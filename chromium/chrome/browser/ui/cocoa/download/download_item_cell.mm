@@ -376,15 +376,16 @@ using content::DownloadItem;
 }
 
 - (NSString*)elideTitle:(int)availableWidth {
-  return base::SysUTF16ToNSString(gfx::ElideFilename(
-      downloadPath_, gfx::FontList(gfx::Font([self font])), availableWidth));
+  return base::SysUTF16ToNSString(
+      gfx::ElideFilename(downloadPath_, gfx::FontList(gfx::Font([self font])),
+                         availableWidth, gfx::Typesetter::BROWSER));
 }
 
 - (NSString*)elideStatus:(int)availableWidth {
   return base::SysUTF16ToNSString(gfx::ElideText(
       base::SysNSStringToUTF16([self secondaryTitle]),
-      gfx::FontList(gfx::Font([self secondaryFont])),
-      availableWidth, gfx::ELIDE_TAIL));
+      gfx::FontList(gfx::Font([self secondaryFont])), availableWidth,
+      gfx::ELIDE_TAIL, gfx::Typesetter::BROWSER));
 }
 
 - (const ui::ThemeProvider*)backgroundThemeWrappingProvider:

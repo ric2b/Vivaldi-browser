@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.test.util;
 
+import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.ActivityManager;
@@ -40,6 +41,7 @@ public class ApplicationTestUtils {
 
     // TODO(jbudorick): fix deprecation warning crbug.com/537347
     @SuppressWarnings("deprecation")
+    @SuppressLint("WakelockTimeout")
     public static void setUp(Context context, boolean clearAppData) {
         if (clearAppData) {
             // Clear data and remove any tasks listed in Android's Overview menu between test runs.
@@ -80,6 +82,8 @@ public class ApplicationTestUtils {
         ApplicationData.clearAppData(context);
     }
 
+    // TODO(bauerb): make this function throw more specific exception and update
+    // StartupLoadingMetricsTest correspondingly.
     /** Send the user to the Android home screen. */
     public static void fireHomeScreenIntent(Context context) throws Exception {
         Intent intent = new Intent(Intent.ACTION_MAIN);

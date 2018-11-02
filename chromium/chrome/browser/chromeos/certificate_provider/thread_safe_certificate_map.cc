@@ -4,7 +4,6 @@
 
 #include "chrome/browser/chromeos/certificate_provider/thread_safe_certificate_map.h"
 
-#include "base/memory/ptr_util.h"
 #include "net/base/hash_value.h"
 #include "net/cert/x509_certificate.h"
 
@@ -22,9 +21,9 @@ void BuildFingerprintsMap(
     for (const CertificateInfo& cert_info : entry.second) {
       const net::SHA256HashValue fingerprint =
           net::X509Certificate::CalculateFingerprint256(
-              cert_info.certificate->os_cert_handle());
+              cert_info.certificate->cert_buffer());
       fingerprint_to_cert->insert(std::make_pair(
-          fingerprint, base::MakeUnique<ThreadSafeCertificateMap::MapValue>(
+          fingerprint, std::make_unique<ThreadSafeCertificateMap::MapValue>(
                            cert_info, extension_id)));
     }
   }
@@ -66,7 +65,7 @@ bool ThreadSafeCertificateMap::LookUpCertificate(
     std::string* extension_id) {
   *is_currently_provided = false;
   const net::SHA256HashValue fingerprint =
-      net::X509Certificate::CalculateFingerprint256(cert.os_cert_handle());
+      net::X509Certificate::CalculateFingerprint256(cert.cert_buffer());
 
   base::AutoLock auto_lock(lock_);
   const auto it = fingerprint_to_cert_and_extension_.find(fingerprint);

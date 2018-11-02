@@ -40,7 +40,6 @@ class CC_EXPORT LayerTreeSettings {
   bool can_use_lcd_text = true;
   bool use_distance_field_text = false;
   bool gpu_rasterization_forced = false;
-  bool async_worker_context_enabled = false;
   int gpu_rasterization_msaa_sample_count = 0;
   float gpu_rasterization_skewport_target_time_in_seconds = 0.2f;
   bool create_low_res_tiling = false;
@@ -125,12 +124,6 @@ class CC_EXPORT LayerTreeSettings {
   // completed the current BeginFrame before triggering their own BeginFrame
   // deadlines.
   bool wait_for_all_pipeline_stages_before_draw = false;
-
-  // On a low-end android devices where the GPU memory is low, we are reducing
-  // the tile width to half in the cases where the content width > screen width.
-  // This doesn't impact CPU tile size, and we should see an obvious GPU memory
-  // saving.
-  bool use_half_width_tiles_for_gpu_rasterization = false;
 
   // Whether layer tree commits should be made directly to the active
   // tree on the impl thread. If |false| LayerTreeHostImpl creates a

@@ -226,13 +226,20 @@ Sources.NavigatorView = class extends UI.VBox {
     this._workspace = workspace;
     this._workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, this._uiSourceCodeAdded, this);
     this._workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, this._uiSourceCodeRemoved, this);
-    this._workspace.addEventListener(
-        Workspace.Workspace.Events.ProjectAdded,
-        event => this._projectAdded(/** @type {!Workspace.Project} */ (event.data)), this);
-    this._workspace.addEventListener(
-        Workspace.Workspace.Events.ProjectRemoved,
-        event => this._removeProject(/** @type {!Workspace.Project} */ (event.data)), this);
+    this._workspace.addEventListener(Workspace.Workspace.Events.ProjectAdded, event => {
+      var project = /** @type {!Workspace.Project} */ (event.data);
+      this._projectAdded(project);
+      if (project.type() === Workspace.projectTypes.FileSystem)
+        this._computeUniqueFileSystemProjectNames();
+    });
+    this._workspace.addEventListener(Workspace.Workspace.Events.ProjectRemoved, event => {
+      var project = /** @type {!Workspace.Project} */ (event.data);
+      this._removeProject(project);
+      if (project.type() === Workspace.projectTypes.FileSystem)
+        this._computeUniqueFileSystemProjectNames();
+    });
     this._workspace.projects().forEach(this._projectAdded.bind(this));
+    this._computeUniqueFileSystemProjectNames();
   }
 
   /**
@@ -369,6 +376,32 @@ Sources.NavigatorView = class extends UI.VBox {
       return;
     this._rootNode.appendChild(new Sources.NavigatorGroupTreeNode(
         this, project, project.id(), Sources.NavigatorView.Types.FileSystem, project.displayName()));
+  }
+
+  _computeUniqueFileSystemProjectNames() {
+    var fileSystemProjects = this._workspace.projectsForType(Workspace.projectTypes.FileSystem);
+    if (!fileSystemProjects.length)
+      return;
+    var encoder = new Persistence.PathEncoder();
+    var reversedPaths = fileSystemProjects.map(project => {
+      var fileSystem = /** @type {!Persistence.FileSystemWorkspaceBinding.FileSystem} */ (project);
+      return encoder.encode(fileSystem.fileSystemPath()).reverse();
+    });
+    var reversedIndex = new Common.Trie();
+    for (var reversedPath of reversedPaths)
+      reversedIndex.add(reversedPath);
+
+    for (var i = 0; i < fileSystemProjects.length; ++i) {
+      var reversedPath = reversedPaths[i];
+      var project = fileSystemProjects[i];
+      reversedIndex.remove(reversedPath);
+      var commonPrefix = reversedIndex.longestPrefix(reversedPath, false /* fullWordOnly */);
+      reversedIndex.add(reversedPath);
+      var path = encoder.decode(reversedPath.substring(0, commonPrefix.length + 1).reverse());
+      var fileSystemNode = this._rootNode.child(project.id());
+      if (fileSystemNode)
+        fileSystemNode.setTitle(path);
+    }
   }
 
   /**
@@ -710,22 +743,29 @@ Sources.NavigatorView = class extends UI.VBox {
 
   /**
    * @param {!Event} event
-   * @param {!Sources.NavigatorFolderTreeNode} node
+   * @param {!Sources.NavigatorTreeNode} node
    */
   handleFolderContextMenu(event, node) {
-    var path = node._folderPath;
+    var path = node._folderPath || '';
     var project = node._project;
 
     var contextMenu = new UI.ContextMenu(event);
 
     Sources.NavigatorView.appendSearchItem(contextMenu, path);
-    if (project.type() !== Workspace.projectTypes.FileSystem)
-      return;
 
-    contextMenu.defaultSection().appendItem(
-        Common.UIString('New file'), this._handleContextMenuCreate.bind(this, project, path));
-    contextMenu.defaultSection().appendItem(
-        Common.UIString('Exclude folder'), this._handleContextMenuExclude.bind(this, project, path));
+    var folderPath = Common.ParsedURL.urlToPlatformPath(
+        Persistence.FileSystemWorkspaceBinding.completeURL(project, path), Host.isWin());
+    contextMenu.revealSection().appendItem(
+        Common.UIString('Open folder'), () => InspectorFrontendHost.showItemInFolder(folderPath));
+    if (project.canCreateFile()) {
+      contextMenu.defaultSection().appendItem(
+          Common.UIString('New file'), this._handleContextMenuCreate.bind(this, project, path));
+    }
+
+    if (project.canExcludeFolder(path)) {
+      contextMenu.defaultSection().appendItem(
+          Common.UIString('Exclude folder'), this._handleContextMenuExclude.bind(this, project, path));
+    }
 
     function removeFolder() {
       var shouldRemove = window.confirm(Common.UIString('Are you sure you want to remove this folder?'));
@@ -733,9 +773,11 @@ Sources.NavigatorView = class extends UI.VBox {
         project.remove();
     }
 
-    Sources.NavigatorView.appendAddFolderItem(contextMenu);
-    if (node instanceof Sources.NavigatorGroupTreeNode)
-      contextMenu.defaultSection().appendItem(Common.UIString('Remove folder from workspace'), removeFolder);
+    if (project.type() === Workspace.projectTypes.FileSystem) {
+      Sources.NavigatorView.appendAddFolderItem(contextMenu);
+      if (node instanceof Sources.NavigatorGroupTreeNode)
+        contextMenu.defaultSection().appendItem(Common.UIString('Remove folder from workspace'), removeFolder);
+    }
 
     contextMenu.show();
   }
@@ -974,7 +1016,7 @@ Sources.NavigatorSourceTreeElement = class extends UI.TreeElement {
       var icon = UI.Icon.create('largeicon-navigator-file-sync', 'icon');
       var badge = UI.Icon.create('badge-navigator-file-sync', 'icon-badge');
       // TODO(allada) This does not play well with dark theme. Add an actual icon and use it.
-      if (Persistence.networkPersistenceManager.activeProject() === binding.fileSystem.project())
+      if (Persistence.networkPersistenceManager.project() === binding.fileSystem.project())
         badge.style.filter = 'hue-rotate(160deg)';
       container.appendChild(icon);
       container.appendChild(badge);
@@ -1634,6 +1676,8 @@ Sources.NavigatorGroupTreeNode = class extends Sources.NavigatorTreeNode {
     if (wasActive === isActive)
       return;
     this._treeElement.listItemElement.classList.toggle('has-mapped-files', isActive);
+    if (this._treeElement.childrenListElement.hasFocus())
+      return;
     if (isActive)
       this._treeElement.expand();
     else

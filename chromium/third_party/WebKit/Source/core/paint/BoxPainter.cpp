@@ -65,10 +65,12 @@ void BoxPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info,
                 paint_info.context.GetPaintController()
                     .CurrentPaintChunkProperties()
                     .backface_hidden);
-      scoped_scroll_property.emplace(
-          paint_info.context.GetPaintController(),
-          layout_box_.FirstFragment().GetRarePaintData()->ContentsProperties(),
-          layout_box_, DisplayItem::PaintPhaseToScrollType(paint_info.phase));
+      if (const auto* fragment = paint_info.FragmentToPaint(layout_box_)) {
+        scoped_scroll_property.emplace(
+            paint_info.context.GetPaintController(),
+            fragment->ContentsProperties(), layout_box_,
+            DisplayItem::PaintPhaseToScrollType(paint_info.phase));
+      }
     }
 
     // The background painting code assumes that the borders are part of the
@@ -248,7 +250,8 @@ void BoxPainter::PaintMaskImages(const PaintInfo& paint_info,
 
   bool all_mask_images_loaded = true;
 
-  if (!mask_blending_applied_by_compositor) {
+  if (!mask_blending_applied_by_compositor &&
+      !RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     push_transparency_layer = true;
     StyleImage* mask_box_image = layout_box_.Style()->MaskBoxImage().GetImage();
     const FillLayer& mask_layers = layout_box_.Style()->MaskLayers();
@@ -281,6 +284,8 @@ void BoxPainter::PaintMaskImages(const PaintInfo& paint_info,
 
 void BoxPainter::PaintClippingMask(const PaintInfo& paint_info,
                                    const LayoutPoint& paint_offset) {
+  // SPv175 always paints clipping mask in PaintLayerPainter.
+  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV175Enabled());
   DCHECK(paint_info.phase == PaintPhase::kClippingMask);
 
   if (layout_box_.Style()->Visibility() != EVisibility::kVisible)

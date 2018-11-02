@@ -83,7 +83,7 @@ class V8ValueConverterImplTest : public testing::Test {
       ADD_FAILURE();
       return std::string();
     }
-    v8::String::Utf8Value utf8(temp);
+    v8::String::Utf8Value utf8(isolate_, temp);
     return std::string(*utf8, utf8.length());
   }
 
@@ -102,7 +102,7 @@ class V8ValueConverterImplTest : public testing::Test {
       ADD_FAILURE();
       return std::string();
     }
-    v8::String::Utf8Value utf8(temp);
+    v8::String::Utf8Value utf8(isolate_, temp);
     return std::string(*utf8, utf8.length());
   }
 
@@ -213,6 +213,16 @@ class V8ValueConverterImplTest : public testing::Test {
     }
   }
 
+  template <typename T>
+  v8::Local<T> CompileRun(v8::Local<v8::Context> context, const char* source) {
+    return v8::Script::Compile(context,
+                               v8::String::NewFromUtf8(isolate_, source))
+        .ToLocalChecked()
+        ->Run(context)
+        .ToLocalChecked()
+        .As<T>();
+  }
+
   base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   v8::Isolate* isolate_;
@@ -321,9 +331,7 @@ TEST_F(V8ValueConverterImplTest, ObjectExceptions) {
       "Object.prototype.__defineGetter__('foo', "
       "    function() { throw new Error('muah!'); });";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  script->Run();
+  CompileRun<v8::Value>(context, source);
 
   v8::Local<v8::Object> object(v8::Object::New(isolate_));
   object->Set(v8::String::NewFromUtf8(isolate_, "bar"),
@@ -368,10 +376,7 @@ TEST_F(V8ValueConverterImplTest, ArrayExceptions) {
       "return arr;"
       "})();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Array> array = script->Run().As<v8::Array>();
-  ASSERT_FALSE(array.IsEmpty());
+  v8::Local<v8::Array> array = CompileRun<v8::Array>(context, source);
 
   // Converting from v8 value should replace the first item with null.
   V8ValueConverterImpl converter;
@@ -401,8 +406,10 @@ TEST_F(V8ValueConverterImplTest, WeirdTypes) {
       v8::Local<v8::Context>::New(isolate_, context_);
   v8::Context::Scope context_scope(context);
 
-  v8::Local<v8::RegExp> regex(v8::RegExp::New(
-      v8::String::NewFromUtf8(isolate_, "."), v8::RegExp::kNone));
+  v8::Local<v8::RegExp> regex(
+      v8::RegExp::New(context, v8::String::NewFromUtf8(isolate_, "."),
+                      v8::RegExp::kNone)
+          .ToLocalChecked());
 
   V8ValueConverterImpl converter;
   TestWeirdType(converter, v8::Undefined(isolate_),
@@ -437,10 +444,7 @@ TEST_F(V8ValueConverterImplTest, Prototype) {
       "return {};"
       "})();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Object> object = script->Run().As<v8::Object>();
-  ASSERT_FALSE(object.IsEmpty());
+  v8::Local<v8::Object> object = CompileRun<v8::Object>(context, source);
 
   V8ValueConverterImpl converter;
   std::unique_ptr<base::DictionaryValue> result(
@@ -472,13 +476,10 @@ TEST_F(V8ValueConverterImplTest, ObjectPrototypeSetter) {
       "({}).foo = 'Trigger setter';"
       "({}).foo;";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Object> result = script->Run().As<v8::Object>();
-  ASSERT_FALSE(result.IsEmpty());
+  v8::Local<v8::Object> result = CompileRun<v8::Object>(context, source);
 
   // Sanity checks: the getters/setters are normally triggered.
-  v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source_sanity))->Run();
+  CompileRun<v8::Value>(context, source_sanity);
   EXPECT_EQ(1, GetInt(result, "getters"));
   EXPECT_EQ(1, GetInt(result, "setters"));
 
@@ -541,13 +542,10 @@ TEST_F(V8ValueConverterImplTest, ArrayPrototypeSetter) {
       "[][1] = 'Trigger setter';"
       "[][1];";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Object> result = script->Run().As<v8::Object>();
-  ASSERT_FALSE(result.IsEmpty());
+  v8::Local<v8::Object> result = CompileRun<v8::Object>(context, source);
 
   // Sanity checks: the getters/setters are normally triggered.
-  v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source_sanity))->Run();
+  CompileRun<v8::Value>(context, source_sanity);
   EXPECT_EQ(1, GetInt(result, "getters"));
   EXPECT_EQ(1, GetInt(result, "setters"));
 
@@ -601,10 +599,7 @@ TEST_F(V8ValueConverterImplTest, StripNullFromObjects) {
       "return { foo: undefined, bar: null };"
       "})();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Object> object = script->Run().As<v8::Object>();
-  ASSERT_FALSE(object.IsEmpty());
+  v8::Local<v8::Object> object = CompileRun<v8::Object>(context, source);
 
   V8ValueConverterImpl converter;
   converter.SetStripNullFromObjects(true);
@@ -666,10 +661,7 @@ TEST_F(V8ValueConverterImplTest, WeirdProperties) {
       "};"
       "})();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Object> object = script->Run().As<v8::Object>();
-  ASSERT_FALSE(object.IsEmpty());
+  v8::Local<v8::Object> object = CompileRun<v8::Object>(context, source);
 
   V8ValueConverterImpl converter;
   std::unique_ptr<base::Value> actual(converter.FromV8Value(object, context));
@@ -701,10 +693,7 @@ TEST_F(V8ValueConverterImplTest, ArrayGetters) {
       "return a;"
       "})();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Array> array = script->Run().As<v8::Array>();
-  ASSERT_FALSE(array.IsEmpty());
+  v8::Local<v8::Array> array = CompileRun<v8::Array>(context, source);
 
   V8ValueConverterImpl converter;
   std::unique_ptr<base::ListValue> result(
@@ -726,10 +715,7 @@ TEST_F(V8ValueConverterImplTest, UndefinedValueBehavior) {
     const char* source = "(function() {"
         "return { foo: undefined, bar: null, baz: function(){} };"
         "})();";
-    v8::Local<v8::Script> script(
-        v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-    object = script->Run().As<v8::Object>();
-    ASSERT_FALSE(object.IsEmpty());
+    object = CompileRun<v8::Object>(context, source);
   }
 
   v8::Local<v8::Array> array;
@@ -737,10 +723,7 @@ TEST_F(V8ValueConverterImplTest, UndefinedValueBehavior) {
     const char* source = "(function() {"
         "return [ undefined, null, function(){} ];"
         "})();";
-    v8::Local<v8::Script> script(
-        v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-    array = script->Run().As<v8::Array>();
-    ASSERT_FALSE(array.IsEmpty());
+    array = CompileRun<v8::Array>(context, source);
   }
 
   v8::Local<v8::Array> sparse_array;
@@ -748,10 +731,7 @@ TEST_F(V8ValueConverterImplTest, UndefinedValueBehavior) {
     const char* source = "(function() {"
         "return new Array(3);"
         "})();";
-    v8::Local<v8::Script> script(
-        v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-    sparse_array = script->Run().As<v8::Array>();
-    ASSERT_FALSE(sparse_array.IsEmpty());
+    sparse_array = CompileRun<v8::Array>(context, source);
   }
 
   V8ValueConverterImpl converter;
@@ -862,10 +842,7 @@ TEST_F(V8ValueConverterImplTest, ReuseObjects) {
         "var obj = {one: objA, two: objA};"
         "return obj;"
         "})();";
-    v8::Local<v8::Script> script(
-        v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-    v8::Local<v8::Object> object = script->Run().As<v8::Object>();
-    ASSERT_FALSE(object.IsEmpty());
+    v8::Local<v8::Object> object = CompileRun<v8::Object>(context, source);
 
     // The actual result.
     std::unique_ptr<base::DictionaryValue> result(
@@ -894,10 +871,7 @@ TEST_F(V8ValueConverterImplTest, ReuseObjects) {
         "var arr = [objA, objA];"
         "return arr;"
         "})();";
-    v8::Local<v8::Script> script(
-        v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-    v8::Local<v8::Array> array = script->Run().As<v8::Array>();
-    ASSERT_FALSE(array.IsEmpty());
+    v8::Local<v8::Array> array = CompileRun<v8::Array>(context, source);
 
     // The actual result.
     std::unique_ptr<base::ListValue> list_result(
@@ -962,10 +936,7 @@ TEST_F(V8ValueConverterImplTest, NegativeZero) {
   v8::Context::Scope context_scope(context);
   const char* source = "(function() { return -0; })();";
 
-  v8::Local<v8::Script> script(
-      v8::Script::Compile(v8::String::NewFromUtf8(isolate_, source)));
-  v8::Local<v8::Value> value = script->Run();
-  ASSERT_FALSE(value.IsEmpty());
+  v8::Local<v8::Value> value = CompileRun<v8::Value>(context, source);
 
   {
     V8ValueConverterImpl converter;

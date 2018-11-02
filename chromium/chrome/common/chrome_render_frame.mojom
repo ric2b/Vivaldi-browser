@@ -13,6 +13,12 @@ enum ImageFormat {
   PNG,
 };
 
+[Native]
+enum BrowserControlsState;
+
+[Native]
+struct WebApplicationInfo;
+
 // Messages sent from chrome to the render frame.
 interface ChromeRenderFrame {
 
@@ -41,4 +47,16 @@ interface ChromeRenderFrame {
 
   // Sent when the profile changes the kSafeBrowsingEnabled preference.
   SetClientSidePhishingDetection(bool enable_phishing_detection);
+
+  // Requests the web application info from the renderer.
+  GetWebApplicationInfo() => (WebApplicationInfo web_application_info);
+
+  // TODO(cm.sanchi): enable below mojom only for Android once EnabledIf
+  // attribute is supported in mojom files. See https://crbug.com/676224
+  // Notifies the renderer whether hiding/showing the browser controls is
+  // enabled, what the current state should be, and whether or not to
+  // animate to the proper state.
+  UpdateBrowserControlsState(BrowserControlsState constraints,
+                             BrowserControlsState current,
+                             bool animate);
 };

@@ -7,11 +7,11 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/user_metrics.h"
 #include "base/pickle.h"
@@ -29,6 +29,7 @@
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/mus_util.h"
+#include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
@@ -41,7 +42,6 @@
 #include "content/common/drag_messages.h"
 #include "content/common/input/ime_text_span_conversions.h"
 #include "content/common/input_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/text_input_state.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
@@ -54,6 +54,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/drop_data.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/gfx/geometry/size_conversions.h"
 
@@ -198,7 +199,7 @@ int BrowserPluginGuest::LoadURLWithParams(
 void BrowserPluginGuest::ResizeDueToAutoResize(const gfx::Size& new_size,
                                                uint64_t sequence_number) {
   SendMessageToEmbedder(
-      base::MakeUnique<BrowserPluginMsg_ResizeDueToAutoResize>(
+      std::make_unique<BrowserPluginMsg_ResizeDueToAutoResize>(
           browser_plugin_instance_id_, sequence_number));
 }
 
@@ -451,7 +452,7 @@ void BrowserPluginGuest::SetChildFrameSurface(
     const viz::SurfaceInfo& surface_info,
     const viz::SurfaceSequence& sequence) {
   has_attached_since_surface_set_ = false;
-  if (!IsUsingMus()) {
+  if (!switches::IsMusHostingViz()) {
     SendMessageToEmbedder(
         std::make_unique<BrowserPluginMsg_SetChildFrameSurface>(
             browser_plugin_instance_id(), surface_info, sequence));
@@ -682,8 +683,7 @@ void BrowserPluginGuest::SendTextInputTypeChangedToView(
 
   if (last_text_input_state_.get()) {
     guest_rwhv->TextInputStateChanged(*last_text_input_state_);
-    if (auto* rwh =
-            RenderWidgetHostImpl::From(guest_rwhv->GetRenderWidgetHost())) {
+    if (auto* rwh = guest_rwhv->GetRenderWidgetHostImpl()) {
       // We need composition range information for some IMEs. To get the
       // updates, we need to explicitly ask the renderer to monitor and send the
       // composition information changes. RenderWidgetHostView of the page will
@@ -718,7 +718,7 @@ void BrowserPluginGuest::RenderViewReady() {
   // In case we've created a new guest render process after a crash, let the
   // associated BrowserPlugin know. We only need to send this if we're attached,
   // as guest_crashed_ is cleared automatically on attach anyways.
-  if (attached() && !IsUsingMus()) {
+  if (attached() && !switches::IsMusHostingViz()) {
     RenderWidgetHostViewGuest* rwhv = static_cast<RenderWidgetHostViewGuest*>(
         web_contents()->GetRenderWidgetHostView());
     if (rwhv) {
@@ -892,8 +892,13 @@ void BrowserPluginGuest::OnDetach(int browser_plugin_instance_id) {
       static_cast<RenderWidgetHostViewChildFrame*>(
           web_contents()->GetRenderWidgetHostView());
   // If the guest is terminated, our host may already be gone.
-  if (rwhv)
+  if (rwhv) {
     rwhv->UnregisterFrameSinkId();
+    RenderWidgetHostViewBase* root_view =
+        RenderWidgetHostViewGuest::GetRootView(rwhv);
+    if (root_view)
+      root_view->GetCursorManager()->ViewBeingDestroyed(rwhv);
+  }
 
   delegate_->DidDetach();
 }

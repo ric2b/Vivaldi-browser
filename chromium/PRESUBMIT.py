@@ -24,6 +24,8 @@ _EXCLUDED_PATHS = (
     r"^gpu[\\\/]config[\\\/].*_list_json\.cc$",
     r"^chrome[\\\/]browser[\\\/]resources[\\\/]pdf[\\\/]index.js",
     r"tools[\\\/]md_browser[\\\/].*\.css$",
+    # Test pages for Maps telemetry tests.
+    r"tools[\\\/]perf[\\\/]page_sets[\\\/]maps_perf_test.*",
     # Test pages for WebRTC telemetry tests.
     r"tools[\\\/]perf[\\\/]page_sets[\\\/]webrtc_cases.*",
 )
@@ -423,7 +425,7 @@ _BANNED_CPP_FUNCTIONS = (
       r'std::regex',
       (
         'Using std::regex adds unnecessary binary size to Chrome. Please use',
-        're2::RE2 instead (crbug/755321)',
+        're2::RE2 instead (crbug.com/755321)',
       ),
       True,
       (),
@@ -441,7 +443,7 @@ _BANNED_CPP_FUNCTIONS = (
       r'/\bbase::Bind\(',
       (
           'Please consider using base::Bind{Once,Repeating} instead '
-          'of base::Bind. (crbug/714018)',
+          'of base::Bind. (crbug.com/714018)',
       ),
       False,
       (),
@@ -450,7 +452,7 @@ _BANNED_CPP_FUNCTIONS = (
       r'/\bbase::Callback<',
       (
           'Please consider using base::{Once,Repeating}Callback instead '
-          'of base::Callback. (crbug/714018)',
+          'of base::Callback. (crbug.com/714018)',
       ),
       False,
       (),
@@ -459,7 +461,7 @@ _BANNED_CPP_FUNCTIONS = (
       r'/\bbase::Closure\b',
       (
           'Please consider using base::{Once,Repeating}Closure instead '
-          'of base::Closure. (crbug/714018)',
+          'of base::Closure. (crbug.com/714018)',
       ),
       False,
       (),
@@ -2084,7 +2086,8 @@ def _CheckPydepsNeedsUpdating(input_api, output_api, checker_for_tests=None):
   # Mac, so skip it on other platforms.
   if input_api.platform != 'linux2':
     return []
-  # TODO(agrieve): Update when there's a better way to detect this: crbug/570091
+  # TODO(agrieve): Update when there's a better way to detect
+  # this: crbug.com/570091
   is_android = input_api.os_path.exists('third_party/android_tools')
   pydeps_files = _ALL_PYDEPS_FILES if is_android else _GENERIC_PYDEPS_FILES
   results = []
@@ -2759,6 +2762,30 @@ def _CheckSyslogUseWarning(input_api, output_api, source_file_filter=None,
   return []
 
 
+def _CheckCrbugLinksHaveHttps(input_api, output_api):
+  """Checks that crbug(.com) links are correctly prefixed by https://,
+   unless they come in the accepted form TODO(crbug.com/...)
+  """
+  white_list = r'.+%s' % _IMPLEMENTATION_EXTENSIONS
+  black_list = (_EXCLUDED_PATHS + _TEST_CODE_EXCLUDED_PATHS)
+  sources = lambda f: input_api.FilterSourceFile(
+      f, white_list=white_list, black_list=black_list)
+
+  pattern = input_api.re.compile(r'//.*(?<!:\/\/)crbug[.com]*')
+  accepted_pattern = input_api.re.compile(r'//.*TODO\(crbug[.com]*');
+  problems = []
+  for f in input_api.AffectedSourceFiles(sources):
+    for line_num, line in f.ChangedContents():
+      if pattern.search(line) and not accepted_pattern.search(line):
+        problems.append('    %s:%d %s' % (f.LocalPath(), line_num, line))
+
+  if problems:
+    return [output_api.PresubmitPromptWarning(
+      'Found unprefixed crbug.com URL(s), consider prepending https://\n'+
+      '\n'.join(problems))]
+  return []
+
+
 def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
@@ -2769,6 +2796,7 @@ def CheckChangeOnUpload(input_api, output_api):
   results.extend(_AndroidSpecificOnUploadChecks(input_api, output_api))
   results.extend(_CheckSyslogUseWarning(input_api, output_api))
   results.extend(_CheckGoogleSupportAnswerUrl(input_api, output_api))
+  results.extend(_CheckCrbugLinksHaveHttps(input_api, output_api))
   return results
 
 

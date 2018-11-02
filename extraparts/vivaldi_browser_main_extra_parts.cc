@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved
 
 #include "extraparts/vivaldi_browser_main_extra_parts.h"
 
@@ -14,7 +14,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/prefs/pref_service.h"
-#include "components/security_state/core/switches.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
 #include "contact/contact_service_factory.h"
@@ -53,41 +52,10 @@ VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  // base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (vivaldi::IsVivaldiRunning()) {
-    // andre@vivaldi.com HACK while not having all the permission dialogs in
-    // place.
-    vivaldi::CommandLineAppendSwitchNoDup(command_line,
-                                          switches::kAlwaysAuthorizePlugins);
-
-    // vivaldi::CommandLineAppendSwitchNoDup(
-    //    command_line, translate::switches::kDisableTranslate);
-
-    // NOTE(arnar): Can be removed once ResizeObserver is stable.
-    // https://www.chromestatus.com/feature/5705346022637568
-    if (command_line->HasSwitch(switches::kEnableBlinkFeatures)) {
-      std::string enabledBlinkFeatures =
-          command_line->GetSwitchValueASCII(switches::kEnableBlinkFeatures);
-
-      if (enabledBlinkFeatures.find("ResizeObserver") == std::string::npos) {
-        std::string out = enabledBlinkFeatures.append(",ResizeObserver");
-        command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures, out);
-      }
-    } else {
-      command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                      "ResizeObserver");
-    }
+    // Options to be set when Vivaldi is running, but not during unit tests
   }
-
-#if defined(OS_MACOSX)
-  PostEarlyInitializationMac();
-#endif
-#if defined(OS_WIN)
-  PostEarlyInitializationWin();
-#endif
-#if defined(OS_LINUX)
-  PostEarlyInitializationLinux();
-#endif
 }
 
 void VivaldiBrowserMainExtraParts::
@@ -116,10 +84,6 @@ void VivaldiBrowserMainExtraParts::
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
-
-#if defined(OS_MACOSX)
-  PreProfileInitMac();
-#endif
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {

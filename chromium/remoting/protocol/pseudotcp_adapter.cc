@@ -17,6 +17,7 @@
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "remoting/protocol/p2p_datagram_socket.h"
 
 using cricket::PseudoTcp;
@@ -37,8 +38,10 @@ class PseudoTcpAdapter::Core : public cricket::IPseudoTcpNotify,
   // Functions used to implement net::StreamSocket.
   int Read(const scoped_refptr<net::IOBuffer>& buffer, int buffer_size,
            const net::CompletionCallback& callback);
-  int Write(const scoped_refptr<net::IOBuffer>& buffer, int buffer_size,
-            const net::CompletionCallback& callback);
+  int Write(const scoped_refptr<net::IOBuffer>& buffer,
+            int buffer_size,
+            const net::CompletionCallback& callback,
+            const net::NetworkTrafficAnnotationTag& traffic_annotation);
   int Connect(const net::CompletionCallback& callback);
 
   // cricket::IPseudoTcpNotify interface.
@@ -152,9 +155,11 @@ int PseudoTcpAdapter::Core::Read(const scoped_refptr<net::IOBuffer>& buffer,
   return result;
 }
 
-int PseudoTcpAdapter::Core::Write(const scoped_refptr<net::IOBuffer>& buffer,
-                                  int buffer_size,
-                                  const net::CompletionCallback& callback) {
+int PseudoTcpAdapter::Core::Write(
+    const scoped_refptr<net::IOBuffer>& buffer,
+    int buffer_size,
+    const net::CompletionCallback& callback,
+    const net::NetworkTrafficAnnotationTag& /*traffic_annotation*/) {
   DCHECK(write_callback_.is_null());
 
   // Reference the Core in case a callback deletes the adapter.
@@ -466,11 +471,13 @@ int PseudoTcpAdapter::Read(const scoped_refptr<net::IOBuffer>& buffer,
   return core_->Read(buffer, buffer_size, callback);
 }
 
-int PseudoTcpAdapter::Write(const scoped_refptr<net::IOBuffer>& buffer,
-                            int buffer_size,
-                            const net::CompletionCallback& callback) {
+int PseudoTcpAdapter::Write(
+    const scoped_refptr<net::IOBuffer>& buffer,
+    int buffer_size,
+    const net::CompletionCallback& callback,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return core_->Write(buffer, buffer_size, callback);
+  return core_->Write(buffer, buffer_size, callback, traffic_annotation);
 }
 
 int PseudoTcpAdapter::SetReceiveBufferSize(int32_t size) {

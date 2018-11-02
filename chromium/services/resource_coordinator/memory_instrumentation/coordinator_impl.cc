@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
@@ -21,6 +22,7 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "services/resource_coordinator/memory_instrumentation/queued_request_dispatcher.h"
+#include "services/resource_coordinator/memory_instrumentation/switches.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/client_process_impl.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/constants.mojom.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
@@ -48,7 +50,8 @@ CoordinatorImpl* CoordinatorImpl::GetInstance() {
 }
 
 CoordinatorImpl::CoordinatorImpl(service_manager::Connector* connector)
-    : next_dump_id_(0) {
+    : next_dump_id_(0),
+      client_process_timeout_(base::TimeDelta::FromSeconds(15)) {
   process_map_ = std::make_unique<ProcessMap>(connector);
   DCHECK(!g_coordinator_impl);
   g_coordinator_impl = this;
@@ -81,38 +84,107 @@ void CoordinatorImpl::BindCoordinatorRequest(
   bindings_.AddBinding(this, std::move(request), source_info.identity);
 }
 
+void CoordinatorImpl::BindHeapProfilerHelperRequest(
+    mojom::HeapProfilerHelperRequest request,
+    const service_manager::BindSourceInfo& source_info) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  bindings_heap_profiler_helper_.AddBinding(this, std::move(request),
+                                            source_info.identity);
+}
+
 void CoordinatorImpl::RequestGlobalMemoryDump(
-    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
+    MemoryDumpType dump_type,
+    MemoryDumpLevelOfDetail level_of_detail,
+    const std::vector<std::string>& allocator_dump_names,
     const RequestGlobalMemoryDumpCallback& callback) {
+  // Don't allow arbitary processes to obtain VM regions. Only the heap profiler
+  // is allowed to obtain them using the special method on the different
+  // interface.
+  if (level_of_detail ==
+      MemoryDumpLevelOfDetail::VM_REGIONS_ONLY_FOR_HEAP_PROFILER) {
+    bindings_.ReportBadMessage(
+        "Requested global memory dump using level of detail reserved for the "
+        "heap profiler.");
+    return;
+  }
+
   // This merely strips out the |dump_guid| argument.
-  auto callback_adapter = [](const RequestGlobalMemoryDumpCallback& callback,
-                             bool success, uint64_t,
-                             mojom::GlobalMemoryDumpPtr global_memory_dump) {
+  auto adapter = [](const RequestGlobalMemoryDumpCallback& callback,
+                    bool success, uint64_t,
+                    mojom::GlobalMemoryDumpPtr global_memory_dump) {
     callback.Run(success, std::move(global_memory_dump));
   };
-  RequestGlobalMemoryDumpInternal(args_in, false,
-                                  base::Bind(callback_adapter, callback));
+
+  QueuedRequest::Args args(dump_type, level_of_detail, allocator_dump_names,
+                           false /* add_to_trace */, base::kNullProcessId);
+  RequestGlobalMemoryDumpInternal(args, base::BindRepeating(adapter, callback));
+}
+
+void CoordinatorImpl::RequestGlobalMemoryDumpForPid(
+    base::ProcessId pid,
+    const RequestGlobalMemoryDumpForPidCallback& callback) {
+  // Error out early if process id is null to avoid confusing with global
+  // dump for all processes case when pid is kNullProcessId.
+  if (pid == base::kNullProcessId) {
+    callback.Run(false, nullptr);
+    return;
+  }
+
+  // This merely strips out the |dump_guid| argument; this is not relevant
+  // as we are not adding to trace.
+  auto adapter = [](const RequestGlobalMemoryDumpForPidCallback& callback,
+                    bool success, uint64_t,
+                    mojom::GlobalMemoryDumpPtr global_memory_dump) {
+    callback.Run(success, std::move(global_memory_dump));
+  };
+
+  QueuedRequest::Args args(
+      base::trace_event::MemoryDumpType::SUMMARY_ONLY,
+      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND, {},
+      false /* add_to_trace */, pid);
+  RequestGlobalMemoryDumpInternal(args, base::BindRepeating(adapter, callback));
 }
 
 void CoordinatorImpl::RequestGlobalMemoryDumpAndAppendToTrace(
-    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
+    MemoryDumpType dump_type,
+    MemoryDumpLevelOfDetail level_of_detail,
     const RequestGlobalMemoryDumpAndAppendToTraceCallback& callback) {
+  // Don't allow arbitary processes to obtain VM regions. Only the heap profiler
+  // is allowed to obtain them using the special method on its own dedicated
+  // interface (HeapProfilingHelper).
+  if (level_of_detail ==
+      MemoryDumpLevelOfDetail::VM_REGIONS_ONLY_FOR_HEAP_PROFILER) {
+    bindings_.ReportBadMessage(
+        "Requested global memory dump using level of detail reserved for the "
+        "heap profiler.");
+    return;
+  }
+
   // This merely strips out the |dump_ptr| argument.
-  auto callback_adapter =
+  auto adapter =
       [](const RequestGlobalMemoryDumpAndAppendToTraceCallback& callback,
          bool success, uint64_t dump_guid,
          mojom::GlobalMemoryDumpPtr) { callback.Run(success, dump_guid); };
-  RequestGlobalMemoryDumpInternal(args_in, true,
-                                  base::Bind(callback_adapter, callback));
+
+  QueuedRequest::Args args(dump_type, level_of_detail, {},
+                           true /* add_to_trace */, base::kNullProcessId);
+  RequestGlobalMemoryDumpInternal(args, base::BindRepeating(adapter, callback));
 }
 
 void CoordinatorImpl::GetVmRegionsForHeapProfiler(
     const GetVmRegionsForHeapProfilerCallback& callback) {
-  base::trace_event::GlobalMemoryDumpRequestArgs args{
-      base::trace_event::MemoryDumpType::EXPLICITLY_TRIGGERED,
-      base::trace_event::MemoryDumpLevelOfDetail::
-          VM_REGIONS_ONLY_FOR_HEAP_PROFILER};
-  RequestGlobalMemoryDump(args, callback);
+  // This merely strips out the |dump_guid| argument.
+  auto adapter = [](const RequestGlobalMemoryDumpCallback& callback,
+                    bool success, uint64_t dump_guid,
+                    mojom::GlobalMemoryDumpPtr global_memory_dump) {
+    callback.Run(success, std::move(global_memory_dump));
+  };
+
+  QueuedRequest::Args args(
+      MemoryDumpType::EXPLICITLY_TRIGGERED,
+      MemoryDumpLevelOfDetail::VM_REGIONS_ONLY_FOR_HEAP_PROFILER, {},
+      false /* add_to_trace */, base::kNullProcessId);
+  RequestGlobalMemoryDumpInternal(args, base::BindRepeating(adapter, callback));
 }
 
 void CoordinatorImpl::RegisterClientProcess(
@@ -155,8 +227,7 @@ void CoordinatorImpl::UnregisterClientProcess(
 }
 
 void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
-    const base::trace_event::GlobalMemoryDumpRequestArgs& args_in,
-    bool add_to_trace,
+    const QueuedRequest::Args& args,
     const RequestGlobalMemoryDumpInternalCallback& callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
@@ -164,11 +235,6 @@ void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
                             queued_memory_dump_requests_.size());
 
   bool another_dump_is_queued = !queued_memory_dump_requests_.empty();
-
-  base::trace_event::MemoryDumpRequestArgs args;
-  args.dump_guid = ++next_dump_id_;
-  args.dump_type = args_in.dump_type;
-  args.level_of_detail = args_in.level_of_detail;
 
   // If this is a periodic or peak memory dump request and there already is
   // another request in the queue with the same level of detail, there's no
@@ -192,7 +258,7 @@ void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
     }
   }
 
-  queued_memory_dump_requests_.emplace_back(args, callback, add_to_trace);
+  queued_memory_dump_requests_.emplace_back(args, ++next_dump_id_, callback);
 
   // If another dump is already in queued, this dump will automatically be
   // scheduled when the other dump finishes.
@@ -200,6 +266,25 @@ void CoordinatorImpl::RequestGlobalMemoryDumpInternal(
     return;
 
   PerformNextQueuedGlobalMemoryDump();
+}
+
+void CoordinatorImpl::OnQueuedRequestTimedOut(uint64_t dump_guid) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  QueuedRequest* request = GetCurrentRequest();
+
+  // TODO(lalitm): add metrics for how often this happens.
+
+  // Only consider the current request timed out if we fired off this
+  // delayed callback in association with this request.
+  if (!request || request->dump_guid != dump_guid)
+    return;
+
+  // Fail all remaining dumps being waited upon and clear the vector.
+  request->failed_memory_dump_count += request->pending_responses.size();
+  request->pending_responses.clear();
+
+  // Callback the consumer of the service.
+  FinalizeGlobalMemoryDumpIfAllManagersReplied();
 }
 
 void CoordinatorImpl::PerformNextQueuedGlobalMemoryDump() {
@@ -221,9 +306,15 @@ void CoordinatorImpl::PerformNextQueuedGlobalMemoryDump() {
   auto chrome_callback = base::Bind(
       &CoordinatorImpl::OnChromeMemoryDumpResponse, base::Unretained(this));
   auto os_callback = base::Bind(&CoordinatorImpl::OnOSMemoryDumpResponse,
-                                base::Unretained(this));
+                                base::Unretained(this), request->dump_guid);
   QueuedRequestDispatcher::SetUpAndDispatch(request, clients, chrome_callback,
                                             os_callback);
+
+  base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&CoordinatorImpl::OnQueuedRequestTimedOut,
+                     base::Unretained(this), request->dump_guid),
+      client_process_timeout_);
 
   // Run the callback in case there are no client processes registered.
   FinalizeGlobalMemoryDumpIfAllManagersReplied();
@@ -244,8 +335,7 @@ void CoordinatorImpl::OnChromeMemoryDumpResponse(
   using ResponseType = QueuedRequest::PendingResponse::Type;
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   QueuedRequest* request = GetCurrentRequest();
-  if (request == nullptr) {
-    NOTREACHED() << "No current dump request.";
+  if (request == nullptr || request->dump_guid != dump_guid) {
     return;
   }
 
@@ -255,14 +345,7 @@ void CoordinatorImpl::OnChromeMemoryDumpResponse(
     VLOG(1) << "Received a memory dump response from an unregistered client";
     return;
   }
-
-  // Only add to trace if requested.
   auto* response = &request->responses[client];
-  if (chrome_memory_dump && request->add_to_trace) {
-    bool added_to_trace = tracing_observer_->AddChromeDumpToTraceIfEnabled(
-        request->args, response->process_id, chrome_memory_dump.get());
-    success = success && added_to_trace;
-  }
   response->chrome_dump = std::move(chrome_memory_dump);
 
   if (!success) {
@@ -273,14 +356,14 @@ void CoordinatorImpl::OnChromeMemoryDumpResponse(
   FinalizeGlobalMemoryDumpIfAllManagersReplied();
 }
 
-void CoordinatorImpl::OnOSMemoryDumpResponse(mojom::ClientProcess* client,
+void CoordinatorImpl::OnOSMemoryDumpResponse(uint64_t dump_guid,
+                                             mojom::ClientProcess* client,
                                              bool success,
                                              OSMemDumpMap os_dumps) {
   using ResponseType = QueuedRequest::PendingResponse::Type;
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   QueuedRequest* request = GetCurrentRequest();
-  if (request == nullptr) {
-    NOTREACHED() << "No current dump request.";
+  if (request == nullptr || request->dump_guid != dump_guid) {
     return;
   }
 

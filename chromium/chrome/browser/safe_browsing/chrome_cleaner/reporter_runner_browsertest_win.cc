@@ -24,21 +24,29 @@
 #include "base/version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/mock_chrome_cleaner_controller_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_client_info_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
-#include "components/chrome_cleaner/public/constants/constants.h"
 #include "components/component_updater/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/variations/variations_params_manager.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 
 namespace safe_browsing {
 
 namespace {
+
+using ::testing::_;
+using ::testing::Eq;
+using ::testing::InvokeWithoutArgs;
+using ::testing::Return;
+using ::testing::SaveArg;
 
 constexpr char kSRTPromptGroup[] = "SRTGroup";
 
@@ -50,10 +58,6 @@ class Waiter {
   void Wait() {
     while (!Done())
       base::RunLoop().RunUntilIdle();
-  }
-
-  base::OnceClosure SignalClosure() {
-    return base::BindOnce(&Waiter::Signal, base::Unretained(this));
   }
 
   bool Done() {
@@ -125,9 +129,6 @@ class ReporterRunnerTest
     SetSwReporterTestingDelegate(nullptr);
   }
 
-  // Records that the prompt was shown.
-  void TriggerPrompt() override { prompt_trigger_called_ = true; }
-
   // Records that the reporter was launched with the parameters given in
   // |invocation|.
   int LaunchReporter(const SwReporterInvocation& invocation) override {
@@ -140,6 +141,14 @@ class ReporterRunnerTest
 
   // Returns the test's idea of the current time.
   base::Time Now() const override { return now_; }
+
+  ChromeCleanerController* GetCleanerController() override {
+    return &mock_chrome_cleaner_controller_;
+  }
+
+  void CreateChromeCleanerDialogController() override {
+    dialog_controller_created_ = true;
+  }
 
   void FastForwardBy(base::TimeDelta delta) { now_ += delta; }
 
@@ -157,7 +166,7 @@ class ReporterRunnerTest
     exit_code_to_report_ = exit_code_to_report;
     reporter_launch_count_ = 0;
     reporter_launch_parameters_.clear();
-    prompt_trigger_called_ = false;
+    dialog_controller_created_ = false;
   }
 
   SwReporterInvocation CreateInvocation(const base::FilePath& exe_path) {
@@ -167,10 +176,10 @@ class ReporterRunnerTest
   }
 
   SwReporterInvocationSequence CreateInvocationSequence(
-      OnReporterSequenceDone on_sequence_done,
       const SwReporterInvocationSequence::Queue& container) {
-    return SwReporterInvocationSequence(base::Version("1.2.3"), container,
-                                        std::move(on_sequence_done));
+    SwReporterInvocationSequence sequence(base::Version("1.2.3"));
+    sequence.mutable_container() = container;
+    return sequence;
   }
 
   // Schedules a single reporter to run.
@@ -188,12 +197,20 @@ class ReporterRunnerTest
       const SwReporterInvocationSequence::Queue& container) {
     ResetReporterRuns(exit_code_to_report);
 
+    ON_CALL(mock_chrome_cleaner_controller_, state())
+        .WillByDefault(Return(ChromeCleanerController::State::kIdle));
+
+    if (expected_result != SwReporterInvocationResult::kNotScheduled) {
+      EXPECT_CALL(mock_chrome_cleaner_controller_, OnReporterSequenceStarted())
+          .Times(1);
+    }
+
     Waiter on_sequence_done;
-    auto invocations = CreateInvocationSequence(
-        ExpectResultOnSequenceDoneCallback(expected_result,
-                                           on_sequence_done.SignalClosure()),
-        container);
-    RunSwReporters(invocation_type_, std::move(invocations));
+    EXPECT_CALL(mock_chrome_cleaner_controller_,
+                OnReporterSequenceDone(Eq(expected_result)))
+        .WillOnce(InvokeWithoutArgs(&on_sequence_done, &Waiter::Signal));
+    auto invocations = CreateInvocationSequence(container);
+    MaybeStartSwReporter(invocation_type_, std::move(invocations));
     on_sequence_done.Wait();
   }
 
@@ -243,7 +260,7 @@ class ReporterRunnerTest
   void ExpectNumReporterLaunches(int expected_launch_count,
                                  bool expect_prompt) {
     EXPECT_EQ(expected_launch_count, reporter_launch_count_);
-    EXPECT_EQ(expect_prompt, prompt_trigger_called_);
+    EXPECT_EQ(expect_prompt, dialog_controller_created_);
   }
 
   // Expects that the reporter has been launched once with each path in
@@ -355,8 +372,9 @@ class ReporterRunnerTest
                           base::Passed(&closure));
   }
 
-  bool SeedIndicatesPromptEnabled() {
-    return incoming_seed_.empty() || (incoming_seed_ != old_seed_);
+  bool PromptDialogShouldBeShown(SwReporterInvocationType invocation_type) {
+    return !IsUserInitiated(invocation_type) &&
+           (incoming_seed_.empty() || (incoming_seed_ != old_seed_));
   }
 
   // Tests that a sequence of type |invocation_type1|, once scheduled, will not
@@ -366,7 +384,12 @@ class ReporterRunnerTest
     const base::FilePath path1(L"path1");
     const base::FilePath path2(L"path2");
 
-    ResetReporterRuns(chrome_cleaner::kSwReporterCleanupNeeded);
+    ResetReporterRuns(chrome_cleaner::kSwReporterNothingFound);
+
+    ON_CALL(mock_chrome_cleaner_controller_, state())
+        .WillByDefault(Return(ChromeCleanerController::State::kIdle));
+    EXPECT_CALL(mock_chrome_cleaner_controller_, OnReporterSequenceStarted())
+        .Times(1);
 
     // Launch two sequences that will be run in the following order:
     //  - The first sequence (of type |invocation_type1|) starts and waits to
@@ -383,31 +406,29 @@ class ReporterRunnerTest
     Waiter first_sequence_done;
     Waiter second_sequence_done;
 
+    EXPECT_CALL(
+        mock_chrome_cleaner_controller_,
+        OnReporterSequenceDone(Eq(SwReporterInvocationResult::kNothingFound)))
+        .WillOnce(
+            DoAll(InvokeWithoutArgs(&second_sequence_done, &Waiter::Wait),
+                  InvokeWithoutArgs(&first_sequence_done, &Waiter::Signal)));
+
     SwReporterInvocationSequence::Queue invocations1({CreateInvocation(path1)});
-    SwReporterInvocationSequence first_sequence = CreateInvocationSequence(
-        base::BindOnce(
-            [](Waiter* first_sequence_done, Waiter* second_sequence_done,
-               SwReporterInvocationResult result) {
-              EXPECT_EQ(SwReporterInvocationResult::kCleanupNeeded, result);
-              second_sequence_done->Wait();
-              first_sequence_done->Signal();
-            },
-            &first_sequence_done, &second_sequence_done),
-        invocations1);
-    RunSwReporters(invocation_type1, std::move(first_sequence));
+    MaybeStartSwReporter(invocation_type1,
+                         CreateInvocationSequence(invocations1));
+
+    EXPECT_CALL(
+        mock_chrome_cleaner_controller_,
+        OnReporterSequenceDone(Eq(SwReporterInvocationResult::kNotScheduled)))
+        .WillOnce(InvokeWithoutArgs(&second_sequence_done, &Waiter::Signal));
 
     SwReporterInvocationSequence::Queue invocations2({CreateInvocation(path2)});
-    SwReporterInvocationSequence second_sequence =
-        CreateInvocationSequence(ExpectResultOnSequenceDoneCallback(
-                                     SwReporterInvocationResult::kNotScheduled,
-                                     second_sequence_done.SignalClosure()),
-                                 invocations2);
-    RunSwReporters(invocation_type2, std::move(second_sequence));
+    MaybeStartSwReporter(invocation_type2,
+                         CreateInvocationSequence(invocations2));
 
     first_sequence_done.Wait();
 
-    ExpectReporterLaunches({path1},
-                           /*expect_prompt=*/SeedIndicatesPromptEnabled());
+    ExpectReporterLaunches({path1}, /*expect_prompt=*/false);
   }
 
   base::Time now_;
@@ -418,10 +439,14 @@ class ReporterRunnerTest
   std::string old_seed_;
   std::string incoming_seed_;
 
-  bool prompt_trigger_called_ = false;
+  bool dialog_controller_created_ = false;
   int reporter_launch_count_ = 0;
   std::vector<SwReporterInvocation> reporter_launch_parameters_;
   int exit_code_to_report_ = kReporterNotLaunchedExitCode;
+
+  // Using NiceMock to suppress warnings about uninteresting calls to state().
+  ::testing::NiceMock<MockChromeCleanerController>
+      mock_chrome_cleaner_controller_;
 
   // A callback to invoke when the first reporter of a queue is launched. This
   // can be used to perform actions in the middle of a queue of reporters which
@@ -444,10 +469,33 @@ IN_PROC_BROWSER_TEST_P(ReporterRunnerTest, NothingFound) {
 }
 
 IN_PROC_BROWSER_TEST_P(ReporterRunnerTest, CleanupNeeded) {
-  RunSingleReporterAndWait(chrome_cleaner::kSwReporterCleanupNeeded,
-                           SwReporterInvocationResult::kCleanupNeeded);
-  ExpectNumReporterLaunches(/*expected_launch_count=*/1,
-                            /*expect_prompt=*/SeedIndicatesPromptEnabled());
+  bool cleanup_offered =
+      IsUserInitiated(invocation_type_) ||
+      (incoming_seed_.empty() || (incoming_seed_ != old_seed_));
+
+  SwReporterInvocation scan_invocation = CreateInvocation(base::FilePath());
+  if (cleanup_offered) {
+    EXPECT_CALL(mock_chrome_cleaner_controller_, Scan(_))
+        .WillOnce(SaveArg<0>(&scan_invocation));
+  }
+
+  RunSingleReporterAndWait(
+      chrome_cleaner::kSwReporterCleanupNeeded,
+      cleanup_offered ? SwReporterInvocationResult::kCleanupToBeOffered
+                      : SwReporterInvocationResult::kCleanupNotOffered);
+  ExpectNumReporterLaunches(
+      /*expected_launch_count=*/1,
+      /*expect_prompt=*/PromptDialogShouldBeShown(invocation_type_));
+
+  if (cleanup_offered) {
+    EXPECT_EQ(invocation_type_ ==
+                  SwReporterInvocationType::kUserInitiatedWithLogsAllowed,
+              scan_invocation.cleaner_logs_upload_enabled());
+    EXPECT_EQ(invocation_type_ == SwReporterInvocationType::kPeriodicRun
+                  ? chrome_cleaner::ChromePromptValue::kPrompted
+                  : chrome_cleaner::ChromePromptValue::kUserInitiated,
+              scan_invocation.chrome_prompt());
+  }
 }
 
 IN_PROC_BROWSER_TEST_P(ReporterRunnerTest, RanRecently) {

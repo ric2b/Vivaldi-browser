@@ -15,24 +15,18 @@ class CSSFontFace;
 class FontSelector;
 class FontCustomPlatformData;
 
-enum FontDisplay {
-  kFontDisplayAuto,
-  kFontDisplayBlock,
-  kFontDisplaySwap,
-  kFontDisplayFallback,
-  kFontDisplayOptional,
-  kFontDisplayEnumMax
-};
-
 class RemoteFontFaceSource final : public CSSFontFaceSource,
                                    public FontResourceClient {
   USING_PRE_FINALIZER(RemoteFontFaceSource, Dispose);
   USING_GARBAGE_COLLECTED_MIXIN(RemoteFontFaceSource);
 
  public:
+  enum Phase { kNoLimitExceeded, kShortLimitExceeded, kLongLimitExceeded };
+  // Periods of the Font Display Timeline.
+  // https://drafts.csswg.org/css-fonts-4/#font-display-timeline
   enum DisplayPeriod { kBlockPeriod, kSwapPeriod, kFailurePeriod };
 
-  RemoteFontFaceSource(CSSFontFace*, FontResource*, FontSelector*, FontDisplay);
+  RemoteFontFaceSource(CSSFontFace*, FontSelector*, FontDisplay);
   ~RemoteFontFaceSource() override;
   void Dispose();
 
@@ -41,6 +35,7 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
   bool IsValid() const override;
 
   void BeginLoadIfNeeded() override;
+  void SetDisplay(FontDisplay) override;
 
   void NotifyFinished(Resource*) override;
   void FontLoadShortLimitExceeded(FontResource*) override;
@@ -85,11 +80,11 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
       kFromNetwork
     };
 
-    FontLoadHistograms(DataSource data_source)
+    FontLoadHistograms()
         : load_start_time_(0),
           blank_paint_time_(0),
           is_long_limit_exceeded_(false),
-          data_source_(data_source) {}
+          data_source_(kFromUnknown) {}
     void LoadStarted();
     void FallbackFontPainted(DisplayPeriod);
     void LongLimitExceeded();
@@ -98,6 +93,12 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
     bool HadBlankText() { return blank_paint_time_; }
     DataSource GetDataSource() { return data_source_; }
     void MaySetDataSource(DataSource);
+
+    static DataSource DataSourceForLoadFinish(const FontResource* font) {
+      if (font->Url().ProtocolIsData())
+        return kFromDataURL;
+      return font->GetResponse().WasCached() ? kFromDiskCache : kFromNetwork;
+    }
 
    private:
     void RecordLoadTimeHistogram(const FontResource*, int duration);
@@ -108,21 +109,19 @@ class RemoteFontFaceSource final : public CSSFontFaceSource,
     DataSource data_source_;
   };
 
-  void SwitchToSwapPeriod();
-  void SwitchToFailurePeriod();
+  void UpdatePeriod();
   bool ShouldTriggerWebFontsIntervention();
   bool IsLowPriorityLoadingAllowedForRemoteFont() const override;
 
   // Our owning font face.
   Member<CSSFontFace> face_;
-  // Cleared once load is finished.
-  Member<FontResource> font_;
   Member<FontSelector> font_selector_;
 
   // |nullptr| if font is not loaded or failed to decode.
   scoped_refptr<FontCustomPlatformData> custom_font_data_;
 
-  const FontDisplay display_;
+  FontDisplay display_;
+  Phase phase_;
   DisplayPeriod period_;
   FontLoadHistograms histograms_;
   bool is_intervention_triggered_;

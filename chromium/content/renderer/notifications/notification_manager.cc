@@ -26,7 +26,7 @@ using blink::WebString;
 namespace content {
 namespace {
 
-int CurrentWorkerId() {
+int NotificationWorkerId() {
   return WorkerThread::GetCurrentId();
 }
 
@@ -74,7 +74,7 @@ NotificationManager* NotificationManager::ThreadSpecificInstance(
 
   NotificationManager* manager =
       new NotificationManager(thread_safe_sender, notification_dispatcher);
-  if (CurrentWorkerId())
+  if (NotificationWorkerId())
     WorkerThread::AddObserver(manager);
   return manager;
 }
@@ -93,10 +93,10 @@ void NotificationManager::Show(
 
   GURL origin_gurl = url::Origin(origin).GetURL();
 
-  int notification_id =
-      notification_dispatcher_->GenerateNotificationId(CurrentWorkerId());
+  int request_id =
+      notification_dispatcher_->GenerateNotificationId(NotificationWorkerId());
 
-  active_page_notifications_[notification_id] = ActiveNotificationData(
+  active_page_notifications_[request_id] = ActiveNotificationData(
       delegate, origin_gurl,
       notification_data.tag.Utf8(
           WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD));
@@ -105,8 +105,7 @@ void NotificationManager::Show(
   // origins. Perhaps also 'file:', 'blob:' and 'filesystem:'. See
   // https://crbug.com/490074 for detail.
   thread_safe_sender_->Send(new PlatformNotificationHostMsg_Show(
-      notification_id, origin_gurl,
-      ToPlatformNotificationData(notification_data),
+      request_id, origin_gurl, ToPlatformNotificationData(notification_data),
       ToNotificationResources(std::move(notification_resources))));
 }
 
@@ -145,7 +144,7 @@ void NotificationManager::ShowPersistent(
   // TODO(peter): GenerateNotificationId is more of a request id. Consider
   // renaming the method in the NotificationDispatcher if this makes sense.
   int request_id =
-      notification_dispatcher_->GenerateNotificationId(CurrentWorkerId());
+      notification_dispatcher_->GenerateNotificationId(NotificationWorkerId());
 
   pending_show_notification_requests_.AddWithID(std::move(callbacks),
                                                 request_id);
@@ -177,7 +176,7 @@ void NotificationManager::GetNotifications(
   // TODO(peter): GenerateNotificationId is more of a request id. Consider
   // renaming the method in the NotificationDispatcher if this makes sense.
   int request_id =
-      notification_dispatcher_->GenerateNotificationId(CurrentWorkerId());
+      notification_dispatcher_->GenerateNotificationId(NotificationWorkerId());
 
   pending_get_notification_requests_.AddWithID(std::move(callbacks),
                                                request_id);
@@ -245,8 +244,8 @@ bool NotificationManager::OnMessageReceived(const IPC::Message& message) {
   return handled;
 }
 
-void NotificationManager::OnDidShow(int notification_id) {
-  const auto& iter = active_page_notifications_.find(notification_id);
+void NotificationManager::OnDidShow(int request_id) {
+  const auto& iter = active_page_notifications_.find(request_id);
   if (iter == active_page_notifications_.end())
     return;
 
@@ -269,8 +268,8 @@ void NotificationManager::OnDidShowPersistent(int request_id, bool success) {
   pending_show_notification_requests_.Remove(request_id);
 }
 
-void NotificationManager::OnDidClose(int notification_id) {
-  const auto& iter = active_page_notifications_.find(notification_id);
+void NotificationManager::OnDidClose(int request_id) {
+  const auto& iter = active_page_notifications_.find(request_id);
   if (iter == active_page_notifications_.end())
     return;
 
@@ -279,8 +278,8 @@ void NotificationManager::OnDidClose(int notification_id) {
   active_page_notifications_.erase(iter);
 }
 
-void NotificationManager::OnDidClick(int notification_id) {
-  const auto& iter = active_page_notifications_.find(notification_id);
+void NotificationManager::OnDidClick(int request_id) {
+  const auto& iter = active_page_notifications_.find(request_id);
   if (iter == active_page_notifications_.end())
     return;
 

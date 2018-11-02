@@ -21,7 +21,7 @@ class CachedMetadataHandler
     kSendToPlatform,  // send cache data to blink::Platform::cacheMetadata
     kCacheLocally     // cache only in Resource's member variables
   };
-  virtual ~CachedMetadataHandler() {}
+  virtual ~CachedMetadataHandler() = default;
   virtual void Trace(blink::Visitor* visitor) {}
   // Caches the given metadata in association with this resource and suggests
   // that the platform persist it. The dataTypeID is a pseudo-randomly chosen
@@ -39,8 +39,10 @@ class CachedMetadataHandler
   // Returns the encoding to which the cache is specific.
   virtual String Encoding() const = 0;
 
+  virtual bool IsServedFromCacheStorage() const = 0;
+
  protected:
-  CachedMetadataHandler() {}
+  CachedMetadataHandler() = default;
 };
 }  // namespace blink
 

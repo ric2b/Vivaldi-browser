@@ -51,7 +51,7 @@ namespace {
 class LocalFrameMockWebFrameClient
     : public FrameTestHelpers::TestWebFrameClient {
  public:
-  ~LocalFrameMockWebFrameClient() override {}
+  ~LocalFrameMockWebFrameClient() override = default;
 
   MOCK_METHOD0(UserAgentOverride, WebString());
 };
@@ -65,7 +65,8 @@ class LocalFrameClientImplTest : public ::testing::Test {
     helper_.Initialize(&web_frame_client_);
     // FIXME: http://crbug.com/363843. This needs to find a better way to
     // not create graphics layers.
-    helper_.WebView()->GetSettings()->SetAcceleratedCompositingEnabled(false);
+    helper_.GetWebView()->GetSettings()->SetAcceleratedCompositingEnabled(
+        false);
   }
 
   void TearDown() override {

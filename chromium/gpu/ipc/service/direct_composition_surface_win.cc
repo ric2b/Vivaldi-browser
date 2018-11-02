@@ -9,8 +9,10 @@
 #include <dxgi1_6.h>
 
 #include "base/containers/circular_deque.h"
+#include "base/debug/alias.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/trace_event/trace_event.h"
@@ -137,8 +139,8 @@ bool HardwareSupportsOverlays() {
                                             d3d11_device.Get(), &flags)))
       continue;
 
-    UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DirectComposition.OverlaySupportFlags",
-                                flags);
+    base::UmaHistogramSparse("GPU.DirectComposition.OverlaySupportFlags",
+                             flags);
 
     // Some new Intel drivers only claim to support unscaled overlays, but
     // scaled overlays still work. Even when scaled overlays aren't actually
@@ -763,8 +765,8 @@ void DCLayerTree::SwapChainPresenter::PresentToSwapChain(
   if (SUCCEEDED(swap_chain_.CopyTo(swap_chain_media.GetAddressOf()))) {
     DXGI_FRAME_STATISTICS_MEDIA stats = {};
     if (SUCCEEDED(swap_chain_media->GetFrameStatisticsMedia(&stats))) {
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DirectComposition.CompositionMode",
-                                  stats.CompositionMode);
+      base::UmaHistogramSparse("GPU.DirectComposition.CompositionMode",
+                               stats.CompositionMode);
       presentation_history_.AddSample(stats.CompositionMode);
     }
   }
@@ -816,8 +818,11 @@ void DCLayerTree::SwapChainPresenter::ReallocateSwapChain(bool yuy2) {
       DXGI_SWAP_CHAIN_FLAG_YUV_VIDEO | DXGI_SWAP_CHAIN_FLAG_FULLSCREEN_VIDEO;
 
   HANDLE handle;
-  create_surface_handle_function_(COMPOSITIONOBJECT_ALL_ACCESS, nullptr,
-                                  &handle);
+  HRESULT hr = create_surface_handle_function_(COMPOSITIONOBJECT_ALL_ACCESS,
+                                               nullptr, &handle);
+  // TODO(crbug/792806): Remove Alias and CHECK after issue is fixed.
+  base::debug::Alias(&hr);
+  CHECK(SUCCEEDED(hr));
   swap_chain_handle_.Set(handle);
 
   if (is_yuy2_swapchain_ != yuy2) {
@@ -831,7 +836,6 @@ void DCLayerTree::SwapChainPresenter::ReallocateSwapChain(bool yuy2) {
   is_yuy2_swapchain_ = false;
   // The composition surface handle isn't actually used, but
   // CreateSwapChainForComposition can't create YUY2 swapchains.
-  HRESULT hr = E_FAIL;
   if (yuy2) {
     hr = media_factory->CreateSwapChainForCompositionSurfaceHandle(
         d3d11_device_.Get(), swap_chain_handle_.Get(), &desc, nullptr,
@@ -1145,8 +1149,8 @@ bool DirectCompositionSurfaceWin::IsHDRSupported() {
         continue;
       }
 
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.ColorSpace", desc.ColorSpace);
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.Output.MaxLuminance", desc.MaxLuminance);
+      base::UmaHistogramSparse("GPU.Output.ColorSpace", desc.ColorSpace);
+      base::UmaHistogramSparse("GPU.Output.MaxLuminance", desc.MaxLuminance);
 
       if (desc.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020) {
         hdr_monitor_found = true;
@@ -1245,20 +1249,17 @@ bool DirectCompositionSurfaceWin::Resize(const gfx::Size& size,
   size_ = size;
   is_hdr_ = is_hdr;
   has_alpha_ = has_alpha;
-  ui::ScopedReleaseCurrent release_current(this);
   return RecreateRootSurface();
 }
 
 gfx::SwapResult DirectCompositionSurfaceWin::SwapBuffers(
     const PresentationCallback& callback) {
-  {
-    ui::ScopedReleaseCurrent release_current(this);
-    root_surface_->SwapBuffers(callback);
-
-    layer_tree_->CommitAndClearPendingOverlays();
-  }
+  ui::ScopedReleaseCurrent release_current;
+  root_surface_->SwapBuffers(callback);
+  layer_tree_->CommitAndClearPendingOverlays();
   child_window_.ClearInvalidContents();
-  return gfx::SwapResult::SWAP_ACK;
+  return release_current.Restore() ? gfx::SwapResult::SWAP_ACK
+                                   : gfx::SwapResult::SWAP_FAILED;
 }
 
 gfx::SwapResult DirectCompositionSurfaceWin::PostSubBuffer(
@@ -1284,11 +1285,9 @@ bool DirectCompositionSurfaceWin::ScheduleDCLayer(
 bool DirectCompositionSurfaceWin::SetEnableDCLayers(bool enable) {
   if (enable_dc_layers_ == enable)
     return true;
-  ui::ScopedReleaseCurrent release_current(this);
   enable_dc_layers_ = enable;
   return RecreateRootSurface();
 }
-
 
 bool DirectCompositionSurfaceWin::FlipsVertically() const {
   return true;

@@ -7,8 +7,8 @@
 #include <memory>
 
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/system/system_notifier.h"
 #include "ash/system/tray/tray_constants.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/network/network_event_log.h"
 #include "chromeos/network/network_handler.h"
@@ -20,6 +20,8 @@ using chromeos::NetworkHandler;
 namespace ash {
 
 namespace {
+
+const char kNotifierSms[] = "ash.sms";
 
 // Send the |message| to notification center to display to users. Note that each
 // notification will be assigned with different |message_id| as notification id.
@@ -35,15 +37,16 @@ void ShowNotification(const base::DictionaryValue* message,
   const char kNotificationId[] = "chrome://network/sms";
   std::unique_ptr<message_center::Notification> notification;
 
-  notification = system_notifier::CreateSystemNotification(
+  // TODO(estade): should SMS notifications really be shown to all users?
+  notification = message_center::Notification::CreateSystemNotification(
       message_center::NOTIFICATION_TYPE_SIMPLE,
       kNotificationId + std::to_string(message_id),
-      base::ASCIIToUTF16(message_number), base::UTF8ToUTF16(message_text),
-      gfx::Image(gfx::CreateVectorIcon(kSystemMenuSmsIcon, kMenuIconSize,
-                                       kMenuIconColor)),
-      base::string16(), GURL(),
-      message_center::NotifierId(message_center::NotifierId::APPLICATION,
-                                 system_notifier::kNotifierSms),
+      base::ASCIIToUTF16(message_number),
+      base::CollapseWhitespace(base::UTF8ToUTF16(message_text),
+                               false /* trim_sequences_with_line_breaks */),
+      gfx::Image(), base::string16(), GURL(),
+      message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
+                                 kNotifierSms),
       message_center::RichNotificationData(), nullptr, kNotificationSmsSyncIcon,
       message_center::SystemNotificationWarningLevel::NORMAL);
   message_center->AddNotification(std::move(notification));

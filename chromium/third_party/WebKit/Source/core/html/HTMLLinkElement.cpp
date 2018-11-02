@@ -62,7 +62,7 @@ HTMLLinkElement* HTMLLinkElement::Create(Document& document,
   return new HTMLLinkElement(document, created_by_parser);
 }
 
-HTMLLinkElement::~HTMLLinkElement() {}
+HTMLLinkElement::~HTMLLinkElement() = default;
 
 void HTMLLinkElement::ParseAttribute(
     const AttributeModificationParams& params) {
@@ -302,7 +302,7 @@ void HTMLLinkElement::DispatchPendingEvent(
 void HTMLLinkElement::ScheduleEvent() {
   GetDocument()
       .GetTaskRunner(TaskType::kDOMManipulation)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&HTMLLinkElement::DispatchPendingEvent,
                            WrapPersistent(this),
                            WTF::Passed(IncrementLoadEventDelayCount::Create(

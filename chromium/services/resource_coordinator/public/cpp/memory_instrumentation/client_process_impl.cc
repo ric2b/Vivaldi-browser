@@ -103,17 +103,18 @@ void ClientProcessImpl::OnChromeMemoryDumpDone(
 }
 
 void ClientProcessImpl::RequestGlobalMemoryDump_NoCallback(
-    const base::trace_event::GlobalMemoryDumpRequestArgs& args) {
+    base::trace_event::MemoryDumpType dump_type,
+    base::trace_event::MemoryDumpLevelOfDetail level_of_detail) {
   if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&ClientProcessImpl::RequestGlobalMemoryDump_NoCallback,
-                   base::Unretained(this), args));
+                   base::Unretained(this), dump_type, level_of_detail));
     return;
   }
 
   coordinator_->RequestGlobalMemoryDumpAndAppendToTrace(
-      args,
+      dump_type, level_of_detail,
       mojom::Coordinator::RequestGlobalMemoryDumpAndAppendToTraceCallback());
 }
 

@@ -31,7 +31,7 @@
     didChangeActiveWebState:(web::WebState*)newWebState
                 oldWebState:(web::WebState*)oldWebState
                     atIndex:(int)atIndex
-                 userAction:(BOOL)userAction {
+                     reason:(int)reason {
   if (oldWebState) {
     // Save state, such as scroll position, ... of the old selected Tab.
     Tab* oldTab = LegacyTabHelper::GetTabForWebState(oldWebState);
@@ -40,10 +40,7 @@
     // Avoid artificially extending the lifetime of oldTab until the global
     // autoreleasepool is purged.
     @autoreleasepool {
-      [[NSNotificationCenter defaultCenter]
-          postNotificationName:kTabModelTabDeselectedNotification
-                        object:_tabModel
-                      userInfo:@{kTabModelTabKey : oldTab}];
+      [_tabModel notifyTabWasDeselected:oldTab];
     }
   }
 

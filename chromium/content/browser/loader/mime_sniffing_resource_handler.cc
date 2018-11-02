@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -21,7 +20,6 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/loader/stream_resource_handler.h"
-#include "content/common/loader_util.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_save_info.h"
@@ -29,7 +27,6 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
-#include "content/public/common/resource_response.h"
 #include "content/public/common/webplugininfo.h"
 #include "net/base/io_buffer.h"
 #include "net/base/mime_sniffer.h"
@@ -38,6 +35,8 @@
 #include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
 #include "ppapi/features/features.h"
+#include "services/network/public/cpp/loader_util.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "third_party/WebKit/common/mime_util/mime_util.h"
 #include "url/origin.h"
 
@@ -131,12 +130,11 @@ void MimeSniffingResourceHandler::OnWillStart(
     std::unique_ptr<ResourceController> controller) {
   DCHECK(!has_controller());
 
-  AttachAcceptHeader(GetRequestInfo()->GetResourceType(), request());
   next_handler_->OnWillStart(url, std::move(controller));
 }
 
 void MimeSniffingResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller,
     bool open_when_done,
     bool ask_for_target) {
@@ -144,7 +142,7 @@ void MimeSniffingResourceHandler::OnResponseStarted(
 }
 
 void MimeSniffingResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   DCHECK_EQ(STATE_STARTING, state_);
   DCHECK(!has_controller());
@@ -159,7 +157,7 @@ void MimeSniffingResourceHandler::OnResponseStarted(
         response_->head.headers->response_code() == 304)) {
     // MIME sniffing should be disabled for a request initiated by fetch().
     if (request_context_type_ != REQUEST_CONTEXT_TYPE_FETCH &&
-        ShouldSniffContent(request(), response_.get())) {
+        network::ShouldSniffContent(request(), response_.get())) {
       controller->Resume();
       return;
     }
@@ -523,26 +521,42 @@ bool MimeSniffingResourceHandler::MustDownload() {
 
   must_download_is_set_ = true;
 
+  bool is_cross_origin =
+      (request()->initiator().has_value() &&
+       !request()->url_chain().back().SchemeIsBlob() &&
+       !request()->url_chain().back().SchemeIsFileSystem() &&
+       !request()->url_chain().back().SchemeIs(url::kAboutScheme) &&
+       !request()->url_chain().back().SchemeIs(url::kDataScheme) &&
+       request()->initiator()->GetURL() !=
+           request()->url_chain().back().GetOrigin());
+
   std::string disposition;
   request()->GetResponseHeaderByName("content-disposition", &disposition);
   if (!disposition.empty() &&
       net::HttpContentDisposition(disposition, std::string()).is_attachment()) {
     must_download_ = true;
-  } else if (host_->delegate() &&
-             host_->delegate()->ShouldForceDownloadResource(
+  } else if (GetRequestInfo()->suggested_filename().has_value() &&
+             !is_cross_origin) {
+    must_download_ = true;
+  } else if (GetContentClient()->browser()->ShouldForceDownloadResource(
                  request()->url(), response_->head.mime_type)) {
     must_download_ = true;
   } else if (request()->url().SchemeIsHTTPOrHTTPS() &&
              // The MHTML mime type should be same as the one we check in
              // Blink's DocumentLoader.
-             response_->head.mime_type == "multipart/related" &&
-             !host_->delegate()->AllowRenderingMhtmlOverHttp(request())) {
-    // Force to download the MHTML page from the remote server, instead of
-    // loading it.
-    must_download_ = true;
+             response_->head.mime_type == "multipart/related") {
+    // It is OK to load the saved offline copy, in MHTML format.
+    const ResourceRequestInfo* info =
+        ResourceRequestInfo::ForRequest(request());
+    must_download_ =
+        !GetContentClient()->browser()->AllowRenderingMhtmlOverHttp(
+            info->GetNavigationUIData());
   } else {
     must_download_ = false;
   }
+
+  if (GetRequestInfo()->suggested_filename().has_value() && !must_download_)
+    RecordDownloadCount(CROSS_ORIGIN_DOWNLOAD_WITHOUT_CONTENT_DISPOSITION);
 
   return must_download_;
 }

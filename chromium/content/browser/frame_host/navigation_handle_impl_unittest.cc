@@ -84,8 +84,6 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
     CreateNavigationHandle();
-    EXPECT_EQ(REQUEST_CONTEXT_TYPE_UNSPECIFIED,
-              test_handle_->request_context_type_);
     contents()->GetMainFrame()->InitializeRenderFrameIfNeeded();
   }
 
@@ -113,9 +111,6 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     // It's safe to use base::Unretained since the NavigationHandle is owned by
     // the NavigationHandleImplTest.
     test_handle_->WillStartRequest(
-        "GET", nullptr, Referrer(), false, ui::PAGE_TRANSITION_LINK, false,
-        REQUEST_CONTEXT_TYPE_LOCATION,
-        blink::WebMixedContentContextType::kBlockable,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -151,7 +146,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     // It's safe to use base::Unretained since the NavigationHandle is owned by
     // the NavigationHandleImplTest.
     test_handle_->WillFailRequest(
-        ssl_info, false,
+        ssl_info,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -172,7 +167,7 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
     test_handle_->WillProcessResponse(
         main_test_rfh(), scoped_refptr<net::HttpResponseHeaders>(),
         net::HttpResponseInfo::CONNECTION_INFO_QUIC_35, net::HostPortPair(),
-        net::SSLInfo(), GlobalRequestID(), false, false, false, base::Closure(),
+        net::SSLInfo(), GlobalRequestID(), false, false, false,
         base::Bind(&NavigationHandleImplTest::UpdateThrottleCheckResult,
                    base::Unretained(this)));
   }
@@ -262,7 +257,15 @@ class NavigationHandleImplTest : public RenderViewHostImplTestHarness {
         base::TimeTicks::Now(), 0,
         false,                  // started_from_context_menu
         CSPDisposition::CHECK,  // should_check_main_world_csp
-        false);                 // is_form_submission
+        false,                  // is_form_submission
+        base::nullopt,          // suggested_filename
+        "GET",
+        nullptr,  // resource_request_body
+        Referrer(),
+        false,  // has_user_gesture
+        ui::PAGE_TRANSITION_LINK,
+        false,  // is_external_protocol
+        REQUEST_CONTEXT_TYPE_LOCATION);
   }
 
  private:
@@ -956,7 +959,6 @@ TEST_F(NavigationHandleImplTest, BlockRequestCustomNetErrorAndErrorHTML) {
 
 TEST_F(NavigationHandleImplTest, BlockRequestCustomNetErrorInRedirect) {
   // BLOCK_REQUEST on redirect requires PlzNavigate.
-  EnableBrowserSideNavigation();
   TestNavigationThrottle* block_throttle = CreateTestNavigationThrottle(
       {NavigationThrottle::BLOCK_REQUEST, net::ERR_FILE_NOT_FOUND});
   EXPECT_TRUE(call_counts_match(block_throttle, 0, 0, 0, 0));
@@ -977,7 +979,6 @@ TEST_F(NavigationHandleImplTest, BlockRequestCustomNetErrorInRedirect) {
 TEST_F(NavigationHandleImplTest,
        BlockRequestCustomNetErrorAndErrorHTMLInRedirect) {
   // BLOCK_REQUEST on redirect requires PlzNavigate.
-  EnableBrowserSideNavigation();
   std::string expected_error_page_content("<html><body>test</body></html>");
   TestNavigationThrottle* block_throttle = CreateTestNavigationThrottle(
       {NavigationThrottle::BLOCK_REQUEST, net::ERR_FILE_NOT_FOUND,

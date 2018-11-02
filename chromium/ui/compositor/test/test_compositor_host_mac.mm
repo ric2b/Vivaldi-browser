@@ -16,6 +16,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "ui/compositor/compositor.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -43,6 +44,10 @@
 - (void)drawRect:(NSRect)rect {
   DCHECK(compositor_) << "Drawing with no compositor set.";
   compositor_->ScheduleFullRedraw();
+}
+
+- (gfx::AcceleratedWidget)widget {
+  return compositor_->widget();
 }
 @end
 
@@ -142,8 +147,8 @@ void TestCompositorHostMac::Show() {
                               defer:NO];
   base::scoped_nsobject<AcceleratedTestView> view(
       [[AcceleratedTestView alloc] init]);
-  compositor_.SetAcceleratedWidget(view);
-  compositor_.SetScaleAndSize(1.0f, bounds_.size());
+  compositor_.SetAcceleratedWidget([view widget]);
+  compositor_.SetScaleAndSize(1.0f, bounds_.size(), viz::LocalSurfaceId());
   [view setCompositor:&compositor_];
   [window_ setContentView:view];
   [window_ orderFront:nil];

@@ -21,8 +21,8 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/context_result.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
-#include "gpu/gpu_export.h"
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
+#include "gpu/ipc/service/command_buffer_stub.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/ipc_sync_channel.h"
@@ -45,7 +45,7 @@ class SyncPointManager;
 class GpuChannelManager;
 class GpuChannelMessageFilter;
 
-class GPU_EXPORT FilteredSender : public IPC::Sender {
+class GPU_IPC_SERVICE_EXPORT FilteredSender : public IPC::Sender {
  public:
   FilteredSender();
   ~FilteredSender() override;
@@ -54,7 +54,7 @@ class GPU_EXPORT FilteredSender : public IPC::Sender {
   virtual void RemoveFilter(IPC::MessageFilter* filter) = 0;
 };
 
-class GPU_EXPORT SyncChannelFilteredSender : public FilteredSender {
+class GPU_IPC_SERVICE_EXPORT SyncChannelFilteredSender : public FilteredSender {
  public:
   SyncChannelFilteredSender(
       IPC::ChannelHandle channel_handle,
@@ -75,7 +75,8 @@ class GPU_EXPORT SyncChannelFilteredSender : public FilteredSender {
 
 // Encapsulates an IPC channel between the GPU process and one renderer
 // process. On the renderer side there's a corresponding GpuChannelHost.
-class GPU_EXPORT GpuChannel : public IPC::Listener, public FilteredSender {
+class GPU_IPC_SERVICE_EXPORT GpuChannel : public IPC::Listener,
+                                          public FilteredSender {
  public:
   // Takes ownership of the renderer process handle.
   GpuChannel(GpuChannelManager* gpu_channel_manager,
@@ -138,12 +139,12 @@ class GPU_EXPORT GpuChannel : public IPC::Listener, public FilteredSender {
   void AddFilter(IPC::MessageFilter* filter) override;
   void RemoveFilter(IPC::MessageFilter* filter) override;
 
-  void OnCommandBufferScheduled(GpuCommandBufferStub* stub);
-  void OnCommandBufferDescheduled(GpuCommandBufferStub* stub);
+  void OnCommandBufferScheduled(CommandBufferStub* stub);
+  void OnCommandBufferDescheduled(CommandBufferStub* stub);
 
   gl::GLShareGroup* share_group() const { return share_group_.get(); }
 
-  GpuCommandBufferStub* LookupCommandBuffer(int32_t route_id);
+  CommandBufferStub* LookupCommandBuffer(int32_t route_id);
 
   bool HasActiveWebGLContext() const;
   void LoseAllContexts();
@@ -179,7 +180,7 @@ class GPU_EXPORT GpuChannel : public IPC::Listener, public FilteredSender {
   void HandleMessageForTesting(const IPC::Message& msg);
 
 #if defined(OS_ANDROID)
-  const GpuCommandBufferStub* GetOneStub() const;
+  const CommandBufferStub* GetOneStub() const;
 #endif
 
  private:
@@ -203,7 +204,7 @@ class GPU_EXPORT GpuChannel : public IPC::Listener, public FilteredSender {
   scoped_refptr<GpuChannelMessageFilter> filter_;
 
   // Map of routing id to command buffer stub.
-  base::flat_map<int32_t, std::unique_ptr<GpuCommandBufferStub>> stubs_;
+  base::flat_map<int32_t, std::unique_ptr<CommandBufferStub>> stubs_;
 
   // Map of stream id to scheduler sequence id.
   base::flat_map<int32_t, SequenceId> stream_sequences_;

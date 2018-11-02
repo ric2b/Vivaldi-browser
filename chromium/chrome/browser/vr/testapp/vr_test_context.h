@@ -9,6 +9,7 @@
 
 #include <cstdint>
 
+#include "base/time/time.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/model/controller_model.h"
 #include "chrome/browser/vr/ui_browser_interface.h"
@@ -20,6 +21,8 @@ class Event;
 
 namespace vr {
 
+class TextInputDelegate;
+class TestKeyboardDelegate;
 class Ui;
 struct Model;
 
@@ -49,6 +52,7 @@ class VrTestContext : public vr::UiBrowserInterface {
   void StartAutocomplete(const base::string16& string) override;
   void StopAutocomplete() override;
   void Navigate(GURL gurl) override;
+  void LoadAssets() override;
 
   void set_window_size(const gfx::Size& size) { window_size_ = size; }
 
@@ -56,8 +60,10 @@ class VrTestContext : public vr::UiBrowserInterface {
   unsigned int CreateFakeContentTexture();
   void CreateFakeOmniboxSuggestions();
   void CreateFakeVoiceSearchResult();
+  void CreateFakeTextInputOrCommit(bool commit);
   void CycleWebVrModes();
   void ToggleSplashScreen();
+  void CycleOrigin();
   gfx::Transform ProjectionMatrix() const;
   gfx::Transform ViewProjectionMatrix() const;
   ControllerModel UpdateController();
@@ -80,11 +86,14 @@ class VrTestContext : public vr::UiBrowserInterface {
 
   bool fullscreen_ = false;
   bool incognito_ = false;
-
   bool show_web_vr_splash_screen_ = false;
   bool voice_search_enabled_ = false;
+  base::TimeTicks page_load_start_;
 
   ControllerModel last_controller_model_;
+
+  std::unique_ptr<TextInputDelegate> text_input_delegate_;
+  std::unique_ptr<TestKeyboardDelegate> keyboard_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(VrTestContext);
 };

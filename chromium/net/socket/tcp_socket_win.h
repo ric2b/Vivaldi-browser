@@ -21,6 +21,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/socket/socket_descriptor.h"
 #include "net/socket/socket_performance_watcher.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -29,6 +30,7 @@ class IOBuffer;
 class IPEndPoint;
 class NetLog;
 struct NetLogSource;
+class SocketTag;
 
 class NET_EXPORT TCPSocketWin : public base::win::ObjectWatcher::Delegate {
  public:
@@ -68,7 +70,10 @@ class NET_EXPORT TCPSocketWin : public base::win::ObjectWatcher::Delegate {
   int ReadIfReady(IOBuffer* buf,
                   int buf_len,
                   const CompletionCallback& callback);
-  int Write(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
+  int Write(IOBuffer* buf,
+            int buf_len,
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation);
 
   int GetLocalAddress(IPEndPoint* address) const;
   int GetPeerAddress(IPEndPoint* address) const;
@@ -123,6 +128,9 @@ class NET_EXPORT TCPSocketWin : public base::win::ObjectWatcher::Delegate {
   // no longer be used. This method should be used only for testing. No read,
   // write, or accept operations should be pending.
   SocketDescriptor ReleaseSocketDescriptorForTesting();
+
+  // Apply |tag| to this socket.
+  void ApplySocketTag(const SocketTag& tag);
 
  private:
   class Core;

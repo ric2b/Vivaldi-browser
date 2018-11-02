@@ -57,8 +57,12 @@ class ExtensionSystem : public KeyedService {
 
   // Initializes extensions machinery.
   // Component extensions are always enabled, external and user extensions are
-  // controlled by |extensions_enabled|.
+  // controlled (for both incognito and non-incognito profiles) by the
+  // |extensions_enabled| flag passed to non-incognito initialization.
+  // These calls should occur after the profile IO data is initialized,
+  // as extensions initialization depends on that.
   virtual void InitForRegularProfile(bool extensions_enabled) = 0;
+  virtual void InitForIncognitoProfile() = 0;
 
   // The ExtensionService is created at startup. ExtensionService is only
   // defined in Chrome.
@@ -132,7 +136,9 @@ class ExtensionSystem : public KeyedService {
   // transferred and implementors of this function are responsible for cleaning
   // it up on errors, etc.
   virtual void InstallUpdate(const std::string& extension_id,
-                             const base::FilePath& unpacked_dir) = 0;
+                             const std::string& public_key,
+                             const base::FilePath& unpacked_dir,
+                             InstallUpdateCallback install_update_callback) = 0;
 };
 
 }  // namespace extensions

@@ -18,7 +18,6 @@
 #include "chrome/common/features.h"
 #include "chrome/common/profiling/constants.mojom.h"
 #include "chrome/profiling/profiling_service.h"
-#include "chrome/utility/printing/pdf_to_pwg_raster_converter_impl.h"
 #include "chrome/utility/utility_message_handler.h"
 #include "components/patch_service/patch_service.h"
 #include "components/patch_service/public/interfaces/constants.mojom.h"
@@ -45,6 +44,7 @@
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_WIN)
+#include "chrome/services/printing/pdf_to_emf_converter_factory.h"
 #include "chrome/services/util_win/public/interfaces/constants.mojom.h"
 #include "chrome/services/util_win/util_win_service.h"
 #endif
@@ -52,20 +52,23 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/services/media_gallery_util/media_gallery_util_service.h"
 #include "chrome/services/media_gallery_util/public/interfaces/constants.mojom.h"
+#include "chrome/services/removable_storage_writer/public/interfaces/constants.mojom.h"
+#include "chrome/services/removable_storage_writer/removable_storage_writer_service.h"
 #include "chrome/utility/extensions/extensions_handler.h"
+#include "extensions/utility/utility_handler.h"
 #if defined(OS_WIN)
 #include "chrome/services/wifi_util_win/public/interfaces/constants.mojom.h"
 #include "chrome/services/wifi_util_win/wifi_util_win_service.h"
 #endif
 #endif
 
-#if BUILDFLAG(ENABLE_MUS)
+#if defined(OS_CHROMEOS)
 #include "chrome/utility/mash_service_factory.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-#include "chrome/common/printing/pdf_to_pwg_raster_converter.mojom.h"
-#include "chrome/utility/printing/pdf_to_pwg_raster_converter_service.h"
+#include "chrome/services/printing/printing_service.h"
+#include "chrome/services/printing/public/interfaces/constants.mojom.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
@@ -118,6 +121,17 @@ void CreateResourceUsageReporter(
 base::LazyInstance<ChromeContentUtilityClient::NetworkBinderCreationCallback>::
     Leaky g_network_binder_creation_callback = LAZY_INSTANCE_INITIALIZER;
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+void RegisterRemovableStorageWriterService(
+    ChromeContentUtilityClient::StaticServiceMap* services) {
+  service_manager::EmbeddedServiceInfo service_info;
+  service_info.factory =
+      base::Bind(&RemovableStorageWriterService::CreateService);
+  services->emplace(chrome::mojom::kRemovableStorageWriterServiceName,
+                    service_info);
+}
+#endif
+
 }  // namespace
 
 ChromeContentUtilityClient::ChromeContentUtilityClient()
@@ -129,6 +143,10 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
     (BUILDFLAG(ENABLE_BASIC_PRINTING) && defined(OS_WIN))
   handlers_.push_back(base::MakeUnique<printing::PrintingHandler>());
+#endif
+
+#if defined(OS_CHROMEOS)
+  mash_service_factory_ = std::make_unique<MashServiceFactory>();
 #endif
 }
 
@@ -155,8 +173,6 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
 
   auto registry = base::MakeUnique<service_manager::BinderRegistry>();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::ExposeInterfacesToBrowser(registry.get(),
-                                        utility_process_running_elevated_);
   extensions::utility_handler::ExposeInterfacesToBrowser(
       registry.get(), utility_process_running_elevated_);
 #endif
@@ -167,6 +183,13 @@ void ChromeContentUtilityClient::UtilityThreadStarted() {
     registry->AddInterface(base::Bind(CreateResourceUsageReporter),
                            base::ThreadTaskRunnerHandle::Get());
 #endif  // !defined(OS_ANDROID)
+#if defined(OS_WIN)
+    // TODO(crbug.com/798782): remove when the Cloud print chrome/service is
+    // removed.
+    registry->AddInterface(
+        base::Bind(printing::PdfToEmfConverterFactory::Create),
+        base::ThreadTaskRunnerHandle::Get());
+#endif
   }
 
   connection->AddConnectionFilter(
@@ -191,9 +214,10 @@ void ChromeContentUtilityClient::RegisterServices(
   if (utility_process_running_elevated_) {
 #if defined(OS_WIN) && BUILDFLAG(ENABLE_EXTENSIONS)
     service_manager::EmbeddedServiceInfo service_info;
-    service_info.factory =
-        base::Bind(&chrome::WifiUtilWinService::CreateService);
+    service_info.factory = base::Bind(&WifiUtilWinService::CreateService);
     services->emplace(chrome::mojom::kWifiUtilWinServiceName, service_info);
+
+    RegisterRemovableStorageWriterService(services);
 #endif
     return;
   }
@@ -206,11 +230,13 @@ void ChromeContentUtilityClient::RegisterServices(
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  service_manager::EmbeddedServiceInfo pdf_to_pwg_converter_info;
-  pdf_to_pwg_converter_info.factory =
-      base::Bind(&printing::PDFToPWGRasterConverterService::CreateService);
-  services->emplace(printing::mojom::kPdfToPwgRasterConverterServiceName,
-                    pdf_to_pwg_converter_info);
+  {
+    service_manager::EmbeddedServiceInfo printing_info;
+    printing_info.factory =
+        base::Bind(&printing::PrintingService::CreateService);
+    services->emplace(printing::mojom::kChromePrintingServiceName,
+                      printing_info);
+  }
 #endif
 
   service_manager::EmbeddedServiceInfo profiling_info;
@@ -238,7 +264,7 @@ void ChromeContentUtilityClient::RegisterServices(
 #if defined(OS_WIN)
   {
     service_manager::EmbeddedServiceInfo service_info;
-    service_info.factory = base::Bind(&chrome::UtilWinService::CreateService);
+    service_info.factory = base::Bind(&UtilWinService::CreateService);
     services->emplace(chrome::mojom::kUtilWinServiceName, service_info);
   }
 #endif
@@ -246,7 +272,7 @@ void ChromeContentUtilityClient::RegisterServices(
 #if defined(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
   {
     service_manager::EmbeddedServiceInfo service_info;
-    service_info.factory = base::Bind(&chrome::FileUtilService::CreateService);
+    service_info.factory = base::Bind(&FileUtilService::CreateService);
     services->emplace(chrome::mojom::kFileUtilServiceName, service_info);
   }
 #endif
@@ -260,15 +286,19 @@ void ChromeContentUtilityClient::RegisterServices(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   {
     service_manager::EmbeddedServiceInfo service_info;
-    service_info.factory =
-        base::Bind(&chrome::MediaGalleryUtilService::CreateService);
+    service_info.factory = base::Bind(&MediaGalleryUtilService::CreateService);
     services->emplace(chrome::mojom::kMediaGalleryUtilServiceName,
                       service_info);
   }
+#if !defined(OS_WIN)
+  // On Windows the service is running elevated.
+  RegisterRemovableStorageWriterService(services);
 #endif
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#if BUILDFLAG(ENABLE_MUS)
-  RegisterMashServices(services);
+#if defined(OS_CHROMEOS)
+  // TODO(jamescook): Figure out why we have to do this when not using --mash.
+  mash_service_factory_->RegisterOutOfProcessServices(services);
 #endif
 }
 

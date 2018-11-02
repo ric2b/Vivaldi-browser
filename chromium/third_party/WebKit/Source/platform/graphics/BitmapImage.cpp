@@ -144,12 +144,21 @@ PaintImage BitmapImage::CreateAndCacheFrame(size_t index) {
   auto completion_state = all_data_received_
                               ? PaintImage::CompletionState::DONE
                               : PaintImage::CompletionState::PARTIALLY_DONE;
+
+  // When requesting more than a single loop, repetition count is one less than
+  // the actual number of loops requested.
+  // TODO(khushalsagar): Fix this in RepetitionCount itself when removing code
+  // here for animations.
+  int repetition_count = RepetitionCount();
+  if (repetition_count > 0)
+    repetition_count++;
+
   auto builder =
       CreatePaintImageBuilder()
           .set_paint_image_generator(std::move(generator))
           .set_frame_index(index)
           .set_repetition_count(GetRepetitionCountWithPolicyOverride(
-              repetition_count_, animation_policy_))
+              repetition_count, animation_policy_))
           .set_completion_state(completion_state)
           .set_reset_animation_sequence_id(reset_animation_sequence_id_);
 
@@ -575,8 +584,7 @@ Optional<size_t> BitmapImage::StartAnimationInternal(TimeTicks time) {
     frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
         task_runner_, this, &BitmapImage::AdvanceAnimation));
     frame_timer_->StartOneShot(
-        std::max(desired_frame_start_time_ - time, TimeDelta()),
-        BLINK_FROM_HERE);
+        std::max(desired_frame_start_time_ - time, TimeDelta()), FROM_HERE);
 
     // No frames needed to be skipped to advance to the next frame.
     return Optional<size_t>(0u);
@@ -624,9 +632,8 @@ Optional<size_t> BitmapImage::StartAnimationInternal(TimeTicks time) {
   // animation can happen during painting and this invalidation is required
   // after the current paint.
   task_runner_->PostTask(
-      BLINK_FROM_HERE,
-      WTF::Bind(&BitmapImage::NotifyObserversOfAnimationAdvance,
-                weak_factory_.CreateWeakPtr(), nullptr));
+      FROM_HERE, WTF::Bind(&BitmapImage::NotifyObserversOfAnimationAdvance,
+                           weak_factory_.GetWeakPtr(), nullptr));
 
   // Reset the |desired_frame_start_time_| to the time for starting the
   // |current_frame_index_|. Whenever StartAnimationInternal decides to schedule
@@ -715,7 +722,7 @@ bool BitmapImage::InternalAdvanceAnimation(AnimationAdvancement advancement) {
         frame_timer_ = WTF::WrapUnique(new TaskRunnerTimer<BitmapImage>(
             task_runner_, this,
             &BitmapImage::NotifyObserversOfAnimationAdvance));
-        frame_timer_->StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+        frame_timer_->StartOneShot(TimeDelta(), FROM_HERE);
       }
 
       return false;

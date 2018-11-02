@@ -25,17 +25,19 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/events/Event.h"
+#include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
-#include "core/plugins/PluginView.h"
+#include "core/probe/CoreProbes.h"
+#include "core/timing/DOMWindowPerformance.h"
+#include "core/timing/Performance.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
@@ -44,7 +46,7 @@ namespace blink {
 
 namespace {
 
-using PluginSet = PersistentHeapHashSet<Member<PluginView>>;
+using PluginSet = PersistentHeapHashSet<Member<WebPluginContainerImpl>>;
 PluginSet& PluginsPendingDispose() {
   DEFINE_STATIC_LOCAL(PluginSet, set, ());
   return set;
@@ -78,8 +80,7 @@ HTMLFrameOwnerElement::HTMLFrameOwnerElement(const QualifiedName& tag_name,
     : HTMLElement(tag_name, document),
       content_frame_(nullptr),
       embedded_content_view_(nullptr),
-      sandbox_flags_(kSandboxNone),
-      did_load_non_empty_document_(false) {}
+      sandbox_flags_(kSandboxNone) {}
 
 LayoutEmbeddedContent* HTMLFrameOwnerElement::GetLayoutEmbeddedContent() const {
   // HTMLObjectElement and HTMLEmbedElement may return arbitrary layoutObjects
@@ -105,8 +106,12 @@ void HTMLFrameOwnerElement::ClearContentFrame() {
   if (!content_frame_)
     return;
 
+  Frame* frame = content_frame_;
   DCHECK_EQ(content_frame_->Owner(), this);
   content_frame_ = nullptr;
+
+  if (frame->IsLocalFrame())
+    probe::frameDisconnected(ToLocalFrame(frame), this);
 
   for (ContainerNode* node = this; node; node = node->ParentOrShadowHostNode())
     node->DecrementConnectedSubframeCount();
@@ -172,7 +177,7 @@ bool HTMLFrameOwnerElement::IsKeyboardFocusable() const {
   return content_frame_ && HTMLElement::IsKeyboardFocusable();
 }
 
-void HTMLFrameOwnerElement::DisposePluginSoon(PluginView* plugin) {
+void HTMLFrameOwnerElement::DisposePluginSoon(WebPluginContainerImpl* plugin) {
   if (PluginDisposeSuspendScope::suspend_count_) {
     PluginsPendingDispose().insert(plugin);
     PluginDisposeSuspendScope::suspend_count_ |= 1;
@@ -197,6 +202,13 @@ void HTMLFrameOwnerElement::FrameOwnerPropertiesChanged() {
   if (ContentFrame()) {
     GetDocument().GetFrame()->Client()->DidChangeFrameOwnerProperties(this);
   }
+}
+
+void HTMLFrameOwnerElement::AddResourceTiming(const ResourceTimingInfo& info) {
+  // Resource timing info should only be reported if the subframe is attached.
+  DCHECK(ContentFrame() && ContentFrame()->IsLocalFrame());
+  DOMWindowPerformance::performance(*GetDocument().domWindow())
+      ->GenerateAndAddResourceTiming(info, localName());
 }
 
 void HTMLFrameOwnerElement::DispatchLoad() {
@@ -233,7 +245,7 @@ void HTMLFrameOwnerElement::SetEmbeddedContentView(
     if (embedded_content_view_->IsAttached()) {
       embedded_content_view_->DetachFromLayout();
       if (embedded_content_view_->IsPluginView())
-        DisposePluginSoon(ToPluginView(embedded_content_view_));
+        DisposePluginSoon(ToWebPluginContainerImpl(embedded_content_view_));
       else
         embedded_content_view_->Dispose();
     }
@@ -244,9 +256,7 @@ void HTMLFrameOwnerElement::SetEmbeddedContentView(
 
   LayoutEmbeddedContent* layout_embedded_content =
       ToLayoutEmbeddedContent(GetLayoutObject());
-  LayoutEmbeddedContentItem layout_embedded_content_item =
-      LayoutEmbeddedContentItem(layout_embedded_content);
-  if (layout_embedded_content_item.IsNull())
+  if (!layout_embedded_content)
     return;
 
   if (embedded_content_view_) {
@@ -256,11 +266,10 @@ void HTMLFrameOwnerElement::SetEmbeddedContentView(
     if (doc) {
       CHECK_NE(doc->Lifecycle().GetState(), DocumentLifecycle::kStopping);
     }
-    layout_embedded_content_item.UpdateOnEmbeddedContentViewChange();
+    layout_embedded_content->UpdateOnEmbeddedContentViewChange();
 
-    DCHECK_EQ(GetDocument().View(),
-              layout_embedded_content_item.GetFrameView());
-    DCHECK(layout_embedded_content_item.GetFrameView());
+    DCHECK_EQ(GetDocument().View(), layout_embedded_content->GetFrameView());
+    DCHECK(layout_embedded_content->GetFrameView());
     embedded_content_view_->AttachToLayout();
   }
 
@@ -321,6 +330,13 @@ bool HTMLFrameOwnerElement::LoadOrRedirectSubframe(
     child_load_type = kFrameLoadTypeReloadBypassingCache;
     request.SetCacheMode(mojom::FetchCacheMode::kBypassCache);
   }
+
+  // Plug-ins should not load via service workers as plug-ins may have their
+  // own origin checking logic that may get confused if service workers respond
+  // with resources from another origin.
+  // https://w3c.github.io/ServiceWorker/#implementer-concerns
+  if (IsPlugin())
+    request.SetServiceWorkerMode(WebURLRequest::ServiceWorkerMode::kNone);
 
   child_frame->Loader().Load(FrameLoadRequest(&GetDocument(), request),
                              child_load_type);

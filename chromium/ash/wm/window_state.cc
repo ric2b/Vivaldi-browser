@@ -99,6 +99,40 @@ WMEventType WMEventTypeFromWindowPinType(ash::mojom::WindowPinType type) {
   return WM_EVENT_NORMAL;
 }
 
+float GetCurrentSnappedWidthRatio(aura::Window* window) {
+  gfx::Rect maximized_bounds =
+      screen_util::GetMaximizedWindowBoundsInParent(window);
+  return static_cast<float>(window->bounds().width()) /
+         static_cast<float>(maximized_bounds.width());
+}
+
+// Move all transient children to |dst_root|, including the ones in the child
+// windows and transient children of the transient children.
+void MoveAllTransientChildrenToNewRoot(aura::Window* window) {
+  aura::Window* dst_root = window->GetRootWindow();
+  for (aura::Window* transient_child : ::wm::GetTransientChildren(window)) {
+    if (!transient_child->parent())
+      continue;
+    const int container_id = transient_child->parent()->id();
+    DCHECK_GE(container_id, 0);
+    aura::Window* container = dst_root->GetChildById(container_id);
+    if (container->Contains(transient_child))
+      continue;
+    gfx::Rect child_bounds = transient_child->bounds();
+    ::wm::ConvertRectToScreen(dst_root, &child_bounds);
+    container->AddChild(transient_child);
+    transient_child->SetBoundsInScreen(
+        child_bounds,
+        display::Screen::GetScreen()->GetDisplayNearestWindow(window));
+
+    // Transient children may have transient children.
+    MoveAllTransientChildrenToNewRoot(transient_child);
+  }
+  // Move transient children of the child windows if any.
+  for (aura::Window* child : window->children())
+    MoveAllTransientChildrenToNewRoot(child);
+}
+
 }  // namespace
 
 WindowState::~WindowState() {
@@ -273,6 +307,8 @@ void WindowState::RestoreAlwaysOnTop() {
 
 void WindowState::OnWMEvent(const WMEvent* event) {
   current_state_->OnWMEvent(this, event);
+
+  UpdateSnappedWidthRatio(event);
 }
 
 void WindowState::SaveCurrentBoundsForRestore() {
@@ -317,8 +353,36 @@ std::unique_ptr<WindowState::State> WindowState::SetStateObject(
   return old_object;
 }
 
+void WindowState::UpdateSnappedWidthRatio(const WMEvent* event) {
+  if (!IsSnapped()) {
+    snapped_width_ratio_.reset();
+    return;
+  }
+
+  const WMEventType type = event->type();
+  // Initializes |snapped_width_ratio_| whenever |event| is snapping event.
+  if (type == WM_EVENT_SNAP_LEFT || type == WM_EVENT_SNAP_RIGHT ||
+      type == WM_EVENT_CYCLE_SNAP_LEFT || type == WM_EVENT_CYCLE_SNAP_RIGHT) {
+    // Since |UpdateSnappedWidthRatio()| is called post WMEvent taking effect,
+    // |window_|'s bounds is in a correct state for ratio update.
+    snapped_width_ratio_ =
+        base::make_optional(GetCurrentSnappedWidthRatio(window_));
+    return;
+  }
+
+  // |snapped_width_ratio_| under snapped state may change due to bounds event.
+  if (event->IsBoundsEvent()) {
+    snapped_width_ratio_ =
+        base::make_optional(GetCurrentSnappedWidthRatio(window_));
+  }
+}
+
 void WindowState::SetPreAutoManageWindowBounds(const gfx::Rect& bounds) {
-  pre_auto_manage_window_bounds_.reset(new gfx::Rect(bounds));
+  pre_auto_manage_window_bounds_ = base::make_optional(bounds);
+}
+
+void WindowState::SetPreAddedToWorkspaceWindowBounds(const gfx::Rect& bounds) {
+  pre_added_to_workspace_window_bounds_ = base::make_optional(bounds);
 }
 
 void WindowState::AddObserver(WindowStateObserver* observer) {
@@ -365,8 +429,28 @@ void WindowState::SetInImmersiveFullscreen(bool enabled) {
 
 void WindowState::set_bounds_changed_by_user(bool bounds_changed_by_user) {
   bounds_changed_by_user_ = bounds_changed_by_user;
-  if (bounds_changed_by_user)
+  if (bounds_changed_by_user) {
     pre_auto_manage_window_bounds_.reset();
+    pre_added_to_workspace_window_bounds_.reset();
+  }
+}
+
+void WindowState::OnDragStarted(int window_component) {
+  DCHECK(drag_details_);
+  if (delegate_)
+    delegate_->OnDragStarted(window_component);
+}
+
+void WindowState::OnCompleteDrag(const gfx::Point& location) {
+  DCHECK(drag_details_);
+  if (delegate_)
+    delegate_->OnDragFinished(/*canceled=*/false, location);
+}
+
+void WindowState::OnRevertDrag(const gfx::Point& location) {
+  DCHECK(drag_details_);
+  if (delegate_)
+    delegate_->OnDragFinished(/*canceled=*/true, location);
 }
 
 void WindowState::CreateDragDetails(const gfx::Point& point_in_parent,
@@ -424,7 +508,11 @@ void WindowState::AdjustSnappedBounds(gfx::Rect* bounds) {
   if (is_dragged() || !IsSnapped())
     return;
   gfx::Rect maximized_bounds =
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window_);
+      screen_util::GetMaximizedWindowBoundsInParent(window_);
+  if (snapped_width_ratio_) {
+    bounds->set_width(
+        static_cast<int>(*snapped_width_ratio_ * maximized_bounds.width()));
+  }
   if (GetStateType() == mojom::WindowStateType::LEFT_SNAPPED)
     bounds->set_x(maximized_bounds.x());
   else if (GetStateType() == mojom::WindowStateType::RIGHT_SNAPPED)
@@ -495,7 +583,7 @@ void WindowState::SetBoundsDirect(const gfx::Rect& bounds) {
 
 void WindowState::SetBoundsConstrained(const gfx::Rect& bounds) {
   gfx::Rect work_area_in_parent =
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(window_);
+      screen_util::GetDisplayWorkAreaBoundsInParent(window_);
   gfx::Rect child_bounds(bounds);
   AdjustBoundsSmallerThan(work_area_in_parent.size(), &child_bounds);
   SetBoundsDirect(child_bounds);
@@ -589,6 +677,19 @@ void WindowState::OnWindowPropertyChanged(aura::Window* window,
     }
     return;
   }
+}
+
+void WindowState::OnWindowAddedToRootWindow(aura::Window* window) {
+  DCHECK_EQ(window_, window);
+  if (::wm::GetTransientParent(window))
+    return;
+  MoveAllTransientChildrenToNewRoot(window);
+}
+
+void WindowState::OnWindowDestroying(aura::Window* window) {
+  DCHECK_EQ(window_, window);
+  current_state_->OnWindowDestroying(this);
+  delegate_.reset();
 }
 
 }  // namespace wm

@@ -4,11 +4,7 @@
 
 #include "device/usb/usb_device_handle_usbfs.h"
 
-#if defined(OS_ANDROID) && __ANDROID_API__ < 21
-#include <linux/usb_ch9.h>
-#else
 #include <linux/usb/ch9.h>
-#endif
 
 #include <linux/usbdevice_fs.h>
 #include <sys/ioctl.h>
@@ -19,6 +15,7 @@
 #include "base/cancelable_callback.h"
 #include "base/files/file_descriptor_watcher_posix.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/sequence_checker.h"
 #include "base/stl_util.h"
@@ -26,7 +23,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/device_event_log/device_event_log.h"
 #include "device/usb/usb_device_linux.h"
-#include "net/base/io_buffer.h"
 
 namespace device {
 
@@ -73,28 +69,26 @@ uint8_t ConvertRecipient(UsbControlTransferRecipient recipient) {
   return 0;
 }
 
-scoped_refptr<net::IOBuffer> BuildControlTransferBuffer(
+scoped_refptr<base::RefCountedBytes> BuildControlTransferBuffer(
     UsbTransferDirection direction,
     UsbControlTransferType request_type,
     UsbControlTransferRecipient recipient,
     uint8_t request,
     uint16_t value,
     uint16_t index,
-    scoped_refptr<net::IOBuffer> original_buffer,
-    size_t length) {
-  scoped_refptr<net::IOBuffer> new_buffer(
-      new net::IOBuffer(length + sizeof(usb_ctrlrequest)));
-  usb_ctrlrequest* setup =
-      reinterpret_cast<usb_ctrlrequest*>(new_buffer->data());
+    scoped_refptr<base::RefCountedBytes> original_buffer) {
+  auto new_buffer = base::MakeRefCounted<base::RefCountedBytes>(
+      original_buffer->size() + sizeof(usb_ctrlrequest));
+  usb_ctrlrequest* setup = new_buffer->front_as<usb_ctrlrequest>();
   setup->bRequestType = ConvertEndpointDirection(direction) |
                         ConvertRequestType(request_type) |
                         ConvertRecipient(recipient);
   setup->bRequest = request;
   setup->wValue = value;
   setup->wIndex = index;
-  setup->wLength = length;
-  memcpy(new_buffer->data() + sizeof(usb_ctrlrequest), original_buffer->data(),
-         length);
+  setup->wLength = original_buffer->size();
+  memcpy(new_buffer->front() + sizeof(usb_ctrlrequest),
+         original_buffer->front(), original_buffer->size());
   return new_buffer;
 }
 
@@ -165,10 +159,10 @@ class UsbDeviceHandleUsbfs::FileThreadHelper {
 
 struct UsbDeviceHandleUsbfs::Transfer {
   Transfer() = delete;
-  Transfer(scoped_refptr<net::IOBuffer> buffer,
+  Transfer(scoped_refptr<base::RefCountedBytes> buffer,
            TransferCallback callback,
            scoped_refptr<base::SingleThreadTaskRunner> callback_runner);
-  Transfer(scoped_refptr<net::IOBuffer> buffer,
+  Transfer(scoped_refptr<base::RefCountedBytes> buffer,
            IsochronousTransferCallback callback);
   ~Transfer();
 
@@ -176,8 +170,8 @@ struct UsbDeviceHandleUsbfs::Transfer {
   void RunCallback(UsbTransferStatus status, size_t bytes_transferred);
   void RunIsochronousCallback(const std::vector<IsochronousPacket>& packets);
 
-  scoped_refptr<net::IOBuffer> control_transfer_buffer;
-  scoped_refptr<net::IOBuffer> buffer;
+  scoped_refptr<base::RefCountedBytes> control_transfer_buffer;
+  scoped_refptr<base::RefCountedBytes> buffer;
   base::CancelableClosure timeout_closure;
   bool cancelled = false;
 
@@ -354,7 +348,7 @@ void UsbDeviceHandleUsbfs::FileThreadHelper::OnFileCanWriteWithoutBlocking() {
 }
 
 UsbDeviceHandleUsbfs::Transfer::Transfer(
-    scoped_refptr<net::IOBuffer> buffer,
+    scoped_refptr<base::RefCountedBytes> buffer,
     TransferCallback callback,
     scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
     : buffer(buffer),
@@ -362,16 +356,17 @@ UsbDeviceHandleUsbfs::Transfer::Transfer(
       callback_runner(callback_runner) {
   memset(&urb, 0, sizeof(urb));
   urb.usercontext = this;
-  urb.buffer = buffer->data();
+  urb.buffer = buffer->front();
 }
 
-UsbDeviceHandleUsbfs::Transfer::Transfer(scoped_refptr<net::IOBuffer> buffer,
-                                         IsochronousTransferCallback callback)
+UsbDeviceHandleUsbfs::Transfer::Transfer(
+    scoped_refptr<base::RefCountedBytes> buffer,
+    IsochronousTransferCallback callback)
     : buffer(buffer), isoc_callback(std::move(callback)) {
   memset(&urb, 0, sizeof(urb) +
                       sizeof(usbdevfs_iso_packet_desc) * urb.number_of_packets);
   urb.usercontext = this;
-  urb.buffer = buffer->data();
+  urb.buffer = buffer->front();
 }
 
 UsbDeviceHandleUsbfs::Transfer::~Transfer() = default;
@@ -582,8 +577,7 @@ void UsbDeviceHandleUsbfs::ControlTransfer(
     uint8_t request,
     uint16_t value,
     uint16_t index,
-    scoped_refptr<net::IOBuffer> buffer,
-    size_t length,
+    scoped_refptr<base::RefCountedBytes> buffer,
     unsigned int timeout,
     TransferCallback callback) {
   DCHECK(sequence_checker_.CalledOnValidSequence());
@@ -596,13 +590,12 @@ void UsbDeviceHandleUsbfs::ControlTransfer(
 
   std::unique_ptr<Transfer> transfer(
       new (0) Transfer(buffer, std::move(callback), nullptr));
-  transfer->control_transfer_buffer =
-      BuildControlTransferBuffer(direction, request_type, recipient, request,
-                                 value, index, buffer, length);
+  transfer->control_transfer_buffer = BuildControlTransferBuffer(
+      direction, request_type, recipient, request, value, index, buffer);
   transfer->urb.type = USBDEVFS_URB_TYPE_CONTROL;
   transfer->urb.endpoint = 0;
-  transfer->urb.buffer = transfer->control_transfer_buffer->data();
-  transfer->urb.buffer_length = 8 + length;
+  transfer->urb.buffer = transfer->control_transfer_buffer->front();
+  transfer->urb.buffer_length = transfer->control_transfer_buffer->size();
 
   // USBDEVFS_SUBMITURB appears to be non-blocking as completion is reported
   // by USBDEVFS_REAPURBNDELAY.
@@ -628,14 +621,14 @@ void UsbDeviceHandleUsbfs::IsochronousTransferIn(
   uint8_t endpoint_address = USB_DIR_IN | endpoint_number;
   size_t total_length =
       std::accumulate(packet_lengths.begin(), packet_lengths.end(), 0u);
-  scoped_refptr<net::IOBuffer> buffer(new net::IOBuffer(total_length));
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(total_length);
   IsochronousTransferInternal(endpoint_address, buffer, total_length,
                               packet_lengths, timeout, std::move(callback));
 }
 
 void UsbDeviceHandleUsbfs::IsochronousTransferOut(
     uint8_t endpoint_number,
-    scoped_refptr<net::IOBuffer> buffer,
+    scoped_refptr<base::RefCountedBytes> buffer,
     const std::vector<uint32_t>& packet_lengths,
     unsigned int timeout,
     IsochronousTransferCallback callback) {
@@ -647,20 +640,20 @@ void UsbDeviceHandleUsbfs::IsochronousTransferOut(
                               packet_lengths, timeout, std::move(callback));
 }
 
-void UsbDeviceHandleUsbfs::GenericTransfer(UsbTransferDirection direction,
-                                           uint8_t endpoint_number,
-                                           scoped_refptr<net::IOBuffer> buffer,
-                                           size_t length,
-                                           unsigned int timeout,
-                                           TransferCallback callback) {
+void UsbDeviceHandleUsbfs::GenericTransfer(
+    UsbTransferDirection direction,
+    uint8_t endpoint_number,
+    scoped_refptr<base::RefCountedBytes> buffer,
+    unsigned int timeout,
+    TransferCallback callback) {
   if (task_runner_->BelongsToCurrentThread()) {
-    GenericTransferInternal(direction, endpoint_number, buffer, length, timeout,
+    GenericTransferInternal(direction, endpoint_number, buffer, timeout,
                             std::move(callback), task_runner_);
   } else {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&UsbDeviceHandleUsbfs::GenericTransferInternal, this,
-                       direction, endpoint_number, buffer, length, timeout,
+                       direction, endpoint_number, buffer, timeout,
                        std::move(callback),
                        base::ThreadTaskRunnerHandle::Get()));
   }
@@ -715,7 +708,7 @@ void UsbDeviceHandleUsbfs::ReleaseInterfaceComplete(int interface_number,
 
 void UsbDeviceHandleUsbfs::IsochronousTransferInternal(
     uint8_t endpoint_address,
-    scoped_refptr<net::IOBuffer> buffer,
+    scoped_refptr<base::RefCountedBytes> buffer,
     size_t total_length,
     const std::vector<uint32_t>& packet_lengths,
     unsigned int timeout,
@@ -736,6 +729,7 @@ void UsbDeviceHandleUsbfs::IsochronousTransferInternal(
     return;
   }
 
+  DCHECK_GE(buffer->size(), total_length);
   std::unique_ptr<Transfer> transfer(new (packet_lengths.size())
                                          Transfer(buffer, std::move(callback)));
   transfer->urb.type = USBDEVFS_URB_TYPE_ISO;
@@ -764,8 +758,7 @@ void UsbDeviceHandleUsbfs::IsochronousTransferInternal(
 void UsbDeviceHandleUsbfs::GenericTransferInternal(
     UsbTransferDirection direction,
     uint8_t endpoint_number,
-    scoped_refptr<net::IOBuffer> buffer,
-    size_t length,
+    scoped_refptr<base::RefCountedBytes> buffer,
     unsigned int timeout,
     TransferCallback callback,
     scoped_refptr<base::SingleThreadTaskRunner> callback_runner) {
@@ -793,7 +786,7 @@ void UsbDeviceHandleUsbfs::GenericTransferInternal(
   std::unique_ptr<Transfer> transfer(
       new (0) Transfer(buffer, std::move(callback), callback_runner));
   transfer->urb.endpoint = endpoint_address;
-  transfer->urb.buffer_length = length;
+  transfer->urb.buffer_length = buffer->size();
   transfer->urb.type = ConvertTransferType(it->second.type);
 
   // USBDEVFS_SUBMITURB appears to be non-blocking as completion is reported
@@ -855,8 +848,8 @@ void UsbDeviceHandleUsbfs::TransferComplete(
     if (transfer->urb.status == 0 &&
         transfer->urb.type == USBDEVFS_URB_TYPE_CONTROL) {
       // Copy the result of the control transfer back into the original buffer.
-      memcpy(transfer->buffer->data(),
-             transfer->control_transfer_buffer->data() + 8,
+      memcpy(transfer->buffer->front(),
+             transfer->control_transfer_buffer->front() + 8,
              transfer->urb.actual_length);
     }
 

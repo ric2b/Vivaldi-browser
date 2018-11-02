@@ -3,6 +3,7 @@
 <translationbundle lang="ja">
 <translation id="102360288709523007">使用統計情報と障害レポートを Google に送信して Chromium の機能向上に役立てる。</translation>
 <translation id="1185134272377778587">Chromium について</translation>
+<translation id="1289966288285062467">Chromium のプライバシーに関するお知らせ</translation>
 <translation id="1472013873724362412">このアカウントは Chromium では使用できません。ドメイン管理者に問い合わせるか、通常の Google アカウントでログインしてください。</translation>
 <translation id="1736662517232558588">Chromium データを削除しました</translation>
 <translation id="1838412507805038478">このウェブサイトの証明書が <ph name="ISSUER" /> 発行のものであることが Chromium で確認されました。</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Chromium からログアウトしますか？</translation>
 <translation id="6424492062988593837">Chromium のアップデートが見つかりました。新しいバージョンが利用可能です。</translation>
 <translation id="6604711459180487467">ユーザーの場所に応じて Chromium を使いやすくします。</translation>
+<translation id="6626296268883197964">このアプリケーションを使用すると、Chromium の<ph name="BEGIN_LINK_TOS" />利用規約<ph name="END_LINK_TOS" />と<ph name="BEGIN_LINK_PRIVACY" />プライバシーに関するお知らせ<ph name="END_LINK_PRIVACY" />に同意したことになります。</translation>
 <translation id="7099326575020694068">Chromium では、分割表示モードでカメラを使用することはできません</translation>
-<translation id="7144758435978427212">周囲のオブジェクトから送信されているウェブページを検出します。Bluetooth がオンになっている場合、Chromium は周囲のオブジェクトに関連付けられたウェブページを収集して、匿名で Google に送信し、最も役立つと判断されたウェブページを表示します。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium ではアカウントがウェブで管理されるので、さまざまな手間を省くことができます。[設定] でアカウントの追加と削除を行うことができます。</translation>
 <translation id="7269362888766543920">アドオンが原因で Chromium がクラッシュしました。アドオンをアンインストールしてみてください。</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Chromium をどこでも使用</translation>
 <translation id="7674213385180944843">[設定] &gt; [プライバシー] &gt; [カメラ] &gt; [Chromium] の順に選択し、カメラをオンにします。</translation>
 <translation id="786327964234957808">同期アカウントを <ph name="USER_EMAIL1" /> から <ph name="USER_EMAIL2" /> に切り替えようとしています。既存の Chromium データは <ph name="DOMAIN" /> で管理されています。この操作を行うと、データはこの端末から削除されますが、<ph name="USER_EMAIL1" /> には残ります。</translation>
-<translation id="8111736072665034317">このアプリを使用すると、Chromium の<ph name="BEGIN_LINK" />利用規約<ph name="END_LINK" />に同意したことになります。</translation>
 <translation id="8175055321229419309">ヒント: <ph name="BEGIN_LINK" />Chromium を Dock に移動<ph name="END_LINK" />するとアクセスしやすくなります</translation>
 <translation id="8252885722420466166">ユーザーの現在時に基づいて Chromium で Google を使いやすくします。</translation>
 <translation id="8353224596138547809">Chromium でこのサイトのパスワードを保存しますか？</translation>

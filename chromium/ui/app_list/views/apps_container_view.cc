@@ -37,8 +37,7 @@ constexpr int kSearchBoxMinimumTopPadding = 24;
 
 AppsContainerView::AppsContainerView(AppListMainView* app_list_main_view,
                                      AppListModel* model)
-    : is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
-      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()) {
+    : is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
   apps_grid_view_ =
       new AppsGridView(app_list_main_view->contents_view(), nullptr);
   if (is_fullscreen_app_list_enabled_) {
@@ -75,10 +74,7 @@ void AppsContainerView::ShowActiveFolder(AppListFolderItem* folder_item) {
 
   CreateViewsForFolderTopItemsAnimation(folder_item, true);
 
-  if (is_app_list_focus_enabled_)
-    contents_view()->GetSearchBoxView()->search_box()->RequestFocus();
-  else
-    apps_grid_view_->ClearAnySelectedView();
+  contents_view()->GetSearchBoxView()->search_box()->RequestFocus();
 }
 
 void AppsContainerView::ShowApps(AppListFolderItem* folder_item) {
@@ -156,9 +152,20 @@ bool AppsContainerView::OnKeyPressed(const ui::KeyEvent& event) {
     return app_list_folder_view_->OnKeyPressed(event);
 }
 
+const char* AppsContainerView::GetClassName() const {
+  return "AppsContainerView";
+}
+
 void AppsContainerView::OnWillBeShown() {
   apps_grid_view()->ClearAnySelectedView();
   app_list_folder_view()->items_grid_view()->ClearAnySelectedView();
+}
+
+void AppsContainerView::OnWillBeHidden() {
+  if (show_state_ == SHOW_APPS || show_state_ == SHOW_ITEM_REPARENT)
+    apps_grid_view_->EndDrag(true);
+  else if (show_state_ == SHOW_ACTIVE_FOLDER)
+    app_list_folder_view_->CloseFolderPage();
 }
 
 gfx::Rect AppsContainerView::GetSearchBoxBounds() const {

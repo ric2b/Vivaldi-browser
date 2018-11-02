@@ -14,22 +14,22 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
+#include "gpu/ipc/service/command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_channel.h"
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
 #include "media/base/bind_to_current_loop.h"
-#include "media/base/scoped_callback_runner.h"
 #include "media/base/video_frame.h"
 #include "media/gpu//android/codec_image.h"
 #include "media/gpu//android/codec_image_group.h"
 #include "media/gpu/android/codec_wrapper.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "ui/gl/android/surface_texture.h"
 #include "ui/gl/gl_bindings.h"
 
 namespace media {
 namespace {
 
-bool MakeContextCurrent(gpu::GpuCommandBufferStub* stub) {
-  return stub && stub->decoder()->MakeCurrent();
+bool MakeContextCurrent(gpu::CommandBufferStub* stub) {
+  return stub && stub->decoder_context()->MakeCurrent();
 }
 
 }  // namespace
@@ -50,7 +50,7 @@ void VideoFrameFactoryImpl::Initialize(bool wants_promotion_hint,
                                        InitCb init_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!gpu_video_frame_factory_);
-  gpu_video_frame_factory_ = base::MakeUnique<GpuVideoFrameFactory>();
+  gpu_video_frame_factory_ = std::make_unique<GpuVideoFrameFactory>();
   base::PostTaskAndReplyWithResult(
       gpu_task_runner_.get(), FROM_HERE,
       base::Bind(&GpuVideoFrameFactory::Initialize,
@@ -94,7 +94,7 @@ void VideoFrameFactoryImpl::CreateVideoFrame(
     base::TimeDelta timestamp,
     gfx::Size natural_size,
     PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-    OutputWithReleaseMailboxCB output_cb) {
+    VideoDecoder::OutputCB output_cb) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   gpu_task_runner_->PostTask(
       FROM_HERE,
@@ -133,7 +133,7 @@ scoped_refptr<SurfaceTextureGLOwner> GpuVideoFrameFactory::Initialize(
   if (!MakeContextCurrent(stub_))
     return nullptr;
   stub_->AddDestructionObserver(this);
-  decoder_helper_ = GLES2DecoderHelper::Create(stub_->decoder());
+  decoder_helper_ = GLES2DecoderHelper::Create(stub_->decoder_context());
   return SurfaceTextureGLOwnerImpl::Create();
 }
 
@@ -143,7 +143,7 @@ void GpuVideoFrameFactory::CreateVideoFrame(
     base::TimeDelta timestamp,
     gfx::Size natural_size,
     PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-    VideoFrameFactory::OutputWithReleaseMailboxCB output_cb,
+    VideoDecoder::OutputCB output_cb,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   scoped_refptr<VideoFrame> frame;
@@ -164,17 +164,16 @@ void GpuVideoFrameFactory::CreateVideoFrame(
   // release callback lifetime should be separate from MCVD or
   // MojoVideoDecoderService (http://crbug.com/737220).
   texture_refs_[texture_ref.get()] = texture_ref;
-  auto drop_texture_ref = base::Bind(&GpuVideoFrameFactory::DropTextureRef,
-                                     weak_factory_.GetWeakPtr(),
-                                     base::Unretained(texture_ref.get()));
+  auto drop_texture_ref = base::BindOnce(&GpuVideoFrameFactory::DropTextureRef,
+                                         weak_factory_.GetWeakPtr(),
+                                         base::Unretained(texture_ref.get()));
 
   // Guarantee that the TextureRef is released even if the VideoFrame is
   // dropped. Otherwise we could keep TextureRefs we don't need alive.
-  auto release_cb = ScopedCallbackRunner(
-      ToOnceCallback(BindToCurrentLoop(drop_texture_ref)), gpu::SyncToken());
-  task_runner->PostTask(
-      FROM_HERE,
-      base::BindOnce(output_cb, std::move(release_cb), std::move(frame)));
+  auto release_cb = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+      BindToCurrentLoop(std::move(drop_texture_ref)), gpu::SyncToken());
+  frame->SetReleaseMailboxCB(std::move(release_cb));
+  task_runner->PostTask(FROM_HERE, base::BindOnce(output_cb, std::move(frame)));
 }
 
 void GpuVideoFrameFactory::CreateVideoFrameInternal(
@@ -189,7 +188,7 @@ void GpuVideoFrameFactory::CreateVideoFrameInternal(
   if (!MakeContextCurrent(stub_))
     return;
 
-  gpu::gles2::ContextGroup* group = stub_->decoder()->GetContextGroup();
+  gpu::gles2::ContextGroup* group = stub_->decoder_context()->GetContextGroup();
   if (!group)
     return;
   gpu::gles2::TextureManager* texture_manager = group->texture_manager();
@@ -250,7 +249,7 @@ void GpuVideoFrameFactory::CreateVideoFrameInternal(
 
   // The frames must be copied when threaded texture mailboxes are in use
   // (http://crbug.com/582170).
-  if (stub_->GetGpuPreferences().enable_threaded_texture_mailboxes)
+  if (group->gpu_preferences().enable_threaded_texture_mailboxes)
     frame->metadata()->SetBoolean(VideoFrameMetadata::COPY_REQUIRED, true);
 
   // We unconditionally mark the picture as overlayable, even if

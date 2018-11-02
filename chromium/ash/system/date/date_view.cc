@@ -127,14 +127,14 @@ void BaseDateTimeView::ChildPreferredSizeChanged(views::View* child) {
 
 DateView::DateView(SystemTrayItem* owner)
     : BaseDateTimeView(owner), action_(DateAction::NONE) {
-  views::BoxLayout* box_layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal,
-                           gfx::Insets(0, kTrayPopupLabelHorizontalPadding), 0);
+  auto box_layout = std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kHorizontal,
+      gfx::Insets(0, kTrayPopupLabelHorizontalPadding), 0);
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   box_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  SetLayoutManager(box_layout);
+  SetLayoutManager(std::move(box_layout));
   date_label_ = TrayPopupUtils::CreateDefaultLabel();
   UpdateTextInternal(base::Time::Now());
   TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
@@ -258,11 +258,12 @@ void TimeView::UpdateClockLayout(ClockLayout clock_layout) {
   if (clock_layout == ClockLayout::HORIZONTAL_CLOCK) {
     RemoveChildView(vertical_label_hours_.get());
     RemoveChildView(vertical_label_minutes_.get());
-    SetLayoutManager(new views::FillLayout());
+    SetLayoutManager(std::make_unique<views::FillLayout>());
     AddChildView(horizontal_label_.get());
   } else {
     RemoveChildView(horizontal_label_.get());
-    views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+    views::GridLayout* layout =
+        SetLayoutManager(std::make_unique<views::GridLayout>(this));
     const int kColumnId = 0;
     views::ColumnSet* columns = layout->AddColumnSet(kColumnId);
     columns->AddPaddingColumn(0, kVerticalClockLeftPadding);

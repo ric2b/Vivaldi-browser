@@ -11,17 +11,18 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "content/common/resource_messages.h"
-#include "content/public/common/request_context_frame_type.h"
-#include "content/public/common/resource_request.h"
+#include "content/common/weak_wrapper_shared_url_loader_factory.h"
 #include "content/public/common/service_worker_modes.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "net/base/request_priority.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -41,12 +42,12 @@ class TestRequestPeer : public RequestPeer {
   }
 
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                          const ResourceResponseInfo& info) override {
+                          const network::ResourceResponseInfo& info) override {
     ADD_FAILURE() << "OnReceivedRedirect should not be called.";
     return false;
   }
 
-  void OnReceivedResponse(const ResourceResponseInfo& info) override {
+  void OnReceivedResponse(const network::ResourceResponseInfo& info) override {
     ADD_FAILURE() << "OnReceivedResponse should not be called.";
   }
 
@@ -88,32 +89,48 @@ class TestRequestPeer : public RequestPeer {
   DISALLOW_COPY_AND_ASSIGN(TestRequestPeer);
 };
 
-class URLResponseBodyConsumerTest : public ::testing::Test,
-                                    public ::IPC::Sender {
+class URLResponseBodyConsumerTest : public ::testing::Test {
  protected:
+  // A URLResponseBodyConsumer needs an associated PendingRequestInfo, and
+  // we need a URLLoaderFactory to create a PendingRequestInfo. We don't need
+  // a true URLLoaderFactory, so here we define a no-op (other than keeping
+  // clients to avoid connection error notifications) factory.
+  class NoopURLLoaderFactory final : public network::mojom::URLLoaderFactory {
+   public:
+    void CreateLoaderAndStart(network::mojom::URLLoaderRequest request,
+                              int32_t routing_id,
+                              int32_t request_id,
+                              uint32_t options,
+                              const network::ResourceRequest& url_request,
+                              network::mojom::URLLoaderClientPtr client,
+                              const net::MutableNetworkTrafficAnnotationTag&
+                                  traffic_annotation) override {
+      clients_.push_back(std::move(client));
+    }
+
+    void Clone(network::mojom::URLLoaderFactoryRequest request) override {}
+
+    std::vector<network::mojom::URLLoaderClientPtr> clients_;
+  };
+
   URLResponseBodyConsumerTest()
-      : dispatcher_(new ResourceDispatcher(this, message_loop_.task_runner())) {
-  }
+      : dispatcher_(new ResourceDispatcher(message_loop_.task_runner())) {}
 
   ~URLResponseBodyConsumerTest() override {
     dispatcher_.reset();
     base::RunLoop().RunUntilIdle();
   }
 
-  bool Send(IPC::Message* message) override {
-    delete message;
-    return true;
-  }
-
-  std::unique_ptr<ResourceRequest> CreateResourceRequest() {
-    std::unique_ptr<ResourceRequest> request(new ResourceRequest);
+  std::unique_ptr<network::ResourceRequest> CreateResourceRequest() {
+    std::unique_ptr<network::ResourceRequest> request(
+        new network::ResourceRequest);
 
     request->method = "GET";
     request->url = GURL("http://www.example.com/");
     request->priority = net::LOW;
     request->appcache_host_id = 0;
     request->fetch_request_mode = network::mojom::FetchRequestMode::kNoCORS;
-    request->fetch_frame_type = REQUEST_CONTEXT_FRAME_TYPE_NONE;
+    request->fetch_frame_type = network::mojom::RequestContextFrameType::kNone;
 
     const RequestExtraData extra_data;
     extra_data.CopyToResourceRequest(request.get());
@@ -131,15 +148,16 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
   }
 
   // Returns the request id.
-  int SetUpRequestPeer(std::unique_ptr<ResourceRequest> request,
+  int SetUpRequestPeer(std::unique_ptr<network::ResourceRequest> request,
                        TestRequestPeer::Context* context) {
     return dispatcher_->StartAsync(
-        std::move(request), 0, nullptr, url::Origin(),
+        std::move(request), 0,
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), url::Origin(),
         TRAFFIC_ANNOTATION_FOR_TESTS, false,
         std::make_unique<TestRequestPeer>(context, message_loop_.task_runner()),
-        blink::WebURLRequest::LoadingIPCType::kChromeIPC, nullptr,
+        base::MakeRefCounted<WeakWrapperSharedURLLoaderFactory>(&factory_),
         std::vector<std::unique_ptr<URLLoaderThrottle>>(),
-        mojo::ScopedDataPipeConsumerHandle());
+        network::mojom::URLLoaderClientEndpointsPtr());
   }
 
   void Run(TestRequestPeer::Context* context) {
@@ -149,13 +167,14 @@ class URLResponseBodyConsumerTest : public ::testing::Test,
   }
 
   base::MessageLoop message_loop_;
+  NoopURLLoaderFactory factory_;
   std::unique_ptr<ResourceDispatcher> dispatcher_;
   static const MojoWriteDataFlags kNone = MOJO_WRITE_DATA_FLAG_NONE;
 };
 
 TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
   TestRequestPeer::Context context;
-  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
   int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
@@ -180,7 +199,7 @@ TEST_F(URLResponseBodyConsumerTest, ReceiveData) {
 
 TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
   TestRequestPeer::Context context;
-  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
   int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
@@ -215,7 +234,7 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenClose) {
 TEST_F(URLResponseBodyConsumerTest, OnCompleteThenCloseWithAsyncRelease) {
   TestRequestPeer::Context context;
   context.release_data_asynchronously = true;
-  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
   int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
@@ -247,7 +266,7 @@ TEST_F(URLResponseBodyConsumerTest, OnCompleteThenCloseWithAsyncRelease) {
 
 TEST_F(URLResponseBodyConsumerTest, CloseThenOnComplete) {
   TestRequestPeer::Context context;
-  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
   int request_id = SetUpRequestPeer(std::move(request), &context);
   mojo::DataPipe data_pipe(CreateDataPipeOptions());
 
@@ -272,7 +291,7 @@ TEST_F(URLResponseBodyConsumerTest, TooBigChunkShouldBeSplit) {
   constexpr auto kMaxNumConsumedBytesInTask =
       URLResponseBodyConsumer::kMaxNumConsumedBytesInTask;
   TestRequestPeer::Context context;
-  std::unique_ptr<ResourceRequest> request(CreateResourceRequest());
+  std::unique_ptr<network::ResourceRequest> request(CreateResourceRequest());
   int request_id = SetUpRequestPeer(std::move(request), &context);
   auto options = CreateDataPipeOptions();
   options.capacity_num_bytes = 2 * kMaxNumConsumedBytesInTask;

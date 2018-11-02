@@ -149,6 +149,11 @@ bool CompositeEditCommand::Apply() {
 
   LocalFrame* frame = GetDocument().GetFrame();
   DCHECK(frame);
+  // directional is stored at the top level command, so that before and after
+  // executing command same directional will be there.
+  SetSelectionIsDirectional(frame->Selection().IsDirectional());
+  GetUndoStep()->SetSelectionIsDirectional(SelectionIsDirectional());
+
   EditingState editing_state;
   EventQueueScope event_queue_scope;
   DoApply(&editing_state);
@@ -157,7 +162,6 @@ bool CompositeEditCommand::Apply() {
   // do it on their own (see TypingCommand::typingAddedToOpenCommand).
   if (!IsTypingCommand())
     frame->GetEditor().AppliedEditing(this);
-  SetShouldRetainAutocorrectionIndicator(false);
   return !editing_state.IsAborted();
 }
 
@@ -192,8 +196,6 @@ bool CompositeEditCommand::IsReplaceSelectionCommand() const {
   return false;
 }
 
-void CompositeEditCommand::SetShouldRetainAutocorrectionIndicator(bool) {}
-
 //
 // sugary-sweet convenience functions to help create and apply edit commands in
 // composite commands
@@ -202,6 +204,7 @@ void CompositeEditCommand::ApplyCommandToComposite(
     EditCommand* command,
     EditingState* editing_state) {
   command->SetParent(this);
+  command->SetSelectionIsDirectional(SelectionIsDirectional());
   command->DoApply(editing_state);
   if (editing_state->IsAborted()) {
     command->SetParent(nullptr);
@@ -1245,6 +1248,8 @@ void CompositeEditCommand::CleanupAfterDeletion(EditingState* editing_state,
         MostForwardCaretPosition(caret_after_delete.DeepEquivalent());
     Node* node = position.AnchorNode();
 
+    // InsertListCommandTest.CleanupNodeSameAsDestinationNode reaches here.
+    ABORT_EDITING_COMMAND_IF(destination_node == node);
     // Bail if we'd remove an ancestor of our destination.
     if (destination_node && destination_node->IsDescendantOf(node))
       return;
@@ -1291,6 +1296,9 @@ void CompositeEditCommand::MoveParagraphWithClones(
     HTMLElement* block_element,
     Node* outer_node,
     EditingState* editing_state) {
+  // InsertListCommandTest.InsertListWithCollapsedVisibility reaches here.
+  ABORT_EDITING_COMMAND_IF(start_of_paragraph_to_move.IsNull());
+  ABORT_EDITING_COMMAND_IF(end_of_paragraph_to_move.IsNull());
   DCHECK(outer_node);
   DCHECK(block_element);
 
@@ -1564,6 +1572,7 @@ void CompositeEditCommand::MoveParagraphs(
       editing_state);
   if (editing_state->IsAborted())
     return;
+  ABORT_EDITING_COMMAND_IF(!EndingSelection().IsValidFor(GetDocument()));
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 

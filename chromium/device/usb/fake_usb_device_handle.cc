@@ -6,8 +6,8 @@
 
 #include "base/callback.h"
 #include "base/logging.h"
+#include "base/memory/ref_counted_memory.h"
 #include "device/usb/usb_device.h"
-#include "net/base/io_buffer.h"
 
 namespace device {
 
@@ -60,8 +60,7 @@ void FakeUsbDeviceHandle::ControlTransfer(
     uint8_t request,
     uint16_t value,
     uint16_t index,
-    scoped_refptr<net::IOBuffer> buffer,
-    size_t length,
+    scoped_refptr<base::RefCountedBytes> buffer,
     unsigned int timeout,
     UsbDeviceHandle::TransferCallback callback) {
   if (position_ == size_) {
@@ -74,12 +73,12 @@ void FakeUsbDeviceHandle::ControlTransfer(
     if (position_ + 2 <= size_) {
       bytes_transferred = data_[position_] | data_[position_ + 1] << 8;
       position_ += 2;
-      bytes_transferred = std::min(bytes_transferred, length);
+      bytes_transferred = std::min(bytes_transferred, buffer->size());
       bytes_transferred = std::min(bytes_transferred, size_ - position_);
     }
 
     if (direction == UsbTransferDirection::INBOUND) {
-      memcpy(buffer->data(), &data_[position_], bytes_transferred);
+      memcpy(buffer->front(), &data_[position_], bytes_transferred);
       position_ += bytes_transferred;
     }
 
@@ -100,19 +99,19 @@ void FakeUsbDeviceHandle::IsochronousTransferIn(
 
 void FakeUsbDeviceHandle::IsochronousTransferOut(
     uint8_t endpoint_number,
-    scoped_refptr<net::IOBuffer> buffer,
+    scoped_refptr<base::RefCountedBytes> buffer,
     const std::vector<uint32_t>& packet_lengths,
     unsigned int timeout,
     IsochronousTransferCallback callback) {
   NOTIMPLEMENTED();
 }
 
-void FakeUsbDeviceHandle::GenericTransfer(UsbTransferDirection direction,
-                                          uint8_t endpoint_number,
-                                          scoped_refptr<net::IOBuffer> buffer,
-                                          size_t length,
-                                          unsigned int timeout,
-                                          TransferCallback callback) {
+void FakeUsbDeviceHandle::GenericTransfer(
+    UsbTransferDirection direction,
+    uint8_t endpoint_number,
+    scoped_refptr<base::RefCountedBytes> buffer,
+    unsigned int timeout,
+    TransferCallback callback) {
   NOTIMPLEMENTED();
 }
 

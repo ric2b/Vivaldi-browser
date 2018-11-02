@@ -60,32 +60,12 @@ class MemlogConnectionManager {
     DISALLOW_COPY_AND_ASSIGN(DumpArgs);
   };
 
-  // Parameters to DumpProcess().
-  struct DumpProcessArgs : public DumpArgs {
-    DumpProcessArgs();
-    DumpProcessArgs(DumpProcessArgs&&) noexcept;
-    ~DumpProcessArgs();
-
-    // Process ID to dump.
-    base::ProcessId pid;
-
-    // The memory map for the given process for the dumped process must be
-    // provided here since that is not tracked as part of the normal allocation
-    // process.
-    std::vector<memory_instrumentation::mojom::VmRegionPtr> maps;
-
-    std::unique_ptr<base::DictionaryValue> metadata;
-
-    // File to dump the output to.
-    base::File file;
-    mojom::ProfilingService::DumpProcessCallback callback;
-  };
-
   // Dumping is asynchronous so will not be complete when this function
   // returns. The dump is complete when the callback provided in the args is
   // fired.
-  void DumpProcess(DumpProcessArgs args);
   void DumpProcessesForTracing(
+      bool keep_small_allocations,
+      bool strip_path_from_mapped_files,
       mojom::ProfilingService::DumpProcessesForTracingCallback callback,
       memory_instrumentation::mojom::GlobalMemoryDumpPtr dump);
 
@@ -93,25 +73,25 @@ class MemlogConnectionManager {
                        mojom::ProfilingClientPtr client,
                        mojo::ScopedHandle sender_pipe_end,
                        mojo::ScopedHandle receiver_pipe_end,
-                       mojom::ProcessType process_type);
+                       mojom::ProcessType process_type,
+                       profiling::mojom::StackMode stack_mode);
+
+  std::vector<base::ProcessId> GetConnectionPids();
 
  private:
   struct Connection;
   struct DumpProcessesForTracingTracking;
 
-  // Actually does the dump assuming the given process has been synchronized.
-  void DoDumpProcess(DumpProcessArgs args,
-                     mojom::ProcessType process_type,
-                     bool success,
-                     AllocationCountMap counts,
-                     AllocationTracker::ContextMap context);
   void DoDumpOneProcessForTracing(
       scoped_refptr<DumpProcessesForTracingTracking> tracking,
       base::ProcessId pid,
       mojom::ProcessType process_type,
+      bool keep_small_allocations,
+      bool strip_path_from_mapped_files,
       bool success,
       AllocationCountMap counts,
-      AllocationTracker::ContextMap context);
+      AllocationTracker::ContextMap context,
+      AllocationTracker::AddressToStringMap mapped_strings);
 
   // Notification that a connection is complete. Unlike OnNewConnection which
   // is signaled by the pipe server, this is signaled by the allocation tracker

@@ -21,6 +21,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/containers/stack.h"
 #include "base/environment.h"
 #include "base/files/file_enumerator.h"
@@ -66,7 +68,8 @@ namespace base {
 
 namespace {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
+#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 static int CallStat(const char *path, stat_wrapper_t *sb) {
   AssertBlockingAllowed();
   return stat(path, sb);
@@ -75,7 +78,8 @@ static int CallLstat(const char *path, stat_wrapper_t *sb) {
   AssertBlockingAllowed();
   return lstat(path, sb);
 }
-#else  //  defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
+#else  //  defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) ||
+//  defined(OS_ANDROID) && __ANDROID_API__ < 21
 static int CallStat(const char *path, stat_wrapper_t *sb) {
   AssertBlockingAllowed();
   return stat64(path, sb);
@@ -140,19 +144,6 @@ std::string TempFileName() {
 #endif
 }
 
-// Creates and opens a temporary file in |directory|, returning the
-// file descriptor. |path| is set to the temporary file path.
-// This function does NOT unlink() the file.
-int CreateAndOpenFdForTemporaryFile(FilePath directory, FilePath* path) {
-  AssertBlockingAllowed();  // For call to mkstemp().
-  *path = directory.Append(base::TempFileName());
-  const std::string& tmpdir_string = path->value();
-  // this should be OK since mkstemp just replaces characters in place
-  char* buffer = const_cast<char*>(tmpdir_string.c_str());
-
-  return HANDLE_EINTR(mkstemp(buffer));
-}
-
 #if defined(OS_LINUX) || defined(OS_AIX)
 // Determine if /dev/shm files can be mapped and then mprotect'd PROT_EXEC.
 // This depends on the mount options used for /dev/shm, which vary among
@@ -163,7 +154,8 @@ bool DetermineDevShmExecutable() {
   bool result = false;
   FilePath path;
 
-  ScopedFD fd(CreateAndOpenFdForTemporaryFile(FilePath("/dev/shm"), &path));
+  ScopedFD fd(
+      CreateAndOpenFdForTemporaryFileInDir(FilePath("/dev/shm"), &path));
   if (fd.is_valid()) {
     DeleteFile(path, false);
     long sysconf_result = sysconf(_SC_PAGESIZE);
@@ -218,6 +210,148 @@ bool CopyFileContents(File* infile, File* outfile) {
 
   NOTREACHED();
   return false;
+}
+
+bool DoCopyDirectory(const FilePath& from_path,
+                     const FilePath& to_path,
+                     bool recursive,
+                     bool open_exclusive) {
+  AssertBlockingAllowed();
+  // Some old callers of CopyDirectory want it to support wildcards.
+  // After some discussion, we decided to fix those callers.
+  // Break loudly here if anyone tries to do this.
+  DCHECK(to_path.value().find('*') == std::string::npos);
+  DCHECK(from_path.value().find('*') == std::string::npos);
+
+  if (from_path.value().size() >= PATH_MAX) {
+    return false;
+  }
+
+  // This function does not properly handle destinations within the source
+  FilePath real_to_path = to_path;
+  if (PathExists(real_to_path)) {
+    real_to_path = MakeAbsoluteFilePath(real_to_path);
+    if (real_to_path.empty())
+      return false;
+  } else {
+    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
+    if (real_to_path.empty())
+      return false;
+  }
+  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
+  if (real_from_path.empty())
+    return false;
+  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
+    return false;
+
+  int traverse_type = FileEnumerator::FILES | FileEnumerator::SHOW_SYM_LINKS;
+  if (recursive)
+    traverse_type |= FileEnumerator::DIRECTORIES;
+  FileEnumerator traversal(from_path, recursive, traverse_type);
+
+  // We have to mimic windows behavior here. |to_path| may not exist yet,
+  // start the loop with |to_path|.
+  struct stat from_stat;
+  FilePath current = from_path;
+  if (stat(from_path.value().c_str(), &from_stat) < 0) {
+    DPLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
+                 << from_path.value();
+    return false;
+  }
+  FilePath from_path_base = from_path;
+  if (recursive && DirectoryExists(to_path)) {
+    // If the destination already exists and is a directory, then the
+    // top level of source needs to be copied.
+    from_path_base = from_path.DirName();
+  }
+
+  // The Windows version of this function assumes that non-recursive calls
+  // will always have a directory for from_path.
+  // TODO(maruel): This is not necessary anymore.
+  DCHECK(recursive || S_ISDIR(from_stat.st_mode));
+
+  do {
+    // current is the source path, including from_path, so append
+    // the suffix after from_path to to_path to create the target_path.
+    FilePath target_path(to_path);
+    if (from_path_base != current &&
+        !from_path_base.AppendRelativePath(current, &target_path)) {
+      return false;
+    }
+
+    if (S_ISDIR(from_stat.st_mode)) {
+      mode_t mode = (from_stat.st_mode & 01777) | S_IRUSR | S_IXUSR | S_IWUSR;
+      if (mkdir(target_path.value().c_str(), mode) == 0)
+        continue;
+      if (errno == EEXIST && !open_exclusive)
+        continue;
+
+      DPLOG(ERROR) << "CopyDirectory() couldn't create directory: "
+                   << target_path.value();
+      return false;
+    }
+
+    if (!S_ISREG(from_stat.st_mode)) {
+      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
+                    << current.value();
+      continue;
+    }
+
+    // Add O_NONBLOCK so we can't block opening a pipe.
+    base::File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
+    if (!infile.IsValid()) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't open file: " << current.value();
+      return false;
+    }
+
+    struct stat stat_at_use;
+    if (fstat(infile.GetPlatformFile(), &stat_at_use) < 0) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't stat file: " << current.value();
+      return false;
+    }
+
+    if (!S_ISREG(stat_at_use.st_mode)) {
+      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
+                    << current.value();
+      continue;
+    }
+
+    int open_flags = O_WRONLY | O_CREAT;
+    // If |open_exclusive| is set then we should always create the destination
+    // file, so O_NONBLOCK is not necessary to ensure we don't block on the
+    // open call for the target file below, and since the destination will
+    // always be a regular file it wouldn't affect the behavior of the
+    // subsequent write calls anyway.
+    if (open_exclusive)
+      open_flags |= O_EXCL;
+    else
+      open_flags |= O_TRUNC | O_NONBLOCK;
+    // Each platform has different default file opening modes for CopyFile which
+    // we want to replicate here. On OS X, we use copyfile(3) which takes the
+    // source file's permissions into account. On the other platforms, we just
+    // use the base::File constructor. On Chrome OS, base::File uses a different
+    // set of permissions than it does on other POSIX platforms.
+#if defined(OS_MACOSX)
+    int mode = 0600 | (stat_at_use.st_mode & 0177);
+#elif defined(OS_CHROMEOS)
+    int mode = 0644;
+#else
+    int mode = 0600;
+#endif
+    base::File outfile(open(target_path.value().c_str(), open_flags, mode));
+    if (!outfile.IsValid()) {
+      DPLOG(ERROR) << "CopyDirectory() couldn't create file: "
+                   << target_path.value();
+      return false;
+    }
+
+    if (!CopyFileContents(&infile, &outfile)) {
+      DLOG(ERROR) << "CopyDirectory() couldn't copy file: " << current.value();
+      return false;
+    }
+  } while (AdvanceEnumeratorWithStat(&traversal, &current, &from_stat));
+
+  return true;
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
@@ -291,142 +425,20 @@ bool ReplaceFile(const FilePath& from_path,
   if (rename(from_path.value().c_str(), to_path.value().c_str()) == 0)
     return true;
   if (error)
-    *error = File::OSErrorToFileError(errno);
+    *error = File::GetLastFileError();
   return false;
 }
 
 bool CopyDirectory(const FilePath& from_path,
                    const FilePath& to_path,
                    bool recursive) {
-  AssertBlockingAllowed();
-  // Some old callers of CopyDirectory want it to support wildcards.
-  // After some discussion, we decided to fix those callers.
-  // Break loudly here if anyone tries to do this.
-  DCHECK(to_path.value().find('*') == std::string::npos);
-  DCHECK(from_path.value().find('*') == std::string::npos);
+  return DoCopyDirectory(from_path, to_path, recursive, false);
+}
 
-  if (from_path.value().size() >= PATH_MAX) {
-    return false;
-  }
-
-  // This function does not properly handle destinations within the source
-  FilePath real_to_path = to_path;
-  if (PathExists(real_to_path)) {
-    real_to_path = MakeAbsoluteFilePath(real_to_path);
-    if (real_to_path.empty())
-      return false;
-  } else {
-    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
-    if (real_to_path.empty())
-      return false;
-  }
-  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
-  if (real_from_path.empty())
-    return false;
-  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
-    return false;
-
-  int traverse_type = FileEnumerator::FILES | FileEnumerator::SHOW_SYM_LINKS;
-  if (recursive)
-    traverse_type |= FileEnumerator::DIRECTORIES;
-  FileEnumerator traversal(from_path, recursive, traverse_type);
-
-  // We have to mimic windows behavior here. |to_path| may not exist yet,
-  // start the loop with |to_path|.
-  struct stat from_stat;
-  FilePath current = from_path;
-  if (stat(from_path.value().c_str(), &from_stat) < 0) {
-    DPLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
-                 << from_path.value();
-    return false;
-  }
-  FilePath from_path_base = from_path;
-  if (recursive && DirectoryExists(to_path)) {
-    // If the destination already exists and is a directory, then the
-    // top level of source needs to be copied.
-    from_path_base = from_path.DirName();
-  }
-
-  // The Windows version of this function assumes that non-recursive calls
-  // will always have a directory for from_path.
-  // TODO(maruel): This is not necessary anymore.
-  DCHECK(recursive || S_ISDIR(from_stat.st_mode));
-
-  do {
-    // current is the source path, including from_path, so append
-    // the suffix after from_path to to_path to create the target_path.
-    FilePath target_path(to_path);
-    if (from_path_base != current &&
-        !from_path_base.AppendRelativePath(current, &target_path)) {
-      return false;
-    }
-
-    if (S_ISDIR(from_stat.st_mode)) {
-      if (mkdir(target_path.value().c_str(),
-                (from_stat.st_mode & 01777) | S_IRUSR | S_IXUSR | S_IWUSR) ==
-              0 ||
-          errno == EEXIST) {
-        continue;
-      }
-
-      DPLOG(ERROR) << "CopyDirectory() couldn't create directory: "
-                   << target_path.value();
-      return false;
-    }
-
-    if (!S_ISREG(from_stat.st_mode)) {
-      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
-                    << current.value();
-      continue;
-    }
-
-    // Add O_NONBLOCK so we can't block opening a pipe.
-    base::File infile(open(current.value().c_str(), O_RDONLY | O_NONBLOCK));
-    if (!infile.IsValid()) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't open file: " << current.value();
-      return false;
-    }
-
-    struct stat stat_at_use;
-    if (fstat(infile.GetPlatformFile(), &stat_at_use) < 0) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't stat file: " << current.value();
-      return false;
-    }
-
-    if (!S_ISREG(stat_at_use.st_mode)) {
-      DLOG(WARNING) << "CopyDirectory() skipping non-regular file: "
-                    << current.value();
-      continue;
-    }
-
-    // Each platform has different default file opening modes for CopyFile which
-    // we want to replicate here. On OS X, we use copyfile(3) which takes the
-    // source file's permissions into account. On the other platforms, we just
-    // use the base::File constructor. On Chrome OS, base::File uses a different
-    // set of permissions than it does on other POSIX platforms.
-#if defined(OS_MACOSX)
-    int mode = 0600 | (stat_at_use.st_mode & 0177);
-#elif defined(OS_CHROMEOS)
-    int mode = 0644;
-#else
-    int mode = 0600;
-#endif
-    base::File outfile(
-        open(target_path.value().c_str(),
-             O_WRONLY | O_CREAT | O_TRUNC | O_NONBLOCK, mode));
-    if (!outfile.IsValid()) {
-      DPLOG(ERROR) << "CopyDirectory() couldn't create file: "
-                   << target_path.value();
-      return false;
-    }
-
-    if (!CopyFileContents(&infile, &outfile)) {
-      DLOG(ERROR) << "CopyDirectory() couldn't copy file: " << current.value();
-      return false;
-    }
-  } while (AdvanceEnumeratorWithStat(&traversal, &current, &from_stat));
-
-  return true;
+bool CopyDirectoryExcl(const FilePath& from_path,
+                       const FilePath& to_path,
+                       bool recursive) {
+  return DoCopyDirectory(from_path, to_path, recursive, true);
 }
 #endif  // !defined(OS_NACL_NONSFI)
 
@@ -517,6 +529,17 @@ bool ReadFromFD(int fd, char* buffer, size_t bytes) {
 }
 
 #if !defined(OS_NACL_NONSFI)
+
+int CreateAndOpenFdForTemporaryFileInDir(const FilePath& directory,
+                                         FilePath* path) {
+  AssertBlockingAllowed();  // For call to mkstemp().
+  *path = directory.Append(TempFileName());
+  const std::string& tmpdir_string = path->value();
+  // this should be OK since mkstemp just replaces characters in place
+  char* buffer = const_cast<char*>(tmpdir_string.c_str());
+
+  return HANDLE_EINTR(mkstemp(buffer));
+}
 
 #if !defined(OS_FUCHSIA)
 bool CreateSymbolicLink(const FilePath& target_path,
@@ -646,7 +669,7 @@ bool CreateTemporaryFile(FilePath* path) {
   FilePath directory;
   if (!GetTempDir(&directory))
     return false;
-  int fd = CreateAndOpenFdForTemporaryFile(directory, path);
+  int fd = CreateAndOpenFdForTemporaryFileInDir(directory, path);
   if (fd < 0)
     return false;
   close(fd);
@@ -654,7 +677,7 @@ bool CreateTemporaryFile(FilePath* path) {
 }
 
 FILE* CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* path) {
-  int fd = CreateAndOpenFdForTemporaryFile(dir, path);
+  int fd = CreateAndOpenFdForTemporaryFileInDir(dir, path);
   if (fd < 0)
     return nullptr;
 
@@ -666,7 +689,7 @@ FILE* CreateAndOpenTemporaryFileInDir(const FilePath& dir, FilePath* path) {
 
 bool CreateTemporaryFileInDir(const FilePath& dir, FilePath* temp_file) {
   AssertBlockingAllowed();  // For call to close().
-  int fd = CreateAndOpenFdForTemporaryFile(dir, temp_file);
+  int fd = CreateAndOpenFdForTemporaryFileInDir(dir, temp_file);
   return ((fd >= 0) && !IGNORE_EINTR(close(fd)));
 }
 
@@ -987,16 +1010,21 @@ int GetMaximumPathComponentLength(const FilePath& path) {
 // This is implemented in file_util_android.cc for that platform.
 bool GetShmemTempDir(bool executable, FilePath* path) {
 #if defined(OS_LINUX) || defined(OS_AIX)
+  bool disable_dev_shm = false;
+#if !defined(OS_CHROMEOS)
+  disable_dev_shm = CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableDevShmUsage);
+#endif
   bool use_dev_shm = true;
   if (executable) {
     static const bool s_dev_shm_executable = DetermineDevShmExecutable();
     use_dev_shm = s_dev_shm_executable;
   }
-  if (use_dev_shm) {
+  if (use_dev_shm && !disable_dev_shm) {
     *path = FilePath("/dev/shm");
     return true;
   }
-#endif
+#endif  // defined(OS_LINUX) || defined(OS_AIX)
   return GetTempDir(path);
 }
 #endif  // !defined(OS_ANDROID)

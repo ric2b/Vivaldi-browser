@@ -101,6 +101,10 @@ class Surface final : public ui::PropertyHandler {
   // events. The region is clipped to the surface bounds.
   void SetInputRegion(const cc::Region& region);
 
+  // This resets the region of the surface that can receive pointer and touch
+  // events to be wide-open. This will be clipped to the surface bounds.
+  void ResetInputRegion();
+
   // This overrides the input region to the surface bounds with an outset.
   // TODO(domlaskowski): Remove this once client-driven resizing is removed.
   void SetInputOutset(int outset);
@@ -143,6 +147,9 @@ class Surface final : public ui::PropertyHandler {
   // Request that surface should have the specified frame type.
   void SetFrame(SurfaceFrameType type);
 
+  // Request that surface should use a specific set of frame colors.
+  void SetFrameColors(SkColor active_color, SkColor inactive_color);
+
   // Request "parent" for surface.
   void SetParent(Surface* parent, const gfx::Point& position);
 
@@ -174,8 +181,8 @@ class Surface final : public ui::PropertyHandler {
   // Returns true if surface is in synchronized mode.
   bool IsSynchronized() const;
 
-  // Returns true if surface should receive touch events.
-  bool IsTouchEnabled(Surface* surface) const;
+  // Returns true if surface should receive input events.
+  bool IsInputEnabled(Surface* surface) const;
 
   // Returns false if the hit test region is empty.
   bool HasHitTestRegion() const;
@@ -253,7 +260,7 @@ class Surface final : public ui::PropertyHandler {
     bool operator!=(const State& other) { return !(*this == other); }
 
     cc::Region opaque_region;
-    cc::Region input_region;
+    base::Optional<cc::Region> input_region;
     int input_outset = 0;
     float buffer_scale = 1.0f;
     Transform buffer_transform = Transform::NORMAL;

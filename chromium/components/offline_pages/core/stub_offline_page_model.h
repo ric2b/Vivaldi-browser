@@ -9,16 +9,15 @@
 #include <string>
 #include <vector>
 
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/offline_pages/core/client_policy_controller.h"
-#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/offline_page_model_impl.h"
 
 namespace offline_pages {
 
 // Stub implementation of OfflinePageModel interface for testing. Besides using
 // as a stub for tests, it may also be subclassed to mock specific methods
 // needed for a set of tests.
-class StubOfflinePageModel : public OfflinePageModel, public KeyedService {
+class StubOfflinePageModel : public OfflinePageModelImpl {
  public:
   StubOfflinePageModel();
   ~StubOfflinePageModel() override;
@@ -62,8 +61,9 @@ class StubOfflinePageModel : public OfflinePageModel, public KeyedService {
       const MultipleOfflinePageItemCallback& callback) override;
   void GetPagesSupportedByDownloads(
       const MultipleOfflinePageItemCallback& callback) override;
-  const base::FilePath& GetArchiveDirectory(
+  const base::FilePath& GetInternalArchiveDirectory(
       const std::string& name_space) const override;
+  bool IsArchiveInInternalDir(const base::FilePath& file_path) const override;
   ClientPolicyController* GetPolicyController() override;
   OfflineEventLogger* GetLogger() override;
 

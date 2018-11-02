@@ -51,11 +51,9 @@ class FrameClient;
 class FrameOwner;
 class HTMLFrameOwnerElement;
 class LayoutEmbeddedContent;
-class LayoutEmbeddedContentItem;
 class LocalFrame;
 class KURL;
 class Page;
-class ResourceTimingInfo;
 class SecurityContext;
 class Settings;
 class WindowProxy;
@@ -88,11 +86,11 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   virtual void Navigate(const FrameLoadRequest&) = 0;
   virtual void Reload(FrameLoadType, ClientRedirectPolicy) = 0;
 
-  virtual void AddResourceTiming(const ResourceTimingInfo&) = 0;
-
   virtual void Detach(FrameDetachType);
   void DisconnectOwnerElement();
   virtual bool ShouldClose() = 0;
+  virtual void DidFreeze() = 0;
+  virtual void DidResume() = 0;
 
   FrameClient* Client() const;
 
@@ -121,16 +119,8 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   // otherwise.
   virtual bool PrepareForCommit() = 0;
 
-  // TODO(japhet): These should all move to LocalFrame.
-  virtual void PrintNavigationErrorMessage(const Frame&,
-                                           const char* reason) = 0;
-  virtual void PrintNavigationWarning(const String&) = 0;
-
-  // TODO(pilgrim): Replace all instances of ownerLayoutObject() with
-  // ownerLayoutItem(), https://crbug.com/499321
-  LayoutEmbeddedContent* OwnerLayoutObject()
-      const;  // LayoutObject for the element that contains this frame.
-  LayoutEmbeddedContentItem OwnerLayoutItem() const;
+  // LayoutObject for the element that contains this frame.
+  LayoutEmbeddedContent* OwnerLayoutObject() const;
 
   Settings* GetSettings() const;  // can be null
 
@@ -205,6 +195,8 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   virtual void SetIsInert(bool) = 0;
   void UpdateInertIfPossible();
 
+  String GetDevToolsFrameToken() const { return devtools_frame_token_; }
+
  protected:
   Frame(FrameClient*, Page&, FrameOwner*, WindowProxyManager*);
 
@@ -240,6 +232,7 @@ class CORE_EXPORT Frame : public GarbageCollectedFinalized<Frame> {
   const Member<WindowProxyManager> window_proxy_manager_;
   // TODO(sashab): Investigate if this can be represented with m_lifecycle.
   bool is_loading_;
+  String devtools_frame_token_;
 };
 
 inline FrameClient* Frame::Client() const {

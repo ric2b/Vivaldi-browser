@@ -11,6 +11,8 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // Name of the Scout Transition UMA metric.
@@ -159,7 +161,7 @@ const char kSafeBrowsingUnhandledSyncPasswordReuses[] =
 namespace safe_browsing {
 
 const base::Feature kCanShowScoutOptIn{"CanShowScoutOptIn",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 std::string ChooseOptInTextPreference(
     const PrefService& prefs,
@@ -269,14 +271,20 @@ void InitializeSafeBrowsingPrefs(PrefService* prefs) {
 }
 
 bool IsExtendedReportingOptInAllowed(const PrefService& prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   return prefs.GetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed);
 }
 
 bool IsExtendedReportingEnabled(const PrefService& prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   return prefs.GetBoolean(GetExtendedReportingPrefName(prefs));
 }
 
 bool IsScout(const PrefService& prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false;
   return GetExtendedReportingPrefName(prefs) ==
          prefs::kSafeBrowsingScoutReportingEnabled;
 }
@@ -334,7 +342,7 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingSawInterstitialScoutReporting, false);
   registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
+      prefs::kSafeBrowsingExtendedReportingOptInAllowed, !vivaldi::IsVivaldiRunning());
   registry->RegisterBooleanPref(
       prefs::kSafeBrowsingEnabled, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);

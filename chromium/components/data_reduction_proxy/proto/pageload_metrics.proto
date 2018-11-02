@@ -10,16 +10,26 @@ import "client_config.proto";
 
 package data_reduction_proxy;
 
+// Information about the device the user is on.
+message PageloadDeviceInfo {
+  // Kilobytes of total device memory.
+  optional int64 total_device_memory_kb = 1;
+}
+
 // Request message to record metrics for one or more pageloads.
 message RecordPageloadMetricsRequest {
   // The pageload metrics to record.
   repeated PageloadMetrics pageloads = 1;
   // Time metrics were sent.
   optional Timestamp metrics_sent_time = 2;
+
+  // Added in M65.
+  optional PageloadDeviceInfo device_info = 3;
 }
 
 // Metrics for a single pageload.
 message PageloadMetrics {
+  // Next ID: 22
   reserved 3;
 
   // The possible effective connection type values.
@@ -52,6 +62,22 @@ message PageloadMetrics {
     LOFI = 1;
     // The main resource was a lite page.
     LITE_PAGE = 2;
+  }
+
+  // What type of crash occured on the page.
+  enum RendererCrashType {
+    // Reserved default value.
+    UNSPECIFIED = 0;
+    // No renderer crash happened on the page.
+    NO_CRASH = 1;
+    // A crash occured on the page, but the type is unknown. This is reported
+    // for all non-Android crashes and Android crashes that did not have their
+    // crash dump analyzed within 5 seconds of the crash.
+    NOT_ANALYZED = 2;
+    // Any other Android crash where the dump was successfully analyzed.
+    OTHER_CRASH = 3;
+    // A crash where the renderer ran out of memory on the page.
+    ANDROID_FOREGROUND_OOM = 4;
   }
 
   // The session key used to load the page.
@@ -105,4 +131,13 @@ message PageloadMetrics {
   // The name of the finch group for the data reduction proxy holdback
   // experiment. This can be an empty string if not included in a finch group.
   optional string holdback_group = 19;
+
+  // Kilobytes of memory used by the main renderer process related to this page
+  // load. Recorded after load event starts. 0 if the page closed before or
+  // shortly after load event or the memory dump failed.
+  // Out of process frames will not be tracked in this estimate.
+  optional int64 renderer_memory_usage_kb = 20;
+
+  // The RendererCrashType for the page load.
+  optional RendererCrashType renderer_crash_type = 21;
 }

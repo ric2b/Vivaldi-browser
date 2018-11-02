@@ -19,7 +19,7 @@ namespace blink {
 CompositingInputsUpdater::CompositingInputsUpdater(PaintLayer* root_layer)
     : geometry_map_(kUseTransforms), root_layer_(root_layer) {}
 
-CompositingInputsUpdater::~CompositingInputsUpdater() {}
+CompositingInputsUpdater::~CompositingInputsUpdater() = default;
 
 void CompositingInputsUpdater::Update() {
   TRACE_EVENT0("blink", "CompositingInputsUpdater::update");
@@ -152,18 +152,23 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
         properties.unclipped_absolute_bounding_box =
             EnclosingIntRect(geometry_map_.AbsoluteRect(
                 FloatRect(layer->BoundingBoxForCompositingOverlapTest())));
-        // FIXME: Setting the absBounds to 1x1 instead of 0x0 makes very little
-        // sense, but removing this code will make JSGameBench sad.
-        // See https://codereview.chromium.org/13912020/
-        if (properties.unclipped_absolute_bounding_box.IsEmpty())
-          properties.unclipped_absolute_bounding_box.SetSize(IntSize(1, 1));
 
         ClipRect clip_rect;
         layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
             .CalculateBackgroundClipRect(
                 ClipRectsContext(root_layer_,
-                                 kAbsoluteClipRectsIgnoringViewportClip),
+                                 kAbsoluteClipRectsIgnoringViewportClip,
+                                 kIgnorePlatformOverlayScrollbarSize,
+                                 kIgnoreOverflowClipAndScroll),
                 clip_rect);
+        // Scroll offset is not included in the clip rect returned above
+        // (see kIgnoreOverflowClipAndScroll), so we need to add it in
+        // now. Scroll offset is excluded so that we do not need to invalidate
+        // the clip rect cache on scroll.
+        if (root_layer_->ScrollsOverflow()) {
+          clip_rect.Move(
+              LayoutSize(-root_layer_->GetScrollableArea()->GetScrollOffset()));
+        }
         IntRect snapped_clip_rect = PixelSnappedIntRect(clip_rect.Rect());
         properties.clipped_absolute_bounding_box =
             properties.unclipped_absolute_bounding_box;
@@ -180,12 +185,6 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
                                        : parent->FilterAncestor();
       bool layer_is_fixed_position =
           layer->GetLayoutObject().Style()->GetPosition() == EPosition::kFixed;
-
-      if (layer_is_fixed_position && properties.filter_ancestor &&
-          layer->FixedToViewport()) {
-        UseCounter::Count(layer->GetLayoutObject().GetDocument(),
-                          WebFeature::kViewportFixedPositionUnderFilter);
-      }
 
       properties.nearest_fixed_position_layer =
           layer_is_fixed_position ? layer : parent->NearestFixedPositionLayer();

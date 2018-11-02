@@ -92,6 +92,7 @@ const struct {
     // http.protocol.error?
     {ERR_INVALID_HTTP_RESPONSE, "http.response.invalid"},
     {ERR_TOO_MANY_REDIRECTS, "http.response.redirect_loop"},
+    {ERR_EMPTY_RESPONSE, "http.response.empty"},
     // http.failed?
 
     {ERR_ABORTED, "abandoned"},
@@ -170,16 +171,21 @@ void NetworkErrorLoggingService::OnNetworkError(const ErrorDetails& details) {
   if (!reporting_service_)
     return;
 
-  url::Origin origin = url::Origin::Create(details.uri);
+  // It is expected for Reporting uploads to terminate with ERR_ABORTED, since
+  // the ReportingUploader cancels them after receiving the response code and
+  // headers.
+  if (details.is_reporting_upload && details.type == ERR_ABORTED)
+    return;
 
   // NEL is only available to secure origins, so ignore network errors from
   // insecure origins. (The check in OnHeader prevents insecure origins from
   // setting policies, but this check is needed to ensure that insecure origins
   // can't match wildcard policies from secure origins.)
-  if (!origin.GetURL().SchemeIsCryptographic())
+  if (!details.uri.SchemeIsCryptographic())
     return;
 
-  const OriginPolicy* policy = FindPolicyForOrigin(origin);
+  const OriginPolicy* policy =
+      FindPolicyForOrigin(url::Origin::Create(details.uri));
   if (!policy)
     return;
 
@@ -191,14 +197,36 @@ void NetworkErrorLoggingService::OnNetworkError(const ErrorDetails& details) {
                                   CreateReportBody(type_string, details));
 }
 
+void NetworkErrorLoggingService::RemoveBrowsingData(
+    const base::RepeatingCallback<bool(const GURL&)>& origin_filter) {
+  if (origin_filter.is_null()) {
+    wildcard_policies_.clear();
+    policies_.clear();
+    return;
+  }
+
+  std::vector<url::Origin> origins_to_remove;
+
+  for (auto it = policies_.begin(); it != policies_.end(); ++it) {
+    if (origin_filter.Run(it->first.GetURL()))
+      origins_to_remove.push_back(it->first);
+  }
+
+  for (auto it = origins_to_remove.begin(); it != origins_to_remove.end();
+       ++it) {
+    MaybeRemoveWildcardPolicy(*it, &policies_[*it]);
+    policies_.erase(*it);
+  }
+}
+
 void NetworkErrorLoggingService::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> tick_clock) {
+    base::TickClock* tick_clock) {
   DCHECK(tick_clock);
-  tick_clock_ = std::move(tick_clock);
+  tick_clock_ = tick_clock;
 }
 
 NetworkErrorLoggingService::NetworkErrorLoggingService()
-    : tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+    : tick_clock_(base::DefaultTickClock::GetInstance()),
       reporting_service_(nullptr) {}
 
 bool NetworkErrorLoggingService::ParseHeader(const std::string& json_value,

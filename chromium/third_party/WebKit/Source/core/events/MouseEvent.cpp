@@ -27,8 +27,10 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/frame/UseCounter.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/layout/LayoutObject.h"
+#include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
 #include "core/svg/SVGElement.h"
 #include "platform/bindings/DOMWrapperWorld.h"
@@ -125,7 +127,7 @@ MouseEvent* MouseEvent::Create(const AtomicString& event_type,
   }
 
   TimeTicks timestamp = underlying_event ? underlying_event->PlatformTimeStamp()
-                                         : TimeTicks::Now();
+                                         : CurrentTimeTicks();
   MouseEvent* created_event = new MouseEvent(
       event_type, true, true, view, 0, screen_x, screen_y, 0, 0, 0, 0,
       modifiers, 0, 0, nullptr, timestamp, synthetic_type, String());
@@ -291,7 +293,7 @@ void MouseEvent::InitCoordinatesFromRootFrame(double window_x,
   has_cached_relative_position_ = false;
 }
 
-MouseEvent::~MouseEvent() {}
+MouseEvent::~MouseEvent() = default;
 
 unsigned short MouseEvent::WebInputEventModifiersToButtons(unsigned modifiers) {
   unsigned short buttons = 0;
@@ -447,8 +449,19 @@ DispatchEventResult MouseEvent::DispatchEvent(EventDispatcher& dispatcher) {
     return dispatcher.Dispatch();
 
   if (!send_to_disabled_form_controls &&
-      IsDisabledFormControl(&dispatcher.GetNode()))
+      IsDisabledFormControl(&dispatcher.GetNode())) {
+    if (GetEventPath().HasEventListenersInPath(type())) {
+      UseCounter::Count(dispatcher.GetNode().GetDocument(),
+                        WebFeature::kDispatchMouseEventOnDisabledFormControl);
+      if (type() == EventTypeNames::mousedown ||
+          type() == EventTypeNames::mouseup) {
+        UseCounter::Count(
+            dispatcher.GetNode().GetDocument(),
+            WebFeature::kDispatchMouseUpDownEventOnDisabledFormControl);
+      }
+    }
     return DispatchEventResult::kCanceledBeforeDispatch;
+  }
 
   if (type().IsEmpty())
     return DispatchEventResult::kNotCanceled;  // Shouldn't happen.
@@ -534,6 +547,9 @@ void MouseEvent::ComputeRelativePosition() {
     n = n->parentNode();
 
   if (n) {
+    if (LocalFrameView* view = n->GetLayoutObject()->View()->GetFrameView())
+      layer_location_ = view->DocumentToAbsolute(page_location_);
+
     // FIXME: This logic is a wrong implementation of convertToLayerCoords.
     for (PaintLayer* layer = n->GetLayoutObject()->EnclosingLayer(); layer;
          layer = layer->Parent()) {

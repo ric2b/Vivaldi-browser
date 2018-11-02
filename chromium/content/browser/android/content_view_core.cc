@@ -221,8 +221,9 @@ ContentViewCore::~ContentViewCore() {
 void ContentViewCore::UpdateWindowAndroid(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
-    jlong window_android) {
-  auto* window = reinterpret_cast<ui::WindowAndroid*>(window_android);
+    const JavaParamRef<jobject>& jwindow_android) {
+  ui::WindowAndroid* window =
+      ui::WindowAndroid::FromJavaWindowAndroid(jwindow_android);
   auto* old_window = GetWindowAndroid();
   if (window == old_window)
     return;
@@ -448,57 +449,6 @@ void ContentViewCore::HideSelectPopupMenu() {
   if (!j_obj.is_null())
     Java_ContentViewCoreImpl_hideSelectPopup(env, j_obj);
   select_popup_.Reset();
-}
-
-void ContentViewCore::OnGestureEventAck(const blink::WebGestureEvent& event,
-                                        InputEventAckState ack_result) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> j_obj = java_ref_.get(env);
-  if (j_obj.is_null())
-    return;
-
-  switch (event.GetType()) {
-    case WebInputEvent::kGestureFlingStart:
-      if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED) {
-        // The view expects the fling velocity in pixels/s.
-        Java_ContentViewCoreImpl_onFlingStartEventConsumed(env, j_obj);
-      } else {
-        // If a scroll ends with a fling, a SCROLL_END event is never sent.
-        // However, if that fling went unconsumed, we still need to let the
-        // listeners know that scrolling has ended.
-        Java_ContentViewCoreImpl_onScrollEndEventAck(env, j_obj);
-      }
-      break;
-    case WebInputEvent::kGestureFlingCancel:
-      Java_ContentViewCoreImpl_onFlingCancelEventAck(env, j_obj);
-      break;
-    case WebInputEvent::kGestureScrollBegin:
-      Java_ContentViewCoreImpl_onScrollBeginEventAck(env, j_obj);
-      break;
-    case WebInputEvent::kGestureScrollUpdate:
-      if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
-        Java_ContentViewCoreImpl_onScrollUpdateGestureConsumed(env, j_obj);
-      break;
-    case WebInputEvent::kGestureScrollEnd:
-      Java_ContentViewCoreImpl_onScrollEndEventAck(env, j_obj);
-      break;
-    case WebInputEvent::kGesturePinchBegin:
-      Java_ContentViewCoreImpl_onPinchBeginEventAck(env, j_obj);
-      break;
-    case WebInputEvent::kGesturePinchEnd:
-      Java_ContentViewCoreImpl_onPinchEndEventAck(env, j_obj);
-      break;
-    case WebInputEvent::kGestureTap:
-      Java_ContentViewCoreImpl_onSingleTapEventAck(
-          env, j_obj, ack_result == INPUT_EVENT_ACK_STATE_CONSUMED);
-      break;
-    case WebInputEvent::kGestureLongPress:
-      if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
-        Java_ContentViewCoreImpl_performLongPressHapticFeedback(env, j_obj);
-      break;
-    default:
-      break;
-  }
 }
 
 bool ContentViewCore::FilterInputEvent(const blink::WebInputEvent& event) {
@@ -900,7 +850,7 @@ jlong JNI_ContentViewCoreImpl_Init(
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jweb_contents,
     const JavaParamRef<jobject>& jview_android_delegate,
-    jlong jwindow_android,
+    const JavaParamRef<jobject>& jwindow_android,
     jfloat dip_scale) {
   WebContentsImpl* web_contents = static_cast<WebContentsImpl*>(
       WebContents::FromJavaWebContents(jweb_contents));
@@ -910,7 +860,7 @@ jlong JNI_ContentViewCoreImpl_Init(
   view_android->SetDelegate(jview_android_delegate);
 
   ui::WindowAndroid* window_android =
-      reinterpret_cast<ui::WindowAndroid*>(jwindow_android);
+      ui::WindowAndroid::FromJavaWindowAndroid(jwindow_android);
   DCHECK(window_android);
   window_android->AddChild(view_android);
 

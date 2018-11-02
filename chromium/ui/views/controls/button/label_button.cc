@@ -55,7 +55,7 @@ LabelButton::LabelButton(ButtonListener* listener,
       style_(STYLE_TEXTBUTTON),
       border_is_themed_border_(true),
       image_label_spacing_(LayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_RELATED_CONTROL_HORIZONTAL)),
+          DISTANCE_RELATED_LABEL_HORIZONTAL)),
       horizontal_alignment_(gfx::ALIGN_LEFT) {
   SetAnimationDuration(kHoverAnimationDurationMs);
   SetTextInternal(text);
@@ -207,9 +207,7 @@ gfx::Size LabelButton::CalculatePreferredSize() const {
   size.set_height(std::max(preferred_label_size.height() + GetInsets().height(),
                            size.height()));
 
-  // Increase the minimum size monotonically with the preferred size.
   size.SetToMax(min_size_);
-  min_size_ = size;
 
   // Clamp size to max size (if valid).
   if (max_size_.width() > 0)

@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -18,8 +17,11 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "gpu/command_buffer/client/client_test_helper.h"
-#include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
+#include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
+#include "gpu/command_buffer/service/image_manager.h"
+#include "gpu/command_buffer/service/mailbox_manager_impl.h"
+#include "gpu/command_buffer/service/service_discardable_manager.h"
 #include "media/base/android/media_codec_util.h"
 #include "media/base/android/mock_android_overlay.h"
 #include "media/base/android/mock_media_codec_bridge.h"
@@ -56,9 +58,9 @@ bool MakeContextCurrent() {
   return true;
 }
 
-base::WeakPtr<gpu::gles2::GLES2Decoder> GetGLES2Decoder(
-    const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder) {
-  return decoder;
+gpu::gles2::ContextGroup* GetContextGroup(
+    scoped_refptr<gpu::gles2::ContextGroup> context_group) {
+  return context_group.get();
 }
 
 class MockVDAClient : public VideoDecodeAccelerator::Client {
@@ -85,9 +87,7 @@ class MockVDAClient : public VideoDecodeAccelerator::Client {
 class AndroidVideoDecodeAcceleratorTest : public testing::Test {
  public:
   // Default to baseline H264 because it's always supported.
-  AndroidVideoDecodeAcceleratorTest()
-      : gl_decoder_(&command_buffer_service_, &outputter_),
-        config_(H264PROFILE_BASELINE) {}
+  AndroidVideoDecodeAcceleratorTest() : config_(H264PROFILE_BASELINE) {}
 
   void SetUp() override {
     ASSERT_TRUE(gl::init::InitializeGLOneOff());
@@ -96,13 +96,19 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
                                          gl::GLContextAttribs());
     context_->MakeCurrent(surface_.get());
 
-    codec_allocator_ = base::MakeUnique<FakeCodecAllocator>(
+    codec_allocator_ = std::make_unique<FakeCodecAllocator>(
         base::SequencedTaskRunnerHandle::Get());
-    device_info_ = base::MakeUnique<NiceMock<MockDeviceInfo>>();
+    device_info_ = std::make_unique<NiceMock<MockDeviceInfo>>();
 
     chooser_that_is_usually_null_ =
-        base::MakeUnique<NiceMock<MockAndroidVideoSurfaceChooser>>();
+        std::make_unique<NiceMock<MockAndroidVideoSurfaceChooser>>();
     chooser_ = chooser_that_is_usually_null_.get();
+
+    feature_info_ = new gpu::gles2::FeatureInfo();
+    context_group_ = new gpu::gles2::ContextGroup(
+        gpu_preferences_, false, &mailbox_manager_, nullptr, nullptr, nullptr,
+        feature_info_, false, &image_manager_, nullptr, nullptr,
+        gpu::GpuFeatureInfo(), &discardable_manager_);
 
     // By default, allow deferred init.
     config_.is_deferred_initialization_allowed = true;
@@ -115,6 +121,9 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     codec_allocator_ = nullptr;
     context_ = nullptr;
     surface_ = nullptr;
+    feature_info_ = nullptr;
+    context_group_ = nullptr;
+
     gl::init::ShutdownGL(false);
   }
 
@@ -123,8 +132,8 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     // Because VDA has a custom deleter, we must assign it to |vda_| carefully.
     AndroidVideoDecodeAccelerator* avda = new AndroidVideoDecodeAccelerator(
         codec_allocator_.get(), std::move(chooser_that_is_usually_null_),
-        base::Bind(&MakeContextCurrent),
-        base::Bind(&GetGLES2Decoder, gl_decoder_.AsWeakPtr()),
+        base::BindRepeating(&MakeContextCurrent),
+        base::BindRepeating(&GetContextGroup, context_group_),
         AndroidOverlayMojoFactoryCB(), device_info_.get());
     vda_.reset(avda);
     avda->force_defer_surface_creation_for_testing_ =
@@ -146,7 +155,7 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
     // Have the factory provide an overlay, and verify that codec creation is
     // provided with that overlay.
     std::unique_ptr<MockAndroidOverlay> overlay =
-        base::MakeUnique<MockAndroidOverlay>();
+        std::make_unique<MockAndroidOverlay>();
     overlay_callbacks_ = overlay->GetCallbacks();
 
     // Set the expectations first, since ProvideOverlay might cause callbacks.
@@ -199,11 +208,15 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
 
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
-  gpu::FakeCommandBufferServiceBase command_buffer_service_;
-  gpu::gles2::TraceOutputter outputter_;
-  NiceMock<gpu::gles2::MockGLES2Decoder> gl_decoder_;
   NiceMock<MockVDAClient> client_;
   std::unique_ptr<FakeCodecAllocator> codec_allocator_;
+
+  scoped_refptr<gpu::gles2::ContextGroup> context_group_;
+  scoped_refptr<gpu::gles2::FeatureInfo> feature_info_;
+  gpu::GpuPreferences gpu_preferences_;
+  gpu::gles2::MailboxManagerImpl mailbox_manager_;
+  gpu::gles2::ImageManager image_manager_;
+  gpu::ServiceDiscardableManager discardable_manager_;
 
   // Only set until InitializeAVDA() is called.
   std::unique_ptr<MockAndroidVideoSurfaceChooser> chooser_that_is_usually_null_;
@@ -238,7 +251,7 @@ TEST_F(AndroidVideoDecodeAcceleratorTest,
 
   EXPECT_CALL(*codec_allocator_, MockCreateMediaCodecSync(_, _));
   // AVDA must set client callbacks even in sync mode, so that the chooser is
-  // in a sane state.  crbug.com/772899 .
+  // in a sane state.  https://crbug.com/772899 .
   EXPECT_CALL(*chooser_, MockSetClientCallbacks());
   ASSERT_TRUE(InitializeAVDA());
   testing::Mock::VerifyAndClearExpectations(chooser_);
@@ -422,7 +435,7 @@ TEST_F(AndroidVideoDecodeAcceleratorTest,
   SetHasUnrenderedPictureBuffers(true);
   EXPECT_CALL(*codec_allocator_->most_recent_codec, SetSurface(_)).Times(0);
   std::unique_ptr<MockAndroidOverlay> overlay =
-      base::MakeUnique<MockAndroidOverlay>();
+      std::make_unique<MockAndroidOverlay>();
   // Make sure that the overlay is not destroyed too soon.
   std::unique_ptr<DestructionObserver> observer =
       overlay->CreateDestructionObserver();

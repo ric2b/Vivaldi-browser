@@ -17,6 +17,8 @@ namespace base {
 
 #if defined(OS_WIN)
 static const size_t kPageAllocationGranularityShift = 16;  // 64KB
+#elif defined(_MIPS_ARCH_LOONGSON)
+static const size_t kPageAllocationGranularityShift = 14;  // 16KB
 #else
 static const size_t kPageAllocationGranularityShift = 12;  // 4KB
 #endif
@@ -27,9 +29,11 @@ static const size_t kPageAllocationGranularityOffsetMask =
 static const size_t kPageAllocationGranularityBaseMask =
     ~kPageAllocationGranularityOffsetMask;
 
-// All Blink-supported systems have 4096 sized system pages and can handle
-// permissions and commit / decommit at this granularity.
+#if defined(_MIPS_ARCH_LOONGSON)
+static const size_t kSystemPageSize = 16384;
+#else
 static const size_t kSystemPageSize = 4096;
+#endif
 static const size_t kSystemPageOffsetMask = kSystemPageSize - 1;
 static_assert((kSystemPageSize & (kSystemPageSize - 1)) == 0,
               "kSystemPageSize must be power of 2");
@@ -39,7 +43,6 @@ enum PageAccessibilityConfiguration {
   PageInaccessible,
   PageReadWrite,
   PageReadExecute,
-  PageReadWriteExecute,
 };
 
 // Allocate one or more pages.

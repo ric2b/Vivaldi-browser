@@ -45,8 +45,8 @@
 #include "core/dom/events/Event.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
-#include "core/html/TextMetrics.h"
 #include "core/html/canvas/CanvasFontCache.h"
+#include "core/html/canvas/TextMetrics.h"
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutTheme.h"
@@ -54,20 +54,22 @@
 #include "modules/canvas/canvas2d/HitRegion.h"
 #include "modules/canvas/canvas2d/Path2D.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/graphics/Canvas2DLayerBridge.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/DrawLooperBuilder.h"
-#include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/StrokeData.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "platform/graphics/paint/PaintFlags.h"
 #include "platform/graphics/skia/SkiaUtils.h"
+#include "platform/scroll/ScrollAlignment.h"
 #include "platform/text/BidiTextRun.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/typed_arrays/ArrayBufferContents.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 
 namespace blink {
 
@@ -140,7 +142,7 @@ void CanvasRenderingContext2D::SetCanvasGetContextResult(
   result.SetCanvasRenderingContext2D(this);
 }
 
-CanvasRenderingContext2D::~CanvasRenderingContext2D() {}
+CanvasRenderingContext2D::~CanvasRenderingContext2D() = default;
 
 void CanvasRenderingContext2D::ValidateStateStack() const {
 #if DCHECK_IS_ON()
@@ -160,9 +162,10 @@ void CanvasRenderingContext2D::ValidateStateStack() const {
 }
 
 bool CanvasRenderingContext2D::IsAccelerated() const {
-  if (!HasImageBuffer())
+  Canvas2DLayerBridge* buffer2d = canvas()->Canvas2DBuffer();
+  if (!buffer2d)
     return false;
-  return GetImageBuffer()->IsAccelerated();
+  return buffer2d->IsAccelerated();
 }
 
 bool CanvasRenderingContext2D::IsComposited() const {
@@ -187,7 +190,7 @@ void CanvasRenderingContext2D::LoseContext(LostContextMode lost_mode) {
   if (context_lost_mode_ == kSyntheticLostContext && canvas()) {
     Host()->DiscardImageBuffer();
   }
-  dispatch_context_lost_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  dispatch_context_lost_event_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void CanvasRenderingContext2D::DidSetSurfaceSize() {
@@ -195,12 +198,12 @@ void CanvasRenderingContext2D::DidSetSurfaceSize() {
     return;
   // This code path is for restoring from an eviction
   // Restoring from surface failure is handled internally
-  DCHECK(context_lost_mode_ != kNotLostContext && !HasImageBuffer());
+  DCHECK(context_lost_mode_ != kNotLostContext && !HasCanvas2DBuffer());
 
-  if (GetImageBuffer()) {
+  if (CanCreateCanvas2DBuffer()) {
     if (ContextLostRestoredEventsEnabled()) {
       dispatch_context_restored_event_timer_.StartOneShot(TimeDelta(),
-                                                          BLINK_FROM_HERE);
+                                                          FROM_HERE);
     } else {
       // legacy synchronous context restoration.
       Reset();
@@ -231,7 +234,7 @@ void CanvasRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
   if (context_restorable_ && context_lost_mode_ == kRealLostContext) {
     try_restore_context_attempt_count_ = 0;
     try_restore_context_event_timer_.StartRepeating(kTryRestoreContextInterval,
-                                                    BLINK_FROM_HERE);
+                                                    FROM_HERE);
   }
 }
 
@@ -244,7 +247,7 @@ void CanvasRenderingContext2D::TryRestoreContextEvent(TimerBase* timer) {
   }
 
   DCHECK(context_lost_mode_ == kRealLostContext);
-  if (HasImageBuffer() && GetImageBuffer()->RestoreSurface()) {
+  if (HasCanvas2DBuffer() && canvas()->Canvas2DBuffer()->Restore()) {
     try_restore_context_event_timer_.Stop();
     DispatchContextRestoredEvent(nullptr);
   }
@@ -253,7 +256,7 @@ void CanvasRenderingContext2D::TryRestoreContextEvent(TimerBase* timer) {
     // final attempt: allocate a brand new image buffer instead of restoring
     Host()->DiscardImageBuffer();
     try_restore_context_event_timer_.Stop();
-    if (GetImageBuffer())
+    if (CanCreateCanvas2DBuffer())
       DispatchContextRestoredEvent(nullptr);
   }
 }
@@ -273,12 +276,27 @@ void CanvasRenderingContext2D::WillDrawImage(CanvasImageSource* source) const {
   canvas()->WillDrawImageTo2DContext(source);
 }
 
-CanvasColorSpace CanvasRenderingContext2D::ColorSpace() const {
-  return ColorParams().ColorSpace();
-}
-
 String CanvasRenderingContext2D::ColorSpaceAsString() const {
   return CanvasRenderingContext::ColorSpaceAsString();
+}
+
+CanvasColorParams CanvasRenderingContext2D::ColorParams() const {
+  return CanvasRenderingContext::ColorParams();
+}
+
+bool CanvasRenderingContext2D::WritePixels(const SkImageInfo& orig_info,
+                                           const void* pixels,
+                                           size_t row_bytes,
+                                           int x,
+                                           int y) {
+  DCHECK(HasCanvas2DBuffer());
+  return canvas()->Canvas2DBuffer()->WritePixels(orig_info, pixels, row_bytes,
+                                                 x, y);
+}
+
+void CanvasRenderingContext2D::WillOverwriteCanvas() {
+  if (HasCanvas2DBuffer())
+    canvas()->Canvas2DBuffer()->WillOverwriteCanvas();
 }
 
 CanvasPixelFormat CanvasRenderingContext2D::PixelFormat() const {
@@ -348,11 +366,12 @@ void CanvasRenderingContext2D::ScrollPathIntoViewInternal(const Path& path) {
 
   renderer->ScrollRectToVisible(
       path_rect,
-      is_horizontal_writing_mode ? ScrollAlignment::kAlignToEdgeIfNeeded
-                                 : ScrollAlignment::kAlignLeftAlways,
-      !is_horizontal_writing_mode ? ScrollAlignment::kAlignToEdgeIfNeeded
-                                  : ScrollAlignment::kAlignTopAlways,
-      kProgrammaticScroll, false, kScrollBehaviorAuto);
+      WebScrollIntoViewParams(
+          is_horizontal_writing_mode ? ScrollAlignment::kAlignToEdgeIfNeeded
+                                     : ScrollAlignment::kAlignLeftAlways,
+          !is_horizontal_writing_mode ? ScrollAlignment::kAlignToEdgeIfNeeded
+                                      : ScrollAlignment::kAlignTopAlways,
+          kProgrammaticScroll, false, kScrollBehaviorAuto));
 }
 
 void CanvasRenderingContext2D::clearRect(double x,
@@ -370,13 +389,6 @@ void CanvasRenderingContext2D::clearRect(double x,
 void CanvasRenderingContext2D::DidDraw(const SkIRect& dirty_rect) {
   if (dirty_rect.isEmpty())
     return;
-
-  if (CanvasHeuristicParameters::kBlurredShadowsAreExpensive &&
-      GetState().ShouldDrawShadows() && GetState().ShadowBlur() > 0) {
-    ImageBuffer* buffer = GetImageBuffer();
-    if (buffer)
-      buffer->SetHasExpensiveOp();
-  }
 
   CanvasRenderingContext::DidDraw(dirty_rect);
 }
@@ -580,7 +592,9 @@ void CanvasRenderingContext2D::ClearFilterReferences() {
 void CanvasRenderingContext2D::UpdateFilterReferences(
     const FilterOperations& filters) {
   ClearFilterReferences();
-  filters.AddClient(this);
+  filters.AddClient(
+      this,
+      canvas()->GetDocument().GetTaskRunner(TaskType::kUnspecedLoading).get());
   filter_operations_ = filters;
 }
 
@@ -598,7 +612,7 @@ bool CanvasRenderingContext2D::OriginClean() const {
 }
 
 void CanvasRenderingContext2D::SetOriginTainted() {
-  return Host()->SetOriginTainted();
+  Host()->SetOriginTainted();
 }
 
 int CanvasRenderingContext2D::Width() const {
@@ -609,21 +623,19 @@ int CanvasRenderingContext2D::Height() const {
   return Host()->Size().Height();
 }
 
-bool CanvasRenderingContext2D::HasImageBuffer() const {
-  return Host()->GetImageBuffer();
+bool CanvasRenderingContext2D::HasCanvas2DBuffer() const {
+  return !!canvas()->Canvas2DBuffer();
 }
 
-ImageBuffer* CanvasRenderingContext2D::GetImageBuffer() const {
-  return const_cast<CanvasRenderingContextHost*>(Host())
-      ->GetOrCreateImageBuffer();
+bool CanvasRenderingContext2D::CanCreateCanvas2DBuffer() const {
+  return canvas()->TryCreateImageBuffer();
 }
 
 scoped_refptr<StaticBitmapImage> blink::CanvasRenderingContext2D::GetImage(
-    AccelerationHint hint,
-    SnapshotReason reason) const {
-  if (!HasImageBuffer())
+    AccelerationHint hint) const {
+  if (!HasCanvas2DBuffer())
     return nullptr;
-  return GetImageBuffer()->NewImageSnapshot(hint, reason);
+  return canvas()->Canvas2DBuffer()->NewImageSnapshot(hint);
 }
 
 bool CanvasRenderingContext2D::ParseColorOrCurrentColor(
@@ -885,8 +897,8 @@ const Font& CanvasRenderingContext2D::AccessFont() {
 }
 
 void CanvasRenderingContext2D::SetIsHidden(bool hidden) {
-  if (HasImageBuffer())
-    GetImageBuffer()->SetIsHidden(hidden);
+  if (HasCanvas2DBuffer())
+    canvas()->Canvas2DBuffer()->SetIsHidden(hidden);
   if (hidden) {
     PruneLocalFontCache(0);
   }
@@ -897,7 +909,7 @@ bool CanvasRenderingContext2D::IsTransformInvertible() const {
 }
 
 WebLayer* CanvasRenderingContext2D::PlatformLayer() const {
-  return GetImageBuffer() ? GetImageBuffer()->PlatformLayer() : nullptr;
+  return HasCanvas2DBuffer() ? canvas()->Canvas2DBuffer()->Layer() : nullptr;
 }
 
 void CanvasRenderingContext2D::getContextAttributes(
@@ -1074,6 +1086,13 @@ void CanvasRenderingContext2D::DisableAcceleration() {
 
 void CanvasRenderingContext2D::DidInvokeGPUReadbackInCurrentFrame() {
   canvas()->DidInvokeGPUReadbackInCurrentFrame();
+}
+
+bool CanvasRenderingContext2D::IsCanvas2DBufferValid() const {
+  if (canvas()->Canvas2DBuffer()) {
+    return canvas()->Canvas2DBuffer()->IsValid();
+  }
+  return false;
 }
 
 }  // namespace blink

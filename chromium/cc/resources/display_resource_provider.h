@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "cc/output/overlay_candidate.h"
 #include "cc/resources/resource_provider.h"
+#include "components/viz/common/resources/resource_fence.h"
 
 namespace viz {
 class SharedBitmapManager;
@@ -19,11 +20,8 @@ namespace cc {
 // created on.
 class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
  public:
-  DisplayResourceProvider(
-      viz::ContextProvider* compositor_context_provider,
-      viz::SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const viz::ResourceSettings& resource_settings);
+  DisplayResourceProvider(viz::ContextProvider* compositor_context_provider,
+                          viz::SharedBitmapManager* shared_bitmap_manager);
   ~DisplayResourceProvider() override;
 
 #if defined(OS_ANDROID)
@@ -33,7 +31,39 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
   // that they're not promotable right now.
   void SendPromotionHints(
       const OverlayCandidateList::PromotionHintInfoMap& promotion_hints);
+
+  // Indicates if this resource is backed by an Android SurfaceTexture, and thus
+  // can't really be promoted to an overlay.
+  bool IsBackedBySurfaceTexture(viz::ResourceId id);
+
+  // Indicates if this resource wants to receive promotion hints.
+  bool WantsPromotionHintForTesting(viz::ResourceId id);
+
+  // Return the number of resources that request promotion hints.
+  size_t CountPromotionHintRequestsForTesting();
 #endif
+
+  viz::ResourceType GetResourceType(viz::ResourceId id);
+
+  // Return the format of the underlying buffer that can be used for scanout.
+  gfx::BufferFormat GetBufferFormat(viz::ResourceId id);
+
+  // Indicates if this resource may be used for a hardware overlay plane.
+  bool IsOverlayCandidate(viz::ResourceId id);
+
+  void WaitSyncToken(viz::ResourceId id);
+
+  // Binds the given GL resource to a texture target for sampling using the
+  // specified filter for both minification and magnification. Returns the
+  // texture target used. The resource must be locked for reading.
+  GLenum BindForSampling(viz::ResourceId resource_id,
+                         GLenum unit,
+                         GLenum filter);
+
+  // Checks whether a resource is in use.
+  bool InUse(viz::ResourceId id);
+
+  static GLint GetActiveTextureUnit(gpu::gles2::GLES2Interface* gl);
 
   // The following lock classes are part of the DisplayResourceProvider API and
   // are needed to read the resource contents. The user must ensure that they
@@ -139,6 +169,29 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
     DISALLOW_COPY_AND_ASSIGN(ScopedBatchReturnResources);
   };
 
+  class CC_EXPORT SynchronousFence : public viz::ResourceFence {
+   public:
+    explicit SynchronousFence(gpu::gles2::GLES2Interface* gl);
+
+    // viz::ResourceFence implementation.
+    void Set() override;
+    bool HasPassed() override;
+    void Wait() override;
+
+    // Returns true if fence has been set but not yet synchornized.
+    bool has_synchronized() const { return has_synchronized_; }
+
+   private:
+    ~SynchronousFence() override;
+
+    void Synchronize();
+
+    gpu::gles2::GLES2Interface* gl_;
+    bool has_synchronized_;
+
+    DISALLOW_COPY_AND_ASSIGN(SynchronousFence);
+  };
+
   // Sets the current read fence. If a resource is locked for read
   // and has read fences enabled, the resource will not allow writes
   // until this fence has passed.
@@ -184,6 +237,7 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
 
   const viz::internal::Resource* LockForRead(viz::ResourceId id);
   void UnlockForRead(viz::ResourceId id);
+  bool ReadLockFenceHasPassed(const viz::internal::Resource* resource);
 
   struct Child {
     Child();
@@ -207,6 +261,8 @@ class CC_EXPORT DisplayResourceProvider : public ResourceProvider {
   scoped_refptr<viz::ResourceFence> current_read_lock_fence_;
   ChildMap children_;
   base::flat_map<viz::ResourceId, sk_sp<SkImage>> resource_sk_image_;
+  viz::ResourceId next_id_;
+  viz::SharedBitmapManager* shared_bitmap_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(DisplayResourceProvider);
 };

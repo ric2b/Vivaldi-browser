@@ -55,7 +55,11 @@ class Target : public Item {
   typedef std::vector<SourceFile> FileList;
   typedef std::vector<std::string> StringVector;
 
-  Target(const Settings* settings, const Label& label);
+  // We track the set of build files that may affect this target, please refer
+  // to Scope for how this is determined.
+  Target(const Settings* settings,
+         const Label& label,
+         const std::set<SourceFile>& build_dependency_files = {});
   ~Target() override;
 
   // Returns a string naming the output type.
@@ -151,10 +155,6 @@ class Target : public Item {
   void set_write_runtime_deps_output(const OutputFile& value) {
     write_runtime_deps_output_ = value;
   }
-
-  // Compile-time extra dependencies.
-  const FileList& inputs() const { return inputs_; }
-  FileList& inputs() { return inputs_; }
 
   // Runtime dependencies. These are "file-like things" that can either be
   // directories or files. They do not need to exist, these are just passed as
@@ -360,7 +360,6 @@ class Target : public Item {
   bool check_includes_;
   bool complete_static_lib_;
   bool testonly_;
-  FileList inputs_;
   std::vector<std::string> data_;
   BundleData bundle_data_;
   OutputFile write_runtime_deps_output_;
@@ -391,9 +390,9 @@ class Target : public Item {
 
   std::vector<LabelPattern> assert_no_deps_;
 
-  // Used for all binary targets. The precompiled header values in this struct
-  // will be resolved to the ones to use for this target, if precompiled
-  // headers are used.
+  // Used for all binary targets, and for inputs in regular targets. The
+  // precompiled header values in this struct will be resolved to the ones to
+  // use for this target, if precompiled headers are used.
   ConfigValues config_values_;
 
   // Used for action[_foreach] targets.

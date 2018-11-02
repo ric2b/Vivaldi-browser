@@ -36,6 +36,10 @@ namespace web {
 
 WebTestWithWebState::WebTestWithWebState() {}
 
+WebTestWithWebState::WebTestWithWebState(
+    std::unique_ptr<web::WebClient> web_client)
+    : WebTest(std::move(web_client)) {}
+
 WebTestWithWebState::~WebTestWithWebState() {}
 
 void WebTestWithWebState::SetUp() {
@@ -173,6 +177,11 @@ id WebTestWithWebState::ExecuteJavaScript(NSString* script) {
   [GetWebController(web_state())
       executeJavaScript:script
       completionHandler:^(id result, NSError* error) {
+        // Most of executed JS does not return the result, and there is no need
+        // to log WKErrorJavaScriptResultTypeIsUnsupported error code.
+        if (error && error.code != WKErrorJavaScriptResultTypeIsUnsupported) {
+          DLOG(WARNING) << base::SysNSStringToUTF8(error.localizedDescription);
+        }
         execution_result = [result copy];
         execution_completed = true;
       }];

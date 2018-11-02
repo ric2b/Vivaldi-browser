@@ -33,11 +33,11 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/MessageChannel.h"
-#include "core/dom/MessagePort.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
+#include "core/messaging/MessageChannel.h"
+#include "core/messaging/MessagePort.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/SharedWorkerRepositoryClient.h"
 #include "platform/weborigin/KURL.h"
@@ -71,6 +71,8 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
         "Access to shared workers is denied to origin '" +
         document->GetSecurityOrigin()->ToString() + "'.");
     return nullptr;
+  } else if (document->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(document, WebFeature::kFileAccessedSharedWorker);
   }
 
   KURL script_url = ResolveURL(context, url, exception_state,
@@ -86,7 +88,7 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
   return worker;
 }
 
-SharedWorker::~SharedWorker() {}
+SharedWorker::~SharedWorker() = default;
 
 const AtomicString& SharedWorker::InterfaceName() const {
   return EventTargetNames::SharedWorker;

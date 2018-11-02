@@ -11,13 +11,10 @@ Kai kurios funkcijos gali būti nepasiekiamos ir nuostatų pakeitimai nebus išs
 <translation id="1185134272377778587">Apie „Chromium“</translation>
 <translation id="1298199220304005244">Gauti su „Chromium“ OS naudojimu susijusios pagalbos</translation>
 <translation id="1396446129537741364">„Chromium“ bando parodyti slaptažodžius.</translation>
-<translation id="1403254041219632970">Būsimų versijų „Chromium“ nebebus palaikoma naudojant 10.6, 10.7 ar 10.8 versijos „Mac OS X“.</translation>
 <translation id="1414495520565016063">Esate prisijungę prie „Chromium“.</translation>
-<translation id="1440917365206527807">„Chromium“ neleidžia šiai svetainei nukreipti jūsų į</translation>
 <translation id="1444754455097148408">„Chromium“ atvirojo šaltinio licencijos</translation>
 <translation id="1502360822835740515">Nustatymas „Chromium“ numatytąja naršykle</translation>
 <translation id="151962892725702025">„Chromium“ OS negali sinchronizuoti duomenų, nes jūsų domene sinchronizavimas nepasiekiamas.</translation>
-<translation id="1559451348202814456">„Chromium“ gali tinkamai neveikti, nes ji nebepalaikoma naudojant 10.6, 10.7 ar 10.8 versijos „Mac OS X“.</translation>
 <translation id="1585657529869845941">Jei bus rodomas, spustelėkite mygtuką <ph name="BEGIN_BOLD" />Vis tiek perjungti<ph name="END_BOLD" /></translation>
 <translation id="1653828314016431939">Gerai – dabar paleisti iš naujo</translation>
 <translation id="1668054258064581266">Pašalinus paskyrą iš „Chromium“, galbūt reikės iš naujo įkelti skirtukus, kad pakeitimai įsigaliotų.</translation>
@@ -50,7 +47,6 @@ Kai kurios funkcijos gali būti nepasiekiamos ir nuostatų pakeitimai nebus išs
 <translation id="2587578672395088481">Kad būtų galima pritaikyti naujinį, „Chromium“ OS reikia paleisti iš naujo.</translation>
 <translation id="2647554856022461007">„Chromium“ gali naudoti žiniatinklio paslaugas naršymo funkcijoms pagerinti. Galite pasirinktinai išjungti šias paslaugas. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Diegiant įvyko operacinės sistemos klaida. Atsisiųskite „Chromium“ dar kartą.</translation>
-<translation id="2685838254101182273">„Chromium“ nebeatsinaujina ir nebepalaiko šios operacinės sistemos versijos.</translation>
 <translation id="2705403826523567092">Prisijunkite ir gaukite suasmenintų naršymo funkcijų, sinchronizuojamų skirtinguose įrenginiuose</translation>
 <translation id="2711502716910134313">„Chromium“ skirtukas</translation>
 <translation id="2718390899429598676">Kad būtų papildomai užtikrintas saugumas, „Chromium“ užšifruos jūsų duomenis.</translation>
@@ -108,7 +104,6 @@ Kai kurios funkcijos gali būti nepasiekiamos ir nuostatų pakeitimai nebus išs
 <translation id="4458285410772214805">Atsijunkite ir prisijunkite iš naujo, kad šis pakeitimas būtų pritaikytas.</translation>
 <translation id="4469812139324097969">„Chromium“ pasenusi, nes kurį laiką nebuvo paleista iš naujo. Naujinys pasiekiamas ir jis bus pritaikytas, kai paleisite „Chromium“ iš naujo.</translation>
 <translation id="4488554488975128561">Galite padėti sustiprinti „Chromium“ saugą ir palengvinti jos naudojimą automatiškai „Google“ siųsdami tam tikrą sistemos informaciją ir puslapių turinį, kad padėtumėte aptikti pavojingas programas ir svetaines.</translation>
-<translation id="4549794359424059447">Būsimų versijų „Chromium“ nebebus palaikoma naudojant „Windows XP“ ar „Windows Vista“.</translation>
 <translation id="4567424176335768812">Esate prisijungę kaip <ph name="USER_EMAIL_ADDRESS" />. Dabar galite pasiekti savo žymes, istoriją ir kitus nustatymus visuose įrenginiuose, kuriuose esate prisijungę.</translation>
 <translation id="459535195905078186">„Chromium“ programos</translation>
 <translation id="4611246891205775468">„Chromium“ reikia leidimo, kad galėtų naudoti jūsų mikrofoną šioje svetainėje.</translation>
@@ -147,7 +142,6 @@ Kai kurios funkcijos gali būti nepasiekiamos ir nuostatų pakeitimai nebus išs
 <translation id="5902536751647951209">Nepavyko autentifikuoti sertifikato. Prisijunkite prie „Chromium“ dar kartą arba susisiekite su administratoriumi, jei reikia daugiau informacijos. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Beveik įdiegta naujausia versija! Paleiskite įrenginį iš naujo, kad būtų užbaigtas naujinimas.</translation>
 <translation id="5942520288919337908">„<ph name="EXTENSION_NAME" />“ pridėtas prie „Chromium“.</translation>
-<translation id="59625444380784159">Turėdami išsamią kontaktų informaciją galite greičiau užpildyti formas „Chromium“.</translation>
 <translation id="5987687638152509985">Atnaujinkite „Chromium“, kad galėtumėte pradėti sinchronizuoti</translation>
 <translation id="6055895534982063517">Pasiekiama nauja „Chromium“ versija, kuri greitesnė nei bet kada.</translation>
 <translation id="6063093106622310249">&amp;Atidaryti naudojant „Chromium“</translation>
@@ -161,6 +155,7 @@ Kai kurios funkcijos gali būti nepasiekiamos ir nuostatų pakeitimai nebus išs
 <translation id="6334986366598267305">Dabar galite lengviau naudoti „Chromium“ naudodami „Google“ paskyrą ir bendrinamus kompiuterius.</translation>
 <translation id="6373523479360886564">Ar tikrai norite pašalinti „Chromium"?</translation>
 <translation id="6394232988457703198">Turėtumėte dabar iš naujo paleisti „Chromium“.</translation>
+<translation id="6400072781405947421">„Chromium“ gali tinkamai neveikti, nes ji nebepalaikoma naudojant 10.9 versijos „Mac OS X“.</translation>
 <translation id="6403826409255603130">„Chromium“ – tai žiniatinklio naršyklė, kurią naudojant akimirksniu paleidžiami tinklalapiai ir programos. Ji greita, stabili ir lengvai naudojama. Saugiau naršykite žiniatinklį naudodami į „Chromium“ integruotą apsaugą nuo kenkėjiškų programų ir sukčiavimo.</translation>
 <translation id="6475912303565314141">Ji taip pat kontroliuoja, koks puslapis rodomas, kai paleidžiate „Chromium“.</translation>
 <translation id="6485906693002546646">Sinchronizuoti „Chromium“ duomenims naudojate <ph name="PROFILE_EMAIL" />. Jei norite atnaujinti sinchronizavimo nuostatą arba naudoti „Chromium“ be „Google“ paskyros, apsilankykite <ph name="SETTINGS_LINK" /> skiltyje.</translation>
@@ -176,13 +171,13 @@ Kai kurios funkcijos gali būti nepasiekiamos. Nurodykite kitą profilio katalog
 <translation id="6734291798041940871">„Chromium“ jau įdiegta visiems kompiuterio naudotojams.</translation>
 <translation id="6810143991807788455">Padėkite tobulinti „Chromium“ pateikę ataskaitą apie dabartinius nustatymus</translation>
 <translation id="6857782730669500492">„Chromium“ – „<ph name="PAGE_TITLE" />“</translation>
+<translation id="6863361426438995919">„Google Pay“ (nukopijuota į „Chromium“)</translation>
 <translation id="6893813176749746474">„Chromium“ atnaujinta, bet jos nenaudojote mažiausiai 30 dienų.</translation>
 <translation id="6944967875980567883">Į „Chromium“ įkelti moduliai</translation>
 <translation id="6964305034639999644">Atidaryti nuorodą „Chromium“ inko&amp;gnito lange</translation>
 <translation id="6970811910055250180">Įrenginys atnaujinamas...</translation>
 <translation id="705851970750939768">Atnaujinti „Chromium“</translation>
 <translation id="7066436765290594559">„Chromium“ OS negali sinchronizuoti duomenų. Atnaujinkite sinchronizavimo slaptafrazę.</translation>
-<translation id="707471633328071618">„Google Payments“ (nukopijuota į „Chromium“)</translation>
 <translation id="7162152143154757523">„Chromium“ gali teikti išmanesnę rašybos tikrinimo funkciją, siųsdama tai, ką įvedate naršyklėje, „Google“ serveriams. Tai suteikia galimybę naudoti tą pačią rašybos tikrinimo technologiją, kuri naudojama „Google“ paieškoje.</translation>
 <translation id="7205698830395646142">Paslėpti „Chromium“ meniu elementą</translation>
 <translation id="7223968959479464213">Užduočių tvarkytuvė – „Chromium“</translation>
@@ -242,7 +237,6 @@ Patikrinkite el. pašto adresu <ph name="ACCOUNT_EMAIL" /> išsiųstą laišką,
 <translation id="872034308864968620">Paleisti „Chromium“ fone</translation>
 <translation id="8803635938069941624">„Chromium“ OS sąlygos</translation>
 <translation id="8821041990367117597">„Chromium“ negali sinchronizuoti jūsų duomenų, nes paskyros išsami prisijungimo informacija yra pasenusi.</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Neturite reikiamų teisių sistemai įdiegti. Pamėginkite įdiegimo priemonę dar kartą paleisti kaip administratorius.</translation>
 <translation id="8897323336392112261">Ji taip pat kontroliuoja, koks puslapis rodomas, kai paleidžiate „Chromium“ arba spustelėjate pagrindinio puslapio mygtuką.</translation>
 <translation id="8907580949721785412">„Chromium“ bando rodyti slaptažodžius. Įveskite „Windows“ slaptažodį, kad tai leistumėte.</translation>

@@ -46,13 +46,28 @@ print_preview.DestinationConnectionStatus = {
  * @enum {string}
  */
 print_preview.DestinationProvisionalType = {
-  /** Destination is not provisional. */
+  // Destination is not provisional.
   NONE: 'NONE',
-  /**
-   * User has to grant USB access for the destination to its provider.
-   * Used for destinations with extension origin.
-   */
+  // User has to grant USB access for the destination to its provider.
+  // Used for destinations with extension origin.
   NEEDS_USB_PERMISSION: 'NEEDS_USB_PERMISSION'
+};
+
+/**
+ * Enumeration specifying the status of a destination's 2018 certificate.
+ * Values UNKNOWN and YES are returned directly by the GCP server.
+ * @enum {string}
+ */
+print_preview.DestinationCertificateStatus = {
+  // Destination is not a cloud printer or no status was retrieved.
+  NONE: 'NONE',
+  // Printer does not have a valid 2018 certificate. Currently unused, to be
+  // sent by GCP server.
+  NO: 'NO',
+  // Printer may or may not have a valid certificate. Sent by GCP server.
+  UNKNOWN: 'UNKNOWN',
+  // Printer has a valid 2018 certificate. Sent by GCP server.
+  YES: 'YES'
 };
 
 /**
@@ -108,8 +123,46 @@ print_preview.CddCapabilities;
  */
 print_preview.Cdd;
 
+/**
+ * Enumeration of color modes used by Chromium.
+ * @enum {number}
+ */
+print_preview.ColorMode = {
+  GRAY: 1,
+  COLOR: 2
+};
+
+/**
+ * @typedef {{id: string,
+ *            origin: print_preview.DestinationOrigin,
+ *            account: string,
+ *            capabilities: ?print_preview.Cdd,
+ *            displayName: string,
+ *            extensionId: string,
+ *            extensionName: string}}
+ */
+print_preview.RecentDestination;
+
 cr.define('print_preview', function() {
   'use strict';
+
+  /**
+   * Creates a |RecentDestination| to represent |destination| in the app
+   * state.
+   * @param {!print_preview.Destination} destination The destination to store.
+   * @return {!print_preview.RecentDestination}
+   */
+  function makeRecentDestination(destination) {
+    return {
+      id: destination.id,
+      origin: destination.origin,
+      account: destination.account || '',
+      capabilities: destination.capabilities,
+      displayName: destination.displayName || '',
+      extensionId: destination.extensionId || '',
+      extensionName: destination.extensionName || '',
+    };
+  }
 
   class Destination {
     /**
@@ -133,7 +186,10 @@ cr.define('print_preview', function() {
      *              (print_preview.DestinationProvisionalType|undefined),
      *          extensionId: (string|undefined),
      *          extensionName: (string|undefined),
-     *          description: (string|undefined)}=} opt_params Optional
+     *          description: (string|undefined),
+     *          certificateStatus:
+     *              (print_preview.DestinationCertificateStatus|undefined)
+     *         }=} opt_params Optional
      *     parameters for the destination.
      */
     constructor(
@@ -256,12 +312,32 @@ cr.define('print_preview', function() {
       this.provisionalType_ = (opt_params && opt_params.provisionalType) ||
           print_preview.DestinationProvisionalType.NONE;
 
+      /**
+       * Printer 2018 certificate status
+       * @private {print_preview.DestinationCertificateStatus}
+       */
+      this.certificateStatus_ = opt_params && opt_params.certificateStatus ||
+          print_preview.DestinationCertificateStatus.NONE;
+
       assert(
           this.provisionalType_ !=
                   print_preview.DestinationProvisionalType
                       .NEEDS_USB_PERMISSION ||
               this.isExtension,
           'Provisional USB destination only supprted with extension origin.');
+
+      /**
+       * @private {!Array<string>} List of capability types considered color.
+       * @const
+       */
+      this.COLOR_TYPES_ = ['STANDARD_COLOR', 'CUSTOM_COLOR'];
+
+      /**
+       * @private {!Array<string>} List of capability types considered
+       *     monochrome.
+       * @const
+       */
+      this.MONOCHROME_TYPES_ = ['STANDARD_MONOCHROME', 'CUSTOM_MONOCHROME'];
     }
 
     /** @return {string} ID of the destination. */
@@ -430,6 +506,26 @@ cr.define('print_preview', function() {
       this.connectionStatus_ = status;
     }
 
+    /**
+     * @return {boolean} Whether the destination has an invalid 2018
+     *     certificate.
+     */
+    get hasInvalidCertificate() {
+      return this.certificateStatus_ ==
+          print_preview.DestinationCertificateStatus.NO;
+    }
+
+    /**
+     * @return {boolean} Whether the destination should display an invalid
+     *     certificate UI warning in the selection dialog and cause a UI
+     *     warning to appear in the preview area when selected.
+     */
+    get shouldShowInvalidCertificateError() {
+      return this.certificateStatus_ ==
+          print_preview.DestinationCertificateStatus.NO &&
+          !loadTimeData.getBoolean('isEnterpriseManaged');
+    }
+
     /** @return {boolean} Whether the destination is considered offline. */
     get isOffline() {
       return arrayContains(
@@ -440,23 +536,26 @@ cr.define('print_preview', function() {
           this.connectionStatus_);
     }
 
-    /** @return {string} Human readable status for offline destination. */
-    get offlineStatusText() {
-      if (!this.isOffline) {
+    /**
+     * @return {string} Human readable status for a destination that is offline
+     *     or has a bad certificate. */
+    get connectionStatusText() {
+      if (!this.isOffline && !this.shouldShowInvalidCertificateError)
         return '';
-      }
       const offlineDurationMs = Date.now() - this.lastAccessTime_;
-      let offlineMessageId;
-      if (offlineDurationMs > 31622400000.0) {  // One year.
-        offlineMessageId = 'offlineForYear';
+      let statusMessageId;
+      if (this.shouldShowInvalidCertificateError) {
+        statusMessageId = 'noLongerSupported';
+      } else if (offlineDurationMs > 31622400000.0) {  // One year.
+        statusMessageId = 'offlineForYear';
       } else if (offlineDurationMs > 2678400000.0) {  // One month.
-        offlineMessageId = 'offlineForMonth';
+        statusMessageId = 'offlineForMonth';
       } else if (offlineDurationMs > 604800000.0) {  // One week.
-        offlineMessageId = 'offlineForWeek';
+        statusMessageId = 'offlineForWeek';
       } else {
-        offlineMessageId = 'offline';
+        statusMessageId = 'offline';
       }
-      return loadTimeData.getString(offlineMessageId);
+      return loadTimeData.getString(statusMessageId);
     }
 
     /**
@@ -542,6 +641,14 @@ cr.define('print_preview', function() {
     }
 
     /**
+     * Gets the destination's certificate status.
+     * @return {print_preview.DestinationCertificateStatus}
+     */
+    get certificateStatus() {
+      return this.certificateStatus_;
+    }
+
+    /**
      * Whether the destinaion is provisional.
      * @return {boolean}
      */
@@ -556,6 +663,90 @@ cr.define('print_preview', function() {
      */
     get isEnterprisePrinter() {
       return this.isEnterprisePrinter_;
+    }
+
+    /**
+     * @return {Object} Color capability of this destination.
+     * @private
+     */
+    colorCapability_() {
+      return this.capabilities && this.capabilities.printer &&
+              this.capabilities.printer.color ?
+          this.capabilities.printer.color :
+          null;
+    }
+
+    /**
+     * @return {boolean} Whether the printer supports both black and white and
+     *     color printing.
+     */
+    get hasColorCapability() {
+      const capability = this.colorCapability_();
+      if (!capability || !capability.option)
+        return false;
+      let hasColor = false;
+      let hasMonochrome = false;
+      capability.option.forEach(option => {
+        const type = assert(option.type);
+        hasColor = hasColor || this.COLOR_TYPES_.includes(option.type);
+        hasMonochrome =
+            hasMonochrome || this.MONOCHROME_TYPES_.includes(option.type);
+      });
+      return hasColor && hasMonochrome;
+    }
+
+    /**
+     * @param {boolean} isColor Whether to use a color printing mode.
+     * @return {Object} Selected color option.
+     */
+    getSelectedColorOption(isColor) {
+      const typesToLookFor =
+          isColor ? this.COLOR_TYPES_ : this.MONOCHROME_TYPES_;
+      const capability = this.colorCapability_();
+      if (!capability || !capability.option)
+        return null;
+      for (let i = 0; i < typesToLookFor.length; i++) {
+        const matchingOptions = capability.option.filter(option => {
+          return option.type == typesToLookFor[i];
+        });
+        if (matchingOptions.length > 0)
+          return matchingOptions[0];
+      }
+      return null;
+    }
+
+    /**
+     * @param {boolean} isColor Whether to use a color printing mode.
+     * @return {number} Native color model of the destination.
+     */
+    getNativeColorModel(isColor) {
+      // For non-local printers or printers without capability, native color
+      // model is ignored.
+      const capability = this.colorCapability_();
+      if (!capability || !capability.option || !this.isLocal) {
+        return isColor ? print_preview.ColorMode.COLOR :
+                         print_preview.ColorMode.GRAY;
+      }
+      const selected = this.getSelectedColorOption(isColor);
+      const mode = parseInt(selected ? selected.vendor_id : null, 10);
+      if (isNaN(mode)) {
+        return isColor ? print_preview.ColorMode.COLOR :
+                         print_preview.ColorMode.GRAY;
+      }
+      return mode;
+    }
+
+    /**
+     * @return {Object} The default color option for the destination.
+     */
+    get defaultColorOption() {
+      const capability = this.colorCapability_();
+      if (!capability || !capability.option)
+        return null;
+      const defaultOptions = capability.option.filter(option => {
+        return option.is_default;
+      });
+      return defaultOptions.length != 0 ? defaultOptions[0] : null;
     }
   }
 
@@ -599,5 +790,6 @@ cr.define('print_preview', function() {
   // Export
   return {
     Destination: Destination,
+    makeRecentDestination: makeRecentDestination,
   };
 });

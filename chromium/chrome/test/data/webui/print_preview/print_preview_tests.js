@@ -59,7 +59,8 @@ cr.define('print_preview_test', function() {
   function setupSettingsAndDestinationsWithCapabilities(opt_device) {
     nativeLayer.setInitialSettings(initialSettings);
     nativeLayer.setLocalDestinations(localDestinationInfos);
-    opt_device = opt_device || getCddTemplate('FooDevice', 'FooName');
+    opt_device = opt_device ||
+        print_preview_test_utils.getCddTemplate('FooDevice', 'FooName');
     nativeLayer.setLocalDestinationCapabilities(opt_device);
 
     printPreview.initialize();
@@ -107,70 +108,6 @@ cr.define('print_preview_test', function() {
   }
 
   /**
-   * @param {string} printerId
-   * @param {string=} opt_printerName Defaults to an empty string.
-   * @return {!print_preview.PrinterCapabilitiesResponse}
-   */
-  function getCddTemplate(printerId, opt_printerName) {
-    return {
-      printer: {
-        deviceName: printerId,
-        printerName: opt_printerName || '',
-      },
-      capabilities: {
-        version: '1.0',
-        printer: {
-          supported_content_type: [{content_type: 'application/pdf'}],
-          collate: {},
-          color: {
-            option: [
-              {type: 'STANDARD_COLOR', is_default: true},
-              {type: 'STANDARD_MONOCHROME'}
-            ]
-          },
-          copies: {},
-          dpi: {
-            option: [
-              {horizontal_dpi: 200, vertical_dpi: 200, is_default: true},
-              {horizontal_dpi: 100, vertical_dpi: 100},
-            ]
-          },
-          duplex: {
-            option: [
-              {type: 'NO_DUPLEX', is_default: true},
-              {type: 'LONG_EDGE'},
-              {type: 'SHORT_EDGE'}
-            ]
-          },
-          page_orientation: {
-            option: [
-              {type: 'PORTRAIT', is_default: true},
-              {type: 'LANDSCAPE'},
-              {type: 'AUTO'}
-            ]
-          },
-          media_size: {
-            option: [
-              { name: 'NA_LETTER',
-                width_microns: 215900,
-                height_microns: 279400,
-                is_default: true,
-                custom_display_name: "Letter",
-              },
-              {
-                name: 'CUSTOM_SQUARE',
-                width_microns: 215900,
-                height_microns: 215900,
-                custom_display_name: "CUSTOM_SQUARE",
-              }
-            ]
-          }
-        }
-      }
-    };
-  }
-
-  /**
    * @return {!print_preview.PrinterCapabilitiesResponse} The capabilities of
    *     the Save as PDF destination.
    */
@@ -214,7 +151,8 @@ cr.define('print_preview_test', function() {
    */
   function getAppStateString() {
     const origin = cr.isChromeOS ? 'chrome_os' : 'local';
-    const cdd = getCddTemplate('ID1', 'One').capabilities;
+    const cdd =
+        print_preview_test_utils.getCddTemplate('ID1', 'One').capabilities;
     return JSON.stringify({
         version: 2,
         recentDestinations: [
@@ -293,7 +231,7 @@ cr.define('print_preview_test', function() {
    * @return {!Object}
    */
   function getCddTemplateWithAdvancedSettings(printerId) {
-    const template = getCddTemplate(printerId);
+    const template = print_preview_test_utils.getCddTemplate(printerId);
     template.capabilities.printer.vendor_capability = [{
       display_name: 'Print Area',
       id: 'Print Area',
@@ -322,6 +260,18 @@ cr.define('print_preview_test', function() {
         element.removeEventListener('animationend', f);
         resolve();
       });
+    });
+  }
+
+  /**
+   * @param {!HTMLElement} headerFooter The header/footer settings section.
+   * @param {boolean} displayed Whether the header footer section should be
+   *     displayed when the preview is done loading.
+   */
+  function checkHeaderFooterOnLoad(headerFooter, displayed) {
+    return nativeLayer.whenCalled('getPreview').then(function() {
+      checkElementDisplayed(headerFooter, displayed);
+      return whenAnimationDone('more-settings');
     });
   }
 
@@ -517,7 +467,8 @@ cr.define('print_preview_test', function() {
           },
         ],
       });
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID'));
       setInitialSettings();
       return nativeLayer.whenCalled('getInitialSettings');
     });
@@ -536,7 +487,7 @@ cr.define('print_preview_test', function() {
       // Set up capabilities for ID1. This should be the device that should hav
       // its capabilities fetched, since it is the most recent. If another
       // device is selected the native layer will reject the callback.
-      const device = getCddTemplate('ID1', 'One');
+      const device = print_preview_test_utils.getCddTemplate('ID1', 'One');
 
       return setupSettingsAndDestinationsWithCapabilities(device).then(
           function() {
@@ -578,10 +529,12 @@ cr.define('print_preview_test', function() {
       ];
 
       initialSettings.printerName = 'ID3';
-      const device = getCddTemplate('ID3', 'Three');
+      const device = print_preview_test_utils.getCddTemplate('ID3', 'Three');
 
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID1', 'One'));
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID2', 'Two'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID1', 'One'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID2', 'Two'));
       return setupSettingsAndDestinationsWithCapabilities(device).then(
           function() {
         nativeLayer.reset();
@@ -634,7 +587,7 @@ cr.define('print_preview_test', function() {
         { printerName: 'Two', deviceName: 'ID2' },
         { printerName: 'Three', deviceName: 'ID3' },
       ];
-      const device = getCddTemplate('ID1', 'One');
+      const device = print_preview_test_utils.getCddTemplate('ID1', 'One');
 
       return Promise.all([
           setupSettingsAndDestinationsWithCapabilities(device),
@@ -644,24 +597,21 @@ cr.define('print_preview_test', function() {
                 'ID1', printPreview.destinationStore_.selectedDestination.id);
 
             // Validate the parameters for getPreview match the app state.
-            expectEquals('CUSTOM_SQUARE',
-                         args[1].printTicketStore.mediaSize.getValue().name);
-            expectEquals('90', args[1].printTicketStore.scaling.getValue());
-            expectEquals(
-                100, args[1].printTicketStore.dpi.getValue().horizontal_dpi);
-            expectTrue(args[1].printTicketStore.headerFooter.getValue());
-            expectTrue(args[1].printTicketStore.cssBackground.getValue());
-            expectTrue(args[1].printTicketStore.fitToPage.getValue());
-            expectTrue(args[1].printTicketStore.collate.getValue());
-            expectTrue(args[1].printTicketStore.duplex.getValue());
-            expectTrue(args[1].printTicketStore.landscape.getValue());
-            expectTrue(args[1].printTicketStore.color.getValue());
+            const ticket = JSON.parse(args[1].printTicket);
+            expectEquals('CUSTOM_SQUARE', ticket.mediaSize.name);
+            expectEquals(90, ticket.scaleFactor);
+            expectEquals(100, ticket.dpiHorizontal);
+            expectTrue(ticket.headerFooterEnabled);
+            expectTrue(ticket.shouldPrintBackgrounds);
+            expectTrue(ticket.fitToPageEnabled);
+            expectTrue(ticket.collate);
+            expectEquals(ticket.duplex,
+                         print_preview.PreviewGenerator.DuplexMode.LONG_EDGE);
+            expectTrue(ticket.landscape);
+            expectEquals(ticket.color, print_preview.ColorMode.COLOR);
             expectEquals(print_preview.ticket_items.MarginsTypeValue.CUSTOM,
-                         args[1].printTicketStore.marginsType.getValue());
-            expectEquals(
-                74,
-                args[1].printTicketStore.customMargins.getValue().get(
-                    print_preview.ticket_items.CustomMarginsOrientation.TOP));
+                         ticket.marginsType);
+            expectEquals(74, ticket.marginsCustom.marginTop);
 
             // Change scaling (a persisted ticket item value)
             expandMoreSettings();
@@ -691,7 +641,9 @@ cr.define('print_preview_test', function() {
       initialSettings.serializedDefaultDestinationSelectionRulesStr =
           JSON.stringify({namePattern: '.*Bar.*'});
       return setupSettingsAndDestinationsWithCapabilities(
-          getCddTemplate('BarDevice', 'BarName')).then(function() {
+                 print_preview_test_utils.getCddTemplate(
+                     'BarDevice', 'BarName'))
+          .then(function() {
             assertEquals('BarDevice',
                          printPreview.destinationStore_.selectedDestination.id);
           });
@@ -700,7 +652,8 @@ cr.define('print_preview_test', function() {
     test('SystemDialogLinkIsHiddenInAppKioskMode', function() {
       if (!cr.isChromeOS)
         initialSettings.isInAppKioskMode = true;
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('FooDevice'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('FooDevice'));
       setInitialSettings();
       return nativeLayer.whenCalled('getInitialSettings').then(
           function() {
@@ -715,7 +668,7 @@ cr.define('print_preview_test', function() {
       checkSectionVisible($('layout-settings'), false);
       checkSectionVisible($('color-settings'), false);
       checkSectionVisible($('copies-settings'), false);
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         option: [{is_default: true, type: 'STANDARD_COLOR'}]
       };
@@ -842,8 +795,9 @@ cr.define('print_preview_test', function() {
           const fitToPageContainer =
               scalingSettings.querySelector('#fit-to-page-container');
           checkElementDisplayed(fitToPageContainer, true);
-          expectTrue(args[1].printTicketStore.fitToPage.getValue());
-          expectEquals('100', args[1].printTicketStore.scaling.getValue());
+          const ticket = JSON.parse(args[1].printTicket);
+          expectTrue(ticket.fitToPageEnabled);
+          expectEquals(100, ticket.scaleFactor);
           expectTrue(fitToPageContainer.querySelector('.checkbox').checked);
           expandMoreSettings();
           checkSectionVisible($('media-size-settings'), true);
@@ -863,10 +817,11 @@ cr.define('print_preview_test', function() {
           scalingInput.dispatchEvent(enterEvent);
 
           // Wait for the preview to refresh and verify print ticket and
-          // display.
+          // display. There will be 2 preview requests. Since we only catch
+          // the first one, only verify fit to page in print ticket.
           return nativeLayer.whenCalled('getPreview').then(function(args) {
-            expectFalse(args.printTicketStore.fitToPage.getValue());
-            expectEquals('105', args.printTicketStore.scaling.getValue());
+            const updatedTicket = JSON.parse(args.printTicket);
+            expectFalse(updatedTicket.fitToPageEnabled);
             expectFalse(fitToPageContainer.querySelector('.checkbox').checked);
             return whenAnimationDone('more-settings');
           });
@@ -913,18 +868,19 @@ cr.define('print_preview_test', function() {
     // Make sure that custom margins controls are properly set up.
     test('CustomMarginsControlsCheck', function() {
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.marginsType.updateValue(
             print_preview.ticket_items.MarginsTypeValue.CUSTOM);
-
-        ['left', 'top', 'right', 'bottom'].forEach(function(margin) {
-          const control =
-              $('preview-area').querySelector('.margin-control-' + margin);
-          assertNotEquals(null, control);
-          const input = control.querySelector('.margin-control-textbox');
-          assertTrue(input.hasAttribute('aria-label'));
-          assertNotEquals('undefined', input.getAttribute('aria-label'));
+        return nativeLayer.whenCalled('getPreview').then(function() {
+          ['left', 'top', 'right', 'bottom'].forEach(function(margin) {
+            const control =
+                $('preview-area').querySelector('.margin-control-' + margin);
+            assertNotEquals(null, control);
+            const input = control.querySelector('.margin-control-textbox');
+            assertTrue(input.hasAttribute('aria-label'));
+            assertNotEquals('undefined', input.getAttribute('aria-label'));
+          });
         });
-        return whenAnimationDone('more-settings');
       });
     });
 
@@ -944,14 +900,13 @@ cr.define('print_preview_test', function() {
 
         checkElementDisplayed(headerFooter, true);
 
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.marginsType.updateValue(
             print_preview.ticket_items.MarginsTypeValue.CUSTOM);
         printPreview.printTicketStore_.customMargins.updateValue(
             new print_preview.Margins(0, 0, 0, 0));
 
-        checkElementDisplayed(headerFooter, false);
-
-        return whenAnimationDone('more-settings');
+        return checkHeaderFooterOnLoad(headerFooter, false);
       });
     });
 
@@ -971,14 +926,12 @@ cr.define('print_preview_test', function() {
 
         checkElementDisplayed(headerFooter, true);
 
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.marginsType.updateValue(
             print_preview.ticket_items.MarginsTypeValue.CUSTOM);
         printPreview.printTicketStore_.customMargins.updateValue(
             new print_preview.Margins(36, 36, 36, 36));
-
-        checkElementDisplayed(headerFooter, true);
-
-        return whenAnimationDone('more-settings');
+        return checkHeaderFooterOnLoad(headerFooter, true);
       });
     });
 
@@ -999,14 +952,13 @@ cr.define('print_preview_test', function() {
 
         checkElementDisplayed(headerFooter, true);
 
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.marginsType.updateValue(
             print_preview.ticket_items.MarginsTypeValue.CUSTOM);
         printPreview.printTicketStore_.customMargins.updateValue(
             new print_preview.Margins(0, 36, 0, 36));
 
-        checkElementDisplayed(headerFooter, false);
-
-        return whenAnimationDone('more-settings');
+        return checkHeaderFooterOnLoad(headerFooter, false);
       });
     });
 
@@ -1027,20 +979,19 @@ cr.define('print_preview_test', function() {
 
         checkElementDisplayed(headerFooter, true);
 
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.marginsType.updateValue(
             print_preview.ticket_items.MarginsTypeValue.CUSTOM);
         printPreview.printTicketStore_.customMargins.updateValue(
             new print_preview.Margins(0, 36, 36, 36));
 
-        checkElementDisplayed(headerFooter, true);
-
-        return whenAnimationDone('more-settings');
+        return checkHeaderFooterOnLoad(headerFooter, true);
       });
     });
 
     // Check header footer availability with small (label) page size.
     test('SmallPaperSizeHeaderFooter', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.media_size = {
         'option': [
           {'name': 'SmallLabel', 'width_microns': 38100,
@@ -1066,23 +1017,25 @@ cr.define('print_preview_test', function() {
         checkElementDisplayed(headerFooter, true);
 
         // Small label should not
+        nativeLayer.resetResolver('getPreview');
         printPreview.printTicketStore_.mediaSize.updateValue(
             device.capabilities.printer.media_size.option[0]);
-        checkElementDisplayed(headerFooter, false);
+        return nativeLayer.whenCalled('getPreview').then(function() {
+          checkElementDisplayed(headerFooter, false);
 
-        // Oriented in landscape, there should be enough space for
-        // header/footer.
-        printPreview.printTicketStore_.landscape.updateValue(true);
-        checkElementDisplayed(headerFooter, true);
-
-        return whenAnimationDone('more-settings');
+          // Oriented in landscape, there should be enough space for
+          // header/footer.
+          nativeLayer.resetResolver('getPreview');
+          printPreview.printTicketStore_.landscape.updateValue(true);
+          return checkHeaderFooterOnLoad(headerFooter, true);
+        });
       });
     });
 
     // Test that the color settings, one option, standard monochrome.
     test('ColorSettingsMonochrome', function() {
       // Only one option, standard monochrome.
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'is_default': true, 'type': 'STANDARD_MONOCHROME'}
@@ -1100,7 +1053,7 @@ cr.define('print_preview_test', function() {
     // Test that the color settings, one option, custom monochrome.
     test('ColorSettingsCustomMonochrome', function() {
       // Only one option, standard monochrome.
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'is_default': true, 'type': 'CUSTOM_MONOCHROME',
@@ -1118,7 +1071,7 @@ cr.define('print_preview_test', function() {
 
     // Test that the color settings, one option, standard color.
     test('ColorSettingsColor', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'is_default': true, 'type': 'STANDARD_COLOR'}
@@ -1135,7 +1088,7 @@ cr.define('print_preview_test', function() {
 
     // Test that the color settings, one option, custom color.
     test('ColorSettingsCustomColor', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'is_default': true, 'type': 'CUSTOM_COLOR', 'vendor_id': '42'}
@@ -1152,7 +1105,7 @@ cr.define('print_preview_test', function() {
     // Test that the color settings, two options, both standard, defaults to
     // color.
     test('ColorSettingsBothStandardDefaultColor', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'type': 'STANDARD_MONOCHROME'},
@@ -1174,7 +1127,7 @@ cr.define('print_preview_test', function() {
     // Test that the color settings, two options, both standard, defaults to
     // monochrome.
     test('ColorSettingsBothStandardDefaultMonochrome', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'is_default': true, 'type': 'STANDARD_MONOCHROME'},
@@ -1196,7 +1149,7 @@ cr.define('print_preview_test', function() {
     // Test that the color settings, two options, both custom, defaults to
     // color.
     test('ColorSettingsBothCustomDefaultColor', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.color = {
         'option': [
           {'type': 'CUSTOM_MONOCHROME', 'vendor_id': '42'},
@@ -1232,7 +1185,7 @@ cr.define('print_preview_test', function() {
     // Test to verify that duplex settings are set according to the printer
     // capabilities.
     test('DuplexSettingsFalse', function() {
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       delete device.capabilities.printer.duplex;
       return setupSettingsAndDestinationsWithCapabilities(device)
           .then(function() {
@@ -1256,12 +1209,13 @@ cr.define('print_preview_test', function() {
           setupSettingsAndDestinationsWithCapabilities(),
           nativeLayer.whenCalled('getPreview'),
       ]).then(function(args) {
-        expectEquals(0, args[1].requestId);
-        expectEquals('FooDevice', args[1].destination.id);
+        const ticket = JSON.parse(args[1].printTicket);
+        expectEquals(0, ticket.requestID);
+        expectEquals('FooDevice', ticket.deviceName);
         nativeLayer.reset();
 
         // Setup capabilities for BarDevice.
-        const device = getCddTemplate('BarDevice');
+        const device = print_preview_test_utils.getCddTemplate('BarDevice');
         device.capabilities.printer.color = {
           'option': [
             {'is_default': true, 'type': 'STANDARD_MONOCHROME'}
@@ -1275,8 +1229,9 @@ cr.define('print_preview_test', function() {
         printPreview.destinationStore_.selectDestination(barDestination);
         return waitForPrinterToUpdatePreview();
       }).then(function(args) {
-        expectEquals(1, args[1].requestId);
-        expectEquals('BarDevice', args[1].destination.id);
+        const ticket = JSON.parse(args[1].printTicket);
+        expectEquals(1, ticket.requestID);
+        expectEquals('BarDevice', ticket.deviceName);
       });
     });
 
@@ -1285,7 +1240,8 @@ cr.define('print_preview_test', function() {
       previewArea.checkPluginCompatibility_ = function() {
         return false;
       };
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('FooDevice'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('FooDevice'));
       setInitialSettings();
       return nativeLayer.whenCalled('getInitialSettings').then(function() {
         const previewAreaEl = $('preview-area');
@@ -1316,7 +1272,7 @@ cr.define('print_preview_test', function() {
       const customLocalizedMediaName = 'Vendor defined localized media name';
       const customMediaName = 'Vendor defined media name';
 
-      const device = getCddTemplate('FooDevice');
+      const device = print_preview_test_utils.getCddTemplate('FooDevice');
       device.capabilities.printer.media_size = {
         option: [
           { name: 'CUSTOM',
@@ -1409,17 +1365,24 @@ cr.define('print_preview_test', function() {
         version: 2,
         recentDestinations: [1, 2, 3].map(function(i) {
           return {
-            id: 'ID' + i, origin: origin, account: '',
-            capabilities: getCddTemplate('ID' + i), displayName: '',
-            extensionId: '', extensionName: ''
+            id: 'ID' + i,
+            origin: origin,
+            account: '',
+            capabilities: print_preview_test_utils.getCddTemplate('ID' + i),
+            displayName: '',
+            extensionId: '',
+            extensionName: ''
           };
         }),
       });
 
       // Ensure all capabilities are available for fetch.
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID1'));
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID2'));
-      nativeLayer.setLocalDestinationCapabilities(getCddTemplate('ID3'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID1'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID2'));
+      nativeLayer.setLocalDestinationCapabilities(
+          print_preview_test_utils.getCddTemplate('ID3'));
 
       // For crbug.com/666595. If multiple destinations are fetched there may
       // be multiple preview requests. This verifies the first fetch is for
@@ -1434,8 +1397,9 @@ cr.define('print_preview_test', function() {
         expectEquals('ID1', id);
         return nativeLayer.whenCalled('getPreview');
       }).then(function(previewArgs) {
-        expectEquals(0, previewArgs.requestId);
-        expectEquals('ID1', previewArgs.destination.id);
+        const ticket = JSON.parse(previewArgs.printTicket);
+        expectEquals(0, ticket.requestID);
+        expectEquals('ID1', ticket.deviceName);
       });
     });
 
@@ -1443,7 +1407,7 @@ cr.define('print_preview_test', function() {
     // an error and that the preview dialog can be recovered by selecting a
     // new destination.
     test('InvalidSettingsError', function() {
-      const barDevice = getCddTemplate('BarDevice');
+      const barDevice = print_preview_test_utils.getCddTemplate('BarDevice');
       nativeLayer.setLocalDestinationCapabilities(barDevice);
 
       // FooDevice is the default printer, so will be selected for the initial
@@ -1489,31 +1453,23 @@ cr.define('print_preview_test', function() {
         return nativeLayer.whenCalled('print');
       }).then(
           /**
-           * @param {{destination: !print_preview.Destination,
-           *          printTicketStore: !print_preview.PrintTicketStore,
-           *          cloudPrintInterface: print_preview
-           *                                  .CloudPrintInterface,
-           *          documentInfo: print_preview.DocumentInfo,
-           *          openPdfInPreview: boolean,
-           *          showSystemDialog: boolean}} args
-           *      The arguments that print() was called with.
+           * @param {string} printTicket The print ticket print() was called
+           *     for.
            */
-          function(args) {
+          function(printTicket) {
             // Sanity check some printing argument values.
-            const printTicketStore = args.printTicketStore;
-            expectEquals(barDevice.printer.deviceName, args.destination.id);
+            const ticket = JSON.parse(printTicket);
+            expectEquals(barDevice.printer.deviceName, ticket.deviceName);
             expectEquals(
                 getDefaultOrientation(barDevice) == 'LANDSCAPE',
-                printTicketStore.landscape.getValue());
-            expectEquals(1, printTicketStore.copies.getValueAsNumber());
+                ticket.landscape);
+            expectEquals(1, ticket.copies);
             const mediaDefault = getDefaultMediaSize(barDevice);
             expectEquals(
-                mediaDefault.width_microns,
-                printTicketStore.mediaSize.getValue().width_microns);
+                mediaDefault.width_microns, ticket.mediaSize.width_microns);
             expectEquals(
-                mediaDefault.height_microns,
-                printTicketStore.mediaSize.getValue().height_microns);
-            return nativeLayer.whenCalled('hidePreview');
+                mediaDefault.height_microns, ticket.mediaSize.height_microns);
+            return nativeLayer.whenCalled('dialogClose');
           });
     });
 
@@ -1526,16 +1482,18 @@ cr.define('print_preview_test', function() {
       ]).then(function(args) {
         // The first request should generate draft because there was no
         // previous print preview draft.
-        expectTrue(args[1].generateDraft);
-        expectEquals(0, args[1].requestId);
+        const ticket = JSON.parse(args[1].printTicket);
+        expectTrue(ticket.generateDraft);
+        expectEquals(0, ticket.requestID);
         nativeLayer.resetResolver('getPreview');
 
         // Change the page range - no new draft needed.
         printPreview.printTicketStore_.pageRange.updateValue('2');
         return nativeLayer.whenCalled('getPreview');
       }).then(function(args) {
-        expectFalse(args.generateDraft);
-        expectEquals(1, args.requestId);
+        const ticket = JSON.parse(args.printTicket);
+        expectFalse(ticket.generateDraft);
+        expectEquals(1, ticket.requestID);
         nativeLayer.resetResolver('getPreview');
 
         // Change the margin type - need to regenerate again.
@@ -1543,8 +1501,9 @@ cr.define('print_preview_test', function() {
             print_preview.ticket_items.MarginsTypeValue.NO_MARGINS);
         return nativeLayer.whenCalled('getPreview');
       }).then(function(args) {
-        expectTrue(args.generateDraft);
-        expectEquals(2, args.requestId);
+        const ticket = JSON.parse(args.printTicket);
+        expectTrue(ticket.generateDraft);
+        expectEquals(2, ticket.requestID);
       });
     });
 
@@ -1573,7 +1532,7 @@ cr.define('print_preview_test', function() {
         { printerName: 'FooName', deviceName: 'FooDevice' }
       ];
       nativeLayer.setLocalDestinationCapabilities(
-          getCddTemplate('ID1', 'One'));
+          print_preview_test_utils.getCddTemplate('ID1', 'One'));
 
       return setupSettingsAndDestinationsWithCapabilities().then(function() {
         // The system default destination should be used instead of the
@@ -1600,22 +1559,16 @@ cr.define('print_preview_test', function() {
               const openPdfPreviewLink = $('open-pdf-in-preview-link');
               checkElementDisplayed(openPdfPreviewLink, true);
               openPdfPreviewLink.click();
-              // Should result in a print call and dialog should hide
+              // Should result in a print call and dialog should close.
               return nativeLayer.whenCalled('print');
             }).then(
                 /**
-                 * @param {{destination: !print_preview.Destination,
-                 *          printTicketStore: !print_preview.PrintTicketStore,
-                 *          cloudPrintInterface: print_preview
-                 *                                  .CloudPrintInterface,
-                 *          documentInfo: print_preview.DocumentInfo,
-                 *          openPdfInPreview: boolean
-                 *          showSystemDialog: boolean}} args
-                 *      The arguments that print() was called with.
+                 * @param {string} printTicket The print ticket print() was
+                 *     called for.
                  */
-                function(args) {
-                  expectTrue(args.openPdfInPreview);
-                  return nativeLayer.whenCalled('hidePreview');
+                function(printTicket) {
+                  expectTrue(JSON.parse(printTicket).OpenPDFInPreview);
+                  return nativeLayer.whenCalled('dialogClose');
                 });
       });
 
@@ -1668,22 +1621,16 @@ cr.define('print_preview_test', function() {
               const systemDialogLink = $('system-dialog-link');
               checkElementDisplayed(systemDialogLink, true);
               systemDialogLink.click();
-              // Should result in a print call and dialog should hide
+              // Should result in a print call and dialog should close.
               return nativeLayer.whenCalled('print');
             }).then(
                 /**
-                 * @param {{destination: !print_preview.Destination,
-                 *          printTicketStore: !print_preview.PrintTicketStore,
-                 *          cloudPrintInterface: print_preview
-                 *                                  .CloudPrintInterface,
-                 *          documentInfo: print_preview.DocumentInfo,
-                 *          openPdfInPreview: boolean
-                 *          showSystemDialog: boolean}} args
-                 *      The arguments that print() was called with.
+                 * @param {string} printTicket The print ticket print() was
+                 *     called for.
                  */
-                function(args) {
-                  expectTrue(args.showSystemDialog);
-                  return nativeLayer.whenCalled('hidePreview');
+                function(printTicket) {
+                  expectTrue(JSON.parse(printTicket).showSystemDialog);
+                  return nativeLayer.whenCalled('dialogClose');
                 });
       });
 

@@ -5,13 +5,14 @@
 module content.mojom;
 
 import "content/common/service_worker/service_worker_fetch_response_callback.mojom";
-import "content/public/common/url_loader.mojom";
 import "mojo/common/string16.mojom";
 import "mojo/common/time.mojom";
-import "third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom";
+import "services/network/public/interfaces/url_loader.mojom";
 import "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom";
 import "third_party/WebKit/public/platform/modules/payments/payment_app.mojom";
-import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom";
+import "third_party/WebKit/common/service_worker/service_worker_client.mojom";
+import "third_party/WebKit/common/service_worker/service_worker_event_status.mojom";
+import "third_party/WebKit/common/service_worker/service_worker_object.mojom";
 import "url/mojo/origin.mojom";
 import "url/mojo/url.mojom";
 
@@ -23,9 +24,6 @@ struct PushEventPayload;
 
 [Native]
 struct ServiceWorkerResponse;
-
-[Native]
-struct ExtendableMessageEventSource;
 
 // TODO(peter): Move this to Blink when ServiceWorkerResponse has a Mojo
 // counterpart.
@@ -41,15 +39,18 @@ enum BackgroundFetchState {
 };
 
 struct FetchEventPreloadHandle {
-  URLLoader url_loader;
-  URLLoaderClient& url_loader_client_request;
+  network.mojom.URLLoader url_loader;
+  network.mojom.URLLoaderClient& url_loader_client_request;
 };
 
 struct ExtendableMessageEvent {
   mojo.common.mojom.String16 message;
   url.mojom.Origin source_origin;
   array<handle<message_pipe>> message_ports;
-  ExtendableMessageEventSource source;
+  // Exactly one of |source_info_for_client| and
+  // |source_info_for_service_worker| should be non-null.
+  blink.mojom.ServiceWorkerClientInfo? source_info_for_client;
+  blink.mojom.ServiceWorkerObjectInfo? source_info_for_service_worker;
 };
 
 // An interface for dispatching events to a ServiceWorker. This interface is
@@ -105,7 +106,7 @@ interface ServiceWorkerEventDispatcher {
       => (blink.mojom.ServiceWorkerEventStatus status,
           mojo.common.mojom.Time dispatch_event_time);
   // S13nServiceWorker
-  DispatchFetchEvent(URLRequest request,
+  DispatchFetchEvent(network.mojom.URLRequest request,
                      FetchEventPreloadHandle? preload_handle,
                      ServiceWorkerFetchResponseCallback response_callback)
       => (blink.mojom.ServiceWorkerEventStatus status,
@@ -126,8 +127,7 @@ interface ServiceWorkerEventDispatcher {
           mojo.common.mojom.Time dispatch_event_time);
   // Arguments are passed to the event handler as parameters of SyncEvent.
   // Ref: https://wicg.github.io/BackgroundSync/spec/#sync-event
-  DispatchSyncEvent(string id,
-                    blink.mojom.BackgroundSyncEventLastChance last_chance)
+  DispatchSyncEvent(string id, bool last_chance)
       => (blink.mojom.ServiceWorkerEventStatus status,
           mojo.common.mojom.Time dispatch_event_time);
   DispatchAbortPaymentEvent(
@@ -156,4 +156,9 @@ interface ServiceWorkerEventDispatcher {
   // worker. Unlike the other functions in this interface, Ping() does not
   // dispatch an event.
   Ping() => ();
+
+  // S13nServiceWorker:
+  // Lets the idle timer request termination immediately after all inflight
+  // events are handled without delay.
+  SetIdleTimerDelayToZero();
 };

@@ -15,6 +15,7 @@
 #include "content/public/renderer/child_url_loader_factory_getter.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
 #include "net/url_request/url_request.h"
@@ -24,26 +25,26 @@ namespace content {
 
 namespace {
 
-ResourceResponseHead RewriteServiceWorkerTime(
+network::ResourceResponseHead RewriteServiceWorkerTime(
     base::TimeTicks service_worker_start_time,
     base::TimeTicks service_worker_ready_time,
-    const ResourceResponseHead& response_head) {
-  ResourceResponseHead new_head = response_head;
+    const network::ResourceResponseHead& response_head) {
+  network::ResourceResponseHead new_head = response_head;
   new_head.service_worker_start_time = service_worker_start_time;
   new_head.service_worker_ready_time = service_worker_ready_time;
   return new_head;
 }
 
-// A wrapper URLLoaderClient that invokes given RewriteHeaderCallback whenever
-// response or redirect is received. It self-destruct itself when the Mojo
+// A wrapper URLLoaderClient that invokes the given RewriteHeaderCallback
+// whenever a response or redirect is received. It self-destructs when the Mojo
 // connection is closed.
-class HeaderRewritingURLLoaderClient : public mojom::URLLoaderClient {
+class HeaderRewritingURLLoaderClient : public network::mojom::URLLoaderClient {
  public:
-  using RewriteHeaderCallback =
-      base::Callback<ResourceResponseHead(const ResourceResponseHead&)>;
+  using RewriteHeaderCallback = base::Callback<network::ResourceResponseHead(
+      const network::ResourceResponseHead&)>;
 
-  static mojom::URLLoaderClientPtr CreateAndBind(
-      mojom::URLLoaderClientPtr url_loader_client,
+  static network::mojom::URLLoaderClientPtr CreateAndBind(
+      network::mojom::URLLoaderClientPtr url_loader_client,
       RewriteHeaderCallback rewrite_header_callback) {
     return (new HeaderRewritingURLLoaderClient(std::move(url_loader_client),
                                                rewrite_header_callback))
@@ -53,15 +54,16 @@ class HeaderRewritingURLLoaderClient : public mojom::URLLoaderClient {
   ~HeaderRewritingURLLoaderClient() override {}
 
  private:
-  HeaderRewritingURLLoaderClient(mojom::URLLoaderClientPtr url_loader_client,
-                                 RewriteHeaderCallback rewrite_header_callback)
+  HeaderRewritingURLLoaderClient(
+      network::mojom::URLLoaderClientPtr url_loader_client,
+      RewriteHeaderCallback rewrite_header_callback)
       : url_loader_client_(std::move(url_loader_client)),
         binding_(this),
         rewrite_header_callback_(rewrite_header_callback) {}
 
-  mojom::URLLoaderClientPtr CreateInterfacePtrAndBind() {
+  network::mojom::URLLoaderClientPtr CreateInterfacePtrAndBind() {
     DCHECK(!binding_.is_bound());
-    mojom::URLLoaderClientPtr ptr;
+    network::mojom::URLLoaderClientPtr ptr;
     binding_.Bind(mojo::MakeRequest(&ptr));
     binding_.set_connection_error_handler(
         base::Bind(&HeaderRewritingURLLoaderClient::OnClientConnectionError,
@@ -73,19 +75,20 @@ class HeaderRewritingURLLoaderClient : public mojom::URLLoaderClient {
     base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   }
 
-  // mojom::URLLoaderClient implementation:
+  // network::mojom::URLLoaderClient implementation:
   void OnReceiveResponse(
-      const ResourceResponseHead& response_head,
+      const network::ResourceResponseHead& response_head,
       const base::Optional<net::SSLInfo>& ssl_info,
-      mojom::DownloadedTempFilePtr downloaded_file) override {
+      network::mojom::DownloadedTempFilePtr downloaded_file) override {
     DCHECK(url_loader_client_.is_bound());
     url_loader_client_->OnReceiveResponse(
         rewrite_header_callback_.Run(response_head), ssl_info,
         std::move(downloaded_file));
   }
 
-  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         const ResourceResponseHead& response_head) override {
+  void OnReceiveRedirect(
+      const net::RedirectInfo& redirect_info,
+      const network::ResourceResponseHead& response_head) override {
     DCHECK(url_loader_client_.is_bound());
     url_loader_client_->OnReceiveRedirect(
         redirect_info, rewrite_header_callback_.Run(response_head));
@@ -125,28 +128,24 @@ class HeaderRewritingURLLoaderClient : public mojom::URLLoaderClient {
     url_loader_client_->OnComplete(status);
   }
 
-  mojom::URLLoaderClientPtr url_loader_client_;
-  mojo::Binding<mojom::URLLoaderClient> binding_;
+  network::mojom::URLLoaderClientPtr url_loader_client_;
+  mojo::Binding<network::mojom::URLLoaderClient> binding_;
   RewriteHeaderCallback rewrite_header_callback_;
 };
-
 }  // namespace
 
 // ServiceWorkerSubresourceLoader -------------------------------------------
 
 ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
-    mojom::URLLoaderRequest request,
+    network::mojom::URLLoaderRequest request,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    const ResourceRequest& resource_request,
-    mojom::URLLoaderClientPtr client,
+    const network::ResourceRequest& resource_request,
+    network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
     scoped_refptr<ControllerServiceWorkerConnector> controller_connector,
-    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-    const GURL& controller_origin,
-    scoped_refptr<base::RefCountedData<blink::mojom::BlobRegistryPtr>>
-        blob_registry)
+    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter)
     : redirect_limit_(net::URLRequest::kMaxRedirects),
       url_loader_client_(std::move(client)),
       url_loader_binding_(this, std::move(request)),
@@ -156,11 +155,8 @@ ServiceWorkerSubresourceLoader::ServiceWorkerSubresourceLoader(
       routing_id_(routing_id),
       request_id_(request_id),
       options_(options),
-      resource_request_(resource_request),
       traffic_annotation_(traffic_annotation),
-      controller_origin_(controller_origin),
-      blob_client_binding_(this),
-      blob_registry_(std::move(blob_registry)),
+      resource_request_(resource_request),
       default_loader_factory_getter_(std::move(default_loader_factory_getter)),
       weak_factory_(this) {
   DCHECK(controller_connector_);
@@ -182,15 +178,16 @@ void ServiceWorkerSubresourceLoader::DeleteSoon() {
 }
 
 void ServiceWorkerSubresourceLoader::StartRequest(
-    const ResourceRequest& resource_request) {
+    const network::ResourceRequest& resource_request) {
   DCHECK_EQ(Status::kNotStarted, status_);
   status_ = Status::kStarted;
 
-  DCHECK(
-      !ServiceWorkerUtils::IsMainResourceType(resource_request.resource_type));
+  DCHECK(!ServiceWorkerUtils::IsMainResourceType(
+      static_cast<ResourceType>(resource_request.resource_type)));
 
   DCHECK(!inflight_fetch_request_);
-  inflight_fetch_request_ = std::make_unique<ResourceRequest>(resource_request);
+  inflight_fetch_request_ =
+      std::make_unique<network::ResourceRequest>(resource_request);
   controller_connector_->AddObserver(this);
   fetch_request_restarted_ = false;
 
@@ -213,6 +210,21 @@ void ServiceWorkerSubresourceLoader::DispatchFetchEvent() {
   // the network provider has already been discarded. In that case, We don't
   // need to return an error as the client must be shutting down.
   if (!controller) {
+    auto controller_state = controller_connector_->state();
+    if (controller_state ==
+        ControllerServiceWorkerConnector::State::kNoController) {
+      // The controller was lost after this loader or its loader factory was
+      // created.
+      default_loader_factory_getter_->GetNetworkLoaderFactory()
+          ->CreateLoaderAndStart(url_loader_binding_.Unbind(), routing_id_,
+                                 request_id_, options_, resource_request_,
+                                 std::move(url_loader_client_),
+                                 traffic_annotation_);
+      DeleteSoon();
+      return;
+    }
+    DCHECK_EQ(ControllerServiceWorkerConnector::State::kNoContainerHost,
+              controller_state);
     SettleInflightFetchRequestIfNeeded();
     return;
   }
@@ -386,9 +398,11 @@ void ServiceWorkerSubresourceLoader::StartResponse(
     return;
   }
 
+  // We have a non-redirect response. Send the headers to the client.
+  CommitResponseHeaders();
+
   // Handle a stream response body.
   if (!body_as_stream.is_null() && body_as_stream->stream.is_valid()) {
-    CommitResponseHeaders();
     DCHECK(url_loader_client_.is_bound());
     url_loader_client_->OnStartLoadingResponseBody(
         std::move(body_as_stream->stream));
@@ -398,31 +412,25 @@ void ServiceWorkerSubresourceLoader::StartResponse(
     return;
   }
 
-  // Handle a blob response body. Ideally we'd just get a data pipe from
-  // SWFetchDispatcher, and this could be treated the same as a stream response.
-  // See:
-  // https://docs.google.com/a/google.com/document/d/1_ROmusFvd8ATwIZa29-P6Ls5yyLjfld0KvKchVfA84Y/edit?usp=drive_web
-  // TODO(kinuko): This code is hacked up on top of the legacy API, migrate
-  // to mojo-fied Blob code once it becomes ready.
-  if (!response.blob_uuid.empty()) {
-    GURL blob_url =
-        GURL("blob:" + controller_origin_.spec() + "/" + response.blob_uuid);
-    blob_registry_->data->RegisterURL(std::move(body_as_blob), blob_url,
-                                      &blob_url_handle_);
-    resource_request_.url = blob_url;
-
-    mojom::URLLoaderClientPtr blob_loader_client;
-    blob_client_binding_.Bind(mojo::MakeRequest(&blob_loader_client));
-    default_loader_factory_getter_->GetBlobLoaderFactory()
-        ->CreateLoaderAndStart(mojo::MakeRequest(&blob_loader_), routing_id_,
-                               request_id_, options_, resource_request_,
-                               std::move(blob_loader_client),
-                               traffic_annotation_);
+  // Handle a blob response body.
+  if (body_as_blob) {
+    body_as_blob_ = std::move(body_as_blob);
+    mojo::ScopedDataPipeConsumerHandle data_pipe;
+    int error = ServiceWorkerLoaderHelpers::ReadBlobResponseBody(
+        &body_as_blob_, resource_request_.headers,
+        base::BindOnce(&ServiceWorkerSubresourceLoader::OnBlobReadingComplete,
+                       weak_factory_.GetWeakPtr()),
+        &data_pipe);
+    if (error != net::OK) {
+      CommitCompleted(error);
+      return;
+    }
+    url_loader_client_->OnStartLoadingResponseBody(std::move(data_pipe));
+    // We continue in OnBlobReadingComplete().
     return;
   }
 
   // The response has no body.
-  CommitResponseHeaders();
   CommitCompleted(net::OK);
 }
 
@@ -462,17 +470,17 @@ void ServiceWorkerSubresourceLoader::FollowRedirect() {
   resource_request_.method = redirect_info_->new_method;
   resource_request_.site_for_cookies = redirect_info_->new_site_for_cookies;
   resource_request_.referrer = GURL(redirect_info_->new_referrer);
-  resource_request_.referrer_policy =
-      Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
-          redirect_info_->new_referrer_policy);
+  resource_request_.referrer_policy = redirect_info_->new_referrer_policy;
 
   // Restart the request.
   status_ = Status::kNotStarted;
   redirect_info_.reset();
   response_callback_binding_.Close();
-  // We don't support the body of redirect responses.
-  DCHECK(!blob_loader_);
   StartRequest(resource_request_);
+}
+
+void ServiceWorkerSubresourceLoader::ProceedWithResponse() {
+  NOTREACHED();
 }
 
 void ServiceWorkerSubresourceLoader::SetPriority(net::RequestPriority priority,
@@ -484,81 +492,18 @@ void ServiceWorkerSubresourceLoader::PauseReadingBodyFromNet() {}
 
 void ServiceWorkerSubresourceLoader::ResumeReadingBodyFromNet() {}
 
-// ServiceWorkerSubresourceLoader: URLLoaderClient for Blob reading ---------
-
-void ServiceWorkerSubresourceLoader::OnReceiveResponse(
-    const ResourceResponseHead& response_head,
-    const base::Optional<net::SSLInfo>& ssl_info,
-    mojom::DownloadedTempFilePtr downloaded_file) {
-  DCHECK_EQ(Status::kStarted, status_);
-  DCHECK(url_loader_client_.is_bound());
-  status_ = Status::kSentHeader;
-  if (response_head.headers->response_code() >= 400) {
-    DVLOG(1) << "Blob::OnReceiveResponse got error: "
-             << response_head.headers->response_code();
-    response_head_.headers = response_head.headers;
-  }
-  url_loader_client_->OnReceiveResponse(response_head_, ssl_info,
-                                        std::move(downloaded_file));
-}
-
-void ServiceWorkerSubresourceLoader::OnReceiveRedirect(
-    const net::RedirectInfo& redirect_info,
-    const ResourceResponseHead& response_head) {
-  NOTREACHED();
-}
-
-void ServiceWorkerSubresourceLoader::OnDataDownloaded(
-    int64_t data_len,
-    int64_t encoded_data_len) {
-  NOTREACHED();
-}
-
-void ServiceWorkerSubresourceLoader::OnUploadProgress(
-    int64_t current_position,
-    int64_t total_size,
-    OnUploadProgressCallback ack_callback) {
-  NOTREACHED();
-}
-
-void ServiceWorkerSubresourceLoader::OnReceiveCachedMetadata(
-    const std::vector<uint8_t>& data) {
-  // TODO(kinuko): Support this.
-  NOTIMPLEMENTED();
-}
-
-void ServiceWorkerSubresourceLoader::OnTransferSizeUpdated(
-    int32_t transfer_size_diff) {
-  NOTREACHED();
-}
-
-void ServiceWorkerSubresourceLoader::OnStartLoadingResponseBody(
-    mojo::ScopedDataPipeConsumerHandle body) {
-  DCHECK(url_loader_client_.is_bound());
-  url_loader_client_->OnStartLoadingResponseBody(std::move(body));
-}
-
-void ServiceWorkerSubresourceLoader::OnComplete(
-    const network::URLLoaderCompletionStatus& status) {
-  DCHECK_EQ(Status::kSentHeader, status_);
-  DCHECK(url_loader_client_.is_bound());
-  status_ = Status::kCompleted;
-  url_loader_client_->OnComplete(status);
+void ServiceWorkerSubresourceLoader::OnBlobReadingComplete(int net_error) {
+  CommitCompleted(net_error);
+  body_as_blob_.reset();
 }
 
 // ServiceWorkerSubresourceLoaderFactory ------------------------------------
 
 ServiceWorkerSubresourceLoaderFactory::ServiceWorkerSubresourceLoaderFactory(
     scoped_refptr<ControllerServiceWorkerConnector> controller_connector,
-    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter,
-    const GURL& controller_origin,
-    scoped_refptr<base::RefCountedData<blink::mojom::BlobRegistryPtr>>
-        blob_registry)
+    scoped_refptr<ChildURLLoaderFactoryGetter> default_loader_factory_getter)
     : controller_connector_(std::move(controller_connector)),
-      default_loader_factory_getter_(std::move(default_loader_factory_getter)),
-      controller_origin_(controller_origin),
-      blob_registry_(std::move(blob_registry)) {
-  DCHECK_EQ(controller_origin, controller_origin.GetOrigin());
+      default_loader_factory_getter_(std::move(default_loader_factory_getter)) {
   DCHECK(default_loader_factory_getter_);
 }
 
@@ -566,12 +511,12 @@ ServiceWorkerSubresourceLoaderFactory::
     ~ServiceWorkerSubresourceLoaderFactory() = default;
 
 void ServiceWorkerSubresourceLoaderFactory::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    network::mojom::URLLoaderRequest request,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    const ResourceRequest& resource_request,
-    mojom::URLLoaderClientPtr client,
+    const network::ResourceRequest& resource_request,
+    network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   // This loader destructs itself, as we want to transparently switch to the
   // network loader when fallback happens. When that happens the loader unbinds
@@ -580,11 +525,11 @@ void ServiceWorkerSubresourceLoaderFactory::CreateLoaderAndStart(
   new ServiceWorkerSubresourceLoader(
       std::move(request), routing_id, request_id, options, resource_request,
       std::move(client), traffic_annotation, controller_connector_,
-      default_loader_factory_getter_, controller_origin_, blob_registry_);
+      default_loader_factory_getter_);
 }
 
 void ServiceWorkerSubresourceLoaderFactory::Clone(
-    mojom::URLLoaderFactoryRequest request) {
+    network::mojom::URLLoaderFactoryRequest request) {
   NOTREACHED();
 }
 

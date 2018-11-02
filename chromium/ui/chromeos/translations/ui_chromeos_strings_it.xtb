@@ -48,7 +48,6 @@
 <translation id="255937426064304553">Internazionale USA</translation>
 <translation id="2563185590376525700">Rana</translation>
 <translation id="2649120831653069427">Pesce arcobaleno</translation>
-<translation id="2656923396825879524">Figura geometrica 3</translation>
 <translation id="2735698359135166290">Tastiera Rumeno standard</translation>
 <translation id="2771816809568414714">Formaggio</translation>
 <translation id="2781645665747935084">Belga</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">Turco F</translation>
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3678559383040232393">Tastiera Maltese</translation>
-<translation id="3728399474846997774">Figura geometrica 2</translation>
-<translation id="3734201824773416162">Figura geometrica 1</translation>
 <translation id="3801082500826908679">Faroese</translation>
 <translation id="3809272675881623365">Coniglio</translation>
 <translation id="3815016854028376614">Metodo di immissione Zhuyin</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">Tastiera italiana</translation>
 <translation id="3910699493603749297">Tastiera Khmer</translation>
 <translation id="391445228316373457">Tastiera Nepalese (fonetica)</translation>
-<translation id="3947050919258841761">Figura geometrica 5</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="4070370845051020638">Metodo di immissione Cantonese</translation>
 <translation id="4072248638558688893">Tastiera Tamil (fonetica)</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">Scimmia</translation>
 <translation id="4711094779914110278">Turco</translation>
 <translation id="4725511304875193254">Corgi</translation>
+<translation id="4737050008115666127">Atterraggio</translation>
 <translation id="4747271164117300400">Macedone</translation>
 <translation id="4749157430980974800">Tastiera Georgiano</translation>
 <translation id="4755240240651974342">Tastiera finlandese</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">Tastiera Nepalese (InScript)</translation>
 <translation id="5469868506864199649">Italiano</translation>
 <translation id="5500122897333236901">Islandese</translation>
+<translation id="5508696409934741614">Punti</translation>
 <translation id="5533555070048896610">Traslitterazione (namaste → नमस्ते)</translation>
 <translation id="5605830556594064952">Dvorak USA</translation>
 <translation id="5640179856859982418">Tastiera svizzera</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">Tastiera inglese canadese</translation>
 <translation id="751507702149411736">Bielorusso</translation>
 <translation id="7547811415869834682">Olandese</translation>
+<translation id="7603724359189955920">Griglie</translation>
 <translation id="770015031906360009">Greco</translation>
 <translation id="7706319470528945664">Tastiera portoghese</translation>
 <translation id="7774365994322694683">Uccellino</translation>
 <translation id="7825423931463735974">Tastiera Tamil (Tamil99)</translation>
 <translation id="7853966320808728790">BÉPO francese</translation>
-<translation id="7872088194351932564">Figura geometrica 4</translation>
 <translation id="7896906914454843592">Tastiera estesa americana</translation>
 <translation id="7898607018410277265">Tastiera Gujarati (nuova fonetica)</translation>
 <translation id="7917972308273378936">Tastiera lituana</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">Tastiera Colemak USA</translation>
 <translation id="8437209419043462667">USA</translation>
 <translation id="8467473010914675605">Metodo di immissione coreano</translation>
+<translation id="8477649328507734757">Rotazione</translation>
 <translation id="8521441079177373948">Regno Unito</translation>
 <translation id="8551494947769799688">Lettone</translation>
 <translation id="8561206103590473338">Elefante</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">Tastiera Birmano myansan</translation>
 <translation id="9153744823707037316">Metodo di immissione Array</translation>
 <translation id="9206487995878691001">Metodo di immissione Cangjie</translation>
+<translation id="9219908252191632183">Lunare</translation>
 </translationbundle>

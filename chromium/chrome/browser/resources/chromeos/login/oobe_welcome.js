@@ -145,6 +145,21 @@ Polymer({
   },
 
   /**
+   * Updates "device in tablet mode" state when tablet mode is changed.
+   * @param {Boolean} isInTabletMode True when in tablet mode.
+   */
+  setTabletModeState: function(isInTabletMode) {
+    this.$.welcomeScreen.isInTabletMode = isInTabletMode;
+  },
+
+  /**
+   * Window-resize event listener (delivered through the display_manager).
+   */
+  onWindowResize: function() {
+    this.$.welcomeScreen.onWindowResize();
+  },
+
+  /**
    * Hides all screens to help switching from one screen to another.
    * @private
    */
@@ -368,22 +383,37 @@ Polymer({
     var self = this;
     var networkStateCopy = Object.assign({}, state);
 
-    // TODO(stevenjb): Do this when state.Connectable == false once network
-    // configuration is integrated into the Settings UI / details dialog.
+    // Cellular should normally auto connect. If it is selected, show the
+    // details UI since there is no configuration UI for Cellular.
     if (state.Type == chrome.networkingPrivate.NetworkType.CELLULAR) {
       chrome.send('showNetworkDetails', [state.GUID]);
       return;
     }
 
-    chrome.networkingPrivate.startConnect(state.GUID, function() {
-      var lastError = chrome.runtime.lastError;
+    // Allow proxy to be set for connected networks.
+    if (state.ConnectionState == CrOnc.ConnectionState.CONNECTED) {
+      chrome.send('showNetworkDetails', [state.GUID]);
+      return;
+    }
+
+    if (state.Connectable === false || state.ErrorState) {
+      chrome.send('showNetworkConfig', [state.GUID]);
+      return;
+    }
+
+    chrome.networkingPrivate.startConnect(state.GUID, () => {
+      const lastError = chrome.runtime.lastError;
       if (!lastError)
         return;
-
-      if (lastError.message == 'connected' || lastError.message == 'connecting')
+      const message = lastError.message;
+      if (message == 'connecting' || message == 'connect-canceled' ||
+          message == 'connected' || message == 'Error.InvalidNetworkGuid') {
         return;
-
-      console.error('networkingPrivate.startConnect error: ' + lastError);
+      }
+      console.error(
+          'networkingPrivate.startConnect error: ' + message +
+          ' For: ' + state.GUID);
+      chrome.send('showNetworkConfig', [state.GUID]);
     });
   },
 

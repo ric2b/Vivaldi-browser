@@ -103,6 +103,11 @@ bool IsScrollBlockingEvent(const AtomicString& event_type) {
          event_type == EventTypeNames::wheel;
 }
 
+bool IsInstrumentedForAsyncStack(const AtomicString& event_type) {
+  return event_type == EventTypeNames::load ||
+         event_type == EventTypeNames::error;
+}
+
 double BlockedEventsWarningThreshold(ExecutionContext* context,
                                      const Event* event) {
   if (!event->cancelable())
@@ -148,9 +153,9 @@ bool CheckTypeThenUseCount(const Event* event,
 
 }  // namespace
 
-EventTargetData::EventTargetData() {}
+EventTargetData::EventTargetData() = default;
 
-EventTargetData::~EventTargetData() {}
+EventTargetData::~EventTargetData() = default;
 
 void EventTargetData::Trace(blink::Visitor* visitor) {
   visitor->Trace(event_listener_map);
@@ -161,9 +166,9 @@ void EventTargetData::TraceWrappers(
   visitor->TraceWrappers(event_listener_map);
 }
 
-EventTarget::EventTarget() {}
+EventTarget::EventTarget() = default;
 
-EventTarget::~EventTarget() {}
+EventTarget::~EventTarget() = default;
 
 Node* EventTarget::ToNode() {
   return nullptr;
@@ -261,6 +266,7 @@ void EventTarget::SetDefaultAddEventListenerOptions(
       if (function->IsFunction() &&
           strcmp("ssc_wheel",
                  *v8::String::Utf8Value(
+                     v8::Isolate::GetCurrent(),
                      v8::Local<v8::Function>::Cast(function)->GetName())) ==
               0) {
         options.setPassive(true);
@@ -367,6 +373,10 @@ bool EventTarget::AddEventListenerInternal(
       event_type, listener, options, &registered_listener);
   if (added) {
     AddedEventListener(event_type, registered_listener);
+    if (V8AbstractEventListener::Cast(listener) &&
+        IsInstrumentedForAsyncStack(event_type)) {
+      probe::AsyncTaskScheduled(GetExecutionContext(), event_type, listener);
+    }
   }
   return added;
 }
@@ -499,6 +509,10 @@ bool EventTarget::SetAttributeEventListener(const AtomicString& event_type,
     return false;
   }
   if (registered_listener) {
+    if (V8AbstractEventListener::Cast(listener) &&
+        IsInstrumentedForAsyncStack(event_type)) {
+      probe::AsyncTaskScheduled(GetExecutionContext(), event_type, listener);
+    }
     registered_listener->SetCallback(listener);
     return true;
   }
@@ -747,7 +761,7 @@ bool EventTarget::FireEventListeners(Event* event,
   TimeTicks now;
   bool should_report_blocked_event = false;
   if (blocked_event_threshold) {
-    now = TimeTicks::Now();
+    now = CurrentTimeTicks();
     should_report_blocked_event =
         (now - event->PlatformTimeStamp()).InSecondsF() >
         blocked_event_threshold;
@@ -786,6 +800,9 @@ bool EventTarget::FireEventListeners(Event* event,
     bool passive_forced = registered_listener.PassiveForcedForDocumentTarget();
 
     probe::UserCallback probe(context, nullptr, event->type(), false, this);
+    probe::AsyncTask async_task(
+        context, V8AbstractEventListener::Cast(listener), "event",
+        IsInstrumentedForAsyncStack(event->type()));
 
     // To match Mozilla, the AT_TARGET phase fires both capturing and bubbling
     // event listeners, even though that violates some versions of the DOM spec.

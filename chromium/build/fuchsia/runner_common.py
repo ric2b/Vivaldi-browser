@@ -24,8 +24,6 @@ import uuid
 DIR_SOURCE_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 SDK_ROOT = os.path.join(DIR_SOURCE_ROOT, 'third_party', 'fuchsia-sdk')
-QEMU_ROOT = os.path.join(DIR_SOURCE_ROOT, 'third_party',
-                         'qemu-' + platform.machine())
 
 # The guest will get 192.168.3.9 from DHCP, while the host will be
 # accessible as 192.168.3.2 .
@@ -135,11 +133,9 @@ def _ExpandDirectories(file_mapping, mapper):
   return expanded
 
 
-def _GetSymbolsMapping(dry_run, file_mapping, output_directory):
-  """For each stripped executable or dynamic library in |file_mapping|, looks
-  for an unstripped version in [exe|lib].unstripped under |output_directory|.
-  Returns a map from target filenames to un-stripped binary, if available, or
-  to the run-time binary otherwise."""
+def _GetSymbolsMapping(dry_run, file_mapping):
+  """Generates symbols mapping from |file_mapping| by filtering out all files
+  that are not ELF binaries."""
   symbols_mapping = {}
   for target, source in file_mapping.iteritems():
     with open(source, 'rb') as f:
@@ -147,23 +143,12 @@ def _GetSymbolsMapping(dry_run, file_mapping, output_directory):
     if file_tag != '\x7fELF':
       continue
 
-    # TODO(wez): Rather than bake-in assumptions about the naming of unstripped
-    # binaries, once we have ELF Build-Id values in the stack printout we should
-    # just scan the two directories to populate an Id->path mapping.
-    binary_name = os.path.basename(source)
-    exe_unstripped_path = os.path.join(
-        output_directory, 'exe.unstripped', binary_name)
-    lib_unstripped_path = os.path.join(
-        output_directory, 'lib.unstripped', binary_name)
-    if os.path.exists(exe_unstripped_path):
-      symbols_mapping[target] = exe_unstripped_path
-    elif os.path.exists(lib_unstripped_path):
-      symbols_mapping[target] = lib_unstripped_path
-    else:
-      symbols_mapping[target] = source
+    symbols_mapping[os.path.basename(target)] = source
+    symbols_mapping[target] = source
 
-    if dry_run:
-      print 'Symbols:', binary_name, '->', symbols_mapping[target]
+  if dry_run:
+    for target, path in symbols_mapping.iteritems():
+      print 'Symbols:', target, '->', path
 
   return symbols_mapping
 
@@ -302,13 +287,11 @@ def WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
     autorun_file.write('export CHROME_HEADLESS=1\n')
 
   if wait_for_network:
-    # Quietly block until `ping google.com` succeeds.
-    autorun_file.write("""echo "Waiting for network connectivity..."
-                       until ping -c 1 google.com >/dev/null 2>/dev/null
-                       do
-                       :
-                       done
-                       """)
+    # Quietly block until `ping -c 0 google.com` succeeds. With -c 0 ping
+    # resolves the domain name, but doesn't send any pings.
+    autorun_file.write("echo Waiting for network connectivity...\n" +
+                       "until ping -c 0 google.com >/dev/null 2>&1\n" +
+                       "do sleep 1; done\n")
 
   if summary_output:
     # Unfortunately, devmgr races with this autorun script. This delays long
@@ -330,20 +313,19 @@ def WriteAutorun(bin_name, child_args, summary_output, shutdown_machine,
   for arg in child_args:
     autorun_file.write(' "%s"' % arg);
   autorun_file.write('\n')
-  autorun_file.write('echo \"%s\"\n' % ALL_DONE_MESSAGE)
 
   if shutdown_machine:
-    autorun_file.write('echo Sleeping and shutting down...\n')
+    autorun_file.write('echo Shutting down...\n')
 
-    # A delay is required to give the guest OS or remote device a chance to
-    # flush its output before it terminates.
+    # Sleep 1 second to let test outputs get flushed to the console.
+    autorun_file.write('msleep 1000\n')
+
     if use_device:
-      autorun_file.write('msleep 8000\n')
       autorun_file.write('dm reboot\n')
     else:
-      autorun_file.write('msleep 3000\n')
       autorun_file.write('dm poweroff\n')
 
+  autorun_file.write('echo \"%s\"\n' % ALL_DONE_MESSAGE)
 
   autorun_file.flush()
   os.chmod(autorun_file.name, 0750)
@@ -404,8 +386,7 @@ def _BuildBootfsManifest(image_creation_data):
       lambda x: _MakeTargetImageName(DIR_SOURCE_ROOT, icd.output_directory, x))
 
   # Determine the locations of unstripped versions of each binary, if any.
-  symbols_mapping = _GetSymbolsMapping(
-      icd.dry_run, file_mapping, icd.output_directory)
+  symbols_mapping = _GetSymbolsMapping(icd.dry_run, file_mapping)
 
   return file_mapping, symbols_mapping
 
@@ -496,8 +477,8 @@ def _SymbolizeEntries(entries):
   return results
 
 
-def _LookupDebugBinary(entry, file_mapping):
-  """Looks up the binary listed in |entry| in the |file_mapping|, and returns
+def _LookupDebugBinary(entry, symbols_mapping):
+  """Looks up the binary listed in |entry| in the |symbols_mapping|, and returns
   the corresponding host-side binary's filename, or None."""
   binary = entry['binary']
   if not binary:
@@ -518,24 +499,25 @@ def _LookupDebugBinary(entry, file_mapping):
     binary = binary[len(system_prefix):]
   # Allow any other paths to pass-through; sometimes neither prefix is present.
 
-  if binary in file_mapping:
-    return file_mapping[binary]
+  if binary in symbols_mapping:
+    return symbols_mapping[binary]
 
   # |binary| may be truncated by the crashlogger, so if there is a unique
-  # match for the truncated name in |file_mapping|, use that instead.
-  matches = filter(lambda x: x.startswith(binary), file_mapping.keys())
+  # match for the truncated name in |symbols_mapping|, use that instead.
+  matches = filter(lambda x: x.startswith(binary), symbols_mapping.keys())
   if len(matches) == 1:
-    return file_mapping[matches[0]]
+    return symbols_mapping[matches[0]]
 
   return None
 
 
-def _SymbolizeBacktrace(backtrace, file_mapping):
+def _SymbolizeBacktrace(backtrace, symbols_mapping):
   # Group |backtrace| entries according to the associated binary, and locate
   # the path to the debug symbols for that binary, if any.
   batches = {}
+
   for entry in backtrace:
-    debug_binary = _LookupDebugBinary(entry, file_mapping)
+    debug_binary = _LookupDebugBinary(entry, symbols_mapping)
     if debug_binary:
       entry['debug_binary'] = debug_binary
     batches.setdefault(debug_binary, []).append(entry)
@@ -566,9 +548,9 @@ def _HandleOutputFromProcess(process, symbols_mapping):
   # Back-trace line matcher/parser assumes that 'pc' is always present, and
   # expects that 'sp' and ('binary','pc_offset') may also be provided.
   backtrace_entry = re.compile(
-      r'pc 0(?:x[0-9a-f]+)? ' +
-      r'(?:sp 0x[0-9a-f]+ )?' +
-      r'(?:\((?P<binary>\S+),(?P<pc_offset>0x[0-9a-f]+)\))?$')
+      r'pc 0(?:x[0-9a-f]+)?' +
+      r'(?: sp 0x[0-9a-f]+)?' +
+      r'(?: \((?P<binary>\S+),(?P<pc_offset>0x[0-9a-f]+)\))?$')
 
   # A buffer of backtrace entries awaiting symbolization, stored as dicts:
   # raw: The original back-trace line that followed the prefix.
@@ -631,7 +613,7 @@ def _HandleOutputFromProcess(process, symbols_mapping):
 
 
 def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
-               test_launcher_summary_output):
+               test_launcher_summary_output=None, forward_ssh_port=None):
   if not kernel_path:
     # TODO(wez): Parameterize this on the |target_cpu| from GN.
     kernel_path = os.path.join(_TargetCpuToSdkBinPath(bootfs_data.target_cpu),
@@ -644,6 +626,16 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
     kernel_args.append('zircon.autorun.system=/boot/bin/sh+/system/cr_autorun')
 
   if use_device:
+    if test_launcher_summary_output:
+      sys.stderr.write("--test-launcher-summary-output when running " +
+                       "on a device.\n")
+      return 1
+
+    if forward_ssh_port:
+      sys.stderr.write("--forward-ssh-port is not supported when running " +
+                       "on a device.\n")
+      return 1
+
     # Deploy the boot image to the device.
     bootserver_path = os.path.join(SDK_ROOT, 'tools', 'bootserver')
     bootserver_command = [bootserver_path, '-1', kernel_path,
@@ -656,7 +648,7 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
         stdout=subprocess.PIPE, stdin=open(os.devnull))
   else:
     qemu_path = os.path.join(
-        QEMU_ROOT,'bin',
+        SDK_ROOT, 'qemu', 'bin',
         'qemu-system-' + _TargetCpuToArch(bootfs_data.target_cpu))
     qemu_command = [qemu_path,
         '-m', '2048',
@@ -664,11 +656,6 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
         '-kernel', kernel_path,
         '-initrd', bootfs_data.bootfs,
         '-smp', '4',
-
-        # Configure virtual network. It is used in the tests to connect to
-        # testserver running on the host.
-        '-netdev', 'user,id=net0,net=%s,dhcpstart=%s,host=%s' %
-            (GUEST_NET, GUEST_IP_ADDRESS, HOST_IP_ADDRESS),
 
         # Use stdio for the guest OS only; don't attach the QEMU interactive
         # monitor.
@@ -687,18 +674,29 @@ def RunFuchsia(bootfs_data, use_device, kernel_path, dry_run,
       qemu_command.extend([
           '-machine','virt',
           '-cpu', 'cortex-a53',
-          '-device', 'virtio-net-pci,netdev=net0,mac=' + GUEST_MAC_ADDRESS,
       ])
+      netdev_type = 'virtio-net-pci'
       if platform.machine() == 'aarch64':
         qemu_command.append('-enable-kvm')
     else:
       qemu_command.extend([
           '-machine', 'q35',
           '-cpu', 'host,migratable=no',
-          '-device', 'e1000,netdev=net0,mac=' + GUEST_MAC_ADDRESS,
       ])
+      netdev_type = 'e1000'
       if platform.machine() == 'x86_64':
         qemu_command.append('-enable-kvm')
+
+    # Configure virtual network. It is used in the tests to connect to
+    # testserver running on the host.
+    netdev_config = 'user,id=net0,net=%s,dhcpstart=%s,host=%s' % \
+            (GUEST_NET, GUEST_IP_ADDRESS, HOST_IP_ADDRESS)
+    if forward_ssh_port:
+      netdev_config += ",hostfwd=tcp::%s-:22" % forward_ssh_port
+    qemu_command.extend([
+      '-netdev', netdev_config,
+      '-device', '%s,netdev=net0,mac=%s' % (netdev_type, GUEST_MAC_ADDRESS),
+    ])
 
     if test_launcher_summary_output:
       # Make and mount a 100M minfs formatted image that is used to copy the

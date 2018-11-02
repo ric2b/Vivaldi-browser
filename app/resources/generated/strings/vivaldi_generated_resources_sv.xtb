@@ -146,6 +146,7 @@
 <translation id="2890678560483811744">Sidreferensen faller utanför intervallet</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunde inte kommunicera med den här skrivaren. Kontrollera att skrivaren är ansluten och försök igen.</translation>
 <translation id="2904456025988372123">Fråga när en webbplats försöker hämta filer till datorn automatiskt efter den första filen</translation>
+<translation id="2911898792135283060">Skapa lösenord...</translation>
 <translation id="2913331724188855103">Tillåt att webbplatser sparar och läser data i kakor (rekommenderas)</translation>
 <translation id="2916745397441987255">Sök tillägg</translation>
 <translation id="2932883381142163287">Anmäl otillåten användning</translation>
@@ -413,7 +414,6 @@
 <translation id="6295158916970320988">Alla webbplatser</translation>
 <translation id="6295855836753816081">Sparar ...</translation>
 <translation id="6308937455967653460">Spara l&amp;änk som...</translation>
-<translation id="6314335155547195432">Generera lösenord</translation>
 <translation id="6326855256003666642">Antal keepalive</translation>
 <translation id="6370021412472292592">Kunde inte läsa in manifestet.</translation>
 <translation id="6374469231428023295">Försök igen</translation>
@@ -497,7 +497,6 @@
 <translation id="7564847347806291057">Avsluta process</translation>
 <translation id="7576690715254076113">Kollationera</translation>
 <translation id="7629827748548208700">Flik: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Avbryt</translation>
 <translation id="7661259717474717992">Tillåt att webbplatser sparar och läser data i kakor</translation>
 <translation id="7663719505383602579">Mottagare: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installerats av din administratör</translation>

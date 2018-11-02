@@ -62,7 +62,7 @@ TEST(SecurityPolicyTest, GenerateReferrerRespectsReferrerSchemesRegistry) {
 
 TEST(SecurityPolicyTest, ShouldHideReferrerRespectsReferrerSchemesRegistry) {
   const KURL example_http_url = KURL("http://example.com/");
-  const KURL foobar_url = KURL(NullURL(), "foobar://somepage/");
+  const KURL foobar_url = KURL("foobar://somepage/");
   const String foobar_scheme = String::FromUTF8("foobar");
 
   EXPECT_TRUE(SecurityPolicy::ShouldHideReferrer(example_http_url, foobar_url));
@@ -251,7 +251,7 @@ TEST(SecurityPolicyTest, TrustworthyWhiteList) {
   };
 
   for (const char* url : insecure_urls) {
-    scoped_refptr<SecurityOrigin> origin =
+    scoped_refptr<const SecurityOrigin> origin =
         SecurityOrigin::CreateFromString(url);
     EXPECT_FALSE(origin->IsPotentiallyTrustworthy());
     SecurityPolicy::AddOriginTrustworthyWhiteList(*origin);
@@ -274,9 +274,9 @@ TEST(SecurityPolicyTest, TrustworthyWhiteList) {
   };
   for (const TestCase& test : insecure_urls_with_inner_origin) {
     // Actually origins of both URLs should be same.
-    scoped_refptr<SecurityOrigin> origin1 =
+    scoped_refptr<const SecurityOrigin> origin1 =
         SecurityOrigin::CreateFromString(test.url);
-    scoped_refptr<SecurityOrigin> origin2 =
+    scoped_refptr<const SecurityOrigin> origin2 =
         SecurityOrigin::CreateFromString(test.another_url_in_origin);
 
     EXPECT_FALSE(origin1->IsPotentiallyTrustworthy());

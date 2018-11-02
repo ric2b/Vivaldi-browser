@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">Nu se poate despacheta extensia. Pentru a despacheta în siguranță o extensie, trebuie să existe o cale către directorul de profil, care începe cu o literă de unitate și nu conține o joncțiune, un punct de montare sau un link simbolic. Nu există o astfel de cale pentru profilul tău.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (numărul de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> de la furnizorul <ph name="VENDOR_ID" /> (numărul de serie <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">Pagina lansatorului „<ph name="PAGE" />” nu poate fi încărcată.</translation>
 <translation id="388442998277590542">Nu se poate încărca pagina cu opțiuni „<ph name="OPTIONS_PAGE" />”.</translation>
 <translation id="4115165561519362854">Administratorul acestui computer solicită ca versiunea minimă pentru <ph name="EXTENSION_NAME" /> să fie <ph name="EXTENSION_VERSION" />. Extensia poate fi activată doar după actualizarea la acea versiune (sau una superioară).</translation>
 <translation id="4233778200880751280">Pagina informativă „<ph name="ABOUT_PAGE" />” nu s-a putut încărca.</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">Extensia nu poate fi dezarhivată. Pentru a dezarhiva în siguranță o extensie, trebuie să existe o cale către directorul tău de profiluri care să nu conțină un link simbolic. Pentru profilul tău nu există nicio astfel de cale.</translation>
 <translation id="641087317769093025">Extensia nu a putut fi dezarhivată</translation>
 <translation id="6542618148162044354">„<ph name="APP_NAME" />” solicită accesul la cel puțin unul dintre dispozitivele tale:</translation>
-<translation id="6566142449942033617">Nu se poate încărca „<ph name="PLUGIN_PATH" />” pentru plugin.</translation>
 <translation id="657064425229075395">Scriptul de fundal „<ph name="BACKGROUND_SCRIPT" />” nu a putut fi încărcat.</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" /> de la <ph name="VENDOR_NAME" /> (număr de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">Nu s-a putut crea directorul pentru dezarhivare: „<ph name="DIRECTORY_PATH" />”</translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">Această extensie s-a reîncărcat automat prea frecvent.</translation>
 <translation id="7003844668372540529">Produs necunoscut <ph name="PRODUCT_ID" /> de la <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Administratorul acestui dispozitiv solicită instalarea extensiei <ph name="EXTENSION_NAME" />. Aceasta nu poate fi eliminată sau modificată.</translation>
-<translation id="7581279002575751816">Pluginurile NPAPI nu sunt acceptate.</translation>
 <translation id="7972881773422714442">Opțiuni: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Camera foto frontală</translation>
 <translation id="8047248493720652249">Această extensie nu a reușit să denumească fișierul descărcat „<ph name="ATTEMPTED_FILENAME" />”, deoarece altă extensie (<ph name="EXTENSION_NAME" />) a stabilit alt nume de fișier, „<ph name="ACTUAL_FILENAME" />”.</translation>

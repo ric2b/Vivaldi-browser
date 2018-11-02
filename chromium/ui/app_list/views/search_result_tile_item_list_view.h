@@ -35,11 +35,12 @@ class APP_LIST_EXPORT SearchResultTileItemListView
                            bool directional_movement) override;
   void NotifyFirstResultYIndex(int y_index) override;
   int GetYSize() override;
-  views::View* GetSelectedView() const override;
-  views::View* SetFirstResultSelected(bool selected) override;
+  views::View* GetSelectedView() override;
+  SearchResultBaseView* GetFirstResultView() override;
 
   // Overridden from views::View:
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  const char* GetClassName() const override;
 
   const std::vector<SearchResultTileItemView*>& tile_views_for_test() const {
     return tile_views_;

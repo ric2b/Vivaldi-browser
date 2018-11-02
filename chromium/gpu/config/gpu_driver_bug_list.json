@@ -1897,6 +1897,10 @@
       "os": {
         "type": "win"
       },
+      "driver_version": {
+        "op": "<",
+        "value": "21.21.13.7576"
+      },
       "vendor_id": "0x10de",
       "features": [
         "disable_dxgi_zero_copy_video"
@@ -1978,7 +1982,11 @@
       "description": "Emulate GLSL function isnan() on Intel Mac",
       "cr_bugs": [650547],
       "os": {
-        "type": "macosx"
+        "type": "macosx",
+        "version": {
+          "op": "<",
+          "value": "10.13.2"
+        }
       },
       "vendor_id": "0x8086",
       "device_id" : [
@@ -2281,8 +2289,7 @@
       "id": 215,
       "description": "Fake no-op GPU driver bug workaround for testing",
       "cr_bugs": [682912],
-      "vendor_id": "0xbad9",
-      "device_id": ["0xbad9"],
+      "test_group": 1,
       "features": [
         "use_gpu_driver_workaround_for_testing"
       ]
@@ -2754,6 +2761,76 @@
       "gl_extensions": ".*GL_VIV_shader_binary.*",
       "features": [
         "disable_program_cache"
+      ]
+    },
+    {
+      "id": 252,
+      "description": "Core profile doesn't work on NVidia GeForce GT 120",
+      "cr_bugs": [657817],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x10de",
+      "device_id": ["0x0640"],
+      "features": [
+        "disable_es3_gl_context"
+      ]
+    },
+    {
+      "id": 254,
+      "description": "Limit MSAA samples to 4x on AMD Stoney",
+      "cr_bugs": [798936],
+      "os": {
+        "type" : "chromeos"
+      },
+      "vendor_id": "0x1002",
+      "device_id": ["0x98e4"],
+      "features": [
+        "max_msaa_sample_count_4"
+      ]
+    },
+    {
+      "id": 256,
+      "description": "Don't expose disjoint_timer_query extensions to WebGL",
+      "cr_bugs": [808744],
+      "disabled_webgl_extensions": [
+        "EXT_disjoint_timer_query",
+        "EXT_disjoint_timer_query_webgl2"
+      ]
+    },
+    {
+      "id": 257,
+      "description": "Fake entry for testing disabling of WebGL extensions",
+      "cr_bugs": [808744],
+      "test_group": 2,
+      "disabled_webgl_extensions": [
+        "WEBGL_lose_context"
+      ]
+    },
+    {
+      "id": 258,
+      "description": "Shader variable initialization in a loop caused perf regression on Mac Intel.",
+      "cr_bugs": [809422],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "any",
+      "features": [
+        "dont_use_loops_to_initialize_variables"
+      ]
+    },
+    {
+      "id": 259,
+      "description": "8x MSAA is slow for alpha:false WebGL contexts on Mac Intel",
+      "cr_bugs": [812071],
+      "os": {
+        "type": "macosx"
+      },
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "primary",
+      "features": [
+        "max_msaa_sample_count_4"
       ]
     }
   ]

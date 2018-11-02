@@ -8,6 +8,8 @@
 
 #include "base/logging.h"
 #include "components/favicon/ios/web_favicon_driver.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
+#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -15,7 +17,7 @@
 #import "ios/chrome/browser/ui/stack_view/page_animation_util.h"
 #import "ios/chrome/browser/ui/stack_view/stack_card.h"
 #include "ios/chrome/browser/ui/ui_util.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
+#import "ios/chrome/browser/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -430,8 +432,11 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
 - (void)rebuildCards {
   [stackModel_ removeAllCards];
 
-  for (Tab* tab in tabModel_) {
-    StackCard* card = [self buildCardFromTab:tab];
+  WebStateList* webStateList = tabModel_.webStateList;
+  for (int index = 0; index < webStateList->count(); ++index) {
+    web::WebState* webState = webStateList->GetWebStateAt(index);
+    StackCard* card =
+        [self buildCardFromTab:LegacyTabHelper::GetTabForWebState(webState)];
     [stackModel_ addCard:card];
   }
 
@@ -505,11 +510,12 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
       [view setFavicon:favicon.ToUIImage()];
   }
 
-  [tab retrieveSnapshot:^(UIImage* image) {
-    [view setImage:image];
-  }];
+  SnapshotTabHelper::FromWebState(tab.webState)
+      ->RetrieveColorSnapshot(^(UIImage* image) {
+        [view setImage:image];
+      });
   if (!view.image)
-    [view setImage:[CRWWebController defaultSnapshotImage]];
+    [view setImage:SnapshotTabHelper::GetDefaultSnapshotImage()];
   view.closeButtonSide = self.closeButtonSide;
 
   return view;
@@ -532,6 +538,11 @@ const CGFloat kMaxCardStaggerPercentage = 0.35;
     didRemoveTab:(Tab*)tab
          atIndex:(NSUInteger)index {
   [self removeCardAtIndex:index];
+}
+
+// All tabs were closed in the model
+- (void)tabModelClosedAllTabs:(TabModel*)model {
+  [self.observer cardSetDidCloseAllTabs:self];
 }
 
 - (CGFloat)maximumStackLength {

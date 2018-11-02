@@ -15,8 +15,8 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -126,7 +126,7 @@ base::FilePath GetDownloadFilePath(const base::FilePath& download_directory,
   // filename and when the download starts writing to it (think concurrently
   // running sharded browser tests installing the same test file, for
   // instance).
-  std::string random_number = base::Uint64ToString(
+  std::string random_number = base::NumberToString(
       base::RandGenerator(std::numeric_limits<uint16_t>::max()));
 
   base::FilePath file =
@@ -417,7 +417,7 @@ void WebstoreInstaller::OnExtensionInstalled(
   } else {
     const base::Version version_required(info.minimum_version);
     if (version_required.IsValid() &&
-        extension->version()->CompareTo(version_required) < 0) {
+        extension->version().CompareTo(version_required) < 0) {
       // It should not happen, CrxInstaller will make sure the version is
       // equal or newer than version_required.
       ReportFailure(kDependencyNotFoundError,
@@ -655,7 +655,6 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   // The download url for the given extension is contained in |download_url_|.
   // We will navigate the current tab to this url to start the download. The
   // download system will then pass the crx to the CrxInstaller.
-  RecordDownloadSource(DOWNLOAD_INITIATED_BY_WEBSTORE_INSTALLER);
   int render_process_host_id =
       contents->GetRenderViewHost()->GetProcess()->GetID();
   int render_view_host_routing_id =
@@ -707,6 +706,7 @@ void WebstoreInstaller::StartDownload(const std::string& extension_id,
   params->set_callback(base::Bind(&WebstoreInstaller::OnDownloadStarted,
                                   this,
                                   extension_id));
+  params->set_download_source(content::DownloadSource::EXTENSION_INSTALLER);
   download_manager->DownloadUrl(std::move(params));
 }
 
@@ -798,8 +798,8 @@ void WebstoreInstaller::ReportSuccess() {
 }
 
 void WebstoreInstaller::RecordInterrupt(const DownloadItem* download) const {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.WebstoreDownload.InterruptReason",
-                              download->GetLastReason());
+  base::UmaHistogramSparse("Extensions.WebstoreDownload.InterruptReason",
+                           download->GetLastReason());
 
   // Use logarithmic bin sizes up to 1 TB.
   const int kNumBuckets = 30;

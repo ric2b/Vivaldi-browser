@@ -23,6 +23,7 @@
 #include "contact/contact_table.h"
 #include "contact/email_table.h"
 #include "contact/phonenumber_table.h"
+#include "contact/postaladdress_table.h"
 
 namespace base {
 class FilePath;
@@ -39,7 +40,8 @@ namespace contact {
 // be in ContactBackend.cc.
 class ContactDatabase : public ContactTable,
                         public EmailTable,
-                        public PhonenumberTable {
+                        public PhonenumberTable,
+                        public PostalAddressTable {
   // public ContactTable,
   // public RecurrrenceTable {
  public:

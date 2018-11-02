@@ -50,7 +50,7 @@ class WebCursor;
 // into, and whether the view currently has keyboard focus.
 class CONTENT_EXPORT FrameConnectorDelegate {
  public:
-  virtual void SetView(RenderWidgetHostViewChildFrame* view) {}
+  virtual void SetView(RenderWidgetHostViewChildFrame* view);
 
   // Returns the parent RenderWidgetHostView or nullptr if it doesn't have one.
   virtual RenderWidgetHostViewBase* GetParentRenderWidgetHostView();
@@ -67,13 +67,35 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   virtual void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
                                     const viz::SurfaceSequence& sequence) {}
 
+  // Sends new resize parameters to the sub-frame's renderer.
+  void UpdateResizeParams(const gfx::Rect& screen_space_rect,
+                          const gfx::Size& local_frame_size,
+                          const ScreenInfo& screen_info,
+                          uint64_t sequence_number,
+                          const viz::SurfaceId& surface_id);
+
+  // Return the size of the CompositorFrame to use in the child renderer.
+  const gfx::Size& local_frame_size_in_pixels() {
+    return local_frame_size_in_pixels_;
+  }
+
+  // Return the size of the CompositorFrame to use in the child renderer in DIP.
+  // This is used to set the layout size of the child renderer.
+  const gfx::Size& local_frame_size_in_dip() {
+    return local_frame_size_in_dip_;
+  }
+
   // Return the rect in DIP that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& frame_rect_in_dip() { return frame_rect_in_dip_; }
+  const gfx::Rect& screen_space_rect_in_dip() {
+    return screen_space_rect_in_dip_;
+  }
 
   // Return the rect in pixels that the RenderWidgetHostViewChildFrame's content
   // will render into.
-  const gfx::Rect& frame_rect_in_pixels() { return frame_rect_in_pixels_; }
+  const gfx::Rect& screen_space_rect_in_pixels() {
+    return screen_space_rect_in_pixels_;
+  }
 
   // Request that the platform change the mouse cursor when the mouse is
   // positioned over this view's content.
@@ -172,9 +194,14 @@ class CONTENT_EXPORT FrameConnectorDelegate {
   // nested child RWHVCFs inside it.
   virtual void SetVisibilityForChildViews(bool visible) const {}
 
-  // Called to resize the child renderer. |frame_rect| is in pixels if
+  // Called to resize the child renderer's CompositorFrame.
+  // |local_frame_size| is in pixels if zoom-for-dsf is enabled, and in DIP
+  // if not.
+  virtual void SetLocalFrameSize(const gfx::Size& local_frame_size);
+
+  // Called to resize the child renderer. |screen_space_rect| is in pixels if
   // zoom-for-dsf is enabled, and in DIP if not.
-  virtual void SetRect(const gfx::Rect& frame_rect);
+  virtual void SetScreenSpaceRect(const gfx::Rect& screen_space_rect);
 
 #if defined(USE_AURA)
   // Embeds a WindowTreeClient in the parent. This results in the parent
@@ -193,13 +220,18 @@ class CONTENT_EXPORT FrameConnectorDelegate {
 
   virtual ~FrameConnectorDelegate() {}
 
+  // The RenderWidgetHostView for the frame. Initially NULL.
+  RenderWidgetHostViewChildFrame* view_ = nullptr;
+
   // This is here rather than in the implementation class so that
   // ViewportIntersection() can return a reference.
   gfx::Rect viewport_intersection_rect_;
 
   ScreenInfo screen_info_;
-  gfx::Rect frame_rect_in_dip_;
-  gfx::Rect frame_rect_in_pixels_;
+  gfx::Size local_frame_size_in_dip_;
+  gfx::Size local_frame_size_in_pixels_;
+  gfx::Rect screen_space_rect_in_dip_;
+  gfx::Rect screen_space_rect_in_pixels_;
   viz::LocalSurfaceId local_surface_id_;
 
   const bool use_zoom_for_device_scale_factor_;

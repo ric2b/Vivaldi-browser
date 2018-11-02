@@ -240,9 +240,6 @@ class KeyboardControllerTest : public testing::Test,
 
  protected:
   // KeyboardControllerObserver overrides
-  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override {
-    // TODO(blakeo): remove this method
-  }
   void OnKeyboardVisibleBoundsChanging(const gfx::Rect& new_bounds) override {
     visible_bounds_ = new_bounds;
     visible_bounds_number_of_calls_++;
@@ -258,8 +255,6 @@ class KeyboardControllerTest : public testing::Test,
   }
   void OnKeyboardClosed() override { keyboard_closed_ = true; }
 
-  // TODO(blakeo): remove this method
-  int bounds_number_of_calls() const { return 0; }
   int visible_bounds_number_of_calls() const {
     return visible_bounds_number_of_calls_;
   }
@@ -279,7 +274,8 @@ class KeyboardControllerTest : public testing::Test,
   void SetFocus(ui::TextInputClient* client) {
     ui::InputMethod* input_method = ui()->GetInputMethod();
     input_method->SetFocusedTextInputClient(client);
-    if (client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE) {
+    if (client && client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE &&
+        client->GetTextInputMode() != ui::TEXT_INPUT_MODE_NONE) {
       input_method->ShowImeIfNeeded();
       if (controller_->ui()->GetContentsWindow()->bounds().height() == 0) {
         // Set initial bounds for test keyboard window.
@@ -717,9 +713,6 @@ TEST_F(KeyboardControllerTest, DisplayChangeShouldNotifyBoundsChange) {
 
   SetFocus(&input_client);
   gfx::Rect new_bounds(0, 0, 1280, 800);
-  // TODO(blakeo): strictly speaking, the is_available_number_of_calls should
-  // not go up if the availability value is the same each time. This will
-  // eventually need to be fixed, but is currently harmless.
   ASSERT_NE(new_bounds, root_window()->bounds());
   EXPECT_EQ(1, visible_bounds_number_of_calls());
   EXPECT_EQ(1, occluding_bounds_number_of_calls());
@@ -727,11 +720,42 @@ TEST_F(KeyboardControllerTest, DisplayChangeShouldNotifyBoundsChange) {
   root_window()->SetBounds(new_bounds);
   EXPECT_EQ(2, visible_bounds_number_of_calls());
   EXPECT_EQ(2, occluding_bounds_number_of_calls());
-  EXPECT_EQ(2, is_available_number_of_calls());
+  EXPECT_EQ(1, is_available_number_of_calls());
   MockRotateScreen();
   EXPECT_EQ(3, visible_bounds_number_of_calls());
   EXPECT_EQ(3, occluding_bounds_number_of_calls());
-  EXPECT_EQ(3, is_available_number_of_calls());
+  EXPECT_EQ(1, is_available_number_of_calls());
+}
+
+TEST_F(KeyboardControllerTest, TextInputMode) {
+  ScopedAccessibilityKeyboardEnabler scoped_keyboard_enabler;
+  ui::DummyTextInputClient input_client(ui::TEXT_INPUT_TYPE_TEXT,
+                                        ui::TEXT_INPUT_MODE_TEXT);
+  ui::DummyTextInputClient no_input_client(ui::TEXT_INPUT_TYPE_TEXT,
+                                           ui::TEXT_INPUT_MODE_NONE);
+
+  base::RunLoop run_loop;
+  aura::Window* keyboard_container(controller()->GetContainerWindow());
+  std::unique_ptr<KeyboardContainerObserver> keyboard_container_observer(
+      new KeyboardContainerObserver(keyboard_container, &run_loop));
+  root_window()->AddChild(keyboard_container);
+
+  SetFocus(&input_client);
+
+  EXPECT_TRUE(keyboard_container->IsVisible());
+
+  SetFocus(&no_input_client);
+  // Keyboard should not immediately hide itself. It is delayed to avoid layout
+  // flicker when the focus of input field quickly change.
+  EXPECT_TRUE(keyboard_container->IsVisible());
+  EXPECT_TRUE(WillHideKeyboard());
+  // Wait for hide keyboard to finish.
+
+  RunLoop(&run_loop);
+  EXPECT_FALSE(keyboard_container->IsVisible());
+
+  SetFocus(&input_client);
+  EXPECT_TRUE(keyboard_container->IsVisible());
 }
 
 }  // namespace keyboard

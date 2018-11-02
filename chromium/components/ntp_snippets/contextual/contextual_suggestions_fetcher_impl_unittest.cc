@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -105,21 +104,28 @@ void ParseJson(const std::string& json,
 
 }  // namespace
 
-class ContextualSuggestionsFetcherTest : public testing::Test {
+class ContextualSuggestionsFetcherTest
+    : public testing::Test,
+      public OAuth2TokenService::DiagnosticsObserver {
  public:
   ContextualSuggestionsFetcherTest()
       : fake_url_fetcher_factory_(new net::FakeURLFetcherFactory(nullptr)),
-        mock_task_runner_(new base::TestMockTimeTaskRunner()),
-        mock_task_runner_handle_(mock_task_runner_) {
+        mock_task_runner_(new base::TestMockTimeTaskRunner(
+            base::TestMockTimeTaskRunner::Type::kBoundToThread)) {
     scoped_refptr<net::TestURLRequestContextGetter> request_context_getter =
         new net::TestURLRequestContextGetter(mock_task_runner_.get());
-    fake_token_service_ = base::MakeUnique<FakeProfileOAuth2TokenService>(
-        base::MakeUnique<FakeOAuth2TokenServiceDelegate>(
+    fake_token_service_ = std::make_unique<FakeProfileOAuth2TokenService>(
+        std::make_unique<FakeOAuth2TokenServiceDelegate>(
             request_context_getter.get()));
-    fetcher_ = base::MakeUnique<ContextualSuggestionsFetcherImpl>(
+    fetcher_ = std::make_unique<ContextualSuggestionsFetcherImpl>(
         test_utils_.fake_signin_manager(), fake_token_service_.get(),
         std::move(request_context_getter), test_utils_.pref_service(),
         base::Bind(&ParseJson));
+    fake_token_service_->AddDiagnosticsObserver(this);
+  }
+
+  ~ContextualSuggestionsFetcherTest() override {
+    fake_token_service_->RemoveDiagnosticsObserver(this);
   }
 
   void FastForwardUntilNoTasksRemain() {
@@ -159,14 +165,27 @@ class ContextualSuggestionsFetcherTest : public testing::Test {
     return mock_suggestions_available_callback_;
   }
 
+  void set_on_access_token_request_callback(base::OnceClosure callback) {
+    on_access_token_request_callback_ = std::move(callback);
+  }
+
  private:
+  // OAuth2TokenService::DiagnosticsObserver:
+  void OnAccessTokenRequested(
+      const std::string& account_id,
+      const std::string& consumer_id,
+      const OAuth2TokenService::ScopeSet& scopes) override {
+    if (on_access_token_request_callback_)
+      std::move(on_access_token_request_callback_).Run();
+  }
+
   std::unique_ptr<FakeProfileOAuth2TokenService> fake_token_service_;
   std::unique_ptr<net::FakeURLFetcherFactory> fake_url_fetcher_factory_;
   std::unique_ptr<ContextualSuggestionsFetcherImpl> fetcher_;
   MockSuggestionsAvailableCallback mock_suggestions_available_callback_;
   scoped_refptr<base::TestMockTimeTaskRunner> mock_task_runner_;
-  base::ThreadTaskRunnerHandle mock_task_runner_handle_;
   test::RemoteSuggestionsTestUtils test_utils_;
+  base::OnceClosure on_access_token_request_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextualSuggestionsFetcherTest);
 };
@@ -177,6 +196,9 @@ TEST_F(ContextualSuggestionsFetcherTest, ShouldCreateFetcher) {
 }
 
 TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchSuggestion) {
+  base::RunLoop run_loop;
+  set_on_access_token_request_callback(run_loop.QuitClosure());
+
   InitializeFakeCredentials();
   const std::string kValidResponseData =
       "{\"categories\" : [{"
@@ -197,6 +219,9 @@ TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchSuggestion) {
   fetcher().FetchContextualSuggestions(
       GURL(kValidURL),
       ToSuggestionsAvailableCallback(&mock_suggestions_available_callback()));
+
+  run_loop.Run();
+
   IssueOAuth2Token();
   FastForwardUntilNoTasksRemain();
   EXPECT_THAT(fetcher().GetLastStatusForTesting(), Eq("OK"));
@@ -204,6 +229,9 @@ TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchSuggestion) {
 }
 
 TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchEmptySuggestionsList) {
+  base::RunLoop run_loop;
+  set_on_access_token_request_callback(run_loop.QuitClosure());
+
   InitializeFakeCredentials();
   const std::string kValidEmptyCategoryResponseData =
       "{\"categories\" : [{"
@@ -219,6 +247,9 @@ TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchEmptySuggestionsList) {
   fetcher().FetchContextualSuggestions(
       GURL(kValidURL),
       ToSuggestionsAvailableCallback(&mock_suggestions_available_callback()));
+
+  run_loop.Run();
+
   IssueOAuth2Token();
   FastForwardUntilNoTasksRemain();
   EXPECT_THAT(fetcher().GetLastStatusForTesting(), Eq("OK"));
@@ -228,6 +259,9 @@ TEST_F(ContextualSuggestionsFetcherTest, ShouldFetchEmptySuggestionsList) {
 
 TEST_F(ContextualSuggestionsFetcherTest,
        ShouldReportErrorForEmptyResponseData) {
+  base::RunLoop run_loop;
+  set_on_access_token_request_callback(run_loop.QuitClosure());
+
   InitializeFakeCredentials();
   SetFakeResponse(/*response_data=*/std::string(), net::HTTP_NOT_FOUND,
                   net::URLRequestStatus::SUCCESS);
@@ -237,12 +271,18 @@ TEST_F(ContextualSuggestionsFetcherTest,
   fetcher().FetchContextualSuggestions(
       GURL(kValidURL),
       ToSuggestionsAvailableCallback(&mock_suggestions_available_callback()));
+
+  run_loop.Run();
+
   IssueOAuth2Token();
   FastForwardUntilNoTasksRemain();
 }
 
 TEST_F(ContextualSuggestionsFetcherTest,
        ShouldReportErrorForInvalidResponseData) {
+  base::RunLoop run_loop;
+  set_on_access_token_request_callback(run_loop.QuitClosure());
+
   InitializeFakeCredentials();
   const std::string kInvalidResponseData = "{ \"recos\": []";
   SetFakeResponse(/*response_data=*/kInvalidResponseData, net::HTTP_OK,
@@ -257,6 +297,9 @@ TEST_F(ContextualSuggestionsFetcherTest,
   fetcher().FetchContextualSuggestions(
       GURL(kValidURL),
       ToSuggestionsAvailableCallback(&mock_suggestions_available_callback()));
+
+  run_loop.Run();
+
   IssueOAuth2Token();
   FastForwardUntilNoTasksRemain();
   EXPECT_THAT(fetcher().GetLastStatusForTesting(),

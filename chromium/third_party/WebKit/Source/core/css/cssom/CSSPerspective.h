@@ -40,7 +40,7 @@ class CORE_EXPORT CSSPerspective final : public CSSTransformComponent {
   // Internal methods - from CSSTransformComponent.
   TransformComponentType GetType() const final { return kPerspectiveType; }
   const DOMMatrix* AsMatrix(ExceptionState&) const final;
-  const CSSFunctionValue* ToCSSValue(SecureContextMode) const final;
+  const CSSFunctionValue* ToCSSValue() const final;
 
   virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(length_);
@@ -48,8 +48,7 @@ class CORE_EXPORT CSSPerspective final : public CSSTransformComponent {
   }
 
  private:
-  CSSPerspective(CSSNumericValue* length)
-      : CSSTransformComponent(false /* is2D */), length_(length) {}
+  CSSPerspective(CSSNumericValue* length);
 
   Member<CSSNumericValue> length_;
   DISALLOW_COPY_AND_ASSIGN(CSSPerspective);

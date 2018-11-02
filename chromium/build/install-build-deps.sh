@@ -149,6 +149,7 @@ chromeos_dev_list="libbluetooth-dev libxkbcommon-dev realpath"
 dev_list="\
   bison
   cdbs
+  chrpath
   curl
   dpkg-dev
   elfutils
@@ -168,11 +169,9 @@ dev_list="\
   libcap-dev
   libcups2-dev
   libcurl4-gnutls-dev
-  libdconf-dev
   libdrm-dev
   libelf-dev
   libffi-dev
-  libgconf2-dev
   libglib2.0-dev
   libglu1-mesa-dev
   libgnome-keyring-dev
@@ -235,7 +234,6 @@ lib_list="\
   libcairo2
   libcap2
   libcups2
-  libdconf1
   libexpat1
   libffi6
   libfontconfig1
@@ -420,9 +418,7 @@ nacl_list="\
   libasound2:i386
   libcap2:i386
   libelf-dev:i386
-  libdconf1:i386
   libfontconfig1:i386
-  libgconf-2-4:i386
   libglib2.0-0:i386
   libgpm2:i386
   libgtk2.0-0:i386
@@ -447,10 +443,12 @@ nacl_list="\
   ${naclports_list}
 "
 
-if package_exists libssl1.0.0; then
-  nacl_list="${nacl_list} libssl1.0.0:i386"
-else
+if package_exists libssl1.1; then
+  nacl_list="${nacl_list} libssl1.1:i386"
+elif package_exists libssl1.0.2; then
   nacl_list="${nacl_list} libssl1.0.2:i386"
+else
+  nacl_list="${nacl_list} libssl1.0.0:i386"
 fi
 
 # Find the proper version of packages that depend on mesa. Only one -lts variant
@@ -478,10 +476,10 @@ dev_list="${dev_list} libgbm-dev${mesa_variant}
 nacl_list="${nacl_list} libgl1-mesa-glx${mesa_variant}:i386"
 
 # Some package names have changed over time
-if package_exists libpng12-0; then
-  lib_list="${lib_list} libpng12-0"
-else
+if package_exists libpng16-16; then
   lib_list="${lib_list} libpng16-16"
+else
+  lib_list="${lib_list} libpng12-0"
 fi
 if package_exists libnspr4-dbg; then
   dbg_list="${dbg_list} libnspr4-dbg libnss3-dbg"
@@ -507,10 +505,10 @@ if package_exists libbrlapi0.6; then
 else
   dev_list="${dev_list} libbrlapi0.5"
 fi
-if package_exists apache2-bin; then
-  dev_list="${dev_list} apache2-bin"
-else
+if package_exists apache2.2-bin; then
   dev_list="${dev_list} apache2.2-bin"
+else
+  dev_list="${dev_list} apache2-bin"
 fi
 if package_exists xfonts-mathml; then
   dev_list="${dev_list} xfonts-mathml"

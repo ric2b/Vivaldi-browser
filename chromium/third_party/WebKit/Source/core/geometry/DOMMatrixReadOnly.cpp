@@ -14,7 +14,7 @@
 #include "core/geometry/DOMMatrixInit.h"
 #include "core/geometry/DOMPoint.h"
 #include "core/geometry/DOMPointInit.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
@@ -210,7 +210,7 @@ DOMMatrixReadOnly* DOMMatrixReadOnly::fromMatrix(
   return new DOMMatrixReadOnly(args, 16);
 }
 
-DOMMatrixReadOnly::~DOMMatrixReadOnly() {}
+DOMMatrixReadOnly::~DOMMatrixReadOnly() = default;
 
 bool DOMMatrixReadOnly::is2D() const {
   return is2d_;
@@ -493,8 +493,8 @@ void DOMMatrixReadOnly::SetMatrixValueFromString(
 
   const ComputedStyle& initial_style = ComputedStyle::InitialStyle();
   TransformOperations operations = TransformBuilder::CreateTransformOperations(
-      *value, CSSToLengthConversionData(&initial_style, &initial_style,
-                                        LayoutViewItem(nullptr), 1.0f));
+      *value,
+      CSSToLengthConversionData(&initial_style, &initial_style, nullptr, 1.0f));
 
   if (operations.DependsOnBoxSize()) {
     exception_state.ThrowDOMException(

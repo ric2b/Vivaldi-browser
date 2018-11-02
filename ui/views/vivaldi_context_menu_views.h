@@ -50,6 +50,7 @@ class VivaldiContextMenuViews : public vivaldi::VivaldiContextMenu {
   void Show() override;
   void SetIcon(const gfx::Image& icon, int id) override;
   void SetSelectedItem(int id) override;
+  void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) override;
 
  private:
   void RunMenuAt(views::Widget* parent,

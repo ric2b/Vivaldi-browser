@@ -11,8 +11,8 @@
 #include "core/frame/RemoteFrameClient.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/intersection_observer/IntersectionObserverEntry.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
 
 namespace blink {
 
@@ -21,7 +21,7 @@ RemoteFrameView::RemoteFrameView(RemoteFrame* remote_frame)
   DCHECK(remote_frame);
 }
 
-RemoteFrameView::~RemoteFrameView() {}
+RemoteFrameView::~RemoteFrameView() = default;
 
 LocalFrameView* RemoteFrameView::ParentFrameView() const {
   if (!is_attached_)
@@ -106,14 +106,14 @@ void RemoteFrameView::Dispose() {
 }
 
 void RemoteFrameView::InvalidateRect(const IntRect& rect) {
-  LayoutEmbeddedContentItem layout_item = remote_frame_->OwnerLayoutItem();
-  if (layout_item.IsNull())
+  auto* object = remote_frame_->OwnerLayoutObject();
+  if (!object)
     return;
 
   LayoutRect repaint_rect(rect);
-  repaint_rect.Move(layout_item.BorderLeft() + layout_item.PaddingLeft(),
-                    layout_item.BorderTop() + layout_item.PaddingTop());
-  layout_item.InvalidatePaintRectangle(repaint_rect);
+  repaint_rect.Move(object->BorderLeft() + object->PaddingLeft(),
+                    object->BorderTop() + object->PaddingTop());
+  object->InvalidatePaintRectangle(repaint_rect);
 }
 
 void RemoteFrameView::SetFrameRect(const IntRect& frame_rect) {
@@ -128,11 +128,13 @@ void RemoteFrameView::FrameRectsChanged() {
   // Update the rect to reflect the position of the frame relative to the
   // containing local frame root. The position of the local root within
   // any remote frames, if any, is accounted for by the embedder.
-  IntRect new_rect = frame_rect_;
+  IntRect screen_space_rect = frame_rect_;
 
-  if (LocalFrameView* parent = ParentFrameView())
-    new_rect = parent->ConvertToRootFrame(parent->ContentsToFrame(new_rect));
-  remote_frame_->Client()->FrameRectsChanged(new_rect);
+  if (LocalFrameView* parent = ParentFrameView()) {
+    screen_space_rect =
+        parent->ConvertToRootFrame(parent->ContentsToFrame(screen_space_rect));
+  }
+  remote_frame_->Client()->FrameRectsChanged(frame_rect_, screen_space_rect);
 }
 
 void RemoteFrameView::UpdateGeometry() {
@@ -181,7 +183,7 @@ void RemoteFrameView::SetupRenderThrottling() {
     return;
 
   visibility_observer_ = new ElementVisibilityObserver(
-      target_element, WTF::Bind(
+      target_element, WTF::BindRepeating(
                           [](RemoteFrameView* remote_view, bool is_visible) {
                             remote_view->UpdateRenderThrottlingStatus(
                                 !is_visible, remote_view->subtree_throttled_);

@@ -118,14 +118,6 @@ void WidgetInputHandlerManager::WillShutdown() {
   input_handler_proxy_.reset();
 }
 
-void WidgetInputHandlerManager::TransferActiveWheelFlingAnimation(
-    const blink::WebActiveWheelFlingParameters& params) {
-  main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RenderWidget::TransferActiveWheelFlingAnimation,
-                     render_widget_, params));
-}
-
 void WidgetInputHandlerManager::DispatchNonBlockingEventToMainThread(
     ui::WebScopedInputEvent event,
     const ui::LatencyInfo& latency_info) {
@@ -283,7 +275,8 @@ void WidgetInputHandlerManager::InitOnCompositorThread(
     bool smooth_scroll_enabled) {
   input_handler_proxy_ = std::make_unique<ui::InputHandlerProxy>(
       input_handler.get(), this,
-      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
+      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching),
+      base::FeatureList::IsEnabled(features::kAsyncWheelEvents));
   input_handler_proxy_->set_smooth_scroll_enabled(smooth_scroll_enabled);
 }
 

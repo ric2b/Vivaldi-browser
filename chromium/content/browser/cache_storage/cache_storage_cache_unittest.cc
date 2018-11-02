@@ -52,8 +52,8 @@
 using blink::mojom::CacheStorageError;
 
 namespace content {
+namespace cache_storage_cache_unittest {
 
-namespace {
 const char kTestData[] = "Hello World";
 const char kOrigin[] = "http://example.com";
 const char kCacheName[] = "test_cache";
@@ -162,11 +162,11 @@ void CopyBody(const storage::BlobDataHandle& blob_handle, std::string* output) {
   const auto& items = data->items();
   for (const auto& item : items) {
     switch (item->type()) {
-      case storage::DataElement::TYPE_BYTES: {
+      case network::DataElement::TYPE_BYTES: {
         output->append(item->bytes(), item->length());
         break;
       }
-      case storage::DataElement::TYPE_DISK_CACHE_ENTRY: {
+      case network::DataElement::TYPE_DISK_CACHE_ENTRY: {
         disk_cache::Entry* entry = item->disk_cache_entry();
         int32_t body_size = entry->GetDataSize(item->disk_cache_stream_index());
 
@@ -195,7 +195,7 @@ void CopySideData(const storage::BlobDataHandle& blob_handle,
   const auto& items = data->items();
   ASSERT_EQ(1u, items.size());
   const auto& item = items[0];
-  ASSERT_EQ(storage::DataElement::TYPE_DISK_CACHE_ENTRY, item->type());
+  ASSERT_EQ(network::DataElement::TYPE_DISK_CACHE_ENTRY, item->type());
   ASSERT_EQ(CacheStorageCache::INDEX_SIDE_DATA,
             item->disk_cache_side_stream_index());
 
@@ -289,8 +289,6 @@ void OnBadMessage(base::Optional<bad_message::BadMessageReason>* result,
   *result = reason;
 }
 
-}  // namespace
-
 // A CacheStorageCache that can optionally delay during backend creation.
 class TestCacheStorageCache : public CacheStorageCache {
  public:
@@ -379,7 +377,8 @@ class CacheStorageCacheTest : public testing::Test {
     mock_quota_manager_ = new MockQuotaManager(
         is_incognito, temp_dir_path, base::ThreadTaskRunnerHandle::Get().get(),
         quota_policy_.get());
-    mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
+    mock_quota_manager_->SetQuota(GURL(kOrigin),
+                                  blink::mojom::StorageType::kTemporary,
                                   1024 * 1024 * 100);
 
     quota_manager_proxy_ = new MockQuotaManagerProxy(
@@ -435,13 +434,11 @@ class CacheStorageCacheTest : public testing::Test {
     blob_handle_ = BuildBlobHandle("blob-id:myblob", expected_blob_data_);
 
     scoped_refptr<storage::BlobHandle> blob;
-    if (features::IsMojoBlobsEnabled()) {
-      blink::mojom::BlobPtr blob_ptr;
-      storage::BlobImpl::Create(
-          std::make_unique<storage::BlobDataHandle>(*blob_handle_),
-          MakeRequest(&blob_ptr));
-      blob = base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
-    }
+    blink::mojom::BlobPtr blob_ptr;
+    storage::BlobImpl::Create(
+        std::make_unique<storage::BlobDataHandle>(*blob_handle_),
+        MakeRequest(&blob_ptr));
+    blob = base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
 
     body_response_ = CreateResponse(
         "http://example.com/body.html",
@@ -494,14 +491,12 @@ class CacheStorageCacheTest : public testing::Test {
                               ServiceWorkerResponse* response) {
     response->side_data_blob_uuid = side_data_blob_handle->uuid();
     response->side_data_blob_size = side_data_blob_handle->size();
-    if (features::IsMojoBlobsEnabled()) {
-      blink::mojom::BlobPtr blob_ptr;
-      storage::BlobImpl::Create(
-          std::make_unique<storage::BlobDataHandle>(*side_data_blob_handle),
-          MakeRequest(&blob_ptr));
-      response->side_data_blob =
-          base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
-    }
+    blink::mojom::BlobPtr blob_ptr;
+    storage::BlobImpl::Create(
+        std::make_unique<storage::BlobDataHandle>(*side_data_blob_handle),
+        MakeRequest(&blob_ptr));
+    response->side_data_blob =
+        base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
   }
 
   std::unique_ptr<ServiceWorkerFetchRequest> CopyFetchRequest(
@@ -1509,7 +1504,8 @@ TEST_P(CacheStorageCacheTestP, PutWithSideData) {
 }
 
 TEST_P(CacheStorageCacheTestP, PutWithSideData_QuotaExceeded) {
-  mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
+  mock_quota_manager_->SetQuota(GURL(kOrigin),
+                                blink::mojom::StorageType::kTemporary,
                                 expected_blob_data_.size() - 1);
   ServiceWorkerResponse response(body_response_);
   const std::string expected_side_data = "SideData";
@@ -1524,7 +1520,8 @@ TEST_P(CacheStorageCacheTestP, PutWithSideData_QuotaExceeded) {
 }
 
 TEST_P(CacheStorageCacheTestP, PutWithSideData_QuotaExceededSkipSideData) {
-  mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
+  mock_quota_manager_->SetQuota(GURL(kOrigin),
+                                blink::mojom::StorageType::kTemporary,
                                 expected_blob_data_.size());
   ServiceWorkerResponse response(body_response_);
   const std::string expected_side_data = "SideData";
@@ -1602,8 +1599,8 @@ TEST_P(CacheStorageCacheTestP, WriteSideData) {
 }
 
 TEST_P(CacheStorageCacheTestP, WriteSideData_QuotaExceeded) {
-  mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
-                                1024 * 1023);
+  mock_quota_manager_->SetQuota(
+      GURL(kOrigin), blink::mojom::StorageType::kTemporary, 1024 * 1023);
   base::Time response_time(base::Time::Now());
   ServiceWorkerResponse response;
   response.response_time = response_time;
@@ -1723,8 +1720,8 @@ TEST_P(CacheStorageCacheTestP, QuotaManagerModified) {
 }
 
 TEST_P(CacheStorageCacheTestP, PutObeysQuotaLimits) {
-  mock_quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
-                                0);
+  mock_quota_manager_->SetQuota(GURL(kOrigin),
+                                blink::mojom::StorageType::kTemporary, 0);
   EXPECT_FALSE(Put(body_request_, body_response_));
   EXPECT_EQ(CacheStorageError::kErrorQuotaExceeded, callback_error_);
 }
@@ -1930,4 +1927,5 @@ INSTANTIATE_TEST_CASE_P(CacheStorageCacheTest,
                         CacheStorageCacheTestP,
                         ::testing::Values(false, true));
 
+}  // namespace cache_storage_cache_unittest
 }  // namespace content

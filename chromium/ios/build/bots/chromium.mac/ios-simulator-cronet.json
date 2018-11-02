@@ -2,12 +2,17 @@
   "comments": [
     "Cronet tests 64-bit iOS 11.0 simulators."
   ],
-  "xcode version": "9.0",
+  "xcode build version": "9C40b",
+  "comments": [
+    "TODO(crbug.com/803158): remove enable_precompiled_headers=false",
+    "when the bug is fixed."
+  ],
   "gn_args": [
     "additional_target_cpus=[\"x86\"]",
     "disable_brotli_filter=false",
     "disable_file_support=true",
     "disable_ftp_support=true",
+    "enable_precompiled_headers=false",
     "enable_websockets=false",
     "goma_dir=\"$(goma_dir)\"",
     "ios_deployment_target=\"9.0\"",
@@ -19,19 +24,22 @@
     "use_platform_icu_alternatives=true"
   ],
   "configuration": "Debug",
-  "sdk": "iphonesimulator11.0",
+  "sdk": "iphonesimulator11.2",
   "tests": [
+    {
+      "app": "cronet_unittests_ios",
+      "device type": "iPhone 5s",
+      "os": "9.3"
+    },
     {
       "app": "cronet_test",
       "device type": "iPhone 5s",
-      "os": "11.0",
-      "xcode version": "9.0"
+      "os": "9.3"
     },
     {
       "app": "cronet_test",
       "device type": "iPad Air 2",
-      "os": "11.0",
-      "xcode version": "9.0"
+      "os": "11.2"
     }
   ]
 }

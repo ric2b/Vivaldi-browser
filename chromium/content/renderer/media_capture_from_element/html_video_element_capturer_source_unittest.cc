@@ -13,6 +13,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 using ::testing::_;
 using ::testing::InSequence;
@@ -35,7 +36,6 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   void Load(LoadType, const blink::WebMediaPlayerSource&, CORSMode) override {}
   void Play() override {}
   void Pause() override {}
-  bool SupportsSave() const override { return true; }
   void Seek(double seconds) override {}
   void SetRate(double) override {}
   void SetVolume(double) override {}
@@ -63,6 +63,7 @@ class MockWebMediaPlayer : public blink::WebMediaPlayer,
   }
 
   bool DidLoadingProgress() override { return true; }
+  bool DidGetOpaqueResponseFromServiceWorker() const override { return false; }
   bool HasSingleSecurityOrigin() const override { return true; }
   bool DidPassCORSAccessCheck() const override { return true; }
   double MediaTimeForTimeValue(double timeValue) const override { return 0.0; }
@@ -92,7 +93,8 @@ class HTMLVideoElementCapturerSourceTest : public testing::Test {
         web_media_player_(new MockWebMediaPlayer()),
         html_video_capturer_(new HtmlVideoElementCapturerSource(
             web_media_player_->AsWeakPtr(),
-            base::ThreadTaskRunnerHandle::Get())) {}
+            blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+            blink::scheduler::GetSingleThreadTaskRunnerForTesting())) {}
 
   // Necessary callbacks and MOCK_METHODS for them.
   MOCK_METHOD2(DoOnDeliverFrame,
@@ -138,10 +140,12 @@ TEST_F(HTMLVideoElementCapturerSourceTest, GetFormatsAndStartAndStop) {
 
   base::RunLoop run_loop;
   base::Closure quit_closure = run_loop.QuitClosure();
-  EXPECT_CALL(*this, DoOnDeliverFrame(_, _)).Times(1);
+  scoped_refptr<media::VideoFrame> first_frame;
+  scoped_refptr<media::VideoFrame> second_frame;
+  EXPECT_CALL(*this, DoOnDeliverFrame(_, _)).WillOnce(SaveArg<0>(&first_frame));
   EXPECT_CALL(*this, DoOnDeliverFrame(_, _))
       .Times(1)
-      .WillOnce(RunClosure(quit_closure));
+      .WillOnce(DoAll(SaveArg<0>(&second_frame), RunClosure(quit_closure)));
 
   html_video_capturer_->StartCapture(
       params, base::Bind(&HTMLVideoElementCapturerSourceTest::OnDeliverFrame,
@@ -151,6 +155,8 @@ TEST_F(HTMLVideoElementCapturerSourceTest, GetFormatsAndStartAndStop) {
 
   run_loop.Run();
 
+  EXPECT_EQ(0u, first_frame->timestamp().InMilliseconds());
+  EXPECT_GT(second_frame->timestamp().InMilliseconds(), 30u);
   html_video_capturer_->StopCapture();
   Mock::VerifyAndClearExpectations(this);
 }
@@ -172,7 +178,7 @@ TEST_F(HTMLVideoElementCapturerSourceTest,
   media::VideoCaptureParams params;
   params.requested_format = formats[0];
 
-  EXPECT_CALL(*this, DoOnRunning(true)).Times(1);
+  EXPECT_CALL(*this, DoOnRunning(true));
   EXPECT_CALL(*this, DoOnDeliverFrame(_, _)).Times(0);
 
   html_video_capturer_->StartCapture(

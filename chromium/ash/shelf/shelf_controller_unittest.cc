@@ -22,15 +22,36 @@
 #include "ash/test_shell_delegate.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "components/prefs/pref_service.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "testing/gtest/include/gtest/gtest.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/gfx/image/image_unittest_util.h"
+#include "ui/message_center/message_center.h"
+#include "ui/message_center/notifier_id.h"
 
 namespace ash {
 namespace {
 
 Shelf* GetShelfForDisplay(int64_t display_id) {
   return Shell::GetRootWindowControllerWithDisplayId(display_id)->shelf();
+}
+
+void BuildAndSendNotification(message_center::MessageCenter* message_center,
+                              const std::string& app_id,
+                              const std::string& notification_id) {
+  const message_center::NotifierId notifier_id(
+      message_center::NotifierId::APPLICATION, app_id);
+  std::unique_ptr<message_center::Notification> notification =
+      std::make_unique<message_center::Notification>(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+          base::ASCIIToUTF16("Test Web Notification"),
+          base::ASCIIToUTF16("Notification message body."), gfx::Image(),
+          base::ASCIIToUTF16("www.test.org"), GURL(), notifier_id,
+          message_center::RichNotificationData(), nullptr /* delegate */);
+  message_center->AddNotification(std::move(notification));
 }
 
 // A test implementation of the ShelfObserver mojo interface.
@@ -64,10 +85,12 @@ class TestShelfObserver : public mojom::ShelfObserver {
 
 using ShelfControllerTest = AshTestBase;
 
-TEST_F(ShelfControllerTest, IntializesAppListItemDelegate) {
+TEST_F(ShelfControllerTest, InitializesBackButtonAndAppListItemDelegate) {
   ShelfModel* model = Shell::Get()->shelf_controller()->model();
-  EXPECT_EQ(1, model->item_count());
-  EXPECT_EQ(kAppListId, model->items()[0].id.app_id);
+  EXPECT_EQ(2, model->item_count());
+  EXPECT_EQ(kBackButtonId, model->items()[0].id.app_id);
+  EXPECT_FALSE(model->GetShelfItemDelegate(ShelfID(kBackButtonId)));
+  EXPECT_EQ(kAppListId, model->items()[1].id.app_id);
   EXPECT_TRUE(model->GetShelfItemDelegate(ShelfID(kAppListId)));
 }
 
@@ -82,9 +105,10 @@ TEST_F(ShelfControllerTest, ShelfModelChangesWithoutSync) {
       &observer, mojo::MakeRequestAssociatedWithDedicatedPipe(&observer_ptr));
   controller->AddObserver(observer_ptr.PassInterface());
 
-  // The ShelfModel should be initialized with a single item for the AppList.
-  // Without syncing, the observer should not be notified of ShelfModel changes.
-  EXPECT_EQ(1, controller->model()->item_count());
+  // The ShelfModel should be initialized with a two items, one for the back
+  // button and one for the AppList. Without syncing, the observer should not be
+  // notified of ShelfModel changes.
+  EXPECT_EQ(2, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
@@ -94,14 +118,14 @@ TEST_F(ShelfControllerTest, ShelfModelChangesWithoutSync) {
   item.id = ShelfID("foo");
   int index = controller->model()->Add(item);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(3, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
   // Remove a ShelfModel item; |observer| should not be notified without sync.
   controller->model()->RemoveItemAt(index);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(1, controller->model()->item_count());
+  EXPECT_EQ(2, controller->model()->item_count());
   EXPECT_EQ(0u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 }
@@ -118,10 +142,11 @@ TEST_F(ShelfControllerTest, ShelfModelChangesWithSync) {
   controller->AddObserver(observer_ptr.PassInterface());
   base::RunLoop().RunUntilIdle();
 
-  // The ShelfModel should be initialized with a single item for the AppList.
-  // When syncing, the observer is immediately notified of existing shelf items.
-  EXPECT_EQ(1, controller->model()->item_count());
-  EXPECT_EQ(1u, observer.added_count());
+  // The ShelfModel should be initialized with a two items, one for the back
+  // button and one for the AppList. When syncing, the observer is immediately
+  // notified of existing shelf items.
+  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(2u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
   // Add a ShelfModel item; |observer| should be notified when syncing.
@@ -130,31 +155,31 @@ TEST_F(ShelfControllerTest, ShelfModelChangesWithSync) {
   item.id = ShelfID("foo");
   int index = controller->model()->Add(item);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
-  EXPECT_EQ(2u, observer.added_count());
+  EXPECT_EQ(3, controller->model()->item_count());
+  EXPECT_EQ(3u, observer.added_count());
   EXPECT_EQ(0u, observer.removed_count());
 
   // Remove a ShelfModel item; |observer| should be notified when syncing.
   controller->model()->RemoveItemAt(index);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(1, controller->model()->item_count());
-  EXPECT_EQ(2u, observer.added_count());
+  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(3u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 
   // Simulate adding an item remotely; Ash should apply the change.
   // |observer| is not notified; see mojom::ShelfController for rationale.
   controller->AddShelfItem(index, item);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(2, controller->model()->item_count());
-  EXPECT_EQ(2u, observer.added_count());
+  EXPECT_EQ(3, controller->model()->item_count());
+  EXPECT_EQ(3u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 
   // Simulate removing an item remotely; Ash should apply the change.
   // |observer| is not notified; see mojom::ShelfController for rationale.
   controller->RemoveShelfItem(item.id);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(1, controller->model()->item_count());
-  EXPECT_EQ(2u, observer.added_count());
+  EXPECT_EQ(2, controller->model()->item_count());
+  EXPECT_EQ(3u, observer.added_count());
   EXPECT_EQ(1u, observer.removed_count());
 }
 
@@ -215,6 +240,53 @@ TEST_F(ShelfControllerTest, ShelfItemImageSync) {
   EXPECT_FALSE(controller->model()->items()[index].image.isNull());
 }
 
+class ShelfControllerTouchableContextMenuTest : public AshTestBase {
+ public:
+  ShelfControllerTouchableContextMenuTest() = default;
+  ~ShelfControllerTouchableContextMenuTest() override = default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(
+        app_list::features::kEnableTouchableAppContextMenu);
+    AshTestBase::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShelfControllerTouchableContextMenuTest);
+};
+
+// Tests that the ShelfController keeps the ShelfModel updated on new
+// notifications.
+TEST_F(ShelfControllerTouchableContextMenuTest, HasNotificationBasic) {
+  ShelfController* controller = Shell::Get()->shelf_controller();
+  const std::string app_id("app_id");
+  ShelfItem item;
+  item.type = TYPE_APP;
+  item.id = ShelfID(app_id);
+  const int index = controller->model()->Add(item);
+  EXPECT_FALSE(controller->model()->items()[index].has_notification);
+
+  // Add a notification for |item|.
+  message_center::MessageCenter* message_center =
+      message_center::MessageCenter::Get();
+  const std::string notification_id("notification_id");
+  BuildAndSendNotification(message_center, app_id, notification_id);
+
+  EXPECT_TRUE(controller->model()->items()[index].has_notification);
+
+  // Remove the app and pin it, the notification should persist.
+  controller->model()->RemoveItemAt(index);
+  controller->model()->PinAppWithID(app_id);
+
+  EXPECT_TRUE(controller->model()->items()[index].has_notification);
+
+  message_center->RemoveNotification(notification_id, true);
+
+  EXPECT_FALSE(controller->model()->items()[index].has_notification);
+}
+
 class ShelfControllerPrefsTest : public AshTestBase {
  public:
   ShelfControllerPrefsTest() = default;
@@ -264,6 +336,44 @@ TEST_F(ShelfControllerPrefsTest, ShelfRespectsPerDisplayPrefs) {
   EXPECT_EQ(SHELF_ALIGNMENT_RIGHT, shelf2->alignment());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf1->auto_hide_behavior());
   EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf2->auto_hide_behavior());
+}
+
+// Ensures that pre-Unified Mode per-display shelf settings don't prevent us
+// from changing the shelf settings in unified mode.
+TEST_F(ShelfControllerPrefsTest, ShelfRespectsPerDisplayPrefsUnified) {
+  UpdateDisplay("1024x768,800x600");
+
+  // Before enabling Unified Mode, set the shelf alignment for one of the two
+  // displays, so that we have a per-display shelf alignment setting.
+  ASSERT_FALSE(display_manager()->IsInUnifiedMode());
+  const int64_t non_unified_primary_id = GetPrimaryDisplay().id();
+  PrefService* prefs =
+      Shell::Get()->session_controller()->GetLastActiveUserPrefService();
+  Shelf* shelf = GetShelfForDisplay(non_unified_primary_id);
+  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  SetShelfAlignmentPref(prefs, non_unified_primary_id, SHELF_ALIGNMENT_LEFT);
+  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+
+  // Switch to Unified Mode, and expect to be able to change the shelf
+  // alignment.
+  display_manager()->SetUnifiedDesktopEnabled(true);
+  ASSERT_TRUE(display_manager()->IsInUnifiedMode());
+  const int64_t unified_id = display::kUnifiedDisplayId;
+  ASSERT_EQ(unified_id, GetPrimaryDisplay().id());
+
+  shelf = GetShelfForDisplay(unified_id);
+  EXPECT_EQ(SHELF_ALIGNMENT_BOTTOM, shelf->alignment());
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+
+  SetShelfAlignmentPref(prefs, unified_id, SHELF_ALIGNMENT_LEFT);
+  SetShelfAutoHideBehaviorPref(prefs, unified_id,
+                               SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+
+  EXPECT_EQ(SHELF_ALIGNMENT_LEFT, shelf->alignment());
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+
+  SetShelfAlignmentPref(prefs, unified_id, SHELF_ALIGNMENT_RIGHT);
+  EXPECT_EQ(SHELF_ALIGNMENT_RIGHT, shelf->alignment());
 }
 
 // Ensure shelf settings are correct after display swap, see crbug.com/748291

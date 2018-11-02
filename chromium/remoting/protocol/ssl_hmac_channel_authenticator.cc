@@ -12,7 +12,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "crypto/secure_util.h"
 #include "net/base/host_port_pair.h"
@@ -34,6 +33,7 @@
 #include "net/socket/ssl_server_socket.h"
 #include "net/ssl/ssl_config_service.h"
 #include "net/ssl/ssl_server_config.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/auth_util.h"
 #include "remoting/protocol/p2p_stream_socket.h"
@@ -93,9 +93,12 @@ class NetStreamSocketAdapter : public net::StreamSocket {
            const net::CompletionCallback& callback) override {
     return socket_->Read(buf, buf_len, callback);
   }
-  int Write(net::IOBuffer* buf, int buf_len,
-            const net::CompletionCallback& callback) override {
-    return socket_->Write(buf, buf_len, callback);
+  int Write(
+      net::IOBuffer* buf,
+      int buf_len,
+      const net::CompletionCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override {
+    return socket_->Write(buf, buf_len, callback, traffic_annotation);
   }
 
   int SetReceiveBufferSize(int32_t size) override {
@@ -155,6 +158,7 @@ class NetStreamSocketAdapter : public net::StreamSocket {
     NOTIMPLEMENTED();
     return 0;
   }
+  void ApplySocketTag(const net::SocketTag& tag) override { NOTIMPLEMENTED(); }
 
  private:
   std::unique_ptr<P2PStreamSocket> socket_;
@@ -174,9 +178,12 @@ class P2PStreamSocketAdapter : public P2PStreamSocket {
            const net::CompletionCallback& callback) override {
     return socket_->Read(buf.get(), buf_len, callback);
   }
-  int Write(const scoped_refptr<net::IOBuffer>& buf, int buf_len,
-            const net::CompletionCallback& callback) override {
-    return socket_->Write(buf.get(), buf_len, callback);
+  int Write(
+      const scoped_refptr<net::IOBuffer>& buf,
+      int buf_len,
+      const net::CompletionCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override {
+    return socket_->Write(buf.get(), buf_len, callback, traffic_annotation);
   }
 
  private:
@@ -250,7 +257,7 @@ void SslHmacChannelAuthenticator::SecureAndAuthenticate(
 
     std::unique_ptr<net::SSLServerSocket> server_socket =
         server_context_->CreateSSLServerSocket(
-            base::MakeUnique<NetStreamSocketAdapter>(std::move(socket)));
+            std::make_unique<NetStreamSocketAdapter>(std::move(socket)));
     net::SSLServerSocket* raw_server_socket = server_socket.get();
     socket_ = std::move(server_socket);
     result = raw_server_socket->Handshake(
@@ -293,7 +300,7 @@ void SslHmacChannelAuthenticator::SecureAndAuthenticate(
     std::unique_ptr<net::ClientSocketHandle> socket_handle(
         new net::ClientSocketHandle);
     socket_handle->SetSocket(
-        base::MakeUnique<NetStreamSocketAdapter>(std::move(socket)));
+        std::make_unique<NetStreamSocketAdapter>(std::move(socket)));
 
 #if defined(OS_NACL)
     // net_nacl doesn't include ClientSocketFactory.
@@ -357,11 +364,12 @@ void SslHmacChannelAuthenticator::OnConnected(int result) {
 void SslHmacChannelAuthenticator::WriteAuthenticationBytes(
     bool* callback_called) {
   while (true) {
+    // TODO(crbug.com/656607): Add proper network traffic annotation.
     int result = socket_->Write(
-        auth_write_buf_.get(),
-        auth_write_buf_->BytesRemaining(),
+        auth_write_buf_.get(), auth_write_buf_->BytesRemaining(),
         base::Bind(&SslHmacChannelAuthenticator::OnAuthBytesWritten,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        NO_TRAFFIC_ANNOTATION_BUG_656607);
     if (result == net::ERR_IO_PENDING)
       break;
     if (!HandleAuthBytesWritten(result, callback_called))
@@ -461,7 +469,7 @@ void SslHmacChannelAuthenticator::CheckDone(bool* callback_called) {
       *callback_called = true;
 
     base::ResetAndReturn(&done_callback_)
-        .Run(net::OK, base::MakeUnique<P2PStreamSocketAdapter>(
+        .Run(net::OK, std::make_unique<P2PStreamSocketAdapter>(
                           std::move(socket_), std::move(server_context_)));
   }
 }

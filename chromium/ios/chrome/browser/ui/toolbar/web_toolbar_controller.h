@@ -9,8 +9,9 @@
 
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_positioner.h"
 #include "ios/chrome/browser/ui/qr_scanner/requirements/qr_scanner_result_loading.h"
-#import "ios/chrome/browser/ui/toolbar/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/public/abstract_web_toolbar.h"
+#import "ios/chrome/browser/ui/toolbar/public/fakebox_focuser.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #include "ios/public/provider/chrome/browser/voice/voice_search_controller_delegate.h"
 #include "ios/web/public/navigation_item_list.h"
@@ -18,6 +19,7 @@
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
 @class Tab;
+@protocol ToolbarCommands;
 @protocol UrlLoader;
 @protocol WebToolbarDelegate;
 
@@ -30,12 +32,14 @@ class ChromeBrowserState;
 @interface WebToolbarController
     : ToolbarController<AbstractWebToolbar,
                         OmniboxFocuser,
+                        FakeboxFocuser,
                         QRScannerResultLoading,
                         VoiceSearchControllerDelegate>
 
 // Mark inherited initializer as unavailable.
 - (instancetype)initWithStyle:(ToolbarControllerStyle)style
-                   dispatcher:(id<BrowserCommands>)dispatcher NS_UNAVAILABLE;
+                   dispatcher:(id<BrowserCommands, ToolbarCommands>)dispatcher
+    NS_UNAVAILABLE;
 
 // Create a new web toolbar controller whose omnibox is backed by
 // |browserState|.

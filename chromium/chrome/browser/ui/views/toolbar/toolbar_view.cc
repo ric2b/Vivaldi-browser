@@ -102,14 +102,7 @@ const char ToolbarView::kViewClassName[] = "ToolbarView";
 // ToolbarView, public:
 
 ToolbarView::ToolbarView(Browser* browser)
-    : back_(nullptr),
-      forward_(nullptr),
-      reload_(nullptr),
-      home_(nullptr),
-      location_bar_(nullptr),
-      browser_actions_(nullptr),
-      app_menu_button_(nullptr),
-      browser_(browser),
+    : browser_(browser),
       app_menu_icon_controller_(browser->profile(), this),
       display_mode_(browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP)
                         ? DISPLAYMODE_NORMAL
@@ -128,9 +121,11 @@ ToolbarView::ToolbarView(Browser* browser)
 ToolbarView::~ToolbarView() {
   UpgradeDetector::GetInstance()->RemoveObserver(this);
 
-  // NOTE: Don't remove the command observers here.  This object gets destroyed
-  // after the Browser (which owns the CommandUpdater), so the CommandUpdater is
-  // already gone.
+  chrome::RemoveCommandObserver(browser_, IDC_BACK, this);
+  chrome::RemoveCommandObserver(browser_, IDC_FORWARD, this);
+  chrome::RemoveCommandObserver(browser_, IDC_RELOAD, this);
+  chrome::RemoveCommandObserver(browser_, IDC_HOME, this);
+  chrome::RemoveCommandObserver(browser_, IDC_LOAD_NEW_TAB_PAGE, this);
 }
 
 void ToolbarView::Init() {
@@ -146,7 +141,8 @@ void ToolbarView::Init() {
 
   back_ = new ToolbarButton(
       browser_->profile(), this,
-      new BackForwardMenuModel(browser_, BackForwardMenuModel::BACKWARD_MENU));
+      std::make_unique<BackForwardMenuModel>(
+          browser_, BackForwardMenuModel::ModelType::kBackward));
   back_->set_hide_ink_drop_when_showing_context_menu(false);
   back_->set_triggerable_event_flags(
       ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON);
@@ -158,7 +154,8 @@ void ToolbarView::Init() {
 
   forward_ = new ToolbarButton(
       browser_->profile(), this,
-      new BackForwardMenuModel(browser_, BackForwardMenuModel::FORWARD_MENU));
+      std::make_unique<BackForwardMenuModel>(
+          browser_, BackForwardMenuModel::ModelType::kForward));
   forward_->set_hide_ink_drop_when_showing_context_menu(false);
   forward_->set_triggerable_event_flags(
       ui::EF_LEFT_MOUSE_BUTTON | ui::EF_MIDDLE_MOUSE_BUTTON);
@@ -188,7 +185,7 @@ void ToolbarView::Init() {
 
   browser_actions_ = new BrowserActionsContainer(
       browser_,
-      NULL);  // No master container for this one (it is master).
+      nullptr);  // No master container for this one (it is master).
 
   app_menu_button_ = new AppMenuButton(this);
   app_menu_button_->EnableCanvasFlippingForRTLUI(true);
@@ -300,8 +297,10 @@ void ToolbarView::ShowBookmarkBubble(
   views::Widget* bubble_widget = BookmarkBubbleView::ShowBubble(
       anchor_view, gfx::Rect(), nullptr, observer, std::move(delegate),
       browser_->profile(), url, already_bookmarked);
-  if (bubble_widget && star_view)
+  if (bubble_widget && star_view) {
+    star_view->SetHighlighted();
     bubble_widget->AddObserver(star_view);
+  }
 }
 
 void ToolbarView::ShowTranslateBubble(
@@ -343,11 +342,6 @@ bool ToolbarView::SetPaneFocus(views::View* initial_focus) {
 
   location_bar_->SetShowFocusRect(true);
   return true;
-}
-
-void ToolbarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_TOOLBAR;
-  node_data->SetName(l10n_util::GetStringUTF8(IDS_ACCNAME_TOOLBAR));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -392,7 +386,7 @@ ToolbarView::GetContentSettingBubbleModelDelegate() {
 // ToolbarView, CommandObserver implementation:
 
 void ToolbarView::EnabledStateChangedForCommand(int id, bool enabled) {
-  views::Button* button = NULL;
+  views::Button* button = nullptr;
   switch (id) {
     case IDC_BACK:
       button = back_;
@@ -464,11 +458,11 @@ void ToolbarView::Layout() {
     return;
   }
 
-  // We assume all child elements except the location bar are the same height.
-  // Set child_y such that buttons appear vertically centered.
-  const int child_height =
+  // We assume all toolbar buttons except for the browser actions are the same
+  // height. Set toolbar_button_y such that buttons appear vertically centered.
+  const int toolbar_button_height =
       std::min(back_->GetPreferredSize().height(), height());
-  const int child_y = (height() - child_height) / 2;
+  const int toolbar_button_y = (height() - toolbar_button_height) / 2;
 
   // If the window is maximized, we extend the back button to the left so that
   // clicking on the left-most pixel will activate the back button.
@@ -482,28 +476,31 @@ void ToolbarView::Layout() {
   // The padding at either end of the toolbar.
   const int end_padding = GetToolbarHorizontalPadding();
   back_->SetLeadingMargin(maximized ? end_padding : 0);
-  back_->SetBounds(maximized ? 0 : end_padding, child_y,
-                   back_->GetPreferredSize().width(), child_height);
+  back_->SetBounds(maximized ? 0 : end_padding, toolbar_button_y,
+                   back_->GetPreferredSize().width(), toolbar_button_height);
   const int element_padding = GetLayoutConstant(TOOLBAR_ELEMENT_PADDING);
   int next_element_x = back_->bounds().right() + element_padding;
 
-  forward_->SetBounds(next_element_x, child_y,
-                      forward_->GetPreferredSize().width(), child_height);
+  forward_->SetBounds(next_element_x, toolbar_button_y,
+                      forward_->GetPreferredSize().width(),
+                      toolbar_button_height);
   next_element_x = forward_->bounds().right() + element_padding;
 
-  reload_->SetBounds(next_element_x, child_y,
-                     reload_->GetPreferredSize().width(), child_height);
+  reload_->SetBounds(next_element_x, toolbar_button_y,
+                     reload_->GetPreferredSize().width(),
+                     toolbar_button_height);
   next_element_x = reload_->bounds().right();
 
   if (show_home_button_.GetValue() ||
       (browser_->is_app() && extensions::util::IsNewBookmarkAppsEnabled())) {
     next_element_x += element_padding;
     home_->SetVisible(true);
-    home_->SetBounds(next_element_x, child_y,
-                     home_->GetPreferredSize().width(), child_height);
+    home_->SetBounds(next_element_x, toolbar_button_y,
+                     home_->GetPreferredSize().width(), toolbar_button_height);
   } else {
     home_->SetVisible(false);
-    home_->SetBounds(next_element_x, child_y, 0, child_height);
+    home_->SetBounds(next_element_x, toolbar_button_y, 0,
+                     toolbar_button_height);
   }
   next_element_x =
       home_->bounds().right() + GetLayoutConstant(TOOLBAR_STANDARD_SPACING);
@@ -534,8 +531,13 @@ void ToolbarView::Layout() {
                            location_bar_width, location_height);
 
   next_element_x = location_bar_->bounds().right();
-  browser_actions_->SetBounds(
-      next_element_x, child_y, browser_actions_width, child_height);
+
+  // Note height() may be zero in fullscreen.
+  const int browser_actions_height =
+      std::min(browser_actions_->GetPreferredSize().height(), height());
+  const int browser_actions_y = (height() - browser_actions_height) / 2;
+  browser_actions_->SetBounds(next_element_x, browser_actions_y,
+                              browser_actions_width, browser_actions_height);
   next_element_x = browser_actions_->bounds().right();
   if (!browser_actions_width)
     next_element_x += right_padding;
@@ -553,8 +555,8 @@ void ToolbarView::Layout() {
   // we extend the back button to the left edge.
   if (maximized)
     app_menu_width += end_padding;
-  app_menu_button_->SetBounds(next_element_x, child_y, app_menu_width,
-                              child_height);
+  app_menu_button_->SetBounds(next_element_x, toolbar_button_y, app_menu_width,
+                              toolbar_button_height);
   app_menu_button_->SetTrailingMargin(maximized ? end_padding : 0);
 }
 

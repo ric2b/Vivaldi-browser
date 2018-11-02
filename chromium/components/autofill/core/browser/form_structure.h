@@ -274,8 +274,8 @@ class FormStructure {
   // Classifies each field in |fields_| into a logical section.
   // Sections are identified by the heuristic that a logical section should not
   // include multiple fields of the same autofill type (with some exceptions, as
-  // described in the implementation).  Sections are furthermore distinguished
-  // as either credit card or non-credit card sections.
+  // described in the implementation). Credit card fields also, have a single
+  // separate section from address fields.
   // If |has_author_specified_sections| is true, only the second pass --
   // distinguishing credit card sections from non-credit card ones -- is made.
   void IdentifySections(bool has_author_specified_sections);
@@ -343,7 +343,10 @@ class FormStructure {
   // True if the form is a <form>.
   bool is_form_tag_;
 
-  // True if the form is made of unowned fields in a non checkout flow.
+  // True if the form is made of unowned fields (i.e., not within a <form> tag)
+  // in what appears to be a checkout flow. This attribute is only calculated
+  // and used if features::kAutofillRestrictUnownedFieldsToFormlessCheckout is
+  // enabled, to prevent heuristics from running on formless non-checkout.
   bool is_formless_checkout_;
 
   // True if all form fields are password fields.

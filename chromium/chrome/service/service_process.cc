@@ -148,13 +148,12 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
 #if defined(USE_GLIB)
   // g_type_init has been deprecated since version 2.35.
 #if !GLIB_CHECK_VERSION(2, 35, 0)
-  // GLib type system initialization is needed for gconf.
+  // Unclear if still needed, but harmless so keeping.
   g_type_init();
 #endif
-#endif  // defined(OS_LINUX) || defined(OS_OPENBSD)
+#endif  // defined(USE_GLIB)
   main_message_loop_ = message_loop;
   service_process_state_.reset(state);
-  network_change_notifier_.reset(net::NetworkChangeNotifier::Create());
 
   // Initialize TaskScheduler and redirect SequencedWorkerPool tasks to it.
   constexpr int kMaxBackgroundThreads = 1;
@@ -173,6 +172,10 @@ bool ServiceProcess::Initialize(base::MessageLoopForUI* message_loop,
         base::SchedulerBackwardCompatibility::INIT_COM_STA}});
 
   base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
+
+  // The NetworkChangeNotifier must be created after TaskScheduler because it
+  // posts tasks to it.
+  network_change_notifier_.reset(net::NetworkChangeNotifier::Create());
 
   // Initialize the IO and FILE threads.
   base::Thread::Options options;

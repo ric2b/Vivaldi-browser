@@ -27,6 +27,7 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptController.h"
+#include "common/net/ip_address_space.mojom-blink.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
@@ -49,6 +50,7 @@
 #include "core/loader/PingLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkletGlobalScope.h"
 #include "platform/json/JSONValues.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -69,7 +71,6 @@
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
-#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -173,8 +174,9 @@ void ContentSecurityPolicy::SetupSelf(const SecurityOrigin& security_origin) {
 void ContentSecurityPolicy::ApplyPolicySideEffectsToExecutionContext() {
   DCHECK(execution_context_ &&
          execution_context_->GetSecurityContext().GetSecurityOrigin());
+  SecurityContext& security_context = execution_context_->GetSecurityContext();
 
-  SetupSelf(*execution_context_->GetSecurityContext().GetSecurityOrigin());
+  SetupSelf(*security_context.GetSecurityOrigin());
 
   // Set mixed content checking and sandbox flags, then dump all the parsing
   // error messages, then poke at histograms.
@@ -184,28 +186,29 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToExecutionContext() {
     if (document)
       document->EnforceSandboxFlags(sandbox_mask_);
     else
-      execution_context_->GetSecurityContext().ApplySandboxFlags(sandbox_mask_);
+      security_context.ApplySandboxFlags(sandbox_mask_);
   }
   if (treat_as_public_address_) {
-    execution_context_->GetSecurityContext().SetAddressSpace(
-        kWebAddressSpacePublic);
+    security_context.SetAddressSpace(mojom::IPAddressSpace::kPublic);
   }
   if (require_safe_types_)
-    execution_context_->GetSecurityContext().SetRequireTrustedTypes();
+    security_context.SetRequireTrustedTypes();
 
-  if (document) {
-    document->EnforceInsecureRequestPolicy(insecure_request_policy_);
-  } else {
-    execution_context_->GetSecurityContext().SetInsecureRequestPolicy(
-        insecure_request_policy_);
-  }
+  // Upgrade Insecure Requests: Update the policy.
+  security_context.SetInsecureRequestPolicy(
+      security_context.GetInsecureRequestPolicy() | insecure_request_policy_);
+  if (document)
+    document->DidEnforceInsecureRequestPolicy();
 
+  // Upgrade Insecure Requests: Update the set of insecure URLs to upgrade.
   if (insecure_request_policy_ & kUpgradeInsecureRequests) {
     UseCounter::Count(execution_context_,
                       WebFeature::kUpgradeInsecureRequestsEnabled);
     if (!execution_context_->Url().Host().IsEmpty()) {
-      execution_context_->GetSecurityContext().AddInsecureNavigationUpgrade(
-          execution_context_->Url().Host().Impl()->GetHash());
+      uint32_t hash = execution_context_->Url().Host().Impl()->GetHash();
+      security_context.AddInsecureNavigationUpgrade(hash);
+      if (document)
+        document->DidEnforceInsecureNavigationsSet();
     }
   }
 
@@ -232,7 +235,7 @@ void ContentSecurityPolicy::ApplyPolicySideEffectsToExecutionContext() {
     execution_context_->DisableEval(disable_eval_error_message_);
 }
 
-ContentSecurityPolicy::~ContentSecurityPolicy() {}
+ContentSecurityPolicy::~ContentSecurityPolicy() = default;
 
 void ContentSecurityPolicy::Trace(blink::Visitor* visitor) {
   visitor->Trace(execution_context_);
@@ -294,7 +297,7 @@ void ContentSecurityPolicy::DidReceiveHeader(
 
 bool ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
     const ResourceResponse& response,
-    SecurityOrigin* parent_origin) {
+    const SecurityOrigin* parent_origin) {
   if (response.Url().IsEmpty() || response.Url().ProtocolIsAbout() ||
       response.Url().ProtocolIsData() || response.Url().ProtocolIs("blob") ||
       response.Url().ProtocolIs("filesystem")) {
@@ -308,7 +311,7 @@ bool ContentSecurityPolicy::ShouldEnforceEmbeddersPolicy(
   header = header.StripWhiteSpace();
   if (header == "*")
     return true;
-  if (scoped_refptr<SecurityOrigin> child_origin =
+  if (scoped_refptr<const SecurityOrigin> child_origin =
           SecurityOrigin::CreateFromString(header)) {
     return parent_origin->CanAccess(child_origin.get());
   }
@@ -412,7 +415,7 @@ void ContentSecurityPolicy::SetOverrideURLForSelf(const KURL& url) {
   // before we bind to an execution context (for 'frame-ancestor' resolution,
   // for example). This CSPSource will be overwritten when we bind this object
   // to an execution context.
-  scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(url);
+  scoped_refptr<const SecurityOrigin> origin = SecurityOrigin::Create(url);
   self_protocol_ = origin->Protocol();
   self_source_ =
       new CSPSource(this, self_protocol_, origin->Host(), origin->Port(),
@@ -753,6 +756,9 @@ bool ContentSecurityPolicy::AllowRequest(
     case WebURLRequest::kRequestContextObject:
       return AllowObjectFromSource(url, redirect_status, reporting_policy,
                                    check_header_type);
+    case WebURLRequest::kRequestContextPrefetch:
+      return AllowPrefetchFromSource(url, redirect_status, reporting_policy,
+                                     check_header_type);
     case WebURLRequest::kRequestContextFavicon:
     case WebURLRequest::kRequestContextImage:
     case WebURLRequest::kRequestContextImageSet:
@@ -791,7 +797,6 @@ bool ContentSecurityPolicy::AllowRequest(
     case WebURLRequest::kRequestContextInternal:
     case WebURLRequest::kRequestContextLocation:
     case WebURLRequest::kRequestContextPlugin:
-    case WebURLRequest::kRequestContextPrefetch:
     case WebURLRequest::kRequestContextUnspecified:
       return true;
   }
@@ -821,6 +826,25 @@ bool ContentSecurityPolicy::AllowObjectFromSource(
       continue;
     is_allowed &=
         policy->AllowObjectFromSource(url, redirect_status, reporting_policy);
+  }
+
+  return is_allowed;
+}
+
+bool ContentSecurityPolicy::AllowPrefetchFromSource(
+    const KURL& url,
+    RedirectStatus redirect_status,
+    SecurityViolationReportingPolicy reporting_policy,
+    CheckHeaderType check_header_type) const {
+  if (ShouldBypassContentSecurityPolicy(url, execution_context_))
+    return true;
+
+  bool is_allowed = true;
+  for (const auto& policy : policies_) {
+    if (!CheckHeaderTypeMatches(check_header_type, policy->HeaderType()))
+      continue;
+    is_allowed &=
+        policy->AllowPrefetchFromSource(url, redirect_status, reporting_policy);
   }
 
   return is_allowed;
@@ -1076,6 +1100,14 @@ bool ContentSecurityPolicy::IsActive() const {
   return !policies_.IsEmpty();
 }
 
+bool ContentSecurityPolicy::IsActiveForConnections() const {
+  for (const auto& policy : policies_) {
+    if (policy->IsActiveForConnections())
+      return true;
+  }
+  return false;
+}
+
 const KURL ContentSecurityPolicy::Url() const {
   return execution_context_->Url();
 }
@@ -1273,7 +1305,7 @@ void ContentSecurityPolicy::ReportViolation(
   // we're not processing 'frame-ancestors').
   if (execution_context_) {
     execution_context_->GetTaskRunner(TaskType::kNetworking)
-        ->PostTask(BLINK_FROM_HERE,
+        ->PostTask(FROM_HERE,
                    WTF::Bind(&ContentSecurityPolicy::DispatchViolationEvents,
                              WrapPersistent(this), violation_data,
                              WrapPersistent(element)));
@@ -1384,6 +1416,10 @@ void ContentSecurityPolicy::DispatchViolationEvents(
   if (!queue)
     return;
 
+  // Worklets don't support Events in general.
+  if (execution_context_->IsWorkletGlobalScope())
+    return;
+
   SecurityPolicyViolationEvent* event = SecurityPolicyViolationEvent::Create(
       EventTypeNames::securitypolicyviolation, violation_data);
   DCHECK(event->bubbles());
@@ -1397,7 +1433,7 @@ void ContentSecurityPolicy::DispatchViolationEvents(
   } else if (execution_context_->IsWorkerGlobalScope()) {
     event->SetTarget(ToWorkerGlobalScope(execution_context_));
   }
-  queue->EnqueueEvent(BLINK_FROM_HERE, event);
+  queue->EnqueueEvent(FROM_HERE, event);
 }
 
 void ContentSecurityPolicy::ReportMixedContent(const KURL& mixed_url,
@@ -1673,6 +1709,8 @@ const char* ContentSecurityPolicy::GetDirectiveName(const DirectiveType& type) {
       return "media-src";
     case DirectiveType::kObjectSrc:
       return "object-src";
+    case DirectiveType::kPrefetchSrc:
+      return "prefetch-src";
     case DirectiveType::kPluginTypes:
       return "plugin-types";
     case DirectiveType::kReportURI:
@@ -1734,6 +1772,8 @@ ContentSecurityPolicy::DirectiveType ContentSecurityPolicy::GetDirectiveType(
     return DirectiveType::kObjectSrc;
   if (name == "plugin-types")
     return DirectiveType::kPluginTypes;
+  if (name == "prefetch-src")
+    return DirectiveType::kPrefetchSrc;
   if (name == "report-uri")
     return DirectiveType::kReportURI;
   if (name == "require-sri-for")
@@ -1799,6 +1839,10 @@ bool ContentSecurityPolicy::ShouldBypassContentSecurityPolicy(
 
 // static
 bool ContentSecurityPolicy::IsValidCSPAttr(const String& attr) {
+  // we don't allow any newline characters in the CSP attributes
+  if (attr.Contains('\n') || attr.Contains('\r'))
+    return false;
+
   ContentSecurityPolicy* policy = ContentSecurityPolicy::Create();
   policy->AddPolicyFromHeaderValue(attr,
                                    kContentSecurityPolicyHeaderTypeEnforce,

@@ -15,9 +15,9 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "content/browser/media/media_devices_permission_checker.h"
 #include "content/browser/renderer_host/media/in_process_video_capture_provider.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
@@ -52,9 +52,7 @@ const char kNormalVideoDeviceID[] = "/dev/video0";
 const char kNoFormatsVideoDeviceID[] = "/dev/video1";
 const char kZeroResolutionVideoDeviceID[] = "/dev/video2";
 const char* const kDefaultVideoDeviceID = kZeroResolutionVideoDeviceID;
-const char kUserDefaultAudioInputDeviceID[] = "fake_audio_input_2";
-const char kSystemDefaultAudioInputLabel[] = "Fake Audio Input 1";
-const char kSystemDefaultAudioOutputLabel[] = "Fake Audio Output 1";
+const char kDefaultAudioDeviceID[] = "fake_audio_input_2";
 
 const auto kIgnoreLogMessageCB = base::BindRepeating([](const std::string&) {});
 
@@ -95,8 +93,7 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
         switches::kUseFakeDeviceForMediaStream,
         base::StringPrintf("video-input-default-id=%s, "
                            "audio-input-default-id=%s",
-                           kDefaultVideoDeviceID,
-                           kUserDefaultAudioInputDeviceID));
+                           kDefaultVideoDeviceID, kDefaultAudioDeviceID));
     audio_manager_ = std::make_unique<media::MockAudioManager>(
         std::make_unique<media::TestAudioThread>());
     audio_system_ =
@@ -202,7 +199,7 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
     EXPECT_EQ(kNumExpectedEntries, capabilities.size());
     std::string expected_first_device_id =
         GetHMACForMediaDeviceID(browser_context_->GetMediaDeviceIDSalt(),
-                                origin_, kUserDefaultAudioInputDeviceID);
+                                origin_, kDefaultAudioDeviceID);
     EXPECT_EQ(expected_first_device_id, capabilities[0]->device_id);
     for (const auto& capability : capabilities)
       EXPECT_TRUE(capability->parameters.IsValid());
@@ -244,8 +241,9 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
                                         bool enumerate_video_input,
                                         bool enumerate_audio_output,
                                         bool permission_override_value = true) {
-    host_->SetPermissionChecker(std::make_unique<MediaDevicesPermissionChecker>(
-        permission_override_value));
+    media_stream_manager_->media_devices_manager()->SetPermissionChecker(
+        std::make_unique<MediaDevicesPermissionChecker>(
+            permission_override_value));
     base::RunLoop run_loop;
     host_->EnumerateDevices(
         enumerate_audio_input, enumerate_video_input, enumerate_audio_output,
@@ -308,15 +306,8 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
   }
 
   // Returns true if all devices have labels, false otherwise.
-  bool DoesContainLabels(
-      const MediaDeviceInfoArray& device_infos,
-      const std::string& system_default_label = std::string()) {
+  bool DoesContainLabels(const MediaDeviceInfoArray& device_infos) {
     for (const auto& device_info : device_infos) {
-      if (media::AudioDeviceDescription::IsDefaultDevice(
-              device_info.device_id)) {
-        EXPECT_TRUE(base::EndsWith(device_info.label, system_default_label,
-                                   base::CompareCase::SENSITIVE));
-      }
       if (device_info.label.empty())
         return false;
     }
@@ -325,13 +316,8 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
 
   // Returns true if all devices have labels, false otherwise.
   bool DoesContainLabels(const std::vector<MediaDeviceInfoArray>& enumeration) {
-    for (int i = 0; i < NUM_MEDIA_DEVICE_TYPES; i++) {
-      std::string default_label;
-      if (i == MEDIA_DEVICE_TYPE_AUDIO_INPUT)
-        default_label = kSystemDefaultAudioInputLabel;
-      else if (i == MEDIA_DEVICE_TYPE_AUDIO_OUTPUT)
-        default_label = kSystemDefaultAudioOutputLabel;
-      if (!DoesContainLabels(enumeration[i], default_label))
+    for (const auto& device_infos : enumeration) {
+      if (!DoesContainLabels(device_infos))
         return false;
     }
     return true;
@@ -357,7 +343,7 @@ class MediaDevicesDispatcherHostTest : public testing::TestWithParam<GURL> {
   }
 
   void SubscribeAndWaitForResult(bool has_permission) {
-    host_->SetPermissionChecker(
+    media_stream_manager_->media_devices_manager()->SetPermissionChecker(
         std::make_unique<MediaDevicesPermissionChecker>(has_permission));
     uint32_t subscription_id = 0u;
     for (size_t i = 0; i < NUM_MEDIA_DEVICE_TYPES; ++i) {

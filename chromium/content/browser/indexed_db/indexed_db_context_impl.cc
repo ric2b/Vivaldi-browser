@@ -36,6 +36,7 @@
 #include "content/public/common/content_switches.h"
 #include "storage/browser/database/database_util.h"
 #include "storage/common/database/database_identifier.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "ui/base/text/bytes_formatting.h"
 #include "url/origin.h"
 
@@ -259,9 +260,9 @@ base::ListValue* IndexedDBContextImpl::GetAllOriginsDetails() {
           std::unique_ptr<base::ListValue> scope(
               std::make_unique<base::ListValue>());
           for (const auto& id : transaction->scope()) {
-            const auto& it = db->metadata().object_stores.find(id);
-            if (it != db->metadata().object_stores.end())
-              scope->AppendString(it->second.name);
+            const auto& stores_it = db->metadata().object_stores.find(id);
+            if (stores_it != db->metadata().object_stores.end())
+              scope->AppendString(stores_it->second.name);
           }
 
           transaction_info->Set("scope", std::move(scope));
@@ -444,7 +445,7 @@ void IndexedDBContextImpl::ConnectionOpened(const Origin& origin,
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
   quota_manager_proxy()->NotifyStorageAccessed(
       storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
-      storage::kStorageTypeTemporary);
+      blink::mojom::StorageType::kTemporary);
   if (AddToOriginSet(origin)) {
     // A newly created db, notify the quota system.
     QueryDiskAndUpdateQuotaUsage(origin);
@@ -458,7 +459,7 @@ void IndexedDBContextImpl::ConnectionClosed(const Origin& origin,
   DCHECK(TaskRunner()->RunsTasksInCurrentSequence());
   quota_manager_proxy()->NotifyStorageAccessed(
       storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
-      storage::kStorageTypeTemporary);
+      blink::mojom::StorageType::kTemporary);
   if (factory_.get() && factory_->GetConnectionCount(origin) == 0)
     QueryDiskAndUpdateQuotaUsage(origin);
 }
@@ -583,7 +584,7 @@ void IndexedDBContextImpl::QueryDiskAndUpdateQuotaUsage(const Origin& origin) {
     origin_size_map_[origin] = current_disk_usage;
     quota_manager_proxy()->NotifyStorageModified(
         storage::QuotaClient::kIndexedDatabase, origin.GetURL(),
-        storage::kStorageTypeTemporary, difference);
+        blink::mojom::StorageType::kTemporary, difference);
     NotifyIndexedDBListChanged(origin);
   }
 }

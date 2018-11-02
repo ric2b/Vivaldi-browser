@@ -8,13 +8,19 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
+#include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/offline_pages/offline_page_request_job.h"
+#include "chrome/browser/offline_pages/offline_page_utils.h"
 #include "chrome/browser/offline_pages/prefetch/prefetch_service_factory.h"
 #include "chrome/browser/offline_pages/request_coordinator_factory.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
 #include "components/offline_pages/core/offline_page_item.h"
+#include "components/offline_pages/core/offline_page_model.h"
+#include "components/offline_pages/core/offline_store_utils.h"
 #include "components/offline_pages/core/prefetch/offline_metrics_collector.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
+#include "components/offline_pages/core/request_header/offline_page_header.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -27,14 +33,29 @@ DEFINE_WEB_CONTENTS_USER_DATA_KEY(offline_pages::OfflinePageTabHelper);
 
 namespace offline_pages {
 
+namespace {
+bool SchemeIsForUntrustedOfflinePages(const GURL& url) {
+#if defined(OS_ANDROID)
+  if (url.SchemeIs(url::kContentScheme))
+    return true;
+#endif
+  return url.SchemeIsFile();
+}
+
+void SavePageLaterCallback(AddRequestResult result) {
+  // do nothing.
+}
+}  // namespace
+
 OfflinePageTabHelper::LoadedOfflinePageInfo::LoadedOfflinePageInfo()
-    : is_showing_offline_preview(false) {}
+    : is_trusted(false), is_showing_offline_preview(false) {}
 
 OfflinePageTabHelper::LoadedOfflinePageInfo::~LoadedOfflinePageInfo() {}
 
 void OfflinePageTabHelper::LoadedOfflinePageInfo::Clear() {
   offline_page.reset();
   offline_header.Clear();
+  is_trusted = false;
   is_showing_offline_preview = false;
 }
 
@@ -87,52 +108,111 @@ void OfflinePageTabHelper::DidFinishNavigation(
   if (navigation_handle->IsSameDocument())
     return;
 
-  GURL navigated_url = navigation_handle->GetURL();
-  if (navigation_handle->IsErrorPage()) {
-    offline_info_.Clear();
-  } else {
-    // The provisional offline info can now be committed if the navigation is
-    // done without error.
-    DCHECK(!provisional_offline_info_.offline_page ||
-           OfflinePageUtils::EqualsIgnoringFragment(
-               navigated_url,
-               provisional_offline_info_.offline_page->url));
-    offline_info_.offline_page =
-        std::move(provisional_offline_info_.offline_page);
-    offline_info_.offline_header = provisional_offline_info_.offline_header;
-    offline_info_.is_showing_offline_preview =
-        provisional_offline_info_.is_showing_offline_preview;
-
-    // Report prefetch usage to OfflineMetricsCollector.
-    if (offline_info_.offline_page &&
-        policy_controller_.IsSuggested(
-            offline_info_.offline_page->client_id.name_space)) {
-      prefetch_service_->GetOfflineMetricsCollector()->OnPrefetchedPageOpened();
-    }
-  }
+  FinalizeOfflineInfo(navigation_handle);
   provisional_offline_info_.Clear();
+
+  ReportPrefetchMetrics(navigation_handle);
+
+  TryLoadingOfflinePageOnNetError(navigation_handle);
+}
+
+void OfflinePageTabHelper::FinalizeOfflineInfo(
+    content::NavigationHandle* navigation_handle) {
+  offline_info_.Clear();
+
+  if (navigation_handle->IsErrorPage())
+    return;
+
+  GURL navigated_url = navigation_handle->GetURL();
+
+  // If a MHTML archive is being loaded for file: or content: URL, create an
+  // untrusted offline page.
+  content::WebContents* web_contents = navigation_handle->GetWebContents();
+  if (SchemeIsForUntrustedOfflinePages(navigated_url) &&
+      web_contents->GetContentsMimeType() == "multipart/related") {
+    offline_info_.offline_page = std::make_unique<OfflinePageItem>();
+    offline_info_.offline_page->offline_id = store_utils::GenerateOfflineId();
+    offline_info_.is_trusted = false;
+    // TODO(jianli): Extract the url where the MHTML acrhive claims from the
+    // MHTML headers and set it in OfflinePageItem::original_url.
+
+    // If the file: or content: URL is launched due to opening an item from
+    // Downloads home, a custom offline header containing the offline ID should
+    // be present. If so, find and use the corresponding offline page.
+    content::NavigationEntry* entry =
+        web_contents->GetController().GetLastCommittedEntry();
+    DCHECK(entry);
+    std::string header_value =
+        OfflinePageUtils::ExtractOfflineHeaderValueFromNavigationEntry(*entry);
+    if (!header_value.empty()) {
+      OfflinePageHeader header(header_value);
+      if (header.reason == OfflinePageHeader::Reason::DOWNLOAD &&
+          !header.id.empty()) {
+        int64_t offline_id;
+        if (base::StringToInt64(header.id, &offline_id)) {
+          offline_info_.offline_page->offline_id = offline_id;
+          OfflinePageModel* model =
+              OfflinePageModelFactory::GetForBrowserContext(
+                  web_contents->GetBrowserContext());
+          DCHECK(model);
+          model->GetPageByOfflineId(
+              offline_id,
+              base::Bind(&OfflinePageTabHelper::GetPageByOfflineIdDone,
+                         weak_ptr_factory_.GetWeakPtr()));
+        }
+      }
+    }
+
+    return;
+  }
+
+  // For http/https URL,commit the provisional offline info if any.
+  if (!navigated_url.SchemeIsHTTPOrHTTPS() ||
+      !provisional_offline_info_.offline_page) {
+    return;
+  }
+
+  DCHECK(OfflinePageUtils::EqualsIgnoringFragment(
+      navigated_url, provisional_offline_info_.offline_page->url));
+  offline_info_.offline_page =
+      std::move(provisional_offline_info_.offline_page);
+  offline_info_.offline_header = provisional_offline_info_.offline_header;
+  offline_info_.is_trusted = provisional_offline_info_.is_trusted;
+  offline_info_.is_showing_offline_preview =
+      provisional_offline_info_.is_showing_offline_preview;
+}
+
+void OfflinePageTabHelper::ReportPrefetchMetrics(
+    content::NavigationHandle* navigation_handle) {
+  if (navigation_handle->IsErrorPage())
+    return;
+
+  if (!prefetch_service_)
+    return;
 
   // Report the kind of navigation (online/offline) to metrics collector.
   // It accumulates this info to mark a day as 'offline' or 'online'.
-  if (!navigation_handle->IsErrorPage()) {
-    if (prefetch_service_) {
-      OfflineMetricsCollector* metrics_collector =
-          prefetch_service_->GetOfflineMetricsCollector();
-      DCHECK(metrics_collector);
+  OfflineMetricsCollector* metrics_collector =
+      prefetch_service_->GetOfflineMetricsCollector();
+  DCHECK(metrics_collector);
 
-      if (offline_page()) {
-        // Note that navigation to offline page may happen even if network is
-        // connected. For the purposes of collecting offline usage statistics,
-        // we still count this as offline navigation.
-        metrics_collector->OnSuccessfulNavigationOffline();
-      } else {
-        metrics_collector->OnSuccessfulNavigationOnline();
-        // The device is apparently online, attempt to report stats to UMA.
-        metrics_collector->ReportAccumulatedStats();
-      }
-    }
+  if (offline_page()) {
+    // Report prefetch usage.
+    if (policy_controller_.IsSuggested(offline_page()->client_id.name_space))
+      metrics_collector->OnPrefetchedPageOpened();
+    // Note that navigation to offline page may happen even if network is
+    // connected. For the purposes of collecting offline usage statistics,
+    // we still count this as offline navigation.
+    metrics_collector->OnSuccessfulNavigationOffline();
+  } else {
+    metrics_collector->OnSuccessfulNavigationOnline();
+    // The device is apparently online, attempt to report stats to UMA.
+    metrics_collector->ReportAccumulatedStats();
   }
+}
 
+void OfflinePageTabHelper::TryLoadingOfflinePageOnNetError(
+    content::NavigationHandle* navigation_handle) {
   // If the offline page has been loaded successfully, nothing more to do.
   net::Error error_code = navigation_handle->GetNetErrorCode();
   if (error_code == net::OK)
@@ -173,17 +253,17 @@ void OfflinePageTabHelper::DidFinishNavigation(
     return;
   }
 
-  OfflinePageUtils::SelectPageForURL(
-      web_contents()->GetBrowserContext(), navigated_url,
+  OfflinePageUtils::SelectPagesForURL(
+      web_contents()->GetBrowserContext(), navigation_handle->GetURL(),
       URLSearchMode::SEARCH_BY_ALL_URLS, tab_id,
-      base::Bind(&OfflinePageTabHelper::SelectPageForURLDone,
+      base::Bind(&OfflinePageTabHelper::SelectPagesForURLDone,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void OfflinePageTabHelper::SelectPageForURLDone(
-    const OfflinePageItem* offline_page) {
+void OfflinePageTabHelper::SelectPagesForURLDone(
+    const std::vector<OfflinePageItem>& offline_pages) {
   // Bails out if no offline page is found.
-  if (!offline_page) {
+  if (offline_pages.empty()) {
     OfflinePageRequestJob::ReportAggregatedRequestResult(
         OfflinePageRequestJob::AggregatedRequestResult::
             PAGE_NOT_FOUND_ON_FLAKY_NETWORK);
@@ -193,7 +273,8 @@ void OfflinePageTabHelper::SelectPageForURLDone(
   reloading_url_on_net_error_ = true;
 
   // Reloads the page with extra header set to force loading the offline page.
-  content::NavigationController::LoadURLParams load_params(offline_page->url);
+  content::NavigationController::LoadURLParams load_params(
+      offline_pages.front().url);
   load_params.transition_type = ui::PAGE_TRANSITION_RELOAD;
   OfflinePageHeader offline_header;
   offline_header.reason = OfflinePageHeader::Reason::NET_ERROR;
@@ -201,27 +282,50 @@ void OfflinePageTabHelper::SelectPageForURLDone(
   web_contents()->GetController().LoadURLWithParams(load_params);
 }
 
+void OfflinePageTabHelper::GetPageByOfflineIdDone(
+    const OfflinePageItem* offline_page) {
+  if (!offline_page)
+    return;
+
+  // Update the temporary offline page which only contains the offline ID with
+  // the one retrieved from the metadata database. Do this only when the stored
+  // offline info is not changed since last time the asynchronous query is
+  // issued.
+  if (offline_info_.offline_page && !offline_info_.is_trusted &&
+      offline_info_.offline_page->offline_id == offline_page->offline_id) {
+    offline_info_.offline_page =
+        base::MakeUnique<OfflinePageItem>(*offline_page);
+  }
+}
+
 // This is a callback from network request interceptor. It happens between
 // DidStartNavigation and DidFinishNavigation calls on this tab helper.
 void OfflinePageTabHelper::SetOfflinePage(
     const OfflinePageItem& offline_page,
     const OfflinePageHeader& offline_header,
+    bool is_trusted,
     bool is_offline_preview) {
   provisional_offline_info_.offline_page =
       base::MakeUnique<OfflinePageItem>(offline_page);
   provisional_offline_info_.offline_header = offline_header;
+  provisional_offline_info_.is_trusted = is_trusted;
   provisional_offline_info_.is_showing_offline_preview = is_offline_preview;
+}
+
+bool OfflinePageTabHelper::IsShowingTrustedOfflinePage() const {
+  return offline_info_.offline_page && offline_info_.is_trusted;
 }
 
 const OfflinePageItem* OfflinePageTabHelper::GetOfflinePageForTest() const {
   return provisional_offline_info_.offline_page.get();
 }
 
-bool OfflinePageTabHelper::IsShowingOfflinePreview() const {
-  // TODO(ryansturm): Change this once offline pages infrastructure uses
-  // NavigationHandle instead of a back channel. crbug.com/658899
-  return provisional_offline_info_.is_showing_offline_preview ||
-         offline_info_.is_showing_offline_preview;
+const OfflinePageItem* OfflinePageTabHelper::GetOfflinePreviewItem() const {
+  if (provisional_offline_info_.is_showing_offline_preview)
+    return provisional_offline_info_.offline_page.get();
+  if (offline_info_.is_showing_offline_preview)
+    return offline_info_.offline_page.get();
+  return nullptr;
 }
 
 void OfflinePageTabHelper::ScheduleDownloadHelper(
@@ -279,7 +383,8 @@ void OfflinePageTabHelper::DoDownloadPageLater(
   params.url = url;
   params.client_id = offline_pages::ClientId(name_space, base::GenerateGUID());
   params.request_origin = request_origin;
-  request_coordinator->SavePageLater(params);
+  request_coordinator->SavePageLater(params,
+                                     base::Bind(&SavePageLaterCallback));
 
   if (static_cast<int>(ui_action) &
       static_cast<int>(OfflinePageUtils::DownloadUIActionFlags::

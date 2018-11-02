@@ -16,6 +16,7 @@
 
 namespace blink {
 
+class LayoutBlockFlow;
 class LayoutObject;
 class Node;
 
@@ -116,9 +117,10 @@ class CORE_EXPORT NGOffsetMapping {
   static const NGOffsetMapping* GetFor(const Position&);
 
   // Returns the mapping object of the inline formatting context containing the
-  // given LayoutObject, if it's laid out with LayoutNG. This makes the
-  // retrieval of the mapping object easier when we already have a LayoutObject
-  // at hand.
+  // given LayoutObject, if it's laid out with LayoutNG. If the LayoutObject is
+  // itself an inline formatting context, returns its own offset mapping object.
+  // This makes the retrieval of the mapping object easier when we already have
+  // a LayoutObject at hand.
   static const NGOffsetMapping* GetFor(const LayoutObject*);
 
   // Returns the NGOffsetMappingUnit whose DOM range contains the position.
@@ -183,6 +185,8 @@ class CORE_EXPORT NGOffsetMapping {
 
   DISALLOW_COPY_AND_ASSIGN(NGOffsetMapping);
 };
+
+CORE_EXPORT const LayoutBlockFlow* NGInlineFormattingContextOf(const Position&);
 
 }  // namespace blink
 

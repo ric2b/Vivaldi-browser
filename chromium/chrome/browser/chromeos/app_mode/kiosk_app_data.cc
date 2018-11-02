@@ -20,6 +20,7 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/webstore_data_fetcher.h"
 #include "chrome/browser/extensions/webstore_install_helper.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -33,6 +34,7 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/image/image.h"
 
@@ -192,14 +194,10 @@ class KioskAppData::WebstoreDataParser
   void Start(const std::string& app_id,
              const std::string& manifest,
              const GURL& icon_url,
-             net::URLRequestContextGetter* context_getter) {
+             network::mojom::URLLoaderFactory* loader_factory) {
     scoped_refptr<extensions::WebstoreInstallHelper> webstore_helper =
-        new extensions::WebstoreInstallHelper(this,
-                                              app_id,
-                                              manifest,
-                                              icon_url,
-                                              context_getter);
-    webstore_helper->Start();
+        new extensions::WebstoreInstallHelper(this, app_id, manifest, icon_url);
+    webstore_helper->Start(loader_factory);
   }
 
  private:
@@ -369,6 +367,11 @@ net::URLRequestContextGetter* KioskAppData::GetRequestContextGetter() {
   return g_browser_process->system_request_context();
 }
 
+network::mojom::URLLoaderFactory* KioskAppData::GetURLLoaderFactory() {
+  return g_browser_process->system_network_context_manager()
+      ->GetURLLoaderFactory();
+}
+
 bool KioskAppData::LoadFromCache() {
   PrefService* local_state = g_browser_process->local_state();
   const base::DictionaryValue* dict =
@@ -492,7 +495,7 @@ void KioskAppData::OnWebstoreResponseParseSuccess(
 
   // WebstoreDataParser deletes itself when done.
   (new WebstoreDataParser(weak_factory_.GetWeakPtr()))
-      ->Start(app_id(), manifest, icon_url, GetRequestContextGetter());
+      ->Start(app_id(), manifest, icon_url, GetURLLoaderFactory());
 }
 
 void KioskAppData::OnWebstoreResponseParseFailure(const std::string& error) {

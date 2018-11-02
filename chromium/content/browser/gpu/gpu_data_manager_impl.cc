@@ -20,70 +20,8 @@ GpuDataManagerImpl* GpuDataManagerImpl::GetInstance() {
 }
 
 void GpuDataManagerImpl::BlacklistWebGLForTesting() {
-  // Manually generate the following data instead of going through
-  // gpu/config/process_json.py because this is just one simple instance.
-  static const int kFeatureListForEntry0[1] = {
-      gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL};
-  static const gpu::GpuControlList::Entry kEntry = {
-      1,  // id
-      "ExtensionWebstoreGetWebGLStatusTest.Blocked",
-      arraysize(kFeatureListForEntry0),  // features size
-      kFeatureListForEntry0,             // features
-      0,                                 // DisabledExtensions size
-      nullptr,                           // DisabledExtensions
-      0,                                 // CrBugs size
-      nullptr,                           // CrBugs
-      {
-          gpu::GpuControlList::kOsAny,  // os_type
-          {gpu::GpuControlList::kUnknown,
-           gpu::GpuControlList::kVersionStyleNumerical, nullptr,
-           nullptr},                                   // os_version
-          0x00,                                        // vendor_id
-          0,                                           // DeviceIDs size
-          nullptr,                                     // DeviceIDs
-          gpu::GpuControlList::kMultiGpuCategoryNone,  // multi_gpu_category
-          gpu::GpuControlList::kMultiGpuStyleNone,     // multi_gpu_style
-          nullptr,                                     // driver info
-          nullptr,                                     // GL strings
-          nullptr,                                     // machine model info
-          nullptr,                                     // more conditions
-      },
-      0,        // exceptions count
-      nullptr,  // exceptions
-  };
-  static const gpu::GpuControlListData kData(1, &kEntry);
-
-  gpu::GPUInfo gpu_info;
-
   base::AutoLock auto_lock(lock_);
-  private_->InitializeForTesting(kData, gpu_info);
-}
-
-void GpuDataManagerImpl::InitializeForTesting(
-    const gpu::GpuControlListData& gpu_blacklist_data,
-    const gpu::GPUInfo& gpu_info) {
-  base::AutoLock auto_lock(lock_);
-  private_->InitializeForTesting(gpu_blacklist_data, gpu_info);
-}
-
-bool GpuDataManagerImpl::IsFeatureBlacklisted(int feature) const {
-  base::AutoLock auto_lock(lock_);
-  return private_->IsFeatureBlacklisted(feature);
-}
-
-bool GpuDataManagerImpl::IsFeatureEnabled(int feature) const {
-  base::AutoLock auto_lock(lock_);
-  return private_->IsFeatureEnabled(feature);
-}
-
-bool GpuDataManagerImpl::IsWebGLEnabled() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->IsWebGLEnabled();
-}
-
-bool GpuDataManagerImpl::IsWebGL2Enabled() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->IsWebGL2Enabled();
+  private_->BlacklistWebGLForTesting();
 }
 
 gpu::GPUInfo GpuDataManagerImpl::GetGPUInfo() const {
@@ -111,16 +49,22 @@ bool GpuDataManagerImpl::IsCompleteGpuInfoAvailable() const {
   return private_->IsCompleteGpuInfoAvailable();
 }
 
+bool GpuDataManagerImpl::IsGpuFeatureInfoAvailable() const {
+  base::AutoLock auto_lock(lock_);
+  return private_->IsGpuFeatureInfoAvailable();
+}
+
+gpu::GpuFeatureStatus GpuDataManagerImpl::GetFeatureStatus(
+    gpu::GpuFeatureType feature) const {
+  base::AutoLock auto_lock(lock_);
+  return private_->GetFeatureStatus(feature);
+}
+
 void GpuDataManagerImpl::RequestVideoMemoryUsageStatsUpdate(
     const base::Callback<void(const gpu::VideoMemoryUsageStats& stats)>&
         callback) const {
   base::AutoLock auto_lock(lock_);
   private_->RequestVideoMemoryUsageStatsUpdate(callback);
-}
-
-bool GpuDataManagerImpl::ShouldUseSwiftShader() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->ShouldUseSwiftShader();
 }
 
 void GpuDataManagerImpl::AddObserver(
@@ -147,22 +91,19 @@ void GpuDataManagerImpl::SetGLStrings(const std::string& gl_vendor,
   private_->SetGLStrings(gl_vendor, gl_renderer, gl_version);
 }
 
-void GpuDataManagerImpl::GetGLStrings(std::string* gl_vendor,
-                                      std::string* gl_renderer,
-                                      std::string* gl_version) {
-  base::AutoLock auto_lock(lock_);
-  private_->GetGLStrings(gl_vendor, gl_renderer, gl_version);
-}
-
 void GpuDataManagerImpl::DisableHardwareAcceleration() {
   base::AutoLock auto_lock(lock_);
   private_->DisableHardwareAcceleration();
 }
 
+void GpuDataManagerImpl::DisableSwiftShader() {
+  base::AutoLock auto_lock(lock_);
+  private_->DisableSwiftShader();
+}
+
 bool GpuDataManagerImpl::HardwareAccelerationEnabled() const {
   base::AutoLock auto_lock(lock_);
-  return !private_->ShouldUseSwiftShader() &&
-         private_->GpuAccessAllowed(nullptr);
+  return private_->HardwareAccelerationEnabled();
 }
 
 void GpuDataManagerImpl::GetDisabledExtensions(
@@ -174,6 +115,12 @@ void GpuDataManagerImpl::GetDisabledExtensions(
 void GpuDataManagerImpl::SetGpuInfo(const gpu::GPUInfo& gpu_info) {
   base::AutoLock auto_lock(lock_);
   private_->SetGpuInfo(gpu_info);
+}
+
+void GpuDataManagerImpl::GetDisabledWebGLExtensions(
+    std::string* disabled_webgl_extensions) const {
+  base::AutoLock auto_lock(lock_);
+  private_->GetDisabledWebGLExtensions(disabled_webgl_extensions);
 }
 
 void GpuDataManagerImpl::Initialize() {
@@ -207,12 +154,6 @@ void GpuDataManagerImpl::AppendGpuCommandLine(
     base::CommandLine* command_line) const {
   base::AutoLock auto_lock(lock_);
   private_->AppendGpuCommandLine(command_line);
-}
-
-void GpuDataManagerImpl::UpdateRendererWebPrefs(
-    WebPreferences* prefs) const {
-  base::AutoLock auto_lock(lock_);
-  private_->UpdateRendererWebPrefs(prefs);
 }
 
 void GpuDataManagerImpl::UpdateGpuPreferences(
@@ -272,11 +213,6 @@ bool GpuDataManagerImpl::Are3DAPIsBlocked(const GURL& top_origin_url,
 void GpuDataManagerImpl::DisableDomainBlockingFor3DAPIsForTesting() {
   base::AutoLock auto_lock(lock_);
   private_->DisableDomainBlockingFor3DAPIsForTesting();
-}
-
-size_t GpuDataManagerImpl::GetBlacklistedFeatureCount() const {
-  base::AutoLock auto_lock(lock_);
-  return private_->GetBlacklistedFeatureCount();
 }
 
 bool GpuDataManagerImpl::UpdateActiveGpu(uint32_t vendor_id,

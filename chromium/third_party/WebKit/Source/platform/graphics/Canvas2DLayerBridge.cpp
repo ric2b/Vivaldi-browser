@@ -26,6 +26,7 @@
 #include "platform/graphics/Canvas2DLayerBridge.h"
 
 #include <memory>
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -33,9 +34,9 @@
 #include "platform/WebTaskRunner.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/CanvasMetrics.h"
+#include "platform/graphics/CanvasResource.h"
 #include "platform/graphics/CanvasResourceProvider.h"
 #include "platform/graphics/GraphicsLayer.h"
-#include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
 #include "platform/graphics/gpu/SharedContextRateLimiter.h"
@@ -45,7 +46,6 @@
 #include "platform/scheduler/child/web_scheduler.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
-#include "public/platform/WebTraceLocation.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -63,10 +63,8 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(const IntSize& size,
                                          int msaa_sample_count,
                                          AccelerationMode acceleration_mode,
                                          const CanvasColorParams& color_params)
-    : ImageBufferSurface(size, color_params),
-      logger_(WTF::WrapUnique(new Logger)),
+    : logger_(WTF::WrapUnique(new Logger)),
       weak_ptr_factory_(this),
-      image_buffer_(nullptr),
       msaa_sample_count_(msaa_sample_count),
       bytes_allocated_(0),
       have_recorded_draw_commands_(false),
@@ -77,12 +75,23 @@ Canvas2DLayerBridge::Canvas2DLayerBridge(const IntSize& size,
       software_rendering_while_hidden_(false),
       acceleration_mode_(acceleration_mode),
       color_params_(color_params),
+      size_(size),
+      snapshot_state_(kInitialSnapshotState),
       resource_host_(nullptr) {
   // Used by browser tests to detect the use of a Canvas2DLayerBridge.
   TRACE_EVENT_INSTANT0("test_gpu", "Canvas2DLayerBridgeCreation",
                        TRACE_EVENT_SCOPE_GLOBAL);
   StartRecording();
-  Clear();
+  // Clear the background transparent or opaque. Similar code at
+  // CanvasResourceProvider::Clear().
+  if (IsValid()) {
+    DCHECK(!resource_provider_);
+    DCHECK(recorder_);
+    recorder_->getRecordingCanvas()->clear(
+        color_params_.GetOpacityMode() == kOpaque ? SK_ColorBLACK
+                                                  : SK_ColorTRANSPARENT);
+  }
+  DidDraw(FloatRect(FloatPoint(0, 0), FloatSize(size_)));
 }
 
 Canvas2DLayerBridge::~Canvas2DLayerBridge() {
@@ -95,7 +104,7 @@ void Canvas2DLayerBridge::StartRecording() {
   DCHECK(is_deferral_enabled_);
   recorder_ = WTF::WrapUnique(new PaintRecorder);
   PaintCanvas* canvas =
-      recorder_->beginRecording(Size().Width(), Size().Height());
+      recorder_->beginRecording(size_.Width(), size_.Height());
   // Always save an initial frame, to support resetting the top level matrix
   // and clip.
   canvas->save();
@@ -128,7 +137,7 @@ bool Canvas2DLayerBridge::ShouldAccelerate(AccelerationHint hint) const {
                  hint == kPreferAccelerationAfterVisibilityChange;
   }
 
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
       SharedGpuContext::ContextProviderWrapper();
   if (accelerate && (!context_provider_wrapper ||
                      context_provider_wrapper->ContextProvider()
@@ -155,7 +164,7 @@ bool Canvas2DLayerBridge::IsAccelerated() const {
   return ShouldAccelerate(kPreferAcceleration);
 }
 
-static void HibernateWrapper(WeakPtr<Canvas2DLayerBridge> bridge,
+static void HibernateWrapper(base::WeakPtr<Canvas2DLayerBridge> bridge,
                              double /*idleDeadline*/) {
   if (bridge) {
     bridge->Hibernate();
@@ -167,7 +176,8 @@ static void HibernateWrapper(WeakPtr<Canvas2DLayerBridge> bridge,
   }
 }
 
-static void HibernateWrapperForTesting(WeakPtr<Canvas2DLayerBridge> bridge) {
+static void HibernateWrapperForTesting(
+    base::WeakPtr<Canvas2DLayerBridge> bridge) {
   HibernateWrapper(bridge, 0);
 }
 
@@ -205,7 +215,7 @@ void Canvas2DLayerBridge::Hibernate() {
 
   TRACE_EVENT0("blink", "Canvas2DLayerBridge::hibernate");
   sk_sp<SkSurface> temp_hibernation_surface =
-      SkSurface::MakeRasterN32Premul(Size().Width(), Size().Height());
+      SkSurface::MakeRasterN32Premul(size_.Width(), size_.Height());
   if (!temp_hibernation_surface) {
     logger_->ReportHibernationEvent(kHibernationAbortedDueToAllocationFailure);
     return;
@@ -273,8 +283,8 @@ CanvasResourceProvider* Canvas2DLayerBridge::GetOrCreateResourceProvider(
           : CanvasResourceProvider::kSoftwareCompositedResourceUsage;
 
   resource_provider_ = CanvasResourceProvider::Create(
-      Size(), msaa_sample_count_, color_params_, usage,
-      SharedGpuContext::ContextProviderWrapper());
+      size_, usage, SharedGpuContext::ContextProviderWrapper(),
+      msaa_sample_count_, color_params_);
 
   if (resource_provider_) {
     // Always save an initial frame, to support resetting the top level matrix
@@ -373,10 +383,6 @@ void Canvas2DLayerBridge::DisableDeferral(DisableDeferralReason reason) {
     resource_host_->RestoreCanvasMatrixClipStack(resource_provider_->Canvas());
 }
 
-void Canvas2DLayerBridge::SetImageBuffer(ImageBuffer* image_buffer) {
-  image_buffer_ = image_buffer;
-}
-
 void Canvas2DLayerBridge::BeginDestruction() {
   if (destruction_in_progress_)
     return;
@@ -384,7 +390,6 @@ void Canvas2DLayerBridge::BeginDestruction() {
     logger_->ReportHibernationEvent(kHibernationEndedWithTeardown);
   hibernation_image_.reset();
   recorder_.reset();
-  image_buffer_ = nullptr;
   destruction_in_progress_ = true;
   SetIsHidden(true);
   ResetResourceProvider();
@@ -427,12 +432,12 @@ void Canvas2DLayerBridge::SetIsHidden(bool hidden) {
     hibernation_scheduled_ = true;
     if (dont_use_idle_scheduling_for_testing_) {
       Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-          BLINK_FROM_HERE, WTF::Bind(&HibernateWrapperForTesting,
-                                     weak_ptr_factory_.CreateWeakPtr()));
+          FROM_HERE, WTF::Bind(&HibernateWrapperForTesting,
+                               weak_ptr_factory_.GetWeakPtr()));
     } else {
       Platform::Current()->CurrentThread()->Scheduler()->PostIdleTask(
-          BLINK_FROM_HERE,
-          WTF::Bind(&HibernateWrapper, weak_ptr_factory_.CreateWeakPtr()));
+          FROM_HERE,
+          WTF::Bind(&HibernateWrapper, weak_ptr_factory_.GetWeakPtr()));
     }
   }
   if (!IsHidden() && software_rendering_while_hidden_) {
@@ -474,15 +479,15 @@ bool Canvas2DLayerBridge::WritePixels(const SkImageInfo& orig_info,
                                       int y) {
   if (!GetOrCreateResourceProvider())
     return false;
-  if (x <= 0 && y <= 0 && x + orig_info.width() >= Size().Width() &&
-      y + orig_info.height() >= Size().Height()) {
+  if (x <= 0 && y <= 0 && x + orig_info.width() >= size_.Width() &&
+      y + orig_info.height() >= size_.Height()) {
     SkipQueuedDrawCommands();
   } else {
     FlushRecording();
   }
 
-  GetOrCreateResourceProvider()->GetSkSurface()->getCanvas()->writePixels(
-      orig_info, pixels, row_bytes, x, y);
+  GetOrCreateResourceProvider()->WritePixels(orig_info, pixels, row_bytes, x,
+                                             y);
   DidDraw(FloatRect(x, y, orig_info.width(), orig_info.height()));
 
   return true;
@@ -556,7 +561,7 @@ bool Canvas2DLayerBridge::Restore() {
 
   gpu::gles2::GLES2Interface* shared_gl = nullptr;
   layer_->ClearTexture();
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
       SharedGpuContext::ContextProviderWrapper();
   if (context_provider_wrapper)
     shared_gl = context_provider_wrapper->ContextProvider()->ContextGL();
@@ -564,9 +569,9 @@ bool Canvas2DLayerBridge::Restore() {
   if (shared_gl && shared_gl->GetGraphicsResetStatusKHR() == GL_NO_ERROR) {
     std::unique_ptr<CanvasResourceProvider> resource_provider =
         CanvasResourceProvider::Create(
-            Size(), msaa_sample_count_, color_params_,
-            CanvasResourceProvider::kAcceleratedCompositedResourceUsage,
-            std::move(context_provider_wrapper));
+            size_, CanvasResourceProvider::kAcceleratedCompositedResourceUsage,
+            std::move(context_provider_wrapper), msaa_sample_count_,
+            color_params_);
 
     if (!resource_provider)
       ReportResourceProviderCreationFailure();
@@ -621,14 +626,15 @@ bool Canvas2DLayerBridge::PrepareTransferableResource(
   if (!GetOrCreateResourceProvider())
     return false;
 
-  if (!resource_provider_->IsAccelerated()) {
-  }
-
   FlushRecording();
-  if (resource_provider_->PrepareTransferableResource(out_resource,
-                                                      out_release_callback)) {
-    out_resource->color_space = color_params_.GetSamplerGfxColorSpace();
-    return true;
+  scoped_refptr<CanvasResource> frame = resource_provider_->ProduceFrame();
+  if (frame && frame->IsValid()) {
+    // Note frame is kept alive via a reference kept in out_release_callback.
+    bool success =
+        frame->PrepareTransferableResource(out_resource, out_release_callback);
+    if (success)
+      out_resource->color_space = color_params_.GetSamplerGfxColorSpace();
+    return success;
   }
   return false;
 }
@@ -641,6 +647,8 @@ WebLayer* Canvas2DLayerBridge::Layer() {
 }
 
 void Canvas2DLayerBridge::DidDraw(const FloatRect& rect) {
+  if (snapshot_state_ == kDidAcquireSnapshot)
+    snapshot_state_ = kDrawnToAfterSnapshot;
   if (is_deferral_enabled_) {
     have_recorded_draw_commands_ = true;
     IntRect pixel_bounds = EnclosingIntRect(rect);
@@ -651,8 +659,8 @@ void Canvas2DLayerBridge::DidDraw(const FloatRect& rect) {
       DisableDeferral(kDisableDeferralReasonExpensiveOverdrawHeuristic);
       return;
     }
-    CheckedNumeric<int> threshold_size = Size().Width();
-    threshold_size *= Size().Height();
+    CheckedNumeric<int> threshold_size = size_.Width();
+    threshold_size *= size_.Height();
     threshold_size *= CanvasHeuristicParameters::kExpensiveOverdrawThreshold;
     if (!threshold_size.IsValid()) {
       DisableDeferral(kDisableDeferralReasonExpensiveOverdrawHeuristic);
@@ -697,8 +705,9 @@ void Canvas2DLayerBridge::DoPaintInvalidation(const FloatRect& dirty_rect) {
 }
 
 scoped_refptr<StaticBitmapImage> Canvas2DLayerBridge::NewImageSnapshot(
-    AccelerationHint hint,
-    SnapshotReason) {
+    AccelerationHint hint) {
+  if (snapshot_state_ == kInitialSnapshotState)
+    snapshot_state_ = kDidAcquireSnapshot;
   if (IsHibernating())
     return StaticBitmapImage::Create(hibernation_image_);
   if (!IsValid())

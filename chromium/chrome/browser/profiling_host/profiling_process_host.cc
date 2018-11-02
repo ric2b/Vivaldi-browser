@@ -22,6 +22,7 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/trace_log.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -34,6 +35,7 @@
 #include "chrome/common/profiling/profiling_constants.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_child_process_host.h"
+#include "content/public/browser/browser_child_process_host_iterator.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -47,6 +49,11 @@
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/public/cpp/system/platform_handle.h"
+#include "third_party/zlib/zlib.h"
+
+#if defined(OS_WIN)
+#include <io.h>
+#endif
 
 namespace {
 
@@ -63,14 +70,15 @@ class StringWrapper : public base::trace_event::ConvertableToTraceFormat {
   std::string json_;
 };
 
-base::trace_event::TraceConfig GetBackgroundTracingConfig() {
+base::trace_event::TraceConfig GetBackgroundTracingConfig(bool anonymize) {
   // Disable all categories other than memory-infra.
   base::trace_event::TraceConfig trace_config(
       "-*,disabled-by-default-memory-infra",
       base::trace_event::RECORD_UNTIL_FULL);
 
   // This flag is set by background tracing to filter out undesired events.
-  trace_config.EnableArgumentFilter();
+  if (anonymize)
+    trace_config.EnableArgumentFilter();
 
   // Trigger a background memory dump exactly once by setting a time-delta
   // between dumps of 2**29.
@@ -99,8 +107,6 @@ const char kOOPHeapProfilingFeatureMode[] = "mode";
 bool ProfilingProcessHost::has_started_ = false;
 
 namespace {
-
-constexpr char kNoTriggerName[] = "";
 
 // This helper class cleans up initialization boilerplate for the callers who
 // need to create ProfilingClients bound to various different things.
@@ -151,6 +157,13 @@ void OnTraceUploadComplete(TraceCrashServiceUploader* uploader,
 
 void UploadTraceToCrashServer(std::string file_contents,
                               std::string trigger_name) {
+  // Traces has been observed as small as 4k. Seems likely to be a bug. To
+  // account for all potentially too-small traces, we set the lower bounds to
+  // 512 bytes. The upper bounds is set to 300MB as an extra-high threshold,
+  // just in case something goes wrong.
+  UMA_HISTOGRAM_CUSTOM_COUNTS("OutOfProcessHeapProfiling.UploadTrace.Size",
+                              file_contents.size(), 512, 300 * 1024 * 1024, 50);
+
   base::Value rules_list(base::Value::Type::LIST);
   base::Value rule(base::Value::Type::DICTIONARY);
   rule.SetKey("rule", base::Value("MEMLOG"));
@@ -179,11 +192,7 @@ void UploadTraceToCrashServer(std::string file_contents,
 }  // namespace
 
 ProfilingProcessHost::ProfilingProcessHost()
-    : is_registered_(false),
-      background_triggers_(this),
-      mode_(Mode::kNone),
-      profiled_renderer_(nullptr),
-      always_sample_for_tests_(false) {}
+    : is_registered_(false), background_triggers_(this), mode_(Mode::kNone) {}
 
 ProfilingProcessHost::~ProfilingProcessHost() {
   if (is_registered_)
@@ -215,21 +224,11 @@ void ProfilingProcessHost::BrowserChildProcessLaunchedAndConnected(
   // so as not to collide with logic in ProfilingProcessHost::Observe().
   DCHECK_NE(data.process_type, content::ProcessType::PROCESS_TYPE_RENDERER);
 
-  if (!ShouldProfileProcessType(data.process_type)) {
+  if (!ShouldProfileNonRendererProcessType(data.process_type)) {
     return;
   }
 
-  profiling::mojom::ProcessType process_type =
-      (data.process_type == content::ProcessType::PROCESS_TYPE_GPU)
-          ? profiling::mojom::ProcessType::GPU
-          : profiling::mojom::ProcessType::OTHER;
-
-  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
-      ->PostTask(
-          FROM_HERE,
-          base::BindOnce(&ProfilingProcessHost::StartProfilingNonRendererChild,
-                         base::Unretained(this), data.id,
-                         base::GetProcId(data.handle), process_type));
+  StartProfilingNonRendererChild(data);
 }
 
 void ProfilingProcessHost::Observe(
@@ -245,42 +244,40 @@ void ProfilingProcessHost::Observe(
   // the RenderProcessHost's lifetime is ending. Ideally, we'd only listen to
   // the former, but if the RenderProcessHost is destroyed before the
   // RenderProcess, then the former is never sent.
-  if (host == profiled_renderer_ &&
-      (type == content::NOTIFICATION_RENDERER_PROCESS_TERMINATED ||
+  if ((type == content::NOTIFICATION_RENDERER_PROCESS_TERMINATED ||
        type == content::NOTIFICATION_RENDERER_PROCESS_CLOSED)) {
-    // |profiled_renderer_| is only ever set in kRendererSampling mode. This
-    // code is a deadstore otherwise so it's safe but having a DCHECK makes the
-    // intent clear.
-    DCHECK_EQ(mode(), Mode::kRendererSampling);
-    profiled_renderer_ = nullptr;
+    profiled_renderers_.erase(host);
   }
+
   if (type == content::NOTIFICATION_RENDERER_PROCESS_CREATED &&
       ShouldProfileNewRenderer(host)) {
-    // In kRendererSampling mode, store the RPH to ensure only one renderer is
-    // ever sampled inside a chrome instance.
-    if (mode() == Mode::kRendererSampling) {
-      profiled_renderer_ = host;
-    }
-    // Tell the child process to start profiling.
-    ProfilingClientBinder client(host);
-
-    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
-        ->PostTask(
-            FROM_HERE,
-            base::BindOnce(&ProfilingProcessHost::AddClientToProfilingService,
-                           base::Unretained(this), client.take(),
-                           base::GetProcId(host->GetHandle()),
-                           profiling::mojom::ProcessType::RENDERER));
+    StartProfilingRenderer(host);
   }
 }
 
 bool ProfilingProcessHost::OnMemoryDump(
     const base::trace_event::MemoryDumpArgs& args,
     base::trace_event::ProcessMemoryDump* pmd) {
-  profiling_service_->DumpProcessesForTracing(
-      base::BindOnce(&ProfilingProcessHost::OnDumpProcessesForTracingCallback,
-                     base::Unretained(this), args.dump_guid));
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+      ->PostTask(FROM_HERE,
+                 base::BindOnce(&ProfilingProcessHost::OnMemoryDumpOnIOThread,
+                                base::Unretained(this), args.dump_guid));
   return true;
+}
+
+void ProfilingProcessHost::OnMemoryDumpOnIOThread(uint64_t dump_guid) {
+  bool force_prune = TakingTraceForUpload();
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  bool keep_small_allocations =
+      !force_prune && cmdline->HasSwitch(switches::kMemlogKeepSmallAllocations);
+
+  bool strip_path_from_mapped_files = base::trace_event::TraceLog::GetInstance()
+                                          ->GetCurrentTraceConfig()
+                                          .IsArgumentFilterEnabled();
+  profiling_service_->DumpProcessesForTracing(
+      keep_small_allocations, strip_path_from_mapped_files,
+      base::BindOnce(&ProfilingProcessHost::OnDumpProcessesForTracingCallback,
+                     base::Unretained(this), dump_guid));
 }
 
 void ProfilingProcessHost::OnDumpProcessesForTracingCallback(
@@ -327,10 +324,17 @@ void ProfilingProcessHost::OnDumpProcessesForTracingCallback(
 }
 
 void ProfilingProcessHost::DumpProcessFinishedUIThread() {
-  if (dump_process_for_tracing_callback_) {
-    std::move(dump_process_for_tracing_callback_).Run();
-    dump_process_for_tracing_callback_.Reset();
-  }
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  heap_dump_has_been_added_ = true;
+  if (minimum_time_has_elapsed_ && !finish_tracing_callback_.is_null())
+    std::move(finish_tracing_callback_).Run();
+}
+
+void ProfilingProcessHost::OnMinimumTimeHasElapsed() {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  minimum_time_has_elapsed_ = true;
+  if (heap_dump_has_been_added_ && !finish_tracing_callback_.is_null())
+    std::move(finish_tracing_callback_).Run();
 }
 
 void ProfilingProcessHost::AddClientToProfilingService(
@@ -352,11 +356,11 @@ void ProfilingProcessHost::AddClientToProfilingService(
       pid, std::move(client),
       mojo::WrapPlatformFile(pipes.PassSender().release().handle),
       mojo::WrapPlatformFile(pipes.PassReceiver().release().handle),
-      process_type);
+      process_type, stack_mode_);
 }
 
 // static
-ProfilingProcessHost::Mode ProfilingProcessHost::GetCurrentMode() {
+ProfilingProcessHost::Mode ProfilingProcessHost::GetModeForStartup() {
   const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
 #if BUILDFLAG(USE_ALLOCATOR_SHIM)
   if (cmdline->HasSwitch(switches::kMemlog) ||
@@ -396,6 +400,10 @@ ProfilingProcessHost::Mode ProfilingProcessHost::ConvertStringToMode(
     const std::string& mode) {
   if (mode == switches::kMemlogModeAll)
     return Mode::kAll;
+  if (mode == switches::kMemlogModeAllRenderers)
+    return Mode::kAllRenderers;
+  if (mode == switches::kMemlogModeManual)
+    return Mode::kManual;
   if (mode == switches::kMemlogModeMinimal)
     return Mode::kMinimal;
   if (mode == switches::kMemlogModeBrowser)
@@ -410,13 +418,31 @@ ProfilingProcessHost::Mode ProfilingProcessHost::ConvertStringToMode(
 }
 
 // static
+profiling::mojom::StackMode ProfilingProcessHost::GetStackModeForStartup() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  if (cmdline->HasSwitch(switches::kMemlogStackMode)) {
+    std::string stack_mode =
+        cmdline->GetSwitchValueASCII(switches::kMemlogStackMode);
+    if (stack_mode == switches::kMemlogStackModeNative)
+      return profiling::mojom::StackMode::NATIVE;
+    if (stack_mode == switches::kMemlogStackModePseudo)
+      return profiling::mojom::StackMode::PSEUDO;
+    if (stack_mode == switches::kMemlogStackModeMixed)
+      return profiling::mojom::StackMode::MIXED;
+  }
+  return profiling::mojom::StackMode::NATIVE;
+}
+
+// static
 ProfilingProcessHost* ProfilingProcessHost::Start(
     content::ServiceManagerConnection* connection,
-    Mode mode) {
+    Mode mode,
+    profiling::mojom::StackMode stack_mode) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   CHECK(!has_started_);
   has_started_ = true;
   ProfilingProcessHost* host = GetInstance();
+  host->stack_mode_ = stack_mode;
   host->SetMode(mode);
   host->Register();
   host->MakeConnector(connection);
@@ -440,20 +466,39 @@ void ProfilingProcessHost::ConfigureBackgroundProfilingTriggers() {
   background_triggers_.StartTimer();
 }
 
-void ProfilingProcessHost::RequestProcessDump(base::ProcessId pid,
-                                              base::FilePath dest,
-                                              base::OnceClosure done) {
-  if (!connector_) {
+void ProfilingProcessHost::SaveTraceWithHeapDumpToFile(
+    base::FilePath dest,
+    SaveTraceFinishedCallback done,
+    bool stop_immediately_after_heap_dump_for_tests) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  if (!profiling_service_.is_bound()) {
     DLOG(ERROR)
-        << "Requesting process dump when profiling process hasn't started.";
+        << "Requesting heap dump when profiling process hasn't started.";
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(done), false));
     return;
   }
 
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
-      base::BindOnce(&ProfilingProcessHost::GetOutputFileOnBlockingThread,
-                     base::Unretained(this), pid, std::move(dest),
-                     kNoTriggerName, std::move(done)));
+  auto finish_trace_callback = base::BindOnce(
+      [](base::FilePath dest, SaveTraceFinishedCallback done, bool success,
+         std::string trace) {
+        if (!success) {
+          content::BrowserThread::GetTaskRunnerForThread(
+              content::BrowserThread::UI)
+              ->PostTask(FROM_HERE, base::BindOnce(std::move(done), false));
+          return;
+        }
+        base::PostTaskWithTraits(
+            FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+            base::BindOnce(
+                &ProfilingProcessHost::SaveTraceToFileOnBlockingThread,
+                base::Unretained(ProfilingProcessHost::GetInstance()),
+                std::move(dest), std::move(trace), std::move(done)));
+      },
+      std::move(dest), std::move(done));
+  RequestTraceWithHeapDump(std::move(finish_trace_callback),
+                           stop_immediately_after_heap_dump_for_tests,
+                           false /* anonymize */);
 }
 
 void ProfilingProcessHost::RequestProcessReport(std::string trigger_name) {
@@ -465,19 +510,33 @@ void ProfilingProcessHost::RequestProcessReport(std::string trigger_name) {
     return;
   }
 
+  // If taking_trace_for_upload_ is already true, then the setter has no effect,
+  // and we should early return.
+  if (SetTakingTraceForUpload(true))
+    return;
+
+  // It's safe to pass a raw pointer for ProfilingProcessHost because it's a
+  // singleton that's never destroyed.
   auto finish_report_callback = base::BindOnce(
-      [](std::string trigger_name, bool success, std::string trace) {
+      [](ProfilingProcessHost* host, std::string trigger_name, bool success,
+         std::string trace) {
+        UMA_HISTOGRAM_BOOLEAN("OutOfProcessHeapProfiling.RecordTrace.Success",
+                              success);
+        host->SetTakingTraceForUpload(false);
         if (success) {
           UploadTraceToCrashServer(std::move(trace), std::move(trigger_name));
         }
       },
-      std::move(trigger_name));
-  RequestTraceWithHeapDump(std::move(finish_report_callback), false);
+      base::Unretained(this), std::move(trigger_name));
+  RequestTraceWithHeapDump(std::move(finish_report_callback),
+                           false /* keep_small_allocations */,
+                           true /* anonymize */);
 }
 
 void ProfilingProcessHost::RequestTraceWithHeapDump(
     TraceFinishedCallback callback,
-    bool stop_immediately_after_heap_dump_for_tests) {
+    bool stop_immediately_after_heap_dump_for_tests,
+    bool anonymize) {
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
 
   if (!connector_) {
@@ -489,7 +548,7 @@ void ProfilingProcessHost::RequestTraceWithHeapDump(
   }
 
   bool result = content::TracingController::GetInstance()->StartTracing(
-      GetBackgroundTracingConfig(), base::Closure());
+      GetBackgroundTracingConfig(anonymize), base::Closure());
   if (!result) {
     DLOG(ERROR) << "Requesting heap dump when tracing has already started.";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -521,18 +580,112 @@ void ProfilingProcessHost::RequestTraceWithHeapDump(
           &content::TracingController::StopTracing),
       base::Unretained(content::TracingController::GetInstance()), sink);
 
+  // There is no race condition between setting
+  // |finish_tracing_callback_| and starting tracing, since
+  // the callback is only ever accessed on the UI thread.
+  DCHECK(!finish_tracing_callback_);
+  finish_tracing_callback_ = std::move(stop_tracing_closure);
+
+  heap_dump_has_been_added_ = false;
   if (stop_immediately_after_heap_dump_for_tests) {
-    // There is no race condition between setting
-    // |dump_process_for_tracing_callback_| and starting tracing, since running
-    // the callback is an asynchronous task executed on the UI thread.
-    DCHECK(!dump_process_for_tracing_callback_);
-    dump_process_for_tracing_callback_ = std::move(stop_tracing_closure);
+    minimum_time_has_elapsed_ = true;
   } else {
-    // Wait 10 seconds, then end the trace.
+    minimum_time_has_elapsed_ = false;
+
+    // Give the MDPs 10 seconds to emit their memory dumps to the trace.
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, std::move(stop_tracing_closure),
+        FROM_HERE,
+        base::BindOnce(&ProfilingProcessHost::OnMinimumTimeHasElapsed,
+                       base::Unretained(this)),
         base::TimeDelta::FromSeconds(10));
   }
+}
+
+void ProfilingProcessHost::GetProfiledPids(GetProfiledPidsCallback callback) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&ProfilingProcessHost::GetProfiledPidsOnIOThread,
+                         base::Unretained(this), std::move(callback)));
+}
+
+void ProfilingProcessHost::GetProfiledPidsOnIOThread(
+    GetProfiledPidsCallback callback) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
+  if (!profiling_service_.is_bound()) {
+    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+        ->PostTask(FROM_HERE, base::BindOnce(std::move(callback),
+                                             std::vector<base::ProcessId>()));
+    return;
+  }
+
+  auto post_result_to_ui_thread = base::BindOnce(
+      [](GetProfiledPidsCallback callback,
+         const std::vector<base::ProcessId>& result) {
+        content::BrowserThread::GetTaskRunnerForThread(
+            content::BrowserThread::UI)
+            ->PostTask(FROM_HERE, base::BindOnce(std::move(callback), result));
+      },
+      std::move(callback));
+  profiling_service_->GetProfiledPids(std::move(post_result_to_ui_thread));
+}
+
+void ProfilingProcessHost::StartManualProfiling(base::ProcessId pid) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+
+  if (!has_started_) {
+    profiling::ProfilingProcessHost::Start(
+        content::ServiceManagerConnection::GetForProcess(), Mode::kManual,
+        GetStackModeForStartup());
+  } else {
+    SetMode(Mode::kManual);
+  }
+
+  // The RenderProcessHost iterator must be used on the UI thread.
+  // The BrowserChildProcessHostIterator iterator must be used on the IO thread.
+  for (auto iter = content::RenderProcessHost::AllHostsIterator();
+       !iter.IsAtEnd(); iter.Advance()) {
+    if (pid == base::GetProcId(iter.GetCurrentValue()->GetHandle())) {
+      StartProfilingRenderer(iter.GetCurrentValue());
+      return;
+    }
+  }
+
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&ProfilingProcessHost::StartProfilingPidOnIOThread,
+                         base::Unretained(this), pid));
+}
+
+void ProfilingProcessHost::StartProfilingPidOnIOThread(base::ProcessId pid) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
+
+  // Check if the request is for the current process.
+  if (pid == base::GetCurrentProcId()) {
+    ProfilingClientBinder client(connector_.get());
+    AddClientToProfilingService(client.take(), base::Process::Current().Pid(),
+                                profiling::mojom::ProcessType::BROWSER);
+    return;
+  }
+
+  for (content::BrowserChildProcessHostIterator browser_child_iter;
+       !browser_child_iter.Done(); ++browser_child_iter) {
+    const content::ChildProcessData& data = browser_child_iter.GetData();
+    if (base::GetProcId(data.handle) == pid) {
+      content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+          ->PostTask(FROM_HERE,
+                     base::BindOnce(
+                         &ProfilingProcessHost::StartProfilingNonRendererChild,
+                         base::Unretained(this), data));
+      return;
+    }
+  }
+
+  DLOG(WARNING)
+      << "Attempt to start profiling failed as no process was found with pid: "
+      << pid;
 }
 
 void ProfilingProcessHost::MakeConnector(
@@ -562,90 +715,67 @@ void ProfilingProcessHost::LaunchAsService() {
   connector_->BindInterface(mojom::kServiceName, &profiling_service_);
 
   // Start profiling the browser if the mode allows.
-  if (ShouldProfileProcessType(content::ProcessType::PROCESS_TYPE_BROWSER)) {
+  if (ShouldProfileNonRendererProcessType(
+          content::ProcessType::PROCESS_TYPE_BROWSER)) {
     ProfilingClientBinder client(connector_.get());
     AddClientToProfilingService(client.take(), base::Process::Current().Pid(),
                                 profiling::mojom::ProcessType::BROWSER);
   }
 }
 
-void ProfilingProcessHost::GetOutputFileOnBlockingThread(
-    base::ProcessId pid,
+void ProfilingProcessHost::SaveTraceToFileOnBlockingThread(
     base::FilePath dest,
-    std::string trigger_name,
-    base::OnceClosure done) {
-  base::ScopedClosureRunner done_runner(std::move(done));
+    std::string trace,
+    SaveTraceFinishedCallback done) {
   base::File file(dest,
                   base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&ProfilingProcessHost::HandleDumpProcessOnIOThread,
-                     base::Unretained(this), pid, std::move(dest),
-                     std::move(file), std::move(trigger_name),
-                     done_runner.Release()));
-}
 
-void ProfilingProcessHost::HandleDumpProcessOnIOThread(base::ProcessId pid,
-                                                       base::FilePath file_path,
-                                                       base::File file,
-                                                       std::string trigger_name,
-                                                       base::OnceClosure done) {
-  mojo::ScopedHandle handle = mojo::WrapPlatformFile(file.TakePlatformFile());
-  profiling_service_->DumpProcess(
-      pid, std::move(handle), GetMetadataJSONForTrace(),
-      base::BindOnce(&ProfilingProcessHost::OnProcessDumpComplete,
-                     base::Unretained(this), std::move(file_path),
-                     std::move(trigger_name), std::move(done)));
-}
-
-void ProfilingProcessHost::OnProcessDumpComplete(base::FilePath file_path,
-                                                 std::string trigger_name,
-                                                 base::OnceClosure done,
-                                                 bool success) {
-  base::ScopedClosureRunner done_runner(std::move(done));
-  if (!success) {
-    DLOG(ERROR) << "Cannot dump process.";
-    // On any errors, the requested trace output file is deleted.
-    base::PostTaskWithTraits(
-        FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-        base::BindOnce(base::IgnoreResult(&base::DeleteFile), file_path,
-                       false));
+  // Pass ownership of the underlying fd/HANDLE to zlib.
+  base::PlatformFile platform_file = file.TakePlatformFile();
+#if defined(OS_WIN)
+  // The underlying handle |platform_file| is also closed when |fd| is closed.
+  int fd = _open_osfhandle(reinterpret_cast<intptr_t>(platform_file), 0);
+#else
+  int fd = platform_file;
+#endif
+  gzFile gz_file = gzdopen(fd, "w");
+  if (!gz_file) {
+    DLOG(ERROR) << "Cannot compress trace file";
+    content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+        ->PostTask(FROM_HERE, base::BindOnce(std::move(done), false));
     return;
   }
+
+  size_t written_bytes = gzwrite(gz_file, trace.c_str(), trace.size());
+  gzclose(gz_file);
+
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+      ->PostTask(FROM_HERE, base::BindOnce(std::move(done),
+                                           written_bytes == trace.size()));
 }
 
 void ProfilingProcessHost::SetMode(Mode mode) {
+  base::AutoLock l(mode_lock_);
   mode_ = mode;
 }
 
-std::unique_ptr<base::DictionaryValue>
-ProfilingProcessHost::GetMetadataJSONForTrace() {
-  std::unique_ptr<base::DictionaryValue> metadata_dict(
-      new base::DictionaryValue);
-  metadata_dict->SetKey(
-      "product-version",
-      base::Value(version_info::GetProductNameAndVersionForUserAgent()));
-  metadata_dict->SetKey("user-agent", base::Value(GetUserAgent()));
-  metadata_dict->SetKey("os-name",
-                        base::Value(base::SysInfo::OperatingSystemName()));
-  metadata_dict->SetKey(
-      "command_line",
-      base::Value(
-          base::CommandLine::ForCurrentProcess()->GetCommandLineString()));
-  metadata_dict->SetKey(
-      "os-arch", base::Value(base::SysInfo::OperatingSystemArchitecture()));
-  return metadata_dict;
-}
-
 void ProfilingProcessHost::ReportMetrics() {
-  UMA_HISTOGRAM_ENUMERATION("OutOfProcessHeapProfiling.ProfilingMode", mode(),
-                            Mode::kCount);
+  UMA_HISTOGRAM_ENUMERATION("OutOfProcessHeapProfiling.ProfilingMode",
+                            GetMode(), Mode::kCount);
 }
 
-bool ProfilingProcessHost::ShouldProfileProcessType(int process_type) {
-  switch (mode()) {
+bool ProfilingProcessHost::ShouldProfileNonRendererProcessType(
+    int process_type) {
+  switch (GetMode()) {
     case Mode::kAll:
       return true;
+
+    case Mode::kAllRenderers:
+      // Renderer logic is handled in ProfilingProcessHost::Observe.
+      return false;
+
+    case Mode::kManual:
+      return false;
 
     case Mode::kMinimal:
       return (process_type == content::ProcessType::PROCESS_TYPE_GPU ||
@@ -658,10 +788,7 @@ bool ProfilingProcessHost::ShouldProfileProcessType(int process_type) {
       return process_type == content::ProcessType::PROCESS_TYPE_BROWSER;
 
     case Mode::kRendererSampling:
-      // This seems odd because a renderer does get profiled. However, since
-      // the general rule for the whole type is to not profile in this mode,
-      // returning false is appropriate. kRendererSampling has special case
-      // logic elsewhere to enable rendering specifically chosed renderers.
+      // Renderer logic is handled in ProfilingProcessHost::Observe.
       return false;
 
     case Mode::kNone:
@@ -677,20 +804,17 @@ bool ProfilingProcessHost::ShouldProfileProcessType(int process_type) {
 }
 
 bool ProfilingProcessHost::ShouldProfileNewRenderer(
-    content::RenderProcessHost* renderer) const {
+    content::RenderProcessHost* renderer) {
+  Mode mode = GetMode();
   // Never profile incognito processes.
   if (Profile::FromBrowserContext(renderer->GetBrowserContext())
           ->GetProfileType() == Profile::INCOGNITO_PROFILE) {
     return false;
   }
 
-  if (mode() == Mode::kAll) {
+  if (mode == Mode::kAll || mode == Mode::kAllRenderers) {
     return true;
-  } else if (mode() == Mode::kRendererSampling && !profiled_renderer_) {
-    if (always_sample_for_tests_) {
-      return true;
-    }
-
+  } else if (mode == Mode::kRendererSampling && profiled_renderers_.empty()) {
     // Sample renderers with a 1/3 probability.
     return (base::RandUint64() % 100000) < 33333;
   }
@@ -699,6 +823,23 @@ bool ProfilingProcessHost::ShouldProfileNewRenderer(
 }
 
 void ProfilingProcessHost::StartProfilingNonRendererChild(
+    const content::ChildProcessData& data) {
+  DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
+  profiling::mojom::ProcessType process_type =
+      (data.process_type == content::ProcessType::PROCESS_TYPE_GPU)
+          ? profiling::mojom::ProcessType::GPU
+          : profiling::mojom::ProcessType::OTHER;
+
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &ProfilingProcessHost::StartProfilingNonRendererChildOnIOThread,
+              base::Unretained(this), data.id, base::GetProcId(data.handle),
+              process_type));
+}
+
+void ProfilingProcessHost::StartProfilingNonRendererChildOnIOThread(
     int child_process_id,
     base::ProcessId proc_id,
     profiling::mojom::ProcessType process_type) {
@@ -714,8 +855,32 @@ void ProfilingProcessHost::StartProfilingNonRendererChild(
   AddClientToProfilingService(client.take(), proc_id, process_type);
 }
 
-void ProfilingProcessHost::SetRendererSamplingAlwaysProfileForTest() {
-  always_sample_for_tests_ = true;
+void ProfilingProcessHost::StartProfilingRenderer(
+    content::RenderProcessHost* host) {
+  profiled_renderers_.insert(host);
+
+  // Tell the child process to start profiling.
+  ProfilingClientBinder client(host);
+
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::IO)
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(&ProfilingProcessHost::AddClientToProfilingService,
+                         base::Unretained(this), client.take(),
+                         base::GetProcId(host->GetHandle()),
+                         profiling::mojom::ProcessType::RENDERER));
+}
+
+bool ProfilingProcessHost::TakingTraceForUpload() {
+  base::AutoLock lock(taking_trace_for_upload_lock_);
+  return taking_trace_for_upload_;
+}
+
+bool ProfilingProcessHost::SetTakingTraceForUpload(bool new_state) {
+  base::AutoLock lock(taking_trace_for_upload_lock_);
+  bool ret = taking_trace_for_upload_;
+  taking_trace_for_upload_ = new_state;
+  return ret;
 }
 
 }  // namespace profiling

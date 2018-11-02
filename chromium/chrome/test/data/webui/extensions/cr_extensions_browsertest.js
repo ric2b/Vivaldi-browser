@@ -122,6 +122,10 @@ TEST_F('CrExtensionsToolbarTest', 'Layout', function() {
   this.runMochaTest(extension_toolbar_tests.TestNames.Layout);
 });
 
+TEST_F('CrExtensionsToolbarTest', 'DevModeToggle', function() {
+  this.runMochaTest(extension_toolbar_tests.TestNames.DevModeToggle);
+});
+
 TEST_F('CrExtensionsToolbarTest', 'ClickHandlers', function() {
   this.runMochaTest(extension_toolbar_tests.TestNames.ClickHandlers);
 });
@@ -288,8 +292,12 @@ var CrExtensionsLoadErrorTest = class extends CrExtensionsBrowserTest {
   }
 };
 
-TEST_F('CrExtensionsLoadErrorTest', 'Interaction', function() {
-  this.runMochaTest(extension_load_error_tests.TestNames.Interaction);
+TEST_F('CrExtensionsLoadErrorTest', 'RetryError', function() {
+  this.runMochaTest(extension_load_error_tests.TestNames.RetryError);
+});
+
+TEST_F('CrExtensionsLoadErrorTest', 'RetrySuccess', function() {
+  this.runMochaTest(extension_load_error_tests.TestNames.RetrySuccess);
 });
 
 TEST_F('CrExtensionsLoadErrorTest', 'CodeSection', function() {
@@ -591,6 +599,10 @@ var CrExtensionsCodeSectionTest = class extends CrExtensionsBrowserTest {
 
 TEST_F('CrExtensionsCodeSectionTest', 'Layout', function() {
   this.runMochaTest(extension_code_section_tests.TestNames.Layout);
+});
+
+TEST_F('CrExtensionsCodeSectionTest', 'LongSource', function() {
+  this.runMochaTest(extension_code_section_tests.TestNames.LongSource);
 });
 
 ////////////////////////////////////////////////////////////////////////////////

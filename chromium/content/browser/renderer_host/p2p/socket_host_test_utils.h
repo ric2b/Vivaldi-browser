@@ -16,6 +16,7 @@
 #include "net/base/net_errors.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -49,9 +50,11 @@ class FakeSocket : public net::StreamSocket {
   int Read(net::IOBuffer* buf,
            int buf_len,
            const net::CompletionCallback& callback) override;
-  int Write(net::IOBuffer* buf,
-            int buf_len,
-            const net::CompletionCallback& callback) override;
+  int Write(
+      net::IOBuffer* buf,
+      int buf_len,
+      const net::CompletionCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int Connect(const net::CompletionCallback& callback) override;
@@ -72,6 +75,7 @@ class FakeSocket : public net::StreamSocket {
   void AddConnectionAttempts(const net::ConnectionAttempts& attempts) override {
   }
   int64_t GetTotalReceivedBytes() const override;
+  void ApplySocketTag(const net::SocketTag& tag) override {}
 
  private:
   void DoAsyncWrite(scoped_refptr<net::IOBuffer> buf, int buf_len,

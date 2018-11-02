@@ -31,9 +31,9 @@
   },
 
   "UnsafelyTreatInsecureOriginAsSecure": {
-    "os": ["win", "linux", "max", "chromeos", "android"],
+    "os": ["win", "linux", "mac"],
     "test_policy": { "UnsafelyTreatInsecureOriginAsSecure": ["http://example.com/"] },
-    "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_securex" } ]
+    "pref_mappings": [ { "pref": "unsafely_treat_insecure_origin_as_secure" } ]
   },
 
   "HomepageLocation": {
@@ -126,16 +126,7 @@
   },
 
   "DnsPrefetchingEnabled": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "can_be_recommended": true,
-    "test_policy": { "DnsPrefetchingEnabled": false },
-    "pref_mappings": [
-      { "pref": "net.network_prediction_options",
-        "indicator_tests": [
-          { "policy": { "DnsPrefetchingEnabled": false } }
-        ]
-      }
-    ]
+    "note": "This policy has been removed. See https://bugs.chromium.org/p/chromium/issues/detail?id=624095"
   },
 
   "NetworkPredictionOptions": {
@@ -152,11 +143,7 @@
   },
 
   "DisableSpdy": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DisableSpdy": true },
-    "pref_mappings": [
-      { "pref": "spdy.disabled" }
-    ]
+    "note": "This policy has been removed. See https://bugs.chromium.org/p/chromium/issues/detail?id=624095"
   },
 
   "QuicAllowed": {
@@ -540,9 +527,7 @@
   },
 
   "DisablePluginFinder": {
-    "note": "This policy is not in use anymore.",
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DisablePluginFinder": true }
+    "note": "This policy is not in use anymore since Chrome 65."
   },
 
   "SyncDisabled": {
@@ -562,8 +547,7 @@
   },
 
   "EnableDeprecatedWebBasedSignin": {
-    "os": ["win", "linux", "mac"],
-    "test_policy": { "EnableDeprecatedWebBasedSignin": false }
+    "note": "This policy has been removed in Chrome 42."
   },
 
   "UserDataDir": {
@@ -724,6 +708,7 @@
           { "policy": { "ProxySettings": { "ProxyMode": "direct" } } }
         ]
       }
+
     ]
   },
 
@@ -732,13 +717,7 @@
   },
 
   "DisableSSLRecordSplitting": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "DisableSSLRecordSplitting": true },
-    "pref_mappings": [
-      { "pref": "ssl.ssl_record_splitting.disabled",
-        "local_state": true
-      }
-    ]
+    "note": "This policy is retired, see https://bugs.chromium.org/p/chromium/issues/detail?id=485097#c17."
   },
 
   "EnableOnlineRevocationChecks": {
@@ -832,7 +811,7 @@
   },
 
   "GSSAPILibraryName": {
-    "os": ["mac", "linux"],
+    "os": ["linux"],
     "test_policy": { "GSSAPILibraryName": "libwhatever.so" },
     "pref_mappings": [
       { "pref": "auth.gssapi_library_name",
@@ -891,8 +870,18 @@
     "note": "There is a pref behind this setting, but due to the fact that tests override the default with a command-line flag on some trybots, this setting cannot be verified with the common test."
   },
 
+  "WebDriverOverridesIncompatiblePolicies": {
+    "os": ["win", "linux", "mac"],
+    "test_policy": { "WebDriverOverridesIncompatiblePolicies": true },
+    "pref_mappings": [
+      { "pref": "webdriver.override_incompatible_policy",
+        "local_state": true
+      }
+    ]
+  },
+
   "DefaultDownloadDirectory": {
-    "os": ["win", "linux", "mac", "chbromeos"],
+    "os": ["win", "linux", "mac", "chromeos"],
     "test_policy": { "DefaultDownloadDirectory": "${user_home}/test-downloads" },
     "can_be_recommended": true,
     "pref_mappings": [
@@ -904,6 +893,39 @@
         "check_for_mandatory": false,
         "check_for_recommended": true
       }
+    ]
+  },
+
+  "SpellcheckLanguage": {
+    "os": ["win", "linux", "chromeos"],
+    "test_policy": { "SpellcheckLanguage": [ "fr" ] },
+    "pref_mappings": [
+      { "pref": "spellcheck.forced_dictionaries",
+        "indicator_tests": [
+          { "policy": { "SpellcheckLanguage": [ "en-US" ] } },
+          { "policy": { "SpellcheckLanguage": [ "en-US", "ru", "sk" ] } },
+          { "policy": { "SpellcheckLanguage": [] } }
+        ]
+      }
+    ]
+  },
+
+  "ThirdPartyBlockingEnabled": {
+    "os": ["win"],
+    "test_policy": { "ThirdPartyBlockingEnabled": false },
+    "pref_mappings": [
+      { "pref": "third_party_blocking_enabled",
+        "local_state": true
+      }
+    ]
+  },
+
+  "SpellcheckEnabled": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": { "SpellcheckEnabled": false },
+    "pref_mappings": [
+      { "pref": "browser.enable_spellchecking",
+        "indicator_tests": [ { "policy": { "SpellcheckEnabled": false } } ] }
     ]
   },
 
@@ -1113,16 +1135,7 @@
   },
 
   "DefaultSearchProviderInstantURL": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "DefaultSearchProviderEnabled": true,
-      "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}",
-      "DefaultSearchProviderKeyword": "google",
-      "DefaultSearchProviderInstantURL": "http://www.google.com/instant?q={searchTerms}"
-    },
-    "pref_mappings": [
-      { "pref": "default_search_provider_data.template_url_data" }
-    ]
+    "note": "Deprecated since Chrome 63. See https://crbug.com/476079"
   },
 
   "DefaultSearchProviderNewTabURL": {
@@ -1178,16 +1191,7 @@
   },
 
   "DefaultSearchProviderSearchTermsReplacementKey": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "DefaultSearchProviderEnabled": true,
-      "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}",
-      "DefaultSearchProviderKeyword": "google",
-      "DefaultSearchProviderSearchTermsReplacementKey": "espv"
-    },
-    "pref_mappings": [
-      { "pref": "default_search_provider_data.template_url_data" }
-    ]
+    "note": "Deprecated since Chrome 63. See https://crbug.com/476079"
   },
 
   "DefaultSearchProviderImageURL": {
@@ -1230,16 +1234,7 @@
   },
 
   "DefaultSearchProviderInstantURLPostParams": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": {
-      "DefaultSearchProviderEnabled": true,
-      "DefaultSearchProviderSearchURL": "http://www.google.com/?q={searchTerms}",
-      "DefaultSearchProviderKeyword": "google",
-      "DefaultSearchProviderInstantURLPostParams": ""
-    },
-    "pref_mappings": [
-      { "pref": "default_search_provider_data.template_url_data" }
-    ]
+    "note": "Deprecated since Chrome 63. See https://crbug.com/476079"
   },
 
   "DefaultSearchProviderImageURLPostParams": {
@@ -1784,11 +1779,7 @@
   },
 
   "AlwaysAuthorizePlugins": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "AlwaysAuthorizePlugins": true },
-    "pref_mappings": [
-      { "pref": "plugins.always_authorize" }
-    ]
+    "note": "This policy has been removed since Chrome 65."
   },
 
   "RunAllFlashInAllowMode": {
@@ -1925,7 +1916,7 @@
   },
 
   "MaxConnectionsPerProxy": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac"],
     "test_policy": { "MaxConnectionsPerProxy": 16 },
     "pref_mappings": [
       { "pref": "net.max_connections_per_proxy",
@@ -2095,7 +2086,7 @@
   },
 
   "HideWebStoreIcon": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac"],
     "test_policy": { "HideWebStoreIcon": true },
     "pref_mappings": [
       { "pref": "hide_web_store_icon" }
@@ -2165,7 +2156,7 @@
   },
 
   "ForceBrowserSignin": {
-    "os": ["win", "linux", "mac"],
+    "os": ["win"],
     "test_policy": { "ForceBrowserSignin": false },
     "pref_mappings": [
       { "pref": "profile.force_browser_signin",
@@ -2770,6 +2761,14 @@
     ]
   },
 
+  "SecondaryGoogleAccountSigninAllowed": {
+    "os": ["chromeos"],
+    "test_policy": { "SecondaryGoogleAccountSigninAllowed": false },
+    "pref_mappings": [
+      { "pref": "account_consistency_mirror.required" }
+    ]
+  },
+
   "NativeMessagingBlacklist": {
     "os": ["win", "linux", "mac"],
     "test_policy": { "NativeMessagingBlacklist": ["*"] },
@@ -3313,7 +3312,7 @@
   },
 
   "BrowserNetworkTimeQueriesEnabled": {
-    "os": ["win", "linux", "mac", "chromeos"],
+    "os": ["win", "linux", "mac"],
     "test_policy": { "BrowserNetworkTimeQueriesEnabled": true },
     "pref_mappings": [
       { "pref": "network_time.network_time_queries_enabled",
@@ -3327,8 +3326,7 @@
   },
 
   "DeviceEcryptfsMigrationStrategy": {
-    "note": "This policy is deprecated.",
-    "os": ["chromeos"]
+    "note": "This policy is deprecated and removed since Chrome 61."
   },
 
   "NoteTakingAppsLockScreenWhitelist": {
@@ -3431,6 +3429,47 @@
     "pref_mappings": [
       { "pref": "cros.unaffiliated_arc_allowed"}
     ]
+  },
+
+  "DeviceHostnameTemplate": {
+    "os": ["chromeos"],
+    "test_policy": {
+      "DeviceHostnameTemplate": "chromebook-${ASSET_ID}"
+    },
+    "pref_mappings": [
+      { "pref": "cros.network.hostname_template" }
+    ]
+  },
+
+  "AbusiveExperienceInterventionEnforce": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "AbusiveExperienceInterventionEnforce": false
+    },
+    "pref_mappings": [
+      { "pref": "abusive_experience_intervention_enforce"}
+    ]
+  },
+
+  "AdsSettingForIntrusiveAdsSites": {
+    "os": ["win", "linux", "mac", "chromeos"],
+    "test_policy": {
+      "AdsSettingForIntrusiveAdsSites": 1
+    },
+    "pref_mappings": [
+      { "pref": "profile.managed_default_content_settings.ads",
+        "indicator_selector": "[content-setting=ads]",
+        "indicator_tests": [
+          { "policy": { "DefaultAdsSetting": 1 },
+            "value": "allow"},
+          { "policy": { "DefaultAdsSetting": 2 },
+            "value": "block"}
+        ]
+      }
+    ]
+  },
+
+  "RestrictAccountsToPatterns": {
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

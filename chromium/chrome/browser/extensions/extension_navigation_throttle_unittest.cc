@@ -3,7 +3,8 @@
 // found in the LICENSE file.
 
 #include "extensions/browser/extension_navigation_throttle.h"
-#include "base/memory/ptr_util.h"
+
+#include <memory>
 #include "base/strings/stringprintf.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/crx_file/id_util.h"
@@ -41,7 +42,7 @@ class MockBrowserClient : public content::ContentBrowserClient {
   std::vector<std::unique_ptr<NavigationThrottle>> CreateThrottlesForNavigation(
       content::NavigationHandle* handle) override {
     std::vector<std::unique_ptr<NavigationThrottle>> throttles;
-    throttles.push_back(base::MakeUnique<ExtensionNavigationThrottle>(handle));
+    throttles.push_back(std::make_unique<ExtensionNavigationThrottle>(handle));
     return throttles;
   }
 };
@@ -76,10 +77,7 @@ class ExtensionNavigationThrottleUnitTest
         content::NavigationHandle::CreateNavigationHandleForTesting(
             extension_url, host);
     EXPECT_EQ(expected_will_start_result,
-              handle->CallWillStartRequestForTesting(
-                  /*is_post=*/false, content::Referrer(),
-                  /*has_user_gesture=*/false, ui::PAGE_TRANSITION_LINK,
-                  /*is_external_protocol=*/false))
+              handle->CallWillStartRequestForTesting())
         << extension_url;
 
     // Reset the handle for a second subtest: server redirect to
@@ -96,10 +94,7 @@ class ExtensionNavigationThrottleUnitTest
             ? NavigationThrottle::PROCEED
             : NavigationThrottle::CANCEL;
     EXPECT_EQ(NavigationThrottle::PROCEED,
-              handle->CallWillStartRequestForTesting(
-                  /*is_post=*/false, content::Referrer(),
-                  /*has_user_gesture=*/false, ui::PAGE_TRANSITION_LINK,
-                  /*is_external_protocol=*/false))
+              handle->CallWillStartRequestForTesting())
         << http_url;
     EXPECT_EQ(expected_will_redirect_result,
               handle->CallWillRedirectRequestForTesting(

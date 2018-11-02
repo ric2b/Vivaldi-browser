@@ -36,10 +36,10 @@ using namespace HTMLNames;
 LabelsNodeList::LabelsNodeList(ContainerNode& owner_node)
     : LiveNodeList(owner_node,
                    kLabelsNodeListType,
-                   kInvalidateOnForAttrChange,
+                   kInvalidateForFormControls,
                    NodeListRootType::kTreeScope) {}
 
-LabelsNodeList::~LabelsNodeList() {}
+LabelsNodeList::~LabelsNodeList() = default;
 
 bool LabelsNodeList::ElementMatches(const Element& element) const {
   return IsHTMLLabelElement(element) &&

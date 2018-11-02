@@ -12,10 +12,10 @@
 #include "chrome/browser/vr/elements/render_text_wrapper.h"
 #include "chrome/browser/vr/model/color_scheme.h"
 #include "chrome/browser/vr/model/toolbar_state.h"
+#include "chrome/browser/vr/test/mock_render_text.h"
 #include "components/security_state/core/security_state.h"
 #include "components/toolbar/vector_icons.h"
 #include "components/url_formatter/url_formatter.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "ui/gfx/color_palette.h"
@@ -28,15 +28,11 @@ namespace vr {
 
 // TODO(cjgrant): Use ColorScheme instead of hardcoded values
 // where it makes sense.
-static const SkColor kEmphasizedColor = 0xFF000000;
+static const SkColor kEmphasizedColor = SK_ColorBLACK;
 static const SkColor kDeemphasizedColor = 0xFF5A5A5A;
-static const SkColor kSecureColor = gfx::kGoogleGreen700;
-static const SkColor kWarningColor = gfx::kGoogleRed700;
 
-static const SkColor kIncognitoDeemphasizedColor = 0xFF878787;
-static const SkColor kIncognitoEmphasizedColor = 0xFFEDEDED;
-static const SkColor kIncognitoSecureColor = 0xFFEDEDED;
-static const SkColor kIncognitoWarningColor = 0xFFEDEDED;
+static const SkColor kIncognitoDeemphasizedColor = 0xCCFFFFFF;
+static const SkColor kIncognitoEmphasizedColor = 0xFFFFFFFF;
 
 static constexpr int kUrlWidthPixels = 1024;
 
@@ -117,22 +113,6 @@ TestUrlBarTexture::TestUrlBarTexture()
   SetForegroundColor(SK_ColorWHITE);
 }
 
-class MockRenderText : public RenderTextWrapper {
- public:
-  MockRenderText() : RenderTextWrapper(nullptr) {}
-  ~MockRenderText() override {}
-
-  MOCK_METHOD1(SetColor, void(SkColor value));
-  MOCK_METHOD2(ApplyColor, void(SkColor value, const gfx::Range& range));
-  MOCK_METHOD2(SetStyle, void(gfx::TextStyle style, bool value));
-  MOCK_METHOD3(ApplyStyle,
-               void(gfx::TextStyle style, bool value, const gfx::Range& range));
-  MOCK_METHOD1(SetStrikeThicknessFactor, void(SkScalar));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockRenderText);
-};
-
 class UrlEmphasisTest : public testing::Test {
  protected:
   void Verify(const std::string& url_string,
@@ -141,8 +121,11 @@ class UrlEmphasisTest : public testing::Test {
     GURL url(base::UTF8ToUTF16(url_string));
     url::Parsed parsed;
     const base::string16 formatted_url = url_formatter::FormatUrl(
-        url, url_formatter::kFormatUrlOmitDefaults, net::UnescapeRule::NORMAL,
-        &parsed, nullptr, nullptr);
+        url,
+        url_formatter::kFormatUrlOmitDefaults |
+            url_formatter::kFormatUrlOmitHTTPS |
+            url_formatter::kFormatUrlOmitTrivialSubdomains,
+        net::UnescapeRule::NORMAL, &parsed, nullptr, nullptr);
     EXPECT_EQ(formatted_url, base::UTF8ToUTF16(expected_string));
     TestUrlBarTexture::TestUrlStyling(
         formatted_url, parsed, level, &mock_,
@@ -168,22 +151,19 @@ TEST(UrlBarTextureTest, WillNotFailOnNonAsciiURLs) {
 
 TEST_F(UrlEmphasisTest, SecureHttpsHost) {
   EXPECT_CALL(mock_, SetColor(kDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kEmphasizedColor, gfx::Range(8, 16)));
-  EXPECT_CALL(mock_, ApplyColor(kSecureColor, gfx::Range(0, 5)));
+  EXPECT_CALL(mock_, ApplyColor(kEmphasizedColor, gfx::Range(0, 8)));
   EXPECT_CALL(mock_, SetColor(kIncognitoDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(8, 16)));
-  EXPECT_CALL(mock_, ApplyColor(kIncognitoSecureColor, gfx::Range(0, 5)));
-  Verify("https://host.com/page", SecurityLevel::SECURE,
-         "https://host.com/page");
+  EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(0, 8)));
+  Verify("https://host.com/page", SecurityLevel::SECURE, "host.com/page");
 }
 
 TEST_F(UrlEmphasisTest, NotSecureHttpsHost) {
   EXPECT_CALL(mock_, SetColor(kDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kEmphasizedColor, gfx::Range(8, 16)));
+  EXPECT_CALL(mock_, ApplyColor(kEmphasizedColor, gfx::Range(0, 8)));
   EXPECT_CALL(mock_, SetColor(kIncognitoDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(8, 16)));
+  EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(0, 8)));
   Verify("https://host.com/page", SecurityLevel::HTTP_SHOW_WARNING,
-         "https://host.com/page");
+         "host.com/page");
 }
 
 TEST_F(UrlEmphasisTest, NotSecureHttpHost) {
@@ -193,23 +173,6 @@ TEST_F(UrlEmphasisTest, NotSecureHttpHost) {
   EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(0, 8)));
   Verify("http://host.com/page", SecurityLevel::HTTP_SHOW_WARNING,
          "host.com/page");
-}
-
-TEST_F(UrlEmphasisTest, DangerousHttpsHost) {
-  EXPECT_CALL(mock_, SetColor(kDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kEmphasizedColor, gfx::Range(8, 16)));
-  EXPECT_CALL(mock_, ApplyColor(kWarningColor, gfx::Range(0, 5)));
-  EXPECT_CALL(mock_, SetStrikeThicknessFactor(testing::_));
-  EXPECT_CALL(mock_,
-              ApplyStyle(gfx::TextStyle::STRIKE, true, gfx::Range(0, 5)));
-  EXPECT_CALL(mock_, SetColor(kIncognitoDeemphasizedColor));
-  EXPECT_CALL(mock_, ApplyColor(kIncognitoEmphasizedColor, gfx::Range(8, 16)));
-  EXPECT_CALL(mock_, ApplyColor(kIncognitoWarningColor, gfx::Range(0, 5)));
-  EXPECT_CALL(mock_, SetStrikeThicknessFactor(testing::_));
-  EXPECT_CALL(mock_,
-              ApplyStyle(gfx::TextStyle::STRIKE, true, gfx::Range(0, 5)));
-  Verify("https://host.com/page", SecurityLevel::DANGEROUS,
-         "https://host.com/page");
 }
 
 TEST_F(UrlEmphasisTest, Data) {
@@ -299,7 +262,7 @@ TEST(UrlBarTexture, OfflinePage) {
   EXPECT_GT(texture.url_rect().width(), 0);
   EXPECT_GT(texture.url_rect().height(), 0);
   EXPECT_TRUE(texture.security_text().empty());
-  EXPECT_EQ(texture.url_text(), base::UTF8ToUTF16("https://host.com/page"));
+  EXPECT_EQ(texture.url_text(), base::UTF8ToUTF16("host.com/page"));
   gfx::Rect online_url_rect = texture.url_rect();
 
   // Go offline. Security text should be visible and displace the URL.
@@ -320,7 +283,7 @@ TEST(UrlBarTexture, OfflinePage) {
   EXPECT_EQ(texture.security_rect().height(), 0);
   EXPECT_EQ(texture.url_rect(), online_url_rect);
   EXPECT_TRUE(texture.security_text().empty());
-  EXPECT_EQ(texture.url_text(), base::UTF8ToUTF16("https://host.com/page"));
+  EXPECT_EQ(texture.url_text(), base::UTF8ToUTF16("host.com/page"));
 }
 
 TEST(UrlBarTexture, ColorChange) {
@@ -328,7 +291,7 @@ TEST(UrlBarTexture, ColorChange) {
   texture.DrawURL(GURL("https://short.com/"));
   EXPECT_FALSE(texture.url_dirty());
   UrlBarColors colors;
-  colors.insecure = SK_ColorRED;
+  colors.dangerous_icon = SK_ColorRED;
   texture.SetColors(colors);
   EXPECT_TRUE(texture.url_dirty());
 }

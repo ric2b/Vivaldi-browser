@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include "ash/app_list/model/app_list_model.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
@@ -19,15 +18,15 @@
 #include "chrome/browser/ui/app_list/search/app_search_provider.h"
 #include "chrome/browser/ui/app_list/search/history_factory.h"
 #include "chrome/browser/ui/app_list/search/launcher_search/launcher_search_provider.h"
+#include "chrome/browser/ui/app_list/search/mixer.h"
 #include "chrome/browser/ui/app_list/search/omnibox_provider.h"
+#include "chrome/browser/ui/app_list/search/search_controller.h"
 #include "chrome/browser/ui/app_list/search/suggestions/suggestions_search_provider.h"
 #include "chrome/browser/ui/app_list/search/webstore/webstore_provider.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/arc/arc_util.h"
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
-#include "ui/app_list/search/mixer.h"
-#include "ui/app_list/search_controller.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/ui/app_list/search/arc/arc_playstore_search_provider.h"
@@ -71,12 +70,11 @@ bool IsSuggestionsSearchProviderEnabled() {
 
 std::unique_ptr<SearchController> CreateSearchController(
     Profile* profile,
-    AppListModel* model,
+    AppListModelUpdater* model_updater,
     AppListControllerDelegate* list_controller) {
   std::unique_ptr<SearchController> controller =
-      base::MakeUnique<SearchController>(
-          model->search_box(), model->results(),
-          HistoryFactory::GetForBrowserContext(profile));
+      std::make_unique<SearchController>(
+          model_updater, HistoryFactory::GetForBrowserContext(profile));
 
   // Add mixer groups. There are four main groups: answer card, apps, webstore
   // and omnibox. Each group has a "soft" maximum number of results. However, if
@@ -95,30 +93,30 @@ std::unique_ptr<SearchController> CreateSearchController(
   // Add search providers.
   controller->AddProvider(
       apps_group_id,
-      base::MakeUnique<AppSearchProvider>(
-          profile, list_controller, base::MakeUnique<base::DefaultClock>(),
-          model->top_level_item_list()));
-  controller->AddProvider(omnibox_group_id, base::MakeUnique<OmniboxProvider>(
+      std::make_unique<AppSearchProvider>(
+          profile, list_controller, std::make_unique<base::DefaultClock>(),
+          model_updater));
+  controller->AddProvider(omnibox_group_id, std::make_unique<OmniboxProvider>(
                                                 profile, list_controller));
   if (arc::IsWebstoreSearchEnabled()) {
     controller->AddProvider(
         webstore_group_id,
-        base::MakeUnique<WebstoreProvider>(profile, list_controller));
+        std::make_unique<WebstoreProvider>(profile, list_controller));
   }
   if (features::IsAnswerCardEnabled()) {
     controller->AddProvider(
         answer_card_group_id,
-        base::MakeUnique<AnswerCardSearchProvider>(
-            profile, model, list_controller,
-            base::MakeUnique<AnswerCardWebContents>(profile),
-            base::MakeUnique<AnswerCardWebContents>(profile)));
+        std::make_unique<AnswerCardSearchProvider>(
+            profile, model_updater, list_controller,
+            std::make_unique<AnswerCardWebContents>(profile),
+            std::make_unique<AnswerCardWebContents>(profile)));
   }
   if (IsSuggestionsSearchProviderEnabled()) {
     size_t suggestions_group_id =
         controller->AddGroup(kMaxSuggestionsResults, 1.0, 0.0);
     controller->AddProvider(
         suggestions_group_id,
-        base::MakeUnique<SuggestionsSearchProvider>(profile, list_controller));
+        std::make_unique<SuggestionsSearchProvider>(profile, list_controller));
   }
 
   // LauncherSearchProvider is added only when flag is enabled, not in guest
@@ -128,7 +126,7 @@ std::unique_ptr<SearchController> CreateSearchController(
     size_t search_api_group_id =
         controller->AddGroup(kMaxLauncherSearchResults, 1.0, 0.0);
     controller->AddProvider(search_api_group_id,
-                            base::MakeUnique<LauncherSearchProvider>(profile));
+                            std::make_unique<LauncherSearchProvider>(profile));
   }
 
 #if defined(OS_CHROMEOS)
@@ -139,7 +137,7 @@ std::unique_ptr<SearchController> CreateSearchController(
         controller->AddGroup(kMaxPlayStoreResults, 1.0, 10.0);
     controller->AddProvider(
         playstore_api_group_id,
-        base::MakeUnique<ArcPlayStoreSearchProvider>(kMaxPlayStoreResults,
+        std::make_unique<ArcPlayStoreSearchProvider>(kMaxPlayStoreResults,
                                                      profile, list_controller));
   }
 #endif

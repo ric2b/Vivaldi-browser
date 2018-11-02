@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/callback.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #import "base/test/ios/wait_util.h"
 #include "base/time/time.h"
@@ -60,7 +59,7 @@ std::unique_ptr<KeyedService> BuildMockSyncSetupService(
       ios::ChromeBrowserState::FromBrowserState(context);
   syncer::SyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state);
-  return base::MakeUnique<SyncSetupServiceMock>(sync_service,
+  return std::make_unique<SyncSetupServiceMock>(sync_service,
                                                 browser_state->GetPrefs());
 }
 
@@ -160,9 +159,8 @@ TEST_F(HistoryCollectionViewControllerTest, DeleteSingleEntry) {
              scrollPosition:UICollectionViewScrollPositionNone];
   [history_collection_view_controller_ deleteSelectedItemsFromHistory];
 
-  // Expect header section with one item and one entries section with one item.
+  // Expect header section and one entries section with one item.
   EXPECT_EQ(2, [collection_view numberOfSections]);
-  EXPECT_EQ(1, [collection_view numberOfItemsInSection:0]);
   EXPECT_EQ(1, [collection_view numberOfItemsInSection:1]);
 }
 
@@ -189,7 +187,6 @@ TEST_F(HistoryCollectionViewControllerTest, DeleteMultipleEntries) {
 
   // Expect only the header section to remain.
   EXPECT_EQ(1, [collection_view numberOfSections]);
-  EXPECT_EQ(1, [collection_view numberOfItemsInSection:0]);
 }
 
 // Tests that adding two entries to history from different days then deleting
@@ -217,5 +214,4 @@ TEST_F(HistoryCollectionViewControllerTest, DeleteMultipleSections) {
 
   // Expect only the header section to remain.
   EXPECT_EQ(1, [collection_view numberOfSections]);
-  EXPECT_EQ(1, [collection_view numberOfItemsInSection:0]);
 }

@@ -4,21 +4,24 @@
 
 #include "content/public/test/url_loader_interceptor.h"
 
+#include "base/test/bind_test_util.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/loader/url_loader_factory_impl.h"
-#include "content/browser/storage_partition_impl.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
-#include "content/public/common/url_loader.mojom.h"
+#include "net/http/http_util.h"
+#include "services/network/public/interfaces/url_loader.mojom.h"
 
 namespace content {
 
-class URLLoaderInterceptor::Interceptor : public mojom::URLLoaderFactory {
+class URLLoaderInterceptor::Interceptor
+    : public network::mojom::URLLoaderFactory {
  public:
   using ProcessIdGetter = base::Callback<int()>;
-  using OriginalFactoryGetter = base::Callback<mojom::URLLoaderFactory*()>;
+  using OriginalFactoryGetter =
+      base::Callback<network::mojom::URLLoaderFactory*()>;
 
   Interceptor(URLLoaderInterceptor* parent,
               const ProcessIdGetter& process_id_getter,
@@ -30,13 +33,13 @@ class URLLoaderInterceptor::Interceptor : public mojom::URLLoaderFactory {
   ~Interceptor() override {}
 
  private:
-  // mojom::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(mojom::URLLoaderRequest request,
+  // network::mojom::URLLoaderFactory implementation:
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest request,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
-                            const ResourceRequest& url_request,
-                            mojom::URLLoaderClientPtr client,
+                            const network::ResourceRequest& url_request,
+                            network::mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override {
     RequestParams params;
@@ -49,9 +52,23 @@ class URLLoaderInterceptor::Interceptor : public mojom::URLLoaderFactory {
     params.client = std::move(client);
     params.traffic_annotation = traffic_annotation;
     // We don't intercept the blob URL for plznavigate requests.
-    if (url_request.resource_body_stream_url.is_empty() &&
+    if (params.url_request.resource_body_stream_url.is_empty() &&
         parent_->callback_.Run(&params))
       return;
+
+    // mock.failed.request is a special request whereby the query indicates what
+    // error code to respond with.
+    if (params.url_request.url.DomainIs("mock.failed.request")) {
+      std::string query = params.url_request.url.query();
+      std::string error_code = query.substr(query.find("=") + 1);
+
+      int error = 0;
+      base::StringToInt(error_code, &error);
+      network::URLLoaderCompletionStatus status;
+      status.error_code = error;
+      params.client->OnComplete(status);
+      return;
+    }
 
     original_factory_getter_.Run()->CreateLoaderAndStart(
         std::move(params.request), params.routing_id, params.request_id,
@@ -59,7 +76,9 @@ class URLLoaderInterceptor::Interceptor : public mojom::URLLoaderFactory {
         params.traffic_annotation);
   }
 
-  void Clone(mojom::URLLoaderFactoryRequest request) override { NOTREACHED(); }
+  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
+    NOTREACHED();
+  }
 
   URLLoaderInterceptor* parent_;
   ProcessIdGetter process_id_getter_;
@@ -68,130 +87,145 @@ class URLLoaderInterceptor::Interceptor : public mojom::URLLoaderFactory {
   DISALLOW_COPY_AND_ASSIGN(Interceptor);
 };
 
-class URLLoaderInterceptor::IOThreadWrapper {
+// This class intercepts calls to each StoragePartition's URLLoaderFactoryGetter
+// so that it can intercept frame requests.
+class URLLoaderInterceptor::URLLoaderFactoryGetterWrapper {
  public:
-  IOThreadWrapper(mojom::URLLoaderFactoryRequest factory_request,
-                  int process_id,
-                  URLLoaderInterceptor* parent,
-                  mojom::URLLoaderFactoryPtrInfo original_factory)
-      : interceptor_(
-            parent,
-            base::Bind([](int process_id) { return process_id; }, process_id),
-            base::Bind(&IOThreadWrapper::GetOriginalFactory,
-                       base::Unretained(this))),
-        binding_(&interceptor_, std::move(factory_request)),
-        original_factory_(std::move(original_factory)) {}
+  URLLoaderFactoryGetterWrapper(
+      URLLoaderFactoryGetter* url_loader_factory_getter,
+      URLLoaderInterceptor* parent)
+      : url_loader_factory_getter_(url_loader_factory_getter) {
+    frame_interceptor_ = std::make_unique<Interceptor>(
+        parent, base::BindRepeating([]() { return 0; }),
+        base::BindLambdaForTesting([=]() -> network::mojom::URLLoaderFactory* {
+          return url_loader_factory_getter
+              ->original_network_factory_for_testing()
+              ->get();
+        }));
+    url_loader_factory_getter_->SetNetworkFactoryForTesting(
+        frame_interceptor_.get());
+  }
 
-  ~IOThreadWrapper() {}
+  ~URLLoaderFactoryGetterWrapper() {
+    url_loader_factory_getter_->SetNetworkFactoryForTesting(nullptr);
+  }
 
  private:
-  mojom::URLLoaderFactory* GetOriginalFactory() {
+  std::unique_ptr<Interceptor> frame_interceptor_;
+  URLLoaderFactoryGetter* url_loader_factory_getter_;
+};
+
+// This class is sent along a RenderFrame commit message as a subresource
+// loader so that it can intercept subresource requests.
+class URLLoaderInterceptor::SubresourceWrapper {
+ public:
+  SubresourceWrapper(network::mojom::URLLoaderFactoryRequest factory_request,
+                     int process_id,
+                     URLLoaderInterceptor* parent,
+                     network::mojom::URLLoaderFactoryPtrInfo original_factory)
+      : interceptor_(
+            parent,
+            base::BindRepeating([](int process_id) { return process_id; },
+                                process_id),
+            base::BindRepeating(&SubresourceWrapper::GetOriginalFactory,
+                                base::Unretained(this))),
+        binding_(&interceptor_, std::move(factory_request)),
+        original_factory_(std::move(original_factory)) {
+    binding_.set_connection_error_handler(
+        base::BindOnce(&URLLoaderInterceptor::SubresourceWrapperBindingError,
+                       base::Unretained(parent), this));
+  }
+
+  ~SubresourceWrapper() {}
+
+ private:
+  network::mojom::URLLoaderFactory* GetOriginalFactory() {
     return original_factory_.get();
   }
 
   Interceptor interceptor_;
-  mojo::Binding<mojom::URLLoaderFactory> binding_;
-  mojom::URLLoaderFactoryPtr original_factory_;
+  mojo::Binding<network::mojom::URLLoaderFactory> binding_;
+  network::mojom::URLLoaderFactoryPtr original_factory_;
 
-  DISALLOW_COPY_AND_ASSIGN(IOThreadWrapper);
+  DISALLOW_COPY_AND_ASSIGN(SubresourceWrapper);
 };
 
 URLLoaderInterceptor::RequestParams::RequestParams() = default;
 URLLoaderInterceptor::RequestParams::~RequestParams() = default;
 
 URLLoaderInterceptor::URLLoaderInterceptor(const InterceptCallback& callback,
-                                           StoragePartition* storage_partition,
                                            bool intercept_frame_requests,
                                            bool intercept_subresources)
-    : callback_(callback), storage_partition_(storage_partition) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  if (intercept_frame_requests) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      auto factory_getter =
-          static_cast<StoragePartitionImpl*>(storage_partition)
-              ->url_loader_factory_getter();
-      frame_interceptor_ = std::make_unique<Interceptor>(
-          this, base::Bind([]() { return 0 /* browser process */; }),
-          base::Bind(
-              [](scoped_refptr<URLLoaderFactoryGetter> factory_getter) {
-                mojom::URLLoaderFactory* factory =
-                    factory_getter->original_network_factory_for_testing()
-                        ->get();
-                return factory;
-              },
-              factory_getter));
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(&URLLoaderFactoryGetter::SetNetworkFactoryForTesting,
-                     factory_getter, frame_interceptor_.get()));
-    } else {
-      // Once http://crbug.com/747130 is fixed, the codepath above will work for
-      // the non-network service code path.
-    }
+    : callback_(callback),
+      intercept_frame_requests_(intercept_frame_requests),
+      intercept_subresources_(intercept_subresources) {
+  DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::UI) ||
+         BrowserThread::CurrentlyOn(BrowserThread::UI));
+
+  if (intercept_subresources_ &&
+      base::FeatureList::IsEnabled(features::kNetworkService)) {
+    RenderFrameHostImpl::SetNetworkFactoryForTesting(base::BindRepeating(
+        &URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources,
+        base::Unretained(this)));
   }
 
-  if (intercept_subresources) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      RenderFrameHostImpl::SetNetworkFactoryForTesting(base::Bind(
-          &URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources,
-          base::Unretained(this)));
-    } else {
-      rmf_interceptor_ = std::make_unique<Interceptor>(
-          this, base::Bind([]() {
-            return ResourceMessageFilter::GetCurrentForTesting()->child_id();
-          }),
-          base::Bind([]() {
-            mojom::URLLoaderFactory* factory =
-                ResourceMessageFilter::GetCurrentForTesting();
-            return factory;
-          }));
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(&ResourceMessageFilter::SetNetworkFactoryForTesting,
-                     rmf_interceptor_.get()));
-    }
+  if (BrowserThread::IsThreadInitialized(BrowserThread::IO)) {
+    base::RunLoop run_loop;
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&URLLoaderInterceptor::InitializeOnIOThread,
+                       base::Unretained(this), run_loop.QuitClosure()));
+    run_loop.Run();
+  } else {
+    InitializeOnIOThread(base::OnceClosure());
   }
 }
 
 URLLoaderInterceptor::~URLLoaderInterceptor() {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  if (frame_interceptor_) {
-    auto factory_getter = static_cast<StoragePartitionImpl*>(storage_partition_)
-                              ->url_loader_factory_getter();
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(&URLLoaderFactoryGetter::SetNetworkFactoryForTesting,
-                   factory_getter, nullptr));
+
+  if (intercept_subresources_ &&
+      base::FeatureList::IsEnabled(features::kNetworkService)) {
+    RenderFrameHostImpl::SetNetworkFactoryForTesting(
+        RenderFrameHostImpl::CreateNetworkFactoryCallback());
   }
 
-  if (rmf_interceptor_) {
-    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-      RenderFrameHostImpl::SetNetworkFactoryForTesting(
-          RenderFrameHostImpl::CreateNetworkFactoryCallback());
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(&URLLoaderInterceptor::ClearSubresourceWrappers,
-                     base::Unretained(this)));
-    } else {
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(&ResourceMessageFilter::SetNetworkFactoryForTesting,
-                     nullptr));
-    }
-  }
+  base::RunLoop run_loop;
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&URLLoaderInterceptor::ShutdownOnIOThread,
+                     base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+}
 
-  if (frame_interceptor_ || rmf_interceptor_) {
-    base::RunLoop run_loop;
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            run_loop.QuitClosure());
-  }
+void URLLoaderInterceptor::WriteResponse(
+    const std::string& headers,
+    const std::string& body,
+    network::mojom::URLLoaderClient* client) {
+  net::HttpResponseInfo info;
+  info.headers = new net::HttpResponseHeaders(
+      net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.length()));
+  network::ResourceResponseHead response;
+  response.headers = info.headers;
+  response.headers->GetMimeType(&response.mime_type);
+  client->OnReceiveResponse(response, base::nullopt, nullptr);
+
+  uint32_t bytes_written = body.size();
+  mojo::DataPipe data_pipe;
+  data_pipe.producer_handle->WriteData(body.data(), &bytes_written,
+                                       MOJO_WRITE_DATA_FLAG_ALL_OR_NONE);
+  client->OnStartLoadingResponseBody(std::move(data_pipe.consumer_handle));
+
+  network::URLLoaderCompletionStatus status;
+  status.error_code = net::OK;
+  client->OnComplete(status);
 }
 
 void URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources(
-    mojom::URLLoaderFactoryRequest request,
+    network::mojom::URLLoaderFactoryRequest request,
     int process_id,
-    mojom::URLLoaderFactoryPtrInfo original_factory) {
-  if (BrowserThread::CurrentlyOn(BrowserThread::IO)) {
+    network::mojom::URLLoaderFactoryPtrInfo original_factory) {
+  if (!BrowserThread::CurrentlyOn(BrowserThread::IO)) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources,
@@ -200,13 +234,74 @@ void URLLoaderInterceptor::CreateURLLoaderFactoryForSubresources(
     return;
   }
 
-  io_thread_wrappers_.emplace(std::make_unique<IOThreadWrapper>(
+  subresource_wrappers_.emplace(std::make_unique<SubresourceWrapper>(
       std::move(request), process_id, this, std::move(original_factory)));
 }
 
-void URLLoaderInterceptor::ClearSubresourceWrappers() {
+void URLLoaderInterceptor::GetNetworkFactoryCallback(
+    URLLoaderFactoryGetter* url_loader_factory_getter) {
+  url_loader_factory_getter_wrappers_.emplace(
+      std::make_unique<URLLoaderFactoryGetterWrapper>(url_loader_factory_getter,
+                                                      this));
+}
+
+void URLLoaderInterceptor::SubresourceWrapperBindingError(
+    SubresourceWrapper* wrapper) {
+  for (auto& it : subresource_wrappers_) {
+    if (it.get() == wrapper) {
+      subresource_wrappers_.erase(it);
+      return;
+    }
+  }
+
+  NOTREACHED();
+}
+
+void URLLoaderInterceptor::InitializeOnIOThread(base::OnceClosure closure) {
+  // Once http://crbug.com/747130 is fixed, the codepath above will work for
+  // the non-network service code path.
+  if (intercept_frame_requests_ &&
+      base::FeatureList::IsEnabled(features::kNetworkService)) {
+    URLLoaderFactoryGetter::SetGetNetworkFactoryCallbackForTesting(
+        base::BindRepeating(&URLLoaderInterceptor::GetNetworkFactoryCallback,
+                            base::Unretained(this)));
+  }
+
+  if (intercept_subresources_ &&
+      !base::FeatureList::IsEnabled(features::kNetworkService)) {
+    rmf_interceptor_ = std::make_unique<Interceptor>(
+        this, base::BindRepeating([]() {
+          return ResourceMessageFilter::GetCurrentForTesting()->child_id();
+        }),
+        base::BindRepeating([]() {
+          network::mojom::URLLoaderFactory* factory =
+              ResourceMessageFilter::GetCurrentForTesting();
+          return factory;
+        }));
+    ResourceMessageFilter::SetNetworkFactoryForTesting(rmf_interceptor_.get());
+  }
+
+  if (closure)
+    std::move(closure).Run();
+}
+
+void URLLoaderInterceptor::ShutdownOnIOThread(base::OnceClosure closure) {
   DCHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
-  io_thread_wrappers_.clear();
+  url_loader_factory_getter_wrappers_.clear();
+  subresource_wrappers_.clear();
+
+  if (intercept_frame_requests_ &&
+      base::FeatureList::IsEnabled(features::kNetworkService)) {
+    URLLoaderFactoryGetter::SetGetNetworkFactoryCallbackForTesting(
+        URLLoaderFactoryGetter::GetNetworkFactoryCallback());
+  }
+
+  if (intercept_subresources_ &&
+      !base::FeatureList::IsEnabled(features::kNetworkService)) {
+    ResourceMessageFilter::SetNetworkFactoryForTesting(nullptr);
+  }
+
+  std::move(closure).Run();
 }
 
 }  // namespace content

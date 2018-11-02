@@ -4,6 +4,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -32,8 +33,8 @@ def EnsureEmptyDir(path):
 
 def BuildForArch(project, arch):
   Run('scripts/build-zircon.sh', '-p', project)
-  Run('packages/gn/gen.py', '--target_cpu=' + arch,
-      '--packages=packages/gn/sdk','--ignore-skia', '--release')
+  Run('build/gn/gen.py', '--target_cpu=' + arch,
+      '--packages=garnet/packages/sdk','--ignore-skia', '--release')
   Run('buildtools/ninja', '-C', 'out/release-' + arch)
 
 
@@ -49,8 +50,8 @@ def main(args):
   # Switch to the Fuchsia tree and build an SDK.
   os.chdir(fuchsia_root)
 
-  BuildForArch('zircon-pc-x86-64', 'x86-64')
-  BuildForArch('zircon-qemu-arm64', 'aarch64')
+  BuildForArch('x86', 'x86-64')
+  BuildForArch('arm64', 'aarch64')
 
   tempdir = tempfile.mkdtemp()
   sdk_tar = os.path.join(tempdir, 'fuchsia-sdk.tgz')
@@ -62,9 +63,22 @@ def main(args):
   output_dir = os.path.join(REPOSITORY_ROOT, 'third_party', 'fuchsia-sdk')
   EnsureEmptyDir(output_dir)
   tarfile.open(sdk_tar, mode='r:gz').extractall(path=output_dir)
+
+  print 'Hashing sysroot...'
+  # Hash the sysroot to catch updates to the headers, but don't hash the whole
+  # tree, as we want to avoid rebuilding all of Chromium if it's only e.g. the
+  # kernel blob has changed. https://crbug.com/793956.
+  sysroot_hash_obj = hashlib.sha1()
+  for root, dirs, files in os.walk(os.path.join(output_dir, 'sysroot')):
+    for f in files:
+      path = os.path.join(root, f)
+      sysroot_hash_obj.update(path)
+      sysroot_hash_obj.update(open(path, 'rb').read())
+  sysroot_hash = sysroot_hash_obj.hexdigest()
+
   hash_filename = os.path.join(output_dir, '.hash')
   with open(hash_filename, 'w') as f:
-    f.write('locally-built-sdk')
+    f.write('locally-built-sdk-' + sysroot_hash)
 
   # Clean up.
   shutil.rmtree(tempdir)

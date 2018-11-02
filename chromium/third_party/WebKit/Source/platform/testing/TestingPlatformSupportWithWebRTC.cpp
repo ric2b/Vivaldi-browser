@@ -13,9 +13,9 @@
 
 namespace blink {
 
-MockWebRTCPeerConnectionHandler::MockWebRTCPeerConnectionHandler() {}
+MockWebRTCPeerConnectionHandler::MockWebRTCPeerConnectionHandler() = default;
 
-MockWebRTCPeerConnectionHandler::~MockWebRTCPeerConnectionHandler() {}
+MockWebRTCPeerConnectionHandler::~MockWebRTCPeerConnectionHandler() = default;
 
 bool MockWebRTCPeerConnectionHandler::Initialize(const WebRTCConfiguration&,
                                                  const WebMediaConstraints&) {
@@ -101,7 +101,8 @@ void MockWebRTCPeerConnectionHandler::Stop() {}
 
 std::unique_ptr<WebRTCPeerConnectionHandler>
 TestingPlatformSupportWithWebRTC::CreateRTCPeerConnectionHandler(
-    WebRTCPeerConnectionHandlerClient*) {
+    WebRTCPeerConnectionHandlerClient*,
+    scoped_refptr<base::SingleThreadTaskRunner>) {
   return std::make_unique<MockWebRTCPeerConnectionHandler>();
 }
 

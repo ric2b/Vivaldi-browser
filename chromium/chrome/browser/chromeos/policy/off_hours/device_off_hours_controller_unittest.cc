@@ -13,6 +13,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
@@ -102,7 +103,9 @@ void SetOffHoursPolicyToProto(em::ChromeDeviceSettingsProto* proto,
 class DeviceOffHoursControllerSimpleTest
     : public chromeos::DeviceSettingsTestBase {
  protected:
-  DeviceOffHoursControllerSimpleTest() {}
+  DeviceOffHoursControllerSimpleTest()
+      : fake_user_manager_(new chromeos::FakeChromeUserManager()),
+        scoped_user_manager_(base::WrapUnique(fake_user_manager_)) {}
 
   void SetUp() override {
     chromeos::DeviceSettingsTestBase::SetUp();
@@ -113,7 +116,7 @@ class DeviceOffHoursControllerSimpleTest
         base::WrapUnique(power_manager_client_));
 
     device_settings_service_.SetDeviceOffHoursControllerForTesting(
-        base::MakeUnique<policy::off_hours::DeviceOffHoursController>());
+        std::make_unique<policy::off_hours::DeviceOffHoursController>());
     device_off_hours_controller_ =
         device_settings_service_.device_off_hours_controller();
   }
@@ -150,6 +153,10 @@ class DeviceOffHoursControllerSimpleTest
     return device_off_hours_controller_;
   }
 
+  chromeos::FakeChromeUserManager* fake_user_manager() {
+    return fake_user_manager_;
+  }
+
  private:
   // The object is owned by DeviceSettingsTestBase class.
   chromeos::FakeSystemClockClient* system_clock_client_;
@@ -159,6 +166,9 @@ class DeviceOffHoursControllerSimpleTest
 
   // The object is owned by DeviceSettingsService class.
   policy::off_hours::DeviceOffHoursController* device_off_hours_controller_;
+
+  chromeos::FakeChromeUserManager* fake_user_manager_;
+  user_manager::ScopedUserManager scoped_user_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(DeviceOffHoursControllerSimpleTest);
 };
@@ -248,6 +258,39 @@ TEST_F(DeviceOffHoursControllerSimpleTest, NoNetworkSynchronization) {
                    .guest_mode_enabled());
 }
 
+TEST_F(DeviceOffHoursControllerSimpleTest,
+       IsCurrentSessionAllowedOnlyForOffHours) {
+  EXPECT_FALSE(
+      device_off_hours_controller()->IsCurrentSessionAllowedOnlyForOffHours());
+
+  system_clock_client()->set_network_synchronized(true);
+  system_clock_client()->NotifyObserversSystemClockUpdated();
+
+  EXPECT_FALSE(
+      device_off_hours_controller()->IsCurrentSessionAllowedOnlyForOffHours());
+
+  em::ChromeDeviceSettingsProto& proto(device_policy_.payload());
+  proto.mutable_guest_mode_enabled()->set_guest_mode_enabled(false);
+  int current_day_of_week = ExtractDayOfWeek(base::Time::Now());
+  SetOffHoursPolicyToProto(
+      &proto, OffHoursPolicy(
+                  kUtcTimezone,
+                  {OffHoursInterval(
+                      WeeklyTime(current_day_of_week, 0),
+                      WeeklyTime(NextDayOfWeek(current_day_of_week),
+                                 TimeDelta::FromHours(10).InMilliseconds()))}));
+  UpdateDeviceSettings();
+
+  EXPECT_FALSE(
+      device_off_hours_controller()->IsCurrentSessionAllowedOnlyForOffHours());
+
+  fake_user_manager()->AddGuestUser();
+  fake_user_manager()->LoginUser(fake_user_manager()->GetGuestAccountId());
+
+  EXPECT_TRUE(
+      device_off_hours_controller()->IsCurrentSessionAllowedOnlyForOffHours());
+}
+
 class DeviceOffHoursControllerFakeClockTest
     : public DeviceOffHoursControllerSimpleTest {
  protected:
@@ -258,7 +301,7 @@ class DeviceOffHoursControllerFakeClockTest
     system_clock_client()->set_network_synchronized(true);
     system_clock_client()->NotifyObserversSystemClockUpdated();
     std::unique_ptr<base::SimpleTestClock> test_clock =
-        base::MakeUnique<base::SimpleTestClock>();
+        std::make_unique<base::SimpleTestClock>();
     test_clock_ = test_clock.get();
     // Clocks are set to 1970-01-01 00:00:00 UTC, Thursday.
     test_clock_->SetNow(base::Time::UnixEpoch());

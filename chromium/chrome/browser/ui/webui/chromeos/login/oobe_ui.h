@@ -54,10 +54,12 @@ class SigninScreenHandler;
 class SigninScreenHandlerDelegate;
 class SupervisedUserCreationScreenHandler;
 class ResetView;
+class SyncConsentScreenView;
 class TermsOfServiceScreenView;
 class UserBoardView;
 class UserImageView;
 class UpdateView;
+class UpdateRequiredView;
 class VoiceInteractionValuePropScreenView;
 class WaitForContainerReadyScreenView;
 class WrongHWIDScreenView;
@@ -104,6 +106,7 @@ class OobeUI : public content::WebUIController,
   KioskAutolaunchScreenView* GetKioskAutolaunchScreenView();
   KioskEnableScreenView* GetKioskEnableScreenView();
   TermsOfServiceScreenView* GetTermsOfServiceScreenView();
+  SyncConsentScreenView* GetSyncConsentScreenView();
   ArcTermsOfServiceScreenView* GetArcTermsOfServiceScreenView();
   UserImageView* GetUserImageView();
   ErrorScreen* GetErrorScreen();
@@ -119,6 +122,7 @@ class OobeUI : public content::WebUIController,
   EncryptionMigrationScreenView* GetEncryptionMigrationScreenView();
   VoiceInteractionValuePropScreenView* GetVoiceInteractionValuePropScreenView();
   WaitForContainerReadyScreenView* GetWaitForContainerReadyScreenView();
+  UpdateRequiredView* GetUpdateRequiredScreenView();
   GaiaView* GetGaiaScreenView();
   UserBoardView* GetUserBoardView();
 

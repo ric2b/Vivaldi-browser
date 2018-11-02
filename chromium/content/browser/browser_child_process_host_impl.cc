@@ -16,6 +16,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/persistent_histogram_allocator.h"
 #include "base/metrics/persistent_memory_allocator.h"
@@ -26,12 +27,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "content/browser/bad_message.h"
 #include "content/browser/histogram_controller.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/browser/tracing/trace_message_filter.h"
 #include "content/common/child_process_host_impl.h"
-#include "content/common/child_process_messages.h"
 #include "content/common/service_manager/child_connection.h"
 #include "content/public/browser/browser_child_process_host_delegate.h"
 #include "content/public/browser/browser_child_process_observer.h"
@@ -362,8 +363,12 @@ void BrowserChildProcessHostImpl::OnChannelError() {
 
 void BrowserChildProcessHostImpl::OnBadMessageReceived(
     const IPC::Message& message) {
-  std::string log_message =
-      base::StringPrintf("Bad message received of type: %u", message.type());
+  std::string log_message = "Bad message received of type: ";
+  if (message.IsValid()) {
+    log_message += std::to_string(message.type());
+  } else {
+    log_message += "unknown";
+  }
   TerminateOnBadMessageReceived(log_message);
 }
 
@@ -505,7 +510,7 @@ void BrowserChildProcessHostImpl::CreateMetricsAllocator() {
       int process_type = data_.process_type;
       if (process_type >= PROCESS_TYPE_CONTENT_END)
         process_type += 1000 - PROCESS_TYPE_CONTENT_END;
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "UMA.SubprocessMetricsProvider.UntrackedProcesses", process_type);
       return;
   }
@@ -527,7 +532,8 @@ void BrowserChildProcessHostImpl::ShareMetricsAllocatorToProcess() {
         GetHost(),
         mojo::WrapSharedMemoryHandle(
             metrics_allocator_->shared_memory()->handle().Duplicate(),
-            metrics_allocator_->shared_memory()->mapped_size(), false));
+            metrics_allocator_->shared_memory()->mapped_size(),
+            mojo::UnwrappedSharedMemoryHandleProtection::kReadWrite));
   } else {
     HistogramController::GetInstance()->SetHistogramMemory<ChildProcessHost>(
         GetHost(), mojo::ScopedSharedBufferHandle());
@@ -600,7 +606,8 @@ void BrowserChildProcessHostImpl::OnMojoError(
   // Create a memory dump with the error message captured in a crash key value.
   // This will make it easy to determine details about what interface call
   // failed.
-  base::debug::ScopedCrashKey error_key_value("mojo-message-error", error);
+  base::debug::ScopedCrashKeyString scoped_error_key(
+      bad_message::GetMojoErrorCrashKey(), error);
   base::debug::DumpWithoutCrashing();
   process->child_process_->GetProcess().Terminate(
       RESULT_CODE_KILLED_BAD_MESSAGE, false);

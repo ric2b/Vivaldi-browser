@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "ash/app_list/model/search_result.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/i18n/rtl.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
@@ -47,7 +47,7 @@ SearchResultTileItemListView::SearchResultTileItemListView(
       search_box_(search_box),
       is_play_store_app_search_enabled_(
           features::IsPlayStoreAppSearchEnabled()) {
-  SetLayoutManager(new views::BoxLayout(
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal,
       gfx::Insets(kItemListVerticalSpacing, kItemListHorizontalSpacing),
       kBetweenItemSpacing));
@@ -65,8 +65,7 @@ SearchResultTileItemListView::SearchResultTileItemListView(
     }
 
     SearchResultTileItemView* tile_item = new SearchResultTileItemView(
-        this, view_delegate, nullptr, false /* Not a suggested app */,
-        is_play_store_app_search_enabled_);
+        this, view_delegate, nullptr /* pagination model */);
     tile_item->SetParentBackgroundColor(kCardBackgroundColor);
     tile_views_.push_back(tile_item);
     AddChildView(tile_item);
@@ -97,23 +96,19 @@ int SearchResultTileItemListView::GetYSize() {
   return num_results() ? 1 : 0;
 }
 
-views::View* SearchResultTileItemListView::GetSelectedView() const {
+views::View* SearchResultTileItemListView::GetSelectedView() {
   return IsValidSelectionIndex(selected_index()) ? tile_views_[selected_index()]
                                                  : nullptr;
 }
 
-views::View* SearchResultTileItemListView::SetFirstResultSelected(
-    bool selected) {
+SearchResultBaseView* SearchResultTileItemListView::GetFirstResultView() {
   DCHECK(!tile_views_.empty());
-  if (num_results() <= 0)
-    return nullptr;
-  tile_views_[0]->SetSelected(selected);
-  return tile_views_[0];
+  return num_results() <= 0 ? nullptr : tile_views_[0];
 }
 
 int SearchResultTileItemListView::DoUpdate() {
   std::vector<SearchResult*> display_results =
-      AppListModel::FilterSearchResultsByDisplayType(
+      SearchModel::FilterSearchResultsByDisplayType(
           results(), SearchResult::DISPLAY_TILE, kMaxNumSearchResultTiles);
 
   SearchResult::ResultType previous_type = SearchResult::RESULT_UNKNOWN;
@@ -151,103 +146,48 @@ int SearchResultTileItemListView::DoUpdate() {
   return display_results.size();
 }
 
+// TODO(warx): This implementation is deprecated and should be removed as part
+// of removing "pseudo-focus" logic work (https://crbug.com/766807).
 void SearchResultTileItemListView::UpdateSelectedIndex(int old_selected,
-                                                       int new_selected) {
-  if (old_selected >= 0)
-    tile_views_[old_selected]->SetSelected(false);
-
-  if (new_selected >= 0) {
-    tile_views_[new_selected]->SetSelected(true);
-    ScrollRectToVisible(GetLocalBounds());
-  }
-}
+                                                       int new_selected) {}
 
 bool SearchResultTileItemListView::OnKeyPressed(const ui::KeyEvent& event) {
-  if (features::IsAppListFocusEnabled()) {
-    // Let the FocusManager handle Left/Right keys.
-    if (!CanProcessUpDownKeyTraversal(event))
-      return false;
+  // Let the FocusManager handle Left/Right keys.
+  if (!CanProcessUpDownKeyTraversal(event))
+    return false;
 
-    views::View* next_focusable_view = nullptr;
+  views::View* next_focusable_view = nullptr;
 
-    // Since search result tile item views have horizontal layout, hitting
-    // up/down when one of them is focused moves focus to the previous/next
-    // search result container.
-    if (event.key_code() == ui::VKEY_UP) {
-      next_focusable_view = GetFocusManager()->GetNextFocusableView(
-          tile_views_.front(), GetWidget(), true, false);
-      if (!search_result_page_view_->Contains(next_focusable_view)) {
-        // Focus should be moved to search box when it is moved outside search
-        // result page view.
-        search_box_->RequestFocus();
-        return true;
-      }
-    } else {
-      DCHECK_EQ(event.key_code(), ui::VKEY_DOWN);
-      next_focusable_view = GetFocusManager()->GetNextFocusableView(
-          tile_views_.back(), GetWidget(), false, false);
-    }
-
-    if (next_focusable_view) {
-      next_focusable_view->RequestFocus();
+  // Since search result tile item views have horizontal layout, hitting
+  // up/down when one of them is focused moves focus to the previous/next
+  // search result container.
+  if (event.key_code() == ui::VKEY_UP) {
+    next_focusable_view = GetFocusManager()->GetNextFocusableView(
+        tile_views_.front(), GetWidget(), true, false);
+    if (!search_result_page_view_->Contains(next_focusable_view)) {
+      // Focus should be moved to search box when it is moved outside search
+      // result page view.
+      search_box_->RequestFocus();
       return true;
     }
-
-    // Return false to let FocusManager to handle default focus move by key
-    // events.
-    return false;
+  } else {
+    DCHECK_EQ(event.key_code(), ui::VKEY_DOWN);
+    next_focusable_view = GetFocusManager()->GetNextFocusableView(
+        tile_views_.back(), GetWidget(), false, false);
   }
-  // TODO(weidongg/766807) Remove everything below when the flag is enabled by
-  // default.
-  int selection_index = selected_index();
-  // Also count the separator when Play Store app search feature is enabled.
-  const int child_index = is_play_store_app_search_enabled_
-                              ? selection_index * 2 + 1
-                              : selection_index;
-  if (selection_index >= 0 && child_at(child_index)->OnKeyPressed(event))
-    return true;
 
-  int dir = 0;
-  bool cursor_at_end_of_searchbox =
-      search_box_->GetCursorPosition() == search_box_->text().length();
-  const int forward_dir = base::i18n::IsRTL() ? -1 : 1;
-  switch (event.key_code()) {
-    case ui::VKEY_TAB:
-      if (event.IsShiftDown())
-        dir = -1;
-      else
-        dir = 1;
-      break;
-    case ui::VKEY_LEFT:
-      // The left key will not capture the key event when the selection is at
-      // the beginning of the list. This means that the text cursor in the
-      // search box will be allowed to handle the keypress. This will also
-      // ignore the keypress if the user has clicked somewhere in the middle of
-      // the searchbox. In fullscreen app list, the cursor will be moved only
-      // when search box is selected.
-      if (cursor_at_end_of_searchbox)
-        dir = -forward_dir;
-      break;
-    case ui::VKEY_RIGHT:
-      // Only move right if the search box text cursor is at the end of the
-      // text. In fullscreen app list, the cursor will be moved only when search
-      // box is selected.
-      if (cursor_at_end_of_searchbox)
-        dir = forward_dir;
-      break;
-    default:
-      break;
-  }
-  if (dir == 0)
-    return false;
-
-  selection_index = selection_index + dir;
-  if (IsValidSelectionIndex(selection_index)) {
-    SetSelectedIndex(selection_index);
+  if (next_focusable_view) {
+    next_focusable_view->RequestFocus();
     return true;
   }
 
+  // Return false to let FocusManager to handle default focus move by key
+  // events.
   return false;
+}
+
+const char* SearchResultTileItemListView::GetClassName() const {
+  return "SearchResultTileItemListView";
 }
 
 }  // namespace app_list

@@ -23,11 +23,10 @@
 namespace blink {
 
 ThreadedWorkletMessagingProxy::ThreadedWorkletMessagingProxy(
-    ExecutionContext* execution_context,
-    WorkerClients* worker_clients)
-    : ThreadedMessagingProxyBase(execution_context, worker_clients) {}
+    ExecutionContext* execution_context)
+    : ThreadedMessagingProxyBase(execution_context) {}
 
-void ThreadedWorkletMessagingProxy::Initialize() {
+void ThreadedWorkletMessagingProxy::Initialize(WorkerClients* worker_clients) {
   DCHECK(IsMainThread());
   if (AskedToTerminate())
     return;
@@ -40,18 +39,16 @@ void ThreadedWorkletMessagingProxy::Initialize() {
 
   auto global_scope_creation_params =
       std::make_unique<GlobalScopeCreationParams>(
-          document->Url(), document->UserAgent(), String() /* source_code */,
-          nullptr /* cached_meta_data */, csp->Headers().get(),
+          document->Url(), document->UserAgent(), csp->Headers().get(),
           document->GetReferrerPolicy(), document->GetSecurityOrigin(),
-          ReleaseWorkerClients(), document->AddressSpace(),
+          worker_clients, document->AddressSpace(),
           OriginTrialContext::GetTokens(document).get(),
           std::make_unique<WorkerSettings>(document->GetSettings()),
           kV8CacheOptionsDefault);
 
   // Worklets share the pre-initialized backing thread so that we don't have to
   // specify the backing thread startup data.
-  InitializeWorkerThread(std::move(global_scope_creation_params), WTF::nullopt,
-                         document->Url(), v8_inspector::V8StackTraceId());
+  InitializeWorkerThread(std::move(global_scope_creation_params), WTF::nullopt);
 }
 
 void ThreadedWorkletMessagingProxy::Trace(blink::Visitor* visitor) {
@@ -65,17 +62,15 @@ void ThreadedWorkletMessagingProxy::FetchAndInvokeScript(
     scoped_refptr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());
-  GetWorkerThread()
-      ->GetTaskRunner(TaskType::kUnspecedLoading)
-      ->PostTask(BLINK_FROM_HERE,
-                 CrossThreadBind(
-                     &ThreadedWorkletObjectProxy::FetchAndInvokeScript,
-                     CrossThreadUnretained(worklet_object_proxy_.get()),
-                     module_url_record,
-                     WrapCrossThreadPersistent(module_responses_map),
-                     credentials_mode, std::move(outside_settings_task_runner),
-                     WrapCrossThreadPersistent(pending_tasks),
-                     CrossThreadUnretained(GetWorkerThread())));
+  PostCrossThreadTask(
+      *GetWorkerThread()->GetTaskRunner(TaskType::kUnspecedLoading), FROM_HERE,
+      CrossThreadBind(&ThreadedWorkletObjectProxy::FetchAndInvokeScript,
+                      CrossThreadUnretained(worklet_object_proxy_.get()),
+                      module_url_record,
+                      WrapCrossThreadPersistent(module_responses_map),
+                      credentials_mode, std::move(outside_settings_task_runner),
+                      WrapCrossThreadPersistent(pending_tasks),
+                      CrossThreadUnretained(GetWorkerThread())));
 }
 
 void ThreadedWorkletMessagingProxy::WorkletObjectDestroyed() {

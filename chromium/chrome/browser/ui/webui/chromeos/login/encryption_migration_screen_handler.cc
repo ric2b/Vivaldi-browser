@@ -27,6 +27,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -254,7 +255,7 @@ namespace chromeos {
 
 EncryptionMigrationScreenHandler::EncryptionMigrationScreenHandler()
     : BaseScreenHandler(kScreenId),
-      tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+      tick_clock_(std::make_unique<base::DefaultTickClock>()),
       weak_ptr_factory_(this) {
   set_call_js_prefix(kJsScreenPath);
   free_disk_space_fetcher_ = base::Bind(&base::SysInfo::AmountOfFreeDiskSpace,
@@ -564,29 +565,24 @@ void EncryptionMigrationScreenHandler::StartMigration() {
 
   // Mount the existing eCryptfs vault to a temporary location for migration.
   cryptohome::MountRequest mount;
+  cryptohome::AuthorizationRequest auth_request;
   mount.set_to_migrate_from_ecryptfs(true);
   if (IsArcKiosk()) {
     mount.set_public_mount(true);
-    cryptohome::HomedirMethods::GetInstance()->MountEx(
-        cryptohome::Identification(user_context_.GetAccountId()),
-        cryptohome::AuthorizationRequest(), mount,
-        base::Bind(&EncryptionMigrationScreenHandler::OnMountExistingVault,
-                   weak_ptr_factory_.GetWeakPtr()));
-
   } else {
-    cryptohome::HomedirMethods::GetInstance()->MountEx(
-        cryptohome::Identification(user_context_.GetAccountId()),
-        CreateAuthorizationRequest(), mount,
-        base::Bind(&EncryptionMigrationScreenHandler::OnMountExistingVault,
-                   weak_ptr_factory_.GetWeakPtr()));
+    auth_request = CreateAuthorizationRequest();
   }
+  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
+      cryptohome::Identification(user_context_.GetAccountId()), auth_request,
+      mount,
+      base::BindOnce(&EncryptionMigrationScreenHandler::OnMountExistingVault,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void EncryptionMigrationScreenHandler::OnMountExistingVault(
-    bool success,
-    cryptohome::MountError return_code,
-    const std::string& mount_hash) {
-  if (!success || return_code != cryptohome::MOUNT_ERROR_NONE) {
+    base::Optional<cryptohome::BaseReply> reply) {
+  if (cryptohome::BaseReplyToMountError(reply) !=
+      cryptohome::MOUNT_ERROR_NONE) {
     RecordMigrationResultMountFailure(IsResumingIncompleteMigration(),
                                       IsArcKiosk());
     UpdateUIState(UIState::MIGRATION_FAILED);

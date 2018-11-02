@@ -6,8 +6,10 @@
 #define UI_APP_LIST_VIEWS_APP_LIST_VIEW_H_
 
 #include <memory>
+#include <vector>
 
 #include "ash/app_list/model/app_list_view_state.h"
+#include "ash/app_list/model/speech/speech_ui_model_observer.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
@@ -15,7 +17,6 @@
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/display/display_observer.h"
 #include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/widget/widget.h"
@@ -45,6 +46,7 @@ class AppsGridView;
 class HideViewAnimationObserver;
 class PaginationModel;
 class SearchBoxView;
+class SearchModel;
 class SpeechView;
 
 namespace test {
@@ -327,6 +329,7 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
 
   AppListViewDelegate* delegate_;  // Weak. Owned by AppListService.
   AppListModel* const model_;      // Not Owned.
+  SearchModel* const search_model_;  // Not Owned.
 
   AppListMainView* app_list_main_view_ = nullptr;
   SpeechView* speech_view_ = nullptr;
@@ -370,8 +373,6 @@ class APP_LIST_EXPORT AppListView : public views::BubbleDialogDelegateView,
   const bool is_fullscreen_app_list_enabled_;
   // Whether the background blur is enabled.
   const bool is_background_blur_enabled_;
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
   // The state of the app list, controlled via SetState().
   AppListViewState app_list_state_ = AppListViewState::PEEKING;
   // An observer that notifies AppListView when the display has changed.

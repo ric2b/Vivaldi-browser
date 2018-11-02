@@ -4,7 +4,8 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -38,7 +39,7 @@ NavigationEvent::NavigationEvent()
       target_tab_id(-1),
       frame_id(-1),
       last_updated(base::Time::Now()),
-      is_user_initiated(false),
+      navigation_initiation(ReferrerChainEntry::UNDEFINED),
       has_committed(false) {}
 
 NavigationEvent::NavigationEvent(NavigationEvent&& nav_event)
@@ -50,7 +51,7 @@ NavigationEvent::NavigationEvent(NavigationEvent&& nav_event)
       target_tab_id(std::move(nav_event.target_tab_id)),
       frame_id(nav_event.frame_id),
       last_updated(nav_event.last_updated),
-      is_user_initiated(nav_event.is_user_initiated),
+      navigation_initiation(nav_event.navigation_initiation),
       has_committed(nav_event.has_committed) {}
 
 NavigationEvent& NavigationEvent::operator=(NavigationEvent&& nav_event) {
@@ -61,7 +62,7 @@ NavigationEvent& NavigationEvent::operator=(NavigationEvent&& nav_event) {
   target_tab_id = nav_event.target_tab_id;
   frame_id = nav_event.frame_id;
   last_updated = nav_event.last_updated;
-  is_user_initiated = nav_event.is_user_initiated;
+  navigation_initiation = nav_event.navigation_initiation;
   has_committed = nav_event.has_committed;
   server_redirect_urls = std::move(nav_event.server_redirect_urls);
   return *this;
@@ -81,7 +82,7 @@ void SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
           Profile::FromBrowserContext(web_contents->GetBrowserContext()))) {
     web_contents->SetUserData(
         kWebContentsUserDataKey,
-        base::MakeUnique<SafeBrowsingNavigationObserver>(
+        std::make_unique<SafeBrowsingNavigationObserver>(
             web_contents, g_browser_process->safe_browsing_service()
                               ->navigation_observer_manager()));
   }
@@ -114,26 +115,32 @@ SafeBrowsingNavigationObserver::~SafeBrowsingNavigationObserver() {}
 void SafeBrowsingNavigationObserver::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
   std::unique_ptr<NavigationEvent> nav_event =
-      base::MakeUnique<NavigationEvent>();
+      std::make_unique<NavigationEvent>();
   auto it = navigation_handle_map_.find(navigation_handle);
   // It is possible to see multiple DidStartNavigation(..) with the same
   // navigation_handle (e.g. cross-process transfer). If that's the case,
-  // we need to copy the is_user_initiated field.
-  if (it != navigation_handle_map_.end()) {
-    nav_event->is_user_initiated = it->second->is_user_initiated;
+  // we need to copy the navigation_initiation field.
+  if (it != navigation_handle_map_.end() &&
+      it->second->navigation_initiation != ReferrerChainEntry::UNDEFINED) {
+    nav_event->navigation_initiation = it->second->navigation_initiation;
   } else {
     // If this is the first time we see this navigation_handle, create a new
     // NavigationEvent, and decide if it is triggered by user.
-    if ((has_user_gesture_ &&
-         !SafeBrowsingNavigationObserverManager::IsUserGestureExpired(
-             last_user_gesture_timestamp_)) ||
-        !navigation_handle->IsRendererInitiated()) {
-      nav_event->is_user_initiated = true;
-      if (has_user_gesture_) {
-        manager_->OnUserGestureConsumed(web_contents(),
-                                        last_user_gesture_timestamp_);
-        has_user_gesture_ = false;
-      }
+    if (!navigation_handle->IsRendererInitiated()) {
+      nav_event->navigation_initiation = ReferrerChainEntry::BROWSER_INITIATED;
+    } else if (has_user_gesture_ &&
+               !SafeBrowsingNavigationObserverManager::IsUserGestureExpired(
+                   last_user_gesture_timestamp_)) {
+      nav_event->navigation_initiation =
+          ReferrerChainEntry::RENDERER_INITIATED_WITH_USER_GESTURE;
+    } else {
+      nav_event->navigation_initiation =
+          ReferrerChainEntry::RENDERER_INITIATED_WITHOUT_USER_GESTURE;
+    }
+    if (has_user_gesture_) {
+      manager_->OnUserGestureConsumed(web_contents(),
+                                      last_user_gesture_timestamp_);
+      has_user_gesture_ = false;
     }
   }
 

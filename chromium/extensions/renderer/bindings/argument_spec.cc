@@ -530,7 +530,7 @@ bool ArgumentSpec::ParseArgumentToObject(
     // excluded by GetOwnPropertyNames()). If you try to set anything else
     // (e.g. an object), it is converted to a string.
     DCHECK(key->IsString() || key->IsNumber());
-    v8::String::Utf8Value utf8_key(key);
+    v8::String::Utf8Value utf8_key(context->GetIsolate(), key);
 
     ArgumentSpec* property_spec = nullptr;
     auto iter = properties_.find(*utf8_key);
@@ -626,7 +626,8 @@ bool ArgumentSpec::ParseArgumentToObject(
     v8::Local<v8::Value> next_check = object;
     do {
       v8::Local<v8::Object> current = next_check.As<v8::Object>();
-      v8::String::Utf8Value constructor(current->GetConstructorName());
+      v8::String::Utf8Value constructor(context->GetIsolate(),
+                                        current->GetConstructorName());
       if (*instance_of_ ==
           base::StringPiece(*constructor, constructor.length())) {
         found = true;
@@ -643,8 +644,19 @@ bool ArgumentSpec::ParseArgumentToObject(
 
   if (out_value)
     *out_value = std::move(result);
-  if (v8_out_value)
-    *v8_out_value = convert_to_v8 ? v8_result.Build() : object;
+
+  if (v8_out_value) {
+    if (convert_to_v8) {
+      v8::Local<v8::Object> converted = v8_result.Build();
+      // We set the object's prototype to Null() so that handlers avoid
+      // triggering any tricky getters or setters on Object.prototype.
+      CHECK(converted->SetPrototype(context, v8::Null(context->GetIsolate()))
+                .ToChecked());
+      *v8_out_value = converted;
+    } else {
+      *v8_out_value = object;
+    }
+  }
 
   return true;
 }

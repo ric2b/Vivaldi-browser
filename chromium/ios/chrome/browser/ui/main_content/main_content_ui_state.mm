@@ -13,8 +13,12 @@
 
 @interface MainContentUIState ()
 // Redefine broadcast properties as readwrite.
+@property(nonatomic, assign) CGSize scrollViewSize;
+@property(nonatomic, assign) CGSize contentSize;
+@property(nonatomic, assign) UIEdgeInsets contentInset;
 @property(nonatomic, assign) CGFloat yContentOffset;
 @property(nonatomic, assign, getter=isScrolling) BOOL scrolling;
+@property(nonatomic, assign, getter=isZooming) BOOL zooming;
 @property(nonatomic, assign, getter=isDragging) BOOL dragging;
 // Whether the scroll view is decelerating.
 @property(nonatomic, assign, getter=isDecelerating) BOOL decelerating;
@@ -25,8 +29,12 @@
 @end
 
 @implementation MainContentUIState
+@synthesize scrollViewSize = _scrollViewSize;
+@synthesize contentSize = _contentSize;
+@synthesize contentInset = _contentInset;
 @synthesize yContentOffset = _yContentOffset;
 @synthesize scrolling = _scrolling;
+@synthesize zooming = _zooming;
 @synthesize dragging = _dragging;
 @synthesize decelerating = _decelerating;
 
@@ -34,6 +42,10 @@
   if (_dragging == dragging)
     return;
   _dragging = dragging;
+  // When a scroll view is being dragged, its contents are tracking the pan
+  // gesture, and previous deceleration is cancelled.
+  if (_dragging)
+    _decelerating = NO;
   [self updateIsScrolling];
 }
 
@@ -78,6 +90,18 @@
 
 #pragma mark Public
 
+- (void)scrollViewSizeDidChange:(CGSize)scrollViewSize {
+  self.state.scrollViewSize = scrollViewSize;
+}
+
+- (void)scrollViewDidResetContentSize:(CGSize)contentSize {
+  self.state.contentSize = contentSize;
+}
+
+- (void)scrollViewDidResetContentInset:(UIEdgeInsets)contentInset {
+  self.state.contentInset = contentInset;
+}
+
 - (void)scrollViewDidScrollToOffset:(CGPoint)offset {
   self.state.yContentOffset = offset.y;
 }
@@ -89,16 +113,44 @@
 }
 
 - (void)scrollViewDidEndDraggingWithGesture:(UIPanGestureRecognizer*)panGesture
-                           residualVelocity:(CGPoint)velocity {
+                        targetContentOffset:(CGPoint)target {
+  // It's possible during the side-swipe gesture for a drag to end on the scroll
+  // view without a corresponding begin dragging call.  Early return if there
+  // is no pan gesture from the begin call.
+  if (!self.panGesture)
+    return;
   DCHECK_EQ(panGesture, self.panGesture);
-  if (!AreCGFloatsEqual(velocity.y, 0.0))
+  // UIScrollView does not sent a |-scrollViewDidEndDecelerating:| signal after
+  // pixel alignments, so the state should not be considered decelerating if the
+  // target content offset is less than a pixel away from the current value.
+  CGFloat singlePixel = 1.0 / [UIScreen mainScreen].scale;
+  CGFloat delta = std::abs(self.state.yContentOffset - target.y);
+  if (delta > singlePixel) {
     self.state.decelerating = YES;
+  } else {
+    self.state.yContentOffset = target.y;
+  }
   self.state.dragging = NO;
   self.panGesture = nil;
 }
 
 - (void)scrollViewDidEndDecelerating {
   self.state.decelerating = NO;
+}
+
+- (void)scrollViewDidStartZooming {
+  self.state.zooming = YES;
+}
+
+- (void)scrollViewDidEndZooming {
+  self.state.zooming = NO;
+}
+
+- (void)scrollWasInterrupted {
+  self.state.scrolling = NO;
+  self.state.dragging = NO;
+  self.state.decelerating = NO;
+  self.state.zooming = NO;
 }
 
 @end

@@ -36,7 +36,6 @@ import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
-import org.chromium.content.app.ContentApplication;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -66,10 +65,10 @@ public class AwShellActivity extends Activity {
 
         AwShellResourceProvider.registerResources(this);
 
-        ContentApplication.initCommandLine(this);
+        ((AwShellApplication) getApplication()).initCommandLine();
 
         ContextUtils.initApplicationContext(getApplicationContext());
-        AwBrowserProcess.loadLibrary();
+        AwBrowserProcess.loadLibrary(null);
 
         if (CommandLine.getInstance().hasSwitch(AwShellSwitches.ENABLE_ATRACE)) {
             Log.e(TAG, "Enabling Android trace.");

@@ -30,7 +30,7 @@ const base::Feature kAsmJsToWebAssembly{"AsmJsToWebAssembly",
 // TouchpadAndWheelScrollLatching and enabling it when latching is disabled
 // won't have any impacts.
 const base::Feature kAsyncWheelEvents{"AsyncWheelEvents",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Block subresource requests whose URLs contain embedded credentials (e.g.
 // `https://user:pass@example.com/resource`).
@@ -46,10 +46,6 @@ const base::Feature kDataSaverHoldback{"DataSaverHoldback",
 // Brotli format specification: http://www.ietf.org/id/draft-alakuijala-brotli
 const base::Feature kBrotliEncoding{"brotli-encoding",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables browser side navigation (aka PlzNavigate). http://crbug.com/368813
-const base::Feature kBrowserSideNavigation{"browser-side-navigation",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Browser side navigation (aka PlzNavigate) is using blob URLs to deliver
 // the body of the main resource to the renderer process. When enabled, the
@@ -102,6 +98,10 @@ const base::Feature kCrossSiteDocumentBlockingAlways{
 const base::Feature kCrossSiteDocumentBlockingIfIsolating{
     "CrossSiteDocumentBlockingIfIsolating", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Enables exposing back/forward mouse buttons to the renderer and the web.
+const base::Feature kExtendedMouseButtons{"ExtendedMouseButtons",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Throttle tasks in Blink background timer queues based on CPU budgets
 // for the background tab. Bug: https://crbug.com/639852.
 const base::Feature kExpensiveBackgroundTimerThrottling{
@@ -111,10 +111,6 @@ const base::Feature kExpensiveBackgroundTimerThrottling{
 // other features through HTTP headers.
 const base::Feature kFeaturePolicy{"FeaturePolicy",
                                    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Enables Fetch API keepalive timeout setting.
-const base::Feature kFetchKeepaliveTimeoutSetting{
-    "FetchKeepaliveTimeoutSetting", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables a blink::FontCache optimization that reuses a font to serve different
 // size of font.
@@ -149,15 +145,21 @@ const base::Feature kLazyInitializeMediaControls{
 const base::Feature kLazyParseCSS{"LazyParseCSS",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Use Mojo IPC for resource loading.
-const base::Feature kLoadingWithMojo{"LoadingWithMojo",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables lowering the priority of the resources in iframes.
+const base::Feature kLowPriorityIframes{"LowPriorityIframes",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If this feature is enabled, media-device enumerations use a cache that is
 // invalidated upon notifications sent by base::SystemMonitor. If disabled, the
 // cache is considered invalid on every enumeration request.
 const base::Feature kMediaDevicesSystemMonitorCache{
-    "MediaDevicesSystemMonitorCaching", base::FEATURE_DISABLED_BY_DEFAULT};
+  "MediaDevicesSystemMonitorCaching",
+#if defined(OS_MACOSX) || defined(OS_WIN)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Enables the memory coordinator.
 // WARNING:
@@ -171,6 +173,10 @@ const base::Feature kMemoryCoordinator {
 const base::Feature kNetworkService{"NetworkService",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// If the network service is enabled, runs it in process.
+const base::Feature kNetworkServiceInProcess{"NetworkServiceInProcess",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Kill switch for Web Notification content images.
 const base::Feature kNotificationContentImage{"NotificationContentImage",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
@@ -179,9 +185,6 @@ const base::Feature kNotificationContentImage{"NotificationContentImage",
 const base::Feature kMainThreadBusyScrollIntervention{
     "MainThreadBusyScrollIntervention", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Blob mojofication.
-const base::Feature kMojoBlobs{"MojoBlobs", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Mojo-based Input Event routing.
 const base::Feature kMojoInputMessages{"MojoInputMessages",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
@@ -189,10 +192,6 @@ const base::Feature kMojoInputMessages{"MojoInputMessages",
 // Mojo-based Session Storage.
 const base::Feature kMojoSessionStorage{"MojoSessionStorage",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables/disables hardware video encode acceleration using Mojo (falls back).
-const base::Feature kMojoVideoEncodeAccelerator{
-    "MojoVideoEncodeAccelerator", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // ES6 Modules dynamic imports.
 const base::Feature kModuleScriptsDynamicImport{
@@ -205,10 +204,6 @@ const base::Feature kModuleScriptsImportMetaUrl{
 // Use Mojo IPC for notifications.
 const base::Feature kNotificationsWithMojo{"NotificationsWithMojo",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Resource fetch optimizations for workers. See crbug.com/443374
-const base::Feature kOffMainThreadFetch{"OffMainThreadFetch",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Origin Manifest. See crbug.com/751996
 const base::Feature kOriginManifest{"OriginManifest",
@@ -224,7 +219,13 @@ const base::Feature kOutOfBlinkCORS{"OutOfBlinkCORS",
 
 // Whether a download can be handled by parallel jobs.
 const base::Feature kParallelDownloading{
-    "ParallelDownloading", base::FEATURE_DISABLED_BY_DEFAULT};
+  "ParallelDownloading",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Whether document level event listeners should default 'passive' to true.
 const base::Feature kPassiveDocumentEventListeners{
@@ -266,7 +267,7 @@ const base::Feature kPWAFullCodeCache{"PWAFullCodeCache",
 
 // Port some content::ResourceScheduler functionalities to renderer.
 const base::Feature kRendererSideResourceScheduler{
-    "RendererSideResourceSchduler", base::FEATURE_DISABLED_BY_DEFAULT};
+    "RendererSideResourceScheduler", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Throttle Blink's rendering pipeline based on frame visibility.
 const base::Feature kRenderingPipelineThrottling{
@@ -287,6 +288,10 @@ const base::Feature kResourceLoadScheduler{"ResourceLoadScheduler",
 // Scrolls to compensate for layout movements (bit.ly/scroll-anchoring).
 const base::Feature kScrollAnchoring{"ScrollAnchoring",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Save the scroll anchor and use it to restore scroll position.
+const base::Feature kScrollAnchorSerialization{
+    "ScrollAnchorSerialization", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Make sendBeacon throw for a Blob with a non simple type.
 const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
@@ -313,7 +318,7 @@ const base::Feature kSharedArrayBuffer{"SharedArrayBuffer",
 // An experiment to require process isolation for the sign-in origin,
 // https://accounts.google.com.  Launch bug: https://crbug.com/739418.
 const base::Feature kSignInProcessIsolation{"sign-in-process-isolation",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Alternative to switches::kSitePerProcess, for turning on full site isolation.
 // Launch bug: https://crbug.com/739418.
@@ -323,6 +328,16 @@ const base::Feature kSitePerProcess{"site-per-process",
 // Paint invalidation based on slimming paint. See https://goo.gl/eQczQW
 const base::Feature kSlimmingPaintInvalidation{
     "SlimmingPaintInvalidation", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Stop scheduler task queues in background after allowed grace time.
+const base::Feature kStopInBackground {
+  "stop-in-background",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Stop loading tasks and loading of resources in background, on Android,
 // after allowed grace time. Launch bug: https://crbug.com/775761.
@@ -347,20 +362,22 @@ const base::Feature kTopDocumentIsolation{"top-document-isolation",
 
 // Enables touchpad and wheel scroll latching.
 const base::Feature kTouchpadAndWheelScrollLatching{
-    "TouchpadAndWheelScrollLatching", base::FEATURE_DISABLED_BY_DEFAULT};
+    "TouchpadAndWheelScrollLatching", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experiment to turn off compositing for 2D transform & opacity animations.
 const base::Feature kTurnOff2DAndOpacityCompositorAnimations{
     "TurnOff2DAndOpacityCompositorAnimations",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kEnablePreventLayerSquashing{
-    "EnablePreventLayerSquashing", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Use Feature Policy to gate the use of permission features like midi,
 // geolocation, camera, microphone, etc.
 const base::Feature kUseFeaturePolicyForPermissions{
     "UseFeaturePolicyForPermissions", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Use MojoAudioInputIPC and RenderFrameAudioInputStreamFactory rather than
+// AudioInputMessageFilter and AudioInputRendererHost.
+const base::Feature kUseMojoAudioInputStreamFactory{
+    "UseMojoAudioInputStreamFactory", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use MojoAudioOutputIPC and RenderFrameAudioOutputStreamFactory rather than
 // AudioMessageFilter and AudioRendererHost.
@@ -451,13 +468,28 @@ const char kIsolateOriginsFieldTrialParamName[] = "OriginsList";
 const base::Feature kKeepAliveRendererForKeepaliveRequests{
     "KeepAliveRendererForKeepaliveRequests", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls whether WebVR experimental rendering optimizations is enabled.
-const base::Feature kWebVrExperimentalRendering{
-    "WebVRExperimentalRendering", base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Controls whether WebVR VSync-aligned render loop timing is enabled.
 const base::Feature kWebVrVsyncAlign{"WebVrVsyncAlign",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether the WebXR Device API is enabled.
+const base::Feature kWebXr{"WebXR", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether the orientation sensor based device is enabled.
+const base::Feature kWebXrOrientationSensorDevice{
+    "WebXROrientationSensorDevice", base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_ANDROID)
+// Controls whether an override for the WebXR presentation render path is
+// enabled. The param value specifies the requested specific render path. This
+// is combined with a runtime capability check, the option is ignored if the
+// requested render path is unsupported.
+const base::Feature kWebXrRenderPath{"WebXrRenderPath",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+const char kWebXrRenderPathParamName[] = "RenderPath";
+const char kWebXrRenderPathParamValueClientWait[] = "ClientWait";
+const char kWebXrRenderPathParamValueGpuFence[] = "GpuFence";
+#endif  // defined(OS_ANDROID)
 
 // Enabled "work stealing" in the script runner.
 const base::Feature kWorkStealingInScriptRunner{
@@ -489,6 +521,10 @@ const base::Feature kMacV2Sandbox{"MacV2Sandbox",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MACOSX)
 
+// Enables V8 background compilation
+const base::Feature kV8BackgroundCompile{"V8BackgroundCompile",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables to use a snapshot file in creating V8 contexts.
 const base::Feature kV8ContextSnapshot{"V8ContextSnapshot",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -496,10 +532,5 @@ const base::Feature kV8ContextSnapshot{"V8ContextSnapshot",
 // Enables future V8 VM features
 const base::Feature kV8VmFuture{"V8VmFuture",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
-
-bool IsMojoBlobsEnabled() {
-  return base::FeatureList::IsEnabled(features::kMojoBlobs) ||
-         base::FeatureList::IsEnabled(features::kNetworkService);
-}
 
 }  // namespace features

@@ -482,6 +482,8 @@ void InsertListCommand::UnlistifyParagraph(
     // will be moved.
     start = StartOfParagraph(original_start, kCanSkipOverEditingBoundary);
     end = EndOfParagraph(start, kCanSkipOverEditingBoundary);
+    // InsertListCommandTest.UnlistifyParagraphCrashOnRemoveStyle reaches here.
+    ABORT_EDITING_COMMAND_IF(start.DeepEquivalent() == end.DeepEquivalent());
     next_list_child = EnclosingListChild(
         NextPositionOf(end).DeepEquivalent().AnchorNode(), list_element);
     DCHECK_NE(next_list_child, list_child_node);
@@ -693,8 +695,11 @@ void InsertListCommand::MoveParagraphOverPositionIntoEmptyListItem(
       CreateVisiblePosition(pos.ToPositionWithAffinity());
   const VisiblePosition& start =
       StartOfParagraph(valid_pos, kCanSkipOverEditingBoundary);
+  // InsertListCommandTest.InsertListOnEmptyHiddenElements reaches here.
+  ABORT_EDITING_COMMAND_IF(start.IsNull());
   const VisiblePosition& end =
       EndOfParagraph(valid_pos, kCanSkipOverEditingBoundary);
+  ABORT_EDITING_COMMAND_IF(end.IsNull());
   MoveParagraph(start, end, VisiblePosition::BeforeNode(*placeholder),
                 editing_state, kPreserveSelection);
 }

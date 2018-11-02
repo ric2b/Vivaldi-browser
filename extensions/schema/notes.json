@@ -10,30 +10,14 @@
         "type": "object",
         "description": "Attachment to a node.",
         "properties": {
-          "id": {
-            "type": "string",
-            "minimum": 0,
-            "description": "The unique identifier for the attachment."
-          },
-          "index": {
-            "type": "integer",
-            "optional": true,
-            "description": "The 0-based position of this node within its parent folder."
-          },
-          "filename": {
+          "checksum": {
             "type": "string",
             "optional": true,
-            "description": "Full system-path to a file that contains data."
-          },
-          "content_type": {
-            "type": "string",
-            "optional": true,
-            "description": "TODO: Document."
+            "description": "A checksum of the attachment content. This can be omitted when passing a new atttachment to the API."
           },
           "content": {
-              "type": "string",
-              "optional": true,
-              "description": "Content data."
+            "type": "string",
+            "description": "Content data."
           }
         }
       },
@@ -259,14 +243,6 @@
               },
               "url": {
                 "type": "string",
-                "optional": true
-              },
-              "dateAdded": {
-                "type": "number",
-                "optional": true
-              },
-              "dateGroupModified": {
-                "type": "number",
                 "optional": true
               },
               "attachments": {

@@ -30,9 +30,12 @@
 
 #include "controller/BlinkInitializer.h"
 
+#include <memory>
+
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/modules/v8/V8ContextSnapshotExternalReferences.h"
 #include "build/build_config.h"
+#include "controller/DevToolsFrontendImpl.h"
 #include "controller/OomInterventionImpl.h"
 #include "core/animation/AnimationClock.h"
 #include "core/frame/LocalFrame.h"
@@ -41,7 +44,7 @@
 #include "platform/bindings/V8PerIsolateData.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/Functional.h"
 #include "platform/wtf/WTF.h"
 #include "public/platform/InterfaceRegistry.h"
 #include "public/platform/Platform.h"
@@ -68,11 +71,11 @@ static WebThread::TaskObserver* g_end_of_task_runner = nullptr;
 
 static BlinkInitializer& GetBlinkInitializer() {
   DEFINE_STATIC_LOCAL(std::unique_ptr<BlinkInitializer>, initializer,
-                      (WTF::WrapUnique(new BlinkInitializer)));
+                      (std::make_unique<BlinkInitializer>()));
   return *initializer;
 }
 
-void Initialize(Platform* platform, InterfaceRegistry* registry) {
+void Initialize(Platform* platform, service_manager::BinderRegistry* registry) {
   DCHECK(registry);
   Platform::Initialize(platform);
 
@@ -114,7 +117,8 @@ void Initialize(Platform* platform, InterfaceRegistry* registry) {
   }
 }
 
-void BlinkInitializer::RegisterInterfaces(InterfaceRegistry& registry) {
+void BlinkInitializer::RegisterInterfaces(
+    service_manager::BinderRegistry& registry) {
   ModulesInitializer::RegisterInterfaces(registry);
   WebThread* main_thread = Platform::Current()->MainThread();
   // GetSingleThreadTaskRunner() uses GetWebTaskRunner() internally.
@@ -122,8 +126,25 @@ void BlinkInitializer::RegisterInterfaces(InterfaceRegistry& registry) {
   if (!main_thread || !main_thread->GetWebTaskRunner())
     return;
 
-  registry.AddInterface(CrossThreadBind(&OomInterventionImpl::Create),
-                        main_thread->GetSingleThreadTaskRunner());
+  registry.AddInterface(
+      ConvertToBaseCallback(CrossThreadBind(&OomInterventionImpl::Create)),
+      main_thread->GetSingleThreadTaskRunner());
+}
+
+void BlinkInitializer::InitLocalFrame(LocalFrame& frame) const {
+  frame.GetInterfaceRegistry()->AddAssociatedInterface(WTF::BindRepeating(
+      &DevToolsFrontendImpl::BindMojoRequest, WrapWeakPersistent(&frame)));
+  ModulesInitializer::InitLocalFrame(frame);
+}
+
+void BlinkInitializer::OnClearWindowObjectInMainWorld(
+    Document& document,
+    const Settings& settings) const {
+  if (DevToolsFrontendImpl* devtools_frontend =
+          DevToolsFrontendImpl::From(document.GetFrame())) {
+    devtools_frontend->DidClearWindowObject();
+  }
+  ModulesInitializer::OnClearWindowObjectInMainWorld(document, settings);
 }
 
 }  // namespace blink

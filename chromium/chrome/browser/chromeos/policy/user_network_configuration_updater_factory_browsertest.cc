@@ -5,7 +5,6 @@
 #include <memory>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "chrome/browser/browser_process.h"
@@ -157,7 +156,7 @@ class PolicyProvidedTrustRootsTestBase : public DevicePolicyCrosBrowserTest {
     policy.Set(policy::key::kOpenNetworkConfiguration,
                policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                policy::POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(user_policy_blob), nullptr);
+               std::make_unique<base::Value>(user_policy_blob), nullptr);
     provider_.UpdateChromePolicy(policy);
     // Note that this relies on the implementation detail that the notification
     // is sent even if the trust roots effectively remain the same.
@@ -303,7 +302,7 @@ class PolicyProvidedTrustRootsPublicSessionTest
 };
 
 IN_PROC_BROWSER_TEST_F(PolicyProvidedTrustRootsPublicSessionTest,
-                       NotAllowedInPublicSession) {
+                       AllowedInPublicSession) {
   StartLogin();
   WaitForSessionStart();
 
@@ -313,8 +312,7 @@ IN_PROC_BROWSER_TEST_F(PolicyProvidedTrustRootsPublicSessionTest,
   ASSERT_TRUE(browser);
 
   SetRootCertONCPolicy(browser->profile());
-  EXPECT_EQ(net::ERR_CERT_AUTHORITY_INVALID,
-            VerifyTestServerCert(browser->profile()));
+  EXPECT_EQ(net::OK, VerifyTestServerCert(browser->profile()));
 }
 
 }  // namespace policy

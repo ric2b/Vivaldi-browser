@@ -34,7 +34,6 @@ const ui::EventFlags kPlatformModifier = ui::EF_CONTROL_DOWN;
 // Do not use Ctrl-Alt as a shortcut modifier, as it is used by i18n keyboards:
 // http://blogs.msdn.com/b/oldnewthing/archive/2004/03/29/101121.aspx
 const AcceleratorMapping kAcceleratorMap[] = {
-  { ui::VKEY_BACK, ui::EF_NONE, IDC_BACKSPACE_BACK },
   { ui::VKEY_D, kPlatformModifier, IDC_BOOKMARK_PAGE },
   { ui::VKEY_D, ui::EF_SHIFT_DOWN | kPlatformModifier,
     IDC_BOOKMARK_ALL_TABS },
@@ -44,7 +43,6 @@ const AcceleratorMapping kAcceleratorMap[] = {
   { ui::VKEY_G, kPlatformModifier, IDC_FIND_NEXT },
   { ui::VKEY_G, ui::EF_SHIFT_DOWN | kPlatformModifier, IDC_FIND_PREVIOUS },
   { ui::VKEY_L, kPlatformModifier, IDC_FOCUS_LOCATION },
-  { ui::VKEY_BACK, ui::EF_SHIFT_DOWN, IDC_BACKSPACE_FORWARD },
   { ui::VKEY_F12, ui::EF_NONE, IDC_DEV_TOOLS_TOGGLE },
   { ui::VKEY_O, kPlatformModifier, IDC_OPEN_FILE },
   { ui::VKEY_P, kPlatformModifier, IDC_PRINT },
@@ -147,8 +145,6 @@ const AcceleratorMapping kAcceleratorMap[] = {
     IDC_HELP_PAGE_VIA_KEYBOARD },
   { ui::VKEY_BROWSER_FAVORITES, ui::EF_NONE, IDC_SHOW_BOOKMARK_MANAGER },
   { ui::VKEY_BROWSER_STOP, ui::EF_NONE, IDC_STOP },
-  { ui::VKEY_P, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
-    IDC_TOUCH_HUD_PROJECTION_TOGGLE },
   // On Chrome OS, Search + Esc is used to call out task manager.
   { ui::VKEY_ESCAPE, ui::EF_COMMAND_DOWN, IDC_TASK_MANAGER },
 #else  // !OS_CHROMEOS
@@ -292,9 +288,6 @@ const ChromeCmdId2AshActionId kChromeCmdId2AshActionId[] = {
   { IDC_NEW_WINDOW,           ash::NEW_WINDOW },
   { IDC_RESTORE_TAB,          ash::RESTORE_TAB },
   { IDC_TASK_MANAGER,         ash::SHOW_TASK_MANAGER },
-#if defined(OS_CHROMEOS)
-  { IDC_TOUCH_HUD_PROJECTION_TOGGLE, ash::TOUCH_HUD_PROJECTION_TOGGLE },
-#endif
 };
 const size_t kChromeCmdId2AshActionIdLength =
     arraysize(kChromeCmdId2AshActionId);

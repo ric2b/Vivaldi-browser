@@ -218,7 +218,9 @@ class AliveCheckerTest : public testing::Test {
 };
 
 // Start and Stop the checker, verify that we get no dead detection.
-TEST_F(AliveCheckerTest, StartStop) {
+// TODO(crbug.com/789804): Fix the test not to be flaky, e.g. by switching to
+// using a mocked clock, and re-enable it.
+TEST_F(AliveCheckerTest, DISABLED_StartStop) {
   CreateAliveChecker(false, false);
 
   StartAliveChecker();
@@ -263,7 +265,9 @@ TEST_F(AliveCheckerTest, NoAliveNotificationsDetectTwice) {
 
 // Start the checker, notify that the client is alive several times, then stop
 // the checker. Verify that it doesn't detect dead.
-TEST_F(AliveCheckerTest, NotifyThenStop) {
+// TODO(crbug.com/789804): Fix the test not to be flaky, e.g. by switching to
+// using a mocked clock, and re-enable it.
+TEST_F(AliveCheckerTest, DISABLED_NotifyThenStop) {
   CreateAliveChecker(false, false);
 
   StartAliveChecker();
@@ -285,7 +289,9 @@ TEST_F(AliveCheckerTest, NotifyThenStop) {
 
 // Start the checker, notify that the client is alive several times, then
 // run until detection. Repeat once.
-TEST_F(AliveCheckerTest, NotifyThenDetectDead) {
+// TODO(crbug.com/789804): Fix the test not to be flaky, e.g. by switching to
+// using a mocked clock, and re-enable it.
+TEST_F(AliveCheckerTest, DISABLED_NotifyThenDetectDead) {
   CreateAliveChecker(false, false);
 
   StartAliveChecker();
@@ -331,7 +337,9 @@ TEST_F(AliveCheckerTest, StopAtFirstAliveNotification_DontNotify) {
 // send alive notifications, and run until it detects dead. Start it again and
 // notify that the client is alive several times. Suspend and verify that it
 // doesn't detect dead. Resume and run until detected dead.
-TEST_F(AliveCheckerTest, SuspendResume_StartBeforeSuspend) {
+// TODO(crbug.com/789804): Fix the test not to be flaky, e.g. by switching to
+// using a mocked clock, and re-enable it.
+TEST_F(AliveCheckerTest, DISABLED_SuspendResume_StartBeforeSuspend) {
   CreateAliveChecker(false, true);
   ASSERT_TRUE(mock_power_observer_helper_);
 

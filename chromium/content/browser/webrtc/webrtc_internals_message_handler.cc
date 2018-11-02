@@ -21,6 +21,7 @@ WebRTCInternalsMessageHandler::WebRTCInternalsMessageHandler()
 WebRTCInternalsMessageHandler::WebRTCInternalsMessageHandler(
     WebRTCInternals* webrtc_internals)
     : webrtc_internals_(webrtc_internals) {
+  DCHECK(webrtc_internals);
   webrtc_internals_->AddObserver(this);
 }
 
@@ -99,9 +100,10 @@ void WebRTCInternalsMessageHandler::OnSetEventLogRecordingsEnabled(
     bool enable,
     const base::ListValue* /* unused_list */) {
   if (enable) {
-    webrtc_internals_->EnableEventLogRecordings(web_ui()->GetWebContents());
+    webrtc_internals_->EnableLocalEventLogRecordings(
+        web_ui()->GetWebContents());
   } else {
-    webrtc_internals_->DisableEventLogRecordings();
+    webrtc_internals_->DisableLocalEventLogRecordings();
   }
 }
 

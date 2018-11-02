@@ -96,6 +96,8 @@ bool DisplayManager::SetDisplayConfiguration(
   bool found_internal_display = false;
 
   // Check the mirrors before potentially passing them to a unified display.
+  DCHECK(window_server_->is_hosting_viz() || mirrors.empty())
+      << "The window server only handles mirrors specially when hosting viz.";
   for (const auto& mirror : mirrors) {
     if (mirror.id() == display::kInvalidDisplayId) {
       LOG(ERROR) << "SetDisplayConfiguration passed invalid display id";
@@ -129,31 +131,22 @@ bool DisplayManager::SetDisplayConfiguration(
       primary_display_index = i;
     found_internal_display |= display.id() == internal_display_id;
     Display* ws_display = GetDisplayById(display.id());
-    if (!ws_display) {
-      if (display.id() == display::kUnifiedDisplayId) {
-        if (displays.size() != 1u) {
-          LOG(ERROR) << "SetDisplayConfiguration passed 2+ displays in unified";
-          return false;
-        }
-        if (mirrors.size() <= 1u) {
-          LOG(ERROR) << "SetDisplayConfiguration passed <2 mirrors in unified";
-          return false;
-        }
-        NOTIMPLEMENTED() << "TODO(crbug.com/764472): Mus unified mode.";
-        return false;
-      } else {
-        LOG(ERROR) << "SetDisplayConfiguration passed unknown display id "
-                   << display.id();
-        return false;
-      }
+    if (!ws_display && display.id() != display::kUnifiedDisplayId) {
+      LOG(ERROR) << "SetDisplayConfiguration passed unknown display id "
+                 << display.id();
+      return false;
     }
   }
   if (primary_display_index == std::numeric_limits<size_t>::max()) {
     LOG(ERROR) << "SetDisplayConfiguration primary id not in displays";
     return false;
   }
+
+  // Ignore a temporarily missing interal display during ash unified mode setup.
   if (!found_internal_display &&
-      internal_display_id != display::kInvalidDisplayId) {
+      internal_display_id != display::kInvalidDisplayId &&
+      (displays.size() != 1 ||
+       displays[0].id() != display::kUnifiedDisplayId)) {
     LOG(ERROR) << "SetDisplayConfiguration internal display id not in displays";
     return false;
   }
@@ -197,12 +190,8 @@ bool DisplayManager::SetDisplayConfiguration(
   std::set<int64_t> removed_display_ids =
       base::STLSetDifference<std::set<int64_t>>(existing_display_ids,
                                                 display_ids);
-  for (int64_t display_id : removed_display_ids) {
+  for (int64_t display_id : removed_display_ids)
     display_list.RemoveDisplay(display_id);
-    // If the destroyed display still has a root window, it is orphaned here.
-    // Root windows are destroyed by explicit window manager instruction.
-    DestroyDisplay(GetDisplayById(display_id));
-  }
 
   for (auto& pair : user_display_managers_)
     pair.second->CallOnDisplaysChanged();

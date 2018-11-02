@@ -8,6 +8,7 @@
 
 #include "net/quic/core/crypto/aes_128_gcm_12_encrypter.h"
 #include "net/quic/core/spdy_utils.h"
+#include "net/quic/core/tls_client_handshaker.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_socket_address.h"
@@ -63,11 +64,11 @@ class TestQuicSpdyClientSession : public QuicSpdyClientSession {
   }
 };
 
-class QuicSpdyClientSessionTest
-    : public QuicTestWithParam<QuicTransportVersion> {
+class QuicSpdyClientSessionTest : public QuicTestWithParam<ParsedQuicVersion> {
  protected:
   QuicSpdyClientSessionTest()
-      : crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
+      : crypto_config_(crypto_test_utils::ProofVerifierForTesting(),
+                       TlsClientHandshaker::CreateSslCtx()),
         promised_stream_id_(kInvalidStreamId),
         associated_stream_id_(kInvalidStreamId) {
     Initialize();
@@ -82,9 +83,9 @@ class QuicSpdyClientSessionTest
 
   void Initialize() {
     session_.reset();
-    connection_ = new PacketSavingConnection(
-        &helper_, &alarm_factory_, Perspective::IS_CLIENT,
-        SupportedTransportVersions(GetParam()));
+    connection_ = new PacketSavingConnection(&helper_, &alarm_factory_,
+                                             Perspective::IS_CLIENT,
+                                             SupportedVersions(GetParam()));
     session_.reset(new TestQuicSpdyClientSession(
         DefaultQuicConfig(), connection_,
         QuicServerId(kServerHostname, kPort, PRIVACY_MODE_DISABLED),
@@ -131,7 +132,7 @@ class QuicSpdyClientSessionTest
 
 INSTANTIATE_TEST_CASE_P(Tests,
                         QuicSpdyClientSessionTest,
-                        ::testing::ValuesIn(AllSupportedTransportVersions()));
+                        ::testing::ValuesIn(AllSupportedVersions()));
 
 TEST_P(QuicSpdyClientSessionTest, CryptoConnect) {
   CompleteCryptoHandshake();
@@ -342,7 +343,7 @@ TEST_P(QuicSpdyClientSessionTest, InvalidFramedPacketReceived) {
 
   // Verify that a decryptable packet with bad frames does close the connection.
   QuicConnectionId connection_id = session_->connection()->connection_id();
-  QuicTransportVersionVector versions = {GetParam()};
+  ParsedQuicVersionVector versions = {GetParam()};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
       connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
       PACKET_6BYTE_PACKET_NUMBER, &versions, Perspective::IS_SERVER));

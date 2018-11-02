@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -173,6 +172,7 @@ class AutomationWebContentsObserver
       params.event_type = event.event_type;
       params.update = event.update;
       params.event_from = event.event_from;
+      params.action_request_id = event.action_request_id;
 #if defined(USE_AURA)
       params.mouse_location = aura::Env::GetInstance()->last_mouse_location();
 #endif
@@ -295,7 +295,6 @@ AutomationInternalEnableTabFunction::Run() {
   AutomationEventRouter::GetInstance()->RegisterListenerForOneTree(
       extension_id(),
       source_process_id(),
-      params->args.routing_id,
       ax_tree_id);
 
   return RespondNow(ArgumentList(
@@ -497,15 +496,9 @@ AutomationInternalEnableDesktopFunction::Run() {
   if (!automation_info || !automation_info->desktop)
     return RespondNow(Error("desktop permission must be requested"));
 
-  using api::automation_internal::EnableDesktop::Params;
-  std::unique_ptr<Params> params(Params::Create(*args_));
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
   // This gets removed when the extension process dies.
   AutomationEventRouter::GetInstance()->RegisterListenerWithDesktopPermission(
-      extension_id(),
-      source_process_id(),
-      params->routing_id);
+      extension_id(), source_process_id());
 
   AutomationManagerAura::GetInstance()->Enable(browser_context());
   return RespondNow(NoArguments());
@@ -555,7 +548,7 @@ void AutomationInternalQuerySelectorFunction::OnResponse(
     return;
   }
 
-  Respond(OneArgument(base::MakeUnique<base::Value>(result_acc_obj_id)));
+  Respond(OneArgument(std::make_unique<base::Value>(result_acc_obj_id)));
 }
 
 }  // namespace extensions

@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "ui/base/page_transition_types.h"
 
 class GURL;
 
@@ -27,9 +28,29 @@ class DownloadTaskObserver;
 // stores all the state for a download. Must be used on the UI thread.
 class DownloadTask {
  public:
+  enum class State {
+    // Download has not started yet.
+    kNotStarted = 0,
+
+    // Download is actively progressing.
+    kInProgress,
+
+    // Download is cancelled.
+    kCancelled,
+
+    // Download is completely finished.
+    kComplete,
+  };
+
+  // Returns the download task state.
+  virtual State GetState() const = 0;
+
   // Starts the download. |writer| allows clients to perform in-memory or
   // in-file downloads and must not be null. Start() can only be called once.
   virtual void Start(std::unique_ptr<net::URLFetcherResponseWriter> writer) = 0;
+
+  // Cancels the download.
+  virtual void Cancel() = 0;
 
   // Response writer, which was passed to Start(). Can be used to obtain the
   // download data.
@@ -54,9 +75,16 @@ class DownloadTask {
   // possible error codes.
   virtual int GetErrorCode() const = 0;
 
+  // HTTP response code for this download task. -1 the response has not been
+  // received yet or the response not an HTTP response.
+  virtual int GetHttpCode() const = 0;
+
   // Total number of expected bytes (a best-guess upper-bound). Returns -1 if
   // the total size is unknown.
   virtual int64_t GetTotalBytes() const = 0;
+
+  // Total number of bytes that have been received.
+  virtual int64_t GetReceivedBytes() const = 0;
 
   // Rough percent complete. Returns -1 if progress is unknown. 100 if the
   // download is already complete.
@@ -67,6 +95,9 @@ class DownloadTask {
 
   // Effective MIME type of downloaded content.
   virtual std::string GetMimeType() const = 0;
+
+  // The page transition type associated with the download request.
+  virtual ui::PageTransition GetTransitionType() const = 0;
 
   // Suggested name for the downloaded file.
   virtual base::string16 GetSuggestedFilename() const = 0;

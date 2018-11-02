@@ -19,15 +19,15 @@ AuditorResult::AuditorResult(Type type,
          type == AuditorResult::Type::RESULT_OK ||
          type == AuditorResult::Type::RESULT_IGNORE ||
          type == AuditorResult::Type::ERROR_FATAL ||
-         type == AuditorResult::Type::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE ||
+         type == AuditorResult::Type::ERROR_HASH_CODE_COLLISION ||
+         type == AuditorResult::Type::ERROR_REPEATED_ID ||
          type == AuditorResult::Type::ERROR_MERGE_FAILED ||
          type == AuditorResult::Type::ERROR_ANNOTATIONS_XML_UPDATE);
   DCHECK(!message.empty() || type == AuditorResult::Type::RESULT_OK ||
          type == AuditorResult::Type::RESULT_IGNORE ||
          type == AuditorResult::Type::ERROR_MISSING_TAG_USED ||
          type == AuditorResult::Type::ERROR_NO_ANNOTATION ||
-         type == AuditorResult::Type::ERROR_MISSING_EXTRA_ID ||
-         type == AuditorResult::Type::ERROR_INCOMPLETED_ANNOTATION ||
+         type == AuditorResult::Type::ERROR_MISSING_SECOND_ID ||
          type == AuditorResult::Type::ERROR_DIRECT_ASSIGNMENT);
   if (!message.empty())
     details_.push_back(message);
@@ -57,7 +57,7 @@ void AuditorResult::AddDetail(const std::string& message) {
 std::string AuditorResult::ToText() const {
   switch (type_) {
     case AuditorResult::Type::ERROR_FATAL:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return details_[0];
 
     case AuditorResult::Type::ERROR_MISSING_TAG_USED:
@@ -70,59 +70,66 @@ std::string AuditorResult::ToText() const {
                                 file_path_.c_str(), line_);
 
     case AuditorResult::Type::ERROR_SYNTAX: {
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       std::string flat_message(details_[0]);
       std::replace(flat_message.begin(), flat_message.end(), '\n', ' ');
       return base::StringPrintf("Syntax error in '%s': %s", file_path_.c_str(),
                                 flat_message.c_str());
     }
 
-    case AuditorResult::Type::ERROR_RESERVED_UNIQUE_ID_HASH_CODE:
-      DCHECK(details_.size());
+    case AuditorResult::Type::ERROR_RESERVED_ID_HASH_CODE:
+      DCHECK(!details_.empty());
       return base::StringPrintf(
-          "Unique id '%s' in '%s:%i' has a hash code similar to a reserved "
-          "word and should be changed.",
+          "Id '%s' in '%s:%i' has a hash code equal to a reserved word and "
+          "should be changed.",
           details_[0].c_str(), file_path_.c_str(), line_);
 
-    case AuditorResult::Type::ERROR_DEPRECATED_UNIQUE_ID_HASH_CODE:
-      DCHECK(details_.size());
+    case AuditorResult::Type::ERROR_DEPRECATED_ID_HASH_CODE:
+      DCHECK(!details_.empty());
       return base::StringPrintf(
-          "Unique id '%s' in '%s:%i' has a hash code similar to a deprecated "
-          "unique id and should be changed.",
+          "Id '%s' in '%s:%i' has a hash code equal to a deprecated id and "
+          "should be changed.",
           details_[0].c_str(), file_path_.c_str(), line_);
 
-    case AuditorResult::Type::ERROR_DUPLICATE_UNIQUE_ID_HASH_CODE:
+    case AuditorResult::Type::ERROR_HASH_CODE_COLLISION:
       DCHECK_EQ(details_.size(), 2u);
       return base::StringPrintf(
-          "The following annotations have similar unique id "
-          "hash codes and should be updated: %s, %s.",
+          "The following annotations have colliding hash codes and should be "
+          "updated: %s, %s.",
           details_[0].c_str(), details_[1].c_str());
 
-    case AuditorResult::Type::ERROR_UNIQUE_ID_INVALID_CHARACTER:
-      DCHECK(details_.size());
+    case AuditorResult::Type::ERROR_REPEATED_ID:
+      DCHECK_EQ(details_.size(), 2u);
       return base::StringPrintf(
-          "Unique id '%s' in '%s:%i' contains an invalid character.",
+          "The following annotations have equal ids and should be updated: "
+          "%s, %s.",
+          details_[0].c_str(), details_[1].c_str());
+
+    case AuditorResult::Type::ERROR_ID_INVALID_CHARACTER:
+      DCHECK(!details_.empty());
+      return base::StringPrintf(
+          "Id '%s' in '%s:%i' contains an invalid character.",
           details_[0].c_str(), file_path_.c_str(), line_);
 
     case AuditorResult::Type::ERROR_MISSING_ANNOTATION:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf("Function '%s' in '%s:%i' requires annotation.",
                                 details_[0].c_str(), file_path_.c_str(), line_);
 
     case AuditorResult::Type::ERROR_INCOMPLETE_ANNOTATION:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf(
           "Annotation at '%s:%i' has the following missing fields: %s",
           file_path_.c_str(), line_, details_[0].c_str());
 
-    case AuditorResult::Type::ERROR_MISSING_EXTRA_ID:
+    case AuditorResult::Type::ERROR_MISSING_SECOND_ID:
       return base::StringPrintf(
           "Second id of annotation at '%s:%i' should be updated as it has the "
           "same hash code as the first one.",
           file_path_.c_str(), line_);
 
     case AuditorResult::Type::ERROR_INCONSISTENT_ANNOTATION:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf(
           "Annotation at '%s:%i' has the following inconsistencies: %s",
           file_path_.c_str(), line_, details_[0].c_str());
@@ -135,8 +142,9 @@ std::string AuditorResult::ToText() const {
           details_[1].c_str(), details_[2].c_str(), details_[0].c_str());
 
     case AuditorResult::Type::ERROR_INCOMPLETED_ANNOTATION:
-      return base::StringPrintf("Annotation at '%s:%i' is never completed.",
-                                file_path_.c_str(), line_);
+      DCHECK(!details_.empty());
+      return base::StringPrintf("Annotation '%s' is never completed.",
+                                details_[0].c_str());
 
     case AuditorResult::Type::ERROR_DIRECT_ASSIGNMENT:
       return base::StringPrintf(
@@ -145,7 +153,7 @@ std::string AuditorResult::ToText() const {
           file_path_.c_str(), line_);
 
     case AuditorResult::Type::ERROR_ANNOTATIONS_XML_UPDATE:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf(
           "'tools/traffic_annotation/summary/annotations.xml' requires update. "
           "It is recommended to run traffic_annotation_auditor locally to do "
@@ -163,12 +171,12 @@ std::string AuditorResult::ToText() const {
 std::string AuditorResult::ToShortText() const {
   switch (type_) {
     case AuditorResult::Type::ERROR_INCOMPLETE_ANNOTATION:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf("the following fields are missing: %s",
                                 details_[0].c_str());
 
     case AuditorResult::Type::ERROR_INCONSISTENT_ANNOTATION:
-      DCHECK(details_.size());
+      DCHECK(!details_.empty());
       return base::StringPrintf("the following inconsistencies: %s",
                                 details_[0].c_str());
 

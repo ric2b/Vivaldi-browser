@@ -61,12 +61,12 @@ source_set("command_buffer_traits_sources") {
   public_deps = [
     "//gpu/command_buffer/common:common_sources",
     "//ipc",
+    "//ui/gfx/ipc",
   ]
 
   deps = [
     "//base",
-    "//gpu/command_buffer/common:gles2_utils",
-    "//ui/gfx/ipc",
+    "//ui/gfx/ipc/buffer_types",
     "//ui/gfx/ipc/geometry",
   ]
 }
@@ -99,7 +99,6 @@ source_set("ipc_common_sources") {
   public_deps = [
     ":command_buffer_traits_sources",
     ":surface_handle_type",
-    "//gpu/command_buffer/common:gles2_utils",
     "//ipc",
   ]
 
@@ -109,6 +108,7 @@ source_set("ipc_common_sources") {
     "//gpu/config:config_sources",
     "//ui/base",
     "//ui/gfx/ipc",
+    "//ui/gfx/ipc/buffer_types",
     "//ui/gfx/ipc/geometry",
     "//ui/gl",
     "//url/ipc:url_ipc",
@@ -118,16 +118,12 @@ source_set("ipc_common_sources") {
     sources += [
       "android/scoped_surface_request_conduit.cc",
       "android/scoped_surface_request_conduit.h",
-    ]
-  }
-
-  if (is_mac || is_android) {
-    sources += [
       "gpu_surface_lookup.cc",
       "gpu_surface_lookup.h",
       "gpu_surface_tracker.cc",
       "gpu_surface_tracker.h",
     ]
+    libs = [ "android" ]
   }
 
   if (use_ozone) {
@@ -163,6 +159,7 @@ mojom("interfaces") {
   public_deps = [
     "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
   ]
 }
 

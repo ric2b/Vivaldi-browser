@@ -42,29 +42,19 @@ if (is_official_build) {
   assert(!is_component_build)
 }
 
-# This file defines the following three main targets:
+# This file defines the following two main targets:
 #
-# "gn_all" should (transitively) cause everything to be built; if you run
-# 'ninja gn_all' and then 'ninja all', the second build should do no work.
+# "gn_all" is used to create explicit dependencies from the root BUILD.gn to
+# each top-level component that we wish to include when building everything via
+# "all". This is required since the set of targets built by "all" is determined
+# automatically based on reachability from the root BUILD.gn (for details, see
+# crbug.com/503241). Builders should typically use "all", or list targets
+# explicitly, rather than relying on "gn_all".
 #
 # "gn_visibility": targets that are normally not visible to top-level targets,
 # but are built anyway by "all". Since we don't want any such targets, we have
 # this placeholder to make sure hidden targets that aren't otherwise depended
 # on yet are accounted for.
-#
-# "All" is an alias for "gn_all". It exists for bot compatibility w/ GYP for
-# the iOS bots and the official builders, but should not be generally used
-# during the GYP->GN migration.  We cannot guarantee that GN's "All" builds the
-# same set of targets as GYP's "All" does, because GYP's "All" supports
-# wildcards.
-#
-# Lastly, none of these targets are guaranteed to be the same as what ninja
-# will build with "all". For more on how "all" works and how GN determines
-# "all", see crbug.com/503241.
-#
-# TODO(GYP_GONE): crbug.com/481694. Make sure that the above is true and there
-# are scripts run on the bots that enforce this. Once the GYP migration is
-# over, we can collapse all of these targets as desired.
 
 group("gn_all") {
   testonly = true
@@ -159,13 +149,28 @@ group("gn_all") {
 
   if (!is_ios) {
     deps += [
+      "//cc:cc_unittests",
+      "//components/policy:policy_templates",
+      "//content/shell:content_shell",
+      "//content/test:content_browsertests",
+      "//content/test:content_perftests",
+      "//content/test:content_unittests",
+      "//gpu:gpu_unittests",
+      "//gpu/ipc/service:gpu_ipc_service_unittests",
+      "//ipc:ipc_tests",
       "//media:media_unittests",
+      "//media/midi:midi_unittests",
+      "//media/mojo:media_mojo_unittests",
       "//mojo",
       "//mojo/common:mojo_common_unittests",
       "//mojo/edk/system:mojo_system_unittests",
       "//mojo/edk/test:mojo_public_bindings_unittests",
       "//mojo/edk/test:mojo_public_system_unittests",
+      "//net:net_perftests",
+      "//third_party/WebKit/Source/controller:webkit_unit_tests",
+      "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
       "//ui/gl:gl_unittests",
+      "//url/ipc:url_ipc_unittests",
     ]
   }
 
@@ -178,38 +183,19 @@ group("gn_all") {
 
   if (!is_ios && !is_fuchsia) {
     deps += [
-      "//cc:cc_unittests",
       "//chrome/test:telemetry_perf_unittests",
       "//chrome/test:unit_tests",
       "//components:components_browsertests",
-      "//components/policy:policy_templates",
       "//components/viz:viz_perftests",
       "//components/viz:viz_unittests",
       "//components/viz/common:viz_benchmark",
-      "//content/shell:content_shell",
-      "//content/test:content_browsertests",
-      "//content/test:content_perftests",
-      "//content/test:content_unittests",
       "//device:device_unittests",
       "//google_apis/gcm:mcs_probe",
-      "//gpu:gpu_unittests",
-      "//gpu/ipc/service:gpu_ipc_service_unittests",
-      "//ipc:ipc_tests",
       "//media/capture:capture_unittests",
       "//media/cast:cast_unittests",
-      "//media/midi:midi_unittests",
-      "//media/mojo:media_mojo_unittests",
-      "//mojo",
-      "//mojo/common:mojo_common_unittests",
-      "//mojo/edk/system:mojo_system_unittests",
-      "//mojo/edk/test:mojo_public_bindings_unittests",
-      "//mojo/edk/test:mojo_public_system_unittests",
-      "//net:net_perftests",
       "//storage:storage_unittests",
-      "//third_party/WebKit/Source/controller:webkit_unit_tests",
       "//third_party/WebKit/Source/platform:blink_platform_unittests",
       "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
-      "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
       "//third_party/angle/src/tests:angle_end2end_tests",
       "//third_party/angle/src/tests:angle_unittests",
       "//third_party/angle/src/tests:angle_white_box_tests",
@@ -220,7 +206,6 @@ group("gn_all") {
       "//ui/events:events_unittests",
       "//ui/latency:latency_unittests",
       "//ui/touch_selection:ui_touch_selection_unittests",
-      "//url/ipc:url_ipc_unittests",
       "//v8:gn_all",
     ]
   } else if (is_ios) {
@@ -263,9 +248,19 @@ group("gn_all") {
     deps += [
       "//ui/ozone",
       "//ui/ozone:ozone_unittests",
-      "//ui/ozone/demo",
-      "//ui/ozone/gl:ozone_gl_unittests",
     ]
+
+    # TODO(crbug.com/766360): These require a working GL implementation.
+    if (!is_fuchsia) {
+      deps += [
+        "//ui/ozone/demo",
+        "//ui/ozone/gl:ozone_gl_unittests",
+      ]
+    }
+
+    if (ozone_platform_x11) {
+      deps += [ "//ui/ozone:ozone_x11_unittests" ]
+    }
   }
 
   if (use_x11 || ozone_platform_x11) {
@@ -295,6 +290,7 @@ group("gn_all") {
       "//chrome/test/vr/perf:motopho_latency_test",
       "//components/invalidation/impl:components_invalidation_impl_junit_tests",
       "//components/policy/android:components_policy_junit_tests",
+      "//components/signin/core/browser/android:components_signin_junit_tests",
       "//content/public/android:content_junit_tests",
       "//content/shell/android:content_shell_apk",
       "//device:device_junit_tests",
@@ -647,6 +643,10 @@ group("gn_all") {
     }
   }
 
+  if (is_mac || is_linux) {
+    deps += [ "//third_party/perfetto:all" ]
+  }
+
   if (is_linux && !is_chromeos && !is_chromecast) {
     # TODO(GYP): Figure out if any of these should be in gn_all
     # and figure out how cross-platform they are
@@ -657,7 +657,6 @@ group("gn_all") {
       "//components/filesystem:filesystem_service_unittests",
       "//components/leveldb:leveldb_service_unittests",
       "//components/metrics:serialization",
-      "//components/password_manager/content/renderer:browser_tests",
       "//components/rappor:unit_tests",
       "//components/sessions:unit_tests",
       "//media/blink:media_blink_unittests",
@@ -705,6 +704,7 @@ group("gn_all") {
       "//testing/libfuzzer/tests:libfuzzer_tests",
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
+      "//third_party/zlib/contrib/tests/fuzzers",
     ]
   }
 
@@ -725,7 +725,7 @@ group("gn_all") {
       "//chrome/browser/vr:vr_common_unittests",
       "//chrome/browser/vr:vr_pixeltests",
     ]
-    if (is_linux && use_ozone) {
+    if (is_desktop_linux && use_ozone) {
       deps += [ "//chrome/browser/vr/testapp:vr_testapp" ]
     }
     if (is_android) {
@@ -734,18 +734,12 @@ group("gn_all") {
   }
 
   if (is_fuchsia) {
-    deps += [ "//headless" ]
+    deps += [
+      "//headless",
+      "//headless:headless_shell",
+      "//headless:headless_tests",
+    ]
   }
-}
-
-# TODO(GYP_GONE): This target exists for compatibility with GYP, specifically
-# for the iOS bots and the official builders.
-group("All") {
-  testonly = true
-
-  deps = [
-    ":gn_all",
-  ]
 }
 
 if (is_fuchsia) {
@@ -866,7 +860,7 @@ group("gn_visibility") {
   }
 }
 
-if (!is_ios && !is_fuchsia) {
+if (!is_ios) {
   # This group includes all of the targets needed to build and test Blink,
   # including running the layout tests (see below).
   group("blink_tests") {
@@ -952,6 +946,10 @@ if (!is_ios && !is_fuchsia) {
       data_deps += [ "//third_party/breakpad:dump_syms($host_toolchain)" ]
     }
 
+    if (is_fuchsia) {
+      data_deps += [ "//content/shell:content_shell_fuchsia" ]
+    }
+
     data = [
       "$root_build_dir/resources/inspector/",
       "//testing/scripts/common.py",
@@ -989,7 +987,7 @@ if (!is_ios && !is_fuchsia) {
     ]
 
     deps = [
-      "//mojo/public/js:new_bindings",
+      "//mojo/public/js:bindings",
     ]
   }
 
@@ -1036,6 +1034,7 @@ group("chromium_builder_perf") {
     data_deps = [
       "//cc:cc_perftests",
       "//chrome/test:load_library_perf_tests",
+      "//chrome/test:performance_test_suite",
       "//chrome/test:telemetry_perf_tests",
       "//components/tracing:tracing_perftests",
       "//gpu:command_buffer_perftests",

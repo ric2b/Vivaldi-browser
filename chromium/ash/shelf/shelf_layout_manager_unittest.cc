@@ -20,7 +20,7 @@
 #include "ash/shelf/shelf_view.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
+#include "ash/shell_test_api.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_item.h"
@@ -1201,8 +1201,8 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowSingleDisplay) {
   wm::ActivateWindow(window);
 
   // Enable system modal dialog, and make sure shelf is still hidden.
-  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
-  EXPECT_TRUE(ShellPort::Get()->IsSystemModalWindowOpen());
+  ShellTestApi().SimulateModalWindowOpenForTest(true);
+  EXPECT_TRUE(Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(wm::CanActivateWindow(window));
   Shell::Get()->UpdateShelfVisibility();
   EXPECT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
@@ -1244,8 +1244,8 @@ TEST_F(ShelfLayoutManagerTest, ShelfWithSystemModalWindowDualDisplay) {
   EXPECT_TRUE(window_2->IsVisible());
 
   // Enable system modal dialog, and make sure both shelves are still hidden.
-  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
-  EXPECT_TRUE(ShellPort::Get()->IsSystemModalWindowOpen());
+  ShellTestApi().SimulateModalWindowOpenForTest(true);
+  EXPECT_TRUE(Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(wm::CanActivateWindow(window_1));
   EXPECT_FALSE(wm::CanActivateWindow(window_2));
   Shell::Get()->UpdateShelfVisibility();
@@ -2113,6 +2113,19 @@ class ShelfLayoutManagerKeyboardTest : public AshTestBase {
                              work_area.width(), work_area.height() / 2);
   }
 
+  void NotifyKeyboardChanging(ShelfLayoutManager* layout_manager,
+                              bool is_locked,
+                              const gfx::Rect& bounds) {
+    keyboard::KeyboardStateDescriptor state;
+    state.visual_bounds = bounds;
+    state.occluded_bounds = bounds;
+    state.displaced_bounds = is_locked ? bounds : gfx::Rect();
+    state.is_locked = is_locked;
+    state.is_available = !bounds.IsEmpty();
+    layout_manager->OnKeyboardAvailabilityChanging(state.is_available);
+    layout_manager->OnKeyboardAppearanceChanging(state);
+  }
+
   const gfx::Rect& keyboard_bounds() const { return keyboard_bounds_; }
 
  private:
@@ -2130,7 +2143,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfNotMoveOnKeyboardOpen) {
       keyboard::KeyboardController::GetInstance();
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
-  layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  NotifyKeyboardChanging(layout_manager, false, keyboard_bounds());
   layout_manager->LayoutShelf();
 
   // Shelf position should not be changed.
@@ -2150,7 +2163,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
 
   // Open keyboard in non-sticky mode.
   kb_controller->ShowKeyboard(false);
-  layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  NotifyKeyboardChanging(layout_manager, false, keyboard_bounds());
   layout_manager->LayoutShelf();
 
   // Work area should not be changed.
@@ -2159,7 +2172,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest,
 
   kb_controller->HideKeyboard(
       keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-  layout_manager->OnKeyboardBoundsChanging(gfx::Rect());
+  NotifyKeyboardChanging(layout_manager, false, gfx::Rect());
   layout_manager->LayoutShelf();
   EXPECT_EQ(orig_work_area,
             display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
@@ -2176,7 +2189,7 @@ TEST_F(ShelfLayoutManagerKeyboardTest, ShelfShouldChangeWorkAreaInStickyMode) {
 
   // Open keyboard in sticky mode.
   kb_controller->ShowKeyboard(true);
-  layout_manager->OnKeyboardBoundsChanging(keyboard_bounds());
+  NotifyKeyboardChanging(layout_manager, true, keyboard_bounds());
   layout_manager->LayoutShelf();
 
   // Work area should be changed.

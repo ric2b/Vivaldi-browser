@@ -22,13 +22,8 @@
 #include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
 #include "third_party/WebKit/public/web/WebApplyConstraintsRequest.h"
 #include "third_party/WebKit/public/web/WebMediaDeviceChangeObserver.h"
-#include "third_party/WebKit/public/web/WebMediaDevicesRequest.h"
 #include "third_party/WebKit/public/web/WebUserMediaClient.h"
 #include "third_party/WebKit/public/web/WebUserMediaRequest.h"
-
-namespace base {
-class TaskRunner;
-}
 
 namespace content {
 
@@ -49,8 +44,7 @@ class CONTENT_EXPORT UserMediaClientImpl : public RenderFrameObserver,
   UserMediaClientImpl(
       RenderFrame* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
-      std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer,
-      const scoped_refptr<base::TaskRunner>& worker_task_runner);
+      std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer);
   UserMediaClientImpl(RenderFrame* render_frame,
                       std::unique_ptr<UserMediaProcessor> user_media_processor);
   ~UserMediaClientImpl() override;
@@ -63,8 +57,6 @@ class CONTENT_EXPORT UserMediaClientImpl : public RenderFrameObserver,
   void RequestUserMedia(const blink::WebUserMediaRequest& web_request) override;
   void CancelUserMediaRequest(
       const blink::WebUserMediaRequest& web_request) override;
-  void RequestMediaDevices(
-      const blink::WebMediaDevicesRequest& media_devices_request) override;
   void SetMediaDeviceChangeObserver(
       const blink::WebMediaDeviceChangeObserver& observer) override;
   void ApplyConstraints(
@@ -76,14 +68,6 @@ class CONTENT_EXPORT UserMediaClientImpl : public RenderFrameObserver,
 
   void SetMediaDevicesDispatcherForTesting(
       blink::mojom::MediaDevicesDispatcherHostPtr media_devices_dispatcher);
-
- protected:
-  // This method is virtual for test purposes. A test can override it to
-  // test requesting local media streams. The function notifies Blink that the
-  // |request| has completed.
-  virtual void EnumerateDevicesSucceded(
-      blink::WebMediaDevicesRequest* request,
-      blink::WebVector<blink::WebMediaDeviceInfo>& devices);
 
  private:
   class Request {
@@ -126,10 +110,6 @@ class CONTENT_EXPORT UserMediaClientImpl : public RenderFrameObserver,
 
   // RenderFrameObserver implementation.
   void OnDestruct() override;
-
-  using EnumerationResult = std::vector<MediaDeviceInfoArray>;
-  void FinalizeEnumerateDevices(blink::WebMediaDevicesRequest request,
-                                const EnumerationResult& result);
 
   // Callback invoked by MediaDevicesEventDispatcher when a device-change
   // notification arrives.

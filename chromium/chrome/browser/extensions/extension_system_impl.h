@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "chrome/browser/extensions/extension_cookie_notifier.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/extension_system.h"
@@ -40,6 +41,8 @@ class ValueStoreFactoryImpl;
 // but with a shared instance for incognito) keeps the common services.
 class ExtensionSystemImpl : public ExtensionSystem {
  public:
+  using InstallUpdateCallback = ExtensionSystem::InstallUpdateCallback;
+
   explicit ExtensionSystemImpl(Profile* profile);
   ~ExtensionSystemImpl() override;
 
@@ -47,6 +50,7 @@ class ExtensionSystemImpl : public ExtensionSystem {
   void Shutdown() override;
 
   void InitForRegularProfile(bool extensions_enabled) override;
+  void InitForIncognitoProfile() override;
 
   ExtensionService* extension_service() override;  // shared
   RuntimeData* runtime_data() override;            // shared
@@ -73,7 +77,9 @@ class ExtensionSystemImpl : public ExtensionSystem {
   std::unique_ptr<ExtensionSet> GetDependentExtensions(
       const Extension* extension) override;
   void InstallUpdate(const std::string& extension_id,
-                     const base::FilePath& temp_dir) override;
+                     const std::string& public_key,
+                     const base::FilePath& unpacked_dir,
+                     InstallUpdateCallback install_update_callback) override;
 
  private:
   friend class ExtensionSystemSharedFactory;
@@ -155,6 +161,8 @@ class ExtensionSystemImpl : public ExtensionSystem {
 
     OneShotEvent ready_;
   };
+
+  std::unique_ptr<ExtensionCookieNotifier> cookie_notifier_;
 
   Profile* profile_;
 

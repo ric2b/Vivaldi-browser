@@ -46,32 +46,33 @@
 
 namespace blink {
 
+namespace {
 // The following values default values are defined within the WebVTT Regions
 // Spec.
 // https://dvcs.w3.org/hg/text-tracks/raw-file/default/608toVTT/region.html
 
 // The region occupies by default 100% of the width of the video viewport.
-static const float kDefaultWidth = 100;
+constexpr double kDefaultRegionWidth = 100;
 
 // The region has, by default, 3 lines of text.
-static const int kDefaultHeightInLines = 3;
+constexpr int kDefaultHeightInLines = 3;
 
 // The region and viewport are anchored in the bottom left corner.
-static const float kDefaultAnchorPointX = 0;
-static const float kDefaultAnchorPointY = 100;
+constexpr double kDefaultAnchorPointX = 0;
+constexpr double kDefaultAnchorPointY = 100;
 
 // The region doesn't have scrolling text, by default.
-static const bool kDefaultScroll = false;
+constexpr bool kDefaultScroll = false;
 
 // Default region line-height (vh units)
-static const float kLineHeight = 5.33;
+constexpr float kLineHeight = 5.33;
 
 // Default scrolling animation time period (s).
-static const float kScrollTime = 0.433;
+constexpr float kScrollTime = 0.433;
 
-static bool IsNonPercentage(double value,
-                            const char* method,
-                            ExceptionState& exception_state) {
+bool IsNonPercentage(double value,
+                     const char* method,
+                     ExceptionState& exception_state) {
   if (value < 0 || value > 100) {
     exception_state.ThrowDOMException(
         kIndexSizeError,
@@ -83,19 +84,21 @@ static bool IsNonPercentage(double value,
   return false;
 }
 
+}  // namespace
+
 VTTRegion::VTTRegion()
     : id_(g_empty_string),
-      width_(kDefaultWidth),
+      width_(kDefaultRegionWidth),
       lines_(kDefaultHeightInLines),
-      region_anchor_(FloatPoint(kDefaultAnchorPointX, kDefaultAnchorPointY)),
-      viewport_anchor_(FloatPoint(kDefaultAnchorPointX, kDefaultAnchorPointY)),
+      region_anchor_(DoublePoint(kDefaultAnchorPointX, kDefaultAnchorPointY)),
+      viewport_anchor_(DoublePoint(kDefaultAnchorPointX, kDefaultAnchorPointY)),
       scroll_(kDefaultScroll),
       current_top_(0),
       scroll_timer_(Platform::Current()->CurrentThread()->GetWebTaskRunner(),
                     this,
                     &VTTRegion::ScrollTimerFired) {}
 
-VTTRegion::~VTTRegion() {}
+VTTRegion::~VTTRegion() = default;
 
 void VTTRegion::setId(const String& id) {
   id_ = id;
@@ -164,7 +167,7 @@ void VTTRegion::SetRegionSettings(const String& input_string) {
   VTTScanner input(input_string);
 
   while (!input.IsAtEnd()) {
-    input.SkipWhile<VTTParser::IsValidSettingDelimiter>();
+    input.SkipWhile<VTTParser::IsASpace>();
 
     if (input.IsAtEnd())
       break;
@@ -172,8 +175,8 @@ void VTTRegion::SetRegionSettings(const String& input_string) {
     // Scan the name part.
     RegionSetting name = ScanSettingName(input);
 
-    // Verify that we're looking at a '='.
-    if (name == kNone || !input.Scan('=')) {
+    // Verify that we're looking at a ':'.
+    if (name == kNone || !input.Scan(':')) {
       input.SkipUntil<VTTParser::IsASpace>();
       continue;
     }
@@ -186,8 +189,8 @@ void VTTRegion::SetRegionSettings(const String& input_string) {
 VTTRegion::RegionSetting VTTRegion::ScanSettingName(VTTScanner& input) {
   if (input.Scan("id"))
     return kId;
-  if (input.Scan("height"))
-    return kHeight;
+  if (input.Scan("lines"))
+    return kLines;
   if (input.Scan("width"))
     return kWidth;
   if (input.Scan("viewportanchor"))
@@ -218,15 +221,15 @@ void VTTRegion::ParseSettingValue(RegionSetting setting, VTTScanner& input) {
       break;
     }
     case kWidth: {
-      float float_width;
-      if (VTTParser::ParseFloatPercentageValue(input, float_width) &&
+      double width;
+      if (VTTParser::ParsePercentageValue(input, width) &&
           ParsedEntireRun(input, value_run))
-        width_ = float_width;
+        width_ = width;
       else
         DVLOG(VTT_LOG_LEVEL) << "parseSettingValue, invalid Width";
       break;
     }
-    case kHeight: {
+    case kLines: {
       int number;
       if (input.ScanDigits(number) && ParsedEntireRun(input, value_run))
         lines_ = number;
@@ -235,8 +238,8 @@ void VTTRegion::ParseSettingValue(RegionSetting setting, VTTScanner& input) {
       break;
     }
     case kRegionAnchor: {
-      FloatPoint anchor;
-      if (VTTParser::ParseFloatPercentageValuePair(input, ',', anchor) &&
+      DoublePoint anchor;
+      if (VTTParser::ParsePercentageValuePair(input, ',', anchor) &&
           ParsedEntireRun(input, value_run))
         region_anchor_ = anchor;
       else
@@ -244,8 +247,8 @@ void VTTRegion::ParseSettingValue(RegionSetting setting, VTTScanner& input) {
       break;
     }
     case kViewportAnchor: {
-      FloatPoint anchor;
-      if (VTTParser::ParseFloatPercentageValuePair(input, ',', anchor) &&
+      DoublePoint anchor;
+      if (VTTParser::ParsePercentageValuePair(input, ',', anchor) &&
           ParsedEntireRun(input, value_run))
         viewport_anchor_ = anchor;
       else
@@ -401,7 +404,7 @@ void VTTRegion::StartTimer() {
     return;
 
   double duration = IsScrollingRegion() ? kScrollTime : 0;
-  scroll_timer_.StartOneShot(duration, BLINK_FROM_HERE);
+  scroll_timer_.StartOneShot(duration, FROM_HERE);
 }
 
 void VTTRegion::StopTimer() {

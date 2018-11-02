@@ -31,6 +31,10 @@
 #include "base/win/windows_version.h"
 #endif
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/common/feature_toggles.h"
+#endif
+
 namespace media {
 namespace internal {
 
@@ -182,31 +186,30 @@ TEST(MimeUtilTest, CommonMediaMimeType) {
   EXPECT_EQ(kHlsSupported, IsSupportedMediaMimeType("audio/x-mpegurl"));
 
 #if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp4"));
-  EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-m4a"));
-  EXPECT_TRUE(IsSupportedMediaMimeType("video/mp4"));
-  EXPECT_TRUE(IsSupportedMediaMimeType("video/x-m4v"));
-
+#endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && !defined(PLATFORM_MEDIA_MP3)
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mp3"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-mp3"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/mpeg"));
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS) && !defined(PLATFORM_MEDIA_MP3)
+#if !defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  EXPECT_TRUE(IsSupportedMediaMimeType("video/mp4"));
+
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+  EXPECT_TRUE(IsSupportedMediaMimeType("audio/x-m4a"));
+  EXPECT_TRUE(IsSupportedMediaMimeType("video/x-m4v"));
   EXPECT_TRUE(IsSupportedMediaMimeType("audio/aac"));
 
 #if BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
   EXPECT_TRUE(IsSupportedMediaMimeType("video/mp2t"));
 #else
   EXPECT_FALSE(IsSupportedMediaMimeType("video/mp2t"));
-#endif
-#else
-  EXPECT_FALSE(IsSupportedMediaMimeType("audio/mp4"));
-  EXPECT_FALSE(IsSupportedMediaMimeType("audio/x-m4a"));
-  EXPECT_FALSE(IsSupportedMediaMimeType("video/mp4"));
-  EXPECT_FALSE(IsSupportedMediaMimeType("video/x-m4v"));
+#endif  // BUILDFLAG(ENABLE_MSE_MPEG2TS_STREAM_PARSER)
 
-  EXPECT_FALSE(IsSupportedMediaMimeType("audio/mp3"));
-  EXPECT_FALSE(IsSupportedMediaMimeType("audio/x-mp3"));
-  EXPECT_FALSE(IsSupportedMediaMimeType("audio/mpeg"));
+#else
+  EXPECT_FALSE(IsSupportedMediaMimeType("audio/x-m4a"));
+  EXPECT_FALSE(IsSupportedMediaMimeType("video/x-m4v"));
   EXPECT_FALSE(IsSupportedMediaMimeType("audio/aac"));
 #endif  // USE_PROPRIETARY_CODECS
 #endif  // !defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -242,9 +245,12 @@ TEST(MimeUtilTest, CommonMediaMimeTypeSystemCodecs) {
   EXPECT_VIDEO_SUPPORT("video/mp4");
   EXPECT_VIDEO_SUPPORT("video/x-m4v");
 
+#if defined(PLATFORM_MEDIA_MP3)
   EXPECT_AUDIO_SUPPORT("audio/mp3");
   EXPECT_AUDIO_SUPPORT("audio/x-mp3");
   EXPECT_AUDIO_SUPPORT("audio/mpeg");
+#endif  // defined(PLATFORM_MEDIA_MP3)
+
   EXPECT_AUDIO_SUPPORT("audio/aac");
 }
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -370,11 +376,9 @@ TEST(MimeUtilTest, ParseAudioCodecString) {
     EXPECT_EQ(kCodecAAC, out_codec);
   }
 
-  // Valid FLAC string when proprietary codecs are supported. FLAC-in-MP4
-  // currently requires proprietary codecs to demux mp4.
-  EXPECT_EQ(kUsePropCodecs,
-            ParseAudioCodecString("audio/mp4", "flac", &out_is_ambiguous,
-                                  &out_codec));
+  // Valid FLAC string with MP4. Neither decoding nor demuxing is proprietary.
+  EXPECT_TRUE(ParseAudioCodecString("audio/mp4", "flac", &out_is_ambiguous,
+                                    &out_codec));
   if (kUsePropCodecs) {
     EXPECT_FALSE(out_is_ambiguous);
     EXPECT_EQ(kCodecFLAC, out_codec);

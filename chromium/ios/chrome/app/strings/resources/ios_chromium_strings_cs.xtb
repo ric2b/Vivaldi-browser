@@ -3,6 +3,7 @@
 <translationbundle lang="cs">
 <translation id="102360288709523007">Pomozte Chromium zlepšovat – posílejte Googlu statistiky využití a zprávy o selhání.</translation>
 <translation id="1185134272377778587">O prohlížeči Chromium</translation>
+<translation id="1289966288285062467">Upozornění ve věci ochrany soukromí v prohlížeči Chromium</translation>
 <translation id="1472013873724362412">Váš účet v prohlížeči Chromium nefunguje. Kontaktujte administrátora domény nebo se přihlaste pomocí běžného účtu Google.</translation>
 <translation id="1736662517232558588">Data prohlížeče Chromium byla vymazána</translation>
 <translation id="1838412507805038478">Prohlížeč Chromium ověřil, že certifikát tohoto webu byl vydán vydavatelem <ph name="ISSUER" />.</translation>
@@ -31,8 +32,8 @@
 <translation id="6268381023930128611">Odhlásit se z prohlížeče Chromium?</translation>
 <translation id="6424492062988593837">Chromium je opět o něco lepší. K dispozici je nová verze.</translation>
 <translation id="6604711459180487467">Získejte v prohlížeči Chromium lepší funkce založené na poloze.</translation>
+<translation id="6626296268883197964">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK_TOS" />smluvními podmínkami<ph name="END_LINK_TOS" /> a <ph name="BEGIN_LINK_PRIVACY" />zásadami ochrany soukromí<ph name="END_LINK_PRIVACY" /> prohlížeče Chromium.</translation>
 <translation id="7099326575020694068">Prohlížeč Chromium nemůže používat fotoaparát v režimu Split View.</translation>
-<translation id="7144758435978427212">Objevujte webové stránky odesílané objekty v okolí. Když zapnete Bluetooth, prohlížeč Chromium bude moci načítat webové stránky přidružené k objektům v okolí a odesílat je do Googlu, aby vybral ty nejužitečnější. <ph name="BEGIN_LINK" />Další informace<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium vám šetří čas tím, že vaše účty přenáší na web. Účty můžete přidat nebo odstranit v Nastavení.</translation>
 <translation id="7269362888766543920">Některé doplňky způsobují selhání prohlížeče Chromium. Zkuste je prosím odinstalovat.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -40,7 +41,6 @@
 <translation id="7400689562045506105">Používejte Chromium všude</translation>
 <translation id="7674213385180944843">Otevřete Nastavení &gt; Soukromí &gt; Kamera &gt; Chromium a zapněte fotoaparát.</translation>
 <translation id="786327964234957808">Přepínáte účet pro synchronizaci z <ph name="USER_EMAIL1" /> na <ph name="USER_EMAIL2" />. Vaše existující data prohlížeče Chromium jsou spravována doménou <ph name="DOMAIN" />. Touto akcí svá data smažete z tohoto zařízení, v účtu <ph name="USER_EMAIL1" /> však vaše data zůstanou.</translation>
-<translation id="8111736072665034317">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK" />1smluvními podmínkami<ph name="END_LINK" /> prohlížeče Chromium.</translation>
 <translation id="8175055321229419309">Tip: <ph name="BEGIN_LINK" />Přesuňte si prohlížeč Chromium do doku<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Služby Google mohou v prohlížeči Chromium díky údajům o poloze fungovat lépe.</translation>
 <translation id="8353224596138547809">Přejete si, aby aplikace Chromium uložila vaše heslo pro tyto stránky?</translation>

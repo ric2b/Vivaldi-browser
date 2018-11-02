@@ -20,8 +20,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
@@ -30,6 +32,7 @@
 #include "base/strings/string_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/win/scoped_variant.h"
+#include "chrome/common/chrome_features.h"
 #include "ui/base/win/atl_module.h"
 
 namespace shell_integration {
@@ -110,6 +113,10 @@ class SettingsAppMonitor::Context {
   // Installs an event handler to observe events of interest.
   HRESULT InstallObservers();
 
+  // Invokes the |browser_button| if the Win10AcceleratedDefaultBrowserFlow
+  // feature is enabled.
+  void MaybeInvokeChooser(IUIAutomationElement* browser_button);
+
   // The task runner for the automation thread.
   base::SingleThreadTaskRunner* task_runner_ = nullptr;
 
@@ -127,6 +134,9 @@ class SettingsAppMonitor::Context {
 
   // State to suppress duplicate "focus changed" events.
   ElementType last_focused_element_ = ElementType::UNKNOWN;
+
+  // The browser chooser must only be invoked once.
+  bool browser_chooser_invoked_ = false;
 
   // Weak pointers to the context are given to event handlers.
   base::WeakPtrFactory<Context> weak_ptr_factory_;
@@ -204,6 +214,7 @@ void ConfigureCacheRequest(IUIAutomationCacheRequest* cache_request) {
   cache_request->AddProperty(UIA_AutomationIdPropertyId);
   cache_request->AddProperty(UIA_NamePropertyId);
   cache_request->AddProperty(UIA_ClassNamePropertyId);
+  cache_request->AddPattern(UIA_InvokePatternId);
 #if DCHECK_IS_ON()
   cache_request->AddProperty(UIA_ControlTypePropertyId);
   cache_request->AddProperty(UIA_IsPeripheralPropertyId);
@@ -687,6 +698,7 @@ void SettingsAppMonitor::Context::HandleFocusChangedEvent(
   last_focused_element_ = element_type;
 
   if (element_type == ElementType::DEFAULT_BROWSER) {
+    MaybeInvokeChooser(sender.Get());
     monitor_runner_->PostTask(
         FROM_HERE, base::Bind(&SettingsAppMonitor::OnAppFocused, monitor_));
   } else if (element_type == ElementType::CHECK_IT_OUT) {
@@ -776,6 +788,26 @@ HRESULT SettingsAppMonitor::Context::InstallObservers() {
   }
 
   return result;
+}
+
+void SettingsAppMonitor::Context::MaybeInvokeChooser(
+    IUIAutomationElement* browser_button) {
+  if (browser_chooser_invoked_ ||
+      !base::FeatureList::IsEnabled(
+          features::kWin10AcceleratedDefaultBrowserFlow)) {
+    return;
+  }
+
+  // Invoke the dialog and record whether it was successful.
+  Microsoft::WRL::ComPtr<IUIAutomationInvokePattern> invoke_pattern;
+  bool succeeded = SUCCEEDED(browser_button->GetCachedPatternAs(
+                       UIA_InvokePatternId, IID_PPV_ARGS(&invoke_pattern))) &&
+                   invoke_pattern && SUCCEEDED(invoke_pattern->Invoke());
+
+  if (succeeded)
+    browser_chooser_invoked_ = true;
+
+  UMA_HISTOGRAM_BOOLEAN("DefaultBrowser.Win10ChooserInvoked", succeeded);
 }
 
 

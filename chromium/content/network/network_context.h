@@ -13,25 +13,24 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "base/timer/timer.h"
 #include "content/common/content_export.h"
-#include "content/network/cookie_manager.h"
-#include "content/public/common/network_service.mojom.h"
-#include "content/public/common/url_loader_factory.mojom.h"
+#include "content/public/network/url_request_context_owner.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
-
-class PrefService;
+#include "services/network/cookie_manager.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 
 namespace net {
+class CertVerifier;
 class URLRequestContext;
-class URLRequestContextBuilder;
 class HttpServerPropertiesManager;
 }
 
 namespace content {
 class NetworkServiceImpl;
 class URLLoader;
+class URLRequestContextBuilderMojo;
 
 // A NetworkContext creates and manages access to a URLRequestContext.
 //
@@ -42,33 +41,36 @@ class URLLoader;
 //
 // When the network service is disabled, NetworkContexts may be created through
 // NetworkServiceImpl::CreateNetworkContextWithBuilder, and take in a
-// URLRequestContextBuilder to seed construction of the NetworkContext's
+// URLRequestContextBuilderMojo to seed construction of the NetworkContext's
 // URLRequestContext. When that happens, the consumer takes ownership of the
 // NetworkContext directly, has direct access to its URLRequestContext, and is
 // responsible for destroying it before the NetworkService.
-class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
+class CONTENT_EXPORT NetworkContext : public network::mojom::NetworkContext {
  public:
   NetworkContext(NetworkServiceImpl* network_service,
-                 mojom::NetworkContextRequest request,
-                 mojom::NetworkContextParamsPtr params);
+                 network::mojom::NetworkContextRequest request,
+                 network::mojom::NetworkContextParamsPtr params);
 
   // Temporary constructor that allows creating an in-process NetworkContext
-  // with a pre-populated URLRequestContextBuilder.
+  // with a pre-populated URLRequestContextBuilderMojo.
   NetworkContext(NetworkServiceImpl* network_service,
-                 mojom::NetworkContextRequest request,
-                 mojom::NetworkContextParamsPtr params,
-                 std::unique_ptr<net::URLRequestContextBuilder> builder);
+                 network::mojom::NetworkContextRequest request,
+                 network::mojom::NetworkContextParamsPtr params,
+                 std::unique_ptr<URLRequestContextBuilderMojo> builder);
 
   // Creates a NetworkContext that wraps a consumer-provided URLRequestContext
-  // that the NetworkContext does not own. In this case, there is no
-  // NetworkService object.
+  // that the NetworkContext does not own.
   // TODO(mmenke):  Remove this constructor when the network service ships.
-  NetworkContext(mojom::NetworkContextRequest request,
+  NetworkContext(NetworkServiceImpl* network_service,
+                 network::mojom::NetworkContextRequest request,
                  net::URLRequestContext* url_request_context);
 
   ~NetworkContext() override;
 
   static std::unique_ptr<NetworkContext> CreateForTesting();
+
+  // Sets a global CertVerifier to use when initializing all profiles.
+  static void SetCertVerifierForTesting(net::CertVerifier* cert_verifier);
 
   net::URLRequestContext* url_request_context() { return url_request_context_; }
 
@@ -79,11 +81,12 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
   void RegisterURLLoader(URLLoader* url_loader);
   void DeregisterURLLoader(URLLoader* url_loader);
 
-  // mojom::NetworkContext implementation:
-  void CreateURLLoaderFactory(mojom::URLLoaderFactoryRequest request,
+  // network::mojom::NetworkContext implementation:
+  void CreateURLLoaderFactory(network::mojom::URLLoaderFactoryRequest request,
                               uint32_t process_id) override;
-  void HandleViewCacheRequest(const GURL& url,
-                              mojom::URLLoaderClientPtr client) override;
+  void HandleViewCacheRequest(
+      const GURL& url,
+      network::mojom::URLLoaderClientPtr client) override;
   void GetCookieManager(network::mojom::CookieManagerRequest request) override;
   void GetRestrictedCookieManager(
       network::mojom::RestrictedCookieManagerRequest request,
@@ -92,6 +95,13 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
   void ClearNetworkingHistorySince(
       base::Time time,
       base::OnceClosure completion_callback) override;
+  void SetNetworkConditions(
+      const std::string& profile_id,
+      network::mojom::NetworkConditionsPtr conditions) override;
+  void AddHSTSForTesting(const std::string& host,
+                         base::Time expiry,
+                         bool include_subdomains,
+                         AddHSTSForTestingCallback callback) override;
 
   // Called when the associated NetworkServiceImpl is going away. Guaranteed to
   // destroy NetworkContext's URLRequestContext.
@@ -100,37 +110,38 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
   // Disables use of QUIC by the NetworkContext.
   void DisableQuic();
 
-  void SetNetworkConditions(const std::string& profile_id,
-                            mojom::NetworkConditionsPtr conditions) override;
+
+  // Applies the values in |network_context_params| to |builder|, and builds
+  // the URLRequestContext.
+  static URLRequestContextOwner ApplyContextParamsToBuilder(
+      URLRequestContextBuilderMojo* builder,
+      network::mojom::NetworkContextParams* network_context_params,
+      bool quic_disabled,
+      net::NetLog* net_log);
 
  private:
-  NetworkContext();
+  // Constructor only used in tests.
+  explicit NetworkContext(network::mojom::NetworkContextParamsPtr params);
 
   // On connection errors the NetworkContext destroys itself.
   void OnConnectionError();
 
-  std::unique_ptr<net::URLRequestContext> MakeURLRequestContext(
-      mojom::NetworkContextParams* network_context_params);
-
-  // Applies the values in |network_context_params| to |builder|.
-  void ApplyContextParamsToBuilder(
-      net::URLRequestContextBuilder* builder,
-      mojom::NetworkContextParams* network_context_params);
+  URLRequestContextOwner MakeURLRequestContext(
+      network::mojom::NetworkContextParams* network_context_params);
 
   NetworkServiceImpl* const network_service_;
 
-  // This needs to be destroyed after the URLRequestContext.
-  std::unique_ptr<PrefService> pref_service_;
-
-  // Owning pointer to |url_request_context_|. nullptr when the
-  // NetworkContextImpl doesn't own its own URLRequestContext.
-  std::unique_ptr<net::URLRequestContext> owned_url_request_context_;
+  // Holds owning pointer to |url_request_context_|. Will contain a nullptr for
+  // |url_request_context| when the NetworkContextImpl doesn't own its own
+  // URLRequestContext.
+  URLRequestContextOwner url_request_context_owner_;
 
   net::URLRequestContext* url_request_context_ = nullptr;
 
   // Put it below |url_request_context_| so that it outlives all the
   // NetworkServiceURLLoaderFactory instances.
-  mojo::StrongBindingSet<mojom::URLLoaderFactory> loader_factory_bindings_;
+  mojo::StrongBindingSet<network::mojom::URLLoaderFactory>
+      loader_factory_bindings_;
 
   // URLLoaders register themselves with the NetworkContext so that they can
   // be cleaned up when the NetworkContext goes away. This is needed as
@@ -138,29 +149,11 @@ class CONTENT_EXPORT NetworkContext : public mojom::NetworkContext {
   // net::URLRequestContext (held by NetworkContext) is destroyed.
   std::set<URLLoader*> url_loaders_;
 
-  mojom::NetworkContextParamsPtr params_;
+  network::mojom::NetworkContextParamsPtr params_;
 
-  mojo::Binding<mojom::NetworkContext> binding_;
+  mojo::Binding<network::mojom::NetworkContext> binding_;
 
-  std::unique_ptr<CookieManager> cookie_manager_;
-
-  // Temporary class to help diagnose the impact of https://crbug.com/711579.
-  // Every 24-hours, measures the size of the network cache and emits an UMA
-  // metric.
-  class DiskChecker {
-   public:
-    explicit DiskChecker(const base::FilePath& cache_path);
-    ~DiskChecker();
-
-   private:
-    void CheckDiskSize();
-    static void CheckDiskSizeOnBackgroundThread(
-        const base::FilePath& cache_path);
-    base::RepeatingTimer timer_;
-    base::FilePath cache_path_;
-    DISALLOW_COPY_AND_ASSIGN(DiskChecker);
-  };
-  std::unique_ptr<DiskChecker> disk_checker_;
+  std::unique_ptr<network::CookieManager> cookie_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkContext);
 };

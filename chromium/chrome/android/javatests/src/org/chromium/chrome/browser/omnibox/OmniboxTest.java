@@ -79,8 +79,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * framework once it supports Test Rule Parameterization
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @CommandLineParameter({"", "disable-features=" + ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE})
 @SuppressLint("SetTextI18n")
 public class OmniboxTest {
@@ -366,7 +365,7 @@ public class OmniboxTest {
         Assert.assertEquals("Location bar has text.", "", urlBar.getText().toString());
         Assert.assertEquals("Location bar has incorrect hint.",
                 mActivityTestRule.getActivity().getResources().getString(
-                        R.string.search_or_type_url),
+                        R.string.search_or_type_web_address),
                 urlBar.getHint().toString());
 
         // Type something in the omnibox.

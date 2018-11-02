@@ -19,11 +19,14 @@ class ChromeBrowserState;
 }  // namespace ios
 
 namespace bookmarks {
-class BookmarkModelBridge;
 class BookmarkNode;
 }  // namespace bookmarks
 
+@class BookmarkContextBar;
 @class BookmarkHomeViewController;
+@class BookmarkHomeWaitingView;
+@class BookmarkTableView;
+@class MDCAppBar;
 
 @protocol BookmarkHomeViewControllerDelegate
 // The view controller wants to be dismissed. If |urls| is not empty, then
@@ -42,24 +45,19 @@ class BookmarkNode;
 
 @end
 
-// Class to navigate the bookmark hierarchy, needs subclassing for tablet /
-// handset case.
-@interface BookmarkHomeViewController : UIViewController {
- @protected
-  // The following 2 ivars both represent the set of nodes being edited.
-  // The set is for fast lookup.
-  // The vector maintains the order that edit nodes were added.
-  // Use the relevant instance methods to modify these two ivars in tandem.
-  // DO NOT modify these two ivars directly.
-  std::set<const bookmarks::BookmarkNode*> _editNodes;
-  std::vector<const bookmarks::BookmarkNode*> _editNodesOrdered;
+// Class to navigate the bookmark hierarchy.
+@interface BookmarkHomeViewController : UIViewController
 
-  // Bridge to register for bookmark changes.
-  std::unique_ptr<bookmarks::BookmarkModelBridge> _bridge;
+// Set to YES, only when this view controller instance is being created
+// from cached path. Once the view controller is shown, this is set to NO.
+// This is so that the cache code is called only once in viewWillAppear, and
+// not every time the view appears.
+@property(nonatomic, assign) BOOL isReconstructingFromCache;
 
-  // The root node, whose child nodes are shown in the bookmark table view.
-  const bookmarks::BookmarkNode* _rootNode;
-}
+// Delegate for presenters. Note that this delegate is currently being set only
+// in case of handset, and not tablet. In the future it will be used by both
+// cases.
+@property(nonatomic, weak) id<BookmarkHomeViewControllerDelegate> homeDelegate;
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
@@ -70,32 +68,34 @@ class BookmarkNode;
                     dispatcher:(id<ApplicationCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
 
-// Set to YES, only when this view controller instance is being created
-// from cached path. Once the view controller is shown, this is set to NO.
-// This is so that the cache code is called only once in viewWillAppear, and
-// not every time the view appears.
-@property(nonatomic, assign) BOOL isReconstructingFromCache;
-
 // Setter to set _rootNode value.
 - (void)setRootNode:(const bookmarks::BookmarkNode*)rootNode;
 
-// Delegate for presenters. Note that this delegate is currently being set only
-// in case of handset, and not tablet. In the future it will be used by both
-// cases.
-@property(nonatomic, weak) id<BookmarkHomeViewControllerDelegate> homeDelegate;
+// This method should be called at most once in the life-cycle of the class.
+// It should be called at the soonest possible time after the view has been
+// loaded, and the bookmark model is loaded.
+- (void)loadBookmarkViews;
 
-// Dispatcher for sending commands.
-@property(nonatomic, readonly, weak) id<ApplicationCommands> dispatcher;
+// This method is called if the view needs to be loaded and the model is not
+// ready yet.
+- (void)loadWaitingView;
 
-// Dismisses any modal interaction elements. Note that this
-// method is currently used in case of handset only. In the future it
-// will be used by both cases.
-- (void)dismissModals;
 @end
 
 @interface BookmarkHomeViewController (ExposedForTesting)
 
-- (const std::set<const bookmarks::BookmarkNode*>&)editNodes;
+// The main view showing all the bookmarks.
+@property(nonatomic, readonly) BookmarkTableView* bookmarksTableView;
+
+// The app bar for the bookmarks.
+@property(nonatomic, readonly) MDCAppBar* appBar;
+
+// The context bar at the bottom of the bookmarks.
+@property(nonatomic, readonly) BookmarkContextBar* contextBar;
+
+// This view is created and used if the model is not fully loaded yet by the
+// time this controller starts.
+@property(nonatomic, readonly) BookmarkHomeWaitingView* waitForModelView;
 
 @end
 

@@ -172,7 +172,7 @@ class VideoUtilTest : public testing::Test {
   void CreateDestinationFrame(int width, int height) {
     gfx::Size size(width, height);
     destination_frame_ = VideoFrame::CreateFrame(
-        PIXEL_FORMAT_YV12, size, gfx::Rect(size), size, base::TimeDelta());
+        PIXEL_FORMAT_I420, size, gfx::Rect(size), size, base::TimeDelta());
   }
 
  private:
@@ -200,23 +200,23 @@ TEST_F(VideoUtilTest, GetNaturalSize) {
 
   // Test abnormal ratios.
   EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 0, 0));
+  EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 0, 1));
   EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 1, 0));
   EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, 1, -1));
   EXPECT_EQ(gfx::Size(0, 0), GetNaturalSize(visible_size, -1, 1));
 
   // Test normal sizes and ratios.
-  EXPECT_EQ(gfx::Size(0, 240), GetNaturalSize(visible_size, 0, 1));
   EXPECT_EQ(gfx::Size(320, 240), GetNaturalSize(visible_size, 1, 1));
   EXPECT_EQ(gfx::Size(640, 240), GetNaturalSize(visible_size, 2, 1));
-  EXPECT_EQ(gfx::Size(160, 240), GetNaturalSize(visible_size, 1, 2));
+  EXPECT_EQ(gfx::Size(320, 480), GetNaturalSize(visible_size, 1, 2));
   EXPECT_EQ(gfx::Size(427, 240), GetNaturalSize(visible_size, 4, 3));
-  EXPECT_EQ(gfx::Size(240, 240), GetNaturalSize(visible_size, 3, 4));
+  EXPECT_EQ(gfx::Size(320, 320), GetNaturalSize(visible_size, 3, 4));
   EXPECT_EQ(gfx::Size(569, 240), GetNaturalSize(visible_size, 16, 9));
-  EXPECT_EQ(gfx::Size(180, 240), GetNaturalSize(visible_size, 9, 16));
+  EXPECT_EQ(gfx::Size(320, 427), GetNaturalSize(visible_size, 9, 16));
 
   // Test some random ratios.
   EXPECT_EQ(gfx::Size(495, 240), GetNaturalSize(visible_size, 17, 11));
-  EXPECT_EQ(gfx::Size(207, 240), GetNaturalSize(visible_size, 11, 17));
+  EXPECT_EQ(gfx::Size(320, 371), GetNaturalSize(visible_size, 11, 17));
 }
 
 namespace {
@@ -481,7 +481,7 @@ TEST_F(VideoUtilTest, LetterboxYUV) {
   int height = 30;
   gfx::Size size(width, height);
   scoped_refptr<VideoFrame> frame(VideoFrame::CreateFrame(
-      PIXEL_FORMAT_YV12, size, gfx::Rect(size), size, base::TimeDelta()));
+      PIXEL_FORMAT_I420, size, gfx::Rect(size), size, base::TimeDelta()));
 
   for (int left_margin = 0; left_margin <= 10; left_margin += 10) {
     for (int right_margin = 0; right_margin <= 10; right_margin += 10) {

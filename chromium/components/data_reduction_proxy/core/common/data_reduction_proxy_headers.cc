@@ -23,8 +23,6 @@
 #include "net/http/http_util.h"
 #include "net/url_request/url_request.h"
 
-using base::StringPiece;
-
 namespace {
 
 const char kChromeProxyHeader[] = "chrome-proxy";
@@ -45,10 +43,6 @@ const char kLitePageDirective[] = "lite-page";
 const char kCompressedVideoDirective[] = "compressed-video";
 const char kIdentityDirective[] = "identity";
 const char kChromeProxyPagePoliciesDirective[] = "page-policies";
-
-const char kChromeProxyExperimentForceLitePage[] = "force_lite_page";
-const char kChromeProxyExperimentForceEmptyImage[] =
-    "force_page_policies_empty_image";
 
 const char kChromeProxyActionBlockOnce[] = "block-once";
 const char kChromeProxyActionBlock[] = "block";
@@ -181,14 +175,6 @@ const char* page_policies_directive() {
   return kChromeProxyPagePoliciesDirective;
 }
 
-const char* chrome_proxy_experiment_force_lite_page() {
-  return kChromeProxyExperimentForceLitePage;
-}
-
-const char* chrome_proxy_experiment_force_empty_image() {
-  return kChromeProxyExperimentForceEmptyImage;
-}
-
 TransformDirective ParseRequestTransform(
     const net::HttpRequestHeaders& headers) {
   std::string accept_transform_value;
@@ -290,7 +276,8 @@ bool ParseHeadersAndSetBypassDuration(const net::HttpResponseHeaders& headers,
     if (StartsWithActionPrefix(value, action_prefix)) {
       int64_t seconds;
       if (!base::StringToInt64(
-              StringPiece(value).substr(action_prefix.size() + 1), &seconds) ||
+              base::StringPiece(value).substr(action_prefix.size() + 1),
+              &seconds) ||
           seconds < 0) {
         continue;  // In case there is a well formed instruction.
       }

@@ -35,13 +35,13 @@ class ComputedStyleInitialValues{
   // Hand-written methods.
 
   static StyleContentAlignmentData InitialContentAlignment() {
-    return StyleContentAlignmentData(kContentPositionNormal,
-                                     kContentDistributionDefault,
-                                     kOverflowAlignmentDefault);
+    return StyleContentAlignmentData(ContentPosition::kNormal,
+                                     ContentDistributionType::kDefault,
+                                     OverflowAlignment::kDefault);
   }
   static StyleSelfAlignmentData InitialDefaultAlignment() {
-    return StyleSelfAlignmentData(kItemPositionNormal,
-                                  kOverflowAlignmentDefault);
+    return StyleSelfAlignmentData(ItemPosition::kNormal,
+                                  OverflowAlignment::kDefault);
   }
   static StyleImage* InitialBorderImageSource() { return nullptr; }
   static float InitialBorderWidth() { return 3; }

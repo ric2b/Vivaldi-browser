@@ -125,6 +125,7 @@ cr.define('cr.ui.Oobe', function() {
       login.PasswordChangedScreen.register();
       login.SupervisedUserCreationScreen.register();
       login.TermsOfServiceScreen.register();
+      login.SyncConsentScreen.register();
       login.ArcTermsOfServiceScreen.register();
       login.AppLaunchSplashScreen.register();
       login.ArcKioskSplashScreen.register();
@@ -350,6 +351,14 @@ cr.define('cr.ui.Oobe', function() {
 
       // Update localized content of the screens.
       Oobe.updateLocalizedContent();
+    },
+
+    /**
+     * Updates "device in tablet mode" state when tablet mode is changed.
+     * @param {Boolean} isInTabletMode True when in tablet mode.
+     */
+    setTabletModeState: function(isInTabletMode) {
+      Oobe.getInstance().setTabletModeState_(isInTabletMode);
     },
 
     /**

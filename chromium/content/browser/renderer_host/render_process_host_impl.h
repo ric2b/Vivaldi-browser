@@ -27,7 +27,6 @@
 #include "content/browser/renderer_host/frame_sink_provider_impl.h"
 #include "content/browser/renderer_host/media/renderer_audio_output_stream_factory_context_impl.h"
 #include "content/browser/renderer_host/offscreen_canvas_provider_impl.h"
-#include "content/browser/webrtc/webrtc_eventlog_host.h"
 #include "content/common/associated_interface_registry_impl.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/child_control.mojom.h"
@@ -40,7 +39,6 @@
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/url_loader_factory.mojom.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/media_features.h"
@@ -48,6 +46,7 @@
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/ui/public/interfaces/gpu.mojom.h"
@@ -191,8 +190,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #if BUILDFLAG(ENABLE_WEBRTC)
   void EnableAudioDebugRecordings(const base::FilePath& file) override;
   void DisableAudioDebugRecordings() override;
-  bool StartWebRTCEventLog(const base::FilePath& file_path) override;
-  bool StopWebRTCEventLog() override;
   void SetEchoCanceller3(
       bool enable,
       base::OnceCallback<void(bool, const std::string&)> callback) override;
@@ -416,6 +413,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   friend class ChildProcessLauncherBrowserTest_ChildSpawnFail_Test;
   friend class VisitRelayingRenderProcessHost;
   friend class StoragePartitonInterceptor;
+  friend class SecurityExploitBrowserTest;
   class ConnectionFilterController;
   class ConnectionFilterImpl;
 
@@ -450,7 +448,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojom::AssociatedInterfaceAssociatedRequest request) override;
 
   // mojom::RendererHost
-  void GetBlobURLLoaderFactory(mojom::URLLoaderFactoryRequest request) override;
+  void GetBlobURLLoaderFactory(
+      network::mojom::URLLoaderFactoryRequest request) override;
   using BrowserHistogramCallback =
       mojom::RendererHost::GetBrowserHistogramCallback;
   void GetBrowserHistogram(const std::string& name,
@@ -470,7 +469,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void CreateStoragePartitionService(
       mojom::StoragePartitionServiceRequest request);
   void CreateRendererHost(mojom::RendererHostAssociatedRequest request);
-  void CreateURLLoaderFactory(mojom::URLLoaderFactoryRequest request);
+  void CreateURLLoaderFactory(network::mojom::URLLoaderFactoryRequest request);
 
   // Control message handlers.
   void OnUserMetricsRecordAction(const std::string& action);
@@ -713,8 +712,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   base::OnceCallback<void(bool, const std::string&)> aec3_set_callback_;
 
   WebRtcStopRtpDumpCallback stop_rtp_dump_callback_;
-
-  WebRTCEventLogHost webrtc_eventlog_host_;
 
   scoped_refptr<base::SequencedTaskRunner>
       audio_debug_recordings_file_task_runner_;

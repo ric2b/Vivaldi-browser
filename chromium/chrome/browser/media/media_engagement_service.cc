@@ -13,6 +13,7 @@
 #include "chrome/browser/media/media_engagement_contents_observer.h"
 #include "chrome/browser/media/media_engagement_score.h"
 #include "chrome/browser/media/media_engagement_service_factory.h"
+#include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -32,22 +33,7 @@ namespace {
 
 // The current schema version of the MEI data. If this value is higher
 // than the stored value, all MEI data will be wiped.
-static const int kSchemaVersion = 3;
-
-// Returns the combined list of origins which have media engagement data.
-std::set<GURL> GetEngagementOriginsFromContentSettings(Profile* profile) {
-  ContentSettingsForOneType content_settings;
-  std::set<GURL> urls;
-
-  HostContentSettingsMapFactory::GetForProfile(profile)->GetSettingsForOneType(
-      CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT,
-      content_settings::ResourceIdentifier(), &content_settings);
-
-  for (const auto& site : content_settings)
-    urls.insert(GURL(site.primary_pattern.ToString()));
-
-  return urls;
-}
+static const int kSchemaVersion = 4;
 
 bool MediaEngagementFilterAdapter(
     const GURL& predicate,
@@ -97,6 +83,11 @@ MediaEngagementService* MediaEngagementService::Get(Profile* profile) {
 void MediaEngagementService::CreateWebContentsObserver(
     content::WebContents* web_contents) {
   DCHECK(IsEnabled());
+
+  // Ignore WebContents that are used for prerender/prefetch.
+  if (prerender::PrerenderContents::FromWebContents(web_contents))
+    return;
+
   MediaEngagementService* service =
       Get(Profile::FromBrowserContext(web_contents->GetBrowserContext()));
   if (!service)
@@ -113,12 +104,11 @@ void MediaEngagementService::RegisterProfilePrefs(
 }
 
 MediaEngagementService::MediaEngagementService(Profile* profile)
-    : MediaEngagementService(profile, base::MakeUnique<base::DefaultClock>()) {}
+    : MediaEngagementService(profile, base::DefaultClock::GetInstance()) {}
 
-MediaEngagementService::MediaEngagementService(
-    Profile* profile,
-    std::unique_ptr<base::Clock> clock)
-    : profile_(profile), clock_(std::move(clock)) {
+MediaEngagementService::MediaEngagementService(Profile* profile,
+                                               base::Clock* clock)
+    : profile_(profile), clock_(clock) {
   DCHECK(IsEnabled());
 
   // May be null in tests.
@@ -136,10 +126,16 @@ MediaEngagementService::MediaEngagementService(
   }
 
   // Record the stored scores to a histogram.
-  RecordStoredScoresToHistogram();
+  task_tracker_.PostTask(
+      base::ThreadTaskRunnerHandle::Get().get(), FROM_HERE,
+      base::BindOnce(&MediaEngagementService::RecordStoredScoresToHistogram,
+                     base::Unretained(this)));
 }
 
-MediaEngagementService::~MediaEngagementService() = default;
+MediaEngagementService::~MediaEngagementService() {
+  // Cancel any tasks that depend on |this|.
+  task_tracker_.TryCancelAll();
+}
 
 int MediaEngagementService::GetSchemaVersion() const {
   return profile_->GetPrefs()->GetInteger(prefs::kMediaEngagementSchemaVersion);
@@ -168,11 +164,8 @@ void MediaEngagementService::Shutdown() {
 }
 
 void MediaEngagementService::RecordStoredScoresToHistogram() {
-  for (const GURL& url : GetEngagementOriginsFromContentSettings(profile_)) {
-    if (!url.is_valid())
-      continue;
-
-    int percentage = round(GetEngagementScore(url) * 100);
+  for (const MediaEngagementScore& score : GetAllStoredScores()) {
+    int percentage = round(score.actual_score() * 100);
     UMA_HISTOGRAM_PERCENTAGE(
         MediaEngagementService::kHistogramScoreAtStartupName, percentage);
   }
@@ -234,11 +227,8 @@ bool MediaEngagementService::HasHighEngagement(const GURL& url) const {
 
 std::map<GURL, double> MediaEngagementService::GetScoreMapForTesting() const {
   std::map<GURL, double> score_map;
-  for (const GURL& url : GetEngagementOriginsFromContentSettings(profile_)) {
-    if (!url.is_valid())
-      continue;
-    score_map[url] = GetEngagementScore(url);
-  }
+  for (MediaEngagementScore& score : GetAllStoredScores())
+    score_map[score.origin()] = score.actual_score();
   return score_map;
 }
 
@@ -253,17 +243,12 @@ void MediaEngagementService::RecordVisit(const GURL& url) {
 
 std::vector<media::mojom::MediaEngagementScoreDetailsPtr>
 MediaEngagementService::GetAllScoreDetails() const {
-  std::set<GURL> origins = GetEngagementOriginsFromContentSettings(profile_);
+  std::vector<MediaEngagementScore> data = GetAllStoredScores();
 
   std::vector<media::mojom::MediaEngagementScoreDetailsPtr> details;
-  details.reserve(origins.size());
-  for (const GURL& origin : origins) {
-    // TODO(beccahughes): Why would an origin not be valid here?
-    if (!origin.is_valid())
-      continue;
-    MediaEngagementScore score = CreateEngagementScore(origin);
+  details.reserve(data.size());
+  for (MediaEngagementScore& score : data)
     details.push_back(score.GetScoreDetails());
-  }
 
   return details;
 }
@@ -283,8 +268,7 @@ MediaEngagementScore MediaEngagementService::CreateEngagementScore(
   // the original profile migrated in, so all engagement scores in incognito
   // will be initialised to the values from the original profile.
   return MediaEngagementScore(
-      clock_.get(), url,
-      HostContentSettingsMapFactory::GetForProfile(profile_));
+      clock_, url, HostContentSettingsMapFactory::GetForProfile(profile_));
 }
 
 MediaEngagementContentsObserver* MediaEngagementService::GetContentsObserverFor(
@@ -299,4 +283,51 @@ Profile* MediaEngagementService::profile() const {
 
 bool MediaEngagementService::ShouldRecordEngagement(const GURL& url) const {
   return url.SchemeIsHTTPOrHTTPS();
+}
+
+std::vector<MediaEngagementScore> MediaEngagementService::GetAllStoredScores()
+    const {
+  ContentSettingsForOneType content_settings;
+  std::vector<MediaEngagementScore> data;
+
+  HostContentSettingsMap* settings =
+      HostContentSettingsMapFactory::GetForProfile(profile_);
+  settings->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT,
+                                  content_settings::ResourceIdentifier(),
+                                  &content_settings);
+
+  // `GetSettingsForOneType` mixes incognito and non-incognito results in
+  // incognito profiles creating duplicates. The incognito results are first so
+  // we should discard the results following.
+  std::map<GURL, const ContentSettingPatternSource*> filtered_results;
+
+  for (const auto& site : content_settings) {
+    GURL origin(site.primary_pattern.ToString());
+    if (!origin.is_valid()) {
+      NOTREACHED();
+      continue;
+    }
+
+    const auto& result = filtered_results.find(origin);
+    if (result != filtered_results.end()) {
+      DCHECK(result->second->incognito && !site.incognito);
+      continue;
+    }
+
+    filtered_results[origin] = &site;
+  }
+
+  for (const auto& it : filtered_results) {
+    const auto& origin = it.first;
+    auto* const site = it.second;
+
+    std::unique_ptr<base::Value> clone =
+        std::make_unique<base::Value>(site->setting_value->Clone());
+
+    data.push_back(MediaEngagementScore(
+        clock_, origin, base::DictionaryValue::From(std::move(clone)),
+        settings));
+  }
+
+  return data;
 }

@@ -257,7 +257,8 @@ StyleBuilderConverter::ConvertFontFeatureSettings(StyleResolverState& state,
   scoped_refptr<FontFeatureSettings> settings = FontFeatureSettings::Create();
   int len = list.length();
   for (int i = 0; i < len; ++i) {
-    const CSSFontFeatureValue& feature = ToCSSFontFeatureValue(list.Item(i));
+    const cssvalue::CSSFontFeatureValue& feature =
+        ToCSSFontFeatureValue(list.Item(i));
     settings->Append(FontFeature(feature.Tag(), feature.Value()));
   }
   return settings;
@@ -358,7 +359,10 @@ double StyleBuilderConverter::ConvertValueToNumber(
     case CSSValueBrightness:
     case CSSValueContrast:
     case CSSValueOpacity: {
-      double amount = (filter->FunctionType() == CSSValueBrightness) ? 0 : 1;
+      double amount = (filter->FunctionType() == CSSValueBrightness ||
+                       filter->FunctionType() == CSSValueInvert)
+                          ? 0
+                          : 1;
       if (filter->length() == 1) {
         amount = value->GetDoubleValue();
         if (value->IsPercentage())
@@ -684,15 +688,15 @@ StyleSelfAlignmentData StyleBuilderConverter::ConvertSelfOrDefaultAlignmentData(
   if (value.IsValuePair()) {
     const CSSValuePair& pair = ToCSSValuePair(value);
     if (ToCSSIdentifierValue(pair.First()).GetValueID() == CSSValueLegacy) {
-      alignment_data.SetPositionType(kLegacyPosition);
+      alignment_data.SetPositionType(ItemPositionType::kLegacy);
       alignment_data.SetPosition(
           ToCSSIdentifierValue(pair.Second()).ConvertTo<ItemPosition>());
     } else if (ToCSSIdentifierValue(pair.First()).GetValueID() ==
                CSSValueFirst) {
-      alignment_data.SetPosition(kItemPositionBaseline);
+      alignment_data.SetPosition(ItemPosition::kBaseline);
     } else if (ToCSSIdentifierValue(pair.First()).GetValueID() ==
                CSSValueLast) {
-      alignment_data.SetPosition(kItemPositionLastBaseline);
+      alignment_data.SetPosition(ItemPosition::kLastBaseline);
     } else {
       alignment_data.SetPosition(
           ToCSSIdentifierValue(pair.First()).ConvertTo<ItemPosition>());
@@ -713,15 +717,21 @@ StyleContentAlignmentData StyleBuilderConverter::ConvertContentAlignmentData(
       ComputedStyleInitialValues::InitialContentAlignment();
   const CSSContentDistributionValue& content_value =
       ToCSSContentDistributionValue(value);
-  if (content_value.Distribution()->GetValueID() != CSSValueInvalid)
+  if (content_value.Distribution() != CSSValueInvalid) {
     alignment_data.SetDistribution(
-        content_value.Distribution()->ConvertTo<ContentDistributionType>());
-  if (content_value.GetPosition()->GetValueID() != CSSValueInvalid)
+        CSSIdentifierValue::Create(content_value.Distribution())
+            ->ConvertTo<ContentDistributionType>());
+  }
+  if (content_value.Position() != CSSValueInvalid) {
     alignment_data.SetPosition(
-        content_value.GetPosition()->ConvertTo<ContentPosition>());
-  if (content_value.Overflow()->GetValueID() != CSSValueInvalid)
+        CSSIdentifierValue::Create(content_value.Position())
+            ->ConvertTo<ContentPosition>());
+  }
+  if (content_value.Overflow() != CSSValueInvalid) {
     alignment_data.SetOverflow(
-        content_value.Overflow()->ConvertTo<OverflowAlignment>());
+        CSSIdentifierValue::Create(content_value.Overflow())
+            ->ConvertTo<OverflowAlignment>());
+  }
 
   return alignment_data;
 }
@@ -1116,17 +1126,17 @@ StyleOffsetRotation StyleBuilderConverter::ConvertOffsetRotate(
 
 StyleOffsetRotation StyleBuilderConverter::ConvertOffsetRotate(
     const CSSValue& value) {
-  StyleOffsetRotation result(0, kOffsetRotationFixed);
+  StyleOffsetRotation result(0, OffsetRotationType::kFixed);
 
   const CSSValueList& list = ToCSSValueList(value);
   DCHECK(list.length() == 1 || list.length() == 2);
   for (const auto& item : list) {
     if (item->IsIdentifierValue() &&
         ToCSSIdentifierValue(*item).GetValueID() == CSSValueAuto) {
-      result.type = kOffsetRotationAuto;
+      result.type = OffsetRotationType::kAuto;
     } else if (item->IsIdentifierValue() &&
                ToCSSIdentifierValue(*item).GetValueID() == CSSValueReverse) {
-      result.type = kOffsetRotationAuto;
+      result.type = OffsetRotationType::kAuto;
       result.angle = clampTo<float>(result.angle + 180);
     } else {
       const CSSPrimitiveValue& primitive_value = ToCSSPrimitiveValue(*item);
@@ -1307,7 +1317,7 @@ ShapeValue* StyleBuilderConverter::ConvertShapeValue(StyleResolverState& state,
         state.GetStyleImage(CSSPropertyShapeOutside, value));
 
   scoped_refptr<BasicShape> shape;
-  CSSBoxType css_box = kBoxMissing;
+  CSSBoxType css_box = CSSBoxType::kMissing;
   const CSSValueList& value_list = ToCSSValueList(value);
   for (unsigned i = 0; i < value_list.length(); ++i) {
     const CSSValue& value = value_list.Item(i);
@@ -1321,7 +1331,7 @@ ShapeValue* StyleBuilderConverter::ConvertShapeValue(StyleResolverState& state,
   if (shape)
     return ShapeValue::CreateShapeValue(std::move(shape), css_box);
 
-  DCHECK_NE(css_box, kBoxMissing);
+  DCHECK_NE(css_box, CSSBoxType::kMissing);
   return ShapeValue::CreateBoxShapeValue(css_box);
 }
 

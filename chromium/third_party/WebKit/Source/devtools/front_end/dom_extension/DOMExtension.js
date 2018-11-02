@@ -232,6 +232,8 @@ Node.prototype.enclosingNodeOrSelfWithClassList = function(classNames, stayWithi
  * @return {?Element}
  */
 Node.prototype.parentElementOrShadowHost = function() {
+  if (this.nodeType === Node.DOCUMENT_FRAGMENT_NODE && this.host)
+    return /** @type {!Element} */ (this.host);
   var node = this.parentNode;
   if (!node)
     return null;
@@ -285,7 +287,7 @@ Node.prototype.hasSelection = function() {
  * @return {!Window}
  */
 Node.prototype.window = function() {
-  return this.ownerDocument.defaultView;
+  return /** @type {!Window} */ (this.ownerDocument.defaultView);
 };
 
 Element.prototype.removeChildren = function() {
@@ -488,7 +490,7 @@ AnchorBox.prototype.equals = function(anchorBox) {
 };
 
 /**
- * @param {!Window=} targetWindow
+ * @param {?Window=} targetWindow
  * @return {!AnchorBox}
  */
 Element.prototype.boxInWindow = function(targetWindow) {

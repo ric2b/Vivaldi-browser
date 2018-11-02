@@ -9,7 +9,6 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/ios/block_types.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -24,7 +23,9 @@
 #import "ios/chrome/browser/chrome_url_util.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/history/history_tab_helper.h"
-#import "ios/chrome/browser/snapshots/snapshot_manager.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_helper_util.h"
@@ -32,7 +33,6 @@
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/ui/open_in_controller.h"
 #import "ios/chrome/browser/ui/open_in_controller_testing.h"
-#import "ios/chrome/browser/web/external_app_launcher.h"
 #import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #include "ios/chrome/test/block_cleanup_test.h"
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
@@ -43,8 +43,8 @@
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 #include "ios/web/public/referrer.h"
+#import "ios/web/public/test/fakes/fake_navigation_context.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
-#import "ios/web/web_state/navigation_context_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/web_state_impl.h"
 #import "net/base/mac/url_conversions.h"
@@ -52,10 +52,20 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
+#import "third_party/ocmock/gtest_support.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+// When C++ exceptions are disabled, the C++ library defines |try| and
+// |catch| so as to allow exception-expecting C++ code to build properly when
+// language support for exceptions is not present.  These macros interfere
+// with the use of |@try| and |@catch| in Objective-C files such as this one.
+// Undefine these macros here, after everything has been #included, since
+// there will be no C++ uses and only Objective-C uses from this point on.
+#undef try
+#undef catch
 
 namespace {
 const char kAppSettingsUrl[] = "app-settings://";
@@ -73,10 +83,6 @@ const char kContentDispositionWithoutFilename[] =
 const char kInvalidFilenameUrl[] = "http://www.hostname.com/";
 const char kValidFilenameUrl[] = "http://www.hostname.com/filename.pdf";
 }  // namespace
-
-@interface Tab (Testing)
-@property(nonatomic, strong) SnapshotManager* snapshotManager;
-@end
 
 @interface ArrayTabModel : TabModel {
  @private
@@ -105,20 +111,6 @@ const char kValidFilenameUrl[] = "http://www.hostname.com/filename.pdf";
 
 - (void)closeTabAtIndex:(NSUInteger)index {
   [_tabsForTesting removeObjectAtIndex:index];
-}
-@end
-
-@interface ExternalAppLauncherMock : OCMockComplexTypeHelper
-@end
-
-@implementation ExternalAppLauncherMock
-typedef BOOL (^openURLBlockType)(const GURL&, const GURL&, BOOL);
-
-- (BOOL)requestToOpenURL:(const GURL&)url
-           sourcePageURL:(const GURL&)sourceURL
-             linkClicked:(BOOL)linkClicked {
-  return static_cast<openURLBlockType>([self blockForSelector:_cmd])(
-      url, sourceURL, linkClicked);
 }
 @end
 
@@ -155,7 +147,7 @@ class TabTest : public BlockCleanupTest {
  public:
   TabTest()
       : scoped_browser_state_manager_(
-            base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())),
+            std::make_unique<TestChromeBrowserStateManager>(base::FilePath())),
         web_state_impl_(nullptr) {}
 
   void SetUp() override {
@@ -166,6 +158,9 @@ class TabTest : public BlockCleanupTest {
 
     // Set up the testing profiles.
     TestChromeBrowserState::Builder test_cbs_builder;
+    test_cbs_builder.AddTestingFactory(
+        SnapshotCacheFactory::GetInstance(),
+        SnapshotCacheFactory::GetDefaultFactory());
     chrome_browser_state_ = test_cbs_builder.Build();
     chrome_browser_state_->CreateBookmarkModel(false);
     bookmarks::test::WaitForBookmarkModelToLoad(
@@ -180,7 +175,7 @@ class TabTest : public BlockCleanupTest {
     mock_web_controller_ =
         [OCMockObject niceMockForClass:[CRWWebController class]];
     web::WebState::CreateParams create_params(browser_state);
-    web_state_impl_ = base::MakeUnique<web::WebStateImpl>(create_params);
+    web_state_impl_ = std::make_unique<web::WebStateImpl>(create_params);
     web_state_impl_->SetWebController(mock_web_controller_);
     web_state_impl_->GetNavigationManagerImpl().InitializeSession();
     web::WebStateImpl* web_state_impl = web_state_impl_.get();
@@ -201,10 +196,6 @@ class TabTest : public BlockCleanupTest {
     history::QueryResults results;
     QueryAllHistory(&results);
     EXPECT_EQ(0UL, results.size());
-    mock_external_app_launcher_ = [[ExternalAppLauncherMock alloc]
-        initWithRepresentedObject:
-            [OCMockObject mockForClass:[ExternalAppLauncher class]]];
-    [tab_ replaceExternalAppLauncher:mock_external_app_launcher_];
   }
 
   void TearDown() override {
@@ -213,36 +204,35 @@ class TabTest : public BlockCleanupTest {
     BlockCleanupTest::TearDown();
   }
 
-  void BrowseTo(const GURL& userUrl, const GURL& redirectUrl, NSString* title) {
+  void BrowseTo(const GURL& user_url,
+                const GURL& redirect_url,
+                NSString* title) {
     DCHECK_EQ(tab_.webState, web_state_impl_.get());
 
-    std::unique_ptr<web::NavigationContext> context1 =
-        web::NavigationContextImpl::CreateNavigationContext(
-            web_state_impl_.get(), userUrl,
-            ui::PageTransition::PAGE_TRANSITION_TYPED, false);
-    web_state_impl_->OnNavigationStarted(context1.get());
+    web::FakeNavigationContext context1;
+    context1.SetUrl(user_url);
+    web_state_impl_->OnNavigationStarted(&context1);
 
     web::Referrer empty_referrer;
     [tab_ navigationManagerImpl]->AddPendingItem(
-        redirectUrl, empty_referrer, ui::PAGE_TRANSITION_CLIENT_REDIRECT,
+        redirect_url, empty_referrer, ui::PAGE_TRANSITION_CLIENT_REDIRECT,
         web::NavigationInitiationType::RENDERER_INITIATED,
         web::NavigationManager::UserAgentOverrideOption::INHERIT);
 
-    std::unique_ptr<web::NavigationContext> context2 =
-        web::NavigationContextImpl::CreateNavigationContext(
-            web_state_impl_.get(), redirectUrl,
-            ui::PageTransition::PAGE_TRANSITION_TYPED, false);
-    web_state_impl_->OnNavigationStarted(context2.get());
+    web::FakeNavigationContext context2;
+    context2.SetUrl(redirect_url);
+    web_state_impl_->OnNavigationStarted(&context2);
     [tab_ navigationManagerImpl]->CommitPendingItem();
-    web_state_impl_->UpdateHttpResponseHeaders(redirectUrl);
-    web_state_impl_->OnNavigationFinished(context2.get());
+    web_state_impl_->UpdateHttpResponseHeaders(redirect_url);
+    web_state_impl_->OnNavigationFinished(&context2);
+    web_state_impl_->SetIsLoading(true);
 
     base::string16 new_title = base::SysNSStringToUTF16(title);
     [tab_ navigationManager]->GetLastCommittedItem()->SetTitle(new_title);
 
     web_state_impl_->OnTitleChanged();
     web_state_impl_->SetIsLoading(false);
-    web_state_impl_->OnPageLoaded(redirectUrl, true);
+    web_state_impl_->OnPageLoaded(redirect_url, true);
   }
 
   void BrowseToNewTab() {
@@ -314,7 +304,6 @@ class TabTest : public BlockCleanupTest {
   __weak CRWWebController* mock_web_controller_;
   UIView* web_controller_view_;
   ArrayTabModel* tabModel_;
-  id mock_external_app_launcher_;
   __weak Tab* tab_;
 };
 
@@ -408,26 +397,31 @@ TEST_F(TabTest, GetSuggestedFilenameFromDefaultName) {
   EXPECT_NSEQ(@"Document.pdf", [[tab_ openInController] suggestedFilename]);
 }
 
-TEST_F(TabTest, SnapshotIsNotRemovedDuringShutdown) {
-  id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
-  tab_.snapshotManager = mockSnapshotManager;
-  [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
-  web_state_impl_.reset();
-}
-
 TEST_F(TabTest, ClosingWebStateDoesNotRemoveSnapshot) {
-  id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
-  tab_.snapshotManager = mockSnapshotManager;
-  [[mockSnapshotManager reject] removeImageWithSessionID:[OCMArg any]];
-  web_state_impl_.reset();
+  id partialMock = OCMPartialMock(
+      SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
+  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
+  [[partialMock reject] removeImageWithSessionID:tab_.tabId];
+
+  // Use @try/@catch as -reject raises an exception.
+  @try {
+    web_state_impl_.reset();
+    EXPECT_OCMOCK_VERIFY(partialMock);
+  } @catch (NSException* exception) {
+    // The exception is raised when -removeImageWithSessionID: is invoked. As
+    // this should not happen, mark the test as failed.
+    GTEST_FAIL();
+  }
 }
 
 TEST_F(TabTest, CallingRemoveSnapshotRemovesSnapshot) {
-  id mockSnapshotManager = OCMClassMock([SnapshotManager class]);
-  tab_.snapshotManager = mockSnapshotManager;
-  [tab_ removeSnapshot];
-  [[mockSnapshotManager verify] removeImageWithSessionID:[OCMArg any]];
-  web_state_impl_.reset();
+  id partialMock = OCMPartialMock(
+      SnapshotCacheFactory::GetForBrowserState(tab_.browserState));
+  SnapshotTabHelper::CreateForWebState(tab_.webState, tab_.tabId);
+  OCMExpect([partialMock removeImageWithSessionID:tab_.tabId]);
+
+  SnapshotTabHelper::FromWebState(tab_.webState)->RemoveSnapshot();
+  EXPECT_OCMOCK_VERIFY(partialMock);
 }
 
 }  // namespace

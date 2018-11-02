@@ -19,8 +19,12 @@
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/renderer_context_menu/context_menu_delegate.h"
 #include "content/public/browser/render_process_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
+
+#include "app/vivaldi_apptools.h"
+
 
 using guest_view::GuestViewEvent;
 
@@ -38,6 +42,20 @@ ChromeWebViewGuestDelegate::~ChromeWebViewGuestDelegate() {
 
 bool ChromeWebViewGuestDelegate::HandleContextMenu(
     const content::ContextMenuParams& params) {
+  if ((params.source_type == ui::MENU_SOURCE_LONG_PRESS ||
+       params.source_type == ui::MENU_SOURCE_TOUCH) &&
+      !params.selection_text.empty() &&
+      (guest_web_contents()->GetRenderWidgetHostView() &&
+       guest_web_contents()
+           ->GetRenderWidgetHostView()
+           ->GetTouchSelectionControllerClientManager())) {
+    // This context menu request should be handled by the
+    // TouchSelectionController. If the user selects the full context menu from
+    // the QuickMenu, the request will come back here (with different source
+    // parameters) to complete.
+    return true;
+  }
+
   ContextMenuDelegate* menu_delegate =
       ContextMenuDelegate::FromWebContents(guest_web_contents());
   DCHECK(menu_delegate);
@@ -51,6 +69,13 @@ bool ChromeWebViewGuestDelegate::HandleContextMenu(
   if (context_menu_position_) {
     new_params.x = context_menu_position_->x();
     new_params.y = context_menu_position_->y();
+    if (vivaldi::IsVivaldiRunning()) {
+      // NOTE(espen@vivaldi.com). This value is almost never set in vivaldi
+      // code. Typically only if we right click a page while it is loading at an
+      // early stage. It must be released after being used. Otherwise all normal
+      // context menus will open at that location.
+      context_menu_position_.reset();
+    }
   }
 
   pending_menu_ = menu_delegate->BuildMenu(guest_web_contents(), new_params);

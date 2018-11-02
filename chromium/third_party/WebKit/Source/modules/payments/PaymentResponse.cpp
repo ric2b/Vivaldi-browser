@@ -30,7 +30,7 @@ PaymentResponse::PaymentResponse(
   DCHECK(payment_completer_);
 }
 
-PaymentResponse::~PaymentResponse() {}
+PaymentResponse::~PaymentResponse() = default;
 
 ScriptValue PaymentResponse::toJSONForBinding(ScriptState* script_state) const {
   V8ObjectBuilder result(script_state);
@@ -54,9 +54,10 @@ ScriptValue PaymentResponse::toJSONForBinding(ScriptState* script_state) const {
 
 ScriptValue PaymentResponse::details(ScriptState* script_state,
                                      ExceptionState& exception_state) const {
-  return ScriptValue(script_state,
-                     FromJSONString(script_state->GetIsolate(),
-                                    stringified_details_, exception_state));
+  return ScriptValue(
+      script_state,
+      FromJSONString(script_state->GetIsolate(), script_state->GetContext(),
+                     stringified_details_, exception_state));
 }
 
 ScriptPromise PaymentResponse::complete(ScriptState* script_state,

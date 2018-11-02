@@ -29,9 +29,11 @@ namespace {
 
 scoped_refptr<ui::ContextProviderCommandBuffer> CreateContext(
     scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+  gpu::GpuChannelEstablishFactory* factory =
+      content::BrowserMainLoop::GetInstance()->gpu_channel_establish_factory();
   // This is for an offscreen context, so the default framebuffer doesn't need
   // any alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
+  gpu::ContextCreationAttribs attributes;
   attributes.alpha_size = -1;
   attributes.depth_size = 0;
   attributes.stencil_size = 0;
@@ -41,10 +43,11 @@ scoped_refptr<ui::ContextProviderCommandBuffer> CreateContext(
   constexpr bool automatic_flushes = false;
   constexpr bool support_locking = false;
   return base::MakeRefCounted<ui::ContextProviderCommandBuffer>(
-      std::move(gpu_channel_host), content::kGpuStreamIdDefault,
-      content::kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle, GURL(),
-      automatic_flushes, support_locking, gpu::SharedMemoryLimits(), attributes,
-      nullptr, ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING);
+      std::move(gpu_channel_host), factory->GetGpuMemoryBufferManager(),
+      content::kGpuStreamIdDefault, content::kGpuStreamPriorityDefault,
+      gpu::kNullSurfaceHandle, GURL(), automatic_flushes, support_locking,
+      gpu::SharedMemoryLimits(), attributes, nullptr,
+      ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING);
 }
 
 void OnEstablishedGpuChannel(
@@ -62,7 +65,7 @@ scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSyncRunLoop() {
   CHECK(factory);
   base::RunLoop run_loop;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host;
-  factory->EstablishGpuChannel(base::Bind(
+  factory->EstablishGpuChannel(base::BindOnce(
       &OnEstablishedGpuChannel, run_loop.QuitClosure(), &gpu_channel_host));
   run_loop.Run();
   return gpu_channel_host;
@@ -159,6 +162,13 @@ class BrowserGpuChannelHostFactoryTest : public ContentBrowserTest {
     gpu_channel_host_ = std::move(gpu_channel_host);
   }
 
+  void SignalAndQuitLoop(bool* event,
+                         base::RunLoop* run_loop,
+                         scoped_refptr<gpu::GpuChannelHost> gpu_channel_host) {
+    Signal(event, std::move(gpu_channel_host));
+    run_loop->Quit();
+  }
+
  protected:
   gpu::GpuChannelEstablishFactory* GetFactory() {
     return BrowserMainLoop::GetInstance()->gpu_channel_establish_factory();
@@ -202,17 +212,45 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
                        MAYBE_AlreadyEstablished) {
   DCHECK(!IsChannelEstablished());
   scoped_refptr<gpu::GpuChannelHost> gpu_channel =
-      GetFactory()->EstablishGpuChannelSync(nullptr);
+      GetFactory()->EstablishGpuChannelSync();
 
   // Expect established callback immediately.
   bool event = false;
   GetFactory()->EstablishGpuChannel(
-      base::Bind(&BrowserGpuChannelHostFactoryTest::Signal,
-                 base::Unretained(this), &event));
+      base::BindOnce(&BrowserGpuChannelHostFactoryTest::Signal,
+                     base::Unretained(this), &event));
   EXPECT_TRUE(event);
   EXPECT_EQ(gpu_channel.get(), GetGpuChannel());
 }
 #endif
+
+// Test fails on Chromeos + Mac, flaky on Windows because UI Compositor
+// establishes a GPU channel.
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#define MAYBE_CallbacksDontRunOnEstablishSync CallbacksDontRunOnEstablishSync
+#else
+#define MAYBE_CallbacksDontRunOnEstablishSync \
+  DISABLED_CallbacksDontRunOnEstablishSync
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest,
+                       MAYBE_CallbacksDontRunOnEstablishSync) {
+  DCHECK(!IsChannelEstablished());
+  bool event = false;
+  base::RunLoop run_loop;
+  GetFactory()->EstablishGpuChannel(
+      base::BindOnce(&BrowserGpuChannelHostFactoryTest::SignalAndQuitLoop,
+                     base::Unretained(this), &event, &run_loop));
+
+  scoped_refptr<gpu::GpuChannelHost> gpu_channel =
+      GetFactory()->EstablishGpuChannelSync();
+
+  // Expect async callback didn't run yet.
+  EXPECT_FALSE(event);
+
+  run_loop.Run();
+  EXPECT_TRUE(event);
+  EXPECT_EQ(gpu_channel.get(), GetGpuChannel());
+}
 
 // Test fails on Windows because GPU Channel set-up fails.
 #if !defined(OS_WIN)
@@ -317,7 +355,7 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest, CreateTransferBuffer) {
 
   // This is for an offscreen context, so the default framebuffer doesn't need
   // any alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
+  gpu::ContextCreationAttribs attributes;
   attributes.alpha_size = -1;
   attributes.depth_size = 0;
   attributes.stencil_size = 0;
@@ -326,8 +364,8 @@ IN_PROC_BROWSER_TEST_F(BrowserGpuChannelHostFactoryTest, CreateTransferBuffer) {
   attributes.bind_generates_resource = false;
 
   auto impl = std::make_unique<gpu::CommandBufferProxyImpl>(
-      GetGpuChannel(), content::kGpuStreamIdDefault,
-      base::ThreadTaskRunnerHandle::Get());
+      GetGpuChannel(), GetFactory()->GetGpuMemoryBufferManager(),
+      content::kGpuStreamIdDefault, base::ThreadTaskRunnerHandle::Get());
   ASSERT_EQ(
       impl->Initialize(gpu::kNullSurfaceHandle, nullptr,
                        content::kGpuStreamPriorityDefault, attributes, GURL()),

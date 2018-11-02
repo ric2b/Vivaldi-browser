@@ -37,7 +37,7 @@ class MockPageContextCanvas : public SkCanvas {
   };
 
   MockPageContextCanvas() : SkCanvas(kPageWidth, kPageHeight) {}
-  ~MockPageContextCanvas() override {}
+  ~MockPageContextCanvas() override = default;
 
   void onDrawAnnotation(const SkRect& rect,
                         const char key[],
@@ -66,7 +66,7 @@ class PrintContextTest : public RenderingTest {
  protected:
   explicit PrintContextTest(LocalFrameClient* local_frame_client = nullptr)
       : RenderingTest(local_frame_client) {}
-  ~PrintContextTest() override {}
+  ~PrintContextTest() override = default;
 
   void SetUp() override {
     RenderingTest::SetUp();
@@ -165,6 +165,7 @@ TEST_F(PrintContextTest, LinkTarget) {
 }
 
 TEST_F(PrintContextTest, LinkTargetUnderAnonymousBlockBeforeBlock) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   MockPageContextCanvas canvas;
   SetBodyInnerHTML("<div style='padding-top: 50px'>" +
                    InlineHtmlForLink("http://www.google.com",
@@ -184,6 +185,7 @@ TEST_F(PrintContextTest, LinkTargetUnderAnonymousBlockBeforeBlock) {
 }
 
 TEST_F(PrintContextTest, LinkTargetContainingABlock) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   MockPageContextCanvas canvas;
   SetBodyInnerHTML(
       "<div style='padding-top: 50px'>" +

@@ -11,6 +11,9 @@
 
 var gnubbySignRequestQueue;
 
+/**
+ * Initialize request queue.
+ */
 function initRequestQueue() {
   gnubbySignRequestQueue =
       new OriginKeyedRequestQueue(FACTORY_REGISTRY.getSystemTimer());
@@ -177,10 +180,10 @@ function isValidSignRequest(request) {
  * @param {WebRequestSender} sender Message sender.
  * @param {function(U2fError)} errorCb Error callback
  * @param {function(SignChallenge, string, string)} successCb Success callback
- * @param {string|undefined} opt_defaultChallenge A default sign challenge
+ * @param {string=} opt_defaultChallenge A default sign challenge
  *     value, if a request does not provide one.
- * @param {string|undefined} opt_appId The app id for the entire request.
- * @param {string|undefined} opt_logMsgUrl Url to post log messages to
+ * @param {string=} opt_appId The app id for the entire request.
+ * @param {string=} opt_logMsgUrl Url to post log messages to
  * @constructor
  * @implements {Closeable}
  */
@@ -321,7 +324,7 @@ function Signer(timer, sender, errorCb, successCb, opt_logMsgUrl) {
   /** @private {boolean} */
   this.allowHttp_ =
       this.sender_.origin ? this.sender_.origin.indexOf('http://') == 0 : false;
-  /** @private {Closeable} */
+  /** @private {RequestHandler} */
   this.handler_ = null;
 }
 
@@ -538,6 +541,11 @@ Signer.prototype.helperComplete_ = function(helperReply, opt_source) {
     console.log(UTIL_fmt(
         'helper reported ' + reply.code.toString(16) + ', returning ' +
         reportedError.errorCode));
+    // Log non-expected reply codes if we have an url to send them
+    if ((reportedError.errorCode == ErrorCodes.OTHER_ERROR) &&
+        this.logMsgUrl_) {
+      logMessage('log=u2fsign&rc=' + reply.code.toString(16), this.logMsgUrl_);
+    }
     this.notifyError_(reportedError);
   } else {
     if (this.logMsgUrl_ && opt_source) {

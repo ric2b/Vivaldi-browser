@@ -71,6 +71,9 @@ class VivaldiUtilitiesAPI : public BrowserContextKeyedAPI,
   void OnSuspend() override;
   void OnResume() override;
 
+  // Close all app windows generating thumbnails.
+  void CloseAllThumbnailWindows();
+
  private:
   friend class BrowserContextKeyedAPIFactory<VivaldiUtilitiesAPI>;
 

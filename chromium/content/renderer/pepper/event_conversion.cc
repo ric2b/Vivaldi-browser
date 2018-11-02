@@ -28,6 +28,10 @@
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
 
+#if defined(OS_WIN)
+#include <windows.h>
+#endif
+
 using ppapi::InputEventData;
 using ppapi::TouchPointWithTilt;
 using blink::WebInputEvent;
@@ -214,8 +218,17 @@ void AppendMouseEvent(const WebInputEvent& event,
   if (mouse_event.GetType() == WebInputEvent::kMouseDown ||
       mouse_event.GetType() == WebInputEvent::kMouseMove ||
       mouse_event.GetType() == WebInputEvent::kMouseUp) {
-    result.mouse_button =
-        static_cast<PP_InputEvent_MouseButton>(mouse_event.button);
+    switch (mouse_event.button) {
+      case WebMouseEvent::Button::kNoButton:
+      case WebMouseEvent::Button::kLeft:
+      case WebMouseEvent::Button::kRight:
+      case WebMouseEvent::Button::kMiddle:
+        result.mouse_button =
+            static_cast<PP_InputEvent_MouseButton>(mouse_event.button);
+        break;
+      default:
+        return;
+    }
   }
   result.mouse_position.x = mouse_event.PositionInWidget().x;
   result.mouse_position.y = mouse_event.PositionInWidget().y;

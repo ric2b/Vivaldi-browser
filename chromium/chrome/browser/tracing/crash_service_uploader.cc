@@ -25,6 +25,7 @@
 #include "net/base/load_flags.h"
 #include "net/base/mime_util.h"
 #include "net/base/network_delegate.h"
+#include "net/http/http_status_code.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_config_service.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
@@ -42,10 +43,9 @@ using std::string;
 namespace {
 
 const char kUploadURL[] = CRASH_REPORT_URL("/report");
-const char kUploadContentType[] = "multipart/form-data";
-const char kMultipartBoundary[] =
+const char kCrashUploadContentType[] = "multipart/form-data";
+const char kCrashMultipartBoundary[] =
     "----**--yradnuoBgoLtrapitluMklaTelgooG--**----";
-const int kHttpResponseOk = 200;
 
 // Allow up to 10MB for trace upload
 const size_t kMaxUploadBytes = 10000000;
@@ -88,7 +88,7 @@ void TraceCrashServiceUploader::OnURLFetchComplete(
   DCHECK_EQ(source, url_fetcher_.get());
   int response_code = source->GetResponseCode();
   string feedback;
-  bool success = (response_code == kHttpResponseOk);
+  bool success = (response_code == net::HTTP_OK);
   if (success) {
     source->GetResponseAsString(&feedback);
   } else {
@@ -224,17 +224,17 @@ void TraceCrashServiceUploader::SetupMultipart(
     const std::string& trace_filename,
     const std::string& trace_contents,
     std::string* post_data) {
-  net::AddMultipartValueForUpload("prod", product, kMultipartBoundary, "",
+  net::AddMultipartValueForUpload("prod", product, kCrashMultipartBoundary, "",
                                   post_data);
-  net::AddMultipartValueForUpload("ver", version + "-trace", kMultipartBoundary,
-                                  "", post_data);
-  net::AddMultipartValueForUpload("guid", "0", kMultipartBoundary, "",
+  net::AddMultipartValueForUpload("ver", version + "-trace",
+                                  kCrashMultipartBoundary, "", post_data);
+  net::AddMultipartValueForUpload("guid", "0", kCrashMultipartBoundary, "",
                                   post_data);
-  net::AddMultipartValueForUpload("type", "trace", kMultipartBoundary, "",
+  net::AddMultipartValueForUpload("type", "trace", kCrashMultipartBoundary, "",
                                   post_data);
   // No minidump means no need for crash to process the report.
-  net::AddMultipartValueForUpload("should_process", "false", kMultipartBoundary,
-                                  "", post_data);
+  net::AddMultipartValueForUpload("should_process", "false",
+                                  kCrashMultipartBoundary, "", post_data);
   if (metadata) {
     for (base::DictionaryValue::Iterator it(*metadata); !it.IsAtEnd();
          it.Advance()) {
@@ -244,21 +244,21 @@ void TraceCrashServiceUploader::SetupMultipart(
           continue;
       }
 
-      net::AddMultipartValueForUpload(it.key(), value, kMultipartBoundary, "",
-                                      post_data);
+      net::AddMultipartValueForUpload(it.key(), value, kCrashMultipartBoundary,
+                                      "", post_data);
     }
   }
 
   AddTraceFile(trace_filename, trace_contents, post_data);
 
-  net::AddMultipartFinalDelimiterForUpload(kMultipartBoundary, post_data);
+  net::AddMultipartFinalDelimiterForUpload(kCrashMultipartBoundary, post_data);
 }
 
 void TraceCrashServiceUploader::AddTraceFile(const std::string& trace_filename,
                                              const std::string& trace_contents,
                                              std::string* post_data) {
   post_data->append("--");
-  post_data->append(kMultipartBoundary);
+  post_data->append(kCrashMultipartBoundary);
   post_data->append("\r\n");
   post_data->append("Content-Disposition: form-data; name=\"trace\"");
   post_data->append("; filename=\"");
@@ -307,9 +307,9 @@ void TraceCrashServiceUploader::CreateAndStartURLFetcher(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(!url_fetcher_.get());
 
-  std::string content_type = kUploadContentType;
+  std::string content_type = kCrashUploadContentType;
   content_type.append("; boundary=");
-  content_type.append(kMultipartBoundary);
+  content_type.append(kCrashMultipartBoundary);
 
   // Create traffic annotation tag.
   net::NetworkTrafficAnnotationTag traffic_annotation =

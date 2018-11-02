@@ -35,6 +35,7 @@
 #include "build/build_config.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/NodeWithIndex.h"
+#include "core/dom/Range.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrameView.h"
@@ -314,8 +315,8 @@ class MockDocumentValidationMessageClient
 
 class MockWebApplicationCacheHost : public blink::WebApplicationCacheHost {
  public:
-  MockWebApplicationCacheHost() {}
-  ~MockWebApplicationCacheHost() override {}
+  MockWebApplicationCacheHost() = default;
+  ~MockWebApplicationCacheHost() override = default;
 
   void SelectCacheWithoutManifest() override {
     without_manifest_was_called_ = true;
@@ -330,6 +331,20 @@ class MockWebApplicationCacheHost : public blink::WebApplicationCacheHost {
 };
 
 }  // anonymous namespace
+
+TEST_F(DocumentTest, CreateRangeAdjustedToTreeScopeWithPositionInShadowTree) {
+  GetDocument().body()->SetInnerHTMLFromString(
+      "<div><select><option>012</option></div>");
+  Element* const select_element = GetDocument().QuerySelector("select");
+  const Position& position =
+      Position::AfterNode(*select_element->UserAgentShadowRoot());
+  Range* const range =
+      Document::CreateRangeAdjustedToTreeScope(GetDocument(), position);
+  EXPECT_EQ(range->startContainer(), select_element->parentNode());
+  EXPECT_EQ(static_cast<unsigned>(range->startOffset()),
+            select_element->NodeIndex());
+  EXPECT_TRUE(range->collapsed());
+}
 
 TEST_F(DocumentTest, DomTreeVersionForRemoval) {
   // ContainerNode::CollectChildrenAndRemoveFromOldParentWithCheck assumes this
@@ -513,16 +528,14 @@ TEST_F(DocumentTest, referrerPolicyParsing) {
 }
 
 TEST_F(DocumentTest, OutgoingReferrer) {
-  GetDocument().SetURL(
-      KURL(NullURL(), "https://www.example.com/hoge#fuga?piyo"));
+  GetDocument().SetURL(KURL("https://www.example.com/hoge#fuga?piyo"));
   GetDocument().SetSecurityOrigin(
-      SecurityOrigin::Create(KURL(NullURL(), "https://www.example.com/")));
+      SecurityOrigin::Create(KURL("https://www.example.com/")));
   EXPECT_EQ("https://www.example.com/hoge", GetDocument().OutgoingReferrer());
 }
 
 TEST_F(DocumentTest, OutgoingReferrerWithUniqueOrigin) {
-  GetDocument().SetURL(
-      KURL(NullURL(), "https://www.example.com/hoge#fuga?piyo"));
+  GetDocument().SetURL(KURL("https://www.example.com/hoge#fuga?piyo"));
   GetDocument().SetSecurityOrigin(SecurityOrigin::CreateUnique());
   EXPECT_EQ(String(), GetDocument().OutgoingReferrer());
 }
@@ -831,13 +844,13 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxOrigin;
   GetDocument().EnforceSandboxFlags(mask);
-  GetDocument().SetURL(KURL(NullURL(), "https://test.com/foobar/document"));
+  GetDocument().SetURL(KURL("https://test.com/foobar/document"));
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
   appcache_host->host_ = std::make_unique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
-      KURL(NullURL(), "https://test.com/foobar/manifest"));
+      KURL("https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
       static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
   EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
@@ -852,13 +865,13 @@ TEST_F(DocumentTest, SuboriginDisablesAppCache) {
   suborigin.SetName("foobar");
   origin->AddSuborigin(suborigin);
   GetDocument().SetSecurityOrigin(origin);
-  GetDocument().SetURL(KURL(NullURL(), "https://test.com/foobar/document"));
+  GetDocument().SetURL(KURL("https://test.com/foobar/document"));
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
   appcache_host->host_ = std::make_unique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
-      KURL(NullURL(), "https://test.com/foobar/manifest"));
+      KURL("https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
       static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
   EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
@@ -946,6 +959,7 @@ INSTANTIATE_TEST_CASE_P(All, ParameterizedDocumentTest, ::testing::Bool());
 // Android does not support non-overlay top-level scrollbars.
 #if !defined(OS_ANDROID)
 TEST_P(ParameterizedDocumentTest, ElementFromPointOnScrollbar) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   // This test requires that scrollbars take up space.
   ScopedOverlayScrollbarsForTest no_overlay_scrollbars(false);
 
@@ -973,6 +987,7 @@ TEST_P(ParameterizedDocumentTest, ElementFromPointOnScrollbar) {
 #endif  // defined(OS_ANDROID)
 
 TEST_P(ParameterizedDocumentTest, ElementFromPointWithPageZoom) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   // This test requires that scrollbars take up space.
   ScopedOverlayScrollbarsForTest no_overlay_scrollbars(false);
 

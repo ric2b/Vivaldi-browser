@@ -600,7 +600,7 @@ void HTMLElement::ParseAttribute(const AttributeModificationParams& params) {
   if (triggers->web_feature != kNoWebFeature) {
     // Count usage of attributes but ignore attributes in user agent shadow DOM.
     if (ShadowRoot* shadow = ContainingShadowRoot()) {
-      if (shadow->GetType() != ShadowRootType::kUserAgent)
+      if (shadow->IsUserAgent())
         UseCounter::Count(GetDocument(), triggers->web_feature);
     }
   }
@@ -1282,7 +1282,7 @@ int HTMLElement::offsetHeightForBinding() {
 Element* HTMLElement::unclosedOffsetParent() {
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
-  LayoutObject* layout_object = this->GetLayoutObject();
+  LayoutObject* layout_object = GetLayoutObject();
   if (!layout_object)
     return nullptr;
 

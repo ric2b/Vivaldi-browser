@@ -136,8 +136,10 @@ TEST_P(ScopedTaskEnvironmentTest,
 }
 
 TEST_P(ScopedTaskEnvironmentTest, DelayedTasks) {
+  // Use a QUEUED execution-mode environment, so that no tasks are actually
+  // executed until RunUntilIdle()/FastForwardBy() are invoked.
   ScopedTaskEnvironment scoped_task_environment(
-      GetParam(), ScopedTaskEnvironment::ExecutionMode::ASYNC);
+      GetParam(), ScopedTaskEnvironment::ExecutionMode::QUEUED);
 
   subtle::Atomic32 counter = 0;
 
@@ -191,6 +193,8 @@ TEST_P(ScopedTaskEnvironmentTest, DelayedTasks) {
                           },
                           Unretained(&counter)));
 
+  // This expectation will fail flakily if the preceding PostTask() is executed
+  // asynchronously, indicating a problem with the QUEUED execution mode.
   int expected_value = 0;
   EXPECT_EQ(expected_value, counter);
 

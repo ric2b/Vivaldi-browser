@@ -12,6 +12,15 @@
 namespace net {
 
 const char kForceEffectiveConnectionType[] = "force_effective_connection_type";
+const char kEffectiveConnectionTypeSlow2GOnCellular[] = "Slow-2G-On-Cellular";
+const base::TimeDelta
+    kHttpRttEffectiveConnectionTypeThresholds[EFFECTIVE_CONNECTION_TYPE_LAST] =
+        {base::TimeDelta::FromMilliseconds(0),
+         base::TimeDelta::FromMilliseconds(0),
+         base::TimeDelta::FromMilliseconds(2010),
+         base::TimeDelta::FromMilliseconds(1420),
+         base::TimeDelta::FromMilliseconds(272),
+         base::TimeDelta::FromMilliseconds(0)};
 
 namespace {
 
@@ -164,7 +173,7 @@ void ObtainDefaultObservations(
                                     74);
 
   default_observations[NetworkChangeNotifier::CONNECTION_3G] =
-      nqe::internal::NetworkQuality(base::TimeDelta::FromMilliseconds(272),
+      nqe::internal::NetworkQuality(base::TimeDelta::FromMilliseconds(273),
                                     base::TimeDelta::FromMilliseconds(209),
                                     749);
 
@@ -287,24 +296,35 @@ void ObtainConnectionThresholds(
   nqe::internal::NetworkQuality default_effective_connection_type_thresholds
       [EffectiveConnectionType::EFFECTIVE_CONNECTION_TYPE_LAST];
 
+  DCHECK_LT(base::TimeDelta(), kHttpRttEffectiveConnectionTypeThresholds
+                                   [EFFECTIVE_CONNECTION_TYPE_SLOW_2G]);
   default_effective_connection_type_thresholds
       [EFFECTIVE_CONNECTION_TYPE_SLOW_2G] = nqe::internal::NetworkQuality(
           // Set to the 66th percentile of 2G RTT observations on Android.
-          base::TimeDelta::FromMilliseconds(2010),
+          kHttpRttEffectiveConnectionTypeThresholds
+              [EFFECTIVE_CONNECTION_TYPE_SLOW_2G],
           base::TimeDelta::FromMilliseconds(1870),
           nqe::internal::INVALID_RTT_THROUGHPUT);
 
+  DCHECK_LT(
+      base::TimeDelta(),
+      kHttpRttEffectiveConnectionTypeThresholds[EFFECTIVE_CONNECTION_TYPE_2G]);
   default_effective_connection_type_thresholds[EFFECTIVE_CONNECTION_TYPE_2G] =
       nqe::internal::NetworkQuality(
           // Set to the 50th percentile of RTT observations on Android.
-          base::TimeDelta::FromMilliseconds(1420),
+          kHttpRttEffectiveConnectionTypeThresholds
+              [EFFECTIVE_CONNECTION_TYPE_2G],
           base::TimeDelta::FromMilliseconds(1280),
           nqe::internal::INVALID_RTT_THROUGHPUT);
 
+  DCHECK_LT(
+      base::TimeDelta(),
+      kHttpRttEffectiveConnectionTypeThresholds[EFFECTIVE_CONNECTION_TYPE_3G]);
   default_effective_connection_type_thresholds[EFFECTIVE_CONNECTION_TYPE_3G] =
       nqe::internal::NetworkQuality(
           // Set to the 50th percentile of 3G RTT observations on Android.
-          base::TimeDelta::FromMilliseconds(273),
+          kHttpRttEffectiveConnectionTypeThresholds
+              [EFFECTIVE_CONNECTION_TYPE_3G],
           base::TimeDelta::FromMilliseconds(204),
           nqe::internal::INVALID_RTT_THROUGHPUT);
 
@@ -354,10 +374,24 @@ void ObtainConnectionThresholds(
   }
 }
 
-base::Optional<EffectiveConnectionType> GetForcedEffectiveConnectionType(
+std::string GetForcedEffectiveConnectionTypeString(
     const std::map<std::string, std::string>& params) {
-  std::string forced_value = GetStringValueForVariationParamWithDefaultValue(
+  return GetStringValueForVariationParamWithDefaultValue(
       params, kForceEffectiveConnectionType, "");
+}
+
+bool GetForcedEffectiveConnectionTypeOnCellularOnly(
+    const std::map<std::string, std::string>& params) {
+  return GetForcedEffectiveConnectionTypeString(params) ==
+         kEffectiveConnectionTypeSlow2GOnCellular;
+}
+
+base::Optional<EffectiveConnectionType> GetInitForcedEffectiveConnectionType(
+    const std::map<std::string, std::string>& params) {
+  if (GetForcedEffectiveConnectionTypeOnCellularOnly(params)) {
+    return base::nullopt;
+  }
+  std::string forced_value = GetForcedEffectiveConnectionTypeString(params);
   base::Optional<EffectiveConnectionType> ect =
       GetEffectiveConnectionTypeForName(forced_value);
   DCHECK(forced_value.empty() || ect);
@@ -377,19 +411,21 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
           GetValueForVariationParam(params_,
                                     "throughput_min_transfer_size_kilobytes",
                                     32)),
+      throughput_hanging_requests_cwnd_size_multiplier_(
+          GetDoubleValueForVariationParamWithDefaultValue(
+              params_,
+              "throughput_hanging_requests_cwnd_size_multiplier",
+              -1)),
       weight_multiplier_per_second_(GetWeightMultiplierPerSecond(params_)),
       weight_multiplier_per_signal_strength_level_(
           GetDoubleValueForVariationParamWithDefaultValue(
               params_,
               "rssi_weight_per_signal_strength_level",
               1.0)),
-      correlation_uma_logging_probability_(
-          GetDoubleValueForVariationParamWithDefaultValue(
-              params_,
-              "correlation_logging_probability",
-              0.01)),
       forced_effective_connection_type_(
-          GetForcedEffectiveConnectionType(params_)),
+          GetInitForcedEffectiveConnectionType(params_)),
+      forced_effective_connection_type_on_cellular_only_(
+          GetForcedEffectiveConnectionTypeOnCellularOnly(params_)),
       persistent_cache_reading_enabled_(
           GetPersistentCacheReadingEnabled(params_)),
       min_socket_watcher_notification_interval_(
@@ -398,12 +434,27 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
           GetDoubleValueForVariationParamWithDefaultValue(
               params_,
               "lower_bound_http_rtt_transport_rtt_multiplier",
-              -1)),
+              1.0)),
       upper_bound_http_rtt_transport_rtt_multiplier_(
           GetDoubleValueForVariationParamWithDefaultValue(
               params_,
               "upper_bound_http_rtt_transport_rtt_multiplier",
               -1)),
+      hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_(
+          GetValueForVariationParam(
+              params_,
+              "hanging_request_http_rtt_upper_bound_transport_rtt_multiplier",
+              -1)),
+      hanging_request_http_rtt_upper_bound_http_rtt_multiplier_(
+          GetValueForVariationParam(
+              params_,
+              "hanging_request_http_rtt_upper_bound_http_rtt_multiplier",
+              -1)),
+      hanging_request_upper_bound_min_http_rtt_(
+          base::TimeDelta::FromMilliseconds(GetValueForVariationParam(
+              params_,
+              "hanging_request_upper_bound_min_http_rtt_msec",
+              -1))),
       http_rtt_transport_rtt_min_count_(
           GetValueForVariationParam(params_,
                                     "http_rtt_transport_rtt_min_count",
@@ -443,8 +494,6 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
               "socket_watchers_min_notification_interval_msec",
               200))),
       use_small_responses_(false) {
-  DCHECK_LE(0.0, correlation_uma_logging_probability_);
-  DCHECK_GE(1.0, correlation_uma_logging_probability_);
   DCHECK(lower_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
          lower_bound_http_rtt_transport_rtt_multiplier_ > 0);
   DCHECK(upper_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
@@ -453,6 +502,20 @@ NetworkQualityEstimatorParams::NetworkQualityEstimatorParams(
          upper_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
          lower_bound_http_rtt_transport_rtt_multiplier_ <
              upper_bound_http_rtt_transport_rtt_multiplier_);
+
+  DCHECK(hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_ == -1 ||
+         hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_ > 0);
+  DCHECK(hanging_request_http_rtt_upper_bound_http_rtt_multiplier_ == -1 ||
+         hanging_request_http_rtt_upper_bound_http_rtt_multiplier_ > 0);
+  DCHECK(hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_ == -1 ||
+         hanging_request_http_rtt_upper_bound_http_rtt_multiplier_ == -1 ||
+         hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_ >=
+             hanging_request_http_rtt_upper_bound_http_rtt_multiplier_);
+
+  DCHECK(upper_bound_http_rtt_transport_rtt_multiplier_ == -1 ||
+         hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_ == -1 ||
+         upper_bound_http_rtt_transport_rtt_multiplier_ <
+             hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_);
 
   const auto algorithm_it = params_.find("effective_connection_type_algorithm");
   effective_connection_type_algorithm_ =
@@ -480,6 +543,21 @@ bool NetworkQualityEstimatorParams::use_small_responses() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return use_small_responses_;
 };
+
+base::Optional<EffectiveConnectionType>
+NetworkQualityEstimatorParams::GetForcedEffectiveConnectionType(
+    NetworkChangeNotifier::ConnectionType connection_type) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (forced_effective_connection_type_) {
+    return forced_effective_connection_type_;
+  }
+
+  if (forced_effective_connection_type_on_cellular_only_ &&
+      net::NetworkChangeNotifier::IsConnectionCellular(connection_type)) {
+    return EFFECTIVE_CONNECTION_TYPE_SLOW_2G;
+  }
+  return base::nullopt;
+}
 
 // static
 NetworkQualityEstimatorParams::EffectiveConnectionTypeAlgorithm
@@ -527,12 +605,6 @@ int64_t NetworkQualityEstimatorParams::GetThroughputMinTransferSizeBits()
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return static_cast<int64_t>(throughput_min_transfer_size_kilobytes_) * 8 *
          1000;
-}
-
-// static
-const char* NetworkQualityEstimatorParams::GetNameForConnectionType(
-    NetworkChangeNotifier::ConnectionType connection_type) {
-  return GetNameForConnectionTypeInternal(connection_type);
 }
 
 const nqe::internal::NetworkQuality&

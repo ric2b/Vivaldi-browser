@@ -20,12 +20,12 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/renderer/worker_thread.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_state.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -47,8 +47,8 @@ class WebServiceWorkerImpl;
 class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
  public:
   ServiceWorkerDispatcher(
-      ThreadSafeSender* thread_safe_sender,
-      base::SingleThreadTaskRunner* main_thread_task_runner);
+      scoped_refptr<ThreadSafeSender> thread_safe_sender,
+      scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner);
   ~ServiceWorkerDispatcher() override;
 
   void OnMessageReceived(const IPC::Message& msg);
@@ -59,8 +59,8 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
       std::unique_ptr<ServiceWorkerHandleReference> handle_ref);
 
   static ServiceWorkerDispatcher* GetOrCreateThreadSpecificInstance(
-      ThreadSafeSender* thread_safe_sender,
-      base::SingleThreadTaskRunner* main_thread_task_runner);
+      scoped_refptr<ThreadSafeSender> thread_safe_sender,
+      scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner);
 
   // Unlike GetOrCreateThreadSpecificInstance() this doesn't create a new
   // instance if thread-local instance doesn't exist.
@@ -77,8 +77,11 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
  private:
   using WorkerObjectMap = std::map<int, WebServiceWorkerImpl*>;
 
+  friend class ServiceWorkerContextClientTest;
   friend class ServiceWorkerDispatcherTest;
   friend class WebServiceWorkerImpl;
+
+  void AllowReinstantiationForTesting();
 
   // WorkerThread::Observer implementation.
   void WillStopCurrentWorkerThread() override;
@@ -90,6 +93,10 @@ class CONTENT_EXPORT ServiceWorkerDispatcher : public WorkerThread::Observer {
   // Keeps map from handle_id to ServiceWorker object.
   void AddServiceWorker(int handle_id, WebServiceWorkerImpl* worker);
   void RemoveServiceWorker(int handle_id);
+
+  // True if another dispatcher is allowed to be created on the same thread
+  // after this instance is destructed.
+  bool allow_reinstantiation_ = false;
 
   WorkerObjectMap service_workers_;
 

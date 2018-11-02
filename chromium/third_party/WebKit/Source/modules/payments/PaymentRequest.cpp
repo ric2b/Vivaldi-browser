@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include <utility>
+#include "base/location.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptRegexp.h"
@@ -51,12 +52,12 @@
 #include "platform/wtf/text/StringBuilder.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
-#include "public/platform/WebTraceLocation.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace {
 
 using ::payments::mojom::blink::CanMakePaymentQueryResult;
+using ::payments::mojom::blink::PaymentAddress;
 using ::payments::mojom::blink::PaymentAddressPtr;
 using ::payments::mojom::blink::PaymentCurrencyAmount;
 using ::payments::mojom::blink::PaymentCurrencyAmountPtr;
@@ -796,7 +797,7 @@ PaymentRequest* PaymentRequest::Create(
                             exception_state);
 }
 
-PaymentRequest::~PaymentRequest() {}
+PaymentRequest::~PaymentRequest() = default;
 
 ScriptPromise PaymentRequest::show(ScriptState* script_state) {
   if (!payment_provider_.is_bound() || show_resolver_) {
@@ -1040,9 +1041,9 @@ PaymentRequest::PaymentRequest(ExecutionContext* execution_context,
 
   GetFrame()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&payment_provider_));
-  payment_provider_.set_connection_error_handler(ConvertToBaseCallback(
+  payment_provider_.set_connection_error_handler(
       WTF::Bind(&PaymentRequest::OnError, WrapWeakPersistent(this),
-                PaymentErrorReason::UNKNOWN)));
+                PaymentErrorReason::UNKNOWN));
 
   payments::mojom::blink::PaymentRequestClientPtr client;
   client_binding_.Bind(mojo::MakeRequest(&client));
@@ -1144,7 +1145,7 @@ void PaymentRequest::OnPaymentResponse(PaymentResponsePtr response) {
     return;
   }
 
-  complete_timer_.StartOneShot(kCompleteTimeoutSeconds, BLINK_FROM_HERE);
+  complete_timer_.StartOneShot(kCompleteTimeoutSeconds, FROM_HERE);
 
   show_resolver_->Resolve(new PaymentResponse(
       std::move(response), shipping_address_.Get(), this, id_));

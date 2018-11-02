@@ -4,7 +4,6 @@
 
 #import "ios/web/navigation/navigation_manager_impl.h"
 
-#include "base/memory/ptr_util.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
 #import "ios/web/public/web_client.h"
 #include "ui/base/page_transition_types.h"
@@ -40,8 +39,8 @@ NavigationManager::WebLoadParams& NavigationManager::WebLoadParams::operator=(
   is_renderer_initiated = other.is_renderer_initiated;
   transition_type = other.transition_type;
   user_agent_override_option = other.user_agent_override_option;
-  extra_headers.reset([other.extra_headers copy]);
-  post_data.reset([other.post_data copy]);
+  extra_headers = [other.extra_headers copy];
+  post_data = [other.post_data copy];
 
   return *this;
 }
@@ -268,7 +267,6 @@ void NavigationManagerImpl::LoadURLWithParams(
     added_item->SetShouldSkipRepostFormConfirmation(true);
   }
 
-  delegate_->WillLoadCurrentItemWithUrl(params.url);
   delegate_->LoadCurrentItem();
 }
 
@@ -333,17 +331,22 @@ NavigationManagerImpl::CreateNavigationItemWithRewriters(
         &loaded_url, browser_state_);
   }
 
-  if (initiation_type == web::NavigationInitiationType::RENDERER_INITIATED &&
+  // The URL should not be changed to app-specific URL in two cases:
+  // 1) The load is renderer-initiated requested by non-app-specific URL. Pages
+  //    with app-specific urls have elevated previledges and should not be
+  //    allowed to open app-specific URLs.
+  // 2) The load is a placeholder URL. Navigation code relies on this special
+  //    URL to implement native view and WebUI.
+  bool is_renderer_initiated_app_specific_url_from_non_app_specific_url =
+      initiation_type == web::NavigationInitiationType::RENDERER_INITIATED &&
       loaded_url != url && web::GetWebClient()->IsAppSpecificURL(loaded_url) &&
-      !web::GetWebClient()->IsAppSpecificURL(previous_url)) {
-    // The URL should not be changed to app-specific URL if the load was
-    // renderer-initiated requested by non app-specific URL. Pages with
-    // app-specific urls have elevated previledges and should not be allowed
-    // to open app-specific URLs.
+      !web::GetWebClient()->IsAppSpecificURL(previous_url);
+  if (is_renderer_initiated_app_specific_url_from_non_app_specific_url ||
+      IsPlaceholderUrl(url)) {
     loaded_url = url;
   }
 
-  auto item = base::MakeUnique<NavigationItemImpl>();
+  auto item = std::make_unique<NavigationItemImpl>();
   item->SetOriginalRequestURL(loaded_url);
   item->SetURL(loaded_url);
   item->SetReferrer(referrer);
@@ -365,6 +368,10 @@ NavigationItem* NavigationManagerImpl::GetLastCommittedNonAppSpecificItem()
       return item;
   }
   return nullptr;
+}
+
+bool NavigationManagerImpl::IsPlaceholderUrl(const GURL& url) const {
+  return false;  // Default implementation doesn't use placeholder URLs
 }
 
 }  // namespace web

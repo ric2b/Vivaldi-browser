@@ -14,25 +14,25 @@
 
 namespace viz {
 class ContextProvider;
-}
+class RasterContextProvider;
+}  // namespace viz
 
 namespace cc {
 
 class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
  public:
   GpuRasterBufferProvider(viz::ContextProvider* compositor_context_provider,
-                          viz::ContextProvider* worker_context_provider,
+                          viz::RasterContextProvider* worker_context_provider,
                           LayerTreeResourceProvider* resource_provider,
                           bool use_distance_field_text,
                           int gpu_rasterization_msaa_sample_count,
                           viz::ResourceFormat preferred_tile_format,
-                          bool async_worker_context_enabled,
                           bool enable_oop_rasterization);
   ~GpuRasterBufferProvider() override;
 
   // Overridden from RasterBufferProvider:
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
-      const Resource* resource,
+      const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
       uint64_t previous_content_id) override;
   void OrderingBarrier() override;
@@ -40,15 +40,16 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
   viz::ResourceFormat GetResourceFormat(bool must_support_alpha) const override;
   bool IsResourceSwizzleRequired(bool must_support_alpha) const override;
   bool CanPartialRasterIntoProvidedResource() const override;
-  bool IsResourceReadyToDraw(viz::ResourceId id) const override;
+  bool IsResourceReadyToDraw(
+      const ResourcePool::InUsePoolResource& resource) const override;
   uint64_t SetReadyToDrawCallback(
-      const ResourceProvider::ResourceIdArray& resource_ids,
+      const std::vector<const ResourcePool::InUsePoolResource*>& resources,
       const base::Closure& callback,
       uint64_t pending_callback_id) const override;
   void Shutdown() override;
 
   void PlaybackOnWorkerThread(
-      ResourceProvider::ScopedWriteLockGL* resource_lock,
+      LayerTreeResourceProvider::ScopedWriteLockRaster* resource_lock,
       const gpu::SyncToken& sync_token,
       bool resource_has_previous_content,
       const RasterSource* raster_source,
@@ -82,7 +83,7 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
 
    private:
     GpuRasterBufferProvider* const client_;
-    ResourceProvider::ScopedWriteLockGL lock_;
+    LayerTreeResourceProvider::ScopedWriteLockRaster lock_;
     const bool resource_has_previous_content_;
 
     gpu::SyncToken sync_token_;
@@ -91,12 +92,11 @@ class CC_EXPORT GpuRasterBufferProvider : public RasterBufferProvider {
   };
 
   viz::ContextProvider* const compositor_context_provider_;
-  viz::ContextProvider* const worker_context_provider_;
+  viz::RasterContextProvider* const worker_context_provider_;
   LayerTreeResourceProvider* const resource_provider_;
   const bool use_distance_field_text_;
   const int msaa_sample_count_;
   const viz::ResourceFormat preferred_tile_format_;
-  const bool async_worker_context_enabled_;
   const bool enable_oop_rasterization_;
 
   std::set<RasterBufferImpl*> pending_raster_buffers_;

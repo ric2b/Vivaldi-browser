@@ -14,7 +14,9 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
@@ -54,27 +56,17 @@
 
 namespace {
 
-views::Link* CreateLink(views::LinkListener* listener,
-                        int resource_id,
-                        int id) {
-  views::Link* link = new views::Link(l10n_util::GetStringUTF16(resource_id));
-  link->set_listener(listener);
-  link->set_id(id);
-  return link;
-}
+// Container for |advanced_view_|. When the text on the "Translate"/"Done"
+// button changes a layout is required.
+class AdvancedViewContainer : public views::View {
+ public:
+  AdvancedViewContainer() {}
 
-// TODO(ftang) Restore icons in CreateViewAfterTranslate and CreateViewError
-// without causing layout issues; see http://crbug.com/610351
-void AddIconToLayout(views::GridLayout* layout) {
-  views::ImageView* icon = new views::ImageView();
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
-  icon->SetImage(bundle.GetImageNamed(IDR_TRANSLATE_BUBBLE_ICON).ToImageSkia());
-  layout->AddView(icon);
-}
+  void ChildPreferredSizeChanged(views::View* child) override { Layout(); }
 
-bool Use2016Q2UI() {
-  return base::FeatureList::IsEnabled(translate::kTranslateUI2016Q2);
-}
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AdvancedViewContainer);
+};
 
 }  // namespace
 
@@ -134,6 +126,17 @@ views::Widget* TranslateBubbleView::ShowBubble(
       new TranslateBubbleModelImpl(step, std::move(ui_delegate)));
   TranslateBubbleView* view = new TranslateBubbleView(
       anchor_view, anchor_point, std::move(model), error_type, web_contents);
+
+#if defined(OS_MACOSX)
+  // On Mac, there's no anchor view (|anchor_point| is used to position).
+  // However, the bubble will be set up with no parent and no anchor. That needs
+  // to be set up before showing the bubble.
+  DCHECK(!anchor_view);
+  view->set_arrow(views::BubbleBorder::TOP_RIGHT);
+  view->set_parent_window(
+      platform_util::GetViewForWindow(web_contents->GetTopLevelNativeWindow()));
+#endif
+
   views::Widget* bubble_widget =
       views::BubbleDialogDelegateView::CreateBubble(view);
   view->ShowForReason(reason);
@@ -162,15 +165,34 @@ int TranslateBubbleView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_NONE;
 }
 
-void TranslateBubbleView::Init() {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
-
-  should_always_translate_ = model_->ShouldAlwaysTranslate();
-  if (Use2016Q2UI() && !is_in_incognito_window_) {
-    should_always_translate_ =
-        model_->ShouldAlwaysTranslateBeCheckedByDefault();
+base::string16 TranslateBubbleView::GetWindowTitle() const {
+  int id = 0;
+  switch (model_->GetViewState()) {
+    case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE:
+      id = IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_TITLE;
+      break;
+    case TranslateBubbleModel::VIEW_STATE_TRANSLATING:
+      id = IDS_TRANSLATE_BUBBLE_TRANSLATING;
+      break;
+    case TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE:
+      id = IDS_TRANSLATE_BUBBLE_TRANSLATED_TITLE;
+      break;
+    case TranslateBubbleModel::VIEW_STATE_ERROR:
+      id = IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE_TITLE;
+      break;
+    case TranslateBubbleModel::VIEW_STATE_ADVANCED:
+      id = IDS_TRANSLATE_BUBBLE_ADVANCED_TITLE;
+      break;
   }
 
+  return l10n_util::GetStringUTF16(id);
+}
+
+void TranslateBubbleView::Init() {
+  SetLayoutManager(
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
+
+  should_always_translate_ = model_->ShouldAlwaysTranslate();
   before_translate_view_ = CreateViewBeforeTranslate();
   translating_view_ = CreateViewTranslating();
   after_translate_view_ = CreateViewAfterTranslate();
@@ -193,7 +215,50 @@ void TranslateBubbleView::Init() {
 
 void TranslateBubbleView::ButtonPressed(views::Button* sender,
                                         const ui::Event& event) {
-  HandleButtonPressed(static_cast<ButtonID>(sender->id()));
+  switch (static_cast<ButtonID>(sender->id())) {
+    case BUTTON_ID_TRANSLATE: {
+      Translate();
+      break;
+    }
+    case BUTTON_ID_DONE: {
+      ConfirmAdvancedOptions();
+      break;
+    }
+    case BUTTON_ID_CANCEL: {
+      model_->GoBackFromAdvanced();
+      UpdateChildVisibilities();
+      SizeToContents();
+      translate::ReportUiAction(translate::CANCEL_BUTTON_CLICKED);
+      break;
+    }
+    case BUTTON_ID_TRY_AGAIN: {
+      model_->Translate();
+      translate::ReportUiAction(translate::TRY_AGAIN_BUTTON_CLICKED);
+      break;
+    }
+    case BUTTON_ID_SHOW_ORIGINAL: {
+      ShowOriginal();
+      break;
+    }
+    case BUTTON_ID_ALWAYS_TRANSLATE: {
+      views::Checkbox* always_checkbox = GetAlwaysTranslateCheckbox();
+      DCHECK(always_checkbox);
+      should_always_translate_ = always_checkbox->checked();
+      translate::ReportUiAction(should_always_translate_
+                                    ? translate::ALWAYS_TRANSLATE_CHECKED
+                                    : translate::ALWAYS_TRANSLATE_UNCHECKED);
+      break;
+    }
+    case BUTTON_ID_ADVANCED: {
+      SwitchView(TranslateBubbleModel::VIEW_STATE_ADVANCED);
+      translate::ReportUiAction(translate::ADVANCED_BUTTON_CLICKED);
+      break;
+    }
+    case BUTTON_ID_OPTIONS_MENU: {
+      ShowOptionsMenu(sender);
+      break;
+    }
+  }
 }
 
 views::View* TranslateBubbleView::GetInitiallyFocusedView() {
@@ -201,7 +266,7 @@ views::View* TranslateBubbleView::GetInitiallyFocusedView() {
 }
 
 bool TranslateBubbleView::ShouldShowCloseButton() const {
-  return Use2016Q2UI();
+  return true;
 }
 
 void TranslateBubbleView::WindowClosing() {
@@ -226,7 +291,7 @@ bool TranslateBubbleView::AcceleratorPressed(
   switch (model_->GetViewState()) {
     case TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE: {
       if (accelerator.key_code() == ui::VKEY_RETURN) {
-        HandleButtonPressed(BUTTON_ID_TRANSLATE);
+        Translate();
         return true;
       }
       break;
@@ -235,7 +300,7 @@ bool TranslateBubbleView::AcceleratorPressed(
       break;
     case TranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE: {
       if (accelerator.key_code() == ui::VKEY_RETURN) {
-        HandleButtonPressed(BUTTON_ID_SHOW_ORIGINAL);
+        ShowOriginal();
         return true;
       }
       break;
@@ -244,7 +309,7 @@ bool TranslateBubbleView::AcceleratorPressed(
       break;
     case TranslateBubbleModel::VIEW_STATE_ADVANCED: {
       if (accelerator.key_code() == ui::VKEY_RETURN) {
-        HandleButtonPressed(BUTTON_ID_DONE);
+        ConfirmAdvancedOptions();
         return true;
       }
       break;
@@ -271,34 +336,46 @@ void TranslateBubbleView::LinkClicked(views::Link* source, int event_flags) {
   HandleLinkClicked(static_cast<LinkID>(source->id()));
 }
 
-void TranslateBubbleView::OnMenuButtonClicked(views::MenuButton* source,
-                                              const gfx::Point& point,
-                                              const ui::Event* event) {
-  if (!denial_menu_runner_) {
-    denial_menu_model_.reset(new ui::SimpleMenuModel(this));
-    denial_menu_model_->AddItem(
-        DenialMenuItem::NEVER_TRANSLATE_LANGUAGE,
-        l10n_util::GetStringFUTF16(
-            IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_LANG,
-            model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex())));
+void TranslateBubbleView::ShowOptionsMenu(views::Button* source) {
+  // Recreate the menu model as translated languages can change while the menu
+  // is not showing, which invalidates these text strings.
+  options_menu_model_.reset(new ui::SimpleMenuModel(this));
 
-    denial_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  options_menu_model_->AddCheckItem(
+      OptionsMenuItem::ALWAYS_TRANSLATE_LANGUAGE,
+      l10n_util::GetStringFUTF16(
+          IDS_TRANSLATE_BUBBLE_ALWAYS_TRANSLATE_LANG,
+          model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex())));
 
-    denial_menu_model_->AddItemWithStringId(
-        DenialMenuItem::NEVER_TRANSLATE_SITE,
+  options_menu_model_->AddItem(
+      OptionsMenuItem::NEVER_TRANSLATE_LANGUAGE,
+      l10n_util::GetStringFUTF16(
+          IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_LANG,
+          model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex())));
+
+  // TODO(https://crbug.com/793925): Blacklisting should probably not be
+  // possible in incognito mode as it leaves a trace of the user.
+  if (model_->CanBlacklistSite()) {
+    options_menu_model_->AddItemWithStringId(
+        OptionsMenuItem::NEVER_TRANSLATE_SITE,
         IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_SITE);
-
-    denial_menu_runner_.reset(
-        new views::MenuRunner(denial_menu_model_.get(), 0));
   }
+
+  options_menu_model_->AddItemWithStringId(
+      OptionsMenuItem::MORE_OPTIONS,
+      IDS_TRANSLATE_BUBBLE_ADVANCED_MENU_BUTTON);
+
+  options_menu_runner_.reset(
+      new views::MenuRunner(options_menu_model_.get(), 0));
   gfx::Rect screen_bounds = source->GetBoundsInScreen();
-  denial_menu_runner_->RunMenuAt(source->GetWidget(), source, screen_bounds,
-                                 views::MENU_ANCHOR_TOPRIGHT,
-                                 ui::MENU_SOURCE_MOUSE);
+  options_menu_runner_->RunMenuAt(source->GetWidget(), nullptr, screen_bounds,
+                                  views::MENU_ANCHOR_TOPRIGHT,
+                                  ui::MENU_SOURCE_MOUSE);
 }
 
 bool TranslateBubbleView::IsCommandIdChecked(int command_id) const {
-  return false;
+  DCHECK_EQ(OptionsMenuItem::ALWAYS_TRANSLATE_LANGUAGE, command_id);
+  return should_always_translate_;
 }
 
 bool TranslateBubbleView::IsCommandIdEnabled(int command_id) const {
@@ -306,21 +383,39 @@ bool TranslateBubbleView::IsCommandIdEnabled(int command_id) const {
 }
 
 void TranslateBubbleView::ExecuteCommand(int command_id, int event_flags) {
-  model_->DeclineTranslation();
   switch (command_id) {
-    case DenialMenuItem::NEVER_TRANSLATE_LANGUAGE:
-      model_->SetNeverTranslateLanguage(true);
+    case OptionsMenuItem::ALWAYS_TRANSLATE_LANGUAGE:
+      should_always_translate_ = !should_always_translate_;
+      model_->SetAlwaysTranslate(should_always_translate_);
+
+      if (should_always_translate_ &&
+          model_->GetViewState() ==
+              TranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE) {
+        model_->Translate();
+        SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
+      }
+      break;
+
+    case OptionsMenuItem::NEVER_TRANSLATE_LANGUAGE:
       translate::ReportUiAction(
           translate::NEVER_TRANSLATE_LANGUAGE_MENU_CLICKED);
+      model_->SetNeverTranslateLanguage(true);
+      model_->DeclineTranslation();
+      GetWidget()->Close();
       break;
-    case DenialMenuItem::NEVER_TRANSLATE_SITE:
-      model_->SetNeverTranslateSite(true);
+    case OptionsMenuItem::NEVER_TRANSLATE_SITE:
       translate::ReportUiAction(translate::NEVER_TRANSLATE_SITE_MENU_CLICKED);
+      model_->SetNeverTranslateSite(true);
+      model_->DeclineTranslation();
+      GetWidget()->Close();
+      break;
+    case OptionsMenuItem::MORE_OPTIONS:
+      translate::ReportUiAction(translate::ADVANCED_MENU_CLICKED);
+      SwitchView(TranslateBubbleModel::VIEW_STATE_ADVANCED);
       break;
     default:
       NOTREACHED();
   }
-  GetWidget()->Close();
 }
 
 void TranslateBubbleView::StyledLabelLinkClicked(views::StyledLabel* label,
@@ -358,14 +453,13 @@ TranslateBubbleView::TranslateBubbleView(
       after_translate_view_(NULL),
       error_view_(NULL),
       advanced_view_(NULL),
-      denial_combobox_(NULL),
       source_language_combobox_(NULL),
       target_language_combobox_(NULL),
       before_always_translate_checkbox_(NULL),
       advanced_always_translate_checkbox_(NULL),
       advanced_cancel_button_(NULL),
       advanced_done_button_(NULL),
-      denial_menu_button_(NULL),
+      before_translate_options_button_(NULL),
       model_(std::move(model)),
       error_type_(error_type),
       is_in_incognito_window_(
@@ -394,56 +488,29 @@ views::View* TranslateBubbleView::GetCurrentView() const {
   return NULL;
 }
 
-void TranslateBubbleView::HandleButtonPressed(
-    TranslateBubbleView::ButtonID sender_id) {
-  switch (sender_id) {
-    case BUTTON_ID_TRANSLATE: {
-      model_->SetAlwaysTranslate(should_always_translate_);
-      model_->Translate();
-      translate::ReportUiAction(translate::TRANSLATE_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_DONE: {
-      model_->SetAlwaysTranslate(should_always_translate_);
-      if (model_->IsPageTranslatedInCurrentLanguages()) {
-        model_->GoBackFromAdvanced();
-        UpdateChildVisibilities();
-        SizeToContents();
-      } else {
-        model_->Translate();
-        SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
-      }
-      translate::ReportUiAction(translate::DONE_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_CANCEL: {
-      model_->GoBackFromAdvanced();
-      UpdateChildVisibilities();
-      SizeToContents();
-      translate::ReportUiAction(translate::CANCEL_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_TRY_AGAIN: {
-      model_->Translate();
-      translate::ReportUiAction(translate::TRY_AGAIN_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_SHOW_ORIGINAL: {
-      model_->RevertTranslation();
-      GetWidget()->Close();
-      translate::ReportUiAction(translate::SHOW_ORIGINAL_BUTTON_CLICKED);
-      break;
-    }
-    case BUTTON_ID_ALWAYS_TRANSLATE: {
-      views::Checkbox* always_checkbox = GetAlwaysTranslateCheckbox();
-      DCHECK(always_checkbox);
-      should_always_translate_ = always_checkbox->checked();
-      translate::ReportUiAction(should_always_translate_
-                                    ? translate::ALWAYS_TRANSLATE_CHECKED
-                                    : translate::ALWAYS_TRANSLATE_UNCHECKED);
-      break;
-    }
+void TranslateBubbleView::Translate() {
+  model_->SetAlwaysTranslate(should_always_translate_);
+  model_->Translate();
+  translate::ReportUiAction(translate::TRANSLATE_BUTTON_CLICKED);
+}
+
+void TranslateBubbleView::ShowOriginal() {
+  model_->RevertTranslation();
+  GetWidget()->Close();
+  translate::ReportUiAction(translate::SHOW_ORIGINAL_BUTTON_CLICKED);
+}
+
+void TranslateBubbleView::ConfirmAdvancedOptions() {
+  model_->SetAlwaysTranslate(should_always_translate_);
+  if (model_->IsPageTranslatedInCurrentLanguages()) {
+    model_->GoBackFromAdvanced();
+    UpdateChildVisibilities();
+    SizeToContents();
+  } else {
+    model_->Translate();
+    SwitchView(TranslateBubbleModel::VIEW_STATE_TRANSLATING);
   }
+  translate::ReportUiAction(translate::DONE_BUTTON_CLICKED);
 }
 
 void TranslateBubbleView::HandleLinkClicked(
@@ -454,45 +521,12 @@ void TranslateBubbleView::HandleLinkClicked(
       translate::ReportUiAction(translate::ADVANCED_LINK_CLICKED);
       break;
     }
-    case LINK_ID_LANGUAGE_SETTINGS: {
-      GURL url = chrome::GetSettingsUrl(chrome::kLanguageOptionsSubPage);
-      web_contents()->OpenURL(content::OpenURLParams(
-          url, content::Referrer(), WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          ui::PAGE_TRANSITION_LINK, false));
-      translate::ReportUiAction(translate::SETTINGS_LINK_CLICKED);
-      break;
-    }
   }
 }
 
 void TranslateBubbleView::HandleComboboxPerformAction(
     TranslateBubbleView::ComboboxID sender_id) {
   switch (sender_id) {
-    case COMBOBOX_ID_DENIAL: {
-      model_->DeclineTranslation();
-      DenialComboboxIndex index =
-          static_cast<DenialComboboxIndex>(denial_combobox_->selected_index());
-      switch (index) {
-        case DenialComboboxIndex::DONT_TRANSLATE:
-          translate::ReportUiAction(translate::NOPE_MENU_CLICKED);
-          break;
-        case DenialComboboxIndex::NEVER_TRANSLATE_LANGUAGE:
-          model_->SetNeverTranslateLanguage(true);
-          translate::ReportUiAction(
-              translate::NEVER_TRANSLATE_LANGUAGE_MENU_CLICKED);
-          break;
-        case DenialComboboxIndex::NEVER_TRANSLATE_SITE:
-          model_->SetNeverTranslateSite(true);
-          translate::ReportUiAction(
-              translate::NEVER_TRANSLATE_SITE_MENU_CLICKED);
-          break;
-        default:
-          NOTREACHED();
-          break;
-      }
-      GetWidget()->Close();
-      break;
-    }
     case COMBOBOX_ID_SOURCE_LANGUAGE: {
       if (model_->GetOriginalLanguageIndex() ==
           source_language_combobox_->selected_index()) {
@@ -519,7 +553,7 @@ void TranslateBubbleView::HandleComboboxPerformAction(
 }
 
 void TranslateBubbleView::UpdateChildVisibilities() {
-  // Update the statew of the always translate checkbox
+  // Update the state of the always translate checkbox
   if (advanced_always_translate_checkbox_)
     advanced_always_translate_checkbox_->SetChecked(should_always_translate_);
   if (before_always_translate_checkbox_)
@@ -528,14 +562,14 @@ void TranslateBubbleView::UpdateChildVisibilities() {
     views::View* view = child_at(i);
     view->SetVisible(view == GetCurrentView());
   }
+  if (GetWidget())
+    GetWidget()->UpdateWindowTitle();
   // BoxLayout only considers visible children, so ensure any newly visible
   // child views are positioned correctly.
   Layout();
 }
 
 views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
-  const int kQuestionWidth = 200;
-
   base::string16 original_language_name =
       model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex());
   if (original_language_name.empty()) {
@@ -544,7 +578,8 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
   }
 
   views::View* view = new views::View();
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view);
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view));
 
   using views::GridLayout;
 
@@ -560,14 +595,10 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
-  if (Use2016Q2UI()) {
-    // Add padding between the icon and the text.
-    cs->AddPaddingColumn(0, provider->GetDistanceMetric(
-                                views::DISTANCE_RELATED_LABEL_HORIZONTAL));
-  } else {
-    // Add padding between the text and the link.
-    cs->AddPaddingColumn(0, button_spacing);
-  }
+
+  // Add padding between the text and the link.
+  cs->AddPaddingColumn(0, button_spacing);
+
   cs->AddColumn(GridLayout::FILL, GridLayout::CENTER, 1,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(1, 0);
@@ -581,96 +612,24 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
                 GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI()) {
-    AddIconToLayout(layout);
 
-    base::string16 target_language_name =
-        model_->GetLanguageNameAt(model_->GetTargetLanguageIndex());
-    std::vector<size_t> offsets;
-    auto* styled_label = new views::StyledLabel(
-        l10n_util::GetStringFUTF16(IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_NEW,
-                                   original_language_name, target_language_name,
-                                   &offsets),
-        this);
-    auto style_info = views::StyledLabel::RangeStyleInfo::CreateForLink();
-    styled_label->AddStyleRange(
-        gfx::Range(static_cast<uint32_t>(offsets[0]),
-                   static_cast<uint32_t>(offsets[0] +
-                                         original_language_name.length())),
-        style_info);
-    styled_label->AddStyleRange(
-        gfx::Range(
-            static_cast<uint32_t>(offsets[1]),
-            static_cast<uint32_t>(offsets[1] + target_language_name.length())),
-        style_info);
-    styled_label->SizeToFit(kQuestionWidth);
-    layout->AddView(styled_label);
-  } else {
-    layout->AddView(new views::Label(
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE)));
-    layout->AddView(
-        CreateLink(this, IDS_TRANSLATE_BUBBLE_ADVANCED, LINK_ID_ADVANCED));
-  }
-
-  // In an incognito window, the "Always translate" checkbox shouldn't be shown.
-  if (Use2016Q2UI() && !is_in_incognito_window_) {
-    layout->AddPaddingRow(0, provider->GetDistanceMetric(
-                                 views::DISTANCE_RELATED_CONTROL_VERTICAL));
-    layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-    layout->SkipColumns(1);
-    before_always_translate_checkbox_ = new views::Checkbox(
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS_DO_THIS));
-    before_always_translate_checkbox_->set_id(BUTTON_ID_ALWAYS_TRANSLATE);
-    before_always_translate_checkbox_->set_listener(this);
-    layout->AddView(before_always_translate_checkbox_);
-  }
-
-  layout->AddPaddingRow(0, provider->GetDistanceMetric(
-                               views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
+  layout->AddPaddingRow(
+      0, provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL));
 
   layout->StartRow(0, COLUMN_SET_ID_CONTENT);
   views::LabelButton* accept_button =
-      Use2016Q2UI()
-          ? views::MdTextButton::CreateSecondaryUiBlueButton(
-                this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ACCEPT))
-          : views::MdTextButton::CreateSecondaryUiButton(
-                this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ACCEPT));
+      views::MdTextButton::CreateSecondaryUiButton(
+          this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ACCEPT));
   accept_button->set_id(BUTTON_ID_TRANSLATE);
   layout->AddView(accept_button);
   accept_button->SetIsDefault(true);
-  if (Use2016Q2UI()) {
-    denial_menu_button_ = new views::MenuButton(
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON),
-        this, true);
-    denial_menu_button_->SetStyleDeprecated(views::Button::STYLE_BUTTON);
-    layout->AddView(denial_menu_button_);
-  } else {
-    // Can the site of the current page be blacklisted? This will be false for
-    // example for file:///... URLs.
-    const bool can_blacklist_site = model_->CanBlacklistSite();
-
-    // Number of items in the combobox.
-    const size_t menu_size = static_cast<size_t>(
-        can_blacklist_site ? DenialComboboxIndex::MENU_SIZE
-                           : DenialComboboxIndex::MENU_SIZE_NO_BLACKLIST);
-
-    std::vector<base::string16> items(menu_size);
-    items[static_cast<size_t>(DenialComboboxIndex::DONT_TRANSLATE)] =
-        l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_DENY);
-    items[static_cast<size_t>(DenialComboboxIndex::NEVER_TRANSLATE_LANGUAGE)] =
-        l10n_util::GetStringFUTF16(IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_LANG,
-                                   original_language_name);
-    if (can_blacklist_site) {
-      items[static_cast<size_t>(DenialComboboxIndex::NEVER_TRANSLATE_SITE)] =
-          l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_SITE);
-    }
-    denial_combobox_model_.reset(new ui::SimpleComboboxModel(items));
-    denial_combobox_ = new views::Combobox(denial_combobox_model_.get(),
-                                           views::Combobox::STYLE_ACTION);
-    denial_combobox_->set_id(COMBOBOX_ID_DENIAL);
-    denial_combobox_->set_listener(this);
-    layout->AddView(denial_combobox_);
-  }
+  before_translate_options_button_ =
+      views::MdTextButton::CreateSecondaryUiButton(
+          this,
+          l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON));
+  before_translate_options_button_->set_id(BUTTON_ID_OPTIONS_MENU);
+  before_translate_options_button_->set_request_focus_on_press(true);
+  layout->AddView(before_translate_options_button_);
 
   return view;
 }
@@ -678,11 +637,10 @@ views::View* TranslateBubbleView::CreateViewBeforeTranslate() {
 views::View* TranslateBubbleView::CreateViewTranslating() {
   base::string16 target_language_name =
       model_->GetLanguageNameAt(model_->GetTargetLanguageIndex());
-  views::Label* label = new views::Label(
-      l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRANSLATING));
 
   views::View* view = new views::View();
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view);
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view));
 
   using views::GridLayout;
 
@@ -693,13 +651,6 @@ views::View* TranslateBubbleView::CreateViewTranslating() {
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI()) {
-    cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
-                  views::GridLayout::USE_PREF, 0, 0);
-    // Add padding between the icon and the text.
-    cs->AddPaddingColumn(0, provider->GetDistanceMetric(
-                                views::DISTANCE_RELATED_LABEL_HORIZONTAL));
-  }
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(1, 0);
@@ -709,10 +660,10 @@ views::View* TranslateBubbleView::CreateViewTranslating() {
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
 
-  layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  if (Use2016Q2UI())
-    AddIconToLayout(layout);
-  layout->AddView(label);
+  cs->AddPaddingColumn(0, provider->GetDistanceMetric(
+                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
+  cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
+                GridLayout::USE_PREF, 0, 0);
 
   layout->AddPaddingRow(0, provider->GetDistanceMetric(
                                views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
@@ -729,11 +680,9 @@ views::View* TranslateBubbleView::CreateViewTranslating() {
 }
 
 views::View* TranslateBubbleView::CreateViewAfterTranslate() {
-  views::Label* label = new views::Label(
-      l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRANSLATED));
-
   views::View* view = new views::View();
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view);
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view));
 
   using views::GridLayout;
 
@@ -745,13 +694,13 @@ views::View* TranslateBubbleView::CreateViewAfterTranslate() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
-
+  const int button_spacing =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
   // TODO(ftang) Restore icon without causing layout defects: crbug.com/610351
 
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(0, provider->GetDistanceMetric(
-                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
+  cs->AddPaddingColumn(0, button_spacing);
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(1, 0);
@@ -761,10 +710,9 @@ views::View* TranslateBubbleView::CreateViewAfterTranslate() {
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
 
-  layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  layout->AddView(label);
-  layout->AddView(
-      CreateLink(this, IDS_TRANSLATE_BUBBLE_ADVANCED, LINK_ID_ADVANCED));
+  cs->AddPaddingColumn(0, button_spacing);
+  cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
+                GridLayout::USE_PREF, 0, 0);
 
   layout->AddPaddingRow(0, provider->GetDistanceMetric(
                                views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
@@ -775,15 +723,22 @@ views::View* TranslateBubbleView::CreateViewAfterTranslate() {
   button->set_id(BUTTON_ID_SHOW_ORIGINAL);
   layout->AddView(button);
 
+  views::Button* options_menu_button =
+      views::MdTextButton::CreateSecondaryUiButton(
+          this,
+          l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_OPTIONS_MENU_BUTTON));
+  options_menu_button->set_id(BUTTON_ID_OPTIONS_MENU);
+  options_menu_button->set_request_focus_on_press(true);
+
+  layout->AddView(options_menu_button);
+
   return view;
 }
 
 views::View* TranslateBubbleView::CreateViewError() {
-  views::Label* label = new views::Label(
-      l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE));
-
   views::View* view = new views::View();
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view);
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view));
 
   using views::GridLayout;
 
@@ -795,13 +750,14 @@ views::View* TranslateBubbleView::CreateViewError() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   views::ColumnSet* cs = layout->AddColumnSet(COLUMN_SET_ID_MESSAGE);
+  const int button_spacing =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
 
   // TODO(ftang) Restore icon without causing layout defects: crbug.com/610351
 
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
-  cs->AddPaddingColumn(0, provider->GetDistanceMetric(
-                              views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
+  cs->AddPaddingColumn(0, button_spacing);
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
   cs->AddPaddingColumn(1, 0);
@@ -811,19 +767,26 @@ views::View* TranslateBubbleView::CreateViewError() {
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
 
-  layout->StartRow(0, COLUMN_SET_ID_MESSAGE);
-  layout->AddView(label);
-  layout->AddView(
-      CreateLink(this, IDS_TRANSLATE_BUBBLE_ADVANCED, LINK_ID_ADVANCED));
+  cs->AddPaddingColumn(0, button_spacing);
+  cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
+                GridLayout::USE_PREF, 0, 0);
 
   layout->AddPaddingRow(0, provider->GetDistanceMetric(
                                views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
 
   layout->StartRow(0, COLUMN_SET_ID_CONTENT);
-  views::LabelButton* button = views::MdTextButton::CreateSecondaryUiButton(
-      this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRY_AGAIN));
-  button->set_id(BUTTON_ID_TRY_AGAIN);
-  layout->AddView(button);
+  views::LabelButton* try_again_button =
+      views::MdTextButton::CreateSecondaryUiButton(
+          this, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRY_AGAIN));
+  try_again_button->set_id(BUTTON_ID_TRY_AGAIN);
+  layout->AddView(try_again_button);
+
+  views::LabelButton* advanced_button =
+      views::MdTextButton::CreateSecondaryUiButton(
+          this,
+          l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ADVANCED_BUTTON));
+  advanced_button->set_id(BUTTON_ID_ADVANCED);
+  layout->AddView(advanced_button);
 
   return view;
 }
@@ -862,14 +825,16 @@ views::View* TranslateBubbleView::CreateViewAdvanced() {
     advanced_always_translate_checkbox_->set_listener(this);
   }
 
-  views::View* view = new views::View();
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view);
+  views::View* view = new AdvancedViewContainer();
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view));
 
   using views::GridLayout;
 
   enum {
     COLUMN_SET_ID_LANGUAGES,
     COLUMN_SET_ID_BUTTONS,
+    COLUMN_SET_ID_ALWAYS_CHECKBOX,
   };
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
@@ -895,6 +860,10 @@ views::View* TranslateBubbleView::CreateViewAdvanced() {
   cs->AddColumn(GridLayout::LEADING, GridLayout::CENTER, 0,
                 GridLayout::USE_PREF, 0, 0);
 
+  cs = layout->AddColumnSet(COLUMN_SET_ID_ALWAYS_CHECKBOX);
+  cs->AddColumn(GridLayout::TRAILING, GridLayout::CENTER, 0,
+                GridLayout::USE_PREF, 0, 0);
+
   layout->StartRow(0, COLUMN_SET_ID_LANGUAGES);
   layout->AddView(source_language_label);
   layout->AddView(source_language_combobox_);
@@ -909,23 +878,17 @@ views::View* TranslateBubbleView::CreateViewAdvanced() {
 
   if (!is_in_incognito_window_) {
     layout->AddPaddingRow(0, vertical_spacing);
-    layout->StartRow(0, COLUMN_SET_ID_LANGUAGES);
-    layout->SkipColumns(1);
+    layout->StartRow(0, COLUMN_SET_ID_ALWAYS_CHECKBOX);
     layout->AddView(advanced_always_translate_checkbox_);
   }
 
-  layout->AddPaddingRow(0, provider->GetDistanceMetric(
-                               views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
+  layout->AddPaddingRow(0, vertical_spacing);
 
   layout->StartRow(0, COLUMN_SET_ID_BUTTONS);
-  // TODO(estade): this should use CreateExtraView().
-  layout->AddView(CreateLink(this, IDS_TRANSLATE_BUBBLE_LANGUAGE_SETTINGS,
-                             LINK_ID_LANGUAGE_SETTINGS));
-  advanced_done_button_ =
-      Use2016Q2UI() ? views::MdTextButton::CreateSecondaryUiBlueButton(
-                          this, l10n_util::GetStringUTF16(IDS_DONE))
-                    : views::MdTextButton::CreateSecondaryUiButton(
-                          this, l10n_util::GetStringUTF16(IDS_DONE));
+  layout->SkipColumns(1);
+
+  advanced_done_button_ = views::MdTextButton::CreateSecondaryUiButton(
+      this, l10n_util::GetStringUTF16(IDS_DONE));
   advanced_done_button_->set_id(BUTTON_ID_DONE);
   advanced_done_button_->SetIsDefault(true);
   advanced_cancel_button_ = views::MdTextButton::CreateSecondaryUiButton(
@@ -971,28 +934,15 @@ void TranslateBubbleView::SwitchToErrorView(
 }
 
 void TranslateBubbleView::UpdateAdvancedView() {
-  DCHECK(source_language_combobox_);
-  DCHECK(target_language_combobox_);
-  DCHECK(advanced_done_button_);
-
-  base::string16 source_language_name =
-      model_->GetLanguageNameAt(model_->GetOriginalLanguageIndex());
-  base::string16 target_language_name =
-      model_->GetLanguageNameAt(model_->GetTargetLanguageIndex());
-
   // "Always translate" checkbox doesn't exist in an incognito window.
   if (advanced_always_translate_checkbox_) {
     advanced_always_translate_checkbox_->SetText(
         l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ALWAYS));
   }
 
-  base::string16 label;
-  if (model_->IsPageTranslatedInCurrentLanguages())
-    label = l10n_util::GetStringUTF16(IDS_DONE);
-  else
-    label = l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_ACCEPT);
-  advanced_done_button_->SetText(label);
-  advanced_done_button_->SizeToPreferredSize();
-  if (advanced_view_)
-    advanced_view_->Layout();
+  DCHECK(advanced_done_button_);
+  advanced_done_button_->SetText(
+      l10n_util::GetStringUTF16(model_->IsPageTranslatedInCurrentLanguages()
+                                    ? IDS_DONE
+                                    : IDS_TRANSLATE_BUBBLE_ACCEPT));
 }

@@ -8,11 +8,11 @@
 #include <vector>
 
 #include "base/containers/mru_cache.h"
+#include "base/containers/span.h"
 #include "cc/paint/transfer_cache_entry.h"
 #include "gpu/command_buffer/common/discardable_handle.h"
-#include "gpu/command_buffer/common/transfer_cache_entry_id.h"
 #include "gpu/command_buffer/service/context_group.h"
-#include "gpu/gpu_export.h"
+#include "gpu/gpu_gles2_export.h"
 
 namespace gpu {
 
@@ -24,20 +24,20 @@ namespace gpu {
 // unlocking and deleting entries when no longer needed, as well as enforcing
 // cache limits. If the cache exceeds its specified limits, unlocked transfer
 // cache entries may be deleted.
-class GPU_EXPORT ServiceTransferCache {
+class GPU_GLES2_EXPORT ServiceTransferCache {
  public:
   ServiceTransferCache();
   ~ServiceTransferCache();
 
-  bool CreateLockedEntry(TransferCacheEntryId id,
+  bool CreateLockedEntry(cc::TransferCacheEntryType entry_type,
+                         uint32_t entry_id,
                          ServiceDiscardableHandle handle,
-                         cc::TransferCacheEntryType type,
                          GrContext* context,
-                         uint8_t* data_memory,
-                         size_t data_size);
-  bool UnlockEntry(TransferCacheEntryId id);
-  bool DeleteEntry(TransferCacheEntryId id);
-  cc::ServiceTransferCacheEntry* GetEntry(TransferCacheEntryId id);
+                         base::span<uint8_t> data);
+  bool UnlockEntry(cc::TransferCacheEntryType entry_type, uint32_t entry_id);
+  bool DeleteEntry(cc::TransferCacheEntryType entry_type, uint32_t entry_id);
+  cc::ServiceTransferCacheEntry* GetEntry(cc::TransferCacheEntryType entry_type,
+                                          uint32_t entry_id);
 
   // Test-only functions:
   void SetCacheSizeLimitForTesting(size_t cache_size_limit) {
@@ -57,7 +57,9 @@ class GPU_EXPORT ServiceTransferCache {
     ServiceDiscardableHandle handle;
     std::unique_ptr<cc::ServiceTransferCacheEntry> entry;
   };
-  using EntryCache = base::MRUCache<TransferCacheEntryId, CacheEntryInternal>;
+  using EntryCache =
+      base::MRUCache<std::pair<cc::TransferCacheEntryType, uint32_t>,
+                     CacheEntryInternal>;
   EntryCache entries_;
 
   // Total size of all |entries_|. The same as summing

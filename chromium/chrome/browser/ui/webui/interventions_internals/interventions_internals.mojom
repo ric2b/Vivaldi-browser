@@ -11,6 +11,9 @@ struct PreviewsStatus {
   // chrome://interventions-internals.
   string description;
   bool enabled;
+
+  // The ID of the html DOM element.
+  string htmlId;
 };
 
 struct PreviewsFlag {
@@ -23,6 +26,9 @@ struct PreviewsFlag {
 
   // The string representation of the flag value.
   string value;
+
+  // The ID of the html DOM element.
+  string htmlId;
 };
 
 struct MessageLog {
@@ -37,17 +43,19 @@ struct MessageLog {
 
   // The time when the event happened in millisecond since Unix epoch.
   int64 time;
+
+  // The ID associated with the request, for grouping log messages in the UI. If
+  // |id| is 0, then they will not be grouped, since pageId values start at 1.
+  uint64 page_id;
 };
 
 
 interface InterventionsInternalsPageHandler {
   // Returns a map of previews modes statuses.
-  // TODO(thanhdle): Change this to array type. crbug.com/786996.
-  GetPreviewsEnabled() => (map<string, PreviewsStatus> statuses);
+  GetPreviewsEnabled() => (array<PreviewsStatus> statuses);
 
   // Returns a map of previews related flags details.
-  // TODO(thanhdle): Change this to array type. crbug.com/786996.
-  GetPreviewsFlagsDetails() => (map<string, PreviewsFlag> flags);
+  GetPreviewsFlagsDetails() => (array<PreviewsFlag> flags);
 
   // Inject the client side page object.
   SetClientPage(InterventionsInternalsPage page);

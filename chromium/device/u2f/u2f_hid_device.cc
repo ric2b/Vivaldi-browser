@@ -79,6 +79,7 @@ void U2fHidDevice::Transition(std::unique_ptr<U2fApduCommand> command,
     default:
       base::WeakPtr<U2fHidDevice> self = weak_factory_.GetWeakPtr();
       repeating_callback.Run(false, nullptr);
+
       // Executing callbacks may free |this|. Check |self| first.
       while (self && !pending_transactions_.empty()) {
         // Respond to any pending requests
@@ -140,6 +141,7 @@ void U2fHidDevice::OnAllocateChannel(std::vector<uint8_t> nonce,
     Transition(nullptr, std::move(callback));
     return;
   }
+
   // Channel allocation response is defined as:
   // 0: 8 byte nonce
   // 8: 4 byte channel id
@@ -154,12 +156,17 @@ void U2fHidDevice::OnAllocateChannel(std::vector<uint8_t> nonce,
     Transition(nullptr, std::move(callback));
     return;
   }
+  auto received_nonce = base::make_span(payload).first(8);
+  // Received a broadcast message for a different client. Disregard and continue
+  // reading.
+  if (base::make_span(nonce) != received_nonce) {
+    auto repeating_callback =
+        base::AdaptCallbackForRepeating(std::move(callback));
+    ArmTimeout(repeating_callback);
+    ReadMessage(base::BindOnce(&U2fHidDevice::OnAllocateChannel,
+                               weak_factory_.GetWeakPtr(), nonce,
+                               std::move(command), repeating_callback));
 
-  std::vector<uint8_t> received_nonce(std::begin(payload),
-                                      std::begin(payload) + 8);
-  if (nonce != received_nonce) {
-    state_ = State::DEVICE_ERROR;
-    Transition(nullptr, std::move(callback));
     return;
   }
 
@@ -169,7 +176,6 @@ void U2fHidDevice::OnAllocateChannel(std::vector<uint8_t> nonce,
   channel_id_ |= payload[index++] << 8;
   channel_id_ |= payload[index++];
   capabilities_ = payload[16];
-
   state_ = State::IDLE;
   Transition(std::move(command), std::move(callback));
 }
@@ -182,8 +188,9 @@ void U2fHidDevice::WriteMessage(std::unique_ptr<U2fMessage> message,
     return;
   }
 
+  const auto& packet = message->PopNextPacket();
   connection_->Write(
-      kReportId, message->PopNextPacket(),
+      kReportId, packet,
       base::BindOnce(&U2fHidDevice::PacketWritten, weak_factory_.GetWeakPtr(),
                      std::move(message), true, std::move(callback)));
 }
@@ -221,6 +228,7 @@ void U2fHidDevice::OnRead(U2fHidMessageCallback callback,
   }
 
   DCHECK(buf);
+
   std::unique_ptr<U2fMessage> read_message =
       U2fMessage::CreateFromSerializedData(*buf);
 
@@ -328,8 +336,7 @@ void U2fHidDevice::ArmTimeout(DeviceCallback callback) {
                                          std::move(callback)));
   // Setup timeout task for 3 seconds
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, timeout_callback_.callback(),
-      base::TimeDelta::FromMilliseconds(3000));
+      FROM_HERE, timeout_callback_.callback(), kDeviceTimeout);
 }
 
 void U2fHidDevice::OnTimeout(DeviceCallback callback) {

@@ -7,6 +7,7 @@
 #include "ash/login/ui/login_button.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/gfx/font.h"
@@ -59,8 +60,8 @@ class LoginErrorBubbleView : public LoginBaseBubbleView {
         gfx::Insets(kAnchorViewErrorBubbleVerticalSpacingDp, 0));
 
     views::View* alert_view = new views::View();
-    alert_view->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets()));
+    alert_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::kHorizontal, gfx::Insets()));
     views::ImageView* alert_icon = new views::ImageView();
     alert_icon->SetPreferredSize(gfx::Size(kAlertIconSizeDp, kAlertIconSizeDp));
     alert_icon->SetImage(
@@ -76,6 +77,9 @@ class LoginErrorBubbleView : public LoginBaseBubbleView {
 
   // views::View:
   const char* GetClassName() const override { return "LoginErrorBubbleView"; }
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_TOOLTIP;
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(LoginErrorBubbleView);
@@ -117,6 +121,11 @@ class LoginTooltipView : public LoginBaseBubbleView {
     AddChildView(text);
   }
 
+  // LoginBaseBubbleView:
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override {
+    node_data->role = ui::AX_ROLE_TOOLTIP;
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(LoginTooltipView);
 };
@@ -129,8 +138,10 @@ LoginBubble::LoginBubble() {
 
 LoginBubble::~LoginBubble() {
   Shell::Get()->RemovePreTargetHandler(this);
-  if (bubble_view_)
+  if (bubble_view_) {
     bubble_view_->GetWidget()->RemoveObserver(this);
+    CloseImmediately();
+  }
 }
 
 void LoginBubble::ShowErrorBubble(views::StyledLabel* label,
@@ -223,6 +234,9 @@ void LoginBubble::Show() {
   bubble_view_->GetWidget()->AddObserver(this);
 
   ScheduleAnimation(true /*visible*/);
+
+  // Fire an alert so ChromeVox will read the contents of the bubble.
+  bubble_view_->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, true);
 }
 
 void LoginBubble::CloseImmediately() {

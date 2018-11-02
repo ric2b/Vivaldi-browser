@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #import "chrome/browser/ui/cocoa/download/md_download_item_view.h"
+#import "chrome/browser/ui/cocoa/download/md_download_item_view_testing.h"
 
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -34,7 +35,7 @@
 namespace {
 
 // Size of a download item in a non-dangerous state.
-constexpr CGSize kNormalSize = {239, 44};
+constexpr CGSize kNormalSize = {245, 44};
 
 constexpr CGFloat kDangerousDownloadIconX = 16;
 constexpr CGFloat kDangerousDownloadIconSize = 16;
@@ -228,6 +229,7 @@ NSTextField* MakeLabel(
   MDDownloadItemProgressIndicator* progressIndicator_;
   NSTextField* filenameView_;
   NSTextField* statusTextView_;
+  BOOL finished_;
 
   // Danger state
   MDDownloadItemDangerView* dangerView_;
@@ -310,7 +312,15 @@ NSTextField* MakeLabel(
         [NSView cr_localizedAutoresizingMask:NSViewMaxXMargin];
     [self addSubview:filenameView_];
 
-    statusTextView_ = MakeLabel([NSFont systemFontOfSize:12]);
+    NSFont* statusFont;
+    if (@available(macOS 10.11, *)) {
+      statusFont = [NSFont monospacedDigitSystemFontOfSize:12
+                                                    weight:NSFontWeightRegular];
+    } else {
+      statusFont = [NSFont systemFontOfSize:12];
+    }
+    statusTextView_ = MakeLabel(statusFont);
+
     NSRect statusTextRect =
         NSMakeRect(kTextX, kStatusTextY, NSWidth(filenameRect),
                    NSHeight(statusTextView_.bounds));
@@ -337,8 +347,8 @@ NSTextField* MakeLabel(
 
 - (CGFloat)preferredWidth {
   if (dangerView_) {
-    CGFloat delta = [dangerView_ preferredWidth] - NSWidth(dangerView_.frame);
-    return NSWidth(self.frame) + delta;
+    return NSWidth(dangerView_.frame) + kMenuButtonSpacing + kMenuButtonSize +
+           kMenuButtonTrailingMargin;
   } else {
     return kNormalSize.width;
   }
@@ -393,6 +403,7 @@ NSTextField* MakeLabel(
 }
 
 - (void)finish {
+  finished_ = YES;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC),
                  dispatch_get_main_queue(), ^{
                    [NSAnimationContext
@@ -407,6 +418,8 @@ NSTextField* MakeLabel(
 }
 
 - (void)setCanceled:(BOOL)canceled {
+  if (finished_)
+    return;
   if (progressIndicator_.hidden == canceled)
     return;
   [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
@@ -448,22 +461,19 @@ NSTextField* MakeLabel(
       for (NSView* view in [self normalViews]) {
         view.hidden = YES;
       }
-      NSRect dangerViewRect =
-          NSMakeRect(0, 0,
-                     NSWidth(self.bounds) - NSWidth(menuButton_.frame) -
-                         kMenuButtonSpacing - kMenuButtonTrailingMargin,
-                     NSHeight(self.bounds));
       base::scoped_nsobject<MDDownloadItemDangerView> dangerView(
           [[MDDownloadItemDangerView alloc]
-              initWithFrame:[self cr_localizedRect:dangerViewRect]]);
+              initWithFrame:NSMakeRect(0, 0, 0, NSHeight(self.bounds))]);
       dangerView_ = dangerView;
       dangerView_.autoresizingMask =
-          [NSView cr_localizedAutoresizingMask:NSViewWidthSizable];
+          [NSView cr_localizedAutoresizingMask:NSViewMaxXMargin];
       dangerView_.button.target = controller_;
       dangerView_.button.action = @selector(discardDownload:);
       [self addSubview:dangerView_];
     }
     [dangerView_ setStateFromDownload:downloadModel];
+    [dangerView_ setFrameSize:NSMakeSize(dangerView_.preferredWidth,
+                                         NSHeight(dangerView_.frame))];
     return;
   } else if (dangerView_) {
     for (NSView* view in [self normalViews]) {
@@ -486,7 +496,7 @@ NSTextField* MakeLabel(
       cr_setAccessibilityLabel:base::SysUTF8ToNSString(
                                    download.GetFileNameToReportUser().value())];
 
-  button_.enabled = ^{
+  button_.enabled = [&] {
     switch (state) {
       case content::DownloadItem::IN_PROGRESS:
       case content::DownloadItem::COMPLETE:
@@ -494,7 +504,10 @@ NSTextField* MakeLabel(
       default:
         return NO;
     }
-  }();
+  }() && !download.GetFileExternallyRemoved();
+
+  NSString* statusString =
+      base::SysUTF16ToNSString(downloadModel->GetStatusText());
 
   switch (state) {
     case content::DownloadItem::COMPLETE:
@@ -511,8 +524,10 @@ NSTextField* MakeLabel(
                       forKey:nil];
             [filenameView_
                 setFrameOrigin:NSMakePoint(NSMinX(filenameView_.frame),
-                                           kFilenameY)];
-            statusTextView_.animator.hidden = YES;
+                                           statusString.length
+                                               ? kFilenameWithStatusY
+                                               : kFilenameY)];
+            statusTextView_.animator.hidden = !statusString.length;
           }
           completion:^{
             [self finish];
@@ -547,14 +562,11 @@ NSTextField* MakeLabel(
   filenameView_.stringValue = base::SysUTF16ToNSString(
       gfx::ElideFilename(downloadModel->download()->GetFileNameToReportUser(),
                          gfx::FontList(gfx::Font(filenameView_.font)),
-                         NSWidth(filenameView_.bounds) - lineFragmentPadding));
+                         NSWidth(filenameView_.bounds) - lineFragmentPadding,
+                         gfx::Typesetter::BROWSER));
 
-  NSString* statusString =
-      base::SysUTF16ToNSString(downloadModel->GetStatusText());
-
-  // Never make the status label blank. For example, GetStatusText() will
-  // return the empty string on completion, but -finish hides the label with an
-  // animation instead.
+  // Never make the status label blank. Instead, let the code above hide or show
+  // the label with an animation.
   if (statusString.length)
     statusTextView_.stringValue = statusString;
 
@@ -630,6 +642,18 @@ NSTextField* MakeLabel(
   RecordDownloadShelfDragEvent(operation == NSDragOperationNone
                                    ? DownloadShelfDragEvent::CANCELED
                                    : DownloadShelfDragEvent::DROPPED);
+}
+
+@end
+
+@implementation MDDownloadItemView (Testing)
+
+- (NSButton*)primaryButton {
+  return button_;
+}
+
+- (NSButton*)menuButton {
+  return menuButton_;
 }
 
 @end

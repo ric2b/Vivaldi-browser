@@ -65,12 +65,38 @@ const struct {
     {ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN},
     {ui::VKEY_F4, ui::EF_ALT_DOWN}};
 
+class ShellSurfaceWidget : public views::Widget {
+ public:
+  explicit ShellSurfaceWidget(ShellSurfaceBase* shell_surface)
+      : shell_surface_(shell_surface) {}
+
+  // Overridden from views::Widget:
+  void Close() override { shell_surface_->Close(); }
+  void OnKeyEvent(ui::KeyEvent* event) override {
+    // Handle only accelerators. Do not call Widget::OnKeyEvent that eats focus
+    // management keys (like the tab key) as well.
+    if (GetFocusManager()->ProcessAccelerator(ui::Accelerator(*event)))
+      event->SetHandled();
+  }
+  gfx::Size GetMinimumSize() const override {
+    return shell_surface_->GetMinimumSize();
+  }
+
+ private:
+  ShellSurfaceBase* const shell_surface_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
+};
+
 class CustomFrameView : public ash::CustomFrameViewAsh {
  public:
   using ShapeRects = std::vector<gfx::Rect>;
 
-  CustomFrameView(views::Widget* widget, bool enabled)
-      : CustomFrameViewAsh(widget) {
+  CustomFrameView(views::Widget* widget,
+                  bool enabled,
+                  bool client_controlled_move_resize)
+      : CustomFrameViewAsh(widget),
+        client_controlled_move_resize_(client_controlled_move_resize) {
     SetEnabled(enabled);
     if (!enabled)
       CustomFrameViewAsh::SetShouldPaintHeader(false);
@@ -121,7 +147,7 @@ class CustomFrameView : public ash::CustomFrameViewAsh {
     return client_bounds;
   }
   int NonClientHitTest(const gfx::Point& point) override {
-    if (enabled())
+    if (enabled() || !client_controlled_move_resize_)
       return ash::CustomFrameViewAsh::NonClientHitTest(point);
     return GetWidget()->client_view()->NonClientHitTest(point);
   }
@@ -145,23 +171,30 @@ class CustomFrameView : public ash::CustomFrameViewAsh {
     if (enabled())
       return ash::CustomFrameViewAsh::SizeConstraintsChanged();
   }
+  gfx::Size GetMinimumSize() const override {
+    return static_cast<const ShellSurfaceWidget*>(GetWidget())
+        ->GetMinimumSize();
+  }
 
  private:
+  // TODO(oshima): Remove this once the transition to new drag/resize
+  // is complete. https://crbug.com/801666.
+  const bool client_controlled_move_resize_;
+
   DISALLOW_COPY_AND_ASSIGN(CustomFrameView);
 };
 
 class CustomWindowTargeter : public aura::WindowTargeter {
  public:
-  CustomWindowTargeter(views::Widget* widget) : widget_(widget) {}
+  CustomWindowTargeter(views::Widget* widget,
+                       bool client_controlled_move_resize)
+      : widget_(widget),
+        client_controlled_move_resize_(client_controlled_move_resize) {}
   ~CustomWindowTargeter() override {}
 
   // Overridden from aura::WindowTargeter:
   bool EventLocationInsideBounds(aura::Window* window,
                                  const ui::LocatedEvent& event) const override {
-    Surface* surface = ShellSurfaceBase::GetMainSurface(window);
-    if (!surface)
-      return false;
-
     gfx::Point local_point = event.location();
 
     if (window->parent()) {
@@ -169,38 +202,72 @@ class CustomWindowTargeter : public aura::WindowTargeter {
                                          &local_point);
     }
 
-    int component = widget_->non_client_view()->NonClientHitTest(local_point);
-    if (component != HTNOWHERE && component != HTCLIENT)
+    if (IsInResizeHandle(window, event, local_point))
       return true;
+
+    Surface* surface = ShellSurfaceBase::GetMainSurface(window);
+    if (!surface)
+      return false;
+
+    int component = widget_->non_client_view()->NonClientHitTest(local_point);
+    if (component != HTNOWHERE && component != HTCLIENT &&
+        component != HTBORDER) {
+      return true;
+    }
 
     aura::Window::ConvertPointToTarget(window, surface->window(), &local_point);
     return surface->HitTest(local_point);
   }
 
  private:
-  views::Widget* const widget_;
+  bool IsInResizeHandle(aura::Window* window,
+                        const ui::LocatedEvent& event,
+                        const gfx::Point& local_point) const {
+    if (window != widget_->GetNativeWindow() ||
+        !widget_->widget_delegate()->CanResize()) {
+      return false;
+    }
 
-  DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
-};
+    // Use ash's resize handle detection logic if
+    // a) ClientControlledShellSurface uses server side resize or
+    // b) xdg shell is using the server side decoration.
+    if (ash::wm::GetWindowState(widget_->GetNativeWindow())
+                ->allow_set_bounds_direct()
+            ? client_controlled_move_resize_
+            : !widget_->non_client_view()->frame_view()->enabled()) {
+      return false;
+    }
 
-class ShellSurfaceWidget : public views::Widget {
- public:
-  explicit ShellSurfaceWidget(ShellSurfaceBase* shell_surface)
-      : shell_surface_(shell_surface) {}
+    ui::EventTarget* parent =
+        static_cast<ui::EventTarget*>(window)->GetParentTarget();
+    if (parent) {
+      aura::WindowTargeter* parent_targeter =
+          static_cast<aura::WindowTargeter*>(parent->GetEventTargeter());
 
-  // Overridden from views::Widget
-  void Close() override { shell_surface_->Close(); }
-  void OnKeyEvent(ui::KeyEvent* event) override {
-    // Handle only accelerators. Do not call Widget::OnKeyEvent that eats focus
-    // management keys (like the tab key) as well.
-    if (GetFocusManager()->ProcessAccelerator(ui::Accelerator(*event)))
-      event->SetHandled();
+      if (parent_targeter) {
+        gfx::Rect mouse_rect;
+        gfx::Rect touch_rect;
+
+        if (parent_targeter->GetHitTestRects(window, &mouse_rect,
+                                             &touch_rect)) {
+          const gfx::Vector2d offset = -window->bounds().OffsetFromOrigin();
+          mouse_rect.Offset(offset);
+          touch_rect.Offset(offset);
+          if (event.IsTouchEvent() || event.IsGestureEvent()
+                  ? touch_rect.Contains(local_point)
+                  : mouse_rect.Contains(local_point)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
- private:
-  ShellSurfaceBase* const shell_surface_;
+  views::Widget* const widget_;
+  const bool client_controlled_move_resize_;
 
-  DISALLOW_COPY_AND_ASSIGN(ShellSurfaceWidget);
+  DISALLOW_COPY_AND_ASSIGN(CustomWindowTargeter);
 };
 
 // A place holder to disable default implementation created by
@@ -502,6 +569,13 @@ void ShellSurfaceBase::SetCanMinimize(bool can_minimize) {
   can_minimize_ = can_minimize;
 }
 
+void ShellSurfaceBase::DisableMovement() {
+  movement_disabled_ = true;
+
+  if (widget_)
+    widget_->set_movement_disabled(true);
+}
+
 // static
 void ShellSurfaceBase::SetMainSurface(aura::Window* window, Surface* surface) {
   window->SetProperty(kMainSurfaceKey, surface);
@@ -606,9 +680,11 @@ void ShellSurfaceBase::OnSurfaceCommit() {
   }
 
   SubmitCompositorFrame();
+
+  widget_->OnSizeConstraintsChanged();
 }
 
-bool ShellSurfaceBase::IsTouchEnabled(Surface*) const {
+bool ShellSurfaceBase::IsInputEnabled(Surface*) const {
   return true;
 }
 
@@ -628,6 +704,14 @@ void ShellSurfaceBase::OnSetFrame(SurfaceFrameType type) {
       shadow_bounds_ = gfx::Rect();
       break;
   }
+}
+
+void ShellSurfaceBase::OnSetFrameColors(SkColor active_color,
+                                        SkColor inactive_color) {
+  // TODO(reveman): Allow frame colors to change after surface has been enabled.
+  has_frame_colors_ = true;
+  active_frame_color_ = active_color;
+  inactive_frame_color_ = inactive_color;
 }
 
 void ShellSurfaceBase::OnSetParent(Surface* parent,
@@ -697,7 +781,11 @@ void ShellSurfaceBase::OnSurfaceDestroying(Surface* surface) {
 // views::WidgetDelegate overrides:
 
 bool ShellSurfaceBase::CanResize() const {
-  return !movement_disabled_;
+  if (movement_disabled_)
+    return false;
+  // The shell surface is resizable by default when min/max size is empty,
+  // othersize it's resizable when min size != max size.
+  return minimum_size_.IsEmpty() || minimum_size_ != maximum_size_;
 }
 
 bool ShellSurfaceBase::CanMaximize() const {
@@ -749,7 +837,11 @@ views::NonClientFrameView* ShellSurfaceBase::CreateNonClientFrameView(
   if (!frame_enabled_ && !window_state->HasDelegate()) {
     window_state->SetDelegate(std::make_unique<CustomWindowStateDelegate>());
   }
-  return new CustomFrameView(widget, frame_enabled_);
+  CustomFrameView* frame_view = new CustomFrameView(
+      widget, frame_enabled_, client_controlled_move_resize_);
+  if (has_frame_colors_)
+    frame_view->SetFrameColors(active_frame_color_, inactive_frame_color_);
+  return frame_view;
 }
 
 bool ShellSurfaceBase::WidgetHasHitTestMask() const {
@@ -783,6 +875,8 @@ gfx::Size ShellSurfaceBase::GetMinimumSize() const {
 }
 
 gfx::Size ShellSurfaceBase::GetMaximumSize() const {
+  // On ChromeOS, non empty maximum size will make the window
+  // non maximizable.
   return maximum_size_;
 }
 
@@ -1004,7 +1098,8 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   // events.
   window->SetEventTargetingPolicy(
       ui::mojom::EventTargetingPolicy::DESCENDANTS_ONLY);
-  window->SetEventTargeter(base::WrapUnique(new CustomWindowTargeter(widget_)));
+  window->SetEventTargeter(base::WrapUnique(
+      new CustomWindowTargeter(widget_, client_controlled_move_resize_)));
   SetApplicationId(window, application_id_);
   SetMainSurface(window, root_surface());
 
@@ -1086,6 +1181,8 @@ void ShellSurfaceBase::Configure() {
 }
 
 bool ShellSurfaceBase::IsResizing() const {
+  if (!resizer_)
+    return false;
   ash::wm::WindowState* window_state =
       ash::wm::GetWindowState(widget_->GetNativeWindow());
   if (!window_state->is_dragged())
@@ -1108,7 +1205,7 @@ void ShellSurfaceBase::UpdateWidgetBounds() {
     return;
   }
 
-  // 2) When a window is being dragged.
+  // 2) When a window is being dragged by |resizer_|.
   if (IsResizing())
     return;
 

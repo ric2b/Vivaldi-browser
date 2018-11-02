@@ -46,18 +46,20 @@ NSString* const kTestFieldValue = @"FieldValue";
 
 class CWVAutofillControllerTest : public PlatformTest {
  protected:
-  CWVAutofillControllerTest()
-      : browser_state_(/*off_the_record=*/false),
-        autofill_agent_([[FakeAutofillAgent alloc]
-            initWithPrefService:browser_state_.GetPrefs()
-                       webState:&web_state_]),
-        js_autofill_manager_([[FakeJSAutofillManager alloc] init]) {
+  CWVAutofillControllerTest() : browser_state_(/*off_the_record=*/false) {
     l10n_util::OverrideLocaleWithCocoaLocale();
 
     web_state_.SetBrowserState(&browser_state_);
     CRWTestJSInjectionReceiver* injectionReceiver =
         [[CRWTestJSInjectionReceiver alloc] init];
     web_state_.SetJSInjectionReceiver(injectionReceiver);
+
+    js_autofill_manager_ =
+        [[FakeJSAutofillManager alloc] initWithReceiver:injectionReceiver];
+
+    autofill_agent_ =
+        [[FakeAutofillAgent alloc] initWithPrefService:browser_state_.GetPrefs()
+                                              webState:&web_state_];
 
     autofill_controller_ =
         [[CWVAutofillController alloc] initWithWebState:&web_state_
@@ -228,17 +230,21 @@ TEST_F(CWVAutofillControllerTest, SubmitCallback) {
   @autoreleasepool {
     [[delegate expect] autofillController:autofill_controller_
                     didSubmitFormWithName:kTestFormName
-                            userInitiated:YES];
+                            userInitiated:YES
+                              isMainFrame:YES];
 
     web_state_.OnDocumentSubmitted(base::SysNSStringToUTF8(kTestFormName),
-                                   /*user_initiated=*/true);
+                                   /*user_initiated=*/true,
+                                   /*is_main_frame=*/true);
 
     [[delegate expect] autofillController:autofill_controller_
                     didSubmitFormWithName:kTestFormName
-                            userInitiated:NO];
+                            userInitiated:NO
+                              isMainFrame:YES];
 
     web_state_.OnDocumentSubmitted(base::SysNSStringToUTF8(kTestFormName),
-                                   /*user_initiated=*/false);
+                                   /*user_initiated=*/false,
+                                   /*is_main_frame=*/true);
 
     [delegate verify];
   }

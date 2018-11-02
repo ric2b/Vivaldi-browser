@@ -37,7 +37,8 @@ class CORE_EXPORT ResizeObserver final : public ScriptWrappable {
   static ResizeObserver* Create(Document&, V8ResizeObserverCallback*);
   static ResizeObserver* Create(Document&, Delegate*);
 
-  virtual ~ResizeObserver(){};
+  virtual ~ResizeObserver() = default;
+  ;
 
   // API methods
   void observe(Element*);
@@ -64,7 +65,9 @@ class CORE_EXPORT ResizeObserver final : public ScriptWrappable {
   const TraceWrapperMember<V8ResizeObserverCallback> callback_;
   const Member<Delegate> delegate_;
 
-  // List of elements we are observing
+  // List of Elements we are observing. These Elements make the ResizeObserver
+  // and most-importantly |callback_| alive. If |observations_| is empty, no one
+  // is performing wrapper-tracing and |callback_| might already be gone.
   ObservationList observations_;
   // List of elements that have changes
   HeapVector<Member<ResizeObservation>> active_observations_;

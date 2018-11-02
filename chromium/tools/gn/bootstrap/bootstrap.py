@@ -103,6 +103,15 @@ def windows_target_build_arch():
     if platform.machine().lower() in ['x86_64', 'amd64']: return 'x64'
     return 'x86'
 
+def windows_sdk_bin_dir():
+  arch = windows_target_build_arch()
+  kits_bin_dir = r"c:\Program Files (x86)\Windows Kits\10\bin"
+  for ver in ["10.0.16299.0", "10.0.15063.0"]:
+    candiate = os.path.join(kits_bin_dir, ver, arch)
+    if os.access(candiate, os.F_OK):
+      return candiate;
+  return kits_bin_dir
+
 def main(argv):
   parser = optparse.OptionParser(description=sys.modules[__name__].__doc__)
   parser.add_option('-d', '--debug', action='store_true',
@@ -129,7 +138,8 @@ def main(argv):
   logging.basicConfig(level=logging.DEBUG if options.verbose else logging.ERROR)
 
   if is_win:
-    os.environ["PATH"] += ';C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64'
+    # Add the Win 10 SDK binary path
+    os.environ["PATH"] += os.pathsep + windows_sdk_bin_dir()
 
   try:
     if options.no_clean:
@@ -192,6 +202,11 @@ def build_gn_with_ninja_manually(tempdir, options):
   root_gen_dir = os.path.join(tempdir, 'gen')
   mkdir_p(root_gen_dir)
 
+  write_buildflag_header_manually(
+      root_gen_dir,
+      'base/synchronization/synchronization_flags.h',
+      {'ENABLE_MUTEX_PRIORITY_INHERITANCE': 'false'})
+
   write_buildflag_header_manually(root_gen_dir, 'base/allocator/features.h',
       {'USE_ALLOCATOR_SHIM': 'true' if is_linux else 'false'})
 
@@ -202,6 +217,10 @@ def build_gn_with_ninja_manually(tempdir, options):
           'CAN_UNWIND_WITH_FRAME_POINTERS': 'false',
           'UNSAFE_DEVELOPER_BUILD': 'false'
       })
+
+  write_buildflag_header_manually(root_gen_dir,
+                                  'base/memory/protected_memory_flags.h',
+                                  { 'USE_LLD': 'false' })
 
   write_buildflag_header_manually(root_gen_dir, 'base/cfi_flags.h',
       {
@@ -229,6 +248,10 @@ def build_gn_with_ninja_manually(tempdir, options):
 
     write_compiled_message(root_gen_dir,
         'base/trace_event/etw_manifest/chrome_events_win.man')
+
+  write_buildflag_header_manually(
+      root_gen_dir, 'base/android/library_loader.h',
+      {'USE_LLD': 'false'})
 
   write_gn_ninja(os.path.join(tempdir, 'build.ninja'),
                  root_gen_dir, options)
@@ -480,13 +503,12 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/json/json_string_value_serializer.cc',
       'base/json/json_writer.cc',
       'base/json/string_escape.cc',
-      'base/lazy_instance.cc',
+      'base/lazy_instance_helpers.cc',
       'base/location.cc',
       'base/logging.cc',
       'base/md5.cc',
       'base/memory/ref_counted.cc',
       'base/memory/ref_counted_memory.cc',
-      'base/memory/singleton.cc',
       'base/memory/shared_memory_handle.cc',
       'base/memory/shared_memory_tracker.cc',
       'base/memory/weak_ptr.cc',
@@ -766,6 +788,9 @@ def write_gn_ninja(path, root_gen_dir, options):
 
   if is_win:
     static_libraries['base']['sources'].extend([
+        "base/allocator/partition_allocator/address_space_randomization.cc",
+        'base/allocator/partition_allocator/page_allocator.cc',
+        "base/allocator/partition_allocator/spin_lock.cc",
         'base/base_paths_win.cc',
         'base/cpu.cc',
         'base/debug/close_handle_hook_win.cc',

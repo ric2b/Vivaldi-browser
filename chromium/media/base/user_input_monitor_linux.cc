@@ -7,8 +7,7 @@
 #include <stddef.h>
 #include <sys/select.h>
 #include <unistd.h>
-#define XK_MISCELLANY
-#include <X11/keysymdef.h>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -17,20 +16,14 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "media/base/keyboard_event_counter.h"
 #include "third_party/skia/include/core/SkPoint.h"
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
-
-// These includes need to be later than dictated by the style guide due to
-// Xlib header pollution, specifically the min, max, and Status macros.
-#include <X11/XKBlib.h>
-#include <X11/Xlibint.h>
-#include <X11/extensions/record.h>
 
 namespace media {
 namespace {
@@ -299,7 +292,7 @@ void UserInputMonitorLinux::StopKeyboardMonitoring() {
 std::unique_ptr<UserInputMonitor> UserInputMonitor::Create(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner) {
-  return base::MakeUnique<UserInputMonitorLinux>(io_task_runner);
+  return std::make_unique<UserInputMonitorLinux>(io_task_runner);
 }
 
 }  // namespace media

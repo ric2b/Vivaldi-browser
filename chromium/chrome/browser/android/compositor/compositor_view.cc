@@ -44,12 +44,12 @@ jlong JNI_CompositorView_Init(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jboolean low_mem_device,
-    jlong native_window_android,
+    const JavaParamRef<jobject>& jwindow_android,
     const JavaParamRef<jobject>& jlayer_title_cache,
     const JavaParamRef<jobject>& jtab_content_manager) {
   CompositorView* view;
   ui::WindowAndroid* window_android =
-      reinterpret_cast<ui::WindowAndroid*>(native_window_android);
+      ui::WindowAndroid::FromJavaWindowAndroid(jwindow_android);
   LayerTitleCache* layer_title_cache =
       LayerTitleCache::FromJavaObject(jlayer_title_cache);
   TabContentManager* tab_content_manager =
@@ -268,6 +268,15 @@ void CompositorView::BrowserChildProcessCrashed(
     int exit_code) {
   // The Android TERMINATION_STATUS_OOM_PROTECTED hack causes us to never go
   // through here but through BrowserChildProcessHostDisconnected() instead.
+}
+
+void CompositorView::SetCompositorWindow(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& object,
+    const JavaParamRef<jobject>& window_android) {
+  ui::WindowAndroid* wa =
+      ui::WindowAndroid::FromJavaWindowAndroid(window_android);
+  compositor_->SetRootWindow(wa);
 }
 
 }  // namespace android

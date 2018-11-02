@@ -12,7 +12,6 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/policy/device_network_configuration_updater.h"
@@ -221,7 +220,8 @@ class NetworkConfigurationUpdaterTest : public testing::Test {
     provider_.Init();
     PolicyServiceImpl::Providers providers;
     providers.push_back(&provider_);
-    policy_service_.reset(new PolicyServiceImpl(providers));
+    policy_service_ = std::make_unique<PolicyServiceImpl>();
+    policy_service_->SetProviders(providers);
 
     std::unique_ptr<base::DictionaryValue> fake_toplevel_onc =
         chromeos::onc::ReadDictionaryFromJson(kFakeONC);
@@ -359,7 +359,7 @@ TEST_F(NetworkConfigurationUpdaterTest, PolicyIsValidatedAndRepaired) {
   PolicyMap policy;
   policy.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::Value>(onc_policy), nullptr);
+             std::make_unique<base::Value>(onc_policy), nullptr);
   UpdateProviderPolicy(policy);
 
   EXPECT_CALL(network_config_handler_,
@@ -477,7 +477,7 @@ TEST_F(NetworkConfigurationUpdaterTest,
   PolicyMap policy;
   policy.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::Value>(kFakeONC), nullptr);
+             std::make_unique<base::Value>(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
   base::RunLoop().RunUntilIdle();
 
@@ -498,7 +498,7 @@ TEST_F(NetworkConfigurationUpdaterTest,
   PolicyMap policy;
   policy.Set(key::kOpenNetworkConfiguration, POLICY_LEVEL_MANDATORY,
              POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-             base::MakeUnique<base::Value>(kFakeONC), nullptr);
+             std::make_unique<base::Value>(kFakeONC), nullptr);
   UpdateProviderPolicy(policy);
 
   EXPECT_CALL(network_config_handler_,
@@ -565,7 +565,7 @@ class NetworkConfigurationUpdaterTestWithParam
 TEST_P(NetworkConfigurationUpdaterTestWithParam, InitialUpdates) {
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(kFakeONC),
+             POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(kFakeONC),
              nullptr);
   UpdateProviderPolicy(policy);
 
@@ -587,7 +587,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
        PolicyNotSetBeforePolicyProviderInitialized) {
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(kFakeONC),
+             POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(kFakeONC),
              nullptr);
   UpdateProviderPolicy(policy);
 
@@ -615,7 +615,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam,
 
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(kFakeONC),
+             POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(kFakeONC),
              nullptr);
   UpdateProviderPolicy(policy);
 
@@ -655,7 +655,7 @@ TEST_P(NetworkConfigurationUpdaterTestWithParam, PolicyChange) {
 
   PolicyMap policy;
   policy.Set(GetParam(), POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-             POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(kFakeONC),
+             POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(kFakeONC),
              nullptr);
   UpdateProviderPolicy(policy);
   Mock::VerifyAndClearExpectations(&network_config_handler_);

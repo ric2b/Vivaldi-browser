@@ -68,7 +68,7 @@ ChromeIOSTranslateClient::ChromeIOSTranslateClient(
     web::WebState* web_state,
     id<LanguageSelectionHandler> language_selection_handler)
     : web_state_(web_state),
-      translate_manager_(base::MakeUnique<translate::TranslateManager>(
+      translate_manager_(std::make_unique<translate::TranslateManager>(
           this,
           translate::TranslateRankerFactory::GetForBrowserState(
               ios::ChromeBrowserState::FromBrowserState(
@@ -154,7 +154,7 @@ void ChromeIOSTranslateClient::RecordTranslateEvent(
   if (item == nullptr)
     return;
 
-  auto specifics = base::MakeUnique<sync_pb::UserEventSpecifics>();
+  auto specifics = std::make_unique<sync_pb::UserEventSpecifics>();
   // We only log the event we care about.
   const bool needs_logging = translate::ConstructTranslateEvent(
       item->GetTimestamp().ToInternalValue(), translate_event, specifics.get());
@@ -248,6 +248,8 @@ void ChromeIOSTranslateClient::WebStateDestroyed(web::WebState* web_state) {
   DCHECK_EQ(web_state_, web_state);
   web_state_->RemoveObserver(this);
   web_state_ = nullptr;
+
+  [language_selection_handler_ dismissLanguageSelector];
 
   // Translation process can be interrupted.
   // Destroying the TranslateManager now guarantees that it never has to deal

@@ -25,10 +25,6 @@ bool FakeCompositorDependencies::IsGpuRasterizationForced() {
   return false;
 }
 
-bool FakeCompositorDependencies::IsAsyncWorkerContextEnabled() {
-  return false;
-}
-
 int FakeCompositorDependencies::GetGpuRasterizationMSAASampleCount() {
   return 0;
 }
@@ -55,11 +51,6 @@ bool FakeCompositorDependencies::IsGpuMemoryBufferCompositorResourcesEnabled() {
 
 bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
   return true;
-}
-
-const viz::BufferToTextureTargetMap&
-FakeCompositorDependencies::GetBufferToTextureTargetMap() {
-  return buffer_to_texture_target_map_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

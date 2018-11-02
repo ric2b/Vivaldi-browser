@@ -19,18 +19,22 @@ namespace cc {
 SurfaceLayerImpl::SurfaceLayerImpl(LayerTreeImpl* tree_impl, int id)
     : LayerImpl(tree_impl, id) {}
 
-SurfaceLayerImpl::~SurfaceLayerImpl() {}
+SurfaceLayerImpl::~SurfaceLayerImpl() = default;
 
 std::unique_ptr<LayerImpl> SurfaceLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
   return SurfaceLayerImpl::Create(tree_impl, id());
 }
 
-void SurfaceLayerImpl::SetPrimarySurfaceId(const viz::SurfaceId& surface_id) {
-  if (primary_surface_id_ == surface_id)
+void SurfaceLayerImpl::SetPrimarySurfaceId(
+    const viz::SurfaceId& surface_id,
+    base::Optional<uint32_t> deadline_in_frames) {
+  if (primary_surface_id_ == surface_id &&
+      deadline_in_frames_ == deadline_in_frames) {
     return;
-
+  }
   primary_surface_id_ = surface_id;
+  deadline_in_frames_ = deadline_in_frames;
   NoteLayerPropertyChanged();
 }
 
@@ -50,21 +54,13 @@ void SurfaceLayerImpl::SetStretchContentToFillBounds(bool stretch_content) {
   NoteLayerPropertyChanged();
 }
 
-void SurfaceLayerImpl::SetDefaultBackgroundColor(SkColor background_color) {
-  if (default_background_color_ == background_color)
-    return;
-
-  default_background_color_ = background_color;
-  NoteLayerPropertyChanged();
-}
-
 void SurfaceLayerImpl::PushPropertiesTo(LayerImpl* layer) {
   LayerImpl::PushPropertiesTo(layer);
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
-  layer_impl->SetPrimarySurfaceId(primary_surface_id_);
+  layer_impl->SetPrimarySurfaceId(primary_surface_id_, deadline_in_frames_);
+  deadline_in_frames_.reset();
   layer_impl->SetFallbackSurfaceId(fallback_surface_id_);
   layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
-  layer_impl->SetDefaultBackgroundColor(default_background_color_);
 }
 
 void SurfaceLayerImpl::AppendQuads(viz::RenderPass* render_pass,
@@ -78,11 +74,16 @@ void SurfaceLayerImpl::AppendQuads(viz::RenderPass* render_pass,
       fallback_surface_id_.is_valid()
           ? base::Optional<viz::SurfaceId>(fallback_surface_id_)
           : base::nullopt);
-  // Emitting a fallback viz::SurfaceDrawQuad is unnecessary if the primary and
-  // fallback surface Ids match.
   if (primary && fallback_surface_id_ != primary_surface_id_) {
     // Add the primary surface ID as a dependency.
     append_quads_data->activation_dependencies.push_back(primary_surface_id_);
+    if (deadline_in_frames_) {
+      if (!append_quads_data->deadline_in_frames)
+        append_quads_data->deadline_in_frames = 0u;
+      append_quads_data->deadline_in_frames = std::max(
+          *append_quads_data->deadline_in_frames, *deadline_in_frames_);
+      deadline_in_frames_.reset();
+    }
   }
 }
 
@@ -119,10 +120,9 @@ viz::SurfaceDrawQuad* SurfaceLayerImpl::CreateSurfaceDrawQuad(
 
   auto* surface_draw_quad =
       render_pass->CreateAndAppendDrawQuad<viz::SurfaceDrawQuad>();
-  surface_draw_quad->SetNew(shared_quad_state, quad_rect, visible_quad_rect,
-                            primary_surface_id, fallback_surface_id,
-                            default_background_color_,
-                            stretch_content_to_fill_bounds_);
+  surface_draw_quad->SetNew(
+      shared_quad_state, quad_rect, visible_quad_rect, primary_surface_id,
+      fallback_surface_id, background_color(), stretch_content_to_fill_bounds_);
 
   return surface_draw_quad;
 }

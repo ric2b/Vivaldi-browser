@@ -15,8 +15,8 @@
 #endif
 
 namespace {
-// Preferred image size in points.
-const CGFloat kBookmarkTableCellDefaultImageSize = 16.0;
+// Image size, in points.
+const CGFloat kBookmarkTableCellImageSize = 16.0;
 
 // Padding in table cell.
 const CGFloat kBookmarkTableCellImagePadding = 16.0;
@@ -39,6 +39,9 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 // Lists the accessibility elements that are to be seen by UIAccessibility.
 @property(nonatomic, readonly) NSMutableArray* accessibilityElements;
 
+// True when title text has ended editing and committed.
+@property(nonatomic, assign) BOOL isTextCommitted;
+
 @end
 
 @implementation BookmarkTableCell
@@ -48,6 +51,7 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 @synthesize textDelegate = _textDelegate;
 @synthesize separatorView = _separatorView;
 @synthesize accessibilityElements = _accessibilityElements;
+@synthesize isTextCommitted = _isTextCommitted;
 
 #pragma mark - Initializer
 
@@ -65,10 +69,10 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
     _iconView = iconView;
     [_iconView setHidden:NO];
     [_iconView.widthAnchor
-        constraintEqualToConstant:kBookmarkTableCellDefaultImageSize]
+        constraintEqualToConstant:kBookmarkTableCellImageSize]
         .active = YES;
     [_iconView.heightAnchor
-        constraintEqualToConstant:kBookmarkTableCellDefaultImageSize]
+        constraintEqualToConstant:kBookmarkTableCellImageSize]
         .active = YES;
 
     // Create placeholder label.
@@ -77,10 +81,10 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
     _placeholderLabel.font = [MDCTypography captionFont];
     [_placeholderLabel setHidden:YES];
     [_placeholderLabel.widthAnchor
-        constraintEqualToConstant:kBookmarkTableCellDefaultImageSize]
+        constraintEqualToConstant:kBookmarkTableCellImageSize]
         .active = YES;
     [_placeholderLabel.heightAnchor
-        constraintEqualToConstant:kBookmarkTableCellDefaultImageSize]
+        constraintEqualToConstant:kBookmarkTableCellImageSize]
         .active = YES;
 
     // Create stack view.
@@ -147,6 +151,7 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 }
 
 - (void)startEdit {
+  self.isTextCommitted = NO;
   self.titleText.userInteractionEnabled = YES;
   self.titleText.enablesReturnKeyAutomatically = YES;
   self.titleText.keyboardType = UIKeyboardTypeDefault;
@@ -168,6 +173,10 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 }
 
 - (void)stopEdit {
+  if (self.isTextCommitted) {
+    return;
+  }
+  self.isTextCommitted = YES;
   [self.textDelegate textDidChangeTo:self.titleText.text];
   self.titleText.userInteractionEnabled = NO;
   [self.titleText endEditing:YES];
@@ -176,10 +185,6 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 
 + (NSString*)reuseIdentifier {
   return @"BookmarkTableCellIdentifier";
-}
-
-+ (CGFloat)preferredImageSize {
-  return kBookmarkTableCellDefaultImageSize;
 }
 
 - (void)setImage:(UIImage*)image {
@@ -198,7 +203,6 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
   self.placeholderLabel.backgroundColor = backgroundColor;
   self.placeholderLabel.textColor = textColor;
   self.placeholderLabel.text = text;
-  [self.placeholderLabel sizeToFit];
 }
 
 #pragma mark - Layout
@@ -259,10 +263,15 @@ const CGFloat kBookmarkTableCellImagePadding = 16.0;
 
 // This method hides the keyboard when the return key is pressed.
 - (BOOL)textFieldShouldReturn:(UITextField*)textField {
-  [self.textDelegate textDidChangeTo:self.titleText.text];
-  self.titleText.userInteractionEnabled = NO;
-  [textField endEditing:YES];
+  [self stopEdit];
   return YES;
+}
+
+// This method is called when titleText resigns its first responder status.
+// (when return/dimiss key is pressed, or when navigating away.)
+- (void)textFieldDidEndEditing:(UITextField*)textField
+                        reason:(UITextFieldDidEndEditingReason)reason {
+  [self stopEdit];
 }
 
 @end

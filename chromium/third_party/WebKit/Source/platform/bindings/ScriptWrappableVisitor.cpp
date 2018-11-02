@@ -23,7 +23,7 @@
 
 namespace blink {
 
-ScriptWrappableVisitor::~ScriptWrappableVisitor() {}
+ScriptWrappableVisitor::~ScriptWrappableVisitor() = default;
 
 void ScriptWrappableVisitor::TracePrologue() {
   // This CHECK ensures that wrapper tracing is not started from scopes
@@ -52,10 +52,8 @@ void ScriptWrappableVisitor::TraceEpilogue() {
   CHECK(!ThreadState::Current()->IsWrapperTracingForbidden());
   DCHECK(marking_deque_.IsEmpty());
 #if DCHECK_IS_ON()
-  ScriptWrappableVisitorVerifier verifier(isolate_);
-  for (auto& marking_data : verifier_deque_) {
-    marking_data.TraceWrappers(&verifier);
-  }
+  ScriptWrappableVisitorVerifier verifier(isolate_, &verifier_deque_);
+  verifier.Verify();
 #endif
 
   should_cleanup_ = true;
@@ -107,8 +105,8 @@ void ScriptWrappableVisitor::ScheduleIdleLazyCleanup() {
     return;
 
   Platform::Current()->CurrentThread()->Scheduler()->PostIdleTask(
-      BLINK_FROM_HERE, WTF::Bind(&ScriptWrappableVisitor::PerformLazyCleanup,
-                                 WTF::Unretained(this)));
+      FROM_HERE, WTF::Bind(&ScriptWrappableVisitor::PerformLazyCleanup,
+                           WTF::Unretained(this)));
   idle_cleanup_task_scheduled_ = true;
 }
 
@@ -121,7 +119,7 @@ void ScriptWrappableVisitor::PerformLazyCleanup(double deadline_seconds) {
   TRACE_EVENT1("blink_gc,devtools.timeline",
                "ScriptWrappableVisitor::performLazyCleanup",
                "idleDeltaInSeconds",
-               deadline_seconds - MonotonicallyIncreasingTime());
+               deadline_seconds - CurrentTimeTicksInSeconds());
 
   const int kDeadlineCheckInterval = 2500;
   int processed_wrapper_count = 0;
@@ -139,7 +137,7 @@ void ScriptWrappableVisitor::PerformLazyCleanup(double deadline_seconds) {
 
     processed_wrapper_count++;
     if (processed_wrapper_count % kDeadlineCheckInterval == 0) {
-      if (deadline_seconds <= MonotonicallyIncreasingTime()) {
+      if (deadline_seconds <= CurrentTimeTicksInSeconds()) {
         ScheduleIdleLazyCleanup();
         return;
       }
@@ -197,7 +195,7 @@ bool ScriptWrappableVisitor::AdvanceTracing(
   WTF::AutoReset<bool>(&advancing_tracing_, true);
   while (actions.force_completion ==
              v8::EmbedderHeapTracer::ForceCompletionAction::FORCE_COMPLETION ||
-         WTF::MonotonicallyIncreasingTimeMS() < deadline_in_ms) {
+         WTF::CurrentTimeTicksInMilliseconds() < deadline_in_ms) {
     if (marking_deque_.IsEmpty()) {
       return false;
     }
@@ -206,17 +204,14 @@ bool ScriptWrappableVisitor::AdvanceTracing(
   return true;
 }
 
-bool ScriptWrappableVisitor::MarkWrapperHeader(HeapObjectHeader* header) const {
-  if (header->IsWrapperHeaderMarked())
-    return false;
-
+void ScriptWrappableVisitor::MarkWrapperHeader(HeapObjectHeader* header) const {
+  DCHECK(!header->IsWrapperHeaderMarked());
   // Verify that no compactable & movable objects are slated for
   // lazy unmarking.
   DCHECK(!HeapCompact::IsCompactableArena(
       PageFromObject(header)->Arena()->ArenaIndex()));
   header->MarkWrapperHeader();
   headers_to_unmark_.push_back(header);
-  return true;
 }
 
 void ScriptWrappableVisitor::MarkWrappersInAllWorlds(
@@ -234,24 +229,34 @@ void ScriptWrappableVisitor::WriteBarrier(
 
   // Conservatively assume that the source object containing |dst_object| is
   // marked.
-  visitor->MarkWrapper(
-      &(const_cast<TraceWrapperV8Reference<v8::Value>&>(dst_object).Get()));
+  visitor->TraceWrappers(dst_object);
 }
 
-void ScriptWrappableVisitor::TraceWrappers(
+void ScriptWrappableVisitor::Visit(
     const TraceWrapperV8Reference<v8::Value>& traced_wrapper) const {
-  MarkWrapper(
-      &(const_cast<TraceWrapperV8Reference<v8::Value>&>(traced_wrapper).Get()));
-}
-
-void ScriptWrappableVisitor::MarkWrapper(
-    const v8::PersistentBase<v8::Value>* handle) const {
   // The write barrier may try to mark a wrapper because cleanup is still
   // delayed. Bail out in this case. We also allow unconditional marking which
   // requires us to bail out here when tracing is not in progress.
-  if (!tracing_in_progress_ || handle->IsEmpty())
+  if (!tracing_in_progress_ || traced_wrapper.Get().IsEmpty())
     return;
-  handle->RegisterExternalReference(isolate_);
+  traced_wrapper.Get().RegisterExternalReference(isolate_);
+}
+
+void ScriptWrappableVisitor::Visit(
+    const WrapperDescriptor& wrapper_descriptor) const {
+  HeapObjectHeader* header = wrapper_descriptor.heap_object_header_callback(
+      wrapper_descriptor.traceable);
+  if (header->IsWrapperHeaderMarked())
+    return;
+  MarkWrapperHeader(header);
+  DCHECK(tracing_in_progress_);
+  DCHECK(header->IsWrapperHeaderMarked());
+  marking_deque_.push_back(WrapperMarkingData(wrapper_descriptor));
+#if DCHECK_IS_ON()
+  if (!advancing_tracing_) {
+    verifier_deque_.push_back(WrapperMarkingData(wrapper_descriptor));
+  }
+#endif
 }
 
 void ScriptWrappableVisitor::DispatchTraceWrappers(

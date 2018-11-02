@@ -22,7 +22,7 @@ def Connect(options):
   if options.adb_device:
     backend = TracingBackendAndroid(options.adb_device)
   else:
-    backend = TracingBackend(options.device, options.port, 10, 0)
+    backend = TracingBackend(options.device, options.port, options.timeout, 0)
 
   try:
     backend.Connect()
@@ -57,19 +57,28 @@ def _CreateOptionParser():
       default='127.0.0.1')
   parser.add_option(
       '-s', '--adb-device', help='Device serial for adb.', type='string')
+  parser.add_option(
+      '-t', '--timeout', help='Websocket timeout interval.', type='int',
+      default=90)
 
   tracing_opts = optparse.OptionGroup(parser, 'Tracing options')
   tracing_opts.add_option(
       '-c', '--category-filter',
       help='Apply filter to control what category groups should be traced.',
       type='string',
-      default='"*"')
+      default='')
   tracing_opts.add_option(
       '--record-continuously',
       help='Keep recording until stopped. The trace buffer is of fixed size '
            'and used as a ring buffer. If this option is omitted then '
            'recording stops when the trace buffer is full.',
       action='store_true')
+  tracing_opts.add_option(
+      '--systrace',
+      help='Enable system tracing.',
+      action='store_true',
+      dest='systrace',
+      default=True)
   parser.add_option_group(tracing_opts)
 
   output_options = optparse.OptionGroup(parser, 'Output options')
@@ -92,13 +101,13 @@ def main():
 
   with Connect(options) as tracing_backend:
     tracing_backend.StartTracing(options.category_filter,
-                                 options.record_continuously)
+                                 options.record_continuously, options.systrace)
     raw_input('Capturing trace. Press Enter to stop...')
-    filepath = GetOutputFilePath(options)
-    tracing_backend.StopTracing(filepath)
+    output_path_base = GetOutputFilePath(options)
+    output_path = tracing_backend.StopTracing(output_path_base)
 
   print('Done')
-  print('Trace written to file://%s' % filepath)
+  print('Trace written to file://%s' % output_path)
 
 
 if __name__ == '__main__':

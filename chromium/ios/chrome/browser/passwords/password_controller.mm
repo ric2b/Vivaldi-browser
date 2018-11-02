@@ -16,7 +16,6 @@
 #include "base/json/json_writer.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -217,14 +216,14 @@ NSString* SerializeFillData(const GURL& origin,
   rootDict.SetString("origin", origin.spec());
   rootDict.SetString("action", action.spec());
 
-  auto fieldList = base::MakeUnique<base::ListValue>();
+  auto fieldList = std::make_unique<base::ListValue>();
 
-  auto usernameField = base::MakeUnique<base::DictionaryValue>();
+  auto usernameField = std::make_unique<base::DictionaryValue>();
   usernameField->SetString("name", username_element);
   usernameField->SetString("value", username_value);
   fieldList->Append(std::move(usernameField));
 
-  auto passwordField = base::MakeUnique<base::DictionaryValue>();
+  auto passwordField = std::make_unique<base::DictionaryValue>();
   passwordField->SetString("name", password_element);
   passwordField->SetString("value", password_value);
   fieldList->Append(std::move(passwordField));
@@ -296,6 +295,8 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 @synthesize isWebStateDestroyed = _isWebStateDestroyed;
 
+@synthesize baseViewController = _baseViewController;
+
 @synthesize dispatcher = _dispatcher;
 
 @synthesize delegate = _delegate;
@@ -331,7 +332,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     sentRequestToStore_ = NO;
 
     if (base::FeatureList::IsEnabled(features::kCredentialManager)) {
-      credentialManager_ = base::MakeUnique<CredentialManager>(
+      credentialManager_ = std::make_unique<CredentialManager>(
           passwordManagerClient_.get(), webState_);
     }
 
@@ -467,7 +468,8 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
 
 - (void)webState:(web::WebState*)webState
     didSubmitDocumentWithFormNamed:(const std::string&)formName
-                     userInitiated:(BOOL)userInitiated {
+                     userInitiated:(BOOL)userInitiated
+                       isMainFrame:(BOOL)isMainFrame {
   DCHECK_EQ(webState_, webState);
   __weak PasswordController* weakSelf = self;
   // This code is racing against the new page loading and will not get the
@@ -476,9 +478,17 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   // TODO(crbug.com/418827): Fix this by passing in more data from the JS side.
   id completionHandler = ^(BOOL found, const autofill::PasswordForm& form) {
     PasswordController* strongSelf = weakSelf;
-    if (strongSelf && ![strongSelf isWebStateDestroyed]) {
-      strongSelf.passwordManager->OnPasswordFormSubmitted(
-          strongSelf.passwordManagerDriver, form);
+    if (strongSelf && ![strongSelf isWebStateDestroyed] &&
+        strongSelf.passwordManager) {
+      if (isMainFrame) {
+        strongSelf.passwordManager->OnPasswordFormSubmitted(
+            strongSelf.passwordManagerDriver, form);
+      } else {
+        // Show a save prompt immediately because for iframes it is very hard to
+        // figure out correctness of password forms submission.
+        strongSelf.passwordManager->OnPasswordFormSubmittedNoChecks(
+            strongSelf.passwordManagerDriver, form);
+      }
     }
   };
   [self extractSubmittedPasswordForm:formName
@@ -538,7 +548,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
   std::string errorMessage;
   std::unique_ptr<base::Value> jsonData(base::JSONReader::ReadAndReturnError(
       JSONString, false, &errorCode, &errorMessage));
-  if (errorCode || !jsonData || !jsonData->IsType(base::Value::Type::LIST)) {
+  if (errorCode || !jsonData || !jsonData->is_list()) {
     VLOG(1) << "JSON parse error " << errorMessage
             << " JSON string: " << JSONString;
     return;
@@ -610,7 +620,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     return NO;
   }
 
-  if (errorCode || !JSONData->IsType(base::Value::Type::DICTIONARY)) {
+  if (errorCode || !JSONData->is_dict()) {
     VLOG(1) << "JSON parse error " << errorMessage
             << " JSON string: " << JSONString;
     return NO;
@@ -665,6 +675,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
                                  fieldType:(NSString*)fieldType
                                       type:(NSString*)type
                                 typedValue:(NSString*)typedValue
+                               isMainFrame:(BOOL)isMainFrame
                                   webState:(web::WebState*)webState
                          completionHandler:
                              (SuggestionsAvailableCompletion)completion {
@@ -1011,7 +1022,7 @@ bool GetPageURLAndCheckTrustLevel(web::WebState* web_state, GURL* page_url) {
     case PasswordInfoBarType::UPDATE:
       IOSChromeUpdatePasswordInfoBarDelegate::Create(
           isSmartLockBrandingEnabled, infoBarManager, std::move(form),
-          self.dispatcher);
+          self.baseViewController, self.dispatcher);
       break;
   }
 }

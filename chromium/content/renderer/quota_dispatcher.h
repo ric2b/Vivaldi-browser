@@ -13,13 +13,11 @@
 
 #include "base/containers/id_map.h"
 #include "base/macros.h"
-#include "content/common/quota_dispatcher_host.mojom.h"
 #include "content/public/renderer/worker_thread.h"
+#include "third_party/WebKit/common/quota/quota_dispatcher_host.mojom.h"
 
-class GURL;
-
-namespace blink {
-class WebStorageQuotaCallbacks;
+namespace url {
+class Origin;
 }
 
 namespace content {
@@ -31,16 +29,6 @@ namespace content {
 // TODO(sashab): Change this to be per-execution context instead of per-process.
 class QuotaDispatcher : public WorkerThread::Observer {
  public:
-  // TODO(sashab): Remove this wrapper, using lambdas or just the web callback
-  // itself.
-  class Callback {
-   public:
-    virtual ~Callback() {}
-    virtual void DidQueryStorageUsageAndQuota(int64_t usage, int64_t quota) = 0;
-    virtual void DidGrantStorageQuota(int64_t usage, int64_t granted_quota) = 0;
-    virtual void DidFail(storage::QuotaStatusCode status) = 0;
-  };
-
   explicit QuotaDispatcher(
       scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner);
   ~QuotaDispatcher() override;
@@ -51,38 +39,20 @@ class QuotaDispatcher : public WorkerThread::Observer {
   // WorkerThread::Observer implementation.
   void WillStopCurrentWorkerThread() override;
 
-  void QueryStorageUsageAndQuota(const GURL& gurl,
-                                 storage::StorageType type,
-                                 std::unique_ptr<Callback> callback);
-  void RequestStorageQuota(int render_frame_id,
-                           const GURL& gurl,
-                           storage::StorageType type,
-                           int64_t requested_size,
-                           std::unique_ptr<Callback> callback);
-
-  // Creates a new Callback instance for WebStorageQuotaCallbacks.
-  static std::unique_ptr<Callback> CreateWebStorageQuotaCallbacksWrapper(
-      blink::WebStorageQuotaCallbacks callbacks);
+  void QueryStorageUsageAndQuota(
+      const url::Origin& origin,
+      blink::mojom::StorageType type,
+      blink::mojom::QuotaDispatcherHost::QueryStorageUsageAndQuotaCallback);
+  void RequestStorageQuota(
+      int render_frame_id,
+      const url::Origin& origin,
+      blink::mojom::StorageType type,
+      int64_t requested_size,
+      blink::mojom::QuotaDispatcherHost::RequestStorageQuotaCallback);
 
  private:
-  // Message handlers.
-  void DidQueryStorageUsageAndQuota(int64_t request_id,
-                                    storage::QuotaStatusCode status,
-                                    int64_t current_usage,
-                                    int64_t current_quota);
-  void DidGrantStorageQuota(int64_t request_id,
-                            storage::QuotaStatusCode status,
-                            int64_t current_usage,
-                            int64_t granted_quota);
-  void DidFail(int request_id, storage::QuotaStatusCode error);
-
-  content::mojom::QuotaDispatcherHostPtr quota_host_;
+  blink::mojom::QuotaDispatcherHostPtr quota_host_;
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
-
-  // TODO(sashab, nverne): Once default callbacks are available for dropped mojo
-  // callbacks (crbug.com/775358), use them to call DidFail for them in the
-  // destructor and remove this.
-  base::IDMap<std::unique_ptr<Callback>> pending_quota_callbacks_;
 
   DISALLOW_COPY_AND_ASSIGN(QuotaDispatcher);
 };

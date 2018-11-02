@@ -33,7 +33,7 @@ class DetailsTestCase {
         expect_exception_(expect_exception),
         expected_exception_code_(expected_exception_code) {}
 
-  ~DetailsTestCase() {}
+  ~DetailsTestCase() = default;
 
   PaymentDetailsInit BuildDetails() const {
     return BuildPaymentDetailsInitForTest(detail_, data_, mod_type_,
@@ -128,7 +128,7 @@ class PaymentRequestDetailsTest
 TEST_P(PaymentRequestDetailsTest, ValidatesDetails) {
   V8TestingScope scope;
   scope.GetDocument().SetSecurityOrigin(
-      SecurityOrigin::Create(KURL(NullURL(), "https://www.example.com/")));
+      SecurityOrigin::Create(KURL("https://www.example.com/")));
   scope.GetDocument().SetSecureContextStateForTesting(
       SecureContextState::kSecure);
   PaymentOptions options;

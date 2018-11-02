@@ -53,6 +53,16 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Called when focus is returned from ash::SystemTray.
+   */
+  Oobe.focusReturned = function() {
+    if (Oobe.getInstance().currentScreen &&
+        Oobe.getInstance().currentScreen.onFocusReturned) {
+      Oobe.getInstance().currentScreen.onFocusReturned();
+    }
+  };
+
+  /**
    * Handle accelerators. These are passed from native code instead of a JS
    * event handler in order to make sure that embedded iframes cannot swallow
    * them.
@@ -307,6 +317,14 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Skip to update screen for telemetry.
+   */
+  Oobe.skipToUpdateForTesting = function() {
+    Oobe.disableSigninUI();
+    chrome.send('skipToUpdateForTesting');
+  };
+
+  /**
    * Login for telemetry.
    * @param {string} username Login username.
    * @param {string} password Login password.
@@ -434,6 +452,19 @@ cr.define('cr.ui', function() {
    */
   Oobe.setClientAreaSize = function(width, height) {
     Oobe.getInstance().setClientAreaSize(width, height);
+  };
+
+  /**
+   * Get the primary display's name.
+   *
+   * Same as the displayInfo.name parameter returned by
+   * chrome.system.display.getInfo(), but unlike chrome.system it's available
+   * during OOBE.
+   *
+   * @return {string} The name of the primary display.
+   */
+  Oobe.getPrimaryDisplayNameForTesting = function() {
+    return cr.sendWithPromise('getPrimaryDisplayNameForTesting');
   };
 
   // Export

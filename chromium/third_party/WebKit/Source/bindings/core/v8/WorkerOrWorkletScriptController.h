@@ -42,7 +42,6 @@
 
 namespace blink {
 
-class CachedMetadataHandler;
 class ErrorEvent;
 class ExceptionState;
 class ScriptSourceCode;
@@ -63,7 +62,6 @@ class CORE_EXPORT WorkerOrWorkletScriptController
   // Returns true if the evaluation completed with no uncaught exception.
   bool Evaluate(const ScriptSourceCode&,
                 ErrorEvent** = nullptr,
-                CachedMetadataHandler* = nullptr,
                 V8CacheOptions = kV8CacheOptionsDefault);
 
   // Prevents future JavaScript execution.
@@ -103,12 +101,8 @@ class CORE_EXPORT WorkerOrWorkletScriptController
   class ExecutionState;
 
   // Evaluate a script file in the current execution environment.
-  ScriptValue Evaluate(const String& script,
-                       const String& file_name,
-                       const TextPosition& script_start_position,
-                       ScriptSourceLocationType,
-                       CachedMetadataHandler*,
-                       V8CacheOptions);
+  ScriptValue EvaluateInternal(const ScriptSourceCode&,
+                               V8CacheOptions);
   void DisposeContextIfNeeded();
 
   Member<WorkerOrWorkletGlobalScope> global_scope_;

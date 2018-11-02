@@ -71,6 +71,7 @@ class VIZ_SERVICE_EXPORT VideoDetector : public SurfaceObserver {
   void OnVideoActivityEnded();
 
   // SurfaceObserver implementation.
+  void OnSurfaceCreated(const SurfaceId& surface_id) override {}
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override {}
   void OnSurfaceActivated(const SurfaceId& surface_id) override {}
   void OnSurfaceDestroyed(const SurfaceId& surface_id) override {}
@@ -79,7 +80,6 @@ class VIZ_SERVICE_EXPORT VideoDetector : public SurfaceObserver {
   void OnSurfaceDiscarded(const SurfaceId& surface_id) override {}
   void OnSurfaceDamageExpected(const SurfaceId& surface_id,
                                const BeginFrameArgs& args) override {}
-  void OnSurfaceSubtreeDamaged(const SurfaceId& surface_id) override {}
   void OnSurfaceWillBeDrawn(Surface* surface) override;
 
   // True if video has been observed in the last |kVideoTimeout|.

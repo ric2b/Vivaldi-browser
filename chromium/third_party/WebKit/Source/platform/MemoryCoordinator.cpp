@@ -71,7 +71,7 @@ void MemoryCoordinator::UnregisterThread(WebThread* thread) {
   MemoryCoordinator::Instance().web_threads_.erase(thread);
 }
 
-MemoryCoordinator::MemoryCoordinator() {}
+MemoryCoordinator::MemoryCoordinator() = default;
 
 void MemoryCoordinator::RegisterClient(MemoryCoordinatorClient* client) {
   DCHECK(IsMainThread());
@@ -114,8 +114,8 @@ void MemoryCoordinator::OnPurgeMemory() {
     if (!thread->GetWebTaskRunner())
       continue;
 
-    thread->GetWebTaskRunner()->PostTask(
-        FROM_HERE,
+    PostCrossThreadTask(
+        *thread->GetWebTaskRunner(), FROM_HERE,
         CrossThreadBind(MemoryCoordinator::ClearThreadSpecificMemory));
   }
 }

@@ -12,6 +12,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "platform/scheduler/base/lazy_now.h"
+#include "platform/scheduler/util/tracing_helper.h"
 
 namespace blink {
 namespace scheduler {
@@ -22,6 +23,7 @@ class PLATFORM_EXPORT CPUTimeBudgetPool : public BudgetPool {
  public:
   CPUTimeBudgetPool(const char* name,
                     BudgetPoolController* budget_pool_controller,
+                    TraceableVariableController* tracing_controller,
                     base::TimeTicks now);
 
   ~CPUTimeBudgetPool();
@@ -115,7 +117,8 @@ class PLATFORM_EXPORT CPUTimeBudgetPool : public BudgetPool {
   // See CPUTimeBudgetPool::SetMinBudgetLevelToRun.
   base::TimeDelta min_budget_level_to_run_;
 
-  base::TimeDelta current_budget_level_;
+  TraceableCounter<base::TimeDelta, kTracingCategoryNameInfo>
+      current_budget_level_;
   base::TimeTicks last_checkpoint_;
   double cpu_percentage_;
 

@@ -85,11 +85,6 @@ bool IncomingTaskQueue::AddToIncomingQueue(const Location& from_here,
   return PostPendingTask(&pending_task);
 }
 
-bool IncomingTaskQueue::IsIdleForTesting() {
-  AutoLock lock(incoming_queue_lock_);
-  return incoming_queue_.empty();
-}
-
 void IncomingTaskQueue::WillDestroyCurrentMessageLoop() {
   {
     AutoLock auto_lock(incoming_queue_lock_);
@@ -109,11 +104,12 @@ void IncomingTaskQueue::StartScheduling() {
     DCHECK(!message_loop_scheduled_);
     is_ready_for_scheduling_ = true;
     schedule_work = !incoming_queue_.empty();
+    if (schedule_work)
+      message_loop_scheduled_ = true;
   }
   if (schedule_work) {
     DCHECK(message_loop_);
-    // Don't need to lock |message_loop_lock_| here because this function is
-    // called by MessageLoop on its thread.
+    AutoLock auto_lock(message_loop_lock_);
     message_loop_->ScheduleWork();
   }
 }
@@ -181,6 +177,7 @@ void IncomingTaskQueue::TriageQueue::Clear() {
 }
 
 void IncomingTaskQueue::TriageQueue::ReloadFromIncomingQueueIfEmpty() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(outer_->sequence_checker_);
   if (queue_.empty()) {
     // TODO(robliao): Since these high resolution tasks aren't yet in the
     // delayed queue, they technically shouldn't trigger high resolution timers
@@ -351,6 +348,8 @@ bool IncomingTaskQueue::PostPendingTaskLockRequired(PendingTask* pending_task) {
 }
 
 int IncomingTaskQueue::ReloadWorkQueue(TaskQueue* work_queue) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   // Make sure no tasks are lost.
   DCHECK(work_queue->empty());
 

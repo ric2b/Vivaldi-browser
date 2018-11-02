@@ -39,12 +39,19 @@ namespace {
 std::pair<unsigned, unsigned> GetTextMatchMarkerPaintOffsets(
     const DocumentMarker& marker,
     const InlineTextBox& text_box) {
+  // text_box.Start() returns an offset relative to the start of the layout
+  // object. We add the LineLayoutItem's TextStartOffset() to get a DOM offset
+  // (which is what DocumentMarker uses). This is necessary to get proper
+  // behavior with the :first-letter psuedo element.
+  const unsigned text_box_start =
+      text_box.Start() + text_box.GetLineLayoutItem().TextStartOffset();
+
   DCHECK_EQ(DocumentMarker::kTextMatch, marker.GetType());
-  const unsigned start_offset = marker.StartOffset() > text_box.Start()
-                                    ? marker.StartOffset() - text_box.Start()
+  const unsigned start_offset = marker.StartOffset() > text_box_start
+                                    ? marker.StartOffset() - text_box_start
                                     : 0U;
   const unsigned end_offset =
-      std::min(marker.EndOffset() - text_box.Start(), text_box.Len());
+      std::min(marker.EndOffset() - text_box_start, text_box.Len());
   return std::make_pair(start_offset, end_offset);
 }
 
@@ -177,11 +184,10 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
   LayoutRect box_rect(box_origin, LayoutSize(inline_text_box_.LogicalWidth(),
                                              inline_text_box_.LogicalHeight()));
 
-  int length = inline_text_box_.Len();
+  unsigned length = inline_text_box_.Len();
   const String& layout_item_string =
       inline_text_box_.GetLineLayoutItem().GetText();
-  // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
-  CHECK(inline_text_box_.Start() + length <= layout_item_string.length());
+
   String first_line_string;
   if (inline_text_box_.IsFirstLineStyle()) {
     first_line_string = layout_item_string;
@@ -190,6 +196,17 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
             inline_text_box_.IsFirstLineStyle()),
         first_line_string,
         inline_text_box_.GetLineLayoutItem().PreviousCharacter());
+    // TODO(crbug.com/795498): this is a hack. The root issue is that
+    // capitalizing letters can change the length of the backing string.
+    // That needs to be taken into account when computing the size of the box
+    // or its painting.
+    length = std::min(length, first_line_string.length());
+
+    // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
+    CHECK(inline_text_box_.Start() + length <= first_line_string.length());
+  } else {
+    // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
+    CHECK(inline_text_box_.Start() + length <= layout_item_string.length());
   }
   StringView string =
       StringView(inline_text_box_.IsFirstLineStyle() ? first_line_string
@@ -440,10 +457,17 @@ InlineTextBoxPainter::PaintOffsets InlineTextBoxPainter::MarkerPaintStartAndEnd(
   DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
   DCHECK(inline_text_box_.Len());
 
+  // inline_text_box_.Start() returns an offset relative to the start of the
+  // layout object. We add the LineLayoutItem's TextStartOffset() to get a DOM
+  // offset (which is what DocumentMarker uses). This is necessary to get proper
+  // behavior with the :first-letter psuedo element.
+  const unsigned inline_text_box_start =
+      inline_text_box_.Start() +
+      inline_text_box_.GetLineLayoutItem().TextStartOffset();
+
   // Start painting at the beginning of the text or the specified underline
   // start offset, whichever is greater.
-  unsigned paint_start =
-      std::max(inline_text_box_.Start(), marker.StartOffset());
+  unsigned paint_start = std::max(inline_text_box_start, marker.StartOffset());
   // Cap the maximum paint start to the last character in the text box.
   paint_start = std::min(paint_start, inline_text_box_.end());
 
@@ -455,8 +479,8 @@ InlineTextBoxPainter::PaintOffsets InlineTextBoxPainter::MarkerPaintStartAndEnd(
 
   // paint_start and paint_end are currently relative to the start of the text
   // node. Subtract to make them relative to the start of the InlineTextBox.
-  paint_start -= inline_text_box_.Start();
-  paint_end -= inline_text_box_.Start();
+  paint_start -= inline_text_box_start;
+  paint_end -= inline_text_box_start;
 
   return ApplyTruncationToPaintOffsets({paint_start, paint_end});
 }
@@ -1055,7 +1079,7 @@ void InlineTextBoxPainter::PaintTextMatchMarkerForeground(
 
   Color text_color =
       LayoutTheme::GetTheme().PlatformTextSearchColor(marker.IsActiveMatch());
-  if (style.VisitedDependentColor(CSSPropertyColor) == text_color)
+  if (style.VisitedDependentColor(GetCSSPropertyColor()) == text_color)
     return;
 
   const SimpleFontData* font_data = font.PrimaryFont();

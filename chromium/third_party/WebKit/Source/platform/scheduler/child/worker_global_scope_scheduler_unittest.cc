@@ -10,7 +10,6 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_simple_task_runner.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/child/worker_scheduler_impl.h"
 #include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,16 +30,15 @@ void AppendToVectorTestTask(std::vector<std::string>* vector,
 class WorkerGlobalScopeSchedulerTest : public ::testing::Test {
  public:
   WorkerGlobalScopeSchedulerTest()
-      : clock_(new base::SimpleTestTickClock()),
-        mock_task_runner_(new base::TestSimpleTaskRunner()),
+      : mock_task_runner_(new base::TestSimpleTaskRunner()),
         scheduler_(new WorkerSchedulerImpl(
-            CreateTaskQueueManagerWithUnownedClockForTest(nullptr,
-                                                          mock_task_runner_,
-                                                          clock_.get()))) {
-    clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
+            CreateTaskQueueManagerForTest(nullptr,
+                                          mock_task_runner_,
+                                          &clock_))) {
+    clock_.Advance(base::TimeDelta::FromMicroseconds(5000));
   }
 
-  ~WorkerGlobalScopeSchedulerTest() override {}
+  ~WorkerGlobalScopeSchedulerTest() override = default;
 
   void SetUp() override {
     scheduler_->Init();
@@ -53,14 +51,14 @@ class WorkerGlobalScopeSchedulerTest : public ::testing::Test {
   // Helper for posting a task.
   void PostTestTask(std::vector<std::string>* run_order,
                     const std::string& task_descriptor) {
-    global_scope_scheduler_->GetTaskRunner(TaskType::kUnthrottled)
+    global_scope_scheduler_->GetTaskRunner(TaskType::kInternalTest)
         ->PostTask(FROM_HERE,
                    WTF::Bind(&AppendToVectorTestTask,
                              WTF::Unretained(run_order), task_descriptor));
   }
 
  protected:
-  std::unique_ptr<base::SimpleTestTickClock> clock_;
+  base::SimpleTestTickClock clock_;
   scoped_refptr<base::TestSimpleTaskRunner> mock_task_runner_;
 
   std::unique_ptr<WorkerSchedulerImpl> scheduler_;

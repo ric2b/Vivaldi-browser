@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "components/rappor/public/rappor_utils.h"
@@ -113,6 +114,10 @@ const char kHistogramTimeToInteractive[] =
     "PageLoad.Experimental.NavigationToInteractive";
 const char kHistogramInteractiveToInteractiveDetection[] =
     "PageLoad.Internal.InteractiveToInteractiveDetection";
+const char kHistogramFirstInputDelay[] =
+    "PageLoad.InteractiveTiming.FirstInputDelay";
+const char kHistogramFirstInputTimestamp[] =
+    "PageLoad.InteractiveTiming.FirstInputTimestamp";
 const char kHistogramParseStartToFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.ParseStartToFirstMeaningfulPaint";
 const char kHistogramParseStartToFirstContentfulPaint[] =
@@ -193,13 +198,6 @@ const char kHistogramForegroundToFirstContentfulPaint[] =
     "PageLoad.PaintTiming.ForegroundToFirstContentfulPaint";
 const char kHistogramForegroundToFirstMeaningfulPaint[] =
     "PageLoad.Experimental.PaintTiming.ForegroundToFirstMeaningfulPaint";
-
-const char kHistogramCacheRequestPercentParseStop[] =
-    "PageLoad.Experimental.Cache.RequestPercent.ParseStop";
-const char kHistogramCacheTotalRequestsParseStop[] =
-    "PageLoad.Experimental.Cache.TotalRequests.ParseStop";
-const char kHistogramTotalRequestsParseStop[] =
-    "PageLoad.Experimental.TotalRequests.ParseStop";
 
 const char kRapporMetricsNameCoarseTiming[] =
     "PageLoad.CoarseTiming.NavigationToFirstContentfulPaint";
@@ -536,6 +534,25 @@ void CorePageLoadMetricsObserver::OnPageInteractive(
   RecordTimeToInteractiveStatus(internal::TIME_TO_INTERACTIVE_RECORDED);
 }
 
+void CorePageLoadMetricsObserver::OnFirstInputInPage(
+    const page_load_metrics::mojom::PageLoadTiming& timing,
+    const page_load_metrics::PageLoadExtraInfo& extra_info) {
+  if (!WasStartedInForegroundOptionalEventInForeground(
+          timing.interactive_timing->first_input_timestamp, extra_info)) {
+    return;
+  }
+
+  // Input delay will often be ~0, and will only be > 10 seconds very
+  // rarely. Capture the range from 1ms to 60s.
+  UMA_HISTOGRAM_CUSTOM_TIMES(
+      internal::kHistogramFirstInputDelay,
+      timing.interactive_timing->first_input_delay.value(),
+      base::TimeDelta::FromMilliseconds(1), base::TimeDelta::FromSeconds(60),
+      50);
+  PAGE_LOAD_HISTOGRAM(internal::kHistogramFirstInputTimestamp,
+                      timing.interactive_timing->first_input_timestamp.value());
+}
+
 void CorePageLoadMetricsObserver::OnParseStart(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
@@ -597,28 +614,6 @@ void CorePageLoadMetricsObserver::OnParseStop(
         timing.parse_timing
             ->parse_blocked_on_script_execution_from_document_write_duration
             .value());
-
-    int total_resources = num_cache_resources_ + num_network_resources_;
-    if (total_resources) {
-      int percent_cached = (100 * num_cache_resources_) / total_resources;
-      UMA_HISTOGRAM_PERCENTAGE(internal::kHistogramCacheRequestPercentParseStop,
-                               percent_cached);
-      UMA_HISTOGRAM_COUNTS(internal::kHistogramCacheTotalRequestsParseStop,
-                           num_cache_resources_);
-      UMA_HISTOGRAM_COUNTS(internal::kHistogramTotalRequestsParseStop,
-                           num_cache_resources_ + num_network_resources_);
-
-      // Separate out parse duration based on cache percent.
-      if (percent_cached <= 50) {
-        PAGE_LOAD_HISTOGRAM(
-            "PageLoad.Experimental.ParseDuration.CachedPercent.0-50",
-            parse_duration);
-      } else {
-        PAGE_LOAD_HISTOGRAM(
-            "PageLoad.Experimental.ParseDuration.CachedPercent.51-100",
-            parse_duration);
-      }
-    }
   } else {
     PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramParseDuration,
                         parse_duration);

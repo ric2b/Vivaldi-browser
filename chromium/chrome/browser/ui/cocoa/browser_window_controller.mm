@@ -13,7 +13,6 @@
 #import "base/mac/foundation_util.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
-#include "base/memory/ptr_util.h"
 #include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -61,7 +60,6 @@
 #import "chrome/browser/ui/cocoa/framed_browser_window.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/fullscreen/fullscreen_toolbar_visibility_lock_controller.h"
-#include "chrome/browser/ui/cocoa/fullscreen_low_power_coordinator.h"
 #include "chrome/browser/ui/cocoa/fullscreen_placeholder_view.h"
 #import "chrome/browser/ui/cocoa/fullscreen_window.h"
 #import "chrome/browser/ui/cocoa/infobars/infobar_container_controller.h"
@@ -69,7 +67,6 @@
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field_editor.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/location_bar/star_decoration.h"
-#include "chrome/browser/ui/cocoa/permission_bubble/permission_bubble_cocoa.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_base_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_button_controller.h"
 #import "chrome/browser/ui/cocoa/profiles/avatar_icon_controller.h"
@@ -438,7 +435,7 @@ bool IsTabDetachingInFullscreenEnabled() {
             windowShim_.get()));
 
     omniboxPopupModelObserverBridge_ =
-        base::MakeUnique<OmniboxPopupModelObserverBridge>(self);
+        std::make_unique<OmniboxPopupModelObserverBridge>(self);
 
     blockLayoutSubviews_ = NO;
 
@@ -2043,7 +2040,7 @@ willAnimateFromState:(BookmarkBar::State)oldState
   // TODO(erikchen): Fullscreen modes should stack. Should be able to exit
   // Immersive Fullscreen and still be in AppKit Fullscreen.
   if ([self isInAppKitFullscreen])
-    [self exitAppKitFullscreen];
+    [self exitAppKitFullscreenAsync:NO];
   if ([self isInImmersiveFullscreen])
     [self exitImmersiveFullscreen];
 }

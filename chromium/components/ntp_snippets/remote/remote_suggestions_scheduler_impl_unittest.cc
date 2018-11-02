@@ -12,7 +12,6 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -153,7 +152,7 @@ class MockRemoteSuggestionsProvider : public RemoteSuggestionsProvider {
   }
   MOCK_METHOD2(GetDismissedSuggestionsForDebugging,
                void(Category category, DismissedSuggestionsCallback* callback));
-  MOCK_METHOD0(OnSignInStateChanged, void());
+  MOCK_METHOD1(OnSignInStateChanged, void(bool));
 };
 
 class FakeOfflineNetworkChangeNotifier : public net::NetworkChangeNotifier {
@@ -176,7 +175,7 @@ class RemoteSuggestionsSchedulerImplTest : public ::testing::Test {
                         default_variation_params_,
                         {kArticleSuggestionsFeature.name}),
         user_classifier_(/*pref_service=*/nullptr,
-                         base::MakeUnique<base::DefaultClock>()) {
+                         base::DefaultClock::GetInstance()) {
     RemoteSuggestionsSchedulerImpl::RegisterProfilePrefs(
         utils_.pref_service()->registry());
     RequestThrottler::RegisterProfilePrefs(utils_.pref_service()->registry());
@@ -191,16 +190,14 @@ class RemoteSuggestionsSchedulerImplTest : public ::testing::Test {
   }
 
   void ResetProvider() {
-    provider_ = base::MakeUnique<StrictMock<MockRemoteSuggestionsProvider>>(
+    provider_ = std::make_unique<StrictMock<MockRemoteSuggestionsProvider>>(
         /*observer=*/nullptr);
 
-    auto test_clock = base::MakeUnique<base::SimpleTestClock>();
-    test_clock_ = test_clock.get();
-    test_clock_->SetNow(base::Time::Now());
+    test_clock_.SetNow(base::Time::Now());
 
-    scheduler_ = base::MakeUnique<RemoteSuggestionsSchedulerImpl>(
+    scheduler_ = std::make_unique<RemoteSuggestionsSchedulerImpl>(
         &persistent_scheduler_, &user_classifier_, utils_.pref_service(),
-        &local_state_, std::move(test_clock), &debug_logger_);
+        &local_state_, &test_clock_, &debug_logger_);
     scheduler_->SetProvider(provider_.get());
   }
 
@@ -271,7 +268,7 @@ class RemoteSuggestionsSchedulerImplTest : public ::testing::Test {
     return &persistent_scheduler_;
   }
 
-  base::SimpleTestClock* test_clock() { return test_clock_; }
+  base::SimpleTestClock* test_clock() { return &test_clock_; }
   MockRemoteSuggestionsProvider* provider() { return provider_.get(); }
   RemoteSuggestionsSchedulerImpl* scheduler() { return scheduler_.get(); }
 
@@ -280,7 +277,7 @@ class RemoteSuggestionsSchedulerImplTest : public ::testing::Test {
   UserClassifier user_classifier_;
   TestingPrefServiceSimple local_state_;
   StrictMock<MockPersistentScheduler> persistent_scheduler_;
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
   std::unique_ptr<MockRemoteSuggestionsProvider> provider_;
   std::unique_ptr<RemoteSuggestionsSchedulerImpl> scheduler_;
   Logger debug_logger_;
@@ -908,7 +905,7 @@ TEST_F(RemoteSuggestionsSchedulerImplTest, FetchIntervalForShownTriggerOnWifi) {
   // Open NTP again after too short delay (one minute missing). UserClassifier
   // defaults to UserClass::ACTIVE_NTP_USER - we work with the default interval
   // for this class here. This time no fetch is executed.
-  test_clock()->Advance(base::TimeDelta::FromHours(10) -
+  test_clock()->Advance(base::TimeDelta::FromHours(4) -
                         base::TimeDelta::FromMinutes(1));
   scheduler()->OnSuggestionsSurfaceOpened();
 
@@ -973,11 +970,12 @@ TEST_F(RemoteSuggestionsSchedulerImplTest,
   std::move(signal_fetch_done).Run(Status::Success());
 
   // Open NTP again after too short delay. This time no fetch is executed.
-  test_clock()->Advance(base::TimeDelta::FromHours(5));
+  test_clock()->Advance(base::TimeDelta::FromHours(4) -
+                        base::TimeDelta::FromMinutes(1));
   scheduler()->OnSuggestionsSurfaceOpened();
 
   // Open NTP after another delay, now together long enough to issue a fetch.
-  test_clock()->Advance(base::TimeDelta::FromHours(7));
+  test_clock()->Advance(base::TimeDelta::FromMinutes(2));
   EXPECT_CALL(*provider(), RefetchInTheBackground(_));
   scheduler()->OnSuggestionsSurfaceOpened();
 }

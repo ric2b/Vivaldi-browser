@@ -30,6 +30,7 @@ class FakeChromeUserManager : public ChromeUserManager {
   ~FakeChromeUserManager() override;
 
   // Create and add various types of users.
+  user_manager::User* AddGuestUser();
   user_manager::User* AddKioskAppUser(const AccountId& account_id);
   user_manager::User* AddArcKioskAppUser(const AccountId& account_id);
   user_manager::User* AddSupervisedUser(const AccountId& account_id);
@@ -184,6 +185,10 @@ class FakeChromeUserManager : public ChromeUserManager {
 
   void set_current_user_new(bool new_user) { current_user_new_ = new_user; }
 
+  void set_is_enterprise_managed(bool is_enterprise_managed) {
+    is_enterprise_managed_ = is_enterprise_managed;
+  }
+
  private:
   // Lazily creates default user flow.
   UserFlow* GetDefaultUserFlow() const;
@@ -212,6 +217,9 @@ class FakeChromeUserManager : public ChromeUserManager {
   // Specific flows by user e-mail.
   // Keys should be canonicalized before access.
   FlowMap specific_flows_;
+
+  // Whether the device is enterprise managed.
+  bool is_enterprise_managed_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FakeChromeUserManager);
 };

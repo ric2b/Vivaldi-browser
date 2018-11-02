@@ -360,7 +360,7 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, TabsRememberFocusFindInPage) {
 
 // Background window does not steal focus.
 // Flaky, http://crbug.com/62538.
-#if defined(OS_CHROMEOS)
+#if defined(OS_CHROMEOS) || defined(OS_LINUX)
 #define MAYBE_BackgroundBrowserDontStealFocus \
   DISABLED_BackgroundBrowserDontStealFocus
 #else
@@ -645,10 +645,10 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
   GURL url2("http://maps.google.com/");
 
   // Navigate to url.
-  chrome::NavigateParams p(browser(), url, ui::PAGE_TRANSITION_LINK);
-  p.window_action = chrome::NavigateParams::SHOW_WINDOW;
+  NavigateParams p(browser(), url, ui::PAGE_TRANSITION_LINK);
+  p.window_action = NavigateParams::SHOW_WINDOW;
   p.disposition = WindowOpenDisposition::CURRENT_TAB;
-  chrome::Navigate(&p);
+  Navigate(&p);
 
   // Focus the omnibox.
   chrome::FocusLocationBar(browser());
@@ -673,8 +673,8 @@ IN_PROC_BROWSER_TEST_F(BrowserFocusTest, NavigateFromOmniboxIntoNewTab) {
   EXPECT_FALSE(IsViewFocused(VIEW_ID_OMNIBOX));
 }
 
-// Flaky on Mac (http://crbug.com/665296).
-#if defined(OS_MACOSX)
+// Flaky on Mac and ChromeOS (http://crbug.com/665296).
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
 #define MAYBE_FocusOnNavigate DISABLED_FocusOnNavigate
 #else
 #define MAYBE_FocusOnNavigate FocusOnNavigate

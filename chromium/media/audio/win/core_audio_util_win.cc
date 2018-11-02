@@ -15,7 +15,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_co_mem.h"
@@ -63,31 +63,31 @@ void LogUMAEmptyCb(UmaLogStep step, HRESULT hr) {}
 void LogUMAPreferredOutputParams(UmaLogStep step, HRESULT hr) {
   switch (step) {
     case UmaLogStep::CREATE_DEVICE_ENUMERATOR:
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "Media.AudioOutputStreamProxy."
           "GetPreferredOutputStreamParametersWin.CreateDeviceEnumeratorResult",
           hr);
       break;
     case UmaLogStep::CREATE_DEVICE:
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "Media.AudioOutputStreamProxy."
           "GetPreferredOutputStreamParametersWin.CreateDeviceResult",
           hr);
       break;
     case UmaLogStep::CREATE_CLIENT:
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "Media.AudioOutputStreamProxy."
           "GetPreferredOutputStreamParametersWin.CreateClientResult",
           hr);
       break;
     case UmaLogStep::GET_MIX_FORMAT:
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "Media.AudioOutputStreamProxy."
           "GetPreferredOutputStreamParametersWin.GetMixFormatResult",
           hr);
       break;
     case UmaLogStep::GET_DEVICE_PERIOD:
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "Media.AudioOutputStreamProxy."
           "GetPreferredOutputStreamParametersWin.GetDevicePeriodResult",
           hr);
@@ -477,9 +477,27 @@ ComPtr<IMMDeviceEnumerator> CoreAudioUtil::CreateDeviceEnumerator() {
                                         base::BindRepeating(&LogUMAEmptyCb));
 }
 
+std::string CoreAudioUtil::GetDefaultInputDeviceID() {
+  ComPtr<IMMDevice> device(CreateDevice(
+      AudioDeviceDescription::kDefaultDeviceId, eCapture, eConsole));
+  return device.Get() ? GetDeviceID(device.Get()) : std::string();
+}
+
 std::string CoreAudioUtil::GetDefaultOutputDeviceID() {
   ComPtr<IMMDevice> device(CreateDevice(
       AudioDeviceDescription::kDefaultDeviceId, eRender, eConsole));
+  return device.Get() ? GetDeviceID(device.Get()) : std::string();
+}
+
+std::string CoreAudioUtil::GetCommunicationsInputDeviceID() {
+  ComPtr<IMMDevice> device(
+      CreateDevice(std::string(), eCapture, eCommunications));
+  return device.Get() ? GetDeviceID(device.Get()) : std::string();
+}
+
+std::string CoreAudioUtil::GetCommunicationsOutputDeviceID() {
+  ComPtr<IMMDevice> device(
+      CreateDevice(std::string(), eRender, eCommunications));
   return device.Get() ? GetDeviceID(device.Get()) : std::string();
 }
 
@@ -879,25 +897,36 @@ ComPtr<IAudioCaptureClient> CoreAudioUtil::CreateCaptureClient(
 }
 
 bool CoreAudioUtil::FillRenderEndpointBufferWithSilence(
-    IAudioClient* client, IAudioRenderClient* render_client) {
+    IAudioClient* client,
+    IAudioRenderClient* render_client) {
   UINT32 endpoint_buffer_size = 0;
-  if (FAILED(client->GetBufferSize(&endpoint_buffer_size)))
+  if (FAILED(client->GetBufferSize(&endpoint_buffer_size))) {
+    PLOG(ERROR) << "Failed IAudioClient::GetBufferSize()";
     return false;
+  }
 
   UINT32 num_queued_frames = 0;
-  if (FAILED(client->GetCurrentPadding(&num_queued_frames)))
+  if (FAILED(client->GetCurrentPadding(&num_queued_frames))) {
+    PLOG(ERROR) << "Failed IAudioClient::GetCurrentPadding()";
     return false;
+  }
 
   BYTE* data = NULL;
   int num_frames_to_fill = endpoint_buffer_size - num_queued_frames;
-  if (FAILED(render_client->GetBuffer(num_frames_to_fill, &data)))
+  if (FAILED(render_client->GetBuffer(num_frames_to_fill, &data))) {
+    PLOG(ERROR) << "Failed IAudioRenderClient::GetBuffer()";
     return false;
+  }
 
   // Using the AUDCLNT_BUFFERFLAGS_SILENT flag eliminates the need to
   // explicitly write silence data to the rendering buffer.
-  DVLOG(2) << "filling up " << num_frames_to_fill << " frames with silence";
-  return SUCCEEDED(render_client->ReleaseBuffer(num_frames_to_fill,
-                                                AUDCLNT_BUFFERFLAGS_SILENT));
+  if (FAILED(render_client->ReleaseBuffer(num_frames_to_fill,
+                                          AUDCLNT_BUFFERFLAGS_SILENT))) {
+    PLOG(ERROR) << "Failed IAudioRenderClient::ReleaseBuffer()";
+    return false;
+  }
+
+  return true;
 }
 
 bool CoreAudioUtil::GetDxDiagDetails(std::string* driver_name,

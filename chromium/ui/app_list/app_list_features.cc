@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "ui/app_list/app_list_switches.h"
 
 namespace app_list {
 namespace features {
@@ -16,8 +17,8 @@ const base::Feature kEnableBackgroundBlur{"EnableBackgroundBlur",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kEnablePlayStoreAppSearch{"EnablePlayStoreAppSearch",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kEnableAppListFocus{"EnableAppListFocus",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kEnableTouchableAppContextMenu{
+    "EnableTouchableAppContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsAnswerCardEnabled() {
   // Not using local static variable to allow tests to change this value.
@@ -39,8 +40,9 @@ bool IsPlayStoreAppSearchEnabled() {
   return base::FeatureList::IsEnabled(kEnablePlayStoreAppSearch);
 }
 
-bool IsAppListFocusEnabled() {
-  return base::FeatureList::IsEnabled(kEnableAppListFocus);
+bool IsTouchableAppContextMenuEnabled() {
+  return switches::IsTouchableAppContextMenuEnabled() ||
+         base::FeatureList::IsEnabled(kEnableTouchableAppContextMenu);
 }
 
 std::string AnswerServerUrl() {

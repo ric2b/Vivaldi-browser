@@ -318,6 +318,10 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // only set it.
   void SetWakeOnLanEnabled(bool enabled);
 
+  // Sets the HostName property. Note: we do not track this property, we
+  // only set it.
+  void SetHostname(const std::string& hostname);
+
   // Enable or disable network bandwidth throttling, on all interfaces on the
   // system. If |enabled| is true, |upload_rate_kbits| and |download_rate_kbits|
   // are the desired rates (in kbits/s) to throttle to. If |enabled| is false,
@@ -464,12 +468,20 @@ class CHROMEOS_EXPORT NetworkStateHandler
   // Gets the list specified by |type|.
   ManagedStateList* GetManagedList(ManagedState::ManagedType type);
 
-  // Helper function to notify observers. Calls CheckDefaultNetworkChanged().
-  // Returns true if NotifyDefaultNetworkChanged() was called.
-  bool OnNetworkConnectionStateChanged(NetworkState* network);
+  // Helper function that calls NotifyNetworkConnectionStateChanged and,
+  // for the default network, OnDefaultNetworkConnectionStateChanged and
+  // NotifyDefaultNetworkChanged.
+  void OnNetworkConnectionStateChanged(NetworkState* network);
+
+  // Verifies the connection state of the default network. Returns false
+  // if the connection state change should be ignored.
+  bool VerifyDefaultNetworkConnectionStateChange(NetworkState* network);
+
+  // Notifies observers when a network's connection state changes.
+  void NotifyNetworkConnectionStateChanged(NetworkState* network);
 
   // Notifies observers when the default network or its properties change.
-  void NotifyDefaultNetworkChanged(const NetworkState* default_network);
+  void NotifyDefaultNetworkChanged();
 
   // Notifies observers about changes to |network|, including IPConfg.
   void NotifyNetworkPropertiesUpdated(const NetworkState* network);

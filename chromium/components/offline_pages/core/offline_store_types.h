@@ -21,6 +21,7 @@ enum class StoreState {
   LOADED,          // Store is properly loaded and operational.
   FAILED_LOADING,  // Store initialization failed.
   FAILED_RESET,    // Resetting the store failed.
+  INITIALIZING,    // Store is in the process of initializing.
 };
 
 // Statuses referring to actions taken on items in the stores.
@@ -30,6 +31,23 @@ enum class ItemActionStatus {
   ALREADY_EXISTS,
   NOT_FOUND,
   STORE_ERROR,
+};
+
+// Result for synchronous operations (like database and file operations) that
+// are part of the tasks used by Offline Pages.
+// Keep it in sync with OfflinePagesSyncOperationResult in enums.xml for
+// histograms usages.
+enum class SyncOperationResult {
+  SUCCESS,                   // Successful operation
+  INVALID_DB_CONNECTION,     // Invalid database connection
+  TRANSACTION_BEGIN_ERROR,   // Failed when start a DB transaction
+  TRANSACTION_COMMIT_ERROR,  // Failed when commiting a DB transaction
+  DB_OPERATION_ERROR,        // Failed when executing a DB statement
+  FILE_OPERATION_ERROR,      // Failed while doing file operations
+  // NOTE: always keep this entry at the end. Add new result types only
+  // immediately above this line. Make sure to update the corresponding
+  // histogram enum accordingly.
+  RESULT_COUNT,
 };
 
 // List of item action statuses mapped to item ID.
@@ -52,6 +70,19 @@ class StoreUpdateResult {
 
   // State of the store after the operation is done.
   StoreState store_state;
+};
+
+// This enum is backed by a UMA histogram therefore its entries should not be
+// deleted or re-ordered and new ones should only be appended.
+// See enum definition with the same name in tools/metrics/histograms/enum.xml.
+enum OfflinePagesStoreEvent {
+  STORE_OPENED_FIRST_TIME = 0,
+  STORE_REOPENED = 1,
+  STORE_CLOSED = 2,
+  STORE_CLOSE_SKIPPED = 3,
+
+  // NOTE: always keep this entry at the end.
+  STORE_EVENT_COUNT
 };
 
 }  // namespace offline_pages

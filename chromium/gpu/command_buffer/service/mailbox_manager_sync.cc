@@ -52,7 +52,8 @@ void CreateFenceLocked(const SyncToken& sync_token) {
       sync_points.pop();
     }
     // Need to use EGL fences since we are likely not in a single share group.
-    auto fence = std::make_unique<gl::GLFenceEGL>();
+    auto fence = gl::GLFenceEGL::Create();
+    DCHECK(fence);
     std::pair<SyncTokenToFenceMap::iterator, bool> result =
         sync_point_to_fence.insert(
             std::make_pair(sync_token, std::move(fence)));
@@ -97,8 +98,7 @@ MailboxManagerSync::TextureGroup::TextureGroup(
     : definition_(definition) {
 }
 
-MailboxManagerSync::TextureGroup::~TextureGroup() {
-}
+MailboxManagerSync::TextureGroup::~TextureGroup() = default;
 
 void MailboxManagerSync::TextureGroup::AddName(const Mailbox& name) {
   g_lock.Get().AssertAcquired();
@@ -170,11 +170,9 @@ MailboxManagerSync::TextureGroupRef::TextureGroupRef(unsigned version,
 MailboxManagerSync::TextureGroupRef::TextureGroupRef(
     const TextureGroupRef& other) = default;
 
-MailboxManagerSync::TextureGroupRef::~TextureGroupRef() {
-}
+MailboxManagerSync::TextureGroupRef::~TextureGroupRef() = default;
 
-MailboxManagerSync::MailboxManagerSync() {
-}
+MailboxManagerSync::MailboxManagerSync() = default;
 
 MailboxManagerSync::~MailboxManagerSync() {
   DCHECK_EQ(0U, texture_to_group_.size());
@@ -271,7 +269,7 @@ void MailboxManagerSync::ProduceTexture(const Mailbox& mailbox,
         texture, TextureGroupRef(kNewTextureVersion, group_for_texture)));
   }
 
-  DCHECK(texture->mailbox_manager_ == this);
+  DCHECK(texture->mailbox_manager() == this);
 }
 
 void MailboxManagerSync::TextureDeleted(TextureBase* texture_base) {

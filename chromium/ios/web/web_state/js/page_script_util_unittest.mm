@@ -6,6 +6,7 @@
 
 #import <UIKit/UIKit.h>
 #import <WebKit/WebKit.h>
+#include <memory>
 
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -24,13 +25,21 @@ namespace web {
 namespace {
 
 // A test fixture for testing the page_script_util methods.
-typedef WebTest PageScriptUtilTest;
+class PageScriptUtilTest : public WebTest {
+ protected:
+  PageScriptUtilTest() : WebTest(std::make_unique<TestWebClient>()) {}
+
+  TestWebClient* GetWebClient() override {
+    return static_cast<TestWebClient*>(WebTest::GetWebClient());
+  }
+};
 
 // Tests that WKWebView early page script is a valid script that injects global
 // __gCrWeb object.
 TEST_F(PageScriptUtilTest, WKWebViewEarlyPageScript) {
   WKWebView* web_view = BuildWKWebView(CGRectZero, GetBrowserState());
-  ExecuteJavaScript(web_view, GetEarlyPageScript(GetBrowserState()));
+  ExecuteJavaScript(web_view,
+                    GetDocumentStartScriptForAllFrames(GetBrowserState()));
   EXPECT_NSEQ(@"object", ExecuteJavaScript(web_view, @"typeof __gCrWeb"));
 }
 
@@ -38,7 +47,10 @@ TEST_F(PageScriptUtilTest, WKWebViewEarlyPageScript) {
 TEST_F(PageScriptUtilTest, WKEmbedderScript) {
   GetWebClient()->SetEarlyPageScript(@"__gCrEmbedder = {};");
   WKWebView* web_view = BuildWKWebView(CGRectZero, GetBrowserState());
-  ExecuteJavaScript(web_view, GetEarlyPageScript(GetBrowserState()));
+  ExecuteJavaScript(web_view,
+                    GetDocumentStartScriptForAllFrames(GetBrowserState()));
+  ExecuteJavaScript(web_view,
+                    GetDocumentStartScriptForMainFrame(GetBrowserState()));
   EXPECT_NSEQ(@"object", ExecuteJavaScript(web_view, @"typeof __gCrEmbedder"));
 }
 

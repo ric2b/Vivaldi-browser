@@ -16,6 +16,7 @@
 
 #include "base/bind.h"
 #include "base/compiler_specific.h"
+#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -71,15 +72,6 @@ using syncer::ModelTypeChangeProcessor;
 */
 
 namespace history {
-
-// TODO(crbug.com/746268): Clean up this toggle after impact is measured via
-// Finch, which is expected to be neutral.
-const base::Feature kAvoidStrippingRefFromFaviconPageUrls{
-    "AvoidStrippingRefFromFaviconPageUrls", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// TODO(crbug.com/759631): Clean this up after impact is measured via Finch.
-const base::Feature kPropagateFaviconsAcrossClientRedirects{
-    "PropagateFaviconsAcrossClientRedirects", base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace {
 
@@ -569,11 +561,7 @@ void HistoryBackend::AddPage(const HistoryAddPageArgs& request) {
             db_->UpdateVisitRow(visit_row);
           }
 
-          if (base::FeatureList::IsEnabled(
-                  kPropagateFaviconsAcrossClientRedirects)) {
-            extended_redirect_chain =
-                GetCachedRecentRedirects(request.referrer);
-          }
+          extended_redirect_chain = GetCachedRecentRedirects(request.referrer);
         }
       }
     }
@@ -1604,10 +1592,12 @@ void HistoryBackend::GetFaviconsForURL(
     const GURL& page_url,
     const favicon_base::IconTypeSet& icon_types,
     const std::vector<int>& desired_sizes,
+    bool fallback_to_host,
     std::vector<favicon_base::FaviconRawBitmapResult>* bitmap_results) {
   TRACE_EVENT0("browser", "HistoryBackend::GetFaviconsForURL");
   DCHECK(bitmap_results);
-  GetFaviconsFromDB(page_url, icon_types, desired_sizes, bitmap_results);
+  GetFaviconsFromDB(page_url, icon_types, desired_sizes, fallback_to_host,
+                    bitmap_results);
 
   if (desired_sizes.size() == 1)
     bitmap_results->assign(1, favicon_base::ResizeFaviconBitmapResult(
@@ -1954,7 +1944,8 @@ void HistoryBackend::SetImportedFavicons(
         }
       } else {
         if (!thumbnail_db_->GetIconMappingsForPageURL(
-                *url, {favicon_base::IconType::kFavicon}, nullptr)) {
+                *url, {favicon_base::IconType::kFavicon},
+                /*mapping_data=*/nullptr)) {
           // URL is present in history, update the favicon *only* if it is not
           // set already.
           thumbnail_db_->AddIconMapping(*url, favicon_id);
@@ -2051,8 +2042,8 @@ bool HistoryBackend::SetFaviconBitmaps(favicon_base::FaviconID icon_id,
   std::vector<FaviconBitmapIDSize> bitmap_id_sizes;
   thumbnail_db_->GetFaviconBitmapIDSizes(icon_id, &bitmap_id_sizes);
 
-  typedef std::pair<scoped_refptr<base::RefCountedBytes>, gfx::Size>
-      PNGEncodedBitmap;
+  using PNGEncodedBitmap =
+      std::pair<scoped_refptr<base::RefCountedBytes>, gfx::Size>;
   std::vector<PNGEncodedBitmap> to_add;
   for (size_t i = 0; i < bitmaps.size(); ++i) {
     scoped_refptr<base::RefCountedBytes> bitmap_data(new base::RefCountedBytes);
@@ -2123,6 +2114,7 @@ bool HistoryBackend::GetFaviconsFromDB(
     const GURL& page_url,
     const favicon_base::IconTypeSet& icon_types,
     const std::vector<int>& desired_sizes,
+    bool fallback_to_host,
     std::vector<favicon_base::FaviconRawBitmapResult>* favicon_bitmap_results) {
   DCHECK(favicon_bitmap_results);
   favicon_bitmap_results->clear();
@@ -2137,6 +2129,22 @@ bool HistoryBackend::GetFaviconsFromDB(
   std::vector<IconMapping> icon_mappings;
   thumbnail_db_->GetIconMappingsForPageURL(page_url, icon_types,
                                            &icon_mappings);
+
+  if (icon_mappings.empty() && fallback_to_host &&
+      page_url.SchemeIsHTTPOrHTTPS()) {
+    // We didn't find any matches, and the caller requested falling back to the
+    // host of |page_url| for fuzzy matching. Query the database for a page_url
+    // that is known to exist and matches the host of |page_url|. Do this only
+    // if we have a HTTP/HTTPS url.
+    base::Optional<GURL> fallback_page_url =
+        thumbnail_db_->FindFirstPageURLForHost(page_url, icon_types);
+
+    if (fallback_page_url) {
+      thumbnail_db_->GetIconMappingsForPageURL(fallback_page_url.value(),
+                                               icon_types, &icon_mappings);
+    }
+  }
+
   std::vector<favicon_base::FaviconID> favicon_ids;
   for (size_t i = 0; i < icon_mappings.size(); ++i)
     favicon_ids.push_back(icon_mappings[i].icon_id);
@@ -2234,22 +2242,6 @@ bool HistoryBackend::SetFaviconMappingsForPageAndRedirects(
       !SetFaviconMappingsForPages(base::flat_set<GURL>(redirects), icon_type,
                                   icon_id)
            .empty();
-  if (page_url.has_ref() &&
-      !base::FeatureList::IsEnabled(kAvoidStrippingRefFromFaviconPageUrls)) {
-    // Refs often gets added by Javascript, but the redirect chain is keyed to
-    // the URL without a ref.
-    // TODO(crbug.com/746268): This can cause orphan favicons, i.e. without a
-    // matching history URL, which will never be cleaned up by the expirer.
-    GURL::Replacements replacements;
-    replacements.ClearRef();
-    GURL page_url_without_ref = page_url.ReplaceComponents(replacements);
-    redirects = GetCachedRecentRedirects(page_url_without_ref);
-    mappings_changed |=
-        !SetFaviconMappingsForPages(base::flat_set<GURL>(redirects), icon_type,
-                                    icon_id)
-             .empty();
-  }
-
   return mappings_changed;
 }
 

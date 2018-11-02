@@ -12,9 +12,9 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-#include "chrome/browser/browsing_data/cache_counter.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
-#include "chrome/browser/browsing_data/site_data_counting_helper.h"
+#include "chrome/browser/browsing_data/counters/cache_counter.h"
+#include "chrome/browser/browsing_data/counters/site_data_counting_helper.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/external_protocol/external_protocol_handler.h"
@@ -282,12 +282,14 @@ IN_PROC_BROWSER_TEST_F(BrowsingDataRemoverBrowserTest, VideoDecodePerfHistory) {
   const int kFramesPowerEfficient = 0;
   const url::Origin kOrigin = url::Origin::Create(GURL("http://example.com"));
   const bool kIsTopFrame = true;
+  const uint64_t kPlayerId = 1234u;
 
   {
     base::RunLoop run_loop;
     video_decode_perf_history->SavePerfRecord(
         kOrigin, kIsTopFrame, kProfile, kSize, kFrameRate, kFramesDecoded,
-        kFramesDropped, kFramesPowerEfficient, run_loop.QuitWhenIdleClosure());
+        kFramesDropped, kFramesPowerEfficient, kPlayerId,
+        run_loop.QuitWhenIdleClosure());
     run_loop.Run();
   }
 

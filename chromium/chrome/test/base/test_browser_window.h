@@ -72,8 +72,6 @@ class TestBrowserWindow : public BrowserWindow {
   bool ShouldHideUIForFullscreen() const override;
   bool IsFullscreen() const override;
   bool IsFullscreenBubbleVisible() const override;
-  void MaybeShowNewBackShortcutBubble(bool forward) override {}
-  void HideNewBackShortcutBubble() override {}
   LocationBar* GetLocationBar() const override;
   void SetFocusToLocationBar(bool select_all) override {}
   void UpdateReloadStopState(bool is_loading, bool force) override {}
@@ -189,7 +187,7 @@ class TestBrowserWindow : public BrowserWindow {
 
 // Handles destroying a TestBrowserWindow when the Browser it is attached to is
 // destroyed.
-class TestBrowserWindowOwner : public chrome::BrowserListObserver {
+class TestBrowserWindowOwner : public BrowserListObserver {
  public:
   explicit TestBrowserWindowOwner(TestBrowserWindow* window);
   ~TestBrowserWindowOwner() override;

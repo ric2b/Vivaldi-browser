@@ -10,8 +10,8 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
@@ -100,6 +100,7 @@ static const int kSSLHandshakeTimeoutInSeconds = 30;
 
 SSLConnectJob::SSLConnectJob(const std::string& group_name,
                              RequestPriority priority,
+                             const SocketTag& socket_tag,
                              ClientSocketPool::RespectLimits respect_limits,
                              const scoped_refptr<SSLSocketParams>& params,
                              const base::TimeDelta& timeout_duration,
@@ -114,6 +115,7 @@ SSLConnectJob::SSLConnectJob(const std::string& group_name,
           group_name,
           timeout_duration,
           priority,
+          socket_tag,
           respect_limits,
           delegate,
           NetLogWithSource::Make(net_log, NetLogSourceType::SSL_CONNECT_JOB)),
@@ -236,8 +238,8 @@ int SSLConnectJob::DoTransportConnect() {
   scoped_refptr<TransportSocketParams> direct_params =
       params_->GetDirectConnectionParams();
   return transport_socket_handle_->Init(group_name(), direct_params, priority(),
-                                        respect_limits(), callback_,
-                                        transport_pool_, net_log());
+                                        socket_tag(), respect_limits(),
+                                        callback_, transport_pool_, net_log());
 }
 
 int SSLConnectJob::DoTransportConnectComplete(int result) {
@@ -259,9 +261,9 @@ int SSLConnectJob::DoSOCKSConnect() {
   transport_socket_handle_.reset(new ClientSocketHandle());
   scoped_refptr<SOCKSSocketParams> socks_proxy_params =
       params_->GetSocksProxyConnectionParams();
-  return transport_socket_handle_->Init(group_name(), socks_proxy_params,
-                                        priority(), respect_limits(), callback_,
-                                        socks_pool_, net_log());
+  return transport_socket_handle_->Init(
+      group_name(), socks_proxy_params, priority(), socket_tag(),
+      respect_limits(), callback_, socks_pool_, net_log());
 }
 
 int SSLConnectJob::DoSOCKSConnectComplete(int result) {
@@ -278,9 +280,9 @@ int SSLConnectJob::DoTunnelConnect() {
   transport_socket_handle_.reset(new ClientSocketHandle());
   scoped_refptr<HttpProxySocketParams> http_proxy_params =
       params_->GetHttpProxyConnectionParams();
-  return transport_socket_handle_->Init(group_name(), http_proxy_params,
-                                        priority(), respect_limits(), callback_,
-                                        http_proxy_pool_, net_log());
+  return transport_socket_handle_->Init(
+      group_name(), http_proxy_params, priority(), socket_tag(),
+      respect_limits(), callback_, http_proxy_pool_, net_log());
 }
 
 int SSLConnectJob::DoTunnelConnectComplete(int result) {
@@ -366,8 +368,8 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
         result == ERR_SSL_BAD_RECORD_MAC_ALERT) {
       // Report the error code for each time a version interference probe is
       // triggered.
-      UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSLVersionInterferenceProbeTrigger",
-                                  std::abs(result));
+      base::UmaHistogramSparse("Net.SSLVersionInterferenceProbeTrigger",
+                               std::abs(result));
       net_log().AddEventWithNetErrorCode(
           NetLogEventType::SSL_VERSION_INTERFERENCE_PROBE, result);
       SSLErrorDetails details = ssl_socket_->GetConnectErrorDetails();
@@ -417,11 +419,11 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
 
     uint16_t cipher_suite =
         SSLConnectionStatusToCipherSuite(ssl_info.connection_status);
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_CipherSuite", cipher_suite);
+    base::UmaHistogramSparse("Net.SSL_CipherSuite", cipher_suite);
 
     if (ssl_info.key_exchange_group != 0) {
-      UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_KeyExchange.ECDHE",
-                                  ssl_info.key_exchange_group);
+      base::UmaHistogramSparse("Net.SSL_KeyExchange.ECDHE",
+                               ssl_info.key_exchange_group);
     }
 
     if (ssl_info.handshake_type == SSLInfo::HANDSHAKE_RESUME) {
@@ -469,24 +471,24 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
     }
   }
 
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_Connection_Error", std::abs(result));
+  base::UmaHistogramSparse("Net.SSL_Connection_Error", std::abs(result));
 
   if (is_google) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_Connection_Error_Google",
-                                std::abs(result));
+    base::UmaHistogramSparse("Net.SSL_Connection_Error_Google",
+                             std::abs(result));
   }
 
   if (tls13_supported) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_Connection_Error_TLS13Experiment",
-                                std::abs(result));
+    base::UmaHistogramSparse("Net.SSL_Connection_Error_TLS13Experiment",
+                             std::abs(result));
   }
 
   if (result == ERR_SSL_VERSION_INTERFERENCE) {
     // Record the error code version interference was detected at.
     DCHECK(version_interference_probe_);
     DCHECK_NE(OK, version_interference_error_);
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSLVersionInterferenceError",
-                                std::abs(version_interference_error_));
+    base::UmaHistogramSparse("Net.SSLVersionInterferenceError",
+                             std::abs(version_interference_error_));
 
     if (tls13_supported) {
       UMA_HISTOGRAM_ENUMERATION(
@@ -622,9 +624,10 @@ SSLClientSocketPool::SSLConnectJobFactory::NewConnectJob(
     const PoolBase::Request& request,
     ConnectJob::Delegate* delegate) const {
   return std::unique_ptr<ConnectJob>(new SSLConnectJob(
-      group_name, request.priority(), request.respect_limits(),
-      request.params(), ConnectionTimeout(), transport_pool_, socks_pool_,
-      http_proxy_pool_, client_socket_factory_, context_, delegate, net_log_));
+      group_name, request.priority(), request.socket_tag(),
+      request.respect_limits(), request.params(), ConnectionTimeout(),
+      transport_pool_, socks_pool_, http_proxy_pool_, client_socket_factory_,
+      context_, delegate, net_log_));
 }
 
 base::TimeDelta SSLClientSocketPool::SSLConnectJobFactory::ConnectionTimeout()
@@ -635,6 +638,7 @@ base::TimeDelta SSLClientSocketPool::SSLConnectJobFactory::ConnectionTimeout()
 int SSLClientSocketPool::RequestSocket(const std::string& group_name,
                                        const void* socket_params,
                                        RequestPriority priority,
+                                       const SocketTag& socket_tag,
                                        RespectLimits respect_limits,
                                        ClientSocketHandle* handle,
                                        const CompletionCallback& callback,
@@ -643,7 +647,8 @@ int SSLClientSocketPool::RequestSocket(const std::string& group_name,
       static_cast<const scoped_refptr<SSLSocketParams>*>(socket_params);
 
   return base_.RequestSocket(group_name, *casted_socket_params, priority,
-                             respect_limits, handle, callback, net_log);
+                             socket_tag, respect_limits, handle, callback,
+                             net_log);
 }
 
 void SSLClientSocketPool::RequestSockets(

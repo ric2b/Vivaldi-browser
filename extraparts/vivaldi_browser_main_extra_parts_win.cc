@@ -1,6 +1,6 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved
 
-#include "extraparts/vivaldi_browser_main_extra_parts.h"
+#include "extraparts/vivaldi_browser_main_extra_parts_win.h"
 
 #include <shlobj.h>
 
@@ -10,12 +10,23 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/win/registry.h"
+#include "browser/win/vivaldi_utils.h"
 #include "chrome/common/chrome_switches.h"
 
 #define GOOGLE_CHROME_BASE_DIRECTORY L"Google\\Chrome\\Application"
 
+VivaldiBrowserMainExtraPartsWin::VivaldiBrowserMainExtraPartsWin() {}
+
+VivaldiBrowserMainExtraPartsWin::~VivaldiBrowserMainExtraPartsWin() {}
+
+VivaldiBrowserMainExtraParts* VivaldiBrowserMainExtraParts::Create() {
+  return new VivaldiBrowserMainExtraPartsWin();
+}
+
 // Overridden from ChromeBrowserMainExtraParts:
-void VivaldiBrowserMainExtraParts::PostEarlyInitializationWin() {
+void VivaldiBrowserMainExtraPartsWin::PostEarlyInitialization() {
+  VivaldiBrowserMainExtraParts::PostEarlyInitialization();
+
   base::FilePath path;  // chromeWindowsPPapiFlashPath
   // 1 Use Adobes installation if present.
   base::win::RegKey adobepepperflash(

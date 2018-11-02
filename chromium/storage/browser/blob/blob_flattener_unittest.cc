@@ -10,11 +10,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/time/time.h"
+#include "services/network/public/cpp/data_element.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_data_item.h"
@@ -22,7 +22,6 @@
 #include "storage/browser/blob/blob_memory_controller.h"
 #include "storage/browser/blob/blob_storage_registry.h"
 #include "storage/browser/blob/shareable_blob_data_item.h"
-#include "storage/common/data_element.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace storage {
@@ -61,7 +60,7 @@ class BlobFlattenerTest : public testing::Test {
 
   void SetUp() override {
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
-    context_ = base::MakeUnique<BlobStorageContext>();
+    context_ = std::make_unique<BlobStorageContext>();
   }
 
   void TearDown() override {
@@ -72,26 +71,26 @@ class BlobFlattenerTest : public testing::Test {
   }
 
   scoped_refptr<BlobDataItem> CreateDataDescriptionItem(size_t size) {
-    std::unique_ptr<DataElement> element(new DataElement());
+    std::unique_ptr<network::DataElement> element(new network::DataElement());
     element->SetToBytesDescription(size);
     return scoped_refptr<BlobDataItem>(new BlobDataItem(std::move(element)));
   };
 
   scoped_refptr<BlobDataItem> CreateDataItem(const char* memory, size_t size) {
-    std::unique_ptr<DataElement> element(new DataElement());
+    std::unique_ptr<network::DataElement> element(new network::DataElement());
     element->SetToBytes(memory, size);
     return scoped_refptr<BlobDataItem>(new BlobDataItem(std::move(element)));
   };
 
   scoped_refptr<BlobDataItem> CreateFileItem(size_t offset, size_t size) {
-    std::unique_ptr<DataElement> element(new DataElement());
+    std::unique_ptr<network::DataElement> element(new network::DataElement());
     element->SetToFilePathRange(fake_file_path_, offset, size,
                                 base::Time::Max());
     return scoped_refptr<BlobDataItem>(new BlobDataItem(std::move(element)));
   };
 
   scoped_refptr<BlobDataItem> CreateFutureFileItem(size_t offset, size_t size) {
-    std::unique_ptr<DataElement> element(new DataElement());
+    std::unique_ptr<network::DataElement> element(new network::DataElement());
     element->SetToFilePathRange(BlobDataBuilder::GetFutureFileItemPath(0),
                                 offset, size, base::Time());
     return scoped_refptr<BlobDataItem>(new BlobDataItem(std::move(element)));
@@ -200,7 +199,7 @@ TEST_F(BlobFlattenerTest, BlobWithSlices) {
   // * pending data,
 
   context_ =
-      base::MakeUnique<BlobStorageContext>(temp_dir_.GetPath(), file_runner_);
+      std::make_unique<BlobStorageContext>(temp_dir_.GetPath(), file_runner_);
   SetTestMemoryLimits();
 
   std::unique_ptr<BlobDataHandle> data_blob;

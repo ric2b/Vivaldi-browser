@@ -8,17 +8,14 @@
 #include "base/logging.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/extensions/api/messaging/incognito_connectability_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/infobars/core/confirm_infobar_delegate.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/extension.h"
 #include "ui/base/l10n/l10n_util.h"
-
-using infobars::InfoBar;
-using infobars::InfoBarManager;
 
 namespace extensions {
 
@@ -27,97 +24,6 @@ namespace {
 IncognitoConnectability::ScopedAlertTracker::Mode g_alert_mode =
     IncognitoConnectability::ScopedAlertTracker::INTERACTIVE;
 int g_alert_count = 0;
-
-class IncognitoConnectabilityInfoBarDelegate : public ConfirmInfoBarDelegate {
- public:
-  typedef base::Callback<void(
-      IncognitoConnectability::ScopedAlertTracker::Mode)> InfoBarCallback;
-
-  // Creates a confirmation infobar and delegate and adds the infobar to
-  // |infobar_service|.
-  static InfoBar* Create(InfoBarManager* infobar_manager,
-                         const base::string16& message,
-                         const InfoBarCallback& callback);
-
-  // Marks the infobar as answered so that the callback is not executed when the
-  // delegate is destroyed.
-  void set_answered() { answered_ = true; }
-
- private:
-  IncognitoConnectabilityInfoBarDelegate(const base::string16& message,
-                                         const InfoBarCallback& callback);
-  ~IncognitoConnectabilityInfoBarDelegate() override;
-
-  // ConfirmInfoBarDelegate:
-  Type GetInfoBarType() const override;
-  infobars::InfoBarDelegate::InfoBarIdentifier GetIdentifier() const override;
-  base::string16 GetMessageText() const override;
-  base::string16 GetButtonLabel(InfoBarButton button) const override;
-  bool Accept() override;
-  bool Cancel() override;
-
-  base::string16 message_;
-  bool answered_;
-  InfoBarCallback callback_;
-};
-
-// static
-InfoBar* IncognitoConnectabilityInfoBarDelegate::Create(
-    InfoBarManager* infobar_manager,
-    const base::string16& message,
-    const IncognitoConnectabilityInfoBarDelegate::InfoBarCallback& callback) {
-  return infobar_manager->AddInfoBar(infobar_manager->CreateConfirmInfoBar(
-      std::unique_ptr<ConfirmInfoBarDelegate>(
-          new IncognitoConnectabilityInfoBarDelegate(message, callback))));
-}
-
-IncognitoConnectabilityInfoBarDelegate::IncognitoConnectabilityInfoBarDelegate(
-    const base::string16& message,
-    const InfoBarCallback& callback)
-    : message_(message), answered_(false), callback_(callback) {
-}
-
-IncognitoConnectabilityInfoBarDelegate::
-    ~IncognitoConnectabilityInfoBarDelegate() {
-  if (!answered_) {
-    // The infobar has closed without the user expressing an explicit
-    // preference. The current request should be denied but further requests
-    // should show an interactive prompt.
-    callback_.Run(IncognitoConnectability::ScopedAlertTracker::INTERACTIVE);
-  }
-}
-
-infobars::InfoBarDelegate::Type
-IncognitoConnectabilityInfoBarDelegate::GetInfoBarType() const {
-  return PAGE_ACTION_TYPE;
-}
-
-infobars::InfoBarDelegate::InfoBarIdentifier
-IncognitoConnectabilityInfoBarDelegate::GetIdentifier() const {
-  return INCOGNITO_CONNECTABILITY_INFOBAR_DELEGATE;
-}
-
-base::string16 IncognitoConnectabilityInfoBarDelegate::GetMessageText() const {
-  return message_;
-}
-
-base::string16 IncognitoConnectabilityInfoBarDelegate::GetButtonLabel(
-    InfoBarButton button) const {
-  return l10n_util::GetStringUTF16(
-      (button == BUTTON_OK) ? IDS_PERMISSION_ALLOW : IDS_PERMISSION_DENY);
-}
-
-bool IncognitoConnectabilityInfoBarDelegate::Accept() {
-  callback_.Run(IncognitoConnectability::ScopedAlertTracker::ALWAYS_ALLOW);
-  answered_ = true;
-  return true;
-}
-
-bool IncognitoConnectabilityInfoBarDelegate::Cancel() {
-  callback_.Run(IncognitoConnectability::ScopedAlertTracker::ALWAYS_DENY);
-  answered_ = true;
-  return true;
-}
 
 }  // namespace
 
@@ -177,9 +83,9 @@ void IncognitoConnectability::Query(
 
   PendingOrigin& pending_origin =
       pending_origins_[make_pair(extension->id(), origin)];
-  InfoBarManager* infobar_manager =
+  InfoBarService* infobar_service =
       InfoBarService::FromWebContents(web_contents);
-  TabContext& tab_context = pending_origin[infobar_manager];
+  TabContext& tab_context = pending_origin[infobar_service];
   tab_context.callbacks.push_back(callback);
   if (tab_context.infobar) {
     // This tab is already displaying an infobar for this extension and origin.
@@ -197,19 +103,20 @@ void IncognitoConnectability::Query(
               ? IDS_EXTENSION_PROMPT_APP_CONNECT_FROM_INCOGNITO
               : IDS_EXTENSION_PROMPT_EXTENSION_CONNECT_FROM_INCOGNITO;
       tab_context.infobar = IncognitoConnectabilityInfoBarDelegate::Create(
-          infobar_manager, l10n_util::GetStringFUTF16(
-                               template_id, base::UTF8ToUTF16(origin.spec()),
-                               base::UTF8ToUTF16(extension->name())),
+          infobar_service,
+          l10n_util::GetStringFUTF16(template_id,
+                                     base::UTF8ToUTF16(origin.spec()),
+                                     base::UTF8ToUTF16(extension->name())),
           base::Bind(&IncognitoConnectability::OnInteractiveResponse,
                      weak_factory_.GetWeakPtr(), extension->id(), origin,
-                     infobar_manager));
+                     infobar_service));
       break;
     }
 
     // Testing code can override to always allow or deny.
     case ScopedAlertTracker::ALWAYS_ALLOW:
     case ScopedAlertTracker::ALWAYS_DENY:
-      OnInteractiveResponse(extension->id(), origin, infobar_manager,
+      OnInteractiveResponse(extension->id(), origin, infobar_service,
                             g_alert_mode);
       break;
   }
@@ -227,7 +134,7 @@ IncognitoConnectability::TabContext::~TabContext() {
 void IncognitoConnectability::OnInteractiveResponse(
     const std::string& extension_id,
     const GURL& origin,
-    InfoBarManager* infobar_manager,
+    InfoBarService* infobar_service,
     ScopedAlertTracker::Mode response) {
   switch (response) {
     case ScopedAlertTracker::ALWAYS_ALLOW:
@@ -245,29 +152,29 @@ void IncognitoConnectability::OnInteractiveResponse(
   DCHECK(base::ContainsKey(pending_origins_, make_pair(extension_id, origin)));
   PendingOrigin& pending_origin =
       pending_origins_[make_pair(extension_id, origin)];
-  DCHECK(base::ContainsKey(pending_origin, infobar_manager));
+  DCHECK(base::ContainsKey(pending_origin, infobar_service));
 
   std::vector<base::Callback<void(bool)>> callbacks;
   if (response == ScopedAlertTracker::INTERACTIVE) {
     // No definitive answer for this extension and origin. Execute only the
     // callbacks associated with this tab.
-    TabContext& tab_context = pending_origin[infobar_manager];
+    TabContext& tab_context = pending_origin[infobar_service];
     callbacks.swap(tab_context.callbacks);
-    pending_origin.erase(infobar_manager);
+    pending_origin.erase(infobar_service);
   } else {
     // We have a definitive answer for this extension and origin. Close all
     // other infobars and answer all the callbacks.
     for (const auto& map_entry : pending_origin) {
-      InfoBarManager* other_infobar_manager = map_entry.first;
+      InfoBarService* other_infobar_service = map_entry.first;
       const TabContext& other_tab_context = map_entry.second;
-      if (other_infobar_manager != infobar_manager) {
+      if (other_infobar_service != infobar_service) {
         // Disarm the delegate so that it doesn't think the infobar has been
         // dismissed.
         IncognitoConnectabilityInfoBarDelegate* delegate =
             static_cast<IncognitoConnectabilityInfoBarDelegate*>(
                 other_tab_context.infobar->delegate());
         delegate->set_answered();
-        other_infobar_manager->RemoveInfoBar(other_tab_context.infobar);
+        other_infobar_service->RemoveInfoBar(other_tab_context.infobar);
       }
       callbacks.insert(callbacks.end(), other_tab_context.callbacks.begin(),
                        other_tab_context.callbacks.end());

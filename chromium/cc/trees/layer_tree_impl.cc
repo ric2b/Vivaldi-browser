@@ -298,15 +298,37 @@ void LayerTreeImpl::BuildLayerListForTesting() {
 
 void LayerTreeImpl::InvalidateRegionForImages(
     const PaintImageIdFlatSet& images_to_invalidate) {
+  TRACE_EVENT_BEGIN1("cc", "LayerTreeImpl::InvalidateRegionForImages",
+                     "total_layer_count", picture_layers_.size());
   DCHECK(IsSyncTree());
 
-  if (images_to_invalidate.empty())
-    return;
-
-  // TODO(khushalsagar): It might be better to keep track of layers with images
-  // and only iterate through those here.
-  for (auto* picture_layer : picture_layers_)
-    picture_layer->InvalidateRegionForImages(images_to_invalidate);
+  size_t no_images_count = 0;
+  size_t no_invalidation_count = 0;
+  size_t invalidated_count = 0;
+  if (!images_to_invalidate.empty()) {
+    // TODO(khushalsagar): It might be better to keep track of layers with
+    // images and only iterate through those here.
+    for (auto* picture_layer : picture_layers_) {
+      auto result =
+          picture_layer->InvalidateRegionForImages(images_to_invalidate);
+      switch (result) {
+        case PictureLayerImpl::ImageInvalidationResult::kNoImages:
+          ++no_images_count;
+          break;
+        case PictureLayerImpl::ImageInvalidationResult::kNoInvalidation:
+          ++no_invalidation_count;
+          break;
+        case PictureLayerImpl::ImageInvalidationResult::kInvalidated:
+          ++invalidated_count;
+          break;
+      }
+    }
+  }
+  TRACE_EVENT_END1(
+      "cc", "LayerTreeImpl::InvalidateRegionForImages", "counts",
+      base::StringPrintf("no_images[%zu] no_invalidaton[%zu] invalidated[%zu]",
+                         no_images_count, no_invalidation_count,
+                         invalidated_count));
 }
 
 bool LayerTreeImpl::IsRootLayer(const LayerImpl* layer) const {
@@ -368,6 +390,7 @@ void LayerTreeImpl::SetPropertyTrees(PropertyTrees* property_trees) {
 }
 
 void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
+  TRACE_EVENT0("cc", "LayerTreeImpl::PushPropertyTreesTo");
   // Property trees may store damage status. We preserve the active tree
   // damage status by pushing the damage status from active tree property
   // trees to pending tree property trees or by moving it onto the layers.
@@ -405,6 +428,7 @@ void LayerTreeImpl::PushSurfaceIdsTo(LayerTreeImpl* target_tree) {
 }
 
 void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
+  TRACE_EVENT0("cc", "LayerTreeImpl::PushPropertiesTo");
   // The request queue should have been processed and does not require a push.
   DCHECK_EQ(ui_resource_request_queue_.size(), 0u);
 
@@ -1561,11 +1585,13 @@ void LayerTreeImpl::AppendSwapPromises(
   new_swap_promises.clear();
 }
 
-void LayerTreeImpl::FinishSwapPromises(viz::CompositorFrameMetadata* metadata) {
+void LayerTreeImpl::FinishSwapPromises(
+    viz::CompositorFrameMetadata* compositor_frame_metadata,
+    RenderFrameMetadata* render_frame_metadata) {
   for (const auto& swap_promise : swap_promise_list_)
-    swap_promise->WillSwap(metadata);
+    swap_promise->WillSwap(compositor_frame_metadata, render_frame_metadata);
   for (const auto& swap_promise : pinned_swap_promise_list_)
-    swap_promise->WillSwap(metadata);
+    swap_promise->WillSwap(compositor_frame_metadata, render_frame_metadata);
 }
 
 void LayerTreeImpl::ClearSwapPromises() {
@@ -1878,6 +1904,7 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
                                      LayerImpl* root_layer,
                                      const Functor& func,
                                      FindClosestMatchingLayerState* state) {
+  base::ElapsedTimer timer;
   // We want to iterate from front to back when hit testing.
   for (auto* layer : base::Reversed(*root_layer->layer_tree_impl())) {
     if (!func(layer))
@@ -1905,6 +1932,12 @@ static void FindClosestMatchingLayer(const gfx::PointF& screen_space_point,
       state->closest_distance = distance_to_intersection;
       state->closest_match = layer;
     }
+  }
+  if (const char* client_name = GetClientNameForMetrics()) {
+    UMA_HISTOGRAM_COUNTS_1M(
+        base::StringPrintf("Compositing.%s.HitTestTimeToFindClosestLayer",
+                           client_name),
+        timer.Elapsed().InMicroseconds());
   }
 }
 
@@ -2088,6 +2121,10 @@ void LayerTreeImpl::UpdateImageDecodingHints(
     base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
         decoding_mode_map) {
   host_impl_->UpdateImageDecodingHints(std::move(decoding_mode_map));
+}
+
+bool LayerTreeImpl::IsActivelyScrolling() const {
+  return host_impl_->IsActivelyScrolling();
 }
 
 void LayerTreeImpl::SetPendingPageScaleAnimation(

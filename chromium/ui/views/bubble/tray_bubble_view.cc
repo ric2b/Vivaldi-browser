@@ -30,6 +30,7 @@
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow_types.h"
+#include "ui/wm/core/window_util.h"
 
 namespace views {
 
@@ -157,6 +158,17 @@ TrayBubbleView::RerouteEventHandler::~RerouteEventHandler() {
 }
 
 void TrayBubbleView::RerouteEventHandler::OnKeyEvent(ui::KeyEvent* event) {
+  // Do not handle a key event if it is targeted to the tray or its descendants,
+  // or if the target has the tray as a transient ancestor. RerouteEventHandler
+  // is for rerouting events which are not targetted to the tray. Those events
+  // should be handled by the target.
+  aura::Window* target = static_cast<aura::Window*>(event->target());
+  aura::Window* tray_window = tray_bubble_view_->GetWidget()->GetNativeView();
+  if (target && (tray_window->Contains(target) ||
+                 wm::HasTransientAncestor(target, tray_window))) {
+    return;
+  }
+
   // Only passes Tab, Shift+Tab, Esc to the widget as it can consume more key
   // events. e.g. Alt+Tab can be consumed as focus traversal by FocusManager.
   ui::KeyboardCode key_code = event->key_code();
@@ -193,7 +205,7 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     : BubbleDialogDelegateView(init_params.anchor_view,
                                GetArrowAlignment(init_params.anchor_alignment)),
       params_(init_params),
-      layout_(new BottomAlignedBoxLayout(this)),
+      layout_(nullptr),
       delegate_(init_params.delegate),
       preferred_width_(init_params.min_width),
       bubble_border_(new BubbleBorder(
@@ -220,8 +232,9 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
       views::Painter::CreateSolidRoundRectPainter(
           SK_ColorBLACK, bubble_border_->GetBorderCornerRadius()));
 
-  layout_->SetDefaultFlex(1);
-  SetLayoutManager(layout_);
+  auto layout = std::make_unique<BottomAlignedBoxLayout>(this);
+  layout->SetDefaultFlex(1);
+  layout_ = SetLayoutManager(std::move(layout));
 }
 
 TrayBubbleView::~TrayBubbleView() {

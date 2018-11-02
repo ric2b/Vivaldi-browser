@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/media/video_capture_gpu_jpeg_decoder.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -175,7 +176,7 @@ void VideoCaptureGpuJpegDecoder::DecodeCapturedData(
       media::mojom::VideoFrameInfo::New();
   out_frame_info->timestamp = timestamp;
   out_frame_info->pixel_format = media::PIXEL_FORMAT_I420;
-  out_frame_info->storage_type = media::PIXEL_STORAGE_CPU;
+  out_frame_info->storage_type = media::VideoPixelStorage::CPU;
   out_frame_info->coded_size = dimensions;
   out_frame_info->visible_rect = gfx::Rect(dimensions);
   out_frame_info->metadata = out_frame->metadata()->CopyInternalValues();
@@ -284,7 +285,7 @@ void VideoCaptureGpuJpegDecoder::FinishInitialization(
 
   if (unbound_remote_decoder.is_valid()) {
     base::AutoLock lock(lock_);
-    decoder_ = base::MakeUnique<media::MojoJpegDecodeAccelerator>(
+    decoder_ = std::make_unique<media::MojoJpegDecodeAccelerator>(
         BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
         std::move(unbound_remote_decoder));
 

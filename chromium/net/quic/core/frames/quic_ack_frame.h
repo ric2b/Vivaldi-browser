@@ -29,169 +29,9 @@ class QUIC_EXPORT_PRIVATE PacketNumberQueue {
   PacketNumberQueue& operator=(const PacketNumberQueue& other);
   PacketNumberQueue& operator=(PacketNumberQueue&& other);
 
-  class QUIC_EXPORT_PRIVATE const_iterator {
-   public:
-    const_iterator(const const_iterator& other);
-    const_iterator(const_iterator&& other);
-    ~const_iterator();
-
-    explicit const_iterator(
-        typename QuicIntervalSet<QuicPacketNumber>::const_iterator it);
-
-    explicit const_iterator(
-        typename QuicDeque<Interval<QuicPacketNumber>>::const_iterator it);
-
-    typedef std::input_iterator_tag iterator_category;
-    typedef Interval<QuicPacketNumber> value_type;
-    typedef value_type& reference;
-    typedef value_type* pointer;
-    typedef typename std::vector<value_type>::iterator::difference_type
-        difference_type;
-
-    inline const Interval<QuicPacketNumber>& operator*() {
-      if (use_deque_it_) {
-        return *deque_it_;
-      } else {
-        return *vector_it_;
-      }
-    }
-
-    inline const_iterator& operator++() {
-      if (use_deque_it_) {
-        deque_it_++;
-      } else {
-        vector_it_++;
-      }
-      return *this;
-    }
-
-    inline const_iterator& operator--() {
-      if (use_deque_it_) {
-        deque_it_--;
-      } else {
-        vector_it_--;
-      }
-      return *this;
-    }
-
-    inline const_iterator& operator++(int) {
-      if (use_deque_it_) {
-        ++deque_it_;
-      } else {
-        ++vector_it_;
-      }
-      return *this;
-    }
-
-    inline bool operator==(const const_iterator& other) {
-      if (use_deque_it_ != other.use_deque_it_) {
-        return false;
-      }
-
-      if (use_deque_it_) {
-        return deque_it_ == other.deque_it_;
-      } else {
-        return vector_it_ == other.vector_it_;
-      }
-    }
-
-    inline bool operator!=(const const_iterator& other) {
-      return !(*this == other);
-    }
-
-   private:
-    typename QuicIntervalSet<QuicPacketNumber>::const_iterator vector_it_;
-    typename QuicDeque<Interval<QuicPacketNumber>>::const_iterator deque_it_;
-    const bool use_deque_it_;
-  };
-
-  class QUIC_EXPORT_PRIVATE const_reverse_iterator {
-   public:
-    const_reverse_iterator(const const_reverse_iterator& other);
-    const_reverse_iterator(const_reverse_iterator&& other);
-    ~const_reverse_iterator();
-
-    explicit const_reverse_iterator(
-        const typename QuicIntervalSet<
-            QuicPacketNumber>::const_reverse_iterator& it);
-
-    explicit const_reverse_iterator(
-        const typename QuicDeque<
-            Interval<QuicPacketNumber>>::const_reverse_iterator& it);
-
-    typedef std::input_iterator_tag iterator_category;
-    typedef Interval<QuicPacketNumber> value_type;
-    typedef value_type& reference;
-    typedef value_type* pointer;
-    typedef typename std::vector<value_type>::iterator::difference_type
-        difference_type;
-
-    inline const Interval<QuicPacketNumber>& operator*() {
-      if (use_deque_it_) {
-        return *deque_it_;
-      } else {
-        return *vector_it_;
-      }
-    }
-
-    inline const Interval<QuicPacketNumber>* operator->() {
-      if (use_deque_it_) {
-        return &*deque_it_;
-      } else {
-        return &*vector_it_;
-      }
-    }
-
-    inline const_reverse_iterator& operator++() {
-      if (use_deque_it_) {
-        deque_it_++;
-      } else {
-        vector_it_++;
-      }
-      return *this;
-    }
-
-    inline const_reverse_iterator& operator--() {
-      if (use_deque_it_) {
-        deque_it_--;
-      } else {
-        vector_it_--;
-      }
-      return *this;
-    }
-
-    inline const_reverse_iterator& operator++(int) {
-      if (use_deque_it_) {
-        ++deque_it_;
-      } else {
-        ++vector_it_;
-      }
-      return *this;
-    }
-
-    inline bool operator==(const const_reverse_iterator& other) {
-      if (use_deque_it_ != other.use_deque_it_) {
-        return false;
-      }
-
-      if (use_deque_it_) {
-        return deque_it_ == other.deque_it_;
-      } else {
-        return vector_it_ == other.vector_it_;
-      }
-    }
-
-    inline bool operator!=(const const_reverse_iterator& other) {
-      return !(*this == other);
-    }
-
-   private:
-    typename QuicIntervalSet<QuicPacketNumber>::const_reverse_iterator
-        vector_it_;
-    typename QuicDeque<Interval<QuicPacketNumber>>::const_reverse_iterator
-        deque_it_;
-    const bool use_deque_it_;
-  };
+  typedef QuicDeque<Interval<QuicPacketNumber>>::const_iterator const_iterator;
+  typedef QuicDeque<Interval<QuicPacketNumber>>::const_reverse_iterator
+      const_reverse_iterator;
 
   // Adds |packet_number| to the set of packets in the queue.
   void Add(QuicPacketNumber packet_number);
@@ -243,11 +83,7 @@ class QUIC_EXPORT_PRIVATE PacketNumberQueue {
       const PacketNumberQueue& q);
 
  private:
-  // TODO(lilika): Remove QuicIntervalSet<QuicPacketNumber>
-  // once FLAGS_quic_reloadable_flag_quic_frames_deque2 is removed
-  QuicIntervalSet<QuicPacketNumber> packet_number_intervals_;
   QuicDeque<Interval<QuicPacketNumber>> packet_number_deque_;
-  bool use_deque_;
 };
 
 struct QUIC_EXPORT_PRIVATE QuicAckFrame {
@@ -259,9 +95,10 @@ struct QUIC_EXPORT_PRIVATE QuicAckFrame {
       std::ostream& os,
       const QuicAckFrame& ack_frame);
 
-  // The highest packet number we've observed from the peer.
-  // This is being deprecated.
-  QuicPacketNumber deprecated_largest_observed;
+  // The highest packet number we've observed from the peer. When |packets| is
+  // not empty, it should always be equal to packets.Max(). The |LargestAcked|
+  // function ensures this invariant in debug mode.
+  QuicPacketNumber largest_acked;
 
   // Time elapsed since largest_observed() was received until this Ack frame was
   // sent.
@@ -276,7 +113,11 @@ struct QUIC_EXPORT_PRIVATE QuicAckFrame {
 
 // The highest acked packet number we've observed from the peer. If no packets
 // have been observed, return 0.
-QUIC_EXPORT_PRIVATE QuicPacketNumber LargestAcked(const QuicAckFrame& frame);
+inline QUIC_EXPORT_PRIVATE QuicPacketNumber
+LargestAcked(const QuicAckFrame& frame) {
+  DCHECK(frame.packets.Empty() || frame.packets.Max() == frame.largest_acked);
+  return frame.largest_acked;
+}
 
 // True if the packet number is greater than largest_observed or is listed
 // as missing.

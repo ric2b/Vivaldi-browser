@@ -20,7 +20,7 @@ namespace blink {
 
 class Document;
 class Navigator;
-class VR;
+class XR;
 class VRController;
 
 class MODULES_EXPORT NavigatorVR final
@@ -36,9 +36,11 @@ class MODULES_EXPORT NavigatorVR final
   static NavigatorVR& From(Navigator&);
   ~NavigatorVR() override;
 
-  // Latest API
-  static VR* vr(Navigator&);
-  VR* vr();
+  // XR API
+  // TODO(offenwanger) Should eventually move this out into it's own separate
+  // Navigator supplement.
+  static XR* xr(Navigator&);
+  XR* xr();
 
   // Legacy API
   static ScriptPromise getVRDisplays(ScriptState*, Navigator&);
@@ -74,12 +76,16 @@ class MODULES_EXPORT NavigatorVR final
 
   void FireVRDisplayPresentChange(VRDisplay*);
 
-  Member<VR> vr_;
+  Member<XR> xr_;
   Member<VRController> controller_;
 
   // Whether this page is listening for vrdisplayactivate event.
   bool listening_for_activate_ = false;
   bool focused_ = false;
+
+  // Metrics data - indicates whether we've already measured this data so we
+  // don't do it every frame.
+  bool did_log_getVRDisplays_ = false;
 };
 
 }  // namespace blink

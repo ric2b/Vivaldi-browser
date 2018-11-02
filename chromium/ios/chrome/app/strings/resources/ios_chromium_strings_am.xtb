@@ -3,6 +3,7 @@
 <translationbundle lang="am">
 <translation id="102360288709523007">የአጠቃቀም ስታቲክሶችን እና የብልሽት ሪፖርቶችን ወደ Google በመላክ Chromiumን የተሻለ ለማድረግ ያግዙ።</translation>
 <translation id="1185134272377778587">ስለChromium</translation>
+<translation id="1289966288285062467">የChromium ግላዊነት ማስታወቂያ</translation>
 <translation id="1472013873724362412">የእርስዎ መለያ በChromium ላይ አይሠራም። እባክዎ የእርስዎን የጎራ አስተዳዳሪ ያነጋግሩ ወይም ለመግባት መደበኛ Google መለያ ይጠቀሙ።</translation>
 <translation id="1736662517232558588">የChromium ውሂብ ጸድቷል</translation>
 <translation id="1838412507805038478">Chromium የዚህ ድር ጣቢያ እውቅና ማረጋገጫ ያወጣው <ph name="ISSUER" /> መሆኑን አረጋግጧል።</translation>
@@ -31,8 +32,8 @@
 <translation id="6268381023930128611">ከChromium ተዘግቶ ይውጣ?</translation>
 <translation id="6424492062988593837">Chromium አሁን ተሻሽሏል! አዲስ ስሪት አለ።</translation>
 <translation id="6604711459180487467">Chromium ውስጥ በአካባቢዎ ላይ የተመሠረተ የተሻለ ተሞክሮ ያግኙ።</translation>
+<translation id="6626296268883197964">ይህን መተግበሪያ በመጠቀምዎ በChromium <ph name="BEGIN_LINK_TOS" />አገልግሎት ውል<ph name="END_LINK_TOS" /> እና <ph name="BEGIN_LINK_PRIVACY" />የግላዊነት ማስታወቂያ<ph name="END_LINK_PRIVACY" /> ተስማምተዋል።</translation>
 <translation id="7099326575020694068">Chromium ካሜራዎን በተከፈለ እይታ ሁነታ ላይ መጠቀም አይችልም</translation>
-<translation id="7144758435978427212">በአቅራቢያ ካሉ ነገሮች የተላኩ ድረ-ገጾችን ያግኙ። ብሉቱዝ በሚበራበት ጊዜ Chromium በእርስዎ ዙሪያ ካሉ ነገሮች ጋር የተጎዳኙ ድረ-ገጾችን ሊሰበስብ እና ይበልጥ ጠቃሚ የሆኑትን ለማግኘት ወደ Google ማንነት ሳያሳውቅ ሊልካቸው ይችላል። <ph name="BEGIN_LINK" />የበለጠ ለመረዳት<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium የእርስዎን መለያዎች ወደ ድር በማምጣት ጊዜ ይቆጥብልዎታል። ቅንብሮች ውስጥ መለያዎችን ማከል ወይም ማስወገድ ይችላሉ።</translation>
 <translation id="7269362888766543920">አንዳንድ ተጨማሪዎች Chromium እንዲበላሽ ያደርጋሉ። እባክዎ እነሱን ለማራገፍ ይሞክሩ።</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -40,7 +41,6 @@
 <translation id="7400689562045506105">Chromiumን በሁሉም ቦታ ይጠቀሙ</translation>
 <translation id="7674213385180944843">ቅንብሮች &gt; ግላዊነት &gt; ካሜራ &gt; Chromium ይክፈቱ እና ማይክሮፎን ያብሩ።</translation>
 <translation id="786327964234957808">የስምረት መለያዎችን ከ<ph name="USER_EMAIL1" /> ወደ <ph name="USER_EMAIL2" /> እየቀየሩ ነው። ነባሩ የChromium ውሂብዎ በ<ph name="DOMAIN" /> ነው የሚተዳደረው። ይሄ ውሂብዎን ከዚህ መሣሪያዎ ይሰርዘዋል፣ ነገር ግን ውሂብዎ በ<ph name="USER_EMAIL1" /> ውስጥ እንዳለ ይቀራል።</translation>
-<translation id="8111736072665034317">ይህን መተግበሪያ በመጠቀምዎ በChromium <ph name="BEGIN_LINK" />አገልግሎት ውል<ph name="END_LINK" /> ተስማምተዋል።</translation>
 <translation id="8175055321229419309">ጠቃሚ ምክር፦ <ph name="BEGIN_LINK" />Chromiumን ወደ የእርስዎ መትከያ ይውሰዱት<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">በአካባቢዎ ላይ በመመስረት በChromium ውስጥ የተሻለ የGoogle ተሞክሮ ያግኙ።</translation>
 <translation id="8353224596138547809">Chromium የዚህ ጣቢያ ይለፍ ቃልዎን እንዲያስቀምጥልዎ ይፈልጋሉ?</translation>

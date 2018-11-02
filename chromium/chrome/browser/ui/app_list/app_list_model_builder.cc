@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/app_list/model/app_list_item.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 
 AppListModelBuilder::AppListModelBuilder(AppListControllerDelegate* controller,
                                          const char* item_type)
@@ -16,10 +16,9 @@ AppListModelBuilder::AppListModelBuilder(AppListControllerDelegate* controller,
 AppListModelBuilder::~AppListModelBuilder() {
 }
 
-void AppListModelBuilder::Initialize(
-    app_list::AppListSyncableService* service,
-    Profile* profile,
-    app_list::AppListModelUpdater* model_updater) {
+void AppListModelBuilder::Initialize(app_list::AppListSyncableService* service,
+                                     Profile* profile,
+                                     AppListModelUpdater* model_updater) {
   DCHECK(!service_ && !profile_ && !model_updater_);
   service_ = service;
   profile_ = profile;
@@ -28,8 +27,7 @@ void AppListModelBuilder::Initialize(
   BuildModel();
 }
 
-void AppListModelBuilder::InsertApp(
-    std::unique_ptr<app_list::AppListItem> app) {
+void AppListModelBuilder::InsertApp(std::unique_ptr<ChromeAppListItem> app) {
   if (service_) {
     service_->AddItem(std::move(app));
     return;
@@ -51,8 +49,8 @@ AppListModelBuilder::GetSyncItem(const std::string& id) {
   return service_ ? service_->GetSyncItem(id) : nullptr;
 }
 
-app_list::AppListItem* AppListModelBuilder::GetAppItem(const std::string& id) {
-  app_list::AppListItem* item = model_updater_->FindItem(id);
+ChromeAppListItem* AppListModelBuilder::GetAppItem(const std::string& id) {
+  ChromeAppListItem* item = model_updater_->FindItem(id);
   if (item && item->GetItemType() != item_type_) {
     VLOG(2) << "App Item matching id: " << id
             << " has incorrect type: '" << item->GetItemType() << "'";

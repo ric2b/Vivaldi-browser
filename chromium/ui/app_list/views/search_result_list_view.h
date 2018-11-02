@@ -10,12 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/app_list/views/search_result_container_view.h"
-#include "ui/gfx/animation/animation_delegate.h"
 #include "ui/views/view.h"
-
-namespace gfx {
-class LinearAnimation;
-}
 
 namespace app_list {
 namespace test {
@@ -28,16 +23,16 @@ class SearchResultView;
 
 // SearchResultListView displays SearchResultList with a list of
 // SearchResultView.
-class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
-                                             public SearchResultContainerView {
+class APP_LIST_EXPORT SearchResultListView : public SearchResultContainerView {
  public:
   SearchResultListView(AppListMainView* main_view,
                        AppListViewDelegate* view_delegate);
   ~SearchResultListView() override;
 
-  void UpdateAutoLaunchState();
-
   bool IsResultViewSelected(const SearchResultView* result_view) const;
+
+  // Helper function to get SearchResultView at given |index|.
+  SearchResultView* GetResultViewAt(size_t index);
 
   void SearchResultActivated(SearchResultView* view, int event_flags);
 
@@ -48,8 +43,8 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   void OnSearchResultInstalled(SearchResultView* view);
 
   // Overridden from views::View:
-  bool OnKeyPressed(const ui::KeyEvent& event) override;
   gfx::Size CalculatePreferredSize() const override;
+  const char* GetClassName() const override;
 
   // Overridden from ui::ListModelObserver:
   void ListItemsRemoved(size_t start, size_t count) override;
@@ -59,10 +54,8 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
                            bool directional_movement) override;
   void NotifyFirstResultYIndex(int y_index) override;
   int GetYSize() override;
-  views::View* GetSelectedView() const override;
-  views::View* SetFirstResultSelected(bool selected) override;
-
-  views::View* results_container_for_test() const { return results_container_; }
+  views::View* GetSelectedView() override;
+  SearchResultBaseView* GetFirstResultView() override;
 
  private:
   friend class test::SearchResultListViewTest;
@@ -71,31 +64,16 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   int DoUpdate() override;
   void UpdateSelectedIndex(int old_selected, int new_selected) override;
 
-  // Updates the auto launch states.
-  void SetAutoLaunchTimeout(const base::TimeDelta& timeout);
-  void CancelAutoLaunchTimeout();
-
-  // Helper function to get SearchResultView at given |index|.
-  SearchResultView* GetResultViewAt(int index) const;
-
-  // Forcibly auto-launch for test if it is in auto-launching state.
-  void ForceAutoLaunchForTest();
-
   // Overridden from views::View:
   void Layout() override;
   int GetHeightForWidth(int w) const override;
-  void VisibilityChanged(views::View* starting_from, bool is_visible) override;
-
-  // Overridden from gfx::AnimationDelegate:
-  void AnimationEnded(const gfx::Animation* animation) override;
-  void AnimationProgressed(const gfx::Animation* animation) override;
 
   AppListMainView* main_view_;          // Owned by views hierarchy.
   AppListViewDelegate* view_delegate_;  // Not owned.
 
   views::View* results_container_;
-  views::View* auto_launch_indicator_;
-  std::unique_ptr<gfx::LinearAnimation> auto_launch_animation_;
+
+  std::vector<SearchResultView*> search_result_views_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultListView);
 };

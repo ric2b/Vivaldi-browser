@@ -11,7 +11,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
-#include "build/build_config.h"
 #include "chrome/common/extensions/extension_test_util.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/common/socket_permission_request.h"
@@ -414,7 +413,7 @@ class ExtensionScriptAndCaptureVisibleTest : public testing::Test {
   bool Allowed(const Extension* extension, const GURL& url, int tab_id) {
     return (extension->permissions_data()->CanAccessPage(extension, url, tab_id,
                                                          nullptr) &&
-            extension->permissions_data()->CanCaptureVisiblePage(tab_id, NULL));
+            extension->permissions_data()->CanCaptureVisiblePage(url, extension, tab_id, NULL));
   }
 
   bool CaptureOnly(const Extension* extension, const GURL& url) {
@@ -424,7 +423,7 @@ class ExtensionScriptAndCaptureVisibleTest : public testing::Test {
   bool CaptureOnly(const Extension* extension, const GURL& url, int tab_id) {
     return !extension->permissions_data()->CanAccessPage(extension, url, tab_id,
                                                          nullptr) &&
-           extension->permissions_data()->CanCaptureVisiblePage(tab_id,
+           extension->permissions_data()->CanCaptureVisiblePage(url, extension, tab_id,
                                                                 nullptr);
   }
 
@@ -434,7 +433,7 @@ class ExtensionScriptAndCaptureVisibleTest : public testing::Test {
 
   bool ScriptOnly(const Extension* extension, const GURL& url, int tab_id) {
     return AllowedScript(extension, url, tab_id) &&
-           !extension->permissions_data()->CanCaptureVisiblePage(tab_id,
+           !extension->permissions_data()->CanCaptureVisiblePage(url, extension, tab_id,
                                                                  nullptr);
   }
 
@@ -445,7 +444,7 @@ class ExtensionScriptAndCaptureVisibleTest : public testing::Test {
   bool Blocked(const Extension* extension, const GURL& url, int tab_id) {
     return !extension->permissions_data()->CanAccessPage(extension, url, tab_id,
                                                          nullptr) &&
-           !extension->permissions_data()->CanCaptureVisiblePage(tab_id,
+           !extension->permissions_data()->CanCaptureVisiblePage(url, extension,tab_id,
                                                                  nullptr);
   }
 

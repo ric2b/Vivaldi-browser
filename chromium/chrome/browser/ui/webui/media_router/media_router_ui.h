@@ -16,7 +16,7 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/media/router/media_router_dialog_controller.h"
 #include "chrome/browser/media/router/mojo/media_route_controller.h"
-#include "chrome/browser/media/router/presentation_service_delegate_impl.h"
+#include "chrome/browser/media/router/presentation/presentation_service_delegate_impl.h"
 #include "chrome/browser/ui/webui/constrained_web_dialog_ui.h"
 #include "chrome/browser/ui/webui/media_router/media_cast_mode.h"
 #include "chrome/browser/ui/webui/media_router/media_router_file_dialog.h"
@@ -45,7 +45,6 @@ class Browser;
 
 namespace media_router {
 
-class EventPageRequestManager;
 class IssueManager;
 class IssuesObserver;
 class MediaRoute;
@@ -167,8 +166,6 @@ class MediaRouterUI
     return forced_cast_mode_;
   }
 
-  virtual const std::string& GetRouteProviderExtensionId() const;
-
   // Called to track UI metrics.
   void SetUIInitializationTimer(const base::Time& start_time);
   void OnUIInitiallyLoaded();
@@ -221,6 +218,7 @@ class MediaRouterUI
   FRIEND_TEST_ALL_PREFIXES(MediaRouterUITest, SendInitialMediaStatusUpdate);
 
   class UIIssuesObserver;
+  class WebContentsFullscreenOnLoadedObserver;
 
   class UIMediaRoutesObserver : public MediaRoutesObserver {
    public:
@@ -346,9 +344,15 @@ class MediaRouterUI
   bool SetLocalFileRouteParameters(
       const MediaSink::Id& sink_id,
       url::Origin* origin,
+      const GURL& file_url,
+      content::WebContents* tab_contents,
       std::vector<MediaRouteResponseCallback>* route_response_callbacks,
       base::TimeDelta* timeout,
       bool* incognito);
+
+  void FullScreenFirstVideoElement(const GURL& file_url,
+                                   content::WebContents* web_contents,
+                                   const RouteRequestResult& result);
 
   // Updates the set of supported cast modes and sends the updated set to
   // |handler_|.
@@ -429,9 +433,6 @@ class MediaRouterUI
 
   // Pointer to the MediaRouter for this instance's BrowserContext.
   MediaRouter* router_;
-
-  // Request manager for the Media Router component extension.
-  const EventPageRequestManager* event_page_request_manager_;
 
   // The start time for UI initialization metrics timer. When a dialog has been
   // been painted and initialized with initial data, this should be cleared.

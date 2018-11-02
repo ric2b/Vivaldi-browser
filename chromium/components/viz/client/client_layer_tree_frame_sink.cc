@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/client/hit_test_data_provider.h"
@@ -37,10 +36,11 @@ ClientLayerTreeFrameSink::UnboundMessagePipes::UnboundMessagePipes(
 
 ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
     scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider,
+    scoped_refptr<RasterContextProvider> worker_context_provider,
     InitParams* params)
     : cc::LayerTreeFrameSink(std::move(context_provider),
                              std::move(worker_context_provider),
+                             std::move(params->compositor_task_runner),
                              params->gpu_memory_buffer_manager,
                              params->shared_bitmap_manager),
       hit_test_data_provider_(std::move(params->hit_test_data_provider)),
@@ -50,6 +50,7 @@ ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
       pipes_(std::move(params->pipes)),
       client_binding_(this),
       enable_surface_synchronization_(params->enable_surface_synchronization),
+      wants_animate_only_begin_frames_(params->wants_animate_only_begin_frames),
       weak_factory_(this) {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -65,6 +66,7 @@ ClientLayerTreeFrameSink::ClientLayerTreeFrameSink(
       pipes_(std::move(params->pipes)),
       client_binding_(this),
       enable_surface_synchronization_(params->enable_surface_synchronization),
+      wants_animate_only_begin_frames_(params->wants_animate_only_begin_frames),
       weak_factory_(this) {
   DETACH_FROM_THREAD(thread_checker_);
 }
@@ -103,10 +105,13 @@ bool ClientLayerTreeFrameSink::BindToClient(
   if (synthetic_begin_frame_source_) {
     client->SetBeginFrameSource(synthetic_begin_frame_source_.get());
   } else {
-    begin_frame_source_ = base::MakeUnique<ExternalBeginFrameSource>(this);
+    begin_frame_source_ = std::make_unique<ExternalBeginFrameSource>(this);
     begin_frame_source_->OnSetBeginFrameSourcePaused(begin_frames_paused_);
     client->SetBeginFrameSource(begin_frame_source_.get());
   }
+
+  if (wants_animate_only_begin_frames_)
+    compositor_frame_sink_->SetWantsAnimateOnlyBeginFrames();
 
   return true;
 }
@@ -144,8 +149,7 @@ void ClientLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   }
 
   TRACE_EVENT_FLOW_BEGIN0(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
-                          "SubmitCompositorFrame",
-                          local_surface_id_.parent_id());
+                          "SubmitCompositorFrame", local_surface_id_.hash());
   bool tracing_enabled;
   TRACE_EVENT_CATEGORY_GROUP_ENABLED(TRACE_DISABLED_BY_DEFAULT("cc.debug.ipc"),
                                      &tracing_enabled);

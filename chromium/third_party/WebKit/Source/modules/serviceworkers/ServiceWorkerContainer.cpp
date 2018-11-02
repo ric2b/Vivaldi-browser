@@ -40,12 +40,12 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/MessagePort.h"
 #include "core/events/MessageEvent.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/messaging/MessagePort.h"
 #include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorker.h"
@@ -61,7 +61,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorker.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
-#include "public/platform/modules/serviceworker/service_worker_error_type.mojom-blink.h"
+#include "third_party/WebKit/common/service_worker/service_worker_error_type.mojom-blink.h"
 
 namespace blink {
 
@@ -178,7 +178,7 @@ void ServiceWorkerContainer::RegisterServiceWorkerImpl(
     return;
   }
 
-  scoped_refptr<SecurityOrigin> document_origin =
+  scoped_refptr<const SecurityOrigin> document_origin =
       execution_context->GetSecurityOrigin();
   String error_message;
   // Restrict to secure origins:
@@ -203,7 +203,7 @@ void ServiceWorkerContainer::RegisterServiceWorkerImpl(
   KURL script_url = raw_script_url;
   script_url.RemoveFragmentIdentifier();
   if (!document_origin->CanRequest(script_url)) {
-    scoped_refptr<SecurityOrigin> script_origin =
+    scoped_refptr<const SecurityOrigin> script_origin =
         SecurityOrigin::Create(script_url);
     callbacks->OnError(
         WebServiceWorkerError(mojom::blink::ServiceWorkerErrorType::kSecurity,
@@ -228,7 +228,7 @@ void ServiceWorkerContainer::RegisterServiceWorkerImpl(
   pattern_url.RemoveFragmentIdentifier();
 
   if (!document_origin->CanRequest(pattern_url)) {
-    scoped_refptr<SecurityOrigin> pattern_origin =
+    scoped_refptr<const SecurityOrigin> pattern_origin =
         SecurityOrigin::Create(pattern_url);
     callbacks->OnError(
         WebServiceWorkerError(mojom::blink::ServiceWorkerErrorType::kSecurity,
@@ -276,7 +276,7 @@ void ServiceWorkerContainer::RegisterServiceWorkerImpl(
     }
   }
 
-  provider_->RegisterServiceWorker(pattern_url, script_url,
+  provider_->RegisterServiceWorker(pattern_url, script_url, update_via_cache,
                                    std::move(callbacks));
 }
 
@@ -340,7 +340,7 @@ ScriptPromise ServiceWorkerContainer::getRegistration(
   if (!execution_context)
     return ScriptPromise();
 
-  scoped_refptr<SecurityOrigin> document_origin =
+  scoped_refptr<const SecurityOrigin> document_origin =
       execution_context->GetSecurityOrigin();
   String error_message;
   if (!execution_context->IsSecureContext(error_message)) {
@@ -362,7 +362,7 @@ ScriptPromise ServiceWorkerContainer::getRegistration(
   KURL completed_url = execution_context->CompleteURL(document_url);
   completed_url.RemoveFragmentIdentifier();
   if (!document_origin->CanRequest(completed_url)) {
-    scoped_refptr<SecurityOrigin> document_url_origin =
+    scoped_refptr<const SecurityOrigin> document_url_origin =
         SecurityOrigin::Create(completed_url);
     resolver->Reject(
         DOMException::Create(kSecurityError,
@@ -393,7 +393,7 @@ ScriptPromise ServiceWorkerContainer::getRegistrations(
   }
 
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  scoped_refptr<SecurityOrigin> document_origin =
+  scoped_refptr<const SecurityOrigin> document_origin =
       execution_context->GetSecurityOrigin();
   String error_message;
   if (!execution_context->IsSecureContext(error_message)) {

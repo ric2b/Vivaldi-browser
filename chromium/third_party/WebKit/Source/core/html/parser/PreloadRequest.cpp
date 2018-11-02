@@ -5,9 +5,9 @@
 #include "core/html/parser/PreloadRequest.h"
 
 #include "core/dom/Document.h"
-#include "core/dom/DocumentWriteIntervention.h"
-#include "core/dom/ScriptLoader.h"
 #include "core/loader/DocumentLoader.h"
+#include "core/script/DocumentWriteIntervention.h"
+#include "core/script/ScriptLoader.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -30,7 +30,8 @@ KURL PreloadRequest::CompleteURL(Document* document) {
   return document->CompleteURL(resource_url_);
 }
 
-Resource* PreloadRequest::Start(Document* document) {
+Resource* PreloadRequest::Start(Document* document,
+                                CSSPreloaderResourceClient* client) {
   DCHECK(IsMainThread());
 
   FetchInitiatorInfo initiator_info;
@@ -55,7 +56,7 @@ Resource* PreloadRequest::Start(Document* document) {
   FetchParameters params(resource_request, options);
 
   if (resource_type_ == Resource::kImportResource) {
-    SecurityOrigin* security_origin =
+    const SecurityOrigin* security_origin =
         document->ContextDocument()->GetSecurityOrigin();
     params.SetCrossOriginAccessControl(security_origin,
                                        kCrossOriginAttributeAnonymous);
@@ -105,7 +106,7 @@ Resource* PreloadRequest::Start(Document* document) {
     // the async request to the blocked script here.
   }
 
-  return document->Loader()->StartPreload(resource_type_, params);
+  return document->Loader()->StartPreload(resource_type_, params, client);
 }
 
 }  // namespace blink

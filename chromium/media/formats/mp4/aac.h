@@ -36,12 +36,14 @@ class MEDIA_EXPORT AAC {
   // configurations.
   bool Parse(const std::vector<uint8_t>& data, MediaLog* media_log);
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
   // Gets the actual sample rate of the AAC stream.  Returns the
   // input_samples_per_second value that should be used in an
   // AudioDecoderConfig.
   // TODO(wdzierzanowski): This should become unnecessary when DNA-35764 is
   // fixed.
   int GetSamplesPerSecond() const;
+#endif
 
   // Gets the output sample rate for the AAC stream.
   // |sbr_in_mimetype| should be set to true if the SBR mode is

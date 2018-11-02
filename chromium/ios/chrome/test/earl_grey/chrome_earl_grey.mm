@@ -9,7 +9,6 @@
 
 #include "base/format_macros.h"
 #include "base/mac/foundation_util.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "components/strings/grit/components_strings.h"
@@ -243,4 +242,20 @@ id ExecuteJavaScript(NSString* javascript,
                  }),
              @"Bookmark model did not load");
 }
+
++ (void)waitForElementWithMatcherSufficientlyVisible:(id<GREYMatcher>)matcher {
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for element with matcher sufficiently visible"
+                  block:^BOOL {
+                    NSError* error = nil;
+                    [[EarlGrey selectElementWithMatcher:matcher]
+                        assertWithMatcher:grey_sufficientlyVisible()
+                                    error:&error];
+                    return error == nil;
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"Failed waiting for element with matcher %@ to become visible",
+             matcher);
+}
+
 @end

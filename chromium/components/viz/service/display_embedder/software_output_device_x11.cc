@@ -4,8 +4,6 @@
 
 #include "components/viz/service/display_embedder/software_output_device_x11.h"
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -13,13 +11,13 @@
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/base/x/x11_util_internal.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/x11_types.h"
 
 namespace viz {
 
 SoftwareOutputDeviceX11::SoftwareOutputDeviceX11(gfx::AcceleratedWidget widget)
     : widget_(widget), display_(gfx::GetXDisplay()), gc_(nullptr) {
-  // TODO(skaslev) Remove this when crbug.com/180702 is fixed.
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   gc_ = XCreateGC(display_, widget_, 0, nullptr);

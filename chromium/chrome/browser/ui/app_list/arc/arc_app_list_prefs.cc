@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -509,7 +508,7 @@ std::unique_ptr<ArcAppListPrefs::PackageInfo> ArcAppListPrefs::GetPackage(
   package->GetBoolean(kSystem, &system);
   package->GetBoolean(kVPNProvider, &vpn_provider);
 
-  return base::MakeUnique<PackageInfo>(package_name, package_version,
+  return std::make_unique<PackageInfo>(package_name, package_version,
                                        last_backup_android_id, last_backup_time,
                                        should_sync, system, vpn_provider);
 }
@@ -600,7 +599,7 @@ std::unique_ptr<ArcAppListPrefs::AppInfo> ArcAppListPrefs::GetApp(
   arc::mojom::OrientationLock orientation_lock =
       static_cast<arc::mojom::OrientationLock>(orientation_lock_value);
 
-  return base::MakeUnique<AppInfo>(
+  return std::make_unique<AppInfo>(
       name, package_name, activity, intent_uri, icon_resource_id,
       last_launch_time, GetInstallTime(app_id), sticky, notifications_enabled,
       ready_apps_.count(app_id) > 0,
@@ -818,6 +817,9 @@ void ArcAppListPrefs::OnConnectionReady() {
   // Note, sync_service_ may be nullptr in testing.
   sync_service_ = arc::ArcPackageSyncableService::Get(profile_);
   is_initialized_ = false;
+
+  if (!app_list_refreshed_callback_.is_null())
+    std::move(app_list_refreshed_callback_).Run();
 }
 
 void ArcAppListPrefs::OnConnectionClosed() {
@@ -834,6 +836,7 @@ void ArcAppListPrefs::OnConnectionClosed() {
 
   is_initialized_ = false;
   package_list_initial_refreshed_ = false;
+  app_list_refreshed_callback_.Reset();
 }
 
 void ArcAppListPrefs::HandleTaskCreated(const base::Optional<std::string>& name,
@@ -870,6 +873,11 @@ void ArcAppListPrefs::AddAppAndShortcut(
     const arc::mojom::OrientationLock orientation_lock) {
   const std::string app_id = shortcut ? GetAppId(package_name, intent_uri)
                                       : GetAppId(package_name, activity);
+
+  // Do not add Play Store app for Public Session and Kiosk modes.
+  if (app_id == arc::kPlayStoreAppId && arc::IsRobotAccountMode())
+    return;
+
   std::string updated_name = name;
   // Add "(beta)" string to Play Store. See crbug.com/644576 for details.
   if (app_id == arc::kPlayStoreAppId)
@@ -1033,6 +1041,16 @@ void ArcAppListPrefs::RemovePackageFromPrefs(PrefService* prefs,
 
 void ArcAppListPrefs::OnAppListRefreshed(
     std::vector<arc::mojom::AppInfoPtr> apps) {
+  DCHECK(app_list_refreshed_callback_.is_null());
+  if (!app_connection_holder_->IsConnected()) {
+    LOG(ERROR) << "App instance is not connected. Delaying app list refresh. "
+               << "See b/70566216.";
+    app_list_refreshed_callback_ =
+        base::BindOnce(&ArcAppListPrefs::OnAppListRefreshed,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(apps));
+    return;
+  }
+
   DCHECK(IsArcAndroidEnabledForProfile(profile_));
   std::vector<std::string> old_apps = GetAppIds();
 

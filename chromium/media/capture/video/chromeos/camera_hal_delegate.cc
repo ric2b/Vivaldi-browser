@@ -61,7 +61,7 @@ CameraHalDelegate::~CameraHalDelegate() = default;
 
 void CameraHalDelegate::RegisterCameraClient() {
   CameraHalDispatcherImpl::GetInstance()->AddClientObserver(
-      base::MakeUnique<LocalCameraClientObserver>(this));
+      std::make_unique<LocalCameraClientObserver>(this));
 }
 
 void CameraHalDelegate::SetCameraModule(
@@ -347,6 +347,13 @@ void CameraHalDelegate::CameraDeviceStatusChange(
   DCHECK(ipc_task_runner_->BelongsToCurrentThread());
   // TODO(jcliang): Handle status change for external cameras.
   NOTIMPLEMENTED() << "CameraDeviceStatusChange is not implemented";
+}
+
+void CameraHalDelegate::TorchModeStatusChange(
+    int32_t camera_id,
+    arc::mojom::TorchModeStatus new_status) {
+  DCHECK(ipc_task_runner_->BelongsToCurrentThread());
+  // Do nothing here as we don't care about torch mode status.
 }
 
 }  // namespace media

@@ -4,6 +4,8 @@
 
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 
+#include <memory>
+
 #include "build/build_config.h"
 #include "core/dom/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -153,7 +155,7 @@ void MediaControlsOrientationLockDelegate::MaybeLockOrientation() {
   locked_orientation_ = ComputeOrientationLock();
   DCHECK_NE(locked_orientation_, kWebScreenOrientationLockDefault);
   controller->lock(locked_orientation_,
-                   WTF::WrapUnique(new DummyScreenOrientationCallback));
+                   std::make_unique<DummyScreenOrientationCallback>());
 
   if (locked_orientation_ == kWebScreenOrientationLockLandscape)
     RecordLockResult(LockResultMetrics::kLandscape);
@@ -171,7 +173,7 @@ void MediaControlsOrientationLockDelegate::ChangeLockToAnyOrientation() {
   locked_orientation_ = kWebScreenOrientationLockAny;
   ScreenOrientationController::From(*GetDocument().GetFrame())
       ->lock(locked_orientation_,
-             WTF::WrapUnique(new DummyScreenOrientationCallback));
+             std::make_unique<DummyScreenOrientationCallback>());
 }
 
 void MediaControlsOrientationLockDelegate::MaybeUnlockOrientation() {
@@ -219,9 +221,9 @@ void MediaControlsOrientationLockDelegate::MaybeListenToDeviceOrientation() {
   DCHECK(!monitor_.is_bound());
   Platform::Current()->GetConnector()->BindInterface(
       device::mojom::blink::kServiceName, mojo::MakeRequest(&monitor_));
-  monitor_->IsAutoRotateEnabledByUser(ConvertToBaseCallback(WTF::Bind(
+  monitor_->IsAutoRotateEnabledByUser(WTF::Bind(
       &MediaControlsOrientationLockDelegate::GotIsAutoRotateEnabledByUser,
-      WrapPersistent(this))));
+      WrapPersistent(this)));
 #else
   GotIsAutoRotateEnabledByUser(true);  // Assume always enabled on other OSes.
 #endif  // defined(OS_ANDROID)
@@ -448,28 +450,25 @@ void MediaControlsOrientationLockDelegate::
   // Android would change the screen orientation back to portrait-primary. This
   // is avoided by delaying unlocking long enough to ensure that Android has
   // detected the orientation change.
-  lock_to_any_task_ =
-      GetDocument()
-          .GetTaskRunner(TaskType::kMediaElementEvent)
-          ->PostDelayedCancellableTask(
-              BLINK_FROM_HERE,
-              // Conceptually, this callback will unlock the screen orientation,
-              // so that the user can now rotate their device to the opposite
-              // orientation in order to exit fullscreen. But unlocking
-              // corresponds to kWebScreenOrientationLockDefault, which is
-              // sometimes a specific orientation. For example in a webapp added
-              // to homescreen that has set its orientation to portrait using
-              // the manifest, unlocking actually locks to portrait, which would
-              // immediately exit fullscreen if we're watching a landscape video
-              // in landscape orientation! So instead, this locks to
-              // kWebScreenOrientationLockAny which will auto-rotate according
-              // to the accelerometer, and only exit fullscreen once the user
-              // actually rotates their device. We only fully unlock to
-              // kWebScreenOrientationLockDefault once fullscreen is exited.
-              WTF::Bind(&MediaControlsOrientationLockDelegate::
-                            ChangeLockToAnyOrientation,
-                        WrapPersistent(this)),
-              kLockToAnyDelay);
+  lock_to_any_task_ = PostDelayedCancellableTask(
+      *GetDocument().GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
+      // Conceptually, this callback will unlock the screen orientation,
+      // so that the user can now rotate their device to the opposite
+      // orientation in order to exit fullscreen. But unlocking
+      // corresponds to kWebScreenOrientationLockDefault, which is
+      // sometimes a specific orientation. For example in a webapp added
+      // to homescreen that has set its orientation to portrait using
+      // the manifest, unlocking actually locks to portrait, which would
+      // immediately exit fullscreen if we're watching a landscape video
+      // in landscape orientation! So instead, this locks to
+      // kWebScreenOrientationLockAny which will auto-rotate according
+      // to the accelerometer, and only exit fullscreen once the user
+      // actually rotates their device. We only fully unlock to
+      // kWebScreenOrientationLockDefault once fullscreen is exited.
+      WTF::Bind(
+          &MediaControlsOrientationLockDelegate::ChangeLockToAnyOrientation,
+          WrapPersistent(this)),
+      kLockToAnyDelay);
 }
 
 void MediaControlsOrientationLockDelegate::Trace(blink::Visitor* visitor) {

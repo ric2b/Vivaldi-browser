@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> من العناصر</translation>
 <translation id="1491277525950327607">انقر نقرًا مزدوجًا لتبديل الإعداد</translation>
 <translation id="152234381334907219">لم يتم الحفظ مطلقًا</translation>
+<translation id="1532451416480227577">‏عرض العناوين وبطاقات الائتمان من Google Pay</translation>
 <translation id="1540800554400757039">العنوان 1</translation>
 <translation id="1545749641540134597">فحص رمز الاستجابة السريعة</translation>
 <translation id="1580783302095112590">تم إرسال البريد.</translation>
@@ -96,6 +97,7 @@
 <translation id="2718352093833049315">‏في شبكة Wi-Fi فقط</translation>
 <translation id="2747003861858887689">الحقل السابق</translation>
 <translation id="2780046210906776326">لا تتوفر حسابات بريد إلكتروني</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">الخروج من أداة تغيير علامات التبويب</translation>
 <translation id="283291358677939992">البحث في الصفحة...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />، <ph name="STATE" />، <ph name="URL" /></translation>
@@ -179,6 +181,7 @@
 <translation id="4378154925671717803">الهاتف</translation>
 <translation id="441868831736628555">إشعار الخصوصية</translation>
 <translation id="4460091562821778167">اطلب مني تحديد التطبيق الذي أود استخدامه كل مرة</translation>
+<translation id="4496373720959965247">إضافة علامات التبويب والتبديل بين الصفحات</translation>
 <translation id="4508750114462689118">إغلاق عرض ترويجي لتسجيل الدخول</translation>
 <translation id="4526249700380860531">‏عرض كلمات المرور المحفوظة وإدارتها في <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">حاول تسجيل الدخول مرة أخرى.</translation>
@@ -217,12 +220,12 @@
 <translation id="5300589172476337783">عرض</translation>
 <translation id="5317780077021120954">حفظ</translation>
 <translation id="5327248766486351172">الاسم</translation>
+<translation id="533632423981297619">ستكون كلمات مرورك مرئية لأي شخص يمكنه الاطلاع على الملف الذي تم تصديره. ينبغي عدم مشاركة هذا الملف مع أي شخص.</translation>
 <translation id="5388358297987318779">فتح الصورة</translation>
 <translation id="5409365236829784218">لا تتوفر تطبيقات مثبتة يمكن من خلالها فتح هذا الملف.</translation>
 <translation id="5433691172869980887">تم نسخ اسم المستخدم</translation>
 <translation id="54401264925851789">معلومات أمان الصفحة</translation>
 <translation id="5525269841082836315">إنشاء عبارة مرور</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">‏يتيح لك Handoff بدء تصفح موقع على هذا الجهاز ثم متابعة التصفح بسهولة على جهاز Mac. سيظهر الموقع المفتوح حاليًا على Dock بـ Mac.
 
 لابد من تمكين Handoff كذلك في القسم العام من الإعدادات، ولابد من استخدام أجهزتك لنفس حساب iCloud.</translation>
@@ -247,7 +250,6 @@
 <translation id="5911030830365207728">‏الترجمة من Google</translation>
 <translation id="5916664084637901428">تشغيل</translation>
 <translation id="5948291296578561264">يسمح لك ذلك بحفظ الصور في مكتبة صورك.</translation>
-<translation id="5953603475187800576">‏عرض العناوين وبطاقات الائتمان من Google Payments</translation>
 <translation id="5955891643922670672">عرض النسخة في وضع عدم الاتصال</translation>
 <translation id="5964480694698977962">إنشاء علامة تبويب جديدة للتصفح المتخفي.</translation>
 <translation id="5965679971710331625">تم تسجيل الدخول</translation>
@@ -337,7 +339,6 @@
 <translation id="7514365320538308">تنزيل</translation>
 <translation id="7537586195939242955">‏عذرًا، لا يمكن أن تكون بطاقتك مثبتة على Passbook في الوقت الحالي.</translation>
 <translation id="7561196759112975576">دومًا</translation>
-<translation id="7588950540487816470">الشبكة المادية</translation>
 <translation id="7603852183842204213">تم حظر النوافذ المنبثقة (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">المزامنة لا تعمل</translation>
 <translation id="7638584964844754484">عبارة مرور غير صحيحة</translation>
@@ -350,6 +351,7 @@
 <translation id="780301667611848630">لا، شكرًا</translation>
 <translation id="7859704718976024901">سجل التصفح</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">جارٍ تصدير كلمات المرور...</translation>
 <translation id="7947953824732555851">قبول وتسجيل الدخول</translation>
 <translation id="7961015016161918242">مطلقًا</translation>
 <translation id="7971521879845308059">حظر النوافذ المنبثقة</translation>
@@ -407,7 +409,6 @@
 <translation id="9083392325882095631">عنصر واحد</translation>
 <translation id="9100610230175265781">عبارة المرور مطلوبة</translation>
 <translation id="9148126808321036104">تسجيل الدخول مرة أخرى</translation>
-<translation id="91549621916703028">إنشاء علامات تبويب متعددة لجميع مهامك</translation>
 <translation id="9157836665414082580">إيقاف مربعات الحوار</translation>
 <translation id="9188680907066685419">تسجيل الخروج من الحساب المُدار</translation>
 <translation id="9203116392574189331">Handoff</translation>

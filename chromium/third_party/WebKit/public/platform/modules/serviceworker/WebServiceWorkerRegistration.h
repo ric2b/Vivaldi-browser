@@ -10,7 +10,7 @@
 #include "public/platform/WebCallbacks.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerError.h"
-#include "public/platform/modules/serviceworker/service_worker_registration.mojom-shared.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom-shared.h"
 
 namespace blink {
 
@@ -23,7 +23,7 @@ struct WebNavigationPreloadState;
 // implementation via the handle to update or unregister the registration.
 class WebServiceWorkerRegistration {
  public:
-  virtual ~WebServiceWorkerRegistration() {}
+  virtual ~WebServiceWorkerRegistration() = default;
 
   using WebServiceWorkerUpdateCallbacks =
       WebCallbacks<void, const WebServiceWorkerError&>;
@@ -43,7 +43,7 @@ class WebServiceWorkerRegistration {
   // registration representation while Blink is owning this handle.
   class Handle {
    public:
-    virtual ~Handle() {}
+    virtual ~Handle() = default;
     virtual WebServiceWorkerRegistration* Registration() { return nullptr; }
   };
 
@@ -52,6 +52,8 @@ class WebServiceWorkerRegistration {
   virtual void ProxyStopped() {}
 
   virtual WebURL Scope() const { return WebURL(); }
+  // TODO(crbug.com/675540): Make this pure virtual once
+  // implemented in derived classes.
   virtual mojom::ServiceWorkerUpdateViaCache UpdateViaCache() const {
     return mojom::ServiceWorkerUpdateViaCache::kImports;
   }

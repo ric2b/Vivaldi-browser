@@ -8,7 +8,6 @@
 #include "base/android/jni_string.h"
 #include "base/bind.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/android/shortcut_helper.h"
 #include "chrome/browser/android/shortcut_info.h"
 #include "chrome/browser/android/webapk/webapk_install_service_factory.h"
@@ -37,21 +36,21 @@ void WebApkInstallService::InstallAsync(content::WebContents* web_contents,
                                         const ShortcutInfo& shortcut_info,
                                         const SkBitmap& primary_icon,
                                         const SkBitmap& badge_icon,
-                                        webapk::InstallSource install_source) {
+                                        WebappInstallSource install_source) {
   if (IsInstallInProgress(shortcut_info.manifest_url)) {
     ShortcutHelper::ShowWebApkInstallInProgressToast();
     return;
   }
 
   installs_.insert(shortcut_info.manifest_url);
-  webapk::TrackInstallSource(install_source);
+  InstallableMetrics::TrackInstallEvent(install_source);
 
   ShowInstallInProgressNotification(shortcut_info, primary_icon);
 
   // We pass an observer which wraps the WebContents to the callback, since the
   // installation may take more than 10 seconds so there is a chance that the
   // WebContents has been destroyed before the install is finished.
-  auto observer = base::MakeUnique<LifetimeObserver>(web_contents);
+  auto observer = std::make_unique<LifetimeObserver>(web_contents);
   WebApkInstaller::InstallAsync(
       browser_context_, shortcut_info, primary_icon, badge_icon,
       base::Bind(&WebApkInstallService::OnFinishedInstall,

@@ -4,24 +4,71 @@
 
 #include "content/browser/webauth/authenticator_impl.h"
 
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/logging.h"
+#include "base/timer/timer.h"
+#include "content/browser/bad_message.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/web_contents.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/common/service_manager_connection.h"
 #include "crypto/sha2.h"
 #include "device/u2f/u2f_hid_discovery.h"
 #include "device/u2f/u2f_register.h"
 #include "device/u2f/u2f_request.h"
 #include "device/u2f/u2f_return_code.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "device/u2f/u2f_sign.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "url/url_util.h"
 
 namespace content {
 
 namespace {
 constexpr int32_t kCoseEs256 = -7;
+
+// Ensure that the origin's effective domain is a valid domain.
+// Only the domain format of host is valid.
+// Reference https://url.spec.whatwg.org/#valid-domain-string and
+// https://html.spec.whatwg.org/multipage/origin.html#concept-origin-effective-domain.
+bool HasValidEffectiveDomain(url::Origin caller_origin) {
+  return (caller_origin.unique() ||
+          url::HostIsIPAddress(caller_origin.host()) ||
+          !content::IsOriginSecure(caller_origin.GetURL()))
+             ? false
+             : true;
+}
+
+// Ensure the relying party ID is a registrable domain suffix of or equal
+// to the origin's effective domain. Reference:
+// https://html.spec.whatwg.org/multipage/origin.html#is-a-registrable-domain-suffix-of-or-is-equal-to.
+bool IsRelyingPartyIdValid(const std::string& relying_party_id,
+                           url::Origin caller_origin) {
+  if (relying_party_id.empty())
+    return false;
+
+  if (caller_origin.host() == relying_party_id)
+    return true;
+
+  if (!caller_origin.DomainIs(relying_party_id))
+    return false;
+  if (!net::registry_controlled_domains::HostHasRegistryControlledDomain(
+          caller_origin.host(),
+          net::registry_controlled_domains::INCLUDE_UNKNOWN_REGISTRIES,
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
+    return false;
+  if (!net::registry_controlled_domains::HostHasRegistryControlledDomain(
+          relying_party_id,
+          net::registry_controlled_domains::INCLUDE_UNKNOWN_REGISTRIES,
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES))
+    // TODO(crbug.com/803414): Accept corner-case situations like the following
+    // origin: "https://login.awesomecompany",
+    // relying_party_id: "awesomecompany".
+    return false;
+  return true;
+}
 
 bool HasValidAlgorithm(
     const std::vector<webauth::mojom::PublicKeyCredentialParametersPtr>&
@@ -33,23 +80,89 @@ bool HasValidAlgorithm(
   return false;
 }
 
-webauth::mojom::PublicKeyCredentialInfoPtr CreatePublicKeyCredentialInfo(
-    std::unique_ptr<RegisterResponseData> response_data) {
-  auto credential_info = webauth::mojom::PublicKeyCredentialInfo::New();
-  credential_info->client_data_json = response_data->GetClientDataJSONBytes();
-  credential_info->raw_id = response_data->raw_id();
-  credential_info->id = response_data->GetId();
-  auto response = webauth::mojom::AuthenticatorResponse::New();
-  response->attestation_object =
-      response_data->GetCBOREncodedAttestationObject();
-  credential_info->response = std::move(response);
-  return credential_info;
+std::vector<std::vector<uint8_t>> FilterCredentialList(
+    const std::vector<webauth::mojom::PublicKeyCredentialDescriptorPtr>&
+        descriptors) {
+  std::vector<std::vector<uint8_t>> handles;
+  for (const auto& credential_descriptor : descriptors) {
+    if (credential_descriptor->type ==
+        webauth::mojom::PublicKeyCredentialType::PUBLIC_KEY) {
+      handles.push_back(credential_descriptor->id);
+    }
+  }
+  return handles;
 }
+
+std::vector<uint8_t> ConstructClientDataHash(const std::string& client_data) {
+  // SHA-256 hash of the JSON data structure.
+  std::vector<uint8_t> client_data_hash(crypto::kSHA256Length);
+  crypto::SHA256HashString(client_data, client_data_hash.data(),
+                           client_data_hash.size());
+  return client_data_hash;
+}
+
+// The application parameter is the SHA-256 hash of the UTF-8 encoding of
+// the application identity (i.e. relying_party_id) of the application
+// requesting the registration.
+std::vector<uint8_t> CreateAppId(const std::string& relying_party_id) {
+  std::vector<uint8_t> application_parameter(crypto::kSHA256Length);
+  crypto::SHA256HashString(relying_party_id, application_parameter.data(),
+                           application_parameter.size());
+  return application_parameter;
+}
+
+webauth::mojom::MakeCredentialAuthenticatorResponsePtr
+CreateMakeCredentialResponse(CollectedClientData client_data,
+                             device::RegisterResponseData response_data) {
+  auto response = webauth::mojom::MakeCredentialAuthenticatorResponse::New();
+  auto common_info = webauth::mojom::CommonCredentialInfo::New();
+  std::string client_data_json = client_data.SerializeToJson();
+  common_info->client_data_json.assign(client_data_json.begin(),
+                                       client_data_json.end());
+  common_info->raw_id = response_data.raw_id();
+  common_info->id = response_data.GetId();
+  response->info = std::move(common_info);
+  response->attestation_object =
+      response_data.GetCBOREncodedAttestationObject();
+  return response;
+}
+
+webauth::mojom::GetAssertionAuthenticatorResponsePtr CreateGetAssertionResponse(
+    CollectedClientData client_data,
+    device::SignResponseData response_data) {
+  auto response = webauth::mojom::GetAssertionAuthenticatorResponse::New();
+  auto common_info = webauth::mojom::CommonCredentialInfo::New();
+  std::string client_data_json = client_data.SerializeToJson();
+  common_info->client_data_json.assign(client_data_json.begin(),
+                                       client_data_json.end());
+  common_info->raw_id = response_data.raw_id();
+  common_info->id = response_data.GetId();
+  response->info = std::move(common_info);
+  response->authenticator_data = response_data.GetAuthenticatorDataBytes();
+  response->signature = response_data.signature();
+  response->user_handle.emplace();
+  return response;
+}
+
 }  // namespace
 
 AuthenticatorImpl::AuthenticatorImpl(RenderFrameHost* render_frame_host)
-    : render_frame_host_(render_frame_host), weak_factory_(this) {
+    : timer_(std::make_unique<base::OneShotTimer>()),
+      render_frame_host_(render_frame_host),
+      weak_factory_(this) {
   DCHECK(render_frame_host_);
+  DCHECK(timer_);
+}
+
+AuthenticatorImpl::AuthenticatorImpl(RenderFrameHost* render_frame_host,
+                                     service_manager::Connector* connector,
+                                     std::unique_ptr<base::OneShotTimer> timer)
+    : timer_(std::move(timer)),
+      render_frame_host_(render_frame_host),
+      connector_(connector),
+      weak_factory_(this) {
+  DCHECK(render_frame_host_);
+  DCHECK(timer_);
 }
 
 AuthenticatorImpl::~AuthenticatorImpl() {}
@@ -62,34 +175,28 @@ void AuthenticatorImpl::Bind(webauth::mojom::AuthenticatorRequest request) {
 void AuthenticatorImpl::MakeCredential(
     webauth::mojom::MakePublicKeyCredentialOptionsPtr options,
     MakeCredentialCallback callback) {
-  // Ensure no other operations are in flight.
-  // TODO(kpaulhamus): Do this properly. http://crbug.com/785954.
   if (u2f_request_) {
     std::move(callback).Run(
-        webauth::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
+        webauth::mojom::AuthenticatorStatus::PENDING_REQUEST, nullptr);
     return;
   }
 
-  // Steps 6 & 7 of https://w3c.github.io/webauthn/#createCredential
-  // opaque origin
   url::Origin caller_origin = render_frame_host_->GetLastCommittedOrigin();
-  if (caller_origin.unique()) {
-    std::move(callback).Run(
-        webauth::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
+
+  if (!HasValidEffectiveDomain(caller_origin)) {
+    bad_message::ReceivedBadMessage(render_frame_host_->GetProcess(),
+                                    bad_message::AUTH_INVALID_EFFECTIVE_DOMAIN);
+    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::INVALID_DOMAIN,
+                            nullptr);
     return;
   }
 
-  std::string relying_party_id;
-  if (options->relying_party->id) {
-    // TODO(kpaulhamus): Check if relyingPartyId is a registrable domain
-    // suffix of and equal to effectiveDomain and set relyingPartyId
-    // appropriately.
-    // TODO(kpaulhamus): Add unit tests for domains. http://crbug.com/785950.
-    relying_party_id = *options->relying_party->id;
-  } else {
-    // Use the effective domain of the caller origin.
-    relying_party_id = caller_origin.host();
-    DCHECK(!relying_party_id.empty());
+  if (!IsRelyingPartyIdValid(options->relying_party->id, caller_origin)) {
+    bad_message::ReceivedBadMessage(render_frame_host_->GetProcess(),
+                                    bad_message::AUTH_INVALID_RELYING_PARTY);
+    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::INVALID_DOMAIN,
+                            nullptr);
+    return;
   }
 
   // Check that at least one of the cryptographic parameters is supported.
@@ -100,92 +207,181 @@ void AuthenticatorImpl::MakeCredential(
     return;
   }
 
-  std::unique_ptr<CollectedClientData> client_data =
-      CollectedClientData::Create(authenticator_utils::kCreateType,
-                                  caller_origin.Serialize(),
-                                  std::move(options->challenge));
+  DCHECK(make_credential_response_callback_.is_null());
+  make_credential_response_callback_ = std::move(callback);
 
-  // SHA-256 hash of the JSON data structure
+  client_data_ = CollectedClientData::Create(client_data::kCreateType,
+                                             caller_origin.Serialize(),
+                                             std::move(options->challenge));
+
+  // SHA-256 hash of the JSON data structure.
   std::vector<uint8_t> client_data_hash(crypto::kSHA256Length);
-  crypto::SHA256HashString(client_data->SerializeToJson(),
+  crypto::SHA256HashString(client_data_.SerializeToJson(),
                            client_data_hash.data(), client_data_hash.size());
 
-  // The application parameter is the SHA-256 hash of the UTF-8 encoding of
-  // the application identity (i.e. relying_party_id) of the application
-  // requesting the registration.
-  std::vector<uint8_t> application_parameter(crypto::kSHA256Length);
-  crypto::SHA256HashString(relying_party_id, application_parameter.data(),
-                           application_parameter.size());
+  timer_->Start(
+      FROM_HERE, options->adjusted_timeout,
+      base::Bind(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
+  if (!connector_)
+    connector_ = ServiceManagerConnection::GetForProcess()->GetConnector();
 
-  auto copyable_callback = base::AdaptCallbackForRepeating(std::move(callback));
-
-  // Start the timer (step 16 - https://w3c.github.io/webauthn/#makeCredential).
-  timer_.Start(FROM_HERE, options->adjusted_timeout,
-               base::Bind(&AuthenticatorImpl::OnTimeout, base::Unretained(this),
-                          copyable_callback));
-
-  service_manager::Connector* connector =
-      ServiceManagerConnection::GetForProcess()->GetConnector();
-
-  std::vector<std::unique_ptr<device::U2fDiscovery>> discoveries;
-  discoveries.push_back(std::make_unique<device::U2fHidDiscovery>(connector));
-
-  // Per fido-u2f-raw-message-formats:
-  // The challenge parameter is the SHA-256 hash of the Client Data,
-  // Among other things, the Client Data contains the challenge from the
-  // relying party (hence the name of the parameter).
-  device::U2fRegister::ResponseCallback response_callback = base::Bind(
-      &AuthenticatorImpl::OnDeviceResponse, weak_factory_.GetWeakPtr(),
-      copyable_callback, base::Passed(&client_data));
+  DCHECK(!u2f_discovery_);
+  u2f_discovery_ = std::make_unique<device::U2fHidDiscovery>(connector_);
 
   // Extract list of credentials to exclude.
   std::vector<std::vector<uint8_t>> registered_keys;
   for (const auto& credential : options->exclude_credentials) {
     registered_keys.push_back(credential->id);
   }
+  // Save client data to return with the authenticator response.
+  client_data_ = CollectedClientData::Create(client_data::kCreateType,
+                                             caller_origin.Serialize(),
+                                             std::move(options->challenge));
 
-  // TODO(kpaulhamus): Mock U2fRegister for unit tests. http://crbug.com/785955.
+  // TODO(kpaulhamus): Mock U2fRegister for unit tests.
+  // http://crbug.com/785955.
+  // Per fido-u2f-raw-message-formats:
+  // The challenge parameter is the SHA-256 hash of the Client Data,
+  // Among other things, the Client Data contains the challenge from the
+  // relying party (hence the name of the parameter).
   u2f_request_ = device::U2fRegister::TryRegistration(
-      registered_keys, client_data_hash, application_parameter,
-      std::move(discoveries), response_callback);
+      options->relying_party->id, {u2f_discovery_.get()}, registered_keys,
+      ConstructClientDataHash(client_data_.SerializeToJson()),
+      CreateAppId(options->relying_party->id),
+      base::BindOnce(&AuthenticatorImpl::OnRegisterResponse,
+                     weak_factory_.GetWeakPtr()));
 }
 
-// Callback to handle the async response from a U2fDevice.
-// |data| is returned for both successful sign and register responses, whereas
-//  |key_handle| is only returned for successful sign responses.
-void AuthenticatorImpl::OnDeviceResponse(
-    MakeCredentialCallback callback,
-    std::unique_ptr<CollectedClientData> client_data,
-    device::U2fReturnCode status_code,
-    const std::vector<uint8_t>& u2f_register_response,
-    const std::vector<uint8_t>& key_handle) {
-  timer_.Stop();
-
-  if (status_code == device::U2fReturnCode::SUCCESS) {
-    // TODO(kpaulhamus): Add fuzzers for the response parsers.
-    // http//crbug.com/785957.
-    std::unique_ptr<RegisterResponseData> response =
-        RegisterResponseData::CreateFromU2fRegisterResponse(
-            std::move(client_data), std::move(u2f_register_response));
-    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::SUCCESS,
-                            CreatePublicKeyCredentialInfo(std::move(response)));
-  } else if (status_code == device::U2fReturnCode::FAILURE ||
-             status_code == device::U2fReturnCode::INVALID_PARAMS) {
-    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::UNKNOWN_ERROR,
-                            nullptr);
+// mojom:Authenticator
+void AuthenticatorImpl::GetAssertion(
+    webauth::mojom::PublicKeyCredentialRequestOptionsPtr options,
+    GetAssertionCallback callback) {
+  if (u2f_request_) {
+    std::move(callback).Run(
+        webauth::mojom::AuthenticatorStatus::PENDING_REQUEST, nullptr);
+    return;
   }
 
-  u2f_request_.reset();
+  url::Origin caller_origin = render_frame_host_->GetLastCommittedOrigin();
+
+  if (!HasValidEffectiveDomain(caller_origin)) {
+    bad_message::ReceivedBadMessage(render_frame_host_->GetProcess(),
+                                    bad_message::AUTH_INVALID_EFFECTIVE_DOMAIN);
+    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::INVALID_DOMAIN,
+                            nullptr);
+    return;
+  }
+
+  if (!IsRelyingPartyIdValid(options->relying_party_id, caller_origin)) {
+    bad_message::ReceivedBadMessage(render_frame_host_->GetProcess(),
+                                    bad_message::AUTH_INVALID_RELYING_PARTY);
+    std::move(callback).Run(webauth::mojom::AuthenticatorStatus::INVALID_DOMAIN,
+                            nullptr);
+    return;
+  }
+
+  DCHECK(get_assertion_response_callback_.is_null());
+  get_assertion_response_callback_ = std::move(callback);
+
+  // Pass along valid keys from allow_list, if any.
+  std::vector<std::vector<uint8_t>> handles =
+      FilterCredentialList(std::move(options->allow_credentials));
+
+  timer_->Start(
+      FROM_HERE, options->adjusted_timeout,
+      base::Bind(&AuthenticatorImpl::OnTimeout, base::Unretained(this)));
+
+  if (!connector_)
+    connector_ = ServiceManagerConnection::GetForProcess()->GetConnector();
+
+  DCHECK(!u2f_discovery_);
+  u2f_discovery_ = std::make_unique<device::U2fHidDiscovery>(connector_);
+
+  // Save client data to return with the authenticator response.
+  client_data_ = CollectedClientData::Create(client_data::kGetType,
+                                             caller_origin.Serialize(),
+                                             std::move(options->challenge));
+
+  u2f_request_ = device::U2fSign::TrySign(
+      options->relying_party_id, {u2f_discovery_.get()}, handles,
+      ConstructClientDataHash(client_data_.SerializeToJson()),
+      CreateAppId(options->relying_party_id),
+      base::BindOnce(&AuthenticatorImpl::OnSignResponse,
+                     weak_factory_.GetWeakPtr()));
 }
 
-// TODO(kpaulhamus): Add unit test for this. http://crbug.com/785950.
-void AuthenticatorImpl::OnTimeout(
-    base::OnceCallback<void(webauth::mojom::AuthenticatorStatus,
-                            webauth::mojom::PublicKeyCredentialInfoPtr)>
-        callback) {
-  u2f_request_.reset();
-  std::move(callback).Run(
-      webauth::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
+// Callback to handle the async registration response from a U2fDevice.
+void AuthenticatorImpl::OnRegisterResponse(
+    device::U2fReturnCode status_code,
+    base::Optional<device::RegisterResponseData> response_data) {
+  timer_->Stop();
+
+  switch (status_code) {
+    case device::U2fReturnCode::CONDITIONS_NOT_SATISFIED:
+      // Duplicate registration.
+      std::move(make_credential_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
+      break;
+    case device::U2fReturnCode::FAILURE:
+    case device::U2fReturnCode::INVALID_PARAMS:
+      std::move(make_credential_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::UNKNOWN_ERROR, nullptr);
+      break;
+    case device::U2fReturnCode::SUCCESS:
+      DCHECK(response_data.has_value());
+      std::move(make_credential_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::SUCCESS,
+               CreateMakeCredentialResponse(std::move(client_data_),
+                                            std::move(*response_data)));
+      break;
+  }
+  Cleanup();
 }
 
+void AuthenticatorImpl::OnSignResponse(
+    device::U2fReturnCode status_code,
+    base::Optional<device::SignResponseData> response_data) {
+  timer_->Stop();
+  switch (status_code) {
+    case device::U2fReturnCode::CONDITIONS_NOT_SATISFIED:
+      // No authenticators contained the credential.
+      std::move(get_assertion_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::NOT_ALLOWED_ERROR, nullptr);
+      break;
+    case device::U2fReturnCode::FAILURE:
+    case device::U2fReturnCode::INVALID_PARAMS:
+      std::move(get_assertion_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::UNKNOWN_ERROR, nullptr);
+      break;
+    case device::U2fReturnCode::SUCCESS:
+      DCHECK(response_data.has_value());
+      std::move(get_assertion_response_callback_)
+          .Run(webauth::mojom::AuthenticatorStatus::SUCCESS,
+               CreateGetAssertionResponse(std::move(client_data_),
+                                          std::move(*response_data)));
+      break;
+  }
+  Cleanup();
+}
+
+void AuthenticatorImpl::OnTimeout() {
+  DCHECK(make_credential_response_callback_ ||
+         get_assertion_response_callback_);
+  if (make_credential_response_callback_) {
+    std::move(make_credential_response_callback_)
+        .Run(webauth::mojom::AuthenticatorStatus::TIMED_OUT, nullptr);
+  } else if (get_assertion_response_callback_) {
+    std::move(get_assertion_response_callback_)
+        .Run(webauth::mojom::AuthenticatorStatus::TIMED_OUT, nullptr);
+  }
+  Cleanup();
+}
+
+void AuthenticatorImpl::Cleanup() {
+  u2f_request_.reset();
+  u2f_discovery_.reset();
+  make_credential_response_callback_.Reset();
+  get_assertion_response_callback_.Reset();
+  client_data_ = CollectedClientData();
+}
 }  // namespace content

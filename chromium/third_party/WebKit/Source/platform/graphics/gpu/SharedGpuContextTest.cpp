@@ -6,8 +6,8 @@
 
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/graphics/Canvas2DLayerBridge.h"
+#include "platform/graphics/CanvasResourceProvider.h"
 #include "platform/graphics/StaticBitmapImage.h"
-#include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -31,7 +31,7 @@ class SharedGpuContextTestBase : public Test {
       return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
     };
     SharedGpuContext::SetContextProviderFactoryForTesting(
-        WTF::Bind(factory, WTF::Unretained(&gl_)));
+        WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
   }
 
   void TearDown() override { SharedGpuContext::ResetForTesting(); }
@@ -45,9 +45,8 @@ class SharedGpuContextTest
 class MailboxMockGLES2Interface : public FakeGLES2Interface {
  public:
   MOCK_METHOD1(GenMailboxCHROMIUM, void(GLbyte*));
-  MOCK_METHOD2(GenSyncTokenCHROMIUM, void(GLuint64, GLbyte*));
-  MOCK_METHOD2(GenUnverifiedSyncTokenCHROMIUM, void(GLuint64, GLbyte*));
-  MOCK_METHOD0(InsertFenceSyncCHROMIUM, GLuint64(void));
+  MOCK_METHOD1(GenSyncTokenCHROMIUM, void(GLbyte*));
+  MOCK_METHOD1(GenUnverifiedSyncTokenCHROMIUM, void(GLbyte*));
 };
 
 class MailboxSharedGpuContextTest
@@ -63,7 +62,8 @@ class BadSharedGpuContextTest : public Test {
       *gpu_compositing_disabled = false;
       return nullptr;
     };
-    SharedGpuContext::SetContextProviderFactoryForTesting(WTF::Bind(factory));
+    SharedGpuContext::SetContextProviderFactoryForTesting(
+        WTF::BindRepeating(factory));
   }
 
   void TearDown() override { SharedGpuContext::ResetForTesting(); }
@@ -82,7 +82,7 @@ class SoftwareCompositingTest : public Test {
       return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
     };
     SharedGpuContext::SetContextProviderFactoryForTesting(
-        WTF::Bind(factory, WTF::Unretained(&gl_)));
+        WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
   }
 
   void TearDown() override { SharedGpuContext::ResetForTesting(); }
@@ -92,7 +92,7 @@ class SoftwareCompositingTest : public Test {
 
 TEST_F(SharedGpuContextTest, contextLossAutoRecovery) {
   EXPECT_NE(SharedGpuContext::ContextProviderWrapper(), nullptr);
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context =
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context =
       SharedGpuContext::ContextProviderWrapper();
   gl_.SetIsContextLost(true);
   EXPECT_FALSE(SharedGpuContext::IsValidWithoutRestoring());
@@ -109,9 +109,11 @@ TEST_F(SharedGpuContextTest, AccelerateImageBufferSurfaceAutoRecovery) {
   gl_.SetIsContextLost(true);
   EXPECT_FALSE(SharedGpuContext::IsValidWithoutRestoring());
   IntSize size(10, 10);
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
-  EXPECT_TRUE(surface->IsValid());
+  std::unique_ptr<CanvasResourceProvider> resource_provider =
+      CanvasResourceProvider::Create(
+          size, CanvasResourceProvider::kAcceleratedResourceUsage,
+          SharedGpuContext::ContextProviderWrapper());
+  EXPECT_TRUE(resource_provider && resource_provider->IsValid());
   EXPECT_TRUE(SharedGpuContext::IsValidWithoutRestoring());
 }
 
@@ -148,9 +150,11 @@ TEST_F(BadSharedGpuContextTest, AccelerateImageBufferSurfaceCreationFails) {
   // With a bad shared context, AccelerateImageBufferSurface creation should
   // fail gracefully
   IntSize size(10, 10);
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
-  EXPECT_FALSE(surface->IsValid());
+  std::unique_ptr<CanvasResourceProvider> resource_provider =
+      CanvasResourceProvider::Create(
+          size, CanvasResourceProvider::kAcceleratedResourceUsage,
+          SharedGpuContext::ContextProviderWrapper());
+  EXPECT_FALSE(!resource_provider);
 }
 
 TEST_F(SharedGpuContextTest, CompositingMode) {
@@ -174,11 +178,12 @@ class FakeMailboxGenerator {
 
 TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
   IntSize size(10, 10);
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
-  EXPECT_TRUE(surface->IsValid());
-  scoped_refptr<StaticBitmapImage> image =
-      surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
+  std::unique_ptr<CanvasResourceProvider> resource_provider =
+      CanvasResourceProvider::Create(
+          size, CanvasResourceProvider::kAcceleratedResourceUsage,
+          SharedGpuContext::ContextProviderWrapper());
+  EXPECT_TRUE(resource_provider && resource_provider->IsValid());
+  scoped_refptr<StaticBitmapImage> image = resource_provider->Snapshot();
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   FakeMailboxGenerator mailboxGenerator;
@@ -191,7 +196,7 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
                                   &FakeMailboxGenerator::GenMailbox));
 
   SharedGpuContext::ContextProviderWrapper()->Utils()->GetMailboxForSkImage(
-      mailbox, image->PaintImageForCurrentFrame().GetSkImage());
+      mailbox, image->PaintImageForCurrentFrame().GetSkImage(), GL_NEAREST);
 
   EXPECT_EQ(mailbox.name[0], 1);
 
@@ -202,7 +207,7 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
 
   mailbox.name[0] = 0;
   SharedGpuContext::ContextProviderWrapper()->Utils()->GetMailboxForSkImage(
-      mailbox, image->PaintImageForCurrentFrame().GetSkImage());
+      mailbox, image->PaintImageForCurrentFrame().GetSkImage(), GL_NEAREST);
   EXPECT_EQ(mailbox.name[0], 1);
 
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
@@ -210,11 +215,12 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCaching) {
 
 TEST_F(MailboxSharedGpuContextTest, MailboxCacheSurvivesSkiaRecycling) {
   IntSize size(10, 10);
-  std::unique_ptr<ImageBufferSurface> surface =
-      WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
-  EXPECT_TRUE(surface->IsValid());
-  scoped_refptr<StaticBitmapImage> image =
-      surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
+  std::unique_ptr<CanvasResourceProvider> resource_provider =
+      CanvasResourceProvider::Create(
+          size, CanvasResourceProvider::kAcceleratedResourceUsage,
+          SharedGpuContext::ContextProviderWrapper());
+  EXPECT_TRUE(resource_provider && resource_provider->IsValid());
+  scoped_refptr<StaticBitmapImage> image = resource_provider->Snapshot();
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   FakeMailboxGenerator mailboxGenerator;
@@ -227,22 +233,23 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCacheSurvivesSkiaRecycling) {
                                   &FakeMailboxGenerator::GenMailbox));
 
   SharedGpuContext::ContextProviderWrapper()->Utils()->GetMailboxForSkImage(
-      mailbox, image->PaintImageForCurrentFrame().GetSkImage());
+      mailbox, image->PaintImageForCurrentFrame().GetSkImage(), GL_NEAREST);
 
   EXPECT_EQ(mailbox.name[0], 1);
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   // Destroy image and surface to return texture to recleable resource pool
   image = nullptr;
-  surface = nullptr;
+  resource_provider = nullptr;
 
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
   // Re-creating surface should recycle the old GrTexture inside skia
-  surface = WTF::WrapUnique(new AcceleratedImageBufferSurface(size));
-  EXPECT_TRUE(surface->IsValid());
-  image =
-      surface->NewImageSnapshot(kPreferAcceleration, kSnapshotReasonUnitTests);
+  resource_provider = CanvasResourceProvider::Create(
+      size, CanvasResourceProvider::kAcceleratedResourceUsage,
+      SharedGpuContext::ContextProviderWrapper());
+  EXPECT_TRUE(resource_provider && resource_provider->IsValid());
+  image = resource_provider->Snapshot();
 
   ::testing::Mock::VerifyAndClearExpectations(&gl_);
 
@@ -251,7 +258,7 @@ TEST_F(MailboxSharedGpuContextTest, MailboxCacheSurvivesSkiaRecycling) {
 
   mailbox.name[0] = 0;
   SharedGpuContext::ContextProviderWrapper()->Utils()->GetMailboxForSkImage(
-      mailbox, image->PaintImageForCurrentFrame().GetSkImage());
+      mailbox, image->PaintImageForCurrentFrame().GetSkImage(), GL_NEAREST);
   EXPECT_EQ(mailbox.name[0], 1);
 
   ::testing::Mock::VerifyAndClearExpectations(&gl_);

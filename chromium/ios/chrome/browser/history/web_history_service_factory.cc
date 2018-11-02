@@ -4,7 +4,6 @@
 
 #include "ios/chrome/browser/history/web_history_service_factory.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/history/core/browser/web_history_service.h"
@@ -14,8 +13,7 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
-#include "ios/chrome/browser/signin/signin_manager_factory.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "net/url_request/url_request_context_getter.h"
 
@@ -56,8 +54,7 @@ WebHistoryServiceFactory::WebHistoryServiceFactory()
           "WebHistoryService",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(IOSChromeProfileSyncServiceFactory::GetInstance());
-  DependsOn(OAuth2TokenServiceFactory::GetInstance());
-  DependsOn(ios::SigninManagerFactory::GetInstance());
+  DependsOn(IdentityManagerFactory::GetInstance());
 }
 
 WebHistoryServiceFactory::~WebHistoryServiceFactory() {
@@ -67,9 +64,8 @@ std::unique_ptr<KeyedService> WebHistoryServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  return base::MakeUnique<history::WebHistoryService>(
-      OAuth2TokenServiceFactory::GetForBrowserState(browser_state),
-      ios::SigninManagerFactory::GetForBrowserState(browser_state),
+  return std::make_unique<history::WebHistoryService>(
+      IdentityManagerFactory::GetForBrowserState(browser_state),
       browser_state->GetRequestContext());
 }
 

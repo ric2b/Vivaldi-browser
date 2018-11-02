@@ -180,12 +180,12 @@ void FakeWebHistoryService::FakeRequest::Start() {
 // FakeWebHistoryService -------------------------------------------------------
 
 FakeWebHistoryService::FakeWebHistoryService(
-    OAuth2TokenService* token_service,
-    SigninManagerBase* signin_manager,
     const scoped_refptr<net::URLRequestContextGetter>& request_context)
-    : history::WebHistoryService(token_service,
-                                 signin_manager,
-                                 request_context),
+    // NOTE: Simply pass null object for IdentityManager. WebHistoryService's
+    // only usage of this object is to fetch access tokens via RequestImpl, and
+    // FakeWebHistoryService deliberately replaces this flow with
+    // FakeWebHistoryService::FakeRequest.
+    : history::WebHistoryService(nullptr, request_context),
       emulate_success_(true),
       emulate_response_code_(net::HTTP_OK),
       web_and_app_activity_enabled_(false),

@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
 
 #include <algorithm>
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -252,7 +253,8 @@ int ContentSettingBubbleContents::ListItemContainer::GetRowIndexOf(
 
 void ContentSettingBubbleContents::ListItemContainer::ResetLayout() {
   using views::GridLayout;
-  GridLayout* layout = GridLayout::CreateAndInstall(this);
+  GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
   views::ColumnSet* item_list_column_set = layout->AddColumnSet(0);
   item_list_column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, 0,
                                   GridLayout::USE_PREF, 0, 0);
@@ -329,6 +331,20 @@ gfx::Size ContentSettingBubbleContents::CalculatePreferredSize() const {
   } else {
     preferred_size.set_width(std::min(preferred_width, kMaxContentsWidth));
   }
+
+  // These bubbles should all be the "small" dialog width, but only when in
+  // Harmony mode.
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  if (provider->IsHarmonyMode()) {
+    // Subtract out this dialog's margins. The margins are imposed by
+    // DialogClientView around this view, so this view's width plus the width of
+    // these margins must equal the desired width, which is
+    // GetSnappedDialogWidth(0).
+    preferred_size.set_width(provider->GetSnappedDialogWidth(0) -
+                             margins().width());
+    preferred_size.set_height(GetHeightForWidth(preferred_size.width()));
+  }
+
   return preferred_size;
 }
 
@@ -363,7 +379,8 @@ bool ContentSettingBubbleContents::ShouldShowCloseButton() const {
 void ContentSettingBubbleContents::Init() {
   using views::GridLayout;
 
-  GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+  GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
   const ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const int related_control_horizontal_spacing =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
@@ -437,6 +454,7 @@ void ContentSettingBubbleContents::Init() {
       views::RadioButton* radio = new views::RadioButton(*i, 0);
       radio->SetEnabled(bubble_content.radio_group_enabled);
       radio->set_listener(this);
+      radio->SetMultiLine(true);
       radio_group_.push_back(radio);
       layout->StartRow(0, kIndentedSingleColumnSetId);
       layout->AddView(radio);
@@ -494,7 +512,7 @@ void ContentSettingBubbleContents::Init() {
            bubble_content.domain_lists.begin());
        i != bubble_content.domain_lists.end(); ++i) {
     auto list_view =
-        base::MakeUnique<ContentSettingDomainListView>(i->title, i->hosts);
+        std::make_unique<ContentSettingDomainListView>(i->title, i->hosts);
     layout->StartRow(0, kSingleColumnSetId);
     layout->AddView(list_view.release());
     bubble_content_empty = false;
@@ -503,6 +521,7 @@ void ContentSettingBubbleContents::Init() {
   if (!bubble_content.custom_link.empty()) {
     custom_link_ = new views::Link(bubble_content.custom_link);
     custom_link_->SetEnabled(bubble_content.custom_link_enabled);
+    custom_link_->SetMultiLine(true);
     custom_link_->set_listener(this);
     if (!bubble_content_empty)
       layout->AddPaddingRow(0, related_control_vertical_spacing);
@@ -555,7 +574,7 @@ views::View* ContentSettingBubbleContents::CreateExtraView() {
   if (extra_views.size() == 1)
     return extra_views.front();
   views::View* container = new views::View();
-  container->SetLayoutManager(new views::BoxLayout(
+  container->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal, gfx::Insets(),
       layout->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
   for (auto* extra_view : extra_views)

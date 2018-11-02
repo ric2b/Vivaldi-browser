@@ -54,6 +54,7 @@ class MediaControlOverlayEnclosureElement;
 class MediaControlOverlayPlayButtonElement;
 class MediaControlPanelElement;
 class MediaControlPanelEnclosureElement;
+class MediaControlPictureInPictureButtonElement;
 class MediaControlPlayButtonElement;
 class MediaControlRemainingTimeDisplayElement;
 class MediaControlTextTrackListElement;
@@ -154,8 +155,13 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
 
     // Playback has stopped to buffer.
     kBuffering,
+
+    // The media is being scrubbed.
+    kScrubbing,
   };
   ControlsState State() const;
+
+  void MaybeToggleControlsFromTap();
 
  private:
   // MediaControlsMediaEventListener is a component that is listening to events
@@ -198,6 +204,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void InitializeControls();
 
   void MakeOpaque();
+  void MakeOpaqueFromPointerEvent();
   void MakeTransparent();
   bool IsVisible() const;
 
@@ -287,6 +294,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   Member<MediaControlOverflowMenuListElement> overflow_list_;
   Member<MediaControlButtonPanelElement> media_button_panel_;
   Member<MediaControlLoadingPanelElement> loading_panel_;
+  Member<MediaControlPictureInPictureButtonElement> picture_in_picture_button_;
 
   Member<MediaControlCastButtonElement> cast_button_;
   Member<MediaControlFullscreenButtonElement> fullscreen_button_;
@@ -302,6 +310,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   unsigned hide_timer_behavior_flags_;
   bool is_mouse_over_controls_ : 1;
   bool is_paused_for_scrubbing_ : 1;
+  bool is_scrubbing_ = false;
 
   // Watches the video element for resize and updates media controls as
   // necessary.
@@ -315,6 +324,8 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   IntSize size_;
 
   bool keep_showing_until_timer_fires_ : 1;
+
+  bool pointer_event_did_show_controls_ = false;
 
   Member<MediaDownloadInProductHelpManager> download_iph_manager_;
 };

@@ -18,7 +18,7 @@
  * Keep in sync with the string keys provided by settings.
  * @enum {string}
  */
-var MessageType = {
+const MessageType = {
   TOO_SHORT: 'configurePinTooShort',
   TOO_LONG: 'configurePinTooLong',
   TOO_WEAK: 'configurePinWeakPin',
@@ -26,7 +26,10 @@ var MessageType = {
 };
 
 /** @enum {string} */
-var ProblemType = {WARNING: 'warning', ERROR: 'error'};
+const ProblemType = {
+  WARNING: 'warning',
+  ERROR: 'error'
+};
 
 Polymer({
   is: 'settings-setup-pin-dialog',
@@ -148,14 +151,14 @@ Polymer({
   },
 
   /**
-   * Handles writting the appropriate message to |problemMessage_|.
+   * Handles writing the appropriate message to |problemMessage_|.
    * @private
    * @param {string} messageId
    * @param {chrome.quickUnlockPrivate.CredentialRequirements} requirements
    *     The requirements received from getCredentialRequirements.
    */
   processPinRequirements_: function(messageId, requirements) {
-    var additionalInformation = '';
+    let additionalInformation = '';
     switch (messageId) {
       case MessageType.TOO_SHORT:
         additionalInformation = requirements.minLength.toString();

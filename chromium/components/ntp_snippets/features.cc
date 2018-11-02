@@ -5,7 +5,6 @@
 #include "components/ntp_snippets/features.h"
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/clock.h"
 #include "components/ntp_snippets/category_rankers/click_based_category_ranker.h"
 #include "components/ntp_snippets/category_rankers/constant_category_ranker.h"
@@ -99,17 +98,16 @@ CategoryRankerChoice GetSelectedCategoryRanker(bool is_chrome_home_enabled) {
 
 std::unique_ptr<CategoryRanker> BuildSelectedCategoryRanker(
     PrefService* pref_service,
-    std::unique_ptr<base::Clock> clock,
+    base::Clock* clock,
     bool is_chrome_home_enabled) {
   CategoryRankerChoice choice =
       ntp_snippets::GetSelectedCategoryRanker(is_chrome_home_enabled);
 
   switch (choice) {
     case CategoryRankerChoice::CONSTANT:
-      return base::MakeUnique<ConstantCategoryRanker>();
+      return std::make_unique<ConstantCategoryRanker>();
     case CategoryRankerChoice::CLICK_BASED:
-      return base::MakeUnique<ClickBasedCategoryRanker>(pref_service,
-                                                        std::move(clock));
+      return std::make_unique<ClickBasedCategoryRanker>(pref_service, clock);
   }
   return nullptr;
 }

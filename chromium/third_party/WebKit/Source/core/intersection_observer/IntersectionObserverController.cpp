@@ -23,7 +23,7 @@ IntersectionObserverController::IntersectionObserverController(
     Document* document)
     : PausableObject(document), callback_fired_while_suspended_(false) {}
 
-IntersectionObserverController::~IntersectionObserverController() {}
+IntersectionObserverController::~IntersectionObserverController() = default;
 
 void IntersectionObserverController::PostTaskToDeliverObservations() {
   DCHECK(GetExecutionContext());
@@ -33,7 +33,7 @@ void IntersectionObserverController::PostTaskToDeliverObservations() {
   GetExecutionContext()
       ->GetTaskRunner(TaskType::kUnthrottled)
       ->PostTask(
-          BLINK_FROM_HERE,
+          FROM_HERE,
           WTF::Bind(
               &IntersectionObserverController::DeliverIntersectionObservations,
               WrapWeakPersistent(this)));

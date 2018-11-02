@@ -9,6 +9,7 @@ import "content/common/service_worker/embedded_worker.mojom";
 import "ipc/constants.mojom";
 import "mojo/common/time.mojom";
 import "mojo/common/unguessable_token.mojom";
+import "services/network/public/interfaces/network_types.mojom";
 import "services/service_manager/public/interfaces/interface_provider.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "ui/gfx/mojo/icc_profile.mojom";
@@ -74,6 +75,9 @@ struct CreateViewParams {
   // Whether the window associated with this view was created with an opener.
   bool window_was_created_with_opener;
 
+  // Whether or not the frame has previously committed a real load.
+  bool has_committed_real_load;
+
   // The initial renderer size.
   ResizeParams initial_size;
 
@@ -88,6 +92,11 @@ struct CreateViewParams {
 
   // The page zoom level.
   double page_zoom_level;
+
+  // Whether lookup of frames in the created RenderView (e.g. lookup via
+  // window.open or via <a target=...>) should be renderer-wide (i.e. going
+  // beyond the usual opener-relationship-based BrowsingInstance boundaries).
+  bool renderer_wide_named_frame_lookup;
 };
 
 struct CreateFrameWidgetParams {
@@ -149,6 +158,9 @@ struct CreateFrameParams {
   // Specifies properties for a new RenderWidget that will be attached to the
   // new RenderFrame (if one is needed).
   CreateFrameWidgetParams widget_params;
+
+  // Whether or not the frame has previously committed a real load.
+  bool has_committed_real_load;
 };
 
 struct UpdateScrollbarThemeParams {
@@ -201,10 +213,11 @@ interface Renderer {
   // estimate of the HTTP or transport RTT is unavailable, it will be set to
   // net::nqe::internal::InvalidRTT(). If the throughput estimate is
   // unavailable, it will be set to net::nqe::internal::INVALID_RTT_THROUGHPUT.
-  OnNetworkQualityChanged(EffectiveConnectionType effective_connection_type,
-                          mojo.common.mojom.TimeDelta http_rtt,
-                          mojo.common.mojom.TimeDelta transport_rtt,
-                          double bandwidth_kbps);
+  OnNetworkQualityChanged(
+      network.mojom.EffectiveConnectionType effective_connection_type,
+      mojo.common.mojom.TimeDelta http_rtt,
+      mojo.common.mojom.TimeDelta transport_rtt,
+      double bandwidth_kbps);
 
   // Tells the renderer to suspend/resume the webkit timers. Only for use on
   // Android.
@@ -226,6 +239,11 @@ interface Renderer {
   // Tells the renderer process to enter or leave background mode.
   // TODO(crbug:676224) Make this conditional on IPC_MESSAGE_LOG_ENABLED.
   SetProcessBackgrounded(bool background);
+
+  // Tells the scheduler about "keep-alive" state which can be due to:
+  // service workers, shared workers, or fetch keep-alive.
+  // If set to true, then the scheduler should not freeze the renderer.
+  SetSchedulerKeepActive(bool keep_active);
 
   // Tells the renderer process to purge and suspend.
   ProcessPurgeAndSuspend();

@@ -265,8 +265,11 @@ extern const char kMediaAccessLearnMoreUrl[];
 extern const char kLanguageSettingsLearnMoreUrl[];
 
 #if defined(OS_MACOSX)
-// The URL for the Mac OS X 10.6/10.7/10.8 deprecation help center article.
-extern const char kMac10_678_DeprecationURL[];
+// "Learn more" URL for the enterprise sign-in confirmation dialog.
+extern const char kChromeEnterpriseSignInLearnMoreURL[];
+
+// The URL for the "learn more" link on the 10.9 obsolescence infobar.
+extern const char kMac10_9_ObsoleteURL[];
 #endif
 
 #if defined(OS_WIN)
@@ -290,6 +293,11 @@ extern const char kEolNotificationURL[];
 
 // The URL for providing more information about Google nameservers.
 extern const char kGoogleNameserversLearnMoreURL[];
+#endif
+
+#if defined(OS_CHROMEOS)
+// The URL for the "Learn more" page for the time zone settings page.
+extern const char kTimeZoneSettingsLearnMoreURL[];
 #endif
 
 }  // namespace chrome

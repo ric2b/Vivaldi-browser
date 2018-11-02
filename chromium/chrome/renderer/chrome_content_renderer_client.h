@@ -129,12 +129,12 @@ class ChromeContentRendererClient
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
                                const GURL& url) override;
   bool ShouldTrackUseCounter(const GURL& url) override;
-  void GetNavigationErrorStrings(content::RenderFrame* render_frame,
-                                 const blink::WebURLRequest& failed_request,
-                                 const blink::WebURLError& error,
-                                 std::string* error_html,
-                                 base::string16* error_description) override;
-  void GetNavigationErrorStringsForHttpStatusError(
+  void PrepareErrorPage(content::RenderFrame* render_frame,
+                        const blink::WebURLRequest& failed_request,
+                        const blink::WebURLError& error,
+                        std::string* error_html,
+                        base::string16* error_description) override;
+  void PrepareErrorPageForHttpStatusError(
       content::RenderFrame* render_frame,
       const blink::WebURLRequest& failed_request,
       const GURL& unreachable_url,
@@ -158,7 +158,6 @@ class ChromeContentRendererClient
       blink::WebLocalFrame* frame,
       ui::PageTransition transition_type,
       const blink::WebURL& url,
-      std::vector<std::unique_ptr<content::URLLoaderThrottle>>* throttles,
       GURL* new_url) override;
   bool IsPrefetchOnly(content::RenderFrame* render_frame,
                       const blink::WebURLRequest& request) override;
@@ -221,6 +220,11 @@ class ChromeContentRendererClient
       const GURL& url,
       base::Time cert_validity_start,
       std::string* console_messsage) override;
+  std::unique_ptr<content::URLLoaderThrottleProvider>
+  CreateURLLoaderThrottleProvider(
+      content::URLLoaderThrottleProviderType provider_type) override;
+  blink::WebFrame* FindFrame(blink::WebLocalFrame* relative_to_frame,
+                             const std::string& name) override;
 
 #if BUILDFLAG(ENABLE_SPELLCHECK)
   // Sets a new |spellcheck|. Used for testing only.
@@ -243,6 +247,10 @@ class ChromeContentRendererClient
       const std::set<std::string>& whitelist);
 #endif
 
+  prerender::PrerenderDispatcher* prerender_dispatcher() const {
+    return prerender_dispatcher_.get();
+  }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ChromeContentRendererClientTest, NaClRestriction);
   FRIEND_TEST_ALL_PREFIXES(ChromeContentRendererClientTest,
@@ -258,12 +266,11 @@ class ChromeContentRendererClient
   // Initialises |safe_browsing_| if it is not already initialised.
   void InitSafeBrowsingIfNecessary();
 
-  void GetNavigationErrorStringsInternal(
-      content::RenderFrame* render_frame,
-      const blink::WebURLRequest& failed_request,
-      const error_page::Error& error,
-      std::string* error_html,
-      base::string16* error_description);
+  void PrepareErrorPageInternal(content::RenderFrame* render_frame,
+                                const blink::WebURLRequest& failed_request,
+                                const error_page::Error& error,
+                                std::string* error_html,
+                                base::string16* error_description);
 
   // Time at which this object was created. This is very close to the time at
   // which the RendererMain function was entered.

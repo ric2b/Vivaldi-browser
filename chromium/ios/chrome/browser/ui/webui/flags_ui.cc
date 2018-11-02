@@ -4,6 +4,7 @@
 
 #include "ios/chrome/browser/ui/webui/flags_ui.h"
 
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -38,32 +39,8 @@ web::WebUIIOSDataSource* CreateFlagsUIHTMLSource() {
   web::WebUIIOSDataSource* source =
       web::WebUIIOSDataSource::Create(kChromeUIFlagsHost);
 
-  source->AddLocalizedString(flags_ui::kFlagsSearchPlaceholder,
-                             IDS_FLAGS_UI_SEARCH_PLACEHOLDER);
-  source->AddLocalizedString(flags_ui::kFlagsTitle, IDS_FLAGS_UI_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsWarningHeader,
-                             IDS_FLAGS_UI_WARNING_HEADER);
-  source->AddLocalizedString(flags_ui::kFlagsBlurb, IDS_FLAGS_UI_WARNING_TEXT);
-  source->AddLocalizedString(flags_ui::kChannelPromoBeta,
-                             IDS_FLAGS_UI_PROMOTE_BETA_CHANNEL);
-  source->AddLocalizedString(flags_ui::kChannelPromoDev,
-                             IDS_FLAGS_UI_PROMOTE_DEV_CHANNEL);
-  source->AddLocalizedString(flags_ui::kFlagsSupportedTitle,
-                             IDS_FLAGS_UI_SUPPORTED_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsUnsupportedTitle,
-                             IDS_FLAGS_UI_UNSUPPORTED_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsNotSupported,
-                             IDS_FLAGS_UI_NOT_AVAILABLE);
   source->AddLocalizedString(flags_ui::kFlagsRestartNotice,
                              IDS_FLAGS_UI_RELAUNCH_NOTICE);
-  source->AddLocalizedString(flags_ui::kFlagsRestartButton,
-                             IDS_FLAGS_UI_RELAUNCH_BUTTON);
-  source->AddLocalizedString(flags_ui::kResetAllButton,
-                             IDS_FLAGS_UI_RESET_ALL_BUTTON);
-  source->AddLocalizedString(flags_ui::kFlagsNoMatches,
-                             IDS_FLAGS_UI_NO_MATCHES);
-  source->AddLocalizedString(flags_ui::kDisable, IDS_FLAGS_UI_DISABLE);
-  source->AddLocalizedString(flags_ui::kEnable, IDS_FLAGS_UI_ENABLE);
   source->AddString(flags_ui::kVersion, version_info::GetVersionNumber());
 
   source->SetJsonPath("strings.js");
@@ -155,8 +132,8 @@ void FlagsDOMHandler::HandleRequestExperimentalFeatures(
 
   base::DictionaryValue results;
 
-  auto supported_features = base::MakeUnique<base::ListValue>();
-  auto unsupported_features = base::MakeUnique<base::ListValue>();
+  auto supported_features = std::make_unique<base::ListValue>();
+  auto unsupported_features = std::make_unique<base::ListValue>();
   GetFlagFeatureEntries(flags_storage_.get(), access_, supported_features.get(),
                         unsupported_features.get());
   results.Set(flags_ui::kSupportedFeatures, std::move(supported_features));
@@ -191,7 +168,9 @@ void FlagsDOMHandler::HandleEnableExperimentalFeatureMessage(
 }
 
 void FlagsDOMHandler::HandleRestartBrowser(const base::ListValue* args) {
-  NOTREACHED();
+#if CHROMIUM_BUILD
+  CHECK(false);
+#endif  // CHROMIUM_BUILD
 }
 
 void FlagsDOMHandler::HandleResetAllFlags(const base::ListValue* args) {
@@ -214,7 +193,7 @@ FlagsUI::FlagsUI(web::WebUIIOS* web_ui)
   web_ui->AddMessageHandler(base::WrapUnique(handler));
 
   flags_ui::FlagAccess flag_access = flags_ui::kOwnerAccessToFlags;
-  handler->Init(base::MakeUnique<flags_ui::PrefServiceFlagsStorage>(
+  handler->Init(std::make_unique<flags_ui::PrefServiceFlagsStorage>(
                     GetApplicationContext()->GetLocalState()),
                 flag_access);
 

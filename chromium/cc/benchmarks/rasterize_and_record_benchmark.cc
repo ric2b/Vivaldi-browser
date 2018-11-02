@@ -22,7 +22,6 @@
 #include "cc/paint/display_item_list.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_host_common.h"
-#include "skia/ext/analysis_canvas.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace cc {
@@ -191,6 +190,6 @@ void RasterizeAndRecordBenchmark::RunOnLayer(PictureLayer* layer) {
 RasterizeAndRecordBenchmark::RecordResults::RecordResults()
     : pixels_recorded(0), bytes_used(0) {}
 
-RasterizeAndRecordBenchmark::RecordResults::~RecordResults() {}
+RasterizeAndRecordBenchmark::RecordResults::~RecordResults() = default;
 
 }  // namespace cc

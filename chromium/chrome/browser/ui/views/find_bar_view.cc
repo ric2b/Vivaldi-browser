@@ -8,7 +8,6 @@
 
 #include "base/i18n/number_formatting.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/profiles/profile.h"
@@ -151,7 +150,7 @@ FindBarView::FindBarView(FindBarHost* host)
   EnableCanvasFlippingForRTLUI(true);
 
   match_count_text_->SetEventTargeter(
-      base::MakeUnique<views::ViewTargeter>(this));
+      std::make_unique<views::ViewTargeter>(this));
   AddChildViewAt(match_count_text_, 1);
 
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
@@ -199,12 +198,10 @@ FindBarView::FindBarView(FindBarHost* host)
 
   find_text_->SetBorder(views::NullBorder());
 
-  views::BoxLayout* manager = new views::BoxLayout(
+  auto* manager = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::kHorizontal,
       gfx::Insets(provider->GetInsetsMetric(INSETS_TOAST) - horizontal_margin),
-      0);
-
-  SetLayoutManager(manager);
+      0));
   manager->SetFlexForView(find_text_, 1);
 }
 
@@ -298,6 +295,14 @@ gfx::Size FindBarView::CalculatePreferredSize() const {
   // width from changing every time the match count text changes.
   size.set_width(size.width() - match_count_text_->GetPreferredSize().width());
   return size;
+}
+
+void FindBarView::AddedToWidget() {
+  // Since the find bar now works/looks like a location bar bubble, make sure it
+  // doesn't get dark themed in incognito mode.
+  if (find_bar_host_->browser_view()->browser()->profile()->GetProfileType() ==
+      Profile::INCOGNITO_PROFILE)
+    SetNativeTheme(ui::NativeTheme::GetInstanceForNativeUi());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -437,10 +442,9 @@ const char* FindBarView::GetClassName() const {
 void FindBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   SkColor bg_color = theme->GetSystemColor(
       ui::NativeTheme::kColorId_TextfieldDefaultBackground);
-  auto border = base::MakeUnique<views::BubbleBorder>(
-      views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
-      bg_color);
-  SetBackground(base::MakeUnique<views::BubbleBackground>(border.get()));
+  auto border = std::make_unique<views::BubbleBorder>(
+      views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW, bg_color);
+  SetBackground(std::make_unique<views::BubbleBackground>(border.get()));
   SetBorder(std::move(border));
 
   match_count_text_->SetBackgroundColor(bg_color);

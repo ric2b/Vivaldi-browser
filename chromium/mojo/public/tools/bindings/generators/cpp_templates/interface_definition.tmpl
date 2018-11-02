@@ -122,6 +122,9 @@ class {{class_name}}_{{method.name}}_ForwardToCallback
 {%-   if method.sync %}
 bool {{proxy_name}}::{{method.name}}(
     {{interface_macros.declare_sync_method_params("param_", method)}}) {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT0("mojom", "{{namespace_as_string}}::{{class_name}}::{{method.name}}");
+#endif
   const bool kExpectsResponse = true;
   const bool kIsSync = true;
 {%-   if method|method_supports_lazy_serialization %}
@@ -153,6 +156,9 @@ bool {{proxy_name}}::{{method.name}}(
 
 void {{proxy_name}}::{{method.name}}(
     {{interface_macros.declare_request_params("in_", method, use_once_callback)}}) {
+#if BUILDFLAG(MOJO_TRACE_ENABLED)
+  TRACE_EVENT0("mojom", "{{namespace_as_string}}::{{class_name}}::{{method.name}}");
+#endif
 {%- if method.response_parameters != None %}
   const bool kExpectsResponse = true;
 {%- else %}
@@ -213,12 +219,11 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
   ~{{class_name}}_{{method.name}}_ProxyToResponder() {
 #if DCHECK_IS_ON()
     if (responder_) {
-      // Is the Service destroying the callback without running it
-      // and without first closing the pipe?
-      responder_->DCheckInvalid("The callback passed to "
-          "{{class_name}}::{{method.name}}() was never run. It should either "
-          "be run before destruction, or else destroyed after first closing "
-          "the pipe.");
+      // If we're being destroyed without being run, we want to ensure the
+      // binding endpoint has been closed. This checks for that asynchronously.
+      // We pass a bound generated callback to handle the response so that any
+      // resulting DCHECK stack will have useful interface type information.
+      responder_->IsConnectedAsync(base::BindOnce(&OnIsConnectedComplete));
     }
 #endif
     // If the Callback was dropped then deleting the responder will close
@@ -235,6 +240,16 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
         is_sync_(is_sync),
         responder_(std::move(responder)) {
   }
+
+#if DCHECK_IS_ON()
+  static void OnIsConnectedComplete(bool connected) {
+    DCHECK(!connected)
+        << "{{class_name}}::{{method.name}}Callback was destroyed without "
+        << "first either being run or its corresponding binding being closed. "
+        << "It is an error to drop response callbacks which still correspond "
+        << "to an open interface pipe.";
+  }
+#endif
 
   void Run(
       {{interface_macros.declare_params("in_", method.response_parameters)}});
@@ -256,7 +271,8 @@ class {{class_name}}_{{method.name}}_ProxyToResponder {
 bool {{class_name}}_{{method.name}}_ForwardToCallback::Accept(
     mojo::Message* message) {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+  TRACE_EVENT1("mojom", "{{namespace_as_string}}::{{class_name}}::{{method.name}}Callback",
+               "message", message->name());
 #endif
   mojo::internal::MessageDispatchContext dispatch_context(message);
 {%-     if method|method_supports_lazy_serialization %}
@@ -305,7 +321,8 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
 {%-   endif %}
 
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message.name());
+  TRACE_EVENT1("mojom", "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}Callback",
+               "message", message.name());
 #endif
   message.set_request_id(request_id_);
   ignore_result(responder_->Accept(&message));
@@ -319,9 +336,6 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
 {%-   if method.sync %}
 bool {{class_name}}_{{method.name}}_HandleSyncResponse::Accept(
     mojo::Message* message) {
-#if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
-#endif
 {%-     if method|method_supports_lazy_serialization %}
   if (!message->is_serialized()) {
     auto context =
@@ -376,7 +390,8 @@ bool {{class_name}}StubDispatch::Accept(
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+  TRACE_EVENT1("mojom", "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}",
+               "message", message->name());
 #endif
 {%-     if method.response_parameters == None %}
       mojo::internal::MessageDispatchContext context(message);
@@ -428,7 +443,8 @@ bool {{class_name}}StubDispatch::AcceptWithResponder(
 {%-   for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
 #if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
+  TRACE_EVENT1("mojom", "(Impl){{namespace_as_string}}::{{class_name}}::{{method.name}}",
+               "message", message->name());
 #endif
 {%-     if method.response_parameters != None %}
       mojo::internal::MessageDispatchContext context(message);
@@ -495,9 +511,6 @@ bool {{class_name}}RequestValidator::Accept(mojo::Message* message) {
   switch (message->header()->name) {
 {%- for method in interface.methods %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
-#if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
-#endif
 {%-   if method.response_parameters != None %}
       if (!mojo::internal::ValidateMessageIsRequestExpectingResponse(
               message, &validation_context)) {
@@ -544,9 +557,6 @@ bool {{class_name}}ResponseValidator::Accept(mojo::Message* message) {
   switch (message->header()->name) {
 {%- for method in interface.methods if method.response_parameters != None %}
     case internal::k{{class_name}}_{{method.name}}_Name: {
-#if BUILDFLAG(MOJO_TRACE_ENABLED)
-  TRACE_EVENT1("mojom", "{{method.name}}", "message", message->name());
-#endif
       if (!mojo::internal::ValidateMessagePayload<
                internal::{{class_name}}_{{method.name}}_ResponseParams_Data>(
                     message, &validation_context)) {

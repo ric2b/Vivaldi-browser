@@ -19,6 +19,7 @@
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 
 namespace blink {
 
@@ -163,7 +164,7 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
   if (ShouldBlockRequestByInspector(resource_request.Url()))
     return ResourceRequestBlockedReason::kInspector;
 
-  SecurityOrigin* security_origin = options.security_origin.get();
+  const SecurityOrigin* security_origin = options.security_origin.get();
   if (!security_origin)
     security_origin = GetSecurityOrigin();
 
@@ -191,7 +192,8 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
     case Resource::kLinkPrefetch:
     case Resource::kTextTrack:
     case Resource::kImportResource:
-    case Resource::kMedia:
+    case Resource::kAudio:
+    case Resource::kVideo:
     case Resource::kManifest:
     case Resource::kMock:
       // By default these types of resources can be loaded from any origin.
@@ -248,13 +250,15 @@ ResourceRequestBlockedReason BaseFetchContext::CanRequestInternal(
       !url.ProtocolIsData())
     return ResourceRequestBlockedReason::kOrigin;
 
-  WebURLRequest::FrameType frame_type = resource_request.GetFrameType();
+  network::mojom::RequestContextFrameType frame_type =
+      resource_request.GetFrameType();
 
   // Measure the number of legacy URL schemes ('ftp://') and the number of
   // embedded-credential ('http://user:password@...') resources embedded as
   // subresources.
-  if (frame_type != WebURLRequest::kFrameTypeTopLevel) {
-    bool is_subresource = frame_type == WebURLRequest::kFrameTypeNone;
+  if (frame_type != network::mojom::RequestContextFrameType::kTopLevel) {
+    bool is_subresource =
+        frame_type == network::mojom::RequestContextFrameType::kNone;
     const SecurityOrigin* embedding_origin =
         is_subresource ? GetSecurityOrigin() : GetParentSecurityOrigin();
     DCHECK(embedding_origin);

@@ -33,6 +33,7 @@ extern "C" {
 #include <X11/extensions/Xfixes.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/Xrender.h>
+#include <X11/extensions/record.h>
 #include <X11/extensions/scrnsaver.h>
 #include <X11/extensions/shape.h>
 
@@ -65,6 +66,7 @@ extern "C" {
 #define XK_MATHEMATICAL
 #define XK_BRAILLE
 #define XK_SINHALA
+#define XK_XKB_KEYS
 
 #ifndef XK_dead_greek
 #define XK_dead_greek 0xfe8c
@@ -95,6 +97,7 @@ extern "C" {
 #undef COUNT          // Defined by X11/extensions/XI.h to 0
 #undef CREATE         // Defined by X11/extensions/XI.h to 1
 #undef DeviceAdded    // Defined by X11/extensions/XI.h to 0
+#undef DeviceMode     // Defined by X11/extensions/XI.h to 1
 #undef DeviceRemoved  // Defined by X11/extensions/XI.h to 1
 }
 

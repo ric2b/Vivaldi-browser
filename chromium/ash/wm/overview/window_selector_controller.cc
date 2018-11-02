@@ -9,7 +9,6 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
@@ -20,6 +19,8 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 
@@ -47,7 +48,7 @@ bool WindowSelectorController::CanSelect() {
   SessionController* session_controller = Shell::Get()->session_controller();
   return session_controller->GetSessionState() ==
              session_manager::SessionState::ACTIVE &&
-         !ShellPort::Get()->IsSystemModalWindowOpen() &&
+         !Shell::IsSystemModalWindowOpen() &&
          !Shell::Get()->screen_pinning_controller()->IsPinned() &&
          !session_controller->IsRunningInAppMode();
 }
@@ -154,17 +155,26 @@ void WindowSelectorController::OnOverviewButtonTrayLongPressed(
   auto* split_view_controller = Shell::Get()->split_view_controller();
   // Exit split view mode if we are already in it.
   if (split_view_controller->IsSplitViewModeActive()) {
-    aura::Window* active_window = split_view_controller->left_window()
-                                      ? split_view_controller->left_window()
-                                      : split_view_controller->right_window();
+    // In some cases the window returned by wm::GetActiveWindow will be an item
+    // in overview mode (maybe the overview mode text selection widget). The
+    // active window may also be a transient descendant of the left or right
+    // snapped window, in which we want to activate the transient window's
+    // ancestor (left or right snapped window). Manually set |active_window| as
+    // either the left or right window.
+    aura::Window* active_window = wm::GetActiveWindow();
+    while (::wm::GetTransientParent(active_window))
+      active_window = ::wm::GetTransientParent(active_window);
+    if (active_window != split_view_controller->left_window() &&
+        active_window != split_view_controller->right_window()) {
+      active_window = split_view_controller->GetDefaultSnappedWindow();
+    }
     DCHECK(active_window);
     split_view_controller->EndSplitView();
     if (IsSelecting())
       ToggleOverview();
-    // In some cases the window returned by wm::GetActiveWindow will be an item
-    // in overview mode. To work around this set |active_window| before exiting
-    // split view.
     wm::ActivateWindow(active_window);
+    base::RecordAction(
+        base::UserMetricsAction("Tablet_LongPressOverviewButtonExitSplitView"));
     return;
   }
 
@@ -187,6 +197,8 @@ void WindowSelectorController::OnOverviewButtonTrayLongPressed(
     // mode.
     split_view_controller->SnapWindow(active_window, SplitViewController::LEFT);
     ToggleOverview();
+    base::RecordAction(base::UserMetricsAction(
+        "Tablet_LongPressOverviewButtonEnterSplitView"));
     return;
   }
 
@@ -219,6 +231,8 @@ void WindowSelectorController::OnOverviewButtonTrayLongPressed(
   window_selector_->SetBoundsForWindowGridsInScreen(
       split_view_controller->GetSnappedWindowBoundsInScreen(
           window, SplitViewController::RIGHT));
+  base::RecordAction(
+      base::UserMetricsAction("Tablet_LongPressOverviewButtonEnterSplitView"));
 }
 
 std::vector<aura::Window*>

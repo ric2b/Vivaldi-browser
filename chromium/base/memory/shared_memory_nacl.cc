@@ -117,9 +117,8 @@ SharedMemoryHandle SharedMemory::handle() const {
 SharedMemoryHandle SharedMemory::TakeHandle() {
   SharedMemoryHandle handle_copy = shm_;
   handle_copy.SetOwnershipPassesToIPC(true);
+  Unmap();
   shm_ = SharedMemoryHandle();
-  memory_ = nullptr;
-  mapped_size_ = 0;
   return handle_copy;
 }
 
@@ -130,7 +129,7 @@ void SharedMemory::Close() {
   }
 }
 
-SharedMemoryHandle SharedMemory::GetReadOnlyHandle() {
+SharedMemoryHandle SharedMemory::GetReadOnlyHandle() const {
   // Untrusted code can't create descriptors or handles, which is needed to
   // drop permissions.
   return SharedMemoryHandle();

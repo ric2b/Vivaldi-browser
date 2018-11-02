@@ -23,6 +23,7 @@
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_arc_home_service.h"
+#include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_test_base.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
@@ -39,6 +40,7 @@
 #include "chrome/browser/ui/app_list/arc/arc_default_app_list.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_pai_starter.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window_launcher_controller.h"
@@ -146,6 +148,8 @@ enum class ArcState {
   ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED,
   // ARC is persistent but without Play Store UI support.
   ARC_PERSISTENT_WITHOUT_PLAY_STORE,
+  // ARC is persistent, Play Store is managed, enabled, but hidden.
+  ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN,
 };
 
 constexpr ArcState kManagedArcStates[] = {
@@ -153,6 +157,7 @@ constexpr ArcState kManagedArcStates[] = {
     ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED,
     ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED,
     ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED,
+    ArcState::ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN,
 };
 
 constexpr ArcState kUnmanagedArcStates[] = {
@@ -186,6 +191,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
       case ArcState::ARC_PERSISTENT_PLAY_STORE_UNMANAGED:
       case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED:
       case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED:
+      case ArcState::ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN:
         arc::SetArcAlwaysStartForTesting(true);
         break;
       case ArcState::ARC_PERSISTENT_WITHOUT_PLAY_STORE:
@@ -221,7 +227,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
   void CreateBuilder() {
     ResetBuilder();  // Destroy any existing builder in the correct order.
 
-    model_updater_ = std::make_unique<app_list::FakeAppListModelUpdater>();
+    model_updater_ = std::make_unique<FakeAppListModelUpdater>();
     controller_ = std::make_unique<test::TestAppListControllerDelegate>();
     builder_ = std::make_unique<ArcAppModelBuilder>(controller_.get());
     builder_->Initialize(nullptr, profile_.get(), model_updater_.get());
@@ -237,7 +243,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
     size_t arc_count = 0;
     const size_t count = model_updater_->ItemCount();
     for (size_t i = 0; i < count; ++i) {
-      app_list::AppListItem* item = model_updater_->ItemAt(i);
+      ChromeAppListItem* item = model_updater_->ItemAtForTest(i);
       if (item->GetItemType() == ArcAppItem::kItemType)
         ++arc_count;
     }
@@ -249,7 +255,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
     const size_t count = model_updater_->ItemCount();
     ArcAppItem* arc_item = nullptr;
     for (size_t i = 0; i < count; ++i) {
-      app_list::AppListItem* item = model_updater_->ItemAt(i);
+      ChromeAppListItem* item = model_updater_->ItemAtForTest(i);
       if (item->GetItemType() == ArcAppItem::kItemType) {
         if (arc_count++ == index) {
           arc_item = reinterpret_cast<ArcAppItem*>(item);
@@ -304,7 +310,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
       const ArcAppItem* app_item = FindArcItem(id);
       ASSERT_NE(nullptr, app_item);
-      EXPECT_EQ(app.name, app_item->GetDisplayName());
+      EXPECT_EQ(app.name, app_item->name());
     }
 
     for (auto& shortcut : shortcuts) {
@@ -318,7 +324,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
       const ArcAppItem* app_item = FindArcItem(id);
       ASSERT_NE(nullptr, app_item);
-      EXPECT_EQ(shortcut.name, app_item->GetDisplayName());
+      EXPECT_EQ(shortcut.name, app_item->name());
     }
   }
 
@@ -463,7 +469,7 @@ class ArcAppModelBuilderTest : public extensions::ExtensionServiceTestBase,
 
  private:
   ArcAppTest arc_test_;
-  std::unique_ptr<app_list::FakeAppListModelUpdater> model_updater_;
+  std::unique_ptr<FakeAppListModelUpdater> model_updater_;
   std::unique_ptr<test::TestAppListControllerDelegate> controller_;
   std::unique_ptr<ArcAppModelBuilder> builder_;
 
@@ -584,6 +590,7 @@ class ArcDefaulAppForManagedUserTest : public ArcPlayStoreAppTest {
     switch (GetParam()) {
       case ArcState::ARC_PLAY_STORE_MANAGED_AND_ENABLED:
       case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_ENABLED:
+      case ArcState::ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN:
         return true;
       case ArcState::ARC_PLAY_STORE_MANAGED_AND_DISABLED:
       case ArcState::ARC_PERSISTENT_PLAY_STORE_MANAGED_AND_DISABLED:
@@ -597,12 +604,19 @@ class ArcDefaulAppForManagedUserTest : public ArcPlayStoreAppTest {
 
   // ArcPlayStoreAppTest:
   void OnBeforeArcTestSetup() override {
+    if (GetParam() ==
+        ArcState::ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN) {
+      const AccountId account_id(
+          AccountId::FromUserEmail(profile_->GetProfileUserName()));
+      arc_test()->GetUserManager()->AddPublicAccountUser(account_id);
+      arc_test()->GetUserManager()->LoginUser(account_id);
+    }
     policy::ProfilePolicyConnector* const connector =
         policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile());
     connector->OverrideIsManagedForTesting(true);
     profile()->GetTestingPrefService()->SetManagedPref(
         arc::prefs::kArcEnabled,
-        base::MakeUnique<base::Value>(IsEnabledByPolicy()));
+        std::make_unique<base::Value>(IsEnabledByPolicy()));
 
     ArcPlayStoreAppTest::OnBeforeArcTestSetup();
   }
@@ -627,7 +641,7 @@ class ArcVoiceInteractionTest : public ArcPlayStoreAppTest {
     DCHECK(!pai_starter_->started());
     DCHECK(!pai_starter_->locked());
 
-    voice_service_ = base::MakeUnique<arc::ArcVoiceInteractionArcHomeService>(
+    voice_service_ = std::make_unique<arc::ArcVoiceInteractionArcHomeService>(
         profile(), arc::ArcServiceManager::Get()->arc_bridge_service());
     voice_service()->OnAssistantStarted();
 
@@ -812,6 +826,7 @@ TEST_P(ArcAppModelBuilderTest, StopStartServicePreserveApps) {
   ValidateAppReadyState(fake_apps(), false);
 
   // Refreshing app list makes apps available.
+  arc_test()->RestartArcInstance();
   app_instance()->SendRefreshAppList(fake_apps());
   EXPECT_EQ(ids, prefs->GetAppIds());
   ValidateAppReadyState(fake_apps(), true);
@@ -841,6 +856,7 @@ TEST_P(ArcAppModelBuilderTest, StopStartServicePreserveShortcuts) {
   ValidateShortcutReadyState(fake_shortcuts(), false);
 
   // Refreshing app list makes apps available.
+  arc_test()->RestartArcInstance();
   app_instance()->RefreshAppList();
   app_instance()->SendRefreshAppList(std::vector<arc::mojom::AppInfo>());
   EXPECT_EQ(ids, prefs->GetAppIds());
@@ -1946,7 +1962,6 @@ TEST_P(ArcAppLauncherForDefaulAppTest, AppLauncherForDefaultApps) {
                            display::kInvalidDisplayId);
 
   EXPECT_FALSE(launcher1.app_launched());
-  EXPECT_FALSE(launcher2.app_launched());
 
   arc_test()->WaitForDefaultApps();
 
@@ -2068,7 +2083,9 @@ TEST_P(ArcDefaulAppForManagedUserTest, DefaultAppsForManagedUser) {
   // PlayStor exists for managed and enabled state.
   std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
       prefs->GetApp(arc::kPlayStoreAppId);
-  if (IsEnabledByPolicy()) {
+  if (IsEnabledByPolicy() &&
+      GetParam() !=
+          ArcState::ARC_PERSISTENT_MANAGED_ENABLED_AND_PLAY_STORE_HIDDEN) {
     ASSERT_TRUE(app_info);
     EXPECT_FALSE(app_info->ready);
   } else {

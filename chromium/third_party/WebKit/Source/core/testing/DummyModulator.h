@@ -6,7 +6,7 @@
 #define DummyModulator_h
 
 #include "bindings/core/v8/ScriptModule.h"
-#include "core/dom/Modulator.h"
+#include "core/script/Modulator.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -34,7 +34,7 @@ class DummyModulator : public Modulator {
   ScriptModuleResolver* GetScriptModuleResolver() override;
   WebTaskRunner* TaskRunner() override;
   ReferrerPolicy GetReferrerPolicy() override;
-  SecurityOrigin* GetSecurityOriginForFetch() override;
+  const SecurityOrigin* GetSecurityOriginForFetch() override;
   ScriptState* GetScriptState() override;
 
   void FetchTree(const ModuleScriptFetchRequest&, ModuleTreeClient*) override;
@@ -54,14 +54,13 @@ class DummyModulator : public Modulator {
                           ScriptPromiseResolver*) override;
   ModuleImportMeta HostGetImportMetaProperties(ScriptModule) const override;
   ScriptModule CompileModule(const String& script,
-                             const String& url_str,
+                             const KURL& source_url,
+                             const KURL& base_url,
                              const ScriptFetchOptions&,
                              AccessControlStatus,
                              const TextPosition&,
                              ExceptionState&) override;
   ScriptValue InstantiateModule(ScriptModule) override;
-  ScriptModuleState GetRecordStatus(ScriptModule) override;
-  ScriptValue GetError(const ModuleScript*) override;
   Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
   ScriptValue ExecuteModule(const ModuleScript*, CaptureEvalErrorFlag) override;
   ModuleScriptFetcher* CreateModuleScriptFetcher() override;

@@ -15,7 +15,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/user_image_screen.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
+#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/users/default_user_image/default_user_images.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -137,7 +137,7 @@ void UserImageScreenHandler::HandleScreenReady() {
 
 void UserImageScreenHandler::HandlePhotoTaken(const std::string& image_url) {
   AccessibilityManager::Get()->PlayEarcon(
-      SOUND_CAMERA_SNAP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_CAMERA_SNAP, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 
   std::string raw_data;
   base::StringPiece url(image_url);
@@ -155,7 +155,7 @@ void UserImageScreenHandler::HandlePhotoTaken(const std::string& image_url) {
 
 void UserImageScreenHandler::HandleDiscardPhoto() {
   AccessibilityManager::Get()->PlayEarcon(
-      SOUND_OBJECT_DELETE, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_OBJECT_DELETE, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 }
 
 void UserImageScreenHandler::HandleSelectImage(const std::string& image_type,

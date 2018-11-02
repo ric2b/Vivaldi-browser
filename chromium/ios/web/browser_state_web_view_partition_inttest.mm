@@ -8,8 +8,6 @@
 #include <string>
 
 #include "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
-#include "base/memory/ptr_util.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/test_timeouts.h"
 #include "ios/web/public/browser_state.h"
@@ -58,7 +56,7 @@ class BrowserStateWebViewPartitionTest : public web::WebIntTest {
     ASSERT_TRUE(server.IsRunning());
 
     auto provider =
-        base::MakeUnique<web::StringResponseProvider>("Hello World");
+        std::make_unique<web::StringResponseProvider>("Hello World");
     provider_ = provider.get();  // Keep a weak copy to allow unregistration.
     server.AddResponseProvider(std::move(provider));
   }
@@ -108,8 +106,8 @@ class BrowserStateWebViewPartitionTest : public web::WebIntTest {
   void LoadTestWebPage(WKWebView* web_view) {
     DCHECK(web_view);
 
-    base::scoped_nsobject<TestNavigationDelegate> navigation_delegate(
-        [[TestNavigationDelegate alloc] init]);
+    TestNavigationDelegate* navigation_delegate =
+        [[TestNavigationDelegate alloc] init];
 
     id old_navigation_delegate = web_view.navigationDelegate;
     web_view.navigationDelegate = navigation_delegate;

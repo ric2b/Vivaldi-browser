@@ -12,14 +12,9 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "content/common/loader_util.h"
+#include "content/network/data_pipe_element_reader.h"
 #include "content/network/network_context.h"
 #include "content/network/network_service_impl.h"
-#include "content/public/common/referrer.h"
-#include "content/public/common/resource_request.h"
-#include "content/public/common/resource_request_body.h"
-#include "content/public/common/resource_response.h"
-#include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/mime_sniffer.h"
@@ -27,7 +22,11 @@
 #include "net/base/upload_file_element_reader.h"
 #include "net/cert/symantec_certs.h"
 #include "net/url_request/url_request_context.h"
+#include "services/network/public/cpp/loader_util.h"
 #include "services/network/public/cpp/net_adapters.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 
 namespace content {
 
@@ -38,7 +37,7 @@ constexpr size_t kDefaultAllocationSize = 512 * 1024;
 // content/browser/loader/resource_loader.cc
 void PopulateResourceResponse(net::URLRequest* request,
                               bool is_load_timing_enabled,
-                              ResourceResponse* response) {
+                              network::ResourceResponse* response) {
   response->head.request_time = request->request_time();
   response->head.response_time = request->response_time();
   response->head.headers = request->response_headers();
@@ -60,11 +59,9 @@ void PopulateResourceResponse(net::URLRequest* request,
     request->GetLoadTimingInfo(&response->head.load_timing);
 
   if (request->ssl_info().cert.get()) {
-    response->head.has_major_certificate_errors =
-        net::IsCertStatusError(request->ssl_info().cert_status) &&
-        !net::IsCertStatusMinorError(request->ssl_info().cert_status);
     response->head.is_legacy_symantec_cert =
-        !response->head.has_major_certificate_errors &&
+        (!net::IsCertStatusError(response->head.cert_status) ||
+         net::IsCertStatusMinorError(response->head.cert_status)) &&
         net::IsLegacySymantecCert(request->ssl_info().public_key_hashes);
     response->head.cert_validity_start =
         request->ssl_info().cert->valid_start();
@@ -80,17 +77,17 @@ void PopulateResourceResponse(net::URLRequest* request,
 // ResourceRequestBody.
 class BytesElementReader : public net::UploadBytesElementReader {
  public:
-  BytesElementReader(ResourceRequestBody* resource_request_body,
-                     const ResourceRequestBody::Element& element)
+  BytesElementReader(network::ResourceRequestBody* resource_request_body,
+                     const network::DataElement& element)
       : net::UploadBytesElementReader(element.bytes(), element.length()),
         resource_request_body_(resource_request_body) {
-    DCHECK_EQ(ResourceRequestBody::Element::TYPE_BYTES, element.type());
+    DCHECK_EQ(network::DataElement::TYPE_BYTES, element.type());
   }
 
   ~BytesElementReader() override {}
 
  private:
-  scoped_refptr<ResourceRequestBody> resource_request_body_;
+  scoped_refptr<network::ResourceRequestBody> resource_request_body_;
 
   DISALLOW_COPY_AND_ASSIGN(BytesElementReader);
 };
@@ -101,31 +98,31 @@ class BytesElementReader : public net::UploadBytesElementReader {
 // files survive until upload completion.
 class FileElementReader : public net::UploadFileElementReader {
  public:
-  FileElementReader(ResourceRequestBody* resource_request_body,
+  FileElementReader(network::ResourceRequestBody* resource_request_body,
                     base::TaskRunner* task_runner,
-                    const ResourceRequestBody::Element& element)
+                    const network::DataElement& element)
       : net::UploadFileElementReader(task_runner,
                                      element.path(),
                                      element.offset(),
                                      element.length(),
                                      element.expected_modification_time()),
         resource_request_body_(resource_request_body) {
-    DCHECK_EQ(ResourceRequestBody::Element::TYPE_FILE, element.type());
+    DCHECK_EQ(network::DataElement::TYPE_FILE, element.type());
   }
 
   ~FileElementReader() override {}
 
  private:
-  scoped_refptr<ResourceRequestBody> resource_request_body_;
+  scoped_refptr<network::ResourceRequestBody> resource_request_body_;
 
   DISALLOW_COPY_AND_ASSIGN(FileElementReader);
 };
 
 class RawFileElementReader : public net::UploadFileElementReader {
  public:
-  RawFileElementReader(ResourceRequestBody* resource_request_body,
+  RawFileElementReader(network::ResourceRequestBody* resource_request_body,
                        base::TaskRunner* task_runner,
-                       const ResourceRequestBody::Element& element)
+                       const network::DataElement& element)
       : net::UploadFileElementReader(
             task_runner,
             // TODO(mmenke): Is duplicating this necessary?
@@ -135,155 +132,52 @@ class RawFileElementReader : public net::UploadFileElementReader {
             element.length(),
             element.expected_modification_time()),
         resource_request_body_(resource_request_body) {
-    DCHECK_EQ(ResourceRequestBody::Element::TYPE_RAW_FILE, element.type());
+    DCHECK_EQ(network::DataElement::TYPE_RAW_FILE, element.type());
   }
 
   ~RawFileElementReader() override {}
 
  private:
-  scoped_refptr<ResourceRequestBody> resource_request_body_;
+  scoped_refptr<network::ResourceRequestBody> resource_request_body_;
 
   DISALLOW_COPY_AND_ASSIGN(RawFileElementReader);
 };
 
-// A subclass of net::UploadElementReader to read data pipes.
-class DataPipeElementReader : public net::UploadElementReader {
- public:
-  DataPipeElementReader(
-      scoped_refptr<ResourceRequestBody> resource_request_body,
-      network::mojom::DataPipeGetterPtr data_pipe_getter_)
-      : resource_request_body_(std::move(resource_request_body)),
-        data_pipe_getter_(std::move(data_pipe_getter_)),
-        handle_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL),
-        weak_factory_(this) {}
-
-  ~DataPipeElementReader() override {}
-
- private:
-  void ReadCallback(int32_t status, uint64_t size) {
-    if (status == net::OK)
-      size_ = size;
-    if (!init_callback_.is_null())
-      std::move(init_callback_).Run(status);
-  }
-
-  void OnHandleReadable(MojoResult result) {
-    if (result == MOJO_RESULT_OK) {
-      int read = Read(buf_.get(), buf_length_, net::CompletionCallback());
-      DCHECK_GT(read, 0);
-      std::move(read_callback_).Run(read);
-    } else {
-      std::move(read_callback_).Run(net::ERR_FAILED);
-    }
-    buf_ = nullptr;
-    buf_length_ = 0;
-  }
-
-  // net::UploadElementReader implementation:
-  int Init(const net::CompletionCallback& callback) override {
-    // Init rewinds the stream. Throw away current state.
-    if (!read_callback_.is_null())
-      std::move(read_callback_).Run(net::ERR_FAILED);
-    buf_ = nullptr;
-    buf_length_ = 0;
-    handle_watcher_.Cancel();
-    size_ = 0;
-    bytes_read_ = 0;
-
-    // Get a new data pipe and start.
-    mojo::DataPipe data_pipe;
-    data_pipe_getter_->Read(std::move(data_pipe.producer_handle),
-                            base::BindOnce(&DataPipeElementReader::ReadCallback,
-                                           weak_factory_.GetWeakPtr()));
-    data_pipe_ = std::move(data_pipe.consumer_handle);
-    handle_watcher_.Watch(data_pipe_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-                          base::Bind(&DataPipeElementReader::OnHandleReadable,
-                                     base::Unretained(this)));
-
-    init_callback_ = std::move(callback);
-    return net::ERR_IO_PENDING;
-  }
-
-  uint64_t GetContentLength() const override { return size_; }
-
-  uint64_t BytesRemaining() const override { return size_ - bytes_read_; }
-
-  int Read(net::IOBuffer* buf,
-           int buf_length,
-           const net::CompletionCallback& callback) override {
-    if (!BytesRemaining())
-      return net::OK;
-
-    uint32_t num_bytes = buf_length;
-    MojoResult rv =
-        data_pipe_->ReadData(buf->data(), &num_bytes, MOJO_READ_DATA_FLAG_NONE);
-    if (rv == MOJO_RESULT_OK) {
-      bytes_read_ += num_bytes;
-      return num_bytes;
-    }
-
-    if (rv == MOJO_RESULT_SHOULD_WAIT) {
-      buf_ = buf;
-      buf_length_ = buf_length;
-      handle_watcher_.ArmOrNotify();
-      read_callback_ = std::move(callback);
-      return net::ERR_IO_PENDING;
-    }
-
-    return net::ERR_FAILED;
-  }
-
-  scoped_refptr<ResourceRequestBody> resource_request_body_;
-  network::mojom::DataPipeGetterPtr data_pipe_getter_;
-  mojo::ScopedDataPipeConsumerHandle data_pipe_;
-  mojo::SimpleWatcher handle_watcher_;
-  scoped_refptr<net::IOBuffer> buf_;
-  int buf_length_ = 0;
-  uint64_t size_ = 0;
-  uint64_t bytes_read_ = 0;
-  net::CompletionCallback init_callback_;
-  net::CompletionCallback read_callback_;
-
-  base::WeakPtrFactory<DataPipeElementReader> weak_factory_;
-
-  DISALLOW_COPY_AND_ASSIGN(DataPipeElementReader);
-};
-
 // TODO: copied from content/browser/loader/upload_data_stream_builder.cc.
 std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
-    ResourceRequestBody* body,
+    network::ResourceRequestBody* body,
     base::SequencedTaskRunner* file_task_runner) {
   std::vector<std::unique_ptr<net::UploadElementReader>> element_readers;
   for (const auto& element : *body->elements()) {
     switch (element.type()) {
-      case ResourceRequestBody::Element::TYPE_BYTES:
+      case network::DataElement::TYPE_BYTES:
         element_readers.push_back(
             std::make_unique<BytesElementReader>(body, element));
         break;
-      case ResourceRequestBody::Element::TYPE_FILE:
+      case network::DataElement::TYPE_FILE:
         element_readers.push_back(std::make_unique<FileElementReader>(
             body, file_task_runner, element));
         break;
-      case ResourceRequestBody::Element::TYPE_RAW_FILE:
+      case network::DataElement::TYPE_RAW_FILE:
         element_readers.push_back(std::make_unique<RawFileElementReader>(
             body, file_task_runner, element));
         break;
-      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
+      case network::DataElement::TYPE_FILE_FILESYSTEM:
         CHECK(false) << "Should never be reached";
         break;
-      case ResourceRequestBody::Element::TYPE_BLOB: {
+      case network::DataElement::TYPE_BLOB: {
         CHECK(false) << "Network service always uses DATA_PIPE for blobs.";
         break;
       }
-      case ResourceRequestBody::Element::TYPE_DATA_PIPE: {
+      case network::DataElement::TYPE_DATA_PIPE: {
         element_readers.push_back(std::make_unique<DataPipeElementReader>(
-            body, const_cast<storage::DataElement*>(&element)
+            body, const_cast<network::DataElement*>(&element)
                       ->ReleaseDataPipeGetter()));
         break;
       }
-      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
-      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
-      case ResourceRequestBody::Element::TYPE_UNKNOWN:
+      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
+      case network::DataElement::TYPE_BYTES_DESCRIPTION:
+      case network::DataElement::TYPE_UNKNOWN:
         NOTREACHED();
         break;
     }
@@ -296,11 +190,11 @@ std::unique_ptr<net::UploadDataStream> CreateUploadDataStream(
 }  // namespace
 
 URLLoader::URLLoader(NetworkContext* context,
-                     mojom::URLLoaderRequest url_loader_request,
+                     network::mojom::URLLoaderRequest url_loader_request,
                      int32_t options,
-                     const ResourceRequest& request,
+                     const network::ResourceRequest& request,
                      bool report_raw_headers,
-                     mojom::URLLoaderClientPtr url_loader_client,
+                     network::mojom::URLLoaderClientPtr url_loader_client,
                      const net::NetworkTrafficAnnotationTag& traffic_annotation,
                      uint32_t process_id)
     : context_(context),
@@ -323,14 +217,11 @@ URLLoader::URLLoader(NetworkContext* context,
       base::BindOnce(&URLLoader::OnConnectionError, base::Unretained(this)));
 
   url_request_ = context_->url_request_context()->CreateRequest(
-      GURL(request.url), net::DEFAULT_PRIORITY, this, traffic_annotation);
+      GURL(request.url), request.priority, this, traffic_annotation);
   url_request_->set_method(request.method);
-
   url_request_->set_site_for_cookies(request.site_for_cookies);
-
-  const Referrer referrer(request.referrer, request.referrer_policy);
-  Referrer::SetReferrerForRequest(url_request_.get(), referrer);
-
+  url_request_->SetReferrer(network::ComputeReferrer(request.referrer));
+  url_request_->set_referrer_policy(request.referrer_policy);
   url_request_->SetExtraRequestHeaders(request.headers);
 
   // Resolve elements from request_body and prepare upload data.
@@ -352,15 +243,12 @@ URLLoader::URLLoader(NetworkContext* context,
 
   url_request_->set_initiator(request.request_initiator);
 
-  // TODO(qinmin): network service shouldn't know about resource type, need
-  // to introduce another field to set this.
-  if (request.resource_type == RESOURCE_TYPE_MAIN_FRAME) {
+  if (request.update_first_party_url_on_redirect) {
     url_request_->set_first_party_url_policy(
         net::URLRequest::UPDATE_FIRST_PARTY_URL_ON_REDIRECT);
   }
 
-  int load_flags = BuildLoadFlagsForRequest(request, false);
-  url_request_->SetLoadFlags(load_flags);
+  url_request_->SetLoadFlags(request.load_flags);
   if (report_raw_headers_) {
     url_request_->SetRequestHeadersCallback(
         base::Bind(&net::HttpRawRequestHeaders::Assign,
@@ -368,8 +256,6 @@ URLLoader::URLLoader(NetworkContext* context,
     url_request_->SetResponseHeadersCallback(
         base::Bind(&URLLoader::SetRawResponseHeaders, base::Unretained(this)));
   }
-
-  AttachAcceptHeader(request.resource_type, url_request_.get());
 
   url_request_->Start();
 }
@@ -406,6 +292,10 @@ void URLLoader::FollowRedirect() {
   }
 
   url_request_->FollowDeferredRedirect();
+}
+
+void URLLoader::ProceedWithResponse() {
+  NOTREACHED();
 }
 
 void URLLoader::SetPriority(net::RequestPriority priority,
@@ -456,12 +346,14 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
   // optionally follow the redirect.
   *defer_redirect = true;
 
-  scoped_refptr<ResourceResponse> response = new ResourceResponse();
+  scoped_refptr<network::ResourceResponse> response =
+      new network::ResourceResponse();
   PopulateResourceResponse(url_request_.get(), is_load_timing_enabled_,
                            response.get());
   if (report_raw_headers_) {
-    response->head.devtools_info = BuildDevToolsInfo(
-        *url_request_, raw_request_headers_, raw_response_headers_.get());
+    response->head.raw_request_response_info =
+        network::BuildRawRequestResponseInfo(
+            *url_request_, raw_request_headers_, raw_response_headers_.get());
     raw_request_headers_ = net::HttpRawRequestHeaders();
     raw_response_headers_ = nullptr;
   }
@@ -509,12 +401,13 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
     upload_progress_tracker_ = nullptr;
   }
 
-  response_ = new ResourceResponse();
+  response_ = new network::ResourceResponse();
   PopulateResourceResponse(url_request_.get(), is_load_timing_enabled_,
                            response_.get());
   if (report_raw_headers_) {
-    response_->head.devtools_info = BuildDevToolsInfo(
-        *url_request_, raw_request_headers_, raw_response_headers_.get());
+    response_->head.raw_request_response_info =
+        network::BuildRawRequestResponseInfo(
+            *url_request_, raw_request_headers_, raw_response_headers_.get());
     raw_request_headers_ = net::HttpRawRequestHeaders();
     raw_response_headers_ = nullptr;
   }
@@ -535,8 +428,8 @@ void URLLoader::OnResponseStarted(net::URLRequest* url_request, int net_error) {
       base::Bind(&URLLoader::OnResponseBodyStreamReady,
                  base::Unretained(this)));
 
-  if (!(options_ & mojom::kURLLoadOptionSniffMimeType) ||
-      !ShouldSniffContent(url_request_.get(), response_.get()))
+  if (!(options_ & network::mojom::kURLLoadOptionSniffMimeType) ||
+      !network::ShouldSniffContent(url_request_.get(), response_.get()))
     SendResponseToClient();
 
   // Start reading...
@@ -672,7 +565,8 @@ void URLLoader::NotifyCompleted(int error_code) {
   status.encoded_body_length = url_request_->GetRawBodyBytes();
   status.decoded_body_length = total_written_bytes_;
 
-  if ((options_ & mojom::kURLLoadOptionSendSSLInfoForCertificateError) &&
+  if ((options_ &
+       network::mojom::kURLLoadOptionSendSSLInfoForCertificateError) &&
       net::IsCertStatusError(url_request_->ssl_info().cert_status) &&
       !net::IsCertStatusMinorError(url_request_->ssl_info().cert_status)) {
     status.ssl_info = url_request_->ssl_info();
@@ -726,9 +620,9 @@ void URLLoader::DeleteIfNeeded() {
 
 void URLLoader::SendResponseToClient() {
   base::Optional<net::SSLInfo> ssl_info;
-  if (options_ & mojom::kURLLoadOptionSendSSLInfoWithResponse)
+  if (options_ & network::mojom::kURLLoadOptionSendSSLInfoWithResponse)
     ssl_info = url_request_->ssl_info();
-  mojom::DownloadedTempFilePtr downloaded_file_ptr;
+  network::mojom::DownloadedTempFilePtr downloaded_file_ptr;
   url_loader_client_->OnReceiveResponse(response_->head, ssl_info,
                                         std::move(downloaded_file_ptr));
 

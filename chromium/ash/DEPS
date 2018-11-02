@@ -37,7 +37,6 @@ include_rules = [
   "+ui",
   "-ash/host",
   "-content",
-  "+content/public/common/service_names.mojom.h",
 
   # Only allow Chrome OS services and D-Bus clients accessible to the mustash
   # ash process.
@@ -55,6 +54,8 @@ include_rules = [
   "+chromeos/dbus/shill_device_client.h",
   "+chromeos/dbus/system_clock_client.h",
   "+chromeos/login",
+  # LoginState is deprecated and is not instantiated in mash.
+  "-chromeos/login/login_state.h",
   # TODO(jamescook): Eliminate this. http://crbug.com/644355
   "+chromeos/network",
   # TODO(jamescook): Eliminate this. http://crbug.com/644361
@@ -102,9 +103,14 @@ specific_include_rules = {
   "shell_port_mus\.cc": [
     "+ash/host/ash_window_tree_host_init_params.h",
     "+ash/host/ash_window_tree_host_mus.h",
+    "+ash/host/ash_window_tree_host_mus_mirroring_unified.h",
+    "+ash/host/ash_window_tree_host_mus_unified.h",
   ],
   "touch_transformer_controller\.*": [
     "+ash/host"
+  ],
+  "window_manager.cc": [
+    "+ash/host/ash_window_tree_host.h"
   ],
   "window_manager_service.cc": [
     "+chromeos/cryptohome"

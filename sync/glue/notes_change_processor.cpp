@@ -89,11 +89,9 @@ void NotesChangeProcessor::UpdateSyncNodeProperties(
     notes_specifics.set_url(src->GetURL().spec());
     notes_specifics.set_content(base::UTF16ToUTF8(src->GetContent()));
     notes_specifics.clear_attachments();
-    for (auto it : src->GetAttachments()) {
+    for (const auto& item : src->GetAttachments()) {
       auto* attachment = notes_specifics.add_attachments();
-      attachment->set_filename(base::UTF16ToUTF8(it.filename));
-      attachment->set_content_type(base::UTF16ToUTF8(it.content_type));
-      attachment->set_content(it.content);
+      attachment->set_checksum(item.second.checksum());
     }
   }
   if (src->is_trash())
@@ -691,20 +689,14 @@ void NotesChangeProcessor::UpdateNoteWithAttachmentData(
     const sync_pb::NotesSpecifics& specifics,
     const Notes_Node* node) {
   Notes_Node* mutable_node = AsMutable(node);
-  std::vector<Notes_attachment> new_attachments;
   if (!node->is_folder() && specifics.attachments_size()) {
+    NoteAttachments new_attachments;
     for (auto it : specifics.attachments()) {
-      Notes_attachment attachment;
-      if (it.has_filename())
-        attachment.filename = base::UTF8ToUTF16(it.filename());
-      if (it.has_content_type())
-        attachment.content_type = base::UTF8ToUTF16(it.content_type());
-      if (it.has_content())
-        attachment.content = it.content();
-      new_attachments.push_back(std::move(attachment));
+      if (!it.has_checksum())
+        continue;
+      mutable_node->AddAttachment(NoteAttachment(it.checksum(), ""));
     }
   }
-  mutable_node->SetAttachments(new_attachments);
   if (specifics.has_special_node_type()) {
     switch (specifics.special_node_type()) {
       case sync_pb::NotesSpecifics::TRASH_NODE:

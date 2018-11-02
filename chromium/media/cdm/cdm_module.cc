@@ -6,9 +6,11 @@
 
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/crash/core/common/crash_key.h"
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
 #include "media/cdm/cdm_host_files.h"
@@ -63,7 +65,7 @@ void ReportLoadErrorCode(const base::NativeLibraryLoadError& error) {
 // Only report load error code on Windows because that's the only platform that
 // has a numerical error value.
 #if defined(OS_WIN)
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Media.EME.CdmLoadErrorCode", error.code);
+  base::UmaHistogramSparse("Media.EME.CdmLoadErrorCode", error.code);
 #endif
 }
 
@@ -118,7 +120,7 @@ bool CdmModule::Initialize(const base::FilePath& cdm_path,
 #else
 bool CdmModule::Initialize(const base::FilePath& cdm_path) {
 #endif  // BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
-  DVLOG(2) << __func__ << ": cdm_path = " << cdm_path.value();
+  DVLOG(1) << __func__ << ": cdm_path = " << cdm_path.value();
 
   DCHECK(!was_initialize_called_);
   was_initialize_called_ = true;
@@ -150,17 +152,27 @@ bool CdmModule::Initialize(const base::FilePath& cdm_path) {
       library_.GetFunctionPointer("DeinitializeCdmModule"));
   create_cdm_func_ = reinterpret_cast<CreateCdmFunc>(
       library_.GetFunctionPointer("CreateCdmInstance"));
+  get_cdm_version_func_ = reinterpret_cast<GetCdmVersionFunc>(
+      library_.GetFunctionPointer("GetCdmVersion"));
 
   if (!initialize_cdm_module_func_ || !deinitialize_cdm_module_func_ ||
-      !create_cdm_func_) {
+      !create_cdm_func_ || !get_cdm_version_func_) {
     LOG(ERROR) << "Missing entry function in CDM at " << cdm_path.value();
     initialize_cdm_module_func_ = nullptr;
     deinitialize_cdm_module_func_ = nullptr;
     create_cdm_func_ = nullptr;
+    get_cdm_version_func_ = nullptr;
     library_.Release();
     ReportLoadResult(LoadResult::kEntryPointMissing);
     return false;
   }
+
+  // In case of crashes, provide CDM version to facilitate investigation.
+  std::string cdm_version = get_cdm_version_func_();
+  DVLOG(2) << __func__ << ": cdm_version = " << cdm_version;
+
+  static crash_reporter::CrashKeyString<32> cdm_version_key("cdm-version");
+  cdm_version_key.Set(cdm_version);
 
 #if defined(OS_WIN)
   // Load DXVA before sandbox lockdown to give CDM access to Output Protection

@@ -5,6 +5,8 @@
 #ifndef UI_AURA_WINDOW_TREE_HOST_H_
 #define UI_AURA_WINDOW_TREE_HOST_H_
 
+#include <stdint.h>
+
 #include <memory>
 #include <vector>
 
@@ -169,6 +171,9 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   // Overridden from ui::internal::InputMethodDelegate:
   ui::EventDispatchDetails DispatchKeyEventPostIME(ui::KeyEvent* event) final;
 
+  // Returns the id of the display. Default implementation queries Screen.
+  virtual int64_t GetDisplayId();
+
   // Returns the EventSource responsible for dispatching events to the window
   // tree.
   virtual ui::EventSource* GetEventSource() = 0;
@@ -247,6 +252,11 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t metrics) override;
 
+ protected:
+  const base::ObserverList<WindowTreeHostObserver>& observers() const {
+    return observers_;
+  }
+
  private:
   friend class test::WindowTreeHostTestApi;
 
@@ -291,9 +301,6 @@ class AURA_EXPORT WindowTreeHost : public ui::internal::InputMethodDelegate,
   bool owned_input_method_;
 
   gfx::Insets output_surface_padding_in_pixels_;
-
-  // Set to true if the next CompositorFrame will block on a new child surface.
-  bool synchronizing_with_child_on_next_frame_ = false;
 
   // Set to the time the synchronization event began.
   base::TimeTicks synchronization_start_time_;

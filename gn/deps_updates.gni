@@ -14,25 +14,26 @@ if (!is_android) {
 }
 import("//vivaldi/extraparts/deps_updates.gni")
 import("//vivaldi/importer/deps_updates.gni")
+import("//vivaldi/installer/deps_updates.gni")
 import("//vivaldi/notes/deps_updates.gni")
 import("//vivaldi/prefs/deps_updates.gni")
 import("//vivaldi/sync/deps_updates.gni")
 import("//vivaldi/third_party/deps_updates.gni")
 import("//vivaldi/vivapp/deps_updates.gni")
 
-post_process_target("//chrome/browser:test_support_ui") {
+update_target("//chrome/browser:test_support_ui") {
   deps += [ "//chrome/common" ]
 }
 
-post_process_target("//content/common:common") {
+update_target("//content/common:common") {
   deps += [ "//components/version_info:generate_version_info" ]
 }
 
-post_process_target("//components/url_formatter:url_formatter") {
+update_target("//components/url_formatter:url_formatter") {
   deps += [ "//base:base_static" ]
 }
 
-post_process_target("//third_party/WebKit/public:all_blink") {
+update_target("//third_party/WebKit/public:all_blink") {
   public_deps -= [
     "//third_party/WebKit/Source/controller:webkit_unit_tests",
     "//third_party/WebKit/Source/platform/heap:blink_heap_unittests",
@@ -41,63 +42,53 @@ post_process_target("//third_party/WebKit/public:all_blink") {
   ]
 }
 
-if (is_component_build) {
-  post_process_target("//third_party/WebKit/Source/core:remaining") {
-    deps += [ "//base:base" ]
-  }
-} else {
-  post_process_template("//third_party/WebKit/Source/core:remaining") {
-    deps += [ "//base:base" ]
-  }
-}
-
 foreach(_target,
         [
-          "//components/mus/clipboard:tests",
-          "//components/mus/gpu:tests",
-          "//components/mus/ws:tests",
           "//media/cast:testing_tools",
-          "//mojo/edk/js:tests",
           "//mojo/edk/system:tests",
           "//mojo/edk/test:public_tests",
-          "//services/shell/runner/host:host",
           "//v8:gn_all",
         ]) {
-  post_process_target(_target) {
+  update_target(_target) {
     deps = []
   }
 }
 
-foreach(_target, [ "//chrome/common:common" ]) {
-  post_process_target(_target) {
-    public_deps += [ "//components/version_info:generate_version_info" ]
-  }
-}
-
-post_process_template("//components/sync:sync") {
+update_template_instance("//components/sync:sync") {
   deps += [
     "//components/sync/protocol",
   ]
 }
 
-foreach(_target,
-        [
-          "//apps:apps",
-          "//chrome/browser:test_support",
-          "//chrome/browser/ui:test_support",
-        ]) {
-  post_process_target(_target) {
+_targets = [
+  "//chrome/browser:test_support",
+  "//chrome/browser/ui:test_support",
+]
+
+if (!is_android) {
+  _targets += ["//apps:apps"]
+}
+
+foreach(_target, _targets) {
+  update_target(_target) {
     deps += [ "//components/version_info:generate_version_info" ]
   }
 }
 
-foreach(_target,
-        [
-          "//chrome/test:browser_tests",
-          "//chrome/test:interactive_ui_tests",
-          "//chrome/test:sync_integration_tests",
-        ]) {
-  post_process_template(_target) {
+_targets=[]
+_targets = [
+  "//chrome/test:browser_tests",
+]
+
+if (!is_android) {
+  _targets += [
+    "//chrome/test:interactive_ui_tests",
+    "//chrome/test:sync_integration_tests",
+  ]
+}
+
+foreach(_target, _targets) {
+  update_template_instance(_target) {
     deps += [
       "//vivaldi/extraparts",
       "//vivaldi/calendar",
@@ -109,7 +100,7 @@ foreach(_target,
   }
 }
 
-post_process_template("//components:components_unittests") {
+update_template_instance("//components:components_unittests") {
   if (!is_linux && !is_android) {
     deps -= [
       "//components/rlz:unit_tests",
@@ -122,4 +113,19 @@ post_process_template("//components:components_unittests") {
     "//vivaldi/notes",
     "//vivaldi/sync:sync",
   ]
+}
+
+update_target("//chrome/common:common") {
+  public_deps += [
+    "//components/version_info:generate_version_info",
+    "//third_party/libxml",
+  ]
+}
+
+if (!is_android) {
+  update_target("//chrome/common/importer:importer") {
+    deps += [
+      "//third_party/libxml",
+    ]
+  }
 }

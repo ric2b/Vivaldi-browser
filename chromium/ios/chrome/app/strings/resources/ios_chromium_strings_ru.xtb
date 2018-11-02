@@ -3,6 +3,7 @@
 <translationbundle lang="ru">
 <translation id="102360288709523007">Отправлять в Google статистику использования и отчеты о сбоях</translation>
 <translation id="1185134272377778587">О Chromium</translation>
+<translation id="1289966288285062467">Примечание о конфиденциальности Chromium</translation>
 <translation id="1472013873724362412">Ваш аккаунт не поддерживается в Chromium. Обратитесь к администратору домена или войдите с помощью обычного аккаунта Google.</translation>
 <translation id="1736662517232558588">Данные Chromium удалены</translation>
 <translation id="1838412507805038478">Данные Chromium подтверждают, что сертификат сайта выпущен компанией <ph name="ISSUER" />.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Выйти из Chromium?</translation>
 <translation id="6424492062988593837">Chromium становится лучше! Доступна новая версия.</translation>
 <translation id="6604711459180487467">Откройте доступ к геоданным, чтобы использовать дополнительные возможности Chromium.</translation>
+<translation id="6626296268883197964">Работая с Chromium, вы принимаете <ph name="BEGIN_LINK_TOS" />Условия использования<ph name="END_LINK_TOS" /> и <ph name="BEGIN_LINK_PRIVACY" />Примечание о конфиденциальности<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="7099326575020694068">Chromium не может использовать камеру в режиме Split View.</translation>
-<translation id="7144758435978427212">Если на устройстве включен Bluetooth, Chromium находит и анонимно отправляет в Google веб-страницы, связанные с находящимися рядом объектами, а затем предлагает вам интересные и полезные ресурсы. <ph name="BEGIN_LINK" />Подробнее…<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Чтобы сэкономить ваше время, Chromium будет использовать аккаунты, сохраненные на вашем устройстве. Добавить или удалить их можно в настройках.</translation>
 <translation id="7269362888766543920">Некоторые дополнения вызывают сбой Chromium. Попробуйте удалить их.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Возьмите Chromium с собой</translation>
 <translation id="7674213385180944843">Откройте "Настройки &gt; Конфиденциальность &gt; Камера &gt; Chromium" и включите камеру.</translation>
 <translation id="786327964234957808">Вы переходите из аккаунта <ph name="USER_EMAIL1" /> в <ph name="USER_EMAIL2" />. Данными Chromium управляет администратор домена <ph name="DOMAIN" />. Обратите внимание, что данные будут удалены с устройства, но сохранятся в аккаунте <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Работая с приложением, вы принимаете <ph name="BEGIN_LINK" />Условия использования Chromium<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Совет. <ph name="BEGIN_LINK" />Добавьте Chromium в Dock<ph name="END_LINK" />.</translation>
 <translation id="8252885722420466166">Используйте дополнительные возможности Google в Chrome, сообщив свое местоположение.</translation>
 <translation id="8353224596138547809">Сохранить пароль для этого сайта в Chromium?</translation>

@@ -5,8 +5,9 @@
 #ifndef VideoFrameSubmitter_h
 #define VideoFrameSubmitter_h
 
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/PlatformExport.h"
 #include "platform/graphics/VideoFrameResourceProvider.h"
@@ -72,11 +73,12 @@ class PLATFORM_EXPORT VideoFrameSubmitter
   cc::VideoFrameProvider* provider_ = nullptr;
   viz::mojom::blink::CompositorFrameSinkPtr compositor_frame_sink_;
   mojo::Binding<viz::mojom::blink::CompositorFrameSinkClient> binding_;
-  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
   viz::LocalSurfaceId current_local_surface_id_;
   std::unique_ptr<VideoFrameResourceProvider> resource_provider_;
 
   bool is_rendering_;
+  gfx::Size current_size_in_pixels_;
   base::WeakPtrFactory<VideoFrameSubmitter> weak_ptr_factory_;
 
   THREAD_CHECKER(media_thread_checker_);

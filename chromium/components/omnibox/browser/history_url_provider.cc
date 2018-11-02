@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
@@ -1226,7 +1227,8 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
       history_match.input_location + params.input.text().length()};
 
   const auto format_types = AutocompleteMatch::GetFormatTypes(
-      !params.trim_http || history_match.match_in_scheme,
+      params.input.parts().scheme.len > 0 || !params.trim_http ||
+          history_match.match_in_scheme,
       history_match.match_in_subdomain, history_match.match_after_host);
   match.contents = url_formatter::FormatUrlWithOffsets(
       info.url(), format_types, net::UnescapeRule::SPACES, nullptr, nullptr,

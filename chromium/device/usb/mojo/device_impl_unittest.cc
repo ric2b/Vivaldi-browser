@@ -18,6 +18,7 @@
 #include "base/bind.h"
 #include "base/containers/queue.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
@@ -27,7 +28,6 @@
 #include "device/usb/mojo/type_converters.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
-#include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using ::testing::Invoke;
@@ -43,6 +43,10 @@ using mojom::UsbDevicePtr;
 namespace usb {
 
 namespace {
+
+MATCHER_P(BufferSizeIs, size, "") {
+  return arg->size() == size;
+}
 
 class ConfigBuilder {
  public:
@@ -185,10 +189,9 @@ class USBDeviceImplTest : public testing::Test {
             Invoke(this, &USBDeviceImplTest::SetInterfaceAlternateSetting));
     ON_CALL(mock_handle(), ResetDeviceInternal(_))
         .WillByDefault(Invoke(this, &USBDeviceImplTest::ResetDevice));
-    ON_CALL(mock_handle(),
-            ControlTransferInternal(_, _, _, _, _, _, _, _, _, _))
+    ON_CALL(mock_handle(), ControlTransferInternal(_, _, _, _, _, _, _, _, _))
         .WillByDefault(Invoke(this, &USBDeviceImplTest::ControlTransfer));
-    ON_CALL(mock_handle(), GenericTransferInternal(_, _, _, _, _, _))
+    ON_CALL(mock_handle(), GenericTransferInternal(_, _, _, _, _))
         .WillByDefault(Invoke(this, &USBDeviceImplTest::GenericTransfer));
     ON_CALL(mock_handle(), IsochronousTransferInInternal(_, _, _, _))
         .WillByDefault(Invoke(this, &USBDeviceImplTest::IsochronousTransferIn));
@@ -301,24 +304,23 @@ class USBDeviceImplTest : public testing::Test {
     ASSERT_GE(mock_inbound_data_.size(), 1u);
     const std::vector<uint8_t>& bytes = mock_inbound_data_.front();
     size_t length = bytes.size();
-    scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(length);
-    std::copy(bytes.begin(), bytes.end(), buffer->data());
+    auto buffer = base::MakeRefCounted<base::RefCountedBytes>(bytes);
     mock_inbound_data_.pop();
     std::move(callback).Run(UsbTransferStatus::COMPLETED, buffer, length);
   }
 
-  void OutboundTransfer(scoped_refptr<net::IOBuffer> buffer,
-                        size_t length,
+  void OutboundTransfer(scoped_refptr<base::RefCountedBytes> buffer,
                         UsbDeviceHandle::TransferCallback callback) {
     ASSERT_GE(mock_outbound_data_.size(), 1u);
     const std::vector<uint8_t>& bytes = mock_outbound_data_.front();
-    ASSERT_EQ(bytes.size(), length);
-    for (size_t i = 0; i < length; ++i) {
-      EXPECT_EQ(bytes[i], buffer->data()[i]) << "Contents differ at index: "
-                                             << i;
+    ASSERT_EQ(bytes.size(), buffer->size());
+    for (size_t i = 0; i < bytes.size(); ++i) {
+      EXPECT_EQ(bytes[i], buffer->front()[i])
+          << "Contents differ at index: " << i;
     }
     mock_outbound_data_.pop();
-    std::move(callback).Run(UsbTransferStatus::COMPLETED, buffer, length);
+    std::move(callback).Run(UsbTransferStatus::COMPLETED, buffer,
+                            buffer->size());
   }
 
   void ControlTransfer(UsbTransferDirection direction,
@@ -327,26 +329,24 @@ class USBDeviceImplTest : public testing::Test {
                        uint8_t request,
                        uint16_t value,
                        uint16_t index,
-                       scoped_refptr<net::IOBuffer> buffer,
-                       size_t length,
+                       scoped_refptr<base::RefCountedBytes> buffer,
                        unsigned int timeout,
                        UsbDeviceHandle::TransferCallback& callback) {
     if (direction == UsbTransferDirection::INBOUND)
       InboundTransfer(std::move(callback));
     else
-      OutboundTransfer(buffer, length, std::move(callback));
+      OutboundTransfer(buffer, std::move(callback));
   }
 
   void GenericTransfer(UsbTransferDirection direction,
                        uint8_t endpoint,
-                       scoped_refptr<net::IOBuffer> buffer,
-                       size_t length,
+                       scoped_refptr<base::RefCountedBytes> buffer,
                        unsigned int timeout,
                        UsbDeviceHandle::TransferCallback& callback) {
     if (direction == UsbTransferDirection::INBOUND)
       InboundTransfer(std::move(callback));
     else
-      OutboundTransfer(buffer, length, std::move(callback));
+      OutboundTransfer(buffer, std::move(callback));
   }
 
   void IsochronousTransferIn(
@@ -356,9 +356,7 @@ class USBDeviceImplTest : public testing::Test {
       UsbDeviceHandle::IsochronousTransferCallback& callback) {
     ASSERT_FALSE(mock_inbound_data_.empty());
     const std::vector<uint8_t>& bytes = mock_inbound_data_.front();
-    size_t length = bytes.size();
-    scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(length);
-    std::copy(bytes.begin(), bytes.end(), buffer->data());
+    auto buffer = base::MakeRefCounted<base::RefCountedBytes>(bytes);
     mock_inbound_data_.pop();
 
     ASSERT_FALSE(mock_inbound_packets_.empty());
@@ -376,7 +374,7 @@ class USBDeviceImplTest : public testing::Test {
 
   void IsochronousTransferOut(
       uint8_t endpoint_number,
-      scoped_refptr<net::IOBuffer> buffer,
+      scoped_refptr<base::RefCountedBytes> buffer,
       const std::vector<uint32_t>& packet_lengths,
       unsigned int timeout,
       UsbDeviceHandle::IsochronousTransferCallback& callback) {
@@ -386,8 +384,8 @@ class USBDeviceImplTest : public testing::Test {
         std::accumulate(packet_lengths.begin(), packet_lengths.end(), 0u);
     ASSERT_EQ(bytes.size(), length);
     for (size_t i = 0; i < length; ++i) {
-      EXPECT_EQ(bytes[i], buffer->data()[i]) << "Contents differ at index: "
-                                             << i;
+      EXPECT_EQ(bytes[i], buffer->front()[i])
+          << "Contents differ at index: " << i;
     }
     mock_outbound_data_.pop();
 
@@ -715,7 +713,7 @@ TEST_F(USBDeviceImplTest, ControlTransfer) {
               ControlTransferInternal(UsbTransferDirection::INBOUND,
                                       UsbControlTransferType::STANDARD,
                                       UsbControlTransferRecipient::DEVICE, 5, 6,
-                                      7, _, _, 0, _));
+                                      7, _, 0, _));
 
   {
     auto params = mojom::UsbControlTransferParams::New();
@@ -739,7 +737,7 @@ TEST_F(USBDeviceImplTest, ControlTransfer) {
               ControlTransferInternal(UsbTransferDirection::OUTBOUND,
                                       UsbControlTransferType::STANDARD,
                                       UsbControlTransferRecipient::INTERFACE, 5,
-                                      6, 7, _, _, 0, _));
+                                      6, 7, _, 0, _));
 
   {
     auto params = mojom::UsbControlTransferParams::New();
@@ -783,9 +781,10 @@ TEST_F(USBDeviceImplTest, GenericTransfer) {
   AddMockOutboundData(fake_outbound_data);
   AddMockInboundData(fake_inbound_data);
 
-  EXPECT_CALL(mock_handle(),
-              GenericTransferInternal(UsbTransferDirection::OUTBOUND, 0x01, _,
-                                      fake_outbound_data.size(), 0, _));
+  EXPECT_CALL(
+      mock_handle(),
+      GenericTransferInternal(UsbTransferDirection::OUTBOUND, 0x01,
+                              BufferSizeIs(fake_outbound_data.size()), 0, _));
 
   {
     base::RunLoop loop;
@@ -796,14 +795,14 @@ TEST_F(USBDeviceImplTest, GenericTransfer) {
     loop.Run();
   }
 
-  EXPECT_CALL(mock_handle(),
-              GenericTransferInternal(UsbTransferDirection::INBOUND, 0x81, _,
-                                      fake_inbound_data.size(), 0, _));
+  EXPECT_CALL(mock_handle(), GenericTransferInternal(
+                                 UsbTransferDirection::INBOUND, 0x81,
+                                 BufferSizeIs(fake_inbound_data.size()), 0, _));
 
   {
     base::RunLoop loop;
     device->GenericTransferIn(
-        1, static_cast<uint32_t>(fake_inbound_data.size()), 0,
+        1, fake_inbound_data.size(), 0,
         base::Bind(&ExpectTransferInAndThen,
                    mojom::UsbTransferStatus::COMPLETED, fake_inbound_data,
                    loop.QuitClosure()));

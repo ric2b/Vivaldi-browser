@@ -17,13 +17,13 @@
 #include "base/feature_list.h"
 #include "base/hash.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chromeos/ash_config.h"
@@ -48,8 +48,8 @@
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/chromeos/ime/input_method_menu_item.h"
 #include "ui/chromeos/ime/input_method_menu_manager.h"
+#include "ui/keyboard/content/keyboard_content_util.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/keyboard/keyboard_util.h"
 
 namespace chromeos {
 namespace input_method {
@@ -861,7 +861,7 @@ InputMethodManagerImpl::InputMethodManagerImpl(
       is_ime_menu_activated_(false),
       features_enabled_state_(InputMethodManager::FEATURE_ALL) {
   if (IsRunningAsSystemCompositor()) {
-    keyboard_ = base::MakeUnique<ImeKeyboardMus>(
+    keyboard_ = std::make_unique<ImeKeyboardMus>(
         g_browser_process->platform_part()->GetInputDeviceControllerClient());
   } else {
     keyboard_.reset(new FakeImeKeyboard());
@@ -888,8 +888,8 @@ void InputMethodManagerImpl::RecordInputMethodUsage(
   UMA_HISTOGRAM_ENUMERATION("InputMethod.Category",
                             GetInputMethodCategory(input_method_id),
                             INPUT_METHOD_CATEGORY_MAX);
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
-      "InputMethod.ID2", static_cast<int32_t>(base::Hash(input_method_id)));
+  base::UmaHistogramSparse("InputMethod.ID2",
+                           static_cast<int32_t>(base::Hash(input_method_id)));
 }
 
 void InputMethodManagerImpl::AddObserver(
@@ -1028,7 +1028,8 @@ void InputMethodManagerImpl::ChangeInputMethodInternal(
       extension_ime_util::GetComponentIDByInputMethodID(descriptor.id());
   if (engine_map_.find(profile) == engine_map_.end() ||
       engine_map_[profile].find(extension_id) == engine_map_[profile].end()) {
-    LOG(ERROR) << "IMEEngine for \"" << extension_id << "\" is not registered";
+    LOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS())
+        << "IMEEngine for \"" << extension_id << "\" is not registered";
   }
   engine = engine_map_[profile][extension_id];
 

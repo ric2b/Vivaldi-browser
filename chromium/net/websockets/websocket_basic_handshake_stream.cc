@@ -17,8 +17,8 @@
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -35,6 +35,7 @@
 #include "net/http/http_stream_parser.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/websocket_transport_client_socket_pool.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/websockets/websocket_basic_stream.h"
 #include "net/websockets/websocket_deflate_parameters.h"
 #include "net/websockets/websocket_deflate_predictor.h"
@@ -311,11 +312,12 @@ WebSocketBasicHandshakeStream::~WebSocketBasicHandshakeStream() = default;
 
 int WebSocketBasicHandshakeStream::InitializeStream(
     const HttpRequestInfo* request_info,
+    bool can_send_early,
     RequestPriority priority,
     const NetLogWithSource& net_log,
     const CompletionCallback& callback) {
   url_ = request_info->url;
-  state_.Initialize(request_info, priority, net_log, callback);
+  state_.Initialize(request_info, can_send_early, priority, net_log, callback);
   return OK;
 }
 
@@ -363,8 +365,10 @@ int WebSocketBasicHandshakeStream::SendRequest(
   request->headers.CopyFrom(enriched_headers);
   connect_delegate_->OnStartOpeningHandshake(std::move(request));
 
-  return parser()->SendRequest(
-      state_.GenerateRequestLine(), enriched_headers, response, callback);
+  // TODO(crbug.com/656607): Add propoer annotation.
+  return parser()->SendRequest(state_.GenerateRequestLine(), enriched_headers,
+                               NO_TRAFFIC_ANNOTATION_BUG_656607, response,
+                               callback);
 }
 
 int WebSocketBasicHandshakeStream::ReadResponseHeaders(
@@ -527,7 +531,7 @@ int WebSocketBasicHandshakeStream::ValidateResponse(int rv) {
   if (rv >= 0) {
     const HttpResponseHeaders* headers = http_response_info_->headers.get();
     const int response_code = headers->response_code();
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.WebSocket.ResponseCode", response_code);
+    base::UmaHistogramSparse("Net.WebSocket.ResponseCode", response_code);
     switch (response_code) {
       case HTTP_SWITCHING_PROTOCOLS:
         OnFinishOpeningHandshake();

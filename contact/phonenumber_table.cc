@@ -24,11 +24,13 @@ void FillPhonenumberRow(sql::Statement& statement,
   int contact_id = statement.ColumnInt(1);
   std::string phonenumber = statement.ColumnString(2);
   std::string type = statement.ColumnString(3);
+  bool is_default = statement.ColumnInt(4) == 1 ? true : false;
 
   phonenumber_row->set_phonenumber_id(phonenumber_id);
   phonenumber_row->set_contact_id(contact_id);
   phonenumber_row->set_phonenumber(phonenumber);
   phonenumber_row->set_type(type);
+  phonenumber_row->set_is_default(is_default);
 }
 
 // static
@@ -66,6 +68,7 @@ bool PhonenumberTable::CreatePhonenumberTable() {
       "contact_id INTEGER,"
       "phonenumber LONGVARCHAR,"
       "type LONGVARCHAR,"
+      "is_default integer,"
       "created INTEGER,"
       "last_modified INTEGER"
       ")");
@@ -79,16 +82,17 @@ PhonenumberID PhonenumberTable::AddPhoneNumber(AddPropertyObject row) {
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
       "INSERT INTO phonenumbers "
-      "(contact_id, phonenumber, type, created, last_modified) "
-      "VALUES (?, ?, ?, ?, ?)"));
+      "(contact_id, phonenumber, type, is_default, created, last_modified) "
+      "VALUES (?, ?, ?, ?, ?, ?)"));
 
   statement.BindInt64(0, row.contact_id);
   statement.BindString16(1, row.value);
   statement.BindString(2, row.type);
+  statement.BindInt(3, row.is_default ? 1 : 0);
 
   int created = base::Time().Now().ToInternalValue();
-  statement.BindInt64(3, created);
   statement.BindInt64(4, created);
+  statement.BindInt64(5, created);
 
   if (!statement.Run()) {
     return 0;
@@ -99,14 +103,16 @@ PhonenumberID PhonenumberTable::AddPhoneNumber(AddPropertyObject row) {
 bool PhonenumberTable::UpdatePhoneNumber(UpdatePropertyObject row) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
                                                       "UPDATE phonenumbers SET \
-        phonenumber=? , last_modified=? \
+        phonenumber=? ,type=?, is_default=?, last_modified=? \
         WHERE phonenumber_id=? and contact_id=?"));
 
   int modified = base::Time().Now().ToInternalValue();
   statement.BindString16(0, row.value);
-  statement.BindInt64(1, modified);
-  statement.BindInt64(2, row.property_id);
-  statement.BindInt64(3, row.contact_id);
+  statement.BindString(1, row.type);
+  statement.BindInt(2, row.is_default ? 1 : 0);
+  statement.BindInt64(3, modified);
+  statement.BindInt64(4, row.property_id);
+  statement.BindInt64(5, row.contact_id);
 
   return statement.Run();
 }
@@ -129,7 +135,7 @@ bool PhonenumberTable::GetPhonenumbersForContact(
 
   sql::Statement statement(GetDB().GetCachedStatement(
       SQL_FROM_HERE,
-      "SELECT phonenumber_id, contact_id, phonenumber "
+      "SELECT phonenumber_id, contact_id, phonenumber, type, is_default "
       "FROM phonenumbers WHERE contact_id=?"));
   statement.BindInt64(0, contact_id);
   return FillPhonenumberVector(statement, phonenumbers);

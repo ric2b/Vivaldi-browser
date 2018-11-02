@@ -14,6 +14,10 @@
 class Profile;
 class AppListControllerDelegate;
 
+namespace arc {
+enum class ArcPlayStoreSearchRequestState;
+}  // namespace arc
+
 namespace app_list {
 
 class ArcPlayStoreSearchProvider : public SearchProvider {
@@ -24,11 +28,11 @@ class ArcPlayStoreSearchProvider : public SearchProvider {
   ~ArcPlayStoreSearchProvider() override;
 
   // SearchProvider:
-  void Start(bool is_voice_query, const base::string16& query) override;
+  void Start(const base::string16& query) override;
 
  private:
   void OnResults(base::TimeTicks query_start_time,
-                 arc::mojom::AppDiscoveryRequestState state,
+                 arc::ArcPlayStoreSearchRequestState state,
                  std::vector<arc::mojom::AppDiscoveryResultPtr> results);
 
   const int max_results_;

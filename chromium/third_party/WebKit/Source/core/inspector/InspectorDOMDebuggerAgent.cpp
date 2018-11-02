@@ -80,12 +80,14 @@ static const char kXhrBreakpoints[] = "xhrBreakpoints";
 static const char kEnabled[] = "enabled";
 }
 
-static void CollectEventListeners(v8::Isolate* isolate,
-                                  EventTarget* target,
-                                  v8::Local<v8::Value> target_wrapper,
-                                  Node* target_node,
-                                  bool report_for_all_contexts,
-                                  V8EventListenerInfoList* event_information) {
+// static
+void InspectorDOMDebuggerAgent::CollectEventListeners(
+    v8::Isolate* isolate,
+    EventTarget* target,
+    v8::Local<v8::Value> target_wrapper,
+    Node* target_node,
+    bool report_for_all_contexts,
+    V8EventListenerInfoList* event_information) {
   if (!target->GetExecutionContext())
     return;
 
@@ -165,7 +167,8 @@ void InspectorDOMDebuggerAgent::EventListenersInfoForTarget(
       depth = INT_MAX;
     HeapVector<Member<Node>> nodes;
     InspectorDOMAgent::CollectNodes(
-        node, depth, pierce, WTF::Bind(&FilterNodesWithListeners), &nodes);
+        node, depth, pierce, WTF::BindRepeating(&FilterNodesWithListeners),
+        &nodes);
     for (Node* n : nodes) {
       // We are only interested in listeners from the current context.
       CollectEventListeners(isolate, n, v8::Local<v8::Value>(), n, pierce,
@@ -191,7 +194,7 @@ InspectorDOMDebuggerAgent::InspectorDOMDebuggerAgent(
     v8_inspector::V8InspectorSession* v8_session)
     : isolate_(isolate), dom_agent_(dom_agent), v8_session_(v8_session) {}
 
-InspectorDOMDebuggerAgent::~InspectorDOMDebuggerAgent() {}
+InspectorDOMDebuggerAgent::~InspectorDOMDebuggerAgent() = default;
 
 void InspectorDOMDebuggerAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(dom_agent_);
@@ -273,11 +276,12 @@ Response InspectorDOMDebuggerAgent::SetBreakpoint(const String& event_name,
     return Response::Error("Event name is empty");
   protocol::DictionaryValue* breakpoints_by_target =
       EnsurePropertyObject(EventListenerBreakpoints(), event_name);
-  if (target_name.IsEmpty())
+  if (target_name.IsEmpty()) {
     breakpoints_by_target->setBoolean(DOMDebuggerAgentState::kEventTargetAny,
                                       true);
-  else
+  } else {
     breakpoints_by_target->setBoolean(target_name.DeprecatedLower(), true);
+  }
   DidAddBreakpoint();
   return Response::OK();
 }
@@ -444,29 +448,42 @@ Response InspectorDOMDebuggerAgent::getEventListeners(
     return Response::Error(ToCoreString(std::move(error)));
   }
   v8::Context::Scope scope(context);
-  *listeners_array =
-      protocol::Array<protocol::DOMDebugger::EventListener>::create();
   V8EventListenerInfoList event_information;
   InspectorDOMDebuggerAgent::EventListenersInfoForTarget(
       context->GetIsolate(), object, depth.fromMaybe(1),
       pierce.fromMaybe(false), &event_information);
+  *listeners_array = BuildObjectsForEventListeners(event_information, context,
+                                                   object_group->string());
+  return Response::OK();
+}
+
+std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>
+InspectorDOMDebuggerAgent::BuildObjectsForEventListeners(
+    const V8EventListenerInfoList& event_information,
+    v8::Local<v8::Context> context,
+    const v8_inspector::StringView& object_group_id) {
+  std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>
+      listeners_array =
+          protocol::Array<protocol::DOMDebugger::EventListener>::create();
+  // Make sure listeners with |use_capture| true come first because they have
+  // precedence.
   for (const auto& info : event_information) {
     if (!info.use_capture)
       continue;
     std::unique_ptr<protocol::DOMDebugger::EventListener> listener_object =
-        BuildObjectForEventListener(context, info, object_group->string());
+        BuildObjectForEventListener(context, info, object_group_id);
     if (listener_object)
-      (*listeners_array)->addItem(std::move(listener_object));
+      listeners_array->addItem(std::move(listener_object));
   }
   for (const auto& info : event_information) {
     if (info.use_capture)
       continue;
     std::unique_ptr<protocol::DOMDebugger::EventListener> listener_object =
-        BuildObjectForEventListener(context, info, object_group->string());
+        BuildObjectForEventListener(context, info, object_group_id);
     if (listener_object)
-      (*listeners_array)->addItem(std::move(listener_object));
+      listeners_array->addItem(std::move(listener_object));
   }
-  return Response::OK();
+  return listeners_array;
 }
 
 std::unique_ptr<protocol::DOMDebugger::EventListener>
@@ -499,10 +516,10 @@ InspectorDOMDebuggerAgent::BuildObjectForEventListener(
           .setColumnNumber(column_number)
           .build();
   if (object_group_id.length()) {
-    value->setHandler(
-        v8_session_->wrapObject(context, function, object_group_id));
-    value->setOriginalHandler(
-        v8_session_->wrapObject(context, info.handler, object_group_id));
+    value->setHandler(v8_session_->wrapObject(
+        context, function, object_group_id, false /* generatePreview */));
+    value->setOriginalHandler(v8_session_->wrapObject(
+        context, info.handler, object_group_id, false /* generatePreview */));
     if (info.backend_node_id)
       value->setBackendNodeId(info.backend_node_id);
   }
@@ -661,13 +678,13 @@ void InspectorDOMDebuggerAgent::DidFireWebGLError(const String& error_name) {
     return;
   if (!error_name.IsEmpty())
     event_data->setString(kWebglErrorNameProperty, error_name);
-  PauseOnNativeEventIfNeeded(std::move(event_data), false);
+  PauseOnNativeEventIfNeeded(std::move(event_data), true);
 }
 
 void InspectorDOMDebuggerAgent::DidFireWebGLWarning() {
   PauseOnNativeEventIfNeeded(
       PreparePauseOnNativeEventData(kWebglWarningFiredEventName, nullptr),
-      false);
+      true);
 }
 
 void InspectorDOMDebuggerAgent::DidFireWebGLErrorOrWarning(

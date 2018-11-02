@@ -20,12 +20,13 @@ class CORE_EXPORT NGInlineBreakToken : public NGBreakToken {
   // Takes ownership of the state_stack.
   static scoped_refptr<NGInlineBreakToken> Create(
       NGInlineNode node,
+      const ComputedStyle* style,
       unsigned item_index,
       unsigned text_offset,
       bool is_forced_break,
       std::unique_ptr<const NGInlineLayoutStateStack> state_stack) {
-    return base::AdoptRef(new NGInlineBreakToken(node, item_index, text_offset,
-                                                 is_forced_break,
+    return base::AdoptRef(new NGInlineBreakToken(node, style, item_index,
+                                                 text_offset, is_forced_break,
                                                  std::move(state_stack)));
   }
 
@@ -35,6 +36,13 @@ class CORE_EXPORT NGInlineBreakToken : public NGBreakToken {
   }
 
   ~NGInlineBreakToken() override;
+
+  // The style at the end of this break token. The next line should start with
+  // this style.
+  const ComputedStyle* Style() const {
+    DCHECK(!IsFinished());
+    return style_.get();
+  }
 
   unsigned ItemIndex() const {
     DCHECK(!IsFinished());
@@ -56,8 +64,22 @@ class CORE_EXPORT NGInlineBreakToken : public NGBreakToken {
     return *state_stack_;
   }
 
+  // When a previously laid out line box didn't fit in the current
+  // fragmentainer, and we have to lay it out again in the next fragmentainer,
+  // we need to skip floats associated with that line. The parent block layout
+  // algorithm will take care of any floats that broke and need to be resumed in
+  // the next fragmentainer. Dealing with them as part of line layout as well
+  // would result in duplicate fragments for the floats.
+  void SetIgnoreFloats() { ignore_floats_ = true; }
+  bool IgnoreFloats() const { return ignore_floats_; }
+
+#ifndef NDEBUG
+  String ToString() const override;
+#endif  // NDEBUG
+
  private:
   NGInlineBreakToken(NGInlineNode node,
+                     const ComputedStyle*,
                      unsigned item_index,
                      unsigned text_offset,
                      bool is_forced_break,
@@ -65,9 +87,11 @@ class CORE_EXPORT NGInlineBreakToken : public NGBreakToken {
 
   explicit NGInlineBreakToken(NGLayoutInputNode node);
 
+  scoped_refptr<const ComputedStyle> style_;
   unsigned item_index_;
   unsigned text_offset_;
   unsigned is_forced_break_ : 1;
+  unsigned ignore_floats_ : 1;
 
   std::unique_ptr<const NGInlineLayoutStateStack> state_stack_;
 };

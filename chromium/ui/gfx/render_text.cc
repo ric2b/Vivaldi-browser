@@ -338,19 +338,31 @@ RenderText::~RenderText() {
 }
 
 // static
-RenderText* RenderText::CreateInstance() {
-#if defined(OS_MACOSX)
-  const bool use_native = !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableHarfBuzzRenderText);
-  if (use_native)
-    return new RenderTextMac;
-#endif  // defined(OS_MACOSX)
-  return new RenderTextHarfBuzz;
+std::unique_ptr<RenderText> RenderText::CreateHarfBuzzInstance() {
+  return std::make_unique<RenderTextHarfBuzz>();
 }
 
 // static
-RenderText* RenderText::CreateInstanceForEditing() {
-  return new RenderTextHarfBuzz;
+std::unique_ptr<RenderText> RenderText::CreateFor(Typesetter typesetter) {
+#if defined(OS_MACOSX)
+  if (typesetter == Typesetter::NATIVE)
+    return std::make_unique<RenderTextMac>();
+
+  if (typesetter == Typesetter::HARFBUZZ)
+    return CreateHarfBuzzInstance();
+
+  static const bool use_native =
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableHarfBuzzRenderText);
+  if (use_native)
+    return std::make_unique<RenderTextMac>();
+#endif  // defined(OS_MACOSX)
+  return CreateHarfBuzzInstance();
+}
+
+// static
+std::unique_ptr<RenderText> RenderText::CreateInstanceDeprecated() {
+  return CreateFor(Typesetter::BROWSER);
 }
 
 std::unique_ptr<RenderText> RenderText::CreateInstanceOfSameStyle(
@@ -1263,6 +1275,11 @@ void RenderText::ApplyFadeEffects(internal::SkiaTextRenderer* renderer) {
     right_part.Inset(solid_part.width() - gradient_width, 0, 0, 0);
     solid_part.Inset(0, 0, gradient_width, 0);
   }
+
+  // CreateFadeShader() expects at least one part to not be empty.
+  // See https://crbug.com/706835.
+  if (left_part.IsEmpty() && right_part.IsEmpty())
+    return;
 
   Rect text_rect = display_rect();
   text_rect.Inset(GetAlignmentOffset(0).x(), 0, 0, 0);

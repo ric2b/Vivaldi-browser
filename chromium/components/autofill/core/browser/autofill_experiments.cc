@@ -65,13 +65,10 @@ const base::Feature kAutofillUpstreamAllowAllEmailDomains{
     "AutofillUpstreamAllowAllEmailDomains", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamRequestCvcIfMissing{
     "AutofillUpstreamRequestCvcIfMissing", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kAutofillUpstreamShowGoogleLogo{
-    "AutofillUpstreamShowGoogleLogo", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kAutofillUpstreamShowNewUi{
-    "AutofillUpstreamShowNewUi", base::FEATURE_DISABLED_BY_DEFAULT};
-const base::Feature kAutofillUpstreamUseAutofillProfileComparator{
-    "AutofillUpstreamUseAutofillProfileComparator",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillUpstreamSendDetectedValues{
+    "AutofillUpstreamSendDetectedValues", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillUpstreamSendPanFirstSix{
+    "AutofillUpstreamSendPanFirstSix", base::FEATURE_DISABLED_BY_DEFAULT};
 const char kCreditCardSigninPromoImpressionLimitParamKey[] = "impression_limit";
 const char kAutofillCreditCardPopupBackgroundColorKey[] = "background_color";
 const char kAutofillCreditCardPopupDividerColorKey[] = "dropdown_divider_color";
@@ -293,20 +290,12 @@ bool IsAutofillUpstreamRequestCvcIfMissingExperimentEnabled() {
 #endif
 }
 
-bool IsAutofillUpstreamShowGoogleLogoExperimentEnabled() {
-#if defined(OS_ANDROID)
-  return false;
-#else
-  return base::FeatureList::IsEnabled(kAutofillUpstreamShowGoogleLogo);
-#endif
+bool IsAutofillUpstreamSendDetectedValuesExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillUpstreamSendDetectedValues);
 }
 
-bool IsAutofillUpstreamShowNewUiExperimentEnabled() {
-#if defined(OS_ANDROID)
-  return false;
-#else
-  return base::FeatureList::IsEnabled(kAutofillUpstreamShowNewUi);
-#endif
+bool IsAutofillUpstreamSendPanFirstSixExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillUpstreamSendPanFirstSix);
 }
 
 #if defined(OS_MACOSX)

@@ -4,15 +4,19 @@
 
 #include "chromeos/components/tether/wifi_hotspot_connector.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/guid.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
+#include "chromeos/network/device_state.h"
 #include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
+#include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/shill_property_util.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "third_party/cros_system_api/dbus/shill/dbus-constants.h"
@@ -26,8 +30,9 @@ WifiHotspotConnector::WifiHotspotConnector(
     NetworkConnect* network_connect)
     : network_state_handler_(network_state_handler),
       network_connect_(network_connect),
-      timer_(base::MakeUnique<base::OneShotTimer>()),
-      clock_(base::MakeUnique<base::DefaultClock>()),
+      timer_(std::make_unique<base::OneShotTimer>()),
+      clock_(std::make_unique<base::DefaultClock>()),
+      task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {
   network_state_handler_->AddObserver(this, FROM_HERE);
 }
@@ -85,9 +90,9 @@ void WifiHotspotConnector::ConnectToWifiHotspot(
 
   // If Wi-Fi is enabled, continue with creating the configuration of the
   // hotspot. Otherwise, request that Wi-Fi be enabled and wait; see
-  // DeviceListChanged().
+  // UpdateWaitingForWifi.
   if (network_state_handler_->IsTechnologyEnabled(NetworkTypePattern::WiFi())) {
-    // Ensure that a possible previous pending callback to DeviceListChanged()
+    // Ensure that a possible previous pending callback to UpdateWaitingForWifi
     // won't result in a second call to CreateWifiConfiguration().
     is_waiting_for_wifi_to_enable_ = false;
 
@@ -95,7 +100,7 @@ void WifiHotspotConnector::ConnectToWifiHotspot(
   } else if (!is_waiting_for_wifi_to_enable_) {
     is_waiting_for_wifi_to_enable_ = true;
 
-    // Once Wi-Fi is enabled, DeviceListChanged() will be called.
+    // Once Wi-Fi is enabled, UpdateWaitingForWifi will be called.
     network_state_handler_->SetTechnologyEnabled(
         NetworkTypePattern::WiFi(), true /*enabled */,
         base::Bind(&WifiHotspotConnector::OnEnableWifiError,
@@ -111,13 +116,7 @@ void WifiHotspotConnector::OnEnableWifiError(
 }
 
 void WifiHotspotConnector::DeviceListChanged() {
-  if (is_waiting_for_wifi_to_enable_ &&
-      network_state_handler_->IsTechnologyEnabled(NetworkTypePattern::WiFi())) {
-    is_waiting_for_wifi_to_enable_ = false;
-
-    if (!ssid_.empty())
-      CreateWifiConfiguration();
-  }
+  UpdateWaitingForWifi();
 }
 
 void WifiHotspotConnector::NetworkPropertiesUpdated(
@@ -129,44 +128,93 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
   }
 
   if (network->IsConnectedState()) {
-    // If a connection occurred, notify observers and exit early.
-    CompleteActiveConnectionAttempt(true /* success */);
+    // The network has connected, so complete the connection attempt. Because
+    // this is a NetworkStateHandlerObserver callback, complete the attempt in
+    // a new task to ensure that NetworkStateHandler is not modified while it is
+    // notifying observers. See https://crbug.com/800370.
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&WifiHotspotConnector::CompleteActiveConnectionAttempt,
+                   weak_ptr_factory_.GetWeakPtr(), true /* success */));
     return;
   }
 
   if (network->connectable() && !has_initiated_connection_to_current_network_) {
-    // Set |has_initiated_connection_to_current_network_| to true to ensure that
-    // this code path is only run once per connection attempt. Without this
-    // field, the association and connection code below would be re-run multiple
-    // times for one network.
-    has_initiated_connection_to_current_network_ = true;
-
-    // If the network is now connectable, associate it with a Tether network
-    // ASAP so that the correct icon will be displayed in the tray while the
-    // network is connecting.
-    bool successful_association =
-        network_state_handler_->AssociateTetherNetworkStateWithWifiNetwork(
-            tether_network_guid_, wifi_network_guid_);
-    if (successful_association) {
-      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
-                   << "successfully associated with Tether network (ID \""
-                   << tether_network_guid_ << "\"). Starting connection "
-                   << "attempt.";
-    } else {
-      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
-                   << "failed to associate with Tether network (ID \""
-                   << tether_network_guid_ << "\"). Starting connection "
-                   << "attempt.";
-    }
-
-    // Initiate a connection to the network.
-    network_connect_->ConnectToNetworkId(wifi_network_guid_);
+    // The network is connectable, so initiate a connection attempt. Because
+    // this is a NetworkStateHandlerObserver callback, complete the attempt in
+    // a new task to ensure that NetworkStateHandler is not modified while it is
+    // notifying observers. See https://crbug.com/800370.
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&WifiHotspotConnector::InitiateConnectionToCurrentNetwork,
+                   weak_ptr_factory_.GetWeakPtr()));
   }
 }
 
+void WifiHotspotConnector::DevicePropertiesUpdated(const DeviceState* device) {
+  if (device->Matches(NetworkTypePattern::WiFi()))
+    UpdateWaitingForWifi();
+}
+
+void WifiHotspotConnector::UpdateWaitingForWifi() {
+  if (!is_waiting_for_wifi_to_enable_ ||
+      !network_state_handler_->IsTechnologyEnabled(
+          NetworkTypePattern::WiFi())) {
+    return;
+  }
+
+  is_waiting_for_wifi_to_enable_ = false;
+
+  if (ssid_.empty())
+    return;
+
+  task_runner_->PostTask(
+      FROM_HERE, base::Bind(&WifiHotspotConnector::CreateWifiConfiguration,
+                            weak_ptr_factory_.GetWeakPtr()));
+}
+
+void WifiHotspotConnector::InitiateConnectionToCurrentNetwork() {
+  if (wifi_network_guid_.empty()) {
+    PA_LOG(WARNING) << "InitiateConnectionToCurrentNetwork() was called, but "
+                    << "the connection was canceled before it could be "
+                    << "initiated.";
+    return;
+  }
+
+  // Set |has_initiated_connection_to_current_network_| to true to ensure that
+  // this code path is only run once per connection attempt. Without this
+  // field, the association and connection code below would be re-run multiple
+  // times for one network.
+  has_initiated_connection_to_current_network_ = true;
+
+  // If the network is now connectable, associate it with a Tether network
+  // ASAP so that the correct icon will be displayed in the tray while the
+  // network is connecting.
+  bool successful_association =
+      network_state_handler_->AssociateTetherNetworkStateWithWifiNetwork(
+          tether_network_guid_, wifi_network_guid_);
+  if (successful_association) {
+    PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                 << "successfully associated with Tether network (ID \""
+                 << tether_network_guid_ << "\"). Starting connection "
+                 << "attempt.";
+  } else {
+    PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                 << "failed to associate with Tether network (ID \""
+                 << tether_network_guid_ << "\"). Starting connection "
+                 << "attempt.";
+  }
+
+  // Initiate a connection to the network.
+  network_connect_->ConnectToNetworkId(wifi_network_guid_);
+}
+
 void WifiHotspotConnector::CompleteActiveConnectionAttempt(bool success) {
-  DCHECK(!callback_.is_null());
-  DCHECK(!wifi_network_guid_.empty());
+  if (wifi_network_guid_.empty()) {
+    PA_LOG(WARNING) << "CompleteActiveConnectionAttempt(" << success << ") "
+                    << "was called, but no connection attempt is in progress.";
+    return;
+  }
 
   // Note: Empty string is passed to callback to signify a failed attempt.
   std::string wifi_guid_for_callback =
@@ -244,13 +292,13 @@ void WifiHotspotConnector::OnConnectionTimeout() {
   CompleteActiveConnectionAttempt(false /* success */);
 }
 
-void WifiHotspotConnector::SetTimerForTest(std::unique_ptr<base::Timer> timer) {
-  timer_ = std::move(timer);
-}
-
-void WifiHotspotConnector::SetClockForTest(
-    std::unique_ptr<base::Clock> clock_for_test) {
-  clock_ = std::move(clock_for_test);
+void WifiHotspotConnector::SetTestDoubles(
+    std::unique_ptr<base::Timer> test_timer,
+    std::unique_ptr<base::Clock> test_clock,
+    scoped_refptr<base::TaskRunner> test_task_runner) {
+  timer_ = std::move(test_timer);
+  clock_ = std::move(test_clock);
+  task_runner_ = test_task_runner;
 }
 
 }  // namespace tether

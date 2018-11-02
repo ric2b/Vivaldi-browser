@@ -116,6 +116,9 @@ const char kChromeSyncMergeTroubleshootingURL[] =
 #if defined(OS_MACOSX)
 const char kChromeEnterpriseSignInLearnMoreURL[] =
     "https://support.google.com/chromebook/answer/1331549";
+
+const char kMac10_9_ObsoleteURL[] =
+    "https://support.google.com/chrome/?p=unsupported_mac";
 #endif
 
 const char kResetProfileSettingsLearnMoreURL[] =
@@ -304,13 +307,6 @@ const char kLanguageSettingsLearnMoreUrl[] =
     "https://support.google.com/chrome/topic/1678461";
 #endif
 
-#if defined(OS_MACOSX)
-// TODO(mark): Change to a Help Center URL when one is available.
-// https://crbug.com/555044
-const char kMac10_678_DeprecationURL[] =
-    "https://chrome.blogspot.com/2015/11/updates-to-chrome-platform-support.html";
-#endif
-
 #if defined(OS_WIN)
 const char kWindowsXPVistaDeprecationURL[] =
     "https://chrome.blogspot.com/2015/11/updates-to-chrome-platform-support.html";
@@ -334,6 +330,11 @@ const char kEolNotificationURL[] = "https://www.google.com/chromebook/older/";
 
 const char kGoogleNameserversLearnMoreURL[] =
     "https://developers.google.com/speed/public-dns";
+#endif
+
+#if defined(OS_CHROMEOS)
+const char kTimeZoneSettingsLearnMoreURL[] =
+    "https://support.google.com/chromebook/answer/177871?hl=%s";
 #endif
 
 }  // namespace chrome

@@ -156,7 +156,9 @@ TEST_F(LoginShelfViewTest, ShouldUpdateUiAfterSessionStateChange) {
   EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown}));
 
   NotifySessionStateChanged(SessionState::LOGIN_PRIMARY);
-  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown}));
+  EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown,
+                                 LoginShelfView::kBrowseAsGuest,
+                                 LoginShelfView::kAddUser}));
 
   NotifySessionStateChanged(SessionState::LOGGED_IN_NOT_ACTIVE);
   EXPECT_TRUE(ShowsShelfButtons({LoginShelfView::kShutdown}));
@@ -299,6 +301,12 @@ TEST_F(LoginShelfViewTest, ClickCancelButton) {
   std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
   EXPECT_CALL(*client, CancelAddUser());
   Click(LoginShelfView::kCancel);
+}
+
+TEST_F(LoginShelfViewTest, ClickBrowseAsGuestButton) {
+  std::unique_ptr<MockLoginScreenClient> client = BindMockLoginScreenClient();
+  EXPECT_CALL(*client, LoginAsGuest());
+  Click(LoginShelfView::kBrowseAsGuest);
 }
 
 TEST_F(LoginShelfViewTest, TabGoesFromShelfToStatusAreaAndBackToShelf) {

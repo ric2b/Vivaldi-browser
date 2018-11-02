@@ -192,6 +192,11 @@
             "$ref": "RecurrencePattern",
             "optional": true,
             "description": "How this event reoccurs."
+          },
+          "calendarId": {
+            "type": "string",
+            "optional": true,
+            "description": "The calendar id of the event."
           }
         }
       },
@@ -393,12 +398,12 @@
             "type": "object",
             "name": "changes",
             "properties": {
-              "calendar_id": {
+              "calendarId": {
                 "description": "The updated calendar id of event",
                 "type": "string",
                 "optional": true
               },
-              "alarm_id": {
+              "alarmId": {
                 "description": "The updated alarm id of event",
                 "type": "string",
                 "optional": true
@@ -609,6 +614,42 @@
             "name": "changedEvent",
             "$ref": "CalendarEvent",
             "description": "The changed event"
+          }
+        ]
+      },
+      {
+        "name": "onCalendarCreated",
+        "type": "function",
+        "description": "Fired when a calendar is created.",
+        "parameters": [
+          {
+            "name": "createdCalendar",
+            "$ref": "Calendar",
+            "description": "The created calendar"
+          }
+        ]
+      },
+      {
+        "name": "onCalendarRemoved",
+        "type": "function",
+        "description": "Fired when calendar is deleted.",
+        "parameters": [
+          {
+            "name": "removedCalendar",
+            "$ref": "Calendar",
+            "description": "The deleted calendar"
+          }
+        ]
+      },
+      {
+        "name": "onCalendarChanged",
+        "type": "function",
+        "description": "Fired when calendar is updated.",
+        "parameters": [
+          {
+            "name": "changedCalendar",
+            "$ref": "Calendar",
+            "description": "The changed calendar"
           }
         ]
       }

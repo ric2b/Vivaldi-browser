@@ -53,6 +53,7 @@ class DeathAwareScriptWrappable : public ScriptWrappable {
       visitor->TraceWrappers(pair.key);
       visitor->TraceWrappers(pair.value);
     }
+    ScriptWrappable::TraceWrappers(visitor);
   }
 
   void SetWrappedDependency(DeathAwareScriptWrappable* dependency) {
@@ -69,7 +70,7 @@ class DeathAwareScriptWrappable : public ScriptWrappable {
   }
 
  private:
-  DeathAwareScriptWrappable() {}
+  DeathAwareScriptWrappable() = default;
 
   Wrapper wrapped_dependency_;
   HeapVector<Wrapper> wrapped_vector_dependency_;

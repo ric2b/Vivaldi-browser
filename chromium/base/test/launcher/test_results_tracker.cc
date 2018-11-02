@@ -11,10 +11,11 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
-#include "base/json/json_file_value_serializer.h"
+#include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -437,8 +438,37 @@ bool TestResultsTracker::SaveSummaryAsJSON(
   }
   summary_root->Set("test_locations", std::move(test_locations));
 
-  JSONFileValueSerializer serializer(path);
-  return serializer.Serialize(*summary_root);
+  std::string json;
+  if (!JSONWriter::Write(*summary_root, &json))
+    return false;
+
+  File output(path, File::FLAG_CREATE_ALWAYS | File::FLAG_WRITE);
+  if (!output.IsValid())
+    return false;
+
+  int json_size = static_cast<int>(json.size());
+  if (output.WriteAtCurrentPos(json.data(), json_size) != json_size) {
+    return false;
+  }
+
+  // File::Flush() will call fsync(). This is important on Fuchsia to ensure
+  // that the file is written to the disk - the system running under qemu will
+  // shutdown shortly after the test completes. On Fuchsia fsync() times out
+  // after 15 seconds. Apparently this may not be enough in some cases,
+  // particularly when running net_unittests on buildbots, see
+  // https://crbug.com/796318. Try calling fsync() more than once to workaround
+  // this issue.
+  //
+  // TODO(sergeyu): Figure out a better solution.
+  int flush_attempts_left = 4;
+  while (flush_attempts_left-- > 0) {
+    if (output.Flush())
+      return true;
+    LOG(ERROR) << "fsync() failed when saving test output summary. "
+               << ((flush_attempts_left > 0) ? "Retrying." : " Giving up.");
+  }
+
+  return false;
 }
 
 TestResultsTracker::TestStatusMap

@@ -14,6 +14,20 @@ goog.require('__crWeb.message');
 
 /** Beginning of anonymous object */
 (function() {
+  // Skip iframes that have different origins from the main frame. For such
+  // frames no form related actions (eg. filling, saving) are supported.
+  try {
+    // The following line generates exception for iframes that have different
+    // origin that.
+    // TODO(crbug.com/792642): implement sending messages instead of using
+    // window.top, when messaging framework is ready.
+    if (!window.top.document)
+      return;
+  }
+  catch(error) {
+    return;
+  }
+
 
   /**
    * Focus and input events for form elements are messaged to the main

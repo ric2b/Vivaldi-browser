@@ -3,6 +3,7 @@
 <translationbundle lang="nl">
 <translation id="102360288709523007">Help Chromium te verbeteren door gebruiksstatistieken en crashrapporten naar Google te verzenden.</translation>
 <translation id="1185134272377778587">Over Chromium</translation>
+<translation id="1289966288285062467">Privacybeleid van Chromium</translation>
 <translation id="1472013873724362412">Je account werkt niet in Chromium. Neem contact op met je domeinbeheerder of gebruik een gewoon Google-account om je aan te melden.</translation>
 <translation id="1736662517232558588">Chromium-gegevens gewist</translation>
 <translation id="1838412507805038478">Chromium heeft bevestigd dat <ph name="ISSUER" /> het certificaat voor deze website heeft verstrekt.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Uitloggen bij Chromium?</translation>
 <translation id="6424492062988593837">Chromium is nu nog beter! Er is een nieuwe versie beschikbaar.</translation>
 <translation id="6604711459180487467">Een betere ervaring in Chromium op basis van je locatie.</translation>
+<translation id="6626296268883197964">Als je deze app gebruikt, ga je akkoord met de <ph name="BEGIN_LINK_TOS" />Servicevoorwaarden<ph name="END_LINK_TOS" /> en het <ph name="BEGIN_LINK_PRIVACY" />Privacybeleid<ph name="END_LINK_PRIVACY" /> van Chromium.</translation>
 <translation id="7099326575020694068">Chromium kan je camera niet gebruiken in de modus 'Gesplitste weergave'</translation>
-<translation id="7144758435978427212">Ontdek webpagina's die worden verzonden door objecten in de buurt. Wanneer Bluetooth is ingeschakeld, kan Chromium webpagina's verzamelen die zijn gekoppeld aan objecten om je heen en ze anoniem verzenden naar Google om de relevantste pagina's te vinden. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium bespaart je tijd door je accounts beschikbaar te maken op internet. Je kunt accounts toevoegen of verwijderen bij Instellingen.</translation>
 <translation id="7269362888766543920">Sommige add-ons kunnen ervoor zorgen dat Chromium crasht. Verwijder deze add-ons.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Chromium overal gebruiken</translation>
 <translation id="7674213385180944843">Open Instellingen &gt; Privacy &gt; Camera &gt; Chromium en zet de camera aan.</translation>
 <translation id="786327964234957808">Je wijzigt het synchronisatieaccount van <ph name="USER_EMAIL1" /> in <ph name="USER_EMAIL2" />. Je bestaande Chromium-gegevens worden beheerd door <ph name="DOMAIN" />. Hierdoor worden je gegevens van dit apparaat verwijderd. Je gegevens blijven echter opgeslagen in <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Door deze app te gebruiken, ga je akkoord met de <ph name="BEGIN_LINK" />Servicevoorwaarden<ph name="END_LINK" /> van Chromium.</translation>
 <translation id="8175055321229419309">Tip: <ph name="BEGIN_LINK" />Verplaats Chromium naar je dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Gebruik Google in Chromium beter en efficiënter op basis van je locatie.</translation>
 <translation id="8353224596138547809">Wil je dat Chromium je wachtwoord voor deze site opslaat?</translation>

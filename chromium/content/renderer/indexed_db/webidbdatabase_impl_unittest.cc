@@ -17,6 +17,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebBlobInfo.h"
 #include "third_party/WebKit/public/platform/WebData.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 
 using blink::WebBlobInfo;
@@ -58,13 +59,15 @@ TEST_F(WebIDBDatabaseImplTest, ValueSizeTest) {
   StrictMock<MockWebIDBCallbacks> callbacks;
   EXPECT_CALL(callbacks, OnError(_)).Times(1);
 
-  WebIDBDatabaseImpl database_impl(nullptr,
-                                   base::ThreadTaskRunnerHandle::Get());
+  WebIDBDatabaseImpl database_impl(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+      blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   database_impl.max_put_value_size_ = kMaxValueSizeForTesting;
+  const WebIDBKey idb_key = WebIDBKey::CreateNumber(0);
   database_impl.Put(transaction_id, object_store_id, value, web_blob_info,
-                    WebIDBKey::CreateNumber(0),
-                    blink::kWebIDBPutModeAddOrUpdate, &callbacks,
-                    WebVector<long long>(), WebVector<WebVector<WebIDBKey>>());
+                    idb_key.View(), blink::kWebIDBPutModeAddOrUpdate,
+                    &callbacks, WebVector<long long>(),
+                    WebVector<WebVector<WebIDBKey>>());
 }
 
 TEST_F(WebIDBDatabaseImplTest, KeyAndValueSizeTest) {
@@ -85,11 +88,12 @@ TEST_F(WebIDBDatabaseImplTest, KeyAndValueSizeTest) {
   StrictMock<MockWebIDBCallbacks> callbacks;
   EXPECT_CALL(callbacks, OnError(_)).Times(1);
 
-  WebIDBDatabaseImpl database_impl(nullptr,
-                                   base::ThreadTaskRunnerHandle::Get());
+  WebIDBDatabaseImpl database_impl(
+      nullptr, blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+      blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   database_impl.max_put_value_size_ = kMaxValueSizeForTesting;
-  database_impl.Put(transaction_id, object_store_id, value, web_blob_info, key,
-                    blink::kWebIDBPutModeAddOrUpdate, &callbacks,
+  database_impl.Put(transaction_id, object_store_id, value, web_blob_info,
+                    key.View(), blink::kWebIDBPutModeAddOrUpdate, &callbacks,
                     WebVector<long long>(), WebVector<WebVector<WebIDBKey>>());
 }
 

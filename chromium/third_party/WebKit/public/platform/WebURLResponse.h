@@ -61,7 +61,7 @@ class WebURLResponse {
   };
 
   struct SignedCertificateTimestamp {
-    SignedCertificateTimestamp() {}
+    SignedCertificateTimestamp() = default;
     SignedCertificateTimestamp(WebString status,
                                WebString origin,
                                WebString log_description,
@@ -139,7 +139,7 @@ class WebURLResponse {
 
   class ExtraData {
    public:
-    virtual ~ExtraData() {}
+    virtual ~ExtraData() = default;
   };
 
   BLINK_PLATFORM_EXPORT ~WebURLResponse();
@@ -202,6 +202,7 @@ class WebURLResponse {
   BLINK_PLATFORM_EXPORT void SetSecurityStyle(WebSecurityStyle);
 
   BLINK_PLATFORM_EXPORT void SetSecurityDetails(const WebSecurityDetails&);
+  BLINK_PLATFORM_EXPORT WebSecurityDetails SecurityDetailsForTesting();
 
 #if INSIDE_BLINK
   BLINK_PLATFORM_EXPORT const ResourceResponse& ToResourceResponse() const;
@@ -224,9 +225,12 @@ class WebURLResponse {
   // details.
   BLINK_PLATFORM_EXPORT void SetWasFallbackRequiredByServiceWorker(bool);
 
-  // The type of the response which was returned by the ServiceWorker.
+  // The type of the response, if it was returned by a service worker. This is
+  // kDefault if the response was not returned by a service worker.
   BLINK_PLATFORM_EXPORT void SetResponseTypeViaServiceWorker(
       network::mojom::FetchResponseType);
+  BLINK_PLATFORM_EXPORT network::mojom::FetchResponseType
+  ResponseTypeViaServiceWorker() const;
 
   // The URL list of the Response object the ServiceWorker passed to
   // respondWith(). See ServiceWorkerResponseInfo::url_list_via_service_worker()

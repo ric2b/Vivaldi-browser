@@ -20,7 +20,11 @@
       },
       "requires": {
         "*": [ "app" ],
-        "content_browser": [ "gpu" ],
+        "content_browser": [
+          "dwrite_font_proxy",
+          "field_trials",
+          "gpu"
+        ],
         "device": [ "device:power_monitor" ],
         "metrics": [ "url_keyed_metrics" ]
       }

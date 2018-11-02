@@ -11,20 +11,20 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/background_generator.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_panel_protocol.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
-#include "ios/chrome/browser/ui/side_swipe/side_swipe_toolbar_interacting.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_util.h"
 #import "ios/chrome/browser/ui/side_swipe_gesture_recognizer.h"
+#include "ios/chrome/browser/ui/toolbar/public/side_swipe_toolbar_interacting.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
-#import "ios/web/web_state/ui/crw_web_controller.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -66,15 +66,15 @@ const CGFloat kResizeFactor = 4;
   if (self) {
     _topMargin = topMargin;
 
-    image_.reset([[UIImageView alloc] initWithFrame:CGRectZero]);
+    image_ = [[UIImageView alloc] initWithFrame:CGRectZero];
     [image_ setClipsToBounds:YES];
     [image_ setContentMode:UIViewContentModeScaleAspectFill];
     [self addSubview:image_];
 
-    toolbarHolder_.reset([[UIImageView alloc] initWithFrame:CGRectZero]);
+    toolbarHolder_ = [[UIImageView alloc] initWithFrame:CGRectZero];
     [self addSubview:toolbarHolder_];
 
-    shadowView_.reset([[UIImageView alloc] initWithFrame:self.bounds]);
+    shadowView_ = [[UIImageView alloc] initWithFrame:self.bounds];
     [shadowView_ setImage:NativeImage(IDR_IOS_TOOLBAR_SHADOW)];
     [self addSubview:shadowView_];
 
@@ -189,10 +189,10 @@ const CGFloat kResizeFactor = 4;
 
     InstallBackgroundInView(background);
 
-    rightCard_.reset(
-        [[SwipeView alloc] initWithFrame:CGRectZero topMargin:topMargin]);
-    leftCard_.reset(
-        [[SwipeView alloc] initWithFrame:CGRectZero topMargin:topMargin]);
+    rightCard_ =
+        [[SwipeView alloc] initWithFrame:CGRectZero topMargin:topMargin];
+    leftCard_ =
+        [[SwipeView alloc] initWithFrame:CGRectZero topMargin:topMargin];
     [rightCard_ setTranslatesAutoresizingMaskIntoConstraints:NO];
     [leftCard_ setTranslatesAutoresizingMaskIntoConstraints:NO];
     [self addSubview:rightCard_];
@@ -266,21 +266,22 @@ const CGFloat kResizeFactor = 4;
   // grey image for multi core devices.
   dispatch_queue_t priorityQueue =
       dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_HIGH, 0ul);
-  [tab retrieveSnapshot:^(UIImage* image) {
-    if (PagePlaceholderTabHelper::FromWebState(tab.webState)
-            ->will_add_placeholder_for_next_navigation() &&
-        !ios::device_util::IsSingleCoreDevice()) {
-      [card setImage:[CRWWebController defaultSnapshotImage]];
-      dispatch_async(priorityQueue, ^{
-        UIImage* greyImage = [self smallGreyImage:image];
-        dispatch_async(dispatch_get_main_queue(), ^{
-          [card setImage:greyImage];
-        });
+  SnapshotTabHelper::FromWebState(tab.webState)
+      ->RetrieveColorSnapshot(^(UIImage* image) {
+        if (PagePlaceholderTabHelper::FromWebState(tab.webState)
+                ->will_add_placeholder_for_next_navigation() &&
+            !ios::device_util::IsSingleCoreDevice()) {
+          [card setImage:SnapshotTabHelper::GetDefaultSnapshotImage()];
+          dispatch_async(priorityQueue, ^{
+            UIImage* greyImage = [self smallGreyImage:image];
+            dispatch_async(dispatch_get_main_queue(), ^{
+              [card setImage:greyImage];
+            });
+          });
+        } else {
+          [card setImage:image];
+        }
       });
-    } else {
-      [card setImage:image];
-    }
-  }];
 }
 
 // Place cards around |currentPoint_.x|, and lean towards each card near the

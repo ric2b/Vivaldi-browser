@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sr">
 <translation id="1326317727527857210">Да би вам картице биле доступне на другим уређајима, пријавите се у Chrome.</translation>
-<translation id="1685087038067318291">Откривајте веб-странице које шаљу објекти у околини. Када је Bluetooth укључен, Chrome може да прикупља веб-странице повезане са објектима око вас и да их анонимно шаље Google-у како би пронашао најкорисније. <ph name="BEGIN_LINK" />Сазнајте више<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Обавештење о приватности за Google Chrome</translation>
+<translation id="1863312987075920112">Ако користите ову апликацију, прихватате Chrome <ph name="BEGIN_LINK_TOS" />услове коришћења услуге<ph name="END_LINK_TOS" /> и <ph name="BEGIN_LINK_PRIVACY" />Обавештење о приватности<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="2147651015520127414">Chrome је потврдио да је <ph name="ISSUER" /> издао сертификат овог веб-сајта.</translation>
 <translation id="2334084861041072223">Ауторска права <ph name="YEAR" />. Google Inc. Сва права задржана.</translation>
 <translation id="2342981853652716282">Пријавите се у Chrome да би вам обележивачи, лозинке и други садржај били доступни на свим уређајима.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Неки програмски додаци изазивају отказивање Chrome-а. Деинсталирајте:</translation>
 <translation id="4615174829807303908">Одјављујете се са налога којим управља <ph name="SIGNOUT_MANAGED_DOMAIN" />. То ће избрисати Chrome податке са овог уређаја, али ће подаци остати на Google налогу.</translation>
 <translation id="5389212809648216794">Google Chrome не може да користи камеру зато што је већ користи друга апликација</translation>
-<translation id="5566557026214762153">Коришћењем апликације прихватате Chrome-ове <ph name="BEGIN_LINK" />Услове коришћења услуге<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Отворите Подешавања &gt; Приватност &gt; Камера &gt; Google Chrome и укључите камеру.</translation>
 <translation id="5642200033778930880">Google Chrome не може да користи камеру у режиму подељеног приказа</translation>
 <translation id="5703130498371792817">Уживате у Chrome-у? <ph name="BEGIN_LINK" />Оцените ову апликацију<ph name="END_LINK" /></translation>

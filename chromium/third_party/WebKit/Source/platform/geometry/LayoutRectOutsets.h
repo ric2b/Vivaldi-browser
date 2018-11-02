@@ -49,7 +49,7 @@ class PLATFORM_EXPORT LayoutRectOutsets {
   DISALLOW_NEW();
 
  public:
-  LayoutRectOutsets() {}
+  LayoutRectOutsets() = default;
   LayoutRectOutsets(LayoutUnit top,
                     LayoutUnit right,
                     LayoutUnit bottom,
@@ -133,6 +133,12 @@ inline LayoutRectOutsets operator+(const LayoutRectOutsets& a,
 
 inline LayoutRectOutsets operator-(const LayoutRectOutsets& a) {
   return LayoutRectOutsets(-a.Top(), -a.Right(), -a.Bottom(), -a.Left());
+}
+
+inline LayoutRectOutsets& operator-=(LayoutRectOutsets& a,
+                                     const LayoutRectOutsets& b) {
+  a += -b;
+  return a;
 }
 
 inline LayoutRectOutsets EnclosingLayoutRectOutsets(

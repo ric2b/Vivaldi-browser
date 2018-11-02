@@ -627,7 +627,7 @@ WebContentsView* InterstitialPageImpl::CreateWebContentsView() {
       static_cast<WebContentsImpl*>(web_contents())->GetView();
   RenderWidgetHostViewBase* view =
       wcv->CreateViewForWidget(render_view_host_->GetWidget(), false);
-  RenderWidgetHostImpl::From(render_view_host_->GetWidget())->SetView(view);
+  render_view_host_->GetWidget()->SetView(view);
   render_view_host_->GetMainFrame()->AllowBindings(
       BINDINGS_POLICY_DOM_AUTOMATION);
 
@@ -1025,6 +1025,26 @@ RenderWidgetHostInputEventRouter* InterstitialPageImpl::GetInputEventRouter() {
     return nullptr;
 
   return web_contents_impl->GetInputEventRouter();
+}
+
+BrowserAccessibilityManager*
+InterstitialPageImpl::GetRootBrowserAccessibilityManager() {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents_);
+  if (!web_contents_impl)
+    return nullptr;
+
+  return web_contents_impl->GetRootBrowserAccessibilityManager();
+}
+
+BrowserAccessibilityManager*
+InterstitialPageImpl::GetOrCreateRootBrowserAccessibilityManager() {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents_);
+  if (!web_contents_impl)
+    return nullptr;
+
+  return web_contents_impl->GetOrCreateRootBrowserAccessibilityManager();
 }
 
 }  // namespace content

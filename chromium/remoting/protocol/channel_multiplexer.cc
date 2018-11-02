@@ -14,7 +14,6 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -82,7 +81,8 @@ class ChannelMultiplexer::MuxChannel {
   // Called by MuxSocket.
   void OnSocketDestroyed();
   void DoWrite(std::unique_ptr<MultiplexPacket> packet,
-               const base::Closure& done_task);
+               const base::Closure& done_task,
+               const net::NetworkTrafficAnnotationTag& traffic_annotation);
   int DoRead(const scoped_refptr<net::IOBuffer>& buffer, int buffer_len);
 
  private:
@@ -109,8 +109,11 @@ class ChannelMultiplexer::MuxSocket : public P2PStreamSocket {
   // P2PStreamSocket interface.
   int Read(const scoped_refptr<net::IOBuffer>& buffer, int buffer_len,
            const net::CompletionCallback& callback) override;
-  int Write(const scoped_refptr<net::IOBuffer>& buffer, int buffer_len,
-            const net::CompletionCallback& callback) override;
+  int Write(
+      const scoped_refptr<net::IOBuffer>& buffer,
+      int buffer_len,
+      const net::CompletionCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation) override;
 
  private:
   MuxChannel* channel_;
@@ -160,7 +163,7 @@ void ChannelMultiplexer::MuxChannel::OnIncomingPacket(
   DCHECK_EQ(packet->channel_id(), receive_id_);
   if (packet->data().size() > 0) {
     pending_packets_.push_back(
-        base::MakeUnique<PendingPacket>(std::move(packet)));
+        std::make_unique<PendingPacket>(std::move(packet)));
     if (socket_) {
       // Notify the socket that we have more data.
       socket_->OnPacketReceived();
@@ -180,13 +183,14 @@ void ChannelMultiplexer::MuxChannel::OnSocketDestroyed() {
 
 void ChannelMultiplexer::MuxChannel::DoWrite(
     std::unique_ptr<MultiplexPacket> packet,
-    const base::Closure& done_task) {
+    const base::Closure& done_task,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   packet->set_channel_id(send_id_);
   if (!id_sent_) {
     packet->set_channel_name(name_);
     id_sent_ = true;
   }
-  multiplexer_->DoWrite(std::move(packet), done_task);
+  multiplexer_->DoWrite(std::move(packet), done_task, traffic_annotation);
 }
 
 int ChannelMultiplexer::MuxChannel::DoRead(
@@ -237,8 +241,10 @@ int ChannelMultiplexer::MuxSocket::Read(
 }
 
 int ChannelMultiplexer::MuxSocket::Write(
-    const scoped_refptr<net::IOBuffer>& buffer, int buffer_len,
-    const net::CompletionCallback& callback) {
+    const scoped_refptr<net::IOBuffer>& buffer,
+    int buffer_len,
+    const net::CompletionCallback& callback,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(write_callback_.is_null());
 
@@ -252,7 +258,8 @@ int ChannelMultiplexer::MuxSocket::Write(
   write_pending_ = true;
   channel_->DoWrite(std::move(packet),
                     base::Bind(&ChannelMultiplexer::MuxSocket::OnWriteComplete,
-                               weak_factory_.GetWeakPtr()));
+                               weak_factory_.GetWeakPtr()),
+                    traffic_annotation);
 
   // OnWriteComplete() might be called above synchronously.
   if (write_pending_) {
@@ -395,7 +402,7 @@ ChannelMultiplexer::MuxChannel* ChannelMultiplexer::GetOrCreateChannel(
   std::unique_ptr<MuxChannel>& channel = channels_[name];
   if (!channel) {
     // Create a new channel if we haven't found existing one.
-    channel = base::MakeUnique<MuxChannel>(this, name, next_channel_id_);
+    channel = std::make_unique<MuxChannel>(this, name, next_channel_id_);
     ++next_channel_id_;
   }
 
@@ -453,9 +460,12 @@ void ChannelMultiplexer::OnIncomingPacket(
   channel->OnIncomingPacket(std::move(packet));
 }
 
-void ChannelMultiplexer::DoWrite(std::unique_ptr<MultiplexPacket> packet,
-                                 const base::Closure& done_task) {
-  writer_.Write(SerializeAndFrameMessage(*packet), done_task);
+void ChannelMultiplexer::DoWrite(
+    std::unique_ptr<MultiplexPacket> packet,
+    const base::Closure& done_task,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+  writer_.Write(SerializeAndFrameMessage(*packet), done_task,
+                traffic_annotation);
 }
 
 }  // namespace protocol

@@ -5,7 +5,7 @@
 #include "cc/paint/paint_op_buffer_serializer.h"
 
 #include "base/bind.h"
-#include "cc/paint/scoped_image_flags.h"
+#include "cc/paint/scoped_raster_flags.h"
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
@@ -26,11 +26,14 @@ class ScopedFlagsOverride {
 
 }  // namespace
 
-PaintOpBufferSerializer::PaintOpBufferSerializer(SerializeCallback serialize_cb,
-                                                 ImageProvider* image_provider)
+PaintOpBufferSerializer::PaintOpBufferSerializer(
+    SerializeCallback serialize_cb,
+    ImageProvider* image_provider,
+    TransferCacheSerializeHelper* transfer_cache)
     : serialize_cb_(std::move(serialize_cb)),
       canvas_(100, 100),
-      image_provider_(image_provider) {
+      image_provider_(image_provider),
+      transfer_cache_(transfer_cache) {
   DCHECK(serialize_cb_);
 }
 
@@ -39,15 +42,37 @@ PaintOpBufferSerializer::~PaintOpBufferSerializer() = default;
 void PaintOpBufferSerializer::Serialize(const PaintOpBuffer* buffer,
                                         const std::vector<size_t>* offsets,
                                         const Preamble& preamble) {
-  PaintOp::SerializeOptions options(image_provider_, &canvas_,
+  // Reset the canvas to the maximum extents of our playback rect, ensuring this
+  // rect will not reject images.
+  canvas_.resetCanvas(preamble.playback_rect.right(),
+                      preamble.playback_rect.bottom());
+  DCHECK(canvas_.getTotalMatrix().isIdentity());
+  static const int kInitialSaveCount = 1;
+  DCHECK_EQ(kInitialSaveCount, canvas_.getSaveCount());
+
+  // These SerializeOptions and PlaybackParams use the initial (identity) canvas
+  // matrix, as they are only used for serializing the preamble and the initial
+  // save / final restore. SerializeBuffer will create its own SerializeOptions
+  // and PlaybackParams based on the post-preamble canvas.
+  PaintOp::SerializeOptions options(image_provider_, transfer_cache_, &canvas_,
                                     canvas_.getTotalMatrix());
   PlaybackParams params(image_provider_, canvas_.getTotalMatrix());
 
-  int save_count = canvas_.getSaveCount();
   Save(options, params);
   SerializePreamble(preamble, options, params);
   SerializeBuffer(buffer, offsets);
-  RestoreToCount(save_count, options, params);
+  RestoreToCount(kInitialSaveCount, options, params);
+}
+
+void PaintOpBufferSerializer::Serialize(const PaintOpBuffer* buffer) {
+  // Use half of the max int as the extent for the SkNoDrawCanvas.
+  static const int extent = std::numeric_limits<int>::max() >> 1;
+  // Reset the canvas to the maximum extents of our playback rect, ensuring this
+  // rect will not reject images.
+  canvas_.resetCanvas(extent, extent);
+  DCHECK(canvas_.getTotalMatrix().isIdentity());
+
+  SerializeBuffer(buffer, nullptr);
 }
 
 void PaintOpBufferSerializer::SerializePreamble(
@@ -82,7 +107,8 @@ void PaintOpBufferSerializer::SerializePreamble(
 void PaintOpBufferSerializer::SerializeBuffer(
     const PaintOpBuffer* buffer,
     const std::vector<size_t>* offsets) {
-  PaintOp::SerializeOptions options(image_provider_, &canvas_,
+  DCHECK(buffer);
+  PaintOp::SerializeOptions options(image_provider_, transfer_cache_, &canvas_,
                                     canvas_.getTotalMatrix());
   PlaybackParams params(image_provider_, canvas_.getTotalMatrix());
 
@@ -124,18 +150,10 @@ bool PaintOpBufferSerializer::SerializeOpWithFlags(
     PaintOp::SerializeOptions* options,
     const PlaybackParams& params,
     uint8_t alpha) {
-  const bool needs_flag_override =
-      alpha != 255 ||
-      (flags_op->flags.HasDiscardableImages() && options->image_provider);
-
-  base::Optional<ScopedImageFlags> scoped_flags;
-  if (needs_flag_override) {
-    scoped_flags.emplace(options->image_provider, &flags_op->flags,
-                         options->canvas->getTotalMatrix(), alpha);
-  }
-
-  const PaintFlags* flags_to_serialize =
-      scoped_flags ? scoped_flags->flags() : &flags_op->flags;
+  const ScopedRasterFlags scoped_flags(
+      &flags_op->flags, options->image_provider,
+      options->canvas->getTotalMatrix(), alpha);
+  const PaintFlags* flags_to_serialize = scoped_flags.flags();
   if (!flags_to_serialize)
     return true;
 
@@ -185,13 +203,16 @@ void PaintOpBufferSerializer::RestoreToCount(
   }
 }
 
-SimpleBufferSerializer::SimpleBufferSerializer(void* memory,
-                                               size_t size,
-                                               ImageProvider* image_provider)
+SimpleBufferSerializer::SimpleBufferSerializer(
+    void* memory,
+    size_t size,
+    ImageProvider* image_provider,
+    TransferCacheSerializeHelper* transfer_cache)
     : PaintOpBufferSerializer(
           base::Bind(&SimpleBufferSerializer::SerializeToMemory,
                      base::Unretained(this)),
-          image_provider),
+          image_provider,
+          transfer_cache),
       memory_(memory),
       total_(size) {}
 

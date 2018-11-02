@@ -16,8 +16,9 @@
 
 namespace variations {
 
-class VariationsServiceClient;
 class PlatformFieldTrials;
+class SafeSeedManager;
+class VariationsServiceClient;
 
 // Used to setup field trials based on stored variations seed data.
 class VariationsFieldTrialCreator {
@@ -33,28 +34,10 @@ class VariationsFieldTrialCreator {
   // empty if it is not available.
   std::string GetLatestCountry() const;
 
-  // Creates field trials based on the variations seed loaded from local state.
-  // If there is a problem loading the seed data, all trials specified by the
-  // seed may not be created. Some field trials are configured to override or
-  // associate with (for reporting) specific features. These associations are
-  // registered with |feature_list|.
-  bool CreateTrialsFromSeed(
-      std::unique_ptr<const base::FieldTrial::EntropyProvider>
-          low_entropy_provider,
-      base::FeatureList* feature_list);
+  VariationsSeedStore* seed_store() { return &seed_store_; }
 
-  VariationsSeedStore& seed_store() { return seed_store_; }
-
-  const VariationsSeedStore& seed_store() const { return seed_store_; }
-
-  bool create_trials_from_seed_called() const {
-    return create_trials_from_seed_called_;
-  }
-
-  // Exposed for testing.
-  void SetCreateTrialsFromSeedCalledForTesting(bool called);
-
-  // Sets up field trials based on stored variations seed data.
+  // Sets up field trials based on stored variations seed data. Returns whether
+  // setup completed successfully.
   // |kEnableGpuBenchmarking|, |kEnableFeatures|, |kDisableFeatures| are
   // feature controlling flags not directly accesible from variations.
   // |unforcable_field_trials| contains the list of trials that can not be
@@ -65,6 +48,9 @@ class VariationsFieldTrialCreator {
   // specified using the command-line flag.
   // |platform_field_trials| provides the platform specific field trial set up
   // for Chrome.
+  // |safe_seed_manager| should be notified of the combined server and client
+  // state that was activated to create the field trials (only when the return
+  // value is true).
   bool SetupFieldTrials(const char* kEnableGpuBenchmarking,
                         const char* kEnableFeatures,
                         const char* kDisableFeatures,
@@ -73,7 +59,8 @@ class VariationsFieldTrialCreator {
                             low_entropy_provider,
                         std::unique_ptr<base::FeatureList> feature_list,
                         std::vector<std::string>* variation_ids,
-                        PlatformFieldTrials* platform_field_trials);
+                        PlatformFieldTrials* platform_field_trials,
+                        SafeSeedManager* safe_seed_manager);
 
   // Returns all of the client state used for filtering studies.
   // As a side-effect, may update the stored permanent consistency country.
@@ -96,36 +83,42 @@ class VariationsFieldTrialCreator {
   // Records the time of the most recent successful fetch.
   void RecordLastFetchTime();
 
-  // Loads the seed from the variations store into |seed|. If successfull,
-  // |seed| will contain the loaded data and true is returned. Set as virtual
-  // so that it can be overridden by tests.
-  virtual bool LoadSeed(VariationsSeed* seed);
-
-  // Allow the platform that is used to filter the set of active trials
-  // to be overridden.
+  // Allow the platform that is used to filter the set of active trials to be
+  // overridden.
   void OverrideVariationsPlatform(Study::Platform platform_override);
 
  private:
+  // Loads the seed from the variations store into |seed|, and records metrics
+  // about the loaded seed. Returns true on success, in which case |seed| will
+  // contain the loaded data, and |seed_data| and |base64_signature| will
+  // contain the raw pref values.
+  bool LoadSeed(VariationsSeed* seed,
+                std::string* seed_data,
+                std::string* base64_signature);
+
+  // Loads the seed from the variations store into |seed|. Returns true on
+  // success, in which case |seed| will contain the loaded data, and |seed_data|
+  // and |base64_signature| will contain the raw pref values. Virtual for
+  // testing.
+  virtual bool LoadSeedFromStore(VariationsSeed* seed,
+                                 std::string* seed_data,
+                                 std::string* base64_signature);
+
+  // Creates field trials based on the variations seed loaded from local state.
+  // If there is a problem loading the seed data, all trials specified by the
+  // seed may not be created. Some field trials are configured to override or
+  // associate with (for reporting) specific features. These associations are
+  // registered with |feature_list|. Returns true if trials were created
+  // successfully; and if so, stores the loaded variations state into the
+  // |safe_seed_manager|.
+  bool CreateTrialsFromSeed(
+      std::unique_ptr<const base::FieldTrial::EntropyProvider>
+          low_entropy_provider,
+      base::FeatureList* feature_list,
+      SafeSeedManager* safe_seed_manager);
+
   PrefService* local_state() { return seed_store_.local_state(); }
-
   const PrefService* local_state() const { return seed_store_.local_state(); }
-
-  // Set of different possible values to report for the
-  // Variations.LoadPermanentConsistencyCountryResult histogram. This enum must
-  // be kept consistent with its counterpart in histograms.xml.
-  enum LoadPermanentConsistencyCountryResult {
-    LOAD_COUNTRY_NO_PREF_NO_SEED = 0,
-    LOAD_COUNTRY_NO_PREF_HAS_SEED,
-    LOAD_COUNTRY_INVALID_PREF_NO_SEED,
-    LOAD_COUNTRY_INVALID_PREF_HAS_SEED,
-    LOAD_COUNTRY_HAS_PREF_NO_SEED_VERSION_EQ,
-    LOAD_COUNTRY_HAS_PREF_NO_SEED_VERSION_NEQ,
-    LOAD_COUNTRY_HAS_BOTH_VERSION_EQ_COUNTRY_EQ,
-    LOAD_COUNTRY_HAS_BOTH_VERSION_EQ_COUNTRY_NEQ,
-    LOAD_COUNTRY_HAS_BOTH_VERSION_NEQ_COUNTRY_EQ,
-    LOAD_COUNTRY_HAS_BOTH_VERSION_NEQ_COUNTRY_NEQ,
-    LOAD_COUNTRY_MAX,
-  };
 
   VariationsServiceClient* client_;
 
@@ -133,8 +126,8 @@ class VariationsFieldTrialCreator {
 
   VariationsSeedStore seed_store_;
 
-  // Tracks whether |CreateTrialsFromSeed| has been called, to ensure that
-  // it gets called prior to |StartRepeatedVariationsSeedFetch|.
+  // Tracks whether |CreateTrialsFromSeed| has been called, to ensure that it is
+  // called at most once.
   bool create_trials_from_seed_called_;
 
   // Indiciate if OverrideVariationsPlatform has been used to set

@@ -13,6 +13,7 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-shared.h"
 
 #if INSIDE_BLINK
 #include <utility>
@@ -89,14 +90,14 @@ class BLINK_PLATFORM_EXPORT WebServiceWorkerRequest {
   void SetKeepalive(bool);
   bool Keepalive() const;
 
-  void SetRedirectMode(WebURLRequest::FetchRedirectMode);
-  WebURLRequest::FetchRedirectMode RedirectMode() const;
+  void SetRedirectMode(network::mojom::FetchRedirectMode);
+  network::mojom::FetchRedirectMode RedirectMode() const;
 
   void SetRequestContext(WebURLRequest::RequestContext);
   WebURLRequest::RequestContext GetRequestContext() const;
 
-  void SetFrameType(WebURLRequest::FrameType);
-  WebURLRequest::FrameType GetFrameType() const;
+  void SetFrameType(network::mojom::RequestContextFrameType);
+  network::mojom::RequestContextFrameType GetFrameType() const;
 
   void SetClientId(const WebString&);
   const WebString& ClientId() const;

@@ -4,6 +4,9 @@
 
 #include "components/cronet/cronet_prefs_manager.h"
 
+#include <memory>
+
+#include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
@@ -108,11 +111,15 @@ class PrefServiceAdapter
     return pref_service_->GetDictionary(path_);
   }
 
-  void SetServerProperties(const base::DictionaryValue& value) override {
-    return pref_service_->Set(path_, value);
+  void SetServerProperties(const base::DictionaryValue& value,
+                           base::OnceClosure callback) override {
+    pref_service_->Set(path_, value);
+    if (callback)
+      pref_service_->CommitPendingWrite(std::move(callback));
   }
 
-  void StartListeningForUpdates(const base::Closure& callback) override {
+  void StartListeningForUpdates(
+      const base::RepeatingClosure& callback) override {
     pref_change_registrar_.Add(path_, callback);
     // Notify the pref manager that settings are already loaded, as a result
     // of initializing the pref store synchornously.
@@ -227,7 +234,7 @@ CronetPrefsManager::CronetPrefsManager(
   factory.set_user_prefs(json_pref_store_);
   scoped_refptr<PrefRegistrySimple> registry(new PrefRegistrySimple());
   registry->RegisterDictionaryPref(kHttpServerPropertiesPref,
-                                   base::MakeUnique<base::DictionaryValue>());
+                                   std::make_unique<base::DictionaryValue>());
 
   if (enable_network_quality_estimator) {
     // Use lossy prefs to limit the overhead of reading/writing the prefs.
@@ -263,8 +270,8 @@ void CronetPrefsManager::SetupNqePersistence(
     net::NetworkQualityEstimator* nqe) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   network_qualities_prefs_manager_ =
-      base::MakeUnique<net::NetworkQualitiesPrefsManager>(
-          base::MakeUnique<NetworkQualitiesPrefDelegateImpl>(
+      std::make_unique<net::NetworkQualitiesPrefsManager>(
+          std::make_unique<NetworkQualitiesPrefDelegateImpl>(
               pref_service_.get()));
 
   network_qualities_prefs_manager_->InitializeOnNetworkThread(nqe);
@@ -276,7 +283,7 @@ void CronetPrefsManager::SetupHostCachePersistence(
     net::NetLog* net_log) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   host_cache_persistence_manager_ =
-      base::MakeUnique<HostCachePersistenceManager>(
+      std::make_unique<HostCachePersistenceManager>(
           host_cache, pref_service_.get(), kHostCachePref,
           base::TimeDelta::FromMilliseconds(host_cache_persistence_delay_ms),
           net_log);

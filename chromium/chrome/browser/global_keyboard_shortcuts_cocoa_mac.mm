@@ -6,6 +6,8 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/global_keyboard_shortcuts_mac.h"
 
+#include "app/vivaldi_apptools.h"
+
 // Basically, there are two kinds of keyboard shortcuts: Ones that should work
 // only if the tab contents is focused (BrowserKeyboardShortcut), and ones that
 // should work in all other cases (WindowKeyboardShortcut). In the latter case,
@@ -15,13 +17,17 @@
 // (DelayedWindowKeyboardShortcut).
 
 const std::vector<KeyboardShortcutData>& GetWindowKeyboardShortcutTable() {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    CR_DEFINE_STATIC_LOCAL(std::vector<KeyboardShortcutData>, result, ({}));
+    return result;
+  }
   // clang-format off
   CR_DEFINE_STATIC_LOCAL(std::vector<KeyboardShortcutData>, result, ({
     //cmd   shift  cntrl  option vkeycode               char command
     //---   -----  -----  ------ --------               ---- -------
     // '{' / '}' characters should be matched earlier than virtual key codes
     // (so we can match alt-8 as '{' on German keyboards).
-#ifndef VIVALDI_BUILD
     {true,  false, false, false, 0,                     '}', IDC_SELECT_NEXT_TAB},
     {true,  false, false, false, 0,                     '{', IDC_SELECT_PREVIOUS_TAB},
     {true,  true,  false, false, kVK_ANSI_RightBracket, 0,   IDC_SELECT_NEXT_TAB},
@@ -54,7 +60,6 @@ const std::vector<KeyboardShortcutData>& GetWindowKeyboardShortcutTable() {
     {true, false, false, false, kVK_ANSI_Keypad9,       0,   IDC_SELECT_LAST_TAB},
     {true, true,  false, false, kVK_ANSI_M,             0,   IDC_SHOW_AVATAR_MENU},
     {true, false, false, true,  kVK_ANSI_L,             0,   IDC_SHOW_DOWNLOADS},
-#endif // VIVALDI_BUILD
   }));
   // clang-format on
   return result;
@@ -79,8 +84,6 @@ const std::vector<KeyboardShortcutData>& GetBrowserKeyboardShortcutTable() {
     //---   -----  -----  ------ --------        ---- -------
     {true,  false, false, false, kVK_LeftArrow,  0,   IDC_BACK},
     {true,  false, false, false, kVK_RightArrow, 0,   IDC_FORWARD},
-    {false, false, false, false, kVK_Delete,     0,   IDC_BACKSPACE_BACK},
-    {false, true,  false, false, kVK_Delete,     0,   IDC_BACKSPACE_FORWARD},
     {true,  true,  false, false, 0,              'c', IDC_DEV_TOOLS_INSPECT},
   }));
   // clang-format on

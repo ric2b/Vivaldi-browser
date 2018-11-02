@@ -6,6 +6,7 @@
 #define ThreadDebugger_h
 
 #include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/inspector/ConsoleTypes.h"
@@ -22,11 +23,8 @@ namespace blink {
 class ExecutionContext;
 class SourceLocation;
 
-// TODO(dgozman): rename this to ThreadInspector (and subclasses).
 class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
                                    public V8PerIsolateData::Data {
-  WTF_MAKE_NONCOPYABLE(ThreadDebugger);
-
  public:
   explicit ThreadDebugger(v8::Isolate*);
   ~ThreadDebugger() override;
@@ -40,7 +38,9 @@ class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
   static void IdleStarted(v8::Isolate*);
   static void IdleFinished(v8::Isolate*);
 
-  void AsyncTaskScheduled(const String& task_name, void* task, bool recurring);
+  void AsyncTaskScheduled(const StringView& task_name,
+                          void* task,
+                          bool recurring);
   void AsyncTaskCanceled(void* task);
   void AllAsyncTasksCanceled();
   void AsyncTaskStarted(void* task);
@@ -53,7 +53,7 @@ class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
                                unsigned promise_rejection_id);
 
   v8_inspector::V8StackTraceId StoreCurrentStackTrace(
-      const String& description);
+      const StringView& description);
   void ExternalAsyncTaskStarted(const v8_inspector::V8StackTraceId& parent);
   void ExternalAsyncTaskFinished(const v8_inspector::V8StackTraceId& parent);
 
@@ -115,6 +115,7 @@ class CORE_EXPORT ThreadDebugger : public v8_inspector::V8InspectorClient,
   Vector<v8_inspector::V8InspectorClient::TimerCallback> timer_callbacks_;
   Vector<void*> timer_data_;
   std::unique_ptr<UserGestureIndicator> user_gesture_indicator_;
+  DISALLOW_COPY_AND_ASSIGN(ThreadDebugger);
 };
 
 template <>

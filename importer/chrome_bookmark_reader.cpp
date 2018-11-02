@@ -55,43 +55,42 @@ void ChromeBookmarkFileReader::LoadFile(const base::FilePath& file) {
   const base::Value* roots;
   dict->Get("roots", &roots);
 
-  const base::DictionaryValue* roots_d_value =
-      static_cast<const base::DictionaryValue*>(roots);
-  const base::Value* root_folder_value;
+  const base::DictionaryValue* roots_d_value = nullptr;
+  roots->GetAsDictionary(&roots_d_value);
+
+  const base::Value* root_folder_value = nullptr;
   const base::Value* other_folder_value = nullptr;
   const base::Value* custom_roots;
+  const base::DictionaryValue* root_folder_d_value = nullptr;
+  const base::DictionaryValue* other_folder_d_value = nullptr;
 
   if (roots_d_value->Get("bookmark_bar", &root_folder_value) &&
-      root_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-    DecodeNode(*static_cast<const base::DictionaryValue*>(root_folder_value));
+      root_folder_value->GetAsDictionary(&root_folder_d_value)) {
+    DecodeNode(*root_folder_d_value);
   }
   if (roots_d_value->Get("other", &other_folder_value) &&
-      other_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-    DecodeNode(*static_cast<const base::DictionaryValue*>(other_folder_value));
+      other_folder_value->GetAsDictionary(&other_folder_d_value)) {
+    DecodeNode(*other_folder_d_value);
   }
   // Opera 20+ uses a custom root.
   if (roots_d_value->Get("custom_root", &custom_roots)) {
-    if (custom_roots && custom_roots->IsType(base::Value::Type::DICTIONARY)) {
-      roots_d_value = static_cast<const base::DictionaryValue*>(custom_roots);
+    if (custom_roots && custom_roots->GetAsDictionary(&roots_d_value)) {
+      const base::DictionaryValue* custom_folder_d_value = nullptr;
       if (roots_d_value->Get("unsorted", &root_folder_value) &&
-          root_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-        DecodeNode(
-            *static_cast<const base::DictionaryValue*>(root_folder_value));
+          root_folder_value->GetAsDictionary(&custom_folder_d_value)) {
+        DecodeNode(*custom_folder_d_value);
       }
       if (roots_d_value->Get("speedDial", &root_folder_value) &&
-          root_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-        DecodeNode(
-            *static_cast<const base::DictionaryValue*>(root_folder_value));
+          root_folder_value->GetAsDictionary(&custom_folder_d_value)) {
+        DecodeNode(*custom_folder_d_value);
       }
       if (roots_d_value->Get("trash", &root_folder_value) &&
-          root_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-        DecodeNode(
-            *static_cast<const base::DictionaryValue*>(root_folder_value));
+          root_folder_value->GetAsDictionary(&custom_folder_d_value)) {
+        DecodeNode(*custom_folder_d_value);
       }
       if (roots_d_value->Get("userRoot", &root_folder_value) &&
-          root_folder_value->IsType(base::Value::Type::DICTIONARY)) {
-        DecodeNode(
-            *static_cast<const base::DictionaryValue*>(root_folder_value));
+          root_folder_value->GetAsDictionary(&custom_folder_d_value)) {
+        DecodeNode(*custom_folder_d_value);
       }
     }
   }

@@ -21,9 +21,9 @@ void SensorProviderProxy::InitializeIfNeeded() {
 
   GetSupplementable()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&sensor_provider_));
-  sensor_provider_.set_connection_error_handler(ConvertToBaseCallback(
+  sensor_provider_.set_connection_error_handler(
       WTF::Bind(&SensorProviderProxy::OnSensorProviderConnectionError,
-                WrapWeakPersistent(this))));
+                WrapWeakPersistent(this)));
 }
 
 const char* SensorProviderProxy::SupplementName() {
@@ -43,7 +43,7 @@ SensorProviderProxy* SensorProviderProxy::From(LocalFrame* frame) {
   return provider_proxy;
 }
 
-SensorProviderProxy::~SensorProviderProxy() {}
+SensorProviderProxy::~SensorProviderProxy() = default;
 
 void SensorProviderProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(sensor_proxies_);

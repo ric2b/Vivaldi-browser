@@ -22,12 +22,14 @@ class CORE_EXPORT NGPhysicalBoxFragment final
                         const NGPhysicalOffsetRect& contents_visual_rect,
                         Vector<NGBaseline>& baselines,
                         NGBoxType box_type,
+                        bool is_old_layout_root,
                         unsigned,  // NGBorderEdges::Physical
                         scoped_refptr<NGBreakToken> break_token = nullptr);
 
   const NGBaseline* Baseline(const NGBaselineRequest&) const;
 
   bool HasSelfPaintingLayer() const;
+  bool ChildrenInline() const;
 
   // True if overflow != 'visible', except for certain boxes that do not allow
   // overflow clip; i.e., AllowOverflowClip() returns false.

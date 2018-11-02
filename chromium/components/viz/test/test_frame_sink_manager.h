@@ -16,7 +16,8 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   TestFrameSinkManagerImpl();
   ~TestFrameSinkManagerImpl() override;
 
-  void BindRequest(mojom::FrameSinkManagerRequest request);
+  void BindRequest(mojom::FrameSinkManagerRequest request,
+                   mojom::FrameSinkManagerClientPtr client);
 
  private:
   // mojom::FrameSinkManager:
@@ -25,13 +26,7 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   void SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
                               const std::string& debug_label) override {}
   void CreateRootCompositorFrameSink(
-      const FrameSinkId& frame_sink_id,
-      gpu::SurfaceHandle surface_handle,
-      const RendererSettings& renderer_settings,
-      mojom::CompositorFrameSinkAssociatedRequest request,
-      mojom::CompositorFrameSinkClientPtr client,
-      mojom::DisplayPrivateAssociatedRequest display_private_request) override {
-  }
+      mojom::RootCompositorFrameSinkParamsPtr params) override {}
   void CreateCompositorFrameSink(
       const FrameSinkId& frame_sink_id,
       mojom::CompositorFrameSinkRequest request,
@@ -47,8 +42,11 @@ class TestFrameSinkManagerImpl : public mojom::FrameSinkManager {
   void DropTemporaryReference(const SurfaceId& surface_id) override {}
   void AddVideoDetectorObserver(
       mojom::VideoDetectorObserverPtr observer) override {}
+  void CreateVideoCapturer(
+      mojom::FrameSinkVideoCapturerRequest request) override {}
 
   mojo::Binding<mojom::FrameSinkManager> binding_;
+  mojom::FrameSinkManagerClientPtr client_;
 
   DISALLOW_COPY_AND_ASSIGN(TestFrameSinkManagerImpl);
 };

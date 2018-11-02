@@ -214,6 +214,8 @@ class NET_EXPORT NetworkQualityEstimator
       const std::map<nqe::internal::NetworkID,
                      nqe::internal::CachedNetworkQuality> read_prefs);
 
+  const NetworkQualityEstimatorParams* params() { return params_.get(); }
+
   typedef nqe::internal::Observation Observation;
   typedef nqe::internal::ObservationBuffer ObservationBuffer;
 
@@ -272,10 +274,7 @@ class NET_EXPORT NetworkQualityEstimator
       const;
 
   // Overrides the tick clock used by |this| for testing.
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
-
-  // Returns a random double in the range [0.0, 1.0). Virtualized for testing.
-  virtual double RandDouble() const;
+  void SetTickClockForTesting(base::TickClock* tick_clock);
 
   // Returns the effective type of the current connection based on only the
   // observations received after |start_time|. |http_rtt|, |transport_rtt| and
@@ -342,9 +341,27 @@ class NET_EXPORT NetworkQualityEstimator
   // effective connection type.
   void AddAndNotifyObserversOfThroughput(const Observation& observation);
 
+  // Returns true if the request with observed HTTP of |observed_http_rtt| is
+  // expected to be a hanging request. The decision is made by comparing
+  // |observed_http_rtt| with the expected HTTP and transport RTT.
+  bool IsHangingRequest(base::TimeDelta observed_http_rtt) const;
+
   base::Optional<int32_t> ComputeIncreaseInTransportRTTForTests() {
     return ComputeIncreaseInTransportRTT();
   }
+
+  // Returns the current network signal strength by querying the platform APIs.
+  // Set to INT32_MIN when the value is unavailable. Otherwise, must be between
+  // 0 and 4 (both inclusive). This may take into account many different radio
+  // technology inputs. 0 represents very poor signal strength while 4
+  // represents a very strong signal strength. The range is capped between 0 and
+  // 4 to ensure that a change in the value indicates a non-negligible change in
+  // the signal quality.
+  virtual int32_t GetCurrentSignalStrength() const;
+
+  // Forces computation of effective connection type, and notifies observers
+  // if there is a change in its value.
+  void ComputeEffectiveConnectionType();
 
   // Observer list for RTT or throughput estimates. Protected for testing.
   base::ObserverList<RTTAndThroughputEstimatesObserver>
@@ -407,9 +424,6 @@ class NET_EXPORT NetworkQualityEstimator
   // Queries external estimate provider for network quality. When the network
   // quality is available, OnUpdatedEstimateAvailable() is called.
   void MaybeQueryExternalEstimateProvider() const;
-
-  // Records UMA when there is a change in connection type.
-  void RecordMetricsOnConnectionTypeChanged() const;
 
   // Records UMA on whether the NetworkID was available or not. Called right
   // after a network change event.
@@ -500,11 +514,6 @@ class NET_EXPORT NetworkQualityEstimator
   // Returns true if the cached network quality estimate was successfully read.
   bool ReadCachedNetworkQualityEstimate();
 
-  // Records a correlation metric that can be used for computing the correlation
-  // between HTTP-layer RTT, transport-layer RTT, throughput and the time
-  // taken to complete |request|.
-  void RecordCorrelationMetric(const URLRequest& request, int net_error) const;
-
   // Returns true if transport RTT should be used for computing the effective
   // connection type.
   bool UseTransportRTT() const;
@@ -524,10 +533,6 @@ class NET_EXPORT NetworkQualityEstimator
 
   // Periodically updates |increase_in_transport_rtt_| by posting delayed tasks.
   void IncreaseInTransportRTTUpdater();
-
-  // Forces computation of effective connection type, and notifies observers
-  // if there is a change in its value.
-  void ComputeEffectiveConnectionType();
 
   const char* GetNameForStatistic(int i) const;
 
@@ -558,7 +563,7 @@ class NET_EXPORT NetworkQualityEstimator
   bool disable_offline_check_;
 
   // Tick clock used by the network quality estimator.
-  std::unique_ptr<base::TickClock> tick_clock_;
+  base::TickClock* tick_clock_;
 
   // Intervals after the main frame request arrives at which accuracy of network
   // quality prediction is recorded.
@@ -650,11 +655,6 @@ class NET_EXPORT NetworkQualityEstimator
   // the last computation was more than
   // |effective_connection_type_recomputation_interval_| ago).
   EffectiveConnectionType effective_connection_type_;
-
-  // Last known value of the wireless signal strength level. If the signal
-  // strength level is available, the value is set to between 0 and 4, both
-  // inclusive. If the value is unavailable, |signal_strength_| has null value.
-  base::Optional<int32_t> signal_strength_;
 
   // Minimum and maximum signal strength level observed since last connection
   // change. Updated on connection change and main frame requests.

@@ -27,6 +27,10 @@ class CrossThreadPersistent;
 template <typename T>
 class CrossThreadWeakPersistent;
 template <typename T>
+class HeapDoublyLinkedList;
+template <typename T>
+class HeapTerminatedArray;
+template <typename T>
 class Member;
 template <typename T>
 class TraceEagerlyTrait;
@@ -217,7 +221,6 @@ class TraceTrait {
  public:
   static void Trace(Visitor*, void* self);
 
-  static void MarkWrapperNoTracing(const ScriptWrappableVisitor*, const void*);
   static void TraceMarkedWrapper(const ScriptWrappableVisitor*, const void*);
   static HeapObjectHeader* GetHeapObjectHeader(const void*);
 
@@ -242,14 +245,6 @@ template <typename T>
 void TraceTrait<T>::Trace(Visitor* visitor, void* self) {
   static_assert(WTF::IsTraceable<T>::value, "T should not be traced");
   static_cast<T*>(self)->Trace(visitor);
-}
-
-template <typename T>
-void TraceTrait<T>::MarkWrapperNoTracing(const ScriptWrappableVisitor* visitor,
-                                         const void* t) {
-  const T* traceable = ToWrapperTracingType(t);
-  DCHECK(!GetHeapObjectHeader(traceable)->IsWrapperHeaderMarked());
-  visitor->MarkWrapperHeader(GetHeapObjectHeader(traceable));
 }
 
 template <typename T>
@@ -428,6 +423,20 @@ class TraceEagerlyTrait<CrossThreadPersistent<T>> {
 
 template <typename T>
 class TraceEagerlyTrait<CrossThreadWeakPersistent<T>> {
+  STATIC_ONLY(TraceEagerlyTrait);
+
+ public:
+  static const bool value = TraceEagerlyTrait<T>::value;
+};
+
+template <typename T>
+class TraceEagerlyTrait<HeapTerminatedArray<T>> {
+ public:
+  static const bool value = TraceEagerlyTrait<T>::value;
+};
+
+template <typename T>
+class TraceEagerlyTrait<HeapDoublyLinkedList<T>> {
   STATIC_ONLY(TraceEagerlyTrait);
 
  public:

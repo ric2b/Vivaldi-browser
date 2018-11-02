@@ -352,13 +352,13 @@ std::string ChromeExtensionsClient::GetUserAgent() const {
 // static
 void ChromeExtensionsClient::RegisterAlternativeGetInstance(
          ChromeExtensionsClient::ChromeExtensionsClientInstanceFetcher func) {
-  DCHECK(g_alternative_get_instance == NULL && g_client == NULL);
+  DCHECK(g_alternative_get_instance == NULL && !g_client.IsCreated());
   g_alternative_get_instance = func;
 }
 
 // static
 ChromeExtensionsClient* ChromeExtensionsClient::GetInstance() {
-  DCHECK(g_alternative_get_instance == NULL || g_client == NULL);
+  DCHECK(g_alternative_get_instance == NULL || !g_client.IsCreated());
   if (g_alternative_get_instance)
       return g_alternative_get_instance();
   return g_client.Pointer();

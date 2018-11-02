@@ -9,6 +9,7 @@
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/Position.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
+#include "core/layout/ng/ng_block_node.h"
 
 namespace blink {
 
@@ -44,6 +45,24 @@ std::pair<const Node&, unsigned> ToNodeOffsetPair(const Position& position) {
 // predicates below.
 
 }  // namespace
+
+const LayoutBlockFlow* NGInlineFormattingContextOf(const Position& position) {
+  if (!RuntimeEnabledFeatures::LayoutNGEnabled())
+    return nullptr;
+  if (!NGOffsetMapping::AcceptsPosition(position))
+    return nullptr;
+  const auto node_offset_pair = ToNodeOffsetPair(position);
+  const LayoutObject* layout_object =
+      AssociatedLayoutObjectOf(node_offset_pair.first, node_offset_pair.second);
+  // For an atomic inline, EnclosingNGBlockFlow() may return itself. Example:
+  // <div><span style='display: inline-block'>foo</span></div>
+  // EnclosingNGBlockFlow() on SPAN returns SPAN itself. However, the inline
+  // formatting context of SPAN@Before/After is DIV, not SPAN.
+  // Therefore, we return its parent's EnclosingNGBlockFlow() instead.
+  if (layout_object->IsAtomicInlineLevel())
+    layout_object = layout_object->Parent();
+  return layout_object->EnclosingNGBlockFlow();
+}
 
 NGOffsetMappingUnit::NGOffsetMappingUnit(NGOffsetMappingUnitType type,
                                          const Node& node,
@@ -122,10 +141,7 @@ const NGOffsetMapping* NGOffsetMapping::GetFor(const Position& position) {
     return nullptr;
   if (!NGOffsetMapping::AcceptsPosition(position))
     return nullptr;
-  const auto node_offset_pair = ToNodeOffsetPair(position);
-  const LayoutObject* layout_object =
-      AssociatedLayoutObjectOf(node_offset_pair.first, node_offset_pair.second);
-  return GetFor(layout_object);
+  return GetFor(NGInlineFormattingContextOf(position));
 }
 
 // static
@@ -133,12 +149,11 @@ const NGOffsetMapping* NGOffsetMapping::GetFor(
     const LayoutObject* layout_object) {
   if (!RuntimeEnabledFeatures::LayoutNGEnabled())
     return nullptr;
-  if (!layout_object || !layout_object->IsInline())
+  if (!layout_object)
     return nullptr;
   LayoutBlockFlow* block_flow = layout_object->EnclosingNGBlockFlow();
-  if (!block_flow)
+  if (!block_flow || !block_flow->ChildrenInline())
     return nullptr;
-  DCHECK(block_flow->ChildrenInline());
   NGBlockNode block_node = NGBlockNode(block_flow);
   if (!block_node.CanUseNewLayout())
     return nullptr;

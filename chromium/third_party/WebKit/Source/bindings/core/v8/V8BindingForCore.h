@@ -71,7 +71,6 @@ class FlexibleArrayBufferView;
 class Frame;
 class LocalDOMWindow;
 class LocalFrame;
-class NodeFilter;
 class XPathNSResolver;
 
 template <typename CallbackInfo>
@@ -388,41 +387,16 @@ inline double ToCoreDate(v8::Isolate* isolate,
   return object.As<v8::Date>()->ValueOf();
 }
 
-// FIXME: Remove the special casing for NodeFilter and XPathNSResolver.
-NodeFilter* ToNodeFilter(v8::Local<v8::Value>,
-                         v8::Local<v8::Object>,
-                         ScriptState*);
+// FIXME: Remove the special casing for XPathNSResolver.
 XPathNSResolver* ToXPathNSResolver(ScriptState*, v8::Local<v8::Value>);
 
-template <typename VectorType>
-VectorType ToImplArray(const Vector<ScriptValue>& value,
-                       v8::Isolate* isolate,
-                       ExceptionState& exception_state) {
-  using ValueType = typename VectorType::ValueType;
-  using TraitsType = NativeValueTraits<ValueType>;
-
-  if (value.size() > VectorType::MaxCapacity()) {
-    exception_state.ThrowRangeError("Array length exceeds supported limit.");
-    return VectorType();
-  }
-
-  VectorType result;
-  result.ReserveInitialCapacity(value.size());
-  for (unsigned i = 0; i < value.size(); ++i) {
-    result.UncheckedAppend(
-        TraitsType::NativeValue(isolate, value[i].V8Value(), exception_state));
-    if (exception_state.HadException())
-      return VectorType();
-  }
-  return result;
-}
-
-template <typename VectorType>
-VectorType ToImplArguments(const v8::FunctionCallbackInfo<v8::Value>& info,
-                           int start_index,
-                           ExceptionState& exception_state) {
-  using ValueType = typename VectorType::ValueType;
-  using TraitsType = NativeValueTraits<ValueType>;
+template <typename IDLType>
+VectorOf<typename NativeValueTraits<IDLType>::ImplType> ToImplArguments(
+    const v8::FunctionCallbackInfo<v8::Value>& info,
+    int start_index,
+    ExceptionState& exception_state) {
+  using TraitsType = NativeValueTraits<IDLType>;
+  using VectorType = VectorOf<typename TraitsType::ImplType>;
 
   int length = info.Length();
   VectorType result;
@@ -453,33 +427,6 @@ CORE_EXPORT v8::Local<v8::Object> GetEsIterator(v8::Isolate*,
 CORE_EXPORT bool HasCallableIteratorSymbol(v8::Isolate*,
                                            v8::Local<v8::Value>,
                                            ExceptionState&);
-
-// TODO(rakuco): remove the specializations below (and consequently the
-// non-IDLBase version of NativeValueTraitsBase) once we manage to convert all
-// uses of NativeValueTraits to types that derive from IDLBase or for generated
-// IDL interfaces/dictionaries/unions.
-template <>
-struct NativeValueTraits<String> {
-  static inline String NativeValue(v8::Isolate* isolate,
-                                   v8::Local<v8::Value> value,
-                                   ExceptionState& exception_state) {
-    V8StringResource<> string_value(value);
-    if (!string_value.Prepare(exception_state))
-      return String();
-    return string_value;
-  }
-};
-
-template <>
-struct NativeValueTraits<v8::Local<v8::Value>>
-    : public NativeValueTraitsBase<v8::Local<v8::Value>> {
-  static inline v8::Local<v8::Value> NativeValue(
-      v8::Isolate* isolate,
-      v8::Local<v8::Value> value,
-      ExceptionState& exception_state) {
-    return value;
-  }
-};
 
 CORE_EXPORT v8::Isolate* ToIsolate(ExecutionContext*);
 CORE_EXPORT v8::Isolate* ToIsolate(LocalFrame*);
@@ -541,6 +488,7 @@ CORE_EXPORT bool IsValidEnum(const Vector<String>& values,
 enum DeleteResult { kDeleteSuccess, kDeleteReject, kDeleteUnknownProperty };
 
 CORE_EXPORT v8::Local<v8::Value> FromJSONString(v8::Isolate*,
+                                                v8::Local<v8::Context>,
                                                 const String& stringified_json,
                                                 ExceptionState&);
 

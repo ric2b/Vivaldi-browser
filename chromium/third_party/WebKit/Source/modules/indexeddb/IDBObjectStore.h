@@ -45,7 +45,6 @@
 namespace blink {
 
 class DOMStringList;
-class IDBAny;
 class ExceptionState;
 
 class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
@@ -56,7 +55,7 @@ class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
                                 IDBTransaction* transaction) {
     return new IDBObjectStore(std::move(metadata), transaction);
   }
-  ~IDBObjectStore() {}
+  ~IDBObjectStore() = default;
   void Trace(blink::Visitor*);
 
   const IDBObjectStoreMetadata& Metadata() const { return *metadata_; }
@@ -117,13 +116,13 @@ class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
 
   IDBRequest* count(ScriptState*, const ScriptValue& range, ExceptionState&);
 
-  // Used by IDBCursor::update():
-  IDBRequest* put(ScriptState*,
-                  WebIDBPutMode,
-                  IDBAny* source,
-                  const ScriptValue&,
-                  IDBKey*,
-                  ExceptionState&);
+  // Exposed for the use of IDBCursor::update().
+  IDBRequest* DoPut(ScriptState*,
+                    WebIDBPutMode,
+                    const IDBRequest::Source&,
+                    const ScriptValue&,
+                    const IDBKey*,
+                    ExceptionState&);
 
   // Used internally and by InspectorIndexedDBAgent:
   IDBRequest* openCursor(
@@ -131,6 +130,10 @@ class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
       IDBKeyRange*,
       WebIDBCursorDirection,
       WebIDBTaskType = kWebIDBTaskTypeNormal,
+      IDBRequest::AsyncTraceState = IDBRequest::AsyncTraceState());
+  IDBRequest* deleteFunction(
+      ScriptState*,
+      IDBKeyRange*,
       IDBRequest::AsyncTraceState = IDBRequest::AsyncTraceState());
 
   void MarkDeleted();
@@ -190,12 +193,11 @@ class MODULES_EXPORT IDBObjectStore final : public ScriptWrappable {
                         const IDBKeyPath&,
                         const IDBIndexParameters&,
                         ExceptionState&);
-  IDBRequest* put(ScriptState*,
-                  WebIDBPutMode,
-                  IDBAny* source,
-                  const ScriptValue&,
-                  const ScriptValue& key,
-                  ExceptionState&);
+  IDBRequest* DoPut(ScriptState*,
+                    WebIDBPutMode,
+                    const ScriptValue&,
+                    const ScriptValue& key_value,
+                    ExceptionState&);
 
   int64_t FindIndexId(const String& name) const;
 

@@ -26,6 +26,12 @@
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
+namespace vivaldi {
+void DispatchEvent(Profile* profile,
+                   const std::string& event_name,
+                   std::unique_ptr<base::ListValue> event_args);
+}
+
 class Browser;
 
 #if defined(OS_WIN)
@@ -94,7 +100,7 @@ class VivaldiAppWindowContentsImpl : public AppWindowContents,
   content::ColorChooser* OpenColorChooser(
     content::WebContents* web_contents,
     SkColor color,
-    const std::vector<content::ColorSuggestion>& suggestions) override;
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   void NavigationStateChanged(content::WebContents* source,
@@ -346,8 +352,6 @@ class VivaldiBrowserWindow
           callback) override {}
 
   std::string GetWorkspace() const override;
-  void MaybeShowNewBackShortcutBubble(bool forward) override {}
-  void HideNewBackShortcutBubble() override {}
   bool IsVisibleOnAllWorkspaces() const override;
 
   void ResetDockingState(int tab_id);
@@ -398,6 +402,11 @@ class VivaldiBrowserWindow
   void DestroyBrowser() override;
 
   void DeleteThis();
+
+  // Move pinned tabs to remaining window if we have 2 open windows and
+  // close the one with pinned tabs.
+  void MovePinnedTabsToOtherWindowIfNeeded();
+
 
   // The Browser object we are associated with.
   std::unique_ptr<Browser> browser_;

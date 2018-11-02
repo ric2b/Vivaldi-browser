@@ -24,6 +24,7 @@
 #define LayoutBox_h
 
 #include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/OverflowModel.h"
@@ -33,12 +34,14 @@
 
 namespace blink {
 
+class EventHandler;
 class LayoutBlockFlow;
 class LayoutMultiColumnSpannerPlaceholder;
 struct NGPhysicalBoxStrut;
 class ShapeOutsideInfo;
 
 struct PaintInfo;
+struct WebScrollIntoViewParams;
 
 enum SizeType { kMainOrPreferredSize, kMinSize, kMaxSize };
 enum AvailableLogicalHeightType {
@@ -56,7 +59,6 @@ enum ShouldComputePreferred { kComputeActual, kComputePreferred };
 using SnapAreaSet = HashSet<const LayoutBox*>;
 
 struct LayoutBoxRareData {
-  WTF_MAKE_NONCOPYABLE(LayoutBoxRareData);
   USING_FAST_MALLOC(LayoutBoxRareData);
 
  public:
@@ -115,6 +117,7 @@ struct LayoutBoxRareData {
   // TODO(sunyunjia): We should get rid of this variable and move the next
   // rect_to_scroll calculation into ScrollRectToVisible. crbug.com/741830
   LayoutSize pending_offset_to_scroll_;
+  DISALLOW_COPY_AND_ASSIGN(LayoutBoxRareData);
 };
 
 // LayoutBox implements the full CSS box model.
@@ -597,12 +600,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // If makeVisibleInVisualViewport is set, the visual viewport will be scrolled
   // if required to make the rect visible.
   void ScrollRectToVisibleRecursive(const LayoutRect&,
-                                    const ScrollAlignment& align_x,
-                                    const ScrollAlignment& align_y,
-                                    ScrollType = kProgrammaticScroll,
-                                    bool make_visible_in_visual_viewport = true,
-                                    ScrollBehavior = kScrollBehaviorAuto,
-                                    bool is_for_scroll_sequence = false);
+                                    const WebScrollIntoViewParams&);
 
   LayoutRectOutsets MarginBoxOutsets() const { return margin_box_outsets_; }
   LayoutUnit MarginTop() const override { return margin_box_outsets_.Top(); }
@@ -706,7 +704,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // SYSTEMS in LayoutBoxModel) for use during layout.
   struct ComputedMarginValues {
     DISALLOW_NEW();
-    ComputedMarginValues() {}
+    ComputedMarginValues() = default;
 
     LayoutUnit before_;
     LayoutUnit after_;
@@ -718,7 +716,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   // block-flow and inline-direction axis.
   struct LogicalExtentComputedValues {
     STACK_ALLOCATED();
-    LogicalExtentComputedValues() {}
+    LogicalExtentComputedValues() = default;
 
     // This is the dimension in the measured direction
     // (logical height or logical width).
@@ -836,19 +834,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual EBreakBetween BreakAfter() const;
   virtual EBreakBetween BreakBefore() const;
   EBreakInside BreakInside() const;
-
-  // Join two adjacent break values specified on break-before and/or break-
-  // after. avoid* values win over auto values, and forced break values win over
-  // avoid* values. |firstValue| is specified on an element earlier in the flow
-  // than |secondValue|. This method is used at class A break points [1], to
-  // join the values of the previous break-after and the next break-before, to
-  // figure out whether we may, must, or should not, break at that point. It is
-  // also used when propagating break-before values from first children and
-  // break-after values on last children to their container.
-  //
-  // [1] https://drafts.csswg.org/css-break/#possible-breaks
-  static EBreakBetween JoinFragmentainerBreakValues(EBreakBetween first_value,
-                                                    EBreakBetween second_value);
 
   static bool IsForcedFragmentainerBreakValue(EBreakBetween);
 
@@ -1001,6 +986,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       const IntPoint& point_in_root_frame) const;
   static LayoutBox* FindAutoscrollable(LayoutObject*);
   virtual void StopAutoscroll() {}
+  virtual void DispatchFakeMouseMoveEventSoon(EventHandler&);
 
   DISABLE_CFI_PERF bool HasAutoVerticalScrollbar() const {
     return HasOverflowClip() && Style()->HasAutoVerticalScroll();
@@ -1142,6 +1128,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const override;
 
+  LayoutPoint OffsetPoint(const Element* parent) const;
   LayoutUnit OffsetLeft(const Element*) const override;
   LayoutUnit OffsetTop(const Element*) const override;
 
@@ -1411,7 +1398,7 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual ItemPosition SelfAlignmentNormalBehavior(
       const LayoutBox* child = nullptr) const {
     DCHECK(!child);
-    return kItemPositionStretch;
+    return ItemPosition::kStretch;
   }
 
   // Returns false if it could not cheaply compute the extent (e.g. fixed

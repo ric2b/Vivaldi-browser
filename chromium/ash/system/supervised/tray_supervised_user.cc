@@ -10,7 +10,6 @@
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/system/system_notifier.h"
 #include "ash/system/tray/label_tray_view.h"
 #include "ash/system/tray/tray_constants.h"
 #include "base/callback.h"
@@ -28,6 +27,8 @@ using message_center::Notification;
 
 namespace ash {
 namespace {
+
+const char kNotifierSupervisedUser[] = "ash.locally-managed-user";
 
 const gfx::VectorIcon& GetSupervisedUserIcon() {
   SessionController* session_controller = Shell::Get()->session_controller();
@@ -99,17 +100,20 @@ void TraySupervisedUser::OnUserSessionUpdated(const AccountId& account_id) {
 }
 
 void TraySupervisedUser::CreateOrUpdateNotification() {
+  // No notification for the child user.
+  if (Shell::Get()->session_controller()->IsUserChild())
+    return;
+
+  // Regular supervised user.
   std::unique_ptr<Notification> notification =
-      system_notifier::CreateSystemNotification(
+      Notification::CreateSystemNotification(
           message_center::NOTIFICATION_TYPE_SIMPLE, kNotificationId,
           l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL),
-          GetSupervisedUserMessage(),
-          gfx::Image(
-              gfx::CreateVectorIcon(GetSupervisedUserIcon(), kMenuIconColor)),
+          GetSupervisedUserMessage(), gfx::Image(),
           base::string16() /* display_source */, GURL(),
           message_center::NotifierId(
               message_center::NotifierId::SYSTEM_COMPONENT,
-              system_notifier::kNotifierSupervisedUser),
+              kNotifierSupervisedUser),
           message_center::RichNotificationData(), nullptr,
           kNotificationSupervisedIcon,
           message_center::SystemNotificationWarningLevel::NORMAL);

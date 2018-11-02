@@ -43,8 +43,9 @@ class ScriptResource;
 
 class CORE_EXPORT ScriptResource final : public TextResource {
  public:
-  using ClientType = ResourceClient;
-  static ScriptResource* Fetch(FetchParameters&, ResourceFetcher*);
+  static ScriptResource* Fetch(FetchParameters&,
+                               ResourceFetcher*,
+                               ResourceClient*);
 
   // Public for testing
   static ScriptResource* CreateForTest(const KURL& url,
@@ -67,7 +68,7 @@ class CORE_EXPORT ScriptResource final : public TextResource {
 
   const String& SourceText();
 
-  AccessControlStatus CalculateAccessControlStatus() const;
+  AccessControlStatus CalculateAccessControlStatus(const SecurityOrigin*) const;
 
  private:
   class ScriptResourceFactory : public ResourceFactory {

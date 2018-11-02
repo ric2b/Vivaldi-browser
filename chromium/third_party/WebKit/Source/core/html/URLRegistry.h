@@ -33,6 +33,7 @@
 
 #include "core/CoreExport.h"
 #include "platform/wtf/text/WTFString.h"
+#include "third_party/WebKit/common/blob/blob.mojom-blink.h"
 
 namespace blink {
 
@@ -42,15 +43,16 @@ class URLRegistry;
 
 class CORE_EXPORT URLRegistrable {
  public:
-  virtual ~URLRegistrable() {}
+  virtual ~URLRegistrable() = default;
   virtual URLRegistry& Registry() const = 0;
+  virtual mojom::blink::BlobPtr AsMojoBlob() { return nullptr; }
 };
 
 class CORE_EXPORT URLRegistry {
   USING_FAST_MALLOC(URLRegistry);
 
  public:
-  virtual ~URLRegistry() {}
+  virtual ~URLRegistry() = default;
   virtual void RegisterURL(SecurityOrigin*, const KURL&, URLRegistrable*) = 0;
   virtual void UnregisterURL(const KURL&) = 0;
 

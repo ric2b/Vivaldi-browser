@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "chrome/browser/extensions/crx_installer.h"
@@ -16,6 +15,7 @@
 #include "chrome/browser/extensions/webstore_data_fetcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/crx_file/id_util.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
@@ -69,9 +69,8 @@ void WebstoreStandaloneInstaller::BeginInstall() {
       GetRequestorURL(),
       id_));
 
-  std::string json_post_data = GetJsonPostData();
-  if (!json_post_data.empty())
-    webstore_data_fetcher_->SetJsonPostData(json_post_data);
+  webstore_data_fetcher_->SetPostData(
+      GetPostData(webstore_data_fetcher_->upload_content_type()));
 
   webstore_data_fetcher_->Start();
 }
@@ -157,7 +156,8 @@ WebstoreStandaloneInstaller::GetLocalizedExtensionForDisplay() {
   return localized_extension_for_display_.get();
 }
 
-std::string WebstoreStandaloneInstaller::GetJsonPostData() {
+std::string WebstoreStandaloneInstaller::GetPostData(
+    const std::string& upload_content_type_unused) {
   return std::string();
 }
 
@@ -167,7 +167,7 @@ void WebstoreStandaloneInstaller::OnManifestParsed() {
 
 std::unique_ptr<ExtensionInstallPrompt>
 WebstoreStandaloneInstaller::CreateInstallUI() {
-  return base::MakeUnique<ExtensionInstallPrompt>(GetWebContents());
+  return std::make_unique<ExtensionInstallPrompt>(GetWebContents());
 }
 
 std::unique_ptr<WebstoreInstaller::Approval>
@@ -309,14 +309,11 @@ void WebstoreStandaloneInstaller::OnWebstoreResponseParseSuccess(
   webstore_data_ = std::move(webstore_data);
 
   scoped_refptr<WebstoreInstallHelper> helper =
-      new WebstoreInstallHelper(this,
-                                id_,
-                                manifest,
-                                icon_url,
-                                profile_->GetRequestContext());
+      new WebstoreInstallHelper(this, id_, manifest, icon_url);
   // The helper will call us back via OnWebstoreParseSuccess() or
   // OnWebstoreParseFailure().
-  helper->Start();
+  helper->Start(content::BrowserContext::GetDefaultStoragePartition(profile_)
+                    ->GetURLLoaderFactoryForBrowserProcess());
 }
 
 void WebstoreStandaloneInstaller::OnWebstoreResponseParseFailure(

@@ -48,6 +48,7 @@ class DataReductionProxyConfigServiceClient;
 class DataReductionProxyConfigurator;
 class DataReductionProxyEventCreator;
 class DataReductionProxyService;
+class NetworkPropertiesManager;
 
 // Contains and initializes all Data Reduction Proxy objects that operate on
 // the IO thread.
@@ -57,6 +58,7 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   // state of the Data Reduction Proxy.
   DataReductionProxyIOData(
       Client client,
+      PrefService* prefs,
       net::NetLog* net_log,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
@@ -101,21 +103,12 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   // Applies a serialized Data Reduction Proxy configuration.
   void SetDataReductionProxyConfiguration(const std::string& serialized_config);
 
-  // Returns true when Lo-Fi Previews should be activated. When Lo-Fi is
-  // active, URL requests are modified to request low fidelity versions of the
-  // resources, except when the user is in the Lo-Fi control group.
-  // |previews_decider| is a non-null object that determines eligibility of
-  // showing the preview based on past opt outs.
-  bool ShouldEnableLoFi(const net::URLRequest& request,
-                        previews::PreviewsDecider* previews_decider);
-
-  // Returns true when Lite Page Previews should be activated. When Lite Pages
-  // are active, a low fidelity transcoded page is requested on the main frame
-  // resource, except when the user is in the control group. |previews_decider|
-  // is a non-null object that determines eligibility of showing the preview
-  // based on past opt outs.
-  bool ShouldEnableLitePages(const net::URLRequest& request,
-                             previews::PreviewsDecider* previews_decider);
+  // Returns true when server previews should be activated. When server previews
+  // are active, URL requests are modified to request low fidelity versions of
+  // the resources.|previews_decider| is a non-null object that determines
+  // eligibility of showing the preview based on past opt outs.
+  bool ShouldAcceptServerPreview(const net::URLRequest& request,
+                                 previews::PreviewsDecider* previews_decider);
 
   // Bridge methods to safely call to the UI thread objects.
   void UpdateDataUseForHost(int64_t network_bytes,
@@ -144,6 +137,9 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   // Changes the reporting fraction for the pingback service to
   // |pingback_reporting_fraction|. Overridden in testing.
   virtual void SetPingbackReportingFraction(float pingback_reporting_fraction);
+
+  // Called when the user clears the browsing history.
+  void DeleteBrowsingHistory(const base::Time start, const base::Time end);
 
   // Various accessor methods.
   DataReductionProxyConfigurator* configurator() const {
@@ -223,7 +219,10 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
                            TestResetBadProxyListOnDisableDataSaver);
 
   // Used for testing.
-  DataReductionProxyIOData();
+  DataReductionProxyIOData(
+      PrefService* prefs,
+      scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
 
   // Initializes the weak pointer to |this| on the IO thread. It must be done
   // on the IO thread, since it is used for posting tasks from the UI thread
@@ -307,6 +306,11 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   // The production channel of this build.
   const std::string channel_;
+
+  // Created on the UI thread. Guaranteed to be destroyed on IO thread if the
+  // IO thread is still available at the time of destruction. If the IO thread
+  // is unavailable, then the destruction will happen on the UI thread.
+  std::unique_ptr<NetworkPropertiesManager> network_properties_manager_;
 
   base::WeakPtrFactory<DataReductionProxyIOData> weak_factory_;
 

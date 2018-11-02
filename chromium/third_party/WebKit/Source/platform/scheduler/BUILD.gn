@@ -3,8 +3,9 @@
 # found in the LICENSE file.
 
 import("//build/config/jumbo.gni")
+import("//third_party/WebKit/Source/platform/platform.gni")
 
-jumbo_source_set("scheduler") {
+blink_platform_sources("scheduler") {
   sources = [
     "base/enqueue_order.cc",
     "base/enqueue_order.h",
@@ -39,12 +40,16 @@ jumbo_source_set("scheduler") {
     "base/work_queue_sets.h",
     "child/cancelable_closure_holder.cc",
     "child/cancelable_closure_holder.h",
+    "child/compositor_metrics_helper.cc",
+    "child/compositor_metrics_helper.h",
     "child/compositor_worker_scheduler.cc",
     "child/compositor_worker_scheduler.h",
     "child/idle_canceled_delayed_task_sweeper.cc",
     "child/idle_canceled_delayed_task_sweeper.h",
     "child/idle_helper.cc",
     "child/idle_helper.h",
+    "child/metrics_helper.cc",
+    "child/metrics_helper.h",
     "child/pollable_thread_safe_flag.cc",
     "child/pollable_thread_safe_flag.h",
     "child/scheduler_helper.cc",
@@ -60,6 +65,8 @@ jumbo_source_set("scheduler") {
     "child/webthread_impl_for_worker_scheduler.h",
     "child/worker_global_scope_scheduler.cc",
     "child/worker_global_scope_scheduler.h",
+    "child/worker_metrics_helper.cc",
+    "child/worker_metrics_helper.h",
     "child/worker_scheduler.cc",
     "child/worker_scheduler.h",
     "child/worker_scheduler_helper.cc",
@@ -76,6 +83,8 @@ jumbo_source_set("scheduler") {
     "renderer/cpu_time_budget_pool.h",
     "renderer/deadline_task_runner.cc",
     "renderer/deadline_task_runner.h",
+    "renderer/frame_status.cc",
+    "renderer/frame_status.h",
     "renderer/idle_time_estimator.cc",
     "renderer/idle_time_estimator.h",
     "renderer/main_thread_scheduler_helper.cc",
@@ -94,7 +103,6 @@ jumbo_source_set("scheduler") {
     "renderer/renderer_scheduler_impl.h",
     "renderer/renderer_web_scheduler_impl.cc",
     "renderer/renderer_web_scheduler_impl.h",
-    "renderer/scoped_virtual_time_pauser.cc",
     "renderer/task_cost_estimator.cc",
     "renderer/task_cost_estimator.h",
     "renderer/task_queue_throttler.cc",
@@ -107,12 +115,17 @@ jumbo_source_set("scheduler") {
     "renderer/wake_up_budget_pool.h",
     "renderer/web_frame_scheduler_impl.cc",
     "renderer/web_frame_scheduler_impl.h",
+    "renderer/web_scoped_virtual_time_pauser.cc",
     "renderer/web_view_scheduler.h",
     "renderer/web_view_scheduler_impl.cc",
     "renderer/web_view_scheduler_impl.h",
     "renderer/webthread_impl_for_renderer_scheduler.cc",
     "renderer/webthread_impl_for_renderer_scheduler.h",
+    "util/aggregated_metric_reporter.h",
+    "util/task_duration_metric_reporter.cc",
     "util/task_duration_metric_reporter.h",
+    "util/thread_cpu_throttler.cc",
+    "util/thread_cpu_throttler.h",
     "util/thread_load_tracker.cc",
     "util/thread_load_tracker.h",
     "util/thread_type.h",
@@ -127,13 +140,7 @@ jumbo_source_set("scheduler") {
     "//cc",
     "//device/base/synchronization",
     "//third_party/WebKit/Source/platform:make_platform_generated",
-    "//third_party/WebKit/Source/platform/instrumentation",
     "//third_party/WebKit/Source/platform/wtf",
-  ]
-
-  configs += [
-    "//third_party/WebKit/Source/platform:blink_platform_config",
-    "//third_party/WebKit/Source/platform:blink_platform_implementation",
   ]
 }
 
@@ -142,8 +149,6 @@ jumbo_source_set("test_support") {
 
   sources = [
     "base/test_task_time_observer.h",
-    "base/test_time_source.cc",
-    "base/test_time_source.h",
     "test/create_task_queue_manager_for_test.cc",
     "test/create_task_queue_manager_for_test.h",
     "test/fake_renderer_scheduler.cc",
@@ -180,6 +185,7 @@ jumbo_source_set("unit_tests") {
     "base/work_queue_unittest.cc",
     "child/idle_canceled_delayed_task_sweeper_unittest.cc",
     "child/idle_helper_unittest.cc",
+    "child/metrics_helper_unittest.cc",
     "child/scheduler_helper_unittest.cc",
     "child/webthread_impl_for_worker_scheduler_unittest.cc",
     "child/worker_global_scope_scheduler_unittest.cc",
@@ -210,6 +216,7 @@ jumbo_source_set("unit_tests") {
     "//components/viz/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/WebKit/public:test_support",
   ]
 
   configs += [ "//third_party/WebKit/Source/platform:blink_platform_config" ]

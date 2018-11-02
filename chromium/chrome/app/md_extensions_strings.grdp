@@ -16,11 +16,28 @@
   <message name="IDS_MD_EXTENSIONS_ERROR_ANONYMOUS_FUNCTION" desc="The label indicating that an error was caused within an anonymous function in the code.">
     anonymous function
   </message>
+  <message name="IDS_MD_EXTENSIONS_ERROR_CONTEXT" desc="The label for the error's context url.">
+    Context
+  </message>
+  <message name="IDS_MD_EXTENSIONS_ERROR_CONTEXT_UNKNOWN" desc="The text displayed to the user if an error's context url is unknown.">
+    Unknown
+  </message>
+  <message name="IDS_MD_EXTENSIONS_ERROR_CLEAR_ALL" desc="The label for the button that clears all the errors.">
+    Clear all
+  </message>
+  <message name="IDS_MD_EXTENSIONS_A11Y_CLEAR_ENTRY" desc="The accessibility label for the button that clears a single error entry.">
+    Clear entry
+  </message>
   <message name="IDS_MD_EXTENSIONS_ERROR_LAUNCH_DEVTOOLS" desc="The text for the button to view an extension error in the developer tools.">
     View in Developer Tools
   </message>
   <message name="IDS_MD_EXTENSIONS_ERROR_STACK_TRACE" desc="The label for the stack trace of an extension's error.">
     Stack Trace
+  </message>
+  <message name="IDS_MD_EXTENSIONS_ERROR_LINES_NOT_SHOWN" desc="The label displayed to the users indicating that some lines of code are truncated.">
+    {LINE_COUNT, plural,
+      =1 {&lt;1 line not shown&gt;}
+      other {&lt;$1 lines not shown&gt;}}
   </message>
   <message name="IDS_MD_EXTENSIONS_LEARN_MORE" desc="Learn more text">
     Learn more
@@ -40,6 +57,9 @@
   <message name="IDS_MD_EXTENSIONS_ITEM_INSPECT_VIEWS_EXTRA" desc="The text to indicate there are additional inspectable views that aren't listed.">
     <ph name="NUMBER_OF_VIEWS">$1<ex>2</ex></ph> more...
   </message>
+  <message name="IDS_MD_EXTENSIONS_ITEM_NO_ACTIVE_VIEWS" desc="Placeholder text when the extension Inspect Views list is empty.">
+    No active views
+  </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_ALLOW_INCOGNITO" desc="The text next to the checkbox to enable an extension in incognito mode.">
     Allow in incognito
   </message>
@@ -54,6 +74,9 @@
   </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_DETAILS" desc="The text on the button to show more details for a given extension.">
     Details
+  </message>
+  <message name="IDS_MD_EXTENSIONS_EXTENSION_A11Y_ASSOCIATION" desc="Label used to associate an app or extension with actions for screen readers. This will only be read out lout.">
+    Related to <ph name="NAME_PH">$1<ex>AdBlock</ex></ph>
   </message>
   <message name="IDS_MD_EXTENSIONS_APP_ICON" desc="The alt text for the app's icon. Used for accessibility.">
     App Icon
@@ -75,6 +98,12 @@
   </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_ON" desc="The label to indicate that a specific extension is currently enabled.">
     On
+  </message>
+  <message name="IDS_MD_EXTENSIONS_ITEM_EXTENSION_WEBSITE" desc="Label for button to go to the website the extension developer specified.">
+    Open extension website
+  </message>
+  <message name="IDS_MD_EXTENSIONS_ITEM_CHROME_WEB_STORE" desc="Label for button to visit the Chrome web store.">
+    View in Chrome Web Store
   </message>
   <message name="IDS_MD_EXTENSIONS_ITEM_OPTIONS" desc="The label on the button to open an extension options page.">
     Extension options
@@ -121,14 +150,11 @@
   <message name="IDS_MD_EXTENSIONS_LOAD_ERROR_COULD_NOT_LOAD_MANIFEST" desc="The text to indicate that an extension's manifest could not be loaded.">
     Could not load manifest.
   </message>
-  <message name="IDS_MD_EXTENSIONS_LOAD_ERROR_CANCEL" desc="The text on the button to close the dialog when an unpacked extension failed to load.">
-    Cancel
-  </message>
   <message name="IDS_MD_EXTENSIONS_LOAD_ERROR_RETRY" desc="The text on the button to retry loading an unpacked extension after a failed load.">
     Retry
   </message>
   <message name="IDS_MD_EXTENSIONS_NO_INSTALLED_ITEMS" desc="The message shown to the user on the Extensions settings page when there are no extensions or apps installed.">
-    Find extensions and apps in the <ph name="BEGIN_LINK">&lt;a target="_blank" href="https://chrome.google.com/webstore/category/extensions"&gt;</ph>Chrome Web Store<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
+    Find extensions and themes in the <ph name="BEGIN_LINK">&lt;a target="_blank" href="https://chrome.google.com/webstore/category/extensions"&gt;</ph>Chrome Web Store<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
   </message>
   <message name="IDS_MD_EXTENSIONS_NO_DESCRIPTION" desc="The message shown to the user when an extension does not have any description.">
     No description provided
@@ -156,9 +182,6 @@
   </message>
   <message name="IDS_MD_EXTENSIONS_PACK_DIALOG_CONFIRM_BUTTON" desc="The label of the button to confirm the action to pack an extension.">
     Pack extension
-  </message>
-  <message name="IDS_MD_EXTENSIONS_PACK_DIALOG_CANCEL_BUTTON" desc="The label of the button to cancel the pack extension dialog.">
-    Cancel
   </message>
   <message name="IDS_MD_EXTENSIONS_TOOLBAR_TITLE" desc="The text displayed in the toolbar of the chrome://extensions page.">
     Extensions
@@ -199,12 +222,15 @@
   <message name="IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_NOW_TOOLTIP" desc="Text displayed over the 'update' menu that provides more context as a tooltip.">
     Update extensions now
   </message>
+  <message name="IDS_MD_EXTENSIONS_TOOLBAR_UPDATE_DONE" desc="Text used to announce when extensions have been updated. This is for accessibility.">
+    Extensions updated
+  </message>
   <message name="IDS_MD_EXTENSIONS_TYPE_A_SHORTCUT" desc="The prompt to the user to enter a keyboard shortcut in order to assign it to an extension.">
     Type a shortcut
   </message>
 <if expr="is_macosx">
   <message name="IDS_MD_EXTENSIONS_INCLUDE_START_MODIFIER" desc="Error message explaining that shortcuts must start with either the Control, Alt, or Command key.">
-    Include Ctrl, Alt, or Command
+    Include Ctrl, Alt, or ⌘
   </message>
 </if>
 <if expr="chromeos">
@@ -222,11 +248,11 @@
     Include either Ctrl or Alt
   </message>
   <message name="IDS_MD_EXTENSIONS_TOO_MANY_MODIFIERS" desc="Error message explaining not to use both Ctrl and Alt in a shortcut.">
-    Either, not both Ctrl and Alt
+    Use either Ctrl or Alt
   </message>
 </if>
 <message name="IDS_MD_EXTENSIONS_NEED_CHARACTER" desc="Error message explaining that a shortcut needs a character. This is only shown if a valid modifier is already entered.">
-  Need a character
+  Type a letter
 </message>
 <if expr="chromeos">
   <!-- Extensions Kiosk apps -->

@@ -64,8 +64,10 @@
 #include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/graphics/SVGImageChromeClient.h"
+#include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "core/timing/PerformanceBase.h"
+#include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/bindings/V8DOMActivityLogger.h"
 #include "platform/exported/WrappedResourceRequest.h"
@@ -88,9 +90,11 @@
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebApplicationCacheHost.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/modules/fetch/fetch_api_request.mojom-shared.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 #include "third_party/WebKit/common/device_memory/approximated_device_memory.h"
 
 namespace blink {
@@ -187,13 +191,12 @@ struct FrameFetchContext::FrozenState final
   FrozenState(ReferrerPolicy referrer_policy,
               const String& outgoing_referrer,
               const KURL& url,
-              scoped_refptr<SecurityOrigin> security_origin,
+              scoped_refptr<const SecurityOrigin> security_origin,
               scoped_refptr<const SecurityOrigin> parent_security_origin,
-              const Optional<WebAddressSpace>& address_space,
+              const Optional<mojom::IPAddressSpace>& address_space,
               const ContentSecurityPolicy* content_security_policy,
               KURL site_for_cookies,
-              scoped_refptr<SecurityOrigin> requestor_origin,
-              scoped_refptr<SecurityOrigin> requestor_origin_for_frame_loading,
+              scoped_refptr<const SecurityOrigin> requestor_origin,
               const ClientHintsPreferences& client_hints_preferences,
               float device_pixel_ratio,
               const String& user_agent,
@@ -208,7 +211,6 @@ struct FrameFetchContext::FrozenState final
         content_security_policy(content_security_policy),
         site_for_cookies(site_for_cookies),
         requestor_origin(requestor_origin),
-        requestor_origin_for_frame_loading(requestor_origin_for_frame_loading),
         client_hints_preferences(client_hints_preferences),
         device_pixel_ratio(device_pixel_ratio),
         user_agent(user_agent),
@@ -218,13 +220,12 @@ struct FrameFetchContext::FrozenState final
   const ReferrerPolicy referrer_policy;
   const String outgoing_referrer;
   const KURL url;
-  const scoped_refptr<SecurityOrigin> security_origin;
+  const scoped_refptr<const SecurityOrigin> security_origin;
   const scoped_refptr<const SecurityOrigin> parent_security_origin;
-  const Optional<WebAddressSpace> address_space;
+  const Optional<mojom::IPAddressSpace> address_space;
   const Member<const ContentSecurityPolicy> content_security_policy;
   const KURL site_for_cookies;
-  const scoped_refptr<SecurityOrigin> requestor_origin;
-  const scoped_refptr<SecurityOrigin> requestor_origin_for_frame_loading;
+  const scoped_refptr<const SecurityOrigin> requestor_origin;
   const ClientHintsPreferences client_hints_preferences;
   const float device_pixel_ratio;
   const String user_agent;
@@ -305,7 +306,7 @@ scoped_refptr<WebTaskRunner> FrameFetchContext::GetLoadingTaskRunner() {
   return GetFrame()->GetTaskRunner(TaskType::kNetworking);
 }
 
-WebFrameScheduler* FrameFetchContext::GetFrameScheduler() {
+WebFrameScheduler* FrameFetchContext::GetFrameScheduler() const {
   if (IsDetached())
     return nullptr;
   return GetFrame()->FrameScheduler();
@@ -354,7 +355,16 @@ void FrameFetchContext::AddAdditionalRequestHeaders(ResourceRequest& request,
   if (save_data_enabled_)
     request.SetHTTPHeaderField(HTTPNames::Save_Data, "on");
 
-  if (GetLocalFrameClient()->IsClientLoFiActiveForFrame()) {
+  if (GetLocalFrameClient()->GetPreviewsStateForFrame() &
+      WebURLRequest::kNoScriptOn) {
+    request.AddHTTPHeaderField(
+        "Intervention",
+        "<https://www.chromestatus.com/features/4775088607985664>; "
+        "level=\"warning\"");
+  }
+
+  if (GetLocalFrameClient()->GetPreviewsStateForFrame() &
+      WebURLRequest::kClientLoFiOn) {
     request.AddHTTPHeaderField(
         "Intervention",
         "<https://www.chromestatus.com/features/6072546726248448>; "
@@ -426,10 +436,11 @@ void FrameFetchContext::DispatchDidChangeResourcePriority(
     int intra_priority_value) {
   if (IsDetached())
     return;
-  TRACE_EVENT1(
-      "devtools.timeline", "ResourceChangePriority", "data",
-      InspectorChangeResourcePriorityEvent::Data(identifier, load_priority));
-  probe::didChangeResourcePriority(GetFrame(), identifier, load_priority);
+  TRACE_EVENT1("devtools.timeline", "ResourceChangePriority", "data",
+               InspectorChangeResourcePriorityEvent::Data(
+                   MasterDocumentLoader(), identifier, load_priority));
+  probe::didChangeResourcePriority(GetFrame(), MasterDocumentLoader(),
+                                   identifier, load_priority);
 }
 
 void FrameFetchContext::PrepareRequest(ResourceRequest& request,
@@ -490,7 +501,7 @@ void FrameFetchContext::DispatchWillSendRequest(
 void FrameFetchContext::DispatchDidReceiveResponse(
     unsigned long identifier,
     const ResourceResponse& response,
-    WebURLRequest::FrameType frame_type,
+    network::mojom::RequestContextFrameType frame_type,
     WebURLRequest::RequestContext request_context,
     Resource* resource,
     ResourceResponseType response_type) {
@@ -501,7 +512,7 @@ void FrameFetchContext::DispatchDidReceiveResponse(
 
   if (response_type == ResourceResponseType::kFromMemoryCache) {
     // Note: probe::willSendRequest needs to precede before this probe method.
-    probe::markResourceAsCached(GetFrame(), identifier);
+    probe::markResourceAsCached(GetFrame(), MasterDocumentLoader(), identifier);
     if (response.IsNull())
       return;
   }
@@ -566,7 +577,8 @@ void FrameFetchContext::DispatchDidReceiveEncodedData(unsigned long identifier,
                                                       int encoded_data_length) {
   if (IsDetached())
     return;
-  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(), identifier,
+  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(),
+                                     MasterDocumentLoader(), identifier,
                                      encoded_data_length);
 }
 
@@ -579,21 +591,25 @@ void FrameFetchContext::DispatchDidDownloadData(unsigned long identifier,
   GetFrame()->Loader().Progress().IncrementProgress(identifier, data_length);
   probe::didReceiveData(GetFrame()->GetDocument(), identifier,
                         MasterDocumentLoader(), nullptr, data_length);
-  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(), identifier,
+  probe::didReceiveEncodedDataLength(GetFrame()->GetDocument(),
+                                     MasterDocumentLoader(), identifier,
                                      encoded_data_length);
 }
 
-void FrameFetchContext::DispatchDidFinishLoading(unsigned long identifier,
-                                                 double finish_time,
-                                                 int64_t encoded_data_length,
-                                                 int64_t decoded_body_length) {
+void FrameFetchContext::DispatchDidFinishLoading(
+    unsigned long identifier,
+    double finish_time,
+    int64_t encoded_data_length,
+    int64_t decoded_body_length,
+    bool blocked_cross_site_document) {
   if (IsDetached())
     return;
 
   GetFrame()->Loader().Progress().CompleteProgress(identifier);
   probe::didFinishLoading(GetFrame()->GetDocument(), identifier,
                           MasterDocumentLoader(), finish_time,
-                          encoded_data_length, decoded_body_length);
+                          encoded_data_length, decoded_body_length,
+                          blocked_cross_site_document);
   if (document_) {
     InteractiveDetector* interactive_detector(
         InteractiveDetector::From(*document_));
@@ -624,14 +640,16 @@ void FrameFetchContext::DispatchDidFail(unsigned long identifier,
         InteractiveDetector::From(*document_));
     if (interactive_detector) {
       // We have not yet recorded load_finish_time. Pass nullopt here; we will
-      // call MonotonicallyIncreasingTime lazily when we need it.
+      // call CurrentTimeTicksInSeconds lazily when we need it.
       interactive_detector->OnResourceLoadEnd(WTF::nullopt);
     }
   }
   // Notification to FrameConsole should come AFTER InspectorInstrumentation
   // call, DevTools front-end relies on this.
-  if (!is_internal_request)
-    GetFrame()->Console().DidFailLoading(identifier, error);
+  if (!is_internal_request) {
+    GetFrame()->Console().DidFailLoading(MasterDocumentLoader(), identifier,
+                                         error);
+  }
 }
 
 void FrameFetchContext::DispatchDidLoadResourceFromMemoryCache(
@@ -700,17 +718,24 @@ void FrameFetchContext::AddResourceTiming(const ResourceTimingInfo& info) {
   // Normally, |document_| is cleared on Document shutdown. However, Documents
   // for HTML imports will also not have a LocalFrame set: in that case, also
   // early return, as there is nothing to report the resource timing to.
-  if (!document_ || !document_->GetFrame())
+  if (!document_)
+    return;
+  LocalFrame* frame = document_->GetFrame();
+  if (!frame)
     return;
 
-  Frame* initiator_frame = info.IsMainResource()
-                               ? document_->GetFrame()->Tree().Parent()
-                               : document_->GetFrame();
-
-  if (!initiator_frame)
+  if (info.IsMainResource()) {
+    DCHECK(frame->Owner());
+    // Main resource timing information is reported through the owner to be
+    // passed to the parent frame, if appropriate.
+    frame->Owner()->AddResourceTiming(info);
+    frame->DidSendResourceTimingInfoToParent();
     return;
+  }
 
-  initiator_frame->AddResourceTiming(info);
+  // All other resources are reported to the corresponding Document.
+  DOMWindowPerformance::performance(*document_->domWindow())
+      ->GenerateAndAddResourceTiming(info);
 }
 
 bool FrameFetchContext::AllowImage(bool images_enabled, const KURL& url) const {
@@ -779,11 +804,6 @@ bool FrameFetchContext::IsLoadComplete() const {
   return document_ && document_->LoadEventFinished();
 }
 
-bool FrameFetchContext::PageDismissalEventBeingDispatched() const {
-  return document_ && document_->PageDismissalEventBeingDispatched() !=
-                          Document::kNoDismissal;
-}
-
 bool FrameFetchContext::UpdateTimingInfoForIFrameNavigation(
     ResourceTimingInfo* info) {
   if (IsDetached())
@@ -791,26 +811,20 @@ bool FrameFetchContext::UpdateTimingInfoForIFrameNavigation(
 
   // <iframe>s should report the initial navigation requested by the parent
   // document, but not subsequent navigations.
-  // FIXME: Resource timing is broken when the parent is a remote frame.
-  if (!GetFrame()->DeprecatedLocalOwner() ||
-      GetFrame()->DeprecatedLocalOwner()->LoadedNonEmptyDocument())
+  if (!GetFrame()->Owner())
     return false;
-  GetFrame()->DeprecatedLocalOwner()->DidLoadNonEmptyDocument();
+  // Note that this can be racy since this information is forwarded over IPC
+  // when crossing process boundaries.
+  if (!GetFrame()->should_send_resource_timing_info_to_parent())
+    return false;
   // Do not report iframe navigation that restored from history, since its
   // location may have been changed after initial navigation.
   if (MasterDocumentLoader()->LoadType() == kFrameLoadTypeInitialHistoryLoad)
     return false;
-  info->SetInitiatorType(GetFrame()->DeprecatedLocalOwner()->localName());
   return true;
 }
 
-void FrameFetchContext::SendImagePing(const KURL& url) {
-  if (IsDetached())
-    return;
-  PingLoader::LoadImage(GetFrame(), url);
-}
-
-SecurityOrigin* FrameFetchContext::GetSecurityOrigin() const {
+const SecurityOrigin* FrameFetchContext::GetSecurityOrigin() const {
   if (IsDetached())
     return frozen_state_->security_origin.get();
   return document_ ? document_->GetSecurityOrigin() : nullptr;
@@ -892,25 +906,24 @@ void FrameFetchContext::SetFirstPartyCookieAndRequestorOrigin(
   // requests). This value will be updated during redirects, consistent with
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-same-site-00#section-2.1.1?
   if (request.SiteForCookies().IsNull()) {
-    if (request.GetFrameType() == WebURLRequest::kFrameTypeTopLevel) {
+    if (request.GetFrameType() ==
+        network::mojom::RequestContextFrameType::kTopLevel) {
       request.SetSiteForCookies(request.Url());
     } else {
       request.SetSiteForCookies(GetSiteForCookies());
     }
   }
 
-  // Subresource requests inherit their requestor origin from |document_|
-  // directly.  Top-level frame types are taken care of in 'FrameLoadRequest()'.
-  // Auxiliary frame types in 'CreateWindow()' and 'FrameLoader::Load'.
-  if (!request.RequestorOrigin()) {
-    if (request.GetFrameType() == WebURLRequest::kFrameTypeNone) {
+  // * For subresources, the initiator origin is the origin of the
+  //   |document_| that contains them.
+  // * For loading a new document in the frame, the initiator is not set here.
+  //   In most of the cases, it is set in the FrameLoadRequest constructor.
+  //   Otherwise, it must be set immediately after the request has been created.
+  //   See the calls to ResourceRequest::SetRequestorOrigin().
+  if (request.GetFrameType() ==
+      network::mojom::RequestContextFrameType::kNone) {
+    if (!request.RequestorOrigin())
       request.SetRequestorOrigin(GetRequestorOrigin());
-    } else {
-      // Set the requestor origin to the same origin as the frame's document
-      // if it hasn't yet been set. (We may hit here for nested frames and
-      // redirect cases)
-      request.SetRequestorOrigin(GetRequestorOriginForFrameLoading());
-    }
   }
 }
 
@@ -996,7 +1009,7 @@ void FrameFetchContext::CountDeprecation(WebFeature feature) const {
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
     WebURLRequest::RequestContext request_context,
-    WebURLRequest::FrameType frame_type,
+    network::mojom::RequestContextFrameType frame_type,
     ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
     SecurityViolationReportingPolicy reporting_policy) const {
@@ -1072,7 +1085,7 @@ const SecurityOrigin* FrameFetchContext::GetParentSecurityOrigin() const {
   return parent->GetSecurityContext()->GetSecurityOrigin();
 }
 
-Optional<WebAddressSpace> FrameFetchContext::GetAddressSpace() const {
+Optional<mojom::IPAddressSpace> FrameFetchContext::GetAddressSpace() const {
   if (IsDetached())
     return frozen_state_->address_space;
   if (!document_)
@@ -1120,7 +1133,7 @@ String FrameFetchContext::GetUserAgent() const {
   return GetFrame()->Loader().UserAgent();
 }
 
-scoped_refptr<SecurityOrigin> FrameFetchContext::GetRequestorOrigin() {
+scoped_refptr<const SecurityOrigin> FrameFetchContext::GetRequestorOrigin() {
   if (IsDetached())
     return frozen_state_->requestor_origin;
 
@@ -1128,14 +1141,6 @@ scoped_refptr<SecurityOrigin> FrameFetchContext::GetRequestorOrigin() {
     return SecurityOrigin::Create(document_->Url());
 
   return GetSecurityOrigin();
-}
-
-scoped_refptr<SecurityOrigin>
-FrameFetchContext::GetRequestorOriginForFrameLoading() {
-  if (IsDetached())
-    return frozen_state_->requestor_origin;
-
-  return GetFrame()->GetDocument()->GetSecurityOrigin();
 }
 
 ClientHintsPreferences FrameFetchContext::GetClientHintsPreferences() const {
@@ -1218,18 +1223,17 @@ FetchContext* FrameFetchContext::Detach() {
         GetReferrerPolicy(), GetOutgoingReferrer(), Url(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
         GetContentSecurityPolicy(), GetSiteForCookies(), GetRequestorOrigin(),
-        GetRequestorOriginForFrameLoading(), GetClientHintsPreferences(),
-        GetDevicePixelRatio(), GetUserAgent(), IsMainFrame(),
-        IsSVGImageChromeClient());
+        GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
+        IsMainFrame(), IsSVGImageChromeClient());
   } else {
     // Some getters are unavailable in this case.
     frozen_state_ = new FrozenState(
         kReferrerPolicyDefault, String(), NullURL(), GetSecurityOrigin(),
         GetParentSecurityOrigin(), GetAddressSpace(),
         GetContentSecurityPolicy(), GetSiteForCookies(),
-        SecurityOrigin::CreateUnique(), SecurityOrigin::CreateUnique(),
-        GetClientHintsPreferences(), GetDevicePixelRatio(), GetUserAgent(),
-        IsMainFrame(), IsSVGImageChromeClient());
+        SecurityOrigin::CreateUnique(), GetClientHintsPreferences(),
+        GetDevicePixelRatio(), GetUserAgent(), IsMainFrame(),
+        IsSVGImageChromeClient());
   }
 
   // This is needed to break a reference cycle in which off-heap
@@ -1248,6 +1252,47 @@ void FrameFetchContext::Trace(blink::Visitor* visitor) {
 
 void FrameFetchContext::RecordDataUriWithOctothorpe() {
   UseCounter::Count(GetFrame(), WebFeature::kDataUriHasOctothorpe);
+}
+
+ResourceLoadPriority FrameFetchContext::ModifyPriorityForExperiments(
+    ResourceLoadPriority priority) const {
+  if (!GetSettings())
+    return priority;
+
+  WebEffectiveConnectionType max_effective_connection_type_threshold =
+      GetSettings()->GetLowPriorityIframesThreshold();
+
+  if (max_effective_connection_type_threshold <=
+      WebEffectiveConnectionType::kTypeOffline) {
+    return priority;
+  }
+
+  WebEffectiveConnectionType effective_connection_type =
+      GetNetworkStateNotifier().EffectiveType();
+
+  if (effective_connection_type <= WebEffectiveConnectionType::kTypeOffline) {
+    return priority;
+  }
+
+  if (effective_connection_type > max_effective_connection_type_threshold) {
+    // Network is not slow enough.
+    return priority;
+  }
+
+  if (GetFrame()->IsMainFrame()) {
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, main_frame_priority_histogram,
+                        ("LowPriorityIframes.MainFrameRequestPriority",
+                         static_cast<int>(ResourceLoadPriority::kHighest) + 1));
+    main_frame_priority_histogram.Count(static_cast<int>(priority));
+    return priority;
+  }
+
+  DEFINE_STATIC_LOCAL(EnumerationHistogram, iframe_priority_histogram,
+                      ("LowPriorityIframes.IframeRequestPriority",
+                       static_cast<int>(ResourceLoadPriority::kHighest) + 1));
+  iframe_priority_histogram.Count(static_cast<int>(priority));
+  // When enabled, the priority of all resources in subframe is dropped.
+  return ResourceLoadPriority::kLowest;
 }
 
 }  // namespace blink

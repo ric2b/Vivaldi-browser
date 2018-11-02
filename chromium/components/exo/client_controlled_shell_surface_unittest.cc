@@ -7,7 +7,6 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/shell_test_api.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -26,6 +25,10 @@
 #include "components/exo/wm_helper.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
+#include "ui/aura/window_event_dispatcher.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/event_targeter.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/shadow.h"
@@ -59,7 +62,11 @@ TEST_F(ClientControlledShellSurfaceTest, SetPinned) {
   gfx::Size buffer_size(256, 256);
   std::unique_ptr<Buffer> buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+
   std::unique_ptr<Surface> surface(new Surface);
+  surface->Attach(buffer.get());
+  surface->Commit();
+
   auto shell_surface(
       exo_test_helper()->CreateClientControlledShellSurface(surface.get()));
 
@@ -132,7 +139,7 @@ TEST_F(ClientControlledShellSurfaceTest, ModalWindowDefaultActive) {
   shell_surface->SetSystemModal(true);
   surface->Commit();
 
-  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 }
 
@@ -147,7 +154,7 @@ TEST_F(ClientControlledShellSurfaceTest, UpdateModalWindow) {
   surface->SetInputRegion(cc::Region());
   surface->Commit();
 
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Creating a surface without input region should not make it modal.
@@ -162,31 +169,31 @@ TEST_F(ClientControlledShellSurfaceTest, UpdateModalWindow) {
   surface->SetSubSurfacePosition(child.get(), gfx::Point(10, 10));
   child->Commit();
   surface->Commit();
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Making the surface opaque shouldn't make it modal either.
   child->SetBlendMode(SkBlendMode::kSrc);
   child->Commit();
   surface->Commit();
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Setting input regions won't make it modal either.
   surface->SetInputRegion(gfx::Rect(10, 10, 100, 100));
   surface->Commit();
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // Only SetSystemModal changes modality.
   shell_surface->SetSystemModal(true);
 
-  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
   shell_surface->SetSystemModal(false);
 
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_FALSE(shell_surface->GetWidget()->IsActive());
 
   // If the non modal system window was active,
@@ -194,11 +201,11 @@ TEST_F(ClientControlledShellSurfaceTest, UpdateModalWindow) {
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
   shell_surface->SetSystemModal(true);
-  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 
   shell_surface->SetSystemModal(false);
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
   EXPECT_TRUE(shell_surface->GetWidget()->IsActive());
 }
 
@@ -222,12 +229,12 @@ TEST_F(ClientControlledShellSurfaceTest,
 
   // It is expected that modal window is shown.
   EXPECT_TRUE(shell_surface->GetWidget());
-  EXPECT_TRUE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_TRUE(ash::Shell::IsSystemModalWindowOpen());
 
   // Now widget is created and setting modal state should be applied
   // immediately.
   shell_surface->SetSystemModal(false);
-  EXPECT_FALSE(ash::ShellPort::Get()->IsSystemModalWindowOpen());
+  EXPECT_FALSE(ash::Shell::IsSystemModalWindowOpen());
 }
 
 TEST_F(ClientControlledShellSurfaceTest, SurfaceShadow) {
@@ -390,11 +397,18 @@ TEST_F(ClientControlledShellSurfaceTest, ShadowWithTransform) {
 }
 
 TEST_F(ClientControlledShellSurfaceTest, ShadowStartMaximized) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+
   std::unique_ptr<Surface> surface(new Surface);
+
   auto shell_surface =
       exo_test_helper()->CreateClientControlledShellSurface(surface.get());
   shell_surface->SetMaximized();
+  surface->Attach(buffer.get());
   surface->Commit();
+
   views::Widget* widget = shell_surface->GetWidget();
   aura::Window* window = widget->GetNativeWindow();
 
@@ -689,6 +703,102 @@ TEST_F(ClientControlledShellSurfaceTest,
   EXPECT_EQ(
       transform.ToString(),
       shell_surface->host_window()->layer()->GetTargetTransform().ToString());
+}
+
+TEST_F(ClientControlledShellSurfaceTest, MouseAndTouchTarget) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  auto shell_surface(
+      exo_test_helper()->CreateClientControlledShellSurface(surface.get()));
+
+  const gfx::Rect original_bounds(0, 0, 256, 256);
+  shell_surface->SetGeometry(original_bounds);
+  shell_surface->set_client_controlled_move_resize(false);
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  EXPECT_TRUE(shell_surface->CanResize());
+
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  aura::Window* root = window->GetRootWindow();
+  ui::EventTargeter* targeter =
+      root->GetHost()->dispatcher()->GetDefaultEventTargeter();
+
+  gfx::Point mouse_location(256 + 5, 150);
+
+  ui::MouseEvent mouse(ui::ET_MOUSE_MOVED, mouse_location, mouse_location,
+                       ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  EXPECT_EQ(window, targeter->FindTargetForEvent(root, &mouse));
+
+  // Move 20px further away. Touch event can hit the window but
+  // mouse event will not.
+  gfx::Point touch_location(256 + 25, 150);
+  ui::MouseEvent touch(ui::ET_TOUCH_PRESSED, touch_location, touch_location,
+                       ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  EXPECT_EQ(window, targeter->FindTargetForEvent(root, &touch));
+
+  ui::MouseEvent mouse_with_touch_loc(ui::ET_MOUSE_MOVED, touch_location,
+                                      touch_location, ui::EventTimeForNow(),
+                                      ui::EF_NONE, ui::EF_NONE);
+  EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+      targeter->FindTargetForEvent(root, &mouse_with_touch_loc))));
+
+  // Touching futher away shouldn't hit the window.
+  gfx::Point no_touch_location(256 + 35, 150);
+  ui::MouseEvent no_touch(ui::ET_TOUCH_PRESSED, no_touch_location,
+                          no_touch_location, ui::EventTimeForNow(), ui::EF_NONE,
+                          ui::EF_NONE);
+  EXPECT_FALSE(window->Contains(static_cast<aura::Window*>(
+      targeter->FindTargetForEvent(root, &no_touch))));
+}
+
+// The shell surface in SystemModal container should be unresizable.
+TEST_F(ClientControlledShellSurfaceTest,
+       ShellSurfaceInSystemModalIsUnresizable) {
+  gfx::Size buffer_size(256, 256);
+  std::unique_ptr<Buffer> buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(buffer_size)));
+  std::unique_ptr<Surface> surface(new Surface);
+  auto shell_surface =
+      exo_test_helper()->CreateClientControlledShellSurface(surface.get(),
+                                                            /*is_modal=*/true);
+  surface->Attach(buffer.get());
+  surface->Commit();
+
+  EXPECT_FALSE(shell_surface->GetWidget()->widget_delegate()->CanResize());
+}
+
+// The shell surface in SystemModal container should not become target
+// at the edge.
+TEST_F(ClientControlledShellSurfaceTest, ShellSurfaceInSystemModalHitTest) {
+  std::unique_ptr<Surface> surface(new Surface);
+  auto shell_surface =
+      exo_test_helper()->CreateClientControlledShellSurface(surface.get(),
+                                                            /*is_modal=*/true);
+  shell_surface->set_client_controlled_move_resize(false);
+
+  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
+
+  gfx::Size desktop_size(640, 480);
+  std::unique_ptr<Buffer> desktop_buffer(
+      new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(desktop_size)));
+  surface->Attach(desktop_buffer.get());
+  surface->SetInputRegion(gfx::Rect(0, 0, 0, 0));
+  shell_surface->SetGeometry(display.bounds());
+  surface->Commit();
+
+  EXPECT_FALSE(shell_surface->GetWidget()->widget_delegate()->CanResize());
+  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
+  aura::Window* root = window->GetRootWindow();
+
+  ui::MouseEvent event(ui::ET_MOUSE_MOVED, gfx::Point(100, 0),
+                       gfx::Point(100, 0), ui::EventTimeForNow(), 0, 0);
+  aura::WindowTargeter targeter;
+  aura::Window* found =
+      static_cast<aura::Window*>(targeter.FindTargetForEvent(root, &event));
+  EXPECT_FALSE(window->Contains(found));
 }
 
 }  // namespace exo

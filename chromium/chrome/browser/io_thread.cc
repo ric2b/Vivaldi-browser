@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -34,7 +35,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/data_usage/tab_id_annotator.h"
 #include "chrome/browser/data_use_measurement/chrome_data_use_ascriber.h"
-#include "chrome/browser/net/chrome_mojo_proxy_resolver_factory.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/dns_probe_service.h"
 #include "chrome/browser/net/proxy_service_factory.h"
@@ -55,7 +55,6 @@
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/variations/variations_associated_data.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -65,6 +64,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/user_agent.h"
 #include "content/public/network/ignore_errors_cert_verifier.h"
+#include "content/public/network/network_service.h"
 #include "content/public/network/url_request_context_builder_mojo.h"
 #include "extensions/features/features.h"
 #include "net/cert/caching_cert_verifier.h"
@@ -224,6 +224,20 @@ void UpdateMetricsUsagePrefsOnUIThread(const std::string& service_name,
                               service_name, message_size, is_cellular));
 }
 
+// Check the AsyncDns field trial and return true if it should be enabled. On
+// Android this includes checking the Android version in the field trial.
+bool ShouldEnableAsyncDns() {
+  bool feature_can_be_enabled = true;
+#if defined(OS_ANDROID)
+  int min_sdk =
+      base::GetFieldTrialParamByFeatureAsInt(features::kAsyncDns, "min_sdk", 0);
+  if (base::android::BuildInfo::GetInstance()->sdk_int() < min_sdk)
+    feature_can_be_enabled = false;
+#endif
+  return feature_can_be_enabled &&
+         base::FeatureList::IsEnabled(features::kAsyncDns);
+}
+
 }  // namespace
 
 class SystemURLRequestContextGetter : public net::URLRequestContextGetter {
@@ -297,7 +311,6 @@ IOThread::IOThread(
 #endif
       globals_(nullptr),
       is_quic_allowed_on_init_(true),
-      network_service_request_(mojo::MakeRequest(&ui_thread_network_service_)),
       weak_factory_(this) {
   scoped_refptr<base::SingleThreadTaskRunner> io_thread_proxy =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
@@ -334,11 +347,6 @@ IOThread::IOThread(
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
   allow_gssapi_library_load_ = connector->IsActiveDirectoryManaged();
 #endif
-  pref_proxy_config_tracker_.reset(
-      ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
-          local_state));
-  system_proxy_config_service_ = ProxyServiceFactory::CreateProxyConfigService(
-      pref_proxy_config_tracker_.get());
   ChromeNetworkDelegate::InitializePrefsOnUIThread(
       &system_enable_referrers_,
       nullptr,
@@ -351,9 +359,8 @@ IOThread::IOThread(
           local_state,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
-  local_state->SetDefaultPrefValue(
-      prefs::kBuiltInDnsClientEnabled,
-      base::Value(base::FeatureList::IsEnabled(features::kAsyncDns)));
+  local_state->SetDefaultPrefValue(prefs::kBuiltInDnsClientEnabled,
+                                   base::Value(ShouldEnableAsyncDns()));
 
   dns_client_enabled_.Init(prefs::kBuiltInDnsClientEnabled,
                            local_state,
@@ -394,7 +401,6 @@ IOThread::~IOThread() {
   // be multiply constructed.
   BrowserThread::SetIOThreadDelegate(nullptr);
 
-  pref_proxy_config_tracker_->DetachFromPrefService();
   DCHECK(!globals_);
 
   // Destroy the old distributor to check that the observers list it holds is
@@ -515,17 +521,6 @@ void IOThread::Init() {
   globals_->network_quality_observer = content::CreateNetworkQualityObserver(
       globals_->network_quality_estimator.get());
 
-  std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
-      net::ct::CreateLogVerifiersForKnownLogs());
-
-  globals_->ct_logs.assign(ct_logs.begin(), ct_logs.end());
-
-  ct_tree_tracker_ =
-      std::make_unique<certificate_transparency::TreeStateTracker>(
-          globals_->ct_logs, net_log_);
-  // Register the ct_tree_tracker_ as observer for new STHs.
-  RegisterSTHObserver(ct_tree_tracker_.get());
-
   globals_->dns_probe_service =
       std::make_unique<chrome_browser_net::DnsProbeService>();
 
@@ -550,9 +545,23 @@ void IOThread::Init() {
                         CRYPTO_needs_hwcap2_workaround());
 #endif
 
+  std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs(
+      net::ct::CreateLogVerifiersForKnownLogs());
+  globals_->ct_logs.assign(ct_logs.begin(), ct_logs.end());
+
   ConstructSystemRequestContext();
 
   UpdateDnsClientEnabled();
+
+  ct_tree_tracker_ =
+      std::make_unique<certificate_transparency::TreeStateTracker>(
+          globals_->ct_logs, globals_->system_request_context->host_resolver(),
+          net_log_);
+  // Register the ct_tree_tracker_ as observer for new STHs.
+  RegisterSTHObserver(ct_tree_tracker_.get());
+  // Register the ct_tree_tracker_ as observer for verified SCTs.
+  globals_->system_request_context->cert_transparency_verifier()->SetObserver(
+      ct_tree_tracker_.get());
 }
 
 void IOThread::CleanUp() {
@@ -588,7 +597,6 @@ void IOThread::CleanUp() {
   // Shutdown the HistogramWatcher on the IO thread.
   net::NetworkChangeNotifier::ShutdownHistogramWatcher();
 
-  system_proxy_config_service_.reset();
   delete globals_;
   globals_ = nullptr;
 
@@ -616,7 +624,7 @@ void IOThread::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kQuickCheckEnabled, true);
   registry->RegisterBooleanPref(prefs::kPacHttpsUrlStrippingEnabled, true);
 #if defined(OS_POSIX)
-  registry->RegisterBooleanPref(prefs::kNtlmV2Enabled, false);
+  registry->RegisterBooleanPref(prefs::kNtlmV2Enabled, true);
 #endif
 }
 
@@ -694,7 +702,7 @@ void IOThread::ClearHostCache(
 
 void IOThread::DisableQuic() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  globals_->network_service->DisableQuic();
+  globals_->quic_disabled = true;
 }
 
 net::SSLConfigService* IOThread::GetSSLConfigService() {
@@ -730,47 +738,25 @@ bool IOThread::PacHttpsUrlStrippingEnabled() const {
   return pac_https_url_stripping_enabled_.GetValue();
 }
 
-void IOThread::SetUpProxyConfigService(
-    content::URLRequestContextBuilderMojo* builder,
-    std::unique_ptr<net::ProxyConfigService> proxy_config_service) const {
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-
-  // TODO(eroman): Figure out why this doesn't work in single-process mode.
-  // Should be possible now that a private isolate is used.
-  // http://crbug.com/474654
-  if (!command_line.HasSwitch(switches::kWinHttpProxyResolver)) {
-    if (command_line.HasSwitch(switches::kSingleProcess)) {
-      LOG(ERROR) << "Cannot use V8 Proxy resolver in single process mode.";
-    } else {
-      builder->SetMojoProxyResolverFactory(
-          ChromeMojoProxyResolverFactory::CreateWithStrongBinding());
+void IOThread::SetUpProxyService(
+    content::URLRequestContextBuilderMojo* builder) const {
 #if defined(OS_CHROMEOS)
-      builder->SetDhcpFetcherFactory(
-          base::MakeUnique<chromeos::DhcpProxyScriptFetcherFactoryChromeos>());
+  builder->SetDhcpFetcherFactory(
+      base::MakeUnique<chromeos::DhcpProxyScriptFetcherFactoryChromeos>());
 #endif
-    }
-  }
 
   builder->set_pac_quick_check_enabled(WpadQuickCheckEnabled());
   builder->set_pac_sanitize_url_policy(
       PacHttpsUrlStrippingEnabled()
           ? net::ProxyService::SanitizeUrlPolicy::SAFE
           : net::ProxyService::SanitizeUrlPolicy::UNSAFE);
-  builder->set_proxy_config_service(std::move(proxy_config_service));
 }
 
-content::mojom::NetworkService* IOThread::GetNetworkServiceOnUIThread() {
-  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-    return content::GetNetworkService();
-  } else {
-    return ui_thread_network_service_.get();
-  }
+certificate_transparency::TreeStateTracker* IOThread::ct_tree_tracker() const {
+  return ct_tree_tracker_.get();
 }
 
 void IOThread::ConstructSystemRequestContext() {
-  DCHECK(network_service_request_.is_pending());
-
   std::unique_ptr<content::URLRequestContextBuilderMojo> builder =
       base::MakeUnique<content::URLRequestContextBuilderMojo>();
 
@@ -820,25 +806,26 @@ void IOThread::ConstructSystemRequestContext() {
       base::MakeUnique<net::MultiLogCTVerifier>();
   // Add built-in logs
   ct_verifier->AddLogs(globals_->ct_logs);
-
-  // Register the ct_tree_tracker_ as observer for verified SCTs.
-  ct_verifier->SetObserver(ct_tree_tracker_.get());
-
   builder->set_ct_verifier(std::move(ct_verifier));
 
-  SetUpProxyConfigService(builder.get(),
-                          std::move(system_proxy_config_service_));
+  SetUpProxyService(builder.get());
 
-  globals_->network_service = content::NetworkService::Create(
-      std::move(network_service_request_), net_log_);
   if (!is_quic_allowed_on_init_)
-    globals_->network_service->DisableQuic();
+    globals_->quic_disabled = true;
 
-  globals_->system_network_context =
-      globals_->network_service->CreateNetworkContextWithBuilder(
-          std::move(network_context_request_),
-          std::move(network_context_params_), std::move(builder),
-          &globals_->system_request_context);
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    globals_->system_request_context_owner =
+        std::move(builder)->Create(std::move(network_context_params_).get(),
+                                   !is_quic_allowed_on_init_, net_log_);
+    globals_->system_request_context =
+        globals_->system_request_context_owner.url_request_context.get();
+  } else {
+    globals_->system_network_context =
+        content::GetNetworkServiceImpl()->CreateNetworkContextWithBuilder(
+            std::move(network_context_request_),
+            std::move(network_context_params_), std::move(builder),
+            &globals_->system_request_context);
+  }
 
 #if defined(USE_NSS_CERTS)
   net::SetURLRequestContextForNSSHttpIO(globals_->system_request_context);

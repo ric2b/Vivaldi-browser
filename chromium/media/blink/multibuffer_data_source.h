@@ -82,6 +82,10 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   // Returns true if the media resource passed a CORS access control check.
   bool DidPassCORSAccessCheck() const;
 
+  // Returns true if a service worker provided the media resource response,
+  // and the response was opaque.
+  bool DidGetOpaqueResponseViaServiceWorker() const;
+
   // Notifies changes in playback state for controlling media buffering
   // behavior.
   void MediaPlaybackRateChanged(double playback_rate);
@@ -114,6 +118,9 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   bool GetSize(int64_t* size_out) override;
   bool IsStreaming() override;
   void SetBitrate(int bitrate) override;
+  void SetIsClientAudioElement(bool is_client_audio_element) {
+    is_client_audio_element_ = is_client_audio_element;
+  }
 
   const std::string& mime_type() const { return mime_type_; }
 
@@ -249,6 +256,8 @@ class MEDIA_BLINK_EXPORT MultibufferDataSource : public DataSource {
   double playback_rate_;
 
   MediaLog* media_log_;
+
+  bool is_client_audio_element_ = false;
 
   int buffer_size_update_counter_;
 

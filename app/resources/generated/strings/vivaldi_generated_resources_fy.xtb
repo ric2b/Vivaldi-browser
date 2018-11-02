@@ -71,6 +71,7 @@
 <translation id="1850508293116537636">Rjochtsom &amp;draaie</translation>
 <translation id="1859234291848436338">Skriuw rjochting</translation>
 <translation id="1886996562706621347">Stean it websteeën ta om te freegjen om standert handlers foar protokollen te wurden (oanrekommandearre)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">&amp;Alles selektearje</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Alles wiskje</translation>
@@ -148,6 +149,7 @@
 <translation id="2890678560483811744">Side ferwizing falt bûten berik</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> koe net komunisearje mei dizze printer. Kontrolearje of de printer oansluten is en besykje nochris.</translation>
 <translation id="2904456025988372123">Freegje as in webstee besiket om triemmen automatysk yn te laden nei de earste triem</translation>
+<translation id="2911898792135283060">Wachtwurd oanmeitsje...</translation>
 <translation id="2913331724188855103">Stean websteeën it ta om koekje gegevens te bewarjen en te lêzen (rekommandearre)</translation>
 <translation id="2916745397441987255">Tafoegings trochsykje</translation>
 <translation id="2932883381142163287">Misbrûk rapportearje</translation>
@@ -416,7 +418,6 @@
 <translation id="6295158916970320988">Alle websteeën</translation>
 <translation id="6295855836753816081">Oan 't bewarjen...</translation>
 <translation id="6308937455967653460">Keppeling &amp;bewarje as...</translation>
-<translation id="6314335155547195432">Wachtwurd oanmeitsje</translation>
 <translation id="6326855256003666642">Tal keepalive-aktiviteiten</translation>
 <translation id="6370021412472292592">Koe manifest net lade.</translation>
 <translation id="6374469231428023295">Besykje nochris</translation>
@@ -500,7 +501,6 @@
 <translation id="7564847347806291057">Proses einje</translation>
 <translation id="7576690715254076113">Sortearje</translation>
 <translation id="7629827748548208700">Ljepper: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Ofbrekke</translation>
 <translation id="7661259717474717992">Stean websteeën it ta om koekje gegevens te bewarjen en te lêzen</translation>
 <translation id="7663719505383602579">Untfanger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ynstallearre troch jo administrator</translation>

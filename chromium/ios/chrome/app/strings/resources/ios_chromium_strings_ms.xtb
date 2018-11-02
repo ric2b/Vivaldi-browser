@@ -3,6 +3,7 @@
 <translationbundle lang="ms">
 <translation id="102360288709523007">Bantu jadikan Chromium lebih baik dengan menghantar laporan perangkaan penggunaan dan ranap sistem kepada Google.</translation>
 <translation id="1185134272377778587">Mengenai Chromium</translation>
+<translation id="1289966288285062467">Notis Privasi Chromium</translation>
 <translation id="1472013873724362412">Akaun anda tidak berfungsi pada Chromium. Sila hubungi pentadbir domain anda atau gunakan Akaun Google biasa untuk log masuk.</translation>
 <translation id="1736662517232558588">Data Chromium dikosongkan</translation>
 <translation id="1838412507805038478">Chromium mengesahkan bahawa <ph name="ISSUER" /> telah mengeluarkan sijil tapak web ini.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Log keluar daripada Chromium?</translation>
 <translation id="6424492062988593837">Chromium telah dipertingkatkan! Versi baharu kini boleh didapati.</translation>
 <translation id="6604711459180487467">Dapatkan pengalaman yang lebih baik di Chromium berdasarkan lokasi anda.</translation>
+<translation id="6626296268883197964">Apabila menggunakan aplikasi ini, anda bersetuju menerima <ph name="BEGIN_LINK_TOS" />Syarat Perkhidmatan<ph name="END_LINK_TOS" /> dan <ph name="BEGIN_LINK_PRIVACY" />Notis Privasi<ph name="END_LINK_PRIVACY" /> Chromium.</translation>
 <translation id="7099326575020694068">Chromium tidak dapat menggunakan kamera anda dalam mod Paparan Pisah</translation>
-<translation id="7144758435978427212">Temui halaman web yang dihantar oleh objek yang berdekatan. Apabila Bluetooth dihidupkan, Chromium boleh mengumpulkan halaman web yang berkaitan dengan objek di sekeliling anda dan menghantarnya secara awanama ke Google untuk mencari halaman web yang paling berguna. <ph name="BEGIN_LINK" />Ketahui lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium menjimatkan masa dengan membawa akaun anda ke web. Anda boleh menambahkan atau mengalih keluar akaun dalam Tetapan.</translation>
 <translation id="7269362888766543920">Beberapa alat tambah menyebabkan Chromium ranap. Sila cuba menyahpasang alat tambah tersebut.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Gunakan Chromium Di Mana-mana Sahaja</translation>
 <translation id="7674213385180944843">Buka Tetapan &gt; Privasi &gt; Kamera &gt; Chromium dan hidupkan kamera.</translation>
 <translation id="786327964234957808">Anda sedang menukar akaun penyegerakan daripada <ph name="USER_EMAIL1" /> kepada <ph name="USER_EMAIL2" />. Data Chromium sedia ada diurus oleh <ph name="DOMAIN" />. Tindakan ini akan memadamkan data anda daripada peranti ini, tetapi data itu akan kekal disimpan dalam <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Apabila menggunakan aplikasi ini, anda bersetuju menerima <ph name="BEGIN_LINK" />Syarat Perkhidmatan<ph name="END_LINK" /> Chromium.</translation>
 <translation id="8175055321229419309">Petua: <ph name="BEGIN_LINK" />Alihkan Chromium ke dok anda<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Dapatkan pengalaman yang lebih baik di Chromium berdasarkan lokasi anda.</translation>
 <translation id="8353224596138547809">Adakah anda mahu Chromium menyimpan kata laluan anda untuk tapak ini?</translation>

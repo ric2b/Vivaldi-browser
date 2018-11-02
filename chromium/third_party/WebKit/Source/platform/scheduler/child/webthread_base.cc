@@ -10,13 +10,13 @@
 #include <memory>
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/location.h"
 #include "base/message_loop/message_loop.h"
 #include "base/pending_task.h"
 #include "base/threading/platform_thread.h"
 #include "platform/scheduler/child/compositor_worker_scheduler.h"
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 #include "platform/scheduler/utility/webthread_impl_for_utility_thread.h"
-#include "public/platform/WebTraceLocation.h"
 #include "public/platform/scheduler/child/single_thread_idle_task_runner.h"
 
 namespace blink {
@@ -40,7 +40,7 @@ class WebThreadBase::TaskObserverAdapter
   WebThread::TaskObserver* observer_;
 };
 
-WebThreadBase::WebThreadBase() {}
+WebThreadBase::WebThreadBase() = default;
 
 WebThreadBase::~WebThreadBase() {
   for (auto& observer_entry : task_observer_map_) {
@@ -67,6 +67,12 @@ void WebThreadBase::RemoveTaskObserver(TaskObserver* observer) {
   task_observer_map_.erase(iter);
 }
 
+scoped_refptr<base::SingleThreadTaskRunner>
+WebThreadBase::GetSingleThreadTaskRunner() const {
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
 void WebThreadBase::AddTaskTimeObserver(TaskTimeObserver* task_time_observer) {
   AddTaskTimeObserverInternal(task_time_observer);
 }
@@ -87,21 +93,20 @@ void WebThreadBase::RemoveTaskObserverInternal(
 }
 
 // static
-void WebThreadBase::RunWebThreadIdleTask(
-    std::unique_ptr<blink::WebThread::IdleTask> idle_task,
-    base::TimeTicks deadline) {
-  idle_task->Run((deadline - base::TimeTicks()).InSecondsF());
+void WebThreadBase::RunWebThreadIdleTask(blink::WebThread::IdleTask idle_task,
+                                         base::TimeTicks deadline) {
+  std::move(idle_task).Run((deadline - base::TimeTicks()).InSecondsF());
 }
 
-void WebThreadBase::PostIdleTask(const blink::WebTraceLocation& location,
-                                 IdleTask* idle_task) {
+void WebThreadBase::PostIdleTask(const base::Location& location,
+                                 IdleTask idle_task) {
   GetIdleTaskRunner()->PostIdleTask(
-      location, base::Bind(&WebThreadBase::RunWebThreadIdleTask,
-                           base::Passed(base::WrapUnique(idle_task))));
+      location, base::BindOnce(&WebThreadBase::RunWebThreadIdleTask,
+                               std::move(idle_task)));
 }
 
 bool WebThreadBase::IsCurrentThread() const {
-  return GetTaskRunner()->BelongsToCurrentThread();
+  return GetSingleThreadTaskRunner()->BelongsToCurrentThread();
 }
 
 namespace {
@@ -112,7 +117,7 @@ class WebThreadForCompositor : public WebThreadImplForWorkerScheduler {
       : WebThreadImplForWorkerScheduler("Compositor", options) {
     Init();
   }
-  ~WebThreadForCompositor() override {}
+  ~WebThreadForCompositor() override = default;
 
  private:
   // WebThreadImplForWorkerScheduler:

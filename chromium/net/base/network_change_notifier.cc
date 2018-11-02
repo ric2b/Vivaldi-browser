@@ -21,7 +21,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/android/network_library.h"
 #endif
@@ -296,8 +296,7 @@ class NetworkChangeNotifier::HistogramWatcher : public ConnectionTypeObserver,
   // from the network thread.
   void NotifyDataReceived(const URLRequest& request, int bytes_read) {
     DCHECK(thread_checker_.CalledOnValidThread());
-    if (IsLocalhost(request.url().host()) ||
-        !request.url().SchemeIsHTTPOrHTTPS()) {
+    if (IsLocalhost(request.url()) || !request.url().SchemeIsHTTPOrHTTPS()) {
       return;
     }
 
@@ -497,6 +496,11 @@ NetworkChangeNotifier::~NetworkChangeNotifier() {
   network_change_calculator_.reset();
   DCHECK_EQ(this, g_network_change_notifier);
   g_network_change_notifier = NULL;
+}
+
+// static
+NetworkChangeNotifierFactory* NetworkChangeNotifier::GetFactory() {
+  return g_network_change_notifier_factory;
 }
 
 // static
@@ -760,7 +764,7 @@ void NetworkChangeNotifier::LogOperatorCodeHistogram(ConnectionType type) {
       mcc_mnc = 0;
     }
   }
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NCN.NetworkOperatorMCCMNC", mcc_mnc);
+  base::UmaHistogramSparse("NCN.NetworkOperatorMCCMNC", mcc_mnc);
 #endif
 }
 

@@ -45,6 +45,7 @@
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/platform_window_defaults.h"
 #include "ui/base/test/material_design_controller_test_api.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/display/display.h"
@@ -66,7 +67,8 @@ AshTestHelper::AshTestHelper(AshTestEnvironment* ash_test_environment)
     : ash_test_environment_(ash_test_environment),
       test_shell_delegate_(nullptr),
       dbus_thread_manager_initialized_(false),
-      bluez_dbus_manager_initialized_(false) {
+      bluez_dbus_manager_initialized_(false),
+      command_line_(std::make_unique<base::test::ScopedCommandLine>()) {
   ui::test::EnableTestConfigForPlatformWindows();
   aura::test::InitializeAuraEventGeneratorDelegate();
 }
@@ -74,7 +76,6 @@ AshTestHelper::AshTestHelper(AshTestEnvironment* ash_test_environment)
 AshTestHelper::~AshTestHelper() = default;
 
 void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
-  command_line_ = std::make_unique<base::test::ScopedCommandLine>();
   // TODO(jamescook): Can we do this without changing command line?
   // Use the origin (1,1) so that it doesn't over
   // lap with the native mouse cursor.
@@ -113,6 +114,17 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
   zero_duration_mode_.reset(new ui::ScopedAnimationDurationScaleMode(
       ui::ScopedAnimationDurationScaleMode::ZERO_DURATION));
   ui::InitializeInputMethodForTesting();
+
+  if (config_ == Config::MUS && !::switches::IsMusHostingViz()) {
+    ui::ContextFactory* context_factory = nullptr;
+    ui::ContextFactoryPrivate* context_factory_private = nullptr;
+    ui::InitializeContextFactoryForTests(false /* enable_pixel_output */,
+                                         &context_factory,
+                                         &context_factory_private);
+    auto* env = aura::Env::GetInstance();
+    env->set_context_factory(context_factory);
+    env->set_context_factory_private(context_factory_private);
+  }
 
   // Creates Shell and hook with Desktop.
   if (!test_shell_delegate_)
@@ -163,6 +175,12 @@ void AshTestHelper::SetUp(bool start_session, bool provide_local_state) {
       std::unique_ptr<aura::InputStateLookup>());
 
   Shell* shell = Shell::Get();
+
+  // Cursor is visible by default in tests.
+  // CursorManager is null on MASH.
+  if (shell->cursor_manager())
+    shell->cursor_manager()->ShowCursor();
+
   if (provide_local_state) {
     auto pref_service = std::make_unique<TestingPrefServiceSimple>();
     Shell::RegisterLocalStatePrefs(pref_service->registry());
@@ -220,8 +238,7 @@ void AshTestHelper::TearDown() {
     dbus_thread_manager_initialized_ = false;
   }
 
-  if (config_ == Config::CLASSIC)
-    ui::TerminateContextFactoryForTests();
+  ui::TerminateContextFactoryForTests();
 
   ui::ShutdownInputMethodForTesting();
   zero_duration_mode_.reset();
@@ -243,6 +260,16 @@ void AshTestHelper::TearDown() {
 void AshTestHelper::RunAllPendingInMessageLoop() {
   base::RunLoop run_loop;
   run_loop.RunUntilIdle();
+}
+
+void AshTestHelper::NotifyClientAboutAcceleratedWidgets() {
+  if (config_ == Config::CLASSIC)
+    return;
+  if (::switches::IsMusHostingViz())
+    return;
+  Shell* shell = Shell::Get();
+  window_tree_client_setup_.NotifyClientAboutAcceleratedWidgets(
+      shell->display_manager());
 }
 
 aura::Window* AshTestHelper::CurrentContext() {
@@ -286,6 +313,7 @@ void AshTestHelper::CreateMashWindowManager() {
   window_tree_client_private_ =
       std::make_unique<aura::WindowTreeClientPrivate>(window_tree_client);
   window_tree_client_private_->CallOnConnect();
+  NotifyClientAboutAcceleratedWidgets();
 }
 
 void AshTestHelper::CreateShell() {

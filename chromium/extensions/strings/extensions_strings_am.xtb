@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">ቅጥያ መበተን አይቻልም።  አንድ ቅጥያ ደህንነቱ በተጠበቀ መልኩ ለመበተን በአንጻፊ ፊደሉ የሚጀምርና መገጣጠሚያ፣ የማፈናጠጫ ነጥብ ወይም ተምሳሌታዊ መጠሪያ ያልያዘ ወደ የመገለጫ ማውጫዎ የሚወስድ ዱካ መኖር አለበት።  እንደዚህ ያሉ ዱካዎች ለመገለጫዎ የሉም።</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (ተከታታይ ቁጥር <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> ከ<ph name="VENDOR_ID" /> ሻጭ (ተከታታይ ቁጥር <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">የማስጀመሪያ ገጽ «<ph name="PAGE" />»ን መጫን አልተቻለም።</translation>
 <translation id="388442998277590542">የአማራጮች ገጽ «<ph name="OPTIONS_PAGE" />»ን መጫን አልተቻለም።</translation>
 <translation id="4115165561519362854">የዚህ ማሽን አስተዳዳሪ <ph name="EXTENSION_NAME" /> ቢያንስ የ<ph name="EXTENSION_VERSION" /> ስሪት እንዲሆን ይፈልጋሉል። ወደዚያ ስሪት (ወይም ከዚያ በላይ) ካልተዘመነ በስተቀር ሊነቃ አይችልም።</translation>
 <translation id="4233778200880751280">የስለ ገጹ «<ph name="ABOUT_PAGE" />» መጫን አልተቻለም።</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">ቅጥያ መበተን አልተቻለም።  አንድ ቅጥያ ደህንነቱ በተጠበቀ ሁኔታ ለመበተን ተምሳሌታዊ መጠሪያ ያልያዘ ወደ የመገለጫዎ አቃፊ የሚወስድ ዱካ መኖር አለበት።  ምንም እንደዚህ ያለ ወደ መገለጫዎ የሚወስድ ዱካ የለም።</translation>
 <translation id="641087317769093025">ቅጥያውን መበተን አልተቻለም</translation>
 <translation id="6542618148162044354">«<ph name="APP_NAME" />» የአንድ ወይም ተጨማሪ መሣሪያዎችዎ መዳረሻ እየጠየቁ ነው።</translation>
-<translation id="6566142449942033617">«<ph name="PLUGIN_PATH" />»ን ለተሰኪ መጫን አልተቻለም።</translation>
 <translation id="657064425229075395">የጀርባ ስክሪፕት «<ph name="BACKGROUND_SCRIPT" />» መጫን አልተቻለም።</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" /> ከ<ph name="VENDOR_NAME" /> (የመለያ ቁጥር <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">ይሄ የሚበተንበት አቃፊ መፍጠር አልተቻለም፦ «<ph name="DIRECTORY_PATH" />»</translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">ይህ ቅጥያ ብዙ ጊዜ እራሱን ዳግም ጭኗል።</translation>
 <translation id="7003844668372540529">ያልታወቀ ምርት <ph name="PRODUCT_ID" /> ከ<ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">የዚህ ማሽን አስተዳዳሪ <ph name="EXTENSION_NAME" /> እንዲጫን ይፈልጋል። ሊወገድ ወይም ሊቀየር አይችልም።</translation>
-<translation id="7581279002575751816">የNPAPI ተሰኪዎች አይደገፉም።</translation>
 <translation id="7972881773422714442">አማራጮች፦ <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">ተጠቃሚውን የሚመለከት</translation>
 <translation id="8047248493720652249">ይህ ቅጥያ የወረደውን «<ph name="ATTEMPTED_FILENAME" />» ብሎ መሰየም አልተሳካለትም፣ ምክንያቱም ሌላ ቅጥያ (<ph name="EXTENSION_NAME" />) ሌላ የፋይል ስም «<ph name="ACTUAL_FILENAME" />» ስለወሰነ ነው።</translation>

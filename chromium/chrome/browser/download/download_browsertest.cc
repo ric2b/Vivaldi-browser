@@ -106,7 +106,6 @@
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/slow_download_http_response.h"
 #include "content/public/test/test_download_http_response.h"
-#include "content/public/test/test_download_request_handler.h"
 #include "content/public/test/test_file_error_injector.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
@@ -142,6 +141,20 @@ using net::test_server::EmbeddedTestServer;
 namespace {
 
 const char kDownloadTest1Path[] = "download-test1.lib";
+
+class DownloadTestContentBrowserClient : public content::ContentBrowserClient {
+ public:
+  explicit DownloadTestContentBrowserClient(bool must_download)
+      : must_download_(must_download) {}
+
+  bool ShouldForceDownloadResource(const GURL& url,
+                                   const std::string& mime_type) override {
+    return must_download_;
+  }
+
+ private:
+  const bool must_download_;
+};
 
 class CreatedObserver : public content::DownloadManager::Observer {
  public:
@@ -181,11 +194,7 @@ class CreatedObserver : public content::DownloadManager::Observer {
 
 class PercentWaiter : public content::DownloadItem::Observer {
  public:
-  explicit PercentWaiter(DownloadItem* item)
-    : item_(item),
-      waiting_(false),
-      error_(false),
-      prev_percent_(0) {
+  explicit PercentWaiter(DownloadItem* item) : item_(item) {
     item_->AddObserver(this);
   }
   ~PercentWaiter() override {
@@ -225,9 +234,9 @@ class PercentWaiter : public content::DownloadItem::Observer {
   }
 
   content::DownloadItem* item_;
-  bool waiting_;
-  bool error_;
-  int prev_percent_;
+  bool waiting_ = false;
+  bool error_ = false;
+  int prev_percent_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(PercentWaiter);
 };
@@ -270,6 +279,9 @@ const char kGoodCrxPath[] = "extensions/good.crx";
 
 const char kLargeThemeCrxId[] = "pjpgmfcmabopnnfonnhmdjglfpjjfkbf";
 const char kLargeThemePath[] = "extensions/theme2.crx";
+
+// User script file used in tests.
+const char kUserScriptPath[] = "extensions/user_script_basic.user.js";
 
 // Get History Information.
 class DownloadsHistoryDataCollector {
@@ -353,13 +365,9 @@ bool DownloadTestObserverNotInProgress::IsDownloadInFinalState(
 
 class HistoryObserver : public DownloadHistory::Observer {
  public:
-  typedef base::Callback<bool(const history::DownloadRow&)> FilterCallback;
+  using FilterCallback = base::Callback<bool(const history::DownloadRow&)>;
 
-  explicit HistoryObserver(Profile* profile)
-      : profile_(profile),
-        waiting_(false),
-        seen_stored_(false),
-        minimum_received_bytes_(kNoMinimumReceivedBytes) {
+  explicit HistoryObserver(Profile* profile) : profile_(profile) {
     DownloadCoreServiceFactory::GetForBrowserContext(profile_)
         ->GetDownloadHistory()
         ->AddObserver(this);
@@ -372,10 +380,6 @@ class HistoryObserver : public DownloadHistory::Observer {
       service->GetDownloadHistory()->RemoveObserver(this);
   }
 
-  void set_minimum_received_bytes(int64_t minimum_received_bytes) {
-    minimum_received_bytes_ = minimum_received_bytes;
-  }
-
   void SetFilterCallback(const FilterCallback& callback) {
     callback_ = callback;
   }
@@ -384,11 +388,6 @@ class HistoryObserver : public DownloadHistory::Observer {
                         const history::DownloadRow& info) override {
     if (!callback_.is_null() && (!callback_.Run(info)))
         return;
-
-    if (minimum_received_bytes_ != kNoMinimumReceivedBytes &&
-        info.received_bytes < minimum_received_bytes_) {
-      return;
-    }
 
     seen_stored_ = true;
     if (waiting_)
@@ -410,11 +409,9 @@ class HistoryObserver : public DownloadHistory::Observer {
   }
 
  private:
-  static const int64_t kNoMinimumReceivedBytes = -1;
   Profile* profile_;
-  bool waiting_;
-  bool seen_stored_;
-  int64_t minimum_received_bytes_;
+  bool waiting_ = false;
+  bool seen_stored_ = false;
   FilterCallback callback_;
 
   DISALLOW_COPY_AND_ASSIGN(HistoryObserver);
@@ -1857,7 +1854,13 @@ ServerRedirectRequestHandler(const net::test_server::HttpRequest& request) {
   return std::move(response);
 }
 
-IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadHistoryCheck) {
+#if defined(OS_WIN)
+// https://crbug.com/788160
+#define MAYBE_DownloadHistoryCheck DISABLED_DownloadHistoryCheck
+#else
+#define MAYBE_DownloadHistoryCheck DownloadHistoryCheck
+#endif
+IN_PROC_BROWSER_TEST_F(DownloadTest, MAYBE_DownloadHistoryCheck) {
   // Rediret to the actual download URL.
   embedded_test_server()->RegisterRequestHandler(
       base::Bind(&ServerRedirectRequestHandler));
@@ -1892,8 +1895,6 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadHistoryCheck) {
   base::Time start(base::Time::Now());
   HistoryObserver observer(browser()->profile());
   observer.SetFilterCallback(base::Bind(&HasDataAndName));
-  observer.set_minimum_received_bytes(
-      content::SlowDownloadHttpResponse::kFirstDownloadSize);
   ui_test_utils::NavigateToURL(browser(), redirect_url);
   observer.WaitForStored();
 
@@ -2114,6 +2115,27 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, AnchorDownloadTag) {
   downloaded_file = downloaded_file.Append(FILE_PATH_LITERAL("a_red_dot.png"));
   base::ScopedAllowBlockingForTesting allow_blocking;
   EXPECT_TRUE(base::PathExists(downloaded_file));
+}
+
+// Test that navigating to a user script URL will result in a download.
+IN_PROC_BROWSER_TEST_F(DownloadTest, UserScriptDownload) {
+  DownloadTestContentBrowserClient new_client(true);
+  content::ContentBrowserClient* old_client =
+      SetBrowserClientForTesting(&new_client);
+  embedded_test_server()->ServeFilesFromDirectory(GetTestDataDirectory());
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL url = embedded_test_server()->GetURL("/" + std::string(kUserScriptPath));
+
+  // Navigate to the user script URL and wait for the download to complete.
+  std::unique_ptr<content::DownloadTestObserver> observer(
+      DangerousDownloadWaiter(
+          browser(), 1,
+          content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT));
+  ui_test_utils::NavigateToURL(browser(), url);
+  observer->WaitForFinished();
+  EXPECT_EQ(1u, observer->NumDownloadsSeenInState(DownloadItem::COMPLETE));
+  CheckDownloadStates(1, DownloadItem::COMPLETE);
+  SetBrowserClientForTesting(old_client);
 }
 
 // Test to make sure auto-open works.
@@ -2610,19 +2632,19 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadErrorsServer) {
        // should appear on the shelf and the error should be indicated.
        "download-anchor-attrib-name-not-resolved.html",
        "http://doesnotexist/shouldnotberesolved", DOWNLOAD_NAVIGATE,
-       content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, true, false},
+       content::DOWNLOAD_INTERRUPT_REASON_NETWORK_FAILED, false, false},
       {// Simulates clicking on <a href="http://..." download=""> where the URL
        // leads to a 404 response. This is different from the previous test case
        // in that the ResourceLoader issues a OnResponseStarted() callback since
        // the headers are successfully received.
        "download-anchor-attrib-404.html", "there_IS_no_spoon.zip",
        DOWNLOAD_NAVIGATE, content::DOWNLOAD_INTERRUPT_REASON_SERVER_BAD_CONTENT,
-       true, false},
+       false, false},
       {// Similar to the above, but the resulting response contains a status
        // code of 400.
        "download-anchor-attrib-400.html", "zip_file_not_found.zip",
        DOWNLOAD_NAVIGATE, content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED,
-       true, false},
+       false, false},
       {// Direct download of a URL where the hostname doesn't resolve.
        "http://doesnotexist/shouldnotdownloadsuccessfully",
        "http://doesnotexist/shouldnotdownloadsuccessfully", DOWNLOAD_DIRECT,

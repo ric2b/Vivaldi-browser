@@ -69,8 +69,8 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
 
 #if defined(OS_MACOSX)
   if (base::mac::IsAtLeastOS10_10()) {
-    EXPECT_EQ("e7832270a91e8de7945b5724eec2cbcb", GetVideoHash());
-    EXPECT_EQ("-1.29,-0.84,-0.56,1.16,0.82,0.32,", GetAudioHash());
+    EXPECT_EQ("bd1d880e4934bf76c0bb34450cd0f173", GetVideoHash());
+    EXPECT_EQ("-0.51,0.54,1.03,0.85,-0.08,-0.22,", GetAudioHash());
   } else {
     // On OS X 10.9, the expected hashes can be different, because our solution
     // doesn't necessarily process frames one by one, see AVFMediaDecoder.
@@ -78,7 +78,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback) {
   }
 #elif defined(OS_WIN)
   EXPECT_EQ("eb228dfe6882747111161156164dcab0", GetVideoHash());
-  EXPECT_EQ("-1.83,-1.16,-0.44,0.88,0.92,0.62,", GetAudioHash());
+  EXPECT_EQ("-0.52,0.26,0.16,0.24,-0.00,0.26,", GetAudioHash());
 #endif
   EXPECT_TRUE(demuxer_->GetTimelineOffset().is_null());
 }
@@ -129,6 +129,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_VideoOnly) {
 #endif
 }
 
+#if defined(PLATFORM_MEDIA_MP3)
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MP3) {
   if (!IsEnabled())
     return;
@@ -156,9 +157,10 @@ TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_MP3) {
     EXPECT_EQ("2.08,3.25,3.79,3.28,2.11,1.14,", GetAudioHash());
   }
 #elif defined(OS_WIN)
-  EXPECT_EQ("0.35,1.24,2.97,4.28,4.18,2.75,", GetAudioHash());
+  EXPECT_EQ("1.30,2.72,4.56,5.08,3.74,2.03,", GetAudioHash());
 #endif
 }
+#endif
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlayback_M4A) {
   if (!IsEnabled())

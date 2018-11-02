@@ -25,8 +25,7 @@ TEST_F(StructTraitsTest, RendererSettings) {
   ResourceSettings arbitrary_resource_settings;
   arbitrary_resource_settings.texture_id_allocation_chunk_size = kArbitrarySize;
   arbitrary_resource_settings.use_gpu_memory_buffer_resources = kArbitraryBool;
-  arbitrary_resource_settings.buffer_to_texture_target_map =
-      DefaultBufferToTextureTargetMapForTesting();
+
   RendererSettings input;
 
   // Set |input| to non-default values.
@@ -38,10 +37,9 @@ TEST_F(StructTraitsTest, RendererSettings) {
   input.finish_rendering_on_resize = true;
   input.should_clear_root_render_pass = false;
   input.release_overlay_resources_after_gpu_query = true;
-  input.gl_composited_overlay_candidate_quad_border = true;
   input.show_overdraw_feedback = true;
+  input.enable_draw_occlusion = true;
   input.highp_threshold_min = -1;
-  input.disallow_non_exact_resource_reuse = true;
   input.use_skia_renderer = true;
 
   RendererSettings output;
@@ -51,8 +49,6 @@ TEST_F(StructTraitsTest, RendererSettings) {
             output.resource_settings.texture_id_allocation_chunk_size);
   EXPECT_EQ(input.resource_settings.use_gpu_memory_buffer_resources,
             output.resource_settings.use_gpu_memory_buffer_resources);
-  EXPECT_EQ(input.resource_settings.buffer_to_texture_target_map,
-            output.resource_settings.buffer_to_texture_target_map);
   EXPECT_EQ(input.allow_antialiasing, output.allow_antialiasing);
   EXPECT_EQ(input.force_antialiasing, output.force_antialiasing);
   EXPECT_EQ(input.force_blending_with_shaders,
@@ -64,12 +60,11 @@ TEST_F(StructTraitsTest, RendererSettings) {
             output.should_clear_root_render_pass);
   EXPECT_EQ(input.release_overlay_resources_after_gpu_query,
             output.release_overlay_resources_after_gpu_query);
-  EXPECT_EQ(input.gl_composited_overlay_candidate_quad_border,
-            output.gl_composited_overlay_candidate_quad_border);
+  EXPECT_EQ(input.tint_gl_composited_content,
+            output.tint_gl_composited_content);
   EXPECT_EQ(input.show_overdraw_feedback, output.show_overdraw_feedback);
+  EXPECT_EQ(input.enable_draw_occlusion, output.enable_draw_occlusion);
   EXPECT_EQ(input.highp_threshold_min, output.highp_threshold_min);
-  EXPECT_EQ(input.disallow_non_exact_resource_reuse,
-            output.disallow_non_exact_resource_reuse);
   EXPECT_EQ(input.use_skia_renderer, output.use_skia_renderer);
 }
 

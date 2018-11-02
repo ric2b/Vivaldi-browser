@@ -5,13 +5,20 @@
 module viz.mojom;
 
 import "mojo/common/time.mojom";
+import "ui/gfx/mojo/ca_layer_params.mojom";
 import "ui/gfx/mojo/color_space.mojom";
+import "ui/gfx/mojo/transform.mojom";
 
 // See ui/compositor/compositor.h: ContextFactoryPrivate.
 // The DisplayPrivate is used by privileged clients to talk to Display.
 // DisplayPrivate would eventually replace or be used by ContextFactoryPrivate.
 interface DisplayPrivate {
   SetDisplayVisible(bool visible);
+
+  // Sets the matrix that will be used to transform the output color of the
+  // display. This only works in GPU compositing.
+  SetDisplayColorMatrix(gfx.mojom.Transform color_matrix);
+
   SetDisplayColorSpace(gfx.mojom.ColorSpace blending_color_space,
                        gfx.mojom.ColorSpace device_color_space);
   SetOutputIsSecure(bool secure);
@@ -20,4 +27,8 @@ interface DisplayPrivate {
   // ignores vsync interval information from other sources. This will do nothing
   // if the display is using an external BeginFrame source.
   SetAuthoritativeVSyncInterval(mojo.common.mojom.TimeDelta interval);
+};
+
+interface DisplayClient {
+  OnDisplayReceivedCALayerParams(gfx.mojom.CALayerParams ca_layer_params);
 };

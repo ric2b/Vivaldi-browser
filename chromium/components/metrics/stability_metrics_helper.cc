@@ -9,8 +9,8 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/metrics/user_metrics.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -174,8 +174,10 @@ void StabilityMetricsHelper::BrowserChildProcessCrashed() {
   IncrementPrefValue(prefs::kStabilityChildProcessCrashCount);
 }
 
-void StabilityMetricsHelper::LogLoadStarted() {
+void StabilityMetricsHelper::LogLoadStarted(bool is_incognito) {
   base::RecordAction(base::UserMetricsAction("PageLoad"));
+  if (is_incognito)
+    base::RecordAction(base::UserMetricsAction("PageLoadInIncognito"));
   IncrementPrefValue(prefs::kStabilityPageLoadCount);
   IncrementLongPrefsValue(prefs::kUninstallMetricsPageLoadCount);
   // We need to save the prefs, as page load count is a critical stat, and it
@@ -200,13 +202,13 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
 #endif
         IncrementPrefValue(prefs::kStabilityExtensionRendererCrashCount);
 
-        UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Extension",
-                                    MapCrashExitCodeForHistogram(exit_code));
+        base::UmaHistogramSparse("CrashExitCodes.Extension",
+                                 MapCrashExitCodeForHistogram(exit_code));
       } else {
         IncrementPrefValue(prefs::kStabilityRendererCrashCount);
 
-        UMA_HISTOGRAM_SPARSE_SLOWLY("CrashExitCodes.Renderer",
-                                    MapCrashExitCodeForHistogram(exit_code));
+        base::UmaHistogramSparse("CrashExitCodes.Renderer",
+                                 MapCrashExitCodeForHistogram(exit_code));
       }
 
       UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildCrashes",
@@ -237,7 +239,7 @@ void StabilityMetricsHelper::LogRendererCrash(bool was_extension_process,
     case base::TERMINATION_STATUS_LAUNCH_FAILED:
       UMA_HISTOGRAM_ENUMERATION("BrowserRenderProcessHost.ChildLaunchFailures",
                                 histogram_type, RENDERER_TYPE_COUNT);
-      UMA_HISTOGRAM_SPARSE_SLOWLY(
+      base::UmaHistogramSparse(
           "BrowserRenderProcessHost.ChildLaunchFailureCodes", exit_code);
       if (was_extension_process)
         IncrementPrefValue(prefs::kStabilityExtensionRendererFailedLaunchCount);

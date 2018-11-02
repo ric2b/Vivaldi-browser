@@ -19,7 +19,7 @@
 #include "chrome/install_static/install_util.h"
 #include "components/nacl/common/nacl_switches.h"
 
-#include "browser/win/vivaldi_standalone.h"
+#include "browser/win/vivaldi_utils.h"
 
 namespace chrome {
 

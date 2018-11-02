@@ -8,12 +8,14 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/interfaces/night_light_controller.mojom.h"
 #include "ash/session/session_observer.h"
 #include "ash/system/night_light/time_of_day.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
+#include "chromeos/dbus/power_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
@@ -22,10 +24,15 @@ class PrefService;
 
 namespace ash {
 
+class ColorTemperatureAnimation;
+
 // Controls the NightLight feature that adjusts the color temperature of the
 // screen.
-class ASH_EXPORT NightLightController : public mojom::NightLightController,
-                                        public SessionObserver {
+class ASH_EXPORT NightLightController
+    : public mojom::NightLightController,
+      public WindowTreeHostManager::Observer,
+      public SessionObserver,
+      public chromeos::PowerManagerClient::Observer {
  public:
   using ScheduleType = mojom::NightLightController::ScheduleType;
 
@@ -74,6 +81,14 @@ class ASH_EXPORT NightLightController : public mojom::NightLightController,
 
   static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
+  // Convenience functions for converting between the color temperature value,
+  // and the blue and green color scales. Note that the red color scale remains
+  // unaffected (i.e. its scale remains 1.0f);
+  static float BlueColorScaleFromTemperature(float temperature);
+  static float GreenColorScaleFromTemperature(float temperature);
+  static float TemperatureFromBlueColorScale(float blue_scale);
+  static float TemperatureFromGreenColorScale(float green_scale);
+
   AnimationDuration animation_duration() const { return animation_duration_; }
   AnimationDuration last_animation_duration() const {
     return last_animation_duration_;
@@ -103,12 +118,18 @@ class ASH_EXPORT NightLightController : public mojom::NightLightController,
   // AnimationDurationType::kShort.
   void Toggle();
 
+  // ash::WindowTreeHostManager::Observer:
+  void OnDisplayConfigurationChanged() override;
+
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* pref_service) override;
 
   // ash::mojom::NightLightController:
   void SetCurrentGeoposition(mojom::SimpleGeopositionPtr position) override;
   void SetClient(mojom::NightLightClientPtr client) override;
+
+  // chromeos::PowerManagerClient::Observer:
+  void SuspendDone(const base::TimeDelta& sleep_duration) override;
 
   void SetDelegateForTesting(std::unique_ptr<Delegate> delegate);
 
@@ -167,6 +188,8 @@ class ASH_EXPORT NightLightController : public mojom::NightLightController,
   AnimationDuration animation_duration_ = AnimationDuration::kShort;
   // The animation duration of the change that was just performed.
   AnimationDuration last_animation_duration_ = AnimationDuration::kShort;
+
+  std::unique_ptr<ColorTemperatureAnimation> temperature_animation_;
 
   // The timer that schedules the start and end of NightLight when the schedule
   // type is either kSunsetToSunrise or kCustom.

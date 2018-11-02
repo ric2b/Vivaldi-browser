@@ -13,6 +13,7 @@
 #include "bindings/modules/v8/V8DOMFileSystem.h"
 #include "bindings/modules/v8/V8RTCCertificate.h"
 #include "bindings/modules/v8/serialization/V8ScriptValueDeserializerForModules.h"
+#include "build/build_config.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/crypto/CryptoResultImpl.h"
 #include "modules/filesystem/DOMFileSystem.h"
@@ -21,6 +22,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCryptoAlgorithmParams.h"
 #include "public/platform/WebRTCCertificateGenerator.h"
+#include "public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -144,11 +146,15 @@ static const uint8_t kEcdsaCertificateEncoded[] = {
     0x2d, 0x0a};
 
 TEST(V8ScriptValueSerializerForModulesTest, RoundTripRTCCertificate) {
+  // If WebRTC is not supported in this build, this test is meaningless.
+  std::unique_ptr<WebRTCCertificateGenerator> certificate_generator(
+      Platform::Current()->CreateRTCCertificateGenerator());
+  if (!certificate_generator)
+    return;
+
   V8TestingScope scope;
 
   // Make a certificate with the existing key above.
-  std::unique_ptr<WebRTCCertificateGenerator> certificate_generator(
-      Platform::Current()->CreateRTCCertificateGenerator());
   std::unique_ptr<WebRTCCertificate> web_certificate =
       certificate_generator->FromPEM(
           WebString::FromUTF8(kEcdsaPrivateKey, sizeof(kEcdsaPrivateKey)),
@@ -169,6 +175,12 @@ TEST(V8ScriptValueSerializerForModulesTest, RoundTripRTCCertificate) {
 }
 
 TEST(V8ScriptValueSerializerForModulesTest, DecodeRTCCertificate) {
+  // If WebRTC is not supported in this build, this test is meaningless.
+  std::unique_ptr<WebRTCCertificateGenerator> certificate_generator(
+      Platform::Current()->CreateRTCCertificateGenerator());
+  if (!certificate_generator)
+    return;
+
   V8TestingScope scope;
 
   // This is encoded data generated from Chromium (around M55).
@@ -253,7 +265,7 @@ template <typename T>
 class WebCryptoResultAdapter : public ScriptFunction {
  private:
   WebCryptoResultAdapter(ScriptState* script_state,
-                         WTF::RepeatingFunction<void(T)> function)
+                         base::RepeatingCallback<void(T)> function)
       : ScriptFunction(script_state), function_(std::move(function)) {}
 
   ScriptValue Call(ScriptValue value) final {
@@ -261,21 +273,21 @@ class WebCryptoResultAdapter : public ScriptFunction {
     return ScriptValue::From(GetScriptState(), ToV8UndefinedGenerator());
   }
 
-  WTF::RepeatingFunction<void(T)> function_;
+  base::RepeatingCallback<void(T)> function_;
   template <typename U>
   friend WebCryptoResult ToWebCryptoResult(ScriptState*,
-                                           WTF::Function<void(U)>);
+                                           base::RepeatingCallback<void(U)>);
 };
 
 template <typename T>
 WebCryptoResult ToWebCryptoResult(ScriptState* script_state,
-                                  WTF::Function<void(T)> function) {
+                                  base::RepeatingCallback<void(T)> function) {
   CryptoResultImpl* result = CryptoResultImpl::Create(script_state);
   result->Promise().Then(
       (new WebCryptoResultAdapter<T>(script_state, std::move(function)))
           ->BindToV8Function(),
       (new WebCryptoResultAdapter<DOMException*>(
-           script_state, WTF::Bind([](DOMException* exception) {
+           script_state, WTF::BindRepeating([](DOMException* exception) {
              CHECK(false) << "crypto operation failed";
            })))
           ->BindToV8Function());
@@ -287,12 +299,13 @@ T SubtleCryptoSync(ScriptState* script_state, PMF func, Args&&... args) {
   T result;
   (Platform::Current()->Crypto()->*func)(
       std::forward<Args>(args)...,
-      ToWebCryptoResult(script_state, WTF::Bind(
+      ToWebCryptoResult(script_state, WTF::BindRepeating(
                                           [](T* out, T result) {
                                             *out = result;
                                             testing::ExitRunLoop();
                                           },
-                                          WTF::Unretained(&result))));
+                                          WTF::Unretained(&result))),
+      scheduler::GetSingleThreadTaskRunnerForTesting());
   testing::EnterRunLoop();
   return result;
 }

@@ -14,9 +14,11 @@ namespace gfx {
 class ImageSkia;
 }  // namespace gfx
 
-namespace net {
-class URLRequestContextGetter;
-}  // namespace net
+namespace network {
+namespace mojom {
+class URLLoaderFactory;
+}
+}  // namespace network
 
 class AccountAvatarFetcherDelegate {
  public:
@@ -25,7 +27,7 @@ class AccountAvatarFetcherDelegate {
 
 // Helper class to download an avatar. It deletes itself once the request is
 // done.
-class AccountAvatarFetcher : public chrome::BitmapFetcherDelegate {
+class AccountAvatarFetcher : public BitmapFetcherDelegate {
  public:
   AccountAvatarFetcher(
       const GURL& url,
@@ -33,13 +35,13 @@ class AccountAvatarFetcher : public chrome::BitmapFetcherDelegate {
 
   ~AccountAvatarFetcher() override;
 
-  void Start(net::URLRequestContextGetter* request_context);
+  void Start(network::mojom::URLLoaderFactory* loader_factory);
 
  private:
-  // chrome::BitmapFetcherDelegate:
+  // BitmapFetcherDelegate:
   void OnFetchComplete(const GURL& url, const SkBitmap* bitmap) override;
 
-  chrome::BitmapFetcher fetcher_;
+  BitmapFetcher fetcher_;
   base::WeakPtr<AccountAvatarFetcherDelegate> delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(AccountAvatarFetcher);

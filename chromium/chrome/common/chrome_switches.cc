@@ -42,10 +42,6 @@ const char kAllowRunningInsecureContent[]   = "allow-running-insecure-content";
 // Allows Web Push notifications that do not show a notification.
 const char kAllowSilentPush[] = "allow-silent-push";
 
-// Prevents Chrome from requiring authorization to run certain widely installed
-// but less commonly used plugins.
-const char kAlwaysAuthorizePlugins[]        = "always-authorize-plugins";
-
 // Specifies that the associated value should be launched in "application"
 // mode.
 const char kApp[]                           = "app";
@@ -347,9 +343,6 @@ const char kEnableOfflineAutoReloadVisibleOnly[] =
 const char kEnablePermissionActionReporting[] =
     "enable-permission-action-reporting";
 
-// Enables the picture in picture feature for videos.
-const char kEnablePictureInPicture[] = "enable-picture-in-picture";
-
 // Enables a number of potentially annoying security features (strict mixed
 // content mode, powerful feature restrictions, etc.)
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
@@ -371,10 +364,6 @@ const char kEnableSiteSettings[] = "enable-site-settings";
 
 // Enables user control over muting tab audio from the tab strip.
 const char kEnableTabAudioMuting[]  = "enable-tab-audio-muting";
-
-// If the WebRTC logging private API is active, enables WebRTC event logging.
-const char kEnableWebRtcEventLoggingFromExtension[] =
-    "enable-webrtc-event-logging-from-extension";
 
 // Name of the command line flag to force content verification to be on in one
 // of various modes.
@@ -479,11 +468,18 @@ const char kMediaCacheSize[]                = "media-cache-size";
 
 // Enables the out-of-process memory logging.
 const char kMemlog[] = "memlog";
+const char kMemlogKeepSmallAllocations[] = "memlog-keep-small-allocations";
 const char kMemlogModeAll[] = "all";
+const char kMemlogModeAllRenderers[] = "all-renderers";
 const char kMemlogModeBrowser[] = "browser";
 const char kMemlogModeGpu[] = "gpu";
+const char kMemlogModeManual[] = "manual";
 const char kMemlogModeMinimal[] = "minimal";
 const char kMemlogModeRendererSampling[] = "renderer-sampling";
+const char kMemlogStackMode[] = "memlog-stack-mode";
+const char kMemlogStackModeMixed[] = "mixed";
+const char kMemlogStackModeNative[] = "native";
+const char kMemlogStackModePseudo[] = "pseudo";
 
 // Allows setting a different destination ID for connection-monitoring GCM
 // messages. Useful when running against a non-prod management server.
@@ -795,12 +791,6 @@ const char kMarketUrlForTesting[] = "market-url-for-testing";
 // Specifies Android phone page loading progress bar animation.
 const char kProgressBarAnimation[]          = "progress-bar-animation";
 
-// Specifies a particular tab management experiment to enable.
-const char kTabManagementExperimentTypeDisabled[] =
-    "tab-management-experiment-type-disabled";
-const char kTabManagementExperimentTypeElderberry[] =
-    "tab-management-experiment-type-elderberry";
-
 // Custom WebAPK server URL for the sake of testing.
 const char kWebApkServerUrl[] = "webapk-server-url";
 #endif  // defined(OS_ANDROID)
@@ -815,6 +805,14 @@ const char kDisableLoggingRedirect[] = "disable-logging-redirect";
 // Disables apps on the login screen. By default, they are allowed and can be
 // installed through policy.
 const char kDisableLoginScreenApps[] = "disable-login-screen-apps";
+
+// Enables out-of-process ash and mus (ui service). See //ash/README.md
+const char kMash[] = "mash";
+
+// Provides the name of the mojo service running in a mash utility process.
+// NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
+// change or remove the flag please update platform2/crash_reporter.
+const char kMashServiceName[] = "mash-service-name";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
@@ -851,10 +849,6 @@ const char kDisableAppInfoDialogMac[] = "disable-app-info-dialog-mac";
 
 // Disables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kDisableAppWindowCycling[] = "disable-app-window-cycling";
-
-// Disables fullscreen low power mode on Mac.
-const char kDisableFullscreenLowPowerMode[] =
-    "disable-fullscreen-low-power-mode";
 
 // Disables tab detaching in fullscreen mode on Mac.
 const char kDisableFullscreenTabDetaching[] =
@@ -963,16 +957,6 @@ const char kWatcherProcess[]                = "watcher";
 // a garish #FFFFFF like it is by default on Windows 10.
 const char kWindows10CustomTitlebar[]       = "windows10-custom-titlebar";
 #endif  // defined(OS_WIN)
-
-#if BUILDFLAG(ENABLE_MUS)
-// Enables Mus+ash (out-of-process ash and mus). See //ash/README.md
-const char kMash[]                          = "mash";
-
-// Provides the name of the mojo service running in a mash utility process.
-// NOTE: Used by the Chrome OS crash_reporter to identify mash processes. If you
-// change or remove the flag please update platform2/crash_reporter.
-const char kMashServiceName[] = "mash-service-name";
-#endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 // Enables support to debug printing subsystem.

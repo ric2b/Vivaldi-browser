@@ -49,7 +49,7 @@ bool GetInstallPathUsingInstallLocation(const base::win::RegKey& candidate,
 // Returns true if the |component_path| points to a registry key. Registry key
 // paths are characterized by a number instead of a drive letter.
 // See the documentation for ::MsiGetComponentPath():
-// https://msdn.microsoft.com/en-us/library/windows/desktop/aa370112(v=vs.85).aspx
+// https://msdn.microsoft.com/library/windows/desktop/aa370112.aspx
 bool IsRegistryComponentPath(const base::string16& component_path) {
   base::string16 drive_letter =
       component_path.substr(0, component_path.find(':'));
@@ -88,20 +88,18 @@ bool GetInstalledFilesUsingMsiGuid(
 }
 
 // Checks if the registry key references an installed program in the Apps &
-// Features settings page. Also keeps tracks of the memory used by all the
-// strings that are added to |programs_data| and adds it to |size_in_bytes|.
+// Features settings page.
 void CheckRegistryKeyForInstalledProgram(
     HKEY hkey,
     const base::string16& key_path,
+    REGSAM wow64access,
     const base::string16& key_name,
     const MsiUtil& msi_util,
-    InstalledPrograms::ProgramsData* programs_data,
-    int* size_in_bytes) {
-  base::win::RegKey candidate(
-      hkey,
-      base::StringPrintf(L"%ls\\%ls", key_path.c_str(), key_name.c_str())
-          .c_str(),
-      KEY_READ);
+    InstalledPrograms::ProgramsData* programs_data) {
+  base::string16 candidate_key_path =
+      base::StringPrintf(L"%ls\\%ls", key_path.c_str(), key_name.c_str());
+  base::win::RegKey candidate(hkey, candidate_key_path.c_str(),
+                              KEY_QUERY_VALUE | wow64access);
 
   if (!candidate.Valid())
     return;
@@ -131,30 +129,26 @@ void CheckRegistryKeyForInstalledProgram(
 
   base::FilePath install_path;
   if (GetInstallPathUsingInstallLocation(candidate, &install_path)) {
-    *size_in_bytes +=
-        display_name.length() * sizeof(base::string16::value_type);
-    programs_data->program_names.push_back(std::move(display_name));
+    programs_data->programs.emplace_back(std::move(display_name), hkey,
+                                         std::move(candidate_key_path),
+                                         wow64access);
 
-    *size_in_bytes +=
-        install_path.value().length() * sizeof(base::FilePath::CharType);
-    const size_t program_name_index = programs_data->program_names.size() - 1;
+    const size_t program_index = programs_data->programs.size() - 1;
     programs_data->install_directories.emplace_back(std::move(install_path),
-                                                    program_name_index);
+                                                    program_index);
     return;
   }
 
   std::vector<base::FilePath> installed_files;
   if (GetInstalledFilesUsingMsiGuid(key_name, msi_util, &installed_files)) {
-    *size_in_bytes +=
-        display_name.length() * sizeof(base::string16::value_type);
-    programs_data->program_names.push_back(std::move(display_name));
+    programs_data->programs.emplace_back(std::move(display_name), hkey,
+                                         std::move(candidate_key_path),
+                                         wow64access);
 
-    const size_t program_name_index = programs_data->program_names.size() - 1;
+    const size_t program_index = programs_data->programs.size() - 1;
     for (auto& installed_file : installed_files) {
-      *size_in_bytes +=
-          installed_file.value().length() * sizeof(base::FilePath::CharType);
       programs_data->installed_files.emplace_back(std::move(installed_file),
-                                                  program_name_index);
+                                                  program_index);
     }
   }
 }
@@ -177,20 +171,24 @@ std::unique_ptr<InstalledPrograms::ProgramsData> GetProgramsData(
   auto programs_data = base::MakeUnique<InstalledPrograms::ProgramsData>();
 
   // Iterate over all the variants of the uninstall registry key.
-  const wchar_t* kUninstallKeyPaths[] = {
-      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-      L"SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall",
-  };
+  const wchar_t kUninstallKeyPath[] =
+      L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall";
 
-  int size_in_bytes = 0;
-  for (const wchar_t* uninstall_key_path : kUninstallKeyPaths) {
-    for (HKEY hkey : {HKEY_LOCAL_MACHINE, HKEY_CURRENT_USER}) {
-      for (base::win::RegistryKeyIterator i(hkey, uninstall_key_path);
-           i.Valid(); ++i) {
-        CheckRegistryKeyForInstalledProgram(hkey, uninstall_key_path, i.Name(),
-                                            *msi_util, programs_data.get(),
-                                            &size_in_bytes);
-      }
+  // The "HKCU\SOFTWARE\" registry subtree is shared between both 32-bits and
+  // 64-bits views. Accessing both would create duplicate entries.
+  // https://msdn.microsoft.com/library/windows/desktop/aa384253.aspx
+  static const std::pair<HKEY, REGSAM> kCombinations[] = {
+      {HKEY_CURRENT_USER, 0},
+      {HKEY_LOCAL_MACHINE, KEY_WOW64_32KEY},
+      {HKEY_LOCAL_MACHINE, KEY_WOW64_64KEY},
+  };
+  for (const auto& combination : kCombinations) {
+    for (base::win::RegistryKeyIterator i(combination.first, kUninstallKeyPath,
+                                          combination.second);
+         i.Valid(); ++i) {
+      CheckRegistryKeyForInstalledProgram(combination.first, kUninstallKeyPath,
+                                          combination.second, i.Name(),
+                                          *msi_util, programs_data.get());
     }
   }
 
@@ -199,24 +197,21 @@ std::unique_ptr<InstalledPrograms::ProgramsData> GetProgramsData(
   SortByFilePaths(&programs_data->installed_files);
   SortByFilePaths(&programs_data->install_directories);
 
-  // Calculate the size taken by |programs_data|.
-  size_in_bytes +=
-      programs_data->program_names.capacity() * sizeof(base::string16);
-  size_in_bytes += programs_data->installed_files.capacity() *
-                   sizeof(std::pair<base::FilePath, size_t>);
-  size_in_bytes += programs_data->install_directories.capacity() *
-                   sizeof(std::pair<base::FilePath, size_t>);
-
-  // Using the function version of this UMA histogram because this will only be
-  // invoked once during a browser run so the caching that comes with the macro
-  // version is wasted resources.
-  base::UmaHistogramMemoryKB("ThirdPartyModules.InstalledPrograms.DataSize",
-                             size_in_bytes / 1024);
-
   return programs_data;
 }
 
 }  // namespace
+
+InstalledPrograms::ProgramInfo::ProgramInfo(base::string16 name,
+                                            HKEY registry_root,
+                                            base::string16 registry_key_path,
+                                            REGSAM registry_wow64_access)
+    : name(std::move(name)),
+      registry_root(registry_root),
+      registry_key_path(std::move(registry_key_path)),
+      registry_wow64_access(registry_wow64_access) {}
+
+InstalledPrograms::ProgramInfo::~ProgramInfo() = default;
 
 InstalledPrograms::ProgramsData::ProgramsData() = default;
 
@@ -227,26 +222,25 @@ InstalledPrograms::InstalledPrograms()
 
 InstalledPrograms::~InstalledPrograms() = default;
 
-void InstalledPrograms::Initialize(
-    const base::Closure& on_initialized_callback) {
-  Initialize(on_initialized_callback, base::MakeUnique<MsiUtil>());
+void InstalledPrograms::Initialize(base::OnceClosure on_initialized_callback) {
+  Initialize(std::move(on_initialized_callback), base::MakeUnique<MsiUtil>());
 }
 
-bool InstalledPrograms::GetInstalledProgramNames(
+bool InstalledPrograms::GetInstalledPrograms(
     const base::FilePath& file,
-    std::vector<base::string16>* program_names) {
+    std::vector<ProgramInfo>* programs) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(initialized_);
 
   // First, check if an exact file match exists in the installed files list.
-  if (GetNamesFromInstalledFiles(file, program_names))
+  if (GetProgramsFromInstalledFiles(file, programs))
     return true;
 
   // Then try to find a parent directory in the install directories list.
-  return GetNamesFromInstallDirectories(file, program_names);
+  return GetProgramsFromInstallDirectories(file, programs);
 }
 
-void InstalledPrograms::Initialize(const base::Closure& on_initialized_callback,
+void InstalledPrograms::Initialize(base::OnceClosure on_initialized_callback,
                                    std::unique_ptr<MsiUtil> msi_util) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!initialized_);
@@ -257,12 +251,13 @@ void InstalledPrograms::Initialize(const base::Closure& on_initialized_callback,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&GetProgramsData, std::move(msi_util)),
       base::BindOnce(&InstalledPrograms::OnInitializationDone,
-                     weak_ptr_factory_.GetWeakPtr(), on_initialized_callback));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     std::move(on_initialized_callback)));
 }
 
-bool InstalledPrograms::GetNamesFromInstalledFiles(
+bool InstalledPrograms::GetProgramsFromInstalledFiles(
     const base::FilePath& file,
-    std::vector<base::string16>* program_names) {
+    std::vector<ProgramInfo>* programs) const {
   // This functor is used to find all exact items by their key in a collection
   // of key/value pairs.
   struct FilePathLess {
@@ -282,20 +277,20 @@ bool InstalledPrograms::GetNamesFromInstalledFiles(
                                       programs_data_->installed_files.end(),
                                       file, FilePathLess());
 
-  // If the range is of size 0, no matching files were found.
-  if (std::distance(equal_range.first, equal_range.second) == 0)
+  auto nb_matches = std::distance(equal_range.first, equal_range.second);
+  if (nb_matches == 0)
     return false;
 
-  for (auto iter = equal_range.first; iter != equal_range.second; ++iter) {
-    program_names->push_back(programs_data_->program_names[iter->second]);
-  }
+  programs->reserve(programs->size() + nb_matches);
+  for (auto iter = equal_range.first; iter != equal_range.second; ++iter)
+    programs->push_back(programs_data_->programs[iter->second]);
 
   return true;
 }
 
-bool InstalledPrograms::GetNamesFromInstallDirectories(
+bool InstalledPrograms::GetProgramsFromInstallDirectories(
     const base::FilePath& file,
-    std::vector<base::string16>* program_names) {
+    std::vector<ProgramInfo>* programs) const {
   // This functor is used to find all matching items by their key in a
   // collection of key/value pairs. This also takes advantage of the fact that
   // only the first element of the pair is a directory.
@@ -325,13 +320,12 @@ bool InstalledPrograms::GetNamesFromInstallDirectories(
   if (std::distance(equal_range.first, equal_range.second) != 1)
     return false;
 
-  program_names->push_back(
-      programs_data_->program_names[equal_range.first->second]);
+  programs->push_back(programs_data_->programs[equal_range.first->second]);
   return true;
 }
 
 void InstalledPrograms::OnInitializationDone(
-    const base::Closure& on_initialized_callback,
+    base::OnceClosure on_initialized_callback,
     std::unique_ptr<ProgramsData> programs_data) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!initialized_);
@@ -340,5 +334,5 @@ void InstalledPrograms::OnInitializationDone(
 
   initialized_ = true;
   if (on_initialized_callback)
-    on_initialized_callback.Run();
+    std::move(on_initialized_callback).Run();
 }

@@ -7,20 +7,15 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "media/base/bind_to_current_loop.h"
-#include "media/base/scoped_callback_runner.h"
 #include "media/capture/video/scoped_buffer_pool_reservation.h"
 #include "media/capture/video/video_capture_buffer_pool_impl.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/video_capture/public/interfaces/constants.mojom.h"
 #include "services/video_capture/scoped_access_permission_media_to_mojo_adapter.h"
 
 namespace {
-
-// The maximum number of video frame buffers in-flight at any one time
-// If all buffers are still in use by consumers when new frames are produced
-// those frames get dropped.
-static const int kMaxBufferCount = 3;
 
 void OnNewBufferHandleAcknowleged(
     video_capture::mojom::VirtualDevice::RequestFrameBufferCallback callback,
@@ -48,6 +43,11 @@ VirtualDeviceMojoAdapter::~VirtualDeviceMojoAdapter() {
 }
 
 int VirtualDeviceMojoAdapter::max_buffer_pool_buffer_count() {
+  // The maximum number of video frame buffers in-flight at any one time
+  // If all buffers are still in use by consumers when new frames are produced
+  // those frames get dropped.
+  static const int kMaxBufferCount = 3;
+
   return kMaxBufferCount;
 }
 

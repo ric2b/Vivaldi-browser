@@ -141,17 +141,19 @@ class NET_EXPORT HostResolverImpl
   int ResolveFromCache(const RequestInfo& info,
                        AddressList* addresses,
                        const NetLogWithSource& source_net_log) override;
-  void SetDnsClientEnabled(bool enabled) override;
-  HostCache* GetHostCache() override;
-  std::unique_ptr<base::Value> GetDnsConfigAsValue() const override;
-
-  // Like |ResolveFromCache()|, but can return a stale result if the
-  // implementation supports it. Fills in |*stale_info| if a response is
-  // returned to indicate how stale (or not) it is.
   int ResolveStaleFromCache(const RequestInfo& info,
                             AddressList* addresses,
                             HostCache::EntryStaleness* stale_info,
-                            const NetLogWithSource& source_net_log);
+                            const NetLogWithSource& source_net_log) override;
+  void SetDnsClientEnabled(bool enabled) override;
+
+  HostCache* GetHostCache() override;
+  bool HasCached(base::StringPiece hostname,
+                 HostCache::Entry::Source* source_out,
+                 HostCache::EntryStaleness* stale_out) const override;
+
+  std::unique_ptr<base::Value> GetDnsConfigAsValue() const override;
+
   // Returns the number of host cache entries that were restored, or 0 if there
   // is no cache.
   size_t LastRestoredCacheSize() const;

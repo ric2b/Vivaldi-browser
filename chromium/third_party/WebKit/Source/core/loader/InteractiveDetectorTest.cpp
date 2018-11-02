@@ -5,7 +5,9 @@
 #include "core/loader/InteractiveDetector.h"
 
 #include "core/dom/Document.h"
+#include "core/paint/FirstMeaningfulPaintDetector.h"
 #include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
@@ -38,23 +40,37 @@ struct TaskTiming {
   TaskTiming(double start, double end) : start(start), end(end) {}
 };
 
-static constexpr char kSupplementName[] = "InteractiveDetector";
-
 class InteractiveDetectorTest : public ::testing::Test {
  public:
-  InteractiveDetectorTest() : document_(Document::CreateForTest()) {
-    InteractiveDetector* detector = new InteractiveDetector(
-        *document_, new NetworkActivityCheckerForTest(document_));
-    Supplement<Document>::ProvideTo(*document_, kSupplementName, detector);
-    detector_ = detector;
+  InteractiveDetectorTest() {
+    platform_->AdvanceClockSeconds(1);
+    dummy_page_holder_ = DummyPageHolder::Create();
+
+    Document* document = &dummy_page_holder_->GetDocument();
+
+    detector_ = new InteractiveDetector(
+        *document, new NetworkActivityCheckerForTest(document));
+
+    // By this time, the DummyPageHolder has created an InteractiveDetector, and
+    // sent DOMContentLoadedEnd. We overwrite it with our new
+    // InteractiveDetector, which won't have received any timestamps.
+    Supplement<Document>::ProvideTo(
+        *document, InteractiveDetector::SupplementName(), detector_.Get());
+
+    // Ensure the document is using the injected InteractiveDetector.
+    DCHECK_EQ(detector_, InteractiveDetector::From(*document));
+  }
+
+  // Public because it's executed on a task queue.
+  void DummyTaskWithDuration(double duration_seconds) {
+    platform_->AdvanceClockSeconds(duration_seconds);
+    dummy_task_end_time_ = CurrentTimeTicksInSeconds();
   }
 
  protected:
-  void SetUp() override { platform_->AdvanceClockSeconds(1); }
-
-  Document* GetDocument() { return document_; }
-
   InteractiveDetector* GetDetector() { return detector_; }
+
+  double GetDummyTaskEndTime() { return dummy_task_end_time_; }
 
   NetworkActivityCheckerForTest* GetNetworkActivityChecker() {
     // We know in this test context that network_activity_checker_ is an
@@ -81,7 +97,8 @@ class InteractiveDetectorTest : public ::testing::Test {
 
   void SimulateFMPDetected(double fmp_time, double detection_time) {
     RunTillTimestamp(detection_time);
-    detector_->OnFirstMeaningfulPaintDetected(fmp_time);
+    detector_->OnFirstMeaningfulPaintDetected(
+        fmp_time, FirstMeaningfulPaintDetector::kNoUserInput);
   }
 
   void SimulateInteractiveInvalidatingInput(double timestamp) {
@@ -90,7 +107,7 @@ class InteractiveDetectorTest : public ::testing::Test {
   }
 
   void RunTillTimestamp(double target_time) {
-    double current_time = MonotonicallyIncreasingTime();
+    double current_time = CurrentTimeTicksInSeconds();
     platform_->RunForPeriodSeconds(std::max(0.0, target_time - current_time));
   }
 
@@ -118,12 +135,13 @@ class InteractiveDetectorTest : public ::testing::Test {
 
   double GetInteractiveTime() { return detector_->GetInteractiveTime(); }
 
- protected:
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
 
-  Persistent<Document> document_;
+ private:
   Persistent<InteractiveDetector> detector_;
+  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
+  double dummy_task_end_time_ = 0.0;
 };
 
 // Note: The tests currently assume kTimeToInteractiveWindowSeconds is 5
@@ -139,7 +157,7 @@ class InteractiveDetectorTest : public ::testing::Test {
 // The name shows the ordering of these events in the test.
 
 TEST_F(InteractiveDetectorTest, FMP_DCL_FmpDetect) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -152,7 +170,7 @@ TEST_F(InteractiveDetectorTest, FMP_DCL_FmpDetect) {
 }
 
 TEST_F(InteractiveDetectorTest, DCL_FMP_FmpDetect) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -165,7 +183,7 @@ TEST_F(InteractiveDetectorTest, DCL_FMP_FmpDetect) {
 }
 
 TEST_F(InteractiveDetectorTest, InstantDetectionAtFmpDetectIfPossible) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -178,7 +196,7 @@ TEST_F(InteractiveDetectorTest, InstantDetectionAtFmpDetectIfPossible) {
 }
 
 TEST_F(InteractiveDetectorTest, FmpDetectFiresAfterLateLongTask) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -191,7 +209,7 @@ TEST_F(InteractiveDetectorTest, FmpDetectFiresAfterLateLongTask) {
 }
 
 TEST_F(InteractiveDetectorTest, FMP_FmpDetect_DCL) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -202,7 +220,7 @@ TEST_F(InteractiveDetectorTest, FMP_FmpDetect_DCL) {
 }
 
 TEST_F(InteractiveDetectorTest, LongTaskBeforeFMPDoesNotAffectTTI) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -216,7 +234,7 @@ TEST_F(InteractiveDetectorTest, LongTaskBeforeFMPDoesNotAffectTTI) {
 }
 
 TEST_F(InteractiveDetectorTest, DCLDoesNotResetTimer) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -230,7 +248,7 @@ TEST_F(InteractiveDetectorTest, DCLDoesNotResetTimer) {
 }
 
 TEST_F(InteractiveDetectorTest, DCL_FMP_FmpDetect_LT) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -244,7 +262,7 @@ TEST_F(InteractiveDetectorTest, DCL_FMP_FmpDetect_LT) {
 }
 
 TEST_F(InteractiveDetectorTest, DCL_FMP_LT_FmpDetect) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -258,7 +276,7 @@ TEST_F(InteractiveDetectorTest, DCL_FMP_LT_FmpDetect) {
 }
 
 TEST_F(InteractiveDetectorTest, FMP_FmpDetect_LT_DCL) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -272,7 +290,7 @@ TEST_F(InteractiveDetectorTest, FMP_FmpDetect_LT_DCL) {
 }
 
 TEST_F(InteractiveDetectorTest, DclIsMoreThan5sAfterFMP) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -289,7 +307,7 @@ TEST_F(InteractiveDetectorTest, DclIsMoreThan5sAfterFMP) {
 }
 
 TEST_F(InteractiveDetectorTest, NetworkBusyBlocksTTIEvenWhenMainThreadQuiet) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   SetActiveConnections(1);
   SimulateDOMContentLoadedEnd(t0 + 2.0);
@@ -307,7 +325,7 @@ TEST_F(InteractiveDetectorTest, NetworkBusyBlocksTTIEvenWhenMainThreadQuiet) {
 }
 
 TEST_F(InteractiveDetectorTest, LongEnoughQuietWindowBetweenFMPAndFmpDetect) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   SetActiveConnections(1);
   SimulateDOMContentLoadedEnd(t0 + 2.0);
@@ -323,7 +341,7 @@ TEST_F(InteractiveDetectorTest, LongEnoughQuietWindowBetweenFMPAndFmpDetect) {
 }
 
 TEST_F(InteractiveDetectorTest, NetworkBusyEndIsNotTTI) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   SetActiveConnections(1);
   SimulateDOMContentLoadedEnd(t0 + 2.0);
@@ -340,7 +358,7 @@ TEST_F(InteractiveDetectorTest, NetworkBusyEndIsNotTTI) {
 }
 
 TEST_F(InteractiveDetectorTest, LateLongTaskWithLateFMPDetection) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   SetActiveConnections(1);
   SimulateDOMContentLoadedEnd(t0 + 2.0);
@@ -355,7 +373,7 @@ TEST_F(InteractiveDetectorTest, LateLongTaskWithLateFMPDetection) {
 }
 
 TEST_F(InteractiveDetectorTest, IntermittentNetworkBusyBlocksTTI) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   SetActiveConnections(1);
   SimulateDOMContentLoadedEnd(t0 + 2.0);
@@ -378,7 +396,7 @@ TEST_F(InteractiveDetectorTest, IntermittentNetworkBusyBlocksTTI) {
 }
 
 TEST_F(InteractiveDetectorTest, InvalidatingUserInput) {
-  double t0 = MonotonicallyIncreasingTime();
+  double t0 = CurrentTimeTicksInSeconds();
   SimulateNavigationStart(t0);
   // Network is forever quiet for this test.
   SetActiveConnections(1);
@@ -395,91 +413,76 @@ TEST_F(InteractiveDetectorTest, InvalidatingUserInput) {
   EXPECT_EQ(GetDetector()->GetFirstInvalidatingInputTime(), t0 + 5.0);
 }
 
-class InteractiveDetectorTestWithDummyPage : public ::testing::Test {
- public:
-  // Public because it's executed on a task queue.
-  void DummyTaskWithDuration(double duration_seconds) {
-    platform_->AdvanceClockSeconds(duration_seconds);
-    dummy_task_end_time_ = MonotonicallyIncreasingTime();
-  }
+TEST_F(InteractiveDetectorTest, InvalidatedFMP) {
+  double t0 = CurrentTimeTicksInSeconds();
+  SimulateNavigationStart(t0);
+  // Network is forever quiet for this test.
+  SetActiveConnections(1);
+  SimulateInteractiveInvalidatingInput(t0 + 1.0);
+  SimulateDOMContentLoadedEnd(t0 + 2.0);
+  RunTillTimestamp(t0 + 4.0);  // FMP Detection time.
+  GetDetector()->OnFirstMeaningfulPaintDetected(
+      t0 + 3.0, FirstMeaningfulPaintDetector::kHadUserInput);
+  // Run till 5 seconds after FMP.
+  RunTillTimestamp((t0 + 3.0) + 5.0 + 0.1);
+  // Since FMP was invalidated, we do not have TTI or TTI Detection Time.
+  EXPECT_EQ(GetInteractiveTime(), 0.0);
+  EXPECT_EQ(GetDetector()->GetInteractiveDetectionTime(), 0.0);
+  // Invalidating input timestamp is available.
+  EXPECT_EQ(GetDetector()->GetFirstInvalidatingInputTime(), t0 + 1.0);
+}
 
- protected:
-  void SetUp() override {
-    platform_->AdvanceClockSeconds(1);
-    dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-  }
+TEST_F(InteractiveDetectorTest, TaskLongerThan5sBlocksTTI) {
+  double t0 = CurrentTimeTicksInSeconds();
+  GetDetector()->SetNavigationStartTime(t0);
 
-  double GetDummyTaskEndTime() { return dummy_task_end_time_; }
-
-  Document& GetDocument() { return dummy_page_holder_->GetDocument(); }
-  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
-      platform_;
-
- private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
-  double dummy_task_end_time_ = 0.0;
-};
-
-TEST_F(InteractiveDetectorTestWithDummyPage, TaskLongerThan5sBlocksTTI) {
-  double t0 = MonotonicallyIncreasingTime();
-  InteractiveDetector* detector = InteractiveDetector::From(GetDocument());
-  detector->SetNavigationStartTime(t0);
-  platform_->RunForPeriodSeconds(4.0);
-
-  // DummyPageHolder automatically fires DomContentLoadedEnd, but not First
-  // Meaningful Paint. We therefore manually Invoking the listener on
-  // InteractiveDetector.
-  detector->OnFirstMeaningfulPaintDetected(t0 + 3.0);
+  SimulateDOMContentLoadedEnd(t0 + 2.0);
+  SimulateFMPDetected(t0 + 3.0, t0 + 4.0);
 
   // Post a task with 6 seconds duration.
-  platform_->CurrentThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(
-          &InteractiveDetectorTestWithDummyPage::DummyTaskWithDuration,
-          CrossThreadUnretained(this), 6.0));
+  PostCrossThreadTask(
+      *platform_->CurrentThread()->GetWebTaskRunner(), FROM_HERE,
+      CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
+                      CrossThreadUnretained(this), 6.0));
+
   platform_->RunUntilIdle();
 
   // We should be able to detect TTI 5s after the end of long task.
   platform_->RunForPeriodSeconds(5.1);
-  EXPECT_EQ(detector->GetInteractiveTime(), GetDummyTaskEndTime());
+  EXPECT_EQ(GetDetector()->GetInteractiveTime(), GetDummyTaskEndTime());
 }
 
-TEST_F(InteractiveDetectorTestWithDummyPage, LongTaskAfterTTIDoesNothing) {
-  double t0 = MonotonicallyIncreasingTime();
-  InteractiveDetector* detector = InteractiveDetector::From(GetDocument());
-  detector->SetNavigationStartTime(t0);
-  platform_->RunForPeriodSeconds(4.0);
+TEST_F(InteractiveDetectorTest, LongTaskAfterTTIDoesNothing) {
+  double t0 = CurrentTimeTicksInSeconds();
+  GetDetector()->SetNavigationStartTime(t0);
 
-  // DummyPageHolder automatically fires DomContentLoadedEnd, but not First
-  // Meaningful Paint. We therefore manually Invoking the listener on
-  // InteractiveDetector.
-  detector->OnFirstMeaningfulPaintDetected(t0 + 3.0);
+  SimulateDOMContentLoadedEnd(2.0);
+  SimulateFMPDetected(t0 + 3.0, t0 + 4.0);
 
   // Long task 1.
-  platform_->CurrentThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(
-          &InteractiveDetectorTestWithDummyPage::DummyTaskWithDuration,
-          CrossThreadUnretained(this), 0.1));
+  PostCrossThreadTask(
+      *platform_->CurrentThread()->GetWebTaskRunner(), FROM_HERE,
+      CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
+                      CrossThreadUnretained(this), 0.1));
+
   platform_->RunUntilIdle();
 
   double long_task_1_end_time = GetDummyTaskEndTime();
   // We should be able to detect TTI 5s after the end of long task.
   platform_->RunForPeriodSeconds(5.1);
-  EXPECT_EQ(detector->GetInteractiveTime(), long_task_1_end_time);
+  EXPECT_EQ(GetDetector()->GetInteractiveTime(), long_task_1_end_time);
 
   // Long task 2.
-  platform_->CurrentThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(
-          &InteractiveDetectorTestWithDummyPage::DummyTaskWithDuration,
-          CrossThreadUnretained(this), 0.1));
+  PostCrossThreadTask(
+      *platform_->CurrentThread()->GetWebTaskRunner(), FROM_HERE,
+      CrossThreadBind(&InteractiveDetectorTest::DummyTaskWithDuration,
+                      CrossThreadUnretained(this), 0.1));
 
   platform_->RunUntilIdle();
   // Wait 5 seconds to see if TTI time changes.
   platform_->RunForPeriodSeconds(5.1);
   // TTI time should not change.
-  EXPECT_EQ(detector->GetInteractiveTime(), long_task_1_end_time);
+  EXPECT_EQ(GetDetector()->GetInteractiveTime(), long_task_1_end_time);
 }
 
 }  // namespace blink

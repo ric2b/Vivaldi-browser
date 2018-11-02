@@ -37,7 +37,6 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/resource_request_body.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
@@ -46,6 +45,7 @@
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_with_source.h"
+#include "services/network/public/cpp/resource_request_body.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_impl.h"
@@ -165,9 +165,9 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
     callback_ = std::move(callback);
 
     std::vector<base::FilePath> file_paths;
-    for (ResourceRequestBody::Element& element : *body_->elements_mutable()) {
-      if (element.type() == ResourceRequestBody::Element::TYPE_FILE &&
-          element.length() == ResourceRequestBody::Element::kUnknownSize) {
+    for (network::DataElement& element : *body_->elements_mutable()) {
+      if (element.type() == network::DataElement::TYPE_FILE &&
+          element.length() == network::DataElement::kUnknownSize) {
         file_elements_.push_back(&element);
         file_paths.push_back(element.path());
       }
@@ -195,7 +195,7 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
       DCHECK_EQ(sizes.size(), file_elements_.size());
       size_t num_elements = file_elements_.size();
       for (size_t i = 0; i < num_elements; i++) {
-        ResourceRequestBody::Element* element = file_elements_[i];
+        network::DataElement* element = file_elements_[i];
         element->SetToFilePathRange(element->path(), element->offset(),
                                     base::checked_cast<uint64_t>(sizes[i]),
                                     element->expected_modification_time());
@@ -215,8 +215,8 @@ class ServiceWorkerURLRequestJob::FileSizeResolver {
   // Owns and must outlive |this|.
   ServiceWorkerURLRequestJob* owner_;
 
-  scoped_refptr<ResourceRequestBody> body_;
-  std::vector<ResourceRequestBody::Element*> file_elements_;
+  scoped_refptr<network::ResourceRequestBody> body_;
+  std::vector<network::DataElement*> file_elements_;
   base::OnceCallback<void(bool /* success */)> callback_;
   Phase phase_ = Phase::INITIAL;
   base::WeakPtrFactory<FileSizeResolver> weak_factory_;
@@ -323,15 +323,14 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
     const ResourceContext* resource_context,
     network::mojom::FetchRequestMode request_mode,
     network::mojom::FetchCredentialsMode credentials_mode,
-    FetchRedirectMode redirect_mode,
+    network::mojom::FetchRedirectMode redirect_mode,
     const std::string& integrity,
     bool keepalive,
     ResourceType resource_type,
     RequestContextType request_context_type,
-    RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body,
+    network::mojom::RequestContextFrameType frame_type,
+    scoped_refptr<network::ResourceRequestBody> body,
     ServiceWorkerFetchType fetch_type,
-    const base::Optional<base::TimeDelta>& timeout,
     Delegate* delegate)
     : net::URLRequestJob(request, network_delegate),
       delegate_(delegate),
@@ -352,7 +351,6 @@ ServiceWorkerURLRequestJob::ServiceWorkerURLRequestJob(
       fall_back_required_(false),
       body_(body),
       fetch_type_(fetch_type),
-      timeout_(timeout),
       weak_factory_(this) {
   DCHECK(delegate_) << "ServiceWorkerURLRequestJob requires a delegate";
 }
@@ -606,7 +604,7 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
                                                        uint64_t* blob_size) {
   DCHECK(HasRequestBody());
   storage::BlobDataBuilder blob_builder(base::GenerateGUID());
-  for (const ResourceRequestBody::Element& element : (*body_->elements())) {
+  for (const network::DataElement& element : (*body_->elements())) {
     blob_builder.AppendIPCDataElement(element, nullptr);  // TODO
   }
 
@@ -615,14 +613,12 @@ void ServiceWorkerURLRequestJob::CreateRequestBodyBlob(std::string* blob_uuid,
   *blob_uuid = blob_builder.uuid();
   *blob_size = request_body_blob_data_handle_->size();
 
-  if (features::IsMojoBlobsEnabled()) {
-    blink::mojom::BlobPtr blob_ptr;
-    storage::BlobImpl::Create(std::make_unique<storage::BlobDataHandle>(
-                                  *request_body_blob_data_handle_),
-                              MakeRequest(&blob_ptr));
-    request_body_blob_handle_ =
-        base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
-  }
+  blink::mojom::BlobPtr blob_ptr;
+  storage::BlobImpl::Create(std::make_unique<storage::BlobDataHandle>(
+                                *request_body_blob_data_handle_),
+                            MakeRequest(&blob_ptr));
+  request_body_blob_handle_ =
+      base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
 }
 
 bool ServiceWorkerURLRequestJob::ShouldRecordNavigationMetrics(
@@ -686,9 +682,9 @@ void ServiceWorkerURLRequestJob::DidDispatchFetchEvent(
     blink::mojom::BlobPtr body_as_blob,
     scoped_refptr<ServiceWorkerVersion> version) {
   // Do not clear |fetch_dispatcher_| if it has dispatched a navigation preload
-  // request to keep the mojom::URLLoader related objects in it, because the
-  // preload response might still need to be streamed even after calling
-  // respondWith().
+  // request to keep the network::mojom::URLLoader related objects in it,
+  // because the preload response might still need to be streamed even after
+  // calling respondWith().
   if (!did_navigation_preload_) {
     fetch_dispatcher_.reset();
   }
@@ -992,7 +988,7 @@ void ServiceWorkerURLRequestJob::RequestBodyFileSizesResolved(bool success) {
   DCHECK(!fetch_dispatcher_);
   fetch_dispatcher_ = std::make_unique<ServiceWorkerFetchDispatcher>(
       CreateFetchRequest(), base::WrapRefCounted(active_worker), resource_type_,
-      timeout_, request()->net_log(),
+      request()->net_log(),
       base::BindOnce(&ServiceWorkerURLRequestJob::DidPrepareFetchEvent,
                      weak_factory_.GetWeakPtr(),
                      base::WrapRefCounted(active_worker)),

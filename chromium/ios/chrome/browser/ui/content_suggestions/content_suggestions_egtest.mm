@@ -5,10 +5,10 @@
 #import <EarlGrey/EarlGrey.h>
 #import <XCTest/XCTest.h>
 
+#include <memory>
 #include <vector>
 
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -29,7 +29,6 @@
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_provider_test_singleton.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_test_utils.h"
-#import "ios/chrome/browser/ui/ntp/modal_ntp.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -77,7 +76,7 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
     return nullptr;
   }
   std::unique_ptr<net::test_server::BasicHttpResponse> http_response =
-      base::MakeUnique<net::test_server::BasicHttpResponse>();
+      std::make_unique<net::test_server::BasicHttpResponse>();
   http_response->set_code(net::HTTP_OK);
   http_response->set_content("<html><head><title>" + std::string(kPageTitle) +
                              "</title></head><body>" +
@@ -129,14 +128,6 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
 
 + (void)setUp {
   [super setUp];
-  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
-  // be shown modally.  Clean up the non-modal code below.
-  if (!PresentNTPPanelModally()) {
-    // Make sure we are on the Home panel on iPad when NTP is shown modally.
-    chrome_test_util::OpenNewTab();
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
-        performAction:grey_typeText(@"chrome://newtab/#most_visited\n")];
-  }
 
   [self closeAllTabs];
   ios::ChromeBrowserState* browserState =
@@ -177,13 +168,6 @@ GREYElementInteraction* CellWithMatcher(id<GREYMatcher> matcher) {
       ReadingListModelFactory::GetForBrowserState(self.browserState);
   readingListModel->DeleteAllEntries();
   [super setUp];
-  // TODO(crbug.com/753599): When old bookmark is removed, NTP panel will always
-  // be shown modally.  Clean up the non-modal code below.
-  if (!PresentNTPPanelModally()) {
-    [[EarlGrey selectElementWithMatcher:
-                   chrome_test_util::ButtonWithAccessibilityLabelId(
-                       IDS_IOS_NEW_TAB_HOME)] performAction:grey_tap()];
-  }
 }
 
 - (void)tearDown {

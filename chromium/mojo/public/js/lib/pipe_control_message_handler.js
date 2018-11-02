@@ -2,46 +2,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-define("mojo/public/js/lib/pipe_control_message_handler", [
-  "mojo/public/interfaces/bindings/pipe_control_messages.mojom",
-  "mojo/public/js/codec",
-  "mojo/public/js/interface_types",
-  "mojo/public/js/validator",
-], function(pipeControlMessages, codec, types, validator) {
-
-  var Validator = validator.Validator;
+(function() {
+  var internal = mojo.internal;
 
   function validateControlRequestWithoutResponse(message) {
-    var messageValidator = new Validator(message);
+    var messageValidator = new internal.Validator(message);
     var error = messageValidator.validateMessageIsRequestWithoutResponse();
-    if (error != validator.validationError.NONE) {
+    if (error != internal.validationError.NONE) {
       throw error;
     }
 
-    if (message.getName() != pipeControlMessages.kRunOrClosePipeMessageId) {
+    if (message.getName() != mojo.pipeControl.kRunOrClosePipeMessageId) {
       throw new Error("Control message name is not kRunOrClosePipeMessageId");
     }
 
     // Validate payload.
-    error = pipeControlMessages.RunOrClosePipeMessageParams.validate(
+    error = mojo.pipeControl.RunOrClosePipeMessageParams.validate(
         messageValidator, message.getHeaderNumBytes());
-    if (error != validator.validationError.NONE) {
+    if (error != internal.validationError.NONE) {
       throw error;
     }
   }
 
   function runOrClosePipe(message, delegate) {
-    var reader = new codec.MessageReader(message);
+    var reader = new internal.MessageReader(message);
     var runOrClosePipeMessageParams = reader.decodeStruct(
-        pipeControlMessages.RunOrClosePipeMessageParams);
+        mojo.pipeControl.RunOrClosePipeMessageParams);
     var event = runOrClosePipeMessageParams.input
-        .peer_associated_endpoint_closed_event;
+        .peerAssociatedEndpointClosedEvent;
     return delegate.onPeerAssociatedEndpointClosed(event.id,
-        event.disconnect_reason);
+        event.disconnectReason);
   }
 
   function isPipeControlMessage(message) {
-    return !types.isValidInterfaceId(message.getInterfaceId());
+    return !internal.isValidInterfaceId(message.getInterfaceId());
   }
 
   function PipeControlMessageHandler(delegate) {
@@ -53,9 +47,6 @@ define("mojo/public/js/lib/pipe_control_message_handler", [
     return runOrClosePipe(message, this.delegate_);
   };
 
-  var exports = {};
-  exports.PipeControlMessageHandler = PipeControlMessageHandler;
-  exports.isPipeControlMessage = isPipeControlMessage;
-
-  return exports;
-});
+  internal.PipeControlMessageHandler = PipeControlMessageHandler;
+  internal.isPipeControlMessage = isPipeControlMessage;
+})();

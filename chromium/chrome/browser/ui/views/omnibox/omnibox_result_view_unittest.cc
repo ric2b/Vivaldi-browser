@@ -4,12 +4,14 @@
 
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 
-#include "base/memory/ptr_util.h"
-#include "chrome/browser/ui/omnibox/test_omnibox_client.h"
+#include <memory>
+
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
+#include "components/omnibox/browser/test_omnibox_client.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
@@ -20,8 +22,8 @@
 namespace {
 
 // An arbitrary index for the result view under test. Used to test the selection
-// state.
-static constexpr int kTestResultViewIndex = 7;
+// state. There are 6 results total so the index should be in the range 0-5.
+static constexpr int kTestResultViewIndex = 4;
 
 class TestOmniboxPopupContentsView : public OmniboxPopupContentsView {
  public:
@@ -48,10 +50,10 @@ class OmniboxResultViewTest : public views::ViewsTestBase {
   void SetUp() override {
     ViewsTestBase::SetUp();
 
-    edit_model_ = base::MakeUnique<OmniboxEditModel>(
-        nullptr, nullptr, base::MakeUnique<TestOmniboxClient>());
+    edit_model_ = std::make_unique<OmniboxEditModel>(
+        nullptr, nullptr, std::make_unique<TestOmniboxClient>());
     popup_view_ =
-        base::MakeUnique<TestOmniboxPopupContentsView>(edit_model_.get());
+        std::make_unique<TestOmniboxPopupContentsView>(edit_model_.get());
     result_view_ = new OmniboxResultView(popup_view_.get(),
                                          kTestResultViewIndex, gfx::FontList());
 
@@ -197,4 +199,40 @@ TEST_F(OmniboxResultViewTest, MouseMoveAndExitSetsHoveredState) {
   // But exiting should revert the HOVERED state.
   result_view()->OnMouseExited(CreateEvent(ui::ET_MOUSE_MOVED, 0));
   EXPECT_NE(OmniboxResultView::HOVERED, result_view()->GetState());
+}
+
+TEST_F(OmniboxResultViewTest, AccessibleNodeData) {
+  // Check accessibility of result.
+  base::string16 match_url = base::ASCIIToUTF16("https://google.com");
+  AutocompleteMatch match(nullptr, 500, false,
+                          AutocompleteMatchType::HISTORY_TITLE);
+  match.contents = match_url;
+  match.contents_class.push_back(
+      ACMatchClassification(0, ACMatchClassification::URL));
+  match.destination_url = GURL(match_url);
+  match.description = base::ASCIIToUTF16("Google");
+  match.allowed_to_be_default_match = true;
+  result_view()->SetMatch(match);
+  ui::AXNodeData result_node_data;
+  result_view()->GetAccessibleNodeData(&result_node_data);
+  EXPECT_TRUE(result_node_data.HasState(ui::AX_STATE_SELECTABLE));
+  EXPECT_FALSE(result_node_data.HasState(ui::AX_STATE_SELECTED));
+  EXPECT_EQ(result_node_data.role, ui::AX_ROLE_LIST_BOX_OPTION);
+  EXPECT_EQ(
+      result_node_data.GetString16Attribute(ui::AX_ATTR_NAME),
+      base::ASCIIToUTF16("Google https://google.com location from history"));
+  EXPECT_EQ(result_node_data.GetIntAttribute(ui::AX_ATTR_POS_IN_SET),
+            kTestResultViewIndex + 1);
+  EXPECT_EQ(result_node_data.GetIntAttribute(ui::AX_ATTR_SET_SIZE), 6);
+
+  // Select it and check selected state.
+  result_view()->OnMousePressed(
+      CreateEvent(ui::ET_MOUSE_PRESSED, ui::EF_LEFT_MOUSE_BUTTON));
+  result_view()->GetAccessibleNodeData(&result_node_data);
+  EXPECT_TRUE(result_node_data.HasState(ui::AX_STATE_SELECTED));
+
+  // Check accessibility of list box.
+  ui::AXNodeData popup_node_data;
+  popup_view()->GetAccessibleNodeData(&popup_node_data);
+  EXPECT_EQ(popup_node_data.role, ui::AX_ROLE_LIST_BOX);
 }

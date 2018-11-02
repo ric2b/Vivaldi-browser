@@ -399,6 +399,10 @@ void ArcNetHostImpl::OnConnectionReady() {
 }
 
 void ArcNetHostImpl::OnConnectionClosed() {
+  // Make sure shill doesn't leave an ARC VPN connected after Android
+  // goes down.
+  AndroidVpnStateChanged(arc::mojom::ConnectionStateType::NOT_CONNECTED);
+
   if (!observing_network_state_)
     return;
 
@@ -634,7 +638,8 @@ void ArcNetHostImpl::StartConnect(const std::string& guid,
       base::AdaptCallbackForRepeating(std::move(callback));
   GetNetworkConnectionHandler()->ConnectToNetwork(
       path, base::Bind(&StartConnectSuccessCallback, repeating_callback),
-      base::Bind(&StartConnectFailureCallback, repeating_callback), false);
+      base::Bind(&StartConnectFailureCallback, repeating_callback),
+      false /* check_error_state */, chromeos::ConnectCallbackMode::ON_STARTED);
 }
 
 void ArcNetHostImpl::StartDisconnect(const std::string& guid,
@@ -802,7 +807,8 @@ void ArcNetHostImpl::ConnectArcVpn(const std::string& service_path,
 
   GetNetworkConnectionHandler()->ConnectToNetwork(
       service_path, base::Bind(&ArcVpnSuccessCallback),
-      base::Bind(&ArcVpnErrorCallback), false /* check_error_state */);
+      base::Bind(&ArcVpnErrorCallback), false /* check_error_state */,
+      chromeos::ConnectCallbackMode::ON_COMPLETED);
 }
 
 std::unique_ptr<base::Value> ArcNetHostImpl::TranslateStringListToValue(

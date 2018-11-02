@@ -116,15 +116,17 @@ bool WebFrame::Swap(WebFrame* frame) {
       TRACE_EVENT_INSTANT1("loading", "markAsMainFrame",
                            TRACE_EVENT_SCOPE_THREAD, "frame", &local_frame);
     }
+    local_frame.SetIsProvisional(false);
   } else {
     ToWebRemoteFrameImpl(frame)->InitializeCoreFrame(*page, owner, name);
   }
 
-  if (parent_ && old_frame->HasBeenActivated())
-    ToCoreFrame(*frame)->UpdateUserActivationInFrameTree();
+  Frame* new_frame = ToCoreFrame(*frame);
 
-  ToCoreFrame(*frame)->GetWindowProxyManager()->SetGlobalProxies(
-      global_proxies);
+  if (parent_ && old_frame->HasBeenActivated())
+    new_frame->UpdateUserActivationInFrameTree();
+
+  new_frame->GetWindowProxyManager()->SetGlobalProxies(global_proxies);
 
   parent_ = nullptr;
 
@@ -153,6 +155,12 @@ void WebFrame::SetFrameOwnerPolicy(
 
 WebInsecureRequestPolicy WebFrame::GetInsecureRequestPolicy() const {
   return ToCoreFrame(*this)->GetSecurityContext()->GetInsecureRequestPolicy();
+}
+
+std::vector<unsigned> WebFrame::GetInsecureRequestToUpgrade() const {
+  SecurityContext::InsecureNavigationsSet* set =
+      ToCoreFrame(*this)->GetSecurityContext()->InsecureNavigationsToUpgrade();
+  return SecurityContext::SerializeInsecureNavigationSet(*set);
 }
 
 void WebFrame::SetFrameOwnerProperties(

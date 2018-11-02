@@ -4,6 +4,7 @@
 
 #include "net/spdy/chromium/spdy_session_pool.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "base/logging.h"
@@ -13,6 +14,7 @@
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "net/base/address_list.h"
 #include "net/base/trace_constants.h"
 #include "net/http/http_network_session.h"
@@ -77,6 +79,8 @@ SpdySessionPool::SpdySessionPool(
 
 SpdySessionPool::~SpdySessionPool() {
   DCHECK(spdy_session_request_map_.empty());
+  // TODO(bnc): CloseAllSessions() is also called in HttpNetworkSession
+  // destructor, one of the two calls should be removed.
   CloseAllSessions();
 
   while (!sessions_.empty()) {
@@ -138,7 +142,7 @@ base::WeakPtr<SpdySession> SpdySessionPool::FindAvailableSession(
     const NetLogWithSource& net_log) {
   AvailableSessionMap::iterator it = LookupAvailableSessionByKey(key);
   if (it != available_sessions_.end()) {
-    if (key.Equals(it->second->spdy_session_key())) {
+    if (key == it->second->spdy_session_key()) {
       UMA_HISTOGRAM_ENUMERATION("Net.SpdySessionGet", FOUND_EXISTING,
                                 SPDY_SESSION_GET_MAX);
       net_log.AddEvent(
@@ -270,7 +274,9 @@ void SpdySessionPool::CloseCurrentIdleSessions() {
 }
 
 void SpdySessionPool::CloseAllSessions() {
-  while (!available_sessions_.empty()) {
+  auto is_draining = [](const SpdySession* s) { return s->IsDraining(); };
+  // Repeat until every SpdySession owned by |this| is draining.
+  while (!std::all_of(sessions_.begin(), sessions_.end(), is_draining)) {
     CloseCurrentSessionsHelper(ERR_ABORTED, "Closing all sessions.",
                                false /* idle_only */);
   }
@@ -286,7 +292,7 @@ std::unique_ptr<base::Value> SpdySessionPool::SpdySessionPoolInfoToValue()
     // host_port_proxy_pair (not an alias).
     const SpdySessionKey& key = it->first;
     const SpdySessionKey& session_key = it->second->spdy_session_key();
-    if (key.Equals(session_key))
+    if (key == session_key)
       list->Append(it->second->GetInfoAsValue());
   }
   return std::move(list);
@@ -358,7 +364,8 @@ void SpdySessionPool::OnNewSpdySessionReady(
           direct || request->url().SchemeIs(url::kHttpsScheme);
       request->OnStreamReadyOnPooledConnection(
           used_ssl_config, used_proxy_info,
-          std::make_unique<SpdyHttpStream>(spdy_session, use_relative_url,
+          std::make_unique<SpdyHttpStream>(spdy_session, kNoPushedStreamFound,
+                                           use_relative_url,
                                            source_dependency));
     }
   }
@@ -439,7 +446,8 @@ void SpdySessionPool::DumpMemoryStats(
       num_active_sessions++;
   }
   total_size += SpdyEstimateMemoryUsage(ObtainHpackHuffmanTable()) +
-                SpdyEstimateMemoryUsage(ObtainHpackStaticTable());
+                SpdyEstimateMemoryUsage(ObtainHpackStaticTable()) +
+                SpdyEstimateMemoryUsage(push_promise_index_);
   base::trace_event::MemoryAllocatorDump* dump =
       pmd->CreateAllocatorDump(SpdyStringPrintf(
           "%s/spdy_session_pool", parent_dump_absolute_name.c_str()));
@@ -498,7 +506,7 @@ void SpdySessionPool::RemoveAliases(const SpdySessionKey& key) {
   // Walk the aliases map, find references to this pair.
   // TODO(mbelshe):  Figure out if this is too expensive.
   for (AliasMap::iterator it = aliases_.begin(); it != aliases_.end(); ) {
-    if (it->second.Equals(key)) {
+    if (it->second == key) {
       AliasMap::iterator old_it = it;
       ++it;
       aliases_.erase(old_it);
@@ -521,16 +529,20 @@ void SpdySessionPool::CloseCurrentSessionsHelper(Error error,
                                                  const SpdyString& description,
                                                  bool idle_only) {
   WeakSessionList current_sessions = GetCurrentSessions();
-  for (WeakSessionList::const_iterator it = current_sessions.begin();
-       it != current_sessions.end(); ++it) {
-    if (!*it)
+  for (base::WeakPtr<SpdySession>& session : current_sessions) {
+    if (!session)
       continue;
 
-    if (idle_only && (*it)->is_active())
+    if (idle_only && session->is_active())
       continue;
 
-    (*it)->CloseSessionOnError(error, description);
-    DCHECK(!IsSessionAvailable(*it));
+    if (session->IsDraining())
+      continue;
+
+    session->CloseSessionOnError(error, description);
+
+    DCHECK(!IsSessionAvailable(session));
+    DCHECK(!session || session->IsDraining());
   }
 }
 

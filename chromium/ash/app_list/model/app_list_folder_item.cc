@@ -18,6 +18,7 @@ AppListFolderItem::AppListFolderItem(const std::string& id,
       item_list_(new AppListItemList),
       folder_image_(item_list_.get()) {
   folder_image_.AddObserver(this);
+  set_is_folder(true);
 }
 
 AppListFolderItem::~AppListFolderItem() {
@@ -35,20 +36,11 @@ gfx::Rect AppListFolderItem::GetTargetIconRectInFolderForItem(
                                                         folder_icon_bounds);
 }
 
-void AppListFolderItem::Activate(int event_flags) {
-  // Folder handling is implemented by the View, so do nothing.
-}
-
 // static
 const char AppListFolderItem::kItemType[] = "FolderItem";
 
 const char* AppListFolderItem::GetItemType() const {
   return AppListFolderItem::kItemType;
-}
-
-ui::MenuModel* AppListFolderItem::GetContextMenuModel() {
-  // TODO(stevenjb/jennyz): Implement.
-  return NULL;
 }
 
 AppListItem* AppListFolderItem::FindChildItem(const std::string& id) {
@@ -57,6 +49,10 @@ AppListItem* AppListFolderItem::FindChildItem(const std::string& id) {
 
 size_t AppListFolderItem::ChildItemCount() const {
   return item_list_->item_count();
+}
+
+size_t AppListFolderItem::BadgedItemCount() const {
+  return item_list_->BadgedItemCount();
 }
 
 bool AppListFolderItem::CompareForTest(const AppListItem* other) const {

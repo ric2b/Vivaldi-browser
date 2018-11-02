@@ -6,6 +6,7 @@ import("//build/config/ios/ios_sdk.gni")
 import("//build/config/ios/rules.gni")
 import("//components/grpc_support/include/headers.gni")
 import("//ios/build/config.gni")
+import("//ios/web/js_compile.gni")
 import("//ios/web_view/features.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
@@ -65,6 +66,8 @@ ios_web_view_sources = [
   "internal/autofill/cwv_autofill_controller_internal.h",
   "internal/autofill/cwv_autofill_suggestion.mm",
   "internal/autofill/cwv_autofill_suggestion_internal.h",
+  "internal/autofill/web_view_autofill_client_ios.h",
+  "internal/autofill/web_view_autofill_client_ios.mm",
   "internal/autofill/web_view_personal_data_manager_factory.cc",
   "internal/autofill/web_view_personal_data_manager_factory.h",
   "internal/content_settings/web_view_cookie_settings_factory.cc",
@@ -89,6 +92,7 @@ ios_web_view_sources = [
   "internal/cwv_web_view.mm",
   "internal/cwv_web_view_configuration.mm",
   "internal/cwv_web_view_configuration_internal.h",
+  "internal/cwv_web_view_internal.h",
   "internal/ios_global_state_web_view_configuration.cc",
   "internal/language/web_view_language_model_factory.cc",
   "internal/language/web_view_language_model_factory.h",
@@ -161,6 +165,7 @@ if (ios_web_view_enable_sync) {
 }
 
 ios_web_view_deps = [
+  ":web_view_bundle",
   ":packed_resources",
   "//base",
   "//components/autofill/core/browser",
@@ -244,6 +249,7 @@ test("ios_web_view_unittests") {
     "internal/cwv_html_element_unittest.mm",
     "internal/cwv_preferences_unittest.mm",
     "internal/cwv_preview_element_info_unittest.mm",
+    "internal/web_view_web_client_unittest.mm",
   ]
   sources += ios_web_view_sources
 
@@ -262,6 +268,14 @@ test("ios_web_view_unittests") {
   configs += [ "//build/config/compiler:enable_arc" ]
 
   assert_no_deps = ios_assert_no_deps
+}
+
+js_compile_bundle("web_view_bundle") {
+  closure_entry_point = "__crWeb.webViewBundle"
+  sources = [
+    "//components/autofill/ios/browser/resources/autofill_controller.js",
+    "resources/web_view_bundle.js",
+  ]
 }
 
 repack("repack_resources") {

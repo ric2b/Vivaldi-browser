@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fa">
 <translation id="1326317727527857210">‏برای دسترسی به برگه‌هایتان در دستگاه‌های دیگر، به سیستم Chrome وارد شوید.</translation>
-<translation id="1685087038067318291">‏صفحه‌های وبی را که توسط اشیای اطراف ارسال می‌شوند کشف کنید. وقتی بلوتوث روشن است، Chrome می‌تواند صفحه‌های وب مرتبط با اشیای اطراف شما را جمع‌آوری کند و برای پیدا کردن مفیدترین آن‌ها، آن صفحه‌ها را به‌صورت ناشناس به Google ارسال کند. <ph name="BEGIN_LINK" />بیشتر بدانید<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">‏اعلان حریم خصوصی Google Chrome</translation>
+<translation id="1863312987075920112">‏استفاده از این برنامه به‌معنای اعلام موافقت شما با <ph name="BEGIN_LINK_TOS" />شرایط و ضوابط<ph name="END_LINK_TOS" /> و <ph name="BEGIN_LINK_PRIVACY" />اعلان حریم خصوصی<ph name="END_LINK_PRIVACY" /> Chrome است.</translation>
 <translation id="2147651015520127414">‏Chrome تأیید می‌کند که <ph name="ISSUER" /> گواهی‌نامه این وب‌سایت را صادر کرده است.</translation>
 <translation id="2334084861041072223">‏حق نسخه‌برداری ‪<ph name="YEAR" />‏ Google Inc.‬ کلیه حقوق محفوظ است.</translation>
 <translation id="2342981853652716282">‏برای دریافت نشانک‌ها، گذرواژه‌ها و موارد دیگر در همه دستگاه‌هایتان، به سیستم Chrome وارد شوید.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">‏برخی از افزونه‌ها باعث می‌شوند Chrome از کار بیفتد. لطفاً آنها را حذف نصب کنید:</translation>
 <translation id="4615174829807303908">‏هم‌اکنون از حسابی که توسط <ph name="SIGNOUT_MANAGED_DOMAIN" /> مدیریت می‌شود، خارج می‌شوید. با این کار داده‌های Chrome شما از این دستگاه حذف می‌شود اما همچنان در حساب Google شما باقی می‌ماند.</translation>
 <translation id="5389212809648216794">‏Google Chrome نمی‌تواند از دوربین استفاده کند زیرا برنامه دیگری از آن استفاده می‌کند</translation>
-<translation id="5566557026214762153">‏با استفاده از این برنامه، با <ph name="BEGIN_LINK" />شرایط خدمات<ph name="END_LINK" />‏ Chrome موافقت می‌کنید.</translation>
 <translation id="5639704535586432836">‏Settings (تنظیمات) &gt; Privacy (حریم خصوصی) &gt; Camera (دوربین) &gt; Google Chrome را باز کنید و دوربین را روشن کنید.</translation>
 <translation id="5642200033778930880">‏Google Chrome نمی‌تواند از دوربین درحالت Split View (نمای تقسیم) استفاده کند</translation>
 <translation id="5703130498371792817">‏از Chrome لذت می‌برید؟ <ph name="BEGIN_LINK" />به این برنامه رتبه بدهید<ph name="END_LINK" /></translation>

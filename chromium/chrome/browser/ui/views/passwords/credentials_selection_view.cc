@@ -38,8 +38,8 @@ CredentialsSelectionView::CredentialsSelectionView(
   DCHECK(!password_forms_->empty());
 
   // Layout.
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
-  SetLayoutManager(layout);
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // ColumnSet.
   int column_set_id = 0;

@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -46,6 +47,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
+#include "printing/features/features.h"
 
 #if defined(OS_WIN)
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
@@ -62,7 +64,6 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/public/cpp/stylus_utils.h"
-#include "ash/system/power/power_status.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ui/ash/ash_util.h"
@@ -84,7 +85,6 @@
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_util.h"
 #else  // !defined(OS_CHROMEOS)
-#include "chrome/browser/ui/webui/settings/printing_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_default_browser_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_manage_profile_handler.h"
 #include "chrome/browser/ui/webui/settings/system_handler.h"
@@ -95,6 +95,10 @@
 #elif defined(OS_WIN) || defined(OS_MACOSX)
 #include "chrome/browser/ui/webui/settings/native_certificates_handler.h"
 #endif  // defined(USE_NSS_CERTS)
+
+#if BUILDFLAG(ENABLE_PRINTING) && !defined(OS_CHROMEOS)
+#include "chrome/browser/ui/webui/settings/printing_handler.h"
+#endif
 
 #if defined(SAFE_BROWSING_DB_LOCAL)
 #include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
@@ -121,72 +125,75 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
 #endif
 
   Profile* profile = Profile::FromWebUI(web_ui);
-  AddSettingsPageUIHandler(base::MakeUnique<AppearanceHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<AppearanceHandler>(web_ui));
 
 #if defined(USE_NSS_CERTS)
   AddSettingsPageUIHandler(
-      base::MakeUnique<certificate_manager::CertificatesHandler>());
+      std::make_unique<certificate_manager::CertificatesHandler>());
 #elif defined(OS_WIN) || defined(OS_MACOSX)
-  AddSettingsPageUIHandler(base::MakeUnique<NativeCertificatesHandler>());
+  AddSettingsPageUIHandler(std::make_unique<NativeCertificatesHandler>());
 #endif  // defined(USE_NSS_CERTS)
 
-  AddSettingsPageUIHandler(base::MakeUnique<BrowserLifetimeHandler>());
-  AddSettingsPageUIHandler(base::MakeUnique<ClearBrowsingDataHandler>(web_ui));
-  AddSettingsPageUIHandler(base::MakeUnique<CookiesViewHandler>());
-  AddSettingsPageUIHandler(base::MakeUnique<DownloadsHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<ExtensionControlHandler>());
-  AddSettingsPageUIHandler(base::MakeUnique<FontHandler>(web_ui));
-  AddSettingsPageUIHandler(base::MakeUnique<ImportDataHandler>());
+  AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
+  AddSettingsPageUIHandler(std::make_unique<ClearBrowsingDataHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<CookiesViewHandler>());
+  AddSettingsPageUIHandler(std::make_unique<DownloadsHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<ExtensionControlHandler>());
+  AddSettingsPageUIHandler(std::make_unique<FontHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<ImportDataHandler>());
 
 #if defined(OS_WIN) || defined(OS_CHROMEOS)
-  AddSettingsPageUIHandler(base::MakeUnique<LanguagesHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(web_ui));
 #endif  // defined(OS_WIN) || defined(OS_CHROMEOS)
 
   AddSettingsPageUIHandler(
-      base::MakeUnique<MediaDevicesSelectionHandler>(profile));
+      std::make_unique<MediaDevicesSelectionHandler>(profile));
 #if defined(GOOGLE_CHROME_BUILD) && !defined(OS_CHROMEOS)
-  AddSettingsPageUIHandler(base::MakeUnique<MetricsReportingHandler>());
+  AddSettingsPageUIHandler(std::make_unique<MetricsReportingHandler>());
 #endif
-  AddSettingsPageUIHandler(base::MakeUnique<OnStartupHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<PeopleHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<ProfileInfoHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<ProtocolHandlersHandler>());
+  AddSettingsPageUIHandler(std::make_unique<OnStartupHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<PeopleHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<ProfileInfoHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<ProtocolHandlersHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<SafeBrowsingHandler>(profile->GetPrefs()));
-  AddSettingsPageUIHandler(base::MakeUnique<SearchEnginesHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<SiteSettingsHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<StartupPagesHandler>(web_ui));
+      std::make_unique<SafeBrowsingHandler>(profile->GetPrefs()));
+  AddSettingsPageUIHandler(std::make_unique<SearchEnginesHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<SiteSettingsHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<StartupPagesHandler>(web_ui));
 
 #if defined(OS_CHROMEOS)
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::AccessibilityHandler>(web_ui));
+      std::make_unique<chromeos::settings::AccessibilityHandler>(web_ui));
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::AndroidAppsHandler>(profile));
+      std::make_unique<chromeos::settings::AndroidAppsHandler>(profile));
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::ChangePictureHandler>());
+      std::make_unique<chromeos::settings::ChangePictureHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::CupsPrintersHandler>(web_ui));
+      std::make_unique<chromeos::settings::CupsPrintersHandler>(web_ui));
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::FingerprintHandler>(profile));
+      std::make_unique<chromeos::settings::FingerprintHandler>(profile));
   if (chromeos::switches::IsVoiceInteractionEnabled()) {
     AddSettingsPageUIHandler(
-        base::MakeUnique<chromeos::settings::GoogleAssistantHandler>(profile));
+        std::make_unique<chromeos::settings::GoogleAssistantHandler>(profile));
   }
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::KeyboardHandler>());
+      std::make_unique<chromeos::settings::KeyboardHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::PointerHandler>());
+      std::make_unique<chromeos::settings::PointerHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::StorageHandler>());
+      std::make_unique<chromeos::settings::StorageHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::StylusHandler>());
+      std::make_unique<chromeos::settings::StylusHandler>());
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::InternetHandler>(profile));
+      std::make_unique<chromeos::settings::InternetHandler>(profile));
 #else
-  AddSettingsPageUIHandler(base::MakeUnique<DefaultBrowserHandler>(web_ui));
-  AddSettingsPageUIHandler(base::MakeUnique<ManageProfileHandler>(profile));
-  AddSettingsPageUIHandler(base::MakeUnique<SystemHandler>());
-  AddSettingsPageUIHandler(base::MakeUnique<PrintingHandler>());
+  AddSettingsPageUIHandler(std::make_unique<DefaultBrowserHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<ManageProfileHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<SystemHandler>());
+#endif
+
+#if BUILDFLAG(ENABLE_PRINTING) && !defined(OS_CHROMEOS)
+  AddSettingsPageUIHandler(std::make_unique<PrintingHandler>());
 #endif
 
   content::WebUIDataSource* html_source =
@@ -196,7 +203,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   bool chromeCleanupEnabled = false;
   bool userInitiatedCleanupsEnabled = false;
 
-  AddSettingsPageUIHandler(base::MakeUnique<ChromeCleanupHandler>(profile));
+  AddSettingsPageUIHandler(std::make_unique<ChromeCleanupHandler>(profile));
 
   safe_browsing::ChromeCleanerController* cleaner_controller =
       safe_browsing::ChromeCleanerController::GetInstance();
@@ -204,9 +211,6 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   userInitiatedCleanupsEnabled = safe_browsing::UserInitiatedCleanupsEnabled();
 
 #if defined(GOOGLE_CHROME_BUILD)
-  if (cleaner_controller->IsPoweredByPartner())
-    html_source->AddBoolean("cleanupPoweredByPartner", true);
-
   html_source->AddResourcePath("partner-logo.svg", IDR_CHROME_CLEANUP_PARTNER);
 #if BUILDFLAG(OPTIMIZE_WEBUI)
   exclude_from_gzip.push_back("partner-logo.svg");
@@ -221,15 +225,19 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
 
 #endif  // defined(OS_WIN)
 
+  bool password_protection_available = false;
 #if defined(SAFE_BROWSING_DB_LOCAL)
   safe_browsing::ChromePasswordProtectionService* password_protection =
       safe_browsing::ChromePasswordProtectionService::
           GetPasswordProtectionService(profile);
+  password_protection_available = !!password_protection;
   if (password_protection) {
     AddSettingsPageUIHandler(
-        base::MakeUnique<ChangePasswordHandler>(profile, password_protection));
+        std::make_unique<ChangePasswordHandler>(profile, password_protection));
   }
 #endif
+  html_source->AddBoolean("passwordProtectionAvailable",
+                          password_protection_available);
 
 #if defined(OS_CHROMEOS)
   chromeos::settings::EasyUnlockSettingsHandler* easy_unlock_handler =
@@ -242,7 +250,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
       chromeos::settings::DateTimeHandler::Create(html_source)));
 
   AddSettingsPageUIHandler(
-      base::MakeUnique<chromeos::settings::StylusHandler>());
+      std::make_unique<chromeos::settings::StylusHandler>());
   html_source->AddBoolean(
       "quickUnlockEnabled",
       chromeos::quick_unlock::IsPinEnabled(profile->GetPrefs()));
@@ -270,7 +278,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   bool enable_power_settings = !ash_util::IsRunningInMash();
   html_source->AddBoolean("enablePowerSettings", enable_power_settings);
   if (enable_power_settings) {
-    AddSettingsPageUIHandler(base::MakeUnique<chromeos::settings::PowerHandler>(
+    AddSettingsPageUIHandler(std::make_unique<chromeos::settings::PowerHandler>(
         profile->GetPrefs()));
   }
 #endif
@@ -289,7 +297,7 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
       base::WrapUnique(ResetSettingsHandler::Create(html_source, profile)));
 
   // Add the metrics handler to write uma stats.
-  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
+  web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
 
 #if BUILDFLAG(OPTIMIZE_WEBUI)
   html_source->AddResourcePath("crisper.js", IDR_MD_SETTINGS_CRISPER_JS);
@@ -351,14 +359,12 @@ void MdSettingsUI::DocumentOnLoadCompletedInMainFrame() {
 }
 
 #if defined(OS_WIN)
-void MdSettingsUI::UpdateCleanupDataSource(bool cleanupEnabled,
-                                           bool partnerPowered) {
+void MdSettingsUI::UpdateCleanupDataSource(bool cleanupEnabled) {
   DCHECK(web_ui());
   Profile* profile = Profile::FromWebUI(web_ui());
 
   std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue);
   update->SetBoolean("chromeCleanupEnabled", cleanupEnabled);
-  update->SetBoolean("cleanupPoweredByPartner", partnerPowered);
 
   content::WebUIDataSource::Update(profile, chrome::kChromeUISettingsHost,
                                    std::move(update));

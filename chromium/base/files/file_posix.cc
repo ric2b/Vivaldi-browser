@@ -11,7 +11,7 @@
 #include <unistd.h>
 
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
@@ -30,7 +30,8 @@ static_assert(File::FROM_BEGIN == SEEK_SET && File::FROM_CURRENT == SEEK_CUR &&
 
 namespace {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
+#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 int CallFstat(int fd, stat_wrapper_t *sb) {
   AssertBlockingAllowed();
   return fstat(fd, sb);
@@ -78,7 +79,7 @@ File::Error CallFcntlFlock(PlatformFile file, bool do_lock) {
   lock.l_start = 0;
   lock.l_len = 0;  // Lock entire file.
   if (HANDLE_EINTR(fcntl(file, F_SETLK, &lock)) == -1)
-    return File::OSErrorToFileError(errno);
+    return File::GetLastFileError();
   return File::FILE_OK;
 }
 #endif
@@ -383,7 +384,7 @@ File File::Duplicate() const {
 
   PlatformFile other_fd = HANDLE_EINTR(dup(GetPlatformFile()));
   if (other_fd == -1)
-    return File(OSErrorToFileError(errno));
+    return File(File::GetLastFileError());
 
   File other(other_fd);
   if (async())
@@ -421,9 +422,10 @@ File::Error File::OSErrorToFileError(int saved_errno) {
       return FILE_ERROR_NOT_A_DIRECTORY;
     default:
 #if !defined(OS_NACL)  // NaCl build has no metrics code.
-      UMA_HISTOGRAM_SPARSE_SLOWLY("PlatformFile.UnknownErrors.Posix",
-                                  saved_errno);
+      UmaHistogramSparse("PlatformFile.UnknownErrors.Posix", saved_errno);
 #endif
+      // This function should only be called for errors.
+      DCHECK_NE(0, saved_errno);
       return FILE_ERROR_FAILED;
   }
 }
@@ -501,7 +503,7 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   }
 
   if (descriptor < 0) {
-    error_details_ = File::OSErrorToFileError(errno);
+    error_details_ = File::GetLastFileError();
     return;
   }
 
@@ -535,6 +537,11 @@ bool File::Flush() {
 void File::SetPlatformFile(PlatformFile file) {
   DCHECK(!file_.is_valid());
   file_.reset(file);
+}
+
+// static
+File::Error File::GetLastFileError() {
+  return base::File::OSErrorToFileError(errno);
 }
 
 }  // namespace base

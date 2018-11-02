@@ -43,8 +43,7 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
                                  public ::testing::TestWithParam<bool> {
  public:
   VideoFrameCompositorTest()
-      : tick_clock_(new base::SimpleTestTickClock()),
-        client_(new StrictMock<MockWebVideoFrameSubmitter>()) {}
+      : client_(new StrictMock<MockWebVideoFrameSubmitter>()) {}
 
   void SetUp() {
     if (IsSurfaceLayerForVideoEnabled()) {
@@ -58,20 +57,19 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
     submitter_ = client_.get();
 
     if (!IsSurfaceLayerForVideoEnabled()) {
-      compositor_ = base::MakeUnique<VideoFrameCompositor>(
+      compositor_ = std::make_unique<VideoFrameCompositor>(
           message_loop.task_runner(), nullptr);
       compositor_->SetVideoFrameProviderClient(client_.get());
     } else {
       EXPECT_CALL(*submitter_, Initialize(_));
-      compositor_ = base::MakeUnique<VideoFrameCompositor>(
+      compositor_ = std::make_unique<VideoFrameCompositor>(
           message_loop.task_runner(), std::move(client_));
       base::RunLoop().RunUntilIdle();
       EXPECT_CALL(*submitter_, StartSubmitting(_));
       compositor_->EnableSubmission(viz::FrameSinkId(1, 1));
     }
 
-    compositor_->set_tick_clock_for_testing(
-        std::unique_ptr<base::TickClock>(tick_clock_));
+    compositor_->set_tick_clock_for_testing(&tick_clock_);
     // Disable background rendering by default.
     compositor_->set_background_rendering_for_testing(false);
   }
@@ -82,7 +80,7 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
 
   scoped_refptr<VideoFrame> CreateOpaqueFrame() {
     gfx::Size size(8, 8);
-    return VideoFrame::CreateFrame(PIXEL_FORMAT_YV12, size, gfx::Rect(size),
+    return VideoFrame::CreateFrame(PIXEL_FORMAT_I420, size, gfx::Rect(size),
                                    size, base::TimeDelta());
   }
 
@@ -123,7 +121,7 @@ class VideoFrameCompositorTest : public VideoRendererSink::RenderCallback,
   }
 
   base::MessageLoop message_loop;
-  base::SimpleTestTickClock* tick_clock_;  // Owned by |compositor_|
+  base::SimpleTestTickClock tick_clock_;
   StrictMock<MockWebVideoFrameSubmitter>* submitter_;
   std::unique_ptr<StrictMock<MockWebVideoFrameSubmitter>> client_;
   std::unique_ptr<VideoFrameCompositor> compositor_;
@@ -260,7 +258,7 @@ TEST_P(VideoFrameCompositorTest, UpdateCurrentFrameIfStale) {
 
   // Since we have a client, this call should not call background render, even
   // if a lot of time has elapsed between calls.
-  tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
+  tick_clock_.Advance(base::TimeDelta::FromSeconds(1));
   EXPECT_CALL(*this, Render(_, _, _)).Times(0);
   compositor()->UpdateCurrentFrameIfStale();
 
@@ -285,7 +283,7 @@ TEST_P(VideoFrameCompositorTest, UpdateCurrentFrameIfStale) {
   EXPECT_EQ(opaque_frame_2, compositor()->GetCurrentFrame());
 
   // Advancing the tick clock should allow a new frame to be requested.
-  tick_clock_->Advance(base::TimeDelta::FromMilliseconds(10));
+  tick_clock_.Advance(base::TimeDelta::FromMilliseconds(10));
   EXPECT_CALL(*this, Render(_, _, true)).WillOnce(Return(opaque_frame_1));
   compositor()->UpdateCurrentFrameIfStale();
   EXPECT_EQ(opaque_frame_1, compositor()->GetCurrentFrame());

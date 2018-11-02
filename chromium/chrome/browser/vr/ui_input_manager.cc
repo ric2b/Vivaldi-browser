@@ -11,6 +11,7 @@
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/model/controller_model.h"
 #include "chrome/browser/vr/model/reticle_model.h"
+#include "chrome/browser/vr/model/text_input_info.h"
 #include "chrome/browser/vr/ui_renderer.h"
 #include "chrome/browser/vr/ui_scene.h"
 // TODO(tiborg): Remove include once we use a generic type to pass scroll/fling
@@ -90,30 +91,14 @@ void UiInputManager::HandleInput(base::TimeTicks current_time,
   reticle_model->target_element_id = 0;
   reticle_model->target_local_point = kInvalidTargetPoint;
   GetVisualTargetElement(controller_model, reticle_model);
-
-  UiElement* target_element = nullptr;
-  // TODO(vollick): this should be replaced with a formal notion of input
-  // capture.
-  if (input_locked_element_id_) {
-    target_element = scene_->GetUiElementById(input_locked_element_id_);
-    if (target_element) {
-      HitTestRequest request;
-      request.ray_origin = kOrigin;
-      request.ray_target = reticle_model->target_point;
-      request.max_distance_to_plane = 2 * scene_->background_distance();
-      HitTestResult result;
-      target_element->HitTest(request, &result);
-      reticle_model->target_local_point = result.local_hit_point;
-      if (result.type == HitTestResult::Type::kNone) {
-        reticle_model->target_local_point = kInvalidTargetPoint;
-      }
-    }
-  } else if (!in_scroll_ && !in_click_) {
-    // TODO(vollick): support multiple dispatch. We may want to, for example,
-    // dispatch raw events to several elements we hit (imagine nested horizontal
-    // and vertical scrollers). Currently, we only dispatch to one "winner".
-    target_element = scene_->GetUiElementById(reticle_model->target_element_id);
-    if (target_element && IsScrollEvent(*gesture_list)) {
+  // TODO(vollick): support multiple dispatch. We may want to, for example,
+  // dispatch raw events to several elements we hit (imagine nested horizontal
+  // and vertical scrollers). Currently, we only dispatch to one "winner".
+  UiElement* target_element =
+      scene_->GetUiElementById(reticle_model->target_element_id);
+  if (target_element) {
+    if (IsScrollEvent(*gesture_list) && !input_capture_element_id_) {
+      DCHECK(!in_scroll_ && !in_click_);
       UiElement* ancestor = target_element;
       while (!ancestor->scrollable() && ancestor->parent()) {
         ancestor = ancestor->parent();
@@ -124,14 +109,30 @@ void UiInputManager::HandleInput(base::TimeTicks current_time,
     }
   }
 
-  SendFlingCancel(gesture_list, reticle_model->target_local_point);
+  auto element_local_point = reticle_model->target_local_point;
+  if (input_capture_element_id_) {
+    auto* captured = scene_->GetUiElementById(input_capture_element_id_);
+    if (captured) {
+      HitTestRequest request;
+      request.ray_origin = kOrigin;
+      request.ray_target = reticle_model->target_point;
+      request.max_distance_to_plane = 2 * scene_->background_distance();
+      HitTestResult result;
+      captured->HitTest(request, &result);
+      element_local_point = result.local_hit_point;
+      if (result.type == HitTestResult::Type::kNone) {
+        element_local_point = kInvalidTargetPoint;
+      }
+    }
+  }
+
+  SendFlingCancel(gesture_list, element_local_point);
   // For simplicity, don't allow scrolling while clicking until we need to.
   if (!in_click_) {
-    SendScrollEnd(gesture_list, reticle_model->target_local_point,
+    SendScrollEnd(gesture_list, element_local_point,
                   controller_model.touchpad_button_state);
-    if (!SendScrollBegin(target_element, gesture_list,
-                         reticle_model->target_local_point)) {
-      SendScrollUpdate(gesture_list, reticle_model->target_local_point);
+    if (!SendScrollBegin(target_element, gesture_list, element_local_point)) {
+      SendScrollUpdate(gesture_list, element_local_point);
     }
   }
 
@@ -140,23 +141,13 @@ void UiInputManager::HandleInput(base::TimeTicks current_time,
   if (in_scroll_) {
     return;
   }
-  SendHoverLeave(target_element);
-  if (!SendHoverEnter(target_element, reticle_model->target_local_point)) {
-    SendHoverMove(reticle_model->target_local_point);
-  }
+
+  SendHoverEvents(target_element, reticle_model->target_local_point);
   SendButtonDown(target_element, reticle_model->target_local_point,
                  controller_model.touchpad_button_state);
-  if (SendButtonUp(target_element, reticle_model->target_local_point,
-                   controller_model.touchpad_button_state)) {
-    target_element = scene_->GetUiElementById(reticle_model->target_element_id);
-    SendHoverLeave(target_element);
-    SendHoverEnter(target_element, reticle_model->target_local_point);
-  }
+  SendButtonUp(element_local_point, controller_model.touchpad_button_state);
 
-  previous_button_state_ =
-      (controller_model.touchpad_button_state == ButtonState::CLICKED)
-          ? ButtonState::UP
-          : controller_model.touchpad_button_state;
+  previous_button_state_ = controller_model.touchpad_button_state;
 }
 
 void UiInputManager::SendFlingCancel(GestureList* gesture_list,
@@ -185,12 +176,11 @@ void UiInputManager::SendScrollEnd(GestureList* gesture_list,
   if (!in_scroll_) {
     return;
   }
-  DCHECK_GT(input_locked_element_id_, 0);
-  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
+  DCHECK_GT(input_capture_element_id_, 0);
+  UiElement* element = scene_->GetUiElementById(input_capture_element_id_);
 
   if (previous_button_state_ != button_state &&
-      (button_state == ButtonState::DOWN ||
-       button_state == ButtonState::CLICKED)) {
+      button_state == ButtonState::DOWN) {
     DCHECK_GT(gesture_list->size(), 0LU);
     DCHECK_EQ(gesture_list->front()->GetType(),
               blink::WebInputEvent::kGestureScrollEnd);
@@ -213,13 +203,13 @@ void UiInputManager::SendScrollEnd(GestureList* gesture_list,
   } else {
     DCHECK_EQ(gesture_list->front()->GetType(),
               blink::WebInputEvent::kGestureFlingStart);
-    fling_target_id_ = input_locked_element_id_;
+    fling_target_id_ = input_capture_element_id_;
     if (element) {
       element->OnFlingStart(std::move(gesture_list->front()), target_point);
     }
   }
   gesture_list->erase(gesture_list->begin());
-  input_locked_element_id_ = 0;
+  input_capture_element_id_ = 0;
   in_scroll_ = false;
 }
 
@@ -237,7 +227,7 @@ bool UiInputManager::SendScrollBegin(UiElement* target,
                                 blink::WebInputEvent::kGestureScrollBegin)) {
     return false;
   }
-  input_locked_element_id_ = target->id();
+  input_capture_element_id_ = target->id();
   in_scroll_ = true;
   target->OnScrollBegin(std::move(gesture_list->front()), target_point);
   gesture_list->erase(gesture_list->begin());
@@ -249,13 +239,13 @@ void UiInputManager::SendScrollUpdate(GestureList* gesture_list,
   if (!in_scroll_) {
     return;
   }
-  DCHECK(input_locked_element_id_);
+  DCHECK(input_capture_element_id_);
   if (gesture_list->empty() || (gesture_list->front()->GetType() !=
                                 blink::WebInputEvent::kGestureScrollUpdate)) {
     return;
   }
   // Scrolling currently only supported on content window.
-  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
+  UiElement* element = scene_->GetUiElementById(input_capture_element_id_);
   if (element) {
     DCHECK(element->scrollable());
     element->OnScrollUpdate(std::move(gesture_list->front()), target_point);
@@ -263,47 +253,38 @@ void UiInputManager::SendScrollUpdate(GestureList* gesture_list,
   gesture_list->erase(gesture_list->begin());
 }
 
-void UiInputManager::SendHoverLeave(UiElement* target) {
-  if (!hover_target_id_) {
-    return;
-  }
+void UiInputManager::SendHoverEvents(UiElement* target,
+                                     const gfx::PointF& target_point) {
   if (target && target->id() == hover_target_id_) {
+    SendMove(target, target_point);
     return;
   }
-  UiElement* element = scene_->GetUiElementById(hover_target_id_);
-  if (element) {
-    element->OnHoverLeave();
+
+  UiElement* prev_hovered = scene_->GetUiElementById(hover_target_id_);
+  if (prev_hovered) {
+    prev_hovered->OnHoverLeave();
   }
   hover_target_id_ = 0;
+  if (target) {
+    target->OnHoverEnter(target_point);
+    hover_target_id_ = target->id();
+  }
 }
 
-bool UiInputManager::SendHoverEnter(UiElement* target,
-                                    const gfx::PointF& target_point) {
-  if (!target || target->id() == hover_target_id_) {
-    return false;
-  }
-  target->OnHoverEnter(target_point);
-  hover_target_id_ = target->id();
-  return true;
-}
-
-void UiInputManager::SendHoverMove(const gfx::PointF& target_point) {
-  if (!hover_target_id_) {
-    return;
-  }
-  UiElement* element = scene_->GetUiElementById(hover_target_id_);
+void UiInputManager::SendMove(UiElement* element,
+                              const gfx::PointF& target_point) {
+  DCHECK(element);
   if (!element) {
     return;
   }
-
-  // TODO(mthiesse, vollick): Content is currently way too sensitive to mouse
-  // moves for how noisy the controller is. It's almost impossible to click a
-  // link without unintentionally starting a drag event. For this reason we
-  // disable mouse moves, only delivering a down and up event.
+  // TODO(mthiesse, vollick): Content is currently way too sensitive to
+  // mouse moves for how noisy the controller is. It's almost impossible
+  // to click a link without unintentionally starting a drag event. For
+  // this reason we disable mouse moves, only delivering a down and up
+  // event.
   if (element->name() == kContentQuad && in_click_) {
     return;
   }
-
   element->OnMove(target_point);
 }
 
@@ -314,39 +295,41 @@ void UiInputManager::SendButtonDown(UiElement* target,
     return;
   }
   if (previous_button_state_ == button_state ||
-      (button_state != ButtonState::DOWN &&
-       button_state != ButtonState::CLICKED)) {
+      button_state != ButtonState::DOWN) {
     return;
   }
   in_click_ = true;
   if (target) {
     target->OnButtonDown(target_point);
-    input_locked_element_id_ = target->id();
+    input_capture_element_id_ = target->id();
   } else {
-    input_locked_element_id_ = 0;
+    input_capture_element_id_ = 0;
   }
 }
 
-bool UiInputManager::SendButtonUp(UiElement* target,
-                                  const gfx::PointF& target_point,
+bool UiInputManager::SendButtonUp(const gfx::PointF& target_point,
                                   ButtonState button_state) {
   if (!in_click_) {
     return false;
   }
   if (previous_button_state_ == button_state ||
-      (button_state != ButtonState::UP &&
-       button_state != ButtonState::CLICKED)) {
+      button_state != ButtonState::UP) {
     return false;
   }
   in_click_ = false;
-  if (!input_locked_element_id_) {
+  if (!input_capture_element_id_) {
     return false;
   }
-  UiElement* element = scene_->GetUiElementById(input_locked_element_id_);
+  UiElement* element = scene_->GetUiElementById(input_capture_element_id_);
   if (element) {
-    target->OnButtonUp(target_point);
+    element->OnButtonUp(target_point);
+    // Clicking outside of the focused element causes it to lose focus.
+    if (element->id() != focused_element_id_ && element->focusable()) {
+      UnfocusFocusedElement();
+    }
   }
-  input_locked_element_id_ = 0;
+
+  input_capture_element_id_ = 0;
   return true;
 }
 
@@ -359,10 +342,10 @@ void UiInputManager::GetVisualTargetElement(
   // usability, do the following instead:
   //
   // - Project the controller laser onto a distance-limiting sphere.
-  // - Create a vector between the eyes and the outer surface point.
-  // - If any UI elements intersect this vector, and is within the bounding
-  //   sphere, choose the closest to the eyes, and place the reticle at the
-  //   intersection point.
+  // - Create a vector between the eyes and the point on the sphere.
+  // - If any UI elements intersect this vector, and are within the bounding
+  //   sphere, choose the element that is last in scene draw order (which is
+  //   typically the closest to the eye).
 
   // Compute the distance from the eyes to the distance limiting sphere. Note
   // that the sphere is centered at the controller, rather than the eye, for
@@ -378,16 +361,16 @@ void UiInputManager::GetVisualTargetElement(
   // more intuitive. For testing, however, we occasionally hit test along the
   // laser precisely since this geometric accuracy is important and we are not
   // dealing with a physical controller.
-  float closest_element_distance =
-      (reticle_model->target_point - kOrigin).Length();
-
-  HitTestRequest request;
-  request.ray_origin =
+  gfx::Point3F ray_origin =
       hit_test_strategy_ == HitTestStrategy::PROJECT_TO_WORLD_ORIGIN
           ? kOrigin
           : controller_model.laser_origin;
+  float distance_limit = (reticle_model->target_point - ray_origin).Length();
+
+  HitTestRequest request;
+  request.ray_origin = ray_origin;
   request.ray_target = reticle_model->target_point;
-  request.max_distance_to_plane = closest_element_distance;
+  request.max_distance_to_plane = distance_limit;
   HitTestElements(&scene_->root_element(), reticle_model, &request);
 }
 
@@ -419,6 +402,58 @@ void UiInputManager::UpdateQuiescenceState(
              kControllerQuiescenceTemporalThresholdSeconds) {
     controller_quiescent_ = true;
   }
+}
+
+void UiInputManager::UnfocusFocusedElement() {
+  if (!focused_element_id_)
+    return;
+
+  UiElement* focused = scene_->GetUiElementById(focused_element_id_);
+  if (focused && focused->focusable()) {
+    focused->OnFocusChanged(false);
+  }
+  focused_element_id_ = 0;
+}
+
+void UiInputManager::RequestFocus(int element_id) {
+  if (element_id == focused_element_id_)
+    return;
+
+  UnfocusFocusedElement();
+
+  UiElement* focused = scene_->GetUiElementById(element_id);
+  if (!focused || !focused->focusable())
+    return;
+
+  focused_element_id_ = element_id;
+  focused->OnFocusChanged(true);
+}
+
+void UiInputManager::RequestUnfocus(int element_id) {
+  if (element_id != focused_element_id_)
+    return;
+
+  UnfocusFocusedElement();
+}
+
+void UiInputManager::OnInputEdited(const TextInputInfo& info) {
+  UiElement* focused = scene_->GetUiElementById(focused_element_id_);
+  if (!focused)
+    return;
+  DCHECK(focused->focusable());
+  focused->OnInputEdited(info);
+}
+
+void UiInputManager::OnInputCommitted(const TextInputInfo& info) {
+  UiElement* focused = scene_->GetUiElementById(focused_element_id_);
+  if (!focused || !focused->focusable())
+    return;
+  DCHECK(focused->focusable());
+  focused->OnInputCommitted(info);
+}
+
+void UiInputManager::OnKeyboardHidden() {
+  UnfocusFocusedElement();
 }
 
 }  // namespace vr

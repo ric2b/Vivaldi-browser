@@ -34,12 +34,12 @@ import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.common.ContentSwitches;
 import org.chromium.net.test.EmbeddedTestServerRule;
+import org.chromium.webapk.lib.client.WebApkValidator;
 import org.chromium.webapk.lib.common.WebApkConstants;
 
 /** Integration tests for WebAPK feature. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
         ContentSwitches.HOST_RESOLVER_RULES + "=MAP * 127.0.0.1"})
 public class WebApkIntegrationTest {
     @Rule
@@ -100,6 +100,27 @@ public class WebApkIntegrationTest {
     @Before
     public void setUp() throws Exception {
         WebApkUpdateManager.setUpdatesEnabledForTesting(false);
+    }
+
+    /**
+     * Tests that WebApkActivities are started properly by WebappLauncherActivity.
+     */
+    @Test
+    @LargeTest
+    @Feature({"Webapps"})
+    public void testWebApkLaunchesByLauncherActivity() {
+        Intent intent = new Intent();
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setPackage(InstrumentationRegistry.getTargetContext().getPackageName());
+        intent.setAction(WebappLauncherActivity.ACTION_START_WEBAPP);
+        intent.putExtra(WebApkConstants.EXTRA_URL, "https://pwa.rocks/")
+                .putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, "org.chromium.webapk");
+
+        WebApkValidator.disableValidationForTesting();
+        mActivityTestRule.startActivityCompletely(intent);
+
+        WebApkActivity lastActivity = (WebApkActivity) mActivityTestRule.getActivity();
+        Assert.assertEquals("https://pwa.rocks/", lastActivity.getWebappInfo().uri().toString());
     }
 
     /**

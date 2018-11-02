@@ -8,13 +8,16 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 
 import android.os.StrictMode;
-import android.text.TextUtils;
 
-import org.chromium.base.CommandLine;
+import org.junit.runner.Description;
+import org.junit.runners.model.Statement;
+
 import org.chromium.base.test.util.AnnotationRule;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.util.FeatureUtilities;
+import org.chromium.ui.test.util.UiRestriction;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -28,35 +31,40 @@ import java.lang.annotation.Target;
  * @see ChromeHome.Processor
  * @see FeatureUtilities#isChromeHomeEnabled()
  */
-@Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.METHOD, ElementType.TYPE})
-public @interface ChromeHome {
-    boolean value() default true;
+public interface ChromeHome {
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
+    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
+    @Features.EnableFeatures(ChromeFeatureList.CHROME_HOME)
+    @interface Enable {}
 
-    String FEATURES = ChromeFeatureList.CHROME_HOME;
-    String ENABLE_FLAGS = "enable-features=" + FEATURES;
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
+    @Features.DisableFeatures(ChromeFeatureList.CHROME_HOME)
+    @interface Disable {}
 
     /**
-     * Rule to Handle setting and resetting the feature flag and preference for ChromeHome. Can be
-     * used by explicitly calling methods ({@link #setPrefs(boolean)} and {@link #clearTestState()})
-     * or by using the {@link ChromeHome} annotation on tests.
+     * Rule to handle setting and resetting the cached feature state for ChromeHome. Can be used by
+     * explicitly calling methods ({@link #setPrefs(boolean)} and {@link #clearTestState()}) or by
+     * using the {@link ChromeHome.Enable} and {@link ChromeHome.Disable} annotations on tests.
      */
     class Processor extends AnnotationRule {
         private Boolean mOldState;
 
         public Processor() {
-            super(ChromeHome.class);
+            super(ChromeHome.Enable.class, ChromeHome.Disable.class);
+        }
+
+        @Override
+        public Statement apply(Statement base, Description description) {
+            Statement wrappedStatement = super.apply(base, description);
+            return getAnnotations().isEmpty() ? base : wrappedStatement;
         }
 
         @Override
         protected void before() throws Throwable {
-            boolean enabled = getAnnotation(ChromeHome.class).value();
-            if (enabled) {
-                Features.getInstance().enable(ChromeFeatureList.CHROME_HOME);
-            } else {
-                Features.getInstance().disable(ChromeFeatureList.CHROME_HOME);
-            }
-            setPrefs(enabled);
+            boolean featureEnabled = getClosestAnnotation() instanceof ChromeHome.Enable;
+            setPrefs(featureEnabled);
         }
 
         @Override
@@ -88,23 +96,6 @@ public @interface ChromeHome {
         public void clearTestState() {
             assertNotNull(mOldState);
             ChromePreferenceManager.getInstance().setChromeHomeEnabled(mOldState);
-        }
-
-        private void updateCommandLine() {
-            // TODO(dgn): Possible extra work: detect the flag and combine them with existing ones
-            // or support explicitly disabling the feature. Ideally this will be done by refactoring
-            // the entire features setting system for tests instead or string manipulation.
-            CommandLine commandLine = CommandLine.getInstance();
-            String existingFeatures = commandLine.getSwitchValue("enable-features");
-
-            if (TextUtils.equals(existingFeatures, FEATURES)) return;
-
-            if (existingFeatures != null) {
-                throw new IllegalStateException("Unable to enable ChromeHome, the feature flag is"
-                        + " already set to " + existingFeatures);
-            }
-
-            commandLine.appendSwitch(ENABLE_FLAGS);
         }
     }
 }

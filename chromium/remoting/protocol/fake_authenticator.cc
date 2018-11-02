@@ -4,16 +4,17 @@
 
 #include "remoting/protocol/fake_authenticator.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/base64.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "remoting/base/constants.h"
 #include "remoting/protocol/p2p_stream_socket.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -44,10 +45,12 @@ void FakeChannelAuthenticator::SecureAndAuthenticate(
     } else {
       scoped_refptr<net::IOBuffer> write_buf = new net::IOBuffer(1);
       write_buf->data()[0] = 0;
+      // TODO(crbug.com/656607): Add proper annotation.
       int result = socket_->Write(
           write_buf.get(), 1,
           base::Bind(&FakeChannelAuthenticator::OnAuthBytesWritten,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr()),
+          NO_TRAFFIC_ANNOTATION_BUG_656607);
       if (result != net::ERR_IO_PENDING) {
         // This will not call the callback because |did_read_bytes_| is
         // still set to false.
@@ -225,7 +228,7 @@ const std::string& FakeAuthenticator::GetAuthKey() const {
 std::unique_ptr<ChannelAuthenticator>
 FakeAuthenticator::CreateChannelAuthenticator() const {
   EXPECT_EQ(ACCEPTED, state());
-  return base::MakeUnique<FakeChannelAuthenticator>(
+  return std::make_unique<FakeChannelAuthenticator>(
       config_.action != REJECT_CHANNEL, config_.async);
 }
 

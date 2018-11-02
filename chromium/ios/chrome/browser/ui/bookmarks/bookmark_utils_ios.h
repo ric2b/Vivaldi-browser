@@ -14,10 +14,6 @@
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 
-@class BookmarkCell;
-@class BookmarkMenuItem;
-@class BookmarkPositionCache;
-@class BookmarkPathCache;
 class GURL;
 
 namespace bookmarks {
@@ -47,15 +43,6 @@ UIColor* DefaultColor(const GURL& url);
 
 // Returns the subtitle relevant to the bookmark navigation ui.
 NSString* subtitleForBookmarkNode(const bookmarks::BookmarkNode* node);
-
-// This margin is designed to align with the menu button in the navigation bar.
-extern const CGFloat menuMargin;
-// The margin from the left of the screen for the title of the navigation bar.
-extern const CGFloat titleMargin;
-// The distance between the icon in hamburger menu and the menu item title.
-extern const CGFloat titleToIconDistance;
-// The amount of time it takes to show or hide the bookmark menu.
-extern const CGFloat menuAnimationDuration;
 
 // On iPad, background color can be transparent. Wrapper for the light grey
 // background color.
@@ -190,32 +177,12 @@ std::vector<NodeVector::size_type> MissingNodesIndices(
     const NodeVector& vector1,
     const NodeVector& vector2);
 
-#pragma mark - Cache position in collection view.
-
-// Caches the active menu item, and the position in the collection view.
-void CachePosition(CGFloat position, BookmarkMenuItem* item);
-// Returns YES if a valid cache exists.
-// |model| must be loaded.
-// |item| and |position| are out variables, only populated if the return is YES.
-BOOL GetPositionCache(bookmarks::BookmarkModel* model,
-                      BookmarkMenuItem* __autoreleasing* item,
-                      CGFloat* position);
-// Method exists for testing.
-void ClearPositionCache();
-
-// Caches the bookmark UI position that the user was last viewing.
-void CacheBookmarkUIPosition(BookmarkPathCache* cache);
-
-// Returns the bookmark UI position that the user was last viewing.
-BookmarkPathCache* GetBookmarkUIPositionCache(bookmarks::BookmarkModel* model);
+#pragma mark - Cache position in table view.
 
 // Creates bookmark path for |folderId| passed in. For eg: for folderId = 76,
 // Root node(0) --> MobileBookmarks (3) --> Test1(76) will be returned as [0, 3,
 // 76].
 NSArray* CreateBookmarkPath(bookmarks::BookmarkModel* model, int64_t folderId);
-
-// Clears the bookmark UI position cache.
-void ClearBookmarkUIPositionCache();
 
 }  // namespace bookmark_utils_ios
 

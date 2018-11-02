@@ -4,7 +4,7 @@
 
 #include "core/layout/ng/ng_container_fragment_builder.h"
 
-#include "core/layout/ng/ng_exclusion_space.h"
+#include "core/layout/ng/exclusions/ng_exclusion_space.h"
 #include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_physical_fragment.h"
 #include "core/layout/ng/ng_unpositioned_float.h"
@@ -18,7 +18,7 @@ NGContainerFragmentBuilder::NGContainerFragmentBuilder(
     TextDirection direction)
     : NGBaseFragmentBuilder(std::move(style), writing_mode, direction) {}
 
-NGContainerFragmentBuilder::~NGContainerFragmentBuilder() {}
+NGContainerFragmentBuilder::~NGContainerFragmentBuilder() = default;
 
 NGContainerFragmentBuilder& NGContainerFragmentBuilder::SetInlineSize(
     LayoutUnit inline_size) {
@@ -101,6 +101,13 @@ NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddChild(
 NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddChild(
     scoped_refptr<NGPhysicalFragment> child,
     const NGLogicalOffset& child_offset) {
+  if (!has_last_resort_break_) {
+    if (const auto* token = child->BreakToken()) {
+      if (token->IsBlockType() &&
+          ToNGBlockBreakToken(token)->HasLastResortBreak())
+        has_last_resort_break_ = true;
+    }
+  }
   children_.push_back(std::move(child));
   offsets_.push_back(child_offset);
   return *this;
@@ -117,7 +124,6 @@ NGContainerFragmentBuilder::AddOutOfFlowChildCandidate(
                                           NGPhysicalOffset())},
       child_offset));
 
-  child.SaveStaticOffsetForLegacy(child_offset);
   return *this;
 }
 
@@ -125,15 +131,20 @@ NGContainerFragmentBuilder&
 NGContainerFragmentBuilder::AddInlineOutOfFlowChildCandidate(
     NGBlockNode child,
     const NGLogicalOffset& child_offset,
-    TextDirection line_direction) {
+    TextDirection line_direction,
+    LayoutObject* inline_container) {
   DCHECK(child);
+  // Fixed positioned children are never placed inside inline container.
+  if (child.Style().GetPosition() == EPosition::kFixed)
+    inline_container = nullptr;
   oof_positioned_candidates_.push_back(NGOutOfFlowPositionedCandidate(
-      NGOutOfFlowPositionedDescendant{
-          child, NGStaticPosition::Create(GetWritingMode(), line_direction,
-                                          NGPhysicalOffset())},
+      NGOutOfFlowPositionedDescendant(
+          child,
+          NGStaticPosition::Create(GetWritingMode(), line_direction,
+                                   NGPhysicalOffset()),
+          inline_container),
       child_offset, line_direction));
 
-  child.SaveStaticOffsetForLegacy(child_offset);
   return *this;
 }
 
@@ -144,7 +155,8 @@ NGContainerFragmentBuilder& NGContainerFragmentBuilder::AddOutOfFlowDescendant(
 }
 
 void NGContainerFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
-    Vector<NGOutOfFlowPositionedDescendant>* descendant_candidates) {
+    Vector<NGOutOfFlowPositionedDescendant>* descendant_candidates,
+    const LayoutObject* current_container) {
   DCHECK(descendant_candidates->IsEmpty());
 
   descendant_candidates->ReserveCapacity(oof_positioned_candidates_.size());
@@ -165,8 +177,15 @@ void NGContainerFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
     builder_relative_position.offset =
         child_offset + candidate.descendant.static_position.offset;
 
-    descendant_candidates->push_back(NGOutOfFlowPositionedDescendant{
-        candidate.descendant.node, builder_relative_position});
+    descendant_candidates->push_back(NGOutOfFlowPositionedDescendant(
+        candidate.descendant.node, builder_relative_position,
+        candidate.descendant.inline_container));
+    NGLogicalOffset container_offset =
+        builder_relative_position.offset.ConvertToLogical(
+            GetWritingMode(), Direction(), builder_physical_size,
+            NGPhysicalSize());
+    candidate.descendant.node.SaveStaticOffsetForLegacy(container_offset,
+                                                        current_container);
   }
 
   // Clear our current canidate list. This may get modified again if the
@@ -178,5 +197,21 @@ void NGContainerFragmentBuilder::GetAndClearOutOfFlowDescendantCandidates(
   // fixed descendant).
   oof_positioned_candidates_.clear();
 }
+
+#ifndef NDEBUG
+
+String NGContainerFragmentBuilder::ToString() const {
+  StringBuilder builder;
+  builder.Append(String::Format("ContainerFragment %.2fx%.2f, Children %zu\n",
+                                inline_size_.ToFloat(), block_size_.ToFloat(),
+                                children_.size()));
+  for (auto& child : children_) {
+    builder.Append(child->DumpFragmentTree(
+        NGPhysicalFragment::DumpAll & ~NGPhysicalFragment::DumpHeaderText));
+  }
+  return builder.ToString();
+}
+
+#endif
 
 }  // namespace blink

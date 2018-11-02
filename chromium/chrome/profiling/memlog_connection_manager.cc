@@ -36,17 +36,6 @@ MemlogConnectionManager::DumpArgs::DumpArgs(DumpArgs&& other) noexcept
     : backtrace_storage_lock(std::move(other.backtrace_storage_lock)) {}
 MemlogConnectionManager::DumpArgs::~DumpArgs() = default;
 
-MemlogConnectionManager::DumpProcessArgs::DumpProcessArgs() = default;
-MemlogConnectionManager::DumpProcessArgs::DumpProcessArgs(
-    DumpProcessArgs&& other) noexcept
-    : DumpArgs(std::move(other)),
-      pid(other.pid),
-      maps(std::move(other.maps)),
-      metadata(std::move(other.metadata)),
-      file(std::move(other.file)),
-      callback(std::move(other.callback)) {}
-MemlogConnectionManager::DumpProcessArgs::~DumpProcessArgs() = default;
-
 // Tracking information for DumpProcessForTracing(). This struct is
 // refcounted since there will be many background thread calls (one for each
 // AllocationTracker) and the callback is only issued when each has
@@ -121,11 +110,23 @@ void MemlogConnectionManager::OnNewConnection(
     mojom::ProfilingClientPtr client,
     mojo::ScopedHandle sender_pipe_end,
     mojo::ScopedHandle receiver_pipe_end,
-    mojom::ProcessType process_type) {
+    mojom::ProcessType process_type,
+    profiling::mojom::StackMode stack_mode) {
   base::AutoLock lock(connections_lock_);
 
-  // Shouldn't be asked to profile a process more than once.
-  DCHECK(connections_.find(pid) == connections_.end());
+  // Attempting to start profiling on an already profiled processs should have
+  // no effect.
+  if (connections_.find(pid) != connections_.end())
+    return;
+
+  // It's theoretically possible that we started profiling a process, the
+  // profiling was stopped [e.g. by hitting the 10-s timeout], and then we tried
+  // to start profiling again. The ProfilingClient will refuse to start again.
+  // But the MemlogConnectionManager will not be able to distinguish this
+  // never-started ProfilingClient from a brand new ProfilingClient that happens
+  // to share the same pid. This is a rare condition which should only happen
+  // when the user is attempting to manually start profiling for processes, so
+  // we ignore this edge case.
 
   base::PlatformFile receiver_handle;
   CHECK_EQ(MOJO_RESULT_OK, mojo::UnwrapPlatformFile(
@@ -157,9 +158,19 @@ void MemlogConnectionManager::OnNewConnection(
       base::Bind(&MemlogReceiverPipe::StartReadingOnIOThread, new_pipe));
 
   // Request the client start sending us data.
-  connection->client->StartProfiling(std::move(sender_pipe_end));
+  connection->client->StartProfiling(std::move(sender_pipe_end), stack_mode);
 
   connections_[pid] = std::move(connection);  // Transfers ownership.
+}
+
+std::vector<base::ProcessId> MemlogConnectionManager::GetConnectionPids() {
+  base::AutoLock lock(connections_lock_);
+  std::vector<base::ProcessId> results;
+  results.reserve(connections_.size());
+  for (const auto& pair : connections_) {
+    results.push_back(pair.first);
+  }
+  return results;
 }
 
 void MemlogConnectionManager::OnConnectionComplete(base::ProcessId pid) {
@@ -189,42 +200,9 @@ void MemlogConnectionManager::OnConnectionCompleteThunk(
                                 connection_manager, pid));
 }
 
-void MemlogConnectionManager::DumpProcess(DumpProcessArgs args) {
-  // Schedules the given callback to execute after the given process ID has
-  // been synchronized. If the process ID isn't found, the callback will be
-  // asynchronously run with "false" as the success parameter.
-  args.backtrace_storage_lock = BacktraceStorage::Lock(&backtrace_storage_);
-
-  base::AutoLock lock(connections_lock_);
-  auto task_runner = base::MessageLoop::current()->task_runner();
-  auto it = connections_.find(args.pid);
-
-  if (it == connections_.end()) {
-    DLOG(ERROR) << "No connections found for memory dump for pid:" << args.pid;
-    task_runner->PostTask(
-        FROM_HERE,
-        base::BindOnce(&MemlogConnectionManager::DoDumpProcess,
-                       weak_factory_.GetWeakPtr(), std::move(args),
-                       mojom::ProcessType::OTHER, false, AllocationCountMap(),
-                       AllocationTracker::ContextMap()));
-    return;
-  }
-
-  int barrier_id = next_barrier_id_++;
-
-  // Register for callback before requesting the dump so we don't race for the
-  // signal. The callback will be issued on the allocation tracker thread so
-  // need to thunk back to the I/O thread.
-  Connection* connection = it->second.get();
-  auto callback = base::BindOnce(&MemlogConnectionManager::DoDumpProcess,
-                                 weak_factory_.GetWeakPtr(), std::move(args),
-                                 connection->process_type);
-  connection->tracker.SnapshotOnBarrier(barrier_id, std::move(task_runner),
-                                        std::move(callback));
-  connection->client->FlushMemlogPipe(barrier_id);
-}
-
 void MemlogConnectionManager::DumpProcessesForTracing(
+    bool keep_small_allocations,
+    bool strip_path_from_mapped_files,
     mojom::ProfilingService::DumpProcessesForTracingCallback callback,
     memory_instrumentation::mojom::GlobalMemoryDumpPtr dump) {
   base::AutoLock lock(connections_lock_);
@@ -259,63 +237,22 @@ void MemlogConnectionManager::DumpProcessesForTracing(
         barrier_id, task_runner,
         base::BindOnce(&MemlogConnectionManager::DoDumpOneProcessForTracing,
                        weak_factory_.GetWeakPtr(), tracking, pid,
-                       connection->process_type));
+                       connection->process_type, keep_small_allocations,
+                       strip_path_from_mapped_files));
     connection->client->FlushMemlogPipe(barrier_id);
   }
-}
-
-void MemlogConnectionManager::DoDumpProcess(
-    DumpProcessArgs args,
-    mojom::ProcessType process_type,
-    bool success,
-    AllocationCountMap counts,
-    AllocationTracker::ContextMap context) {
-  if (!success) {
-    std::move(args.callback).Run(false);
-    return;
-  }
-
-  CHECK(args.backtrace_storage_lock.IsLocked());
-  std::ostringstream oss;
-  ExportParams params;
-  params.allocs = std::move(counts);
-  params.context_map = std::move(context);
-  params.maps = std::move(args.maps);
-  params.process_type = process_type;
-  params.min_size_threshold = kMinSizeThreshold;
-  params.min_count_threshold = kMinCountThreshold;
-  ExportAllocationEventSetToJSON(args.pid, params, std::move(args.metadata),
-                                 oss);
-  std::string reply = oss.str();
-
-  // Pass ownership of the underlying fd/HANDLE to zlib.
-  base::PlatformFile platform_file = args.file.TakePlatformFile();
-#if defined(OS_WIN)
-  // The underlying handle |platform_file| is also closed when |fd| is closed.
-  int fd = _open_osfhandle(reinterpret_cast<intptr_t>(platform_file), 0);
-#else
-  int fd = platform_file;
-#endif
-  gzFile gz_file = gzdopen(fd, "w");
-  if (!gz_file) {
-    DLOG(ERROR) << "Cannot compress trace file";
-    std::move(args.callback).Run(false);
-    return;
-  }
-
-  size_t written_bytes = gzwrite(gz_file, reply.c_str(), reply.size());
-  gzclose(gz_file);
-
-  std::move(args.callback).Run(written_bytes == reply.size());
 }
 
 void MemlogConnectionManager::DoDumpOneProcessForTracing(
     scoped_refptr<DumpProcessesForTracingTracking> tracking,
     base::ProcessId pid,
     mojom::ProcessType process_type,
+    bool keep_small_allocations,
+    bool strip_path_from_mapped_files,
     bool success,
     AllocationCountMap counts,
-    AllocationTracker::ContextMap context) {
+    AllocationTracker::ContextMap context,
+    AllocationTracker::AddressToStringMap mapped_strings) {
   // All code paths through here must issue the callback when waiting_responses
   // is 0 or the browser will wait forever for the dump.
   DCHECK(tracking->waiting_responses > 0);
@@ -347,10 +284,11 @@ void MemlogConnectionManager::DoDumpOneProcessForTracing(
   params.allocs = std::move(counts);
   params.maps = std::move(process_dump->os_dump->memory_maps_for_heap_profiler);
   params.context_map = std::move(context);
+  params.mapped_strings = std::move(mapped_strings);
   params.process_type = process_type;
-  params.min_size_threshold = kMinSizeThreshold;
-  params.min_count_threshold = kMinCountThreshold;
-  params.is_argument_filtering_enabled = true;
+  params.min_size_threshold = keep_small_allocations ? 0 : kMinSizeThreshold;
+  params.min_count_threshold = keep_small_allocations ? 0 : kMinCountThreshold;
+  params.strip_path_from_mapped_files = strip_path_from_mapped_files;
 
   std::ostringstream oss;
   ExportMemoryMapsAndV2StackTraceToJSON(params, oss);

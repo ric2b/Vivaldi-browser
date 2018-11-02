@@ -8,7 +8,7 @@
 #include "content/network/network_context.h"
 #include "content/network/network_service_impl.h"
 #include "content/network/url_loader.h"
-#include "content/public/common/resource_request.h"
+#include "services/network/public/cpp/resource_request.h"
 
 namespace content {
 
@@ -22,12 +22,12 @@ NetworkServiceURLLoaderFactory::NetworkServiceURLLoaderFactory(
 NetworkServiceURLLoaderFactory::~NetworkServiceURLLoaderFactory() = default;
 
 void NetworkServiceURLLoaderFactory::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    network::mojom::URLLoaderRequest request,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client,
+    const network::ResourceRequest& url_request,
+    network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   bool report_raw_headers = false;
   if (url_request.report_raw_headers) {
@@ -44,7 +44,7 @@ void NetworkServiceURLLoaderFactory::CreateLoaderAndStart(
 }
 
 void NetworkServiceURLLoaderFactory::Clone(
-    mojom::URLLoaderFactoryRequest request) {
+    network::mojom::URLLoaderFactoryRequest request) {
   context_->CreateURLLoaderFactory(std::move(request), process_id_);
 }
 

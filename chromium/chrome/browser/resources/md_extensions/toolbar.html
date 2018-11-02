@@ -4,11 +4,14 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
 <link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
 <link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/policy/cr_tooltip_icon.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
+<link rel="import" href="chrome://resources/html/util.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-a11y-announcer/iron-a11y-announcer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="icons.html">
-<link rel="stylesheet" href="chrome://resources/css/md_colors.css">
 
 <dom-module id="extensions-toolbar">
   <template>
@@ -31,6 +34,10 @@
         --cr-toggle-checked-button-color: white;
         --cr-toggle-checked-ink-color: white;
         --cr-toggle-unchecked-ink-color: white;
+      }
+
+      cr-tooltip-icon {
+        -webkit-margin-end: 20px;
       }
 
       #devDrawer[expanded] #button-strip {
@@ -89,14 +96,22 @@
         narrow-threshold="1000">
       <div class="more-actions" hidden$="[[isGuest]]">
         <span id="devModeLabel">$i18n{toolbarDevMode}</span>
+        <cr-tooltip-icon hidden$="[[!devModeControlledByPolicy]]"
+            tooltip-text="$i18n{controlledSettingPolicy}"
+            icon-class="cr20:domain"
+            icon-aria-label="$i18n{controlledSettingPolicy}">
+        </cr-tooltip-icon>
         <cr-toggle id="dev-mode" on-change="onDevModeToggleChange_"
+            disabled="[[shouldDisableDevMode_(
+                devModeControlledByPolicy, isSupervised)]]"
             checked="[[inDevMode]]" aria-labelledby="devModeLabel">
         </cr-toggle>
       </div>
     </cr-toolbar>
     <div id="devDrawer" expanded$="[[expanded_]]">
       <div id="button-strip">
-        <paper-button id="load-unpacked" on-tap="onLoadUnpackedTap_">
+        <paper-button hidden$="[[!canLoadUnpacked]]" id="load-unpacked"
+            on-tap="onLoadUnpackedTap_">
           $i18n{toolbarLoadUnpacked}
         </paper-button>
         <paper-button id="pack-extensions" on-tap="onPackTap_">

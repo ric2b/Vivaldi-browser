@@ -49,8 +49,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ContentSwitches.DISABLE_GESTURE_REQUIREMENT_FOR_PRESENTATION,
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class MediaRouterIntegrationTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -296,6 +295,7 @@ public class MediaRouterIntegrationTest {
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
     @Feature({"MediaRouter"})
     @LargeTest
+    @RetryOnFailure
     public void testFailCreateRoute() throws InterruptedException, TimeoutException {
         MockMediaRouteProvider.Factory.sProvider.setCreateRouteErrorMessage("Unknown sink");
         mActivityTestRule.loadUrl(mTestServer.getURL(TEST_PAGE));

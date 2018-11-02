@@ -5,12 +5,13 @@
 package org.chromium.base.test.util;
 
 import android.content.Context;
+import android.text.TextUtils;
 
 import org.junit.Assert;
 import org.junit.Rule;
 
-import org.chromium.base.BaseChromiumApplication;
 import org.chromium.base.CommandLine;
+import org.chromium.base.CommandLineInitUtil;
 import org.chromium.base.test.BaseTestResult.PreTestHook;
 
 import java.lang.annotation.ElementType;
@@ -22,6 +23,7 @@ import java.lang.reflect.AnnotatedElement;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -54,6 +56,8 @@ import java.util.Set;
  * Note that this class should never be instantiated.
  */
 public final class CommandLineFlags {
+    private static final String DISABLE_FEATURES = "disable-features";
+    private static final String ENABLE_FEATURES = "enable-features";
 
     /**
      * Adds command-line flags to the {@link org.chromium.base.CommandLine} for this test.
@@ -87,15 +91,33 @@ public final class CommandLineFlags {
     public static void setUp(Context targetContext, AnnotatedElement element) {
         Assert.assertNotNull("Unable to get a non-null target context.", targetContext);
         CommandLine.reset();
-        BaseChromiumApplication.initCommandLine(targetContext);
+        CommandLineInitUtil.initCommandLine(targetContext, getTestCmdLineFile());
+        Set<String> enableFeatures = new HashSet<String>();
+        Set<String> disableFeatures = new HashSet<String>();
         Set<String> flags = getFlags(element);
         for (String flag : flags) {
             String[] parsedFlags = flag.split("=", 2);
             if (parsedFlags.length == 1) {
                 CommandLine.getInstance().appendSwitch(flag);
+            } else if (ENABLE_FEATURES.equals(parsedFlags[0])) {
+                // We collect enable/disable features flags separately and aggregate them because
+                // they may be specified multiple times, in which case the values will trample each
+                // other.
+                Collections.addAll(enableFeatures, parsedFlags[1].split(","));
+            } else if (DISABLE_FEATURES.equals(parsedFlags[0])) {
+                Collections.addAll(disableFeatures, parsedFlags[1].split(","));
             } else {
                 CommandLine.getInstance().appendSwitchWithValue(parsedFlags[0], parsedFlags[1]);
             }
+        }
+
+        if (enableFeatures.size() > 0) {
+            CommandLine.getInstance().appendSwitchWithValue(
+                    ENABLE_FEATURES, TextUtils.join(",", enableFeatures));
+        }
+        if (disableFeatures.size() > 0) {
+            CommandLine.getInstance().appendSwitchWithValue(
+                    DISABLE_FEATURES, TextUtils.join(",", disableFeatures));
         }
     }
 
@@ -166,5 +188,9 @@ public final class CommandLineFlags {
             }
 
         };
+    }
+
+    public static String getTestCmdLineFile() {
+        return "test-cmdline-file";
     }
 }

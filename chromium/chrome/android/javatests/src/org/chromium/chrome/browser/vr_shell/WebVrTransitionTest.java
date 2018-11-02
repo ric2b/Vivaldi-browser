@@ -14,8 +14,10 @@ import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_V
 import android.app.Activity;
 import android.os.Build;
 import android.os.SystemClock;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.MediumTest;
+import android.support.test.uiautomator.UiDevice;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -57,8 +59,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 @RunWith(ParameterizedRunner.class)
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, "enable-webvr"})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "enable-webvr"})
 @MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT) // WebVR is only supported on K+
 public class WebVrTransitionTest {
     @ClassParameter
@@ -156,6 +157,35 @@ public class WebVrTransitionTest {
     }
 
     /**
+     * Tests that the requestPresent promise is rejected if the DON flow is canceled.
+     */
+    @Test
+    @MediumTest
+    @Restriction({RESTRICTION_TYPE_VIEWER_DAYDREAM, RESTRICTION_TYPE_DON_ENABLED})
+    @VrActivityRestriction({VrActivityRestriction.SupportedActivity.ALL})
+    public void testPresentationPromiseRejectedIfDonCanceled() throws InterruptedException {
+        mVrTestFramework.loadUrlAndAwaitInitialization(
+                VrTestFramework.getHtmlTestFile(
+                        "test_presentation_promise_rejected_if_don_canceled"),
+                PAGE_LOAD_TIMEOUT_S);
+        final UiDevice uiDevice =
+                UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
+        VrTransitionUtils.enterPresentation(mVrTestFramework.getFirstTabCvc());
+        // Wait until the DON flow appears to be triggered
+        // TODO(bsheedy): Make this less hacky if there's ever an explicit way to check if the
+        // DON flow is currently active https://crbug.com/758296
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return uiDevice.getCurrentPackageName().equals("com.google.vr.vrcore");
+            }
+        }, POLL_TIMEOUT_LONG_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+        uiDevice.pressBack();
+        mVrTestFramework.waitOnJavaScriptStep(mVrTestFramework.getFirstTabWebContents());
+        mVrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
+    }
+
+    /**
      * Tests that an intent from a trusted app such as Daydream Home allows WebVR content
      * to auto present without the need for a user gesture.
      */
@@ -212,8 +242,7 @@ public class WebVrTransitionTest {
     public void testControlsVisibleAfterExitingVr() throws InterruptedException {
         mVrTestFramework.loadUrlAndAwaitInitialization(
                 VrTestFramework.getHtmlTestFile("generic_webvr_page"), PAGE_LOAD_TIMEOUT_S);
-        VrTransitionUtils.enterPresentationAndWait(
-                mVrTestFramework.getFirstTabCvc(), mVrTestFramework.getFirstTabWebContents());
+        VrTransitionUtils.enterPresentationOrFail(mVrTestFramework.getFirstTabCvc());
         VrTransitionUtils.forceExitVr();
         // The hiding of the controls may only propagate after VR has exited, so give it a chance
         // to propagate. In the worst case this test will erroneously pass, but should never
@@ -226,5 +255,27 @@ public class WebVrTransitionTest {
                 return activity.getFullscreenManager().getBrowserControlHiddenRatio() == 0.0;
             }
         }, POLL_TIMEOUT_SHORT_MS, POLL_CHECK_INTERVAL_SHORT_MS);
+    }
+
+    /**
+     * Tests that window.requestAnimationFrame stops firing while in WebVR presentation, but resumes
+     * afterwards.
+     */
+    @Test
+    @MediumTest
+    @VrActivityRestriction({VrActivityRestriction.SupportedActivity.ALL})
+    public void testWindowRafStopsFiringWhilePresenting() throws InterruptedException {
+        mVrTestFramework.loadUrlAndAwaitInitialization(
+                VrTestFramework.getHtmlTestFile("test_window_raf_stops_firing_while_presenting"),
+                PAGE_LOAD_TIMEOUT_S);
+        VrTestFramework.executeStepAndWait(
+                "stepVerifyBeforePresent()", mVrTestFramework.getFirstTabWebContents());
+        VrTransitionUtils.enterPresentationOrFail(mVrTestFramework.getFirstTabCvc());
+        VrTestFramework.executeStepAndWait(
+                "stepVerifyDuringPresent()", mVrTestFramework.getFirstTabWebContents());
+        VrTransitionUtils.forceExitVr();
+        VrTestFramework.executeStepAndWait(
+                "stepVerifyAfterPresent()", mVrTestFramework.getFirstTabWebContents());
+        VrTestFramework.endTest(mVrTestFramework.getFirstTabWebContents());
     }
 }

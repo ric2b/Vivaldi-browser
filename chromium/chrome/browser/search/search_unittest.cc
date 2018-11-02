@@ -2,10 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/search/search.h"
+
 #include <stddef.h>
 
 #include <map>
-#include <memory>
+#include <string>
+#include <utility>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -13,16 +16,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
-#include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
-#include "components/prefs/pref_service.h"
-#include "components/search/search.h"
 #include "components/search_engines/template_url_service.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -39,6 +37,27 @@
 #endif
 
 namespace search {
+
+bool MatchesOriginAndPath(const GURL& my_url, const GURL& other_url);
+
+TEST(SearchURLsTest, MatchesOriginAndPath) {
+  EXPECT_TRUE(MatchesOriginAndPath(GURL("http://example.com/path"),
+                                   GURL("http://example.com/path?param")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("http://not.example.com/path"),
+                                    GURL("http://example.com/path")));
+  EXPECT_TRUE(MatchesOriginAndPath(GURL("http://example.com:80/path"),
+                                   GURL("http://example.com/path")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("http://example.com:8080/path"),
+                                    GURL("http://example.com/path")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("ftp://example.com/path"),
+                                    GURL("http://example.com/path")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("http://example.com/path"),
+                                    GURL("https://example.com/path")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("https://example.com/path"),
+                                    GURL("http://example.com/path")));
+  EXPECT_FALSE(MatchesOriginAndPath(GURL("http://example.com/path"),
+                                    GURL("http://example.com/another-path")));
+}
 
 class SearchTest : public BrowserWithTestWindowTest {
  protected:
@@ -256,8 +275,7 @@ const SearchTestCase kInstantNTPTestCases[] = {
 
 TEST_F(SearchTest, InstantNTPExtendedEnabled) {
   AddTab(browser(), GURL("chrome://blank"));
-  for (size_t i = 0; i < arraysize(kInstantNTPTestCases); ++i) {
-    const SearchTestCase& test = kInstantNTPTestCases[i];
+  for (const SearchTestCase& test : kInstantNTPTestCases) {
     NavigateAndCommitActiveTab(GURL(test.url));
     const content::WebContents* contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
@@ -268,8 +286,7 @@ TEST_F(SearchTest, InstantNTPExtendedEnabled) {
 
 TEST_F(SearchTest, InstantNTPCustomNavigationEntry) {
   AddTab(browser(), GURL("chrome://blank"));
-  for (size_t i = 0; i < arraysize(kInstantNTPTestCases); ++i) {
-    const SearchTestCase& test = kInstantNTPTestCases[i];
+  for (const SearchTestCase& test : kInstantNTPTestCases) {
     NavigateAndCommitActiveTab(GURL(test.url));
     content::WebContents* contents =
         browser()->tab_strip_model()->GetWebContentsAt(0);
@@ -281,11 +298,13 @@ TEST_F(SearchTest, InstantNTPCustomNavigationEntry) {
                                          false,
                                          std::string(),
                                          contents->GetBrowserContext()));
-    // The active entry is chrome://blank and not an NTP.
-    EXPECT_FALSE(IsInstantNTP(contents));
+    // The visible entry is now chrome://blank, but this is still an NTP.
+    EXPECT_FALSE(NavEntryIsInstantNTP(contents, controller.GetVisibleEntry()));
     EXPECT_EQ(test.expected_result,
               NavEntryIsInstantNTP(contents,
                                    controller.GetLastCommittedEntry()))
+        << test.url << " " << test.comment;
+    EXPECT_EQ(test.expected_result, IsInstantNTP(contents))
         << test.url << " " << test.comment;
   }
 }
@@ -375,8 +394,7 @@ TEST_F(SearchTest, IsNTPURL) {
   GURL local_ntp_url(chrome::kChromeSearchLocalNtpUrl);
 
   EXPECT_FALSE(IsNTPURL(invalid_url, profile()));
-  // No margin.
-  profile()->GetPrefs()->SetBoolean(prefs::kSearchSuggestEnabled, true);
+
   GURL remote_ntp_url(GetNewTabPageURL(profile()));
   GURL remote_ntp_service_worker_url("https://foo.com/newtab-serviceworker.js");
   GURL search_url_with_search_terms("https://foo.com/url?bar=abc");

@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -28,7 +27,6 @@ const char kNTPPromoFinchExperiment[] = "IOSNTPPromotion";
 const char kPrefPromoObject[] = "ios.ntppromo";
 
 // Keys in the kPrefPromoObject dictionary; used only here.
-const char kPrefPromoID[] = "id";
 const char kPrefPromoFirstViewTime[] = "first_view_time";
 const char kPrefPromoViews[] = "views";
 const char kPrefPromoClosed[] = "closed";
@@ -142,7 +140,7 @@ void NotificationPromo::WritePrefs(int promo_id,
                                    double first_view_time,
                                    int views,
                                    bool closed) {
-  auto ntp_promo = base::MakeUnique<base::DictionaryValue>();
+  auto ntp_promo = std::make_unique<base::DictionaryValue>();
   ntp_promo->SetDouble(kPrefPromoFirstViewTime, first_view_time);
   ntp_promo->SetInteger(kPrefPromoViews, views);
   ntp_promo->SetBoolean(kPrefPromoClosed, closed);
@@ -155,10 +153,6 @@ void NotificationPromo::WritePrefs(int promo_id,
 }
 
 void NotificationPromo::InitFromPrefs() {
-  // Check if data is stored in the old prefs structure, and migrate it before
-  // reading from prefs.
-  MigrateOldPrefs();
-
   // If |promo_id_| is not set, do nothing.
   if (promo_id_ == -1)
     return;
@@ -176,48 +170,6 @@ void NotificationPromo::InitFromPrefs() {
   ntp_promo->GetDouble(kPrefPromoFirstViewTime, &first_view_time_);
   ntp_promo->GetInteger(kPrefPromoViews, &views_);
   ntp_promo->GetBoolean(kPrefPromoClosed, &closed_);
-}
-
-void NotificationPromo::MigrateOldPrefs() {
-  const base::DictionaryValue* promo_dict =
-      local_state_->GetDictionary(kPrefPromoObject);
-  if (!promo_dict)
-    return;
-
-  const base::ListValue* promo_list = NULL;
-  promo_dict->GetList("mobile_ntp_whats_new_promo", &promo_list);
-  if (!promo_list)
-    return;
-
-  const base::DictionaryValue* ntp_promo = NULL;
-  promo_list->GetDictionary(0, &ntp_promo);
-  if (!ntp_promo) {
-    // If the list is saved but there is no promo dictionary, clear prefs to
-    // delete the empty list.
-    NotificationPromo::MigrateUserPrefs(local_state_);
-    return;
-  }
-
-  int promo_id = -1;
-  ntp_promo->GetInteger(kPrefPromoID, &promo_id);
-  if (promo_id == -1) {
-    // If there is no promo id saved in prefs, then data is corrupt and the
-    // prefs can be discarded.
-    NotificationPromo::MigrateUserPrefs(local_state_);
-    return;
-  }
-
-  double first_view_time = 0;
-  ntp_promo->GetDouble(kPrefPromoFirstViewTime, &first_view_time);
-  int views = 0;
-  ntp_promo->GetInteger(kPrefPromoViews, &views);
-  bool closed = false;
-  ntp_promo->GetBoolean(kPrefPromoClosed, &closed);
-
-  // Clear prefs to discard the old structure before saving the data in the new
-  // structure.
-  NotificationPromo::MigrateUserPrefs(local_state_);
-  WritePrefs(promo_id, first_view_time, views, closed);
 }
 
 bool NotificationPromo::CanShow() const {

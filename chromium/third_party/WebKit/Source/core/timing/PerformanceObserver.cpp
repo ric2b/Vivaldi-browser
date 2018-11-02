@@ -96,6 +96,12 @@ void PerformanceObserver::disconnect() {
   is_registered_ = false;
 }
 
+PerformanceEntryVector PerformanceObserver::takeRecords() {
+  PerformanceEntryVector performance_entries;
+  performance_entries.swap(performance_entries_);
+  return performance_entries;
+}
+
 void PerformanceObserver::EnqueuePerformanceEntry(PerformanceEntry& entry) {
   performance_entries_.push_back(&entry);
   if (performance_)
@@ -138,6 +144,7 @@ void PerformanceObserver::Trace(blink::Visitor* visitor) {
 void PerformanceObserver::TraceWrappers(
     const ScriptWrappableVisitor* visitor) const {
   visitor->TraceWrappers(callback_);
+  ScriptWrappable::TraceWrappers(visitor);
 }
 
 }  // namespace blink

@@ -119,7 +119,7 @@ void StyleBuilder::ApplyProperty(const CSSProperty& property,
   if (id != CSSPropertyVariable && (value.IsVariableReferenceValue() ||
                                     value.IsPendingSubstitutionValue())) {
     bool omit_animation_tainted =
-        CSSAnimations::IsAnimationAffectingProperty(id);
+        CSSAnimations::IsAnimationAffectingProperty(property);
     const CSSValue* resolved_value =
         CSSVariableResolver(state).ResolveVariableReferences(
             id, value, omit_animation_tainted);
@@ -742,16 +742,16 @@ void StyleBuilderFunctions::applyValueCSSPropertyContent(
         default:
           NOTREACHED();
         case CSSValueOpenQuote:
-          quote_type = OPEN_QUOTE;
+          quote_type = QuoteType::kOpen;
           break;
         case CSSValueCloseQuote:
-          quote_type = CLOSE_QUOTE;
+          quote_type = QuoteType::kClose;
           break;
         case CSSValueNoOpenQuote:
-          quote_type = NO_OPEN_QUOTE;
+          quote_type = QuoteType::kNoOpen;
           break;
         case CSSValueNoCloseQuote:
-          quote_type = NO_CLOSE_QUOTE;
+          quote_type = QuoteType::kNoClose;
           break;
       }
       next_content = ContentData::Create(quote_type);
@@ -1001,6 +1001,20 @@ void StyleBuilderFunctions::applyValueCSSPropertyCaretColor(
     state.Style()->SetVisitedLinkCaretColor(
         StyleBuilderConverter::ConvertStyleAutoColor(state, value, true));
   }
+}
+
+void StyleBuilderFunctions::applyValueCSSPropertyBorderImageSource(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  state.Style()->SetBorderImageSource(
+      state.GetStyleImage(CSSPropertyBorderImageSource, value));
+}
+
+void StyleBuilderFunctions::applyValueCSSPropertyWebkitMaskBoxImageSource(
+    StyleResolverState& state,
+    const CSSValue& value) {
+  state.Style()->SetMaskBoxImageSource(
+      state.GetStyleImage(CSSPropertyWebkitMaskBoxImageSource, value));
 }
 
 }  // namespace blink

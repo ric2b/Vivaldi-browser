@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/i18n/rtl.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,6 +17,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/gfx/gfx_paths.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 
@@ -29,8 +29,6 @@ AshTestSuite::~AshTestSuite() = default;
 
 void AshTestSuite::Initialize() {
   base::TestSuite::Initialize();
-  // Ensure histograms hit during tests are registered properly.
-  base::StatisticsRecorder::Initialize();
   gl::GLSurfaceTestSupport::InitializeOneOff();
 
   gfx::RegisterPathProvider();
@@ -70,13 +68,14 @@ void AshTestSuite::Initialize() {
   env_ = aura::Env::CreateInstance(is_mus || is_mash ? aura::Env::Mode::MUS
                                                      : aura::Env::Mode::LOCAL);
 
-  if (is_mus || is_mash) {
+  if (is_mash) {
     context_factory_ = std::make_unique<aura::test::AuraTestContextFactory>();
     env_->set_context_factory(context_factory_.get());
     env_->set_context_factory_private(nullptr);
     // mus needs to host viz, because ash by itself cannot.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kMus, switches::kMusHostVizValue);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kMus);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kMusHostingViz);
   }
 }
 

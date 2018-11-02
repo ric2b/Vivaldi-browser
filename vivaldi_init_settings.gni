@@ -1,7 +1,11 @@
 # Static feature overrides, don't change
 # Features we either always want enable or don't want at all,
 # depending on platform settings
+
+import("//build/toolchain/cc_wrapper.gni")
+
 declare_overrides() {
+  ffmpeg_branding = "Chromium"
   proprietary_codecs = true
   enable_widevine = true
 
@@ -24,10 +28,20 @@ declare_overrides() {
   exclude_unwind_tables = is_official_build
 
   # enable jumbo file compile
-  use_jumbo_build = !is_mac || !is_component_build
+  use_jumbo_build = true
 
   if (is_android) {
     enable_gvr_services = false
     enable_vr = false
+  }
+
+  enable_hangout_services_extension = true
+
+  enable_precompiled_headers = !is_official_build && !use_cc_wrapper
+
+  if (is_mac && !is_component_build) {
+    # We need to force SDK 10.12 for Mac builds due to VB-40761
+    # Static builds are mostly built by the builder
+    mac_use_sdk = "10.12"
   }
 }

@@ -928,28 +928,6 @@ TEST_F(VisibleUnitsTest, isVisuallyEquivalentCandidateWithDocument) {
   EXPECT_FALSE(IsVisuallyEquivalentCandidate(Position(&GetDocument(), 0)));
 }
 
-TEST_F(VisibleUnitsTest, localCaretRectOfPosition) {
-  const char* body_content =
-      "<p id='host'><b id='one'>1</b></p><b id='two'>22</b>";
-  const char* shadow_content =
-      "<b id='two'>22</b><content select=#one></content><b id='three'>333</b>";
-  SetBodyContent(body_content);
-  SetShadowContent(shadow_content, "host");
-
-  Element* one = GetDocument().getElementById("one");
-
-  const LocalCaretRect& caret_rect_from_dom_tree =
-      LocalCaretRectOfPosition(Position(one->firstChild(), 0));
-
-  const LocalCaretRect& caret_rect_from_flat_tree =
-      LocalCaretRectOfPosition(PositionInFlatTree(one->firstChild(), 0));
-
-  EXPECT_FALSE(caret_rect_from_dom_tree.IsEmpty());
-  EXPECT_EQ(caret_rect_from_dom_tree.layout_object,
-            caret_rect_from_flat_tree.layout_object);
-  EXPECT_EQ(caret_rect_from_dom_tree.rect, caret_rect_from_flat_tree.rect);
-}
-
 TEST_F(VisibleUnitsTest, logicalEndOfLine) {
   const char* body_content =
       "<a id=host><b id=one>11</b><b id=two>22</b></a><i id=three>333</i><i "

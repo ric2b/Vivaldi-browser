@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chromeos/components/tether/tether_component.h"
+#include "chromeos/components/tether/tether_host_fetcher.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
@@ -25,21 +26,30 @@ class Profile;
 namespace chromeos {
 class NetworkStateHandler;
 namespace tether {
+class GmsCoreNotificationsStateTracker;
+class GmsCoreNotificationsStateTrackerImpl;
 class NotificationPresenter;
 }  // namespace tether
 }  // namespace chromeos
 
 namespace cryptauth {
 class CryptAuthService;
+class RemoteDeviceProvider;
 }  // namespace cryptauth
 
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
 
+// Service providing access to the Instant Tethering component. Provides an
+// interface to start up the component as well as to retrieve metadata about
+// ongoing Tether connections.
+//
+// This service starts up when the user logs in (or recovers from a crash) and
+// is shut down when the user logs out.
 class TetherService : public KeyedService,
                       public chromeos::PowerManagerClient::Observer,
-                      public cryptauth::CryptAuthDeviceManager::Observer,
+                      public chromeos::tether::TetherHostFetcher::Observer,
                       public device::BluetoothAdapter::Observer,
                       public chromeos::NetworkStateHandlerObserver,
                       public chromeos::tether::TetherComponent::Observer {
@@ -64,6 +74,9 @@ class TetherService : public KeyedService,
   // Should only be called once a user is logged in.
   virtual void StartTetherIfPossible();
 
+  virtual chromeos::tether::GmsCoreNotificationsStateTracker*
+  GetGmsCoreNotificationsStateTracker();
+
  protected:
   // KeyedService:
   void Shutdown() override;
@@ -72,10 +85,8 @@ class TetherService : public KeyedService,
   void SuspendImminent(power_manager::SuspendImminent::Reason reason) override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
 
-  // cryptauth::CryptAuthDeviceManager::Observer
-  void OnSyncFinished(cryptauth::CryptAuthDeviceManager::SyncResult sync_result,
-                      cryptauth::CryptAuthDeviceManager::DeviceChangeResult
-                          device_change_result) override;
+  // chromeos::tether::TetherHostFetcher::Observer
+  void OnTetherHostsUpdated() override;
 
   // device::BluetoothAdapter::Observer:
   void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
@@ -83,6 +94,10 @@ class TetherService : public KeyedService,
 
   // chromeos::NetworkStateHandlerObserver:
   void DeviceListChanged() override;
+  void DevicePropertiesUpdated(const chromeos::DeviceState* device) override;
+
+  // Helper method called from NetworkStateHandlerObserver methods.
+  void UpdateEnabledState();
 
   // chromeos::tether::TetherComponent::Observer:
   void OnShutdownComplete() override;
@@ -116,7 +131,8 @@ class TetherService : public KeyedService,
       TestBleAdvertisingNotSupportedAndRecorded_BluetoothIsInitiallyNotPowered);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
                            TestBleAdvertisingSupportedButIncorrectlyRecorded);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestFeatureFlagEnabled);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
+                           TestGet_PrimaryUser_FeatureFlagEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestNoTetherHosts);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestProhibitedByPolicy);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestIsBluetoothPowered);
@@ -126,17 +142,18 @@ class TetherService : public KeyedService,
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestEnabled);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotification);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestBluetoothNotPresent);
-  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest,
-                           TestBluetoothNotPresent_FalsePositive);
+  FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestMetricsFalsePositives);
   FRIEND_TEST_ALL_PREFIXES(TetherServiceTest, TestWifiNotPresent);
 
   // Reflects InstantTethering_TechnologyStateAndReason enum in enums.xml. Do
   // not rearrange.
   enum TetherFeatureState {
-    OTHER_OR_UNKNOWN = 0,
+    // Note: Value 0 was previously OTHER_OR_UNKNOWN, but this was a vague
+    // description.
+    SHUT_DOWN = 0,
     BLE_ADVERTISING_NOT_SUPPORTED = 1,
-    // Note: SCREEN_LOCKED is an obsolete value, and should not be used.
-    SCREEN_LOCKED = 2,
+    // Note: Value 2 was previously SCREEN_LOCKED, but this value is obsolete
+    // and should no longer be used.
     NO_AVAILABLE_HOSTS = 3,
     CELLULAR_DISABLED = 4,
     PROHIBITED = 5,
@@ -145,11 +162,13 @@ class TetherService : public KeyedService,
     ENABLED = 8,
     BLE_NOT_PRESENT = 9,
     WIFI_NOT_PRESENT = 10,
+    SUSPENDED = 11,
     TETHER_FEATURE_STATE_MAX
   };
 
   // For debug logs.
-  static std::string TetherFeatureStateToString(TetherFeatureState state);
+  static std::string TetherFeatureStateToString(
+      const TetherFeatureState& state);
 
   void OnBluetoothAdapterFetched(
       scoped_refptr<device::BluetoothAdapter> adapter);
@@ -189,11 +208,17 @@ class TetherService : public KeyedService,
   // Attempt to record the current Tether FeatureState.
   void RecordTetherFeatureStateIfPossible();
 
-  void SetNotificationPresenterForTest(
-      std::unique_ptr<chromeos::tether::NotificationPresenter>
-          notification_presenter);
+  // Handles potential false positive metric states which may occur normally
+  // during startup. In the normal case (i.e., when Tether is enabled), the
+  // state transitions from OTHER_OR_UNKNOWN -> BLE_NOT_PRESENT ->
+  // NO_AVAILABLE_HOSTS -> ENABLED, but we do not wish to log metrics for the
+  // intermediate states (BLE_NOT_PRESENT or NO_AVAILABLE_HOSTS), since these
+  // are ephemeral. Returns whether a false positive case was handled.
+  bool HandleFeatureStateMetricIfUninitialized();
 
-  void SetTimerForTest(std::unique_ptr<base::Timer> timer);
+  void SetTestDoubles(std::unique_ptr<chromeos::tether::NotificationPresenter>
+                          notification_presenter,
+                      std::unique_ptr<base::Timer> timer);
 
   // Whether the service has been shut down.
   bool shut_down_ = false;
@@ -211,6 +236,11 @@ class TetherService : public KeyedService,
   // report has been hit yet.
   bool ble_not_present_false_positive_encountered_ = false;
 
+  // The first report of TetherFeatureState::NO_AVAILABLE_HOSTS may be incorrect
+  // and hence a false positive. This property tracks if the first report has
+  // been hit yet.
+  bool no_available_hosts_false_positive_encountered_ = false;
+
   // The TetherFeatureState obtained the last time that
   // GetTetherTechnologyState() was called. Used only for logging purposes.
   TetherFeatureState previous_feature_state_ =
@@ -222,6 +252,10 @@ class TetherService : public KeyedService,
   chromeos::NetworkStateHandler* network_state_handler_;
   std::unique_ptr<chromeos::tether::NotificationPresenter>
       notification_presenter_;
+  std::unique_ptr<chromeos::tether::GmsCoreNotificationsStateTrackerImpl>
+      gms_core_notifications_state_tracker_;
+  std::unique_ptr<cryptauth::RemoteDeviceProvider> remote_device_provider_;
+  std::unique_ptr<chromeos::tether::TetherHostFetcher> tether_host_fetcher_;
   std::unique_ptr<chromeos::tether::TetherComponent> tether_component_;
 
   PrefChangeRegistrar registrar_;

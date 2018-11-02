@@ -8,7 +8,11 @@
 
 goog.provide('BrailleCommandHandler');
 
+goog.require('BackgroundKeyboardHandler');
+
 goog.scope(function() {
+var StateType = chrome.automation.StateType;
+
 /**
  * Maps a dot pattern to a command.
  * @type {!Object<number, string>}
@@ -85,6 +89,56 @@ BrailleCommandHandler.getDots = function(command) {
       return key;
   }
   return 0;
+};
+
+/**
+ * Customizes ChromeVox commands when issued from a braille display while within
+ * editable text.
+ * @param {string} command
+ * @return {boolean} True if the command should propagate.
+ */
+BrailleCommandHandler.onEditCommand = function(command) {
+  var current = ChromeVoxState.instance.currentRange;
+  if (cvox.ChromeVox.isStickyModeOn() || !current || !current.start ||
+      !current.start.node || !current.start.node.state[StateType.EDITABLE])
+    return true;
+
+  var isMultiline = AutomationPredicate.multiline(current.start.node);
+  switch (command) {
+    case 'previousCharacter':
+      BackgroundKeyboardHandler.sendKeyPress(37);
+      break;
+    case 'nextCharacter':
+      BackgroundKeyboardHandler.sendKeyPress(39);
+      break;
+    case 'previousWord':
+      BackgroundKeyboardHandler.sendKeyPress(37, {ctrl: true});
+      break;
+    case 'nextWord':
+      BackgroundKeyboardHandler.sendKeyPress(39, {ctrl: true});
+      break;
+    case 'previousObject':
+    case 'previousLine':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(38);
+      break;
+    case 'nextObject':
+    case 'nextLine':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(40);
+      break;
+    case 'previousGroup':
+      BackgroundKeyboardHandler.sendKeyPress(38, {ctrl: true});
+      break;
+    case 'nextGroup':
+      BackgroundKeyboardHandler.sendKeyPress(40, {ctrl: true});
+      break;
+    default:
+      return true;
+  }
+  return false;
 };
 
 /**

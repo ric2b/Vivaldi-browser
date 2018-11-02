@@ -347,6 +347,10 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;
+  std::set<int32_t> GetReverseRelations(ui::AXIntAttribute attr,
+                                        int32_t dst_id) override;
+  std::set<int32_t> GetReverseRelations(ui::AXIntListAttribute attr,
+                                        int32_t dst_id) override;
 
  protected:
   using BrowserAccessibilityPositionInstance =
@@ -362,8 +366,11 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // The underlying node.
   ui::AXNode* node_;
 
-  // A unique ID, since node IDs are frame-local.
-  int32_t unique_id_;
+  // Protected so that it can't be called directly on a BrowserAccessibility
+  // where it could be confused with an id that comes from the node data,
+  // which is only unique to the Blink process.
+  // Does need to be called by subclasses such as BrowserAccessibilityAndroid.
+  const ui::AXUniqueId& GetUniqueId() const override;
 
  private:
   // |GetInnerText| recursively includes all the text from descendants such as
@@ -371,6 +378,9 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // special character in the place of every embedded object instead of its
   // text, depending on the platform.
   base::string16 GetInnerText() const;
+
+  // A unique ID, since node IDs are frame-local.
+  ui::AXUniqueId unique_id_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibility);
 };

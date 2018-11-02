@@ -88,6 +88,10 @@ const char kDisableAcceleratedMjpegDecode[] =
 const char kDisableAcceleratedVideoDecode[] =
     "disable-accelerated-video-decode";
 
+// Disables hardware acceleration of video encode, where available.
+const char kDisableAcceleratedVideoEncode[] =
+    "disable-accelerated-video-encode";
+
 // Disable limits on the number of backing stores. Can prevent blinking for
 // users with many windows/tabs and lots of memory.
 const char kDisableBackingStoreLimit[]      = "disable-backing-store-limit";
@@ -106,6 +110,10 @@ const char kDisableBackgroundTimerThrottling[] =
 // Applied after kEnableBlinkFeatures, and after other flags that change these
 // features.
 const char kDisableBlinkFeatures[]          = "disable-blink-features";
+
+// Disables compositor Ukm recording in browser tests.
+// TODO(khushalsagar): Remove once crbug.com/761524 is resolved.
+const char kDisableCompositorUkmForTests[] = "disable-compositor-ukm-for-tests";
 
 // Disables HTML5 DB support.
 const char kDisableDatabases[]              = "disable-databases";
@@ -137,9 +145,6 @@ const char kDisableGestureRequirementForPresentation[] =
 // Disables GPU hardware acceleration.  If software renderer is not in place,
 // then the GPU process won't launch.
 const char kDisableGpu[]                    = "disable-gpu";
-
-// Disable async worker context.
-const char kDisableGpuAsyncWorkerContext[] = "disable-gpu-async-worker-context";
 
 // Prevent the compositor from using its GPU implementation.
 const char kDisableGpuCompositing[]         = "disable-gpu-compositing";
@@ -347,21 +352,9 @@ const char kEnableBackgroundFetchPersistence[] =
 // features.
 const char kEnableBlinkFeatures[]           = "enable-blink-features";
 
-// PlzNavigate: Use or not the experimental browser-side navigation path.
-const char kDisableBrowserSideNavigation[] = "disable-browser-side-navigation";
-const char kEnableBrowserSideNavigation[]   = "enable-browser-side-navigation";
-
 // Enable animating of images in the compositor instead of blink.
 const char kEnableCompositorImageAnimations[] =
     "enable-compositor-image-animations";
-
-// Enables display list based 2d canvas implementation. Options:
-//  1. Enable: allow browser to use display list for 2d canvas (browser makes
-//     decision).
-//  2. Force: browser always uses display list for 2d canvas.
-const char kEnableDisplayList2dCanvas[]     = "enable-display-list-2d-canvas";
-const char kForceDisplayList2dCanvas[]      = "force-display-list-2d-canvas";
-const char kDisableDisplayList2dCanvas[]    = "disable-display-list-2d-canvas";
 
 // Enable experimental canvas features, e.g. canvas 2D context attributes
 const char kEnableExperimentalCanvasFeatures[] =
@@ -374,9 +367,6 @@ const char kEnableExperimentalWebPlatformFeatures[] =
 // Disables all RuntimeEnabledFeatures that can be enabled via OriginTrials.
 const char kDisableOriginTrialControlledBlinkFeatures[] =
     "disable-origin-trial-controlled-blink-features";
-
-// Makes the GL worker context run asynchronously by using a separate stream.
-const char kEnableGpuAsyncWorkerContext[] = "enable-gpu-async-worker-context";
 
 // Specify that all compositor resources should be backed by GPU memory buffers.
 const char kEnableGpuMemoryBufferCompositorResources[] =
@@ -444,9 +434,6 @@ const char kEnableSmoothScrolling[]         = "enable-smooth-scrolling";
 
 // Enable spatial navigation
 const char kEnableSpatialNavigation[]       = "enable-spatial-navigation";
-
-// Enables StatsTable, logging statistics to a global named shared memory table.
-const char kEnableStatsTable[]              = "enable-stats-table";
 
 // Blocks all insecure requests from secure contexts, and prevents the user
 // from overriding that decision.
@@ -636,9 +623,6 @@ const char kMojoLocalStorage[]              = "mojo-local-storage";
 // Mutes audio sent to the audio device so it is not audible during
 // automated testing.
 const char kMuteAudio[]                     = "mute-audio";
-
-// Don't send HTTP-Referer headers.
-const char kNoReferrers[]                   = "no-referrers";
 
 // Disables the sandbox for all process types that are normally sandboxed.
 const char kNoSandbox[]                     = "no-sandbox";
@@ -861,14 +845,15 @@ const char kTouchTextSelectionStrategy[]    = "touch-selection-strategy";
 // streams (e.g. WebRTC). Works with --use-fake-device-for-media-stream.
 const char kUseFakeUIForMediaStream[]     = "use-fake-ui-for-media-stream";
 
-// Texture target for CHROMIUM_image backed content textures.
-const char kContentImageTextureTarget[] = "content-image-texture-target";
-
 // Texture target for CHROMIUM_image backed video frame textures.
 const char kVideoImageTextureTarget[] = "video-image-texture-target";
 
 // Set when Chromium should use a mobile user agent.
 const char kUseMobileUserAgent[] = "use-mobile-user-agent";
+
+// Use the MockCertVerifier. This only works in test code.
+const char kUseMockCertVerifierForTesting[] =
+    "use-mock-cert-verifier-for-testing";
 
 // The contents of this flag are prepended to the utility process command line.
 // Useful values might be "valgrind" or "xterm -e gdb --args".
@@ -931,14 +916,20 @@ const char kEnforceWebRtcIPPermissionCheck[] =
 // handling policy is specified in Preferences.
 const char kForceWebRtcIPHandlingPolicy[] = "force-webrtc-ip-handling-policy";
 
+// Override the maximum framerate as can be specified in calls to getUserMedia.
+// This flag expects a value.  Example: --max-gum-fps=17.5
+const char kWebRtcMaxCaptureFramerate[] = "max-gum-fps";
+
+// Configure the maximum CPU time percentage of a single core that can be
+// consumed for desktop capturing. Default is 50. Set 100 to disable the
+// throttling of the capture.
+const char kWebRtcMaxCpuConsumptionPercentage[] =
+    "webrtc-max-cpu-consumption-percentage";
+
 // Renderer process parameter for WebRTC Stun probe trial to determine the
 // interval. Please see SetupStunProbeTrial in
 // chrome_browser_field_trials_desktop.cc for more detail.
 const char kWebRtcStunProbeTrialParameter[] = "webrtc-stun-probe-trial";
-
-// Override the maximum framerate as can be specified in calls to getUserMedia.
-// This flag expects a value.  Example: --max-gum-fps=17.5
-const char kWebRtcMaxCaptureFramerate[]     = "max-gum-fps";
 #endif
 
 #if defined(OS_ANDROID)
@@ -998,10 +989,6 @@ const char kDisableAudioSupportForDesktopShare[] =
 #if defined(OS_CHROMEOS)
 // Disables panel fitting (used for mirror mode).
 const char kDisablePanelFitting[]           = "disable-panel-fitting";
-
-// Disables VA-API accelerated video encode.
-const char kDisableVaapiAcceleratedVideoEncode[] =
-    "disable-vaapi-accelerated-video-encode";
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)

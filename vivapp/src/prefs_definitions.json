@@ -1,4 +1,5 @@
 {
+  "documentation": "http://wiki.viv.int/doku.php?id=prefs_system",
   "vivaldi": {
     "address_bar": {
       "autocomplete": {
@@ -18,12 +19,13 @@
           "syncable": true
         }
       },
-      "cutcopy_encoded": {
-        "type": "boolean",
-        "default": false,
-        "syncable": true
-      },
       "omnibox": {
+        "cutcopy_encoded": {
+          "description": "URL encode the string passed to the clipboard from the url field",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
         "enabled": {
           "type": "boolean",
           "default": true,
@@ -50,6 +52,7 @@
         "syncable": true
       },
       "select_on_click": {
+        "description": "Select the content of the URL field when it gets activated",
         "type": "boolean",
         "default": true,
         "syncable": true
@@ -60,6 +63,7 @@
         "syncable": true
       },
       "url_open_shortcut": {
+        "description": "Which modifier key to use for opening the url in a new tab",
         "type": "enum",
         "enum_values": {
           "alt": 0,
@@ -71,7 +75,7 @@
     },
     "bookmarks": {
       "bar": {
-        "bookmarkssort": {
+        "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
@@ -90,7 +94,7 @@
         "folder_ids": {
           "type": "list",
           "default": ["1"],
-          "syncable": true
+          "syncable": false
         },
         "position": {
           "type": "enum",
@@ -103,12 +107,12 @@
         },
         "visible": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "syncable": true
         }
       },
       "manager": {
-        "bookmarkssort": {
+        "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
@@ -120,11 +124,18 @@
         "syncable": true
       },
       "panel": {
-        "bookmarkssort": {
+        "sorting": {
           "type": "dictionary",
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
         }
+      }
+    },
+    "calendar": {
+      "date_format": {
+        "type": "string",
+        "default": "",
+        "syncable": false
       }
     },
     "homepage": {
@@ -148,6 +159,7 @@
     },
     "mouse_gestures": {
       "alt_gestures_enabled": {
+        "description": "Allow gestures using Alt key and left mouse button",
         "type": "boolean",
         "default": false,
         "syncable": true
@@ -178,7 +190,7 @@
       "size": {
         "width": {
           "type": "integer",
-          "default": 740,
+          "default": 960,
           "syncable": false
         },
         "height": {
@@ -203,9 +215,22 @@
         "type": "file_path",
         "default": "./../resources/bg.jpg",
         "syncable": false
+      },
+      "speed_dial": {
+        "display_navigation": {
+          "description": "Controls Speed Dial navigation display on manager pages",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
+        }
       }
     },
     "sync": {
+      "active": {
+        "type": "boolean",
+        "default": false,
+        "syncable": false
+      },
       "is_using_separate_encryption_password": {
         "type": "enum",
         "enum_values": {
@@ -214,6 +239,11 @@
           "nay": 2
         },
         "default": "unknown",
+        "syncable": false
+      },
+      "username": {
+        "type": "string",
+        "default": "",
         "syncable": false
       }
     },
@@ -230,22 +260,71 @@
       }
     },
     "theme": {
-      "border_radius": {
-        "type": "integer",
-        "default": 0,
-        "syncable": true
+      "window_background_accent_color_blend": {
+        "type": "boolean",
+        "default": true,
+        "syncable": false
+      },
+      "window_background_image_url": {
+        "type": "string",
+        "syncable": false,
+        "default": "../resources/sayagata.png"
+      },
+      "window_background_image_scaling": {
+        "type": "enum",
+        "enum_values": {
+          "scale": 0,
+          "repeat": 1
+        },
+        "default": "repeat",
+        "syncable": false
+      },
+      "window_background_image_enabled": {
+        "type": "boolean",
+        "default": false,
+        "syncable": false
       }
     },
     "webpages": {
       "capture": {
         "directory": {
+          "description": "The location where captured pages are stored",
           "type": "file_path",
+          "default": null,
           "syncable": false
+        },
+        "compression_format": {
+          "type": "enum",
+          "enum_values": {
+            "png": 0,
+            "jpg": 1
+          },
+          "default": "png",
+          "syncable": true
+        },
+        "capture_mode": {
+          "type": "enum",
+          "enum_values": {
+            "fullpage": 0,
+            "area": 1
+          },
+          "default": "fullpage",
+          "syncable": true
+        },
+        "save_location": {
+          "type": "enum",
+          "enum_values": {
+            "file": 0,
+            "clipboard": 1
+          },
+          "default": "file",
+          "syncable": true
         }
       },
       "full_screen": {
         "hide_mouse": {
           "type": "boolean",
+          "default": null,
           "default_win": true,
           "default_linux": true,
           "syncable": true
@@ -277,12 +356,21 @@
         "type": "boolean",
         "default": false,
         "syncable": true
+      },
+      "size_cache": {
+        "type": "dictionary",
+        "default": {
+          "width": 1200,
+          "height": 700
+        },
+        "syncable": false
       }
     },
 
     "system": {
       "has_desktop_wallpaper_protocol": {
         "type": "boolean",
+        "default": null,
         "default_linux": false,
         "default_mac": false,
         "syncable": false
@@ -290,22 +378,27 @@
       "mac": {
         "action_on_double_click": {
           "type": "string",
+          "default": null,
           "syncable": false
         },
         "aqua_color_variant": {
           "type": "integer",
+          "default": null,
           "syncable": false
         },
         "interface_style": {
           "type": "integer",
+          "default": null,
           "syncable": false
         },
         "keyboard_ui_mode": {
           "type": "integer",
+          "default": null,
           "syncable": false
         },
         "swipe_scroll_direction": {
           "type": "boolean",
+          "default": null,
           "syncable": false
         }
       }

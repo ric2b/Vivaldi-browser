@@ -130,12 +130,6 @@ void OobeBaseTest::SetUpOnMainThread() {
 }
 
 void OobeBaseTest::TearDownOnMainThread() {
-  // If the login display is still showing, exit gracefully.
-  if (LoginDisplayHost::default_host()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
-    content::RunMessageLoop();
-  }
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
 
   ExtensionApiTest::TearDownOnMainThread();
@@ -212,11 +206,11 @@ content::WebUI* OobeBaseTest::GetLoginUI() {
   return LoginDisplayHost::default_host()->GetOobeUI()->web_ui();
 }
 
-WebUILoginDisplay* OobeBaseTest::GetLoginDisplay() {
+LoginDisplayWebUI* OobeBaseTest::GetLoginDisplay() {
   ExistingUserController* controller =
       ExistingUserController::current_controller();
   CHECK(controller);
-  return static_cast<WebUILoginDisplay*>(controller->login_display());
+  return static_cast<LoginDisplayWebUI*>(controller->login_display());
 }
 
 void OobeBaseTest::WaitForGaiaPageLoad() {

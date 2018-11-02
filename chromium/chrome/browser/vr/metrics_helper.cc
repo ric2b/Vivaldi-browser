@@ -5,6 +5,7 @@
 #include "chrome/browser/vr/metrics_helper.h"
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/version.h"
 #include "net/base/network_change_notifier.h"
@@ -24,6 +25,8 @@ constexpr char kLatencyWebVr[] =
     "VR.Component.Assets.DurationUntilReady.OnEnter.WebVRPresentation";
 constexpr char kLatencyLaunchBrowser[] =
     "VR.Component.Assets.DurationUntilReady.OnChromeStart";
+constexpr char kLatencyRegisterComponent[] =
+    "VR.Component.Assets.DurationUntilReady.OnRegisterComponent";
 // TODO(tiborg): Rename VRAssetsComponentStatus and VRAssetsLoadStatus in
 // enums.xml and consider merging them.
 constexpr char kComponentUpdateStatus[] =
@@ -43,9 +46,8 @@ const auto kMinLatency = base::TimeDelta::FromMilliseconds(500);
 const auto kMaxLatency = base::TimeDelta::FromHours(1);
 constexpr size_t kLatencyBucketCount = 100;
 
-// Ensure that this stays in sync with VRAssetsComponentEnterStatus in
-// enums.xml.
-enum class AssetsComponentEnterStatus : int {
+// Ensure that this stays in sync with VRComponentStatus in enums.xml.
+enum class ComponentStatus : int {
   kReady = 0,
   kUnreadyOther = 1,
 
@@ -53,19 +55,17 @@ enum class AssetsComponentEnterStatus : int {
   kCount,
 };
 
-void LogStatus(Mode mode, AssetsComponentEnterStatus status) {
+void LogStatus(Mode mode, ComponentStatus status) {
   switch (mode) {
     case Mode::kVr:
-      UMA_HISTOGRAM_ENUMERATION(kStatusVr, status,
-                                AssetsComponentEnterStatus::kCount);
+      UMA_HISTOGRAM_ENUMERATION(kStatusVr, status, ComponentStatus::kCount);
       return;
     case Mode::kVrBrowsing:
       UMA_HISTOGRAM_ENUMERATION(kStatusVrBrowsing, status,
-                                AssetsComponentEnterStatus::kCount);
+                                ComponentStatus::kCount);
       return;
     case Mode::kWebVr:
-      UMA_HISTOGRAM_ENUMERATION(kStatusWebVr, status,
-                                AssetsComponentEnterStatus::kCount);
+      UMA_HISTOGRAM_ENUMERATION(kStatusWebVr, status, ComponentStatus::kCount);
       return;
     default:
       NOTIMPLEMENTED();
@@ -137,19 +137,25 @@ MetricsHelper::~MetricsHelper() {
 void MetricsHelper::OnComponentReady(const base::Version& version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   component_ready_ = true;
-  auto now = base::Time::Now();
+  auto now = base::TimeTicks::Now();
   LogLatencyIfWaited(Mode::kVrBrowsing, now);
   LogLatencyIfWaited(Mode::kWebVr, now);
   OnComponentUpdated(AssetsComponentUpdateStatus::kSuccess, version);
 
-  if (logged_ready_duration_on_chrome_start_) {
-    return;
+  if (!logged_ready_duration_on_chrome_start_) {
+    DCHECK(chrome_start_time_);
+    auto ready_duration = now - *chrome_start_time_;
+    UMA_HISTOGRAM_CUSTOM_TIMES(kLatencyLaunchBrowser, ready_duration,
+                               kMinLatency, kMaxLatency, kLatencyBucketCount);
+    logged_ready_duration_on_chrome_start_ = true;
   }
-  DCHECK(chrome_start_time_);
-  auto ready_duration = now - *chrome_start_time_;
-  UMA_HISTOGRAM_CUSTOM_TIMES(kLatencyLaunchBrowser, ready_duration, kMinLatency,
-                             kMaxLatency, kLatencyBucketCount);
-  logged_ready_duration_on_chrome_start_ = true;
+  if (!logged_ready_duration_on_component_register_) {
+    DCHECK(component_register_time_);
+    auto ready_duration = now - *component_register_time_;
+    UMA_HISTOGRAM_CUSTOM_TIMES(kLatencyRegisterComponent, ready_duration,
+                               kMinLatency, kMaxLatency, kLatencyBucketCount);
+    logged_ready_duration_on_component_register_ = true;
+  }
 }
 
 void MetricsHelper::OnEnter(Mode mode) {
@@ -162,25 +168,28 @@ void MetricsHelper::OnEnter(Mode mode) {
     // UMA metrics.
     return;
   }
-  LogStatus(mode, component_ready_ ? AssetsComponentEnterStatus::kReady
-                                   : AssetsComponentEnterStatus::kUnreadyOther);
+  LogStatus(mode, component_ready_ ? ComponentStatus::kReady
+                                   : ComponentStatus::kUnreadyOther);
   if (!component_ready_) {
-    enter_time = base::Time::Now();
+    enter_time = base::TimeTicks::Now();
   }
 }
 
 void MetricsHelper::OnRegisteredComponent() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   UMA_HISTOGRAM_ENUMERATION(
       kNetworkConnectionTypeRegisterComponent,
       net::NetworkChangeNotifier::GetConnectionType(),
       net::NetworkChangeNotifier::ConnectionType::CONNECTION_LAST + 1);
+  DCHECK(!component_register_time_);
+  component_register_time_ = base::TimeTicks::Now();
 }
 
 void MetricsHelper::OnComponentUpdated(
     AssetsComponentUpdateStatus status,
     const base::Optional<base::Version>& version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       kComponentUpdateStatus,
       EncodeVersionStatus(version, static_cast<int>(status)));
 }
@@ -188,7 +197,7 @@ void MetricsHelper::OnComponentUpdated(
 void MetricsHelper::OnAssetsLoaded(AssetsLoadStatus status,
                                    const base::Version& component_version) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       kAssetsLoadStatus,
       EncodeVersionStatus(component_version, static_cast<int>(status)));
 }
@@ -196,10 +205,10 @@ void MetricsHelper::OnAssetsLoaded(AssetsLoadStatus status,
 void MetricsHelper::OnChromeStarted() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!chrome_start_time_);
-  chrome_start_time_ = base::Time::Now();
+  chrome_start_time_ = base::TimeTicks::Now();
 }
 
-base::Optional<base::Time>& MetricsHelper::GetEnterTime(Mode mode) {
+base::Optional<base::TimeTicks>& MetricsHelper::GetEnterTime(Mode mode) {
   switch (mode) {
     case Mode::kVr:
       return enter_vr_time_;
@@ -213,7 +222,7 @@ base::Optional<base::Time>& MetricsHelper::GetEnterTime(Mode mode) {
   }
 }
 
-void MetricsHelper::LogLatencyIfWaited(Mode mode, const base::Time& now) {
+void MetricsHelper::LogLatencyIfWaited(Mode mode, const base::TimeTicks& now) {
   auto& enter_time = GetEnterTime(mode);
   if (enter_time) {
     LogLatency(mode, now - *enter_time);

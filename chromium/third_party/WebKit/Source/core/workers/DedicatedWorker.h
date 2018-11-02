@@ -8,11 +8,12 @@
 #include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
-#include "core/dom/MessagePort.h"
 #include "core/dom/PausableObject.h"
 #include "core/dom/events/EventListener.h"
 #include "core/dom/events/EventTarget.h"
+#include "core/messaging/MessagePort.h"
 #include "core/workers/AbstractWorker.h"
+#include "core/workers/WorkerOptions.h"
 #include "platform/wtf/Forward.h"
 
 namespace v8_inspector {
@@ -25,7 +26,9 @@ class DedicatedWorkerMessagingProxy;
 class ExceptionState;
 class ExecutionContext;
 class ScriptState;
+class WorkerClients;
 class WorkerScriptLoader;
+struct GlobalScopeCreationParams;
 
 // Implementation of the Worker interface defined in the WebWorker HTML spec:
 // https://html.spec.whatwg.org/multipage/workers.html#worker
@@ -67,17 +70,18 @@ class CORE_EXPORT DedicatedWorker final
   void Trace(blink::Visitor*) override;
 
  private:
-  DedicatedWorker(ExecutionContext*, const KURL& script_url);
+  DedicatedWorker(ExecutionContext*,
+                  const KURL& script_url,
+                  const WorkerOptions&);
 
   // Starts the worker.
   void Start();
 
-  // Creates a proxy to allow communicating with the worker's global scope.
-  // DedicatedWorker does not take ownership of the created proxy. The proxy
-  // is expected to manage its own lifetime, and delete itself in response to
-  // terminateWorkerGlobalScope().
-  DedicatedWorkerMessagingProxy* CreateMessagingProxy(ExecutionContext*);
+  std::unique_ptr<GlobalScopeCreationParams> CreateGlobalScopeCreationParams();
 
+  WorkerClients* CreateWorkerClients();
+
+  // [classic script only]
   // Callbacks for |script_loader_|.
   void OnResponse();
   void OnFinished(const v8_inspector::V8StackTraceId&);
@@ -86,6 +90,7 @@ class CORE_EXPORT DedicatedWorker final
   const AtomicString& InterfaceName() const final;
 
   const KURL script_url_;
+  const WorkerOptions options_;
   const Member<DedicatedWorkerMessagingProxy> context_proxy_;
 
   scoped_refptr<WorkerScriptLoader> script_loader_;

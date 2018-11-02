@@ -49,7 +49,6 @@ class ActiveScriptWrappableBase;
 class DOMDataStore;
 class StringCache;
 class V8PrivateProperty;
-class WebTaskRunner;
 struct WrapperTypeInfo;
 
 typedef WTF::Vector<DOMDataStore*> DOMDataStoreList;
@@ -100,7 +99,7 @@ class PLATFORM_EXPORT V8PerIsolateData {
     virtual ~Data() = default;
   };
 
-  static v8::Isolate* Initialize(WebTaskRunner*,
+  static v8::Isolate* Initialize(scoped_refptr<base::SingleThreadTaskRunner>,
                                  V8ContextSnapshotMode);
 
   static V8PerIsolateData* From(v8::Isolate* isolate) {
@@ -185,7 +184,7 @@ class PLATFORM_EXPORT V8PerIsolateData {
   // to C++ from script, after executing a script task (e.g. callback,
   // event) or microtasks (e.g. promise). This is explicitly needed for
   // Indexed DB transactions per spec, but should in general be avoided.
-  void AddEndOfScopeTask(WTF::Closure);
+  void AddEndOfScopeTask(base::OnceClosure);
   void RunEndOfScopeTasks();
   void ClearEndOfScopeTasks();
 
@@ -235,7 +234,7 @@ class PLATFORM_EXPORT V8PerIsolateData {
   }
 
  private:
-  V8PerIsolateData(WebTaskRunner*,
+  V8PerIsolateData(scoped_refptr<base::SingleThreadTaskRunner>,
                    V8ContextSnapshotMode);
   V8PerIsolateData();
   ~V8PerIsolateData();
@@ -300,7 +299,7 @@ class PLATFORM_EXPORT V8PerIsolateData {
   bool is_handling_recursion_level_error_;
   bool is_reporting_exception_;
 
-  Vector<WTF::Closure> end_of_scope_tasks_;
+  Vector<base::OnceClosure> end_of_scope_tasks_;
   std::unique_ptr<Data> thread_debugger_;
 
   Persistent<ActiveScriptWrappableSet> active_script_wrappables_;

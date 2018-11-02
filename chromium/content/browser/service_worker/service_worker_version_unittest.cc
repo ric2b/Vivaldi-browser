@@ -29,9 +29,10 @@
 #include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_installed_scripts_manager.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 // IPC messages for testing ---------------------------------------------------
 
@@ -51,8 +52,7 @@ IPC_MESSAGE_ROUTED2(TestMsg_TestEventResult, int, std::string)
 // ---------------------------------------------------------------------------
 
 namespace content {
-
-namespace {
+namespace service_worker_version_unittest {
 
 class MessageReceiver : public EmbeddedWorkerTestHelper {
  public:
@@ -94,7 +94,7 @@ class MessageReceiver : public EmbeddedWorkerTestHelper {
       blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
-      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
+      blink::mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     service_worker_host_map_[embedded_worker_id].Bind(
         std::move(service_worker_host));
@@ -204,8 +204,6 @@ void StartWorker(ServiceWorkerVersion* version,
   EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
 }
 
-}  // namespace
-
 class ServiceWorkerVersionTest : public testing::Test {
  protected:
   struct RunningStateListener : public ServiceWorkerVersion::Listener {
@@ -238,9 +236,10 @@ class ServiceWorkerVersionTest : public testing::Test {
     base::RunLoop().RunUntilIdle();
 
     pattern_ = GURL("https://www.example.com/test/");
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = pattern_;
     registration_ = new ServiceWorkerRegistration(
-        blink::mojom::ServiceWorkerRegistrationOptions(pattern_), 1L,
-        helper_->context()->AsWeakPtr());
+        options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(),
         GURL("https://www.example.com/test/service_worker.js"),
@@ -265,12 +264,6 @@ class ServiceWorkerVersionTest : public testing::Test {
         CreateReceiverOnCurrentThread(&status));
     base::RunLoop().RunUntilIdle();
     ASSERT_EQ(SERVICE_WORKER_OK, status);
-
-    // Simulate adding one process to the pattern.
-    helper_->SimulateAddProcessToPattern(pattern_,
-                                         helper_->mock_render_process_id());
-    ASSERT_TRUE(helper_->context()->process_manager()
-        ->PatternHasProcessToRun(pattern_));
   }
 
   virtual std::unique_ptr<MessageReceiver> GetMessageReceiver() {
@@ -288,10 +281,10 @@ class ServiceWorkerVersionTest : public testing::Test {
         SERVICE_WORKER_ERROR_MAX_VALUE;  // dummy value
 
     // Make sure worker is running.
-    version_->RunAfterStartWorker(event_type, base::Bind(&base::DoNothing),
+    version_->RunAfterStartWorker(event_type,
                                   CreateReceiverOnCurrentThread(&status));
     base::RunLoop().RunUntilIdle();
-    EXPECT_EQ(SERVICE_WORKER_ERROR_MAX_VALUE, status);
+    EXPECT_EQ(SERVICE_WORKER_OK, status);
     EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version_->running_status());
 
     // Start request, as if an event is being dispatched.
@@ -303,7 +296,7 @@ class ServiceWorkerVersionTest : public testing::Test {
     EXPECT_TRUE(version_->FinishRequest(request_id, true /* was_handled */,
                                         base::Time::Now()));
     base::RunLoop().RunUntilIdle();
-    EXPECT_EQ(SERVICE_WORKER_ERROR_MAX_VALUE, status);
+    EXPECT_EQ(SERVICE_WORKER_OK, status);
   }
 
   void SetTickClockForTesting(base::SimpleTestTickClock* tick_clock) {
@@ -338,7 +331,7 @@ class MessageReceiverDisallowStart : public MessageReceiver {
       blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
       mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
-      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
+      blink::mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info)
       override {
     switch (mode_) {
       case StartMode::STALL:
@@ -867,11 +860,9 @@ TEST_F(ServiceWorkerVersionTest, StaleUpdate_DoNotDeferTimer) {
   // Stale time is not deferred.
   version_->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::UNKNOWN,
-      base::BindOnce(&base::DoNothing),
       base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
   version_->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::UNKNOWN,
-      base::BindOnce(&base::DoNothing),
       base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(stale_time, version_->stale_time_);
@@ -1056,7 +1047,7 @@ TEST_F(ServiceWorkerRequestTimeoutTest, RequestTimeout) {
   EXPECT_FALSE(version_->FinishRequest(request_id, true /* was_handled */,
                                        base::Time::Now()));
 
-  // Simulate the renderer aborting the pending event.
+  // Simulate the renderer aborting the inflight event.
   // This should not crash: https://crbug.com/676984.
   TakeExtendableMessageEventCallback().Run(
       blink::mojom::ServiceWorkerEventStatus::ABORTED, base::Time::Now());
@@ -1359,9 +1350,6 @@ TEST_F(ServiceWorkerVersionTest, RendererCrashDuringEvent) {
 
 TEST_F(ServiceWorkerFailToStartTest, FailingWorkerUsesNewRendererProcess) {
   ServiceWorkerStatusCode status = SERVICE_WORKER_ERROR_MAX_VALUE;
-
-  helper_->SimulateAddProcessToPattern(pattern_,
-                                       helper_->new_render_process_id());
   ServiceWorkerContextCore* context = helper_->context();
   int64_t id = version_->version_id();
   version_->SetStatus(ServiceWorkerVersion::ACTIVATED);
@@ -1542,4 +1530,5 @@ TEST_F(ServiceWorkerNavigationHintUMATest, StartWhileStopping) {
   histogram_tester_.ExpectTotalCount(kStartHintPrecision, 2);
 }
 
+}  // namespace service_worker_version_unittest
 }  // namespace content

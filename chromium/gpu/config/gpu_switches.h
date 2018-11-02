@@ -7,6 +7,10 @@
 
 #include "gpu/gpu_export.h"
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/common/feature_toggles.h"
+#endif
+
 namespace switches {
 
 GPU_EXPORT extern const char kAMDSwitchable[];
@@ -24,19 +28,12 @@ GPU_EXPORT extern const char kGpuDriverDate[];
 GPU_EXPORT extern const char kGpuSecondaryVendorIDs[];
 GPU_EXPORT extern const char kGpuSecondaryDeviceIDs[];
 GPU_EXPORT extern const char kGpuTestingNoCompleteInfoCollection[];
-GPU_EXPORT extern const char kGpuTestingOsVersion[];
-GPU_EXPORT extern const char kGpuTestingVendorId[];
-GPU_EXPORT extern const char kGpuTestingDeviceId[];
-GPU_EXPORT extern const char kGpuTestingSecondaryVendorIDs[];
-GPU_EXPORT extern const char kGpuTestingSecondaryDeviceIDs[];
-GPU_EXPORT extern const char kGpuTestingDriverDate[];
-GPU_EXPORT extern const char kGpuTestingGLVendor[];
-GPU_EXPORT extern const char kGpuTestingGLRenderer[];
-GPU_EXPORT extern const char kGpuTestingGLVersion[];
 GPU_EXPORT extern const char kGpuVendorID[];
 GPU_EXPORT extern const char kIgnoreGpuBlacklist[];
+GPU_EXPORT extern const char kGpuBlacklistTestGroup[];
+GPU_EXPORT extern const char kGpuDriverBugListTestGroup[];
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
 GPU_EXPORT extern const char kEnablePlatformAcceleratedVideoDecoding[];
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 

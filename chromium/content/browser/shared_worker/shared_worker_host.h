@@ -15,12 +15,14 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "base/unguessable_token.h"
 #include "content/common/shared_worker/shared_worker.mojom.h"
 #include "content/common/shared_worker/shared_worker_client.mojom.h"
 #include "content/common/shared_worker/shared_worker_factory.mojom.h"
 #include "content/common/shared_worker/shared_worker_host.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
+#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
 
 class GURL;
 
@@ -32,6 +34,7 @@ namespace content {
 
 class SharedWorkerContentSettingsProxyImpl;
 class SharedWorkerInstance;
+class SharedWorkerServiceImpl;
 
 // The SharedWorkerHost is the interface that represents the browser side of
 // the browser <-> worker communication channel. This is owned by
@@ -40,13 +43,15 @@ class SharedWorkerInstance;
 class SharedWorkerHost : public mojom::SharedWorkerHost,
                          public service_manager::mojom::InterfaceProvider {
  public:
-  SharedWorkerHost(std::unique_ptr<SharedWorkerInstance> instance,
-                   int process_id,
-                   int route_id);
+  SharedWorkerHost(SharedWorkerServiceImpl* service,
+                   std::unique_ptr<SharedWorkerInstance> instance,
+                   int process_id);
   ~SharedWorkerHost() override;
 
   // Starts the SharedWorker in the renderer process.
-  void Start(mojom::SharedWorkerFactoryPtr factory, bool pause_on_start);
+  void Start(mojom::SharedWorkerFactoryPtr factory,
+             bool pause_on_start,
+             const base::UnguessableToken& devtools_worker_token);
 
   void AllowFileSystem(const GURL& url,
                        base::OnceCallback<void(bool)> callback);
@@ -65,9 +70,10 @@ class SharedWorkerHost : public mojom::SharedWorkerHost,
   // Returns true if any clients live in a different process from this worker.
   bool ServesExternalClient();
 
+  void BindDevToolsAgent(blink::mojom::DevToolsAgentAssociatedRequest request);
+
   SharedWorkerInstance* instance() { return instance_.get(); }
   int process_id() const { return process_id_; }
-  int route_id() const { return route_id_; }
   bool IsAvailable() const;
 
  private:
@@ -106,13 +112,13 @@ class SharedWorkerHost : public mojom::SharedWorkerHost,
                     mojo::ScopedMessagePipeHandle interface_pipe) override;
 
   mojo::Binding<mojom::SharedWorkerHost> binding_;
+  SharedWorkerServiceImpl* service_;
   std::unique_ptr<SharedWorkerInstance> instance_;
   ClientList clients_;
 
   mojom::SharedWorkerPtr worker_;
 
   const int process_id_;
-  const int route_id_;
   int next_connection_request_id_;
   bool termination_message_sent_ = false;
   bool closed_ = false;

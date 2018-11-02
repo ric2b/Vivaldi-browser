@@ -16,6 +16,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/stream_socket.h"
 #include "net/test/gtest_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -73,6 +74,8 @@ class FakeStreamSocket : public StreamSocket {
     return 0;
   }
 
+  void ApplySocketTag(const SocketTag& tag) override {}
+
   // Socket implementation
   int Read(IOBuffer* buf,
            int buf_len,
@@ -82,7 +85,8 @@ class FakeStreamSocket : public StreamSocket {
 
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback) override {
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override {
     return ERR_FAILED;
   }
 

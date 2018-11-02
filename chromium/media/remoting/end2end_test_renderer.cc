@@ -4,10 +4,13 @@
 
 #include "media/remoting/end2end_test_renderer.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "media/mojo/common/mojo_data_pipe_read_write.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "media/remoting/courier_renderer.h"
 #include "media/remoting/proto_utils.h"
@@ -30,35 +33,32 @@ class TestStreamSender final : public mojom::RemotingDataStreamSender {
                    DemuxerStream::Type type,
                    const SendFrameToSinkCallback& callback)
       : binding_(this, std::move(request)),
-        consumer_handle_(std::move(handle)),
+        data_pipe_reader_(std::move(handle)),
         type_(type),
         send_frame_to_sink_cb_(callback) {}
 
   ~TestStreamSender() override = default;
 
   // mojom::RemotingDataStreamSender implementation.
-
-  void ConsumeDataChunk(uint32_t offset,
-                        uint32_t size,
-                        uint32_t total_payload_size) override {
-    next_frame_data_.resize(total_payload_size);
-    MojoResult result =
-        consumer_handle_->ReadData(next_frame_data_.data() + offset, &size,
-                                   MOJO_READ_DATA_FLAG_ALL_OR_NONE);
-    CHECK(result == MOJO_RESULT_OK);
-  }
-
-  void SendFrame() override {
-    if (!send_frame_to_sink_cb_.is_null())
-      send_frame_to_sink_cb_.Run(next_frame_data_, type_);
-    next_frame_data_.resize(0);
+  void SendFrame(uint32_t frame_size) override {
+    next_frame_data_.resize(frame_size);
+    data_pipe_reader_.Read(
+        next_frame_data_.data(), frame_size,
+        base::BindOnce(&TestStreamSender::OnFrameRead, base::Unretained(this)));
   }
 
   void CancelInFlightData() override { next_frame_data_.resize(0); }
 
  private:
+  void OnFrameRead(bool success) {
+    DCHECK(success);
+    if (!send_frame_to_sink_cb_.is_null())
+      send_frame_to_sink_cb_.Run(next_frame_data_, type_);
+    next_frame_data_.resize(0);
+  }
+
   mojo::Binding<RemotingDataStreamSender> binding_;
-  mojo::ScopedDataPipeConsumerHandle consumer_handle_;
+  MojoDataPipeReader data_pipe_reader_;
   const DemuxerStream::Type type_;
   const SendFrameToSinkCallback send_frame_to_sink_cb_;
   std::vector<uint8_t> next_frame_data_;
@@ -136,7 +136,7 @@ scoped_refptr<SharedSession> CreateSharedSession(
   mojom::RemotingSourcePtr remoting_source;
   auto remoting_source_request = mojo::MakeRequest(&remoting_source);
   mojom::RemoterPtr remoter;
-  std::unique_ptr<TestRemoter> test_remoter = base::MakeUnique<TestRemoter>(
+  std::unique_ptr<TestRemoter> test_remoter = std::make_unique<TestRemoter>(
       std::move(remoting_source), send_message_to_sink_cb,
       send_frame_to_sink_cb);
   mojo::MakeStrongBinding(std::move(test_remoter), mojo::MakeRequest(&remoter));

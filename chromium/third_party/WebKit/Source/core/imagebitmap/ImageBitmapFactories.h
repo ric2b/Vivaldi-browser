@@ -90,9 +90,10 @@ class ImageBitmapFactories final
                                                  Optional<IntRect> crop_rect,
                                                  const ImageBitmapOptions&);
 
-  virtual ~ImageBitmapFactories() {}
+  virtual ~ImageBitmapFactories() = default;
 
   void Trace(blink::Visitor*);
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  protected:
   static const char* SupplementName();
@@ -114,7 +115,7 @@ class ImageBitmapFactories final
 
     void Trace(blink::Visitor*);
 
-    ~ImageBitmapLoader() override {}
+    ~ImageBitmapLoader() override = default;
 
    private:
     ImageBitmapLoader(ImageBitmapFactories&,

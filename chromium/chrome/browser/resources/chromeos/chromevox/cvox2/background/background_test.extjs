@@ -24,9 +24,9 @@ BackgroundTest.prototype = {
   setUp: function() {
     window.RoleType = chrome.automation.RoleType;
     window.doCmd = this.doCmd;
+    window.press = this.press;
+    window.Mod = constants.ModifierFlag;
 
-    // Reset notifications so only explicit mode changes can cause them to trigger.
-    Notifications.reset();
     this.forceContextualLastOutput();
   },
 
@@ -48,6 +48,12 @@ BackgroundTest.prototype = {
   doCmd: function(cmd) {
     return function() {
       CommandHandler.onCommand(cmd);
+    };
+  },
+
+  press: function(keyCode, modifiers) {
+    return function() {
+      BackgroundKeyboardHandler.sendKeyPress(keyCode, modifiers);
     };
   },
 
@@ -451,6 +457,10 @@ TEST_F('BackgroundTest', 'EarconsForControls', function() {
           .call(doCmd('nextObject'))
           .expectSpeech('Edit text')
           .expectEarcon(cvox.Earcon.EDITABLE_TEXT)
+
+      // Editable text Search re-mappings are in effect.
+          .call(doCmd('toggleStickyMode'))
+          .expectSpeech('Sticky mode enabled')
           .call(doCmd('nextObject'))
           .expectSpeech('List box')
           .expectEarcon(cvox.Earcon.LISTBOX)
@@ -512,78 +522,6 @@ TEST_F('BackgroundTest', 'DISABLED_ActiveOrInactive', function() {
 
       mockFeedback.replay();
     });
-});
-
-TEST_F('BackgroundTest', 'ModeSwitching', function() {
-  this.runWithLoadedTree('<button></button>', function(root) {
-    var fakeDesktop = {};
-    fakeDesktop.role = 'desktop';
-    fakeDesktop.root = fakeDesktop;
-
-    var fakeWebRoot = {};
-    fakeWebRoot.root = fakeWebRoot;
-    fakeWebRoot.parent = fakeDesktop;
-    fakeWebRoot.role = RoleType.ROOT_WEB_AREA;
-    fakeWebRoot.makeVisible = function() {};
-    fakeWebRoot.location = {left: 1, top: 1, width: 1, height: 1};
-    var fakeSubRoot = {};
-    fakeSubRoot.root = fakeSubRoot;
-    fakeSubRoot.parent = fakeWebRoot;
-    fakeSubRoot.role = RoleType.ROOT_WEB_AREA;
-    fakeSubRoot.makeVisible = function() {};
-    fakeSubRoot.location = {left: 1, top: 1, width: 1, height: 1};
-    var bk = ChromeVoxState.instance;
-
-    // Tests default to force next mode.
-    assertEquals('force_next', bk.mode);
-
-    // Force next mode stays set regardless of where the range lands.
-    fakeWebRoot.docUrl = 'http://google.com';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('force_next', bk.mode);
-    // Empty urls occur before document load or when root is desktop.
-    fakeWebRoot.docUrl = '';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('force_next', bk.mode);
-
-    // Verify force next -> classic compat switching.
-    localStorage['useClassic'] = true;
-    fakeWebRoot.docUrl = 'chrome://foobar';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('classic_compat', bk.mode);
-
-    // Classic compat -> classic.
-    fakeWebRoot.docUrl = 'http://google.com';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('classic', bk.mode);
-
-    // Ensure we switch to classic compat if our current range has focused
-    // state set and is not in web content.
-    assertTrue(root.parent.state.focused);
-    bk.setCurrentRange(cursors.Range.fromNode(root.parent));
-    assertEquals('classic_compat', bk.mode);
-
-    // And back to classic.
-    bk.setCurrentRange(cursors.Range.fromNode(root));
-    assertEquals('classic', bk.mode);
-
-    // Now, verify mode switching uses the top level root.
-    fakeWebRoot.docUrl = 'http://google.com/#chromevox_next_test';
-    fakeSubRoot.docUrl = 'http://chromevox.com';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('next', bk.mode);
-
-    // Next compat switching.
-    localStorage['useClassic'] = false;
-    fakeWebRoot.docUrl = 'http://docs.google.com/document/#123123';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('force_next', bk.mode);
-
-    // And, back to force next.
-    fakeWebRoot.docUrl = 'http://docs.google.com/form/123';
-    bk.setCurrentRange(cursors.Range.fromNode(fakeWebRoot));
-    assertEquals('force_next', bk.mode);
-  }.bind(this));
 });
 
 TEST_F('BackgroundTest', 'ShouldNotFocusIframe', function() {
@@ -758,18 +696,22 @@ TEST_F('BackgroundTest', 'ForwardObjectNavigationThroughIframes', function() {
       return;
 
     running = true;
+    var suppressFocusActionOutput = function() {
+      DesktopAutomationHandler.announceActions = false;
+    };
     var beforeButton = rootNode.find({role: RoleType.BUTTON,
                                       name: 'Before'});
-    beforeButton.focus();
-    mockFeedback.expectSpeech('Before', 'Button');
-    mockFeedback.call(doCmd('nextObject'))
+    mockFeedback.call(beforeButton.focus.bind(beforeButton))
+        .expectSpeech('Before', 'Button')
+        .call(suppressFocusActionOutput)
+        .call(doCmd('nextObject'))
         .expectSpeech('Inside', 'Button');
     mockFeedback.call(doCmd('nextObject'))
         .expectSpeech('Inside', 'Heading 1');
     mockFeedback.call(doCmd('nextObject'))
         .expectSpeech('After', 'Button');
     mockFeedback.call(doCmd('previousObject'))
-        .expectSpeech('Heading 1', 'Inside');
+        .expectSpeech('Inside', 'Heading 1');
     mockFeedback.call(doCmd('previousObject'))
         .expectSpeech('Inside', 'Button');
     mockFeedback.call(doCmd('previousObject'))
@@ -1309,6 +1251,144 @@ TEST_F('BackgroundTest', 'BusyHeading', function() {
         .expectSpeech(
             'Lots', 'Link', 'going', 'Link', 'here', 'Link', 'Heading 2')
         .expectBraille('Lots lnk going lnk here lnk h2')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'NodeVsSubnode', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <a href="#">test</a>
+  */}, function(root) {
+    var link = root.find({role: RoleType.LINK});
+    function outputLinkRange(start, end) {
+      return function() {
+        new Output().withSpeech(new cursors.Range(new cursors.Cursor(link, start),
+            new cursors.Cursor(link, end))).go();
+      };
+    }
+
+    mockFeedback.call(outputLinkRange(0, 0))
+        .expectSpeech('test', 'Link')
+        .call(outputLinkRange(0, 1))
+        .expectSpeech('t')
+        .call(outputLinkRange(1, 1))
+        .expectSpeech('test', 'Link')
+        .call(outputLinkRange(1, 2))
+        .expectSpeech('e')
+        .call(outputLinkRange(1, 3))
+        .expectNextSpeechUtteranceIsNot('Link')
+        .expectSpeech('es')
+        .call(outputLinkRange(0, 4))
+        .expectSpeech('test', 'Link')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'NativeFind', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <a href="#">grape</a>
+    <a href="#">pineapple</a>
+  */}, function(root) {
+    mockFeedback.call(press(70, {ctrl: true}))
+        .expectSpeech('Find', 'Edit text')
+        .call(press(71))
+        .expectSpeech('grape', 'Link')
+        .call(press(8))
+        .call(press(76))
+        .expectSpeech('pineapple', 'Link')
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'EditableKeyCommand', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <input type="text"></input>
+    <textarea>test</textarea>
+    <div role="textbox" contenteditable>test</div>
+  */}, function(root) {
+    var assertCurNode = function(node) {
+      return function() {
+        assertEquals(node, ChromeVoxState.instance.currentRange.start.node);
+      };
+    };
+    var doBrlCmd = function(command) {
+      return function() {
+        BrailleCommandHandler.onEditCommand(command);
+      };
+    };
+
+    var textField = root.firstChild;
+    var textArea = textField.nextSibling;
+    var contentEditable = textArea.nextSibling;
+
+    mockFeedback.call(assertCurNode(textField))
+        .call(doCmd('nextObject'))
+        .call(assertCurNode(textArea))
+
+        // Processed as edit commands.
+        .call(doCmd('nextObject'))
+        .call(assertCurNode(textArea))
+        // Output here is wrong.
+        .expectBraille('test mled mled', {startIndex: 4, endIndex: 4})
+        .call(doBrlCmd('previousObject'))
+        .call(assertCurNode(textArea))
+        .expectBraille('test mled mled', {startIndex: 0, endIndex: 0}) 
+
+        // Sticky mode overrides the edit keys.
+        .call(doCmd('toggleStickyMode'))
+        .call(doCmd('nextObject'))
+        .call(assertCurNode(contentEditable))
+
+        // Flipping sticky off returns us to editing.
+        .call(doCmd('toggleStickyMode'))
+        .call(doCmd('nextObject'))
+        .call(assertCurNode(contentEditable))
+        .expectBraille('test', {startIndex: 4, endIndex: 4})
+
+        .call(doBrlCmd('previousObject'))
+        .call(assertCurNode(contentEditable.firstChild))
+        .expectBraille('test', {startIndex: 0, endIndex: 0}) 
+
+        .replay();
+  });
+});
+
+TEST_F('BackgroundTest', 'TextSelectionAndLiveRegion', function() {
+  var mockFeedback = this.createMockFeedback();
+  this.runWithLoadedTree(function(root) {/*!
+    <div><input value="test" type="text"></input></div>
+    <div id="live" aria-live="polite"></div>
+    <script>
+      const input = document.querySelector('input');
+      const [div, live] = document.querySelectorAll('div');
+      let clicks = 0;
+      div.addEventListener('click', function() {
+        clicks++;
+        if (clicks == 1) {
+          input.selectionStart = 1;
+          live.textContent = 'queued';
+        } else {
+          live.textContent = 'interrupted';
+          input.selectionStart = 2;
+        }
+      });
+    </script>
+  */}, function(root) {
+    var textField = root.find({role: RoleType.TEXT_FIELD});
+    var div = textField.parent;
+    mockFeedback.call(textField.focus.bind(textField))
+        .expectSpeech('Edit text')
+        .call(div.doDefault.bind(div))
+        .expectSpeechWithQueueMode('e', cvox.QueueMode.FLUSH)
+        .expectSpeechWithQueueMode('queued', cvox.QueueMode.CATEGORY_FLUSH)
+
+        .call(div.doDefault.bind(div))
+        .expectSpeechWithQueueMode('interrupted', cvox.QueueMode.QUEUE)
+        .expectSpeechWithQueueMode('s', cvox.QueueMode.FLUSH)
+
         .replay();
   });
 });

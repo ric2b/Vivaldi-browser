@@ -4,9 +4,9 @@
 
 #include "chrome/browser/extensions/api/settings_private/settings_private_api.h"
 
+#include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/api/settings_private/settings_private_delegate.h"
 #include "chrome/browser/extensions/api/settings_private/settings_private_delegate_factory.h"
@@ -40,25 +40,25 @@ ExtensionFunction::ResponseAction SettingsPrivateSetPrefFunction::Run() {
   if (delegate == nullptr)
     return RespondNow(Error(kDelegateIsNull));
 
-  PrefsUtil::SetPrefResult result =
+  settings_private::SetPrefResult result =
       delegate->SetPref(parameters->name, parameters->value.get());
   switch (result) {
-    case PrefsUtil::SUCCESS:
-      return RespondNow(OneArgument(base::MakeUnique<base::Value>(true)));
-    case PrefsUtil::PREF_NOT_MODIFIABLE:
+    case settings_private::SetPrefResult::SUCCESS:
+      return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
+    case settings_private::SetPrefResult::PREF_NOT_MODIFIABLE:
       // Not an error, but return false to indicate setting the pref failed.
-      return RespondNow(OneArgument(base::MakeUnique<base::Value>(false)));
-    case PrefsUtil::PREF_NOT_FOUND:
+      return RespondNow(OneArgument(std::make_unique<base::Value>(false)));
+    case settings_private::SetPrefResult::PREF_NOT_FOUND:
       return RespondNow(Error("Pref not found: *", parameters->name));
-    case PrefsUtil::PREF_TYPE_MISMATCH:
+    case settings_private::SetPrefResult::PREF_TYPE_MISMATCH:
       return RespondNow(Error("Incorrect type used for value of pref *",
                               parameters->name));
-    case PrefsUtil::PREF_TYPE_UNSUPPORTED:
+    case settings_private::SetPrefResult::PREF_TYPE_UNSUPPORTED:
       return RespondNow(Error("Unsupported type used for value of pref *",
                               parameters->name));
   }
   NOTREACHED();
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(false)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(false)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -141,7 +141,7 @@ ExtensionFunction::ResponseAction
     return RespondNow(Error(kDelegateIsNull));
 
   delegate->SetDefaultZoom(parameters->zoom);
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(true)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
 }
 
 }  // namespace extensions

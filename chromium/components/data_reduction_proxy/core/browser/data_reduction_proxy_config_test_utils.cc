@@ -8,7 +8,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
@@ -31,7 +30,7 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : TestDataReductionProxyConfig(
-          base::MakeUnique<TestDataReductionProxyParams>(),
+          std::make_unique<TestDataReductionProxyParams>(),
           io_task_runner,
           net_log,
           configurator,
@@ -56,7 +55,7 @@ TestDataReductionProxyConfig::~TestDataReductionProxyConfig() {
 }
 
 void TestDataReductionProxyConfig::ResetParamFlagsForTest() {
-  config_values_ = base::MakeUnique<TestDataReductionProxyParams>();
+  config_values_ = std::make_unique<TestDataReductionProxyParams>();
 }
 
 TestDataReductionProxyParams* TestDataReductionProxyConfig::test_params() {
@@ -120,6 +119,53 @@ bool TestDataReductionProxyConfig::ShouldAddDefaultProxyBypassRules() const {
 void TestDataReductionProxyConfig::SetShouldAddDefaultProxyBypassRules(
     bool add_default_proxy_bypass_rules) {
   add_default_proxy_bypass_rules_ = add_default_proxy_bypass_rules;
+}
+
+std::string TestDataReductionProxyConfig::GetCurrentNetworkID() const {
+  if (current_network_id_) {
+    return current_network_id_.value();
+  }
+  return DataReductionProxyConfig::GetCurrentNetworkID();
+}
+
+void TestDataReductionProxyConfig::SetCurrentNetworkID(
+    const std::string& network_id) {
+  current_network_id_ = network_id;
+}
+
+base::Optional<std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+TestDataReductionProxyConfig::GetInFlightWarmupProxyDetails() const {
+  if (in_flight_warmup_proxy_details_)
+    return in_flight_warmup_proxy_details_;
+  return DataReductionProxyConfig::GetInFlightWarmupProxyDetails();
+}
+
+void TestDataReductionProxyConfig::SetInFlightWarmupProxyDetails(
+    base::Optional<
+        std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+        in_flight_warmup_proxy_details) {
+  in_flight_warmup_proxy_details_ = in_flight_warmup_proxy_details;
+}
+
+bool TestDataReductionProxyConfig::IsFetchInFlight() const {
+  if (fetch_in_flight_)
+    return fetch_in_flight_.value();
+  return DataReductionProxyConfig::IsFetchInFlight();
+}
+
+void TestDataReductionProxyConfig::SetIsFetchInFlight(bool fetch_in_flight) {
+  fetch_in_flight_ = fetch_in_flight;
+}
+
+size_t TestDataReductionProxyConfig::GetWarmupURLFetchAttemptCounts() const {
+  if (!previous_attempt_counts_)
+    return DataReductionProxyConfig::GetWarmupURLFetchAttemptCounts();
+  return previous_attempt_counts_.value();
+}
+
+void TestDataReductionProxyConfig::SetWarmupURLFetchAttemptCounts(
+    base::Optional<size_t> previous_attempt_counts) {
+  previous_attempt_counts_ = previous_attempt_counts;
 }
 
 MockDataReductionProxyConfig::MockDataReductionProxyConfig(

@@ -178,6 +178,9 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
     // Used as a hint to the decoder. Outputting VideoFrames in this color space
     // may avoid extra conversion steps.
     gfx::ColorSpace target_color_space;
+
+    // HDR metadata specified by the container.
+    base::Optional<HDRMetadata> hdr_metadata;
   };
 
   // Interface for collaborating with picture interface to provide memory for
@@ -277,15 +280,20 @@ class MEDIA_EXPORT VideoDecodeAccelerator {
   virtual void AssignPictureBuffers(
       const std::vector<PictureBuffer>& buffers) = 0;
 
-  // Imports |gpu_memory_buffer_handle| as backing memory for picture buffer
-  // associated with |picture_buffer_id|. This can only be be used if the VDA
-  // has been Initialize()d with config.output_mode = IMPORT, and should be
-  // preceded by a call to AssignPictureBuffers() to set up the number of
-  // PictureBuffers and their details.
+  // Imports |gpu_memory_buffer_handle|, pointing to a buffer in |pixel_format|,
+  // as backing memory for picture buffer associated with |picture_buffer_id|.
+  // This can only be be used if the VDA has been Initialize()d with
+  // config.output_mode = IMPORT, and should be preceded by a call to
+  // AssignPictureBuffers() to set up the number of PictureBuffers and their
+  // details.
+  // The |pixel_format| used here may be different from the |pixel_format|
+  // required in ProvidePictureBuffers(). If the buffer cannot be imported an
+  // error should be notified via NotifyError().
   // After this call, the VDA becomes the owner of the GpuMemoryBufferHandle,
   // and is responsible for closing it after use, also on import failure.
   virtual void ImportBufferForPicture(
       int32_t picture_buffer_id,
+      VideoPixelFormat pixel_format,
       const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle);
 
   // Sends picture buffers to be reused by the decoder. This needs to be called

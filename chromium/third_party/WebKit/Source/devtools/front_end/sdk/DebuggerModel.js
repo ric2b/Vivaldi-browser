@@ -1188,6 +1188,8 @@ SDK.DebuggerModel.CallFrame = class {
     }
     if (payload.functionLocation)
       this._functionLocation = SDK.DebuggerModel.Location.fromPayload(debuggerModel, payload.functionLocation);
+    this._returnValue =
+        payload.returnValue ? this.debuggerModel._runtimeModel.createRemoteObject(payload.returnValue) : null;
   }
 
   /**
@@ -1245,8 +1247,26 @@ SDK.DebuggerModel.CallFrame = class {
    * @return {?SDK.RemoteObject}
    */
   returnValue() {
-    return this._payload.returnValue ? this.debuggerModel._runtimeModel.createRemoteObject(this._payload.returnValue) :
-                                       null;
+    return this._returnValue;
+  }
+
+  /**
+   * @param {string} expression
+   * @return {!Promise<?SDK.RemoteObject>}
+   */
+  async setReturnValue(expression) {
+    if (!this._returnValue)
+      return null;
+
+    var evaluateResponse = await this.debuggerModel._agent.invoke_evaluateOnCallFrame(
+        {callFrameId: this.id, expression: expression, silent: true, objectGroup: 'backtrace'});
+    if (evaluateResponse[Protocol.Error] || evaluateResponse.exceptionDetails)
+      return null;
+    var response = await this.debuggerModel._agent.invoke_setReturnValue({newValue: evaluateResponse.result});
+    if (response[Protocol.Error])
+      return null;
+    this._returnValue = this.debuggerModel._runtimeModel.createRemoteObject(evaluateResponse.result);
+    return this._returnValue;
   }
 
   /**
@@ -1462,7 +1482,7 @@ SDK.DebuggerPausedDetails = class {
     while (stack) {
       if (stack.description === 'async function' && stack.callFrames.length)
         stack.callFrames.shift();
-      if (previous && (!stack.callFrames.length && !stack.promiseCreationFrame))
+      if (previous && !stack.callFrames.length)
         previous.parent = stack.parent;
       else
         previous = stack;

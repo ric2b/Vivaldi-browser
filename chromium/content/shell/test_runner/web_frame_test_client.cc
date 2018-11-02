@@ -13,7 +13,6 @@
 #include "content/public/test/test_runner_support.h"
 #include "content/shell/test_runner/accessibility_controller.h"
 #include "content/shell/test_runner/event_sender.h"
-#include "content/shell/test_runner/mock_color_chooser.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
 #include "content/shell/test_runner/test_common.h"
 #include "content/shell/test_runner/test_interfaces.h"
@@ -180,14 +179,6 @@ WebFrameTestClient::WebFrameTestClient(
 
 WebFrameTestClient::~WebFrameTestClient() {}
 
-blink::WebColorChooser* WebFrameTestClient::CreateColorChooser(
-    blink::WebColorChooserClient* client,
-    const blink::WebColor& color,
-    const blink::WebVector<blink::WebColorSuggestion>& suggestions) {
-  // This instance is deleted by WebCore::ColorInputType
-  return new MockColorChooser(client, delegate_, test_runner());
-}
-
 void WebFrameTestClient::RunModalAlertDialog(const blink::WebString& message) {
   if (!test_runner()->ShouldDumpJavaScriptDialogs())
     return;
@@ -242,9 +233,6 @@ void WebFrameTestClient::PostAccessibilityEvent(const blink::WebAXObject& obj,
   switch (event) {
     case blink::kWebAXEventActiveDescendantChanged:
       event_name = "ActiveDescendantChanged";
-      break;
-    case blink::kWebAXEventAlert:
-      event_name = "Alert";
       break;
     case blink::kWebAXEventAriaAttributeChanged:
       event_name = "AriaAttributeChanged";
@@ -327,12 +315,6 @@ void WebFrameTestClient::PostAccessibilityEvent(const blink::WebAXObject& obj,
     case blink::kWebAXEventTextChanged:
       event_name = "TextChanged";
       break;
-    case blink::kWebAXEventTextInserted:
-      event_name = "TextInserted";
-      break;
-    case blink::kWebAXEventTextRemoved:
-      event_name = "TextRemoved";
-      break;
     case blink::kWebAXEventValueChanged:
       event_name = "ValueChanged";
       break;
@@ -366,6 +348,12 @@ void WebFrameTestClient::DidChangeSelection(bool is_empty_callback) {
     delegate_->PrintMessage(
         "EDITING DELEGATE: "
         "webViewDidChangeSelection:WebViewDidChangeSelectionNotification\n");
+}
+
+void WebFrameTestClient::DidChangeContents() {
+  if (test_runner()->shouldDumpEditingCallbacks())
+    delegate_->PrintMessage(
+        "EDITING DELEGATE: webViewDidChange:WebViewDidChangeNotification\n");
 }
 
 blink::WebPlugin* WebFrameTestClient::CreatePlugin(
@@ -403,6 +391,15 @@ void WebFrameTestClient::LoadErrorPage(int reason) {
 void WebFrameTestClient::DidStartProvisionalLoad(
     blink::WebDocumentLoader* document_loader,
     blink::WebURLRequest& request) {
+  if (request.GetSuggestedFilename().has_value() &&
+      test_runner()->shouldWaitUntilExternalURLLoad()) {
+    delegate_->PrintMessage(
+        std::string("Downloading URL with suggested filename \"") +
+        request.GetSuggestedFilename()->Utf8() + "\"\n");
+    delegate_->PostTask(base::BindRepeating(&WebTestDelegate::TestFinished,
+                                            base::Unretained(delegate_)));
+  }
+
   // PlzNavigate
   // A provisional load notification is received when a frame navigation is
   // sent to the browser. We don't want to log it again during commit.
@@ -443,7 +440,8 @@ void WebFrameTestClient::DidFailProvisionalLoad(
 
 void WebFrameTestClient::DidCommitProvisionalLoad(
     const blink::WebHistoryItem& history_item,
-    blink::WebHistoryCommitType history_type) {
+    blink::WebHistoryCommitType history_type,
+    blink::WebGlobalObjectReusePolicy) {
   if (test_runner()->shouldDumpFrameLoadCallbacks()) {
     PrintFrameDescription(delegate_, web_frame_test_proxy_base_->web_frame());
     delegate_->PrintMessage(" - didCommitLoadForFrame\n");

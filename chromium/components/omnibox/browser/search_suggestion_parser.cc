@@ -15,6 +15,7 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -288,7 +289,8 @@ SearchSuggestionParser::NavigationResult::CalculateAndClassifyMatchContents(
       GURL(formatted_url_), {{match_start, match_start + input_text.length()}},
       &match_in_scheme, &match_in_subdomain, &match_after_host);
   auto format_types = AutocompleteMatch::GetFormatTypes(
-      match_in_scheme, match_in_subdomain, match_after_host);
+      GURL(input_text).has_scheme() || match_in_scheme, match_in_subdomain,
+      match_after_host);
 
   base::string16 match_contents =
       url_formatter::FormatUrl(url_, format_types, net::UnescapeRule::SPACES,
@@ -555,8 +557,7 @@ bool SearchSuggestionParser::ParseSuggestResults(
             answer = SuggestionAnswer::ParseAnswer(answer_json);
             int answer_type = 0;
             if (answer && base::StringToInt(answer_type_str, &answer_type)) {
-              UMA_HISTOGRAM_SPARSE_SLOWLY("Omnibox.AnswerParseType",
-                                          answer_type);
+              base::UmaHistogramSparse("Omnibox.AnswerParseType", answer_type);
               answer_parsed_successfully = true;
 
               answer->set_type(answer_type);

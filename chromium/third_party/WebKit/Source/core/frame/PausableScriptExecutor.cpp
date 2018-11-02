@@ -181,7 +181,7 @@ PausableScriptExecutor::PausableScriptExecutor(
   CHECK(script_state_->ContextIsValid());
 }
 
-PausableScriptExecutor::~PausableScriptExecutor() {}
+PausableScriptExecutor::~PausableScriptExecutor() = default;
 
 void PausableScriptExecutor::Fired() {
   ExecuteAndDestroySelf();
@@ -195,7 +195,7 @@ void PausableScriptExecutor::Run() {
     ExecuteAndDestroySelf();
     return;
   }
-  StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  StartOneShot(TimeDelta(), FROM_HERE);
   PauseIfNeeded();
 }
 
@@ -206,7 +206,7 @@ void PausableScriptExecutor::RunAsync(BlockingOption blocking) {
   if (blocking_option_ == kOnloadBlocking)
     ToDocument(GetExecutionContext())->IncrementLoadEventDelayCount();
 
-  StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  StartOneShot(TimeDelta(), FROM_HERE);
   PauseIfNeeded();
 }
 

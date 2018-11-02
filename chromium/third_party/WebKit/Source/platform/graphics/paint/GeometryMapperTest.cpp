@@ -25,7 +25,8 @@ class GeometryMapperTest : public ::testing::Test,
       const PropertyTreeState& ancestor_property_tree_state) {
     GeometryMapperClipCache::ClipAndTransform clip_and_transform(
         ancestor_property_tree_state.Clip(),
-        ancestor_property_tree_state.Transform());
+        ancestor_property_tree_state.Transform(),
+        kIgnorePlatformOverlayScrollbarSize);
     return descendant_clip->GetClipCache().GetCachedClip(clip_and_transform);
   }
 
@@ -35,7 +36,8 @@ class GeometryMapperTest : public ::testing::Test,
       FloatClipRect& mapping_rect,
       bool& success) {
     GeometryMapper::LocalToAncestorVisualRectInternal(
-        local_state, ancestor_state, mapping_rect, success);
+        local_state, ancestor_state, mapping_rect,
+        kIgnorePlatformOverlayScrollbarSize, success);
   }
 
   // Variables required by CHECK_MAPPINGS(). The tests should set these
@@ -300,6 +302,44 @@ TEST_P(GeometryMapperTest, SimpleClip) {
   expected_clip = FloatClipRect(clip->ClipRect());
   expected_visual_rect = expected_clip;
   CHECK_MAPPINGS();
+}
+
+TEST_P(GeometryMapperTest, SimpleClipOverlayScrollbars) {
+  FloatRoundedRect rect_without_overlay_scrollbars(10, 10, 45, 43);
+  auto clip = ClipPaintPropertyNode::Create(
+      ClipPaintPropertyNode::Root(), TransformPaintPropertyNode::Root(),
+      FloatRoundedRect(10, 10, 50, 50), &rect_without_overlay_scrollbars);
+  local_state.SetClip(clip.get());
+
+  input_rect = FloatRect(0, 0, 100, 100);
+
+  FloatClipRect actual_visual_rect(input_rect);
+  GeometryMapper::LocalToAncestorVisualRect(
+      local_state, ancestor_state, actual_visual_rect,
+      kExcludeOverlayScrollbarSizeForHitTesting);
+  EXPECT_CLIP_RECT_EQ(FloatClipRect(FloatRect(10, 10, 45, 43)),
+                      actual_visual_rect);
+
+  // Check that not passing kExcludeOverlayScrollbarSizeForHitTesting gives
+  // a different result.
+  actual_visual_rect = FloatClipRect(input_rect);
+  GeometryMapper::LocalToAncestorVisualRect(
+      local_state, ancestor_state, actual_visual_rect,
+      kIgnorePlatformOverlayScrollbarSize);
+  EXPECT_CLIP_RECT_EQ(FloatClipRect(FloatRect(10, 10, 50, 50)),
+                      actual_visual_rect);
+
+  FloatClipRect actual_clip_rect = GeometryMapper::LocalToAncestorClipRect(
+      local_state, ancestor_state, kExcludeOverlayScrollbarSizeForHitTesting);
+  EXPECT_CLIP_RECT_EQ(FloatClipRect(FloatRect(10, 10, 45, 43)),
+                      actual_clip_rect);
+
+  // Check that not passing kExcludeOverlayScrollbarSizeForHitTesting gives
+  // a different result.
+  actual_clip_rect = GeometryMapper::LocalToAncestorClipRect(
+      local_state, ancestor_state, kIgnorePlatformOverlayScrollbarSize);
+  EXPECT_CLIP_RECT_EQ(FloatClipRect(FloatRect(10, 10, 50, 50)),
+                      actual_clip_rect);
 }
 
 TEST_P(GeometryMapperTest, RoundedClip) {
@@ -621,7 +661,7 @@ TEST_P(GeometryMapperTest, ReflectionWithPaintOffset) {
   auto effect = EffectPaintPropertyNode::Create(
       EffectPaintPropertyNode::Root(), TransformPaintPropertyNode::Root(),
       ClipPaintPropertyNode::Root(), kColorFilterNone, filters, 1.0,
-      SkBlendMode::kSrcOver, kCompositingReasonNone, CompositorElementId(),
+      SkBlendMode::kSrcOver, CompositingReason::kNone, CompositorElementId(),
       FloatPoint(100, 100));
   local_state.SetEffect(effect);
 

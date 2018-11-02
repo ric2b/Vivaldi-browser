@@ -25,6 +25,8 @@ blink_core_sources("paint") {
     "BoxBorderPainter.h",
     "BoxClipper.cpp",
     "BoxClipper.h",
+    "BoxClipperBase.cpp",
+    "BoxClipperBase.h",
     "BoxDecorationData.cpp",
     "BoxDecorationData.h",
     "BoxModelObjectPainter.cpp",
@@ -147,8 +149,6 @@ blink_core_sources("paint") {
     "PaintTiming.h",
     "PrePaintTreeWalk.cpp",
     "PrePaintTreeWalk.h",
-    "RarePaintData.cpp",
-    "RarePaintData.h",
     "ReplacedPainter.cpp",
     "ReplacedPainter.h",
     "RootInlineBoxPainter.cpp",
@@ -244,6 +244,8 @@ blink_core_sources("paint") {
     "compositing/PaintLayerCompositor.h",
     "ng/ng_block_flow_painter.cc",
     "ng/ng_block_flow_painter.h",
+    "ng/ng_box_clipper.cc",
+    "ng/ng_box_clipper.h",
     "ng/ng_box_fragment_painter.cc",
     "ng/ng_box_fragment_painter.h",
     "ng/ng_fragment_painter.cc",
@@ -254,10 +256,5 @@ blink_core_sources("paint") {
     "ng/ng_text_fragment_painter.h",
     "ng/ng_text_painter.cc",
     "ng/ng_text_painter.h",
-  ]
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 }

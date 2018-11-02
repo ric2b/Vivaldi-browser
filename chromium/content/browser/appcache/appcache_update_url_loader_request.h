@@ -11,13 +11,13 @@
 
 #include "base/macros.h"
 #include "content/browser/appcache/appcache_update_request_base.h"
-#include "content/public/common/resource_request.h"
-#include "content/public/common/resource_response.h"
-#include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/base/io_buffer.h"
 #include "services/network/public/cpp/net_adapters.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/resource_response.h"
+#include "services/network/public/interfaces/url_loader.mojom.h"
 
 namespace net {
 class HttpResponseInfo;
@@ -26,14 +26,13 @@ class HttpResponseInfo;
 namespace content {
 
 class URLLoaderFactoryGetter;
-struct ResourceRequest;
 
 // URLLoaderClient subclass for the UpdateRequestBase class. Provides
 // functionality to update the AppCache using functionality provided by the
 // network URL loader.
 class AppCacheUpdateJob::UpdateURLLoaderRequest
     : public AppCacheUpdateJob::UpdateRequestBase,
-      public mojom::URLLoaderClient {
+      public network::mojom::URLLoaderClient {
  public:
   ~UpdateURLLoaderRequest() override;
 
@@ -52,13 +51,15 @@ class AppCacheUpdateJob::UpdateURLLoaderRequest
   void Read() override;
   int Cancel() override;
 
-  // mojom::URLLoaderClient implementation.
+  // network::mojom::URLLoaderClient implementation.
   // These methods are called by the network loader.
-  void OnReceiveResponse(const ResourceResponseHead& response_head,
-                         const base::Optional<net::SSLInfo>& ssl_info,
-                         mojom::DownloadedTempFilePtr downloaded_file) override;
-  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         const ResourceResponseHead& response_head) override;
+  void OnReceiveResponse(
+      const network::ResourceResponseHead& response_head,
+      const base::Optional<net::SSLInfo>& ssl_info,
+      network::mojom::DownloadedTempFilePtr downloaded_file) override;
+  void OnReceiveRedirect(
+      const net::RedirectInfo& redirect_info,
+      const network::ResourceResponseHead& response_head) override;
   void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override;
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
@@ -90,15 +91,15 @@ class AppCacheUpdateJob::UpdateURLLoaderRequest
   // requests
   scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter_;
 
-  ResourceRequest request_;
-  ResourceResponseHead response_;
+  network::ResourceRequest request_;
+  network::ResourceResponseHead response_;
   network::URLLoaderCompletionStatus response_status_;
   // Response details.
   std::unique_ptr<net::HttpResponseInfo> http_response_info_;
   // Binds the URLLoaderClient interface to the channel.
-  mojo::Binding<mojom::URLLoaderClient> client_binding_;
+  mojo::Binding<network::mojom::URLLoaderClient> client_binding_;
   // The network URL loader.
-  mojom::URLLoaderPtr url_loader_;
+  network::mojom::URLLoaderPtr url_loader_;
   // Caller buffer size.
   int buffer_size_;
   // The mojo data pipe.

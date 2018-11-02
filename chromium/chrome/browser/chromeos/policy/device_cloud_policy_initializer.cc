@@ -11,7 +11,6 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -63,7 +62,7 @@ DeviceCloudPolicyInitializer::DeviceCloudPolicyInitializer(
       manager_(manager),
       attestation_flow_(std::move(attestation_flow)),
       statistics_provider_(statistics_provider),
-      signing_service_(base::MakeUnique<TpmEnrollmentKeySigningService>(
+      signing_service_(std::make_unique<TpmEnrollmentKeySigningService>(
           async_method_caller)) {}
 
 void DeviceCloudPolicyInitializer::SetSigningServiceForTesting(
@@ -231,7 +230,7 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
   } else if (device_state_restore_mode ==
              kDeviceStateRestoreModeReEnrollmentZeroTouch) {
     config.mode = EnrollmentConfig::MODE_ATTESTATION_SERVER_FORCED;
-    config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_ATTESTATION;
+    config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_BEST_AVAILABLE;
     config.management_domain = device_state_management_domain;
   } else if (pref_enrollment_auto_start_present &&
              pref_enrollment_auto_start &&
@@ -290,7 +289,7 @@ std::unique_ptr<CloudPolicyClient> DeviceCloudPolicyInitializer::CreateClient(
   std::string machine_model;
   statistics_provider_->GetMachineStatistic(chromeos::system::kHardwareClassKey,
                                             &machine_model);
-  return base::MakeUnique<CloudPolicyClient>(
+  return std::make_unique<CloudPolicyClient>(
       statistics_provider_->GetEnterpriseMachineID(), machine_model,
       device_management_service, g_browser_process->system_request_context(),
       signing_service_.get());

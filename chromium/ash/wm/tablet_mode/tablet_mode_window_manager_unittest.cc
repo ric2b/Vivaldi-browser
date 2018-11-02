@@ -14,7 +14,6 @@
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/mru_window_tracker.h"
@@ -287,8 +286,8 @@ TEST_F(TabletModeWindowManagerTest, GoingToMaximizedWithModalDialogPresent) {
   EXPECT_EQ(rect3.ToString(), w3->bounds().ToString());
 
   // Enable system modal dialog, and make sure both shelves are still hidden.
-  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
-  EXPECT_TRUE(ShellPort::Get()->IsSystemModalWindowOpen());
+  ShellTestApi().SimulateModalWindowOpenForTest(true);
+  EXPECT_TRUE(Shell::IsSystemModalWindowOpen());
 
   // Create the manager and make sure that all qualifying windows were detected
   // and changed.
@@ -352,7 +351,7 @@ TEST_F(TabletModeWindowManagerTest,
   EXPECT_EQ(rect.ToString(), fixed_window->bounds().ToString());
 
   gfx::Size workspace_size =
-      ScreenUtil::GetMaximizedWindowBoundsInParent(unlimited_window.get())
+      screen_util::GetMaximizedWindowBoundsInParent(unlimited_window.get())
           .size();
 
   // Create the manager and make sure that all qualifying windows were detected
@@ -424,7 +423,7 @@ TEST_F(TabletModeWindowManagerTest, CreateWindows) {
   // Make sure that the position of the unresizable window is in the middle of
   // the screen.
   gfx::Size work_area_size =
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(w3.get()).size();
+      screen_util::GetDisplayWorkAreaBoundsInParent(w3.get()).size();
   gfx::Point center =
       gfx::Point((work_area_size.width() - rect3.size().width()) / 2,
                  (work_area_size.height() - rect3.size().height()) / 2);
@@ -504,7 +503,7 @@ TEST_F(TabletModeWindowManagerTest, CreateNonMaximizableButResizableWindows) {
                                           rect));
 
   gfx::Size workspace_size =
-      ScreenUtil::GetMaximizedWindowBoundsInParent(unlimited_window.get())
+      screen_util::GetMaximizedWindowBoundsInParent(unlimited_window.get())
           .size();
 
   // All windows should be sized now as big as possible and be centered.
@@ -882,6 +881,26 @@ TEST_F(TabletModeWindowManagerTest, TestMinimize) {
   EXPECT_TRUE(window->IsVisible());
 }
 
+// Tests that minimized window can restore to pre-minimized show state after
+// entering and leaving tablet mode (https://crbug.com/783310).
+TEST_F(TabletModeWindowManagerTest, MinimizedEnterAndLeaveTabletMode) {
+  gfx::Rect rect(10, 10, 100, 100);
+  std::unique_ptr<aura::Window> window(
+      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
+  wm::WindowState* window_state = wm::GetWindowState(window.get());
+  window_state->Minimize();
+  EXPECT_TRUE(window_state->IsMinimized());
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  EXPECT_TRUE(window_state->IsMinimized());
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  EXPECT_TRUE(window_state->IsMinimized());
+
+  window_state->Unminimize();
+  EXPECT_FALSE(window_state->IsMinimized());
+  window_state->Minimize();
+  EXPECT_TRUE(window_state->IsMinimized());
+}
+
 // Check that a full screen window remains full screen upon entering maximize
 // mode. Furthermore, checks that this window is not full screen upon exiting
 // tablet mode if it was un-full-screened while in tablet mode.
@@ -1213,34 +1232,6 @@ TEST_F(TabletModeWindowManagerTest,
 
   EXPECT_FALSE(window_state->IsMaximized());
   EXPECT_EQ(w1->bounds().ToString(), requested_bounds.ToString());
-}
-
-// Check that snapping operations get ignored.
-TEST_F(TabletModeWindowManagerTest, SnapModeTests) {
-  gfx::Rect rect(20, 140, 100, 100);
-  std::unique_ptr<aura::Window> w1(
-      CreateWindow(aura::client::WINDOW_TYPE_NORMAL, rect));
-  wm::WindowState* window_state = wm::GetWindowState(w1.get());
-  wm::WMEvent event_left(wm::WM_EVENT_SNAP_LEFT);
-  wm::WMEvent event_right(wm::WM_EVENT_SNAP_RIGHT);
-  window_state->OnWMEvent(&event_left);
-  EXPECT_TRUE(window_state->IsSnapped());
-
-  CreateTabletModeWindowManager();
-
-  // Fullscreen mode should now be off and it should not come back while in
-  // tablet mode.
-  EXPECT_FALSE(window_state->IsSnapped());
-  EXPECT_TRUE(window_state->IsMaximized());
-  window_state->OnWMEvent(&event_left);
-  EXPECT_FALSE(window_state->IsSnapped());
-  EXPECT_TRUE(window_state->IsMaximized());
-  window_state->OnWMEvent(&event_right);
-  EXPECT_FALSE(window_state->IsSnapped());
-  EXPECT_TRUE(window_state->IsMaximized());
-
-  DestroyTabletModeWindowManager();
-  EXPECT_TRUE(window_state->IsSnapped());
 }
 
 // Check that non maximizable windows cannot be dragged by the user.

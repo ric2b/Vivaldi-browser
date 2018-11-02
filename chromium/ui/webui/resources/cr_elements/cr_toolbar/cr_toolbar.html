@@ -10,7 +10,6 @@
   <template>
     <style include="cr-icons cr-hidden-style">
       :host {
-        --cr-toolbar-field-width: 680px;
         --cr-toolbar-height: 56px;
         --paper-icon-button-ink-color: white;
         align-items: center;
@@ -161,7 +160,7 @@
     </div>
 
     <div id="rightContent">
-      <content select=".more-actions"></content>
+      <slot></slot>
     </div>
   </template>
   <script src="cr_toolbar.js"></script>

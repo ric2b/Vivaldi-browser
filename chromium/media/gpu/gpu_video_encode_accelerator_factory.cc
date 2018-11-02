@@ -10,7 +10,7 @@
 #include "media/gpu/gpu_video_accelerator_util.h"
 
 #if BUILDFLAG(USE_V4L2_CODEC)
-#include "media/gpu/v4l2_video_encode_accelerator.h"
+#include "media/gpu/v4l2/v4l2_video_encode_accelerator.h"
 #endif
 #if defined(OS_ANDROID) && BUILDFLAG(ENABLE_WEBRTC)
 #include "media/gpu/android/android_video_encode_accelerator.h"
@@ -24,7 +24,7 @@
 #include "media/gpu/media_foundation_video_encode_accelerator_win.h"
 #endif
 #if BUILDFLAG(USE_VAAPI)
-#include "media/gpu/vaapi_video_encode_accelerator.h"
+#include "media/gpu/vaapi/vaapi_video_encode_accelerator.h"
 #endif
 
 namespace media {
@@ -83,12 +83,13 @@ std::vector<VEAFactoryFunction> GetVEAFactoryFunctions(
   // platform. This list is ordered by priority, from most to least preferred,
   // if applicable.
   std::vector<VEAFactoryFunction> vea_factory_functions;
+  if (gpu_preferences.disable_accelerated_video_encode)
+    return vea_factory_functions;
 #if BUILDFLAG(USE_V4L2_CODEC)
   vea_factory_functions.push_back(&CreateV4L2VEA);
 #endif
 #if BUILDFLAG(USE_VAAPI)
-  if (!gpu_preferences.disable_vaapi_accelerated_video_encode)
-    vea_factory_functions.push_back(&CreateVaapiVEA);
+  vea_factory_functions.push_back(&CreateVaapiVEA);
 #endif
 #if defined(OS_ANDROID) && BUILDFLAG(ENABLE_WEBRTC)
   if (!gpu_preferences.disable_web_rtc_hw_encoding)

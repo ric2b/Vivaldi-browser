@@ -10,6 +10,7 @@ import static junit.framework.Assert.assertNull;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.chrome.browser.download.DownloadInfo;
@@ -79,7 +80,8 @@ public class StubbedProvider implements BackendProvider {
         }
 
         @Override
-        public void removeDownload(final String guid, final boolean isOffTheRecord) {
+        public void removeDownload(
+                final String guid, final boolean isOffTheRecord, boolean externallyRemoved) {
             mHandler.post(new Runnable() {
                 @Override
                 public void run() {
@@ -128,8 +130,8 @@ public class StubbedProvider implements BackendProvider {
         }
 
         @Override
-        public ArrayList<OfflineItem> getAllItems() {
-            return items;
+        public void getAllItems(Callback<ArrayList<OfflineItem>> callback) {
+            mHandler.post(() -> callback.onResult(items));
         }
 
         @Override
@@ -165,8 +167,8 @@ public class StubbedProvider implements BackendProvider {
         }
 
         @Override
-        public OfflineItem getItemById(ContentId id) {
-            return null;
+        public void getItemById(ContentId id, Callback<OfflineItem> callback) {
+            mHandler.post(() -> callback.onResult(null));
         }
 
         @Override
@@ -188,6 +190,17 @@ public class StubbedProvider implements BackendProvider {
         public void cancelRetrieval(ThumbnailRequest request) {}
     }
 
+    /** Stubs out the UIDelegate. */
+    public class StubbedUIDelegate implements UIDelegate {
+        @Override
+        public void deleteItem(DownloadHistoryItemWrapper item) {
+            mHandler.post(() -> item.removePermanently());
+        }
+
+        @Override
+        public void shareItem(DownloadHistoryItemWrapper item) {}
+    }
+
     private static final long ONE_GIGABYTE = 1024L * 1024L * 1024L;
 
     private final Handler mHandler;
@@ -195,6 +208,7 @@ public class StubbedProvider implements BackendProvider {
     private final StubbedOfflineContentProvider mOfflineContentProvider;
     private final SelectionDelegate<DownloadHistoryItemWrapper> mSelectionDelegate;
     private final StubbedThumbnailProvider mStubbedThumbnailProvider;
+    private UIDelegate mUIDelegate;
 
     public StubbedProvider() {
         mHandler = new Handler(Looper.getMainLooper());
@@ -202,6 +216,11 @@ public class StubbedProvider implements BackendProvider {
         mOfflineContentProvider = new StubbedOfflineContentProvider();
         mSelectionDelegate = new DownloadItemSelectionDelegate();
         mStubbedThumbnailProvider = new StubbedThumbnailProvider();
+        mUIDelegate = new StubbedUIDelegate();
+    }
+
+    public void setUIDelegate(UIDelegate delegate) {
+        mUIDelegate = delegate;
     }
 
     @Override
@@ -222,6 +241,11 @@ public class StubbedProvider implements BackendProvider {
     @Override
     public StubbedThumbnailProvider getThumbnailProvider() {
         return mStubbedThumbnailProvider;
+    }
+
+    @Override
+    public UIDelegate getUIDelegate() {
+        return mUIDelegate;
     }
 
     @Override

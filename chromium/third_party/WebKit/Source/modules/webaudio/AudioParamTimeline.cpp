@@ -26,6 +26,9 @@
 #include "modules/webaudio/AudioParamTimeline.h"
 
 #include <algorithm>
+#include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "build/build_config.h"
@@ -35,7 +38,6 @@
 #include "platform/audio/AudioUtilities.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/MathExtras.h"
-#include "platform/wtf/PtrUtil.h"
 
 #if defined(ARCH_CPU_X86_FAMILY)
 #include <emmintrin.h>
@@ -171,7 +173,7 @@ float AudioParamTimeline::ValueCurveAtTime(double t,
 
 std::unique_ptr<AudioParamTimeline::ParamEvent>
 AudioParamTimeline::ParamEvent::CreateSetValueEvent(float value, double time) {
-  return WTF::WrapUnique(new ParamEvent(ParamEvent::kSetValue, value, time));
+  return base::WrapUnique(new ParamEvent(ParamEvent::kSetValue, value, time));
 }
 
 std::unique_ptr<AudioParamTimeline::ParamEvent>
@@ -179,8 +181,8 @@ AudioParamTimeline::ParamEvent::CreateLinearRampEvent(float value,
                                                       double time,
                                                       float initial_value,
                                                       double call_time) {
-  return WTF::WrapUnique(new ParamEvent(ParamEvent::kLinearRampToValue, value,
-                                        time, initial_value, call_time));
+  return base::WrapUnique(new ParamEvent(ParamEvent::kLinearRampToValue, value,
+                                         time, initial_value, call_time));
 }
 
 std::unique_ptr<AudioParamTimeline::ParamEvent>
@@ -188,8 +190,9 @@ AudioParamTimeline::ParamEvent::CreateExponentialRampEvent(float value,
                                                            double time,
                                                            float initial_value,
                                                            double call_time) {
-  return WTF::WrapUnique(new ParamEvent(ParamEvent::kExponentialRampToValue,
-                                        value, time, initial_value, call_time));
+  return base::WrapUnique(new ParamEvent(ParamEvent::kExponentialRampToValue,
+                                         value, time, initial_value,
+                                         call_time));
 }
 
 std::unique_ptr<AudioParamTimeline::ParamEvent>
@@ -200,7 +203,7 @@ AudioParamTimeline::ParamEvent::CreateSetTargetEvent(float value,
   // returns NaN or Infinity due to division by zero.  The caller
   // should have converted this to a SetValueEvent.
   DCHECK_NE(time_constant, 0);
-  return WTF::WrapUnique(
+  return base::WrapUnique(
       new ParamEvent(ParamEvent::kSetTarget, value, time, time_constant));
 }
 
@@ -212,9 +215,9 @@ AudioParamTimeline::ParamEvent::CreateSetValueCurveEvent(
   double curve_points = (curve.size() - 1) / duration;
   float end_value = curve.data()[curve.size() - 1];
 
-  return WTF::WrapUnique(new ParamEvent(ParamEvent::kSetValueCurve, time,
-                                        duration, curve, curve_points,
-                                        end_value));
+  return base::WrapUnique(new ParamEvent(ParamEvent::kSetValueCurve, time,
+                                         duration, curve, curve_points,
+                                         end_value));
 }
 
 std::unique_ptr<AudioParamTimeline::ParamEvent>
@@ -231,7 +234,7 @@ AudioParamTimeline::ParamEvent::CreateCancelValuesEvent(
            saved_type == ParamEvent::kSetValueCurve);
   }
 
-  return WTF::WrapUnique(
+  return base::WrapUnique(
       new ParamEvent(ParamEvent::kCancelValues, time, std::move(saved_event)));
 }
 
@@ -248,7 +251,7 @@ AudioParamTimeline::ParamEvent::CreateGeneralEvent(
     double curve_points_per_second,
     float curve_end_value,
     std::unique_ptr<ParamEvent> saved_event) {
-  return WTF::WrapUnique(new ParamEvent(
+  return base::WrapUnique(new ParamEvent(
       type, value, time, initial_value, call_time, time_constant, duration,
       curve, curve_points_per_second, curve_end_value, std::move(saved_event)));
 }
@@ -583,11 +586,29 @@ void AudioParamTimeline::InsertEvent(std::unique_ptr<ParamEvent> event,
   new_events_.insert(events_[i].get());
 }
 
-bool AudioParamTimeline::HasValues() const {
+bool AudioParamTimeline::HasValues(size_t current_frame,
+                                   double sample_rate) const {
   MutexTryLocker try_locker(events_lock_);
 
-  if (try_locker.Locked())
-    return events_.size();
+  if (try_locker.Locked()) {
+    if (events_.size() == 0)
+      return false;
+
+    switch (events_[0]->GetType()) {
+      case ParamEvent::kSetValue:
+      case ParamEvent::kSetValueCurve:
+      case ParamEvent::kSetTarget:
+        // Need automation if the event starts somewhere before the
+        // end of the current render quantum.
+        return events_[0]->Time() <=
+               (current_frame + AudioUtilities::kRenderQuantumFrames) /
+                   sample_rate;
+      default:
+        // Otherwise, there's some kind of other event running, so we
+        // need to do automation.
+        return true;
+    }
+  }
 
   // Can't get the lock so that means the main thread is trying to insert an
   // event.  Just return true then.  If the main thread releases the lock before
@@ -1102,6 +1123,14 @@ void AudioParamTimeline::ClampNewEventsToCurrentTime(double current_time) {
   new_events_.clear();
 }
 
+// Test that for a SetTarget event, the current value is close enough
+// to the target value that we can consider the event to have
+// converged to the target.
+static bool HasSetTargetConverged(float value, float target) {
+  return fabs(value - target) < kSetTargetThreshold * fabs(target) ||
+         (target == 0 && fabs(value) < kSetTargetZeroThreshold);
+}
+
 bool AudioParamTimeline::HandleAllEventsInThePast(double current_time,
                                                   double sample_rate,
                                                   float default_value,
@@ -1118,9 +1147,22 @@ bool AudioParamTimeline::HandleAllEventsInThePast(double current_time,
   // the curve, so we don't need to worry that SetValueCurve time is a
   // start time, not an end time.
   if (last_event_time +
-              1.5 * AudioUtilities::kRenderQuantumFrames / sample_rate <
-          current_time &&
-      last_event_type != ParamEvent::kSetTarget) {
+          1.5 * AudioUtilities::kRenderQuantumFrames / sample_rate <
+      current_time) {
+    // If the last event is SetTarget, make sure we've converged and, that
+    // we're at least 5 time constants past the start of the event.  If not, we
+    // have to continue processing it.
+    if (last_event_type == ParamEvent::kSetTarget) {
+      if (HasSetTargetConverged(default_value, last_event->Value()) &&
+          current_time > last_event_time + 5 * last_event->TimeConstant()) {
+        // We've converged. Slam the default value with the target value.
+        default_value = last_event->Value();
+      } else {
+        // Not converged, so give up; we can't remove this event yet.
+        return false;
+      }
+    }
+
     // |events_| is being mutated.  |new_events_| better be empty because there
     // are raw pointers there.
     DCHECK_EQ(new_events_.size(), 0U);
@@ -1478,8 +1520,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessSetTarget(
 
   // If the value is close enough to the target, just fill in the data
   // with the target value.
-  if (fabs(value - target) < kSetTargetThreshold * fabs(target) ||
-      (!target && fabs(value) < kSetTargetZeroThreshold)) {
+  if (HasSetTargetConverged(value, target)) {
     for (; write_index < fill_to_frame; ++write_index)
       values[write_index] = target;
   } else {

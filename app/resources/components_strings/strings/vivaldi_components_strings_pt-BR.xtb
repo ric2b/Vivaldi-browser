@@ -50,10 +50,12 @@
 <translation id="5492298309214877701">Este site na intranet da empresa, organização ou escola tem o mesmo URL de um website externo. <ph name="LINE_BREAK" /> Tente entrar em contato com o administrador do sistema.</translation>
 <translation id="5510766032865166053">Talvez ele tenha sido movido ou excluído.</translation>
 <translation id="5556459405103347317">Atualizar</translation>
+<translation id="5571347317547569613">({NUM_COOKIES, plural, =0 {Nenhum} =1 {1 em uso} other {# em uso}})</translation>
 <translation id="5610142619324316209">Verificar que você está conectado</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> redirecionou o endereço muitas vezes.</translation>
 <translation id="5675650730144413517">Esta página não está funcionando</translation>
 <translation id="5869405914158311789">Não foi possível acessar este site</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =0 {Nenhum} =1 {1 em uso} other {# em uso}}</translation>
 <translation id="5990559369517809815">Solicitações ao servidor foram bloqueadas por uma extensão.</translation>
 <translation id="6146055958333702838">Verifique todos os cabos e reinicie todos os roteadores, modens ou outros dispositivos de rede que você estiver usando.</translation>
 <translation id="614940544461990577">Tente:</translation>

@@ -35,6 +35,25 @@ using blink::WebURLResponse;
 
 namespace media {
 
+namespace {
+
+bool IsOpaqueData(network::mojom::FetchResponseType response_type) {
+  switch (response_type) {
+    case network::mojom::FetchResponseType::kBasic:
+    case network::mojom::FetchResponseType::kCORS:
+    case network::mojom::FetchResponseType::kDefault:
+      return false;
+    case network::mojom::FetchResponseType::kError:
+    case network::mojom::FetchResponseType::kOpaque:
+    case network::mojom::FetchResponseType::kOpaqueRedirect:
+      return true;
+  }
+  NOTREACHED();
+  return false;
+}
+
+}  // namespace
+
 // The number of milliseconds to wait before retrying a failed load.
 const int kLoaderFailedRetryDelayMs = 250;
 
@@ -54,12 +73,14 @@ const int kHttpRangeNotSatisfiable = 416;
 
 ResourceMultiBufferDataProvider::ResourceMultiBufferDataProvider(
     UrlData* url_data,
-    MultiBufferBlockId pos)
+    MultiBufferBlockId pos,
+    bool is_client_audio_element)
     : pos_(pos),
       url_data_(url_data),
       retries_(0),
       cors_mode_(url_data->cors_mode()),
       origin_(url_data->url().GetOrigin()),
+      is_client_audio_element_(is_client_audio_element),
       weak_factory_(this) {
   DCHECK(url_data_) << " pos = " << pos;
   DCHECK_GE(pos, 0);
@@ -78,8 +99,9 @@ void ResourceMultiBufferDataProvider::Start() {
 
   // Prepare the request.
   WebURLRequest request(url_data_->url());
-  // TODO(mkwst): Split this into video/audio.
-  request.SetRequestContext(WebURLRequest::kRequestContextVideo);
+  request.SetRequestContext(is_client_audio_element_
+                                ? WebURLRequest::kRequestContextAudio
+                                : WebURLRequest::kRequestContextVideo);
   request.SetHTTPHeaderField(
       WebString::FromUTF8(net::HttpRequestHeaders::kRange),
       WebString::FromUTF8(
@@ -320,6 +342,11 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
     destination_url_data =
         url_data_->url_index()->TryInsert(destination_url_data);
   }
+
+  // This is vital for security! A service worker can respond with a response
+  // from a different origin, so this response type is needed to detect that.
+  destination_url_data->set_has_opaque_data(
+      IsOpaqueData(response.ResponseTypeViaServiceWorker()));
 
   if (destination_url_data != url_data_) {
     // At this point, we've encountered a redirect, or found a better url data

@@ -44,6 +44,10 @@ blink_core_sources("editing") {
     "InlineBoxTraversal.h",
     "LayoutSelection.cpp",
     "LayoutSelection.h",
+    "LocalCaretRect.cpp",
+    "LocalCaretRect.h",
+    "NGFlatTreeShorthands.cpp",
+    "NGFlatTreeShorthands.h",
     "PlainTextRange.cpp",
     "PlainTextRange.h",
     "Position.cpp",
@@ -72,8 +76,6 @@ blink_core_sources("editing") {
     "SelectionType.h",
     "SetSelectionOptions.cpp",
     "SetSelectionOptions.h",
-    "SurroundingText.cpp",
-    "SurroundingText.h",
     "TextAffinity.cpp",
     "TextAffinity.h",
     "TextGranularity.h",
@@ -305,11 +307,6 @@ blink_core_sources("editing") {
   if (is_mac) {
     sources += [ "commands/SmartReplaceCF.cpp" ]
   }
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-  ]
 }
 
 jumbo_source_set("unit_tests") {
@@ -325,6 +322,7 @@ jumbo_source_set("unit_tests") {
     "GranularityStrategyTest.cpp",
     "InlineBoxPositionTest.cpp",
     "LayoutSelectionTest.cpp",
+    "LocalCaretRectTest.cpp",
     "PositionIteratorTest.cpp",
     "PositionTest.cpp",
     "RelocatablePositionTest.cpp",
@@ -333,7 +331,6 @@ jumbo_source_set("unit_tests") {
     "SelectionModifierTest.cpp",
     "SelectionTemplateTest.cpp",
     "SetSelectionOptionsTest.cpp",
-    "SurroundingTextTest.cpp",
     "VisiblePositionTest.cpp",
     "VisibleSelectionTest.cpp",
     "VisibleUnitsTest.cpp",
@@ -345,6 +342,7 @@ jumbo_source_set("unit_tests") {
     "commands/EditingCommandTest.cpp",
     "commands/InsertIncrementalTextCommandTest.cpp",
     "commands/InsertListCommandTest.cpp",
+    "commands/InsertParagraphSeparatorCommandTest.cpp",
     "commands/InsertTextCommandTest.cpp",
     "commands/ReplaceSelectionCommandTest.cpp",
     "commands/SetCharacterDataCommandTest.cpp",

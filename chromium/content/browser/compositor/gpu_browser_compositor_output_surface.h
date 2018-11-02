@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/gpu_vsync_begin_frame_source.h"
+#include "gpu/vulkan/features.h"
 #include "ui/gfx/swap_result.h"
 
 namespace viz {
@@ -23,7 +24,7 @@ struct PresentationFeedback;
 
 namespace gpu {
 class CommandBufferProxyImpl;
-struct GpuProcessHostedCALayerTreeParamsMac;
+struct SwapBuffersCompleteParams;
 }
 
 namespace ui {
@@ -50,13 +51,8 @@ class GpuBrowserCompositorOutputSurface
   ~GpuBrowserCompositorOutputSurface() override;
 
   // Called when a swap completion is sent from the GPU process.
-  // The argument |params_mac| is used to communicate parameters needed on Mac
-  // to display the CALayer for the swap in the browser process.
-  // TODO(ccameron): Remove |params_mac| when the CALayer tree is hosted in the
-  // browser process.
   virtual void OnGpuSwapBuffersCompleted(
-      const gfx::SwapResponse& response,
-      const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac);
+      const gpu::SwapBuffersCompleteParams& params);
 
   // BrowserCompositorOutputSurface implementation.
   void OnReflectorChanged() override;
@@ -85,6 +81,9 @@ class GpuBrowserCompositorOutputSurface
 
   // GpuVSyncControl implementation.
   void SetNeedsVSync(bool needs_vsync) override;
+#if BUILDFLAG(ENABLE_VULKAN)
+  gpu::VulkanSurface* GetVulkanSurface() override;
+#endif
 
   // OutputSurface::LatencyInfoCache::Client implementation.
   void LatencyInfoCompleted(

@@ -146,6 +146,7 @@
 <translation id="2890678560483811744">Sidereferencen er ugyldig</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> kunne ikke kommunikere med denne printer. Sørg for, at printeren er tilsluttet, og prøv igen.</translation>
 <translation id="2904456025988372123">Spørg om tilladelse, når et website automatisk forsøger at downloade flere filer efter den første fil</translation>
+<translation id="2911898792135283060">Generer adgangskode...</translation>
 <translation id="2913331724188855103">Tillad, at websites gemmer og læser cookiedata (anbefales)</translation>
 <translation id="2916745397441987255">Søg efter udvidelser</translation>
 <translation id="2932883381142163287">Rapportér misbrug</translation>
@@ -413,7 +414,6 @@
 <translation id="6295158916970320988">Alle websites</translation>
 <translation id="6295855836753816081">Gemmer...</translation>
 <translation id="6308937455967653460">Gem lin&amp;k som...</translation>
-<translation id="6314335155547195432">Generér adgangskode</translation>
 <translation id="6326855256003666642">Antal aktiviteter, der bruger udvidelsen</translation>
 <translation id="6370021412472292592">Kunne ikke indlæse manifest.</translation>
 <translation id="6374469231428023295">Prøv igen</translation>
@@ -497,7 +497,6 @@
 <translation id="7564847347806291057">Afslut proces</translation>
 <translation id="7576690715254076113">Sætvis</translation>
 <translation id="7629827748548208700">Fane: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Annuller</translation>
 <translation id="7661259717474717992">Tillad, at websites gemmer og læser cookiedata</translation>
 <translation id="7663719505383602579">Modtager: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installeret af din administrator</translation>

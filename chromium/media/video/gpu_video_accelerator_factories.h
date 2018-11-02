@@ -110,10 +110,13 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
       gfx::BufferUsage usage) = 0;
 
   virtual bool ShouldUseGpuMemoryBuffersForVideoFrames() const = 0;
+
+  // The GLContextLock must be taken when calling this.
   virtual unsigned ImageTextureTarget(gfx::BufferFormat format) = 0;
+
   // Pixel format of the hardware video frames created when GpuMemoryBuffers
   // video frames are enabled.
-  virtual OutputFormat VideoFrameOutputFormat() = 0;
+  virtual OutputFormat VideoFrameOutputFormat(size_t bit_depth) = 0;
 
   virtual std::unique_ptr<ScopedGLContextLock> GetGLContextLock() = 0;
 
@@ -134,6 +137,9 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   GetVideoEncodeAcceleratorSupportedProfiles() = 0;
 
   virtual viz::ContextProvider* GetMediaContextProvider() = 0;
+
+  // Sets the current pipeline rendering color space.
+  virtual void SetRenderingColorSpace(const gfx::ColorSpace& color_space) = 0;
 
  protected:
   friend class base::RefCounted<GpuVideoAcceleratorFactories>;

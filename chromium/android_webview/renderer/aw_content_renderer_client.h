@@ -38,11 +38,11 @@ class AwContentRendererClient : public content::ContentRendererClient,
   void RenderFrameCreated(content::RenderFrame* render_frame) override;
   void RenderViewCreated(content::RenderView* render_view) override;
   bool HasErrorPage(int http_status_code) override;
-  void GetNavigationErrorStrings(content::RenderFrame* render_frame,
-                                 const blink::WebURLRequest& failed_request,
-                                 const blink::WebURLError& error,
-                                 std::string* error_html,
-                                 base::string16* error_description) override;
+  void PrepareErrorPage(content::RenderFrame* render_frame,
+                        const blink::WebURLRequest& failed_request,
+                        const blink::WebURLError& error,
+                        std::string* error_html,
+                        base::string16* error_description) override;
   unsigned long long VisitedLinkHash(const char* canonical_url,
                                      size_t length) override;
   bool IsLinkVisited(unsigned long long link_hash) override;
@@ -51,13 +51,6 @@ class AwContentRendererClient : public content::ContentRendererClient,
       override;
   std::unique_ptr<blink::WebSocketHandshakeThrottle>
   CreateWebSocketHandshakeThrottle() override;
-  bool WillSendRequest(
-      blink::WebLocalFrame* frame,
-      ui::PageTransition transition_type,
-      const blink::WebURL& url,
-      std::vector<std::unique_ptr<content::URLLoaderThrottle>>* throttles,
-      GURL* new_url) override;
-
   bool HandleNavigation(content::RenderFrame* render_frame,
                         bool is_content_initiated,
                         bool render_view_was_created_by_renderer,
@@ -67,6 +60,9 @@ class AwContentRendererClient : public content::ContentRendererClient,
                         blink::WebNavigationPolicy default_policy,
                         bool is_redirect) override;
   bool ShouldUseMediaPlayerForURL(const GURL& url) override;
+  std::unique_ptr<content::URLLoaderThrottleProvider>
+  CreateURLLoaderThrottleProvider(
+      content::URLLoaderThrottleProviderType provider_type) override;
 
  private:
   // service_manager::LocalInterfaceProvider:

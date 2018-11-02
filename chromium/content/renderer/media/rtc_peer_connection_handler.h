@@ -95,11 +95,9 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
  public:
   RTCPeerConnectionHandler(
       blink::WebRTCPeerConnectionHandlerClient* client,
-      PeerConnectionDependencyFactory* dependency_factory);
+      PeerConnectionDependencyFactory* dependency_factory,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~RTCPeerConnectionHandler() override;
-
-  // Destroy all existing RTCPeerConnectionHandler objects.
-  static void DestructAllHandlers();
 
   void associateWithFrame(blink::WebLocalFrame* frame);
 
@@ -181,8 +179,12 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // Start recording an event log.
   void StartEventLog(IPC::PlatformFileForTransit file,
                      int64_t max_file_size_bytes);
+  void StartEventLog();
   // Stop recording an event log.
   void StopEventLog();
+
+  // WebRTC event log fragments sent back from PeerConnection land here.
+  void OnWebRtcEventLogWrite(const std::string& output);
 
  protected:
   webrtc::PeerConnectionInterface* native_peer_connection() {
@@ -252,6 +254,10 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   void RunSynchronousClosureOnSignalingThread(const base::Closure& closure,
                                               const char* trace_event_name);
+
+  // Initialize() is never expected to be called more than once, even if the
+  // first call fails.
+  bool initialize_called_;
 
   base::ThreadChecker thread_checker_;
 
@@ -352,6 +358,8 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
 
   // Track which ICE Connection state that this PeerConnection has gone through.
   bool ice_state_seen_[webrtc::PeerConnectionInterface::kIceConnectionMax] = {};
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   base::WeakPtrFactory<RTCPeerConnectionHandler> weak_factory_;
 

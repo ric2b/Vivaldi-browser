@@ -9,13 +9,13 @@
 #include "ash/login/login_screen_controller.h"
 #include "ash/login/ui/layout_util.h"
 #include "ash/login/ui/lock_screen.h"
-#include "ash/login/ui/login_constants.h"
 #include "ash/login/ui/login_display_style.h"
 #include "ash/login/ui/login_password_view.h"
 #include "ash/login/ui/login_pin_view.h"
 #include "ash/login/ui/login_user_view.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ash/login/ui/pin_keyboard_animation.h"
+#include "ash/public/cpp/login_constants.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/strings/utf_string_conversions.h"
@@ -115,7 +115,7 @@ LoginAuthUserView::LoginAuthUserView(
   password_view_->UpdateForUser(user);
 
   pin_view_ =
-      new LoginPinView(base::BindRepeating(&LoginPasswordView::AppendNumber,
+      new LoginPinView(base::BindRepeating(&LoginPasswordView::InsertNumber,
                                            base::Unretained(password_view_)),
                        base::BindRepeating(&LoginPasswordView::Backspace,
                                            base::Unretained(password_view_)));
@@ -145,7 +145,8 @@ LoginAuthUserView::LoginAuthUserView(
 
   // Use views::GridLayout instead of views::BoxLayout because views::BoxLayout
   // lays out children according to the view->children order.
-  views::GridLayout* grid_layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* grid_layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
   views::ColumnSet* column_set = grid_layout->AddColumnSet(0);
   column_set->AddColumn(views::GridLayout::CENTER, views::GridLayout::LEADING,
                         0 /*resize_percent*/, views::GridLayout::USE_PREF,
@@ -204,8 +205,7 @@ void LoginAuthUserView::SetAuthMethods(uint32_t auth_methods) {
   // case, then render the user view as if it was always focused, since clicking
   // on it will not do anything (such as swapping users).
   user_view_->SetForceOpaque(has_password);
-  user_view_->SetFocusBehavior(has_password ? FocusBehavior::NEVER
-                                            : FocusBehavior::ALWAYS);
+  user_view_->SetTapEnabled(!has_password);
 
   PreferredSizeChanged();
 }
@@ -346,14 +346,19 @@ void LoginAuthUserView::OnAuthSubmit(const base::string16& password) {
 }
 
 void LoginAuthUserView::OnAuthComplete(base::Optional<bool> auth_success) {
-  password_view_->SetReadOnly(false);
-  if (auth_success.has_value()) {
-    // Clear the password if auth fails.
-    if (!auth_success.value())
-      password_view_->Clear();
+  if (!auth_success.has_value())
+    return;
 
-    on_auth_.Run(auth_success.value());
+  // Clear the password only if auth fails. Make sure to keep the password view
+  // disabled even if auth succeededs, as if the user submits a password while
+  // animating the next lock screen will not work as expected. See
+  // https://crbug.com/808486.
+  if (!auth_success.value()) {
+    password_view_->Clear();
+    password_view_->SetReadOnly(false);
   }
+
+  on_auth_.Run(auth_success.value());
 }
 
 void LoginAuthUserView::OnUserViewTap() {

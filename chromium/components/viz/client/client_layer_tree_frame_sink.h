@@ -15,7 +15,7 @@
 #include "components/viz/client/viz_client_export.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
@@ -50,6 +50,7 @@ class VIZ_CLIENT_EXPORT ClientLayerTreeFrameSink
     InitParams();
     ~InitParams();
 
+    scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner;
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager = nullptr;
     SharedBitmapManager* shared_bitmap_manager = nullptr;
     std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source;
@@ -57,11 +58,12 @@ class VIZ_CLIENT_EXPORT ClientLayerTreeFrameSink
     std::unique_ptr<LocalSurfaceIdProvider> local_surface_id_provider;
     UnboundMessagePipes pipes;
     bool enable_surface_synchronization = false;
+    bool wants_animate_only_begin_frames = false;
   };
 
   ClientLayerTreeFrameSink(
       scoped_refptr<ContextProvider> context_provider,
-      scoped_refptr<ContextProvider> worker_context_provider,
+      scoped_refptr<RasterContextProvider> worker_context_provider,
       InitParams* params);
 
   ClientLayerTreeFrameSink(
@@ -74,6 +76,8 @@ class VIZ_CLIENT_EXPORT ClientLayerTreeFrameSink
   const HitTestDataProvider* hit_test_data_provider() const {
     return hit_test_data_provider_.get();
   }
+
+  const LocalSurfaceId& local_surface_id() const { return local_surface_id_; }
 
   // cc::LayerTreeFrameSink implementation.
   bool BindToClient(cc::LayerTreeFrameSinkClient* client) override;
@@ -123,6 +127,7 @@ class VIZ_CLIENT_EXPORT ClientLayerTreeFrameSink
 
   THREAD_CHECKER(thread_checker_);
   const bool enable_surface_synchronization_;
+  const bool wants_animate_only_begin_frames_;
 
   base::WeakPtrFactory<ClientLayerTreeFrameSink> weak_factory_;
 

@@ -33,6 +33,7 @@
 
 #include <memory>
 
+#include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "public/platform/WebCommon.h"
 
@@ -41,7 +42,6 @@ namespace blink {
 class WebContentSettingsClient;
 class WebServiceWorkerContextClient;
 class WebServiceWorkerInstalledScriptsManager;
-class WebString;
 struct WebConsoleMessage;
 struct WebEmbeddedWorkerStartData;
 
@@ -59,7 +59,7 @@ class BLINK_EXPORT WebEmbeddedWorker {
       mojo::ScopedMessagePipeHandle content_settings_handle,
       mojo::ScopedMessagePipeHandle interface_provider);
 
-  virtual ~WebEmbeddedWorker() {}
+  virtual ~WebEmbeddedWorker() = default;
 
   // Starts and terminates WorkerThread and WorkerGlobalScope.
   virtual void StartWorkerContext(const WebEmbeddedWorkerStartData&) = 0;
@@ -70,15 +70,9 @@ class BLINK_EXPORT WebEmbeddedWorker {
   virtual void ResumeAfterDownload() = 0;
 
   // Inspector related methods.
-  virtual void AttachDevTools(int session_id) = 0;
-  virtual void ReattachDevTools(int session_id,
-                                const WebString& saved_state) = 0;
-  virtual void DetachDevTools(int session_id) = 0;
-  virtual void DispatchDevToolsMessage(int session_id,
-                                       int call_id,
-                                       const WebString& method,
-                                       const WebString& message) = 0;
   virtual void AddMessageToConsole(const WebConsoleMessage&) = 0;
+  virtual void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_request) = 0;
 };
 
 }  // namespace blink

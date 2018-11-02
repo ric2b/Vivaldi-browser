@@ -29,16 +29,14 @@
 
 namespace blink {
 
-FilterOperations::FilterOperations() {}
+FilterOperations::FilterOperations() = default;
 
 void FilterOperations::Trace(blink::Visitor* visitor) {
   visitor->Trace(operations_);
 }
 
-FilterOperations& FilterOperations::operator=(const FilterOperations& other) {
-  operations_ = other.operations_;
-  return *this;
-}
+FilterOperations& FilterOperations::operator=(const FilterOperations& other) =
+    default;
 
 bool FilterOperations::operator==(const FilterOperations& o) const {
   if (operations_.size() != o.operations_.size())
@@ -73,8 +71,9 @@ bool FilterOperations::CanInterpolateWith(const FilterOperations& other) const {
 }
 
 bool FilterOperations::HasReferenceFilter() const {
-  for (size_t i = 0; i < operations_.size(); ++i) {
-    if (operations_.at(i)->GetType() == FilterOperation::REFERENCE)
+  for (const auto& operation : operations_) {
+    if (operation->GetType() == FilterOperation::REFERENCE ||
+        operation->GetType() == FilterOperation::BOX_REFLECT)
       return true;
   }
   return false;
@@ -105,10 +104,11 @@ bool FilterOperations::HasFilterThatMovesPixels() const {
   return false;
 }
 
-void FilterOperations::AddClient(SVGResourceClient* client) const {
+void FilterOperations::AddClient(SVGResourceClient* client,
+                                 WebTaskRunner* task_runner) const {
   for (FilterOperation* operation : operations_) {
     if (operation->GetType() == FilterOperation::REFERENCE)
-      ToReferenceFilterOperation(*operation).AddClient(client);
+      ToReferenceFilterOperation(*operation).AddClient(client, task_runner);
   }
 }
 

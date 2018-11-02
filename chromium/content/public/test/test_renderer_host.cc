@@ -10,7 +10,7 @@
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/browser/compositor/test/no_transport_image_transport_factory.h"
+#include "content/browser/compositor/test/test_image_transport_factory.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -83,11 +83,8 @@ void RenderFrameHostTester::CommitPendingLoad(
 
   WebContentsImpl* web_contents =
       static_cast<WebContentsImpl*>(controller->GetWebContents());
-  RenderFrameHost* pending_rfh =
-      IsBrowserSideNavigationEnabled()
-          ? web_contents->GetRenderManagerForTesting()
-                ->speculative_render_frame_host_.get()
-          : web_contents->GetRenderManagerForTesting()->pending_frame_host();
+  RenderFrameHost* pending_rfh = web_contents->GetRenderManagerForTesting()
+                                     ->speculative_render_frame_host_.get();
 
   // Commit on the pending_rfh, if one exists.
   RenderFrameHost* test_rfh = pending_rfh ? pending_rfh : old_rfh;
@@ -145,7 +142,7 @@ RenderViewHostTestEnabler::RenderViewHostTestEnabler()
     message_loop_ = std::make_unique<base::MessageLoop>();
 #if !defined(OS_ANDROID)
   ImageTransportFactory::SetFactory(
-      std::make_unique<NoTransportImageTransportFactory>());
+      std::make_unique<TestImageTransportFactory>());
 #else
   if (!screen_)
     screen_.reset(ui::CreateDummyScreenAndroid());
@@ -211,7 +208,7 @@ RenderFrameHost* RenderViewHostTestHarness::pending_main_rfh() {
 }
 
 BrowserContext* RenderViewHostTestHarness::browser_context() {
-  return browser_context_.get();
+  return GetBrowserContext();
 }
 
 MockRenderProcessHost* RenderViewHostTestHarness::process() {
@@ -236,10 +233,10 @@ WebContents* RenderViewHostTestHarness::CreateTestWebContents() {
 #endif
 
   scoped_refptr<SiteInstance> instance =
-      SiteInstance::Create(browser_context_.get());
+      SiteInstance::Create(GetBrowserContext());
   instance->GetProcess()->Init();
 
-  return TestWebContents::Create(browser_context_.get(), std::move(instance));
+  return TestWebContents::Create(GetBrowserContext(), std::move(instance));
 }
 
 void RenderViewHostTestHarness::NavigateAndCommit(const GURL& url) {
@@ -320,6 +317,10 @@ void RenderViewHostTestHarness::TearDown() {
 
 BrowserContext* RenderViewHostTestHarness::CreateBrowserContext() {
   return new TestBrowserContext();
+}
+
+BrowserContext* RenderViewHostTestHarness::GetBrowserContext() {
+  return browser_context_.get();
 }
 
 void RenderViewHostTestHarness::SetRenderProcessHostFactory(

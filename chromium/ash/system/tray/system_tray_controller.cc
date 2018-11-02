@@ -6,6 +6,7 @@
 
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/update/tray_update.h"
@@ -13,7 +14,7 @@
 namespace ash {
 
 SystemTrayController::SystemTrayController()
-    : binding_(this), hour_clock_type_(base::GetHourClockType()) {}
+    : hour_clock_type_(base::GetHourClockType()) {}
 
 SystemTrayController::~SystemTrayController() = default;
 
@@ -140,7 +141,7 @@ void SystemTrayController::RequestRestartForUpdate() {
 }
 
 void SystemTrayController::BindRequest(mojom::SystemTrayRequest request) {
-  binding_.Bind(std::move(request));
+  bindings_.AddBinding(this, std::move(request));
 }
 
 void SystemTrayController::SetClient(mojom::SystemTrayClientPtr client) {
@@ -167,19 +168,10 @@ void SystemTrayController::SetPrimaryTrayEnabled(bool enabled) {
 }
 
 void SystemTrayController::SetPrimaryTrayVisible(bool visible) {
-  ash::SystemTray* tray =
-      Shell::GetPrimaryRootWindowController()->GetSystemTray();
-  if (!tray)
-    return;
-
-  tray->SetVisible(visible);
-  tray->GetWidget()->SetOpacity(visible ? 1.f : 0.f);
-  if (visible) {
-    tray->GetWidget()->Show();
-  } else {
-    tray->CloseBubble();
-    tray->GetWidget()->Hide();
-  }
+  auto* status_area =
+      Shell::GetPrimaryRootWindowController()->GetStatusAreaWidget();
+  if (status_area)
+    status_area->SetSystemTrayVisibility(visible);
 }
 
 void SystemTrayController::SetUse24HourClock(bool use_24_hour) {

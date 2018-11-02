@@ -8,7 +8,10 @@
 #include "base/logging.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "components/viz/service/surfaces/surface_hittest.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_base.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -24,6 +27,7 @@
 #include "ui/base/ui_base_types.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -65,16 +69,14 @@ RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {
 }
 
 RenderWidgetHostImpl* RenderWidgetHostViewBase::GetFocusedWidget() const {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
-
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   return host && host->delegate()
              ? host->delegate()->GetFocusedRenderWidgetHost(host)
              : nullptr;
 }
 
 RenderWidgetHost* RenderWidgetHostViewBase::GetRenderWidgetHost() const {
-  return nullptr;
+  return GetRenderWidgetHostImpl();
 }
 
 void RenderWidgetHostViewBase::NotifyObserversAboutShutdown() {
@@ -157,6 +159,10 @@ bool RenderWidgetHostViewBase::IsInVR() const {
   return false;
 }
 
+viz::FrameSinkId RenderWidgetHostViewBase::GetRootFrameSinkId() {
+  return viz::FrameSinkId();
+}
+
 bool RenderWidgetHostViewBase::IsSurfaceAvailableForCopy() const {
   return false;
 }
@@ -226,10 +232,7 @@ RenderWidgetHostViewBase::CreateBrowserAccessibilityManager(
 }
 
 void RenderWidgetHostViewBase::AccessibilityShowMenu(const gfx::Point& point) {
-  RenderWidgetHostImpl* impl = nullptr;
-  if (GetRenderWidgetHost())
-    impl = RenderWidgetHostImpl::From(GetRenderWidgetHost());
-
+  RenderWidgetHostImpl* impl = GetRenderWidgetHostImpl();
   if (impl)
     impl->ShowContextMenuAtPoint(point, ui::MENU_SOURCE_NONE);
 }
@@ -250,15 +253,15 @@ gfx::NativeViewAccessible
 }
 
 void RenderWidgetHostViewBase::UpdateScreenInfo(gfx::NativeView view) {
-  RenderWidgetHostImpl* impl = nullptr;
-  if (GetRenderWidgetHost())
-    impl = RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* impl = GetRenderWidgetHostImpl();
 
   if (impl && impl->delegate())
     impl->delegate()->SendScreenRects();
 
-  if (HasDisplayPropertyChanged(view) && impl)
+  if (HasDisplayPropertyChanged(view) && impl) {
+    OnSynchronizedDisplayPropertiesChanged();
     impl->NotifyScreenInfoChanged();
+  }
 }
 
 bool RenderWidgetHostViewBase::HasDisplayPropertyChanged(gfx::NativeView view) {
@@ -287,8 +290,7 @@ void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(
 
 void RenderWidgetHostViewBase::ResizeDueToAutoResize(const gfx::Size& new_size,
                                                      uint64_t sequence_number) {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   host->DidAllocateLocalSurfaceIdForAutoResize(sequence_number);
 }
 
@@ -298,8 +300,7 @@ base::WeakPtr<RenderWidgetHostViewBase> RenderWidgetHostViewBase::GetWeakPtr() {
 
 std::unique_ptr<SyntheticGestureTarget>
 RenderWidgetHostViewBase::CreateSyntheticGestureTarget() {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   return std::unique_ptr<SyntheticGestureTarget>(
       new SyntheticGestureTargetBase(host));
 }
@@ -321,8 +322,7 @@ void RenderWidgetHostViewBase::FocusedNodeTouched(
 }
 
 void RenderWidgetHostViewBase::GetScreenInfo(ScreenInfo* screen_info) {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   if (!host || !host->delegate()) {
     *screen_info = ScreenInfo();
     return;
@@ -422,10 +422,14 @@ ScreenOrientationValues RenderWidgetHostViewBase::GetOrientationTypeForDesktop(
 void RenderWidgetHostViewBase::OnDidNavigateMainFrameToNewPage() {
 }
 
+RenderWidgetHostImpl* RenderWidgetHostViewBase::GetRenderWidgetHostImpl()
+    const {
+  return nullptr;
+}
+
 void RenderWidgetHostViewBase::OnFrameTokenChangedForView(
     uint32_t frame_token) {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   if (host)
     host->DidProcessFrame(frame_token);
 }
@@ -441,9 +445,65 @@ viz::LocalSurfaceId RenderWidgetHostViewBase::GetLocalSurfaceId() const {
 viz::FrameSinkId RenderWidgetHostViewBase::FrameSinkIdAtPoint(
     viz::SurfaceHittestDelegate* delegate,
     const gfx::PointF& point,
-    gfx::PointF* transformed_point) {
-  NOTREACHED();
-  return viz::FrameSinkId();
+    gfx::PointF* transformed_point,
+    bool* out_query_renderer) {
+  float device_scale_factor = ui::GetScaleFactorForNativeView(GetNativeView());
+  DCHECK(device_scale_factor != 0.0f);
+
+  // The surface hittest happens in device pixels, so we need to convert the
+  // |point| from DIPs to pixels before hittesting.
+  gfx::PointF point_in_pixels =
+      gfx::ConvertPointToPixel(device_scale_factor, point);
+  viz::SurfaceId surface_id = GetCurrentSurfaceId();
+  if (!surface_id.is_valid()) {
+    return GetFrameSinkId();
+  }
+  viz::SurfaceHittest hittest(delegate,
+                              GetFrameSinkManager()->surface_manager());
+  gfx::Transform target_transform;
+  viz::SurfaceId target_local_surface_id = hittest.GetTargetSurfaceAtPoint(
+      surface_id, gfx::ToFlooredPoint(point_in_pixels), &target_transform,
+      out_query_renderer);
+  *transformed_point = point_in_pixels;
+  if (target_local_surface_id.is_valid()) {
+    target_transform.TransformPoint(transformed_point);
+  }
+  *transformed_point =
+      gfx::ConvertPointToDIP(device_scale_factor, *transformed_point);
+  // It is possible that the renderer has not yet produced a surface, in which
+  // case we return our current FrameSinkId.
+  auto frame_sink_id = target_local_surface_id.frame_sink_id();
+  return frame_sink_id.is_valid() ? frame_sink_id : GetFrameSinkId();
+}
+
+void RenderWidgetHostViewBase::ProcessMouseEvent(
+    const blink::WebMouseEvent& event,
+    const ui::LatencyInfo& latency) {
+  PreProcessMouseEvent(event);
+  auto* host = GetRenderWidgetHostImpl();
+  host->ForwardMouseEventWithLatencyInfo(event, latency);
+}
+
+void RenderWidgetHostViewBase::ProcessMouseWheelEvent(
+    const blink::WebMouseWheelEvent& event,
+    const ui::LatencyInfo& latency) {
+  auto* host = GetRenderWidgetHostImpl();
+  host->ForwardWheelEventWithLatencyInfo(event, latency);
+}
+
+void RenderWidgetHostViewBase::ProcessTouchEvent(
+    const blink::WebTouchEvent& event,
+    const ui::LatencyInfo& latency) {
+  PreProcessTouchEvent(event);
+  auto* host = GetRenderWidgetHostImpl();
+  host->ForwardTouchEventWithLatencyInfo(event, latency);
+}
+
+void RenderWidgetHostViewBase::ProcessGestureEvent(
+    const blink::WebGestureEvent& event,
+    const ui::LatencyInfo& latency) {
+  auto* host = GetRenderWidgetHostImpl();
+  host->ForwardGestureEventWithLatencyInfo(event, latency);
 }
 
 gfx::PointF RenderWidgetHostViewBase::TransformPointToRootCoordSpaceF(
@@ -504,8 +564,7 @@ TextInputManager* RenderWidgetHostViewBase::GetTextInputManager() {
   if (text_input_manager_)
     return text_input_manager_;
 
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  RenderWidgetHostImpl* host = GetRenderWidgetHostImpl();
   if (!host || !host->delegate())
     return nullptr;
 
@@ -550,19 +609,13 @@ void RenderWidgetHostViewBase::EmbedChildFrameRendererWindowTreeClient(
 }
 
 void RenderWidgetHostViewBase::OnChildFrameDestroyed(int routing_id) {
-  DCHECK(render_widget_window_tree_client_);
   pending_embeds_.erase(routing_id);
-  render_widget_window_tree_client_->DestroyFrame(routing_id);
+  // Tests may not create |render_widget_window_tree_client_| (tests don't
+  // necessarily create RenderWidgetHostViewAura).
+  if (render_widget_window_tree_client_)
+    render_widget_window_tree_client_->DestroyFrame(routing_id);
 }
 #endif
-
-bool RenderWidgetHostViewBase::IsChildFrameForTesting() const {
-  return false;
-}
-
-viz::SurfaceId RenderWidgetHostViewBase::SurfaceIdForTesting() const {
-  return viz::SurfaceId();
-}
 
 #if defined(USE_AURA)
 void RenderWidgetHostViewBase::OnDidScheduleEmbed(
@@ -573,8 +626,10 @@ void RenderWidgetHostViewBase::OnDidScheduleEmbed(
   if (iter == pending_embeds_.end() || iter->second != embed_id)
     return;
   pending_embeds_.erase(iter);
-  DCHECK(render_widget_window_tree_client_);
-  render_widget_window_tree_client_->Embed(routing_id, token);
+  // Tests may not create |render_widget_window_tree_client_| (tests don't
+  // necessarily create RenderWidgetHostViewAura).
+  if (render_widget_window_tree_client_)
+    render_widget_window_tree_client_->Embed(routing_id, token);
 }
 
 void RenderWidgetHostViewBase::ScheduleEmbed(

@@ -4,6 +4,7 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//components/vector_icons/vector_icons.gni")
 import("//testing/test.gni")
@@ -38,11 +39,11 @@ buildflag_header("features") {
       [ "ENABLE_NATIVE_WINDOW_NAV_BUTTONS=$enable_native_window_nav_buttons" ]
 }
 
-component("views") {
+jumbo_component("views") {
   all_dependent_configs = [ ":flags" ]
 
   public = [
-    "accessibility/native_view_accessibility.h",
+    "accessibility/view_accessibility.h",
     "accessible_pane_view.h",
     "animation/bounds_animator.h",
     "animation/bounds_animator_observer.h",
@@ -248,6 +249,7 @@ component("views") {
   ]
 
   sources = [
+    "accessibility/view_accessibility.cc",
     "accessible_pane_view.cc",
     "animation/bounds_animator.cc",
     "animation/flood_fill_ink_drop_ripple.cc",
@@ -702,8 +704,6 @@ component("views") {
       "accessibility/native_view_accessibility_win.cc",
       "accessibility/native_view_accessibility_win.h",
     ]
-  } else {
-    sources += [ "accessibility/native_view_accessibility_stub.cc" ]
   }
 
   if (is_fuchsia) {
@@ -711,7 +711,7 @@ component("views") {
   }
 }
 
-static_library("test_support_internal") {
+jumbo_source_set("test_support_internal") {
   testonly = true
   sources = [
     "animation/test/flood_fill_ink_drop_ripple_test_api.cc",
@@ -738,8 +738,6 @@ static_library("test_support_internal") {
     "animation/test/test_ink_drop_ripple_observer.h",
     "controls/textfield/textfield_test_api.cc",
     "controls/textfield/textfield_test_api.h",
-    "corewm/test/tooltip_aura_test_api.cc",
-    "corewm/test/tooltip_aura_test_api.h",
     "test/capture_tracking_view.cc",
     "test/capture_tracking_view.h",
     "test/combobox_test_api.cc",
@@ -825,6 +823,8 @@ static_library("test_support_internal") {
 
   if (use_aura) {
     sources += [
+      "corewm/test/tooltip_aura_test_api.cc",
+      "corewm/test/tooltip_aura_test_api.h",
       "corewm/tooltip_controller_test_helper.cc",
       "corewm/tooltip_controller_test_helper.h",
       "test/desktop_test_views_delegate_aura.cc",
@@ -865,7 +865,7 @@ static_library("test_support_internal") {
   }
 }
 
-static_library("test_support") {
+jumbo_static_library("test_support") {
   testonly = true
   public_deps = [
     ":test_support_internal",
@@ -1176,4 +1176,19 @@ source_set("views_interactive_ui_tests") {
   if (is_chromeos) {
     sources -= [ "corewm/desktop_capture_controller_unittest.cc" ]
   }
+}
+
+test("views_perftests") {
+  sources = [
+    "controls/label_perftest.cc",
+    "views_perftests.cc",
+  ]
+
+  deps = [
+    ":test_support",
+    "//base/test:test_support",
+    "//cc/base:base",
+    "//testing/perf",
+    "//ui/resources:ui_test_pak",
+  ]
 }

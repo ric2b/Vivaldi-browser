@@ -5,9 +5,9 @@
 #include "core/paint/HTMLCanvasPainter.h"
 
 #include "core/frame/LocalFrameView.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/paint/PaintControllerPaintTest.h"
 #include "core/paint/StubChromeClientForSPv2.h"
 #include "platform/graphics/Canvas2DLayerBridge.h"
@@ -39,7 +39,7 @@ class HTMLCanvasPainterTestForSPv2 : public PaintControllerPaintTest {
       return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
     };
     SharedGpuContext::SetContextProviderFactoryForTesting(
-        WTF::Bind(factory, WTF::Unretained(&gl_)));
+        WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
     PaintControllerPaintTest::SetUp();
   }
 
@@ -90,9 +90,9 @@ TEST_P(HTMLCanvasPainterTestForSPv2, Canvas2DLayerAppearsInLayerTree) {
   attributes.setAlpha(true);
   CanvasRenderingContext* context =
       element->GetCanvasRenderingContext("2d", attributes);
-  std::unique_ptr<Canvas2DLayerBridge> bridge =
-      MakeCanvas2DLayerBridge(IntSize(300, 200));
-  element->CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
+  IntSize size(300, 200);
+  std::unique_ptr<Canvas2DLayerBridge> bridge = MakeCanvas2DLayerBridge(size);
+  element->CreateImageBufferUsingSurfaceForTesting(std::move(bridge), size);
   ASSERT_EQ(context, element->RenderingContext());
   ASSERT_TRUE(context->IsComposited());
   ASSERT_TRUE(element->IsAccelerated());

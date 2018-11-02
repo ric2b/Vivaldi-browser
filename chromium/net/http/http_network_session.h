@@ -175,6 +175,13 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // If true, connection migration v2 may be used to migrate active QUIC
     // sessions to alternative network if current network connectivity is poor.
     bool quic_migrate_sessions_early_v2;
+    // Maximum time the session could be on the non-default network before
+    // migrates back to default network. Defaults to
+    // kMaxTimeOnNonDefaultNetwork.
+    base::TimeDelta quic_max_time_on_non_default_network;
+    // Maximum number of migrations to the non-default network on path
+    // degrading per network for each session.
+    int quic_max_migrations_to_non_default_network_on_path_degrading;
     // If true, allows migration of QUIC connections to a server-specified
     // alternate server address.
     bool quic_allow_server_migration;
@@ -189,6 +196,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     bool quic_race_cert_verification;
     // If true, estimate the initial RTT for QUIC connections based on network.
     bool quic_estimate_initial_rtt;
+    // If true, client headers will include HTTP/2 stream dependency info
+    // derived from the request priority.
+    bool quic_headers_include_h2_stream_dependency;
     // If non-empty, QUIC will only be spoken to hosts in this list.
     base::flat_set<std::string> quic_host_whitelist;
 
@@ -198,6 +208,9 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
     // Enable HTTP/0.9 for HTTP/HTTPS on ports other than the default one for
     // each protocol.
     bool http_09_on_non_default_ports_enabled;
+
+    // If true, idle sockets won't be closed when memory pressure happens.
+    bool disable_idle_sockets_close_on_memory_pressure;
   };
 
   // Structure with pointers to the dependencies of the HttpNetworkSession.
@@ -277,9 +290,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
   HttpStreamFactory* http_stream_factory() {
     return http_stream_factory_.get();
   }
-  HttpStreamFactory* http_stream_factory_for_websocket() {
-    return http_stream_factory_for_websocket_.get();
-  }
   NetworkThrottleManager* throttler() {
     return network_stream_throttler_.get();
   }
@@ -358,7 +368,6 @@ class NET_EXPORT HttpNetworkSession : public base::MemoryCoordinatorClient {
   QuicStreamFactory quic_stream_factory_;
   SpdySessionPool spdy_session_pool_;
   std::unique_ptr<HttpStreamFactory> http_stream_factory_;
-  std::unique_ptr<HttpStreamFactory> http_stream_factory_for_websocket_;
   std::map<HttpResponseBodyDrainer*, std::unique_ptr<HttpResponseBodyDrainer>>
       response_drainers_;
   std::unique_ptr<NetworkThrottleManager> network_stream_throttler_;

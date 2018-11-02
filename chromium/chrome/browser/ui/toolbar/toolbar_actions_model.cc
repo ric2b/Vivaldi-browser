@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 
 #include "base/location.h"
@@ -39,8 +40,6 @@
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/one_shot_event.h"
 
-#include "chrome/browser/ui/browser_finder.h"
-
 ToolbarActionsModel::ToolbarActionsModel(
     Profile* profile,
     extensions::ExtensionPrefs* extension_prefs)
@@ -52,13 +51,13 @@ ToolbarActionsModel::ToolbarActionsModel(
       extension_action_manager_(
           extensions::ExtensionActionManager::Get(profile_)),
       component_actions_factory_(
-          base::MakeUnique<ComponentToolbarActionsFactory>(profile_)),
+          std::make_unique<ComponentToolbarActionsFactory>(profile_)),
       actions_initialized_(false),
       highlight_type_(HIGHLIGHT_NONE),
       has_active_bubble_(false),
       extension_action_observer_(this),
       extension_registry_observer_(this),
-      extension_error_reporter_observer_(this),
+      load_error_reporter_observer_(this),
       weak_ptr_factory_(this) {
   extensions::ExtensionSystem::Get(profile_)->ready().Post(
       FROM_HERE, base::Bind(&ToolbarActionsModel::OnReady,
@@ -185,7 +184,7 @@ ToolbarActionsModel::CreateActionForItem(Browser* browser,
       DCHECK(extension);
 
       // Create and add an ExtensionActionViewController for the extension.
-      result = base::MakeUnique<ExtensionActionViewController>(
+      result = std::make_unique<ExtensionActionViewController>(
           extension, browser,
           extension_action_manager_->GetExtensionAction(*extension), bar);
       break;
@@ -200,41 +199,6 @@ ToolbarActionsModel::CreateActionForItem(Browser* browser,
       break;
   }
   return result;
-}
-
-void ToolbarActionsModel::OnPageActionsUpdated(
-    content::WebContents* web_contents) {
-
-  // Vivaldi: We use a unified model for both action- and browser-actions.
-  Browser* browser =
-      web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
-  bool is_vivaldi = (browser && browser->is_vivaldi());
-
-  if (!is_vivaldi)
-    return;
-
-  const extensions::ExtensionSet& extensions =
-      extensions::ExtensionRegistry::Get(profile_)
-          ->enabled_extensions();
-
-  extensions::ExtensionActionManager* action_manager =
-      extensions::ExtensionActionManager::Get(profile_);
-
-  for (extensions::ExtensionSet::const_iterator it = extensions.begin();
-       it != extensions.end();
-       ++it) {
-    const extensions::Extension* extension = it->get();
-
-    ExtensionAction* action = action_manager->GetExtensionAction(*extension);
-
-    if (action && action->action_type() == extensions::ActionInfo::TYPE_PAGE ) {
-      // all extensions with pageactions must be updated
-      for (auto& observer : observers_)
-        observer.OnToolbarActionUpdated(extension->name());
-    }
-  }
-
-
 }
 
 void ToolbarActionsModel::OnExtensionLoaded(
@@ -293,7 +257,8 @@ void ToolbarActionsModel::RemovePref(const ToolbarItem& item) {
 void ToolbarActionsModel::OnReady() {
   InitializeActionList();
 
-  extension_error_reporter_observer_.Add(ExtensionErrorReporter::GetInstance());
+  load_error_reporter_observer_.Add(
+      extensions::LoadErrorReporter::GetInstance());
 
   // Wait until the extension system is ready before observing any further
   // changes so that the toolbar buttons can be shown in their stable ordering

@@ -954,7 +954,6 @@ void ContainerNode::AttachLayoutTree(AttachContext& context) {
 
 void ContainerNode::DetachLayoutTree(const AttachContext& context) {
   AttachContext children_context(context);
-  children_context.resolved_style = nullptr;
   children_context.clear_invalidation = true;
 
   for (Node* child = firstChild(); child; child = child->nextSibling())
@@ -988,43 +987,42 @@ bool ContainerNode::GetUpperLeftCorner(FloatPoint& point) const {
     return false;
 
   // FIXME: What is this code really trying to do?
-  // TODO(xiaochengh): Rename |o| to |runner|.
-  LayoutObject* o = GetLayoutObject();
-  if (!o->IsInline() || o->IsAtomicInlineLevel()) {
-    point = o->LocalToAbsolute(FloatPoint(), kUseTransforms);
+  LayoutObject* runner = GetLayoutObject();
+  if (!runner->IsInline() || runner->IsAtomicInlineLevel()) {
+    point = runner->LocalToAbsolute(FloatPoint(), kUseTransforms);
     return true;
   }
 
   // Find the next text/image child, to get a position.
-  while (o) {
-    const LayoutObject* const previous = o;
-    if (LayoutObject* o_first_child = o->SlowFirstChild()) {
-      o = o_first_child;
-    } else if (o->NextSibling()) {
-      o = o->NextSibling();
+  while (runner) {
+    const LayoutObject* const previous = runner;
+    if (LayoutObject* runner_first_child = runner->SlowFirstChild()) {
+      runner = runner_first_child;
+    } else if (runner->NextSibling()) {
+      runner = runner->NextSibling();
     } else {
       LayoutObject* next = nullptr;
-      while (!next && o->Parent()) {
-        o = o->Parent();
-        next = o->NextSibling();
+      while (!next && runner->Parent()) {
+        runner = runner->Parent();
+        next = runner->NextSibling();
       }
-      o = next;
+      runner = next;
 
-      if (!o)
+      if (!runner)
         break;
     }
-    DCHECK(o);
+    DCHECK(runner);
 
-    if (!o->IsInline() || o->IsAtomicInlineLevel()) {
-      point = o->LocalToAbsolute(FloatPoint(), kUseTransforms);
+    if (!runner->IsInline() || runner->IsAtomicInlineLevel()) {
+      point = runner->LocalToAbsolute(FloatPoint(), kUseTransforms);
       return true;
     }
 
-    if (o->IsText() && !o->IsBR()) {
+    if (runner->IsText() && !runner->IsBR()) {
       const Optional<FloatPoint> maybe_point =
-          ToLayoutText(o)->GetUpperLeftCorner();
+          ToLayoutText(runner)->GetUpperLeftCorner();
       if (maybe_point.has_value()) {
-        point = o->LocalToAbsolute(maybe_point.value(), kUseTransforms);
+        point = runner->LocalToAbsolute(maybe_point.value(), kUseTransforms);
         return true;
       }
       if (previous->GetNode() == this) {
@@ -1034,15 +1032,15 @@ bool ContainerNode::GetUpperLeftCorner(FloatPoint& point) const {
         // whitespace child (because |previous| has moved).
         continue;
       }
-      point = o->LocalToAbsolute(FloatPoint(), kUseTransforms);
+      point = runner->LocalToAbsolute(FloatPoint(), kUseTransforms);
       return true;
     }
 
-    if (o->IsAtomicInlineLevel()) {
-      DCHECK(o->IsBox());
-      LayoutBox* box = ToLayoutBox(o);
+    if (runner->IsAtomicInlineLevel()) {
+      DCHECK(runner->IsBox());
+      LayoutBox* box = ToLayoutBox(runner);
       point = FloatPoint(box->Location());
-      point = o->Container()->LocalToAbsolute(point, kUseTransforms);
+      point = runner->Container()->LocalToAbsolute(point, kUseTransforms);
       return true;
     }
   }
@@ -1051,7 +1049,7 @@ bool ContainerNode::GetUpperLeftCorner(FloatPoint& point) const {
   // calculate the scroll position, we must be at the end of the
   // document. Scroll to the bottom.
   // FIXME: who said anything about scrolling?
-  if (!o && GetDocument().View()) {
+  if (!runner && GetDocument().View()) {
     point = FloatPoint(0, GetDocument().View()->ContentsHeight());
     return true;
   }
@@ -1212,7 +1210,7 @@ void ContainerNode::SetFocused(bool received, WebFocusType focus_type) {
   // TODO(kochi): Handle UA shadows which marks multiple nodes as focused such
   // as <input type="date"> the same way as author shadow.
   if (ShadowRoot* root = ContainingShadowRoot()) {
-    if (root->GetType() != ShadowRootType::kUserAgent)
+    if (!root->IsUserAgent())
       OwnerShadowHost()->SetFocused(received, focus_type);
   }
 
@@ -1482,6 +1480,13 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
   }
 }
 
+void ContainerNode::RecalcDescendantStylesForReattach() {
+  for (Node* child = lastChild(); child; child = child->previousSibling()) {
+    if (child->IsElementNode())
+      ToElement(child)->RecalcStyleForReattach();
+  }
+}
+
 void ContainerNode::RebuildLayoutTreeForChild(
     Node* child,
     WhitespaceAttacher& whitespace_attacher) {
@@ -1572,7 +1577,7 @@ void ContainerNode::CheckForSiblingStyleChanges(SiblingCheckType change_type,
           ? ToElement(node_before_change)
           : ElementTraversal::PreviousSibling(*node_before_change);
 
-  // TODO(rune@opera.com): move this code into StyleEngine and collect the
+  // TODO(futhark@chromium.org): move this code into StyleEngine and collect the
   // various invalidation sets into a single InvalidationLists object and
   // schedule with a single scheduleInvalidationSetsForNode for efficiency.
 
@@ -1624,6 +1629,11 @@ void ContainerNode::InvalidateNodeListCachesInAncestors(
     const QualifiedName* attr_name,
     Element* attribute_owner_element,
     const ChildrenChange* change) {
+  // This is a performance optimization, NodeList cache invalidation is
+  // not necessary for a text change.
+  if (change && change->type == kTextChanged)
+    return;
+
   if (HasRareData() && (!attr_name || IsAttributeNode())) {
     if (NodeListsNodeData* lists = RareData()->NodeLists()) {
       if (ChildNodeList* child_node_list = lists->GetChildNodeList(*this)) {

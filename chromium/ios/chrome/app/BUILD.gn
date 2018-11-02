@@ -7,6 +7,12 @@ import("//build/config/mac/base_rules.gni")
 import("//build/mac/tweak_info_plist.gni")
 import("//ios/build/chrome_build.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
+import("//services/service_manager/public/service_manifest.gni")
+
+service_manifest("chrome_browser_manifest_overlay") {
+  source = "//ios/chrome/browser/chrome_browser_manifest_overlay.json"
+  packaged_services = [ "//services/identity:manifest" ]
+}
 
 source_set("app") {
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -156,6 +162,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/content_settings",
     "//ios/chrome/browser/crash_report",
     "//ios/chrome/browser/crash_report:crash_report_internal",
+    "//ios/chrome/browser/download",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/feature_engagement",
     "//ios/chrome/browser/first_run",
@@ -196,12 +203,16 @@ source_set("app_internal") {
     "//ios/chrome/browser/ui/stack_view",
     "//ios/chrome/browser/ui/tab_switcher",
     "//ios/chrome/browser/ui/tabs",
+    "//ios/chrome/browser/ui/toolbar/clean:toolbar_ui",
+    "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/util",
     "//ios/chrome/browser/ui/webui:webui_internal",
     "//ios/chrome/browser/upgrade",
     "//ios/chrome/browser/variations:ios_chrome_ui_string_overrider_factory",
     "//ios/chrome/browser/voice",
+    "//ios/chrome/browser/web:tab_id_tab_helper",
     "//ios/chrome/browser/web:web_internal",
+    "//ios/chrome/browser/web_state_list",
     "//ios/chrome/common",
     "//ios/chrome/common/app_group",
     "//ios/chrome/common/app_group:main_app",

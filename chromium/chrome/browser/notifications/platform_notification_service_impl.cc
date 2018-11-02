@@ -18,8 +18,8 @@
 #include "chrome/browser/notifications/metrics/notification_metrics_logger.h"
 #include "chrome/browser/notifications/metrics/notification_metrics_logger_factory.h"
 #include "chrome/browser/notifications/notification_common.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
-#include "chrome/browser/notifications/web_notification_delegate.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
@@ -56,7 +56,7 @@
 #include "ui/message_center/notifier_id.h"
 #include "url/url_constants.h"
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #endif
@@ -143,7 +143,7 @@ PlatformNotificationServiceImpl::GetInstance() {
 }
 
 PlatformNotificationServiceImpl::PlatformNotificationServiceImpl() {
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   pending_click_dispatch_events_ = 0;
 #endif
 }
@@ -180,7 +180,7 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
     metrics_logger->LogPersistentNotificationClick();
   }
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   // Ensure the browser stays alive while the event is processed.
   if (pending_click_dispatch_events_++ == 0) {
     click_dispatch_keep_alive_.reset(
@@ -358,9 +358,7 @@ void PlatformNotificationServiceImpl::DisplayNotification(
 
   message_center::Notification notification = CreateNotificationFromData(
       profile, origin, notification_id, notification_data,
-      notification_resources,
-      new WebNotificationDelegate(NotificationHandler::Type::WEB_NON_PERSISTENT,
-                                  profile, notification_id, origin));
+      notification_resources, nullptr /* delegate */);
 
   NotificationDisplayServiceFactory::GetForProfile(profile)->Display(
       NotificationHandler::Type::WEB_NON_PERSISTENT, notification);
@@ -386,9 +384,7 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
 
   message_center::Notification notification = CreateNotificationFromData(
       profile, origin, notification_id, notification_data,
-      notification_resources,
-      new WebNotificationDelegate(NotificationHandler::Type::WEB_PERSISTENT,
-                                  profile, notification_id, origin));
+      notification_resources, nullptr /* delegate */);
   auto metadata = std::make_unique<PersistentNotificationMetadata>();
   metadata->service_worker_scope = service_worker_scope;
 
@@ -449,7 +445,7 @@ void PlatformNotificationServiceImpl::OnClickEventDispatchComplete(
       "Notifications.PersistentWebNotificationClickResult", status,
       content::PersistentNotificationStatus::
           PERSISTENT_NOTIFICATION_STATUS_MAX);
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   DCHECK_GT(pending_click_dispatch_events_, 0);
   if (--pending_click_dispatch_events_ == 0) {
     click_dispatch_keep_alive_.reset();

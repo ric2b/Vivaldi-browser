@@ -13,6 +13,7 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/wm/overview/cleanup_animation_observer.h"
 #include "ash/wm/overview/overview_animation_type.h"
+#include "ash/wm/overview/overview_utils.h"
 #include "ash/wm/overview/overview_window_drag_controller.h"
 #include "ash/wm/overview/rounded_rect_view.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
@@ -20,6 +21,8 @@
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/splitview/split_view_constants.h"
+#include "ash/wm/splitview/split_view_utils.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "base/auto_reset.h"
@@ -27,6 +30,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -35,9 +39,14 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/transform_util.h"
+#include "ui/views/animation/flood_fill_ink_drop_ripple.h"
+#include "ui/views/animation/ink_drop_impl.h"
+#include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/window/non_client_view.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -51,68 +60,84 @@ namespace {
 // In the conceptual overview table, the window margin is the space reserved
 // around the window within the cell. This margin does not overlap so the
 // closest distance between adjacent windows will be twice this amount.
-static const int kWindowMargin = 5;
+constexpr int kWindowMargin = 5;
 
 // Cover the transformed window including the gaps between the windows with a
 // transparent shield to block the input events from reaching the transformed
 // window while in overview.
-static const int kWindowSelectorMargin = kWindowMargin * 2;
+constexpr int kWindowSelectorMargin = kWindowMargin * 2;
 
 // Foreground label color.
-static const SkColor kLabelColor = SK_ColorWHITE;
+constexpr SkColor kLabelColor = SK_ColorWHITE;
 
 // Close button color.
-static const SkColor kCloseButtonColor = SK_ColorWHITE;
+constexpr SkColor kCloseButtonColor = SK_ColorWHITE;
 
 // Label background color once in overview mode.
-static const SkColor kLabelBackgroundColor = SkColorSetARGB(25, 255, 255, 255);
+constexpr SkColor kLabelBackgroundColor = SkColorSetARGB(25, 255, 255, 255);
 
 // Label background color when exiting overview mode.
-static const SkColor kLabelExitColor = SkColorSetARGB(255, 90, 90, 90);
+constexpr SkColor kLabelExitColor = SkColorSetARGB(255, 90, 90, 90);
 
 // Corner radius for the selection tiles.
 static int kLabelBackgroundRadius = 2;
 
 // Horizontal padding for the label, on both sides.
-static const int kHorizontalLabelPadding = 8;
-
-// Color of the label which identifies if a selector item can be snapped in
-// split view.
-constexpr SkColor kCannotSnapLabelColor = SkColorSetA(SK_ColorBLACK, 0xB0);
-
-// The amount of round on the cannot snap label.
-constexpr int kCannotSnapLabelRounding = 10;
+constexpr int kHorizontalLabelPaddingDp = 12;
 
 // Height of an item header.
-static const int kHeaderHeight = 32;
+constexpr int kHeaderHeightDp = 40;
 
 // Opacity for dimmed items.
-static const float kDimmedItemOpacity = 0.5f;
+constexpr float kDimmedItemOpacity = 0.5f;
 
 // Opacity for fading out during closing a window.
-static const float kClosingItemOpacity = 0.8f;
+constexpr float kClosingItemOpacity = 0.8f;
 
 // Opacity for the item header.
-static const float kHeaderOpacity =
-    (SkColorGetA(kLabelBackgroundColor) / 255.f);
+constexpr float kHeaderOpacity = (SkColorGetA(kLabelBackgroundColor) / 255.f);
 
 // Duration it takes for the header to shift from opaque header color to
 // |kLabelBackgroundColor|.
-static const int kSelectorColorSlideMilliseconds = 240;
+constexpr int kSelectorColorSlideMilliseconds = 240;
 
 // Duration of background opacity transition for the selected label.
-static const int kSelectorFadeInMilliseconds = 350;
+constexpr int kSelectorFadeInMilliseconds = 350;
 
 // Duration of background opacity transition when exiting overview mode.
-static const int kExitFadeInMilliseconds = 30;
+constexpr int kExitFadeInMilliseconds = 30;
 
 // Before closing a window animate both the window and the caption to shrink by
 // this fraction of size.
-static const float kPreCloseScale = 0.02f;
+constexpr float kPreCloseScale = 0.02f;
 
 // Before dragging an overview window, the window will scale up |kPreDragScale|
 // to indicate its selection.
-static const float kDragWindowScale = 0.04f;
+constexpr float kDragWindowScale = 0.04f;
+
+// The size in dp of the window icon shown on the overview window next to the
+// title.
+constexpr gfx::Size kIconSize = gfx::Size(24, 24);
+
+// Values for the old overview ui.
+// TODO(crbug.com/782320): Delete these values when the old ui becomes obsolete.
+constexpr int kOldHeaderHeightDp = 32;
+constexpr int kOldHorizontalLabelPaddingDp = 8;
+
+constexpr int kCloseButtonInkDropInsetDp = 2;
+
+// Shift the close button by |kCloseButtonOffsetDp| so that its image aligns
+// with the overview window, but its hit bounds exceeds.
+constexpr int kCloseButtonOffsetDp = 8;
+
+// The colors of the close button ripple.
+constexpr SkColor kCloseButtonInkDropRippleColor =
+    SkColorSetARGBMacro(0x0F, 0xFF, 0xFF, 0xFF);
+constexpr SkColor kCloseButtonInkDropRippleHighlightColor =
+    SkColorSetARGBMacro(0x14, 0xFF, 0xFF, 0xFF);
+
+// The font delta of the overview window title.
+constexpr int kLabelFontDelta = 2;
 
 // Convenience method to fade in a Window with predefined animation settings.
 // Note: The fade in animation will occur after a delay where the delay is how
@@ -222,14 +247,46 @@ class ShieldButton : public views::Button {
 WindowSelectorItem::OverviewCloseButton::OverviewCloseButton(
     views::ButtonListener* listener)
     : views::ImageButton(listener) {
+  if (IsNewOverviewUi())
+    SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
+
   SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(kWindowControlCloseIcon, kCloseButtonColor));
+           gfx::CreateVectorIcon(IsNewOverviewUi() ? kOverviewWindowCloseIcon
+                                                   : kWindowControlCloseIcon,
+                                 kCloseButtonColor));
   SetImageAlignment(views::ImageButton::ALIGN_CENTER,
                     views::ImageButton::ALIGN_MIDDLE);
-  SetMinimumImageSize(gfx::Size(kHeaderHeight, kHeaderHeight));
+  const int length = IsNewOverviewUi() ? kHeaderHeightDp : kOldHeaderHeightDp;
+  SetMinimumImageSize(gfx::Size(length, length));
 }
 
 WindowSelectorItem::OverviewCloseButton::~OverviewCloseButton() = default;
+
+std::unique_ptr<views::InkDropRipple>
+WindowSelectorItem::OverviewCloseButton::CreateInkDropRipple() const {
+  return std::make_unique<views::FloodFillInkDropRipple>(
+      size(), gfx::Insets(), GetInkDropCenterBasedOnLastEvent(),
+      kCloseButtonInkDropRippleColor, /*visible_opacity=*/1.f);
+}
+
+std::unique_ptr<views::InkDropHighlight>
+WindowSelectorItem::OverviewCloseButton::CreateInkDropHighlight() const {
+  return std::make_unique<views::InkDropHighlight>(
+      gfx::PointF(GetLocalBounds().CenterPoint()),
+      std::make_unique<views::CircleLayerDelegate>(
+          kCloseButtonInkDropRippleHighlightColor, GetInkDropRadius()));
+}
+
+std::unique_ptr<views::InkDropMask>
+WindowSelectorItem::OverviewCloseButton::CreateInkDropMask() const {
+  return std::make_unique<views::CircleInkDropMask>(
+      size(), GetLocalBounds().CenterPoint(), GetInkDropRadius());
+}
+
+int WindowSelectorItem::OverviewCloseButton::GetInkDropRadius() const {
+  return std::min(size().width(), size().height()) / 2 -
+         kCloseButtonInkDropInsetDp;
+}
 
 // A View having rounded top corners and a specified background color which is
 // only painted within the bounds defined by the rounded corners.
@@ -394,39 +451,53 @@ class WindowSelectorItem::RoundedContainerView
 class WindowSelectorItem::CaptionContainerView : public views::View {
  public:
   CaptionContainerView(ButtonListener* listener,
+                       views::ImageView* image_view,
                        views::Label* title_label,
                        views::Label* cannot_snap_label,
                        views::ImageButton* close_button,
                        WindowSelectorItem::RoundedContainerView* background)
       : listener_button_(new ShieldButton(listener, title_label->text())),
         background_(background),
+        image_view_(image_view),
         title_label_(title_label),
         cannot_snap_label_(cannot_snap_label),
         close_button_(close_button) {
+    if (image_view_)
+      background_->AddChildView(image_view_);
     background_->AddChildView(title_label_);
-    background_->AddChildView(close_button_);
     listener_button_->AddChildView(background_);
     AddChildView(listener_button_);
+    if (IsNewOverviewUi()) {
+      // Do not make |close_button_| a child of |background_| because
+      // |close_button_|'s hit radius should extend outside the bounds of
+      // |background_|.
+      close_button_->SetPaintToLayer();
+      close_button_->layer()->SetFillsBoundsOpaquely(false);
+      AddChildView(close_button_);
+    } else {
+      background_->AddChildView(close_button_);
+    }
 
     // Use |cannot_snap_container_| to specify the padding surrounding
     // |cannot_snap_label_| and to give the label rounded corners.
-    auto* layout = new views::BoxLayout(views::BoxLayout::kVertical);
-    cannot_snap_container_ =
-        new RoundedRectView(kCannotSnapLabelRounding, kCannotSnapLabelColor);
+    cannot_snap_container_ = new RoundedRectView(
+        kSplitviewLabelRoundRectRadiusDp, kSplitviewLabelBackgroundColor);
+    cannot_snap_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::kVertical,
+        gfx::Insets(kSplitviewLabelVerticalInsetDp,
+                    kSplitviewLabelHorizontalInsetDp)));
+    cannot_snap_container_->AddChildView(cannot_snap_label_);
+    cannot_snap_container_->set_can_process_events_within_subtree(false);
     cannot_snap_container_->SetPaintToLayer();
     cannot_snap_container_->layer()->SetFillsBoundsOpaquely(false);
-    cannot_snap_container_->AddChildView(cannot_snap_label_);
-    cannot_snap_container_->SetLayoutManager(layout);
-    cannot_snap_container_->set_can_process_events_within_subtree(false);
-    layout->SetFlexForView(cannot_snap_label_, 1);
+    cannot_snap_container_->layer()->SetOpacity(0.f);
     AddChildView(cannot_snap_container_);
-    cannot_snap_container_->SetVisible(false);
   }
 
   ShieldButton* listener_button() { return listener_button_; }
 
   void SetCannotSnapLabelVisibility(bool visible) {
-    cannot_snap_container_->SetVisible(visible);
+    AnimateSplitviewLabelOpacity(cannot_snap_container_->layer(), visible);
   }
 
  protected:
@@ -445,10 +516,11 @@ class WindowSelectorItem::CaptionContainerView : public views::View {
 
     // Position the cannot snap label.
     gfx::Size label_size = cannot_snap_label_->CalculatePreferredSize();
-    label_size.Enlarge(2 * kHorizontalLabelPadding,
-                       2 * kHorizontalLabelPadding);
-    if (!bounds.IsEmpty())
-      label_size.SetToMin(bounds.size());
+    label_size.set_width(
+        std::min(label_size.width() + 2 * kSplitviewLabelHorizontalInsetDp,
+                 bounds.width() - 2 * kSplitviewLabelHorizontalInsetDp));
+    label_size.set_height(
+        std::max(label_size.height(), kSplitviewLabelPreferredHeightDp));
 
     gfx::Rect cannot_snap_bounds = GetLocalBounds();
     cannot_snap_bounds.ClampToCenteredSize(label_size);
@@ -459,13 +531,29 @@ class WindowSelectorItem::CaptionContainerView : public views::View {
     background_bounds.set_height(visible_height);
     background_->SetBoundsRect(background_bounds);
 
+    const int label_padding = IsNewOverviewUi() ? kHorizontalLabelPaddingDp
+                                                : kOldHorizontalLabelPaddingDp;
     bounds = background_bounds;
-    bounds.Inset(kHorizontalLabelPadding, 0,
-                 kHorizontalLabelPadding + visible_height, 0);
+    bounds.Inset(
+        label_padding + (image_view_ ? image_view_->size().width() : 0), 0,
+        label_padding + visible_height, 0);
     title_label_->SetBoundsRect(bounds);
 
+    if (image_view_) {
+      bounds.set_x(0);
+      bounds.set_width(image_view_->size().width());
+      image_view_->SetBoundsRect(bounds);
+    }
+
     bounds = background_bounds;
-    bounds.set_x(bounds.width() - visible_height);
+    // Align the close button so that the right edge of its image is aligned
+    // with the right edge of the overview window, but the right edge of its
+    // touch target exceeds it.
+    bounds.set_x(
+        bounds.width() - visible_height +
+        (IsNewOverviewUi() ? kCloseButtonOffsetDp + kWindowSelectorMargin : 0));
+    if (IsNewOverviewUi())
+      bounds.set_y(kWindowSelectorMargin);
     bounds.set_width(visible_height);
     close_button_->SetBoundsRect(bounds);
   }
@@ -475,6 +563,7 @@ class WindowSelectorItem::CaptionContainerView : public views::View {
  private:
   ShieldButton* listener_button_;
   WindowSelectorItem::RoundedContainerView* background_;
+  views::ImageView* image_view_;
   views::Label* title_label_;
   views::Label* cannot_snap_label_;
   RoundedRectView* cannot_snap_container_;
@@ -733,6 +822,9 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
   background_view_ = new RoundedContainerView(this, transform_window_.window(),
                                               kLabelBackgroundRadius,
                                               transform_window_.GetTopColor());
+  if (IsNewOverviewUi())
+    background_view_->set_color(SK_ColorTRANSPARENT);
+
   // |background_view_| will get added as a child to CaptionContainerView.
   views::Widget::InitParams params_label;
   params_label.type = views::Widget::InitParams::TYPE_POPUP;
@@ -760,6 +852,21 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
     widget_window->parent()->StackChildBelow(widget_window,
                                              transform_window_.window());
   }
+
+  // Create an image view for and scale down the windows window icon, if it
+  // exists.
+  views::ImageView* image_view = nullptr;
+  if (IsNewOverviewUi()) {
+    gfx::ImageSkia* icon =
+        transform_window_.window()->GetProperty(aura::client::kWindowIconKey);
+    if (icon && !icon->size().IsEmpty()) {
+      image_view = new views::ImageView();
+      image_view->SetImage(gfx::ImageSkiaOperations::CreateResizedImage(
+          *icon, skia::ImageOperations::RESIZE_GOOD, kIconSize));
+      image_view->SetSize(kIconSize);
+    }
+  }
+
   label_view_ = new views::Label(title);
   label_view_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   label_view_->SetAutoColorReadabilityEnabled(false);
@@ -768,19 +875,21 @@ void WindowSelectorItem::CreateWindowLabel(const base::string16& title) {
   // background color is opaque or transparent to decide whether to use
   // subpixel rendering. Does not actually set the label's background color.
   label_view_->SetBackgroundColor(kLabelBackgroundColor);
+  if (IsNewOverviewUi()) {
+    label_view_->SetFontList(gfx::FontList().Derive(
+        kLabelFontDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+  }
 
-  cannot_snap_label_view_ = new views::Label(title);
+  cannot_snap_label_view_ = new views::Label(
+      l10n_util::GetStringUTF16(IDS_ASH_SPLIT_VIEW_CANNOT_SNAP));
   cannot_snap_label_view_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
   cannot_snap_label_view_->SetAutoColorReadabilityEnabled(false);
-  cannot_snap_label_view_->SetMultiLine(true);
-  cannot_snap_label_view_->SetEnabledColor(kLabelColor);
-  cannot_snap_label_view_->SetBackgroundColor(kLabelBackgroundColor);
-  cannot_snap_label_view_->SetText(
-      l10n_util::GetStringUTF16(IDS_ASH_SPLIT_VIEW_CANNOT_SNAP));
+  cannot_snap_label_view_->SetEnabledColor(kSplitviewLabelEnabledColor);
+  cannot_snap_label_view_->SetBackgroundColor(kSplitviewLabelBackgroundColor);
 
-  caption_container_view_ =
-      new CaptionContainerView(this, label_view_, cannot_snap_label_view_,
-                               close_button_, background_view_);
+  caption_container_view_ = new CaptionContainerView(
+      this, image_view, label_view_, cannot_snap_label_view_, close_button_,
+      background_view_);
   UpdateCannotSnapWarningVisibility();
 
   item_widget_->SetContentsView(caption_container_view_);
@@ -813,13 +922,15 @@ void WindowSelectorItem::UpdateHeaderLayout(
         // Animate the color of |background_view_| once the fade in animation of
         // |item_widget_| ends.
         layer_animation_settings.AddObserver(background_view_);
-        background_view_->set_color(kLabelBackgroundColor);
+        if (!IsNewOverviewUi())
+          background_view_->set_color(kLabelBackgroundColor);
       } else if (mode == HeaderFadeInMode::EXIT) {
         // Make the header visible above the window. It will be faded out when
         // the Shutdown() is called.
         background_view_->AnimateColor(gfx::Tween::EASE_OUT,
                                        kExitFadeInMilliseconds);
-        background_view_->set_color(kLabelExitColor);
+        if (!IsNewOverviewUi())
+          background_view_->set_color(kLabelExitColor);
       }
     }
     if (!label_view_->visible()) {

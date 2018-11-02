@@ -44,7 +44,6 @@
 #include "platform/FileMetadata.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
@@ -57,7 +56,7 @@ namespace blink {
 namespace {
 
 void RunCallback(ExecutionContext* execution_context,
-                 WTF::Closure task,
+                 base::OnceClosure task,
                  std::unique_ptr<int> identifier) {
   if (!execution_context)
     return;
@@ -207,14 +206,17 @@ void DOMFileSystem::CreateFile(const FileEntry* file_entry,
 }
 
 void DOMFileSystem::ScheduleCallback(ExecutionContext* execution_context,
-                                     WTF::Closure task) {
+                                     base::OnceClosure task) {
+  if (!execution_context)
+    return;
+
   DCHECK(execution_context->IsContextThread());
 
   std::unique_ptr<int> identifier = std::make_unique<int>(0);
   probe::AsyncTaskScheduled(execution_context, TaskNameForInstrumentation(),
                             identifier.get());
   execution_context->GetTaskRunner(TaskType::kFileReading)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&RunCallback, WrapWeakPersistent(execution_context),
                            WTF::Passed(std::move(task)),
                            WTF::Passed(std::move(identifier))));

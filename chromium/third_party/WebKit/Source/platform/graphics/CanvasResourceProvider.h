@@ -6,17 +6,17 @@
 #define CanvasResourceProvider_h
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/CanvasColorParams.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/Vector.h"
-#include "platform/wtf/WeakPtr.h"
 #include "third_party/khronos/GLES2/gl2.h"
+#include "third_party/skia/include/core/SkSurface.h"
 
 class GrContext;
 class SkCanvas;
-class SkSurface;
 
 namespace cc {
 
@@ -30,13 +30,6 @@ class GLES2Interface;
 
 }  // namespace gles2
 }  // namespace gpu
-
-namespace viz {
-
-class SingleReleaseCallback;
-struct TransferableResource;
-
-}  // namespace viz
 
 namespace blink {
 
@@ -72,41 +65,53 @@ class PLATFORM_EXPORT CanvasResourceProvider {
 
   static std::unique_ptr<CanvasResourceProvider> Create(
       const IntSize&,
-      unsigned msaa_sample_count,
-      const CanvasColorParams&,
       ResourceUsage,
-      WeakPtr<WebGraphicsContext3DProviderWrapper> = nullptr);
+      base::WeakPtr<WebGraphicsContext3DProviderWrapper> = nullptr,
+      unsigned msaa_sample_count = 0,
+      const CanvasColorParams& = CanvasColorParams());
+
+  // Use this method for capturing a frame that is intended to be displayed via
+  // the compositor. Cases that need to acquire a snaptshot that is not destined
+  // to be transfered via TransferableResource should call Snapshot() instead.
+  virtual scoped_refptr<CanvasResource> ProduceFrame() = 0;
+  scoped_refptr<StaticBitmapImage> Snapshot();
 
   cc::PaintCanvas* Canvas();
   void FlushSkia() const;
   const CanvasColorParams& ColorParams() const { return color_params_; }
-  scoped_refptr<StaticBitmapImage> Snapshot();
   void SetFilterQuality(SkFilterQuality quality) { filter_quality_ = quality; }
-  bool PrepareTransferableResource(
-      viz::TransferableResource*,
-      std::unique_ptr<viz::SingleReleaseCallback>*);
   const IntSize& Size() const { return size_; }
   virtual bool IsValid() const = 0;
   virtual bool IsAccelerated() const = 0;
-  virtual bool CanPrepareTransferableResource() const = 0;
   uint32_t ContentUniqueID() const;
   void ClearRecycledResources();
   void RecycleResource(scoped_refptr<CanvasResource>);
   void SetResourceRecyclingEnabled(bool);
   SkSurface* GetSkSurface() const;
   bool IsGpuContextLost() const;
+  bool WritePixels(const SkImageInfo& orig_info,
+                   const void* pixels,
+                   size_t row_bytes,
+                   int x,
+                   int y);
+  virtual GLuint GetBackingTextureHandleForOverwrite() {
+    NOTREACHED();
+    return 0;
+  }
+  void Clear();
   virtual ~CanvasResourceProvider();
 
  protected:
   gpu::gles2::GLES2Interface* ContextGL() const;
   GrContext* GetGrContext() const;
-  WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper() {
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> ContextProviderWrapper() {
     return context_provider_wrapper_;
   }
-  GLenum GetGLFilter() const;
-  bool UseNearestNeighbor() const;
-  void ResetSkiaTextureBinding() const;
   scoped_refptr<CanvasResource> NewOrRecycledResource();
+  SkFilterQuality FilterQuality() const { return filter_quality_; }
+  base::WeakPtr<CanvasResourceProvider> CreateWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
+  }
 
   // Called by subclasses when the backing resource has changed and resources
   // are not managed by skia, signaling that a new surface needs to be created.
@@ -114,16 +119,14 @@ class PLATFORM_EXPORT CanvasResourceProvider {
 
   CanvasResourceProvider(const IntSize&,
                          const CanvasColorParams&,
-                         WeakPtr<WebGraphicsContext3DProviderWrapper>);
+                         base::WeakPtr<WebGraphicsContext3DProviderWrapper>);
 
  private:
   virtual sk_sp<SkSurface> CreateSkSurface() const = 0;
   virtual scoped_refptr<CanvasResource> CreateResource();
-  virtual scoped_refptr<CanvasResource> DoPrepareTransferableResource(
-      viz::TransferableResource* out_resource) = 0;
 
-  WeakPtrFactory<CanvasResourceProvider> weak_ptr_factory_;
-  WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
+  base::WeakPtrFactory<CanvasResourceProvider> weak_ptr_factory_;
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
   IntSize size_;
   CanvasColorParams color_params_;
   std::unique_ptr<cc::PaintCanvas> canvas_;

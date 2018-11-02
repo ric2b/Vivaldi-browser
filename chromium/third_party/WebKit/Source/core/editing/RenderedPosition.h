@@ -39,11 +39,12 @@
 
 namespace blink {
 
-class GraphicsLayer;
+class FrameSelection;
 class LayoutPoint;
 class LayoutUnit;
 class LayoutObject;
 struct CompositedSelectionBound;
+struct CompositedSelection;
 
 class CORE_EXPORT RenderedPosition {
   STACK_ALLOCATED();
@@ -57,10 +58,8 @@ class CORE_EXPORT RenderedPosition {
   bool IsEquivalent(const RenderedPosition&) const;
 
   bool IsNull() const { return !layout_object_; }
-  // TODO(crbug.com/766448): Change return type to |const RootInlineBox*|.
-  RootInlineBox* RootBox() const {
-    return const_cast<RootInlineBox*>(inline_box_ ? &inline_box_->Root()
-                                                  : nullptr);
+  const RootInlineBox* RootBox() const {
+    return inline_box_ ? &inline_box_->Root() : nullptr;
   }
 
   unsigned char BidiLevelOnLeft() const;
@@ -89,12 +88,14 @@ class CORE_EXPORT RenderedPosition {
 
   IntRect AbsoluteRect(LayoutUnit* extra_width_to_end_of_line = nullptr) const;
 
-  void PositionInGraphicsLayerBacking(CompositedSelectionBound&,
-                                      bool selection_start) const;
+  CompositedSelectionBound PositionInGraphicsLayerBacking(
+      bool selection_start) const;
 
   // Returns whether this position is not visible on the screen (because
   // clipped out).
-  bool IsVisible(bool selection_start);
+  bool IsVisible(bool selection_start) const;
+
+  static CompositedSelection ComputeCompositedSelection(const FrameSelection&);
 
  private:
   bool operator==(const RenderedPosition&) const { return false; }
@@ -113,14 +114,11 @@ class CORE_EXPORT RenderedPosition {
   bool AtRightBoundaryOfBidiRun(ShouldMatchBidiLevel,
                                 unsigned char bidi_level_of_run) const;
 
-  void GetLocalSelectionEndpoints(bool selection_start,
-                                  LayoutPoint& edge_top_in_layer,
-                                  LayoutPoint& edge_bottom_in_layer,
-                                  bool& is_text_direction_rtl) const;
+  std::pair<LayoutPoint, LayoutPoint> GetLocalSelectionEndpoints(
+      bool selection_star) const;
 
   FloatPoint LocalToInvalidationBackingPoint(
-      const LayoutPoint& local_point,
-      GraphicsLayer** graphics_layer_backing) const;
+      const LayoutPoint& local_point) const;
 
   static LayoutPoint GetSamplePointForVisibility(
       const LayoutPoint& edge_top_in_layer,

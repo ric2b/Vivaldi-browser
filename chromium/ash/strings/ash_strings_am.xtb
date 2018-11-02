@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">ይህ መሣሪያ በ<ph name="DOMAIN" /> ነው የሚቀናበረው።</translation>
 <translation id="2050339315714019657">በቁመት</translation>
 <translation id="2067602449040652523">የቁልፍ ሰሌዳ ብሩህነት</translation>
-<translation id="207439088875642105">ይሄ በ<ph name="FIRST_PARENT_EMAIL" /> እና <ph name="SECOND_PARENT_EMAIL" /> የሚቀናበር የህጻናት መለያ ነው</translation>
 <translation id="2122028596993374965"><ph name="TAB_NAME" />ን ወደ <ph name="RECEIVER_NAME" /> Cast ማድረግ አስቁም</translation>
 <translation id="2127372758936585790">አነስተኛ ኃይል ያለው ባትሪ መሙያ</translation>
 <translation id="2144487987174258011">Adobe Flash Playerን ለማዘመን ዳግም ያስጀምሩ</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">ሞኖ ኦዲዮ</translation>
 <translation id="3009178788565917040">ውጽዓት</translation>
 <translation id="3019353588588144572">ባትሪ ሙሉ ኃይል እስኪኖረው ድረስ የሚቀረው ጊዜ፣ <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">ይሄ በ<ph name="MANAGER_EMAIL" /> የሚቀናበር የህጻናት መለያ ነው</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">ግርጌ</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (ብሉቱዝ)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">የማያ ገጽ ማጉያ</translation>
 <translation id="3477079411857374384">Control-Shift-Space</translation>
 <translation id="3510164367642747937">የመዳፊት ጠቋሚን አድምቅ</translation>
+<translation id="3513798432020909783">መለያው በ<ph name="MANAGER_EMAIL" /> ነው የሚቀናበረው</translation>
 <translation id="3573179567135747900">ወደ «<ph name="FROM_LOCALE" />» መልሰህ ቀይር (ዳግም ማስጀመር ይፈልጋል)</translation>
 <translation id="3582792037806681688">በበርካታ መለያ መግባት በዚህ ክፍለ ጊዜ ውስጥ ላለ ተጠቃሚ ተከልክሏል</translation>
 <translation id="3595596368722241419">ባትሪ ሙሉ ነው</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">ቆልፍ</translation>
 <translation id="3798670284305777884">ድምጽ ማጉያ (ውስጣዊ)</translation>
 <translation id="3846575436967432996">ምንም የአውታረ መረብ መረጃ አይገኝም</translation>
+<translation id="385051799172605136">ተመለስ</translation>
 <translation id="3891340733213178823">ዘግተው ለመውጣት Ctrl+Shift+Qን ሁለቴ ይጫኑ።</translation>
 <translation id="3893630138897523026">ChromeVox (የሚነገር ግብረመልስ)</translation>
 <translation id="3899995891769452915">የድምፅ ግቤት</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">ቅጽበታዊ እንደ ሞደም መሰካት</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">ሁሉም የሚገኙ ተጤቃሚዎች አስቀድመው ወደዚህ ክፍለ-ጊዜ ታክለዋል።</translation>
+<translation id="5457599981699367932">እንደ እንግዳ ያስሱ</translation>
 <translation id="553675580533261935">ከክፍለ-ጊዜ በመውጣት ላይ</translation>
 <translation id="5548285847212963613">«<ph name="EXTENSION_NAME" />» ቅጥያ ወደዚህ አውታረመረብ ለማገናኘት ሊያግዝ ይችላል።</translation>
 <translation id="5571066253365925590">ብሉቱዝ ነቅቷል</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">መታ አድርጎ መጎተት</translation>
 <translation id="5777841717266010279">ማያ ገጽ ማጋራት ይቁም?</translation>
 <translation id="57838592816432529">ድምጽ ይዝጉ</translation>
+<translation id="5832805196449965646">ሰው አክል</translation>
 <translation id="5860033963881614850">አጥፋ</translation>
 <translation id="5895138241574237353">እንደገና ጀምር</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
@@ -273,6 +275,7 @@
 <translation id="7829386189513694949">ጠንካራ ሲግናል</translation>
 <translation id="7904094684485781019">የዚህ መለያ አስተዳዳሪ ባለብዙ መለያ መግባትን ከልክሏል።</translation>
 <translation id="7933084174919150729">Google ረዳቱ ለዋናው መገለጫ ብቻ የሚገኝ ነው።</translation>
+<translation id="79341161159229895">መለያው በ<ph name="FIRST_PARENT_EMAIL" /> እና <ph name="SECOND_PARENT_EMAIL" /> ነው የሚቀናበረው</translation>
 <translation id="7977927628060636163">የተንቀሳቃሽ ስልክ አውታረ መረቦችን በመፈለግ ላይ...</translation>
 <translation id="7982789257301363584">አውታረ መረብ</translation>
 <translation id="7994370417837006925">ባለብዙ በመለያ-መግቢያ</translation>
@@ -289,6 +292,7 @@
 <translation id="8261506727792406068">ሰርዝ</translation>
 <translation id="8308637677604853869">ቀዳሚ ምናሌ</translation>
 <translation id="8351131234907093545">ማስታወሻን ይፍጠሩ</translation>
+<translation id="8392451568018454956">የ<ph name="USER_EMAIL_ADDRESS" /> አማራጮች ምናሌ</translation>
 <translation id="8428213095426709021">ቅንብሮች</translation>
 <translation id="8433186206711564395">የአውታረ መረብ ቅንብሮች</translation>
 <translation id="8433977262951327081">በመደርደሪያው ውስጥ የግቤት አማራጮች ምናሌ አረፋን ለማሳየት የሚሆነው አቋራጭ ተለውጧል። እባክዎ በ<ph name="OLD_SHORTCUT" /> ምትክ <ph name="NEW_SHORTCUT" />ን ይጠቀሙ።</translation>

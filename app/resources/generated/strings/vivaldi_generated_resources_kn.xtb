@@ -56,6 +56,7 @@
 <translation id="2941112035454246133">ಕಡಿಮೆ</translation>
 <translation id="2972581237482394796">&amp;ಮತ್ತೆಮಾಡು</translation>
 <translation id="299483336428448530">ನಿಮ್ಮ ಪೋಷಕರು ಸ್ಥಾಪಿಸಿದ್ದಾರೆ.</translation>
+<translation id="3031601332414921114">ಮುದ್ರಣವನ್ನು ಪುನರಾರಂಭಿಸಿ</translation>
 <translation id="3080207940057008665">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಥೀಮ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">ಬಳಕೆದಾರರ ನಿರ್ವಹಣೆಗಳು</translation>
@@ -92,6 +93,7 @@
 <translation id="4090535558450035482">(ಈ ವಿಸ್ತರಣೆಯನ್ನು ನಿರ್ವಹಿಸಲಾಗಿದೆ ಮತ್ತು ತೆಗೆದುಹಾಕಲಾಗುವುದಿಲ್ಲ.)</translation>
 <translation id="4096508467498758490">ವಿಸ್ತರಣೆಗಳ ಡೆವೆಲಪರ್ ಮೋಡ್ ಅನ್ನು ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ</translation>
 <translation id="4100839878934973028">ನಿಮ್ಮ ಕಂಪ್ಯೂಟರ್‌ನಲ್ಲಿನ ಮತ್ತೊಂದು ಪ್ರೋಗ್ರಾಂ Vivaldi ಕಾರ್ಯನಿರ್ವಹಿಸುವ ವಿಧಾನವನ್ನು ಬದಲಿಸಬಹುದಾದಂತಹ ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ಸೇರಿಸಿದೆ.</translation>
+<translation id="4115080753528843955">ಸಂರಕ್ಷಿತ ವಿಷಯಕ್ಕೆ ಪ್ರವೇಶವನ್ನು ಅನುಮೋದಿಸುವ ಉದ್ದೇಶಕ್ಕಾಗಿ ಕೆಲವು ವಿಷಯ ಸೇವೆಗಳು ಅನನ್ಯ ಗುರುತಿಸುವಿಕೆಗಳನ್ನು ಬಳಸುತ್ತವೆ</translation>
 <translation id="4130207949184424187">ಆಮ್ನಿಬಾಕ್ಸ್‌ನಿಂದ ನೀವು ಹುಡುಕಿದಾಗ ತೋರಿಸಬೇಕಾದ ಪುಟವನ್ನು ಈ ವಿಸ್ತರಣೆಯು ಬದಲಾಯಿಸಿದೆ.</translation>
 <translation id="4176463684765177261">ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="4200983522494130825">ಹೊಸ &amp;ಟ್ಯಾಬ್</translation>
@@ -149,6 +151,7 @@
 <translation id="6122081475643980456">ನಿಮ್ಮ ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕವನ್ನು ನಿಯಂತ್ರಿಸಲಾಗುತ್ತಿದೆ</translation>
 <translation id="6124650939968185064">ಕೆಳಗಿನ ವಿಸ್ತರಣೆಗಳು ಈ ವಿಸ್ತರಣೆಯ ಮೇಲೆ ಅವಲಂಬಿತವಾಗಿವೆ:</translation>
 <translation id="6156863943908443225">ಲಿಪಿ ಸಂಗ್ರಹ</translation>
+<translation id="6171948306033499786">ಮುದ್ರಣವನ್ನು ವಿರಾಮಗೊಳಿಸಿ</translation>
 <translation id="6196854373336333322">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು "<ph name="EXTENSION_NAME" />" ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
 <translation id="6239558157302047471">ರೀಲೋಡ್ &amp;ಫ್ರೇಮ್</translation>
 <translation id="6247802389331535091">ಸಿಸ್ಟಮ್: <ph name="ARC_PROCESS_NAME" /></translation>
@@ -164,6 +167,7 @@
 <translation id="6508261954199872201">ಅಪ್ಲಿಕೇಶನ್: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">ಇಮೇಜ್ ಅನ್ನು ನಕ&amp;ಲಿಸಿ</translation>
 <translation id="6550675742724504774">ಆಯ್ಕೆಗಳು</translation>
+<translation id="6612358246767739896">ಸಂರಕ್ಷಿತ ವಿಷಯ</translation>
 <translation id="6639554308659482635">SQLite ಮೆಮೊರಿ</translation>
 <translation id="6691936601825168937">&amp;ಮುಂದೆ ತನ್ನಿ</translation>
 <translation id="6786747875388722282">ವಿಸ್ತರಣೆಗಳು</translation>
@@ -173,6 +177,7 @@
 <translation id="6886871292305414135">ಹೊಸ &amp;ಟ್ಯಾಬ್‌ನಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಿರಿ</translation>
 <translation id="6900284862687837908">ಹಿನ್ನೆಲೆ ಅಪ್ಲಿಕೇಶನ್: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ಫೈಲ್ ಪ್ರವೇಶವನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಿ</translation>
+<translation id="6943176775188458830">ಮುದ್ರಣ ರದ್ದುಮಾಡಿ</translation>
 <translation id="6974053822202609517">ಬಲದಿಂದ ಎಡಕ್ಕೆ</translation>
 <translation id="708060913198414444">ಆಡಿಯೋ ವಿಳಾಸವನ್ನು ನ&amp;ಕಲಿಸಿ</translation>
 <translation id="7144878232160441200">ಮರುಪ್ರಯತ್ನಿಸಿ</translation>
@@ -182,10 +187,10 @@
 <translation id="7361297102842600584"><ph name="PLUGIN_NAME" /> ರನ್ ಮಾಡಲು ರೈಟ್ ಕ್ಲಿಕ್ ಮಾಡಿ</translation>
 <translation id="7401543881546089382">ಶಾರ್ಟ್‌ಕಟ್ ಅಳಿಸಿ</translation>
 <translation id="7427348830195639090">ಹಿನ್ನೆಲೆ ಪುಟ: <ph name="BACKGROUND_PAGE_URL" /></translation>
+<translation id="7521387064766892559">ಜಾವಾಸ್ಕ್ರಿಪ್ಟ್</translation>
 <translation id="7554791636758816595">ಹೊಸ ಟ್ಯಾಬ್</translation>
 <translation id="7564847347806291057">ಪ್ರಕ್ರಿಯೆ ಕೊನೆಗೊಳಿಸಿ</translation>
 <translation id="7629827748548208700">ಟ್ಯಾಬ್: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">ರದ್ದುಮಾಡಿ</translation>
 <translation id="7663719505383602579">ರಿಸೀವರ್: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">JavaScript ಸ್ಮರಣೆ</translation>
 <translation id="7704305437604973648">ಕಾರ್ಯ</translation>
@@ -205,6 +210,7 @@
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8188120771410500975">&amp;ಪಠ್ಯ ಕ್ಷೇತ್ರಗಳ ಕಾಗುಣಿತ ಪರಿಶೀಲಿಸಿ</translation>
 <translation id="8261378640211443080">ಈ ವಿಸ್ತರಣೆಯನ್ನು <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ನಲ್ಲಿ ಪಟ್ಟಿ ಮಾಡಲಾಗಿಲ್ಲ ಮತ್ತು ಇದು ನಿಮಗೆ ಅರಿವಿಲ್ಲದಂತೆ ಸೇರಿಸಿರಬಹುದು.</translation>
+<translation id="8270242299912238708">ಪಿಡಿಎಫ್ ದಾಖಲೆಗಳು</translation>
 <translation id="8338952601723052325">ಡೆವಲಪರ್ ವೆಬ್‌ಸೈಟ್</translation>
 <translation id="8351419472474436977">ನಿಮ್ಮ ಪ್ರಾಕ್ಸಿ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಈ ವಿಸ್ತರಣೆಯು ನಿಯಂತ್ರಣಕ್ಕೆ ತೆಗೆದುಕೊಂಡಿದೆ. ಅಂದರೆ, ನೀವು ಆನ್‌ಲೈನ್‌ನಲ್ಲಿ ಮಾಡುವ ಯಾವುದೇ ಕಾರ್ಯವನ್ನು ಇದು ಬದಲಾಯಿಸಬಹುದು, ಒಳನುಸುಳಬಹುದು ಅಥವಾ ಕದ್ದಾಲಿಸಬಹುದು ಎಂದರ್ಥ. ಇದು ಹೇಗೆ ಸಂಭವಿಸಿದೆ ಎಂಬುದೇ ನಿಮಗೆ ಖಚಿತವಿಲ್ಲದಿದ್ದರೆ, ನಿಮಗೆ ಬಹುಶಃ ಇದು ಬೇಕಾಗಿಲ್ಲ.</translation>
 <translation id="8357224663288891423">ವಿಸ್ತರಣೆಗಳು ಮತ್ತು ಅಪ್ಲಿಕೇಶನ್‌ಗಳಿಗಾಗಿ ಕೀಬೋರ್ಡ್ ಶಾರ್ಟ್‌‌ಕಟ್‌ಗಳು</translation>
@@ -219,6 +225,7 @@
 <translation id="873545264931343897"><ph name="PLUGIN_NAME" /> ಅಪ್‌‌ಡೇಟ್‌ ಮುಕ್ತಾಯಗೊಳಿಸುವಾಗ, ಅದನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು ಪುಟವನ್ನು ಮರುಲೋಡ್ ಮಾಡಿ</translation>
 <translation id="8798099450830957504">ಡಿಫಾಲ್ಟ್</translation>
 <translation id="8808478386290700967">ವೆಬ್‌ ಸ್ಟೋರ್‌</translation>
+<translation id="8845001906332463065">ಸಹಾಯ ಪಡೆ</translation>
 <translation id="8859174528519900719">ಉಪಫ್ರೇಮ್‌: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">ಹೊಸ &amp;ವಿಂಡೋದಲ್ಲಿ ಲಿಂಕ್ ತೆರೆಯಿರಿ</translation>
 <translation id="8916476537757519021">ಅದೃಶ್ಯ ಉಪಫ್ರೇಮ್: <ph name="SUBFRAME_SITE" /></translation>

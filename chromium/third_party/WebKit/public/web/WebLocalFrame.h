@@ -12,6 +12,7 @@
 #include "WebFrameLoadType.h"
 #include "WebHistoryItem.h"
 #include "WebImeTextSpan.h"
+#include "base/callback.h"
 #include "base/unguessable_token.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebFocusType.h"
@@ -34,8 +35,6 @@ class WebAutofillClient;
 class WebContentSettingsClient;
 class WebData;
 class WebDocumentLoader;
-class WebDevToolsAgent;
-class WebDevToolsAgentClient;
 class WebDocument;
 class WebDoubleSize;
 class WebDOMEvent;
@@ -133,8 +132,6 @@ class WebLocalFrame : public WebFrame {
 
   virtual void SetAutofillClient(WebAutofillClient*) = 0;
   virtual WebAutofillClient* AutofillClient() = 0;
-  virtual void SetDevToolsAgentClient(WebDevToolsAgentClient*) = 0;
-  virtual WebDevToolsAgent* DevToolsAgent() = 0;
   virtual void SetSharedWorkerRepositoryClient(
       WebSharedWorkerRepositoryClient*) = 0;
 
@@ -370,6 +367,10 @@ class WebLocalFrame : public WebFrame {
   // Associates an isolated world (see above for description) with a security
   // origin. XMLHttpRequest instances used in that world will be considered
   // to come from that origin, not the frame's.
+  //
+  // Currently the origin shouldn't be aliased, because IsolatedCopy() is
+  // taken before associating it to an isolated world and aliased relationship,
+  // if any, is broken. crbug.com/779730
   virtual void SetIsolatedWorldSecurityOrigin(int world_id,
                                               const WebSecurityOrigin&) = 0;
 
@@ -394,7 +395,7 @@ class WebLocalFrame : public WebFrame {
 
   // Call the function with the given receiver and arguments, bypassing
   // canExecute().
-  virtual v8::Local<v8::Value> CallFunctionEvenIfScriptDisabled(
+  virtual v8::MaybeLocal<v8::Value> CallFunctionEvenIfScriptDisabled(
       v8::Local<v8::Function>,
       v8::Local<v8::Value>,
       int argc,
@@ -424,6 +425,22 @@ class WebLocalFrame : public WebFrame {
                                         int argc,
                                         v8::Local<v8::Value> argv[],
                                         WebScriptExecutionCallback*) = 0;
+
+  enum class PausableTaskResult {
+    // The context was invalid or destroyed.
+    kContextInvalidOrDestroyed,
+    // Script is not paused.
+    kReady,
+  };
+  using PausableTaskCallback = base::OnceCallback<void(PausableTaskResult)>;
+
+  // Queues a callback to run script when the context is not paused, e.g. for a
+  // modal JS dialog or window.print(). This callback can run immediately if the
+  // context is not paused. If the context is invalidated before becoming
+  // unpaused, the callback will be run with a kContextInvalidOrDestroyed value.
+  // This asserts that the context is valid at the time of this
+  // call.
+  virtual void PostPausableTask(PausableTaskCallback) = 0;
 
   enum ScriptExecutionType {
     // Execute script synchronously, unless the page is suspended.
@@ -567,8 +584,6 @@ class WebLocalFrame : public WebFrame {
   virtual void SetSpellCheckPanelHostClient(WebSpellCheckPanelHostClient*) = 0;
   virtual WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const = 0;
   virtual void ReplaceMisspelledRange(const WebString&) = 0;
-  virtual void EnableSpellChecking(bool) = 0;
-  virtual bool IsSpellCheckingEnabled() const = 0;
   virtual void RemoveSpellingMarkers() = 0;
   virtual void RemoveSpellingMarkersUnderWords(
       const WebVector<WebString>& words) = 0;

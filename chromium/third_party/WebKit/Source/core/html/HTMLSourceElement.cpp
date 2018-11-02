@@ -66,7 +66,7 @@ inline HTMLSourceElement::HTMLSourceElement(Document& document)
 
 DEFINE_NODE_FACTORY(HTMLSourceElement)
 
-HTMLSourceElement::~HTMLSourceElement() {}
+HTMLSourceElement::~HTMLSourceElement() = default;
 
 void HTMLSourceElement::CreateMediaQueryList(const AtomicString& media) {
   RemoveMediaQueryListListener();
@@ -135,13 +135,10 @@ void HTMLSourceElement::setType(const AtomicString& type) {
 void HTMLSourceElement::ScheduleErrorEvent() {
   DVLOG(SOURCE_LOG_LEVEL) << "scheduleErrorEvent - " << (void*)this;
 
-  pending_error_event_ =
-      GetDocument()
-          .GetTaskRunner(TaskType::kDOMManipulation)
-          ->PostCancellableTask(
-              BLINK_FROM_HERE,
-              WTF::Bind(&HTMLSourceElement::DispatchPendingEvent,
-                        WrapPersistent(this)));
+  pending_error_event_ = PostCancellableTask(
+      *GetDocument().GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
+      WTF::Bind(&HTMLSourceElement::DispatchPendingEvent,
+                WrapPersistent(this)));
 }
 
 void HTMLSourceElement::CancelPendingErrorEvent() {

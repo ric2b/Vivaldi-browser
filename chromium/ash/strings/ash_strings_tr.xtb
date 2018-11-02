@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Bu cihaz <ph name="DOMAIN" /> tarafından yönetiliyor.</translation>
 <translation id="2050339315714019657">Dikey</translation>
 <translation id="2067602449040652523">Klavye parlaklığı</translation>
-<translation id="207439088875642105">Bu hesap çocuklar içindir ve <ph name="FIRST_PARENT_EMAIL" /> ile <ph name="SECOND_PARENT_EMAIL" /> tarafından yönetilmektedir</translation>
 <translation id="2122028596993374965"><ph name="TAB_NAME" /> sekmesinin <ph name="RECEIVER_NAME" /> cihazına yayınını durdur</translation>
 <translation id="2127372758936585790">Düşük güçlü şarj cihazı</translation>
 <translation id="2144487987174258011">Adobe Flash Player'ı güncellemek için yeniden başlatın</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Mono ses</translation>
 <translation id="3009178788565917040">Çıkış</translation>
 <translation id="3019353588588144572">Pilin tam olarak şarj olması için kalan süre, <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Bu hesap çocuklar içindir ve <ph name="MANAGER_EMAIL" /> tarafından yönetilmektedir</translation>
 <translation id="3077734595579995578">üstkrktr</translation>
 <translation id="3087734570205094154">Alt</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Ekran büyüteci</translation>
 <translation id="3477079411857374384">Control-Üst Karakter-Boşluk</translation>
 <translation id="3510164367642747937">Fare imlecini vurgula</translation>
+<translation id="3513798432020909783">Hesap <ph name="MANAGER_EMAIL" /> tarafından yönetiliyor</translation>
 <translation id="3573179567135747900">Tekrar "<ph name="FROM_LOCALE" />" ayarına dön (yeniden başlatmak gerekir)</translation>
 <translation id="3582792037806681688">Bu oturumdaki bir kullanıcı için çoklu oturum açma engellendi</translation>
 <translation id="3595596368722241419">Pil tam dolu</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Kilitle</translation>
 <translation id="3798670284305777884">Hoparlör (dahili)</translation>
 <translation id="3846575436967432996">Hiçbir ağ bilgisi yok</translation>
+<translation id="385051799172605136">Geri</translation>
 <translation id="3891340733213178823">Oturumu kapatmak için Ctrl+ÜstKrktr+Q tuşlarına iki defa basın.</translation>
 <translation id="3893630138897523026">ChromeVox (sesli geri bildirim)</translation>
 <translation id="3899995891769452915">Ses girişi</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Anında Tethering</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">Mevcut tüm kullanıcılar zaten bu oturuma eklenmiş.</translation>
+<translation id="5457599981699367932">Misafir olarak Göz At</translation>
 <translation id="553675580533261935">Oturum kapatılıyor</translation>
 <translation id="5548285847212963613">"<ph name="EXTENSION_NAME" />" uzantısı bu ağa bağlanmaya yardımcı olabilir.</translation>
 <translation id="5571066253365925590">Bluetooth etkin</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Dokunarak sürükleme</translation>
 <translation id="5777841717266010279">Ekran paylaşma durdurulsun mu?</translation>
 <translation id="57838592816432529">Sesi kapat</translation>
+<translation id="5832805196449965646">Kişi Ekle</translation>
 <translation id="5860033963881614850">Kapalı</translation>
 <translation id="5895138241574237353">Yeniden başlat</translation>
 <translation id="5901316534475909376">Üst Karakter+Esc</translation>
@@ -274,6 +276,7 @@ Bu özelliği sadece güvendiğiniz hesaplarda kullanın.</translation>
 <translation id="7829386189513694949">Güçlü sinyal</translation>
 <translation id="7904094684485781019">Bu hesabın yöneticisi, çoklu oturum açmayı engelledi.</translation>
 <translation id="7933084174919150729">Google Asistan yalnızca birincil profilde kullanılabilir.</translation>
+<translation id="79341161159229895">Hesap <ph name="FIRST_PARENT_EMAIL" /> ve <ph name="SECOND_PARENT_EMAIL" /> tarafından yönetiliyor</translation>
 <translation id="7977927628060636163">Mobil ağlar aranıyor...</translation>
 <translation id="7982789257301363584">Ağ</translation>
 <translation id="7994370417837006925">Çoklu oturum açma</translation>
@@ -290,6 +293,7 @@ Bu özelliği sadece güvendiğiniz hesaplarda kullanın.</translation>
 <translation id="8261506727792406068">Sil</translation>
 <translation id="8308637677604853869">Önceki menü</translation>
 <translation id="8351131234907093545">Not oluştur</translation>
+<translation id="8392451568018454956"><ph name="USER_EMAIL_ADDRESS" /> seçenekler menüsü</translation>
 <translation id="8428213095426709021">Ayarlar</translation>
 <translation id="8433186206711564395">Ağ ayarları</translation>
 <translation id="8433977262951327081">Giriş seçenekleri menüsü balonunu rafta görüntüleme kısa yolu değişti. <ph name="OLD_SHORTCUT" /> yerine <ph name="NEW_SHORTCUT" /> kısayolunu kullanın.</translation>

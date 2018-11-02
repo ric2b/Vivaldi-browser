@@ -13,8 +13,7 @@
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/frame/WebLocalFrameImpl.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
-#include "core/layout/api/LayoutItem.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -54,8 +53,6 @@ void RemoteFrameClientImpl::Trace(blink::Visitor* visitor) {
 bool RemoteFrameClientImpl::InShadowTree() const {
   return web_frame_->InShadowTree();
 }
-
-void RemoteFrameClientImpl::WillBeDetached() {}
 
 void RemoteFrameClientImpl::Detached(FrameDetachType type) {
   // Alert the client that the frame is being detached.
@@ -105,6 +102,13 @@ void RemoteFrameClientImpl::FrameFocused() const {
     web_frame_->Client()->FrameFocused();
 }
 
+String RemoteFrameClientImpl::GetDevToolsFrameToken() const {
+  if (web_frame_->Client()) {
+    return web_frame_->Client()->GetDevToolsFrameToken();
+  }
+  return g_empty_string;
+}
+
 void RemoteFrameClientImpl::Navigate(const ResourceRequest& request,
                                      bool should_replace_current_entry) {
   if (web_frame_->Client()) {
@@ -133,7 +137,7 @@ unsigned RemoteFrameClientImpl::BackForwardLength() {
 
 void RemoteFrameClientImpl::ForwardPostMessage(
     MessageEvent* event,
-    scoped_refptr<SecurityOrigin> target,
+    scoped_refptr<const SecurityOrigin> target,
     LocalFrame* source_frame) const {
   if (web_frame_->Client()) {
     web_frame_->Client()->ForwardPostMessage(
@@ -142,8 +146,10 @@ void RemoteFrameClientImpl::ForwardPostMessage(
   }
 }
 
-void RemoteFrameClientImpl::FrameRectsChanged(const IntRect& frame_rect) {
-  web_frame_->Client()->FrameRectsChanged(frame_rect);
+void RemoteFrameClientImpl::FrameRectsChanged(
+    const IntRect& local_frame_rect,
+    const IntRect& screen_space_rect) {
+  web_frame_->Client()->FrameRectsChanged(local_frame_rect, screen_space_rect);
 }
 
 void RemoteFrameClientImpl::UpdateRemoteViewportIntersection(

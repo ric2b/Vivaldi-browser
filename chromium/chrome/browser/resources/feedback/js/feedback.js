@@ -321,6 +321,8 @@ function initialize() {
       }
 
       $('description-text').textContent = feedbackInfo.description;
+      if (feedbackInfo.descriptionPlaceholder)
+        $('description-text').placeholder = feedbackInfo.descriptionPlaceholder;
       if (feedbackInfo.pageUrl)
         $('page-url-text').value = feedbackInfo.pageUrl;
 

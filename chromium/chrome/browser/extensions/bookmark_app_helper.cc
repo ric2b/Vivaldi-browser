@@ -12,7 +12,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -420,7 +419,7 @@ void BookmarkAppHelper::GenerateIcon(
     return;
 
   gfx::ImageSkia icon_image(
-      base::MakeUnique<GeneratedIconImageSource>(letter, color, output_size),
+      std::make_unique<GeneratedIconImageSource>(letter, color, output_size),
       gfx::Size(output_size, output_size));
   SkBitmap& dst = (*bitmaps)[output_size].bitmap;
   if (dst.tryAllocPixels(icon_image.bitmap()->info())) {
@@ -531,12 +530,14 @@ BookmarkAppHelper::BitmapAndSource::~BitmapAndSource() {
 
 BookmarkAppHelper::BookmarkAppHelper(Profile* profile,
                                      WebApplicationInfo web_app_info,
-                                     content::WebContents* contents)
+                                     content::WebContents* contents,
+                                     WebappInstallSource install_source)
     : profile_(profile),
       contents_(contents),
       web_app_info_(web_app_info),
       crx_installer_(extensions::CrxInstaller::CreateSilent(
           ExtensionSystem::Get(profile)->extension_service())),
+      install_source_(install_source),
       weak_factory_(this) {
   if (contents)
     installable_manager_ = InstallableManager::FromWebContents(contents);
@@ -729,6 +730,11 @@ void BookmarkAppHelper::OnBubbleCompleted(
   if (user_accepted) {
     web_app_info_ = web_app_info;
     crx_installer_->InstallWebApp(web_app_info_);
+
+    if (InstallableMetrics::IsReportableInstallSource(install_source_) &&
+        installable_ == INSTALLABLE_YES) {
+      InstallableMetrics::TrackInstallEvent(install_source_);
+    }
   } else {
     callback_.Run(nullptr, web_app_info_);
   }

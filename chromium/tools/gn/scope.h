@@ -22,6 +22,7 @@
 class Item;
 class ParseNode;
 class Settings;
+class SourceFile;
 class Template;
 
 // Scope for the script execution.
@@ -44,9 +45,16 @@ class Scope {
 
   // <Vivaldi>
   typedef std::pair<const ParseNode *, std::unique_ptr<Scope>>
-            ProcessParseListElement;
-  typedef std::vector<ProcessParseListElement> ProcessParseList;
-  typedef std::map<std::string, ProcessParseList> ProcessParseMap;
+            UpdateParseListElement;
+  typedef std::vector<UpdateParseListElement> UpdateParseList;
+  struct UpdateParseItem {
+    bool used = false;
+    UpdateParseList updates;
+
+    UpdateParseItem();
+    ~UpdateParseItem();
+  };
+  typedef std::map<std::string, UpdateParseItem> UpdateParseMap;
   // </Vivaldi>
 
   // A flag to indicate whether a function should recurse into nested scopes,
@@ -295,6 +303,15 @@ class Scope {
   const SourceDir& GetSourceDir() const;
   void set_source_dir(const SourceDir& d) { source_dir_ = d; }
 
+  // Set of files that may affect the execution of this scope. Note that this
+  // set is constructed conservatively, meanining that every file that can
+  // potentially affect this scope is included, but not necessarily every change
+  // to these files will affect this scope.
+  const std::set<SourceFile>& build_dependency_files() const {
+    return build_dependency_files_;
+  }
+  void AddBuildDependencyFile(const SourceFile& build_dependency_file);
+
   // The item collector is where Items (Targets, Configs, etc.) go that have
   // been defined. If a scope can generate items, this non-owning pointer will
   // point to the storage for such items. The creator of this scope will be
@@ -329,18 +346,13 @@ class Scope {
   void* GetProperty(const void* key, const Scope** found_on_scope) const;
 
   // <Vivaldi>
-  static ProcessParseMap &GetTargetPreProcessing() {
-    return target_pre_process_list;
+  static UpdateParseMap &GetTargetPostProcessing() {
+    return target_update_list;
   }
-  static ProcessParseMap &GetTargetPostProcessing() {
-    return target_post_process_list;
+  static UpdateParseMap &GetTemplatePostProcessing() {
+    return template_update_list;
   }
-  static ProcessParseMap &GetTemplatePreProcessing() {
-    return template_pre_process_list;
-  }
-  static ProcessParseMap &GetTemplatePostProcessing() {
-    return template_post_process_list;
-  }
+  static bool VerifyAllUpdatesUsed(Err *err);
   // </Vivaldi>
 
  private:
@@ -405,11 +417,11 @@ class Scope {
 
   SourceDir source_dir_;
 
+  std::set<SourceFile> build_dependency_files_;
+
   // <Vivaldi>
-  static ProcessParseMap target_pre_process_list;
-  static ProcessParseMap target_post_process_list;
-  static ProcessParseMap template_pre_process_list;
-  static ProcessParseMap template_post_process_list;
+  static UpdateParseMap target_update_list;
+  static UpdateParseMap template_update_list;
   // </Vivaldi>
 
   DISALLOW_COPY_AND_ASSIGN(Scope);

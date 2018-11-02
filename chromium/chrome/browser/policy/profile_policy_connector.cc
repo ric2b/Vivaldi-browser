@@ -11,6 +11,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_manager.h"
@@ -55,7 +56,7 @@ void ProfilePolicyConnector::Init(
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
 #else
   DCHECK_EQ(nullptr, user);
-  BrowserPolicyConnector* connector =
+  ChromeBrowserPolicyConnector* connector =
       g_browser_process->browser_policy_connector();
 #endif
 
@@ -103,7 +104,10 @@ void ProfilePolicyConnector::Init(
   }
 #endif
 
-  policy_service_.reset(new PolicyServiceImpl(policy_providers_));
+  std::unique_ptr<PolicyServiceImpl> policy_service =
+      std::make_unique<PolicyServiceImpl>();
+  policy_service->SetProviders(policy_providers_);
+  policy_service_ = std::move(policy_service);
 
 #if defined(OS_CHROMEOS)
   if (is_primary_user_) {

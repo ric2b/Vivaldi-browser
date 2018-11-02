@@ -14,6 +14,7 @@
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_injection.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "v8/include/v8.h"
 
@@ -89,6 +90,13 @@ ScriptContext* ScriptContextSet::GetContextByV8Context(
     const v8::Local<v8::Context>& v8_context) {
   // g_context_set can be null in unittests.
   return g_context_set ? g_context_set->GetByV8Context(v8_context) : nullptr;
+}
+
+ScriptContext* ScriptContextSet::GetMainWorldContextForFrame(
+    content::RenderFrame* render_frame) {
+  v8::HandleScope handle_scope(blink::MainThreadIsolate());
+  return GetContextByV8Context(
+      render_frame->GetWebFrame()->MainWorldScriptContext());
 }
 
 void ScriptContextSet::ForEach(

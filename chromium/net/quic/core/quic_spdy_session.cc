@@ -121,7 +121,7 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnSetting(SpdySettingsIds id, uint32_t value) override {
-    if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
+    if (!GetQuicReloadableFlag(quic_respect_http2_settings_frame)) {
       CloseConnection("SPDY SETTINGS frame received.",
                       QUIC_INVALID_HEADERS_STREAM_DATA);
       return;
@@ -150,7 +150,7 @@ class QuicSpdySession::SpdyFramerVisitor
       // TODO(fayang): Need to support SETTINGS_MAX_HEADER_LIST_SIZE when
       // clients are actually sending it.
       case SETTINGS_MAX_HEADER_LIST_SIZE:
-        if (FLAGS_quic_reloadable_flag_quic_send_max_header_list_size) {
+        if (GetQuicReloadableFlag(quic_send_max_header_list_size)) {
           break;
         }
       default:
@@ -161,14 +161,14 @@ class QuicSpdySession::SpdyFramerVisitor
   }
 
   void OnSettingsAck() override {
-    if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
+    if (!GetQuicReloadableFlag(quic_respect_http2_settings_frame)) {
       CloseConnection("SPDY SETTINGS frame received.",
                       QUIC_INVALID_HEADERS_STREAM_DATA);
     }
   }
 
   void OnSettingsEnd() override {
-    if (!FLAGS_quic_reloadable_flag_quic_respect_http2_settings_frame) {
+    if (!GetQuicReloadableFlag(quic_respect_http2_settings_frame)) {
       CloseConnection("SPDY SETTINGS frame received.",
                       QUIC_INVALID_HEADERS_STREAM_DATA);
     }
@@ -296,10 +296,11 @@ QuicSpdySession::QuicSpdySession(QuicConnection* connection,
       supports_push_promise_(perspective() == Perspective::IS_CLIENT),
       cur_max_timestamp_(QuicTime::Zero()),
       prev_max_timestamp_(QuicTime::Zero()),
-      use_hq_deframer_(FLAGS_quic_reloadable_flag_quic_enable_hq_deframer),
+      use_hq_deframer_(GetQuicReloadableFlag(quic_enable_hq_deframer)),
       spdy_framer_(SpdyFramer::ENABLE_COMPRESSION),
       spdy_framer_visitor_(new SpdyFramerVisitor(this)) {
   if (use_hq_deframer_) {
+    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_enable_hq_deframer);
     hq_deframer_.set_visitor(spdy_framer_visitor_.get());
     hq_deframer_.set_debug_visitor(spdy_framer_visitor_.get());
   } else {
@@ -399,10 +400,21 @@ size_t QuicSpdySession::WriteHeaders(
     SpdyHeaderBlock headers,
     bool fin,
     SpdyPriority priority,
-    QuicReferenceCountedPointer<QuicAckListenerInterface>
-        ack_notifier_delegate) {
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+  return WriteHeadersImpl(id, std::move(headers), fin, priority, 0, false,
+                          std::move(ack_listener));
+}
+
+size_t QuicSpdySession::WriteHeaders(
+    QuicStreamId id,
+    SpdyHeaderBlock headers,
+    bool fin,
+    SpdyPriority priority,
+    QuicStreamId parent_stream_id,
+    bool exclusive,
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   return WriteHeadersImpl(id, std::move(headers), fin, priority,
-                          std::move(ack_notifier_delegate));
+                          parent_stream_id, exclusive, std::move(ack_listener));
 }
 
 size_t QuicSpdySession::WriteHeadersImpl(
@@ -410,18 +422,32 @@ size_t QuicSpdySession::WriteHeadersImpl(
     SpdyHeaderBlock headers,
     bool fin,
     SpdyPriority priority,
-    QuicReferenceCountedPointer<QuicAckListenerInterface>
-        ack_notifier_delegate) {
+    QuicStreamId parent_stream_id,
+    bool exclusive,
+    QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   SpdyHeadersIR headers_frame(id, std::move(headers));
   headers_frame.set_fin(fin);
   if (perspective() == Perspective::IS_CLIENT) {
     headers_frame.set_has_priority(true);
     headers_frame.set_weight(Spdy3PriorityToHttp2Weight(priority));
+    headers_frame.set_parent_stream_id(parent_stream_id);
+    headers_frame.set_exclusive(exclusive);
   }
   SpdySerializedFrame frame(spdy_framer_.SerializeFrame(headers_frame));
   headers_stream_->WriteOrBufferData(
       QuicStringPiece(frame.data(), frame.size()), false,
-      std::move(ack_notifier_delegate));
+      std::move(ack_listener));
+  return frame.size();
+}
+
+size_t QuicSpdySession::WritePriority(QuicStreamId id,
+                                      QuicStreamId parent_stream_id,
+                                      int weight,
+                                      bool exclusive) {
+  SpdyPriorityIR priority_frame(id, parent_stream_id, weight, exclusive);
+  SpdySerializedFrame frame(spdy_framer_.SerializeFrame(priority_frame));
+  headers_stream_->WriteOrBufferData(
+      QuicStringPiece(frame.data(), frame.size()), false, nullptr);
   return frame.size();
 }
 
@@ -480,7 +506,7 @@ QuicSpdyStream* QuicSpdySession::GetSpdyDataStream(
 
 void QuicSpdySession::OnCryptoHandshakeEvent(CryptoHandshakeEvent event) {
   QuicSession::OnCryptoHandshakeEvent(event);
-  if (FLAGS_quic_reloadable_flag_quic_send_max_header_list_size &&
+  if (GetQuicReloadableFlag(quic_send_max_header_list_size) &&
       event == HANDSHAKE_CONFIRMED && config()->SupportMaxHeaderListSize()) {
     SendMaxHeaderListSize(max_inbound_header_list_size_);
   }

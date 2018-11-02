@@ -73,7 +73,6 @@
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
-#include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -81,7 +80,6 @@
 #include "third_party/WebKit/public/platform/modules/app_banner/app_banner.mojom.h"
 #include "third_party/WebKit/public/web/WebArrayBufferView.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
-#include "third_party/WebKit/public/web/WebDevToolsAgent.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
@@ -99,7 +97,6 @@
 using blink::Platform;
 using blink::WebArrayBufferView;
 using blink::WebContextMenuData;
-using blink::WebDevToolsAgent;
 using device::MotionData;
 using device::OrientationData;
 using blink::WebElement;
@@ -116,7 +113,6 @@ using blink::WebURL;
 using blink::WebURLError;
 using blink::WebURLRequest;
 using blink::WebTestingSupport;
-using blink::WebTraceLocation;
 using blink::WebThread;
 using blink::WebVector;
 using blink::WebView;
@@ -407,36 +403,12 @@ void BlinkTestRunner::DisableAutoResizeMode(const WebSize& new_size) {
     ForceResizeRenderView(render_view(), new_size);
 }
 
-void BlinkTestRunner::ClearDevToolsLocalStorage() {
-  Send(new ShellViewHostMsg_ClearDevToolsLocalStorage(routing_id()));
+void BlinkTestRunner::NavigateSecondaryWindow(const GURL& url) {
+  Send(new ShellViewHostMsg_NavigateSecondaryWindow(routing_id(), url));
 }
 
-void BlinkTestRunner::ShowDevTools(const std::string& settings,
-                                   const std::string& frontend_url) {
-  Send(new ShellViewHostMsg_ShowDevTools(
-      routing_id(), settings, frontend_url));
-}
-
-void BlinkTestRunner::CloseDevTools() {
-  Send(new ShellViewHostMsg_CloseDevTools(routing_id()));
-  render_view()->GetMainRenderFrame()->DetachDevToolsForTest();
-}
-
-void BlinkTestRunner::EvaluateInWebInspector(int call_id,
-                                             const std::string& script) {
-  Send(new ShellViewHostMsg_EvaluateInDevTools(
-      routing_id(), call_id, script));
-}
-
-std::string BlinkTestRunner::EvaluateInWebInspectorOverlay(
-    const std::string& script) {
-  WebDevToolsAgent* agent =
-      render_view()->GetMainRenderFrame()->GetWebFrame()->DevToolsAgent();
-  if (!agent)
-    return std::string();
-
-  return agent->EvaluateInWebInspectorOverlay(WebString::FromUTF8(script))
-      .Utf8();
+void BlinkTestRunner::InspectSecondaryWindow() {
+  Send(new LayoutTestHostMsg_InspectSecondaryWindow(routing_id()));
 }
 
 void BlinkTestRunner::ClearAllDatabases() {
@@ -620,11 +592,9 @@ bool BlinkTestRunner::AllowExternalPages() {
 }
 
 void BlinkTestRunner::FetchManifest(
-      blink::WebView* view,
-      const GURL& url,
-      const base::Callback<void(const blink::WebURLResponse& response,
-                                const std::string& data)>& callback) {
-  ::content::FetchManifest(view, url, callback);
+    blink::WebView* view,
+    base::OnceCallback<void(const GURL&, const Manifest&)> callback) {
+  ::content::FetchManifest(view, std::move(callback));
 }
 
 void BlinkTestRunner::SetPermission(const std::string& name,

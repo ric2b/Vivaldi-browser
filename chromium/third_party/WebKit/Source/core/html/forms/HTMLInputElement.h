@@ -105,6 +105,10 @@ class CORE_EXPORT HTMLInputElement
   // isRadio, isFile.  If you want to check the input type, you may use
   // |input->type() == InputTypeNames::image|, etc.
 
+  // Returns whether this field is or has ever been a password field so that
+  // its value can be protected from memorization by autofill or keyboards.
+  bool HasBeenPasswordField() const;
+
   bool checked() const;
   void setChecked(bool, TextFieldEventBehavior = kDispatchNoEvent);
   void DispatchChangeEventIfNeeded();
@@ -118,7 +122,7 @@ class CORE_EXPORT HTMLInputElement
   bool ShouldAppearChecked() const;
   bool ShouldAppearIndeterminate() const override;
 
-  int size() const;
+  unsigned size() const;
   bool SizeShouldIncludeDecoration(int& preferred_size) const;
 
   void setType(const AtomicString&);
@@ -198,7 +202,6 @@ class CORE_EXPORT HTMLInputElement
   Vector<String> AcceptFileExtensions() const;
   const AtomicString& Alt() const;
 
-  void setSize(unsigned);
   void setSize(unsigned, ExceptionState&);
 
   KURL Src() const;
@@ -296,6 +299,8 @@ class CORE_EXPORT HTMLInputElement
   bool SupportsPlaceholder() const final;
   String GetPlaceholderValue() const final;
 
+  void ChildrenChanged(const ChildrenChange&) override;
+
  protected:
   HTMLInputElement(Document&, bool created_by_parser);
 
@@ -368,7 +373,6 @@ class CORE_EXPORT HTMLInputElement
 
   void UpdatePlaceholderText() final;
   bool IsEmptyValue() const final { return InnerEditorValue().IsEmpty(); }
-  void HandleFocusEvent(Element* old_focused_element, WebFocusType) final;
   void HandleBlurEvent() final;
   void DispatchFocusInEvent(const AtomicString& event_type,
                             Element* old_focused_element,
@@ -402,7 +406,7 @@ class CORE_EXPORT HTMLInputElement
   AtomicString name_;
   // The value string in |value| value mode.
   String non_attribute_value_;
-  int size_;
+  unsigned size_;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-input-value-dirty-flag
   unsigned has_dirty_value_ : 1;
   // https://html.spec.whatwg.org/multipage/forms.html#concept-fe-checked
@@ -419,6 +423,7 @@ class CORE_EXPORT HTMLInputElement
   unsigned should_reveal_password_ : 1;
   unsigned needs_to_update_view_value_ : 1;
   unsigned is_placeholder_visible_ : 1;
+  unsigned has_been_password_field_ : 1;
   Member<InputType> input_type_;
   Member<InputTypeView> input_type_view_;
   // The ImageLoader must be owned by this element because the loader code

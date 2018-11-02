@@ -48,6 +48,7 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   void OnGestureEvent(ui::GestureEvent* event) override;
   void AboutToRequestFocusFromTabTraversal(bool reverse) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void Layout() override;
   void ChildPreferredSizeChanged(views::View* child) override;
 
   // ActionableView:
@@ -131,6 +132,12 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
   // based on background insets returned from GetBackgroundInsets().
   gfx::Rect GetBackgroundBounds() const;
 
+  aura::Window* clipping_window_for_test() const {
+    return clipping_window_.get();
+  }
+
+  TrayDragController* drag_controller() { return drag_controller_.get(); }
+
  protected:
   // ActionableView:
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
@@ -140,7 +147,6 @@ class ASH_EXPORT TrayBackgroundView : public ActionableView,
                                  const ui::Event& event) override;
   views::PaintInfo::ScaleType GetPaintScaleType() const override;
 
-  TrayDragController* drag_controller() { return drag_controller_.get(); }
   void set_drag_controller(
       std::unique_ptr<TrayDragController> drag_controller) {
     drag_controller_ = std::move(drag_controller);

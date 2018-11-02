@@ -167,11 +167,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   virtual int PixelSnappedOffsetHeight(const Element*) const;
 
   bool HasSelfPaintingLayer() const;
-  PaintLayer* Layer() const {
-    return FirstFragment().GetRarePaintData()
-               ? FirstFragment().GetRarePaintData()->Layer()
-               : nullptr;
-  }
+  PaintLayer* Layer() const { return FirstFragment().Layer(); }
   // The type of PaintLayer to instantiate. Any value returned from this
   // function other than NoPaintLayer will lead to a PaintLayer being created.
   virtual PaintLayerType LayerTypeRequired() const = 0;
@@ -274,7 +270,7 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
                              BorderLeft());
   }
 
-  virtual LayoutRectOutsets PaddingOutsets() const {
+  LayoutRectOutsets PaddingOutsets() const {
     return LayoutRectOutsets(PaddingTop(), PaddingRight(), PaddingBottom(),
                              PaddingLeft());
   }
@@ -417,8 +413,6 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   const LayoutObject* PushMappingToContainer(
       const LayoutBoxModelObject* ancestor_to_stop_at,
       LayoutGeometryMap&) const override;
-
-  void SetSelectionState(SelectionState) override;
 
   void ContentChanged(ContentChangeType);
   bool HasAcceleratedCompositing() const;

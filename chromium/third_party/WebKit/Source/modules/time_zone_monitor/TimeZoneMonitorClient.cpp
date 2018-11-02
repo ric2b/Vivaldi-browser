@@ -51,7 +51,7 @@ TimeZoneMonitorClient::TimeZoneMonitorClient() : binding_(this) {
   DCHECK(IsMainThread());
 }
 
-TimeZoneMonitorClient::~TimeZoneMonitorClient() {}
+TimeZoneMonitorClient::~TimeZoneMonitorClient() = default;
 
 void TimeZoneMonitorClient::OnTimeZoneChange(const String& time_zone_info) {
   DCHECK(IsMainThread());
@@ -74,10 +74,10 @@ void TimeZoneMonitorClient::OnTimeZoneChange(const String& time_zone_info) {
     // among multiple WorkerThreads.
     if (posted.Contains(&thread->GetWorkerBackingThread()))
       continue;
-    thread->GetTaskRunner(TaskType::kUnspecedTimer)
-        ->PostTask(BLINK_FROM_HERE,
-                   CrossThreadBind(&NotifyTimezoneChangeOnWorkerThread,
-                                   WTF::CrossThreadUnretained(thread)));
+    PostCrossThreadTask(*thread->GetTaskRunner(TaskType::kUnspecedTimer),
+                        FROM_HERE,
+                        CrossThreadBind(&NotifyTimezoneChangeOnWorkerThread,
+                                        WTF::CrossThreadUnretained(thread)));
     posted.insert(&thread->GetWorkerBackingThread());
   }
 }

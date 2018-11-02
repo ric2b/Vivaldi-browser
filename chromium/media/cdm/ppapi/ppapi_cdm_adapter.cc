@@ -334,6 +334,9 @@ PP_CdmMessageType CdmMessageTypeToPpMessageType(cdm::MessageType message) {
       return PP_CDMMESSAGETYPE_LICENSE_RENEWAL;
     case cdm::kLicenseRelease:
       return PP_CDMMESSAGETYPE_LICENSE_RELEASE;
+    case cdm::kIndividualizationRequest:
+      PP_NOTREACHED();
+      return PP_CDMMESSAGETYPE_LICENSE_REQUEST;
   }
 
   PP_NOTREACHED();
@@ -458,7 +461,7 @@ void PpapiCdmAdapter::Initialize(uint32_t promise_id,
   key_system_ = key_system;
   allow_distinctive_identifier_ = allow_distinctive_identifier;
   allow_persistent_state_ = allow_persistent_state;
-  cdm_->Initialize(allow_distinctive_identifier, allow_persistent_state);
+  cdm_->Initialize(allow_distinctive_identifier, allow_persistent_state, false);
   OnResolvePromise(promise_id);
 }
 
@@ -1386,9 +1389,9 @@ void* GetCdmHost(int host_interface_version, void* user_data) {
 
   PP_DCHECK(
       // Future version is not supported.
-      !IsSupportedCdmHostVersion(cdm::Host_9::kVersion + 1) &&
+      !IsSupportedCdmHostVersion(cdm::Host_10::kVersion + 1) &&
       // Current version is supported.
-      IsSupportedCdmHostVersion(cdm::Host_9::kVersion) &&
+      IsSupportedCdmHostVersion(cdm::Host_10::kVersion) &&
       // Include all previous supported versions (if any) here.
       IsSupportedCdmHostVersion(cdm::Host_8::kVersion) &&
       // One older than the oldest supported version is not supported.

@@ -7,16 +7,15 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/location.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/runtime_enabled_features.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_view_scheduler_impl.h"
 #include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
-#include "public/platform/WebTraceLocation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -26,17 +25,15 @@ namespace web_frame_scheduler_impl_unittest {
 
 class WebFrameSchedulerImplTest : public ::testing::Test {
  public:
-  WebFrameSchedulerImplTest() {}
-  ~WebFrameSchedulerImplTest() override {}
+  WebFrameSchedulerImplTest() = default;
+  ~WebFrameSchedulerImplTest() override = default;
 
   void SetUp() override {
-    clock_.reset(new base::SimpleTestTickClock());
-    clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
+    clock_.Advance(base::TimeDelta::FromMicroseconds(5000));
     mock_task_runner_ =
-        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), true);
-    scheduler_.reset(
-        new RendererSchedulerImpl(CreateTaskQueueManagerWithUnownedClockForTest(
-            nullptr, mock_task_runner_, clock_.get())));
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(&clock_, true);
+    scheduler_.reset(new RendererSchedulerImpl(
+        CreateTaskQueueManagerForTest(nullptr, mock_task_runner_, &clock_)));
     web_view_scheduler_.reset(
         new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(), false));
     web_frame_scheduler_ = web_view_scheduler_->CreateWebFrameSchedulerImpl(
@@ -71,7 +68,7 @@ class WebFrameSchedulerImplTest : public ::testing::Test {
     return web_frame_scheduler_->UnpausableTaskQueue();
   }
 
-  std::unique_ptr<base::SimpleTestTickClock> clock_;
+  base::SimpleTestTickClock clock_;
   scoped_refptr<cc::OrderedSimpleTaskRunner> mock_task_runner_;
   std::unique_ptr<RendererSchedulerImpl> scheduler_;
   std::unique_ptr<WebViewSchedulerImpl> web_view_scheduler_;
@@ -128,7 +125,7 @@ void RunRepeatingTask(scoped_refptr<TaskQueue> task_queue, int* run_count) {
 
   TaskQueue* task_queue_ptr = task_queue.get();
   task_queue_ptr->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(std::move(task_queue), run_count),
+      FROM_HERE, MakeRepeatingTask(std::move(task_queue), run_count),
       TimeDelta::FromMilliseconds(1));
 }
 
@@ -144,7 +141,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInForeground) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -158,7 +155,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInBackground) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -172,7 +169,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_SameOrigin) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -187,7 +184,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameVisible_CrossOrigin) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -202,7 +199,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -216,7 +213,7 @@ TEST_F(WebFrameSchedulerImplTest, PageInBackground_ThrottlingDisabled) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -232,7 +229,7 @@ TEST_F(WebFrameSchedulerImplTest,
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -242,20 +239,15 @@ TEST_F(WebFrameSchedulerImplTest,
 TEST_F(WebFrameSchedulerImplTest, PauseAndResume) {
   int counter = 0;
   LoadingTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&IncrementCounter, base::Unretained(&counter)));
+      FROM_HERE, base::Bind(&IncrementCounter, base::Unretained(&counter)));
   ThrottleableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&IncrementCounter, base::Unretained(&counter)));
+      FROM_HERE, base::Bind(&IncrementCounter, base::Unretained(&counter)));
   DeferrableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&IncrementCounter, base::Unretained(&counter)));
+      FROM_HERE, base::Bind(&IncrementCounter, base::Unretained(&counter)));
   PausableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&IncrementCounter, base::Unretained(&counter)));
+      FROM_HERE, base::Bind(&IncrementCounter, base::Unretained(&counter)));
   UnpausableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&IncrementCounter, base::Unretained(&counter)));
+      FROM_HERE, base::Bind(&IncrementCounter, base::Unretained(&counter)));
 
   web_frame_scheduler_->SetPaused(true);
 
@@ -326,7 +318,7 @@ TEST_F(WebFrameSchedulerImplTest, ThrottlingObserver) {
   web_view_scheduler_->SetPageVisible(false);
 
   // Wait 100 secs virtually and run pending tasks just in case.
-  clock_->Advance(base::TimeDelta::FromSeconds(100));
+  clock_.Advance(base::TimeDelta::FromSeconds(100));
   mock_task_runner_->RunUntilIdle();
 
   observer->CheckObserverState(throttled_count, not_throttled_count,

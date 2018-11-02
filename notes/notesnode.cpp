@@ -94,16 +94,11 @@ std::unique_ptr<base::Value> Notes_Node::Encode(
     value->SetString("url", temp);
     checksummer->UpdateChecksum(temp);
 
-    if (!note_icon_.content.empty())
-      value->Set("icon", note_icon_.Encode(checksummer));
-
     if (attachments_.size()) {
       std::unique_ptr<base::ListValue> attachments(new base::ListValue());
 
-      std::vector<Notes_attachment>::const_iterator item;
-      for (item = attachments_.begin(); item < attachments_.end(); item++) {
-        std::unique_ptr<base::Value> val(item->Encode(checksummer));
-        attachments->Append(std::move(val));
+      for (const auto& attachment : attachments_) {
+        attachments->Append(attachment.second.Encode(checksummer));
       }
 
       value->Set("attachments", std::move(attachments));
@@ -184,21 +179,17 @@ bool Notes_Node::Decode(const base::DictionaryValue& d_input,
       url_ = GURL(str);
     checksummer->UpdateChecksum(url_.possibly_invalid_spec());
 
-    const base::DictionaryValue* attachment = NULL;
-    if (d_input.GetDictionary("icon", &attachment) && attachment) {
-      if (!note_icon_.Decode(attachment, checksummer))
-        return false;
-    }
-
     const base::ListValue* attachments = NULL;
     if (d_input.GetList("attachments", &attachments) && attachments) {
       for (size_t i = 0; i < attachments->GetSize(); i++) {
         const base::DictionaryValue* d_att = NULL;
         if (attachments->GetDictionary(i, &d_att)) {
-          Notes_attachment item;
-          if (!item.Decode(d_att, checksummer))
+          std::unique_ptr<NoteAttachment> item(
+              NoteAttachment::Decode(d_att, checksummer));
+          if (!item)
             return false;
-          attachments_.push_back(item);
+          attachments_.insert(
+              std::make_pair(item->checksum(), std::move(*item)));
         }
       }
     }

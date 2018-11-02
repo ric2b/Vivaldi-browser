@@ -178,12 +178,12 @@ QuicConnection::QuicConnection(
     QuicPacketWriter* writer,
     bool owns_writer,
     Perspective perspective,
-    const QuicTransportVersionVector& supported_versions)
+    const ParsedQuicVersionVector& supported_versions)
     : framer_(supported_versions,
               helper->GetClock()->ApproximateNow(),
               perspective),
       server_reply_to_connectivity_probes_(
-          FLAGS_quic_reloadable_flag_quic_server_reply_to_connectivity_probing),
+          GetQuicReloadableFlag(quic_server_reply_to_connectivity_probing)),
       current_packet_content_(NO_FRAMES_RECEIVED),
       current_peer_migration_type_(NO_CHANGE),
       helper_(helper),
@@ -258,7 +258,7 @@ QuicConnection::QuicConnection(
           perspective,
           clock_,
           &stats_,
-          FLAGS_quic_reloadable_flag_quic_default_to_bbr ? kBBR : kCubicBytes,
+          GetQuicReloadableFlag(quic_default_to_bbr) ? kBBR : kCubicBytes,
           kNack),
       version_negotiation_state_(START_NEGOTIATION),
       perspective_(perspective),
@@ -361,7 +361,7 @@ void QuicConnection::SetFromConfig(const QuicConfig& config) {
   if (config.HasClientSentConnectionOption(k5RTO, perspective_)) {
     close_connection_after_five_rtos_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_enable_3rtos &&
+  if (GetQuicReloadableFlag(quic_enable_3rtos) &&
       config.HasClientSentConnectionOption(k3RTO, perspective_)) {
     QUIC_FLAG_COUNT(quic_reloadable_flag_quic_enable_3rtos);
     close_connection_after_three_rtos_ = true;
@@ -406,14 +406,14 @@ void QuicConnection::SetNumOpenStreams(size_t num_streams) {
 }
 
 bool QuicConnection::SelectMutualVersion(
-    const QuicTransportVersionVector& available_versions) {
+    const ParsedQuicVersionVector& available_versions) {
   // Try to find the highest mutual version by iterating over supported
   // versions, starting with the highest, and breaking out of the loop once we
   // find a matching version in the provided available_versions vector.
-  const QuicTransportVersionVector& supported_versions =
+  const ParsedQuicVersionVector& supported_versions =
       framer_.supported_versions();
   for (size_t i = 0; i < supported_versions.size(); ++i) {
-    const QuicTransportVersion& version = supported_versions[i];
+    const ParsedQuicVersion& version = supported_versions[i];
     if (QuicContainsValue(available_versions, version)) {
       framer_.set_version(version);
       return true;
@@ -452,9 +452,9 @@ void QuicConnection::OnPublicResetPacket(const QuicPublicResetPacket& packet) {
 }
 
 bool QuicConnection::OnProtocolVersionMismatch(
-    QuicTransportVersion received_version) {
+    ParsedQuicVersion received_version) {
   QUIC_DLOG(INFO) << ENDPOINT << "Received packet with mismatched version "
-                  << received_version;
+                  << ParsedQuicVersionToString(received_version);
   // TODO(satyamshekhar): Implement no server state in this mode.
   if (perspective_ == Perspective::IS_CLIENT) {
     const string error_details = "Protocol version mismatch.";
@@ -463,7 +463,7 @@ bool QuicConnection::OnProtocolVersionMismatch(
                                  ConnectionCloseSource::FROM_SELF);
     return false;
   }
-  DCHECK_NE(transport_version(), received_version);
+  DCHECK_NE(version(), received_version);
 
   if (debug_visitor_ != nullptr) {
     debug_visitor_->OnProtocolVersionMismatch(received_version);
@@ -495,11 +495,13 @@ bool QuicConnection::OnProtocolVersionMismatch(
   }
 
   version_negotiation_state_ = NEGOTIATED_VERSION;
-  visitor_->OnSuccessfulVersionNegotiation(received_version);
+  visitor_->OnSuccessfulVersionNegotiation(received_version.transport_version);
   if (debug_visitor_ != nullptr) {
-    debug_visitor_->OnSuccessfulVersionNegotiation(received_version);
+    debug_visitor_->OnSuccessfulVersionNegotiation(
+        received_version.transport_version);
   }
-  QUIC_DLOG(INFO) << ENDPOINT << "version negotiated " << received_version;
+  QUIC_DLOG(INFO) << ENDPOINT << "version negotiated "
+                  << ParsedQuicVersionToString(received_version);
 
   // Store the new version.
   framer_.set_version(received_version);
@@ -533,7 +535,7 @@ void QuicConnection::OnVersionNegotiationPacket(
     return;
   }
 
-  if (QuicContainsValue(packet.versions, transport_version())) {
+  if (QuicContainsValue(packet.versions, version())) {
     const string error_details =
         "Server already supports client's version and should have accepted the "
         "connection.";
@@ -551,9 +553,9 @@ void QuicConnection::OnVersionNegotiationPacket(
         QUIC_INVALID_VERSION,
         QuicStrCat(
             "No common version found. Supported versions: {",
-            QuicTransportVersionVectorToString(framer_.supported_versions()),
+            ParsedQuicVersionVectorToString(framer_.supported_versions()),
             "}, peer supported versions: {",
-            QuicTransportVersionVectorToString(packet.versions), "}"),
+            ParsedQuicVersionVectorToString(packet.versions), "}"),
         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
     return;
   }
@@ -859,14 +861,12 @@ const char* QuicConnection::ValidateAckFrame(const QuicAckFrame& incoming_ack) {
     return "Largest observed too low.";
   }
 
-  // TODO(wub): Remove this check along with
-  // FLAGS_quic_reloadable_flag_quic_deprecate_largest_observed.
   if (!incoming_ack.packets.Empty() &&
       incoming_ack.packets.Max() != LargestAcked(incoming_ack)) {
     QUIC_BUG << ENDPOINT
              << "Peer last received packet: " << incoming_ack.packets.Max()
              << " which is not equal to largest observed: "
-             << incoming_ack.deprecated_largest_observed;
+             << incoming_ack.largest_acked;
     return "Last received packet not equal to largest observed.";
   }
 
@@ -1161,7 +1161,7 @@ void QuicConnection::SendVersionNegotiationPacket() {
     return;
   }
   QUIC_DLOG(INFO) << ENDPOINT << "Sending version negotiation packet: {"
-                  << QuicTransportVersionVectorToString(
+                  << ParsedQuicVersionVectorToString(
                          framer_.supported_versions())
                   << "}";
   std::unique_ptr<QuicEncryptedPacket> version_packet(
@@ -1219,10 +1219,7 @@ void QuicConnection::SendRstStream(QuicStreamId id,
     return;
   }
   // Flush stream frames of reset stream.
-  if (FLAGS_quic_reloadable_flag_quic_remove_on_stream_frame_discarded &&
-      packet_generator_.HasPendingStreamFramesOfStream(id)) {
-    QUIC_FLAG_COUNT_N(
-        quic_reloadable_flag_quic_remove_on_stream_frame_discarded, 2, 2);
+  if (packet_generator_.HasPendingStreamFramesOfStream(id)) {
     packet_generator_.FlushAllQueuedFrames();
   }
 
@@ -1414,7 +1411,7 @@ bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
     if (self_address_.port() != last_packet_destination_address_.port() ||
         self_address_.host().Normalized() !=
             last_packet_destination_address_.host().Normalized()) {
-      if (!FLAGS_quic_reloadable_flag_quic_allow_address_change_for_udp_proxy ||
+      if (!GetQuicReloadableFlag(quic_allow_address_change_for_udp_proxy) ||
           !visitor_->AllowSelfAddressChange()) {
         CloseConnection(
             QUIC_ERROR_MIGRATING_ADDRESS,
@@ -1426,7 +1423,7 @@ bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
     self_address_ = last_packet_destination_address_;
   }
 
-  if (FLAGS_quic_restart_flag_quic_enable_accept_random_ipn) {
+  if (GetQuicRestartFlag(quic_enable_accept_random_ipn)) {
     QUIC_FLAG_COUNT_N(quic_restart_flag_quic_enable_accept_random_ipn, 2, 2);
     // Configured to accept any packet number in range 1...0x7fffffff
     // as initial packet number.
@@ -1488,7 +1485,7 @@ bool QuicConnection::ProcessValidatedPacket(const QuicPacketHeader& header) {
                         ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
         return false;
       } else {
-        DCHECK_EQ(header.version, transport_version());
+        DCHECK_EQ(header.version, version());
         version_negotiation_state_ = NEGOTIATED_VERSION;
         visitor_->OnSuccessfulVersionNegotiation(transport_version());
         if (debug_visitor_ != nullptr) {
@@ -2017,6 +2014,11 @@ void QuicConnection::SetDiversificationNonce(
 }
 
 void QuicConnection::SetDefaultEncryptionLevel(EncryptionLevel level) {
+  if (level != encryption_level_ && packet_generator_.HasQueuedFrames()) {
+    // Flush all queued frames when encryption level changes.
+    ScopedPacketFlusher flusher(this, NO_ACK);
+    packet_generator_.FlushAllQueuedFrames();
+  }
   encryption_level_ = level;
   packet_generator_.set_encryption_level(level);
 }
@@ -2250,7 +2252,7 @@ void QuicConnection::CheckForTimeout() {
   if (idle_duration >= idle_network_timeout_) {
     const string error_details = "No recent network activity.";
     QUIC_DVLOG(1) << ENDPOINT << error_details;
-    if (FLAGS_quic_reloadable_flag_quic_explicit_close_after_tlp &&
+    if (GetQuicReloadableFlag(quic_explicit_close_after_tlp) &&
         (sent_packet_manager_.GetConsecutiveTlpCount() > 0 ||
          sent_packet_manager_.GetConsecutiveRtoCount() > 0 ||
          visitor_->HasOpenDynamicStreams())) {
@@ -2357,15 +2359,19 @@ QuicConnection::ScopedPacketFlusher::ScopedPacketFlusher(
   // If caller wants us to include an ack, check the delayed-ack timer to see if
   // there's ack info to be sent.
   if (ShouldSendAck(ack_mode)) {
-    QUIC_DVLOG(1) << "Bundling ack with outgoing packet.";
-    DCHECK(ack_mode == SEND_ACK || connection_->ack_frame_updated() ||
-           connection_->stop_waiting_count_ > 1);
-    connection_->SendAck();
+    if (!GetQuicReloadableFlag(quic_strict_ack_handling) ||
+        !connection_->GetUpdatedAckFrame().ack_frame->packets.Empty()) {
+      QUIC_DVLOG(1) << "Bundling ack with outgoing packet.";
+      connection_->SendAck();
+    }
   }
 }
 
 bool QuicConnection::ScopedPacketFlusher::ShouldSendAck(
     AckBundling ack_mode) const {
+  // If the ack alarm is set, make sure the ack has been updated.
+  DCHECK(!connection_->ack_alarm_->IsSet() || connection_->ack_frame_updated())
+      << "ack_mode:" << ack_mode;
   switch (ack_mode) {
     case SEND_ACK:
       return true;
@@ -2588,8 +2594,13 @@ void QuicConnection::StartPeerMigration(
 
   // TODO(jri): Move these calls to OnPeerMigrationValidated. Rename
   // OnConnectionMigration methods to OnPeerMigration.
-  visitor_->OnConnectionMigration(peer_migration_type);
-  sent_packet_manager_.OnConnectionMigration(peer_migration_type);
+  OnConnectionMigration(peer_migration_type);
+}
+
+void QuicConnection::OnConnectionMigration(
+    PeerAddressChangeType addr_change_type) {
+  visitor_->OnConnectionMigration(addr_change_type);
+  sent_packet_manager_.OnConnectionMigration(addr_change_type);
 }
 
 bool QuicConnection::ack_frame_updated() const {
@@ -2730,9 +2741,9 @@ void QuicConnection::UpdatePacketContent(PacketContent type) {
   current_peer_migration_type_ = NO_CHANGE;
 }
 
-void QuicConnection::SetStreamNotifier(
-    StreamNotifierInterface* stream_notifier) {
-  sent_packet_manager_.SetStreamNotifier(stream_notifier);
+void QuicConnection::SetSessionNotifier(
+    SessionNotifierInterface* session_notifier) {
+  sent_packet_manager_.SetSessionNotifier(session_notifier);
 }
 
 void QuicConnection::SetDataProducer(

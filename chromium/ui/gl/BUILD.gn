@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
+import("//ui/gl/features.gni")
 import("//ui/ozone/ozone.gni")
 import("//testing/test.gni")
 
@@ -25,7 +26,10 @@ if (is_android) {
 
 buildflag_header("gl_features") {
   header = "gl_features.h"
-  flags = [ "ENABLE_SWIFTSHADER=$enable_swiftshader" ]
+  flags = [
+    "ENABLE_SWIFTSHADER=$enable_swiftshader",
+    "USE_STATIC_ANGLE=$use_static_angle",
+  ]
 }
 
 config("gl_config") {
@@ -114,10 +118,14 @@ component("gl") {
     "gl_surface_osmesa.h",
     "gl_surface_overlay.cc",
     "gl_surface_overlay.h",
+    "gl_surface_presentation_helper.cc",
+    "gl_surface_presentation_helper.h",
     "gl_surface_stub.cc",
     "gl_surface_stub.h",
     "gl_switches.cc",
     "gl_switches.h",
+    "gl_switches_util.cc",
+    "gl_switches_util.h",
     "gl_utils.cc",
     "gl_utils.h",
     "gl_version_info.cc",
@@ -148,6 +156,9 @@ component("gl") {
 
   deps = [
     "//base/third_party/dynamic_annotations",
+
+    # Remove after fixing crbug.com/724999.
+    "//components/crash/core/common:crash_key",
 
     # ANGLE includes are used cross-platform.
     "//third_party/angle:includes",
@@ -196,9 +207,21 @@ component("gl") {
         "gl_image_ahardwarebuffer.cc",
         "gl_image_ahardwarebuffer.h",
       ]
+
+      if (use_static_angle) {
+        deps += [ "//third_party/angle:libEGL_static" ]
+      }
+    }
+
+    if (is_posix) {
+      # Windows has USE_EGL but doesn't support base::FileDescriptor
+      sources += [
+        "gl_fence_android_native_fence_sync.cc",
+        "gl_fence_android_native_fence_sync.h",
+      ]
     }
   }
-  if (is_android || is_linux) {
+  if (is_android || is_linux || is_fuchsia) {
     sources += [
       "gl_implementation_osmesa.cc",
       "gl_implementation_osmesa.h",
@@ -316,10 +339,15 @@ component("gl") {
 static_library("gl_unittest_utils") {
   testonly = true
   sources = [
+    "egl_bindings_autogen_mock.cc",
+    "egl_bindings_autogen_mock.h",
+    "egl_mock.cc",
+    "egl_mock.h",
     "gl_bindings_autogen_mock.cc",
     "gl_bindings_autogen_mock.h",
     "gl_mock.cc",
     "gl_mock.h",
+    "gl_mock_autogen_egl.h",
     "gl_mock_autogen_gl.h",
     "gpu_timing_fake.cc",
     "gpu_timing_fake.h",
@@ -339,6 +367,7 @@ static_library("test_support") {
   sources = [
     "test/gl_image_test_support.cc",
     "test/gl_image_test_support.h",
+    "test/gl_image_test_template.cc",
     "test/gl_image_test_template.h",
     "test/gl_surface_test_support.cc",
     "test/gl_surface_test_support.h",
@@ -431,6 +460,10 @@ test("gl_unittests") {
 
   if (is_android) {
     sources += [ "gl_image_ahardwarebuffer_unittest.cc" ]
+  }
+
+  if (is_desktop_linux) {
+    sources += [ "gl_image_native_pixmap_unittest.cc" ]
   }
 
   include_dirs = [ "//third_party/khronos" ]

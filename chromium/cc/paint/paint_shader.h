@@ -100,6 +100,8 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
       const SkMatrix* local_matrix,
       ScalingBehavior scaling_behavior = ScalingBehavior::kRasterAtScale);
 
+  static size_t GetSerializedSize(const PaintShader* shader);
+
   ~PaintShader() override;
 
   SkMatrix GetLocalMatrix() const {
@@ -134,8 +136,9 @@ class CC_PAINT_EXPORT PaintShader : public SkRefCnt {
   friend class PaintOpReader;
   friend class PaintOpSerializationTestUtils;
   friend class PaintOpWriter;
-  friend class ScopedImageFlags;
+  friend class ScopedRasterFlags;
   FRIEND_TEST_ALL_PREFIXES(PaintShaderTest, DecodePaintRecord);
+  FRIEND_TEST_ALL_PREFIXES(PaintOpBufferTest, PaintRecordShaderSerialization);
 
   explicit PaintShader(Type type);
 

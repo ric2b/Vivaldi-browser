@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//device/vr/features/features.gni")
 import("//testing/test.gni")
@@ -22,7 +23,7 @@ source_set("gfx_export") {
   ]
 }
 
-component("geometry_skia") {
+jumbo_component("geometry_skia") {
   sources = [
     "skia_util.cc",
     "skia_util.h",
@@ -42,7 +43,7 @@ component("geometry_skia") {
   defines = [ "GFX_IMPLEMENTATION" ]
 }
 
-component("gfx") {
+jumbo_component("gfx") {
   sources = [
     "android/java_bitmap.cc",
     "android/java_bitmap.h",
@@ -394,7 +395,7 @@ component("gfx") {
   }
 }
 
-component("color_space") {
+jumbo_component("color_space") {
   sources = [
     "color_space.cc",
     "color_space.h",
@@ -515,12 +516,18 @@ source_set("memory_buffer_sources") {
   sources = [
     "buffer_format_util.cc",
     "buffer_format_util.h",
+    "ca_layer_params.cc",
+    "ca_layer_params.h",
     "client_native_pixmap.h",
     "client_native_pixmap_factory.cc",
     "client_native_pixmap_factory.h",
     "generic_shared_memory_id.cc",
     "generic_shared_memory_id.h",
     "gfx_export.h",
+    "gpu_fence.cc",
+    "gpu_fence.h",
+    "gpu_fence_handle.cc",
+    "gpu_fence_handle.h",
     "native_pixmap.h",
     "native_pixmap_handle.cc",
     "native_pixmap_handle.h",
@@ -552,6 +559,8 @@ source_set("memory_buffer_sources") {
       "linux/client_native_pixmap_dmabuf.h",
       "linux/client_native_pixmap_factory_dmabuf.cc",
       "linux/client_native_pixmap_factory_dmabuf.h",
+      "linux/native_pixmap_dmabuf.cc",
+      "linux/native_pixmap_dmabuf.h",
     ]
 
     deps += [ "//third_party/libdrm" ]
@@ -568,7 +577,7 @@ source_set("memory_buffer_sources") {
 }
 
 # TODO(ccameron): This can be moved into a separate source_set.
-component("gfx_switches") {
+jumbo_component("gfx_switches") {
   sources = [
     "switches.cc",
     "switches.h",
@@ -600,8 +609,6 @@ static_library("test_support") {
     "test/gfx_util.h",
     "test/icc_profiles.cc",
     "test/icc_profiles.h",
-    "test/ui_cocoa_test_helper.h",
-    "test/ui_cocoa_test_helper.mm",
   ]
 
   public_deps = [
@@ -617,13 +624,6 @@ static_library("test_support") {
     "//ui/gfx/geometry",
   ]
 
-  if (is_ios) {
-    # The cocoa files don't apply to iOS.
-    sources -= [
-      "test/ui_cocoa_test_helper.h",
-      "test/ui_cocoa_test_helper.mm",
-    ]
-  }
   if (is_linux) {
     deps += [ "//third_party/fontconfig" ]
   }
@@ -796,6 +796,10 @@ test("gfx_unittests") {
       "//ui/gfx/mojo:test_interfaces",
       "//ui/gfx/range/mojo:unit_test",
     ]
+  }
+
+  if (is_linux) {
+    sources += [ "linux/native_pixmap_dmabuf_unittest.cc" ]
   }
 }
 

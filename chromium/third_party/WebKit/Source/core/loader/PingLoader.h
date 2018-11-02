@@ -33,12 +33,12 @@
 #define PingLoader_h
 
 #include <memory>
+
 #include "core/CoreExport.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/SelfKeepAlive.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebURLLoaderClient.h"
 
 namespace blink {
@@ -65,7 +65,6 @@ class CORE_EXPORT PingLoader {
     kXSSAuditorViolationReport
   };
 
-  static void LoadImage(LocalFrame*, const KURL&);
   static void SendLinkAuditPing(LocalFrame*,
                                 const KURL& ping_url,
                                 const KURL& destination_url);
@@ -77,14 +76,10 @@ class CORE_EXPORT PingLoader {
   // The last argument is guaranteed to be set to the size of payload if
   // these method return true. If these method returns false, the value
   // shouldn't be used.
-  static bool SendBeacon(LocalFrame*, int, const KURL&, const String&, size_t&);
-  static bool SendBeacon(LocalFrame*,
-                         int,
-                         const KURL&,
-                         DOMArrayBufferView*,
-                         size_t&);
-  static bool SendBeacon(LocalFrame*, int, const KURL&, Blob*, size_t&);
-  static bool SendBeacon(LocalFrame*, int, const KURL&, FormData*, size_t&);
+  static bool SendBeacon(LocalFrame*, const KURL&, const String&);
+  static bool SendBeacon(LocalFrame*, const KURL&, DOMArrayBufferView*);
+  static bool SendBeacon(LocalFrame*, const KURL&, Blob*);
+  static bool SendBeacon(LocalFrame*, const KURL&, FormData*);
 };
 
 }  // namespace blink

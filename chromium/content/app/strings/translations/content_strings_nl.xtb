@@ -22,10 +22,10 @@
 <translation id="1821985195704844674">boomstructuur</translation>
 <translation id="1822429046913737220">a.m./p.m.</translation>
 <translation id="1832974991323546415">afspelen op extern apparaat</translation>
-<translation id="1854180393107901205">Casten stoppen</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">status</translation>
 <translation id="1938124657309484470">Waarde moet <ph name="MAXIMUM_DATE_OR_TIME" /> of eerder zijn.</translation>
+<translation id="1993104285338243655">Overgeschakeld naar mirroring</translation>
 <translation id="2060505056492490888">'<ph name="DOT" />' wordt op een verkeerde positie gebruikt in '<ph name="INVALIDDOMAIN" />'.</translation>
 <translation id="2148716181193084225">Vandaag</translation>
 <translation id="2226276347425096477">Kort deze tekst in tot <ph name="MAX_CHARACTERS" /> tekens of minder (je gebruikt momenteel <ph name="CURRENT_LENGTH" /> tekens).</translation>
@@ -51,6 +51,7 @@
 <translation id="2940813599313844715">object</translation>
 <translation id="2942448076852699108">gemarkeerde content</translation>
 <translation id="3040011195152428237">link</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3075154866155599887">Voer een geldige waarde in. Het veld is onvolledig of bevat een ongeldige datum.</translation>
 <translation id="3078740164268491126">tabel</translation>
 <translation id="3086746722712840547">opmerking</translation>
@@ -63,6 +64,7 @@
 <translation id="3639613635497528239">aantal seconden van resterende film</translation>
 <translation id="3706100364254443312">schakelaar</translation>
 <translation id="3732799496749320381">mm</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3785482301506746191">scrollbar met tijd van de film</translation>
 <translation id="3808586225841795776">term</translation>
 <translation id="3822383571486410024">Breid deze tekst uit tot <ph name="MIN_CHARACTERS" /> tekens of meer (je gebruikt momenteel <ph name="CURRENT_LENGTH" /> tekens).</translation>
@@ -93,6 +95,7 @@
 <translation id="5117590920725113268">Volgende maand weergeven</translation>
 <translation id="512758898067543763">rijkop</translation>
 <translation id="5164977714490026579">Waarde moet groter dan of gelijk zijn aan <ph name="MINIMUM" />.</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Geef een naamgedeelte op, gevolgd door '<ph name="ATSIGN" />'. '<ph name="INVALIDADDRESS" />' is onvolledig.</translation>
 <translation id="5406322316791861025">figuur</translation>
 <translation id="5453733299334684579">item in boomstructuur</translation>
@@ -126,6 +129,7 @@
 <translation id="6643016212128521049">Wissen</translation>
 <translation id="668171684555832681">Anders...</translation>
 <translation id="6692633176391053278">stappenregelaar</translation>
+<translation id="6709570249143506788">Slechte afspeelkwaliteit</translation>
 <translation id="6755330956360078551">knopinfo</translation>
 <translation id="6790428901817661496">Spelen</translation>
 <translation id="6820355525329141109">Kan plug-in niet laden.</translation>
@@ -141,6 +145,7 @@
 <translation id="727747134524199931">kolomkop</translation>
 <translation id="7364796246159120393">Bestand kiezen</translation>
 <translation id="739024184232394898">Anders...</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7514365320538308">Downloaden</translation>
 <translation id="7673697353781729403">Uur</translation>
@@ -173,6 +178,8 @@
 <translation id="8785498733064193001">afspelen starten</translation>
 <translation id="8845239796550121995">Wordt nu gecast naar je tv</translation>
 <translation id="8851136666856101339">hoofd</translation>
+<translation id="8875657656876809964">Fout bij afspelen video</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" />  KB</translation>
 <translation id="8987927404178983737">Maand</translation>
 <translation id="901493112792887934">huidige tijd in seconden</translation>
 <translation id="9048119486235211610">navigatie</translation>
@@ -182,6 +189,7 @@
 <translation id="9132465097189459683">Anders...</translation>
 <translation id="9138385573473225930">melding</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, die begint op <ph name="WEEK_START_DATE" /></translation>
+<translation id="916607977885256133">Scherm-in-scherm</translation>
 <translation id="947831847158436616">cel</translation>
 <translation id="966787709310836684">menu</translation>
 </translationbundle>

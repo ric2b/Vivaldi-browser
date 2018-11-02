@@ -26,7 +26,7 @@
 #ifndef IDBKeyPath_h
 #define IDBKeyPath_h
 
-#include "bindings/modules/v8/string_or_string_sequence.h"
+#include "bindings/core/v8/string_or_string_sequence.h"
 #include "modules/ModulesExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
@@ -65,7 +65,7 @@ class MODULES_EXPORT IDBKeyPath {
     return array_;
   }
 
-  const String& GetString() const {
+  const String& String() const {
     DCHECK_EQ(type_, kStringType);
     return string_;
   }
@@ -76,8 +76,8 @@ class MODULES_EXPORT IDBKeyPath {
 
  private:
   Type type_;
-  String string_;
-  Vector<String> array_;
+  class String string_;
+  Vector<class String> array_;
 };
 
 }  // namespace blink

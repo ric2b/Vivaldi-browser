@@ -7,10 +7,12 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <map>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "ash/app_list/model/search_box_model.h"
+#include "ash/app_list/model/search/search_box_model.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
@@ -42,7 +44,6 @@
 #include "ui/app_list/views/search_result_view.h"
 #include "ui/app_list/views/suggestions_container_view.h"
 #include "ui/app_list/views/test/apps_grid_view_test_api.h"
-#include "ui/app_list/views/tile_item_view.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/events/event_utils.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -132,7 +133,7 @@ class AppListViewTest : public views::ViewsTestBase {
                 (contents_view->GetPageView(i)->GetPageBoundsForState(state) ==
                  contents_view->GetPageView(i)->bounds());
     }
-    return success && state == delegate_->GetTestModel()->state();
+    return success && state == delegate_->GetModel()->state();
   }
 
   // Checks the search box widget is at |expected| in the contents view's
@@ -185,9 +186,6 @@ class AppListViewFocusTest : public views::ViewsTestBase,
         base::i18n::SetICUDefaultLocale("he");
     }
 
-    // Enable app list focus.
-    scoped_feature_list_.InitAndEnableFeature(features::kEnableAppListFocus);
-
     // Initialize app list view.
     delegate_.reset(new AppListTestViewDelegate);
     view_ = new AppListView(delegate_.get());
@@ -201,8 +199,11 @@ class AppListViewFocusTest : public views::ViewsTestBase,
     const int kItemNumInFolder = 8;
     const int kAppListItemNum = test_api_->TilesPerPage(0) + 1;
     AppListTestModel* model = delegate_->GetTestModel();
-    for (size_t i = 0; i < kSuggestionAppNum; i++)
-      model->results()->Add(std::make_unique<TestStartPageSearchResult>());
+    SearchModel* search_model = delegate_->GetSearchModel();
+    for (size_t i = 0; i < kSuggestionAppNum; i++) {
+      search_model->results()->Add(
+          std::make_unique<TestStartPageSearchResult>());
+    }
     AppListFolderItem* folder_item =
         model->CreateAndPopulateFolderWithApps(kItemNumInFolder);
     model->PopulateApps(kAppListItemNum);
@@ -254,7 +255,8 @@ class AppListViewFocusTest : public views::ViewsTestBase,
     result_types.push_back(
         std::make_pair(SearchResult::DISPLAY_LIST, list_results_num));
 
-    AppListModel::SearchResults* results = delegate_->GetTestModel()->results();
+    SearchModel::SearchResults* results =
+        delegate_->GetSearchModel()->results();
     results->DeleteAll();
     double relevance = result_types.size();
     for (const auto& data : result_types) {
@@ -532,7 +534,7 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInHalfState) {
 
   // Type something in search box to transition to HALF state and populate
   // fake search results.
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   EXPECT_EQ(app_list_view()->app_list_state(), AppListViewState::HALF);
   constexpr int kTileResults = 3;
   constexpr int kListResults = 2;
@@ -550,11 +552,10 @@ TEST_P(AppListViewFocusTest, LinearFocusTraversalInHalfState) {
   forward_view_list.push_back(contents_view()
                                   ->search_result_answer_card_view_for_test()
                                   ->GetSearchAnswerContainerViewForTest());
-  views::View* results_container = contents_view()
-                                       ->search_result_list_view_for_test()
-                                       ->results_container_for_test();
+  SearchResultListView* list_view =
+      contents_view()->search_result_list_view_for_test();
   for (int i = 0; i < kListResults; ++i)
-    forward_view_list.push_back(results_container->child_at(i));
+    forward_view_list.push_back(list_view->GetResultViewAt(i));
   forward_view_list.push_back(search_box_view()->search_box());
   std::vector<views::View*> backward_view_list = forward_view_list;
   std::reverse(backward_view_list.begin(), backward_view_list.end());
@@ -689,7 +690,7 @@ TEST_F(AppListViewFocusTest, VerticalFocusTraversalInHalfState) {
 
   // Type something in search box to transition to HALF state and populate
   // fake search results.
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   EXPECT_EQ(app_list_view()->app_list_state(), AppListViewState::HALF);
   constexpr int kTileResults = 3;
   constexpr int kListResults = 2;
@@ -705,11 +706,10 @@ TEST_F(AppListViewFocusTest, VerticalFocusTraversalInHalfState) {
   forward_view_list.push_back(contents_view()
                                   ->search_result_answer_card_view_for_test()
                                   ->GetSearchAnswerContainerViewForTest());
-  views::View* results_container = contents_view()
-                                       ->search_result_list_view_for_test()
-                                       ->results_container_for_test();
+  SearchResultListView* list_view =
+      contents_view()->search_result_list_view_for_test();
   for (int i = 0; i < kListResults; ++i)
-    forward_view_list.push_back(results_container->child_at(i));
+    forward_view_list.push_back(list_view->GetResultViewAt(i));
   forward_view_list.push_back(search_box_view()->search_box());
 
   // Test traversal triggered by down.
@@ -718,7 +718,7 @@ TEST_F(AppListViewFocusTest, VerticalFocusTraversalInHalfState) {
   std::vector<views::View*> backward_view_list;
   backward_view_list.push_back(search_box_view()->search_box());
   for (int i = kListResults - 1; i >= 0; --i)
-    backward_view_list.push_back(results_container->child_at(i));
+    backward_view_list.push_back(list_view->GetResultViewAt(i));
   backward_view_list.push_back(contents_view()
                                    ->search_result_answer_card_view_for_test()
                                    ->GetSearchAnswerContainerViewForTest());
@@ -772,7 +772,7 @@ TEST_F(AppListViewFocusTest, FocusResetAfterStateTransition) {
 
   // Type something in search box to transition to HALF state and populate
   // fake search results.
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   const int kTileResults = 3;
   const int kListResults = 2;
   SetUpSearchResults(kTileResults, kListResults, true);
@@ -859,7 +859,7 @@ TEST_F(AppListViewFocusTest, SearchBoxTextfieldHasNoSelectionWhenFocusLeaves) {
 // SearchBoxTextfield.
 TEST_F(AppListViewFocusTest, SearchBoxSelectionCoversWholeQueryOnFocus) {
   Show();
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   EXPECT_EQ(app_list_view()->app_list_state(), AppListViewState::HALF);
   constexpr int kListResults = 1;
   SetUpSearchResults(0, kListResults, false);
@@ -907,7 +907,7 @@ TEST_F(AppListViewFocusTest, SearchBoxSelectionCoversWholeQueryOnFocus) {
 // not focused.
 TEST_F(AppListViewFocusTest, CtrlASelectsAllTextInSearchbox) {
   Show();
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   EXPECT_EQ(app_list_view()->app_list_state(), AppListViewState::HALF);
   constexpr int kTileResults = 3;
   constexpr int kListResults = 2;
@@ -938,22 +938,20 @@ TEST_F(AppListViewFocusTest, CtrlASelectsAllTextInSearchbox) {
             search_box_view()->search_box()->GetSelectedRange());
 }
 
-// Tests that the first search result's view is always selected after search
-// results are updated, but the focus is always on search box.
+// Tests that the first search result's view is selected after search results
+// are updated when the focus is on search box.
 TEST_F(AppListViewFocusTest, FirstResultSelectedAfterSearchResultsUpdated) {
   Show();
 
   // Type something in search box to transition to HALF state and populate
   // fake list results.
-  search_box_view()->search_box()->InsertText(base::UTF8ToUTF16("test"));
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test"));
   const int kListResults = 2;
   SetUpSearchResults(0, kListResults, false);
-  const views::View* results_container =
-      contents_view()
-          ->search_result_list_view_for_test()
-          ->results_container_for_test();
+  SearchResultListView* list_view =
+      contents_view()->search_result_list_view_for_test();
   EXPECT_EQ(search_box_view()->search_box(), focused_view());
-  EXPECT_EQ(results_container->child_at(0),
+  EXPECT_EQ(list_view->GetResultViewAt(0),
             contents_view()->search_results_page_view()->first_result_view());
 
   // Populate both fake list results and tile results.
@@ -980,6 +978,53 @@ TEST_F(AppListViewFocusTest, FirstResultSelectedAfterSearchResultsUpdated) {
   EXPECT_EQ(search_box_view()->search_box(), focused_view());
   EXPECT_EQ(nullptr,
             contents_view()->search_results_page_view()->first_result_view());
+}
+
+// Tests that the first search result's view is not selected after search
+// results are updated when the focus is on one of the search results (This
+// happens when the user quickly hits Tab key after typing query and before
+// search results are updated for the new query).
+TEST_F(AppListViewFocusTest, FirstResultNotSelectedAfterQuicklyHittingTab) {
+  Show();
+
+  // Type something in search box to transition to HALF state and populate
+  // fake list results.
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test1"));
+  const int kListResults = 2;
+  SetUpSearchResults(0, kListResults, false);
+  SearchResultListView* list_view =
+      contents_view()->search_result_list_view_for_test();
+  SearchResultBaseView* first_result_view =
+      contents_view()->search_results_page_view()->first_result_view();
+  EXPECT_EQ(search_box_view()->search_box(), focused_view());
+  EXPECT_EQ(list_view->GetResultViewAt(0), first_result_view);
+  EXPECT_TRUE(first_result_view->background_highlighted());
+
+  // Type something else.
+  search_box_view()->search_box()->InsertText(base::ASCIIToUTF16("test2"));
+  EXPECT_EQ(search_box_view()->search_box(), focused_view());
+
+  // Simulate hitting Tab key to move focus to the close button, then to the
+  // first result before search results are updated.
+  SimulateKeyPress(ui::VKEY_TAB, false);
+  EXPECT_EQ(search_box_view()->close_button(), focused_view());
+  SimulateKeyPress(ui::VKEY_TAB, false);
+  EXPECT_EQ(list_view->GetResultViewAt(0), focused_view());
+  EXPECT_TRUE(first_result_view->background_highlighted());
+
+  // Update search results, both list and tile results are populated.
+  const int kTileResults = 3;
+  SetUpSearchResults(kTileResults, kListResults, false);
+  const std::vector<SearchResultTileItemView*>& tile_views =
+      contents_view()
+          ->search_result_tile_item_list_view_for_test()
+          ->tile_views_for_test();
+  first_result_view =
+      contents_view()->search_results_page_view()->first_result_view();
+  EXPECT_EQ(list_view->GetResultViewAt(0), focused_view());
+  EXPECT_EQ(tile_views[0], first_result_view);
+  EXPECT_FALSE(first_result_view->HasFocus());
+  EXPECT_TRUE(list_view->GetResultViewAt(0)->background_highlighted());
 }
 
 // Tests hitting Enter key when focus is on search box.
@@ -1518,7 +1563,7 @@ TEST_F(AppListViewTest, DisplayTest) {
 
   AppListModel::State expected = AppListModel::STATE_START;
   EXPECT_TRUE(main_view->contents_view()->IsStateActive(expected));
-  EXPECT_EQ(expected, delegate_->GetTestModel()->state());
+  EXPECT_EQ(expected, delegate_->GetModel()->state());
 }
 
 // Tests that the start page view operates correctly.
@@ -1644,7 +1689,7 @@ TEST_F(AppListViewTest, SearchResultsTest) {
   main_view->search_box_view()->search_box()->SetText(base::string16());
   main_view->search_box_view()->search_box()->InsertText(search_text);
   // Check that the current search is using |search_text|.
-  EXPECT_EQ(search_text, delegate_->GetTestModel()->search_box()->text());
+  EXPECT_EQ(search_text, delegate_->GetSearchModel()->search_box()->text());
   EXPECT_EQ(search_text, main_view->search_box_view()->search_box()->text());
   contents_view->Layout();
   EXPECT_TRUE(contents_view->IsStateActive(AppListModel::STATE_SEARCH_RESULTS));
@@ -1660,7 +1705,7 @@ TEST_F(AppListViewTest, SearchResultsTest) {
   main_view->search_box_view()->search_box()->SetText(base::string16());
   main_view->search_box_view()->search_box()->InsertText(new_search_text);
   // Check that the current search is using |new_search_text|.
-  EXPECT_EQ(new_search_text, delegate_->GetTestModel()->search_box()->text());
+  EXPECT_EQ(new_search_text, delegate_->GetSearchModel()->search_box()->text());
   EXPECT_EQ(new_search_text,
             main_view->search_box_view()->search_box()->text());
   contents_view->Layout();

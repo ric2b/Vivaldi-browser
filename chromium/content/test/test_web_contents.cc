@@ -189,10 +189,7 @@ void TestWebContents::SetLastCommittedURL(const GURL& url) {
 }
 
 bool TestWebContents::CrossProcessNavigationPending() {
-  if (IsBrowserSideNavigationEnabled()) {
-    return GetRenderManager()->speculative_render_frame_host_ != nullptr;
-  }
-  return GetRenderManager()->pending_frame_host() != nullptr;
+  return GetRenderManager()->speculative_render_frame_host_ != nullptr;
 }
 
 bool TestWebContents::CreateRenderViewForRenderManager(
@@ -237,18 +234,11 @@ void TestWebContents::TestSetIsLoading(bool value) {
       DCHECK(current_frame_host);
       current_frame_host->ResetLoadingState();
 
-      if (IsBrowserSideNavigationEnabled()) {
-        RenderFrameHostImpl* speculative_frame_host =
-            node->render_manager()->speculative_frame_host();
-        if (speculative_frame_host)
-          speculative_frame_host->ResetLoadingState();
-        node->ResetNavigationRequest(false, true);
-      } else {
-        RenderFrameHostImpl* pending_frame_host =
-            node->render_manager()->pending_frame_host();
-        if (pending_frame_host)
-          pending_frame_host->ResetLoadingState();
-      }
+      RenderFrameHostImpl* speculative_frame_host =
+          node->render_manager()->speculative_frame_host();
+      if (speculative_frame_host)
+        speculative_frame_host->ResetLoadingState();
+      node->ResetNavigationRequest(false, true);
     }
   }
 }
@@ -389,6 +379,10 @@ void TestWebContents::SaveFrameWithHeaders(const GURL& url,
                                            const Referrer& referrer,
                                            const std::string& headers) {
   save_frame_headers_ = headers;
+}
+
+void TestWebContents::SetMainFrameMimeType(const std::string& mime_type) {
+  WebContentsImpl::SetMainFrameMimeType(mime_type);
 }
 
 void TestWebContents::SetWasRecentlyAudible(bool audible) {

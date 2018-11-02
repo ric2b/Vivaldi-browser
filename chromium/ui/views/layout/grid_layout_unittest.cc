@@ -99,7 +99,10 @@ class FlexibleView : public View {
 
 class GridLayoutTest : public testing::Test {
  public:
-  GridLayoutTest() : layout_(GridLayout::CreateAndInstall(&host_)) {}
+  GridLayoutTest() {
+    layout_ =
+        host_.SetLayoutManager(std::make_unique<views::GridLayout>(&host_));
+  }
 
   void RemoveAll() {
     for (int i = host_.child_count() - 1; i >= 0; i--)
@@ -118,7 +121,9 @@ class GridLayoutTest : public testing::Test {
 
 class GridLayoutAlignmentTest : public testing::Test {
  public:
-  GridLayoutAlignmentTest() : layout_(GridLayout::CreateAndInstall(&host_)) {
+  GridLayoutAlignmentTest() {
+    layout_ =
+        host_.SetLayoutManager(std::make_unique<views::GridLayout>(&host_));
     v1_.SetPreferredSize(gfx::Size(10, 20));
   }
 
@@ -1021,6 +1026,37 @@ TEST_F(GridLayoutTest, TwoViewsBothColumnsResizableOneViewFixedWidthMin) {
   layout()->Layout(&host());
   EXPECT_EQ(gfx::Rect(0, 0, 10, 10), view1->bounds());
   EXPECT_EQ(gfx::Rect(10, 0, 50, 10), view2->bounds());
+}
+
+class SettablePreferredHeightView : public View {
+ public:
+  explicit SettablePreferredHeightView(int height) : pref_height_(height) {}
+  ~SettablePreferredHeightView() override = default;
+
+  // View:
+  int GetHeightForWidth(int width) const override { return pref_height_; }
+
+ private:
+  const int pref_height_;
+
+  DISALLOW_COPY_AND_ASSIGN(SettablePreferredHeightView);
+};
+
+TEST_F(GridLayoutTest, HeightForWidthCalledWhenNotGivenPreferredWidth) {
+  ColumnSet* set = layout()->AddColumnSet(0);
+  set->AddColumn(GridLayout::LEADING, GridLayout::FILL, 1, GridLayout::USE_PREF,
+                 0, 0);
+  layout()->StartRow(0, 0);
+  const int pref_height = 100;
+  // |view| is owned by parent.
+  SettablePreferredHeightView* view =
+      new SettablePreferredHeightView(pref_height);
+  const gfx::Size pref(10, 20);
+  view->SetPreferredSize(pref);
+  layout()->AddView(view);
+
+  EXPECT_EQ(pref, GetPreferredSize());
+  EXPECT_EQ(pref_height, host().GetHeightForWidth(5));
 }
 
 }  // namespace views

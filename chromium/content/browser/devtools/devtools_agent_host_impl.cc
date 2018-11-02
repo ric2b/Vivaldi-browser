@@ -16,6 +16,7 @@
 #include "content/browser/devtools/devtools_session.h"
 #include "content/browser/devtools/forwarding_agent_host.h"
 #include "content/browser/devtools/protocol/page.h"
+#include "content/browser/devtools/protocol/security_handler.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
@@ -36,6 +37,34 @@ base::LazyInstance<DevToolsMap>::Leaky g_devtools_instances =
 
 base::LazyInstance<base::ObserverList<DevToolsAgentHostObserver>>::Leaky
     g_devtools_observers = LAZY_INSTANCE_INITIALIZER;
+
+// Returns a list of all active hosts on browser targets.
+DevToolsAgentHost::List GetBrowserAgentHosts() {
+  DevToolsAgentHost::List result;
+  for (const auto& id_host : g_devtools_instances.Get()) {
+    if (id_host.second->GetType() == DevToolsAgentHost::kTypeBrowser)
+      result.push_back(id_host.second);
+  }
+  return result;
+}
+
+// Notify the provided agent host of a certificate error. Returns true if one of
+// the host's handlers will handle the certificate error.
+bool NotifyCertificateError(
+    DevToolsAgentHost* host,
+    int cert_error,
+    const GURL& request_url,
+    const DevToolsAgentHostImpl::CertErrorCallback& callback) {
+  DevToolsAgentHostImpl* host_impl = static_cast<DevToolsAgentHostImpl*>(host);
+  for (auto* security_handler :
+       protocol::SecurityHandler::ForAgentHost(host_impl)) {
+    if (security_handler->NotifyCertificateError(cert_error, request_url,
+                                                 callback)) {
+      return true;
+    }
+  }
+  return false;
+}
 }  // namespace
 
 const char DevToolsAgentHost::kTypePage[] = "page";
@@ -46,7 +75,6 @@ const char DevToolsAgentHost::kTypeBrowser[] = "browser";
 const char DevToolsAgentHost::kTypeGuest[] = "webview";
 const char DevToolsAgentHost::kTypeOther[] = "other";
 int DevToolsAgentHostImpl::s_force_creation_count_ = 0;
-int DevToolsAgentHostImpl::s_last_session_id_ = 0;
 
 // static
 std::string DevToolsAgentHost::GetProtocolVersion() {
@@ -98,7 +126,7 @@ DevToolsAgentHostImpl::~DevToolsAgentHostImpl() {
 // static
 scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetForId(
     const std::string& id) {
-  if (g_devtools_instances == nullptr)
+  if (!g_devtools_instances.IsCreated())
     return nullptr;
   DevToolsMap::iterator it = g_devtools_instances.Get().find(id);
   if (it == g_devtools_instances.Get().end())
@@ -116,9 +144,29 @@ scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::Forward(
   return new ForwardingAgentHost(id, std::move(delegate));
 }
 
-DevToolsSession* DevToolsAgentHostImpl::SessionById(int session_id) {
-  auto it = session_by_id_.find(session_id);
-  return it == session_by_id_.end() ? nullptr : it->second;
+// static
+bool DevToolsAgentHostImpl::HandleCertificateError(WebContents* web_contents,
+                                                   int cert_error,
+                                                   const GURL& request_url,
+                                                   CertErrorCallback callback) {
+  scoped_refptr<DevToolsAgentHost> agent_host =
+      DevToolsAgentHost::GetOrCreateFor(web_contents).get();
+  if (NotifyCertificateError(agent_host.get(), cert_error, request_url,
+                             callback)) {
+    // Only allow a single agent host to handle the error.
+    callback.Reset();
+  }
+
+  for (scoped_refptr<DevToolsAgentHost> browser_agent_host :
+       GetBrowserAgentHosts()) {
+    if (NotifyCertificateError(browser_agent_host.get(), cert_error,
+                               request_url, callback)) {
+      // Only allow a single agent host to handle the error.
+      callback.Reset();
+    }
+  }
+
+  return !callback;
 }
 
 DevToolsSession* DevToolsAgentHostImpl::SessionByClient(
@@ -129,18 +177,15 @@ DevToolsSession* DevToolsAgentHostImpl::SessionByClient(
 
 void DevToolsAgentHostImpl::InnerAttachClient(DevToolsAgentHostClient* client) {
   scoped_refptr<DevToolsAgentHostImpl> protect(this);
-  DevToolsSession* session =
-      new DevToolsSession(this, client, ++s_last_session_id_);
-  int session_id = session->session_id();
+  DevToolsSession* session = new DevToolsSession(this, client);
   sessions_.insert(session);
-  session_by_id_[session_id] = session;
   session_by_client_[client].reset(session);
   AttachSession(session);
   if (sessions_.size() == 1)
     NotifyAttached();
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (manager->delegate())
-    manager->delegate()->SessionCreated(this, session_id);
+    manager->delegate()->ClientAttached(this, client);
 }
 
 void DevToolsAgentHostImpl::AttachClient(DevToolsAgentHostClient* client) {
@@ -177,26 +222,15 @@ bool DevToolsAgentHostImpl::DispatchProtocolMessage(
   return DispatchProtocolMessage(session, message);
 }
 
-bool DevToolsAgentHostImpl::SendProtocolMessageToClient(
-    int session_id,
-    const std::string& message) {
-  DevToolsSession* session = SessionById(session_id);
-  if (!session)
-    return false;
-  session->SendMessageToClient(message);
-  return true;
-}
-
 void DevToolsAgentHostImpl::InnerDetachClient(DevToolsAgentHostClient* client) {
-  DevToolsSession* session = SessionByClient(client);
-  int session_id = session->session_id();
-  sessions_.erase(session);
-  session_by_id_.erase(session_id);
+  std::unique_ptr<DevToolsSession> session =
+      std::move(session_by_client_[client]);
+  sessions_.erase(session.get());
   session_by_client_.erase(client);
-  DetachSession(session_id);
+  DetachSession(session.get());
   DevToolsManager* manager = DevToolsManager::GetInstance();
   if (manager->delegate())
-    manager->delegate()->SessionDestroyed(this, session_id);
+    manager->delegate()->ClientDetached(this, client);
   if (sessions_.empty()) {
     io_context_.DiscardAllStreams();
     NotifyDetached();
@@ -290,7 +324,7 @@ void DevToolsAgentHostImpl::InspectElement(
 
 // static
 void DevToolsAgentHost::DetachAllClients() {
-  if (g_devtools_instances == nullptr)
+  if (!g_devtools_instances.IsCreated())
     return;
 
   // Make a copy, since detaching may lead to agent destruction, which
@@ -358,94 +392,6 @@ void DevToolsAgentHostImpl::NotifyDestroyed() {
   for (auto& observer : g_devtools_observers.Get())
     observer.DevToolsAgentHostDestroyed(this);
   g_devtools_instances.Get().erase(id_);
-}
-
-// DevToolsMessageChunkProcessor -----------------------------------------------
-
-DevToolsMessageChunkProcessor::DevToolsMessageChunkProcessor(
-    const SendMessageIPCCallback& ipc_callback,
-    const SendMessageCallback& callback)
-    : ipc_callback_(ipc_callback),
-      callback_(callback),
-      message_buffer_size_(0),
-      last_call_id_(0) {}
-
-DevToolsMessageChunkProcessor::~DevToolsMessageChunkProcessor() {
-}
-
-bool DevToolsMessageChunkProcessor::ProcessChunkedMessageFromAgent(
-    const DevToolsMessageChunk& chunk) {
-  if (chunk.is_last && !chunk.post_state.empty())
-    state_cookie_ = chunk.post_state;
-  if (chunk.is_last)
-    last_call_id_ = chunk.call_id;
-
-  if (chunk.is_first && chunk.is_last) {
-    if (message_buffer_size_ != 0)
-      return false;
-    ipc_callback_.Run(chunk.session_id, chunk.data);
-    return true;
-  }
-
-  if (chunk.is_first) {
-    message_buffer_ = std::string();
-    message_buffer_.reserve(chunk.message_size);
-    message_buffer_size_ = chunk.message_size;
-  }
-
-  if (message_buffer_.size() + chunk.data.size() > message_buffer_size_)
-    return false;
-  message_buffer_.append(chunk.data);
-
-  if (chunk.is_last) {
-    if (message_buffer_.size() != message_buffer_size_)
-      return false;
-    ipc_callback_.Run(chunk.session_id, message_buffer_);
-    message_buffer_ = std::string();
-    message_buffer_size_ = 0;
-  }
-  return true;
-}
-
-bool DevToolsMessageChunkProcessor::ProcessChunkedMessageFromAgent(
-    mojom::DevToolsMessageChunkPtr chunk) {
-  if (chunk->is_last && !chunk->post_state.empty())
-    state_cookie_ = chunk->post_state;
-  if (chunk->is_last)
-    last_call_id_ = chunk->call_id;
-
-  if (chunk->is_first && chunk->is_last) {
-    if (message_buffer_size_ != 0)
-      return false;
-    callback_.Run(chunk->data);
-    return true;
-  }
-
-  if (chunk->is_first) {
-    message_buffer_ = std::string();
-    message_buffer_.reserve(chunk->message_size);
-    message_buffer_size_ = chunk->message_size;
-  }
-
-  if (message_buffer_.size() + chunk->data.size() > message_buffer_size_)
-    return false;
-  message_buffer_.append(chunk->data);
-
-  if (chunk->is_last) {
-    if (message_buffer_.size() != message_buffer_size_)
-      return false;
-    callback_.Run(message_buffer_);
-    message_buffer_ = std::string();
-    message_buffer_size_ = 0;
-  }
-  return true;
-}
-
-void DevToolsMessageChunkProcessor::Reset() {
-  message_buffer_ = std::string();
-  message_buffer_size_ = 0;
-  state_cookie_ = std::string();
-  last_call_id_ = 0;
 }
 
 }  // namespace content

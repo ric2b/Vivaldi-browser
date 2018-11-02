@@ -136,15 +136,27 @@ TEST_F(WKWebViewConfigurationProviderTest, Purge) {
 }
 
 // Tests that configuration's userContentController has only one script with the
-// same content as web::GetEarlyPageScript() returns.
+// same content as web::GetDocumentStartScriptForMainFrame() returns.
 TEST_F(WKWebViewConfigurationProviderTest, UserScript) {
   WKWebViewConfiguration* config = GetProvider().GetWebViewConfiguration();
   NSArray* scripts = config.userContentController.userScripts;
-  EXPECT_EQ(1U, scripts.count);
-  NSString* early_script = GetEarlyPageScript(&browser_state_);
-  // |earlyScript| is a substring of |userScripts|. The latter wraps the
-  // former with "if (!injected)" check to avoid double injections.
-  EXPECT_LT(0U, [[scripts[0] source] rangeOfString:early_script].length);
+  ASSERT_EQ(3U, scripts.count);
+  EXPECT_FALSE(((WKUserScript*)[scripts objectAtIndex:0]).isForMainFrameOnly);
+  EXPECT_TRUE(((WKUserScript*)[scripts objectAtIndex:1]).isForMainFrameOnly);
+  EXPECT_FALSE(((WKUserScript*)[scripts objectAtIndex:2]).isForMainFrameOnly);
+  NSString* early_all_frames_script =
+      GetDocumentStartScriptForAllFrames(&browser_state_);
+  NSString* main_frame_script =
+      GetDocumentStartScriptForMainFrame(&browser_state_);
+  NSString* late_all_frames_script =
+      GetDocumentEndScriptForAllFrames(&browser_state_);
+  // The scripts in |userScrips| are wrapped with a "if (!injected)" check to
+  // avoid double injections, so a substring check is necessary.
+  EXPECT_LT(0U,
+            [[scripts[0] source] rangeOfString:early_all_frames_script].length);
+  EXPECT_LT(0U, [[scripts[1] source] rangeOfString:main_frame_script].length);
+  EXPECT_LT(0U,
+            [[scripts[2] source] rangeOfString:late_all_frames_script].length);
 }
 
 }  // namespace

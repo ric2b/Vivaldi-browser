@@ -6,10 +6,6 @@ source_set("crash_report") {
   sources = [
     "breakpad_helper.h",
     "breakpad_helper.mm",
-    "crash_keys.cc",
-    "crash_keys.h",
-    "crash_report_background_uploader.h",
-    "crash_report_background_uploader.mm",
     "crash_report_multi_parameter.h",
     "crash_report_multi_parameter.mm",
     "crash_report_user_application_state.h",
@@ -52,6 +48,7 @@ source_set("crash_report_internal") {
     "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/sessions:serialisation",
     "//ios/chrome/browser/tabs",
+    "//ios/chrome/browser/web:tab_id_tab_helper",
     "//ios/chrome/browser/web_state_list",
     "//ios/web",
     "//net",

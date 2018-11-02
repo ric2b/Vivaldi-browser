@@ -221,6 +221,7 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
       ->GetContextualSuggestionsService(/*create_if_necessary=*/true)
       ->CreateContextualSuggestionsRequest(
           can_attach_current_url ? current_query_ : std::string(),
+          client()->GetCurrentVisitTimestamp(),
           client()->GetTemplateURLService(),
           /*fetcher_delegate=*/this,
           base::BindOnce(

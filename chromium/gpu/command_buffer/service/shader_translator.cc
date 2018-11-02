@@ -136,11 +136,9 @@ ShShaderOutput ShaderTranslator::GetShaderOutputLanguageForContext(
   return SH_GLSL_COMPATIBILITY_OUTPUT;
 }
 
-ShaderTranslator::DestructionObserver::DestructionObserver() {
-}
+ShaderTranslator::DestructionObserver::DestructionObserver() = default;
 
-ShaderTranslator::DestructionObserver::~DestructionObserver() {
-}
+ShaderTranslator::DestructionObserver::~DestructionObserver() = default;
 
 ShaderTranslator::ShaderTranslator()
     : compiler_(NULL),
@@ -189,7 +187,7 @@ bool ShaderTranslator::Init(GLenum shader_type,
     options_affecting_compilation_ =
         base::MakeRefCounted<OptionsAffectingCompilationString>(
             std::string(":CompileOptions:" +
-                        base::Uint64ToString(GetCompileOptions())) +
+                        base::NumberToString(GetCompileOptions())) +
             sh::GetBuiltInResourcesString(compiler_));
   }
 

@@ -11,7 +11,6 @@
 #include "apps/launcher.h"
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -130,14 +129,38 @@ bool IsFallbackFileHandler(const file_tasks::TaskDescriptor& task) {
     return false;
 
   const char* const kBuiltInApps[] = {
-      kFileManagerAppId, kVideoPlayerAppId, kGalleryAppId, kTextEditorAppId,
-  };
+      kFileManagerAppId,
+      kVideoPlayerAppId,
+      kGalleryAppId,
+      kTextEditorAppId,
+      kAudioPlayerAppId,
+      extension_misc::kQuickOfficeComponentExtensionId,
+      extension_misc::kQuickOfficeInternalExtensionId,
+      extension_misc::kQuickOfficeExtensionId};
 
   for (size_t i = 0; i < arraysize(kBuiltInApps); ++i) {
     if (task.app_id == kBuiltInApps[i])
       return true;
   }
   return false;
+}
+
+// Gets the profile in which a file task owned by |extension| should be
+// launched - for example, it makes sure that a file task is not handled in OTR
+// profile for platform apps (outside a guest session).
+Profile* GetProfileForExtensionTask(Profile* profile,
+                                    const extensions::Extension& extension) {
+  // In guest profile, all available task handlers are in OTR profile.
+  if (profile->IsGuestSession()) {
+    DCHECK(profile->IsOffTheRecord());
+    return profile;
+  }
+
+  // Outside guest sessions, if the task is handled by a platform app, launch
+  // the handler in the original profile.
+  if (extension.is_platform_app())
+    return profile->GetOriginalProfile();
+  return profile;
 }
 
 void ExecuteByArcAfterMimeTypesCollected(
@@ -199,7 +222,7 @@ void UpdateDefaultTask(PrefService* pref_service,
     for (std::set<std::string>::const_iterator iter = mime_types.begin();
         iter != mime_types.end(); ++iter) {
       mime_type_pref->SetWithoutPathExpansion(
-          *iter, base::MakeUnique<base::Value>(task_id));
+          *iter, std::make_unique<base::Value>(task_id));
     }
   }
 
@@ -211,7 +234,7 @@ void UpdateDefaultTask(PrefService* pref_service,
       // Suffixes are case insensitive.
       std::string lower_suffix = base::ToLowerASCII(*iter);
       mime_type_pref->SetWithoutPathExpansion(
-          lower_suffix, base::MakeUnique<base::Value>(task_id));
+          lower_suffix, std::make_unique<base::Value>(task_id));
     }
   }
 }
@@ -332,20 +355,19 @@ bool ExecuteFileTask(Profile* profile,
   if (!extension)
     return false;
 
+  Profile* extension_task_profile =
+      GetProfileForExtensionTask(profile, *extension);
+
   // Execute the task.
   if (task.task_type == TASK_TYPE_FILE_BROWSER_HANDLER) {
     return file_browser_handlers::ExecuteFileBrowserHandler(
-        profile,
-        extension,
-        task.action_id,
-        file_urls,
-        done);
+        extension_task_profile, extension, task.action_id, file_urls, done);
   } else if (task.task_type == TASK_TYPE_FILE_HANDLER) {
     std::vector<base::FilePath> paths;
     for (size_t i = 0; i != file_urls.size(); ++i)
       paths.push_back(file_urls[i].path());
-    apps::LaunchPlatformAppWithFileHandler(
-        profile, extension, task.action_id, paths);
+    apps::LaunchPlatformAppWithFileHandler(extension_task_profile, extension,
+                                           task.action_id, paths);
     if (!done.is_null())
       done.Run(extensions::api::file_manager_private::TASK_RESULT_MESSAGE_SENT);
     return true;

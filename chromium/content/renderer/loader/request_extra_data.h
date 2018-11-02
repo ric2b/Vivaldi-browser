@@ -19,9 +19,11 @@
 #include "ui/base/page_transition_types.h"
 #include "url/origin.h"
 
-namespace content {
-
+namespace network {
 struct ResourceRequest;
+}
+
+namespace content {
 
 // Can be used by callers to store extra data on every ResourceRequest
 // which will be incorporated into the ResourceHostMsg_RequestResource message
@@ -55,14 +57,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   void set_should_replace_current_entry(
       bool should_replace_current_entry) {
     should_replace_current_entry_ = should_replace_current_entry;
-  }
-  void set_transferred_request_child_id(
-      int transferred_request_child_id) {
-    transferred_request_child_id_ = transferred_request_child_id;
-  }
-  void set_transferred_request_request_id(
-      int transferred_request_request_id) {
-    transferred_request_request_id_ = transferred_request_request_id;
   }
   int service_worker_provider_id() const {
     return service_worker_provider_id_;
@@ -114,6 +108,9 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
 
   // The request is downloaded to the network cache, but not rendered or
   // executed. The renderer will see this as an aborted request.
+  bool download_to_network_cache_only() const {
+    return download_to_network_cache_only_;
+  }
   void set_download_to_network_cache_only(bool download_to_cache) {
     download_to_network_cache_only_ = download_to_cache;
   }
@@ -127,7 +124,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
     block_mixed_plugin_content_ = block_mixed_plugin_content;
   }
 
-  // PlzNavigate
   // Indicates whether a navigation was initiated by the browser or renderer.
   bool navigation_initiated_by_renderer() const {
     return navigation_initiated_by_renderer_;
@@ -144,7 +140,7 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
     url_loader_throttles_ = std::move(throttles);
   }
 
-  void CopyToResourceRequest(ResourceRequest* request) const;
+  void CopyToResourceRequest(network::ResourceRequest* request) const;
 
  private:
   blink::mojom::PageVisibilityState visibility_state_;
@@ -154,8 +150,6 @@ class CONTENT_EXPORT RequestExtraData : public blink::WebURLRequest::ExtraData {
   bool allow_download_;
   ui::PageTransition transition_type_;
   bool should_replace_current_entry_;
-  int transferred_request_child_id_;
-  int transferred_request_request_id_;
   int service_worker_provider_id_;
   bool originated_from_service_worker_;
   blink::WebString custom_user_agent_;

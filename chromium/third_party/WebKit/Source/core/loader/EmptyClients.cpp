@@ -49,12 +49,6 @@ void FillWithEmptyClients(Page::PageClients& page_clients) {
   DEFINE_STATIC_LOCAL(ChromeClient, dummy_chrome_client,
                       (EmptyChromeClient::Create()));
   page_clients.chrome_client = &dummy_chrome_client;
-
-  DEFINE_STATIC_LOCAL(EmptyContextMenuClient, dummy_context_menu_client, ());
-  page_clients.context_menu_client = &dummy_context_menu_client;
-
-  DEFINE_STATIC_LOCAL(EmptyEditorClient, dummy_editor_client, ());
-  page_clients.editor_client = &dummy_editor_client;
 }
 
 class EmptyPopupMenu : public PopupMenu {
@@ -175,13 +169,14 @@ LocalFrame* EmptyLocalFrameClient::CreateFrame(const AtomicString&,
   return nullptr;
 }
 
-PluginView* EmptyLocalFrameClient::CreatePlugin(HTMLPlugInElement&,
-                                                const KURL&,
-                                                const Vector<String>&,
-                                                const Vector<String>&,
-                                                const String&,
-                                                bool,
-                                                DetachedPluginPolicy) {
+WebPluginContainerImpl* EmptyLocalFrameClient::CreatePlugin(
+    HTMLPlugInElement&,
+    const KURL&,
+    const Vector<String>&,
+    const Vector<String>&,
+    const String&,
+    bool,
+    DetachedPluginPolicy) {
   return nullptr;
 }
 
@@ -199,6 +194,15 @@ WebRemotePlaybackClient* EmptyLocalFrameClient::CreateWebRemotePlaybackClient(
 }
 
 WebTextCheckClient* EmptyLocalFrameClient::GetTextCheckerClient() const {
+  return text_check_client_;
+}
+
+void EmptyLocalFrameClient::SetTextCheckerClientForTesting(
+    WebTextCheckClient* client) {
+  text_check_client_ = client;
+}
+
+Frame* EmptyLocalFrameClient::FindFrame(const AtomicString& name) const {
   return nullptr;
 }
 
@@ -218,10 +222,5 @@ EmptyLocalFrameClient::CreateApplicationCacheHost(
 }
 
 EmptyRemoteFrameClient::EmptyRemoteFrameClient() = default;
-
-bool EmptyContextMenuClient::ShowContextMenu(const ContextMenu*,
-                                             WebMenuSourceType source_type) {
-  return false;
-}
 
 }  // namespace blink

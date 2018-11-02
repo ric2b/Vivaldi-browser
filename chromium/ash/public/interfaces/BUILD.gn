@@ -14,6 +14,7 @@ mojom("interfaces_internal") {
   sources = [
     "accelerator_controller.mojom",
     "accessibility_controller.mojom",
+    "app_list.mojom",
     "ash_display_controller.mojom",
     "ash_message_center_controller.mojom",
     "cast_config.mojom",
@@ -30,6 +31,7 @@ mojom("interfaces_internal") {
     "night_light_controller.mojom",
     "note_taking_controller.mojom",
     "pref_connector.mojom",
+    "process_creation_time_recorder.mojom",
     "session_controller.mojom",
     "shelf.mojom",
     "shutdown.mojom",
@@ -50,8 +52,10 @@ mojom("interfaces_internal") {
   ]
 
   public_deps = [
+    "//components/password_manager/public/interfaces",
     "//components/proximity_auth/public/interfaces",
     "//components/signin/public/interfaces",
+    "//components/sync/mojo:interfaces",
     "//mojo/common:common_custom_types",
     "//services/preferences/public/interfaces",
     "//skia/public/interfaces",
@@ -70,7 +74,9 @@ mojom("test_interfaces") {
   testonly = true
   sources = [
     "shelf_test_api.mojom",
+    "shell_test_api.mojom",
     "system_tray_test_api.mojom",
+    "time_to_first_present_recorder_test_api.mojom",
   ]
   deps = [
     "//mojo/common:common_custom_types",

@@ -7,8 +7,8 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/task_scheduler/post_task.h"
-#include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
@@ -78,7 +78,7 @@ void ZipFileInstaller::Unzip(base::Optional<base::FilePath> unzip_dir) {
   }
   DCHECK(!utility_process_mojo_client_);
 
-  utility_process_mojo_client_ = base::MakeUnique<
+  utility_process_mojo_client_ = std::make_unique<
       content::UtilityProcessMojoClient<mojom::ExtensionUnpacker>>(
       l10n_util::GetStringUTF16(IDS_UTILITY_PROCESS_ZIP_FILE_INSTALLER_NAME));
   utility_process_mojo_client_->set_error_callback(
@@ -112,7 +112,7 @@ void ZipFileInstaller::ReportFailure(const std::string& error) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   if (extension_service_weak_) {
-    ExtensionErrorReporter::GetInstance()->ReportLoadError(
+    LoadErrorReporter::GetInstance()->ReportLoadError(
         zip_file_, error, extension_service_weak_->profile(),
         be_noisy_on_failure_);
   }

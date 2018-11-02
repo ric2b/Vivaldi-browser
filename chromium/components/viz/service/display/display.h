@@ -30,10 +30,6 @@ class DisplayResourceProvider;
 class RendererSettings;
 }  // namespace cc
 
-namespace gpu {
-class GpuMemoryBufferManager;
-}
-
 namespace gfx {
 class Size;
 }
@@ -64,7 +60,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   // The |current_task_runner| may be null if the Display is on a thread without
   // a MessageLoop.
   Display(SharedBitmapManager* bitmap_manager,
-          gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
           const RendererSettings& settings,
           const FrameSinkId& frame_sink_id,
           std::unique_ptr<OutputSurface> output_surface,
@@ -83,6 +78,11 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void SetLocalSurfaceId(const LocalSurfaceId& id, float device_scale_factor);
   void SetVisible(bool visible);
   void Resize(const gfx::Size& new_size);
+
+  // Sets the color matrix that will be used to transform the output of this
+  // display. This is only supported for GPU compositing.
+  void SetColorMatrix(const SkMatrix44& matrix);
+
   void SetColorSpace(const gfx::ColorSpace& blending_color_space,
                      const gfx::ColorSpace& device_color_space);
   void SetOutputIsSecure(bool secure);
@@ -102,15 +102,14 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void DidReceiveSwapBuffersAck(uint64_t swap_id) override;
   void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) override;
+  void DidReceiveCALayerParams(
+      const gfx::CALayerParams& ca_layer_params) override;
   void DidReceivePresentationFeedback(
       uint64_t swap_id,
       const gfx::PresentationFeedback& feedback) override;
 
   bool has_scheduler() const { return !!scheduler_; }
   DirectRenderer* renderer_for_testing() const { return renderer_.get(); }
-  size_t stored_latency_info_size_for_testing() const {
-    return stored_latency_info_.size();
-  }
 
   void ForceImmediateDrawAndSwapIfPossible();
   void SetNeedsOneBeginFrame();
@@ -124,7 +123,6 @@ class VIZ_SERVICE_EXPORT Display : public DisplaySchedulerClient,
   void OnContextLost() override;
 
   SharedBitmapManager* const bitmap_manager_;
-  gpu::GpuMemoryBufferManager* const gpu_memory_buffer_manager_;
   const RendererSettings settings_;
 
   DisplayClient* client_ = nullptr;

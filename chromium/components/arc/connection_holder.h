@@ -107,8 +107,10 @@ class ConnectionHolderImpl {
   explicit ConnectionHolderImpl(ConnectionNotifier* connection_notifier)
       : connection_notifier_(connection_notifier), weak_ptr_factory_(this) {}
 
-  InstanceType* instance() { return instance_; }
-  uint32_t instance_version() const { return instance_version_; }
+  InstanceType* instance() { return IsConnected() ? instance_ : nullptr; }
+  uint32_t instance_version() const {
+    return IsConnected() ? instance_version_ : 0;
+  }
 
   // Returns true if |binding_| is set.
   bool IsConnected() const { return binding_.get(); }
@@ -127,45 +129,57 @@ class ConnectionHolderImpl {
     OnChanged();
   }
 
-  // Sets (or resets if |instance| is nullptr) the instance.
+  // Sets the instance.
   void SetInstance(InstanceType* instance,
                    uint32_t version = InstanceType::version_) {
-    DCHECK(instance == nullptr || instance_ == nullptr);
-
-    // Note: This can be called with nullptr even if |instance_| is still
-    // nullptr for just in case clean up purpose. No-op in such a case.
-    if (instance == instance_)
-      return;
+    DCHECK(instance);
+    DCHECK(instance_ != instance);
 
     instance_ = instance;
     instance_version_ = version;
     OnChanged();
   }
 
- private:
-  // Called when |instance_| or |host_| is updated from null to non-null or
-  // from non-null to null.
-  void OnChanged() {
-    if (instance_ && host_) {
-      // When both get ready, start connection.
-      // TODO(crbug.com/750563): Fix the race issue.
-      binding_ = std::make_unique<mojo::Binding<HostType>>(host_);
-      mojo::InterfacePtr<HostType> host_proxy;
-      binding_->Bind(mojo::MakeRequest(&host_proxy));
-      // Note: because the callback will be destroyed with |binding_|,
-      // base::Unretained() can be safely used.
-      binding_->set_connection_error_handler(base::BindOnce(
-          &mojo::Binding<HostType>::Close, base::Unretained(binding_.get())));
+  // Resets the instance if it matches |instance|.
+  void CloseInstance(InstanceType* instance) {
+    DCHECK(instance);
 
-      // Call the appropriate version of Init().
-      CallInstanceInit<InstanceType>(std::move(host_proxy),
-                                     HasInitDeprecated<InstanceType>());
-    } else if (binding_.get()) {
-      // Otherwise, the connection is closed. If it was connected,
-      // reset the host binding and notify.
-      binding_.reset();
-      connection_notifier_->NotifyConnectionClosed();
+    if (instance != instance_) {
+      DVLOG(1) << "Dropping request to close a stale instance";
+      return;
     }
+
+    instance_ = nullptr;
+    instance_version_ = 0;
+    OnChanged();
+  }
+
+ private:
+  // Called when |instance_| or |host_| are updated.
+  void OnChanged() {
+    // Cancel any in-flight connection requests. This also prevents Observers
+    // from being notified of a spurious OnConnectionClosed() before an
+    // OnConnectionReady() event.
+    weak_ptr_factory_.InvalidateWeakPtrs();
+    if (binding_.get()) {
+      // Regardless of what has changed, the old connection is now stale. Reset
+      // the current binding and notify any listeners. Since |binding_| is set
+      // just before the OnConnectionReady() event, we never notify observers of
+      // OnConnectionClosed() without seeing the former event first.
+      if (instance_ && host_)
+        LOG(ERROR) << "Unbinding instance of a stale connection";
+      OnConnectionClosed();
+    }
+    if (!instance_ || !host_)
+      return;
+    // When both the instance and host are ready, start connection.
+    // TODO(crbug.com/750563): Fix the race issue.
+    auto binding = std::make_unique<mojo::Binding<HostType>>(host_);
+    mojo::InterfacePtr<HostType> host_proxy;
+    binding->Bind(mojo::MakeRequest(&host_proxy));
+    // Call the appropriate version of Init().
+    CallInstanceInit<InstanceType>(std::move(host_proxy), std::move(binding),
+                                   HasInitDeprecated<InstanceType>());
   }
 
   // Dispatches the correct version of Init(). The template type is needed
@@ -174,52 +188,84 @@ class ConnectionHolderImpl {
   // std::false_type) refers to whether InstanceType::DeprecatedInit() exists.
   template <class T>
   typename std::enable_if<CountInitArgs<T>::value == 2, void>::type
-  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy, std::true_type) {
+  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy,
+                   std::unique_ptr<mojo::Binding<HostType>> binding,
+                   std::true_type) {
     if (instance_version_ < InstanceType::kInitMinVersion) {
       // The instance is too old to know about the new Init() version. For now,
       // call the deprecated version for backwards-compatibility.
       // TODO(crbug.com/750563): Deprecate this version.
-      CallInstanceInitDeprecated(std::move(host_proxy),
+      CallInstanceInitDeprecated(std::move(host_proxy), std::move(binding),
                                  HasInitDeprecated<InstanceType>());
       return;
     }
 
-    instance_->Init(std::move(host_proxy),
-                    base::BindOnce(&ConnectionHolderImpl::OnConnectionReady,
-                                   weak_ptr_factory_.GetWeakPtr()));
+    instance_->Init(
+        std::move(host_proxy),
+        base::BindOnce(&ConnectionHolderImpl::OnConnectionReady,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(binding)));
   }
 
   template <class T>
   typename std::enable_if<CountInitArgs<T>::value == 2, void>::type
-  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy, std::false_type) {
-    instance_->Init(std::move(host_proxy),
-                    base::BindOnce(&ConnectionHolderImpl::OnConnectionReady,
-                                   weak_ptr_factory_.GetWeakPtr()));
+  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy,
+                   std::unique_ptr<mojo::Binding<HostType>> binding,
+                   std::false_type) {
+    instance_->Init(
+        std::move(host_proxy),
+        base::BindOnce(&ConnectionHolderImpl::OnConnectionReady,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(binding)));
   }
 
   // TODO(crbug.com/750563): Deprecate this version.
   template <class T>
   typename std::enable_if<CountInitArgs<T>::value == 1, void>::type
-  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy, ...) {
+  CallInstanceInit(mojo::InterfacePtr<HostType> host_proxy,
+                   std::unique_ptr<mojo::Binding<HostType>> binding,
+                   ...) {
     instance_->Init(std::move(host_proxy));
-    OnConnectionReady();
+    OnConnectionReady(std::move(binding));
   }
 
-  void CallInstanceInitDeprecated(mojo::InterfacePtr<HostType> host_proxy,
-                                  std::true_type) {
+  void CallInstanceInitDeprecated(
+      mojo::InterfacePtr<HostType> host_proxy,
+      std::unique_ptr<mojo::Binding<HostType>> binding,
+      std::true_type) {
     instance_->InitDeprecated(std::move(host_proxy));
-    OnConnectionReady();
+    OnConnectionReady(std::move(binding));
   }
 
-  void CallInstanceInitDeprecated(mojo::InterfacePtr<HostType> host_proxy,
-                                  std::false_type) {
+  void CallInstanceInitDeprecated(
+      mojo::InterfacePtr<HostType> host_proxy,
+      std::unique_ptr<mojo::Binding<HostType>> binding,
+      std::false_type) {
     // If InitDeprecated does not exists, ARC container must support
     // Init() with callback, already. Thus, this should not be called.
     NOTREACHED();
   }
 
+  // Resets the binding and notifies all the observers that the connection is
+  // closed.
+  void OnConnectionClosed() {
+    DCHECK(binding_);
+    binding_.reset();
+    connection_notifier_->NotifyConnectionClosed();
+  }
+
   // Notifies all the observers that the connection is ready.
-  void OnConnectionReady() { connection_notifier_->NotifyConnectionReady(); }
+  void OnConnectionReady(std::unique_ptr<mojo::Binding<HostType>> binding) {
+    DCHECK(!binding_);
+    // Now that we can finally commit to this connection and will deliver the
+    // OnConnectionReady() event, set the connection error handler to notify
+    // Observers of connection closures.
+    // Note: because the callback will be destroyed with |binding_|,
+    // base::Unretained() can be safely used.
+    binding->set_connection_error_handler(base::BindOnce(
+        &ConnectionHolderImpl::OnConnectionClosed, base::Unretained(this)));
+
+    binding_ = std::move(binding);
+    connection_notifier_->NotifyConnectionReady();
+  }
 
   // This class does not have ownership. The pointers should be managed by the
   // caller.
@@ -264,24 +310,31 @@ class ConnectionHolderImpl<InstanceType, void> {
     NOTREACHED();
   }
 
-  // Sets (or resets if |instance| is nullptr) the instance.
+  // Sets the instance.
   void SetInstance(InstanceType* instance,
                    uint32_t version = InstanceType::version_) {
-    DCHECK(instance == nullptr || instance_ == nullptr);
-
-    // Note: This can be called with nullptr even if |instance_| is still
-    // nullptr for just in case clean up purpose. No-op in such a case.
-    if (instance == instance_)
-      return;
+    DCHECK(instance);
+    DCHECK(instance_ != instance);
 
     instance_ = instance;
     instance_version_ = version;
 
     // There is nothing more than setting in this case. Notify observers.
-    if (instance_)
-      connection_notifier_->NotifyConnectionReady();
-    else
-      connection_notifier_->NotifyConnectionClosed();
+    connection_notifier_->NotifyConnectionReady();
+  }
+
+  // Resets the instance if it matches |instance|.
+  void CloseInstance(InstanceType* instance) {
+    DCHECK(instance);
+
+    if (instance != instance_) {
+      DVLOG(1) << "Dropping request to close a stale instance";
+      return;
+    }
+
+    instance_ = nullptr;
+    instance_version_ = 0;
+    connection_notifier_->NotifyConnectionClosed();
   }
 
  private:
@@ -364,12 +417,19 @@ class ConnectionHolder {
   }
 
   // Sets |instance| with |version|.
-  // This can be called in both case; on ready, and on closed.
-  // Passing nullptr to |instance| means closing.
   void SetInstance(InstanceType* instance,
                    uint32_t version = InstanceType::Version_) {
+    DCHECK(instance);
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     impl_.SetInstance(instance, version);
+  }
+
+  // Closes |instance|, if it matches against the current instance. Otherwise,
+  // it is a no-op.
+  void CloseInstance(InstanceType* instance) {
+    DCHECK(instance);
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+    impl_.CloseInstance(instance);
   }
 
  private:

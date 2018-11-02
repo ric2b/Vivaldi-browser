@@ -62,6 +62,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
     // layout tests. This will still get called in the latter case, but we don't
     // need to record UKM in that case.
   }
+  void ClearHistoryOnNavigation() override;
 
   // Blink layout tests might call into this even though an unthreaded CC
   // doesn't have BrowserControls itself.
@@ -116,6 +117,11 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void NeedsImplSideInvalidation(bool needs_first_draw_on_activation) override;
   void RequestBeginMainFrameNotExpected(bool new_state) override;
   void NotifyImageDecodeRequestFinished() override;
+  void DidPresentCompositorFrameOnImplThread(
+      const std::vector<int>& source_frames,
+      base::TimeTicks time,
+      base::TimeDelta refresh,
+      uint32_t flags) override;
 
   void RequestNewLayerTreeFrameSink();
 

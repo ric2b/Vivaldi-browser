@@ -153,6 +153,19 @@
         </settings-slider>
       </div>
 
+      <div class="settings-box indented two-line"
+          hidden$="[[!showDisplayZoomSetting_]]">
+        <div class="start text-area layout vertical">
+          <div>Display Size</div>
+          <div class="secondary layout self-start">
+            [[getDisplayZoomText_(selectedDisplay, selectedZoomPref_.value)]]
+          </div>
+        </div>
+        <settings-slider tick-values="[[zoomValues_]]"
+            pref="{{selectedZoomPref_}}" on-change="onSelectedZoomChange_">
+        </settings-slider>
+      </div>
+
       <template is="dom-if" if="[[!unifiedDesktopMode_]]" restamp>
         <div class="settings-box indented">
           <div id="displayOrientation" class="start text-area">
@@ -175,7 +188,8 @@
 
       <button is="cr-link-row" icon-class="subpage-arrow" class="indented hr"
           id="overscan" label="$i18n{displayOverscanPageTitle}"
-          sub-label="$i18n{displayOverscanPageText}" on-tap="onOverscanTap_">
+          sub-label="$i18n{displayOverscanPageText}" on-tap="onOverscanTap_"
+          hidden$="[[!showOverscanSetting_(selectedDisplay)]]">
       </button>
 
       <settings-display-overscan-dialog id="displayOverscan"
@@ -226,8 +240,14 @@
         </div>
         <!-- Schedule settings -->
         <div class="settings-box indented">
-          <div id="nightLightScheduleLabel" class="start text-area">
-            $i18n{displayNightLightScheduleLabel}
+          <div class="start text-area">
+            <div id="nightLightScheduleLabel" class="label">
+              $i18n{displayNightLightScheduleLabel}
+            </div>
+            <div id="nightLightScheduleSubLabel" class="secondary label"
+                hidden$="[[!nightLightScheduleSubLabel_]]">
+              [[nightLightScheduleSubLabel_]]
+            </div>
           </div>
           <settings-dropdown-menu
               id="nightLightScheduleTypeDropDown"

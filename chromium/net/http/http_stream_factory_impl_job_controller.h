@@ -35,14 +35,13 @@ class HttpStreamFactoryImpl::JobController
                 JobFactory* job_factory,
                 const HttpRequestInfo& request_info,
                 bool is_preconnect,
+                bool is_websocket,
                 bool enable_ip_based_pooling,
                 bool enable_alternative_services,
                 const SSLConfig& server_ssl_config,
                 const SSLConfig& proxy_ssl_config);
 
   ~JobController() override;
-
-  bool for_websockets() override;
 
   // Used in tests only for verification purpose.
   const Job* main_job() const { return main_job_.get(); }
@@ -192,10 +191,6 @@ class HttpStreamFactoryImpl::JobController
   // Returns true if |this| has a pending alternative job that is not completed.
   bool HasPendingAltJob() const;
 
-  // TODO(xunjieli): Added to investigate crbug.com/711721. Remove when no
-  // longer needed.
-  void LogHistograms() const;
-
   // Returns the estimated memory usage in bytes.
   size_t EstimateMemoryUsage() const;
 
@@ -331,6 +326,9 @@ class HttpStreamFactoryImpl::JobController
   // True if this JobController is used to preconnect streams.
   const bool is_preconnect_;
 
+  // True if request is for Websocket.
+  const bool is_websocket_;
+
   // Enable pooling to a SpdySession with matching IP and certificate even if
   // the SpdySessionKey is different.
   const bool enable_ip_based_pooling_;
@@ -373,7 +371,7 @@ class HttpStreamFactoryImpl::JobController
   bool can_start_alternative_proxy_job_;
 
   State next_state_;
-  ProxyService::PacRequest* pac_request_;
+  ProxyService::Request* proxy_resolve_request_;
   CompletionCallback io_callback_;
   const HttpRequestInfo request_info_;
   ProxyInfo proxy_info_;

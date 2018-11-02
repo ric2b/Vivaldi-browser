@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/start_page_observer.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
@@ -29,8 +30,6 @@
 #include "ui/app_list/views/app_list_view.h"
 
 namespace app_list {
-class CustomLauncherPageContents;
-class LauncherPageEventDispatcher;
 class SearchController;
 class SearchResourceManager;
 class SpeechUIModel;
@@ -63,30 +62,29 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
   void StartSpeechRecognitionForHotword(
       const scoped_refptr<content::SpeechRecognitionSessionPreamble>& preamble);
 
+  // Gets the model updater.
+  AppListModelUpdater* GetModelUpdater();
+
   // Overridden from app_list::AppListViewDelegate:
   app_list::AppListModel* GetModel() override;
+  app_list::SearchModel* GetSearchModel() override;
   app_list::SpeechUIModel* GetSpeechUI() override;
-  void StartSearch() override;
+  void StartSearch(const base::string16& raw_query) override;
   void OpenSearchResult(app_list::SearchResult* result,
-                        bool auto_launch,
                         int event_flags) override;
   void InvokeSearchResultAction(app_list::SearchResult* result,
                                 int action_index,
                                 int event_flags) override;
-  base::TimeDelta GetAutoLaunchTimeout() override;
-  void AutoLaunchCanceled() override;
   void ViewInitialized() override;
   void Dismiss() override;
   void ViewClosing() override;
   void StartSpeechRecognition() override;
   void StopSpeechRecognition() override;
   views::View* CreateStartPageWebView(const gfx::Size& size) override;
-  std::vector<views::View*> CreateCustomPageWebViews(
-      const gfx::Size& size) override;
-  void CustomLauncherPageAnimationChanged(double progress) override;
-  void CustomLauncherPagePopSubpage() override;
   bool IsSpeechRecognitionEnabled() override;
   void GetWallpaperProminentColors(std::vector<SkColor>* colors) override;
+  void ActivateItem(const std::string& id, int event_flags) override;
+  ui::MenuModel* GetContextMenuModel(const std::string& id) override;
   void AddObserver(app_list::AppListViewDelegateObserver* observer) override;
   void RemoveObserver(app_list::AppListViewDelegateObserver* observer) override;
 
@@ -101,10 +99,9 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
   void SetUpSearchUI();
 
   // Overridden from app_list::StartPageObserver:
-  void OnSpeechResult(const base::string16& result, bool is_final) override;
   void OnSpeechSoundLevelChanged(int16_t level) override;
   void OnSpeechRecognitionStateChanged(
-      app_list::SpeechRecognitionState new_state) override;
+      SpeechRecognizerState new_state) override;
 
   // Overridden from ash::mojom::WallpaperObserver:
   void OnWallpaperColorsChanged(
@@ -120,9 +117,14 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
   // Unowned pointer to the associated profile. May change if SetProfileByPath
   // is called.
   Profile* profile_;
-  // Unowned pointer to the model owned by AppListSyncableService. Will change
+  // Unowned pointer to the models owned by AppListSyncableService. Will change
   // if |profile_| changes.
   app_list::AppListModel* model_;
+  app_list::SearchModel* search_model_;
+
+  // Unowned pointer to the model updater owned by AppListSyncableService.
+  // Will change if |profile_| changes.
+  ChromeAppListModelUpdater* model_updater_;
 
   // Note: order ensures |search_resource_manager_| is destroyed before
   // |speech_ui_|.
@@ -130,19 +132,10 @@ class AppListViewDelegate : public app_list::AppListViewDelegate,
   std::unique_ptr<app_list::SearchResourceManager> search_resource_manager_;
   std::unique_ptr<app_list::SearchController> search_controller_;
 
-  std::unique_ptr<app_list::LauncherPageEventDispatcher>
-      launcher_page_event_dispatcher_;
-
-  base::TimeDelta auto_launch_timeout_;
-
   std::unique_ptr<AppSyncUIStateWatcher> app_sync_ui_state_watcher_;
 
   ScopedObserver<TemplateURLService, AppListViewDelegate>
       template_url_service_observer_;
-
-  // Window contents of additional custom launcher pages.
-  std::vector<std::unique_ptr<app_list::CustomLauncherPageContents>>
-      custom_page_contents_;
 
   // Registers for NOTIFICATION_APP_TERMINATING to unload custom launcher pages.
   content::NotificationRegistrar registrar_;

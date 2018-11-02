@@ -30,8 +30,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/features.h"
 #include "components/security_state/content/ssl_status_input_event_data.h"
+#include "components/security_state/core/features.h"
 #include "components/security_state/core/security_state.h"
-#include "components/security_state/core/switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_controller.h"
@@ -49,10 +49,8 @@
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/ct_policy_status.h"
 #include "net/cert/mock_cert_verifier.h"
-#include "net/cert/sct_status_flags.h"
-#include "net/cert/signed_certificate_timestamp.h"
-#include "net/cert/signed_certificate_timestamp_and_status.h"
 #include "net/cert/x509_certificate.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
@@ -114,7 +112,7 @@ void SetInputEvents(content::NavigationEntry* entry,
           ssl.user_data.get());
   if (!input_events) {
     ssl.user_data =
-        base::MakeUnique<security_state::SSLStatusInputEventData>(events);
+        std::make_unique<security_state::SSLStatusInputEventData>(events);
   } else {
     *input_events->input_events() = events;
   }
@@ -240,11 +238,9 @@ void CheckSecureCertificateExplanation(
 void CheckSecureConnectionExplanation(
     const content::SecurityStyleExplanation& explanation,
     Browser* browser) {
-  EXPECT_EQ(l10n_util::GetStringUTF8(IDS_STRONG_SSL_SUMMARY),
-            explanation.summary);
-
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
+
   security_state::SecurityInfo security_info;
   SecurityStateTabHelper::FromWebContents(web_contents)
       ->GetSecurityInfo(&security_info);
@@ -253,6 +249,10 @@ void CheckSecureConnectionExplanation(
   int ssl_version =
       net::SSLConnectionStatusToVersion(security_info.connection_status);
   net::SSLVersionToString(&protocol, ssl_version);
+  EXPECT_EQ(l10n_util::GetStringFUTF8(IDS_STRONG_SSL_SUMMARY,
+                                      base::ASCIIToUTF16(protocol)),
+            explanation.summary);
+
   bool is_aead, is_tls13;
   uint16_t cipher_suite =
       net::SSLConnectionStatusToCipherSuite(security_info.connection_status);
@@ -379,6 +379,7 @@ class SecurityStateTabHelperTest : public CertVerifierBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    CertVerifierBrowserTest::SetUpCommandLine(command_line);
     // Browser will both run and display insecure content.
     command_line->AppendSwitch(switches::kAllowRunningInsecureContent);
   }
@@ -1423,15 +1424,6 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
   helper->GetSecurityInfo(&security_info);
   EXPECT_EQ(security_state::NONE, security_info.security_level);
 
-  // Verify an InsertText operation isn't treated as user-input.
-  EXPECT_TRUE(content::ExecuteScript(
-      contents, "document.execCommand('InsertText',false,'a');"));
-  InjectScript(contents);
-  base::RunLoop().RunUntilIdle();
-  helper->GetSecurityInfo(&security_info);
-  ASSERT_EQ(security_state::NONE, security_info.security_level);
-  ASSERT_FALSE(security_info.field_edit_downgraded_security_level);
-
   // Type one character into the focused input control and wait for a security
   // state change.
   SecurityStyleTestObserver observer(contents);
@@ -1453,10 +1445,11 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
   {
     // Ensure that the security level remains Dangerous in the
     // kMarkHttpAsDangerous configuration.
-    base::test::ScopedCommandLine scoped_command_line;
-    scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-        security_state::switches::kMarkHttpAs,
-        security_state::switches::kMarkHttpAsDangerous);
+    base::test::ScopedFeatureList scoped_feature_list;
+    scoped_feature_list.InitAndEnableFeatureWithParameters(
+        security_state::features::kMarkHttpAsFeature,
+        {{security_state::features::kMarkHttpAsFeatureParameterName,
+          security_state::features::kMarkHttpAsParameterDangerous}});
 
     helper->GetSecurityInfo(&security_info);
     EXPECT_EQ(security_state::DANGEROUS, security_info.security_level);
@@ -1481,6 +1474,46 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
   EXPECT_EQ(security_state::NONE, security_info.security_level);
   EXPECT_FALSE(security_info.field_edit_downgraded_security_level);
   EXPECT_EQ(0u, observer.latest_explanations().neutral_explanations.size());
+}
+
+// Tests that the security level of a HTTP page is not downgraded when a form
+// field is modified by JavaScript.
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
+                       SecurityLevelNotDowngradedAfterScriptModification) {
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+
+  // Navigate to an HTTP page. Use a non-local hostname so that it is
+  // not considered secure.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      GetURLWithNonLocalHostname(embedded_test_server(),
+                                 "/textinput/focus_input_on_load.html"));
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::NONE, security_info.security_level);
+
+  // Verify a value set operation isn't treated as user-input.
+  EXPECT_TRUE(content::ExecuteScript(
+      contents, "document.getElementById('text_id').value='v';"));
+  InjectScript(contents);
+  base::RunLoop().RunUntilIdle();
+  helper->GetSecurityInfo(&security_info);
+  ASSERT_EQ(security_state::NONE, security_info.security_level);
+  ASSERT_FALSE(security_info.field_edit_downgraded_security_level);
+
+  // Verify an InsertText operation isn't treated as user-input.
+  EXPECT_TRUE(content::ExecuteScript(
+      contents, "document.execCommand('InsertText',false,'a');"));
+  InjectScript(contents);
+  base::RunLoop().RunUntilIdle();
+  helper->GetSecurityInfo(&security_info);
+  ASSERT_EQ(security_state::NONE, security_info.security_level);
+  ASSERT_FALSE(security_info.field_edit_downgraded_security_level);
 }
 
 // A Browser subclass that keeps track of messages that have been
@@ -2120,10 +2153,11 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
 // MarkHttpAsDangerous is enabled.
 IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperIncognitoTest,
                        SecurityLevelDangerousWhenMarkHttpAsDangerous) {
-  base::test::ScopedCommandLine scoped_command_line;
-  scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-      security_state::switches::kMarkHttpAs,
-      security_state::switches::kMarkHttpAsDangerous);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::kMarkHttpAsParameterDangerous}});
 
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
@@ -2364,12 +2398,17 @@ IN_PROC_BROWSER_TEST_F(
   // TLS settings, so it should remain at WebSecurityStyleSecure.
   EXPECT_EQ(blink::kWebSecurityStyleSecure, observer.latest_security_style());
 
-  // The messages explaining the security style do, however, get
-  // downgraded: SECURE_PROTOCOL_AND_CIPHERSUITE should not show up when
-  // the TLS settings are obsolete.
+  security_state::SecurityInfo security_info;
+  SecurityStateTabHelper::FromWebContents(web_contents)
+      ->GetSecurityInfo(&security_info);
+  const char* protocol;
+  int ssl_version =
+      net::SSLConnectionStatusToVersion(security_info.connection_status);
+  net::SSLVersionToString(&protocol, ssl_version);
   for (const auto& explanation :
        observer.latest_explanations().secure_explanations) {
-    EXPECT_NE(l10n_util::GetStringUTF8(IDS_STRONG_SSL_SUMMARY),
+    EXPECT_NE(l10n_util::GetStringFUTF8(IDS_STRONG_SSL_SUMMARY,
+                                        base::ASCIIToUTF16(protocol)),
               explanation.summary);
   }
 
@@ -2420,6 +2459,214 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperIncognitoTest, HttpErrorPage) {
   security_state::SecurityInfo security_info;
   helper->GetSecurityInfo(&security_info);
   EXPECT_EQ(security_state::NONE, security_info.security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, MarkHttpAsWarning) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::kMarkHttpAsParameterWarning}});
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+
+  // Navigate to an HTTP page. Use a non-local hostname so that it is
+  // not considered secure.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      GetURLWithNonLocalHostname(embedded_test_server(), "/title1.html"));
+
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::HTTP_SHOW_WARNING, security_info.security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
+                       MarkHttpAsWarningAndDangerousOnFormEdits) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::
+            kMarkHttpAsParameterWarningAndDangerousOnFormEdits}});
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+
+  // Navigate to an HTTP page. Use a non-local hostname so that it is
+  // not considered secure.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      GetURLWithNonLocalHostname(embedded_test_server(),
+                                 "/textinput/focus_input_on_load.html"));
+
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::HTTP_SHOW_WARNING, security_info.security_level);
+
+  // Type one character into the focused input control and wait for a security
+  // state change.
+  SecurityStyleTestObserver observer(contents);
+  content::SimulateKeyPress(contents, ui::DomKey::FromCharacter('A'),
+                            ui::DomCode::US_A, ui::VKEY_A, false, false, false,
+                            false);
+  observer.WaitForDidChangeVisibleSecurityState();
+
+  // Verify that the security state degrades as expected.
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::DANGEROUS, security_info.security_level);
+}
+
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
+                       MarkHttpAsWarningAndDangerousOnPasswordsAndCreditCards) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::
+            kMarkHttpAsParameterWarningAndDangerousOnPasswordsAndCreditCards}});
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  SecurityStateTabHelper* helper =
+      SecurityStateTabHelper::FromWebContents(contents);
+  ASSERT_TRUE(helper);
+
+  // Navigate to an HTTP page. Use a non-local hostname so that it is
+  // not considered secure.
+  ui_test_utils::NavigateToURL(
+      browser(),
+      GetURLWithNonLocalHostname(embedded_test_server(), "/title1.html"));
+
+  security_state::SecurityInfo security_info;
+  helper->GetSecurityInfo(&security_info);
+  EXPECT_EQ(security_state::HTTP_SHOW_WARNING, security_info.security_level);
+
+  // Insert a password field into the page and wait for a security state change.
+  {
+    SecurityStyleTestObserver observer(contents);
+    EXPECT_TRUE(
+        content::ExecuteScript(contents,
+                               "var i = document.createElement('input');"
+                               "i.type = 'password';"
+                               "i.id = 'password-field';"
+                               "document.body.appendChild(i);"));
+    observer.WaitForDidChangeVisibleSecurityState();
+
+    // Verify that the security state degrades as expected.
+    helper->GetSecurityInfo(&security_info);
+    EXPECT_EQ(security_state::DANGEROUS, security_info.security_level);
+  }
+
+  // Remove the password field and verify that the security level returns to
+  // HTTP_SHOW_WARNING.
+  {
+    SecurityStyleTestObserver observer(contents);
+    EXPECT_TRUE(content::ExecuteScript(contents,
+                                       "document.body.removeChild(document."
+                                       "getElementById('password-field'));"));
+    observer.WaitForDidChangeVisibleSecurityState();
+    helper->GetSecurityInfo(&security_info);
+    EXPECT_EQ(security_state::HTTP_SHOW_WARNING, security_info.security_level);
+  }
+}
+
+// Tests that the histogram for security level is recorded correctly for HTTP
+// pages.
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, HTTPSecurityLevelHistogram) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeatureWithParameters(
+      security_state::features::kMarkHttpAsFeature,
+      {{security_state::features::kMarkHttpAsFeatureParameterName,
+        security_state::features::
+            kMarkHttpAsParameterWarningAndDangerousOnPasswordsAndCreditCards}});
+
+  const char kHistogramName[] = "Security.SecurityLevel.NoncryptographicScheme";
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  {
+    base::HistogramTester histograms;
+    // Use a non-local hostname so that password fields (added below) downgrade
+    // the security level.
+    ui_test_utils::NavigateToURL(
+        browser(),
+        GetURLWithNonLocalHostname(embedded_test_server(), "/title1.html"));
+    histograms.ExpectUniqueSample(kHistogramName,
+                                  security_state::HTTP_SHOW_WARNING, 1);
+  }
+
+  // Add a password field and check that the histogram is recorded correctly.
+  {
+    base::HistogramTester histograms;
+    SecurityStyleTestObserver observer(contents);
+    EXPECT_TRUE(
+        content::ExecuteScript(contents,
+                               "var i = document.createElement('input');"
+                               "i.type = 'password';"
+                               "document.body.appendChild(i);"));
+    observer.WaitForDidChangeVisibleSecurityState();
+    histograms.ExpectUniqueSample(kHistogramName, security_state::DANGEROUS, 1);
+  }
+}
+
+// Tests that the histogram for security level is recorded correctly for HTTPS
+// pages.
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest,
+                       HTTPSSecurityLevelHistogram) {
+  SetUpMockCertVerifierForHttpsServer(0, net::OK);
+  const char kHistogramName[] = "Security.SecurityLevel.CryptographicScheme";
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  {
+    base::HistogramTester histograms;
+    ui_test_utils::NavigateToURL(browser(),
+                                 https_server_.GetURL("/title1.html"));
+    histograms.ExpectUniqueSample(kHistogramName, security_state::SECURE, 1);
+  }
+
+  // Load mixed content and check that the histogram is recorded correctly.
+  {
+    base::HistogramTester histograms;
+    SecurityStyleTestObserver observer(contents);
+    EXPECT_TRUE(content::ExecuteScript(contents,
+                                       "var i = document.createElement('img');"
+                                       "i.src = 'http://example.test';"
+                                       "document.body.appendChild(i);"));
+    observer.WaitForDidChangeVisibleSecurityState();
+    histograms.ExpectUniqueSample(kHistogramName, security_state::NONE, 1);
+  }
+
+  // Navigate away and the histogram should be recorded exactly once again, when
+  // the new navigation commits.
+  {
+    base::HistogramTester histograms;
+    ui_test_utils::NavigateToURL(browser(),
+                                 https_server_.GetURL("/title2.html"));
+    histograms.ExpectUniqueSample(kHistogramName, security_state::SECURE, 1);
+  }
+}
+
+// Tests that the Certificate Transparency compliance of the main resource is
+// recorded in a histogram.
+IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTest, CTComplianceHistogram) {
+  const char kHistogramName[] =
+      "Security.CertificateTransparency.MainFrameNavigationCompliance";
+  SetUpMockCertVerifierForHttpsServer(0, net::OK);
+  base::HistogramTester histograms;
+  ui_test_utils::NavigateToURL(browser(),
+                               https_server_.GetURL("/ssl/google.html"));
+  histograms.ExpectUniqueSample(
+      kHistogramName, net::ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS,
+      1);
 }
 
 }  // namespace

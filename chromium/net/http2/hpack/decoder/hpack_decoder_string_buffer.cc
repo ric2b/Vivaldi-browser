@@ -53,7 +53,7 @@ HpackDecoderStringBuffer::HpackDecoderStringBuffer()
       is_huffman_encoded_(false),
       state_(State::RESET),
       backing_(Backing::RESET) {}
-HpackDecoderStringBuffer::~HpackDecoderStringBuffer() {}
+HpackDecoderStringBuffer::~HpackDecoderStringBuffer() = default;
 
 void HpackDecoderStringBuffer::Reset() {
   DVLOG(3) << "HpackDecoderStringBuffer::Reset";
@@ -168,7 +168,7 @@ void HpackDecoderStringBuffer::BufferStringIfUnbuffered() {
   if (state_ != State::RESET && backing_ == Backing::UNBUFFERED) {
     DVLOG(2) << "HpackDecoderStringBuffer buffering string of length "
              << value_.size();
-    value_.CopyToString(&buffer_);
+    buffer_.assign(value_.data(), value_.size());
     if (state_ == State::COMPLETE) {
       value_ = buffer_;
     }

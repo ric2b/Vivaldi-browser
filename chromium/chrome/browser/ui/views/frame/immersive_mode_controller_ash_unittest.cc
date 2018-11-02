@@ -8,6 +8,8 @@
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/window_properties.h"
+#include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
@@ -18,14 +20,13 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
-#include "chrome/browser/ui/tabs/tab_features.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view_ash.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/webview/webview.h"
@@ -264,10 +265,7 @@ TEST_F(ImmersiveModeControllerAshTest, TabAndBrowserFullscreen) {
 TEST_F(ImmersiveModeControllerAshTest, LayeredSpinners) {
   AddTab(browser(), GURL("about:blank"));
 
-  // This test only works with the TabStripImpl.
-  TabStripImpl* tabstrip = browser_view()->tabstrip()->AsTabStripImpl();
-  if (!tabstrip)
-    return;
+  TabStrip* tabstrip = browser_view()->tabstrip();
 
   // Immersive fullscreen starts out disabled; layers are OK.
   EXPECT_FALSE(browser_view()->GetWidget()->IsFullscreen());
@@ -281,4 +279,13 @@ TEST_F(ImmersiveModeControllerAshTest, LayeredSpinners) {
 
   ToggleFullscreen();
   EXPECT_TRUE(tabstrip->CanPaintThrobberToLayer());
+}
+
+// Make sure that going from regular fullscreen to locked fullscreen does not
+// cause a crash. crbug.com/796171
+TEST_F(ImmersiveModeControllerAshTest, RegularFullscreenToLockedFullscreen) {
+  ToggleFullscreen();
+  // Set locked fullscreen state.
+  browser()->window()->GetNativeWindow()->SetProperty(
+      ash::kWindowPinTypeKey, ash::mojom::WindowPinType::TRUSTED_PINNED);
 }

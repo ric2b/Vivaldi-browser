@@ -10,6 +10,7 @@
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/wtf/Time.h"
+#include "public/platform/WebInputEvent.h"
 
 namespace blink {
 
@@ -19,14 +20,15 @@ InteractiveDetector* InteractiveDetector::From(Document& document) {
   InteractiveDetector* detector = static_cast<InteractiveDetector*>(
       Supplement<Document>::From(document, kSupplementName));
   if (!detector) {
-    if (!document.IsInMainFrame()) {
-      return nullptr;
-    }
     detector = new InteractiveDetector(document,
                                        new NetworkActivityChecker(&document));
     Supplement<Document>::ProvideTo(document, kSupplementName, detector);
   }
   return detector;
+}
+
+const char* InteractiveDetector::SupplementName() {
+  return "InteractiveDetector";
 }
 
 InteractiveDetector::InteractiveDetector(
@@ -46,6 +48,11 @@ InteractiveDetector::~InteractiveDetector() {
 void InteractiveDetector::SetNavigationStartTime(double navigation_start_time) {
   // Should not set nav start twice.
   DCHECK(page_event_times_.nav_start == 0.0);
+
+  // Don't record TTI for OOPIFs (yet).
+  // TODO(crbug.com/808086): enable this case.
+  if (!GetSupplementable()->IsInMainFrame())
+    return;
 
   LongTaskDetector::Instance().RegisterObserver(this);
   page_event_times_.nav_start = navigation_start_time;
@@ -81,7 +88,7 @@ void InteractiveDetector::StartOrPostponeCITimer(double timer_fire_time) {
   if (timer_fire_time < time_to_interactive_timer_fire_time_)
     return;
 
-  double delay = timer_fire_time - MonotonicallyIncreasingTime();
+  double delay = timer_fire_time - CurrentTimeTicksInSeconds();
   time_to_interactive_timer_fire_time_ = timer_fire_time;
 
   if (delay <= 0.0) {
@@ -89,20 +96,88 @@ void InteractiveDetector::StartOrPostponeCITimer(double timer_fire_time) {
     // the API contract. nullptr should work fine.
     TimeToInteractiveTimerFired(nullptr);
   } else {
-    time_to_interactive_timer_.StartOneShot(delay, BLINK_FROM_HERE);
+    time_to_interactive_timer_.StartOneShot(delay, FROM_HERE);
   }
 }
 
 double InteractiveDetector::GetInteractiveTime() const {
-  return interactive_time_;
+  // TODO(crbug.com/808685) Simplify FMP and TTI input invalidation.
+  return page_event_times_.first_meaningful_paint_invalidated
+             ? 0.0
+             : interactive_time_;
 }
 
 double InteractiveDetector::GetInteractiveDetectionTime() const {
-  return interactive_detection_time_;
+  // TODO(crbug.com/808685) Simplify FMP and TTI input invalidation.
+  return page_event_times_.first_meaningful_paint_invalidated
+             ? 0.0
+             : interactive_detection_time_;
 }
 
 double InteractiveDetector::GetFirstInvalidatingInputTime() const {
   return page_event_times_.first_invalidating_input;
+}
+
+double InteractiveDetector::GetFirstInputDelay() const {
+  return page_event_times_.first_input_delay;
+}
+
+double InteractiveDetector::GetFirstInputTimestamp() const {
+  return page_event_times_.first_input_timestamp;
+}
+
+// This is called early enough in the pipeline that we don't need to worry about
+// javascript dispatching untrusted input events.
+void InteractiveDetector::HandleForFirstInputDelay(const WebInputEvent& event) {
+  if (page_event_times_.first_input_delay != 0)
+    return;
+
+  DCHECK(event.GetType() != WebInputEvent::kTouchStart);
+
+  // We can't report a pointerDown until the pointerUp, in case it turns into a
+  // scroll.
+  if (event.GetType() == WebInputEvent::kPointerDown) {
+    pending_pointerdown_delay_ =
+        CurrentTimeTicksInSeconds() - event.TimeStampSeconds();
+    pending_pointerdown_timestamp_ =
+        event.TimeStampSeconds();
+    return;
+  }
+
+  bool event_is_meaningful =
+      event.GetType() == WebInputEvent::kMouseDown ||
+      event.GetType() == WebInputEvent::kKeyDown ||
+      event.GetType() == WebInputEvent::kRawKeyDown ||
+      // We need to explicitly include tap, as if there are no listeners, we
+      // won't receive the pointer events.
+      event.GetType() == WebInputEvent::kGestureTap ||
+      event.GetType() == WebInputEvent::kPointerUp;
+
+  if (!event_is_meaningful)
+    return;
+
+  double delay;
+  double event_timestamp;
+  if (event.GetType() == WebInputEvent::kPointerUp) {
+    // It is possible that this pointer up doesn't match with the pointer down
+    // whose delay is stored in pending_pointerdown_delay_. In this case, the
+    // user gesture started by this event contained some non-scroll input, so we
+    // consider it reasonable to use the delay of the initial event.
+    delay = pending_pointerdown_delay_;
+    event_timestamp = pending_pointerdown_timestamp_;
+  } else {
+    delay = CurrentTimeTicksInSeconds() - event.TimeStampSeconds();
+    event_timestamp = event.TimeStampSeconds();
+  }
+
+  pending_pointerdown_delay_ = 0;
+  pending_pointerdown_timestamp_ = 0;
+
+  page_event_times_.first_input_delay = delay;
+  page_event_times_.first_input_timestamp = event_timestamp;
+
+  if (GetSupplementable()->Loader())
+    GetSupplementable()->Loader()->DidChangePerformanceTiming();
 }
 
 void InteractiveDetector::BeginNetworkQuietPeriod(double current_time) {
@@ -125,22 +200,22 @@ void InteractiveDetector::EndNetworkQuietPeriod(double current_time) {
 }
 
 // The optional opt_current_time, if provided, saves us a call to
-// MonotonicallyIncreasingTime.
+// CurrentTimeTicksInSeconds.
 void InteractiveDetector::UpdateNetworkQuietState(
     double request_count,
     WTF::Optional<double> opt_current_time) {
   if (request_count <= kNetworkQuietMaximumConnections &&
       active_network_quiet_window_start_ == 0.0) {
-    // Not using `value_or(MonotonicallyIncreasingTime())` here because
+    // Not using `value_or(CurrentTimeTicksInSeconds())` here because
     // arguments to functions are eagerly evaluated, which always call
-    // MonotonicallyIncreasingTime.
+    // CurrentTimeTicksInSeconds.
     double current_time = opt_current_time ? opt_current_time.value()
-                                           : MonotonicallyIncreasingTime();
+                                           : CurrentTimeTicksInSeconds();
     BeginNetworkQuietPeriod(current_time);
   } else if (request_count > kNetworkQuietMaximumConnections &&
              active_network_quiet_window_start_ != 0.0) {
     double current_time = opt_current_time ? opt_current_time.value()
-                                           : MonotonicallyIncreasingTime();
+                                           : CurrentTimeTicksInSeconds();
     EndNetworkQuietPeriod(current_time);
   }
 }
@@ -157,7 +232,7 @@ void InteractiveDetector::OnResourceLoadBegin(
 }
 
 // The optional load_finish_time, if provided, saves us a call to
-// MonotonicallyIncreasingTime.
+// CurrentTimeTicksInSeconds.
 void InteractiveDetector::OnResourceLoadEnd(
     WTF::Optional<double> load_finish_time) {
   if (!GetSupplementable())
@@ -182,11 +257,15 @@ void InteractiveDetector::OnLongTaskDetected(double start_time,
   StartOrPostponeCITimer(end_time + kTimeToInteractiveWindowSeconds);
 }
 
-void InteractiveDetector::OnFirstMeaningfulPaintDetected(double fmp_time) {
-  DCHECK(page_event_times_.first_meaningful_paint ==
-         0.0);  // Should not set FMP twice.
+void InteractiveDetector::OnFirstMeaningfulPaintDetected(
+    double fmp_time,
+    FirstMeaningfulPaintDetector::HadUserInput user_input_before_fmp) {
+  // Should not set FMP twice.
+  DCHECK(page_event_times_.first_meaningful_paint == 0.0);
   page_event_times_.first_meaningful_paint = fmp_time;
-  if (MonotonicallyIncreasingTime() - fmp_time >=
+  page_event_times_.first_meaningful_paint_invalidated =
+      user_input_before_fmp == FirstMeaningfulPaintDetector::kHadUserInput;
+  if (CurrentTimeTicksInSeconds() - fmp_time >=
       kTimeToInteractiveWindowSeconds) {
     // We may have reached TTCI already. Check right away.
     CheckTimeToInteractiveReached();
@@ -208,6 +287,15 @@ void InteractiveDetector::OnInvalidatingInputEvent(double timestamp_seconds) {
     return;
 
   page_event_times_.first_invalidating_input = timestamp_seconds;
+  if (GetSupplementable()->Loader())
+    GetSupplementable()->Loader()->DidChangePerformanceTiming();
+}
+
+void InteractiveDetector::OnFirstInputDelay(double delay) {
+  if (page_event_times_.first_input_delay != 0)
+    return;
+
+  page_event_times_.first_input_delay = delay;
   if (GetSupplementable()->Loader())
     GetSupplementable()->Loader()->DidChangePerformanceTiming();
 }
@@ -318,7 +406,7 @@ void InteractiveDetector::CheckTimeToInteractiveReached() {
       page_event_times_.dom_content_loaded_end == 0.0)
     return;
 
-  const double current_time = MonotonicallyIncreasingTime();
+  const double current_time = CurrentTimeTicksInSeconds();
   if (current_time - page_event_times_.first_meaningful_paint <
       kTimeToInteractiveWindowSeconds) {
     // Too close to FMP to determine Time to Interactive.
@@ -336,7 +424,7 @@ void InteractiveDetector::CheckTimeToInteractiveReached() {
 
   interactive_time_ = std::max(
       {interactive_candidate, page_event_times_.dom_content_loaded_end});
-  interactive_detection_time_ = MonotonicallyIncreasingTime();
+  interactive_detection_time_ = CurrentTimeTicksInSeconds();
   OnTimeToInteractiveDetected();
 }
 
@@ -357,8 +445,13 @@ void InteractiveDetector::OnTimeToInteractiveDetected() {
       GetSupplementable()->GetFrame(), "had_user_input_before_interactive",
       had_user_input_before_interactive);
 
-  if (GetSupplementable()->Loader())
-    GetSupplementable()->Loader()->DidChangePerformanceTiming();
+  // We only send TTI to Performance Timing Observers if FMP was not invalidated
+  // by input.
+  // TODO(crbug.com/808685) Simplify FMP and TTI input invalidation.
+  if (!page_event_times_.first_meaningful_paint_invalidated) {
+    if (GetSupplementable()->Loader())
+      GetSupplementable()->Loader()->DidChangePerformanceTiming();
+  }
 }
 
 void InteractiveDetector::Trace(Visitor* visitor) {

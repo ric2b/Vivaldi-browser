@@ -6,12 +6,12 @@
 
 #include <utility>
 
-#include "ash/app_list/model/app_list_model.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/search/answer_card/answer_card_result.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
@@ -60,12 +60,12 @@ void AnswerCardSearchProvider::NavigationContext::Clear() {
 
 AnswerCardSearchProvider::AnswerCardSearchProvider(
     Profile* profile,
-    app_list::AppListModel* model,
+    AppListModelUpdater* model_updater,
     AppListControllerDelegate* list_controller,
     std::unique_ptr<AnswerCardContents> contents0,
     std::unique_ptr<AnswerCardContents> contents1)
     : profile_(profile),
-      model_(model),
+      model_updater_(model_updater),
       list_controller_(list_controller),
       answer_server_url_(features::AnswerServerUrl()),
       template_url_service_(TemplateURLServiceFactory::GetForProfile(profile)) {
@@ -78,13 +78,12 @@ AnswerCardSearchProvider::AnswerCardSearchProvider(
 AnswerCardSearchProvider::~AnswerCardSearchProvider() {
 }
 
-void AnswerCardSearchProvider::Start(bool is_voice_query,
-                                     const base::string16& query) {
+void AnswerCardSearchProvider::Start(const base::string16& query) {
   // Reset the state.
   current_request_url_ = GURL();
   server_request_start_time_ = answer_loaded_time_ = base::TimeTicks();
 
-  if (query.empty() || is_voice_query || !model_->search_engine_is_google()) {
+  if (query.empty() || !model_updater_->SearchEngineIsGoogle()) {
     DeleteCurrentResult();
     return;
   }
@@ -188,7 +187,6 @@ void AnswerCardSearchProvider::DidStopLoading(
   answer_loaded_time_ = base::TimeTicks::Now();
   UMA_HISTOGRAM_TIMES("SearchAnswer.LoadingTime",
                       answer_loaded_time_ - server_request_start_time_);
-  base::RecordAction(base::UserMetricsAction("SearchAnswer_StoppedLoading"));
 }
 
 void AnswerCardSearchProvider::UpdateResult() {
@@ -202,7 +200,7 @@ void AnswerCardSearchProvider::UpdateResult() {
         GURL(current_context.result_url), AutocompleteInput(),
         template_url_service_, base::string16() /* keyword */);
 
-    results.emplace_back(base::MakeUnique<AnswerCardResult>(
+    results.emplace_back(std::make_unique<AnswerCardResult>(
         profile_, list_controller_, current_context.result_url,
         stripped_result_url.spec(),
         base::UTF8ToUTF16(current_context.result_title),

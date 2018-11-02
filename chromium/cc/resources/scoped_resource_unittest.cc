@@ -6,9 +6,9 @@
 
 #include <stddef.h>
 
+#include "cc/resources/resource_util.h"
 #include "cc/test/fake_resource_provider.h"
 #include "cc/test/test_context_provider.h"
-#include "cc/test/test_shared_bitmap_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace cc {
@@ -20,11 +20,9 @@ TEST(ScopedResourceTest, NewScopedResource) {
   ASSERT_EQ(context_provider->BindToCurrentThread(),
             gpu::ContextResult::kSuccess);
 
-  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager(
-      new TestSharedBitmapManager());
-  std::unique_ptr<ResourceProvider> resource_provider =
-      FakeResourceProvider::Create(context_provider.get(),
-                                   shared_bitmap_manager.get());
+  std::unique_ptr<LayerTreeResourceProvider> resource_provider =
+      FakeResourceProvider::CreateLayerTreeResourceProvider(
+          context_provider.get(), nullptr);
   auto texture = std::make_unique<ScopedResource>(resource_provider.get());
 
   // New scoped textures do not hold a texture yet.
@@ -42,14 +40,13 @@ TEST(ScopedResourceTest, CreateScopedResource) {
   ASSERT_EQ(context_provider->BindToCurrentThread(),
             gpu::ContextResult::kSuccess);
 
-  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager(
-      new TestSharedBitmapManager());
-  std::unique_ptr<ResourceProvider> resource_provider =
-      FakeResourceProvider::Create(context_provider.get(),
-                                   shared_bitmap_manager.get());
+  std::unique_ptr<LayerTreeResourceProvider> resource_provider =
+      FakeResourceProvider::CreateLayerTreeResourceProvider(
+          context_provider.get(), nullptr);
   auto texture = std::make_unique<ScopedResource>(resource_provider.get());
-  texture->Allocate(gfx::Size(30, 30), viz::ResourceTextureHint::kDefault,
-                    viz::RGBA_8888, gfx::ColorSpace());
+  texture->AllocateGpuTexture(gfx::Size(30, 30),
+                              viz::ResourceTextureHint::kDefault,
+                              viz::RGBA_8888, gfx::ColorSpace());
 
   // The texture has an allocated byte-size now.
   size_t expected_bytes = 30 * 30 * 4;
@@ -57,7 +54,8 @@ TEST(ScopedResourceTest, CreateScopedResource) {
                                 texture->size(), texture->format()));
 
   EXPECT_LT(0u, texture->id());
-  EXPECT_EQ(static_cast<unsigned>(viz::RGBA_8888), texture->format());
+  EXPECT_EQ(static_cast<unsigned>(viz::RGBA_8888),
+            static_cast<unsigned>(texture->format()));
   EXPECT_EQ(gfx::Size(30, 30), texture->size());
 }
 
@@ -67,17 +65,16 @@ TEST(ScopedResourceTest, ScopedResourceIsDeleted) {
   ASSERT_EQ(context_provider->BindToCurrentThread(),
             gpu::ContextResult::kSuccess);
 
-  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager(
-      new TestSharedBitmapManager());
-  std::unique_ptr<ResourceProvider> resource_provider =
-      FakeResourceProvider::Create(context_provider.get(),
-                                   shared_bitmap_manager.get());
+  std::unique_ptr<LayerTreeResourceProvider> resource_provider =
+      FakeResourceProvider::CreateLayerTreeResourceProvider(
+          context_provider.get(), nullptr);
   {
     auto texture = std::make_unique<ScopedResource>(resource_provider.get());
 
     EXPECT_EQ(0u, resource_provider->num_resources());
-    texture->Allocate(gfx::Size(30, 30), viz::ResourceTextureHint::kDefault,
-                      viz::RGBA_8888, gfx::ColorSpace());
+    texture->AllocateGpuTexture(gfx::Size(30, 30),
+                                viz::ResourceTextureHint::kDefault,
+                                viz::RGBA_8888, gfx::ColorSpace());
     EXPECT_LT(0u, texture->id());
     EXPECT_EQ(1u, resource_provider->num_resources());
   }
@@ -86,8 +83,9 @@ TEST(ScopedResourceTest, ScopedResourceIsDeleted) {
   {
     auto texture = std::make_unique<ScopedResource>(resource_provider.get());
     EXPECT_EQ(0u, resource_provider->num_resources());
-    texture->Allocate(gfx::Size(30, 30), viz::ResourceTextureHint::kDefault,
-                      viz::RGBA_8888, gfx::ColorSpace());
+    texture->AllocateGpuTexture(gfx::Size(30, 30),
+                                viz::ResourceTextureHint::kDefault,
+                                viz::RGBA_8888, gfx::ColorSpace());
     EXPECT_LT(0u, texture->id());
     EXPECT_EQ(1u, resource_provider->num_resources());
     texture->Free();

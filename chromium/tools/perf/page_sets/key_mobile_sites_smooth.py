@@ -28,8 +28,7 @@ class KeyMobileSitesSmoothPage(page_module.Page):
     if name == '':
       name = url
     super(KeyMobileSitesSmoothPage, self).__init__(
-        url=url, page_set=page_set, name=name,
-        credentials_path='data/credentials.json', tags=tags,
+        url=url, page_set=page_set, name=name, tags=tags,
         shared_page_state_class=shared_page_state.SharedMobilePageState)
     self.action_on_load_complete = action_on_load_complete
 
@@ -192,13 +191,13 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
     self.AddStory(KeyMobileSitesSmoothPage(
       url='http://en.wikipedia.org/wiki/Wikipedia',
       page_set=self,
-      name='Wikipedia (1 tab)'))
+      name='Wikipedia_(1_tab)'))
 
     # Why: Wikipedia page with a delayed scroll start
     self.AddStory(KeyMobileSitesSmoothPage(
       url='http://en.wikipedia.org/wiki/Wikipedia',
       page_set=self,
-      name='Wikipedia (1 tab) - delayed scroll start',
+      name='Wikipedia_(1_tab)-delayed_scroll_start',
       action_on_load_complete=True))
 
     # Why: #8 (Alexa global), picked an interesting page
@@ -281,9 +280,3 @@ class KeyMobileSitesSmoothPageSet(story.StorySet):
 
     for url in urls_list:
       self.AddStory(KeyMobileSitesSmoothPage(url, self))
-
-
-class KeyMobileSitesSmoothStoryExpectations(
-    story.expectations.StoryExpectations):
-  def SetExpectations(self):
-    pass # No tests disabled.

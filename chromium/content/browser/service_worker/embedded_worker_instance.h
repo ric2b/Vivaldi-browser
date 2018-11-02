@@ -29,7 +29,8 @@
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_installed_scripts_manager.mojom.h"
 #include "url/gurl.h"
 
 namespace IPC {
@@ -39,7 +40,6 @@ class Message;
 namespace content {
 
 class EmbeddedWorkerRegistry;
-struct EmbeddedWorkerStartParams;
 class ServiceWorkerContentSettingsProxyImpl;
 class ServiceWorkerContextCore;
 class ServiceWorkerVersion;
@@ -132,14 +132,10 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // it is null.
   // |provider_info_getter| is called when this instance
   // allocates a process and is ready to send a StartWorker message.
-  void Start(std::unique_ptr<EmbeddedWorkerStartParams> params,
-             ProviderInfoGetter provider_info_getter,
-             mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
-             mojom::ControllerServiceWorkerRequest controller_request,
-             mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
-             blink::mojom::ServiceWorkerHostAssociatedPtrInfo
-                 service_worker_host_ptr_info,
-             StatusCallback callback);
+  void Start(
+      mojom::EmbeddedWorkerStartParamsPtr params,
+      ProviderInfoGetter provider_info_getter,
+      StatusCallback callback);
 
   // Stops the worker. It is invalid to call this when the worker is not in
   // STARTING or RUNNING status.
@@ -253,7 +249,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
 
   // Sends StartWorker message via Mojo.
   ServiceWorkerStatusCode SendStartWorker(
-      std::unique_ptr<EmbeddedWorkerStartParams> params);
+      mojom::EmbeddedWorkerStartParamsPtr params);
 
   // Called back from StartTask after a start worker message is sent.
   void OnStartWorkerMessageSent(bool is_script_streaming);
@@ -322,27 +318,11 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Binding for EmbeddedWorkerInstanceHost, runs on IO thread.
   mojo::AssociatedBinding<EmbeddedWorkerInstanceHost> instance_host_binding_;
 
-  // |pending_dispatcher_request_|, |pending_controller_request_|,
-  // |pending_installed_scripts_info_|, and
-  // |pending_service_worker_host_ptr_info_| are parameters of the StartWorker
-  // message. These are called "pending" because they are not used directly by
-  // this class and are just transferred to the renderer in SendStartWorker().
-  // TODO(shimazu): Remove these when EmbeddedWorkerStartParams is
-  // changed to a mojo struct and we put them in EmbeddedWorkerStartParams.
-  mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
-  mojom::ControllerServiceWorkerRequest pending_controller_request_;
-  mojom::ServiceWorkerInstalledScriptsInfoPtr pending_installed_scripts_info_;
-  blink::mojom::ServiceWorkerHostAssociatedPtrInfo
-      pending_service_worker_host_ptr_info_;
-
   // This is set at Start and used on SendStartWorker.
   ProviderInfoGetter provider_info_getter_;
 
   // Whether devtools is attached or not.
   bool devtools_attached_;
-
-  // Unique token identifying this worker for DevTools.
-  base::UnguessableToken devtools_worker_token_;
 
   // True if the script load request accessed the network. If the script was
   // served from HTTPCache or ServiceWorkerDatabase this value is false.

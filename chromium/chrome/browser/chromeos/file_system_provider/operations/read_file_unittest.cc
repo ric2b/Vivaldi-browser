@@ -11,9 +11,9 @@
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/test_util.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
@@ -60,7 +60,7 @@ class CallbackLogger {
   virtual ~CallbackLogger() {}
 
   void OnReadFile(int chunk_length, bool has_more, base::File::Error result) {
-    events_.push_back(base::MakeUnique<Event>(chunk_length, has_more, result));
+    events_.push_back(std::make_unique<Event>(chunk_length, has_more, result));
   }
 
   std::vector<std::unique_ptr<Event>>& events() { return events_; }
@@ -82,7 +82,7 @@ class FileSystemProviderOperationsReadFileTest : public testing::Test {
     file_system_info_ = ProvidedFileSystemInfo(
         kExtensionId, MountOptions(kFileSystemId, "" /* display_name */),
         base::FilePath(), false /* configurable */, true /* watchable */,
-        extensions::SOURCE_FILE);
+        extensions::SOURCE_FILE, IconSet());
     io_buffer_ = base::MakeRefCounted<net::IOBuffer>(kOffset + kLength);
   }
 
@@ -175,12 +175,12 @@ TEST_F(FileSystemProviderOperationsReadFileTest, OnSuccess) {
   const int execution_time = 0;
 
   base::ListValue value_as_list;
-  value_as_list.Set(0, base::MakeUnique<base::Value>(kFileSystemId));
-  value_as_list.Set(1, base::MakeUnique<base::Value>(kRequestId));
+  value_as_list.Set(0, std::make_unique<base::Value>(kFileSystemId));
+  value_as_list.Set(1, std::make_unique<base::Value>(kRequestId));
   value_as_list.Set(
       2, base::Value::CreateWithCopiedBuffer(data.c_str(), data.size()));
-  value_as_list.Set(3, base::MakeUnique<base::Value>(has_more));
-  value_as_list.Set(4, base::MakeUnique<base::Value>(execution_time));
+  value_as_list.Set(3, std::make_unique<base::Value>(has_more));
+  value_as_list.Set(4, std::make_unique<base::Value>(execution_time));
 
   std::unique_ptr<Params> params(Params::Create(value_as_list));
   ASSERT_TRUE(params.get());

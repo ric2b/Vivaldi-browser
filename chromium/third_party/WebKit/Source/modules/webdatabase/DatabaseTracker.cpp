@@ -30,6 +30,9 @@
 
 #include "modules/webdatabase/DatabaseTracker.h"
 
+#include <memory>
+
+#include "base/location.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "modules/webdatabase/Database.h"
@@ -42,13 +45,11 @@
 #include "platform/weborigin/SecurityOriginHash.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebDatabaseObserver.h"
 #include "public/platform/WebSecurityOrigin.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -83,7 +84,7 @@ bool DatabaseTracker::CanEstablishDatabase(DatabaseContext* database_context,
   return success;
 }
 
-String DatabaseTracker::FullPathForDatabase(SecurityOrigin* origin,
+String DatabaseTracker::FullPathForDatabase(const SecurityOrigin* origin,
                                             const String& name,
                                             bool) {
   return String(Platform::Current()->DatabaseCreateOriginIdentifier(
@@ -94,7 +95,7 @@ String DatabaseTracker::FullPathForDatabase(SecurityOrigin* origin,
 void DatabaseTracker::AddOpenDatabase(Database* database) {
   MutexLocker open_database_map_lock(open_database_map_guard_);
   if (!open_database_map_)
-    open_database_map_ = WTF::WrapUnique(new DatabaseOriginMap);
+    open_database_map_ = std::make_unique<DatabaseOriginMap>();
 
   String origin_string = database->GetSecurityOrigin()->ToRawString();
   DatabaseNameMap* name_map = open_database_map_->at(origin_string);
@@ -198,8 +199,8 @@ void DatabaseTracker::CloseDatabasesImmediately(const SecurityOrigin* origin,
   // We have to call closeImmediately() on the context thread.
   for (DatabaseSet::iterator it = database_set->begin();
        it != database_set->end(); ++it) {
-    (*it)->GetDatabaseTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *(*it)->GetDatabaseTaskRunner(), FROM_HERE,
         CrossThreadBind(&DatabaseTracker::CloseOneDatabaseImmediately,
                         CrossThreadUnretained(this), origin_string, name, *it));
   }

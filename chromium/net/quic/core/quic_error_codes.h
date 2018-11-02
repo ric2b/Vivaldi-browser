@@ -263,8 +263,8 @@ enum QuicErrorCode {
   QUIC_CONNECTION_MIGRATION_NON_MIGRATABLE_STREAM = 84,
 
   // Stream frames arrived too discontiguously so that stream sequencer buffer
-  // maintains too many gaps.
-  QUIC_TOO_MANY_FRAME_GAPS = 93,
+  // maintains too many intervals.
+  QUIC_TOO_MANY_STREAM_DATA_INTERVALS = 93,
 
   // Sequencer buffer get into weird state where continuing read/write will lead
   // to crash.
@@ -273,8 +273,11 @@ enum QuicErrorCode {
   // Connection closed because of server hits max number of sessions allowed.
   QUIC_TOO_MANY_SESSIONS_ON_SERVER = 96,
 
+  // Receive a RST_STREAM with offset larger than kMaxStreamLength.
+  QUIC_STREAM_LENGTH_OVERFLOW = 98,
+
   // No error. Used as bound while iterating.
-  QUIC_LAST_ERROR = 98,
+  QUIC_LAST_ERROR = 99,
 };
 // QuicErrorCodes is encoded as a single octet on-the-wire.
 static_assert(static_cast<int>(QUIC_LAST_ERROR) <=

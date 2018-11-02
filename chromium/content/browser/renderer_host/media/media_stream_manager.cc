@@ -305,8 +305,7 @@ class MediaStreamManager::DeviceRequest {
   void SetState(MediaStreamType stream_type, MediaRequestState new_state) {
     if (stream_type == NUM_MEDIA_TYPES) {
       for (int i = MEDIA_NO_SERVICE + 1; i < NUM_MEDIA_TYPES; ++i) {
-        const MediaStreamType stream_type = static_cast<MediaStreamType>(i);
-        state_[stream_type] = new_state;
+        state_[static_cast<MediaStreamType>(i)] = new_state;
       }
     } else {
       state_[stream_type] = new_state;
@@ -317,9 +316,18 @@ class MediaStreamManager::DeviceRequest {
     if (!media_observer)
       return;
 
-    media_observer->OnMediaRequestStateChanged(
-        target_process_id_, target_frame_id_, page_request_id,
-        security_origin.GetURL(), stream_type, new_state);
+    if (stream_type == NUM_MEDIA_TYPES) {
+      for (int i = MEDIA_NO_SERVICE + 1; i < NUM_MEDIA_TYPES; ++i) {
+        media_observer->OnMediaRequestStateChanged(
+            target_process_id_, target_frame_id_, page_request_id,
+            security_origin.GetURL(), static_cast<MediaStreamType>(i),
+            new_state);
+      }
+    } else {
+      media_observer->OnMediaRequestStateChanged(
+          target_process_id_, target_frame_id_, page_request_id,
+          security_origin.GetURL(), stream_type, new_state);
+    }
   }
 
   MediaRequestState state(MediaStreamType stream_type) const {
@@ -1377,8 +1385,6 @@ void MediaStreamManager::Opened(MediaStreamType stream_type,
             FilterAudioEffects(request->controls, &effects);
             EnableHotwordEffect(request->controls, &effects);
             device.input.set_effects(effects);
-
-            device.matched_output = opened_device->matched_output;
           }
         }
         if (RequestDone(*request))

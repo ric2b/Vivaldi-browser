@@ -11,7 +11,6 @@
 #include "net/base/auth.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/io_buffer.h"
-#include "net/base/proxy_delegate.h"
 #include "net/http/http_basic_stream.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_request_info.h"
@@ -21,25 +20,24 @@
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
 namespace net {
 
 HttpProxyClientSocket::HttpProxyClientSocket(
-    ClientSocketHandle* transport_socket,
+    std::unique_ptr<ClientSocketHandle> transport_socket,
     const std::string& user_agent,
     const HostPortPair& endpoint,
-    const HostPortPair& proxy_server,
     HttpAuthController* http_auth_controller,
     bool tunnel,
     bool using_spdy,
     NextProto negotiated_protocol,
-    ProxyDelegate* proxy_delegate,
     bool is_https_proxy)
     : io_callback_(base::Bind(&HttpProxyClientSocket::OnIOComplete,
                               base::Unretained(this))),
       next_state_(STATE_NONE),
-      transport_(transport_socket),
+      transport_(std::move(transport_socket)),
       endpoint_(endpoint),
       auth_(http_auth_controller),
       tunnel_(tunnel),
@@ -47,9 +45,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
       negotiated_protocol_(negotiated_protocol),
       is_https_proxy_(is_https_proxy),
       redirect_has_load_timing_info_(false),
-      proxy_server_(proxy_server),
-      proxy_delegate_(proxy_delegate),
-      net_log_(transport_socket->socket()->NetLog()) {
+      net_log_(transport_->socket()->NetLog()) {
   // Synthesize the bits of a request that we actually use.
   request_.url = GURL("https://" + endpoint.ToString());
   request_.method = "CONNECT";
@@ -207,6 +203,10 @@ int64_t HttpProxyClientSocket::GetTotalReceivedBytes() const {
   return transport_->socket()->GetTotalReceivedBytes();
 }
 
+void HttpProxyClientSocket::ApplySocketTag(const SocketTag& tag) {
+  return transport_->socket()->ApplySocketTag(tag);
+}
+
 int HttpProxyClientSocket::Read(IOBuffer* buf, int buf_len,
                                 const CompletionCallback& callback) {
   DCHECK(user_callback_.is_null());
@@ -227,12 +227,16 @@ int HttpProxyClientSocket::Read(IOBuffer* buf, int buf_len,
   return transport_->socket()->Read(buf, buf_len, callback);
 }
 
-int HttpProxyClientSocket::Write(IOBuffer* buf, int buf_len,
-                                 const CompletionCallback& callback) {
+int HttpProxyClientSocket::Write(
+    IOBuffer* buf,
+    int buf_len,
+    const CompletionCallback& callback,
+    const NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_EQ(STATE_DONE, next_state_);
   DCHECK(user_callback_.is_null());
 
-  return transport_->socket()->Write(buf, buf_len, callback);
+  return transport_->socket()->Write(buf, buf_len, callback,
+                                     traffic_annotation);
 }
 
 int HttpProxyClientSocket::SetReceiveBufferSize(int32_t size) {
@@ -396,10 +400,6 @@ int HttpProxyClientSocket::DoSendRequest() {
     HttpRequestHeaders authorization_headers;
     if (auth_->HaveAuth())
       auth_->AddAuthorizationHeader(&authorization_headers);
-    if (proxy_delegate_) {
-      proxy_delegate_->OnBeforeTunnelRequest(proxy_server_,
-                                             &authorization_headers);
-    }
     std::string user_agent;
     if (!request_.extra_headers.GetHeader(HttpRequestHeaders::kUserAgent,
                                           &user_agent)) {
@@ -417,8 +417,10 @@ int HttpProxyClientSocket::DoSendRequest() {
   parser_buf_ = new GrowableIOBuffer();
   http_stream_parser_.reset(new HttpStreamParser(
       transport_.get(), &request_, parser_buf_.get(), net_log_));
-  return http_stream_parser_->SendRequest(
-      request_line_, request_headers_, &response_, io_callback_);
+  // TODO(crbug.com/656607): Add propoer annotation.
+  return http_stream_parser_->SendRequest(request_line_, request_headers_,
+                                          NO_TRAFFIC_ANNOTATION_BUG_656607,
+                                          &response_, io_callback_);
 }
 
 int HttpProxyClientSocket::DoSendRequestComplete(int result) {
@@ -445,13 +447,6 @@ int HttpProxyClientSocket::DoReadHeadersComplete(int result) {
   net_log_.AddEvent(
       NetLogEventType::HTTP_TRANSACTION_READ_TUNNEL_RESPONSE_HEADERS,
       base::Bind(&HttpResponseHeaders::NetLogCallback, response_.headers));
-
-  if (proxy_delegate_) {
-    proxy_delegate_->OnTunnelHeadersReceived(
-        HostPortPair::FromURL(request_.url),
-        proxy_server_,
-        *response_.headers);
-  }
 
   switch (response_.headers->response_code()) {
     case 200:  // OK

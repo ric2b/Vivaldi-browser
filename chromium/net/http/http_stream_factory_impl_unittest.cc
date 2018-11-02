@@ -50,6 +50,7 @@
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/mock_client_socket_pool_manager.h"
 #include "net/socket/next_proto.h"
+#include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
 #include "net/spdy/chromium/spdy_session.h"
 #include "net/spdy/chromium/spdy_session_pool.h"
@@ -99,6 +100,7 @@ class MockWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 
   // HttpStream methods
   int InitializeStream(const HttpRequestInfo* request_info,
+                       bool can_send_early,
                        RequestPriority priority,
                        const NetLogWithSource& net_log,
                        const CompletionCallback& callback) override {
@@ -157,7 +159,7 @@ class MockWebSocketHandshakeStream : public WebSocketHandshakeStreamBase {
 class MockHttpStreamFactoryImplForPreconnect : public HttpStreamFactoryImpl {
  public:
   explicit MockHttpStreamFactoryImplForPreconnect(HttpNetworkSession* session)
-      : HttpStreamFactoryImpl(session, false),
+      : HttpStreamFactoryImpl(session),
         preconnect_done_(false),
         waiting_for_preconnect_(false) {}
 
@@ -388,6 +390,7 @@ class CapturePreconnectsSocketPool : public ParentPool {
   int RequestSocket(const std::string& group_name,
                     const void* socket_params,
                     RequestPriority priority,
+                    const SocketTag& socket_tag,
                     ClientSocketPool::RespectLimits respect_limits,
                     ClientSocketHandle* handle,
                     const CompletionCallback& callback,
@@ -1021,16 +1024,6 @@ TEST_F(HttpStreamFactoryTest, WithQUICAlternativeProxyMarkedAsBad) {
         // If alternative proxy server was specified, it should have been marked
         // as invalid so that it is not used for subsequent requests.
         EXPECT_FALSE(test_proxy_delegate.alternative_proxy_server().is_valid());
-
-        if (set_alternative_proxy_server) {
-          // GetAlternativeProxy should be called only once for the first
-          // request.
-          EXPECT_EQ(1, test_proxy_delegate.get_alternative_proxy_invocations());
-        } else {
-          // Alternative proxy server job is never started. So, ProxyDelegate is
-          // queried once per request.
-          EXPECT_EQ(2, test_proxy_delegate.get_alternative_proxy_invocations());
-        }
       }
     }
   }
@@ -1126,10 +1119,6 @@ TEST_F(HttpStreamFactoryTest, WithQUICAlternativeProxyNotMarkedAsBad) {
       // Alternative proxy server should be marked as invalid so that it is
       // not used for subsequent requests.
       EXPECT_FALSE(test_proxy_delegate.alternative_proxy_server().is_quic());
-
-      // GetAlternativeProxy should be called only once per request.
-      EXPECT_EQ(static_cast<int>(i + 1),
-                test_proxy_delegate.get_alternative_proxy_invocations());
     }
   }
 }
@@ -1818,12 +1807,11 @@ TEST_F(HttpStreamFactoryTest, RequestWebSocketBasicHandshakeStream) {
   StreamRequestWaiter waiter;
   WebSocketStreamCreateHelper create_helper;
   std::unique_ptr<HttpStreamRequest> request(
-      session->http_stream_factory_for_websocket()
-          ->RequestWebSocketHandshakeStream(
-              request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
-              &create_helper,
-              /* enable_ip_based_pooling = */ true,
-              /* enable_alternative_services = */ true, NetLogWithSource()));
+      session->http_stream_factory()->RequestWebSocketHandshakeStream(
+          request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
+          &create_helper,
+          /* enable_ip_based_pooling = */ true,
+          /* enable_alternative_services = */ true, NetLogWithSource()));
   waiter.WaitForStream();
   EXPECT_TRUE(waiter.stream_done());
   EXPECT_TRUE(nullptr == waiter.stream());
@@ -1863,12 +1851,11 @@ TEST_F(HttpStreamFactoryTest, RequestWebSocketBasicHandshakeStreamOverSSL) {
   StreamRequestWaiter waiter;
   WebSocketStreamCreateHelper create_helper;
   std::unique_ptr<HttpStreamRequest> request(
-      session->http_stream_factory_for_websocket()
-          ->RequestWebSocketHandshakeStream(
-              request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
-              &create_helper,
-              /* enable_ip_based_pooling = */ true,
-              /* enable_alternative_services = */ true, NetLogWithSource()));
+      session->http_stream_factory()->RequestWebSocketHandshakeStream(
+          request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
+          &create_helper,
+          /* enable_ip_based_pooling = */ true,
+          /* enable_alternative_services = */ true, NetLogWithSource()));
   waiter.WaitForStream();
   EXPECT_TRUE(waiter.stream_done());
   EXPECT_TRUE(nullptr == waiter.stream());
@@ -1906,12 +1893,11 @@ TEST_F(HttpStreamFactoryTest, RequestWebSocketBasicHandshakeStreamOverProxy) {
   StreamRequestWaiter waiter;
   WebSocketStreamCreateHelper create_helper;
   std::unique_ptr<HttpStreamRequest> request(
-      session->http_stream_factory_for_websocket()
-          ->RequestWebSocketHandshakeStream(
-              request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
-              &create_helper,
-              /* enable_ip_based_pooling = */ true,
-              /* enable_alternative_services = */ true, NetLogWithSource()));
+      session->http_stream_factory()->RequestWebSocketHandshakeStream(
+          request_info, DEFAULT_PRIORITY, ssl_config, ssl_config, &waiter,
+          &create_helper,
+          /* enable_ip_based_pooling = */ true,
+          /* enable_alternative_services = */ true, NetLogWithSource()));
   waiter.WaitForStream();
   EXPECT_TRUE(waiter.stream_done());
   EXPECT_TRUE(nullptr == waiter.stream());
@@ -2081,7 +2067,7 @@ TEST_F(HttpStreamFactoryTest, NewSpdySessionCloseIdleH2Sockets) {
                             ssl_config, PRIVACY_MODE_DISABLED, 0, false));
     std::string group_name = "ssl/" + host_port_pair.ToString();
     int rv = connection->Init(
-        group_name, ssl_params, MEDIUM,
+        group_name, ssl_params, MEDIUM, SocketTag(),
         ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
         session->GetSSLSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL),
         NetLogWithSource());
@@ -2236,20 +2222,25 @@ TEST_F(HttpStreamFactoryTest, RequestBidirectionalStreamImpl) {
 
 class HttpStreamFactoryBidirectionalQuicTest
     : public ::testing::Test,
-      public ::testing::WithParamInterface<QuicTransportVersion> {
+      public ::testing::WithParamInterface<
+          std::tuple<QuicTransportVersion, bool>> {
  protected:
   HttpStreamFactoryBidirectionalQuicTest()
       : default_url_(kDefaultUrl),
-        client_packet_maker_(GetParam(),
+        version_(std::get<0>(GetParam())),
+        client_headers_include_h2_stream_dependency_(std::get<1>(GetParam())),
+        client_packet_maker_(version_,
                              0,
                              &clock_,
                              "www.example.org",
-                             Perspective::IS_CLIENT),
-        server_packet_maker_(GetParam(),
+                             Perspective::IS_CLIENT,
+                             client_headers_include_h2_stream_dependency_),
+        server_packet_maker_(version_,
                              0,
                              &clock_,
                              "www.example.org",
-                             Perspective::IS_SERVER),
+                             Perspective::IS_SERVER,
+                             false),
         random_generator_(0),
         proxy_service_(ProxyService::CreateDirect()),
         ssl_config_service_(new SSLConfigServiceDefaults) {
@@ -2267,7 +2258,9 @@ class HttpStreamFactoryBidirectionalQuicTest
   void Initialize() {
     params_.enable_quic = true;
     params_.quic_supported_versions =
-        test::SupportedTransportVersions(GetParam());
+        test::SupportedTransportVersions(version_);
+    params_.quic_headers_include_h2_stream_dependency =
+        client_headers_include_h2_stream_dependency_;
 
     HttpNetworkSession::Context session_context;
     session_context.http_server_properties = &http_server_properties_;
@@ -2320,10 +2313,12 @@ class HttpStreamFactoryBidirectionalQuicTest
   const GURL default_url_;
 
   QuicStreamId GetNthClientInitiatedStreamId(int n) {
-    return test::GetNthClientInitiatedStreamId(GetParam(), n);
+    return test::GetNthClientInitiatedStreamId(version_, n);
   }
 
  private:
+  const QuicTransportVersion version_;
+  const bool client_headers_include_h2_stream_dependency_;
   MockClock clock_;
   test::QuicTestPacketMaker client_packet_maker_;
   test::QuicTestPacketMaker server_packet_maker_;
@@ -2343,9 +2338,11 @@ class HttpStreamFactoryBidirectionalQuicTest
   HttpNetworkSession::Params params_;
 };
 
-INSTANTIATE_TEST_CASE_P(Version,
-                        HttpStreamFactoryBidirectionalQuicTest,
-                        ::testing::ValuesIn(AllSupportedTransportVersions()));
+INSTANTIATE_TEST_CASE_P(
+    VersionIncludeStreamDependencySequnece,
+    HttpStreamFactoryBidirectionalQuicTest,
+    ::testing::Combine(::testing::ValuesIn(AllSupportedTransportVersions()),
+                       ::testing::Bool()));
 
 TEST_P(HttpStreamFactoryBidirectionalQuicTest,
        RequestBidirectionalStreamImplQuicAlternative) {
@@ -2360,7 +2357,8 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
       2, GetNthClientInitiatedStreamId(0), /*should_include_version=*/true,
       /*fin=*/true, priority,
       client_packet_maker().GetRequestHeaders("GET", "https", "/"),
-      &spdy_headers_frame_length, &header_stream_offset));
+      /*parent_stream_id=*/0, &spdy_headers_frame_length,
+      &header_stream_offset));
   size_t spdy_response_headers_frame_length;
   mock_quic_data.AddRead(server_packet_maker().MakeResponseHeadersPacket(
       1, GetNthClientInitiatedStreamId(0), /*should_include_version=*/false,
@@ -2486,7 +2484,8 @@ TEST_P(HttpStreamFactoryBidirectionalQuicTest,
       2, GetNthClientInitiatedStreamId(0), /*should_include_version=*/true,
       /*fin=*/true, priority,
       client_packet_maker().GetRequestHeaders("GET", "https", "/"),
-      &spdy_headers_frame_length, &header_stream_offset));
+      /*parent_stream_id=*/0, &spdy_headers_frame_length,
+      &header_stream_offset));
   size_t spdy_response_headers_frame_length;
   mock_quic_data.AddRead(server_packet_maker().MakeResponseHeadersPacket(
       1, GetNthClientInitiatedStreamId(0), /*should_include_version=*/false,

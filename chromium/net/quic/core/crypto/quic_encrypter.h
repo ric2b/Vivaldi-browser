@@ -6,6 +6,7 @@
 #define NET_QUIC_CORE_CRYPTO_QUIC_ENCRYPTER_H_
 
 #include <cstddef>
+#include <memory>
 
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/platform/api/quic_export.h"
@@ -17,7 +18,12 @@ class QUIC_EXPORT_PRIVATE QuicEncrypter {
  public:
   virtual ~QuicEncrypter() {}
 
-  static QuicEncrypter* Create(QuicTag algorithm);
+  static std::unique_ptr<QuicEncrypter> Create(QuicTag algorithm);
+
+  // Creates an IETF QuicEncrypter based on |cipher_suite| which must be an id
+  // returned by SSL_CIPHER_get_id. The caller is responsible for taking
+  // ownership of the new QuicEncrypter.
+  static QuicEncrypter* CreateFromCipherSuite(uint32_t cipher_suite);
 
   // Sets the encryption key. Returns true on success, false on failure.
   //
@@ -94,6 +100,9 @@ class QUIC_EXPORT_PRIVATE QuicEncrypter {
   virtual size_t GetKeySize() const = 0;
   // Returns the size in bytes of the fixed initial part of the nonce.
   virtual size_t GetNoncePrefixSize() const = 0;
+
+  // Returns the size in bytes of an IV to use with the algorithm.
+  virtual size_t GetIVSize() const = 0;
 
   // Returns the maximum length of plaintext that can be encrypted
   // to ciphertext no larger than |ciphertext_size|.

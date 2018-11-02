@@ -4,9 +4,12 @@
 
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_coordinator.h"
 
+#include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/ui/commands/tools_menu_commands.h"
+#import "ios/chrome/browser/ui/fullscreen/chrome_coordinator+fullscreen_disabling.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_configuration_provider.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_presentation_provider.h"
@@ -23,75 +26,32 @@
 @end
 
 @implementation ToolsMenuCoordinator
+@synthesize dispatcher = _dispatcher;
 @synthesize configurationProvider = _configurationProvider;
 @synthesize presentationProvider = _presentationProvider;
-@synthesize dispatcher = _dispatcher;
 
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController {
-  if (self = [super initWithBaseViewController:viewController]) {
-    NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
-    [defaultCenter addObserver:self
-                      selector:@selector(applicationDidEnterBackground:)
-                          name:UIApplicationDidEnterBackgroundNotification
-                        object:nil];
-  }
-  return self;
+- (instancetype)init {
+  return [super initWithBaseViewController:nil browserState:nil];
 }
 
-- (void)disconnect {
-  self.dispatcher = nil;
+#pragma mark - ChromeCoordinator
+
+- (void)start {
+  NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
+  [defaultCenter addObserver:self
+                    selector:@selector(applicationDidEnterBackground:)
+                        name:UIApplicationDidEnterBackgroundNotification
+                      object:nil];
+  [self.dispatcher startDispatchingToTarget:self
+                                forProtocol:@protocol(ToolsMenuCommands)];
 }
 
-- (void)setDispatcher:(CommandDispatcher*)dispatcher {
-  if (dispatcher != self.dispatcher) {
-    if (self.dispatcher) {
-      [self.dispatcher stopDispatchingToTarget:self];
-    }
-    if (dispatcher) {
-      [dispatcher startDispatchingToTarget:self
-                               forProtocol:@protocol(ToolsMenuCommands)];
-    }
-    _dispatcher = dispatcher;
-  }
+- (void)stop {
+  [self.dispatcher stopDispatchingToTarget:self];
+  [self dismissToolsMenu];
 }
 
-- (void)showToolsMenuPopupWithConfiguration:
-    (ToolsMenuConfiguration*)configuration {
-  // Because an animation hides and shows the tools popup menu it is possible to
-  // tap the tools button multiple times before the tools menu is shown. Ignore
-  // repeated taps between animations.
-  if ([self isShowingToolsMenu])
-    return;
-
-  base::RecordAction(base::UserMetricsAction("ShowAppMenu"));
-
-  [[NSNotificationCenter defaultCenter]
-      postNotificationName:kToolsMenuWillShowNotification
-                    object:nil];
-  if ([self.configurationProvider
-          respondsToSelector:@selector
-          (prepareForToolsMenuPresentationByCoordinator:)]) {
-    [self.configurationProvider
-        prepareForToolsMenuPresentationByCoordinator:self];
-  }
-
-  _toolsPopupController = [[ToolsPopupController alloc]
-      initAndPresentWithConfiguration:configuration
-                           dispatcher:(id<ApplicationCommands, BrowserCommands>)
-                                          self.dispatcher
-                           completion:^{
-                             [[NSNotificationCenter defaultCenter]
-                                 postNotificationName:
-                                     kToolsMenuDidShowNotification
-                                               object:nil];
-                           }];
-
-  // Set this coordinator as the popup menu delegate; this is used to
-  // dismiss the popup in response to popup menu requests for dismissal.
-  [_toolsPopupController setDelegate:self];
-
-  [self updateConfiguration];
-}
+#pragma mark - Public
 
 - (void)updateConfiguration {
   // The ToolsMenuConfiguration provided to the ToolsPopupController is not
@@ -123,6 +83,8 @@
                             isTabLoadingForToolsMenuCoordinator:self]];
 }
 
+#pragma mark - ToolsMenuPresentationStateProvider
+
 - (BOOL)isShowingToolsMenu {
   return !!_toolsPopupController;
 }
@@ -146,6 +108,10 @@
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kToolsMenuWillHideNotification
                     object:nil];
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen) &&
+      self.browserState) {
+    [self didStopFullscreenDisablingUI];
+  }
 
   ToolsPopupController* tempTPC = _toolsPopupController;
   [_toolsPopupController containerView].userInteractionEnabled = NO;
@@ -161,6 +127,8 @@
   _toolsPopupController = nil;
 }
 
+#pragma mark - Notification callback
+
 - (void)applicationDidEnterBackground:(NSNotification*)note {
   [self dismissToolsMenu];
 }
@@ -173,14 +141,48 @@
     [self dismissToolsMenu];
 }
 
-#pragma mark - Chrome Coordinator interface
+#pragma mark - Private
 
-- (void)start {
-  [self showToolsMenu];
-}
+- (void)showToolsMenuPopupWithConfiguration:
+    (ToolsMenuConfiguration*)configuration {
+  // Because an animation hides and shows the tools popup menu it is possible to
+  // tap the tools button multiple times before the tools menu is shown. Ignore
+  // repeated taps between animations.
+  if ([self isShowingToolsMenu])
+    return;
 
-- (void)stop {
-  [self dismissToolsMenu];
+  base::RecordAction(base::UserMetricsAction("ShowAppMenu"));
+
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:kToolsMenuWillShowNotification
+                    object:nil];
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen) &&
+      self.browserState) {
+    [self didStartFullscreenDisablingUI];
+  }
+  if ([self.configurationProvider
+          respondsToSelector:@selector
+          (prepareForToolsMenuPresentationByCoordinator:)]) {
+    [self.configurationProvider
+        prepareForToolsMenuPresentationByCoordinator:self];
+  }
+
+  _toolsPopupController = [[ToolsPopupController alloc]
+      initAndPresentWithConfiguration:configuration
+                           dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                          self.dispatcher
+                           completion:^{
+                             [[NSNotificationCenter defaultCenter]
+                                 postNotificationName:
+                                     kToolsMenuDidShowNotification
+                                               object:nil];
+                           }];
+
+  // Set this coordinator as the popup menu delegate; this is used to
+  // dismiss the popup in response to popup menu requests for dismissal.
+  [_toolsPopupController setDelegate:self];
+
+  [self updateConfiguration];
 }
 
 @end

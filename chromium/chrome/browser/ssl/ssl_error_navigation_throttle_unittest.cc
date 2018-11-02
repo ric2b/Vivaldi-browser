@@ -30,7 +30,6 @@ void MockHandleSSLError(
     int cert_error,
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
-    bool should_ssl_errors_be_fatal,
     bool expired_previous_decision,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -38,10 +37,10 @@ void MockHandleSSLError(
     base::OnceCallback<
         void(std::unique_ptr<security_interstitials::SecurityInterstitialPage>)>
         blocking_page_ready_callback) {
-  std::unique_ptr<SSLBlockingPage> blocking_page(
-      SSLBlockingPage::Create(web_contents, cert_error, ssl_info, request_url,
-                              0, base::Time::NowFromSystemTime(), nullptr,
-                              false /* is superfish */, decision_callback));
+  std::unique_ptr<SSLBlockingPage> blocking_page(SSLBlockingPage::Create(
+      web_contents, cert_error, ssl_info, request_url, 0,
+      base::Time::NowFromSystemTime(), GURL(), nullptr,
+      false /* is superfish */, decision_callback));
   if (async) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(blocking_page_ready_callback),
@@ -134,8 +133,7 @@ TEST_P(SSLErrorNavigationThrottleTest, NoSSLInfo) {
                << "Asynchronous MockHandleSSLError: " << async_);
 
   content::NavigationThrottle::ThrottleCheckResult result =
-      handle_->CallWillFailRequestForTesting(
-          base::nullopt, false /* should_ssl_errors_be_fatal */);
+      handle_->CallWillFailRequestForTesting(base::nullopt);
 
   EXPECT_FALSE(handle_->GetSSLInfo().is_valid());
   EXPECT_EQ(content::NavigationThrottle::PROCEED, result);
@@ -152,8 +150,7 @@ TEST_P(SSLErrorNavigationThrottleTest, SSLInfoWithoutCertError) {
   net::SSLInfo ssl_info;
   ssl_info.cert_status = net::CERT_STATUS_IS_EV;
   content::NavigationThrottle::ThrottleCheckResult result =
-      handle_->CallWillFailRequestForTesting(
-          ssl_info, false /* should_ssl_errors_be_fatal */);
+      handle_->CallWillFailRequestForTesting(ssl_info);
 
   EXPECT_EQ(net::CERT_STATUS_IS_EV, handle_->GetSSLInfo().cert_status);
   EXPECT_EQ(content::NavigationThrottle::PROCEED, result);
@@ -172,8 +169,7 @@ TEST_P(SSLErrorNavigationThrottleTest, SSLInfoWithCertError) {
       net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
   ssl_info.cert_status = net::CERT_STATUS_COMMON_NAME_INVALID;
   content::NavigationThrottle::ThrottleCheckResult synchronous_result =
-      handle_->CallWillFailRequestForTesting(
-          ssl_info, false /* should_ssl_errors_be_fatal */);
+      handle_->CallWillFailRequestForTesting(ssl_info);
 
   EXPECT_EQ(content::NavigationThrottle::DEFER, synchronous_result.action());
   base::RunLoop().RunUntilIdle();

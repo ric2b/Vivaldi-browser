@@ -7,6 +7,7 @@
 
 #include "components/crash/core/common/crash_key.h"
 
+#include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -14,8 +15,8 @@
 #include "components/crash/core/common/crash_key_base_support.h"
 #include "components/crash/core/common/crash_key_internal.h"
 
-#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_WIN)
-#error "This file should not be used when Crashpad is available."
+#if defined(OS_MACOSX) || defined(OS_IOS) || defined(OS_WIN)
+#error "This file should not be used when Crashpad is available, nor on iOS."
 #endif
 
 namespace crash_reporter {
@@ -23,14 +24,22 @@ namespace internal {
 
 namespace {
 
-// String used to format chunked key names.
-const char kChunkFormatString[] = "%s-%" PRIuS;
+// String used to format chunked key names. The __1 through __N syntax is
+// recognized by the crash collector, which will then stitch the numbered
+// parts back into a single string value.
+const char kChunkFormatString[] = "%s__%" PRIuS;
 
 static TransitionalCrashKeyStorage* g_storage = nullptr;
+
+constexpr size_t kUnsetStorageSlotSentinel =
+    TransitionalCrashKeyStorage::num_entries;
 
 }  // namespace
 
 TransitionalCrashKeyStorage* GetCrashKeyStorage() {
+  if (!g_storage) {
+    g_storage = new internal::TransitionalCrashKeyStorage();
+  }
   return g_storage;
 }
 
@@ -58,7 +67,32 @@ void CrashKeyStringImpl::Set(base::StringPiece value) {
     return;
   }
 
-  // Otherwise, break the value into chunks labeled name-1 through name-N,
+  // If the value fits in a single slot, the name of the key should not
+  // end with the __1 suffix of the chunked format.
+  if (value.length() < kCrashKeyStorageValueSize - 1) {
+    if (index_array_[1] != kUnsetStorageSlotSentinel) {
+      // If switching from chunked to non-chunked, clear all the values.
+      Clear();
+      index_array_[0] = storage->SetKeyValue(name_, value.data());
+    } else if (index_array_[0] != kUnsetStorageSlotSentinel) {
+      // The single entry was previously set.
+      storage->SetValueAtIndex(index_array_[0], value.data());
+    } else {
+      // This key was not previously set.
+      index_array_[0] = storage->SetKeyValue(name_, value.data());
+    }
+    return;
+  }
+
+  // If the key was previously set, but only using one slot, then the chunk
+  // name will change (from |name| to |name__1|).
+  if (index_array_[0] != kUnsetStorageSlotSentinel &&
+      index_array_[1] == kUnsetStorageSlotSentinel) {
+    storage->RemoveAtIndex(index_array_[0]);
+    index_array_[0] = kUnsetStorageSlotSentinel;
+  }
+
+  // Otherwise, break the value into chunks labeled name__1 through name__N,
   // where N is |index_array_count_|.
   size_t offset = 0;
   for (size_t i = 0; i < index_array_count_; ++i) {
@@ -69,7 +103,7 @@ void CrashKeyStringImpl::Set(base::StringPiece value) {
           value.substr(offset, kCrashKeyStorageValueSize - 1);
       offset += chunk.length();
 
-      if (index_array_[i] == TransitionalCrashKeyStorage::num_entries) {
+      if (index_array_[i] == kUnsetStorageSlotSentinel) {
         std::string chunk_name =
             base::StringPrintf(kChunkFormatString, name_, i + 1);
         index_array_[i] =
@@ -79,7 +113,7 @@ void CrashKeyStringImpl::Set(base::StringPiece value) {
       }
     } else {
       storage->RemoveAtIndex(index_array_[i]);
-      index_array_[i] = TransitionalCrashKeyStorage::num_entries;
+      index_array_[i] = kUnsetStorageSlotSentinel;
     }
   }
 }
@@ -87,21 +121,32 @@ void CrashKeyStringImpl::Set(base::StringPiece value) {
 void CrashKeyStringImpl::Clear() {
   for (size_t i = 0; i < index_array_count_; ++i) {
     GetCrashKeyStorage()->RemoveAtIndex(index_array_[i]);
-    index_array_[i] = TransitionalCrashKeyStorage::num_entries;
+    index_array_[i] = kUnsetStorageSlotSentinel;
   }
 }
 
 bool CrashKeyStringImpl::is_set() const {
-  return index_array_[0] != TransitionalCrashKeyStorage::num_entries;
+  return index_array_[0] != kUnsetStorageSlotSentinel;
 }
 
 }  // namespace internal
 
 void InitializeCrashKeys() {
-  if (!internal::g_storage) {
-    internal::g_storage = new internal::TransitionalCrashKeyStorage();
-    InitializeCrashKeyBaseSupport();
-  }
+  internal::GetCrashKeyStorage();
+  InitializeCrashKeyBaseSupport();
+}
+
+std::string GetCrashKeyValue(const std::string& key_name) {
+  const char* value =
+      internal::GetCrashKeyStorage()->GetValueForKey(key_name.c_str());
+  if (value)
+    return value;
+  return std::string();
+}
+
+void ResetCrashKeysForTesting() {
+  internal::ResetCrashKeyStorageForTesting();
+  base::debug::SetCrashKeyImplementation(nullptr);
 }
 
 }  // namespace crash_reporter

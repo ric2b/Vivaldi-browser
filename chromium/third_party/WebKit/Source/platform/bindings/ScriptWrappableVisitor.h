@@ -39,21 +39,33 @@ using TraceWrappersCallback = void (*)(const ScriptWrappableVisitor*,
     traceable->TraceWrappers(visitor);                               \
   }
 
+// WrapperDescriptor contains enough information to visit a
+// ScriptWrappable without knowing its type statically.
+// It is passed to ScriptWrappableVisitor::Visit method.
+struct WrapperDescriptor {
+  STACK_ALLOCATED();
+  const void* traceable;
+  TraceWrappersCallback trace_wrappers_callback;
+  HeapObjectHeaderCallback heap_object_header_callback;
+  MissedWriteBarrierCallback missed_write_barrier_callback;
+};
+
+// TODO(ulan): rename it to MarkingDequeItem and make it a private
+// nested class of ScriptWrappableMarkingVisitor.
 class WrapperMarkingData {
  public:
-  WrapperMarkingData(TraceWrappersCallback trace_wrappers_callback,
-                     HeapObjectHeaderCallback heap_object_header_callback,
-                     const void* object)
-      : trace_wrappers_callback_(trace_wrappers_callback),
-        heap_object_header_callback_(heap_object_header_callback),
-        raw_object_pointer_(object) {
+  WrapperMarkingData(const WrapperDescriptor& wrapper_descriptor)
+      : trace_wrappers_callback_(wrapper_descriptor.trace_wrappers_callback),
+        heap_object_header_callback_(
+            wrapper_descriptor.heap_object_header_callback),
+        raw_object_pointer_(wrapper_descriptor.traceable) {
     DCHECK(trace_wrappers_callback_);
     DCHECK(heap_object_header_callback_);
     DCHECK(raw_object_pointer_);
   }
 
   // Traces wrappers if the underlying object has not yet been invalidated.
-  inline void TraceWrappers(ScriptWrappableVisitor* visitor) {
+  inline void TraceWrappers(ScriptWrappableVisitor* visitor) const {
     if (raw_object_pointer_) {
       trace_wrappers_callback_(visitor, raw_object_pointer_);
     }
@@ -112,9 +124,8 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   // alive in the current GC cycle.
   template <typename T>
   static void WriteBarrier(const T* dst_object) {
-    if (!dst_object) {
+    if (!dst_object)
       return;
-    }
 
     const ThreadState* thread_state =
         ThreadStateFor<ThreadingTrait<T>::kAffinity>::GetState();
@@ -127,24 +138,11 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
     if (TraceTrait<T>::GetHeapObjectHeader(dst_object)->IsWrapperHeaderMarked())
       return;
 
-    // Otherwise, eagerly mark the wrapper header and put the object on the
-    // marking deque for further processing.
-    CurrentVisitor(thread_state->GetIsolate())
-        ->MarkAndPushToMarkingDeque(dst_object);
+    CurrentVisitor(thread_state->GetIsolate())->Visit(dst_object);
   }
 
   static void WriteBarrier(v8::Isolate*,
                            const TraceWrapperV8Reference<v8::Value>&);
-
-  // TODO(mlippautz): Remove once ScriptWrappable is converted to
-  // TraceWrapperV8Reference.
-  static void WriteBarrier(v8::Isolate* isolate,
-                           const v8::Persistent<v8::Object>& dst_object) {
-    ScriptWrappableVisitor* visitor = CurrentVisitor(isolate);
-    if (dst_object.IsEmpty() || !visitor->WrapperTracingInProgress())
-      return;
-    visitor->MarkWrapper(&dst_object.As<v8::Value>());
-  }
 
   ScriptWrappableVisitor(v8::Isolate* isolate) : isolate_(isolate){};
   ~ScriptWrappableVisitor() override;
@@ -154,9 +152,10 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   // If you cannot use TraceWrapperMember & the corresponding TraceWrappers()
   // for some reason (e.g., unions using raw pointers), see
   // |TraceWrappersWithManualWriteBarrier()| below.
+  // TODO(ulan): extract TraceWrappers* methods to a general visitor interface.
   template <typename T>
-  void TraceWrappers(const TraceWrapperMember<T>& t) const {
-    MarkAndTraceWrappers(t.Get());
+  void TraceWrappers(const TraceWrapperMember<T>& traceable) const {
+    Visit(traceable.Get());
   }
 
   // Enable partial tracing of objects. This is used when tracing interior
@@ -170,7 +169,7 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   // Only called from automatically generated bindings code.
   template <typename T>
   void TraceWrappersFromGeneratedCode(const T* traceable) const {
-    MarkAndTraceWrappers(traceable);
+    Visit(traceable);
   }
 
   // Require all users of manual write barriers to make this explicit in their
@@ -179,16 +178,13 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   // the field. Otherwise, the objects may be collected prematurely.
   template <typename T>
   void TraceWrappersWithManualWriteBarrier(const T* traceable) const {
-    MarkAndTraceWrappers(traceable);
+    Visit(traceable);
   }
 
   template <typename V8Type>
   void TraceWrappers(const TraceWrapperV8Reference<V8Type>& v8reference) const {
-    TraceWrappers(v8reference.template Cast<v8::Value>());
+    Visit(v8reference.template Cast<v8::Value>());
   }
-  virtual void TraceWrappers(const TraceWrapperV8Reference<v8::Value>&) const;
-  virtual void MarkWrapper(const v8::PersistentBase<v8::Value>*) const;
-  virtual bool MarkWrapperHeader(HeapObjectHeader*) const;
 
   virtual void DispatchTraceWrappers(const TraceWrapperBase*) const;
   template <typename T>
@@ -227,51 +223,34 @@ class PLATFORM_EXPORT ScriptWrappableVisitor : public v8::EmbedderHeapTracer {
   size_t NumberOfWrappersToTrace() override;
 
  protected:
+  // The visitor interface. Derived visitors should override this
+  // function to visit V8 references and ScriptWrappables.
+  // TODO(ulan): extract Visit methods to a general visitor interface.
+  virtual void Visit(const TraceWrapperV8Reference<v8::Value>&) const;
+  virtual void Visit(const WrapperDescriptor&) const;
+
+  v8::Isolate* isolate() const { return isolate_; }
+
+ private:
   template <typename T>
   static NOINLINE void MissedWriteBarrier() {
     NOTREACHED();
   }
 
+  // Helper method to invoke the virtual Visit method with wrapper descriptor.
   template <typename T>
-  void MarkAndTraceWrappers(const T* traceable) const {
+  void Visit(const T* traceable) const {
     static_assert(sizeof(T), "T must be fully defined");
-
-    if (!traceable) {
+    if (!traceable)
       return;
-    }
-
-    if (TraceTrait<T>::GetHeapObjectHeader(traceable)
-            ->IsWrapperHeaderMarked()) {
-      return;
-    }
-
-    MarkAndPushToMarkingDeque(traceable);
+    WrapperDescriptor wrapper_descriptor = {
+        traceable, TraceTrait<T>::TraceMarkedWrapper,
+        TraceTrait<T>::GetHeapObjectHeader,
+        ScriptWrappableVisitor::MissedWriteBarrier<T>};
+    Visit(wrapper_descriptor);
   }
 
-  template <typename T>
-  ALWAYS_INLINE void MarkAndPushToMarkingDeque(const T* traceable) const {
-    TraceTrait<T>::MarkWrapperNoTracing(this, traceable);
-    PushToMarkingDeque(
-        TraceTrait<T>::TraceMarkedWrapper, TraceTrait<T>::GetHeapObjectHeader,
-        ScriptWrappableVisitor::MissedWriteBarrier<T>, traceable);
-  }
-
-  virtual void PushToMarkingDeque(
-      TraceWrappersCallback trace_wrappers_callback,
-      HeapObjectHeaderCallback heap_object_header_callback,
-      MissedWriteBarrierCallback missed_write_barrier_callback,
-      const void* object) const {
-    DCHECK(tracing_in_progress_);
-    DCHECK(heap_object_header_callback(object)->IsWrapperHeaderMarked());
-    marking_deque_.push_back(WrapperMarkingData(
-        trace_wrappers_callback, heap_object_header_callback, object));
-#if DCHECK_IS_ON()
-    if (!advancing_tracing_) {
-      verifier_deque_.push_back(WrapperMarkingData(
-          trace_wrappers_callback, heap_object_header_callback, object));
-    }
-#endif
-  }
+  void MarkWrapperHeader(HeapObjectHeader*) const;
 
   // Supplement-specific implementation of DispatchTraceWrappers.  The suffix of
   // "ForSupplement" is necessary not to make this member function a candidate

@@ -29,8 +29,56 @@
 namespace data_reduction_proxy {
 
 namespace {
+
 static const char kDataReductionCoreProxy[] = "proxy.googlezip.net";
+
+// Adds data reduction proxies to |result|, where applicable, if result
+// otherwise uses a direct connection for |url|, and the data reduction proxy is
+// not bypassed. Also, configures |result| to proceed directly to the origin if
+// |result|'s current proxy is the data reduction proxy.
+void OnResolveProxyHandler(
+    const GURL& url,
+    const std::string& method,
+    const net::ProxyConfig& proxy_config,
+    const net::ProxyRetryInfoMap& proxy_retry_info,
+    const DataReductionProxyConfig& data_reduction_proxy_config,
+    DataReductionProxyIOData* io_data,
+    net::ProxyInfo* result) {
+  DCHECK(result->is_empty() || result->is_direct() ||
+         !data_reduction_proxy_config.IsDataReductionProxy(
+             result->proxy_server(), nullptr));
+
+  if (!util::EligibleForDataReductionProxy(*result, url, method))
+    return;
+
+  net::ProxyInfo data_reduction_proxy_info;
+  bool data_saver_proxy_used = util::ApplyProxyConfigToProxyInfo(
+      proxy_config, proxy_retry_info, url, &data_reduction_proxy_info);
+  if (data_saver_proxy_used)
+    result->OverrideProxyList(data_reduction_proxy_info.proxy_list());
+
+  if (io_data && io_data->resource_type_provider()) {
+    ResourceTypeProvider::ContentType content_type =
+        io_data->resource_type_provider()->GetContentType(url);
+    DCHECK_GT(ResourceTypeProvider::CONTENT_TYPE_MAX, content_type);
+    UMA_HISTOGRAM_ENUMERATION("DataReductionProxy.ResourceContentType",
+                              content_type,
+                              ResourceTypeProvider::CONTENT_TYPE_MAX);
+  }
+
+  // The |proxy_config| must be valid otherwise the proxy cannot be used.
+  DCHECK(proxy_config.is_valid() || !data_saver_proxy_used);
+
+  if (data_reduction_proxy_config.enabled_by_user_and_reachable() &&
+      url.SchemeIs(url::kHttpScheme) && !net::IsLocalhost(url) &&
+      !params::IsIncludedInHoldbackFieldTrial()) {
+    UMA_HISTOGRAM_BOOLEAN(
+        "DataReductionProxy.ConfigService.HTTPRequests",
+        !data_reduction_proxy_config.GetProxiesForHttp().empty());
+  }
 }
+
+}  // namespace
 
 DataReductionProxyDelegate::DataReductionProxyDelegate(
     DataReductionProxyConfig* config,
@@ -43,7 +91,7 @@ DataReductionProxyDelegate::DataReductionProxyDelegate(
       event_creator_(event_creator),
       bypass_stats_(bypass_stats),
       alternative_proxies_broken_(false),
-      tick_clock_(new base::DefaultTickClock()),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       first_data_saver_request_recorded_(false),
       io_data_(nullptr),
       net_log_(net_log) {
@@ -97,12 +145,45 @@ void DataReductionProxyDelegate::OnResolveProxy(
                      }),
       proxies_for_http.end());
 
+  base::Optional<std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+      warmup_proxy = config_->GetInFlightWarmupProxyDetails();
+
+  bool is_warmup_url = warmup_proxy &&
+                       url.host() == params::GetWarmupURL().host() &&
+                       url.path() == params::GetWarmupURL().path();
+
+  if (is_warmup_url) {
+    // This is a request to fetch the warmup (aka probe) URL.
+    // |is_secure_proxy| and |is_core_proxy| indicate the properties of the
+    // proxy that is being currently probed.
+    bool is_secure_proxy = warmup_proxy->first;
+    bool is_core_proxy = warmup_proxy->second;
+    // Remove the proxies with properties that do not match the properties of
+    // the proxy that is being probed.
+    proxies_for_http.erase(
+        std::remove_if(proxies_for_http.begin(), proxies_for_http.end(),
+                       [is_secure_proxy,
+                        is_core_proxy](const DataReductionProxyServer& proxy) {
+                         return proxy.IsSecureProxy() != is_secure_proxy ||
+                                proxy.IsCoreProxy() != is_core_proxy;
+                       }),
+        proxies_for_http.end());
+  }
+
+  // If the proxy is disabled due to warmup URL fetch failing in the past,
+  // then enable it temporarily. This ensures that |configurator_| includes
+  // this proxy type when generating the |proxy_config|.
   net::ProxyConfig proxy_config = configurator_->CreateProxyConfig(
-      !config_->secure_proxy_allowed(), !config_->insecure_proxies_allowed(),
-      proxies_for_http);
+      is_warmup_url, config_->GetNetworkPropertiesManager(), proxies_for_http);
 
   OnResolveProxyHandler(url, method, proxy_config, proxy_retry_info, *config_,
                         io_data_, result);
+
+  if (!result->is_empty()) {
+    net::ProxyServer alternative_proxy_server;
+    GetAlternativeProxy(url, result->proxy_server(), &alternative_proxy_server);
+    result->SetAlternativeProxy(alternative_proxy_server);
+  }
 
   if (!first_data_saver_request_recorded_ && !result->is_empty() &&
       config_->IsDataReductionProxy(result->proxy_server(), nullptr)) {
@@ -111,13 +192,6 @@ void DataReductionProxyDelegate::OnResolveProxy(
         tick_clock_->NowTicks() - last_network_change_time_);
     first_data_saver_request_recorded_ = true;
   }
-}
-
-void DataReductionProxyDelegate::OnTunnelConnectCompleted(
-    const net::HostPortPair& endpoint,
-    const net::HostPortPair& proxy_server,
-    int net_error) {
-  DCHECK(thread_checker_.CalledOnValidThread());
 }
 
 void DataReductionProxyDelegate::OnFallback(const net::ProxyServer& bad_proxy,
@@ -133,12 +207,6 @@ void DataReductionProxyDelegate::OnFallback(const net::ProxyServer& bad_proxy,
     bypass_stats_->OnProxyFallback(bad_proxy, net_error);
 }
 
-void DataReductionProxyDelegate::OnBeforeTunnelRequest(
-    const net::HostPortPair& proxy_server,
-    net::HttpRequestHeaders* extra_headers) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-}
-
 bool DataReductionProxyDelegate::IsTrustedSpdyProxy(
     const net::ProxyServer& proxy_server) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -146,16 +214,9 @@ bool DataReductionProxyDelegate::IsTrustedSpdyProxy(
          config_->IsDataReductionProxy(proxy_server, nullptr);
 }
 
-void DataReductionProxyDelegate::OnTunnelHeadersReceived(
-    const net::HostPortPair& origin,
-    const net::HostPortPair& proxy_server,
-    const net::HttpResponseHeaders& response_headers) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-}
-
 void DataReductionProxyDelegate::SetTickClockForTesting(
-    std::unique_ptr<base::TickClock> tick_clock) {
-  tick_clock_ = std::move(tick_clock);
+    base::TickClock* tick_clock) {
+  tick_clock_ = tick_clock;
   // Update |last_network_change_time_| to the provided tick clock's current
   // time for testing.
   last_network_change_time_ = tick_clock_->NowTicks();
@@ -237,48 +298,6 @@ void DataReductionProxyDelegate::OnIPAddressChanged() {
   DCHECK(thread_checker_.CalledOnValidThread());
   first_data_saver_request_recorded_ = false;
   last_network_change_time_ = tick_clock_->NowTicks();
-}
-
-void OnResolveProxyHandler(
-    const GURL& url,
-    const std::string& method,
-    const net::ProxyConfig& proxy_config,
-    const net::ProxyRetryInfoMap& proxy_retry_info,
-    const DataReductionProxyConfig& data_reduction_proxy_config,
-    DataReductionProxyIOData* io_data,
-    net::ProxyInfo* result) {
-  DCHECK(result->is_empty() || result->is_direct() ||
-         !data_reduction_proxy_config.IsDataReductionProxy(
-             result->proxy_server(), nullptr));
-
-  if (!util::EligibleForDataReductionProxy(*result, url, method))
-    return;
-
-  net::ProxyInfo data_reduction_proxy_info;
-  bool data_saver_proxy_used = util::ApplyProxyConfigToProxyInfo(
-      proxy_config, proxy_retry_info, url, &data_reduction_proxy_info);
-  if (data_saver_proxy_used)
-    result->OverrideProxyList(data_reduction_proxy_info.proxy_list());
-
-  if (io_data && io_data->resource_type_provider()) {
-    ResourceTypeProvider::ContentType content_type =
-        io_data->resource_type_provider()->GetContentType(url);
-    DCHECK_GT(ResourceTypeProvider::CONTENT_TYPE_MAX, content_type);
-    UMA_HISTOGRAM_ENUMERATION("DataReductionProxy.ResourceContentType",
-                              content_type,
-                              ResourceTypeProvider::CONTENT_TYPE_MAX);
-  }
-
-  // The |proxy_config| must be valid otherwise the proxy cannot be used.
-  DCHECK(proxy_config.is_valid() || !data_saver_proxy_used);
-
-  if (data_reduction_proxy_config.enabled_by_user_and_reachable() &&
-      url.SchemeIs(url::kHttpScheme) && !net::IsLocalhost(url.host_piece()) &&
-      !params::IsIncludedInHoldbackFieldTrial()) {
-    UMA_HISTOGRAM_BOOLEAN(
-        "DataReductionProxy.ConfigService.HTTPRequests",
-        !data_reduction_proxy_config.GetProxiesForHttp().empty());
-  }
 }
 
 }  // namespace data_reduction_proxy

@@ -13,13 +13,15 @@ fun:*ThreadSpecific*
 src:*third_party/mesa*
 
 # LLVM's allocator
-src:*third_party/swiftshader/third_party/llvm-subzero/include/llvm/Support/Allocator.h*
+src:*llvm/Support/Allocator.h
 
 # Deliberate bad cast to derived class to hide functions.
 type:*BlockIUnknownMethods*
 type:*BlockRefType*
 type:*SkAutoTUnref*
 type:*SkBlockComRef*
+type:*RemoveIUnknown*
+src:*atlcomcli.h
 
 # invalid downcasts for IPC messages
 # https://crbug.com/520760
@@ -30,6 +32,9 @@ type:*EtwTraceProvider*
 
 # b/64003142
 fun:*internal_default_instance*
+
+# CAtlArray<T> casts to uninitialized T*.
+src:*atlcoll.h
 
 #############################################################################
 # Base class's constructor accesses a derived class.
@@ -168,14 +173,9 @@ src:*base/native_library_unittest.cc
 
 # chrome/browser/ui/views/frame/global_menu_bar_x11.cc
 fun:*GlobalMenuBarX11*
-# net/cert/cert_verify_proc_nss.cc
-fun:*CertVerifyProcNSS*VerifyInternalImpl*
 
 # third_party/skia/include/gpu/gl/GrGLFunctions.h
 fun:*GrGLFunction*
-
-# chrome/browser/ui/libgtkui/gtk_util.cc
-fun:*AppendCssNodeToStyleContext*
 
 ######### Function pointers cast to incorrect type signatures
 
@@ -191,14 +191,13 @@ fun:*LocaleConvertCase*
 # third_party/boringssl/src/crypto/pem/pem_lib.c
 fun:*PEM_ASN1_write*
 
-src:*third_party/libsrtp/*
-src:*third_party/libvpx/*
-src:*third_party/libxml/*
-src:*third_party/pdfium/third_party/lcms/*
 src:*third_party/sqlite/*
-src:*third_party/webrtc/*
 
-src:*v8/*
+# PropertyCallbackArguments::Call methods cast function pointers
+src:*v8/src/api-arguments-inl.h
+
+# v8 callback that casts argument template parameters
+fun:*PendingPhantomCallback*Invoke*
 
 ######### Uncategorized
 

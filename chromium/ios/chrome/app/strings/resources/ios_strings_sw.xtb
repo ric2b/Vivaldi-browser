@@ -34,6 +34,7 @@
 <translation id="145015347812617860">Vipengee <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Gusa mara mbili ili ugeuze mipangilio</translation>
 <translation id="152234381334907219">Hayatahifadhiwa Kamwe</translation>
+<translation id="1532451416480227577">Onyesha anwani na kadi za malipo kutoka Google Pay</translation>
 <translation id="1540800554400757039">Anwani ya 1</translation>
 <translation id="1545749641540134597">Changanua Msimbo wa QR</translation>
 <translation id="1580783302095112590">Barua imetumwa.</translation>
@@ -96,6 +97,7 @@ Kwa mfano, tovuti nyingine zinaweza kujibu ombi hili kwa kukuonyesha matangazo y
 <translation id="2718352093833049315">Kwenye Wi-Fi pekee</translation>
 <translation id="2747003861858887689">Sehemu iliyotangulia</translation>
 <translation id="2780046210906776326">Hakuna Akaunti za Barua pepe</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Ondoka kwenye Kibadilishaji cha Kichupo</translation>
 <translation id="283291358677939992">Tafuta katika Ukurasa...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@ Kwa mfano, tovuti nyingine zinaweza kujibu ombi hili kwa kukuonyesha matangazo y
 <translation id="4378154925671717803">Simu</translation>
 <translation id="441868831736628555">Ilani ya Faragha</translation>
 <translation id="4460091562821778167">Niulize programu ya kutumia kila mara</translation>
+<translation id="4496373720959965247">Ongeza vichupo na ubadili kati ya kurasa</translation>
 <translation id="4508750114462689118">Funga matangazo ya kuingia kwenye akaunti</translation>
 <translation id="4526249700380860531">Angalia na udhibiti manenosiri yaliyohifadhiwa kwenye <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Jaribu kuingia katika akaunti tena.</translation>
@@ -217,12 +220,12 @@ Data yako imesimbwa kwa njia fiche kwa kauli yako ya siri ya usawazishaji. Iweke
 <translation id="5300589172476337783">Onyesha</translation>
 <translation id="5317780077021120954">Hifadhi</translation>
 <translation id="5327248766486351172">Jina</translation>
+<translation id="533632423981297619">Manenosiri yako yataonekana na mtu yeyote ambaye anaweza kuona faili iliyohamishwa. Usishiriki faili hii na mtu yeyote.</translation>
 <translation id="5388358297987318779">Fungua Picha</translation>
 <translation id="5409365236829784218">Hakuna programu zilizosakinishwa zinazoweza kufungua faili hii.</translation>
 <translation id="5433691172869980887">Jina la mtumiaji limenakiliwa</translation>
 <translation id="54401264925851789">Maelezo ya Usalama wa Ukurasa</translation>
 <translation id="5525269841082836315">Unda Kaulisiri</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoff inakuwezesha kuanza kuvinjari tovuti kwenye kifaa hiki kisha uendelee kwa urahisi kwenye Mac yako. Tovuti ya sasa iliyo wazi itaonekana katika Kituo cha Mac yako.
 
 Lazima Handoff iwashwe pia katika sehemu ya Jumla ya Mipangilio, na lazima vifaa vyako vitumie akaunti sawa ya iCloud.</translation>
@@ -247,7 +250,6 @@ Lazima Handoff iwashwe pia katika sehemu ya Jumla ya Mipangilio, na lazima vifaa
 <translation id="5911030830365207728">Google Tafsiri</translation>
 <translation id="5916664084637901428">Imewashwa</translation>
 <translation id="5948291296578561264">Hatua hii inakuruhusu uhifadhi picha kwenye maktaba ya picha.</translation>
-<translation id="5953603475187800576">Onyesha anwani na kadi za malipo kutoka Google Payments</translation>
 <translation id="5955891643922670672">Unasoma Toleo la Nje ya Mtandao</translation>
 <translation id="5964480694698977962">Unda kichupo fiche kipya.</translation>
 <translation id="5965679971710331625">Umeingia katika akaunti</translation>
@@ -337,7 +339,6 @@ Data yako ilisimbwa kwa njia fiche kwa kauli yako ya siri ya kusawazisha mnamo <
 <translation id="7514365320538308">Pakua</translation>
 <translation id="7537586195939242955">Samahani, Indhini yako haiwezi kuhifadhiwa kwenye Kitabu cha idhini kwa wakati huu.</translation>
 <translation id="7561196759112975576">Kila wakati</translation>
-<translation id="7588950540487816470">Wavuti Kila Mahali</translation>
 <translation id="7603852183842204213">Ibukizi zimefungwa (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Kipengele cha usawazishaji hakifanyi kazi</translation>
 <translation id="7638584964844754484">Kaulisiri si sahihi</translation>
@@ -350,6 +351,7 @@ Data yako ilisimbwa kwa njia fiche kwa kauli yako ya siri ya kusawazisha mnamo <
 <translation id="780301667611848630">La, asante</translation>
 <translation id="7859704718976024901">Historia ya Kuvinjari</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Hamisha Manenosiri...</translation>
 <translation id="7947953824732555851">Kubali na uingie</translation>
 <translation id="7961015016161918242">Katu</translation>
 <translation id="7971521879845308059">Zuia Ibukizi</translation>
@@ -407,7 +409,6 @@ Data yako ilisimbwa kwa njia fiche kwa kauli yako ya siri ya kusawazisha mnamo <
 <translation id="9083392325882095631">Kipengee 1</translation>
 <translation id="9100610230175265781">Kaulisiri inahitajika</translation>
 <translation id="9148126808321036104">Ingia tena</translation>
-<translation id="91549621916703028">Fungua vichupo kadhaa ili kutekeleza kazi zako</translation>
 <translation id="9157836665414082580">Zima Vidirisha</translation>
 <translation id="9188680907066685419">Ondoka kwenye akaunti inayodhibitiwa</translation>
 <translation id="9203116392574189331">Handoff</translation>

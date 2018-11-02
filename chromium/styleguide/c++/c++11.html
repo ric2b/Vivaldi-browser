@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <!--
 Copyright 2014 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
@@ -377,6 +377,22 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 </tr>
 
 <tr>
+<td>Number literal separators</td>
+<td><code>float f = 1'000'000.000'1;</code></td>
+<td><code>'</code>s anywhere in int or float literals are ignored</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/integer_literal">Integer literals</a>, <a href="http://en.cppreference.com/w/cpp/language/floating_literal">Floating point literals</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/d/topic/cxx/exS1aGs1wes/discussion">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Aggregate member initialization</td>
+<td><code>struct Point { int x, y, z = 0; };<br>Point p = {2, 3};</code></td>
+<td>Allows classes with default member initializers to be initialized with aggregate initialization, optionally omitting data members with such initializers.</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/aggregate_initialization">aggregate initialization</a></td>
+<td><a href="https://groups.google.com/a/chromium.org/d/topic/cxx/WMBs3K9OQ_E/discussion">Discussion thread</a></td>
+</tr>
+
+<tr>
 <td>Relaxed constant expressions</td>
 <td><code>constexpr int Factorial(int n) {<br>&nbsp;&nbsp;int result = 1;<br>&nbsp;&nbsp;while (n > 0)<br>&nbsp;&nbsp;&nbsp;&nbsp;result *= n--;<br>&nbsp;&nbsp;return result;<br>}</code></td>
 <td>Allows use of more declarations, conditional statements and loops inside <code>constexpr</code> functions.</td>
@@ -458,6 +474,14 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <td>Allows more widespread use of <code>const_iterator</code></td>
 <td><a href="http://en.cppreference.com/w/cpp/container/vector/begin">std::vector::cbegin</a>, <a href="http://en.cppreference.com/w/cpp/container/vector/end">std::vector::cend<a></td>
 <td>Applies to all containers, not just <code>vector</code>. Consider using <code>const_iterator</code> over <code>iterator</code> where possible for the same reason as using <code>const</code> variables and functions where possible; see Effective Modern C++ item 13. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/cS83F_buqLM">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Container Compaction Functions</td>
+<td><code>std::vector::shrink_to_fit()</code>, <code>std::deque::shrink_to_fit()</code>, <code>std::string::shrink_to_fit()</code></td>
+<td>Requests the removal of unused space in the container</td>
+<td><a href="http://en.cppreference.com/w/cpp/container/vector/shrink_to_fit">std::vector::shrink_to_fit</a>, <a href="http://en.cppreference.com/w/cpp/container/deque/shrink_to_fit">std::deque::shrink_to_fit</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/shrink_to_fit">std::basic_string::shrink_to_fit</a></td>
+<td></td>
 </tr>
 
 <tr>
@@ -563,7 +587,7 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <code>enable_if</code>, <code>conditional</code>, <code>result_of</code><br/></td>
 <td>Allows compile-time inspection of the properties of types</td>
 <td><a href="http://en.cppreference.com/w/cpp/header/type_traits">Standard library header &lt;type_traits&gt;</a></td>
-<td>Note that not all type traits are available on all platforms (e.g. <code>std::underlying_type</code> doesn't work in libstdc++ 4.6). Use judiciously. <a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
+<td><a href='https://groups.google.com/a/chromium.org/forum/#!topic/cxx/vCxo4tZNd_M'>Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -609,6 +633,14 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 </tr>
 
 <tr>
+<td>Constant begin/end non-member functions</td>
+<td><code>std::cbegin(<i>container</i>)<br>std::cend(<i>container</i>)<br>std::crbegin(<i>container</i>)<br>std::crend(<i>container</i>)</br></code></td>
+<td>Constant counterparts to <code>std::begin</code> etc.</td>
+<td><a href="http://en.cppreference.com/w/cpp/iterator/begin">std::cbegin</a></td>
+<td></td>
+</tr>
+
+<tr>
 <td>Heterogeneous lookup in associative containers</td>
 <td><code><i>// Does not construct an std::string to use as the lookup key.</i><br>std::map&lt;std::string, int, std::less&lt;&gt;&gt; map;<br>auto it = map.find("answer");</code></td>
 <td>Allows searching associative containers without converting the key to exactly match the stored key type, assuming a suitable comparator exists.</td>
@@ -637,7 +669,15 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 <td>Arithmetic operations:<br><code>std::plus&lt;&gt;, std::minus&lt;&gt;</code> ...<br>Comparisons:<br><code>std::less&lt;&gt;, std::equal_to&lt;&gt;</code>...<br>Logical operations:<br><code>std::logical_and&lt;&gt;, std::logical_or&lt;&gt;</code>...<br>Bitwise operations:<br><code>std::bit_and&lt;&gt;, std::bit_or&lt;&gt;</code>...<br></td>
 <td>Function objects that deduce argument types.</td>
 <td><a href="http://en.cppreference.com/w/cpp/utility/functional/less_void">std::less&lt;&gt;</a></td>
-<td>Should replace <code>base::less</code> and usage of these functors with explicit types where appropriate. Note: std::set/std::map do not yet support transparent comparators on all platforms <a href="https://crbug.com/756020">bug</a>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/cPoULd2NY9k">Discussion thread</a></td>
+<td>Should replace <code>base::less</code> and usage of these functors with explicit types where appropriate. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/cxx/cPoULd2NY9k">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Tuple addressing by type</td>
+<td><code>std::tuple&lt;int, char&gt; enterprise(1701, 'D');<br>int n = std::get&lt;int&gt;(enterprise);</code></td>
+<td>Allows entries in a tuple to be accessed by type rather than entry, if it is not ambiguous.</td>
+<td><a href="http://en.cppreference.com/w/cpp/utility/tuple/get">std::get(std::tuple)</a></td>
+<td></td>
 </tr>
 
 </tbody>
@@ -649,9 +689,7 @@ template &lt;typename T&gt;<br/>void Function(T&amp;&amp; t) { ... }</code></td>
 
 <h3 id="blacklist_banned"><a name="core-blacklist"></a>C++11 Banned Features</h3>
 
-<p>This section lists C++11 features that are not allowed in the Chromium
-codebase.
-</p>
+<p>This section lists C++11 features that are not allowed in the Chromium codebase.</p>
 
 <table id="banned_list" class="unlined striped">
 <tbody>
@@ -715,27 +753,37 @@ std::move(t).f();&nbsp;&nbsp;// second</code></td>
 
 <h3 id="blacklist_banned"><a name="core-blacklist-14"></a>C++14 Banned Features</h3>
 
-<p>Nothing yet. Suggest something!</p>
-
-<!--
-<p>This section lists C++14 features that are not allowed in the Chromium
-codebase.
-</p>
+<p>This section lists C++14 features that are not allowed in the Chromium codebase.</p>
 
 <table id="banned_list" class="unlined striped">
 <tbody>
 
 <tr>
-<th style='width:240px;'>Feature or Library</th>
+<th style='width:240px;'>Feature</th>
 <th style='width:240px;'>Snippet</th>
 <th style='width:240px;'>Description</th>
 <th style='width:240px;'>Documentation Link</th>
 <th style='width:240px;'>Notes and Discussion Thread</th>
 </tr>
 
+<tr>
+<td>Function return type deduction</td>
+<td><code>auto f() { return 42; }<br>decltype(auto) g() { return 42; }</code></td>
+<td>Allows the return type of a function to be automatically deduced from its return statements, according to either template or <code>decltype</code> rules.</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/function#Return_type_deduction">Return type deduction</a></td>
+<td>Temporarily banned since it <a href="https://bugs.llvm.org/show_bug.cgi?id=34185">can cause infinite loops in clang</a>. We expect to allow this once that bug is fixed. Usage should be rare, primarily for abstract template code. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/-Ox7YgRS_no/discussion">Discussion thread</a></td>
+</tr>
+
+<tr>
+<td>Generic lambdas</td>
+<td><code>[](const auto&amp; x) { <i>...</i> }</code></td>
+<td>Allows lambda argument types to be deduced using <code>auto</code> (according to the rules that apply to templates).</td>
+<td><a href="http://en.cppreference.com/w/cpp/language/lambda">lambda expressions</a></td>
+<td>Temporarily banned since it <a href="https://bugs.llvm.org/show_bug.cgi?id=33561">can cause infinite loops in clang</a>. We expect to allow this once that bug is fixed. <a href="https://chromium-review.googlesource.com/#/c/chromium/src/+/855776">Discussion thread</a></td>
+</tr>
+
 </tbody>
 </table>
--->
 
 <h3 id="blacklist_stdlib"><a name="library-blacklist"></a>C++11 Banned Library Features</h3>
 
@@ -929,14 +977,6 @@ something, remove all callers and remove the function instead.</td>
 </tr>
 
 <tr>
-<td>Aggregate member initialization</td>
-<td><code>struct Point { int x, y, z = 0; };<br>Point p = {2, 3};</code></td>
-<td>Allows classes with default member initializers to be initialized with aggregate initialization, optionally omitting data members with such initializers.</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/aggregate_initialization">aggregate initialization</a></td>
-<td></td>
-</tr>
-
-<tr>
 <td>Binary literals</td>
 <td><code>int i = 0b1001;</code></td>
 <td>Allows defining literals in base two.</td>
@@ -954,37 +994,11 @@ for printing or reading in this format. Still seems useful in minor ways.</td>
 </tr>
 
 <tr>
-<td>Function return type deduction</td>
-<td><code>auto f() { return 42; }<br>decltype(auto) g() { return 42; }</code></td>
-<td>Allows the return type of a function to be automatically deduced from its return statements, according to either template or <code>decltype</code> rules.</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/function#Return_type_deduction">Return type deduction</a></td>
-<td>Likely to be primarily useful in abstract template code.</td>
-</tr>
-
-<tr>
-<td>Generic lambdas</td>
-<td><code>[](const auto&amp; x) { <i>...</i> }</code></td>
-<td>Allows lambda argument types to be deduced using <code>auto</code> (according to the rules that apply to templates).</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/lambda">lambda expressions</a></td>
-<td></td>
-</tr>
-
-<tr>
 <td>Lambda capture expressions</td>
 <td><code>auto widget = base::MakeUnique&lt;Widget&gt;();<br>auto lambda = [widget = std::move(widget)]() {<br>&nbsp;&nbsp;SetWidget(std::move(widget));<br>}</code></td>
 <td>Allows lambda captures to be explicitly initialized with expressions.</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/lambda#Lambda_capture">Lambda capture</a></td>
 <td>Particularly useful to capture move-only types in a lambda when a reference would go out of scope. Less useful without allowing lambdas to outlive the scope.</td>
-</tr>
-
-<tr>
-<td>Number literal separators</td>
-<td><code>float f = 1'000'000.000'1;</code></td>
-<td><code>'</code>s anywhere in int or float literals are ignored</td>
-<td><a href="http://en.cppreference.com/w/cpp/language/integer_literal">Integer literals</a>, <a href="http://en.cppreference.com/w/cpp/language/floating_literal">Floating point literals</a></td>
-<td>Might confuse syntax highlighting in editors. No standard library support
-for printing or reading in this format. Seems less useful and harder on editors
-than binary literals.</td>
 </tr>
 
 <tr>
@@ -1042,14 +1056,6 @@ than binary literals.</td>
 <td>Functions within <code>&lt;complex&gt;</code></td>
 <td>Adds inverse trigonomentric and hyperbolic non-member functions to the <code>&lt;complex&gt;</code> library.</td>
 <td><a href="http://en.cppreference.com/w/cpp/numeric/complex">std::complex</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Container Compaction Functions</td>
-<td><code>std::vector::shrink_to_fit()</code>, <code>std::deque::shrink_to_fit()</code>, <code>std::string::shrink_to_fit()</code></td>
-<td>Requests the removal of unused space in the container</td>
-<td><a href="http://en.cppreference.com/w/cpp/container/vector/shrink_to_fit">std::vector::shrink_to_fit</a>, <a href="http://en.cppreference.com/w/cpp/container/deque/shrink_to_fit">std::deque::shrink_to_fit</a>, <a href="http://en.cppreference.com/w/cpp/string/basic_string/shrink_to_fit">std::basic_string::shrink_to_fit</a></td>
 <td></td>
 </tr>
 
@@ -1193,14 +1199,6 @@ than binary literals.</td>
 </tr>
 
 <tr>
-<td>Constant begin/end non-member functions</td>
-<td><code>std::cbegin(<i>container</i>)<br>std::cend(<i>container</i>)<br>std::crbegin(<i>container</i>)<br>std::crend(<i>container</i>)</br></code></td>
-<td>Constant counterparts to <code>std::begin</code> etc.</td>
-<td><a href="http://en.cppreference.com/w/cpp/iterator/begin">std::cbegin</a></td>
-<td></td>
-</tr>
-
-<tr>
 <td><code>std::complex</code> literals</td>
 <td><code>using namespace std::complex_literals;<br>std::complex&lt;double&gt; c = 2.0 + 0.5i;</code></td>
 <td>Allows <code>std::complex</code> objects to be more easily constructed.</td>
@@ -1215,14 +1213,6 @@ using std::literals::string_literals::operator"" s;<br>
 auto s = "asdf"s;  // deduces to std::string</code></td>
 <td>Allows literals of type <code>std::string</code></td>
 <td><a href="http://en.cppreference.com/w/cpp/string/basic_string/operator%22%22s">std::literals::string_literals::operator""s</a></td>
-<td></td>
-</tr>
-
-<tr>
-<td>Tuple addressing by type</td>
-<td><code>std::tuple&lt;int, char&gt; enterprise(1701, 'D');<br>int n = std::get&lt;int&gt;(enterprise);</code></td>
-<td>Allows entries in a tuple to be accessed by type rather than entry, if it is not ambiguous.</td>
-<td><a href="http://en.cppreference.com/w/cpp/utility/tuple/get">std::get(std::tuple)</a></td>
 <td></td>
 </tr>
 

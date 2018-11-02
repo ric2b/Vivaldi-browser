@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> elementer</translation>
 <translation id="1491277525950327607">Dobbelttrykk for å slå innstillingen av/på</translation>
 <translation id="152234381334907219">Aldri lagret</translation>
+<translation id="1532451416480227577">Vis adresser og kredittkort fra Google Pay</translation>
 <translation id="1540800554400757039">Adresse 1</translation>
 <translation id="1545749641540134597">Skann en QR-kode</translation>
 <translation id="1580783302095112590">E-posten er sendt.</translation>
@@ -96,6 +97,7 @@ Noen nettsteder kan for eksempel svare på forespørselen ved å vise deg annons
 <translation id="2718352093833049315">Bare på Wi-Fi</translation>
 <translation id="2747003861858887689">Forrige felt</translation>
 <translation id="2780046210906776326">Ingen e-postkontoer</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Avslutt fanevelgeren</translation>
 <translation id="283291358677939992">Finn på siden</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@ Noen nettsteder kan for eksempel svare på forespørselen ved å vise deg annons
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Merknad om personvern</translation>
 <translation id="4460091562821778167">Spør meg hvilken app som skal brukes, hver gang</translation>
+<translation id="4496373720959965247">Legg til faner, og bytt mellom sider</translation>
 <translation id="4508750114462689118">Lukk påloggingskampanjen</translation>
 <translation id="4526249700380860531">Se på og administrer lagrede passord på <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Prøv å logge på igjen.</translation>
@@ -217,12 +220,12 @@ Dataene dine er kryptert med passordfrasen din for synkronisering. Skriv den inn
 <translation id="5300589172476337783">Vis</translation>
 <translation id="5317780077021120954">Lagre</translation>
 <translation id="5327248766486351172">Navn</translation>
+<translation id="533632423981297619">Passordene dine blir synlige for alle som kan se den eksporterte filen. Ikke del filen med noen.</translation>
 <translation id="5388358297987318779">Åpne bildet</translation>
 <translation id="5409365236829784218">Ingen av de installerte appene kan åpne denne filen.</translation>
 <translation id="5433691172869980887">Brukernavnet er kopiert</translation>
 <translation id="54401264925851789">Sikkerhetsinformasjon for siden</translation>
 <translation id="5525269841082836315">Opprett en passordfrase</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Med Handoff kan du begynne å se gjennom en nettside på denne enheten og deretter fortsette på Mac-en din uten problemer. Den åpne nettsiden vises i dokken til Mac-en din.
 
 Handoff må også være aktivert i Generelt-delen av Innstillinger, og enhetene må bruke samme iCloud-konto.</translation>
@@ -247,7 +250,6 @@ Handoff må også være aktivert i Generelt-delen av Innstillinger, og enhetene 
 <translation id="5911030830365207728">Google Oversetter</translation>
 <translation id="5916664084637901428">På</translation>
 <translation id="5948291296578561264">Da kan du lagre bilder i bildebiblioteket ditt.</translation>
-<translation id="5953603475187800576">Vis adresser og kredittkort fra Google Payments</translation>
 <translation id="5955891643922670672">Du ser en versjon uten nett</translation>
 <translation id="5964480694698977962">Åpne en ny inkognitofane.</translation>
 <translation id="5965679971710331625">Du er pålogget</translation>
@@ -337,7 +339,6 @@ Dataene dine er kryptert med passordfrasen din for synkronisering <ph name="TIME
 <translation id="7514365320538308">Last ned</translation>
 <translation id="7537586195939242955">Tillatelsen din kan for øyeblikket ikke installeres i Passbook.</translation>
 <translation id="7561196759112975576">Alltid</translation>
-<translation id="7588950540487816470">Fysisk nett</translation>
 <translation id="7603852183842204213">Blokkerte forgrunnsvinduer (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synkronisering fungerer ikke</translation>
 <translation id="7638584964844754484">Feil passordfrase</translation>
@@ -350,6 +351,7 @@ Dataene dine er kryptert med passordfrasen din for synkronisering <ph name="TIME
 <translation id="780301667611848630">Nei takk</translation>
 <translation id="7859704718976024901">Nettlesingsloggen</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Eksportér passord</translation>
 <translation id="7947953824732555851">Godta og logg på</translation>
 <translation id="7961015016161918242">Aldri</translation>
 <translation id="7971521879845308059">Blokkér forgrunnsvinduer</translation>
@@ -407,12 +409,11 @@ Dataene dine er kryptert med passordfrasen din for synkronisering <ph name="TIME
 <translation id="9083392325882095631">1 element</translation>
 <translation id="9100610230175265781">Det kreves en passordfrase</translation>
 <translation id="9148126808321036104">Logg på igjen</translation>
-<translation id="91549621916703028">Opprett flere faner for alle oppgavene dine</translation>
 <translation id="9157836665414082580">Ignorer dialogbokser</translation>
 <translation id="9188680907066685419">Logg av administrert konto</translation>
 <translation id="9203116392574189331">Handoff</translation>
 <translation id="9223358826628549784">Programstopprapporten er sendt.</translation>
-<translation id="932327136139879170">Start</translation>
+<translation id="932327136139879170">Gå til startsiden</translation>
 <translation id="935490618240037774">Bokmerkene, loggoppføringene, passordene og de andre innstillingene dine blir synkronisert med Google-kontoen din, slik at du kan få dem på alle enhetene du bruker.</translation>
 <translation id="939598580284253335">Angi en passordfrase</translation>
 <translation id="976982866697960176">Administrer synkroniserte data …</translation>

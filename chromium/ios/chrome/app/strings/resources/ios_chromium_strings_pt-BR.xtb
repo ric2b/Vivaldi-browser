@@ -3,6 +3,7 @@
 <translationbundle lang="pt-BR">
 <translation id="102360288709523007">Ajude a melhorar o Chromium. Envie estatísticas e relatórios de erros ao Google.</translation>
 <translation id="1185134272377778587">Sobre o Chromium</translation>
+<translation id="1289966288285062467">Aviso de Privacidade do Chromium</translation>
 <translation id="1472013873724362412">Sua conta não funciona com o Chromium. Entre em contato com o administrador do domínio ou use uma Conta do Google normal para fazer login.</translation>
 <translation id="1736662517232558588">Dados do Chromium apagados</translation>
 <translation id="1838412507805038478">O Chromium verificou que <ph name="ISSUER" /> emitiu o certificado deste website.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Sair do Chromium?</translation>
 <translation id="6424492062988593837">O Chromium ficou ainda melhor! Uma nova versão está disponível.</translation>
 <translation id="6604711459180487467">Tenha uma experiência melhor no Chromium com base na sua localização.</translation>
+<translation id="6626296268883197964">Ao usar este aplicativo, você concorda com os <ph name="BEGIN_LINK_TOS" />Termos de Serviço<ph name="END_LINK_TOS" /> e o <ph name="BEGIN_LINK_PRIVACY" />Aviso de Privacidade<ph name="END_LINK_PRIVACY" /> do Chromium.</translation>
 <translation id="7099326575020694068">O Chromium não pode usar a câmera no modo Visualização dividida</translation>
-<translation id="7144758435978427212">Descubra páginas da Web enviadas por objetos nas proximidades. Quando o Bluetooth está ativado, o Chromium pode reunir páginas da Web associadas a objetos ao seu redor e enviá-las anonimamente ao Google para encontrar as mais úteis. <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">O Chromium permite que você otimize seu tempo trazendo suas contas para a Web. É possível adicionar ou remover contas nas configurações.</translation>
 <translation id="7269362888766543920">Alguns complementos causam falhas do Chromium. Tente desinstalá-los.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Use o Chromium em qualquer lugar</translation>
 <translation id="7674213385180944843">Abra Ajustes &gt; Privacidade &gt; Câmera &gt; Chromium e ative a câmera.</translation>
 <translation id="786327964234957808">Você está trocando a conta de sincronização de <ph name="USER_EMAIL1" /> para <ph name="USER_EMAIL2" />. Os dados do Chromium são gerenciados por <ph name="DOMAIN" />. Eles serão excluídos deste dispositivo, mas permanecerão no <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Ao usar este app, você concorda com os <ph name="BEGIN_LINK" />Termos de Serviço<ph name="END_LINK" /> do Chromium.</translation>
 <translation id="8175055321229419309">Dica: <ph name="BEGIN_LINK" />mova o Chromium para a dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Melhore sua experiência do Google no Chromium de acordo com seu local.</translation>
 <translation id="8353224596138547809">Quer que o Chromium salve sua senha para este site?</translation>

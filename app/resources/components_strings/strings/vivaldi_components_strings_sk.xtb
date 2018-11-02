@@ -2,6 +2,7 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
 <translation id="1038842779957582377">neznámy názov</translation>
+<translation id="1110994991967754504">Vyberte povolenie pre <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Prístup ku <ph name="BEGIN_LINK" />kópii vo vyrovnávacej pamäti<ph name="END_LINK" /> stránky <ph name="URL" /></translation>
 <translation id="1158211211994409885">Hostiteľský web <ph name="HOST_NAME" /> neočakávane ukončil pripojenie.</translation>
 <translation id="1161325031994447685">Znovu sa pripojiť k sieti Wi-Fi</translation>
@@ -15,6 +16,7 @@
 <translation id="1620510694547887537">Kamera</translation>
 <translation id="1640244768702815859">Skúste <ph name="BEGIN_LINK" />navštíviť domovskú stránku webu<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Nepodporovaný protokol</translation>
+<translation id="1676269943528358898"><ph name="SITE" /> spravidla používa šifrovanie na ochranu vašich informácií. Keď sa Vivaldi pokúsil pripojiť k <ph name="SITE" /> webová stránka odoslala nezvyčajné a nesprávne poverenia. Toto sa môže stať, keď sa útočník snaží predstierať že je <ph name="SITE" />, alebo prihlasovacia obrazovka siete Wi-Fi prerušila spojenie. Vaše informácie sú stále v bezpečí, pretože prehliadač Vivaldi zastavil pripojenie pred výmenou akýchkoľvek údajov.</translation>
 <translation id="1710259589646384581">Operačný systém</translation>
 <translation id="1728677426644403582">Prezeráte si zdrojový kód webovej stránky</translation>
 <translation id="1734878702283171397">Skúste kontaktovať správcu systému.</translation>
@@ -42,7 +44,9 @@
 <translation id="2482878487686419369">Upozornenia</translation>
 <translation id="2539524384386349900">Rozpoznávať</translation>
 <translation id="255002559098805027">Web <ph name="HOST_NAME" /> odoslal neplatnú odpoveď.</translation>
+<translation id="2586657967955657006">Schránka</translation>
 <translation id="2609632851001447353">Variácie</translation>
+<translation id="2634124572758952069">Adresu IP servera <ph name="HOST_NAME" /> sa nepodarilo nájsť.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Prístup k súboru bol odmietnutý</translation>
 <translation id="2705137772291741111">Uložená kópia tohto webu (vo vyrovnávacej pamäti) bola nečitateľná.</translation>
@@ -52,6 +56,7 @@
 <translation id="2856444702002559011">Útočníci sa môžu pokúsiť ukradnúť vaše informácie z webu <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (napríklad heslá, správy alebo kreditné karty). <ph name="BEGIN_LEARN_MORE_LINK" />Ďalšie informácie<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Zistila sa zmena siete.</translation>
 <translation id="2948083400971632585">Môžete zakázať akékoľvek proxy konfigurované na pripojenie zo stránky s nastaveniami.</translation>
+<translation id="298138621710431427">Pomôžte mi to opraviť</translation>
 <translation id="2991571918955627853">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože používa certifikát HSTS. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="3005723025932146533">Zobraziť uloženú kópiu</translation>
 <translation id="301521992641321250">Automaticky blokované</translation>
@@ -67,6 +72,7 @@
 <translation id="3422472998109090673">Web <ph name="HOST_NAME" /> nie je momentálne k dispozícii.</translation>
 <translation id="3427092606871434483">Povoliť (predvolené)</translation>
 <translation id="3447661539832366887">Vlastník tohto zariadenia vypol hru Dinosaur.</translation>
+<translation id="3447884698081792621">Zobraziť certifikát (od vydavateľa <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Skryť rozšírené podrobnosti</translation>
 <translation id="3566021033012934673">Vaše pripojenie nie je súkromné</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
@@ -93,6 +99,7 @@
 <translation id="4304224509867189079">Prihlásiť</translation>
 <translation id="4312866146174492540">Blokovať (predvolené)</translation>
 <translation id="4356973930735388585">Útočníci na tejto stránke sa môžu pokúsiť nainštalovať v počítači nebezpečné programy, ktoré ukradnú alebo odstránia vaše informácie (napríklad fotografie, heslá, správy alebo čísla kreditných kariet).</translation>
+<translation id="4408413947728134509">Súbory cookie: <ph name="NUM_COOKIES" /></translation>
 <translation id="4432688616882109544">Web <ph name="HOST_NAME" /> neakceptoval váš prihlasovací certifikát alebo nebol žiadny poskytnutý.</translation>
 <translation id="4506599922270137252">Kontaktovať správcu systému</translation>
 <translation id="4522570452068850558">Podrobnosti</translation>
@@ -108,6 +115,7 @@
 <translation id="4744603770635761495">Spustiteľná cesta</translation>
 <translation id="4750917950439032686">Vaše informácie (napríklad heslá alebo čísla kreditných kariet) sú pri odoslaní na túto stránku súkromné.</translation>
 <translation id="4764776831041365478">Webové stránky na adrese <ph name="URL" /> môžu byť dočasne nedostupné alebo sa mohli natrvalo premiestniť na novú webovú adresu.</translation>
+<translation id="4807049035289105102">Momentálne nemôžete navštíviť <ph name="SITE" />, pretože webová stránka odoslala kódované poverenia, ktoré Vivaldi nemôže spracovať. Sieťové chyby a útoky sú zvyčajne dočasné, takže táto stránka pravdepodobne bude neskôr fungovať.</translation>
 <translation id="4913131542719409934">Vyžaduje sa overenie totožnosti</translation>
 <translation id="4916962322362512664"><ph name="DEVICE_NAME" /></translation>
 <translation id="4974590756084640048">Opätovne aktivovať upozornenia</translation>
@@ -116,6 +124,7 @@
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Skontrolovať adresu proxy servera<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-bitová verzia)</translation>
 <translation id="522700295135997067">Táto stránka možno práve ukradla vaše heslo</translation>
+<translation id="5287240709317226393">Zobraziť súbory cookie</translation>
 <translation id="5355557959165512791">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože tento certifikát bol odvolaný. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="5386426401304769735">Reťazec certifikátu pre túto stránku obsahuje certifikát podpísaný pomocou funkcie SHA-1.</translation>
 <translation id="5431657950005405462">Súbor sa nenašiel</translation>
@@ -126,6 +135,7 @@
     Skúste kontaktovať správcu systému.</translation>
 <translation id="5510766032865166053">Mohol byť prenesený alebo odstránený.</translation>
 <translation id="5556459405103347317">Znova načítať</translation>
+<translation id="5571347317547569613">({NUM_COOKIES,plural, =1{Používa sa 1}few{Používajú sa #}many{Používa sa #}other{Používa sa #}})</translation>
 <translation id="5610142619324316209">Skontrolovať pripojenie</translation>
 <translation id="5617949217645503996">Web <ph name="HOST_NAME" /> vás presmeroval príliš veľakrát.</translation>
 <translation id="5675650730144413517">Táto stránka nefunguje</translation>
@@ -137,6 +147,7 @@
 <translation id="5810442152076338065">Vaše pripojenie k doméne <ph name="DOMAIN" /> je šifrované pomocou zastaranej šifrovacej súpravy.</translation>
 <translation id="5838278095973806738">Na tejto stránke by ste nemali zadávať citlivé informácie (napríklad heslá alebo čísla kreditných kariet), pretože by ich mohli ukradnúť útočníci.</translation>
 <translation id="5869405914158311789">K tomuto webu sa nedá pripojiť</translation>
+<translation id="5920262536204764679">{NUM_COOKIES,plural, =1{Používa sa 1}few{Používajú sa #}many{Používa sa #}other{Používa sa #}}</translation>
 <translation id="5990559369517809815">Žiadosti odoslané serveru boli zablokované rozšírením.</translation>
 <translation id="6051221802930200923">Web <ph name="SITE" /> momentálne nemôžete navštíviť, pretože používa pripínanie certifikátov. Chyby siete a útoky sú zvyčajne dočasné, takže by táto stránka mala neskôr pravdepodobne fungovať.</translation>
 <translation id="6080696365213338172">K obsahu ste pristúpili pomocou certifikátu, ktorý poskytol správca. Údaje, ktoré poskytnete doméne <ph name="DOMAIN" /> môžu byť zachytené správcom.</translation>
@@ -166,6 +177,7 @@
 <translation id="7079718277001814089">Táto stránka obsahuje škodlivý softvér</translation>
 <translation id="7090678807593890770">Vyhľadajte na Googli výraz <ph name="LINK" /></translation>
 <translation id="7108819624672055576">Povolené rozšírením</translation>
+<translation id="7111012039238467737">(Platný)</translation>
 <translation id="7210863904660874423">Web <ph name="HOST_NAME" /> nespĺňa bezpečnostné štandardy.</translation>
 <translation id="7219179957768738017">Spojenie používa protokol <ph name="SSL_VERSION" />.</translation>
 <translation id="7260504762447901703">Odvolať prístup</translation>
@@ -178,6 +190,7 @@
 <translation id="7549584377607005141">Správne zobrazenie tejto webovej stránky si vyžaduje údaje, ktoré ste zadali v minulosti. Tieto údaje môžete poslať znova, ale v tom prípade zopakujete všetky akcie, ktoré sa na tejto stránke vykonali v minulosti.</translation>
 <translation id="759889825892636187">Web <ph name="HOST_NAME" /> momentálne nemôže spracovať túto žiadosť.</translation>
 <translation id="7662298039739062396">Nastavenie ovládané rozšírením</translation>
+<translation id="7663736086183791259">Certifikát <ph name="CERTIFICATE_VALIDITY" /></translation>
 <translation id="7669271284792375604">Útočníci na tejto stránke sa vás môžu pokúsiť podvodom presvedčiť, aby ste si nainštalovali programy, ktoré poškodzujú vaše prostredie prehliadania (napríklad zmenou domovskej stránky alebo zobrazovaním ďalších reklám na stránkach, ktoré navštevujete).</translation>
 <translation id="7714464543167945231">Certifikát</translation>
 <translation id="7716147886133743102">Blokované správcom</translation>
@@ -198,6 +211,7 @@
 <translation id="8205463626947051446">Stránka zvykne zobrazovať obťažujúce reklamy</translation>
 <translation id="8225771182978767009">Osoba, ktorá nastavila tento počítač, sa rozhodla daný web blokovať.</translation>
 <translation id="8241712895048303527">Blokovať na tejto stránke</translation>
+<translation id="8288807391153049143">Zobraziť certifikát</translation>
 <translation id="8289355894181816810">Ak neviete, čo to znamená, kontaktujte správcu siete.</translation>
 <translation id="8332188693563227489">Prístup k webu <ph name="HOST_NAME" /> bol zamietnutý</translation>
 <translation id="8498891568109133222">Web <ph name="HOST_NAME" /> príliš dlho neodpovedal.</translation>
@@ -207,6 +221,8 @@
 <translation id="8740359287975076522"><ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;adresa DNS&lt;/abbr&gt; sa nenašla. Problém sa diagnostikuje.</translation>
 <translation id="9001074447101275817">Proxy server <ph name="DOMAIN" /> vyžaduje používateľské meno a heslo.</translation>
 <translation id="9008201768610948239">Ignorovať</translation>
+<translation id="9011424611726486705">Otvoriť nastavenia stránky</translation>
+<translation id="9025348182339809926">(Neplatný)</translation>
 <translation id="9039213469156557790">Táto stránka obsahuje aj iné zdroje, ktoré nie sú zabezpečené. Tieto zdroje môžu pri prenose vidieť ostatní používatelia a útočník ich môže upraviť tak, aby zmenil správanie stránky.</translation>
 <translation id="9069693763241529744">Blokované rozšírením</translation>
 <translation id="910908805481542201">Pomôžte mi to vyriešiť</translation>

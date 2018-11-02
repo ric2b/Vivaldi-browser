@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
@@ -43,8 +42,8 @@ ArcAppItem* ArcAppModelBuilder::GetArcAppItem(const std::string& app_id) {
 std::unique_ptr<ArcAppItem> ArcAppModelBuilder::CreateApp(
     const std::string& app_id,
     const ArcAppListPrefs::AppInfo& app_info) {
-  return base::MakeUnique<ArcAppItem>(profile(), GetSyncItem(app_id), app_id,
-                                      app_info.name);
+  return std::make_unique<ArcAppItem>(
+      profile(), model_updater(), GetSyncItem(app_id), app_id, app_info.name);
 }
 
 void ArcAppModelBuilder::OnAppRegistered(

@@ -4,13 +4,13 @@
 
 /**
  * @typedef {{
- *   tetherNostDeviceName: string,
+ *   tetherHostDeviceName: string,
  *   batteryPercentage: number,
  *   connectionStrength: number,
  *   isTetherHostCurrentlyOnWifi: boolean
  * }}
  */
-var TetherConnectionData;
+let TetherConnectionData;
 
 Polymer({
   is: 'tether-connection-dialog',
@@ -25,10 +25,16 @@ Polymer({
     networkProperties: {
       type: Object,
     },
+
+    /**
+     * Whether the network has been lost (e.g., has gone out of range).
+     * @type {boolean}
+     */
+    outOfRange: Boolean,
   },
 
   open: function() {
-    var dialog = this.getDialog_();
+    const dialog = this.getDialog_();
     if (!dialog.open)
       this.getDialog_().showModal();
 
@@ -36,7 +42,7 @@ Polymer({
   },
 
   close: function() {
-    var dialog = this.getDialog_();
+    const dialog = this.getDialog_();
     if (dialog.open)
       dialog.close();
   },
@@ -82,7 +88,7 @@ Polymer({
    * @private
    */
   getBatteryPercentageAsString_: function(networkProperties) {
-    var percentage = this.get('Tether.BatteryPercentage', networkProperties);
+    const percentage = this.get('Tether.BatteryPercentage', networkProperties);
     if (percentage === undefined)
       return '';
     return percentage.toString();
@@ -98,7 +104,7 @@ Polymer({
    * signal strength.
    */
   getSignalStrengthIconName_: function(networkProperties) {
-    var signalStrength = this.get('Tether.SignalStrength', networkProperties);
+    let signalStrength = this.get('Tether.SignalStrength', networkProperties);
     if (signalStrength === undefined)
       signalStrength = 4;
     return 'settings:signal-cellular-' +
@@ -132,7 +138,8 @@ Polymer({
    */
   getExplanation_: function(networkProperties) {
     return this.i18n(
-        'tetherConnectionExplanation', CrOnc.getNetworkName(networkProperties));
+        'tetherConnectionExplanation',
+        CrOnc.getEscapedNetworkName(networkProperties));
   },
 
   /**
@@ -143,7 +150,7 @@ Polymer({
   getDescriptionTitle_: function(networkProperties) {
     return this.i18n(
         'tetherConnectionDescriptionTitle',
-        CrOnc.getNetworkName(networkProperties));
+        CrOnc.getEscapedNetworkName(networkProperties));
   },
 
   /**

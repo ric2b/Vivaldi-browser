@@ -16,11 +16,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.MetricsUtils.HistogramDelta;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.share.ShareMenuActionHandler.ShareMenuActionDelegate;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.ui_metrics.CanonicalURLResult;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
 
@@ -31,8 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Integration tests for the Share Menu handling.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ShareMenuActionHandlerIntegrationTest {
     private static final String PAGE_WITH_HTTPS_CANONICAL_URL =
             "/chrome/test/data/android/share/link_share_https_canonical.html";
@@ -61,9 +62,12 @@ public class ShareMenuActionHandlerIntegrationTest {
         final String noCanonicalUrl = testServer.getURL(PAGE_WITH_NO_CANONICAL_URL);
 
         try {
-            verifyShareUrl(httpsCanonicalUrl, "https://examplehttps.com/");
-            verifyShareUrl(httpCanonicalUrl, "http://examplehttp.com/");
-            verifyShareUrl(noCanonicalUrl, noCanonicalUrl);
+            verifyShareUrl(httpsCanonicalUrl, "https://examplehttps.com/",
+                    CanonicalURLResult.SUCCESS_CANONICAL_URL_DIFFERENT_FROM_VISIBLE);
+            verifyShareUrl(httpCanonicalUrl, "http://examplehttp.com/",
+                    CanonicalURLResult.SUCCESS_CANONICAL_URL_NOT_HTTPS);
+            verifyShareUrl(noCanonicalUrl, noCanonicalUrl,
+                    CanonicalURLResult.FAILED_NO_CANONICAL_URL_DEFINED);
         } finally {
             testServer.stopAndDestroyServer();
         }
@@ -79,19 +83,26 @@ public class ShareMenuActionHandlerIntegrationTest {
         final String noCanonicalUrl = testServer.getURL(PAGE_WITH_NO_CANONICAL_URL);
 
         try {
-            verifyShareUrl(httpsCanonicalUrl, httpsCanonicalUrl);
-            verifyShareUrl(httpCanonicalUrl, httpCanonicalUrl);
-            verifyShareUrl(noCanonicalUrl, noCanonicalUrl);
+            verifyShareUrl(httpsCanonicalUrl, httpsCanonicalUrl,
+                    CanonicalURLResult.FAILED_VISIBLE_URL_NOT_HTTPS);
+            verifyShareUrl(httpCanonicalUrl, httpCanonicalUrl,
+                    CanonicalURLResult.FAILED_VISIBLE_URL_NOT_HTTPS);
+            verifyShareUrl(noCanonicalUrl, noCanonicalUrl,
+                    CanonicalURLResult.FAILED_VISIBLE_URL_NOT_HTTPS);
         } finally {
             testServer.stopAndDestroyServer();
         }
     }
 
-    private void verifyShareUrl(String pageUrl, String expectedShareUrl)
+    private void verifyShareUrl(
+            String pageUrl, String expectedShareUrl, @CanonicalURLResult int expectedUrlResult)
             throws IllegalArgumentException, InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(pageUrl);
+        HistogramDelta urlResultDelta = new HistogramDelta(
+                ShareMenuActionHandler.CANONICAL_URL_RESULT_HISTOGRAM, expectedUrlResult);
         ShareParams params = triggerShare();
         Assert.assertEquals(expectedShareUrl, params.getUrl());
+        Assert.assertEquals(1, urlResultDelta.getDelta());
     }
 
     private ShareParams triggerShare() throws InterruptedException, TimeoutException {

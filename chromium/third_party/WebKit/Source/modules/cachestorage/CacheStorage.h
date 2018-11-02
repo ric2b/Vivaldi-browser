@@ -7,9 +7,9 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptPromise.h"
+#include "core/fetch/GlobalFetch.h"
 #include "modules/cachestorage/Cache.h"
 #include "modules/cachestorage/CacheQueryOptions.h"
-#include "modules/fetch/GlobalFetch.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/Forward.h"
@@ -32,10 +32,10 @@ class CacheStorage final : public ScriptWrappable {
   ~CacheStorage();
   void Dispose();
 
-  ScriptPromise open(ScriptState*, const String& cache_name, ExceptionState&);
-  ScriptPromise has(ScriptState*, const String& cache_name, ExceptionState&);
-  ScriptPromise Delete(ScriptState*, const String& cache_name, ExceptionState&);
-  ScriptPromise keys(ScriptState*, ExceptionState&);
+  ScriptPromise open(ScriptState*, const String& cache_name);
+  ScriptPromise has(ScriptState*, const String& cache_name);
+  ScriptPromise Delete(ScriptState*, const String& cache_name);
+  ScriptPromise keys(ScriptState*);
   ScriptPromise match(ScriptState*,
                       const RequestInfo&,
                       const CacheQueryOptions&,

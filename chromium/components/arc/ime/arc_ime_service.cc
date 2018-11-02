@@ -279,17 +279,19 @@ void ArcImeService::OnCursorRectChangedWithSurroundingText(
 
 ////////////////////////////////////////////////////////////////////////////////
 // Overridden from keyboard::KeyboardControllerObserver
-void ArcImeService::OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {
+void ArcImeService::OnKeyboardAppearanceChanging(
+    const keyboard::KeyboardStateDescriptor& state) {
   if (!focused_arc_window_)
     return;
   aura::Window* window = focused_arc_window_;
+  gfx::Rect new_bounds = state.occluded_bounds;
   // Multiply by the scale factor. To convert from DPI to physical pixels.
   gfx::Rect bounds_in_px = gfx::ScaleToEnclosingRect(
       new_bounds, window->layer()->device_scale_factor());
-  ime_bridge_->SendOnKeyboardBoundsChanging(bounds_in_px);
-}
 
-void ArcImeService::OnKeyboardClosed() {}
+  ime_bridge_->SendOnKeyboardAppearanceChanging(bounds_in_px,
+                                                state.is_available);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // Overridden from ui::TextInputClient:

@@ -12,6 +12,7 @@
 #include "net/quic/core/quic_data_writer.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_aligned.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
@@ -302,7 +303,7 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
   QuicPacketHeader header;
   FillPacketHeader(&header);
   QUIC_CACHELINE_ALIGNED char encrypted_buffer[kMaxPacketSize];
-  QuicDataWriter writer(arraysize(encrypted_buffer), encrypted_buffer,
+  QuicDataWriter writer(QUIC_ARRAYSIZE(encrypted_buffer), encrypted_buffer,
                         framer_->endianness());
   if (!framer_->AppendPacketHeader(header, &writer)) {
     QUIC_BUG << "AppendPacketHeader failed";
@@ -343,7 +344,7 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
   size_t encrypted_length = framer_->EncryptInPlace(
       packet_.encryption_level, packet_.packet_number,
       GetStartOfEncryptedData(framer_->transport_version(), header),
-      writer.length(), arraysize(encrypted_buffer), encrypted_buffer);
+      writer.length(), QUIC_ARRAYSIZE(encrypted_buffer), encrypted_buffer);
   if (encrypted_length == 0) {
     QUIC_BUG << "Failed to encrypt packet number " << header.packet_number;
     return;
@@ -462,7 +463,7 @@ void QuicPacketCreator::SerializePacket(char* encrypted_buffer,
 
 std::unique_ptr<QuicEncryptedPacket>
 QuicPacketCreator::SerializeVersionNegotiationPacket(
-    const QuicTransportVersionVector& supported_versions) {
+    const ParsedQuicVersionVector& supported_versions) {
   DCHECK_EQ(Perspective::IS_SERVER, framer_->perspective());
   std::unique_ptr<QuicEncryptedPacket> encrypted =
       QuicFramer::BuildVersionNegotiationPacket(connection_id_,
@@ -480,7 +481,7 @@ QuicPacketCreator::SerializeConnectivityProbingPacket() {
 
   std::unique_ptr<char[]> buffer(new char[kMaxPacketSize]);
   size_t length = framer_->BuildConnectivityProbingPacket(header, buffer.get(),
-                                                          max_packet_length_);
+                                                          max_plaintext_size_);
   DCHECK(length);
 
   const size_t encrypted_length = framer_->EncryptInPlace(

@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/app_list/model/search_result.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -31,7 +31,7 @@ class ArcPlayStoreSearchProviderTest : public AppListTestBase {
   void SetUp() override {
     AppListTestBase::SetUp();
     arc_test_.SetUp(profile());
-    controller_ = base::MakeUnique<test::TestAppListControllerDelegate>();
+    controller_ = std::make_unique<test::TestAppListControllerDelegate>();
   }
 
   void TearDown() override {
@@ -42,7 +42,7 @@ class ArcPlayStoreSearchProviderTest : public AppListTestBase {
 
  protected:
   std::unique_ptr<ArcPlayStoreSearchProvider> CreateSearch(int max_results) {
-    return base::MakeUnique<ArcPlayStoreSearchProvider>(
+    return std::make_unique<ArcPlayStoreSearchProvider>(
         max_results, profile_.get(), controller_.get());
   }
 
@@ -79,7 +79,7 @@ TEST_F(ArcPlayStoreSearchProviderTest, Basic) {
   AddExtension(CreateExtension(extension_misc::kGmailAppId).get());
 
   // Check that the result size of a query doesn't exceed the |kMaxResults|.
-  provider->Start(false, base::UTF8ToUTF16(kQuery));
+  provider->Start(base::UTF8ToUTF16(kQuery));
   const app_list::SearchProvider::Results& results = provider->results();
   ASSERT_GT(results.size(), 0u);
   // Play Store returns |kMaxResults| results, but the first one (GMail) already

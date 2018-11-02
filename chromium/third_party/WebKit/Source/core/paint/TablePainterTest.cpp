@@ -39,19 +39,9 @@ TEST_P(TablePainterTest, Background) {
   IntRect interest_rect(0, 0, 200, 200);
   Paint(&interest_rect);
 
-  DisplayItemClient* background_client = nullptr;
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    // With SPv1 and RLS, the document background uses the scrolling contents
-    // layer as its DisplayItemClient.
-    background_client = GetLayoutView().Layer()->GraphicsLayerBacking();
-  } else {
-    background_client = &GetLayoutView();
-  }
-
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
@@ -60,11 +50,12 @@ TEST_P(TablePainterTest, Background) {
 
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row2, DisplayItem::kBoxDecorationBackground));
 }
 
 TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   SetBodyInnerHTML(R"HTML(
     <style>
       body { margin: 0; }
@@ -91,19 +82,9 @@ TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
   IntRect interest_rect(0, 200, 200, 150);
   Paint(&interest_rect);
 
-  DisplayItemClient* background_client = nullptr;
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    // With SPv1 and RLS, the document background uses the scrolling contents
-    // layer as its DisplayItemClient.
-    background_client = GetLayoutView().Layer()->GraphicsLayerBacking();
-  } else {
-    background_client = &GetLayoutView();
-  }
-
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 3,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground),
       TestDisplayItem(cell1, DisplayItem::kBoxDecorationBackground));
 
@@ -114,7 +95,7 @@ TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
 
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 2,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row1, DisplayItem::kBoxDecorationBackground));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
@@ -124,7 +105,7 @@ TEST_P(TablePainterTest, BackgroundWithCellSpacing) {
 
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 3,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row2, DisplayItem::kBoxDecorationBackground),
       TestDisplayItem(cell2, DisplayItem::kBoxDecorationBackground));
 }
@@ -154,19 +135,9 @@ TEST_P(TablePainterTest, BackgroundInSelfPaintingRow) {
   IntRect interest_rect(200, 0, 200, 200);
   Paint(&interest_rect);
 
-  DisplayItemClient* background_client = nullptr;
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    // With SPv1 and RLS, the document background uses the scrolling contents
-    // layer as its DisplayItemClient.
-    background_client = GetLayoutView().Layer()->GraphicsLayerBacking();
-  } else {
-    background_client = &GetLayoutView();
-  }
-
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 5,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row, DisplayItem::kBeginCompositing),
       TestDisplayItem(row, DisplayItem::kBoxDecorationBackground),
       TestDisplayItem(cell1, DisplayItem::kBoxDecorationBackground),
@@ -177,9 +148,9 @@ TEST_P(TablePainterTest, BackgroundInSelfPaintingRow) {
   interest_rect = IntRect(300, 0, 100, 100);
   Paint(&interest_rect);
 
-  EXPECT_DISPLAY_LIST(
-      RootPaintController().GetDisplayItemList(), 1,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground));
+  EXPECT_DISPLAY_LIST(RootPaintController().GetDisplayItemList(), 1,
+                      TestDisplayItem(ViewBackgroundClient(),
+                                      DisplayItem::kDocumentBackground));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // Intersects cell2 only.
@@ -188,7 +159,7 @@ TEST_P(TablePainterTest, BackgroundInSelfPaintingRow) {
 
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 5,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(row, DisplayItem::kBeginCompositing),
       TestDisplayItem(row, DisplayItem::kBoxDecorationBackground),
       TestDisplayItem(cell2, DisplayItem::kBoxDecorationBackground),
@@ -216,20 +187,10 @@ TEST_P(TablePainterTest, CollapsedBorderAndOverflow) {
   IntRect interest_rect(0, 0, 100, 100);
   Paint(&interest_rect);
 
-  DisplayItemClient* background_client = nullptr;
-  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
-      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
-    // With SPv1 and RLS, the document background uses the scrolling contents
-    // layer as its DisplayItemClient.
-    background_client = GetLayoutView().Layer()->GraphicsLayerBacking();
-  } else {
-    background_client = &GetLayoutView();
-  }
-
   // We should paint all display items of cell.
   EXPECT_DISPLAY_LIST(
       RootPaintController().GetDisplayItemList(), 4,
-      TestDisplayItem(*background_client, DisplayItem::kDocumentBackground),
+      TestDisplayItem(ViewBackgroundClient(), DisplayItem::kDocumentBackground),
       TestDisplayItem(cell, DisplayItem::kBoxDecorationBackground),
       TestDisplayItem(*cell.Row(), DisplayItem::kTableCollapsedBorders),
       TestDisplayItem(cell, DisplayItem::PaintPhaseToDrawingType(

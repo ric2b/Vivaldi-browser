@@ -9,14 +9,17 @@
 #include "base/json/json_reader.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/test_extension_dir.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
+#include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -56,6 +59,7 @@ using extensions::Extension;
 namespace {
 
 constexpr const char kExampleURL[] = "http://example.org/";
+constexpr const char kExampleURL2[] = "http://example.com/";
 constexpr const char kAppDotComManifest[] = R"( { "name": "Hosted App",
   "version": "1",
   "manifest_version": 2,
@@ -71,7 +75,7 @@ void NavigateToURLAndWait(Browser* browser, const GURL& url) {
   content::TestNavigationObserver observer(
       browser->tab_strip_model()->GetActiveWebContents(),
       content::MessageLoopRunner::QuitMode::DEFERRED);
-  chrome::NavigateParams params(browser, url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser, url, ui::PAGE_TRANSITION_LINK);
   ui_test_utils::NavigateToURL(&params);
   observer.Wait();
 }
@@ -162,7 +166,8 @@ class HostedAppTest : public ExtensionBrowserTest,
 };
 
 // Tests that "Open link in new tab" opens a link in a foreground tab.
-IN_PROC_BROWSER_TEST_P(HostedAppTest, OpenLinkInNewTab) {
+// Flaky, see https://crbug.com/795055
+IN_PROC_BROWSER_TEST_P(HostedAppTest, DISABLED_OpenLinkInNewTab) {
   SetupApp("app", true);
 
   const GURL url("http://www.foo.com/");
@@ -445,6 +450,129 @@ IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, OpenInChrome) {
   ASSERT_EQ(1u, chrome::GetBrowserCount(browser()->profile()));
 }
 
+// Check the 'App info' menu button for Hosted App windows.
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, AppInfo) {
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = GURL(kExampleURL);
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+  Browser* app_browser = LaunchAppBrowser(app);
+
+  bool dialog_created = false;
+
+  GetAppInfoDialogCreatedCallbackForTesting() = base::BindOnce(
+      [](bool* dialog_created) { *dialog_created = true; }, &dialog_created);
+
+  chrome::ExecuteCommand(app_browser, IDC_APP_INFO);
+
+  EXPECT_TRUE(dialog_created);
+
+  // The test closure should have run. But clear the global in case it hasn't.
+  EXPECT_FALSE(GetAppInfoDialogCreatedCallbackForTesting());
+  GetAppInfoDialogCreatedCallbackForTesting().Reset();
+}
+
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, EngagementHistogram) {
+  base::HistogramTester histograms;
+  WebApplicationInfo web_app_info;
+  web_app_info.app_url = GURL(kExampleURL);
+  web_app_info.scope = GURL(kExampleURL);
+  web_app_info.theme_color = base::Optional<SkColor>();
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+  Browser* app_browser = LaunchAppBrowser(app);
+  NavigateToURLAndWait(app_browser, GURL(kExampleURL));
+
+  // Test shortcut launch.
+  EXPECT_EQ(web_app::GetExtensionIdFromApplicationName(app_browser->app_name()),
+            app->id());
+
+  histograms.ExpectUniqueSample(
+      extensions::kPwaWindowEngagementTypeHistogram,
+      SiteEngagementService::ENGAGEMENT_WEBAPP_SHORTCUT_LAUNCH, 1);
+
+  // Test some other engagement events by directly calling into
+  // SiteEngagementService.
+  content::WebContents* web_contents =
+      app_browser->tab_strip_model()->GetActiveWebContents();
+  SiteEngagementService* site_engagement_service =
+      SiteEngagementService::Get(app_browser->profile());
+  site_engagement_service->HandleMediaPlaying(web_contents, false);
+  site_engagement_service->HandleMediaPlaying(web_contents, true);
+  site_engagement_service->HandleNavigation(web_contents,
+                                            ui::PAGE_TRANSITION_TYPED);
+  site_engagement_service->HandleUserInput(
+      web_contents, SiteEngagementService::ENGAGEMENT_MOUSE);
+
+  histograms.ExpectTotalCount(extensions::kPwaWindowEngagementTypeHistogram, 5);
+  histograms.ExpectBucketCount(extensions::kPwaWindowEngagementTypeHistogram,
+                               SiteEngagementService::ENGAGEMENT_MEDIA_VISIBLE,
+                               1);
+  histograms.ExpectBucketCount(extensions::kPwaWindowEngagementTypeHistogram,
+                               SiteEngagementService::ENGAGEMENT_MEDIA_HIDDEN,
+                               1);
+  histograms.ExpectBucketCount(extensions::kPwaWindowEngagementTypeHistogram,
+                               SiteEngagementService::ENGAGEMENT_NAVIGATION, 1);
+  histograms.ExpectBucketCount(extensions::kPwaWindowEngagementTypeHistogram,
+                               SiteEngagementService::ENGAGEMENT_MOUSE, 1);
+}
+
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest,
+                       EngagementHistogramNotRecordedIfNoScope) {
+  base::HistogramTester histograms;
+  WebApplicationInfo web_app_info;
+  // App with no scope.
+  web_app_info.app_url = GURL(kExampleURL);
+  web_app_info.theme_color = base::Optional<SkColor>();
+  const extensions::Extension* app = InstallBookmarkApp(web_app_info);
+  Browser* app_browser = LaunchAppBrowser(app);
+
+  EXPECT_EQ(web_app::GetExtensionIdFromApplicationName(app_browser->app_name()),
+            app->id());
+
+  histograms.ExpectTotalCount(extensions::kPwaWindowEngagementTypeHistogram, 0);
+}
+
+IN_PROC_BROWSER_TEST_P(HostedAppPWAOnlyTest, EngagementHistogramTwoApps) {
+  base::HistogramTester histograms;
+  const extensions::Extension *app1, *app2;
+
+  // Install two apps.
+  {
+    WebApplicationInfo web_app_info;
+    web_app_info.app_url = GURL(kExampleURL);
+    web_app_info.scope = GURL(kExampleURL);
+    web_app_info.theme_color = base::Optional<SkColor>();
+    app1 = InstallBookmarkApp(web_app_info);
+  }
+  {
+    WebApplicationInfo web_app_info;
+    web_app_info.app_url = GURL(kExampleURL2);
+    web_app_info.scope = GURL(kExampleURL2);
+    web_app_info.theme_color = base::Optional<SkColor>();
+    app2 = InstallBookmarkApp(web_app_info);
+  }
+
+  // Launch them three times. This ensures that each launch only logs once.
+  // (Since all apps receive the notification on launch, there is a danger that
+  // we might log too many times.)
+  Browser* app_browser1 = LaunchAppBrowser(app1);
+  Browser* app_browser2 = LaunchAppBrowser(app1);
+  Browser* app_browser3 = LaunchAppBrowser(app2);
+
+  EXPECT_EQ(
+      web_app::GetExtensionIdFromApplicationName(app_browser1->app_name()),
+      app1->id());
+  EXPECT_EQ(
+      web_app::GetExtensionIdFromApplicationName(app_browser2->app_name()),
+      app1->id());
+  EXPECT_EQ(
+      web_app::GetExtensionIdFromApplicationName(app_browser3->app_name()),
+      app2->id());
+
+  histograms.ExpectUniqueSample(
+      extensions::kPwaWindowEngagementTypeHistogram,
+      SiteEngagementService::ENGAGEMENT_WEBAPP_SHORTCUT_LAUNCH, 3);
+}
+
 // Common app manifest for HostedAppProcessModelTests.
 constexpr const char kHostedAppProcessModelManifest[] =
     R"( { "name": "Hosted App Process Model Test",
@@ -705,11 +833,11 @@ IN_PROC_BROWSER_TEST_P(HostedAppProcessModelTest, IframesInsideHostedApp) {
   // Verify that |same_dir| and |diff_dir| can script each other.
   // (they should - they have the same origin).
   std::string inner_text_from_other_frame;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      diff_dir,
+  const std::string r_script =
       R"( var w = window.open('', 'SameOrigin-SamePath');
-          domAutomationController.send(w.document.body.innerText); )",
-      &inner_text_from_other_frame));
+          domAutomationController.send(w.document.body.innerText); )";
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      diff_dir, r_script, &inner_text_from_other_frame));
   EXPECT_EQ("Simple test page.", inner_text_from_other_frame);
 }
 

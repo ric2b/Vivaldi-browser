@@ -58,9 +58,6 @@ class SpellCheckProvider
   // Replace shared spellcheck data.
   void set_spellcheck(SpellCheck* spellcheck) { spellcheck_ = spellcheck; }
 
-  // Enables document-wide spellchecking.
-  void EnableSpellcheck(bool enabled);
-
   // content::RenderFrameObserver:
   bool OnMessageReceived(const IPC::Message& message) override;
   void FocusedNodeChanged(const blink::WebNode& node) override;
@@ -86,6 +83,7 @@ class SpellCheckProvider
   void OnDestruct() override;
 
   // blink::WebTextCheckClient:
+  bool IsSpellCheckingEnabled() const override;
   void CheckSpelling(
       const blink::WebString& text,
       int& offset,

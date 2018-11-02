@@ -60,9 +60,10 @@ class ContentViewCore : public WebContentsObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 
-  void UpdateWindowAndroid(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& obj,
-                           jlong window_android);
+  void UpdateWindowAndroid(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& jwindow_android);
   void OnJavaContentViewCoreDestroyed(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -215,8 +216,6 @@ class ContentViewCore : public WebContentsObserver {
                        bool is_mobile_optimized_hint);
 
   void RequestDisallowInterceptTouchEvent();
-  void OnGestureEventAck(const blink::WebGestureEvent& event,
-                         InputEventAckState ack_result);
   bool FilterInputEvent(const blink::WebInputEvent& event);
 
   void DidStopFlinging();

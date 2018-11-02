@@ -11,7 +11,6 @@
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/rand_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -72,8 +71,9 @@
 #endif
 
 #if defined(USE_X11)
-#include "ui/base/x/x11_util.h"     // nogncheck
-#include "ui/gfx/x/x11_switches.h"  // nogncheck
+#include "ui/base/x/x11_util.h"       // nogncheck
+#include "ui/gfx/x/x11_connection.h"  // nogncheck
+#include "ui/gfx/x/x11_switches.h"    // nogncheck
 #endif
 
 #if defined(OS_LINUX)
@@ -95,7 +95,7 @@
 #endif
 
 #if BUILDFLAG(USE_VAAPI)
-#include "media/gpu/vaapi_wrapper.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
 
 namespace content {
@@ -240,6 +240,11 @@ int GpuMain(const MainFunctionParams& parameters) {
     main_message_loop.reset(
         new base::MessageLoop(base::MessageLoop::TYPE_DEFAULT));
 #elif defined(USE_X11)
+    // Depending on how Chrome is running there are multiple threads that can
+    // make Xlib function calls. Call XInitThreads() here to be safe, even if
+    // some configurations don't strictly need it.
+    gfx::InitializeThreadedX11();
+
     // We need a UI loop so that we can grab the Expose events. See GLSurfaceGLX
     // and https://crbug.com/326995.
     ui::SetDefaultX11ErrorHandlers();
@@ -267,9 +272,6 @@ int GpuMain(const MainFunctionParams& parameters) {
   }
 
   base::PlatformThread::SetName("CrGpuMain");
-
-  // Initializes StatisticsRecorder which tracks UMA histograms.
-  base::StatisticsRecorder::Initialize();
 
 #if defined(OS_ANDROID) || defined(OS_CHROMEOS)
   // Set thread priority before sandbox initialization.
@@ -359,11 +361,8 @@ bool StartSandboxLinux(gpu::GpuWatchdogThread* watchdog_thread,
       gpu_info && angle::IsAMD(gpu_info->active_gpu().vendor_id);
   sandbox_options.accelerated_video_decode_enabled =
       !gpu_prefs.disable_accelerated_video_decode;
-
-#if defined(OS_CHROMEOS)
-  sandbox_options.vaapi_accelerated_video_encode_enabled =
-      !gpu_prefs.disable_vaapi_accelerated_video_encode;
-#endif
+  sandbox_options.accelerated_video_encode_enabled =
+      !gpu_prefs.disable_accelerated_video_encode;
 
   bool res = service_manager::SandboxLinux::GetInstance()->InitializeSandbox(
       service_manager::SandboxTypeFromCommandLine(

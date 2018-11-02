@@ -17,8 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_common.h"
-#include "chrome/browser/notifications/notification_display_service.h"
-#include "chrome/browser/notifications/notification_display_service_factory.h"
+#include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_switches.h"
@@ -122,9 +121,8 @@ void ProfileLoadedCallback(NotificationCommon::Operation operation,
     return;
   }
 
-  auto* display_service =
-      NotificationDisplayServiceFactory::GetForProfile(profile);
-
+  NotificationDisplayServiceImpl* display_service =
+      NotificationDisplayServiceImpl::GetForProfile(profile);
   display_service->ProcessNotificationOperation(operation, notification_type,
                                                 origin, notification_id,
                                                 action_index, reply, by_user);
@@ -277,8 +275,8 @@ void NotificationPlatformBridgeAndroid::Display(
       ConvertUTF8ToJavaString(env, notification.id());
   ScopedJavaLocalRef<jstring> j_origin =
       ConvertUTF8ToJavaString(env, origin_url.spec());
-  // TODO(estade,peter): remove the tag field from Java and just use the
-  // notification id.
+  // TODO(https://crbug.com/801535): remove the tag field from Java and just use
+  // the notification id.
   ScopedJavaLocalRef<jstring> tag =
       ConvertUTF8ToJavaString(env, notification.id());
   ScopedJavaLocalRef<jstring> title =
@@ -334,16 +332,11 @@ void NotificationPlatformBridgeAndroid::Close(
 
   ScopedJavaLocalRef<jstring> j_notification_id =
       ConvertUTF8ToJavaString(env, notification_id);
-  ScopedJavaLocalRef<jstring> j_origin = ConvertUTF8ToJavaString(
-      env, notification_info.origin.possibly_invalid_spec());
 
   GURL scope_url(
       notification_info.service_worker_scope.possibly_invalid_spec());
   ScopedJavaLocalRef<jstring> j_scope_url =
       ConvertUTF8ToJavaString(env, scope_url.spec());
-
-  ScopedJavaLocalRef<jstring> j_tag =
-      ConvertUTF8ToJavaString(env, notification_info.tag);
 
   bool has_queried_webapk_package =
       notification_info.webapk_package.has_value();
@@ -355,7 +348,7 @@ void NotificationPlatformBridgeAndroid::Close(
   regenerated_notification_infos_.erase(iterator);
 
   Java_NotificationPlatformBridge_closeNotification(
-      env, java_object_, j_notification_id, j_origin, j_scope_url, j_tag,
+      env, java_object_, j_notification_id, j_scope_url,
       has_queried_webapk_package, j_webapk_package);
 }
 

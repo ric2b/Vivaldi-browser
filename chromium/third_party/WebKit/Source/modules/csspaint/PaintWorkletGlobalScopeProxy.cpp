@@ -29,17 +29,15 @@ PaintWorkletGlobalScopeProxy::PaintWorkletGlobalScopeProxy(
   reporting_proxy_ =
       std::make_unique<MainThreadWorkletReportingProxy>(document);
 
-  // TODO(nhiroki): Set CSP headers (https://crbug.com/773786).
   auto creation_params = std::make_unique<GlobalScopeCreationParams>(
-      document->Url(), document->UserAgent(), String() /* source_code */,
-      nullptr /* cached_meta_data */,
-      nullptr /* content_security_policy_parsed_headers */,
+      document->Url(), document->UserAgent(),
+      document->GetContentSecurityPolicy()->Headers().get(),
       document->GetReferrerPolicy(), document->GetSecurityOrigin(),
       nullptr /* worker_clients */, document->AddressSpace(),
       OriginTrialContext::GetTokens(document).get(),
       nullptr /* worker_settings */, kV8CacheOptionsDefault);
   global_scope_ = PaintWorkletGlobalScope::Create(
-      frame, std::move(creation_params), ToIsolate(document), *reporting_proxy_,
+      frame, std::move(creation_params), *reporting_proxy_,
       pending_generator_registry, global_scope_number);
 }
 

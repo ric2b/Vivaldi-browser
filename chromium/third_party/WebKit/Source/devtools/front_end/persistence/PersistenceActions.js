@@ -39,5 +39,13 @@ Persistence.PersistenceActions.ContextMenuProvider = class {
         Common.Revealer.reveal(uiSourceCode);
       });
     }
+
+    var binding = uiSourceCode && Persistence.persistence.binding(uiSourceCode);
+    var fileURL = binding ? binding.fileSystem.contentURL() : contentProvider.contentURL();
+    if (fileURL.startsWith('file://')) {
+      var path = Common.ParsedURL.urlToPlatformPath(fileURL, Host.isWin());
+      contextMenu.revealSection().appendItem(
+          Common.UIString('Open in containing folder'), () => InspectorFrontendHost.showItemInFolder(path));
+    }
   }
 };

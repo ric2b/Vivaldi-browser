@@ -40,7 +40,6 @@
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSFontStyleRangeValue.h"
 #include "core/css/CSSIdentifierValue.h"
-#include "core/css/CSSPropertyValueSet.h"
 #include "core/css/CSSUnicodeRangeValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/FontFaceDescriptors.h"
@@ -49,6 +48,8 @@
 #include "core/css/RemoteFontFaceSource.h"
 #include "core/css/StyleEngine.h"
 #include "core/css/StyleRule.h"
+#include "core/css/parser/AtRuleDescriptorParser.h"
+#include "core/css/parser/AtRuleDescriptorValueSet.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
@@ -70,14 +71,54 @@
 
 namespace blink {
 
-static const CSSValue* ParseCSSValue(const ExecutionContext* context,
-                                     const String& value,
-                                     CSSPropertyID property_id) {
+namespace {
+
+const CSSValue* ParseCSSValue(const ExecutionContext* context,
+                              const String& value,
+                              AtRuleDescriptorID descriptor_id) {
   CSSParserContext* parser_context =
       context->IsDocument() ? CSSParserContext::Create(*ToDocument(context))
                             : CSSParserContext::Create(*context);
-  return CSSParser::ParseFontFaceDescriptor(property_id, value, parser_context);
+  return AtRuleDescriptorParser::ParseFontFaceDescriptor(descriptor_id, value,
+                                                         *parser_context);
 }
+
+FontDisplay CSSValueToFontDisplay(const CSSValue* value) {
+  if (value && value->IsIdentifierValue()) {
+    switch (ToCSSIdentifierValue(value)->GetValueID()) {
+      case CSSValueAuto:
+        return kFontDisplayAuto;
+      case CSSValueBlock:
+        return kFontDisplayBlock;
+      case CSSValueSwap:
+        return kFontDisplaySwap;
+      case CSSValueFallback:
+        return kFontDisplayFallback;
+      case CSSValueOptional:
+        return kFontDisplayOptional;
+      default:
+        break;
+    }
+  }
+  return kFontDisplayAuto;
+}
+
+CSSFontFace* CreateCSSFontFace(FontFace* font_face,
+                               const CSSValue* unicode_range) {
+  Vector<UnicodeRange> ranges;
+  if (const CSSValueList* range_list = ToCSSValueList(unicode_range)) {
+    unsigned num_ranges = range_list->length();
+    for (unsigned i = 0; i < num_ranges; i++) {
+      const CSSUnicodeRangeValue& range =
+          ToCSSUnicodeRangeValue(range_list->Item(i));
+      ranges.push_back(UnicodeRange(range.From(), range.To()));
+    }
+  }
+
+  return new CSSFontFace(font_face, ranges);
+}
+
+}  // namespace
 
 FontFace* FontFace::Create(ExecutionContext* context,
                            const AtomicString& family,
@@ -101,7 +142,7 @@ FontFace* FontFace::Create(ExecutionContext* context,
                            const FontFaceDescriptors& descriptors) {
   FontFace* font_face = new FontFace(context, family, descriptors);
 
-  const CSSValue* src = ParseCSSValue(context, source, CSSPropertySrc);
+  const CSSValue* src = ParseCSSValue(context, source, AtRuleDescriptorID::Src);
   if (!src || !src->IsValueList())
     font_face->SetError(DOMException::Create(
         kSyntaxError, "The source provided ('" + source +
@@ -134,28 +175,34 @@ FontFace* FontFace::Create(ExecutionContext* context,
 
 FontFace* FontFace::Create(Document* document,
                            const StyleRuleFontFace* font_face_rule) {
-  const CSSPropertyValueSet& properties = font_face_rule->Properties();
+  const AtRuleDescriptorValueSet& properties = font_face_rule->Properties();
 
   // Obtain the font-family property and the src property. Both must be defined.
   const CSSValue* family =
-      properties.GetPropertyCSSValue(CSSPropertyFontFamily);
+      properties.GetPropertyCSSValue(AtRuleDescriptorID::FontFamily);
   if (!family || (!family->IsFontFamilyValue() && !family->IsIdentifierValue()))
     return nullptr;
-  const CSSValue* src = properties.GetPropertyCSSValue(CSSPropertySrc);
+  const CSSValue* src = properties.GetPropertyCSSValue(AtRuleDescriptorID::Src);
   if (!src || !src->IsValueList())
     return nullptr;
 
   FontFace* font_face = new FontFace(document);
 
   if (font_face->SetFamilyValue(*family) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyFontStyle) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyFontWeight) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyFontStretch) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyUnicodeRange) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyFontVariant) &&
       font_face->SetPropertyFromStyle(properties,
-                                      CSSPropertyFontFeatureSettings) &&
-      font_face->SetPropertyFromStyle(properties, CSSPropertyFontDisplay) &&
+                                      AtRuleDescriptorID::FontStyle) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::FontWeight) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::FontStretch) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::UnicodeRange) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::FontVariant) &&
+      font_face->SetPropertyFromStyle(
+          properties, AtRuleDescriptorID::FontFeatureSettings) &&
+      font_face->SetPropertyFromStyle(properties,
+                                      AtRuleDescriptorID::FontDisplay) &&
       font_face->GetFontSelectionCapabilities().IsValid() &&
       !font_face->family().IsEmpty()) {
     font_face->InitCSSFontFace(document, src);
@@ -171,15 +218,20 @@ FontFace::FontFace(ExecutionContext* context,
                    const AtomicString& family,
                    const FontFaceDescriptors& descriptors)
     : ContextClient(context), family_(family), status_(kUnloaded) {
-  SetPropertyFromString(context, descriptors.style(), CSSPropertyFontStyle);
-  SetPropertyFromString(context, descriptors.weight(), CSSPropertyFontWeight);
-  SetPropertyFromString(context, descriptors.stretch(), CSSPropertyFontStretch);
+  SetPropertyFromString(context, descriptors.style(),
+                        AtRuleDescriptorID::FontStyle);
+  SetPropertyFromString(context, descriptors.weight(),
+                        AtRuleDescriptorID::FontWeight);
+  SetPropertyFromString(context, descriptors.stretch(),
+                        AtRuleDescriptorID::FontStretch);
   SetPropertyFromString(context, descriptors.unicodeRange(),
-                        CSSPropertyUnicodeRange);
-  SetPropertyFromString(context, descriptors.variant(), CSSPropertyFontVariant);
+                        AtRuleDescriptorID::UnicodeRange);
+  SetPropertyFromString(context, descriptors.variant(),
+                        AtRuleDescriptorID::FontVariant);
   SetPropertyFromString(context, descriptors.featureSettings(),
-                        CSSPropertyFontFeatureSettings);
-  SetPropertyFromString(context, descriptors.display(), CSSPropertyFontDisplay);
+                        AtRuleDescriptorID::FontFeatureSettings);
+  SetPropertyFromString(context, descriptors.display(),
+                        AtRuleDescriptorID::FontDisplay);
 }
 
 FontFace::~FontFace() = default;
@@ -215,52 +267,58 @@ String FontFace::display() const {
 void FontFace::setStyle(ExecutionContext* context,
                         const String& s,
                         ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontStyle, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontStyle,
+                        &exception_state);
 }
 
 void FontFace::setWeight(ExecutionContext* context,
                          const String& s,
                          ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontWeight, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontWeight,
+                        &exception_state);
 }
 
 void FontFace::setStretch(ExecutionContext* context,
                           const String& s,
                           ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontStretch, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontStretch,
+                        &exception_state);
 }
 
 void FontFace::setUnicodeRange(ExecutionContext* context,
                                const String& s,
                                ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyUnicodeRange, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::UnicodeRange,
+                        &exception_state);
 }
 
 void FontFace::setVariant(ExecutionContext* context,
                           const String& s,
                           ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontVariant, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontVariant,
+                        &exception_state);
 }
 
 void FontFace::setFeatureSettings(ExecutionContext* context,
                                   const String& s,
                                   ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontFeatureSettings,
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontFeatureSettings,
                         &exception_state);
 }
 
 void FontFace::setDisplay(ExecutionContext* context,
                           const String& s,
                           ExceptionState& exception_state) {
-  SetPropertyFromString(context, s, CSSPropertyFontDisplay, &exception_state);
+  SetPropertyFromString(context, s, AtRuleDescriptorID::FontDisplay,
+                        &exception_state);
 }
 
 void FontFace::SetPropertyFromString(const ExecutionContext* context,
                                      const String& s,
-                                     CSSPropertyID property_id,
+                                     AtRuleDescriptorID descriptor_id,
                                      ExceptionState* exception_state) {
-  const CSSValue* value = ParseCSSValue(context, s, property_id);
-  if (value && SetPropertyValue(value, property_id))
+  const CSSValue* value = ParseCSSValue(context, s, descriptor_id);
+  if (value && SetPropertyValue(value, descriptor_id))
     return;
 
   String message = "Failed to set '" + s + "' as a property value.";
@@ -270,37 +328,39 @@ void FontFace::SetPropertyFromString(const ExecutionContext* context,
     SetError(DOMException::Create(kSyntaxError, message));
 }
 
-bool FontFace::SetPropertyFromStyle(const CSSPropertyValueSet& properties,
-                                    CSSPropertyID property_id) {
-  return SetPropertyValue(properties.GetPropertyCSSValue(property_id),
-                          property_id);
+bool FontFace::SetPropertyFromStyle(const AtRuleDescriptorValueSet& properties,
+                                    AtRuleDescriptorID descriptor_id) {
+  return SetPropertyValue(properties.GetPropertyCSSValue(descriptor_id),
+                          descriptor_id);
 }
 
 bool FontFace::SetPropertyValue(const CSSValue* value,
-                                CSSPropertyID property_id) {
-  switch (property_id) {
-    case CSSPropertyFontStyle:
+                                AtRuleDescriptorID descriptor_id) {
+  switch (descriptor_id) {
+    case AtRuleDescriptorID::FontStyle:
       style_ = value;
       break;
-    case CSSPropertyFontWeight:
+    case AtRuleDescriptorID::FontWeight:
       weight_ = value;
       break;
-    case CSSPropertyFontStretch:
+    case AtRuleDescriptorID::FontStretch:
       stretch_ = value;
       break;
-    case CSSPropertyUnicodeRange:
+    case AtRuleDescriptorID::UnicodeRange:
       if (value && !value->IsValueList())
         return false;
       unicode_range_ = value;
       break;
-    case CSSPropertyFontVariant:
+    case AtRuleDescriptorID::FontVariant:
       variant_ = value;
       break;
-    case CSSPropertyFontFeatureSettings:
+    case AtRuleDescriptorID::FontFeatureSettings:
       feature_settings_ = value;
       break;
-    case CSSPropertyFontDisplay:
+    case AtRuleDescriptorID::FontDisplay:
       display_ = value;
+      if (css_font_face_)
+        css_font_face_->SetDisplay(CSSValueToFontDisplay(display_.Get()));
       break;
     default:
       NOTREACHED();
@@ -377,7 +437,7 @@ void FontFace::SetLoadStatus(LoadStatusType status) {
       if (status_ == kLoaded) {
         GetExecutionContext()
             ->GetTaskRunner(TaskType::kDOMManipulation)
-            ->PostTask(BLINK_FROM_HERE,
+            ->PostTask(FROM_HERE,
                        WTF::Bind(&LoadedProperty::Resolve<FontFace*>,
                                  WrapPersistent(loaded_property_.Get()),
                                  WrapPersistent(this)));
@@ -387,7 +447,7 @@ void FontFace::SetLoadStatus(LoadStatusType status) {
 
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kDOMManipulation)
-        ->PostTask(BLINK_FROM_HERE,
+        ->PostTask(FROM_HERE,
                    WTF::Bind(&FontFace::RunCallbacks, WrapPersistent(this)));
   }
 }
@@ -629,41 +689,6 @@ size_t FontFace::ApproximateBlankCharacterCount() const {
   return 0;
 }
 
-static FontDisplay CSSValueToFontDisplay(const CSSValue* value) {
-  if (value && value->IsIdentifierValue()) {
-    switch (ToCSSIdentifierValue(value)->GetValueID()) {
-      case CSSValueAuto:
-        return kFontDisplayAuto;
-      case CSSValueBlock:
-        return kFontDisplayBlock;
-      case CSSValueSwap:
-        return kFontDisplaySwap;
-      case CSSValueFallback:
-        return kFontDisplayFallback;
-      case CSSValueOptional:
-        return kFontDisplayOptional;
-      default:
-        break;
-    }
-  }
-  return kFontDisplayAuto;
-}
-
-static CSSFontFace* CreateCSSFontFace(FontFace* font_face,
-                                      const CSSValue* unicode_range) {
-  Vector<UnicodeRange> ranges;
-  if (const CSSValueList* range_list = ToCSSValueList(unicode_range)) {
-    unsigned num_ranges = range_list->length();
-    for (unsigned i = 0; i < num_ranges; i++) {
-      const CSSUnicodeRangeValue& range =
-          ToCSSUnicodeRangeValue(range_list->Item(i));
-      ranges.push_back(UnicodeRange(range.From(), range.To()));
-    }
-  }
-
-  return new CSSFontFace(font_face, ranges);
-}
-
 bool ContextAllowsDownload(ExecutionContext* context) {
   if (!context) {
     return false;
@@ -694,32 +719,27 @@ void FontFace::InitCSSFontFace(ExecutionContext* context, const CSSValue* src) {
     // An item in the list either specifies a string (local font name) or a URL
     // (remote font to download).
     const CSSFontFaceSrcValue& item = ToCSSFontFaceSrcValue(src_list->Item(i));
-    CSSFontFaceSource* source = nullptr;
 
     if (!item.IsLocal()) {
       if (ContextAllowsDownload(context) && item.IsSupportedFormat()) {
-        FontResource* fetched = item.Fetch(context);
-        if (fetched) {
-          FontSelector* font_selector = nullptr;
-          if (context->IsDocument()) {
-            font_selector =
-                ToDocument(context)->GetStyleEngine().GetFontSelector();
-          } else if (context->IsWorkerGlobalScope()) {
-            font_selector = ToWorkerGlobalScope(context)->GetFontSelector();
-          } else {
-            NOTREACHED();
-          }
-          source =
-              new RemoteFontFaceSource(css_font_face_, fetched, font_selector,
-                                       CSSValueToFontDisplay(display_.Get()));
+        FontSelector* font_selector = nullptr;
+        if (context->IsDocument()) {
+          font_selector =
+              ToDocument(context)->GetStyleEngine().GetFontSelector();
+        } else if (context->IsWorkerGlobalScope()) {
+          font_selector = ToWorkerGlobalScope(context)->GetFontSelector();
+        } else {
+          NOTREACHED();
         }
+        RemoteFontFaceSource* source =
+            new RemoteFontFaceSource(css_font_face_, font_selector,
+                                     CSSValueToFontDisplay(display_.Get()));
+        if (item.Fetch(context, source))
+          css_font_face_->AddSource(source);
       }
     } else {
-      source = new LocalFontFaceSource(item.GetResource());
+      css_font_face_->AddSource(new LocalFontFaceSource(item.GetResource()));
     }
-
-    if (source)
-      css_font_face_->AddSource(source);
   }
 
   if (display_) {

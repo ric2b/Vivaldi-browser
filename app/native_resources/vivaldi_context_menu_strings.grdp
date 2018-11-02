@@ -70,4 +70,10 @@
     <message name="IDS_VIV_INSPECT_IMAGE" desc="Show information about image">
         Image Properties...
     </message>
+    <message name="IDS_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS" desc="Add active tab to bookmarks. Used in Mac main menu">
+        Add Active Tab
+    </message>
+    <message name="IDS_VIV_NO_TITLE" desc="A menu is missing a name">
+        (no title)
+    </message>
 </grit-part>

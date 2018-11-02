@@ -43,7 +43,7 @@ class ContentsView : public views::View {
 
 ContentsView::ContentsView(MessageCenterBubble* bubble, views::View* contents)
     : bubble_(bubble->AsWeakPtr()) {
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
   AddChildView(contents);
 }
 
@@ -95,6 +95,8 @@ void MessageCenterBubble::SetMaxHeight(int height) {
   max_height_ = height;
   if (bubble_view_)
     bubble_view_->SetMaxHeight(max_height_);
+  if (message_center_view_)
+    message_center_view_->SetMaxHeight(max_height_);
 }
 
 void MessageCenterBubble::SetSettingsVisible() {
@@ -112,6 +114,7 @@ void MessageCenterBubble::InitializeContents(
       new MessageCenterView(message_center_, ui_controller_, max_height_,
                             initially_settings_visible_);
   bubble_view_->AddChildView(new ContentsView(this, message_center_view_));
+  message_center_view_->SetMaxHeight(max_height_);
   message_center_view_->Init();
   // Resize the content of the bubble view to the given bubble size. This is
   // necessary in case of the bubble border forcing a bigger size then the

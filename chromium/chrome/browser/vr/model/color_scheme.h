@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_VR_MODEL_COLOR_SCHEME_H_
 #define CHROME_BROWSER_VR_MODEL_COLOR_SCHEME_H_
 
+#include "base/version.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace vr {
@@ -28,11 +29,10 @@ struct UrlBarColors {
   bool operator!=(const UrlBarColors& other) const;
   SkColor deemphasized = SK_ColorBLACK;
   SkColor emphasized = SK_ColorBLACK;
-  SkColor secure = SK_ColorBLACK;
-  SkColor insecure = SK_ColorBLACK;
+  SkColor default_icon = SK_ColorBLACK;
+  SkColor dangerous_icon = SK_ColorBLACK;
   SkColor offline_page_warning = SK_ColorBLACK;
   SkColor separator = SK_ColorBLACK;
-  ButtonColors back_button;
 };
 
 struct ColorScheme {
@@ -44,6 +44,7 @@ struct ColorScheme {
   };
 
   static const ColorScheme& GetColorScheme(Mode mode);
+  static void UpdateForComponent(const base::Version& component_version);
 
   ColorScheme();
   ColorScheme(const ColorScheme& other);
@@ -55,6 +56,7 @@ struct ColorScheme {
   SkColor floor;
   SkColor ceiling;
   SkColor floor_grid;
+  SkColor web_vr_background;
 
   // The foreground color is used for text and sometimes for icons.
   SkColor element_foreground;
@@ -86,25 +88,46 @@ struct ColorScheme {
   ButtonColors prompt_secondary_button_colors;
   ButtonColors prompt_primary_button_colors;
 
+  ButtonColors back_button;
+  SkColor url_bar_separator;
+
+  // These colors feed the URL origin texture.
   UrlBarColors url_bar;
 
-  // Screen dimmer colors.
   SkColor dimmer_outer;
   SkColor dimmer_inner;
 
-  // Splash screen colors.
   SkColor splash_screen_background;
   SkColor splash_screen_text_color;
 
-  // WebVr timeout spinner colors.
-  SkColor spinner_background;
-  SkColor spinner_color;
-
-  // Timeout UI colors
-  SkColor timeout_message_background;
-  SkColor timeout_message_foreground;
+  SkColor web_vr_timeout_spinner;
+  SkColor web_vr_timeout_message_background;
+  SkColor web_vr_timeout_message_foreground;
 
   SkColor speech_recognition_circle_background;
+
+  SkColor omnibox_background;
+  SkColor omnibox_icon;
+  SkColor omnibox_text;
+  SkColor omnibox_hint;
+  SkColor suggestion_text;
+  SkColor suggestion_dim_text;
+  SkColor suggestion_url_text;
+  ButtonColors omnibox_voice_search_button_colors;
+  ButtonColors suggestion_button_colors;
+
+  SkColor snackbar_background;
+  SkColor snackbar_foreground;
+  ButtonColors snackbar_button_colors;
+
+  // These are used for blending between colors that are available only in
+  // shaders. They are, as you might expect, one for a given mode, but zero
+  // otherwise.
+  float normal_factor = 0.0f;
+  float incognito_factor = 0.0f;
+  float fullscreen_factor = 0.0f;
+
+  SkColor cursor;
 };
 
 }  // namespace vr

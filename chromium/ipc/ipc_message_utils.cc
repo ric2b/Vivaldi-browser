@@ -332,35 +332,35 @@ bool ParamTraits<unsigned short>::Read(const base::Pickle* m,
 }
 
 void ParamTraits<unsigned short>::Log(const param_type& p, std::string* l) {
-  l->append(base::UintToString(p));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<int>::Log(const param_type& p, std::string* l) {
-  l->append(base::IntToString(p));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<unsigned int>::Log(const param_type& p, std::string* l) {
-  l->append(base::UintToString(p));
+  l->append(base::NumberToString(p));
 }
 
 #if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_FUCHSIA) || \
     (defined(OS_ANDROID) && defined(ARCH_CPU_64_BITS)) || \
     defined(USE_SYSTEM_PROPRIETARY_CODECS)
 void ParamTraits<long>::Log(const param_type& p, std::string* l) {
-  l->append(base::Int64ToString(static_cast<int64_t>(p)));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<unsigned long>::Log(const param_type& p, std::string* l) {
-  l->append(base::Uint64ToString(static_cast<uint64_t>(p)));
+  l->append(base::NumberToString(p));
 }
 #endif
 
 void ParamTraits<long long>::Log(const param_type& p, std::string* l) {
-  l->append(base::Int64ToString(static_cast<int64_t>(p)));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<unsigned long long>::Log(const param_type& p, std::string* l) {
-  l->append(base::Uint64ToString(p));
+  l->append(base::NumberToString(p));
 }
 
 void ParamTraits<float>::Log(const param_type& p, std::string* l) {
@@ -619,6 +619,15 @@ void ParamTraits<base::SharedMemoryHandle>::Write(base::Pickle* m,
   // subtypes, both are transferred via file descriptor but need to be handled
   // differently by the receiver. Write the type to distinguish.
   WriteParam(m, p.GetType());
+  WriteParam(m, p.IsReadOnly());
+
+  // Ensure the region is read-only before sending it through IPC.
+  if (p.IsReadOnly()) {
+    if (!p.IsRegionReadOnly()) {
+      LOG(ERROR) << "Sending unsealed read-only region through IPC";
+      p.SetRegionReadOnly();
+    }
+  }
 #endif
   if (p.OwnershipPassesToIPC()) {
     if (!m->WriteAttachment(new internal::PlatformFileAttachment(
@@ -671,8 +680,11 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
   // Android uses both ashmen and AHardwareBuffer subtypes, get the actual type
   // for use as a constructor argument alongside the file descriptor.
   base::SharedMemoryHandle::Type android_subtype;
-  if (!ReadParam(m, iter, &android_subtype))
+  bool is_read_only = false;
+  if (!ReadParam(m, iter, &android_subtype) ||
+      !ReadParam(m, iter, &is_read_only)) {
     return false;
+  }
 #endif
   scoped_refptr<base::Pickle::Attachment> attachment;
   if (!m->ReadAttachment(iter, &attachment))
@@ -707,6 +719,8 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
               ->TakePlatformFile(),
           true),
       static_cast<size_t>(size), guid);
+  if (is_read_only)
+    r->SetReadOnly();
 #else
   *r = base::SharedMemoryHandle(
       base::FileDescriptor(
@@ -736,6 +750,10 @@ void ParamTraits<base::SharedMemoryHandle>::Log(const param_type& p,
   LogParam(p.GetGUID(), l);
   l->append("size: ");
   LogParam(static_cast<uint64_t>(p.GetSize()), l);
+#if defined(OS_ANDROID)
+  l->append("read-only: ");
+  LogParam(p.IsReadOnly(), l);
+#endif
 }
 
 #if defined(OS_WIN)

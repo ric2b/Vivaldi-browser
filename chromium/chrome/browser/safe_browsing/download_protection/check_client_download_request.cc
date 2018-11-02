@@ -4,6 +4,9 @@
 
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request.h"
 
+#include <memory>
+
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/task_scheduler/post_task.h"
@@ -33,12 +36,12 @@ const char kUnsupportedSchemeUmaPrefix[] = "SBClientDownload.UnsupportedScheme";
 
 void RecordFileExtensionType(const std::string& metric_name,
                              const base::FilePath& file) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       metric_name, FileTypePolicies::GetInstance()->UmaValueForFile(file));
 }
 
 void RecordArchivedArchiveFileExtensionType(const base::FilePath& file) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       "SBClientDownload.ArchivedArchiveExtensions",
       FileTypePolicies::GetInstance()->UmaValueForFile(file));
 }
@@ -189,11 +192,11 @@ void CheckClientDownloadRequest::OnURLFetchComplete(
            << ": success=" << source->GetStatus().is_success()
            << " response_code=" << source->GetResponseCode();
   if (source->GetStatus().is_success()) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DownloadRequestResponseCode",
-                                source->GetResponseCode());
+    base::UmaHistogramSparse("SBClientDownload.DownloadRequestResponseCode",
+                             source->GetResponseCode());
   }
-  UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DownloadRequestNetError",
-                              -source->GetStatus().error());
+  base::UmaHistogramSparse("SBClientDownload.DownloadRequestNetError",
+                           -source->GetStatus().error());
   DownloadCheckResultReason reason = REASON_SERVER_PING_FAILED;
   DownloadCheckResult result = DownloadCheckResult::UNKNOWN;
   std::string token;
@@ -477,7 +480,7 @@ void CheckClientDownloadRequest::StartExtractZipFeatures() {
   zip_analysis_start_time_ = base::TimeTicks::Now();
   // We give the zip analyzer a weak pointer to this object.  Since the
   // analyzer is refcounted, it might outlive the request.
-  analyzer_ = new chrome::SandboxedZipAnalyzer(
+  analyzer_ = new SandboxedZipAnalyzer(
       item_->GetFullPath(),
       base::Bind(&CheckClientDownloadRequest::OnZipAnalysisFinished,
                  weakptr_factory_.GetWeakPtr()),
@@ -571,7 +574,7 @@ void CheckClientDownloadRequest::StartExtractDmgFeatures() {
   if (too_big_to_unpack) {
     OnFileFeatureExtractionDone();
   } else {
-    dmg_analyzer_ = new chrome::SandboxedDMGAnalyzer(
+    dmg_analyzer_ = new SandboxedDMGAnalyzer(
         item_->GetFullPath(),
         base::Bind(&CheckClientDownloadRequest::OnDmgAnalysisFinished,
                    weakptr_factory_.GetWeakPtr()),
@@ -612,7 +615,7 @@ void CheckClientDownloadRequest::OnDmgAnalysisFinished(
 
   if (results.signature_blob.size() > 0) {
     disk_image_signature_ =
-        base::MakeUnique<std::vector<uint8_t>>(results.signature_blob);
+        std::make_unique<std::vector<uint8_t>>(results.signature_blob);
   }
 
   // Even if !results.success, some of the DMG may have been parsed.
@@ -629,21 +632,21 @@ void CheckClientDownloadRequest::OnDmgAnalysisFinished(
       item_->GetTargetFilePath());
 
   if (results.success) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileSuccessByType",
-                                uma_file_type);
+    base::UmaHistogramSparse("SBClientDownload.DmgFileSuccessByType",
+                             uma_file_type);
   } else {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileFailureByType",
-                                uma_file_type);
+    base::UmaHistogramSparse("SBClientDownload.DmgFileFailureByType",
+                             uma_file_type);
   }
 
   if (archived_executable_) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileHasExecutableByType",
-                                uma_file_type);
+    base::UmaHistogramSparse("SBClientDownload.DmgFileHasExecutableByType",
+                             uma_file_type);
     UMA_HISTOGRAM_COUNTS("SBClientDownload.DmgFileArchivedBinariesCount",
                          results.archived_binary.size());
   } else {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("SBClientDownload.DmgFileHasNoExecutableByType",
-                                uma_file_type);
+    base::UmaHistogramSparse("SBClientDownload.DmgFileHasNoExecutableByType",
+                             uma_file_type);
   }
 
   UMA_HISTOGRAM_TIMES("SBClientDownload.ExtractDmgFeaturesTime",
@@ -872,12 +875,15 @@ void CheckClientDownloadRequest::SendRequest() {
       !referrer_chain_data->GetReferrerChain()->empty()) {
     request.mutable_referrer_chain()->Swap(
         referrer_chain_data->GetReferrerChain());
+    request.mutable_referrer_chain_options()->set_recent_navigations_to_collect(
+        referrer_chain_data->recent_navigations_to_collect());
     UMA_HISTOGRAM_COUNTS_100(
         "SafeBrowsing.ReferrerURLChainSize.DownloadAttribution",
-        request.referrer_chain().size());
-    if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE)
+        referrer_chain_data->referrer_chain_length());
+    if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE) {
       SafeBrowsingNavigationObserverManager::SanitizeReferrerChain(
           request.mutable_referrer_chain());
+    }
   }
 
 #if defined(OS_MACOSX)

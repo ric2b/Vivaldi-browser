@@ -7,9 +7,7 @@
 
 #include "base/macros.h"
 #include "components/favicon/content/content_favicon_driver.h"
-#include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/browser/web_contents_unresponsive_state.h"
 #include "ui/base/models/table_model.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/table/table_view.h"
@@ -58,6 +56,8 @@ class HungPagesTableModel : public ui::TableModel {
   void SetObserver(ui::TableModelObserver* observer) override;
 
  private:
+  friend class HungRendererDialogViewBrowserTest;
+
   // Used to track a single WebContents. If the WebContents is destroyed
   // TabDestroyed() is invoked on the model.
   class WebContentsObserverImpl : public content::WebContentsObserver {
@@ -110,17 +110,13 @@ class HungRendererDialogView : public views::DialogDelegateView,
   static HungRendererDialogView* GetInstance();
 
   // Shows or hides the hung renderer dialog for the given WebContents.
-  static void Show(
-      content::WebContents* contents,
-      const content::WebContentsUnresponsiveState& unresponsive_state);
+  static void Show(content::WebContents* contents);
   static void Hide(content::WebContents* contents);
 
   // Returns true if the frame is in the foreground.
   static bool IsFrameActive(content::WebContents* contents);
 
-  virtual void ShowForWebContents(
-      content::WebContents* contents,
-      const content::WebContentsUnresponsiveState& unresponsive_state);
+  virtual void ShowForWebContents(content::WebContents* contents);
   virtual void EndForWebContents(content::WebContents* contents);
 
   // views::DialogDelegateView overrides:
@@ -149,13 +145,15 @@ class HungRendererDialogView : public views::DialogDelegateView,
   static HungRendererDialogView* g_instance_;
 
  private:
+  friend class HungRendererDialogViewBrowserTest;
+
   // Initialize the controls in this dialog.
   void Init();
 
   // Restart the hang timer, giving the page more time.
   void RestartHangTimer();
 
-  static void InitClass();
+  void UpdateLabels();
 
   // The label describing the list.
   views::Label* info_label_;
@@ -169,10 +167,6 @@ class HungRendererDialogView : public views::DialogDelegateView,
 
   // Whether or not we've created controls for ourself.
   bool initialized_;
-
-  // A copy of the unresponsive state which ShowForWebContents was
-  // called with.
-  content::WebContentsUnresponsiveState unresponsive_state_;
 
   DISALLOW_COPY_AND_ASSIGN(HungRendererDialogView);
 };

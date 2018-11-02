@@ -606,10 +606,16 @@
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_CANCEL_COMMAND" desc="Label of button on details panel that cancels an active import.">
     Cancel
   </message>
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_ONE_FILE" desc="Cloud import 1 new photo.">
+    1 new photo
+  </message>
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_MULTIPLE_FILES" desc="Cloud import multiple new photos.">
+    <ph name="FILE_COUNT">$1<ex>5</ex></ph> new photos
+  </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_SCANNING" desc="Cloud import scanning status message.">
     Scanning your media device...
     <ph name="LINE_BREAK1">&lt;br&gt;</ph>
-    <ph name="FILE_COUNT">$1<ex>5</ex></ph> new photos found
+    <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph> found
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_SCANNING" desc="Cloud import scanning tooltip.">
     Scanning your media device...
@@ -620,32 +626,45 @@
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_NO_MEDIA" desc="Cloud import no-new-media-found tooltip. Shown after backup is completed and when a search for new files to backup produces no result.">
     All backed up!
   </message>
-  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_INSUFFICIENT_SPACE" desc="Cloud import insufficient space status message.">
-    <ph name="FILE_COUNT">$1<ex>5</ex></ph> new photos found
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_INSUFFICIENT_CLOUD_SPACE" desc="Cloud import insufficient cloud space status message.">
+    <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph> found.
     <ph name="LINE_BREAK1">&lt;br&gt;</ph>
-    Not enough space on device.
+    Your Google Drive quota isn't large enough. Additional <ph name="FILE_SIZE">$2<ex>5 MB</ex></ph> needed.
     <ph name="LINE_BREAK2">&lt;br&gt;</ph>
-    Try selecting a few photos to start.
+    Try selecting fewer photos.
   </message>
-  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_INSUFFICIENT_SPACE" desc="Cloud import insufficient space tooltip.">
-    Not enough space on device
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_INSUFFICIENT_CLOUD_SPACE" desc="Cloud import insufficient cloud space tooltip.">
+    Your Google Drive quota isn't large enough.
+  </message>
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_INSUFFICIENT_LOCAL_SPACE" desc="Cloud import insufficient local space status message.">
+    <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph> found.
+    <ph name="LINE_BREAK1">&lt;br&gt;</ph>
+    Not enough space available in local storage. Additional <ph name="FILE_SIZE">$2<ex>5 MB</ex></ph> needed.
+    <ph name="LINE_BREAK2">&lt;br&gt;</ph>
+    Try selecting fewer photos.
+  </message>
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_INSUFFICIENT_LOCAL_SPACE" desc="Cloud import insufficient local space tooltip.">
+    Not enough space available in local storage.
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_READY" desc="Cloud import ready status message.">
-    <ph name="FILE_COUNT">$1<ex>5</ex></ph> new photos found
+    <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph> found
     <ph name="LINE_BREAK1">&lt;br&gt;</ph>
-    Ready to backup to <ph name="BEGIN_LINK">&lt;a is='action-link' class='destination-link'&gt;</ph>Google Drive<ph name="END_LINK">&lt;/a&gt;</ph>
+    Ready to back up to <ph name="BEGIN_LINK">&lt;a is='action-link' class='destination-link'&gt;</ph>Google Drive<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_READY" desc="Cloud import ready tooltip.">
-    Ready to backup <ph name="FILE_COUNT">$1<ex>5</ex></ph> new photos
+    Ready to backup <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph>
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_IMPORTING" desc="Cloud import active-backup status. Message shown when importing is in progress">
-    Backing up <ph name="FILE_COUNT">$1<ex>5</ex></ph> photos to <ph name="BEGIN_LINK">&lt;a is='action-link' class='destination-link'&gt;</ph>Google Drive<ph name="END_LINK">&lt;/a&gt;</ph>
+    Backing up <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph> to <ph name="BEGIN_LINK">&lt;a is='action-link' class='destination-link'&gt;</ph>Google Drive<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_IMPORTING" desc="Cloud import active-backup tooltip.">
-    Backing up <ph name="FILE_COUNT">$1<ex>5</ex></ph> photos
+    Backing up <ph name="FILE_COUNT">$1<ex>5 new photos</ex></ph>
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_STATUS_DONE" desc="Cloud import backup is complete status.">
     <ph name="FILE_COUNT">$1<ex>5</ex></ph> photos backed up to <ph name="BEGIN_LINK">&lt;a is='action-link' class='destination-link'&gt;</ph>Google Drive<ph name="END_LINK">&lt;/a&gt;</ph>
+  </message>
+  <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_ERROR_ITEM" desc="Cloud import error message for a file it couldn't back up.">
+    Couldn't back up <ph name="FILE_NAME">$1<ex>photo.jpg</ex></ph>
   </message>
   <message name="IDS_FILE_BROWSER_CLOUD_IMPORT_TOOLTIP_DONE" desc="Cloud import backup is complete tooltip.">
     <ph name="FILE_COUNT">$1<ex>5</ex></ph> photos backed up
@@ -1500,7 +1519,7 @@
     Please wait...
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_WORKING_MESSAGE" desc="Message to show while enrollment is in progress">
-    Please wait...
+    Enrolling device...
   </message>
   <message name="IDS_NETWORK_SELECTION_TITLE" desc="Welcome title shown on network selection screen">
     Let's get started
@@ -1681,6 +1700,48 @@
   </message>
   <message name="IDS_OOBE_EULA_ACCEPT_AND_CONTINUE_BUTTON_TEXT" desc="Label on a button on the Title of Terms of Service OOBE screen to accept EULA and continue.">
     Accept and continue
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_TITLE" desc="The title of the dialog that welcomes the user on the first log in, and explains Chrome Sync and privacy options.">
+    You're signed in!
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_CHROME_SYNC_NAME" desc="Title of the 'Chrome sync' section of the sync confirmation dialog that is displayed on the first user log in.">
+    Chrome sync
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_CHROME_SYNC_DESCRIPTION" desc="The description of 'Chrome sync' section of the sync confirmation dialog that is displayed on the first user log in.">
+    Your bookmarks, history, passwords, and other settings will be synced to your Google Account so you can use them on all your devices.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_PERSONALIZE_GOOGLE_SERVICES_NAME" desc="Title of the personalize services section of the sync confirmation dialog that is displayed on the first user log in.">
+    Personalize Google services
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_PERSONALIZE_GOOGLE_SERVICES_DESCRIPTION" desc="The description of the personalize services section of the sync confirmation dialog that is displayed on the first user log in.">
+    Google may use your browsing history to personalize Search, ads, and other Google services.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SCREEN_SETTINGS_LINK" desc="A note at the end of the sync confirmation dialog that is displayed on the first user log in, suggesting that preferences may be changed in Settings. It also contains link to Settings page.">
+    Control how this works in <ph name="LINK_START">$1<ex>&gt;a&lt;</ex></ph>Settings<ph name="LINK_END">$2<ex>&gt;/a&lt;</ex></ph>.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SETTINGS_TITLE" desc="The title of the dialog that is shown on the first user log in, and allows user to select Chrome Sync options.">
+    Sync settings
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SETTINGS_SUBTITLE" desc="The sub-title of the dialog that is shown on the first user log in, and allows user to select Chrome Sync options. It explains to the user what options can be changed here.">
+    Your bookmarks, history, passwords, and other settings will be synced to your Google Account so you can use them on all your devices. You can always change this later in your settings.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SYNC_ALL_OPTION" desc="Label for toggle-button UI element that controls whether user settings are synced to user's Google Account.">
+    Sync everything
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SYNC_ALL_OPTION_ON" desc="A 'turned on' value for the 'Sync everything' toggle-button UI element that controls whether user settings are synced to user's Google Account.">
+    On
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SYNC_ALL_OPTION_OFF" desc="A 'turned off' value for the 'Sync everything' toggle-button UI element that controls whether user settings are synced to user's Google Account.">
+    Off
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_STATUS_SYNC_ALL_ON" desc="Status message on the Chrome Sync status dialog explaining 'sync is turned on' status.">
+    Personalization is on. You can change this at myaccount.google.com.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_STATUS_SYNC_ALL_OFF" desc="Status message on the Chrome Sync status dialog explaining 'sync is turned off' status.">
+    Personalization is off. You can change this at myaccount.google.com.
+  </message>
+  <message name="IDS_LOGIN_SYNC_CONSENT_SAVE_AND_CONTINUE" desc="Label on the button of the Sync Settings dialog that closes the dialog and saves the changes.">
+    Save and continue
   </message>
   <message name="IDS_DISABLED_ADD_USER_TOOLTIP" desc="Tooltip over disabled Add user button">
     The owner of this device has disabled new users from being added
@@ -2193,6 +2254,12 @@
   <message name="IDS_NETWORK_ACTIVATION_NEEDS_CONNECTION" desc="Message when attempting to activate a mobile network that requires a connection">
     Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
   </message>
+  <message name="IDS_NETWORK_AUTOCONNECT_NOTIFICATION_TITLE" desc="Title used for the system notification shown when a network has been auto-connected (e.g., when an enterprise policy is applied which initiates a connection to a corporate network like Google-A).">
+    Switched network connection
+  </message>
+  <message name="IDS_NETWORK_AUTOCONNECT_NOTIFICATION_MESSAGE" desc="Message displayed in the system notification shown when a network has been auto-connected (e.g., when an enterprise policy is applied which initiates a connection to a corporate network like Google-A).">
+    Your connection has switched to a more secure network
+  </message>
 
   <!-- Strings shown within Tether notifications -->
   <message name="IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_TITLE" desc="Title of the notification shown to the user when an attempt to tether to another device has failed.">
@@ -2267,8 +2334,8 @@
   <message name="IDS_OPTIONS_CHANGE_PICTURE_PHOTO_FROM_CAMERA" desc="The accessible text on the icon in the user image grid for a camera photo, when a photo has been captured.">
     Photo from internal camera
   </message>
-  <message name="IDS_OPTIONS_CHANGE_PICTURE_DISCARD_PHOTO" desc="The text on the button to discard the captured photo of the current user.">
-    Discard photo
+  <message name="IDS_OPTIONS_CHANGE_PICTURE_DISCARD_PHOTO" desc="The text on the button to discard the captured photo or video of the current user.">
+    Discard photo or video
   </message>
   <message name="IDS_OPTIONS_PHOTO_CAPTURE_ACCESSIBLE_TEXT" desc="The accessible message to speak to announce that a photo was captured.">
     Photo was captured
@@ -3695,6 +3762,11 @@
     Don't remind me again
   </message>
 
+  <!-- Obsolete versions Notification strings-->
+  <message name="IDS_UPDATE_REQUIRED_LOGIN_SCREEN_MESSAGE" desc="The message on login screen to inform the user that policy prevents user sign in before OS version is is updated.">
+    Your device is no longer compliant with the minimum client version specified by your admin. Please update to login.
+  </message>
+
   <!-- Genius App -->
   <message name="IDS_GENIUS_APP_NAME" desc="Name of the genius app in the app shelf">
     Get Help
@@ -4208,6 +4280,18 @@
   <message name="IDS_AD_PASSWORD_CHANGE_PASSWORDS_MISMATCH_ERROR" desc="Error message in case new password fields does not match on the Active Directory password change dialog.">
     Passwords do not match.
   </message>
+  <message name="IDS_AD_MORE_OPTIONS_BUTTON" desc="Text on the 'More options' button on the Active Directory domain join screen.">
+    More options
+  </message>
+  <message name="IDS_AD_ORG_UNIT_HINT" desc="Hint for the Active Directory Organizational units input on the 'More options' dialog.">
+    Computer OU (e.g. OU=Chromebooks,DC=example,DC=com)
+  </message>
+  <message name="IDS_AD_CONFIRM_BUTTON" desc="Text on the 'Confirm' button on the 'More options' dialog.">
+    Confirm
+  </message>
+  <message name="IDS_AD_CANCEL_BUTTON" desc="Text on the 'Cancel' button on the 'More options' dialog.">
+    Cancel
+  </message>
   <message name="IDS_AD_DOMAIN_JOIN_UNKNOWN_ERROR" desc="Default error text on the Active Directory join screen">
     Oops!  Something went wrong when trying to join the domain. Please try again.
   </message>
@@ -4231,6 +4315,18 @@
   </message>
   <message name="IDS_AD_USER_HIT_JOIN_QUOTA" desc="Alert message that user can't add more machines to the domain">
     Failed to join the machine to the domain. This might be due to exceeding the maximum number of allowed machine joins for your account on the server.
+  </message>
+  <message name="IDS_AD_OU_DOES_NOT_EXIST" desc="Alert message that user joins the machine to non-existing organizational unit.">
+    Failed to join the machine to the domain. Organizational unit does not exist.
+  </message>
+  <message name="IDS_AD_OU_INVALID" desc="Alert message that user joins the machine to invalid organizational unit.">
+    Failed to join the machine to the domain. Organizational unit is invalid.
+  </message>
+  <message name="IDS_AD_OU_ACCESS_DENIED" desc="Alert message that user does not have rights to join the machine to specified organizational unit.">
+    Failed to join the machine to the domain. This might be due to insufficient privileges for your account for the organizational unit.
+  </message>
+  <message name="IDS_AD_OU_SETTING_FAILED" desc="Alert message that user could not join the machine to specified organizational unit due to unknown reason.">
+    Failed to join the machine to the domain. This might be due to issues with the organizational unit.
   </message>
   <message name="IDS_AD_BOARD_NOT_SUPPORTED" desc="Alert message that the Chromebook model is not supported for Active Directory">
     Chrome <ph name="MS_AD_NAME">Microsoft® Active Directory®</ph> integration is only supported on x86_64 platforms. Chromebooks built on top of an ARM or x86 platform do not support this functionality.
@@ -4578,7 +4674,7 @@
     Google Assistant
   </message>
   <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE" desc="Load error message of the voice interaction value prop dialog.">
-    Google Assistant was unable to load, please retry.
+    Google Assistant was unable to load, please check your network connection and retry.
   </message>
   <message name="IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON" desc="Button label for skipping voice interaction value prop upon error.">
     Skip
@@ -4731,9 +4827,6 @@
   </message>
   <message name="IDS_HATS_NOTIFICATION_BODY" desc="The body of the notification for Happiness Tracking Survey.">
     Let us know how we’re doing.
-  </message>
-  <message name="IDS_HATS_NOTIFICATION_TAKE_SURVEY_BUTTON" desc="The title of the button in the notification for Happiness Tracking Survey to take the said survey.">
-    Take survey
   </message>
 
   <!-- Lock screen note app toast dialog -->

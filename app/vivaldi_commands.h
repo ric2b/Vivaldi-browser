@@ -3,6 +3,12 @@
 #ifndef APP_VIVALDI_COMMANDS_H_
 #define APP_VIVALDI_COMMANDS_H_
 
+// Definitions used in the Vivaldi is running dialog.
+#define IDD_EXIT_WAIT_DLG               129
+#define IDC_EXIT_PROGRESS               1001
+#define IDC_EXIT_STATIC                 1002
+
+
 #define IDC_VIV_NEW_TAB 54001
 #define IDC_VIV_NEW_WINDOW 54002
 #define IDC_VIV_IMPORT_DATA 54003
@@ -58,6 +64,7 @@
 #define IDC_VIV_HISTORY_PANEL 54053
 #define IDC_VIV_TOGGLE_IMAGES 54054
 #define IDC_VIV_WINDOW_PANEL 54055
+#define IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS 54056
 
 #define IDC_VIVALDI_MENU 54900
 #define IDC_VIV_VIEW_MENU 54901

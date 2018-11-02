@@ -18,9 +18,9 @@
 #include "content/renderer/service_worker/web_service_worker_registration_impl.h"
 #include "third_party/WebKit/common/message_port/message_port_channel.h"
 #include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProviderClient.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 using blink::WebURL;
 
@@ -75,6 +75,7 @@ void WebServiceWorkerProviderImpl::SetClient(
 void WebServiceWorkerProviderImpl::RegisterServiceWorker(
     const WebURL& web_pattern,
     const WebURL& web_script_url,
+    blink::mojom::ServiceWorkerUpdateViaCache update_via_cache,
     std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks) {
   DCHECK(callbacks);
 
@@ -102,7 +103,8 @@ void WebServiceWorkerProviderImpl::RegisterServiceWorker(
   TRACE_EVENT_ASYNC_BEGIN2(
       "ServiceWorker", "WebServiceWorkerProviderImpl::RegisterServiceWorker",
       this, "Scope", pattern.spec(), "Script URL", script_url.spec());
-  auto options = blink::mojom::ServiceWorkerRegistrationOptions::New(pattern);
+  auto options = blink::mojom::ServiceWorkerRegistrationOptions::New(
+      pattern, update_via_cache);
   context_->container_host()->Register(
       script_url, std::move(options),
       base::BindOnce(&WebServiceWorkerProviderImpl::OnRegistered,
@@ -203,20 +205,18 @@ void WebServiceWorkerProviderImpl::SetController(
 }
 
 void WebServiceWorkerProviderImpl::PostMessageToClient(
-    blink::mojom::ServiceWorkerObjectInfoPtr source,
+    std::unique_ptr<ServiceWorkerHandleReference> source_handle,
     const base::string16& message,
     std::vector<mojo::ScopedMessagePipeHandle> message_pipes) {
   if (!provider_client_)
     return;
 
-  scoped_refptr<WebServiceWorkerImpl> worker =
-      GetDispatcher()->GetOrCreateServiceWorker(
-          ServiceWorkerHandleReference::Create(std::move(source),
-                                               thread_safe_sender_.get()));
+  scoped_refptr<WebServiceWorkerImpl> source_worker =
+      GetDispatcher()->GetOrCreateServiceWorker(std::move(source_handle));
   auto message_ports =
       blink::MessagePortChannel::CreateFromHandles(std::move(message_pipes));
   provider_client_->DispatchMessageEvent(
-      WebServiceWorkerImpl::CreateHandle(std::move(worker)),
+      WebServiceWorkerImpl::CreateHandle(std::move(source_worker)),
       blink::WebString::FromUTF16(message), std::move(message_ports));
 }
 

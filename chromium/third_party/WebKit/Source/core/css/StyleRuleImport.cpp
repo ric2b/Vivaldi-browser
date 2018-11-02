@@ -52,28 +52,21 @@ StyleRuleImport::StyleRuleImport(const String& href,
 StyleRuleImport::~StyleRuleImport() = default;
 
 void StyleRuleImport::Dispose() {
-  if (resource_)
-    resource_->RemoveClient(style_sheet_client_);
-  resource_ = nullptr;
+  style_sheet_client_->Dispose();
 }
 
 void StyleRuleImport::TraceAfterDispatch(blink::Visitor* visitor) {
   visitor->Trace(style_sheet_client_);
   visitor->Trace(parent_style_sheet_);
   visitor->Trace(style_sheet_);
-  visitor->Trace(resource_);
   StyleRuleBase::TraceAfterDispatch(visitor);
 }
 
-void StyleRuleImport::SetCSSStyleSheet(
-    const String& href,
-    const KURL& base_url,
-    ReferrerPolicy referrer_policy,
-    const WTF::TextEncoding& charset,
-    const CSSStyleSheetResource* cached_style_sheet) {
+void StyleRuleImport::NotifyFinished(Resource* resource) {
   if (style_sheet_)
     style_sheet_->ClearOwnerRule();
 
+  CSSStyleSheetResource* cached_style_sheet = ToCSSStyleSheetResource(resource);
   Document* document = nullptr;
 
   // Fallback to an insecure context parser if we don't have a parent style
@@ -85,10 +78,13 @@ void StyleRuleImport::SetCSSStyleSheet(
     document = parent_style_sheet_->SingleOwnerDocument();
     context = parent_style_sheet_->ParserContext();
   }
-  context = CSSParserContext::Create(context, base_url, referrer_policy,
-                                     charset, document);
+  context =
+      CSSParserContext::Create(context, cached_style_sheet->GetResponse().Url(),
+                               cached_style_sheet->GetReferrerPolicy(),
+                               cached_style_sheet->Encoding(), document);
 
-  style_sheet_ = StyleSheetContents::Create(this, href, context);
+  style_sheet_ =
+      StyleSheetContents::Create(this, cached_style_sheet->Url(), context);
 
   style_sheet_->ParseAuthorStyleSheet(
       cached_style_sheet, document ? document->GetSecurityOrigin() : nullptr);
@@ -140,16 +136,18 @@ void StyleRuleImport::RequestStyleSheet() {
   options.initiator_info.name = FetchInitiatorTypeNames::css;
   FetchParameters params(ResourceRequest(abs_url), options);
   params.SetCharset(parent_style_sheet_->Charset());
-  resource_ = CSSStyleSheetResource::Fetch(params, fetcher);
-  if (resource_) {
+  loading_ = true;
+  DCHECK(!style_sheet_client_->GetResource());
+  if (!CSSStyleSheetResource::Fetch(params, fetcher, style_sheet_client_)) {
+    loading_ = false;
+  } else if (loading_) {
     // if the import rule is issued dynamically, the sheet may be
     // removed from the pending sheet count, so let the doc know
     // the sheet being imported is pending.
     if (parent_style_sheet_ && parent_style_sheet_->LoadCompleted() &&
-        root_sheet == parent_style_sheet_)
+        root_sheet == parent_style_sheet_) {
       parent_style_sheet_->StartLoadingDynamicSheet();
-    loading_ = true;
-    resource_->AddClient(style_sheet_client_);
+    }
   }
 }
 

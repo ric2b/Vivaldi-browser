@@ -6,17 +6,18 @@
 
 #include <memory>
 #include <utility>
+
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/Request.h"
+#include "core/fetch/Response.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/cachestorage/CacheStorageError.h"
-#include "modules/fetch/Request.h"
-#include "modules/fetch/Response.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/network/http_names.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/modules/cache_storage/cache_storage.mojom-blink.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 
@@ -29,20 +30,6 @@ DOMException* CreateNoImplementationException() {
                               "No CacheStorage implementation provided.");
 }
 
-bool CommonChecks(ScriptState* script_state, ExceptionState& exception_state) {
-  ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  // FIXME: May be null due to worker termination: http://crbug.com/413518.
-  if (!execution_context)
-    return false;
-
-  String error_message;
-  if (!execution_context->IsSecureContext(error_message)) {
-    exception_state.ThrowSecurityError(error_message);
-    return false;
-  }
-  return true;
-}
-
 }  // namespace
 
 // FIXME: Consider using CallbackPromiseAdapter.
@@ -52,7 +39,7 @@ class CacheStorage::Callbacks final
 
  public:
   explicit Callbacks(ScriptPromiseResolver* resolver) : resolver_(resolver) {}
-  ~Callbacks() override {}
+  ~Callbacks() override = default;
 
   void OnSuccess() override {
     if (!resolver_->GetExecutionContext() ||
@@ -89,14 +76,14 @@ class CacheStorage::WithCacheCallbacks final
       : cache_name_(cache_name),
         cache_storage_(cache_storage),
         resolver_(resolver) {}
-  ~WithCacheCallbacks() override {}
+  ~WithCacheCallbacks() override = default;
 
   void OnSuccess(std::unique_ptr<WebServiceWorkerCache> web_cache) override {
     if (!resolver_->GetExecutionContext() ||
         resolver_->GetExecutionContext()->IsContextDestroyed())
       return;
     Cache* cache = Cache::Create(cache_storage_->scoped_fetcher_,
-                                 WTF::WrapUnique(web_cache.release()));
+                                 base::WrapUnique(web_cache.release()));
     resolver_->Resolve(cache);
     resolver_.Clear();
   }
@@ -169,7 +156,7 @@ class CacheStorage::DeleteCallbacks final
       : cache_name_(cache_name),
         cache_storage_(cache_storage),
         resolver_(resolver) {}
-  ~DeleteCallbacks() override {}
+  ~DeleteCallbacks() override = default;
 
   void OnSuccess() override {
     if (!resolver_->GetExecutionContext() ||
@@ -206,7 +193,7 @@ class CacheStorage::KeysCallbacks final
  public:
   explicit KeysCallbacks(ScriptPromiseResolver* resolver)
       : resolver_(resolver) {}
-  ~KeysCallbacks() override {}
+  ~KeysCallbacks() override = default;
 
   void OnSuccess(const WebVector<WebString>& keys) override {
     if (!resolver_->GetExecutionContext() ||
@@ -238,11 +225,7 @@ CacheStorage* CacheStorage::Create(
 }
 
 ScriptPromise CacheStorage::open(ScriptState* script_state,
-                                 const String& cache_name,
-                                 ExceptionState& exception_state) {
-  if (!CommonChecks(script_state, exception_state))
-    return ScriptPromise();
-
+                                 const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
 
@@ -258,11 +241,7 @@ ScriptPromise CacheStorage::open(ScriptState* script_state,
 }
 
 ScriptPromise CacheStorage::has(ScriptState* script_state,
-                                const String& cache_name,
-                                ExceptionState& exception_state) {
-  if (!CommonChecks(script_state, exception_state))
-    return ScriptPromise();
-
+                                const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
 
@@ -277,11 +256,7 @@ ScriptPromise CacheStorage::has(ScriptState* script_state,
 }
 
 ScriptPromise CacheStorage::Delete(ScriptState* script_state,
-                                   const String& cache_name,
-                                   ExceptionState& exception_state) {
-  if (!CommonChecks(script_state, exception_state))
-    return ScriptPromise();
-
+                                   const String& cache_name) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
 
@@ -296,11 +271,7 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
   return promise;
 }
 
-ScriptPromise CacheStorage::keys(ScriptState* script_state,
-                                 ExceptionState& exception_state) {
-  if (!CommonChecks(script_state, exception_state))
-    return ScriptPromise();
-
+ScriptPromise CacheStorage::keys(ScriptState* script_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
   const ScriptPromise promise = resolver->Promise();
 
@@ -317,8 +288,6 @@ ScriptPromise CacheStorage::match(ScriptState* script_state,
                                   const CacheQueryOptions& options,
                                   ExceptionState& exception_state) {
   DCHECK(!request.IsNull());
-  if (!CommonChecks(script_state, exception_state))
-    return ScriptPromise();
 
   if (request.IsRequest())
     return MatchImpl(script_state, request.GetAsRequest(), options);
@@ -360,7 +329,7 @@ CacheStorage::CacheStorage(
     : scoped_fetcher_(fetcher),
       web_cache_storage_(std::move(web_cache_storage)) {}
 
-CacheStorage::~CacheStorage() {}
+CacheStorage::~CacheStorage() = default;
 
 void CacheStorage::Dispose() {
   web_cache_storage_.reset();

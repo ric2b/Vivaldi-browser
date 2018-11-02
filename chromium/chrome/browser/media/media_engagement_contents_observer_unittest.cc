@@ -29,8 +29,7 @@ class MediaEngagementContentsObserverTest
     : public ChromeRenderViewHostTestHarness {
  public:
   MediaEngagementContentsObserverTest()
-      : task_runner_(new base::TestMockTimeTaskRunner()),
-        test_clock_(new base::SimpleTestClock()) {}
+      : task_runner_(new base::TestMockTimeTaskRunner()) {}
 
   void SetUp() override {
     scoped_feature_list_.InitFromCommandLine("RecordMediaEngagementScores",
@@ -41,8 +40,8 @@ class MediaEngagementContentsObserverTest
     SetContents(content::WebContentsTester::CreateTestWebContents(
         browser_context(), nullptr));
 
-    service_ = base::WrapUnique(
-        new MediaEngagementService(profile(), base::WrapUnique(test_clock_)));
+    service_ =
+        base::WrapUnique(new MediaEngagementService(profile(), &test_clock_));
     contents_observer_ = CreateContentsObserverFor(web_contents());
 
     // Navigate to an initial URL to setup the |session|.
@@ -120,7 +119,7 @@ class MediaEngagementContentsObserverTest
   void SimulatePlaybackStoppedWithTime(int id,
                                        bool finished,
                                        base::TimeDelta elapsed) {
-    test_clock_->Advance(elapsed);
+    test_clock_.Advance(elapsed);
 
     content::WebContentsObserver::MediaPlayerInfo player_info(true, true);
     content::WebContentsObserver::MediaPlayerId player_id =
@@ -214,7 +213,7 @@ class MediaEngagementContentsObserverTest
   scoped_refptr<MediaEngagementSession> GetOrCreateSession(
       const url::Origin& origin,
       content::WebContents* opener) {
-    return contents_observer_->GetOrCreateSession(origin, opener);
+    return contents_observer_->GetOrCreateSession(origin, opener, false);
   }
 
   scoped_refptr<MediaEngagementSession> GetSessionFor(
@@ -367,10 +366,10 @@ class MediaEngagementContentsObserverTest
     EXPECT_EQ(expected_time, score.last_media_playback_time());
   }
 
-  base::Time Now() const { return test_clock_->Now(); }
+  base::Time Now() { return test_clock_.Now(); }
 
   void Advance15Minutes() {
-    test_clock_->Advance(base::TimeDelta::FromMinutes(15));
+    test_clock_.Advance(base::TimeDelta::FromMinutes(15));
   }
 
   ukm::TestAutoSetUkmRecorder& test_ukm_recorder() {
@@ -391,7 +390,7 @@ class MediaEngagementContentsObserverTest
 
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
 
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
 
   const base::TimeDelta kMaxWaitingTime =
       MediaEngagementContentsObserver::kSignificantMediaPlaybackTime +
@@ -675,7 +674,7 @@ TEST_F(MediaEngagementContentsObserverTest, InteractionsRecorded) {
   Navigate(url);
   SimulateAudible();
   SimulateSignificantPlaybackTimeForPage();
-  ExpectScores(url, 0.0, 2, 1, 0, 0);
+  ExpectScores(url, 0.05, 2, 1, 0, 0);
 }
 
 TEST_F(MediaEngagementContentsObserverTest,
@@ -713,9 +712,9 @@ TEST_F(MediaEngagementContentsObserverTest, RecordScoreOnPlayback) {
   GURL url2("https://www.google.co.uk");
   GURL url3("https://www.example.com");
 
-  SetScores(url1, 6, 5);
-  SetScores(url2, 6, 3);
-  SetScores(url3, 2, 1);
+  SetScores(url1, 24, 20);
+  SetScores(url2, 24, 12);
+  SetScores(url3, 8, 4);
   base::HistogramTester tester;
   tester.ExpectTotalCount(
       MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName, 0);
@@ -735,7 +734,7 @@ TEST_F(MediaEngagementContentsObserverTest, RecordScoreOnPlayback) {
   Navigate(url3);
   SimulateAudioVideoPlaybackStarted(0);
   tester.ExpectBucketCount(
-      MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName, 0, 1);
+      MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName, 20, 1);
   tester.ExpectTotalCount(
       MediaEngagementContentsObserver::kHistogramScoreAtPlaybackName, 4);
 
@@ -750,7 +749,7 @@ TEST_F(MediaEngagementContentsObserverTest, RecordScoreOnPlayback) {
 
 TEST_F(MediaEngagementContentsObserverTest, DoNotRecordScoreOnPlayback_Muted) {
   GURL url("https://www.google.com");
-  SetScores(url, 6, 5);
+  SetScores(url, 24, 20);
 
   base::HistogramTester tester;
   Navigate(url);
@@ -792,7 +791,7 @@ TEST_F(MediaEngagementContentsObserverTest, VisibilityNotRequired) {
 
 TEST_F(MediaEngagementContentsObserverTest, RecordUkmMetricsOnDestroy) {
   GURL url("https://www.google.com");
-  SetScores(url, 6, 5, 3, 1);
+  SetScores(url, 24, 20, 3, 1);
   Navigate(url);
 
   EXPECT_FALSE(WasSignificantPlaybackRecorded());
@@ -803,26 +802,26 @@ TEST_F(MediaEngagementContentsObserverTest, RecordUkmMetricsOnDestroy) {
   EXPECT_TRUE(WasSignificantPlaybackRecorded());
 
   SimulateDestroy();
-  ExpectScores(url, 6.0 / 7.0, 7, 6, 5, 2);
-  ExpectUkmEntry(url, 6, 7, 86, 1, true, 2, 5, 1, 2, 0);
+  ExpectScores(url, 21.0 / 25.0, 25, 21, 5, 2);
+  ExpectUkmEntry(url, 21, 25, 84, 1, true, 2, 5, 1, 2, 0);
 }
 
 TEST_F(MediaEngagementContentsObserverTest,
        RecordUkmMetricsOnDestroy_NoPlaybacks) {
   GURL url("https://www.google.com");
-  SetScores(url, 6, 5, 2, 1);
+  SetScores(url, 24, 20, 2, 1);
   Navigate(url);
 
   EXPECT_FALSE(WasSignificantPlaybackRecorded());
 
   SimulateDestroy();
-  ExpectScores(url, 5.0 / 7.0, 7, 5, 2, 1);
-  ExpectUkmEntry(url, 5, 7, 71, 0, true, 0, 2, 0, 1, 0);
+  ExpectScores(url, 20.0 / 25.0, 25, 20, 2, 1);
+  ExpectUkmEntry(url, 20, 25, 80, 0, true, 0, 2, 0, 1, 0);
 }
 
 TEST_F(MediaEngagementContentsObserverTest, RecordUkmMetricsOnNavigate) {
   GURL url("https://www.google.com");
-  SetScores(url, 6, 5, 3, 1);
+  SetScores(url, 24, 20, 3, 1);
   Navigate(url);
 
   EXPECT_FALSE(WasSignificantPlaybackRecorded());
@@ -833,27 +832,27 @@ TEST_F(MediaEngagementContentsObserverTest, RecordUkmMetricsOnNavigate) {
   EXPECT_TRUE(WasSignificantPlaybackRecorded());
 
   Navigate(GURL("https://www.example.org"));
-  ExpectScores(url, 6.0 / 7.0, 7, 6, 5, 2);
-  ExpectUkmEntry(url, 6, 7, 86, 1, true, 2, 5, 1, 2, 0);
+  ExpectScores(url, 21.0 / 25.0, 25, 21, 5, 2);
+  ExpectUkmEntry(url, 21, 25, 84, 1, true, 2, 5, 1, 2, 0);
 }
 
 TEST_F(MediaEngagementContentsObserverTest,
        RecordUkmMetricsOnNavigate_NoPlaybacks) {
   GURL url("https://www.google.com");
-  SetScores(url, 9, 2, 2, 1);
+  SetScores(url, 27, 6, 2, 1);
   Navigate(url);
 
   EXPECT_FALSE(WasSignificantPlaybackRecorded());
 
   Navigate(GURL("https://www.example.org"));
-  ExpectScores(url, 2 / 10.0, 10, 2, 2, 1);
-  ExpectUkmEntry(url, 2, 10, 20, 0, false, 0, 2, 0, 1, 0);
+  ExpectScores(url, 6 / 28.0, 28, 6, 2, 1);
+  ExpectUkmEntry(url, 6, 28, 21, 0, false, 0, 2, 0, 1, 0);
 }
 
 TEST_F(MediaEngagementContentsObserverTest,
        RecordUkmMetrics_MultiplePlaybackTime) {
   GURL url("https://www.google.com");
-  SetScores(url, 6, 5, 3, 1);
+  SetScores(url, 24, 20, 3, 1);
   Advance15Minutes();
   SetLastPlaybackTime(url, Now());
   Navigate(url);
@@ -869,9 +868,9 @@ TEST_F(MediaEngagementContentsObserverTest,
   SimulateSignificantPlaybackTimeForPlayer(1);
 
   SimulateDestroy();
-  ExpectScores(url, 6.0 / 7.0, 7, 6, 5, 3);
+  ExpectScores(url, 21.0 / 25.0, 25, 21, 5, 3);
   ExpectLastPlaybackTime(url, first);
-  ExpectUkmEntry(url, 6, 7, 86, 1, true, 2, 5, 2, 3, 900);
+  ExpectUkmEntry(url, 21, 25, 84, 1, true, 2, 5, 2, 3, 900);
 }
 
 TEST_F(MediaEngagementContentsObserverTest, DoNotCreateSessionOnInternalUrl) {
@@ -916,11 +915,11 @@ TEST_F(MediaEngagementContentsObserverTest, RecordAudiblePlayers_OnDestroy) {
   SimulateSignificantPlaybackTimeForPlayer(0);
   SimulateSignificantPlaybackTimeForPlayer(1);
   SimulateSignificantPlaybackTimeForPlayer(2);
-  ExpectScores(url, 0, 1, 1, 0, 0);
+  ExpectScores(url, 0.05, 1, 1, 0, 0);
 
   // Test that when we destroy the audible players the scores are recorded.
   SimulateDestroy();
-  ExpectScores(url, 0, 1, 1, 3, 3);
+  ExpectScores(url, 0.05, 1, 1, 3, 3);
 }
 
 TEST_F(MediaEngagementContentsObserverTest, RecordAudiblePlayers_OnNavigate) {
@@ -948,18 +947,18 @@ TEST_F(MediaEngagementContentsObserverTest, RecordAudiblePlayers_OnNavigate) {
   SimulateSignificantPlaybackTimeForPlayer(0);
   SimulateSignificantPlaybackTimeForPlayer(1);
   SimulateSignificantPlaybackTimeForPlayer(2);
-  ExpectScores(url, 0, 1, 1, 0, 0);
+  ExpectScores(url, 0.05, 1, 1, 0, 0);
 
   // Navigate to a sub page and continue watching.
   Navigate(GURL("https://www.google.com/test"));
   SimulateSignificantAudioPlayer(1);
   SimulateLongMediaPlayback(1);
-  ExpectScores(url, 0, 1, 1, 0, 0);
+  ExpectScores(url, 0.05, 1, 1, 0, 0);
 
   // Test that when we navigate to a new origin the audible players the scores
   // are recorded.
   Navigate(GURL("https://www.google.co.uk"));
-  ExpectScores(url, 0, 1, 1, 4, 3);
+  ExpectScores(url, 0.05, 1, 1, 4, 3);
 }
 
 TEST_F(MediaEngagementContentsObserverTest, TimerSpecificToPlayer) {

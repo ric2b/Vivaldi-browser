@@ -11,6 +11,7 @@
 
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_creator.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "net/proxy/proxy_config.h"
@@ -31,22 +32,21 @@ DataReductionProxyConfigurator::~DataReductionProxyConfigurator() {
 }
 
 void DataReductionProxyConfigurator::Enable(
-    bool secure_transport_restricted,
-    bool insecure_proxies_restricted,
+    const NetworkPropertiesManager& network_properties_manager,
     const std::vector<DataReductionProxyServer>& proxies_for_http) {
   DCHECK(thread_checker_.CalledOnValidThread());
   net::ProxyConfig config =
-      CreateProxyConfig(secure_transport_restricted,
-                        insecure_proxies_restricted, proxies_for_http);
+      CreateProxyConfig(false /* probe_url_config */,
+                        network_properties_manager, proxies_for_http);
   data_reduction_proxy_event_creator_->AddProxyEnabledEvent(
-      net_log_, secure_transport_restricted,
+      net_log_, network_properties_manager.IsSecureProxyDisallowedByCarrier(),
       DataReductionProxyServer::ConvertToNetProxyServers(proxies_for_http));
   config_ = config;
 }
 
 net::ProxyConfig DataReductionProxyConfigurator::CreateProxyConfig(
-    bool secure_transport_restricted,
-    bool insecure_proxies_restricted,
+    bool probe_url_config,
+    const NetworkPropertiesManager& network_properties_manager,
     const std::vector<DataReductionProxyServer>& proxies_for_http) const {
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -56,14 +56,34 @@ net::ProxyConfig DataReductionProxyConfigurator::CreateProxyConfig(
       net::ProxyConfig::ProxyRules::TYPE_PROXY_PER_SCHEME;
 
   for (const auto& http_proxy : proxies_for_http) {
-    if (secure_transport_restricted &&
-        (http_proxy.proxy_server().scheme() == net::ProxyServer::SCHEME_HTTPS ||
-         http_proxy.proxy_server().scheme() == net::ProxyServer::SCHEME_QUIC)) {
+    // If the config is being generated for fetching the probe URL, then the
+    // proxies that are disabled by the network properties manager are still
+    // added to the proxy config. This is because the network properties manager
+    // may have disabled a proxy because the warmup URL to the proxy has failed
+    // in this session or in a previous session on the same connection. Adding
+    // the proxy enables probing the proxy even though the proxy may not be
+    // usable for non-proble traffic.
+    if (!probe_url_config &&
+        !network_properties_manager.IsSecureProxyAllowed(true) &&
+        http_proxy.IsSecureProxy() && http_proxy.IsCoreProxy()) {
       continue;
     }
 
-    if (insecure_proxies_restricted &&
-        http_proxy.proxy_server().scheme() == net::ProxyServer::SCHEME_HTTP) {
+    if (!probe_url_config &&
+        !network_properties_manager.IsInsecureProxyAllowed(true) &&
+        !http_proxy.IsSecureProxy() && http_proxy.IsCoreProxy()) {
+      continue;
+    }
+
+    if (!probe_url_config &&
+        !network_properties_manager.IsSecureProxyAllowed(false) &&
+        http_proxy.IsSecureProxy() && !http_proxy.IsCoreProxy()) {
+      continue;
+    }
+
+    if (!probe_url_config &&
+        !network_properties_manager.IsInsecureProxyAllowed(false) &&
+        !http_proxy.IsSecureProxy() && !http_proxy.IsCoreProxy()) {
       continue;
     }
 
@@ -86,6 +106,7 @@ net::ProxyConfig DataReductionProxyConfigurator::CreateProxyConfig(
   // config will return invalid.
   net::ProxyConfig::ID unused_id = 1;
   config.set_id(unused_id);
+
   return config;
 }
 

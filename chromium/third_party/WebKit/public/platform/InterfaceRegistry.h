@@ -44,11 +44,12 @@ class BLINK_PLATFORM_EXPORT InterfaceRegistry {
 #if INSIDE_BLINK
   template <typename Interface>
   void AddInterface(
-      WTF::RepeatingFunction<void(mojo::InterfaceRequest<Interface>)> factory) {
+      base::RepeatingCallback<void(mojo::InterfaceRequest<Interface>)>
+          factory) {
     AddInterface(Interface::Name_,
-                 ConvertToBaseCallback(WTF::Bind(
+                 WTF::BindRepeating(
                      &InterfaceRegistry::ForwardToInterfaceFactory<Interface>,
-                     std::move(factory))));
+                     std::move(factory)));
   }
 
   template <typename Interface>
@@ -65,20 +66,19 @@ class BLINK_PLATFORM_EXPORT InterfaceRegistry {
 
   template <typename Interface>
   void AddAssociatedInterface(
-      WTF::RepeatingFunction<void(mojo::AssociatedInterfaceRequest<Interface>)>
+      base::RepeatingCallback<void(mojo::AssociatedInterfaceRequest<Interface>)>
           factory) {
     AddAssociatedInterface(
         Interface::Name_,
-        ConvertToBaseCallback(WTF::Bind(
+        WTF::BindRepeating(
             &InterfaceRegistry::ForwardToAssociatedInterfaceFactory<Interface>,
-            std::move(factory))));
+            std::move(factory)));
   }
 
  private:
   template <typename Interface>
   static void ForwardToInterfaceFactory(
-      const WTF::RepeatingFunction<void(mojo::InterfaceRequest<Interface>)>&
-          factory,
+      base::RepeatingCallback<void(mojo::InterfaceRequest<Interface>)> factory,
       mojo::ScopedMessagePipeHandle handle) {
     factory.Run(mojo::InterfaceRequest<Interface>(std::move(handle)));
   }
@@ -93,8 +93,8 @@ class BLINK_PLATFORM_EXPORT InterfaceRegistry {
 
   template <typename Interface>
   static void ForwardToAssociatedInterfaceFactory(
-      const WTF::RepeatingFunction<
-          void(mojo::AssociatedInterfaceRequest<Interface>)>& factory,
+      base::RepeatingCallback<void(mojo::AssociatedInterfaceRequest<Interface>)>
+          factory,
       mojo::ScopedInterfaceEndpointHandle handle) {
     factory.Run(mojo::AssociatedInterfaceRequest<Interface>(std::move(handle)));
   }

@@ -12,7 +12,7 @@
 #include "core/frame/RemoteFrameClient.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
 #include "core/paint/PaintLayer.h"
@@ -58,6 +58,9 @@ void RemoteFrame::Navigate(Document& origin_document,
   frame_request.SetReplacesCurrentItem(replace_current_item);
   frame_request.GetResourceRequest().SetHasUserGesture(
       user_gesture_status == UserGestureStatus::kActive);
+  frame_request.GetResourceRequest().SetFrameType(
+      IsMainFrame() ? network::mojom::RequestContextFrameType::kTopLevel
+                    : network::mojom::RequestContextFrameType::kNested);
   Navigate(frame_request);
 }
 
@@ -65,9 +68,11 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
   FrameLoadRequest frame_request(passed_request);
 
   // The process where this frame actually lives won't have sufficient
-  // information to determine correct referrer, since it won't have access to
-  // the originDocument. Set it now.
+  // information to determine correct referrer and upgrade the url, since it
+  // won't have access to the originDocument. Do it now.
   FrameLoader::SetReferrerForFrameRequest(frame_request);
+  FrameLoader::UpgradeInsecureRequest(frame_request.GetResourceRequest(),
+                                      frame_request.OriginDocument());
 
   frame_request.GetResourceRequest().SetHasUserGesture(
       Frame::HasTransientUserActivation(this));
@@ -78,11 +83,6 @@ void RemoteFrame::Navigate(const FrameLoadRequest& passed_request) {
 void RemoteFrame::Reload(FrameLoadType frame_load_type,
                          ClientRedirectPolicy client_redirect_policy) {
   Client()->Reload(frame_load_type, client_redirect_policy);
-}
-
-void RemoteFrame::AddResourceTiming(const ResourceTimingInfo& info) {
-  DCHECK(info.IsMainResource());
-  // TODO(dcheng): Perform origin check, filter out fields, and forward via IPC.
 }
 
 void RemoteFrame::Detach(FrameDetachType type) {
@@ -97,7 +97,6 @@ void RemoteFrame::Detach(FrameDetachType type) {
   // the parent is a local frame.
   if (view_)
     view_->Dispose();
-  Client()->WillBeDetached();
   GetWindowProxyManager()->ClearForClose();
   SetView(nullptr);
   // ... the RemoteDOMWindow will need to be informed of detachment,
@@ -127,6 +126,16 @@ bool RemoteFrame::ShouldClose() {
   return true;
 }
 
+void RemoteFrame::DidFreeze() {
+  DCHECK(RuntimeEnabledFeatures::PageLifecycleEnabled());
+  // TODO(fmeawad): Add support for remote frames.
+}
+
+void RemoteFrame::DidResume() {
+  DCHECK(RuntimeEnabledFeatures::PageLifecycleEnabled());
+  // TODO(fmeawad): Add support for remote frames.
+}
+
 void RemoteFrame::SetIsInert(bool inert) {
   if (inert != is_inert_)
     Client()->SetIsInert(inert);
@@ -149,7 +158,7 @@ void RemoteFrame::CreateView() {
 
   SetView(RemoteFrameView::Create(this));
 
-  if (!OwnerLayoutItem().IsNull())
+  if (OwnerLayoutObject())
     DeprecatedLocalOwner()->SetEmbeddedContentView(view_);
 }
 

@@ -25,6 +25,10 @@
 #include "third_party/libjingle_xmpp/xmllite/xmlelement.h"
 #include "third_party/libjingle_xmpp/xmpp/constants.h"
 
+#ifdef ERROR
+#undef ERROR  // Defined by windows.h
+#endif
+
 using buzz::QName;
 using buzz::XmlElement;
 
@@ -94,7 +98,7 @@ void HeartbeatSender::OnSignalStrategyStateChange(SignalStrategy::State state) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (state == SignalStrategy::CONNECTED) {
     DCHECK(!iq_sender_);
-    iq_sender_ = base::MakeUnique<IqSender>(signal_strategy_);
+    iq_sender_ = std::make_unique<IqSender>(signal_strategy_);
     SendHeartbeat();
   } else if (state == SignalStrategy::DISCONNECTED) {
     request_.reset();
@@ -154,7 +158,13 @@ void HeartbeatSender::SendHeartbeat() {
   request_ = iq_sender_->SendIq(
       buzz::STR_SET, directory_bot_jid_, CreateHeartbeatMessage(),
       base::Bind(&HeartbeatSender::OnResponse, base::Unretained(this)));
-  request_->SetTimeout(kHeartbeatResponseTimeout);
+  if (request_) {
+    request_->SetTimeout(kHeartbeatResponseTimeout);
+  } else {
+    // If we failed to send a new heartbeat, call into the handler to determine
+    // whether to retry later or disconnect.
+    OnResponse(nullptr, nullptr);
+  }
   ++sequence_id_;
 }
 
@@ -248,8 +258,9 @@ void HeartbeatSender::OnResponse(IqRequest* request,
 
 HeartbeatSender::HeartbeatResult HeartbeatSender::ProcessResponse(
     const buzz::XmlElement* response) {
-  if (!response)
+  if (!response) {
     return HeartbeatResult::TIMEOUT;
+  }
 
   std::string type = response->Attr(buzz::QN_TYPE);
   if (type == buzz::STR_ERROR) {

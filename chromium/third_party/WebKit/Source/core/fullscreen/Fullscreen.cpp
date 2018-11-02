@@ -29,6 +29,7 @@
 
 #include "core/fullscreen/Fullscreen.h"
 
+#include "base/macros.h"
 #include "core/css/StyleEngine.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
@@ -44,7 +45,6 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutFullScreen.h"
-#include "core/layout/api/LayoutFullScreenItem.h"
 #include "core/page/ChromeClient.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/ScopedOrientationChangeIndicator.h"
@@ -193,7 +193,6 @@ bool RequestFullscreenConditionsMet(Element& pending, Document& document) {
 // deferring changes in |DidEnterFullscreen()|.
 class RequestFullscreenScope {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(RequestFullscreenScope);
 
  public:
   RequestFullscreenScope() {
@@ -210,6 +209,7 @@ class RequestFullscreenScope {
 
  private:
   static bool running_request_fullscreen_;
+  DISALLOW_COPY_AND_ASSIGN(RequestFullscreenScope);
 };
 
 bool RequestFullscreenScope::running_request_fullscreen_ = false;
@@ -410,7 +410,7 @@ Fullscreen::Fullscreen(Document& document)
   document.SetHasFullscreenSupplement();
 }
 
-Fullscreen::~Fullscreen() {}
+Fullscreen::~Fullscreen() = default;
 
 Document* Fullscreen::GetDocument() {
   return ToDocument(LifecycleContext());
@@ -898,6 +898,12 @@ void Fullscreen::FullscreenElementChanged(Element* old_element,
       if (LocalFrameView* frame_view = frame->View())
         frame_view->SetNeedsPaintPropertyUpdate();
     }
+
+    // Descendant frames may have been inert because their owner iframes were
+    // outside of fullscreen element. SetIsInert recurses through subframes to
+    // propagate the inert bit as needed.
+    frame->SetIsInert(GetDocument()->LocalOwner() &&
+                      GetDocument()->LocalOwner()->IsInert());
   }
 
   // TODO(foolip): This should not call |UpdateStyleAndLayoutTree()|.

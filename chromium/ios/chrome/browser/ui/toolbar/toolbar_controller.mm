@@ -18,7 +18,11 @@
 #include "ios/chrome/browser/ui/bubble/bubble_util.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
-#import "ios/chrome/browser/ui/image_util.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_animator.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_foreground_animator.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_end_animator.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_scroll_to_top_animator.h"
+#import "ios/chrome/browser/ui/image_util/image_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_tools_menu_button.h"
@@ -81,12 +85,6 @@ using ios::material::TimingFunction;
   NSArray* standardButtons_;
   ToolsMenuButtonObserverBridge* toolsMenuButtonObserverBridge_;
   ToolbarControllerStyle style_;
-
-  // Backing object for |self.omniboxExpanderAnimator|.
-  API_AVAILABLE(ios(10.0)) UIViewPropertyAnimator* _omniboxExpanderAnimator;
-
-  // Backing object for |self.omniboxContractorAnimator|.
-  API_AVAILABLE(ios(10.0)) UIViewPropertyAnimator* _omniboxContractorAnimator;
 }
 
 // Leading and trailing safe area constraint for faking a safe area. These
@@ -129,9 +127,10 @@ using ios::material::TimingFunction;
 @synthesize trailingSafeAreaConstraint = _trailingSafeAreaConstraint;
 @dynamic view;
 
-- (instancetype)initWithStyle:(ToolbarControllerStyle)style
-                   dispatcher:
-                       (id<ApplicationCommands, BrowserCommands>)dispatcher {
+- (instancetype)
+initWithStyle:(ToolbarControllerStyle)style
+   dispatcher:
+       (id<ApplicationCommands, BrowserCommands, ToolbarCommands>)dispatcher {
   self = [super initWithNibName:nil bundle:nil];
   if (self) {
     style_ = style;
@@ -153,7 +152,7 @@ using ios::material::TimingFunction;
       toolsMenuButtonFrame.origin.y += statusBarOffset;
     }
 
-    self.view = [[ToolbarView alloc] initWithFrame:viewFrame];
+    self.view = [[LegacyToolbarView alloc] initWithFrame:viewFrame];
     if (IsSafeAreaCompatibleToolbarEnabled()) {
       [self.view setTranslatesAutoresizingMaskIntoConstraints:NO];
     }
@@ -171,6 +170,7 @@ using ios::material::TimingFunction;
 
     contentView_ = [[UIView alloc] initWithFrame:viewFrame];
     contentView_.translatesAutoresizingMaskIntoConstraints = NO;
+    contentView_.layer.allowsGroupOpacity = YES;
     [self.view addSubview:contentView_];
     NSLayoutConstraint* safeAreaLeading = nil;
     NSLayoutConstraint* safeAreaTrailing = nil;
@@ -202,8 +202,7 @@ using ios::material::TimingFunction;
 
     toolsMenuButton_ =
         [[ToolbarToolsMenuButton alloc] initWithFrame:toolsMenuButtonFrame
-                                                style:style_
-                                                small:NO];
+                                                style:style_];
     [toolsMenuButton_ addTarget:self.dispatcher
                          action:@selector(showToolsMenu)
                forControlEvents:UIControlEventTouchUpInside];
@@ -611,23 +610,6 @@ using ios::material::TimingFunction;
     [self fadeInStandardControls];
 }
 
-- (UIViewPropertyAnimator*)omniboxExpanderAnimator {
-  return _omniboxExpanderAnimator;
-}
-
-- (void)setOmniboxExpanderAnimator:
-    (UIViewPropertyAnimator*)omniboxExpanderAnimator {
-  _omniboxExpanderAnimator = omniboxExpanderAnimator;
-}
-
-- (UIViewPropertyAnimator*)omniboxContractorAnimator {
-  return _omniboxContractorAnimator;
-}
-
-- (void)setOmniboxContractorAnimator:
-    (UIViewPropertyAnimator*)omniboxContractorAnimator {
-  _omniboxContractorAnimator = omniboxContractorAnimator;
-}
 
 #pragma mark - ToolsMenuPresentationProvider
 
@@ -685,34 +667,6 @@ using ios::material::TimingFunction;
                      [shadowView_ setAlpha:0];
                      [fullBleedShadowView_ setAlpha:1];
                    }];
-}
-
-- (void)configureFadeOutAnimation API_AVAILABLE(ios(10.0)) {
-  __weak NSArray* weakStandardButtons = standardButtons_;
-  __weak UIView* weakShadowView = shadowView_;
-  __weak UIView* weakFullBleedShadowView = fullBleedShadowView_;
-  [self.omniboxExpanderAnimator addAnimations:^{
-    // Animate the opacity of the buttons to 0 and 10 pixels in the
-    // leading-to-trailing direction.
-    for (UIButton* button in weakStandardButtons) {
-      if (![button isHidden])
-        button.alpha = 0;
-      button.frame = CGRectOffset(button.frame, kButtonFadeOutXOffset, 0);
-    }
-
-    // Fade to the full bleed shadow.
-    weakShadowView.alpha = 0;
-    weakFullBleedShadowView.alpha = 1;
-  }];
-
-  // After the animation is done and the buttons are hidden, move the buttons
-  // back to the position they originally were.
-  [self.omniboxExpanderAnimator
-      addCompletion:^(UIViewAnimatingPosition finalPosition) {
-        for (UIButton* button in weakStandardButtons) {
-          button.frame = CGRectOffset(button.frame, -kButtonFadeOutXOffset, 0);
-        }
-      }];
 }
 
 - (void)fadeInStandardControls {
@@ -795,9 +749,11 @@ using ios::material::TimingFunction;
 #pragma mark - BubbleViewAnchorPointProvider methods.
 
 - (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
-  CGPoint anchorPoint = bubble_util::AnchorPoint(stackButton_.frame, direction);
-  return [stackButton_.superview convertPoint:anchorPoint
-                                       toView:stackButton_.window];
+  CGPoint anchorPoint =
+      bubble_util::AnchorPoint(stackButton_.imageView.frame, direction);
+  return [stackButton_.imageView.superview
+      convertPoint:anchorPoint
+            toView:stackButton_.imageView.window];
 }
 
 - (CGPoint)anchorPointForToolsMenuButton:(BubbleArrowDirection)direction {
@@ -805,6 +761,41 @@ using ios::material::TimingFunction;
       bubble_util::AnchorPoint(toolsMenuButton_.frame, direction);
   return [toolsMenuButton_.superview convertPoint:anchorPoint
                                            toView:toolsMenuButton_.window];
+}
+
+#pragma mark - FullscreenUIElement
+
+- (void)updateForFullscreenProgress:(CGFloat)progress {
+  self.contentView.alpha = progress;
+}
+
+- (void)updateForFullscreenEnabled:(BOOL)enabled {
+  if (!enabled)
+    [self updateForFullscreenProgress:1.0];
+}
+
+- (void)finishFullscreenScrollWithAnimator:
+    (FullscreenScrollEndAnimator*)animator {
+  [self addFullscreenAnimationsToAnimator:animator];
+}
+
+- (void)scrollFullscreenToTopWithAnimator:
+    (FullscreenScrollToTopAnimator*)animator {
+  [self addFullscreenAnimationsToAnimator:animator];
+}
+
+- (void)showToolbarForForgroundWithAnimator:
+    (FullscreenForegroundAnimator*)animator {
+  [self addFullscreenAnimationsToAnimator:animator];
+}
+
+#pragma mark - FullscreenUIElement helpers
+
+- (void)addFullscreenAnimationsToAnimator:(FullscreenAnimator*)animator {
+  CGFloat finalProgress = animator.finalProgress;
+  [animator addAnimations:^() {
+    [self updateForFullscreenProgress:finalProgress];
+  }];
 }
 
 #pragma mark - CAAnimationDelegate

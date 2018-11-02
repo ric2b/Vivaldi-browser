@@ -94,6 +94,7 @@ class CastConfigController;
 class DisplayColorManager;
 class DisplayConfigurationController;
 class DisplayErrorObserver;
+class DisplayShutdownObserver;
 class DragDropController;
 class EventClientImpl;
 class EventTransformationHandler;
@@ -143,7 +144,6 @@ class ShellDelegate;
 struct ShellInitParams;
 class ShellObserver;
 class ShutdownController;
-class ShutdownObserver;
 class SmsObserver;
 class SplitViewController;
 class StickyKeysController;
@@ -152,6 +152,7 @@ class SystemModalContainerEventFilter;
 class SystemTray;
 class SystemTrayController;
 class SystemTrayNotifier;
+class TimeToFirstPresentRecorder;
 class ToplevelWindowEventHandler;
 class ToastManager;
 class TouchDevicesController;
@@ -231,6 +232,14 @@ class ASH_EXPORT Shell : public SessionObserver,
   static const aura::Window* GetContainer(const aura::Window* root_window,
                                           int container_id);
 
+  // If a system-modal dialog window is currently open, returns the ID of the
+  // system modal window container that contains the window.
+  // If no system-modal dialogs are open it returns -1.
+  static int GetOpenSystemModalWindowContainerId();
+
+  // Returns true if a system-modal dialog window is currently open.
+  static bool IsSystemModalWindowOpen();
+
   // TODO(sky): move this and WindowManagerClient into ShellMash that is owned
   // by Shell. Doing the move is gated on having mash create Shell.
   static void set_window_tree_client(aura::WindowTreeClient* client) {
@@ -305,6 +314,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   AutoclickController* autoclick_controller() {
     return autoclick_controller_.get();
+  }
+  BacklightsForcedOffSetter* backlights_forced_off_setter() {
+    return backlights_forced_off_setter_.get();
   }
   BluetoothPowerController* bluetooth_power_controller() {
     return bluetooth_power_controller_.get();
@@ -430,6 +442,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   TabletModeController* tablet_mode_controller() {
     return tablet_mode_controller_.get();
   }
+  TimeToFirstPresentRecorder* time_to_first_present_recorder() {
+    return time_to_first_present_recorder_.get();
+  }
   ToastManager* toast_manager() { return toast_manager_.get(); }
   views::corewm::TooltipController* tooltip_controller() {
     return tooltip_controller_.get();
@@ -468,6 +483,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return window_tree_host_manager_.get();
   }
 
+  ToplevelWindowEventHandler* toplevel_window_event_handler() {
+    return toplevel_window_event_handler_.get();
+  }
+
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
   void UpdateShelfVisibility();
@@ -484,10 +503,6 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Returns the system tray on primary display.
   SystemTray* GetPrimarySystemTray();
-
-  static void set_initially_hide_cursor(bool hide) {
-    initially_hide_cursor_ = hide;
-  }
 
   // Starts the animation that occurs on first login.
   void DoInitialWorkspaceAnimation();
@@ -581,6 +596,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   void Init(ui::ContextFactory* context_factory,
             ui::ContextFactoryPrivate* context_factory_private);
 
+  // Initializes the display manager and related components.
+  void InitializeDisplayManager();
+
   // Initializes the root window so that it can host browser windows.
   void InitRootWindow(aura::Window* root_window);
 
@@ -606,10 +624,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   void OnLoginStatusChanged(LoginStatus login_status) override;
   void OnLockStateChanged(bool locked) override;
 
-  // Finalizes the shelf state. Called after the user session is active and
-  // the profile is available.
-  void InitializeShelf();
-
   // Callback for prefs::ConnectToPrefService.
   void OnLocalStatePrefServiceInitialized(
       std::unique_ptr<::PrefService> pref_service);
@@ -619,10 +633,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   // Only valid in mash, for classic ash this is null.
   static aura::WindowTreeClient* window_tree_client_;
   static aura::WindowManagerClient* window_manager_client_;
-
-  // If set before the Shell is initialized, the mouse cursor will be hidden
-  // when the screen is initially created.
-  static bool initially_hide_cursor_;
 
   std::unique_ptr<ShellPort> shell_port_;
 
@@ -665,6 +675,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<SystemTrayNotifier> system_tray_notifier_;
   std::unique_ptr<ToastManager> toast_manager_;
   std::unique_ptr<TouchDevicesController> touch_devices_controller_;
+  std::unique_ptr<TimeToFirstPresentRecorder> time_to_first_present_recorder_;
   std::unique_ptr<TrayAction> tray_action_;
   std::unique_ptr<VoiceInteractionController> voice_interaction_controller_;
   std::unique_ptr<VpnList> vpn_list_;
@@ -741,7 +752,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<display::DisplayChangeObserver> display_change_observer_;
 
   // Listens for shutdown and updates DisplayConfigurator.
-  std::unique_ptr<ShutdownObserver> shutdown_observer_;
+  std::unique_ptr<DisplayShutdownObserver> display_shutdown_observer_;
 
   // Listens for new sms messages and shows notifications.
   std::unique_ptr<SmsObserver> sms_observer_;
@@ -771,7 +782,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<::wm::CursorManager> cursor_manager_;
 
   // For testing only: simulate that a modal window is open
-  bool simulate_modal_window_open_for_testing_;
+  bool simulate_modal_window_open_for_test_ = false;
 
   // See comment for GetRootWindowForNewWindows().
   aura::Window* root_window_for_new_windows_ = nullptr;

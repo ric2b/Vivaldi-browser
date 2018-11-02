@@ -61,12 +61,13 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
       TreeScope(*this, document),
       style_sheet_list_(nullptr),
       child_shadow_root_count_(0),
-      type_(static_cast<unsigned>(type)),
+      type_(static_cast<unsigned short>(type)),
       registered_with_parent_shadow_root_(false),
       descendant_insertion_points_is_valid_(false),
-      delegates_focus_(false) {}
+      delegates_focus_(false),
+      unused_(0) {}
 
-ShadowRoot::~ShadowRoot() {}
+ShadowRoot::~ShadowRoot() = default;
 
 ShadowRoot* ShadowRoot::YoungerShadowRoot() const {
   if (GetType() == ShadowRootType::V0 && shadow_root_rare_data_v0_)
@@ -167,8 +168,15 @@ void ShadowRoot::RecalcStyle(StyleRecalcChange change) {
   // There's no style to update so just calling recalcStyle means we're updated.
   ClearNeedsStyleRecalc();
 
-  RecalcDescendantStyles(change);
+  if (change >= kUpdatePseudoElements || ChildNeedsStyleRecalc())
+    RecalcDescendantStyles(change);
   ClearChildNeedsStyleRecalc();
+}
+
+void ShadowRoot::RecalcStylesForReattach() {
+  // ShadowRoot doesn't support custom callbacks.
+  DCHECK(!HasCustomStyleCallbacks());
+  RecalcDescendantStylesForReattach();
 }
 
 void ShadowRoot::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
@@ -360,7 +368,7 @@ void ShadowRoot::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
 
 std::ostream& operator<<(std::ostream& ostream, const ShadowRootType& type) {
   switch (type) {
-    case ShadowRootType::kUserAgent:
+    case ShadowRootType::kUserAgentV1:
       ostream << "UserAgent";
       break;
     case ShadowRootType::V0:

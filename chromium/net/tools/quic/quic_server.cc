@@ -18,6 +18,7 @@
 #include "net/quic/core/quic_crypto_stream.h"
 #include "net/quic/core/quic_data_reader.h"
 #include "net/quic/core/quic_packets.h"
+#include "net/quic/core/tls_server_handshaker.h"
 #include "net/quic/platform/api/quic_clock.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
@@ -56,14 +57,14 @@ QuicServer::QuicServer(std::unique_ptr<ProofSource> proof_source,
     : QuicServer(std::move(proof_source),
                  QuicConfig(),
                  QuicCryptoServerConfig::ConfigOptions(),
-                 AllSupportedTransportVersions(),
+                 AllSupportedVersions(),
                  response_cache) {}
 
 QuicServer::QuicServer(
     std::unique_ptr<ProofSource> proof_source,
     const QuicConfig& config,
     const QuicCryptoServerConfig::ConfigOptions& crypto_config_options,
-    const QuicTransportVersionVector& supported_versions,
+    const ParsedQuicVersionVector& supported_versions,
     QuicHttpResponseCache* response_cache)
     : port_(0),
       fd_(-1),
@@ -73,7 +74,8 @@ QuicServer::QuicServer(
       config_(config),
       crypto_config_(kSourceAddressTokenSecret,
                      QuicRandom::GetInstance(),
-                     std::move(proof_source)),
+                     std::move(proof_source),
+                     TlsServerHandshaker::CreateSslCtx()),
       crypto_config_options_(crypto_config_options),
       version_manager_(supported_versions),
       packet_reader_(new QuicPacketReader()),

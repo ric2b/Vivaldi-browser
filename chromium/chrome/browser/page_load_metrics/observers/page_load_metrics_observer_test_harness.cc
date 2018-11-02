@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/global_request_id.h"
@@ -34,7 +33,7 @@ void PageLoadMetricsObserverTestHarness::SetUp() {
   // Page load metrics depends on UKM source URLs being recorded, so make sure
   // the SourceUrlRecorderWebContentsObserver is instantiated.
   ukm::InitializeSourceUrlRecorderForWebContents(web_contents());
-  tester_ = base::MakeUnique<PageLoadMetricsObserverTester>(
+  tester_ = std::make_unique<PageLoadMetricsObserverTester>(
       web_contents(),
       base::BindRepeating(
           &PageLoadMetricsObserverTestHarness::RegisterObservers,
@@ -107,8 +106,10 @@ PageLoadMetricsObserverTestHarness::GetPageLoadExtraInfoForCommittedLoad() {
 void PageLoadMetricsObserverTestHarness::NavigateWithPageTransitionAndCommit(
     const GURL& url,
     ui::PageTransition transition) {
-  controller().LoadURL(url, content::Referrer(), transition, std::string());
-  content::WebContentsTester::For(web_contents())->CommitPendingNavigation();
+  auto simulator =
+      content::NavigationSimulator::CreateRendererInitiated(url, main_rfh());
+  simulator->SetTransition(transition);
+  simulator->Commit();
 }
 
 void PageLoadMetricsObserverTestHarness::NavigateToUntrackedUrl() {

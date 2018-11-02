@@ -24,7 +24,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "dbus/bus.h"
 #include "device/media_transfer_protocol/media_transfer_protocol_daemon_client.h"
-#include "device/media_transfer_protocol/mtp_file_entry.pb.h"
 #include "device/media_transfer_protocol/mtp_storage_info.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -91,17 +90,17 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
   }
 
   // MediaTransferProtocolManager override.
-  const std::vector<std::string> GetStorages() const override {
+  void GetStorages(GetStoragesCallback callback) const override {
     DCHECK(thread_checker_.CalledOnValidThread());
     std::vector<std::string> storages;
     storages.reserve(storage_info_map_.size());
     for (const auto& info : storage_info_map_)
       storages.push_back(info.first);
-    return storages;
+    std::move(callback).Run(storages);
   }
 
   // MediaTransferProtocolManager override.
-  const MtpStorageInfo* GetStorageInfo(
+  const mojom::MtpStorageInfo* GetStorageInfo(
       const std::string& storage_name) const override {
     DCHECK(thread_checker_.CalledOnValidThread());
     const auto it = storage_info_map_.find(storage_name);
@@ -114,7 +113,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
       const GetStorageInfoFromDeviceCallback& callback) override {
     DCHECK(thread_checker_.CalledOnValidThread());
     if (!base::ContainsKey(storage_info_map_, storage_name) || !mtp_client_) {
-      MtpStorageInfo info;
+      mojom::MtpStorageInfo info;
       callback.Run(info, true /* error */);
       return;
     }
@@ -190,7 +189,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
                      const ReadDirectoryCallback& callback) override {
     DCHECK(thread_checker_.CalledOnValidThread());
     if (!base::ContainsKey(handles_, storage_handle) || !mtp_client_) {
-      callback.Run(std::vector<MtpFileEntry>(),
+      callback.Run(std::vector<mojom::MtpFileEntry>(),
                    false /* no more entries */,
                    true /* error */);
       return;
@@ -230,7 +229,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
                    const GetFileInfoCallback& callback) override {
     DCHECK(thread_checker_.CalledOnValidThread());
     if (!base::ContainsKey(handles_, storage_handle) || !mtp_client_) {
-      callback.Run(MtpFileEntry(), true);
+      callback.Run(mojom::MtpFileEntry(), true);
       return;
     }
     std::vector<uint32_t> file_ids;
@@ -361,9 +360,9 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
     }
   }
 
-  void OnGetStorageInfo(const MtpStorageInfo& storage_info) {
+  void OnGetStorageInfo(const mojom::MtpStorageInfo& storage_info) {
     DCHECK(thread_checker_.CalledOnValidThread());
-    const std::string& storage_name = storage_info.storage_name();
+    const std::string& storage_name = storage_info.storage_name;
     if (base::ContainsKey(storage_info_map_, storage_name)) {
       // This should not happen, since MediaTransferProtocolManagerImpl should
       // only call EnumerateStorages() once, which populates |storage_info_map_|
@@ -382,14 +381,14 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
       observer.StorageChanged(true /* is attach */, storage_name);
   }
 
-  void OnGetStorageInfoFromDevice(const MtpStorageInfo& storage_info) {
+  void OnGetStorageInfoFromDevice(const mojom::MtpStorageInfo& storage_info) {
     get_storage_info_from_device_callbacks_.front().Run(storage_info,
                                                         false /* no error */);
     get_storage_info_from_device_callbacks_.pop();
   }
 
   void OnGetStorageInfoFromDeviceError() {
-    MtpStorageInfo info;
+    mojom::MtpStorageInfo info;
     get_storage_info_from_device_callbacks_.front().Run(info, true /* error */);
     get_storage_info_from_device_callbacks_.pop();
   }
@@ -450,7 +449,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
 
     if (file_ids.empty()) {
       OnGotDirectoryEntries(storage_handle, file_ids, kInitialOffset, max_size,
-                            file_ids, std::vector<MtpFileEntry>());
+                            file_ids, std::vector<mojom::MtpFileEntry>());
       return;
     }
 
@@ -470,12 +469,13 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
                    weak_ptr_factory_.GetWeakPtr()));
   }
 
-  void OnGotDirectoryEntries(const std::string& storage_handle,
-                             const std::vector<uint32_t>& file_ids,
-                             const size_t offset,
-                             const size_t max_size,
-                             const std::vector<uint32_t>& sorted_file_ids,
-                             const std::vector<MtpFileEntry>& file_entries) {
+  void OnGotDirectoryEntries(
+      const std::string& storage_handle,
+      const std::vector<uint32_t>& file_ids,
+      const size_t offset,
+      const size_t max_size,
+      const std::vector<uint32_t>& sorted_file_ids,
+      const std::vector<mojom::MtpFileEntry>& file_entries) {
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK_EQ(file_ids.size(), sorted_file_ids.size());
 
@@ -483,7 +483,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
     // subset of the requested file ids.
     for (const auto& entry : file_entries) {
       std::vector<uint32_t>::const_iterator it = std::lower_bound(
-          sorted_file_ids.begin(), sorted_file_ids.end(), entry.item_id());
+          sorted_file_ids.begin(), sorted_file_ids.end(), entry.item_id);
       if (it == sorted_file_ids.end()) {
         OnReadDirectoryError();
         return;
@@ -518,7 +518,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
 
   void OnReadDirectoryError() {
     DCHECK(thread_checker_.CalledOnValidThread());
-    read_directory_callbacks_.front().Run(std::vector<MtpFileEntry>(),
+    read_directory_callbacks_.front().Run(std::vector<mojom::MtpFileEntry>(),
                                           false /* no more entries */,
                                           true /* error */);
     read_directory_callbacks_.pop();
@@ -536,7 +536,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
     read_file_callbacks_.pop();
   }
 
-  void OnGetFileInfo(const std::vector<MtpFileEntry>& entries) {
+  void OnGetFileInfo(const std::vector<mojom::MtpFileEntry>& entries) {
     DCHECK(thread_checker_.CalledOnValidThread());
     if (entries.size() == 1) {
       get_file_info_callbacks_.front().Run(entries[0], false /* no error */);
@@ -548,7 +548,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
 
   void OnGetFileInfoError() {
     DCHECK(thread_checker_.CalledOnValidThread());
-    get_file_info_callbacks_.front().Run(MtpFileEntry(), true);
+    get_file_info_callbacks_.front().Run(mojom::MtpFileEntry(), true);
     get_file_info_callbacks_.pop();
   }
 
@@ -646,7 +646,7 @@ class MediaTransferProtocolManagerImpl : public MediaTransferProtocolManager {
   base::ObserverList<Observer> observers_;
 
   // Map to keep track of attached storages by name.
-  base::flat_map<std::string, MtpStorageInfo> storage_info_map_;
+  base::flat_map<std::string, mojom::MtpStorageInfo> storage_info_map_;
 
   // Set of open storage handles.
   base::flat_set<std::string> handles_;

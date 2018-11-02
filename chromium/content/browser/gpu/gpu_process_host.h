@@ -97,6 +97,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
       GpuProcessKind kind = GPU_PROCESS_KIND_SANDBOXED,
       bool force_create = true);
 
+  // FEATURE_FORCE_ACCESS_TO_GPU
   CONTENT_EXPORT static void SetForceAllowAccessToGpu(bool enable);
 
   // Returns whether there is an active GPU process or not.
@@ -231,7 +232,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
 
   bool LaunchGpuProcess();
 
-  void SendOutstandingReplies();
+  void SendOutstandingReplies(EstablishChannelStatus failure_status);
 
   void RunRequestGPUInfoCallbacks(const gpu::GPUInfo& gpu_info);
 
@@ -291,6 +292,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   static bool crashed_before_;
   static int swiftshader_crash_count_;
 
+  // FEATURE_FORCE_ACCESS_TO_GPU
   static bool force_allow_access_to_gpu_;
 
   std::unique_ptr<BrowserChildProcessHostImpl> process_;

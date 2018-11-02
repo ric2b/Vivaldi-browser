@@ -39,7 +39,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/ResourceError.h"
-#include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/network/HTTPHeaderMap.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/Forward.h"
@@ -203,33 +202,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   void LoadRequest(ResourceRequest&, ResourceLoaderOptions);
   bool IsAllowedRedirect(network::mojom::FetchRequestMode, const KURL&) const;
 
-  // TODO(hiroshige): After crbug.com/633696 is fixed,
-  // - Remove RawResourceClientStateChecker logic,
-  // - Make DocumentThreadableLoader to be a ResourceOwner and remove this
-  //   re-implementation of ResourceOwner, and
-  // - Consider re-applying RawResourceClientStateChecker in a more
-  //   general fashion (crbug.com/640291).
-  RawResource* GetResource() const { return resource_.Get(); }
-  void ClearResource() { SetResource(nullptr); }
-  void SetResource(RawResource* new_resource) {
-    if (new_resource == resource_)
-      return;
-
-    if (RawResource* old_resource = resource_.Release()) {
-      checker_.WillRemoveClient();
-      old_resource->RemoveClient(this);
-    }
-
-    if (new_resource) {
-      resource_ = new_resource;
-      checker_.WillAddClient();
-      resource_->AddClient(this);
-    }
-  }
-  Member<RawResource> resource_;
-  // End of ResourceOwner re-implementation, see above.
-
-  SecurityOrigin* GetSecurityOrigin() const;
+  const SecurityOrigin* GetSecurityOrigin() const;
 
   // Returns null if the loader is not associated with Document.
   // TODO(kinuko): Remove dependency to document.
@@ -252,7 +225,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // Corresponds to the CORS flag in the Fetch spec.
   bool cors_flag_;
   bool suborigin_force_credentials_;
-  scoped_refptr<SecurityOrigin> security_origin_;
+  scoped_refptr<const SecurityOrigin> security_origin_;
 
   // Set to true when the response data is given to a data consumer handle.
   bool is_using_data_consumer_handle_;
@@ -290,7 +263,7 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // same-origin redirects are not counted here.
   int cors_redirect_limit_;
 
-  WebURLRequest::FetchRedirectMode redirect_mode_;
+  network::mojom::FetchRedirectMode redirect_mode_;
 
   // Holds the referrer after a redirect response was received. This referrer is
   // used to populate the HTTP Referer header when following the redirect.

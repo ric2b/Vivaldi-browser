@@ -17,7 +17,7 @@
 #include "core/html/HTMLHtmlElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
@@ -123,7 +123,7 @@ class VisualViewportTest
         blink::testing::CoreTestDataPath(WebString::FromUTF8(fileName)));
   }
 
-  WebViewImpl* WebView() const { return helper_.WebView(); }
+  WebViewImpl* WebView() const { return helper_.GetWebView(); }
   LocalFrame* GetFrame() const { return helper_.LocalMainFrame()->GetFrame(); }
 
   static void ConfigureSettings(WebSettings* settings) {
@@ -395,7 +395,7 @@ TEST_P(VisualViewportTest, TestWebViewResizedBeforeAttachment) {
   NavigateTo("about:blank");
   WebView()->UpdateAllLifecyclePhases();
   main_frame_widget->SetRootGraphicsLayer(
-      frame_view.GetLayoutViewItem().Compositor()->RootGraphicsLayer());
+      frame_view.GetLayoutView()->Compositor()->RootGraphicsLayer());
 
   VisualViewport& visual_viewport = GetFrame()->GetPage()->GetVisualViewport();
   EXPECT_FLOAT_SIZE_EQ(FloatSize(320, 240),

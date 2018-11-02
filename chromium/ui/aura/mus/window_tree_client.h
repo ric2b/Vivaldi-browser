@@ -18,8 +18,9 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/optional.h"
 #include "base/single_thread_task_runner.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/ui/public/interfaces/remote_event_dispatcher.mojom.h"
@@ -146,6 +147,7 @@ class AURA_EXPORT WindowTreeClient
   void SetImeVisibility(WindowMus* window,
                         bool visible,
                         ui::mojom::TextInputStatePtr state);
+  void SetHitTestMask(WindowMus* window, const base::Optional<gfx::Rect>& rect);
 
   // Embeds a new client in |window|. |flags| is a bitmask of the values defined
   // by kEmbedFlag*; 0 gives default behavior. |callback| is called to indicate
@@ -412,6 +414,7 @@ class AURA_EXPORT WindowTreeClient
       uint32_t event_id,
       Id window_id,
       int64_t display_id,
+      Id display_root_window_id,
       const gfx::PointF& event_location_in_screen_pixel_layout,
       std::unique_ptr<ui::Event> event,
       bool matches_pointer_watcher) override;
@@ -548,9 +551,6 @@ class AURA_EXPORT WindowTreeClient
       WindowTreeHostMus* window_tree_host,
       const gfx::Insets& client_area,
       const std::vector<gfx::Rect>& additional_client_areas) override;
-  void OnWindowTreeHostHitTestMaskWillChange(
-      WindowTreeHostMus* window_tree_host,
-      const base::Optional<gfx::Rect>& mask_rect) override;
   void OnWindowTreeHostSetOpacity(WindowTreeHostMus* window_tree_host,
                                   float opacity) override;
   void OnWindowTreeHostDeactivateWindow(

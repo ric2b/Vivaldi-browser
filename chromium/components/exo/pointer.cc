@@ -23,6 +23,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/vector2d_conversions.h"
 #include "ui/gfx/transform_util.h"
+#include "ui/views/widget/widget.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/cursor_factory_ozone.h"
@@ -86,8 +87,8 @@ Pointer::Pointer(PointerDelegate* delegate)
       cursor_capture_weak_ptr_factory_(this) {
   auto* helper = WMHelper::GetInstance();
   helper->AddPreTargetHandler(this);
-  helper->AddCursorObserver(this);
   helper->AddDisplayConfigurationObserver(this);
+  helper->GetCursorClient()->AddObserver(this);
 }
 
 Pointer::~Pointer() {
@@ -100,8 +101,8 @@ Pointer::~Pointer() {
     pinch_delegate_->OnPointerDestroying(this);
   auto* helper = WMHelper::GetInstance();
   helper->RemoveDisplayConfigurationObserver(this);
-  helper->RemoveCursorObserver(this);
   helper->RemovePreTargetHandler(this);
+  helper->GetCursorClient()->RemoveObserver(this);
   if (root_surface())
     root_surface()->RemoveSurfaceObserver(this);
 }
@@ -315,11 +316,15 @@ void Pointer::OnCursorSizeChanged(ui::CursorSize cursor_size) {
 }
 
 void Pointer::OnCursorDisplayChanged(const display::Display& display) {
-  if (!focus_surface_)
-    return;
-
-  if (cursor_ != ui::CursorType::kNull)
+  auto* cursor_client = WMHelper::GetInstance()->GetCursorClient();
+  if (cursor_ == ui::CursorType::kCustom &&
+      cursor_client->GetCursor() == cursor_client->GetCursor()) {
+    // If the current cursor is still the one created by us,
+    // it's our responsibility to update the cursor for the new display.
+    // Don't check |focus_surface_| because it can be null while
+    // dragging the window due to an event capture.
     UpdateCursor();
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -355,7 +360,6 @@ void Pointer::SetFocus(Surface* surface,
     // response to each OnPointerEnter() call.
     focus_surface_->UnregisterCursorProvider(this);
     focus_surface_ = nullptr;
-    cursor_ = ui::CursorType::kNull;
     cursor_capture_weak_ptr_factory_.InvalidateWeakPtrs();
   }
   // Second generate an enter event if focus moved to a new surface.
@@ -434,7 +438,8 @@ void Pointer::OnCursorCaptured(const gfx::Point& hotspot,
 }
 
 void Pointer::UpdateCursor() {
-  DCHECK(focus_surface_);
+  auto* helper = WMHelper::GetInstance();
+  aura::client::CursorClient* cursor_client = helper->GetCursorClient();
 
   if (cursor_bitmap_.drawsNothing()) {
     cursor_ = ui::CursorType::kNone;
@@ -443,12 +448,13 @@ void Pointer::UpdateCursor() {
     gfx::Point hotspot =
         gfx::ScaleToFlooredPoint(cursor_hotspot_, capture_ratio_);
 
-    auto* helper = WMHelper::GetInstance();
-    const display::Display& display = helper->GetCursorDisplay();
+    // TODO(oshima|weidongg): Add cutsom cursor API to handle size/display
+    // change without explicit management like this. https://crbug.com/721601.
+    const display::Display& display = cursor_client->GetDisplay();
     float scale =
         helper->GetDisplayInfo(display.id()).GetDensityRatio() / capture_ratio_;
 
-    if (helper->GetCursorSize() == ui::CursorSize::kLarge)
+    if (cursor_client->GetCursorSize() == ui::CursorSize::kLarge)
       scale *= kLargeCursorScale;
 
     ui::ScaleAndRotateCursorBitmapAndHotpoint(scale, display.rotation(),
@@ -473,14 +479,22 @@ void Pointer::UpdateCursor() {
 #endif
   }
 
-  aura::Window* root_window = focus_surface_->window()->GetRootWindow();
-  if (!root_window)
-    return;
-
-  aura::client::CursorClient* cursor_client =
-      aura::client::GetCursorClient(root_window);
-  if (cursor_client)
+  // If there is a focused surface, update its widget as the views framework
+  // expect that Widget knows the current cursor. Otherwise update the
+  // cursor directly on CursorClient.
+  if (focus_surface_) {
+    aura::Window* window = focus_surface_->window();
+    do {
+      views::Widget* widget = views::Widget::GetWidgetForNativeView(window);
+      if (widget) {
+        widget->SetCursor(cursor_);
+        return;
+      }
+      window = window->parent();
+    } while (window);
+  } else {
     cursor_client->SetCursor(cursor_);
+  }
 }
 
 }  // namespace exo

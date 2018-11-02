@@ -76,9 +76,11 @@
 #include "core/events/TouchEvent.h"
 #include "core/events/UIEvent.h"
 #include "core/events/WheelEvent.h"
+#include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/fullscreen/Fullscreen.h"
@@ -93,7 +95,6 @@
 #include "core/mathml_names.h"
 #include "core/page/ContextMenuController.h"
 #include "core/page/Page.h"
-#include "core/plugins/PluginView.h"
 #include "core/svg/SVGElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/EventDispatchForbiddenScope.h"
@@ -836,7 +837,11 @@ static ContainerNode* GetReattachParent(Node& node) {
   if (node.IsPseudoElement())
     return node.ParentOrShadowHostNode();
   if (node.IsChildOfV1ShadowHost()) {
-    if (HTMLSlotElement* slot = node.FinalDestinationSlot())
+    HTMLSlotElement* slot =
+        RuntimeEnabledFeatures::IncrementalShadowDOMEnabled()
+            ? node.AssignedSlot()
+            : node.FinalDestinationSlot();
+    if (slot)
       return slot;
   }
   if (node.IsInV0ShadowTree() || node.IsChildOfV0ShadowHost()) {
@@ -1065,6 +1070,8 @@ void Node::ReattachLayoutTree(AttachContext& context) {
   if (GetStyleChangeType() < kNeedsReattachStyleChange)
     DetachLayoutTree(context);
   AttachLayoutTree(context);
+  DCHECK(!NeedsReattachLayoutTree());
+  DCHECK(!GetNonAttachedStyle());
 }
 
 void Node::AttachLayoutTree(AttachContext& context) {
@@ -1079,6 +1086,7 @@ void Node::AttachLayoutTree(AttachContext& context) {
 
   ClearNeedsStyleRecalc();
   ClearNeedsReattachLayoutTree();
+  SetNonAttachedStyle(nullptr);
 
   if (AXObjectCache* cache = GetDocument().GetOrCreateAXObjectCache())
     cache->UpdateCacheAfterNodeIsAttached(this);
@@ -2222,8 +2230,16 @@ void Node::HandleLocalEvents(Event& event) {
 
   if (IsDisabledFormControl(this) && event.IsMouseEvent() &&
       !RuntimeEnabledFeatures::SendMouseEventsDisabledFormControlsEnabled()) {
-    UseCounter::Count(GetDocument(),
-                      WebFeature::kDispatchMouseEventOnDisabledFormControl);
+    if (HasEventListeners(event.type())) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kDispatchMouseEventOnDisabledFormControl);
+      if (event.type() == EventTypeNames::mousedown ||
+          event.type() == EventTypeNames::mouseup) {
+        UseCounter::Count(
+            GetDocument(),
+            WebFeature::kDispatchMouseUpDownEventOnDisabledFormControl);
+      }
+    }
     return;
   }
 
@@ -2415,6 +2431,21 @@ void Node::DefaultEventHandler(Event* event) {
       if (layout_object) {
         if (LocalFrame* frame = GetDocument().GetFrame())
           frame->GetEventHandler().StartMiddleClickAutoscroll(layout_object);
+      }
+    }
+  } else if (event_type == EventTypeNames::mouseup && event->IsMouseEvent()) {
+    MouseEvent* mouse_event = ToMouseEvent(event);
+    if (mouse_event->button() ==
+        static_cast<short>(WebPointerProperties::Button::kBack)) {
+      if (LocalFrame* frame = GetDocument().GetFrame()) {
+        if (frame->Client()->NavigateBackForward(-1))
+          event->SetDefaultHandled();
+      }
+    } else if (mouse_event->button() ==
+               static_cast<short>(WebPointerProperties::Button::kForward)) {
+      if (LocalFrame* frame = GetDocument().GetFrame()) {
+        if (frame->Client()->NavigateBackForward(1))
+          event->SetDefaultHandled();
       }
     }
   }
@@ -2666,10 +2697,7 @@ WebPluginContainerImpl* Node::GetWebPluginContainer() const {
 
   LayoutObject* object = GetLayoutObject();
   if (object && object->IsLayoutEmbeddedContent()) {
-    PluginView* plugin = ToLayoutEmbeddedContent(object)->Plugin();
-    if (plugin) {
-      return plugin->GetWebPluginContainer();
-    }
+    return ToLayoutEmbeddedContent(object)->Plugin();
   }
 
   return nullptr;

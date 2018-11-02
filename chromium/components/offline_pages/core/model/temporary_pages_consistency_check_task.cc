@@ -13,6 +13,7 @@
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "components/offline_pages/core/client_policy_controller.h"
 #include "components/offline_pages/core/offline_page_metadata_store_sql.h"
 #include "components/offline_pages/core/offline_page_types.h"
@@ -24,6 +25,8 @@
 namespace offline_pages {
 
 namespace {
+
+#define OFFLINE_PAGES_TABLE_NAME "offlinepages_v1"
 
 struct PageInfo {
   int64_t offline_id;
@@ -37,8 +40,7 @@ std::vector<PageInfo> GetAllTemporaryPageInfos(
 
   const char kSql[] =
       "SELECT offline_id, file_path"
-      " FROM offlinepages_v1"
-      " WHERE client_namespace = ?";
+      " FROM " OFFLINE_PAGES_TABLE_NAME " WHERE client_namespace = ?";
 
   for (const auto& temp_namespace : temp_namespaces) {
     sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
@@ -56,7 +58,8 @@ std::vector<PageInfo> GetAllTemporaryPageInfos(
 std::set<base::FilePath> GetAllArchives(const base::FilePath& archives_dir) {
   std::set<base::FilePath> result;
   base::FileEnumerator file_enumerator(archives_dir, false,
-                                       base::FileEnumerator::FILES);
+                                       base::FileEnumerator::FILES,
+                                       FILE_PATH_LITERAL("*.mhtml"));
   for (auto archive_path = file_enumerator.Next(); !archive_path.empty();
        archive_path = file_enumerator.Next()) {
     result.insert(archive_path);
@@ -66,7 +69,8 @@ std::set<base::FilePath> GetAllArchives(const base::FilePath& archives_dir) {
 
 bool DeletePagesByOfflineIds(const std::vector<int64_t>& offline_ids,
                              sql::Connection* db) {
-  static const char kSql[] = "DELETE FROM offlinepages_v1 WHERE offline_id = ?";
+  static const char kSql[] =
+      "DELETE FROM " OFFLINE_PAGES_TABLE_NAME " WHERE offline_id = ?";
 
   for (const auto& offline_id : offline_ids) {
     sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
@@ -84,17 +88,12 @@ bool DeleteFiles(const std::vector<base::FilePath>& file_paths) {
   return result;
 }
 
-// The method will return false if:
-// - An invalid database pointer is provided by the store, which indicates store
-//   failure, or
-// - The transaction of database operations fails at start or commit, or
-// - At least one deletion of an offline page entry failed, or
-// - At least one file deletion failed
-bool CheckConsistencySync(const base::FilePath& archives_dir,
-                          const std::vector<std::string>& namespaces,
-                          sql::Connection* db) {
+SyncOperationResult CheckConsistencySync(
+    const base::FilePath& archives_dir,
+    const std::vector<std::string>& namespaces,
+    sql::Connection* db) {
   if (!db)
-    return false;
+    return SyncOperationResult::INVALID_DB_CONNECTION;
 
   // One large database transaction that will:
   // 1. Get temporary page infos from the database.
@@ -102,10 +101,11 @@ bool CheckConsistencySync(const base::FilePath& archives_dir,
   // 3. Delete metadata entries from the database.
   sql::Transaction transaction(db);
   if (!transaction.Begin())
-    return false;
+    return SyncOperationResult::TRANSACTION_BEGIN_ERROR;
 
   auto temp_page_infos = GetAllTemporaryPageInfos(namespaces, db);
 
+  std::set<base::FilePath> temp_page_info_paths;
   std::vector<int64_t> offline_ids_to_delete;
   for (const auto& page_info : temp_page_infos) {
     // Get pages whose archive files does not exist and delete.
@@ -113,32 +113,45 @@ bool CheckConsistencySync(const base::FilePath& archives_dir,
       offline_ids_to_delete.push_back(page_info.offline_id);
       continue;
     }
+    // Extract existing file paths from |temp_page_infos| so that we can do a
+    // faster matching later.
+    temp_page_info_paths.insert(page_info.file_path);
   }
   // Try to delete the pages by offline ids collected above.
   // If there's any database related errors, the function will return false,
   // and the database operations will be rolled back since the transaction will
   // not be committed.
   if (!DeletePagesByOfflineIds(offline_ids_to_delete, db))
-    return false;
+    return SyncOperationResult::DB_OPERATION_ERROR;
+
+  if (offline_ids_to_delete.size() > 0) {
+    UMA_HISTOGRAM_COUNTS(
+        "OfflinePages.ConsistencyCheck.Temporary.PagesMissingArchiveFileCount",
+        static_cast<int32_t>(offline_ids_to_delete.size()));
+  }
 
   if (!transaction.Commit())
-    return false;
+    return SyncOperationResult::TRANSACTION_COMMIT_ERROR;
 
   // Delete any files in the temporary archive directory that no longer have
   // associated entries in the database.
-  // TODO(romax): https://crbug.com/786240.
   std::set<base::FilePath> archive_paths = GetAllArchives(archives_dir);
   std::vector<base::FilePath> files_to_delete;
   for (const auto& archive_path : archive_paths) {
-    if (std::find_if(temp_page_infos.begin(), temp_page_infos.end(),
-                     [&archive_path](const PageInfo& page_info) -> bool {
-                       return page_info.file_path == archive_path;
-                     }) == temp_page_infos.end()) {
+    if (temp_page_info_paths.find(archive_path) == temp_page_info_paths.end())
       files_to_delete.push_back(archive_path);
-    }
   }
 
-  return DeleteFiles(files_to_delete);
+  if (files_to_delete.size() > 0) {
+    UMA_HISTOGRAM_COUNTS(
+        "OfflinePages.ConsistencyCheck.Temporary.PagesMissingDbEntryCount",
+        static_cast<int32_t>(files_to_delete.size()));
+  }
+
+  if (!DeleteFiles(files_to_delete))
+    return SyncOperationResult::FILE_OPERATION_ERROR;
+
+  return SyncOperationResult::SUCCESS;
 }
 
 }  // namespace
@@ -167,11 +180,10 @@ void TemporaryPagesConsistencyCheckTask::Run() {
           weak_ptr_factory_.GetWeakPtr()));
 }
 
-void TemporaryPagesConsistencyCheckTask::OnCheckConsistencyDone(bool result) {
-  // TODO(romax): https://crbug.com/772204. Replace the DVLOG with UMA
-  // collecting. If there's a need, introduce more detailed local enums
-  // indicating which part failed.
-  DVLOG(1) << "TemporaryPagesConsistencyCheck returns with result: " << result;
+void TemporaryPagesConsistencyCheckTask::OnCheckConsistencyDone(
+    SyncOperationResult result) {
+  UMA_HISTOGRAM_ENUMERATION("OfflinePages.ConsistencyCheck.Temporary.Result",
+                            result, SyncOperationResult::RESULT_COUNT);
   TaskComplete();
 }
 

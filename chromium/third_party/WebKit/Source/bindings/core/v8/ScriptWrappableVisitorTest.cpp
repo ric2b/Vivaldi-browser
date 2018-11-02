@@ -170,7 +170,7 @@ TEST(ScriptWrappableVisitorTest, OilpanClearsMarkingDequeWhenObjectDied) {
       V8PerIsolateData::From(scope.GetIsolate())->GetScriptWrappableVisitor();
   visitor->TracePrologue();
 
-  visitor->MarkAndPushToMarkingDeque(object);
+  visitor->TraceWrappersWithManualWriteBarrier(object);
 
   EXPECT_EQ(visitor->MarkingDeque()->front().RawObjectPointer(), object);
 
@@ -244,7 +244,7 @@ class HandleContainer
       blink::TraceWrapperBase {
  public:
   static HandleContainer* Create() { return new HandleContainer(); }
-  virtual ~HandleContainer() {}
+  virtual ~HandleContainer() = default;
 
   void Trace(blink::Visitor* visitor) {}
   void TraceWrappers(const ScriptWrappableVisitor* visitor) const {
@@ -256,7 +256,7 @@ class HandleContainer
   }
 
  private:
-  HandleContainer() : handle_(this) {}
+  HandleContainer() = default;
 
   TraceWrapperV8Reference<v8::String> handle_;
 };
@@ -268,7 +268,7 @@ class InterceptingScriptWrappableVisitor
       : ScriptWrappableVisitor(isolate), marked_wrappers_(new size_t(0)) {}
   ~InterceptingScriptWrappableVisitor() { delete marked_wrappers_; }
 
-  virtual void MarkWrapper(const v8::PersistentBase<v8::Value>* handle) const {
+  void Visit(const TraceWrapperV8Reference<v8::Value>&) const override {
     *marked_wrappers_ += 1;
     // Do not actually mark this visitor, as this would call into v8, which
     // would require executing an actual GC.

@@ -32,18 +32,21 @@ HttpServerPropertiesPrefDelegate::GetServerProperties() const {
 }
 
 void HttpServerPropertiesPrefDelegate::SetServerProperties(
-    const base::DictionaryValue& value) {
-  return pref_service_->Set(kPrefPath, value);
+    const base::DictionaryValue& value,
+    base::OnceClosure callback) {
+  pref_service_->Set(kPrefPath, value);
+  if (callback)
+    pref_service_->CommitPendingWrite(std::move(callback));
 }
 
 void HttpServerPropertiesPrefDelegate::StartListeningForUpdates(
-    const base::Closure& callback) {
+    const base::RepeatingClosure& callback) {
   pref_change_registrar_.Add(kPrefPath, callback);
   // PrefChangeRegistrar isn't notified of initial pref load, so watch for that,
   // too.
   if (pref_service_->GetInitializationStatus() ==
       PrefService::INITIALIZATION_STATUS_WAITING) {
-    pref_service_->AddPrefInitObserver(base::Bind(
+    pref_service_->AddPrefInitObserver(base::BindOnce(
         [](const base::Closure& callback, bool) { callback.Run(); }, callback));
   }
 }

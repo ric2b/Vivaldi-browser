@@ -291,7 +291,7 @@ void PrerenderManager::CancelAllPrerenders() {
 }
 
 bool PrerenderManager::MaybeUsePrerenderedPage(const GURL& url,
-                                               chrome::NavigateParams* params) {
+                                               NavigateParams* params) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   WebContents* web_contents = params->target_contents;
@@ -387,7 +387,7 @@ std::unique_ptr<WebContents> PrerenderManager::SwapInternal(
   }
 
   // Do not swap in the prerender if the current WebContents is being captured.
-  if (web_contents->GetCapturerCount() > 0) {
+  if (web_contents->IsBeingCaptured()) {
     prerender_data->contents()->Destroy(FINAL_STATUS_PAGE_BEING_CAPTURED);
     return nullptr;
   }
@@ -400,16 +400,6 @@ std::unique_ptr<WebContents> PrerenderManager::SwapInternal(
     histograms_->RecordFinalStatus(prerender_data->contents()->origin(),
                                    FINAL_STATUS_DEVTOOLS_ATTACHED);
     prerender_data->contents()->Destroy(FINAL_STATUS_DEVTOOLS_ATTACHED);
-    return nullptr;
-  }
-
-  // If the prerendered page is in the middle of a cross-site navigation,
-  // don't swap it in because there isn't a good way to merge histories.
-  if (prerender_data->contents()->IsCrossSiteNavigationPending()) {
-    histograms_->RecordFinalStatus(prerender_data->contents()->origin(),
-                                   FINAL_STATUS_CROSS_SITE_NAVIGATION_PENDING);
-    prerender_data->contents()->Destroy(
-        FINAL_STATUS_CROSS_SITE_NAVIGATION_PENDING);
     return nullptr;
   }
 
@@ -485,21 +475,6 @@ void PrerenderManager::MoveEntryToPendingDelete(PrerenderContents* entry,
   active_prerenders_.erase(it);
   // Destroy the old WebContents relatively promptly to reduce resource usage.
   PostCleanupTask();
-}
-
-void PrerenderManager::RecordPrefetchResponseReceived(Origin origin,
-                                                      bool is_main_resource,
-                                                      bool is_redirect,
-                                                      bool is_no_store) {
-  histograms_->RecordPrefetchResponseReceived(origin, is_main_resource,
-                                              is_redirect, is_no_store);
-}
-
-void PrerenderManager::RecordPrefetchRedirectCount(Origin origin,
-                                                   bool is_main_resource,
-                                                   int redirect_count) {
-  histograms_->RecordPrefetchRedirectCount(origin, is_main_resource,
-                                           redirect_count);
 }
 
 void PrerenderManager::RecordNoStateFirstContentfulPaint(const GURL& url,
@@ -704,18 +679,6 @@ bool PrerenderManager::HasRecentlyBeenNavigatedTo(Origin origin,
   }
 
   return false;
-}
-
-// static
-bool PrerenderManager::DoesURLHaveValidScheme(const GURL& url) {
-  return (url.SchemeIsHTTPOrHTTPS() ||
-          url.SchemeIs(extensions::kExtensionScheme) ||
-          url.SchemeIs("data"));
-}
-
-// static
-bool PrerenderManager::DoesSubresourceURLHaveValidScheme(const GURL& url) {
-  return DoesURLHaveValidScheme(url) || url == url::kAboutBlankURL;
 }
 
 std::unique_ptr<base::DictionaryValue> PrerenderManager::CopyAsValue() const {

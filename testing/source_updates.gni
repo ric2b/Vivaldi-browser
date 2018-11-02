@@ -1,5 +1,5 @@
 
-post_process_target("//testing/gtest:gtest") {
+update_target("//testing/gtest:gtest") {
   sources += [
     "//vivaldi/testing/disable_unittests.cpp",
     "//vivaldi/testing/disable_unittests_api.h",

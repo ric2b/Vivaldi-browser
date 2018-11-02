@@ -11,10 +11,8 @@
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/ash/launcher/arc_app_window.h"
@@ -23,6 +21,7 @@
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_util.h"
 #include "components/exo/shell_surface.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
@@ -39,21 +38,34 @@ namespace {
 constexpr size_t kMaxIconPngSize = 64 * 1024;  // 64 kb
 
 blink::WebScreenOrientationLockType BlinkOrientationLockFromMojom(
+    blink::WebScreenOrientationLockType natural_orientation,
     arc::mojom::OrientationLock orientation_lock) {
   DCHECK_NE(arc::mojom::OrientationLock::CURRENT, orientation_lock);
+
+  // In Android, "portrait" means 90 degrees counterclockwise rotation
+  // on naturally landscape devices.
+  bool reverse_portrait_orientation =
+      natural_orientation == blink::kWebScreenOrientationLockLandscape;
+
   switch (orientation_lock) {
     case arc::mojom::OrientationLock::PORTRAIT:
       return blink::kWebScreenOrientationLockPortrait;
     case arc::mojom::OrientationLock::LANDSCAPE:
       return blink::kWebScreenOrientationLockLandscape;
-    case arc::mojom::OrientationLock::PORTRAIT_PRIMARY:
-      return blink::kWebScreenOrientationLockPortraitPrimary;
     case arc::mojom::OrientationLock::LANDSCAPE_PRIMARY:
       return blink::kWebScreenOrientationLockLandscapePrimary;
-    case arc::mojom::OrientationLock::PORTRAIT_SECONDARY:
-      return blink::kWebScreenOrientationLockPortraitSecondary;
     case arc::mojom::OrientationLock::LANDSCAPE_SECONDARY:
       return blink::kWebScreenOrientationLockLandscapeSecondary;
+
+    case arc::mojom::OrientationLock::PORTRAIT_PRIMARY:
+      return reverse_portrait_orientation
+                 ? blink::kWebScreenOrientationLockPortraitSecondary
+                 : blink::kWebScreenOrientationLockPortraitPrimary;
+
+    case arc::mojom::OrientationLock::PORTRAIT_SECONDARY:
+      return reverse_portrait_orientation
+                 ? blink::kWebScreenOrientationLockPortraitPrimary
+                 : blink::kWebScreenOrientationLockPortraitSecondary;
     default:
       return blink::kWebScreenOrientationLockAny;
   }
@@ -302,7 +314,7 @@ void ArcAppWindowLauncherController::AttachControllerToWindowIfNeeded(
   views::Widget* widget = views::Widget::GetWidgetForNativeWindow(window);
   DCHECK(widget);
   DCHECK(!info->app_window());
-  info->set_app_window(base::MakeUnique<ArcAppWindow>(
+  info->set_app_window(std::make_unique<ArcAppWindow>(
       task_id, info->app_shelf_id(), widget, this));
   info->app_window()->SetDescription(info->title(), info->icon_data_png());
   RegisterApp(info);
@@ -354,7 +366,7 @@ void ArcAppWindowLauncherController::OnTaskCreated(
   const arc::ArcAppShelfId arc_app_shelf_id =
       arc::ArcAppShelfId::FromIntentAndAppId(intent, arc_app_id);
   task_id_to_app_window_info_[task_id] =
-      base::MakeUnique<AppWindowInfo>(arc_app_shelf_id, intent);
+      std::make_unique<AppWindowInfo>(arc_app_shelf_id, intent);
   // Don't create shelf icon for non-primary user.
   if (observed_profile_ != owner()->profile())
     return;
@@ -573,7 +585,7 @@ ArcAppWindowLauncherController::AttachControllerToTask(
   }
 
   std::unique_ptr<ArcAppWindowLauncherItemController> controller =
-      base::MakeUnique<ArcAppWindowLauncherItemController>(
+      std::make_unique<ArcAppWindowLauncherItemController>(
           app_shelf_id.ToString());
   ArcAppWindowLauncherItemController* item_controller = controller.get();
   const ash::ShelfID shelf_id(app_shelf_id.ToString());
@@ -608,9 +620,11 @@ void ArcAppWindowLauncherController::RegisterApp(
     arc::Intent intent;
     if (arc::ParseIntent(app_window_info->launch_intent(), &intent) &&
         intent.HasExtraParam(arc::kInitialStartParam)) {
+      DCHECK(!arc::IsRobotAccountMode());
       arc::UpdatePlayStoreShowTime(
           base::Time::Now() - opt_in_management_check_start_time_,
-          arc::policy_util::IsAccountManaged(owner()->profile()));
+          owner()->profile());
+      VLOG(1) << "Play Store is initially shown.";
     }
     opt_in_management_check_start_time_ = base::Time();
   }
@@ -655,9 +669,14 @@ void ArcAppWindowLauncherController::SetOrientationLockForAppWindow(
           ScreenOrientationController::LockCompletionBehavior::DisableSensor;
     }
   }
+
+  blink::WebScreenOrientationLockType natural_orientation =
+      ash::Shell::Get()->screen_orientation_controller()->natural_orientation();
+
   ash::Shell* shell = ash::Shell::Get();
   shell->screen_orientation_controller()->LockOrientationForWindow(
-      window, BlinkOrientationLockFromMojom(orientation_lock),
+      window,
+      BlinkOrientationLockFromMojom(natural_orientation, orientation_lock),
       lock_completion_behavior);
 }
 

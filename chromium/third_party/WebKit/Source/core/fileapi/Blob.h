@@ -112,6 +112,7 @@ class CORE_EXPORT Blob : public ScriptWrappable,
 
   // URLRegistrable to support PublicURLs.
   URLRegistry& Registry() const final;
+  mojom::blink::BlobPtr AsMojoBlob() final;
 
   // ImageBitmapSource implementation
   bool IsBlob() const override { return true; }
@@ -133,10 +134,9 @@ class CORE_EXPORT Blob : public ScriptWrappable,
   static String NormalizeType(const String& type);
 
  private:
-  Blob();
+  Blob() = delete;
 
   scoped_refptr<BlobDataHandle> blob_data_handle_;
-  bool is_closed_;
 };
 
 }  // namespace blink

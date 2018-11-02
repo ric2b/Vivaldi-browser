@@ -33,8 +33,7 @@ struct TreeChangeObserver {
 
 // The native component of custom bindings for the chrome.automationInternal
 // API.
-class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
-                                         public ui::AXTreeDelegate {
+class AutomationInternalCustomBindings : public ObjectBackedNativeHandler {
  public:
   AutomationInternalCustomBindings(ScriptContext* context,
                                    ExtensionBindingsSystem* bindings_system);
@@ -58,6 +57,14 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
 
   float GetDeviceScaleFactor() const;
 
+  void SendNodesRemovedEvent(ui::AXTree* tree, const std::vector<int>& ids);
+  void SendTreeChangeEvent(api::automation::TreeChangeType change_type,
+                           ui::AXTree* tree,
+                           ui::AXNode* node);
+  void SendAutomationEvent(const ExtensionMsg_AccessibilityEventParams& params,
+                           int target_id,
+                           api::automation::EventType event_type);
+
  private:
   // ObjectBackedNativeHandler overrides:
   void Invalidate() override;
@@ -69,9 +76,6 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   // Returns an object with bindings that will be added to the
   // chrome.automation namespace.
   void GetSchemaAdditions(const v8::FunctionCallbackInfo<v8::Value>& args);
-
-  // Get the routing ID for the extension.
-  void GetRoutingID(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   // This is called by automation_internal_custom_bindings.js to indicate
   // that an API was called that needs access to accessibility trees. This
@@ -155,28 +159,7 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
 
   void UpdateOverallTreeChangeObserverFilter();
 
-  // AXTreeDelegate implementation.
-  void OnNodeDataWillChange(ui::AXTree* tree,
-                            const ui::AXNodeData& old_node_data,
-                            const ui::AXNodeData& new_node_data) override;
-  void OnTreeDataChanged(ui::AXTree* tree,
-                         const ui::AXTreeData& old_tree_data,
-                         const ui::AXTreeData& new_tree_data) override;
-  void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnSubtreeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnNodeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnSubtreeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnNodeCreated(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnNodeReparented(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnNodeChanged(ui::AXTree* tree, ui::AXNode* node) override;
-  void OnAtomicUpdateFinished(ui::AXTree* tree,
-                              bool root_changed,
-                              const std::vector<Change>& changes) override;
-  void SendTreeChangeEvent(api::automation::TreeChangeType change_type,
-                           ui::AXTree* tree,
-                           ui::AXNode* node);
   void SendChildTreeIDEvent(ui::AXTree* tree, ui::AXNode* node);
-  void SendNodesRemovedEvent(ui::AXTree* tree, const std::vector<int>& ids);
 
   std::map<int, std::unique_ptr<AutomationAXTreeWrapper>>
       tree_id_to_tree_wrapper_map_;
@@ -186,8 +169,6 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   std::vector<TreeChangeObserver> tree_change_observers_;
   // A bit-map of api::automation::TreeChangeObserverFilter.
   int tree_change_observer_overall_filter_;
-  std::vector<int> deleted_node_ids_;
-  std::vector<int> text_changed_node_ids_;
   ExtensionBindingsSystem* bindings_system_;
   bool should_ignore_context_;
 

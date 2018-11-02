@@ -156,14 +156,18 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   // Insert a fragmentainer break before the child if necessary.
   // Return true if a break was inserted, false otherwise.
   bool BreakBeforeChild(NGLayoutInputNode child,
-                        const NGPhysicalFragment&,
-                        LayoutUnit block_offset);
+                        const NGLayoutResult&,
+                        LayoutUnit block_offset,
+                        bool is_pushed_by_floats);
 
-  // Given a child fragment and the corresponding node's style, return true if
-  // we need to insert a fragmentainer break in front of it.
-  bool ShouldBreakBeforeChild(NGLayoutInputNode child,
-                              const NGPhysicalFragment& physical_fragment,
-                              LayoutUnit block_offset) const;
+  enum BreakType { NoBreak, SoftBreak, ForcedBreak };
+
+  // Given a child fragment and the corresponding node's style, determine the
+  // type of break we should insert in front of it, if any.
+  BreakType BreakTypeBeforeChild(NGLayoutInputNode child,
+                                 const NGLayoutResult&,
+                                 LayoutUnit block_offset,
+                                 bool is_pushed_by_floats) const;
 
   // Final adjustments before fragment creation. We need to prevent the
   // fragment from crossing fragmentainer boundaries, and rather create a break
@@ -199,7 +203,22 @@ class CORE_EXPORT NGBlockLayoutAlgorithm
   NGBoxStrut border_scrollbar_padding_;
   LayoutUnit intrinsic_block_size_;
 
+  // The line box index at which we ran out of space. This where we'll actually
+  // end up breaking, unless we determine that we should break earlier in order
+  // to satisfy the widows request.
+  int first_overflowing_line_ = 0;
+
+  // Set if we should fit as many lines as there's room for, i.e. no early
+  // break. In that case we'll break before first_overflowing_line_. In this
+  // case there'll either be enough widows for the next fragment, or we have
+  // determined that we're unable to fulfill the widows request.
+  bool fit_all_lines_ = false;
+
+  // Set if we're resuming layout of a node that has already produced fragments.
+  bool is_resuming_;
+
   bool abort_when_bfc_resolved_;
+  bool has_processed_first_child_ = false;
 
   std::unique_ptr<NGExclusionSpace> exclusion_space_;
   Vector<scoped_refptr<NGUnpositionedFloat>> unpositioned_floats_;

@@ -224,9 +224,7 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest> {
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) final;
   void RendererResponsive(content::WebContents* source) final;
-  void RendererUnresponsive(
-      content::WebContents* source,
-      const content::WebContentsUnresponsiveState& unresponsive_state) final;
+  void RendererUnresponsive(content::WebContents* source) final;
   void RequestMediaAccessPermission(
       content::WebContents* source,
       const content::MediaStreamRequest& request,

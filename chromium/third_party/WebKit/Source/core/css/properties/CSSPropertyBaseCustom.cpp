@@ -7,6 +7,8 @@
 #include "core/css/properties/CSSProperty.h"
 
 #include "core/StylePropertyShorthand.h"
+#include "core/style/ComputedStyle.h"
+#include "core/style/SVGComputedStyle.h"
 
 namespace blink {
 
@@ -72,6 +74,18 @@ const CSSProperty& CSSProperty::ResolveStartToPhysicalProperty(
   if (IsHorizontalWritingMode(writing_mode))
     return *shorthand_properties[kRightSide];
   return *shorthand_properties[kBottomSide];
+}
+
+const CSSValue* CSSProperty::CSSValueFromComputedStyle(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    Node* styled_node,
+    bool allow_visited_style) const {
+  const SVGComputedStyle& svg_style = style.SvgStyle();
+  const CSSProperty& resolved_property =
+      ResolveDirectionAwareProperty(style.Direction(), style.GetWritingMode());
+  return resolved_property.CSSValueFromComputedStyleInternal(
+      style, svg_style, layout_object, styled_node, allow_visited_style);
 }
 
 void CSSProperty::FilterEnabledCSSPropertiesIntoVector(

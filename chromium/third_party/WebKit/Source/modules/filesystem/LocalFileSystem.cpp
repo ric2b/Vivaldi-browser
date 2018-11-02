@@ -60,7 +60,7 @@ class CallbackWrapper final
  public:
   CallbackWrapper(std::unique_ptr<AsyncFileSystemCallbacks> c)
       : callbacks_(std::move(c)) {}
-  virtual ~CallbackWrapper() {}
+  virtual ~CallbackWrapper() = default;
   std::unique_ptr<AsyncFileSystemCallbacks> Release() {
     return std::move(callbacks_);
   }
@@ -71,7 +71,7 @@ class CallbackWrapper final
   std::unique_ptr<AsyncFileSystemCallbacks> callbacks_;
 };
 
-LocalFileSystem::~LocalFileSystem() {}
+LocalFileSystem::~LocalFileSystem() = default;
 
 void LocalFileSystem::ResolveURL(
     ExecutionContext* context,
@@ -112,9 +112,10 @@ WebFileSystem* LocalFileSystem::GetFileSystem() const {
   return platform->FileSystem();
 }
 
-void LocalFileSystem::RequestFileSystemAccessInternal(ExecutionContext* context,
-                                                      WTF::Closure allowed,
-                                                      WTF::Closure denied) {
+void LocalFileSystem::RequestFileSystemAccessInternal(
+    ExecutionContext* context,
+    base::OnceClosure allowed,
+    base::OnceClosure denied) {
   if (!context->IsDocument()) {
     if (!Client().RequestFileSystemAccessSync(context)) {
       std::move(denied).Run();
@@ -131,7 +132,7 @@ void LocalFileSystem::RequestFileSystemAccessInternal(ExecutionContext* context,
 void LocalFileSystem::FileSystemNotAvailable(ExecutionContext* context,
                                              CallbackWrapper* callbacks) {
   context->GetTaskRunner(TaskType::kFileReading)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&ReportFailure, WTF::Passed(callbacks->Release()),
                            FileError::kAbortErr));
 }
@@ -139,7 +140,7 @@ void LocalFileSystem::FileSystemNotAvailable(ExecutionContext* context,
 void LocalFileSystem::FileSystemNotAllowedInternal(ExecutionContext* context,
                                                    CallbackWrapper* callbacks) {
   context->GetTaskRunner(TaskType::kFileReading)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&ReportFailure, WTF::Passed(callbacks->Release()),
                            FileError::kAbortErr));
 }
@@ -185,6 +186,12 @@ LocalFileSystem::LocalFileSystem(WorkerClients& worker_clients,
 void LocalFileSystem::Trace(blink::Visitor* visitor) {
   Supplement<LocalFrame>::Trace(visitor);
   Supplement<WorkerClients>::Trace(visitor);
+}
+
+void LocalFileSystem::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  Supplement<LocalFrame>::TraceWrappers(visitor);
+  Supplement<WorkerClients>::TraceWrappers(visitor);
 }
 
 const char* LocalFileSystem::SupplementName() {

@@ -4,6 +4,7 @@
 
 #include "ui/compositor/test/in_process_context_factory.h"
 
+#include <limits>
 #include <utility>
 
 #include "base/bind.h"
@@ -16,7 +17,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/gpu/context_provider.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
@@ -26,7 +27,7 @@
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "ui/compositor/compositor_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/reflector.h"
@@ -45,8 +46,8 @@
 namespace ui {
 namespace {
 // The client_id used here should not conflict with the client_id generated
-// from RenderWidgetHostImpl.
-constexpr uint32_t kDefaultClientId = 0u;
+// from RenderWidgetHostImpl and client_id(0) used by aura::WindowPortMus.
+constexpr uint32_t kDefaultClientId = std::numeric_limits<uint32_t>::max();
 
 class FakeReflector : public Reflector {
  public:
@@ -97,11 +98,8 @@ class DirectOutputSurface : public viz::OutputSurface {
       context_provider_->ContextSupport()->Swap();
     }
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
-    const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
-    gl->ShallowFlushCHROMIUM();
-
     gpu::SyncToken sync_token;
-    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
 
     context_provider_->ContextSupport()->SignalSyncToken(
         sync_token, base::Bind(&DirectOutputSurface::OnSwapBuffersComplete,
@@ -123,6 +121,9 @@ class DirectOutputSurface : public viz::OutputSurface {
   bool SurfaceIsSuspendForRecycle() const override { return false; }
   bool HasExternalStencilTest() const override { return false; }
   void ApplyExternalStencil() override {}
+#if BUILDFLAG(ENABLE_VULKAN)
+  gpu::VulkanSurface* GetVulkanSurface() override { return nullptr; }
+#endif
 
  private:
   void OnSwapBuffersComplete(uint64_t swap_id) {
@@ -144,6 +145,7 @@ struct InProcessContextFactory::PerCompositorData {
   gpu::SurfaceHandle surface_handle = gpu::kNullSurfaceHandle;
   std::unique_ptr<viz::BeginFrameSource> begin_frame_source;
   std::unique_ptr<viz::Display> display;
+  SkMatrix44 output_color_matrix;
 };
 
 InProcessContextFactory::InProcessContextFactory(
@@ -165,19 +167,6 @@ InProcessContextFactory::InProcessContextFactory(
 #elif defined(OS_MACOSX)
   renderer_settings_.release_overlay_resources_after_gpu_query = true;
 #endif
-  // Populate buffer_to_texture_target_map for all buffer usage/formats.
-  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
-       ++usage_idx) {
-    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
-    for (int format_idx = 0;
-         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
-         ++format_idx) {
-      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
-      renderer_settings_.resource_settings
-          .buffer_to_texture_target_map[std::make_pair(usage, format)] =
-          GL_TEXTURE_2D;
-    }
-  }
 }
 
 InProcessContextFactory::~InProcessContextFactory() {
@@ -214,7 +203,7 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
       shared_worker_context_provider_ = nullptr;
   }
 
-  gpu::gles2::ContextCreationAttribHelper attribs;
+  gpu::ContextCreationAttribs attribs;
   attribs.alpha_size = 8;
   attribs.blue_size = 8;
   attribs.green_size = 8;
@@ -266,9 +255,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
       display_output_surface->capabilities().max_frames_pending);
 
   data->display = std::make_unique<viz::Display>(
-      &shared_bitmap_manager_, &gpu_memory_buffer_manager_, renderer_settings_,
-      compositor->frame_sink_id(), std::move(display_output_surface),
-      std::move(scheduler), compositor->task_runner());
+      &shared_bitmap_manager_, renderer_settings_, compositor->frame_sink_id(),
+      std::move(display_output_surface), std::move(scheduler),
+      compositor->task_runner());
   GetFrameSinkManager()->RegisterBeginFrameSource(begin_frame_source.get(),
                                                   compositor->frame_sink_id());
   // Note that we are careful not to destroy a prior |data->begin_frame_source|
@@ -278,8 +267,9 @@ void InProcessContextFactory::CreateLayerTreeFrameSink(
   auto* display = per_compositor_data_[compositor.get()]->display.get();
   auto layer_tree_frame_sink = std::make_unique<viz::DirectLayerTreeFrameSink>(
       compositor->frame_sink_id(), GetHostFrameSinkManager(),
-      GetFrameSinkManager(), display, context_provider,
-      shared_worker_context_provider_, &gpu_memory_buffer_manager_,
+      GetFrameSinkManager(), display, nullptr /* display_client */,
+      context_provider, shared_worker_context_provider_,
+      compositor->task_runner(), &gpu_memory_buffer_manager_,
       &shared_bitmap_manager_);
   compositor->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 
@@ -362,6 +352,16 @@ void InProcessContextFactory::ResizeDisplay(ui::Compositor* compositor,
   per_compositor_data_[compositor]->display->Resize(size);
 }
 
+void InProcessContextFactory::SetDisplayColorMatrix(ui::Compositor* compositor,
+                                                    const SkMatrix44& matrix) {
+  auto iter = per_compositor_data_.find(compositor);
+  if (iter == per_compositor_data_.end())
+    return;
+
+  iter->second->output_color_matrix = matrix;
+  iter->second->display->SetColorMatrix(matrix);
+}
+
 const viz::ResourceSettings& InProcessContextFactory::GetResourceSettings()
     const {
   return renderer_settings_.resource_settings;
@@ -377,6 +377,24 @@ void InProcessContextFactory::RemoveObserver(ContextFactoryObserver* observer) {
 
 viz::FrameSinkManagerImpl* InProcessContextFactory::GetFrameSinkManager() {
   return frame_sink_manager_;
+}
+
+SkMatrix44 InProcessContextFactory::GetOutputColorMatrix(
+    Compositor* compositor) const {
+  auto iter = per_compositor_data_.find(compositor);
+  if (iter == per_compositor_data_.end())
+    return SkMatrix44(SkMatrix44::kIdentity_Constructor);
+
+  return iter->second->output_color_matrix;
+}
+
+void InProcessContextFactory::ResetOutputColorMatrixToIdentity(
+    ui::Compositor* compositor) {
+  auto iter = per_compositor_data_.find(compositor);
+  if (iter == per_compositor_data_.end())
+    return;
+
+  iter->second->output_color_matrix.setIdentity();
 }
 
 InProcessContextFactory::PerCompositorData*

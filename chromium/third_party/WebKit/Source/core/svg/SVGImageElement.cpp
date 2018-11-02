@@ -23,6 +23,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/css/StyleChangeReason.h"
+#include "core/frame/UseCounter.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/svg_names.h"
@@ -98,16 +99,16 @@ void SVGImageElement::CollectStyleForPresentationAttribute(
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == width_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            width_->CssValue());
+                                            &width_->CssValue());
   } else if (property == height_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            height_->CssValue());
+                                            &height_->CssValue());
   } else if (property == x_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            x_->CssValue());
+                                            &x_->CssValue());
   } else if (property == y_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            y_->CssValue());
+                                            &y_->CssValue());
   } else {
     SVGGraphicsElement::CollectStyleForPresentationAttribute(name, value,
                                                              style);
@@ -155,6 +156,7 @@ void SVGImageElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == SVGNames::decodingAttr &&
       RuntimeEnabledFeatures::ImageDecodingAttributeEnabled()) {
+    UseCounter::Count(GetDocument(), WebFeature::kImageDecodingAttribute);
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
   } else {
     SVGElement::ParseAttribute(params);

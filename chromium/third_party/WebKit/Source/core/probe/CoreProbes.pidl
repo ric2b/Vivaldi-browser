@@ -69,6 +69,7 @@ interface CoreProbes {
   void willModifyDOMAttr([Keep] Element*, const AtomicString& oldValue, const AtomicString& newValue);
   void didModifyDOMAttr([Keep] Element*, const QualifiedName& name, const AtomicString& value);
   void didRemoveDOMAttr([Keep] Element*, const QualifiedName& name);
+  void willChangeStyleElement([Keep] Element*);
   void characterDataModified([Keep] CharacterData*);
   void didInvalidateStyleAttr([Keep] Node*);
   void didPerformElementShadowDistribution([Keep] Element*);
@@ -88,13 +89,13 @@ interface CoreProbes {
   void didPaint(LocalFrame*, const GraphicsLayer*, GraphicsContext&, const LayoutRect&);
   void applyUserAgentOverride(ExecutionContext*, String* userAgent);
   void didBlockRequest([Keep] ExecutionContext*, const ResourceRequest&, DocumentLoader*, const FetchInitiatorInfo&, ResourceRequestBlockedReason, Resource::Type);
-  void didChangeResourcePriority(LocalFrame*, unsigned long identifier, ResourceLoadPriority loadPriority);
+  void didChangeResourcePriority(LocalFrame*, DocumentLoader*, unsigned long identifier, ResourceLoadPriority loadPriority);
   void willSendRequest([Keep] ExecutionContext*, unsigned long identifier, DocumentLoader*, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo&, Resource::Type);
-  void markResourceAsCached(LocalFrame*, unsigned long identifier);
+  void markResourceAsCached(LocalFrame*, DocumentLoader*, unsigned long identifier);
   void didReceiveResourceResponse(ExecutionContext*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
   void didReceiveData(ExecutionContext*, unsigned long identifier, DocumentLoader*, const char* data, int dataLength);
-  void didReceiveEncodedDataLength(ExecutionContext*, unsigned long identifier, int encodedDataLength);
-  void didFinishLoading(ExecutionContext*, unsigned long identifier, DocumentLoader*, double finishTime, int64_t encodedDataLength, int64_t decodedBodyLength);
+  void didReceiveEncodedDataLength(ExecutionContext*, DocumentLoader* loader, unsigned long identifier, int encodedDataLength);
+  void didFinishLoading(ExecutionContext*, unsigned long identifier, DocumentLoader*, double finishTime, int64_t encoded_data_length, int64_t decodedBodyLength, bool blocked_cross_site_document);
   void didReceiveCORSRedirectResponse(ExecutionContext*, unsigned long identifier, DocumentLoader*, const ResourceResponse&, Resource*);
   void didFailLoading(ExecutionContext*, unsigned long identifier, DocumentLoader*, const ResourceError&);
   void documentThreadableLoaderStartedLoadingForClient(ExecutionContext*, unsigned long identifier, ThreadableLoaderClient* client);
@@ -102,7 +103,7 @@ interface CoreProbes {
   void willSendEventSourceRequest(ExecutionContext*, ThreadableLoaderClient* eventSource);
   void willDispatchEventSourceEvent(ExecutionContext*, ThreadableLoaderClient* eventSource, const AtomicString& eventName, const AtomicString& eventId, const String& data);
   void didFinishEventSourceRequest(ExecutionContext*, ThreadableLoaderClient* eventSource);
-  void willLoadXHR(ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, scoped_refptr<EncodedFormData>, const HTTPHeaderMap& headers, bool includeCredentials);
+  void willLoadXHR(ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const KURL& url, bool async, const HTTPHeaderMap& headers, bool includeCredentials);
   void didFailXHRLoading([Keep] ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const String& url);
   void didFinishXHRLoading([Keep] ExecutionContext*, XMLHttpRequest* xhr, ThreadableLoaderClient* client, const AtomicString& method, const String& url);
   void willStartFetch(ExecutionContext*, ThreadableLoaderClient*);
@@ -120,6 +121,7 @@ interface CoreProbes {
   void willCommitLoad([Keep] LocalFrame*, DocumentLoader*);
   void didCommitLoad([Keep] LocalFrame*, DocumentLoader*);
   void frameDocumentUpdated([Keep] LocalFrame*);
+  void frameDisconnected([Keep] LocalFrame*, HTMLFrameOwnerElement*);
   void frameStartedLoading([Keep] LocalFrame*, FrameLoadType);
   void frameStoppedLoading([Keep] LocalFrame*);
   void frameScheduledNavigation([Keep] LocalFrame*, ScheduledNavigation*);
@@ -142,7 +144,6 @@ interface CoreProbes {
   void pseudoElementDestroyed([Keep] PseudoElement*);
   void didCreateAnimation(Document*, unsigned);
   void animationPlayStateChanged(Document*, Animation*, Animation::AnimationPlayState oldPlayState, Animation::AnimationPlayState newPlayState);
-  void windowCreated(LocalFrame* opener, LocalFrame* created);
   void windowOpen([Keep] Document*, const String& url, const AtomicString& windowName, const WebWindowFeatures& windowFeatures, bool userGestrue);
   void consoleMessageAdded(ExecutionContext*, ConsoleMessage*);
   void willRunJavaScriptDialog(LocalFrame* frame);

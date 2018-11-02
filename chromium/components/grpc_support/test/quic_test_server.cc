@@ -25,8 +25,7 @@
 namespace grpc_support {
 
 const char kTestServerDomain[] = "example.com";
-// This must match the certificate used (quic_test.example.com.crt and
-// quic_test.example.com.key.pkcs8).
+// This must match the certificate used (quic-chain.pem and quic-leaf-cert.key).
 const char kTestServerHost[] = "test.example.com";
 const char kTestServerUrl[] = "https://test.example.com/hello.txt";
 
@@ -83,16 +82,15 @@ void StartQuicServerOnServerThread(const base::FilePath& test_files_root,
   directory = test_files_root;
   std::unique_ptr<net::ProofSourceChromium> proof_source(
       new net::ProofSourceChromium());
-  CHECK(proof_source->Initialize(
-      directory.AppendASCII("quic_test.example.com.crt"),
-      directory.AppendASCII("quic_test.example.com.key.pkcs8"),
-      directory.AppendASCII("quic_test.example.com.key.sct")));
+  CHECK(proof_source->Initialize(directory.AppendASCII("quic-chain.pem"),
+                                 directory.AppendASCII("quic-leaf-cert.key"),
+                                 base::FilePath()));
   SetupQuicHttpResponseCache();
 
   g_quic_server = new net::QuicSimpleServer(
       std::move(proof_source), config,
-      net::QuicCryptoServerConfig::ConfigOptions(),
-      net::AllSupportedTransportVersions(), g_quic_response_cache);
+      net::QuicCryptoServerConfig::ConfigOptions(), net::AllSupportedVersions(),
+      g_quic_response_cache);
 
   // Start listening on an unbound port.
   int rv = g_quic_server->Listen(

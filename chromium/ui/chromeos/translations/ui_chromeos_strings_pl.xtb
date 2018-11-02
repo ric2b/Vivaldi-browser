@@ -48,7 +48,6 @@
 <translation id="255937426064304553">amerykańska klawiatura międzynarodowa</translation>
 <translation id="2563185590376525700">Żaba</translation>
 <translation id="2649120831653069427">Tęczanka</translation>
-<translation id="2656923396825879524">Figura geometryczna 3</translation>
 <translation id="2735698359135166290">Standardowa klawiatura rumuńska</translation>
 <translation id="2771816809568414714">Ser</translation>
 <translation id="2781645665747935084">belgijska klawiatura</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">Turecki (wersja F)</translation>
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3678559383040232393">Klawiatura maltańska</translation>
-<translation id="3728399474846997774">Figura geometryczna 2</translation>
-<translation id="3734201824773416162">Figura geometryczna 1</translation>
 <translation id="3801082500826908679">Farerski</translation>
 <translation id="3809272675881623365">Królik</translation>
 <translation id="3815016854028376614">Metoda wprowadzania Zhuyin</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">Klawiatura włoska</translation>
 <translation id="3910699493603749297">Klawiatura khmerska</translation>
 <translation id="391445228316373457">Klawiatura nepalska (fonetyczna)</translation>
-<translation id="3947050919258841761">Figura geometryczna 5</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="4070370845051020638">Metoda wprowadzania – kantoński</translation>
 <translation id="4072248638558688893">Klawiatura tamilska (fonetyczna)</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">Małpa</translation>
 <translation id="4711094779914110278">Turecki</translation>
 <translation id="4725511304875193254">Corgi</translation>
+<translation id="4737050008115666127">Lądowanie</translation>
 <translation id="4747271164117300400">Macedoński</translation>
 <translation id="4749157430980974800">Klawiatura gruzińska</translation>
 <translation id="4755240240651974342">Klawiatura fińska</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">Klawiatura nepalska (InScript)</translation>
 <translation id="5469868506864199649">Włoski</translation>
 <translation id="5500122897333236901">Islandzki</translation>
+<translation id="5508696409934741614">Punkty</translation>
 <translation id="5533555070048896610">Transliteracja (namaste → नमस्ते)</translation>
 <translation id="5605830556594064952">amerykańska klawiatura Dvoraka</translation>
 <translation id="5640179856859982418">Klawiatura szwajcarska</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">Klawiatura kanadyjska (angielski)</translation>
 <translation id="751507702149411736">Białoruski</translation>
 <translation id="7547811415869834682">Niderlandzki</translation>
+<translation id="7603724359189955920">Siatki</translation>
 <translation id="770015031906360009">Grecki</translation>
 <translation id="7706319470528945664">Klawiatura portugalska</translation>
 <translation id="7774365994322694683">Ptak</translation>
 <translation id="7825423931463735974">Klawiatura tamilska (Tamil99)</translation>
 <translation id="7853966320808728790">Francuska BÉPO</translation>
-<translation id="7872088194351932564">Figura geometryczna 4</translation>
 <translation id="7896906914454843592">Klawiatura rozszerzona USA</translation>
 <translation id="7898607018410277265">Klawiatura gudżarati (nowa fonetyczna)</translation>
 <translation id="7917972308273378936">Klawiatura litewska</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">Klawiatura amerykańska (Colemak)</translation>
 <translation id="8437209419043462667">amerykański</translation>
 <translation id="8467473010914675605">koreański</translation>
+<translation id="8477649328507734757">Wirowanie</translation>
 <translation id="8521441079177373948">brytyjska klawiatura</translation>
 <translation id="8551494947769799688">Łotewski</translation>
 <translation id="8561206103590473338">Słoń</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">Klawiatura Myanmar Myansan</translation>
 <translation id="9153744823707037316">Tablicowa metoda wprowadzania</translation>
 <translation id="9206487995878691001">Metoda wprowadzania Cangjie</translation>
+<translation id="9219908252191632183">Księżycowy</translation>
 </translationbundle>

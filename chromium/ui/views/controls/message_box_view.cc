@@ -218,7 +218,8 @@ void MessageBoxView::Init(const InitParams& params) {
 
 void MessageBoxView::ResetLayoutManager() {
   // Initialize the Grid Layout Manager used for this dialog box.
-  GridLayout* layout = GridLayout::CreateAndInstall(this);
+  GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // Add the column set for the message displayed at the top of the dialog box.
   constexpr int kMessageViewColumnSetId = 0;
@@ -226,8 +227,9 @@ void MessageBoxView::ResetLayoutManager() {
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, 1,
                         GridLayout::FIXED, message_width_, 0);
 
+  const LayoutProvider* provider = LayoutProvider::Get();
   gfx::Insets horizontal_insets =
-      views::LayoutProvider::Get()->GetInsetsMetric(views::INSETS_DIALOG);
+      provider->GetInsetsMetric(views::INSETS_DIALOG);
   horizontal_insets.Set(0, horizontal_insets.left(), 0,
                         horizontal_insets.right());
 
@@ -241,17 +243,17 @@ void MessageBoxView::ResetLayoutManager() {
     column_set->AddPaddingColumn(0, horizontal_insets.right());
   }
 
-  constexpr int kMaxScrollViewHeight = 160;
   views::View* message_contents = new views::View();
   // We explicitly set insets on the message contents instead of the scroll view
   // so that the scroll view borders are not capped by dialog insets.
   message_contents->SetBorder(CreateEmptyBorder(horizontal_insets));
   message_contents->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical));
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
   for (size_t i = 0; i < message_labels_.size(); ++i)
     message_contents->AddChildView(message_labels_[i]);
   ScrollView* scroll_view = new views::ScrollView();
-  scroll_view->ClipHeightTo(0, kMaxScrollViewHeight);
+  scroll_view->ClipHeightTo(0, provider->GetDistanceMetric(
+                                   DISTANCE_DIALOG_SCROLLABLE_AREA_MAX_HEIGHT));
 
   scroll_view->SetContents(message_contents);
   layout->StartRow(0, kMessageViewColumnSetId);
@@ -269,7 +271,7 @@ void MessageBoxView::ResetLayoutManager() {
     layout->AddPaddingRow(0, inter_row_vertical_spacing_);
     layout->StartRow(0, kExtraViewColumnSetId);
     layout->AddView(checkbox_);
-    trailing_content_type = views::CONTROL;
+    trailing_content_type = views::TEXT;
   }
 
   if (link_) {

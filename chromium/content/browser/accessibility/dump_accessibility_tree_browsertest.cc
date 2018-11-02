@@ -243,6 +243,7 @@ void DumpAccessibilityTreeTest::AddDefaultFilters(
   //
 
   AddFilter(filters, "hint=*");
+  AddFilter(filters, "interesting", Filter::DENY);
 
   //
   // General
@@ -296,6 +297,11 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityActions) {
   RunHtmlTest(FILE_PATH_LITERAL("actions.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityAddClickListener) {
+  RunHtmlTest(FILE_PATH_LITERAL("add-click-listener.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAddress) {
   RunHtmlTest(FILE_PATH_LITERAL("address.html"));
 }
@@ -320,6 +326,14 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAOnclick) {
   RunHtmlTest(FILE_PATH_LITERAL("a-onclick.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAIsInteresting) {
+  RunHtmlTest(FILE_PATH_LITERAL("isInteresting.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityClickableAncestor) {
+  RunHtmlTest(FILE_PATH_LITERAL("clickable-ancestor.html"));
+}
 
 #if defined(THREAD_SANITIZER)
 // See (crbug.com/708759).
@@ -752,6 +766,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaRowHeader) {
   RunAriaTest(FILE_PATH_LITERAL("aria-rowheader.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaRowText) {
+  RunAriaTest(FILE_PATH_LITERAL("aria-rowtext.html"));
+}
+
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaScrollbar) {
   RunAriaTest(FILE_PATH_LITERAL("aria-scrollbar.html"));
 }
@@ -795,8 +813,7 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunAriaTest(FILE_PATH_LITERAL("aria-sort-html-table.html"));
 }
 
-IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       DISABLED_AccessibilityAriaSpinButton) {
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityAriaSpinButton) {
   RunAriaTest(FILE_PATH_LITERAL("aria-spinbutton.html"));
 }
 
@@ -951,6 +968,14 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBoundsInherits) {
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibiltyBoundsClips) {
   RunHtmlTest(FILE_PATH_LITERAL("bounds-clips.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBoundsAbsolute) {
+  RunHtmlTest(FILE_PATH_LITERAL("bounds-absolute.html"));
+}
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessiblitiyBoundsFixed) {
+  RunHtmlTest(FILE_PATH_LITERAL("bounds-fixed.html"));
 }
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityBR) {
@@ -1320,6 +1345,10 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputMonth) {
   RunHtmlTest(FILE_PATH_LITERAL("input-month.html"));
 }
 #endif
+
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputNumber) {
+  RunHtmlTest(FILE_PATH_LITERAL("input-number.html"));
+}
 
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest, AccessibilityInputPassword) {
   RunHtmlTest(FILE_PATH_LITERAL("input-password.html"));

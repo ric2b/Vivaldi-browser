@@ -132,7 +132,7 @@ bool SoftwareBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle()
   return false;
 }
 
-GLenum
+uint32_t
 SoftwareBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
   // Not used for software surfaces.
   NOTREACHED();
@@ -142,6 +142,13 @@ SoftwareBrowserCompositorOutputSurface::GetFramebufferCopyTextureFormat() {
 #if defined(OS_MACOSX)
 void SoftwareBrowserCompositorOutputSurface::SetSurfaceSuspendedForRecycle(
     bool suspended) {
+}
+#endif
+
+#if BUILDFLAG(ENABLE_VULKAN)
+gpu::VulkanSurface* SoftwareBrowserCompositorOutputSurface::GetVulkanSurface() {
+  NOTIMPLEMENTED();
+  return nullptr;
 }
 #endif
 

@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "content/public/common/content_switches.h"
+#include "services/network/public/cpp/loader_util.h"
 
 namespace content {
 
@@ -86,32 +87,14 @@ Referrer Referrer::SanitizeForRequest(const GURL& request,
 // static
 void Referrer::SetReferrerForRequest(net::URLRequest* request,
                                      const Referrer& referrer) {
-  std::string referrer_string;
-  net::URLRequest::ReferrerPolicy referrer_policy;
-  ComputeReferrerInfo(&referrer_string, &referrer_policy, referrer);
-  request->SetReferrer(referrer_string);
-  request->set_referrer_policy(referrer_policy);
-}
-
-// static
-void Referrer::ComputeReferrerInfo(std::string* out_referrer_string,
-                                   net::URLRequest::ReferrerPolicy* out_policy,
-                                   const Referrer& referrer) {
-  if (!referrer.url.is_valid() ||
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kNoReferrers)) {
-    *out_referrer_string = std::string();
-  } else {
-    *out_referrer_string = referrer.url.spec();
-  }
-
-  *out_policy = ReferrerPolicyForUrlRequest(referrer);
+  request->SetReferrer(network::ComputeReferrer(referrer.url));
+  request->set_referrer_policy(ReferrerPolicyForUrlRequest(referrer.policy));
 }
 
 // static
 net::URLRequest::ReferrerPolicy Referrer::ReferrerPolicyForUrlRequest(
-    const Referrer& referrer) {
-  switch (referrer.policy) {
+    blink::WebReferrerPolicy referrer_policy) {
+  switch (referrer_policy) {
     case blink::kWebReferrerPolicyAlways:
       return net::URLRequest::NEVER_CLEAR_REFERRER;
     case blink::kWebReferrerPolicyNever:
@@ -171,6 +154,15 @@ blink::WebReferrerPolicy Referrer::NetReferrerPolicyToBlinkReferrerPolicy(
   }
   NOTREACHED();
   return blink::kWebReferrerPolicyDefault;
+}
+
+net::URLRequest::ReferrerPolicy Referrer::GetDefaultReferrerPolicy() {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kReducedReferrerGranularity)) {
+    return net::URLRequest::
+        REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN;
+  }
+  return net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE;
 }
 
 }  // namespace content

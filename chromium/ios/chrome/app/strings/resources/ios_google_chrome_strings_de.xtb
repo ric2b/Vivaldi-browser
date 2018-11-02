@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
 <translation id="1326317727527857210">Melden Sie sich in Chrome an, um Tabs von Ihren anderen Geräten abzurufen.</translation>
-<translation id="1685087038067318291">Entdecken Sie Webseiten, die von Objekten in Ihrer Nähe übermittelt werden. Wenn Bluetooth aktiviert ist, trägt Chrome Webseiten zusammen, die sich auf Objekte in Ihrer Nähe beziehen, und schickt die Webseiten anonym an Google, um die für Sie besonders nützlichen zu finden. <ph name="BEGIN_LINK" />Weitere Informationen<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Chrome-Datenschutzhinweise</translation>
+<translation id="1863312987075920112">Durch die Verwendung dieser App stimmen Sie den <ph name="BEGIN_LINK_TOS" />Nutzungsbedingungen<ph name="END_LINK_TOS" /> und <ph name="BEGIN_LINK_PRIVACY" />Datenschutzhinweisen<ph name="END_LINK_PRIVACY" /> von Chrome zu.</translation>
 <translation id="2147651015520127414">Chrome hat verifiziert, dass <ph name="ISSUER" /> das Zertifikat dieser Website ausgestellt hat.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Alle Rechte vorbehalten.</translation>
 <translation id="2342981853652716282">Melden Sie sich in Chrome an, um Daten wie Lesezeichen und Passwörter auf allen Ihren Geräten zu nutzen.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Einige Add-ons führen zum Ausfall von Chrome. Bitte deinstallieren Sie:</translation>
 <translation id="4615174829807303908">Sie melden sich von einem Konto ab, das von <ph name="SIGNOUT_MANAGED_DOMAIN" /> verwaltet wird. Dadurch werden Ihre Chrome-Daten von diesem Gerät gelöscht, bleiben jedoch in Ihrem Google-Konto erhalten.</translation>
 <translation id="5389212809648216794">Google Chrome kann nicht auf die Kamera zugreifen, da diese gerade von einer anderen App verwendet wird</translation>
-<translation id="5566557026214762153">Durch die Nutzung stimmen Sie den <ph name="BEGIN_LINK" />Nutzungsbedingungen<ph name="END_LINK" /> von Chrome zu.</translation>
 <translation id="5639704535586432836">Öffnen Sie "Einstellungen" &gt; "Datenschutz" &gt; "Kamera" &gt; "Google Chrome" und aktivieren Sie die Kamera.</translation>
 <translation id="5642200033778930880">Google Chrome kann die Kamera nicht im Modus "Geteilte Ansicht" nutzen</translation>
 <translation id="5703130498371792817">Gefällt Ihnen Chrome? <ph name="BEGIN_LINK" />Bewerten Sie diese App!<ph name="END_LINK" /></translation>

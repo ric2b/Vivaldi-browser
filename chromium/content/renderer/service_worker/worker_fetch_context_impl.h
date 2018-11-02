@@ -8,14 +8,14 @@
 #include "content/common/service_worker/service_worker_provider.mojom.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/service_worker_modes.h"
-#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/public/renderer/child_url_loader_factory_getter.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "third_party/WebKit/common/blob/blob_registry.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/WebApplicationCacheHost.h"
 #include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -30,12 +30,12 @@ namespace content {
 
 class ResourceDispatcher;
 class ThreadSafeSender;
+class URLLoaderThrottleProvider;
 
 // This class is used while fetching resource requests on workers (dedicated
-// worker and shared worker) when off-main-thread-fetch is enabled. This class
-// is created on the main thread and passed to the worker thread.
-// This class is not used for service workers. For service workers,
-// ServiceWorkerFetchContextImpl class is used instead.
+// worker and shared worker). This class is created on the main thread and
+// passed to the worker thread. This class is not used for service workers. For
+// service workers, ServiceWorkerFetchContextImpl class is used instead.
 class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
                                public mojom::ServiceWorkerWorkerClient {
  public:
@@ -43,7 +43,8 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
       mojom::ServiceWorkerWorkerClientRequest service_worker_client_request,
       mojom::ServiceWorkerContainerHostPtrInfo
           service_worker_container_host_info,
-      ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info);
+      ChildURLLoaderFactoryGetter::Info url_loader_factory_getter_info,
+      std::unique_ptr<URLLoaderThrottleProvider> throttle_provider);
   ~WorkerFetchContextImpl() override;
 
   // blink::WebWorkerFetchContext implementation:
@@ -55,9 +56,8 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   void SetIsOnSubframe(bool) override;
   bool IsOnSubframe() const override;
   blink::WebURL SiteForCookies() const override;
-  void DidRunContentWithCertificateErrors(const blink::WebURL& url) override;
-  void DidDisplayContentWithCertificateErrors(
-      const blink::WebURL& url) override;
+  void DidRunContentWithCertificateErrors() override;
+  void DidDisplayContentWithCertificateErrors() override;
   void DidRunInsecureContent(const blink::WebSecurityOrigin&,
                              const blink::WebURL& insecure_url) override;
   void SetApplicationCacheHostID(int id) override;
@@ -138,6 +138,8 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   // A weak ptr to blink::WebURLLoaderFactory which was created and passed to
   // Blink by CreateURLLoaderFactory().
   base::WeakPtr<URLLoaderFactoryImpl> url_loader_factory_;
+
+  std::unique_ptr<URLLoaderThrottleProvider> throttle_provider_;
 };
 
 }  // namespace content

@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
@@ -81,6 +80,7 @@ bool IsOutputDeviceId(const std::string& device) {
 
 std::unique_ptr<FilterGroup> CreateFilterGroup(
     FilterGroup::GroupType type,
+    int input_channels,
     bool mix_to_mono,
     const std::string& name,
     const base::ListValue* filter_list,
@@ -89,9 +89,9 @@ std::unique_ptr<FilterGroup> CreateFilterGroup(
     std::unique_ptr<PostProcessingPipelineFactory>& ppp_factory) {
   DCHECK(ppp_factory);
   auto pipeline =
-      ppp_factory->CreatePipeline(name, filter_list, kNumInputChannels);
-  return std::make_unique<FilterGroup>(kNumInputChannels, type, mix_to_mono,
-                                       name, std::move(pipeline), device_ids,
+      ppp_factory->CreatePipeline(name, filter_list, input_channels);
+  return std::make_unique<FilterGroup>(input_channels, type, mix_to_mono, name,
+                                       std::move(pipeline), device_ids,
                                        mixed_inputs);
 }
 
@@ -137,6 +137,7 @@ StreamMixer::StreamMixer()
       check_close_timeout_(kDefaultCheckCloseTimeoutMs),
       check_close_timer_(new base::Timer(false, false)),
       filter_frame_alignment_(kDefaultFilterFrameAlignment) {
+  VLOG(1) << __func__;
   if (single_threaded_for_test_) {
     mixer_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   } else {
@@ -148,17 +149,29 @@ StreamMixer::StreamMixer()
 
   num_output_channels_ = GetSwitchValueNonNegativeInt(
       switches::kAudioOutputChannels, kNumInputChannels);
-  DCHECK(num_output_channels_ == kNumInputChannels ||
-         num_output_channels_ == 1);
 
   low_sample_rate_cutoff_ =
-      chromecast::GetSwitchValueBoolean(switches::kAlsaEnableUpsampling, false)
+      GetSwitchValueBoolean(switches::kAlsaEnableUpsampling, false)
           ? kLowSampleRateCutoff
           : MixerOutputStream::kInvalidSampleRate;
 
-  // Read post-processing configuration file
-  PostProcessingPipelineParser pipeline_parser;
+  fixed_sample_rate_ = GetSwitchValueNonNegativeInt(
+      switches::kAudioOutputSampleRate, MixerOutputStream::kInvalidSampleRate);
 
+#if defined(USE_ALSA)
+  if (fixed_sample_rate_ == MixerOutputStream::kInvalidSampleRate) {
+    fixed_sample_rate_ =
+        GetSwitchValueNonNegativeInt(switches::kAlsaFixedOutputSampleRate,
+                                     MixerOutputStream::kInvalidSampleRate);
+  }
+#endif  // defined(USE_ALSA)
+
+  if (fixed_sample_rate_ != MixerOutputStream::kInvalidSampleRate) {
+    LOG(INFO) << "Setting fixed sample rate to " << fixed_sample_rate_;
+  }
+
+  // Read post-processing configuration file.
+  PostProcessingPipelineParser pipeline_parser;
   CreatePostProcessors(&pipeline_parser);
 
   // TODO(jyw): command line flag for filter frame alignment.
@@ -166,10 +179,10 @@ StreamMixer::StreamMixer()
       << "Alignment must be a power of 2.";
 
   // --accept-resource-provider should imply a check close timeout of 0.
-  int default_close_timeout = chromecast::GetSwitchValueBoolean(
-                                  switches::kAcceptResourceProvider, false)
-                                  ? 0
-                                  : kDefaultCheckCloseTimeoutMs;
+  int default_close_timeout =
+      GetSwitchValueBoolean(switches::kAcceptResourceProvider, false)
+          ? 0
+          : kDefaultCheckCloseTimeoutMs;
   check_close_timeout_ = GetSwitchValueInt(switches::kAlsaCheckCloseTimeout,
                                            default_close_timeout);
 }
@@ -189,8 +202,9 @@ void StreamMixer::CreatePostProcessors(
           << kCastAudioJsonFilePath << ".";
     }
     filter_groups_.push_back(CreateFilterGroup(
-        FilterGroup::GroupType::kStream, false /* mono_mixer */,
-        *device_ids.begin() /* name */, stream_pipeline.pipeline, device_ids,
+        FilterGroup::GroupType::kStream, kNumInputChannels,
+        false /* mono_mixer */, *device_ids.begin() /* name */,
+        stream_pipeline.pipeline, device_ids,
         std::vector<FilterGroup*>() /* mixed_inputs */,
         post_processing_pipeline_factory_));
     if (device_ids.find(::media::AudioDeviceDescription::kDefaultDeviceId) !=
@@ -199,41 +213,53 @@ void StreamMixer::CreatePostProcessors(
     }
   }
 
-  // Always provide a default filter; OEM may only specify mix filter.
-  if (!default_filter_) {
+  bool enabled_mono_mixer = (num_output_channels_ == 1);
+  if (!filter_groups_.empty()) {
+    std::vector<FilterGroup*> filter_group_ptrs(filter_groups_.size());
+    int mix_group_input_channels = filter_groups_[0]->GetOutputChannelCount();
+    for (size_t i = 0; i < filter_groups_.size(); ++i) {
+      DCHECK_EQ(mix_group_input_channels,
+                filter_groups_[i]->GetOutputChannelCount())
+          << "All output stream mixers must have the same number of channels";
+      filter_group_ptrs[i] = filter_groups_[i].get();
+    }
+
+    // Enable Mono mixer in |mix_filter_| if necessary.
+    filter_groups_.push_back(CreateFilterGroup(
+        FilterGroup::GroupType::kFinalMix, mix_group_input_channels,
+        enabled_mono_mixer, "mix", pipeline_parser->GetMixPipeline(),
+        std::unordered_set<std::string>() /* device_ids */, filter_group_ptrs,
+        post_processing_pipeline_factory_));
+  } else {
+    // Mix group directly mixes all inputs.
     std::string kDefaultDeviceId =
         ::media::AudioDeviceDescription::kDefaultDeviceId;
     filter_groups_.push_back(CreateFilterGroup(
-        FilterGroup::GroupType::kStream, false /* mono_mixer */,
-        kDefaultDeviceId /* name */, nullptr,
+        FilterGroup::GroupType::kFinalMix, kNumInputChannels,
+        enabled_mono_mixer, "mix", pipeline_parser->GetMixPipeline(),
         std::unordered_set<std::string>({kDefaultDeviceId}),
         std::vector<FilterGroup*>() /* mixed_inputs */,
         post_processing_pipeline_factory_));
     default_filter_ = filter_groups_.back().get();
   }
 
-  std::vector<FilterGroup*> filter_group_ptrs(filter_groups_.size());
-  std::transform(
-      filter_groups_.begin(), filter_groups_.end(), filter_group_ptrs.begin(),
-      [](const std::unique_ptr<FilterGroup>& group) { return group.get(); });
-
-  // Enable Mono mixer in |mix_filter_| if necessary.
-  bool enabled_mono_mixer = (num_output_channels_ == 1);
-  filter_groups_.push_back(
-      CreateFilterGroup(FilterGroup::GroupType::kFinalMix, enabled_mono_mixer,
-                        "mix", pipeline_parser->GetMixPipeline(),
-                        std::unordered_set<std::string>() /* device_ids */,
-                        filter_group_ptrs, post_processing_pipeline_factory_));
-
   mix_filter_ = filter_groups_.back().get();
 
   filter_groups_.push_back(CreateFilterGroup(
-      FilterGroup::GroupType::kLinearize, false /* mono_mixer */, "linearize",
+      FilterGroup::GroupType::kLinearize, mix_filter_->GetOutputChannelCount(),
+      false /* mono_mixer */, "linearize",
       pipeline_parser->GetLinearizePipeline(),
       std::unordered_set<std::string>() /* device_ids */,
       std::vector<FilterGroup*>({mix_filter_}),
       post_processing_pipeline_factory_));
   linearize_filter_ = filter_groups_.back().get();
+
+  // StreamMixer can downmix N channels to 1 channel.
+  CHECK(num_output_channels_ == 1 ||
+        num_output_channels_ == linearize_filter_->GetOutputChannelCount())
+      << "PostProcessor configuration channel count does not match command line"
+      << " flag: " << linearize_filter_->GetOutputChannelCount() << " vs "
+      << num_output_channels_;
 }
 
 void StreamMixer::ResetTaskRunnerForTest() {
@@ -252,12 +278,14 @@ void StreamMixer::ResetPostProcessorsForTest(
 }
 
 StreamMixer::~StreamMixer() {
+  VLOG(1) << __func__;
   FinalizeOnMixerThread();
   mixer_thread_->Stop();
   mixer_task_runner_ = nullptr;
 }
 
 void StreamMixer::FinalizeOnMixerThread() {
+  VLOG(1) << __func__;
   RUN_ON_MIXER_THREAD(&StreamMixer::FinalizeOnMixerThread);
   Close();
 
@@ -266,6 +294,7 @@ void StreamMixer::FinalizeOnMixerThread() {
 }
 
 void StreamMixer::FinishFinalize() {
+  VLOG(1) << __func__;
   retry_write_frames_timer_.reset();
   check_close_timer_.reset();
   inputs_.clear();
@@ -273,19 +302,23 @@ void StreamMixer::FinishFinalize() {
 }
 
 bool StreamMixer::Start() {
+  VLOG(1) << __func__;
   DCHECK(mixer_task_runner_->BelongsToCurrentThread());
-
-  int requested_sample_rate = requested_output_samples_per_second_;
 
   if (!output_)
     output_ = MixerOutputStream::Create();
 
-  if (low_sample_rate_cutoff_ != MixerOutputStream::kInvalidSampleRate &&
-      requested_sample_rate < low_sample_rate_cutoff_) {
+  int requested_sample_rate;
+  if (fixed_sample_rate_ != MixerOutputStream::kInvalidSampleRate) {
+    requested_sample_rate = fixed_sample_rate_;
+  } else if (low_sample_rate_cutoff_ != MixerOutputStream::kInvalidSampleRate &&
+             requested_output_samples_per_second_ < low_sample_rate_cutoff_) {
     requested_sample_rate =
         output_samples_per_second_ != MixerOutputStream::kInvalidSampleRate
             ? output_samples_per_second_
             : kLowSampleRateFallback;
+  } else {
+    requested_sample_rate = requested_output_samples_per_second_;
   }
 
   if (!output_->Start(requested_sample_rate, num_output_channels_)) {
@@ -306,17 +339,21 @@ bool StreamMixer::Start() {
 }
 
 void StreamMixer::Stop() {
+  VLOG(1) << __func__;
   for (auto* observer : loopback_observers_) {
     observer->OnLoopbackInterrupted();
   }
 
-  output_->Stop();
+  if (output_) {
+    output_->Stop();
+  }
 
   state_ = kStateUninitialized;
   output_samples_per_second_ = MixerOutputStream::kInvalidSampleRate;
 }
 
 void StreamMixer::Close() {
+  VLOG(1) << __func__;
   Stop();
 }
 
@@ -357,7 +394,8 @@ void StreamMixer::AddInput(std::unique_ptr<InputQueue> input) {
   // If the new input is a primary one, we may need to change the output
   // sample rate to match its input sample rate.
   // We only change the output rate if it is not set to a fixed value.
-  if (input->primary() && output_ && !output_->IsFixedSampleRate()) {
+  if (input->primary() && output_ &&
+      fixed_sample_rate_ != MixerOutputStream::kInvalidSampleRate) {
     CheckChangeOutputRate(input->input_samples_per_second());
   }
 
@@ -527,7 +565,7 @@ bool StreamMixer::TryWriteFrames() {
     return false;
   }
 
-  int chunk_size =
+  int num_frames =
       (output_samples_per_second_ * kMaxAudioWriteTimeMilliseconds / 1000) &
       ~(filter_frame_alignment_ - 1);
   for (auto&& filter_group : filter_groups_) {
@@ -539,7 +577,7 @@ bool StreamMixer::TryWriteFrames() {
     if (read_size > 0) {
       DCHECK(input->filter_group());
       input->filter_group()->AddActiveInput(input.get());
-      chunk_size = std::min(chunk_size, read_size);
+      num_frames = std::min(num_frames, read_size);
       is_silence = false;
     } else if (input->primary()) {
       base::TimeDelta time_until_underrun;
@@ -566,14 +604,14 @@ bool StreamMixer::TryWriteFrames() {
 
   if (is_silence) {
     // No inputs have any data to provide. Push silence to prevent underrun.
-    chunk_size = std::max(kPreventUnderrunChunkSize, filter_frame_alignment_);
+    num_frames = std::max(kPreventUnderrunChunkSize, filter_frame_alignment_);
   }
 
-  DCHECK_EQ(chunk_size % filter_frame_alignment_, 0);
+  DCHECK_EQ(num_frames % filter_frame_alignment_, 0);
   // Recursively mix and filter each group.
-  linearize_filter_->MixAndFilter(chunk_size);
+  linearize_filter_->MixAndFilter(num_frames);
 
-  WriteMixedPcm(chunk_size);
+  WriteMixedPcm(num_frames);
   return true;
 }
 
@@ -594,49 +632,47 @@ void StreamMixer::WriteMixedPcm(int frames) {
   // Downmix reference signal to mono to reduce CPU load.
   int mix_channel_count = mix_filter_->GetOutputChannelCount();
 
+  float* mixed_data = mix_filter_->GetOutputBuffer();
   if (num_output_channels_ == 1 && mix_channel_count != num_output_channels_) {
     for (int i = 0; i < frames; ++i) {
       float sum = 0;
       for (int c = 0; c < mix_channel_count; ++c) {
-        sum += mix_filter_->interleaved()[i * mix_channel_count + c];
+        sum += mixed_data[i * mix_channel_count + c];
       }
-      mix_filter_->interleaved()[i] = sum / mix_channel_count;
+      mixed_data[i] = sum / mix_channel_count;
     }
   }
 
   // Hard limit to [1.0, -1.0]
   for (int i = 0; i < frames * num_output_channels_; ++i) {
-    mix_filter_->interleaved()[i] =
-        std::min(1.0f, std::max(-1.0f, mix_filter_->interleaved()[i]));
+    mixed_data[i] = std::min(1.0f, std::max(-1.0f, mixed_data[i]));
   }
 
   for (CastMediaShlib::LoopbackAudioObserver* observer : loopback_observers_) {
     observer->OnLoopbackAudio(
         expected_playback_time, kSampleFormatF32, output_samples_per_second_,
-        num_output_channels_,
-        reinterpret_cast<uint8_t*>(mix_filter_->interleaved()),
+        num_output_channels_, reinterpret_cast<uint8_t*>(mixed_data),
         static_cast<size_t>(frames) * num_output_channels_ * sizeof(float));
   }
 
   // Drop extra channels from linearize filter if necessary.
+  float* linearized_data = linearize_filter_->GetOutputBuffer();
   int linearize_channel_count = linearize_filter_->GetOutputChannelCount();
   if (num_output_channels_ == 1 &&
       linearize_channel_count != num_output_channels_) {
     for (int i = 0; i < frames; ++i) {
-      linearize_filter_->interleaved()[i] =
-          linearize_filter_->interleaved()[i * linearize_channel_count];
+      linearized_data[i] = linearized_data[i * linearize_channel_count];
     }
   }
 
   // Hard limit to [1.0, -1.0].
   for (int i = 0; i < frames * num_output_channels_; ++i) {
-    linearize_filter_->interleaved()[i] =
-        std::min(1.0f, std::max(-1.0f, linearize_filter_->interleaved()[i]));
+    linearized_data[i] = std::min(1.0f, std::max(-1.0f, linearized_data[i]));
   }
 
   bool playback_interrupted = false;
-  output_->Write(linearize_filter_->interleaved(),
-                 frames * num_output_channels_, &playback_interrupted);
+  output_->Write(linearized_data, frames * num_output_channels_,
+                 &playback_interrupted);
 
   if (playback_interrupted) {
     for (auto* observer : loopback_observers_) {
@@ -660,6 +696,7 @@ void StreamMixer::WriteMixedPcm(int frames) {
 
 void StreamMixer::AddLoopbackAudioObserver(
     CastMediaShlib::LoopbackAudioObserver* observer) {
+  VLOG(1) << __func__;
   RUN_ON_MIXER_THREAD(&StreamMixer::AddLoopbackAudioObserver, observer);
   DCHECK(observer);
   DCHECK(!base::ContainsValue(loopback_observers_, observer));
@@ -668,6 +705,7 @@ void StreamMixer::AddLoopbackAudioObserver(
 
 void StreamMixer::RemoveLoopbackAudioObserver(
     CastMediaShlib::LoopbackAudioObserver* observer) {
+  VLOG(1) << __func__;
   RUN_ON_MIXER_THREAD(&StreamMixer::RemoveLoopbackAudioObserver, observer);
   DCHECK(base::ContainsValue(loopback_observers_, observer));
   loopback_observers_.erase(std::remove(loopback_observers_.begin(),

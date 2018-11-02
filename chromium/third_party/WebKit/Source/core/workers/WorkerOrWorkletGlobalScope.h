@@ -7,15 +7,19 @@
 
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/SecurityContext.h"
 #include "core/dom/events/EventTarget.h"
 #include "core/frame/WebFeatureForward.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerEventQueue.h"
 #include "platform/wtf/BitVector.h"
+#include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
 
 class Modulator;
+class ModuleTreeClient;
 class ResourceFetcher;
 class V8AbstractEventListener;
 class WorkerOrWorkletScriptController;
@@ -23,8 +27,12 @@ class WorkerReportingProxy;
 class WorkerThread;
 
 class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
-                                               public ExecutionContext {
+                                               public ExecutionContext,
+                                               public SecurityContext {
  public:
+  using SecurityContext::GetSecurityOrigin;
+  using SecurityContext::GetContentSecurityPolicy;
+
   WorkerOrWorkletGlobalScope(v8::Isolate*,
                              WorkerClients*,
                              WorkerReportingProxy&);
@@ -49,13 +57,8 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
   EventQueue* GetEventQueue() const final;
 
-  // Evaluates the given main script as a classic script (as opposed to a module
-  // script).
-  // https://html.spec.whatwg.org/multipage/webappapis.html#classic-script
-  virtual void EvaluateClassicScript(
-      const KURL& script_url,
-      String source_code,
-      std::unique_ptr<Vector<char>> cached_meta_data) = 0;
+  // SecurityContext
+  void DidUpdateSecurityOrigin() final {}
 
   // Returns true when the WorkerOrWorkletGlobalScope is closing (e.g. via
   // WorkerGlobalScope#close() method). If this returns true, the worker is
@@ -83,7 +86,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   // MainThreadWorkletGlobalScope) or after dispose() is called.
   virtual WorkerThread* GetThread() const = 0;
 
-  // Available only when off-main-thread-fetch is enabled.
   ResourceFetcher* Fetcher() const override;
   ResourceFetcher* EnsureFetcher();
 
@@ -99,6 +101,17 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
   scoped_refptr<WebTaskRunner> GetTaskRunner(TaskType) override;
+
+ protected:
+  void ApplyContentSecurityPolicyFromVector(
+      const Vector<CSPHeaderAndType>& headers);
+
+  // Implementation of the "fetch a module worker script graph" algorithm in the
+  // HTML spec:
+  // https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-module-worker-script-tree
+  void FetchModuleScript(const KURL& module_url_record,
+                         network::mojom::FetchCredentialsMode,
+                         ModuleTreeClient*);
 
  private:
   CrossThreadPersistent<WorkerClients> worker_clients_;

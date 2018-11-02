@@ -32,6 +32,7 @@
 #define MixedContentChecker_h
 
 #include "base/gtest_prod_util.h"
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -61,13 +62,12 @@ class WebWorkerFetchContext;
 // Current mixed content W3C draft that drives this implementation:
 // https://w3c.github.io/webappsec-mixed-content/
 class CORE_EXPORT MixedContentChecker final {
-  WTF_MAKE_NONCOPYABLE(MixedContentChecker);
   DISALLOW_NEW();
 
  public:
   static bool ShouldBlockFetch(LocalFrame*,
                                WebURLRequest::RequestContext,
-                               WebURLRequest::FrameType,
+                               network::mojom::RequestContextFrameType,
                                ResourceRequest::RedirectStatus,
                                const KURL&,
                                SecurityViolationReportingPolicy =
@@ -76,7 +76,7 @@ class CORE_EXPORT MixedContentChecker final {
   static bool ShouldBlockFetchOnWorker(WorkerOrWorkletGlobalScope*,
                                        WebWorkerFetchContext*,
                                        WebURLRequest::RequestContext,
-                                       WebURLRequest::FrameType,
+                                       network::mojom::RequestContextFrameType,
                                        ResourceRequest::RedirectStatus,
                                        const KURL&,
                                        SecurityViolationReportingPolicy);
@@ -87,7 +87,7 @@ class CORE_EXPORT MixedContentChecker final {
       SecurityViolationReportingPolicy =
           SecurityViolationReportingPolicy::kReport);
 
-  static bool IsMixedContent(SecurityOrigin*, const KURL&);
+  static bool IsMixedContent(const SecurityOrigin*, const KURL&);
   static bool IsMixedFormAction(LocalFrame*,
                                 const KURL&,
                                 SecurityViolationReportingPolicy =
@@ -102,12 +102,13 @@ class CORE_EXPORT MixedContentChecker final {
 
   // Returns the frame that should be considered the effective frame
   // for a mixed content check for the given frame type.
-  static Frame* EffectiveFrameForFrameType(LocalFrame*,
-                                           WebURLRequest::FrameType);
+  static Frame* EffectiveFrameForFrameType(
+      LocalFrame*,
+      network::mojom::RequestContextFrameType);
 
   static void HandleCertificateError(LocalFrame*,
                                      const ResourceResponse&,
-                                     WebURLRequest::FrameType,
+                                     network::mojom::RequestContextFrameType,
                                      WebURLRequest::RequestContext);
 
   // Receive information about mixed content found externally.
@@ -122,10 +123,11 @@ class CORE_EXPORT MixedContentChecker final {
  private:
   FRIEND_TEST_ALL_PREFIXES(MixedContentCheckerTest, HandleCertificateError);
 
-  static Frame* InWhichFrameIsContentMixed(Frame*,
-                                           WebURLRequest::FrameType,
-                                           const KURL&,
-                                           const LocalFrame*);
+  static Frame* InWhichFrameIsContentMixed(
+      Frame*,
+      network::mojom::RequestContextFrameType,
+      const KURL&,
+      const LocalFrame*);
 
   static void LogToConsoleAboutFetch(ExecutionContext*,
                                      const KURL&,
@@ -138,6 +140,8 @@ class CORE_EXPORT MixedContentChecker final {
                                          const KURL&,
                                          bool allowed);
   static void Count(Frame*, WebURLRequest::RequestContext, const LocalFrame*);
+
+  DISALLOW_COPY_AND_ASSIGN(MixedContentChecker);
 };
 
 }  // namespace blink

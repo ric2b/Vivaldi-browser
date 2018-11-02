@@ -42,6 +42,10 @@ using content::BrowserThread;
 using content::MockRenderProcessHost;
 using content::RenderViewHostTester;
 
+namespace content {
+class SiteInstance;
+}
+
 namespace visitedlink {
 
 namespace {
@@ -121,7 +125,8 @@ class TrackingVisitedLinkEventListener : public VisitedLinkMaster::Listener {
     if (table.is_valid()) {
       for (std::vector<VisitedLinkSlave>::size_type i = 0;
            i < g_slaves.size(); i++) {
-        g_slaves[i]->UpdateVisitedLinks(table.Clone());
+        g_slaves[i]->UpdateVisitedLinks(
+            table.Clone(mojo::SharedBufferHandle::AccessMode::READ_ONLY));
       }
     }
   }
@@ -201,7 +206,8 @@ class VisitedLinkTest : public testing::Test {
 
     // Create a slave database.
     VisitedLinkSlave slave;
-    slave.UpdateVisitedLinks(master_->shared_memory().Clone());
+    slave.UpdateVisitedLinks(master_->shared_memory().Clone(
+        mojo::SharedBufferHandle::AccessMode::READ_ONLY));
     g_slaves.push_back(&slave);
 
     bool found;
@@ -329,7 +335,8 @@ TEST_F(VisitedLinkTest, DeleteAll) {
 
   {
     VisitedLinkSlave slave;
-    slave.UpdateVisitedLinks(master_->shared_memory().Clone());
+    slave.UpdateVisitedLinks(master_->shared_memory().Clone(
+        mojo::SharedBufferHandle::AccessMode::READ_ONLY));
     g_slaves.push_back(&slave);
 
     // Add the test URLs.
@@ -373,7 +380,8 @@ TEST_F(VisitedLinkTest, Resizing) {
 
   // ...and a slave
   VisitedLinkSlave slave;
-  slave.UpdateVisitedLinks(master_->shared_memory().Clone());
+  slave.UpdateVisitedLinks(master_->shared_memory().Clone(
+      mojo::SharedBufferHandle::AccessMode::READ_ONLY));
   g_slaves.push_back(&slave);
 
   int32_t used_count = master_->GetUsedCount();
@@ -625,7 +633,8 @@ class VisitedLinkRenderProcessHostFactory
  public:
   VisitedLinkRenderProcessHostFactory() : context_(new VisitCountingContext) {}
   content::RenderProcessHost* CreateRenderProcessHost(
-      content::BrowserContext* browser_context) const override {
+      content::BrowserContext* browser_context,
+      content::SiteInstance* site_instance) const override {
     return new VisitRelayingRenderProcessHost(browser_context, context_.get());
   }
 

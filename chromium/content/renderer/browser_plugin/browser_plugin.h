@@ -15,7 +15,7 @@
 #include "base/sequenced_task_runner_helpers.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "content/public/common/screen_info.h"
 #include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/render_view_impl.h"
@@ -87,10 +87,6 @@ class CONTENT_EXPORT BrowserPlugin : public blink::WebPlugin,
   // This method detaches this BrowserPlugin instance from the guest that it's
   // currently attached to, if any.
   void Detach();
-
-  // Notify the plugin about a compositor commit so that frame ACKs could be
-  // sent, if needed.
-  void DidCommitCompositorFrame();
 
   void WasResized();
 
@@ -247,7 +243,7 @@ class CONTENT_EXPORT BrowserPlugin : public blink::WebPlugin,
 
   viz::FrameSinkId frame_sink_id_;
   viz::LocalSurfaceId local_surface_id_;
-  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
 
   bool enable_surface_synchronization_ = false;
 
@@ -275,6 +271,11 @@ class CONTENT_EXPORT BrowserPlugin : public blink::WebPlugin,
 
   std::unique_ptr<MusEmbeddedFrame> mus_embedded_frame_;
 #endif
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  // Pointer to the RenderWidget that embeds this plugin.
+  RenderWidget* embedding_render_widget_ = nullptr;
 
   // Weak factory used in v8 |MakeWeak| callback, since the v8 callback might
   // get called after BrowserPlugin has been destroyed.

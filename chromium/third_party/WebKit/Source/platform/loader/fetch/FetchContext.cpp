@@ -36,8 +36,7 @@
 namespace blink {
 
 FetchContext& FetchContext::NullInstance() {
-  DEFINE_STATIC_LOCAL(FetchContext, instance, (new FetchContext));
-  return instance;
+  return *(new FetchContext);
 }
 
 FetchContext::FetchContext() : platform_probe_sink_(new PlatformProbeSink) {
@@ -76,12 +75,13 @@ void FetchContext::DispatchDidLoadResourceFromMemoryCache(
     const ResourceRequest&,
     const ResourceResponse&) {}
 
-void FetchContext::DispatchDidReceiveResponse(unsigned long,
-                                              const ResourceResponse&,
-                                              WebURLRequest::FrameType,
-                                              WebURLRequest::RequestContext,
-                                              Resource*,
-                                              ResourceResponseType) {}
+void FetchContext::DispatchDidReceiveResponse(
+    unsigned long,
+    const ResourceResponse&,
+    network::mojom::RequestContextFrameType FrameType,
+    WebURLRequest::RequestContext,
+    Resource*,
+    ResourceResponseType) {}
 
 void FetchContext::DispatchDidReceiveData(unsigned long, const char*, int) {}
 
@@ -92,7 +92,8 @@ void FetchContext::DispatchDidDownloadData(unsigned long, int, int) {}
 void FetchContext::DispatchDidFinishLoading(unsigned long,
                                             double,
                                             int64_t,
-                                            int64_t) {}
+                                            int64_t,
+                                            bool) {}
 
 void FetchContext::DispatchDidFail(unsigned long,
                                    const ResourceError&,
@@ -107,8 +108,6 @@ void FetchContext::RecordLoadingActivity(
 void FetchContext::DidLoadResource(Resource*) {}
 
 void FetchContext::AddResourceTiming(const ResourceTimingInfo&) {}
-
-void FetchContext::SendImagePing(const KURL&) {}
 
 void FetchContext::AddWarningConsoleMessage(const String&, LogSource) const {}
 

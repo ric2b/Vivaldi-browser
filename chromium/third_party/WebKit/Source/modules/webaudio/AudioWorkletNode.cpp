@@ -4,9 +4,9 @@
 
 #include "modules/webaudio/AudioWorkletNode.h"
 
+#include "core/messaging/MessageChannel.h"
+#include "core/messaging/MessagePort.h"
 #include "modules/EventModules.h"
-#include "core/dom/MessageChannel.h"
-#include "core/dom/MessagePort.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
@@ -154,8 +154,8 @@ void AudioWorkletHandler::SetProcessorOnRenderThread(
   AudioWorkletProcessorState new_state;
   new_state = processor_ ? AudioWorkletProcessorState::kRunning
                          : AudioWorkletProcessorState::kError;
-  task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *task_runner_, FROM_HERE,
       CrossThreadBind(&AudioWorkletHandler::NotifyProcessorStateChange,
                       WrapRefCounted(this), new_state));
 }
@@ -169,10 +169,10 @@ void AudioWorkletHandler::FinishProcessorOnRenderThread() {
   new_state = processor_->IsRunnable()
       ? AudioWorkletProcessorState::kStopped
       : AudioWorkletProcessorState::kError;
-  task_runner_->PostTask(
-        BLINK_FROM_HERE,
-        CrossThreadBind(&AudioWorkletHandler::NotifyProcessorStateChange,
-                        WrapRefCounted(this), new_state));
+  PostCrossThreadTask(
+      *task_runner_, FROM_HERE,
+      CrossThreadBind(&AudioWorkletHandler::NotifyProcessorStateChange,
+                      WrapRefCounted(this), new_state));
 
   // TODO(hongchan): After this point, The handler has no more pending activity
   // and ready for GC.

@@ -55,7 +55,6 @@ class ChromeCleanerDialog
   bool ShouldShowCloseButton() const override;
 
   // views::DialogDelegate overrides.
-  views::View* CreateFootnoteView() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   views::View* CreateExtraView() override;
   bool Accept() override;
@@ -72,7 +71,8 @@ class ChromeCleanerDialog
   void OnIdle(
       safe_browsing::ChromeCleanerController::IdleReason idle_reason) override;
   void OnScanning() override;
-  void OnCleaning(const safe_browsing::ChromeCleanerScannerResults&
+  void OnCleaning(bool is_powered_by_partner,
+                  const safe_browsing::ChromeCleanerScannerResults&
                       scanner_results) override;
   void OnRebootRequired() override;
 

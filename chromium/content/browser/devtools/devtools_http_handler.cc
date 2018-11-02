@@ -39,6 +39,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/url_util.h"
 #include "net/server/http_server.h"
 #include "net/server/http_server_request_info.h"
 #include "net/server/http_server_response_info.h"
@@ -74,6 +75,16 @@ const char kTargetDevtoolsFrontendUrlField[] = "devtoolsFrontendUrl";
 
 const int32_t kSendBufferSizeForDevTools = 256 * 1024 * 1024;  // 256Mb
 const int32_t kReceiveBufferSizeForDevTools = 100 * 1024 * 1024;  // 100Mb
+
+bool RequestIsSafeToServe(const net::HttpServerRequestInfo& info) {
+  // For browser-originating requests, serve only those that are coming from
+  // pages loaded off localhost or fixed IPs.
+  std::string header = info.headers["host"];
+  if (header.empty())
+    return true;
+  GURL url = GURL("http://" + header);
+  return url.HostIsIPAddress() || net::IsLocalHostname(url.host(), nullptr);
+}
 
 }  // namespace
 
@@ -362,12 +373,17 @@ static std::string GetMimeType(const std::string& filename) {
   LOG(ERROR) << "GetMimeType doesn't know mime type for: "
              << filename
              << " text/plain will be returned";
-  NOTREACHED();
   return "text/plain";
 }
 
 void ServerWrapper::OnHttpRequest(int connection_id,
                                   const net::HttpServerRequestInfo& info) {
+  if (!RequestIsSafeToServe(info)) {
+    Send500(connection_id,
+            "Host header is specified and is not an IP address or localhost.");
+    return;
+  }
+
   server_->SetSendBufferSize(connection_id, kSendBufferSizeForDevTools);
 
   if (base::StartsWith(info.path, "/json", base::CompareCase::SENSITIVE)) {

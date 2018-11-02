@@ -52,13 +52,14 @@ HTMLAnchorElement::HTMLAnchorElement(const QualifiedName& tag_name,
     : HTMLElement(tag_name, document),
       link_relations_(0),
       was_focused_by_mouse_(false),
-      cached_visited_link_hash_(0) {}
+      cached_visited_link_hash_(0),
+      rel_list_(RelList::Create(this)) {}
 
 HTMLAnchorElement* HTMLAnchorElement::Create(Document& document) {
   return new HTMLAnchorElement(aTag, document);
 }
 
-HTMLAnchorElement::~HTMLAnchorElement() {}
+HTMLAnchorElement::~HTMLAnchorElement() = default;
 
 bool HTMLAnchorElement::SupportsFocus() const {
   if (HasEditableStyle(*this))
@@ -203,6 +204,7 @@ void HTMLAnchorElement::ParseAttribute(
     if (was_link || IsLink()) {
       PseudoStateChanged(CSSSelector::kPseudoLink);
       PseudoStateChanged(CSSSelector::kPseudoVisited);
+      PseudoStateChanged(CSSSelector::kPseudoWebkitAnyLink);
       PseudoStateChanged(CSSSelector::kPseudoAnyLink);
     }
     if (IsLink()) {
@@ -219,6 +221,7 @@ void HTMLAnchorElement::ParseAttribute(
     // Do nothing.
   } else if (params.name == relAttr) {
     SetRel(params.new_value);
+    rel_list_->DidUpdateAttributeValue(params.old_value, params.new_value);
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -385,24 +388,22 @@ void HTMLAnchorElement::HandleClick(Event* event) {
               : WebFeature::
                     kHTMLAnchorElementDownloadInSandboxWithoutUserGesture);
     }
-    request.SetRequestContext(WebURLRequest::kRequestContextDownload);
-    request.SetRequestorOrigin(SecurityOrigin::Create(GetDocument().Url()));
-    frame->Client()->DownloadURL(request, FastGetAttribute(downloadAttr));
-  } else {
-    request.SetRequestContext(WebURLRequest::kRequestContextHyperlink);
-    FrameLoadRequest frame_request(&GetDocument(), request,
-                                   getAttribute(targetAttr));
-    frame_request.SetTriggeringEvent(event);
-    if (HasRel(kRelationNoReferrer)) {
-      frame_request.SetShouldSendReferrer(kNeverSendReferrer);
-      frame_request.SetShouldSetOpener(kNeverSetOpener);
-    }
-    if (HasRel(kRelationNoOpener))
-      frame_request.SetShouldSetOpener(kNeverSetOpener);
-    // TODO(japhet): Link clicks can be emulated via JS without a user gesture.
-    // Why doesn't this go through NavigationScheduler?
-    frame->Loader().Load(frame_request);
+    request.SetSuggestedFilename(
+        static_cast<String>(FastGetAttribute(downloadAttr)));
   }
+  request.SetRequestContext(WebURLRequest::kRequestContextHyperlink);
+  FrameLoadRequest frame_request(&GetDocument(), request,
+                                 getAttribute(targetAttr));
+  frame_request.SetTriggeringEvent(event);
+  if (HasRel(kRelationNoReferrer)) {
+    frame_request.SetShouldSendReferrer(kNeverSendReferrer);
+    frame_request.SetShouldSetOpener(kNeverSetOpener);
+  }
+  if (HasRel(kRelationNoOpener))
+    frame_request.SetShouldSetOpener(kNeverSetOpener);
+  // TODO(japhet): Link clicks can be emulated via JS without a user gesture.
+  // Why doesn't this go through NavigationScheduler?
+  frame->Loader().Load(frame_request);
 }
 
 bool IsEnterKeyKeydownEvent(Event* event) {
@@ -412,12 +413,15 @@ bool IsEnterKeyKeydownEvent(Event* event) {
 }
 
 bool IsLinkClick(Event* event) {
-  // Allow detail <= 1 so that synthetic clicks work. They may have detail == 0.
-  return (event->type() == EventTypeNames::click ||
-          event->type() == EventTypeNames::auxclick) &&
-         (!event->IsMouseEvent() ||
-          ToMouseEvent(event)->button() !=
-              static_cast<short>(WebPointerProperties::Button::kRight));
+  if ((event->type() != EventTypeNames::click &&
+       event->type() != EventTypeNames::auxclick) ||
+      !event->IsMouseEvent()) {
+    return false;
+  }
+  MouseEvent* mouse_event = ToMouseEvent(event);
+  short button = mouse_event->button();
+  return (button == static_cast<short>(WebPointerProperties::Button::kLeft) ||
+          button == static_cast<short>(WebPointerProperties::Button::kMiddle));
 }
 
 bool HTMLAnchorElement::WillRespondToMouseClickEvents() {
@@ -434,6 +438,17 @@ Node::InsertionNotificationRequest HTMLAnchorElement::InsertedInto(
       HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("a", hrefAttr);
   return request;
+}
+
+void HTMLAnchorElement::Trace(blink::Visitor* visitor) {
+  visitor->Trace(rel_list_);
+  HTMLElement::Trace(visitor);
+}
+
+void HTMLAnchorElement::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  visitor->TraceWrappers(rel_list_);
+  HTMLElement::TraceWrappers(visitor);
 }
 
 }  // namespace blink

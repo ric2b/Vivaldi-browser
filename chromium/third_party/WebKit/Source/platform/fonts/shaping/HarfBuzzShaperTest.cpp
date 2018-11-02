@@ -575,6 +575,17 @@ TEST_P(IncludePartialGlyphs, OffsetForPositionMatchesPositionForOffsetMixed) {
                                           include_partial_glyphs));
 }
 
+TEST_F(HarfBuzzShaperTest, PositionForOffsetMissingGlyph) {
+  String string(u"\u0633\u0644\u0627\u0645");
+  HarfBuzzShaper shaper(string.Characters16(), string.length());
+  scoped_refptr<ShapeResult> result = shaper.Shape(&font, TextDirection::kRtl);
+  // Because the offset 1 and 2 should form a ligature, SubRange(2, 4) creates a
+  // ShapeResult that does not have its first glyph.
+  result = result->SubRange(2, 4);
+  result->PositionForOffset(0);
+  // Pass if |PositionForOffset| does not crash.
+}
+
 static struct ShapeResultCopyRangeTestData {
   const char16_t* string;
   TextDirection direction;
@@ -774,6 +785,19 @@ TEST_F(HarfBuzzShaperTest, ShapeResultCopyRangeSegmentGlyphBoundingBox) {
 
   // Check width and bounds are not too much different. ".1" is heuristic.
   EXPECT_NEAR(result->Width(), result->Bounds().Width(), result->Width() * .1);
+}
+
+TEST_F(HarfBuzzShaperTest, SubRange) {
+  String string(u"Hello world");
+  TextDirection direction = TextDirection::kRtl;
+  HarfBuzzShaper shaper(string.Characters16(), string.length());
+  scoped_refptr<ShapeResult> result = shaper.Shape(&font, direction);
+
+  scoped_refptr<ShapeResult> sub_range = result->SubRange(4, 7);
+  DCHECK_EQ(4u, sub_range->StartIndexForResult());
+  DCHECK_EQ(7u, sub_range->EndIndexForResult());
+  DCHECK_EQ(3u, sub_range->NumCharacters());
+  DCHECK_EQ(result->Direction(), sub_range->Direction());
 }
 
 TEST_F(HarfBuzzShaperTest, SafeToBreakLatinCommonLigatures) {

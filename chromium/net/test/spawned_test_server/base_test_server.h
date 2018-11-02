@@ -217,6 +217,10 @@ class BaseTestServer {
     // auto-generated leaf certificate when |server_certificate==CERT_AUTO|.
     uint64_t cert_serial = 0;
 
+    // If not empty, |cert_common_name| will be the common name of the
+    // auto-generated leaf certificate when |server_certificate==CERT_AUTO|.
+    std::string cert_common_name;
+
     // True if a CertificateRequest should be sent to the client during
     // handshaking.
     bool request_client_certificate = false;
@@ -381,6 +385,7 @@ class BaseTestServer {
  protected:
   virtual ~BaseTestServer();
   Type type() const { return type_; }
+  const SSLOptions& ssl_options() const { return ssl_options_; }
 
   bool started() const { return started_; }
 

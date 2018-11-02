@@ -53,6 +53,7 @@ buildflag_header("ui_features") {
   header = "ui_features.h"
   flags = [
     "ENABLE_HIDPI=$enable_hidpi",
+    "ENABLE_MESSAGE_CENTER=$enable_message_center",
     "ENABLE_MUS=$enable_mus",
     "USE_XKBCOMMON=$use_xkbcommon",
     "MAC_VIEWS_BROWSER=$mac_views_browser",
@@ -140,6 +141,8 @@ component("base") {
     "cocoa/remote_layer_api.mm",
     "cocoa/scoped_cg_context_smooth_fonts.h",
     "cocoa/scoped_cg_context_smooth_fonts.mm",
+    "cocoa/secure_password_input.h",
+    "cocoa/secure_password_input.mm",
     "cocoa/three_part_image.h",
     "cocoa/three_part_image.mm",
     "cocoa/tool_tip_base_view.h",
@@ -155,6 +158,8 @@ component("base") {
     "cocoa/user_interface_item_command_handler.h",
     "cocoa/view_description.h",
     "cocoa/view_description.mm",
+    "cocoa/weak_ptr_nsobject.h",
+    "cocoa/weak_ptr_nsobject.mm",
     "cocoa/window_size_constants.h",
     "cocoa/window_size_constants.mm",
     "cursor/cursor.cc",
@@ -261,10 +266,6 @@ component("base") {
     "template_expressions.h",
     "theme_provider.cc",
     "theme_provider.h",
-    "touch/touch_device.h",
-    "touch/touch_device_util.cc",
-    "touch/touch_editing_controller.cc",
-    "touch/touch_editing_controller.h",
     "ui_base_export.h",
     "ui_base_exports.cc",
     "ui_base_features.cc",
@@ -363,6 +364,10 @@ component("base") {
       "idle/idle_win.cc",
       "text/bytes_formatting.cc",
       "text/bytes_formatting.h",
+      "touch/touch_device.h",
+      "touch/touch_device_util.cc",
+      "touch/touch_editing_controller.cc",
+      "touch/touch_editing_controller.h",
     ]
   }
 
@@ -662,6 +667,8 @@ static_library("test_support") {
 
   if (!is_ios) {
     sources += [
+      "test/cocoa_helper.h",
+      "test/cocoa_helper.mm",
       "test/menu_test_observer.h",
       "test/menu_test_observer.mm",
       "test/nswindow_fullscreen_notification_waiter.h",
@@ -698,6 +705,7 @@ static_library("test_support") {
   deps = [
     "//base",
     "//base/test:test_config",
+    "//base/test:test_support",
     "//skia",
     "//testing/gtest",
     "//ui/base:ui_data_pack",
@@ -841,6 +849,7 @@ test("ui_base_unittests") {
       "cocoa/three_part_image_unittest.mm",
       "cocoa/touch_bar_util_unittest.mm",
       "cocoa/tracking_area_unittest.mm",
+      "cocoa/weak_ptr_nsobject_unittest.mm",
       "models/list_model_unittest.cc",
       "models/list_selection_model_unittest.cc",
       "models/tree_node_model_unittest.cc",
@@ -1017,7 +1026,7 @@ test("ui_base_unittests") {
   }
 }
 
-if (is_mac && !is_vivaldi) {
+if (is_mac) {
   mac_framework_bundle("ui_unittests_framework") {
     testonly = true
     deps = [

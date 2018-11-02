@@ -13,7 +13,6 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
@@ -28,12 +27,12 @@
 #include "chrome/browser/chromeos/policy/device_local_account_external_data_service.h"
 #include "chrome/browser/chromeos/policy/device_local_account_policy_store.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/common/chrome_content_client.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/settings/cros_settings_provider.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
@@ -69,7 +68,7 @@ std::unique_ptr<CloudPolicyClient> CreateClient(
   }
 
   std::unique_ptr<CloudPolicyClient> client =
-      base::MakeUnique<CloudPolicyClient>(
+      std::make_unique<CloudPolicyClient>(
           std::string() /* machine_id */, std::string() /* machine_model */,
           device_management_service, system_request_context,
           nullptr /* signing_service */);

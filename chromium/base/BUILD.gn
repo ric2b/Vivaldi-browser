@@ -38,9 +38,6 @@ declare_args() {
   # details and the expected format.
   override_build_date = "N/A"
 
-  # Partition alloc is included by default except iOS.
-  use_partition_alloc = !is_ios
-
   # Indicates if the Location object contains the source code information
   # (file, function, line). False means only the program counter (and currently
   # file name) is saved.
@@ -53,6 +50,11 @@ declare_args() {
 
   # Set to true to disable COM init check hooks.
   com_init_check_hook_disabled = false
+
+  # Set to true to enable mutex priority inheritance. See the comments in
+  # LockImpl::PriorityInheritanceAvailable() in lock_impl_posix.cc for the
+  # platform requirements to safely enable priority inheritance.
+  enable_mutex_priority_inheritance = false
 }
 
 if (is_android) {
@@ -154,7 +156,7 @@ jumbo_component("base") {
     "android/build_info.h",
     "android/callback_android.cc",
     "android/callback_android.h",
-    "android/child_process_service_impl.cc",
+    "android/child_process_service.cc",
     "android/command_line_android.cc",
     "android/content_uri_utils.cc",
     "android/content_uri_utils.h",
@@ -265,6 +267,7 @@ jumbo_component("base") {
     "containers/span.h",
     "containers/stack.h",
     "containers/stack_container.h",
+    "containers/unique_ptr_comparator.h",
     "containers/vector_buffer.h",
     "cpu.cc",
     "cpu.h",
@@ -408,8 +411,9 @@ jumbo_component("base") {
     "json/json_writer.h",
     "json/string_escape.cc",
     "json/string_escape.h",
-    "lazy_instance.cc",
     "lazy_instance.h",
+    "lazy_instance_helpers.cc",
+    "lazy_instance_helpers.h",
     "linux_util.cc",
     "linux_util.h",
     "location.cc",
@@ -522,7 +526,6 @@ jumbo_component("base") {
     "memory/shared_memory_helper.h",
     "memory/shared_memory_tracker.cc",
     "memory/shared_memory_tracker.h",
-    "memory/singleton.cc",
     "memory/singleton.h",
     "memory/weak_ptr.cc",
     "memory/weak_ptr.h",
@@ -605,6 +608,7 @@ jumbo_component("base") {
     "nix/mime_util_xdg.h",
     "nix/xdg_util.cc",
     "nix/xdg_util.h",
+    "no_destructor.h",
     "observer_list.h",
     "observer_list_threadsafe.cc",
     "observer_list_threadsafe.h",
@@ -733,6 +737,8 @@ jumbo_component("base") {
     "strings/pattern.h",
     "strings/safe_sprintf.cc",
     "strings/safe_sprintf.h",
+    "strings/strcat.cc",
+    "strings/strcat.h",
     "strings/string16.cc",
     "strings/string16.h",
     "strings/string_number_conversions.cc",
@@ -871,7 +877,6 @@ jumbo_component("base") {
     "third_party/nspr/prtime.cc",
     "third_party/nspr/prtime.h",
     "third_party/superfasthash/superfasthash.c",
-    "third_party/valgrind/memcheck.h",
     "threading/platform_thread.h",
     "threading/platform_thread_android.cc",
     "threading/platform_thread_internal_posix.cc",
@@ -1142,10 +1147,13 @@ jumbo_component("base") {
   ]
 
   public_deps = [
+    ":anchor_functions_flags",
     ":base_static",
     ":build_date",
     ":cfi_flags",
     ":debugging_flags",
+    ":protected_memory_flags",
+    ":synchronization_flags",
     "//base/numerics:base_numerics",
   ]
 
@@ -1747,6 +1755,34 @@ buildflag_header("debugging_flags") {
   ]
 }
 
+# Build flags for ProtectedMemory, temporary workaround for crbug.com/792777
+# TODO(vtsyrklevich): Remove once support for gold on Android/CrOs is dropped
+buildflag_header("protected_memory_flags") {
+  header = "protected_memory_flags.h"
+  header_dir = "base/memory"
+
+  # buildflag entries added to this header must also must be manually added to
+  # tools/gn/bootstrap/bootstrap.py
+  flags = [ "USE_LLD=$use_lld" ]
+}
+
+buildflag_header("synchronization_flags") {
+  header = "synchronization_flags.h"
+  header_dir = "base/synchronization"
+
+  flags =
+      [ "ENABLE_MUTEX_PRIORITY_INHERITANCE=$enable_mutex_priority_inheritance" ]
+}
+
+buildflag_header("anchor_functions_flags") {
+  header = "anchor_functions_flags.h"
+  header_dir = "base/android/library_loader"
+
+  # buildflag entries added to this header must also must be manually added to
+  # tools/gn/bootstrap/bootstrap.py
+  flags = [ "USE_LLD=$use_lld" ]
+}
+
 # This is the subset of files from base that should not be used with a dynamic
 # library. Note that this library cannot depend on base because base depends on
 # base_static.
@@ -1754,8 +1790,6 @@ static_library("base_static") {
   sources = [
     "base_switches.cc",
     "base_switches.h",
-    "task_scheduler/switches.cc",
-    "task_scheduler/switches.h",
   ]
 
   if (is_win) {
@@ -2044,10 +2078,12 @@ test("base_unittests") {
     "containers/small_map_unittest.cc",
     "containers/span_unittest.cc",
     "containers/stack_container_unittest.cc",
+    "containers/unique_ptr_comparator_unittest.cc",
     "containers/vector_buffer_unittest.cc",
     "cpu_unittest.cc",
     "debug/activity_analyzer_unittest.cc",
     "debug/activity_tracker_unittest.cc",
+    "debug/alias_unittest.cc",
     "debug/crash_logging_unittest.cc",
     "debug/debugger_unittest.cc",
     "debug/leak_tracker_unittest.cc",
@@ -2156,6 +2192,7 @@ test("base_unittests") {
     "metrics/sparse_histogram_unittest.cc",
     "metrics/statistics_recorder_unittest.cc",
     "native_library_unittest.cc",
+    "no_destructor_unittest.cc",
     "observer_list_unittest.cc",
     "optional_unittest.cc",
     "os_compat_android_unittest.cc",
@@ -2190,6 +2227,7 @@ test("base_unittests") {
     "strings/nullable_string16_unittest.cc",
     "strings/pattern_unittest.cc",
     "strings/safe_sprintf_unittest.cc",
+    "strings/strcat_unittest.cc",
     "strings/string16_unittest.cc",
     "strings/string_number_conversions_unittest.cc",
     "strings/string_piece_unittest.cc",
@@ -2320,6 +2358,7 @@ test("base_unittests") {
     "win/shortcut_unittest.cc",
     "win/startup_information_unittest.cc",
     "win/wait_chain_unittest.cc",
+    "win/win_includes_unittest.cc",
     "win/win_util_unittest.cc",
     "win/windows_version_unittest.cc",
     "win/winrt_storage_util_unittest.cc",
@@ -2569,7 +2608,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
       "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
-      "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceImpl.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessService.java",
     ]
 
     public_deps = [
@@ -2660,7 +2699,6 @@ if (is_android) {
       "android/java/src/org/chromium/base/library_loader/LibraryLoader.java",
       "android/java/src/org/chromium/base/library_loader/Linker.java",
       "android/java/src/org/chromium/base/library_loader/LoaderErrors.java",
-      "android/java/src/org/chromium/base/library_loader/ModernLinker.java",
       "android/java/src/org/chromium/base/library_loader/NativeLibraryPreloader.java",
       "android/java/src/org/chromium/base/library_loader/ProcessInitException.java",
       "android/java/src/org/chromium/base/metrics/CachedMetrics.java",
@@ -2673,7 +2711,6 @@ if (is_android) {
       "android/java/src/org/chromium/base/process_launcher/ChildProcessConstants.java",
       "android/java/src/org/chromium/base/process_launcher/ChildProcessLauncher.java",
       "android/java/src/org/chromium/base/process_launcher/ChildProcessService.java",
-      "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceImpl.java",
       "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceDelegate.java",
       "android/java/src/org/chromium/base/process_launcher/FileDescriptorInfo.java",
     ]
@@ -2850,6 +2887,7 @@ if (is_android) {
       "android/library_loader/library_loader_hooks.h",
       "memory/memory_pressure_listener.h",
       "metrics/histogram_base.h",
+      "trace_event/trace_config.h",
     ]
   }
 
@@ -2862,6 +2900,9 @@ if (is_android) {
     defines = []
     if (is_java_debug || dcheck_always_on) {
       defines += [ "_DCHECK_IS_ON" ]
+    }
+    if (use_cfi_diag || is_ubsan || is_ubsan_security || is_ubsan_vptr) {
+      defines += [ "_IS_UBSAN" ]
     }
   }
 

@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/command_line.h"
-#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -53,13 +52,6 @@ GpuFeatureStatus GetGpuRasterizationFeatureStatus(
   if (blacklisted_features.count(GPU_FEATURE_TYPE_GPU_RASTERIZATION))
     return kGpuFeatureStatusBlacklisted;
 
-#if defined(OS_ANDROID)
-  // GPU Raster is always enabled on >512MB Android devices. On 512MB devices,
-  // it is controlled by a Finch experiment.
-  if (base::SysInfo::AmountOfPhysicalMemoryMB() > 512)
-    return kGpuFeatureStatusEnabled;
-#endif  // defined(OS_ANDROID)
-
   // Gpu Rasterization on platforms that are not fully enabled is controlled by
   // a finch experiment.
   if (!base::FeatureList::IsEnabled(features::kDefaultEnableGpuRasterization))
@@ -70,9 +62,8 @@ GpuFeatureStatus GetGpuRasterizationFeatureStatus(
 
 GpuFeatureStatus GetWebGLFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
-  if (use_swift_shader || use_swift_shader_for_webgl)
+    bool use_swift_shader) {
+  if (use_swift_shader)
     return kGpuFeatureStatusSoftware;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_ACCELERATED_WEBGL))
     return kGpuFeatureStatusBlacklisted;
@@ -81,9 +72,8 @@ GpuFeatureStatus GetWebGLFeatureStatus(
 
 GpuFeatureStatus GetWebGL2FeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
-  if (use_swift_shader || use_swift_shader_for_webgl)
+    bool use_swift_shader) {
+  if (use_swift_shader)
     return kGpuFeatureStatusSoftware;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_ACCELERATED_WEBGL2))
     return kGpuFeatureStatusBlacklisted;
@@ -92,15 +82,12 @@ GpuFeatureStatus GetWebGL2FeatureStatus(
 
 GpuFeatureStatus Get2DCanvasFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
+    bool use_swift_shader) {
   if (use_swift_shader) {
     // This is for testing only. Chrome should exercise the GPU accelerated
     // path on top of SwiftShader driver.
     return kGpuFeatureStatusEnabled;
   }
-  if (use_swift_shader_for_webgl)
-    return kGpuFeatureStatusSoftware;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS))
     return kGpuFeatureStatusSoftware;
   return kGpuFeatureStatusEnabled;
@@ -108,15 +95,12 @@ GpuFeatureStatus Get2DCanvasFeatureStatus(
 
 GpuFeatureStatus GetFlash3DFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
+    bool use_swift_shader) {
   if (use_swift_shader) {
     // This is for testing only. Chrome should exercise the GPU accelerated
     // path on top of SwiftShader driver.
     return kGpuFeatureStatusEnabled;
   }
-  if (use_swift_shader_for_webgl)
-    return kGpuFeatureStatusDisabled;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_FLASH3D))
     return kGpuFeatureStatusBlacklisted;
   return kGpuFeatureStatusEnabled;
@@ -124,15 +108,12 @@ GpuFeatureStatus GetFlash3DFeatureStatus(
 
 GpuFeatureStatus GetFlashStage3DFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
+    bool use_swift_shader) {
   if (use_swift_shader) {
     // This is for testing only. Chrome should exercise the GPU accelerated
     // path on top of SwiftShader driver.
     return kGpuFeatureStatusEnabled;
   }
-  if (use_swift_shader_for_webgl)
-    return kGpuFeatureStatusDisabled;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_FLASH_STAGE3D))
     return kGpuFeatureStatusBlacklisted;
   return kGpuFeatureStatusEnabled;
@@ -140,15 +121,12 @@ GpuFeatureStatus GetFlashStage3DFeatureStatus(
 
 GpuFeatureStatus GetFlashStage3DBaselineFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
+    bool use_swift_shader) {
   if (use_swift_shader) {
     // This is for testing only. Chrome should exercise the GPU accelerated
     // path on top of SwiftShader driver.
     return kGpuFeatureStatusEnabled;
   }
-  if (use_swift_shader_for_webgl)
-    return kGpuFeatureStatusDisabled;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_FLASH_STAGE3D) ||
       blacklisted_features.count(GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE))
     return kGpuFeatureStatusBlacklisted;
@@ -157,9 +135,8 @@ GpuFeatureStatus GetFlashStage3DBaselineFeatureStatus(
 
 GpuFeatureStatus GetAcceleratedVideoDecodeFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
-  if (use_swift_shader || use_swift_shader_for_webgl)
+    bool use_swift_shader) {
+  if (use_swift_shader)
     return kGpuFeatureStatusDisabled;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE))
     return kGpuFeatureStatusBlacklisted;
@@ -168,15 +145,12 @@ GpuFeatureStatus GetAcceleratedVideoDecodeFeatureStatus(
 
 GpuFeatureStatus GetGpuCompositingFeatureStatus(
     const std::set<int>& blacklisted_features,
-    bool use_swift_shader,
-    bool use_swift_shader_for_webgl) {
+    bool use_swift_shader) {
   if (use_swift_shader) {
     // This is for testing only. Chrome should exercise the GPU accelerated
     // path on top of SwiftShader driver.
     return kGpuFeatureStatusEnabled;
   }
-  if (use_swift_shader_for_webgl)
-    return kGpuFeatureStatusDisabled;
   if (blacklisted_features.count(GPU_FEATURE_TYPE_GPU_COMPOSITING))
     return kGpuFeatureStatusBlacklisted;
   return kGpuFeatureStatusEnabled;
@@ -204,6 +178,9 @@ void AdjustGpuFeatureStatusToWorkarounds(GpuFeatureInfo* gpu_feature_info) {
   }
 }
 
+GPUInfo* g_gpu_info_cache = nullptr;
+GpuFeatureInfo* g_gpu_feature_info_cache = nullptr;
+
 }  // namespace anonymous
 
 void ParseSecondaryGpuDevicesFromCommandLine(
@@ -213,12 +190,6 @@ void ParseSecondaryGpuDevicesFromCommandLine(
 
   const char* secondary_vendor_switch_key = switches::kGpuSecondaryVendorIDs;
   const char* secondary_device_switch_key = switches::kGpuSecondaryDeviceIDs;
-
-  if (command_line.HasSwitch(switches::kGpuTestingSecondaryVendorIDs) &&
-      command_line.HasSwitch(switches::kGpuTestingSecondaryDeviceIDs)) {
-    secondary_vendor_switch_key = switches::kGpuTestingSecondaryVendorIDs;
-    secondary_device_switch_key = switches::kGpuTestingSecondaryDeviceIDs;
-  }
 
   if (!command_line.HasSwitch(secondary_vendor_switch_key) ||
       !command_line.HasSwitch(secondary_device_switch_key)) {
@@ -299,16 +270,67 @@ void GetGpuInfoFromCommandLine(const base::CommandLine& command_line,
   }
 }
 
-GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
-                                     base::CommandLine* command_line) {
+GpuFeatureInfo ComputeGpuFeatureInfoWithHardwareAccelerationDisabled() {
   GpuFeatureInfo gpu_feature_info;
-  std::set<int> blacklisted_features;
-  if (!command_line->HasSwitch(switches::kIgnoreGpuBlacklist)) {
-    std::unique_ptr<GpuBlacklist> list(GpuBlacklist::Create());
-    blacklisted_features =
-        list->MakeDecision(GpuControlList::kOsAny, std::string(), gpu_info);
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS] =
+      kGpuFeatureStatusSoftware;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_COMPOSITING] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL] =
+      kGpuFeatureStatusSoftware;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH3D] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL2] =
+      kGpuFeatureStatusSoftware;
+#if DCHECK_IS_ON()
+  for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
+    DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
   }
+#endif
+  return gpu_feature_info;
+}
 
+GpuFeatureInfo ComputeGpuFeatureInfoForSwiftShader() {
+  GpuFeatureInfo gpu_feature_info;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS] =
+      kGpuFeatureStatusSoftware;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_COMPOSITING] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL] =
+      kGpuFeatureStatusSoftware;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH3D] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
+      kGpuFeatureStatusDisabled;
+  gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL2] =
+      kGpuFeatureStatusSoftware;
+#if DCHECK_IS_ON()
+  for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
+    DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
+  }
+#endif
+  return gpu_feature_info;
+}
+
+GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
+                                     bool ignore_gpu_blacklist,
+                                     bool disable_gpu_driver_bug_workarounds,
+                                     bool log_gpu_control_list_decisions,
+                                     base::CommandLine* command_line) {
   bool use_swift_shader = false;
   bool use_swift_shader_for_webgl = false;
   if (command_line->HasSwitch(switches::kUseGL)) {
@@ -318,44 +340,52 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
     else if (use_gl == gl::kGLImplementationSwiftShaderForWebGLName)
       use_swift_shader_for_webgl = true;
   }
+  if (use_swift_shader_for_webgl)
+    return ComputeGpuFeatureInfoForSwiftShader();
+
+  GpuFeatureInfo gpu_feature_info;
+  std::set<int> blacklisted_features;
+  if (!ignore_gpu_blacklist) {
+    std::unique_ptr<GpuBlacklist> list(GpuBlacklist::Create());
+    if (log_gpu_control_list_decisions)
+      list->EnableControlListLogging("gpu_blacklist");
+    unsigned target_test_group = 0u;
+    if (command_line->HasSwitch(switches::kGpuBlacklistTestGroup)) {
+      std::string test_group_string =
+          command_line->GetSwitchValueASCII(switches::kGpuBlacklistTestGroup);
+      if (!base::StringToUint(test_group_string, &target_test_group))
+        target_test_group = 0u;
+    }
+    blacklisted_features = list->MakeDecision(
+        GpuControlList::kOsAny, std::string(), gpu_info, target_test_group);
+    gpu_feature_info.applied_gpu_blacklist_entries = list->GetActiveEntries();
+  }
 
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_RASTERIZATION] =
       GetGpuRasterizationFeatureStatus(blacklisted_features, *command_line);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL] =
-      GetWebGLFeatureStatus(blacklisted_features, use_swift_shader,
-                            use_swift_shader_for_webgl);
+      GetWebGLFeatureStatus(blacklisted_features, use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_WEBGL2] =
-      GetWebGL2FeatureStatus(blacklisted_features, use_swift_shader,
-                             use_swift_shader_for_webgl);
+      GetWebGL2FeatureStatus(blacklisted_features, use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS] =
-      Get2DCanvasFeatureStatus(blacklisted_features, use_swift_shader,
-                               use_swift_shader_for_webgl);
+      Get2DCanvasFeatureStatus(blacklisted_features, use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH3D] =
-      GetFlash3DFeatureStatus(blacklisted_features, use_swift_shader,
-                              use_swift_shader_for_webgl);
+      GetFlash3DFeatureStatus(blacklisted_features, use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D] =
-      GetFlashStage3DFeatureStatus(blacklisted_features, use_swift_shader,
-                                   use_swift_shader_for_webgl);
+      GetFlashStage3DFeatureStatus(blacklisted_features, use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_FLASH_STAGE3D_BASELINE] =
-      GetFlashStage3DBaselineFeatureStatus(
-          blacklisted_features, use_swift_shader, use_swift_shader_for_webgl);
+      GetFlashStage3DBaselineFeatureStatus(blacklisted_features,
+                                           use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE] =
-      GetAcceleratedVideoDecodeFeatureStatus(
-          blacklisted_features, use_swift_shader, use_swift_shader_for_webgl);
+      GetAcceleratedVideoDecodeFeatureStatus(blacklisted_features,
+                                             use_swift_shader);
   gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_COMPOSITING] =
-      GetGpuCompositingFeatureStatus(blacklisted_features, use_swift_shader,
-                                     use_swift_shader_for_webgl);
+      GetGpuCompositingFeatureStatus(blacklisted_features, use_swift_shader);
 #if DCHECK_IS_ON()
   for (int ii = 0; ii < NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
     DCHECK_NE(kGpuFeatureStatusUndefined, gpu_feature_info.status_values[ii]);
   }
 #endif
-
-  if (gpu_feature_info.status_values[GPU_FEATURE_TYPE_GPU_COMPOSITING] !=
-      kGpuFeatureStatusEnabled) {
-    gpu_feature_info.status_values[GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS] =
-        kGpuFeatureStatusSoftware;
-  }
 
   gl::ExtensionSet all_disabled_extensions;
   std::string disabled_gl_extensions_value =
@@ -371,16 +401,33 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
 
   std::set<int> enabled_driver_bug_workarounds;
   std::vector<std::string> driver_bug_disabled_extensions;
-  if (!command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
+  if (!disable_gpu_driver_bug_workarounds) {
     std::unique_ptr<gpu::GpuDriverBugList> list(GpuDriverBugList::Create());
-    enabled_driver_bug_workarounds =
-        list->MakeDecision(GpuControlList::kOsAny, std::string(), gpu_info);
+    unsigned target_test_group = 0u;
+    if (command_line->HasSwitch(switches::kGpuDriverBugListTestGroup)) {
+      std::string test_group_string = command_line->GetSwitchValueASCII(
+          switches::kGpuDriverBugListTestGroup);
+      if (!base::StringToUint(test_group_string, &target_test_group))
+        target_test_group = 0u;
+    }
+    enabled_driver_bug_workarounds = list->MakeDecision(
+        GpuControlList::kOsAny, std::string(), gpu_info, target_test_group);
     gpu_feature_info.applied_gpu_driver_bug_list_entries =
         list->GetActiveEntries();
 
     driver_bug_disabled_extensions = list->GetDisabledExtensions();
     all_disabled_extensions.insert(driver_bug_disabled_extensions.begin(),
                                    driver_bug_disabled_extensions.end());
+
+    // Disabling WebGL extensions only occurs via the blacklist, so
+    // the logic is simpler.
+    gl::ExtensionSet disabled_webgl_extensions;
+    std::vector<std::string> disabled_webgl_extension_list =
+        list->GetDisabledWebGLExtensions();
+    disabled_webgl_extensions.insert(disabled_webgl_extension_list.begin(),
+                                     disabled_webgl_extension_list.end());
+    gpu_feature_info.disabled_webgl_extensions =
+        gl::MakeExtensionString(disabled_webgl_extensions);
   }
   gpu::GpuDriverBugList::AppendWorkaroundsFromCommandLine(
       &enabled_driver_bug_workarounds, *command_line);
@@ -406,25 +453,50 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
 
 void SetKeysForCrashLogging(const GPUInfo& gpu_info) {
 #if !defined(OS_ANDROID)
-  base::debug::SetCrashKeyValue(
-      crash_keys::kGPUVendorID,
+  crash_keys::gpu_vendor_id.Set(
       base::StringPrintf("0x%04x", gpu_info.gpu.vendor_id));
-  base::debug::SetCrashKeyValue(
-      crash_keys::kGPUDeviceID,
+  crash_keys::gpu_device_id.Set(
       base::StringPrintf("0x%04x", gpu_info.gpu.device_id));
 #endif
-  base::debug::SetCrashKeyValue(crash_keys::kGPUDriverVersion,
-                                gpu_info.driver_version);
-  base::debug::SetCrashKeyValue(crash_keys::kGPUPixelShaderVersion,
-                                gpu_info.pixel_shader_version);
-  base::debug::SetCrashKeyValue(crash_keys::kGPUVertexShaderVersion,
-                                gpu_info.vertex_shader_version);
+  crash_keys::gpu_driver_version.Set(gpu_info.driver_version);
+  crash_keys::gpu_pixel_shader_version.Set(gpu_info.pixel_shader_version);
+  crash_keys::gpu_vertex_shader_version.Set(gpu_info.vertex_shader_version);
 #if defined(OS_MACOSX)
-  base::debug::SetCrashKeyValue(crash_keys::kGPUGLVersion, gpu_info.gl_version);
+  crash_keys::gpu_gl_version.Set(gpu_info.gl_version);
 #elif defined(OS_POSIX)
-  base::debug::SetCrashKeyValue(crash_keys::kGPUVendor, gpu_info.gl_vendor);
-  base::debug::SetCrashKeyValue(crash_keys::kGPURenderer, gpu_info.gl_renderer);
+  crash_keys::gpu_vendor.Set(gpu_info.gl_vendor);
+  crash_keys::gpu_renderer.Set(gpu_info.gl_renderer);
 #endif
+}
+
+void CacheGPUInfo(const GPUInfo& gpu_info) {
+  DCHECK(!g_gpu_info_cache);
+  g_gpu_info_cache = new GPUInfo;
+  *g_gpu_info_cache = gpu_info;
+}
+
+bool PopGPUInfoCache(GPUInfo* gpu_info) {
+  if (!g_gpu_info_cache)
+    return false;
+  *gpu_info = *g_gpu_info_cache;
+  delete g_gpu_info_cache;
+  g_gpu_info_cache = nullptr;
+  return true;
+}
+
+void CacheGpuFeatureInfo(const GpuFeatureInfo& gpu_feature_info) {
+  DCHECK(!g_gpu_feature_info_cache);
+  g_gpu_feature_info_cache = new GpuFeatureInfo;
+  *g_gpu_feature_info_cache = gpu_feature_info;
+}
+
+bool PopGpuFeatureInfoCache(GpuFeatureInfo* gpu_feature_info) {
+  if (!g_gpu_feature_info_cache)
+    return false;
+  *gpu_feature_info = *g_gpu_feature_info_cache;
+  delete g_gpu_feature_info_cache;
+  g_gpu_feature_info_cache = nullptr;
+  return true;
 }
 
 }  // namespace gpu

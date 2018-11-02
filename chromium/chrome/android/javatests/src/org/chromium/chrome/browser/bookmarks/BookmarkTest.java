@@ -59,10 +59,7 @@ import java.util.concurrent.ExecutionException;
  * Tests for the bookmark manager.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @RetryOnFailure
 public class BookmarkTest {
     @Rule
@@ -275,8 +272,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     public void testSearchBookmarks() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTests(
-                BookmarkPromoHeader.PromoState.PROMO_SIGNIN_GENERIC);
+        BookmarkPromoHeader.forcePromoStateForTests(BookmarkPromoHeader.PromoState.PROMO_SYNC);
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
         addBookmark(TEST_PAGE_TITLE_FOO, mTestPageFoo);
         openBookmarkManager();
@@ -393,9 +389,11 @@ public class BookmarkTest {
         mRenderTestRule.render(manager.getView(), "bookmark_manager_one_folder");
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
-            manager.getRecyclerView()
-                    .findViewHolderForAdapterPosition(0)
-                    .itemView.performLongClick();
+            BookmarkRow itemView = (BookmarkRow) manager.getRecyclerView()
+                                           .findViewHolderForAdapterPosition(0)
+                                           .itemView;
+            itemView.performLongClick();
+            itemView.endAnimationsForTests();
             manager.getToolbarForTests().endAnimationsForTesting();
         });
 

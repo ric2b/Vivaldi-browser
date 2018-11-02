@@ -12,8 +12,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
-#include "gpu/gpu_export.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/image_transport_surface_delegate.h"
 #include "ui/gfx/vsync_provider.h"
 
@@ -22,7 +22,7 @@ namespace gpu {
 class GpuVSyncWorker;
 class GpuVSyncMessageFilter;
 
-class GPU_EXPORT GpuVSyncProviderWin : public gfx::VSyncProvider {
+class GPU_IPC_SERVICE_EXPORT GpuVSyncProviderWin : public gfx::VSyncProvider {
  public:
   GpuVSyncProviderWin(base::WeakPtr<ImageTransportSurfaceDelegate> delegate,
                       SurfaceHandle surface_handle);
@@ -31,6 +31,9 @@ class GPU_EXPORT GpuVSyncProviderWin : public gfx::VSyncProvider {
   // This class ignores this method and updates VSync directly via a
   // worker thread IPC call.
   void GetVSyncParameters(const UpdateVSyncCallback& callback) override;
+  bool GetVSyncParametersIfAvailable(base::TimeTicks* timebase,
+                                     base::TimeDelta* interval) override;
+  bool SupportGetVSyncParametersIfAvailable() override;
 
  private:
   void OnVSync(base::TimeTicks timestamp, base::TimeDelta interval);

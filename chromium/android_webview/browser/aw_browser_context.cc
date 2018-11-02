@@ -4,6 +4,7 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 
+#include <memory>
 #include <utility>
 
 #include "android_webview/browser/aw_browser_policy_connector.h"
@@ -64,6 +65,8 @@ const char kWebRestrictionsAuthority[] = "web_restrictions_authority";
 
 namespace {
 
+const base::FilePath::CharType kChannelIDFilename[] = "Origin Bound Certs";
+
 const void* const kDownloadManagerDelegateKey = &kDownloadManagerDelegateKey;
 
 // Shows notifications which correspond to PersistentPrefStore's reading errors.
@@ -85,24 +88,6 @@ std::unique_ptr<net::ProxyConfigService> CreateProxyConfigService() {
   return config_service;
 }
 
-bool OverrideBlacklistForURL(const GURL& url, bool* block, int* reason) {
-  // We don't have URLs that should never be blacklisted here.
-  return false;
-}
-
-policy::URLBlacklistManager* CreateURLBlackListManager(
-    PrefService* pref_service) {
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
-
-  return new policy::URLBlacklistManager(pref_service, background_task_runner,
-                                         io_task_runner,
-                                         base::Bind(OverrideBlacklistForURL));
-}
-
 std::unique_ptr<AwSafeBrowsingWhitelistManager>
 CreateSafeBrowsingWhitelistManager() {
   // Should not be called until the end of PreMainMessageLoopRun,
@@ -111,7 +96,7 @@ CreateSafeBrowsingWhitelistManager() {
           {base::MayBlock(), base::TaskPriority::BACKGROUND});
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
-  return base::MakeUnique<AwSafeBrowsingWhitelistManager>(
+  return std::make_unique<AwSafeBrowsingWhitelistManager>(
       background_task_runner, io_task_runner);
 }
 
@@ -147,7 +132,7 @@ AwBrowserContext* AwBrowserContext::FromWebContents(
   return static_cast<AwBrowserContext*>(web_contents->GetBrowserContext());
 }
 
-void AwBrowserContext::PreMainMessageLoopRun() {
+void AwBrowserContext::PreMainMessageLoopRun(net::NetLog* net_log) {
   FilePath cache_path;
   PathService::Get(base::DIR_CACHE, &cache_path);
   cache_path =
@@ -158,7 +143,8 @@ void AwBrowserContext::PreMainMessageLoopRun() {
   InitUserPrefService();
 
   url_request_context_getter_ = new AwURLRequestContextGetter(
-      cache_path, CreateProxyConfigService(), user_pref_service_.get());
+      cache_path, context_storage_path_.Append(kChannelIDFilename),
+      CreateProxyConfigService(), user_pref_service_.get(), net_log);
 
   scoped_refptr<base::SequencedTaskRunner> db_task_runner =
       base::CreateSequencedTaskRunnerWithTraits(
@@ -172,8 +158,6 @@ void AwBrowserContext::PreMainMessageLoopRun() {
       new AwFormDatabaseService(context_storage_path_));
 
   EnsureResourceContextInitialized(this);
-
-  blacklist_manager_.reset(CreateURLBlackListManager(user_pref_service_.get()));
 
   AwMetricsServiceClient::GetInstance()->Initialize(
       user_pref_service_.get(),
@@ -194,7 +178,7 @@ void AwBrowserContext::PreMainMessageLoopRun() {
   safe_browsing_db_manager_ =
       new safe_browsing::RemoteSafeBrowsingDatabaseManager();
   safe_browsing_trigger_manager_ =
-      base::MakeUnique<safe_browsing::TriggerManager>(
+      std::make_unique<safe_browsing::TriggerManager>(
           safe_browsing_ui_manager_.get());
   safe_browsing_whitelist_manager_ = CreateSafeBrowsingWhitelistManager();
 
@@ -237,12 +221,10 @@ void AwBrowserContext::InitUserPrefService() {
   pref_registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, false);
   policy::URLBlacklistManager::RegisterProfilePrefs(pref_registry);
 
-  pref_registry->RegisterStringPref(prefs::kAuthServerWhitelist, std::string());
-  pref_registry->RegisterStringPref(prefs::kAuthAndroidNegotiateAccountType,
-                                    std::string());
   pref_registry->RegisterStringPref(prefs::kWebRestrictionsAuthority,
                                     std::string());
 
+  AwURLRequestContextGetter::RegisterPrefs(pref_registry);
   metrics::MetricsService::RegisterPrefs(pref_registry);
   safe_browsing::RegisterProfilePrefs(pref_registry);
 
@@ -251,6 +233,7 @@ void AwBrowserContext::InitUserPrefService() {
       base::MakeRefCounted<InMemoryPrefStore>());
   pref_service_factory.set_managed_prefs(
       base::MakeRefCounted<policy::ConfigurationPolicyPrefStore>(
+          browser_policy_connector_.get(),
           browser_policy_connector_->GetPolicyService(),
           browser_policy_connector_->GetHandlerList(),
           policy::POLICY_LEVEL_MANDATORY));
@@ -282,7 +265,7 @@ content::DownloadManagerDelegate*
 AwBrowserContext::GetDownloadManagerDelegate() {
   if (!GetUserData(kDownloadManagerDelegateKey)) {
     SetUserData(kDownloadManagerDelegateKey,
-                base::MakeUnique<AwDownloadManagerDelegate>());
+                std::make_unique<AwDownloadManagerDelegate>());
   }
   return static_cast<AwDownloadManagerDelegate*>(
       GetUserData(kDownloadManagerDelegateKey));
@@ -366,13 +349,6 @@ AwBrowserContext::CreateMediaRequestContextForStoragePartition(
     bool in_memory) {
   NOTREACHED();
   return NULL;
-}
-
-policy::URLBlacklistManager* AwBrowserContext::GetURLBlacklistManager() {
-  // Should not be called until the end of PreMainMessageLoopRun, where
-  // blacklist_manager_ is initialized.
-  DCHECK(blacklist_manager_);
-  return blacklist_manager_.get();
 }
 
 web_restrictions::WebRestrictionsClient*

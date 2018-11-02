@@ -15,7 +15,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace {
-LoginScreenClient* g_instance = nullptr;
+LoginScreenClient* g_login_screen_client_instance = nullptr;
 }  // namespace
 
 LoginScreenClient::Delegate::Delegate() = default;
@@ -30,32 +30,47 @@ LoginScreenClient::LoginScreenClient() : binding_(this) {
   binding_.Bind(mojo::MakeRequest(&client));
   login_screen_->SetClient(std::move(client));
 
-  DCHECK(!g_instance);
-  g_instance = this;
+  DCHECK(!g_login_screen_client_instance);
+  g_login_screen_client_instance = this;
 }
 
 LoginScreenClient::~LoginScreenClient() {
-  DCHECK_EQ(this, g_instance);
-  g_instance = nullptr;
+  DCHECK_EQ(this, g_login_screen_client_instance);
+  g_login_screen_client_instance = nullptr;
+}
+
+// static
+bool LoginScreenClient::HasInstance() {
+  return !!g_login_screen_client_instance;
 }
 
 // static
 LoginScreenClient* LoginScreenClient::Get() {
-  return g_instance;
+  DCHECK(g_login_screen_client_instance);
+  return g_login_screen_client_instance;
 }
 
-void LoginScreenClient::AuthenticateUser(const AccountId& account_id,
-                                         const std::string& hashed_password,
-                                         bool authenticated_by_pin,
-                                         AuthenticateUserCallback callback) {
-  if (delegate_)
-    delegate_->HandleAuthenticateUser(
-        account_id, hashed_password, authenticated_by_pin, std::move(callback));
+void LoginScreenClient::AuthenticateUser(
+    const AccountId& account_id,
+    const std::string& hashed_password,
+    const password_manager::SyncPasswordData& sync_password_data,
+    bool authenticated_by_pin,
+    AuthenticateUserCallback callback) {
+  if (delegate_) {
+    delegate_->HandleAuthenticateUser(account_id, hashed_password,
+                                      sync_password_data, authenticated_by_pin,
+                                      std::move(callback));
+  }
 }
 
 void LoginScreenClient::ShowLockScreen(
     ash::mojom::LoginScreen::ShowLockScreenCallback on_shown) {
   login_screen_->ShowLockScreen(std::move(on_shown));
+}
+
+void LoginScreenClient::ShowLoginScreen(
+    ash::mojom::LoginScreen::ShowLoginScreenCallback on_shown) {
+  login_screen_->ShowLoginScreen(std::move(on_shown));
 }
 
 void LoginScreenClient::AttemptUnlock(const AccountId& account_id) {
@@ -101,6 +116,11 @@ void LoginScreenClient::SignOutUser() {
 
 void LoginScreenClient::CancelAddUser() {
   chromeos::UserAddingScreen::Get()->Cancel();
+}
+
+void LoginScreenClient::LoginAsGuest() {
+  if (delegate_)
+    delegate_->HandleLoginAsGuest();
 }
 
 void LoginScreenClient::OnMaxIncorrectPasswordAttempted(
@@ -158,6 +178,11 @@ void LoginScreenClient::SetDevChannelInfo(
     const std::string& bluetooth_name) {
   login_screen_->SetDevChannelInfo(os_version_label_text, enterprise_info_text,
                                    bluetooth_name);
+}
+
+void LoginScreenClient::IsReadyForPassword(
+    ash::mojom::LoginScreen::IsReadyForPasswordCallback callback) {
+  login_screen_->IsReadyForPassword(std::move(callback));
 }
 
 void LoginScreenClient::SetDelegate(Delegate* delegate) {

@@ -17,7 +17,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/unguessable_token.h"
-#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "content/child/thread_safe_sender.h"
 #include "content/common/content_export.h"
 #include "media/mojo/interfaces/video_encode_accelerator.mojom.h"
@@ -59,7 +58,6 @@ class CONTENT_EXPORT GpuVideoAcceleratorFactoriesImpl
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<ui::ContextProviderCommandBuffer>& context_provider,
       bool enable_gpu_memory_buffer_video_frames,
-      const viz::BufferToTextureTargetMap& image_texture_targets,
       bool enable_video_accelerator,
       media::mojom::VideoEncodeAcceleratorProviderPtrInfo unbound_vea_provider);
 
@@ -90,7 +88,7 @@ class CONTENT_EXPORT GpuVideoAcceleratorFactoriesImpl
 
   bool ShouldUseGpuMemoryBuffersForVideoFrames() const override;
   unsigned ImageTextureTarget(gfx::BufferFormat format) override;
-  OutputFormat VideoFrameOutputFormat() override;
+  OutputFormat VideoFrameOutputFormat(size_t bit_depth) override;
   std::unique_ptr<media::GpuVideoAcceleratorFactories::ScopedGLContextLock>
   GetGLContextLock() override;
   bool CheckContextLost();
@@ -103,6 +101,8 @@ class CONTENT_EXPORT GpuVideoAcceleratorFactoriesImpl
   GetVideoEncodeAcceleratorSupportedProfiles() override;
 
   viz::ContextProvider* GetMediaContextProvider() override;
+
+  void SetRenderingColorSpace(const gfx::ColorSpace& color_space) override;
 
   void ReleaseContextProvider();
   scoped_refptr<ui::ContextProviderCommandBuffer> ContextProviderMainThread();
@@ -117,7 +117,6 @@ class CONTENT_EXPORT GpuVideoAcceleratorFactoriesImpl
       const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
       const scoped_refptr<ui::ContextProviderCommandBuffer>& context_provider,
       bool enable_gpu_memory_buffer_video_frames,
-      const viz::BufferToTextureTargetMap& image_texture_targets,
       bool enable_video_accelerator,
       media::mojom::VideoEncodeAcceleratorProviderPtrInfo unbound_vea_provider);
 
@@ -139,9 +138,10 @@ class CONTENT_EXPORT GpuVideoAcceleratorFactoriesImpl
 
   // Whether gpu memory buffers should be used to hold video frames data.
   bool enable_gpu_memory_buffer_video_frames_;
-  const viz::BufferToTextureTargetMap image_texture_targets_;
   // Whether video acceleration encoding/decoding should be enabled.
   const bool video_accelerator_enabled_;
+
+  gfx::ColorSpace rendering_color_space_;
 
   gpu::GpuMemoryBufferManager* const gpu_memory_buffer_manager_;
 

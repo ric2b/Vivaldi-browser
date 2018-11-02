@@ -42,34 +42,48 @@ class PRINTING_EXPORT PrintedDocument
                   const base::string16& name,
                   int cookie);
 
-  // Sets a page's data. 0-based. Takes metafile ownership.
-  // Note: locks for a short amount of time.
+#if defined(OS_WIN)
+  // Indicates that the PDF has been generated and the document is waiting for
+  // conversion for printing. This is needed on Windows so that the print job
+  // is not cancelled if the web contents dies before PDF conversion finishes.
+  void SetConvertingPdf();
+
+  // Sets a page's data. 0-based. Note: locks for a short amount of time.
   void SetPage(int page_number,
                std::unique_ptr<MetafilePlayer> metafile,
-#if defined(OS_WIN)
                float shrink,
-#endif
-               const gfx::Size& paper_size,
-               const gfx::Rect& page_rect);
+               const gfx::Size& page_size,
+               const gfx::Rect& page_content_rect);
 
   // Retrieves a page. If the page is not available right now, it
   // requests to have this page be rendered and returns NULL.
   // Note: locks for a short amount of time.
   scoped_refptr<PrintedPage> GetPage(int page_number);
+#else
+  // Sets the document data. Note: locks for a short amount of time.
+  void SetDocument(std::unique_ptr<MetafilePlayer> metafile,
+                   const gfx::Size& page_size,
+                   const gfx::Rect& page_content_rect);
 
-  // Draws the page in the context.
-  // Note: locks for a short amount of time in debug only.
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(USE_AURA))
+  // Retrieves the metafile with the data to print. Lock must be held when
+  // calling this function
+  const MetafilePlayer* GetMetafile();
+#endif
+
+// Draws the page in the context.
+// Note: locks for a short amount of time in debug only.
+#if defined(OS_WIN)
   void RenderPrintedPage(const PrintedPage& page,
                          printing::NativeDrawingContext context) const;
 #elif defined(OS_POSIX)
-  void RenderPrintedPage(const PrintedPage& page,
-                         PrintingContext* context) const;
+  // Draws the document in the context. Returns true on success and false on
+  // failure. Fails if context->NewPage() or context->PageDone() fails.
+  bool RenderPrintedDocument(PrintingContext* context);
 #endif
 
   // Returns true if all the necessary pages for the settings are already
   // rendered.
-  // Note: locks while parsing the whole tree.
+  // Note: This function always locks and may parse the whole tree.
   bool IsComplete() const;
 
   // Sets the number of pages in the document to be rendered. Can only be set
@@ -92,20 +106,32 @@ class PRINTING_EXPORT PrintedDocument
   const base::string16& name() const { return immutable_.name_; }
   int cookie() const { return immutable_.cookie_; }
 
-  // Sets a path where to dump printing output files for debugging. If never set
-  // no files are generated.
-  static void set_debug_dump_path(const base::FilePath& debug_dump_path);
+  // Sets a path where to dump printing output files for debugging. If never
+  // set, no files are generated. |debug_dump_path| must not be empty.
+  static void SetDebugDumpPath(const base::FilePath& debug_dump_path);
+
+  // Returns true if SetDebugDumpPath() has been called.
+  static bool HasDebugDumpPath();
 
   // Creates debug file name from given |document_name| and |extension|.
-  // |extension| should include '.', example ".pdf"
-  // Returns empty |base::FilePath| if debug dumps is not enabled.
+  // |extension| should include the leading dot. e.g. ".pdf"
+  // Should only be called when debug dumps are enabled.
   static base::FilePath CreateDebugDumpPath(
       const base::string16& document_name,
       const base::FilePath::StringType& extension);
 
-  // Dump data on blocking task runner if debug dumps enabled.
+  // Dump data on blocking task runner.
+  // Should only be called when debug dumps are enabled.
   void DebugDumpData(const base::RefCountedMemory* data,
                      const base::FilePath::StringType& extension);
+
+#if defined(OS_WIN) || defined(OS_MACOSX)
+  // Get page content rect adjusted based on
+  // http://dev.w3.org/csswg/css3-page/#positioning-page-box
+  gfx::Rect GetCenteredPageContentRect(const gfx::Size& paper_size,
+                                       const gfx::Size& page_size,
+                                       const gfx::Rect& content_rect) const;
+#endif
 
  private:
   friend class base::RefCountedThreadSafe<PrintedDocument>;
@@ -121,10 +147,6 @@ class PRINTING_EXPORT PrintedDocument
     Mutable();
     ~Mutable();
 
-    // Contains the pages' representation. This is a collection of PrintedPage.
-    // Warning: Lock must be held when accessing this member.
-    PrintedPages pages_;
-
     // Number of expected pages to be rendered.
     // Warning: Lock must be held when accessing this member.
     int expected_page_count_ = 0;
@@ -132,9 +154,19 @@ class PRINTING_EXPORT PrintedDocument
     // The total number of pages in the document.
     int page_count_ = 0;
 
-#if defined(OS_POSIX)
-    // Page number of the first page.
-    int first_page = INT_MAX;
+#if defined(OS_WIN)
+    // Contains the pages' representation. This is a collection of PrintedPage.
+    // Warning: Lock must be held when accessing this member.
+    PrintedPages pages_;
+
+    // Whether the PDF is being converted for printing.
+    bool converting_pdf_ = false;
+#else
+    std::unique_ptr<MetafilePlayer> metafile_;
+#endif
+#if defined(OS_MACOSX)
+    gfx::Size page_size_;
+    gfx::Rect page_content_rect_;
 #endif
   };
 

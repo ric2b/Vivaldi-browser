@@ -50,48 +50,48 @@ class CC_EXPORT SchedulerStateMachine {
   explicit SchedulerStateMachine(const SchedulerSettings& settings);
   ~SchedulerStateMachine();
 
-  enum LayerTreeFrameSinkState {
-    LAYER_TREE_FRAME_SINK_NONE,
-    LAYER_TREE_FRAME_SINK_ACTIVE,
-    LAYER_TREE_FRAME_SINK_CREATING,
-    LAYER_TREE_FRAME_SINK_WAITING_FOR_FIRST_COMMIT,
-    LAYER_TREE_FRAME_SINK_WAITING_FOR_FIRST_ACTIVATION,
+  enum class LayerTreeFrameSinkState {
+    NONE,
+    ACTIVE,
+    CREATING,
+    WAITING_FOR_FIRST_COMMIT,
+    WAITING_FOR_FIRST_ACTIVATION,
   };
   static const char* LayerTreeFrameSinkStateToString(
       LayerTreeFrameSinkState state);
 
   // Note: BeginImplFrameState does not cycle through these states in a fixed
   // order on all platforms. It's up to the scheduler to set these correctly.
-  enum BeginImplFrameState {
-    BEGIN_IMPL_FRAME_STATE_IDLE,
-    BEGIN_IMPL_FRAME_STATE_INSIDE_BEGIN_FRAME,
-    BEGIN_IMPL_FRAME_STATE_INSIDE_DEADLINE,
+  enum class BeginImplFrameState {
+    IDLE,
+    INSIDE_BEGIN_FRAME,
+    INSIDE_DEADLINE,
   };
   static const char* BeginImplFrameStateToString(BeginImplFrameState state);
 
-  enum BeginImplFrameDeadlineMode {
-    BEGIN_IMPL_FRAME_DEADLINE_MODE_NONE,
-    BEGIN_IMPL_FRAME_DEADLINE_MODE_IMMEDIATE,
-    BEGIN_IMPL_FRAME_DEADLINE_MODE_REGULAR,
-    BEGIN_IMPL_FRAME_DEADLINE_MODE_LATE,
-    BEGIN_IMPL_FRAME_DEADLINE_MODE_BLOCKED,
+  enum class BeginImplFrameDeadlineMode {
+    NONE,
+    IMMEDIATE,
+    REGULAR,
+    LATE,
+    BLOCKED,
   };
   static const char* BeginImplFrameDeadlineModeToString(
       BeginImplFrameDeadlineMode mode);
 
-  enum BeginMainFrameState {
-    BEGIN_MAIN_FRAME_STATE_IDLE,
-    BEGIN_MAIN_FRAME_STATE_SENT,
-    BEGIN_MAIN_FRAME_STATE_STARTED,
-    BEGIN_MAIN_FRAME_STATE_READY_TO_COMMIT,
+  enum class BeginMainFrameState {
+    IDLE,
+    SENT,
+    STARTED,
+    READY_TO_COMMIT,
   };
   static const char* BeginMainFrameStateToString(BeginMainFrameState state);
 
-  enum ForcedRedrawOnTimeoutState {
-    FORCED_REDRAW_STATE_IDLE,
-    FORCED_REDRAW_STATE_WAITING_FOR_COMMIT,
-    FORCED_REDRAW_STATE_WAITING_FOR_ACTIVATION,
-    FORCED_REDRAW_STATE_WAITING_FOR_DRAW,
+  enum class ForcedRedrawOnTimeoutState {
+    IDLE,
+    WAITING_FOR_COMMIT,
+    WAITING_FOR_ACTIVATION,
+    WAITING_FOR_DRAW,
   };
   static const char* ForcedRedrawOnTimeoutStateToString(
       ForcedRedrawOnTimeoutState state);
@@ -101,9 +101,9 @@ class CC_EXPORT SchedulerStateMachine {
   }
 
   bool CommitPending() const {
-    return begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_SENT ||
-           begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_STARTED ||
-           begin_main_frame_state_ == BEGIN_MAIN_FRAME_STATE_READY_TO_COMMIT;
+    return begin_main_frame_state_ == BeginMainFrameState::SENT ||
+           begin_main_frame_state_ == BeginMainFrameState::STARTED ||
+           begin_main_frame_state_ == BeginMainFrameState::READY_TO_COMMIT;
   }
 
   bool NewActiveTreeLikely() const {
@@ -113,19 +113,19 @@ class CC_EXPORT SchedulerStateMachine {
   bool RedrawPending() const { return needs_redraw_; }
   bool PrepareTilesPending() const { return needs_prepare_tiles_; }
 
-  enum Action {
-    ACTION_NONE,
-    ACTION_SEND_BEGIN_MAIN_FRAME,
-    ACTION_COMMIT,
-    ACTION_ACTIVATE_SYNC_TREE,
-    ACTION_PERFORM_IMPL_SIDE_INVALIDATION,
-    ACTION_DRAW_IF_POSSIBLE,
-    ACTION_DRAW_FORCED,
-    ACTION_DRAW_ABORT,
-    ACTION_BEGIN_LAYER_TREE_FRAME_SINK_CREATION,
-    ACTION_PREPARE_TILES,
-    ACTION_INVALIDATE_LAYER_TREE_FRAME_SINK,
-    ACTION_NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT,
+  enum class Action {
+    NONE,
+    SEND_BEGIN_MAIN_FRAME,
+    COMMIT,
+    ACTIVATE_SYNC_TREE,
+    PERFORM_IMPL_SIDE_INVALIDATION,
+    DRAW_IF_POSSIBLE,
+    DRAW_FORCED,
+    DRAW_ABORT,
+    BEGIN_LAYER_TREE_FRAME_SINK_CREATION,
+    PREPARE_TILES,
+    INVALIDATE_LAYER_TREE_FRAME_SINK,
+    NOTIFY_BEGIN_MAIN_FRAME_NOT_SENT,
   };
   static const char* ActionToString(Action action);
 
@@ -232,12 +232,12 @@ class CC_EXPORT SchedulerStateMachine {
   // active).
   void SetNeedsOneBeginImplFrame();
 
-  // Call this only in response to receiving an ACTION_SEND_BEGIN_MAIN_FRAME
+  // Call this only in response to receiving an Action::SEND_BEGIN_MAIN_FRAME
   // from NextAction.
   // Indicates that all painting is complete.
   void NotifyReadyToCommit();
 
-  // Call this only in response to receiving an ACTION_SEND_BEGIN_MAIN_FRAME
+  // Call this only in response to receiving an Action::SEND_BEGIN_MAIN_FRAME
   // from NextAction if the client rejects the BeginMainFrame message.
   void BeginMainFrameAborted(CommitEarlyOutReason reason);
 
@@ -293,6 +293,20 @@ class CC_EXPORT SchedulerStateMachine {
   bool previous_pending_tree_was_impl_side() const {
     return previous_pending_tree_was_impl_side_;
   }
+  bool critical_begin_main_frame_to_activate_is_fast() const {
+    return critical_begin_main_frame_to_activate_is_fast_;
+  }
+
+  void set_should_defer_invalidation_for_fast_main_frame(bool defer) {
+    should_defer_invalidation_for_fast_main_frame_ = defer;
+  }
+  bool should_defer_invalidation_for_fast_main_frame() const {
+    return should_defer_invalidation_for_fast_main_frame_;
+  }
+
+  bool main_thread_failed_to_respond_last_deadline() const {
+    return main_thread_failed_to_respond_last_deadline_;
+  }
 
  protected:
   bool BeginFrameRequiredForAction() const;
@@ -324,10 +338,11 @@ class CC_EXPORT SchedulerStateMachine {
   const SchedulerSettings settings_;
 
   LayerTreeFrameSinkState layer_tree_frame_sink_state_ =
-      LAYER_TREE_FRAME_SINK_NONE;
-  BeginImplFrameState begin_impl_frame_state_ = BEGIN_IMPL_FRAME_STATE_IDLE;
-  BeginMainFrameState begin_main_frame_state_ = BEGIN_MAIN_FRAME_STATE_IDLE;
-  ForcedRedrawOnTimeoutState forced_redraw_state_ = FORCED_REDRAW_STATE_IDLE;
+      LayerTreeFrameSinkState::NONE;
+  BeginImplFrameState begin_impl_frame_state_ = BeginImplFrameState::IDLE;
+  BeginMainFrameState begin_main_frame_state_ = BeginMainFrameState::IDLE;
+  ForcedRedrawOnTimeoutState forced_redraw_state_ =
+      ForcedRedrawOnTimeoutState::IDLE;
 
   // These are used for tracing only.
   int commit_count_ = 0;
@@ -387,6 +402,11 @@ class CC_EXPORT SchedulerStateMachine {
   bool did_submit_in_last_frame_ = false;
   bool needs_impl_side_invalidation_ = false;
   bool next_invalidation_needs_first_draw_on_activation_ = false;
+  bool should_defer_invalidation_for_fast_main_frame_ = true;
+
+  // Set to true if the main thread fails to respond with a commit or abort the
+  // main frame before the draw deadline on the previous impl frame.
+  bool main_thread_failed_to_respond_last_deadline_ = false;
 
   bool previous_pending_tree_was_impl_side_ = false;
   bool current_pending_tree_is_impl_side_ = false;

@@ -16,7 +16,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
-#include "components/viz/common/switches.h"
+#include "components/viz/common/features.h"
 #include "content/child/child_process.h"
 #include "content/gpu/gpu_service_factory.h"
 #include "content/public/common/connection_filter.h"
@@ -135,7 +135,7 @@ viz::VizMainImpl::ExternalDependencies CreateVizMainDependencies(
     service_manager::Connector* connector) {
   viz::VizMainImpl::ExternalDependencies deps;
   deps.create_display_compositor =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableViz);
+      base::FeatureList::IsEnabled(features::kVizDisplayCompositor);
   if (GetContentClient()->gpu())
     deps.sync_point_manager = GetContentClient()->gpu()->GetSyncPointManager();
   auto* process = ChildProcess::current();
@@ -277,7 +277,6 @@ void GpuChildThread::BindServiceFactoryRequest(
 // static
 std::unique_ptr<media::AndroidOverlay> GpuChildThread::CreateAndroidOverlay(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-    std::unique_ptr<service_manager::ServiceContextRef> context_ref,
     const base::UnguessableToken& routing_token,
     media::AndroidOverlayConfig config) {
   media::mojom::AndroidOverlayProviderPtr overlay_provider;
@@ -300,8 +299,7 @@ std::unique_ptr<media::AndroidOverlay> GpuChildThread::CreateAndroidOverlay(
   }
 
   return std::make_unique<media::MojoAndroidOverlay>(
-      std::move(overlay_provider), std::move(config), routing_token,
-      std::move(context_ref));
+      std::move(overlay_provider), std::move(config), routing_token);
 }
 #endif
 

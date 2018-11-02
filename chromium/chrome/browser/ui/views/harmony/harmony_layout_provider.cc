@@ -85,13 +85,13 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
     case views::DISTANCE_BUTTON_MAX_LINKABLE_WIDTH:
       return kHarmonyLayoutUnit * 7;
     case views::DISTANCE_RELATED_LABEL_HORIZONTAL:
-      return kHarmonyLayoutUnit;
     case DISTANCE_RELATED_LABEL_HORIZONTAL_LIST:
-      return kHarmonyLayoutUnit / 2;
+    case views::DISTANCE_TABLE_CELL_HORIZONTAL_MARGIN:
+      return 3 * kHarmonyLayoutUnit / 4;
+    case views::DISTANCE_DIALOG_SCROLLABLE_AREA_MAX_HEIGHT:
+      return kHarmonyLayoutUnit * 12;
     case DISTANCE_SUBSECTION_HORIZONTAL_INDENT:
       return 0;
-    case views::DISTANCE_TABLE_CELL_HORIZONTAL_MARGIN:
-      return kHarmonyLayoutUnit;
     case views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING:
       return kHarmonyLayoutUnit / 2;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL:
@@ -102,7 +102,9 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE:
       return kHarmonyLayoutUnit;
-    case DISTANCE_MODAL_DIALOG_WIDTH_CONTAINING_MULTILINE_TEXT:
+    case DISTANCE_BUBBLE_PREFERRED_WIDTH:
+      return kSmallSnapPoint;
+    case DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH:
       return kMediumSnapPoint;
     default:
       return ChromeLayoutProvider::GetDistanceMetric(metric);

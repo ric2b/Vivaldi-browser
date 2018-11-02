@@ -33,11 +33,21 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashMap.h"
+#include "platform/wtf/LinkedHashSet.h"
 
 namespace blink {
 
 class FontDescription;
 class SimpleFontData;
+
+enum FontDisplay {
+  kFontDisplayAuto,
+  kFontDisplayBlock,
+  kFontDisplaySwap,
+  kFontDisplayFallback,
+  kFontDisplayOptional,
+  kFontDisplayEnumMax
+};
 
 class CORE_EXPORT CSSFontFaceSource
     : public GarbageCollectedFinalized<CSSFontFaceSource> {
@@ -54,6 +64,7 @@ class CORE_EXPORT CSSFontFaceSource
 
   virtual bool IsLocalFontAvailable(const FontDescription&) { return false; }
   virtual void BeginLoadIfNeeded() {}
+  virtual void SetDisplay(FontDisplay) {}
 
   virtual bool IsInBlockPeriod() const { return false; }
   virtual bool IsInFailurePeriod() const { return false; }
@@ -71,12 +82,16 @@ class CORE_EXPORT CSSFontFaceSource
   void PruneTable();
 
  private:
+  void PruneOldestIfNeeded();
   using FontDataTable = HashMap<FontCacheKey,
                                 scoped_refptr<SimpleFontData>,
                                 FontCacheKeyHash,
                                 FontCacheKeyTraits>;
+  using FontCacheKeyAgeList =
+      LinkedHashSet<FontCacheKey, FontCacheKeyHash, FontCacheKeyTraits>;
 
   FontDataTable font_data_table_;
+  FontCacheKeyAgeList font_cache_key_age;
   DISALLOW_COPY_AND_ASSIGN(CSSFontFaceSource);
 };
 

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "core/dom/DOMException.h"
@@ -24,7 +25,6 @@
 #include "platform/network/ParsedContentType.h"
 #include "platform/network/mime/ContentType.h"
 #include "platform/runtime_enabled_features.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebEncryptedMediaClient.h"
@@ -107,7 +107,7 @@ class MediaKeySystemAccessInitializer final : public EncryptedMediaRequest {
       ScriptState*,
       const String& key_system,
       const HeapVector<MediaKeySystemConfiguration>& supported_configurations);
-  ~MediaKeySystemAccessInitializer() override {}
+  ~MediaKeySystemAccessInitializer() override = default;
 
   // EncryptedMediaRequest implementation.
   WebString KeySystem() const override { return key_system_; }
@@ -115,7 +115,7 @@ class MediaKeySystemAccessInitializer final : public EncryptedMediaRequest {
       const override {
     return supported_configurations_;
   }
-  SecurityOrigin* GetSecurityOrigin() const override;
+  const SecurityOrigin* GetSecurityOrigin() const override;
   void RequestSucceeded(WebContentDecryptionModuleAccess*) override;
   void RequestNotSupported(const WebString& error_message) override;
 
@@ -192,7 +192,8 @@ MediaKeySystemAccessInitializer::MediaKeySystemAccessInitializer(
   CheckVideoCapabilityRobustness();
 }
 
-SecurityOrigin* MediaKeySystemAccessInitializer::GetSecurityOrigin() const {
+const SecurityOrigin* MediaKeySystemAccessInitializer::GetSecurityOrigin()
+    const {
   return IsExecutionContextValid()
              ? resolver_->GetExecutionContext()->GetSecurityOrigin()
              : nullptr;
@@ -204,7 +205,7 @@ void MediaKeySystemAccessInitializer::RequestSucceeded(
     return;
 
   resolver_->Resolve(
-      new MediaKeySystemAccess(key_system_, WTF::WrapUnique(access)));
+      new MediaKeySystemAccess(key_system_, base::WrapUnique(access)));
   resolver_.Clear();
 }
 

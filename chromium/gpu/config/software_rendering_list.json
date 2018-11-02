@@ -1543,6 +1543,43 @@
       "features": [
         "gpu_rasterization"
       ]
+    },
+    {
+      "id": 151,
+      "description": "Rendering artifacts on older macOS releases and Intel GPUs",
+      "cr_bugs": [794819],
+      "os": {
+        "type": "macosx",
+        "version": {
+          "op": "<=",
+          "value": "10.11"
+        }
+      },
+      "vendor_id": "0x8086",
+      "multi_gpu_category": "any",
+      "features": [
+        "accelerated_2d_canvas",
+        "gpu_rasterization"
+      ]
+    },
+    {
+      "id": 152,
+      "description": "Test entry where all features except WebGL blacklisted",
+      "test_group": 1,
+      "features": [
+        "all",
+        {"exceptions": [
+          "accelerated_webgl"
+        ]}
+      ]
+    },
+    {
+      "id": 153,
+      "description": "Test entry where WebGL is blacklisted",
+      "test_group": 2,
+      "features": [
+        "accelerated_webgl"
+      ]
     }
   ]
 }

@@ -5,13 +5,15 @@
 #include "chrome/installer/zucchini/encoded_view.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "base/logging.h"
 
 namespace zucchini {
 
 EncodedView::EncodedView(const ImageIndex& image_index)
-    : image_index_(image_index) {}
+    : image_index_(image_index), pool_infos_(image_index.PoolCount()) {}
+EncodedView::~EncodedView() = default;
 
 EncodedView::value_type EncodedView::Projection(offset_t location) const {
   DCHECK_LT(location, image_index_.size());
@@ -26,9 +28,10 @@ EncodedView::value_type EncodedView::Projection(offset_t location) const {
   }
 
   // |location| points into a Reference.
-  Reference ref = image_index_.FindReference(type, location);
+  const ReferenceSet& ref_set = image_index_.refs(type);
+  IndirectReference ref = ref_set.at(location);
   DCHECK_GE(location, ref.location);
-  DCHECK_LT(location, ref.location + image_index_.GetTraits(type).width);
+  DCHECK_LT(location, ref.location + ref_set.width());
 
   // |location| is not the first byte of the reference.
   if (location != ref.location) {
@@ -36,16 +39,16 @@ EncodedView::value_type EncodedView::Projection(offset_t location) const {
     return kReferencePaddingProjection;
   }
 
-  // Targets with an associated Label will use its Label index in projection.
-  // Otherwise, LabelBound() is used for all targets with no Label.
-  value_type target =
-      IsMarked(ref.target)
-          ? UnmarkIndex(ref.target)
-          : image_index_.LabelBound(image_index_.GetPoolTag(type));
+  PoolTag pool_tag = ref_set.pool_tag();
 
-  // Projection is done on (|target|, |type|), shifted by a constant value to
-  // avoid collisions with raw content.
-  value_type projection = target;
+  // Targets with an associated Label will use its Label index in projection.
+  DCHECK_EQ(image_index_.pool(pool_tag).size(),
+            pool_infos_[pool_tag.value()].labels.size());
+  uint32_t label = pool_infos_[pool_tag.value()].labels[ref.target_key];
+
+  // Projection is done on (|target|, |type|), shifted by
+  // kBaseReferenceProjection to avoid collisions with raw content.
+  value_type projection = label;
   projection *= image_index_.TypeCount();
   projection += type.value();
   return projection + kBaseReferenceProjection;
@@ -53,11 +56,22 @@ EncodedView::value_type EncodedView::Projection(offset_t location) const {
 
 size_t EncodedView::Cardinality() const {
   size_t max_width = 0;
-  for (uint8_t pool = 0; pool < image_index_.PoolCount(); ++pool) {
-    // LabelBound() + 1 for the extra case of references with no Label.
-    max_width = std::max(image_index_.LabelBound(PoolTag(pool)) + 1, max_width);
-  }
+  for (const auto& pool_info : pool_infos_)
+    max_width = std::max(max_width, pool_info.bound);
   return max_width * image_index_.TypeCount() + kBaseReferenceProjection;
 }
+
+void EncodedView::SetLabels(PoolTag pool,
+                            std::vector<uint32_t>&& labels,
+                            size_t bound) {
+  DCHECK_EQ(labels.size(), image_index_.pool(pool).size());
+  DCHECK(labels.empty() || *max_element(labels.begin(), labels.end()) < bound);
+  pool_infos_[pool.value()].labels = std::move(labels);
+  pool_infos_[pool.value()].bound = bound;
+}
+
+EncodedView::PoolInfo::PoolInfo() = default;
+EncodedView::PoolInfo::PoolInfo(PoolInfo&&) = default;
+EncodedView::PoolInfo::~PoolInfo() = default;
 
 }  // namespace zucchini

@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="te">
 <translation id="1326317727527857210">మీ ఇతర పరికరాల నుండి మీ ట్యాబ్‌లను పొందడానికి, Chromeకి సైన్ ఇన్ చేయండి.</translation>
-<translation id="1685087038067318291">సమీప ఆబ్జెక్ట్‌ల ద్వారా పంపబడిన వెబ్ పేజీలను కనుగొంటుంది. బ్లూటూత్ ఆన్ చేసినప్పుడు, Chrome మీ చుట్టూ ఉన్న ఆబ్జెక్ట్‌లతో అనుబంధించబడిన వెబ్ పేజీలను సేకరించవచ్చు మరియు వాటిలో అత్యంత ఉపయోగకరమైనవి కనుగొనడానికి వాటిని అనామకంగా Googleకు పంపవచ్చు. <ph name="BEGIN_LINK" />మరింత తెలుసుకోండి<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome గోప్యతా ప్రకటన</translation>
+<translation id="1863312987075920112">ఈ యాప్‌ని ఉపయోగించడం ద్వారా, మీరు Chrome <ph name="BEGIN_LINK_TOS" />సేవా నిబంధనలు<ph name="END_LINK_TOS" /> మరియు <ph name="BEGIN_LINK_PRIVACY" />గోప్యతా ప్రకటన<ph name="END_LINK_PRIVACY" />ను అంగీకరిస్తున్నారు.</translation>
 <translation id="2147651015520127414">Chrome ఈ వెబ్‌సైట్ ప్రమాణపత్రాన్ని <ph name="ISSUER" /> జారీ చేసినట్లు ధృవీకరించింది.</translation>
 <translation id="2334084861041072223">కాపీరైట్ <ph name="YEAR" /> Google Inc. సర్వ హక్కులు ప్రత్యేకించబడ్డాయి.</translation>
 <translation id="2342981853652716282">మీ పరికరాలన్నింటిలో మీ బుక్‌మార్క్‌లు, పాస్‌వర్డ్‌లు మరియు మరిన్నింటిని పొందడం కోసం Chromeకు సైన్ ఇన్ చేయండి.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">కొన్ని యాడ్-ఆన్‌లు Chrome క్రాష్ అయ్యేలా చేసాయి. దయచేసి వీటిని అన్‌ఇన్‌స్టాల్ చేయండి:</translation>
 <translation id="4615174829807303908">మీరు <ph name="SIGNOUT_MANAGED_DOMAIN" /> నిర్వహణలో ఉన్న ఖాతా నుండి సైన్ అవుట్ చేస్తున్నారు. దీని వలన మీ Chrome డేటా ఈ పరికరం నుండి తొలగించబడుతుంది, కానీ మీ డేటా మీ Google ఖాతాలో అలాగే ఉంటుంది.</translation>
 <translation id="5389212809648216794">మీ కెమెరాను మరొక అనువర్తనం ఉపయోగిస్తున్నందున Google Chrome దాన్ని ఉపయోగించలేదు</translation>
-<translation id="5566557026214762153">ఈ అనువర్తనాన్ని ఉపయోగించడం ద్వారా, మీరు Chrome <ph name="BEGIN_LINK" />సేవా నిబంధనల<ph name="END_LINK" />కు అంగీకరిస్తారు.</translation>
 <translation id="5639704535586432836">సెట్టింగ్‌లు &gt; గోప్యత &gt; కెమెరా &gt; Google Chromeని తెరిచి, కెమెరాను ఆన్ చేయండి.</translation>
 <translation id="5642200033778930880">Google Chrome విభజన వీక్షణ మోడ్‌లో మీ కెమెరాను ఉపయోగించలేదు</translation>
 <translation id="5703130498371792817">Chromeని ఆస్వాదిస్తున్నారా? <ph name="BEGIN_LINK" />ఈ అనువర్తనాన్ని రేట్ చేయండి<ph name="END_LINK" /></translation>

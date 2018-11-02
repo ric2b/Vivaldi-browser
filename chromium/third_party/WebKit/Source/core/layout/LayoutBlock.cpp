@@ -314,7 +314,7 @@ void LayoutBlock::AddChildBeforeDescendant(LayoutObject* new_child,
     // Insert the child into the anonymous block box instead of here.
     if (new_child->IsInline() || new_child->IsFloatingOrOutOfFlowPositioned() ||
         before_descendant->Parent()->SlowFirstChild() != before_descendant)
-      before_descendant->Parent()->AddChild(new_child, before_descendant);
+      before_descendant_container->AddChild(new_child, before_descendant);
     else
       AddChild(new_child, before_descendant->Parent());
     return;
@@ -479,6 +479,7 @@ void LayoutBlock::AddOverflowFromChildren() {
 
 DISABLE_CFI_PERF
 void LayoutBlock::ComputeOverflow(LayoutUnit old_client_after_edge, bool) {
+  LayoutRect previous_visual_overflow_rect = VisualOverflowRect();
   overflow_.reset();
 
   AddOverflowFromChildren();
@@ -508,12 +509,8 @@ void LayoutBlock::ComputeOverflow(LayoutUnit old_client_after_edge, bool) {
   AddVisualEffectOverflow();
   AddVisualOverflowFromTheme();
 
-  // An enclosing composited layer will need to update its bounds if we now
-  // overflow it.
-  PaintLayer* layer = EnclosingLayer();
-  if (!NeedsLayout() && layer->HasCompositedLayerMapping() &&
-      !layer->VisualRect().Contains(VisualOverflowRect()))
-    layer->SetNeedsCompositingInputsUpdate();
+  if (Layer() && VisualOverflowRect() != previous_visual_overflow_rect)
+    Layer()->SetNeedsCompositingInputsUpdate();
 }
 
 void LayoutBlock::AddOverflowFromBlockChildren() {
@@ -1261,7 +1258,7 @@ PositionWithAffinity LayoutBlock::PositionForPointIfOutsideAtomicInlineLevel(
 static inline bool IsChildHitTestCandidate(LayoutBox* box) {
   return box->Size().Height() &&
          box->Style()->Visibility() == EVisibility::kVisible &&
-         !box->IsFloatingOrOutOfFlowPositioned() && !box->IsLayoutFlowThread();
+         !box->IsOutOfFlowPositioned() && !box->IsLayoutFlowThread();
 }
 
 PositionWithAffinity LayoutBlock::PositionForPoint(const LayoutPoint& point) {
@@ -1302,6 +1299,9 @@ PositionWithAffinity LayoutBlock::PositionForPoint(const LayoutPoint& point) {
         continue;
       LayoutUnit child_logical_bottom =
           LogicalTopForChild(*child_box) + LogicalHeightForChild(*child_box);
+      if (child_box->IsLayoutBlockFlow())
+          child_logical_bottom += ToLayoutBlockFlow(child_box)->LowestFloatLogicalBottom();
+
       // We hit child if our click is above the bottom of its padding box (like
       // IE6/7 and FF3).
       if (point_in_logical_contents.Y() < child_logical_bottom ||
@@ -1325,14 +1325,6 @@ void LayoutBlock::OffsetForContents(LayoutPoint& offset) const {
     offset += LayoutSize(ScrolledContentOffset());
 
   offset = FlipForWritingMode(offset);
-}
-
-int LayoutBlock::ColumnGap() const {
-  if (Style()->HasNormalColumnGap()) {
-    // "1em" is recommended as the normal gap setting. Matches <p> margins.
-    return Style()->GetFontDescription().ComputedPixelSize();
-  }
-  return static_cast<int>(Style()->ColumnGap());
 }
 
 void LayoutBlock::ScrollbarsChanged(bool horizontal_scrollbar_changed,
@@ -1997,6 +1989,7 @@ bool LayoutBlock::RecalcNormalFlowChildOverflowIfNeeded(
 }
 
 bool LayoutBlock::RecalcChildOverflowAfterStyleChange() {
+  DCHECK(!IsTable());
   DCHECK(ChildNeedsOverflowRecalcAfterStyleChange());
   ClearChildNeedsOverflowRecalcAfterStyleChange();
 
@@ -2040,6 +2033,11 @@ bool LayoutBlock::RecalcOverflowAfterStyleChange() {
   if (!self_needs_overflow_recalc && !children_overflow_changed)
     return false;
 
+  return RecalcSelfOverflowAfterStyleChange();
+}
+
+bool LayoutBlock::RecalcSelfOverflowAfterStyleChange() {
+  bool self_needs_overflow_recalc = SelfNeedsOverflowRecalcAfterStyleChange();
   ClearSelfNeedsOverflowRecalcAfterStyleChange();
   // If the current block needs layout, overflow will be recalculated during
   // layout time anyway. We can safely exit here.

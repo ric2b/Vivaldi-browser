@@ -66,7 +66,7 @@ HTMLFormControlElement::HTMLFormControlElement(const QualifiedName& tag_name,
   SetHasCustomStyleCallbacks();
 }
 
-HTMLFormControlElement::~HTMLFormControlElement() {}
+HTMLFormControlElement::~HTMLFormControlElement() = default;
 
 void HTMLFormControlElement::Trace(blink::Visitor* visitor) {
   ListedElement::Trace(visitor);
@@ -375,8 +375,8 @@ String HTMLFormControlElement::ResultForDialogSubmit() {
   return FastGetAttribute(valueAttr);
 }
 
-void HTMLFormControlElement::DidRecalcStyle() {
-  if (LayoutObject* layout_object = this->GetLayoutObject())
+void HTMLFormControlElement::DidRecalcStyle(StyleRecalcChange) {
+  if (LayoutObject* layout_object = GetLayoutObject())
     layout_object->UpdateFromElement();
 }
 
@@ -624,7 +624,7 @@ void HTMLFormControlElement::SetNeedsValidityCheck() {
     GetDocument()
         .GetTaskRunner(TaskType::kDOMManipulation)
         ->PostTask(
-            BLINK_FROM_HERE,
+            FROM_HERE,
             WTF::Bind(&HTMLFormControlElement::UpdateVisibleValidationMessage,
                       WrapPersistent(this)));
   }

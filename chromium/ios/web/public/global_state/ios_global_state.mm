@@ -8,7 +8,6 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/task_scheduler/initialization_util.h"
 #include "net/base/network_change_notifier.h"
 
@@ -49,13 +48,9 @@ void Create(const CreateParams& create_params) {
       g_exit_manager = new base::AtExitManager();
     }
 
-    // Use an empty string as TaskScheduler name to match the suffix of browser
-    // process TaskScheduler histograms.
-    base::TaskScheduler::Create("");
+    base::TaskScheduler::Create("Browser");
 
     base::CommandLine::Init(create_params.argc, create_params.argv);
-
-    base::StatisticsRecorder::Initialize();
   });
 }
 

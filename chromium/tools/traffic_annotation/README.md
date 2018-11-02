@@ -4,6 +4,8 @@ The traffic annotation checkers ensure that every operation in the
 code base that talks to the network is properly annotated in the
 source code, so that we can produce reports of what Chromium talks to
 over the network and why.
+Please see `docs/network_traffic_annotations.md` for an introduction to network
+traffic annotations.
 
 To run the checkers, you need a populated build directory, and then
 you do:
@@ -96,5 +98,5 @@ disable this test by setting the `TEST_IS_ENABLED` flag to False in
 and cc the people listed in OWNERS; they'll be on the hook to rebuild and
 re-enable the test.
 
-CLANG_REVISION = '317263'
-LASTCHANGE=9bbd081d6401276e8173cf0e33b9f93cba1c1b01-refs/heads/master@{#517774}
+CLANG_REVISION = '321529'
+LASTCHANGE=bfcea61717d615f8d021c0da2d7ad7dc0589a0b1-refs/heads/master@{#530086}

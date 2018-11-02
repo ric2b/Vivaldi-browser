@@ -161,9 +161,9 @@ class WebViewTestProxy : public Base, public WebViewTestProxyBase {
   bool IsPointerLocked() override {
     return widget_test_client()->IsPointerLocked();
   }
-  void DidFocus() override {
-    view_test_client()->DidFocus();
-    Base::DidFocus();
+  void DidFocus(blink::WebLocalFrame* calling_frame) override {
+    view_test_client()->DidFocus(calling_frame);
+    Base::DidFocus(calling_frame);
   }
   void SetToolTipText(const blink::WebString& text,
                       blink::WebTextDirection hint) override {
@@ -180,10 +180,6 @@ class WebViewTestProxy : public Base, public WebViewTestProxyBase {
     widget_test_client()->StartDragging(policy, data, mask, image, point);
     // Don't forward this call to Base because we don't want to do a real
     // drag-and-drop.
-  }
-  void DidChangeContents() override {
-    view_test_client()->DidChangeContents();
-    Base::DidChangeContents();
   }
   blink::WebView* CreateView(blink::WebLocalFrame* creator,
                              const blink::WebURLRequest& request,

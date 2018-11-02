@@ -3,6 +3,7 @@
 <translationbundle lang="bg">
 <translation id="102360288709523007">Помогнете за подобряването на Chromium, като изпращате до Google статистически данни за употребата и сигнали за сривове.</translation>
 <translation id="1185134272377778587">Всичко за Chromium</translation>
+<translation id="1289966288285062467">Съобщение за поверителност на Chromium</translation>
 <translation id="1472013873724362412">Профилът ви не е съвместим с Chromium. Моля, свържете се с администратора на домейна си или влезте с обикновен профил в Google.</translation>
 <translation id="1736662517232558588">Данните в Chromium са изчистени</translation>
 <translation id="1838412507805038478">Chromium потвърди, че сертификатът на този уебсайт е издаден от <ph name="ISSUER" />.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Искате ли да излезете от Chromium?</translation>
 <translation id="6424492062988593837">Chromium току-що се подобри! Налице е нова версия.</translation>
 <translation id="6604711459180487467">Подобрете работата си в Chromium въз основа на местоположението си.</translation>
+<translation id="6626296268883197964">С използването на това приложение приемате <ph name="BEGIN_LINK_TOS" />Общите условия<ph name="END_LINK_TOS" /> и <ph name="BEGIN_LINK_PRIVACY" />Съобщението за поверителност<ph name="END_LINK_PRIVACY" /> на Chromium.</translation>
 <translation id="7099326575020694068">Chromium не може да използва камерата ви в режим на разделен изглед</translation>
-<translation id="7144758435978427212">Откривайте уеб страници, изпращани от обекти в близост. Когато функцията за Bluetooth е включена, Chromium може да събира съответните страници и да ги изпраща анонимно до Google, за да намира най-полезните. <ph name="BEGIN_LINK" />Научете повече<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">С Chromium спестявате време, като свързвате профилите си с мрежата. Можете да добавяте или премахвате профили от настройките.</translation>
 <translation id="7269362888766543920">Някои добавки причиняват срив на Chromium. Моля, опитайте да ги деинсталирате.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Използвайте Chromium навсякъде</translation>
 <translation id="7674213385180944843">Отворете „Settings“ &gt; „Privacy“ &gt; „Camera“ &gt; „Chromium“ и включете камерата.</translation>
 <translation id="786327964234957808">Заменяте настоящия профил за синхронизиране (<ph name="USER_EMAIL1" />) с друг (<ph name="USER_EMAIL2" />). Съществуващите ви данни в Chromium се управляват от <ph name="DOMAIN" />. Те ще се изтрият от това устройство, но ще останат в профила <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">С използването на това приложение приемате <ph name="BEGIN_LINK" />Общите условия<ph name="END_LINK" /> на Chromium.</translation>
 <translation id="8175055321229419309">Съвет: <ph name="BEGIN_LINK" />Преместете Chromium в лентата „Dock“<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Подобрете работата си с Google в Chromium въз основа на местоположението си.</translation>
 <translation id="8353224596138547809">Искате ли Chromium да запази паролата ви за този сайт?</translation>

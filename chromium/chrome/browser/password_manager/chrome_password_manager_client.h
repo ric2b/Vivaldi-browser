@@ -92,7 +92,7 @@ class ChromePasswordManagerClient
   password_manager::PasswordStore* GetPasswordStore() const override;
   password_manager::PasswordSyncState GetPasswordSyncState() const override;
   bool WasLastNavigationHTTPError() const override;
-  bool DidLastPageLoadEncounterSSLErrors() const override;
+  net::CertStatus GetMainFrameCertStatus() const override;
   bool IsIncognito() const override;
   const password_manager::PasswordManager* GetPasswordManager() const override;
   autofill::AutofillManager* GetAutofillManagerForMainFrame() override;
@@ -129,7 +129,6 @@ class ChromePasswordManagerClient
   void LogPasswordReuseDetectedEvent() override;
 #endif
 
-  ukm::UkmRecorder* GetUkmRecorder() override;
   ukm::SourceId GetUkmSourceId() override;
   password_manager::PasswordManagerMetricsRecorder& GetMetricsRecorder()
       override;
@@ -142,7 +141,7 @@ class ChromePasswordManagerClient
   void SetTestObserver(autofill::PasswordGenerationPopupObserver* observer);
 
   static void BindCredentialManager(
-      password_manager::mojom::CredentialManagerAssociatedRequest request,
+      password_manager::mojom::CredentialManagerRequest request,
       content::RenderFrameHost* render_frame_host);
 
   // A helper method to determine whether a save/update bubble can be shown
@@ -227,10 +226,6 @@ class ChromePasswordManagerClient
   const password_manager::SyncCredentialsFilter credentials_filter_;
 
   std::unique_ptr<password_manager::LogManager> log_manager_;
-
-  // If set, this stores a ukm::SourceId that is bound to the last committed
-  // navigation of the tab owning this ChromePasswordManagerClient.
-  base::Optional<ukm::SourceId> ukm_source_id_;
 
   // Recorder of metrics that is associated with the last committed navigation
   // of the WebContents owning this ChromePasswordManagerClient. May be unset at

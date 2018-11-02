@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" />個のアイテム</translation>
 <translation id="1491277525950327607">設定を切り替えるにはダブルタップします</translation>
 <translation id="152234381334907219">常に保存しない</translation>
+<translation id="1532451416480227577">Google Pay に保存されている住所とクレジット カードの情報を表示する</translation>
 <translation id="1540800554400757039">住所1行目</translation>
 <translation id="1545749641540134597">QR コードをスキャンします</translation>
 <translation id="1580783302095112590">メールを送信しました。</translation>
@@ -96,6 +97,7 @@
 <translation id="2718352093833049315">Wi-Fi接続時のみ</translation>
 <translation id="2747003861858887689">前の項目</translation>
 <translation id="2780046210906776326">メールアカウントなし</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">タブ切り替えモードを終了</translation>
 <translation id="283291358677939992">ページ内を検索...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />、<ph name="STATE" />、<ph name="URL" /></translation>
@@ -179,6 +181,7 @@
 <translation id="4378154925671717803">電話番号</translation>
 <translation id="441868831736628555">プライバシーに関するお知らせ</translation>
 <translation id="4460091562821778167">使用するアプリを毎回確認する</translation>
+<translation id="4496373720959965247">タブを追加してページを切り替えることができます</translation>
 <translation id="4508750114462689118">ログイン プロモーションを閉じる</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> での保存パスワードの表示と管理</translation>
 <translation id="4536418791685807335">もう一度ログインしてみてください。</translation>
@@ -217,12 +220,12 @@
 <translation id="5300589172476337783">表示</translation>
 <translation id="5317780077021120954">保存</translation>
 <translation id="5327248766486351172">名前</translation>
+<translation id="533632423981297619">エクスポートしたファイルが他のユーザーに閲覧可能な場合、パスワードが知られてしまう可能性があります。このファイルは誰とも共有しないでください。</translation>
 <translation id="5388358297987318779">画像を開く</translation>
 <translation id="5409365236829784218">このファイルを開くアプリがインストールされていません。</translation>
 <translation id="5433691172869980887">ユーザー名がコピーされました</translation>
 <translation id="54401264925851789">ページのセキュリティ情報</translation>
 <translation id="5525269841082836315">パスフレーズの作成</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoffを使うと、この端末で見ているウェブサイトの続きをMacで見ることができます。現在開いているウェブサイトはMacのDockに表示されます。
 
 また[設定]の[一般]画面でHandoffを有効にしておく必要があります。お使いの端末では、iCloudと同じアカウントを使用してください。</translation>
@@ -247,7 +250,6 @@
 <translation id="5911030830365207728">Google 翻訳</translation>
 <translation id="5916664084637901428">オン</translation>
 <translation id="5948291296578561264">フォト ライブラリに写真を保存します。</translation>
-<translation id="5953603475187800576">Google ペイメントに登録した住所とクレジット カードの情報を表示する</translation>
 <translation id="5955891643922670672">オフライン版を表示しています</translation>
 <translation id="5964480694698977962">新しいシークレット タブを作成。</translation>
 <translation id="5965679971710331625">ログイン中のアカウント</translation>
@@ -337,7 +339,6 @@
 <translation id="7514365320538308">ダウンロード</translation>
 <translation id="7537586195939242955">現在、Passbookにパスをインストールできません。</translation>
 <translation id="7561196759112975576">常に使用</translation>
-<translation id="7588950540487816470">フィジカルウェブ</translation>
 <translation id="7603852183842204213">ブロックしたポップアップ: <ph name="NUMBER_OF_BLOCKED_POPUPS" /></translation>
 <translation id="7605594153474022051">同期が機能していません</translation>
 <translation id="7638584964844754484">パスフレーズが正しくありません</translation>
@@ -350,6 +351,7 @@
 <translation id="780301667611848630">いいえ</translation>
 <translation id="7859704718976024901">閲覧履歴</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">パスワードをエクスポート...</translation>
 <translation id="7947953824732555851">同意してログイン</translation>
 <translation id="7961015016161918242">使用しない</translation>
 <translation id="7971521879845308059">ポップアップのブロック</translation>
@@ -407,7 +409,6 @@
 <translation id="9083392325882095631">1個のアイテム</translation>
 <translation id="9100610230175265781">パスフレーズを入力してください</translation>
 <translation id="9148126808321036104">もう一度ログインする</translation>
-<translation id="91549621916703028">複数のタブを開いてさまざまな作業を行うことができます</translation>
 <translation id="9157836665414082580">ダイアログを表示しない</translation>
 <translation id="9188680907066685419">管理対象アカウントからログアウトする</translation>
 <translation id="9203116392574189331">Handoff</translation>

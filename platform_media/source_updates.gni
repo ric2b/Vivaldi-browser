@@ -7,7 +7,7 @@ if (system_proprietary_codecs) {
 # Media Unittests : /media/test/BUILD.gn
 # ------------------
 
-post_process_target("//media/test:pipeline_integration_test_base") {
+update_target("//media/test:pipeline_integration_test_base") {
   sources += [
     "//vivaldi/platform_media/gpu/test/ipc_audio_decoder_unittest.cc",
 #    "//vivaldi/platform_media/gpu/test/ipc_video_decoder_unittest.cc",
@@ -39,7 +39,7 @@ post_process_target("//media/test:pipeline_integration_test_base") {
 # Gpu Ipc Service (Media) : /media/gpu/ipc/service/BUILD.gn
 # ------------------
 
-post_process_target("//media/gpu/ipc/service:service") {
+update_target("//media/gpu/ipc/service:service") {
   sources += [
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.cc",
   "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host_impl.h",
@@ -68,7 +68,7 @@ post_process_target("//media/gpu/ipc/service:service") {
 # Gpu Ipc (Media) : /media/gpu/ipc/common/BUILD.gn
 # ------------------
 
-post_process_target("//media/base:base") {
+update_target("//media/base:base") {
 
   visibility += [ "//media/gpu/ipc/service:service" ]
 
@@ -82,18 +82,10 @@ post_process_target("//media/base:base") {
 }
 
 # ------------------
-# Gpu Service (UI) : /services/ui/gpu/BUILD.gn
-# ------------------
-
-post_process_target("//services/ui/gpu:gpu") {
-  public_deps = [ "//cc", ]
-}
-
-# ------------------
 # CC Component : /cc/BUILD.gn
 # ------------------
 
-post_process_target("//cc:cc") {
+update_target("//cc:cc") {
   public_deps += [ "//media", ]
 }
 
@@ -101,7 +93,7 @@ post_process_target("//cc:cc") {
 # Content Common : /content/common/BUILD.gn
 # ------------------
 
-post_process_target("//content/common:common") {
+update_target("//content/common:common") {
   if (is_mac) {
     sources += [
       "//vivaldi/platform_media/common/mac/at_init.cc",
@@ -123,7 +115,7 @@ post_process_target("//content/common:common") {
 # Media : /media/BUILD.gn
 # ------------------
 
-post_process_target("//media:media") {
+update_target("//media:media") {
   sources = [
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline.h",
@@ -131,7 +123,11 @@ post_process_target("//media:media") {
   ]
 
   if (is_linux) {
-    sources += [ "//vivaldi/platform_media/gpu/pipeline/linux/platform_media_pipeline_linux.cc" ]
+    sources += [
+      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.cc",
+      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.h",
+      "//vivaldi/platform_media/gpu/pipeline/linux/platform_media_pipeline_linux.cc",
+    ]
   }
 
   if (is_mac) {
@@ -212,7 +208,7 @@ post_process_target("//media:media") {
 # Media : /media/BUILD.gn
 # ------------------
 
-post_process_target("//media:media") {
+update_target("//media:media") {
 
    sources += [
     "//vivaldi/platform_media/common/platform_logging_util.cc",
@@ -235,8 +231,6 @@ post_process_target("//media:media") {
     "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.h",
     "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.cc",
     "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.h",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_texture.cc",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_texture.h",
     "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.cc",
     "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.h",
     "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.h",
@@ -280,6 +274,8 @@ post_process_target("//media:media") {
       ]
 
       sources += [
+#       "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_texture.cc",
+#       "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_texture.h",
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
        "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
        "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.cc",
@@ -316,7 +312,7 @@ post_process_target("//media:media") {
 # Filters : /media/base/BUILD.gn
 # ------------------
 
-post_process_target("//media/base:base") {
+update_target("//media/base:base") {
 
    sources += [
     "//vivaldi/platform_media/common/pipeline_stats.cc",
@@ -353,7 +349,7 @@ post_process_target("//media/base:base") {
 # ------------------
 
 if (is_mac) {
-   post_process_target("//media/base/mac:mac") {
+   update_target("//media/base/mac:mac") {
      sources += [
        "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
        "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
@@ -374,12 +370,12 @@ if (is_linux) {
     is_component_ffmpeg = true
   }
 
-  post_process_target("//third_party/ffmpeg:ffmpeg") {
+  update_target("//third_party/ffmpeg:ffmpeg") {
     configs += [ "//vivaldi/gn/config:linux_386_linking"]
     output_dir = "$root_out_dir/lib"
   }
 
-  post_process_target("//chrome:chrome_initial") {
+  update_target("//chrome:chrome_initial") {
     configs += [ "//vivaldi/gn/config:linux_386_linking"]
   }
 } # Linux

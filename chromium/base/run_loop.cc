@@ -32,7 +32,12 @@ void ProxyToTaskRunner(scoped_refptr<SequencedTaskRunner> task_runner,
 
 }  // namespace
 
-RunLoop::Delegate::Delegate() {
+RunLoop::Delegate::Delegate()
+    : should_quit_when_idle_callback_(base::BindRepeating(
+          [](Delegate* self) {
+            return self->active_run_loops_.top()->quit_when_idle_received_;
+          },
+          Unretained(this))) {
   // The Delegate can be created on another thread. It is only bound in
   // RegisterDelegateForCurrentThread().
   DETACH_FROM_THREAD(bound_thread_checker_);
@@ -47,23 +52,12 @@ RunLoop::Delegate::~Delegate() {
     tls_delegate.Get().Set(nullptr);
 }
 
-bool RunLoop::Delegate::Client::ShouldQuitWhenIdle() const {
-  DCHECK_CALLED_ON_VALID_THREAD(outer_->bound_thread_checker_);
-  DCHECK(outer_->bound_);
-  return outer_->active_run_loops_.top()->quit_when_idle_received_;
+bool RunLoop::Delegate::ShouldQuitWhenIdle() {
+  return should_quit_when_idle_callback_.Run();
 }
-
-bool RunLoop::Delegate::Client::IsNested() const {
-  DCHECK_CALLED_ON_VALID_THREAD(outer_->bound_thread_checker_);
-  DCHECK(outer_->bound_);
-  return outer_->active_run_loops_.size() > 1;
-}
-
-RunLoop::Delegate::Client::Client(Delegate* outer) : outer_(outer) {}
 
 // static
-RunLoop::Delegate::Client* RunLoop::RegisterDelegateForCurrentThread(
-    Delegate* delegate) {
+void RunLoop::RegisterDelegateForCurrentThread(Delegate* delegate) {
   // Bind |delegate| to this thread.
   DCHECK(!delegate->bound_);
   DCHECK_CALLED_ON_VALID_THREAD(delegate->bound_thread_checker_);
@@ -72,8 +66,30 @@ RunLoop::Delegate::Client* RunLoop::RegisterDelegateForCurrentThread(
   DCHECK(!tls_delegate.Get().Get());
   tls_delegate.Get().Set(delegate);
   delegate->bound_ = true;
+}
 
-  return &delegate->client_interface_;
+// static
+RunLoop::Delegate* RunLoop::OverrideDelegateForCurrentThreadForTesting(
+    Delegate* delegate,
+    Delegate::ShouldQuitWhenIdleCallback
+        overriding_should_quit_when_idle_callback) {
+  // Bind |delegate| to this thread.
+  DCHECK(!delegate->bound_);
+  DCHECK_CALLED_ON_VALID_THREAD(delegate->bound_thread_checker_);
+
+  // Overriding cannot be performed while running.
+  DCHECK(!IsRunningOnCurrentThread());
+
+  // Override the current Delegate (there must be one).
+  Delegate* overridden_delegate = tls_delegate.Get().Get();
+  DCHECK(overridden_delegate);
+  DCHECK(overridden_delegate->bound_);
+  overridden_delegate->should_quit_when_idle_callback_ =
+      std::move(overriding_should_quit_when_idle_callback);
+  tls_delegate.Get().Set(delegate);
+  delegate->bound_ = true;
+
+  return overridden_delegate;
 }
 
 RunLoop::RunLoop(Type type)
@@ -304,6 +320,11 @@ void RunLoop::AfterRun() {
 
   RunLoop* previous_run_loop =
       active_run_loops_.empty() ? nullptr : active_run_loops_.top();
+
+  if (previous_run_loop) {
+    for (auto& observer : delegate_->nesting_observers_)
+      observer.OnExitNestedRunLoop();
+  }
 
   // Execute deferred Quit, if any:
   if (previous_run_loop && previous_run_loop->quit_called_)

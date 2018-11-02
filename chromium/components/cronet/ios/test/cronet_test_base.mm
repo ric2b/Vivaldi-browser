@@ -4,11 +4,14 @@
 
 #include "cronet_test_base.h"
 
+#include "base/location.h"
+#include "base/threading/thread.h"
 #include "components/grpc_support/test/quic_test_server.h"
 #include "crypto/sha2.h"
 #include "net/base/net_errors.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/mock_cert_verifier.h"
+#include "net/cert/x509_util.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 
@@ -27,6 +30,8 @@
 @synthesize errorPerTask = _errorPerTask;
 @synthesize totalBytesReceivedPerTask = _totalBytesReceivedPerTask;
 @synthesize expectedContentLengthPerTask = _expectedContentLengthPerTask;
+@synthesize taskMetrics = _taskMetrics;
+@synthesize responsePerTask = _responsePerTask;
 
 - (id)init {
   if (self = [super init]) {
@@ -41,6 +46,8 @@
   _totalBytesReceivedPerTask = [NSMutableDictionary dictionaryWithCapacity:0];
   _expectedContentLengthPerTask =
       [NSMutableDictionary dictionaryWithCapacity:0];
+  _responsePerTask = [NSMutableDictionary dictionaryWithCapacity:0];
+  _taskMetrics = nil;
 }
 
 - (NSError*)error {
@@ -144,12 +151,20 @@
 }
 
 - (void)URLSession:(NSURLSession*)session
+                          task:(NSURLSessionTask*)task
+    didFinishCollectingMetrics:(NSURLSessionTaskMetrics*)metrics
+    NS_AVAILABLE_IOS(10.0) {
+  _taskMetrics = metrics;
+}
+
+- (void)URLSession:(NSURLSession*)session
               dataTask:(NSURLSessionDataTask*)dataTask
     didReceiveResponse:(NSURLResponse*)response
      completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))
                            completionHandler {
   _expectedContentLengthPerTask[dataTask] =
       [NSNumber numberWithInt:[response expectedContentLength]];
+  _responsePerTask[dataTask] = static_cast<NSHTTPURLResponse*>(response);
   completionHandler(NSURLSessionResponseAllow);
 }
 
@@ -205,22 +220,35 @@ bool CronetTestBase::StartDataTaskAndWaitForCompletion(
   return [delegate_ waitForDone:task withTimeout:deadline_ns];
 }
 
-::testing::AssertionResult CronetTestBase::IsResponseSuccessful() {
-  if ([delegate_ error]) {
+::testing::AssertionResult CronetTestBase::IsResponseSuccessful(
+    NSURLSessionDataTask* task) {
+  if ([delegate_ errorPerTask][task]) {
     return ::testing::AssertionFailure() << "error in response: " <<
            [[[delegate_ error] description]
                cStringUsingEncoding:NSUTF8StringEncoding];
   }
+
+  if (![delegate_ responsePerTask][task]) {
+    return ::testing::AssertionFailure() << " no response has been received";
+  }
+
+  NSInteger statusCode = [delegate_ responsePerTask][task].statusCode;
+  if (statusCode < 200 || statusCode > 299) {
+    return ::testing::AssertionFailure()
+           << " the response code was " << statusCode;
+  }
+
   return ::testing::AssertionSuccess() << "no errors in response";
 }
 
-::testing::AssertionResult CronetTestBase::IsResponseCanceled() {
-  if ([delegate_ error] && [[delegate_ error] code] == NSURLErrorCancelled)
+::testing::AssertionResult CronetTestBase::IsResponseCanceled(
+    NSURLSessionDataTask* task) {
+  NSError* error = [delegate_ errorPerTask][task];
+  if (error && [error code] == NSURLErrorCancelled)
     return ::testing::AssertionSuccess() << "the response is canceled";
   return ::testing::AssertionFailure() << "the response is not canceled."
                                        << " The response error is " <<
-         [[[delegate_ error] description]
-             cStringUsingEncoding:NSUTF8StringEncoding];
+         [[error description] cStringUsingEncoding:NSUTF8StringEncoding];
 }
 
 std::unique_ptr<net::MockCertVerifier> CronetTestBase::CreateMockCertVerifier(
@@ -248,26 +276,43 @@ std::unique_ptr<net::MockCertVerifier> CronetTestBase::CreateMockCertVerifier(
   return mock_cert_verifier;
 }
 
+void CronetTestBase::PostBlockToFileThread(const base::Location& from_here,
+                                           BlockType block) {
+  base::SingleThreadTaskRunner* file_runner =
+      [Cronet getFileThreadRunnerForTesting];
+  file_runner->PostTask(from_here,
+                        base::BindOnce(&CronetTestBase::ExecuteBlock,
+                                       base::Unretained(this), block));
+}
+
+void CronetTestBase::PostBlockToNetworkThread(const base::Location& from_here,
+                                              BlockType block) {
+  base::SingleThreadTaskRunner* network_runner =
+      [Cronet getNetworkThreadRunnerForTesting];
+  network_runner->PostTask(from_here,
+                           base::BindOnce(&CronetTestBase::ExecuteBlock,
+                                          base::Unretained(this), block));
+}
+
 bool CronetTestBase::CalculatePublicKeySha256(const net::X509Certificate& cert,
                                               net::HashValue* out_hash_value) {
-  // Convert the cert to DER encoded bytes.
-  std::string der_cert_bytes;
-  net::X509Certificate::OSCertHandle cert_handle = cert.os_cert_handle();
-  if (!net::X509Certificate::GetDEREncoded(cert_handle, &der_cert_bytes)) {
-    LOG(INFO) << "Unable to convert the given cert to DER encoding";
-    return false;
-  }
   // Extract the public key from the cert.
   base::StringPiece spki_bytes;
-  if (!net::asn1::ExtractSPKIFromDERCert(der_cert_bytes, &spki_bytes)) {
+  if (!net::asn1::ExtractSPKIFromDERCert(
+          net::x509_util::CryptoBufferAsStringPiece(cert.cert_buffer()),
+          &spki_bytes)) {
     LOG(INFO) << "Unable to retrieve the public key from the DER cert";
     return false;
   }
   // Calculate SHA256 hash of public key bytes.
-  out_hash_value->tag = net::HASH_VALUE_SHA256;
+  *out_hash_value = net::HashValue(net::HASH_VALUE_SHA256);
   crypto::SHA256HashString(spki_bytes, out_hash_value->data(),
                            crypto::kSHA256Length);
   return true;
+}
+
+void CronetTestBase::ExecuteBlock(BlockType block) {
+  block();
 }
 
 }  // namespace cronet

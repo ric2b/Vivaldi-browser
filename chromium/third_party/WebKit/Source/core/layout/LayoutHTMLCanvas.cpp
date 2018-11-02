@@ -27,7 +27,7 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/html/HTMLCanvasElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/paint/HTMLCanvasPaintInvalidator.h"
@@ -90,8 +90,8 @@ PaintInvalidationReason LayoutHTMLCanvas::InvalidatePaint(
 
 CompositingReasons LayoutHTMLCanvas::AdditionalCompositingReasons() const {
   if (ToHTMLCanvasElement(GetNode())->ShouldBeDirectComposited())
-    return kCompositingReasonCanvas;
-  return kCompositingReasonNone;
+    return CompositingReason::kCanvas;
+  return CompositingReason::kNone;
 }
 
 void LayoutHTMLCanvas::StyleDidChange(StyleDifference diff,

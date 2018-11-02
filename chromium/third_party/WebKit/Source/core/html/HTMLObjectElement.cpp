@@ -32,6 +32,7 @@
 #include "core/dom/SyncReattachContext.h"
 #include "core/dom/TagCollection.h"
 #include "core/dom/Text.h"
+#include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
@@ -40,8 +41,7 @@
 #include "core/html/HTMLParamElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html_names.h"
-#include "core/layout/api/LayoutEmbeddedItem.h"
-#include "core/plugins/PluginView.h"
+#include "core/layout/LayoutEmbeddedObject.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 
 namespace blink {
@@ -56,13 +56,13 @@ inline HTMLObjectElement::HTMLObjectElement(Document& document,
                         kShouldNotPreferPlugInsForImages),
       use_fallback_content_(false) {}
 
-inline HTMLObjectElement::~HTMLObjectElement() {}
+inline HTMLObjectElement::~HTMLObjectElement() = default;
 
 HTMLObjectElement* HTMLObjectElement::Create(Document& document,
                                              bool created_by_parser) {
   HTMLObjectElement* element =
       new HTMLObjectElement(document, created_by_parser);
-  element->EnsureUserAgentShadowRoot();
+  element->EnsureUserAgentShadowRootV1();
   return element;
 }
 
@@ -186,7 +186,7 @@ void HTMLObjectElement::ParametersForPlugin(Vector<String>& param_names,
 
   // Turn the attributes of the <object> element into arrays, but don't override
   // <param> values.
-  AttributeCollection attributes = this->Attributes();
+  AttributeCollection attributes = Attributes();
   for (const Attribute& attribute : attributes) {
     const AtomicString& name = attribute.GetName().LocalName();
     if (!unique_param_names.Contains(name.Impl())) {
@@ -250,7 +250,7 @@ void HTMLObjectElement::ReloadPluginOnAttributeChange(
 // TODO(schenney): crbug.com/572908 This should be unified with
 // HTMLEmbedElement::updatePlugin and moved down into HTMLPluginElement.cpp
 void HTMLObjectElement::UpdatePluginInternal() {
-  DCHECK(!GetLayoutEmbeddedItem().ShowsUnavailablePluginIndicator());
+  DCHECK(!GetLayoutEmbeddedObject()->ShowsUnavailablePluginIndicator());
   DCHECK(NeedsPluginUpdate());
   SetNeedsPluginUpdate(false);
   // TODO(schenney): crbug.com/572908 This should ASSERT

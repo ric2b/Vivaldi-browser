@@ -10,7 +10,6 @@ import os
 import shutil
 import re
 import sys
-import textwrap
 
 from util import build_utils
 from util import md5_check
@@ -19,6 +18,71 @@ import jar
 
 sys.path.append(build_utils.COLORAMA_ROOT)
 import colorama
+
+
+ERRORPRONE_WARNINGS_TO_TURN_OFF = [
+  # TODO(crbug.com/801208): Follow steps in bug.
+  'FloatingPointLiteralPrecision',
+  # TODO(crbug.com/801210): Follow steps in bug.
+  'SynchronizeOnNonFinalField',
+  # TODO(crbug.com/801253): Follow steps in bug.
+  'JavaLangClash',
+  # TODO(crbug.com/801256): Follow steps in bug.
+  'ParameterName',
+  # TODO(crbug.com/801261): Follow steps in bug
+  'ArgumentSelectionDefectChecker',
+  # TODO(crbug.com/801268): Follow steps in bug.
+  'NarrowingCompoundAssignment',
+  # TODO(crbug.com/802073): Follow steps in bug.
+  'TypeParameterUnusedInFormals',
+  # TODO(crbug.com/802075): Follow steps in bug
+  'ReferenceEquality',
+  # Android platform default is always UTF-8.
+  # https://developer.android.com/reference/java/nio/charset/Charset.html#defaultCharset()
+  'DefaultCharset',
+  # Low priority since the alternatives still work.
+  'JdkObsolete',
+  # We don't use that many lambdas.
+  'FunctionalInterfaceClash',
+  # There are lots of times when we just want to post a task.
+  'FutureReturnValueIgnored',
+  # Nice to be explicit about operators, but not necessary.
+  'OperatorPrecedence',
+  # Just false positives in our code.
+  'ThreadJoinLoop',
+  # Alias of ParameterName warning.
+  'NamedParameters',
+  # Low priority corner cases with String.split.
+  'StringSplitter',
+  # Preferred to use another method since it propagates exceptions better.
+  'ClassNewInstance',
+  # Nice to have static inner classes but not necessary.
+  'ClassCanBeStatic',
+  # Explicit is better than implicit.
+  'FloatCast',
+  # Results in false positives.
+  'ThreadLocalUsage',
+  # Also just false positives.
+  'Finally',
+  # False positives for Chromium.
+  'FragmentNotInstantiable',
+  # Low priority to fix.
+  'HidingField',
+  # Low priority.
+  'IntLongMath',
+  # Low priority.
+  'BadComparable',
+  # Low priority.
+  'EqualsHashCode',
+  # Nice to fix but low priority.
+  'TypeParameterShadowing',
+  # Good to have immutable enums, also low priority.
+  'ImmutableEnumChecker',
+]
+
+ERRORPRONE_WARNINGS_TO_ERROR = [
+  # Add warnings to this after fixing/suppressing all instances in our codebase.
+]
 
 
 def ColorJavacOutput(output):
@@ -52,14 +116,6 @@ def ColorJavacOutput(output):
     return line
 
   return '\n'.join(map(ApplyColor, output.split('\n')))
-
-
-def _FilterJavaFiles(paths, filters):
-  return [f for f in paths
-          if not filters or build_utils.MatchesGlob(f, filters)]
-
-
-_MAX_MANIFEST_LINE_LEN = 72
 
 
 def _ExtractClassFiles(jar_path, dest_dir, java_files):
@@ -148,7 +204,8 @@ def _CheckPathMatchesClassName(java_file):
                     (java_file, expected_path_suffix))
 
 
-def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
+def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs,
+                classpath):
   incremental = options.incremental
   # Don't bother enabling incremental compilation for third_party code, since
   # _CheckPathMatchesClassName() fails on some of it, and it's not really much
@@ -161,9 +218,6 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
 
   with build_utils.TempDir() as temp_dir:
     srcjars = options.java_srcjars
-    # The .excluded.jar contains .class files excluded from the main jar.
-    # It is used for incremental compiles.
-    excluded_jar_path = options.jar_path.replace('.jar', '.excluded.jar')
 
     classes_dir = os.path.join(temp_dir, 'classes')
     os.makedirs(classes_dir)
@@ -206,7 +260,6 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
                                for f in changes.IterChangedSubpaths(srcjar))
         build_utils.ExtractAll(srcjar, path=java_dir, pattern='*.java')
       jar_srcs = build_utils.FindInDirectory(java_dir, '*.java')
-      jar_srcs = _FilterJavaFiles(jar_srcs, options.javac_includes)
       java_files.extend(jar_srcs)
       if changed_paths:
         # Set the mtime of all sources to 0 since we use the absence of .class
@@ -219,13 +272,10 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
         changed_java_files = [p for p in java_files if p in changed_paths]
         if os.path.exists(options.jar_path):
           _ExtractClassFiles(options.jar_path, classes_dir, changed_java_files)
-        if os.path.exists(excluded_jar_path):
-          _ExtractClassFiles(excluded_jar_path, classes_dir, changed_java_files)
         # Add the extracted files to the classpath. This is required because
         # when compiling only a subset of files, classes that haven't changed
         # need to be findable.
-        classpath_idx = javac_cmd.index('-classpath')
-        javac_cmd[classpath_idx + 1] += ':' + classes_dir
+        classpath.append(classes_dir)
 
       # Can happen when a target goes from having no sources, to having sources.
       # It's created by the call to build_utils.Touch() below.
@@ -235,7 +285,20 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
 
       # Don't include the output directory in the initial set of args since it
       # being in a temp dir makes it unstable (breaks md5 stamping).
-      cmd = javac_cmd + ['-d', classes_dir] + java_files
+      cmd = javac_cmd + ['-d', classes_dir]
+
+      # Pass classpath and source paths as response files to avoid extremely
+      # long command lines that are tedius to debug.
+      if classpath:
+        classpath_rsp_path = os.path.join(temp_dir, 'classpath.txt')
+        with open(classpath_rsp_path, 'w') as f:
+          f.write(':'.join(classpath))
+        cmd += ['-classpath', '@' + classpath_rsp_path]
+
+      java_files_rsp_path = os.path.join(temp_dir, 'files_list.txt')
+      with open(java_files_rsp_path, 'w') as f:
+        f.write(' '.join(java_files))
+      cmd += ['@' + java_files_rsp_path]
 
       # JMake prints out some diagnostic logs that we want to ignore.
       # This assumes that all compiler output goes through stderr.
@@ -263,29 +326,23 @@ def _OnStaleMd5(changes, options, javac_cmd, java_files, classpath_inputs):
       # Make sure output exists.
       build_utils.Touch(pdb_path)
 
-    glob = options.jar_excluded_classes
-    inclusion_predicate = lambda f: not build_utils.MatchesGlob(f, glob)
-    exclusion_predicate = lambda f: not inclusion_predicate(f)
-
     jar.JarDirectory(classes_dir,
                      options.jar_path,
-                     predicate=inclusion_predicate,
                      provider_configurations=options.provider_configurations,
                      additional_files=options.additional_jar_files)
-    jar.JarDirectory(classes_dir,
-                     excluded_jar_path,
-                     predicate=exclusion_predicate,
-                     provider_configurations=options.provider_configurations,
-                     additional_files=options.additional_jar_files)
+
+
+def _ParseAndFlattenGnLists(gn_lists):
+  ret = []
+  for arg in gn_lists:
+    ret.extend(build_utils.ParseGnList(arg))
+  return ret
 
 
 def _ParseOptions(argv):
   parser = optparse.OptionParser()
   build_utils.AddDepfileOption(parser)
 
-  parser.add_option(
-      '--src-gendirs',
-      help='Directories containing generated java files.')
   parser.add_option(
       '--java-srcjars',
       action='append',
@@ -303,30 +360,25 @@ def _ParseOptions(argv):
   parser.add_option(
       '--classpath',
       action='append',
-      help='Classpath for javac. If this is specified multiple times, they '
-      'will all be appended to construct the classpath.')
+      help='Classpath to use when annotation processors are present.')
+  parser.add_option(
+      '--interface-classpath',
+      action='append',
+      help='Classpath to use when no annotation processors are present.')
   parser.add_option(
       '--incremental',
       action='store_true',
       help='Whether to re-use .class files rather than recompiling them '
            '(when possible).')
   parser.add_option(
-      '--javac-includes',
-      default='',
-      help='A list of file patterns. If provided, only java files that match'
-      'one of the patterns will be compiled.')
-  parser.add_option(
-      '--jar-excluded-classes',
-      default='',
-      help='List of .class file patterns to exclude from the jar.')
-  parser.add_option(
-      '--processor',
-      dest='processors',
+      '--processors',
       action='append',
-      help='Annotation processor to use.')
+      help='GN list of annotation processor main classes.')
   parser.add_option(
       '--processorpath',
-      help='Where javac should look for annotation processors.')
+      action='append',
+      help='GN list of jars that comprise the classpath used for Annotation '
+           'Processors.')
   parser.add_option(
       '--processor-arg',
       dest='processor_args',
@@ -354,7 +406,6 @@ def _ParseOptions(argv):
       '--use-errorprone-path',
       help='Use the Errorprone compiler at this path.')
   parser.add_option('--jar-path', help='Jar output path.')
-  parser.add_option('--stamp', help='Path to touch on success.')
   parser.add_option(
       '--javac-arg',
       action='append',
@@ -364,10 +415,14 @@ def _ParseOptions(argv):
   options, args = parser.parse_args(argv)
   build_utils.CheckOptions(options, parser, required=('jar_path',))
 
-  bootclasspath = []
-  for arg in options.bootclasspath:
-    bootclasspath += build_utils.ParseGnList(arg)
-  options.bootclasspath = bootclasspath
+  options.bootclasspath = _ParseAndFlattenGnLists(options.bootclasspath)
+  options.classpath = _ParseAndFlattenGnLists(options.classpath)
+  options.interface_classpath = _ParseAndFlattenGnLists(
+      options.interface_classpath)
+  options.processorpath = _ParseAndFlattenGnLists(options.processorpath)
+  options.processors = _ParseAndFlattenGnLists(options.processors)
+  options.java_srcjars = _ParseAndFlattenGnLists(options.java_srcjars)
+
   if options.java_version == '1.8' and options.bootclasspath:
     # Android's boot jar doesn't contain all java 8 classes.
     # See: https://github.com/evant/gradle-retrolambda/issues/23.
@@ -379,28 +434,11 @@ def _ParseOptions(argv):
     rt_jar = os.path.join(jdk_dir, 'jre', 'lib', 'rt.jar')
     options.bootclasspath.append(rt_jar)
 
-  classpath = []
-  for arg in options.classpath:
-    classpath += build_utils.ParseGnList(arg)
-  options.classpath = classpath
-
-  java_srcjars = []
-  for arg in options.java_srcjars:
-    java_srcjars += build_utils.ParseGnList(arg)
-  options.java_srcjars = java_srcjars
-
   additional_jar_files = []
   for arg in options.additional_jar_files or []:
     filepath, jar_filepath = arg.split(':')
     additional_jar_files.append((filepath, jar_filepath))
   options.additional_jar_files = additional_jar_files
-
-  if options.src_gendirs:
-    options.src_gendirs = build_utils.ParseGnList(options.src_gendirs)
-
-  options.javac_includes = build_utils.ParseGnList(options.javac_includes)
-  options.jar_excluded_classes = (
-      build_utils.ParseGnList(options.jar_excluded_classes))
 
   java_files = []
   for arg in args:
@@ -419,11 +457,6 @@ def main(argv):
   argv = build_utils.ExpandFileArgs(argv)
   options, java_files = _ParseOptions(argv)
 
-  if options.src_gendirs:
-    java_files += build_utils.FindInDirectories(options.src_gendirs, '*.java')
-
-  java_files = _FilterJavaFiles(java_files, options.javac_includes)
-
   if options.use_errorprone_path:
     javac_path = options.use_errorprone_path
   else:
@@ -431,21 +464,20 @@ def main(argv):
   javac_cmd = [javac_path]
 
   javac_cmd.extend((
-      '-g',
-      # Chromium only allows UTF8 source files.  Being explicit avoids
-      # javac pulling a default encoding from the user's environment.
-      '-encoding', 'UTF-8',
-      # Make sure we do not pass an empty string to -classpath and -sourcepath.
-      '-classpath', ':'.join(options.classpath) or ':',
-      # Prevent compiler from compiling .java files not listed as inputs.
-      # See: http://blog.ltgt.net/most-build-tools-misuse-javac/
-      '-sourcepath', ':',
+    '-g',
+    # Chromium only allows UTF8 source files.  Being explicit avoids
+    # javac pulling a default encoding from the user's environment.
+    '-encoding', 'UTF-8',
+    # Prevent compiler from compiling .java files not listed as inputs.
+    # See: http://blog.ltgt.net/most-build-tools-misuse-javac/
+    '-sourcepath', ':',
   ))
 
-  if options.bootclasspath:
-    javac_cmd.extend([
-      '-bootclasspath', ':'.join(options.bootclasspath)
-    ])
+  if options.use_errorprone_path:
+    for warning in ERRORPRONE_WARNINGS_TO_TURN_OFF:
+      javac_cmd.append('-Xep:{}:OFF'.format(warning))
+    for warning in ERRORPRONE_WARNINGS_TO_ERROR:
+      javac_cmd.append('-Xep:{}:ERROR'.format(warning))
 
   if options.java_version:
     javac_cmd.extend([
@@ -463,26 +495,27 @@ def main(argv):
 
   if options.processors:
     javac_cmd.extend(['-processor', ','.join(options.processors)])
+
+  if options.bootclasspath:
+    javac_cmd.extend(['-bootclasspath', ':'.join(options.bootclasspath)])
+
+  # Annotation processors crash when given interface jars.
+  active_classpath = (
+      options.classpath if options.processors else options.interface_classpath)
+  classpath = []
+  if active_classpath:
+    classpath.extend(active_classpath)
+
   if options.processorpath:
-    javac_cmd.extend(['-processorpath', options.processorpath])
+    javac_cmd.extend(['-processorpath', ':'.join(options.processorpath)])
   if options.processor_args:
     for arg in options.processor_args:
       javac_cmd.extend(['-A%s' % arg])
 
   javac_cmd.extend(options.javac_arg)
 
-  classpath_inputs = options.bootclasspath
-  if options.classpath:
-    if options.classpath[0].endswith('.interface.jar'):
-      classpath_inputs.extend(options.classpath)
-    else:
-      # TODO(agrieve): Remove this .TOC heuristic once GYP is no more.
-      for path in options.classpath:
-        if os.path.exists(path + '.TOC'):
-          classpath_inputs.append(path + '.TOC')
-        else:
-          classpath_inputs.append(path)
-
+  classpath_inputs = (options.bootclasspath + options.interface_classpath +
+                      options.processorpath)
   # GN already knows of java_files, so listing them just make things worse when
   # they change.
   depfile_deps = [javac_path] + classpath_inputs + options.java_srcjars
@@ -490,7 +523,6 @@ def main(argv):
 
   output_paths = [
       options.jar_path,
-      options.jar_path.replace('.jar', '.excluded.jar'),
   ]
   if options.incremental:
     output_paths.append(options.jar_path + '.pdb')
@@ -503,11 +535,11 @@ def main(argv):
   # of them does not change what gets written to the depsfile.
   build_utils.CallAndWriteDepfileIfStale(
       lambda changes: _OnStaleMd5(changes, options, javac_cmd, java_files,
-                                  classpath_inputs),
+                                  classpath_inputs, classpath),
       options,
       depfile_deps=depfile_deps,
       input_paths=input_paths,
-      input_strings=javac_cmd,
+      input_strings=javac_cmd + classpath,
       output_paths=output_paths,
       force=force,
       pass_changes=True)

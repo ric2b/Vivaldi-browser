@@ -1,35 +1,18 @@
-import("//vivaldi/gn/config/features.gni")
 import("//tools/grit/grit_rule.gni")
-import("//build/config/locales.gni")
-import("//vivaldi/app/resources/untranslated.gni")
 
-_default_main_resource_dir = "//chrome/app"
-_default_combined_target_dir_base = "$root_gen_dir/vivaldi_resources"
 gritinfo_cmd = "//tools/grit/grit_info.py"
-_grit_cmd = "//tools/grit/grit.py"
 _default_grit_resource_ids = "//tools/gritsettings/resource_ids"
-_list_lang_cmd = "//vivaldi/app/list_lang_xmb_files.py"
-_merge_resources_cmd = "//vivaldi/app/resources/merge_resources.py"
-_mergeid_tool_path = "//vivaldi/app/resources/merge_idfile.py"
-_update_json_path = "//vivaldi/app/resources/updates.json"
-_update_tool_path = "//vivaldi/app/resources/update_file.py"
-if (!defined(locales)) {
-  locales = []
-}
+
 template("single_grit_action") {
   assert(defined(invoker.source))
   forward_variables_from(invoker,
                          [
-                           #"translation_dir",
                            "grit_out_dir",
                            "have_strings",
                            "grit_resource_ids",
                            "grit_additional_defines",
                          ])
 
-  #if (!defined(translation_dir)) {
-  #  translation_dir = "resources"
-  #}
   if (!defined(grit_out_dir)) {
     grit_out_dir = "$root_gen_dir/chrome"
   }

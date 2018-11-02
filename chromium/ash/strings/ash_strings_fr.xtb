@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Cet appareil est géré par <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Portrait</translation>
 <translation id="2067602449040652523">Luminosité du clavier</translation>
-<translation id="207439088875642105">Il s'agit d'un compte pour enfants géré par <ph name="FIRST_PARENT_EMAIL" /> et <ph name="SECOND_PARENT_EMAIL" />.</translation>
 <translation id="2122028596993374965">Arrêter de diffuser <ph name="TAB_NAME" /> sur "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="2127372758936585790">Chargeur de faible puissance</translation>
 <translation id="2144487987174258011">Redémarrez pour mettre Adobe Flash Player à jour</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Audio mono</translation>
 <translation id="3009178788565917040">Sortie</translation>
 <translation id="3019353588588144572">Temps restant avant chargement complet de la batterie : <ph name="TIME_REMAINING" />.</translation>
-<translation id="3047477924825107454">Il s'agit d'un compte pour enfants géré par <ph name="MANAGER_EMAIL" />.</translation>
 <translation id="3077734595579995578">maj</translation>
 <translation id="3087734570205094154">Bas</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Loupe</translation>
 <translation id="3477079411857374384">Ctrl+Maj+Espace</translation>
 <translation id="3510164367642747937">Mettre le curseur de la souris en surbrillance</translation>
+<translation id="3513798432020909783">Compte géré par <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Revenir à "<ph name="FROM_LOCALE" />" (redémarrage requis)</translation>
 <translation id="3582792037806681688">La connexion multicompte a été désactivée pour un utilisateur de cette session.</translation>
 <translation id="3595596368722241419">Batterie pleine</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Verrouiller</translation>
 <translation id="3798670284305777884">Haut-parleur (interne)</translation>
 <translation id="3846575436967432996">Aucune information disponible concernant le réseau</translation>
+<translation id="385051799172605136">Retour</translation>
 <translation id="3891340733213178823">Appuyez deux fois sur Ctrl + Maj + Q pour vous déconnecter.</translation>
 <translation id="3893630138897523026">ChromeVox (commentaires audio)</translation>
 <translation id="3899995891769452915">Saisie vocale</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Partage de connexion instantané</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Tous les utilisateurs disponibles ont déjà été ajoutés à cette session.</translation>
+<translation id="5457599981699367932">Naviguer en tant qu'invité</translation>
 <translation id="553675580533261935">Fermeture de la session</translation>
 <translation id="5548285847212963613">L'extension "<ph name="EXTENSION_NAME" />" peut aider à se connecter à ce réseau.</translation>
 <translation id="5571066253365925590">Bluetooth activé</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Déplacement tactile</translation>
 <translation id="5777841717266010279">Arrêter le partage d'écran ?</translation>
 <translation id="57838592816432529">Couper le son</translation>
+<translation id="5832805196449965646">Ajouter une personne</translation>
 <translation id="5860033963881614850">Désactivé</translation>
 <translation id="5895138241574237353">Redémarrer</translation>
 <translation id="5901316534475909376">Maj+Échap</translation>
@@ -273,6 +275,7 @@ N'utilisez cette fonctionnalité qu'avec des comptes fiables.</translation>
 <translation id="7829386189513694949">Signal de forte intensité</translation>
 <translation id="7904094684485781019">L'administrateur de ce compte a désactivé la connexion multicompte.</translation>
 <translation id="7933084174919150729">L'Assistant Google n'est disponible que pour le profil principal.</translation>
+<translation id="79341161159229895">Compte géré par <ph name="FIRST_PARENT_EMAIL" /> et <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Recherche de réseaux mobiles…</translation>
 <translation id="7982789257301363584">Réseau</translation>
 <translation id="7994370417837006925">Connexion multicompte</translation>
@@ -289,6 +292,7 @@ N'utilisez cette fonctionnalité qu'avec des comptes fiables.</translation>
 <translation id="8261506727792406068">Supprimer</translation>
 <translation id="8308637677604853869">Menu précédent</translation>
 <translation id="8351131234907093545">Créer une note</translation>
+<translation id="8392451568018454956">Menu "Options" de l'adresse e-mail <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Paramètres</translation>
 <translation id="8433186206711564395">Paramètres réseau</translation>
 <translation id="8433977262951327081">Le raccourci pour afficher l'info-bulle du menu des options de saisie dans l'étagère a changé. Veuillez utiliser <ph name="NEW_SHORTCUT" /> au lieu de <ph name="OLD_SHORTCUT" />.</translation>

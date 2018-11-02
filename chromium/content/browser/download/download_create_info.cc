@@ -28,6 +28,7 @@ DownloadCreateInfo::DownloadCreateInfo(
       accept_range(false),
       connection_info(net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN),
       method("GET"),
+      ukm_source_id(ukm::kInvalidSourceId),
       open_when_finished(open_when_done) {}
 
 DownloadCreateInfo::DownloadCreateInfo()

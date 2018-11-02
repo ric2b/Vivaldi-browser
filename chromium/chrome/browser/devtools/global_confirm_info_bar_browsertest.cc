@@ -151,7 +151,7 @@ IN_PROC_BROWSER_TEST_F(GlobalConfirmInfoBarWithInfoBarDisabledTest,
                        InfoBarsDisabled) {
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
 
-  auto delegate = base::MakeUnique<TestConfirmInfoBarDelegate>();
+  auto delegate = std::make_unique<TestConfirmInfoBarDelegate>();
   base::WeakPtr<GlobalConfirmInfoBar> global_confirm_info_bar =
       GlobalConfirmInfoBar::Show(std::move(delegate));
 

@@ -67,21 +67,32 @@ class {{export_attribute}} {{struct.name}} {
 
   template <typename UserType>
   static {{serialization_result_type}} Serialize(UserType* input) {
-    return mojo::internal::StructSerializeImpl<
+    return mojo::internal::SerializeImpl<
         {{struct.name}}::DataView, {{serialization_result_type}}>(input);
   }
 
   template <typename UserType>
   static mojo::Message SerializeAsMessage(UserType* input) {
-    return mojo::internal::StructSerializeAsMessageImpl<
+    return mojo::internal::SerializeAsMessageImpl<
         {{struct.name}}::DataView>(input);
+  }
+
+  // The returned Message is serialized only if the message is moved
+  // cross-process or cross-language. Otherwise if the message is Deserialized
+  // as the same UserType |input| will just be moved to |output| in
+  // DeserializeFromMessage.
+  template <typename UserType>
+  static mojo::Message WrapAsMessage(UserType input) {
+    return mojo::Message(std::make_unique<
+        internal::{{struct.name}}_UnserializedMessageContext<
+            UserType, {{struct.name}}::DataView>>(0, 0, std::move(input)));
   }
 
   template <typename UserType>
   static bool Deserialize(const void* data,
                           size_t data_num_bytes,
                           UserType* output) {
-    return mojo::internal::StructDeserializeImpl<{{struct.name}}::DataView>(
+    return mojo::internal::DeserializeImpl<{{struct.name}}::DataView>(
         data, data_num_bytes, std::vector<mojo::ScopedHandle>(), output, Validate);
   }
 
@@ -95,7 +106,15 @@ class {{export_attribute}} {{struct.name}} {
   template <typename UserType>
   static bool DeserializeFromMessage(mojo::Message input,
                                      UserType* output) {
-    return mojo::internal::StructDeserializeImpl<{{struct.name}}::DataView>(
+    auto context = input.TakeUnserializedContext<
+        internal::{{struct.name}}_UnserializedMessageContext<
+            UserType, {{struct.name}}::DataView>>();
+    if (context) {
+      *output = std::move(context->TakeData());
+      return true;
+    }
+    input.SerializeIfNecessary();
+    return mojo::internal::DeserializeImpl<{{struct.name}}::DataView>(
         input.payload(), input.payload_num_bytes(),
         std::move(*input.mutable_handles()), output, Validate);
   }

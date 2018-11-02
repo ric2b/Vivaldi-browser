@@ -11,7 +11,7 @@
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
@@ -46,7 +46,7 @@ bool FillsViewport(const Element& element) {
   LayoutRect bounding_box(quads[0].BoundingBox());
 
   return bounding_box.Location() == LayoutPoint::Zero() &&
-         bounding_box.Size() == top_document.GetLayoutViewItem().Size();
+         bounding_box.Size() == top_document.GetLayoutView()->Size();
 }
 
 }  // namespace

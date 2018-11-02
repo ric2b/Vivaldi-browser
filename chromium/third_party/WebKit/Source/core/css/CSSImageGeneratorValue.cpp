@@ -28,7 +28,6 @@
 #include "core/css/CSSCrossfadeValue.h"
 #include "core/css/CSSGradientValue.h"
 #include "core/css/CSSPaintValue.h"
-#include "core/layout/LayoutObject.h"
 #include "platform/graphics/Image.h"
 
 namespace blink {
@@ -38,21 +37,44 @@ using cssvalue::ToCSSConicGradientValue;
 using cssvalue::ToCSSLinearGradientValue;
 using cssvalue::ToCSSRadialGradientValue;
 
+Image* GeneratedImageCache::GetImage(const LayoutSize& size) const {
+  if (size.IsEmpty())
+    return nullptr;
+  return images_.at(size);
+}
+
+void GeneratedImageCache::PutImage(const LayoutSize& size,
+                                   scoped_refptr<Image> image) {
+  images_.insert(size, std::move(image));
+}
+
+void GeneratedImageCache::AddSize(const LayoutSize& size) {
+  if (size.IsEmpty())
+    return;
+  sizes_.insert(size);
+}
+
+void GeneratedImageCache::RemoveSize(const LayoutSize& size) {
+  if (size.IsEmpty())
+    return;
+  if (sizes_.erase(size))
+    images_.erase(size);
+}
+
 CSSImageGeneratorValue::CSSImageGeneratorValue(ClassType class_type)
     : CSSValue(class_type) {}
 
 CSSImageGeneratorValue::~CSSImageGeneratorValue() = default;
 
 void CSSImageGeneratorValue::AddClient(const ImageResourceObserver* client,
-                                       const IntSize& size) {
+                                       const LayoutSize& size) {
   DCHECK(client);
   if (clients_.IsEmpty()) {
     DCHECK(!keep_alive_);
     keep_alive_ = this;
   }
 
-  if (!size.IsEmpty())
-    sizes_.insert(size);
+  cached_images_.AddSize(size);
 
   ClientSizeCountMap::iterator it = clients_.find(client);
   if (it == clients_.end()) {
@@ -74,14 +96,8 @@ void CSSImageGeneratorValue::RemoveClient(const ImageResourceObserver* client) {
   ClientSizeCountMap::iterator it = clients_.find(client);
   SECURITY_DCHECK(it != clients_.end());
 
-  IntSize removed_image_size;
   SizeAndCount& size_count = it->value;
-  IntSize size = size_count.size;
-  if (!size.IsEmpty()) {
-    sizes_.erase(size);
-    if (!sizes_.Contains(size))
-      images_.erase(size);
-  }
+  cached_images_.RemoveSize(size_count.size);
 
   if (!--size_count.count)
     clients_.erase(client);
@@ -93,37 +109,33 @@ void CSSImageGeneratorValue::RemoveClient(const ImageResourceObserver* client) {
 }
 
 Image* CSSImageGeneratorValue::GetImage(const ImageResourceObserver* client,
-                                        const Document&,
-                                        const ComputedStyle&,
-                                        const IntSize& size) {
+                                        const LayoutSize& size) {
   ClientSizeCountMap::iterator it = clients_.find(client);
   if (it != clients_.end()) {
+    DCHECK(keep_alive_);
     SizeAndCount& size_count = it->value;
-    IntSize old_size = size_count.size;
-    if (old_size != size) {
-      RemoveClient(client);
-      AddClient(client, size);
+    if (size_count.size != size) {
+      cached_images_.RemoveSize(size_count.size);
+      cached_images_.AddSize(size);
+
+      // If there's only one use for this client, then update the size.
+      if (size_count.count == 1)
+        size_count.size = size;
     }
   }
-
-  // Don't generate an image for empty sizes.
-  if (size.IsEmpty())
-    return nullptr;
-
-  // Look up the image in our cache.
-  return images_.at(size);
+  return cached_images_.GetImage(size);
 }
 
-void CSSImageGeneratorValue::PutImage(const IntSize& size,
+void CSSImageGeneratorValue::PutImage(const LayoutSize& size,
                                       scoped_refptr<Image> image) {
-  images_.insert(size, std::move(image));
+  cached_images_.PutImage(size, std::move(image));
 }
 
 scoped_refptr<Image> CSSImageGeneratorValue::GetImage(
     const ImageResourceObserver& client,
     const Document& document,
     const ComputedStyle& style,
-    const IntSize& container_size) {
+    const LayoutSize& container_size) {
   switch (GetClassType()) {
     case kCrossfadeClass:
       return ToCSSCrossfadeValue(this)->GetImage(client, document, style,
@@ -164,7 +176,7 @@ bool CSSImageGeneratorValue::IsFixedSize() const {
   return false;
 }
 
-IntSize CSSImageGeneratorValue::FixedSize(
+FloatSize CSSImageGeneratorValue::FixedSize(
     const Document& document,
     const FloatSize& default_object_size) {
   switch (GetClassType()) {
@@ -182,7 +194,7 @@ IntSize CSSImageGeneratorValue::FixedSize(
     default:
       NOTREACHED();
   }
-  return IntSize();
+  return FloatSize();
 }
 
 bool CSSImageGeneratorValue::IsPending() const {

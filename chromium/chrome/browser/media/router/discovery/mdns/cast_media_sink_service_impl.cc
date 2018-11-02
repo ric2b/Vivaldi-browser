@@ -4,7 +4,6 @@
 
 #include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -30,7 +29,8 @@ media_router::MediaSinkInternal CreateCastSinkFromDialSink(
   const std::string& unique_id = dial_sink.sink().id();
   const std::string& friendly_name = dial_sink.sink().name();
   media_router::MediaSink sink(unique_id, friendly_name,
-                               media_router::SinkIconType::CAST);
+                               media_router::SinkIconType::CAST,
+                               media_router::MediaRouteProviderId::EXTENSION);
 
   media_router::CastSinkExtraData extra_data;
   extra_data.ip_endpoint =
@@ -177,7 +177,7 @@ CastMediaSinkServiceImpl::CastMediaSinkServiceImpl(
       network_monitor_(network_monitor),
       task_runner_(cast_socket_service_->task_runner()),
       url_request_context_getter_(url_request_context_getter),
-      clock_(new base::DefaultClock()),
+      clock_(base::DefaultClock::GetInstance()),
       weak_ptr_factory_(this) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
   DCHECK(cast_socket_service_);
@@ -226,9 +226,8 @@ CastMediaSinkServiceImpl::~CastMediaSinkServiceImpl() {
   cast_socket_service_->RemoveObserver(this);
 }
 
-void CastMediaSinkServiceImpl::SetClockForTest(
-    std::unique_ptr<base::Clock> clock) {
-  clock_ = std::move(clock);
+void CastMediaSinkServiceImpl::SetClockForTest(base::Clock* clock) {
+  clock_ = clock;
 }
 
 void CastMediaSinkServiceImpl::Start() {
@@ -491,7 +490,7 @@ void CastMediaSinkServiceImpl::OnChannelErrorMayRetry(
   failure_count_map_[ip_endpoint] = std::min(failure_count, kMaxFailureCount);
 
   if (!backoff_entry)
-    backoff_entry = base::MakeUnique<net::BackoffEntry>(&backoff_policy_);
+    backoff_entry = std::make_unique<net::BackoffEntry>(&backoff_policy_);
 
   if (backoff_entry->failure_count() >= retry_params_.max_retry_attempts) {
     DVLOG(1) << "Fail to open channel after all retry attempts: "
@@ -605,8 +604,19 @@ void CastMediaSinkServiceImpl::AttemptConnection(
 }
 
 OnDialSinkAddedCallback CastMediaSinkServiceImpl::GetDialSinkAddedCallback() {
-  return base::BindRepeating(&CastMediaSinkServiceImpl::OnDialSinkAdded,
-                             GetWeakPtr());
+  return base::BindRepeating(
+      &CastMediaSinkServiceImpl::InvokeOnDialSinkAddedOnTaskRunner,
+      GetWeakPtr(), task_runner_);
+}
+
+// static
+void CastMediaSinkServiceImpl::InvokeOnDialSinkAddedOnTaskRunner(
+    const base::WeakPtr<CastMediaSinkServiceImpl>& impl,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+    const MediaSinkInternal& dial_sink) {
+  task_runner->PostTask(
+      FROM_HERE, base::BindOnce(&CastMediaSinkServiceImpl::OnDialSinkAdded,
+                                impl, dial_sink));
 }
 
 CastMediaSinkServiceImpl::RetryParams::RetryParams()

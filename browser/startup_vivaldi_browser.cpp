@@ -28,6 +28,8 @@ using extensions::Extension;
 
 namespace vivaldi {
 
+const char kVivaldiStartupTabUserDataKey[] = "VivaldiStartupTab";
+
 namespace {
 // Start copied from chrome\browser\ui\startup\startup_browser_creator_impl.cc
 

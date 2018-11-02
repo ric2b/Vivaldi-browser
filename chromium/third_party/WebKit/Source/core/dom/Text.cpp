@@ -36,7 +36,6 @@
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextCombine.h"
 #include "core/layout/LayoutTextFragment.h"
-#include "core/layout/api/LayoutTextItem.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
 #include "core/svg/SVGForeignObjectElement.h"
 #include "core/svg_names.h"
@@ -383,12 +382,23 @@ void Text::ReattachLayoutTreeIfNeeded(const AttachContext& context) {
 }
 
 void Text::RecalcTextStyle(StyleRecalcChange change) {
-  if (LayoutTextItem layout_item = LayoutTextItem(GetLayoutObject())) {
-    if (change != kNoChange || NeedsStyleRecalc())
-      layout_item.SetStyle(
-          GetDocument().EnsureStyleResolver().StyleForText(this));
+  if (LayoutText* layout_text = GetLayoutObject()) {
+    if (change != kNoChange || NeedsStyleRecalc()) {
+      scoped_refptr<ComputedStyle> new_style =
+          GetDocument().EnsureStyleResolver().StyleForText(this);
+      const ComputedStyle* layout_parent_style =
+          GetLayoutObject()->Parent()->Style();
+      if (new_style != layout_parent_style &&
+          !new_style->InheritedEqual(*layout_parent_style)) {
+        // The computed style or the need for an anonymous inline wrapper for a
+        // display:contents text child changed.
+        SetNeedsReattachLayoutTree();
+        return;
+      }
+      layout_text->SetStyle(std::move(new_style));
+    }
     if (NeedsStyleRecalc())
-      layout_item.SetText(DataImpl());
+      layout_text->SetText(DataImpl());
     ClearNeedsStyleRecalc();
   } else if (NeedsStyleRecalc() || NeedsWhitespaceLayoutObject()) {
     SetNeedsReattachLayoutTree();

@@ -10,8 +10,8 @@
 #include "chrome/browser/ui/views/frame/contents_layout_manager.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/infobars/infobar_container_view.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -137,7 +137,7 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     immersive_mode_controller_.reset(new MockImmersiveModeController);
 
     top_container_ = CreateFixedSizeView(gfx::Size(800, 60));
-    tab_strip_ = new TabStripImpl(std::unique_ptr<TabStripController>());
+    tab_strip_ = new TabStrip(std::unique_ptr<TabStripController>());
     top_container_->AddChildView(tab_strip_);
     toolbar_ = CreateFixedSizeView(gfx::Size(800, 30));
     top_container_->AddChildView(toolbar_);
@@ -154,8 +154,9 @@ class BrowserViewLayoutTest : public BrowserWithTestWindowTest {
     contents_container_->AddChildView(devtools_web_view_);
     contents_container_->AddChildView(contents_web_view_);
     ContentsLayoutManager* contents_layout_manager =
-        new ContentsLayoutManager(devtools_web_view_, contents_web_view_);
-    contents_container_->SetLayoutManager(contents_layout_manager);
+        contents_container_->SetLayoutManager(
+            std::make_unique<ContentsLayoutManager>(devtools_web_view_,
+                                                    contents_web_view_));
 
     root_view_->AddChildView(contents_container_);
 

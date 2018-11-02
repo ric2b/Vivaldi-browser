@@ -20,7 +20,7 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
-#include "ios/chrome/browser/ui/bookmarks/bookmark_collection_view_background.h"
+#include "ios/chrome/browser/ui/bookmarks/bookmark_empty_background.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_waiting_view.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_utils_ios.h"
@@ -38,11 +38,43 @@
 
 namespace {
 // Minimal acceptable favicon size, in points.
-CGFloat kMinFaviconSizePt = 16;
+const CGFloat kMinFaviconSizePt = 16.0;
+
+// Desired favicon size, in points.
+const CGFloat kDesiredFaviconSizePt = 32.0;
 
 // Cell height, in points.
-CGFloat kCellHeightPt = 56.0;
-}
+const CGFloat kCellHeightPt = 56.0;
+
+// Minimium spacing between keyboard and the titleText when creating new folder,
+// in points.
+const CGFloat kKeyboardSpacing = 16.0;
+
+// Max number of favicon download requests in the lifespan of this tableView.
+const NSUInteger kMaxDownloadFaviconCount = 50;
+
+// NetworkTrafficAnnotationTag for fetching favicon from a Google server.
+const net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("bookmarks_get_large_icon", R"(
+        semantics {
+          sender: "Bookmarks"
+          description:
+            "Sends a request to a Google server to retrieve the favicon bitmap "
+            "for a bookmark."
+          trigger:
+            "A request can be sent if Chrome does not have a favicon for a "
+            "bookmark."
+          data: "Page URL and desired icon size."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: NO
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification: "Not implemented."
+        }
+      )");
+
+}  // namespace
 
 using bookmarks::BookmarkNode;
 
@@ -94,8 +126,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 @property(nonatomic, weak) id<BookmarkTableViewDelegate> delegate;
 // Background shown when there is no bookmarks or folders at the current root
 // node.
-@property(nonatomic, strong)
-    BookmarkCollectionViewBackground* emptyTableBackgroundView;
+@property(nonatomic, strong) BookmarkEmptyBackground* emptyTableBackgroundView;
 // The loading spinner background which appears when syncing.
 @property(nonatomic, strong) BookmarkHomeWaitingView* spinnerView;
 
@@ -114,6 +145,10 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 // to nil once the editing completes. Corresponds to |_editingFolderNode|.
 @property(nonatomic, weak) BookmarkTableCell* editingFolderCell;
 
+// Counts the number of favicon download requests from Google server in the
+// lifespan of this tableView.
+@property(nonatomic, assign) NSUInteger faviconDownloadCount;
+
 @end
 
 @implementation BookmarkTableView
@@ -129,6 +164,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 @synthesize presenter = _presenter;
 @synthesize addingNewFolder = _addingNewFolder;
 @synthesize editingFolderCell = _editingFolderCell;
+@synthesize faviconDownloadCount = _faviconDownloadCount;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
                             delegate:(id<BookmarkTableViewDelegate>)delegate
@@ -397,7 +433,13 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
       cell.textDelegate = self;
     });
   }
-  [self loadFaviconAtIndexPath:indexPath];
+
+  // Cancel previous load attempts.
+  [self cancelLoadingFaviconAtIndexPath:indexPath];
+  // Load the favicon from cache.  If not found, try fetching it from a Google
+  // Server.
+  [self loadFaviconAtIndexPath:indexPath continueToGoogleServer:YES];
+
   return cell;
 }
 
@@ -583,7 +625,8 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
     return;
   }
 
-  [self loadFaviconAtIndexPath:indexPath];
+  // Get the favicon from cache directly. (no need to fetch from server)
+  [self loadFaviconAtIndexPath:indexPath continueToGoogleServer:NO];
 }
 
 #pragma mark - Sections
@@ -700,12 +743,13 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 // Computes the bookmarks table view based on the current root node.
 - (void)computeBookmarkTableViewData {
+  // Regenerate the list of all bookmarks.
+  _bookmarkItems.clear();
+
   if (!self.bookmarkModel->loaded() || !_currentRootNode) {
     return;
   }
 
-  // Regenerate the list of all bookmarks.
-  _bookmarkItems.clear();
   if (_currentRootNode == self.bookmarkModel->root_node()) {
     [self generateTableViewDataForRootNode];
     return;
@@ -796,8 +840,8 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 - (void)showEmptyBackground {
   if (!self.emptyTableBackgroundView) {
     // Set up the background view shown when the table is empty.
-    self.emptyTableBackgroundView = [[BookmarkCollectionViewBackground alloc]
-        initWithFrame:self.tableView.bounds];
+    self.emptyTableBackgroundView =
+        [[BookmarkEmptyBackground alloc] initWithFrame:self.tableView.bounds];
     self.emptyTableBackgroundView.autoresizingMask =
         UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth;
     self.emptyTableBackgroundView.text =
@@ -823,7 +867,7 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
                     withImage:(UIImage*)image
               backgroundColor:(UIColor*)backgroundColor
                     textColor:(UIColor*)textColor
-                 fallbackText:(NSString*)text {
+                 fallbackText:(NSString*)fallbackText {
   BookmarkTableCell* cell = [self.tableView cellForRowAtIndexPath:indexPath];
   if (!cell) {
     return;
@@ -832,10 +876,40 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
   if (image) {
     [cell setImage:image];
   } else {
-    [cell setPlaceholderText:text
+    [cell setPlaceholderText:fallbackText
                    textColor:textColor
              backgroundColor:backgroundColor];
   }
+}
+
+- (void)updateCellAtIndexPath:(NSIndexPath*)indexPath
+          withLargeIconResult:(const favicon_base::LargeIconResult&)result
+                 fallbackText:(NSString*)fallbackText {
+  UIImage* favIcon = nil;
+  UIColor* backgroundColor = nil;
+  UIColor* textColor = nil;
+
+  if (result.bitmap.is_valid()) {
+    scoped_refptr<base::RefCountedMemory> data = result.bitmap.bitmap_data;
+    favIcon = [UIImage
+        imageWithData:[NSData dataWithBytes:data->front() length:data->size()]];
+    fallbackText = nil;
+    // Update the time when the icon was last requested - postpone thus the
+    // automatic eviction of the favicon from the favicon database.
+    IOSChromeLargeIconServiceFactory::GetForBrowserState(self.browserState)
+        ->TouchIconFromGoogleServer(result.bitmap.icon_url);
+  } else if (result.fallback_icon_style) {
+    backgroundColor =
+        skia::UIColorFromSkColor(result.fallback_icon_style->background_color);
+    textColor =
+        skia::UIColorFromSkColor(result.fallback_icon_style->text_color);
+  }
+
+  [self updateCellAtIndexPath:indexPath
+                    withImage:favIcon
+              backgroundColor:backgroundColor
+                    textColor:textColor
+                 fallbackText:fallbackText];
 }
 
 // Cancels all async loads of favicons. Subclasses should call this method when
@@ -852,60 +926,73 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 }
 
 // Asynchronously loads favicon for given index path. The loads are cancelled
-// upon cell reuse automatically.
-- (void)loadFaviconAtIndexPath:(NSIndexPath*)indexPath {
+// upon cell reuse automatically.  When the favicon is not found in cache, try
+// loading it from a Google server if |continueToGoogleServer| is YES,
+// otherwise, use the fall back icon style.
+- (void)loadFaviconAtIndexPath:(NSIndexPath*)indexPath
+        continueToGoogleServer:(BOOL)continueToGoogleServer {
   const bookmarks::BookmarkNode* node = [self nodeAtIndexPath:indexPath];
   if (node->is_folder()) {
     return;
   }
 
-  // Cancel previous load attempts.
-  [self cancelLoadingFaviconAtIndexPath:indexPath];
+  CGFloat scale = [UIScreen mainScreen].scale;
+  CGFloat desiredFaviconSizeInPixel = scale * kDesiredFaviconSizePt;
+  CGFloat minFaviconSizeInPixel = scale * kMinFaviconSizePt;
 
   // Start loading a favicon.
   __weak BookmarkTableView* weakSelf = self;
   GURL blockURL(node->url());
-  void (^faviconBlock)(const favicon_base::LargeIconResult&) =
-      ^(const favicon_base::LargeIconResult& result) {
-        BookmarkTableView* strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-        UIImage* favIcon = nil;
-        UIColor* backgroundColor = nil;
-        UIColor* textColor = nil;
-        NSString* fallbackText = nil;
-        if (result.bitmap.is_valid()) {
-          scoped_refptr<base::RefCountedMemory> data =
-              result.bitmap.bitmap_data;
-          favIcon = [UIImage imageWithData:[NSData dataWithBytes:data->front()
-                                                          length:data->size()]];
-        } else if (result.fallback_icon_style) {
-          backgroundColor = skia::UIColorFromSkColor(
-              result.fallback_icon_style->background_color);
-          textColor =
-              skia::UIColorFromSkColor(result.fallback_icon_style->text_color);
+  NSString* fallbackText =
+      base::SysUTF16ToNSString(favicon::GetFallbackIconText(blockURL));
+  void (^faviconLoadedFromCacheBlock)(const favicon_base::LargeIconResult&) = ^(
+      const favicon_base::LargeIconResult& result) {
+    BookmarkTableView* strongSelf = weakSelf;
+    if (!strongSelf) {
+      return;
+    }
+    // TODO(crbug.com/697329) When fetching icon from server to replace existing
+    // cache is allowed, fetch icon from server here when cached icon is smaller
+    // than the desired size.
+    if (!result.bitmap.is_valid() && continueToGoogleServer &&
+        strongSelf.faviconDownloadCount < kMaxDownloadFaviconCount) {
+      void (^faviconLoadedFromServerBlock)(
+          favicon_base::GoogleFaviconServerRequestStatus status) =
+          ^(const favicon_base::GoogleFaviconServerRequestStatus status) {
+            if (status ==
+                favicon_base::GoogleFaviconServerRequestStatus::SUCCESS) {
+              BookmarkTableView* strongSelf = weakSelf;
+              // GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache
+              // is not cancellable.  So need to check if node has been changed
+              // before proceeding to favicon update.
+              if (!strongSelf ||
+                  [strongSelf nodeAtIndexPath:indexPath] != node) {
+                return;
+              }
+              // Favicon should be ready in cache now.  Fetch it again.
+              [strongSelf loadFaviconAtIndexPath:indexPath
+                          continueToGoogleServer:NO];
+            }
+          };  // faviconLoadedFromServerBlock
 
-          fallbackText =
-              base::SysUTF16ToNSString(favicon::GetFallbackIconText(blockURL));
-        }
-
-        [strongSelf updateCellAtIndexPath:indexPath
-                                withImage:favIcon
-                          backgroundColor:backgroundColor
-                                textColor:textColor
-                             fallbackText:fallbackText];
-      };
-
-  CGFloat scale = [UIScreen mainScreen].scale;
-  CGFloat preferredSize = scale * [BookmarkTableCell preferredImageSize];
-  CGFloat minSize = scale * kMinFaviconSizePt;
+      strongSelf.faviconDownloadCount++;
+      IOSChromeLargeIconServiceFactory::GetForBrowserState(self.browserState)
+          ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
+              node->url(), minFaviconSizeInPixel, desiredFaviconSizeInPixel,
+              /*may_page_url_be_private=*/true, kTrafficAnnotation,
+              base::BindBlockArc(faviconLoadedFromServerBlock));
+    }
+    [strongSelf updateCellAtIndexPath:indexPath
+                  withLargeIconResult:result
+                         fallbackText:fallbackText];
+  };  // faviconLoadedFromCacheBlock
 
   base::CancelableTaskTracker::TaskId taskId =
       IOSChromeLargeIconServiceFactory::GetForBrowserState(self.browserState)
-          ->GetLargeIconOrFallbackStyle(node->url(), minSize, preferredSize,
-                                        base::BindBlockArc(faviconBlock),
-                                        &_faviconTaskTracker);
+          ->GetLargeIconOrFallbackStyle(
+              node->url(), minFaviconSizeInPixel, desiredFaviconSizeInPixel,
+              base::BindBlockArc(faviconLoadedFromCacheBlock),
+              &_faviconTaskTracker);
   _faviconLoadTasks[IntegerPair(indexPath.section, indexPath.item)] = taskId;
 }
 
@@ -943,21 +1030,32 @@ using IntegerPair = std::pair<NSInteger, NSInteger>;
 
 // Called when the UIKeyboardDidShowNotification is sent
 - (void)keyboardWasShown:(NSNotification*)aNotification {
+  if (![self.delegate isAtTopOfNavigation:self]) {
+    return;
+  }
   NSDictionary* info = [aNotification userInfo];
-  CGSize kbSize =
-      [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].size;
+  CGFloat keyboardTop =
+      [[info objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue].origin.y;
+  CGFloat tableBottom =
+      CGRectGetMaxY([self convertRect:self.tableView.frame toView:nil]);
+  CGFloat shiftY = tableBottom - keyboardTop + kKeyboardSpacing;
 
-  UIEdgeInsets previousContentInsets = self.tableView.contentInset;
-  // Shift the content inset by the height of the keyboard so we can scoll to
-  // the bottom of the content that is potentially behind the keyboard.
-  UIEdgeInsets contentInsets =
-      UIEdgeInsetsMake(previousContentInsets.top, 0.0, kbSize.height, 0.0);
-  self.tableView.contentInset = contentInsets;
-  self.tableView.scrollIndicatorInsets = contentInsets;
+  if (shiftY >= 0) {
+    UIEdgeInsets previousContentInsets = self.tableView.contentInset;
+    // Shift the content inset to prevent the editing content from being hidden
+    // by the keyboard.
+    UIEdgeInsets contentInsets =
+        UIEdgeInsetsMake(previousContentInsets.top, 0.0, shiftY, 0.0);
+    self.tableView.contentInset = contentInsets;
+    self.tableView.scrollIndicatorInsets = contentInsets;
+  }
 }
 
 // Called when the UIKeyboardWillHideNotification is sent
 - (void)keyboardWillBeHidden:(NSNotification*)aNotification {
+  if (![self.delegate isAtTopOfNavigation:self]) {
+    return;
+  }
   UIEdgeInsets previousContentInsets = self.tableView.contentInset;
   // Restore the content inset now that the keyboard has been hidden.
   UIEdgeInsets contentInsets =

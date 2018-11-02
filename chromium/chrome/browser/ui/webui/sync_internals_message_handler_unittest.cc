@@ -27,6 +27,7 @@
 using base::DictionaryValue;
 using base::ListValue;
 using base::Value;
+using sync_pb::UserEventSpecifics;
 using syncer::FakeUserEventService;
 using syncer::SyncService;
 using syncer::SyncServiceObserver;
@@ -96,12 +97,12 @@ class TestSyncService : public syncer::FakeSyncService {
 
 static std::unique_ptr<KeyedService> BuildTestSyncService(
     content::BrowserContext* context) {
-  return base::MakeUnique<TestSyncService>();
+  return std::make_unique<TestSyncService>();
 }
 
 static std::unique_ptr<KeyedService> BuildFakeUserEventService(
     content::BrowserContext* context) {
-  return base::MakeUnique<FakeUserEventService>();
+  return std::make_unique<FakeUserEventService>();
 }
 
 class SyncInternalsMessageHandlerTest : public ::testing::Test {
@@ -129,7 +130,7 @@ class SyncInternalsMessageHandlerTest : public ::testing::Test {
       version_info::Channel channel) {
     ++about_sync_data_delegate_call_count_;
     last_delegate_sync_service_ = service;
-    auto dictionary = base::MakeUnique<DictionaryValue>();
+    auto dictionary = std::make_unique<DictionaryValue>();
     dictionary->SetString("fake_key", "fake_value");
     return dictionary;
   }
@@ -293,7 +294,7 @@ TEST_F(SyncInternalsMessageHandlerTest, HandleGetAllNodes) {
   args.AppendInteger(0);
   handler()->HandleGetAllNodes(&args);
   test_sync_service()->get_all_nodes_callback().Run(
-      base::MakeUnique<ListValue>());
+      std::make_unique<ListValue>());
   EXPECT_EQ(1, CallCountWithName(syncer::sync_ui_util::kGetAllNodesCallback));
 
   handler()->HandleGetAllNodes(&args);
@@ -301,12 +302,12 @@ TEST_F(SyncInternalsMessageHandlerTest, HandleGetAllNodes) {
   // the call count not incrementing.
   handler()->DisallowJavascript();
   test_sync_service()->get_all_nodes_callback().Run(
-      base::MakeUnique<ListValue>());
+      std::make_unique<ListValue>());
   EXPECT_EQ(1, CallCountWithName(syncer::sync_ui_util::kGetAllNodesCallback));
 
   handler()->HandleGetAllNodes(&args);
   test_sync_service()->get_all_nodes_callback().Run(
-      base::MakeUnique<ListValue>());
+      std::make_unique<ListValue>());
   EXPECT_EQ(2, CallCountWithName(syncer::sync_ui_util::kGetAllNodesCallback));
 }
 
@@ -337,8 +338,9 @@ TEST_F(SyncInternalsMessageHandlerTest, WriteUserEvent) {
   handler()->HandleWriteUserEvent(&args);
 
   ASSERT_EQ(1u, fake_user_event_service()->GetRecordedUserEvents().size());
-  const sync_pb::UserEventSpecifics& event =
+  const UserEventSpecifics& event =
       *fake_user_event_service()->GetRecordedUserEvents().begin();
+  EXPECT_EQ(UserEventSpecifics::kTestEvent, event.event_case());
   EXPECT_EQ(1000000000000000000, event.event_time_usec());
   EXPECT_EQ(-1, event.navigation_id());
 }
@@ -346,13 +348,48 @@ TEST_F(SyncInternalsMessageHandlerTest, WriteUserEvent) {
 TEST_F(SyncInternalsMessageHandlerTest, WriteUserEventBadParse) {
   ListValue args;
   args.AppendString("123abc");
+  args.AppendString("abcdefghijklmnopqrstuvwxyz");
+  handler()->HandleWriteUserEvent(&args);
+
+  ASSERT_EQ(1u, fake_user_event_service()->GetRecordedUserEvents().size());
+  const UserEventSpecifics& event =
+      *fake_user_event_service()->GetRecordedUserEvents().begin();
+  EXPECT_EQ(UserEventSpecifics::kTestEvent, event.event_case());
+  EXPECT_EQ(0, event.event_time_usec());
+  EXPECT_EQ(0, event.navigation_id());
+}
+
+TEST_F(SyncInternalsMessageHandlerTest, WriteUserEventBlank) {
+  ListValue args;
+  args.AppendString("");
   args.AppendString("");
   handler()->HandleWriteUserEvent(&args);
 
   ASSERT_EQ(1u, fake_user_event_service()->GetRecordedUserEvents().size());
-  const sync_pb::UserEventSpecifics& event =
+  const UserEventSpecifics& event =
       *fake_user_event_service()->GetRecordedUserEvents().begin();
+  EXPECT_EQ(UserEventSpecifics::kTestEvent, event.event_case());
+  EXPECT_TRUE(event.has_event_time_usec());
   EXPECT_EQ(0, event.event_time_usec());
+  // Should not have a navigation_id because that means something different to
+  // the UserEvents logic.
+  EXPECT_FALSE(event.has_navigation_id());
+}
+
+TEST_F(SyncInternalsMessageHandlerTest, WriteUserEventZero) {
+  ListValue args;
+  args.AppendString("0");
+  args.AppendString("0");
+  handler()->HandleWriteUserEvent(&args);
+
+  ASSERT_EQ(1u, fake_user_event_service()->GetRecordedUserEvents().size());
+  const UserEventSpecifics& event =
+      *fake_user_event_service()->GetRecordedUserEvents().begin();
+  EXPECT_EQ(UserEventSpecifics::kTestEvent, event.event_case());
+  EXPECT_TRUE(event.has_event_time_usec());
+  EXPECT_EQ(0, event.event_time_usec());
+  // Should have a navigation_id, even though the value is 0.
+  EXPECT_TRUE(event.has_navigation_id());
   EXPECT_EQ(0, event.navigation_id());
 }
 

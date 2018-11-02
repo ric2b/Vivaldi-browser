@@ -1,0 +1,12 @@
+
+import("//build/config/win/manifest.gni")
+
+assert(is_win)
+
+dpi_aware_manifest = "//chrome/installer/setup/setup.exe.manifest"
+
+windows_manifest("dpi_aware_exe_manifest") {
+  sources = [
+    dpi_aware_manifest
+  ]
+}

@@ -37,13 +37,13 @@ MojoWatcher* MojoWatcher::Create(mojo::Handle handle,
   // is scheduled.
   if (result != MOJO_RESULT_OK) {
     watcher->task_runner_->PostTask(
-        BLINK_FROM_HERE, WTF::Bind(&RunWatchCallback, WrapPersistent(callback),
-                                   WrapPersistent(watcher), result));
+        FROM_HERE, WTF::Bind(&RunWatchCallback, WrapPersistent(callback),
+                             WrapPersistent(watcher), result));
   }
   return watcher;
 }
 
-MojoWatcher::~MojoWatcher() {}
+MojoWatcher::~MojoWatcher() = default;
 
 MojoResult MojoWatcher::cancel() {
   if (!watcher_handle_.is_valid())
@@ -60,6 +60,7 @@ void MojoWatcher::Trace(blink::Visitor* visitor) {
 }
 
 void MojoWatcher::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+  ScriptWrappable::TraceWrappers(visitor);
   visitor->TraceWrappers(callback_);
 }
 
@@ -107,7 +108,7 @@ MojoResult MojoWatcher::Watch(mojo::Handle handle,
   if (result == MOJO_RESULT_FAILED_PRECONDITION) {
     // We couldn't arm the watcher because the handle is already ready to
     // trigger a success notification. Post a notification manually.
-    task_runner_->PostTask(BLINK_FROM_HERE,
+    task_runner_->PostTask(FROM_HERE,
                            WTF::Bind(&MojoWatcher::RunReadyCallback,
                                      WrapPersistent(this), ready_result));
     return MOJO_RESULT_OK;
@@ -154,8 +155,8 @@ void MojoWatcher::OnHandleReady(uintptr_t context,
   // dispatch a |MOJO_RESULT_CANCELLED| notification. That is always the last
   // notification received by this callback.
   MojoWatcher* watcher = reinterpret_cast<MojoWatcher*>(context);
-  watcher->task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *watcher->task_runner_, FROM_HERE,
       CrossThreadBind(&MojoWatcher::RunReadyCallback,
                       WrapCrossThreadWeakPersistent(watcher), result));
 }
@@ -196,7 +197,7 @@ void MojoWatcher::RunReadyCallback(MojoResult result) {
     return;
 
   if (arm_result == MOJO_RESULT_FAILED_PRECONDITION) {
-    task_runner_->PostTask(BLINK_FROM_HERE,
+    task_runner_->PostTask(FROM_HERE,
                            WTF::Bind(&MojoWatcher::RunReadyCallback,
                                      WrapWeakPersistent(this), ready_result));
     return;

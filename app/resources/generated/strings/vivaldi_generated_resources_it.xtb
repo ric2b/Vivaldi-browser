@@ -72,7 +72,7 @@
 <translation id="1850508293116537636">Ruota in senso o&amp;rario</translation>
 <translation id="1859234291848436338">Direzione di scrittura</translation>
 <translation id="1886996562706621347">Consenti ai siti di chiedere di diventare gestori predefiniti dei protocolli (opzione consigliata)</translation>
-<translation id="1890674179660343635">&lt;span&gt;ID: <ph name="EXTENSION_ID" /></translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Seleziona &amp;tutto</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Rimuovi tutto</translation>
@@ -150,6 +150,7 @@
 <translation id="2890678560483811744">Riferimento pagina oltre i limiti</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> non riesce a comunicare con questa stampante. Assicurati che la stampante sia collegata e riprova.</translation>
 <translation id="2904456025988372123">Chiedi conferma quando un sito tenta di scaricare automaticamente file dopo il primo file</translation>
+<translation id="2911898792135283060">Genera password...</translation>
 <translation id="2913331724188855103">Consenti ai siti di salvare e leggere i dati dei cookie (opzione consigliata)</translation>
 <translation id="2916745397441987255">Cerca estensioni</translation>
 <translation id="2932883381142163287">Segnala abuso</translation>
@@ -419,7 +420,6 @@
 <translation id="6295158916970320988">Tutti i siti</translation>
 <translation id="6295855836753816081">Salvataggio in corso...</translation>
 <translation id="6308937455967653460">Salva lin&amp;k come...</translation>
-<translation id="6314335155547195432">Genera password</translation>
 <translation id="6326855256003666642">Numero attività Keep-alive</translation>
 <translation id="6370021412472292592">Impossibile caricare il manifesto.</translation>
 <translation id="6374469231428023295">Riprova</translation>
@@ -503,7 +503,6 @@
 <translation id="7564847347806291057">Termina processo</translation>
 <translation id="7576690715254076113">Fascicola</translation>
 <translation id="7629827748548208700">Scheda: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Annulla</translation>
 <translation id="7661259717474717992">Consenti ai siti di salvare e leggere i dati dei cookie</translation>
 <translation id="7663719505383602579">Ricevitore: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installato dall'amministratore</translation>
@@ -525,7 +524,7 @@
 <translation id="7818135753970109980">Nuovo tema aggiunto (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">C&amp;opia l'indirizzo del video</translation>
 <translation id="7849264908733290972">Apri &amp;immagine in nuova scheda</translation>
-<translation id="7857949311770343000">È la pagina nuova scheda prevista?</translation>
+<translation id="7857949311770343000">Questa è la pagina nuova scheda che ti aspettavi?</translation>
 <translation id="786073089922909430">Servizio: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7874357055309047713">Esegui sempre su tutti i siti</translation>
 <translation id="7885253890047913815">Destinazioni recenti</translation>

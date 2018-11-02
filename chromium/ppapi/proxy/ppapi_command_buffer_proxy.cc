@@ -192,25 +192,6 @@ uint64_t PpapiCommandBufferProxy::GenerateFenceSyncRelease() {
   return next_fence_sync_release_++;
 }
 
-bool PpapiCommandBufferProxy::IsFenceSyncRelease(uint64_t release) {
-  return release != 0 && release < next_fence_sync_release_;
-}
-
-bool PpapiCommandBufferProxy::IsFenceSyncFlushed(uint64_t release) {
-  return release <= flushed_fence_sync_release_;
-}
-
-bool PpapiCommandBufferProxy::IsFenceSyncFlushReceived(uint64_t release) {
-  if (!IsFenceSyncFlushed(release))
-    return false;
-
-  if (release <= validated_fence_sync_release_)
-    return true;
-
-  EnsureWorkVisible();
-  return release <= validated_fence_sync_release_;
-}
-
 bool PpapiCommandBufferProxy::IsFenceSyncReleased(uint64_t release) {
   NOTIMPLEMENTED();
   return false;
@@ -236,6 +217,17 @@ void PpapiCommandBufferProxy::SetSnapshotRequested() {}
 void PpapiCommandBufferProxy::SignalQuery(uint32_t query,
                                           const base::Closure& callback) {
   NOTREACHED();
+}
+
+void PpapiCommandBufferProxy::CreateGpuFence(uint32_t gpu_fence_id,
+                                             ClientGpuFence source) {
+  NOTIMPLEMENTED();
+}
+
+void PpapiCommandBufferProxy::GetGpuFence(
+    uint32_t gpu_fence_id,
+    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) {
+  NOTIMPLEMENTED();
 }
 
 void PpapiCommandBufferProxy::SetGpuControlClient(gpu::GpuControlClient*) {

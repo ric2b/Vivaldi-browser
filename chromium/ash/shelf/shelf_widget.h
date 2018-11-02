@@ -43,8 +43,8 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
   ShelfWidget(aura::Window* shelf_container, Shelf* shelf);
   ~ShelfWidget() override;
 
-  // Returns true if the views-based login shelf is being shown.
-  static bool IsUsingMdLoginShelf();
+  // Returns true if the views-based shelf is being shown.
+  static bool IsUsingViewsShelf();
 
   void CreateStatusAreaWidget(aura::Window* status_container);
 
@@ -111,6 +111,12 @@ class ASH_EXPORT ShelfWidget : public views::Widget,
  private:
   class DelegateView;
   friend class DelegateView;
+
+  // Hides shelf widget if IsVisible() returns true.
+  void HideIfShown();
+
+  // Shows shelf widget if IsVisible() returns false.
+  void ShowIfHidden();
 
   Shelf* shelf_;
 

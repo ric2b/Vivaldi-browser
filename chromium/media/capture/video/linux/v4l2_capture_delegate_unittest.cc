@@ -182,11 +182,9 @@ class MockVideoCaptureDeviceClient : public VideoCaptureDevice::Client {
                     base::TimeTicks,
                     base::TimeDelta,
                     int));
-  MOCK_METHOD4(ReserveOutputBuffer,
-               Buffer(const gfx::Size&,
-                      media::VideoPixelFormat,
-                      media::VideoPixelStorage,
-                      int));
+  MOCK_METHOD4(
+      ReserveOutputBuffer,
+      Buffer(const gfx::Size&, VideoPixelFormat, VideoPixelStorage, int));
   void OnIncomingCapturedBuffer(Buffer buffer,
                                 const VideoCaptureFormat& frame_format,
                                 base::TimeTicks reference_time,
@@ -218,7 +216,7 @@ class V4L2CaptureDelegateTest : public ::testing::Test {
  public:
   V4L2CaptureDelegateTest()
       : device_descriptor_("Device 0", "/dev/video0"),
-        delegate_(base::MakeUnique<V4L2CaptureDelegate>(
+        delegate_(std::make_unique<V4L2CaptureDelegate>(
             device_descriptor_,
             base::ThreadTaskRunnerHandle::Get(),
             50)) {}

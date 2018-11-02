@@ -30,7 +30,9 @@
 #include <string>
 #include <utility>
 
+#include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
@@ -40,9 +42,9 @@
 #include "core/css/MediaQueryMatcher.h"
 #include "core/css/StyleMedia.h"
 #include "core/css/resolver/StyleResolver.h"
+#include "core/dom/ComputedAccessibleNode.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/FrameRequestCallbackCollection.h"
-#include "core/dom/Modulator.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/ScriptedIdleTaskController.h"
 #include "core/dom/SinkDocument.h"
@@ -84,10 +86,10 @@
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/probe/CoreProbes.h"
+#include "core/script/Modulator.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "platform/EventDispatchForbiddenScope.h"
-#include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/scroll/ScrollbarTheme.h"
@@ -111,7 +113,7 @@ class PostMessageTimer final
  public:
   PostMessageTimer(LocalDOMWindow& window,
                    MessageEvent* event,
-                   scoped_refptr<SecurityOrigin> target_origin,
+                   scoped_refptr<const SecurityOrigin> target_origin,
                    std::unique_ptr<SourceLocation> location,
                    UserGestureToken* user_gesture_token)
       : PausableTimer(window.document(), TaskType::kPostedMessage),
@@ -121,11 +123,10 @@ class PostMessageTimer final
         location_(std::move(location)),
         user_gesture_token_(user_gesture_token),
         disposal_allowed_(true) {
-    probe::AsyncTaskScheduled(window.document(), "postMessage", this);
   }
 
   MessageEvent* Event() const { return event_; }
-  SecurityOrigin* TargetOrigin() const { return target_origin_.get(); }
+  const SecurityOrigin* TargetOrigin() const { return target_origin_.get(); }
   std::unique_ptr<SourceLocation> TakeLocation() {
     return std::move(location_);
   }
@@ -165,7 +166,7 @@ class PostMessageTimer final
 
   Member<MessageEvent> event_;
   Member<LocalDOMWindow> window_;
-  scoped_refptr<SecurityOrigin> target_origin_;
+  scoped_refptr<const SecurityOrigin> target_origin_;
   std::unique_ptr<SourceLocation> location_;
   scoped_refptr<UserGestureToken> user_gesture_token_;
   bool disposal_allowed_;
@@ -341,8 +342,6 @@ Document* LocalDOMWindow::InstallNewDocument(const String& mime_type,
     }
   }
 
-  GetFrame()->Selection().UpdateSecureKeyboardEntryIfActive();
-
   if (GetFrame()->IsCrossOriginSubframe())
     document_->RecordDeferredLoadReason(WouldLoadReason::kCreated);
 
@@ -357,14 +356,14 @@ void LocalDOMWindow::EnqueueWindowEvent(Event* event) {
   if (!event_queue_)
     return;
   event->SetTarget(this);
-  event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
+  event_queue_->EnqueueEvent(FROM_HERE, event);
 }
 
 void LocalDOMWindow::EnqueueDocumentEvent(Event* event) {
   if (!event_queue_)
     return;
   event->SetTarget(document_.Get());
-  event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
+  event_queue_->EnqueueEvent(FROM_HERE, event);
 }
 
 void LocalDOMWindow::DispatchWindowLoadEvent() {
@@ -376,9 +375,8 @@ void LocalDOMWindow::DispatchWindowLoadEvent() {
   // 'load' event asynchronously.  crbug.com/569511.
   if (ScopedEventQueue::Instance()->ShouldQueueEvents() && document_) {
     document_->GetTaskRunner(TaskType::kNetworking)
-        ->PostTask(BLINK_FROM_HERE,
-                   WTF::Bind(&LocalDOMWindow::DispatchLoadEvent,
-                             WrapPersistent(this)));
+        ->PostTask(FROM_HERE, WTF::Bind(&LocalDOMWindow::DispatchLoadEvent,
+                                        WrapPersistent(this)));
     return;
   }
   DispatchLoadEvent();
@@ -607,9 +605,10 @@ Navigator* LocalDOMWindow::navigator() const {
   return navigator_.Get();
 }
 
-void LocalDOMWindow::SchedulePostMessage(MessageEvent* event,
-                                         scoped_refptr<SecurityOrigin> target,
-                                         Document* source) {
+void LocalDOMWindow::SchedulePostMessage(
+    MessageEvent* event,
+    scoped_refptr<const SecurityOrigin> target,
+    Document* source) {
   // Allowing unbounded amounts of messages to build up for a suspended context
   // is problematic; consider imposing a limit or other restriction if this
   // surfaces often as a problem (see crbug.com/587012).
@@ -617,8 +616,9 @@ void LocalDOMWindow::SchedulePostMessage(MessageEvent* event,
   PostMessageTimer* timer =
       new PostMessageTimer(*this, event, std::move(target), std::move(location),
                            UserGestureIndicator::CurrentToken());
-  timer->StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  timer->StartOneShot(TimeDelta(), FROM_HERE);
   timer->PauseIfNeeded();
+  probe::AsyncTaskScheduled(document(), "postMessage", timer);
   post_message_timers_.insert(timer);
 }
 
@@ -630,7 +630,8 @@ void LocalDOMWindow::PostMessageTimerFired(PostMessageTimer* timer) {
 
   UserGestureToken* token = timer->GetUserGestureToken();
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
-  if (token && token->HasGestures() && document())
+  if (!RuntimeEnabledFeatures::UserActivationV2Enabled() && token &&
+      token->HasGestures() && document())
     gesture_indicator = Frame::NotifyUserActivation(document()->GetFrame());
 
   event->EntangleMessagePorts(document());
@@ -644,13 +645,13 @@ void LocalDOMWindow::RemovePostMessageTimer(PostMessageTimer* timer) {
 }
 
 void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
-    SecurityOrigin* intended_target_origin,
+    const SecurityOrigin* intended_target_origin,
     Event* event,
     std::unique_ptr<SourceLocation> location) {
   if (intended_target_origin) {
     // Check target origin now since the target document may have changed since
     // the timer was scheduled.
-    SecurityOrigin* security_origin = document()->GetSecurityOrigin();
+    const SecurityOrigin* security_origin = document()->GetSecurityOrigin();
     bool valid_target =
         intended_target_origin->IsSameSchemeHostPortAndSuborigin(
             security_origin);
@@ -1102,6 +1103,15 @@ CSSStyleDeclaration* LocalDOMWindow::getComputedStyle(
   return CSSComputedStyleDeclaration::Create(elt, false, pseudo_elt);
 }
 
+ScriptPromise LocalDOMWindow::getComputedAccessibleNode(
+    ScriptState* script_state,
+    Element* element) {
+  DCHECK(element);
+  ComputedAccessibleNode* computed_accessible_node =
+      element->GetComputedAccessibleNode();
+  return computed_accessible_node->ComputePromiseProperty(script_state);
+}
+
 CSSRuleList* LocalDOMWindow::getMatchedCSSRules(
     Element* element,
     const String& pseudo_element) const {
@@ -1451,9 +1461,10 @@ void LocalDOMWindow::DispatchLoadEvent() {
     // preloads, as speculatove preloads were cleared at DCL.
     if (GetFrame() &&
         document_loader == GetFrame()->Loader().GetDocumentLoader() &&
-        document_loader->Fetcher()->CountPreloads())
+        document_loader->Fetcher()->CountPreloads()) {
       unused_preloads_timer_.StartOneShot(kUnusedPreloadTimeoutInSeconds,
-                                          BLINK_FROM_HERE);
+                                          FROM_HERE);
+    }
   } else {
     DispatchEvent(load_event, document());
   }
@@ -1490,17 +1501,7 @@ DispatchEventResult LocalDOMWindow::DispatchEvent(Event* event,
 
   TRACE_EVENT1("devtools.timeline", "EventDispatch", "data",
                InspectorEventDispatchEvent::Data(*event));
-  DispatchEventResult result;
-
-  if (GetFrame() && GetFrame()->IsMainFrame() &&
-      event->type() == EventTypeNames::resize) {
-    SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.EventListenerDuration.Resize");
-    result = FireEventListeners(event);
-  } else {
-    result = FireEventListeners(event);
-  }
-
-  return result;
+  return FireEventListeners(event);
 }
 
 void LocalDOMWindow::RemoveAllEventListeners() {
@@ -1534,6 +1535,27 @@ void LocalDOMWindow::PrintErrorMessage(const String& message) const {
 
   GetFrameConsole()->AddMessage(
       ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
+}
+
+DOMWindow* LocalDOMWindow::open(ExecutionContext* executionContext,
+                                LocalDOMWindow* current_window,
+                                LocalDOMWindow* entered_window,
+                                const String& url,
+                                const AtomicString& target,
+                                const String& features,
+                                ExceptionState& exception_state) {
+  // If the bindings implementation is 100% correct, the current realm and the
+  // entered realm should be same origin-domain. However, to be on the safe
+  // side and add some defense in depth, we'll check against the entered realm
+  // as well here.
+  if (!BindingSecurity::ShouldAllowAccessTo(entered_window, this,
+                                            exception_state)) {
+    UseCounter::Count(executionContext, WebFeature::kWindowOpenRealmMismatch);
+    return nullptr;
+  }
+  DCHECK(!target.IsNull());
+  return open(url, target, features, current_window, entered_window,
+              exception_state);
 }
 
 DOMWindow* LocalDOMWindow::open(const String& url_string,

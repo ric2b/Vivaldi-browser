@@ -68,25 +68,15 @@ Path SVGEllipseElement::AsPath() const {
   const ComputedStyle& style = GetLayoutObject()->StyleRef();
   const SVGComputedStyle& svg_style = style.SvgStyle();
 
-  float rx = length_context.ValueForLength(svg_style.Rx(), style,
-                                           SVGLengthMode::kWidth);
-  if (rx < 0)
-    return path;
-  float ry = length_context.ValueForLength(svg_style.Ry(), style,
-                                           SVGLengthMode::kHeight);
-  if (ry < 0)
-    return path;
-  if (!rx && !ry)
+  FloatSize radii(ToFloatSize(
+      length_context.ResolveLengthPair(svg_style.Rx(), svg_style.Ry(), style)));
+  if (radii.Width() < 0 || radii.Height() < 0 ||
+      (!radii.Width() && !radii.Height()))
     return path;
 
-  path.AddEllipse(FloatRect(length_context.ValueForLength(
-                                svg_style.Cx(), style, SVGLengthMode::kWidth) -
-                                rx,
-                            length_context.ValueForLength(
-                                svg_style.Cy(), style, SVGLengthMode::kHeight) -
-                                ry,
-                            rx * 2, ry * 2));
-
+  FloatPoint center(
+      length_context.ResolveLengthPair(svg_style.Cx(), svg_style.Cy(), style));
+  path.AddEllipse(FloatRect(center - radii, radii.ScaledBy(2)));
   return path;
 }
 
@@ -97,16 +87,16 @@ void SVGEllipseElement::CollectStyleForPresentationAttribute(
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == cx_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            cx_->CssValue());
+                                            &cx_->CssValue());
   } else if (property == cy_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            cy_->CssValue());
+                                            &cy_->CssValue());
   } else if (property == rx_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            rx_->CssValue());
+                                            &rx_->CssValue());
   } else if (property == ry_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            ry_->CssValue());
+                                            &ry_->CssValue());
   } else {
     SVGGeometryElement::CollectStyleForPresentationAttribute(name, value,
                                                              style);

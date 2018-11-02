@@ -19,14 +19,25 @@ import("//vivaldi/ui/source_updates.gni")
 import("//vivaldi/vivapp/source_updates.gni")
 import("//vivaldi/platform_media/source_updates.gni")
 
-foreach (_target, [
+_targets = [
+  "//chrome/common:version_header",
+  "//components/version_info:generate_version_info",
+]
+
+if (is_linux && !is_component_build) {
+  _targets += ["//chrome/installer/linux:save_build_info"]
+}
+
+if (is_win) {
+  _targets += [
     "//chrome/app/version_assembly:chrome_exe_version_manifest",
     "//chrome/app/version_assembly:version_assembly_manifest",
-    "//chrome/installer/linux:save_build_info",
-    "//chrome/common:version_header",
-    "//components/version_info:generate_version_info",
-  ]) {
-  post_process_template(_target) {
+  ]
+}
+
+
+foreach (_target, _targets) {
+  update_template_instance(_target) {
     sources += [ vivaldi_version_path, lastchange_vivaldi_path, ]
     if (!defined(extra_args)) {
       extra_args = []
@@ -39,16 +50,18 @@ foreach (_target, [
   }
 }
 
-post_process_target("//components/sessions:shared") {
+update_target("//components/sessions:shared") {
   sources += [
     "//vivaldi/components/sessions/vivaldi_session_service_commands.cc",
     "//vivaldi/components/sessions/vivaldi_session_service_commands.h",
   ]
 }
 
-post_process_target("//rlz:rlz_lib") {
-  sources -= [
-      "lib/financial_ping.cc",
-      "lib/rlz_lib.cc",
-  ]
+if (is_win) {
+  update_target("//rlz:rlz_lib") {
+    sources -= [
+        "lib/financial_ping.cc",
+        "lib/rlz_lib.cc",
+    ]
+  }
 }

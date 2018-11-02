@@ -32,7 +32,7 @@
 #define ServiceWorkerGlobalScopeClient_h
 
 #include <memory>
-#include "core/dom/MessagePort.h"
+#include "core/messaging/MessagePort.h"
 #include "core/workers/WorkerClients.h"
 #include "modules/ModulesExport.h"
 #include "platform/wtf/Forward.h"
@@ -41,7 +41,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerSkipWaitingCallbacks.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerStreamHandle.h"
-#include "public/platform/modules/serviceworker/service_worker_event_status.mojom-blink.h"
+#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom-blink.h"
 
 namespace blink {
 

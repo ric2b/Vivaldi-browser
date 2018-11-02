@@ -5,13 +5,11 @@
 #include "chrome/browser/installable/installable_manager.h"
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
-#include "chrome/common/chrome_features.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -62,6 +60,23 @@ int GetIdealBadgeIconSizeInPx() {
 #else
   return kMinimumBadgeIconSizeInPx;
 #endif
+}
+
+// Returns true if the overall security state of |web_contents| is sufficient to
+// be considered installable.
+bool IsContentSecure(content::WebContents* web_contents) {
+  if (!web_contents)
+    return false;
+
+  // Whitelist localhost. Check the VisibleURL to match what the
+  // SecurityStateTabHelper looks at.
+  if (net::IsLocalhost(web_contents->GetVisibleURL()))
+    return true;
+
+  security_state::SecurityInfo security_info;
+  SecurityStateTabHelper::FromWebContents(web_contents)
+      ->GetSecurityInfo(&security_info);
+  return security_state::IsSslCertificateValid(security_info.security_level);
 }
 
 // Returns true if |manifest| specifies a PNG icon with IconPurpose::ANY and of
@@ -144,23 +159,6 @@ InstallableManager::~InstallableManager() {
   // Null in unit tests.
   if (service_worker_context_)
     service_worker_context_->RemoveObserver(this);
-}
-
-// static
-bool InstallableManager::IsContentSecure(content::WebContents* web_contents) {
-  if (!web_contents)
-    return false;
-
-  // Whitelist localhost. Check the VisibleURL to match what the
-  // SecurityStateTabHelper looks at.
-  if (net::IsLocalhost(web_contents->GetVisibleURL().HostNoBracketsPiece()))
-    return true;
-
-  security_state::SecurityInfo security_info;
-  SecurityStateTabHelper::FromWebContents(web_contents)
-      ->GetSecurityInfo(&security_info);
-  return security_info.security_level == security_state::SECURE ||
-         security_info.security_level == security_state::EV_SECURE;
 }
 
 // static
@@ -495,8 +493,7 @@ bool InstallableManager::IsManifestValidForWebApp(
 
   if (manifest.display != blink::kWebDisplayModeStandalone &&
       manifest.display != blink::kWebDisplayModeFullscreen &&
-      !(manifest.display == blink::kWebDisplayModeMinimalUi &&
-        base::FeatureList::IsEnabled(features::kPwaMinimalUi))) {
+      manifest.display != blink::kWebDisplayModeMinimalUi) {
     valid_manifest_->error = MANIFEST_DISPLAY_NOT_SUPPORTED;
     return false;
   }

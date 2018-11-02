@@ -7,6 +7,7 @@
 
 import argparse
 import codecs
+import collections
 import glob
 import logging
 import os
@@ -151,7 +152,7 @@ class _ProjectEntry(object):
     self._build_config = None
     self._java_files = None
     self._all_entries = None
-    self.android_test_entry = None
+    self.android_test_entries = None
 
   @classmethod
   def FromGnTarget(cls, gn_target):
@@ -550,7 +551,7 @@ def _GenerateGradleFile(entry, generator, build_vars, source_properties,
       target_type = 'java_library'
   elif deps_info['type'] == 'java_binary':
     target_type = 'java_binary'
-    variables['main_class'] = gradle['main_class']
+    variables['main_class'] = deps_info.get('main_class')
   elif deps_info['type'] == 'junit_binary':
     target_type = 'android_junit'
     variables['sourceSetName'] = 'test'
@@ -565,13 +566,14 @@ def _GenerateGradleFile(entry, generator, build_vars, source_properties,
   if bootclasspath:
     # Must use absolute path here.
     variables['bootclasspath'] = _RebasePath(bootclasspath)
-  if entry.android_test_entry:
-    variables['android_test'] = generator.Generate(
-        entry.android_test_entry)
-    for key, value in variables['android_test'].iteritems():
-      if isinstance(value, list):
-        variables['android_test'][key] = sorted(
-            set(value) - set(variables['main'][key]))
+  if entry.android_test_entries:
+    variables['android_test'] = []
+    for e in entry.android_test_entries:
+      test_entry = generator.Generate(e)
+      variables['android_test'].append(test_entry)
+      for key, value in test_entry.iteritems():
+        if isinstance(value, list):
+          test_entry[key] = sorted(set(value) - set(variables['main'][key]))
 
   return jinja_processor.Render(
       _TemplatePath(target_type.split('_')[0]), variables)
@@ -607,10 +609,10 @@ def _GenerateModuleAll(gradle_output_dir, generator, build_vars,
       'java_excludes': ['**/*.java'],
       'res_dirs': Relativize(res_dirs),
   }
-  variables['android_test'] = {
+  variables['android_test'] = [{
       'java_dirs': Relativize(test_java_dirs),
       'java_excludes': ['**/*.java'],
-  }
+  }]
   data = jinja_processor.Render(
       _TemplatePath(target_type.split('_')[0]), variables)
   _WriteFile(
@@ -685,22 +687,22 @@ def _CombineTestEntries(entries):
     - e.g. base_junit_tests > base_junit_test_support > base_java
   """
   combined_entries = []
-  android_test_entries = {}
+  android_test_entries = collections.defaultdict(list)
   for entry in entries:
     target_name = entry.GnTarget()
     if (target_name.endswith('_test_apk__apk') and
         'apk_under_test' in entry.Gradle()):
       apk_name = entry.Gradle()['apk_under_test']
-      android_test_entries[apk_name] = entry
+      android_test_entries[apk_name].append(entry)
     else:
       combined_entries.append(entry)
   for entry in combined_entries:
     target_name = entry.DepsInfo()['name']
     if target_name in android_test_entries:
-      entry.android_test_entry = android_test_entries[target_name]
+      entry.android_test_entries = android_test_entries[target_name]
       del android_test_entries[target_name]
   # Add unmatched test entries as individual targets.
-  combined_entries.extend(android_test_entries.values())
+  combined_entries.extend(e for l in android_test_entries.values() for e in l)
   return combined_entries
 
 
@@ -744,6 +746,23 @@ def main():
                       action='store_true',
                       help='Generate a project that is compatible with '
                            'Android Studio 3.1 Canary.')
+  sdk_group = parser.add_mutually_exclusive_group()
+  sdk_group.add_argument('--sdk',
+                         choices=['AndroidStudioCurrent',
+                                  'AndroidStudioDefault',
+                                  'ChromiumSdkRoot'],
+                         default='ChromiumSdkRoot',
+                         help="Set the project's SDK root. This can be set to "
+                              "Android Studio's current SDK root, the default "
+                              "Android Studio SDK root, or Chromium's SDK "
+                              "root. The default is Chromium's SDK root, but "
+                              "using this means that updates and additions to "
+                              "the SDK (e.g. installing emulators), will "
+                              "modify this root, hence possibly causing "
+                              "conflicts on the next repository sync.")
+  sdk_group.add_argument('--sdk-path',
+                         help='An explict path for the SDK root, setting this '
+                              'is an alternative to setting the --sdk option')
   args = parser.parse_args()
   if args.output_directory:
     constants.SetOutputDirectory(args.output_directory)
@@ -768,7 +787,11 @@ def main():
       args.canary)
   logging.warning('Creating project at: %s', generator.project_dir)
 
-  args.all = args.all or not args.split_projects
+  # Generate for "all targets" by default when not using --split-projects (too
+  # slow), and when no --target has been explicitly set. "all targets" means all
+  # java targets that are depended on by an apk or java_binary (leaf
+  # java_library targets will not be included).
+  args.all = args.all or (not args.split_projects and not args.targets)
 
   targets_from_args = set(args.targets or _DEFAULT_TARGETS)
   if args.extra_targets:
@@ -840,9 +863,15 @@ def main():
   _WriteFile(os.path.join(generator.project_dir, 'settings.gradle'),
              _GenerateSettingsGradle(project_entries, add_all_module))
 
-  sdk_path = _RebasePath(build_vars['android_sdk_root'])
-  _WriteFile(os.path.join(generator.project_dir, 'local.properties'),
-             _GenerateLocalProperties(sdk_path))
+  if args.sdk != "AndroidStudioCurrent":
+    if args.sdk_path:
+      sdk_path = _RebasePath(args.sdk_path)
+    elif args.sdk == "AndroidStudioDefault":
+      sdk_path = os.path.expanduser('~/Android/Sdk')
+    else:
+      sdk_path = _RebasePath(build_vars['android_sdk_root'])
+    _WriteFile(os.path.join(generator.project_dir, 'local.properties'),
+               _GenerateLocalProperties(sdk_path))
 
   if generated_inputs:
     logging.warning('Building generated source files...')

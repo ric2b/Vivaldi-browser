@@ -8,13 +8,14 @@
 #include "base/numerics/checked_math.h"
 #include "cc/paint/paint_op_reader.h"
 #include "cc/paint/paint_op_writer.h"
+#include "third_party/skia/include/gpu/GrContext.h"
 
 namespace cc {
 
 ClientImageTransferCacheEntry::ClientImageTransferCacheEntry(
     const SkPixmap* pixmap,
     const SkColorSpace* target_color_space)
-    : pixmap_(pixmap) {
+    : id_(s_next_id_.GetNext()), pixmap_(pixmap) {
   // Compute and cache the size of the data.
   // We write the following:
   // - Image color type (uint32_t)
@@ -34,17 +35,21 @@ ClientImageTransferCacheEntry::ClientImageTransferCacheEntry(
 }
 ClientImageTransferCacheEntry::~ClientImageTransferCacheEntry() = default;
 
-TransferCacheEntryType ClientImageTransferCacheEntry::Type() const {
-  return TransferCacheEntryType::kImage;
-}
+// static
+base::AtomicSequenceNumber ClientImageTransferCacheEntry::s_next_id_;
 
 size_t ClientImageTransferCacheEntry::SerializedSize() const {
   return size_;
 }
 
-bool ClientImageTransferCacheEntry::Serialize(size_t size,
-                                              uint8_t* data) const {
-  PaintOpWriter writer(data, size);
+uint32_t ClientImageTransferCacheEntry::Id() const {
+  return id_;
+}
+
+bool ClientImageTransferCacheEntry::Serialize(base::span<uint8_t> data) const {
+  DCHECK_GE(data.size(), SerializedSize());
+
+  PaintOpWriter writer(data.data(), data.size(), nullptr, nullptr);
   writer.Write(pixmap_->colorType());
   writer.Write(pixmap_->width());
   writer.Write(pixmap_->height());
@@ -53,7 +58,7 @@ bool ClientImageTransferCacheEntry::Serialize(size_t size,
   writer.WriteData(pixmap_size, pixmap_->addr());
   // TODO(ericrk): Handle colorspace.
 
-  if (writer.size() != size)
+  if (writer.size() != data.size())
     return false;
 
   return true;
@@ -62,18 +67,18 @@ bool ClientImageTransferCacheEntry::Serialize(size_t size,
 ServiceImageTransferCacheEntry::ServiceImageTransferCacheEntry() = default;
 ServiceImageTransferCacheEntry::~ServiceImageTransferCacheEntry() = default;
 
-TransferCacheEntryType ServiceImageTransferCacheEntry::Type() const {
-  return TransferCacheEntryType::kImage;
-}
+ServiceImageTransferCacheEntry::ServiceImageTransferCacheEntry(
+    ServiceImageTransferCacheEntry&& other) = default;
+ServiceImageTransferCacheEntry& ServiceImageTransferCacheEntry::operator=(
+    ServiceImageTransferCacheEntry&& other) = default;
 
-size_t ServiceImageTransferCacheEntry::Size() const {
+size_t ServiceImageTransferCacheEntry::CachedSize() const {
   return size_;
 }
 
 bool ServiceImageTransferCacheEntry::Deserialize(GrContext* context,
-                                                 size_t size,
-                                                 uint8_t* data) {
-  PaintOpReader reader(data, size);
+                                                 base::span<uint8_t> data) {
+  PaintOpReader reader(data.data(), data.size(), nullptr);
   SkColorType color_type;
   reader.Read(&color_type);
   uint32_t width;
@@ -82,7 +87,7 @@ bool ServiceImageTransferCacheEntry::Deserialize(GrContext* context,
   reader.Read(&height);
   size_t pixel_size;
   reader.ReadSize(&pixel_size);
-  size_ = size;
+  size_ = data.size();
   if (!reader.valid())
     return false;
   // TODO(ericrk): Handle colorspace.
@@ -98,11 +103,19 @@ bool ServiceImageTransferCacheEntry::Deserialize(GrContext* context,
   // this as the worst case scenario is visual corruption.
   SkPixmap pixmap(image_info, const_cast<const void*>(pixel_data),
                   image_info.minRowBytes());
-  sk_sp<SkImage> image = SkImage::MakeFromRaster(pixmap, nullptr, nullptr);
-  if (!image)
-    return false;
 
-  image_ = image->makeTextureImage(context, nullptr);
+  // Depending on whether the pixmap will fit in a GPU texture, either create
+  // a software or GPU SkImage.
+  uint32_t max_size = context->caps()->maxTextureSize();
+  bool fits_on_gpu = width <= max_size && height <= max_size;
+  if (fits_on_gpu) {
+    sk_sp<SkImage> image = SkImage::MakeFromRaster(pixmap, nullptr, nullptr);
+    DCHECK(image);
+    image_ = image->makeTextureImage(context, nullptr);
+  } else {
+    image_ = SkImage::MakeRasterCopy(pixmap);
+  }
+
   return image_;
 }
 

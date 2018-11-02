@@ -88,7 +88,8 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;
 
-  if (!CreateContactTable() || !CreateEmailTable() || !CreatePhonenumberTable())
+  if (!CreateContactTable() || !CreateEmailTable() ||
+      !CreatePhonenumberTable() || !CreatePostalAddressTable())
     return sql::INIT_FAILURE;
 
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;

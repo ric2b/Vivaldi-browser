@@ -15,6 +15,7 @@ namespace blink {
 class InsertListCommandTest : public EditingTestBase {};
 
 TEST_F(InsertListCommandTest, ShouldCleanlyRemoveSpuriousTextNode) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   // Needs to be editable to use InsertListCommand.
   GetDocument().setDesignMode("on");
   // Set up the condition:
@@ -35,7 +36,7 @@ TEST_F(InsertListCommandTest, ShouldCleanlyRemoveSpuriousTextNode) {
   GetDocument().body()->InsertBefore(empty_text,
                                      GetDocument().body()->firstChild());
   UpdateAllLifecyclePhases();
-  GetDocument().GetFrame()->Selection().SetSelection(
+  GetDocument().GetFrame()->Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(Position(GetDocument().body(), 0))
           .Extend(Position(GetDocument().body(), 2))
@@ -47,5 +48,86 @@ TEST_F(InsertListCommandTest, ShouldCleanlyRemoveSpuriousTextNode) {
   EXPECT_TRUE(command->Apply())
       << "The insert ordered list command should have succeeded";
   EXPECT_EQ("<ol><li>d</li></ol>", GetDocument().body()->InnerHTMLAsString());
+}
+
+// Refer https://crbug.com/794356
+TEST_F(InsertListCommandTest, UnlistifyParagraphCrashOnVisuallyEmptyParagraph) {
+  GetDocument().setDesignMode("on");
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("^<dl>"
+                             "<textarea style='float:left;'></textarea>"
+                             "</dl>|"));
+  InsertListCommand* command = InsertListCommand::Create(
+      GetDocument(), InsertListCommand::kUnorderedList);
+  // Crash happens here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "<dl><ul>"
+      "|<textarea style=\"float:left;\"></textarea>"
+      "</ul></dl>",
+      GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
+}
+
+// Refer https://crbug.com/798176
+TEST_F(InsertListCommandTest, CleanupNodeSameAsDestinationNode) {
+  GetDocument().setDesignMode("on");
+  InsertStyleElement(
+      "* { -webkit-appearance:checkbox; }"
+      "br { visibility:hidden; }"
+      "colgroup { -webkit-column-count:2; }");
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("^<table><col></table>"
+                             "<button></button>|"));
+
+  InsertListCommand* command = InsertListCommand::Create(
+      GetDocument(), InsertListCommand::kUnorderedList);
+
+  // Crash happens here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "<ul><li><br></li></ul>"
+      "<br>"
+      "<table>|<colgroup><col>"
+      "<ul><li><br></li></ul>"
+      "</col></colgroup></table>"
+      "<button></button>",
+      GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
+}
+
+TEST_F(InsertListCommandTest, InsertListOnEmptyHiddenElements) {
+  GetDocument().setDesignMode("on");
+  InsertStyleElement("br { visibility:hidden; }");
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("^<button></button>|"));
+  InsertListCommand* command = InsertListCommand::Create(
+      GetDocument(), InsertListCommand::kUnorderedList);
+
+  // Crash happens here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "<button>"
+      "|<ul><li><br></li></ul>"
+      "</button>",
+      GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
+}
+
+// Refer https://crbug.com/797520
+TEST_F(InsertListCommandTest, InsertListWithCollapsedVisibility) {
+  GetDocument().setDesignMode("on");
+  InsertStyleElement(
+      "ul { visibility:collapse; }"
+      "dl { visibility:visible; }");
+
+  Selection().SetSelectionAndEndTyping(SetSelectionTextToBody("^<dl>a</dl>|"));
+  InsertListCommand* command =
+      InsertListCommand::Create(GetDocument(), InsertListCommand::kOrderedList);
+
+  // Crash happens here.
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ(
+      "<dl>"
+      "<ol></ol><ul>^a|</ul>"
+      "</dl>",
+      GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
 }
 }

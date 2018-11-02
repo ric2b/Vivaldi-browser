@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://github.com/wicg/longtasks
+// https://w3c.github.io/longtasks/#sec-TaskAttributionTiming
 interface TaskAttributionTiming : PerformanceEntry {
     [RuntimeEnabled=LongTaskV2] readonly attribute DOMString scriptURL;
     readonly attribute DOMString containerType;
     readonly attribute DOMString containerSrc;
     readonly attribute DOMString containerId;
     readonly attribute DOMString containerName;
+    serializer = {inherit, attribute};
 };

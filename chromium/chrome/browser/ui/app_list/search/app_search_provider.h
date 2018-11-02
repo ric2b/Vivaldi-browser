@@ -14,6 +14,7 @@
 #include "ui/app_list/search_provider.h"
 
 class AppListControllerDelegate;
+class AppListModelUpdater;
 class Profile;
 
 namespace base {
@@ -21,8 +22,6 @@ class Clock;
 }
 
 namespace app_list {
-
-class AppListItemList;
 
 class AppSearchProvider : public SearchProvider {
  public:
@@ -33,11 +32,11 @@ class AppSearchProvider : public SearchProvider {
   AppSearchProvider(Profile* profile,
                     AppListControllerDelegate* list_controller,
                     std::unique_ptr<base::Clock> clock,
-                    AppListItemList* top_level_item_list);
+                    AppListModelUpdater* model_updater);
   ~AppSearchProvider() override;
 
   // SearchProvider overrides:
-  void Start(bool is_voice_query, const base::string16& query) override;
+  void Start(const base::string16& query) override;
 
   // Refresh indexed app data and update search results. When |force_inline| is
   // set to true, search results is updated before returning from the function.
@@ -52,7 +51,7 @@ class AppSearchProvider : public SearchProvider {
   AppListControllerDelegate* const list_controller_;
   base::string16 query_;
   Apps apps_;
-  AppListItemList* const top_level_item_list_;
+  AppListModelUpdater* const model_updater_;
   std::unique_ptr<base::Clock> clock_;
   std::vector<std::unique_ptr<DataSource>> data_sources_;
   base::WeakPtrFactory<AppSearchProvider> update_results_factory_;

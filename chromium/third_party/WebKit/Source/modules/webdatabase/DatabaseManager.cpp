@@ -25,6 +25,7 @@
 
 #include "modules/webdatabase/DatabaseManager.h"
 
+#include "base/location.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
@@ -37,9 +38,7 @@
 #include "modules/webdatabase/DatabaseTracker.h"
 #include "modules/webdatabase/StorageLog.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/TaskType.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -52,11 +51,9 @@ DatabaseManager& DatabaseManager::Manager() {
   return *g_database_manager;
 }
 
-DatabaseManager::DatabaseManager()
-{
-}
+DatabaseManager::DatabaseManager() = default;
 
-DatabaseManager::~DatabaseManager() {}
+DatabaseManager::~DatabaseManager() = default;
 
 DatabaseContext* DatabaseManager::ExistingDatabaseContextFor(
     ExecutionContext* context) {
@@ -194,7 +191,7 @@ Database* DatabaseManager::OpenDatabase(ExecutionContext* context,
   return database;
 }
 
-String DatabaseManager::FullPathForDatabase(SecurityOrigin* origin,
+String DatabaseManager::FullPathForDatabase(const SecurityOrigin* origin,
                                             const String& name,
                                             bool create_if_does_not_exist) {
   return DatabaseTracker::Tracker().FullPathForDatabase(

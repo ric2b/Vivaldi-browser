@@ -6,6 +6,7 @@
 
 #include <memory.h>
 #include <stddef.h>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
@@ -66,7 +67,7 @@ const char* const kKnownSettings[] = {
     kDeviceAttestationEnabled,
     kDeviceDisabled,
     kDeviceDisabledMessage,
-    kDeviceEnrollmentIdNeeded,
+    kDeviceHostnameTemplate,
     kDeviceLoginScreenAppInstallList,
     kDeviceLoginScreenInputMethods,
     kDeviceLoginScreenLocales,
@@ -605,16 +606,7 @@ void DecodeGenericPolicies(
     const em::CastReceiverNameProto& container(policy.cast_receiver_name());
     if (container.has_name()) {
       new_values_cache->SetValue(
-          kCastReceiverName, base::MakeUnique<base::Value>(container.name()));
-    }
-  }
-
-  if (policy.has_forced_reenrollment()) {
-    const em::ForcedReenrollmentProto& container(policy.forced_reenrollment());
-    if (container.has_enrollment_id_needed()) {
-      new_values_cache->SetValue(
-          kDeviceEnrollmentIdNeeded,
-          base::MakeUnique<base::Value>(container.enrollment_id_needed()));
+          kCastReceiverName, std::make_unique<base::Value>(container.name()));
     }
   }
 
@@ -624,7 +616,16 @@ void DecodeGenericPolicies(
     if (container.has_unaffiliated_arc_allowed()) {
       new_values_cache->SetValue(
           kUnaffiliatedArcAllowed,
-          base::MakeUnique<base::Value>(container.unaffiliated_arc_allowed()));
+          std::make_unique<base::Value>(container.unaffiliated_arc_allowed()));
+    }
+  }
+
+  if (policy.has_network_hostname()) {
+    const em::NetworkHostnameProto& container(policy.network_hostname());
+    if (container.has_device_hostname_template() &&
+        !container.device_hostname_template().empty()) {
+      new_values_cache->SetString(kDeviceHostnameTemplate,
+                                  container.device_hostname_template());
     }
   }
 }
@@ -685,6 +686,19 @@ DeviceSettingsProvider::~DeviceSettingsProvider() {
 bool DeviceSettingsProvider::IsDeviceSetting(const std::string& name) {
   const char* const* end = kKnownSettings + arraysize(kKnownSettings);
   return std::find(kKnownSettings, end, name) != end;
+}
+
+// static
+void DeviceSettingsProvider::DecodePolicies(
+    const em::ChromeDeviceSettingsProto& policy,
+    PrefValueMap* new_values_cache) {
+  DecodeLoginPolicies(policy, new_values_cache);
+  DecodeNetworkPolicies(policy, new_values_cache);
+  DecodeAutoUpdatePolicies(policy, new_values_cache);
+  DecodeReportingPolicies(policy, new_values_cache);
+  DecodeHeartbeatPolicies(policy, new_values_cache);
+  DecodeGenericPolicies(policy, new_values_cache);
+  DecodeLogUploadPolicies(policy, new_values_cache);
 }
 
 void DeviceSettingsProvider::DoSet(const std::string& path,
@@ -826,13 +840,7 @@ void DeviceSettingsProvider::UpdateValuesCache(
                                policy_data.service_account_identity());
   }
 
-  DecodeLoginPolicies(settings, &new_values_cache);
-  DecodeNetworkPolicies(settings, &new_values_cache);
-  DecodeAutoUpdatePolicies(settings, &new_values_cache);
-  DecodeReportingPolicies(settings, &new_values_cache);
-  DecodeHeartbeatPolicies(settings, &new_values_cache);
-  DecodeGenericPolicies(settings, &new_values_cache);
-  DecodeLogUploadPolicies(settings, &new_values_cache);
+  DecodePolicies(settings, &new_values_cache);
   DecodeDeviceState(policy_data, &new_values_cache);
 
   // Collect all notifications but send them only after we have swapped the

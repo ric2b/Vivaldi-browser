@@ -16,7 +16,6 @@
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -29,6 +28,7 @@
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_main_parts.h"
 #include "chromecast/browser/cast_browser_process.h"
+#include "chromecast/browser/cast_navigation_ui_data.h"
 #include "chromecast/browser/cast_network_delegate.h"
 #include "chromecast/browser/cast_quota_permission_context.h"
 #include "chromecast/browser/cast_resource_dispatcher_host_delegate.h"
@@ -46,6 +46,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -94,6 +96,12 @@
 #if defined(USE_ALSA)
 #include "chromecast/media/audio/cast_audio_manager_alsa.h"  // nogncheck
 #endif  // defined(USE_ALSA)
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+#include "extensions/browser/extension_message_filter.h"  // nogncheck
+#include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"  // nogncheck
+#include "extensions/browser/io_thread_extension_message_filter.h"  // nogncheck
+#endif
 
 namespace chromecast {
 namespace shell {
@@ -162,8 +170,22 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
   std::string process_type =
       command_line->GetSwitchValueNative(switches::kProcessType);
   if (process_type == switches::kGpuProcess) {
-    gfx::Size res =
-        display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+    static const char* const kForwardSwitches[] = {
+        switches::kCastInitialScreenHeight, switches::kCastInitialScreenWidth,
+        switches::kVSyncInterval,
+    };
+    base::CommandLine* browser_command_line =
+        base::CommandLine::ForCurrentProcess();
+    command_line->CopySwitchesFrom(*browser_command_line, kForwardSwitches,
+                                   arraysize(kForwardSwitches));
+
+    auto display = display::Screen::GetScreen()->GetPrimaryDisplay();
+    gfx::Size res = display.GetSizeInPixel();
+    if (display.rotation() == display::Display::ROTATE_90 ||
+        display.rotation() == display::Display::ROTATE_270) {
+      res = gfx::Size(res.height(), res.width());
+    }
+
     if (!command_line->HasSwitch(switches::kCastInitialScreenWidth)) {
       command_line->AppendSwitchASCII(switches::kCastInitialScreenWidth,
                                       base::IntToString(res.width()));
@@ -182,15 +204,13 @@ void CastContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif  // defined(USE_AURA)
 }
 
-void CastContentBrowserClient::PreCreateThreads() {}
-
 std::unique_ptr<CastService> CastContentBrowserClient::CreateCastService(
     content::BrowserContext* browser_context,
     PrefService* pref_service,
     net::URLRequestContextGetter* request_context_getter,
     media::VideoPlaneController* video_plane_controller,
     CastWindowManager* window_manager) {
-  return base::MakeUnique<CastServiceSimple>(browser_context, pref_service,
+  return std::make_unique<CastServiceSimple>(browser_context, pref_service,
                                              window_manager);
 }
 
@@ -240,15 +260,15 @@ CastContentBrowserClient::CreateAudioManager(
   // CastAudioManager.
   bool use_mixer = true;
 #if defined(USE_ALSA)
-  return base::MakeUnique<media::CastAudioManagerAlsa>(
-      base::MakeUnique<::media::AudioThreadImpl>(), audio_log_factory,
-      base::MakeUnique<media::MediaPipelineBackendFactoryImpl>(
+  return std::make_unique<media::CastAudioManagerAlsa>(
+      std::make_unique<::media::AudioThreadImpl>(), audio_log_factory,
+      std::make_unique<media::MediaPipelineBackendFactoryImpl>(
           media_pipeline_backend_manager()),
       GetMediaTaskRunner(), use_mixer);
 #else
-  return base::MakeUnique<media::CastAudioManager>(
-      base::MakeUnique<::media::AudioThreadImpl>(), audio_log_factory,
-      base::MakeUnique<media::MediaPipelineBackendFactoryImpl>(
+  return std::make_unique<media::CastAudioManager>(
+      std::make_unique<::media::AudioThreadImpl>(), audio_log_factory,
+      std::make_unique<media::MediaPipelineBackendFactoryImpl>(
           media_pipeline_backend_manager()),
       GetMediaTaskRunner(), use_mixer);
 #endif  // defined(USE_ALSA)
@@ -257,7 +277,7 @@ CastContentBrowserClient::CreateAudioManager(
 std::unique_ptr<::media::CdmFactory>
 CastContentBrowserClient::CreateCdmFactory() {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
-  return base::MakeUnique<media::CastCdmFactory>(GetMediaTaskRunner(),
+  return std::make_unique<media::CastCdmFactory>(GetMediaTaskRunner(),
                                                  media_resource_tracker());
 #endif  // BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   return nullptr;
@@ -282,10 +302,14 @@ bool CastContentBrowserClient::EnableRemoteDebuggingImmediately() {
 content::BrowserMainParts* CastContentBrowserClient::CreateBrowserMainParts(
     const content::MainFunctionParams& parameters) {
   DCHECK(!cast_browser_main_parts_);
-  cast_browser_main_parts_ =
-      new CastBrowserMainParts(parameters, url_request_context_factory_.get());
+  auto main_parts = CastBrowserMainParts::Create(
+      parameters, url_request_context_factory_.get());
+  cast_browser_main_parts_ = main_parts.get();
   CastBrowserProcess::GetInstance()->SetCastContentBrowserClient(this);
-  return cast_browser_main_parts_;
+
+  // TODO(halliwell): would like to change CreateBrowserMainParts to return
+  // unique_ptr, then we don't have to release.
+  return main_parts.release();
 }
 
 void CastContentBrowserClient::RenderProcessWillLaunch(
@@ -311,6 +335,18 @@ void CastContentBrowserClient::RenderProcessWillLaunch(
   // support.
   host->AddFilter(new cdm::CdmMessageFilterAndroid(true, true));
 #endif  // defined(OS_ANDROID)
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  int render_process_id = host->GetID();
+  content::BrowserContext* browser_context =
+      cast_browser_main_parts_->browser_context();
+  host->AddFilter(new extensions::ExtensionMessageFilter(render_process_id,
+                                                         browser_context));
+  host->AddFilter(new extensions::IOThreadExtensionMessageFilter(
+      render_process_id, browser_context));
+  host->AddFilter(new extensions::ExtensionsGuestViewMessageFilter(
+      render_process_id, browser_context));
+#endif
 }
 
 void CastContentBrowserClient::AddNetworkHintsMessageFilter(
@@ -495,12 +531,14 @@ void CastContentBrowserClient::SelectClientCertificate(
   // on the UI thread.
   //
   // TODO(davidben): Stop using child ID to identify an app.
+  std::string session_id =
+      CastNavigationUIData::GetSessionIdForWebContents(web_contents);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::BindOnce(
           &CastContentBrowserClient::SelectClientCertificateOnIOThread,
-          base::Unretained(this), requesting_url,
+          base::Unretained(this), requesting_url, session_id,
           web_contents->GetMainFrame()->GetProcess()->GetID(),
           base::SequencedTaskRunnerHandle::Get(),
           base::Bind(
@@ -510,6 +548,7 @@ void CastContentBrowserClient::SelectClientCertificate(
 
 void CastContentBrowserClient::SelectClientCertificateOnIOThread(
     GURL requesting_url,
+    const std::string& session_id,
     int render_process_id,
     scoped_refptr<base::SequencedTaskRunner> original_runner,
     const base::Callback<void(scoped_refptr<net::X509Certificate>,
@@ -518,8 +557,8 @@ void CastContentBrowserClient::SelectClientCertificateOnIOThread(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   CastNetworkDelegate* network_delegate =
       url_request_context_factory_->app_network_delegate();
-  if (network_delegate->IsWhitelisted(requesting_url, render_process_id,
-                                      false)) {
+  if (network_delegate->IsWhitelisted(requesting_url, session_id,
+                                      render_process_id, false)) {
     original_runner->PostTask(
         FROM_HERE, base::Bind(continue_callback, DeviceCert(), DeviceKey()));
     return;
@@ -634,6 +673,19 @@ void CastContentBrowserClient::GetAdditionalWebUISchemes(
 content::DevToolsManagerDelegate*
 CastContentBrowserClient::GetDevToolsManagerDelegate() {
   return new CastDevToolsManagerDelegate();
+}
+
+std::unique_ptr<content::NavigationUIData>
+CastContentBrowserClient::GetNavigationUIData(
+    content::NavigationHandle* navigation_handle) {
+  DCHECK(navigation_handle);
+
+  content::WebContents* web_contents = navigation_handle->GetWebContents();
+  DCHECK(web_contents);
+
+  std::string session_id =
+      CastNavigationUIData::GetSessionIdForWebContents(web_contents);
+  return std::make_unique<CastNavigationUIData>(session_id);
 }
 
 scoped_refptr<net::X509Certificate> CastContentBrowserClient::DeviceCert() {

@@ -462,7 +462,7 @@ void BubbleFrameView::SetFootnoteView(View* view) {
   DCHECK(!footnote_container_);
   footnote_container_ = new FootnoteContainerView();
   footnote_container_->SetLayoutManager(
-      new BoxLayout(BoxLayout::kVertical, footnote_margins_, 0));
+      std::make_unique<BoxLayout>(BoxLayout::kVertical, footnote_margins_, 0));
   footnote_container_->SetBackground(
       CreateSolidBackground(kFootnoteBackgroundColor));
   footnote_container_->SetBorder(
@@ -500,6 +500,10 @@ gfx::Rect BubbleFrameView::GetAvailableScreenBounds(
   return display::Screen::GetScreen()
       ->GetDisplayNearestPoint(rect.CenterPoint())
       .work_area();
+}
+
+bool BubbleFrameView::ExtendClientIntoTitle() const {
+  return false;
 }
 
 bool BubbleFrameView::IsCloseButtonVisible() const {
@@ -636,7 +640,8 @@ gfx::Insets BubbleFrameView::GetTitleLabelInsetsFromFrame() const {
 gfx::Insets BubbleFrameView::GetClientInsetsForFrameWidth(
     int frame_width) const {
   int close_height = 0;
-  if (GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
+  if (!ExtendClientIntoTitle() &&
+      GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
     const int close_margin =
         LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
     // Note: |close_margin| is not applied on the bottom of the icon.

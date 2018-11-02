@@ -10,7 +10,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_function_test_utils.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "components/cast_channel/cast_socket.h"
 #include "components/cast_channel/cast_socket_service.h"
@@ -28,6 +27,7 @@
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
 #include "net/log/test_net_log.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gmock_mutant.h"
 
@@ -113,12 +113,34 @@ class CastChannelAPITest : public ExtensionApiTest {
                 callback.Run(mock_cast_socket_);
               })));
       EXPECT_CALL(*mock_cast_socket_, ready_state())
-          .WillOnce(Return(ReadyState::OPEN));
+          .WillRepeatedly(Return(ReadyState::OPEN));
       EXPECT_CALL(*mock_cast_socket_->mock_transport(),
-                  SendMessage(A<const CastMessage&>(), _))
+                  SendMessage(A<const CastMessage&>(), _, _))
           .WillOnce(InvokeCompletionCallback<1>(net::OK));
       EXPECT_CALL(*mock_cast_socket_, ready_state())
           .WillOnce(Return(ReadyState::OPEN));
+      EXPECT_CALL(*mock_cast_socket_, Close(_))
+          .WillOnce(InvokeCompletionCallback<0>(net::OK));
+      EXPECT_CALL(*mock_cast_socket_, ready_state())
+          .WillOnce(Return(ReadyState::CLOSED));
+    }
+  }
+
+  void SetUpOpenErrorSend() {
+    SetUpMockCastSocket();
+    mock_cast_socket_->SetErrorState(ChannelError::CONNECT_ERROR);
+    {
+      InSequence sequence;
+
+      EXPECT_CALL(*mock_cast_socket_, ConnectInternal(_))
+          .WillOnce(WithArgs<0>(
+              Invoke([&](const MockCastSocket::MockOnOpenCallback& callback) {
+                callback.Run(mock_cast_socket_);
+              })));
+      EXPECT_CALL(*mock_cast_socket_, ready_state())
+          .WillRepeatedly(Return(ReadyState::CLOSED));
+      EXPECT_CALL(*mock_cast_socket_->mock_transport(), SendMessage(_, _, _))
+          .Times(0);
       EXPECT_CALL(*mock_cast_socket_, Close(_))
           .WillOnce(InvokeCompletionCallback<0>(net::OK));
       EXPECT_CALL(*mock_cast_socket_, ready_state())
@@ -240,6 +262,22 @@ IN_PROC_BROWSER_TEST_F(CastChannelAPITest, MAYBE_TestOpenSendClose) {
 
   EXPECT_TRUE(RunExtensionSubtest("cast_channel/api",
                                   "test_open_send_close.html"));
+}
+
+// TODO(kmarshall): Win Dbg has a workaround that makes RunExtensionSubtest
+// always return true without actually running the test. Remove when fixed.
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_TestOpenErrorSend DISABLED_TestOpenErrorSend
+#else
+#define MAYBE_TestOpenErrorSend TestOpenErrorSend
+#endif
+// Test loading extension, failing to open a channel with ConnectInfo, sending
+// message on closed channel, and closing.
+IN_PROC_BROWSER_TEST_F(CastChannelAPITest, MAYBE_TestOpenErrorSend) {
+  SetUpOpenErrorSend();
+
+  EXPECT_TRUE(
+      RunExtensionSubtest("cast_channel/api", "test_open_error_send.html"));
 }
 
 // TODO(kmarshall): Win Dbg has a workaround that makes RunExtensionSubtest

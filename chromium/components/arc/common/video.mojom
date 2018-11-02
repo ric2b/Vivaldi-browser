@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// Next MinVersion: 6
+// Next MinVersion: 7
 
 module arc.mojom;
 
@@ -29,10 +29,12 @@ interface VideoInstance {
   [MinVersion=5] Init@1(VideoHost host_ptr) => ();
 };
 
-// Next method ID: 2
+// Deprecated method IDs: 0
+// Next method ID: 3
 interface VideoAcceleratorFactory {
-  CreateDecodeAccelerator@0(VideoDecodeAccelerator& decoder);
-
   [MinVersion=1]
-  CreateEncodeAccelerator@1(VideoEncodeAccelerator& encoder);
+  CreateEncodeAccelerator@1(VideoEncodeAccelerator& video_encoder);
+
+  [MinVersion=6]
+  CreateDecodeAccelerator@2(VideoDecodeAccelerator& video_decoder);
 };

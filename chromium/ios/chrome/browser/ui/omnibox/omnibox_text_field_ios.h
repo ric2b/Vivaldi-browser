@@ -5,7 +5,7 @@
 #ifndef IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_TEXT_FIELD_IOS_H_
 #define IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_TEXT_FIELD_IOS_H_
 
-#import <UIKit/UIKit.h>
+#import "ios/chrome/browser/ui/omnibox/clipping_textfield.h"
 
 #include "base/strings/string16.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
@@ -17,7 +17,7 @@ typedef enum {
 } OmniboxTextFieldFadeStyle;
 
 // UITextField subclass to allow for adjusting borders.
-@interface OmniboxTextFieldIOS : UITextField
+@interface OmniboxTextFieldIOS : ClippingTextField
 
 // Initialize the omnibox with the given frame, font, text color, and tint
 // color.
@@ -28,10 +28,6 @@ typedef enum {
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
 
-// Delegate getter and setter.  Overridden to use OmniboxTextFieldDelegate
-// instead of UITextFieldDelegate.
-- (id<OmniboxTextFieldDelegate>)delegate;
-- (void)setDelegate:(id<OmniboxTextFieldDelegate>)delegate;
 
 // Sets the field's text to |text|.  If |userTextLength| is less than the length
 // of |text|, the excess is displayed as inline autocompleted text.  When the
@@ -64,15 +60,6 @@ typedef enum {
 // on older version of iOS.
 - (NSString*)markedText;
 
-// Initial touch on the Omnibox triggers a "pre-edit" state. The current
-// URL is shown without any insertion point. First character typed replaces
-// the URL. A second touch turns on the insertion point. |preEditStaticLabel|
-// is normally hidden. In pre-edit state, |preEditStaticLabel| is unhidden
-// and displays the URL that will be edited on the second touch.
-- (void)enterPreEditState;
-- (void)exitPreEditState;
-- (BOOL)isPreEditing;
-
 // Returns the current selected text range as an NSRange.
 - (NSRange)selectedNSRange;
 
@@ -93,20 +80,32 @@ typedef enum {
 // Called when animations added by |-animateFadeWithStyle:| can be removed.
 - (void)cleanUpFadeAnimations;
 
-// Redeclare the delegate property to be the more specific
-// OmniboxTextFieldDelegate.
+// New animations API, currently behind clean-toolbar flag.
+// They replace all animations above.
+- (void)addExpandOmniboxAnimations:(UIViewPropertyAnimator*)animator
+                completionAnimator:(UIViewPropertyAnimator*)completionAnimator;
+- (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator;
+
+// Initial touch on the Omnibox triggers a "pre-edit" state. The current
+// URL is shown without any insertion point. First character typed replaces
+// the URL. A second touch turns on the insertion point. |preEditStaticLabel|
+// is normally hidden. In pre-edit state, |preEditStaticLabel| is unhidden
+// and displays the URL that will be edited on the second touch.
+- (void)enterPreEditState;
+- (void)exitPreEditState;
+- (BOOL)isPreEditing;
+
+// The delegate for this textfield.  Overridden to use OmniboxTextFieldDelegate
+// instead of UITextFieldDelegate.
 @property(nonatomic, weak) id<OmniboxTextFieldDelegate> delegate;
 
+// Text displayed when in pre-edit state.
 @property(nonatomic, strong) NSString* preEditText;
+
 @property(nonatomic) BOOL clearingPreEditText;
 @property(nonatomic, strong) UIColor* selectedTextBackgroundColor;
 @property(nonatomic, strong) UIColor* placeholderTextColor;
 @property(nonatomic, assign) BOOL incognito;
-
-- (void)addExpandOmniboxAnimations:(UIViewPropertyAnimator*)animator
-    API_AVAILABLE(ios(10.0));
-- (void)addContractOmniboxAnimations:(UIViewPropertyAnimator*)animator
-    API_AVAILABLE(ios(10.0));
 
 @end
 

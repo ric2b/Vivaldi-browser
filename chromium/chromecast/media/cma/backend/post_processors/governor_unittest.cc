@@ -5,14 +5,14 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
-#include "chromecast/media/cma/backend/post_processor_factory.h"
 #include "chromecast/media/cma/backend/post_processors/governor.h"
+#include "chromecast/media/cma/backend/post_processors/post_processor_benchmark.h"
 #include "chromecast/media/cma/backend/post_processors/post_processor_unittest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -25,7 +25,6 @@ namespace {
 const char* kConfigTemplate =
     R"config({"onset_volume": %f, "clamp_multiplier": %f})config";
 
-const char kLibraryPath[] = "libcast_governor_1.0.so";
 const float kDefaultClamp = 0.6f;
 const int kNumFrames = 100;
 const int kFrequency = 2000;
@@ -51,7 +50,7 @@ class GovernorTest : public ::testing::TestWithParam<float> {
     clamp_ = kDefaultClamp;
     onset_volume_ = GetParam();
     std::string config = MakeConfigString(onset_volume_, clamp_);
-    governor_ = base::MakeUnique<Governor>(config, kNumChannels);
+    governor_ = std::make_unique<Governor>(config, kNumChannels);
     governor_->SetSlewTimeMsForTest(0);
     governor_->SetSampleRate(kSampleRate);
 
@@ -113,25 +112,37 @@ INSTANTIATE_TEST_CASE_P(GovernorClampVolumeTest,
 // Default tests from post_processor_test
 TEST_P(PostProcessorTest, GovernorDelay) {
   std::string config = MakeConfigString(1.0, 1.0);
-  PostProcessorFactory factory;
-  auto pp = factory.CreatePostProcessor(kLibraryPath, config, kNumChannels);
+  auto pp = std::make_unique<Governor>(config, kNumChannels);
   TestDelay(pp.get(), sample_rate_);
 }
 
 TEST_P(PostProcessorTest, GovernorRinging) {
   std::string config = MakeConfigString(1.0, 1.0);
-  PostProcessorFactory factory;
-  auto pp = factory.CreatePostProcessor(kLibraryPath, config, kNumChannels);
+  auto pp = std::make_unique<Governor>(config, kNumChannels);
   TestRingingTime(pp.get(), sample_rate_);
 }
 
 TEST_P(PostProcessorTest, GovernorPassthrough) {
   std::string config = MakeConfigString(1.0, 1.0);
-  PostProcessorFactory factory;
-  auto pp = factory.CreatePostProcessor(kLibraryPath, config, kNumChannels);
+  auto pp = std::make_unique<Governor>(config, kNumChannels);
   TestPassthrough(pp.get(), sample_rate_);
+}
+
+TEST_P(PostProcessorTest, GovernorBenchmark) {
+  std::string config = MakeConfigString(1.0, 1.0);
+  auto pp = std::make_unique<Governor>(config, kNumChannels);
+  AudioProcessorBenchmark(pp.get(), sample_rate_);
 }
 
 }  // namespace post_processor_test
 }  // namespace media
 }  // namespace chromecast
+
+/*
+Benchmark results:
+Device: Google Home Max, test audio duration: 1 sec.
+Benchmark           Sample Rate    CPU(%)
+----------------------------------------------------
+GovernorBenchmark   44100          0.0013%
+GovernorBenchmark   48000          0.0015%
+*/

@@ -272,7 +272,7 @@ WebContents* OpenApplicationTab(const AppLaunchParams& launch_params,
     add_type |= TabStripModel::ADD_PINNED;
 
   ui::PageTransition transition = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
-  chrome::NavigateParams params(browser, url, transition);
+  NavigateParams params(browser, url, transition);
   params.tabstrip_add_types = add_type;
   params.disposition = disposition;
 
@@ -300,7 +300,7 @@ WebContents* OpenApplicationTab(const AppLaunchParams& launch_params,
 
     contents = existing_tab;
   } else {
-    chrome::Navigate(&params);
+    Navigate(&params);
     contents = params.target_contents;
   }
 
@@ -376,7 +376,7 @@ WebContents* OpenEnabledApplication(const AppLaunchParams& params) {
     // Record the launch time in the site engagement service. A recent bookmark
     // app launch will provide an engagement boost to the origin.
     SiteEngagementService* service = SiteEngagementService::Get(params.profile);
-    service->SetLastShortcutLaunchTime(url);
+    service->SetLastShortcutLaunchTime(tab, url);
 
     // Refresh the app banner added to homescreen event. The user may have
     // cleared their browsing data since installing the app, which removes the

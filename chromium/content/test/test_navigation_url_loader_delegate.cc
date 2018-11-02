@@ -9,7 +9,7 @@
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/stream_handle.h"
-#include "content/public/common/resource_response.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -44,13 +44,13 @@ void TestNavigationURLLoaderDelegate::WaitForRequestStarted() {
 }
 
 void TestNavigationURLLoaderDelegate::ReleaseBody() {
+  url_loader_client_endpoints_ = nullptr;
   body_.reset();
-  handle_.reset();
 }
 
 void TestNavigationURLLoaderDelegate::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
-    const scoped_refptr<ResourceResponse>& response) {
+    const scoped_refptr<network::ResourceResponse>& response) {
   redirect_info_ = redirect_info;
   redirect_response_ = response;
   ASSERT_TRUE(request_redirected_);
@@ -58,9 +58,9 @@ void TestNavigationURLLoaderDelegate::OnRequestRedirected(
 }
 
 void TestNavigationURLLoaderDelegate::OnResponseStarted(
-    const scoped_refptr<ResourceResponse>& response,
+    const scoped_refptr<network::ResourceResponse>& response,
+    network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
     std::unique_ptr<StreamHandle> body,
-    mojo::ScopedDataPipeConsumerHandle consumer_handle,
     const net::SSLInfo& ssl_info,
     std::unique_ptr<NavigationData> navigation_data,
     const GlobalRequestID& request_id,
@@ -68,8 +68,8 @@ void TestNavigationURLLoaderDelegate::OnResponseStarted(
     bool is_stream,
     base::Optional<SubresourceLoaderParams> subresource_loader_params) {
   response_ = response;
+  url_loader_client_endpoints_ = std::move(url_loader_client_endpoints);
   body_ = std::move(body);
-  handle_ = std::move(consumer_handle);
   ssl_info_ = ssl_info;
   is_download_ = is_download;
   if (response_started_)
@@ -79,12 +79,10 @@ void TestNavigationURLLoaderDelegate::OnResponseStarted(
 void TestNavigationURLLoaderDelegate::OnRequestFailed(
     bool in_cache,
     int net_error,
-    const base::Optional<net::SSLInfo>& ssl_info,
-    bool should_ssl_errors_be_fatal) {
+    const base::Optional<net::SSLInfo>& ssl_info) {
   net_error_ = net_error;
   if (ssl_info.has_value())
     ssl_info_ = ssl_info.value();
-  should_ssl_errors_be_fatal_ = should_ssl_errors_be_fatal;
   if (request_failed_)
     request_failed_->Quit();
 }

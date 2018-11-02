@@ -16,8 +16,19 @@ ChromeComponentUpdaterServiceProviderDelegate::
 
 void ChromeComponentUpdaterServiceProviderDelegate::LoadComponent(
     const std::string& name,
-    const base::Callback<void(const std::string&)>& load_callback) {
-  component_updater::CrOSComponent::LoadComponent(name, load_callback);
+    bool mount,
+    LoadCallback load_callback) {
+  g_browser_process->platform_part()->cros_component_manager()->Load(
+      name,
+      mount ? component_updater::CrOSComponentManager::MountPolicy::kMount
+            : component_updater::CrOSComponentManager::MountPolicy::kDontMount,
+      std::move(load_callback));
+}
+
+bool ChromeComponentUpdaterServiceProviderDelegate::UnloadComponent(
+    const std::string& name) {
+  return g_browser_process->platform_part()->cros_component_manager()->Unload(
+      name);
 }
 
 }  // namespace chromeos

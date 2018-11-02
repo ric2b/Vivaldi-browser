@@ -24,16 +24,20 @@
 #include "net/log/test_net_log.h"
 #include "net/log/test_net_log_entry.h"
 #include "net/log/test_net_log_util.h"
+#include "net/socket/socket_test_util.h"
 #include "net/socket/udp_client_socket.h"
 #include "net/socket/udp_server_socket.h"
 #include "net/test/gtest_util.h"
 #include "net/test/net_test_suite.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
+#include "net/android/network_change_notifier_factory_android.h"
+#include "net/base/network_change_notifier.h"
 #endif
 
 #if defined(OS_IOS)
@@ -95,8 +99,8 @@ class UDPSocketTest : public PlatformTest {
   int WriteSocket(UDPClientSocket* socket, const std::string& msg) {
     scoped_refptr<StringIOBuffer> io_buffer(new StringIOBuffer(msg));
     TestCompletionCallback callback;
-    int rv =
-        socket->Write(io_buffer.get(), io_buffer->size(), callback.callback());
+    int rv = socket->Write(io_buffer.get(), io_buffer->size(),
+                           callback.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
     return callback.GetResult(rv);
   }
 
@@ -734,6 +738,11 @@ TEST_F(UDPSocketTest, SetDSCP) {
 TEST_F(UDPSocketTest, TestBindToNetwork) {
   UDPSocket socket(DatagramSocket::RANDOM_BIND, base::Bind(&PrivilegedRand),
                    NULL, NetLogSource());
+#if defined(OS_ANDROID)
+  NetworkChangeNotifierFactoryAndroid ncn_factory;
+  NetworkChangeNotifier::DisableForTest ncn_disable_for_test;
+  std::unique_ptr<NetworkChangeNotifier> ncn(ncn_factory.CreateInstance());
+#endif
   ASSERT_EQ(OK, socket.Open(ADDRESS_FAMILY_IPV4));
   // Test unsuccessful binding, by attempting to bind to a bogus NetworkHandle.
   int rv = socket.BindToNetwork(65536);
@@ -767,12 +776,11 @@ TEST_F(UDPSocketTest, TestBindToNetwork) {
         socket.BindToNetwork(NetworkChangeNotifier::kInvalidNetworkHandle));
 
     // Test successful binding, if possible.
-    if (NetworkChangeNotifier::AreNetworkHandlesSupported()) {
-      NetworkChangeNotifier::NetworkHandle network_handle =
-          NetworkChangeNotifier::GetDefaultNetwork();
-      if (network_handle != NetworkChangeNotifier::kInvalidNetworkHandle) {
-        EXPECT_EQ(OK, socket.BindToNetwork(network_handle));
-      }
+    EXPECT_TRUE(NetworkChangeNotifier::AreNetworkHandlesSupported());
+    NetworkChangeNotifier::NetworkHandle network_handle =
+        NetworkChangeNotifier::GetDefaultNetwork();
+    if (network_handle != NetworkChangeNotifier::kInvalidNetworkHandle) {
+      EXPECT_EQ(OK, socket.BindToNetwork(network_handle));
     }
   }
 #endif
@@ -900,6 +908,79 @@ TEST_F(UDPSocketTest, SetDSCPFake) {
   g_expected_traffic_type = QOSTrafficTypeBestEffort;
   EXPECT_THAT(client.SetDiffServCodePoint(DSCP_DEFAULT), IsOk());
   client.Close();
+}
+#endif
+
+// On Android, where socket tagging is supported, verify that UDPSocket::Tag
+// works as expected.
+#if defined(OS_ANDROID)
+TEST_F(UDPSocketTest, Tag) {
+  UDPServerSocket server(nullptr, NetLogSource());
+  ASSERT_THAT(server.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0)), IsOk());
+  IPEndPoint server_address;
+  ASSERT_THAT(server.GetLocalAddress(&server_address), IsOk());
+
+  UDPClientSocket client(DatagramSocket::DEFAULT_BIND, RandIntCallback(),
+                         nullptr, NetLogSource());
+  ASSERT_THAT(client.Connect(server_address), IsOk());
+
+  // Verify UDP packets are tagged and counted properly.
+  int32_t tag_val1 = 0x12345678;
+  uint64_t old_traffic = GetTaggedBytes(tag_val1);
+  SocketTag tag1(SocketTag::UNSET_UID, tag_val1);
+  client.ApplySocketTag(tag1);
+  // Client sends to the server.
+  std::string simple_message("hello world!");
+  int rv = WriteSocket(&client, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Server waits for message.
+  std::string str = RecvFromSocket(&server);
+  EXPECT_EQ(simple_message, str);
+  // Server echoes reply.
+  rv = SendToSocket(&server, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Client waits for response.
+  str = ReadSocket(&client);
+  EXPECT_EQ(simple_message, str);
+  EXPECT_GT(GetTaggedBytes(tag_val1), old_traffic);
+
+  // Verify socket can be retagged with a new value and the current process's
+  // UID.
+  int32_t tag_val2 = 0x87654321;
+  old_traffic = GetTaggedBytes(tag_val2);
+  SocketTag tag2(getuid(), tag_val2);
+  client.ApplySocketTag(tag2);
+  // Client sends to the server.
+  rv = WriteSocket(&client, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Server waits for message.
+  str = RecvFromSocket(&server);
+  EXPECT_EQ(simple_message, str);
+  // Server echoes reply.
+  rv = SendToSocket(&server, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Client waits for response.
+  str = ReadSocket(&client);
+  EXPECT_EQ(simple_message, str);
+  EXPECT_GT(GetTaggedBytes(tag_val2), old_traffic);
+
+  // Verify socket can be retagged with a new value and the current process's
+  // UID.
+  old_traffic = GetTaggedBytes(tag_val1);
+  client.ApplySocketTag(tag1);
+  // Client sends to the server.
+  rv = WriteSocket(&client, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Server waits for message.
+  str = RecvFromSocket(&server);
+  EXPECT_EQ(simple_message, str);
+  // Server echoes reply.
+  rv = SendToSocket(&server, simple_message);
+  EXPECT_EQ(simple_message.length(), static_cast<size_t>(rv));
+  // Client waits for response.
+  str = ReadSocket(&client);
+  EXPECT_EQ(simple_message, str);
+  EXPECT_GT(GetTaggedBytes(tag_val1), old_traffic);
 }
 #endif
 

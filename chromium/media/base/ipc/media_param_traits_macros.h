@@ -19,6 +19,7 @@
 #include "media/base/demuxer_stream.h"
 #include "media/base/eme_constants.h"
 #include "media/base/encryption_scheme.h"
+#include "media/base/hdr_metadata.h"
 #include "media/base/media_log_event.h"
 #include "media/base/output_device_info.h"
 #include "media/base/overlay_info.h"
@@ -30,6 +31,10 @@
 #include "media/base/video_rotation.h"
 #include "media/base/video_types.h"
 #include "media/base/watch_time_keys.h"
+// TODO(crbug.com/676224): When EnabledIf attribute is supported in mojom files,
+// move CdmProxy related code into #if BUILDFLAG(ENABLE_LIBRARY_CDMS).
+#include "media/cdm/cdm_proxy.h"
+#include "media/media_features.h"
 #include "ui/gfx/ipc/color/gfx_param_traits_macros.h"
 
 // Enum traits.
@@ -53,6 +58,15 @@ IPC_ENUM_TRAITS_MAX_VALUE(media::CdmMessageType,
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmPromise::Exception,
                           media::CdmPromise::Exception::EXCEPTION_MAX)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Function,
+                          media::CdmProxy::Function::kMax)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Protocol,
+                          media::CdmProxy::Protocol::kMax)
+
+IPC_ENUM_TRAITS_MAX_VALUE(media::CdmProxy::Status,
+                          media::CdmProxy::Status::kMax)
 
 IPC_ENUM_TRAITS_MAX_VALUE(media::CdmSessionType,
                           media::CdmSessionType::SESSION_TYPE_MAX)
@@ -157,6 +171,21 @@ IPC_STRUCT_TRAITS_BEGIN(media::VideoColorSpace)
   IPC_STRUCT_TRAITS_MEMBER(transfer)
   IPC_STRUCT_TRAITS_MEMBER(matrix)
   IPC_STRUCT_TRAITS_MEMBER(range)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(media::MasteringMetadata)
+  IPC_STRUCT_TRAITS_MEMBER(primary_r)
+  IPC_STRUCT_TRAITS_MEMBER(primary_g)
+  IPC_STRUCT_TRAITS_MEMBER(primary_b)
+  IPC_STRUCT_TRAITS_MEMBER(white_point)
+  IPC_STRUCT_TRAITS_MEMBER(luminance_max)
+  IPC_STRUCT_TRAITS_MEMBER(luminance_min)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(media::HDRMetadata)
+  IPC_STRUCT_TRAITS_MEMBER(mastering_metadata)
+  IPC_STRUCT_TRAITS_MEMBER(max_content_light_level)
+  IPC_STRUCT_TRAITS_MEMBER(max_frame_average_light_level)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(media::OverlayInfo)

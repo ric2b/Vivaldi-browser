@@ -45,7 +45,6 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
-#include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/DrawingBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
 #include "platform/graphics/gpu/WebGLImageConversion.h"
@@ -67,6 +66,7 @@ class GLES2Interface;
 
 namespace blink {
 
+class CanvasResourceProvider;
 class EXTDisjointTimerQuery;
 class EXTDisjointTimerQueryWebGL2;
 class ExceptionState;
@@ -74,7 +74,6 @@ class HTMLCanvasElementOrOffscreenCanvas;
 class HTMLImageElement;
 class HTMLVideoElement;
 class ImageBitmap;
-class ImageBuffer;
 class ImageData;
 class IntSize;
 class OESVertexArrayObject;
@@ -560,7 +559,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void Reshape(int width, int height) override;
 
   void MarkLayerComposited() override;
-  ImageData* PaintRenderingResultsToImageData(SourceDrawingBuffer) override;
+
+  scoped_refptr<Uint8Array> PaintRenderingResultsToDataArray(
+      SourceDrawingBuffer) override;
 
   unsigned MaxVertexAttribs() const { return max_vertex_attribs_; }
 
@@ -570,6 +571,11 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   // Returns approximate gpu memory allocated per pixel.
   int ExternallyAllocatedBufferCountPerPixel() override;
+
+  // Returns the drawing buffer size after it is, probably, has scaled down
+  // to the maximum supported canvas size.
+  IntSize DrawingBufferSize() const override;
+  DrawingBuffer* GetDrawingBuffer() const;
 
   class TextureUnitState {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -585,9 +591,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     // object.
   };
 
-  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint,
-                                            SnapshotReason) const override;
-  ImageData* ToImageData(SnapshotReason) override;
+  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const override;
   void SetFilterQuality(SkFilterQuality) override;
   bool IsWebGL2OrHigher() { return Version() >= 2; }
 
@@ -692,7 +696,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Structure for rendering to a DrawingBuffer, instead of directly
   // to the back-buffer of m_context.
   scoped_refptr<DrawingBuffer> drawing_buffer_;
-  DrawingBuffer* GetDrawingBuffer() const;
 
   TraceWrapperMember<WebGLContextGroup> context_group_;
 
@@ -707,6 +710,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   TaskRunnerTimer<WebGLRenderingContextBase> dispatch_context_lost_event_timer_;
   bool restore_allowed_;
   TaskRunnerTimer<WebGLRenderingContextBase> restore_timer_;
+  scoped_refptr<WebTaskRunner> task_runner_;
 
   bool marked_canvas_dirty_;
   bool animation_frame_in_progress_;
@@ -738,19 +742,20 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   Vector<GLenum> compressed_texture_formats_;
 
-  // Fixed-size cache of reusable image buffers for video texImage2D calls.
-  class LRUImageBufferCache {
+  // Fixed-size cache of reusable resource providers for video texImage2D calls.
+  class LRUCanvasResourceProviderCache {
    public:
-    LRUImageBufferCache(int capacity);
+    LRUCanvasResourceProviderCache(int capacity);
     // The pointer returned is owned by the image buffer map.
-    ImageBuffer* GetImageBuffer(const IntSize&);
+    CanvasResourceProvider* GetCanvasResourceProvider(const IntSize&);
 
    private:
     void BubbleToFront(int idx);
-    std::unique_ptr<std::unique_ptr<ImageBuffer>[]> buffers_;
+    std::unique_ptr<std::unique_ptr<CanvasResourceProvider>[]>
+        resource_providers_;
     int capacity_;
   };
-  LRUImageBufferCache generated_image_cache_;
+  LRUCanvasResourceProviderCache generated_image_cache_;
 
   GLint max_texture_size_;
   GLint max_cube_map_texture_size_;
@@ -830,6 +835,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     virtual WebGLExtension* GetExtensionObjectIfAlreadyEnabled() = 0;
 
     virtual void Trace(blink::Visitor* visitor) {}
+    void TraceWrappers(const ScriptWrappableVisitor*) const override {}
 
    private:
     bool draft_;
@@ -898,6 +904,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
 
   bool extension_enabled_[kWebGLExtensionNameCount];
   HeapVector<TraceWrapperMember<ExtensionTracker>> extensions_;
+  HashSet<String> disabled_extensions_;
 
   template <typename T>
   void RegisterExtension(Member<T>& extension_ptr,
@@ -1006,8 +1013,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
     kTexImage3D,
     kTexSubImage3D
   };
-
-  static SnapshotReason FunctionIDToSnapshotReason(TexImageFunctionID);
 
   enum TexImageDimension { kTex2D, kTex3D };
   void TexImage2DBase(GLenum target,
@@ -1433,21 +1438,21 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   // Helper function for tex{Sub}Image2D to make sure image is ready and
   // wouldn't taint Origin.
 
-  bool ValidateHTMLImageElement(SecurityOrigin*,
+  bool ValidateHTMLImageElement(const SecurityOrigin*,
                                 const char* function_name,
                                 HTMLImageElement*,
                                 ExceptionState&);
 
   // Helper function for tex{Sub}Image2D to make sure canvas is ready and
   // wouldn't taint Origin.
-  bool ValidateHTMLCanvasElement(SecurityOrigin*,
+  bool ValidateHTMLCanvasElement(const SecurityOrigin*,
                                  const char* function_name,
                                  HTMLCanvasElement*,
                                  ExceptionState&);
 
   // Helper function for tex{Sub}Image2D to make sure video is ready wouldn't
   // taint Origin.
-  bool ValidateHTMLVideoElement(SecurityOrigin*,
+  bool ValidateHTMLVideoElement(const SecurityOrigin*,
                                 const char* function_name,
                                 HTMLVideoElement*,
                                 ExceptionState&);
@@ -1585,7 +1590,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                const IntRect&,
                                GLint);
 
-  void TexImageHelperHTMLImageElement(SecurityOrigin*,
+  void TexImageHelperHTMLImageElement(const SecurityOrigin*,
                                       TexImageFunctionID,
                                       GLenum,
                                       GLint,
@@ -1601,7 +1606,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                       GLint,
                                       ExceptionState&);
 
-  void TexImageHelperHTMLCanvasElement(SecurityOrigin*,
+  void TexImageHelperHTMLCanvasElement(const SecurityOrigin*,
                                        TexImageFunctionID,
                                        GLenum,
                                        GLint,
@@ -1617,7 +1622,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
                                        GLint,
                                        ExceptionState&);
 
-  void TexImageHelperHTMLVideoElement(SecurityOrigin*,
+  void TexImageHelperHTMLVideoElement(const SecurityOrigin*,
                                       TexImageFunctionID,
                                       GLenum,
                                       GLint,
@@ -1684,15 +1689,17 @@ class MODULES_EXPORT WebGLRenderingContextBase : public CanvasRenderingContext,
   void TexImageBitmapByGPU(ImageBitmap*,
                            GLenum,
                            GLuint,
-                           bool,
                            GLint,
                            GLint,
                            const IntRect&);
 
-  scoped_refptr<StaticBitmapImage> MakeImageSnapshot(SkImageInfo&);
+  scoped_refptr<StaticBitmapImage> MakeImageSnapshot(SkImageInfo&) const;
   const unsigned version_;
 
   bool IsPaintable() const final { return GetDrawingBuffer(); }
+  bool CopyRenderingResultsFromDrawingBuffer(CanvasResourceProvider*,
+                                             SourceDrawingBuffer) const;
+  void HoldReferenceToDrawingBuffer(DrawingBuffer*);
 };
 
 // TODO(fserb): remove this.

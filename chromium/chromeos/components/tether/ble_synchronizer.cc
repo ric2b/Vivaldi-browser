@@ -4,7 +4,8 @@
 
 #include "chromeos/components/tether/ble_synchronizer.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
@@ -23,8 +24,8 @@ const int64_t kTimeBetweenEachCommandMs = 200;
 BleSynchronizer::BleSynchronizer(
     scoped_refptr<device::BluetoothAdapter> bluetooth_adapter)
     : bluetooth_adapter_(bluetooth_adapter),
-      timer_(base::MakeUnique<base::OneShotTimer>()),
-      clock_(base::MakeUnique<base::DefaultClock>()),
+      timer_(std::make_unique<base::OneShotTimer>()),
+      clock_(std::make_unique<base::DefaultClock>()),
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       weak_ptr_factory_(this) {}
 
@@ -86,13 +87,9 @@ void BleSynchronizer::ProcessQueue() {
           current_command_->start_discovery_args.get();
       DCHECK(start_discovery_args);
 
-      // Note: Ideally, we would use a filter for only LE devices here. However,
-      // using a filter here triggers a bug in some kernel implementations which
-      // causes LE scanning to toggle rapidly on and off. This can cause race
-      // conditions which result in Bluetooth bugs. See crbug.com/759090.
-      // TODO(mcchou): Once these issues have been resolved, add the filter
-      // back. See crbug.com/759091.
-      bluetooth_adapter_->StartDiscoverySession(
+      bluetooth_adapter_->StartDiscoverySessionWithFilter(
+          std::make_unique<device::BluetoothDiscoveryFilter>(
+              device::BLUETOOTH_TRANSPORT_LE),
           base::Bind(&BleSynchronizer::OnDiscoverySessionStarted,
                      weak_ptr_factory_.GetWeakPtr()),
           base::Bind(&BleSynchronizer::OnErrorStartingDiscoverySession,

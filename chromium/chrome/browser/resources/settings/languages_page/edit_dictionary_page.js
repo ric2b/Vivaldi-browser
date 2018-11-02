@@ -6,6 +6,11 @@
  * @fileoverview 'settings-edit-dictionary-page' is a sub-page for editing
  * the "dictionary" of custom words used for spell check.
  */
+
+// Max valid word size defined in
+// https://cs.chromium.org/chromium/src/components/spellcheck/common/spellcheck_common.h?l=28
+const MAX_CUSTOM_DICTIONARY_WORD_BYTES = 99;
+
 Polymer({
   is: 'settings-edit-dictionary-page',
 
@@ -54,13 +59,32 @@ Polymer({
   },
 
   /**
-   * Check if the new word text-field is empty.
+   * Check if the field is empty or invalid.
+   * @param {string} word
+   * @return {boolean}
    * @private
-   * @param {string} value
-   * @return {boolean} true if value is empty, false otherwise.
    */
-  validateWord_: function(value) {
-    return !!value.trim();
+  disableAddButton_: function(word) {
+    return word.trim().length == 0 || this.isWordInvalid_(word);
+  },
+
+  /**
+   * If the word is invalid, returns true (or a message if one is provided).
+   * Otherwise returns false.
+   * @param {string} word
+   * @param {string} duplicateError
+   * @param {string} lengthError
+   * @return {string|boolean}
+   * @private
+   */
+  isWordInvalid_: function(word, duplicateError, lengthError) {
+    const trimmedWord = word.trim();
+    if (this.words_.indexOf(trimmedWord) != -1)
+      return duplicateError || true;
+    else if (trimmedWord.length > MAX_CUSTOM_DICTIONARY_WORD_BYTES)
+      return lengthError || true;
+
+    return false;
   },
 
   /**
@@ -70,14 +94,14 @@ Polymer({
    * @param {!Array<string>} removed
    */
   onCustomDictionaryChanged_: function(added, removed) {
-    var wasEmpty = this.words_.length == 0;
+    const wasEmpty = this.words_.length == 0;
 
-    for (var i = 0; i < removed.length; i++)
-      this.arrayDelete('words_', removed[i]);
+    for (const word of removed)
+      this.arrayDelete('words_', word);
 
-    for (var i = 0; i < added.length; i++) {
-      if (this.words_.indexOf(added[i]) == -1)
-        this.unshift('words_', added[i]);
+    for (const word of added) {
+      if (this.words_.indexOf(word) == -1)
+        this.unshift('words_', word);
     }
 
     // When adding a word to an _empty_ list, the template is expanded. This
@@ -96,10 +120,12 @@ Polymer({
    * @param {!{detail: !{key: string}}} e
    */
   onKeysPress_: function(e) {
-    if (e.detail.key == 'enter')
+    if (e.detail.key == 'enter' &&
+        !this.disableAddButton_(this.newWordValue_)) {
       this.addWordFromInput_();
-    else if (e.detail.key == 'esc')
+    } else if (e.detail.key == 'esc') {
       e.detail.keyboardEvent.target.value = '';
+    }
   },
 
   /**
@@ -123,15 +149,12 @@ Polymer({
    */
   addWordFromInput_: function() {
     // Spaces are allowed, but removing leading and trailing whitespace.
-    var word = this.newWordValue_.trim();
+    const word = this.newWordValue_.trim();
     this.newWordValue_ = '';
     if (!word)
       return;
 
-    var index = this.words_.indexOf(word);
-    if (index == -1) {
-      this.languageSettingsPrivate.addSpellcheckWord(word);
-    }
+    this.languageSettingsPrivate.addSpellcheckWord(word);
   },
 
   /**

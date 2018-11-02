@@ -15,11 +15,8 @@
 # https://crbug.com/756312
 -ServiceWorkerVersionBrowserV8CacheTest.Restart
 
-# http://crbug.com/715630
-# This started failing when the test got added in r514724.
--DownloadContentTest.ForceDownloadMhtml
-
 # http://crbug.com/721398
+-ClearSiteDataThrottleBrowserTest.CacheIntegrationTest
 -ClearSiteDataThrottleBrowserTest.CookiesIntegrationTest
 -ClearSiteDataThrottleBrowserTest.Credentials
 -ClearSiteDataThrottleBrowserTest.CredentialsOnRedirect
@@ -39,11 +36,9 @@
 -DataUrlNavigationBrowserTest.PDF_NavigationFromFrame_TopFrameIsDataURL_Block
 
 -AsyncResourceHandlerBrowserTest/AsyncResourceHandlerBrowserTest.UploadProgress*
--BrowserSideNavigationBrowserTest.FailedNavigation
--ContentBrowserTest.AbortedRendererInitiatedNavigationDoNotCancelPendingXHR
 -CrossSiteResourceHandlerTest.NoDeliveryToDetachedFrame
--CrossSiteTransferTest/CrossSiteTransferTest.NoLeakOnCrossSiteCancel*
--CrossSiteTransferTest/CrossSiteTransferTest.ReplaceEntryCrossProcessThenTransfer*
+-CrossSiteTransferTest.NoLeakOnCrossSiteCancel
+-CrossSiteTransferTest.ReplaceEntryCrossProcessThenTransfer
 -DevToolsDownloadContentTest.MultiDownload
 -DevToolsDownloadContentTest.DefaultDownload
 -DevToolsDownloadContentTest.ResetDownloadState
@@ -57,10 +52,8 @@
 -IsolatedDevToolsProtocolTest.ControlNavigationsChildFrames
 -IsolateIcelandFrameTreeBrowserTest.ProcessSwitchForIsolatedBlob
 -ManifestBrowserTest.UseCredentialsSendCookies
--NavigationControllerBrowserTest.ErrorPageReplacement
 -NavigationHandleImplBrowserTest.ErrorCodeOnRedirect
 -NavigationHandleImplBrowserTest.RedirectToRendererDebugUrl
--PlzNavigateNavigationHandleImplBrowserTest.ErrorPageNetworkError
 -PowerMonitorTest.TestGpuProcess
 -PowerMonitorTest.TestRendererProcess
 -PowerMonitorTest.TestUtilityProcess
@@ -88,10 +81,8 @@
 -WebContentsImplBrowserTest.DownloadImage_Deny_FileImage
 -WebContentsImplBrowserTest.LoadingStateChangedForSameDocumentNavigation
 -WebContentsImplBrowserTest.UserAgentOverride
--WorkerFetchTest.WorkerTlsClientAuthFetch/0
--WorkerFetchTest.WorkerTlsClientAuthFetch/1
--WorkerFetchTest.WorkerTlsClientAuthImportScripts/0
--WorkerFetchTest.WorkerTlsClientAuthImportScripts/1
+-WorkerTest.WorkerTlsClientAuthFetch
+-WorkerTest.WorkerTlsClientAuthImportScripts
 
 # content/network/url_loader_impl.cc should handle failure in
 # URLLoaderImpl::OnResponseBodyStreamRead(). Note this is flaky, so it will pass
@@ -108,17 +99,10 @@
 # service process crash.
 -ResourceDispatcherHostBrowserTest.SyncXMLHttpRequest_Cancelled
 
-# http://crbug.com/783981
-# This test should just be removed once we remove
-# WebContentsObserver::DidGetResourceResponseStart.
--WebContentsImplBrowserTest.DidGetResourceResponseStartUpdatesWaitingState
-
 # http://crbug.com/783990
 # Add support for http auth.
--WorkerFetchTest.SharedWorkerHttpAuth/0
--WorkerFetchTest.SharedWorkerHttpAuth/1
--WorkerFetchTest.WorkerHttpAuth/0
--WorkerFetchTest.WorkerHttpAuth/1
+-WorkerTest.SharedWorkerHttpAuth
+-WorkerTest.WorkerHttpAuth
 
 # http://crbug.com/787614
 -ResourceDispatcherHostBrowserTest.ContentDispositionEmpty
@@ -132,3 +116,19 @@
 -ResourceDispatcherHostBrowserTest.RespectNoSniffDirective
 -ResourceDispatcherHostBrowserTest.SniffHTMLWithNoContentType
 -ResourceDispatcherHostBrowserTest.SniffNoContentTypeNoData
+
+# Cross-site document blocking needs to be implemented in the network service.
+# https://crbug.com/786505 (cross site document blocking)
+# https://crbug.com/792546 (cross site document blocking in network service)
+-SiteIsolationStatsGathererBrowserTest.CrossSiteDocumentBlockingForMimeType
+-CrossSiteDocumentBlockingTest.BlockDocuments
+-CrossSiteDocumentBlockingIsolatedOriginTest.BlockDocumentsFromIsolatedOrigin
+-CrossSiteDocumentBlockingTest.RangeRequest
+-CrossSiteDocumentBlockingServiceWorkerTest.NoNetwork
+-CrossSiteDocumentBlockingServiceWorkerTest.NetworkAndOpaqueResponse
+
+# Flakes https://logs.chromium.org/v/?s=chromium%2Fbb%2Fchromium.linux%2FLinux_Tests__dbg__1_%2F69105%2F%2B%2Frecipes%2Fsteps%2Fnetwork_service_content_browsertests%2F0%2Flogs%2FWebContentsImplBrowserTest.DownloadImage_Allow_FileImage%2F0
+-WebContentsImplBrowserTest.DownloadImage_Allow_FileImage
+
+# https://crbug.com/808759
+-DownloadContentTest.DownloadAttributeBlobURL

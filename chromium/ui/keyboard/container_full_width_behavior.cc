@@ -15,12 +15,6 @@ namespace keyboard {
 // The virtual keyboard show/hide animation duration.
 constexpr int kFullWidthKeyboardAnimationDurationMs = 100;
 
-// The opacity of virtual keyboard container when show animation starts or
-// hide animation finishes. This cannot be zero because we call Show() on the
-// keyboard window before setting the opacity back to 1.0. Since windows are not
-// allowed to be shown with zero opacity, we always animate to 0.01 instead.
-constexpr float kAnimationStartOrAfterHideOpacity = 0.01f;
-
 ContainerFullWidthBehavior::ContainerFullWidthBehavior(
     KeyboardController* controller) {
   controller_ = controller;
@@ -99,8 +93,7 @@ bool ContainerFullWidthBehavior::IsDragHandle(
 }
 
 void ContainerFullWidthBehavior::HandlePointerEvent(
-    bool isMouseButtonPressed,
-    const gfx::Vector2d& kb_offset) {
+    const ui::LocatedEvent& event) {
   // No-op. Nothing special to do for pointer events.
 }
 

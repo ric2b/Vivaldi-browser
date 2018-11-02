@@ -16,6 +16,7 @@
 #include "chrome/browser/chromeos/login/demo_mode/demo_mode_detector.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
 #include "chrome/browser/chromeos/login/version_info_updater.h"
+#include "chrome/browser/ui/ash/tablet_mode_client_observer.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_webui_handler.h"
 #include "ui/events/event_source.h"
 
@@ -36,7 +37,8 @@ class OobeUI;
 class CoreOobeHandler : public BaseWebUIHandler,
                         public VersionInfoUpdater::Delegate,
                         public CoreOobeView,
-                        public ui::EventSource {
+                        public ui::EventSource,
+                        public TabletModeClientObserver {
  public:
   explicit CoreOobeHandler(OobeUI* oobe_ui,
                            JSCallsContainer* js_calls_container);
@@ -46,6 +48,9 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
   void Initialize() override;
+
+  // BaseScreenHandler implementation:
+  void GetAdditionalParameters(base::DictionaryValue* dict) override;
 
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
@@ -103,6 +108,9 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void StopDemoModeDetection() override;
   void UpdateKeyboardState() override;
 
+  // TabletModeClientObserver:
+  void OnTabletModeToggled(bool enabled) override;
+
   // Handlers for JS WebUI messages.
   void HandleEnableLargeCursor(bool enabled);
   void HandleEnableHighContrast(bool enabled);
@@ -115,11 +123,13 @@ class CoreOobeHandler : public BaseWebUIHandler,
   void HandleSetDeviceRequisition(const std::string& requisition);
   void HandleScreenAssetsLoaded(const std::string& screen_async_load_id);
   void HandleSkipToLoginForTesting(const base::ListValue* args);
+  void HandleSkipToUpdateForTesting();
   void HandleLaunchHelpApp(double help_topic_id);
   void HandleToggleResetScreen();
   void HandleEnableDebuggingScreen();
   void HandleHeaderBarVisible();
   void HandleSetOobeBootstrappingSlave();
+  void HandleGetPrimaryDisplayNameForTesting(const base::ListValue* args);
 
   // When keyboard_utils.js arrow key down event is reached, raise it
   // to tab/shift-tab event.

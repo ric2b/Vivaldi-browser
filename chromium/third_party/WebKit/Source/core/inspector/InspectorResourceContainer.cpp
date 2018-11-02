@@ -12,7 +12,7 @@ InspectorResourceContainer::InspectorResourceContainer(
     InspectedFrames* inspected_frames)
     : inspected_frames_(inspected_frames) {}
 
-InspectorResourceContainer::~InspectorResourceContainer() {}
+InspectorResourceContainer::~InspectorResourceContainer() = default;
 
 void InspectorResourceContainer::Trace(blink::Visitor* visitor) {
   visitor->Trace(inspected_frames_);
@@ -50,6 +50,10 @@ bool InspectorResourceContainer::LoadStyleElementContent(int backend_node_id,
     return false;
   *content = style_element_contents_.at(backend_node_id);
   return true;
+}
+
+void InspectorResourceContainer::EraseStyleElementContent(int backend_node_id) {
+  style_element_contents_.erase(backend_node_id);
 }
 
 }  // namespace blink

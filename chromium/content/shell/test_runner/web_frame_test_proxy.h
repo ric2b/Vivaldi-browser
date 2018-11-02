@@ -118,9 +118,12 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
 
   void DidCommitProvisionalLoad(
       const blink::WebHistoryItem& item,
-      blink::WebHistoryCommitType commit_type) override {
-    test_client()->DidCommitProvisionalLoad(item, commit_type);
-    Base::DidCommitProvisionalLoad(item, commit_type);
+      blink::WebHistoryCommitType commit_type,
+      blink::WebGlobalObjectReusePolicy global_object_reuse_policy) override {
+    test_client()->DidCommitProvisionalLoad(item, commit_type,
+                                            global_object_reuse_policy);
+    Base::DidCommitProvisionalLoad(item, commit_type,
+                                   global_object_reuse_policy);
   }
 
   void DidReceiveTitle(const blink::WebString& title,
@@ -165,12 +168,9 @@ class WebFrameTestProxy : public Base, public WebFrameTestProxyBase {
     Base::DidChangeSelection(is_selection_empty);
   }
 
-  blink::WebColorChooser* CreateColorChooser(
-      blink::WebColorChooserClient* client,
-      const blink::WebColor& initial_color,
-      const blink::WebVector<blink::WebColorSuggestion>& suggestions) override {
-    return test_client()->CreateColorChooser(client, initial_color,
-                                             suggestions);
+  void DidChangeContents() override {
+    test_client()->DidChangeContents();
+    Base::DidChangeContents();
   }
 
   blink::WebEffectiveConnectionType GetEffectiveConnectionType() override {

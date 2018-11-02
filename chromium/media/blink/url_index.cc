@@ -27,9 +27,10 @@ ResourceMultiBuffer::ResourceMultiBuffer(UrlData* url_data, int block_shift)
 ResourceMultiBuffer::~ResourceMultiBuffer() = default;
 
 std::unique_ptr<MultiBuffer::DataProvider> ResourceMultiBuffer::CreateWriter(
-    const MultiBufferBlockId& pos) {
-  auto writer =
-      base::MakeUnique<ResourceMultiBufferDataProvider>(url_data_, pos);
+    const MultiBufferBlockId& pos,
+    bool is_client_audio_element) {
+  auto writer = std::make_unique<ResourceMultiBufferDataProvider>(
+      url_data_, pos, is_client_audio_element);
   writer->Start();
   return writer;
 }
@@ -50,6 +51,7 @@ UrlData::UrlData(const GURL& url, CORSMode cors_mode, UrlIndex* url_index)
       length_(kPositionNotSpecified),
       range_supported_(false),
       cacheable_(false),
+      has_opaque_data_(false),
       last_used_(),
       multibuffer_(this, url_index_->block_shift_) {}
 
@@ -85,6 +87,9 @@ void UrlData::MergeFrom(const scoped_refptr<UrlData>& other) {
       last_modified_ = other->last_modified_;
     }
     bytes_read_from_cache_ += other->bytes_read_from_cache_;
+    // set_has_opaque_data() will not relax from opaque to non-opaque if already
+    // opaque.
+    set_has_opaque_data(other->has_opaque_data_);
     multibuffer()->MergeFrom(other->multibuffer());
   }
 }
@@ -99,6 +104,12 @@ void UrlData::set_length(int64_t length) {
   if (length != kPositionNotSpecified) {
     length_ = length;
   }
+}
+
+void UrlData::set_has_opaque_data(bool has_opaque_data) {
+  if (has_opaque_data_)
+    return;
+  has_opaque_data_ = has_opaque_data;
 }
 
 void UrlData::RedirectTo(const scoped_refptr<UrlData>& url_data) {

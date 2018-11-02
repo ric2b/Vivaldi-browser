@@ -114,11 +114,16 @@ unit tests.
   NSS certificate nickname for a user certificate. This certificate's Subject
   field doesn't have a common name.
 
-- quic_intermediate.crt
-- quic_test_ecc.example.com.crt
-- quic_test.example.com.crt
-- quic_root.crt
-     These certificates are used by the ProofVerifier's unit tests of QUIC.
+===== From net/data/ssl/scripts/generate-quic-chain.sh
+- quic-chain.pem
+- quic-leaf-cert.key
+- quic-leaf-cert.key.pkcs8.pem
+- quic-root.pem
+     These certificates are used by integration tests that use QUIC.
+
+- quic-leaf-cert.key.sct
+     This isn't generated and just contains a simple text file (the contents
+     don't actually matter, just the presence of the file).
 
 ===== From net/data/ssl/scripts/generate-test-certs.sh
 - expired_cert.pem
@@ -180,11 +185,11 @@ unit tests.
 
 - pre_june_2016.pem
 - post_june_2016.pem
+- dec_2017.pem
    Certs to test that policies related to enforcing CT on Symantec are
-   properly gated on the issuance date. These files also contain legacy
-   Symantec roots to simulate a chain for testing the upcoming Symantec
-   distrust events; see https://g.co/chrome/symantecpkicerts. (Note,
-   however, that the leaf and root do not actually form a chain.)
+   properly gated on the issuance date. See
+   https://g.co/chrome/symantecpkicerts. (Note, however, that the leaf and
+   root do not actually form a chain.)
 
 - tls_feature_extension.pem
   A certificate that contains the TLS Feature Extension.

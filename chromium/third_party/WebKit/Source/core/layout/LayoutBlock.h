@@ -226,8 +226,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   LayoutBox* CreateAnonymousBoxWithSameTypeAs(
       const LayoutObject* parent) const override;
 
-  int ColumnGap() const;
-
   // Accessors for logical width/height and margins in the containing block's
   // block-flow direction.
   LayoutUnit LogicalWidthForChild(const LayoutBox& child) const {
@@ -320,6 +318,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
  protected:
   bool RecalcNormalFlowChildOverflowIfNeeded(LayoutObject*);
   bool RecalcPositionedDescendantsOverflowAfterStyleChange();
+  bool RecalcSelfOverflowAfterStyleChange();
 
  public:
   bool RecalcChildOverflowAfterStyleChange();

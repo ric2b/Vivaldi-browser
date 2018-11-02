@@ -70,11 +70,11 @@ class AutocompleteHistoryManagerTest : public testing::Test {
   AutocompleteHistoryManagerTest() {}
 
   void SetUp() override {
-    web_data_service_ = new MockWebDataService();
-    autofill_client_.reset(new MockAutofillClient(web_data_service_));
-    autofill_driver_.reset(new TestAutofillDriver());
-    autocomplete_manager_.reset(new AutocompleteHistoryManager(
-        autofill_driver_.get(), autofill_client_.get()));
+    web_data_service_ = base::MakeRefCounted<MockWebDataService>();
+    autofill_client_ = std::make_unique<MockAutofillClient>(web_data_service_);
+    autofill_driver_ = std::make_unique<TestAutofillDriver>();
+    autocomplete_manager_ = std::make_unique<AutocompleteHistoryManager>(
+        autofill_driver_.get(), autofill_client_.get());
   }
 
   void TearDown() override { autocomplete_manager_.reset(); }
@@ -195,9 +195,10 @@ class MockAutofillExternalDelegate : public AutofillExternalDelegate {
       : AutofillExternalDelegate(autofill_manager, autofill_driver) {}
   virtual ~MockAutofillExternalDelegate() {}
 
-  MOCK_METHOD2(OnSuggestionsReturned,
+  MOCK_METHOD3(OnSuggestionsReturned,
                void(int query_id,
-                    const std::vector<Suggestion>& suggestions));
+                    const std::vector<Suggestion>& suggestions,
+                    bool is_all_server_suggestions));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockAutofillExternalDelegate);
@@ -223,16 +224,16 @@ TEST_F(AutocompleteHistoryManagerTest, ExternalDelegate) {
   TestAutocompleteHistoryManager autocomplete_history_manager(
       autofill_driver_.get(), autofill_client_.get());
 
-  std::unique_ptr<AutofillManager> autofill_manager(new AutofillManager(
+  auto autofill_manager = std::make_unique<AutofillManager>(
       autofill_driver_.get(), autofill_client_.get(), "en-US",
-      AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER));
+      AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
 
   MockAutofillExternalDelegate external_delegate(autofill_manager.get(),
                                                  autofill_driver_.get());
   autocomplete_history_manager.SetExternalDelegate(&external_delegate);
 
   // Should trigger a call to OnSuggestionsReturned, verified by the mock.
-  EXPECT_CALL(external_delegate, OnSuggestionsReturned(_, _));
+  EXPECT_CALL(external_delegate, OnSuggestionsReturned(_, _, _));
   autocomplete_history_manager.SendSuggestions(nullptr);
 }
 
@@ -241,9 +242,9 @@ TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
   TestAutocompleteHistoryManager autocomplete_history_manager(
       autofill_driver_.get(), autofill_client_.get());
 
-  std::unique_ptr<AutofillManager> autofill_manager(new AutofillManager(
+  auto autofill_manager = std::make_unique<AutofillManager>(
       autofill_driver_.get(), autofill_client_.get(), "en-US",
-      AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER));
+      AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
 
   MockAutofillExternalDelegate external_delegate(autofill_manager.get(),
                                                  autofill_driver_.get());
@@ -257,9 +258,9 @@ TEST_F(AutocompleteHistoryManagerTest, NoAutocompleteSuggestionsForTextarea) {
   FormFieldData field;
   test::CreateTestFormField("Address", "address", "", "textarea", &field);
 
-  EXPECT_CALL(external_delegate,
-              OnSuggestionsReturned(0,
-                                    testing::Truly(IsEmptySuggestionVector)));
+  EXPECT_CALL(
+      external_delegate,
+      OnSuggestionsReturned(0, testing::Truly(IsEmptySuggestionVector), _));
   autocomplete_history_manager.OnGetAutocompleteSuggestions(
       0,
       field.name,

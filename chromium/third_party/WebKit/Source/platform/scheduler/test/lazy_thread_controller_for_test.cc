@@ -14,13 +14,13 @@ namespace scheduler {
 LazyThreadControllerForTest::LazyThreadControllerForTest()
     : ThreadControllerImpl(base::MessageLoop::current(),
                            nullptr,
-                           std::make_unique<base::DefaultTickClock>()),
+                           base::DefaultTickClock::GetInstance()),
       thread_ref_(base::PlatformThread::CurrentRef()) {
   if (message_loop_)
     task_runner_ = message_loop_->task_runner();
 }
 
-LazyThreadControllerForTest::~LazyThreadControllerForTest() {}
+LazyThreadControllerForTest::~LazyThreadControllerForTest() = default;
 
 void LazyThreadControllerForTest::EnsureMessageLoop() {
   if (message_loop_)
@@ -54,7 +54,7 @@ void LazyThreadControllerForTest::AddNestingObserver(
   //       -> LazySchedulerMessageLoopDelegateForTests::AddNestingObserver()
   //   2) Any test framework with a base::MessageLoop member (and not caring
   //      about the blink scheduler) does:
-  //        ThreadTaskRunnerHandle::Get()->PostTask(
+  //        blink::scheduler::GetSingleThreadTaskRunnerForTesting()->PostTask(
   //            FROM_HERE, an_init_task_with_a_nested_loop);
   //        RunLoop.RunUntilIdle();
   //   3) |a_task_with_a_nested_loop| triggers
@@ -88,11 +88,6 @@ void LazyThreadControllerForTest::RemoveNestingObserver(
   base::RunLoop::RemoveNestingObserverOnCurrentThread(observer);
 }
 
-bool LazyThreadControllerForTest::IsNested() {
-  EnsureMessageLoop();
-  return ThreadControllerImpl::IsNested();
-}
-
 bool LazyThreadControllerForTest::RunsTasksInCurrentSequence() {
   return thread_ref_ == base::PlatformThread::CurrentRef();
 }
@@ -110,13 +105,6 @@ void LazyThreadControllerForTest::ScheduleDelayedWork(base::TimeDelta delay) {
 void LazyThreadControllerForTest::CancelDelayedWork() {
   EnsureMessageLoop();
   ThreadControllerImpl::CancelDelayedWork();
-}
-
-void LazyThreadControllerForTest::PostNonNestableTask(
-    const base::Location& from_here,
-    base::OnceClosure task) {
-  EnsureMessageLoop();
-  ThreadControllerImpl::PostNonNestableTask(from_here, std::move(task));
 }
 
 void LazyThreadControllerForTest::SetDefaultTaskRunner(

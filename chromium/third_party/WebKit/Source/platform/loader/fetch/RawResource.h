@@ -24,12 +24,12 @@
 #define RawResource_h
 
 #include <memory>
+
 #include "platform/PlatformExport.h"
 #include "platform/loader/fetch/BufferingDataPipeWriter.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceClient.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
-#include "platform/wtf/WeakPtr.h"
 #include "public/platform/WebDataConsumerHandle.h"
 
 namespace blink {
@@ -41,17 +41,26 @@ class SubstituteData;
 
 class PLATFORM_EXPORT RawResource final : public Resource {
  public:
-  using ClientType = RawResourceClient;
-
   static RawResource* FetchSynchronously(FetchParameters&, ResourceFetcher*);
-  static RawResource* Fetch(FetchParameters&, ResourceFetcher*);
+  static RawResource* Fetch(FetchParameters&,
+                            ResourceFetcher*,
+                            RawResourceClient*);
   static RawResource* FetchMainResource(FetchParameters&,
                                         ResourceFetcher*,
+                                        RawResourceClient*,
                                         const SubstituteData&);
-  static RawResource* FetchImport(FetchParameters&, ResourceFetcher*);
-  static RawResource* FetchMedia(FetchParameters&, ResourceFetcher*);
-  static RawResource* FetchTextTrack(FetchParameters&, ResourceFetcher*);
-  static RawResource* FetchManifest(FetchParameters&, ResourceFetcher*);
+  static RawResource* FetchImport(FetchParameters&,
+                                  ResourceFetcher*,
+                                  RawResourceClient*);
+  static RawResource* FetchMedia(FetchParameters&,
+                                 ResourceFetcher*,
+                                 RawResourceClient*);
+  static RawResource* FetchTextTrack(FetchParameters&,
+                                     ResourceFetcher*,
+                                     RawResourceClient*);
+  static RawResource* FetchManifest(FetchParameters&,
+                                    ResourceFetcher*,
+                                    RawResourceClient*);
 
   // Exposed for testing
   static RawResource* CreateForTest(ResourceRequest request, Type type) {
@@ -65,12 +74,6 @@ class PLATFORM_EXPORT RawResource final : public Resource {
   static RawResource* CreateForTest(const char* url, Type type) {
     return CreateForTest(KURL(url), type);
   }
-
-  // FIXME: AssociatedURLLoader shouldn't be a DocumentThreadableLoader and
-  // therefore shouldn't use RawResource. However, it is, and it needs to be
-  // able to defer loading. This can be fixed by splitting CORS preflighting out
-  // of DocumentThreadableLoader.
-  void SetDefersLoading(bool);
 
   // Resource implementation
   bool CanReuse(const FetchParameters&) const override;
@@ -118,8 +121,9 @@ class PLATFORM_EXPORT RawResource final : public Resource {
 inline bool IsRawResource(const Resource& resource) {
   Resource::Type type = resource.GetType();
   return type == Resource::kMainResource || type == Resource::kRaw ||
-         type == Resource::kTextTrack || type == Resource::kMedia ||
-         type == Resource::kManifest || type == Resource::kImportResource;
+         type == Resource::kTextTrack || type == Resource::kAudio ||
+         type == Resource::kVideo || type == Resource::kManifest ||
+         type == Resource::kImportResource;
 }
 inline RawResource* ToRawResource(Resource* resource) {
   SECURITY_DCHECK(!resource || IsRawResource(*resource));

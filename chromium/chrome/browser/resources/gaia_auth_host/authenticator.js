@@ -336,7 +336,7 @@ cr.define('cr.login', function() {
       url = appendParam(url, 'domain', data.enterpriseEnrollmentDomain);
       url = appendParam(
           url, 'continue',
-          data.gaiaUrl + 'o/oauth2/programmatic_auth?hl=' + data.hl +
+          data.gaiaUrl + 'programmatic_auth_chromeos?hl=' + data.hl +
               '&scope=https%3A%2F%2Fwww.google.com%2Faccounts%2FOAuthLogin&' +
               'client_id=' + encodeURIComponent(data.clientId) +
               '&access_type=offline');
@@ -869,6 +869,13 @@ cr.define('cr.login', function() {
         this.webview_.contentWindow.postMessage(msg, currentUrl);
       else
         console.error('Authenticator: contentWindow is null.');
+
+      if (this.authMode == AuthMode.DEFAULT) {
+        chrome.send('metricsHandler:recordBooleanHistogram', [
+          'ChromeOS.GAIA.AuthenticatorContentWindowNull',
+          !this.webview_.contentWindow
+        ]);
+      }
 
       this.fireReadyEvent_();
       // Focus webview after dispatching event when webview is already visible.

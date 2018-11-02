@@ -4,48 +4,48 @@
 
 #include "chrome/browser/mash_service_registry.h"
 
+#include "ash/public/interfaces/constants.mojom.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "components/font_service/public/interfaces/constants.mojom.h"
 #include "mash/quick_launch/public/interfaces/constants.mojom.h"
 #include "mash/quick_launch/quick_launch.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 
-#if defined(OS_CHROMEOS)
-#include "ash/public/interfaces/constants.mojom.h"  // nogncheck
-#endif                                              // defined(OS_CHROMEOS)
-
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
-#include "components/font_service/public/interfaces/constants.mojom.h"
-#endif  // defined(OS_LINUX) && !defined(OS_ANDROID)
+using content::ContentBrowserClient;
 
 namespace mash_service_registry {
 namespace {
 
 struct Service {
   const char* name;
-  const char* description;
+  const char* display_name;
+  const char* process_group;  // If null, uses a separate process.
 };
 
 constexpr Service kServices[] = {
-    {mash::quick_launch::mojom::kServiceName, "Quick Launch"},
-    {ui::mojom::kServiceName, "UI Service"},
-#if defined(OS_CHROMEOS)
-    {ash::mojom::kServiceName, "Ash Window Manager and Shell"},
-    {"accessibility_autoclick", "Ash Accessibility Autoclick"},
-    {"touch_hud", "Ash Touch Hud"},
-#endif  // defined(OS_CHROMEOS)
-#if defined(OS_LINUX) && !defined(OS_ANDROID)
-    {font_service::mojom::kServiceName, "Font Service"},
-#endif  // defined(OS_LINUX) && !defined(OS_ANDROID)
+    {mash::quick_launch::mojom::kServiceName, "Quick Launch", nullptr},
+    {ui::mojom::kServiceName, "UI Service", kAshAndUiProcessGroup},
+    {ash::mojom::kServiceName, "Ash Window Manager and Shell",
+     kAshAndUiProcessGroup},
+    {"accessibility_autoclick", "Ash Accessibility Autoclick", nullptr},
+    {"touch_hud", "Ash Touch Hud", nullptr},
+    {font_service::mojom::kServiceName, "Font Service", nullptr},
 };
 
 }  // namespace
 
 void RegisterOutOfProcessServices(
-    content::ContentBrowserClient::OutOfProcessServiceMap* services) {
-  for (size_t i = 0; i < arraysize(kServices); ++i) {
-    (*services)[kServices[i].name] =
-        base::ASCIIToUTF16(kServices[i].description);
+    ContentBrowserClient::OutOfProcessServiceMap* services) {
+  for (const auto& service : kServices) {
+    base::string16 display_name = base::ASCIIToUTF16(service.display_name);
+    if (service.process_group) {
+      (*services)[service.name] = ContentBrowserClient::OutOfProcessServiceInfo(
+          display_name, service.process_group);
+    } else {
+      (*services)[service.name] =
+          ContentBrowserClient::OutOfProcessServiceInfo(display_name);
+    }
   }
 }
 
@@ -57,17 +57,22 @@ bool IsMashServiceName(const std::string& name) {
   return false;
 }
 
+std::string GetMashServiceLabel(const std::string& service_name) {
+  for (const Service& service : kServices) {
+    if (service_name == service.name) {
+      // Use the process group name when available because that makes it more
+      // obvious that multiple services are running in the same process.
+      return service.process_group ? service.process_group : service.name;
+    }
+  }
+  return std::string();
+}
+
 bool ShouldTerminateOnServiceQuit(const std::string& name) {
   // Some services going down are treated as catastrophic failures, usually
   // because both the browser and the service cache data about each other's
   // state that is not rebuilt when the service restarts.
-  if (name == ui::mojom::kServiceName)
-    return true;
-#if defined(OS_CHROMEOS)
-  if (name == ash::mojom::kServiceName)
-    return true;
-#endif
-  return false;
+  return name == ui::mojom::kServiceName || name == ash::mojom::kServiceName;
 }
 
 }  // namespace mash_service_registry

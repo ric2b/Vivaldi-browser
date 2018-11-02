@@ -63,6 +63,7 @@ class ASH_EXPORT MirrorWindowController
 
   // aura::WindowTreeHostObserver overrides:
   void OnHostResized(aura::WindowTreeHost* host) override;
+  void OnAcceleratedWidgetOverridden(aura::WindowTreeHost* host) override;
 
   // Returns the display::Display for the mirroring root window.
   display::Display GetDisplayForRootWindow(const aura::Window* root) const;
@@ -102,6 +103,9 @@ class ASH_EXPORT MirrorWindowController
   aura::WindowTreeHost* current_event_targeter_src_host_;
 
   display::DisplayManager::MultiDisplayMode multi_display_mode_;
+
+  // The id of the display being mirrored in the reflector.
+  int64_t reflecting_source_id_ = display::kInvalidDisplayId;
 
   std::unique_ptr<aura::client::ScreenPositionClient> screen_position_client_;
 

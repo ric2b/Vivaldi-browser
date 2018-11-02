@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Giới thiệu về Chromium</translation>
 <translation id="1298199220304005244">Nhận trợ giúp về cách sử dụng Chromium OS</translation>
 <translation id="1396446129537741364">Chromium đang cố gắng hiển thị mật khẩu.</translation>
-<translation id="1403254041219632970">Các phiên bản Chromium trong tương lai sẽ không hỗ trợ Mac OS X 10.6, 10.7 hoặc 10.8 nữa.</translation>
 <translation id="1414495520565016063">Bạn đã đăng nhập vào Chromium!</translation>
-<translation id="1440917365206527807">Chromium đã chặn chuyển hướng từ trang web này đến</translation>
 <translation id="1444754455097148408">Giấy phép nguồn mở Chromium</translation>
 <translation id="1502360822835740515">Đặt Chromium làm trình duyệt mặc định của bạn</translation>
 <translation id="151962892725702025">Chromium OS không thể đồng bộ hóa dữ liệu của bạn vì Đồng bộ hóa không khả dụng với miền của bạn.</translation>
-<translation id="1559451348202814456">Chromium có thể không hoạt động chính xác do không được hỗ trợ trên Mac OS X 10.6, 10.7 hoặc 10.8 nữa.</translation>
 <translation id="1585657529869845941">Hãy nhấp vào nút <ph name="BEGIN_BOLD" />Vẫn chuyển<ph name="END_BOLD" /> khi nút này xuất hiện</translation>
 <translation id="1653828314016431939">OK - Khởi động lại ngay bây giờ</translation>
 <translation id="1668054258064581266">Sau khi xóa tài khoản khỏi Chromium, bạn có thể cần tải lại các tab đang mở của mình để tác vụ có hiệu lực.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Chromium OS cần được khởi động lại để áp dụng bản cập nhật.</translation>
 <translation id="2647554856022461007">Chromium có thể sử dụng dịch vụ web để cải thiện trải nghiệm duyệt web của bạn. Bạn có thể tùy ý vô hiệu hóa các dịch vụ này. <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Đã xảy ra lỗi hệ điều hành khi cài đặt. Hãy tải xuống Chromium lại lần nữa.</translation>
-<translation id="2685838254101182273">Chromium đã ngừng cập nhật và không còn hỗ trợ phiên bản hệ điều hành này của bạn.</translation>
 <translation id="2705403826523567092">Hãy đăng nhập để có trải nghiệm duyệt web tùy chỉnh theo cá nhân, được đồng bộ hóa giữa các thiết bị</translation>
 <translation id="2711502716910134313">Tab Chromium</translation>
 <translation id="2718390899429598676">Để bảo mật hơn, Chromium sẽ mã hóa dữ liệu của bạn.</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">Vui lòng đăng xuất và đăng nhập lại để thay đổi này có hiệu lực.</translation>
 <translation id="4469812139324097969">Chromium đã lỗi thời vì ứng dụng này chưa được chạy lại trong một thời gian. Đã có bản cập nhật và bản cập nhật này sẽ được áp dụng ngay khi bạn chạy lại.</translation>
 <translation id="4488554488975128561">Bạn có thể giúp Chromium an toàn và dễ sử dụng hơn bằng cách tự động gửi một số thông tin hệ thống và nội dung trang cho Google để giúp phát hiện các ứng dụng và trang web nguy hiểm.</translation>
-<translation id="4549794359424059447">Các phiên bản Chromium trong tương lai sẽ không hỗ trợ Windows XP hoặc Windows Vista nữa.</translation>
 <translation id="4567424176335768812">Bạn đã đăng nhập với tên <ph name="USER_EMAIL_ADDRESS" />. Bây giờ, bạn có thể truy cập dấu trang, lịch sử và các cài đặt khác trên tất cả những thiết bị đã đăng nhập của bạn.</translation>
 <translation id="459535195905078186">Ứng dụng Chromium</translation>
 <translation id="4611246891205775468">Chromium cần có quyền truy cập micrô của bạn cho trang web này.</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">Lỗi chứng chỉ xác thực. Vui lòng đăng nhập lại vào Chromium hoặc liên hệ với quản trị viên của bạn để biết thêm thông tin. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Gần được cập nhật! Hãy khởi động lại thiết bị của bạn để hoàn tất cập nhật.</translation>
 <translation id="5942520288919337908">Đã thêm <ph name="EXTENSION_NAME" /> vào  Chromium.</translation>
-<translation id="59625444380784159">Chi tiết từ danh bạ của bạn có thể giúp bạn điền vào biểu mẫu trong Chromium nhanh hơn.</translation>
 <translation id="5987687638152509985">Cập nhật Chromium để bắt đầu đồng bộ hóa</translation>
 <translation id="6055895534982063517">Hiện đã có phiên bản Chromium mới và phiên bản này nhanh hơn bao giờ hết.</translation>
 <translation id="6063093106622310249">&amp;Mở trong Chromium</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">Giờ đây, việc sử dụng Chromium bằng tài khoản Google của bạn và trên máy tính dùng chung trở nên dễ dàng hơn.</translation>
 <translation id="6373523479360886564">Bạn có chắc chắn muốn gỡ cài đặt Chromium không?</translation>
 <translation id="6394232988457703198">Bạn phải khởi động lại Chromium ngay bây giờ.</translation>
+<translation id="6400072781405947421">Chromium có thể không hoạt động chính xác do không còn được hỗ trợ trên Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium là trình duyệt web chạy các trang web và ứng dụng với tốc độ cực nhanh. Đây là một trình duyệt web nhanh, ổn định và dễ sử dụng. Duyệt web trở nên an toàn hơn với tính năng bảo vệ chống lại phần mềm độc hại và lừa đảo được tích hợp sẵn vào Chromium.</translation>
 <translation id="6475912303565314141">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn khởi động Chromium.</translation>
 <translation id="6485906693002546646">Bạn đang sử dụng <ph name="PROFILE_EMAIL" /> để đồng bộ hóa nội dung Chromium của mình. Để cập nhật tùy chọn đồng bộ hóa hoặc sử dụng Chromium mà không cần tài khoản Google, hãy truy cập <ph name="SETTINGS_LINK" />.</translation>
@@ -174,13 +169,13 @@ Một số tính năng có thể không khả dụng. Hãy chỉ định thư m�
 <translation id="6734291798041940871">Chromium đã được cài đặt cho tất cả người dùng trên máy tính của bạn.</translation>
 <translation id="6810143991807788455">Giúp cải thiện Chromium bằng cách báo cáo cài đặt hiện tại</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (đã sao chép vào Chromium)</translation>
 <translation id="6893813176749746474">Chromium đã được cập nhật nhưng bạn đã không sử dụng trình duyệt này trong ít nhất 30 ngày.</translation>
 <translation id="6944967875980567883">Mô-đun được tải vào Chromium</translation>
 <translation id="6964305034639999644">Mở liên kết trong cửa sổ ẩn danh của Chromium</translation>
 <translation id="6970811910055250180">Đang cập nhật thiết bị của bạn...</translation>
 <translation id="705851970750939768">Cập nhật Chromium</translation>
 <translation id="7066436765290594559">Chromium OS không thể đồng bộ hóa dữ liệu của bạn. Vui lòng cập nhật cụm mật khẩu Đồng bộ hóa của bạn.</translation>
-<translation id="707471633328071618">Google Payments (đã sao chép vào Chromium)</translation>
 <translation id="7162152143154757523">Chromium có thể cung cấp tính năng kiểm tra chính tả thông minh hơn bằng cách gửi những gì bạn nhập vào trình duyệt tới máy chủ Google, cho phép bạn sử dụng cùng một công nghệ kiểm tra chính tả mà tìm kiếm của Google sử dụng.</translation>
 <translation id="7205698830395646142">Ẩn trong menu Chromium</translation>
 <translation id="7223968959479464213">Trình quản lý tác vụ - Chromium</translation>
@@ -240,7 +235,6 @@ Vui lòng xem email của bạn tại <ph name="ACCOUNT_EMAIL" /> để được
 <translation id="872034308864968620">Cho phép Chromium chạy dưới nền</translation>
 <translation id="8803635938069941624">Điều khoản Chromium OS</translation>
 <translation id="8821041990367117597">Chromium không thể đồng bộ hóa dữ liệu của bạn vì chi tiết đăng nhập tài khoản của bạn đã cũ.</translation>
-<translation id="8851136666856101339">chính</translation>
 <translation id="8862326446509486874">Bạn không có quyền thích hợp để cài đặt cấp hệ thống. Thử chạy lại trình cài đặt với vai trò Quản trị viên.</translation>
 <translation id="8897323336392112261">Tiện ích này cũng điều khiển trang nào được hiển thị khi bạn khởi động Chromium hoặc nhấp vào nút Trang chủ.</translation>
 <translation id="8907580949721785412">Chromium đang cố gắng hiển thị mật khẩu. Nhập mật khẩu Windows của bạn để cho phép thực hiện việc này.</translation>

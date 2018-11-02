@@ -64,7 +64,7 @@ void DecodeSearchTermsFromJsonResponse(const std::string& response,
   JSONStringValueDeserializer deserializer(proper_json);
   std::unique_ptr<base::Value> root(deserializer.Deserialize(NULL, NULL));
 
-  if (root.get() != NULL && root->IsType(base::Value::Type::DICTIONARY)) {
+  if (root.get() != NULL && root->is_dict()) {
     base::DictionaryValue* dict =
         static_cast<base::DictionaryValue*>(root.get());
     dict->GetString(kContextualSearchPreventPreload, prevent_preload);
@@ -176,12 +176,13 @@ void ContextualSearchDelegate::RequestServerSearchTerm() {
 
   // Add Chrome experiment state to the request headers.
   net::HttpRequestHeaders headers;
-  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
-  // not affect transmission of experiments coming from the variations server.
-  bool is_signed_in = false;
+  // Note: It's OK to pass SignedIn::kNo if it's unknown, as it does not affect
+  // transmission of experiments coming from the variations server.
   variations::AppendVariationHeaders(search_term_fetcher_->GetOriginalURL(),
-                                     browser_state_->IsOffTheRecord(), false,
-                                     is_signed_in, &headers);
+                                     browser_state_->IsOffTheRecord()
+                                         ? variations::InIncognito::kYes
+                                         : variations::InIncognito::kNo,
+                                     variations::SignedIn::kNo, &headers);
   search_term_fetcher_->SetExtraRequestHeaders(headers.ToString());
 
   SetDiscourseContextAndAddToHeader(*context_);

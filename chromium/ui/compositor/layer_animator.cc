@@ -39,7 +39,7 @@ namespace ui {
 
 namespace {
 
-const int kDefaultTransitionDurationMs = 120;
+const int kLayerAnimatorDefaultTransitionDurationMs = 120;
 
 }  // namespace
 
@@ -76,8 +76,8 @@ LayerAnimator* LayerAnimator::CreateDefaultAnimator() {
 
 // static
 LayerAnimator* LayerAnimator::CreateImplicitAnimator() {
-  return new LayerAnimator(
-      base::TimeDelta::FromMilliseconds(kDefaultTransitionDurationMs));
+  return new LayerAnimator(base::TimeDelta::FromMilliseconds(
+      kLayerAnimatorDefaultTransitionDurationMs));
 }
 
 // This macro provides the implementation for the setter and getter (well,
@@ -116,7 +116,6 @@ ANIMATED_PROPERTY(bool, VISIBILITY, Visibility, bool, visibility);
 ANIMATED_PROPERTY(float, BRIGHTNESS, Brightness, float, brightness);
 ANIMATED_PROPERTY(float, GRAYSCALE, Grayscale, float, grayscale);
 ANIMATED_PROPERTY(SkColor, COLOR, Color, SkColor, color);
-ANIMATED_PROPERTY(float, TEMPERATURE, Temperature, float, temperature);
 
 base::TimeDelta LayerAnimator::GetTransitionDuration() const {
   return transition_duration_;

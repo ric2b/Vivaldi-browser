@@ -6,6 +6,7 @@
 
 #include <string.h>
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -13,9 +14,8 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -27,6 +27,8 @@
 #include "content/renderer/media/rtc_certificate.h"
 #include "content/renderer/media/rtc_data_channel_handler.h"
 #include "content/renderer/media/rtc_dtmf_sender_handler.h"
+#include "content/renderer/media/rtc_event_log_output_sink.h"
+#include "content/renderer/media/rtc_event_log_output_sink_proxy.h"
 #include "content/renderer/media/webrtc/peer_connection_dependency_factory.h"
 #include "content/renderer/media/webrtc/rtc_stats.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter.h"
@@ -48,6 +50,7 @@
 #include "third_party/WebKit/public/platform/WebRTCSessionDescriptionRequest.h"
 #include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/webrtc/api/rtceventlogoutput.h"
 #include "third_party/webrtc/pc/mediasession.h"
 
 using webrtc::DataChannelInterface;
@@ -285,6 +288,20 @@ void GetNativeRtcConfiguration(
     case blink::WebRTCRtcpMuxPolicy::kRequire:
       webrtc_config->rtcp_mux_policy =
           webrtc::PeerConnectionInterface::kRtcpMuxPolicyRequire;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  switch (blink_config.sdp_semantics) {
+    case blink::WebRTCSdpSemantics::kDefault:
+      webrtc_config->sdp_semantics = webrtc::SdpSemantics::kDefault;
+      break;
+    case blink::WebRTCSdpSemantics::kPlanB:
+      webrtc_config->sdp_semantics = webrtc::SdpSemantics::kPlanB;
+      break;
+    case blink::WebRTCSdpSemantics::kUnifiedPlan:
+      webrtc_config->sdp_semantics = webrtc::SdpSemantics::kUnifiedPlan;
       break;
     default:
       NOTREACHED();
@@ -535,9 +552,9 @@ WebRTCLegacyStatsMemberTypeFromStatsValueType(
 // GetStats into a blink::WebRTCStatsCallback.
 class StatsResponse : public webrtc::StatsObserver {
  public:
-  explicit StatsResponse(const scoped_refptr<LocalRTCStatsRequest>& request)
-      : request_(request.get()),
-        main_thread_(base::ThreadTaskRunnerHandle::Get()) {
+  StatsResponse(const scoped_refptr<LocalRTCStatsRequest>& request,
+                scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : request_(request.get()), main_thread_(task_runner) {
     // Measure the overall time it takes to satisfy a getStats request.
     TRACE_EVENT_ASYNC_BEGIN0("webrtc", "getStats_Native", this);
     signaling_thread_checker_.DetachFromThread();
@@ -815,28 +832,28 @@ class PeerConnectionUMAObserver : public webrtc::UMAObserver {
       int counter) override {
     switch (counter_type) {
       case webrtc::kEnumCounterAudioSrtpCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
-            "WebRTC.PeerConnection.SrtpCryptoSuite.Audio", counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SrtpCryptoSuite.Audio",
+                                 counter);
         break;
       case webrtc::kEnumCounterAudioSslCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
-            "WebRTC.PeerConnection.SslCipherSuite.Audio", counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SslCipherSuite.Audio",
+                                 counter);
         break;
       case webrtc::kEnumCounterVideoSrtpCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
-            "WebRTC.PeerConnection.SrtpCryptoSuite.Video", counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SrtpCryptoSuite.Video",
+                                 counter);
         break;
       case webrtc::kEnumCounterVideoSslCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
-            "WebRTC.PeerConnection.SslCipherSuite.Video", counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SslCipherSuite.Video",
+                                 counter);
         break;
       case webrtc::kEnumCounterDataSrtpCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
-            "WebRTC.PeerConnection.SrtpCryptoSuite.Data", counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SrtpCryptoSuite.Data",
+                                 counter);
         break;
       case webrtc::kEnumCounterDataSslCipher:
-        UMA_HISTOGRAM_SPARSE_SLOWLY("WebRTC.PeerConnection.SslCipherSuite.Data",
-                                    counter);
+        base::UmaHistogramSparse("WebRTC.PeerConnection.SslCipherSuite.Data",
+                                 counter);
         break;
       default:
         // The default clause is expected to reach when new enum types are
@@ -980,9 +997,10 @@ class RTCPeerConnectionHandler::WebRtcSetRemoteDescriptionObserverImpl
   WebRtcSetRemoteDescriptionObserverImpl(
       base::WeakPtr<RTCPeerConnectionHandler> handler,
       blink::WebRTCVoidRequest web_request,
-      base::WeakPtr<PeerConnectionTracker> tracker)
+      base::WeakPtr<PeerConnectionTracker> tracker,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner)
       : handler_(handler),
-        main_thread_(base::ThreadTaskRunnerHandle::Get()),
+        main_thread_(task_runner),
         web_request_(web_request),
         tracker_(tracker) {}
 
@@ -1098,17 +1116,26 @@ class RTCPeerConnectionHandler::WebRtcSetRemoteDescriptionObserverImpl
     // associated with multiple tracks (multiple receivers).
     for (auto& receiver_state : states.receiver_states) {
       for (auto& stream_ref : receiver_state.stream_refs) {
+        CHECK(!stream_ref->adapter().web_stream().IsNull());
+        CHECK(stream_ref->adapter().webrtc_stream());
         auto* stream_state =
             GetOrAddStreamStateForStream(*stream_ref, &stream_states);
-        stream_state->track_refs.push_back(receiver_state.track_ref->Copy());
+        auto track_ref = receiver_state.track_ref->Copy();
+        CHECK(!track_ref->web_track().IsNull());
+        CHECK(track_ref->webrtc_track());
+        stream_state->track_refs.push_back(std::move(track_ref));
       }
     }
     // The track of removed receivers do not belong to any stream. Make sure we
     // have a stream state for any streams belonging to receivers about to be
     // removed in case it was the last receiver referencing that stream.
-    for (auto* removed_receiver : removed_receivers)
-      for (auto& stream_ref : removed_receiver->StreamAdapterRefs())
+    for (auto* removed_receiver : removed_receivers) {
+      for (auto& stream_ref : removed_receiver->StreamAdapterRefs()) {
+        CHECK(!stream_ref->adapter().web_stream().IsNull());
+        CHECK(stream_ref->adapter().webrtc_stream());
         GetOrAddStreamStateForStream(*stream_ref, &stream_states);
+      }
+    }
     return stream_states;
   }
 
@@ -1140,14 +1167,29 @@ class RTCPeerConnectionHandler::WebRtcSetRemoteDescriptionObserverImpl
 // delivering callbacks on the main thread.
 class RTCPeerConnectionHandler::Observer
     : public base::RefCountedThreadSafe<RTCPeerConnectionHandler::Observer>,
-      public PeerConnectionObserver {
+      public PeerConnectionObserver,
+      public RtcEventLogOutputSink {
  public:
-  Observer(const base::WeakPtr<RTCPeerConnectionHandler>& handler)
-      : handler_(handler), main_thread_(base::ThreadTaskRunnerHandle::Get()) {}
+  Observer(const base::WeakPtr<RTCPeerConnectionHandler>& handler,
+           scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+      : handler_(handler), main_thread_(task_runner) {}
+
+  // When an RTC event log is sent back from PeerConnection, it arrives here.
+  void OnWebRtcEventLogWrite(const std::string& output) override {
+    if (!main_thread_->BelongsToCurrentThread()) {
+      main_thread_->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &RTCPeerConnectionHandler::Observer::OnWebRtcEventLogWrite, this,
+              output));
+    } else if (handler_) {
+      handler_->OnWebRtcEventLogWrite(output);
+    }
+  }
 
  protected:
   friend class base::RefCountedThreadSafe<RTCPeerConnectionHandler::Observer>;
-  virtual ~Observer() {}
+  ~Observer() override = default;
 
   void OnSignalingChange(
       PeerConnectionInterface::SignalingState new_state) override {
@@ -1251,14 +1293,19 @@ class RTCPeerConnectionHandler::Observer
 
 RTCPeerConnectionHandler::RTCPeerConnectionHandler(
     blink::WebRTCPeerConnectionHandlerClient* client,
-    PeerConnectionDependencyFactory* dependency_factory)
-    : client_(client),
+    PeerConnectionDependencyFactory* dependency_factory,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    : initialize_called_(false),
+      client_(client),
       is_closed_(false),
       dependency_factory_(dependency_factory),
       track_adapter_map_(
-          new WebRtcMediaStreamTrackAdapterMap(dependency_factory_)),
+          new WebRtcMediaStreamTrackAdapterMap(dependency_factory_,
+                                               task_runner)),
       stream_adapter_map_(new WebRtcMediaStreamAdapterMap(dependency_factory_,
+                                                          task_runner,
                                                           track_adapter_map_)),
+      task_runner_(std::move(task_runner)),
       weak_factory_(this) {
   CHECK(client_);
   GetPeerConnectionHandlers()->insert(this);
@@ -1277,16 +1324,6 @@ RTCPeerConnectionHandler::~RTCPeerConnectionHandler() {
       "WebRTC.NumDataChannelsPerPeerConnection", num_data_channels_created_);
 }
 
-// static
-void RTCPeerConnectionHandler::DestructAllHandlers() {
-  // Copy g_peer_connection_handlers since releasePeerConnectionHandler will
-  // remove an item.
-  std::set<RTCPeerConnectionHandler*> handlers(
-      GetPeerConnectionHandlers()->begin(), GetPeerConnectionHandlers()->end());
-  for (auto* handler : handlers)
-    handler->client_->ReleasePeerConnectionHandler();
-}
-
 void RTCPeerConnectionHandler::associateWithFrame(blink::WebLocalFrame* frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(frame);
@@ -1298,6 +1335,9 @@ bool RTCPeerConnectionHandler::Initialize(
     const blink::WebMediaConstraints& options) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(frame_);
+
+  CHECK(!initialize_called_);
+  initialize_called_ = true;
 
   peer_connection_tracker_ =
       RenderThreadImpl::current()->peer_connection_tracker()->AsWeakPtr();
@@ -1313,7 +1353,8 @@ bool RTCPeerConnectionHandler::Initialize(
   // Copy all the relevant constraints into |config|.
   CopyConstraintsIntoRtcConfiguration(options, &configuration_);
 
-  peer_connection_observer_ = new Observer(weak_factory_.GetWeakPtr());
+  peer_connection_observer_ =
+      new Observer(weak_factory_.GetWeakPtr(), task_runner_);
   native_peer_connection_ = dependency_factory_->CreatePeerConnection(
       configuration_, frame_, peer_connection_observer_.get());
 
@@ -1337,9 +1378,14 @@ bool RTCPeerConnectionHandler::InitializeForTest(
     const blink::WebMediaConstraints& options,
     const base::WeakPtr<PeerConnectionTracker>& peer_connection_tracker) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  CHECK(!initialize_called_);
+  initialize_called_ = true;
+
   GetNativeRtcConfiguration(server_configuration, &configuration_);
 
-  peer_connection_observer_ = new Observer(weak_factory_.GetWeakPtr());
+  peer_connection_observer_ =
+      new Observer(weak_factory_.GetWeakPtr(), task_runner_);
   CopyConstraintsIntoRtcConfiguration(options, &configuration_);
 
   native_peer_connection_ = dependency_factory_->CreatePeerConnection(
@@ -1360,8 +1406,8 @@ void RTCPeerConnectionHandler::CreateOffer(
 
   scoped_refptr<CreateSessionDescriptionRequest> description_request(
       new rtc::RefCountedObject<CreateSessionDescriptionRequest>(
-          base::ThreadTaskRunnerHandle::Get(), request,
-          weak_factory_.GetWeakPtr(), peer_connection_tracker_,
+          task_runner_, request, weak_factory_.GetWeakPtr(),
+          peer_connection_tracker_,
           PeerConnectionTracker::ACTION_CREATE_OFFER));
 
   // TODO(tommi): Do this asynchronously via e.g. PostTaskAndReply.
@@ -1382,8 +1428,8 @@ void RTCPeerConnectionHandler::CreateOffer(
 
   scoped_refptr<CreateSessionDescriptionRequest> description_request(
       new rtc::RefCountedObject<CreateSessionDescriptionRequest>(
-          base::ThreadTaskRunnerHandle::Get(), request,
-          weak_factory_.GetWeakPtr(), peer_connection_tracker_,
+          task_runner_, request, weak_factory_.GetWeakPtr(),
+          peer_connection_tracker_,
           PeerConnectionTracker::ACTION_CREATE_OFFER));
 
   // TODO(tommi): Do this asynchronously via e.g. PostTaskAndReply.
@@ -1403,8 +1449,8 @@ void RTCPeerConnectionHandler::CreateAnswer(
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::createAnswer");
   scoped_refptr<CreateSessionDescriptionRequest> description_request(
       new rtc::RefCountedObject<CreateSessionDescriptionRequest>(
-          base::ThreadTaskRunnerHandle::Get(), request,
-          weak_factory_.GetWeakPtr(), peer_connection_tracker_,
+          task_runner_, request, weak_factory_.GetWeakPtr(),
+          peer_connection_tracker_,
           PeerConnectionTracker::ACTION_CREATE_ANSWER));
   webrtc::PeerConnectionInterface::RTCOfferAnswerOptions webrtc_options;
   ConvertConstraintsToWebrtcOfferOptions(options, &webrtc_options);
@@ -1423,8 +1469,8 @@ void RTCPeerConnectionHandler::CreateAnswer(
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::createAnswer");
   scoped_refptr<CreateSessionDescriptionRequest> description_request(
       new rtc::RefCountedObject<CreateSessionDescriptionRequest>(
-          base::ThreadTaskRunnerHandle::Get(), request,
-          weak_factory_.GetWeakPtr(), peer_connection_tracker_,
+          task_runner_, request, weak_factory_.GetWeakPtr(),
+          peer_connection_tracker_,
           PeerConnectionTracker::ACTION_CREATE_ANSWER));
   // TODO(tommi): Do this asynchronously via e.g. PostTaskAndReply.
   webrtc::PeerConnectionInterface::RTCOfferAnswerOptions webrtc_options;
@@ -1486,8 +1532,8 @@ void RTCPeerConnectionHandler::SetLocalDescription(
 
   scoped_refptr<SetLocalDescriptionRequest> set_request(
       new rtc::RefCountedObject<SetLocalDescriptionRequest>(
-          base::ThreadTaskRunnerHandle::Get(), request,
-          weak_factory_.GetWeakPtr(), peer_connection_tracker_,
+          task_runner_, request, weak_factory_.GetWeakPtr(),
+          peer_connection_tracker_,
           PeerConnectionTracker::ACTION_SET_LOCAL_DESCRIPTION));
 
   signaling_thread()->PostTask(
@@ -1545,13 +1591,13 @@ void RTCPeerConnectionHandler::SetRemoteDescription(
 
   scoped_refptr<WebRtcSetRemoteDescriptionObserverImpl> content_observer(
       new WebRtcSetRemoteDescriptionObserverImpl(
-          weak_factory_.GetWeakPtr(), request, peer_connection_tracker_));
+          weak_factory_.GetWeakPtr(), request, peer_connection_tracker_,
+          task_runner_));
 
   rtc::scoped_refptr<webrtc::SetRemoteDescriptionObserverInterface>
       webrtc_observer(WebRtcSetRemoteDescriptionObserverHandler::Create(
-                          base::ThreadTaskRunnerHandle::Get(),
-                          native_peer_connection_, stream_adapter_map_,
-                          content_observer)
+                          task_runner_, native_peer_connection_,
+                          stream_adapter_map_, content_observer)
                           .get());
 
   signaling_thread()->PostTask(
@@ -1639,7 +1685,7 @@ bool RTCPeerConnectionHandler::AddICECandidate(
   // TODO(tommi): Instead of calling addICECandidate here, we can do a
   // PostTaskAndReply kind of a thing.
   bool result = AddICECandidate(std::move(candidate));
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(&RTCPeerConnectionHandler::OnaddICECandidateResult,
                      weak_factory_.GetWeakPtr(), request, result));
@@ -1771,9 +1817,8 @@ void RTCPeerConnectionHandler::getStats(
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::getStats");
 
-
   rtc::scoped_refptr<webrtc::StatsObserver> observer(
-      new rtc::RefCountedObject<StatsResponse>(request));
+      new rtc::RefCountedObject<StatsResponse>(request, task_runner_));
 
   std::string track_id;
   blink::WebMediaStreamSource::Type track_type =
@@ -1808,8 +1853,7 @@ void RTCPeerConnectionHandler::GetStats(
   DCHECK(thread_checker_.CalledOnValidThread());
   signaling_thread()->PostTask(
       FROM_HERE,
-      base::BindOnce(&GetRTCStatsOnSignalingThread,
-                     base::ThreadTaskRunnerHandle::Get(),
+      base::BindOnce(&GetRTCStatsOnSignalingThread, task_runner_,
                      native_peer_connection_, base::Passed(&callback)));
 }
 
@@ -1833,11 +1877,13 @@ RTCPeerConnectionHandler::GetSenders() {
         track_adapter = track_adapter_map_->GetLocalTrackAdapter(webrtc_track);
         DCHECK(track_adapter);
       }
-      it = rtp_senders_
-               .insert(std::make_pair(
-                   id, std::make_unique<RTCRtpSender>(
-                           webrtc_senders[i].get(), std::move(track_adapter))))
-               .first;
+      it =
+          rtp_senders_
+              .insert(std::make_pair(
+                  id, std::make_unique<RTCRtpSender>(
+                          task_runner_, signaling_thread(), stream_adapter_map_,
+                          webrtc_senders[i].get(), std::move(track_adapter))))
+              .first;
     }
     web_senders[i] = it->second->ShallowCopy();
   }
@@ -1889,24 +1935,22 @@ std::unique_ptr<blink::WebRTCRtpSender> RTCPeerConnectionHandler::AddTrack(
   auto it = rtp_senders_
                 .insert(std::make_pair(
                     webrtc_sender_id,
-                    std::make_unique<RTCRtpSender>(std::move(webrtc_sender),
-                                                   std::move(track_adapter),
-                                                   std::move(stream_adapters))))
+                    std::make_unique<RTCRtpSender>(
+                        task_runner_, signaling_thread(), stream_adapter_map_,
+                        std::move(webrtc_sender), std::move(track_adapter),
+                        std::move(stream_adapters))))
                 .first;
   return it->second->ShallowCopy();
 }
 
 bool RTCPeerConnectionHandler::RemoveTrack(blink::WebRTCRtpSender* web_sender) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  RTCRtpSender* sender = static_cast<RTCRtpSender*>(web_sender);
-  if (!native_peer_connection_->RemoveTrack(sender->webrtc_rtp_sender())) {
+  auto it = rtp_senders_.find(web_sender->Id());
+  if (it == rtp_senders_.end())
     return false;
-  }
-  sender->OnRemoved();
-  // Make sure |rtp_senders_| is up-to-date. When |AddStream| and |RemoveStream|
-  // is implemented using |AddTrack| and |RemoveTrack|, add and remove
-  // |rtp_senders_| there. https://crbug.com/738929
-  GetSenders();
+  if (!it->second->RemoveFromPeerConnection(native_peer_connection_.get()))
+    return false;
+  rtp_senders_.erase(it);
   return true;
 }
 
@@ -1920,13 +1964,35 @@ void RTCPeerConnectionHandler::StartEventLog(IPC::PlatformFileForTransit file,
                                              int64_t max_file_size_bytes) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(file != IPC::InvalidPlatformFileForTransit());
+  // TODO(eladalon): StartRtcEventLog() return value is not useful; remove it
+  // or find a way to be able to use it.
+  // https://crbug.com/775415
   native_peer_connection_->StartRtcEventLog(
       IPC::PlatformFileForTransitToPlatformFile(file), max_file_size_bytes);
+}
+
+void RTCPeerConnectionHandler::StartEventLog() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  // TODO(eladalon): StartRtcEventLog() return value is not useful; remove it
+  // or find a way to be able to use it.
+  // https://crbug.com/775415
+  native_peer_connection_->StartRtcEventLog(
+      std::make_unique<RtcEventLogOutputSinkProxy>(
+          peer_connection_observer_.get()),
+      webrtc::RtcEventLog::kImmediateOutput);
 }
 
 void RTCPeerConnectionHandler::StopEventLog() {
   DCHECK(thread_checker_.CalledOnValidThread());
   native_peer_connection_->StopRtcEventLog();
+}
+
+void RTCPeerConnectionHandler::OnWebRtcEventLogWrite(
+    const std::string& output) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (peer_connection_tracker_) {
+    peer_connection_tracker_->TrackRtcEventLogWrite(this, output);
+  }
 }
 
 blink::WebRTCDataChannelHandler* RTCPeerConnectionHandler::CreateDataChannel(
@@ -1960,8 +2026,7 @@ blink::WebRTCDataChannelHandler* RTCPeerConnectionHandler::CreateDataChannel(
 
   ++num_data_channels_created_;
 
-  return new RtcDataChannelHandler(base::ThreadTaskRunnerHandle::Get(),
-                                   webrtc_channel);
+  return new RtcDataChannelHandler(task_runner_, webrtc_channel);
 }
 
 blink::WebRTCDTMFSenderHandler* RTCPeerConnectionHandler::CreateDTMFSender(
@@ -2150,14 +2215,17 @@ void RTCPeerConnectionHandler::OnRemoveRemoteTrack(
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("webrtc", "RTCPeerConnectionHandler::OnRemoveRemoteTrack");
 
-  uintptr_t receiver_id = RTCRtpReceiver::getId(webrtc_receiver.get());
-  auto it = rtp_receivers_.find(receiver_id);
-  DCHECK(it != rtp_receivers_.end());
   std::vector<std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>>
-      remote_stream_adapter_refs = it->second->StreamAdapterRefs();
-  if (!is_closed_)
-    client_->DidRemoveRemoteTrack(it->second->ShallowCopy());
-  rtp_receivers_.erase(it);
+      remote_stream_adapter_refs;
+  {
+    uintptr_t receiver_id = RTCRtpReceiver::getId(webrtc_receiver.get());
+    auto it = rtp_receivers_.find(receiver_id);
+    DCHECK(it != rtp_receivers_.end());
+    remote_stream_adapter_refs = it->second->StreamAdapterRefs();
+    if (!is_closed_)
+      client_->DidRemoveRemoteTrack(it->second->ShallowCopy());
+    rtp_receivers_.erase(it);
+  }
 
   for (const auto& remote_stream_adapter_ref : remote_stream_adapter_refs) {
     // Was this the last usage of the remote stream?

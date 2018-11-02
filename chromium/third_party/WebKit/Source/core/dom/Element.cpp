@@ -51,6 +51,7 @@
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attr.h"
+#include "core/dom/ComputedAccessibleNode.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/DatasetDOMStringMap.h"
 #include "core/dom/Document.h"
@@ -101,7 +102,6 @@
 #include "core/fullscreen/Fullscreen.h"
 #include "core/geometry/DOMRect.h"
 #include "core/geometry/DOMRectList.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLElement.h"
@@ -111,6 +111,7 @@
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTemplateElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/html/custom/CustomElement.h"
 #include "core/html/custom/CustomElementRegistry.h"
 #include "core/html/custom/V0CustomElement.h"
@@ -122,8 +123,7 @@
 #include "core/intersection_observer/ElementIntersectionObserverData.h"
 #include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutTextFragment.h"
-#include "core/layout/api/LayoutBoxItem.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
@@ -155,6 +155,7 @@
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/TextPosition.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 
 namespace blink {
 
@@ -529,8 +530,8 @@ void Element::scrollIntoViewWithOptions(const ScrollIntoViewOptions& options) {
       ToPhysicalAlignment(options, kVerticalScroll, is_horizontal_writing_mode);
 
   LayoutRect bounds = BoundingBox();
-  GetLayoutObject()->ScrollRectToVisible(bounds, align_x, align_y,
-                                         kProgrammaticScroll, false, behavior);
+  GetLayoutObject()->ScrollRectToVisible(
+      bounds, {align_x, align_y, kProgrammaticScroll, false, behavior});
 
   GetDocument().SetSequentialFocusNavigationStartingPoint(this);
 }
@@ -544,12 +545,14 @@ void Element::scrollIntoViewIfNeeded(bool center_if_needed) {
   LayoutRect bounds = BoundingBox();
   if (center_if_needed) {
     GetLayoutObject()->ScrollRectToVisible(
-        bounds, ScrollAlignment::kAlignCenterIfNeeded,
-        ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll, false);
+        bounds,
+        {ScrollAlignment::kAlignCenterIfNeeded,
+         ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll, false});
   } else {
     GetLayoutObject()->ScrollRectToVisible(
-        bounds, ScrollAlignment::kAlignToEdgeIfNeeded,
-        ScrollAlignment::kAlignToEdgeIfNeeded, kProgrammaticScroll, false);
+        bounds,
+        {ScrollAlignment::kAlignToEdgeIfNeeded,
+         ScrollAlignment::kAlignToEdgeIfNeeded, kProgrammaticScroll, false});
   }
 }
 
@@ -653,11 +656,9 @@ void Element::NativeApplyScroll(ScrollState& scroll_state) {
   if (!box_to_scroll)
     return;
 
-  ScrollResult result = LayoutBoxItem(box_to_scroll)
-                            .EnclosingBox()
-                            .Scroll(ScrollGranularity(static_cast<int>(
-                                        scroll_state.deltaGranularity())),
-                                    delta);
+  ScrollResult result = box_to_scroll->EnclosingBox()->Scroll(
+      ScrollGranularity(static_cast<int>(scroll_state.deltaGranularity())),
+      delta);
 
   if (!result.DidScroll())
     return;
@@ -790,19 +791,19 @@ int Element::clientWidth() {
   bool in_quirks_mode = GetDocument().InQuirksMode();
   if ((!in_quirks_mode && GetDocument().documentElement() == this) ||
       (in_quirks_mode && IsHTMLElement() && GetDocument().body() == this)) {
-    LayoutViewItem layout_view = GetDocument().GetLayoutViewItem();
-    if (!layout_view.IsNull()) {
+    auto* layout_view = GetDocument().GetLayoutView();
+    if (layout_view) {
       if (!RuntimeEnabledFeatures::OverlayScrollbarsEnabled() ||
           !GetDocument().GetFrame()->IsLocalRoot())
         GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
       if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight())
         return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                   layout_view.OverflowClipRect(LayoutPoint()).Width(),
-                   layout_view.StyleRef())
+                   layout_view->OverflowClipRect(LayoutPoint()).Width(),
+                   layout_view->StyleRef())
             .Round();
       return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                 LayoutUnit(layout_view.GetLayoutSize().Width()),
-                 layout_view.StyleRef())
+                 LayoutUnit(layout_view->GetLayoutSize().Width()),
+                 layout_view->StyleRef())
           .Round();
     }
   }
@@ -826,19 +827,19 @@ int Element::clientHeight() {
 
   if ((!in_quirks_mode && GetDocument().documentElement() == this) ||
       (in_quirks_mode && IsHTMLElement() && GetDocument().body() == this)) {
-    LayoutViewItem layout_view = GetDocument().GetLayoutViewItem();
-    if (!layout_view.IsNull()) {
+    auto* layout_view = GetDocument().GetLayoutView();
+    if (layout_view) {
       if (!RuntimeEnabledFeatures::OverlayScrollbarsEnabled() ||
           !GetDocument().GetFrame()->IsLocalRoot())
         GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
       if (GetDocument().GetPage()->GetSettings().GetForceZeroLayoutHeight())
         return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                   layout_view.OverflowClipRect(LayoutPoint()).Height(),
-                   layout_view.StyleRef())
+                   layout_view->OverflowClipRect(LayoutPoint()).Height(),
+                   layout_view->StyleRef())
             .Round();
       return AdjustForAbsoluteZoom::AdjustLayoutUnit(
-                 LayoutUnit(layout_view.GetLayoutSize().Height()),
-                 layout_view.StyleRef())
+                 LayoutUnit(layout_view->GetLayoutSize().Height()),
+                 layout_view->StyleRef())
           .Round();
     }
   }
@@ -1276,6 +1277,14 @@ AccessibleNode* Element::accessibleNode() {
 
   ElementRareData& rare_data = EnsureElementRareData();
   return rare_data.EnsureAccessibleNode(this);
+}
+
+ComputedAccessibleNode* Element::GetComputedAccessibleNode() {
+  if (!RuntimeEnabledFeatures::AccessibilityObjectModelEnabled())
+    return nullptr;
+
+  ElementRareData& rare_data = EnsureElementRareData();
+  return rare_data.EnsureComputedAccessibleNode(this);
 }
 
 const AtomicString& Element::getAttribute(
@@ -1834,8 +1843,8 @@ void Element::AttachLayoutTree(AttachContext& context) {
     data->ClearComputedStyle();
   }
 
-  if (!IsActiveSlotOrActiveV0InsertionPoint()) {
-    LayoutTreeBuilderForElement builder(*this, context.resolved_style);
+  if (CanParticipateInFlatTree()) {
+    LayoutTreeBuilderForElement builder(*this, GetNonAttachedStyle());
     builder.CreateLayoutObjectIfNeeded();
 
     if (ComputedStyle* style = builder.ResolvedStyle()) {
@@ -1843,8 +1852,6 @@ void Element::AttachLayoutTree(AttachContext& context) {
         StoreNonLayoutObjectComputedStyle(style);
     }
   }
-
-  AddCallbackSelectors();
 
   if (HasRareData() && !GetLayoutObject() &&
       !GetElementRareData()->GetComputedStyle()) {
@@ -1858,13 +1865,13 @@ void Element::AttachLayoutTree(AttachContext& context) {
   SelectorFilterParentScope filter_scope(*this);
 
   AttachContext children_context(context);
-  children_context.resolved_style = nullptr;
 
   LayoutObject* layout_object = GetLayoutObject();
   if (layout_object)
     children_context.previous_in_flow = nullptr;
   children_context.use_previous_in_flow = true;
 
+  ClearNeedsReattachLayoutTree();
   CreateAndAttachPseudoElementIfNeeded(kPseudoIdBefore, children_context);
 
   // When a shadow root exists, it does the work of attaching the children.
@@ -1872,6 +1879,7 @@ void Element::AttachLayoutTree(AttachContext& context) {
     shadow->Attach(children_context);
 
   ContainerNode::AttachLayoutTree(children_context);
+  AddCallbackSelectors();
 
   CreateAndAttachPseudoElementIfNeeded(kPseudoIdAfter, children_context);
   CreateAndAttachPseudoElementIfNeeded(kPseudoIdBackdrop, children_context);
@@ -2072,7 +2080,7 @@ void Element::RecalcStyle(StyleRecalcChange change) {
   }
 
   if (HasCustomStyleCallbacks())
-    DidRecalcStyle();
+    DidRecalcStyle(change);
 }
 
 scoped_refptr<ComputedStyle> Element::PropagateInheritedProperties(
@@ -2136,8 +2144,12 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   }
 
   if (local_change == kReattach) {
-    SetNonAttachedStyle(std::move(new_style));
+    SetNonAttachedStyle(new_style);
     SetNeedsReattachLayoutTree();
+    if (LayoutObjectIsNeeded(*new_style) ||
+        ShouldStoreNonLayoutObjectComputedStyle(*new_style)) {
+      RecalcShadowIncludingDescendantStylesForReattach();
+    }
     return kReattach;
   }
 
@@ -2186,15 +2198,40 @@ StyleRecalcChange Element::RecalcOwnStyle(StyleRecalcChange change) {
   return local_change;
 }
 
+void Element::RecalcStyleForReattach() {
+  scoped_refptr<ComputedStyle> non_attached_style = StyleForLayoutObject();
+  SetNonAttachedStyle(non_attached_style);
+  SetNeedsReattachLayoutTree();
+  if (LayoutObjectIsNeeded(*non_attached_style) ||
+      ShouldStoreNonLayoutObjectComputedStyle(*non_attached_style)) {
+    RecalcShadowIncludingDescendantStylesForReattach();
+  }
+}
+
+void Element::RecalcShadowIncludingDescendantStylesForReattach() {
+  if (!ChildrenCanHaveStyle())
+    return;
+  if (HasCustomStyleCallbacks())
+    return;
+  SelectorFilterParentScope filterScope(*this);
+  RecalcShadowRootStylesForReattach();
+  RecalcDescendantStylesForReattach();
+}
+
+void Element::RecalcShadowRootStylesForReattach() {
+  for (ShadowRoot* root = YoungestShadowRoot(); root;
+       root = root->OlderShadowRoot()) {
+    root->RecalcStylesForReattach();
+  }
+}
+
 void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
   DCHECK(InActiveDocument());
   DCHECK(parentNode());
 
   if (NeedsReattachLayoutTree()) {
     AttachContext reattach_context;
-    reattach_context.resolved_style = GetNonAttachedStyle();
     ReattachLayoutTree(reattach_context);
-    SetNonAttachedStyle(nullptr);
     whitespace_attacher.DidReattachElement(this,
                                            reattach_context.previous_in_flow);
   } else {
@@ -2229,6 +2266,7 @@ void Element::RebuildLayoutTree(WhitespaceAttacher& whitespace_attacher) {
   DCHECK(!NeedsStyleRecalc());
   DCHECK(!ChildNeedsStyleRecalc());
   DCHECK(!NeedsReattachLayoutTree());
+  DCHECK(!GetNonAttachedStyle());
   DCHECK(!ChildNeedsReattachLayoutTree());
 }
 
@@ -2373,7 +2411,7 @@ ShadowRoot* Element::createShadowRoot(const ScriptState* script_state,
       script_state, GetDocument(),
       HostsUsingFeatures::Feature::kElementCreateShadowRoot);
   if (ShadowRoot* root = GetShadowRoot()) {
-    if (root->GetType() == ShadowRootType::kUserAgent) {
+    if (root->IsUserAgent()) {
       exception_state.ThrowDOMException(
           kInvalidStateError,
           "Shadow root cannot be created on a host which already hosts a "
@@ -2460,15 +2498,14 @@ ShadowRoot* Element::attachShadow(const ScriptState* script_state,
 ShadowRoot& Element::CreateShadowRootInternal() {
   DCHECK(!ClosedShadowRoot());
   DCHECK(AreAuthorShadowsAllowed());
-  if (AlwaysCreateUserAgentShadowRoot())
-    EnsureUserAgentShadowRoot();
+  DCHECK(!AlwaysCreateUserAgentShadowRoot());
   GetDocument().SetShadowCascadeOrder(ShadowCascadeOrder::kShadowCascadeV0);
   return EnsureShadow().AddShadowRoot(*this, ShadowRootType::V0);
 }
 
-ShadowRoot& Element::CreateUserAgentShadowRoot() {
+ShadowRoot& Element::CreateUserAgentShadowRootV1() {
   DCHECK(!GetShadowRoot());
-  return EnsureShadow().AddShadowRoot(*this, ShadowRootType::kUserAgent);
+  return EnsureShadow().AddShadowRoot(*this, ShadowRootType::kUserAgentV1);
 }
 
 ShadowRoot& Element::AttachShadowRootInternal(ShadowRootType type,
@@ -2513,24 +2550,26 @@ ShadowRoot* Element::AuthorShadowRoot() const {
   ShadowRoot* root = GetShadowRoot();
   if (!root)
     return nullptr;
-  return root->GetType() != ShadowRootType::kUserAgent ? root : nullptr;
+  return !root->IsUserAgent() ? root : nullptr;
 }
 
 ShadowRoot* Element::UserAgentShadowRoot() const {
   if (ElementShadow* element_shadow = Shadow()) {
     ShadowRoot& root = element_shadow->OldestShadowRoot();
-    DCHECK(root.GetType() == ShadowRootType::kUserAgent);
+    DCHECK(root.IsUserAgent());
     return &root;
   }
 
   return nullptr;
 }
 
-ShadowRoot& Element::EnsureUserAgentShadowRoot() {
-  if (ShadowRoot* shadow_root = UserAgentShadowRoot())
+ShadowRoot& Element::EnsureUserAgentShadowRootV1() {
+  if (ShadowRoot* shadow_root = UserAgentShadowRoot()) {
+    DCHECK(shadow_root->GetType() == ShadowRootType::kUserAgentV1);
     return *shadow_root;
+  }
   ShadowRoot& shadow_root =
-      EnsureShadow().AddShadowRoot(*this, ShadowRootType::kUserAgent);
+      EnsureShadow().AddShadowRoot(*this, ShadowRootType::kUserAgentV1);
   DidAddUserAgentShadowRoot(shadow_root);
   return shadow_root;
 }
@@ -2931,7 +2970,8 @@ void Element::UpdateFocusAppearanceWithOptions(
   } else if (GetLayoutObject() &&
              !GetLayoutObject()->IsLayoutEmbeddedContent()) {
     if (!options.preventScroll()) {
-      GetLayoutObject()->ScrollRectToVisible(BoundingBox());
+      GetLayoutObject()->ScrollRectToVisible(BoundingBox(),
+                                             WebScrollIntoViewParams());
     }
   }
 }
@@ -3076,12 +3116,16 @@ void Element::outerHTML(StringOrTrustedHTML& result) const {
 void Element::SetInnerHTMLFromString(const String& html,
                                      ExceptionState& exception_state) {
   probe::breakableLocation(&GetDocument(), "Element.setInnerHTML");
-  if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
-          html, this, kAllowScriptingContent, "innerHTML", exception_state)) {
-    ContainerNode* container = this;
-    if (auto* template_element = ToHTMLTemplateElementOrNull(*this))
-      container = template_element->content();
-    ReplaceChildrenWithFragment(container, fragment, exception_state);
+  if (html.IsEmpty() && !HasNonInBodyInsertionMode()) {
+    setTextContent(html);
+  } else {
+    if (DocumentFragment* fragment = CreateFragmentForInnerOuterHTML(
+            html, this, kAllowScriptingContent, "innerHTML", exception_state)) {
+      ContainerNode* container = this;
+      if (auto* template_element = ToHTMLTemplateElementOrNull(*this))
+        container = template_element->content();
+      ReplaceChildrenWithFragment(container, fragment, exception_state);
+    }
   }
 }
 
@@ -3409,7 +3453,7 @@ String Element::TextFromChildren() {
 
 const AtomicString& Element::ShadowPseudoId() const {
   if (ShadowRoot* root = ContainingShadowRoot()) {
-    if (root->GetType() == ShadowRootType::kUserAgent)
+    if (root->IsUserAgent())
       return FastGetAttribute(pseudoAttr);
   }
   return g_null_atom;
@@ -3487,6 +3531,9 @@ const ComputedStyle* Element::EnsureComputedStyle(
 }
 
 const ComputedStyle* Element::NonLayoutObjectComputedStyle() const {
+  if (NeedsReattachLayoutTree())
+    return GetNonAttachedStyle();
+
   if (!HasRareData())
     return nullptr;
 
@@ -3502,7 +3549,7 @@ bool Element::HasDisplayContentsStyle() const {
 bool Element::ShouldStoreNonLayoutObjectComputedStyle(
     const ComputedStyle& style) const {
 #if DCHECK_IS_ON()
-  if (style.Display() == EDisplay::kContents)
+  if (style.Display() == EDisplay::kContents && !NeedsReattachLayoutTree())
     DCHECK(!GetLayoutObject() || IsPseudoElement());
 #endif
 
@@ -4252,7 +4299,7 @@ void Element::WillRecalcStyle(StyleRecalcChange) {
   DCHECK(HasCustomStyleCallbacks());
 }
 
-void Element::DidRecalcStyle() {
+void Element::DidRecalcStyle(StyleRecalcChange) {
   DCHECK(HasCustomStyleCallbacks());
 }
 
@@ -4418,8 +4465,8 @@ void Element::StyleAttributeChanged(
     EnsureUniqueElementData().inline_style_.Clear();
   } else if (modification_reason == AttributeModificationReason::kByCloning ||
              ContentSecurityPolicy::ShouldBypassMainWorld(&GetDocument()) ||
-             (ContainingShadowRoot() && ContainingShadowRoot()->GetType() ==
-                                            ShadowRootType::kUserAgent) ||
+             (ContainingShadowRoot() &&
+              ContainingShadowRoot()->IsUserAgent()) ||
              GetDocument().GetContentSecurityPolicy()->AllowInlineStyle(
                  this, GetDocument().Url(), String(), start_line_number,
                  new_style_string, ContentSecurityPolicy::InlineType::kBlock)) {
@@ -4462,7 +4509,7 @@ void Element::InlineStyleChanged() {
 void Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      CSSValueID identifier,
                                      bool important) {
-  SetInlineStyleProperty(property_id, CSSIdentifierValue::Create(identifier),
+  SetInlineStyleProperty(property_id, *CSSIdentifierValue::Create(identifier),
                          important);
 }
 
@@ -4470,15 +4517,15 @@ void Element::SetInlineStyleProperty(CSSPropertyID property_id,
                                      double value,
                                      CSSPrimitiveValue::UnitType unit,
                                      bool important) {
-  SetInlineStyleProperty(property_id, CSSPrimitiveValue::Create(value, unit),
+  SetInlineStyleProperty(property_id, *CSSPrimitiveValue::Create(value, unit),
                          important);
 }
 
 void Element::SetInlineStyleProperty(CSSPropertyID property_id,
-                                     const CSSValue* value,
+                                     const CSSValue& value,
                                      bool important) {
   DCHECK(IsStyledElement());
-  EnsureMutableInlineStyle().SetProperty(property_id, *value, important);
+  EnsureMutableInlineStyle().SetProperty(property_id, value, important);
   InlineStyleChanged();
 }
 
@@ -4501,6 +4548,16 @@ bool Element::RemoveInlineStyleProperty(CSSPropertyID property_id) {
   if (!InlineStyle())
     return false;
   bool did_change = EnsureMutableInlineStyle().RemoveProperty(property_id);
+  if (did_change)
+    InlineStyleChanged();
+  return did_change;
+}
+
+bool Element::RemoveInlineStyleProperty(const AtomicString& property_name) {
+  DCHECK(IsStyledElement());
+  if (!InlineStyle())
+    return false;
+  bool did_change = EnsureMutableInlineStyle().RemoveProperty(property_name);
   if (did_change)
     InlineStyleChanged();
   return did_change;

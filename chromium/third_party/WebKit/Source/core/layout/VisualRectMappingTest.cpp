@@ -48,8 +48,7 @@ class VisualRectMappingTest : public RenderingTest {
       geometry_mapper_rect.MoveBy(FloatPoint(fragment_data.PaintOffset()));
       GeometryMapper::LocalToAncestorVisualRect(
           *fragment_data.LocalBorderBoxProperties(),
-          ancestor.FirstFragment().GetRarePaintData()->ContentsProperties(),
-          geometry_mapper_rect);
+          ancestor.FirstFragment().ContentsProperties(), geometry_mapper_rect);
       geometry_mapper_rect.MoveBy(
           -FloatPoint(ancestor.FirstFragment().PaintOffset()));
     }
@@ -668,7 +667,7 @@ TEST_F(VisualRectMappingTest,
   LayoutBlock* absolute = ToLayoutBlock(GetLayoutObjectByElementId("absolute"));
   LayoutBlock* container =
       ToLayoutBlock(GetLayoutObjectByElementId("container"));
-  EXPECT_EQ(stacking_context, &absolute->ContainerForPaintInvalidation());
+  EXPECT_EQ(absolute->View(), &absolute->ContainerForPaintInvalidation());
   EXPECT_EQ(container, absolute->Container());
 
   LayoutRect absolute_visual_rect = absolute->LocalVisualRect();

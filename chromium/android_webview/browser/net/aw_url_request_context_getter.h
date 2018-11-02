@@ -18,6 +18,7 @@
 #include "net/url_request/url_request_job_factory.h"
 
 class PrefService;
+class PrefRegistrySimple;
 
 namespace net {
 class FileNetLogObserver;
@@ -37,22 +38,22 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
  public:
   AwURLRequestContextGetter(
       const base::FilePath& cache_path,
+      const base::FilePath& channel_id_path,
       std::unique_ptr<net::ProxyConfigService> config_service,
-      PrefService* pref_service);
+      PrefService* pref_service,
+      net::NetLog* net_log);
+
+  static void set_check_cleartext_permitted(bool permitted);
+  static void RegisterPrefs(PrefRegistrySimple* registry);
 
   // net::URLRequestContextGetter implementation.
   net::URLRequestContext* GetURLRequestContext() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
       const override;
 
-  // NetLog is thread-safe, so clients can call this method from arbitrary
-  // threads (UI and IO).
-  net::NetLog* GetNetLog();
-
-  static void set_check_cleartext_permitted(bool permitted);
-
  private:
   friend class AwBrowserContext;
+  friend class AwURLRequestContextGetterTest;
   ~AwURLRequestContextGetter() override;
 
   // Prior to GetURLRequestContext() being called, this is called to hand over
@@ -77,8 +78,9 @@ class AwURLRequestContextGetter : public net::URLRequestContextGetter {
   void UpdateAndroidAuthNegotiateAccountType();
 
   const base::FilePath cache_path_;
+  const base::FilePath channel_id_path_;
 
-  std::unique_ptr<net::NetLog> net_log_;
+  net::NetLog* net_log_;
   std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
   std::unique_ptr<net::URLRequestJobFactory> job_factory_;
   std::unique_ptr<net::HttpUserAgentSettings> http_user_agent_settings_;

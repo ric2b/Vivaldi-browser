@@ -6,12 +6,15 @@
 
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
 
+#include <memory>
+
 #include "base/lazy_instance.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
+#include "chrome/browser/safe_browsing/safe_browsing_controller_client.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -276,12 +279,12 @@ SafeBrowsingBlockingPage::CreateControllerClient(
   DCHECK(profile);
 
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
-      base::MakeUnique<ChromeMetricsHelper>(
+      std::make_unique<ChromeMetricsHelper>(
           web_contents, unsafe_resources[0].url,
           GetReportingInfo(unsafe_resources),
           GetSamplingEventName(GetInterstitialReason(unsafe_resources)));
 
-  return base::MakeUnique<SecurityInterstitialControllerClient>(
+  return std::make_unique<SafeBrowsingControllerClient>(
       web_contents, std::move(metrics_helper), profile->GetPrefs(),
       ui_manager->app_locale(), ui_manager->default_safe_page());
 }

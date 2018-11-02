@@ -21,6 +21,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using GlobalMemoryDump = memory_instrumentation::GlobalMemoryDump;
 using GlobalMemoryDumpPtr = memory_instrumentation::mojom::GlobalMemoryDumpPtr;
 using ProcessMemoryDumpPtr =
     memory_instrumentation::mojom::ProcessMemoryDumpPtr;
@@ -89,14 +90,14 @@ class BackgroundProfilingTriggersTest : public testing::Test {
     ASSERT_TRUE(testing_profile_manager_.SetUp());
     ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
         &is_metrics_enabled_);
+    for (base::ProcessId i = 1; i <= 10; ++i)
+      profiled_pids_.push_back(i);
   }
 
   void TearDown() override {
     ChromeMetricsServiceAccessor::SetMetricsAndCrashReportingForTesting(
         nullptr);
   }
-
-  void SetMode(ProfilingProcessHost::Mode mode) { host_.SetMode(mode); }
 
  protected:
   base::test::ScopedTaskEnvironment scoped_task_envrionment_;
@@ -105,6 +106,7 @@ class BackgroundProfilingTriggersTest : public testing::Test {
 
   ProfilingProcessHost host_;
   FakeBackgroundProfilingTriggers triggers_;
+  std::vector<base::ProcessId> profiled_pids_;
 
   bool is_metrics_enabled_;
 };
@@ -113,69 +115,49 @@ class BackgroundProfilingTriggersTest : public testing::Test {
 //  * robust to empty memory dumps.
 //  * does not trigger if below a size threshold.
 TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_EmptyCases) {
-  SetMode(ProfilingProcessHost::Mode::kAll);
-
   GlobalMemoryDumpPtr dump_empty(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
-  triggers_.OnReceivedMemoryDump(true, std::move(dump_empty));
+  triggers_.OnReceivedMemoryDump(
+      profiled_pids_, true, GlobalMemoryDump::MoveFrom(std::move(dump_empty)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
   triggers_.Reset();
 
   GlobalMemoryDumpPtr dump_browser(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
   PopulateMetrics(&dump_browser, 1, ProcessType::BROWSER, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump_browser));
+  triggers_.OnReceivedMemoryDump(
+      profiled_pids_, true,
+      GlobalMemoryDump::MoveFrom(std::move(dump_browser)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
   triggers_.Reset();
 
   GlobalMemoryDumpPtr dump_gpu(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
   PopulateMetrics(&dump_gpu, 1, ProcessType::GPU, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump_gpu));
+  triggers_.OnReceivedMemoryDump(
+      profiled_pids_, true, GlobalMemoryDump::MoveFrom(std::move(dump_gpu)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
   triggers_.Reset();
 
   GlobalMemoryDumpPtr dump_renderer(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
   PopulateMetrics(&dump_renderer, 1, ProcessType::RENDERER, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump_renderer));
+  triggers_.OnReceivedMemoryDump(
+      profiled_pids_, true,
+      GlobalMemoryDump::MoveFrom(std::move(dump_renderer)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
   triggers_.Reset();
 
   GlobalMemoryDumpPtr dump_other(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
   PopulateMetrics(&dump_other, 1, ProcessType::OTHER, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump_other));
+  triggers_.OnReceivedMemoryDump(
+      profiled_pids_, true, GlobalMemoryDump::MoveFrom(std::move(dump_other)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
   triggers_.Reset();
 }
 
-// kNone mode shold trigger nothing.
-TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeNone) {
-  SetMode(ProfilingProcessHost::Mode::kNone);
-
-  GlobalMemoryDumpPtr dump(
-      memory_instrumentation::mojom::GlobalMemoryDump::New());
-  PopulateMetrics(&dump, 1, ProcessType::BROWSER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 2, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 3, ProcessType::RENDERER, 1, 1, 1);
-  PopulateMetrics(&dump, 4, ProcessType::GPU, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 5, ProcessType::OTHER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 6, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_FALSE(triggers_.WasReportTriggered());
-}
-
-// kAll mode only reports everything over the large threshold.
-TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeAll) {
-  SetMode(ProfilingProcessHost::Mode::kAll);
-
+TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ProfiledPids) {
   GlobalMemoryDumpPtr dump(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
   PopulateMetrics(&dump, 1, ProcessType::RENDERER, 1, 1, 1);
@@ -183,7 +165,8 @@ TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeAll) {
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
 
   // Small processes and OTHER type processes don't trigger.
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
 
   // Ensure each process type triggers.
@@ -191,142 +174,42 @@ TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeAll) {
   dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
   PopulateMetrics(&dump, 1, ProcessType::BROWSER, kProcessMallocTriggerKb,
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_TRUE(triggers_.WasReportTriggered());
 
   triggers_.Reset();
   dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
   PopulateMetrics(&dump, 1, ProcessType::RENDERER, kProcessMallocTriggerKb,
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_TRUE(triggers_.WasReportTriggered());
 
   triggers_.Reset();
   dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
   PopulateMetrics(&dump, 1, ProcessType::GPU, kProcessMallocTriggerKb,
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_TRUE(triggers_.WasReportTriggered());
 }
 
-// kMinimal mode only reports browser and gpu processes.
-TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeMinimal) {
-  SetMode(ProfilingProcessHost::Mode::kMinimal);
-
+// Non-profiled processes don't trigger.
+TEST_F(BackgroundProfilingTriggersTest, OnlyProfiledProcessesTrigger) {
   GlobalMemoryDumpPtr dump(
       memory_instrumentation::mojom::GlobalMemoryDump::New());
-  PopulateMetrics(&dump, 1, ProcessType::BROWSER, 1, 1, 1);
-  PopulateMetrics(&dump, 2, ProcessType::GPU, 1, 1, 1);
-  PopulateMetrics(&dump, 3, ProcessType::OTHER, kProcessMallocTriggerKb,
+  PopulateMetrics(&dump, 101, ProcessType::BROWSER, kProcessMallocTriggerKb,
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 4, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-
-  // Ensure Browser and GPU processes under threshold do not trigger.
-  // Ensure other process types ignored.
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_FALSE(triggers_.WasReportTriggered());
 
-  // Ensure BROWSER and GPU types trigger.
-  triggers_.Reset();
   dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
   PopulateMetrics(&dump, 1, ProcessType::BROWSER, kProcessMallocTriggerKb,
                   kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 2, ProcessType::GPU, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_TRUE(triggers_.WasReportTriggered());
-
-  triggers_.Reset();
-  dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
-  PopulateMetrics(&dump, 1, ProcessType::GPU, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 2, ProcessType::BROWSER, 1, 1, 1);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_TRUE(triggers_.WasReportTriggered());
-}
-
-// kBrowser mode only reports browser.
-TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeBrowser) {
-  SetMode(ProfilingProcessHost::Mode::kBrowser);
-
-  GlobalMemoryDumpPtr dump(
-      memory_instrumentation::mojom::GlobalMemoryDump::New());
-  PopulateMetrics(&dump, 1, ProcessType::BROWSER, 1, 1, 1);
-  PopulateMetrics(&dump, 2, ProcessType::GPU, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 3, ProcessType::OTHER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 4, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-
-  // Ensure Browser processes under threshold do not trigger.
-  // Ensure other process types ignored.
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_FALSE(triggers_.WasReportTriggered());
-
-  // Ensure BROWSER type triggers.
-  triggers_.Reset();
-  dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
-  PopulateMetrics(&dump, 1, ProcessType::BROWSER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_TRUE(triggers_.WasReportTriggered());
-}
-
-// kGpu mode only reports gpu.
-TEST_F(BackgroundProfilingTriggersTest, OnReceivedMemoryDump_ModeGpu) {
-  SetMode(ProfilingProcessHost::Mode::kGpu);
-
-  GlobalMemoryDumpPtr dump(
-      memory_instrumentation::mojom::GlobalMemoryDump::New());
-  PopulateMetrics(&dump, 1, ProcessType::GPU, 1, 1, 1);
-  PopulateMetrics(&dump, 2, ProcessType::BROWSER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 3, ProcessType::OTHER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 4, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-
-  // Ensure GPU processes under threshold do not trigger.
-  // Ensure other process types ignored.
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_FALSE(triggers_.WasReportTriggered());
-
-  // Ensure GPU type triggers.
-  triggers_.Reset();
-  dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
-  PopulateMetrics(&dump, 1, ProcessType::GPU, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_TRUE(triggers_.WasReportTriggered());
-}
-
-// kRendererSampling mode only the single profiled renderer.
-TEST_F(BackgroundProfilingTriggersTest,
-       DISABLED_OnReceivedMemoryDump_ModeRendererSampling) {
-  SetMode(ProfilingProcessHost::Mode::kRendererSampling);
-
-  GlobalMemoryDumpPtr dump(
-      memory_instrumentation::mojom::GlobalMemoryDump::New());
-  PopulateMetrics(&dump, 1, ProcessType::RENDERER, 1, 1, 1);
-  PopulateMetrics(&dump, 2, ProcessType::BROWSER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 3, ProcessType::GPU, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  PopulateMetrics(&dump, 4, ProcessType::OTHER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-
-  // Ensure RENDERER processes under threshold do not trigger.
-  // Ensure other process types ignored.
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
-  EXPECT_FALSE(triggers_.WasReportTriggered());
-
-  // Ensure RENDERER type triggers.
-  triggers_.Reset();
-  dump = memory_instrumentation::mojom::GlobalMemoryDump::New();
-  PopulateMetrics(&dump, 1, ProcessType::RENDERER, kProcessMallocTriggerKb,
-                  kProcessMallocTriggerKb, kProcessMallocTriggerKb);
-  triggers_.OnReceivedMemoryDump(true, std::move(dump));
+  triggers_.OnReceivedMemoryDump(profiled_pids_, true,
+                                 GlobalMemoryDump::MoveFrom(std::move(dump)));
   EXPECT_TRUE(triggers_.WasReportTriggered());
 }
 

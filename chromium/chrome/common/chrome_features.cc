@@ -28,6 +28,11 @@ const base::Feature kAllowAutoplayUnmutedInWebappManifestScope{
 const base::Feature kAppleScriptExecuteJavaScriptMenuItem{
     "AppleScriptExecuteJavaScriptMenuItem", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the "this OS is obsolete" infobar on Mac 10.9.
+// TODO(ellyjones): Remove this after the last 10.9 release.
+const base::Feature kShow10_9ObsoleteInfobar{"Show109ObsoleteInfobar",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the fullscreen toolbar to reveal itself if it's hidden.
 const base::Feature kFullscreenToolbarReveal{"FullscreenToolbarReveal",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -148,6 +153,10 @@ const base::Feature kCaptureThumbnailDependingOnTransitionType{
 const base::Feature kCaptureThumbnailOnNavigatingAway{
     "CaptureThumbnailOnNavigatingAway", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables change picture video mode.
+const base::Feature kChangePictureVideoMode{"ChangePictureVideoMode",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Whether to trigger app banner installability checks on page load.
 const base::Feature kCheckInstallabilityForBannerOnLoad{
     "CheckInstallabilityForBannerOnLoad", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -199,6 +208,12 @@ const base::Feature kDownloadsForeground{"DownloadsForeground",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_ANDROID)
+// Enable changing default downloads storage location on Android.
+const base::Feature kDownloadsLocationChange{"DownloadsLocationChange",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables Expect CT reporting, which sends reports for opted-in sites
 // that don't serve sufficient Certificate Transparency information.
 const base::Feature kExpectCTReporting{"ExpectCTReporting",
@@ -229,7 +244,7 @@ const base::Feature kVrBrowsing {
 #if BUILDFLAG(ENABLE_VR)
 // Enables the virtual keyboard for Chrome VR.
 const base::Feature kVrBrowserKeyboard{"VrBrowserKeyboard",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls features related to VR browsing that are under development.
 const base::Feature kVrBrowsingExperimentalFeatures{
@@ -251,6 +266,20 @@ const base::Feature kOpenVR{"OpenVR", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kGdiTextPrinting {"GdiTextPrinting",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
+
+// Controls whether the GeoLanguage system is enabled. GeoLanguage uses IP-based
+// coarse geolocation to provide an estimate (for use by other Chrome features
+// such as Translate) of the local/regional language(s) corresponding to the
+// device's location. If this feature is disabled, the GeoLanguage provider is
+// not initialized at startup, and clients calling it will receive an empty list
+// of languages.
+const base::Feature kGeoLanguage{"GeoLanguage",
+                                 base::FEATURE_DISABLED_BY_DEFAULT};
+
+#if defined(OS_ANDROID)
+const base::Feature kGrantNotificationsToDSE{"GrantNotificationsToDSE",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+#endif  // defined(OS_ANDROID)
 
 #if defined (OS_CHROMEOS)
 // Enables or disables the Happiness Tracking System for the device.
@@ -290,7 +319,7 @@ const base::Feature kMacFullSizeContentView{"MacFullSizeContentView",
 
 // Enables "Share" submenu in File menu.
 const base::Feature kMacSystemShareMenu{"MacSystemShareMenu",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Enables or disables the Material Design version of chrome://bookmarks.
@@ -329,12 +358,6 @@ const base::Feature kMaterialDesignIncognitoNTP{
 // during Cast Tab Mirroring.
 const base::Feature kMediaRemoting{"MediaRemoting",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, replaces the <extensionview> controller in the route details view
-// of the Media Router dialog with the controller bundled with the WebUI
-// resources.
-const base::Feature kMediaRouterUIRouteController{
-    "MediaRouterUIRouteController", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // !defined(OS_ANDROID)
 
 // Enables or disables modal permission prompts.
@@ -372,7 +395,7 @@ const base::Feature kNetworkPrediction{"NetworkPrediction",
 #if defined(OS_POSIX)
 // Enables NTLMv2, which implicitly disables NTLMv1.
 const base::Feature kNtlmV2Enabled{"NtlmV2Enabled",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // If enabled, the list of content suggestions on the New Tab page will contain
@@ -418,11 +441,6 @@ const base::Feature kPolicyTool{"PolicyTool",
                                 base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
-// Triggers the preconnector on renderer-initiated navigations. This captures
-// more navigations.
-const base::Feature kPreconnectMore{"PreconnectMore",
-                                    base::FEATURE_DISABLED_BY_DEFAULT};
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Prefer HTML content by hiding Flash from the list of plugins.
 // https://crbug.com/626728
@@ -454,10 +472,6 @@ const base::Feature kPrintPdfAsImage{"PrintPdfAsImage",
 const base::Feature kPushMessagingBackgroundMode{
     "PushMessagingBackgroundMode", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables support for Minimal-UI PWA display mode.
-const base::Feature kPwaMinimalUi{"PwaMinimalUi",
-                                  base::FEATURE_ENABLED_BY_DEFAULT};
-
 #if !defined(OS_ANDROID)
 const base::Feature kRemoveUsageOfDeprecatedGaiaSigninEndpoint{
     "RemoveUsageOfDeprecatedGaiaSigninEndpoint",
@@ -473,6 +487,10 @@ const base::Feature kRuntimeMemoryLeakDetector{
 
 const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Controls whether the user is prompted when sites request attestation.
+const base::Feature kSecurityKeyAttestationPrompt{
+    "SecurityKeyAttestationPrompt", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_MACOSX)
 // Whether to show all dialogs with toolkit-views on Mac, rather than Cocoa. A
@@ -533,15 +551,21 @@ const base::Feature kUseGoogleLocalNtp{"UseGoogleLocalNtp",
 #if defined(OS_CHROMEOS)
 // Enables or disables user activity event logging for power management on
 // Chrome OS.
-const base::Feature kUserActivityEventLogging{
-    "UserActivityEventLogging", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kUserActivityEventLogging{"UserActivityEventLogging",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if !defined(OS_ANDROID)
 // Enables or disables Voice Search on the local NTP.
 const base::Feature kVoiceSearchOnLocalNtp{"VoiceSearchOnLocalNtp",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
+
+#if defined(OS_WIN)
+// Enables the accelerated default browser flow for Windows 10.
+const base::Feature kWin10AcceleratedDefaultBrowserFlow{
+    "Win10AcceleratedDefaultBrowserFlow", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
 // Enables or disables the opt-in IME menu in the language settings page.
@@ -566,7 +590,7 @@ const base::Feature kEHVInputOnImeMenu{"EmojiHandwritingVoiceInput",
 
 // Enables or disables the bulk printer policies on Chrome OS.
 const base::Feature kBulkPrinters{"BulkPrinters",
-                                  base::FEATURE_DISABLED_BY_DEFAULT};
+                                  base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables flash component updates on Chrome OS.
 const base::Feature kCrosCompUpdates{"CrosCompUpdates",
@@ -574,7 +598,7 @@ const base::Feature kCrosCompUpdates{"CrosCompUpdates",
 
 // Enables or disables Chrome OS Component updates on Chrome OS.
 const base::Feature kCrOSComponent{"CrOSComponent",
-                                   base::FEATURE_DISABLED_BY_DEFAULT};
+                                   base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables Chrome OS Container utility on Chrome OS.
 const base::Feature kCrOSContainer{"CrOSContainer",

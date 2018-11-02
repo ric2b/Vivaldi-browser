@@ -131,7 +131,7 @@ class ChromeDriver(object):
                download_dir=None, network_connection=None,
                send_w3c_capability=None, send_w3c_request=None,
                page_load_strategy=None, unexpected_alert_behaviour=None,
-               devtools_events_to_log=None):
+               devtools_events_to_log=None, accept_insecure_certs=None):
     self._executor = command_executor.CommandExecutor(server_url)
     self.w3c_compliant = False
 
@@ -152,7 +152,7 @@ class ChromeDriver(object):
     elif chrome_binary:
       options['binary'] = chrome_binary
 
-    if sys.platform.startswith('linux') and not util.Is64Bit():
+    if sys.platform.startswith('linux') and android_package is None:
       if chrome_switches is None:
         chrome_switches = []
       # Workaround for crbug.com/611886.
@@ -221,6 +221,9 @@ class ChromeDriver(object):
 
     if network_connection:
       params['networkConnectionEnabled'] = network_connection
+
+    if accept_insecure_certs is not None:
+      params['acceptInsecureCerts'] = accept_insecure_certs
 
     if send_w3c_request:
       params = {'capabilities': {'alwaysMatch': params}}

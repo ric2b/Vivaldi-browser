@@ -61,9 +61,8 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
   virtual ui::Layer* DelegatedFrameHostGetLayer() const = 0;
   virtual bool DelegatedFrameHostIsVisible() const = 0;
 
-  // Returns the color that the resize gutters should be drawn with. Takes the
-  // suggested color from the current page background.
-  virtual SkColor DelegatedFrameHostGetGutterColor(SkColor color) const = 0;
+  // Returns the color that the resize gutters should be drawn with.
+  virtual SkColor DelegatedFrameHostGetGutterColor() const = 0;
   virtual gfx::Size DelegatedFrameHostDesiredSizeInDIP() const = 0;
 
   virtual bool DelegatedFrameCanCreateResizeLock() const = 0;
@@ -71,7 +70,7 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
   DelegatedFrameHostCreateResizeLock() = 0;
   virtual viz::LocalSurfaceId GetLocalSurfaceId() const = 0;
 
-  virtual void OnBeginFrame() = 0;
+  virtual void OnBeginFrame(base::TimeTicks frame_time) = 0;
   virtual bool IsAutoResizeEnabled() const = 0;
   virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
 };
@@ -164,11 +163,6 @@ class CONTENT_EXPORT DelegatedFrameHost
   void EndFrameSubscription();
   bool HasFrameSubscriber() const { return !!frame_subscriber_; }
   viz::FrameSinkId GetFrameSinkId();
-  // Returns a null SurfaceId if this DelegatedFrameHost has not yet created
-  // a compositor Surface.
-  viz::SurfaceId SurfaceIdAtPoint(viz::SurfaceHittestDelegate* delegate,
-                                  const gfx::PointF& point,
-                                  gfx::PointF* transformed_point);
 
   // Given the SurfaceID of a Surface that is contained within this class'
   // Surface, find the relative transform between the Surfaces and apply it
@@ -188,17 +182,18 @@ class CONTENT_EXPORT DelegatedFrameHost
                                          gfx::PointF* transformed_point);
 
   void SetNeedsBeginFrames(bool needs_begin_frames);
+  void SetWantsAnimateOnlyBeginFrames();
   void DidNotProduceFrame(const viz::BeginFrameAck& ack);
 
-  // Exposed for tests.
-  viz::SurfaceId SurfaceIdForTesting() const {
+  viz::SurfaceId GetCurrentSurfaceId() const {
     return viz::SurfaceId(frame_sink_id_, local_surface_id_);
   }
   viz::CompositorFrameSinkSupport* GetCompositorFrameSinkSupportForTesting() {
     return support_.get();
   }
 
-  bool HasPrimarySurfaceForTesting() const { return has_primary_surface_; }
+  bool HasPrimarySurface() const;
+  bool HasFallbackSurface() const;
 
   void OnCompositingDidCommitForTesting(ui::Compositor* compositor) {
     OnCompositingDidCommit(compositor);
@@ -346,7 +341,6 @@ class CONTENT_EXPORT DelegatedFrameHost
 
   bool needs_begin_frame_ = false;
 
-  bool has_primary_surface_ = false;
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 

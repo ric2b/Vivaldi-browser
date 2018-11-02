@@ -53,9 +53,7 @@ class CORE_EXPORT TypingCommand final : public CompositeEditCommand {
   enum Option {
     kSelectInsertedText = 1 << 0,
     kKillRing = 1 << 1,
-    kRetainAutocorrectionIndicator = 1 << 2,
-    kPreventSpellChecking = 1 << 3,
-    kSmartDelete = 1 << 4
+    kSmartDelete = 1 << 2
   };
   typedef unsigned Options;
 
@@ -88,10 +86,11 @@ class CORE_EXPORT TypingCommand final : public CompositeEditCommand {
   static void CloseTyping(LocalFrame*);
 
   static TypingCommand* LastTypingCommandIfStillOpenForTyping(LocalFrame*);
+  static void UpdateSelectionIfDifferentFromCurrentSelection(TypingCommand*,
+                                                             LocalFrame*);
 
   void InsertText(const String& text, bool select_inserted_text, EditingState*);
   void InsertTextRunWithoutNewlines(const String& text,
-                                    bool select_inserted_text,
                                     EditingState*);
   void InsertLineBreak(EditingState*);
   void InsertParagraphSeparatorInQuotedContent(EditingState*);
@@ -148,15 +147,6 @@ class CORE_EXPORT TypingCommand final : public CompositeEditCommand {
   InputEvent::InputType GetInputType() const override;
   bool IsTypingCommand() const override;
   bool PreservesTypingStyle() const override { return preserves_typing_style_; }
-  void SetShouldRetainAutocorrectionIndicator(bool retain) override {
-    should_retain_autocorrection_indicator_ = retain;
-  }
-  void SetShouldPreventSpellChecking(bool prevent) {
-    should_prevent_spell_checking_ = prevent;
-  }
-
-  static void UpdateSelectionIfDifferentFromCurrentSelection(TypingCommand*,
-                                                             LocalFrame*);
 
   void UpdatePreservesTypingStyle(ETypingCommand);
   void TypingAddedToOpenCommand(ETypingCommand);
@@ -201,9 +191,6 @@ class CORE_EXPORT TypingCommand final : public CompositeEditCommand {
   // the characters that were deleted, but only if the typing command being
   // undone was opened with a backward delete.
   bool opened_by_backward_delete_;
-
-  bool should_retain_autocorrection_indicator_;
-  bool should_prevent_spell_checking_;
 
   bool is_incremental_insertion_;
   size_t selection_start_;

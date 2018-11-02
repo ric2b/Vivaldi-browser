@@ -4,13 +4,12 @@
 
 #include "media/midi/midi_manager_usb.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
-#include "media/midi/midi_scheduler.h"
 #include "media/midi/midi_service.h"
 #include "media/midi/task_service.h"
 #include "media/midi/usb_midi_descriptor_parser.h"
@@ -181,7 +180,7 @@ bool MidiManagerUsb::AddPorts(UsbMidiDevice* device, int device_id) {
         base::StringPrintf("usb:port-%d-%ld", device_id, static_cast<long>(j)));
     if (jacks[j].direction() == UsbMidiJack::DIRECTION_OUT) {
       output_streams_.push_back(
-          base::MakeUnique<UsbMidiOutputStream>(jacks[j]));
+          std::make_unique<UsbMidiOutputStream>(jacks[j]));
       AddOutputPort(MidiPortInfo(id, manufacturer, product_name, version,
                                  PortState::OPENED));
     } else {

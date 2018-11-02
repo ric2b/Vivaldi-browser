@@ -198,7 +198,7 @@ UsbGnubbyDevice.prototype.readOneReply_ = function() {
       }, 0);
     } else {
       console.log(UTIL_fmt('no x.data!'));
-      console.log(x);
+      console.log(UTIL_fmt(JSON.stringify(x)));
       window.setTimeout(function() {
         self.destroy();
       }, 0);
@@ -276,7 +276,7 @@ UsbGnubbyDevice.prototype.writeOneRequest_ = function() {
   var frame = this.txqueue[0];
 
   var self = this;
-  function OutTransferComplete(x) {
+  var OutTransferComplete = function(x) {
     self.outTransferPending = false;
 
     if (!self.readyToUse_())
@@ -294,7 +294,7 @@ UsbGnubbyDevice.prototype.writeOneRequest_ = function() {
     window.setTimeout(function() {
       self.readOneReply_();
     }, 0);
-  }
+  };
 
   var u8 = new Uint8Array(frame);
 

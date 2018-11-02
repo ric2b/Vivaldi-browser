@@ -25,7 +25,8 @@
 
 #include "modules/indexeddb/IDBAny.h"
 
-#include "base/memory/scoped_refptr.h"
+#include <memory>
+
 #include "core/dom/DOMStringList.h"
 #include "modules/indexeddb/IDBCursorWithValue.h"
 #include "modules/indexeddb/IDBDatabase.h"
@@ -46,7 +47,7 @@ IDBAny::IDBAny(Type type) : type_(type) {
   DCHECK(type == kUndefinedType || type == kNullType);
 }
 
-IDBAny::~IDBAny() {}
+IDBAny::~IDBAny() = default;
 
 void IDBAny::ContextWillBeDestroyed() {
   if (idb_cursor_)
@@ -88,7 +89,7 @@ IDBObjectStore* IDBAny::IdbObjectStore() const {
 const IDBKey* IDBAny::Key() const {
   // If type is IDBValueType then instead use value()->primaryKey().
   DCHECK_EQ(type_, kKeyType);
-  return idb_key_.Get();
+  return idb_key_.get();
 }
 
 IDBValue* IDBAny::Value() const {
@@ -96,9 +97,9 @@ IDBValue* IDBAny::Value() const {
   return idb_value_.get();
 }
 
-const Vector<scoped_refptr<IDBValue>>* IDBAny::Values() const {
+const Vector<std::unique_ptr<IDBValue>>& IDBAny::Values() const {
   DCHECK_EQ(type_, kIDBValueArrayType);
-  return &idb_values_;
+  return idb_values_;
 }
 
 int64_t IDBAny::Integer() const {
@@ -122,13 +123,14 @@ IDBAny::IDBAny(IDBIndex* value) : type_(kIDBIndexType), idb_index_(value) {}
 IDBAny::IDBAny(IDBObjectStore* value)
     : type_(kIDBObjectStoreType), idb_object_store_(value) {}
 
-IDBAny::IDBAny(const Vector<scoped_refptr<IDBValue>>& values)
-    : type_(kIDBValueArrayType), idb_values_(values) {}
+IDBAny::IDBAny(Vector<std::unique_ptr<IDBValue>> values)
+    : type_(kIDBValueArrayType), idb_values_(std::move(values)) {}
 
-IDBAny::IDBAny(scoped_refptr<IDBValue> value)
+IDBAny::IDBAny(std::unique_ptr<IDBValue> value)
     : type_(kIDBValueType), idb_value_(std::move(value)) {}
 
-IDBAny::IDBAny(IDBKey* key) : type_(kKeyType), idb_key_(key) {}
+IDBAny::IDBAny(std::unique_ptr<IDBKey> key)
+    : type_(kKeyType), idb_key_(std::move(key)) {}
 
 IDBAny::IDBAny(int64_t value) : type_(kIntegerType), integer_(value) {}
 
@@ -138,7 +140,6 @@ void IDBAny::Trace(blink::Visitor* visitor) {
   visitor->Trace(idb_database_);
   visitor->Trace(idb_index_);
   visitor->Trace(idb_object_store_);
-  visitor->Trace(idb_key_);
 }
 
 }  // namespace blink

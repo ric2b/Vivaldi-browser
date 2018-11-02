@@ -19,28 +19,11 @@
 
 namespace aura {
 
-namespace {
-viz::BufferToTextureTargetMap CreateBufferToTextureTargetMap() {
-  viz::BufferToTextureTargetMap image_targets;
-  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
-       ++usage_idx) {
-    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
-    for (int format_idx = 0;
-         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
-         ++format_idx) {
-      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
-      // TODO(sad): http://crbug.com/675431
-      image_targets[std::make_pair(usage, format)] = GL_TEXTURE_2D;
-    }
-  }
-  return image_targets;
-}
-}  // namespace
-
 MusContextFactory::MusContextFactory(ui::Gpu* gpu)
     : gpu_(gpu),
       resource_settings_(
-          viz::CreateResourceSettings(CreateBufferToTextureTargetMap())),
+          // TODO(sad): http://crbug.com/675431
+          viz::CreateResourceSettings()),
       weak_ptr_factory_(this) {}
 
 MusContextFactory::~MusContextFactory() {}
@@ -72,15 +55,15 @@ void MusContextFactory::OnEstablishedGpuChannel(
 void MusContextFactory::CreateLayerTreeFrameSink(
     base::WeakPtr<ui::Compositor> compositor) {
   gpu_->EstablishGpuChannel(
-      base::Bind(&MusContextFactory::OnEstablishedGpuChannel,
-                 weak_ptr_factory_.GetWeakPtr(), compositor));
+      base::BindOnce(&MusContextFactory::OnEstablishedGpuChannel,
+                     weak_ptr_factory_.GetWeakPtr(), compositor));
 }
 
 scoped_refptr<viz::ContextProvider>
 MusContextFactory::SharedMainThreadContextProvider() {
   if (!shared_main_thread_context_provider_) {
     scoped_refptr<gpu::GpuChannelHost> gpu_channel =
-        gpu_->EstablishGpuChannelSync(nullptr);
+        gpu_->EstablishGpuChannelSync();
     shared_main_thread_context_provider_ =
         gpu_->CreateContextProvider(std::move(gpu_channel));
     if (shared_main_thread_context_provider_->BindToCurrentThread() !=

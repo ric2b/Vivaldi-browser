@@ -8,8 +8,10 @@
 #include <vector>
 
 #include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/speech/speech_ui_model.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/wallpaper/wallpaper_color_profile.h"
@@ -23,7 +25,6 @@
 #include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
-#include "ui/app_list/speech_ui_model.h"
 #include "ui/app_list/views/app_list_folder_view.h"
 #include "ui/app_list/views/app_list_main_view.h"
 #include "ui/app_list/views/apps_container_view.h"
@@ -245,10 +246,10 @@ class HideViewAnimationObserver : public ui::ImplicitAnimationObserver {
 AppListView::AppListView(AppListViewDelegate* delegate)
     : delegate_(delegate),
       model_(delegate->GetModel()),
+      search_model_(delegate->GetSearchModel()),
       short_animations_for_testing_(false),
       is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()),
       is_background_blur_enabled_(features::IsBackgroundBlurEnabled()),
-      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()),
       display_observer_(this),
       animation_observer_(new HideViewAnimationObserver()),
       previous_arrow_key_traversal_enabled_(
@@ -262,11 +263,9 @@ AppListView::AppListView(AppListViewDelegate* delegate)
     display_observer_.Add(display::Screen::GetScreen());
     delegate_->AddObserver(this);
   }
-  if (is_app_list_focus_enabled_) {
-    // Enable arrow key in FocusManager. Arrow left/right and up/down triggers
-    // the same focus movement as tab/shift+tab.
-    views::FocusManager::set_arrow_key_traversal_enabled(true);
-  }
+  // Enable arrow key in FocusManager. Arrow left/right and up/down triggers
+  // the same focus movement as tab/shift+tab.
+  views::FocusManager::set_arrow_key_traversal_enabled(true);
 }
 
 AppListView::~AppListView() {
@@ -277,10 +276,8 @@ AppListView::~AppListView() {
   animation_observer_.reset();
   // Remove child views first to ensure no remaining dependencies on delegate_.
   RemoveAllChildViews(true);
-  if (is_app_list_focus_enabled_) {
-    views::FocusManager::set_arrow_key_traversal_enabled(
-        previous_arrow_key_traversal_enabled_);
-  }
+  views::FocusManager::set_arrow_key_traversal_enabled(
+      previous_arrow_key_traversal_enabled_);
 }
 
 // static
@@ -826,6 +823,20 @@ void AppListView::RecordStateTransitionForUma(AppListViewState new_state) {
 
   UMA_HISTOGRAM_ENUMERATION(kAppListStateTransitionSourceHistogram, transition,
                             kMaxAppListStateTransition);
+
+  switch (transition) {
+    case kPeekingToFullscreenAllApps:
+    case KHalfToFullscreenSearch:
+      base::RecordAction(base::UserMetricsAction("AppList_PeekingToFull"));
+      break;
+
+    case kFullscreenAllAppsToPeeking:
+      base::RecordAction(base::UserMetricsAction("AppList_FullToPeeking"));
+      break;
+
+    default:
+      break;
+  }
 }
 
 void AppListView::MaybeCreateAccessibilityEvent(AppListViewState new_state) {
@@ -1141,7 +1152,7 @@ void AppListView::OnKeyEvent(ui::KeyEvent* event) {
 void AppListView::OnTabletModeChanged(bool started) {
   is_tablet_mode_ = started;
   search_box_view_->OnTabletModeChanged(started);
-  model_->SetTabletMode(started);
+  search_model_->SetTabletMode(started);
   if (is_tablet_mode_ && !is_fullscreen()) {
     // Set |app_list_state_| to a tablet mode friendly state.
     SetState(app_list_state_ == AppListViewState::PEEKING
@@ -1263,6 +1274,14 @@ void AppListView::StartAnimationForState(AppListViewState target_state) {
     animation_duration = kAppListAnimationDurationFromFullscreenMs;
   } else {
     animation_duration = kAppListAnimationDurationMs;
+  }
+
+  if (fullscreen_widget_->GetNativeView()->bounds().y() ==
+      GetDisplayNearestView().work_area().bottom()) {
+    // If the animation start position is the bottom of the screen activate the
+    // fade in animation.
+    app_list_main_view_->contents_view()->FadeInOnOpen(
+        base::TimeDelta::FromMilliseconds(animation_duration));
   }
 
   ui::Layer* layer = fullscreen_widget_->GetLayer();
@@ -1393,9 +1412,6 @@ void AppListView::DraggingLayout() {
 }
 
 void AppListView::RedirectKeyEventToSearchBox(ui::KeyEvent* event) {
-  if (!is_app_list_focus_enabled_)
-    return;
-
   if (event->handled())
     return;
 

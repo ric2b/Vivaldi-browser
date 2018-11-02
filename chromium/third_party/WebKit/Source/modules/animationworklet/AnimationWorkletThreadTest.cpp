@@ -13,7 +13,7 @@
 #include "core/dom/AnimationWorkletProxyClient.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/origin_trials/OriginTrialContext.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
@@ -28,10 +28,8 @@
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -60,19 +58,19 @@ class TestAnimationWorkletProxyClient
   USING_GARBAGE_COLLECTED_MIXIN(TestAnimationWorkletProxyClient);
 
  public:
-  TestAnimationWorkletProxyClient() {}
+  TestAnimationWorkletProxyClient() = default;
   void SetGlobalScope(WorkletGlobalScope*) override {}
   void Dispose() override {}
 };
 
 }  // namespace
 
-class AnimationWorkletThreadTest : public ::testing::Test {
+class AnimationWorkletThreadTest : public PageTestBase {
  public:
   void SetUp() override {
     AnimationWorkletThread::CreateSharedBackingThreadForTest();
-    page_ = DummyPageHolder::Create();
-    Document* document = page_->GetFrame().GetDocument();
+    PageTestBase::SetUp(IntSize());
+    Document* document = &GetDocument();
     document->SetURL(KURL("https://example.com/"));
     document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
     reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
@@ -89,19 +87,16 @@ class AnimationWorkletThreadTest : public ::testing::Test {
 
     std::unique_ptr<AnimationWorkletThread> thread =
         AnimationWorkletThread::Create(nullptr, *reporting_proxy_);
-    Document* document = page_->GetFrame().GetDocument();
+    Document* document = &GetDocument();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), document->UserAgent(), "" /* source_code */,
-            nullptr /* cached_meta_data */,
+            document->Url(), document->UserAgent(),
             nullptr /* content_security_policy_parsed_headers */,
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
             clients, document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             nullptr /* worker_settings */, kV8CacheOptionsDefault),
-        WTF::nullopt,
-        std::make_unique<GlobalScopeInspectorCreationParams>(
-            WorkerInspectorProxy::PauseOnWorkerStart::kDontPause),
+        WTF::nullopt, WorkerInspectorProxy::PauseOnWorkerStart::kDontPause,
         ParentFrameTaskRunners::Create());
     return thread;
   }
@@ -111,7 +106,7 @@ class AnimationWorkletThreadTest : public ::testing::Test {
     std::unique_ptr<WaitableEvent> wait_event =
         std::make_unique<WaitableEvent>();
     thread->GetWorkerBackingThread().BackingThread().PostTask(
-        BLINK_FROM_HERE,
+        FROM_HERE,
         CrossThreadBind(&AnimationWorkletThreadTest::ExecuteScriptInWorklet,
                         CrossThreadUnretained(this),
                         CrossThreadUnretained(thread),
@@ -125,9 +120,10 @@ class AnimationWorkletThreadTest : public ::testing::Test {
         thread->GlobalScope()->ScriptController()->GetScriptState();
     EXPECT_TRUE(script_state);
     ScriptState::Scope scope(script_state);
+    const KURL js_url("https://example.com/foo.js");
     ScriptModule module = ScriptModule::Compile(
-        script_state->GetIsolate(), "var counter = 0; ++counter;", "worklet.js",
-        ScriptFetchOptions(), kSharableCrossOrigin,
+        script_state->GetIsolate(), "var counter = 0; ++counter;", js_url,
+        js_url, ScriptFetchOptions(), kSharableCrossOrigin,
         TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
     ScriptValue exception = module.Instantiate(script_state);
@@ -137,7 +133,6 @@ class AnimationWorkletThreadTest : public ::testing::Test {
     wait_event->Signal();
   }
 
-  std::unique_ptr<DummyPageHolder> page_;
   std::unique_ptr<WorkerReportingProxy> reporting_proxy_;
   ScopedTestingPlatformSupport<AnimationWorkletTestPlatform> platform_;
 };

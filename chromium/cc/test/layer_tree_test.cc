@@ -33,7 +33,6 @@
 #include "cc/trees/proxy_main.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "components/ukm/test_ukm_recorder.h"
-#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "components/viz/test/begin_frame_args_test.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -46,12 +45,13 @@ class SynchronousLayerTreeFrameSink : public viz::TestLayerTreeFrameSink {
  public:
   SynchronousLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       viz::SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const viz::RendererSettings& renderer_settings,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      double refresh_rate)
+      double refresh_rate,
+      viz::BeginFrameSource* begin_frame_source)
       : viz::TestLayerTreeFrameSink(std::move(compositor_context_provider),
                                     std::move(worker_context_provider),
                                     shared_bitmap_manager,
@@ -60,7 +60,8 @@ class SynchronousLayerTreeFrameSink : public viz::TestLayerTreeFrameSink {
                                     task_runner,
                                     false,
                                     false,
-                                    refresh_rate),
+                                    refresh_rate,
+                                    begin_frame_source),
         task_runner_(std::move(task_runner)),
         weak_factory_(this) {}
   ~SynchronousLayerTreeFrameSink() override = default;
@@ -401,7 +402,7 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
       TestHooks* test_hooks) {
     return base::WrapUnique(new LayerTreeHostClientForTesting(test_hooks));
   }
-  ~LayerTreeHostClientForTesting() override {}
+  ~LayerTreeHostClientForTesting() override = default;
 
   void WillBeginMainFrame() override { test_hooks_->WillBeginMainFrame(); }
 
@@ -411,7 +412,9 @@ class LayerTreeHostClientForTesting : public LayerTreeHostClient,
     test_hooks_->BeginMainFrame(args);
   }
 
-  void UpdateLayerTreeHost() override { test_hooks_->UpdateLayerTreeHost(); }
+  void UpdateLayerTreeHost(VisualStateUpdate requested_update) override {
+    test_hooks_->UpdateLayerTreeHost(requested_update);
+  }
 
   void ApplyViewportDeltas(const gfx::Vector2dF& inner_delta,
                            const gfx::Vector2dF& outer_delta,
@@ -925,8 +928,6 @@ void LayerTreeTest::RunTest(CompositorMode mode) {
   // Disable latency recovery to make the scheduler more predictable in its
   // actions and less dependent on timings to make decisions.
   settings_.enable_latency_recovery = false;
-  settings_.resource_settings.buffer_to_texture_target_map =
-      viz::DefaultBufferToTextureTargetMapForTesting();
   InitializeSettings(&settings_);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -957,8 +958,6 @@ void LayerTreeTest::RequestNewLayerTreeFrameSink() {
   // Spend less time waiting for BeginFrame because the output is
   // mocked out.
   constexpr double refresh_rate = 200.0;
-  renderer_settings.resource_settings.buffer_to_texture_target_map =
-      viz::DefaultBufferToTextureTargetMapForTesting();
   auto layer_tree_frame_sink = CreateLayerTreeFrameSink(
       renderer_settings, refresh_rate, std::move(shared_context_provider),
       std::move(worker_context_provider));
@@ -971,7 +970,7 @@ LayerTreeTest::CreateLayerTreeFrameSink(
     const viz::RendererSettings& renderer_settings,
     double refresh_rate,
     scoped_refptr<viz::ContextProvider> compositor_context_provider,
-    scoped_refptr<viz::ContextProvider> worker_context_provider) {
+    scoped_refptr<viz::RasterContextProvider> worker_context_provider) {
   constexpr bool disable_display_vsync = false;
   bool synchronous_composite =
       !HasImplThread() &&
@@ -984,14 +983,14 @@ LayerTreeTest::CreateLayerTreeFrameSink(
     return std::make_unique<SynchronousLayerTreeFrameSink>(
         compositor_context_provider, std::move(worker_context_provider),
         shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
-        impl_task_runner_, refresh_rate);
+        impl_task_runner_, refresh_rate, begin_frame_source_);
   }
 
   return std::make_unique<viz::TestLayerTreeFrameSink>(
       compositor_context_provider, std::move(worker_context_provider),
       shared_bitmap_manager(), gpu_memory_buffer_manager(), renderer_settings,
       impl_task_runner_, synchronous_composite, disable_display_vsync,
-      refresh_rate);
+      refresh_rate, begin_frame_source_);
 }
 
 std::unique_ptr<viz::OutputSurface>

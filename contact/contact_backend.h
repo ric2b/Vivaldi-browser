@@ -90,26 +90,32 @@ class ContactBackend
 
   void Commit();
 
-  // Creates an Contact
-  void CreateContact(ContactRow row,
-                     std::shared_ptr<CreateContactResult> result);
+  // Creates a Contact
+  void CreateContact(ContactRow row, std::shared_ptr<ContactResults> result);
   void GetAllContacts(std::shared_ptr<ContactQueryResults> results);
+  void GetAllEmailAddresses(std::shared_ptr<EmailAddressRows> results);
   void UpdateContact(ContactID contact_id,
                      const Contact& contact,
-                     std::shared_ptr<UpdateContactResult> result);
+                     std::shared_ptr<ContactResults> result);
   void DeleteContact(ContactID contact_id,
-                     std::shared_ptr<DeleteContactResult> result);
+                     std::shared_ptr<ContactResults> result);
 
   void NotifyContactCreated(const ContactRow& row) override;
   void NotifyContactModified(const ContactRow& row) override;
   void NotifyContactDeleted(const ContactRow& row) override;
 
+  void AddEmailAddress(EmailAddressRow row,
+                       std::shared_ptr<ContactResults> result);
+
+  void UpdateEmailAddress(EmailAddressRow row,
+                          std::shared_ptr<ContactResults> result);
+
   void AddProperty(AddPropertyObject row,
-                   std::shared_ptr<UpdateContactResult> result);
+                   std::shared_ptr<ContactResults> result);
   void UpdateProperty(UpdatePropertyObject row,
-                      std::shared_ptr<UpdateContactResult> result);
+                      std::shared_ptr<ContactResults> result);
   void RemoveProperty(RemovePropertyObject row,
-                      std::shared_ptr<UpdateContactResult> result);
+                      std::shared_ptr<ContactResults> result);
 
  protected:
   ~ContactBackend() override;
@@ -124,19 +130,22 @@ class ContactBackend
   // transactions.
   void CloseAllDatabases();
 
-  void AddEmail(AddPropertyObject row,
-                std::shared_ptr<UpdateContactResult> result);
-  void UpdateEmail(UpdatePropertyObject row,
-                   std::shared_ptr<UpdateContactResult> result);
   void DeleteEmail(RemovePropertyObject row,
-                   std::shared_ptr<UpdateContactResult> result);
+                   std::shared_ptr<ContactResults> result);
 
   void AddPhoneNumber(AddPropertyObject row,
-                      std::shared_ptr<UpdateContactResult> result);
+                      std::shared_ptr<ContactResults> result);
   void UpdatePhonenumber(UpdatePropertyObject row,
-                         std::shared_ptr<UpdateContactResult> result);
+                         std::shared_ptr<ContactResults> result);
   void DeletePhonenumber(RemovePropertyObject row,
-                         std::shared_ptr<UpdateContactResult> result);
+                         std::shared_ptr<ContactResults> result);
+
+  void AddPostalAddress(AddPropertyObject row,
+                        std::shared_ptr<ContactResults> result);
+  void UpdatePostalAddress(UpdatePropertyObject row,
+                           std::shared_ptr<ContactResults> result);
+  void DeletePostalAddress(RemovePropertyObject row,
+                           std::shared_ptr<ContactResults> result);
 
   void FillUpdatedContact(ContactID id, ContactRow& updated_row);
 

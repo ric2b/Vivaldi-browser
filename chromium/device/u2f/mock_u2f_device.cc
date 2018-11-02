@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "device/u2f/u2f_response_test_data.h"
+
 namespace device {
 
 MockU2fDevice::MockU2fDevice() : weak_factory_(this) {}
@@ -39,15 +41,31 @@ void MockU2fDevice::WrongData(U2fApduCommand* cmd, DeviceCallback& cb) {
 // static
 void MockU2fDevice::NoErrorSign(U2fApduCommand* cmd, DeviceCallback& cb) {
   std::move(cb).Run(true, std::make_unique<U2fApduResponse>(
-                              std::vector<uint8_t>({kSign}),
+                              std::vector<uint8_t>(
+                                  std::begin(test_data::kTestU2fSignResponse),
+                                  std::end(test_data::kTestU2fSignResponse)),
                               U2fApduResponse::Status::SW_NO_ERROR));
 }
 
 // static
 void MockU2fDevice::NoErrorRegister(U2fApduCommand* cmd, DeviceCallback& cb) {
-  std::move(cb).Run(true, std::make_unique<U2fApduResponse>(
-                              std::vector<uint8_t>({kRegister}),
-                              U2fApduResponse::Status::SW_NO_ERROR));
+  std::move(cb).Run(
+      true,
+      std::make_unique<U2fApduResponse>(
+          std::vector<uint8_t>(std::begin(test_data::kTestU2fRegisterResponse),
+                               std::end(test_data::kTestU2fRegisterResponse)),
+          U2fApduResponse::Status::SW_NO_ERROR));
+}
+
+// static
+void MockU2fDevice::SignWithCorruptedResponse(U2fApduCommand* cmd,
+                                              DeviceCallback& cb) {
+  std::move(cb).Run(
+      true, std::make_unique<U2fApduResponse>(
+                std::vector<uint8_t>(
+                    std::begin(test_data::kTestCorruptedU2fSignResponse),
+                    std::end(test_data::kTestCorruptedU2fSignResponse)),
+                U2fApduResponse::Status::SW_NO_ERROR));
 }
 
 // static

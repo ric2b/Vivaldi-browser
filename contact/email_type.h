@@ -27,57 +27,54 @@
 
 namespace contact {
 
-// Bit flags determing which fields should be updated in the
-// UpdateEmail method
-enum UpdateEmailFields {
-  EMAIL_ID = 1 << 0,
-  TYPE = 1 << 1,
-  EMAIL = 1 << 2,
-};
-
-// Represents a simplified version of a Email.
-struct Email {
-  Email();
-  Email(const Email& email);
-  ~Email();
-  EmailID email_id;
-  std::string email;
-  std::string type;
-  int updateFields;
-};
-
 // Holds all information associated with a specific contact.
-class EmailRow {
+class EmailAddressRow {
  public:
-  EmailRow();
-  ~EmailRow();
+  EmailAddressRow();
+  ~EmailAddressRow();
 
-  EmailRow(const EmailRow& row);
+  EmailAddressRow(const EmailAddressRow& row);
 
-  EmailRow& operator=(const EmailRow& other);
+  EmailAddressRow& operator=(const EmailAddressRow& other);
 
-  EmailID email_id() const { return email_id_; }
-  void set_email_id(EmailID email_id) { email_id_ = email_id; }
+  EmailAddressID email_address_id() const { return email_address_id_; }
+  void set_email_address_id(EmailAddressID email_address_id) {
+    email_address_id_ = email_address_id;
+  }
 
   ContactID contact_id() const { return contact_id_; }
   void set_contact_id(ContactID contact_id) { contact_id_ = contact_id; }
 
-  std::string email() const { return email_; }
-  void set_email(std::string email) { email_ = email; }
+  base::string16 email_address() const { return email_address_; }
+  void set_email_address(base::string16 email_address) {
+    email_address_ = email_address;
+  }
 
   std::string type() const { return type_; }
   void set_type(std::string type) { type_ = type; }
 
-  EmailID email_id_;
+  bool is_default() const { return is_default_; }
+  void set_is_default(bool is_default) { is_default_ = is_default; }
+
+  bool obsolete() const { return obsolete_; }
+  void set_obsolete(bool obsolete) { obsolete_ = obsolete; }
+
+  bool trusted() const { return trusted_; }
+  void set_trusted(bool is_trusted) { trusted_ = is_trusted; }
+
+  EmailAddressID email_address_id_;
   ContactID contact_id_;
-  std::string email_;
+  base::string16 email_address_;
   std::string type_;
+  bool is_default_;
+  bool obsolete_;
+  bool trusted_;
 
  protected:
-  void Swap(EmailRow* other);
+  void Swap(EmailAddressRow* other);
 };
 
-typedef std::vector<EmailRow> EmailRows;
+typedef std::vector<EmailAddressRow> EmailAddressRows;
 
 }  // namespace contact
 

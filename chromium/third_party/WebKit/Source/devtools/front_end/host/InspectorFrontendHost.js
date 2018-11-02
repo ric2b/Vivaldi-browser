@@ -68,6 +68,22 @@ Host.InspectorFrontendHostStub = class {
    * @override
    * @return {string}
    */
+  getInactiveSelectionBackgroundColor() {
+    return '#c9c8c8';
+  }
+
+  /**
+   * @override
+   * @return {string}
+   */
+  getInactiveSelectionForegroundColor() {
+    return '#323232';
+  }
+
+  /**
+   * @override
+   * @return {string}
+   */
   platform() {
     var match = navigator.userAgent.match(/Windows NT/);
     if (match)
@@ -152,6 +168,14 @@ Host.InspectorFrontendHostStub = class {
    */
   openInNewTab(url) {
     window.open(url, '_blank');
+  }
+
+  /**
+   * @override
+   * @param {string} fileSystemPath
+   */
+  showItemInFolder(fileSystemPath) {
+    Common.console.error('Show item in folder is not enabled in hosted mode. Please inspect using chrome://inspect');
   }
 
   /**
@@ -354,14 +378,6 @@ Host.InspectorFrontendHostStub = class {
 
   /**
    * @override
-   * @return {boolean}
-   */
-  isUnderTest() {
-    return false;
-  }
-
-  /**
-   * @override
    * @param {function()} callback
    */
   reattach(callback) {
@@ -371,6 +387,19 @@ Host.InspectorFrontendHostStub = class {
    * @override
    */
   readyForTest() {
+  }
+
+  /**
+   * @override
+   */
+  connectionReady() {
+  }
+
+  /**
+   * @override
+   * @param {boolean} value
+   */
+  setOpenNewWindowForPopups(value) {
   }
 
   /**
@@ -538,10 +567,11 @@ InspectorFrontendHost.events;
  * @return {boolean}
  */
 Host.isUnderTest = function(prefs) {
-  if (InspectorFrontendHost.isUnderTest())
+  // Integration tests rely on test queryParam.
+  if (Runtime.queryParam('test'))
     return true;
-
+  // Browser tests rely on prefs.
   if (prefs)
     return prefs['isUnderTest'] === 'true';
-  return Common.settings.createSetting('isUnderTest', false).get();
+  return Common.settings && Common.settings.createSetting('isUnderTest', false).get();
 };

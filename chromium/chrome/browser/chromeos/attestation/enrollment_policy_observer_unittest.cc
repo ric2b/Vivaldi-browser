@@ -13,16 +13,16 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/attestation/enrollment_policy_observer.h"
-#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#include "chrome/browser/chromeos/settings/device_settings_test_helper.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
 #include "chromeos/dbus/fake_cryptohome_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
-#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using testing::_;
 using testing::Invoke;
+using testing::Return;
 using testing::StrictMock;
 using testing::WithArgs;
 
@@ -33,7 +33,20 @@ namespace {
 
 void CertCallbackSuccess(const AttestationFlow::CertificateCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, true, "fake_cert"));
+      FROM_HERE, base::BindOnce(callback, ATTESTATION_SUCCESS, "fake_cert"));
+}
+
+void CertCallbackUnspecifiedFailure(
+    const AttestationFlow::CertificateCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(callback, ATTESTATION_UNSPECIFIED_FAILURE, ""));
+}
+
+void CertCallbackBadRequestFailure(
+    const AttestationFlow::CertificateCallback& callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(callback, ATTESTATION_SERVER_BAD_REQUEST_FAILURE, ""));
 }
 
 void StatusCallbackSuccess(
@@ -44,39 +57,52 @@ void StatusCallbackSuccess(
 
 }  // namespace
 
-class EnrollmentPolicyObserverTest : public ::testing::Test {
+class EnrollmentPolicyObserverTest : public DeviceSettingsTestBase {
  public:
   EnrollmentPolicyObserverTest() {
-    settings_helper_.ReplaceProvider(kDeviceEnrollmentIdNeeded);
-    settings_helper_.SetBoolean(kDeviceEnrollmentIdNeeded, true);
     policy_client_.SetDMToken("fake_dm_token");
   }
 
  protected:
-  // Configures mock expectations when identification for enrollment is needed.
-  void SetupMocks() {
-    EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _))
-        .WillOnce(WithArgs<4>(Invoke(CertCallbackSuccess)));
-    EXPECT_CALL(policy_client_, UploadCertificate("fake_cert", _))
-        .WillOnce(WithArgs<1>(Invoke(StatusCallbackSuccess)));
+  void SetUpEnrollmentIdNeeded(bool enrollment_id_needed) {
+    if (enrollment_id_needed) {
+      EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _))
+          .WillOnce(WithArgs<4>(Invoke(CertCallbackSuccess)));
+      EXPECT_CALL(policy_client_,
+                  UploadEnterpriseEnrollmentCertificate("fake_cert", _))
+          .WillOnce(WithArgs<1>(Invoke(StatusCallbackSuccess)));
+    }
+    SetUpDevicePolicy(enrollment_id_needed);
+  }
+
+  void SetUpDevicePolicy(bool enrollment_id_needed) {
+    device_policy_.policy_data().set_enrollment_id_needed(enrollment_id_needed);
+    device_policy_.Build();
+    session_manager_client_.set_device_policy(device_policy_.GetBlob());
+    ReloadDeviceSettings();
   }
 
   void Run() {
-    EnrollmentPolicyObserver observer(&policy_client_, &cryptohome_client_,
-                                      &attestation_flow_);
+    EnrollmentPolicyObserver observer(&policy_client_,
+                                      &device_settings_service_,
+                                      &cryptohome_client_, &attestation_flow_);
+    observer.set_retry_limit(3);
     observer.set_retry_delay(0);
     base::RunLoop().RunUntilIdle();
   }
 
-  content::TestBrowserThreadBundle test_browser_thread_bundle_;
-  ScopedCrosSettingsTestHelper settings_helper_;
   FakeCryptohomeClient cryptohome_client_;
   StrictMock<MockAttestationFlow> attestation_flow_;
   StrictMock<policy::MockCloudPolicyClient> policy_client_;
 };
 
+TEST_F(EnrollmentPolicyObserverTest, UploadEnterpriseEnrollmentCertificate) {
+  SetUpEnrollmentIdNeeded(true);
+  Run();
+}
+
 TEST_F(EnrollmentPolicyObserverTest, FeatureDisabled) {
-  settings_helper_.SetBoolean(kDeviceEnrollmentIdNeeded, false);
+  SetUpEnrollmentIdNeeded(false);
   Run();
 }
 
@@ -85,8 +111,25 @@ TEST_F(EnrollmentPolicyObserverTest, UnregisteredPolicyClient) {
   Run();
 }
 
+TEST_F(EnrollmentPolicyObserverTest, GetCertificateUnspecifiedFailure) {
+  EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _))
+      .WillRepeatedly(WithArgs<4>(Invoke(CertCallbackUnspecifiedFailure)));
+  SetUpDevicePolicy(true);
+  Run();
+}
+
+TEST_F(EnrollmentPolicyObserverTest, GetCertificateBadRequestFailure) {
+  EXPECT_CALL(attestation_flow_, GetCertificate(_, _, _, _, _))
+      .WillOnce(WithArgs<4>(Invoke(CertCallbackBadRequestFailure)));
+  EXPECT_CALL(policy_client_, UploadEnterpriseEnrollmentCertificate("", _))
+      .WillOnce(WithArgs<1>(Invoke(StatusCallbackSuccess)));
+  SetUpDevicePolicy(true);
+  Run();
+}
+
 TEST_F(EnrollmentPolicyObserverTest, DBusFailureRetry) {
-  SetupMocks();
+  SetUpEnrollmentIdNeeded(true);
+
   // Simulate a DBus failure.
   cryptohome_client_.SetServiceIsAvailable(false);
 

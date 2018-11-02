@@ -99,7 +99,7 @@ cr.define('extensions', function() {
      * a previously-specified load.
      * @param {string=} opt_retryGuid
      * @return {!Promise} A signal that loading finished, rejected if any error
-     *     occured.
+     *     occurred.
      * @private
      */
     loadUnpackedHelper_(opt_retryGuid) {
@@ -261,8 +261,10 @@ cr.define('extensions', function() {
 
     /** @override */
     updateAllExtensions() {
-      chrome.developerPrivate.autoUpdate();
-      chrome.metricsPrivate.recordUserAction('Options_UpdateExtensions');
+      return new Promise((resolve) => {
+        chrome.developerPrivate.autoUpdate(resolve);
+        chrome.metricsPrivate.recordUserAction('Options_UpdateExtensions');
+      });
     }
 
     /** @override */

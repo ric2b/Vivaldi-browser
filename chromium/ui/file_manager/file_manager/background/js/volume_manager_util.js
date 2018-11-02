@@ -155,12 +155,12 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
             volumeMetadata.mountCondition, volumeMetadata.deviceType,
             volumeMetadata.devicePath, volumeMetadata.isReadOnly,
             volumeMetadata.isReadOnlyRemovableDevice, volumeMetadata.profile,
-            localizedLabel, volumeMetadata.extensionId, volumeMetadata.hasMedia,
+            localizedLabel, volumeMetadata.providerId, volumeMetadata.hasMedia,
             volumeMetadata.configurable, volumeMetadata.watchable,
             /** @type {VolumeManagerCommon.Source} */
             (volumeMetadata.source),
             /** @type {VolumeManagerCommon.FileSystemType} */
-            (volumeMetadata.diskFileSystemType));
+            (volumeMetadata.diskFileSystemType), volumeMetadata.iconSet);
   })
   .catch(
       /**
@@ -179,12 +179,12 @@ volumeManagerUtil.createVolumeInfo = function(volumeMetadata) {
             volumeMetadata.mountCondition, volumeMetadata.deviceType,
             volumeMetadata.devicePath, volumeMetadata.isReadOnly,
             volumeMetadata.isReadOnlyRemovableDevice, volumeMetadata.profile,
-            localizedLabel, volumeMetadata.extensionId, volumeMetadata.hasMedia,
+            localizedLabel, volumeMetadata.providerId, volumeMetadata.hasMedia,
             volumeMetadata.configurable, volumeMetadata.watchable,
             /** @type {VolumeManagerCommon.Source} */
             (volumeMetadata.source),
             /** @type {VolumeManagerCommon.FileSystemType} */
-            (volumeMetadata.diskFileSystemType));
+            (volumeMetadata.diskFileSystemType), volumeMetadata.iconSet);
       });
 };
 
@@ -212,8 +212,8 @@ volumeManagerUtil.reportMountError = function(volumeMetadata, error) {
   }
   var volumeType = volumeMetadata.volumeType;
   if (volumeMetadata.volumeType === VolumeManagerCommon.VolumeType.PROVIDED) {
-    volumeType += ':' + metrics.getFileSystemProviderName(
-        volumeMetadata.extensionId);
+    volumeType +=
+        ':' + metrics.getFileSystemProviderName(volumeMetadata.providerId);
   }
   var description = 'mount ' + errorType + ' ' + volumeType;
   var fatal =

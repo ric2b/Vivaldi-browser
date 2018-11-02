@@ -8,8 +8,8 @@ import("//services/service_manager/public/service_manifest.gni")
 
 source_set("lib") {
   sources = [
-    "identity_manager.cc",
-    "identity_manager.h",
+    "identity_manager_impl.cc",
+    "identity_manager_impl.h",
     "identity_service.cc",
     "identity_service.h",
   ]
@@ -41,6 +41,7 @@ source_set("tests") {
     "//components/signin/core/browser:test_support",
     "//components/sync_preferences:test_support",
     "//mojo/public/cpp/bindings:bindings",
+    "//services/identity/public/cpp",
     "//services/identity/public/interfaces",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/cpp:service_test_support",
@@ -48,7 +49,9 @@ source_set("tests") {
     "//testing/gtest",
   ]
   sources = [
-    "identity_manager_unittest.cc",
+    "identity_manager_impl_unittest.cc",
+    "public/cpp/identity_manager_unittest.cc",
+    "public/cpp/primary_account_access_token_fetcher_unittest.cc",
   ]
 }
 

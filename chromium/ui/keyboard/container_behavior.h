@@ -7,6 +7,7 @@
 
 #include "ui/aura/window.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/events/event.h"
 #include "ui/keyboard/container_type.h"
 #include "ui/keyboard/keyboard_export.h"
 #include "ui/wm/core/window_animations.h"
@@ -61,8 +62,7 @@ class KEYBOARD_EXPORT ContainerBehavior {
 
   virtual void SavePosition(const gfx::Point& position) = 0;
 
-  virtual void HandlePointerEvent(bool isMouseButtonPressed,
-                                  const gfx::Vector2d& kb_offset) = 0;
+  virtual void HandlePointerEvent(const ui::LocatedEvent& event) = 0;
 
   virtual ContainerType GetType() const = 0;
 
@@ -81,6 +81,14 @@ class KEYBOARD_EXPORT ContainerBehavior {
 
   // Sets floating keyboard drggable rect.
   virtual bool SetDraggableArea(const gfx::Rect& rect) = 0;
+
+ protected:
+  // The opacity of virtual keyboard container when show animation
+  // starts or hide animation finishes. This cannot be zero because we
+  // call Show() on the keyboard window before setting the opacity
+  // back to 1.0. Since windows are not allowed to be shown with zero
+  // opacity, we always animate to 0.01 instead.
+  static constexpr float kAnimationStartOrAfterHideOpacity = 0.01f;
 };
 
 }  // namespace keyboard

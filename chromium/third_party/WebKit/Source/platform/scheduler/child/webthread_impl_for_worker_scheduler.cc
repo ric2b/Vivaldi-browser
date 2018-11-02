@@ -14,7 +14,6 @@
 #include "platform/scheduler/child/web_scheduler_impl.h"
 #include "platform/scheduler/child/web_task_runner_impl.h"
 #include "platform/scheduler/child/worker_scheduler_impl.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 namespace scheduler {
@@ -69,7 +68,6 @@ void WebThreadImplForWorkerScheduler::InitOnThread(
   web_scheduler_.reset(new WebSchedulerImpl(
       worker_scheduler_.get(), worker_scheduler_->IdleTaskRunner(),
       worker_scheduler_->DefaultTaskQueue(),
-      worker_scheduler_->DefaultTaskQueue(),
       worker_scheduler_->DefaultTaskQueue()));
   base::MessageLoop::current()->AddDestructionObserver(this);
   web_task_runner_ = WebTaskRunnerImpl::Create(task_queue_, base::nullopt);
@@ -108,8 +106,8 @@ blink::WebScheduler* WebThreadImplForWorkerScheduler::Scheduler() const {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-WebThreadImplForWorkerScheduler::GetTaskRunner() const {
-  return task_queue_;
+WebThreadImplForWorkerScheduler::GetSingleThreadTaskRunner() const {
+  return web_task_runner_.Get();
 }
 
 SingleThreadIdleTaskRunner* WebThreadImplForWorkerScheduler::GetIdleTaskRunner()
@@ -117,7 +115,8 @@ SingleThreadIdleTaskRunner* WebThreadImplForWorkerScheduler::GetIdleTaskRunner()
   return idle_task_runner_.get();
 }
 
-blink::WebTaskRunner* WebThreadImplForWorkerScheduler::GetWebTaskRunner() {
+blink::WebTaskRunner* WebThreadImplForWorkerScheduler::GetWebTaskRunner()
+    const {
   return web_task_runner_.Get();
 }
 

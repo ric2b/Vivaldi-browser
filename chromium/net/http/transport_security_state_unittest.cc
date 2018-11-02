@@ -246,7 +246,7 @@ void CheckHPKPReport(
     const HashValueVector& known_pins) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(report));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
+  ASSERT_TRUE(value->is_dict());
 
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
@@ -311,7 +311,7 @@ void CheckSerializedExpectStapleReport(const std::string& report,
                                        const std::string& cert_status) {
   std::unique_ptr<base::Value> value(base::JSONReader::Read(report));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
+  ASSERT_TRUE(value->is_dict());
 
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
@@ -2220,8 +2220,8 @@ TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
   ASSERT_TRUE(cert);
 
   HashValueVector hashes;
-  hashes.push_back(HashValue(
-      X509Certificate::CalculateFingerprint256(cert->os_cert_handle())));
+  hashes.push_back(
+      HashValue(X509Certificate::CalculateFingerprint256(cert->cert_buffer())));
 
   {
     TransportSecurityState state;
@@ -2357,11 +2357,11 @@ TEST_F(TransportSecurityStateTest, RequireCTForSymantec) {
       ImportCertFromFile(GetTestCertsDirectory(), "post_june_2016.pem");
   ASSERT_TRUE(after_cert);
 
-  SHA256HashValue symantec_hash_value = {
+  const SHA256HashValue symantec_hash_value = {
       {0xb2, 0xde, 0xf5, 0x36, 0x2a, 0xd3, 0xfa, 0xcd, 0x04, 0xbd, 0x29,
        0x04, 0x7a, 0x43, 0x84, 0x4f, 0x76, 0x70, 0x34, 0xea, 0x48, 0x92,
        0xf8, 0x0e, 0x56, 0xbe, 0xe6, 0x90, 0x24, 0x3e, 0x25, 0x02}};
-  SHA256HashValue google_hash_value = {
+  const SHA256HashValue google_hash_value = {
       {0xec, 0x72, 0x29, 0x69, 0xcb, 0x64, 0x20, 0x0a, 0xb6, 0x63, 0x8f,
        0x68, 0xac, 0x53, 0x8e, 0x40, 0xab, 0xab, 0x5b, 0x19, 0xa6, 0x48,
        0x56, 0x61, 0x04, 0x2a, 0x10, 0x61, 0xc4, 0x61, 0x27, 0x76}};
@@ -2471,6 +2471,93 @@ TEST_F(TransportSecurityStateTest, RequireCTForSymantec) {
           after_cert.get(), SignedCertificateTimestampAndStatusList(),
           TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
           ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+}
+
+// Tests that Certificate Transparency is required for all of the Symantec
+// Managed CAs, regardless of when the certificate was issued.
+TEST_F(TransportSecurityStateTest, RequireCTForSymantecManagedCAs) {
+  const SHA256HashValue symantec_hash_value = {
+      {0xb2, 0xde, 0xf5, 0x36, 0x2a, 0xd3, 0xfa, 0xcd, 0x04, 0xbd, 0x29,
+       0x04, 0x7a, 0x43, 0x84, 0x4f, 0x76, 0x70, 0x34, 0xea, 0x48, 0x92,
+       0xf8, 0x0e, 0x56, 0xbe, 0xe6, 0x90, 0x24, 0x3e, 0x25, 0x02}};
+  const SHA256HashValue managed_hash_value = {
+      {0x7c, 0xac, 0x9a, 0x0f, 0xf3, 0x15, 0x38, 0x77, 0x50, 0xba, 0x8b,
+       0xaf, 0xdb, 0x1c, 0x2b, 0xc2, 0x9b, 0x3f, 0x0b, 0xba, 0x16, 0x36,
+       0x2c, 0xa9, 0x3a, 0x90, 0xf8, 0x4d, 0xa2, 0xdf, 0x5f, 0x3e}};
+
+  TransportSecurityState state;
+
+  HashValueVector hashes;
+  hashes.push_back(HashValue(symantec_hash_value));
+  hashes.push_back(HashValue(managed_hash_value));
+
+  // All certificates, both before and after the pre-existing 1 June 2016
+  // date, are expected to be compliant.
+  scoped_refptr<X509Certificate> before_cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "pre_june_2016.pem");
+  ASSERT_TRUE(before_cert);
+
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, before_cert.get(),
+          before_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, before_cert.get(),
+          before_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, before_cert.get(),
+          before_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, before_cert.get(),
+          before_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
+
+  scoped_refptr<X509Certificate> after_cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "post_june_2016.pem");
+  ASSERT_TRUE(after_cert);
+
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, after_cert.get(),
+          after_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, after_cert.get(),
+          after_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, after_cert.get(),
+          after_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
+  EXPECT_EQ(
+      TransportSecurityState::CT_REQUIREMENTS_MET,
+      state.CheckCTRequirements(
+          HostPortPair("www.example.com", 443), true, hashes, after_cert.get(),
+          after_cert.get(), SignedCertificateTimestampAndStatusList(),
+          TransportSecurityState::ENABLE_EXPECT_CT_REPORTS,
+          ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
 }
 
 // Tests that dynamic Expect-CT state is cleared from ClearDynamicData().
@@ -3104,6 +3191,8 @@ TEST_F(TransportSecurityStateStaticTest, IsPreloaded) {
   const std::string google = "google";
   const std::string www_google = "www.google";
   const std::string foo = "foo";
+  const std::string bank = "example.bank";
+  const std::string insurance = "sub.example.insurance";
 
   TransportSecurityState state;
   TransportSecurityState::STSState sts_state;
@@ -3115,6 +3204,10 @@ TEST_F(TransportSecurityStateStaticTest, IsPreloaded) {
   EXPECT_TRUE(GetStaticDomainState(&state, google, &sts_state, &pkp_state));
   EXPECT_TRUE(GetStaticDomainState(&state, www_google, &sts_state, &pkp_state));
   EXPECT_TRUE(GetStaticDomainState(&state, foo, &sts_state, &pkp_state));
+  EXPECT_TRUE(GetStaticDomainState(&state, bank, &sts_state, &pkp_state));
+  EXPECT_TRUE(sts_state.include_subdomains);
+  EXPECT_TRUE(GetStaticDomainState(&state, insurance, &sts_state, &pkp_state));
+  EXPECT_TRUE(sts_state.include_subdomains);
   EXPECT_FALSE(
       GetStaticDomainState(&state, a_www_paypal, &sts_state, &pkp_state));
   EXPECT_FALSE(
@@ -3347,6 +3440,9 @@ TEST_F(TransportSecurityStateStaticTest, Preloaded) {
 
   EXPECT_TRUE(StaticShouldRedirect("crate.io"));
   EXPECT_TRUE(StaticShouldRedirect("foo.crate.io"));
+
+  EXPECT_TRUE(StaticShouldRedirect("sub.bank"));
+  EXPECT_TRUE(StaticShouldRedirect("sub.insurance"));
 }
 
 TEST_F(TransportSecurityStateStaticTest, PreloadedPins) {
@@ -3498,7 +3594,7 @@ TEST_F(TransportSecurityStateStaticTest, OptionalHSTSCertPins) {
   EXPECT_TRUE(HasStaticPublicKeyPins("googlesyndication.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("doubleclick.net"));
   EXPECT_TRUE(HasStaticPublicKeyPins("ad.doubleclick.net"));
-  EXPECT_FALSE(HasStaticPublicKeyPins("learn.doubleclick.net"));
+  EXPECT_TRUE(HasStaticPublicKeyPins("redirector.gvt1.com"));
   EXPECT_TRUE(HasStaticPublicKeyPins("a.googlegroups.com"));
 }
 

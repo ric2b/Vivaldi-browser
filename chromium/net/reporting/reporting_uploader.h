@@ -15,6 +15,7 @@ class GURL;
 
 namespace net {
 
+class URLRequest;
 class URLRequestContext;
 
 // Uploads already-serialized reports and converts responses to one of the
@@ -23,7 +24,7 @@ class NET_EXPORT ReportingUploader {
  public:
   enum class Outcome { SUCCESS, REMOVE_ENDPOINT, FAILURE };
 
-  using Callback = base::Callback<void(Outcome outcome)>;
+  using UploadCallback = base::OnceCallback<void(Outcome outcome)>;
 
   static const char kUploadContentType[];
 
@@ -33,7 +34,10 @@ class NET_EXPORT ReportingUploader {
   // |url|, and calls |callback| when complete (whether successful or not).
   virtual void StartUpload(const GURL& url,
                            const std::string& json,
-                           const Callback& callback) = 0;
+                           UploadCallback callback) = 0;
+
+  // Returns whether |request| is an upload request sent by this uploader.
+  virtual bool RequestIsUpload(const URLRequest& request) = 0;
 
   // Creates a real implementation of |ReportingUploader| that uploads reports
   // using |context|.

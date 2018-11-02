@@ -4,33 +4,40 @@
 
 #include "core/css/cssom/FilteredComputedStylePropertyMap.h"
 
+#include <memory>
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/dom/Element.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/heap/Handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
-class FilteredComputedStylePropertyMapTest : public ::testing::Test {
+class FilteredComputedStylePropertyMapTest : public PageTestBase {
  public:
-  FilteredComputedStylePropertyMapTest() : page_(DummyPageHolder::Create()) {
-    declaration_ = CSSComputedStyleDeclaration::Create(
-        page_->GetDocument().documentElement());
-  }
+  FilteredComputedStylePropertyMapTest() = default;
 
   CSSComputedStyleDeclaration* Declaration() const {
     return declaration_.Get();
   }
-  Node* PageNode() { return page_->GetDocument().documentElement(); }
+
+  void SetUp() override {
+    PageTestBase::SetUp(IntSize());
+    declaration_ =
+        CSSComputedStyleDeclaration::Create(GetDocument().documentElement());
+  }
+
+  Node* PageNode() { return GetDocument().documentElement(); }
 
  private:
-  std::unique_ptr<DummyPageHolder> page_;
   Persistent<CSSComputedStyleDeclaration> declaration_;
 };
 
 TEST_F(FilteredComputedStylePropertyMapTest, GetProperties) {
+  GetDocument().documentElement()->SetInnerHTMLFromString(
+      "<div id='test' style='--foo: 1; --bar: banana'></div>");
+  Element* test_element = GetDocument().getElementById("test");
+
   Vector<CSSPropertyID> native_properties(
       {CSSPropertyColor, CSSPropertyAlignItems});
   Vector<CSSPropertyID> empty_native_properties;
@@ -38,20 +45,24 @@ TEST_F(FilteredComputedStylePropertyMapTest, GetProperties) {
   Vector<AtomicString> empty_custom_properties;
 
   FilteredComputedStylePropertyMap* map =
-      FilteredComputedStylePropertyMap::Create(Declaration(), native_properties,
-                                               custom_properties, PageNode());
+      FilteredComputedStylePropertyMap::Create(test_element, native_properties,
+                                               custom_properties);
   EXPECT_TRUE(map->getProperties().Contains("color"));
   EXPECT_TRUE(map->getProperties().Contains("align-items"));
   EXPECT_TRUE(map->getProperties().Contains("--foo"));
   EXPECT_TRUE(map->getProperties().Contains("--bar"));
 
   map = FilteredComputedStylePropertyMap::Create(
-      Declaration(), native_properties, empty_custom_properties, PageNode());
+      test_element, native_properties, empty_custom_properties);
   EXPECT_TRUE(map->getProperties().Contains("color"));
   EXPECT_TRUE(map->getProperties().Contains("align-items"));
+  EXPECT_FALSE(map->getProperties().Contains("--foo"));
+  EXPECT_FALSE(map->getProperties().Contains("--bar"));
 
   map = FilteredComputedStylePropertyMap::Create(
-      Declaration(), empty_native_properties, custom_properties, PageNode());
+      test_element, empty_native_properties, custom_properties);
+  EXPECT_FALSE(map->getProperties().Contains("color"));
+  EXPECT_FALSE(map->getProperties().Contains("align-items"));
   EXPECT_TRUE(map->getProperties().Contains("--foo"));
   EXPECT_TRUE(map->getProperties().Contains("--bar"));
 }
@@ -61,9 +72,8 @@ TEST_F(FilteredComputedStylePropertyMapTest, NativePropertyAccessors) {
       {CSSPropertyColor, CSSPropertyAlignItems});
   Vector<AtomicString> empty_custom_properties;
   FilteredComputedStylePropertyMap* map =
-      FilteredComputedStylePropertyMap::Create(Declaration(), native_properties,
-                                               empty_custom_properties,
-                                               PageNode());
+      FilteredComputedStylePropertyMap::Create(PageNode(), native_properties,
+                                               empty_custom_properties);
 
   DummyExceptionStateForTesting exception_state;
 
@@ -93,9 +103,8 @@ TEST_F(FilteredComputedStylePropertyMapTest, CustomPropertyAccessors) {
   Vector<CSSPropertyID> empty_native_properties;
   Vector<AtomicString> custom_properties({"--foo", "--bar"});
   FilteredComputedStylePropertyMap* map =
-      FilteredComputedStylePropertyMap::Create(Declaration(),
-                                               empty_native_properties,
-                                               custom_properties, PageNode());
+      FilteredComputedStylePropertyMap::Create(
+          PageNode(), empty_native_properties, custom_properties);
 
   DummyExceptionStateForTesting exception_state;
 

@@ -37,14 +37,6 @@ config("features") {
   }
 }
 
-if (is_win) {
-  config("huge_link") {
-    #huge_link = true
-    #pool = "://build/toolchain/win:huge_pool($default_toolchain)"
-    #description = "HUGE_" + description
-  }
-}
-
 config("disable_new_dtags") {
   if (is_linux) {
     ldflags = [ "-Wl,--disable-new-dtags" ]

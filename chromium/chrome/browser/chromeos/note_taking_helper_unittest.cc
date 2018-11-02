@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -37,6 +36,7 @@
 #include "components/arc/arc_util.h"
 #include "components/arc/common/intent_helper.mojom.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
+#include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_intent_helper_instance.h"
 #include "components/crx_file/id_util.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -218,6 +218,10 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
 
   void TearDown() override {
     if (initialized_) {
+      arc::ArcServiceManager::Get()
+          ->arc_bridge_service()
+          ->intent_helper()
+          ->CloseInstance(&intent_helper_);
       NoteTakingHelper::Shutdown();
       intent_helper_bridge_.reset();
       arc_test_.TearDown();
@@ -279,6 +283,8 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
         ->arc_bridge_service()
         ->intent_helper()
         ->SetInstance(&intent_helper_);
+    WaitForInstanceReady(
+        arc::ArcServiceManager::Get()->arc_bridge_service()->intent_helper());
 
     if (flags & ENABLE_PALETTE) {
       base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -302,7 +308,7 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
         std::make_unique<TestNoteTakingController>();
     test_note_taking_controller_ = test_note_taking_controller_ptr.get();
     connector_factory_ =
-        std::make_unique<service_manager::TestConnectorFactory>(
+        service_manager::TestConnectorFactory::CreateForUniqueService(
             std::move(test_note_taking_controller_ptr));
     connector_ = connector_factory_->CreateConnector();
 
@@ -414,7 +420,7 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
   // BrowserWithTestWindowTest:
   TestingProfile* CreateProfile() override {
     auto prefs =
-        base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>();
+        std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
     RegisterUserProfilePrefs(prefs->registry());
     profile_prefs_ = prefs.get();
     return profile_manager()->CreateTestingProfile(
@@ -465,7 +471,7 @@ class NoteTakingHelperTest : public BrowserWithTestWindowTest,
       std::string actual = GetAppString(actual_apps[i]);
       if (expected != actual) {
         if (!failure) {
-          failure = base::MakeUnique<::testing::AssertionResult>(
+          failure = std::make_unique<::testing::AssertionResult>(
               ::testing::AssertionFailure());
         }
         *failure << "Error at index " << i << ": "
@@ -941,7 +947,7 @@ TEST_P(NoteTakingHelperTest, AddProfileWithPlayStoreEnabled) {
   // notified, since OnArcPlayStoreEnabledChanged() apparently isn't called in
   // this case: http://crbug.com/700554
   const char kSecondProfileName[] = "second-profile";
-  auto prefs = base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>();
+  auto prefs = std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
   RegisterUserProfilePrefs(prefs->registry());
   prefs->SetBoolean(arc::prefs::kArcEnabled, true);
   profile_manager()->CreateTestingProfile(
@@ -1397,7 +1403,7 @@ TEST_P(NoteTakingHelperTest, SetAppEnabledOnLockScreen) {
   // Policy with an empty whitelist - this should disallow all apps from the
   // lock screen.
   profile_prefs_->SetManagedPref(prefs::kNoteTakingAppsLockScreenWhitelist,
-                                 base::MakeUnique<base::ListValue>());
+                                 std::make_unique<base::ListValue>());
 
   // Preferred app changed notification is not expected if the preferred app is
   // not supported on lock screen.
@@ -1440,7 +1446,7 @@ TEST_P(NoteTakingHelperTest,
   // Policy with an empty whitelist - this should disallow test app from running
   // on lock screen.
   profile_prefs_->SetManagedPref(prefs::kNoteTakingAppsLockScreenWhitelist,
-                                 base::MakeUnique<base::ListValue>());
+                                 std::make_unique<base::ListValue>());
 
   // Preferred app settings changed - observers should be notified.
   EXPECT_EQ(std::vector<Profile*>{profile()}, observer.preferred_app_updates());
@@ -1475,7 +1481,7 @@ TEST_P(NoteTakingHelperTest,
                                     kDevKeepAppName, profile());
 
   profile_prefs_->SetManagedPref(prefs::kNoteTakingAppsLockScreenWhitelist,
-                                 base::MakeUnique<base::ListValue>());
+                                 std::make_unique<base::ListValue>());
   // Verify that observers are not notified of preferred app change if preferred
   // app is not set when whitelist policy changes.
   EXPECT_TRUE(observer.preferred_app_updates().empty());
@@ -1503,7 +1509,7 @@ TEST_P(NoteTakingHelperTest, LockScreenSupportInSecondaryProfile) {
   TestObserver observer;
 
   // Initialize secondary profile.
-  auto prefs = base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>();
+  auto prefs = std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
   RegisterUserProfilePrefs(prefs->registry());
   sync_preferences::TestingPrefServiceSyncable* profile_prefs = prefs.get();
   const std::string kSecondProfileName = "second-profile";
@@ -1544,7 +1550,7 @@ TEST_P(NoteTakingHelperTest, LockScreenSupportInSecondaryProfile) {
 
   // Policy with an empty whitelist.
   profile_prefs->SetManagedPref(prefs::kNoteTakingAppsLockScreenWhitelist,
-                                base::MakeUnique<base::ListValue>());
+                                std::make_unique<base::ListValue>());
 
   // Changing policy should not notify observers in secondary profile.
   EXPECT_TRUE(observer.preferred_app_updates().empty());

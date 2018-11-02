@@ -388,7 +388,7 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
  *
  * the string suffix used by dynamic modules (usually shared libraries)
  */
-#define LIBXML_MODULE_EXTENSION ".dll" 
+#define LIBXML_MODULE_EXTENSION ".dll"
 #endif
 
 /**
@@ -410,9 +410,6 @@ XMLPUBFUN void XMLCALL xmlCheckVersion(int version);
 #endif
 
 #ifdef __GNUC__
-#ifdef HAVE_ANSIDECL_H
-#include <ansidecl.h>
-#endif
 
 /**
  * ATTRIBUTE_UNUSED:

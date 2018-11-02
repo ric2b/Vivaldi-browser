@@ -403,11 +403,14 @@ public class WebappNavigationTest {
         String initialInScopeUrl = testServer.getURL(WEB_APP_PATH);
         ChromeTabUtils.waitForTabPageLoaded(activity.getActivityTab(), initialInScopeUrl);
 
-        final String redirectingUrl = testServer.getURL(
-                "/chrome/test/data/android/redirect/js_redirect.html"
-                + "?replace_text="
-                + Base64.encodeToString("PARAM_URL".getBytes("utf-8"), Base64.URL_SAFE) + ":"
-                + Base64.encodeToString(offOriginUrl().getBytes("utf-8"), Base64.URL_SAFE));
+        final String redirectingUrl =
+                testServer.getURL("/chrome/test/data/android/redirect/js_redirect.html"
+                        + "?replace_text="
+                        + Base64.encodeToString(
+                                  ApiCompatibilityUtils.getBytesUtf8("PARAM_URL"), Base64.URL_SAFE)
+                        + ":"
+                        + Base64.encodeToString(ApiCompatibilityUtils.getBytesUtf8(offOriginUrl()),
+                                  Base64.URL_SAFE));
         addAnchorAndClick(redirectingUrl, "_self");
 
         CustomTabActivity customTab = waitFor(CustomTabActivity.class);
@@ -442,14 +445,16 @@ public class WebappNavigationTest {
                         "https://somewebapp.com" /* referrer */, true /* isPost */,
                         true /* hasUserGesture */, PageTransition.FORM_SUBMIT,
                         false /* isRedirect */, false /* isExternalProtocol */,
-                        true /* isMainFrame */, true /* hasUserGestureCarryover */),
+                        true /* isMainFrame */, null /* suggestedFilename */,
+                        true /* hasUserGestureCarryover */),
                 info, WebappScopePolicy.STRICT));
         Assert.assertTrue(WebappInterceptNavigationDelegate.shouldOpenInCustomTab(
                 NavigationParams.create("https://otherdomain.com",
                         "https://somewebapp.com" /* referrer */, false /* isPost */,
                         true /* hasUserGesture */, PageTransition.FORM_SUBMIT,
                         false /* isRedirect */, false /* isExternalProtocol */,
-                        true /* isMainFrame */, true /* hasUserGestureCarryover */),
+                        true /* isMainFrame */, null /* suggestedFilename */,
+                        true /* hasUserGestureCarryover */),
                 info, WebappScopePolicy.STRICT));
     }
 

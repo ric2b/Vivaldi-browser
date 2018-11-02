@@ -15,7 +15,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -96,6 +95,7 @@
 #include "ui/base/ui_base_types.h"
 
 #if defined(OS_CHROMEOS)
+#include "ash/public/cpp/window_pin_type.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "chrome/browser/ui/browser_command_controller.h"
@@ -262,12 +262,6 @@ bool IsValidStateForWindowsCreateFunction(
 }
 
 #if defined(OS_CHROMEOS)
-bool IsWindowTrustedPinned(ui::BaseWindow* base_window) {
-  aura::Window* window = base_window->GetNativeWindow();
-  ash::mojom::WindowPinType type = window->GetProperty(ash::kWindowPinTypeKey);
-  return type == ash::mojom::WindowPinType::TRUSTED_PINNED;
-}
-
 void SetWindowTrustedPinned(ui::BaseWindow* base_window, bool trusted_pinned) {
   aura::Window* window = base_window->GetNativeWindow();
   // TRUSTED_PINNED is used here because that one locks the window fullscreen
@@ -465,7 +459,7 @@ bool WindowsCreateFunction::ShouldOpenIncognitoWindow(
   if (incognito && !profile->IsGuestSession()) {
     std::string first_url_erased;
     for (size_t i = 0; i < urls->size();) {
-      if (chrome::IsURLAllowedInIncognito((*urls)[i], profile)) {
+      if (IsURLAllowedInIncognito((*urls)[i], profile)) {
         i++;
       } else {
         if (first_url_erased.empty())
@@ -664,8 +658,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   }
 
   for (const GURL& url : urls) {
-    chrome::NavigateParams navigate_params(new_window, url,
-                                           transition);
+    NavigateParams navigate_params(new_window, url, transition);
     navigate_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 
     // Depending on the |setSelfAsOpener| option, we need to put the new
@@ -680,7 +673,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
     navigate_params.source_site_instance =
         render_frame_host()->GetSiteInstance();
 
-    chrome::Navigate(&navigate_params);
+    Navigate(&navigate_params);
   }
 
   WebContents* contents = NULL;
@@ -726,7 +719,7 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
       !browser_context()->IsOffTheRecord() && !include_incognito()) {
     // Don't expose incognito windows if extension itself works in non-incognito
     // profile and CanCrossIncognito isn't allowed.
-    result = base::MakeUnique<base::Value>();
+    result = std::make_unique<base::Value>();
   } else {
     result = controller->CreateWindowValueWithTabs(extension());
   }
@@ -753,7 +746,7 @@ ExtensionFunction::ResponseAction WindowsUpdateFunction::Run() {
 
 #if defined(OS_CHROMEOS)
   const bool is_window_trusted_pinned =
-      IsWindowTrustedPinned(controller->window());
+      ash::IsWindowTrustedPinned(controller->window());
   // Don't allow locked fullscreen operations on a window without the proper
   // permission (also don't allow any operations on a locked window if the
   // extension doesn't have the permission).
@@ -886,7 +879,7 @@ ExtensionFunction::ResponseAction WindowsRemoveFunction::Run() {
   }
 
 #if defined(OS_CHROMEOS)
-  if (IsWindowTrustedPinned(controller->window()) &&
+  if (ash::IsWindowTrustedPinned(controller->window()) &&
       !ExtensionHasLockedFullscreenPermission(extension())) {
     return RespondNow(
         Error(keys::kMissingLockWindowFullscreenPrivatePermission));
@@ -1338,8 +1331,7 @@ bool TabsUpdateFunction::RunAsync() {
   if (params->update_properties.url.get()) {
     std::string updated_url = *params->update_properties.url;
     if (browser->profile()->GetProfileType() == Profile::INCOGNITO_PROFILE &&
-        !chrome::IsURLAllowedInIncognito(GURL(updated_url),
-                                         browser->profile())) {
+        !IsURLAllowedInIncognito(GURL(updated_url), browser->profile())) {
       error_ = ErrorUtils::FormatErrorMessage(
           keys::kURLsNotAllowedInIncognitoError, updated_url);
       return false;
@@ -1795,6 +1787,7 @@ WebContents* TabsCaptureVisibleTabFunction::GetWebContentsForID(int window_id) {
   }
 
   if (!extension()->permissions_data()->CanCaptureVisiblePage(
+          contents->GetLastCommittedURL(), extension(),
           SessionTabHelper::IdForTab(contents), &error_)) {
     return NULL;
   }
@@ -1817,6 +1810,8 @@ bool TabsCaptureVisibleTabFunction::RunAsync() {
   }
 
   WebContents* contents = GetWebContentsForID(context_id);
+  if (!contents)
+    return false;
 
   return CaptureAsync(
       contents, image_details.get(),
@@ -1831,7 +1826,7 @@ void TabsCaptureVisibleTabFunction::OnCaptureSuccess(const SkBitmap& bitmap) {
     return;
   }
 
-  SetResult(base::MakeUnique<base::Value>(base64_result));
+  SetResult(std::make_unique<base::Value>(base64_result));
   SendResponse(true);
 }
 
@@ -1944,7 +1939,7 @@ void TabsDetectLanguageFunction::Observe(
 }
 
 void TabsDetectLanguageFunction::GotLanguage(const std::string& language) {
-  SetResult(base::MakeUnique<base::Value>(language));
+  SetResult(std::make_unique<base::Value>(language));
   SendResponse(true);
 
   Release();  // Balanced in Run()

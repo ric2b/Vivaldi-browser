@@ -28,7 +28,9 @@
 
 #include "platform/weborigin/SecurityOrigin.h"
 
+#include <stdint.h>
 #include <memory>
+
 #include "net/base/url_util.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
@@ -48,8 +50,7 @@
 
 namespace blink {
 
-const int kInvalidPort = 0;
-const int kMaxAllowedPort = 65535;
+const uint16_t kInvalidPort = 0;
 
 static URLSecurityOriginMap* g_url_origin_map = nullptr;
 
@@ -329,7 +330,8 @@ bool SecurityOrigin::CanRequest(const KURL& url) const {
   if (IsUnique())
     return false;
 
-  scoped_refptr<SecurityOrigin> target_origin = SecurityOrigin::Create(url);
+  scoped_refptr<const SecurityOrigin> target_origin =
+      SecurityOrigin::Create(url);
 
   if (target_origin->IsUnique())
     return false;
@@ -436,10 +438,10 @@ bool SecurityOrigin::IsLocal() const {
 }
 
 bool SecurityOrigin::IsLocalhost() const {
-  // We special-case "[::1]" here because `net::IsLocalhost` expects a
+  // We special-case "[::1]" here because `net::HostStringIsLocalhost` expects a
   // canonicalization that excludes the braces; a simple string comparison is
   // simpler than trying to adjust Blink's canonicalization.
-  return host_ == "[::1]" || net::IsLocalhost(host_.Ascii().data());
+  return host_ == "[::1]" || net::HostStringIsLocalhost(host_.Ascii().data());
 }
 
 String SecurityOrigin::ToString() const {
@@ -534,10 +536,7 @@ scoped_refptr<SecurityOrigin> SecurityOrigin::CreateFromString(
 
 scoped_refptr<SecurityOrigin> SecurityOrigin::Create(const String& protocol,
                                                      const String& host,
-                                                     int port) {
-  if (port < 0 || port > kMaxAllowedPort)
-    return CreateUnique();
-
+                                                     uint16_t port) {
   DCHECK_EQ(host, DecodeURLEscapeSequences(host));
 
   String port_part = port ? ":" + String::Number(port) : String();
@@ -546,7 +545,7 @@ scoped_refptr<SecurityOrigin> SecurityOrigin::Create(const String& protocol,
 
 scoped_refptr<SecurityOrigin> SecurityOrigin::Create(const String& protocol,
                                                      const String& host,
-                                                     int port,
+                                                     uint16_t port,
                                                      const String& suborigin) {
   scoped_refptr<SecurityOrigin> origin = Create(protocol, host, port);
   if (!suborigin.IsEmpty())
@@ -593,13 +592,13 @@ bool SecurityOrigin::HasSuboriginAndShouldAllowCredentialsFor(
           Suborigin::SuboriginPolicyOptions::kUnsafeCredentials))
     return false;
 
-  scoped_refptr<SecurityOrigin> other = SecurityOrigin::Create(url);
+  scoped_refptr<const SecurityOrigin> other = SecurityOrigin::Create(url);
   return IsSameSchemeHostPort(other.get());
 }
 
 bool SecurityOrigin::AreSameSchemeHostPort(const KURL& a, const KURL& b) {
-  scoped_refptr<SecurityOrigin> origin_a = SecurityOrigin::Create(a);
-  scoped_refptr<SecurityOrigin> origin_b = SecurityOrigin::Create(b);
+  scoped_refptr<const SecurityOrigin> origin_a = SecurityOrigin::Create(a);
+  scoped_refptr<const SecurityOrigin> origin_b = SecurityOrigin::Create(b);
   return origin_b->IsSameSchemeHostPort(origin_a.get());
 }
 

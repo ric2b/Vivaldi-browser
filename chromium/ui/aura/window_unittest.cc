@@ -35,6 +35,7 @@
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/class_property.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/layer_animator.h"
@@ -52,7 +53,7 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/skia_util.h"
 
-DECLARE_UI_CLASS_PROPERTY_TYPE(const char*)
+DEFINE_UI_CLASS_PROPERTY_TYPE(const char*)
 
 namespace {
 
@@ -108,7 +109,7 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(DeletionTestProperty,
 
 }  // namespace
 
-DECLARE_UI_CLASS_PROPERTY_TYPE(DeletionTestProperty*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(DeletionTestProperty*);
 
 namespace aura {
 namespace test {
@@ -418,6 +419,24 @@ TEST_P(WindowTest, ContainsMouse) {
   EXPECT_TRUE(w_test_api.ContainsMouse());
   root->MoveCursorTo(gfx::Point(9, 10));
   EXPECT_FALSE(w_test_api.ContainsMouse());
+}
+
+// Tests that the root window gets a valid LocalSurfaceId.
+TEST_P(WindowTest, RootWindowHasValidLocalSurfaceId) {
+  // When mus is hosting viz, the LocalSurfaceId is sent from mus.
+  if (GetParam() == BackendType::MUS_HOSTING_VIZ)
+    return;
+  EXPECT_TRUE(root_window()->GetLocalSurfaceId().is_valid());
+}
+
+TEST_P(WindowTest, WindowEmbeddingClientHasValidLocalSurfaceId) {
+  // When mus is hosting viz, the LocalSurfaceId is sent from mus.
+  if (GetParam() == BackendType::MUS_HOSTING_VIZ)
+    return;
+  std::unique_ptr<Window> window(CreateTestWindow(
+      SK_ColorWHITE, 1, gfx::Rect(10, 10, 300, 200), root_window()));
+  window->set_embed_frame_sink_id(viz::FrameSinkId(0, 1));
+  EXPECT_TRUE(window->GetLocalSurfaceId().is_valid());
 }
 
 // Test Window::ConvertPointToWindow() with transform to root_window.
@@ -3162,6 +3181,12 @@ TEST_P(WindowTest, WindowDestroyCompletesAnimations) {
   animator->RemoveObserver(&observer);
 }
 
+TEST_P(WindowTest, RootWindowUsesCompositorFrameSinkId) {
+  EXPECT_EQ(host()->compositor()->frame_sink_id(),
+            root_window()->GetFrameSinkId());
+  EXPECT_TRUE(root_window()->GetFrameSinkId().is_valid());
+}
+
 TEST_P(WindowTest, LocalSurfaceIdChanges) {
   Window window(nullptr);
   window.Init(ui::LAYER_NOT_DRAWN);
@@ -3214,12 +3239,14 @@ TEST_P(WindowTest, LocalSurfaceIdChanges) {
 INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowTest,
                         ::testing::Values(BackendType::CLASSIC,
-                                          BackendType::MUS));
+                                          BackendType::MUS,
+                                          BackendType::MUS_HOSTING_VIZ));
 
 INSTANTIATE_TEST_CASE_P(/* no prefix */,
                         WindowObserverTest,
                         ::testing::Values(BackendType::CLASSIC,
-                                          BackendType::MUS));
+                                          BackendType::MUS,
+                                          BackendType::MUS_HOSTING_VIZ));
 
 }  // namespace test
 }  // namespace aura

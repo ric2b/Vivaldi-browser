@@ -10,17 +10,29 @@ import verifier
 class RegistryVerifier(verifier.Verifier):
   """Verifies that the current registry matches the specified criteria."""
 
+  _REGISTRY_VIEW_MAPPING = {
+      'KEY_WOW64_32KEY': _winreg.KEY_WOW64_32KEY,
+      'KEY_WOW64_64KEY': _winreg.KEY_WOW64_64KEY,
+  }
+
+  _ROOT_KEY_MAPPING = {
+      'HKEY_CLASSES_ROOT': _winreg.HKEY_CLASSES_ROOT,
+      'HKEY_CURRENT_USER': _winreg.HKEY_CURRENT_USER,
+      'HKEY_LOCAL_MACHINE': _winreg.HKEY_LOCAL_MACHINE,
+      'HKEY_USERS': _winreg.HKEY_USERS,
+  }
+
   def _RootKeyConstant(self, root_key):
     """Converts a root registry key string into a _winreg.HKEY_* constant."""
-    root_key_mapping = {
-        'HKEY_CLASSES_ROOT': _winreg.HKEY_CLASSES_ROOT,
-        'HKEY_CURRENT_USER': _winreg.HKEY_CURRENT_USER,
-        'HKEY_LOCAL_MACHINE': _winreg.HKEY_LOCAL_MACHINE,
-        'HKEY_USERS': _winreg.HKEY_USERS,
-    }
-    if root_key not in root_key_mapping:
+    if root_key not in RegistryVerifier._ROOT_KEY_MAPPING:
       raise KeyError("Unknown root registry key '%s'" % root_key)
-    return root_key_mapping[root_key]
+    return RegistryVerifier._ROOT_KEY_MAPPING[root_key]
+
+  def _RegistryViewConstant(self, registry_view):
+    """Converts a registry view string into a _winreg.KEY_WOW64* constant."""
+    if registry_view not in RegistryVerifier._REGISTRY_VIEW_MAPPING:
+      raise KeyError("Unknown registry view '%s'" % registry_view)
+    return RegistryVerifier._REGISTRY_VIEW_MAPPING[registry_view]
 
   def _ValueTypeConstant(self, value_type):
     """Converts a registry value type string into a _winreg.REG_* constant."""
@@ -53,13 +65,19 @@ class RegistryVerifier(verifier.Verifier):
               'required', 'optional', or 'forbidden'. Values are not checked if
               an 'optional' key is not present in the registry.
           'values' (optional) a dictionary where each key is a registry value
-              and its associated value is a dictionary with the following key
-              and values:
+              (which is expanded using Expand) and its associated value is a
+              dictionary with the following key and values:
                   'type' (optional) a string indicating the type of the registry
                       value. If not present, the corresponding value is expected
                       to be absent in the registry.
-                  'data' the associated data of the registry value if 'type' is
-                      specified. If it is a string, it is expanded using Expand.
+                  'data' (optional) the associated data of the registry value if
+                      'type' is specified. If it is a string, it is expanded
+                      using Expand. If not present, only the value's type is
+                      verified.
+          'wow_key' (optional) a string indicating whether the view of the
+              registry is KEY_WOW64_32KEY or KEY_WOW64_64KEY. If not present,
+              the view of registry is determined by the bitness of the installer
+              binary.
       variable_expander: A VariableExpander object.
     """
     key = variable_expander.Expand(expectation_name)
@@ -67,8 +85,14 @@ class RegistryVerifier(verifier.Verifier):
     try:
       # Query the Windows registry for the registry key. It will throw a
       # WindowsError if the key doesn't exist.
+      registry_view = _winreg.KEY_WOW64_32KEY
+      if 'wow_key' in expectation:
+        registry_view = self._RegistryViewConstant(expectation['wow_key'])
+      elif variable_expander.Expand('$MINI_INSTALLER_BITNESS') == '64':
+        registry_view = _winreg.KEY_WOW64_64KEY
+
       key_handle = _winreg.OpenKey(self._RootKeyConstant(root_key), sub_key, 0,
-                                   _winreg.KEY_QUERY_VALUE)
+                                   _winreg.KEY_QUERY_VALUE | registry_view)
     except WindowsError:
       # Key doesn't exist. See that it matches the expectation.
       assert expectation['exists'] != 'required', ('Registry key %s is '
@@ -85,6 +109,7 @@ class RegistryVerifier(verifier.Verifier):
     for value, value_expectation in expectation['values'].iteritems():
       # Query the value. It will throw a WindowsError if the value doesn't
       # exist.
+      value = variable_expander.Expand(value)
       try:
         data, value_type = _winreg.QueryValueEx(key_handle, value)
       except WindowsError:
@@ -101,6 +126,9 @@ class RegistryVerifier(verifier.Verifier):
       assert self._ValueTypeConstant(expected_value_type) == value_type, \
           "Value '%s' of registry key %s has unexpected type '%s'" % (
               value, key, expected_value_type)
+
+      if 'data' not in value_expectation:
+        return
 
       # Verify the associated data of the value.
       expected_data = value_expectation['data']

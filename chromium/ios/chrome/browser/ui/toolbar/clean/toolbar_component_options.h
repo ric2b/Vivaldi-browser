@@ -11,15 +11,35 @@
 typedef NS_OPTIONS(NSUInteger, ToolbarComponentVisibility) {
   // Default option, the component will never be visible.
   ToolbarComponentVisibilityNone = 0,
-  // Use this option when the component should always be visible in
-  // CompactWidth.
-  ToolbarComponentVisibilityCompactWidth = 1 << 0,
-  // Use this option when the component should always be visible in
-  // RegularWidth.
-  ToolbarComponentVisibilityRegularWidth = 1 << 1,
-  // Use this option when the component should be visible in CompactWidth only
-  // if it's enabled.
-  ToolbarComponentVisibilityCompactWidthOnlyWhenEnabled = 1 << 2,
+  // Use this option when the component should be visible in CompactWidth x
+  // CompactHeight.
+  ToolbarComponentVisibilityCompactWidthCompactHeight = 1 << 0,
+  // Use this option when the component should be visible in CompactWidth x
+  // CompactHeight.
+  ToolbarComponentVisibilityRegularWidthCompactHeight = 1 << 1,
+  // Use this option when the component should be visible in CompactWidth x
+  // RegularHeight.
+  ToolbarComponentVisibilityCompactWidthRegularHeight = 1 << 2,
+  // Use this option when the component should be visible in
+  // RegularWidth x RegularHeight.
+  ToolbarComponentVisibilityRegularWidthRegularHeight = 1 << 3,
+  // Use this option when the component should always be visible.
+  ToolbarComponentVisibilityAlways =
+      (ToolbarComponentVisibilityRegularWidthRegularHeight |
+       ToolbarComponentVisibilityRegularWidthCompactHeight |
+       ToolbarComponentVisibilityCompactWidthCompactHeight |
+       ToolbarComponentVisibilityCompactWidthRegularHeight),
+  // Use this option when the component should be visible when the toolbar is
+  // split.
+  ToolbarComponentVisibilitySplit =
+      ToolbarComponentVisibilityCompactWidthRegularHeight,
+  // TODO(crbug.com/800266): Remove this, only used for non-adaptive toolbar.
+  // Use this option when the component should be visible only if it's enabled.
+  // This setting applies only if the other settings don't show the button.
+  ToolbarComponentVisibilityOnlyWhenEnabled = 1 << 4,
+  // TODO(crbug.com/800266): Remove this, only used for non-adaptive toolbar.
+  // Use this option when the component should be always visible on iPhone only.
+  ToolbarComponentVisibilityIPhoneOnly = 1 << 5,
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_CLEAN_TOOLBAR_COMPONENT_OPTIONS_H_

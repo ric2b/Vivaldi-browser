@@ -87,3 +87,16 @@ DISABLE_MULTI(ParamaterizedFullscreenControllerInteractiveTest,
               MouseLockSilentAfterTargetUnlock)
 DISABLE(SitePerProcessTextInputManagerTest,
         TrackStateWhenSwitchingFocusedFrames)
+
+// Require fieldtesting setting
+DISABLE_MULTI(SSLUITestWithExtendedReporting, TestBrokenHTTPSReportingCloseTab)
+
+// Timezone dependent
+DISABLE(InterventionsInternalsUITest, LogNewMessage)
+
+// Broke in v65, can't reproduce locally
+DISABLE_ALL(MediaEngagementPreloadedListTest)
+
+// Disabled by chromium.
+// https://bugs.chromium.org/p/chromium/issues/detail?id=806684
+DISABLE(ProcessManagerBrowserTest, NestedURLNavigationsToExtensionBlocked)

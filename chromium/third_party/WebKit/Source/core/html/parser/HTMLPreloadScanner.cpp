@@ -33,7 +33,6 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/css/parser/SizesAttributeParser.h"
 #include "core/dom/Document.h"
-#include "core/dom/ScriptLoader.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/CrossOriginAttribute.h"
@@ -46,6 +45,7 @@
 #include "core/html_names.h"
 #include "core/input_type_names.h"
 #include "core/loader/LinkLoader.h"
+#include "core/script/ScriptLoader.h"
 #include "platform/Histogram.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/SubresourceIntegrity.h"
@@ -605,7 +605,7 @@ TokenPreloadScanner::TokenPreloadScanner(
   css_scanner_.SetReferrerPolicy(document_parameters_->referrer_policy);
 }
 
-TokenPreloadScanner::~TokenPreloadScanner() {}
+TokenPreloadScanner::~TokenPreloadScanner() = default;
 
 TokenPreloadScannerCheckpoint TokenPreloadScanner::CreateCheckpoint() {
   TokenPreloadScannerCheckpoint checkpoint = checkpoints_.size();
@@ -848,7 +848,7 @@ HTMLPreloadScanner::HTMLPreloadScanner(
                scanner_type),
       tokenizer_(HTMLTokenizer::Create(options)) {}
 
-HTMLPreloadScanner::~HTMLPreloadScanner() {}
+HTMLPreloadScanner::~HTMLPreloadScanner() = default;
 
 void HTMLPreloadScanner::AppendToEnd(const SegmentedString& source) {
   source_.Append(source);

@@ -60,7 +60,7 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   bool IsInitialized() const { return state_ == kInitialized; }
 
   void AddConfiguration(device::mojom::blink::SensorConfigurationPtr,
-                        Function<void(bool)>);
+                        base::OnceCallback<void(bool)>);
 
   void RemoveConfiguration(device::mojom::blink::SensorConfigurationPtr);
 
@@ -102,8 +102,7 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   void HandleSensorError();
 
   // mojo call callbacks.
-  void OnSensorCreated(device::mojom::blink::SensorInitParamsPtr,
-                       device::mojom::blink::SensorClientRequest);
+  void OnSensorCreated(device::mojom::blink::SensorInitParamsPtr);
 
   void OnPollingTimer(TimerBase*);
 

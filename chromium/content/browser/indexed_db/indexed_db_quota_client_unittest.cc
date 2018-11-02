@@ -25,10 +25,12 @@
 #include "storage/browser/test/mock_quota_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using blink::mojom::StorageType;
+
 // Declared to shorten the line lengths.
-static const storage::StorageType kTemp = storage::kStorageTypeTemporary;
-static const storage::StorageType kPerm = storage::kStorageTypePersistent;
-static const storage::StorageType kSync = storage::kStorageTypeSyncable;
+static const StorageType kTemp = StorageType::kTemporary;
+static const StorageType kPerm = StorageType::kPersistent;
+static const StorageType kSync = StorageType::kSyncable;
 
 namespace content {
 
@@ -76,7 +78,7 @@ class IndexedDBQuotaClientTest : public testing::Test {
 
   int64_t GetOriginUsage(storage::QuotaClient* client,
                          const GURL& origin,
-                         storage::StorageType type) {
+                         StorageType type) {
     usage_ = -1;
     client->GetOriginUsage(
         origin,
@@ -89,7 +91,7 @@ class IndexedDBQuotaClientTest : public testing::Test {
   }
 
   const std::set<GURL>& GetOriginsForType(storage::QuotaClient* client,
-                                          storage::StorageType type) {
+                                          StorageType type) {
     origins_.clear();
     client->GetOriginsForType(
         type,
@@ -100,7 +102,7 @@ class IndexedDBQuotaClientTest : public testing::Test {
   }
 
   const std::set<GURL>& GetOriginsForHost(storage::QuotaClient* client,
-                                          storage::StorageType type,
+                                          StorageType type,
                                           const std::string& host) {
     origins_.clear();
     client->GetOriginsForHost(
@@ -112,10 +114,10 @@ class IndexedDBQuotaClientTest : public testing::Test {
     return origins_;
   }
 
-  storage::QuotaStatusCode DeleteOrigin(storage::QuotaClient* client,
-                                        const GURL& origin_url,
-                                        storage::StorageType type) {
-    delete_status_ = storage::kQuotaStatusUnknown;
+  blink::mojom::QuotaStatusCode DeleteOrigin(storage::QuotaClient* client,
+                                             const GURL& origin_url,
+                                             StorageType type) {
+    delete_status_ = blink::mojom::QuotaStatusCode::kUnknown;
     client->DeleteOriginData(
         origin_url, type,
         base::Bind(&IndexedDBQuotaClientTest::OnDeleteOriginComplete,
@@ -150,7 +152,7 @@ class IndexedDBQuotaClientTest : public testing::Test {
     origins_ = origins;
   }
 
-  void OnDeleteOriginComplete(storage::QuotaStatusCode code) {
+  void OnDeleteOriginComplete(blink::mojom::QuotaStatusCode code) {
     delete_status_ = code;
   }
 
@@ -160,7 +162,7 @@ class IndexedDBQuotaClientTest : public testing::Test {
   std::set<GURL> origins_;
   scoped_refptr<IndexedDBContextImpl> idb_context_;
   std::unique_ptr<TestBrowserContext> browser_context_;
-  storage::QuotaStatusCode delete_status_;
+  blink::mojom::QuotaStatusCode delete_status_;
   base::WeakPtrFactory<IndexedDBQuotaClientTest> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(IndexedDBQuotaClientTest);
@@ -229,19 +231,19 @@ TEST_F(IndexedDBQuotaClientTest, DeleteOrigin) {
   EXPECT_EQ(1000, GetOriginUsage(&client, kOriginA, kTemp));
   EXPECT_EQ(50, GetOriginUsage(&client, kOriginB, kTemp));
 
-  storage::QuotaStatusCode delete_status =
+  blink::mojom::QuotaStatusCode delete_status =
       DeleteOrigin(&client, kOriginA, kTemp);
-  EXPECT_EQ(storage::kQuotaStatusOk, delete_status);
+  EXPECT_EQ(blink::mojom::QuotaStatusCode::kOk, delete_status);
   EXPECT_EQ(0, GetOriginUsage(&client, kOriginA, kTemp));
   EXPECT_EQ(50, GetOriginUsage(&client, kOriginB, kTemp));
 
   // IndexedDB only supports temporary storage; requests to delete other types
   // are no-ops, but should not fail.
   delete_status = DeleteOrigin(&client, kOriginA, kPerm);
-  EXPECT_EQ(storage::kQuotaStatusOk, delete_status);
+  EXPECT_EQ(blink::mojom::QuotaStatusCode::kOk, delete_status);
 
   delete_status = DeleteOrigin(&client, kOriginA, kSync);
-  EXPECT_EQ(storage::kQuotaStatusOk, delete_status);
+  EXPECT_EQ(blink::mojom::QuotaStatusCode::kOk, delete_status);
 }
 
 }  // namespace content

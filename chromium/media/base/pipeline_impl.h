@@ -66,9 +66,9 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline {
  public:
   // Constructs a media pipeline that will execute media tasks on
   // |media_task_runner|.
-  PipelineImpl(
-      const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-      MediaLog* media_log);
+  PipelineImpl(scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+               scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
+               MediaLog* media_log);
   ~PipelineImpl() override;
 
   // Pipeline implementation.
@@ -138,6 +138,8 @@ class MEDIA_EXPORT PipelineImpl : public Pipeline {
   void OnVideoNaturalSizeChange(const gfx::Size& size);
   void OnVideoOpacityChange(bool opaque);
   void OnVideoAverageKeyframeDistanceUpdate();
+  void OnAudioDecoderChange(const std::string& name);
+  void OnVideoDecoderChange(const std::string& name);
 
   // Task completion callbacks from RendererWrapper.
   void OnSeekDone();

@@ -25,12 +25,15 @@
 #include "net/socket/datagram_socket.h"
 #include "net/socket/diff_serv_code_point.h"
 #include "net/socket/socket_descriptor.h"
+#include "net/socket/socket_tag.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
 class IPAddress;
 class NetLog;
 struct NetLogSource;
+class SocketTag;
 
 class NET_EXPORT UDPSocketPosix {
  public:
@@ -126,7 +129,10 @@ class NET_EXPORT UDPSocketPosix {
   // Writes to the socket.
   // Only usable from the client-side of a UDP socket, after the socket
   // has been connected.
-  int Write(IOBuffer* buf, int buf_len, const CompletionCallback& callback);
+  int Write(IOBuffer* buf,
+            int buf_len,
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // Reads from a socket and receive sender address information.
   // |buf| is the buffer to read data into.
@@ -237,6 +243,9 @@ class NET_EXPORT UDPSocketPosix {
 
   // Resets the thread to be used for thread-safety checks.
   void DetachFromThread();
+
+  // Apply |tag| to this socket.
+  void ApplySocketTag(const SocketTag& tag);
 
  private:
   enum SocketOptions {
@@ -369,6 +378,10 @@ class NET_EXPORT UDPSocketPosix {
   // These are used to lower the overhead updating activity monitor.
   SentActivityMonitor sent_activity_monitor_;
   ReceivedActivityMonitor received_activity_monitor_;
+
+  // Current socket tag if |socket_| is valid, otherwise the tag to apply when
+  // |socket_| is opened.
+  SocketTag tag_;
 
   THREAD_CHECKER(thread_checker_);
 

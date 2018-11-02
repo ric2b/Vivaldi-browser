@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Mengenai Chromium</translation>
 <translation id="1298199220304005244">Dapatkan bantuan untuk menggunakan Chromium OS</translation>
 <translation id="1396446129537741364">Chromium sedang cuba memaparkan kata laluan.</translation>
-<translation id="1403254041219632970">Versi Chromium yang akan datang tidak lagi akan menyokong Mac OS X 10.6, 10.7 atau 10.8.</translation>
 <translation id="1414495520565016063">Anda log masuk ke Chromium!</translation>
-<translation id="1440917365206527807">Chromium menghentikan tapak ini daripada membawa anda ke</translation>
 <translation id="1444754455097148408">Lesen sumber terbuka Chromium</translation>
 <translation id="1502360822835740515">Jadikan Chromium penyemak imbas lalai anda</translation>
 <translation id="151962892725702025">OS Chromium tidak dapat menyegerakkan data anda kerana Segerak tidak tersedia untuk domain anda.</translation>
-<translation id="1559451348202814456">Chromium mungkin tidak akan berfungsi dengan betul kerana tidak lagi disokong pada Mac OS X 10.6, 10.7 atau 10.8.</translation>
 <translation id="1585657529869845941">Klik <ph name="BEGIN_BOLD" />Tukar juga<ph name="END_BOLD" />, jika dipaparkan</translation>
 <translation id="1653828314016431939">OK - Mulakan semula sekarang</translation>
 <translation id="1668054258064581266">Selepas mengalih keluar akaun anda daripada Chromium, anda mungkin perlu memuatkan semula tab yang dibuka untuk memberi kesan.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Chromium OS perlu dimulakan semula untuk melaksanakan kemas kini.</translation>
 <translation id="2647554856022461007">Chromium boleh menggunakan perkhidmatan web untuk meningkatkan pengalaman penyemakan imbas anda. Anda boleh memilih untuk melumpuhkan perkhidmatan ini. <ph name="BEGIN_LINK" />Ketahui lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Ralat sistem pengendalian berlaku semasa pemasangan. Sila muat turun Chromium semula.</translation>
-<translation id="2685838254101182273">Chromium telah berhenti mengemas kini dan tidak lagi menyokong versi sistem pengendalian anda ini.</translation>
 <translation id="2705403826523567092">Log masuk untuk mendapatkan pengalaman penyemakan imbas diperibadikan, yang disegerakkan merentas peranti</translation>
 <translation id="2711502716910134313">Tab Chromium</translation>
 <translation id="2718390899429598676">Untuk keselamatan tambahan, Chromium akan menyulitkan data anda.</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">Sila log keluar dan log masuk semula supaya perubahan ini boleh dilaksanakan.</translation>
 <translation id="4469812139324097969">Chromium sudah usang kerana telah lama tidak dilancarkan. Terdapat kemas kini tersedia dan akan digunakan sebaik sahaja anda melancarkannya semula.</translation>
 <translation id="4488554488975128561">Anda boleh membantu menjadikan Chromium lebih selamat dan mudah digunakan dengan menghantar secara automatik beberapa maklumat sistem dan kandungan halaman kepada Google untuk membantu mengesan apl dan tapak yang berbahaya.</translation>
-<translation id="4549794359424059447">Versi Chromium yang akan datang tidak lagi akan menyokong Windows XP atau Windows Vista.</translation>
 <translation id="4567424176335768812">Anda telah log masuk sebagai <ph name="USER_EMAIL_ADDRESS" />. Sekarang anda boleh mengakses penanda halaman, sejarah dan tetapan anda yang lain pada semua peranti yang anda gunakan untuk log masuk.</translation>
 <translation id="459535195905078186">Apl Chromium</translation>
 <translation id="4611246891205775468">Chromium memerlukan kebenaran untuk mengakses mikrofon anda bagi tapak ini.</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">Sijil pengesahan gagal. Sila log masuk ke Chromium sekali lagi atau hubungi pentadbir anda untuk mendapatkan maklumat lanjut. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Hampir terkini! Mulakan semula peranti anda untuk menyelesaikan kemas kini.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> telah ditambahkan pada Chromium.</translation>
-<translation id="59625444380784159">Butiran daripada kenalan anda dapat membantu anda mengisi borang dengan lebih cepat di Chromium.</translation>
 <translation id="5987687638152509985">Kemas kini Chromium untuk memulakan penyegerakan</translation>
 <translation id="6055895534982063517">Terdapat versi baharu Chromium yang lebih pantas daripada biasa tersedia.</translation>
 <translation id="6063093106622310249">&amp;Buka dalam Chromium</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">Kini lebih mudah menggunakan Chromium dengan Akaun Google anda dan pada komputer yang dikongsi.</translation>
 <translation id="6373523479360886564">Adakah anda pasti mahu menyahpasang Chromium?</translation>
 <translation id="6394232988457703198">Anda perlu memulakan semula Chromium sekarang.</translation>
+<translation id="6400072781405947421">Chromium mungkin tidak akan berfungsi dengan betul kerana tidak lagi disokong pada Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium merupakan penyemak imbas yang mengendalikan laman web dan aplikasi dengan kelajuan sepantas kilat. Chromium cepat, stabil dan mudah digunakan. Semak imbas web lebih selamat dengan perlindungan perisian hasad dan pancingan data terbina dalam Chromium.</translation>
 <translation id="6475912303565314141">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chromium.</translation>
 <translation id="6485906693002546646">Anda menggunakan <ph name="PROFILE_EMAIL" /> untuk menyegerakkan bahan digital chromium anda. Untuk mengemas kini pilihan penyegerakan anda atau menggunakan Chromium tanpa akaun Google, lawati <ph name="SETTINGS_LINK" />.</translation>
@@ -174,13 +169,13 @@ Beberapa ciri mungkin tidak tersedia. Sila nyatakan direktori profil yang berbez
 <translation id="6734291798041940871">Chromium telah dipasang untuk semua pengguna pada komputer anda.</translation>
 <translation id="6810143991807788455">Bantu jadikan Chromium lebih baik dengan melaporkan tetapan semasa</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (disalin ke Chromium)</translation>
 <translation id="6893813176749746474">Chromium telah dikemas kini, tetapi anda belum menggunakannya untuk sekurang-kurangnya 30 hari.</translation>
 <translation id="6944967875980567883">Modul yang dimuatkan dalam Chromium</translation>
 <translation id="6964305034639999644">Buka pautan dalam tetingkap inko&amp;gnito Chromium</translation>
 <translation id="6970811910055250180">Mengemas kini peranti anda...</translation>
 <translation id="705851970750939768">Kemas kini Chromium</translation>
 <translation id="7066436765290594559">OS Chromium tidak dapat menyegerakkan data anda. Sila kemas kini frasa laluan Segerak anda.</translation>
-<translation id="707471633328071618">Google Payments (disalin ke Chromium)</translation>
 <translation id="7162152143154757523">Chromium dapat menyediakan semakan ejaan yang lebih pintar dengan menghantar apa yang anda taip dalam penyemak imbas kepada pelayan Google, membolehkan anda menggunakan teknologi semakan ejaan yang sama seperti yang digunakan oleh carian Google.</translation>
 <translation id="7205698830395646142">Sembunyikan dalam Menu Chromium</translation>
 <translation id="7223968959479464213">Pengurus Tugas - Chromium</translation>
@@ -240,7 +235,6 @@ Sila semak e-mel anda di <ph name="ACCOUNT_EMAIL" /> untuk arahan lanjut.</trans
 <translation id="872034308864968620">Benarkan Chromium Dijalankan dalam Latar Belakang</translation>
 <translation id="8803635938069941624">Syarat Chromium OS</translation>
 <translation id="8821041990367117597">Chromium tidak dapat menyegerakkan data anda kerana butiran log masuk akaun anda sudah lapuk.</translation>
-<translation id="8851136666856101339">utama</translation>
 <translation id="8862326446509486874">Anda tidak mempunyai hak wajar untuk pemasangan peringkat sistem. Cuba jalankan pemasang semula sebagai Pentadbir.</translation>
 <translation id="8897323336392112261">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chromium atau mengklik butang Laman Utama.</translation>
 <translation id="8907580949721785412">Chromium cuba menunjukkan kata laluan. Taip kata laluan Windows anda untuk membenarkannya.</translation>

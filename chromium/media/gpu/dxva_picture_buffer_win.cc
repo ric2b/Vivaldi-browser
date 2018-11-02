@@ -4,7 +4,7 @@
 
 #include "media/gpu/dxva_picture_buffer_win.h"
 
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "media/gpu/dxva_video_decode_accelerator_win.h"
 #include "third_party/angle/include/EGL/egl.h"
 #include "third_party/angle/include/EGL/eglext.h"
@@ -22,7 +22,7 @@ namespace {
 
 void LogDXVAError(int line) {
   LOG(ERROR) << "Error in dxva_picture_buffer_win.cc on line " << line;
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Media.DXVAVDA.PictureBufferErrorLine", line);
+  base::UmaHistogramSparse("Media.DXVAVDA.PictureBufferErrorLine", line);
 }
 
 // These GLImage subclasses are just used to hold references to the underlying
@@ -476,8 +476,8 @@ bool EGLStreamPictureBuffer::Initialize() {
       EGL_NONE,
   };
 
-  result = eglCreateStreamProducerD3DTextureNV12ANGLE(egl_display, stream_,
-                                                      producer_attributes);
+  result = eglCreateStreamProducerD3DTextureANGLE(egl_display, stream_,
+                                                  producer_attributes);
   RETURN_ON_FAILURE(result, "Could not create stream producer", false);
   return true;
 }
@@ -526,7 +526,7 @@ bool EGLStreamPictureBuffer::BindSampleToTexture(
       EGL_D3D_TEXTURE_SUBRESOURCE_ID_ANGLE, subresource, EGL_NONE,
   };
 
-  EGLBoolean result = eglStreamPostD3DTextureNV12ANGLE(
+  EGLBoolean result = eglStreamPostD3DTextureANGLE(
       egl_display, stream_, static_cast<void*>(dx11_decoding_texture_.Get()),
       frame_attributes);
   RETURN_ON_FAILURE(result, "Could not post texture", false);
@@ -597,8 +597,8 @@ bool EGLStreamDelayedCopyPictureBuffer::Initialize(
       EGL_NONE,
   };
 
-  result = eglCreateStreamProducerD3DTextureNV12ANGLE(egl_display, stream_,
-                                                      producer_attributes);
+  result = eglCreateStreamProducerD3DTextureANGLE(egl_display, stream_,
+                                                  producer_attributes);
   RETURN_ON_FAILURE(result, "Could not create stream producer", false);
   scoped_refptr<gl::CopyingGLImageDXGI> copying_image_ =
       base::MakeRefCounted<gl::CopyingGLImageDXGI>(
@@ -716,8 +716,8 @@ bool EGLStreamCopyPictureBuffer::Initialize(
       EGL_NONE,
   };
 
-  result = eglCreateStreamProducerD3DTextureNV12ANGLE(egl_display, stream_,
-                                                      producer_attributes);
+  result = eglCreateStreamProducerD3DTextureANGLE(egl_display, stream_,
+                                                  producer_attributes);
   RETURN_ON_FAILURE(result, "Could not create stream producer", false);
 
   DCHECK(decoder.use_keyed_mutex_);
@@ -797,7 +797,7 @@ bool EGLStreamCopyPictureBuffer::CopySurfaceComplete(
 
   EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
-  EGLBoolean result = eglStreamPostD3DTextureNV12ANGLE(
+  EGLBoolean result = eglStreamPostD3DTextureANGLE(
       egl_display, stream_, static_cast<void*>(angle_copy_texture_.Get()),
       frame_attributes);
   RETURN_ON_FAILURE(result, "Could not post stream", false);

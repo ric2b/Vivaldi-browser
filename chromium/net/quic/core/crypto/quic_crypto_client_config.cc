@@ -21,6 +21,7 @@
 #include "net/quic/core/crypto/quic_encrypter.h"
 #include "net/quic/core/crypto/quic_random.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_endian.h"
 #include "net/quic/platform/api/quic_hostname_utils.h"
@@ -28,6 +29,7 @@
 #include "net/quic/platform/api/quic_map_util.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_text_utils.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 using std::string;
 
@@ -55,8 +57,9 @@ void RecordDiskCacheServerConfigState(
 }  // namespace
 
 QuicCryptoClientConfig::QuicCryptoClientConfig(
-    std::unique_ptr<ProofVerifier> proof_verifier)
-    : proof_verifier_(std::move(proof_verifier)) {
+    std::unique_ptr<ProofVerifier> proof_verifier,
+    bssl::UniquePtr<SSL_CTX> ssl_ctx)
+    : proof_verifier_(std::move(proof_verifier)), ssl_ctx_(std::move(ssl_ctx)) {
   DCHECK(proof_verifier_.get());
   SetDefaults();
 }
@@ -466,9 +469,9 @@ void QuicCryptoClientConfig::FillInchoateClientHello(
   }
 
   char proof_nonce[32];
-  rand->RandBytes(proof_nonce, arraysize(proof_nonce));
-  out->SetStringPiece(kNONP,
-                      QuicStringPiece(proof_nonce, arraysize(proof_nonce)));
+  rand->RandBytes(proof_nonce, QUIC_ARRAYSIZE(proof_nonce));
+  out->SetStringPiece(
+      kNONP, QuicStringPiece(proof_nonce, QUIC_ARRAYSIZE(proof_nonce)));
 
   out->SetVector(kPDMD, QuicTagVector{kX509});
 
@@ -921,6 +924,10 @@ ProofVerifier* QuicCryptoClientConfig::proof_verifier() const {
 
 ChannelIDSource* QuicCryptoClientConfig::channel_id_source() const {
   return channel_id_source_.get();
+}
+
+SSL_CTX* QuicCryptoClientConfig::ssl_ctx() const {
+  return ssl_ctx_.get();
 }
 
 void QuicCryptoClientConfig::SetChannelIDSource(ChannelIDSource* source) {

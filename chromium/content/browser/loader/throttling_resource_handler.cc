@@ -7,8 +7,8 @@
 #include <utility>
 
 #include "content/browser/loader/resource_controller.h"
-#include "content/public/common/resource_response.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_response.h"
 
 #include "content/browser/loader/resource_request_info_impl.h"
 
@@ -36,7 +36,7 @@ ThrottlingResourceHandler::~ThrottlingResourceHandler() {
 
 void ThrottlingResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   DCHECK(!has_controller());
   DCHECK(!cancelled_by_resource_throttle_);
@@ -93,7 +93,7 @@ void ThrottlingResourceHandler::OnWillStart(
 }
 
 void ThrottlingResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller,
     bool open_when_done,
     bool ask_for_target) {
@@ -191,7 +191,7 @@ void ThrottlingResourceHandler::ResumeRedirect() {
 
   net::RedirectInfo redirect_info = deferred_redirect_;
   deferred_redirect_ = net::RedirectInfo();
-  scoped_refptr<ResourceResponse> response;
+  scoped_refptr<network::ResourceResponse> response;
   deferred_response_.swap(response);
 
   OnRequestRedirected(redirect_info, response.get(), ReleaseController());
@@ -201,7 +201,7 @@ void ThrottlingResourceHandler::ResumeResponse(bool open_when_done, bool ask_for
   DCHECK(!cancelled_by_resource_throttle_);
   DCHECK(has_controller());
 
-  scoped_refptr<ResourceResponse> response;
+  scoped_refptr<network::ResourceResponse> response;
   deferred_response_.swap(response);
 
   OnResponseStarted(response.get(), ReleaseController(),

@@ -35,6 +35,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/modules/v8/idb_object_store_or_idb_index.h"
+#include "bindings/modules/v8/idb_object_store_or_idb_index_or_idb_cursor.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/PausableObject.h"
 #include "core/dom/events/EventListener.h"
@@ -68,6 +70,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   USING_GARBAGE_COLLECTED_MIXIN(IDBRequest);
 
  public:
+  using Source = IDBObjectStoreOrIDBIndexOrIDBCursor;
   // Container for async tracing state.
   //
   // The documentation for TRACE_EVENT_ASYNC_{BEGIN,END} suggests identifying
@@ -95,7 +98,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
     // This is used for internal requests that should not show up in an
     // application's trace. Examples of internal requests are the requests
     // issued by DevTools, and the requests used to populate indexes.
-    explicit AsyncTraceState() {}
+    explicit AsyncTraceState() = default;
 
     // Creates an instance that produces begin/end events with the given name.
     //
@@ -156,7 +159,19 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   };
 
   static IDBRequest* Create(ScriptState*,
-                            IDBAny* source,
+                            IDBIndex* source,
+                            IDBTransaction*,
+                            AsyncTraceState);
+  static IDBRequest* Create(ScriptState*,
+                            IDBObjectStore* source,
+                            IDBTransaction*,
+                            AsyncTraceState);
+  static IDBRequest* Create(ScriptState*,
+                            IDBCursor*,
+                            IDBTransaction* source,
+                            AsyncTraceState);
+  static IDBRequest* Create(ScriptState*,
+                            const Source&,
                             IDBTransaction*,
                             AsyncTraceState);
   ~IDBRequest() override;
@@ -165,7 +180,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   v8::Isolate* GetIsolate() const { return isolate_; }
   ScriptValue result(ScriptState*, ExceptionState&);
   DOMException* error(ExceptionState&) const;
-  ScriptValue source(ScriptState*) const;
+  void source(ScriptState*, Source&) const;
   IDBTransaction* transaction() const { return transaction_.Get(); }
 
   bool isResultDirty() const { return result_dirty_; }
@@ -238,14 +253,16 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   // EnqueueBlocked(), or EnqueueUpgradeNeeded().
 
   void HandleResponse(DOMException*);
-  void HandleResponse(IDBKey*);
+  void HandleResponse(std::unique_ptr<IDBKey>);
   void HandleResponse(std::unique_ptr<WebIDBCursor>,
-                      IDBKey*,
-                      IDBKey* primary_key,
-                      scoped_refptr<IDBValue>&&);
-  void HandleResponse(IDBKey*, IDBKey* primary_key, scoped_refptr<IDBValue>&&);
-  void HandleResponse(scoped_refptr<IDBValue>&&);
-  void HandleResponse(const Vector<scoped_refptr<IDBValue>>&);
+                      std::unique_ptr<IDBKey>,
+                      std::unique_ptr<IDBKey> primary_key,
+                      std::unique_ptr<IDBValue>);
+  void HandleResponse(std::unique_ptr<IDBKey>,
+                      std::unique_ptr<IDBKey> primary_key,
+                      std::unique_ptr<IDBValue>);
+  void HandleResponse(std::unique_ptr<IDBValue>);
+  void HandleResponse(Vector<std::unique_ptr<IDBValue>>);
   void HandleResponse(int64_t);
   void HandleResponse();
 
@@ -296,8 +313,8 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   // (which hangs onto the BlobDataHandle) may get garbage-collected. IDBRequest
   // needs to hang onto the BlobDataHandle as well, to avoid having the
   // browser-side Blob get destroyed before the IndexedDB request is processed.
-  inline Vector<scoped_refptr<BlobDataHandle>>* transit_blob_handles() {
-    return &transit_blob_handles_;
+  inline Vector<scoped_refptr<BlobDataHandle>>& transit_blob_handles() {
+    return transit_blob_handles_;
   }
 
 #if DCHECK_IS_ON()
@@ -316,7 +333,7 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   }
 
  protected:
-  IDBRequest(ScriptState*, IDBAny* source, IDBTransaction*, AsyncTraceState);
+  IDBRequest(ScriptState*, const Source&, IDBTransaction*, AsyncTraceState);
   void EnqueueEvent(Event*);
   void DequeueEvent(Event*);
   virtual bool ShouldEnqueueEvent() const;
@@ -347,26 +364,28 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   friend class IDBRequestQueueItem;
 
   void SetResultCursor(IDBCursor*,
-                       IDBKey*,
-                       IDBKey* primary_key,
-                       scoped_refptr<IDBValue>&&);
-  void AckReceivedBlobs(const IDBValue*);
-  void AckReceivedBlobs(const Vector<scoped_refptr<IDBValue>>&);
+                       std::unique_ptr<IDBKey>,
+                       std::unique_ptr<IDBKey> primary_key,
+                       std::unique_ptr<IDBValue>);
+  void AckReceivedBlobs(const IDBValue&);
+  void AckReceivedBlobs(const Vector<std::unique_ptr<IDBValue>>&);
 
   void EnqueueResponse(DOMException*);
-  void EnqueueResponse(IDBKey*);
+  void EnqueueResponse(std::unique_ptr<IDBKey>);
   void EnqueueResponse(std::unique_ptr<WebIDBCursor>,
-                       IDBKey*,
-                       IDBKey* primary_key,
-                       scoped_refptr<IDBValue>&&);
-  void EnqueueResponse(IDBKey*, IDBKey* primary_key, scoped_refptr<IDBValue>&&);
-  void EnqueueResponse(scoped_refptr<IDBValue>&&);
-  void EnqueueResponse(const Vector<scoped_refptr<IDBValue>>&);
+                       std::unique_ptr<IDBKey>,
+                       std::unique_ptr<IDBKey> primary_key,
+                       std::unique_ptr<IDBValue>);
+  void EnqueueResponse(std::unique_ptr<IDBKey>,
+                       std::unique_ptr<IDBKey> primary_key,
+                       std::unique_ptr<IDBValue>);
+  void EnqueueResponse(std::unique_ptr<IDBValue>);
+  void EnqueueResponse(Vector<std::unique_ptr<IDBValue>>);
   void EnqueueResponse();
 
   void ClearPutOperationBlobs() { transit_blob_handles_.clear(); }
 
-  Member<IDBAny> source_;
+  Source source_;
   Member<IDBAny> result_;
   Member<DOMException> error_;
 
@@ -381,9 +400,9 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   Member<IDBCursor> pending_cursor_;
   // New state is not applied to the cursor object until the event is
   // dispatched.
-  Member<IDBKey> cursor_key_;
-  Member<IDBKey> cursor_primary_key_;
-  scoped_refptr<IDBValue> cursor_value_;
+  std::unique_ptr<IDBKey> cursor_key_;
+  std::unique_ptr<IDBKey> cursor_primary_key_;
+  std::unique_ptr<IDBValue> cursor_value_;
 
   Vector<scoped_refptr<BlobDataHandle>> transit_blob_handles_;
 

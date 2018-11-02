@@ -7,9 +7,13 @@ action_foreach("package_sb_files") {
   sources = [
     "cdm.sb",
     "common.sb",
+    "common_v2.sb",
     "gpu.sb",
+    "gpu_v2.sb",
     "nacl_loader.sb",
+    "pdf_compositor.sb",
     "ppapi.sb",
+    "ppapi_v2.sb",
     "renderer.sb",
     "renderer_v2.sb",
     "utility.sb",

@@ -87,7 +87,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
    * @return {boolean}
    */
   static canShowInlineText(node) {
-    if (node.importedDocument() || node.templateContent() ||
+    if (node.contentDocument() || node.importedDocument() || node.templateContent() ||
         Elements.ElementsTreeElement.visibleShadowRoots(node).length || node.hasPseudoElements())
       return false;
     if (node.nodeType() !== Node.ELEMENT_NODE)
@@ -289,7 +289,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
    * @override
    */
   expandRecursively() {
-    this._node.getSubtree(-1).then(UI.TreeElement.prototype.expandRecursively.bind(this, Number.MAX_VALUE));
+    this._node.getSubtree(-1, true).then(UI.TreeElement.prototype.expandRecursively.bind(this, Number.MAX_VALUE));
   }
 
   /**
@@ -538,8 +538,8 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
     if (isEditable)
       contextMenu.editSection().appendItem(Common.UIString('Delete element'), this.remove.bind(this));
 
-    contextMenu.viewSection().appendItem(Common.UIString('Expand all'), this.expandRecursively.bind(this));
-    contextMenu.viewSection().appendItem(Common.UIString('Collapse all'), this.collapseRecursively.bind(this));
+    contextMenu.viewSection().appendItem(ls`Expand recursively`, this.expandRecursively.bind(this));
+    contextMenu.viewSection().appendItem(ls`Collapse children`, this.collapseChildren.bind(this));
   }
 
   _startEditing() {
@@ -964,15 +964,14 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
     var treeOutline = this.treeOutline;
     var wasExpanded = this.expanded;
 
-    function changeTagNameCallback(error, nodeId) {
-      if (error || !nodeId) {
+    this._node.setNodeName(newText, (error, newNode) => {
+      if (error || !newNode) {
         cancel();
         return;
       }
-      var newTreeItem = treeOutline.selectNodeAfterEdit(wasExpanded, error, nodeId);
+      var newTreeItem = treeOutline.selectNodeAfterEdit(wasExpanded, error, newNode);
       moveToNextAttributeIfNeeded.call(newTreeItem);
-    }
-    this._node.setNodeName(newText, changeTagNameCallback);
+    });
   }
 
   /**
@@ -1277,7 +1276,7 @@ Elements.ElementsTreeElement = class extends UI.TreeElement {
       if (value.startsWith('data:'))
         value = value.trimMiddle(60);
       var link = node.nodeName().toLowerCase() === 'a' ?
-          UI.createExternalLink(rewrittenHref, value, '', true) :
+          UI.XLink.create(rewrittenHref, value, '', true /* preventClick */) :
           Components.Linkifier.linkifyURL(rewrittenHref, {text: value, preventClick: true});
       link[Elements.ElementsTreeElement.HrefSymbol] = rewrittenHref;
       return link;

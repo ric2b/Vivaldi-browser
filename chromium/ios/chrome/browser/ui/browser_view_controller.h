@@ -23,10 +23,12 @@
 @class BrowserViewControllerDependencyFactory;
 class GURL;
 @protocol OmniboxFocuser;
+@protocol FakeboxFocuser;
 @protocol SnackbarCommands;
 @class Tab;
 @class TabModel;
 @protocol TabStripFoldAnimation;
+@protocol ToolbarCommands;
 
 namespace ios {
 class ChromeBrowserState;
@@ -59,7 +61,9 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 @property(nonatomic, readonly) id<ApplicationCommands,
                                   BrowserCommands,
                                   OmniboxFocuser,
+                                  FakeboxFocuser,
                                   SnackbarCommands,
+                                  ToolbarCommands,
                                   UrlLoader,
                                   WebToolbarDelegate>
     dispatcher;
@@ -135,9 +139,6 @@ applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
 // Shows the voice search UI. |originView|'s center is used for the presentation
 // and dismissal animations of the Voice Search UI. |originView| can be nil.
 - (void)startVoiceSearchWithOriginView:(UIView*)originView;
-
-// Focuses the omnibox.
-- (void)focusOmnibox;
 
 // Dismisses all presented views, excluding the omnibox if |dismissOmnibox| is
 // NO, then calls |completion|.

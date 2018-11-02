@@ -12,8 +12,7 @@
 #include <string.h>
 
 namespace blink {
-
-namespace {
+namespace multipart_image_resource_parser_test {
 
 String ToString(const Vector<char>& data) {
   if (data.IsEmpty())
@@ -81,8 +80,7 @@ TEST(MultipartResponseTest, FindBoundary) {
 }
 
 TEST(MultipartResponseTest, NoStartBoundary) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
   MockClient* client = new MockClient;
@@ -108,8 +106,7 @@ TEST(MultipartResponseTest, NoStartBoundary) {
 }
 
 TEST(MultipartResponseTest, NoEndBoundary) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
   MockClient* client = new MockClient;
@@ -133,8 +130,7 @@ TEST(MultipartResponseTest, NoEndBoundary) {
 }
 
 TEST(MultipartResponseTest, NoStartAndEndBoundary) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
   MockClient* client = new MockClient;
@@ -159,8 +155,7 @@ TEST(MultipartResponseTest, NoStartAndEndBoundary) {
 
 TEST(MultipartResponseTest, MalformedBoundary) {
   // Some servers send a boundary that is prefixed by "--".  See bug 5786.
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Foo", "Bar");
   response.SetHTTPHeaderField("Content-type", "text/plain");
   MockClient* client = new MockClient;
@@ -208,8 +203,7 @@ void VariousChunkSizesTest(const TestChunk chunks[],
       "foofoofoofoofoo"              // 86-100
       "--bound--";                   // 101-109
 
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   MockClient* client = new MockClient;
   Vector<char> boundary;
   boundary.Append("bound", 5);
@@ -311,8 +305,7 @@ TEST(MultipartResponseTest, BreakInData) {
 }
 
 TEST(MultipartResponseTest, SmallChunk) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   response.SetHTTPHeaderField("Content-type", "text/plain");
   MockClient* client = new MockClient;
   Vector<char> boundary;
@@ -347,8 +340,7 @@ TEST(MultipartResponseTest, SmallChunk) {
 
 TEST(MultipartResponseTest, MultipleBoundaries) {
   // Test multiple boundaries back to back
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   MockClient* client = new MockClient;
   Vector<char> boundary;
   boundary.Append("bound", 5);
@@ -365,8 +357,7 @@ TEST(MultipartResponseTest, MultipleBoundaries) {
 }
 
 TEST(MultipartResponseTest, EatLeadingLF) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   MockClient* client = new MockClient;
   Vector<char> boundary;
   boundary.Append("bound", 5);
@@ -395,8 +386,7 @@ TEST(MultipartResponseTest, EatLeadingLF) {
 }
 
 TEST(MultipartResponseTest, EatLeadingCRLF) {
-  ResourceResponse response;
-  response.SetMimeType("multipart/x-mixed-replace");
+  ResourceResponse response(NullURL(), "multipart/x-mixed-replace");
   MockClient* client = new MockClient;
   Vector<char> boundary;
   boundary.Append("bound", 5);
@@ -424,6 +414,5 @@ TEST(MultipartResponseTest, EatLeadingCRLF) {
   EXPECT_EQ("", ToString(client->data_[3]));
 }
 
-}  // namespace
-
+}  // namespace multipart_image_resource_parser_test
 }  // namespace blink

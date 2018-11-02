@@ -8,7 +8,15 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 
+namespace base {
+class SequencedTaskRunner;
+class SingleThreadTaskRunner;
+}  // namespace base
+
 namespace blink {
+
+class WebTaskRunner;
+
 namespace scheduler {
 
 class RendererScheduler;
@@ -17,6 +25,20 @@ std::unique_ptr<RendererScheduler> CreateRendererSchedulerForTests();
 
 void RunIdleTasksForTesting(RendererScheduler* scheduler,
                             const base::Closure& callback);
+
+// Returns a SequencedTaskRunner. This implementation is same as
+// SequencedTaskRunnerHandle::Get(), but this is intended to be used for
+// testing. See crbug.com/794123.
+scoped_refptr<base::SequencedTaskRunner> GetSequencedTaskRunnerForTesting();
+
+// Returns the SingleThreadTaskRunner for the current thread for testing. This
+// implementation is same as ThreadTaskRunnerHandle::Get(), but this is intended
+// to be used for testing. See crbug.com/794123.
+scoped_refptr<base::SingleThreadTaskRunner>
+GetSingleThreadTaskRunnerForTesting();
+
+// Creates a WebTaskRunner for testing.
+scoped_refptr<WebTaskRunner> CreateWebTaskRunnerForTesting();
 
 }  // namespace scheduler
 }  // namespace blink

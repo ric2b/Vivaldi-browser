@@ -98,7 +98,7 @@ static bool AreValidPixelFormatsForWrap(VideoPixelFormat source_format,
 
   // It is possible to add other planar to planar format conversions here if the
   // use case is there.
-  return source_format == PIXEL_FORMAT_YV12A &&
+  return source_format == PIXEL_FORMAT_I420A &&
          target_format == PIXEL_FORMAT_I420;
 }
 
@@ -110,7 +110,6 @@ bool RequiresEvenSizeAllocation(VideoPixelFormat format) {
     case PIXEL_FORMAT_XRGB:
     case PIXEL_FORMAT_RGB24:
     case PIXEL_FORMAT_RGB32:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_Y16:
       return false;
     case PIXEL_FORMAT_NV12:
@@ -120,8 +119,8 @@ bool RequiresEvenSizeAllocation(VideoPixelFormat format) {
     case PIXEL_FORMAT_MJPEG:
     case PIXEL_FORMAT_YUY2:
     case PIXEL_FORMAT_YV12:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV422P9:
     case PIXEL_FORMAT_YUV444P9:
@@ -131,9 +130,8 @@ bool RequiresEvenSizeAllocation(VideoPixelFormat format) {
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
-    case PIXEL_FORMAT_YV12A:
+    case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_UYVY:
-    case PIXEL_FORMAT_I422:
       return true;
     case PIXEL_FORMAT_UNKNOWN:
       break;
@@ -168,7 +166,7 @@ bool VideoFrame::IsValidConfig(VideoPixelFormat format,
     return true;
 
   // Make sure new formats are properly accounted for in the method.
-  static_assert(PIXEL_FORMAT_MAX == 27,
+  static_assert(PIXEL_FORMAT_MAX == 26,
                 "Added pixel format, please review IsValidConfig()");
 
   if (format == PIXEL_FORMAT_UNKNOWN) {
@@ -206,7 +204,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateZeroInitializedFrame(
 scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
     VideoPixelFormat format,
     const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
-    const ReleaseMailboxCB& mailbox_holder_release_cb,
+    ReleaseMailboxCB mailbox_holder_release_cb,
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
@@ -227,7 +225,8 @@ scoped_refptr<VideoFrame> VideoFrame::WrapNativeTextures(
   }
 
   return new VideoFrame(format, storage, coded_size, visible_rect, natural_size,
-                        mailbox_holders, mailbox_holder_release_cb, timestamp);
+                        mailbox_holders, std::move(mailbox_holder_release_cb),
+                        timestamp);
 }
 
 // static
@@ -377,7 +376,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapCVPixelBuffer(
   if (cv_format == kCVPixelFormatType_420YpCbCr8Planar) {
     format = PIXEL_FORMAT_I420;
   } else if (cv_format == kCVPixelFormatType_444YpCbCr8) {
-    format = PIXEL_FORMAT_YV24;
+    format = PIXEL_FORMAT_I444;
   } else if (cv_format == '420v') {
     // TODO(jfroy): Use kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange when the
     // minimum OS X and iOS SDKs permits it.
@@ -482,7 +481,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateColorFrame(
     uint8_t v,
     base::TimeDelta timestamp) {
   scoped_refptr<VideoFrame> frame =
-      CreateFrame(PIXEL_FORMAT_YV12, size, gfx::Rect(size), size, timestamp);
+      CreateFrame(PIXEL_FORMAT_I420, size, gfx::Rect(size), size, timestamp);
   FillYUV(frame.get(), y, u, v);
   return frame;
 }
@@ -503,7 +502,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateTransparentFrame(
   const uint8_t kTransparentA = 0x00;
   const base::TimeDelta kZero;
   scoped_refptr<VideoFrame> frame =
-      CreateFrame(PIXEL_FORMAT_YV12A, size, gfx::Rect(size), size, kZero);
+      CreateFrame(PIXEL_FORMAT_I420A, size, gfx::Rect(size), size, kZero);
   FillYUVA(frame.get(), kBlackY, kBlackUV, kBlackUV, kTransparentA);
   return frame;
 }
@@ -518,7 +517,6 @@ size_t VideoFrame::NumPlanes(VideoPixelFormat format) {
     case PIXEL_FORMAT_RGB24:
     case PIXEL_FORMAT_RGB32:
     case PIXEL_FORMAT_MJPEG:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_Y16:
       return 1;
     case PIXEL_FORMAT_NV12:
@@ -527,8 +525,8 @@ size_t VideoFrame::NumPlanes(VideoPixelFormat format) {
       return 2;
     case PIXEL_FORMAT_I420:
     case PIXEL_FORMAT_YV12:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV422P9:
     case PIXEL_FORMAT_YUV444P9:
@@ -538,9 +536,8 @@ size_t VideoFrame::NumPlanes(VideoPixelFormat format) {
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
-    case PIXEL_FORMAT_I422:
       return 3;
-    case PIXEL_FORMAT_YV12A:
+    case PIXEL_FORMAT_I420A:
       return 4;
     case PIXEL_FORMAT_UNKNOWN:
       break;
@@ -791,11 +788,14 @@ CVPixelBufferRef VideoFrame::CvPixelBuffer() const {
 }
 #endif
 
-void VideoFrame::SetReleaseMailboxCB(
-    const ReleaseMailboxCB& release_mailbox_cb) {
+void VideoFrame::SetReleaseMailboxCB(ReleaseMailboxCB release_mailbox_cb) {
   DCHECK(!release_mailbox_cb.is_null());
   DCHECK(mailbox_holders_release_cb_.is_null());
-  mailbox_holders_release_cb_ = release_mailbox_cb;
+  mailbox_holders_release_cb_ = std::move(release_mailbox_cb);
+}
+
+bool VideoFrame::HasReleaseMailboxCB() const {
+  return !mailbox_holders_release_cb_.is_null();
 }
 
 void VideoFrame::AddDestructionObserver(base::OnceClosure callback) {
@@ -826,17 +826,16 @@ std::string VideoFrame::AsHumanReadableString() {
   return s.str();
 }
 
-int VideoFrame::BitsPerChannel(VideoPixelFormat format) {
-  int bits_per_channel = 0;
-  switch (format) {
+size_t VideoFrame::BitDepth() const {
+  switch (format_) {
     case media::PIXEL_FORMAT_UNKNOWN:
       NOTREACHED();
     // Fall through!
     case media::PIXEL_FORMAT_I420:
     case media::PIXEL_FORMAT_YV12:
-    case media::PIXEL_FORMAT_YV16:
-    case media::PIXEL_FORMAT_YV12A:
-    case media::PIXEL_FORMAT_YV24:
+    case media::PIXEL_FORMAT_I422:
+    case media::PIXEL_FORMAT_I420A:
+    case media::PIXEL_FORMAT_I444:
     case media::PIXEL_FORMAT_NV12:
     case media::PIXEL_FORMAT_NV21:
     case media::PIXEL_FORMAT_UYVY:
@@ -847,30 +846,24 @@ int VideoFrame::BitsPerChannel(VideoPixelFormat format) {
     case media::PIXEL_FORMAT_RGB32:
     case media::PIXEL_FORMAT_MJPEG:
     case media::PIXEL_FORMAT_MT21:
-    case media::PIXEL_FORMAT_Y8:
-    case media::PIXEL_FORMAT_I422:
-      bits_per_channel = 8;
-      break;
+      return 8;
     case media::PIXEL_FORMAT_YUV420P9:
     case media::PIXEL_FORMAT_YUV422P9:
     case media::PIXEL_FORMAT_YUV444P9:
-      bits_per_channel = 9;
-      break;
+      return 9;
     case media::PIXEL_FORMAT_YUV420P10:
     case media::PIXEL_FORMAT_YUV422P10:
     case media::PIXEL_FORMAT_YUV444P10:
-      bits_per_channel = 10;
-      break;
+      return 10;
     case media::PIXEL_FORMAT_YUV420P12:
     case media::PIXEL_FORMAT_YUV422P12:
     case media::PIXEL_FORMAT_YUV444P12:
-      bits_per_channel = 12;
-      break;
+      return 12;
     case media::PIXEL_FORMAT_Y16:
-      bits_per_channel = 16;
-      break;
+      return 16;
   }
-  return bits_per_channel;
+  NOTREACHED();
+  return 0;
 }
 
 // static
@@ -1045,8 +1038,8 @@ VideoFrame::VideoFrame(VideoPixelFormat format,
                        const gfx::Size& coded_size,
                        const gfx::Rect& visible_rect,
                        const gfx::Size& natural_size,
-                       const gpu::MailboxHolder(&mailbox_holders)[kMaxPlanes],
-                       const ReleaseMailboxCB& mailbox_holder_release_cb,
+                       const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
+                       ReleaseMailboxCB mailbox_holder_release_cb,
                        base::TimeDelta timestamp)
     : VideoFrame(format,
                  storage_type,
@@ -1055,7 +1048,7 @@ VideoFrame::VideoFrame(VideoPixelFormat format,
                  natural_size,
                  timestamp) {
   memcpy(&mailbox_holders_, mailbox_holders, sizeof(mailbox_holders_));
-  mailbox_holders_release_cb_ = mailbox_holder_release_cb;
+  mailbox_holders_release_cb_ = std::move(mailbox_holder_release_cb);
 }
 
 // static
@@ -1097,14 +1090,13 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
     case kUPlane:  // and kUVPlane:
     case kVPlane:
       switch (format) {
-        case PIXEL_FORMAT_YV24:
+        case PIXEL_FORMAT_I444:
         case PIXEL_FORMAT_YUV444P9:
         case PIXEL_FORMAT_YUV444P10:
         case PIXEL_FORMAT_YUV444P12:
         case PIXEL_FORMAT_Y16:
           return gfx::Size(1, 1);
 
-        case PIXEL_FORMAT_YV16:
         case PIXEL_FORMAT_I422:
         case PIXEL_FORMAT_YUV422P9:
         case PIXEL_FORMAT_YUV422P10:
@@ -1113,7 +1105,7 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
 
         case PIXEL_FORMAT_YV12:
         case PIXEL_FORMAT_I420:
-        case PIXEL_FORMAT_YV12A:
+        case PIXEL_FORMAT_I420A:
         case PIXEL_FORMAT_NV12:
         case PIXEL_FORMAT_NV21:
         case PIXEL_FORMAT_MT21:
@@ -1130,7 +1122,6 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
         case PIXEL_FORMAT_RGB24:
         case PIXEL_FORMAT_RGB32:
         case PIXEL_FORMAT_MJPEG:
-        case PIXEL_FORMAT_Y8:
           break;
       }
   }
@@ -1170,11 +1161,9 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     }
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV12A:
-    case PIXEL_FORMAT_YV24:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I420A:
+    case PIXEL_FORMAT_I444:
       return 1;
     case PIXEL_FORMAT_MJPEG:
       return 0;

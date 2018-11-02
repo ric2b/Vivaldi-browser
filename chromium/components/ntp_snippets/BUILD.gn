@@ -161,6 +161,7 @@ static_library("ntp_snippets") {
     "//components/variations/net",
     "//components/variations/service",
     "//components/web_resource",
+    "//services/identity/public/cpp",
     "//third_party/icu/",
     "//ui/gfx",
   ]
@@ -249,6 +250,7 @@ source_set("unit_tests") {
     "//components/web_resource:web_resource",
     "//google_apis/gcm",
     "//net:test_support",
+    "//services/identity/public/cpp",
     "//testing/gtest",
     "//third_party/icu/",
     "//ui/gfx:test_support",

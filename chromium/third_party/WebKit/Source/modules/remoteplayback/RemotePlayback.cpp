@@ -14,6 +14,7 @@
 #include "core/html_names.h"
 #include "core/probe/CoreProbes.h"
 #include "modules/EventTargetModules.h"
+#include "modules/presentation/PresentationAvailabilityState.h"
 #include "modules/presentation/PresentationController.h"
 #include "modules/remoteplayback/AvailabilityCallbackWrapper.h"
 #include "modules/remoteplayback/RemotePlaybackConnectionCallbacks.h"
@@ -47,15 +48,15 @@ const AtomicString& RemotePlaybackStateToString(WebRemotePlaybackState state) {
 }
 
 void RunRemotePlaybackTask(ExecutionContext* context,
-                           WTF::Closure task,
+                           base::OnceClosure task,
                            std::unique_ptr<int> task_id) {
   probe::AsyncTask async_task(context, task_id.get());
   std::move(task).Run();
 }
 
-WebURL GetAvailabilityUrl(const WebURL& source, bool is_source_supported) {
+KURL GetAvailabilityUrl(const WebURL& source, bool is_source_supported) {
   if (source.IsEmpty() || !source.IsValid() || !is_source_supported)
-    return WebURL();
+    return KURL();
 
   // The URL for each media element's source looks like the following:
   // remote-playback://<encoded-data> where |encoded-data| is base64 URL
@@ -239,22 +240,21 @@ void RemotePlayback::PromptInternal() {
           availability_urls_,
           std::make_unique<RemotePlaybackConnectionCallbacks>(this));
     } else {
-      // TODO(yuryu): Wrapping PromptCancelled with WTF::Closure as
+      // TODO(yuryu): Wrapping PromptCancelled with base::OnceClosure as
       // InspectorInstrumentation requires a globally unique pointer to track
       // tasks. We can remove the wrapper if InspectorInstrumentation returns a
       // task id.
-      WTF::Closure task =
+      base::OnceClosure task =
           WTF::Bind(&RemotePlayback::PromptCancelled, WrapPersistent(this));
       std::unique_ptr<int> task_id = std::make_unique<int>(0);
       probe::AsyncTaskScheduled(GetExecutionContext(), "promptCancelled",
                                 task_id.get());
       GetExecutionContext()
           ->GetTaskRunner(TaskType::kMediaElementEvent)
-          ->PostTask(BLINK_FROM_HERE,
-                     WTF::Bind(RunRemotePlaybackTask,
-                               WrapPersistent(GetExecutionContext()),
-                               WTF::Passed(std::move(task)),
-                               WTF::Passed(std::move(task_id))));
+          ->PostTask(FROM_HERE, WTF::Bind(RunRemotePlaybackTask,
+                                          WrapPersistent(GetExecutionContext()),
+                                          WTF::Passed(std::move(task)),
+                                          WTF::Passed(std::move(task_id))));
     }
     return;
   }
@@ -278,27 +278,28 @@ int RemotePlayback::WatchAvailabilityInternal(
   } while (!availability_callbacks_.insert(id, callback).is_new_entry);
 
   // Report the current availability via the callback.
-  // TODO(yuryu): Wrapping notifyInitialAvailability with WTF::Closure as
+  // TODO(yuryu): Wrapping notifyInitialAvailability with base::OnceClosure as
   // InspectorInstrumentation requires a globally unique pointer to track tasks.
   // We can remove the wrapper if InspectorInstrumentation returns a task id.
-  WTF::Closure task = WTF::Bind(&RemotePlayback::NotifyInitialAvailability,
-                                WrapPersistent(this), id);
+  base::OnceClosure task = WTF::Bind(&RemotePlayback::NotifyInitialAvailability,
+                                     WrapPersistent(this), id);
   std::unique_ptr<int> task_id = std::make_unique<int>(0);
   probe::AsyncTaskScheduled(GetExecutionContext(), "watchAvailabilityCallback",
                             task_id.get());
   GetExecutionContext()
       ->GetTaskRunner(TaskType::kMediaElementEvent)
-      ->PostTask(BLINK_FROM_HERE,
-                 WTF::Bind(RunRemotePlaybackTask,
-                           WrapPersistent(GetExecutionContext()),
-                           WTF::Passed(std::move(task)),
-                           WTF::Passed(std::move(task_id))));
+      ->PostTask(FROM_HERE, WTF::Bind(RunRemotePlaybackTask,
+                                      WrapPersistent(GetExecutionContext()),
+                                      WTF::Passed(std::move(task)),
+                                      WTF::Passed(std::move(task_id))));
 
   MaybeStartListeningForAvailability();
   return id;
 }
 
 bool RemotePlayback::CancelWatchAvailabilityInternal(int id) {
+  if (id <= 0)  // HashMap doesn't support the cases of key = 0 or key = -1.
+    return false;
   auto iter = availability_callbacks_.find(id);
   if (iter == availability_callbacks_.end())
     return false;
@@ -358,7 +359,9 @@ void RemotePlayback::StateChanged(WebRemotePlaybackState state) {
       DispatchEvent(Event::Create(EventTypeNames::disconnect));
       if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled() &&
           media_element_->IsHTMLVideoElement()) {
-        ToHTMLVideoElement(media_element_)->MediaRemotingStopped();
+        ToHTMLVideoElement(media_element_)
+            ->MediaRemotingStopped(
+                WebLocalizedString::kMediaRemotingStopNoText);
       }
       break;
   }
@@ -395,9 +398,9 @@ void RemotePlayback::SourceChanged(const WebURL& source,
   if (IsBackgroundAvailabilityMonitoringDisabled())
     return;
 
-  WebURL current_url =
-      availability_urls_.IsEmpty() ? WebURL() : availability_urls_[0];
-  WebURL new_url = GetAvailabilityUrl(source, is_source_supported);
+  KURL current_url =
+      availability_urls_.IsEmpty() ? KURL() : availability_urls_[0];
+  KURL new_url = GetAvailabilityUrl(source, is_source_supported);
 
   if (new_url == current_url)
     return;
@@ -406,15 +409,9 @@ void RemotePlayback::SourceChanged(const WebURL& source,
   // URLs vector is updated.
   StopListeningForAvailability();
 
-  // WebVector doesn't have push_back or alternative.
-  if (new_url.IsEmpty()) {
-    WebVector<WebURL> empty;
-    availability_urls_.Swap(empty);
-  } else {
-    WebVector<WebURL> new_urls((size_t)1);
-    new_urls[0] = new_url;
-    availability_urls_.Swap(new_urls);
-  }
+  availability_urls_.clear();
+  if (!new_url.IsEmpty())
+    availability_urls_.push_back(new_url);
 
   MaybeStartListeningForAvailability();
 }
@@ -455,7 +452,7 @@ void RemotePlayback::RemotePlaybackDisabled() {
 }
 
 void RemotePlayback::AvailabilityChanged(
-    mojom::ScreenAvailability availability) {
+    mojom::blink::ScreenAvailability availability) {
   DCHECK(RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled());
   DCHECK(is_listening_);
 
@@ -485,7 +482,7 @@ void RemotePlayback::AvailabilityChanged(
   AvailabilityChanged(remote_playback_availability);
 }
 
-const WebVector<WebURL>& RemotePlayback::Urls() const {
+const Vector<KURL>& RemotePlayback::Urls() const {
   DCHECK(RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled());
   // TODO(avayvod): update the URL format and add frame url, mime type and
   // response headers when available.
@@ -560,12 +557,12 @@ void RemotePlayback::StopListeningForAvailability() {
     return;
 
   availability_ = WebRemotePlaybackAvailability::kUnknown;
-  WebPresentationClient* client =
-      PresentationController::ClientFromContext(GetExecutionContext());
-  if (!client)
+  PresentationController* controller =
+      PresentationController::FromContext(GetExecutionContext());
+  if (!controller)
     return;
 
-  client->StopListening(this);
+  controller->RemoveAvailabilityObserver(this);
   is_listening_ = false;
 }
 
@@ -579,15 +576,15 @@ void RemotePlayback::MaybeStartListeningForAvailability() {
   if (is_listening_)
     return;
 
-  if (availability_urls_.empty() || availability_callbacks_.IsEmpty())
+  if (availability_urls_.IsEmpty() || availability_callbacks_.IsEmpty())
     return;
 
-  WebPresentationClient* client =
-      PresentationController::ClientFromContext(GetExecutionContext());
-  if (!client)
+  PresentationController* controller =
+      PresentationController::FromContext(GetExecutionContext());
+  if (!controller)
     return;
 
-  client->StartListening(this);
+  controller->AddAvailabilityObserver(this);
   is_listening_ = true;
 }
 

@@ -5,13 +5,13 @@
 #include "chrome/browser/media/router/mojo/media_router_desktop.h"
 
 #include "base/strings/string_util.h"
-#include "chrome/browser/media/router/discovery/dial/dial_media_sink_service.h"
-#include "chrome/browser/media/router/discovery/mdns/cast_media_sink_service.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/router/mojo/media_route_controller.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_metrics.h"
-#include "chrome/browser/media/router/mojo/wired_display_media_route_provider.h"
+#include "chrome/browser/media/router/providers/wired_display/wired_display_media_route_provider.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/media_router/media_source_helper.h"
 #include "extensions/common/extension.h"
@@ -42,18 +42,15 @@ void MediaRouterDesktop::OnUserGesture() {
   // media source.
   UpdateMediaSinks(MediaSourceForDesktop().id());
 
-  if (dial_media_sink_service_)
-    dial_media_sink_service_->OnUserGesture();
-
-  if (cast_media_sink_service_)
-    cast_media_sink_service_->OnUserGesture();
+  if (media_sink_service_)
+    media_sink_service_->OnUserGesture();
 
 #if defined(OS_WIN)
   EnsureMdnsDiscoveryEnabled();
 #endif
 }
 
-base::Optional<mojom::MediaRouteProvider::Id>
+base::Optional<MediaRouteProviderId>
 MediaRouterDesktop::GetProviderIdForPresentation(
     const std::string& presentation_id) {
   // TODO(takumif): Once the Android Media Router also uses MediaRouterMojoImpl,
@@ -61,40 +58,45 @@ MediaRouterDesktop::GetProviderIdForPresentation(
   if (presentation_id == kAutoJoinPresentationId ||
       base::StartsWith(presentation_id, kCastPresentationIdPrefix,
                        base::CompareCase::SENSITIVE)) {
-    return mojom::MediaRouteProvider::Id::EXTENSION;
+    return MediaRouteProviderId::EXTENSION;
   }
   return MediaRouterMojoImpl::GetProviderIdForPresentation(presentation_id);
 }
 
-MediaRouterDesktop::MediaRouterDesktop(content::BrowserContext* context,
-                                       FirewallCheck check_firewall)
+MediaRouterDesktop::MediaRouterDesktop(content::BrowserContext* context)
     : MediaRouterMojoImpl(context),
+      media_sink_service_(nullptr),
       weak_factory_(this) {
   InitializeMediaRouteProviders();
 #if defined(OS_WIN)
-  if (check_firewall == FirewallCheck::RUN) {
-    CanFirewallUseLocalPorts(
-        base::BindOnce(&MediaRouterDesktop::OnFirewallCheckComplete,
-                       weak_factory_.GetWeakPtr()));
-  }
+  CanFirewallUseLocalPorts(
+      base::BindOnce(&MediaRouterDesktop::OnFirewallCheckComplete,
+                     weak_factory_.GetWeakPtr()));
 #endif
 }
 
+MediaRouterDesktop::MediaRouterDesktop(content::BrowserContext* context,
+                                       DualMediaSinkService* media_sink_service)
+    : MediaRouterMojoImpl(context),
+      media_sink_service_(media_sink_service),
+      weak_factory_(this) {
+  InitializeMediaRouteProviders();
+}
+
 void MediaRouterDesktop::RegisterMediaRouteProvider(
-    mojom::MediaRouteProvider::Id provider_id,
+    MediaRouteProviderId provider_id,
     mojom::MediaRouteProviderPtr media_route_provider_ptr,
     mojom::MediaRouter::RegisterMediaRouteProviderCallback callback) {
   auto config = mojom::MediaRouteProviderConfig::New();
   // Enabling browser side discovery means disabling extension side discovery.
   // We are migrating discovery from the external Media Route Provider to the
   // Media Router (crbug.com/687383), so we need to disable it in the provider.
-  config->enable_dial_discovery = !media_router::DialLocalDiscoveryEnabled();
   config->enable_cast_discovery = !media_router::CastDiscoveryEnabled();
   std::move(callback).Run(instance_id(), std::move(config));
 
   SyncStateToMediaRouteProvider(provider_id);
 
-  if (provider_id == mojom::MediaRouteProvider::Id::EXTENSION) {
+  if (provider_id == MediaRouteProviderId::EXTENSION) {
     RegisterExtensionMediaRouteProvider(std::move(media_route_provider_ptr));
   } else {
     media_route_provider_ptr.set_connection_error_handler(
@@ -106,7 +108,7 @@ void MediaRouterDesktop::RegisterMediaRouteProvider(
 
 void MediaRouterDesktop::RegisterExtensionMediaRouteProvider(
     mojom::MediaRouteProviderPtr extension_provider_ptr) {
-  StartDiscovery();
+  ProvideSinksToExtension();
 #if defined(OS_WIN)
   // The extension MRP already turns on mDNS discovery for platforms other than
   // Windows. It only relies on this signalling from MR on Windows to avoid
@@ -143,51 +145,33 @@ void MediaRouterDesktop::BindToMojoRequest(
   }
 }
 
-void MediaRouterDesktop::StartDiscovery() {
+void MediaRouterDesktop::ProvideSinksToExtension() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DVLOG(1) << "StartDiscovery";
+  DVLOG(1) << "ProvideSinksToExtension";
+  if (!media_sink_service_)
+    media_sink_service_ = DualMediaSinkService::GetInstance();
 
-  if (media_router::CastDiscoveryEnabled()) {
-    if (!cast_media_sink_service_) {
-      cast_media_sink_service_ =
-          std::make_unique<CastMediaSinkService>(context());
-      cast_media_sink_service_->Start(
-          base::BindRepeating(&MediaRouterDesktop::ProvideSinks,
-                              weak_factory_.GetWeakPtr(), "cast"));
-    } else {
-      cast_media_sink_service_->ForceSinkDiscoveryCallback();
-    }
+  // If calling |ProvideSinksToExtension| for the first time, add a callback to
+  // be notified of sink updates.
+  if (!media_sink_service_subscription_) {
+    media_sink_service_subscription_ =
+        media_sink_service_->AddSinksDiscoveredCallback(base::BindRepeating(
+            &MediaRouterDesktop::ProvideSinks, base::Unretained(this)));
   }
 
-  if (media_router::DialLocalDiscoveryEnabled()) {
-    if (!dial_media_sink_service_) {
-      dial_media_sink_service_ =
-          std::make_unique<DialMediaSinkService>(context());
-
-      OnDialSinkAddedCallback dial_sink_added_cb;
-      scoped_refptr<base::SequencedTaskRunner> dial_sink_added_cb_sequence;
-      if (cast_media_sink_service_) {
-        dial_sink_added_cb =
-            cast_media_sink_service_->GetDialSinkAddedCallback();
-        dial_sink_added_cb_sequence =
-            cast_media_sink_service_->GetImplTaskRunner();
-      }
-      dial_media_sink_service_->Start(
-          base::BindRepeating(&MediaRouterDesktop::ProvideSinks,
-                              weak_factory_.GetWeakPtr(), "dial"),
-          dial_sink_added_cb, dial_sink_added_cb_sequence);
-    } else {
-      dial_media_sink_service_->ForceSinkDiscoveryCallback();
-    }
-  }
+  // Sync the current list of sinks to the extension.
+  for (const auto& provider_and_sinks : media_sink_service_->current_sinks())
+    ProvideSinks(provider_and_sinks.first, provider_and_sinks.second);
 }
 
-void MediaRouterDesktop::ProvideSinks(const std::string& provider_name,
-                                      std::vector<MediaSinkInternal> sinks) {
+void MediaRouterDesktop::ProvideSinks(
+    const std::string& provider_name,
+    const std::vector<MediaSinkInternal>& sinks) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DVLOG(1) << "Provider [" << provider_name << "] found " << sinks.size()
            << " devices...";
-  extension_provider_proxy_->ProvideSinks(provider_name, std::move(sinks));
+  media_route_providers_[MediaRouteProviderId::EXTENSION]->ProvideSinks(
+      provider_name, sinks);
 }
 
 void MediaRouterDesktop::InitializeMediaRouteProviders() {
@@ -201,7 +185,7 @@ void MediaRouterDesktop::InitializeExtensionMediaRouteProviderProxy() {
   extension_provider_proxy_ =
       std::make_unique<ExtensionMediaRouteProviderProxy>(
           context(), mojo::MakeRequest(&extension_provider_proxy_ptr));
-  media_route_providers_[mojom::MediaRouteProvider::Id::EXTENSION] =
+  media_route_providers_[MediaRouteProviderId::EXTENSION] =
       std::move(extension_provider_proxy_ptr);
 }
 
@@ -213,7 +197,7 @@ void MediaRouterDesktop::InitializeWiredDisplayMediaRouteProvider() {
       mojo::MakeRequest(&wired_display_provider_ptr),
       std::move(media_router_ptr), Profile::FromBrowserContext(context()));
   RegisterMediaRouteProvider(
-      mojom::MediaRouteProvider::Id::WIRED_DISPLAY,
+      MediaRouteProviderId::WIRED_DISPLAY,
       std::move(wired_display_provider_ptr),
       base::BindOnce([](const std::string& instance_id,
                         mojom::MediaRouteProviderConfigPtr config) {}));
@@ -221,10 +205,11 @@ void MediaRouterDesktop::InitializeWiredDisplayMediaRouteProvider() {
 
 #if defined(OS_WIN)
 void MediaRouterDesktop::EnsureMdnsDiscoveryEnabled() {
-  if (cast_media_sink_service_) {
-    cast_media_sink_service_->StartMdnsDiscovery();
+  if (media_router::CastDiscoveryEnabled()) {
+    if (media_sink_service_)
+      media_sink_service_->StartMdnsDiscovery();
   } else {
-    media_route_providers_[mojom::MediaRouteProvider::Id::EXTENSION]
+    media_route_providers_[MediaRouteProviderId::EXTENSION]
         ->EnableMdnsDiscovery();
   }
 

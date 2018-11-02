@@ -35,15 +35,14 @@
 
 #include <memory>
 #include "base/memory/scoped_refptr.h"
+#include "common/net/ip_address_space.mojom-shared.h"
 #include "core/CoreExport.h"
 #include "core/exported/WorkerShadowPage.h"
 #include "core/workers/SharedWorkerReportingProxy.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/WebTaskRunner.h"
-#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebContentSecurityPolicy.h"
-#include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebSharedWorkerClient.h"
 #include "public/web/worker_content_settings_proxy.mojom-blink.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
@@ -73,15 +72,9 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
       WebApplicationCacheHostClient*) override;
   void OnShadowPageInitialized() override;
 
-  // WebDevToolsAgentClient overrides.
-  void SendProtocolMessage(int session_id,
-                           int call_id,
-                           const WebString&,
-                           const WebString&) override;
+  // WebDevToolsAgentImpl::Client overrides.
   void ResumeStartup() override;
-  WebDevToolsAgentClient::WebKitClientMessageLoop* CreateClientMessageLoop()
-      override;
-  const WebString& GetInstrumentationToken() override;
+  const WebString& GetDevToolsFrameToken() override;
 
   // WebSharedWorker methods:
   void StartWorkerContext(
@@ -89,21 +82,16 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
       const WebString& name,
       const WebString& content_security_policy,
       WebContentSecurityPolicyType,
-      WebAddressSpace,
-      const WebString& instrumentation_token,
+      mojom::IPAddressSpace,
+      const WebString& devtools_frame_token,
       mojo::ScopedMessagePipeHandle content_settings_handle,
       mojo::ScopedMessagePipeHandle interface_provider) override;
   void Connect(MessagePortChannel) override;
   void TerminateWorkerContext() override;
 
   void PauseWorkerContextOnStart() override;
-  void AttachDevTools(int session_id) override;
-  void ReattachDevTools(int sesion_id, const WebString& saved_state) override;
-  void DetachDevTools(int session_id) override;
-  void DispatchDevToolsMessage(int session_id,
-                               int call_id,
-                               const WebString& method,
-                               const WebString& message) override;
+  void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_request) override;
 
   // Callback methods for SharedWorkerReportingProxy.
   void CountFeature(WebFeature);
@@ -127,7 +115,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
   std::unique_ptr<WorkerShadowPage> shadow_page_;
   // Unique worker token used by DevTools to attribute different instrumentation
   // to the same worker.
-  WebString instrumentation_token_;
+  WebString devtools_frame_token_;
 
   std::unique_ptr<WebServiceWorkerNetworkProvider> network_provider_;
 
@@ -148,7 +136,7 @@ class CORE_EXPORT WebSharedWorkerImpl final : public WebSharedWorker,
 
   WebURL url_;
   WebString name_;
-  WebAddressSpace creation_address_space_;
+  mojom::IPAddressSpace creation_address_space_;
 
   service_manager::mojom::blink::InterfaceProviderPtrInfo
       pending_interface_provider_;

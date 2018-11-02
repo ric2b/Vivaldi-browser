@@ -49,8 +49,6 @@
 #include "WebPlatformEventType.h"
 #include "WebSize.h"
 #include "WebSpeechSynthesizer.h"
-#include "WebStorageQuotaCallbacks.h"
-#include "WebStorageQuotaType.h"
 #include "WebString.h"
 #include "WebURLError.h"
 #include "WebURLLoader.h"
@@ -63,6 +61,7 @@
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom-shared.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -165,7 +164,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual WebCookieJar* CookieJar() { return nullptr; }
 
   // Must return non-null.
-  virtual WebClipboard* Clipboard() { return nullptr; }
+  virtual WebClipboard* Clipboard();
 
   // Must return non-null.
   virtual WebFileUtilities* GetFileUtilities() { return nullptr; }
@@ -343,7 +342,7 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
-  // Returns a WebDataConsumerHandle for given a mojo data pipe endpoint.
+  // Returns a WebDataConsumerHandle for a given mojo data pipe endpoint.
   virtual std::unique_ptr<WebDataConsumerHandle> CreateDataConsumerHandle(
       mojo::ScopedDataPipeConsumerHandle handle) {
     return nullptr;
@@ -477,6 +476,18 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
+  // Returns an interface to run nested message loop. Used for debugging.
+  class NestedMessageLoopRunner {
+   public:
+    virtual ~NestedMessageLoopRunner() = default;
+    virtual void Run() = 0;
+    virtual void QuitNow() = 0;
+  };
+  virtual std::unique_ptr<NestedMessageLoopRunner>
+  CreateNestedMessageLoopRunner() const {
+    return nullptr;
+  }
+
   // Testing -------------------------------------------------------------
 
   // Gets a pointer to URLLoaderMockFactory for testing. Will not be available
@@ -576,7 +587,8 @@ class BLINK_PLATFORM_EXPORT Platform {
   // May return null if WebRTC functionality is not avaliable or if it's out of
   // resources.
   virtual std::unique_ptr<WebRTCPeerConnectionHandler>
-  CreateRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*);
+  CreateRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*,
+                                 scoped_refptr<base::SingleThreadTaskRunner>);
 
   // Creates a WebMediaRecorderHandler to record MediaStreams.
   // May return null if the functionality is not available or out of resources.
@@ -598,8 +610,10 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // Fills in the WebMediaStream to capture from the WebMediaPlayer identified
   // by the second parameter.
-  virtual void CreateHTMLVideoElementCapturer(WebMediaStream*,
-                                              WebMediaPlayer*) {}
+  virtual void CreateHTMLVideoElementCapturer(
+      WebMediaStream*,
+      WebMediaPlayer*,
+      scoped_refptr<base::SingleThreadTaskRunner>) {}
   virtual void CreateHTMLAudioElementCapturer(WebMediaStream*,
                                               WebMediaPlayer*) {}
 
@@ -681,13 +695,15 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Quota -----------------------------------------------------------
 
   // Queries the storage partition's storage usage and quota information.
-  // WebStorageQuotaCallbacks::DidQueryStorageUsageAndQuota will be called
-  // with the current usage and quota information for the partition. When
-  // an error occurs WebStorageQuotaCallbacks::DidFail is called with an
-  // error code.
-  virtual void QueryStorageUsageAndQuota(const WebURL& storage_partition,
-                                         WebStorageQuotaType,
-                                         WebStorageQuotaCallbacks) {}
+  // The callback will be called with the current usage and quota information
+  // for the partition. When an error occurs the callback is called with a
+  // status code other than kOk.
+  using QueryStorageUsageAndQuotaCallback =
+      base::OnceCallback<void(mojom::QuotaStatusCode, int64_t, int64_t)>;
+  virtual void QueryStorageUsageAndQuota(
+      const WebSecurityOrigin& storage_partition,
+      mojom::StorageType,
+      QueryStorageUsageAndQuotaCallback) {}
 
   // WebDatabase --------------------------------------------------------
 

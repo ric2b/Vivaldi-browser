@@ -7,6 +7,7 @@
 
 #include <memory>
 
+#include "base/containers/span.h"
 #include "cc/paint/paint_export.h"
 
 class GrContext;
@@ -17,13 +18,13 @@ namespace cc {
 //  - Add a type name to the TransferCacheEntryType enum.
 //  - Implement a ClientTransferCacheEntry and ServiceTransferCacheEntry for
 //    your new type.
-//  - Update ServiceTransferCacheEntry::Create and ServiceTransferCacheEntry::
-//    DeduceType in transfer_cache_entry.cc.
-enum class TransferCacheEntryType {
+//  - Update ServiceTransferCacheEntry::Create in transfer_cache_entry.cc.
+enum class TransferCacheEntryType : uint32_t {
   kRawMemory,
   kImage,
+  kPaintTypeface,
   // Add new entries above this line, make sure to update kLast.
-  kLast = kImage,
+  kLast = kPaintTypeface,
 };
 
 // An interface used on the client to serialize a transfer cache entry
@@ -31,9 +32,24 @@ enum class TransferCacheEntryType {
 class CC_PAINT_EXPORT ClientTransferCacheEntry {
  public:
   virtual ~ClientTransferCacheEntry() {}
+
+  // Returns the type of this entry. Combined with id, it should form a unique
+  // identifier.
   virtual TransferCacheEntryType Type() const = 0;
+
+  // Returns the id of this entry. Combined with type, it should form a unique
+  // identifier.
+  virtual uint32_t Id() const = 0;
+
+  // Returns the serialized sized of this entry in bytes. This function will be
+  // used to determine how much memory is going to be allocated and passed to
+  // the Serialize() call.
   virtual size_t SerializedSize() const = 0;
-  virtual bool Serialize(size_t size, uint8_t* data) const = 0;
+
+  // Serializes the entry into the given span of memory. The size of the span is
+  // guaranteed to be at least SerializedSize() bytes. Returns true on success
+  // and false otherwise.
+  virtual bool Serialize(base::span<uint8_t> data) const = 0;
 };
 
 // An interface which receives the raw data sent by the client and
@@ -50,10 +66,35 @@ class CC_PAINT_EXPORT ServiceTransferCacheEntry {
                                 TransferCacheEntryType* type);
 
   virtual ~ServiceTransferCacheEntry() {}
+
+  // Returns the type of this entry.
   virtual TransferCacheEntryType Type() const = 0;
-  virtual size_t Size() const = 0;
-  virtual bool Deserialize(GrContext* context, size_t size, uint8_t* data) = 0;
+
+  // Returns the cached size of this entry. This value is used for memory
+  // bookkeeping and to determine whether an unlocked cache entry will be
+  // evicted.
+  virtual size_t CachedSize() const = 0;
+
+  // Deserialize the cache entry from the given span of memory with the given
+  // context.
+  virtual bool Deserialize(GrContext* context, base::span<uint8_t> data) = 0;
 };
+
+// Helpers to simplify subclassing.
+template <class Base, TransferCacheEntryType EntryType>
+class TransferCacheEntryBase : public Base {
+ public:
+  static constexpr TransferCacheEntryType kType = EntryType;
+  TransferCacheEntryType Type() const final { return kType; }
+};
+
+template <TransferCacheEntryType EntryType>
+using ClientTransferCacheEntryBase =
+    TransferCacheEntryBase<ClientTransferCacheEntry, EntryType>;
+
+template <TransferCacheEntryType EntryType>
+using ServiceTransferCacheEntryBase =
+    TransferCacheEntryBase<ServiceTransferCacheEntry, EntryType>;
 
 };  // namespace cc
 

@@ -13,8 +13,8 @@
 #include "dbus/message.h"
 #include "dbus/object_path.h"
 #include "dbus/object_proxy.h"
-#include "device/media_transfer_protocol/mtp_file_entry.pb.h"
 #include "device/media_transfer_protocol/mtp_storage_info.pb.h"
+#include "device/media_transfer_protocol/mtp_file_entry.pb.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace device {
@@ -23,6 +23,36 @@ namespace {
 
 const char kInvalidResponseMsg[] = "Invalid Response: ";
 uint32_t kMaxChunkSize = 1024 * 1024;  // D-Bus has message size limits.
+
+mojom::MtpFileEntry GetMojoMtpFileEntryFromProtobuf(
+    const MtpFileEntry& entry) {
+  return mojom::MtpFileEntry(
+      entry.item_id(),
+      entry.parent_id(),
+      entry.file_name(),
+      entry.file_size(),
+      entry.modification_time(),
+      static_cast<mojom::MtpFileEntry::FileType>(entry.file_type()));
+}
+
+mojom::MtpStorageInfo GetMojoMtpStorageInfoFromProtobuf(
+    const MtpStorageInfo& protobuf) {
+  return mojom::MtpStorageInfo(
+        protobuf.storage_name(),
+        protobuf.vendor(),
+        protobuf.vendor_id(),
+        protobuf.product(),
+        protobuf.product_id(),
+        protobuf.device_flags(),
+        protobuf.storage_type(),
+        protobuf.filesystem_type(),
+        protobuf.access_capability(),
+        protobuf.max_capacity(),
+        protobuf.free_space_in_bytes(),
+        protobuf.free_space_in_objects(),
+        protobuf.storage_description(),
+        protobuf.volume_identifier());
+}
 
 // The MediaTransferProtocolDaemonClient implementation.
 class MediaTransferProtocolDaemonClientImpl
@@ -315,7 +345,7 @@ class MediaTransferProtocolDaemonClientImpl
       error_callback.Run();
       return;
     }
-    callback.Run(protobuf);
+    callback.Run(GetMojoMtpStorageInfoFromProtobuf(protobuf));
   }
 
   // Handles the result of OpenStorage and calls |callback| or |error_callback|.
@@ -406,10 +436,13 @@ class MediaTransferProtocolDaemonClientImpl
       return;
     }
 
-    std::vector<MtpFileEntry> file_entries;
+    std::vector<mojom::MtpFileEntry> file_entries;
     file_entries.reserve(entries_protobuf.file_entries_size());
-    for (int i = 0; i < entries_protobuf.file_entries_size(); ++i)
-      file_entries.push_back(entries_protobuf.file_entries(i));
+    for (int i = 0; i < entries_protobuf.file_entries_size(); ++i) {
+      const auto& entry = entries_protobuf.file_entries(i);
+      file_entries.push_back(
+          GetMojoMtpFileEntryFromProtobuf(entry));
+    }
     callback.Run(file_entries);
   }
 

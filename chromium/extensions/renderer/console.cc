@@ -29,10 +29,7 @@ namespace {
 
 // Writes |message| to stack to show up in minidump, then crashes.
 void CheckWithMinidump(const std::string& message) {
-  char minidump[1024];
-  base::debug::Alias(&minidump);
-  base::snprintf(
-      minidump, arraysize(minidump), "e::console: %s", message.c_str());
+  DEBUG_ALIAS_FOR_CSTR(minidump, message.c_str(), 1024);
   CHECK(false) << message;
 }
 
@@ -41,7 +38,7 @@ void BoundLogMethodCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   for (int i = 0; i < info.Length(); ++i) {
     if (i > 0)
       message += " ";
-    message += *v8::String::Utf8Value(info[i]);
+    message += *v8::String::Utf8Value(info.GetIsolate(), info[i]);
   }
 
   // A worker's ScriptContext neither lives in ScriptContextSet nor it has a

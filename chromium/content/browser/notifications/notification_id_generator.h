@@ -37,6 +37,11 @@ namespace content {
 //
 // Note that the PlatformNotificationService is expected to handle
 // distinguishing identical generated ids from different browser contexts.
+//
+// Also note that several functions in NotificationPlatformBridge class
+// rely on the format of the notification generated here.
+// Code: chrome/android/java/src/org/chromium/chrome/browser/notifications/
+// NotificationPlatformBridge.java
 class CONTENT_EXPORT NotificationIdGenerator {
  public:
   NotificationIdGenerator() = default;
@@ -58,13 +63,12 @@ class CONTENT_EXPORT NotificationIdGenerator {
       int64_t persistent_notification_id) const;
 
   // Generates an id for a non-persistent notification given the notification's
-  // origin, tag and non-persistent notification id. The non-persistent
-  // notification id must've been created by the |render_process_id|.
-  std::string GenerateForNonPersistentNotification(
-      const GURL& origin,
-      const std::string& tag,
-      int non_persistent_notification_id,
-      int render_process_id) const;
+  // origin, tag and request id. The request id must've been created by the
+  // |render_process_id|.
+  std::string GenerateForNonPersistentNotification(const GURL& origin,
+                                                   const std::string& tag,
+                                                   int request_id,
+                                                   int render_process_id) const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NotificationIdGenerator);

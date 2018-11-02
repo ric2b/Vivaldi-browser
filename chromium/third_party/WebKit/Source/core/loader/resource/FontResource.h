@@ -43,9 +43,9 @@ class FontResourceClient;
 
 class CORE_EXPORT FontResource final : public Resource {
  public:
-  using ClientType = FontResourceClient;
-
-  static FontResource* Fetch(FetchParameters&, ResourceFetcher*);
+  static FontResource* Fetch(FetchParameters&,
+                             ResourceFetcher*,
+                             FontResourceClient*);
   ~FontResource() override;
 
   void DidAddClient(ResourceClient*) override;
@@ -111,7 +111,7 @@ DEFINE_RESOURCE_TYPE_CASTS(Font);
 
 class FontResourceClient : public ResourceClient {
  public:
-  ~FontResourceClient() override {}
+  ~FontResourceClient() override = default;
   static bool IsExpectedType(ResourceClient* client) {
     return client->GetResourceClientType() == kFontType;
   }

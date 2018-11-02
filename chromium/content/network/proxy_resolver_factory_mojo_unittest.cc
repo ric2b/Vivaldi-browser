@@ -495,7 +495,21 @@ class MockHostResolver : public net::HostResolver {
     return net::ERR_DNS_CACHE_MISS;
   }
 
+  int ResolveStaleFromCache(
+      const RequestInfo& info,
+      net::AddressList* addresses,
+      net::HostCache::EntryStaleness* stale_info,
+      const net::NetLogWithSource& source_net_log) override {
+    return net::ERR_DNS_CACHE_MISS;
+  }
+
   net::HostCache* GetHostCache() override { return nullptr; }
+
+  bool HasCached(base::StringPiece hostname,
+                 net::HostCache::Entry::Source* source_out,
+                 net::HostCache::EntryStaleness* stale_out) const override {
+    return false;
+  }
 
   net::EventWaiter<Event>& waiter() { return waiter_; }
 

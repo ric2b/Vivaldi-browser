@@ -5,7 +5,11 @@
     "service_manager:connector": {
       "provides": {
         "browser": [
-          "IPC::mojom::ChannelBootstrap"
+          "IPC::mojom::ChannelBootstrap",
+          "chrome::mojom::ResourceUsageReporter",
+          "content::mojom::Child",
+          "content::mojom::ChildControl",
+          "content::mojom::ChildHistogramFetcherFactory"
         ]
       }
     }

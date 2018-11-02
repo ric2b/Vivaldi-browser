@@ -11,7 +11,7 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/LocalFrameView.h"
-#include "core/html/HTMLCanvasElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/input/EventHandlingUtil.h"
 #include "core/input/TouchActionUtil.h"
 #include "core/layout/HitTestCanvasResult.h"
@@ -89,9 +89,8 @@ WebTouchPoint CreateWebTouchPointFromWebPointerEvent(
   WebTouchPoint web_touch_point(web_pointer_event);
   web_touch_point.state =
       TouchPointStateFromPointerEventType(web_pointer_event.GetType(), stale);
-  // TODO(crbug.com/731725): This mapping needs a division by 2.
-  web_touch_point.radius_x = web_pointer_event.width;
-  web_touch_point.radius_y = web_pointer_event.height;
+  web_touch_point.radius_x = web_pointer_event.width / 2.f;
+  web_touch_point.radius_y = web_pointer_event.height / 2.f;
   web_touch_point.rotation_angle = web_pointer_event.rotation_angle;
   return web_touch_point;
 }
@@ -157,8 +156,6 @@ Touch* TouchEventManager::CreateDomTouch(
   Node* touch_node = point_attr->target_;
   String region_id = point_attr->region_;
   *known_target = false;
-  FloatPoint content_point;
-  FloatSize adjusted_radius;
 
   LocalFrame* target_frame = nullptr;
   if (touch_node) {
@@ -192,17 +189,18 @@ Touch* TouchEventManager::CreateDomTouch(
 
   WebPointerEvent transformed_event =
       point_attr->event_.WebPointerEventInRootFrame();
-  // pagePoint should always be in the target element's document coordinates.
-  FloatPoint page_point = target_frame->View()->RootFrameToContents(
-      transformed_event.PositionInWidget());
   float scale_factor = 1.0f / target_frame->PageZoomFactor();
 
-  content_point = page_point.ScaledBy(scale_factor);
-  adjusted_radius = FloatSize(transformed_event.width, transformed_event.height)
-                        .ScaledBy(scale_factor);
+  FloatPoint document_point =
+      target_frame->View()
+          ->RootFrameToDocument(transformed_event.PositionInWidget())
+          .ScaledBy(scale_factor);
+  FloatSize adjusted_radius =
+      FloatSize(transformed_event.width / 2.f, transformed_event.height / 2.f)
+          .ScaledBy(scale_factor);
 
   return Touch::Create(target_frame, touch_node, point_attr->event_.id,
-                       transformed_event.PositionInScreen(), content_point,
+                       transformed_event.PositionInScreen(), document_point,
                        adjusted_radius, transformed_event.rotation_angle,
                        transformed_event.force, region_id);
 }
@@ -566,6 +564,7 @@ void TouchEventManager::HandleTouchPoint(
     const EventHandlingUtil::PointerEventTarget& pointer_event_target) {
   DCHECK_GE(event.GetType(), WebInputEvent::kPointerTypeFirst);
   DCHECK_LE(event.GetType(), WebInputEvent::kPointerTypeLast);
+  DCHECK_NE(event.GetType(), WebInputEvent::kPointerCausedUaAction);
 
   if (touch_attribute_map_.IsEmpty()) {
     // Ideally we'd DCHECK(!m_touchSequenceDocument) here since we should

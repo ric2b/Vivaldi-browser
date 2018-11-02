@@ -21,7 +21,7 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "net/base/io_buffer.h"
 #include "net/disk_cache/disk_cache.h"
-#include "storage/common/quota/quota_status_code.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "third_party/WebKit/public/platform/modules/cache_storage/cache_storage.mojom.h"
 
 namespace crypto {
@@ -50,6 +50,11 @@ namespace proto {
 class CacheMetadata;
 class CacheResponse;
 }
+
+namespace cache_storage_cache_unittest {
+class TestCacheStorageCache;
+class CacheStorageCacheTest;
+}  // namespace cache_storage_cache_unittest
 
 // Represents a ServiceWorker Cache as seen in
 // https://slightlyoff.github.io/ServiceWorker/spec/service_worker/ The
@@ -150,7 +155,7 @@ class CONTENT_EXPORT CacheStorageCache {
       BadMessageCallback bad_message_callback,
       uint64_t space_required,
       uint64_t side_data_size,
-      storage::QuotaStatusCode status_code,
+      blink::mojom::QuotaStatusCode status_code,
       int64_t usage,
       int64_t quota);
   // Callback passed to operations. If |error| is a real error, invokes
@@ -224,8 +229,8 @@ class CONTENT_EXPORT CacheStorageCache {
   };
 
   friend class base::RefCounted<CacheStorageCache>;
-  friend class TestCacheStorageCache;
-  friend class CacheStorageCacheTest;
+  friend class cache_storage_cache_unittest::TestCacheStorageCache;
+  friend class cache_storage_cache_unittest::CacheStorageCacheTest;
 
   struct PutContext;
   struct QueryCacheContext;
@@ -302,7 +307,7 @@ class CONTENT_EXPORT CacheStorageCache {
                                 base::Time expected_response_time,
                                 scoped_refptr<net::IOBuffer> buffer,
                                 int buf_len,
-                                storage::QuotaStatusCode status_code,
+                                blink::mojom::QuotaStatusCode status_code,
                                 int64_t usage,
                                 int64_t quota);
 
@@ -311,14 +316,15 @@ class CONTENT_EXPORT CacheStorageCache {
                          base::Time expected_response_time,
                          scoped_refptr<net::IOBuffer> buffer,
                          int buf_len);
-  void WriteSideDataDidGetUsageAndQuota(ErrorCallback callback,
-                                        const GURL& url,
-                                        base::Time expected_response_time,
-                                        scoped_refptr<net::IOBuffer> buffer,
-                                        int buf_len,
-                                        storage::QuotaStatusCode status_code,
-                                        int64_t usage,
-                                        int64_t quota);
+  void WriteSideDataDidGetUsageAndQuota(
+      ErrorCallback callback,
+      const GURL& url,
+      base::Time expected_response_time,
+      scoped_refptr<net::IOBuffer> buffer,
+      int buf_len,
+      blink::mojom::QuotaStatusCode status_code,
+      int64_t usage,
+      int64_t quota);
   void WriteSideDataDidOpenEntry(ErrorCallback callback,
                                  base::Time expected_response_time,
                                  scoped_refptr<net::IOBuffer> buffer,
@@ -348,7 +354,7 @@ class CONTENT_EXPORT CacheStorageCache {
   void PutDidDeleteEntry(std::unique_ptr<PutContext> put_context,
                          blink::mojom::CacheStorageError error);
   void PutDidGetUsageAndQuota(std::unique_ptr<PutContext> put_context,
-                              storage::QuotaStatusCode status_code,
+                              blink::mojom::QuotaStatusCode status_code,
                               int64_t usage,
                               int64_t quota);
   void PutDidCreateEntry(std::unique_ptr<disk_cache::Entry*> entry_ptr,

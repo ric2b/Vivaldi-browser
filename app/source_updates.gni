@@ -1,6 +1,6 @@
 import("//vivaldi/gn/config/product.gni")
 
-post_process_target("//base:base") {
+update_target("//base:base") {
   if (!defined(sources)) {
     sources = []
   }
@@ -9,7 +9,7 @@ post_process_target("//base:base") {
   ]
 }
 
-post_process_target("//base:base_static") {
+update_target("//base:base_static") {
   sources += [
     "//vivaldi/app/vivaldi_apptools.cpp",
     "//vivaldi/app/vivaldi_apptools.h",
@@ -24,33 +24,33 @@ post_process_target("//base:base_static") {
   }
 }
 
-post_process_target("//chrome/common:non_code_constants") {
+update_target("//chrome/common:non_code_constants") {
   sources += [
     "//vivaldi/app/vivaldi_version_constants.cc",
     "//vivaldi/app/vivaldi_version_constants.h",
   ]
 }
 
-post_process_target("//components/version_info:version_info") {
+update_target("//components/version_info:version_info") {
   sources += [
     "//vivaldi/app/vivaldi_version_info.cc",
     "//vivaldi/app/vivaldi_version_info.h",
   ]
 }
 
-post_process_target("//chrome:chrome_resources") {
-  sources -= [
-    "app/theme/$branding_path_component/mac/app.icns",
-    "app/theme/$branding_path_component/mac/document.icns",
-  ]
-  sources += [
-    "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/app.icns",
-    "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/document.icns",
-  ]
-}
-
 if (is_mac) {
-  post_process_target("//chrome:chrome_framework_resources") {
+  update_target("//chrome:chrome_resources") {
+    sources -= [
+      "app/theme/$branding_path_component/mac/app.icns",
+      "app/theme/$branding_path_component/mac/document.icns",
+    ]
+    sources += [
+      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/app.icns",
+      "//vivaldi/app/resources/theme/$VIVALDI_RELEASE_KIND/mac/document.icns",
+    ]
+  }
+
+  update_target("//chrome:chrome_framework_resources") {
     sources -= [
       "app/theme/default_100_percent/$branding_path_component/product_logo_32.png",
     ]
@@ -92,13 +92,6 @@ foreach(
       [
         "//chrome/browser:resources",
         "//vivaldi/app/resources/browser/vivaldi_browser_resources.grd",
-        {
-          have_strings_flag = false
-        },
-      ],
-      [
-        "//chrome/browser/resources:options_resources",
-        "//vivaldi/app/resources/options_resources/vivaldi_browser_options.grd",
         {
           have_strings_flag = false
         },
@@ -187,7 +180,7 @@ foreach(
     translation_dir_setting = _flags.translation_dir_setting
   }
 
-  post_process_template(_target) {
+  update_template_instance(_target) {
     #print (target_name)
     actual_target_name = target_name
     temp = rebase_path(get_label_info(_target, "target_gen_dir"), root_gen_dir)

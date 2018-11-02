@@ -40,14 +40,13 @@ void WebSocketHandleImpl::Initialize(mojom::blink::WebSocketPtr websocket) {
 
   DCHECK(!websocket_);
   websocket_ = std::move(websocket);
-  websocket_.set_connection_error_with_reason_handler(
-      ConvertToBaseCallback(WTF::Bind(&WebSocketHandleImpl::OnConnectionError,
-                                      WTF::Unretained(this))));
+  websocket_.set_connection_error_with_reason_handler(WTF::Bind(
+      &WebSocketHandleImpl::OnConnectionError, WTF::Unretained(this)));
 }
 
 void WebSocketHandleImpl::Connect(const KURL& url,
                                   const Vector<String>& protocols,
-                                  SecurityOrigin* origin,
+                                  const SecurityOrigin* origin,
                                   const KURL& site_for_cookies,
                                   const String& user_agent_override,
                                   WebSocketHandleClient* client,

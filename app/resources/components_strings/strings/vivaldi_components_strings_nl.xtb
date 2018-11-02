@@ -75,7 +75,7 @@
 <translation id="3447884698081792621">Certificaat weergeven (uitgegeven door <ph name="ISSUER" />)</translation>
 <translation id="3462200631372590220">Gedetailleerde informatie verbergen</translation>
 <translation id="3566021033012934673">Je verbinding is niet privé</translation>
-<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
+<translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Details verbergen</translation>
 <translation id="3630155396527302611">Als dit programma al wordt vermeld als een programma dat toegang heeft tot het netwerk, kun je proberen het uit de lijst te verwijderen en het opnieuw toe te voegen.</translation>
 <translation id="3658742229777143148">Revisie</translation>
@@ -186,7 +186,7 @@
 <translation id="7445762425076701745">De identiteit van de server waarmee je verbinding maakt, kan niet volledig worden geverifieerd. Je hebt verbinding gemaakt met een server die een naam gebruikt die alleen binnen je netwerk geldig is. Een externe certificeringsinstantie kan hiervoor nooit het eigendom verifiëren. Aangezien sommige certificeringsinstanties toch certificaten voor deze namen verlenen, kun je nooit zeker weten of je verbinding hebt met de bedoelde website en niet met een aanvaller.</translation>
 <translation id="7455133967321480974">Algemene standaardinstelling gebruiken (Blokkeren)</translation>
 <translation id="7518003948725431193">Er is geen webpagina gevonden voor het webadres: <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
+<translation id="7521387064766892559">Javascript</translation>
 <translation id="7549584377607005141">Deze webpagina kan alleen correct worden weergegeven op basis van gegevens die je eerder hebt opgegeven. Je kunt deze gegevens opnieuw verzenden, maar hierdoor worden de acties herhaald die eerder op deze pagina zijn uitgevoerd.</translation>
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kan dit verzoek momenteel niet verwerken.</translation>
 <translation id="7662298039739062396">Instelling beheerd door een extensie</translation>

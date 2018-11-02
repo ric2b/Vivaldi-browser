@@ -78,19 +78,13 @@ declare_args() {
   # which are encoded using HEVC require |enable_hevc_demuxing| to be enabled.
   enable_dolby_vision_demuxing = proprietary_codecs && is_chromecast
 
-  enable_webrtc = !is_cast_audio_only && !is_fuchsia
+  enable_webrtc = !is_cast_audio_only
 
   # Enable HLS with SAMPLE-AES decryption.
-  # Enabled by default on the cast desktop implementation to allow unit tests of
-  # MP2TS parsing support.
-  enable_hls_sample_aes = proprietary_codecs && is_cast_desktop_build
+  enable_hls_sample_aes = proprietary_codecs && is_chromecast
 
   # If true, use cast CMA backend instead of default chromium media pipeline.
   is_cast_using_cma_backend = is_cast_audio_only || !is_android
-
-  # A temporary arg for enabling MCVD while it's being implemented.
-  # See http://crbug.com/660942
-  enable_media_codec_video_decoder = false
 
   # A temporary arg for enabling D3D11VideoDecoder
   enable_d3d11_video_decoder = false
@@ -131,7 +125,7 @@ declare_args() {
   # This flag gives the option to override that decision in case there are no
   # hardware decoders. To do so, you will also need to update ffmpeg build files
   # in order to define which decoders to build in.
-  disable_ffmpeg_video_decoders = !media_use_ffmpeg || is_android
+  enable_ffmpeg_video_decoders = media_use_ffmpeg && !is_android
 }
 
 # Enables the use of library CDMs that implements the interface defined at
@@ -168,6 +162,12 @@ declare_args() {
   # branding, but may be overridden by other embedders.
   enable_cdm_storage_id = enable_library_cdms && is_chrome_branded &&
                           (is_win || is_mac || is_chromeos)
+
+  # If |enable_cdm_storage_id| is set, then an implementation specific key
+  # must also be provided. It can be provided by defining CDM_STORAGE_ID_KEY
+  # (which takes precedence), or by setting |alternate_cdm_storage_id_key|.
+  # The key must be a string of at least 32 characters.
+  alternate_cdm_storage_id_key = ""
 }
 
 # This feature can only be enabled when using Mojo media. Furthermore, the
@@ -224,12 +224,11 @@ declare_args() {
         "cdm",
         "audio_decoder",
       ]
-      if (enable_media_codec_video_decoder) {
-        mojo_media_services += [ "video_decoder" ]
-      }
+      mojo_media_services += [ "video_decoder" ]
       mojo_media_host = "gpu"
     } else if (enable_library_cdms) {
       mojo_media_services = [ "cdm" ]
+      mojo_media_host = "gpu"
       enable_standalone_cdm_service = true
     }
 

@@ -8,12 +8,12 @@
 #include <map>
 #include <memory>
 
+#include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebThread.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 namespace scheduler {
@@ -37,8 +37,7 @@ class BLINK_PLATFORM_EXPORT WebThreadBase : public WebThread {
   bool IsCurrentThread() const override;
   PlatformThreadId ThreadId() const override = 0;
 
-  virtual void PostIdleTask(const WebTraceLocation& location,
-                            IdleTask* idle_task);
+  virtual void PostIdleTask(const base::Location& location, IdleTask idle_task);
 
   void AddTaskObserver(TaskObserver* observer) override;
   void RemoveTaskObserver(TaskObserver* observer) override;
@@ -48,7 +47,8 @@ class BLINK_PLATFORM_EXPORT WebThreadBase : public WebThread {
 
   // Returns the base::Bind-compatible task runner for posting tasks to this
   // thread. Can be called from any thread.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() const = 0;
+  virtual scoped_refptr<base::SingleThreadTaskRunner>
+  GetSingleThreadTaskRunner() const override;
 
   // Returns the base::Bind-compatible task runner for posting idle tasks to
   // this thread. Can be called from any thread.
@@ -69,9 +69,8 @@ class BLINK_PLATFORM_EXPORT WebThreadBase : public WebThread {
   virtual void AddTaskTimeObserverInternal(TaskTimeObserver*) {}
   virtual void RemoveTaskTimeObserverInternal(TaskTimeObserver*) {}
 
-  static void RunWebThreadIdleTask(
-      std::unique_ptr<WebThread::IdleTask> idle_task,
-      base::TimeTicks deadline);
+  static void RunWebThreadIdleTask(WebThread::IdleTask idle_task,
+                                   base::TimeTicks deadline);
 
  private:
   typedef std::map<TaskObserver*, TaskObserverAdapter*> TaskObserverMap;

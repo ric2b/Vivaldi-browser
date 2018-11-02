@@ -1,34 +1,49 @@
+import("//build/config/chrome_build.gni")
 
-post_process_target("//chrome/browser:test_support") {
+update_target("//chrome/browser:test_support") {
   sources += [
     "//vivaldi/extraparts/vivaldi_unit_test_suite.cpp",
     "//vivaldi/extraparts/vivaldi_unit_test_suite.h",
   ]
 }
 
-_main_dll_targets = [
-  "//chrome:main_dll",
-  "//chrome:chrome_child",
-]
-if (!is_mac && !is_win) {
+_main_dll_targets = []
+if (is_win) {
+  _main_dll_targets += [
+    "//chrome:main_dll",
+  ]
+
+  if (is_multi_dll_chrome) {
+    _main_dll_targets += [
+      "//chrome:chrome_child",
+    ]
+  }
+}
+if (!is_mac && !is_win && !is_android) {
   _main_dll_targets += [ "//chrome:chrome_initial" ]
 }
 if (is_mac) {
   _main_dll_targets += [ "//chrome:chrome_dll" ]
 }
 foreach(_target, _main_dll_targets) {
-  post_process_target(_target) {
+  update_target(_target) {
     sources += [
       "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
       "//vivaldi/extraparts/vivaldi_main_delegate.h",
     ]
+    if (is_win) {
+      sources += [
+        "//vivaldi/browser/win/vivaldi_running_dlg.h",
+        "//vivaldi/browser/win/vivaldi_running_dlg.cc",
+      ]
+    }
     if (!is_android) {
       deps += [ "//vivaldi/extensions:extensions_client" ]
     }
   }
 }
 
-post_process_target("//chrome/test:test_support") {
+update_target("//chrome/test:test_support") {
   sources += [
     "//vivaldi/extraparts/vivaldi_main_delegate.cpp",
     "//vivaldi/extraparts/vivaldi_main_delegate.h",

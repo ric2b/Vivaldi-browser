@@ -17,7 +17,7 @@
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
+#include "base/win/windows_types.h"
 #elif defined(OS_MACOSX)
 #include <mach/mach_types.h>
 #elif defined(OS_FUCHSIA)
@@ -55,13 +55,9 @@ class PlatformThreadRef {
 #elif defined(OS_POSIX)
   typedef pthread_t RefType;
 #endif
-  PlatformThreadRef()
-      : id_(0) {
-  }
+  constexpr PlatformThreadRef() : id_(0) {}
 
-  explicit PlatformThreadRef(RefType id)
-      : id_(id) {
-  }
+  explicit constexpr PlatformThreadRef(RefType id) : id_(id) {}
 
   bool operator==(PlatformThreadRef other) const {
     return id_ == other.id_;
@@ -85,9 +81,9 @@ class PlatformThreadHandle {
   typedef pthread_t Handle;
 #endif
 
-  PlatformThreadHandle() : handle_(0) {}
+  constexpr PlatformThreadHandle() : handle_(0) {}
 
-  explicit PlatformThreadHandle(Handle handle) : handle_(handle) {}
+  explicit constexpr PlatformThreadHandle(Handle handle) : handle_(handle) {}
 
   bool is_equal(const PlatformThreadHandle& other) const {
     return handle_ == other.handle_;
@@ -130,7 +126,7 @@ class BASE_EXPORT PlatformThread {
     virtual void ThreadMain() = 0;
 
    protected:
-    virtual ~Delegate() {}
+    virtual ~Delegate() = default;
   };
 
   // Gets the current thread id, which may be useful for logging purposes.

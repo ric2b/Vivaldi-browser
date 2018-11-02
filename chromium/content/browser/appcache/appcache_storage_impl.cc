@@ -37,6 +37,7 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 
 namespace content {
 
@@ -601,7 +602,7 @@ class AppCacheStorageImpl::StoreGroupAndCacheTask : public StoreOrLoadTask {
                          AppCache* newest_cache);
 
   void GetQuotaThenSchedule();
-  void OnQuotaCallback(storage::QuotaStatusCode status,
+  void OnQuotaCallback(blink::mojom::QuotaStatusCode status,
                        int64_t usage,
                        int64_t quota);
 
@@ -667,17 +668,16 @@ void AppCacheStorageImpl::StoreGroupAndCacheTask::GetQuotaThenSchedule() {
   // We have to ask the quota manager for the value.
   storage_->pending_quota_queries_.insert(this);
   quota_manager->GetUsageAndQuota(
-      group_record_.origin,
-      storage::kStorageTypeTemporary,
+      group_record_.origin, blink::mojom::StorageType::kTemporary,
       base::Bind(&StoreGroupAndCacheTask::OnQuotaCallback, this));
 }
 
 void AppCacheStorageImpl::StoreGroupAndCacheTask::OnQuotaCallback(
-    storage::QuotaStatusCode status,
+    blink::mojom::QuotaStatusCode status,
     int64_t usage,
     int64_t quota) {
   if (storage_) {
-    if (status == storage::kQuotaStatusOk)
+    if (status == blink::mojom::QuotaStatusCode::kOk)
       space_available_ = std::max(static_cast<int64_t>(0), quota - usage);
     else
       space_available_ = 0;
@@ -1507,9 +1507,9 @@ void AppCacheStorageImpl::LoadOrCreateGroup(
 
   if (usage_map_.find(manifest_url.GetOrigin()) == usage_map_.end()) {
     // No need to query the database, return a new group immediately.
-    scoped_refptr<AppCacheGroup> group(new AppCacheGroup(
-        this, manifest_url, NewGroupId()));
-    delegate->OnGroupLoaded(group.get(), manifest_url);
+    scoped_refptr<AppCacheGroup> new_group(
+        new AppCacheGroup(this, manifest_url, NewGroupId()));
+    delegate->OnGroupLoaded(new_group.get(), manifest_url);
     return;
   }
 

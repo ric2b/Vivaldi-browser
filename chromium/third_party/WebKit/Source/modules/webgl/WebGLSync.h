@@ -6,7 +6,13 @@
 #define WebGLSync_h
 
 #include "modules/webgl/WebGLSharedObject.h"
-#include "third_party/khronos/GLES2/gl2.h"
+#include "platform/WebTaskRunner.h"
+
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}  // namespace gpu
 
 namespace blink {
 
@@ -20,6 +26,10 @@ class WebGLSync : public WebGLSharedObject {
 
   GLsync Object() const { return object_; }
 
+  void UpdateCache(gpu::gles2::GLES2Interface*);
+  GLint GetCachedResult(GLenum pname);
+  bool IsSignaled() const;
+
  protected:
   WebGLSync(WebGL2RenderingContextBase*, GLsync, GLenum object_type);
 
@@ -31,8 +41,18 @@ class WebGLSync : public WebGLSharedObject {
  private:
   bool IsSync() const override { return true; }
 
+  void ScheduleAllowCacheUpdate();
+  void AllowCacheUpdate();
+
+  bool allow_cache_update_ = false;
+  // Initialized in cpp file to avoid including gl3.h in this header.
+  GLint sync_status_;
+
   GLsync object_;
   GLenum object_type_;
+
+  scoped_refptr<WebTaskRunner> task_runner_;
+  TaskHandle task_handle_;
 };
 
 }  // namespace blink

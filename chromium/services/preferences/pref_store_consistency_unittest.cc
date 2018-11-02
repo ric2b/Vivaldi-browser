@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <utility>
 
 #include "base/containers/circular_deque.h"
@@ -20,16 +21,14 @@
 #include "services/preferences/public/cpp/persistent_pref_store_client.h"
 #include "services/preferences/public/cpp/scoped_pref_update.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/unittest_common.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace prefs {
 namespace {
 
-constexpr int kInitialValue = 1;
-constexpr char kKey[] = "key";
 constexpr char kChildKey[] = "child";
-constexpr char kOtherKey[] = "other_key";
-constexpr char kDictionaryKey[] = "a.dictionary.pref";
+constexpr char kOtherDictionaryKey[] = "other_key";
 
 void DoNothingHandleReadError(PersistentPrefStore::PrefReadError error) {}
 
@@ -57,7 +56,7 @@ class PrefServiceConnection : public mojom::PrefStoreObserver,
   explicit PrefServiceConnection(PersistentPrefStoreImpl* pref_store)
       : observer_binding_(this), pref_store_binding_(this) {
     auto connection = pref_store->CreateConnection({
-        kKey, kOtherKey, kDictionaryKey,
+        kKey, kOtherDictionaryKey, kDictionaryKey,
     });
     observer_binding_.Bind(
         std::move(connection->pref_store_connection->observer));
@@ -68,17 +67,18 @@ class PrefServiceConnection : public mojom::PrefStoreObserver,
 
     pref_store_client_ =
         base::MakeRefCounted<PersistentPrefStoreClient>(std::move(connection));
-    PrefNotifierImpl* pref_notifier = new PrefNotifierImpl();
+    auto pref_notifier = std::make_unique<PrefNotifierImpl>();
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
     pref_registry->RegisterIntegerPref(kKey, kInitialValue);
-    pref_registry->RegisterIntegerPref(kOtherKey, kInitialValue);
+    pref_registry->RegisterIntegerPref(kOtherDictionaryKey, kInitialValue);
     pref_registry->RegisterDictionaryPref(kDictionaryKey);
-    auto* pref_value_store = new PrefValueStore(
+    auto pref_value_store = std::make_unique<PrefValueStore>(
         nullptr, nullptr, nullptr, nullptr, pref_store_client_.get(), nullptr,
-        pref_registry->defaults().get(), pref_notifier);
-    pref_service_ = std::make_unique<::PrefService>(
-        pref_notifier, pref_value_store, pref_store_client_.get(),
-        pref_registry.get(), base::Bind(&DoNothingHandleReadError), true);
+        pref_registry->defaults().get(), pref_notifier.get());
+    pref_service_ = std::make_unique<PrefService>(
+        std::move(pref_notifier), std::move(pref_value_store),
+        pref_store_client_.get(), pref_registry.get(),
+        base::Bind(&DoNothingHandleReadError), true);
   }
 
   ~PrefServiceConnection() override {
@@ -294,7 +294,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DifferentSubPrefs) {
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
-    update->SetInteger(kOtherKey, 3);
+    update->SetInteger(kOtherDictionaryKey, 3);
   }
 
   connection->ForwardWrites(1);
@@ -307,7 +307,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DifferentSubPrefs) {
   two_dict.SetInteger(kKey, 2);
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 2);
-  expected_dict.SetInteger(kOtherKey, 3);
+  expected_dict.SetInteger(kOtherDictionaryKey, 3);
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(two_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -337,7 +337,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenChild) {
     update->SetInteger(kKey, 4);
     update->Clear();
     update->SetInteger(kKey, 2);
-    update->SetInteger(kOtherKey, 4);
+    update->SetInteger(kOtherDictionaryKey, 4);
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
@@ -352,7 +352,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenChild) {
 
   base::DictionaryValue two_and_four_dict;
   two_and_four_dict.SetInteger(kKey, 2);
-  two_and_four_dict.SetInteger(kOtherKey, 4);
+  two_and_four_dict.SetInteger(kOtherDictionaryKey, 4);
   base::DictionaryValue three_dict;
   three_dict.SetInteger(kKey, 3);
   three_dict.SetDictionary(kDictionaryKey,
@@ -361,7 +361,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenChild) {
   five_dict.SetKey(kKey, base::Value(5));
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 3);
-  expected_dict.SetInteger(kOtherKey, 4);
+  expected_dict.SetInteger(kOtherDictionaryKey, 4);
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(two_and_four_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -484,7 +484,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteChildThenDeleteParent) {
 
 TEST_F(PersistentPrefStoreConsistencyTest, DeleteParentThenWriteChild) {
   auto initial_value = std::make_unique<base::DictionaryValue>();
-  initial_value->SetInteger(kOtherKey, 5);
+  initial_value->SetInteger(kOtherDictionaryKey, 5);
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -504,7 +504,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DeleteParentThenWriteChild) {
 
   base::DictionaryValue intermediate_dict;
   intermediate_dict.SetInteger(kKey, 3);
-  intermediate_dict.SetInteger(kOtherKey, 5);
+  intermediate_dict.SetInteger(kOtherDictionaryKey, 5);
 
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 3);
@@ -535,7 +535,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenDeleteChild) {
     update->SetInteger(kKey, 1);
     update->Clear();
     update->SetInteger(kKey, 2);
-    update->SetInteger(kOtherKey, 4);
+    update->SetInteger(kOtherDictionaryKey, 4);
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
@@ -551,10 +551,10 @@ TEST_F(PersistentPrefStoreConsistencyTest, WriteParentThenDeleteChild) {
 
   base::DictionaryValue two_and_four_dict;
   two_and_four_dict.SetInteger(kKey, 2);
-  two_and_four_dict.SetInteger(kOtherKey, 4);
+  two_and_four_dict.SetInteger(kOtherDictionaryKey, 4);
   base::DictionaryValue empty_dict;
   base::DictionaryValue expected_dict;
-  expected_dict.SetInteger(kOtherKey, 4);
+  expected_dict.SetInteger(kOtherDictionaryKey, 4);
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(two_and_four_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -587,7 +587,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DeleteChildThenWriteParent) {
     update->SetInteger(kKey, 4);
     update->Clear();
     update->SetInteger(kKey, 2);
-    update->SetInteger(kOtherKey, 4);
+    update->SetInteger(kOtherDictionaryKey, 4);
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
@@ -604,7 +604,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DeleteChildThenWriteParent) {
   base::DictionaryValue empty_dict;
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 2);
-  expected_dict.SetInteger(kOtherKey, 4);
+  expected_dict.SetInteger(kOtherDictionaryKey, 4);
 
   connection->ForwardUpdates(1);
   EXPECT_EQ(expected_dict, *pref_service.GetDictionary(kDictionaryKey));
@@ -620,7 +620,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, DeleteChildThenWriteParent) {
 
 TEST_F(PersistentPrefStoreConsistencyTest, ReplaceParentThenWriteChild) {
   auto initial_value = std::make_unique<base::DictionaryValue>();
-  initial_value->SetPath({kKey, kOtherKey}, base::Value(5));
+  initial_value->SetPath({kKey, kOtherDictionaryKey}, base::Value(5));
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -645,7 +645,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, ReplaceParentThenWriteChild) {
   simple_dict.SetInteger(kKey, 1);
   base::DictionaryValue nested_dict;
   nested_dict.SetPath({kKey, kChildKey}, base::Value(2));
-  nested_dict.SetPath({kKey, kOtherKey}, base::Value(5));
+  nested_dict.SetPath({kKey, kOtherDictionaryKey}, base::Value(5));
   base::DictionaryValue expected_dict;
   expected_dict.SetPath({kKey, kChildKey}, base::Value(2));
 
@@ -713,7 +713,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteParentThenChild) {
     auto nested_dict =
         update->SetDictionary(kKey, std::make_unique<base::DictionaryValue>());
     nested_dict->SetInteger(kChildKey, 2);
-    nested_dict->SetInteger(kOtherKey, 4);
+    nested_dict->SetInteger(kOtherDictionaryKey, 4);
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
@@ -728,7 +728,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteParentThenChild) {
 
   base::DictionaryValue two_and_four_dict;
   two_and_four_dict.SetPath({kKey, kChildKey}, base::Value(2));
-  two_and_four_dict.SetPath({kKey, kOtherKey}, base::Value(4));
+  two_and_four_dict.SetPath({kKey, kOtherDictionaryKey}, base::Value(4));
   base::DictionaryValue three_dict;
   three_dict.SetPath({kKey, kChildKey}, base::Value(3));
   base::Value expected_dict = two_and_four_dict.Clone();
@@ -766,7 +766,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteChildThenParent) {
     auto nested_dict =
         update->SetDictionary(kKey, std::make_unique<base::DictionaryValue>());
     nested_dict->SetInteger(kChildKey, 2);
-    nested_dict->SetInteger(kOtherKey, 4);
+    nested_dict->SetInteger(kOtherDictionaryKey, 4);
   }
   {
     ScopedDictionaryPrefUpdate update(&pref_service2, kDictionaryKey);
@@ -781,7 +781,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteChildThenParent) {
 
   base::DictionaryValue expected_dict;
   expected_dict.SetPath({kKey, kChildKey}, base::Value(2));
-  expected_dict.SetPath({kKey, kOtherKey}, base::Value(4));
+  expected_dict.SetPath({kKey, kOtherDictionaryKey}, base::Value(4));
   base::DictionaryValue three_dict;
   three_dict.SetPath({kKey, kChildKey}, base::Value(3));
 
@@ -800,7 +800,7 @@ TEST_F(PersistentPrefStoreConsistencyTest, NestedWriteChildThenParent) {
 TEST_F(PersistentPrefStoreConsistencyTest,
        DeleteParentThenWriteChildThenDeleteParent) {
   auto initial_value = std::make_unique<base::DictionaryValue>();
-  initial_value->SetInteger(kOtherKey, 5);
+  initial_value->SetInteger(kOtherDictionaryKey, 5);
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -820,7 +820,7 @@ TEST_F(PersistentPrefStoreConsistencyTest,
 
   base::DictionaryValue intermediate_dict;
   intermediate_dict.SetInteger(kKey, 3);
-  intermediate_dict.SetInteger(kOtherKey, 5);
+  intermediate_dict.SetInteger(kOtherDictionaryKey, 5);
 
   base::DictionaryValue expected_dict;
   expected_dict.SetInteger(kKey, 3);
@@ -853,7 +853,7 @@ TEST_F(PersistentPrefStoreConsistencyTest,
 TEST_F(PersistentPrefStoreConsistencyTest,
        NestedDeleteParentThenWriteChildThenDeleteChild) {
   auto initial_value = std::make_unique<base::DictionaryValue>();
-  initial_value->SetPath({kKey, kOtherKey}, base::Value(5));
+  initial_value->SetPath({kKey, kOtherDictionaryKey}, base::Value(5));
   pref_store()->SetValue(kDictionaryKey, std::move(initial_value), 0);
   auto connection = CreateConnection();
   auto connection2 = CreateConnection();
@@ -876,7 +876,7 @@ TEST_F(PersistentPrefStoreConsistencyTest,
 
   base::DictionaryValue intermediate_dict;
   intermediate_dict.SetPath({kKey, kChildKey}, base::Value(3));
-  intermediate_dict.SetPath({kKey, kOtherKey}, base::Value(5));
+  intermediate_dict.SetPath({kKey, kOtherDictionaryKey}, base::Value(5));
 
   base::DictionaryValue expected_dict;
   expected_dict.SetPath({kKey, kChildKey}, base::Value(3));

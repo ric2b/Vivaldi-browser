@@ -5,8 +5,8 @@
 #include "modules/media_controls/elements/MediaControlDownloadButtonElement.h"
 
 #include "core/dom/events/Event.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLAnchorElement.h"
 #include "core/html/media/HTMLMediaElement.h"
 #include "core/html/media/HTMLMediaElementControlsList.h"
 #include "core/html/media/HTMLMediaSource.h"
@@ -27,45 +27,12 @@ MediaControlDownloadButtonElement::MediaControlDownloadButtonElement(
 }
 
 bool MediaControlDownloadButtonElement::ShouldDisplayDownloadButton() {
-  const KURL& url = MediaElement().currentSrc();
-
-  // Check page settings to see if download is disabled.
-  if (GetDocument().GetPage() &&
-      GetDocument().GetPage()->GetSettings().GetHideDownloadUI())
-    return false;
-
-  // URLs that lead to nowhere are ignored.
-  if (url.IsNull() || url.IsEmpty())
-    return false;
-
-  // If we have no source, we can't download.
-  if (MediaElement().getNetworkState() == HTMLMediaElement::kNetworkEmpty ||
-      MediaElement().getNetworkState() == HTMLMediaElement::kNetworkNoSource) {
-    return false;
-  }
-
-  // Local files and blobs (including MSE) should not have a download button.
-  if (url.IsLocalFile())
-    return false;
-
-  // MediaStream can't be downloaded.
-  if (HTMLMediaElement::IsMediaStreamURL(url.GetString()))
-    return false;
-
-  // MediaSource can't be downloaded.
-  if (MediaElement().HasMediaSource())
-    return false;
-
-  // HLS stream shouldn't have a download button.
-  if (HTMLMediaElement::IsHLSURL(url))
-    return false;
-
-  // Infinite streams don't have a clear end at which to finish the download
-  // (would require adding UI to prompt for the duration to download).
-  if (MediaElement().duration() == std::numeric_limits<double>::infinity())
+  if (!MediaElement().SupportsSave())
     return false;
 
   // The attribute disables the download button.
+  // This is run after `SupportSave()` to guarantee that it is recorded only if
+  // it blocks the download button from showing up.
   if (MediaElement().ControlsListInternal()->ShouldHideDownload()) {
     UseCounter::Count(MediaElement().GetDocument(),
                       WebFeature::kHTMLMediaElementControlsListNoDownload);
@@ -85,7 +52,6 @@ bool MediaControlDownloadButtonElement::HasOverflowButton() const {
 }
 
 void MediaControlDownloadButtonElement::Trace(blink::Visitor* visitor) {
-  visitor->Trace(anchor_);
   MediaControlInputElement::Trace(visitor);
 }
 
@@ -108,13 +74,15 @@ void MediaControlDownloadButtonElement::DefaultEventHandler(Event* event) {
       !(url.IsNull() || url.IsEmpty())) {
     Platform::Current()->RecordAction(
         UserMetricsAction("Media.Controls.Download"));
-    if (!anchor_) {
-      HTMLAnchorElement* anchor = HTMLAnchorElement::Create(GetDocument());
-      anchor->setAttribute(HTMLNames::downloadAttr, "");
-      anchor_ = anchor;
-    }
-    anchor_->SetURL(url);
-    anchor_->DispatchSimulatedClick(event);
+    ResourceRequest request(url);
+    request.SetUIStartTime(
+        (event->PlatformTimeStamp() - TimeTicks()).InSecondsF());
+    request.SetInputPerfMetricReportPolicy(
+        InputToLoadPerfMetricReportPolicy::kReportLink);
+    request.SetSuggestedFilename(String());
+    request.SetRequestContext(WebURLRequest::kRequestContextDownload);
+    request.SetRequestorOrigin(SecurityOrigin::Create(GetDocument().Url()));
+    GetDocument().GetFrame()->Client()->DownloadURL(request, String());
   }
   MediaControlInputElement::DefaultEventHandler(event);
 }

@@ -41,13 +41,17 @@ cr.define('extension_sidebar_tests', function() {
       expectEquals(sidebar.$$(selector).id, 'sections-extensions');
     });
 
-    test(assert(TestNames.LayoutAndClickHandlers), function() {
+    test(assert(TestNames.LayoutAndClickHandlers), function(done) {
       extension_test_util.testIcons(sidebar);
 
       var testVisible = extension_test_util.testVisible.bind(null, sidebar);
       testVisible('#sections-extensions', true);
       testVisible('#sections-shortcuts', true);
       testVisible('#more-extensions', true);
+
+      sidebar.isSupervised = true;
+      Polymer.dom.flush();
+      testVisible('#more-extensions', false);
 
       var currentPage;
       extensions.navigation.addListener(newPage => {
@@ -59,6 +63,10 @@ cr.define('extension_sidebar_tests', function() {
 
       MockInteractions.tap(sidebar.$$('#sections-extensions'));
       expectDeepEquals(currentPage, {page: Page.LIST});
+
+      // Clicking on the link for the current page should close the dialog.
+      sidebar.addEventListener('close-drawer', () => done());
+      MockInteractions.tap(sidebar.$$('#sections-extensions'));
     });
   });
 

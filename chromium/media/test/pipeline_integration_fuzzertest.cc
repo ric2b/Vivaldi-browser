@@ -8,9 +8,11 @@
 
 #include "base/at_exit.h"
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/logging.h"
-#include "base/metrics/statistics_recorder.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/eme_constants.h"
 #include "media/base/media.h"
@@ -112,15 +114,26 @@ void OnEncryptedMediaInitData(media::PipelineIntegrationTestBase* test,
   // we will start demuxing the data but media pipeline will wait for a CDM to
   // be available to start initialization, which will not happen in this case.
   // To prevent the test timeout, we'll just fail the test immediately here.
+  // Note: Since the callback is on the media task runner but the test is on
+  // the main task runner, this must be posted.
   // TODO(xhwang): Support encrypted media in this fuzzer test.
-  test->FailTest(media::PIPELINE_ERROR_INITIALIZATION_FAILED);
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&PipelineIntegrationTestBase::FailTest,
+                                base::Unretained(test),
+                                media::PIPELINE_ERROR_INITIALIZATION_FAILED));
 }
 
 void OnAudioPlayDelay(media::PipelineIntegrationTestBase* test,
                       base::TimeDelta play_delay) {
   CHECK_GT(play_delay, base::TimeDelta());
-  if (play_delay > kMaxPlayDelay)
-    test->FailTest(media::PIPELINE_ERROR_INITIALIZATION_FAILED);
+  if (play_delay > kMaxPlayDelay) {
+    // Note: Since the callback is on the media task runner but the test is on
+    // the main task runner, this must be posted.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&PipelineIntegrationTestBase::FailTest,
+                                  base::Unretained(test),
+                                  media::PIPELINE_ERROR_INITIALIZATION_FAILED));
+  }
 }
 
 class ProgressivePipelineIntegrationFuzzerTest
@@ -195,7 +208,8 @@ class MediaSourcePipelineIntegrationFuzzerTest
 // Disable noisy logging.
 struct Environment {
   Environment() {
-    // Note, use logging::LOG_VERBOSE here to assist local debugging.
+    // Note, instead of LOG_FATAL, use a value at or below logging::LOG_VERBOSE
+    // here to assist local debugging.
     logging::SetMinLogLevel(logging::LOG_FATAL);
   }
 };
@@ -206,11 +220,6 @@ Environment* env = new Environment();
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // Media pipeline starts new threads, which needs AtExitManager.
   base::AtExitManager at_exit;
-
-  // Required to avoid leaking histogram memory over long fuzzing runs. Must be
-  // installed before any histograms are acquired. This is safe to call multiple
-  // times.
-  base::StatisticsRecorder::Initialize();
 
   // Media pipeline checks command line arguments internally.
   base::CommandLine::Init(0, nullptr);

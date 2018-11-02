@@ -22,6 +22,24 @@ using calendar::CalendarService;
 using calendar::CalendarServiceFactory;
 using calendar::RecurrenceInterval;
 
+namespace {
+
+bool GetIdAsInt64(const base::string16& id_string, int64_t* id) {
+  if (base::StringToInt64(id_string, id))
+    return true;
+
+  return false;
+}
+
+bool GetStdStringAsInt64(const std::string& id_string, int64_t* id) {
+  if (base::StringToInt64(id_string, id))
+    return true;
+
+  return false;
+}
+
+}  // namespace
+
 namespace extensions {
 
 using vivaldi::calendar::Calendar;
@@ -32,6 +50,10 @@ using vivaldi::calendar::RecurrencePattern;
 namespace OnEventCreated = vivaldi::calendar::OnEventCreated;
 namespace OnEventRemoved = vivaldi::calendar::OnEventRemoved;
 namespace OnEventChanged = vivaldi::calendar::OnEventChanged;
+
+namespace OnCalendarCreated = vivaldi::calendar::OnCalendarCreated;
+namespace OnCalendarRemoved = vivaldi::calendar::OnCalendarRemoved;
+namespace OnCalendarChanged = vivaldi::calendar::OnCalendarChanged;
 
 typedef std::vector<vivaldi::calendar::CalendarEvent> EventList;
 typedef std::vector<vivaldi::calendar::Calendar> CalendarList;
@@ -113,7 +135,7 @@ calendar::EventRecurrence GetEventRecurrence(
 
 Calendar GetCalendarItem(const calendar::CalendarRow& row) {
   Calendar calendar;
-  calendar.id = row.id();
+  calendar.id = base::Int64ToString(row.id());
   calendar.name.reset(new std::string(base::UTF16ToUTF8(row.name())));
   calendar.description.reset(
       new std::string(base::UTF16ToUTF8(row.description())));
@@ -156,6 +178,30 @@ void CalendarEventRouter::OnEventChanged(CalendarService* service,
   CalendarEvent changedEvent = GetEventItem(row);
   std::unique_ptr<base::ListValue> args = OnEventChanged::Create(changedEvent);
   DispatchEvent(OnEventChanged::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnCalendarCreated(CalendarService* service,
+                                            const calendar::CalendarRow& row) {
+  Calendar createCalendar = GetCalendarItem(row);
+  std::unique_ptr<base::ListValue> args =
+      OnCalendarCreated::Create(createCalendar);
+  DispatchEvent(OnCalendarCreated::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnCalendarDeleted(CalendarService* service,
+                                            const calendar::CalendarRow& row) {
+  Calendar deletedCalendar = GetCalendarItem(row);
+  std::unique_ptr<base::ListValue> args =
+      OnCalendarChanged::Create(deletedCalendar);
+  DispatchEvent(OnCalendarRemoved::kEventName, std::move(args));
+}
+
+void CalendarEventRouter::OnCalendarChanged(CalendarService* service,
+                                            const calendar::CalendarRow& row) {
+  Calendar changedCalendar = GetCalendarItem(row);
+  std::unique_ptr<base::ListValue> args =
+      OnCalendarChanged::Create(changedCalendar);
+  DispatchEvent(OnCalendarChanged::kEventName, std::move(args));
 }
 
 // Helper to actually dispatch an event to extension listeners.
@@ -361,6 +407,14 @@ calendar::EventRow GetEventRow(const vivaldi::calendar::CreateDetails& event) {
     row.set_recurrence(GetEventRecurrence(*event.recurrence));
   }
 
+  if (event.calendar_id.get()) {
+    calendar::CalendarID calendar_id;
+
+    if (GetStdStringAsInt64(*event.calendar_id, &calendar_id)) {
+      row.set_calendar_id(calendar_id);
+    }
+  }
+
   return row;
 }
 
@@ -382,7 +436,7 @@ ExtensionFunction::ResponseAction CalendarEventCreateFunction::Run() {
 void CalendarEventCreateFunction::CreateEventComplete(
     std::shared_ptr<calendar::CreateEventResult> results) {
   if (!results->success) {
-    Respond(Error("Error creating event"));
+    Respond(Error("Error creating event. " + results->message));
   } else {
     CalendarEvent ev = GetEventItem(results->createdRow);
     Respond(ArgumentList(
@@ -431,20 +485,6 @@ void CalendarEventsCreateFunction::CreateEventsComplete(
   Respond(
       ArgumentList(extensions::vivaldi::calendar::EventsCreate::Results::Create(
           return_results)));
-}
-
-bool GetIdAsInt64(const base::string16& id_string, int64_t* id) {
-  if (base::StringToInt64(id_string, id))
-    return true;
-
-  return false;
-}
-
-bool GetStdStringAsInt64(const std::string& id_string, int64_t* id) {
-  if (base::StringToInt64(id_string, id))
-    return true;
-
-  return false;
 }
 
 ExtensionFunction::ResponseAction CalendarUpdateEventFunction::Run() {
@@ -594,7 +634,7 @@ std::unique_ptr<vivaldi::calendar::Calendar> CreateVivaldiCalendar(
   std::unique_ptr<vivaldi::calendar::Calendar> calendar(
       new vivaldi::calendar::Calendar());
 
-  calendar->id = result.id();
+  calendar->id = base::Int64ToString(result.id());
   calendar->name.reset(new std::string(base::UTF16ToUTF8(result.name())));
 
   calendar->description.reset(

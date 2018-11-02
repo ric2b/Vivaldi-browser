@@ -23,16 +23,16 @@ class TimeTicks;
 namespace ash {
 
 class BacklightsForcedOffSetter;
+class ConvertiblePowerButtonController;
 class LockStateController;
 class PowerButtonDisplayController;
 class PowerButtonScreenshotController;
-class TabletPowerButtonController;
 
-// Handles power button and lock button events. For convertible/tablet devices,
-// power button events are handled by TabletPowerButtonController to perform
-// tablet power button behavior, except forced clamshell set by command line.
-// For clamshell devices, power button acts locking or shutdown. On tablet mode,
-// power button may also be consumed to take a screenshot.
+// Handles power button and lock button events. For convertible devices,
+// power button events are handled by ConvertiblePowerButtonController to
+// perform corresponding power button behavior, except forced clamshell set by
+// command line. For clamshell devices, power button acts locking or shutdown.
+// On tablet mode, power button may also be consumed to take a screenshot.
 class ASH_EXPORT PowerButtonController
     : public ui::EventHandler,
       public display::DisplayConfigurator::Observer,
@@ -88,8 +88,9 @@ class ASH_EXPORT PowerButtonController
     return screenshot_controller_.get();
   }
 
-  TabletPowerButtonController* tablet_power_button_controller_for_test() {
-    return tablet_controller_.get();
+  ConvertiblePowerButtonController*
+  convertible_power_button_controller_for_test() {
+    return convertible_controller_.get();
   }
 
   void set_power_button_type_for_test(ButtonType button_type) {
@@ -127,6 +128,10 @@ class ASH_EXPORT PowerButtonController
   // mode.
   bool enable_tablet_mode_ = false;
 
+  // True if the device should show power button menu when the power button is
+  // long-pressed.
+  bool show_power_button_menu_ = false;
+
   // True if the device should use non-tablet-style power button behavior even
   // if it is a convertible device.
   bool force_clamshell_power_button_ = false;
@@ -146,8 +151,8 @@ class ASH_EXPORT PowerButtonController
   // Handles events for power button screenshot.
   std::unique_ptr<PowerButtonScreenshotController> screenshot_controller_;
 
-  // Handles events for convertible/tablet devices.
-  std::unique_ptr<TabletPowerButtonController> tablet_controller_;
+  // Handles events for convertible devices.
+  std::unique_ptr<ConvertiblePowerButtonController> convertible_controller_;
 
   // Used to run ForceDisplayOffAfterLock() shortly after the screen is locked.
   // Only started when |force_clamshell_power_button_| is true.

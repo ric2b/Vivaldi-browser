@@ -37,6 +37,7 @@
 
 #include "base/macros.h"
 #include "platform/wtf/Allocator.h"
+#include "platform/wtf/ConstructTraits.h"
 #include "platform/wtf/Vector.h"
 
 namespace WTF {
@@ -145,8 +146,8 @@ class Deque : public ConditionalDestructor<Deque<T, INLINE_CAPACITY, Allocator>,
 
   void clear();
 
-  template <typename VisitorDispatcher>
-  void Trace(VisitorDispatcher);
+  template <typename VisitorDispatcher, typename A = Allocator>
+  std::enable_if_t<A::kIsGarbageCollected> Trace(VisitorDispatcher);
 
   static_assert(!std::is_polymorphic<T>::value ||
                     !VectorTraits<T>::kCanInitializeWithMemset,
@@ -178,7 +179,7 @@ class Deque : public ConditionalDestructor<Deque<T, INLINE_CAPACITY, Allocator>,
     DISALLOW_COPY_AND_ASSIGN(BackingBuffer);
   };
 
-  typedef VectorTypeOperations<T> TypeOperations;
+  typedef VectorTypeOperations<T, Allocator> TypeOperations;
   typedef DequeIteratorBase<T, inlineCapacity, Allocator> IteratorBase;
 
   void erase(size_t position);
@@ -498,7 +499,8 @@ inline void Deque<T, inlineCapacity, Allocator>::push_back(U&& value) {
     end_ = 0;
   else
     ++end_;
-  new (NotNull, new_element) T(std::forward<U>(value));
+  ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
+      new_element, std::forward<U>(value));
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -509,7 +511,8 @@ inline void Deque<T, inlineCapacity, Allocator>::push_front(U&& value) {
     start_ = buffer_.capacity() - 1;
   else
     --start_;
-  new (NotNull, &buffer_.Buffer()[start_]) T(std::forward<U>(value));
+  ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
+      &buffer_.Buffer()[start_], std::forward<U>(value));
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -521,7 +524,8 @@ inline void Deque<T, inlineCapacity, Allocator>::emplace_back(Args&&... args) {
     end_ = 0;
   else
     ++end_;
-  new (NotNull, new_element) T(std::forward<Args>(args)...);
+  ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
+      new_element, std::forward<Args>(args)...);
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -532,7 +536,8 @@ inline void Deque<T, inlineCapacity, Allocator>::emplace_front(Args&&... args) {
     start_ = buffer_.capacity() - 1;
   else
     --start_;
-  new (NotNull, &buffer_.Buffer()[start_]) T(std::forward<Args>(args)...);
+  ConstructTraits<T, VectorTraits<T>, Allocator>::ConstructAndNotifyElement(
+      &buffer_.Buffer()[start_], std::forward<Args>(args)...);
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
@@ -620,7 +625,8 @@ DequeIteratorBase<T, inlineCapacity, Allocator>::operator=(
 }
 
 template <typename T, size_t inlineCapacity, typename Allocator>
-inline DequeIteratorBase<T, inlineCapacity, Allocator>::~DequeIteratorBase() {}
+inline DequeIteratorBase<T, inlineCapacity, Allocator>::~DequeIteratorBase() =
+    default;
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 inline bool DequeIteratorBase<T, inlineCapacity, Allocator>::IsEqual(
@@ -662,13 +668,14 @@ inline T* DequeIteratorBase<T, inlineCapacity, Allocator>::Before() const {
   return &deque_->buffer_.buffer()[index_ - 1];
 }
 
-// This is only called if the allocator is a HeapAllocator. It is used when
+// This is only defined if the allocator is a HeapAllocator. It is used when
 // visiting during a tracing GC.
 template <typename T, size_t inlineCapacity, typename Allocator>
-template <typename VisitorDispatcher>
-void Deque<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) {
-  DCHECK(Allocator::kIsGarbageCollected)
-      << "Garbage collector must be enabled.";
+template <typename VisitorDispatcher, typename A>
+std::enable_if_t<A::kIsGarbageCollected>
+Deque<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) {
+  static_assert(Allocator::kIsGarbageCollected,
+                "Garbage collector must be enabled.");
   const T* buffer_begin = buffer_.Buffer();
   const T* end = buffer_begin + end_;
   if (IsTraceableInCollectionTrait<VectorTraits<T>>::value) {

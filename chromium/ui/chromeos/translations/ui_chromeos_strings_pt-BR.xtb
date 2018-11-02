@@ -48,7 +48,6 @@
 <translation id="255937426064304553">Internacional: Estados Unidos</translation>
 <translation id="2563185590376525700">Rã</translation>
 <translation id="2649120831653069427">Peixe arco-íris</translation>
-<translation id="2656923396825879524">Figura geométrica 3</translation>
 <translation id="2735698359135166290">Teclado romeno padrão</translation>
 <translation id="2771816809568414714">Queijo</translation>
 <translation id="2781645665747935084">Belga</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">Turco-F</translation>
 <translation id="3619115746895587757">Cappuccino</translation>
 <translation id="3678559383040232393">Teclado maltês</translation>
-<translation id="3728399474846997774">Figura geométrica 2</translation>
-<translation id="3734201824773416162">Figura geométrica 1</translation>
 <translation id="3801082500826908679">Faroês</translation>
 <translation id="3809272675881623365">Coelho</translation>
 <translation id="3815016854028376614">Método de entrada Zhuyin</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">Teclado italiano</translation>
 <translation id="3910699493603749297">Teclado em khmer</translation>
 <translation id="391445228316373457">Teclado em nepalês (fonético)</translation>
-<translation id="3947050919258841761">Figura geométrica 5</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="4070370845051020638">Método de entrada cantonês</translation>
 <translation id="4072248638558688893">Teclado tâmil (fonético)</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">Macaco</translation>
 <translation id="4711094779914110278">Turco</translation>
 <translation id="4725511304875193254">Corgi</translation>
+<translation id="4737050008115666127">Pouso</translation>
 <translation id="4747271164117300400">Macedônio</translation>
 <translation id="4749157430980974800">Teclado georgiano</translation>
 <translation id="4755240240651974342">Teclado finlandês</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">Teclado em nepalês (InScript)</translation>
 <translation id="5469868506864199649">Italiano</translation>
 <translation id="5500122897333236901">Islandês</translation>
+<translation id="5508696409934741614">Pontos</translation>
 <translation id="5533555070048896610">Transliteração (namaste → नमस्ते)</translation>
 <translation id="5605830556594064952">Dvorak americano</translation>
 <translation id="5640179856859982418">Teclado suíço</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">Teclado canadense (inglês)</translation>
 <translation id="751507702149411736">Bielorrusso</translation>
 <translation id="7547811415869834682">Holandês</translation>
+<translation id="7603724359189955920">Grades</translation>
 <translation id="770015031906360009">Grego</translation>
 <translation id="7706319470528945664">Teclado português</translation>
 <translation id="7774365994322694683">Pássaro</translation>
 <translation id="7825423931463735974">Teclado tâmil (Tamil99)</translation>
 <translation id="7853966320808728790">BÉPO francês</translation>
-<translation id="7872088194351932564">Figura geométrica 4</translation>
 <translation id="7896906914454843592">Teclado americano estendido</translation>
 <translation id="7898607018410277265">Teclado gujarati (fonético novo)</translation>
 <translation id="7917972308273378936">Teclado lituano</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">Teclado americano Colemak</translation>
 <translation id="8437209419043462667">EUA</translation>
 <translation id="8467473010914675605">Método de entrada coreano</translation>
+<translation id="8477649328507734757">Giro</translation>
 <translation id="8521441079177373948">Reino Unido</translation>
 <translation id="8551494947769799688">Letão</translation>
 <translation id="8561206103590473338">Elefante</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">Teclado Myanmar Myansan</translation>
 <translation id="9153744823707037316">Método de entrada por array</translation>
 <translation id="9206487995878691001">Método de entrada Cangjie</translation>
+<translation id="9219908252191632183">Lunar</translation>
 </translationbundle>

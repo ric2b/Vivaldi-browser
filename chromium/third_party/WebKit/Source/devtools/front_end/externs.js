@@ -258,9 +258,14 @@ DevToolsHost.getSelectionBackgroundColor = function() {};
 DevToolsHost.getSelectionForegroundColor = function() {};
 
 /**
- * @return {boolean}
+ * @return {string}
  */
-DevToolsHost.isUnderTest = function() {};
+DevToolsHost.getInactiveSelectionBackgroundColor = function() {};
+
+/**
+ * @return {string}
+ */
+DevToolsHost.getInactiveSelectionForegroundColor = function() {};
 
 /**
  * @return {boolean}
@@ -281,12 +286,6 @@ DevToolsHost.upgradeDraggedFileSystemPermissions = function(fileSystem) {};
 
 /** Extensions API */
 
-/** @constructor */
-function AuditCategory() {
-}
-/** @constructor */
-function AuditResult() {
-}
 /** @constructor */
 function EventSink() {
 }
@@ -639,6 +638,15 @@ Element.prototype.animate = function(keyframes, timing) {};
  */
 Element.prototype.addEventListener = function(type, listener, options) {};
 
+/**
+ * @override
+ * @param {string} type
+ * @param {(!EventListener|!function (!Event): (boolean|undefined)|null)} listener
+ * @param {(boolean|!{capture: (boolean|undefined), once: (boolean|undefined), passive: (boolean|undefined)})=} options
+ * @this {EventTarget}
+ */
+Element.prototype.removeEventListener = function(type, listener, options) {};
+
 var acorn = {
   /**
    * @param {string} text
@@ -795,3 +803,17 @@ Terminal.prototype = {
  * @return {!Console}
  */
 Console.prototype.context = function(context) {};
+
+
+/**
+ * @param {!Array<string>|string} strings
+ * @param {...*} vararg
+ * @return {string}
+ */
+var ls = function(strings, vararg) {};
+
+/**
+ * @constructor
+ * @param {function(!Array<*>)} callback
+ */
+var ResizeObserver = function(callback) {};

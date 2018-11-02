@@ -97,6 +97,7 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   const bool on_critical_path = true;
   const uint64_t source_id = 5;
   const uint64_t sequence_number = 10;
+  const bool animate_only = true;
   BeginFrameArgs input;
   input.source_id = source_id;
   input.sequence_number = sequence_number;
@@ -105,6 +106,7 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   input.interval = interval;
   input.type = type;
   input.on_critical_path = on_critical_path;
+  input.animate_only = animate_only;
 
   BeginFrameArgs output;
   SerializeAndDeserialize<mojom::BeginFrameArgs>(input, &output);
@@ -116,6 +118,7 @@ TEST_F(StructTraitsTest, BeginFrameArgs) {
   EXPECT_EQ(interval, output.interval);
   EXPECT_EQ(type, output.type);
   EXPECT_EQ(on_critical_path, output.on_critical_path);
+  EXPECT_EQ(animate_only, output.animate_only);
 }
 
 TEST_F(StructTraitsTest, BeginFrameAck) {
@@ -132,8 +135,7 @@ TEST_F(StructTraitsTest, BeginFrameAck) {
 
   EXPECT_EQ(source_id, output.source_id);
   EXPECT_EQ(sequence_number, output.sequence_number);
-  // |has_damage| is not transmitted.
-  EXPECT_FALSE(output.has_damage);
+  EXPECT_TRUE(output.has_damage);
 }
 
 namespace {
@@ -390,8 +392,6 @@ TEST_F(StructTraitsTest, ResourceSettings) {
   ResourceSettings input;
   input.texture_id_allocation_chunk_size = kArbitrarySize;
   input.use_gpu_memory_buffer_resources = kArbitraryBool;
-  input.buffer_to_texture_target_map =
-      DefaultBufferToTextureTargetMapForTesting();
 
   ResourceSettings output;
   SerializeAndDeserialize<mojom::ResourceSettings>(input, &output);
@@ -400,8 +400,6 @@ TEST_F(StructTraitsTest, ResourceSettings) {
             output.texture_id_allocation_chunk_size);
   EXPECT_EQ(input.use_gpu_memory_buffer_resources,
             output.use_gpu_memory_buffer_resources);
-  EXPECT_EQ(input.buffer_to_texture_target_map,
-            output.buffer_to_texture_target_map);
 }
 
 TEST_F(StructTraitsTest, Selection) {
@@ -607,12 +605,11 @@ TEST_F(StructTraitsTest, SurfaceInfo) {
 TEST_F(StructTraitsTest, ReturnedResource) {
   const RenderPassId id = 1337u;
   const gpu::CommandBufferNamespace command_buffer_namespace = gpu::IN_PROCESS;
-  const int32_t extra_data_field = 0xbeefbeef;
   const gpu::CommandBufferId command_buffer_id(
       gpu::CommandBufferId::FromUnsafeValue(0xdeadbeef));
   const uint64_t release_count = 0xdeadbeefdead;
-  gpu::SyncToken sync_token(command_buffer_namespace, extra_data_field,
-                            command_buffer_id, release_count);
+  gpu::SyncToken sync_token(command_buffer_namespace, command_buffer_id,
+                            release_count);
   sync_token.SetVerifyFlush();
   const int count = 1234;
   const bool lost = true;
@@ -673,6 +670,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   activation_dependencies.push_back(id2);
   uint32_t frame_token = 0xdeadbeef;
   uint64_t begin_frame_ack_sequence_number = 0xdeadbeef;
+  uint32_t deadline_in_frames = 4u;
 
   CompositorFrameMetadata input;
   input.device_scale_factor = device_scale_factor;
@@ -696,6 +694,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
   input.latency_info = latency_infos;
   input.referenced_surfaces = referenced_surfaces;
   input.activation_dependencies = activation_dependencies;
+  input.deadline_in_frames = deadline_in_frames;
   input.frame_token = frame_token;
   input.begin_frame_ack.sequence_number = begin_frame_ack_sequence_number;
 
@@ -732,6 +731,7 @@ TEST_F(StructTraitsTest, CompositorFrameMetadata) {
             output.activation_dependencies.size());
   for (uint32_t i = 0; i < activation_dependencies.size(); ++i)
     EXPECT_EQ(activation_dependencies[i], output.activation_dependencies[i]);
+  EXPECT_EQ(deadline_in_frames, output.deadline_in_frames);
   EXPECT_EQ(frame_token, output.frame_token);
   EXPECT_EQ(begin_frame_ack_sequence_number,
             output.begin_frame_ack.sequence_number);
@@ -1085,7 +1085,6 @@ TEST_F(StructTraitsTest, TransferableResource) {
   const int8_t mailbox_name[GL_MAILBOX_SIZE_CHROMIUM] = {
       0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 2};
   const gpu::CommandBufferNamespace command_buffer_namespace = gpu::IN_PROCESS;
-  const int32_t extra_data_field = 0xbeefbeef;
   const gpu::CommandBufferId command_buffer_id(
       gpu::CommandBufferId::FromUnsafeValue(0xdeadbeef));
   const uint64_t release_count = 0xdeadbeefdeadL;
@@ -1097,9 +1096,8 @@ TEST_F(StructTraitsTest, TransferableResource) {
 
   gpu::MailboxHolder mailbox_holder;
   mailbox_holder.mailbox.SetName(mailbox_name);
-  mailbox_holder.sync_token =
-      gpu::SyncToken(command_buffer_namespace, extra_data_field,
-                     command_buffer_id, release_count);
+  mailbox_holder.sync_token = gpu::SyncToken(command_buffer_namespace,
+                                             command_buffer_id, release_count);
   mailbox_holder.sync_token.SetVerifyFlush();
   mailbox_holder.texture_target = texture_target;
   TransferableResource input;
@@ -1243,7 +1241,7 @@ TEST_F(StructTraitsTest, CopyOutputResult_Texture) {
       gfx::ColorSpace::CreateDisplayP3D65();
   const int8_t mailbox_name[GL_MAILBOX_SIZE_CHROMIUM] = {
       0, 9, 8, 7, 6, 5, 4, 3, 2, 1, 9, 7, 5, 3, 1, 3};
-  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                             gpu::CommandBufferId::FromUnsafeValue(0x123),
                             71234838);
   sync_token.SetVerifyFlush();

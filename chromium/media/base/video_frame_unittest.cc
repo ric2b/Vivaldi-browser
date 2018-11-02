@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/memory/aligned_memory.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -208,7 +208,7 @@ TEST(VideoFrame, CreateBlackFrame) {
       frame->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM));
 
   // Test |frame| properties.
-  EXPECT_EQ(PIXEL_FORMAT_YV12, frame->format());
+  EXPECT_EQ(PIXEL_FORMAT_I420, frame->format());
   EXPECT_EQ(kWidth, frame->coded_size().width());
   EXPECT_EQ(kHeight, frame->coded_size().height());
 
@@ -289,7 +289,7 @@ TEST(VideoFrame, CheckFrameExtents) {
   // Each call consists of a Format and the expected hash of all
   // planes if filled with kFillByte (defined in ExpectFrameExtents).
   ExpectFrameExtents(PIXEL_FORMAT_YV12, "8e5d54cb23cd0edca111dd35ffb6ff05");
-  ExpectFrameExtents(PIXEL_FORMAT_YV16, "cce408a044b212db42a10dfec304b3ef");
+  ExpectFrameExtents(PIXEL_FORMAT_I422, "cce408a044b212db42a10dfec304b3ef");
 }
 
 static void TextureCallback(gpu::SyncToken* called_sync_token,
@@ -300,7 +300,7 @@ static void TextureCallback(gpu::SyncToken* called_sync_token,
 // Verify the gpu::MailboxHolder::ReleaseCallback is called when VideoFrame is
 // destroyed with the default release sync point.
 TEST(VideoFrame, TextureNoLongerNeededCallbackIsCalled) {
-  gpu::SyncToken called_sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken called_sync_token(gpu::CommandBufferNamespace::GPU_IO,
                                    gpu::CommandBufferId::FromUnsafeValue(1), 1);
 
   {
@@ -355,10 +355,10 @@ TEST(VideoFrame,
     mailbox[i].name[0] = 50 + 1;
   }
 
-  gpu::SyncToken sync_token(kNamespace, 0, kCommandBufferId, 7);
+  gpu::SyncToken sync_token(kNamespace, kCommandBufferId, 7);
   sync_token.SetVerifyFlush();
   uint32_t target = 9;
-  gpu::SyncToken release_sync_token(kNamespace, 0, kCommandBufferId, 111);
+  gpu::SyncToken release_sync_token(kNamespace, kCommandBufferId, 111);
   release_sync_token.SetVerifyFlush();
 
   gpu::SyncToken called_sync_token;
@@ -409,7 +409,7 @@ TEST(VideoFrame, IsValidConfig_OddCodedSize) {
 
   // Next try a format with no sub-sampling for UV.
   EXPECT_TRUE(VideoFrame::IsValidConfig(
-      PIXEL_FORMAT_YV24, VideoFrame::STORAGE_OWNED_MEMORY, odd_size,
+      PIXEL_FORMAT_I444, VideoFrame::STORAGE_OWNED_MEMORY, odd_size,
       gfx::Rect(odd_size), odd_size));
 }
 
@@ -430,7 +430,7 @@ TEST(VideoFrame, CreateFrame_OddWidth) {
   EXPECT_EQ(678, frame->coded_size().width());
 
   // Next create a frame that does not sub-sample UV.
-  frame = VideoFrame::CreateFrame(PIXEL_FORMAT_YV24, odd_size,
+  frame = VideoFrame::CreateFrame(PIXEL_FORMAT_I444, odd_size,
                                   gfx::Rect(odd_size), odd_size, kTimestamp);
   ASSERT_TRUE(frame.get());
   // No sub-sampling for YV24 will mean odd width can remain odd since any pixel
@@ -441,57 +441,61 @@ TEST(VideoFrame, CreateFrame_OddWidth) {
 
 TEST(VideoFrame, AllocationSize_OddSize) {
   const gfx::Size size(3, 5);
+
   for (unsigned int i = 1u; i <= PIXEL_FORMAT_MAX; ++i) {
     const VideoPixelFormat format = static_cast<VideoPixelFormat>(i);
-    const size_t allocation_size = VideoFrame::AllocationSize(format, size);
     switch (format) {
       case PIXEL_FORMAT_YUV444P9:
       case PIXEL_FORMAT_YUV444P10:
       case PIXEL_FORMAT_YUV444P12:
-        EXPECT_EQ(144u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(144u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_YUV422P9:
       case PIXEL_FORMAT_YUV422P10:
       case PIXEL_FORMAT_YUV422P12:
-        EXPECT_EQ(96u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(96u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
-      case PIXEL_FORMAT_YV24:
+      case PIXEL_FORMAT_I444:
       case PIXEL_FORMAT_YUV420P9:
       case PIXEL_FORMAT_YUV420P10:
       case PIXEL_FORMAT_YUV420P12:
-        EXPECT_EQ(72u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(72u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_UYVY:
       case PIXEL_FORMAT_YUY2:
-      case PIXEL_FORMAT_YV16:
       case PIXEL_FORMAT_I422:
-        EXPECT_EQ(48u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(48u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_YV12:
       case PIXEL_FORMAT_I420:
       case PIXEL_FORMAT_NV12:
       case PIXEL_FORMAT_NV21:
       case PIXEL_FORMAT_MT21:
-        EXPECT_EQ(36u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(36u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_ARGB:
       case PIXEL_FORMAT_XRGB:
-      case PIXEL_FORMAT_YV12A:
+      case PIXEL_FORMAT_I420A:
       case PIXEL_FORMAT_RGB32:
-        EXPECT_EQ(60u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(60u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_RGB24:
-        EXPECT_EQ(45u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(45u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_Y16:
-        EXPECT_EQ(30u, allocation_size) << VideoPixelFormatToString(format);
-        break;
-      case PIXEL_FORMAT_Y8:
-        EXPECT_EQ(15u, allocation_size) << VideoPixelFormatToString(format);
+        EXPECT_EQ(30u, VideoFrame::AllocationSize(format, size))
+            << VideoPixelFormatToString(format);
         break;
       case PIXEL_FORMAT_MJPEG:
       case PIXEL_FORMAT_UNKNOWN:
-        break;
+        continue;
     }
   }
 }
@@ -551,7 +555,7 @@ TEST(VideoFrameMetadata, SetAndThenGetAllKeysForAllTypes) {
     metadata.Clear();
 
     EXPECT_FALSE(metadata.HasKey(key));
-    metadata.SetValue(key, base::MakeUnique<base::Value>());
+    metadata.SetValue(key, std::make_unique<base::Value>());
     EXPECT_TRUE(metadata.HasKey(key));
     const base::Value* const null_value = metadata.GetValue(key);
     EXPECT_TRUE(null_value);

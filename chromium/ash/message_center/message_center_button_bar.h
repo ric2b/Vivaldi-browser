@@ -61,6 +61,7 @@ class MessageCenterButtonBar : public views::View,
   ASH_EXPORT views::Button* GetCloseAllButtonForTest() const;
   ASH_EXPORT views::Button* GetSettingsButtonForTest() const;
   ASH_EXPORT views::Button* GetQuietModeButtonForTest() const;
+  ASH_EXPORT views::Button* GetCollapseButtonForTest() const;
 
   // Sometimes we shouldn't see the back arrow (not in settings).
   void SetBackArrowVisible(bool visible);
@@ -84,10 +85,10 @@ class MessageCenterButtonBar : public views::View,
   // Sub-views of the button bar.
   views::Label* notification_label_;
   views::View* button_container_;
-  views::ImageButton* close_all_button_;
-  views::ImageButton* settings_button_;
+  views::ToggleImageButton* close_all_button_;
+  views::ToggleImageButton* settings_button_;
   views::ToggleImageButton* quiet_mode_button_;
-  views::ImageButton* collapse_button_;
+  views::ToggleImageButton* collapse_button_;
 
   bool collapse_button_visible_ = false;
 

@@ -84,9 +84,9 @@ void VivaldiSyncManager::ConfigureTypes(bool sync_everything,
   OnUserChoseDatatypes(sync_everything, chosen_types);
 }
 
-void VivaldiSyncManager::NotifyLoginDone() {
+void VivaldiSyncManager::NotifyEngineStarted() {
   for (auto& observer : vivaldi_observers_) {
-    observer.OnLoginDone();
+    observer.OnEngineStarted();
   }
 }
 
@@ -102,15 +102,15 @@ void VivaldiSyncManager::NotifySyncCompleted() {
   }
 }
 
-void VivaldiSyncManager::NotifySyncEngineInitFailed() {
+void VivaldiSyncManager::NotifyEngineInitFailed() {
   for (auto& observer : vivaldi_observers_) {
-    observer.OnSyncEngineInitFailed();
+    observer.OnEngineInitFailed();
   }
 }
 
-void VivaldiSyncManager::NotifyLogoutDone() {
+void VivaldiSyncManager::NotifyEngineStopped() {
   for (auto& observer : vivaldi_observers_) {
-    observer.OnLogoutDone();
+    observer.OnEngineStopped();
   }
 }
 
@@ -177,7 +177,7 @@ void VivaldiSyncManager::ShutdownImpl(syncer::ShutdownReason reason) {
         vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword);
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&VivaldiSyncManager::NotifyLogoutDone,
+        base::Bind(&VivaldiSyncManager::NotifyEngineStopped,
                    weak_factory_.GetWeakPtr()));
   }
   ProfileSyncService::ShutdownImpl(reason);
@@ -187,20 +187,24 @@ bool VivaldiSyncManager::DisableNotifications() const {
   return !vivaldi::ForcedVivaldiRunning();
 }
 
-void VivaldiSyncManager::SetToken(bool has_login_details,
-                                  std::string username,
-                                  std::string password,
+void VivaldiSyncManager::SetToken(bool start_sync,
+                                  std::string account_id,
                                   std::string token,
-                                  std::string expire,
-                                  std::string account_id) {
+                                  std::string expire) {
+  // This can only really happens when switching between sync servers and
+  // using different accounts at the same time.
+  if (signin()->GetAuthenticatedAccountId() != account_id)
+    signin()->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
+                      signin_metrics::SignoutDelete::IGNORE_METRIC);
+
   if (token.empty()
 // TODO(jarle): Remove the !Android check when we have extensions running
 // on Android.
 #if !defined(OS_ANDROID)
-    || !extensions::VivaldiRuntimeFeatures::IsEnabled(
-            sync_client_->GetProfile(), "sync")
+      || !extensions::VivaldiRuntimeFeatures::IsEnabled(
+             sync_client_->GetProfile(), "sync")
 #endif
-) {
+  ) {
     Logout();
     return;
   }
@@ -219,9 +223,8 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
           sync_client_->GetProfile());
   token_service->SetConsumer(this);
 
-  if (has_login_details) {
-    password_ = password;
-    signin()->SetAuthenticatedAccountInfo(account_id, username);
+  if (start_sync) {
+    signin()->SetAuthenticatedAccountInfo(account_id, account_id);
   }
 
   if (!IsEngineInitialized()) {
@@ -232,14 +235,14 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
   if (!IsSyncActive()) {
     sync_startup_tracker_.reset(
         new SyncStartupTracker(sync_client_->GetProfile(), this));
-  } else if (has_login_details) {
-    NotifyLoginDone();
+  } else if (start_sync) {
+    NotifyEngineStarted();
   }
 
-  if (has_login_details) {
+  if (start_sync) {
     // Avoid passing an implicit password here, so that we can detect later on
     // if the account password needs to be provided for decryption.
-    GoogleSigninSucceeded(account_id, username);
+    GoogleSigninSucceeded(account_id, account_id);
   }
 
   token_service->UpdateCredentials(account_id, token);
@@ -250,30 +253,14 @@ bool VivaldiSyncManager::SetEncryptionPassword(const std::string& password) {
     return false;
   }
 
-  std::string password_used = password;
-  bool separate_password = !password_used.empty();
-  if (!separate_password) {
-    password_used = password_;
-  }
-  password_.clear();
-
   bool result = false;
 
   if (IsPassphraseRequired()) {
     result = SetDecryptionPassphrase(password);
   } else if (!IsUsingSecondaryPassphrase()) {
-    SetEncryptionPassphrase(password_used, ProfileSyncService::EXPLICIT);
+    SetEncryptionPassphrase(password, ProfileSyncService::EXPLICIT);
     result = true;
   }
-
-  if (result)
-    sync_client_->GetPrefService()->SetInteger(
-        vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-        static_cast<int>(
-            separate_password
-                ? vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::AYE
-                : vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::
-                      NAY));
 
   return result;
 }
@@ -289,27 +276,22 @@ void VivaldiSyncManager::SyncStartupCompleted() {
 }
 
 void VivaldiSyncManager::SyncStartupFailed() {
-  NotifySyncEngineInitFailed();
+  sync_startup_tracker_.reset();
+  if (!IsSyncAllowed())
+    Logout();
+  NotifyEngineInitFailed();
 }
 
 void VivaldiSyncManager::SetupConfiguration() {
   if (IsSyncActive()) {
-    password_.clear();
     SetFirstSetupComplete();
   }
 
   if (IsPassphraseRequiredForDecryption()) {
-    if (password_.empty() || !SetDecryptionPassphrase(password_))
-      NotifyEncryptionPasswordRequested();
-    else
-      sync_client_->GetPrefService()->SetInteger(
-          vivaldiprefs::kSyncIsUsingSeparateEncryptionPassword,
-          static_cast<int>(
-              vivaldiprefs::SyncIsUsingSeparateEncryptionPasswordValues::NAY));
-    password_.clear();
+    NotifyEncryptionPasswordRequested();
   }
 
-  NotifyLoginDone();
+  NotifyEngineStarted();
 
   if (IsFirstSetupComplete())
     sync_blocker_.reset();

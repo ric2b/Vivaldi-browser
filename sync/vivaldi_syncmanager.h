@@ -37,12 +37,10 @@ class VivaldiSyncManager : public ProfileSyncService,
   void AddVivaldiObserver(VivaldiSyncManagerObserver* observer);
   void RemoveVivaldiObserver(VivaldiSyncManagerObserver* observer);
 
-  void SetToken(bool has_login_details,
-                std::string username,
-                std::string password,
+  void SetToken(bool start_sync,
+                std::string account_id,
                 std::string token,
-                std::string expire,
-                std::string account_id);
+                std::string expire);
   bool SetEncryptionPassword(const std::string& password);
 
   void ClearSyncData();
@@ -54,11 +52,11 @@ class VivaldiSyncManager : public ProfileSyncService,
     return invalidation_service_.get();
   }
 
-  void NotifyLoginDone();
+  void NotifyEngineStarted();
   void NotifySyncStarted();
   void NotifySyncCompleted();
-  void NotifySyncEngineInitFailed();
-  void NotifyLogoutDone();
+  void NotifyEngineInitFailed();
+  void NotifyEngineStopped();
   void NotifyAccessTokenRequested();
   void NotifyEncryptionPasswordRequested();
 
@@ -87,7 +85,6 @@ class VivaldiSyncManager : public ProfileSyncService,
   void SetupConfiguration();
 
   std::string vivaldi_access_token_;
-  std::string password_;
   base::Time expiration_time_;
 
   std::unique_ptr<syncer::SyncSetupInProgressHandle> sync_blocker_;

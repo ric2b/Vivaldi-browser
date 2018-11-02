@@ -31,13 +31,12 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/RemoteFrameClient.h"
 #include "core/page/ChromeClient.h"
-#include "core/page/ContextMenuClient.h"
-#include "core/page/EditorClient.h"
 #include "core/page/Page.h"
 #include "platform/DragImage.h"
 #include "platform/WebFrameScheduler.h"
@@ -80,7 +79,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
  public:
   static EmptyChromeClient* Create() { return new EmptyChromeClient; }
 
-  ~EmptyChromeClient() override {}
+  ~EmptyChromeClient() override = default;
   void ChromeDestroyed() override {}
 
   WebViewImpl* GetWebView() const override { return nullptr; }
@@ -89,7 +88,7 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
 
   IntRect PageRect() override { return IntRect(); }
 
-  void Focus() override {}
+  void Focus(LocalFrame*) override {}
 
   bool CanTakeFocus(WebFocusType) override { return false; }
   void TakeFocus(WebFocusType) override {}
@@ -229,11 +228,9 @@ class CORE_EXPORT EmptyChromeClient : public ChromeClient {
 };
 
 class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
-  WTF_MAKE_NONCOPYABLE(EmptyLocalFrameClient);
-
  public:
   static EmptyLocalFrameClient* Create() { return new EmptyLocalFrameClient; }
-  ~EmptyLocalFrameClient() override {}
+  ~EmptyLocalFrameClient() override = default;
 
   bool HasWebView() const override { return true; }  // mainly for assertions
 
@@ -263,7 +260,9 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
                                        ResourceRequest&) override {}
   void DispatchDidReceiveTitle(const String&) override {}
   void DispatchDidChangeIcons(IconType) override {}
-  void DispatchDidCommitLoad(HistoryItem*, HistoryCommitType) override {}
+  void DispatchDidCommitLoad(HistoryItem*,
+                             HistoryCommitType,
+                             WebGlobalObjectReusePolicy) override {}
   void DispatchDidFailProvisionalLoad(const ResourceError&,
                                       HistoryCommitType) override {}
   void DispatchDidFailLoad(const ResourceError&, HistoryCommitType) override {}
@@ -290,6 +289,8 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   void ProgressEstimateChanged(double) override {}
   void DidStopLoading() override {}
 
+  void ForwardResourceTimingToParent(const WebResourceTimingInfo&) override {}
+
   void DownloadURL(const ResourceRequest&,
                    const String& suggested_name) override {}
   void LoadErrorPage(int reason) override {}
@@ -310,21 +311,21 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   bool NavigateBackForward(int offset) const override { return false; }
   void DidDisplayInsecureContent() override {}
   void DidContainInsecureFormAction() override {}
-  void DidRunInsecureContent(SecurityOrigin*, const KURL&) override {}
+  void DidRunInsecureContent(const SecurityOrigin*, const KURL&) override {}
   void DidDetectXSS(const KURL&, bool) override {}
   void DidDispatchPingLoader(const KURL&) override {}
-  void DidDisplayContentWithCertificateErrors(const KURL&) override {}
-  void DidRunContentWithCertificateErrors(const KURL&) override {}
+  void DidDisplayContentWithCertificateErrors() override {}
+  void DidRunContentWithCertificateErrors() override {}
   void SelectorMatchChanged(const Vector<String>&,
                             const Vector<String>&) override {}
   LocalFrame* CreateFrame(const AtomicString&, HTMLFrameOwnerElement*) override;
-  PluginView* CreatePlugin(HTMLPlugInElement&,
-                           const KURL&,
-                           const Vector<String>&,
-                           const Vector<String>&,
-                           const String&,
-                           bool,
-                           DetachedPluginPolicy) override;
+  WebPluginContainerImpl* CreatePlugin(HTMLPlugInElement&,
+                                       const KURL&,
+                                       const Vector<String>&,
+                                       const Vector<String>&,
+                                       const String&,
+                                       bool,
+                                       DetachedPluginPolicy) override;
   bool CanCreatePluginWithoutRenderer(const String& mime_type) const override {
     return false;
   }
@@ -364,68 +365,47 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
   std::unique_ptr<WebApplicationCacheHost> CreateApplicationCacheHost(
       WebApplicationCacheHostClient*) override;
 
+  void SetTextCheckerClientForTesting(WebTextCheckClient*);
   WebTextCheckClient* GetTextCheckerClient() const override;
+
   std::unique_ptr<WebURLLoaderFactory> CreateURLLoaderFactory() override {
     return Platform::Current()->CreateDefaultURLLoaderFactory();
   }
 
   void AnnotatedRegionsChanged() override {}
-  String GetInstrumentationToken() override { return g_empty_string; };
+  String GetDevToolsFrameToken() const override { return g_empty_string; };
+  String evaluateInInspectorOverlayForTesting(const String& script) override {
+    return g_empty_string;
+  }
+
+  Frame* FindFrame(const AtomicString& name) const override;
 
  protected:
-  EmptyLocalFrameClient() {}
+  EmptyLocalFrameClient() = default;
+
+  // Not owned
+  WebTextCheckClient* text_check_client_;
 
   ContentSettingsClient content_settings_client_;
   service_manager::InterfaceProvider interface_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(EmptyLocalFrameClient);
 };
 
 class EmptySpellCheckPanelHostClient : public WebSpellCheckPanelHostClient {
-  WTF_MAKE_NONCOPYABLE(EmptySpellCheckPanelHostClient);
   USING_FAST_MALLOC(EmptySpellCheckPanelHostClient);
 
  public:
-  EmptySpellCheckPanelHostClient() {}
+  EmptySpellCheckPanelHostClient() = default;
 
   void ShowSpellingUI(bool) override {}
   bool IsShowingSpellingUI() override { return false; }
   void UpdateSpellingUIWithMisspelledWord(const WebString&) override {}
-};
 
-class EmptyEditorClient final : public EditorClient {
-  WTF_MAKE_NONCOPYABLE(EmptyEditorClient);
-  USING_FAST_MALLOC(EmptyEditorClient);
-
- public:
-  EmptyEditorClient() : EditorClient() {}
-  ~EmptyEditorClient() override {}
-
-  void RespondToChangedContents() override {}
-  void RespondToChangedSelection(LocalFrame*, SelectionType) override {}
-
-  bool CanCopyCut(LocalFrame*, bool default_value) const override {
-    return default_value;
-  }
-  bool CanPaste(LocalFrame*, bool default_value) const override {
-    return default_value;
-  }
-
-  bool HandleKeyboardEvent(LocalFrame*) override { return false; }
-};
-
-class EmptyContextMenuClient final : public ContextMenuClient {
-  WTF_MAKE_NONCOPYABLE(EmptyContextMenuClient);
-  USING_FAST_MALLOC(EmptyContextMenuClient);
-
- public:
-  EmptyContextMenuClient() : ContextMenuClient() {}
-  ~EmptyContextMenuClient() override {}
-  bool ShowContextMenu(const ContextMenu*, WebMenuSourceType) override;
-  void ClearContextMenu() override {}
+  DISALLOW_COPY_AND_ASSIGN(EmptySpellCheckPanelHostClient);
 };
 
 class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
-  WTF_MAKE_NONCOPYABLE(EmptyRemoteFrameClient);
-
  public:
   EmptyRemoteFrameClient();
 
@@ -435,9 +415,10 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   void Reload(FrameLoadType, ClientRedirectPolicy) override {}
   unsigned BackForwardLength() override { return 0; }
   void ForwardPostMessage(MessageEvent*,
-                          scoped_refptr<SecurityOrigin> target,
+                          scoped_refptr<const SecurityOrigin> target,
                           LocalFrame* source_frame) const override {}
-  void FrameRectsChanged(const IntRect& frame_rect) override {}
+  void FrameRectsChanged(const IntRect& local_frame_rect,
+                         const IntRect& transformed_frame_rect) override {}
   void UpdateRemoteViewportIntersection(
       const IntRect& viewport_intersection) override {}
   void AdvanceFocus(WebFocusType, LocalFrame* source) override {}
@@ -448,7 +429,6 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
 
   // FrameClient implementation.
   bool InShadowTree() const override { return false; }
-  void WillBeDetached() override {}
   void Detached(FrameDetachType) override {}
   Frame* Opener() const override { return nullptr; }
   void SetOpener(Frame*) override {}
@@ -457,6 +437,9 @@ class CORE_EXPORT EmptyRemoteFrameClient : public RemoteFrameClient {
   Frame* NextSibling() const override { return nullptr; }
   Frame* FirstChild() const override { return nullptr; }
   void FrameFocused() const override {}
+  String GetDevToolsFrameToken() const override { return g_empty_string; };
+
+  DISALLOW_COPY_AND_ASSIGN(EmptyRemoteFrameClient);
 };
 
 CORE_EXPORT void FillWithEmptyClients(Page::PageClients&);

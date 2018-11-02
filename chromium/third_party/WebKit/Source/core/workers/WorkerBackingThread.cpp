@@ -5,6 +5,7 @@
 #include "core/workers/WorkerBackingThread.h"
 
 #include <memory>
+#include "base/location.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ContextSnapshot.h"
 #include "bindings/core/v8/V8GCController.h"
@@ -18,7 +19,6 @@
 #include "platform/runtime_enabled_features.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTraceLocation.h"
 #include "public/web/WebKit.h"
 
 namespace blink {
@@ -68,7 +68,7 @@ WorkerBackingThread::WorkerBackingThread(WebThread* thread,
       is_owning_thread_(false),
       should_call_gc_on_shutdown_(should_call_gc_on_shutdown) {}
 
-WorkerBackingThread::~WorkerBackingThread() {}
+WorkerBackingThread::~WorkerBackingThread() = default;
 
 void WorkerBackingThread::InitializeOnBackingThread(
     const WorkerBackingThreadStartupData& startup_data) {

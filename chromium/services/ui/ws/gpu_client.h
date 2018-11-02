@@ -46,7 +46,10 @@ class GpuClient : public mojom::Gpu {
   // mojom::Gpu overrides:
   void EstablishGpuChannel(
       const EstablishGpuChannelCallback& callback) override;
+
+  // FEATURE_FORCE_ACCESS_TO_GPU
   void SetForceAllowAccessToGpu(bool enable) override {}
+
   void CreateJpegDecodeAccelerator(
       media::mojom::JpegDecodeAcceleratorRequest jda_request) override;
   void CreateVideoEncodeAcceleratorProvider(

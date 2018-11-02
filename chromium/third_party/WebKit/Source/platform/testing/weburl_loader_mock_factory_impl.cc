@@ -31,7 +31,7 @@ WebURLLoaderMockFactoryImpl::WebURLLoaderMockFactoryImpl(
     TestingPlatformSupport* platform)
     : platform_(platform) {}
 
-WebURLLoaderMockFactoryImpl::~WebURLLoaderMockFactoryImpl() {}
+WebURLLoaderMockFactoryImpl::~WebURLLoaderMockFactoryImpl() = default;
 
 std::unique_ptr<WebURLLoader> WebURLLoaderMockFactoryImpl::CreateURLLoader(
     std::unique_ptr<WebURLLoader> default_loader) {
@@ -103,7 +103,8 @@ void WebURLLoaderMockFactoryImpl::UnregisterAllURLsAndClearMemoryCache() {
   url_to_response_info_.clear();
   url_to_error_info_.clear();
   protocol_to_response_info_.clear();
-  GetMemoryCache()->EvictResources();
+  if (IsMainThread())
+    GetMemoryCache()->EvictResources();
 }
 
 void WebURLLoaderMockFactoryImpl::ServeAsynchronousRequests() {
@@ -111,7 +112,7 @@ void WebURLLoaderMockFactoryImpl::ServeAsynchronousRequests() {
   // pending_loaders_ as it might get modified.
   while (!pending_loaders_.IsEmpty()) {
     LoaderToRequestMap::iterator iter = pending_loaders_.begin();
-    WeakPtr<WebURLLoaderMock> loader(iter->key->GetWeakPtr());
+    base::WeakPtr<WebURLLoaderMock> loader(iter->key->GetWeakPtr());
     const WebURLRequest request = iter->value;
     pending_loaders_.erase(loader.get());
 

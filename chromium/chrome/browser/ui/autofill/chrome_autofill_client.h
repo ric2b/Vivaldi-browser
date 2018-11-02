@@ -14,12 +14,14 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller_impl.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
 #if !defined(OS_ANDROID)
+#include "components/autofill/core/browser/ui/save_card_bubble_controller.h"
 #include "components/zoom/zoom_observer.h"
 #endif  // !defined(OS_ANDROID)
 
@@ -109,8 +111,9 @@ class ChromeAutofillClient
 #endif  // !defined(OS_ANDROID)
 
  private:
-  explicit ChromeAutofillClient(content::WebContents* web_contents);
   friend class content::WebContentsUserData<ChromeAutofillClient>;
+
+  explicit ChromeAutofillClient(content::WebContents* web_contents);
 
   void ShowHttpNotSecureExplanation();
 

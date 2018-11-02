@@ -107,8 +107,26 @@ int HostResolverMojo::ResolveFromCache(const RequestInfo& info,
   return ResolveFromCacheInternal(info, CacheKeyForRequest(info), addresses);
 }
 
+int HostResolverMojo::ResolveStaleFromCache(
+    const RequestInfo& info,
+    AddressList* addresses,
+    HostCache::EntryStaleness* stale_info,
+    const NetLogWithSource& net_log) {
+  NOTREACHED();
+  return ERR_UNEXPECTED;
+}
+
 HostCache* HostResolverMojo::GetHostCache() {
   return host_cache_.get();
+}
+
+bool HostResolverMojo::HasCached(base::StringPiece hostname,
+                                 HostCache::Entry::Source* source_out,
+                                 HostCache::EntryStaleness* stale_out) const {
+  if (!host_cache_)
+    return false;
+
+  return host_cache_->HasEntry(hostname, source_out, stale_out);
 }
 
 int HostResolverMojo::ResolveFromCacheInternal(const RequestInfo& info,

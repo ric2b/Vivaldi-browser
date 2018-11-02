@@ -4,6 +4,7 @@
 
 #include "core/workers/WorkerInspectorProxy.h"
 
+#include "base/location.h"
 #include "core/frame/FrameConsole.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -16,7 +17,6 @@
 #include "platform/WebTaskRunner.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/KURL.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -42,7 +42,7 @@ WorkerInspectorProxy* WorkerInspectorProxy::Create() {
   return new WorkerInspectorProxy();
 }
 
-WorkerInspectorProxy::~WorkerInspectorProxy() {}
+WorkerInspectorProxy::~WorkerInspectorProxy() = default;
 
 const String& WorkerInspectorProxy::InspectorId() {
   if (inspector_id_.IsEmpty())
@@ -178,14 +178,5 @@ void WorkerInspectorProxy::WriteTimelineStartedEvent(
 void WorkerInspectorProxy::Trace(blink::Visitor* visitor) {
   visitor->Trace(execution_context_);
 }
-
-GlobalScopeInspectorCreationParams::GlobalScopeInspectorCreationParams(
-    WorkerInspectorProxy::PauseOnWorkerStart pause_on_start,
-    const v8_inspector::V8StackTraceId& stack_id)
-    : pause_on_start(pause_on_start), stack_id(stack_id) {}
-
-GlobalScopeInspectorCreationParams::GlobalScopeInspectorCreationParams(
-    WorkerInspectorProxy::PauseOnWorkerStart pause_on_start)
-    : pause_on_start(pause_on_start) {}
 
 }  // namespace blink

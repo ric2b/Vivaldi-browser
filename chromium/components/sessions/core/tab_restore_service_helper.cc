@@ -9,9 +9,9 @@
 
 #include <algorithm>
 #include <iterator>
+#include <memory>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -25,8 +25,6 @@
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service_client.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
-
-#include "app/vivaldi_apptools.h"
 
 namespace sessions {
 
@@ -91,7 +89,7 @@ void TabRestoreServiceHelper::CreateHistoricalTab(LiveTab* live_tab,
   if (closing_contexts_.find(context) != closing_contexts_.end())
     return;
 
-  auto local_tab = base::MakeUnique<Tab>();
+  auto local_tab = std::make_unique<Tab>();
   PopulateTab(local_tab.get(), index, context, live_tab);
   if (local_tab->navigations.empty())
     return;
@@ -102,7 +100,7 @@ void TabRestoreServiceHelper::CreateHistoricalTab(LiveTab* live_tab,
 void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
   closing_contexts_.insert(context);
 
-  auto window = base::MakeUnique<Window>();
+  auto window = std::make_unique<Window>();
   window->selected_tab_index = context->GetSelectedIndex();
   window->timestamp = TimeNow();
   window->app_name = context->GetAppName();
@@ -112,7 +110,7 @@ void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
   window->ext_data = context->GetExtData();
 
   for (int tab_index = 0; tab_index < context->GetTabCount(); ++tab_index) {
-    auto tab = base::MakeUnique<Tab>();
+    auto tab = std::make_unique<Tab>();
     PopulateTab(tab.get(), tab_index, context,
                 context->GetLiveTabAt(tab_index));
     if (!tab->navigations.empty()) {
@@ -121,10 +119,7 @@ void TabRestoreServiceHelper::BrowserClosing(LiveTabContext* context) {
     }
   }
 
-  // gisli@vivaldi.com:  For vivaldi we want the singleton windows  intact.
-  //                     Will handle it in the UI.
-  if (window->tabs.size() == 1 && window->app_name.empty() &&
-    !vivaldi::IsVivaldiRunning()) {
+  if (window->tabs.size() == 1 && window->app_name.empty()) {
     // Short-circuit creating a Window if only 1 tab was present. This fixes
     // http://crbug.com/56744.
     AddEntry(std::move(window->tabs[0]), true, true);
@@ -477,8 +472,7 @@ LiveTabContext* TabRestoreServiceHelper::RestoreTab(
       tab_index = tab.tabstrip_index;
     } else {
       context = client_->CreateLiveTabContext(
-          std::string(), gfx::Rect(), ui::SHOW_STATE_NORMAL, std::string(),
-          std::string());
+          std::string(), gfx::Rect(), ui::SHOW_STATE_NORMAL, std::string());
       if (tab.browser_id)
         UpdateTabBrowserIDs(tab.browser_id, context->GetSessionID().id());
     }

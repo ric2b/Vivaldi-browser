@@ -47,7 +47,7 @@ HTMLImportLoader::HTMLImportLoader(HTMLImportsController* controller)
       state_(kStateLoading),
       microtask_queue_(V0CustomElementSyncMicrotaskQueue::Create()) {}
 
-HTMLImportLoader::~HTMLImportLoader() {}
+HTMLImportLoader::~HTMLImportLoader() = default;
 
 void HTMLImportLoader::Dispose() {
   controller_ = nullptr;
@@ -58,10 +58,6 @@ void HTMLImportLoader::Dispose() {
     document_.Clear();
   }
   ClearResource();
-}
-
-void HTMLImportLoader::StartLoading(RawResource* resource) {
-  SetResource(resource);
 }
 
 void HTMLImportLoader::ResponseReceived(
@@ -210,7 +206,7 @@ void HTMLImportLoader::Trace(blink::Visitor* visitor) {
   visitor->Trace(document_);
   visitor->Trace(microtask_queue_);
   DocumentParserClient::Trace(visitor);
-  ResourceOwner<RawResource>::Trace(visitor);
+  RawResourceClient::Trace(visitor);
 }
 
 }  // namespace blink

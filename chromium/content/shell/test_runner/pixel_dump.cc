@@ -153,10 +153,10 @@ void PrintFrameAsync(blink::WebLocalFrame* web_frame,
                      base::OnceCallback<void(const SkBitmap&)> callback) {
   DCHECK(web_frame);
   DCHECK(!callback.is_null());
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CapturePixelsForPrinting, base::Unretained(web_frame),
-                     base::Passed(std::move(callback))));
+  web_frame->GetTaskRunner(blink::TaskType::kInternalTest)
+      ->PostTask(FROM_HERE, base::BindOnce(&CapturePixelsForPrinting,
+                                           base::Unretained(web_frame),
+                                           base::Passed(std::move(callback))));
 }
 
 base::OnceCallback<void(const SkBitmap&)>
@@ -183,19 +183,20 @@ void CopyImageAtAndCapturePixels(
   DCHECK(!callback.is_null());
   uint64_t sequence_number =
       blink::Platform::Current()->Clipboard()->SequenceNumber(
-          blink::WebClipboard::Buffer());
+          blink::mojom::ClipboardBuffer::kStandard);
   web_frame->CopyImageAt(blink::WebPoint(x, y));
   if (sequence_number ==
       blink::Platform::Current()->Clipboard()->SequenceNumber(
-          blink::WebClipboard::Buffer())) {
+          blink::mojom::ClipboardBuffer::kStandard)) {
     SkBitmap emptyBitmap;
     std::move(callback).Run(emptyBitmap);
     return;
   }
 
-  blink::WebImage image = static_cast<blink::WebMockClipboard*>(
-                              blink::Platform::Current()->Clipboard())
-                              ->ReadRawImage(blink::WebClipboard::Buffer());
+  blink::WebImage image =
+      static_cast<blink::WebMockClipboard*>(
+          blink::Platform::Current()->Clipboard())
+          ->ReadRawImage(blink::mojom::ClipboardBuffer::kStandard);
   std::move(callback).Run(image.GetSkBitmap());
 }
 

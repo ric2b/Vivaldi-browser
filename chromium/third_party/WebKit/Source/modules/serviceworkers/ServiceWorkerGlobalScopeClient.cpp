@@ -33,8 +33,8 @@
 #include <memory>
 #include <utility>
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/Response.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "modules/fetch/Response.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/modules/payments/WebPaymentHandlerResponse.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
@@ -67,7 +67,7 @@ void ServiceWorkerGlobalScopeClient::OpenWindowForClients(
 void ServiceWorkerGlobalScopeClient::OpenWindowForPaymentHandler(
     const WebURL& url,
     std::unique_ptr<WebServiceWorkerClientCallbacks> callbacks) {
-  client_.OpenNewPopup(url, std::move(callbacks));
+  client_.OpenPaymentHandlerWindow(url, std::move(callbacks));
 }
 
 void ServiceWorkerGlobalScopeClient::SetCachedMetadata(const WebURL& url,

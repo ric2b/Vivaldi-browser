@@ -35,8 +35,6 @@
 #include "core/css/MediaList.h"
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/dom/Document.h"
-#include "core/dom/ModuleScript.h"
-#include "core/dom/ScriptLoader.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -51,6 +49,8 @@
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/loader/private/PrerenderHandle.h"
 #include "core/loader/resource/LinkFetchResource.h"
+#include "core/script/ModuleScript.h"
+#include "core/script/ScriptLoader.h"
 #include "platform/Prerender.h"
 #include "platform/loader/LinkHeader.h"
 #include "platform/loader/SubresourceIntegrity.h"
@@ -130,7 +130,7 @@ LinkLoader::LinkLoader(LinkLoaderClient* client,
   DCHECK(client_);
 }
 
-LinkLoader::~LinkLoader() {}
+LinkLoader::~LinkLoader() = default;
 
 void LinkLoader::NotifyFinished() {
   DCHECK(finish_observer_);
@@ -146,7 +146,7 @@ void LinkLoader::NotifyModuleLoadFinished(ModuleScript* module) {
   // Step 11. "If result is null, fire an event named error at the link element,
   // and return." [spec text]
   // Step 12. "Fire an event named load at the link element." [spec text]
-  if (!module || module->IsErrored())
+  if (!module)
     client_->LinkLoadingErrored();
   else
     client_->LinkLoaded();
@@ -262,9 +262,9 @@ WTF::Optional<Resource::Type> LinkLoader::GetResourceTypeFromAsAttribute(
   } else if (as == "style") {
     return Resource::kCSSStyleSheet;
   } else if (as == "video") {
-    return Resource::kMedia;
+    return Resource::kVideo;
   } else if (as == "audio") {
-    return Resource::kMedia;
+    return Resource::kAudio;
   } else if (as == "track") {
     return Resource::kTextTrack;
   } else if (as == "font") {
@@ -292,7 +292,8 @@ static bool IsSupportedType(Resource::Type resource_type,
       return MIMETypeRegistry::IsSupportedStyleSheetMIMEType(mime_type);
     case Resource::kFont:
       return MIMETypeRegistry::IsSupportedFontMIMEType(mime_type);
-    case Resource::kMedia:
+    case Resource::kAudio:
+    case Resource::kVideo:
       return MIMETypeRegistry::IsSupportedMediaMIMEType(mime_type, String());
     case Resource::kTextTrack:
       return MIMETypeRegistry::IsSupportedTextTrackMIMEType(mime_type);
@@ -392,7 +393,7 @@ static Resource* PreloadIfNeeded(const LinkRelAttribute& rel_attribute,
   }
   link_fetch_params.SetLinkPreload(true);
   return document.Loader()->StartPreload(resource_type.value(),
-                                         link_fetch_params);
+                                         link_fetch_params, nullptr);
 }
 
 // https://html.spec.whatwg.org/#link-type-modulepreload
@@ -658,8 +659,8 @@ bool LinkLoader::LoadLink(
 
 void LinkLoader::DispatchLinkLoadingErroredAsync() {
   client_->GetLoadingTaskRunner()->PostTask(
-      BLINK_FROM_HERE, WTF::Bind(&LinkLoaderClient::LinkLoadingErrored,
-                                 WrapPersistent(client_.Get())));
+      FROM_HERE, WTF::Bind(&LinkLoaderClient::LinkLoadingErrored,
+                           WrapPersistent(client_.Get())));
 }
 
 void LinkLoader::Abort() {

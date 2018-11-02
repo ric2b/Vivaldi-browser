@@ -33,6 +33,11 @@ cr.define('extensions', function() {
     is: 'extensions-manager',
 
     properties: {
+      canLoadUnpacked: {
+        type: Boolean,
+        value: false,
+      },
+
       // This is not typed because it implements multiple interfaces, and is
       // passed to different elements as different types.
       delegate: {
@@ -52,6 +57,22 @@ cr.define('extensions', function() {
       inDevMode: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('inDevMode'),
+      },
+
+      devModeControlledByPolicy: {
+        type: Boolean,
+        value: false,
+      },
+
+      /** @private */
+      isSupervised_: {
+        type: Boolean,
+        value: false,
+      },
+
+      incognitoAvailable_: {
+        type: Boolean,
+        value: false,
       },
 
       filter: {
@@ -153,7 +174,12 @@ cr.define('extensions', function() {
       let service = extensions.Service.getInstance();
 
       let onProfileStateChanged = profileInfo => {
+        this.isSupervised_ = profileInfo.isSupervised;
+        this.incognitoAvailable_ = profileInfo.isIncognitoAvailable;
+        this.devModeControlledByPolicy =
+            profileInfo.isDeveloperModeControlledByPolicy;
         this.inDevMode = profileInfo.inDeveloperMode;
+        this.canLoadUnpacked = profileInfo.canLoadUnpacked;
       };
       service.getProfileStateChangedTarget().addListener(onProfileStateChanged);
       service.getProfileConfiguration().then(onProfileStateChanged);
@@ -216,6 +242,7 @@ cr.define('extensions', function() {
         case EventType.ERROR_ADDED:
         case EventType.ERRORS_REMOVED:
         case EventType.PREFS_CHANGED:
+        case EventType.WARNINGS_CHANGED:
           // |extensionInfo| can be undefined in the case of an extension
           // being unloaded right before uninstallation. There's nothing to do
           // here.
@@ -410,11 +437,7 @@ cr.define('extensions', function() {
      * @private
      */
     changePage_: function(newPage) {
-      const drawer = this.$$('#drawer');
-      if (drawer && drawer.open) {
-        drawer.closeDrawer();
-        this.showDrawer_ = false;
-      }
+      this.onCloseDrawer_();
 
       const optionsDialog = this.$$('#options-dialog');
       if (optionsDialog && optionsDialog.open) {
@@ -456,9 +479,24 @@ cr.define('extensions', function() {
       this.currentPage_ = newPage;
     },
 
-    /** @private */
+    /**
+     * This method detaches the drawer dialog completely. Should only be
+     * triggered by the dialog's 'close' event.
+     * @private
+     */
     onDrawerClose_: function() {
       this.showDrawer_ = false;
+    },
+
+    /**
+     * This method animates the closing of the drawer.
+     * @private
+     */
+    onCloseDrawer_: function() {
+      const drawer = this.$$('#drawer');
+      if (drawer && drawer.open) {
+        drawer.closeDrawer();
+      }
     },
 
     /** @private */

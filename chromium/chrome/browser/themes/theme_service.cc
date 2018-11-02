@@ -23,12 +23,14 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/theme_installed_infobar_delegate.h"
+#include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/browser_theme_pack.h"
 #include "chrome/browser/themes/custom_theme_supplier.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/themes/theme_syncable_service.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -492,7 +494,7 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
           ui::GetAuraColor(id == ThemeProperties::COLOR_TAB_THROBBER_SPINNING
                                ? ui::NativeTheme::kColorId_ThrobberSpinningColor
                                : ui::NativeTheme::kColorId_ThrobberWaitingColor,
-                           nullptr);
+                           ui::NativeTheme::GetInstanceForNativeUi());
       color_utils::HSL hsl = GetTint(ThemeProperties::TINT_BUTTONS, incognito);
       return color_utils::HSLShift(base_color, hsl);
     }
@@ -700,6 +702,13 @@ gfx::ImageSkia* ThemeService::GetImageSkiaNamed(int id, bool incognito) const {
 
 SkColor ThemeService::GetColor(int id, bool incognito) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  // The incognito NTP always uses the default background color, unless there is
+  // a custom NTP background image. See also https://crbug.com/21798#c114.
+  if (id == ThemeProperties::COLOR_NTP_BACKGROUND && incognito &&
+      !HasCustomImage(IDR_THEME_NTP_BACKGROUND)) {
+    return ThemeProperties::GetDefaultColor(id, incognito);
+  }
 
   // For legacy reasons, |theme_supplier_| requires the incognito variants
   // of color IDs.
@@ -917,9 +926,22 @@ void ThemeService::OnThemeBuiltFromExtension(
   }
 
   // Offer to revert to the old theme.
-  if (can_revert_theme && !suppress_infobar) {
-    ThemeInstalledInfoBarDelegate::Create(
-        extension, profile_, previous_theme_id, previous_using_system_theme);
+  if (can_revert_theme && !suppress_infobar && extension->is_theme()) {
+    // FindTabbedBrowser() is called with |match_original_profiles| true because
+    // a theme install in either a normal or incognito window for a profile
+    // affects all normal and incognito windows for that profile.
+    Browser* browser = chrome::FindTabbedBrowser(profile_, true);
+    if (browser) {
+      content::WebContents* web_contents =
+          browser->tab_strip_model()->GetActiveWebContents();
+      if (web_contents) {
+        ThemeInstalledInfoBarDelegate::Create(
+            InfoBarService::FromWebContents(web_contents),
+            extensions::ExtensionSystem::Get(profile_)->extension_service(),
+            ThemeServiceFactory::GetForProfile(profile_), extension->name(),
+            extension->id(), previous_theme_id, previous_using_system_theme);
+      }
+    }
   }
   building_extension_id_.clear();
 }

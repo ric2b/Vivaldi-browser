@@ -20,12 +20,12 @@
 #ifndef SVGElementRareData_h
 #define SVGElementRareData_h
 
+#include "base/macros.h"
 #include "core/style/ComputedStyle.h"
 #include "core/svg/SVGElement.h"
 #include "platform/heap/Handle.h"
 #include "platform/transforms/AffineTransform.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -33,12 +33,9 @@ class SVGElementProxySet;
 
 class SVGElementRareData
     : public GarbageCollectedFinalized<SVGElementRareData> {
-  WTF_MAKE_NONCOPYABLE(SVGElementRareData);
-
  public:
-  SVGElementRareData(SVGElement* owner)
-      : owner_(owner),
-        corresponding_element_(nullptr),
+  SVGElementRareData()
+      : corresponding_element_(nullptr),
         instances_updates_blocked_(false),
         use_override_computed_style_(false),
         needs_override_computed_style_update_(false),
@@ -105,7 +102,6 @@ class SVGElementRareData
   void Trace(blink::Visitor*);
 
  private:
-  Member<SVGElement> owner_;
   SVGElementSet outgoing_references_;
   SVGElementSet incoming_references_;
   HeapHashSet<WeakMember<SVGElement>> element_instances_;
@@ -120,6 +116,7 @@ class SVGElementRareData
   scoped_refptr<ComputedStyle> override_computed_style_;
   // Used by <animateMotion>
   AffineTransform animate_motion_transform_;
+  DISALLOW_COPY_AND_ASSIGN(SVGElementRareData);
 };
 
 }  // namespace blink

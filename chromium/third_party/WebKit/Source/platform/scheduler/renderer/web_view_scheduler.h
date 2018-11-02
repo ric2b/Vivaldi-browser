@@ -18,13 +18,13 @@ class PLATFORM_EXPORT WebViewScheduler {
  public:
   class PLATFORM_EXPORT WebViewSchedulerDelegate {
    public:
-    virtual ~WebViewSchedulerDelegate() {}
+    virtual ~WebViewSchedulerDelegate() = default;
 
     virtual void RequestBeginMainFrameNotExpected(bool new_state) = 0;
     virtual void SetPageStopped(bool) = 0;
   };
 
-  virtual ~WebViewScheduler() {}
+  virtual ~WebViewScheduler() = default;
 
   // The scheduler may throttle tasks associated with background pages.
   virtual void SetPageVisible(bool) = 0;
@@ -86,7 +86,7 @@ class PLATFORM_EXPORT WebViewScheduler {
 
   class PLATFORM_EXPORT VirtualTimeObserver {
    public:
-    virtual ~VirtualTimeObserver() {}
+    virtual ~VirtualTimeObserver() = default;
 
     // Called when virtual time advances. |virtual_time_offset| is the offset
     // between the current virtual time and the initial virtual time when
@@ -109,7 +109,7 @@ class PLATFORM_EXPORT WebViewScheduler {
   // policy is not affected when the budget expires.
   virtual void GrantVirtualTimeBudget(
       base::TimeDelta budget,
-      WTF::Closure budget_exhausted_callback) = 0;
+      base::OnceClosure budget_exhausted_callback) = 0;
 
   // It's possible for pages to send infinite messages which can arbitrarily
   // block virtual time.  We can prevent this by setting an upper limit on the

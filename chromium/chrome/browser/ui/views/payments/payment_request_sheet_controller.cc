@@ -47,7 +47,7 @@ class SheetView : public views::View, public views::FocusTraversable {
   explicit SheetView(
       const base::Callback<bool()>& enter_key_accelerator_callback)
       : first_focusable_(nullptr),
-        focus_search_(base::MakeUnique<views::FocusSearch>(this, true, false)),
+        focus_search_(std::make_unique<views::FocusSearch>(this, true, false)),
         enter_key_accelerator_(ui::Accelerator(ui::VKEY_RETURN, ui::EF_NONE)),
         enter_key_accelerator_callback_(enter_key_accelerator_callback) {
     if (enter_key_accelerator_callback_)
@@ -162,7 +162,7 @@ class BorderedScrollView : public views::ScrollView {
   BorderedScrollView() : views::ScrollView() {
     SetBackgroundColor(SK_ColorWHITE);
     SetBorder(views::CreateBorderPainter(
-        base::MakeUnique<BorderedScrollViewBorderPainter>(
+        std::make_unique<BorderedScrollViewBorderPainter>(
             GetNativeTheme()->GetSystemColor(
                 ui::NativeTheme::kColorId_SeparatorColor),
             this),
@@ -201,7 +201,7 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   // before creating the sheet view. This way, it's possible to determine
   // whether there's something to do when the user hits enter.
   std::unique_ptr<views::View> footer = CreateFooterView();
-  std::unique_ptr<SheetView> view = base::MakeUnique<SheetView>(
+  std::unique_ptr<SheetView> view = std::make_unique<SheetView>(
       primary_button_
           ? base::Bind(
                 &PaymentRequestSheetController::PerformPrimaryButtonAction,
@@ -218,7 +218,8 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   // layer) won't do proper clipping.
   view->SetPaintToLayer();
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(view.get());
+  views::GridLayout* layout =
+      view->SetLayoutManager(std::make_unique<views::GridLayout>(view.get()));
 
   // Note: each view is responsible for its own padding (insets).
   views::ColumnSet* columns = layout->AddColumnSet(0);
@@ -236,7 +237,8 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   // otherwise it'll be sized to the ScrollView's viewport height, preventing
   // the scroll bar from ever being shown.
   pane_ = new views::View;
-  views::GridLayout* pane_layout = views::GridLayout::CreateAndInstall(pane_);
+  views::GridLayout* pane_layout =
+      pane_->SetLayoutManager(std::make_unique<views::GridLayout>(pane_));
   views::ColumnSet* pane_columns = pane_layout->AddColumnSet(0);
   pane_columns->AddColumn(views::GridLayout::Alignment::FILL,
                           views::GridLayout::Alignment::LEADING, 0,
@@ -252,7 +254,7 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   pane_layout->AddView(content_view_);
   pane_->SizeToPreferredSize();
 
-  scroll_ = base::MakeUnique<BorderedScrollView>();
+  scroll_ = std::make_unique<BorderedScrollView>();
   scroll_->set_owned_by_client();
   scroll_->set_hide_horizontal_scrollbar(true);
   scroll_->SetContents(pane_);
@@ -319,6 +321,9 @@ PaymentRequestSheetController::CreateExtraFooterView() {
 
 void PaymentRequestSheetController::ButtonPressed(views::Button* sender,
                                                   const ui::Event& event) {
+  if (!dialog()->IsInteractive())
+    return;
+
   switch (static_cast<PaymentRequestCommonTags>(sender->tag())) {
     case PaymentRequestCommonTags::CLOSE_BUTTON_TAG:
       dialog()->CloseDialog();
@@ -336,22 +341,22 @@ void PaymentRequestSheetController::ButtonPressed(views::Button* sender,
 }
 
 std::unique_ptr<views::View> PaymentRequestSheetController::CreateFooterView() {
-  std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
+  std::unique_ptr<views::View> container = std::make_unique<views::View>();
 
   // The distance between the elements and the dialog borders.
   constexpr int kInset = 16;
   container->SetBorder(
       views::CreateEmptyBorder(kInset, kInset, kInset, kInset));
 
-  views::GridLayout* layout =
-      views::GridLayout::CreateAndInstall(container.get());
+  views::GridLayout* layout = container->SetLayoutManager(
+      std::make_unique<views::GridLayout>(container.get()));
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
-  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
-                     0, views::GridLayout::USE_PREF, 0, 0);
+  columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 0,
+                     views::GridLayout::USE_PREF, 0, 0);
   columns->AddPaddingColumn(1, 0);
-  columns->AddColumn(views::GridLayout::TRAILING, views::GridLayout::CENTER,
-                     0, views::GridLayout::USE_PREF, 0, 0);
+  columns->AddColumn(views::GridLayout::TRAILING, views::GridLayout::CENTER, 0,
+                     views::GridLayout::USE_PREF, 0, 0);
 
   layout->StartRow(0, 0);
   std::unique_ptr<views::View> extra_view = CreateExtraFooterView();
@@ -361,11 +366,12 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateFooterView() {
     layout->SkipColumns(1);
 
   std::unique_ptr<views::View> trailing_buttons_container =
-      base::MakeUnique<views::View>();
+      std::make_unique<views::View>();
 
   trailing_buttons_container->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
-                           kPaymentRequestButtonSpacing));
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal,
+                                         gfx::Insets(),
+                                         kPaymentRequestButtonSpacing));
 
 #if defined(OS_MACOSX)
   AddSecondaryButton(trailing_buttons_container.get());
@@ -394,6 +400,10 @@ bool PaymentRequestSheetController::GetSheetId(DialogViewID* sheet_id) {
 }
 
 bool PaymentRequestSheetController::PerformPrimaryButtonAction() {
+  // Return "true" to prevent other views from handling the event.
+  if (!dialog()->IsInteractive())
+    return true;
+
   if (primary_button_ && primary_button_->enabled())
     ButtonPressed(primary_button_.get(), DummyEvent());
   return true;

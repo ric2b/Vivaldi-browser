@@ -6,8 +6,8 @@
 
 #include "ash/login/ui/hover_notifier.h"
 #include "ash/login/ui/login_button.h"
-#include "ash/login/ui/login_constants.h"
 #include "ash/login/ui/non_accessible_view.h"
+#include "ash/public/cpp/login_constants.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/user/button_from_view.h"
@@ -83,6 +83,22 @@ class NonAccessibleSeparator : public views::Separator {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(NonAccessibleSeparator);
+};
+
+// A textfield that selects all text on focus.
+class LoginTextfield : public views::Textfield {
+ public:
+  LoginTextfield() {}
+  ~LoginTextfield() override {}
+
+  // views::Textfield:
+  void OnFocus() override {
+    views::Textfield::OnFocus();
+    SelectAll(false /*reverse*/);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(LoginTextfield);
 };
 
 // Set of resources for an easy unlock icon.
@@ -187,7 +203,7 @@ class LoginPasswordView::EasyUnlockIcon : public views::Button,
   EasyUnlockIcon(const gfx::Size& size, int corner_radius)
       : views::Button(this) {
     SetPreferredSize(size);
-    SetLayoutManager(new views::FillLayout());
+    SetLayoutManager(std::make_unique<views::FillLayout>());
     icon_ = new AnimatedRoundedImageView(size, corner_radius);
     icon_->SetAnimationEnabled(true);
     AddChildView(icon_);
@@ -344,20 +360,21 @@ void LoginPasswordView::TestApi::set_immediately_hover_easy_unlock_icon() {
 }
 
 LoginPasswordView::LoginPasswordView() : ime_keyboard_observer_(this) {
-  auto* root_layout = new views::BoxLayout(views::BoxLayout::kVertical);
+  auto root_layout =
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical);
   root_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
-  SetLayoutManager(root_layout);
+  SetLayoutManager(std::move(root_layout));
 
   password_row_ = new NonAccessibleView();
 
-  auto* layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal,
-                           gfx::Insets(kMarginAboveBelowPasswordIconsDp, 0));
+  auto layout = std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kHorizontal,
+      gfx::Insets(kMarginAboveBelowPasswordIconsDp, 0));
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  password_row_->SetLayoutManager(layout);
+  auto* layout_ptr = password_row_->SetLayoutManager(std::move(layout));
   AddChildView(password_row_);
 
   // Add easy unlock icon.
@@ -378,7 +395,7 @@ LoginPasswordView::LoginPasswordView() : ime_keyboard_observer_(this) {
 
   // Password textfield. We control the textfield size by sizing the parent
   // view, as the textfield will expand to fill it.
-  textfield_ = new views::Textfield();
+  textfield_ = new LoginTextfield();
   textfield_->set_controller(this);
   textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
   textfield_->SetTextColor(kTextColor);
@@ -391,7 +408,7 @@ LoginPasswordView::LoginPasswordView() : ime_keyboard_observer_(this) {
   textfield_->SetBackgroundColor(SK_ColorTRANSPARENT);
 
   password_row_->AddChildView(textfield_);
-  layout->SetFlexForView(textfield_, 1);
+  layout_ptr->SetFlexForView(textfield_, 1);
 
   // Caps lock hint icon.
   capslock_icon_ = new views::ImageView();
@@ -434,6 +451,9 @@ LoginPasswordView::LoginPasswordView() : ime_keyboard_observer_(this) {
     ime_keyboard_observer_.Add(keyboard);
     OnCapsLockChanged(keyboard->CapsLockIsEnabled());
   }
+
+  // Make sure the UI start with the correct states.
+  UpdateUiState();
 }
 
 LoginPasswordView::~LoginPasswordView() = default;
@@ -482,11 +502,8 @@ void LoginPasswordView::Clear() {
   ContentsChanged(textfield_, textfield_->text());
 }
 
-void LoginPasswordView::AppendNumber(int value) {
-  textfield_->SetText(textfield_->text() + base::IntToString16(value));
-  // |ContentsChanged| won't be called by |Textfield| if the text is changed
-  // by |Textfield::AppendText()|.
-  ContentsChanged(textfield_, textfield_->text());
+void LoginPasswordView::InsertNumber(int value) {
+  textfield_->InsertOrReplaceText(base::IntToString16(value));
 }
 
 void LoginPasswordView::Backspace() {

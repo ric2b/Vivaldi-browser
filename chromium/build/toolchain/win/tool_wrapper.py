@@ -240,11 +240,7 @@ class WinTool(object):
       rc_res_output = rcpy_res_output + '_ms_rc'
     args[-2] = rc_res_output
     rcpy_args.append('/showIncludes')
-    #rc_exe_exit_code = subprocess.call(rcpy_args, env=env)
-    sys.path.insert(0,os.path.join(BASE_DIR, "rc"))
-    import rc
-    rc_exe_exit_code = rc.main(rcpy_args[2:], env=env)
-
+    rc_exe_exit_code = subprocess.call(rcpy_args, env=env)
     if rc_exe_exit_code == 0:
       # Since tool("rc") can't have deps, add deps on this script and on rc.py
       # and its deps here, so that rc edges become dirty if rc.py changes.
@@ -274,6 +270,21 @@ class WinTool(object):
         # Strip "/fo" prefix.
         #assert filecmp.cmp(rc_res_output[3:], rcpy_res_output[3:])
     return rc_exe_exit_code
+
+  def ExecMsRcWrapper(self, arch, *args):
+    """Filter logo banner from invocations of rc.exe. Older versions of RC
+    don't support the /nologo flag."""
+    env = self._GetEnv(arch)
+    popen = subprocess.Popen(args, shell=True, env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    out, _ = popen.communicate()
+    for line in out.splitlines():
+      if (not line.startswith('Microsoft (R) Windows (R) Resource Compiler') and
+          not line.startswith('Copy' + 'right (C' +
+                              ') Microsoft Corporation') and
+          line):
+        print line
+    return popen.returncode
 
   def ExecActionWrapper(self, arch, rspfile, *dirname):
     """Runs an action command line from a response file using the environment

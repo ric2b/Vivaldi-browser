@@ -301,8 +301,6 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     this._isOnInitiatorPath = false;
     this._isOnInitiatedPath = false;
     this._isFromFrame = false;
-    if (!Runtime.experiments.isEnabled('networkGroupingRequests'))
-      return;
     var frame = SDK.ResourceTreeModel.frameForRequest(request);
     this._isFromFrame = frame ? !frame.isMainFrame() : false;
   }
@@ -412,35 +410,11 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     var bRequest = b.requestOrFirstKnownChildRequest();
     if (!aRequest || !bRequest)
       return !aRequest ? -1 : 1;
-    var aInitiator = NetworkLog.networkLog.initiatorInfoForRequest(aRequest);
-    var bInitiator = NetworkLog.networkLog.initiatorInfoForRequest(bRequest);
-
-    if (aInitiator.type < bInitiator.type)
-      return -1;
-    if (aInitiator.type > bInitiator.type)
-      return 1;
-
-    if (typeof aInitiator.__source === 'undefined')
-      aInitiator.__source = Bindings.displayNameForURL(aInitiator.url);
-    if (typeof bInitiator.__source === 'undefined')
-      bInitiator.__source = Bindings.displayNameForURL(bInitiator.url);
-
-    if (aInitiator.__source < bInitiator.__source)
-      return -1;
-    if (aInitiator.__source > bInitiator.__source)
-      return 1;
-
-    if (aInitiator.lineNumber < bInitiator.lineNumber)
-      return -1;
-    if (aInitiator.lineNumber > bInitiator.lineNumber)
-      return 1;
-
-    if (aInitiator.columnNumber < bInitiator.columnNumber)
-      return -1;
-    if (aInitiator.columnNumber > bInitiator.columnNumber)
-      return 1;
-
-    return aRequest.indentityCompare(bRequest);
+    if (!a._initiatorCell || !b._initiatorCell)
+      return !a._initiatorCell ? -1 : 1;
+    var aText = a._linkifiedInitiatorAnchor ? a._linkifiedInitiatorAnchor.textContent : a._initiatorCell.title;
+    var bText = b._linkifiedInitiatorAnchor ? b._linkifiedInitiatorAnchor.textContent : b._initiatorCell.title;
+    return aText.localeCompare(bText);
   }
 
   /**
@@ -491,7 +465,7 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     var aPriority = aRequest.initialPriority();
     var aScore = aPriority ? priorityMap.get(aPriority) : 0;
     aScore = aScore || 0;
-    var bPriority = aRequest.initialPriority();
+    var bPriority = bRequest.initialPriority();
     var bScore = bPriority ? priorityMap.get(bPriority) : 0;
     bScore = bScore || 0;
 
@@ -705,8 +679,6 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     element.classList.toggle('network-navigation-row', this._isNavigationRequest);
     super.createCells(element);
     this._updateBackgroundColor();
-    if (!Runtime.experiments.isEnabled('networkGroupingRequests'))
-      return;
     ProductRegistry.instance().then(productRegistry => {
       if (productRegistry.entryForUrl(this._request.parsedURL)) {
         this._isProduct = true;
@@ -952,9 +924,14 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
 
       case SDK.NetworkRequest.InitiatorType.Script:
         var networkManager = SDK.NetworkManager.forRequest(request);
-        this._linkifiedInitiatorAnchor = this.parentView().linkifier.linkifyScriptLocation(
-            networkManager ? networkManager.target() : null, initiator.scriptId, initiator.url, initiator.lineNumber,
-            initiator.columnNumber);
+        if (initiator.stack) {
+          this._linkifiedInitiatorAnchor = this.parentView().linkifier.linkifyStackTraceTopFrame(
+              networkManager ? networkManager.target() : null, initiator.stack);
+        } else {
+          this._linkifiedInitiatorAnchor = this.parentView().linkifier.linkifyScriptLocation(
+              networkManager ? networkManager.target() : null, initiator.scriptId, initiator.url, initiator.lineNumber,
+              initiator.columnNumber);
+        }
         this._linkifiedInitiatorAnchor.title = '';
         cell.appendChild(this._linkifiedInitiatorAnchor);
         this._appendSubtitle(cell, Common.UIString('Script'));

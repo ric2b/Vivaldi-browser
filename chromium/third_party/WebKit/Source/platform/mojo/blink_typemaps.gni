@@ -5,8 +5,9 @@
 typemaps = [
   "//mojo/common/file_path.typemap",
   "//mojo/common/values.typemap",
-  "//third_party/WebKit/Source/core/dom/BlinkCloneableMessage.typemap",
-  "//third_party/WebKit/Source/core/dom/BlinkTransferableMessage.typemap",
+  "//third_party/WebKit/Source/core/messaging/BlinkCloneableMessage.typemap",
+  "//third_party/WebKit/Source/core/messaging/BlinkTransferableMessage.typemap",
+  "//third_party/WebKit/Source/platform/mojo/BigBuffer.typemap",
   "//third_party/WebKit/Source/platform/mojo/File.typemap",
   "//third_party/WebKit/Source/platform/mojo/Geometry.typemap",
   "//third_party/WebKit/Source/platform/mojo/KURL.typemap",
@@ -16,4 +17,5 @@ typemaps = [
   "//third_party/WebKit/Source/platform/mojo/Time.typemap",
   "//third_party/WebKit/public/platform/modules/bluetooth/Bluetooth.typemap",
   "//third_party/WebKit/public/platform/modules/fetch/FetchAPIRequest.typemap",
+  "//third_party/WebKit/public/platform/modules/notifications/NotificationTypes.typemap",
 ]

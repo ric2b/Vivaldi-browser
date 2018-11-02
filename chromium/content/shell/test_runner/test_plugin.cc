@@ -29,7 +29,6 @@
 #include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "third_party/WebKit/public/platform/WebTouchPoint.h"
-#include "third_party/WebKit/public/platform/WebTraceLocation.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebPluginParams.h"
@@ -263,11 +262,9 @@ void TestPlugin::UpdateGeometry(
     DrawSceneGL();
 
     gl_->GenMailboxCHROMIUM(mailbox_.name);
-    gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox_.name);
-    const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
+    gl_->ProduceTextureDirectCHROMIUM(color_texture_, mailbox_.name);
     gl_->Flush();
-
-    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+    gl_->GenSyncTokenCHROMIUM(sync_token_.GetData());
 
     shared_bitmap_ = nullptr;
   } else {

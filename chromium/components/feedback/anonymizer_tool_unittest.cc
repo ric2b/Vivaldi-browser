@@ -117,6 +117,7 @@ TEST_F(AnonymizerToolTest, AnonymizeCustomPatterns) {
             AnonymizeCustomPatterns("serial  number: 50C971FEE7F3x010900"));
   EXPECT_EQ("SerialNumber: 3",
             AnonymizeCustomPatterns("SerialNumber: EVT23-17BA01-004"));
+  EXPECT_EQ("serial=4", AnonymizeCustomPatterns("serial=\"1234AA5678\""));
 
   EXPECT_EQ("<email: 1>",
             AnonymizeCustomPatterns("foo@bar.com"));
@@ -199,6 +200,32 @@ TEST_F(AnonymizerToolTest, AnonymizeCustomPatternWithoutContext) {
   EXPECT_EQ("f<pattern: 1>\nf<pattern: 2>z\nf<pattern: 1>l\n",
             AnonymizeCustomPatternWithoutContext("fo\nfooz\nfol\n", kPattern,
                                                  &space));
+}
+
+TEST_F(AnonymizerToolTest, AnonymizeChunk) {
+  std::string data =
+      "aaaaaaaa [SSID=123aaaaaa]aaaaa\n"  // SSID.
+      "aaaaaaaahttp://tets.comaaaaaaa\n"  // URL.
+      "aaaaaemail@example.comaaa\n"       // Email address.
+      "example@@1234\n"           // No PII, it is not valid email address.
+      "255.255.155.255\n"         // IP address.
+      "aaaa123.123.45.4aaa\n"     // IP address.
+      "11:11;11::11\n"            // IP address.
+      "11::11\n"                  // IP address.
+      "11:11:abcdef:0:0:0:0:0\n"  // No PII.
+      "aa:aa:aa:aa:aa:aa";        // MAC address (BSSID).
+  std::string result =
+      "aaaaaaaa [SSID=1]aaaaa\n"
+      "aaaaaaaa<URL: 1>\n"
+      "<email: 1>\n"
+      "example@@1234\n"
+      "<IPv4: 1>55\n"
+      "aaaa<IPv4: 2>aaa\n"
+      "11:11;<IPv6: 1>\n"
+      "<IPv6: 1>\n"
+      "11:11:abcdef:0:0:0:0:0\n"
+      "aa:aa:aa:00:00:01";
+  EXPECT_EQ(result, anonymizer_.Anonymize(data));
 }
 
 }  // namespace feedback

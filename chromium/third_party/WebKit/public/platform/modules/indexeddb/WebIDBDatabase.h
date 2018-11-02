@@ -44,7 +44,7 @@ class WebIDBKeyRange;
 
 class WebIDBDatabase {
  public:
-  virtual ~WebIDBDatabase() {}
+  virtual ~WebIDBDatabase() = default;
 
   virtual void CreateObjectStore(long long transaction_id,
                                  long long object_store_id,
@@ -110,14 +110,14 @@ class WebIDBDatabase {
                    long long object_store_id,
                    const WebData& value,
                    const WebVector<WebBlobInfo>&,
-                   const WebIDBKey&,
+                   WebIDBKeyView primary_key,
                    WebIDBPutMode,
                    WebIDBCallbacks*,
                    const WebVector<long long>& index_ids,
-                   const WebVector<WebIndexKeys>&) = 0;
+                   WebVector<WebIndexKeys>) = 0;
   virtual void SetIndexKeys(long long transaction_id,
                             long long object_store_id,
-                            const WebIDBKey&,
+                            WebIDBKeyView primary_key,
                             const WebVector<long long>& index_ids,
                             const WebVector<WebIndexKeys>&) = 0;
   virtual void SetIndexesReady(long long transaction_id,
@@ -136,6 +136,10 @@ class WebIDBDatabase {
                      long long index_id,
                      const WebIDBKeyRange&,
                      WebIDBCallbacks*) = 0;
+  virtual void Delete(long long transaction_id,
+                      long long object_store_id,
+                      WebIDBKeyView primary_key,
+                      WebIDBCallbacks*) = 0;
   virtual void DeleteRange(long long transaction_id,
                            long long object_store_id,
                            const WebIDBKeyRange&,
@@ -146,7 +150,7 @@ class WebIDBDatabase {
   virtual void AckReceivedBlobs(const WebVector<WebString>& uuids) = 0;
 
  protected:
-  WebIDBDatabase() {}
+  WebIDBDatabase() = default;
 };
 
 }  // namespace blink

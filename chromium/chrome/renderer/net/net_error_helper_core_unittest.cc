@@ -18,7 +18,6 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
 #include "base/timer/mock_timer.h"
@@ -173,8 +172,6 @@ class NetErrorHelperCoreTest : public testing::Test,
     EXPECT_FALSE(is_url_being_fetched());
   }
 
-  void SetUp() override { base::StatisticsRecorder::Initialize(); }
-
   void SetUpCore(bool auto_reload_enabled,
                  bool auto_reload_visible_only,
                  bool visible) {
@@ -256,9 +253,9 @@ class NetErrorHelperCoreTest : public testing::Test,
     core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                         NetErrorHelperCore::NON_ERROR_PAGE);
     std::string html;
-    core()->GetErrorHTML(NetErrorHelperCore::MAIN_FRAME,
-                         NetErrorForURL(error, url), false /* is_failed_post */,
-                         false /* is_ignoring_cache */, &html);
+    core()->PrepareErrorPage(
+        NetErrorHelperCore::MAIN_FRAME, NetErrorForURL(error, url),
+        false /* is_failed_post */, false /* is_ignoring_cache */, &html);
     EXPECT_FALSE(html.empty());
     EXPECT_EQ(NetErrorStringForURL(error, url), html);
 
@@ -277,9 +274,9 @@ class NetErrorHelperCoreTest : public testing::Test,
     core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                         NetErrorHelperCore::NON_ERROR_PAGE);
     std::string html;
-    core()->GetErrorHTML(NetErrorHelperCore::MAIN_FRAME,
-                         NetErrorForURL(error, url), false /* is_failed_post */,
-                         true /* is_ignoring_cache */, &html);
+    core()->PrepareErrorPage(
+        NetErrorHelperCore::MAIN_FRAME, NetErrorForURL(error, url),
+        false /* is_failed_post */, true /* is_ignoring_cache */, &html);
     EXPECT_FALSE(html.empty());
     EXPECT_EQ(NetErrorStringForURL(error, url), html);
 
@@ -348,7 +345,7 @@ class NetErrorHelperCoreTest : public testing::Test,
     last_error_html_ = html;
   }
 
-  void EnablePageHelperFunctions() override {
+  void EnablePageHelperFunctions(net::Error net_error) override {
     enable_page_helper_functions_count_++;
   }
 
@@ -508,7 +505,7 @@ TEST_F(NetErrorHelperCoreTest, MainFrameNonDnsError) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page.
@@ -535,7 +532,7 @@ TEST_F(NetErrorHelperCoreTest, MainFrameNonDnsErrorWithCorrections) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page.
@@ -561,7 +558,7 @@ TEST_F(NetErrorHelperCoreTest, MainFrameNonDnsErrorSpuriousStatus) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnNetErrorInfo(error_page::DNS_PROBE_FINISHED_NXDOMAIN);
@@ -593,7 +590,7 @@ TEST_F(NetErrorHelperCoreTest, SubFrameDnsError) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::SUB_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page.
@@ -617,7 +614,7 @@ TEST_F(NetErrorHelperCoreTest, SubFrameDnsErrorWithCorrections) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::SUB_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page.
@@ -642,7 +639,7 @@ TEST_F(NetErrorHelperCoreTest, SubFrameDnsErrorSpuriousStatus) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::SUB_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnNetErrorInfo(error_page::DNS_PROBE_FINISHED_NXDOMAIN);
@@ -680,7 +677,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbe) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -717,7 +714,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbeNotRun) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -751,7 +748,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbeInconclusive) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -788,7 +785,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbeNoInternet) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -826,7 +823,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbeBadConfig) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -865,7 +862,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedAfterStartProbe) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -907,7 +904,7 @@ TEST_F(NetErrorHelperCoreTest, FinishedBeforeProbePost) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       true /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -944,7 +941,7 @@ TEST_F(NetErrorHelperCoreTest, ProbeFinishesEarly) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -985,7 +982,7 @@ TEST_F(NetErrorHelperCoreTest, TwoErrorsWithProbes) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1011,7 +1008,7 @@ TEST_F(NetErrorHelperCoreTest, TwoErrorsWithProbes) {
                       NetErrorHelperCore::NON_ERROR_PAGE);
 
   // It fails, and an error page is requested.
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1046,7 +1043,7 @@ TEST_F(NetErrorHelperCoreTest, TwoErrorsWithProbesAfterSecondStarts) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1065,7 +1062,7 @@ TEST_F(NetErrorHelperCoreTest, TwoErrorsWithProbesAfterSecondStarts) {
                       NetErrorHelperCore::NON_ERROR_PAGE);
 
   // It fails, and an error page is requested.
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1103,7 +1100,7 @@ TEST_F(NetErrorHelperCoreTest, ErrorPageLoadInterrupted) {
 
   // It fails, and an error page is requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1122,7 +1119,7 @@ TEST_F(NetErrorHelperCoreTest, ErrorPageLoadInterrupted) {
                       NetErrorHelperCore::NON_ERROR_PAGE);
 
   // And fails.
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   // Should have returned a local error page indicating a probe may run.
@@ -1159,9 +1156,9 @@ TEST_F(NetErrorHelperCoreTest, NoCorrectionsForHttps) {
   std::string html;
   auto error =
       NetErrorForURL(net::ERR_NAME_NOT_RESOLVED, GURL(kFailedHttpsUrl));
-  core()->GetErrorHTML(NetErrorHelperCore::MAIN_FRAME, error,
-                       false /* is_failed_post */,
-                       false /* is_ignoring_cache */, &html);
+  core()->PrepareErrorPage(NetErrorHelperCore::MAIN_FRAME, error,
+                           false /* is_failed_post */,
+                           false /* is_ignoring_cache */, &html);
 
   auto probe_error =
       ProbeErrorForURL(error_page::DNS_PROBE_POSSIBLE, GURL(kFailedHttpsUrl));
@@ -1198,7 +1195,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsReceivedBeforeProbe) {
 
   // It fails.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1249,7 +1246,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsRetrievedAfterProbes) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1297,7 +1294,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsFailLoadNoProbes) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_FAILED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1341,7 +1338,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsFailLoadBeforeProbe) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1392,7 +1389,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsFailAfterProbe) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1441,7 +1438,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsInterruptedBeforeCommit) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1479,7 +1476,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsInterruptedBeforeLoad) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1513,7 +1510,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsInterrupted) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1536,7 +1533,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsInterrupted) {
   EXPECT_FALSE(is_url_being_fetched());
 
   // It fails, and corrections are requested again once a blank page is loaded.
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1572,7 +1569,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsStopped) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1597,7 +1594,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsStopped) {
                       NetErrorHelperCore::NON_ERROR_PAGE);
 
   // It fails, and corrections are requested again.
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1644,7 +1641,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsDisabledBeforeFetch) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1686,7 +1683,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsDisabledDuringFetch) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1732,7 +1729,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsWithoutSearch) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1780,7 +1777,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionsOnlySearchSuggestion) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1824,7 +1821,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionServiceReturnsNonJsonResult) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_FAILED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1861,7 +1858,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionServiceReturnsInvalidJsonResult) {
 
   // It fails, and corrections are requested.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_FAILED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -1898,7 +1895,7 @@ TEST_F(NetErrorHelperCoreTest, CorrectionClickTracking) {
 
   // It fails.
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_NAME_NOT_RESOLVED),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   EXPECT_TRUE(html.empty());
@@ -2153,7 +2150,7 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, SlowError) {
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                       NetErrorHelperCore::NON_ERROR_PAGE);
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
@@ -2177,7 +2174,7 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, OnlineSlowError) {
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                       NetErrorHelperCore::NON_ERROR_PAGE);
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
@@ -2198,7 +2195,7 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, OnlinePendingError) {
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                       NetErrorHelperCore::NON_ERROR_PAGE);
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
@@ -2219,7 +2216,7 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, OnlinePartialErrorReplacement) {
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                       NetErrorHelperCore::NON_ERROR_PAGE);
   std::string html;
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
@@ -2228,7 +2225,7 @@ TEST_F(NetErrorHelperCoreAutoReloadTest, OnlinePartialErrorReplacement) {
   core()->OnFinishLoad(NetErrorHelperCore::MAIN_FRAME);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,
                       NetErrorHelperCore::NON_ERROR_PAGE);
-  core()->GetErrorHTML(
+  core()->PrepareErrorPage(
       NetErrorHelperCore::MAIN_FRAME, NetError(net::ERR_CONNECTION_RESET),
       false /* is_failed_post */, false /* is_ignoring_cache */, &html);
   core()->OnStartLoad(NetErrorHelperCore::MAIN_FRAME,

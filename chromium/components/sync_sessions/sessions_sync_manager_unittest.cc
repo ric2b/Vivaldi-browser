@@ -61,10 +61,7 @@ const base::Time kTime2 = base::Time::FromInternalValue(120);
 const base::Time kTime3 = base::Time::FromInternalValue(130);
 const base::Time kTime4 = base::Time::FromInternalValue(140);
 const base::Time kTime5 = base::Time::FromInternalValue(150);
-const base::Time kTime6 = base::Time::FromInternalValue(160);
-const base::Time kTime7 = base::Time::FromInternalValue(170);
-const base::Time kTime8 = base::Time::FromInternalValue(180);
-const base::Time kTime9 = base::Time::FromInternalValue(190);
+const base::Time kTime6 = base::Time::FromInternalValue(190);
 
 std::string TabNodeIdToTag(const std::string& machine_tag, int tab_node_id) {
   return base::StringPrintf("%s %d", machine_tag.c_str(), tab_node_id);
@@ -874,7 +871,7 @@ TEST_F(SessionsSyncManagerTest, SetSessionTabFromDelegateNavigationIndex) {
   tab->set_current_entry_index(kNavs - 2);
 
   sessions::SessionTab session_tab;
-  manager()->SetSessionTabFromDelegate(*tab, kTime9, &session_tab);
+  manager()->SetSessionTabFromDelegate(*tab, kTime6, &session_tab);
 
   EXPECT_EQ(6, session_tab.current_navigation_index);
   ASSERT_EQ(8u, session_tab.navigations.size());
@@ -894,7 +891,7 @@ TEST_F(SessionsSyncManagerTest, SetSessionTabFromDelegateCurrentInvalid) {
   tab->set_current_entry_index(1);
 
   sessions::SessionTab session_tab;
-  manager()->SetSessionTabFromDelegate(*tab, kTime9, &session_tab);
+  manager()->SetSessionTabFromDelegate(*tab, kTime6, &session_tab);
 
   EXPECT_EQ(2, session_tab.current_navigation_index);
   ASSERT_EQ(3u, session_tab.navigations.size());
@@ -1028,6 +1025,17 @@ TEST_F(SessionsSyncManagerTest, PreserveTabbedDataNoWindows) {
   ASSERT_EQ(
       restored_tab_id,
       out[1].sync_data().GetSpecifics().session().header().window(0).tab(0));
+  out.clear();
+
+  // Now actually resurrect the native data, which will end up having different
+  // native ids, but the tab has the same sync id as before.
+  AddWindow()->OverrideTabAt(0, tab);
+  NavigateTab(tab, kBar1);
+
+  ASSERT_TRUE(ChangeTypeMatches(
+      out, {SyncChange::ACTION_UPDATE, SyncChange::ACTION_UPDATE}));
+  VerifyLocalTabChange(out[0], 3, kBar1);
+  VerifyLocalHeaderChange(out[1], 1, 1);
 }
 
 // Ensure that tabbed windows from a previous session are preserved if only
@@ -1058,49 +1066,36 @@ TEST_F(SessionsSyncManagerTest, PreserveTabbedDataCustomTab) {
   window->OverrideTabAt(0, custom_tab.get());
   InitWithSyncDataTakeOutput(ConvertToRemote(in), &out);
 
-  // The previous session should be preserved, and the transient window should
-  // be synced as a new transient window. This means that the original tab
-  // node will be updated with its new tab id, a new tab node will be created,
-  // and the header will be updated to reflect the two windows and two tabs.
-  ASSERT_TRUE(
-      ChangeTypeMatches(out, {SyncChange::ACTION_UPDATE, SyncChange::ACTION_ADD,
-                              SyncChange::ACTION_UPDATE}));
+  // The previous session should be preserved. The transient window cannot be
+  // synced because we do not have enough local data to ensure that we wouldn't
+  // vend the same sync id if our persistent storage didn't match upon the last
+  // shutdown.
+  ASSERT_TRUE(ChangeTypeMatches(
+      out, {SyncChange::ACTION_UPDATE, SyncChange::ACTION_UPDATE}));
   VerifyLocalTabChange(out[0], 2, kFoo2);
-  VerifyLocalTabChange(out[1], 1, kBar1);
-  VerifyLocalHeaderChange(out[2], 2, 2);
+  VerifyLocalHeaderChange(out[1], 1, 1);
+  out.clear();
 
-  // The two windows should have different window types.
-  ASSERT_EQ(sync_pb::SessionWindow::TYPE_CUSTOM_TAB, out[2]
-                                                         .sync_data()
-                                                         .GetSpecifics()
-                                                         .session()
-                                                         .header()
-                                                         .window(0)
-                                                         .browser_type());
-  ASSERT_EQ(sync_pb::SessionWindow::TYPE_TABBED, out[2]
-                                                     .sync_data()
-                                                     .GetSpecifics()
-                                                     .session()
-                                                     .header()
-                                                     .window(1)
-                                                     .browser_type());
+  // Now re-create local data and modify it.
+  TestSyncedWindowDelegate* alive_again = AddWindow();
+  alive_again->OverrideTabAt(0, tab);
+  NavigateTab(tab, kBaz1);
 
-  // Verify the tab id of the restored tab is updated and consistent.
-  int restored_tab_id =
-      out[0].sync_data().GetSpecifics().session().tab().tab_id();
-  // SessionId should be rewritten on restore.
-  ASSERT_NE(tab->GetSessionId(), restored_tab_id);
-  ASSERT_EQ(
-      restored_tab_id,
-      out[2].sync_data().GetSpecifics().session().header().window(1).tab(0));
+  // The local change should be created and tracked correctly. This doesn't
+  // actually start syncing the custom tab yet, because the tab itself isn't
+  // associated yet.
+  ASSERT_TRUE(ChangeTypeMatches(
+      out, {SyncChange::ACTION_UPDATE, SyncChange::ACTION_UPDATE}));
+  VerifyLocalTabChange(out[0], 3, kBaz1);
+  VerifyLocalHeaderChange(out[1], 1, 1);
+  out.clear();
 
-  // Verify the tab id of the custom tab is consistent.
-  int custom_tab_id =
-      out[1].sync_data().GetSpecifics().session().tab().tab_id();
-  ASSERT_EQ(custom_tab->GetSessionId(), custom_tab_id);
-  ASSERT_EQ(
-      custom_tab_id,
-      out[2].sync_data().GetSpecifics().session().header().window(0).tab(0));
+  // Now trigger OnLocalTabModified() for the custom tab again, it should sync.
+  NavigateTab(custom_tab.get(), kBar2);
+  ASSERT_TRUE(ChangeTypeMatches(
+      out, {SyncChange::ACTION_ADD, SyncChange::ACTION_UPDATE}));
+  VerifyLocalTabChange(out[0], 2, kBar2);
+  VerifyLocalHeaderChange(out[1], 2, 2);
 }
 
 // Tests MergeDataAndStartSyncing with sync data but no local data.
@@ -1790,7 +1785,7 @@ TEST_F(SessionsSyncManagerTest, MergeDeletesTabMissingTabId) {
 
 // Verifies that we drop both headers and tabs during merge if their stored tag
 // hash doesn't match a computer tag hash. This mitigates potential failures
-// while cleaning up bad foreign data, see crbug.com/604657.
+// while cleaning up bad foreign data, see https://crbug.com/604657.
 TEST_F(SessionsSyncManagerTest, MergeDeletesBadHash) {
   SyncDataList foreign_data;
   std::vector<SessionID::id_type> empty_ids;

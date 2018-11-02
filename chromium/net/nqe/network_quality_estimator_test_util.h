@@ -122,9 +122,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   void NotifyRTTAndThroughputEstimatesObserverIfPresent(
       RTTAndThroughputEstimatesObserver* observer) const override;
 
-  void set_start_time_null_http_rtt(const base::TimeDelta& http_rtt) {
-    start_time_null_http_rtt_ = http_rtt;
-  }
+  // Force set the HTTP RTT estimate.
+  void SetStartTimeNullHttpRtt(const base::TimeDelta http_rtt);
 
   void set_recent_http_rtt(const base::TimeDelta& recent_http_rtt) {
     // Callers should not set effective connection type along with the
@@ -138,9 +137,8 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   bool GetRecentHttpRTT(const base::TimeTicks& start_time,
                         base::TimeDelta* rtt) const override;
 
-  void set_start_time_null_transport_rtt(const base::TimeDelta& transport_rtt) {
-    start_time_null_transport_rtt_ = transport_rtt;
-  }
+  // Force set the transport RTT estimate.
+  void SetStartTimeNullTransportRtt(const base::TimeDelta transport_rtt);
 
   void set_recent_transport_rtt(const base::TimeDelta& recent_transport_rtt) {
     // Callers should not set effective connection type along with the
@@ -196,10 +194,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   const std::vector<base::TimeDelta>& GetAccuracyRecordingIntervals()
       const override;
 
-  void set_rand_double(double rand_double) { rand_double_ = rand_double; }
-
-  double RandDouble() const override;
-
   void set_bandwidth_delay_product_kbits(int32_t value) {
     bandwidth_delay_product_kbits_ = value;
   }
@@ -237,6 +231,7 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   using NetworkQualityEstimator::OnUpdatedTransportRTTAvailable;
   using NetworkQualityEstimator::AddAndNotifyObserversOfRTT;
   using NetworkQualityEstimator::AddAndNotifyObserversOfThroughput;
+  using NetworkQualityEstimator::IsHangingRequest;
 
  private:
   class LocalHttpTestServer : public EmbeddedTestServer {
@@ -252,6 +247,9 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   // network
   // id (instead of invoking platform APIs).
   nqe::internal::NetworkID GetCurrentNetworkID() const override;
+
+  // Net log provided to network quality estimator.
+  std::unique_ptr<net::BoundTestNetLog> net_log_;
 
   // If set, GetEffectiveConnectionType() and GetRecentEffectiveConnectionType()
   // would return the set values, respectively.
@@ -286,8 +284,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   // If set, GetRTTEstimateInternal() would return the set value.
   base::Optional<base::TimeDelta> rtt_estimate_internal_;
 
-  double rand_double_;
-
   // If set, GetBandwidthDelayProductKbits() would return its set value.
   // Otherwise, the base implementation is called.
   base::Optional<int32_t> bandwidth_delay_product_kbits_;
@@ -298,9 +294,6 @@ class TestNetworkQualityEstimator : public NetworkQualityEstimator {
   const bool suppress_notifications_for_testing_;
 
   base::Optional<size_t> transport_rtt_observation_count_last_ect_computation_;
-
-  // Net log provided to network quality estimator.
-  std::unique_ptr<net::BoundTestNetLog> net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(TestNetworkQualityEstimator);
 };

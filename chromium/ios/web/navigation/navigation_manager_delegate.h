@@ -9,7 +9,6 @@
 
 
 @protocol CRWWebViewNavigationProxy;
-class GURL;
 
 namespace web {
 
@@ -39,10 +38,6 @@ class NavigationManagerDelegate {
   // navigation using a different user agent type.
   virtual void WillChangeUserAgentType() = 0;
 
-  // Instructs the delegate to notify its delegates that the current navigation
-  // item will be loaded.
-  virtual void WillLoadCurrentItemWithUrl(const GURL&) = 0;
-
   // Instructs the delegate to load the current navigation item.
   virtual void LoadCurrentItem() = 0;
 
@@ -69,6 +64,11 @@ class NavigationManagerDelegate {
   // Returns a CRWWebViewNavigationProxy protocol that can be used to access
   // navigation related functions on the main WKWebView.
   virtual id<CRWWebViewNavigationProxy> GetWebViewNavigationProxy() const = 0;
+
+  // Instructs the delegate to remove the underlying web view. The only use case
+  // currently is to clear back-forward history in web view before restoring
+  // session history.
+  virtual void RemoveWebView() = 0;
 };
 
 }  // namespace web

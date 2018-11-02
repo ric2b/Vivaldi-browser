@@ -4,6 +4,8 @@
 
 #include "chrome/browser/page_load_metrics/observers/previews_ukm_observer.h"
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/optional.h"
@@ -17,6 +19,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/test/web_contents_tester.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 
@@ -44,10 +47,12 @@ class TestPreviewsUKMObserver : public PreviewsUKMObserver {
  public:
   TestPreviewsUKMObserver(content::WebContents* web_contents,
                           bool data_reduction_proxy_used,
-                          bool lite_page_received)
+                          bool lite_page_received,
+                          bool noscript_on)
       : web_contents_(web_contents),
         data_reduction_proxy_used_(data_reduction_proxy_used),
-        lite_page_received_(lite_page_received) {}
+        lite_page_received_(lite_page_received),
+        noscript_on_(noscript_on) {}
 
   ~TestPreviewsUKMObserver() override {}
 
@@ -59,6 +64,19 @@ class TestPreviewsUKMObserver : public PreviewsUKMObserver {
     data->set_used_data_reduction_proxy(data_reduction_proxy_used_);
     data->set_request_url(GURL(kDefaultTestUrl));
     data->set_lite_page_received(lite_page_received_);
+
+    if (noscript_on_) {
+      // ChromeNavigationData is guaranteed to be non-null at this point, as
+      // DataForNavigationHandle is always called prior to this and creates one.
+      ChromeNavigationData* chrome_navigation_data =
+          static_cast<ChromeNavigationData*>(
+              navigation_handle->GetNavigationData());
+      content::PreviewsState previews_state =
+          chrome_navigation_data->previews_state();
+      chrome_navigation_data->set_previews_state(previews_state |=
+                                                 content::NOSCRIPT_ON);
+    }
+
     return PreviewsUKMObserver::OnCommit(navigation_handle, source_id);
   }
 
@@ -66,6 +84,7 @@ class TestPreviewsUKMObserver : public PreviewsUKMObserver {
   content::WebContents* web_contents_;
   bool data_reduction_proxy_used_;
   bool lite_page_received_;
+  bool noscript_on_;
 
   DISALLOW_COPY_AND_ASSIGN(TestPreviewsUKMObserver);
 };
@@ -76,20 +95,24 @@ class PreviewsUKMObserverTest
   PreviewsUKMObserverTest() {}
   ~PreviewsUKMObserverTest() override {}
 
-  void RunTest(bool data_reduction_proxy_used, bool lite_page_received) {
+  void RunTest(bool data_reduction_proxy_used,
+               bool lite_page_received,
+               bool noscript_on) {
     data_reduction_proxy_used_ = data_reduction_proxy_used;
     lite_page_received_ = lite_page_received;
+    noscript_on_ = noscript_on;
     NavigateAndCommit(GURL(kDefaultTestUrl));
   }
 
   void ValidateUKM(bool server_lofi_expected,
                    bool client_lofi_expected,
                    bool lite_page_expected,
+                   bool noscript_expected,
                    bool opt_out_expected) {
     using UkmEntry = ukm::builders::Previews;
     auto entries = test_ukm_recorder().GetEntriesByName(UkmEntry::kEntryName);
     if (!server_lofi_expected && !client_lofi_expected && !lite_page_expected &&
-        !opt_out_expected) {
+        !noscript_expected && !opt_out_expected) {
       EXPECT_EQ(0u, entries.size());
       return;
     }
@@ -102,6 +125,8 @@ class PreviewsUKMObserverTest
                                           entry, UkmEntry::kclient_lofiName));
       EXPECT_EQ(lite_page_expected, test_ukm_recorder().EntryHasMetric(
                                         entry, UkmEntry::klite_pageName));
+      EXPECT_EQ(noscript_expected, test_ukm_recorder().EntryHasMetric(
+                                       entry, UkmEntry::knoscriptName));
       EXPECT_EQ(opt_out_expected, test_ukm_recorder().EntryHasMetric(
                                       entry, UkmEntry::kopt_outName));
     }
@@ -109,33 +134,36 @@ class PreviewsUKMObserverTest
 
  protected:
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
-    tracker->AddObserver(base::MakeUnique<TestPreviewsUKMObserver>(
-        web_contents(), data_reduction_proxy_used_, lite_page_received_));
+    tracker->AddObserver(std::make_unique<TestPreviewsUKMObserver>(
+        web_contents(), data_reduction_proxy_used_, lite_page_received_,
+        noscript_on_));
     // Data is only added to the first navigation after RunTest().
     data_reduction_proxy_used_ = false;
     lite_page_received_ = false;
+    noscript_on_ = false;
   }
 
  private:
   bool data_reduction_proxy_used_ = false;
   bool lite_page_received_ = false;
+  bool noscript_on_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PreviewsUKMObserverTest);
 };
 
 TEST_F(PreviewsUKMObserverTest, NoPreviewSeen) {
-  RunTest(false /* data_reduction_proxy_used */,
-          false /* lite_page_received */);
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
   NavigateToUntrackedUrl();
 
   ValidateUKM(false /* server_lofi_expected */,
               false /* client_lofi_expected */, false /* lite_page_expected */,
-              false /* opt_out_expected */);
+              false /* noscript_expected */, false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, UntrackedPreviewTypeOptOut) {
-  RunTest(false /* data_reduction_proxy_used */,
-          false /* lite_page_received */);
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
   observer()->BroadcastEventToObservers(
       PreviewsInfoBarDelegate::OptOutEventKey());
   NavigateToUntrackedUrl();
@@ -143,21 +171,23 @@ TEST_F(PreviewsUKMObserverTest, UntrackedPreviewTypeOptOut) {
   // Opt out should not be added sicne we don't track this type.
   ValidateUKM(false /* server_lofi_expected */,
               false /* client_lofi_expected */, false /* lite_page_expected */,
-              false /* opt_out_expected */);
+              false /* noscript_expected */, false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, LitePageSeen) {
-  RunTest(true /* data_reduction_proxy_used */, true /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, true /* lite_page_received */,
+          false /* noscript_on */);
 
   NavigateToUntrackedUrl();
 
   ValidateUKM(false /* server_lofi_expected */,
               false /* client_lofi_expected */, true /* lite_page_expected */,
-              false /* opt_out_expected */);
+              false /* noscript_expected */, false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, LitePageOptOut) {
-  RunTest(true /* data_reduction_proxy_used */, true /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, true /* lite_page_received */,
+          false /* noscript_on */);
 
   observer()->BroadcastEventToObservers(
       PreviewsInfoBarDelegate::OptOutEventKey());
@@ -165,15 +195,39 @@ TEST_F(PreviewsUKMObserverTest, LitePageOptOut) {
 
   ValidateUKM(false /* server_lofi_expected */,
               false /* client_lofi_expected */, true /* lite_page_expected */,
-              true /* opt_out_expected */);
+              false /* noscript_expected */, true /* opt_out_expected */);
+}
+
+TEST_F(PreviewsUKMObserverTest, NoScriptSeen) {
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          true /* noscript_on */);
+
+  NavigateToUntrackedUrl();
+
+  ValidateUKM(false /* server_lofi_expected */,
+              false /* client_lofi_expected */, false /* lite_page_expected */,
+              true /* noscript_expected */, false /* opt_out_expected */);
+}
+
+TEST_F(PreviewsUKMObserverTest, NoScriptOptOut) {
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          true /* noscript_on */);
+
+  observer()->BroadcastEventToObservers(
+      PreviewsInfoBarDelegate::OptOutEventKey());
+  NavigateToUntrackedUrl();
+
+  ValidateUKM(false /* server_lofi_expected */,
+              false /* client_lofi_expected */, false /* lite_page_expected */,
+              true /* noscript_expected */, true /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, ClientLoFiSeen) {
-  RunTest(false /* data_reduction_proxy_used */,
-          false /* lite_page_received */);
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data->set_client_lofi_requested(true);
 
   // Prepare 3 resources of varying size and configurations, 2 of which have
@@ -199,15 +253,16 @@ TEST_F(PreviewsUKMObserverTest, ClientLoFiSeen) {
   NavigateToUntrackedUrl();
 
   ValidateUKM(false /* server_lofi_expected */, true /* client_lofi_expected */,
-              false /* lite_page_expected */, false /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, ClientLoFiOptOut) {
-  RunTest(false /* data_reduction_proxy_used */,
-          false /* lite_page_received */);
+  RunTest(false /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data->set_client_lofi_requested(true);
 
   // Prepare 3 resources of varying size and configurations, 2 of which have
@@ -234,14 +289,16 @@ TEST_F(PreviewsUKMObserverTest, ClientLoFiOptOut) {
   NavigateToUntrackedUrl();
 
   ValidateUKM(false /* server_lofi_expected */, true /* client_lofi_expected */,
-              false /* lite_page_expected */, true /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              true /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, ServerLoFiSeen) {
-  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
   data->set_lofi_received(true);
 
@@ -267,14 +324,16 @@ TEST_F(PreviewsUKMObserverTest, ServerLoFiSeen) {
   NavigateToUntrackedUrl();
 
   ValidateUKM(true /* server_lofi_expected */, false /* client_lofi_expected */,
-              false /* lite_page_expected */, false /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, ServerLoFiOptOut) {
-  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
   data->set_lofi_received(true);
 
@@ -302,19 +361,21 @@ TEST_F(PreviewsUKMObserverTest, ServerLoFiOptOut) {
   NavigateToUntrackedUrl();
 
   ValidateUKM(true /* server_lofi_expected */, false /* client_lofi_expected */,
-              false /* lite_page_expected */, true /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              true /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, BothLoFiSeen) {
-  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data1 =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data1->set_used_data_reduction_proxy(true);
   data1->set_lofi_received(true);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data2 =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data2->set_used_data_reduction_proxy(true);
   data2->set_client_lofi_requested(true);
 
@@ -340,19 +401,21 @@ TEST_F(PreviewsUKMObserverTest, BothLoFiSeen) {
 
   NavigateToUntrackedUrl();
   ValidateUKM(true /* server_lofi_expected */, true /* client_lofi_expected */,
-              false /* lite_page_expected */, false /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              false /* opt_out_expected */);
 }
 
 TEST_F(PreviewsUKMObserverTest, BothLoFiOptOut) {
-  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */);
+  RunTest(true /* data_reduction_proxy_used */, false /* lite_page_received */,
+          false /* noscript_on */);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data1 =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data1->set_used_data_reduction_proxy(true);
   data1->set_lofi_received(true);
 
   std::unique_ptr<data_reduction_proxy::DataReductionProxyData> data2 =
-      base::MakeUnique<data_reduction_proxy::DataReductionProxyData>();
+      std::make_unique<data_reduction_proxy::DataReductionProxyData>();
   data2->set_used_data_reduction_proxy(true);
   data2->set_client_lofi_requested(true);
 
@@ -379,7 +442,8 @@ TEST_F(PreviewsUKMObserverTest, BothLoFiOptOut) {
       PreviewsInfoBarDelegate::OptOutEventKey());
   NavigateToUntrackedUrl();
   ValidateUKM(true /* server_lofi_expected */, true /* client_lofi_expected */,
-              false /* lite_page_expected */, true /* opt_out_expected */);
+              false /* lite_page_expected */, false /* noscript_expected */,
+              true /* opt_out_expected */);
 }
 
 }  // namespace

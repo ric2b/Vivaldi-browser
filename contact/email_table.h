@@ -22,7 +22,7 @@ class Connection;
 
 namespace contact {
 
-// Encapsulates an SQL table that holds Email info.
+// Encapsulates an SQL table that holds Email address info.
 //
 // This is refcounted to support calling InvokeLater() with some of its methods
 // (necessary to maintain ordering of DB operations).
@@ -36,11 +36,13 @@ class EmailTable {
   // happening to avoid thread-safety problems.
   virtual ~EmailTable();
 
-  EmailID AddEmail(AddPropertyObject row);
-  bool UpdateEmail(UpdatePropertyObject row);
-  bool DeleteEmail(EmailID email_id, ContactID contact_id);
-  bool GetEmailsForContact(ContactID contact_id, EmailRows* emails);
-  bool DoesEmailIdExist(EmailID email_id, ContactID contact_id);
+  EmailAddressID AddEmailAddress(EmailAddressRow row);
+  bool UpdateEmailAddress(EmailAddressRow row);
+  bool DeleteEmail(EmailAddressID email_id, ContactID contact_id);
+  bool GetEmailsForContact(ContactID contact_id, EmailAddressRows* emails);
+  bool GetAllEmailAddresses(EmailAddressRows* emails);
+  bool DoesEmailAddressIdExist(EmailAddressID email_address_id,
+                               ContactID contact_id);
 
  protected:
   virtual sql::Connection& GetDB() = 0;

@@ -228,6 +228,28 @@
             "description": "Changed fullscreen state."
           }
         ]
+      },
+      {
+        "name": "onWindowCloseCancelled",
+        "type": "function",
+        "description": "Fired when the window close has been cancelled.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId"
+          }
+        ]
+      },
+      {
+        "name": "onBeforeUnloadDialogOpened",
+        "type": "function",
+        "description": "Fired when a beforeunload dialog is shown for a tab.",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "tabId"
+          }
+        ]
       }
     ]
   }

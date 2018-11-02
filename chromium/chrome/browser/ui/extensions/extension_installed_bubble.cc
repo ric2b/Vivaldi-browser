@@ -43,7 +43,7 @@ const int kAnimationWaitRetries = 10;
 
 // Class responsible for showing the bubble after it's installed. Owns itself.
 class ExtensionInstalledBubbleObserver
-    : public chrome::BrowserListObserver,
+    : public BrowserListObserver,
       public extensions::ExtensionRegistryObserver {
  public:
   explicit ExtensionInstalledBubbleObserver(
@@ -65,7 +65,7 @@ class ExtensionInstalledBubbleObserver
  private:
   ~ExtensionInstalledBubbleObserver() override {}
 
-  // chrome::BrowserListObserver:
+  // BrowserListObserver:
   void OnBrowserClosing(Browser* browser) override {
     if (bubble_->browser() == browser) {
       // Browser is closing before the bubble was shown.

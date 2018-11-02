@@ -10,7 +10,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "media/base/bind_to_current_loop.h"
@@ -20,7 +19,6 @@
 #include "media/capture/video/chromeos/mock_camera_module.h"
 #include "media/capture/video/chromeos/mock_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/mock_video_capture_client.h"
-#include "media/capture/video/chromeos/mojo/arc_camera3.mojom.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -145,7 +143,7 @@ class CameraDeviceDelegateTest : public ::testing::Test {
     ASSERT_FALSE(device_delegate_thread_.IsRunning());
     ASSERT_FALSE(camera_device_delegate_);
     device_delegate_thread_.Start();
-    camera_device_delegate_ = base::MakeUnique<CameraDeviceDelegate>(
+    camera_device_delegate_ = std::make_unique<CameraDeviceDelegate>(
         descriptor, camera_hal_delegate_,
         device_delegate_thread_.task_runner());
   }
@@ -155,6 +153,16 @@ class CameraDeviceDelegateTest : public ::testing::Test {
     arc::mojom::CameraInfoPtr camera_info = arc::mojom::CameraInfo::New();
     arc::mojom::CameraMetadataPtr static_metadata =
         arc::mojom::CameraMetadata::New();
+    arc::mojom::CameraMetadataEntryPtr entry =
+        arc::mojom::CameraMetadataEntry::New();
+    entry->index = 0;
+    entry->tag = arc::mojom::CameraMetadataTag::ANDROID_SENSOR_ORIENTATION;
+    entry->type = arc::mojom::EntryType::TYPE_INT32;
+    entry->count = 1;
+    entry->data = std::vector<uint8_t>(4, 0);
+    static_metadata->entries =
+        std::vector<arc::mojom::CameraMetadataEntryPtr>();
+    static_metadata->entries->push_back(std::move(entry));
     switch (camera_id) {
       case 0:
         camera_info->facing = arc::mojom::CameraFacing::CAMERA_FACING_FRONT;
@@ -345,10 +353,10 @@ class CameraDeviceDelegateTest : public ::testing::Test {
 
   unittest_internal::MockVideoCaptureClient* ResetDeviceContext() {
     auto mock_client =
-        base::MakeUnique<unittest_internal::MockVideoCaptureClient>();
+        std::make_unique<unittest_internal::MockVideoCaptureClient>();
     auto* client_ptr = mock_client.get();
     device_context_ =
-        base::MakeUnique<CameraDeviceContext>(std::move(mock_client));
+        std::make_unique<CameraDeviceContext>(std::move(mock_client));
     return client_ptr;
   }
 
@@ -563,6 +571,48 @@ TEST_F(CameraDeviceDelegateTest, FailToOpenDevice) {
 
   // Wait unitl |camera_device_delegate_->StopAndDeAllocate| calls the
   // QuitRunLoop callback.
+  DoLoop();
+
+  ResetDevice();
+}
+
+// Test that the class handles it correctly when StopAndDeAllocate is called
+// multiple times.
+TEST_F(CameraDeviceDelegateTest, DoubleStopAndDeAllocate) {
+  AllocateDeviceWithDescriptor(kDefaultDescriptor);
+
+  VideoCaptureParams params;
+  params.requested_format = kDefaultCaptureFormat;
+
+  auto* mock_client = ResetDeviceContext();
+  mock_client->SetFrameCb(BindToCurrentLoop(base::BindOnce(
+      &CameraDeviceDelegateTest::QuitRunLoop, base::Unretained(this))));
+  mock_client->SetQuitCb(BindToCurrentLoop(base::BindOnce(
+      &CameraDeviceDelegateTest::QuitRunLoop, base::Unretained(this))));
+  SetUpExpectationUntilCapturing(mock_client);
+  SetUpExpectationForCaptureLoop();
+
+  device_delegate_thread_.task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&CameraDeviceDelegate::AllocateAndStart,
+                                camera_device_delegate_->GetWeakPtr(), params,
+                                base::Unretained(device_context_.get())));
+
+  // Wait until a frame is received.  MockVideoCaptureClient calls QuitRunLoop()
+  // to stop the run loop.
+  DoLoop();
+
+  EXPECT_EQ(CameraDeviceContext::State::kCapturing, GetState());
+
+  SetUpExpectationForClose();
+
+  WaitForDeviceToClose();
+
+  device_delegate_thread_.task_runner()->PostTask(
+      FROM_HERE, base::BindOnce(&CameraDeviceDelegate::StopAndDeAllocate,
+                                camera_device_delegate_->GetWeakPtr(),
+                                BindToCurrentLoop(base::BindOnce(
+                                    &CameraDeviceDelegateTest::QuitRunLoop,
+                                    base::Unretained(this)))));
   DoLoop();
 
   ResetDevice();

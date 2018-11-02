@@ -70,7 +70,7 @@ class WebTextCheckingCompletionImpl : public WebTextCheckingCompletion {
   }
 
  private:
-  virtual ~WebTextCheckingCompletionImpl() {}
+  virtual ~WebTextCheckingCompletionImpl() = default;
 
   Persistent<SpellCheckRequest> request_;
 };
@@ -91,7 +91,7 @@ SpellCheckRequest::SpellCheckRequest(Range* checking_range,
   DCHECK(root_editable_element_);
 }
 
-SpellCheckRequest::~SpellCheckRequest() {}
+SpellCheckRequest::~SpellCheckRequest() = default;
 
 void SpellCheckRequest::Trace(blink::Visitor* visitor) {
   visitor->Trace(requester_);
@@ -165,7 +165,7 @@ SpellCheckRequester::SpellCheckRequester(LocalFrame& frame)
           this,
           &SpellCheckRequester::TimerFiredToProcessQueuedRequest) {}
 
-SpellCheckRequester::~SpellCheckRequester() {}
+SpellCheckRequester::~SpellCheckRequester() = default;
 
 WebTextCheckClient* SpellCheckRequester::GetTextCheckerClient() const {
   return GetFrame().GetSpellChecker().GetTextCheckerClient();
@@ -192,7 +192,7 @@ void SpellCheckRequester::RequestCheckingFor(const EphemeralRange& range,
   DEFINE_STATIC_LOCAL(CustomCountHistogram,
                       spell_checker_request_interval_histogram,
                       ("WebCore.SpellChecker.RequestInterval", 0, 10000, 50));
-  const double current_request_time = MonotonicallyIncreasingTime();
+  const double current_request_time = CurrentTimeTicksInSeconds();
   if (request_num == 0 && last_request_time_ > 0) {
     const double interval_ms =
         (current_request_time - last_request_time_) * 1000.0;
@@ -299,7 +299,7 @@ void SpellCheckRequester::DidCheck(int sequence) {
 
   ClearProcessingRequest();
   if (!request_queue_.IsEmpty())
-    timer_to_process_queued_request_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    timer_to_process_queued_request_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void SpellCheckRequester::DidCheckSucceed(

@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "ui/gfx/native_pixmap.h"
 
@@ -22,7 +22,7 @@ class GLImage;
 
 namespace gpu {
 
-class GPU_EXPORT GpuMemoryBufferFactoryNativePixmap
+class GPU_IPC_SERVICE_EXPORT GpuMemoryBufferFactoryNativePixmap
     : public GpuMemoryBufferFactory,
       public ImageFactory {
  public:
@@ -49,11 +49,11 @@ class GPU_EXPORT GpuMemoryBufferFactoryNativePixmap
       unsigned internalformat,
       int client_id,
       SurfaceHandle surface_handle) override;
-  scoped_refptr<gl::GLImage> CreateAnonymousImage(
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      unsigned internalformat) override;
+  scoped_refptr<gl::GLImage> CreateAnonymousImage(const gfx::Size& size,
+                                                  gfx::BufferFormat format,
+                                                  gfx::BufferUsage usage,
+                                                  unsigned internalformat,
+                                                  bool* is_cleared) override;
   unsigned RequiredTextureType() override;
 
  private:

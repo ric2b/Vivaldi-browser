@@ -54,6 +54,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
       RenderWidgetHost* widget,
       BrowserPluginGuest* guest,
       base::WeakPtr<RenderWidgetHostViewBase> platform_view);
+  static RenderWidgetHostViewBase* GetRootView(RenderWidgetHostViewBase* rwhv);
+
   ~RenderWidgetHostViewGuest() override;
 
   RenderWidgetHostViewBase* GetPlatformView() const
@@ -121,10 +123,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
 #endif
-  void ProcessMouseEvent(const blink::WebMouseEvent& event,
-                         const ui::LatencyInfo& latency) override;
-  void ProcessTouchEvent(const blink::WebTouchEvent& event,
-                         const ui::LatencyInfo& latency) override;
+  void PreProcessMouseEvent(const blink::WebMouseEvent& event) override;
+  void PreProcessTouchEvent(const blink::WebTouchEvent& event) override;
 
   void DidStopFlinging() override;
 

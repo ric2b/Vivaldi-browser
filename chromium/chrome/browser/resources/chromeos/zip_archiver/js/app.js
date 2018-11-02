@@ -82,6 +82,12 @@ unpacker.app = {
   volumeLoadedPromises: {},
 
   /**
+   * A map to indicate whether a volume's metadata load is finished.
+   * @type {!Object<!unpacker.types.FileSystemId, boolean>}
+   */
+  volumeLoadFinished: {},
+
+  /**
    * A Promise used to postpone all calls to fileSystemProvider API after
    * the NaCl module loads.
    * @type {?Promise}
@@ -228,6 +234,8 @@ unpacker.app = {
    * @private
    */
   restoreVolumeState_: function(fileSystemId) {
+    if (chrome.extension.inIncognitoContext)
+      return new Promise.reject('No state restored due to incognito context');
     return new Promise(function(fulfill, reject) {
       chrome.storage.local.get([unpacker.app.STORAGE_KEY], function(result) {
         if (!result[unpacker.app.STORAGE_KEY]) {
@@ -263,17 +271,16 @@ unpacker.app = {
    * @param {!Object<!unpacker.types.RequestId,
    *                 !unpacker.types.OpenFileRequestedOptions>}
    *     openedFiles Previously opened files before a suspend.
-   * @param {?string} passphrase Previously used passphrase before a suspend.
    * @return {!Promise} Promise fulfilled on success and rejected on failure.
    * @private
    */
-  loadVolume_: function(fileSystemId, entry, openedFiles, passphrase) {
+  loadVolume_: function(fileSystemId, entry, openedFiles) {
     return new Promise(function(fulfill, reject) {
       entry.file(
           function(file) {
             // File is a Blob object, so it's ok to construct the Decompressor
             // directly with it.
-            var passphraseManager = new unpacker.PassphraseManager(passphrase);
+            var passphraseManager = new unpacker.PassphraseManager();
             console.assert(
                 unpacker.app.naclModule,
                 'The NaCL module should have already been defined.');
@@ -357,8 +364,7 @@ unpacker.app = {
             };
           });
           return unpacker.app.loadVolume_(
-              fileSystemId, stateWithFileSystem.state.entry, openedFilesOptions,
-              stateWithFileSystem.state.passphrase);
+              fileSystemId, stateWithFileSystem.state.entry, openedFilesOptions);
         })
         .catch(function(error) {
           console.error(error.stack || error);
@@ -501,6 +507,7 @@ unpacker.app = {
     delete unpacker.app.volumes[fileSystemId];
     // Allow mount after clean.
     delete unpacker.app.volumeLoadedPromises[fileSystemId];
+    delete unpacker.app.volumeLoadFinished[fileSystemId];
 
     if (Object.keys(unpacker.app.volumes).length === 0 &&
         unpacker.app.mountProcessCounter === 0) {
@@ -880,7 +887,8 @@ unpacker.app = {
                     // Decrement the counter that indicates the number of
                     // ongoing mount process.
                     unpacker.app.mountProcessCounter--;
-                    if (error.message === 'EXISTS') {
+                    if (error.message === 'EXISTS' ||
+                        error.message === 'ALREADY_LOADING') {
                       if (opt_onError)
                         opt_onError(fileSystemId);
                       return;
@@ -913,10 +921,26 @@ unpacker.app = {
                       opt_onSuccess(fileSystemId);
                   };
 
+                  // Prevent loading a zip file duplicatedly when the extension
+                  // is currently loading the same file.
+                  if (unpacker.app.volumeLoadedPromises[fileSystemId] &&
+                      !unpacker.app.volumeLoadFinished[fileSystemId]) {
+                    onError({message: 'ALREADY_LOADING'}, fileSystemId);
+                    chrome.notifications.create(
+                        fileSystemId, {
+                          type: 'basic',
+                          iconUrl: chrome.runtime.getManifest().icons[128],
+                          title: entry.name,
+                          message: stringData['ZIP_ARCHIVER_MOUNTING_MESSAGE'],
+                        },
+                        function() {});
+                    return;
+                  }
                   var loadPromise = unpacker.app.loadVolume_(
-                      fileSystemId, entry, {}, null /* passphrase */);
+                      fileSystemId, entry, {});
                   loadPromise
                       .then(function() {
+                        unpacker.app.volumeLoadFinished[fileSystemId] = true;
                         // Mount the volume and save its information in local
                         // storage in order to be able to recover the metadata
                         // in case of restarts, system crashes, etc.
@@ -944,6 +968,7 @@ unpacker.app = {
                       });
 
                   unpacker.app.volumeLoadedPromises[fileSystemId] = loadPromise;
+                  unpacker.app.volumeLoadFinished[fileSystemId] = false;
                 }.bind(null, item.entry));
           });
         })

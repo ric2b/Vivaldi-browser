@@ -191,7 +191,7 @@
 <translation id="7445762425076701745">Impossible de valider entièrement l’identité du serveur auquel vous êtes connecté. Le nom utilisé pour cette connexion n’est valide que sur votre réseau et aucune autorité de certification externe ne peut en vérifier la propriété. Certaines autorités de certification délivrent tout de même des certificats pour ces types de nom, par conséquent nous ne sommes pas en mesure de vérifier que vous êtes connecté au site voulu et non à un site malveillant.</translation>
 <translation id="7455133967321480974">Utiliser le paramètre global par défaut (« Bloquer »)</translation>
 <translation id="7518003948725431193">Aucune page Web trouvée à l’adresse : <ph name="URL" /></translation>
-<translation id="7521387064766892559">JavaScript</translation>
+<translation id="7521387064766892559">Javascript</translation>
 <translation id="7549584377607005141">Pour s’afficher correctement, cette page Web a besoin des données que vous avez saisies précédemment. Vous pouvez envoyer de nouveau ces données. Cependant, en procédant ainsi, vous répéterez toute action déjà effectuée sur cette page.</translation>
 <translation id="759889825892636187">Impossible actuellement de traiter cette demande via <ph name="HOST_NAME" />.</translation>
 <translation id="7662298039739062396">Paramètre contrôlé par une extension</translation>

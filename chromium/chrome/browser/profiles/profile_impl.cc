@@ -53,11 +53,11 @@
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/media/media_device_id_salt.h"
 #include "chrome/browser/net/predictor.h"
-#include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/policy/schema_registry_service.h"
@@ -105,10 +105,8 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/metrics/metrics_service.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
-#include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
@@ -159,7 +157,7 @@
 #include "content/public/common/page_zoom.h"
 #endif
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -186,7 +184,6 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
 
-using base::Time;
 using base::TimeDelta;
 using bookmarks::BookmarkModel;
 using content::BrowserThread;
@@ -275,17 +272,6 @@ std::string ExitTypeToSessionTypePrefValue(Profile::ExitType type) {
   }
   NOTREACHED();
   return std::string();
-}
-
-PrefStore* CreateExtensionPrefStore(Profile* profile,
-                                    bool incognito_pref_store) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  return new ExtensionPrefStore(
-      ExtensionPrefValueMapFactory::GetForBrowserContext(profile),
-      incognito_pref_store);
-#else
-  return NULL;
-#endif
 }
 
 }  // namespace
@@ -420,7 +406,7 @@ ProfileImpl::ProfileImpl(
       pref_registry_(new user_prefs::PrefRegistrySyncable),
       io_data_(this),
       last_session_exit_type_(EXIT_NORMAL),
-      start_time_(Time::Now()),
+      start_time_(base::Time::Now()),
       delegate_(delegate),
       predictor_(nullptr) {
   TRACE_EVENT0("browser,startup", "ProfileImpl::ctor")
@@ -537,7 +523,7 @@ ProfileImpl::ProfileImpl(
     // (successfully or not).  Note that we can use base::Unretained
     // because the PrefService is owned by this class and lives on
     // the same thread.
-    prefs_->AddPrefInitObserver(base::Bind(
+    prefs_->AddPrefInitObserver(base::BindOnce(
         &ProfileImpl::OnPrefsLoaded, base::Unretained(this), create_mode));
   } else {
     // Prefs were loaded synchronously so we can continue directly.
@@ -605,7 +591,7 @@ void ProfileImpl::DoFinalInit() {
           local_state,
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)));
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   // Initialize the BackgroundModeManager - this has to be done here before
   // InitExtensions() is called because it relies on receiving notifications
   // when extensions are loaded. BackgroundModeManager is not needed under
@@ -621,12 +607,7 @@ void ProfileImpl::DoFinalInit() {
     if (g_browser_process->background_mode_manager())
       g_browser_process->background_mode_manager()->RegisterProfile(this);
   }
-#endif  // BUILDFLAG(ENABLE_BACKGROUND)
-
-  base::FilePath cookie_path = GetPath();
-  cookie_path = cookie_path.Append(chrome::kCookieFilename);
-  base::FilePath channel_id_path = GetPath();
-  channel_id_path = channel_id_path.Append(chrome::kChannelIDFilename);
+#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
 
   base::FilePath media_cache_path = base_cache_path_;
   int media_cache_max_size;
@@ -637,27 +618,11 @@ void ProfileImpl::DoFinalInit() {
   extensions_cookie_path =
       extensions_cookie_path.Append(chrome::kExtensionsCookieFilename);
 
-#if defined(OS_ANDROID)
-  SessionStartupPref::Type startup_pref_type =
-      SessionStartupPref::GetDefaultStartupType();
-#else
-  SessionStartupPref::Type startup_pref_type =
-      StartupBrowserCreator::GetSessionStartupPref(
-          *base::CommandLine::ForCurrentProcess(), this).type;
-#endif
-  content::CookieStoreConfig::SessionCookieMode session_cookie_mode =
-      content::CookieStoreConfig::PERSISTANT_SESSION_COOKIES;
-  if (GetLastSessionExitType() == Profile::EXIT_CRASHED ||
-      startup_pref_type == SessionStartupPref::LAST) {
-    session_cookie_mode = content::CookieStoreConfig::RESTORED_SESSION_COOKIES;
-  }
-
   // Make sure we initialize the ProfileIOData after everything else has been
   // initialized that we might be reading from the IO thread.
 
-  io_data_.Init(cookie_path, channel_id_path, media_cache_path,
-                media_cache_max_size, extensions_cookie_path, GetPath(),
-                predictor_, session_cookie_mode, GetSpecialStoragePolicy(),
+  io_data_.Init(media_cache_path, media_cache_max_size, extensions_cookie_path,
+                GetPath(), predictor_, GetSpecialStoragePolicy(),
                 CreateDomainReliabilityMonitor(local_state));
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -758,9 +723,6 @@ ProfileImpl::~ProfileImpl() {
 
   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
       this);
-
-  if (pref_proxy_config_tracker_)
-    pref_proxy_config_tracker_->DetachFromPrefService();
 
   // This causes the Preferences file to be written to disk.
   if (prefs_loaded)
@@ -973,6 +935,24 @@ Profile::ExitType ProfileImpl::GetLastSessionExitType() {
   return last_session_exit_type_;
 }
 
+bool ProfileImpl::ShouldRestoreOldSessionCookies() {
+#if defined(OS_ANDROID)
+  SessionStartupPref::Type startup_pref_type =
+      SessionStartupPref::GetDefaultStartupType();
+#else
+  SessionStartupPref::Type startup_pref_type =
+      StartupBrowserCreator::GetSessionStartupPref(
+          *base::CommandLine::ForCurrentProcess(), this)
+          .type;
+#endif
+  return GetLastSessionExitType() == Profile::EXIT_CRASHED ||
+         startup_pref_type == SessionStartupPref::LAST;
+}
+
+bool ProfileImpl::ShouldPersistSessionCookies() {
+  return true;
+}
+
 PrefService* ProfileImpl::GetPrefs() {
   return const_cast<PrefService*>(
       static_cast<const ProfileImpl*>(this)->GetPrefs());
@@ -1153,7 +1133,7 @@ bool ProfileImpl::IsSameProfile(Profile* profile) {
   return otr_profile && profile == otr_profile;
 }
 
-Time ProfileImpl::GetStartTime() const {
+base::Time ProfileImpl::GetStartTime() const {
   return start_time_;
 }
 
@@ -1262,12 +1242,6 @@ void ProfileImpl::InitChromeOSPreferences() {
 
 #endif  // defined(OS_CHROMEOS)
 
-PrefProxyConfigTracker* ProfileImpl::GetProxyConfigTracker() {
-  if (!pref_proxy_config_tracker_)
-    pref_proxy_config_tracker_.reset(CreateProxyConfigTracker());
-  return pref_proxy_config_tracker_.get();
-}
-
 chrome_browser_net::Predictor* ProfileImpl::GetNetworkPredictor() {
   return predictor_;
 }
@@ -1360,17 +1334,6 @@ void ProfileImpl::GetMediaCacheParameters(base::FilePath* cache_path,
     *cache_path = path.Append(cache_path->BaseName());
 
   *max_size = prefs_->GetInteger(prefs::kMediaCacheSize);
-}
-
-PrefProxyConfigTracker* ProfileImpl::CreateProxyConfigTracker() {
-#if defined(OS_CHROMEOS)
-  if (chromeos::ProfileHelper::IsSigninProfile(this)) {
-    return ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
-        g_browser_process->local_state());
-  }
-#endif  // defined(OS_CHROMEOS)
-  return ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
-      GetPrefs(), g_browser_process->local_state());
 }
 
 std::unique_ptr<domain_reliability::DomainReliabilityMonitor>

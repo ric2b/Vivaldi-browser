@@ -48,7 +48,6 @@
 <translation id="255937426064304553">الأمريكية الدولية</translation>
 <translation id="2563185590376525700">ضفدع</translation>
 <translation id="2649120831653069427">أسماك رينبو فيش</translation>
-<translation id="2656923396825879524">شكل هندسي رقم 3</translation>
 <translation id="2735698359135166290">لوحة المفاتيح الرومانية القياسية</translation>
 <translation id="2771816809568414714">جبن</translation>
 <translation id="2781645665747935084">البلجيكية</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">Turkish-F</translation>
 <translation id="3619115746895587757">كابتشينو</translation>
 <translation id="3678559383040232393">لوحة المفاتيح المالطية</translation>
-<translation id="3728399474846997774">شكل هندسي رقم 2</translation>
-<translation id="3734201824773416162">شكل هندسي رقم 1</translation>
 <translation id="3801082500826908679">الفاروية</translation>
 <translation id="3809272675881623365">أرنب</translation>
 <translation id="3815016854028376614">‏أسلوب الإدخال لنظام Zhuyin</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">لوحة المفاتيح الإيطالية</translation>
 <translation id="3910699493603749297">لوحة مفاتيح اللغة الخميرية</translation>
 <translation id="391445228316373457">لوحة مفاتيح لغة نيبالية (صوتي)</translation>
-<translation id="3947050919258841761">شكل هندسي رقم 5</translation>
 <translation id="3958548648197196644">كيوي</translation>
 <translation id="4070370845051020638">أسلوب الإدخال باللغة الكانتونية</translation>
 <translation id="4072248638558688893">لوحة المفاتيح التاميلية (صوتية)</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">قرد</translation>
 <translation id="4711094779914110278">التركية</translation>
 <translation id="4725511304875193254">كورجي</translation>
+<translation id="4737050008115666127">هبوط</translation>
 <translation id="4747271164117300400">المقدونية</translation>
 <translation id="4749157430980974800">لوحة المفاتيح الجورجية</translation>
 <translation id="4755240240651974342">لوحة المفاتيح الفنلندية</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">‏لوحة مفاتيح اللغة النيبالية (InScript)</translation>
 <translation id="5469868506864199649">الإيطالية</translation>
 <translation id="5500122897333236901">الأيسلندية</translation>
+<translation id="5508696409934741614">نقاط</translation>
 <translation id="5533555070048896610">‏التحويل الصوتي (ناماستي ← नमस्ते)</translation>
 <translation id="5605830556594064952">‏الأمريكية Dvorak</translation>
 <translation id="5640179856859982418">لوحة المفاتيح السويسرية</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">لوحة المفاتيح الكندية الإنجليزية</translation>
 <translation id="751507702149411736">البيلاروسية</translation>
 <translation id="7547811415869834682">الهولندية</translation>
+<translation id="7603724359189955920">شبكات</translation>
 <translation id="770015031906360009">اليونانية</translation>
 <translation id="7706319470528945664">لوحة المفاتيح البرتغالية</translation>
 <translation id="7774365994322694683">طائر</translation>
 <translation id="7825423931463735974">‏لوحة المفاتيح التاميلية (Tamil99)</translation>
 <translation id="7853966320808728790">‏BÉPO الفرنسية</translation>
-<translation id="7872088194351932564">شكل هندسي رقم 4</translation>
 <translation id="7896906914454843592">لوحة المفاتيح الأمريكية الموسعة</translation>
 <translation id="7898607018410277265">لوحة المفاتيح الغوجاراتية (صوتية جديدة)</translation>
 <translation id="7917972308273378936">لوحة المفاتيح الليتوانية</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">‏لوحة المفاتيح الأمريكية Colemak</translation>
 <translation id="8437209419043462667">العربية</translation>
 <translation id="8467473010914675605">أسلوب الإدخال الكوري</translation>
+<translation id="8477649328507734757">دوران</translation>
 <translation id="8521441079177373948">المملكة المتحدة</translation>
 <translation id="8551494947769799688">اللاتفية</translation>
 <translation id="8561206103590473338">فيل</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">لوحة مفاتيح ميانمار ميانسان</translation>
 <translation id="9153744823707037316">مصفوفة أسلوب الإدخال</translation>
 <translation id="9206487995878691001">‏أسلوب الإدخال لنظام Cangjie</translation>
+<translation id="9219908252191632183">قمري</translation>
 </translationbundle>

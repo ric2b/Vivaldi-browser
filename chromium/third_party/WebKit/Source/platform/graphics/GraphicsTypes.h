@@ -35,6 +35,12 @@
 
 namespace blink {
 
+enum AlphaDisposition {
+  kPremultiplyAlpha,
+  kUnpremultiplyAlpha,
+  kDontChangeAlpha,
+};
+
 enum DataU8ColorType {
   kRGBAColorType,
   kN32ColorType,
@@ -94,28 +100,6 @@ enum AccelerationHint {
   kPreferNoAcceleration,
 };
 
-enum SnapshotReason {
-  kSnapshotReasonUnknown,
-  kSnapshotReasonGetImageData,
-  kSnapshotReasonWebGLTexImage2D,
-  kSnapshotReasonWebGLTexSubImage2D,
-  kSnapshotReasonWebGLTexImage3D,
-  kSnapshotReasonWebGLTexSubImage3D,
-  kSnapshotReasonPaint,
-  kSnapshotReasonToDataURL,
-  kSnapshotReasonToBlob,
-  kSnapshotReasonCanvasListenerCapture,
-  kSnapshotReasonDrawImage,
-  kSnapshotReasonCreatePattern,
-  kSnapshotReasonTransferToImageBitmap,
-  kSnapshotReasonUnitTests,
-  kSnapshotReasonGetCopiedImage,
-  kSnapshotReasonWebGLDrawImageIntoBuffer,
-  kSnapshotReasonCopyToClipboard,
-  kSnapshotReasonCreateImageBitmap,
-  kSnapshotReasonLowLatencyFrame,
-};
-
 // Note: enum used directly for histogram, values must not change
 enum DisableDeferralReason {
   kDisableDeferralReasonUnknown =
@@ -140,11 +124,6 @@ enum HighContrastClassification {
   kNotClassified,
   kApplyHighContrastFilter,
   kDoNotApplyHighContrastFilter,
-};
-
-enum ImageInitializationMode {
-  kInitializeImagePixels,
-  kDoNotInitializeImagePixels,
 };
 
 // TODO(junov): crbug.com/453113 Relocate ShadowMode to

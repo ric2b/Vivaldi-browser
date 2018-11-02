@@ -3,6 +3,7 @@
 <translationbundle lang="es-419">
 <translation id="102360288709523007">Envía estadísticas de uso e informes de fallos a Google para mejorar Chromium.</translation>
 <translation id="1185134272377778587">Acerca de Chromium</translation>
+<translation id="1289966288285062467">Aviso de privacidad de Chromium</translation>
 <translation id="1472013873724362412">Tu cuenta no funciona en Chromium. Comunícate con tu administrador de dominio o utiliza una cuenta común de Google para acceder.</translation>
 <translation id="1736662517232558588">Dat. Chromium bor.</translation>
 <translation id="1838412507805038478">Chromium verificó que <ph name="ISSUER" /> emitió el certificado de este sitio web.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">¿Salir de Chromium?</translation>
 <translation id="6424492062988593837">¡Chromium mejoró! Hay una nueva versión disponible.</translation>
 <translation id="6604711459180487467">Disfruta de una mejor experiencia en Chromium según tu ubicación.</translation>
+<translation id="6626296268883197964">Al usar esta app, aceptas las <ph name="BEGIN_LINK_TOS" />Condiciones del servicio<ph name="END_LINK_TOS" /> y el <ph name="BEGIN_LINK_PRIVACY" />Aviso de privacidad<ph name="END_LINK_PRIVACY" /> de Chromium.</translation>
 <translation id="7099326575020694068">Chromium no puede usar tu cámara en el modo de vista dividida</translation>
-<translation id="7144758435978427212">Descubre las páginas web que envían los objetos cercanos. Cuando Bluetooth está activado, Chromium puede identificar las páginas web asociadas con los objetos cercanos y enviarlas de forma anónima a Google para determinar cuáles son las más útiles. <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium lleva tus cuentas a la Web para ahorrarte tiempo. Puedes agregar o quitar cuentas en la configuración.</translation>
 <translation id="7269362888766543920">Algunos complementos causan fallos en Chromium. Intenta desinstalarlos.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Usa Chromium en todas partes</translation>
 <translation id="7674213385180944843">Abre Configuración &gt; Privacidad &gt; Cámara &gt; Chromium y activa la cámara.</translation>
 <translation id="786327964234957808">La cuenta de sincronización cambiará de <ph name="USER_EMAIL1" /> a <ph name="USER_EMAIL2" />. El dominio <ph name="DOMAIN" /> administra tus datos existentes de Chromium. Esta acción borrará los datos de este dispositivo, pero permanecerán en <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Al usar esta aplicación, aceptas las <ph name="BEGIN_LINK" />Condiciones del servicio<ph name="END_LINK" /> de Chromium.</translation>
 <translation id="8175055321229419309">Sugerencia: <ph name="BEGIN_LINK" />Lleva Chromium a tu Dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Obtén una mejor experiencia de Google en Chromium según tu ubicación.</translation>
 <translation id="8353224596138547809">¿Quieres que Chromium guarde tu contraseña para este sitio?</translation>

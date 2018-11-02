@@ -17,7 +17,7 @@
 
 namespace blink {
 
-IDBObservation::~IDBObservation() {}
+IDBObservation::~IDBObservation() = default;
 
 ScriptValue IDBObservation::key(ScriptState* script_state) {
   if (!key_range_)
@@ -28,11 +28,7 @@ ScriptValue IDBObservation::key(ScriptState* script_state) {
 }
 
 ScriptValue IDBObservation::value(ScriptState* script_state) {
-  if (!value_)
-    return ScriptValue::From(script_state,
-                             v8::Undefined(script_state->GetIsolate()));
-
-  return ScriptValue::From(script_state, IDBAny::Create(value_));
+  return ScriptValue::From(script_state, value_);
 }
 
 WebIDBOperationType IDBObservation::StringToOperationType(const String& type) {
@@ -69,19 +65,22 @@ const String& IDBObservation::type() const {
   }
 }
 
-IDBObservation* IDBObservation::Create(const WebIDBObservation& observation,
+IDBObservation* IDBObservation::Create(WebIDBObservation observation,
                                        v8::Isolate* isolate) {
-  return new IDBObservation(observation, isolate);
+  return new IDBObservation(std::move(observation), isolate);
 }
 
-IDBObservation::IDBObservation(const WebIDBObservation& observation,
+IDBObservation::IDBObservation(WebIDBObservation observation,
                                v8::Isolate* isolate)
-    : key_range_(observation.key_range),
-      value_(IDBValue::Create(observation.value, isolate)),
-      operation_type_(observation.type) {}
+    : key_range_(observation.key_range), operation_type_(observation.type) {
+  std::unique_ptr<IDBValue> value = observation.value.ReleaseIdbValue();
+  value->SetIsolate(isolate);
+  value_ = IDBAny::Create(std::move(value));
+}
 
 void IDBObservation::Trace(blink::Visitor* visitor) {
   visitor->Trace(key_range_);
+  visitor->Trace(value_);
   ScriptWrappable::Trace(visitor);
 }
 

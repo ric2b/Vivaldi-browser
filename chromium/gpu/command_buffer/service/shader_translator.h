@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "gpu/gpu_export.h"
+#include "gpu/gpu_gles2_export.h"
 #include "third_party/angle/include/GLSLANG/ShaderLang.h"
 
 namespace gl {
@@ -34,7 +34,7 @@ typedef base::RefCountedData<std::string> OptionsAffectingCompilationString;
 class ShaderTranslatorInterface
     : public base::RefCounted<ShaderTranslatorInterface> {
  public:
-  ShaderTranslatorInterface() {}
+  ShaderTranslatorInterface() = default;
 
   // Initializes the translator.
   // Must be called once before using the translator object.
@@ -66,7 +66,7 @@ class ShaderTranslatorInterface
   GetStringForOptionsThatWouldAffectCompilation() const = 0;
 
  protected:
-  virtual ~ShaderTranslatorInterface() {}
+  virtual ~ShaderTranslatorInterface() = default;
 
  private:
   friend class base::RefCounted<ShaderTranslatorInterface>;
@@ -74,7 +74,7 @@ class ShaderTranslatorInterface
 };
 
 // Implementation of ShaderTranslatorInterface
-class GPU_EXPORT ShaderTranslator : public ShaderTranslatorInterface {
+class GPU_GLES2_EXPORT ShaderTranslator : public ShaderTranslatorInterface {
  public:
   class DestructionObserver {
    public:

@@ -18,9 +18,6 @@ class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
  public:
   virtual bool InShadowTree() const = 0;
 
-  // TODO(dcheng): Move this into LocalFrameClient, since remote frames don't
-  // need this.
-  virtual void WillBeDetached() = 0;
   virtual void Detached(FrameDetachType) = 0;
 
   virtual Frame* Opener() const = 0;
@@ -35,7 +32,9 @@ class CORE_EXPORT FrameClient : public GarbageCollectedFinalized<FrameClient> {
 
   virtual void FrameFocused() const = 0;
 
-  virtual ~FrameClient() {}
+  virtual String GetDevToolsFrameToken() const = 0;
+
+  virtual ~FrameClient() = default;
 
   virtual void Trace(blink::Visitor* visitor) {}
 };

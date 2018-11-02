@@ -19,7 +19,12 @@ class GL_EXPORT GLImageNativePixmap : public gl::GLImageEGL {
  public:
   GLImageNativePixmap(const gfx::Size& size, unsigned internalformat);
 
+  // Create an EGLImage from a given NativePixmap.
   bool Initialize(gfx::NativePixmap* pixmap, gfx::BufferFormat format);
+  // Create an EGLImage from a given GL texture.
+  bool InitializeFromTexture(uint32_t texture_id);
+  // Export the wrapped EGLImage to dmabuf fds.
+  gfx::NativePixmapHandle ExportHandle();
 
   // Overridden from GLImage:
   unsigned GetInternalFormat() override;
@@ -47,6 +52,7 @@ class GL_EXPORT GLImageNativePixmap : public gl::GLImageEGL {
   unsigned internalformat_;
   scoped_refptr<gfx::NativePixmap> pixmap_;
   bool has_image_flush_external_;
+  bool has_image_dma_buf_export_;
 };
 
 }  // namespace gl

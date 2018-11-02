@@ -24,3 +24,6 @@ DISABLE(MediaColorTest, Yuv420pRec709H264)
 // Disabled video tests on mac, until the tests can be fixed
 DISABLE(MediaSourceTest, Playback_Video_WEBM_Audio_MP4)
 DISABLE_MULTI(MediaTest, VideoBearHighBitDepthMp4)
+
+// Mac keyboard shortcuts disabled
+DISABLE(GlobalKeyboardShortcuts, ShortcutsToWindowCommand)

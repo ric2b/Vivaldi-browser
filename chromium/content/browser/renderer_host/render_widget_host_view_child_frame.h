@@ -87,7 +87,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   // RenderWidgetHostView implementation.
   void InitAsChild(gfx::NativeView parent_view) override;
-  RenderWidgetHost* GetRenderWidgetHost() const override;
   void SetSize(const gfx::Size& size) override;
   void SetBounds(const gfx::Rect& rect) override;
   void Focus() override;
@@ -110,6 +109,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   gfx::Size GetPhysicalBackingSize() const override;
   bool IsMouseLocked() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
+  void SetWantsAnimateOnlyBeginFrames() override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -141,18 +141,13 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void DidStopFlinging() override;
   bool LockMouse() override;
   void UnlockMouse() override;
+  RenderWidgetHostImpl* GetRenderWidgetHostImpl() const override;
   viz::FrameSinkId GetFrameSinkId() override;
   viz::LocalSurfaceId GetLocalSurfaceId() const override;
-  void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,
-                            const ui::LatencyInfo& latency) override;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event,
-                         const ui::LatencyInfo& latency) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
-                              const ui::LatencyInfo& latency) override;
-  void ProcessTouchEvent(const blink::WebTouchEvent& event,
-                         const ui::LatencyInfo& latency) override;
+  void PreProcessTouchEvent(const blink::WebTouchEvent& event) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
+  viz::SurfaceId GetCurrentSurfaceId() const override;
   gfx::PointF TransformPointToRootCoordSpaceF(
       const gfx::PointF& point) override;
   bool TransformPointToLocalCoordSpace(const gfx::PointF& point,
@@ -162,9 +157,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
       gfx::PointF* transformed_point) override;
-
   gfx::PointF TransformRootPointToViewCoordSpace(
       const gfx::PointF& point) override;
+  TouchSelectionControllerClientManager*
+  GetTouchSelectionControllerClientManager() override;
+
   void BeginFrameSubscription(
     std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
@@ -175,7 +172,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.
-  ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
   void SetActive(bool active) override;
   void ShowDefinitionForSelection() override;
   bool SupportsSpeech() const override;
@@ -212,9 +208,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void OnFirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
 
-  // Exposed for tests.
-  bool IsChildFrameForTesting() const override;
-  viz::SurfaceId SurfaceIdForTesting() const override;
   FrameConnectorDelegate* FrameConnectorForTesting() const {
     return frame_connector_;
   }
@@ -240,9 +233,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   ui::TextInputType GetTextInputType() const;
   bool GetSelectionRange(gfx::Range* range) const;
-  // This returns the origin of this views's bounding rect in the coordinates
-  // of the root RenderWidgetHostView.
-  gfx::Point GetViewOriginInRoot() const;
 
   RenderWidgetHostViewBase* GetRootRenderWidgetHostView() const;
 

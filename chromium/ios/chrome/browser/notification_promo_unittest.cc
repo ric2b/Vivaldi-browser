@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/json/json_reader.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -52,8 +51,8 @@ class NotificationPromoTest : public PlatformTest {
  public:
   NotificationPromoTest()
       : notification_promo_(&local_state_),
-        field_trial_list_(base::MakeUnique<base::FieldTrialList>(
-            base::MakeUnique<base::MockEntropyProvider>())),
+        field_trial_list_(std::make_unique<base::FieldTrialList>(
+            std::make_unique<base::MockEntropyProvider>())),
         received_notification_(false),
         start_(0.0),
         end_(0.0),
@@ -285,54 +284,6 @@ class NotificationPromoTest : public PlatformTest {
     notification_promo_.WritePrefs();
   }
 
-  // Tests that if data is saved in the old pref structure, it is successfully
-  // migrated to the new structure that supports saving multiple promos.
-  // TODO(crbug.com/623726) Remove this method when migration is no longer
-  // needed as most users have been upgraded to the new pref structure.
-  void TestMigrationOfOldPrefs() {
-    NotificationPromo promo(&local_state_);
-    promo.InitFromVariations();
-
-    // Pick values for each variable that is saved into old prefs structure.
-    double first_view_time = 2.0;
-    int views = max_views_ + 1;
-    bool closed = true;
-
-    // Save data into old prefs structure.
-    auto ntp_promo = base::MakeUnique<base::DictionaryValue>();
-    ntp_promo->SetInteger("id", promo.promo_id_);
-    ntp_promo->SetDouble("first_view_time", first_view_time);
-    ntp_promo->SetInteger("views", views);
-    ntp_promo->SetBoolean("closed", true);
-
-    auto promo_list = base::MakeUnique<base::ListValue>();
-    promo_list->Append(std::move(ntp_promo));
-
-    std::string promo_list_key = "mobile_ntp_whats_new_promo";
-    std::string promo_dict_key = "ios.ntppromo";
-
-    base::DictionaryValue promo_dict;
-    promo_dict.Set(promo_list_key, std::move(promo_list));
-    local_state_.Set(promo_dict_key, promo_dict);
-
-    // Initialize promo and verify that its instance variables match the data
-    // saved in the old structure.
-    promo.InitFromPrefs();
-    EXPECT_DOUBLE_EQ(first_view_time, promo.first_view_time_);
-    EXPECT_EQ(views, promo.views_);
-    EXPECT_EQ(closed, promo.closed_);
-    EXPECT_FALSE(promo.CanShow());
-
-    // Verify that old pref structure was cleared.
-    const base::DictionaryValue* current_promo_dict =
-        local_state_.GetDictionary(promo_dict_key);
-    // Do not continue further if no dictionary was found at the key in prefs.
-    ASSERT_TRUE(current_promo_dict);
-    const base::ListValue* current_promo_list = NULL;
-    current_promo_dict->GetList(promo_list_key, &current_promo_list);
-    EXPECT_FALSE(current_promo_list);
-  }
-
   const NotificationPromo& promo() const { return notification_promo_; }
 
  protected:
@@ -417,30 +368,6 @@ TEST_F(NotificationPromoTest, NotificationPromoFinchTest) {
   TestMaxTime();
 
   TestFirstViewTimeRecorded();
-}
-
-// TODO(crbug.com/623726) Remove this test case when migration is no longer
-// needed as most users have been upgraded to the new pref structure.
-TEST_F(NotificationPromoTest, NotificationPromoPrefMigrationTest) {
-  Init(
-      "{"
-      "  \"start\":\"3 Aug 1999 9:26:06 GMT\","
-      "  \"end\":\"$1\","
-      "  \"promo_text\":\"What do you think of Chrome?\","
-      "  \"payload\":"
-      "    {"
-      "      \"days_active\":7,"
-      "      \"install_age_days\":21"
-      "    },"
-      "  \"max_views\":30,"
-      "  \"max_seconds\":30,"
-      "  \"promo_id\":0"
-      "}",
-      "What do you think of Chrome?",
-      933672366,  // unix epoch for 3 Aug 1999 9:26:06 GMT.
-      0, 30, 30);
-  InitPromoFromVariations();
-  TestMigrationOfOldPrefs();
 }
 
 }  // namespace ios

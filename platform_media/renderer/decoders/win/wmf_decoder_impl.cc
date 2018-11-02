@@ -79,8 +79,10 @@ GUID AudioCodecToAudioSubtypeGUID(AudioCodec codec) {
   switch (codec) {
     case AudioCodec::kCodecAAC:
       return MFAudioFormat_AAC;
+#if defined(PLATFORM_MEDIA_MP3)
     case AudioCodec::kCodecMP3:
       return MFAudioFormat_MP3;
+#endif
     default:
       NOTREACHED();
   }
@@ -188,8 +190,11 @@ void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
-
+#if defined(PLATFORM_MEDIA_MP3)
   if (config.codec() != AudioCodec::kCodecMP3 && config.codec() != AudioCodec::kCodecAAC) {
+#else
+  if (config.codec() != AudioCodec::kCodecAAC) {
+#endif
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Unsupported Audio codec : " << GetCodecName(config.codec());
     return false;
@@ -254,8 +259,10 @@ GUID WMFDecoderImpl<DemuxerStream::AUDIO>::GetMediaObjectGUID(
   switch (config.codec()) {
     case AudioCodec::kCodecAAC:
       return __uuidof(CMSAACDecMFT);
+#if defined(PLATFORM_MEDIA_MP3)
     case AudioCodec::kCodecMP3:
       return __uuidof(CMP3DecMediaObject);
+#endif
     default:
       NOTREACHED();
   }
@@ -362,8 +369,13 @@ bool WMFDecoderImpl<DemuxerStream::AUDIO>::SetInputMediaType() {
     return false;
   }
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
   hr = media_type->SetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
-                             config_.input_samples_per_second());
+                             config_.samples_per_second());
   if (FAILED(hr)) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " Error while setting samples per second.";
@@ -524,6 +536,27 @@ HRESULT WMFDecoderImpl<DemuxerStream::AUDIO>::SetOutputMediaTypeInternal(
       return hr;
     }
 
+    hr = media_type->GetUINT32(MF_MT_AUDIO_SAMPLES_PER_SECOND,
+                               &output_samples_per_second_);
+    if (FAILED(hr)) {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while getting sample rate.";
+      return hr;
+    }
+
+    uint32_t output_channel_count;
+    hr = media_type->GetUINT32(MF_MT_AUDIO_NUM_CHANNELS, &output_channel_count);
+    if (FAILED(hr)) {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " Error while getting sample rate.";
+      return hr;
+    }
+
+    if (base::checked_cast<int>(output_channel_count) == config_.channels())
+      output_channel_layout_ = config_.channel_layout();
+    else
+      output_channel_layout_ = GuessChannelLayout(output_channel_count);
+
     hr = media_type->GetUINT32(MF_MT_AUDIO_BITS_PER_SAMPLE,
                                &output_sample_size_);
     if (FAILED(hr)) {
@@ -559,6 +592,7 @@ size_t WMFDecoderImpl<DemuxerStream::AUDIO>::CalculateOutputBufferSize(
     const MFT_OUTPUT_STREAM_INFO& stream_info) const {
   size_t buffer_size = stream_info.cbSize;
 
+#if defined(PLATFORM_MEDIA_MP3)
   // Limit the buffer size for decoded MP3 audio so that |decoder_| doesn't
   // output more than the MP3 frame size at a time.  This makes us behave more
   // like FFmpeg and allows us to handle timestamp calculations and buffer
@@ -571,6 +605,7 @@ size_t WMFDecoderImpl<DemuxerStream::AUDIO>::CalculateOutputBufferSize(
                          ChannelLayoutToChannelCount(config_.channel_layout()) *
                          output_sample_size_);
   }
+#endif
 
   return buffer_size;
 }
@@ -855,13 +890,19 @@ WMFDecoderImpl<DemuxerStream::AUDIO>::CreateOutputBufferInternal(
   DCHECK_GT(output_sample_size_, 0u) << "Division by zero";
 
   const int frame_count = data_size / output_sample_size_ /
-                          ChannelLayoutToChannelCount(config_.channel_layout());
+                          ChannelLayoutToChannelCount(output_channel_layout_);
 
   // The timestamp will be calculated by |discard_helper_| later on.
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
   return AudioBuffer::CopyFrom(
-      ConvertToSampleFormat(output_sample_size_), config_.channel_layout(),
-      ChannelLayoutToChannelCount(config_.channel_layout()),
-      config_.samples_per_second(), frame_count, &data, kNoTimestamp);
+      ConvertToSampleFormat(output_sample_size_), output_channel_layout_,
+      ChannelLayoutToChannelCount(output_channel_layout_),
+      output_samples_per_second_, frame_count, &data, kNoTimestamp);
 }
 
 template <>
@@ -930,6 +971,12 @@ Microsoft::WRL::ComPtr<IMFSample> WMFDecoderImpl<StreamType>::CreateSample(
 
 template <>
 void WMFDecoderImpl<DemuxerStream::AUDIO>::ResetTimestampState() {
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
   discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());

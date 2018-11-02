@@ -31,7 +31,7 @@
 #include "net/base/url_util.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/database/database_identifier.h"
-#include "storage/common/quota/quota_status_code.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -49,8 +49,10 @@ void DeleteOriginDidDeleteDir(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, rv ? storage::kQuotaStatusOk
-                                             : storage::kQuotaErrorAbort));
+      FROM_HERE,
+      base::BindOnce(callback,
+                     rv ? blink::mojom::QuotaStatusCode::kOk
+                        : blink::mojom::QuotaStatusCode::kErrorAbort));
 }
 
 // Calculate the sum of all cache sizes in this store, but only if all sizes are
@@ -123,7 +125,7 @@ void GetOriginsForHostDidListOrigins(
       FROM_HERE, base::BindOnce(callback, out_origins));
 }
 
-void EmptyQuotaStatusCallback(storage::QuotaStatusCode code) {}
+void EmptyQuotaStatusCallback(blink::mojom::QuotaStatusCode code) {}
 
 void AllOriginSizesReported(
     std::unique_ptr<std::vector<CacheStorageUsageInfo>> usages,
@@ -421,12 +423,13 @@ void CacheStorageManager::DeleteOriginDidClose(
 
   quota_manager_proxy_->NotifyStorageModified(
       storage::QuotaClient::kServiceWorkerCache, origin,
-      storage::kStorageTypeTemporary, -1 * origin_size);
+      blink::mojom::StorageType::kTemporary, -1 * origin_size);
   NotifyCacheListChanged(origin);
 
   if (IsMemoryBacked()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(callback, storage::kQuotaStatusOk));
+        FROM_HERE,
+        base::BindOnce(callback, blink::mojom::QuotaStatusCode::kOk));
     return;
   }
 

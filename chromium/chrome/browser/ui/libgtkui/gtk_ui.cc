@@ -20,7 +20,6 @@
 #include "base/macros.h"
 #include "base/memory/protected_memory.h"
 #include "base/memory/protected_memory_cfi.h"
-#include "base/memory/ptr_util.h"
 #include "base/nix/mime_util_xdg.h"
 #include "base/nix/xdg_util.h"
 #include "base/stl_util.h"
@@ -68,9 +67,13 @@
 #if GTK_MAJOR_VERSION == 2
 #include "chrome/browser/ui/libgtkui/native_theme_gtk2.h"  // nogncheck
 #elif GTK_MAJOR_VERSION == 3
-#include "chrome/browser/ui/libgtkui/native_theme_gtk3.h"  // nogncheck
-#include "chrome/browser/ui/libgtkui/nav_button_layout_manager_gtk3.h"  // nogncheck
+#include "chrome/browser/ui/libgtkui/native_theme_gtk3.h"         // nogncheck
 #include "chrome/browser/ui/libgtkui/nav_button_provider_gtk3.h"  // nogncheck
+#include "chrome/browser/ui/libgtkui/settings_provider_gtk3.h"    // nogncheck
+#endif
+
+#if defined(USE_GIO)
+#include "chrome/browser/ui/libgtkui/settings_provider_gsettings.h"
 #endif
 
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
@@ -79,10 +82,6 @@
 
 #if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 #include "chrome/browser/ui/views/nav_button_provider.h"
-#endif
-
-#if defined(USE_GCONF)
-#include "chrome/browser/ui/libgtkui/nav_button_layout_manager_gconf.h"
 #endif
 
 // A minimized port of GtkThemeService into something that can provide colors
@@ -242,7 +241,7 @@ class GtkButtonPainter : public views::Painter {
   gfx::Size GetMinimumSize() const override { return gfx::Size(); }
   void Paint(gfx::Canvas* canvas, const gfx::Size& size) override {
     gfx::ImageSkia image(
-        base::MakeUnique<GtkButtonImageSource>(idr_.c_str(), size), 1);
+        std::make_unique<GtkButtonImageSource>(idr_.c_str(), size), 1);
     canvas->DrawImageInt(image, 0, 0);
   }
 
@@ -275,16 +274,16 @@ int indicators_count;
 // The unknown content type.
 const char* kUnknownContentType = "application/octet-stream";
 
-std::unique_ptr<NavButtonLayoutManager> CreateNavButtonLayoutManager(
-    GtkUi* gtk_ui) {
+std::unique_ptr<SettingsProvider> CreateSettingsProvider(GtkUi* gtk_ui) {
 #if GTK_MAJOR_VERSION == 3
   if (GtkVersionCheck(3, 14))
-    return std::make_unique<NavButtonLayoutManagerGtk3>(gtk_ui);
+    return std::make_unique<SettingsProviderGtk3>(gtk_ui);
 #endif
-#if defined(USE_GCONF)
-  return std::make_unique<NavButtonLayoutManagerGconf>(gtk_ui);
-#endif
+#if defined(USE_GIO)
+  return std::make_unique<SettingsProviderGSettings>(gtk_ui);
+#else
   return nullptr;
+#endif
 }
 
 // Returns a gfx::FontRenderParams corresponding to GTK's configuration.
@@ -336,7 +335,11 @@ gfx::FontRenderParams GetGtkFontRenderParams() {
   return params;
 }
 
-views::LinuxUI::NonClientMiddleClickAction GetDefaultMiddleClickAction() {
+views::LinuxUI::NonClientWindowFrameAction GetDefaultMiddleClickAction() {
+#if GTK_MAJOR_VERSION == 3
+  if (GtkVersionCheck(3, 14))
+    return views::LinuxUI::WINDOW_FRAME_ACTION_NONE;
+#endif
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   switch (base::nix::GetDesktopEnvironment(env.get())) {
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
@@ -345,9 +348,9 @@ views::LinuxUI::NonClientMiddleClickAction GetDefaultMiddleClickAction() {
       // middle mouse button to create tab groups. We don't support that in
       // Chrome, but at least avoid lowering windows in response to middle
       // clicks to avoid surprising users who expect the KDE behavior.
-      return views::LinuxUI::MIDDLE_CLICK_ACTION_NONE;
+      return views::LinuxUI::WINDOW_FRAME_ACTION_NONE;
     default:
-      return views::LinuxUI::MIDDLE_CLICK_ACTION_LOWER;
+      return views::LinuxUI::WINDOW_FRAME_ACTION_LOWER;
   }
 }
 
@@ -404,15 +407,23 @@ SkColor GetToolbarTopSeparatorColor(SkColor header_fg,
 }
 #endif
 
+#if GTK_MAJOR_VERSION > 2
 using GdkSetAllowedBackendsFn = void (*)(const gchar*);
 // Place this function pointers in read-only memory after being resolved to
 // prevent it being tampered with. See crbug.com/771365 for details.
 PROTECTED_MEMORY_SECTION base::ProtectedMemory<GdkSetAllowedBackendsFn>
     g_gdk_set_allowed_backends;
+#endif
 
 }  // namespace
 
-GtkUi::GtkUi() : middle_click_action_(GetDefaultMiddleClickAction()) {
+GtkUi::GtkUi() {
+  window_frame_actions_[WINDOW_FRAME_ACTION_SOURCE_DOUBLE_CLICK] =
+      views::LinuxUI::WINDOW_FRAME_ACTION_TOGGLE_MAXIMIZE;
+  window_frame_actions_[WINDOW_FRAME_ACTION_SOURCE_MIDDLE_CLICK] =
+      GetDefaultMiddleClickAction();
+  window_frame_actions_[WINDOW_FRAME_ACTION_SOURCE_RIGHT_CLICK] =
+      views::LinuxUI::WINDOW_FRAME_ACTION_MENU;
 #if GTK_MAJOR_VERSION > 2
   // Force Gtk to use Xwayland if it would have used wayland.  libgtkui assumes
   // the use of X11 (eg. X11InputMethodContextImplGtk) and will crash under
@@ -482,7 +493,7 @@ void GtkUi::Initialize() {
 #endif
 
   // We must build this after GTK gets initialized.
-  nav_button_layout_manager_ = CreateNavButtonLayoutManager(this);
+  settings_provider_ = CreateSettingsProvider(this);
 
   indicators_count = 0;
 
@@ -589,6 +600,7 @@ bool GtkUi::GetDefaultUsesSystemTheme() const {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
 
   switch (base::nix::GetDesktopEnvironment(env.get())) {
+    case base::nix::DESKTOP_ENVIRONMENT_CINNAMON:
     case base::nix::DESKTOP_ENVIRONMENT_GNOME:
     case base::nix::DESKTOP_ENVIRONMENT_PANTHEON:
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
@@ -721,7 +733,7 @@ std::unique_ptr<views::Border> GtkUi::CreateNativeBorder(
     gtk_border->SetPainter(
         paintstate[i].focus, paintstate[i].state,
         border->PaintsButtonState(paintstate[i].focus, paintstate[i].state)
-            ? base::MakeUnique<GtkButtonPainter>(idr)
+            ? std::make_unique<GtkButtonPainter>(idr)
             : nullptr);
   }
 
@@ -754,8 +766,10 @@ void GtkUi::SetWindowButtonOrdering(
   }
 }
 
-void GtkUi::SetNonClientMiddleClickAction(NonClientMiddleClickAction action) {
-  middle_click_action_ = action;
+void GtkUi::SetNonClientWindowFrameAction(
+    NonClientWindowFrameActionSourceType source,
+    NonClientWindowFrameAction action) {
+  window_frame_actions_[source] = action;
 }
 
 std::unique_ptr<ui::LinuxInputMethodContext> GtkUi::CreateInputMethodContext(
@@ -788,9 +802,9 @@ ui::SelectFileDialog* GtkUi::CreateSelectFileDialog(
   return SelectFileDialogImpl::Create(listener, std::move(policy));
 }
 
-views::LinuxUI::NonClientMiddleClickAction
-GtkUi::GetNonClientMiddleClickAction() {
-  return middle_click_action_;
+views::LinuxUI::NonClientWindowFrameAction GtkUi::GetNonClientWindowFrameAction(
+    NonClientWindowFrameActionSourceType source) {
+  return window_frame_actions_[source];
 }
 
 void GtkUi::NotifyWindowManagerStartupComplete() {
@@ -819,7 +833,7 @@ bool GtkUi::PreferDarkTheme() const {
 #if BUILDFLAG(ENABLE_NATIVE_WINDOW_NAV_BUTTONS)
 std::unique_ptr<views::NavButtonProvider> GtkUi::CreateNavButtonProvider() {
   if (GtkVersionCheck(3, 14))
-    return base::MakeUnique<libgtkui::NavButtonProviderGtk3>();
+    return std::make_unique<libgtkui::NavButtonProviderGtk3>();
   return nullptr;
 }
 #endif

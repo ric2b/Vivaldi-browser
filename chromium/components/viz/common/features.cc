@@ -5,18 +5,29 @@
 #include "components/viz/common/features.h"
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "components/viz/common/switches.h"
 
 namespace features {
 
+#if defined(USE_AURA)
 const base::Feature kEnableSurfaceSynchronization{
     "SurfaceSynchronization", base::FEATURE_DISABLED_BY_DEFAULT};
+#else
+const base::Feature kEnableSurfaceSynchronization{
+    "SurfaceSynchronization", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+// Enables running the display compositor as part of the viz service in the GPU
+// process. This is also referred to as out-of-process display compositor
+// (OOP-D).
+const base::Feature kVizDisplayCompositor{"VizDisplayCompositor",
+                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsSurfaceSynchronizationEnabled() {
+  auto* command_line = base::CommandLine::ForCurrentProcess();
   return base::FeatureList::IsEnabled(kEnableSurfaceSynchronization) ||
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kEnableSurfaceSynchronization);
+         command_line->HasSwitch(switches::kEnableSurfaceSynchronization) ||
+         base::FeatureList::IsEnabled(kVizDisplayCompositor);
 }
 
 }  // namespace features

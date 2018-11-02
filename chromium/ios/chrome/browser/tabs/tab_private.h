@@ -23,9 +23,6 @@ class WebStateImpl;
 
 @interface Tab (TestingSupport)
 
-// Replaces the existing |externalAppLauncher_|.
-- (void)replaceExternalAppLauncher:(id)externalAppLauncher;
-
 // Returns the Tab owning TabModel.
 - (TabModel*)parentTabModel;
 
@@ -39,14 +36,6 @@ class WebStateImpl;
 // by tests and will be removed when Tab can wrap TestWebState (see issue
 // crbug.com/620465 for progress).
 @property(nonatomic, readonly) CRWWebController* webController;
-
-@end
-
-@interface Tab (Private)
-
-// Attaches tab helper-like objects for AttachTabHelpers. Those objects should
-// be converted in real tab helpers and created by AttachTabHelpers.
-- (void)attachTabHelpers;
 
 @end
 

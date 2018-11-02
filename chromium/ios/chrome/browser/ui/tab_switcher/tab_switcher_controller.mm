@@ -21,9 +21,13 @@
 #include "ios/chrome/browser/sessions/session_util.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios.h"
 #include "ios/chrome/browser/sessions/tab_restore_service_delegate_impl_ios_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_configurator.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_consumer.h"
+#import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #include "ios/chrome/browser/ui/commands/application_commands.h"
 #include "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -95,12 +99,14 @@ enum class SnapshotViewOption {
 }  // namespace
 
 @interface TabSwitcherController ()<SigninPresenter,
+                                    SigninPromoViewConsumer,
                                     SyncPresenter,
                                     TabSwitcherModelDelegate,
                                     TabSwitcherViewDelegate,
                                     TabSwitcherHeaderViewDelegate,
                                     TabSwitcherHeaderViewDataSource,
-                                    TabSwitcherPanelControllerDelegate> {
+                                    TabSwitcherPanelControllerDelegate,
+                                    TabSwitcherPanelOverlayViewDelegate> {
   // weak.
   ios::ChromeBrowserState* _browserState;
   // weak.
@@ -120,6 +126,8 @@ enum class SnapshotViewOption {
   TabSwitcherModel* _tabSwitcherModel;
   // Stores the current sign-in panel type.
   TabSwitcherSignInPanelsType _signInPanelType;
+  // Stores the sign-in panel overlay view.
+  TabSwitcherPanelOverlayView* _signInPanelOverlayView;
   // Cache for the panel's cells.
   TabSwitcherCache* _cache;
   // Stores the background color of the window when the tab switcher was
@@ -131,6 +139,8 @@ enum class SnapshotViewOption {
   BOOL _shouldAddPromoPanelHeaderCell;
   // Handles command dispatching.
   CommandDispatcher* _dispatcher;
+  // Sign-in promo view mediator for the "Other Devices" tab.
+  SigninPromoViewMediator* _signinPromoViewMediator;
 }
 
 // Updates the window background color to the tab switcher's background color.
@@ -615,9 +625,12 @@ enum class SnapshotViewOption {
     // context
     tabScreenshotImageView.image =
         [self updateScreenshotForCellIfNeeded:selectedCell tabModel:tabModel];
-    [selectedTab retrieveSnapshot:^(UIImage* snapshot) {
-      [weakTabScreenshotImageView setImage:snapshot];
-    }];
+    if (selectedTab) {
+      SnapshotTabHelper::FromWebState(selectedTab.webState)
+          ->RetrieveColorSnapshot(^(UIImage* snapshot) {
+            [weakTabScreenshotImageView setImage:snapshot];
+          });
+    }
   }
 
   const CGSize tabScreenshotImageSize = tabScreenshotImageView.image.size;
@@ -1027,6 +1040,10 @@ enum class SnapshotViewOption {
         [_tabSwitcherView currentPanelIndex] != kSignInPromoPanelIndex;
     [_tabSwitcherView removePanelViewAtIndex:kSignInPromoPanelIndex
                             updateScrollView:updateScrollView];
+    _signinPromoViewMediator.consumer = nil;
+    [_signinPromoViewMediator signinPromoViewRemoved];
+    _signinPromoViewMediator = nil;
+    _signInPanelOverlayView = nil;
   } else {
     _shouldAddPromoPanelHeaderCell = YES;
   }
@@ -1035,15 +1052,31 @@ enum class SnapshotViewOption {
 
 - (void)addPromoPanelForSignInPanelType:(TabSwitcherSignInPanelsType)panelType {
   _signInPanelType = panelType;
+  DCHECK_EQ(nil, _signInPanelOverlayView);
   if (panelType != TabSwitcherSignInPanelsType::NO_PANEL) {
-    TabSwitcherPanelOverlayView* panelView =
-        [[TabSwitcherPanelOverlayView alloc]
-            initWithFrame:CGRectZero
-             browserState:_browserState
-                presenter:self /* id<SigninPresenter, SyncPresenter> */
-               dispatcher:self.dispatcher];
-    [panelView setOverlayType:PanelOverlayTypeFromSignInPanelsType(panelType)];
-    [_tabSwitcherView addPanelView:panelView atIndex:kSignInPromoPanelIndex];
+    _signInPanelOverlayView = [[TabSwitcherPanelOverlayView alloc]
+        initWithFrame:CGRectZero
+         browserState:_browserState
+            presenter:self /* id<SigninPresenter, SyncPresenter> */
+           dispatcher:self.dispatcher];
+    [_signInPanelOverlayView
+        setOverlayType:PanelOverlayTypeFromSignInPanelsType(panelType)];
+    _signInPanelOverlayView.delegate = self;
+    if (panelType == TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_OUT) {
+      DCHECK_NE(nil, _signInPanelOverlayView.signinPromoView);
+      _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+          initWithBrowserState:_browserState
+                   accessPoint:signin_metrics::AccessPoint::
+                                   ACCESS_POINT_TAB_SWITCHER
+                     presenter:self];
+      _signinPromoViewMediator.consumer = self;
+      _signInPanelOverlayView.signinPromoView.delegate =
+          _signinPromoViewMediator;
+      [[_signinPromoViewMediator createConfigurator]
+          configureSigninPromoView:_signInPanelOverlayView.signinPromoView];
+    }
+    [_tabSwitcherView addPanelView:_signInPanelOverlayView
+                           atIndex:kSignInPromoPanelIndex];
   }
 }
 
@@ -1058,6 +1091,10 @@ enum class SnapshotViewOption {
       NOTREACHED();
       return {};
   }
+}
+
+- (BOOL)isSigninInProgress {
+  return _signinPromoViewMediator.signinInProgress;
 }
 
 #pragma mark - TabSwitcherHeaderViewDelegate
@@ -1274,6 +1311,33 @@ enum class SnapshotViewOption {
 
 - (void)showSignin:(ShowSigninCommand*)command {
   [self.dispatcher showSignin:command baseViewController:self];
+}
+
+#pragma mark - SigninPromoViewConsumer
+
+- (void)configureSigninPromoWithConfigurator:
+            (SigninPromoViewConfigurator*)configurator
+                             identityChanged:(BOOL)identityChanged {
+  DCHECK_NE(nil, _signInPanelOverlayView);
+  DCHECK_NE(nil, _signInPanelOverlayView.signinPromoView);
+  [configurator
+      configureSigninPromoView:_signInPanelOverlayView.signinPromoView];
+}
+
+- (void)signinDidFinish {
+  [_tabSwitcherModel syncedSessionsChanged];
+}
+
+#pragma mark - TabSwitcherPanelOverlayViewDelegate
+
+- (void)tabSwitcherPanelOverlViewWasShown:
+    (TabSwitcherPanelOverlayView*)tabSwitcherPanelOverlayView {
+  [_signinPromoViewMediator signinPromoViewVisible];
+}
+
+- (void)tabSwitcherPanelOverlViewWasHidden:
+    (TabSwitcherPanelOverlayView*)tabSwitcherPanelOverlayView {
+  [_signinPromoViewMediator signinPromoViewHidden];
 }
 
 @end

@@ -14,6 +14,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
@@ -75,6 +76,7 @@ inline void V8SetReturnValue(const CallbackInfo& callbackInfo, BooleanOrString& 
 template <>
 struct NativeValueTraits<BooleanOrString> : public NativeValueTraitsBase<BooleanOrString> {
   MODULES_EXPORT static BooleanOrString NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  MODULES_EXPORT static BooleanOrString NullValue() { return BooleanOrString(); }
 };
 
 template <>

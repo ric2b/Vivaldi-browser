@@ -418,10 +418,10 @@ void InProcessBrowserTest::AddTabAtIndexToBrowser(
     const GURL& url,
     ui::PageTransition transition,
     bool check_navigation_success) {
-  chrome::NavigateParams params(browser, url, transition);
+  NavigateParams params(browser, url, transition);
   params.tabstrip_index = index;
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  chrome::Navigate(&params);
+  Navigate(&params);
 
   if (check_navigation_success)
     content::WaitForLoadStop(params.target_contents);
@@ -612,6 +612,14 @@ void InProcessBrowserTest::PostRunTestOnMainThread() {
 void InProcessBrowserTest::QuitBrowsers() {
   if (chrome::GetTotalBrowserCount() == 0) {
     browser_shutdown::NotifyAppTerminating();
+
+    // Post OnAppExiting call as a task because the code path CHECKs a RunLoop
+    // runs at the current thread.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&chrome::OnAppExiting));
+    // Spin the message loop to ensure OnAppExitting finishes so that proper
+    // clean up happens before returning.
+    content::RunAllPendingInMessageLoop();
     return;
   }
 

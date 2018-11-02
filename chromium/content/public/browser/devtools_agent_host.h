@@ -87,7 +87,7 @@ class CONTENT_EXPORT DevToolsAgentHost
 
   using List = std::vector<scoped_refptr<DevToolsAgentHost>>;
 
-  // Returns all DevToolsAgentHosts content is aware of.
+  // Returns all non-browser target DevToolsAgentHosts content is aware of.
   static List GetOrCreateAll();
 
   // Starts remote debugging.
@@ -132,11 +132,6 @@ class CONTENT_EXPORT DevToolsAgentHost
   // Returns true if the message is dispatched and handled.
   virtual bool DispatchProtocolMessage(DevToolsAgentHostClient* client,
                                        const std::string& message) = 0;
-
-  // Sends |message| to the client of the specified session. Returns |true| if
-  // the session exists and the message was sent.
-  virtual bool SendProtocolMessageToClient(int session_id,
-                                           const std::string& message) = 0;
 
   // Starts inspecting element at position (|x|, |y|).
   virtual void InspectElement(DevToolsAgentHostClient* client,

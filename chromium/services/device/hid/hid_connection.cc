@@ -6,6 +6,7 @@
 
 #include <algorithm>
 
+#include "base/memory/ref_counted_memory.h"
 #include "base/stl_util.h"
 #include "components/device_event_log/device_event_log.h"
 #include "services/device/public/cpp/hid/hid_usage_and_page.h"
@@ -92,8 +93,7 @@ void HidConnection::Read(ReadCallback callback) {
   PlatformRead(std::move(callback));
 }
 
-void HidConnection::Write(scoped_refptr<net::IOBuffer> buffer,
-                          size_t size,
+void HidConnection::Write(scoped_refptr<base::RefCountedBytes> buffer,
                           WriteCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (device_info_->max_output_report_size() == 0) {
@@ -101,13 +101,14 @@ void HidConnection::Write(scoped_refptr<net::IOBuffer> buffer,
     std::move(callback).Run(false);
     return;
   }
-  if (size > device_info_->max_output_report_size() + 1) {
-    HID_LOG(USER) << "Output report buffer too long (" << size << " > "
-                  << (device_info_->max_output_report_size() + 1) << ").";
+  if (buffer->size() > device_info_->max_output_report_size() + 1) {
+    HID_LOG(USER) << "Output report buffer too long (" << buffer->size()
+                  << " > " << (device_info_->max_output_report_size() + 1)
+                  << ").";
     std::move(callback).Run(false);
     return;
   }
-  DCHECK_GE(size, 1u);
+  DCHECK_GE(buffer->size(), 1u);
   uint8_t report_id = buffer->data()[0];
   if (device_info_->has_report_id() != (report_id != 0)) {
     HID_LOG(USER) << "Invalid output report ID.";
@@ -120,7 +121,7 @@ void HidConnection::Write(scoped_refptr<net::IOBuffer> buffer,
     return;
   }
 
-  PlatformWrite(buffer, size, std::move(callback));
+  PlatformWrite(buffer, std::move(callback));
 }
 
 void HidConnection::GetFeatureReport(uint8_t report_id, ReadCallback callback) {
@@ -144,16 +145,16 @@ void HidConnection::GetFeatureReport(uint8_t report_id, ReadCallback callback) {
   PlatformGetFeatureReport(report_id, std::move(callback));
 }
 
-void HidConnection::SendFeatureReport(scoped_refptr<net::IOBuffer> buffer,
-                                      size_t size,
-                                      WriteCallback callback) {
+void HidConnection::SendFeatureReport(
+    scoped_refptr<base::RefCountedBytes> buffer,
+    WriteCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (device_info_->max_feature_report_size() == 0) {
     HID_LOG(USER) << "This device does not support feature reports.";
     std::move(callback).Run(false);
     return;
   }
-  DCHECK_GE(size, 1u);
+  DCHECK_GE(buffer->size(), 1u);
   uint8_t report_id = buffer->data()[0];
   if (device_info_->has_report_id() != (report_id != 0)) {
     HID_LOG(USER) << "Invalid feature report ID.";
@@ -166,7 +167,7 @@ void HidConnection::SendFeatureReport(scoped_refptr<net::IOBuffer> buffer,
     return;
   }
 
-  PlatformSendFeatureReport(buffer, size, std::move(callback));
+  PlatformSendFeatureReport(buffer, std::move(callback));
 }
 
 bool HidConnection::IsReportIdProtected(uint8_t report_id) {

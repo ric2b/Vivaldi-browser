@@ -4,17 +4,16 @@
 
 #include "components/ntp_snippets/contextual/contextual_suggestions_fetcher_impl.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/ntp_snippets/category.h"
-#include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/strings/grit/components_strings.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using net::HttpRequestHeaders;
@@ -171,11 +170,12 @@ void ContextualSuggestionsFetcherImpl::StartTokenRequest() {
   }
 
   OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
-  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
+  token_fetcher_ = std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
       "ntp_snippets", signin_manager_, token_service_, scopes,
       base::BindOnce(
           &ContextualSuggestionsFetcherImpl::AccessTokenFetchFinished,
-          base::Unretained(this)));
+          base::Unretained(this)),
+      identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void ContextualSuggestionsFetcherImpl::AccessTokenFetchFinished(
@@ -184,8 +184,8 @@ void ContextualSuggestionsFetcherImpl::AccessTokenFetchFinished(
   // Delete the fetcher only after we leave this method (which is called from
   // the fetcher itself).
   DCHECK(token_fetcher_);
-  std::unique_ptr<AccessTokenFetcher> token_fetcher_deleter(
-      std::move(token_fetcher_));
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
+      token_fetcher_deleter(std::move(token_fetcher_));
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     AccessTokenError(error);

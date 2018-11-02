@@ -187,6 +187,16 @@ void Context::SignalQuery(uint32_t query, const base::Closure& callback) {
   NOTIMPLEMENTED();
 }
 
+void Context::CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) {
+  NOTIMPLEMENTED();
+}
+
+void Context::GetGpuFence(
+    uint32_t gpu_fence_id,
+    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) {
+  NOTIMPLEMENTED();
+}
+
 void Context::SetLock(base::Lock*) {
   NOTIMPLEMENTED();
 }
@@ -209,18 +219,6 @@ void Context::FlushPendingWork() {
 
 uint64_t Context::GenerateFenceSyncRelease() {
   return display_->GenerateFenceSyncRelease();
-}
-
-bool Context::IsFenceSyncRelease(uint64_t release) {
-  return display_->IsFenceSyncRelease(release);
-}
-
-bool Context::IsFenceSyncFlushed(uint64_t release) {
-  return display_->IsFenceSyncFlushed(release);
-}
-
-bool Context::IsFenceSyncFlushReceived(uint64_t release) {
-  return display_->IsFenceSyncFlushReceived(release);
 }
 
 bool Context::IsFenceSyncReleased(uint64_t release) {
@@ -290,7 +288,7 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
 
   gl_context->MakeCurrent(gl_surface);
 
-  gpu::gles2::ContextCreationAttribHelper helper;
+  gpu::ContextCreationAttribs helper;
   config_->GetAttrib(EGL_ALPHA_SIZE, &helper.alpha_size);
   config_->GetAttrib(EGL_DEPTH_SIZE, &helper.depth_size);
   config_->GetAttrib(EGL_STENCIL_SIZE, &helper.stencil_size);
@@ -299,7 +297,7 @@ bool Context::CreateService(gl::GLSurface* gl_surface) {
   helper.bind_generates_resource = kBindGeneratesResources;
   helper.fail_if_major_perf_caveat = false;
   helper.lose_context_when_out_of_memory = kLoseContextWhenOutOfMemory;
-  helper.context_type = gpu::gles2::CONTEXT_TYPE_OPENGLES2;
+  helper.context_type = gpu::CONTEXT_TYPE_OPENGLES2;
   helper.offscreen_framebuffer_size = gl_surface->GetSize();
 
   auto result = decoder->Initialize(gl_surface, gl_context.get(),

@@ -39,7 +39,6 @@ import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.FullscreenTestUtils;
@@ -52,6 +51,7 @@ import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content.browser.test.util.UiUtils;
+import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.net.test.EmbeddedTestServer;
 
 import java.util.concurrent.Callable;
@@ -65,7 +65,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
         "disable-features=" + ChromeFeatureList.FULLSCREEN_ACTIVITY,
 })
 @RetryOnFailure
@@ -523,8 +522,9 @@ public class FullscreenManagerTest {
         CriteriaHelper.pollUiThread(new Criteria() {
             @Override
             public boolean isSatisfied() {
-                ContentViewCore contentViewCore = tab.getContentViewCore();
-                return !contentViewCore.isFocusedNodeEditable();
+                SelectionPopupController controller =
+                        SelectionPopupController.fromWebContents(tab.getWebContents());
+                return !controller.isFocusedNodeEditable();
             }
         });
     }

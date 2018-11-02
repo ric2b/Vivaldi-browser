@@ -8,12 +8,13 @@
 
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
+#include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/views/apps_grid_view.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -57,17 +58,19 @@ constexpr int kTouchLongpressDelayInMs = 300;
 const char AppListItemView::kViewClassName[] = "ui/app_list/AppListItemView";
 
 AppListItemView::AppListItemView(AppsGridView* apps_grid_view,
-                                 AppListItem* item)
+                                 AppListItem* item,
+                                 AppListViewDelegate* delegate)
     : Button(apps_grid_view),
       is_folder_(item->GetItemType() == AppListFolderItem::kItemType),
       is_in_folder_(item->IsInFolder()),
       item_weak_(item),
+      delegate_(delegate),
       apps_grid_view_(apps_grid_view),
       icon_(new views::ImageView),
       title_(new views::Label),
-      progress_bar_(new views::ProgressBar) {
-  if (features::IsAppListFocusEnabled())
-    SetFocusBehavior(FocusBehavior::ALWAYS);
+      progress_bar_(new views::ProgressBar),
+      weak_ptr_factory_(this) {
+  SetFocusBehavior(FocusBehavior::ALWAYS);
 
   icon_->set_can_process_events_within_subtree(false);
   icon_->SetVerticalAlignment(views::ImageView::LEADING);
@@ -264,22 +267,32 @@ void AppListItemView::SetItemPercentDownloaded(int percent_downloaded) {
   progress_bar_->SetValue(percent_downloaded / 100.0);
 }
 
+void AppListItemView::OnContextMenuClosed(const base::TimeTicks& open_time) {
+  UMA_HISTOGRAM_TIMES("Apps.ContextMenuUserJourneyTime.AppGrid",
+                      base::TimeTicks::Now() - open_time);
+}
+
 void AppListItemView::ShowContextMenuForView(views::View* source,
                                              const gfx::Point& point,
                                              ui::MenuSourceType source_type) {
   if (context_menu_runner_ && context_menu_runner_->IsRunning())
     return;
 
-  ui::MenuModel* menu_model =
-      item_weak_ ? item_weak_->GetContextMenuModel() : NULL;
+  ui::MenuModel* menu_model = delegate_->GetContextMenuModel(item_weak_->id());
   if (!menu_model)
     return;
+
+  UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSource.AppGrid", source_type,
+                            ui::MenuSourceType::MENU_SOURCE_TYPE_LAST);
 
   if (!apps_grid_view_->IsSelectedView(this))
     apps_grid_view_->ClearAnySelectedView();
   int run_types = views::MenuRunner::HAS_MNEMONICS |
                   views::MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER;
-  context_menu_runner_.reset(new views::MenuRunner(menu_model, run_types));
+  context_menu_runner_.reset(new views::MenuRunner(
+      menu_model, run_types,
+      base::Bind(&AppListItemView::OnContextMenuClosed,
+                 weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now())));
   context_menu_runner_->RunMenuAt(GetWidget(), NULL,
                                   gfx::Rect(point, gfx::Size()),
                                   views::MENU_ANCHOR_TOPLEFT, source_type);
@@ -328,8 +341,6 @@ void AppListItemView::PaintButtonContents(gfx::Canvas* canvas) {
   }
 
   if (ui_state_ == UI_STATE_DROPPING_IN_FOLDER) {
-    DCHECK(apps_grid_view_->model()->folders_enabled());
-
     // Draw folder dropping preview circle.
     gfx::Point center = gfx::Point(icon_->x() + icon_->size().width() / 2,
                                    icon_->y() + icon_->size().height() / 2);

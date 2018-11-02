@@ -31,6 +31,12 @@ namespace net {
 class URLRequestContextGetter;
 }
 
+namespace network {
+namespace mojom {
+class URLLoaderFactory;
+}
+}
+
 namespace chromeos {
 
 class KioskAppDataDelegate;
@@ -98,6 +104,9 @@ class KioskAppData : public KioskAppDataBase,
 
   // Returns URLRequestContextGetter to use for fetching web store data.
   net::URLRequestContextGetter* GetRequestContextGetter();
+
+  // Returns URLLoaderFactory to use for fetching web store data.
+  network::mojom::URLLoaderFactory* GetURLLoaderFactory();
 
   // Loads the locally cached data. Return false if there is none.
   bool LoadFromCache();

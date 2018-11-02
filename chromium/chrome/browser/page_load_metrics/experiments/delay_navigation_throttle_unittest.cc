@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -39,15 +38,12 @@ TEST_F(DelayNavigationThrottleTest, BasicDelay) {
       content::NavigationHandle::CreateNavigationHandleForTesting(url,
                                                                   main_rfh());
   test_handle->RegisterThrottleForTesting(
-      base::MakeUnique<DelayNavigationThrottle>(
+      std::make_unique<DelayNavigationThrottle>(
           test_handle.get(), mock_time_task_runner, navigation_delay));
 
   EXPECT_FALSE(mock_time_task_runner->HasPendingTask());
   EXPECT_EQ(content::NavigationThrottle::DEFER,
-            test_handle->CallWillStartRequestForTesting(
-                false /* is_post */, content::Referrer(),
-                false /* has_user_gesture */, ui::PAGE_TRANSITION_LINK,
-                false /* is_external_protocol */));
+            test_handle->CallWillStartRequestForTesting());
 
   // There may be other throttles that DEFER and post async tasks to the UI
   // thread. Allow them to run to completion, so our throttle is guaranteed to

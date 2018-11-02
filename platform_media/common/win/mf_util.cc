@@ -96,8 +96,10 @@ PrimaryLoader::PrimaryLoader()
       video_decoder_available_(
           LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
           LoadMFLibrary("evr.dll")) {
+#if defined(PLATFORM_MEDIA_MP3)
   audio_decoder_available_[AudioCodec::kCodecMP3] =
       LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecMP3).c_str());
+#endif
   audio_decoder_available_[AudioCodec::kCodecAAC] =
       LoadMFLibrary(GetMFAudioDecoderLibraryName(AudioCodec::kCodecAAC).c_str());
 
@@ -162,8 +164,11 @@ bool LoadMFVideoDecoderLibraries() {
 }
 
 std::string GetMFAudioDecoderLibraryName(AudioCodec codec) {
+
+#if defined(PLATFORM_MEDIA_MP3)
   if (codec == AudioCodec::kCodecMP3)
     return "mp3dmod.dll";
+#endif
 
   std::string name;
   const base::win::Version version = base::win::GetVersion();

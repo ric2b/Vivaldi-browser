@@ -1,2 +1,18 @@
 
 #include "app/vivaldi_commands.h"
+#include "third_party/wtl/include/atlres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// The "Vivaldi is exiting" Dialog
+//
+
+IDD_EXIT_WAIT_DLG DIALOGEX 0, 0, 267, 95
+STYLE DS_SETFONT | DS_CENTER | WS_BORDER
+EXSTYLE WS_EX_TOPMOST
+FONT 12, "Segoe UI", 400, 0, 0x0
+BEGIN
+  CTEXT           "Please wait for Vivaldi to close.", IDC_EXIT_STATIC, 7, 11, 253, 12
+  CONTROL         "", IDC_EXIT_PROGRESS, "msctls_progress32", PBS_SMOOTH | PBS_MARQUEE | WS_BORDER, 7, 30, 253, 14
+  DEFPUSHBUTTON   "Force startup", IDCANCEL, 81, 60, 105, 14
+END

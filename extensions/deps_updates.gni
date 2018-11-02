@@ -1,5 +1,5 @@
 
-post_process_template("//chrome:packed_resources") {
+update_template_instance("//chrome:packed_resources") {
   if (!defined(additional_extra_paks)) {
     additional_extra_paks = []
   }
@@ -13,43 +13,37 @@ post_process_template("//chrome:packed_resources") {
   public_deps += [ "//vivaldi/extensions:resources" ]
 }
 
-post_process_template("//chrome/browser:browser") {
+update_template_instance("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/extensions/schema:api",
   ]
 }
 
-post_process_target("//chrome/browser/extensions:extensions") {
-  deps += [
-    "//vivaldi/extensions/schema:api",
-    "//vivaldi/extensions/schema:api_registration",
-  ]
+if (!is_android) {
+  update_target("//chrome/browser/extensions:extensions") {
+    deps += [
+      "//vivaldi/extensions/schema:api",
+      "//vivaldi/extensions/schema:api_registration",
+    ]
+  }
 }
 
-post_process_template("//chrome/browser/ui:ui") {
+update_template_instance("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
     "//vivaldi/extensions/schema:api",
   ]
 }
 
-post_process_target("//components/guest_view/browser:browser") {
+update_target("//components/guest_view/browser:browser") {
   public_deps += [ "//vivaldi/extensions/helper:helper" ]
 }
 
-post_process_target("//components/history/core/browser:browser") {
+update_target("//components/history/core/browser:browser") {
   deps += [ "//vivaldi/prefs:prefs" ]
   public_deps += [ "//vivaldi/db" ]
 }
 
-post_process_target("//content/common:common") {
+update_target("//content/common:common") {
   deps += [ "//components/version_info:generate_version_info" ]
-}
-
-post_process_target("//extensions/browser/guest_view/web_view:web_view") {
-  deps += [
-    "//chrome/common/extensions/api",
-    "//vivaldi/extensions/schema:api",
-    "//vivaldi/extensions/schema:api_registration",
-  ]
 }

@@ -14,6 +14,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
@@ -87,6 +88,7 @@ inline void V8SetReturnValue(const CallbackInfo& callbackInfo, ArrayBufferOrArra
 template <>
 struct NativeValueTraits<ArrayBufferOrArrayBufferViewOrDictionary> : public NativeValueTraitsBase<ArrayBufferOrArrayBufferViewOrDictionary> {
   CORE_EXPORT static ArrayBufferOrArrayBufferViewOrDictionary NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  CORE_EXPORT static ArrayBufferOrArrayBufferViewOrDictionary NullValue() { return ArrayBufferOrArrayBufferViewOrDictionary(); }
 };
 
 template <>

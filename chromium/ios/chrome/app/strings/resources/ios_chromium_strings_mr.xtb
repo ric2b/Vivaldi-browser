@@ -3,6 +3,7 @@
 <translationbundle lang="mr">
 <translation id="102360288709523007">वापर आकडेवारी आणि क्रॅश अहवाल Google कडे पाठवून Chromium ला अधिक चांगले करण्यास मदत करा.</translation>
 <translation id="1185134272377778587">Chromium बद्दल</translation>
+<translation id="1289966288285062467">Chromium गोपनीयता सूचना</translation>
 <translation id="1472013873724362412">आपले खाते Chromium वर कार्य करीत नाही. कृपया आपल्या डोमेन प्रशासकाशी संपर्क साधा किंवा साइन इन करण्यासाठी एक नियमित Google खाते वापरा.</translation>
 <translation id="1736662517232558588">Chromium डेटा साफ करण्यात आला</translation>
 <translation id="1838412507805038478"><ph name="ISSUER" /> ने या वेबसाइटचे प्रमाणपत्र जारी केले हे Chromium ने सत्यापित केले.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Chromium मधून साइन आउट करायचे?</translation>
 <translation id="6424492062988593837">Chrome आता सर्वोत्तम झाले आहे! नवीन आवृत्ती उपलब्ध आहे.</translation>
 <translation id="6604711459180487467">आपल्या स्थानाच्या आधारावर Chromium मध्ये उत्कृष्ट अनुभव मिळवा.</translation>
+<translation id="6626296268883197964">हे अॅप्लिकेशन वापरून, तुम्ही Chromium च्या <ph name="BEGIN_LINK_TOS" />सेवा अटी<ph name="END_LINK_TOS" /> आणि <ph name="BEGIN_LINK_PRIVACY" />गोपनीयता सूचनां<ph name="END_LINK_PRIVACY" /> शी सहमत होता.</translation>
 <translation id="7099326575020694068">Chromium विभाजित दृश्य मोड मध्ये आपला कॅमेरा वापरू शकत नाही</translation>
-<translation id="7144758435978427212">जवळपासच्‍या ऑब्जेक्टने पाठविलेली वेब पृष्‍ठे शोधा. Bluetooth चालू केलेले असते तेव्हा, Chromium आपल्या आसपास असलेल्या ऑब्जेक्टशी संबद्ध असलेली वेब पृष्‍ठे गोळा करू शकते आणि सर्वाधिक उपयुक्त शोधण्‍यासाठी ती अनामितपणे Google कडे पाठवू शकते. <ph name="BEGIN_LINK" />अधिक जाणून घ्या<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">आपली खाती वेबवर आणून Chromium आपला वेळ वाचविते. आपण सेटिंग्जमध्ये खाती जोडू किंवा काढू शकता.</translation>
 <translation id="7269362888766543920">Chromium क्रॅश होण्याचे कारण काही अॅड-ऑन आहेत. कृपया ते अनइंस्टॉल करून पहा.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Chromium सर्वत्र वापरा</translation>
 <translation id="7674213385180944843">सेटिंग्ज &gt; गोपनीयता &gt; कॅमेरा &gt; Chromium उघडा आणि कॅमेरा चालू करा.</translation>
 <translation id="786327964234957808">आपण संकालित केलेली खाती <ph name="USER_EMAIL1" /> वरून <ph name="USER_EMAIL2" /> वर स्विच करीत आहात. आपला विद्यमान Chromium डेटा <ph name="DOMAIN" /> द्वारे व्यवस्थापित केला आहे. हे आपला डेटा या डिव्हाइस वरून हटवेल परंतु आपला डेटा <ph name="USER_EMAIL1" /> मध्ये असेल.</translation>
-<translation id="8111736072665034317">हा अॅप्लिकेशन वापरून, आपण Chromium च्या <ph name="BEGIN_LINK" />सेवा अटीं<ph name="END_LINK" /> ना सहमती देता.</translation>
 <translation id="8175055321229419309">टीप: <ph name="BEGIN_LINK" />Chromium आपल्या डॉकमध्ये हलवा<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">आपल्या स्थानावर आधारित Chromium मध्ये उत्कृष्ट Google अनुभव मिळवा.</translation>
 <translation id="8353224596138547809">आपण या साइटसाठी Chromium ने आपला पासवर्ड जतन करू इच्छिता?</translation>

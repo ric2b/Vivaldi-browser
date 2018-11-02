@@ -4,7 +4,7 @@
 
 #include "modules/webaudio/AudioWorkletMessagingProxy.h"
 
-#include "core/dom/MessagePort.h"
+#include "core/messaging/MessagePort.h"
 #include "modules/webaudio/AudioWorklet.h"
 #include "modules/webaudio/AudioWorkletGlobalScope.h"
 #include "modules/webaudio/AudioWorkletNode.h"
@@ -18,27 +18,21 @@ namespace blink {
 
 AudioWorkletMessagingProxy::AudioWorkletMessagingProxy(
     ExecutionContext* execution_context,
-    WorkerClients* worker_clients,
     AudioWorklet* worklet)
-    : ThreadedWorkletMessagingProxy(execution_context, worker_clients),
-      worklet_(worklet) {}
+    : ThreadedWorkletMessagingProxy(execution_context), worklet_(worklet) {}
 
 void AudioWorkletMessagingProxy::CreateProcessor(
     AudioWorkletHandler* handler,
     MessagePortChannel message_port_channel) {
   DCHECK(IsMainThread());
-  GetWorkerThread()
-      ->GetTaskRunner(TaskType::kMiscPlatformAPI)
-      ->PostTask(
-          BLINK_FROM_HERE,
-          CrossThreadBind(
-              &AudioWorkletMessagingProxy::CreateProcessorOnRenderingThread,
-              WrapCrossThreadPersistent(this),
-              CrossThreadUnretained(GetWorkerThread()),
-              CrossThreadUnretained(handler),
-              handler->Name(),
-              handler->Context()->sampleRate(),
-              std::move(message_port_channel)));
+  PostCrossThreadTask(
+      *GetWorkerThread()->GetTaskRunner(TaskType::kMiscPlatformAPI), FROM_HERE,
+      CrossThreadBind(
+          &AudioWorkletMessagingProxy::CreateProcessorOnRenderingThread,
+          WrapCrossThreadPersistent(this),
+          CrossThreadUnretained(GetWorkerThread()),
+          CrossThreadUnretained(handler), handler->Name(),
+          handler->Context()->sampleRate(), std::move(message_port_channel)));
 }
 
 void AudioWorkletMessagingProxy::CreateProcessorOnRenderingThread(

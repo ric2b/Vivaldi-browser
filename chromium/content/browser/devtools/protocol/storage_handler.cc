@@ -16,7 +16,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "storage/common/quota/quota_status_code.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -45,23 +45,23 @@ Storage::StorageType GetTypeName(storage::QuotaClient::ID id) {
 
 void ReportUsageAndQuotaDataOnUIThread(
     std::unique_ptr<StorageHandler::GetUsageAndQuotaCallback> callback,
-    storage::QuotaStatusCode code,
+    blink::mojom::QuotaStatusCode code,
     int64_t usage,
     int64_t quota,
     base::flat_map<storage::QuotaClient::ID, int64_t> usage_breakdown) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (code != storage::kQuotaStatusOk) {
+  if (code != blink::mojom::QuotaStatusCode::kOk) {
     return callback->sendFailure(
         Response::Error("Quota information is not available"));
   }
 
   std::unique_ptr<Array<Storage::UsageForType>> usageList =
       Array<Storage::UsageForType>::create();
-  for (const auto& usage : usage_breakdown) {
+  for (const auto& specific_usage : usage_breakdown) {
     std::unique_ptr<Storage::UsageForType> entry =
         Storage::UsageForType::Create()
-            .SetStorageType(GetTypeName(usage.first))
-            .SetUsage(usage.second)
+            .SetStorageType(GetTypeName(specific_usage.first))
+            .SetUsage(specific_usage.second)
             .Build();
     usageList->addItem(std::move(entry));
   }
@@ -70,7 +70,7 @@ void ReportUsageAndQuotaDataOnUIThread(
 
 void GotUsageAndQuotaDataCallback(
     std::unique_ptr<StorageHandler::GetUsageAndQuotaCallback> callback,
-    storage::QuotaStatusCode code,
+    blink::mojom::QuotaStatusCode code,
     int64_t usage,
     int64_t quota,
     base::flat_map<storage::QuotaClient::ID, int64_t> usage_breakdown) {
@@ -88,7 +88,7 @@ void GetUsageAndQuotaOnIOThread(
     std::unique_ptr<StorageHandler::GetUsageAndQuotaCallback> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   manager->GetUsageAndQuotaWithBreakdown(
-      url, storage::kStorageTypeTemporary,
+      url, blink::mojom::StorageType::kTemporary,
       base::Bind(&GotUsageAndQuotaDataCallback,
                  base::Passed(std::move(callback))));
 }
@@ -263,18 +263,21 @@ Response StorageHandler::Disable() {
                               cache_storage_observer_.release());
   }
   if (indexed_db_observer_) {
-    indexed_db_observer_->TaskRunner()->DeleteSoon(
-        FROM_HERE, std::move(indexed_db_observer_));
+    scoped_refptr<base::SequencedTaskRunner> observer_task_runner =
+        indexed_db_observer_->TaskRunner();
+    observer_task_runner->DeleteSoon(FROM_HERE,
+                                     std::move(indexed_db_observer_));
   }
 
   return Response::OK();
 }
 
-Response StorageHandler::ClearDataForOrigin(
+void StorageHandler::ClearDataForOrigin(
     const std::string& origin,
-    const std::string& storage_types) {
+    const std::string& storage_types,
+    std::unique_ptr<ClearDataForOriginCallback> callback) {
   if (!process_)
-    return Response::InternalError();
+    return callback->sendFailure(Response::InternalError());
 
   StoragePartition* partition = process_->GetStoragePartition();
   std::vector<std::string> types = base::SplitString(
@@ -302,13 +305,17 @@ Response StorageHandler::ClearDataForOrigin(
   if (set.count(Storage::StorageTypeEnum::All))
     remove_mask |= StoragePartition::REMOVE_DATA_MASK_ALL;
 
-  if (!remove_mask)
-    return Response::InvalidParams("No valid storage type specified");
+  if (!remove_mask) {
+    return callback->sendFailure(
+        Response::InvalidParams("No valid storage type specified"));
+  }
 
-  partition->ClearDataForOrigin(
-      remove_mask, StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
-      GURL(origin), partition->GetURLRequestContext());
-  return Response::OK();
+  partition->ClearData(remove_mask,
+                       StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+                       GURL(origin), StoragePartition::OriginMatcherFunction(),
+                       base::Time(), base::Time::Max(),
+                       base::BindOnce(&ClearDataForOriginCallback::sendSuccess,
+                                      std::move(callback)));
 }
 
 void StorageHandler::GetUsageAndQuota(

@@ -1,0 +1,7 @@
+
+if (is_win) {
+  update_target("//chrome/installer/setup:setup") {
+    deps -= ["//build/win:default_exe_manifest"]
+    deps += ["//vivaldi/installer/win:dpi_aware_exe_manifest"]
+  }
+}

@@ -23,6 +23,7 @@
 #include "net/http/proxy_client_socket.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -31,22 +32,19 @@ class GrowableIOBuffer;
 class HttpStream;
 class HttpStreamParser;
 class IOBuffer;
-class ProxyDelegate;
 
 class NET_EXPORT_PRIVATE HttpProxyClientSocket : public ProxyClientSocket {
  public:
   // Takes ownership of |transport_socket|, which should already be connected
   // by the time Connect() is called.  If tunnel is true then on Connect()
   // this socket will establish an Http tunnel.
-  HttpProxyClientSocket(ClientSocketHandle* transport_socket,
+  HttpProxyClientSocket(std::unique_ptr<ClientSocketHandle> transport_socket,
                         const std::string& user_agent,
                         const HostPortPair& endpoint,
-                        const HostPortPair& proxy_server,
                         HttpAuthController* http_auth_controller,
                         bool tunnel,
                         bool using_spdy,
                         NextProto negotiated_protocol,
-                        ProxyDelegate* proxy_delegate,
                         bool is_https_proxy);
 
   // On destruction Disconnect() is called.
@@ -76,6 +74,7 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocket : public ProxyClientSocket {
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
   int64_t GetTotalReceivedBytes() const override;
+  void ApplySocketTag(const SocketTag& tag) override;
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -83,7 +82,8 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocket : public ProxyClientSocket {
            const CompletionCallback& callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback) override;
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int GetPeerAddress(IPEndPoint* address) const override;
@@ -160,11 +160,6 @@ class NET_EXPORT_PRIVATE HttpProxyClientSocket : public ProxyClientSocket {
   // Used only for redirects.
   bool redirect_has_load_timing_info_;
   LoadTimingInfo redirect_load_timing_info_;
-
-  const HostPortPair proxy_server_;
-
-  // This delegate must outlive this proxy client socket.
-  ProxyDelegate* proxy_delegate_;
 
   const NetLogWithSource net_log_;
 

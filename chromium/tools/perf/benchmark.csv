@@ -25,7 +25,7 @@ gpu_perftests,"reveman@chromium.org, chrome-gpu-perf-owners@chromium.org",Intern
 jetstream,hablich@chromium.org,
 kraken,hablich@chromium.org,
 load_library_perf_tests,,
-loading.desktop,"kouhei@chormium.org, ksakamoto@chromium.org",
+loading.desktop,"kouhei@chromium.org, ksakamoto@chromium.org",
 loading.mobile,"kouhei@chromium.org, ksakamoto@chromium.org",
 media.desktop,"johnchen@chromium.org, crouleau@chromium.org",Internals>Media
 media.mobile,"johnchen@chromium.org, crouleau@chromium.org",Internals>Media
@@ -105,4 +105,5 @@ v8.browsing_mobile-future,"mythria@chromium.org, ulan@chromium.org",
 v8.detached_context_age_in_gc,ulan@chromium.org,
 v8.runtime_stats.top_25,cbruni@chromium.org,
 validating_command_buffer_perftests,"piman@chromium.org, chrome-gpu-perf-owners@chromium.org",Internals>GPU
+wasm,bradnelson@chromium.org,
 webrtc,"qiangchen@chromium.org, ehmaldonado@chromium.org, phoglund@chromium.org",

@@ -531,7 +531,7 @@ bool WebViewPrivateSendRequestFunction::RunAsyncSafe(WebViewGuest* guest) {
                                     false);
 
   url_params.uses_post = params->use_post;
-  url_params.post_data = content::ResourceRequestBody::CreateFromBytes(
+  url_params.post_data = network::ResourceRequestBody::CreateFromBytes(
       params->post_data.c_str(), params->post_data.length());
   url_params.extra_headers = params->extra_headers;
 

@@ -1,6 +1,6 @@
 
 if (!is_android) {
-  post_process_target("//components:components_unittests") {
+  update_target("//components:components_unittests") {
     sources = [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
   }
 }

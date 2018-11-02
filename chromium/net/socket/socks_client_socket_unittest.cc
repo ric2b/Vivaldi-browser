@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "build/build_config.h"
 #include "net/base/address_list.h"
 #include "net/base/test_completion_callback.h"
 #include "net/base/winsock_init.h"
@@ -21,6 +22,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/test/gtest_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -33,9 +35,6 @@ using net::test::IsOk;
 namespace net {
 
 class NetLog;
-
-const char kSOCKSOkRequest[] = { 0x04, 0x01, 0x00, 0x50, 127, 0, 0, 1, 0 };
-const char kSOCKSOkReply[] = { 0x00, 0x5A, 0x00, 0x00, 0, 0, 0, 0 };
 
 class SOCKSClientSocketTest : public PlatformTest {
  public:
@@ -99,7 +98,7 @@ std::unique_ptr<SOCKSClientSocket> SOCKSClientSocketTest::BuildMockSocket(
   return std::unique_ptr<SOCKSClientSocket>(new SOCKSClientSocket(
       std::move(connection),
       HostResolver::RequestInfo(HostPortPair(hostname, port)), DEFAULT_PRIORITY,
-      host_resolver));
+      host_resolver, TRAFFIC_ANNOTATION_FOR_TESTS));
 }
 
 // Implementation of HostResolver that never completes its resolve request.
@@ -128,6 +127,21 @@ class HangingHostResolverWithCancel : public HostResolver {
                        const NetLogWithSource& net_log) override {
     NOTIMPLEMENTED();
     return ERR_UNEXPECTED;
+  }
+
+  int ResolveStaleFromCache(const RequestInfo& info,
+                            AddressList* addresses,
+                            HostCache::EntryStaleness* stale_info,
+                            const NetLogWithSource& net_log) override {
+    NOTIMPLEMENTED();
+    return ERR_UNEXPECTED;
+  }
+
+  bool HasCached(base::StringPiece hostname,
+                 HostCache::Entry::Source* source_out,
+                 HostCache::EntryStaleness* stale_out) const override {
+    NOTIMPLEMENTED();
+    return false;
   }
 
   void RemoveRequest(Request* req) {
@@ -165,11 +179,12 @@ TEST_F(SOCKSClientSocketTest, CompleteHandshake) {
   const std::string payload_read = "moar random data";
 
   MockWrite data_writes[] = {
-      MockWrite(ASYNC, kSOCKSOkRequest, arraysize(kSOCKSOkRequest)),
-      MockWrite(ASYNC, payload_write.data(), payload_write.size()) };
+      MockWrite(ASYNC, kSOCKS4OkRequestLocalHostPort80,
+                kSOCKS4OkRequestLocalHostPort80Length),
+      MockWrite(ASYNC, payload_write.data(), payload_write.size())};
   MockRead data_reads[] = {
-      MockRead(ASYNC, kSOCKSOkReply, arraysize(kSOCKSOkReply)),
-      MockRead(ASYNC, payload_read.data(), payload_read.size()) };
+      MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength),
+      MockRead(ASYNC, payload_read.data(), payload_read.size())};
   TestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, arraysize(data_reads),
@@ -199,8 +214,8 @@ TEST_F(SOCKSClientSocketTest, CompleteHandshake) {
 
   scoped_refptr<IOBuffer> buffer(new IOBuffer(payload_write.size()));
   memcpy(buffer->data(), payload_write.data(), payload_write.size());
-  rv = user_sock_->Write(
-      buffer.get(), payload_write.size(), callback_.callback());
+  rv = user_sock_->Write(buffer.get(), payload_write.size(),
+                         callback_.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback_.WaitForResult();
   EXPECT_EQ(static_cast<int>(payload_write.size()), rv);
@@ -241,7 +256,8 @@ TEST_F(SOCKSClientSocketTest, HandshakeFailures) {
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
     MockWrite data_writes[] = {
-        MockWrite(SYNCHRONOUS, kSOCKSOkRequest, arraysize(kSOCKSOkRequest)) };
+        MockWrite(SYNCHRONOUS, kSOCKS4OkRequestLocalHostPort80,
+                  kSOCKS4OkRequestLocalHostPort80Length)};
     MockRead data_reads[] = {
         MockRead(SYNCHRONOUS, tests[i].fail_reply,
                  arraysize(tests[i].fail_reply)) };
@@ -277,8 +293,8 @@ TEST_F(SOCKSClientSocketTest, PartialServerReads) {
   const char kSOCKSPartialReply1[] = { 0x00 };
   const char kSOCKSPartialReply2[] = { 0x5A, 0x00, 0x00, 0, 0, 0, 0 };
 
-  MockWrite data_writes[] = {
-      MockWrite(ASYNC, kSOCKSOkRequest, arraysize(kSOCKSOkRequest)) };
+  MockWrite data_writes[] = {MockWrite(ASYNC, kSOCKS4OkRequestLocalHostPort80,
+                                       kSOCKS4OkRequestLocalHostPort80Length)};
   MockRead data_reads[] = {
       MockRead(ASYNC, kSOCKSPartialReply1, arraysize(kSOCKSPartialReply1)),
       MockRead(ASYNC, kSOCKSPartialReply2, arraysize(kSOCKSPartialReply2)) };
@@ -318,7 +334,7 @@ TEST_F(SOCKSClientSocketTest, PartialClientWrites) {
       MockWrite(ASYNC, kSOCKSPartialRequest2, arraysize(kSOCKSPartialRequest2)),
   };
   MockRead data_reads[] = {
-      MockRead(ASYNC, kSOCKSOkReply, arraysize(kSOCKSOkReply)) };
+      MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength)};
   TestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, arraysize(data_reads),
@@ -344,12 +360,12 @@ TEST_F(SOCKSClientSocketTest, PartialClientWrites) {
 // Tests the case when the server sends a smaller sized handshake data
 // and closes the connection.
 TEST_F(SOCKSClientSocketTest, FailedSocketRead) {
-  MockWrite data_writes[] = {
-      MockWrite(ASYNC, kSOCKSOkRequest, arraysize(kSOCKSOkRequest)) };
+  MockWrite data_writes[] = {MockWrite(ASYNC, kSOCKS4OkRequestLocalHostPort80,
+                                       kSOCKS4OkRequestLocalHostPort80Length)};
   MockRead data_reads[] = {
-      MockRead(ASYNC, kSOCKSOkReply, arraysize(kSOCKSOkReply) - 2),
+      MockRead(ASYNC, kSOCKS4OkReply, kSOCKS4OkReplyLength - 2),
       // close connection unexpectedly
-      MockRead(SYNCHRONOUS, 0) };
+      MockRead(SYNCHRONOUS, 0)};
   TestNetLog log;
 
   user_sock_ = BuildMockSocket(data_reads, arraysize(data_reads),
@@ -466,6 +482,31 @@ TEST_F(SOCKSClientSocketTest, NoIPv6RealResolver) {
 
   EXPECT_EQ(ERR_NAME_NOT_RESOLVED,
             callback_.GetResult(user_sock_->Connect(callback_.callback())));
+}
+
+TEST_F(SOCKSClientSocketTest, Tag) {
+  StaticSocketDataProvider data;
+  TestNetLog log;
+  MockTaggingStreamSocket* tagging_sock =
+      new MockTaggingStreamSocket(std::unique_ptr<StreamSocket>(
+          new MockTCPClientSocket(address_list_, &log, &data)));
+
+  std::unique_ptr<ClientSocketHandle> connection(new ClientSocketHandle);
+  // |connection| takes ownership of |tagging_sock|, but keep a
+  // non-owning pointer to it.
+  connection->SetSocket(std::unique_ptr<StreamSocket>(tagging_sock));
+  MockHostResolver host_resolver;
+  SOCKSClientSocket socket(
+      std::move(connection),
+      HostResolver::RequestInfo(HostPortPair("localhost", 80)),
+      DEFAULT_PRIORITY, &host_resolver, TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  EXPECT_EQ(tagging_sock->tag(), SocketTag());
+#if defined(OS_ANDROID)
+  SocketTag tag(0x12345678, 0x87654321);
+  socket.ApplySocketTag(tag);
+  EXPECT_EQ(tagging_sock->tag(), tag);
+#endif  // OS_ANDROID
 }
 
 }  // namespace net

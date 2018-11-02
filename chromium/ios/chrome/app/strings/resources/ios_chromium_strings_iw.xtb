@@ -3,6 +3,7 @@
 <translationbundle lang="iw">
 <translation id="102360288709523007">‏עזור לשפר את Chromium על-ידי שליחה של סטטיסטיקת שימוש ודוחות קריסה אל Google.</translation>
 <translation id="1185134272377778587">‏על Chromium</translation>
+<translation id="1289966288285062467">‏הודעת פרטיות של Chromium</translation>
 <translation id="1472013873724362412">‏החשבון שלך לא פועל ב-Chromium. פנה אל מנהל הדומיין או השתמש בחשבון Google רגיל כדי להיכנס לחשבון.</translation>
 <translation id="1736662517232558588">‏נתוני Chromium נמחקו</translation>
 <translation id="1838412507805038478">‏Chromium אימת ש-<ph name="ISSUER" /> הנפיק את האישור של האתר הזה.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">‏האם לצאת מ-Chromium?</translation>
 <translation id="6424492062988593837">‏‫Chromium ממשיך להשתפר! קיימת גירסה חדשה.</translation>
 <translation id="6604711459180487467">‏גישה אל המיקום שלך תאפשר לך ליהנות מחוויה משופרת ב-Chromium.</translation>
+<translation id="6626296268883197964">‏שימוש באפליקציה הזו מהווה הסכמה ל<ph name="BEGIN_LINK_TOS" />תנאים ולהגבלות<ph name="END_LINK_TOS" /> ול<ph name="BEGIN_LINK_PRIVACY" />הודעת הפרטיות<ph name="END_LINK_PRIVACY" /> של Chromium.</translation>
 <translation id="7099326575020694068">‏Chromium לא יכול להשתמש במצלמה במצב תצוגה מפוצלת</translation>
-<translation id="7144758435978427212">‏גלה דפי אינטרנט שנשלחו על-ידי מכשירים הנמצאים בקרבת מקום. כאשר Bluetooth מופעל, Chromium יכול לאסוף דפי אינטרנט המשויכים למכשירים סביבך ולשלוח אותם באופן אנונימי ל-Google כדי למצוא את השימושיים ביותר. <ph name="BEGIN_LINK" />למידע נוסף<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">‏Chromium מאפשר גישה לחשבונות באינטרנט וכך חוסך לך זמן. ניתן להוסיף או להסיר חשבונות בקטע 'הגדרות'.</translation>
 <translation id="7269362888766543920">‏תוספים מסוימים גורמים ל-Chromium לקרוס. נסה להסיר אותם.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">‏אפשר להשתמש ב-Chromium בכל מקום</translation>
 <translation id="7674213385180944843">‏עבור אל 'הגדרות' &gt; 'פרטיות' &gt; 'מצלמה' &gt; Chromium והפעל את המצלמה.</translation>
 <translation id="786327964234957808">‏אתה עובר מחשבון סינכרון <ph name="USER_EMAIL1" /> אל <ph name="USER_EMAIL2" />. נתוני Chromium הקיימים שלך מנוהלים על-ידי <ph name="DOMAIN" />. פעולה זו תמחק את הנתונים שלך מהמכשיר הזה, אבל הם יישארו ב-<ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">‏בשימוש באפליקציה הזו אתה מביע את הסכמתך ל<ph name="BEGIN_LINK" />תנאים ולהגבלות<ph name="END_LINK" /> של Chromium.</translation>
 <translation id="8175055321229419309">‏טיפ: <ph name="BEGIN_LINK" />העבר את Chromium לשורת המשימות<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">‏לחוויית Google משופרת ב-Chromium בהתבסס על המיקום שלך.</translation>
 <translation id="8353224596138547809">‏האם אתה מעוניין ש-Chromium ישמור את הסיסמה עבור אתר זה?</translation>

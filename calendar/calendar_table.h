@@ -36,12 +36,14 @@ class CalendarTable {
   virtual ~CalendarTable();
 
   bool CreateCalendarTable();
+  bool CreateDefaultCalendar();
 
   CalendarID CreateCalendar(CalendarRow row);
   bool GetAllCalendars(CalendarRows* calendars);
   bool GetRowForCalendar(CalendarID calendar_id, CalendarRow* out_calendar);
   bool UpdateCalendarRow(const CalendarRow& calendar);
   bool DeleteCalendar(CalendarID calendar_id);
+  bool DoesCalendarIdExist(CalendarID calendar_id);
 
  protected:
   virtual sql::Connection& GetDB() = 0;
@@ -49,6 +51,7 @@ class CalendarTable {
 
  private:
   std::string GURLToDatabaseURL(const GURL& gurl);
+  bool DoesAnyCalendarExist();
 
   DISALLOW_COPY_AND_ASSIGN(CalendarTable);
 };

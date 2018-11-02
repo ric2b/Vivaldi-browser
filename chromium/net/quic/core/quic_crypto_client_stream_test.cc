@@ -12,6 +12,9 @@
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_server_id.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/core/tls_client_handshaker.h"
+#include "net/quic/core/tls_server_handshaker.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
@@ -34,14 +37,17 @@ const uint16_t kServerPort = 443;
 class QuicCryptoClientStreamTest : public QuicTest {
  public:
   QuicCryptoClientStreamTest()
-      : server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
-        crypto_config_(crypto_test_utils::ProofVerifierForTesting()) {
+      : supported_versions_(AllSupportedVersions()),
+        server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
+        crypto_config_(crypto_test_utils::ProofVerifierForTesting(),
+                       TlsClientHandshaker::CreateSslCtx()) {
     CreateConnection();
   }
 
   void CreateConnection() {
-    connection_ = new PacketSavingConnection(&client_helper_, &alarm_factory_,
-                                             Perspective::IS_CLIENT);
+    connection_ =
+        new PacketSavingConnection(&client_helper_, &alarm_factory_,
+                                   Perspective::IS_CLIENT, supported_versions_);
     // Advance the time, because timers do not like uninitialized times.
     connection_->AdvanceTime(QuicTime::Delta::FromSeconds(1));
 
@@ -50,7 +56,9 @@ class QuicCryptoClientStreamTest : public QuicTest {
   }
 
   void CompleteCryptoHandshake() {
-    EXPECT_CALL(*session_, OnProofValid(testing::_));
+    if (stream()->handshake_protocol() != PROTOCOL_TLS1_3) {
+      EXPECT_CALL(*session_, OnProofValid(testing::_));
+    }
     EXPECT_CALL(*session_, OnProofVerifyDetailsAvailable(testing::_))
         .Times(testing::AnyNumber());
     stream()->CryptoConnect();
@@ -68,6 +76,7 @@ class QuicCryptoClientStreamTest : public QuicTest {
   MockQuicConnectionHelper client_helper_;
   MockAlarmFactory alarm_factory_;
   PacketSavingConnection* connection_;
+  ParsedQuicVersionVector supported_versions_;
   std::unique_ptr<TestQuicSpdyClientSession> session_;
   QuicServerId server_id_;
   CryptoHandshakeMessage message_;
@@ -82,6 +91,21 @@ TEST_F(QuicCryptoClientStreamTest, NotInitiallyConected) {
 
 TEST_F(QuicCryptoClientStreamTest, ConnectedAfterSHLO) {
   CompleteCryptoHandshake();
+  EXPECT_TRUE(stream()->encryption_established());
+  EXPECT_TRUE(stream()->handshake_confirmed());
+}
+
+TEST_F(QuicCryptoClientStreamTest, ConnectedAfterTlsHandshake) {
+  FLAGS_quic_supports_tls_handshake = true;
+  supported_versions_.clear();
+  for (QuicTransportVersion transport_version :
+       AllSupportedTransportVersions()) {
+    supported_versions_.push_back(
+        ParsedQuicVersion(PROTOCOL_TLS1_3, transport_version));
+  }
+  CreateConnection();
+  CompleteCryptoHandshake();
+  EXPECT_EQ(PROTOCOL_TLS1_3, stream()->handshake_protocol());
   EXPECT_TRUE(stream()->encryption_established());
   EXPECT_TRUE(stream()->handshake_confirmed());
 }
@@ -222,7 +246,7 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdate) {
   const string& cached_scfg = state->server_config();
   test::CompareCharArraysWithHexError(
       "scfg", cached_scfg.data(), cached_scfg.length(),
-      reinterpret_cast<char*>(scfg), arraysize(scfg));
+      reinterpret_cast<char*>(scfg), QUIC_ARRAYSIZE(scfg));
 
   QuicStreamSequencer* sequencer = QuicStreamPeer::sequencer(stream());
   EXPECT_FALSE(QuicStreamSequencerPeer::IsUnderlyingBufferAllocated(sequencer));
@@ -236,7 +260,8 @@ TEST_F(QuicCryptoClientStreamTest, ServerConfigUpdateWithCert) {
   // Build a server config update message with certificates
   QuicCryptoServerConfig crypto_config(
       QuicCryptoServerConfig::TESTING, QuicRandom::GetInstance(),
-      crypto_test_utils::ProofSourceForTesting());
+      crypto_test_utils::ProofSourceForTesting(),
+      TlsServerHandshaker::CreateSslCtx());
   crypto_test_utils::FakeServerOptions options;
   crypto_test_utils::SetupCryptoServerConfigForTest(
       connection_->clock(), QuicRandom::GetInstance(), &crypto_config, options);
@@ -355,10 +380,12 @@ TEST_F(QuicCryptoClientStreamTest, NoTokenBindingInPrivacyMode) {
 class QuicCryptoClientStreamStatelessTest : public QuicTest {
  public:
   QuicCryptoClientStreamStatelessTest()
-      : client_crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
+      : client_crypto_config_(crypto_test_utils::ProofVerifierForTesting(),
+                              TlsClientHandshaker::CreateSslCtx()),
         server_crypto_config_(QuicCryptoServerConfig::TESTING,
                               QuicRandom::GetInstance(),
-                              crypto_test_utils::ProofSourceForTesting()),
+                              crypto_test_utils::ProofSourceForTesting(),
+                              TlsServerHandshaker::CreateSslCtx()),
         server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED) {
@@ -366,7 +393,7 @@ class QuicCryptoClientStreamStatelessTest : public QuicTest {
     CreateClientSessionForTest(server_id_,
                                /* supports_stateless_rejects= */ true,
                                QuicTime::Delta::FromSeconds(100000),
-                               AllSupportedTransportVersions(), &helper_,
+                               AllSupportedVersions(), &helper_,
                                &alarm_factory_, &client_crypto_config_,
                                &client_connection_, &client_session);
     CHECK(client_session);
@@ -392,7 +419,7 @@ class QuicCryptoClientStreamStatelessTest : public QuicTest {
   void InitializeFakeStatelessRejectServer() {
     TestQuicSpdyServerSession* server_session = nullptr;
     CreateServerSessionForTest(server_id_, QuicTime::Delta::FromSeconds(100000),
-                               AllSupportedTransportVersions(), &helper_,
+                               AllSupportedVersions(), &helper_,
                                &alarm_factory_, &server_crypto_config_,
                                &server_compressed_certs_cache_,
                                &server_connection_, &server_session);
@@ -402,7 +429,7 @@ class QuicCryptoClientStreamStatelessTest : public QuicTest {
     crypto_test_utils::SetupCryptoServerConfigForTest(
         server_connection_->clock(), server_connection_->random_generator(),
         &server_crypto_config_, options);
-    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
+    SetQuicReloadableFlag(enable_quic_stateless_reject_support, true);
   }
 
   MockQuicConnectionHelper helper_;
@@ -422,7 +449,7 @@ class QuicCryptoClientStreamStatelessTest : public QuicTest {
 };
 
 TEST_F(QuicCryptoClientStreamStatelessTest, StatelessReject) {
-  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
+  SetQuicReloadableFlag(enable_quic_stateless_reject_support, true);
 
   QuicCryptoClientConfig::CachedState* client_state =
       client_crypto_config_.LookupOrCreate(server_id_);

@@ -9,15 +9,14 @@
 
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/values.h"
-#include "chrome/browser/browsing_data/browsing_data_counter_factory.h"
-#include "chrome/browser/browsing_data/browsing_data_counter_utils.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/browsing_data_important_sites_util.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/counters/browsing_data_counter_factory.h"
+#include "chrome/browser/browsing_data/counters/browsing_data_counter_utils.h"
 #include "chrome/browser/engagement/important_sites_usage_counter.h"
 #include "chrome/browser/engagement/important_sites_util.h"
 #include "chrome/browser/history/web_history_service_factory.h"
@@ -276,7 +275,7 @@ void ClearBrowsingDataHandler::HandleClearBrowsingData(
                       [&data_types](BrowsingDataType type) {
                         return data_types.find(type) != data_types.end();
                       });
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
+    base::UmaHistogramSparse(
         "History.ClearBrowsingData.PasswordsDeletion.AdditionalDatatypesCount",
         checked_other_types);
   }
@@ -415,7 +414,7 @@ void ClearBrowsingDataHandler::OnFetchImportantSitesFinished(
   base::ListValue important_sites_list;
 
   for (const auto& info : important_sites) {
-    auto entry = base::MakeUnique<base::DictionaryValue>();
+    auto entry = std::make_unique<base::DictionaryValue>();
     entry->SetString(kRegisterableDomainField, info.registerable_domain);
     // The |reason_bitfield| is only passed to Javascript to be logged
     // from |HandleClearBrowsingData|.

@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> 個項目</translation>
 <translation id="1491277525950327607">輕觸兩下即可切換設定</translation>
 <translation id="152234381334907219">永不儲存</translation>
+<translation id="1532451416480227577">顯示 Google Pay 中儲存的地址和信用卡資訊</translation>
 <translation id="1540800554400757039">地址 1</translation>
 <translation id="1545749641540134597">掃描 QR 圖碼</translation>
 <translation id="1580783302095112590">已傳送郵件。</translation>
@@ -96,6 +97,7 @@
 <translation id="2718352093833049315">僅限連上 Wi-Fi 網路時</translation>
 <translation id="2747003861858887689">上一個欄位</translation>
 <translation id="2780046210906776326">無電子郵件帳戶</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">退出分頁切換選項</translation>
 <translation id="283291358677939992">在網頁中尋找...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />，<ph name="STATE" />，<ph name="URL" /></translation>
@@ -179,6 +181,7 @@
 <translation id="4378154925671717803">電話</translation>
 <translation id="441868831736628555">隱私權聲明</translation>
 <translation id="4460091562821778167">每次皆詢問我要使用的應用程式</translation>
+<translation id="4496373720959965247">新增分頁即可在各網頁之間自由切換</translation>
 <translation id="4508750114462689118">關閉登入提示</translation>
 <translation id="4526249700380860531">您可以前往 <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> 查看及管理已儲存的密碼</translation>
 <translation id="4536418791685807335">請嘗試重新登入。</translation>
@@ -217,12 +220,12 @@
 <translation id="5300589172476337783">顯示</translation>
 <translation id="5317780077021120954">儲存</translation>
 <translation id="5327248766486351172">名稱</translation>
+<translation id="533632423981297619">凡是可查看匯出檔案的使用者都看得到你的密碼。請勿與任何人共用這個檔案。</translation>
 <translation id="5388358297987318779">開啟圖片</translation>
 <translation id="5409365236829784218">未安裝可開啟這個檔案的應用程式。</translation>
 <translation id="5433691172869980887">已複製使用者名稱</translation>
 <translation id="54401264925851789">網頁安全性資訊</translation>
 <translation id="5525269841082836315">建立通關密語</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">有了 Handoff，您使用這個裝置開始瀏覽網站後，可輕鬆改用 Mac 繼續瀏覽。目前開啟的網站會自動顯示在 Mac 的 Dock 中。
 
 此外，您必須在 [設定] 的「一般設定」部分中啟用 Handoff，且您的裝置必須使用同一個 iCloud 帳戶。</translation>
@@ -247,7 +250,6 @@
 <translation id="5911030830365207728">Google 翻譯</translation>
 <translation id="5916664084637901428">開啟</translation>
 <translation id="5948291296578561264">可讓你將相片儲存至相片庫。</translation>
-<translation id="5953603475187800576">顯示 Google Payments 中儲存的地址和信用卡資料</translation>
 <translation id="5955891643922670672">正在查看離線版</translation>
 <translation id="5964480694698977962">新增無痕式分頁。</translation>
 <translation id="5965679971710331625">你已登入帳戶</translation>
@@ -337,7 +339,6 @@
 <translation id="7514365320538308">下載</translation>
 <translation id="7537586195939242955">很抱歉，目前無法將您的通行票證加到 Passbook。</translation>
 <translation id="7561196759112975576">一律使用</translation>
-<translation id="7588950540487816470">實體化網路</translation>
 <translation id="7603852183842204213">已封鎖彈出式視窗 (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">同步處理功能無法正常運作</translation>
 <translation id="7638584964844754484">通關密語不正確</translation>
@@ -350,6 +351,7 @@
 <translation id="780301667611848630">不用了，謝謝</translation>
 <translation id="7859704718976024901">瀏覽紀錄</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">匯出密碼...</translation>
 <translation id="7947953824732555851">接受並登入</translation>
 <translation id="7961015016161918242">一律不要</translation>
 <translation id="7971521879845308059">封鎖彈出式視窗</translation>
@@ -407,7 +409,6 @@
 <translation id="9083392325882095631">1 個項目</translation>
 <translation id="9100610230175265781">請提供通關密語</translation>
 <translation id="9148126808321036104">重新登入</translation>
-<translation id="91549621916703028">為所有工作建立多個分頁</translation>
 <translation id="9157836665414082580">禁止顯示對話方塊</translation>
 <translation id="9188680907066685419">登出受管理的帳戶</translation>
 <translation id="9203116392574189331">Handoff</translation>

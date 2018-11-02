@@ -86,6 +86,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       const std::vector<SkBitmap>& bitmaps,
       const std::vector<gfx::Size>& original_bitmap_sizes) override;
   void SetLastCommittedURL(const GURL& url) override;
+  void SetMainFrameMimeType(const std::string& mime_type) override;
   void SetWasRecentlyAudible(bool audible) override;
   void SetIsCurrentlyAudible(bool audible) override;
 
@@ -99,7 +100,7 @@ class TestWebContents : public WebContentsImpl, public WebContentsTester {
       int proxy_routing_id,
       const base::UnguessableToken& devtools_frame_token,
       const FrameReplicationState& replicated_frame_state) override;
-  void UpdateRenderViewSizeForRenderManager() override {}
+  void UpdateRenderViewSizeForRenderManager(bool is_main_frame) override {}
 
   // Returns a clone of this TestWebContents. The returned object is also a
   // TestWebContents. The caller owns the returned object.

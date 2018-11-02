@@ -4,13 +4,14 @@
 
 #include "chrome/browser/ui/webui/welcome_win10_ui.h"
 
+#include <memory>
 #include <string>
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/welcome_win10_handler.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -82,12 +83,19 @@ WelcomeWin10UI::WelcomeWin10UI(content::WebUI* web_ui, const GURL& url)
   // Determine which variation to show.
   bool is_first_run = !UrlContainsKeyValueInQuery(url, "text", "faster");
 
-  web_ui->AddMessageHandler(base::MakeUnique<WelcomeWin10Handler>());
+  web_ui->AddMessageHandler(std::make_unique<WelcomeWin10Handler>());
 
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::Create(url.host());
 
+  html_source->SetJsonPath("strings.js");
+
   AddLocalizedStrings(html_source, is_first_run);
+
+  // Controls the accelerated default browser flow experiment.
+  html_source->AddBoolean("accelerated_flow_enabled",
+                          base::FeatureList::IsEnabled(
+                              features::kWin10AcceleratedDefaultBrowserFlow));
 
   html_source->AddResourcePath("welcome_win10.css", IDR_WELCOME_WIN10_CSS);
   html_source->AddResourcePath("welcome_win10.js", IDR_WELCOME_WIN10_JS);

@@ -86,10 +86,8 @@ void CreateGLMailbox(gpu::gles2::GLES2Interface* gles2,
                      unsigned texture_id,
                      GLenum target,
                      gpu::Mailbox* mailbox) {
-  gles2->ActiveTexture(GL_TEXTURE0);
-  gles2->BindTexture(target, texture_id);
   gles2->GenMailboxCHROMIUM(mailbox->name);
-  gles2->ProduceTextureCHROMIUM(target, mailbox->name);
+  gles2->ProduceTextureDirectCHROMIUM(texture_id, mailbox->name);
 }
 
 }  // namespace
@@ -261,9 +259,7 @@ gpu::SyncToken Buffer::Texture::BindTexImage() {
     // Create and return a sync token that can be used to ensure that the
     // BindTexImage2DCHROMIUM call is processed before issuing any commands
     // that will read from the texture on a different context.
-    uint64_t fence_sync = gles2->InsertFenceSyncCHROMIUM();
-    gles2->OrderingBarrierCHROMIUM();
-    gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gles2->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
     TRACE_EVENT_ASYNC_STEP_INTO0("exo", "BufferInUse", gpu_memory_buffer_,
                                  "bound");
   }
@@ -316,9 +312,7 @@ gpu::SyncToken Buffer::Texture::CopyTexImage(Texture* destination,
     // Create and return a sync token that can be used to ensure that the
     // CopyTextureCHROMIUM call is processed before issuing any commands
     // that will read from the target texture on a different context.
-    uint64_t fence_sync = gles2->InsertFenceSyncCHROMIUM();
-    gles2->OrderingBarrierCHROMIUM();
-    gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gles2->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
   }
   return sync_token;
 }

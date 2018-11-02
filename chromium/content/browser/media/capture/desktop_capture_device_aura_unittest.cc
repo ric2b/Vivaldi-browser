@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
-#include "content/browser/compositor/test/no_transport_image_transport_factory.h"
+#include "content/browser/compositor/test/test_image_transport_factory.h"
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "media/capture/video_capture_types.h"
@@ -66,7 +66,7 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
                              media::VideoPixelStorage storage,
                              int frame_feedback_id) override {
     EXPECT_EQ(media::PIXEL_FORMAT_I420, format);
-    EXPECT_EQ(media::PIXEL_STORAGE_CPU, storage);
+    EXPECT_EQ(media::VideoPixelStorage::CPU, storage);
     DoReserveOutputBuffer();
     return Buffer();
   }
@@ -90,7 +90,7 @@ class MockDeviceClient : public media::VideoCaptureDevice::Client {
                                    media::VideoPixelStorage storage,
                                    int frame_feedback_id) override {
     EXPECT_EQ(media::PIXEL_FORMAT_I420, format);
-    EXPECT_EQ(media::PIXEL_STORAGE_CPU, storage);
+    EXPECT_EQ(media::VideoPixelStorage::CPU, storage);
     DoResurrectLastOutputBuffer();
     return Buffer();
   }
@@ -107,7 +107,7 @@ class DesktopCaptureDeviceAuraTest : public testing::Test {
   void SetUp() override {
     // The ContextFactory must exist before any Compositors are created.
     ImageTransportFactory::SetFactory(
-        std::make_unique<NoTransportImageTransportFactory>());
+        std::make_unique<TestImageTransportFactory>());
     helper_.reset(new aura::test::AuraTestHelper());
     helper_->SetUp(
         ImageTransportFactory::GetInstance()->GetContextFactory(),

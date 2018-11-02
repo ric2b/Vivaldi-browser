@@ -48,6 +48,7 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
+#include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
@@ -82,12 +83,14 @@
 #include "net/http/http_transaction_factory.h"
 #include "net/reporting/reporting_browsing_data_remover.h"
 #include "net/reporting/reporting_service.h"
+#include "net/url_request/network_error_logging_delegate.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/favicon_size.h"
 
 #if defined(OS_ANDROID)
+#include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
 #else
 #include "content/public/browser/host_zoom_map.h"
@@ -148,6 +151,9 @@ const char kTestRealm[] = "TestRealm";
 // For Autofill.
 const char kWebOrigin[] = "https://www.example.com/";
 
+// Default search engine URL.
+const char kDSETestUrl[] = "https://search.com";
+
 const GURL kOrigin1(kTestOrigin1);
 const GURL kOrigin2(kTestOrigin2);
 const GURL kOrigin3(kTestOrigin3);
@@ -155,6 +161,8 @@ const GURL kOrigin4(kTestOrigin4);
 
 const GURL kOriginExt(kTestOriginExt);
 const GURL kOriginDevTools(kTestOriginDevTools);
+
+const GURL kDSEOrigin(kDSETestUrl);
 
 // Shorthands for origin types.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -180,6 +188,26 @@ class TestWebappRegistry : public WebappRegistry {
       const base::Callback<bool(const GURL&)>& url_filter) override {
     // Mocks out a JNI call.
   }
+};
+
+// TestSearchEngineDelegate
+class TestSearchEngineDelegate
+    : public SearchPermissionsService::SearchEngineDelegate {
+ public:
+  base::string16 GetDSEName() override { return base::string16(); }
+
+  url::Origin GetDSEOrigin() override {
+    return url::Origin::Create(kDSEOrigin);
+  }
+
+  void SetDSEChangedCallback(const base::Closure& callback) override {
+    dse_changed_callback_ = callback;
+  }
+
+  void UpdateDSEOrigin() { dse_changed_callback_.Run(); }
+
+ private:
+  base::Closure dse_changed_callback_;
 };
 #endif
 
@@ -414,6 +442,7 @@ class RemoveFaviconTester {
     quit_closure_ = run_loop.QuitClosure();
     favicon_service_->GetRawFaviconForPageURL(
         page_url, {favicon_base::IconType::kFavicon}, gfx::kFaviconSize,
+        /*fallback_to_host=*/false,
         base::Bind(&RemoveFaviconTester::SaveResultAndQuit,
                    base::Unretained(this)),
         &tracker_);
@@ -890,11 +919,11 @@ class RemoveAutofillTester : public autofill::PersonalDataManagerObserver {
 
 class MockReportingService : public net::ReportingService {
  public:
-  MockReportingService() {}
+  MockReportingService() = default;
 
   // net::ReportingService implementation:
 
-  ~MockReportingService() override {}
+  ~MockReportingService() override = default;
 
   void QueueReport(const GURL& url,
                    const std::string& group,
@@ -908,24 +937,29 @@ class MockReportingService : public net::ReportingService {
     NOTREACHED();
   }
 
-  void RemoveBrowsingData(
-      int data_type_mask,
-      base::Callback<bool(const GURL&)> origin_filter) override {
+  void RemoveBrowsingData(int data_type_mask,
+                          const base::RepeatingCallback<bool(const GURL&)>&
+                              origin_filter) override {
     ++remove_calls_;
     last_data_type_mask_ = data_type_mask;
     last_origin_filter_ = origin_filter;
   }
 
+  bool RequestIsUpload(const net::URLRequest& request) override {
+    NOTREACHED();
+    return true;
+  }
+
   int remove_calls() const { return remove_calls_; }
   int last_data_type_mask() const { return last_data_type_mask_; }
-  base::Callback<bool(const GURL&)> last_origin_filter() const {
+  const base::RepeatingCallback<bool(const GURL&)>& last_origin_filter() const {
     return last_origin_filter_;
   }
 
  private:
   int remove_calls_ = 0;
   int last_data_type_mask_ = 0;
-  base::Callback<bool(const GURL&)> last_origin_filter_;
+  base::RepeatingCallback<bool(const GURL&)> last_origin_filter_;
 
   DISALLOW_COPY_AND_ASSIGN(MockReportingService);
 };
@@ -935,7 +969,7 @@ class ClearReportingCacheTester {
   ClearReportingCacheTester(TestingProfile* profile, bool create_service)
       : profile_(profile) {
     if (create_service)
-      service_ = base::MakeUnique<MockReportingService>();
+      service_ = std::make_unique<MockReportingService>();
 
     net::URLRequestContext* request_context =
         profile_->GetRequestContext()->GetURLRequestContext();
@@ -950,9 +984,10 @@ class ClearReportingCacheTester {
     request_context->set_reporting_service(old_service_);
   }
 
-  void GetMockInfo(int* remove_calls_out,
-                   int* last_data_type_mask_out,
-                   base::Callback<bool(const GURL&)>* last_origin_filter_out) {
+  void GetMockInfo(
+      int* remove_calls_out,
+      int* last_data_type_mask_out,
+      base::RepeatingCallback<bool(const GURL&)>* last_origin_filter_out) {
     DCHECK_NE(nullptr, service_.get());
 
     *remove_calls_out = service_->remove_calls();
@@ -964,6 +999,78 @@ class ClearReportingCacheTester {
   TestingProfile* profile_;
   std::unique_ptr<MockReportingService> service_;
   net::ReportingService* old_service_;
+};
+
+class MockNetworkErrorLoggingDelegate
+    : public net::NetworkErrorLoggingDelegate {
+ public:
+  MockNetworkErrorLoggingDelegate() = default;
+
+  // net::NetworkErrorLoggingDelegate implementation:
+
+  ~MockNetworkErrorLoggingDelegate() override = default;
+
+  void OnHeader(const url::Origin& origin, const std::string& value) override {
+    NOTREACHED();
+  }
+
+  void OnNetworkError(const ErrorDetails& details) override { NOTREACHED(); }
+
+  void RemoveBrowsingData(const base::RepeatingCallback<bool(const GURL&)>&
+                              origin_filter) override {
+    ++remove_calls_;
+    last_origin_filter_ = origin_filter;
+  }
+
+  void SetReportingService(net::ReportingService* reporting_service) override {}
+
+  int remove_calls() const { return remove_calls_; }
+  const base::RepeatingCallback<bool(const GURL&)>& last_origin_filter() const {
+    return last_origin_filter_;
+  }
+
+ private:
+  int remove_calls_ = 0;
+  base::RepeatingCallback<bool(const GURL&)> last_origin_filter_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockNetworkErrorLoggingDelegate);
+};
+
+class ClearNetworkErrorLoggingTester {
+ public:
+  ClearNetworkErrorLoggingTester(TestingProfile* profile, bool create_service)
+      : profile_(profile) {
+    if (create_service)
+      delegate_ = std::make_unique<MockNetworkErrorLoggingDelegate>();
+
+    net::URLRequestContext* request_context =
+        profile_->GetRequestContext()->GetURLRequestContext();
+
+    request_context->set_network_error_logging_delegate(delegate_.get());
+  }
+
+  ~ClearNetworkErrorLoggingTester() {
+    net::URLRequestContext* request_context =
+        profile_->GetRequestContext()->GetURLRequestContext();
+    DCHECK_EQ(delegate_.get(),
+              request_context->network_error_logging_delegate());
+    request_context->set_network_error_logging_delegate(nullptr);
+  }
+
+  void GetMockInfo(
+      int* remove_calls_out,
+      base::RepeatingCallback<bool(const GURL&)>* last_origin_filter_out) {
+    DCHECK_NE(nullptr, delegate_.get());
+
+    *remove_calls_out = delegate_->remove_calls();
+    *last_origin_filter_out = delegate_->last_origin_filter();
+  }
+
+ private:
+  TestingProfile* profile_;
+  std::unique_ptr<MockNetworkErrorLoggingDelegate> delegate_;
+
+  DISALLOW_COPY_AND_ASSIGN(ClearNetworkErrorLoggingTester);
 };
 
 // Implementation of the TestingProfile that provides an SSLHostStateDelegate
@@ -995,6 +1102,14 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
         profile_->GetBrowsingDataRemoverDelegate())
         ->OverrideWebappRegistryForTesting(
             base::WrapUnique<WebappRegistry>(new TestWebappRegistry()));
+
+    SearchPermissionsService* service =
+        SearchPermissionsService::Factory::GetForBrowserContext(profile_.get());
+    std::unique_ptr<TestSearchEngineDelegate> delegate =
+        base::MakeUnique<TestSearchEngineDelegate>();
+    TestSearchEngineDelegate* delegate_ptr = delegate.get();
+    service->SetSearchEngineDelegateForTest(std::move(delegate));
+    delegate_ptr->UpdateDSEOrigin();
 #endif
   }
 
@@ -1189,6 +1304,39 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForLastHour) {
   EXPECT_TRUE(tester.HistoryContainsURL(kOrigin2));
 }
 
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveHistoryForOlderThan30Days) {
+  RemoveHistoryTester tester;
+  ASSERT_TRUE(tester.Init(GetProfile()));
+
+  base::Time older_than_29days =
+      base::Time::Now() - base::TimeDelta::FromDays(29);
+  base::Time older_than_30days =
+      base::Time::Now() - base::TimeDelta::FromDays(30);
+  base::Time older_than_31days =
+      base::Time::Now() - base::TimeDelta::FromDays(31);
+
+  tester.AddHistory(kOrigin1, base::Time::Now());
+  tester.AddHistory(kOrigin2, older_than_29days);
+  tester.AddHistory(kOrigin3, older_than_31days);
+
+  ASSERT_TRUE(tester.HistoryContainsURL(kOrigin1));
+  ASSERT_TRUE(tester.HistoryContainsURL(kOrigin2));
+  ASSERT_TRUE(tester.HistoryContainsURL(kOrigin3));
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), older_than_30days,
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, false);
+
+  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
+            GetRemovalMask());
+  EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+            GetOriginTypeMask());
+
+  EXPECT_TRUE(tester.HistoryContainsURL(kOrigin1));
+  EXPECT_TRUE(tester.HistoryContainsURL(kOrigin2));
+  EXPECT_FALSE(tester.HistoryContainsURL(kOrigin3));
+}
+
 // This should crash (DCHECK) in Debug, but death tests don't work properly
 // here.
 // TODO(msramek): To make this testable, the refusal to delete history should
@@ -1355,6 +1503,45 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalLastHour) {
       AnHourAgo(), base::Time::Max(),
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
 
+  EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
+            GetRemovalMask());
+  EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
+            GetOriginTypeMask());
+  ASSERT_FALSE(tester.HasProfile());
+}
+
+// Verify the clearing of autofill profiles added / modified more than 30 days
+// ago.
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, AutofillRemovalOlderThan30Days) {
+  GetProfile()->CreateWebDataService();
+  RemoveAutofillTester tester(GetProfile());
+
+  const base::Time kNow = base::Time::Now();
+  const base::Time k30DaysOld = kNow - base::TimeDelta::FromDays(30);
+  const base::Time k31DaysOld = kNow - base::TimeDelta::FromDays(31);
+  const base::Time k32DaysOld = kNow - base::TimeDelta::FromDays(32);
+
+  // Add profiles and cards with modification date as 31 days old from now.
+  autofill::TestAutofillClock test_clock;
+  test_clock.SetNow(k31DaysOld);
+
+  ASSERT_FALSE(tester.HasProfile());
+  tester.AddProfilesAndCards();
+  ASSERT_TRUE(tester.HasProfile());
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), k32DaysOld,
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  ASSERT_TRUE(tester.HasProfile());
+
+  BlockUntilBrowsingDataRemoved(
+      k30DaysOld, base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
+  ASSERT_TRUE(tester.HasProfile());
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), k30DaysOld,
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA, false);
   EXPECT_EQ(ChromeBrowsingDataRemoverDelegate::DATA_TYPE_FORM_DATA,
             GetRemovalMask());
   EXPECT_EQ(content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
@@ -1720,6 +1907,9 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
   map->SetContentSettingDefaultScope(kOrigin1, kOrigin1,
                                      CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                      std::string(), CONTENT_SETTING_ALLOW);
+  map->SetContentSettingDefaultScope(kDSEOrigin, kDSEOrigin,
+                                     CONTENT_SETTINGS_TYPE_GEOLOCATION,
+                                     std::string(), CONTENT_SETTING_BLOCK);
   map->SetContentSettingDefaultScope(kOrigin2, kOrigin2,
                                      CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
                                      std::string(), CONTENT_SETTING_ALLOW);
@@ -1735,23 +1925,64 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, RemoveContentSettings) {
       base::Time(), base::Time::Max(),
       ChromeBrowsingDataRemoverDelegate::DATA_TYPE_CONTENT_SETTINGS, false);
 
-  // Everything except the default settings should be deleted now.
+  // Everything except the default settings should be deleted. On Android the
+  // default search engine setting should also not be deleted.
+  bool expect_geolocation_dse_origin = false;
+  bool expect_notifications_dse_origin = false;
+
+#if defined(OS_ANDROID)
+  expect_geolocation_dse_origin = true;
+  expect_notifications_dse_origin =
+      base::FeatureList::IsEnabled(features::kGrantNotificationsToDSE);
+#endif
+
   ContentSettingsForOneType host_settings;
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string(),
                              &host_settings);
-  ASSERT_EQ(1u, host_settings.size());
-  EXPECT_EQ(ContentSettingsPattern::Wildcard(),
-            host_settings[0].primary_pattern)
-      << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
+
+  if (expect_geolocation_dse_origin) {
+    ASSERT_EQ(2u, host_settings.size());
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kDSEOrigin),
+              host_settings[0].primary_pattern)
+        << host_settings[0].primary_pattern.ToString();
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kDSEOrigin),
+              host_settings[0].secondary_pattern)
+        << host_settings[0].secondary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
+
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              host_settings[1].primary_pattern)
+        << host_settings[1].primary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].GetContentSetting());
+  } else {
+    ASSERT_EQ(1u, host_settings.size());
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              host_settings[0].primary_pattern)
+        << host_settings[0].primary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
+  }
 
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, std::string(),
                              &host_settings);
-  ASSERT_EQ(1u, host_settings.size());
-  EXPECT_EQ(ContentSettingsPattern::Wildcard(),
-            host_settings[0].primary_pattern)
-      << host_settings[0].primary_pattern.ToString();
-  EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
+
+  if (expect_notifications_dse_origin) {
+    ASSERT_EQ(2u, host_settings.size());
+    EXPECT_EQ(ContentSettingsPattern::FromURLNoWildcard(kDSEOrigin),
+              host_settings[0].primary_pattern)
+        << host_settings[0].primary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ALLOW, host_settings[0].GetContentSetting());
+
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              host_settings[1].primary_pattern)
+        << host_settings[1].primary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[1].GetContentSetting());
+  } else {
+    ASSERT_EQ(1u, host_settings.size());
+    EXPECT_EQ(ContentSettingsPattern::Wildcard(),
+              host_settings[0].primary_pattern)
+        << host_settings[0].primary_pattern.ToString();
+    EXPECT_EQ(CONTENT_SETTING_ASK, host_settings[0].GetContentSetting());
+  }
 
   map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_COOKIES, std::string(),
                              &host_settings);
@@ -2367,7 +2598,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ReportingCache_Cookies) {
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2391,7 +2622,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2410,7 +2641,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, ReportingCache_History) {
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2436,7 +2667,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2458,7 +2689,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2487,7 +2718,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
 
   int remove_count;
   int data_type_mask;
-  base::Callback<bool(const GURL&)> origin_filter;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
   tester.GetMockInfo(&remove_count, &data_type_mask, &origin_filter);
 
   EXPECT_EQ(1, remove_count);
@@ -2496,6 +2727,56 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
             data_type_mask);
   EXPECT_TRUE(
       ProbablySameFilters(builder->BuildGeneralFilter(), origin_filter));
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_NoDelegate) {
+  ClearNetworkErrorLoggingTester tester(GetProfile(), false);
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      content::BrowsingDataRemover::DATA_TYPE_COOKIES |
+          ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY,
+      true);
+
+  // Nothing to check, since there's no mock service; we're just making sure
+  // nothing crashes without a service.
+}
+
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_Cookies) {
+  ClearNetworkErrorLoggingTester tester(GetProfile(), true);
+
+  std::unique_ptr<BrowsingDataFilterBuilder> builder(
+      BrowsingDataFilterBuilder::Create(BrowsingDataFilterBuilder::WHITELIST));
+  builder->AddRegisterableDomain(kTestRegisterableDomain1);
+
+  BlockUntilOriginDataRemoved(base::Time(), base::Time::Max(),
+                              content::BrowsingDataRemover::DATA_TYPE_COOKIES,
+                              builder->Copy());
+
+  int remove_count;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
+  tester.GetMockInfo(&remove_count, &origin_filter);
+
+  EXPECT_EQ(1, remove_count);
+  EXPECT_TRUE(
+      ProbablySameFilters(builder->BuildGeneralFilter(), origin_filter));
+}
+
+// This would use an origin filter, but history isn't yet filterable.
+TEST_F(ChromeBrowsingDataRemoverDelegateTest, NetworkErrorLogging_History) {
+  ClearNetworkErrorLoggingTester tester(GetProfile(), true);
+
+  BlockUntilBrowsingDataRemoved(
+      base::Time(), base::Time::Max(),
+      ChromeBrowsingDataRemoverDelegate::DATA_TYPE_HISTORY, true);
+
+  int remove_count;
+  base::RepeatingCallback<bool(const GURL&)> origin_filter;
+  tester.GetMockInfo(&remove_count, &origin_filter);
+
+  EXPECT_EQ(1, remove_count);
+  EXPECT_TRUE(ProbablySameFilters(BrowsingDataFilterBuilder::BuildNoopFilter(),
+                                  origin_filter));
 }
 
 // Test that all WebsiteSettings are getting deleted by creating a
@@ -2524,8 +2805,6 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest, AllTypesAreGettingDeleted) {
       // TODO(710873): Make sure that these get fixed:
       // Not deleted but should be deleted with history?
       CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO,
-      // Deprecated and should be removed after M60.
-      CONTENT_SETTINGS_TYPE_PROMPT_NO_DECISION_COUNT,
       // Is cleared in PasswordProtectionService::CleanUpExpiredVerdicts()
       // but not when CBD is executed.
       CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION,

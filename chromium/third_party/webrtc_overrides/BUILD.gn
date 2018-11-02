@@ -61,18 +61,26 @@ static_library("webrtc") {
   }
 
   if (is_nacl) {
-    # For NACL, we have to add a default implementation for field_trial.
+    # For NACL, we have to add a default implementation for field_trial and
+    # runtime_enabled_features.
     deps += [
       "//native_client_sdk/src/libraries/nacl_io",
       "//third_party/webrtc/system_wrappers:field_trial_default",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
     ]
   } else if (is_chromecast) {
-    # Cast builds use the default implementation for field_trial.
-    deps += [ "//third_party/webrtc/system_wrappers:field_trial_default" ]
+    # Cast builds use the default implementation for field_trial and
+    # runtime_enabled_features.
+    deps += [
+      "//third_party/webrtc/system_wrappers:field_trial_default",
+      "//third_party/webrtc/system_wrappers:runtime_enabled_features_default",
+    ]
   } else {
-    # Otherwise, we just add the field_trial which redirects to base.
+    # Otherwise, we just add the field_trial which redirects to base and
+    # runtime_enabled_features which redirects to content/public/common.
     sources = [
       "field_trial.cc",
+      "runtime_enabled_features.cc",
     ]
   }
 
@@ -121,14 +129,13 @@ source_set("libjingle_webrtc_common") {
     ":webrtc",
     "//third_party/libsrtp",
     "//third_party/usrsctp",
-    "//third_party/webrtc/api:libjingle_peerconnection",
     "//third_party/webrtc/media:rtc_media",
     "//third_party/webrtc/media:rtc_media_base",
     "//third_party/webrtc/modules/media_file",
     "//third_party/webrtc/modules/video_capture",
+    "//third_party/webrtc/pc:libjingle_peerconnection",
     "//third_party/webrtc/pc:rtc_pc",
     "//third_party/webrtc/system_wrappers",
-    "//third_party/webrtc/voice_engine",
   ]
 }
 

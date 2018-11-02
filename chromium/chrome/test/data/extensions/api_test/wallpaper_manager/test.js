@@ -39,13 +39,8 @@ chrome.test.getConfig(function(config) {
       requestImage(url, function(requestStatus, response) {
         if (requestStatus === 200) {
           wallpaperJpeg = response;
-          chrome.wallpaperPrivate.setWallpaper(wallpaperJpeg,
-                                               'CENTER_CROPPED',
-                                               url,
-                                               pass(function() {
-            chrome.wallpaperPrivate.setCustomWallpaperLayout('CENTER',
-                fail('Only custom wallpaper can change layout.'));
-          }));
+          chrome.wallpaperPrivate.setWallpaper(
+              wallpaperJpeg, 'CENTER_CROPPED', url, pass());
         } else {
           chrome.test.fail('Failed to load test.jpg from local server.');
         }
@@ -58,9 +53,7 @@ chrome.test.getConfig(function(config) {
                                                  '123',
                                                  pass(function(thumbnail) {
         chrome.wallpaperPrivate.setCustomWallpaperLayout('CENTER',
-                                                         pass(function() {
-          chrome.wallpaperPrivate.setCustomWallpaperLayout('STRETCH', pass());
-        }));
+                                                         pass(function() {}));
       }));
     },
     function setCustomPngWallpaper() {
@@ -77,8 +70,6 @@ chrome.test.getConfig(function(config) {
                                                      pass(function(thumbnail) {
             chrome.wallpaperPrivate.setCustomWallpaperLayout('CENTER',
                                                              pass(function() {
-              chrome.wallpaperPrivate.setCustomWallpaperLayout('STRETCH',
-                                                               pass());
             }));
           }));
         } else {

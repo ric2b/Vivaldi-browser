@@ -13,7 +13,6 @@
 #include "base/base64.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
@@ -25,6 +24,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_mutable_config_values.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_test_utils.h"
+#include "components/data_reduction_proxy/core/browser/network_properties_manager.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params_test_utils.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
@@ -158,6 +158,10 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
 
     context_->Init();
 
+    // Disable fetching of warmup URL to avoid generating extra traffic which
+    // would need to be satisfied using mock sockets.
+    test_context_->DisableWarmupURLFetch();
+
     test_context_->InitSettings();
     ResetBackoffEntryReleaseTime();
     test_context_->test_config_client()->SetNow(base::Time::UnixEpoch());
@@ -276,15 +280,22 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
     // configs.
     ASSERT_EQ(
         2U, test_context_->mutable_config_values()->proxies_for_http().size());
-    EXPECT_EQ(ProxyServer::CORE, test_context_->mutable_config_values()
-                                     ->proxies_for_http()
-                                     .at(0)
-                                     .GetProxyTypeForTesting());
-    EXPECT_EQ(ProxyServer::UNSPECIFIED_TYPE,
-              test_context_->mutable_config_values()
-                  ->proxies_for_http()
-                  .at(1)
-                  .GetProxyTypeForTesting());
+    EXPECT_TRUE(test_context_->mutable_config_values()
+                    ->proxies_for_http()
+                    .at(0)
+                    .IsCoreProxy());
+    EXPECT_FALSE(test_context_->mutable_config_values()
+                     ->proxies_for_http()
+                     .at(1)
+                     .IsCoreProxy());
+    EXPECT_TRUE(test_context_->mutable_config_values()
+                    ->proxies_for_http()
+                    .at(0)
+                    .IsSecureProxy());
+    EXPECT_FALSE(test_context_->mutable_config_values()
+                     ->proxies_for_http()
+                     .at(1)
+                     .IsSecureProxy());
   }
 
   void VerifyRemoteSuccessWithOldConfig() {
@@ -311,15 +322,14 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
     // configs.
     ASSERT_EQ(
         2U, test_context_->mutable_config_values()->proxies_for_http().size());
-    EXPECT_EQ(ProxyServer::CORE, test_context_->mutable_config_values()
-                                     ->proxies_for_http()
-                                     .at(0)
-                                     .GetProxyTypeForTesting());
-    EXPECT_EQ(ProxyServer::UNSPECIFIED_TYPE,
-              test_context_->mutable_config_values()
-                  ->proxies_for_http()
-                  .at(1)
-                  .GetProxyTypeForTesting());
+    EXPECT_TRUE(test_context_->mutable_config_values()
+                    ->proxies_for_http()
+                    .at(0)
+                    .IsCoreProxy());
+    EXPECT_FALSE(test_context_->mutable_config_values()
+                     ->proxies_for_http()
+                     .at(1)
+                     .IsCoreProxy());
   }
 
   void VerifySuccessWithLoadedConfig(bool expect_secure_proxies) {
@@ -345,15 +355,14 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
     // configs.
     ASSERT_EQ(
         2U, test_context_->mutable_config_values()->proxies_for_http().size());
-    EXPECT_EQ(ProxyServer::CORE, test_context_->mutable_config_values()
-                                     ->proxies_for_http()
-                                     .at(0)
-                                     .GetProxyTypeForTesting());
-    EXPECT_EQ(ProxyServer::UNSPECIFIED_TYPE,
-              test_context_->mutable_config_values()
-                  ->proxies_for_http()
-                  .at(1)
-                  .GetProxyTypeForTesting());
+    EXPECT_TRUE(test_context_->mutable_config_values()
+                    ->proxies_for_http()
+                    .at(0)
+                    .IsCoreProxy());
+    EXPECT_FALSE(test_context_->mutable_config_values()
+                     ->proxies_for_http()
+                     .at(1)
+                     .IsCoreProxy());
   }
 
   TestDataReductionProxyConfigServiceClient* config_client() {
@@ -384,7 +393,7 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
 
   void AddMockSuccess() {
     socket_data_providers_.push_back(
-        (base::MakeUnique<net::StaticSocketDataProvider>(
+        (std::make_unique<net::StaticSocketDataProvider>(
             success_reads_, arraysize(success_reads_), nullptr, 0)));
     mock_socket_factory_->AddSocketDataProvider(
         socket_data_providers_.back().get());
@@ -392,7 +401,7 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
 
   void AddMockPreviousSuccess() {
     socket_data_providers_.push_back(
-        (base::MakeUnique<net::StaticSocketDataProvider>(
+        (std::make_unique<net::StaticSocketDataProvider>(
             previous_success_reads_, arraysize(previous_success_reads_),
             nullptr, 0)));
     mock_socket_factory_->AddSocketDataProvider(
@@ -401,7 +410,7 @@ class DataReductionProxyConfigServiceClientTest : public testing::Test {
 
   void AddMockFailure() {
     socket_data_providers_.push_back(
-        (base::MakeUnique<net::StaticSocketDataProvider>(
+        (std::make_unique<net::StaticSocketDataProvider>(
             not_found_reads_, arraysize(not_found_reads_), nullptr, 0)));
     mock_socket_factory_->AddSocketDataProvider(
         socket_data_providers_.back().get());
@@ -595,8 +604,12 @@ TEST_F(DataReductionProxyConfigServiceClientTest,
       ProxyServer::CORE));
 
   // Secure check failed.
-  configurator()->Enable(true /* secure_transport_restricted */, false,
-                         http_proxies);
+  TestingPrefServiceSimple test_prefs;
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
+  NetworkPropertiesManager manager(&test_prefs,
+                                   base::ThreadTaskRunnerHandle::Get());
+  manager.SetIsSecureProxyDisallowedByCarrier(true);
+  configurator()->Enable(manager, http_proxies);
   VerifyRemoteSuccess(false);
 }
 
@@ -730,8 +743,12 @@ TEST_F(DataReductionProxyConfigServiceClientTest,
       ProxyServer::CORE));
 
   // Secure check failed.
-  configurator()->Enable(true /* secure_transport_restricted */, false,
-                         http_proxies);
+  TestingPrefServiceSimple test_prefs;
+  test_prefs.registry()->RegisterDictionaryPref(prefs::kNetworkProperties);
+  NetworkPropertiesManager manager(&test_prefs,
+                                   base::ThreadTaskRunnerHandle::Get());
+  manager.SetIsSecureProxyDisallowedByCarrier(true);
+  configurator()->Enable(manager, http_proxies);
   VerifyRemoteSuccess(false);
 }
 

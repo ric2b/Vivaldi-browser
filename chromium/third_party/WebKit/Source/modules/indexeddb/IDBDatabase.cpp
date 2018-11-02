@@ -45,8 +45,10 @@
 #include "platform/Histogram.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Atomics.h"
+#include "public/platform/modules/indexeddb/WebIDBDatabaseCallbacks.h"
 #include "public/platform/modules/indexeddb/WebIDBDatabaseException.h"
 #include "public/platform/modules/indexeddb/WebIDBKeyPath.h"
+#include "public/platform/modules/indexeddb/WebIDBObservation.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
 
 #include <limits>
@@ -190,10 +192,16 @@ void IDBDatabase::OnComplete(int64_t transaction_id) {
 }
 
 void IDBDatabase::OnChanges(
-    const std::unordered_map<int32_t, std::vector<int32_t>>&
-        observation_index_map,
-    const WebVector<WebIDBObservation>& observations,
-    const IDBDatabaseCallbacks::TransactionMap& transactions) {
+    const WebIDBDatabaseCallbacks::ObservationIndexMap& observation_index_map,
+    WebVector<WebIDBObservation> web_observations,
+    const WebIDBDatabaseCallbacks::TransactionMap& transactions) {
+  HeapVector<Member<IDBObservation>> observations;
+  observations.ReserveInitialCapacity(web_observations.size());
+  for (WebIDBObservation& web_observation : web_observations) {
+    observations.emplace_back(
+        IDBObservation::Create(std::move(web_observation), isolate_));
+  }
+
   for (const auto& map_entry : observation_index_map) {
     auto it = observers_.find(map_entry.first);
     if (it != observers_.end()) {
@@ -213,8 +221,9 @@ void IDBDatabase::OnChanges(
       }
 
       observer->Callback()->InvokeAndReportException(
-          observer, IDBObserverChanges::Create(this, transaction, observations,
-                                               map_entry.second, isolate_));
+          observer,
+          IDBObserverChanges::Create(this, transaction, web_observations,
+                                     observations, map_entry.second));
       if (transaction)
         transaction->SetActive(false);
     }
@@ -288,7 +297,7 @@ IDBObjectStore* IDBDatabase::createObjectStore(
   }
 
   if (auto_increment && ((key_path.GetType() == IDBKeyPath::kStringType &&
-                          key_path.GetString().IsEmpty()) ||
+                          key_path.String().IsEmpty()) ||
                          key_path.GetType() == IDBKeyPath::kArrayType)) {
     exception_state.ThrowDOMException(
         kInvalidAccessError,
@@ -495,7 +504,7 @@ void IDBDatabase::EnqueueEvent(Event* event) {
   DCHECK(GetExecutionContext());
   EventQueue* event_queue = GetExecutionContext()->GetEventQueue();
   event->SetTarget(this);
-  event_queue->EnqueueEvent(BLINK_FROM_HERE, event);
+  event_queue->EnqueueEvent(FROM_HERE, event);
   enqueued_events_.push_back(event);
 }
 

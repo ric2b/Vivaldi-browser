@@ -82,8 +82,7 @@ struct BrowserInfo {
 // Tabs are identified by a unique ID vended by this component. These IDs are
 // not reused in a session. They are stable for a given conceptual tab, and will
 // follow it through discards, reloads, tab strip operations, etc.
-class TabManager : public TabStripModelObserver,
-                   public chrome::BrowserListObserver {
+class TabManager : public TabStripModelObserver, public BrowserListObserver {
  public:
   // Forward declaration of resource coordinator signal observer.
   class ResourceCoordinatorSignalObserver;
@@ -326,11 +325,6 @@ class TabManager : public TabStripModelObserver,
   // can be easily reloaded and hence makes a good choice to discard.
   static bool IsInternalPage(const GURL& url);
 
-  // Records UMA histogram statistics for a tab discard. Record statistics for
-  // user triggered discards via chrome://discards/ because that allows to
-  // manually test the system.
-  void RecordDiscardStatistics();
-
   // Purges data structures in the browser that can be easily recomputed.
   void PurgeBrowserMemory();
 
@@ -467,6 +461,9 @@ class TabManager : public TabStripModelObserver,
       const BackgroundTabNavigationThrottle* first,
       const BackgroundTabNavigationThrottle* second);
 
+  // Returns the number of tabs that are not pending load or discarded.
+  int GetNumAliveTabs() const;
+
   // Check if the tab is loading. Use only in tests.
   bool IsTabLoadingForTest(content::WebContents* contents) const;
 
@@ -492,13 +489,6 @@ class TabManager : public TabStripModelObserver,
 
   // A listener to global memory pressure events.
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
-
-  // Wall-clock time when the priority manager started running.
-  base::TimeTicks start_time_;
-
-  // Wall-clock time of last tab discard during this browsing session, or 0 if
-  // no discard has happened yet.
-  base::TimeTicks last_discard_time_;
 
   // Number of times a tab has been discarded, for statistics.
   int discard_count_;

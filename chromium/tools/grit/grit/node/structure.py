@@ -18,15 +18,12 @@ from grit.node import variant
 import grit.gather.admin_template
 import grit.gather.chrome_html
 import grit.gather.chrome_scaled_image
-import grit.gather.igoogle_strings
-import grit.gather.muppet_strings
 import grit.gather.policy_json
 import grit.gather.rc
 import grit.gather.tr_html
 import grit.gather.txt
 
 import grit.format.rc
-import grit.format.rc_header
 
 # Type of the gatherer to use for each type attribute
 _GATHERERS = {
@@ -35,9 +32,7 @@ _GATHERERS = {
   'chrome_html'         : grit.gather.chrome_html.ChromeHtml,
   'chrome_scaled_image' : grit.gather.chrome_scaled_image.ChromeScaledImage,
   'dialog'              : grit.gather.rc.Dialog,
-  'igoogle'             : grit.gather.igoogle_strings.IgoogleStrings,
   'menu'                : grit.gather.rc.Menu,
-  'muppet'              : grit.gather.muppet_strings.MuppetStrings,
   'rcdata'              : grit.gather.rc.RCData,
   'tr_html'             : grit.gather.tr_html.TrHtml,
   'txt'                 : grit.gather.txt.TxtFile,
@@ -196,20 +191,14 @@ class StructureNode(base.Node):
   def GetCliques(self):
     return self.gatherer.GetCliques()
 
-  def GetDataPackPair(self, lang, encoding):
-    """Returns a (id, string|None) pair that represents the resource id and raw
-    bytes of the data (or None if no resource is generated).  This is used to
-    generate the data pack data file.
-    """
-    from grit.format import rc_header
-    id_map = rc_header.GetIds(self.GetRoot())
-    id = id_map[self.GetTextualIds()[0]]
+  def GetDataPackValue(self, lang, encoding):
+    """Returns a str represenation for a data_pack entry."""
     if self.ExpandVariables():
       text = self.gatherer.GetText()
       data = util.Encode(self._Substitute(text), encoding)
     else:
       data = self.gatherer.GetData(lang, encoding)
-    return id, self.CompressDataIfNeeded(data)
+    return self.CompressDataIfNeeded(data)
 
   def GetHtmlResourceFilenames(self):
     """Returns a set of all filenames inlined by this node."""
@@ -248,7 +237,7 @@ class StructureNode(base.Node):
 
   def HasFileForLanguage(self):
     return self.attrs['type'] in ['tr_html', 'admin_template', 'txt',
-                                  'muppet', 'igoogle', 'chrome_scaled_image',
+                                  'chrome_scaled_image',
                                   'chrome_html']
 
   def ExpandVariables(self):

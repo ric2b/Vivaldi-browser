@@ -63,7 +63,8 @@ void PaymentRequestItemList::Item::Init() {
   std::unique_ptr<views::View> content =
       CreateContentView(&accessible_item_description_);
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // Add a column for the item's content view.
   views::ColumnSet* columns = layout->AddColumnSet(0);
@@ -135,7 +136,7 @@ void PaymentRequestItemList::Item::SetSelected(bool selected, bool notify) {
 std::unique_ptr<views::ImageView> PaymentRequestItemList::Item::CreateCheckmark(
     bool selected) {
   std::unique_ptr<views::ImageView> checkmark =
-      base::MakeUnique<views::ImageView>();
+      std::make_unique<views::ImageView>();
   checkmark->set_id(static_cast<int>(DialogViewID::CHECKMARK_VIEW));
   checkmark->set_can_process_events_within_subtree(false);
   checkmark->set_owned_by_client();
@@ -200,12 +201,11 @@ void PaymentRequestItemList::Clear() {
 }
 
 std::unique_ptr<views::View> PaymentRequestItemList::CreateListView() {
-  std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
+  std::unique_ptr<views::View> content_view = std::make_unique<views::View>();
 
-  views::BoxLayout* layout =
-      new views::BoxLayout(views::BoxLayout::kVertical,
-                           gfx::Insets(kPaymentRequestRowVerticalInsets, 0), 0);
-  content_view->SetLayoutManager(layout);
+  content_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical,
+      gfx::Insets(kPaymentRequestRowVerticalInsets, 0), 0));
 
   for (auto& item : items_)
     content_view->AddChildView(item.release());

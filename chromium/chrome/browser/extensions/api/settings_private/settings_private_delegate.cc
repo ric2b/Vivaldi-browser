@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -22,8 +21,6 @@
 
 namespace extensions {
 
-namespace settings_private = api::settings_private;
-
 SettingsPrivateDelegate::SettingsPrivateDelegate(Profile* profile)
     : profile_(profile) {
   prefs_util_.reset(new PrefsUtil(profile));
@@ -37,7 +34,7 @@ std::unique_ptr<base::Value> SettingsPrivateDelegate::GetPref(
   std::unique_ptr<api::settings_private::PrefObject> pref =
       prefs_util_->GetPref(name);
   if (!pref)
-    return base::MakeUnique<base::Value>();
+    return std::make_unique<base::Value>();
   return pref->ToValue();
 }
 
@@ -54,8 +51,9 @@ std::unique_ptr<base::Value> SettingsPrivateDelegate::GetAllPrefs() {
   return std::move(prefs);
 }
 
-PrefsUtil::SetPrefResult SettingsPrivateDelegate::SetPref(
-    const std::string& pref_name, const base::Value* value) {
+settings_private::SetPrefResult SettingsPrivateDelegate::SetPref(
+    const std::string& pref_name,
+    const base::Value* value) {
   return prefs_util_->SetPref(pref_name, value);
 }
 
@@ -66,11 +64,11 @@ std::unique_ptr<base::Value> SettingsPrivateDelegate::GetDefaultZoom() {
   return value;
 }
 
-PrefsUtil::SetPrefResult SettingsPrivateDelegate::SetDefaultZoom(
+settings_private::SetPrefResult SettingsPrivateDelegate::SetDefaultZoom(
     double zoom) {
   double zoom_factor = content::ZoomFactorToZoomLevel(zoom);
   profile_->GetZoomLevelPrefs()->SetDefaultZoomLevelPref(zoom_factor);
-  return PrefsUtil::SetPrefResult::SUCCESS;
+  return settings_private::SetPrefResult::SUCCESS;
 }
 
 }  // namespace extensions

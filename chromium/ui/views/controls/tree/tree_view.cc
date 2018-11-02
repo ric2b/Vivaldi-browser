@@ -28,11 +28,13 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
+#include "ui/views/border.h"
 #include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/prefix_selector.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/tree/tree_view_controller.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/vector_icons.h"
@@ -174,7 +176,14 @@ void TreeView::StartEditing(TreeModelNode* node) {
   DCHECK(!editing_);
   editing_ = true;
   if (!editor_) {
+    LayoutProvider* provider = LayoutProvider::Get();
+    gfx::Insets text_insets(
+        provider->GetDistanceMetric(DISTANCE_CONTROL_VERTICAL_TEXT_PADDING),
+        provider->GetDistanceMetric(
+            DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
     editor_ = new Textfield;
+    editor_->SetBorder(views::CreatePaddedBorder(
+        views::CreateSolidBorder(1, gfx::kGoogleBlue700), text_insets));
     // Add the editor immediately as GetPreferredSize returns the wrong thing if
     // not parented.
     AddChildView(editor_);
@@ -461,7 +470,7 @@ void TreeView::TreeNodesRemoved(TreeModel* model,
     InternalNode* child_removing = parent_node->GetChild(start);
     if (selected_node_ && selected_node_->HasAncestor(child_removing))
       reset_selection = true;
-    parent_node->Remove(child_removing);
+    parent_node->Remove(start);
   }
   if (reset_selection) {
     // selected_node_ is no longer valid (at the time we enter this function

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/contextualsearch/contextual_search_manager.h"
 
+#include <memory>
 #include <set>
 
 #include "base/android/jni_string.h"
@@ -17,7 +18,6 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "components/contextual_search/browser/contextual_search_js_api_service_impl.h"
-#include "components/contextual_search/common/overlay_page_notifier_service.mojom.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/render_frame_host.h"
@@ -55,7 +55,7 @@ class ContextualSearchObserver : public content::WebContentsObserver,
     // Clobber any prior registered observer.
     contents->SetUserData(
         kContextualSearchObserverKey,
-        base::MakeUnique<ContextualSearchObserver>(contents, api_handler));
+        std::make_unique<ContextualSearchObserver>(contents, api_handler));
   }
 
  private:
@@ -204,30 +204,31 @@ void ContextualSearchManager::OnTextSurroundingSelectionAvailable(
       end_offset);
 }
 
-void ContextualSearchManager::EnableContextualSearchJsApiForOverlay(
+void ContextualSearchManager::EnableContextualSearchJsApiForWebContents(
     JNIEnv* env,
     jobject obj,
     const JavaParamRef<jobject>& j_overlay_web_contents) {
+  DCHECK(j_overlay_web_contents);
   WebContents* overlay_web_contents =
       WebContents::FromJavaWebContents(j_overlay_web_contents);
   DCHECK(overlay_web_contents);
-  // Tell our Overlay Notifier Service that this is currently a CS page.
-  content::RenderFrameHost* render_frame_host =
-      overlay_web_contents->GetRenderViewHost()->GetMainFrame();
-  DCHECK(render_frame_host);
-  contextual_search::mojom::OverlayPageNotifierServicePtr page_notifier_service;
-  render_frame_host->GetRemoteInterfaces()->GetInterface(
-      &page_notifier_service);
-  DCHECK(page_notifier_service);
-  page_notifier_service->NotifyIsContextualSearchOverlay();
-
   ContextualSearchObserver::EnsureForWebContents(overlay_web_contents, this);
 }
 
-jlong JNI_ContextualSearchManager_Init(JNIEnv* env,
-                                       const JavaParamRef<jobject>& obj) {
-  ContextualSearchManager* manager = new ContextualSearchManager(env, obj);
-  return reinterpret_cast<intptr_t>(manager);
+void ContextualSearchManager::WhitelistContextualSearchJsApiUrl(
+    JNIEnv* env,
+    jobject obj,
+    const base::android::JavaParamRef<jstring>& j_url) {
+  DCHECK(j_url);
+  overlay_gurl_ = GURL(base::android::ConvertJavaStringToUTF8(env, j_url));
+}
+
+void ContextualSearchManager::ShouldEnableJsApi(
+    const GURL& gurl,
+    contextual_search::mojom::ContextualSearchJsApiService::
+        ShouldEnableJsApiCallback callback) {
+  bool should_enable = (gurl == overlay_gurl_);
+  std::move(callback).Run(should_enable);
 }
 
 void ContextualSearchManager::SetCaption(std::string caption,
@@ -237,4 +238,10 @@ void ContextualSearchManager::SetCaption(std::string caption,
       base::android::ConvertUTF8ToJavaString(env, caption.c_str());
   Java_ContextualSearchManager_onSetCaption(env, java_manager_, j_caption,
                                             does_answer);
+}
+
+jlong JNI_ContextualSearchManager_Init(JNIEnv* env,
+                                       const JavaParamRef<jobject>& obj) {
+  ContextualSearchManager* manager = new ContextualSearchManager(env, obj);
+  return reinterpret_cast<intptr_t>(manager);
 }

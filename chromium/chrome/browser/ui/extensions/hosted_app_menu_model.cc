@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/extensions/hosted_app_menu_model.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,4 +30,10 @@ void HostedAppMenuModel::Build() {
     AddItemWithStringId(IDC_ROUTE_MEDIA, IDS_MEDIA_ROUTER_MENU_ITEM_TITLE);
   CreateCutCopyPasteMenu();
   AddItemWithStringId(IDC_SITE_SETTINGS, IDS_SITE_SETTINGS);
+  AddItemWithStringId(IDC_APP_INFO, IDS_APP_CONTEXT_MENU_SHOW_INFO);
+}
+
+void HostedAppMenuModel::LogMenuAction(AppMenuAction action_id) {
+  UMA_HISTOGRAM_ENUMERATION("HostedAppFrame.WrenchMenu.MenuAction", action_id,
+                            LIMIT_MENU_ACTION);
 }

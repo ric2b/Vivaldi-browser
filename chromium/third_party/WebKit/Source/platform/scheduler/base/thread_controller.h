@@ -24,7 +24,7 @@ class Sequence;
 // Interface for TaskQueueManager to schedule work to be run.
 class PLATFORM_EXPORT ThreadController {
  public:
-  virtual ~ThreadController() {}
+  virtual ~ThreadController() = default;
 
   // Notify the controller that its associated sequence has immediate work
   // to run. Shortly after this is called, the thread associated with this
@@ -60,11 +60,6 @@ class PLATFORM_EXPORT ThreadController {
   // These methods exist due to current integration of TaskQueueManager
   // with MessageLoop.
 
-  // TaskQueueManager should schedule non-nestable work itself when
-  // appropriate.
-  virtual void PostNonNestableTask(const base::Location& from_here,
-                                   base::OnceClosure task) = 0;
-
   virtual bool RunsTasksInCurrentSequence() = 0;
 
   virtual base::TickClock* GetClock() = 0;
@@ -73,8 +68,6 @@ class PLATFORM_EXPORT ThreadController {
       scoped_refptr<base::SingleThreadTaskRunner>) = 0;
 
   virtual void RestoreDefaultTaskRunner() = 0;
-
-  virtual bool IsNested() = 0;
 
   virtual void AddNestingObserver(base::RunLoop::NestingObserver* observer) = 0;
 

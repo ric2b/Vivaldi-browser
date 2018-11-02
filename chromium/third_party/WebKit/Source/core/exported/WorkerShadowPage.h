@@ -5,8 +5,8 @@
 #ifndef WorkerShadowPage_h
 #define WorkerShadowPage_h
 
+#include "core/exported/WebDevToolsAgentImpl.h"
 #include "core/frame/WebLocalFrameImpl.h"
-#include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebDocumentLoader.h"
 #include "public/web/WebFrameClient.h"
 #include "public/web/WebView.h"
@@ -33,9 +33,9 @@ class WebSettings;
 // TODO(kinuko): Make this go away (https://crbug.com/538751).
 class CORE_EXPORT WorkerShadowPage : public WebFrameClient {
  public:
-  class CORE_EXPORT Client : public WebDevToolsAgentClient {
+  class CORE_EXPORT Client : public WebDevToolsAgentImpl::WorkerClient {
    public:
-    virtual ~Client() {}
+    virtual ~Client() = default;
 
     // Called when the shadow page is requested to create an application cache
     // host.
@@ -45,7 +45,7 @@ class CORE_EXPORT WorkerShadowPage : public WebFrameClient {
     // Called when Initialize() is completed.
     virtual void OnShadowPageInitialized() = 0;
 
-    virtual const WebString& GetInstrumentationToken() = 0;
+    virtual const WebString& GetDevToolsFrameToken() = 0;
   };
 
   explicit WorkerShadowPage(Client*);
@@ -67,14 +67,14 @@ class CORE_EXPORT WorkerShadowPage : public WebFrameClient {
   // frame and its widget.
   void DidFinishDocumentLoad() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory() override;
-  WebString GetInstrumentationToken() override;
+  WebString GetDevToolsFrameToken() override;
 
   Document* GetDocument() { return main_frame_->GetFrame()->GetDocument(); }
   WebSettings* GetSettings() { return web_view_->GetSettings(); }
   WebDocumentLoader* DocumentLoader() {
     return main_frame_->GetDocumentLoader();
   }
-  WebDevToolsAgent* DevToolsAgent() { return main_frame_->DevToolsAgent(); }
+  void BindDevToolsAgent(mojom::blink::DevToolsAgentAssociatedRequest);
 
   bool WasInitialized() const;
 

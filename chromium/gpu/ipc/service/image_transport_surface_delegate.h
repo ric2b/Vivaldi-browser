@@ -7,14 +7,8 @@
 
 #include "base/callback.h"
 #include "gpu/command_buffer/common/texture_in_use_response.h"
-#include "gpu/gpu_export.h"
 #include "gpu/ipc/common/surface_handle.h"
-#include "ui/gfx/swap_result.h"
-
-#if defined(OS_MACOSX)
-#include "ui/base/cocoa/remote_layer_api.h"
-#include "ui/gfx/mac/io_surface.h"
-#endif
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 
 namespace IPC {
 class MessageFilter;
@@ -26,36 +20,13 @@ struct PresentationFeedback;
 
 namespace gpu {
 struct GpuPreferences;
+struct SwapBuffersCompleteParams;
 
 namespace gles2 {
 class FeatureInfo;
 }
 
-struct GPU_EXPORT SwapBuffersCompleteParams {
-  SwapBuffersCompleteParams();
-  SwapBuffersCompleteParams(SwapBuffersCompleteParams&& other);
-  ~SwapBuffersCompleteParams();
-
-  SwapBuffersCompleteParams& operator=(SwapBuffersCompleteParams&& other);
-
-#if defined(OS_MACOSX)
-  // Mac-specific parameters used to present CALayers hosted in the GPU process.
-  // TODO(ccameron): Remove these parameters once the CALayer tree is hosted in
-  // the browser process.
-  // https://crbug.com/604052
-  // Only one of ca_context_id or io_surface may be non-0.
-  CAContextID ca_context_id = 0;
-  bool fullscreen_low_power_ca_context_valid = false;
-  CAContextID fullscreen_low_power_ca_context_id = 0;
-  gfx::ScopedRefCountedIOSurfaceMachPort io_surface;
-  gfx::Size pixel_size;
-  float scale_factor = 1.f;
-  gpu::TextureInUseResponses in_use_responses;
-#endif
-  gfx::SwapResponse response;
-};
-
-class GPU_EXPORT ImageTransportSurfaceDelegate {
+class GPU_IPC_SERVICE_EXPORT ImageTransportSurfaceDelegate {
  public:
 #if defined(OS_WIN)
   // Tells the delegate that a child window was created with the provided
@@ -88,7 +59,7 @@ class GPU_EXPORT ImageTransportSurfaceDelegate {
   virtual int32_t GetRouteID() const = 0;
 
  protected:
-  virtual ~ImageTransportSurfaceDelegate() {}
+  virtual ~ImageTransportSurfaceDelegate() = default;
 };
 
 }  // namespace gpu

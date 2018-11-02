@@ -15,7 +15,6 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
-
 namespace gfx {
 class Size;
 }
@@ -30,9 +29,8 @@ class TranslateHelper;
 
 // This class holds the Chrome specific parts of RenderFrame, and has the same
 // lifetime.
-class ChromeRenderFrameObserver
-    : public content::RenderFrameObserver,
-      public chrome::mojom::ChromeRenderFrame {
+class ChromeRenderFrameObserver : public content::RenderFrameObserver,
+                                  public chrome::mojom::ChromeRenderFrame {
  public:
   explicit ChromeRenderFrameObserver(content::RenderFrame* render_frame);
   ~ChromeRenderFrameObserver() override;
@@ -56,8 +54,8 @@ class ChromeRenderFrameObserver
   void OnDestruct() override;
 
   // IPC handlers
-  void OnGetWebApplicationInfo();
-  void OnSetIsPrerendering(prerender::PrerenderMode mode);
+  void OnSetIsPrerendering(prerender::PrerenderMode mode,
+                           const std::string& histogram_prefix);
   void OnRequestThumbnailForContextNode(
       int thumbnail_min_area_pixels,
       const gfx::Size& thumbnail_max_size_pixels,
@@ -76,6 +74,11 @@ class ChromeRenderFrameObserver
       const RequestThumbnailForContextNodeCallback& callback) override;
   void RequestReloadImageForContextNode() override;
   void SetClientSidePhishingDetection(bool enable_phishing_detection) override;
+  void GetWebApplicationInfo(
+      const GetWebApplicationInfoCallback& callback) override;
+  void UpdateBrowserControlsState(content::BrowserControlsState constraints,
+                                  content::BrowserControlsState current,
+                                  bool animate) override;
 
   void OnRenderFrameObserverRequest(
       chrome::mojom::ChromeRenderFrameAssociatedRequest request);

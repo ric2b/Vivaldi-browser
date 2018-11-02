@@ -7,8 +7,10 @@
 
 #import <Foundation/Foundation.h>
 
+#include <memory>
+
 #import "base/mac/bundle_locations.h"
-#import "base/mac/scoped_nsobject.h"
+#include "ios/web/public/web_client.h"
 #import "testing/gtest_mac.h"
 
 namespace web {
@@ -19,6 +21,8 @@ class WebJsTest : public WebTestT {
  public:
   WebJsTest(NSArray* java_script_paths)
       : java_script_paths_([java_script_paths copy]) {}
+  WebJsTest(std::unique_ptr<web::WebClient> web_client)
+      : WebTestT(std::move(web_client)) {}
 
  protected:
   // Loads |html| and inject JavaScripts at |javaScriptPaths_|.
@@ -53,7 +57,7 @@ class WebJsTest : public WebTestT {
   // Injects JavaScript at |java_script_paths_|.
   void Inject();
 
-  base::scoped_nsobject<NSArray> java_script_paths_;
+  NSArray* java_script_paths_;
 };
 
 template <class WebTestT>
@@ -61,7 +65,7 @@ void WebJsTest<WebTestT>::Inject() {
   // Main web injection should have occurred.
   ASSERT_NSEQ(@"object", WebTestT::ExecuteJavaScript(@"typeof __gCrWeb"));
 
-  for (NSString* java_script_path in java_script_paths_.get()) {
+  for (NSString* java_script_path in java_script_paths_) {
     NSString* path =
         [base::mac::FrameworkBundle() pathForResource:java_script_path
                                                ofType:@"js"];
@@ -76,8 +80,8 @@ template <class WebTestT>
 id WebJsTest<WebTestT>::ExecuteJavaScriptWithFormat(NSString* format, ...) {
   va_list args;
   va_start(args, format);
-  base::scoped_nsobject<NSString> java_script(
-      [[NSString alloc] initWithFormat:format arguments:args]);
+  NSString* java_script =
+      [[NSString alloc] initWithFormat:format arguments:args];
   va_end(args);
 
   return WebTestT::ExecuteJavaScript(java_script);

@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_ui.h"
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 
@@ -68,6 +69,8 @@ content::WebUIDataSource* CreateMdBookmarksUIHTMLSource(Profile* profile) {
   AddLocalizedString(source, "menuDelete", IDS_DELETE);
   AddLocalizedString(source, "menuEdit", IDS_EDIT);
   AddLocalizedString(source, "menuExport", IDS_MD_BOOKMARK_MANAGER_MENU_EXPORT);
+  AddLocalizedString(source, "menuHelpCenter",
+                     IDS_MD_BOOKMARK_MANAGER_MENU_HELP_CENTER);
   AddLocalizedString(source, "menuImport", IDS_MD_BOOKMARK_MANAGER_MENU_IMPORT);
   AddLocalizedString(source, "menuOpenAllNewTab",
                      IDS_MD_BOOKMARK_MANAGER_MENU_OPEN_ALL);
@@ -207,7 +210,7 @@ MdBookmarksUI::MdBookmarksUI(content::WebUI* web_ui) : WebUIController(web_ui) {
   content::WebUIDataSource::Add(profile,
                                 CreateMdBookmarksUIHTMLSource(profile));
 
-  auto plural_string_handler = base::MakeUnique<PluralStringHandler>();
+  auto plural_string_handler = std::make_unique<PluralStringHandler>();
   plural_string_handler->AddLocalizedString(
       "listChanged", IDS_MD_BOOKMARK_MANAGER_FOLDER_LIST_CHANGED);
   plural_string_handler->AddLocalizedString(
@@ -216,8 +219,8 @@ MdBookmarksUI::MdBookmarksUI(content::WebUI* web_ui) : WebUIController(web_ui) {
       "toastItemsCopied", IDS_MD_BOOKMARK_MANAGER_TOAST_ITEMS_COPIED);
   web_ui->AddMessageHandler(std::move(plural_string_handler));
 
-  web_ui->AddMessageHandler(base::MakeUnique<BookmarksMessageHandler>());
-  web_ui->AddMessageHandler(base::MakeUnique<MetricsHandler>());
+  web_ui->AddMessageHandler(std::make_unique<BookmarksMessageHandler>());
+  web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
 }
 
 // static

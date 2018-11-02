@@ -88,7 +88,7 @@ ProxyImpl::ProxyImpl(base::WeakPtr<ProxyMain> proxy_main_weak_ptr,
 ProxyImpl::BlockedMainCommitOnly::BlockedMainCommitOnly()
     : layer_tree_host(nullptr) {}
 
-ProxyImpl::BlockedMainCommitOnly::~BlockedMainCommitOnly() {}
+ProxyImpl::BlockedMainCommitOnly::~BlockedMainCommitOnly() = default;
 
 ProxyImpl::~ProxyImpl() {
   TRACE_EVENT0("cc", "ProxyImpl::~ProxyImpl");
@@ -262,10 +262,7 @@ NOINLINE void ProxyImpl::DumpForBeginMainFrameHang() {
   host_impl_->tile_manager()->ActivationStateAsValueInto(state.get());
   state->EndDictionary();
 
-  char stack_string[50000] = "";
-  base::debug::Alias(&stack_string);
-  strncpy(stack_string, state->ToString().c_str(), arraysize(stack_string) - 1);
-
+  DEBUG_ALIAS_FOR_CSTR(stack_string, state->ToString().c_str(), 50000);
   base::debug::DumpWithoutCrashing();
 }
 
@@ -411,8 +408,11 @@ void ProxyImpl::RenewTreePriority() {
       host_impl_->pinch_gesture_active() ||
       host_impl_->page_scale_animation_active() ||
       host_impl_->IsActivelyScrolling();
-  host_impl_->ukm_manager()->SetUserInteractionInProgress(
-      user_interaction_in_progress);
+
+  if (host_impl_->ukm_manager()) {
+    host_impl_->ukm_manager()->SetUserInteractionInProgress(
+        user_interaction_in_progress);
+  }
 
   // Schedule expiration if smoothness currently takes priority.
   if (user_interaction_in_progress)
@@ -499,6 +499,17 @@ void ProxyImpl::NeedsImplSideInvalidation(bool needs_first_draw_on_activation) {
 void ProxyImpl::NotifyImageDecodeRequestFinished() {
   DCHECK(IsImplThread());
   SetNeedsCommitOnImplThread();
+}
+
+void ProxyImpl::DidPresentCompositorFrameOnImplThread(
+    const std::vector<int>& source_frames,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::BindOnce(&ProxyMain::DidPresentCompositorFrame,
+                                proxy_main_weak_ptr_, source_frames, time,
+                                refresh, flags));
 }
 
 void ProxyImpl::WillBeginImplFrame(const viz::BeginFrameArgs& args) {
@@ -728,7 +739,9 @@ base::SingleThreadTaskRunner* ProxyImpl::MainThreadTaskRunner() {
 
 void ProxyImpl::SetURLForUkm(const GURL& url) {
   DCHECK(IsImplThread());
-  DCHECK(host_impl_->ukm_manager());
+  if (!host_impl_->ukm_manager())
+    return;
+
   // The active tree might still be from content for the previous page when the
   // recorder is updated here, since new content will be pushed with the next
   // main frame. But we should only get a few impl frames wrong here in that
@@ -736,6 +749,12 @@ void ProxyImpl::SetURLForUkm(const GURL& url) {
   // interaction, it must be in progress when the navigation commits for this
   // case to occur.
   host_impl_->ukm_manager()->SetSourceURL(url);
+}
+
+void ProxyImpl::ClearHistoryOnNavigation() {
+  DCHECK(IsImplThread());
+  DCHECK(IsMainThreadBlocked());
+  scheduler_->ClearHistoryOnNavigation();
 }
 
 }  // namespace cc

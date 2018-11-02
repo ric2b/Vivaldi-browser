@@ -68,6 +68,15 @@ class CORE_EXPORT IdleSpellCheckCallback final
 
   LocalFrame& GetFrame() const { return *frame_; }
 
+  // Returns whether there is an active document to work on.
+  bool IsAvailable() const { return LifecycleContext(); }
+
+  // Return the document to work on. Callable only when IsAvailable() is true.
+  Document& GetDocument() const {
+    DCHECK(IsAvailable());
+    return *LifecycleContext();
+  }
+
   // Returns whether spell checking is globally enabled.
   bool IsSpellCheckingEnabled() const;
 
@@ -91,6 +100,8 @@ class CORE_EXPORT IdleSpellCheckCallback final
   uint64_t last_processed_undo_step_sequence_;
   const Member<ColdModeSpellCheckRequester> cold_mode_requester_;
   TaskRunnerTimer<IdleSpellCheckCallback> cold_mode_timer_;
+
+  friend class IdleSpellCheckCallbackTest;
 };
 
 }  // namespace blink

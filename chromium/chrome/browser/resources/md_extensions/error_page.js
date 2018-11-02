@@ -43,6 +43,32 @@ cr.define('extensions', function() {
     return url.startsWith(fullUrl) ? url.substring(fullUrl.length) : url;
   }
 
+  /**
+   * Given 3 strings, this function returns the correct one for the type of
+   * error that |item| is.
+   * @param {!ManifestError|!RuntimeError} item
+   * @param {string} log
+   * @param {string} warn
+   * @param {string} error
+   * @return {string}
+   * @private
+   */
+  function getErrorSeverityText_(item, log, warn, error) {
+    if (item.type == chrome.developerPrivate.ErrorType.RUNTIME) {
+      switch (item.severity) {
+        case chrome.developerPrivate.ErrorLevel.LOG:
+          return log;
+        case chrome.developerPrivate.ErrorLevel.WARN:
+          return warn;
+        case chrome.developerPrivate.ErrorLevel.ERROR:
+          return error;
+      }
+      assertNotReached();
+    }
+    assert(item.type == chrome.developerPrivate.ErrorType.MANIFEST);
+    return warn;
+  }
+
   const ErrorPage = Polymer({
     is: 'extensions-error-page',
 
@@ -58,11 +84,17 @@ cr.define('extensions', function() {
       /** @private {!Array<!(ManifestError|RuntimeError)>} */
       entries_: Array,
 
+      /** @private {?chrome.developerPrivate.RequestFileSourceResponse} */
+      code_: Object,
+
       /**
        * Index into |entries_|.
        * @private
        */
-      selectedEntry_: Number,
+      selectedEntry_: {
+        type: Number,
+        observer: 'onSelectedErrorChanged_',
+      },
 
       /** @private {?chrome.developerPrivate.StackFrame}*/
       selectedStackFrame_: {
@@ -75,7 +107,6 @@ cr.define('extensions', function() {
 
     observers: [
       'observeDataChanges_(data.*)',
-      'onSelectedErrorChanged_(selectedEntry_)',
     ],
 
     /** @override */
@@ -89,6 +120,17 @@ cr.define('extensions', function() {
     },
 
     /**
+     * @param {!ManifestError|!RuntimeError} error
+     * @param {string} unknown
+     * @return {string}
+     * @private
+     */
+    getContextUrl_: function(error, unknown) {
+      return error.contextUrl ? getRelativeUrl(error.contextUrl, error) :
+                                unknown;
+    },
+
+    /**
      * Watches for changes to |data| in order to fetch the corresponding
      * file source.
      * @private
@@ -96,12 +138,20 @@ cr.define('extensions', function() {
     observeDataChanges_: function() {
       const errors = this.data.manifestErrors.concat(this.data.runtimeErrors);
       this.entries_ = errors;
-      this.selectedEntry_ = this.entries_.length ? 0 : -1;
+      this.selectedEntry_ = -1;  // This also help reset code-section content.
+      if (this.entries_.length)
+        this.selectedEntry_ = 0;
     },
 
     /** @private */
     onCloseButtonTap_: function() {
       extensions.navigation.navigateTo({page: Page.LIST});
+    },
+
+    /** @private */
+    onClearAllTap_: function() {
+      const ids = this.entries_.map(entry => entry.id);
+      this.delegate.deleteErrors(this.data.id, ids);
     },
 
     /**
@@ -110,19 +160,20 @@ cr.define('extensions', function() {
      * @private
      */
     computeErrorIcon_: function(error) {
-      if (error.type == chrome.developerPrivate.ErrorType.RUNTIME) {
-        switch (error.severity) {
-          case chrome.developerPrivate.ErrorLevel.LOG:
-            return 'info';
-          case chrome.developerPrivate.ErrorLevel.WARN:
-            return 'warning';
-          case chrome.developerPrivate.ErrorLevel.ERROR:
-            return 'error';
-        }
-        assertNotReached();
-      }
-      assert(error.type == chrome.developerPrivate.ErrorType.MANIFEST);
-      return 'warning';
+      // Do not i18n these strings, they're CSS classes.
+      return getErrorSeverityText_(error, 'info', 'warning', 'error');
+    },
+
+    /**
+     * @param {!ManifestError|!RuntimeError} error
+     * @return {string}
+     * @private
+     */
+    computeErrorTypeLabel_: function(error) {
+      return getErrorSeverityText_(
+          error, loadTimeData.getString('logLevel'),
+          loadTimeData.getString('warnLevel'),
+          loadTimeData.getString('errorLevel'));
     },
 
     /**
@@ -143,10 +194,10 @@ cr.define('extensions', function() {
      * @private
      */
     onSelectedErrorChanged_: function() {
-      if (this.selectedEntry_ < 0) {
-        this.$['code-section'].code = null;
+      this.code_ = null;
+
+      if (this.selectedEntry_ < 0)
         return;
-      }
 
       const error = this.getSelectedError();
       const args = {
@@ -170,9 +221,7 @@ cr.define('extensions', function() {
               null;
           break;
       }
-      this.delegate.requestFileSource(args).then(code => {
-        this.$['code-section'].code = code;
-      });
+      this.delegate.requestFileSource(args).then(code => this.code_ = code);
     },
 
     /**
@@ -248,9 +297,7 @@ cr.define('extensions', function() {
             pathSuffix: getRelativeUrl(frame.url, selectedError),
             lineNumber: frame.lineNumber,
           })
-          .then(code => {
-            this.$['code-section'].code = code;
-          });
+          .then(code => this.code_ = code);
     },
 
     /** @private */
@@ -297,7 +344,7 @@ cr.define('extensions', function() {
     },
 
     /**
-     * @param {!{model: !{index: number}}} e
+     * @param {!{type: string, code: string, model: !{index: number}}} e
      * @private
      */
     onErrorItemAction_: function(e) {

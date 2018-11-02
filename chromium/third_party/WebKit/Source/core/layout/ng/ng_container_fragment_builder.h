@@ -98,13 +98,24 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGBaseFragmentBuilder {
   NGContainerFragmentBuilder& AddInlineOutOfFlowChildCandidate(
       NGBlockNode,
       const NGLogicalOffset& child_line_offset,
-      TextDirection line_direction);
+      TextDirection line_direction,
+      LayoutObject* inline_container);
 
   NGContainerFragmentBuilder& AddOutOfFlowDescendant(
       NGOutOfFlowPositionedDescendant);
 
   void GetAndClearOutOfFlowDescendantCandidates(
-      Vector<NGOutOfFlowPositionedDescendant>* descendant_candidates);
+      Vector<NGOutOfFlowPositionedDescendant>* descendant_candidates,
+      const LayoutObject* container);
+
+  NGContainerFragmentBuilder& SetIsPushedByFloats() {
+    is_pushed_by_floats_ = true;
+    return *this;
+  }
+
+#ifndef NDEBUG
+  String ToString() const;
+#endif
 
  protected:
   // An out-of-flow positioned-candidate is a temporary data structure used
@@ -165,6 +176,10 @@ class CORE_EXPORT NGContainerFragmentBuilder : public NGBaseFragmentBuilder {
 
   Vector<scoped_refptr<NGPhysicalFragment>> children_;
   Vector<NGLogicalOffset> offsets_;
+
+  bool has_last_resort_break_ = false;
+
+  bool is_pushed_by_floats_ = false;
 };
 
 }  // namespace blink

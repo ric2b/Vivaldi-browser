@@ -54,6 +54,7 @@
 #include "ui/devtools/devtools_connector.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/vivaldi_app_window_client.h"
+#include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 #if defined(OS_WIN)
@@ -195,7 +196,7 @@ bool VivaldiAppWindowContentsImpl::PreHandleGestureEvent(
 content::ColorChooser* VivaldiAppWindowContentsImpl::OpenColorChooser(
     content::WebContents* web_contents,
     SkColor initial_color,
-    const std::vector<content::ColorSuggestion>& suggestions) {
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
@@ -235,34 +236,43 @@ void VivaldiAppWindowContentsImpl::RenderViewCreated(
   // An incognito profile is not initialized with the UI zoom value. Set it up
   // here by reading prefs from the regular profile. At this point we do not
   // know the partition key (see ChromeZoomLevelPrefs::InitHostZoomMap) so we
-  // just test all keys until we match kVivaldiAppId.
+  // just test all keys until we match the kVivaldiAppId host.
   if (host_->GetProfile()->IsOffTheRecord()) {
     PrefService* pref_service =
         host_->GetProfile()->GetOriginalProfile()->GetPrefs();
-    const base::DictionaryValue* dictionaries =
+    const base::DictionaryValue* partition_dict =
         pref_service->GetDictionary(prefs::kPartitionPerHostZoomLevels);
     bool match = false;
-    for (base::DictionaryValue::Iterator it1(*dictionaries);
-         !it1.IsAtEnd() && !match; it1.Advance()) {
-      // it1.key() refers to the partition key
-      const base::DictionaryValue* dictionary = nullptr;
-      if (dictionaries->GetDictionary(it1.key(), &dictionary)) {
-        // Test each entry (host) until we match the kVivaldiAppId
-        for (base::DictionaryValue::Iterator it2(*dictionary); !it2.IsAtEnd();
-             it2.Advance()) {
-          if (it2.key() == ::vivaldi::kVivaldiAppId) {
+    for (base::DictionaryValue::Iterator partition(*partition_dict);
+         !partition.IsAtEnd() && !match; partition.Advance()) {
+      const base::DictionaryValue* host_dict = nullptr;
+      if (partition_dict->GetDictionary(partition.key(), &host_dict)) {
+        // Test each host until we match kVivaldiAppId
+        for (base::DictionaryValue::Iterator host(*host_dict); !host.IsAtEnd();
+             host.Advance()) {
+          if (host.key() == ::vivaldi::kVivaldiAppId) {
             match = true;
-            double zoom_level = 0;
-            if (it2.value().GetAsDouble(&zoom_level)) {
-              content::HostZoomMap* zoom_map =
-                  content::HostZoomMap::GetForWebContents(
-                      this->GetWebContents());
-              DCHECK(zoom_map);
-              zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
-                                            zoom_level);
+            // Each host is another dictionary with settings
+            const base::DictionaryValue* settings_dict = nullptr;
+            if (host.value().GetAsDictionary(&settings_dict)) {
+              for (base::DictionaryValue::Iterator setting(*settings_dict);
+                  !setting.IsAtEnd(); setting.Advance()) {
+                if (setting.key() == "zoom_level") {
+                  double zoom_level = 0;
+                  if (setting.value().GetAsDouble(&zoom_level)) {
+                    content::HostZoomMap* zoom_map =
+                        content::HostZoomMap::GetForWebContents(
+                            this->GetWebContents());
+                    DCHECK(zoom_map);
+                    zoom_map->SetZoomLevelForHost(::vivaldi::kVivaldiAppId,
+                        zoom_level);
+                  }
+                  break;
+                }
+              }
             }
-            break;
           }
+          break;
         }
       }
     }
@@ -522,7 +532,37 @@ void VivaldiBrowserWindow::Close() {
   DCHECK(api);
   api->CloseDevtoolsForBrowser(browser_.get());
 
+  MovePinnedTabsToOtherWindowIfNeeded();
+
   native_app_window_->Close();
+}
+
+void VivaldiBrowserWindow::MovePinnedTabsToOtherWindowIfNeeded() {
+  Browser* candidate =
+      ::vivaldi::ui_tools::FindBrowserForPinnedTabs(browser_.get());
+  if (!candidate) {
+    return;
+  }
+  std::vector<int> tabs_to_move;
+  int new_index = 0;
+
+  TabStripModel* tab_strip_model = browser_->tab_strip_model();
+  for (int i = 0; i < tab_strip_model->count(); ++i) {
+    if (tab_strip_model->IsTabPinned(i)) {
+      tabs_to_move.push_back(
+          SessionTabHelper::IdForTab(tab_strip_model->GetWebContentsAt(i)));
+    }
+  }
+  int index = 0;
+  for (size_t i = 0; i < tabs_to_move.size(); i++) {
+    if (::vivaldi::ui_tools::GetTabById(tabs_to_move[i], nullptr, &index)) {
+      if (!::vivaldi::ui_tools::MoveTabToWindow(browser_.get(), candidate,
+                                                index, &new_index, i)) {
+        NOTREACHED();
+        break;
+      }
+    }
+  }
 }
 
 void VivaldiBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
@@ -1035,7 +1075,7 @@ content::WebContents* VivaldiBrowserWindow::GetActiveWebContents() const {
   return browser_->tab_strip_model()->GetActiveWebContents();
 }
 
-namespace {
+namespace vivaldi {
 void DispatchEvent(Profile* profile,
                    const std::string& event_name,
                    std::unique_ptr<base::ListValue> event_args) {
@@ -1046,34 +1086,37 @@ void DispatchEvent(Profile* profile,
                               event_name, std::move(event_args))));
   }
 }
-}  // namespace
+}  // vivaldi namespace
 
 // VivaldiWindowEventDelegate implementation
 void VivaldiBrowserWindow::OnMinimizedChanged(bool minimized) {
   if (browser_.get() == nullptr) {
     return;
   }
-  DispatchEvent(browser_->profile(),
-                extensions::vivaldi::window_private::OnMinimized::kEventName,
-                extensions::vivaldi::window_private::OnMinimized::Create(
-                    browser_->session_id().id(), minimized));
+  vivaldi::DispatchEvent(
+      browser_->profile(),
+      extensions::vivaldi::window_private::OnMinimized::kEventName,
+      extensions::vivaldi::window_private::OnMinimized::Create(
+          browser_->session_id().id(), minimized));
 }
 
 void VivaldiBrowserWindow::OnMaximizedChanged(bool maximized) {
   if (browser_.get() == nullptr) {
     return;
   }
-  DispatchEvent(browser_->profile(),
-                extensions::vivaldi::window_private::OnMaximized::kEventName,
-                extensions::vivaldi::window_private::OnMaximized::Create(
-                    browser_->session_id().id(), maximized));
+  vivaldi::DispatchEvent(
+      browser_->profile(),
+      extensions::vivaldi::window_private::OnMaximized::kEventName,
+      extensions::vivaldi::window_private::OnMaximized::Create(
+          browser_->session_id().id(), maximized));
 }
 
 void VivaldiBrowserWindow::OnFullscreenChanged(bool fullscreen) {
-  DispatchEvent(browser_->profile(),
-                extensions::vivaldi::window_private::OnFullscreen::kEventName,
-                extensions::vivaldi::window_private::OnFullscreen::Create(
-                    browser_->session_id().id(), fullscreen));
+  vivaldi::DispatchEvent(
+      browser_->profile(),
+      extensions::vivaldi::window_private::OnFullscreen::kEventName,
+      extensions::vivaldi::window_private::OnFullscreen::Create(
+          browser_->session_id().id(), fullscreen));
 }
 
 void VivaldiBrowserWindow::OnDocumentLoaded() {

@@ -7,6 +7,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/threading/thread.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "device/vr/vr_service.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -25,15 +26,18 @@ class OpenVRRenderLoop : public base::Thread, mojom::VRPresentationProvider {
   OpenVRRenderLoop();
   ~OpenVRRenderLoop() override;
 
-  void RequestPresent(mojom::VRSubmitFrameClientPtrInfo submit_client_info,
-                      mojom::VRPresentationProviderRequest request,
-                      base::Callback<void(bool)> callback);
+  void RequestPresent(
+      mojom::VRSubmitFrameClientPtrInfo submit_client_info,
+      mojom::VRPresentationProviderRequest request,
+      device::mojom::VRRequestPresentOptionsPtr present_options,
+      device::mojom::VRDisplayHost::RequestPresentCallback callback);
   void ExitPresent();
   base::WeakPtr<OpenVRRenderLoop> GetWeakPtr();
 
   // VRPresentationProvider overrides:
   void SubmitFrame(int16_t frame_index,
-                   const gpu::MailboxHolder& mailbox) override;
+                   const gpu::MailboxHolder& mailbox,
+                   base::TimeDelta time_waited) override;
   void SubmitFrameWithTextureHandle(int16_t frame_index,
                                     mojo::ScopedHandle texture_handle) override;
   void UpdateLayerBounds(int16_t frame_id,

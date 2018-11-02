@@ -20,13 +20,8 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace gpu {
-struct SyncToken;
-}
-
 namespace service_manager {
 class Connector;
-class ServiceContextRefFactory;
 namespace mojom {
 class InterfaceProvider;
 }
@@ -37,21 +32,15 @@ namespace media {
 class AudioDecoder;
 class AudioRendererSink;
 class CdmFactory;
+class CdmProxy;
 class MediaLog;
 class RendererFactory;
 class VideoDecoder;
-class VideoFrame;
 class VideoRendererSink;
 struct CdmHostFilePath;
 
 class MEDIA_MOJO_EXPORT MojoMediaClient {
  public:
-  // Similar to VideoFrame::ReleaseMailboxCB for now.
-  using ReleaseMailboxCB = base::OnceCallback<void(const gpu::SyncToken&)>;
-
-  using OutputWithReleaseMailboxCB =
-      base::Callback<void(ReleaseMailboxCB, const scoped_refptr<VideoFrame>&)>;
-
   // Called before the host application is scheduled to quit.
   // The application message loop is still valid at this point, so all clean
   // up tasks requiring the message loop must be completed before returning.
@@ -59,9 +48,7 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
 
   // Called exactly once before any other method. |connector| can be used by
   // |this| to connect to other services. It is guaranteed to outlive |this|.
-  virtual void Initialize(
-      service_manager::Connector* connector,
-      service_manager::ServiceContextRefFactory* context_ref_factory);
+  virtual void Initialize(service_manager::Connector* connector);
 
   // Called by the MediaService to ensure the process is sandboxed. It could be
   // a no-op if the process is already sandboxed.
@@ -70,13 +57,10 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   virtual std::unique_ptr<AudioDecoder> CreateAudioDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
-  // TODO(sandersd): |output_cb| should not be required.
-  // See https://crbug.com/733828.
   virtual std::unique_ptr<VideoDecoder> CreateVideoDecoder(
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       MediaLog* media_log,
       mojom::CommandBufferIdPtr command_buffer_id,
-      OutputWithReleaseMailboxCB output_cb,
       RequestOverlayInfoCB request_overlay_info_cb);
 
   // Returns the output sink used for rendering audio on |audio_device_id|.
@@ -98,6 +82,12 @@ class MEDIA_MOJO_EXPORT MojoMediaClient {
   // nullptr if the host chose not to bind the InterfacePtr.
   virtual std::unique_ptr<CdmFactory> CreateCdmFactory(
       service_manager::mojom::InterfaceProvider* host_interfaces);
+
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+  // Creates a CdmProxy that proxies part of CDM functionalities to a different
+  // entity, e.g. hardware CDM modules.
+  virtual std::unique_ptr<CdmProxy> CreateCdmProxy(const std::string& cdm_guid);
+#endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(ENABLE_CDM_HOST_VERIFICATION)
   // Gets a list of CDM host file paths and put them in |cdm_host_file_paths|.

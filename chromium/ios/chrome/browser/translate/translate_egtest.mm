@@ -4,6 +4,8 @@
 
 #import <XCTest/XCTest.h>
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/ios/ios_util.h"
 #include "base/mac/bind_objc_block.h"
@@ -324,7 +326,7 @@ using translate::LanguageDetectionController;
   language::IOSLanguageDetectionTabHelper::Callback copyDetailsCallback =
       base::BindBlockArc(^(const translate::LanguageDetectionDetails& details) {
         _language_detection_details =
-            base::MakeUnique<translate::LanguageDetectionDetails>(details);
+            std::make_unique<translate::LanguageDetectionDetails>(details);
       });
   SetTestingLanguageDetectionCallback(copyDetailsCallback);
 }
@@ -687,7 +689,7 @@ using translate::LanguageDetectionController;
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabel(
                                    switchLabel)]
-      assertWithMatcher:grey_notNil()];
+      assertWithMatcher:grey_sufficientlyVisible()];
 
   // Toggle "Always Translate" and check the preference.
   [[EarlGrey
@@ -859,17 +861,25 @@ using translate::LanguageDetectionController;
   client->GetTranslateManager()->PageTranslated(
       "es", "en", translate::TranslateErrors::NONE);
 
+  // The infobar is presented with an animation. Wait for the "Done" button
+  // to become visibile before considering the animation as complete.
+  [ChromeEarlGrey
+      waitForElementWithMatcherSufficientlyVisible:
+          chrome_test_util::ButtonWithAccessibilityLabelId(IDS_DONE)];
+
   // Assert that the infobar is visible.
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_DONE)] assertWithMatcher:grey_notNil()];
+                                   IDS_DONE)]
+      assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
                                    IDS_TRANSLATE_INFOBAR_REVERT)]
-      assertWithMatcher:grey_notNil()];
+      assertWithMatcher:grey_sufficientlyVisible()];
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::ButtonWithAccessibilityLabelId(
-                                   IDS_CLOSE)] assertWithMatcher:grey_notNil()];
+                                   IDS_CLOSE)]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 @end

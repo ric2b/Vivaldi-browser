@@ -45,6 +45,7 @@
 #include "core/layout/line/EllipsisBox.h"
 #include "core/layout/line/GlyphOverflow.h"
 #include "core/layout/line/InlineTextBox.h"
+#include "core/layout/ng/inline/ng_inline_fragment_traversal.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_offset_mapping.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
@@ -90,8 +91,7 @@ class SecureTextTimer final : public TimerBase {
   void RestartWithNewText(unsigned last_typed_character_offset) {
     last_typed_character_offset_ = last_typed_character_offset;
     if (Settings* settings = layout_text_->GetDocument().GetSettings()) {
-      StartOneShot(settings->GetPasswordEchoDurationInSeconds(),
-                   BLINK_FROM_HERE);
+      StartOneShot(settings->GetPasswordEchoDurationInSeconds(), FROM_HERE);
     }
   }
   void Invalidate() { last_typed_character_offset_ = -1; }
@@ -393,29 +393,44 @@ static IntRect EllipsisRectForBox(InlineTextBox* box,
   return IntRect();
 }
 
+void LayoutText::AccumlateQuads(Vector<FloatQuad>& quads,
+                                const IntRect& ellipsis_rect,
+                                LocalOrAbsoluteOption local_or_absolute,
+                                MapCoordinatesFlags mode,
+                                const LayoutRect& passed_boundaries) const {
+  FloatRect boundaries(passed_boundaries);
+  if (!ellipsis_rect.IsEmpty()) {
+    if (Style()->IsHorizontalWritingMode())
+      boundaries.SetWidth(ellipsis_rect.MaxX() - boundaries.X());
+    else
+      boundaries.SetHeight(ellipsis_rect.MaxY() - boundaries.Y());
+  }
+  quads.push_back(local_or_absolute == kAbsoluteQuads
+                      ? LocalToAbsoluteQuad(boundaries, mode)
+                      : boundaries);
+}
+
 void LayoutText::Quads(Vector<FloatQuad>& quads,
                        ClippingOption option,
                        LocalOrAbsoluteOption local_or_absolute,
                        MapCoordinatesFlags mode) const {
-  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
-    FloatRect boundaries(box->FrameRect());
-
-    // Shorten the width of this text box if it ends in an ellipsis.
-    // FIXME: ellipsisRectForBox should switch to return FloatRect soon with the
-    // subpixellayout branch.
-    IntRect ellipsis_rect = (option == kClipToEllipsis)
-                                ? EllipsisRectForBox(box, 0, TextLength())
-                                : IntRect();
-    if (!ellipsis_rect.IsEmpty()) {
-      if (Style()->IsHorizontalWritingMode())
-        boundaries.SetWidth(ellipsis_rect.MaxX() - boundaries.X());
-      else
-        boundaries.SetHeight(ellipsis_rect.MaxY() - boundaries.Y());
+  if (const NGPhysicalBoxFragment* box_fragment =
+          EnclosingBlockFlowFragment()) {
+    const auto children =
+        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    for (const auto& child : children) {
+      // TODO(layout-dev): We should have NG version of |EllipsisRectForBox()|
+      AccumlateQuads(quads, IntRect(), local_or_absolute, mode,
+                     child.RectInContainerBox().ToLayoutRect());
     }
-    if (local_or_absolute == kAbsoluteQuads)
-      quads.push_back(LocalToAbsoluteQuad(boundaries, mode));
-    else
-      quads.push_back(boundaries);
+    return;
+  }
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
+    const IntRect ellipsis_rect = (option == kClipToEllipsis)
+                                      ? EllipsisRectForBox(box, 0, TextLength())
+                                      : IntRect();
+    AccumlateQuads(quads, ellipsis_rect, local_or_absolute, mode,
+                   box->FrameRect());
   }
 }
 
@@ -569,9 +584,10 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
   DCHECK(box);
   DCHECK_GE(offset, 0);
 
-  if (offset && static_cast<unsigned>(offset) < box->Len())
+  if (offset && static_cast<unsigned>(offset) < box->Len()) {
     return CreatePositionWithAffinityForBox(box, box->Start() + offset,
                                             should_affinity_be_downstream);
+  }
 
   bool position_is_at_start_of_box = !offset;
   if (position_is_at_start_of_box == box->IsLeftToRightDirection()) {
@@ -580,9 +596,10 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
     const InlineBox* prev_box = box->PrevLeafChildIgnoringLineBreak();
     if ((prev_box && prev_box->BidiLevel() == box->BidiLevel()) ||
         box->GetLineLayoutItem().ContainingBlock().Style()->Direction() ==
-            box->Direction())  // FIXME: left on 12CBA
+            box->Direction()) {  // FIXME: left on 12CBA
       return CreatePositionWithAffinityForBox(box, box->CaretLeftmostOffset(),
                                               should_affinity_be_downstream);
+    }
 
     if (prev_box && prev_box->BidiLevel() > box->BidiLevel()) {
       // e.g. left of B in aDC12BAb
@@ -618,9 +635,10 @@ CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
   const InlineBox* next_box = box->NextLeafChildIgnoringLineBreak();
   if ((next_box && next_box->BidiLevel() == box->BidiLevel()) ||
       box->GetLineLayoutItem().ContainingBlock().Style()->Direction() ==
-          box->Direction())
+          box->Direction()) {
     return CreatePositionWithAffinityForBox(box, box->CaretRightmostOffset(),
                                             should_affinity_be_downstream);
+  }
 
   // offset is on the right edge
   if (next_box && next_box->BidiLevel() > box->BidiLevel()) {
@@ -682,10 +700,11 @@ PositionWithAffinity LayoutText::PositionForPoint(const LayoutPoint& point) {
           (blocks_are_flipped && point_block_direction == bottom)) {
         ShouldAffinityBeDownstream should_affinity_be_downstream;
         if (LineDirectionPointFitsInBox(point_line_direction.ToInt(), box,
-                                        should_affinity_be_downstream))
+                                        should_affinity_be_downstream)) {
           return CreatePositionWithAffinityForBoxAfterAdjustingOffsetForBiDi(
               box, box->OffsetForPosition(point_line_direction),
               should_affinity_be_downstream);
+        }
       }
     }
     last_box = box;
@@ -752,9 +771,10 @@ LayoutRect LayoutText::LocalCaretRect(
 
   // FIXME: should we use the width of the root inline box or the
   // width of the containing block for this?
-  if (extra_width_to_end_of_line)
+  if (extra_width_to_end_of_line) {
     *extra_width_to_end_of_line =
         (box->Root().LogicalWidth() + root_left) - (left + 1);
+  }
 
   LayoutBlock* cb = ContainingBlock();
   const ComputedStyle& cb_style = cb->StyleRef();
@@ -1238,11 +1258,12 @@ void LayoutText::ComputePreferredLogicalWidths(
             static_cast<unsigned>(text_direction);
         DCHECK_GE(text_direction_index, 0U);
         DCHECK_LE(text_direction_index, 1U);
-        if (!cached_word_trailing_space_width[text_direction_index])
+        if (!cached_word_trailing_space_width[text_direction_index]) {
           cached_word_trailing_space_width[text_direction_index] =
               f.Width(ConstructTextRun(f, &kSpaceCharacter, 1, style_to_use,
                                        text_direction)) +
               word_spacing;
+        }
         word_trailing_space_width =
             cached_word_trailing_space_width[text_direction_index];
       }
@@ -1267,16 +1288,17 @@ void LayoutText::ComputePreferredLogicalWidths(
                                  *hyphenation, i, word_len, suffix_start);
         if (suffix_start) {
           float suffix_width;
-          if (word_trailing_space_width && is_space)
+          if (word_trailing_space_width && is_space) {
             suffix_width =
                 WidthFromFont(f, i + suffix_start, word_len - suffix_start + 1,
                               lead_width, curr_max_width, text_direction,
                               &fallback_fonts, &glyph_bounds) -
                 word_trailing_space_width;
-          else
+          } else {
             suffix_width = WidthFromFont(
                 f, i + suffix_start, word_len - suffix_start, lead_width,
                 curr_max_width, text_direction, &fallback_fonts, &glyph_bounds);
+          }
           max_fragment_width = std::max(max_fragment_width, suffix_width);
           curr_min_width += max_fragment_width - w;
           max_word_width = std::max(max_word_width, max_fragment_width);
@@ -1296,12 +1318,13 @@ void LayoutText::ComputePreferredLogicalWidths(
         curr_min_width += w;
       }
       if (between_words) {
-        if (last_word_boundary == i)
+        if (last_word_boundary == i) {
           curr_max_width += w;
-        else
+        } else {
           curr_max_width += WidthFromFont(
               f, last_word_boundary, j - last_word_boundary, lead_width,
               curr_max_width, text_direction, &fallback_fonts, &glyph_bounds);
+        }
         last_word_boundary = j;
       }
 
@@ -1441,15 +1464,6 @@ float LayoutText::FirstRunX() const {
 
 float LayoutText::FirstRunY() const {
   return first_text_box_ ? first_text_box_->Y().ToFloat() : 0;
-}
-
-void LayoutText::SetSelectionState(SelectionState state) {
-  LayoutObject::SetSelectionState(state);
-
-  // The containing block can be null in case of an orphaned tree.
-  LayoutBlock* containing_block = ContainingBlock();
-  if (containing_block && !containing_block->IsLayoutView())
-    containing_block->SetSelectionState(state);
 }
 
 void LayoutText::SetTextWithOffset(scoped_refptr<StringImpl> text,
@@ -1664,9 +1678,10 @@ void LayoutText::SetText(scoped_refptr<StringImpl> text, bool force) {
   // LayoutObjectChildList::insertChildNode() fails to set true to owner.
   // To avoid that, we call setNeedsLayoutAndPrefWidthsRecalc() only if this
   // LayoutText has parent.
-  if (Parent())
+  if (Parent()) {
     SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
         LayoutInvalidationReason::kTextChanged);
+  }
   known_to_have_no_overflow_and_no_fallback_fonts_ = false;
 
   if (AXObjectCache* cache = GetDocument().ExistingAXObjectCache())
@@ -1771,13 +1786,14 @@ float LayoutText::Width(unsigned from,
       if (fallback_fonts) {
         DCHECK(glyph_bounds);
         if (PreferredLogicalWidthsDirty() ||
-            !known_to_have_no_overflow_and_no_fallback_fonts_)
+            !known_to_have_no_overflow_and_no_fallback_fonts_) {
           const_cast<LayoutText*>(this)->ComputePreferredLogicalWidths(
               0, *fallback_fonts, *glyph_bounds);
-        else
+        } else {
           *glyph_bounds =
               FloatRect(0, -font_data->GetFontMetrics().FloatAscent(),
                         max_width_, font_data->GetFontMetrics().FloatHeight());
+        }
         w = max_width_;
       } else {
         w = MaxLogicalWidth();
@@ -1801,6 +1817,16 @@ float LayoutText::Width(unsigned from,
 }
 
 LayoutRect LayoutText::LinesBoundingBox() const {
+  if (const NGPhysicalBoxFragment* box_fragment =
+          EnclosingBlockFlowFragment()) {
+    NGPhysicalOffsetRect bounding_box;
+    auto children =
+        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    for (const auto& child : children)
+      bounding_box.Unite(child.RectInContainerBox());
+    return bounding_box.ToLayoutRect();
+  }
+
   LayoutRect result;
 
   DCHECK_EQ(!FirstTextBox(),
@@ -2213,15 +2239,17 @@ scoped_refptr<AbstractInlineTextBox> LayoutText::FirstAbstractInlineTextBox() {
 
 void LayoutText::InvalidateDisplayItemClients(
     PaintInvalidationReason invalidation_reason) const {
+  // TODO(yoichio): Cover other PaintInvalidateionReasons.
+  DCHECK(invalidation_reason != PaintInvalidationReason::kSelection ||
+         !EnclosingNGBlockFlow());
   ObjectPaintInvalidator paint_invalidator(*this);
   paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
 
   for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     paint_invalidator.InvalidateDisplayItemClient(*box, invalidation_reason);
-    if (box->Truncation() != kCNoTruncation) {
-      if (EllipsisBox* ellipsis_box = box->Root().GetEllipsisBox())
-        paint_invalidator.InvalidateDisplayItemClient(*ellipsis_box,
-                                                      invalidation_reason);
+    if (EllipsisBox* ellipsis_box = box->Root().GetEllipsisBox()) {
+      paint_invalidator.InvalidateDisplayItemClient(*ellipsis_box,
+                                                    invalidation_reason);
     }
   }
 }
@@ -2230,8 +2258,23 @@ void LayoutText::InvalidateDisplayItemClients(
 // the first run's x and y, but that would involve updating many test results.
 LayoutRect LayoutText::DebugRect() const {
   IntRect lines_box = EnclosingIntRect(LinesBoundingBox());
-  LayoutRect rect = LayoutRect(
-      IntRect(FirstRunX(), FirstRunY(), lines_box.Width(), lines_box.Height()));
+  FloatPoint first_run_offset;
+  if (const NGPhysicalBoxFragment* box_fragment =
+          EnclosingBlockFlowFragment()) {
+    NGPhysicalOffsetRect bounding_box;
+    const auto fragments =
+        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    if (fragments.size()) {
+      const auto& child = fragments[0];
+      first_run_offset = {child.offset_to_container_box.left.ToFloat(),
+                          child.offset_to_container_box.top.ToFloat()};
+    }
+  } else {
+    first_run_offset = {FirstRunX(), FirstRunY()};
+  }
+  LayoutRect rect =
+      LayoutRect(IntRect(first_run_offset.X(), first_run_offset.Y(),
+                         lines_box.Width(), lines_box.Height()));
   LayoutBlock* block = ContainingBlock();
   if (block && HasTextBoxes())
     block->AdjustChildDebugRect(rect);

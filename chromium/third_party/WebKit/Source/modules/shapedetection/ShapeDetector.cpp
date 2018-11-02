@@ -10,7 +10,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/geometry/DOMRect.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/loader/resource/ImageResourceContent.h"
@@ -92,8 +92,7 @@ ScriptPromise ShapeDetector::detect(
 
   SourceImageStatus source_image_status = kInvalidSourceImageStatus;
   scoped_refptr<Image> image = canvas_image_source->GetSourceImageForCanvas(
-      &source_image_status, kPreferNoAcceleration, kSnapshotReasonDrawImage,
-      size);
+      &source_image_status, kPreferNoAcceleration, size);
   if (!image || source_image_status != kNormalSourceImageStatus) {
     resolver->Reject(
         DOMException::Create(kInvalidStateError, "Invalid element or state."));

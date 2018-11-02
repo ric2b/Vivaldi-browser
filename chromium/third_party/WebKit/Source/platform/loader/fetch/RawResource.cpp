@@ -31,46 +31,49 @@
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
-#include "platform/loader/fetch/ResourceLoader.h"
 #include "platform/network/http_names.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-shared.h"
 
 namespace blink {
 
 RawResource* RawResource::FetchSynchronously(FetchParameters& params,
                                              ResourceFetcher* fetcher) {
   params.MakeSynchronous();
-  return ToRawResource(
-      fetcher->RequestResource(params, RawResourceFactory(Resource::kRaw)));
+  return ToRawResource(fetcher->RequestResource(
+      params, RawResourceFactory(Resource::kRaw), nullptr));
 }
 
 RawResource* RawResource::FetchImport(FetchParameters& params,
-                                      ResourceFetcher* fetcher) {
+                                      ResourceFetcher* fetcher,
+                                      RawResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   params.SetRequestContext(WebURLRequest::kRequestContextImport);
   return ToRawResource(fetcher->RequestResource(
-      params, RawResourceFactory(Resource::kImportResource)));
+      params, RawResourceFactory(Resource::kImportResource), client));
 }
 
 RawResource* RawResource::Fetch(FetchParameters& params,
-                                ResourceFetcher* fetcher) {
+                                ResourceFetcher* fetcher,
+                                RawResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   DCHECK_NE(params.GetResourceRequest().GetRequestContext(),
             WebURLRequest::kRequestContextUnspecified);
-  return ToRawResource(
-      fetcher->RequestResource(params, RawResourceFactory(Resource::kRaw)));
+  return ToRawResource(fetcher->RequestResource(
+      params, RawResourceFactory(Resource::kRaw), client));
 }
 
 RawResource* RawResource::FetchMainResource(
     FetchParameters& params,
     ResourceFetcher* fetcher,
+    RawResourceClient* client,
     const SubstituteData& substitute_data) {
   DCHECK_NE(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   DCHECK(params.GetResourceRequest().GetRequestContext() ==
              WebURLRequest::kRequestContextForm ||
          params.GetResourceRequest().GetRequestContext() ==
@@ -85,38 +88,44 @@ RawResource* RawResource::FetchMainResource(
              WebURLRequest::kRequestContextLocation);
 
   return ToRawResource(fetcher->RequestResource(
-      params, RawResourceFactory(Resource::kMainResource), substitute_data));
+      params, RawResourceFactory(Resource::kMainResource), client,
+      substitute_data));
 }
 
 RawResource* RawResource::FetchMedia(FetchParameters& params,
-                                     ResourceFetcher* fetcher) {
+                                     ResourceFetcher* fetcher,
+                                     RawResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
-  DCHECK(params.GetResourceRequest().GetRequestContext() ==
-             WebURLRequest::kRequestContextAudio ||
-         params.GetResourceRequest().GetRequestContext() ==
-             WebURLRequest::kRequestContextVideo);
+            network::mojom::RequestContextFrameType::kNone);
+  auto context = params.GetResourceRequest().GetRequestContext();
+  DCHECK(context == WebURLRequest::kRequestContextAudio ||
+         context == WebURLRequest::kRequestContextVideo);
+  Resource::Type type = (context == WebURLRequest::kRequestContextAudio)
+                            ? Resource::kAudio
+                            : Resource::kVideo;
   return ToRawResource(
-      fetcher->RequestResource(params, RawResourceFactory(Resource::kMedia)));
+      fetcher->RequestResource(params, RawResourceFactory(type), client));
 }
 
 RawResource* RawResource::FetchTextTrack(FetchParameters& params,
-                                         ResourceFetcher* fetcher) {
+                                         ResourceFetcher* fetcher,
+                                         RawResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   params.SetRequestContext(WebURLRequest::kRequestContextTrack);
   return ToRawResource(fetcher->RequestResource(
-      params, RawResourceFactory(Resource::kTextTrack)));
+      params, RawResourceFactory(Resource::kTextTrack), client));
 }
 
 RawResource* RawResource::FetchManifest(FetchParameters& params,
-                                        ResourceFetcher* fetcher) {
+                                        ResourceFetcher* fetcher,
+                                        RawResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   DCHECK_EQ(params.GetResourceRequest().GetRequestContext(),
             WebURLRequest::kRequestContextManifest);
   return ToRawResource(fetcher->RequestResource(
-      params, RawResourceFactory(Resource::kManifest)));
+      params, RawResourceFactory(Resource::kManifest), client));
 }
 
 RawResource::RawResource(const ResourceRequest& resource_request,
@@ -296,11 +305,6 @@ void RawResource::NotifyFinished() {
   Resource::NotifyFinished();
 }
 
-void RawResource::SetDefersLoading(bool defers) {
-  if (Loader())
-    Loader()->SetDefersLoading(defers);
-}
-
 static bool ShouldIgnoreHeaderForCacheReuse(AtomicString header_name) {
   // FIXME: This list of headers that don't affect cache policy almost certainly
   // isn't complete.
@@ -366,7 +370,7 @@ bool RawResource::CanReuse(const FetchParameters& new_fetch_parameters) const {
 RawResourceClientStateChecker::RawResourceClientStateChecker()
     : state_(kNotAddedAsClient) {}
 
-RawResourceClientStateChecker::~RawResourceClientStateChecker() {}
+RawResourceClientStateChecker::~RawResourceClientStateChecker() = default;
 
 NEVER_INLINE void RawResourceClientStateChecker::WillAddClient() {
   SECURITY_CHECK(state_ == kNotAddedAsClient);

@@ -966,7 +966,6 @@ struct FuzzTraits<gpu::SyncToken> {
     bool verified_flush = false;
     gpu::CommandBufferNamespace namespace_id =
         gpu::CommandBufferNamespace::INVALID;
-    int32_t extra_data_field = 0;
     gpu::CommandBufferId command_buffer_id;
     uint64_t release_count = 0;
 
@@ -974,15 +973,13 @@ struct FuzzTraits<gpu::SyncToken> {
       return false;
     if (!FuzzParam(&namespace_id, fuzzer))
       return false;
-    if (!FuzzParam(&extra_data_field, fuzzer))
-      return false;
     if (!FuzzParam(&command_buffer_id, fuzzer))
       return false;
     if (!FuzzParam(&release_count, fuzzer))
       return false;
 
     p->Clear();
-    p->Set(namespace_id, extra_data_field, command_buffer_id, release_count);
+    p->Set(namespace_id, command_buffer_id, release_count);
     if (verified_flush)
       p->SetVerifyFlush();
     return true;
@@ -1444,14 +1441,14 @@ struct FuzzTraits<SkBitmap> {
 };
 
 template <>
-struct FuzzTraits<storage::DataElement> {
-  static bool Fuzz(storage::DataElement* p, Fuzzer* fuzzer) {
+struct FuzzTraits<network::DataElement> {
+  static bool Fuzz(network::DataElement* p, Fuzzer* fuzzer) {
     // TODO(mbarbella): Support mutation.
     if (!fuzzer->ShouldGenerate())
       return true;
 
     switch (RandInRange(4)) {
-      case storage::DataElement::Type::TYPE_BYTES: {
+      case network::DataElement::Type::TYPE_BYTES: {
         if (RandEvent(2)) {
           p->SetToEmptyBytes();
         } else {
@@ -1462,7 +1459,7 @@ struct FuzzTraits<storage::DataElement> {
         }
         return true;
       }
-      case storage::DataElement::Type::TYPE_FILE: {
+      case network::DataElement::Type::TYPE_FILE: {
         base::FilePath path;
         uint64_t offset;
         uint64_t length;
@@ -1478,7 +1475,7 @@ struct FuzzTraits<storage::DataElement> {
         p->SetToFilePathRange(path, offset, length, modification_time);
         return true;
       }
-      case storage::DataElement::Type::TYPE_BLOB: {
+      case network::DataElement::Type::TYPE_BLOB: {
         std::string uuid;
         uint64_t offset;
         uint64_t length;
@@ -1491,7 +1488,7 @@ struct FuzzTraits<storage::DataElement> {
         p->SetToBlobRange(uuid, offset, length);
         return true;
       }
-      case storage::DataElement::Type::TYPE_FILE_FILESYSTEM: {
+      case network::DataElement::Type::TYPE_FILE_FILESYSTEM: {
         GURL url;
         uint64_t offset;
         uint64_t length;

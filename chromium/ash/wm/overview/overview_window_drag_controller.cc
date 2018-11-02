@@ -12,6 +12,7 @@
 #include "ash/wm/overview/scoped_transform_overview_window.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_item.h"
+#include "ash/wm/splitview/split_view_constants.h"
 #include "ash/wm/splitview/split_view_overview_overlay.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/wm_event.h"
@@ -165,9 +166,21 @@ void OverviewWindowDragController::UpdatePhantomWindowAndWindowGrid(
   SplitViewController::SnapPosition last_snap_position = snap_position_;
   snap_position_ = GetSnapPosition(location_in_screen);
 
+  // If there is already a snapped window in |snap_position_|, do not allow
+  // another window snap in the same position.
+  SplitViewController::State snapped_state = split_view_controller_->state();
+  if ((snap_position_ == SplitViewController::LEFT &&
+       snapped_state == SplitViewController::LEFT_SNAPPED) ||
+      (snap_position_ == SplitViewController::RIGHT &&
+       snapped_state == SplitViewController::RIGHT_SNAPPED)) {
+    snap_position_ = SplitViewController::NONE;
+    phantom_window_controller_.reset();
+    return;
+  }
+
   // If there is no current snapped window, update the window grid size if the
   // dragged window can be snapped if dropped.
-  if (split_view_controller_->state() == SplitViewController::NO_SNAP &&
+  if (snapped_state == SplitViewController::NO_SNAP &&
       snap_position_ != last_snap_position) {
     // Do not reposition the item that is currently being dragged.
     window_selector_->SetBoundsForWindowGridsInScreenIgnoringWindow(
@@ -239,38 +252,51 @@ SplitViewController::SnapPosition OverviewWindowDragController::GetSnapPosition(
     const gfx::Point& location_in_screen) const {
   DCHECK(item_);
   gfx::Rect area(
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(item_->GetWindow()));
+      screen_util::GetDisplayWorkAreaBoundsInParent(item_->GetWindow()));
   ::wm::ConvertRectToScreen(item_->GetWindow()->GetRootWindow(), &area);
 
   blink::WebScreenOrientationLockType screen_orientation =
       Shell::Get()->screen_orientation_controller()->GetCurrentOrientation();
   switch (screen_orientation) {
     case blink::kWebScreenOrientationLockLandscapePrimary:
-    case blink::kWebScreenOrientationLockLandscapeSecondary:
-      area.Inset(kScreenEdgeInsetForDrag, 0);
-      if (location_in_screen.x() <= area.x())
+    case blink::kWebScreenOrientationLockLandscapeSecondary: {
+      // The window can be snapped if it reaches close enough to the screen
+      // edge of the screen (on primary axis). The edge insets are a fixed ratio
+      // of the screen plus some padding. This matches the overlay ui.
+      const int screen_edge_inset_for_drag =
+          area.width() * kHighlightScreenPrimaryAxisRatio +
+          kHighlightScreenEdgePaddingDp;
+      area.Inset(screen_edge_inset_for_drag, 0);
+      if (location_in_screen.x() <= area.x()) {
         return IsPrimaryScreenOrientation(screen_orientation)
                    ? SplitViewController::LEFT
                    : SplitViewController::RIGHT;
-      if (location_in_screen.x() >= area.right() - 1)
+      }
+      if (location_in_screen.x() >= area.right() - 1) {
         return IsPrimaryScreenOrientation(screen_orientation)
                    ? SplitViewController::RIGHT
                    : SplitViewController::LEFT;
+      }
       return SplitViewController::NONE;
-
+    }
     case blink::kWebScreenOrientationLockPortraitPrimary:
-    case blink::kWebScreenOrientationLockPortraitSecondary:
-      area.Inset(0, kScreenEdgeInsetForDrag);
-      if (location_in_screen.y() <= area.y())
+    case blink::kWebScreenOrientationLockPortraitSecondary: {
+      const int screen_edge_inset_for_drag =
+          area.height() * kHighlightScreenPrimaryAxisRatio +
+          kHighlightScreenEdgePaddingDp;
+      area.Inset(0, screen_edge_inset_for_drag);
+      if (location_in_screen.y() <= area.y()) {
         return IsPrimaryScreenOrientation(screen_orientation)
                    ? SplitViewController::RIGHT
                    : SplitViewController::LEFT;
-      if (location_in_screen.y() >= area.bottom() - 1)
+      }
+      if (location_in_screen.y() >= area.bottom() - 1) {
         return IsPrimaryScreenOrientation(screen_orientation)
                    ? SplitViewController::LEFT
                    : SplitViewController::RIGHT;
+      }
       return SplitViewController::NONE;
-
+    }
     default:
       NOTREACHED();
       return SplitViewController::NONE;

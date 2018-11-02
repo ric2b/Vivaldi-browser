@@ -1482,7 +1482,7 @@ class RootWindowTestObserver : public aura::WindowObserver {
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds,
                              ui::PropertyChangeReason reason) override {
-    shelf_display_bounds_ = ScreenUtil::GetDisplayBoundsWithShelf(window);
+    shelf_display_bounds_ = screen_util::GetDisplayBoundsWithShelf(window);
   }
 
   const gfx::Rect& shelf_display_bounds() const {
@@ -1569,6 +1569,33 @@ TEST_F(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
   // The mouse pointer is now on 2nd display.
   UpdateDisplay("300x280,200x200");
   EXPECT_EQ("450,10", env->last_mouse_location().ToString());
+}
+
+TEST_F(WindowTreeHostManagerTest,
+       DontUpdateInvisibleCursorLocationAfterDisplayChange) {
+  UpdateDisplay("500x300");
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+
+  aura::Env* env = aura::Env::GetInstance();
+
+  ui::test::EventGenerator generator(root_windows[0]);
+
+  // Logical cursor location is updated to keep the same physical location.
+  generator.MoveMouseToInHost(350, 150);
+  EXPECT_EQ("350,150", env->last_mouse_location().ToString());
+
+  UpdateDisplay("300x500/r");
+  EXPECT_EQ("250,150", env->last_mouse_location().ToString());
+
+  // Logical cursor location change shouldn't change when the cursor isn't
+  // visible.
+  UpdateDisplay("500x300");
+  generator.MoveMouseToInHost(350, 150);
+  EXPECT_EQ("350,150", env->last_mouse_location().ToString());
+
+  Shell::Get()->cursor_manager()->HideCursor();
+  UpdateDisplay("300x500/r");
+  EXPECT_EQ("350,150", env->last_mouse_location().ToString());
 }
 
 TEST_F(WindowTreeHostManagerTest,

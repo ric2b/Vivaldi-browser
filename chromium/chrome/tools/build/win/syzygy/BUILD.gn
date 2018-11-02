@@ -49,7 +49,7 @@ if (is_syzyasan) {
       # Copies the uninstrumented chrome_child.dll.
       copy("chrome_child_dll_syzygy_copy") {
         sources = [
-          "$root_out_dir/vivaldi_child.dll",
+          "$root_out_dir/chrome_child.dll",
         ]
         outputs = [
           "$syzygy_dest_dir/{{source_file_part}}",

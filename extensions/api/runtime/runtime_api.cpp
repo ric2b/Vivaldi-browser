@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2017 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2016-2018 Vivaldi Technologies AS. All rights reserved
 
 #include "extensions/api/runtime/runtime_api.h"
 
@@ -26,6 +26,7 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/schema/runtime_private.h"
 #include "ui/devtools/devtools_connector.h"
@@ -227,6 +228,12 @@ ExtensionFunction::ResponseAction RuntimePrivateExitFunction::Run() {
           Profile::FromBrowserContext(browser_context()));
   DCHECK(api);
   api->CloseAllDevtools();
+
+  extensions::VivaldiUtilitiesAPI* utils_api =
+      extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+          browser_context());
+  DCHECK(utils_api);
+  utils_api->CloseAllThumbnailWindows();
 
   chrome::CloseAllBrowsersAndQuit();
 

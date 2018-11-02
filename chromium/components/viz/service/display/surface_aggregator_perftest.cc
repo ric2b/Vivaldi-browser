@@ -2,7 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/memory/ptr_util.h"
 #include "cc/base/lap_timer.h"
 #include "cc/resources/display_resource_provider.h"
 #include "cc/test/fake_output_surface_client.h"
@@ -34,7 +33,7 @@ class SurfaceAggregatorPerfTest : public testing::Test {
   SurfaceAggregatorPerfTest() {
     context_provider_ = cc::TestContextProvider::Create();
     context_provider_->BindToCurrentThread();
-    shared_bitmap_manager_ = base::MakeUnique<cc::TestSharedBitmapManager>();
+    shared_bitmap_manager_ = std::make_unique<cc::TestSharedBitmapManager>();
 
     resource_provider_ =
         cc::FakeResourceProvider::CreateDisplayResourceProvider(
@@ -50,11 +49,11 @@ class SurfaceAggregatorPerfTest : public testing::Test {
     std::vector<std::unique_ptr<CompositorFrameSinkSupport>> child_supports(
         num_surfaces);
     for (int i = 0; i < num_surfaces; i++) {
-      child_supports[i] = CompositorFrameSinkSupport::Create(
+      child_supports[i] = std::make_unique<CompositorFrameSinkSupport>(
           nullptr, &manager_, FrameSinkId(1, i + 1), kIsChildRoot,
           kNeedsSyncPoints);
     }
-    aggregator_ = base::MakeUnique<SurfaceAggregator>(
+    aggregator_ = std::make_unique<SurfaceAggregator>(
         manager_.surface_manager(), resource_provider_.get(), optimize_damage);
     for (int i = 0; i < num_surfaces; i++) {
       LocalSurfaceId local_surface_id(i + 1, kArbitraryToken);
@@ -62,14 +61,14 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       auto pass = RenderPass::Create();
       pass->output_rect = gfx::Rect(0, 0, 1, 2);
 
-      CompositorFrame frame = test::MakeEmptyCompositorFrame();
+      CompositorFrameBuilder frame_builder;
 
       auto* sqs = pass->CreateAndAppendSharedQuadState();
       for (int j = 0; j < num_textures; j++) {
         TransferableResource resource;
         resource.id = j;
         resource.is_software = true;
-        frame.resource_list.push_back(resource);
+        frame_builder.AddTransferableResource(resource);
 
         auto* quad = pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
         const gfx::Rect rect(0, 0, 1, 2);
@@ -99,18 +98,17 @@ class SurfaceAggregatorPerfTest : public testing::Test {
             base::nullopt, SK_ColorWHITE, false);
       }
 
-      frame.render_pass_list.push_back(std::move(pass));
+      frame_builder.AddRenderPass(std::move(pass));
       child_supports[i]->SubmitCompositorFrame(local_surface_id,
-                                               std::move(frame));
+                                               frame_builder.Build());
     }
 
-    auto root_support = CompositorFrameSinkSupport::Create(
+    auto root_support = std::make_unique<CompositorFrameSinkSupport>(
         nullptr, &manager_, FrameSinkId(1, num_surfaces + 1), kIsRoot,
         kNeedsSyncPoints);
     timer_.Reset();
     do {
       auto pass = RenderPass::Create();
-      CompositorFrame frame = test::MakeEmptyCompositorFrame();
 
       auto* sqs = pass->CreateAndAppendSharedQuadState();
       auto* surface_quad = pass->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
@@ -127,7 +125,8 @@ class SurfaceAggregatorPerfTest : public testing::Test {
       else
         pass->damage_rect = gfx::Rect(0, 0, 1, 1);
 
-      frame.render_pass_list.push_back(std::move(pass));
+      CompositorFrame frame =
+          CompositorFrameBuilder().AddRenderPass(std::move(pass)).Build();
 
       root_support->SubmitCompositorFrame(
           LocalSurfaceId(num_surfaces + 1, kArbitraryToken), std::move(frame));

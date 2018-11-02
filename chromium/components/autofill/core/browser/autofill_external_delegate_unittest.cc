@@ -12,8 +12,11 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/user_action_tester.h"
 #include "build/build_config.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
+#include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -21,15 +24,19 @@
 #include "components/autofill/core/browser/suggestion_test_helpers.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
 #include "components/autofill/core/browser/test_autofill_driver.h"
-#include "components/autofill/core/browser/test_autofill_external_delegate.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/strings/grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/rect.h"
 
+using autofill::features::kAutofillCreditCardDropdownGooglePayBranding;
+using autofill::features::kAutofillUseNewSettingsNameInDropdown;
 using base::ASCIIToUTF16;
 using testing::_;
 
@@ -121,12 +128,12 @@ class MockAutofillManager : public AutofillManager {
 class AutofillExternalDelegateUnitTest : public testing::Test {
  protected:
   void SetUp() override {
-    autofill_driver_.reset(new testing::NiceMock<MockAutofillDriver>());
-    autofill_manager_.reset(
-        new MockAutofillManager(autofill_driver_.get(), &autofill_client_));
-    external_delegate_.reset(
-        new AutofillExternalDelegate(
-            autofill_manager_.get(), autofill_driver_.get()));
+    autofill_driver_ =
+        std::make_unique<testing::NiceMock<MockAutofillDriver>>();
+    autofill_manager_ = std::make_unique<MockAutofillManager>(
+        autofill_driver_.get(), &autofill_client_);
+    external_delegate_ = std::make_unique<AutofillExternalDelegate>(
+        autofill_manager_.get(), autofill_driver_.get());
   }
 
   void TearDown() override {
@@ -544,7 +551,7 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateClearPreviewedForm) {
 TEST_F(AutofillExternalDelegateUnitTest,
        ExternalDelegateHidePopupAfterEditing) {
   EXPECT_CALL(autofill_client_, ShowAutofillPopup(_, _, _, _));
-  GenerateTestAutofillPopup(external_delegate_.get());
+  test::GenerateTestAutofillPopup(external_delegate_.get());
 
   EXPECT_CALL(autofill_client_, HideAutofillPopup());
   external_delegate_->DidEndTextFieldEditing();
@@ -728,6 +735,137 @@ TEST_F(AutofillExternalDelegateUnitTest, ExternalDelegateFillFieldWithValue) {
                                           0);
   histogram_tester.ExpectUniqueSample(
       "Autofill.SuggestionAcceptedIndex.Autocomplete", 0, 1);
+}
+
+TEST_F(AutofillExternalDelegateUnitTest, ShouldShowGooglePayIcon) {
+  // Turn on feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      kAutofillCreditCardDropdownGooglePayBranding);
+
+  IssueOnQuery(kQueryId);
+
+  auto element_icons = testing::ElementsAre(
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      base::string16(), base::ASCIIToUTF16("googlePay"));
+  EXPECT_CALL(
+      autofill_client_,
+      ShowAutofillPopup(_, _, SuggestionVectorIconsAre(element_icons), _));
+
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].frontend_id = kAutofillProfileId;
+
+  // This should call ShowAutofillPopup.
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item, true);
+}
+
+TEST_F(AutofillExternalDelegateUnitTest,
+       ShouldNotShowGooglePayIconIfSuggestionsContainLocalCards) {
+  // Turn on feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      kAutofillCreditCardDropdownGooglePayBranding);
+
+  IssueOnQuery(kQueryId);
+
+  auto element_icons = testing::ElementsAre(
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      base::string16(),
+      base::string16() /* Autofill setting item does not have icon. */);
+  EXPECT_CALL(
+      autofill_client_,
+      ShowAutofillPopup(_, _, SuggestionVectorIconsAre(element_icons), _));
+
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].frontend_id = kAutofillProfileId;
+
+  // This should call ShowAutofillPopup.
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item, false);
+}
+
+TEST_F(AutofillExternalDelegateUnitTest,
+       ShouldNotShowGooglePayIconIfExperimentOff) {
+  // Turn off feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(
+      kAutofillCreditCardDropdownGooglePayBranding);
+
+  IssueOnQuery(kQueryId);
+
+  auto element_icons = testing::ElementsAre(
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      base::string16(),
+      base::string16() /* Autofill setting item does not have icon. */);
+  EXPECT_CALL(
+      autofill_client_,
+      ShowAutofillPopup(_, _, SuggestionVectorIconsAre(element_icons), _));
+
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].frontend_id = kAutofillProfileId;
+
+  // This should call ShowAutofillPopup.
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item, true);
+}
+
+TEST_F(AutofillExternalDelegateUnitTest, ShouldUseNewSettingName) {
+  // Turn on feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      kAutofillUseNewSettingsNameInDropdown);
+
+  IssueOnQuery(kQueryId);
+
+  auto element_values = testing::ElementsAre(
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      base::string16(), l10n_util::GetStringUTF16(IDS_AUTOFILL_SETTINGS_POPUP));
+  EXPECT_CALL(
+      autofill_client_,
+      ShowAutofillPopup(_, _, SuggestionVectorValuesAre(element_values), _));
+
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].frontend_id = kAutofillProfileId;
+
+  // This should call ShowAutofillPopup.
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item);
+}
+
+TEST_F(AutofillExternalDelegateUnitTest,
+       ShouldNotUseNewSettingNameIfExperimentOff) {
+  // Turn off feature flag.
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndDisableFeature(
+      kAutofillUseNewSettingsNameInDropdown);
+
+  IssueOnQuery(kQueryId);
+
+  auto element_values = testing::ElementsAre(
+#if !defined(OS_ANDROID)
+      base::string16(),
+#endif
+      base::string16(),
+      l10n_util::GetStringUTF16(IDS_AUTOFILL_CREDIT_CARD_OPTIONS_POPUP));
+  EXPECT_CALL(
+      autofill_client_,
+      ShowAutofillPopup(_, _, SuggestionVectorValuesAre(element_values), _));
+
+  std::vector<Suggestion> autofill_item;
+  autofill_item.push_back(Suggestion());
+  autofill_item[0].frontend_id = kAutofillProfileId;
+
+  // This should call ShowAutofillPopup.
+  external_delegate_->OnSuggestionsReturned(kQueryId, autofill_item);
 }
 
 }  // namespace autofill

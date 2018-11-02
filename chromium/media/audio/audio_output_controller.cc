@@ -53,7 +53,7 @@ void LogStreamCreationResult(bool for_device_change,
 }  // namespace
 
 AudioOutputController::ErrorStatisticsTracker::ErrorStatisticsTracker()
-    : on_more_io_data_called_(0) {
+    : start_time_(base::TimeTicks::Now()), on_more_io_data_called_(0) {
   // WedgeCheck() will look to see if |on_more_io_data_called_| is true after
   // the timeout expires and log this as a UMA stat. If the stream is
   // paused/closed before the timer fires, nothing is logged.
@@ -62,6 +62,8 @@ AudioOutputController::ErrorStatisticsTracker::ErrorStatisticsTracker()
 }
 
 AudioOutputController::ErrorStatisticsTracker::~ErrorStatisticsTracker() {
+  UMA_HISTOGRAM_LONG_TIMES("Media.OutputStreamDuration",
+                           base::TimeTicks::Now() - start_time_);
   UMA_HISTOGRAM_BOOLEAN("Media.AudioOutputController.CallbackError",
                         error_during_callback_);
 }
@@ -326,7 +328,8 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
                                       base::TimeTicks delay_timestamp,
                                       int prior_frames_skipped,
                                       AudioBus* dest) {
-  TRACE_EVENT0("audio", "AudioOutputController::OnMoreData");
+  TRACE_EVENT_BEGIN1("audio", "AudioOutputController::OnMoreData",
+                     "frames skipped", prior_frames_skipped);
 
   stats_tracker_->OnMoreDataCalled();
 
@@ -364,12 +367,20 @@ int AudioOutputController::OnMoreData(base::TimeDelta delay,
     }
   }
 
+  TRACE_EVENT_END2("audio", "AudioOutputController::OnMoreData",
+                   "timestamp (ms)",
+                   (delay_timestamp - base::TimeTicks()).InMillisecondsF(),
+                   "delay (ms)", delay.InMillisecondsF());
   return frames;
 }
 
 void AudioOutputController::BroadcastDataToDuplicationTargets(
     std::unique_ptr<AudioBus> audio_bus,
     base::TimeTicks reference_time) {
+  TRACE_EVENT1("audio",
+               "AudioOutputController::BroadcastDataToDuplicationTargets",
+               "reference_time (ms)",
+               (reference_time - base::TimeTicks()).InMillisecondsF());
   DCHECK(message_loop_->BelongsToCurrentThread());
   if (state_ != kPlaying || duplication_targets_.empty())
     return;

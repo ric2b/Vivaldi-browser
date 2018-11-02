@@ -74,17 +74,6 @@ NET_EXPORT bool CreateSelfSignedCert(crypto::RSAPrivateKey* key,
                                      base::Time not_valid_after,
                                      std::string* der_cert);
 
-// Provides a method to parse a DER-encoded X509 certificate without calling any
-// OS primitives. This is useful in sandboxed processes.
-NET_EXPORT bool ParseCertificateSandboxed(
-    const base::StringPiece& certificate,
-    std::string* subject,
-    std::string* issuer,
-    base::Time* not_before,
-    base::Time* not_after,
-    std::vector<std::string>* dns_names,
-    std::vector<std::string>* ip_addresses);
-
 // Returns a CRYPTO_BUFFER_POOL for deduplicating certificates.
 NET_EXPORT CRYPTO_BUFFER_POOL* GetBufferPool();
 
@@ -101,6 +90,15 @@ NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
 // char* due to StringPiece implicit ctor.
 NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> CreateCryptoBuffer(
     const char* invalid_data);
+
+// Increments the reference count of |buffer| and returns a UniquePtr owning
+// that reference.
+NET_EXPORT bssl::UniquePtr<CRYPTO_BUFFER> DupCryptoBuffer(
+    CRYPTO_BUFFER* buffer);
+
+// Compares two CRYPTO_BUFFERs and returns true if they have the same contents.
+NET_EXPORT bool CryptoBufferEqual(const CRYPTO_BUFFER* a,
+                                  const CRYPTO_BUFFER* b);
 
 // Returns a StringPiece pointing to the data in |buffer|.
 NET_EXPORT base::StringPiece CryptoBufferAsStringPiece(

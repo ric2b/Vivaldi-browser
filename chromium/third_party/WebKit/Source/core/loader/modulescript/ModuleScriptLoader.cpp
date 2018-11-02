@@ -5,14 +5,14 @@
 #include "core/loader/modulescript/ModuleScriptLoader.h"
 
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/Modulator.h"
-#include "core/dom/ModuleScript.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/modulescript/DocumentModuleScriptFetcher.h"
 #include "core/loader/modulescript/ModuleScriptFetcher.h"
 #include "core/loader/modulescript/ModuleScriptLoaderClient.h"
 #include "core/loader/modulescript/ModuleScriptLoaderRegistry.h"
 #include "core/loader/modulescript/WorkletModuleScriptFetcher.h"
+#include "core/script/Modulator.h"
+#include "core/script/ModuleScript.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
@@ -35,7 +35,7 @@ ModuleScriptLoader::ModuleScriptLoader(Modulator* modulator,
   DCHECK(client);
 }
 
-ModuleScriptLoader::~ModuleScriptLoader() {}
+ModuleScriptLoader::~ModuleScriptLoader() = default;
 
 #if DCHECK_IS_ON()
 const char* ModuleScriptLoader::StateToString(ModuleScriptLoader::State state) {
@@ -185,7 +185,7 @@ void ModuleScriptLoader::NotifyFetchFinished(
   }
 
   // Note: "conditions" referred in Step 8 is implemented in
-  // WasModuleLoadSuccessful() in ModuleScriptFetcher.cpp.
+  // WasModuleLoadSuccessful() in DocumentModuleScriptFetcher.cpp.
   // Step 8. "If any of the following conditions are met, set moduleMap[url] to
   // null, asynchronously complete this algorithm with null, and abort these
   // steps." [spec text]
@@ -203,9 +203,9 @@ void ModuleScriptLoader::NotifyFetchFinished(
   // Step 10. "Let module script be the result of creating a module script given
   // source text, module map settings object, response's url, and options."
   // [spec text]
-  module_script_ = ModuleScript::Create(params->GetSourceText(), modulator_,
-                                        params->GetResponseUrl(), options_,
-                                        params->GetAccessControlStatus());
+  module_script_ = ModuleScript::Create(
+      params->GetSourceText(), modulator_, params->GetResponseUrl(),
+      params->GetResponseUrl(), options_, params->GetAccessControlStatus());
 
   AdvanceState(State::kFinished);
 }

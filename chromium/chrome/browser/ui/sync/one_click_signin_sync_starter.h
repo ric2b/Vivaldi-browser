@@ -32,7 +32,7 @@ class SyncSetupInProgressHandle;
 // starts the sync machine.  Instances of this class delete themselves once
 // the job is done.
 class OneClickSigninSyncStarter : public SigninTracker::Observer,
-                                  public chrome::BrowserListObserver,
+                                  public BrowserListObserver,
                                   public LoginUIService::Observer {
  public:
   enum ProfileMode {
@@ -107,7 +107,7 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
                             ConfirmationRequired display_confirmation,
                             Callback callback);
 
-  // chrome::BrowserListObserver override.
+  // BrowserListObserver override.
   void OnBrowserRemoved(Browser* browser) override;
 
   // If the |browser| argument is non-null, returns the pointer directly.
@@ -167,9 +167,6 @@ class OneClickSigninSyncStarter : public SigninTracker::Observer,
   // Called to create a new profile, which is then signed in with the
   // in-progress auth credentials currently stored in this object.
   void CreateNewSignedInProfile();
-
-  // Opens a browser window for new profile showing the sign-in page.
-  void CancelSigninAndStartNewSigninInNewProfile(Profile* new_profile);
 
   // Copies the sign-in credentials to |new_profile| and starts syncing in
   // |new_profile|.

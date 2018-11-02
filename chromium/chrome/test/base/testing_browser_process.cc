@@ -14,6 +14,7 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/notifications/notification_platform_bridge.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/printing/print_job_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
@@ -35,7 +36,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/message_center.h"
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -199,8 +200,8 @@ variations::VariationsService* TestingBrowserProcess::variations_service() {
   return nullptr;
 }
 
-policy::BrowserPolicyConnector*
-    TestingBrowserProcess::browser_policy_connector() {
+policy::ChromeBrowserPolicyConnector*
+TestingBrowserProcess::browser_policy_connector() {
   if (!browser_policy_connector_) {
     EXPECT_FALSE(created_browser_policy_connector_);
     created_browser_policy_connector_ = true;
@@ -237,9 +238,11 @@ IconManager* TestingBrowserProcess::icon_manager() {
   return nullptr;
 }
 
-GpuProfileCache* TestingBrowserProcess::gpu_profile_cache() {
+#if defined(OS_ANDROID)
+GpuDriverInfoManager* TestingBrowserProcess::gpu_driver_info_manager() {
   return nullptr;
 }
+#endif
 
 GpuModeManager* TestingBrowserProcess::gpu_mode_manager() {
   return nullptr;

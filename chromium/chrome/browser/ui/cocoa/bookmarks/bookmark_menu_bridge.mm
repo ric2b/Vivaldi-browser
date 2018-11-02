@@ -25,6 +25,9 @@
 #include "ui/gfx/image/image.h"
 #include "ui/resources/grit/ui_resources.h"
 
+#include "app/vivaldi_apptools.h"
+#include "ui/cocoa/vivaldi_bookmark_menu_mac.h"
+
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
@@ -119,6 +122,10 @@ void BookmarkMenuBridge::BuildRootMenu() {
   }
   if (!barNode->empty())
     AddNodeToMenu(barNode, menu_root_);
+  else if (vivaldi::IsVivaldiRunning()) {
+    // Even an empty menu should have an "add tab" item
+    vivaldi::AddAddTabToBookmarksMenuItem(barNode, menu_root_);
+  }
 
   // If the "Other Bookmarks" folder has any content, make a submenu for it and
   // fill it in.
@@ -237,6 +244,9 @@ void BookmarkMenuBridge::ClearBookmarkMenu() {
       // This will eventually [obj release] all its kids, if it has any.
       [menu_root_ removeItem:item];
     } else {
+      if (vivaldi::IsVivaldiRunning()) {
+        vivaldi::OnClearBookmarkMenu(menu_root_, item);
+      }
       // Leave it alone.
     }
   }
@@ -262,6 +272,31 @@ void BookmarkMenuBridge::AddNodeAsSubmenu(NSMenu* menu,
 
 // TODO(jrg): limit the number of bookmarks in the menubar?
 void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node, NSMenu* menu) {
+  if (vivaldi::IsVivaldiRunning()) {
+    vivaldi::AddAddTabToBookmarksMenuItem(node, menu);
+
+    std::vector<bookmarks::BookmarkNode*> nodes;
+    vivaldi::GetBookmarkNodes(node, nodes);
+    for (size_t i = 0; i < nodes.size(); ++i) {
+      const BookmarkNode* child = nodes[i];
+      if (vivaldi::IsBookmarkSeparator(child)) {
+        [menu addItem:[NSMenuItem separatorItem]];
+      } else if (child->is_folder()) {
+        AddNodeAsSubmenu(menu, child, folder_image_);
+      } else {
+        NSString* title = [BookmarkMenuCocoaController menuTitleForNode:child];
+        base::scoped_nsobject<NSMenuItem> item([[NSMenuItem alloc]
+            initWithTitle:title
+                   action:nil
+            keyEquivalent:@""]);
+        bookmark_nodes_[child] = item;
+        ConfigureMenuItem(child, item, false);
+        [menu addItem:item];
+      }
+    }
+    return;
+  } // vivaldi specific section
+
   int child_count = node->child_count();
   if (child_count == 0) {
     NSString* empty_string = l10n_util::GetNSString(IDS_MENU_EMPTY_SUBMENU);

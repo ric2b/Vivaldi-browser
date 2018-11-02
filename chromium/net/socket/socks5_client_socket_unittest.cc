@@ -11,6 +11,7 @@
 
 #include "base/macros.h"
 #include "base/sys_byteorder.h"
+#include "build/build_config.h"
 #include "net/base/address_list.h"
 #include "net/base/test_completion_callback.h"
 #include "net/base/winsock_init.h"
@@ -23,6 +24,7 @@
 #include "net/socket/socket_test_util.h"
 #include "net/socket/tcp_client_socket.h"
 #include "net/test/gtest_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -116,7 +118,8 @@ std::unique_ptr<SOCKS5ClientSocket> SOCKS5ClientSocketTest::BuildMockSocket(
   connection->SetSocket(std::unique_ptr<StreamSocket>(tcp_sock_));
   return std::unique_ptr<SOCKS5ClientSocket>(new SOCKS5ClientSocket(
       std::move(connection),
-      HostResolver::RequestInfo(HostPortPair(hostname, port))));
+      HostResolver::RequestInfo(HostPortPair(hostname, port)),
+      TRAFFIC_ANNOTATION_FOR_TESTS));
 }
 
 // Tests a complete SOCKS5 handshake and the disconnection.
@@ -172,8 +175,8 @@ TEST_F(SOCKS5ClientSocketTest, CompleteHandshake) {
 
   scoped_refptr<IOBuffer> buffer(new IOBuffer(payload_write.size()));
   memcpy(buffer->data(), payload_write.data(), payload_write.size());
-  rv = user_sock_->Write(
-      buffer.get(), payload_write.size(), callback_.callback());
+  rv = user_sock_->Write(buffer.get(), payload_write.size(),
+                         callback_.callback(), TRAFFIC_ANNOTATION_FOR_TESTS);
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
   rv = callback_.WaitForResult();
   EXPECT_EQ(static_cast<int>(payload_write.size()), rv);
@@ -382,6 +385,30 @@ TEST_F(SOCKS5ClientSocketTest, PartialReadWrites) {
     EXPECT_TRUE(LogContainsEndEvent(net_log_entries, -1,
                                     NetLogEventType::SOCKS5_CONNECT));
   }
+}
+
+TEST_F(SOCKS5ClientSocketTest, Tag) {
+  StaticSocketDataProvider data;
+  TestNetLog log;
+  MockTaggingStreamSocket* tagging_sock =
+      new MockTaggingStreamSocket(std::unique_ptr<StreamSocket>(
+          new MockTCPClientSocket(address_list_, &log, &data)));
+
+  std::unique_ptr<ClientSocketHandle> connection(new ClientSocketHandle);
+  // |connection| takes ownership of |tagging_sock|, but keep a
+  // non-owning pointer to it.
+  connection->SetSocket(std::unique_ptr<StreamSocket>(tagging_sock));
+  SOCKS5ClientSocket socket(
+      std::move(connection),
+      HostResolver::RequestInfo(HostPortPair("localhost", 80)),
+      TRAFFIC_ANNOTATION_FOR_TESTS);
+
+  EXPECT_EQ(tagging_sock->tag(), SocketTag());
+#if defined(OS_ANDROID)
+  SocketTag tag(0x12345678, 0x87654321);
+  socket.ApplySocketTag(tag);
+  EXPECT_EQ(tagging_sock->tag(), tag);
+#endif  // OS_ANDROID
 }
 
 }  // namespace

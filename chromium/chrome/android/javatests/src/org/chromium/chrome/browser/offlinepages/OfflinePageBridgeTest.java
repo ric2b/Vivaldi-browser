@@ -28,6 +28,7 @@ import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.components.offlinepages.DeletePageResult;
 import org.chromium.components.offlinepages.SavePageResult;
+import org.chromium.components.offlinepages.background.UpdateRequestResult;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.net.test.EmbeddedTestServer;
 
@@ -43,8 +44,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Unit tests for {@link OfflinePageBridge}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class OfflinePageBridgeTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -238,10 +238,7 @@ public class OfflinePageBridgeTest {
         List<OfflinePageBridge.RequestRemovedResult> removed =
                 removeRequestsFromQueue(requestsToRemove);
         Assert.assertEquals(requests[1].getRequestId(), removed.get(0).getRequestId());
-        Assert.assertEquals(
-                org.chromium.components.offlinepages.background.UpdateRequestResult.SUCCESS,
-                removed.get(0).getUpdateRequestResult());
-
+        Assert.assertEquals(UpdateRequestResult.SUCCESS, removed.get(0).getUpdateRequestResult());
         SavePageRequest[] remaining = getRequestsInQueue();
         Assert.assertEquals(1, remaining.length);
 
@@ -587,12 +584,23 @@ public class OfflinePageBridgeTest {
 
     private void savePageLater(final String url, final String namespace)
             throws InterruptedException {
+        final Semaphore semaphore = new Semaphore(0);
         ThreadUtils.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                mOfflinePageBridge.savePageLater(url, namespace, true /* userRequested */);
+                mOfflinePageBridge.savePageLater(url, namespace, true /* userRequested */,
+                        new OfflinePageOrigin(), new Callback<Integer>() {
+                            @Override
+                            public void onResult(Integer i) {
+                                Assert.assertEquals("SavePageLater did not succeed",
+                                        Integer.valueOf(0),
+                                        i); // 0 is SUCCESS
+                                semaphore.release();
+                            }
+                        });
             }
         });
+        Assert.assertTrue(semaphore.tryAcquire(TIMEOUT_MS, TimeUnit.MILLISECONDS));
     }
 
     private SavePageRequest[] getRequestsInQueue() throws InterruptedException {

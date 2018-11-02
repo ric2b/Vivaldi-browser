@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/helper.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
@@ -14,8 +16,11 @@
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/login/auth/user_context.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_connection_handler.h"
 #include "chromeos/network/network_handler.h"
@@ -23,6 +28,8 @@
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_util.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -105,11 +112,11 @@ void NetworkStateHelper::GetConnectedWifiNetwork(std::string* out_onc_spec) {
   std::unique_ptr<base::DictionaryValue> copied_onc(
       new base::DictionaryValue());
   copied_onc->Set(onc::toplevel_config::kType,
-                  base::MakeUnique<base::Value>(onc::network_type::kWiFi));
+                  std::make_unique<base::Value>(onc::network_type::kWiFi));
   copied_onc->Set(onc::network_config::WifiProperty(onc::wifi::kHexSSID),
-                  base::MakeUnique<base::Value>(hex_ssid));
+                  std::make_unique<base::Value>(hex_ssid));
   copied_onc->Set(onc::network_config::WifiProperty(onc::wifi::kSecurity),
-                  base::MakeUnique<base::Value>(security));
+                  std::make_unique<base::Value>(security));
   base::JSONWriter::Write(*copied_onc.get(), out_onc_spec);
 }
 
@@ -125,7 +132,7 @@ void NetworkStateHelper::CreateAndConnectNetworkFromOnc(
   if (!root || !root->GetAsDictionary(&toplevel_onc)) {
     LOG(ERROR) << kInvalidJsonError << ": " << error;
     std::unique_ptr<base::DictionaryValue> error_data =
-        base::MakeUnique<base::DictionaryValue>();
+        std::make_unique<base::DictionaryValue>();
     error_data->SetString(network_handler::kErrorName, kInvalidJsonError);
     error_data->SetString(network_handler::kErrorDetail, error);
     error_callback.Run(kInvalidJsonError, std::move(error_data));
@@ -162,7 +169,8 @@ void NetworkStateHelper::OnCreateConfiguration(
     const std::string& guid) const {
   // Connect to the network.
   NetworkHandler::Get()->network_connection_handler()->ConnectToNetwork(
-      service_path, success_callback, error_callback, false);
+      service_path, success_callback, error_callback,
+      false /* check_error_state */, ConnectCallbackMode::ON_COMPLETED);
 }
 
 content::StoragePartition* GetSigninPartition() {
@@ -186,6 +194,18 @@ net::URLRequestContextGetter* GetSigninContext() {
     return nullptr;
 
   return signin_partition->GetURLRequestContext();
+}
+
+void SaveSyncPasswordDataToProfile(const UserContext& user_context,
+                                   Profile* profile) {
+  DCHECK(user_context.GetSyncPasswordData().has_value());
+  scoped_refptr<password_manager::PasswordStore> password_store =
+      PasswordStoreFactory::GetForProfile(profile,
+                                          ServiceAccessType::EXPLICIT_ACCESS);
+  if (password_store) {
+    password_store->SaveSyncPasswordHash(
+        user_context.GetSyncPasswordData().value());
+  }
 }
 
 }  // namespace login

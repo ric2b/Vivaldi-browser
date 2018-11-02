@@ -4,8 +4,8 @@
 
 #include "chrome/browser/extensions/tab_helper.h"
 
+#include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -23,6 +23,7 @@
 #include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/extensions/webstore_inline_installer.h"
 #include "chrome/browser/extensions/webstore_inline_installer_factory.h"
+#include "chrome/browser/installable/installable_metrics.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/shell_integration.h"
@@ -47,12 +48,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_web_contents_observer.h"
 #include "extensions/browser/image_loader.h"
-#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
 #include "extensions/common/extension_messages.h"
@@ -61,6 +62,7 @@
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
+#include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "url/url_constants.h"
 
 #if defined(OS_WIN)
@@ -165,9 +167,9 @@ TabHelper::TabHelper(content::WebContents* web_contents)
   // The ActiveTabPermissionManager requires a session ID; ensure this
   // WebContents has one.
   SessionTabHelper::CreateForWebContents(web_contents);
-  // The Unretained() is safe because ForEachFrame is synchronous.
+  // The Unretained() is safe because ForEachFrame() is synchronous.
   web_contents->ForEachFrame(
-      base::Bind(&TabHelper::SetTabId, base::Unretained(this)));
+      base::BindRepeating(&TabHelper::SetTabId, base::Unretained(this)));
   active_tab_permission_granter_.reset(new ActiveTabPermissionGranter(
       web_contents,
       SessionTabHelper::IdForTab(web_contents),
@@ -324,8 +326,6 @@ bool TabHelper::OnMessageReceived(const IPC::Message& message,
                                   content::RenderFrameHost* sender) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP_WITH_PARAM(TabHelper, message, sender)
-    IPC_MESSAGE_HANDLER(ChromeFrameHostMsg_DidGetWebApplicationInfo,
-                        OnDidGetWebApplicationInfo)
     IPC_MESSAGE_HANDLER(ExtensionHostMsg_GetAppInstallState,
                         OnGetAppInstallState)
     IPC_MESSAGE_HANDLER(ExtensionHostMsg_ContentScriptsExecuting,
@@ -349,12 +349,13 @@ void TabHelper::DidCloneToNewWebContents(WebContents* old_web_contents,
   new_helper->extension_app_icon_ = extension_app_icon_;
 }
 
-void TabHelper::OnDidGetWebApplicationInfo(content::RenderFrameHost* sender,
-                                           const WebApplicationInfo& info) {
+void TabHelper::OnDidGetWebApplicationInfo(
+    chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame,
+    const WebApplicationInfo& info) {
   web_app_info_ = info;
 
-  NavigationEntry* entry =
-      web_contents()->GetController().GetLastCommittedEntry();
+  content::WebContents* contents = web_contents();
+  NavigationEntry* entry = contents->GetController().GetLastCommittedEntry();
   if (!entry || last_committed_nav_entry_unique_id_ != entry->GetUniqueID())
     return;
   last_committed_nav_entry_unique_id_ = 0;
@@ -362,15 +363,17 @@ void TabHelper::OnDidGetWebApplicationInfo(content::RenderFrameHost* sender,
   switch (pending_web_app_action_) {
     case CREATE_HOSTED_APP: {
       if (web_app_info_.app_url.is_empty())
-        web_app_info_.app_url = web_contents()->GetURL();
+        web_app_info_.app_url = contents->GetLastCommittedURL();
 
       if (web_app_info_.title.empty())
-        web_app_info_.title = web_contents()->GetTitle();
+        web_app_info_.title = contents->GetTitle();
       if (web_app_info_.title.empty())
         web_app_info_.title = base::UTF8ToUTF16(web_app_info_.app_url.spec());
 
       bookmark_app_helper_.reset(
-          new BookmarkAppHelper(profile_, web_app_info_, web_contents()));
+          new BookmarkAppHelper(profile_, web_app_info_, contents,
+                                InstallableMetrics::GetInstallSource(
+                                    contents, InstallTrigger::MENU)));
       bookmark_app_helper_->Create(base::Bind(
           &TabHelper::FinishCreateBookmarkApp, weak_ptr_factory_.GetWeakPtr()));
       break;
@@ -445,7 +448,7 @@ void TabHelper::DoInlineInstall(
     if (observe_install_stage || observe_download_progress) {
       DCHECK_EQ(0u, install_observers_.count(webstore_item_id));
       install_observers_[webstore_item_id] =
-          base::MakeUnique<InlineInstallObserver>(
+          std::make_unique<InlineInstallObserver>(
               this, web_contents()->GetBrowserContext(), webstore_item_id,
               observe_download_progress, observe_install_stage);
     }
@@ -596,12 +599,21 @@ void TabHelper::GetApplicationInfo(WebAppAction action) {
   if (!entry)
     return;
 
+  // This DCHECK added to ensure this function is called only once.
+  DCHECK_EQ(pending_web_app_action_, NONE);
+
   pending_web_app_action_ = action;
   last_committed_nav_entry_unique_id_ = entry->GetUniqueID();
 
-  content::RenderFrameHost* main_frame = web_contents()->GetMainFrame();
-  main_frame->Send(
-      new ChromeFrameMsg_GetWebApplicationInfo(main_frame->GetRoutingID()));
+  chrome::mojom::ChromeRenderFrameAssociatedPtr chrome_render_frame;
+  web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
+      &chrome_render_frame);
+  // Bind the InterfacePtr into the callback so that it's kept alive
+  // until there's either a connection error or a response.
+  auto* web_app_info_proxy = chrome_render_frame.get();
+  web_app_info_proxy->GetWebApplicationInfo(
+      base::Bind(&TabHelper::OnDidGetWebApplicationInfo, base::Unretained(this),
+                 base::Passed(&chrome_render_frame)));
 }
 
 void TabHelper::SetTabId(content::RenderFrameHost* render_frame_host) {

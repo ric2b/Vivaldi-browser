@@ -42,6 +42,7 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/browser/ui/util/top_view_controller.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/referrer.h"
@@ -54,6 +55,9 @@
 
 // Key for saving collapsed session state in the UserDefaults.
 NSString* const kCollapsedSectionsKey = @"ChromeRecentTabsCollapsedSections";
+// Accessibility identifier for the main view.
+NSString* const kRecentTabsTableViewControllerAccessibilityIdentifier =
+    @"recent_tabs_view_controller";
 
 namespace {
 
@@ -195,7 +199,8 @@ enum CellType {
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.view.accessibilityIdentifier = @"recent_tabs_view_controller";
+  self.view.accessibilityIdentifier =
+      kRecentTabsTableViewControllerAccessibilityIdentifier;
   self.tableView.rowHeight = UITableViewAutomaticDimension;
   self.tableView.estimatedRowHeight =
       [SessionTabDataView desiredHeightInUITableViewCell];
@@ -520,9 +525,10 @@ enum CellType {
 #pragma mark - Distant Sessions helpers
 
 - (void)refreshUserState:(SessionsSyncUserState)newSessionState {
-  if (newSessionState == _sessionState &&
-      _sessionState !=
-          SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) {
+  if ((newSessionState == _sessionState &&
+       _sessionState !=
+           SessionsSyncUserState::USER_SIGNED_IN_SYNC_ON_WITH_SESSIONS) ||
+      _signinPromoViewMediator.isSigninInProgress) {
     // No need to refresh the sections.
     return;
   }
@@ -626,12 +632,12 @@ enum CellType {
     // Get view coordinates in local space.
     CGPoint viewCoordinate = [longPressGesture locationInView:self.tableView];
     params.location = viewCoordinate;
-    params.view.reset(self.tableView);
+    params.view = self.tableView;
 
     // Present sheet/popover using controller that is added to view hierarchy.
-    UIViewController* topController = [params.view window].rootViewController;
-    while (topController.presentedViewController)
-      topController = topController.presentedViewController;
+    // TODO(crbug.com/754642): Remove TopPresentedViewController().
+    UIViewController* topController =
+        top_view_controller::TopPresentedViewController();
 
     _contextMenuCoordinator =
         [[ContextMenuCoordinator alloc] initWithBaseViewController:topController
@@ -1023,6 +1029,10 @@ enum CellType {
   DCHECK([subview isKindOfClass:[SigninPromoView class]]);
   SigninPromoView* signinPromoView = (SigninPromoView*)subview;
   [configurator configureSigninPromoView:signinPromoView];
+}
+
+- (void)signinDidFinish {
+  [self.delegate refreshSessionsViewRecentTabsTableViewController:self];
 }
 
 #pragma mark - SyncPresenter

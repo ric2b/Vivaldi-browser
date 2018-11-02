@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Dieses Gerät wird durch <ph name="DOMAIN" /> verwaltet.</translation>
 <translation id="2050339315714019657">Hochformat</translation>
 <translation id="2067602449040652523">Tastaturhelligkeit</translation>
-<translation id="207439088875642105">Dies ist ein Konto für Kinder, das von <ph name="FIRST_PARENT_EMAIL" /> und <ph name="SECOND_PARENT_EMAIL" /> verwaltet wird.</translation>
 <translation id="2122028596993374965">Streamen von <ph name="TAB_NAME" /> an <ph name="RECEIVER_NAME" /> beenden</translation>
 <translation id="2127372758936585790">Schwachstrom-Ladegerät</translation>
 <translation id="2144487987174258011">Neu starten, um den Adobe Flash Player zu aktualisieren</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Mono-Audio</translation>
 <translation id="3009178788565917040">Ausgang</translation>
 <translation id="3019353588588144572">Verbleibende Zeit, bis der Akku vollständig geladen ist: <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Dies ist ein Konto für Kinder, das von <ph name="MANAGER_EMAIL" /> verwaltet wird.</translation>
 <translation id="3077734595579995578">Shift</translation>
 <translation id="3087734570205094154">Unten</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Lupe</translation>
 <translation id="3477079411857374384">Strg + Shift + Leertaste</translation>
 <translation id="3510164367642747937">Mauszeiger hervorheben</translation>
+<translation id="3513798432020909783">Konto verwaltet von <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Zurücksetzen auf "<ph name="FROM_LOCALE" />" (Neustart erforderlich)</translation>
 <translation id="3582792037806681688">Die Mehrfachanmeldung wurde für einen Nutzer in dieser Sitzung deaktiviert.</translation>
 <translation id="3595596368722241419">Akku voll</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Sperren</translation>
 <translation id="3798670284305777884">Lautsprecher (intern)</translation>
 <translation id="3846575436967432996">Keine Netzwerkinformationen verfügbar</translation>
+<translation id="385051799172605136">Zurück</translation>
 <translation id="3891340733213178823">Drücken Sie zum Abmelden zweimal Strg + Shift + Q.</translation>
 <translation id="3893630138897523026">ChromeVox (gesprochenes Feedback)</translation>
 <translation id="3899995891769452915">Spracheingabe</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Instant Tethering</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Alle verfügbaren Nutzer wurden bereits zur Sitzung hinzugefügt.</translation>
+<translation id="5457599981699367932">Als Gast nutzen</translation>
 <translation id="553675580533261935">Sitzung wird beendet</translation>
 <translation id="5548285847212963613">Die Erweiterung "<ph name="EXTENSION_NAME" />" kann die Verbindung mit diesem Netzwerk unterstützen.</translation>
 <translation id="5571066253365925590">Bluetooth aktiviert</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Antippen und Ziehen</translation>
 <translation id="5777841717266010279">Bildschirmfreigabe beenden?</translation>
 <translation id="57838592816432529">Stummschalten</translation>
+<translation id="5832805196449965646">Person hinzufügen</translation>
 <translation id="5860033963881614850">Aus</translation>
 <translation id="5895138241574237353">Neu starten</translation>
 <translation id="5901316534475909376">Shift + Esc</translation>
@@ -273,6 +275,7 @@ Nutzen Sie diese Funktion nur mit vertrauenswürdigen Konten.</translation>
 <translation id="7829386189513694949">Starkes Signal</translation>
 <translation id="7904094684485781019">Der Administrator dieses Kontos hat keine Mehrfachanmeldung zugelassen.</translation>
 <translation id="7933084174919150729">Google Assistant ist nur für das Hauptprofil verfügbar.</translation>
+<translation id="79341161159229895">Konto verwaltet von <ph name="FIRST_PARENT_EMAIL" /> und <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Nach Mobilfunknetzen wird gesucht…</translation>
 <translation id="7982789257301363584">Netzwerk</translation>
 <translation id="7994370417837006925">Mehrfachanmeldung</translation>
@@ -289,6 +292,7 @@ Nutzen Sie diese Funktion nur mit vertrauenswürdigen Konten.</translation>
 <translation id="8261506727792406068">Löschen</translation>
 <translation id="8308637677604853869">Vorheriges Menü</translation>
 <translation id="8351131234907093545">Notiz erstellen</translation>
+<translation id="8392451568018454956">Optionsmenü für <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Einstellungen</translation>
 <translation id="8433186206711564395">Netzwerkeinstellungen</translation>
 <translation id="8433977262951327081">Die Tastenkombination zum Aufrufen des Infofelds für die Eingabeoptionen in der Ablage hat sich geändert. Bitte drücken Sie <ph name="NEW_SHORTCUT" /> statt <ph name="OLD_SHORTCUT" />.</translation>

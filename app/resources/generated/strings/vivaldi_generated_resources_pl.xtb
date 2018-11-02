@@ -10,6 +10,7 @@
 <translation id="1054153489933238809">Otwórz oryginalny obraz w nowej karcie</translation>
 <translation id="1056898198331236512">Ostrzeżenie</translation>
 <translation id="1084824384139382525">Kopiuj adr&amp;es linku</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD,plural, =1{Kontynuuj pobieranie}few{Kontynuuj pobieranie}many{Kontynuuj pobieranie}other{Kontynuuj pobieranie}}</translation>
 <translation id="1128109161498068552">Nie zezwalaj żadnym stronom na używanie wiadomości zarezerwowanych dla systemu w celu uzyskania dostępu do urządzeń MIDI</translation>
 <translation id="114140604515785785">Główny katalog rozszerzenia:</translation>
 <translation id="1163361280229063150">{NUM_DOWNLOAD,plural, =1{Trwa pobieranie pliku. Czy chcesz je anulować i wyjść z trybu prywatnego?}few{Trwa pobieranie # plików. Czy chcesz je anulować i wyjść z trybu prywatnego?}many{Trwa pobieranie # plików. Czy chcesz je anulować i wyjść z trybu prywatnego?}other{Trwa pobieranie # pliku. Czy chcesz je anulować i wyjść z trybu prywatnego?}}</translation>
@@ -41,6 +42,7 @@
 <translation id="1588438908519853928">Normalny</translation>
 <translation id="1588870296199743671">Otwórz link w...</translation>
 <translation id="159359590073980872">Pamięć podręczna grafiki</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD,plural, =1{Pobieranie w toku}few{Pobieranie w toku}many{Pobieranie w toku}other{Pobieranie w toku}}</translation>
 <translation id="1601560923496285236">Zastosuj</translation>
 <translation id="1603914832182249871">(tryb prywatny)</translation>
 <translation id="1620510694547887537">Kamera</translation>
@@ -59,12 +61,14 @@
 <translation id="176587472219019965">Nowe &amp;okno</translation>
 <translation id="1769104665586091481">Otwórz link w nowym &amp;oknie</translation>
 <translation id="1789575671122666129">Wyskakujące okienka</translation>
+<translation id="1805822111539868586">Zbadaj widok</translation>
 <translation id="1815083418640426271">Wklej jako zwykły tekst</translation>
 <translation id="1828901632669367785">Drukuj w oknie systemowym…</translation>
 <translation id="1846308012215045257">Kliknij prawym przyciskiem myszy, aby uruchomić <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Obróć w &amp;prawo</translation>
 <translation id="1859234291848436338">Kierunek pisania</translation>
 <translation id="1886996562706621347">Zezwalaj stronom na wyświetlanie monitu o skonfigurowanie ich jako domyślnego modułu obsługi protokołu (zalecane)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Zaznacz &amp;wszystko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Usuń wszystkie</translation>
@@ -142,6 +146,7 @@
 <translation id="2890678560483811744">Odwołanie do strony spoza zakresu</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> nie może skomunikować się z tą drukarką. Upewnij się, że jest ona podłączona i spróbuj ponownie.</translation>
 <translation id="2904456025988372123">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego</translation>
+<translation id="2911898792135283060">Generuj hasło...</translation>
 <translation id="2913331724188855103">Zezwalaj stronom na zapisywanie danych w ciasteczkach i ich odczytywanie (zalecane)</translation>
 <translation id="2916745397441987255">Szukaj rozszerzeń</translation>
 <translation id="2932883381142163287">Zgłoś nadużycie</translation>
@@ -200,6 +205,7 @@
 <translation id="3494769164076977169">Pytaj gdy strona próbuje automatycznie pobrać pliki po pobraniu pierwszego (zalecane)</translation>
 <translation id="3505030558724226696">Cofnij dostęp do urządzeń</translation>
 <translation id="3511307672085573050">Kopiuj adr&amp;es linku</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD,plural, =1{Anuluj pobieranie}few{Anuluj pobieranie}many{Anuluj pobieranie}other{Anuluj pobieranie}}</translation>
 <translation id="3523642406908660543">Pytaj gdy strona chce uzyskać dostęp do komputera przez wtyczkę (zalecane)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce udostępnić drukarkę &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; należącej do ciebie grupie: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jeśli się na to zgodzisz, wszyscy członkowie grupy będą mogli na niej drukować.</translation>
 <translation id="3587482841069643663">Wszystkie</translation>
@@ -260,6 +266,7 @@
 <translation id="4256316378292851214">&amp;Zapisz film jako...</translation>
 <translation id="4278390842282768270">Dozwolone</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> KB (aktywne <ph name="NUM_KILOBYTES_LIVE" /> KB)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD,plural, =1{Kontynuuj pobieranie}few{Kontynuuj pobieranie}many{Kontynuuj pobieranie}other{Kontynuuj pobieranie}}</translation>
 <translation id="4345587454538109430">Konfiguruj...</translation>
 <translation id="4348766275249686434">Gromadź błędy</translation>
 <translation id="4363771538994847871">Nie wykryto żadnego urządzenia Cast. Potrzebujesz pomocy?</translation>
@@ -357,6 +364,7 @@
 <translation id="5715711091495208045">Broker wtyczek: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Przepraszamy, nie możemy pokazać kodu tego błędu.</translation>
 <translation id="5746169159649715125">Zapisz jako PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD,plural, =1{Anuluj pobieranie}few{Anuluj pobieranie}many{Anuluj pobieranie}other{Anuluj pobieranie}}</translation>
 <translation id="5759728514498647443">Dokumenty wysłane do drukowania z <ph name="APP_NAME" /> można odczytać w aplikacji <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">&amp;Zapisz dźwięk jako...</translation>
 <translation id="577624874850706961">Szukaj ciasteczek</translation>
@@ -406,7 +414,6 @@
 <translation id="6295158916970320988">Wszystkie strony</translation>
 <translation id="6295855836753816081">Zapisywanie…</translation>
 <translation id="6308937455967653460">Zapisz link ja&amp;ko...</translation>
-<translation id="6314335155547195432">Wygeneruj hasło</translation>
 <translation id="6326855256003666642">Liczba sygnałów utrzymania aktywności</translation>
 <translation id="6370021412472292592">Nie można załadować pliku manifestu.</translation>
 <translation id="6374469231428023295">Spróbuj ponownie</translation>
@@ -490,7 +497,6 @@
 <translation id="7564847347806291057">Zakończ proces</translation>
 <translation id="7576690715254076113">Sortuj</translation>
 <translation id="7629827748548208700">Karta: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Anuluj</translation>
 <translation id="7661259717474717992">Zezwalaj stronom na zapis i odczyt danych w ciasteczkach</translation>
 <translation id="7663719505383602579">Odbiornik ARC: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Zainstalowane przez twojego administratora</translation>
@@ -606,6 +612,7 @@ Przechowuj plik klucza w bezpiecznym miejscu. Będzie on potrzebny do utworzenia
 <translation id="9027459031423301635">Otwórz link w nowej &amp;karcie</translation>
 <translation id="9056810968620647706">Nie znaleziono żadnych dopasowań.</translation>
 <translation id="9088234649737575428">Wtyczka <ph name="PLUGIN_NAME" /> została zablokowana przez politykę firmy</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD,plural, =1{Pobieranie w toku}few{Pobieranie w toku}many{Pobieranie w toku}other{Pobieranie w toku}}</translation>
 <translation id="9137916601698928395">Otwórz link jako <ph name="USER" /></translation>
 <translation id="9153341767479566106">Pozostałe rozszerzenia, których nie udało się załadować:</translation>
 <translation id="9170848237812810038">&amp;Cofnij</translation>

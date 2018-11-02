@@ -6,15 +6,15 @@
       "value": "true",
       "internal_value": "true"
     },
-    "docked_devtools": {
-      "friendly_name": "Allow for docking devtools",
-      "description": "Lets Vivaldi support docking devtools with the main window",
+    "bookmark_menu": {
+      "friendly_name": "Bookmark menu",
+      "description": "Enables a bookmark entry in the main menu for Windows and Linux. Always enabled for Mac.",
       "value": "true",
       "internal_value": "true"
     },
-    "window_panel": {
-      "friendly_name": "Window panel",
-      "description": "Enables Window Panel",
+    "docked_devtools": {
+      "friendly_name": "Allow for docking devtools",
+      "description": "Lets Vivaldi support docking devtools with the main window",
       "value": "true",
       "internal_value": "true"
     },

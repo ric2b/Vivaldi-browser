@@ -82,6 +82,30 @@ enum EmbeddedProfileResult : int {
   EMBEDDED_PROFILE_ACTION_MAX
 };
 
+enum Happening : int {
+  ON_DID_CREATE_METRICS_LOG,
+  SCHEDULE_SOURCES_CHECK,
+  CHECK_AND_MERGE_SOURCES,
+  RECORD_SOURCES_CHECKED,
+  CHECK_AND_MAP_SOURCE,
+  FINISHED_WITH_SOURCE,
+  RECORD_SOURCE_AS_READ,
+  DELETE_FILE_ASYNC,
+  MERGE_HISTOGRAM_DELTAS_FROM_SOURCE,
+  RECORD_HISTOGRAM_SNAPSHOTS_FROM_SOURCE,
+  PROVIDE_INDEPENDENT_METRICS,
+  SCHEDULE_SOURCES_FAILED,
+  OLD_DELETE_FILE_FAILED,
+  OVER_DELETE_FILE_FAILED,
+  ASYNC_DELETE_FILE_FAILED,
+  MAX_HAPPENINGS
+};
+
+void RecordHappening(Happening happening) {
+  UMA_HISTOGRAM_ENUMERATION("UMA.FileMetricsProvider.Happening", happening,
+                            MAX_HAPPENINGS);
+}
+
 void RecordEmbeddedProfileResult(EmbeddedProfileResult result) {
   UMA_HISTOGRAM_ENUMERATION("UMA.FileMetricsProvider.EmbeddedProfileResult",
                             result, EMBEDDED_PROFILE_ACTION_MAX);
@@ -92,8 +116,12 @@ void DeleteFileWhenPossible(const base::FilePath& path) {
   // scope. This is the only cross-platform safe way to delete a file that may
   // be open elsewhere, a distinct possibility given the asynchronous nature
   // of the delete task.
-  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
-                            base::File::FLAG_DELETE_ON_CLOSE);
+  {
+    base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ |
+                              base::File::FLAG_DELETE_ON_CLOSE);
+  }
+  if (base::PathExists(path))
+    RecordHappening(ASYNC_DELETE_FILE_FAILED);
 }
 
 // A task runner to use for testing.
@@ -137,6 +165,12 @@ struct FileMetricsProvider::SourceInfo {
   }
   ~SourceInfo() {}
 
+  struct FoundFile {
+    base::FilePath path;
+    base::FileEnumerator::FileInfo info;
+  };
+  using FoundFiles = base::flat_map<base::Time, FoundFile>;
+
   // How to access this source (file/dir, atomic/active).
   const SourceType type;
 
@@ -146,6 +180,9 @@ struct FileMetricsProvider::SourceInfo {
   // Where on disk the directory is located. This will only be populated when
   // a directory is being monitored.
   base::FilePath directory;
+
+  // The files found in the above directory, ordered by last-modified.
+  std::unique_ptr<FoundFiles> found_files;
 
   // Where on disk the file is located. If a directory is being monitored,
   // this will be updated for whatever file is being read.
@@ -252,69 +289,77 @@ bool FileMetricsProvider::LocateNextFileInDirectory(SourceInfo* source) {
   DCHECK_EQ(SOURCE_HISTOGRAMS_ATOMIC_DIR, source->type);
   DCHECK(!source->directory.empty());
 
-  // Open the directory and find all the files, remembering the last-modified
-  // time of each.
-  struct FoundFile {
-    base::FilePath path;
-    base::FileEnumerator::FileInfo info;
-  };
-  base::flat_map<base::Time, FoundFile> found_files;
-  base::FilePath file_path;
-  base::Time now_time = base::Time::Now();
+  // Cumulative directory stats. These will remain zero if the directory isn't
+  // scanned but that's okay since any work they would cause to be done below
+  // would have been done during the first call where the directory was fully
+  // scanned.
   size_t total_size_kib = 0;  // Using KiB allows 4TiB even on 32-bit builds.
   size_t file_count = 0;
   size_t delete_count = 0;
-  base::FileEnumerator file_iter(source->directory, /*recursive=*/false,
-                                 base::FileEnumerator::FILES);
-  FoundFile found_file;
-  for (found_file.path = file_iter.Next(); !found_file.path.empty();
-       found_file.path = file_iter.Next()) {
-    found_file.info = file_iter.GetInfo();
 
-    // Ignore directories and zero-sized files.
-    if (found_file.info.IsDirectory() || found_file.info.GetSize() == 0)
-      continue;
+  base::Time now_time = base::Time::Now();
+  if (!source->found_files) {
+    source->found_files = base::MakeUnique<SourceInfo::FoundFiles>();
+    base::FileEnumerator file_iter(source->directory, /*recursive=*/false,
+                                   base::FileEnumerator::FILES);
+    SourceInfo::FoundFile found_file;
 
-    // Ignore temporary files.
-    base::FilePath::CharType first_character =
-        found_file.path.BaseName().value().front();
-    if (first_character == FILE_PATH_LITERAL('.') ||
-        first_character == FILE_PATH_LITERAL('_')) {
-      continue;
+    // Open the directory and find all the files, remembering the last-modified
+    // time of each.
+    for (found_file.path = file_iter.Next(); !found_file.path.empty();
+         found_file.path = file_iter.Next()) {
+      found_file.info = file_iter.GetInfo();
+
+      // Ignore directories.
+      if (found_file.info.IsDirectory())
+        continue;
+
+      // Ignore temporary files.
+      base::FilePath::CharType first_character =
+          found_file.path.BaseName().value().front();
+      if (first_character == FILE_PATH_LITERAL('.') ||
+          first_character == FILE_PATH_LITERAL('_')) {
+        continue;
+      }
+
+      // Ignore non-PMA (Persistent Memory Allocator) files.
+      if (found_file.path.Extension() !=
+          base::PersistentMemoryAllocator::kFileExtension) {
+        continue;
+      }
+
+      // Process real files.
+      total_size_kib += found_file.info.GetSize() >> 10;
+      base::Time modified = found_file.info.GetLastModifiedTime();
+      if (modified > source->last_seen) {
+        // This file hasn't been read. Remember it (unless from the future).
+        if (modified <= now_time)
+          source->found_files->emplace(modified, std::move(found_file));
+        ++file_count;
+      } else {
+        // This file has been read. Try to delete it. Ignore any errors because
+        // the file may be un-removeable by this process. It could, for example,
+        // have been created by a privileged process like setup.exe. Even if it
+        // is not removed, it will continue to be ignored bacuse of the older
+        // modification time.
+        base::DeleteFile(found_file.path, /*recursive=*/false);
+        if (base::PathExists(found_file.path))
+          RecordHappening(OLD_DELETE_FILE_FAILED);
+        ++delete_count;
+      }
     }
 
-    // Ignore non-PMA (Persistent Memory Allocator) files.
-    if (found_file.path.Extension() !=
-        base::PersistentMemoryAllocator::kFileExtension) {
-      continue;
-    }
-
-    // Process real files.
-    total_size_kib += found_file.info.GetSize() >> 10;
-    base::Time modified = found_file.info.GetLastModifiedTime();
-    if (modified > source->last_seen) {
-      // This file hasn't been read. Remember it (unless it's from the future).
-      if (modified <= now_time)
-        found_files.emplace(modified, std::move(found_file));
-      ++file_count;
-    } else {
-      // This file has been read. Try to delete it. Ignore any errors because
-      // the file may be un-removeable by this process. It could, for example,
-      // have been created by a privileged process like setup.exe. Even if it
-      // is not removed, it will continue to be ignored bacuse of the older
-      // modification time.
-      base::DeleteFile(found_file.path, /*recursive=*/false);
-      ++delete_count;
-    }
+    UMA_HISTOGRAM_COUNTS_100("UMA.FileMetricsProvider.DirectoryFiles",
+                             file_count);
   }
-
-  UMA_HISTOGRAM_COUNTS_100("UMA.FileMetricsProvider.DirectoryFiles",
-                           file_count);
 
   // Filter files from the front until one is found for processing.
   bool have_file = false;
-  while (!found_files.empty()) {
-    const FoundFile& found = found_files.begin()->second;
+  while (!source->found_files->empty()) {
+    SourceInfo::FoundFile found =
+        std::move(source->found_files->begin()->second);
+    source->found_files->erase(source->found_files->begin());
+
     bool too_many =
         source->max_dir_files > 0 && file_count > source->max_dir_files;
     bool too_big =
@@ -324,13 +369,14 @@ bool FileMetricsProvider::LocateNextFileInDirectory(SourceInfo* source) {
         now_time - found.info.GetLastModifiedTime() > source->max_age;
     if (too_many || too_big || too_old) {
       base::DeleteFile(found.path, /*recursive=*/false);
+      if (base::PathExists(found.path))
+        RecordHappening(OVER_DELETE_FILE_FAILED);
       ++delete_count;
       --file_count;
       total_size_kib -= found.info.GetSize() >> 10;
       RecordAccessResult(too_many ? ACCESS_RESULT_TOO_MANY_FILES
                                   : too_big ? ACCESS_RESULT_TOO_MANY_BYTES
                                             : ACCESS_RESULT_TOO_OLD);
-      found_files.erase(found_files.begin());
       continue;
     }
 
@@ -344,7 +390,6 @@ bool FileMetricsProvider::LocateNextFileInDirectory(SourceInfo* source) {
     // Record the result. Success will be recorded by the caller.
     if (result != ACCESS_RESULT_THIS_PID)
       RecordAccessResult(result);
-    found_files.erase(found_files.begin());
   }
 
   UMA_HISTOGRAM_COUNTS_100("UMA.FileMetricsProvider.DeletedFiles",
@@ -356,6 +401,8 @@ bool FileMetricsProvider::LocateNextFileInDirectory(SourceInfo* source) {
 // static
 void FileMetricsProvider::FinishedWithSource(SourceInfo* source,
                                              AccessResult result) {
+  RecordHappening(FINISHED_WITH_SOURCE);
+
   // Different source types require different post-processing.
   switch (source->type) {
     case SOURCE_HISTOGRAMS_ATOMIC_FILE:
@@ -367,6 +414,7 @@ void FileMetricsProvider::FinishedWithSource(SourceInfo* source,
       // the browser.
       if (result == ACCESS_RESULT_SUCCESS ||
           result == ACCESS_RESULT_NOT_MODIFIED ||
+          result == ACCESS_RESULT_MEMORY_DELETED ||
           result == ACCESS_RESULT_TOO_OLD) {
         DeleteFileWhenPossible(source->path);
       }
@@ -381,31 +429,49 @@ void FileMetricsProvider::FinishedWithSource(SourceInfo* source,
 // static
 void FileMetricsProvider::CheckAndMergeMetricSourcesOnTaskRunner(
     SourceInfoList* sources) {
+  RecordHappening(CHECK_AND_MERGE_SOURCES);
+
   // This method has all state information passed in |sources| and is intended
   // to run on a worker thread rather than the UI thread.
   for (std::unique_ptr<SourceInfo>& source : *sources) {
-    AccessResult result = CheckAndMapMetricSource(source.get());
+    AccessResult result;
+    do {
+      result = CheckAndMapMetricSource(source.get());
 
-    // Some results are not reported in order to keep the dashboard clean.
-    if (result != ACCESS_RESULT_DOESNT_EXIST &&
-        result != ACCESS_RESULT_NOT_MODIFIED &&
-        result != ACCESS_RESULT_THIS_PID) {
-      RecordAccessResult(result);
-    }
+      // Some results are not reported in order to keep the dashboard clean.
+      if (result != ACCESS_RESULT_DOESNT_EXIST &&
+          result != ACCESS_RESULT_NOT_MODIFIED &&
+          result != ACCESS_RESULT_THIS_PID) {
+        RecordAccessResult(result);
+      }
 
-    // Metrics associated with internal profiles have to be fetched directly
-    // so just keep the mapping for use by the main thread.
-    if (source->association == ASSOCIATE_INTERNAL_PROFILE)
-      continue;
+      // If there are no files (or no more files) in this source, stop now.
+      if (result == ACCESS_RESULT_DOESNT_EXIST)
+        break;
 
-    // Mapping was successful. Merge it.
-    if (result == ACCESS_RESULT_SUCCESS) {
-      MergeHistogramDeltasFromSource(source.get());
-      DCHECK(source->read_complete);
-    }
+      // Mapping was successful. Merge it.
+      if (result == ACCESS_RESULT_SUCCESS) {
+        // Metrics associated with internal profiles have to be fetched directly
+        // so just keep the mapping for use by the main thread.
+        if (source->association == ASSOCIATE_INTERNAL_PROFILE)
+          break;
 
-    // All done with this source.
-    FinishedWithSource(source.get(), result);
+        MergeHistogramDeltasFromSource(source.get());
+        DCHECK(source->read_complete);
+      }
+
+      // All done with this source.
+      FinishedWithSource(source.get(), result);
+
+      // If it's a directory, keep trying until a file is successfully opened.
+      // When there are no more files, ACCESS_RESULT_DOESNT_EXIST will be
+      // returned and the loop will exit above.
+    } while (result != ACCESS_RESULT_SUCCESS && !source->directory.empty());
+
+    // If the set of known files is empty, clear the object so the next run
+    // will do a fresh scan of the directory.
+    if (source->found_files && source->found_files->empty())
+      source->found_files.reset();
   }
 }
 
@@ -414,6 +480,8 @@ void FileMetricsProvider::CheckAndMergeMetricSourcesOnTaskRunner(
 // static
 FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
     SourceInfo* source) {
+  RecordHappening(CHECK_AND_MAP_SOURCE);
+
   // If source was read, clean up after it.
   if (source->read_complete)
     FinishedWithSource(source, ACCESS_RESULT_SUCCESS);
@@ -480,12 +548,21 @@ FileMetricsProvider::AccessResult FileMetricsProvider::CheckAndMapMetricSource(
   source->allocator = base::MakeUnique<base::PersistentHistogramAllocator>(
       std::move(memory_allocator));
 
+  // Check that an "independent" file has the necessary information present.
+  if (source->association == ASSOCIATE_INTERNAL_PROFILE &&
+      !PersistentSystemProfile::GetSystemProfile(
+          *source->allocator->memory_allocator(), nullptr)) {
+    return ACCESS_RESULT_NO_PROFILE;
+  }
+
   return ACCESS_RESULT_SUCCESS;
 }
 
 // static
 void FileMetricsProvider::MergeHistogramDeltasFromSource(SourceInfo* source) {
   DCHECK(source->allocator);
+  RecordHappening(MERGE_HISTOGRAM_DELTAS_FROM_SOURCE);
+
   base::PersistentHistogramAllocator::Iterator histogram_iter(
       source->allocator.get());
 
@@ -515,6 +592,7 @@ void FileMetricsProvider::RecordHistogramSnapshotsFromSource(
     base::HistogramSnapshotManager* snapshot_manager,
     SourceInfo* source) {
   DCHECK_NE(SOURCE_HISTOGRAMS_ACTIVE_FILE, source->type);
+  RecordHappening(RECORD_HISTOGRAM_SNAPSHOTS_FROM_SOURCE);
 
   base::PersistentHistogramAllocator::Iterator histogram_iter(
       source->allocator.get());
@@ -585,6 +663,8 @@ FileMetricsProvider::AccessResult FileMetricsProvider::HandleFilterSource(
 
 void FileMetricsProvider::ScheduleSourcesCheck() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  RecordHappening(SCHEDULE_SOURCES_CHECK);
+
   if (sources_to_check_.empty())
     return;
 
@@ -594,16 +674,19 @@ void FileMetricsProvider::ScheduleSourcesCheck() {
   // because that must complete before the reply runs.
   SourceInfoList* check_list = new SourceInfoList();
   std::swap(sources_to_check_, *check_list);
-  task_runner_->PostTaskAndReply(
+  bool success = task_runner_->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&FileMetricsProvider::CheckAndMergeMetricSourcesOnTaskRunner,
                  base::Unretained(check_list)),
       base::Bind(&FileMetricsProvider::RecordSourcesChecked,
                  weak_factory_.GetWeakPtr(), base::Owned(check_list)));
+  if (!success)
+    RecordHappening(SCHEDULE_SOURCES_FAILED);
 }
 
 void FileMetricsProvider::RecordSourcesChecked(SourceInfoList* checked) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  RecordHappening(RECORD_SOURCES_CHECKED);
 
   // Sources that still have an allocator at this point are read/write "active"
   // files that may need their contents merged on-demand. If there is no
@@ -640,11 +723,13 @@ void FileMetricsProvider::RecordSourcesChecked(SourceInfoList* checked) {
 }
 
 void FileMetricsProvider::DeleteFileAsync(const base::FilePath& path) {
+  RecordHappening(DELETE_FILE_ASYNC);
   task_runner_->PostTask(FROM_HERE, base::Bind(DeleteFileWhenPossible, path));
 }
 
 void FileMetricsProvider::RecordSourceAsRead(SourceInfo* source) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  RecordHappening(RECORD_SOURCE_AS_READ);
 
   // Persistently record the "last seen" timestamp of the source file to
   // ensure that the file is never read again unless it is modified again.
@@ -657,6 +742,7 @@ void FileMetricsProvider::RecordSourceAsRead(SourceInfo* source) {
 
 void FileMetricsProvider::OnDidCreateMetricsLog() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  RecordHappening(ON_DID_CREATE_METRICS_LOG);
 
   // Schedule a check to see if there are new metrics to load. If so, they will
   // be reported during the next collection run after this one. The check is run
@@ -678,6 +764,7 @@ bool FileMetricsProvider::ProvideIndependentMetrics(
     SystemProfileProto* system_profile_proto,
     base::HistogramSnapshotManager* snapshot_manager) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  RecordHappening(PROVIDE_INDEPENDENT_METRICS);
 
   while (!sources_with_profile_.empty()) {
     SourceInfo* source = sources_with_profile_.begin()->get();

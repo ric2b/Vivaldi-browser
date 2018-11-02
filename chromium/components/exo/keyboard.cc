@@ -69,24 +69,29 @@ bool ConsumedByIme(Surface* focus, const ui::KeyEvent* event) {
   if (event->key_code() == ui::VKEY_PROCESSKEY)
     return true;
 
+  // Except for PROCESSKEY, never discard "key-up" events. A keydown not paired
+  // by a keyup can trigger a never-ending key repeat in the client, which can
+  // never be desirable.
+  if (event->type() == ui::ET_KEY_RELEASED)
+    return false;
+
   // Case 2:
   // When IME ate a key event and generated a single character input, it leaves
   // the key event as-is, and in addition calls the active ui::TextInputClient's
   // InsertChar() method. (In our case, arc::ArcImeService::InsertChar()).
   //
-  // In Chrome OS (and Web) convention, the two calls wont't cause duplicates,
+  // In Chrome OS (and Web) convention, the two calls won't cause duplicates,
   // because key-down events do not mean any character inputs there.
   // (InsertChar issues a DOM "keypress" event, which is distinct from keydown.)
   // Unfortunately, this is not necessary the case for our clients that may
   // treat keydown as a trigger of text inputs. We need suppression for keydown.
-  if (event->type() == ui::ET_KEY_PRESSED) {
-    // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
-    const base::char16 ch = event->GetCharacter();
-    const bool is_control_char =
-        (0x00 <= ch && ch <= 0x1f) || (0x7f <= ch && ch <= 0x9f);
-    if (!is_control_char && !ui::IsSystemKeyModifier(event->flags()))
-      return true;
-  }
+  //
+  // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
+  const base::char16 ch = event->GetCharacter();
+  const bool is_control_char =
+      (0x00 <= ch && ch <= 0x1f) || (0x7f <= ch && ch <= 0x9f);
+  if (!is_control_char && !ui::IsSystemKeyModifier(event->flags()))
+    return true;
 
   // Case 3:
   // Workaround for apps that doesn't handle hardware keyboard events well.
@@ -127,6 +132,11 @@ bool IsReservedAccelerator(const ui::KeyEvent* event) {
     }
   }
   return false;
+}
+
+// Returns false if an accelerator is not reserved or it's not enabled.
+bool ProcessAcceleratorIfReserved(Surface* surface, ui::KeyEvent* event) {
+  return IsReservedAccelerator(event) && ProcessAccelerator(surface, event);
 }
 
 }  // namespace
@@ -179,7 +189,7 @@ bool Keyboard::HasObserver(KeyboardObserver* observer) const {
 }
 
 void Keyboard::RemoveObserver(KeyboardObserver* observer) {
-  observer_list_.HasObserver(observer);
+  observer_list_.RemoveObserver(observer);
 }
 
 void Keyboard::SetNeedKeyboardKeyAcks(bool need_acks) {
@@ -213,6 +223,17 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
       delegate_->OnKeyboardModifiers(modifier_flags_);
   }
 
+  // Process reserved accelerators before sending it to client.
+  if (focus_ && ProcessAcceleratorIfReserved(focus_, event)) {
+    // Discard a key press event if it's a reserved accelerator and it's
+    // enabled.
+    event->SetHandled();
+    // Send leave/enter event instead of key event, so the client can know the
+    // actual state of the keyboard.
+    SetFocus(focus_);
+    return;
+  }
+
   // When IME ate a key event, we use the event only for tracking key states and
   // ignore for further processing. Otherwise it is handled in two places (IME
   // and client) and causes undesired behavior.
@@ -220,7 +241,7 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
 
   switch (event->type()) {
     case ui::ET_KEY_PRESSED:
-      if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
+      if (focus_ && !consumed_by_ime && !event->handled()) {
         uint32_t serial =
             delegate_->OnKeyboardKey(event->time_stamp(), event->code(), true);
         if (are_keyboard_key_acks_needed_) {
@@ -233,7 +254,7 @@ void Keyboard::OnKeyEvent(ui::KeyEvent* event) {
       }
       break;
     case ui::ET_KEY_RELEASED:
-      if (focus_ && !consumed_by_ime && !IsReservedAccelerator(event)) {
+      if (focus_ && !consumed_by_ime && !event->handled()) {
         uint32_t serial =
             delegate_->OnKeyboardKey(event->time_stamp(), event->code(), false);
         if (are_keyboard_key_acks_needed_) {

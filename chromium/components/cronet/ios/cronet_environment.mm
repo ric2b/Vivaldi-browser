@@ -16,9 +16,7 @@
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
@@ -125,7 +123,10 @@ bool IsNetLogPathValid(const base::FilePath& path) {
 
 namespace cronet {
 
-base::SingleThreadTaskRunner* CronetEnvironment::GetNetworkThreadTaskRunner() {
+const double CronetEnvironment::kKeepDefaultThreadPriority = -1;
+
+base::SingleThreadTaskRunner* CronetEnvironment::GetNetworkThreadTaskRunner()
+    const {
   if (network_io_thread_) {
     return network_io_thread_->task_runner().get();
   }
@@ -258,7 +259,8 @@ CronetEnvironment::CronetEnvironment(const std::string& user_agent,
       user_agent_(user_agent),
       user_agent_partial_(user_agent_partial),
       net_log_(new net::NetLog),
-      enable_pkp_bypass_for_local_trust_anchors_(true) {}
+      enable_pkp_bypass_for_local_trust_anchors_(true),
+      network_thread_priority_(kKeepDefaultThreadPriority) {}
 
 void CronetEnvironment::Start() {
   // Threads setup.
@@ -319,6 +321,10 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   DCHECK(GetNetworkThreadTaskRunner()->BelongsToCurrentThread());
   base::DisallowBlocking();
 
+  if (network_thread_priority_ != kKeepDefaultThreadPriority) {
+    SetNetworkThreadPriorityOnNetworkThread(network_thread_priority_);
+  }
+
   static bool ssl_key_log_file_set = false;
   if (!ssl_key_log_file_set && !ssl_key_log_file_name_.empty()) {
     ssl_key_log_file_set = true;
@@ -337,8 +343,10 @@ void CronetEnvironment::InitializeOnNetworkThread() {
 
   URLRequestContextConfigBuilder context_config_builder;
   context_config_builder.enable_quic = quic_enabled_;   // Enable QUIC.
+  context_config_builder.quic_user_agent_id =
+      getDefaultQuicUserAgentId();                      // QUIC User Agent ID.
   context_config_builder.enable_spdy = http2_enabled_;  // Enable HTTP/2.
-  context_config_builder.http_cache = http_cache_;      // Set HTTP cache
+  context_config_builder.http_cache = http_cache_;      // Set HTTP cache.
   context_config_builder.storage_path =
       storage_path.value();  // Storage path for http cache and prefs storage.
   context_config_builder.user_agent =
@@ -386,7 +394,7 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   [[NSHTTPCookieStorage sharedHTTPCookieStorage]
       setCookieAcceptPolicy:NSHTTPCookieAcceptPolicyAlways];
   std::unique_ptr<net::CookieStore> cookie_store =
-      base::MakeUnique<net::CookieStoreIOS>(
+      std::make_unique<net::CookieStoreIOS>(
           [NSHTTPCookieStorage sharedHTTPCookieStorage]);
   context_builder.SetCookieAndChannelIdStores(std::move(cookie_store), nullptr);
 
@@ -425,6 +433,19 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   }
 }
 
+void CronetEnvironment::SetNetworkThreadPriority(double priority) {
+  DCHECK_LE(priority, 1.0);
+  DCHECK_GE(priority, 0.0);
+  network_thread_priority_ = priority;
+  if (network_io_thread_) {
+    PostToNetworkThread(
+        FROM_HERE,
+        base::BindRepeating(
+            &CronetEnvironment::SetNetworkThreadPriorityOnNetworkThread,
+            base::Unretained(this), priority));
+  }
+}
+
 std::string CronetEnvironment::user_agent() {
   const net::HttpUserAgentSettings* user_agent_settings =
       main_context_->http_user_agent_settings();
@@ -436,7 +457,6 @@ std::string CronetEnvironment::user_agent() {
 }
 
 std::vector<uint8_t> CronetEnvironment::GetHistogramDeltas() {
-  DCHECK(base::StatisticsRecorder::IsActive());
   std::vector<uint8_t> data;
   if (!HistogramManager::GetInstance()->GetDeltas(&data))
     return std::vector<uint8_t>();
@@ -461,6 +481,16 @@ void CronetEnvironment::SetHostResolverRulesOnNetworkThread(
   event->Signal();
 }
 
+void CronetEnvironment::SetNetworkThreadPriorityOnNetworkThread(
+    double priority) {
+  DCHECK(GetNetworkThreadTaskRunner()->BelongsToCurrentThread());
+  DCHECK_LE(priority, 1.0);
+  DCHECK_GE(priority, 0.0);
+  if (priority >= 0.0 && priority <= 1.0) {
+    [NSThread setThreadPriority:priority];
+  }
+}
+
 std::string CronetEnvironment::getDefaultQuicUserAgentId() const {
   return base::SysNSStringToUTF8([[NSBundle mainBundle]
              objectForInfoDictionaryKey:@"CFBundleDisplayName"]) +
@@ -470,6 +500,11 @@ std::string CronetEnvironment::getDefaultQuicUserAgentId() const {
 base::SingleThreadTaskRunner* CronetEnvironment::GetFileThreadRunnerForTesting()
     const {
   return file_thread_->task_runner().get();
+}
+
+base::SingleThreadTaskRunner*
+CronetEnvironment::GetNetworkThreadRunnerForTesting() const {
+  return GetNetworkThreadTaskRunner();
 }
 
 CronetEnvironment::CronetNetworkThread::CronetNetworkThread(

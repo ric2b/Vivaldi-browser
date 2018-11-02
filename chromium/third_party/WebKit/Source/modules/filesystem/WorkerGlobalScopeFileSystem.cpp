@@ -27,13 +27,15 @@
 
 #include "modules/filesystem/WorkerGlobalScopeFileSystem.h"
 
+#include <memory>
+
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/fileapi/FileError.h"
+#include "core/frame/UseCounter.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/filesystem/DOMFileSystemBase.h"
 #include "modules/filesystem/DirectoryEntrySync.h"
-#include "modules/filesystem/ErrorCallback.h"
 #include "modules/filesystem/FileEntrySync.h"
 #include "modules/filesystem/FileSystemCallback.h"
 #include "modules/filesystem/FileSystemCallbacks.h"
@@ -41,7 +43,6 @@
 #include "modules/filesystem/SyncCallbackHelper.h"
 #include "platform/FileSystemType.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include <memory>
 
 namespace blink {
 
@@ -50,13 +51,15 @@ void WorkerGlobalScopeFileSystem::webkitRequestFileSystem(
     int type,
     long long size,
     FileSystemCallback* success_callback,
-    ErrorCallback* error_callback) {
+    V8ErrorCallback* error_callback) {
   ExecutionContext* secure_context = worker.GetExecutionContext();
   if (!secure_context->GetSecurityOrigin()->CanAccessFileSystem()) {
     DOMFileSystem::ReportError(&worker,
                                ScriptErrorCallback::Wrap(error_callback),
                                FileError::kSecurityErr);
     return;
+  } else if (secure_context->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(secure_context, WebFeature::kFileAccessedFileSystem);
   }
 
   FileSystemType file_system_type = static_cast<FileSystemType>(type);
@@ -83,6 +86,8 @@ DOMFileSystemSync* WorkerGlobalScopeFileSystem::webkitRequestFileSystemSync(
   if (!secure_context->GetSecurityOrigin()->CanAccessFileSystem()) {
     exception_state.ThrowSecurityError(FileError::kSecurityErrorMessage);
     return nullptr;
+  } else if (secure_context->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(secure_context, WebFeature::kFileAccessedFileSystem);
   }
 
   FileSystemType file_system_type = static_cast<FileSystemType>(type);
@@ -108,8 +113,8 @@ DOMFileSystemSync* WorkerGlobalScopeFileSystem::webkitRequestFileSystemSync(
 void WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemURL(
     WorkerGlobalScope& worker,
     const String& url,
-    EntryCallback* success_callback,
-    ErrorCallback* error_callback) {
+    V8EntryCallback* success_callback,
+    V8ErrorCallback* error_callback) {
   KURL completed_url = worker.CompleteURL(url);
   ExecutionContext* secure_context = worker.GetExecutionContext();
   if (!secure_context->GetSecurityOrigin()->CanAccessFileSystem() ||
@@ -118,6 +123,8 @@ void WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemURL(
                                ScriptErrorCallback::Wrap(error_callback),
                                FileError::kSecurityErr);
     return;
+  } else if (secure_context->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(secure_context, WebFeature::kFileAccessedFileSystem);
   }
 
   if (!completed_url.IsValid()) {
@@ -129,9 +136,9 @@ void WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemURL(
 
   LocalFileSystem::From(worker)->ResolveURL(
       &worker, completed_url,
-      ResolveURICallbacks::Create(success_callback,
-                                  ScriptErrorCallback::Wrap(error_callback),
-                                  &worker));
+      ResolveURICallbacks::Create(
+          ResolveURICallbacks::OnDidGetEntryV8Impl::Create(success_callback),
+          ScriptErrorCallback::Wrap(error_callback), &worker));
 }
 
 EntrySync* WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemSyncURL(
@@ -144,6 +151,8 @@ EntrySync* WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemSyncURL(
       !secure_context->GetSecurityOrigin()->CanRequest(completed_url)) {
     exception_state.ThrowSecurityError(FileError::kSecurityErrorMessage);
     return nullptr;
+  } else if (secure_context->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(secure_context, WebFeature::kFileAccessedFileSystem);
   }
 
   if (!completed_url.IsValid()) {
@@ -152,18 +161,17 @@ EntrySync* WorkerGlobalScopeFileSystem::webkitResolveLocalFileSystemSyncURL(
     return nullptr;
   }
 
-  EntrySyncCallbackHelper* resolve_url_helper =
-      EntrySyncCallbackHelper::Create();
+  EntryCallbacksSyncHelper* sync_helper = EntryCallbacksSyncHelper::Create();
   std::unique_ptr<AsyncFileSystemCallbacks> callbacks =
-      ResolveURICallbacks::Create(resolve_url_helper->GetSuccessCallback(),
-                                  resolve_url_helper->GetErrorCallback(),
-                                  &worker);
+      ResolveURICallbacks::Create(sync_helper->GetSuccessCallback(),
+                                  sync_helper->GetErrorCallback(), &worker);
   callbacks->SetShouldBlockUntilCompletion(true);
 
   LocalFileSystem::From(worker)->ResolveURL(&worker, completed_url,
                                             std::move(callbacks));
 
-  return resolve_url_helper->GetResult(exception_state);
+  Entry* entry = sync_helper->GetResultOrThrow(exception_state);
+  return entry ? EntrySync::Create(entry) : nullptr;
 }
 
 static_assert(static_cast<int>(WorkerGlobalScopeFileSystem::kTemporary) ==

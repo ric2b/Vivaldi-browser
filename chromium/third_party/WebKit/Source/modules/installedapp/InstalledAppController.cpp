@@ -38,7 +38,7 @@ class InstalledAppController::GetRelatedAppsCallbacks
   std::unique_ptr<AppInstalledCallbacks> callbacks_;
 };
 
-InstalledAppController::~InstalledAppController() {}
+InstalledAppController::~InstalledAppController() = default;
 
 void InstalledAppController::GetInstalledRelatedApps(
     std::unique_ptr<AppInstalledCallbacks> callbacks) {
@@ -115,9 +115,8 @@ void InstalledAppController::FilterByInstalledApps(
 
   provider_->FilterInstalledApps(
       std::move(mojo_related_apps),
-      ConvertToBaseCallback(
-          WTF::Bind(&InstalledAppController::OnFilterInstalledApps,
-                    WrapPersistent(this), WTF::Passed(std::move(callbacks)))));
+      WTF::Bind(&InstalledAppController::OnFilterInstalledApps,
+                WrapPersistent(this), WTF::Passed(std::move(callbacks))));
 }
 
 void InstalledAppController::OnFilterInstalledApps(

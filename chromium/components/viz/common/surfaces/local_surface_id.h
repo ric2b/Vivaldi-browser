@@ -23,25 +23,46 @@ class LocalSurfaceIdDataView;
 
 class VIZ_COMMON_EXPORT LocalSurfaceId {
  public:
-  constexpr LocalSurfaceId() : parent_id_(0) {}
+  constexpr LocalSurfaceId()
+      : parent_sequence_number_(0), child_sequence_number_(0) {}
 
   constexpr LocalSurfaceId(const LocalSurfaceId& other)
-      : parent_id_(other.parent_id_), nonce_(other.nonce_) {}
+      : parent_sequence_number_(other.parent_sequence_number_),
+        child_sequence_number_(other.child_sequence_number_),
+        nonce_(other.nonce_) {}
 
-  constexpr LocalSurfaceId(uint32_t parent_id,
+  constexpr LocalSurfaceId(uint32_t parent_sequence_number,
                            const base::UnguessableToken& nonce)
-      : parent_id_(parent_id), nonce_(nonce) {}
+      : parent_sequence_number_(parent_sequence_number),
+        child_sequence_number_(1),
+        nonce_(nonce) {}
+
+  constexpr LocalSurfaceId(uint32_t parent_sequence_number,
+                           uint32_t child_sequence_number,
+                           const base::UnguessableToken& nonce)
+      : parent_sequence_number_(parent_sequence_number),
+        child_sequence_number_(child_sequence_number),
+        nonce_(nonce) {}
 
   constexpr bool is_valid() const {
-    return parent_id_ != 0 && !nonce_.is_empty();
+    return parent_sequence_number_ != 0 && child_sequence_number_ != 0 &&
+           !nonce_.is_empty();
   }
 
-  constexpr uint32_t parent_id() const { return parent_id_; }
+  constexpr uint32_t parent_sequence_number() const {
+    return parent_sequence_number_;
+  }
+
+  constexpr uint32_t child_sequence_number() const {
+    return child_sequence_number_;
+  }
 
   constexpr const base::UnguessableToken& nonce() const { return nonce_; }
 
   bool operator==(const LocalSurfaceId& other) const {
-    return parent_id_ == other.parent_id_ && nonce_ == other.nonce_;
+    return parent_sequence_number_ == other.parent_sequence_number_ &&
+           child_sequence_number_ == other.child_sequence_number_ &&
+           nonce_ == other.nonce_;
   }
 
   bool operator!=(const LocalSurfaceId& other) const {
@@ -51,7 +72,8 @@ class VIZ_COMMON_EXPORT LocalSurfaceId {
   size_t hash() const {
     DCHECK(is_valid()) << ToString();
     return base::HashInts(
-        parent_id_,
+        static_cast<uint64_t>(
+            base::HashInts(parent_sequence_number_, child_sequence_number_)),
         static_cast<uint64_t>(base::UnguessableTokenHash()(nonce_)));
   }
 
@@ -63,7 +85,8 @@ class VIZ_COMMON_EXPORT LocalSurfaceId {
 
   friend bool operator<(const LocalSurfaceId& lhs, const LocalSurfaceId& rhs);
 
-  uint32_t parent_id_;
+  uint32_t parent_sequence_number_;
+  uint32_t child_sequence_number_;
   base::UnguessableToken nonce_;
 };
 
@@ -72,8 +95,10 @@ VIZ_COMMON_EXPORT std::ostream& operator<<(
     const LocalSurfaceId& local_surface_id);
 
 inline bool operator<(const LocalSurfaceId& lhs, const LocalSurfaceId& rhs) {
-  return std::tie(lhs.parent_id_, lhs.nonce_) <
-         std::tie(rhs.parent_id_, rhs.nonce_);
+  return std::tie(lhs.parent_sequence_number_, lhs.child_sequence_number_,
+                  lhs.nonce_) < std::tie(rhs.parent_sequence_number_,
+                                         rhs.child_sequence_number_,
+                                         rhs.nonce_);
 }
 
 inline bool operator>(const LocalSurfaceId& lhs, const LocalSurfaceId& rhs) {

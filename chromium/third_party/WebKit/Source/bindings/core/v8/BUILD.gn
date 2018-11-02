@@ -21,19 +21,25 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/array_buffer_or_array_buffer_view_or_blob_or_usv_string.h",
   "$bindings_core_v8_output_dir/boolean_or_byte_string_byte_string_record.cc",
   "$bindings_core_v8_output_dir/boolean_or_byte_string_byte_string_record.h",
+  "$bindings_core_v8_output_dir/byte_string_sequence_sequence_or_byte_string_byte_string_record.cc",
+  "$bindings_core_v8_output_dir/byte_string_sequence_sequence_or_byte_string_byte_string_record.h",
+  "$bindings_core_v8_output_dir/composite_operation_or_composite_operation_sequence.cc",
+  "$bindings_core_v8_output_dir/composite_operation_or_composite_operation_sequence.h",
   "$bindings_core_v8_output_dir/css_style_value_or_css_style_value_sequence.cc",
   "$bindings_core_v8_output_dir/css_style_value_or_css_style_value_sequence.h",
   "$bindings_core_v8_output_dir/css_style_value_or_string.cc",
   "$bindings_core_v8_output_dir/css_style_value_or_string.h",
-  "$bindings_core_v8_output_dir/dictionary_sequence_or_dictionary.cc",
-  "$bindings_core_v8_output_dir/dictionary_sequence_or_dictionary.h",
   "$bindings_core_v8_output_dir/double_or_auto_keyword.cc",
   "$bindings_core_v8_output_dir/double_or_auto_keyword.h",
   "$bindings_core_v8_output_dir/double_or_css_numeric_value.cc",
   "$bindings_core_v8_output_dir/double_or_double_sequence.cc",
   "$bindings_core_v8_output_dir/double_or_double_sequence.h",
+  "$bindings_core_v8_output_dir/double_or_double_or_null_sequence.cc",
+  "$bindings_core_v8_output_dir/double_or_double_or_null_sequence.h",
   "$bindings_core_v8_output_dir/double_or_internal_enum.cc",
   "$bindings_core_v8_output_dir/double_or_internal_enum.h",
+  "$bindings_core_v8_output_dir/double_or_performance_mark_options.cc",
+  "$bindings_core_v8_output_dir/double_or_performance_mark_options.h",
   "$bindings_core_v8_output_dir/double_or_scroll_timeline_auto_keyword.cc",
   "$bindings_core_v8_output_dir/double_or_scroll_timeline_auto_keyword.h",
   "$bindings_core_v8_output_dir/double_or_string.cc",
@@ -50,16 +56,22 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/html_element_or_long.h",
   "$bindings_core_v8_output_dir/image_bitmap_source.cc",
   "$bindings_core_v8_output_dir/image_bitmap_source.h",
+  "$bindings_core_v8_output_dir/internal_enum_or_internal_enum_sequence.cc",
+  "$bindings_core_v8_output_dir/internal_enum_or_internal_enum_sequence.h",
   "$bindings_core_v8_output_dir/html_option_element_or_html_opt_group_element.cc",
   "$bindings_core_v8_output_dir/html_option_element_or_html_opt_group_element.h",
   "$bindings_core_v8_output_dir/html_script_element_or_svg_script_element.cc",
   "$bindings_core_v8_output_dir/html_script_element_or_svg_script_element.h",
   "$bindings_core_v8_output_dir/node_list_or_element.cc",
   "$bindings_core_v8_output_dir/node_list_or_element.h",
+  "$bindings_core_v8_output_dir/html_collection_or_element.cc",
+  "$bindings_core_v8_output_dir/html_collection_or_element.h",
   "$bindings_core_v8_output_dir/node_or_string.cc",
   "$bindings_core_v8_output_dir/node_or_string.h",
   "$bindings_core_v8_output_dir/radio_node_list_or_element.cc",
   "$bindings_core_v8_output_dir/radio_node_list_or_element.h",
+  "$bindings_core_v8_output_dir/request_or_usv_string.cc",
+  "$bindings_core_v8_output_dir/request_or_usv_string.h",
   "$bindings_core_v8_output_dir/scroll_into_view_options_or_boolean.cc",
   "$bindings_core_v8_output_dir/scroll_into_view_options_or_boolean.h",
   "$bindings_core_v8_output_dir/string_or_array_buffer.cc",
@@ -72,14 +84,16 @@ bindings_core_generated_union_type_files = [
   "$bindings_core_v8_output_dir/string_or_dictionary.h",
   "$bindings_core_v8_output_dir/string_or_float.cc",
   "$bindings_core_v8_output_dir/string_or_float.h",
+  "$bindings_core_v8_output_dir/string_or_string_sequence.cc",
+  "$bindings_core_v8_output_dir/string_or_string_sequence.h",
   "$bindings_core_v8_output_dir/string_or_trusted_html.cc",
   "$bindings_core_v8_output_dir/string_or_trusted_html.h",
   "$bindings_core_v8_output_dir/string_or_trusted_script_url.cc",
   "$bindings_core_v8_output_dir/string_or_trusted_script_url.h",
-  "$bindings_core_v8_output_dir/string_or_trusted_url.cc",
-  "$bindings_core_v8_output_dir/string_or_trusted_url.h",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.cc",
   "$bindings_core_v8_output_dir/string_or_unrestricted_double_sequence.h",
+  "$bindings_core_v8_output_dir/usv_string_or_trusted_url.cc",
+  "$bindings_core_v8_output_dir/usv_string_or_trusted_url.h",
   "$bindings_core_v8_output_dir/usv_string_sequence_sequence_or_usv_string_usv_string_record_or_usv_string.cc",
   "$bindings_core_v8_output_dir/usv_string_sequence_sequence_or_usv_string_usv_string_record_or_usv_string.h",
   "$bindings_core_v8_output_dir/unrestricted_double_or_keyframe_animation_options.cc",
@@ -130,6 +144,8 @@ generated_core_callback_function_files = [
   "$bindings_core_v8_output_dir/v8_resize_observer_callback.h",
   "$bindings_core_v8_output_dir/v8_update_function.cc",
   "$bindings_core_v8_output_dir/v8_update_function.h",
+  "$bindings_core_v8_output_dir/v8_void_function.cc",
+  "$bindings_core_v8_output_dir/v8_void_function.h",
 ]
 
 generate_origin_trial_features("bindings_core_origin_trial_features") {
@@ -143,8 +159,11 @@ generate_origin_trial_features("bindings_core_origin_trial_features") {
   ]
 }
 
-if (is_win || use_jumbo_build) {
+if ((is_win && is_official_build) || use_jumbo_build) {
   # On Windows Official release builds, we try to preserve symbol space.
+  # is_official_build adds /GL option and /LTCG is automatically enabled in
+  # link.exe. But link.exe cannot make binary smaller than its size limit from
+  # many obj files for bindings_core_impl.lib.
   bindings_core_generated_interface_files =
       [ "$bindings_core_v8_output_dir/V8GeneratedCoreBindings.cpp" ]
 } else {
@@ -171,7 +190,7 @@ group("bindings_core_v8_generated") {
   public_deps = [
     ":bindings_core_impl_generated",
   ]
-  if (is_win || use_jumbo_build) {
+  if ((is_win && is_official_build) || use_jumbo_build) {
     public_deps += [ ":generate_bindings_core_v8_all_interfaces" ]
   } else {
     public_deps += [ ":generate_bindings_core_v8_interfaces" ]

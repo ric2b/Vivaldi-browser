@@ -4,9 +4,15 @@
 
 #include "base/optional.h"
 
+#include <memory>
 #include <set>
+#include <string>
+#include <vector>
 
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+using ::testing::ElementsAre;
 
 namespace base {
 
@@ -73,8 +79,10 @@ class TestObject {
   }
 
   bool operator==(const TestObject& other) const {
-    return foo_ == other.foo_ && bar_ == other.bar_;
+    return std::tie(foo_, bar_) == std::tie(other.foo_, other.bar_);
   }
+
+  bool operator!=(const TestObject& other) const { return !(*this == other); }
 
   int foo() const { return foo_; }
   State state() const { return state_; }
@@ -94,6 +102,25 @@ void swap(TestObject& lhs, TestObject& rhs) {
 
 class NonTriviallyDestructible {
   ~NonTriviallyDestructible() {}
+};
+
+class DeletedDefaultConstructor {
+ public:
+  DeletedDefaultConstructor() = delete;
+  DeletedDefaultConstructor(int foo) : foo_(foo) {}
+
+  int foo() const { return foo_; }
+
+ private:
+  int foo_;
+};
+
+class DeleteNewOperators {
+ public:
+  void* operator new(size_t) = delete;
+  void* operator new(size_t, void*) = delete;
+  void* operator new[](size_t) = delete;
+  void* operator new[](size_t, void*) = delete;
 };
 
 }  // anonymous namespace
@@ -124,8 +151,8 @@ TEST(OptionalTest, DefaultConstructor) {
 
 TEST(OptionalTest, CopyConstructor) {
   {
-    Optional<float> first(0.1f);
-    Optional<float> other(first);
+    constexpr Optional<float> first(0.1f);
+    constexpr Optional<float> other(first);
 
     EXPECT_TRUE(other);
     EXPECT_EQ(other.value(), 0.1f);
@@ -180,8 +207,8 @@ TEST(OptionalTest, ValueConstructor) {
 
 TEST(OptionalTest, MoveConstructor) {
   {
-    Optional<float> first(0.1f);
-    Optional<float> second(std::move(first));
+    constexpr Optional<float> first(0.1f);
+    constexpr Optional<float> second(std::move(first));
 
     EXPECT_TRUE(second);
     EXPECT_EQ(second.value(), 0.1f);
@@ -270,6 +297,22 @@ TEST(OptionalTest, ConstructorForwardArguments) {
     Optional<TestObject> a(base::in_place, 0, 0.1);
     EXPECT_TRUE(!!a);
     EXPECT_TRUE(TestObject(0, 0.1) == a.value());
+  }
+}
+
+TEST(OptionalTest, ConstructorForwardInitListAndArguments) {
+  {
+    Optional<std::vector<int>> opt(in_place, {3, 1});
+    EXPECT_TRUE(opt);
+    EXPECT_THAT(*opt, ElementsAre(3, 1));
+    EXPECT_EQ(2u, opt->size());
+  }
+
+  {
+    Optional<std::vector<int>> opt(in_place, {3, 1}, std::allocator<int>());
+    EXPECT_TRUE(opt);
+    EXPECT_THAT(*opt, ElementsAre(3, 1));
+    EXPECT_EQ(2u, opt->size());
   }
 }
 
@@ -576,6 +619,24 @@ TEST(OptionalTest, Emplace) {
     EXPECT_TRUE(!!a);
     EXPECT_TRUE(TestObject(1, 0.2) == a.value());
   }
+
+  {
+    Optional<std::vector<int>> a;
+    auto& ref = a.emplace({2, 3});
+    static_assert(std::is_same<std::vector<int>&, decltype(ref)>::value, "");
+    EXPECT_TRUE(a);
+    EXPECT_THAT(*a, ElementsAre(2, 3));
+    EXPECT_EQ(&ref, &*a);
+  }
+
+  {
+    Optional<std::vector<int>> a;
+    auto& ref = a.emplace({4, 5}, std::allocator<int>());
+    static_assert(std::is_same<std::vector<int>&, decltype(ref)>::value, "");
+    EXPECT_TRUE(a);
+    EXPECT_THAT(*a, ElementsAre(4, 5));
+    EXPECT_EQ(&ref, &*a);
+  }
 }
 
 TEST(OptionalTest, Equals_TwoEmpty) {
@@ -606,6 +667,13 @@ TEST(OptionalTest, Equals_TwoDifferent) {
   EXPECT_FALSE(a == b);
 }
 
+TEST(OptionalTest, Equals_DifferentType) {
+  Optional<int> a(0);
+  Optional<double> b(0);
+
+  EXPECT_TRUE(a == b);
+}
+
 TEST(OptionalTest, NotEquals_TwoEmpty) {
   Optional<int> a;
   Optional<int> b;
@@ -632,6 +700,13 @@ TEST(OptionalTest, NotEquals_TwoDifferent) {
   Optional<int> b(1);
 
   EXPECT_TRUE(a != b);
+}
+
+TEST(OptionalTest, NotEquals_DifferentType) {
+  Optional<int> a(0);
+  Optional<double> b(0.0);
+
+  EXPECT_FALSE(a != b);
 }
 
 TEST(OptionalTest, Less_LeftEmpty) {
@@ -676,6 +751,13 @@ TEST(OptionalTest, Less_BothValues) {
   }
 }
 
+TEST(OptionalTest, Less_DifferentType) {
+  Optional<int> l(1);
+  Optional<double> r(2.0);
+
+  EXPECT_TRUE(l < r);
+}
+
 TEST(OptionalTest, LessEq_LeftEmpty) {
   Optional<int> l;
   Optional<int> r(1);
@@ -716,6 +798,13 @@ TEST(OptionalTest, LessEq_BothValues) {
 
     EXPECT_TRUE(l <= r);
   }
+}
+
+TEST(OptionalTest, LessEq_DifferentType) {
+  Optional<int> l(1);
+  Optional<double> r(2.0);
+
+  EXPECT_TRUE(l <= r);
 }
 
 TEST(OptionalTest, Greater_BothEmpty) {
@@ -760,6 +849,13 @@ TEST(OptionalTest, Greater_BothValue) {
   }
 }
 
+TEST(OptionalTest, Greater_DifferentType) {
+  Optional<int> l(1);
+  Optional<double> r(2.0);
+
+  EXPECT_FALSE(l > r);
+}
+
 TEST(OptionalTest, GreaterEq_BothEmpty) {
   Optional<int> l;
   Optional<int> r;
@@ -800,6 +896,13 @@ TEST(OptionalTest, GreaterEq_BothValue) {
 
     EXPECT_TRUE(l >= r);
   }
+}
+
+TEST(OptionalTest, GreaterEq_DifferentType) {
+  Optional<int> l(1);
+  Optional<double> r(2.0);
+
+  EXPECT_FALSE(l >= r);
 }
 
 TEST(OptionalTest, OptNullEq) {
@@ -950,6 +1053,11 @@ TEST(OptionalTest, ValueEq_NotEmpty) {
   }
 }
 
+TEST(OptionalTest, ValueEq_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(opt == 0.0);
+}
+
 TEST(OptionalTest, EqValue_Empty) {
   Optional<int> opt;
   EXPECT_FALSE(1 == opt);
@@ -964,6 +1072,11 @@ TEST(OptionalTest, EqValue_NotEmpty) {
     Optional<int> opt(1);
     EXPECT_TRUE(1 == opt);
   }
+}
+
+TEST(OptionalTest, EqValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(0.0 == opt);
 }
 
 TEST(OptionalTest, ValueNotEq_Empty) {
@@ -982,6 +1095,11 @@ TEST(OptionalTest, ValueNotEq_NotEmpty) {
   }
 }
 
+TEST(OPtionalTest, ValueNotEq_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_FALSE(opt != 0.0);
+}
+
 TEST(OptionalTest, NotEqValue_Empty) {
   Optional<int> opt;
   EXPECT_TRUE(1 != opt);
@@ -996,6 +1114,11 @@ TEST(OptionalTest, NotEqValue_NotEmpty) {
     Optional<int> opt(1);
     EXPECT_FALSE(1 != opt);
   }
+}
+
+TEST(OptionalTest, NotEqValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_FALSE(0.0 != opt);
 }
 
 TEST(OptionalTest, ValueLess_Empty) {
@@ -1018,6 +1141,11 @@ TEST(OptionalTest, ValueLess_NotEmpty) {
   }
 }
 
+TEST(OPtionalTest, ValueLess_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(opt < 1.0);
+}
+
 TEST(OptionalTest, LessValue_Empty) {
   Optional<int> opt;
   EXPECT_FALSE(1 < opt);
@@ -1036,6 +1164,11 @@ TEST(OptionalTest, LessValue_NotEmpty) {
     Optional<int> opt(2);
     EXPECT_TRUE(1 < opt);
   }
+}
+
+TEST(OptionalTest, LessValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_FALSE(0.0 < opt);
 }
 
 TEST(OptionalTest, ValueLessEq_Empty) {
@@ -1058,6 +1191,11 @@ TEST(OptionalTest, ValueLessEq_NotEmpty) {
   }
 }
 
+TEST(OptionalTest, ValueLessEq_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(opt <= 0.0);
+}
+
 TEST(OptionalTest, LessEqValue_Empty) {
   Optional<int> opt;
   EXPECT_FALSE(1 <= opt);
@@ -1076,6 +1214,11 @@ TEST(OptionalTest, LessEqValue_NotEmpty) {
     Optional<int> opt(2);
     EXPECT_TRUE(1 <= opt);
   }
+}
+
+TEST(OptionalTest, LessEqValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(0.0 <= opt);
 }
 
 TEST(OptionalTest, ValueGreater_Empty) {
@@ -1098,6 +1241,11 @@ TEST(OptionalTest, ValueGreater_NotEmpty) {
   }
 }
 
+TEST(OptionalTest, ValueGreater_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_FALSE(opt > 0.0);
+}
+
 TEST(OptionalTest, GreaterValue_Empty) {
   Optional<int> opt;
   EXPECT_TRUE(1 > opt);
@@ -1116,6 +1264,11 @@ TEST(OptionalTest, GreaterValue_NotEmpty) {
     Optional<int> opt(2);
     EXPECT_FALSE(1 > opt);
   }
+}
+
+TEST(OptionalTest, GreaterValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_FALSE(0.0 > opt);
 }
 
 TEST(OptionalTest, ValueGreaterEq_Empty) {
@@ -1138,6 +1291,11 @@ TEST(OptionalTest, ValueGreaterEq_NotEmpty) {
   }
 }
 
+TEST(OptionalTest, ValueGreaterEq_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(opt <= 0.0);
+}
+
 TEST(OptionalTest, GreaterEqValue_Empty) {
   Optional<int> opt;
   EXPECT_TRUE(1 >= opt);
@@ -1158,6 +1316,11 @@ TEST(OptionalTest, GreaterEqValue_NotEmpty) {
   }
 }
 
+TEST(OptionalTest, GreaterEqValue_DifferentType) {
+  Optional<int> opt(0);
+  EXPECT_TRUE(0.0 >= opt);
+}
+
 TEST(OptionalTest, NotEquals) {
   {
     Optional<float> a(0.1f);
@@ -1168,6 +1331,12 @@ TEST(OptionalTest, NotEquals) {
   {
     Optional<std::string> a("foo");
     Optional<std::string> b("bar");
+    EXPECT_NE(a, b);
+  }
+
+  {
+    Optional<int> a(1);
+    Optional<double> b(2);
     EXPECT_NE(a, b);
   }
 
@@ -1238,6 +1407,15 @@ TEST(OptionalTest, MakeOptional) {
 
     EXPECT_EQ(TestObject::State::MOVE_CONSTRUCTED,
               base::make_optional(std::move(value))->state());
+  }
+
+  {
+    auto str1 = make_optional<std::string>({'1', '2', '3'});
+    EXPECT_EQ("123", *str1);
+
+    auto str2 =
+        make_optional<std::string>({'a', 'b', 'c'}, std::allocator<char>());
+    EXPECT_EQ("abc", *str2);
   }
 }
 
@@ -1374,6 +1552,23 @@ TEST(OptionalTest, AssignFromRValue) {
   a = std::move(obj);
   EXPECT_TRUE(a.has_value());
   EXPECT_EQ(1, a->move_ctors_count());
+}
+
+TEST(OptionalTest, DontCallDefaultCtor) {
+  Optional<DeletedDefaultConstructor> a;
+  EXPECT_FALSE(a.has_value());
+
+  a = base::make_optional<DeletedDefaultConstructor>(42);
+  EXPECT_TRUE(a.has_value());
+  EXPECT_EQ(42, a->foo());
+}
+
+TEST(OptionalTest, DontCallNewMemberFunction) {
+  Optional<DeleteNewOperators> a;
+  EXPECT_FALSE(a.has_value());
+
+  a = DeleteNewOperators();
+  EXPECT_TRUE(a.has_value());
 }
 
 }  // namespace base

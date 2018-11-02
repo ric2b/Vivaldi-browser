@@ -14,16 +14,15 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
-#include "base/strings/string_number_conversions.h"
-#include "base/strings/string_piece.h"
-#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
+#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
+#include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/gpu_data_manager_observer.h"
@@ -32,9 +31,9 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/web_preferences.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/config/gpu_blacklist.h"
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/config/gpu_finch_features.h"
@@ -45,7 +44,6 @@
 #include "gpu/ipc/common/gpu_preferences_util.h"
 #include "gpu/ipc/common/memory_stats.h"
 #include "gpu/ipc/host/shader_disk_cache.h"
-#include "gpu/ipc/service/switches.h"
 #include "media/media_features.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/switches.h"
@@ -141,31 +139,22 @@ int GetGpuBlacklistHistogramValueWin(gpu::GpuFeatureStatus status) {
 #endif  // OS_WIN
 
 // Send UMA histograms about the enabled features and GPU properties.
-void UpdateStats(const gpu::GPUInfo& gpu_info,
-                 const gpu::GpuBlacklist* blacklist,
-                 const std::set<int>& blacklisted_features) {
+void UpdateFeatureStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
+  // Update applied entry stats.
+  std::unique_ptr<gpu::GpuBlacklist> blacklist(gpu::GpuBlacklist::Create());
+  DCHECK(blacklist.get() && blacklist->max_entry_id() > 0);
   uint32_t max_entry_id = blacklist->max_entry_id();
-  if (max_entry_id == 0) {
-    // GPU Blacklist was not loaded.  No need to go further.
-    return;
-  }
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-
   // Use entry 0 to capture the total number of times that data
   // was recorded in this histogram in order to have a convenient
   // denominator to compute blacklist percentages for the rest of the
   // entries.
   UMA_HISTOGRAM_EXACT_LINEAR("GPU.BlacklistTestResultsPerEntry", 0,
                              max_entry_id + 1);
-
-  if (blacklisted_features.size() != 0) {
-    const std::vector<uint32_t>& entry_indices = blacklist->GetActiveEntries();
-    DCHECK_GT(entry_indices.size(), 0u);
-    std::vector<uint32_t> entry_ids =
-        blacklist->GetEntryIDsFromIndices(entry_indices);
-    DCHECK_EQ(entry_indices.size(), entry_ids.size());
+  if (!gpu_feature_info.applied_gpu_blacklist_entries.empty()) {
+    std::vector<uint32_t> entry_ids = blacklist->GetEntryIDsFromIndices(
+        gpu_feature_info.applied_gpu_blacklist_entries);
+    DCHECK_EQ(gpu_feature_info.applied_gpu_blacklist_entries.size(),
+              entry_ids.size());
     for (auto id : entry_ids) {
       DCHECK_GE(max_entry_id, id);
       UMA_HISTOGRAM_EXACT_LINEAR("GPU.BlacklistTestResultsPerEntry", id,
@@ -173,6 +162,9 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
     }
   }
 
+  // Update feature status stats.
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
   const gpu::GpuFeatureType kGpuFeatures[] = {
       gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS,
       gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING,
@@ -205,10 +197,9 @@ void UpdateStats(const gpu::GPUInfo& gpu_info,
   for (size_t i = 0; i < kNumFeatures; ++i) {
     // We can't use UMA_HISTOGRAM_ENUMERATION here because the same name is
     // expected if the macro is used within a loop.
-    gpu::GpuFeatureStatus value = gpu::kGpuFeatureStatusEnabled;
-    if (blacklisted_features.count(kGpuFeatures[i]))
-      value = gpu::kGpuFeatureStatusBlacklisted;
-    else if (kGpuFeatureUserFlags[i])
+    gpu::GpuFeatureStatus value =
+        gpu_feature_info.status_values[kGpuFeatures[i]];
+    if (value == gpu::kGpuFeatureStatusEnabled && kGpuFeatureUserFlags[i])
       value = gpu::kGpuFeatureStatusDisabled;
     base::HistogramBase* histogram_pointer = base::LinearHistogram::FactoryGet(
         kGpuBlacklistFeatureHistogramNames[i], 1, gpu::kGpuFeatureStatusMax,
@@ -230,7 +221,7 @@ void UpdateDriverBugListStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
   // Use entry 0 to capture the total number of times that data was recorded
   // in this histogram in order to have a convenient denominator to compute
   // driver bug list percentages for the rest of the entries.
-  UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DriverBugTestResultsPerEntry", 0);
+  base::UmaHistogramSparse("GPU.DriverBugTestResultsPerEntry", 0);
 
   if (!gpu_feature_info.applied_gpu_driver_bug_list_entries.empty()) {
     std::unique_ptr<gpu::GpuDriverBugList> bug_list(
@@ -242,7 +233,7 @@ void UpdateDriverBugListStats(const gpu::GpuFeatureInfo& gpu_feature_info) {
               entry_ids.size());
     for (auto id : entry_ids) {
       DCHECK_GE(bug_list->max_entry_id(), id);
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.DriverBugTestResultsPerEntry", id);
+      base::UmaHistogramSparse("GPU.DriverBugTestResultsPerEntry", id);
     }
   }
 }
@@ -285,11 +276,6 @@ enum BlockStatusHistogram {
   BLOCK_STATUS_MAX
 };
 
-bool ShouldDisableHardwareAcceleration() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableGpu);
-}
-
 void OnVideoMemoryUsageStats(
     const base::Callback<void(const gpu::VideoMemoryUsageStats& stats)>&
         callback,
@@ -324,44 +310,22 @@ void UpdateGpuInfoOnIO(const gpu::GPUInfo& gpu_info) {
 
 }  // namespace anonymous
 
-void GpuDataManagerImplPrivate::InitializeForTesting(
-    const gpu::GpuControlListData& gpu_blacklist_data,
-    const gpu::GPUInfo& gpu_info) {
+void GpuDataManagerImplPrivate::BlacklistWebGLForTesting() {
   // This function is for testing only, so disable histograms.
   update_histograms_ = false;
-
   // Prevent all further initialization.
   finalized_ = true;
+  is_initialized_ = true;
 
-  InitializeImpl(gpu_blacklist_data, gpu_info);
-}
-
-bool GpuDataManagerImplPrivate::IsFeatureBlacklisted(int feature) const {
-  // SwiftShader blacklists all features
-  return use_swiftshader_ || (blacklisted_features_.count(feature) == 1);
-}
-
-bool GpuDataManagerImplPrivate::IsFeatureEnabled(int feature) const {
-  DCHECK_EQ(feature, gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION);
-  return gpu_feature_info_
-             .status_values[gpu::GPU_FEATURE_TYPE_GPU_RASTERIZATION] ==
-         gpu::kGpuFeatureStatusEnabled;
-}
-
-bool GpuDataManagerImplPrivate::IsWebGLEnabled() const {
-  return use_swiftshader_ ||
-         !blacklisted_features_.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL);
-}
-
-bool GpuDataManagerImplPrivate::IsWebGL2Enabled() const {
-  return /*use_swiftshader_ ||*/ // Uncomment to enable WebGL 2 with SwiftShader
-         !blacklisted_features_.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
-}
-
-size_t GpuDataManagerImplPrivate::GetBlacklistedFeatureCount() const {
-  // SwiftShader blacklists all features
-  return use_swiftshader_ ? gpu::NUMBER_OF_GPU_FEATURE_TYPES
-                          : blacklisted_features_.size();
+  gpu::GpuFeatureInfo gpu_feature_info;
+  for (int ii = 0; ii < gpu::NUMBER_OF_GPU_FEATURE_TYPES; ++ii) {
+    if (ii == static_cast<int>(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL))
+      gpu_feature_info.status_values[ii] = gpu::kGpuFeatureStatusBlacklisted;
+    else
+      gpu_feature_info.status_values[ii] = gpu::kGpuFeatureStatusEnabled;
+  }
+  UpdateGpuFeatureInfo(gpu_feature_info);
+  NotifyGpuInfoUpdate();
 }
 
 gpu::GPUInfo GpuDataManagerImplPrivate::GetGPUInfo() const {
@@ -370,9 +334,15 @@ gpu::GPUInfo GpuDataManagerImplPrivate::GetGPUInfo() const {
 
 bool GpuDataManagerImplPrivate::GpuAccessAllowed(
     std::string* reason) const {
-  if (use_swiftshader_)
-    return true;
-
+#if BUILDFLAG(ENABLE_SWIFTSHADER)
+  if (swiftshader_disabled_) {
+    if (reason) {
+      *reason = "GPU process crashed too many times with SwiftShader.";
+    }
+    return false;
+  }
+  return true;
+#else
   if (!gpu_process_accessible_) {
     if (reason) {
       *reason = "GPU process launch failed.";
@@ -383,7 +353,7 @@ bool GpuDataManagerImplPrivate::GpuAccessAllowed(
   if (in_process_gpu_)
     return true;
 
-  if (card_blacklisted_) {
+  if (card_disabled_) {
     if (reason) {
       *reason = "GPU access is disabled ";
       base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -394,48 +364,8 @@ bool GpuDataManagerImplPrivate::GpuAccessAllowed(
     }
     return false;
   }
-
-  if (preliminary_blacklisted_features_initialized_) {
-    // We only need to block GPU process if more features are disallowed other
-    // than those in the preliminary gpu feature flags because the latter work
-    // through renderer commandline switches. WebGL and WebGL2 should not matter
-    // because their context creation can always be rejected on the GPU process
-    // side.
-    std::set<int> feature_diffs;
-    std::set_difference(blacklisted_features_.begin(),
-                        blacklisted_features_.end(),
-                        preliminary_blacklisted_features_.begin(),
-                        preliminary_blacklisted_features_.end(),
-                        std::inserter(feature_diffs, feature_diffs.begin()));
-    if (feature_diffs.size()) {
-      // TODO(zmo): Other features might also be OK to ignore here.
-      feature_diffs.erase(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL);
-      feature_diffs.erase(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
-      feature_diffs.erase(gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS);
-    }
-    if (feature_diffs.size()) {
-      if (reason) {
-        *reason = "Features are disabled on full but not preliminary GPU info.";
-      }
-      return false;
-    }
-  }
-
-  if (blacklisted_features_.size() == gpu::NUMBER_OF_GPU_FEATURE_TYPES) {
-    // On Linux, we use cached GL strings to make blacklist decsions at browser
-    // startup time. We need to launch the GPU process to validate these
-    // strings even if all features are blacklisted. If all GPU features are
-    // disabled, the GPU process will only initialize GL bindings, create a GL
-    // context, and collect full GPU info.
-#if !defined(OS_LINUX)
-    if (reason) {
-      *reason = "All GPU features are blacklisted.";
-    }
-    return false;
-#endif
-  }
-
   return true;
+#endif
 }
 
 void GpuDataManagerImplPrivate::RequestCompleteGpuInfoIfNeeded() {
@@ -463,8 +393,7 @@ void GpuDataManagerImplPrivate::RequestCompleteGpuInfoIfNeeded() {
 
 bool GpuDataManagerImplPrivate::IsEssentialGpuInfoAvailable() const {
   return (gpu_info_.basic_info_state != gpu::kCollectInfoNone &&
-          gpu_info_.context_info_state != gpu::kCollectInfoNone) ||
-         use_swiftshader_;
+          gpu_info_.context_info_state != gpu::kCollectInfoNone);
 }
 
 bool GpuDataManagerImplPrivate::IsCompleteGpuInfoAvailable() const {
@@ -475,16 +404,23 @@ bool GpuDataManagerImplPrivate::IsCompleteGpuInfoAvailable() const {
   return IsEssentialGpuInfoAvailable();
 }
 
+bool GpuDataManagerImplPrivate::IsGpuFeatureInfoAvailable() const {
+  return gpu_feature_info_.IsInitialized();
+}
+
+gpu::GpuFeatureStatus GpuDataManagerImplPrivate::GetFeatureStatus(
+    gpu::GpuFeatureType feature) const {
+  DCHECK(feature >= 0 && feature < gpu::NUMBER_OF_GPU_FEATURE_TYPES);
+  DCHECK(gpu_feature_info_.IsInitialized());
+  return gpu_feature_info_.status_values[feature];
+}
+
 void GpuDataManagerImplPrivate::RequestVideoMemoryUsageStatsUpdate(
     const base::Callback<void(const gpu::VideoMemoryUsageStats& stats)>&
         callback) const {
   GpuProcessHost::CallOnIO(GpuProcessHost::GPU_PROCESS_KIND_SANDBOXED,
                            false /* force_create */,
                            base::Bind(&RequestVideoMemoryUsageStats, callback));
-}
-
-bool GpuDataManagerImplPrivate::ShouldUseSwiftShader() const {
-  return use_swiftshader_;
 }
 
 void GpuDataManagerImplPrivate::AddObserver(GpuDataManagerObserver* observer) {
@@ -547,17 +483,6 @@ void GpuDataManagerImplPrivate::SetGLStrings(const std::string& gl_vendor,
   gpu::CollectDriverInfoGL(&gpu_info);
 
   UpdateGpuInfo(gpu_info);
-  UpdatePreliminaryBlacklistedFeatures();
-}
-
-void GpuDataManagerImplPrivate::GetGLStrings(std::string* gl_vendor,
-                                             std::string* gl_renderer,
-                                             std::string* gl_version) {
-  DCHECK(gl_vendor && gl_renderer && gl_version);
-
-  *gl_vendor = gpu_info_.gl_vendor;
-  *gl_renderer = gpu_info_.gl_renderer;
-  *gl_version = gpu_info_.gl_version;
 }
 
 void GpuDataManagerImplPrivate::Initialize() {
@@ -574,11 +499,11 @@ void GpuDataManagerImplPrivate::Initialize() {
   }
 
   gpu::GPUInfo gpu_info;
-  const char* softwareGLImplementationName =
+  const char* software_gl_implementation_name =
       gl::GetGLImplementationName(gl::GetSoftwareGLImplementation());
   const bool force_software_gl =
       (command_line->GetSwitchValueASCII(switches::kUseGL) ==
-       softwareGLImplementationName) ||
+       software_gl_implementation_name) ||
       command_line->HasSwitch(switches::kOverrideUseSoftwareGLForTests) ||
       command_line->HasSwitch(switches::kHeadless);
   if (force_software_gl) {
@@ -593,7 +518,7 @@ void GpuDataManagerImplPrivate::Initialize() {
     // Also declare the driver_vendor to be <software GL> to be able to
     // specify exceptions based on driver_vendor==<software GL> for some
     // blacklist rules.
-    gpu_info.driver_vendor = softwareGLImplementationName;
+    gpu_info.driver_vendor = software_gl_implementation_name;
 
     // We are not going to call CollectBasicGraphicsInfo.
     // So mark it as collected.
@@ -607,25 +532,6 @@ void GpuDataManagerImplPrivate::Initialize() {
                    "GpuDataManagerImpl::Initialize:CollectBasicGraphicsInfo");
       gpu::CollectBasicGraphicsInfo(&gpu_info);
     }
-
-    if (command_line->HasSwitch(switches::kGpuTestingVendorId) &&
-        command_line->HasSwitch(switches::kGpuTestingDeviceId)) {
-      base::HexStringToUInt(
-          command_line->GetSwitchValueASCII(switches::kGpuTestingVendorId),
-          &gpu_info.gpu.vendor_id);
-      base::HexStringToUInt(
-          command_line->GetSwitchValueASCII(switches::kGpuTestingDeviceId),
-          &gpu_info.gpu.device_id);
-      gpu_info.gpu.active = true;
-      gpu_info.secondary_gpus.clear();
-    }
-
-    gpu::ParseSecondaryGpuDevicesFromCommandLine(*command_line, &gpu_info);
-
-    if (command_line->HasSwitch(switches::kGpuTestingDriverDate)) {
-      gpu_info.driver_date =
-          command_line->GetSwitchValueASCII(switches::kGpuTestingDriverDate);
-    }
   }
 #if defined(ARCH_CPU_X86_FAMILY)
   if (!gpu_info.gpu.vendor_id || !gpu_info.gpu.device_id) {
@@ -636,49 +542,31 @@ void GpuDataManagerImplPrivate::Initialize() {
   }
 #endif  // ARCH_CPU_X86_FAMILY
 
-  gpu::GpuControlListData gpu_blacklist_data;
+#if defined(OS_ANDROID)
+  // TODO(zmo): Get rid of this on the browser side soon.
   if (!force_software_gl &&
       !command_line->HasSwitch(switches::kIgnoreGpuBlacklist) &&
       !command_line->HasSwitch(switches::kUseGpuInTests)) {
-    gpu_blacklist_data = {gpu::kSoftwareRenderingListEntryCount,
-                          gpu::kSoftwareRenderingListEntries};
+    std::unique_ptr<gpu::GpuBlacklist> gpu_blacklist(
+        gpu::GpuBlacklist::Create());
+    std::set<int> features = gpu_blacklist->MakeDecision(
+        gpu::GpuControlList::kOsAndroid, "", gpu_info);
+    if (features.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE) == 1)
+      blacklist_accelerated_video_decode_ = true;
   }
-  InitializeImpl(gpu_blacklist_data, gpu_info);
+#endif
+
+  gpu_info_ = gpu_info;
+  UpdateGpuInfo(gpu_info);
+
+  RunPostInitTasks();
 
   if (in_process_gpu_) {
     AppendGpuCommandLine(command_line);
   }
 }
 
-void GpuDataManagerImplPrivate::UpdateGpuInfoHelper() {
-  GetContentClient()->SetGpuInfo(gpu_info_);
-
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-
-  std::string os_version;
-  if (command_line->HasSwitch(switches::kGpuTestingOsVersion))
-    os_version =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingOsVersion);
-
-  if (gpu_blacklist_) {
-    std::set<int> features = gpu_blacklist_->MakeDecision(
-        gpu::GpuControlList::kOsAny, os_version, gpu_info_);
-    if (update_histograms_)
-      UpdateStats(gpu_info_, gpu_blacklist_.get(), features);
-
-    UpdateBlacklistedFeatures(features);
-  }
-
-  // We have to update GpuFeatureType before notify all the observers.
-  NotifyGpuInfoUpdate();
-}
-
 void GpuDataManagerImplPrivate::UpdateGpuInfo(const gpu::GPUInfo& gpu_info) {
-  // No further update of gpu_info if falling back to SwiftShader.
-  if (use_swiftshader_)
-    return;
-
   bool was_info_available = IsCompleteGpuInfoAvailable();
   gpu::MergeGPUInfo(&gpu_info_, gpu_info);
   if (IsCompleteGpuInfoAvailable()) {
@@ -688,15 +576,16 @@ void GpuDataManagerImplPrivate::UpdateGpuInfo(const gpu::GPUInfo& gpu_info) {
     complete_gpu_info_already_requested_ = false;
   }
 
-  UpdateGpuInfoHelper();
+  GetContentClient()->SetGpuInfo(gpu_info_);
+  NotifyGpuInfoUpdate();
 }
 
 void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
     const gpu::GpuFeatureInfo& gpu_feature_info) {
-  if (!use_swiftshader_) {
-    gpu_feature_info_ = gpu_feature_info;
+  gpu_feature_info_ = gpu_feature_info;
+  if (update_histograms_) {
+    UpdateFeatureStats(gpu_feature_info);
     UpdateDriverBugListStats(gpu_feature_info);
-    NotifyGpuInfoUpdate();
   }
 }
 
@@ -708,8 +597,12 @@ void GpuDataManagerImplPrivate::AppendRendererCommandLine(
     base::CommandLine* command_line) const {
   DCHECK(command_line);
 
-  if (ShouldDisableAcceleratedVideoDecode(command_line))
+#if defined(OS_ANDROID)
+  // TODO(zmo): Move this to renderer side checking with GPU channel.
+  if (blacklist_accelerated_video_decode_) {
     command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
+  }
+#endif
 }
 
 void GpuDataManagerImplPrivate::AppendGpuCommandLine(
@@ -720,21 +613,14 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   UpdateGpuPreferences(&gpu_prefs);
   command_line->AppendSwitchASCII(switches::kGpuPreferences,
                                   gpu::GpuPreferencesToSwitchValue(gpu_prefs));
-
   std::string use_gl =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kUseGL);
-  if (use_swiftshader_) {
+  if (card_disabled_ && !swiftshader_disabled_ &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableSoftwareRasterizer)) {
     command_line->AppendSwitchASCII(
         switches::kUseGL, gl::kGLImplementationSwiftShaderForWebGLName);
-  } else if ((IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL) ||
-              IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING) ||
-              IsFeatureBlacklisted(
-                  gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS)) &&
-             (use_gl == "any")) {
-    command_line->AppendSwitchASCII(
-        switches::kUseGL,
-        gl::GetGLImplementationName(gl::GetSoftwareGLImplementation()));
   } else if (!use_gl.empty()) {
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
@@ -800,28 +686,26 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
   }
 }
 
-void GpuDataManagerImplPrivate::UpdateRendererWebPrefs(
-    WebPreferences* prefs) const {
-  DCHECK(prefs);
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-  // TODO(zmo): Remove this when we check on the renderer side for 2d canvas.
-  if (command_line->HasSwitch(switches::kDisableGpuCompositing)) {
-    prefs->accelerated_2d_canvas_enabled = false;
-  }
-  if (!ShouldDisableAcceleratedVideoDecode(command_line) &&
-      !command_line->HasSwitch(switches::kDisableAcceleratedVideoDecode)) {
-    prefs->pepper_accelerated_video_decode_enabled = true;
-  }
-}
-
 void GpuDataManagerImplPrivate::UpdateGpuPreferences(
     gpu::GpuPreferences* gpu_preferences) const {
   DCHECK(gpu_preferences);
 
+  BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager =
+      BrowserGpuMemoryBufferManager::current();
+  // For performance reasons, discourage storing VideoFrames in a biplanar
+  // GpuMemoryBuffer if this is not native, see https://crbug.com/791676.
+  if (gpu_memory_buffer_manager) {
+    gpu_preferences->disable_biplanar_gpu_memory_buffers_for_video_frames =
+        !gpu_memory_buffer_manager->IsNativeGpuMemoryBufferConfiguration(
+            gfx::BufferFormat::YUV_420_BIPLANAR,
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
+  }
 
   gpu_preferences->gpu_program_cache_size =
       gpu::ShaderDiskCache::CacheSizeBytes();
+
+  gpu_preferences->texture_target_exception_list =
+      CreateBufferUsageAndFormatExceptionList();
 }
 
 void GpuDataManagerImplPrivate::DisableHardwareAcceleration() {
@@ -831,14 +715,26 @@ void GpuDataManagerImplPrivate::DisableHardwareAcceleration() {
                    base::Unretained(this)));
     return;
   }
-
-  card_blacklisted_ = true;
-
-  for (int i = 0; i < gpu::NUMBER_OF_GPU_FEATURE_TYPES; ++i)
-    blacklisted_features_.insert(i);
-
-  EnableSwiftShaderIfNecessary();
+  card_disabled_ = true;
+  bool reset_gpu_feature_info = true;
+#if BUILDFLAG(ENABLE_SWIFTSHADER)
+  if (!swiftshader_disabled_)
+    reset_gpu_feature_info = false;
+#endif
+  if (reset_gpu_feature_info) {
+    gpu::GpuFeatureInfo gpu_feature_info =
+        gpu::ComputeGpuFeatureInfoWithHardwareAccelerationDisabled();
+    UpdateGpuFeatureInfo(gpu_feature_info);
+  }
   NotifyGpuInfoUpdate();
+}
+
+bool GpuDataManagerImplPrivate::HardwareAccelerationEnabled() const {
+  return !card_disabled_;
+}
+
+void GpuDataManagerImplPrivate::DisableSwiftShader() {
+  swiftshader_disabled_ = true;
 }
 
 void GpuDataManagerImplPrivate::SetGpuInfo(const gpu::GPUInfo& gpu_info) {
@@ -849,8 +745,11 @@ void GpuDataManagerImplPrivate::SetGpuInfo(const gpu::GPUInfo& gpu_info) {
 
 void GpuDataManagerImplPrivate::GetBlacklistReasons(
     base::ListValue* reasons) const {
-  if (gpu_blacklist_)
-    gpu_blacklist_->GetReasons(reasons, "disabledFeatures");
+  if (!gpu_feature_info_.applied_gpu_blacklist_entries.empty()) {
+    std::unique_ptr<gpu::GpuBlacklist> blacklist(gpu::GpuBlacklist::Create());
+    blacklist->GetReasons(reasons, "disabledFeatures",
+                          gpu_feature_info_.applied_gpu_blacklist_entries);
+  }
   if (!gpu_feature_info_.applied_gpu_driver_bug_list_entries.empty()) {
     std::unique_ptr<gpu::GpuDriverBugList> bug_list(
         gpu::GpuDriverBugList::Create());
@@ -871,7 +770,15 @@ GpuDataManagerImplPrivate::GetDriverBugWorkarounds() const {
 
 void GpuDataManagerImplPrivate::AddLogMessage(
     int level, const std::string& header, const std::string& message) {
+  // Some clients emit many log messages. This has been observed to consume GBs
+  // of memory in the wild
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=798012. Use a limit
+  // of 1000 messages to prevent excess memory usage.
+  const int kLogMessageLimit = 1000;
+
   log_messages_.push_back(LogMessage(level, header, message));
+  if (log_messages_.size() > kLogMessageLimit)
+    log_messages_.erase(log_messages_.begin());
 }
 
 void GpuDataManagerImplPrivate::ProcessCrashed(
@@ -921,16 +828,6 @@ void GpuDataManagerImplPrivate::HandleGpuSwitch() {
 
 bool GpuDataManagerImplPrivate::UpdateActiveGpu(uint32_t vendor_id,
                                                 uint32_t device_id) {
-  const base::CommandLine* command_line =
-      base::CommandLine::ForCurrentProcess();
-
-  // For tests, only the gpu process is allowed to detect the active gpu device
-  // using information on the actual loaded GL driver.
-  if (command_line->HasSwitch(switches::kGpuTestingVendorId) &&
-      command_line->HasSwitch(switches::kGpuTestingDeviceId)) {
-    return false;
-  }
-
   if (gpu_info_.gpu.vendor_id == vendor_id &&
       gpu_info_.gpu.device_id == device_id) {
     // The primary GPU is active.
@@ -953,27 +850,21 @@ bool GpuDataManagerImplPrivate::UpdateActiveGpu(uint32_t vendor_id,
     }
     gpu_info_.gpu.active = false;
   }
-  UpdateGpuInfoHelper();
+  GetContentClient()->SetGpuInfo(gpu_info_);
+  NotifyGpuInfoUpdate();
   return true;
-}
-
-bool GpuDataManagerImplPrivate::ShouldDisableAcceleratedVideoDecode(
-    const base::CommandLine* command_line) const {
-  if (command_line->HasSwitch(switches::kDisableAcceleratedVideoDecode)) {
-    // It was already disabled on the command line.
-    return false;
-  }
-  if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_DECODE))
-    return true;
-
-  // Accelerated decode is never available with --disable-gpu.
-  return ShouldDisableHardwareAcceleration();
 }
 
 void GpuDataManagerImplPrivate::GetDisabledExtensions(
     std::string* disabled_extensions) const {
   DCHECK(disabled_extensions);
   *disabled_extensions = gpu_feature_info_.disabled_extensions;
+}
+
+void GpuDataManagerImplPrivate::GetDisabledWebGLExtensions(
+    std::string* disabled_webgl_extensions) const {
+  DCHECK(disabled_webgl_extensions);
+  *disabled_webgl_extensions = gpu_feature_info_.disabled_webgl_extensions;
 }
 
 void GpuDataManagerImplPrivate::BlockDomainFrom3DAPIs(
@@ -1012,10 +903,9 @@ GpuDataManagerImplPrivate* GpuDataManagerImplPrivate::Create(
 
 GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
     : complete_gpu_info_already_requested_(false),
-      preliminary_blacklisted_features_initialized_(false),
       observer_list_(new GpuDataManagerObserverList),
-      use_swiftshader_(false),
-      card_blacklisted_(false),
+      card_disabled_(false),
+      swiftshader_disabled_(false),
       update_histograms_(true),
       domain_blocking_enabled_(true),
       owner_(owner),
@@ -1026,7 +916,9 @@ GpuDataManagerImplPrivate::GpuDataManagerImplPrivate(GpuDataManagerImpl* owner)
   DCHECK(owner_);
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  if (ShouldDisableHardwareAcceleration())
+  if (command_line->HasSwitch(switches::kDisableSoftwareRasterizer))
+    DisableSwiftShader();
+  if (command_line->HasSwitch(switches::kDisableGpu))
     DisableHardwareAcceleration();
 
   if (command_line->HasSwitch(switches::kSingleProcess) ||
@@ -1050,26 +942,6 @@ GpuDataManagerImplPrivate::~GpuDataManagerImplPrivate() {
 #endif
 }
 
-void GpuDataManagerImplPrivate::InitializeImpl(
-    const gpu::GpuControlListData& gpu_blacklist_data,
-    const gpu::GPUInfo& gpu_info) {
-  const bool log_gpu_control_list_decisions =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kLogGpuControlListDecisions);
-
-  if (gpu_blacklist_data.entry_count) {
-    gpu_blacklist_ = gpu::GpuBlacklist::Create(gpu_blacklist_data);
-    if (log_gpu_control_list_decisions)
-      gpu_blacklist_->EnableControlListLogging("gpu_blacklist");
-  }
-
-  gpu_info_ = gpu_info;
-  UpdateGpuInfo(gpu_info);
-  UpdatePreliminaryBlacklistedFeatures();
-
-  RunPostInitTasks();
-}
-
 void GpuDataManagerImplPrivate::RunPostInitTasks() {
   // Set initialized before running callbacks.
   is_initialized_ = true;
@@ -1079,70 +951,8 @@ void GpuDataManagerImplPrivate::RunPostInitTasks() {
   post_init_tasks_.clear();
 }
 
-void GpuDataManagerImplPrivate::UpdateBlacklistedFeatures(
-    const std::set<int>& features) {
-  blacklisted_features_ = features;
-
-  // Force disable using the GPU for these features, even if they would
-  // otherwise be allowed.
-  if (card_blacklisted_) {
-    blacklisted_features_.insert(gpu::GPU_FEATURE_TYPE_GPU_COMPOSITING);
-    blacklisted_features_.insert(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL);
-    blacklisted_features_.insert(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
-  }
-
-  EnableSwiftShaderIfNecessary();
-}
-
-void GpuDataManagerImplPrivate::UpdatePreliminaryBlacklistedFeatures() {
-  preliminary_blacklisted_features_ = blacklisted_features_;
-  preliminary_blacklisted_features_initialized_ = true;
-}
-
 void GpuDataManagerImplPrivate::NotifyGpuInfoUpdate() {
   observer_list_->Notify(FROM_HERE, &GpuDataManagerObserver::OnGpuInfoUpdate);
-}
-
-void GpuDataManagerImplPrivate::EnableSwiftShaderIfNecessary() {
-#if BUILDFLAG(ENABLE_SWIFTSHADER)
-  if ((!GpuAccessAllowed(nullptr) ||
-       blacklisted_features_.count(gpu::GPU_FEATURE_TYPE_ACCELERATED_WEBGL)) &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableSoftwareRasterizer)) {
-    use_swiftshader_ = true;
-
-    // Adjust GPU info for SwiftShader. Most of this data only affects the
-    // chrome://gpu page, so it doesn't require querying the implementation.
-    // It is important to reset the video and image decode/encode capabilities,
-    // to prevent attempts to use them (crbug.com/702417).
-    gpu_info_.driver_vendor = "Google Inc.";
-    gpu_info_.driver_version = "3.3.0.2";
-    gpu_info_.driver_date = "2017/04/07";
-    gpu_info_.pixel_shader_version = "3.0";
-    gpu_info_.vertex_shader_version = "3.0";
-    gpu_info_.max_msaa_samples = "4";
-    gpu_info_.gl_version = "OpenGL ES 2.0 SwiftShader";
-    gpu_info_.gl_vendor = "Google Inc.";
-    gpu_info_.gl_renderer = "Google SwiftShader";
-    gpu_info_.gl_extensions = "";
-    gpu_info_.gl_reset_notification_strategy = 0;
-    gpu_info_.software_rendering = true;
-    gpu_info_.passthrough_cmd_decoder = false;
-    gpu_info_.supports_overlays = false;
-    gpu_info_.basic_info_state = gpu::kCollectInfoSuccess;
-    gpu_info_.context_info_state = gpu::kCollectInfoSuccess;
-    gpu_info_.video_decode_accelerator_capabilities = {};
-    gpu_info_.video_encode_accelerator_supported_profiles = {};
-    gpu_info_.jpeg_decode_accelerator_supported = false;
-
-    gpu_info_.gpu.active = false;
-    for (auto& secondary_gpu : gpu_info_.secondary_gpus)
-      secondary_gpu.active = false;
-
-    for (auto& status : gpu_feature_info_.status_values)
-      status = gpu::kGpuFeatureStatusBlacklisted;
-  }
-#endif
 }
 
 std::string GpuDataManagerImplPrivate::GetDomainFromURL(

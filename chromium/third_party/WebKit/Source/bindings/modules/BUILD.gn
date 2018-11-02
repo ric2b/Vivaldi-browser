@@ -54,14 +54,13 @@ generate_event_interfaces("modules_bindings_generated_event_interfaces") {
     "//third_party/WebKit/Source/modules/speech/SpeechSynthesisEvent.idl",
     "//third_party/WebKit/Source/modules/storage/StorageEvent.idl",
     "//third_party/WebKit/Source/modules/vr/VRDisplayEvent.idl",
-    "//third_party/WebKit/Source/modules/vr/latest/VRDeviceEvent.idl",
-    "//third_party/WebKit/Source/modules/vr/latest/VRSessionEvent.idl",
     "//third_party/WebKit/Source/modules/webaudio/AudioProcessingEvent.idl",
     "//third_party/WebKit/Source/modules/webaudio/OfflineAudioCompletionEvent.idl",
     "//third_party/WebKit/Source/modules/webgl/WebGLContextEvent.idl",
     "//third_party/WebKit/Source/modules/webmidi/MIDIConnectionEvent.idl",
     "//third_party/WebKit/Source/modules/webmidi/MIDIMessageEvent.idl",
     "//third_party/WebKit/Source/modules/websockets/CloseEvent.idl",
+    "//third_party/WebKit/Source/modules/xr/XRSessionEvent.idl",
   ]
   output_file = "event_modules_names.json5"
   suffix = "Modules"
@@ -74,11 +73,7 @@ make_event_factory("event_modules") {
     "$blink_modules_output_dir/event_modules_factory.cc",
   ]
   deps = make_core_generated_deps + [ "//third_party/WebKit/Source/bindings/modules:modules_bindings_generated_event_interfaces" ]
-  deps += [
-    "//device/vr:mojo_bindings_blink",
-    "//media/midi:mojo_blink",
-    "//services/device/public/interfaces:generic_sensor_blink",
-  ]
+  deps += [ "//media/midi:mojo_blink" ]
 }
 
 make_names("event_modules_names") {
@@ -197,4 +192,11 @@ source_set("generated") {
     "//third_party/WebKit/Source/platform/wtf",
     "//v8",
   ]
+}
+
+generate_web_idl_collection("modules_web_idl_collection") {
+  sources = modules_definition_idl_files + modules_dependency_idl_files
+  output = "WebIdlCollectionForModules.pickle"
+  component = "modules"
+  output_dir = bindings_modules_output_dir
 }

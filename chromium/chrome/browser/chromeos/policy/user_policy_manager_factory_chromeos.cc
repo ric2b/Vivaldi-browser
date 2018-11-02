@@ -10,7 +10,6 @@
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
@@ -236,7 +235,7 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
   CHECK(PathService::Get(chromeos::DIR_USER_POLICY_KEYS, &policy_key_dir));
 
   std::unique_ptr<UserCloudPolicyStoreChromeOS> store =
-      base::MakeUnique<UserCloudPolicyStoreChromeOS>(
+      std::make_unique<UserCloudPolicyStoreChromeOS>(
           chromeos::DBusThreadManager::Get()->GetCryptohomeClient(),
           chromeos::DBusThreadManager::Get()->GetSessionManagerClient(),
           background_task_runner, account_id, policy_key_dir,
@@ -268,7 +267,7 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
     return std::move(manager);
   } else {
     std::unique_ptr<UserCloudPolicyManagerChromeOS> manager =
-        base::MakeUnique<UserCloudPolicyManagerChromeOS>(
+        std::make_unique<UserCloudPolicyManagerChromeOS>(
             std::move(store), std::move(external_data_manager),
             component_policy_cache_dir, initial_policy_fetch_timeout,
             base::ThreadTaskRunnerHandle::Get(), io_task_runner);
@@ -276,8 +275,8 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
     // TODO(tnagel): Enable whitelist for Active Directory.
     bool wildcard_match = false;
     if (connector->IsEnterpriseManaged() &&
-        chromeos::CrosSettings::IsWhitelisted(account_id.GetUserEmail(),
-                                              &wildcard_match) &&
+        chromeos::CrosSettings::Get()->IsUserWhitelisted(
+            account_id.GetUserEmail(), &wildcard_match) &&
         wildcard_match &&
         !connector->IsNonEnterpriseUser(account_id.GetUserEmail())) {
       manager->EnableWildcardLoginCheck(account_id.GetUserEmail());

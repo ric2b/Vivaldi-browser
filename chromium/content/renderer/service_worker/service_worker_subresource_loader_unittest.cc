@@ -33,24 +33,25 @@ namespace {
 // This class need to set ChildURLLoaderFactoryGetter. CreateLoaderAndStart()
 // need to implement. todo(emim): Merge this and the one in
 // service_worker_url_loader_job_unittest.cc.
-class FakeNetworkURLLoaderFactory final : public mojom::URLLoaderFactory {
+class FakeNetworkURLLoaderFactory final
+    : public network::mojom::URLLoaderFactory {
  public:
   FakeNetworkURLLoaderFactory() = default;
 
-  // mojom::URLLoaderFactory implementation.
-  void CreateLoaderAndStart(mojom::URLLoaderRequest request,
+  // network::mojom::URLLoaderFactory implementation.
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest request,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
-                            const ResourceRequest& url_request,
-                            mojom::URLLoaderClientPtr client,
+                            const network::ResourceRequest& url_request,
+                            network::mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override {
     std::string headers = "HTTP/1.1 200 OK\n\n";
     net::HttpResponseInfo info;
     info.headers = new net::HttpResponseHeaders(
         net::HttpUtil::AssembleRawHeaders(headers.c_str(), headers.length()));
-    ResourceResponseHead response;
+    network::ResourceResponseHead response;
     response.headers = info.headers;
     response.headers->GetMimeType(&response.mime_type);
     client->OnReceiveResponse(response, base::nullopt, nullptr);
@@ -67,7 +68,9 @@ class FakeNetworkURLLoaderFactory final : public mojom::URLLoaderFactory {
     client->OnComplete(status);
   }
 
-  void Clone(mojom::URLLoaderFactoryRequest factory) override { NOTREACHED(); }
+  void Clone(network::mojom::URLLoaderFactoryRequest factory) override {
+    NOTREACHED();
+  }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeNetworkURLLoaderFactory);
@@ -111,21 +114,22 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
 
   void ReadRequestBody(std::string* out_string) {
     ASSERT_TRUE(request_body_);
-    const std::vector<ResourceRequestBody::Element>* elements =
+    const std::vector<network::DataElement>* elements =
         request_body_->elements();
     // So far this test expects a single bytes element.
     ASSERT_EQ(1u, elements->size());
-    const ResourceRequestBody::Element& element = elements->front();
-    ASSERT_EQ(ResourceRequestBody::Element::TYPE_BYTES, element.type());
+    const network::DataElement& element = elements->front();
+    ASSERT_EQ(network::DataElement::TYPE_BYTES, element.type());
     *out_string = std::string(element.bytes(), element.length());
   }
 
   // mojom::ControllerServiceWorker:
   void DispatchFetchEvent(
-      const ResourceRequest& request,
+      const network::ResourceRequest& request,
       mojom::ServiceWorkerFetchResponseCallbackPtr response_callback,
       DispatchFetchEventCallback callback) override {
-    EXPECT_FALSE(ServiceWorkerUtils::IsMainResourceType(request.resource_type));
+    EXPECT_FALSE(ServiceWorkerUtils::IsMainResourceType(
+        static_cast<ResourceType>(request.resource_type)));
     request_body_ = request.request_body;
 
     fetch_event_count_++;
@@ -212,7 +216,7 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   }
 
   int fetch_event_count() const { return fetch_event_count_; }
-  const ResourceRequest& fetch_event_request() const {
+  const network::ResourceRequest& fetch_event_request() const {
     return fetch_event_request_;
   }
 
@@ -227,10 +231,10 @@ class FakeControllerServiceWorker : public mojom::ControllerServiceWorker {
   };
 
   ResponseMode response_mode_ = ResponseMode::kDefault;
-  scoped_refptr<ResourceRequestBody> request_body_;
+  scoped_refptr<network::ResourceRequestBody> request_body_;
 
   int fetch_event_count_ = 0;
-  ResourceRequest fetch_event_request_;
+  network::ResourceRequest fetch_event_request_;
   base::OnceClosure fetch_event_callback_;
   mojo::BindingSet<mojom::ControllerServiceWorker> bindings_;
 
@@ -307,7 +311,7 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
   void SetUp() override {
     feature_list_.InitAndEnableFeature(features::kNetworkService);
 
-    mojom::URLLoaderFactoryPtr fake_loader_factory;
+    network::mojom::URLLoaderFactoryPtr fake_loader_factory;
     mojo::MakeStrongBinding(std::make_unique<FakeNetworkURLLoaderFactory>(),
                             MakeRequest(&fake_loader_factory));
     loader_factory_getter_ =
@@ -316,13 +320,13 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
   }
 
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory>
-  CreateSubresourceLoaderFactory(const GURL& controller_origin) {
-    auto connector = base::MakeRefCounted<ControllerServiceWorkerConnector>(
-        &fake_container_host_);
+  CreateSubresourceLoaderFactory() {
+    if (!connector_) {
+      connector_ = base::MakeRefCounted<ControllerServiceWorkerConnector>(
+          &fake_container_host_);
+    }
     return std::make_unique<ServiceWorkerSubresourceLoaderFactory>(
-        connector, loader_factory_getter_, controller_origin,
-        base::MakeRefCounted<
-            base::RefCountedData<blink::mojom::BlobRegistryPtr>>());
+        connector_, loader_factory_getter_);
   }
 
   // Starts |request| using |loader_factory| and sets |out_loader| and
@@ -331,18 +335,18 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
   // completion. Calling fake_controller_->RunUntilFetchEvent() also advances
   // the load to until |fake_controller_| receives the fetch event.
   void StartRequest(ServiceWorkerSubresourceLoaderFactory* loader_factory,
-                    const ResourceRequest& request,
-                    mojom::URLLoaderPtr* out_loader,
+                    const network::ResourceRequest& request,
+                    network::mojom::URLLoaderPtr* out_loader,
                     std::unique_ptr<TestURLLoaderClient>* out_loader_client) {
     *out_loader_client = std::make_unique<TestURLLoaderClient>();
     loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(out_loader), 0, 0, mojom::kURLLoadOptionNone, request,
-        (*out_loader_client)->CreateInterfacePtr(),
+        mojo::MakeRequest(out_loader), 0, 0, network::mojom::kURLLoadOptionNone,
+        request, (*out_loader_client)->CreateInterfacePtr(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
 
-  ResourceRequest CreateRequest(const GURL& url) {
-    ResourceRequest request;
+  network::ResourceRequest CreateRequest(const GURL& url) {
+    network::ResourceRequest request;
     request.url = url;
     request.method = "GET";
     request.resource_type = RESOURCE_TYPE_SUB_RESOURCE;
@@ -351,6 +355,7 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
 
   TestBrowserThreadBundle thread_bundle_;
   scoped_refptr<ChildURLLoaderFactoryGetter> loader_factory_getter_;
+  scoped_refptr<ControllerServiceWorkerConnector> connector_;
 
   FakeServiceWorkerContainerHost fake_container_host_;
   FakeControllerServiceWorker fake_controller_;
@@ -362,10 +367,10 @@ class ServiceWorkerSubresourceLoaderTest : public ::testing::Test {
 TEST_F(ServiceWorkerSubresourceLoaderTest, Basic) {
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
-  ResourceRequest request =
+      CreateSubresourceLoaderFactory();
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   fake_controller_.RunUntilFetchEvent();
@@ -381,12 +386,12 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, Abort) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   client->RunUntilComplete();
@@ -397,11 +402,11 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, Abort) {
 TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
   {
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo.png"));
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     fake_controller_.RunUntilFetchEvent();
@@ -416,9 +421,9 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
   // ControllerServiceWorker (i.e. it doesn't increase the get controller
   // service worker count).
   {
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo2.png"));
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     fake_controller_.RunUntilFetchEvent();
@@ -435,9 +440,9 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
 
   {
     // This should re-obtain the ControllerServiceWorker.
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo3.png"));
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     fake_controller_.RunUntilFetchEvent();
@@ -449,15 +454,54 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController) {
   }
 }
 
+TEST_F(ServiceWorkerSubresourceLoaderTest, NoController) {
+  const GURL kScope("https://www.example.com/");
+  std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
+      CreateSubresourceLoaderFactory();
+  {
+    network::ResourceRequest request =
+        CreateRequest(GURL("https://www.example.com/foo.png"));
+    network::mojom::URLLoaderPtr loader;
+    std::unique_ptr<TestURLLoaderClient> client;
+    StartRequest(factory.get(), request, &loader, &client);
+    fake_controller_.RunUntilFetchEvent();
+
+    EXPECT_EQ(request.url, fake_controller_.fetch_event_request().url);
+    EXPECT_EQ(request.method, fake_controller_.fetch_event_request().method);
+    EXPECT_EQ(1, fake_controller_.fetch_event_count());
+    EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
+  }
+
+  // Make the connector have no controller.
+  connector_->ResetControllerConnection(nullptr);
+  base::RunLoop().RunUntilIdle();
+
+  {
+    // This should fallback to the network.
+    network::ResourceRequest request =
+        CreateRequest(GURL("https://www.example.com/foo2.png"));
+    network::mojom::URLLoaderPtr loader;
+    std::unique_ptr<TestURLLoaderClient> client;
+    StartRequest(factory.get(), request, &loader, &client);
+    client->RunUntilComplete();
+
+    EXPECT_TRUE(client->has_received_completion());
+    EXPECT_FALSE(client->response_head().was_fetched_via_service_worker);
+
+    EXPECT_EQ(1, fake_controller_.fetch_event_count());
+    EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
+  }
+}
+
 TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_RestartFetchEvent) {
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   {
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo.png"));
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     fake_controller_.RunUntilFetchEvent();
@@ -472,9 +516,9 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_RestartFetchEvent) {
   // ControllerServiceWorker (i.e. it doesn't increase the get controller
   // service worker count).
   {
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo2.png"));
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     fake_controller_.RunUntilFetchEvent();
@@ -485,9 +529,9 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_RestartFetchEvent) {
     EXPECT_EQ(1, fake_container_host_.get_controller_service_worker_count());
   }
 
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo3.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
 
@@ -509,10 +553,10 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, DropController_TooManyRestart) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
-  ResourceRequest request =
+      CreateSubresourceLoaderFactory();
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
 
@@ -536,17 +580,17 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, StreamResponse) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   client->RunUntilResponseReceived();
 
-  const ResourceResponseHead& info = client->response_head();
+  const network::ResourceResponseHead& info = client->response_head();
   EXPECT_EQ(200, info.headers->response_code());
   EXPECT_EQ(true, info.was_fetched_via_service_worker);
   EXPECT_EQ(false, info.was_fallback_required_by_service_worker);
@@ -586,12 +630,12 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, FallbackResponse) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   client->RunUntilComplete();
@@ -606,12 +650,12 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, ErrorResponse) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   client->RunUntilComplete();
@@ -624,12 +668,12 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, RedirectResponse) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   client->RunUntilRedirectReceived();
@@ -668,7 +712,7 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, RedirectResponse) {
   loader->FollowRedirect();
   client->RunUntilResponseReceived();
 
-  const ResourceResponseHead& info = client->response_head();
+  const network::ResourceResponseHead& info = client->response_head();
   EXPECT_EQ(200, info.headers->response_code());
   EXPECT_EQ(network::mojom::FetchResponseType::kDefault,
             info.response_type_via_service_worker);
@@ -701,12 +745,12 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, TooManyRedirects) {
   fake_controller_.RespondWithRedirect(redirect_location);
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Perform the request.
-  ResourceRequest request =
+  network::ResourceRequest request =
       CreateRequest(GURL("https://www.example.com/foo.png"));
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
 
@@ -747,7 +791,7 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, CORSFallbackResponse) {
 
   const GURL kScope("https://www.example.com/");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kScope.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   struct TestCase {
     network::mojom::FetchRequestMode fetch_request_mode;
@@ -794,16 +838,16 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, CORSFallbackResponse) {
         << (test.request_initiator ? test.request_initiator->Serialize()
                                    : std::string("null")));
     // Perform the request.
-    ResourceRequest request =
+    network::ResourceRequest request =
         CreateRequest(GURL("https://www.example.com/foo.png"));
     request.fetch_request_mode = test.fetch_request_mode;
     request.request_initiator = test.request_initiator;
-    mojom::URLLoaderPtr loader;
+    network::mojom::URLLoaderPtr loader;
     std::unique_ptr<TestURLLoaderClient> client;
     StartRequest(factory.get(), request, &loader, &client);
     client->RunUntilResponseReceived();
 
-    const ResourceResponseHead& info = client->response_head();
+    const network::ResourceResponseHead& info = client->response_head();
     EXPECT_EQ(test.expected_was_fallback_required_by_service_worker,
               info.was_fetched_via_service_worker);
     EXPECT_EQ(test.expected_was_fallback_required_by_service_worker,
@@ -815,13 +859,13 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, CORSFallbackResponse) {
 TEST_F(ServiceWorkerSubresourceLoaderTest, RequestBody) {
   const GURL kUrl("https://www.example.com");
   std::unique_ptr<ServiceWorkerSubresourceLoaderFactory> factory =
-      CreateSubresourceLoaderFactory(kUrl.GetOrigin());
+      CreateSubresourceLoaderFactory();
 
   // Create a request with a body.
-  auto request_body = base::MakeRefCounted<ResourceRequestBody>();
+  auto request_body = base::MakeRefCounted<network::ResourceRequestBody>();
   const std::string kData = "hi this is the request body";
   request_body->AppendBytes(kData.c_str(), kData.length());
-  ResourceRequest request = CreateRequest(kUrl);
+  network::ResourceRequest request = CreateRequest(kUrl);
   request.method = "POST";
   request.request_body = request_body;
 
@@ -830,7 +874,7 @@ TEST_F(ServiceWorkerSubresourceLoaderTest, RequestBody) {
   fake_controller_.RespondWithFallback();
 
   // Perform the request.
-  mojom::URLLoaderPtr loader;
+  network::mojom::URLLoaderPtr loader;
   std::unique_ptr<TestURLLoaderClient> client;
   StartRequest(factory.get(), request, &loader, &client);
   fake_controller_.RunUntilFetchEvent();

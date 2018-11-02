@@ -148,11 +148,7 @@ void BaseAudioContext::Initialize() {
   FFTFrame::Initialize();
 
   if (OriginTrials::audioWorkletEnabled(GetExecutionContext())) {
-    // Worklet requires a valid Frame object, but GetFrame() from the window
-    // can be nullptr. Block out such case. See: crbug.com/792108
-    if (GetExecutionContext()->ExecutingWindow()->GetFrame()) {
-      audio_worklet_ = AudioWorklet::Create(this);
-    }
+    audio_worklet_ = AudioWorklet::Create(this);
   }
 
   if (destination_node_) {
@@ -683,12 +679,12 @@ void BaseAudioContext::SetContextState(AudioContextState new_state) {
   context_state_ = new_state;
 
   // Notify context that state changed
-  if (GetExecutionContext())
+  if (GetExecutionContext()) {
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kMediaElementEvent)
-        ->PostTask(BLINK_FROM_HERE,
-                   WTF::Bind(&BaseAudioContext::NotifyStateChange,
-                             WrapPersistent(this)));
+        ->PostTask(FROM_HERE, WTF::Bind(&BaseAudioContext::NotifyStateChange,
+                                        WrapPersistent(this)));
+  }
 }
 
 void BaseAudioContext::NotifyStateChange() {
@@ -865,8 +861,8 @@ void BaseAudioContext::PerformCleanupOnMainThread() {
 void BaseAudioContext::ScheduleMainThreadCleanup() {
   if (has_posted_cleanup_task_)
     return;
-  Platform::Current()->MainThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *Platform::Current()->MainThread()->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&BaseAudioContext::PerformCleanupOnMainThread,
                       WrapCrossThreadPersistent(this)));
   has_posted_cleanup_task_ = true;
@@ -910,11 +906,30 @@ bool BaseAudioContext::IsAllowedToStart() const {
   if (!user_gesture_required_)
     return true;
 
-  ToDocument(GetExecutionContext())
-      ->AddConsoleMessage(ConsoleMessage::Create(
+  Document* document = ToDocument(GetExecutionContext());
+  DCHECK(document);
+
+  switch (GetAutoplayPolicy()) {
+    case AutoplayPolicy::Type::kNoUserGestureRequired:
+      NOTREACHED();
+      break;
+    case AutoplayPolicy::Type::kUserGestureRequired:
+    case AutoplayPolicy::Type::kUserGestureRequiredForCrossOrigin:
+      DCHECK(document->GetFrame() &&
+             document->GetFrame()->IsCrossOriginSubframe());
+      document->AddConsoleMessage(ConsoleMessage::Create(
           kJSMessageSource, kWarningMessageLevel,
-          "An AudioContext in a cross origin iframe must be created or resumed "
-          "from a user gesture to enable audio output."));
+          "An AudioContext in a cross origin iframe must be created or "
+          "resumed from a user gesture to enable audio output."));
+      break;
+    case AutoplayPolicy::Type::kDocumentUserActivationRequired:
+      document->AddConsoleMessage(ConsoleMessage::Create(
+          kJSMessageSource, kWarningMessageLevel,
+          "An AudioContext must be created or resumed after the document "
+          "received a user gesture to enable audio playback."));
+      break;
+  }
+
   return false;
 }
 
@@ -998,7 +1013,7 @@ void BaseAudioContext::Trace(blink::Visitor* visitor) {
   PausableObject::Trace(visitor);
 }
 
-SecurityOrigin* BaseAudioContext::GetSecurityOrigin() const {
+const SecurityOrigin* BaseAudioContext::GetSecurityOrigin() const {
   if (GetExecutionContext())
     return GetExecutionContext()->GetSecurityOrigin();
 

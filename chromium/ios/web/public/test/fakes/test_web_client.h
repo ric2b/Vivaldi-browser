@@ -27,8 +27,10 @@ class TestWebClient : public web::WebClient {
   void AddAdditionalSchemes(Schemes* schemes) const override;
   // Returns true for kTestWebUIScheme and kTestNativeContentScheme URL schemes.
   bool IsAppSpecificURL(const GURL& url) const override;
+  std::string GetUserAgent(UserAgentType type) const override;
   base::RefCountedMemory* GetDataResourceBytes(int id) const override;
-  NSString* GetEarlyPageScript(BrowserState* browser_state) const override;
+  NSString* GetDocumentStartScriptForMainFrame(
+      BrowserState* browser_state) const override;
   void AllowCertificateError(WebState*,
                              int cert_error,
                              const net::SSLInfo&,

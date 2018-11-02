@@ -26,7 +26,7 @@ class BeginFrameSource;
 class CompositorFrameSinkSupport;
 class Display;
 class FrameSinkManagerImpl;
-class LocalSurfaceIdAllocator;
+class ParentLocalSurfaceIdAllocator;
 }  // namespace viz
 
 namespace android_webview {
@@ -64,6 +64,8 @@ class SurfacesInstance : public base::RefCounted<SurfacesInstance>,
       bool will_draw_and_swap,
       const viz::RenderPassList& render_passes) override {}
   void DisplayDidDrawAndSwap() override {}
+  void DisplayDidReceiveCALayerParams(
+      const gfx::CALayerParams& ca_layer_params) override {}
 
   // viz::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
@@ -87,7 +89,8 @@ class SurfacesInstance : public base::RefCounted<SurfacesInstance>,
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<viz::BeginFrameSource> begin_frame_source_;
   std::unique_ptr<viz::Display> display_;
-  std::unique_ptr<viz::LocalSurfaceIdAllocator> local_surface_id_allocator_;
+  std::unique_ptr<viz::ParentLocalSurfaceIdAllocator>
+      parent_local_surface_id_allocator_;
   std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
 
   viz::LocalSurfaceId root_id_;

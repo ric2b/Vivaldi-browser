@@ -9,8 +9,10 @@
 #include "base/logging.h"
 #include "base/numerics/ranges.h"
 #include "base/stl_util.h"
+#include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "chrome/browser/vr/model/camera_model.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/skia/include/core/SkRRect.h"
 #include "third_party/skia/include/core/SkRect.h"
@@ -65,26 +67,33 @@ UiElement::~UiElement() {
   animation_player_.set_target(nullptr);
 }
 
-void UiElement::set_name(UiElementName name) {
+void UiElement::SetName(UiElementName name) {
   name_ = name;
   OnSetName();
 }
 
 void UiElement::OnSetName() {}
 
-void UiElement::set_type(UiElementType type) {
+void UiElement::SetType(UiElementType type) {
   type_ = type;
   OnSetType();
 }
 
 void UiElement::OnSetType() {}
 
-void UiElement::set_draw_phase(DrawPhase draw_phase) {
+void UiElement::SetDrawPhase(DrawPhase draw_phase) {
   draw_phase_ = draw_phase;
   OnSetDrawPhase();
 }
 
 void UiElement::OnSetDrawPhase() {}
+
+void UiElement::set_focusable(bool focusable) {
+  focusable_ = focusable;
+  OnSetFocusable();
+}
+
+void UiElement::OnSetFocusable() {}
 
 void UiElement::Render(UiElementRenderer* renderer,
                        const CameraModel& model) const {
@@ -92,7 +101,7 @@ void UiElement::Render(UiElementRenderer* renderer,
   // draw phase set to kPhaseNone and should, consequently, be filtered out when
   // the UiRenderer collects elements to draw. Therefore, if we invoke this
   // function, it is an error.
-  NOTREACHED();
+  NOTREACHED() << "element: " << DebugName();
 }
 
 void UiElement::Initialize(SkiaSurfaceProvider* provider) {}
@@ -148,12 +157,24 @@ void UiElement::OnScrollUpdate(std::unique_ptr<blink::WebGestureEvent> gesture,
 void UiElement::OnScrollEnd(std::unique_ptr<blink::WebGestureEvent> gesture,
                             const gfx::PointF& position) {}
 
+void UiElement::OnFocusChanged(bool focused) {
+  NOTREACHED();
+}
+
+void UiElement::OnInputEdited(const TextInputInfo& info) {
+  NOTREACHED();
+}
+
+void UiElement::OnInputCommitted(const TextInputInfo& info) {
+  NOTREACHED();
+}
+
 bool UiElement::PrepareToDraw() {
   return false;
 }
 
 bool UiElement::DoBeginFrame(const base::TimeTicks& time,
-                             const gfx::Vector3dF& look_at) {
+                             const gfx::Transform& head_pose) {
   // TODO(mthiesse): This is overly cautious. We may have animations but not
   // trigger any updates, so we should refine this logic and have
   // AnimationPlayer::Tick return a boolean.
@@ -161,7 +182,7 @@ bool UiElement::DoBeginFrame(const base::TimeTicks& time,
   animation_player_.Tick(time);
   last_frame_time_ = time;
   set_update_phase(kUpdatedAnimations);
-  bool begin_frame_updated = OnBeginFrame(time, look_at);
+  bool begin_frame_updated = OnBeginFrame(time, head_pose);
   UpdateComputedOpacity();
   bool was_visible_at_any_point = IsVisible() || updated_visibility_this_frame_;
   return (begin_frame_updated || animations_updated) &&
@@ -169,7 +190,7 @@ bool UiElement::DoBeginFrame(const base::TimeTicks& time,
 }
 
 bool UiElement::OnBeginFrame(const base::TimeTicks& time,
-                             const gfx::Vector3dF& look_at) {
+                             const gfx::Transform& head_pose) {
   return false;
 }
 
@@ -183,7 +204,7 @@ void UiElement::SetSize(float width, float height) {
   OnSetSize(gfx::SizeF(width, height));
 }
 
-void UiElement::OnSetSize(gfx::SizeF size) {}
+void UiElement::OnSetSize(const gfx::SizeF& size) {}
 
 void UiElement::SetVisible(bool visible) {
   SetOpacity(visible ? opacity_when_visible_ : 0.0);
@@ -255,6 +276,13 @@ void UiElement::SetOpacity(float opacity) {
                                       opacity);
 }
 
+void UiElement::SetCornerRadii(const CornerRadii& radii) {
+  corner_radii_ = radii;
+  OnSetCornerRadii(radii);
+}
+
+void UiElement::OnSetCornerRadii(const CornerRadii& radii) {}
+
 gfx::SizeF UiElement::GetTargetSize() const {
   return animation_player_.GetTargetSizeValue(TargetProperty::BOUNDS, size_);
 }
@@ -294,18 +322,21 @@ bool UiElement::LocalHitTest(const gfx::PointF& point) const {
   if (point.x() < 0.0f || point.x() > 1.0f || point.y() < 0.0f ||
       point.y() > 1.0f) {
     return false;
-  } else if (corner_radius() == 0.f) {
+  } else if (corner_radii_.IsZero()) {
     return point.x() >= 0.0f && point.x() <= 1.0f && point.y() >= 0.0f &&
            point.y() <= 1.0f;
-  } else if (size().width() == size().height() &&
-             corner_radius() == size().width() / 2) {
-    return (point - gfx::PointF(0.5, 0.5)).LengthSquared() < 0.25;
   }
 
   float width = size().width();
   float height = size().height();
-  SkRRect rrect = SkRRect::MakeRectXY(SkRect::MakeWH(width, height),
-                                      corner_radius(), corner_radius());
+  SkRRect rrect;
+  SkVector radii[4] = {
+      {corner_radii_.upper_left, corner_radii_.upper_left},
+      {corner_radii_.upper_right, corner_radii_.upper_right},
+      {corner_radii_.lower_right, corner_radii_.lower_right},
+      {corner_radii_.lower_left, corner_radii_.lower_left},
+  };
+  rrect.setRectRadii(SkRect::MakeWH(width, height), radii);
 
   float left = std::min(point.x() * width, width - kHitTestResolutionInMeter);
   float top = std::min(point.y() * height, height - kHitTestResolutionInMeter);
@@ -360,8 +391,26 @@ std::string UiElement::DebugName() const {
       type() == kTypeNone ? "" : UiElementTypeToString(type()).c_str());
 }
 
+void DumpLines(const std::vector<size_t>& counts,
+               const std::vector<const UiElement*>& ancestors,
+               std::ostringstream* os) {
+  for (size_t i = 0; i < counts.size(); ++i) {
+    size_t current_count = counts[i];
+    if (i + 1 < counts.size()) {
+      current_count++;
+    }
+    if (ancestors[ancestors.size() - i - 1]->children().size() >
+        current_count) {
+      *os << "| ";
+    } else {
+      *os << "  ";
+    }
+  }
+}
+
 void UiElement::DumpHierarchy(std::vector<size_t> counts,
-                              std::ostringstream* os) const {
+                              std::ostringstream* os,
+                              bool include_bindings) const {
   // Put our ancestors in a vector for easy reverse traversal.
   std::vector<const UiElement*> ancestors;
   for (const UiElement* ancestor = parent(); ancestor;
@@ -390,18 +439,42 @@ void UiElement::DumpHierarchy(std::vector<size_t> counts,
   *os << DebugName() << kReset << " " << kCyan << DrawPhaseToString(draw_phase_)
       << " " << kReset;
 
-  if (draw_phase_ != kPhaseNone && !size().IsEmpty()) {
+  if (!size().IsEmpty()) {
     *os << kRed << "[" << size().width() << ", " << size().height() << "] "
         << kReset;
   }
 
   *os << kGreen;
   DumpGeometry(os);
-  *os << kReset << std::endl;
 
   counts.push_back(0u);
+
+  if (include_bindings) {
+    std::ostringstream binding_stream;
+    for (auto& binding : bindings_) {
+      std::string binding_text = binding->ToString();
+      if (binding_text.empty())
+        continue;
+      binding_stream << binding->ToString() << std::endl;
+    }
+
+    auto split_bindings =
+        base::SplitString(binding_stream.str(), "\n", base::TRIM_WHITESPACE,
+                          base::SPLIT_WANT_NONEMPTY);
+    if (!split_bindings.empty()) {
+      ancestors.insert(ancestors.begin(), this);
+    }
+    for (const auto& split : split_bindings) {
+      *os << std::endl << kBlue;
+      DumpLines(counts, ancestors, os);
+      *os << kGreen << split;
+    }
+  }
+
+  *os << kReset << std::endl;
+
   for (auto& child : children_) {
-    child->DumpHierarchy(counts, os);
+    child->DumpHierarchy(counts, os, include_bindings);
     counts.back()++;
   }
 }
@@ -567,29 +640,31 @@ void UiElement::DoLayOutChildren() {
   }
 
   gfx::RectF bounds;
-  bool first = false;
   for (auto& child : children_) {
-    if (!child->IsVisible() || child->size().IsEmpty()) {
+    if (!child->IsVisible() || child->size().IsEmpty() ||
+        !child->contributes_to_parent_bounds()) {
       continue;
     }
     gfx::Point3F child_center(child->local_origin());
-    child->LocalTransform().TransformPoint(&child_center);
+    gfx::Vector3dF corner_offset(child->size().width(), child->size().height(),
+                                 0);
+    corner_offset.Scale(-0.5);
+    gfx::Point3F child_upper_left = child_center + corner_offset;
+    gfx::Point3F child_lower_right = child_center - corner_offset;
+
+    child->LocalTransform().TransformPoint(&child_upper_left);
+    child->LocalTransform().TransformPoint(&child_lower_right);
     gfx::RectF local_rect =
-        gfx::RectF(child_center.x() - 0.5 * child->size().width(),
-                   child_center.y() - 0.5 * child->size().height(),
-                   child->size().width(), child->size().height());
-    if (first) {
-      bounds = local_rect;
-      first = false;
-    } else {
-      bounds.Union(local_rect);
-    }
+        gfx::RectF(child_upper_left.x(), child_upper_left.y(),
+                   child_lower_right.x() - child_upper_left.x(),
+                   child_lower_right.y() - child_upper_left.y());
+    bounds.Union(local_rect);
   }
 
   bounds.Inset(-x_padding_, -y_padding_);
   bounds.set_origin(bounds.CenterPoint());
-  size_ = bounds.size();
   local_origin_ = bounds.origin();
+  SetSize(bounds.width(), bounds.height());
 }
 
 void UiElement::LayOutChildren() {

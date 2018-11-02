@@ -11,7 +11,7 @@
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -92,7 +92,8 @@ class VideoDetectorTest : public testing::Test {
 
     root_frame_sink_ = CreateFrameSink();
     root_frame_sink_->SubmitCompositorFrame(
-        local_surface_id_allocator_.GenerateId(), test::MakeCompositorFrame());
+        parent_local_surface_id_allocator_.GenerateId(),
+        MakeDefaultCompositorFrame());
   }
 
  protected:
@@ -120,7 +121,7 @@ class VideoDetectorTest : public testing::Test {
   }
 
   void SubmitRootFrame() {
-    CompositorFrame frame = test::MakeCompositorFrame();
+    CompositorFrame frame = MakeDefaultCompositorFrame();
     RenderPass* render_pass = frame.render_pass_list.back().get();
     SharedQuadState* shared_quad_state =
         render_pass->CreateAndAppendSharedQuadState();
@@ -140,7 +141,7 @@ class VideoDetectorTest : public testing::Test {
     LocalSurfaceId local_surface_id =
         frame_sink->local_surface_id().is_valid()
             ? frame_sink->local_surface_id()
-            : local_surface_id_allocator_.GenerateId();
+            : parent_local_surface_id_allocator_.GenerateId();
     frame_sink->SubmitCompositorFrame(local_surface_id,
                                       MakeDamagedCompositorFrame(damage));
   }
@@ -167,10 +168,9 @@ class VideoDetectorTest : public testing::Test {
     static uint32_t client_id = 1;
     FrameSinkId frame_sink_id(client_id++, 0);
     frame_sink_manager_.RegisterFrameSinkId(frame_sink_id);
-    std::unique_ptr<CompositorFrameSinkSupport> frame_sink =
-        CompositorFrameSinkSupport::Create(&frame_sink_client_,
-                                           &frame_sink_manager_, frame_sink_id,
-                                           is_root, needs_sync_points);
+    auto frame_sink = std::make_unique<CompositorFrameSinkSupport>(
+        &frame_sink_client_, &frame_sink_manager_, frame_sink_id, is_root,
+        needs_sync_points);
     SendUpdate(frame_sink.get(), gfx::Rect());
     return frame_sink;
   }
@@ -182,15 +182,15 @@ class VideoDetectorTest : public testing::Test {
 
  private:
   CompositorFrame MakeDamagedCompositorFrame(const gfx::Rect& damage) {
-    constexpr gfx::Size kFrameSinkSize = gfx::Size(10000, 10000);
-    CompositorFrame frame = test::MakeCompositorFrame(kFrameSinkSize);
-    frame.render_pass_list.back()->damage_rect = damage;
-    return frame;
+    constexpr gfx::Rect kFrameSinkRect(10000, 10000);
+    return CompositorFrameBuilder()
+        .AddRenderPass(kFrameSinkRect, damage)
+        .Build();
   }
 
   FrameSinkManagerImpl frame_sink_manager_;
   FakeCompositorFrameSinkClient frame_sink_client_;
-  LocalSurfaceIdAllocator local_surface_id_allocator_;
+  ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
   SurfaceAggregator surface_aggregator_;
   std::unique_ptr<CompositorFrameSinkSupport> root_frame_sink_;
   std::set<CompositorFrameSinkSupport*> embedded_clients_;

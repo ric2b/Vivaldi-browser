@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 
 static constexpr int kVersionEncodingError = -4;
@@ -48,17 +49,16 @@ void VrMetricsUtil::LogGvrVersionForVrViewerType(
 
   switch (GetVrViewerType(viewer_type)) {
     case device::VrViewerType::GVR_CARDBOARD:
-      UMA_HISTOGRAM_SPARSE_SLOWLY("VRRuntimeVersion.GVR.Cardboard",
-                                  encoded_version);
+      base::UmaHistogramSparse("VRRuntimeVersion.GVR.Cardboard",
+                               encoded_version);
       break;
     case device::VrViewerType::GVR_DAYDREAM:
-      UMA_HISTOGRAM_SPARSE_SLOWLY("VRRuntimeVersion.GVR.Daydream",
-                                  encoded_version);
+      base::UmaHistogramSparse("VRRuntimeVersion.GVR.Daydream",
+                               encoded_version);
       break;
     default:
       NOTREACHED();
-      UMA_HISTOGRAM_SPARSE_SLOWLY("VRRuntimeVersion.GVR.Unknown",
-                                  encoded_version);
+      base::UmaHistogramSparse("VRRuntimeVersion.GVR.Unknown", encoded_version);
       break;
   }
 
@@ -66,8 +66,8 @@ void VrMetricsUtil::LogGvrVersionForVrViewerType(
 }
 
 void VrMetricsUtil::LogVrViewerType(gvr::ViewerType viewer_type) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("VRViewerType",
-                              static_cast<int>(GetVrViewerType(viewer_type)));
+  base::UmaHistogramSparse("VRViewerType",
+                           static_cast<int>(GetVrViewerType(viewer_type)));
 }
 
 device::VrViewerType VrMetricsUtil::GetVrViewerType(
@@ -81,6 +81,12 @@ device::VrViewerType VrMetricsUtil::GetVrViewerType(
       NOTREACHED();
       return device::VrViewerType::GVR_UNKNOWN;
   }
+}
+
+// static
+void VrMetricsUtil::LogXrRenderPathUsed(XRRenderPath path) {
+  UMA_HISTOGRAM_ENUMERATION("XR.WebXR.RenderPath.Used", path,
+                            XRRenderPath::kCount);
 }
 
 }  // namespace vr_shell

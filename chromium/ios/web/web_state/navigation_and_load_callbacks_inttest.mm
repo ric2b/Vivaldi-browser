@@ -5,7 +5,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/ptr_util.h"
 #include "base/scoped_observer.h"
 #include "base/strings/stringprintf.h"
 #import "ios/testing/wait_util.h"
@@ -13,6 +12,8 @@
 #import "ios/web/public/navigation_manager.h"
 #import "ios/web/public/test/fakes/test_native_content.h"
 #import "ios/web/public/test/fakes/test_native_content_provider.h"
+#import "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/html_response_provider_impl.h"
 #import "ios/web/public/test/http_server/http_server.h"
 #include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/navigation_test_util.h"
@@ -334,12 +335,11 @@ class WebStateObserverMock : public WebStateObserver {
  public:
   WebStateObserverMock() = default;
 
-  MOCK_METHOD2(DidStartNavigation,
-               void(WebState* web_state, NavigationContext* context));
-  MOCK_METHOD2(DidFinishNavigation,
-               void(WebState* web_state, NavigationContext* context));
-  MOCK_METHOD1(DidStartLoading, void(WebState* web_state));
-  MOCK_METHOD1(DidStopLoading, void(WebState* web_state));
+  MOCK_METHOD2(DidStartNavigation, void(WebState*, NavigationContext*));
+  MOCK_METHOD2(DidFinishNavigation, void(WebState*, NavigationContext*));
+  MOCK_METHOD1(DidStartLoading, void(WebState*));
+  MOCK_METHOD1(DidStopLoading, void(WebState*));
+  MOCK_METHOD2(PageLoaded, void(WebState*, PageLoadCompletionStatus));
   void WebStateDestroyed(WebState* web_state) override { NOTREACHED(); }
 
  private:
@@ -372,16 +372,16 @@ class NavigationAndLoadCallbacksTest : public WebIntTest {
 
   void SetUp() override {
     WebIntTest::SetUp();
-    decider_ = base::MakeUnique<StrictMock<PolicyDeciderMock>>(web_state());
+    decider_ = std::make_unique<StrictMock<PolicyDeciderMock>>(web_state());
     scoped_observer_.Add(web_state());
 
     // Stub out NativeContent objects.
-    provider_.reset([[TestNativeContentProvider alloc] init]);
-    content_.reset([[TestNativeContent alloc] initWithURL:GURL::EmptyGURL()
-                                               virtualURL:GURL::EmptyGURL()]);
+    provider_ = [[TestNativeContentProvider alloc] init];
+    content_ = [[TestNativeContent alloc] initWithURL:GURL::EmptyGURL()
+                                           virtualURL:GURL::EmptyGURL()];
 
     WebStateImpl* web_state_impl = reinterpret_cast<WebStateImpl*>(web_state());
-    web_state_impl->GetWebController().nativeProvider = provider_.get();
+    web_state_impl->GetWebController().nativeProvider = provider_;
   }
 
   void TearDown() override {
@@ -390,9 +390,9 @@ class NavigationAndLoadCallbacksTest : public WebIntTest {
   }
 
  protected:
-  base::scoped_nsobject<TestNativeContentProvider> provider_;
+  TestNativeContentProvider* provider_;
   std::unique_ptr<StrictMock<PolicyDeciderMock>> decider_;
-  base::scoped_nsobject<TestNativeContent> content_;
+  TestNativeContent* content_;
   StrictMock<WebStateObserverMock> observer_;
   ScopedObserver<WebState, WebStateObserver> scoped_observer_;
   testing::InSequence callbacks_sequence_checker_;
@@ -418,7 +418,39 @@ TEST_F(NavigationAndLoadCallbacksTest, NewPageNavigation) {
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
+}
+
+// Tests that if web usage is already enabled, enabling it again would not cause
+// any page loads (related to restoring cached session). This is a regression
+// test for crbug.com/781916.
+TEST_F(NavigationAndLoadCallbacksTest, EnableWebUsageTwice) {
+  const GURL url = HttpServer::MakeUrl("http://chromium.test");
+  std::map<GURL, std::string> responses;
+  responses[url] = "Chromium Test";
+  web::test::SetUpSimpleHttpServer(responses);
+
+  // Only expect one set of load events from the first LoadUrl(), not subsequent
+  // SetWebUsageEnabled(true) calls. Web usage is already enabled, so the
+  // subsequent calls should be noops.
+  NavigationContext* context = nullptr;
+  EXPECT_CALL(observer_, DidStartLoading(web_state()));
+  EXPECT_CALL(*decider_, ShouldAllowRequest(_, _)).WillOnce(Return(true));
+  EXPECT_CALL(observer_, DidStartNavigation(web_state(), _))
+      .WillOnce(VerifyNewPageStartedContext(web_state(), url, &context));
+  EXPECT_CALL(*decider_, ShouldAllowResponse(_, /*for_main_frame=*/true))
+      .WillOnce(Return(true));
+  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
+      .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
+  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
+
+  LoadUrl(url);
+  web_state()->SetWebUsageEnabled(true);
+  web_state()->SetWebUsageEnabled(true);
 }
 
 // Tests failed navigation to a new page.
@@ -432,6 +464,10 @@ TEST_F(NavigationAndLoadCallbacksTest, FailedNavigation) {
   EXPECT_CALL(observer_, DidStartNavigation(web_state(), _))
       .WillOnce(VerifyNewPageStartedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  // TODO(crbug.com/803232): PageLoaded() should be called after
+  // DidFinishNavigation().
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyErrorFinishedContext(web_state(), url, &context));
   // LoadUrl() expects sucessfull load and can not be used here.
@@ -456,6 +492,8 @@ TEST_F(NavigationAndLoadCallbacksTest, WebPageReloadNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
 
   // Reload web page.
@@ -470,6 +508,8 @@ TEST_F(NavigationAndLoadCallbacksTest, WebPageReloadNavigation) {
       .WillOnce(VerifyReloadFinishedContext(web_state(), url, &context,
                                             true /* is_web_page */));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   // TODO(crbug.com/700958): ios/web ignores |check_for_repost| flag and current
   // delegate does not run callback for ShowRepostFormWarningDialog. Clearing
   // the delegate will allow form resubmission. Remove this workaround (clearing
@@ -499,6 +539,8 @@ TEST_F(NavigationAndLoadCallbacksTest, UserInitiatedHashChangeNavigation) {
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
 
   // Perform same-document navigation.
@@ -517,6 +559,8 @@ TEST_F(NavigationAndLoadCallbacksTest, UserInitiatedHashChangeNavigation) {
           ui::PageTransition::PAGE_TRANSITION_TYPED,
           /*renderer_initiated=*/false));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(hash_url);
 
   // Perform same-document navigation by going back.
@@ -535,6 +579,8 @@ TEST_F(NavigationAndLoadCallbacksTest, UserInitiatedHashChangeNavigation) {
           ui::PageTransition::PAGE_TRANSITION_FORWARD_BACK,
           /*renderer_initiated=*/false));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteBlockAndWaitForLoad(url, ^{
     navigation_manager()->GoBack();
   });
@@ -558,6 +604,8 @@ TEST_F(NavigationAndLoadCallbacksTest, RendererInitiatedHashChangeNavigation) {
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
 
   // Perform same-page navigation using JavaScript.
@@ -576,6 +624,8 @@ TEST_F(NavigationAndLoadCallbacksTest, RendererInitiatedHashChangeNavigation) {
           ui::PageTransition::PAGE_TRANSITION_CLIENT_REDIRECT,
           /*renderer_initiated=*/true));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteJavaScript(@"window.location.hash = '#1'");
 }
 
@@ -597,6 +647,8 @@ TEST_F(NavigationAndLoadCallbacksTest, StateNavigation) {
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
 
   // Perform push state using JavaScript.
@@ -644,7 +696,9 @@ TEST_F(NavigationAndLoadCallbacksTest, NativeContentNavigation) {
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
       .WillOnce(VerifyNewNativePageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
-  [provider_ setController:content_.get() forURL:url];
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
+  [provider_ setController:content_ forURL:url];
   LoadUrl(url);
 }
 
@@ -657,7 +711,9 @@ TEST_F(NavigationAndLoadCallbacksTest, NativeContentReload) {
   // navigations.
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
-  [provider_ setController:content_.get() forURL:url];
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
+  [provider_ setController:content_ forURL:url];
   LoadUrl(url);
 
   // Reload native content.
@@ -671,6 +727,8 @@ TEST_F(NavigationAndLoadCallbacksTest, NativeContentReload) {
       .WillOnce(VerifyReloadFinishedContext(web_state(), url, &context,
                                             false /* is_web_page */));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   navigation_manager()->Reload(ReloadType::NORMAL, false /*check_for_repost*/);
 }
 
@@ -696,11 +754,13 @@ TEST_F(NavigationAndLoadCallbacksTest, UserInitiatedPostNavigation) {
       .WillOnce(VerifyPostFinishedContext(web_state(), url, &context,
                                           /*renderer_initiated=*/false));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
 
   // Load request using POST HTTP method.
   web::NavigationManager::WebLoadParams params(url);
-  params.post_data.reset([@"foo" dataUsingEncoding:NSUTF8StringEncoding]);
-  params.extra_headers.reset(@{@"Content-Type" : @"text/html"});
+  params.post_data = [@"foo" dataUsingEncoding:NSUTF8StringEncoding];
+  params.extra_headers = @{@"Content-Type" : @"text/html"};
   LoadWithParams(params);
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), kTestPageText));
 }
@@ -724,6 +784,8 @@ TEST_F(NavigationAndLoadCallbacksTest, RendererInitiatedPostNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), kTestPageText));
 
@@ -740,6 +802,8 @@ TEST_F(NavigationAndLoadCallbacksTest, RendererInitiatedPostNavigation) {
       .WillOnce(VerifyPostFinishedContext(web_state(), action, &context,
                                           /*renderer_initiated=*/true));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteJavaScript(@"document.getElementById('form').submit();");
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), responses[action]));
 }
@@ -763,6 +827,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ReloadPostNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), kTestPageText));
 
@@ -774,6 +840,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ReloadPostNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteJavaScript(@"window.document.getElementById('form').submit();");
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), responses[action]));
 
@@ -790,6 +858,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ReloadPostNavigation) {
       .WillOnce(VerifyPostFinishedContext(web_state(), action, &context,
                                           /*renderer_initiated=*/true));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   // TODO(crbug.com/700958): ios/web ignores |check_for_repost| flag and current
   // delegate does not run callback for ShowRepostFormWarningDialog. Clearing
   // the delegate will allow form resubmission. Remove this workaround (clearing
@@ -820,6 +890,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ForwardPostNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   LoadUrl(url);
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), kTestPageText));
 
@@ -831,6 +903,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ForwardPostNavigation) {
       .WillOnce(Return(true));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteJavaScript(@"window.document.getElementById('form').submit();");
   ASSERT_TRUE(WaitForWebViewContainingText(web_state(), responses[action]));
 
@@ -853,6 +927,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ForwardPostNavigation) {
   }
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   ExecuteBlockAndWaitForLoad(url, ^{
     navigation_manager()->GoBack();
   });
@@ -873,6 +949,8 @@ TEST_F(NavigationAndLoadCallbacksTest, ForwardPostNavigation) {
       .WillOnce(VerifyPostFinishedContext(web_state(), action, &context,
                                           /*renderer_initiated=*/false));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
   // TODO(crbug.com/700958): ios/web ignores |check_for_repost| flag and current
   // delegate does not run callback for ShowRepostFormWarningDialog. Clearing
   // the delegate will allow form resubmission. Remove this workaround (clearing
@@ -881,6 +959,37 @@ TEST_F(NavigationAndLoadCallbacksTest, ForwardPostNavigation) {
   ExecuteBlockAndWaitForLoad(action, ^{
     navigation_manager()->GoForward();
   });
+}
+
+// Tests server redirect navigation.
+TEST_F(NavigationAndLoadCallbacksTest, RedirectNavigation) {
+  const GURL url = HttpServer::MakeUrl("http://chromium.test");
+  std::map<GURL, HtmlResponseProviderImpl::Response> responses;
+  const GURL redirect_url = HttpServer::MakeUrl("http://chromium2.test");
+  responses[url] = HtmlResponseProviderImpl::GetRedirectResponse(
+      redirect_url, net::HTTP_MOVED_PERMANENTLY);
+  responses[redirect_url] = HtmlResponseProviderImpl::GetSimpleResponse("here");
+  std::unique_ptr<web::DataResponseProvider> provider(
+      new HtmlResponseProvider(responses));
+  web::test::SetUpHttpServer(std::move(provider));
+
+  // Load url which replies with redirect.
+  NavigationContext* context = nullptr;
+  EXPECT_CALL(observer_, DidStartLoading(web_state()));
+  EXPECT_CALL(*decider_, ShouldAllowRequest(_, _)).WillOnce(Return(true));
+  EXPECT_CALL(observer_, DidStartNavigation(web_state(), _))
+      .WillOnce(VerifyNewPageStartedContext(web_state(), url, &context));
+  // Second ShouldAllowRequest call is for redirect_url.
+  EXPECT_CALL(*decider_, ShouldAllowRequest(_, _)).WillOnce(Return(true));
+  EXPECT_CALL(*decider_, ShouldAllowResponse(_, /*for_main_frame=*/true))
+      .WillOnce(Return(true));
+  EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _))
+      .WillOnce(
+          VerifyNewPageFinishedContext(web_state(), redirect_url, &context));
+  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  EXPECT_CALL(observer_,
+              PageLoaded(web_state(), PageLoadCompletionStatus::SUCCESS));
+  LoadUrl(url);
 }
 
 }  // namespace web

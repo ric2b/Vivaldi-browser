@@ -31,7 +31,7 @@
 #include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTextFragment.h"
-#include "core/layout/api/LayoutTextFragmentItem.h"
+#include "platform/text/TextBreakIterator.h"
 #include "platform/wtf/text/WTFString.h"
 #include "platform/wtf/text/icu/UnicodeIcu.h"
 
@@ -44,7 +44,7 @@ using namespace Unicode;
 // (i.e, characters defined in Unicode [UNICODE] in the "open" (Ps), "close"
 // (Pe), "initial" (Pi). "final" (Pf) and "other" (Po) punctuation classes),
 // that precedes or follows the first letter should be included"
-static inline bool IsPunctuationForFirstLetter(UChar c) {
+static inline bool IsPunctuationForFirstLetter(UChar32 c) {
   CharCategory char_category = Category(c);
   return char_category == kPunctuation_Open ||
          char_category == kPunctuation_Close ||
@@ -55,14 +55,6 @@ static inline bool IsPunctuationForFirstLetter(UChar c) {
 
 static inline bool IsSpaceForFirstLetter(UChar c) {
   return IsSpaceOrNewline(c) || c == kNoBreakSpaceCharacter;
-}
-
-static inline bool IsBetweenSurrogatePair(const String& text, unsigned offset) {
-  if (offset == 0u || offset >= text.length())
-    return false;
-  if (text.Is8Bit())
-    return false;
-  return U16_IS_LEAD(text[offset - 1]) && U16_IS_TRAIL(text[offset]);
 }
 
 unsigned FirstLetterPseudoElement::FirstLetterLength(const String& text) {
@@ -76,8 +68,9 @@ unsigned FirstLetterPseudoElement::FirstLetterLength(const String& text) {
   while (length < text_length && IsSpaceForFirstLetter(text[length]))
     length++;
   // Now account for leading punctuation.
-  while (length < text_length && IsPunctuationForFirstLetter(text[length]))
-    length++;
+  while (length < text_length &&
+         IsPunctuationForFirstLetter(text.CharacterStartingAt(length)))
+    length += LengthOfGraphemeCluster(text, length);
 
   // Bail if we didn't find a letter before the end of the text or before a
   // space.
@@ -85,14 +78,15 @@ unsigned FirstLetterPseudoElement::FirstLetterLength(const String& text) {
     return 0;
 
   // Account the next character for first letter.
-  length++;
+  length += LengthOfGraphemeCluster(text, length);
 
   // Keep looking for allowed punctuation for the :first-letter.
-  for (; length < text_length; ++length) {
-    UChar c = text[length];
-    if (!IsPunctuationForFirstLetter(c) &&
-        !IsBetweenSurrogatePair(text, length))
+  unsigned num_code_units = 0;
+  for (; length < text_length; length += num_code_units) {
+    UChar32 c = text.CharacterStartingAt(length);
+    if (!IsPunctuationForFirstLetter(c))
       break;
+    num_code_units = LengthOfGraphemeCluster(text, length);
   }
   return length;
 }
@@ -218,19 +212,18 @@ void FirstLetterPseudoElement::UpdateTextFragments() {
        child = child->NextSibling()) {
     if (!child->IsText() || !ToLayoutText(child)->IsTextFragment())
       continue;
-    LayoutTextFragmentItem child_fragment =
-        LayoutTextFragmentItem(ToLayoutTextFragment(child));
-    if (child_fragment.GetFirstLetterPseudoElement() != this)
+    LayoutTextFragment* child_fragment = ToLayoutTextFragment(child);
+    if (child_fragment->GetFirstLetterPseudoElement() != this)
       continue;
 
-    child_fragment.SetTextFragment(old_text.Impl()->Substring(0, length), 0,
-                                   length);
-    child_fragment.DirtyLineBoxes();
+    child_fragment->SetTextFragment(old_text.Impl()->Substring(0, length), 0,
+                                    length);
+    child_fragment->DirtyLineBoxes();
 
     // Make sure the first-letter layoutObject is set to require a layout as it
     // needs to re-create the line boxes. The remaining text layoutObject
     // will be marked by the LayoutText::setText.
-    child_fragment.SetNeedsLayoutAndPrefWidthsRecalc(
+    child_fragment->SetNeedsLayoutAndPrefWidthsRecalc(
         LayoutInvalidationReason::kTextChanged);
     break;
   }
@@ -353,7 +346,7 @@ void FirstLetterPseudoElement::AttachFirstLetterTextLayoutObjects() {
   next_layout_object->Destroy();
 }
 
-void FirstLetterPseudoElement::DidRecalcStyle() {
+void FirstLetterPseudoElement::DidRecalcStyle(StyleRecalcChange) {
   LayoutObject* layout_object = GetLayoutObject();
   if (!layout_object)
     return;

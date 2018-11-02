@@ -46,6 +46,10 @@ void VRDeviceBase::OnExitPresent() {
   SetPresentingDisplay(nullptr);
 }
 
+bool VRDeviceBase::IsFallbackDevice() {
+  return false;
+};
+
 mojom::VRDisplayInfoPtr VRDeviceBase::GetVRDisplayInfo() {
   DCHECK(display_info_);
   return display_info_.Clone();
@@ -55,8 +59,9 @@ void VRDeviceBase::RequestPresent(
     VRDisplayImpl* display,
     mojom::VRSubmitFrameClientPtr submit_client,
     mojom::VRPresentationProviderRequest request,
+    mojom::VRRequestPresentOptionsPtr present_options,
     mojom::VRDisplayHost::RequestPresentCallback callback) {
-  std::move(callback).Run(false);
+  std::move(callback).Run(false, nullptr);
 }
 
 void VRDeviceBase::ExitPresent() {

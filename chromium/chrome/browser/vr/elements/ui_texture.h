@@ -34,10 +34,14 @@ class UiTexture {
   virtual ~UiTexture();
 
   void DrawAndLayout(SkCanvas* canvas, const gfx::Size& texture_size);
+  void MeasureSize();
+  // TODO(bshe): make this pure virtual.
+  virtual void OnMeasureSize();
   virtual gfx::Size GetPreferredTextureSize(int maximum_width) const = 0;
   virtual gfx::SizeF GetDrawnSize() const = 0;
-  virtual bool HitTest(const gfx::PointF& point) const;
+  virtual bool LocalHitTest(const gfx::PointF& point) const;
 
+  bool measured() const { return measured_; }
   bool dirty() const { return dirty_; }
 
   void OnInitialized();
@@ -75,6 +79,14 @@ class UiTexture {
     kWrappingBehaviorNoWrap,
   };
 
+  struct TextRenderParameters {
+    SkColor color = SK_ColorBLACK;
+    TextAlignment text_alignment = kTextAlignmentNone;
+    WrappingBehavior wrapping_behavior = kWrappingBehaviorNoWrap;
+    bool cursor_enabled = false;
+    int cursor_position = 0;
+  };
+
  protected:
   virtual void Draw(SkCanvas* canvas, const gfx::Size& texture_size) = 0;
 
@@ -85,12 +97,20 @@ class UiTexture {
     *target = value;
   }
 
-  // Prepares a set of RenderText objects with the given color and fonts.
+  // Prepares a set of RenderText objects with the given parameters.
   // Attempts to fit the text within the provided size. |flags| specifies how
   // the text should be rendered. If multiline is requested and provided height
   // is 0, it will be set to the minimum needed to fit the whole text. If
   // multiline is not requested and provided width is 0, it will be set to the
   // minimum needed to fit the whole text.
+  static std::vector<std::unique_ptr<gfx::RenderText>> PrepareDrawStringRect(
+      const base::string16& text,
+      const gfx::FontList& font_list,
+      gfx::Rect* bounds,
+      const TextRenderParameters& parameters);
+
+  // Deprecated legacy text prep function. UI elements that use this routine
+  // should migrate to use Text elements, rather than drawing text directly.
   static std::vector<std::unique_ptr<gfx::RenderText>> PrepareDrawStringRect(
       const base::string16& text,
       const gfx::FontList& font_list,
@@ -110,12 +130,17 @@ class UiTexture {
   static bool IsRTL();
   static void SetForceFontFallbackFailureForTesting(bool force);
 
-  void set_dirty() { dirty_ = true; }
+  void set_dirty() {
+    measured_ = false;
+    dirty_ = true;
+  }
+
   SkColor foreground_color() const;
   SkColor background_color() const;
 
  private:
   bool dirty_ = true;
+  bool measured_ = false;
   base::Optional<SkColor> foreground_color_;
   base::Optional<SkColor> background_color_;
 

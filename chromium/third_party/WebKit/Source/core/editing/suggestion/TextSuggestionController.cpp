@@ -357,6 +357,9 @@ void TextSuggestionController::OnSuggestionMenuClosed() {
 
 void TextSuggestionController::SuggestionMenuTimeoutCallback(
     size_t max_number_of_suggestions) {
+  if (!IsAvailable())
+    return;
+
   const VisibleSelectionInFlatTree& selection =
       GetFrame().Selection().ComputeVisibleSelectionInFlatTree();
   if (selection.IsNone())
@@ -589,7 +592,7 @@ void TextSuggestionController::AttemptToDeleteActiveSuggestionRange() {
 
 void TextSuggestionController::ReplaceRangeWithText(const EphemeralRange& range,
                                                     const String& replacement) {
-  GetFrame().Selection().SetSelection(
+  GetFrame().Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder().SetBaseAndExtent(range).Build());
 
   // Dispatch 'beforeinput'.

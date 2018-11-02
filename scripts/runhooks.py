@@ -6,6 +6,10 @@ import platform
 
 SRC = os.path.dirname(os.path.dirname(__file__))
 
+depot_tools_path = os.path.abspath(os.path.join(SRC, "chromium/third_party/depot_tools"))
+os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
+os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
+
 OS_CHOICES = {
   "win32": "win",
   "win": "win",
@@ -101,6 +105,7 @@ if "--clobber-out" in sys.argv:
     stop_time = datetime.datetime.now()
     print "Deleted", out_dir, "in", (stop_time-start_time).total_seconds(), "seconds"
     sys.stdout.flush()
+
 
 deps_content = deps_utils.GetDepsContent("DEPS")
 (deps, hooks, deps_vars, recursion) = deps_content

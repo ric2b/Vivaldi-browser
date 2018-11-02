@@ -4,10 +4,10 @@
 
 #include "base/memory/ref_counted.h"
 
+#include <type_traits>
 #include <utility>
 
 #include "base/test/gtest_util.h"
-#include "base/test/opaque_ref_counted.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -161,6 +161,12 @@ TEST(RefCountedUnitTest, TestSelfAssignment) {
   scoped_refptr<SelfAssign> var(p);
   var = var;
   EXPECT_EQ(var.get(), p);
+  var = std::move(var);
+  EXPECT_EQ(var.get(), p);
+  var.swap(var);
+  EXPECT_EQ(var.get(), p);
+  swap(var, var);
+  EXPECT_EQ(var.get(), p);
 }
 
 TEST(RefCountedUnitTest, ScopedRefPtrMemberAccess) {
@@ -186,37 +192,6 @@ TEST(RefCountedUnitTest, ScopedRefPtrToSelfMoveAssignment) {
   // release |check->self_ptr_|.
   check->self_ptr_ = scoped_refptr<ScopedRefPtrToSelf>();
   EXPECT_TRUE(ScopedRefPtrToSelf::was_destroyed());
-}
-
-TEST(RefCountedUnitTest, ScopedRefPtrToOpaque) {
-  scoped_refptr<base::OpaqueRefCounted> initial = base::MakeOpaqueRefCounted();
-  base::TestOpaqueRefCounted(initial);
-
-  scoped_refptr<base::OpaqueRefCounted> assigned;
-  assigned = initial;
-
-  scoped_refptr<base::OpaqueRefCounted> copied(initial);
-
-  scoped_refptr<base::OpaqueRefCounted> moved(std::move(initial));
-
-  scoped_refptr<base::OpaqueRefCounted> move_assigned;
-  move_assigned = std::move(moved);
-}
-
-TEST(RefCountedUnitTest, ScopedRefPtrToOpaqueThreadSafe) {
-  scoped_refptr<base::OpaqueRefCountedThreadSafe> initial =
-      base::MakeOpaqueRefCountedThreadSafe();
-  base::TestOpaqueRefCountedThreadSafe(initial);
-
-  scoped_refptr<base::OpaqueRefCountedThreadSafe> assigned;
-  assigned = initial;
-
-  scoped_refptr<base::OpaqueRefCountedThreadSafe> copied(initial);
-
-  scoped_refptr<base::OpaqueRefCountedThreadSafe> moved(std::move(initial));
-
-  scoped_refptr<base::OpaqueRefCountedThreadSafe> move_assigned;
-  move_assigned = std::move(moved);
 }
 
 TEST(RefCountedUnitTest, BooleanTesting) {
@@ -563,21 +538,21 @@ TEST(RefCountedUnitTest, MoveConstructorDerived) {
 }
 
 TEST(RefCountedUnitTest, TestOverloadResolutionCopy) {
-  scoped_refptr<Derived> derived(new Derived);
-  scoped_refptr<SelfAssign> expected(derived);
+  const scoped_refptr<Derived> derived(new Derived);
+  const scoped_refptr<SelfAssign> expected(derived);
   EXPECT_EQ(expected, Overloaded(derived));
 
-  scoped_refptr<Other> other(new Other);
+  const scoped_refptr<Other> other(new Other);
   EXPECT_EQ(other, Overloaded(other));
 }
 
 TEST(RefCountedUnitTest, TestOverloadResolutionMove) {
   scoped_refptr<Derived> derived(new Derived);
-  scoped_refptr<SelfAssign> expected(derived);
+  const scoped_refptr<SelfAssign> expected(derived);
   EXPECT_EQ(expected, Overloaded(std::move(derived)));
 
   scoped_refptr<Other> other(new Other);
-  scoped_refptr<Other> other2(other);
+  const scoped_refptr<Other> other2(other);
   EXPECT_EQ(other2, Overloaded(std::move(other)));
 }
 

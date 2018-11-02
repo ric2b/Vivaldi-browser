@@ -33,6 +33,19 @@ void RemoteEventDispatcherImpl::DispatchEvent(int64_t display_id,
     return;
   }
 
+  if (event->IsLocatedEvent()) {
+    LocatedEvent* located_event = event->AsLocatedEvent();
+    if (located_event->root_location_f() != located_event->location_f()) {
+      DVLOG(1) << "RemoteEventDispatcher::DispatchEvent locations must match";
+      cb.Run(false);
+      return;
+    }
+
+    // If this is a mouse pointer event, then we have to also update the
+    // location of the cursor on the screen.
+    if (event->IsMousePointerEvent())
+      display->platform_display()->MoveCursorTo(located_event->location());
+  }
   ignore_result(static_cast<PlatformDisplayDelegate*>(display)
                     ->GetEventSink()
                     ->OnEventFromSource(event.get()));

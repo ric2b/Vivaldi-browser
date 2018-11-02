@@ -4,8 +4,14 @@
 
 #import "ios/chrome/browser/ui/toolbar/legacy_toolbar_coordinator.h"
 
+#import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/ui/commands/toolbar_commands.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_controller_factory.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_updater.h"
 #import "ios/chrome/browser/ui/toolbar/clean/toolbar_button_updater.h"
-#import "ios/chrome/browser/ui/toolbar/omnibox_focuser.h"
+#import "ios/chrome/browser/ui/toolbar/public/omnibox_focuser.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_coordinator.h"
@@ -15,28 +21,35 @@
 #error "This file requires ARC support."
 #endif
 
-@interface LegacyToolbarCoordinator () {
+@interface LegacyToolbarCoordinator ()<ToolbarCommands> {
   // Coordinator for the tools menu UI.
   ToolsMenuCoordinator* _toolsMenuCoordinator;
+  // The fullscreen updater.
+  std::unique_ptr<FullscreenUIUpdater> _fullscreenUpdater;
 }
 
 @property(nonatomic, strong) id<Toolbar> toolbarController;
 @end
 
 @implementation LegacyToolbarCoordinator
-@synthesize tabModel = _tabModel;
-@synthesize toolbarViewController = _toolbarViewController;
 @synthesize toolbarController = _toolbarController;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
             toolsMenuConfigurationProvider:
                 (id<ToolsMenuConfigurationProvider>)configurationProvider
-                                dispatcher:(CommandDispatcher*)dispatcher {
-  if (self = [super initWithBaseViewController:viewController]) {
-    _toolsMenuCoordinator = [[ToolsMenuCoordinator alloc]
-        initWithBaseViewController:viewController];
+                                dispatcher:(CommandDispatcher*)dispatcher
+                              browserState:
+                                  (ios::ChromeBrowserState*)browserState {
+  if (self = [super initWithBaseViewController:viewController
+                                  browserState:browserState]) {
+    DCHECK(browserState);
+    _toolsMenuCoordinator = [[ToolsMenuCoordinator alloc] init];
     _toolsMenuCoordinator.dispatcher = dispatcher;
     _toolsMenuCoordinator.configurationProvider = configurationProvider;
+    [_toolsMenuCoordinator start];
+
+    [dispatcher startDispatchingToTarget:self
+                             forProtocol:@protocol(ToolbarCommands)];
 
     NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
     [defaultCenter addObserver:self
@@ -50,15 +63,23 @@
   }
   return self;
 }
+
+- (void)start {
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
+    [self startObservingFullscreen];
+}
+
 - (void)stop {
+  [self.toolbarController setBackgroundAlpha:1.0];
+  [self.toolbarController browserStateDestroyed];
+  [self.toolbarController stop];
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
+    [self stopObservingFullscreen];
   self.toolbarController = nil;
 }
 
-- (UIViewController*)toolbarViewController {
-  if (!_toolbarViewController)
-    _toolbarViewController = self.toolbarController.viewController;
-
-  return _toolbarViewController;
+- (UIViewController*)viewController {
+  return self.toolbarController.viewController;
 }
 
 #pragma mark - Delegates
@@ -93,10 +114,6 @@
   [toolbarController start];
 }
 
-- (void)setToolbarDelegate:(id<WebToolbarDelegate>)delegate {
-  self.toolbarController.delegate = delegate;
-}
-
 - (void)adjustToolbarHeight {
   [self.toolbarController adjustToolbarHeight];
 }
@@ -110,8 +127,7 @@
 }
 
 - (void)browserStateDestroyed {
-  [self.toolbarController setBackgroundAlpha:1.0];
-  [self.toolbarController browserStateDestroyed];
+  [self stop];
 }
 
 - (void)updateToolbarState {
@@ -157,6 +173,8 @@
   [self.toolbarController cancelOmniboxEdit];
 }
 
+#pragma mark - FakeboxFocuser
+
 - (void)focusFakebox {
   [self.toolbarController focusFakebox];
 }
@@ -172,7 +190,7 @@
 #pragma mark - SideSwipeToolbarInteracting
 
 - (UIView*)toolbarView {
-  return self.toolbarViewController.view;
+  return self.viewController.view;
 }
 
 - (BOOL)canBeginToolbarSwipe {
@@ -182,7 +200,7 @@
 - (UIImage*)toolbarSideSwipeSnapshotForTab:(Tab*)tab {
   [self.toolbarController updateToolbarForSideSwipeSnapshot:tab];
   UIImage* toolbarSnapshot = CaptureViewWithOption(
-      [self.toolbarViewController view], [[UIScreen mainScreen] scale],
+      [self.viewController view], [[UIScreen mainScreen] scale],
       kClientSideRendering);
 
   [self.toolbarController resetToolbarAfterSideSwipeSnapshot];
@@ -193,39 +211,32 @@
 
 - (UIView*)snapshotForTabSwitcher {
   UIView* toolbarSnapshotView;
-  if ([self.toolbarViewController.view window]) {
+  if ([self.viewController.view window]) {
     toolbarSnapshotView =
-        [self.toolbarViewController.view snapshotViewAfterScreenUpdates:NO];
+        [self.viewController.view snapshotViewAfterScreenUpdates:NO];
   } else {
     toolbarSnapshotView =
-        [[UIView alloc] initWithFrame:self.toolbarViewController.view.frame];
-    [toolbarSnapshotView layer].contents =
-        static_cast<id>(CaptureViewWithOption(self.toolbarViewController.view,
-                                              0, kClientSideRendering)
-                            .CGImage);
+        [[UIView alloc] initWithFrame:self.viewController.view.frame];
+    [toolbarSnapshotView layer].contents = static_cast<id>(
+        CaptureViewWithOption(self.viewController.view, 0, kClientSideRendering)
+            .CGImage);
   }
   return toolbarSnapshotView;
 }
 
 - (UIView*)snapshotForStackViewWithWidth:(CGFloat)width
                           safeAreaInsets:(UIEdgeInsets)safeAreaInsets {
-  // The snapshotted view must not be in the view hierarchy, because the code
-  // below temporarily changes the frames of views in order to take the snapshot
-  // in simulated target frame. The frames will be returned to normal after the
-  // snapshot is taken.
-  DCHECK(self.toolbarViewController.view.window == nil);
-
-  CGRect oldFrame = self.toolbarViewController.view.superview.frame;
+  CGRect oldFrame = self.viewController.view.superview.frame;
   CGRect newFrame = oldFrame;
   newFrame.size.width = width;
 
-  self.toolbarViewController.view.superview.frame = newFrame;
+  self.viewController.view.superview.frame = newFrame;
   [self.toolbarController activateFakeSafeAreaInsets:safeAreaInsets];
-  [self.toolbarViewController.view.superview layoutIfNeeded];
+  [self.viewController.view.superview layoutIfNeeded];
 
   UIView* toolbarSnapshotView = [self snapshotForTabSwitcher];
 
-  self.toolbarViewController.view.superview.frame = oldFrame;
+  self.viewController.view.superview.frame = oldFrame;
   [self.toolbarController deactivateFakeSafeAreaInsets];
 
   return toolbarSnapshotView;
@@ -237,7 +248,7 @@
       self.toolbarController.backgroundView.alpha == 0) {
     // If the background view isn't visible, use the base toolbar view's
     // background color.
-    toolbarBackgroundColor = self.toolbarViewController.view.backgroundColor;
+    toolbarBackgroundColor = self.viewController.view.backgroundColor;
   }
   return toolbarBackgroundColor;
 }
@@ -272,6 +283,46 @@
 
 - (void)toolsMenuWillHideNotification:(NSNotification*)note {
   [self.toolbarController setToolsMenuIsVisibleForToolsMenuButton:NO];
+}
+
+#pragma mark - Toolbar Commands
+
+- (void)contractToolbar {
+  [self cancelOmniboxEdit];
+}
+
+#pragma mark - Fullscreen helpers
+
+// Creates a FullscreenUIUpdater for the toolbar controller and adds it as a
+// FullscreenControllerObserver.
+- (void)startObservingFullscreen {
+  DCHECK(base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen));
+  if (_fullscreenUpdater)
+    return;
+  if (!self.browserState)
+    return;
+  FullscreenController* fullscreenController =
+      FullscreenControllerFactory::GetInstance()->GetForBrowserState(
+          self.browserState);
+  DCHECK(fullscreenController);
+  _fullscreenUpdater =
+      std::make_unique<FullscreenUIUpdater>(self.toolbarController);
+  fullscreenController->AddObserver(_fullscreenUpdater.get());
+}
+
+// Removes the FullscreenUIUpdater as a FullscreenControllerObserver.
+- (void)stopObservingFullscreen {
+  DCHECK(base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen));
+  if (!_fullscreenUpdater)
+    return;
+  if (!self.browserState)
+    return;
+  FullscreenController* fullscreenController =
+      FullscreenControllerFactory::GetInstance()->GetForBrowserState(
+          self.browserState);
+  DCHECK(fullscreenController);
+  fullscreenController->RemoveObserver(_fullscreenUpdater.get());
+  _fullscreenUpdater = nullptr;
 }
 
 @end

@@ -1,5 +1,5 @@
 
-post_process_template("//chrome/browser/ui:ui") {
+update_template_instance("//chrome/browser/ui:ui") {
   sources += [
     "//vivaldi/ui/about/vivaldi_about_version.cc",
     "//vivaldi/ui/about/vivaldi_about_version.h",
@@ -18,6 +18,8 @@ post_process_template("//chrome/browser/ui:ui") {
   }
   if (is_mac) {
     sources += [
+      "//vivaldi/ui/cocoa/vivaldi_bookmark_menu_mac.h",
+      "//vivaldi/ui/cocoa/vivaldi_bookmark_menu_mac.mm",
       "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.h",
       "//vivaldi/ui/cocoa/vivaldi_browser_window_cocoa.mm",
       "//vivaldi/ui/cocoa/vivaldi_context_menu_mac.h",
@@ -53,14 +55,10 @@ post_process_template("//chrome/browser/ui:ui") {
 }
 
 if (is_win) {
-  post_process_target("//ui/base:base") {
+  update_target("//ui/base:base") {
     sources += [
       "//vivaldi/ui/dragging/custom_drag_source_win.cc",
       "//vivaldi/ui/dragging/custom_drag_source_win.h",
     ]
-  }
-
-  post_process_target("//third_party/WebKit/Source/platform:blink_common") {
-    deps += [ "//ui/events:events" ]
   }
 }

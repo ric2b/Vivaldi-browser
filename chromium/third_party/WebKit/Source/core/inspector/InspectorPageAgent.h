@@ -31,6 +31,7 @@
 #ifndef InspectorPageAgent_h
 #define InspectorPageAgent_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Page.h"
@@ -60,14 +61,11 @@ using blink::protocol::Maybe;
 
 class CORE_EXPORT InspectorPageAgent final
     : public InspectorBaseAgent<protocol::Page::Metainfo> {
-  WTF_MAKE_NONCOPYABLE(InspectorPageAgent);
-
  public:
   class Client {
    public:
-    virtual ~Client() {}
+    virtual ~Client() = default;
     virtual void PageLayoutInvalidated(bool resized) {}
-    virtual void WaitForCreateWindow(InspectorPageAgent*, LocalFrame*) {}
   };
 
   enum ResourceType {
@@ -117,16 +115,9 @@ class CORE_EXPORT InspectorPageAgent final
       String* identifier) override;
   protocol::Response removeScriptToEvaluateOnNewDocument(
       const String& identifier) override;
-  protocol::Response setAutoAttachToCreatedPages(bool) override;
   protocol::Response setLifecycleEventsEnabled(bool) override;
   protocol::Response reload(Maybe<bool> bypass_cache,
                             Maybe<String> script_to_evaluate_on_load) override;
-  protocol::Response navigate(const String& url,
-                              Maybe<String> referrer,
-                              Maybe<String> transitionType,
-                              String* frame_id,
-                              Maybe<String>* loader_id,
-                              Maybe<String>* errorText) override;
   protocol::Response stopLoading() override;
   protocol::Response setAdBlockingEnabled(bool) override;
   protocol::Response getResourceTree(
@@ -183,7 +174,6 @@ class CORE_EXPORT InspectorPageAgent final
   void Did(const probe::UpdateLayout&);
   void Will(const probe::RecalculateStyle&);
   void Did(const probe::RecalculateStyle&);
-  void WindowCreated(LocalFrame*);
   void WindowOpen(Document*,
                   const String&,
                   const AtomicString&,
@@ -238,6 +228,7 @@ class CORE_EXPORT InspectorPageAgent final
   bool reloading_;
   Member<InspectorResourceContentLoader> inspector_resource_content_loader_;
   int resource_content_loader_client_id_;
+  DISALLOW_COPY_AND_ASSIGN(InspectorPageAgent);
 };
 
 }  // namespace blink

@@ -8,10 +8,11 @@
 #include <utility>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/accelerators/accelerator_controller_delegate_classic.h"
 #include "ash/display/display_synchronizer.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/ash_window_tree_host_mus.h"
+#include "ash/host/ash_window_tree_host_mus_mirroring_unified.h"
+#include "ash/host/ash_window_tree_host_mus_unified.h"
 #include "ash/keyboard/keyboard_ui_mash.h"
 #include "ash/pointer_watcher_adapter_classic.h"
 #include "ash/public/cpp/config.h"
@@ -32,6 +33,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace/workspace_event_handler_classic.h"
 #include "base/memory/ptr_util.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "services/ui/public/interfaces/constants.mojom.h"
 #include "services/ui/public/interfaces/video_detector.mojom.h"
 #include "ui/aura/env.h"
@@ -40,6 +42,7 @@
 #include "ui/aura/mus/window_tree_host_mus.h"
 #include "ui/aura/mus/window_tree_host_mus_init_params.h"
 #include "ui/aura/window.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/forwarding_display_delegate.h"
 #include "ui/display/types/native_display_delegate.h"
@@ -206,6 +209,21 @@ std::unique_ptr<AshWindowTreeHost> ShellPortMus::CreateAshWindowTreeHost(
   aura_init_params.display_id = init_params.display_id;
   aura_init_params.display_init_params = std::move(display_params);
   aura_init_params.use_classic_ime = !Shell::ShouldUseIMEService();
+  aura_init_params.uses_real_accelerated_widget =
+      !::switches::IsMusHostingViz();
+
+  if (!::switches::IsMusHostingViz()) {
+    if (init_params.mirroring_unified) {
+      return std::make_unique<AshWindowTreeHostMusMirroringUnified>(
+          std::move(aura_init_params), init_params.display_id,
+          init_params.mirroring_delegate);
+    }
+    if (init_params.offscreen) {
+      return std::make_unique<AshWindowTreeHostMusUnified>(
+          std::move(aura_init_params), init_params.mirroring_delegate);
+    }
+  }
+
   return std::make_unique<AshWindowTreeHostMus>(std::move(aura_init_params));
 }
 
@@ -255,23 +273,26 @@ ShellPortMus::CreateNativeDisplayDelegate() {
 
 std::unique_ptr<AcceleratorController>
 ShellPortMus::CreateAcceleratorController() {
-  DCHECK(!accelerator_controller_delegate_);
-  accelerator_controller_delegate_ =
-      std::make_unique<AcceleratorControllerDelegateClassic>();
-  return std::make_unique<AcceleratorController>(
-      accelerator_controller_delegate_.get(), nullptr);
+  return std::make_unique<AcceleratorController>(nullptr);
 }
 
 void ShellPortMus::AddVideoDetectorObserver(
     viz::mojom::VideoDetectorObserverPtr observer) {
-  // We may not have access to the connector in unit tests.
-  if (!window_manager_->connector())
-    return;
+  if (switches::IsMusHostingViz()) {
+    // We may not have access to the connector in unit tests.
+    if (!window_manager_->connector())
+      return;
 
-  ui::mojom::VideoDetectorPtr video_detector;
-  window_manager_->connector()->BindInterface(ui::mojom::kServiceName,
-                                              &video_detector);
-  video_detector->AddObserver(std::move(observer));
+    ui::mojom::VideoDetectorPtr video_detector;
+    window_manager_->connector()->BindInterface(ui::mojom::kServiceName,
+                                                &video_detector);
+    video_detector->AddObserver(std::move(observer));
+  } else {
+    aura::Env::GetInstance()
+        ->context_factory_private()
+        ->GetHostFrameSinkManager()
+        ->AddVideoDetectorObserver(std::move(observer));
+  }
 }
 
 }  // namespace ash

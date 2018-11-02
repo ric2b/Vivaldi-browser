@@ -11,13 +11,14 @@
 #include <string>
 
 #include "base/memory/ref_counted_memory.h"
+#include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/resource_request_body.h"
+#include "services/network/public/cpp/resource_request_body.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -26,6 +27,7 @@ namespace content {
 
 class PageState;
 struct FaviconStatus;
+struct ReplacedNavigationEntryData;
 struct SSLStatus;
 
 // A NavigationEntry is a data structure that captures all the information
@@ -155,8 +157,9 @@ class NavigationEntry {
   // 1) is not persisted in session restore.
   // 2) is shallow copied with the static copy Create method above.
   // 3) may be nullptr so check before use.
-  virtual void SetPostData(const scoped_refptr<ResourceRequestBody>& data) = 0;
-  virtual scoped_refptr<ResourceRequestBody> GetPostData() const = 0;
+  virtual void SetPostData(
+      const scoped_refptr<network::ResourceRequestBody>& data) = 0;
+  virtual scoped_refptr<network::ResourceRequestBody> GetPostData() const = 0;
 
   // The favicon data and tracking information. See content::FaviconStatus.
   virtual const FaviconStatus& GetFavicon() const = 0;
@@ -216,6 +219,12 @@ class NavigationEntry {
   // redirecting URL to the final non-redirecting current URL.
   virtual void SetRedirectChain(const std::vector<GURL>& redirects) = 0;
   virtual const std::vector<GURL>& GetRedirectChain() const = 0;
+  // When a history entry is replaced (e.g. history.replaceState()), this
+  // contains some information about the entry prior to being replaced. Even if
+  // an entry is replaced multiple times, it represents data prior to the
+  // *first* replace.
+  virtual const base::Optional<ReplacedNavigationEntryData>&
+  GetReplacedEntryData() const = 0;
 
   // True if this entry is restored and hasn't been loaded.
   virtual bool IsRestored() const = 0;

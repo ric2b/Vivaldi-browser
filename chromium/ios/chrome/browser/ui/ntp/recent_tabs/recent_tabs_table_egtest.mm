@@ -10,7 +10,6 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/ui/authentication/signin_earlgrey_utils.h"
 #import "ios/chrome/browser/ui/ntp/recent_tabs/recent_tabs_table_view_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -47,26 +46,13 @@ void OpenRecentTabsPanel() {
   [ChromeEarlGreyUI tapToolsMenuButton:RecentTabsMenuButton()];
 }
 
-// Closes the recent tabs panel, on iPhone.
-void CloseRecentTabsPanelOnIphone() {
-  DCHECK(!IsIPadIdiom());
-
-  id<GREYMatcher> exit_button_matcher = grey_accessibilityID(@"Exit");
-  [[EarlGrey selectElementWithMatcher:exit_button_matcher]
-      performAction:grey_tap()];
-}
-
 // Returns the matcher for the entry of the page in the recent tabs panel.
 id<GREYMatcher> TitleOfTestPage() {
   return grey_allOf(
+      grey_ancestor(grey_accessibilityID(
+          kRecentTabsTableViewControllerAccessibilityIdentifier)),
       chrome_test_util::StaticTextWithAccessibilityLabel(kTitleOfTestPage),
       grey_sufficientlyVisible(), nil);
-}
-
-// Returns the matcher for the Recently closed label.
-id<GREYMatcher> RecentlyClosedLabelMatcher() {
-  return chrome_test_util::StaticTextWithAccessibilityLabelId(
-      IDS_IOS_RECENT_TABS_RECENTLY_CLOSED);
 }
 
 }  // namespace
@@ -88,48 +74,18 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
                                           forKey:kCollapsedSectionsKey];
 }
 
-- (void)tearDown {
-  if (IsIPadIdiom()) {
-    chrome_test_util::OpenNewTab();
-    NSError* error = nil;
-    [[EarlGrey selectElementWithMatcher:RecentlyClosedLabelMatcher()]
-        assertWithMatcher:grey_notNil()
-                    error:&error];
-    // If the Recent Tabs panel is shown, then switch back to the Most Visited
-    // panel so that tabs opened in other tests will show the Most Visited panel
-    // instead of the Recent Tabs panel.
-    if (!error) {
-      [[EarlGrey selectElementWithMatcher:RecentlyClosedLabelMatcher()]
-          performAction:grey_swipeFastInDirection(kGREYDirectionRight)];
-    }
-    chrome_test_util::CloseCurrentTab();
-  }
-}
-
+// Closes the recent tabs panel.
 - (void)closeRecentTabs {
-  // Get rid of the Recent Tabs Panel.
-  if (IsIPadIdiom()) {
-    // On iPad, the Recent Tabs panel is a new page in the navigation history.
-    // Go back to the previous page to restore the test page.
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
-        performAction:grey_tap()];
-    [ChromeEarlGrey waitForPageToFinishLoading];
-  } else {
-    // On iPhone, the Recent Tabs panel is shown in a modal view.
-    // Close that modal.
-    CloseRecentTabsPanelOnIphone();
-    // Wait until the recent tabs panel is dismissed.
-    [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  }
+  id<GREYMatcher> exit_button_matcher = grey_accessibilityID(@"Exit");
+  [[EarlGrey selectElementWithMatcher:exit_button_matcher]
+      performAction:grey_tap()];
+  // Wait until the recent tabs panel is dismissed.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
 
 // Tests that a closed tab appears in the Recent Tabs panel, and that tapping
 // the entry in the Recent Tabs panel re-opens the closed tab.
 - (void)testClosedTabAppearsInRecentTabsPanel {
-  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
-
   const GURL testPageURL = web::test::HttpServer::MakeUrl(kURLOfTestPage);
 
   // Open the test page in a new tab.
@@ -166,10 +122,6 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
 
 // Tests that tapping "Show Full History" open the history.
 - (void)testOpenHistory {
-  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
-
   OpenRecentTabsPanel();
 
   // Tap "Show Full History"
@@ -198,10 +150,6 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
 
 // Tests that the sign-in promo can be reloaded correctly.
 - (void)testRecentTabSigninPromoReloaded {
-  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
-
   OpenRecentTabsPanel();
   // Sign-in promo should be visible with cold state.
   [SigninEarlGreyUtils
@@ -222,10 +170,6 @@ id<GREYMatcher> RecentlyClosedLabelMatcher() {
 // Tests that the sign-in promo can be reloaded correctly while being hidden.
 // crbug.com/776939
 - (void)testRecentTabSigninPromoReloadedWhileHidden {
-  // TODO(crbug.com/782551): Rewrite this egtest for the new bookmark.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
-
   OpenRecentTabsPanel();
   [SigninEarlGreyUtils
       checkSigninPromoVisibleWithMode:SigninPromoViewModeColdState

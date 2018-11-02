@@ -2,8 +2,8 @@
 
 static_library("notes") {
   sources = [
-    "notes_attachment.cpp",
-    "notes_attachment.h",
+    "note_attachment.cpp",
+    "note_attachment.h",
     "notes_codec.cpp",
     "notes_codec.h",
     "notes_model.cpp",

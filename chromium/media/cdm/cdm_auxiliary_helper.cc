@@ -17,6 +17,10 @@ cdm::FileIO* CdmAuxiliaryHelper::CreateCdmFileIO(cdm::FileIOClient* client) {
   return nullptr;
 }
 
+cdm::CdmProxy* CdmAuxiliaryHelper::CreateCdmProxy(cdm::CdmProxyClient* client) {
+  return nullptr;
+}
+
 cdm::Buffer* CdmAuxiliaryHelper::CreateCdmBuffer(size_t capacity) {
   return nullptr;
 }

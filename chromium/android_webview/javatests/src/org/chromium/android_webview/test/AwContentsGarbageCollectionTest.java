@@ -13,7 +13,6 @@ import android.os.ResultReceiver;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.LargeTest;
 import android.support.test.filters.SmallTest;
-import android.view.accessibility.AccessibilityNodeProvider;
 import android.webkit.JavascriptInterface;
 
 import org.junit.After;
@@ -29,6 +28,8 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
+import org.chromium.content_public.browser.ImeAdapter;
+import org.chromium.content_public.browser.WebContentsAccessibility;
 import org.chromium.content_public.common.ContentUrlConstants;
 
 /**
@@ -142,8 +143,8 @@ public class AwContentsGarbageCollectionTest {
             // Instead, we simply emulate Android's behavior by keeping strong references.
             // See crbug.com/595613 for details.
             resultReceivers[i] = ThreadUtils.runOnUiThreadBlocking(
-                    () -> containerView.getContentViewCore()
-                                       .getImeAdapterForTest()
+                    ()
+                            -> ImeAdapter.fromWebContents(containerView.getWebContents())
                                        .getNewShowKeyboardReceiver());
         }
 
@@ -164,27 +165,30 @@ public class AwContentsGarbageCollectionTest {
 
         TestAwContentsClient client = new TestAwContentsClient();
         AwTestContainerView containerViews[] = new AwTestContainerView[MAX_IDLE_INSTANCES + 1];
-        AccessibilityNodeProvider providers[] =
-                new AccessibilityNodeProvider[MAX_IDLE_INSTANCES + 1];
         for (int i = 0; i < containerViews.length; i++) {
             final AwTestContainerView containerView =
                     mActivityTestRule.createAwTestContainerViewOnMainSync(client);
             containerViews[i] = containerView;
             mActivityTestRule.loadUrlAsync(
                     containerViews[i].getAwContents(), ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
-            providers[i] = ThreadUtils.runOnUiThreadBlocking(() -> {
+            ThreadUtils.runOnUiThreadBlocking(() -> {
+                StrongRefTestContext context =
+                        new StrongRefTestContext(mActivityTestRule.getActivity());
+                WebContentsAccessibility webContentsA11y = WebContentsAccessibility.create(
+                        context, containerView, containerView.getWebContents(), true);
                 containerView.getContentViewCore().setAccessibilityState(true);
-                return containerView.getAccessibilityNodeProvider();
+                // Enable a11y for testing.
+                WebContentsAccessibility.setAccessibilityEnabledForTesting();
+                // Initialize native object.
+                containerView.getAccessibilityNodeProvider();
+                Assert.assertTrue(webContentsA11y.isAccessibilityEnabled());
             });
-            Assert.assertNotNull(providers[i]);
         }
 
         for (int i = 0; i < containerViews.length; i++) {
             containerViews[i] = null;
-            providers[i] = null;
         }
         containerViews = null;
-        providers = null;
         removeAllViews();
         gcAndCheckAllAwContentsDestroyed();
     }

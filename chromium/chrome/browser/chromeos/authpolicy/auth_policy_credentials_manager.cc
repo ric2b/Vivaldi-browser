@@ -33,8 +33,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_delegate.h"
-#include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/public/cpp/message_center_switches.h"
 
 namespace {
 
@@ -172,8 +170,11 @@ void AuthPolicyCredentialsManager::GetUserStatus() {
   is_get_status_in_progress_ = true;
   rerun_get_status_on_error_ = false;
   scheduled_get_user_status_call_.Cancel();
+  authpolicy::GetUserStatusRequest request;
+  request.set_user_principal_name(account_id_.GetUserEmail());
+  request.set_account_id(account_id_.GetObjGuid());
   chromeos::DBusThreadManager::Get()->GetAuthPolicyClient()->GetUserStatus(
-      account_id_.GetObjGuid(),
+      request,
       base::BindOnce(&AuthPolicyCredentialsManager::OnGetUserStatusCallback,
                      weak_factory_.GetWeakPtr()));
 }
@@ -193,38 +194,44 @@ void AuthPolicyCredentialsManager::OnGetUserStatusCallback(
     }
     return;
   }
-  CHECK(user_status.account_info().account_id() == account_id_.GetObjGuid());
   rerun_get_status_on_error_ = false;
-  if (user_status.has_account_info())
-    UpdateDisplayAndGivenName(user_status.account_info());
 
-  DCHECK(user_status.has_password_status());
-  switch (user_status.password_status()) {
-    case authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID:
-      // do nothing
-      break;
-    case authpolicy::ActiveDirectoryUserStatus::PASSWORD_EXPIRED:
-      ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_EXPIRED);
-      break;
-    case authpolicy::ActiveDirectoryUserStatus::PASSWORD_CHANGED:
-      ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_CHANGED);
-      break;
+  // user_status.account_info() is missing if the TGT is invalid.
+  if (user_status.has_account_info()) {
+    CHECK(user_status.account_info().account_id() == account_id_.GetObjGuid());
+    UpdateDisplayAndGivenName(user_status.account_info());
   }
 
+  // user_status.password_status() is missing if the TGT is invalid.
+  bool password_ok = false;
+  if (user_status.has_password_status()) {
+    switch (user_status.password_status()) {
+      case authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID:
+        password_ok = true;
+        break;
+      case authpolicy::ActiveDirectoryUserStatus::PASSWORD_EXPIRED:
+        ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_EXPIRED);
+        break;
+      case authpolicy::ActiveDirectoryUserStatus::PASSWORD_CHANGED:
+        ShowNotification(IDS_ACTIVE_DIRECTORY_PASSWORD_CHANGED);
+        break;
+    }
+  }
+
+  // user_status.tgt_status() is always present.
+  bool tgt_ok = false;
   DCHECK(user_status.has_tgt_status());
   switch (user_status.tgt_status()) {
     case authpolicy::ActiveDirectoryUserStatus::TGT_VALID:
-      // do nothing
+      tgt_ok = true;
       break;
     case authpolicy::ActiveDirectoryUserStatus::TGT_EXPIRED:
     case authpolicy::ActiveDirectoryUserStatus::TGT_NOT_FOUND:
       ShowNotification(IDS_ACTIVE_DIRECTORY_REFRESH_AUTH_TOKEN);
       break;
   }
-  const bool ok = user_status.tgt_status() ==
-                      authpolicy::ActiveDirectoryUserStatus::TGT_VALID &&
-                  user_status.password_status() ==
-                      authpolicy::ActiveDirectoryUserStatus::PASSWORD_VALID;
+
+  const bool ok = password_ok && tgt_ok;
   user_manager::UserManager::Get()->SaveForceOnlineSignin(account_id_, !ok);
 }
 
@@ -317,30 +324,20 @@ void AuthPolicyCredentialsManager::ShowNotification(int message_id) {
   // Set |profile_id| for multi-user notification blocker.
   notifier_id.profile_id = profile_->GetProfileUserName();
 
-  message_center::Notification notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
-      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
-      l10n_util::GetStringUTF16(message_id),
-      message_center::IsNewStyleNotificationEnabled()
-          ? gfx::Image()
-          : ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-                IDR_NOTIFICATION_ALERT),
-      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
-      GURL(notification_id), notifier_id, data,
-      new SigninNotificationDelegate());
-  if (message_center::IsNewStyleNotificationEnabled()) {
-    notification.set_accent_color(
-        message_center::kSystemNotificationColorCriticalWarning);
-    notification.set_small_image(gfx::Image(gfx::CreateVectorIcon(
-        kNotificationWarningIcon, message_center::kSmallImageSizeMD,
-        message_center::kSystemNotificationColorWarning)));
-    notification.set_vector_small_image(kNotificationWarningIcon);
-  }
-  notification.SetSystemPriority();
+  std::unique_ptr<message_center::Notification> notification =
+      message_center::Notification::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
+          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_BUBBLE_VIEW_TITLE),
+          l10n_util::GetStringUTF16(message_id), gfx::Image(),
+          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
+          GURL(notification_id), notifier_id, data,
+          new SigninNotificationDelegate(), kNotificationWarningIcon,
+          message_center::SystemNotificationWarningLevel::WARNING);
+  notification->SetSystemPriority();
 
   // Add the notification.
   NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
-      NotificationHandler::Type::TRANSIENT, notification);
+      NotificationHandler::Type::TRANSIENT, *notification);
   shown_notifications_.insert(message_id);
 }
 

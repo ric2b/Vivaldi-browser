@@ -1,5 +1,5 @@
 
-post_process_target("//base:base") {
+update_target("//base:base") {
   if (!defined(sources)) {
     sources = []
   }
@@ -8,14 +8,14 @@ post_process_target("//base:base") {
   ]
 }
 
-post_process_target("//base:base_static") {
+update_target("//base:base_static") {
   sources += [
     "//vivaldi/base/vivaldi_switches.cpp",
     "//vivaldi/base/vivaldi_switches.h",
   ]
 }
 
-post_process_target("//base/test:test_support") {
+update_target("//base/test:test_support") {
   sources += [
     "//vivaldi/base/vivaldi_paths.cc",
     "//vivaldi/base/vivaldi_paths.h",

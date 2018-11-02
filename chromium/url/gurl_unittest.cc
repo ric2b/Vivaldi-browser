@@ -865,6 +865,11 @@ TEST(GURLTest, EqualsIgnoringRef) {
       {"filesystem:http://a.com#foo", "filesystem:http://a.com#foo", true},
       {"filesystem:http://a.com#foo", "filesystem:http://a.com#bar", true},
       {"filesystem:http://a.com#foo", "filesystem:http://b.com#bar", false},
+
+      // Data URLs
+      {"data:text/html,a#foo", "data:text/html,a#bar", true},
+      {"data:text/html,a#foo", "data:text/html,a#foo", true},
+      {"data:text/html,a#foo", "data:text/html,b#foo", false},
   };
 
   for (const auto& test_case : kTestCases) {
@@ -879,6 +884,12 @@ TEST(GURLTest, EqualsIgnoringRef) {
     EXPECT_EQ(test_case.are_equals,
               GURL(test_case.url_b).EqualsIgnoringRef(GURL(test_case.url_a)));
   }
+}
+
+TEST(GURLTest, DebugAlias) {
+  GURL url("https://foo.com/bar");
+  DEBUG_ALIAS_FOR_GURL(url_debug_alias, url);
+  EXPECT_STREQ("https://foo.com/bar", url_debug_alias);
 }
 
 }  // namespace url

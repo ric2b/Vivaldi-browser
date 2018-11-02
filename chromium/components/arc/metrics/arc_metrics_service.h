@@ -17,8 +17,6 @@
 #include "components/arc/connection_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 
-class BrowserContextKeyedServiceFactory;
-
 namespace content {
 class BrowserContext;
 }  // namespace content
@@ -31,12 +29,25 @@ class ArcBridgeService;
 class ArcMetricsService : public KeyedService,
                           public mojom::MetricsHost {
  public:
-  // Returns the factory instance for this class.
-  static BrowserContextKeyedServiceFactory* GetFactory();
+  // These values are persisted to logs, and should therefore never be
+  // renumbered nor reused. They are public for testing only.
+  enum class NativeBridgeType {
+    // Native bridge value has not been received from the container yet.
+    UNKNOWN = 0,
+    // Native bridge is not used.
+    NONE = 1,
+    // Using houdini translator.
+    HOUDINI = 2,
+    // Using ndk-translation translator.
+    NDK_TRANSLATION = 3,
+    COUNT
+  };
 
   // Returns singleton instance for the given BrowserContext,
   // or nullptr if the browser |context| is not allowed to use ARC.
   static ArcMetricsService* GetForBrowserContext(
+      content::BrowserContext* context);
+  static ArcMetricsService* GetForBrowserContextForTesting(
       content::BrowserContext* context);
 
   ArcMetricsService(content::BrowserContext* context,
@@ -50,6 +61,15 @@ class ArcMetricsService : public KeyedService,
   // MetricsHost overrides.
   void ReportBootProgress(std::vector<mojom::BootProgressEventPtr> events,
                           mojom::BootType boot_type) override;
+  void ReportNativeBridge(mojom::NativeBridgeType native_bridge_type) override;
+
+  // Records native bridge UMA according to value received from the
+  // container or as UNKNOWN if the value has not been recieved yet.
+  void RecordNativeBridgeUMA();
+
+  NativeBridgeType native_bridge_type_for_testing() const {
+    return native_bridge_type_;
+  }
 
  private:
   // Adapter to be able to also observe ProcessInstance events.
@@ -82,6 +102,8 @@ class ArcMetricsService : public KeyedService,
 
   ProcessObserver process_observer_;
   base::RepeatingTimer timer_;
+
+  NativeBridgeType native_bridge_type_;
 
   // Always keep this the last member of this class to make sure it's the
   // first thing to be destructed.

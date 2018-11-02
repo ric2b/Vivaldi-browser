@@ -54,7 +54,7 @@ void WebDocumentTest::LoadURL(const std::string& url) {
 }
 
 Document* WebDocumentTest::TopDocument() const {
-  return ToLocalFrame(web_view_helper_.WebView()->GetPage()->MainFrame())
+  return ToLocalFrame(web_view_helper_.GetWebView()->GetPage()->MainFrame())
       ->GetDocument();
 }
 
@@ -85,8 +85,8 @@ TEST_F(WebDocumentTest, InsertAndRemoveStyleSheet) {
       body_element->ComputedStyleRef();
 
   // Inserted stylesheet not yet applied.
-  ASSERT_EQ(Color(0, 0, 0),
-            style_before_insertion.VisitedDependentColor(CSSPropertyColor));
+  ASSERT_EQ(Color(0, 0, 0), style_before_insertion.VisitedDependentColor(
+                                GetCSSPropertyColor()));
 
   // Apply inserted stylesheet.
   core_doc->UpdateStyleAndLayoutTree();
@@ -95,7 +95,7 @@ TEST_F(WebDocumentTest, InsertAndRemoveStyleSheet) {
 
   // Inserted stylesheet applied.
   ASSERT_EQ(Color(0, 128, 0),
-            style_after_insertion.VisitedDependentColor(CSSPropertyColor));
+            style_after_insertion.VisitedDependentColor(GetCSSPropertyColor()));
 
   start_count = core_doc->GetStyleEngine().StyleForElementCount();
 
@@ -109,14 +109,14 @@ TEST_F(WebDocumentTest, InsertAndRemoveStyleSheet) {
 
   // Removed stylesheet not yet applied.
   ASSERT_EQ(Color(0, 128, 0),
-            style_before_removing.VisitedDependentColor(CSSPropertyColor));
+            style_before_removing.VisitedDependentColor(GetCSSPropertyColor()));
 
   // Apply removed stylesheet.
   core_doc->UpdateStyleAndLayoutTree();
 
   const ComputedStyle& style_after_removing = body_element->ComputedStyleRef();
   ASSERT_EQ(Color(0, 0, 0),
-            style_after_removing.VisitedDependentColor(CSSPropertyColor));
+            style_after_removing.VisitedDependentColor(GetCSSPropertyColor()));
 }
 
 TEST_F(WebDocumentTest, ManifestURL) {
@@ -249,7 +249,7 @@ void WebDocumentFirstPartyTest::Load(const char* file) {
 }
 
 Document* WebDocumentFirstPartyTest::NestedDocument() const {
-  return ToLocalFrame(web_view_helper_.WebView()
+  return ToLocalFrame(web_view_helper_.GetWebView()
                           ->GetPage()
                           ->MainFrame()
                           ->Tree()
@@ -258,7 +258,7 @@ Document* WebDocumentFirstPartyTest::NestedDocument() const {
 }
 
 Document* WebDocumentFirstPartyTest::NestedNestedDocument() const {
-  return ToLocalFrame(web_view_helper_.WebView()
+  return ToLocalFrame(web_view_helper_.GetWebView()
                           ->GetPage()
                           ->MainFrame()
                           ->Tree()

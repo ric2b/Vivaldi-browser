@@ -6,13 +6,15 @@
 #define UI_APP_LIST_VIEWS_SEARCH_BOX_VIEW_H_
 
 #include <string>
+#include <vector>
 
 #include "ash/app_list/model/app_list_model.h"
-#include "ash/app_list/model/search_box_model_observer.h"
+#include "ash/app_list/model/search/search_box_model_observer.h"
+#include "ash/app_list/model/search/search_model.h"
+#include "ash/app_list/model/speech/speech_ui_model_observer.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/speech_ui_model_observer.h"
 #include "ui/gfx/shadow_value.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
@@ -26,17 +28,6 @@ class Textfield;
 }  // namespace views
 
 namespace app_list {
-
-// Possible locations for partial keyboard focus (but note that the search
-// box always handles typing).
-enum SearchBoxFocus {
-  FOCUS_NONE,           // No focus
-  FOCUS_BACK_BUTTON,    // Back button, only responds to ENTER
-  FOCUS_SEARCH_BOX,     // Nothing else has partial focus
-  FOCUS_MIC_BUTTON,     // Mic button, only responds to ENTER
-  FOCUS_CLOSE_BUTTON,   // Close button, only responds to ENTER
-  FOCUS_CONTENTS_VIEW,  // Something outside the SearchBox is selected
-};
 
 class AppListView;
 class AppListViewDelegate;
@@ -77,15 +68,6 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
   void set_contents_view(views::View* contents_view) {
     contents_view_ = contents_view;
   }
-
-  // Moves focus in response to arrow key.
-  bool MoveArrowFocus(const ui::KeyEvent& event);
-
-  // Moves focus forward/backwards in response to TAB.
-  bool MoveTabFocus(bool move_backwards);
-
-  // Moves focus to contents or SearchBox and unselects buttons.
-  void ResetTabFocus(bool on_contents);
 
   // Sets voice label for Back button depending on whether a folder is open.
   void SetBackButtonLabel(bool folder);
@@ -150,15 +132,8 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
   // Used only in the tests to get the current search icon.
   views::ImageView* get_search_icon_for_test() { return search_icon_; }
 
-  // Used only in the tests to get the current focused view.
-  SearchBoxFocus get_focused_view_for_test() const { return focused_view_; }
-
   // Whether the search box is active.
   bool is_search_box_active() const { return is_search_box_active_; }
-
-  // Whether the key event is an arrow up/down/left/right.
-  // TODO(weidongg): move this function to utility class.
-  static bool IsArrowKey(const ui::KeyEvent& event);
 
   // Returns selected view in contents view.
   views::View* GetSelectedViewInContentsView() const;
@@ -168,7 +143,7 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
 
  private:
   // Updates model text and selection model with current Textfield info.
-  void UpdateModel();
+  void UpdateModel(bool initiated_by_user);
 
   // Fires query change notification.
   void NotifyQueryChanged();
@@ -226,7 +201,7 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
 
   SearchBoxViewDelegate* delegate_;     // Not owned.
   AppListViewDelegate* view_delegate_;  // Not owned.
-  AppListModel* model_ = nullptr;       // Owned by the profile-keyed service.
+  SearchModel* search_model_ = nullptr;  // Owned by the profile-keyed service.
 
   // Owned by views hierarchy.
   views::View* content_container_;
@@ -241,11 +216,6 @@ class APP_LIST_EXPORT SearchBoxView : public views::WidgetDelegateView,
 
   // Owned by |content_container_|. It is deleted when the view is deleted.
   views::BoxLayout* box_layout_ = nullptr;
-
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
-
-  SearchBoxFocus focused_view_;  // Which element has TAB'd focus.
 
   // Whether the search box is active.
   bool is_search_box_active_ = false;

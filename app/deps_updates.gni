@@ -1,5 +1,5 @@
 
-post_process_template("//chrome:packed_resources") {
+update_template_instance("//chrome:packed_resources") {
   if (!defined(additional_extra_paks)) {
     additional_extra_paks = []
   }
@@ -14,7 +14,7 @@ post_process_template("//chrome:packed_resources") {
   ]
 }
 
-post_process_template("//chrome:packed_resources_extra") {
+update_template_instance("//chrome:packed_resources_extra") {
   if (!defined(deps)) { deps = [] }
   deps += [
     "//vivaldi/app:vivaldi_unscaled_native_resources",
@@ -22,7 +22,7 @@ post_process_template("//chrome:packed_resources_extra") {
 }
 
 
-post_process_template("//chrome:packed_resources_locales") {
+update_template_instance("//chrome:packed_resources_locales") {
   if (!defined(additional_source_patterns)) {
     additional_source_patterns = []
   }
@@ -36,7 +36,7 @@ post_process_template("//chrome:packed_resources_locales") {
   ]
 }
 
-post_process_target("//chrome:resources") {
+update_target("//chrome:resources") {
   public_deps += [
     "//vivaldi/app:resources",
     "//vivaldi/app:vivaldi_native_resources",
@@ -45,20 +45,22 @@ post_process_target("//chrome:resources") {
   ]
 }
 
-post_process_template("//chrome/browser/extensions:extensions") {
-  deps += [
-    "//vivaldi/app:vivaldi_native_resources",
-    "//vivaldi/app:vivaldi_unscaled_native_resources",
-  ]
+if (!is_android) {
+  update_target("//chrome/browser/extensions:extensions") {
+    deps += [
+      "//vivaldi/app:vivaldi_native_resources",
+      "//vivaldi/app:vivaldi_unscaled_native_resources",
+    ]
+  }
 }
 
-post_process_target("//chrome/common:non_code_constants") {
+update_target("//chrome/common:non_code_constants") {
   deps += [
     "//components/version_info:generate_version_info",
   ]
 }
 
-post_process_target("//components/bookmarks/browser:browser") {
+update_target("//components/bookmarks/browser:browser") {
   deps += [
     #"//chrome:strings",
     "//vivaldi/app:vivaldi_native_strings",
@@ -67,7 +69,7 @@ post_process_target("//components/bookmarks/browser:browser") {
   ]
 }
 
-post_process_template("//components:components_tests_pak") {
+update_template_instance("//components:components_tests_pak") {
   sources += [
     "$root_gen_dir/vivaldi/vivaldi_native_strings_en-US.pak"
   ]
@@ -76,25 +78,40 @@ post_process_template("//components:components_tests_pak") {
   ]
 }
 
-foreach(_target,
-        [
-          "//chrome:packed_resources_100_percent",
-          "//chrome:packed_resources_200_percent",
-        ]) {
-  post_process_template(_target + "_repack") {
-    # Keep this source update here for simplicity
-    sources += [ "$root_gen_dir/vivaldi/vivaldi_native_resources_${percent}_percent.pak" ]
-    deps += [ "//vivaldi/app:vivaldi_native_resources" ]
+_targets = [
+  "//chrome:packed_resources_100_percent",
+]
+
+if (!is_android) {
+  _targets += [
+    "//chrome:packed_resources_200_percent",
+  ]
+}
+
+foreach(_target, _targets) {
+  update_template_instance(_target) {
+    if (defined(source)) {
+      # Keep this source update here for simplicity
+      sources += [ "$root_gen_dir/vivaldi/vivaldi_native_resources_${percent}_percent.pak" ]
+      deps += [ "//vivaldi/app:vivaldi_native_resources" ]
+    }
   }
 }
 
-foreach(_target, [
-      "//chrome/app:chrome_dll_resources",
-      "//chrome/app:chrome_exe_resources",
-      "//chrome/installer/mini_installer:lib",
-      "//chrome/installer/setup:setup",
-    ]) {
-  post_process_target(_target) {
+_targets = []
+_targets = [
+  "//chrome/app:chrome_dll_resources",
+]
+
+if (is_win) {
+  _targets += [
+    "//chrome/installer/mini_installer:lib",
+    "//chrome/installer/setup:setup",
+  ]
+}
+
+foreach(_target, _targets) {
+  update_target(_target) {
     if (!defined(deps)) {
       deps = []
     }

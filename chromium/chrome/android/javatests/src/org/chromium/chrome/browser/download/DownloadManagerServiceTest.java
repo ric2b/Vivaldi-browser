@@ -24,10 +24,12 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.AdvancedMockContext;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.download.DownloadInfo.Builder;
 import org.chromium.chrome.browser.download.DownloadManagerServiceTest.MockDownloadNotifier.MethodID;
+import org.chromium.chrome.browser.download.DownloadUpdate.PendingState;
 import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineItem.Progress;
@@ -145,7 +147,8 @@ public class DownloadManagerServiceTest {
         }
 
         @Override
-        public void notifyDownloadInterrupted(DownloadInfo downloadInfo, boolean isAutoResumable) {
+        public void notifyDownloadInterrupted(
+                DownloadInfo downloadInfo, boolean isAutoResumable, PendingState pendingState) {
             assertCorrectExpectedCall(MethodID.DOWNLOAD_INTERRUPTED, downloadInfo, true);
         }
 
@@ -498,8 +501,9 @@ public class DownloadManagerServiceTest {
     }
 
     @Test
-    @MediumTest
-    @Feature({"Download"})
+    //@MediumTest
+    //@Feature({"Download"})
+    @DisabledTest // crbug.com/789931
     public void testInterruptedUnmeteredDownloadCannotAutoResumeOnMeteredNetwork()
             throws InterruptedException {
         MockDownloadNotifier notifier = new MockDownloadNotifier(getTestContext());

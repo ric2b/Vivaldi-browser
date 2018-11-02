@@ -19,9 +19,10 @@
   line-height: 40px;
   margin: 120px 80px 30px 80px;
   text-align: center;
+  user-select: none;
 }
 
-#welcomeIllustration {
+.welcome-illustration {
   padding-top: 14px;
 }
 

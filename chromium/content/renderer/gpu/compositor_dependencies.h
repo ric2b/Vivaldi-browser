@@ -31,7 +31,6 @@ namespace content {
 class CompositorDependencies {
  public:
   virtual bool IsGpuRasterizationForced() = 0;
-  virtual bool IsAsyncWorkerContextEnabled() = 0;
   virtual int GetGpuRasterizationMSAASampleCount() = 0;
   virtual bool IsLcdTextEnabled() = 0;
   virtual bool IsDistanceFieldTextEnabled() = 0;
@@ -39,8 +38,6 @@ class CompositorDependencies {
   virtual bool IsPartialRasterEnabled() = 0;
   virtual bool IsGpuMemoryBufferCompositorResourcesEnabled() = 0;
   virtual bool IsElasticOverscrollEnabled() = 0;
-  virtual const viz::BufferToTextureTargetMap&
-  GetBufferToTextureTargetMap() = 0;
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() = 0;
   // Returns null if the compositor is in single-threaded mode (ie. there is no

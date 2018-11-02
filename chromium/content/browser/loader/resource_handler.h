@@ -31,10 +31,13 @@ class URLRequestStatus;
 struct RedirectInfo;
 }  // namespace net
 
+namespace network {
+struct ResourceResponse;
+}
+
 namespace content {
 class ResourceMessageFilter;
 class ResourceRequestInfoImpl;
-struct ResourceResponse;
 
 // The resource dispatcher host uses this interface to process network events
 // for an URLRequest instance.  A ResourceHandler's lifetime is bound to its
@@ -77,7 +80,7 @@ class CONTENT_EXPORT ResourceHandler {
   // to it.
   virtual void OnRequestRedirected(
       const net::RedirectInfo& redirect_info,
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller) = 0;
 
   // Response headers and metadata are available.  The request will not continue
@@ -86,13 +89,13 @@ class CONTENT_EXPORT ResourceHandler {
   // ResourceHandler wants to continue to use it, it must maintain a reference
   // to it.
   virtual void OnResponseStarted(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller,
       bool open_when_done,
       bool ask_for_target = false);
   virtual void OnResponseStarted(
-    ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller);
+      network::ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller);
 
   // Called before the net::URLRequest (whose url is |url|) is to be started.
   // The request will not continue until one of |controller|'s resume or

@@ -79,8 +79,8 @@ _NEGATIVE_FILTER = [
     'MobileEmulationCapabilityTest.testClickElement',
     'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabs',
     'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabsImmediately',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-    'ChromeDriverTest.testDoesntHangOnFragmentNavigation',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=746266
+    'ChromeDriverSiteIsolation.testCanClickOOPIF',
 ]
 
 _VERSION_SPECIFIC_FILTER = {}
@@ -89,6 +89,27 @@ _VERSION_SPECIFIC_FILTER['HEAD'] = [
     'MobileEmulationCapabilityTest.testDeviceName',
     'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabs',
     'MobileEmulationCapabilityTest.testNetworkConnectionTypeIsAppliedToAllTabsImmediately',
+]
+
+_VERSION_SPECIFIC_FILTER['64'] = [
+    # These tests are implemented to run on the latest versions of Chrome > 64
+    'HeadlessInvalidCertificateTest.*',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+    'ChromeDriverTest.testDoesntHangOnFragmentNavigation',
+]
+
+_VERSION_SPECIFIC_FILTER['63'] = [
+    # These tests are implemented to run on the latest versions of Chrome > 64
+    'HeadlessInvalidCertificateTest.*',
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+    'ChromeDriverTest.testDoesntHangOnFragmentNavigation',
+    'ChromeDriverPageLoadTimeoutTest.testHistoryNavigationWithPageLoadTimeout',
+    'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
+]
+
+_VERSION_SPECIFIC_FILTER['62'] = [
+    # These tests are implemented to run on the latest versions of Chrome > 64
+    'HeadlessInvalidCertificateTest.*',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -105,15 +126,16 @@ _OS_SPECIFIC_FILTER['linux'] = [
     'ChromeDriverTest.testWindowMaximize',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2132
     'MobileEmulationCapabilityTest.testDeviceMetricsWithDeviceWidth',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=803678
+    'ChromeDriverTest.testGoBackAndGoForward'
 ]
 _OS_SPECIFIC_FILTER['mac'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1927
     'MobileEmulationCapabilityTest.testTapElement',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1945
     'ChromeDriverTest.testWindowFullScreen',
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
-    'ChromeDriverPageLoadTimeoutTest.testHistoryNavigationWithPageLoadTimeout',
-    'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
+    # https://bugs.chromium.org/p/chromium/issues/detail?id=803678
+    'ChromeDriverTest.testGoBackAndGoForward'
 ]
 
 _DESKTOP_NEGATIVE_FILTER = [
@@ -174,12 +196,18 @@ _ANDROID_NEGATIVE_FILTER['chrome'] = (
         'ChromeDriverTest.testCanClickAlertInIframes',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2081
         'ChromeDriverTest.testCloseWindowUsingJavascript',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2108
+        'ChromeLoggingCapabilityTest.testPerformanceLogger',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chrome_stable'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'])
 _ANDROID_NEGATIVE_FILTER['chrome_beta'] = (
-    _ANDROID_NEGATIVE_FILTER['chrome'])
+    _ANDROID_NEGATIVE_FILTER['chrome'] + [
+      # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2025
+      'ChromeDriverTest.testDoesntHangOnFragmentNavigation',
+    ]
+)
 _ANDROID_NEGATIVE_FILTER['chromium'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
         'ChromeDriverTest.testSwitchToWindow',
@@ -189,12 +217,13 @@ _ANDROID_NEGATIVE_FILTER['chromium'] = (
         'ChromeDriverTest.testHoverOverElement',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1478
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
-        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2108
-        'ChromeLoggingCapabilityTest.testPerformanceLogger',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
     _ANDROID_NEGATIVE_FILTER['chrome'] + [
+        # Tests in HeadlessInvalidCertificateTest class can't be run
+        # on chromedriver_webview_shell
+        'HeadlessInvalidCertificateTest.*',
         'ChromeLoggingCapabilityTest.testPerformanceLogger',
         'ChromeDriverTest.testShadowDom*',
         # WebView doesn't support emulating network conditions.
@@ -866,6 +895,7 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
                       self._driver.ExecuteScript('return window.confirmed'))
 
   def testSendTextToAlert(self):
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
     self._driver.ExecuteScript('prompt = window.prompt()')
     self.assertTrue(self._driver.IsAlertOpen())
     self._driver.HandleAlert(True, 'TextToPrompt')
@@ -1574,6 +1604,41 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self._driver.Load('about:blank')
     self._driver.ExecuteScript('Object.prototype.$family = undefined;')
     self.assertEquals(1, self._driver.ExecuteScript('return 1;'))
+
+
+class ChromeDriverSiteIsolation(ChromeDriverBaseTestWithWebServer):
+  """Tests for ChromeDriver with the new Site Isolation Chrome feature.
+
+  This feature can be turned on using the --site-per-process flag.
+
+  In order to trick the test into thinking that we are on two separate origins,
+  the cross_domain_iframe.html code points to localhost instead of 127.0.0.1.
+
+  Note that Chrome does not allow "localhost" to be passed to --isolate-origins
+  for fixable technical reasons related to subdomain matching.
+  """
+
+  def setUp(self):
+    self._driver = self.CreateDriver(chrome_switches=['--site-per-process'])
+
+  def testCanClickOOPIF(self):
+    """Test that you can click into an Out of Process I-Frame (OOPIF).
+
+    Note that the Iframe will not be out-of-process if the correct
+    flags are not passed into Chrome.
+    """
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/cross_domain_iframe.html'))
+    a_outer = self._driver.FindElement('tag name', 'a')
+    a_outer.Click()
+    frame_url = self._driver.ExecuteScript('return window.location.href')
+    self.assertTrue(frame_url.endswith('#one'))
+    frame = self._driver.FindElement('tag name', 'iframe')
+    self._driver.SwitchToFrame(frame)
+    a_inner = self._driver.FindElement('tag name', 'a')
+    a_inner.Click()
+    frame_url = self._driver.ExecuteScript('return window.location.href')
+    self.assertTrue(frame_url.endswith('#two'))
 
 
 class ChromeDriverPageLoadTimeoutTest(ChromeDriverBaseTestWithWebServer):
@@ -2563,6 +2628,59 @@ class PerfTest(ChromeDriverBaseTest):
       return end - start
     self._RunDriverPerfTest('cold exe js', Run)
 
+
+class HeadlessInvalidCertificateTest(ChromeDriverBaseTest):
+  """End to end tests for ChromeDriver."""
+
+  @staticmethod
+  def GlobalSetUp():
+    cert_path = os.path.join(chrome_paths.GetTestData(),
+                             'chromedriver/invalid_ssl_cert.pem')
+    HeadlessInvalidCertificateTest._https_server = webserver.WebServer(
+        chrome_paths.GetTestData(), cert_path)
+    if _ANDROID_PACKAGE_KEY:
+      HeadlessInvalidCertificateTest._device = device_utils.DeviceUtils.HealthyDevices()[0]
+      https_host_port = HeadlessInvalidCertificateTest._https_server._server.server_port
+      forwarder.Forwarder.Map([(https_host_port, https_host_port)],
+                              ChromeDriverTest._device)
+
+  @staticmethod
+  def GlobalTearDown():
+    if _ANDROID_PACKAGE_KEY:
+      forwarder.Forwarder.UnmapAllDevicePorts(
+          HeadlessInvalidCertificateTest._device)
+    HeadlessInvalidCertificateTest._https_server.Shutdown()
+
+  @staticmethod
+  def GetHttpsUrlForFile(file_path):
+    return HeadlessInvalidCertificateTest._https_server.GetUrl() + file_path
+
+  def setUp(self):
+    self._driver = self.CreateDriver(chrome_switches = ["--headless"],
+                                     accept_insecure_certs = True)
+
+  def testLoadsPage(self):
+    print "loading"
+    self._driver.Load(self.GetHttpsUrlForFile('/chromedriver/page_test.html'))
+    # Verify that page content loaded.
+    self._driver.FindElement('id', 'link')
+
+  def testNavigateNewWindow(self):
+    print "loading"
+    self._driver.Load(self.GetHttpsUrlForFile('/chromedriver/page_test.html'))
+    self._driver.ExecuteScript(
+        'document.getElementById("link").href = "page_test.html";')
+
+    old_handles = self._driver.GetWindowHandles()
+    self._driver.FindElement('id', 'link').Click()
+    new_window_handle = self.WaitForNewWindow(self._driver, old_handles)
+    self.assertNotEqual(None, new_window_handle)
+    self._driver.SwitchToWindow(new_window_handle)
+    self.assertEquals(new_window_handle, self._driver.GetCurrentWindowHandle())
+    # Verify that page content loaded in new window.
+    self._driver.FindElement('id', 'link')
+
+
 if __name__ == '__main__':
   parser = optparse.OptionParser()
   parser.add_option(
@@ -2632,8 +2750,10 @@ if __name__ == '__main__':
       sys.modules[__name__])
   tests = unittest_util.FilterTestSuite(all_tests_suite, options.filter)
   ChromeDriverTest.GlobalSetUp()
+  HeadlessInvalidCertificateTest.GlobalSetUp()
   MobileEmulationCapabilityTest.GlobalSetUp()
   result = unittest.TextTestRunner(stream=sys.stdout, verbosity=2).run(tests)
   ChromeDriverTest.GlobalTearDown()
+  HeadlessInvalidCertificateTest.GlobalTearDown()
   MobileEmulationCapabilityTest.GlobalTearDown()
   sys.exit(len(result.failures) + len(result.errors))

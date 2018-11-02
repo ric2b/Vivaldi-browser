@@ -9,12 +9,13 @@
 #include "platform/WebFrameScheduler.h"
 #include "platform/heap/GarbageCollected.h"
 #include "platform/heap/HeapAllocator.h"
-#include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/wtf/HashSet.h"
 
 namespace blink {
+
+class FetchContext;
 
 // Client interface to use the throttling/scheduling functionality that
 // ResourceLoadScheduler provides.
@@ -27,13 +28,53 @@ class PLATFORM_EXPORT ResourceLoadSchedulerClient
   void Trace(blink::Visitor* visitor) override {}
 };
 
-// The ResourceLoadScheduler provides a unified per-frame infrastructure to
-// schedule loading requests. It receives resource requests as
-// ResourceLoadSchedulerClient instances and calls Run() on them to dispatch
-// them possibly with additional throttling/scheduling. This also keeps track of
-// in-flight requests that are granted but are not released (by Release()) yet.
-// Note: If FetchContext can not provide a WebFrameScheduler, throttling and
-// scheduling functionalities will be completely disabled.
+// ResourceLoadScheduler provides a unified per-frame infrastructure to schedule
+// loading requests. When Request() is called with a
+// ResourceLoadSchedulerClient |client|, it calls |client|'s Run() method
+// synchronously or asynchronously to notify that |client| can start loading.
+//
+// A ResourceLoadScheduler may initiate a new resource loading in the following
+// cases:
+// - When Request() is called
+// - When LoosenThrottlingPolicy() is called
+// - When SetPriority() is called
+// - When Release() is called with kReleaseAndSchedule
+// - When OnThrottlingStateChanged() is called
+//
+// A ResourceLoadScheduler determines if a request can be throttable or not, and
+// keeps track of pending throttable requests with priority information (i.e.,
+// ResourceLoadPriority accompanied with an integer called "intra-priority").
+// Here are the general principles:
+//  - A ResourceLoadScheduler does not throttle requests that cannot be
+//    throttable. It will call client's Run() method as soon as possible.
+//  - A ResourceLoadScheduler determines whether a request can be throttable by
+//    seeing Request()'s ThrottleOption argument and requests' priority
+//    information. Requests' priority information can be modified via
+//    SetPriority().
+//  - A ResourceLoadScheulder won't initiate a new resource loading which can
+//    be throttable when there are active resource loading activities more than
+//    its internal threshold (i.e., what GetOutstandingLimit() returns)".
+//
+// By default, ResourceLoadScheduler is disabled, which means it doesn't
+// throttle any resource loading requests.
+//
+// Here are running experiments (as of M65):
+//  - "ResourceLoadScheduler"
+//   - Resource loading requests are not at throttled when the frame is in
+//     the foreground tab.
+//   - Resource loading requests are throttled when the frame is in a
+//     background tab. It has different thresholds for the main frame
+//     and sub frames. When the frame has been background for more than five
+//     minutes, all throttable resource loading requests are throttled
+//     indefinitely (i.e., threshold is zero in such a circumstance).
+//  - RendererSideResourceScheduler
+//    ResourceLoadScheduler has two modes each of which has its own threshold.
+//    - Tight mode (used until the frame sees a <body> element):
+//      ResourceLoadScheduler considers a request throttable if its priority
+//      is less than |kHigh|.
+//    - Normal mode:
+//      ResourceLoadScheduler considers a request throttable if its priority
+//      is less than |kMedium|.
 class PLATFORM_EXPORT ResourceLoadScheduler final
     : public GarbageCollectedFinalized<ResourceLoadScheduler>,
       public WebFrameScheduler::Observer {
@@ -61,9 +102,11 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
           encoded_data_length_(encoded_data_length),
           decoded_body_length_(decoded_body_length) {}
 
-    // Takes a shared instance to represent an invalid instance that will be
+    // Returns the instance that represents an invalid report, which can be
     // used when a caller don't want to report traffic, i.e. on a failure.
-    static PLATFORM_EXPORT TrafficReportHints& InvalidInstance();
+    static PLATFORM_EXPORT TrafficReportHints InvalidInstance() {
+      return TrafficReportHints();
+    }
 
     bool IsValid() const { return valid_; }
 
@@ -85,6 +128,12 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
     int64_t decoded_body_length_ = 0;
   };
 
+  // ResourceLoadScheduler has two policies: |kTight| and |kNormal|. Currently
+  // this is used to support aggressive throttling while the corresponding frame
+  // is in layout-blocking phase. There is only one state transition,
+  // |kTight| => |kNormal|, which is done by |LoosenThrottlingPolicy|.
+  enum class ThrottlingPolicy { kTight, kNormal };
+
   // Returned on Request(). Caller should need to return it via Release().
   using ClientId = uint64_t;
 
@@ -93,12 +142,15 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   static constexpr size_t kOutstandingUnlimited =
       std::numeric_limits<size_t>::max();
 
-  static ResourceLoadScheduler* Create(FetchContext* context = nullptr) {
-    return new ResourceLoadScheduler(context ? context
-                                             : &FetchContext::NullInstance());
-  }
+  static ResourceLoadScheduler* Create(FetchContext* = nullptr);
   ~ResourceLoadScheduler();
+
   void Trace(blink::Visitor*);
+
+  // Changes the policy from |kTight| to |kNormal|. This function can be called
+  // multiple times, and does nothing when the scheduler is already working with
+  // the normal policy. This function may initiate a new resource loading.
+  void LoosenThrottlingPolicy();
 
   // Stops all operations including observing throttling signals.
   // ResourceLoadSchedulerClient::Run() will not be called once this method is
@@ -127,7 +179,10 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   bool Release(ClientId, ReleaseOption, const TrafficReportHints&);
 
   // Sets outstanding limit for testing.
-  void SetOutstandingLimitForTesting(size_t limit);
+  void SetOutstandingLimitForTesting(size_t limit) {
+    SetOutstandingLimitForTesting(limit, limit);
+  }
+  void SetOutstandingLimitForTesting(size_t tight_limit, size_t normal_limit);
 
   void OnNetworkQuiet();
 
@@ -190,7 +245,7 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // Grants a client to run,
   void Run(ClientId, ResourceLoadSchedulerClient*);
 
-  void SetOutstandingLimitAndMaybeRun(size_t limit);
+  size_t GetOutstandingLimit() const;
 
   // A flag to indicate an internal running state.
   // TODO(toyoshim): We may want to use enum once we start to have more states.
@@ -200,13 +255,20 @@ class PLATFORM_EXPORT ResourceLoadScheduler final
   // Can be modified by field trial flags or for testing.
   bool is_enabled_ = false;
 
-  // Outstanding limit. 0u means unlimited.
-  // TODO(crbug.com/735410): If this throttling is enabled always, it makes some
-  // tests fail.
-  size_t outstanding_limit_ = kOutstandingUnlimited;
+  ThrottlingPolicy policy_ = ThrottlingPolicy::kNormal;
 
-  // Outstanding limit for throttled frames. Managed via the field trial.
-  const size_t outstanding_throttled_limit_;
+  // ResourceLoadScheduler threshold values for various circumstances. Some
+  // conditions can overlap, and ResourceLoadScheduler chooses the smallest
+  // value in such cases.
+
+  // Used when |policy_| is |kTight|.
+  size_t tight_outstanding_limit_ = kOutstandingUnlimited;
+
+  // Used when |policy_| is |kNormal|.
+  size_t normal_outstanding_limit_ = kOutstandingUnlimited;
+
+  // Used when |frame_scheduler_throttling_state_| is |kThrottled|.
+  const size_t outstanding_limit_for_throttled_frame_scheduler_;
 
   // The last used ClientId to calculate the next.
   ClientId current_id_ = kInvalidClientId;

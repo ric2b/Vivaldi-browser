@@ -62,7 +62,7 @@ SolidColorScrollbarLayer::SolidColorScrollbarLayer(
   Layer::SetOpacity(0.f);
 }
 
-SolidColorScrollbarLayer::~SolidColorScrollbarLayer() {}
+SolidColorScrollbarLayer::~SolidColorScrollbarLayer() = default;
 
 ScrollbarLayerInterface* SolidColorScrollbarLayer::ToScrollbarLayer() {
   return this;
@@ -96,7 +96,7 @@ void SolidColorScrollbarLayer::SetScrollElementId(ElementId element_id) {
     return;
 
   solid_color_scrollbar_layer_inputs_.scroll_element_id = element_id;
-  SetNeedsFullTreeSync();
+  SetNeedsCommit();
 }
 
 }  // namespace cc

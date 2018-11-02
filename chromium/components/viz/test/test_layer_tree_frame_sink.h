@@ -10,7 +10,7 @@
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/display/renderer_settings.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -53,16 +53,19 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
  public:
   // Pass true for |force_disable_reclaim_resources| to act like the Display
   // is out-of-process and can't return resources synchronously.
+  // If |begin_frame_source| is specified, |disable_display_vsync| and
+  // |refresh_rate| are ignored.
   TestLayerTreeFrameSink(
       scoped_refptr<ContextProvider> compositor_context_provider,
-      scoped_refptr<ContextProvider> worker_context_provider,
+      scoped_refptr<RasterContextProvider> worker_context_provider,
       SharedBitmapManager* shared_bitmap_manager,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       const RendererSettings& renderer_settings,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
       bool synchronous_composite,
       bool disable_display_vsync,
-      double refresh_rate);
+      double refresh_rate,
+      BeginFrameSource* begin_frame_source = nullptr);
   ~TestLayerTreeFrameSink() override;
 
   // This client must be set before BindToClient() happens.
@@ -108,6 +111,8 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
                               const RenderPassList& render_passes) override;
   void DisplayDidDrawAndSwap() override;
+  void DisplayDidReceiveCALayerParams(
+      const gfx::CALayerParams& ca_layer_params) override;
 
  private:
   // ExternalBeginFrameSource implementation.
@@ -120,13 +125,12 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   const RendererSettings renderer_settings_;
   const double refresh_rate_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
-
   FrameSinkId frame_sink_id_;
   // TODO(danakj): These don't need to be stored in unique_ptrs when
   // LayerTreeFrameSink is owned/destroyed on the compositor thread.
   std::unique_ptr<FrameSinkManagerImpl> frame_sink_manager_;
-  std::unique_ptr<LocalSurfaceIdAllocator> local_surface_id_allocator_;
+  std::unique_ptr<ParentLocalSurfaceIdAllocator>
+      parent_local_surface_id_allocator_;
   LocalSurfaceId local_surface_id_;
   gfx::Size display_size_;
   float device_scale_factor_ = 0;
@@ -137,6 +141,8 @@ class TestLayerTreeFrameSink : public cc::LayerTreeFrameSink,
   std::unique_ptr<CompositorFrameSinkSupport> support_;
 
   std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source_;
+  BeginFrameSource* client_provided_begin_frame_source_;    // Not owned.
+  BeginFrameSource* display_begin_frame_source_ = nullptr;  // Not owned.
   ExternalBeginFrameSource external_begin_frame_source_;
 
   // Uses surface_manager_ and begin_frame_source_.

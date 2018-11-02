@@ -47,6 +47,7 @@
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "storage/common/blob_storage/blob_handle.h"
 #include "storage/common/storage_histograms.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 
 using blink::mojom::CacheStorageError;
 
@@ -511,7 +512,7 @@ void CacheStorageCache::WriteSideData(ErrorCallback callback,
   // can call Size, another scheduled operation.
   quota_manager_proxy_->GetUsageAndQuota(
       base::ThreadTaskRunnerHandle::Get().get(), origin_,
-      storage::kStorageTypeTemporary,
+      blink::mojom::StorageType::kTemporary,
       base::AdaptCallbackForRepeating(
           base::BindOnce(&CacheStorageCache::WriteSideDataDidGetQuota,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback),
@@ -559,7 +560,7 @@ void CacheStorageCache::BatchOperation(
     // than it's supposed to be.
     quota_manager_proxy_->GetUsageAndQuota(
         base::ThreadTaskRunnerHandle::Get().get(), origin_,
-        storage::kStorageTypeTemporary,
+        blink::mojom::StorageType::kTemporary,
         base::AdaptCallbackForRepeating(base::BindOnce(
             &CacheStorageCache::BatchDidGetUsageAndQuota,
             weak_ptr_factory_.GetWeakPtr(), operations, std::move(callback),
@@ -569,8 +570,8 @@ void CacheStorageCache::BatchOperation(
 
   BatchDidGetUsageAndQuota(
       operations, std::move(callback), std::move(bad_message_callback),
-      0 /* space_required */, 0 /* side_data_size */, storage::kQuotaStatusOk,
-      0 /* usage */, 0 /* quota */);
+      0 /* space_required */, 0 /* side_data_size */,
+      blink::mojom::QuotaStatusCode::kOk, 0 /* usage */, 0 /* quota */);
 }
 
 void CacheStorageCache::BatchDidGetUsageAndQuota(
@@ -579,7 +580,7 @@ void CacheStorageCache::BatchDidGetUsageAndQuota(
     BadMessageCallback bad_message_callback,
     uint64_t space_required,
     uint64_t side_data_size,
-    storage::QuotaStatusCode status_code,
+    blink::mojom::QuotaStatusCode status_code,
     int64_t usage,
     int64_t quota) {
   base::CheckedNumeric<uint64_t> safe_space_required = space_required;
@@ -596,7 +597,7 @@ void CacheStorageCache::BatchDidGetUsageAndQuota(
         base::BindOnce(std::move(callback), CacheStorageError::kErrorStorage));
     return;
   }
-  if (status_code != storage::kQuotaStatusOk ||
+  if (status_code != blink::mojom::QuotaStatusCode::kOk ||
       safe_space_required.ValueOrDie() > quota) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
@@ -760,6 +761,12 @@ CacheStorageCache::CacheStorageCache(
   DCHECK(!origin_.is_empty());
   DCHECK(quota_manager_proxy_.get());
   DCHECK(cache_padding_key_.get());
+
+  if (cache_size_ != CacheStorage::kSizeUnknown &&
+      cache_padding_ != CacheStorage::kSizeUnknown) {
+    // The size of this cache has already been reported to the QuotaManager.
+    last_reported_size_ = cache_size_ + cache_padding_;
+  }
 
   quota_manager_proxy_->NotifyOriginInUse(origin_);
 }
@@ -1089,10 +1096,11 @@ void CacheStorageCache::WriteSideDataDidGetQuota(
     base::Time expected_response_time,
     scoped_refptr<net::IOBuffer> buffer,
     int buf_len,
-    storage::QuotaStatusCode status_code,
+    blink::mojom::QuotaStatusCode status_code,
     int64_t usage,
     int64_t quota) {
-  if (status_code != storage::kQuotaStatusOk || (buf_len > quota - usage)) {
+  if (status_code != blink::mojom::QuotaStatusCode::kOk ||
+      (buf_len > quota - usage)) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(std::move(callback),
                                   CacheStorageError::kErrorQuotaExceeded));
@@ -1234,7 +1242,7 @@ void CacheStorageCache::Put(const CacheStorageBatchOperation& operation,
   std::unique_ptr<storage::BlobDataHandle> side_data_blob_data_handle;
 
   if (!response->blob_uuid.empty()) {
-    DCHECK_EQ(response->blob != nullptr, features::IsMojoBlobsEnabled());
+    DCHECK(response->blob);
     if (!blob_storage_context_) {
       std::move(callback).Run(CacheStorageError::kErrorStorage);
       return;
@@ -1247,8 +1255,7 @@ void CacheStorageCache::Put(const CacheStorageBatchOperation& operation,
     }
   }
   if (!response->side_data_blob_uuid.empty()) {
-    DCHECK_EQ(response->side_data_blob != nullptr,
-              features::IsMojoBlobsEnabled());
+    DCHECK(response->side_data_blob);
     if (!blob_storage_context_) {
       std::move(callback).Run(CacheStorageError::kErrorStorage);
       return;
@@ -1565,7 +1572,7 @@ void CacheStorageCache::UpdateCacheSizeGotSize(
 
   quota_manager_proxy_->NotifyStorageModified(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary, size_delta);
+      blink::mojom::StorageType::kTemporary, size_delta);
 
   if (cache_storage_)
     cache_storage_->NotifyCacheContentChanged(cache_name_);
@@ -1866,14 +1873,11 @@ CacheStorageCache::PopulateResponseBody(disk_cache::ScopedEntryPtr entry,
       temp_entry, INDEX_RESPONSE_BODY, INDEX_SIDE_DATA);
   auto result = blob_storage_context_->AddFinishedBlob(&blob_data);
 
-  if (features::IsMojoBlobsEnabled()) {
-    blink::mojom::BlobPtr blob_ptr;
-    storage::BlobImpl::Create(
-        std::make_unique<storage::BlobDataHandle>(*result),
-        MakeRequest(&blob_ptr));
-    response->blob =
-        base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
-  }
+  blink::mojom::BlobPtr blob_ptr;
+  storage::BlobImpl::Create(std::make_unique<storage::BlobDataHandle>(*result),
+                            MakeRequest(&blob_ptr));
+  response->blob =
+      base::MakeRefCounted<storage::BlobHandle>(std::move(blob_ptr));
 
   return result;
 }

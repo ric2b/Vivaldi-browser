@@ -10,6 +10,7 @@
 #include "ui/android/view_client.h"
 #include "ui/android/window_android.h"
 #include "ui/events/android/motion_event_android.h"
+#include "ui/events/test/scoped_event_test_tick_clock.h"
 
 namespace ui {
 
@@ -64,6 +65,7 @@ class ViewAndroidBoundsTest : public testing::Test {
     client2_.Reset();
     client3_.Reset();
     clientm_.Reset();
+    test_clock_.SetNowTicks(base::TimeTicks());
   }
 
   void GenerateTouchEventAt(float x, float y) {
@@ -95,6 +97,7 @@ class ViewAndroidBoundsTest : public testing::Test {
   TestViewClient client2_;
   TestViewClient client3_;
   TestViewClient clientm_;
+  ui::test::ScopedEventTestTickClock test_clock_;
 };
 
 TEST_F(ViewAndroidBoundsTest, MatchesViewInFront) {
@@ -202,15 +205,28 @@ TEST_F(ViewAndroidBoundsTest, OnSizeChanged) {
   EXPECT_FALSE(clientm_.OnSizeCalled());
   EXPECT_FALSE(client3_.OnSizeCalled());
 
+  viewm_.RemoveFromParent();
+  viewm_.OnSizeChangedInternal(gfx::Size(0, 0));  // Reset the size.
+
   Reset();
 
-  viewm_.RemoveFromParent();
   view1_.OnSizeChanged(100, 100);
 
   // Size event is generated for a newly added, match-parent child view.
   EXPECT_FALSE(clientm_.OnSizeCalled());
   view1_.AddChild(&viewm_);
   EXPECT_TRUE(clientm_.OnSizeCalled());
+  EXPECT_FALSE(client3_.OnSizeCalled());
+
+  viewm_.RemoveFromParent();
+
+  Reset();
+
+  view1_.OnSizeChanged(100, 100);
+
+  // Size event won't propagate if the children already have the same size.
+  view1_.AddChild(&viewm_);
+  EXPECT_FALSE(clientm_.OnSizeCalled());
   EXPECT_FALSE(client3_.OnSizeCalled());
 }
 

@@ -10,9 +10,11 @@
 #include <set>
 
 #include "base/macros.h"
+#include "base/sequence_checker.h"
 #include "base/supports_user_data.h"
 #import "ios/web/download/download_task_impl.h"
 #import "ios/web/public/download/download_controller.h"
+#include "ui/base/page_transition_types.h"
 
 namespace web {
 
@@ -32,8 +34,10 @@ class DownloadControllerImpl : public DownloadController,
                           const GURL& original_url,
                           const std::string& content_disposition,
                           int64_t total_bytes,
-                          const std::string& mime_type) override;
+                          const std::string& mime_type,
+                          ui::PageTransition page_transition) override;
   void SetDelegate(DownloadControllerDelegate* delegate) override;
+  DownloadControllerDelegate* GetDelegate() const override;
 
   // DownloadTaskImpl::Delegate overrides:
   void OnTaskDestroyed(DownloadTaskImpl* task) override;
@@ -45,6 +49,7 @@ class DownloadControllerImpl : public DownloadController,
   // Set of tasks which are currently alive.
   std::set<DownloadTaskImpl*> alive_tasks_;
   DownloadControllerDelegate* delegate_ = nullptr;
+  SEQUENCE_CHECKER(my_sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(DownloadControllerImpl);
 };

@@ -103,20 +103,6 @@ TEST_F(PingLoaderTest, NonHTTPPingTarget) {
   ASSERT_TRUE(ping_request.IsNull());
 }
 
-TEST_F(PingLoaderTest, LoadImagePriority) {
-  SetDocumentURL(KURL("http://localhost/foo.html"));
-
-  KURL ping_url("https://localhost/bar.html");
-  URLTestHelpers::RegisterMockedURLLoad(
-      ping_url, testing::CoreTestDataPath("bar.html"), "text/html");
-  PingLoader::LoadImage(&page_holder_->GetFrame(), ping_url);
-  Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
-  const ResourceRequest& request = client_->PingRequest();
-  ASSERT_FALSE(request.IsNull());
-  ASSERT_EQ(request.Url(), ping_url);
-  EXPECT_EQ(ResourceLoadPriority::kVeryLow, request.Priority());
-}
-
 TEST_F(PingLoaderTest, LinkAuditPingPriority) {
   KURL destination_url("http://navigation.destination");
   SetDocumentURL(KURL("http://localhost/foo.html"));
@@ -155,9 +141,7 @@ TEST_F(PingLoaderTest, BeaconPriority) {
   KURL ping_url("https://localhost/bar.html");
   URLTestHelpers::RegisterMockedURLLoad(
       ping_url, testing::CoreTestDataPath("bar.html"), "text/html");
-  size_t size = 0;
-  PingLoader::SendBeacon(&page_holder_->GetFrame(), 123, ping_url, "hello",
-                         size);
+  PingLoader::SendBeacon(&page_holder_->GetFrame(), ping_url, "hello");
   Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
   const ResourceRequest& request = client_->PingRequest();
   ASSERT_FALSE(request.IsNull());

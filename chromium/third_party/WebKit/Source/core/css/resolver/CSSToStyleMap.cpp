@@ -61,13 +61,13 @@ void CSSToStyleMap::MapFillAttachment(StyleResolverState&,
   const CSSIdentifierValue& identifier_value = ToCSSIdentifierValue(value);
   switch (identifier_value.GetValueID()) {
     case CSSValueFixed:
-      layer->SetAttachment(kFixedBackgroundAttachment);
+      layer->SetAttachment(EFillAttachment::kFixed);
       break;
     case CSSValueScroll:
-      layer->SetAttachment(kScrollBackgroundAttachment);
+      layer->SetAttachment(EFillAttachment::kScroll);
       break;
     case CSSValueLocal:
-      layer->SetAttachment(kLocalBackgroundAttachment);
+      layer->SetAttachment(EFillAttachment::kLocal);
       break;
     default:
       return;
@@ -142,7 +142,7 @@ void CSSToStyleMap::MapFillImage(StyleResolverState& state,
     return;
   }
 
-  CSSPropertyID property = layer->GetType() == kBackgroundFillLayer
+  CSSPropertyID property = layer->GetType() == EFillLayerType::kBackground
                                ? CSSPropertyBackgroundImage
                                : CSSPropertyWebkitMaskImage;
   layer->SetImage(state.GetStyleImage(property, value));
@@ -193,12 +193,12 @@ void CSSToStyleMap::MapFillSize(StyleResolverState& state,
 
   if (value.IsIdentifierValue() &&
       ToCSSIdentifierValue(value).GetValueID() == CSSValueContain)
-    layer->SetSizeType(kContain);
+    layer->SetSizeType(EFillSizeType::kContain);
   else if (value.IsIdentifierValue() &&
            ToCSSIdentifierValue(value).GetValueID() == CSSValueCover)
-    layer->SetSizeType(kCover);
+    layer->SetSizeType(EFillSizeType::kCover);
   else
-    layer->SetSizeType(kSizeLength);
+    layer->SetSizeType(EFillSizeType::kSizeLength);
 
   LengthSize b = FillLayer::InitialFillSizeLength(layer->GetType());
 
@@ -229,11 +229,11 @@ void CSSToStyleMap::MapFillSize(StyleResolverState& state,
   layer->SetSizeLength(b);
 }
 
-void CSSToStyleMap::MapFillXPosition(StyleResolverState& state,
+void CSSToStyleMap::MapFillPositionX(StyleResolverState& state,
                                      FillLayer* layer,
                                      const CSSValue& value) {
   if (value.IsInitialValue()) {
-    layer->SetXPosition(FillLayer::InitialFillXPosition(layer->GetType()));
+    layer->SetPositionX(FillLayer::InitialFillPositionX(layer->GetType()));
     return;
   }
 
@@ -250,18 +250,18 @@ void CSSToStyleMap::MapFillXPosition(StyleResolverState& state,
                                                           CSSValueRight>(state,
                                                                          value);
 
-  layer->SetXPosition(length);
+  layer->SetPositionX(length);
   if (value.IsValuePair())
     layer->SetBackgroundXOrigin(
         ToCSSIdentifierValue(ToCSSValuePair(value).First())
             .ConvertTo<BackgroundEdgeOrigin>());
 }
 
-void CSSToStyleMap::MapFillYPosition(StyleResolverState& state,
+void CSSToStyleMap::MapFillPositionY(StyleResolverState& state,
                                      FillLayer* layer,
                                      const CSSValue& value) {
   if (value.IsInitialValue()) {
-    layer->SetYPosition(FillLayer::InitialFillYPosition(layer->GetType()));
+    layer->SetPositionY(FillLayer::InitialFillPositionY(layer->GetType()));
     return;
   }
 
@@ -278,7 +278,7 @@ void CSSToStyleMap::MapFillYPosition(StyleResolverState& state,
                                                           CSSValueBottom>(
         state, value);
 
-  layer->SetYPosition(length);
+  layer->SetPositionY(length);
   if (value.IsValuePair())
     layer->SetBackgroundYOrigin(
         ToCSSIdentifierValue(ToCSSValuePair(value).First())
@@ -299,10 +299,10 @@ void CSSToStyleMap::MapFillMaskSourceType(StyleResolverState&,
 
   switch (ToCSSIdentifierValue(value).GetValueID()) {
     case CSSValueAlpha:
-      type = kMaskAlpha;
+      type = EMaskSourceType::kAlpha;
       break;
     case CSSValueLuminance:
-      type = kMaskLuminance;
+      type = EMaskSourceType::kLuminance;
       break;
     case CSSValueAuto:
       break;
@@ -386,9 +386,9 @@ EAnimPlayState CSSToStyleMap::MapAnimationPlayState(const CSSValue& value) {
   if (value.IsInitialValue())
     return CSSAnimationData::InitialPlayState();
   if (ToCSSIdentifierValue(value).GetValueID() == CSSValuePaused)
-    return kAnimPlayStatePaused;
+    return EAnimPlayState::kPaused;
   DCHECK_EQ(ToCSSIdentifierValue(value).GetValueID(), CSSValueRunning);
-  return kAnimPlayStatePlaying;
+  return EAnimPlayState::kPlaying;
 }
 
 CSSTransitionData::TransitionProperty CSSToStyleMap::MapAnimationProperty(

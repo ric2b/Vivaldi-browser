@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">Nevar atvērt paplašinājuma pakotni. Lai varētu drošā veidā atvērt paplašinājuma pakotni, jābūt norādītam ceļam uz jūsu profila direktoriju, kas sākas ar diska burtu un neietver savienojumu, montēšanas punktu vai simbolisku saiti. Jūsu profilam nav norādīts šāds ceļš.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (sērijas numurs: <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" />, ko piedāvā <ph name="VENDOR_ID" /> (sērijas numurs: <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">Nevarēja ielādēt palaišanas programmas lapu “<ph name="PAGE" />”.</translation>
 <translation id="388442998277590542">Nevarēja ielādēt opciju lapu “<ph name="OPTIONS_PAGE" />”.</translation>
 <translation id="4115165561519362854">Šīs iekārtas administrators pieprasa, lai tiktu izmantots pakalpojums <ph name="EXTENSION_NAME" /> <ph name="EXTENSION_VERSION" /> vai jaunāka versija. To nevar iespējot, līdz nebūs veikta jaunināšana uz norādīto (vai jaunāku) versiju.</translation>
 <translation id="4233778200880751280">Nevarēja ielādēt lapu “Par” (<ph name="ABOUT_PAGE" />).</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">Nevar atvērt paplašinājuma pakotni. Lai varētu drošā veidā atvērt paplašinājuma pakotni, jābūt norādītam ceļam uz jūsu profila direktoriju, kas neietver simbolisku saiti. Jūsu profilam nav norādīts šāds ceļš.</translation>
 <translation id="641087317769093025">Paplašinājumu nevarēja izgūt no ZIP arhīva.</translation>
 <translation id="6542618148162044354">Lietotne <ph name="APP_NAME" /> pieprasa piekļuvi vienai vai vairākām jūsu ierīcēm:</translation>
-<translation id="6566142449942033617">Nevarēja ielādēt spraudņa ceļu “<ph name="PLUGIN_PATH" />”.</translation>
 <translation id="657064425229075395">Nevarēja ielādēt fona skriptu <ph name="BACKGROUND_SCRIPT" />.</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" />, ko piedāvā <ph name="VENDOR_NAME" /> (sērijas numurs: <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">Nevarēja izveidot direktoriju izgūšanai no ZIP arhīva: <ph name="DIRECTORY_PATH" /></translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">Šis paplašinājums pārāk bieži veica atkārtotu ielādi.</translation>
 <translation id="7003844668372540529">Nezināms produkts (ID: <ph name="PRODUCT_ID" />), ko piedāvā <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Šīs ierīces administrators uzskata, ka paplašinājumam <ph name="EXTENSION_NAME" /> ir jābūt instalētam. To nevar noņemt vai pārveidot.</translation>
-<translation id="7581279002575751816">NPAPI spraudņi netiek atbalstīti.</translation>
 <translation id="7972881773422714442">Iespējas: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Vērsta uz lietotāju</translation>
 <translation id="8047248493720652249">Šim paplašinājumam neizdevās piešķirt nosaukumu lejupielādei “<ph name="ATTEMPTED_FILENAME" />”, jo cits paplašinājums (<ph name="EXTENSION_NAME" />) noteica citu faila nosaukumu “<ph name="ACTUAL_FILENAME" />”.</translation>

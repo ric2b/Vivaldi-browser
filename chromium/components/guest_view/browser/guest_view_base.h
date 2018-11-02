@@ -367,7 +367,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   void WillAttach(content::WebContents* embedder_web_contents,
                   int browser_plugin_instance_id,
                   bool is_full_page_plugin,
-                  const base::Closure& callback) final;
+                  const base::Closure& completion_callback) final;
 
   // WebContentsDelegate implementation.
   void ActivateContents(content::WebContents* contents) final;
@@ -380,7 +380,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   content::ColorChooser* OpenColorChooser(
       content::WebContents* web_contents,
       SkColor color,
-      const std::vector<content::ColorSuggestion>& suggestions) final;
+      const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) final;
   void ResizeDueToAutoResize(content::WebContents* web_contents,
                              const gfx::Size& new_size) final;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
@@ -399,6 +399,15 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // ui_zoom::ZoomObserver implementation.
   void OnZoomChanged(
       const zoom::ZoomController::ZoomChangedEventData& data) final;
+
+  // See BrowserPluginGuestDelegate::WillAttach.
+  // This version also takes a |perform_attach| callback to specify
+  // attachment operations which must be done synchronously.
+  void WillAttach(content::WebContents* embedder_web_contents,
+                  int element_instance_id,
+                  bool is_full_page_plugin,
+                  base::OnceClosure perform_attach,
+                  const base::Closure& completion_callback);
 
   void SendQueuedEvents();
 

@@ -26,6 +26,9 @@
         <span class="i18n" msgid="options_rate_description"
               id="rate_description"></span>
         <select id="rate" aria-labelledby="rate_description">
+          <!-- If these options are changed, make sure to update the
+               SelectToSpeak.speechRateToEnum_ function and add new
+               enums in tools/metrics/histograms/enums.xml -->
           <option value="0.5" class="i18n" msgid="options_rate_slowest">
           </option>
           <option value="0.75" class="i18n" msgid="options_rate_slow">
@@ -41,6 +44,25 @@
         </select>
       </div>
 
+      <div class="option">
+        <span class="i18n" msgid="options_pitch_description"
+              id="pitch_description"></span>
+        <select id="pitch" aria-labelledby="pitch_description">
+          <option value="0.55" class="i18n" msgid="options_pitch_lowest">
+          </option>
+          <option value="0.70" class="i18n" msgid="options_pitch_lower">
+          </option>
+          <option value="0.85" class="i18n" msgid="options_pitch_low">
+          </option>
+          <option value="1.0" class="i18n" msgid="options_pitch_normal">
+          </option>
+          <option value="1.15" class="i18n" msgid="options_pitch_high">
+          </option>
+          <option value="1.3" class="i18n" msgid="options_pitch_highest">
+          </option>
+        </select>
+      </div>
+
       <h2 class="i18n" msgid="options_highlight"></h2>
       <div class="option">
         <input id="wordHighlight" type="checkbox" class="checkbox pref"
@@ -48,38 +70,39 @@
         <label id="wordHighlightLabel" class="i18n"
                msgid="options_highlight_description">
         </label>
-      </div>
-      <div class="option">
-        <span class="i18n" msgid="options_highlight_color_description"
-              id="highlight_color_description"></span>
-        <select id="highlightColor"
-                aria-labeledby="options_highlight_color_description">
-          <option value="#5e9bff" class="i18n"
-                  msgid="options_highlight_color_blue">
-          </option>
-          <option value="#ffa13d" class="i18n"
-                  msgid="options_highlight_color_orange">
-          </option>
-          <option value="#eeff41" class="i18n"
-                  msgid="options_highlight_color_yellow">
-          </option>
-          <option value="#64dd17" class="i18n"
-                  msgid="options_highlight_color_green">
-          </option>
-          <option value="#ff4081" class="i18n"
-                  msgid="options_highlight_color_pink">
-          </option>
-        </select>
-        <div style="float:right">
-          <span class="i18n example dark" msgid="options_highlight_dark">
-          </span>
-          <span class="i18n example" msgid="options_highlight_light">
-          </span>
-          <div class="highlight" id="highlightExample">
+        <div class="sub-option hidden" id="highlightSubOption">
+          <span class="i18n" msgid="options_highlight_color_description"
+                id="highlight_color_description"></span>
+          <select id="highlightColor"
+                  aria-labeledby="options_highlight_color_description">
+            <option value="#5e9bff" class="i18n"
+                    msgid="options_highlight_color_blue">
+            </option>
+            <option value="#ffa13d" class="i18n"
+                    msgid="options_highlight_color_orange">
+            </option>
+            <option value="#eeff41" class="i18n"
+                    msgid="options_highlight_color_yellow">
+            </option>
+            <option value="#64dd17" class="i18n"
+                    msgid="options_highlight_color_green">
+            </option>
+            <option value="#ff4081" class="i18n"
+                    msgid="options_highlight_color_pink">
+            </option>
+          </select>
+          <div class="example dark">
+            <span class="i18n" msgid="options_highlight_dark"></span>
+            <div class="highlight">
+            </div>
+          </div>
+          <div class="example light">
+            <span class="i18n" msgid="options_highlight_light"></span>
+            <div class="highlight">
+            </div>
           </div>
         </div>
       </div>
-
     </div>
 
     <script src="select_to_speak_options.js"></script>

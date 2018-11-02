@@ -35,6 +35,8 @@ ClientControlledState::~ClientControlledState() = default;
 
 void ClientControlledState::HandleTransitionEvents(WindowState* window_state,
                                                    const WMEvent* event) {
+  if (!delegate_)
+    return;
   bool pin_transition = window_state->IsTrustedPinned() ||
                         window_state->IsPinned() || event->IsPinEvent();
   // Pinned State transition is handled on server side.
@@ -98,6 +100,8 @@ void ClientControlledState::HandleWorkspaceEvents(WindowState* window_state,
 
 void ClientControlledState::HandleCompoundEvents(WindowState* window_state,
                                                  const WMEvent* event) {
+  if (!delegate_)
+    return;
   switch (event->type()) {
     case WM_EVENT_TOGGLE_MAXIMIZE_CAPTION:
       if (window_state->IsFullscreen()) {
@@ -141,6 +145,8 @@ void ClientControlledState::HandleCompoundEvents(WindowState* window_state,
 
 void ClientControlledState::HandleBoundsEvents(WindowState* window_state,
                                                const WMEvent* event) {
+  if (!delegate_)
+    return;
   switch (event->type()) {
     case WM_EVENT_SET_BOUNDS: {
       const gfx::Rect& bounds =
@@ -171,12 +177,17 @@ void ClientControlledState::HandleBoundsEvents(WindowState* window_state,
   }
 }
 
+void ClientControlledState::OnWindowDestroying(WindowState* window_state) {
+  delegate_.reset();
+}
+
 bool ClientControlledState::EnterNextState(
     WindowState* window_state,
     mojom::WindowStateType next_state_type,
     BoundsChangeAnimationType animation_type) {
-  // Do nothing if  we're already in the same state.
-  if (state_type_ == next_state_type)
+  // Do nothing if  we're already in the same state, or delegate has already
+  // been deleted.
+  if (state_type_ == next_state_type || !delegate_)
     return false;
   bounds_change_animation_type_ = animation_type;
   mojom::WindowStateType previous_state_type = state_type_;

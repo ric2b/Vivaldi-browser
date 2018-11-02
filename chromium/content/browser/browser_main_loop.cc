@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,7 +21,6 @@
 #include "base/macros.h"
 #include "base/memory/memory_coordinator_proxy.h"
 #include "base/memory/memory_pressure_monitor.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
@@ -52,6 +52,7 @@
 #include "components/tracing/common/trace_config_file.h"
 #include "components/tracing/common/trace_to_console.h"
 #include "components/tracing/common/tracing_switches.h"
+#include "components/viz/common/features.h"
 #include "components/viz/common/switches.h"
 #include "components/viz/host/forwarding_compositing_mode_reporter_impl.h"
 #include "components/viz/host/host_frame_sink_manager.h"
@@ -84,6 +85,7 @@
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_manager/service_manager_context.h"
+#include "content/browser/site_isolation_policy.h"
 #include "content/browser/speech/speech_recognition_manager_impl.h"
 #include "content/browser/startup_task_runner.h"
 #include "content/browser/tracing/background_tracing_manager_impl.h"
@@ -93,7 +95,6 @@
 #include "content/browser/webui/url_data_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/service_manager/service_manager_connection_impl.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/task_scheduler.h"
 #include "content/public/browser/browser_main_parts.h"
 #include "content/public/browser/content_browser_client.h"
@@ -106,6 +107,7 @@
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/public/common/zygote_features.h"
 #include "device/gamepad/gamepad_service.h"
 #include "gpu/vulkan/features.h"
 #include "media/audio/audio_manager.h"
@@ -129,7 +131,6 @@
 #include "skia/ext/event_tracer_impl.h"
 #include "skia/ext/skia_memory_dump_provider.h"
 #include "sql/sql_memory_dump_provider.h"
-#include "third_party/boringssl/src/include/openssl/evp.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_switches_util.h"
@@ -143,6 +144,11 @@
 #if defined(USE_AURA)
 #include "content/public/browser/context_factory.h"
 #include "ui/aura/env.h"
+#endif
+
+#if BUILDFLAG(USE_ZYGOTE_HANDLE)
+#include "content/public/common/zygote_handle.h"
+#include "media/base/media_switches.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -212,7 +218,6 @@
 
 #if !defined(OS_ANDROID)
 #include "content/browser/zygote_host/zygote_communication_linux.h"
-#include "content/public/browser/zygote_handle_linux.h"
 #endif  // !defined(OS_ANDROID)
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX)
 
@@ -223,6 +228,11 @@
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 #include "content/browser/media/cdm_registry_impl.h"
+#endif
+
+#if BUILDFLAG(ENABLE_WEBRTC)
+#include "content/browser/webrtc/webrtc_event_log_manager.h"
+#include "content/browser/webrtc/webrtc_internals.h"
 #endif
 
 #if defined(USE_X11)
@@ -252,8 +262,31 @@
 namespace content {
 namespace {
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
-    !defined(OS_FUCHSIA)
+#if BUILDFLAG(USE_ZYGOTE_HANDLE)
+pid_t LaunchZygoteHelper(base::CommandLine* cmd_line,
+                         base::ScopedFD* control_fd) {
+  // Append any switches from the browser process that need to be forwarded on
+  // to the zygote/renderers.
+  static const char* const kForwardSwitches[] = {
+      switches::kAndroidFontsPath, switches::kClearKeyCdmPathForTesting,
+      switches::kEnableHeapProfiling,
+      switches::kEnableLogging,  // Support, e.g., --enable-logging=stderr.
+      // Need to tell the zygote that it is headless so that we don't try to use
+      // the wrong type of main delegate.
+      switches::kHeadless,
+      // Zygote process needs to know what resources to have loaded when it
+      // becomes a renderer process.
+      switches::kForceDeviceScaleFactor, switches::kLoggingLevel,
+      switches::kPpapiInProcess, switches::kRegisterPepperPlugins, switches::kV,
+      switches::kVModule,
+  };
+  cmd_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
+                             kForwardSwitches, arraysize(kForwardSwitches));
+
+  GetContentClient()->browser()->AppendExtraCommandLineSwitches(cmd_line, -1);
+  return ZygoteHostImpl::GetInstance()->LaunchZygote(cmd_line, control_fd);
+}
+
 void SetupSandbox(const base::CommandLine& parsed_command_line) {
   TRACE_EVENT0("startup", "SetupSandbox");
   // SandboxHostLinux needs to be initialized even if the sandbox and
@@ -268,15 +301,16 @@ void SetupSandbox(const base::CommandLine& parsed_command_line) {
 
   // Tickle the zygote host so it forks now.
   ZygoteHostImpl::GetInstance()->Init(parsed_command_line);
-  ZygoteHandle generic_zygote = CreateGenericZygote();
+  ZygoteHandle generic_zygote =
+      CreateGenericZygote(base::BindOnce(LaunchZygoteHelper));
+
   // TODO(kerrnel): Investigate doing this without the ZygoteHostImpl as a
   // proxy. It is currently done this way due to concerns about race
   // conditions.
   ZygoteHostImpl::GetInstance()->SetRendererSandboxStatus(
       generic_zygote->GetSandboxStatus());
 }
-#endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
-        // !defined(OS_FUCHSIA)
+#endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
 
 #if defined(USE_GLIB)
 static void GLibLogHandler(const gchar* log_domain,
@@ -595,9 +629,11 @@ BrowserMainLoop::BrowserMainLoop(const MainFunctionParams& parameters)
   DCHECK(!g_current_browser_main_loop);
   g_current_browser_main_loop = this;
 
-  // Use an empty string as TaskScheduler name to match the suffix of browser
-  // process TaskScheduler histograms.
-  base::TaskScheduler::Create("");
+  if (GetContentClient()->browser()->ShouldCreateTaskScheduler()) {
+    // Use an empty string as TaskScheduler name to match the suffix of browser
+    // process TaskScheduler histograms.
+    base::TaskScheduler::Create("Browser");
+  }
 }
 
 BrowserMainLoop::~BrowserMainLoop() {
@@ -615,7 +651,7 @@ void BrowserMainLoop::Init() {
 
 // BrowserMainLoop stages ==================================================
 
-void BrowserMainLoop::EarlyInitialization() {
+int BrowserMainLoop::EarlyInitialization() {
   TRACE_EVENT0("startup", "BrowserMainLoop::EarlyInitialization");
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID) && \
@@ -641,19 +677,20 @@ void BrowserMainLoop::EarlyInitialization() {
   // version for 2.36, hence do not call g_type_init starting 2.35.
   // http://developer.gnome.org/gobject/unstable/gobject-Type-Information.html#g-type-init
 #if !GLIB_CHECK_VERSION(2, 35, 0)
-  // GLib type system initialization. Needed at least for gconf,
-  // used in net/proxy/proxy_config_service_linux.cc. Most likely
-  // this is superfluous as gtk_init() ought to do this. It's
-  // definitely harmless, so retained as a reminder of this
-  // requirement for gconf.
+  // GLib type system initialization. It's unclear if it's still required for
+  // any remaining code. Most likely this is superfluous as gtk_init() ought
+  // to do this. It's definitely harmless, so it's retained here.
   g_type_init();
 #endif  // !GLIB_CHECK_VERSION(2, 35, 0)
 
   SetUpGLibLogHandler();
 #endif  // defined(USE_GLIB)
 
-  if (parts_)
-    parts_->PreEarlyInitialization();
+  if (parts_) {
+    const int pre_early_init_error_code = parts_->PreEarlyInitialization();
+    if (pre_early_init_error_code != content::RESULT_CODE_NORMAL_EXIT)
+      return pre_early_init_error_code;
+  }
 
 #if defined(OS_MACOSX) || defined(OS_LINUX) || defined(OS_CHROMEOS)
   // We use quite a few file descriptors for our IPC as well as disk the disk
@@ -690,6 +727,8 @@ void BrowserMainLoop::EarlyInitialization() {
 
   if (parts_)
     parts_->PostEarlyInitialization();
+
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 void BrowserMainLoop::PreMainMessageLoopStart() {
@@ -913,8 +952,6 @@ int BrowserMainLoop::PreCreateThreads() {
   ChildProcessSecurityPolicyImpl* policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
   policy->AddIsolatedOrigins(SiteIsolationPolicy::GetIsolatedOrigins());
-  policy->AddIsolatedOrigins(
-      GetContentClient()->browser()->GetOriginsRequiringDedicatedProcess());
 
   // Record metrics about which site isolation flags have been turned on.
   SiteIsolationPolicy::StartRecordingSiteIsolationFlagUsage();
@@ -1431,7 +1468,7 @@ void BrowserMainLoop::GetCompositingModeReporter(
     return;
   }
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableViz))
+  if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor))
     forwarding_compositing_mode_reporter_impl_->BindRequest(std::move(request));
   else
     compositing_mode_reporter_impl_->BindRequest(std::move(request));
@@ -1505,7 +1542,7 @@ int BrowserMainLoop::BrowserThreadsStarted() {
   if (browser_is_viz_host) {
     host_frame_sink_manager_ = std::make_unique<viz::HostFrameSinkManager>();
     BrowserGpuChannelHostFactory::Initialize(established_gpu_channel);
-    if (parsed_command_line_.HasSwitch(switches::kEnableViz)) {
+    if (base::FeatureList::IsEnabled(features::kVizDisplayCompositor)) {
       forwarding_compositing_mode_reporter_impl_ =
           std::make_unique<viz::ForwardingCompositingModeReporterImpl>();
 
@@ -1515,13 +1552,9 @@ int BrowserMainLoop::BrowserThreadsStarted() {
       transport_factory->ConnectHostFrameSinkManager();
       ImageTransportFactory::SetFactory(std::move(transport_factory));
     } else {
-      // TODO(crbug.com/676384): Remove flag along with surface sequences.
-      auto surface_lifetime_type =
-          parsed_command_line_.HasSwitch(switches::kDisableSurfaceReferences)
-              ? viz::SurfaceManager::LifetimeType::SEQUENCES
-              : viz::SurfaceManager::LifetimeType::REFERENCES;
-      frame_sink_manager_impl_ =
-          std::make_unique<viz::FrameSinkManagerImpl>(surface_lifetime_type);
+      frame_sink_manager_impl_ = std::make_unique<viz::FrameSinkManagerImpl>(
+          viz::SurfaceManager::LifetimeType::REFERENCES,
+          switches::GetDeadlineToSynchronizeSurfaces());
 
       surface_utils::ConnectWithLocalFrameSinkManager(
           host_frame_sink_manager_.get(), frame_sink_manager_impl_.get());
@@ -1570,6 +1603,12 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #elif defined(OS_MACOSX)
   device_monitor_mac_.reset(
       new media::DeviceMonitorMac(audio_manager_->GetTaskRunner()));
+#endif
+
+#if BUILDFLAG(ENABLE_WEBRTC)
+  webrtc_event_log_manager_.reset(
+      WebRtcEventLogManager::CreateSingletonInstance());
+  webrtc_internals_.reset(WebRTCInternals::CreateSingletonInstance());
 #endif
 
   // RDH needs the IO thread to be created
@@ -1635,12 +1674,8 @@ int BrowserMainLoop::BrowserThreadsStarted() {
 #endif
   ui::Clipboard::SetAllowedThreads(allowed_clipboard_threads);
 
-  // When running the GPU thread in-process, avoid optimistically starting it
-  // since creating the GPU thread races against creation of the one-and-only
-  // ChildProcess instance which is created by the renderer thread.
   if (GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(nullptr) &&
-      !established_gpu_channel && always_uses_gpu && !UsingInProcessGpu() &&
-      browser_is_viz_host) {
+      !established_gpu_channel && always_uses_gpu && browser_is_viz_host) {
     TRACE_EVENT_INSTANT0("gpu", "Post task to launch GPU process",
                          TRACE_EVENT_SCOPE_THREAD);
     BrowserThread::PostTask(
@@ -1734,7 +1769,7 @@ bool BrowserMainLoop::InitializeToolkit() {
 
 #if BUILDFLAG(ENABLE_MUS)
   if (parsed_command_line_.HasSwitch(switches::kMus))
-    image_cursors_set_ = base::MakeUnique<ui::ImageCursorsSet>();
+    image_cursors_set_ = std::make_unique<ui::ImageCursorsSet>();
 #endif
 
   if (parts_)

@@ -15,7 +15,7 @@
 <translation id="2923448633003185837">Plakken &amp;en gaan</translation>
 <translation id="2972581237482394796">Op&amp;nieuw</translation>
 <translation id="2977472760057091832">Link openen in &amp;privévenster</translation>
-<translation id="3027988479108856431">Helaas zijn instellingen van Yandex niet te benaderen als die browser open staat. Om Yandex-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Yandex. Klik daarna op Doorgaan.</translation>
+<translation id="3027988479108856431">Helaas zijn instellingen van Yandex niet te benaderen als die browser open staat. Om Yandex-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Yandex. Klik daarna op Opnieuw proberen.</translation>
 <translation id="3259769196742189631">Pagina vali&amp;deren</translation>
 <translation id="3270847123878663523">Sorteren ongedaan maken</translation>
 <translation id="3402602684546832928">Bladwijzerbestand van Opera selecteren</translation>
@@ -43,7 +43,7 @@
 <translation id="5648110075441906505">Afbeelding openen in &amp;nieuw venster</translation>
 <translation id="5716238312826274098">Meldingen uitschakelen</translation>
 <translation id="588258955323874662">Volledig &amp;scherm</translation>
-<translation id="5916080360077521750">Helaas zijn instellingen van Chrome niet te benaderen als die browser open staat. Om Chrome-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Chrome. Klik daarna op Doorgaan.</translation>
+<translation id="5916080360077521750">Helaas zijn instellingen van Chrome niet te benaderen als die browser open staat. Om Chrome-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Chrome. Klik daarna op Opnieuw proberen.</translation>
 <translation id="6229528619562190452">Klik hier om Vivaldi te vernieuwen.</translation>
 <translation id="6234173136417926046">Afbeelding &amp;gebruiken als snelkiezerachtergrond</translation>
 <translation id="6259156558325130047">Opnieuw sorteren</translation>
@@ -53,7 +53,7 @@
 <translation id="6529602333819889595">Opnieuw verwij&amp;deren</translation>
 <translation id="6538338088414940408">Link openen in &amp;achtergrondtab</translation>
 <translation id="6551219277044048123">Toevoegen als &amp;zoekmachine...</translation>
-<translation id="6804831687363620480">Helaas zijn instellingen van Opera 15+ niet te benaderen als die browser open staat. Om Opera-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Opera. Klik daarna op Doorgaan.</translation>
+<translation id="6804831687363620480">Helaas zijn instellingen van Opera 15+ niet te benaderen als die browser open staat. Om Opera-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Opera. Klik daarna op Opnieuw proberen.</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7715497554424665066">Nieuwe versie negeren</translation>
 <translation id="8099620695029051217">Pagina-adres &amp;kopiëren</translation>
@@ -62,6 +62,7 @@
 <translation id="8624587806981488221">Afbeelding &amp;herladen</translation>
 <translation id="864444594187862076">Opera versie 15+ (Developer)</translation>
 <translation id="8647783768664050873">Klik hier om Vivaldi bij te werken naar versie $1.</translation>
+<translation id="8651348004684669199">Voeg actieve tab toe</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8773635261052182196">Je krijgt deze meldingen niet meer te zien. Je kunt ze weer aanzetten in Vivaldi's instellingen.</translation>
 <translation id="8894900864683381599">Link toevoegen aan &amp;webpaneel</translation>

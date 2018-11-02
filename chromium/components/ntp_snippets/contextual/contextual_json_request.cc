@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
@@ -122,7 +121,7 @@ ContextualJsonRequest::Builder::~Builder() = default;
 std::unique_ptr<ContextualJsonRequest> ContextualJsonRequest::Builder::Build()
     const {
   DCHECK(url_request_context_getter_);
-  auto request = base::MakeUnique<ContextualJsonRequest>(parse_json_callback_);
+  auto request = std::make_unique<ContextualJsonRequest>(parse_json_callback_);
   std::string body = BuildBody();
   std::string headers = BuildHeaders();
   request->url_fetcher_ = BuildURLFetcher(request.get(), headers, body);
@@ -176,21 +175,18 @@ std::string ContextualJsonRequest::Builder::BuildHeaders() const {
     headers.SetHeader("Authorization", auth_header_);
   }
   // Add X-Client-Data header with experiment IDs from field trials.
-  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
-  // not affect transmission of experiments coming from the variations server.
-  bool is_signed_in = false;
-  variations::AppendVariationHeaders(url_,
-                                     false,  // incognito
-                                     false,  // uma_enabled
-                                     is_signed_in, &headers);
+  // Note: It's OK to pass SignedIn::kNo if it's unknown, as it does not affect
+  // transmission of experiments coming from the variations server.
+  variations::AppendVariationHeaders(url_, variations::InIncognito::kNo,
+                                     variations::SignedIn::kNo, &headers);
   return headers.ToString();
 }
 
 std::string ContextualJsonRequest::Builder::BuildBody() const {
-  auto request = base::MakeUnique<base::DictionaryValue>();
+  auto request = std::make_unique<base::DictionaryValue>();
 
   request->SetString("url", content_url_.spec());
-  auto categories = base::MakeUnique<base::ListValue>();
+  auto categories = std::make_unique<base::ListValue>();
   categories->AppendString("RELATED_ARTICLES");
   categories->AppendString("PUBLIC_DEBATE");
   request->Set("categories", std::move(categories));

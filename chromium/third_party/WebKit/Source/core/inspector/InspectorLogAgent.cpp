@@ -8,7 +8,6 @@
 #include "core/frame/PerformanceMonitor.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleMessageStorage.h"
-#include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/ResolveNode.h"
 #include "third_party/WebKit/Source/platform/bindings/ScriptForbiddenScope.h"
@@ -85,7 +84,7 @@ InspectorLogAgent::InspectorLogAgent(
       performance_monitor_(performance_monitor),
       v8_session_(v8_session) {}
 
-InspectorLogAgent::~InspectorLogAgent() {}
+InspectorLogAgent::~InspectorLogAgent() = default;
 
 void InspectorLogAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(storage_);
@@ -128,9 +127,9 @@ void InspectorLogAgent::ConsoleMessageAdded(ConsoleMessage* message) {
       !message->WorkerId().IsEmpty())
     entry->setWorkerId(message->WorkerId());
   if (message->Source() == kNetworkMessageSource &&
-      message->RequestIdentifier())
-    entry->setNetworkRequestId(
-        IdentifiersFactory::RequestId(message->RequestIdentifier()));
+      !message->RequestIdentifier().IsNull()) {
+    entry->setNetworkRequestId(message->RequestIdentifier());
+  }
 
   if (v8_session_ && message->Frame() && !message->Nodes().IsEmpty()) {
     ScriptForbiddenScope::AllowUserAgentScript allow_script;

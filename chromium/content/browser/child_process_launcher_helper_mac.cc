@@ -21,7 +21,16 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "sandbox/mac/seatbelt_exec.h"
+#include "services/service_manager/sandbox/mac/cdm.sb.h"
+#include "services/service_manager/sandbox/mac/common_v2.sb.h"
+#include "services/service_manager/sandbox/mac/gpu_v2.sb.h"
+#include "services/service_manager/sandbox/mac/nacl_loader.sb.h"
+#include "services/service_manager/sandbox/mac/pdf_compositor.sb.h"
+#include "services/service_manager/sandbox/mac/ppapi_v2.sb.h"
 #include "services/service_manager/sandbox/mac/renderer_v2.sb.h"
+#include "services/service_manager/sandbox/mac/utility.sb.h"
+#include "services/service_manager/sandbox/sandbox.h"
+#include "services/service_manager/sandbox/sandbox_type.h"
 
 namespace content {
 namespace internal {
@@ -54,23 +63,98 @@ bool ChildProcessLauncherHelper::BeforeLaunchOnLauncherThread(
 
   options->environ = delegate_->GetEnvironment();
 
-  bool no_sandbox = command_line_->HasSwitch(switches::kNoSandbox);
+  auto sandbox_type =
+      service_manager::SandboxTypeFromCommandLine(*command_line_);
 
-  if (base::FeatureList::IsEnabled(features::kMacV2Sandbox) &&
-      GetProcessType() == switches::kRendererProcess && !no_sandbox) {
+  bool no_sandbox = command_line_->HasSwitch(switches::kNoSandbox) ||
+                    service_manager::IsUnsandboxedSandboxType(sandbox_type);
+
+  // TODO(kerrnel): Delete this switch once the V2 sandbox is always enabled.
+  bool v2_process = false;
+  switch (sandbox_type) {
+    case service_manager::SANDBOX_TYPE_NO_SANDBOX:
+      break;
+    case service_manager::SANDBOX_TYPE_CDM:
+    case service_manager::SANDBOX_TYPE_PPAPI:
+    case service_manager::SANDBOX_TYPE_RENDERER:
+    case service_manager::SANDBOX_TYPE_UTILITY:
+    case service_manager::SANDBOX_TYPE_NACL_LOADER:
+    case service_manager::SANDBOX_TYPE_PDF_COMPOSITOR:
+    case service_manager::SANDBOX_TYPE_PROFILING:
+      v2_process = true;
+      break;
+    default:
+      // This is a 'break' because the V2 sandbox is not enabled for all
+      // processes yet, and so there are sandbox types like NETWORK that
+      // should not be run under the V2 sandbox.
+      break;
+  }
+
+  bool use_v2 =
+      v2_process && base::FeatureList::IsEnabled(features::kMacV2Sandbox);
+
+  if (use_v2 && !no_sandbox) {
+    // Generate the profile string.
+    std::string profile =
+        std::string(service_manager::kSeatbeltPolicyString_common_v2);
+
+    switch (sandbox_type) {
+      case service_manager::SANDBOX_TYPE_CDM:
+        profile += service_manager::kSeatbeltPolicyString_cdm;
+        break;
+      case service_manager::SANDBOX_TYPE_GPU:
+        profile += service_manager::kSeatbeltPolicyString_gpu_v2;
+        break;
+      case service_manager::SANDBOX_TYPE_NACL_LOADER:
+        profile += service_manager::kSeatbeltPolicyString_nacl_loader;
+        break;
+      case service_manager::SANDBOX_TYPE_PPAPI:
+        profile += service_manager::kSeatbeltPolicyString_ppapi_v2;
+        break;
+      case service_manager::SANDBOX_TYPE_RENDERER:
+        profile += service_manager::kSeatbeltPolicyString_renderer_v2;
+        break;
+      case service_manager::SANDBOX_TYPE_PDF_COMPOSITOR:
+        profile += service_manager::kSeatbeltPolicyString_pdf_compositor;
+        break;
+      case service_manager::SANDBOX_TYPE_UTILITY:
+      case service_manager::SANDBOX_TYPE_PROFILING:
+        profile += service_manager::kSeatbeltPolicyString_utility;
+        break;
+      default:
+        CHECK(false);
+    }
+
     // Disable os logging to com.apple.diagnosticd which is a performance
     // problem.
     options->environ.insert(std::make_pair("OS_ACTIVITY_MODE", "disable"));
 
     seatbelt_exec_client_ = std::make_unique<sandbox::SeatbeltExecClient>();
-    seatbelt_exec_client_->SetProfile(
-        service_manager::kSeatbeltPolicyString_renderer_v2);
+    seatbelt_exec_client_->SetProfile(profile);
 
-    SetupRendererSandboxParameters(seatbelt_exec_client_.get());
+    switch (sandbox_type) {
+      case service_manager::SANDBOX_TYPE_CDM:
+        SetupCDMSandboxParameters(seatbelt_exec_client_.get());
+        break;
+      case service_manager::SANDBOX_TYPE_GPU:
+      case service_manager::SANDBOX_TYPE_NACL_LOADER:
+      case service_manager::SANDBOX_TYPE_PPAPI:
+      case service_manager::SANDBOX_TYPE_RENDERER:
+      case service_manager::SANDBOX_TYPE_PDF_COMPOSITOR:
+        SetupCommonSandboxParameters(seatbelt_exec_client_.get());
+        break;
+      case service_manager::SANDBOX_TYPE_UTILITY:
+      case service_manager::SANDBOX_TYPE_PROFILING:
+        SetupUtilitySandboxParameters(seatbelt_exec_client_.get(),
+                                      *command_line_.get());
+        break;
+      default:
+        CHECK(false);
+    }
 
     int pipe = seatbelt_exec_client_->SendProfileAndGetFD();
     if (pipe < 0) {
-      LOG(ERROR) << "pipe for sending sandbox profile is an invalid FD";
+      LOG(ERROR) << "Sending the seatbelt profile failed.";
       return false;
     }
 

@@ -9,12 +9,13 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/resource_request_body.h"
+#include "services/network/public/cpp/resource_request_body.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/geometry/rect.h"
@@ -29,27 +30,25 @@ class WebContents;
 struct OpenURLParams;
 }
 
-namespace chrome {
-
 // Parameters that tell Navigate() what to do.
 //
 // Some basic examples:
 //
 // Simple Navigate to URL in current tab:
-// chrome::NavigateParams params(browser, GURL("http://www.google.com/"),
+// NavigateParams params(browser, GURL("http://www.google.com/"),
 //                               ui::PAGE_TRANSITION_LINK);
-// chrome::Navigate(&params);
+// Navigate(&params);
 //
 // Open bookmark in new background tab:
-// chrome::NavigateParams params(browser, url,
+// NavigateParams params(browser, url,
 //                               ui::PAGE_TRANSITION_AUTO_BOOKMARK);
 // params.disposition = NEW_BACKGROUND_TAB;
-// chrome::Navigate(&params);
+// Navigate(&params);
 //
 // Opens a popup WebContents:
-// chrome::NavigateParams params(browser, popup_contents);
+// NavigateParams params(browser, popup_contents);
 // params.source_contents = source_contents;
-// chrome::Navigate(&params);
+// Navigate(&params);
 //
 // See browser_navigator_browsertest.cc for more examples.
 
@@ -70,6 +69,10 @@ struct NavigateParams {
   NavigateParams(const NavigateParams& other);
   ~NavigateParams();
 
+  // Copies fields from |params| struct to |nav_params| struct.
+  void FillNavigateParamsFromOpenURLParams(
+      const content::OpenURLParams& params);
+
   // The URL/referrer to be loaded. Ignored if |target_contents| is non-NULL.
   GURL url;
   content::Referrer referrer;
@@ -88,7 +91,7 @@ struct NavigateParams {
   bool uses_post = false;
 
   // The post data when the navigation uses POST.
-  scoped_refptr<content::ResourceRequestBody> post_data;
+  scoped_refptr<network::ResourceRequestBody> post_data;
 
   // Extra headers to add to the request for this page.  Headers are
   // represented as "<name>: <value>" and separated by \r\n.  The entire string
@@ -243,14 +246,13 @@ struct NavigateParams {
   // an about:blank or a data url navigation.
   scoped_refptr<content::SiteInstance> source_site_instance;
 
+  // If this event was triggered by an anchor element with a download
+  // attribute, |suggested_filename| will contain the (possibly empty) value of
+  // that attribute.
+  base::Optional<std::string> suggested_filename;
+
  private:
   NavigateParams();
 };
-
-// Copies fields from |params| struct to |nav_params| struct.
-void FillNavigateParamsFromOpenURLParams(chrome::NavigateParams* nav_params,
-                                         const content::OpenURLParams& params);
-
-}  // namespace chrome
 
 #endif  // CHROME_BROWSER_UI_BROWSER_NAVIGATOR_PARAMS_H_

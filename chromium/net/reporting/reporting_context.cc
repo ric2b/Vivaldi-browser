@@ -6,13 +6,16 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/observer_list.h"
+#include "base/rand_util.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "net/base/backoff_entry.h"
+#include "net/base/rand_callback.h"
 #include "net/reporting/reporting_cache.h"
 #include "net/reporting/reporting_delegate.h"
 #include "net/reporting/reporting_delivery_agent.h"
@@ -20,7 +23,6 @@
 #include "net/reporting/reporting_garbage_collector.h"
 #include "net/reporting/reporting_network_change_observer.h"
 #include "net/reporting/reporting_observer.h"
-#include "net/reporting/reporting_persister.h"
 #include "net/reporting/reporting_policy.h"
 #include "net/reporting/reporting_uploader.h"
 
@@ -35,8 +37,9 @@ class ReportingContextImpl : public ReportingContext {
   ReportingContextImpl(const ReportingPolicy& policy,
                        URLRequestContext* request_context)
       : ReportingContext(policy,
-                         std::make_unique<base::DefaultClock>(),
-                         std::make_unique<base::DefaultTickClock>(),
+                         base::DefaultClock::GetInstance(),
+                         base::DefaultTickClock::GetInstance(),
+                         base::BindRepeating(&base::RandInt),
                          ReportingUploader::Create(request_context),
                          ReportingDelegate::Create(request_context)) {}
 };
@@ -50,7 +53,7 @@ std::unique_ptr<ReportingContext> ReportingContext::Create(
   return std::make_unique<ReportingContextImpl>(policy, request_context);
 }
 
-ReportingContext::~ReportingContext() {}
+ReportingContext::~ReportingContext() = default;
 
 void ReportingContext::AddObserver(ReportingObserver* observer) {
   DCHECK(!observers_.HasObserver(observer));
@@ -68,19 +71,19 @@ void ReportingContext::NotifyCacheUpdated() {
 }
 
 ReportingContext::ReportingContext(const ReportingPolicy& policy,
-                                   std::unique_ptr<base::Clock> clock,
-                                   std::unique_ptr<base::TickClock> tick_clock,
+                                   base::Clock* clock,
+                                   base::TickClock* tick_clock,
+                                   const RandIntCallback& rand_callback,
                                    std::unique_ptr<ReportingUploader> uploader,
                                    std::unique_ptr<ReportingDelegate> delegate)
     : policy_(policy),
-      clock_(std::move(clock)),
-      tick_clock_(std::move(tick_clock)),
+      clock_(clock),
+      tick_clock_(tick_clock),
       uploader_(std::move(uploader)),
       delegate_(std::move(delegate)),
       cache_(ReportingCache::Create(this)),
-      endpoint_manager_(ReportingEndpointManager::Create(this)),
+      endpoint_manager_(ReportingEndpointManager::Create(this, rand_callback)),
       delivery_agent_(ReportingDeliveryAgent::Create(this)),
-      persister_(ReportingPersister::Create(this)),
       garbage_collector_(ReportingGarbageCollector::Create(this)),
       network_change_observer_(ReportingNetworkChangeObserver::Create(this)) {}
 

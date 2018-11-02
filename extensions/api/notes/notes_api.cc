@@ -62,9 +62,9 @@ void NotesEventRouter::DispatchEvent(
 void BroadcastEvent(const std::string& eventname,
                     std::unique_ptr<base::ListValue> args,
                     content::BrowserContext* context) {
-  std::unique_ptr<extensions::Event> event(new extensions::Event(
-      extensions::events::VIVALDI_EXTENSION_EVENT, eventname, std::move(args),
-      context));
+  std::unique_ptr<extensions::Event> event(
+      new extensions::Event(extensions::events::VIVALDI_EXTENSION_EVENT,
+                            eventname, std::move(args), context));
   EventRouter* event_router = EventRouter::Get(context);
   if (event_router) {
     event_router->BroadcastEvent(std::move(event));
@@ -86,8 +86,9 @@ void NotesAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<NotesAPI> >::
-    DestructorAtExit g_factory = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<NotesAPI>>::DestructorAtExit g_factory =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<NotesAPI>* NotesAPI::GetFactoryInstance() {
@@ -100,18 +101,25 @@ void NotesAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-NoteAttachment* CreateNoteAttachment(Notes_attachment* attachment) {
-  NoteAttachment* note_attachment = new NoteAttachment();
+std::unique_ptr<NoteAttachment> CreateNoteAttachment(
+    const ::vivaldi::NoteAttachment& attachment) {
+  auto note_attachment = std::make_unique<NoteAttachment>();
 
-  base::string16 fname;
-  base::string16 cnt_type;
-  std::string* content = new std::string();
-  content->assign(attachment->content);
-  note_attachment->content.reset(content);
-  note_attachment->filename.reset(new std::string(base::UTF16ToUTF8(fname)));
-  note_attachment->content_type.reset(
-      new std::string(base::UTF16ToUTF8(cnt_type)));
+  note_attachment->content = attachment.content();
+  note_attachment->checksum =
+      std::make_unique<std::string>(attachment.checksum());
   return note_attachment;
+}
+
+std::unique_ptr<std::vector<NoteAttachment>> CreateNoteAttachments(
+    const ::vivaldi::NoteAttachments& attachments) {
+  auto new_attachments = std::make_unique<std::vector<NoteAttachment>>();
+  for (const auto& attachment : attachments) {
+    new_attachments->push_back(
+        std::move(*CreateNoteAttachment(attachment.second)));
+  }
+
+  return new_attachments;
 }
 
 std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
@@ -136,16 +144,8 @@ std::unique_ptr<NoteTreeNode> CreateTreeNode(Notes_Node* node) {
   if (node->GetURL().is_valid()) {
     notes_tree_node->url.reset(new std::string(node->GetURL().spec()));
   }
-  std::vector<NoteAttachment> newattachments;
 
-  std::vector<Notes_attachment> attachments = node->GetAttachments();
-  for (unsigned int i = 0; i < attachments.size(); i++) {
-    std::unique_ptr<NoteAttachment> attachment(
-        CreateNoteAttachment(&(attachments[i])));
-    newattachments.push_back(std::move(*attachment));
-  }
-  notes_tree_node->attachments.reset(
-      new std::vector<NoteAttachment>(std::move(newattachments)));
+  notes_tree_node->attachments = CreateNoteAttachments(node->GetAttachments());
 
   // Javascript Date wants milliseconds since the epoch, ToDoubleT is seconds.
   double timedouble = node->GetCreationTime().ToDoubleT();
@@ -271,7 +271,7 @@ NotesGetTreeFunction::~NotesGetTreeFunction() {
   }
 }
 
-void NotesGetTreeFunction::NotesModelLoaded(Notes_Model *model,
+void NotesGetTreeFunction::NotesModelLoaded(Notes_Model* model,
                                             bool ids_reassigned) {
   SendGetTreeResponse(model);
   model->RemoveObserver(this);
@@ -279,7 +279,7 @@ void NotesGetTreeFunction::NotesModelLoaded(Notes_Model *model,
   Release();
 }
 
-void NotesGetTreeFunction::NotesModelBeingDeleted(Notes_Model *model) {
+void NotesGetTreeFunction::NotesModelBeingDeleted(Notes_Model* model) {
   model->RemoveObserver(this);
   notes_model_ = nullptr;
   Release();
@@ -333,16 +333,8 @@ bool NotesCreateFunction::RunAsync() {
 
   // insert the attachments
   if (params->note.attachments) {
-    for (unsigned int i = 0; i < params->note.attachments->size(); i++) {
-      Notes_attachment* attachment = new Notes_attachment();
-      attachment->content = *params->note.attachments->at(i).content.get();
-      if (params->note.attachments->at(i).content_type.get())
-        attachment->content_type = base::UTF8ToUTF16(
-            *params->note.attachments->at(i).content_type.get());
-      if (params->note.attachments->at(i).filename.get())
-        attachment->filename =
-            base::UTF8ToUTF16(*params->note.attachments->at(i).filename.get());
-      newnode->AddAttachment(*attachment);
+    for (const auto& attachment : *(params->note.attachments)) {
+      newnode->AddAttachment(::vivaldi::NoteAttachment(attachment.content));
     }
   }
 
@@ -403,71 +395,43 @@ bool NotesUpdateFunction::RunAsync() {
 
   vivaldi::notes::OnChanged::ChangeInfo changeinfo;
 
-  model->StartUpdatingNode(node);
   // All fields are optional.
   base::string16 title;
   if (params->changes.title.get()) {
     title = base::UTF8ToUTF16(*params->changes.title);
-    node->SetTitle(title);
+    model->SetTitle(node, title);
     changeinfo.title.reset(new std::string(*params->changes.title));
   }
 
   std::string content;
   if (params->changes.content.get()) {
     content = (*params->changes.content);
-    node->SetContent(base::UTF8ToUTF16(content));
+    model->SetContent(node, base::UTF8ToUTF16(content));
     changeinfo.content.reset(new std::string(*params->changes.content));
-  }
-
-  double dateGroupModified;
-  if (params->changes.date_group_modified.get()) {
-    dateGroupModified = (*params->changes.date_group_modified);
-  }
-
-  double dateAdded;
-  if (params->changes.date_added.get()) {
-    dateAdded = (*params->changes.date_added);
   }
 
   std::string url_string;
   if (params->changes.url.get()) {
     url_string = *params->changes.url;
     GURL url(url_string);
-    node->SetURL(url);
+    model->SetURL(node, url);
     changeinfo.url.reset(new std::string(*params->changes.url));
   }
 
   if (params->changes.attachments.get()) {
-    // Delete all the current attachments if changed.
-    while (node->GetAttachments().size()) {
-      node->DeleteAttachment(0);
-    }
-    for (unsigned int i = 0; i < params->changes.attachments->size(); i++) {
-      Notes_attachment* attachment = new Notes_attachment();
-      if (params->changes.attachments->at(i).content_type)
-        attachment->content_type = base::UTF8ToUTF16(
-            *params->changes.attachments->at(i).content_type.get());
-      if (params->changes.attachments->at(i).content)
-        attachment->content =
-            *(params->changes.attachments->at(i).content.get());
-      if (params->changes.attachments->at(i).filename)
-        attachment->filename = base::UTF8ToUTF16(
-            *params->changes.attachments->at(i).filename.get());
-      node->AddAttachment(*attachment);
+    model->ClearAttachments(node);
+    for (const auto& attachment : *(params->changes.attachments)) {
+      if (attachment.checksum)
+        model->AddAttachment(node,
+                             ::vivaldi::NoteAttachment(*(attachment.checksum),
+                                                       attachment.content));
+      else
+        model->AddAttachment(node,
+                             ::vivaldi::NoteAttachment(attachment.content));
     }
 
-    std::vector<NoteAttachment> newattachments;
-    std::vector<Notes_attachment> attachments = node->GetAttachments();
-    for (unsigned int i = 0; i < attachments.size(); i++) {
-      std::unique_ptr<NoteAttachment> attachment(
-          CreateNoteAttachment(&(attachments[i])));
-      newattachments.push_back(std::move(*attachment));
-    }
-    changeinfo.attachments.reset(
-        new std::vector<NoteAttachment>(std::move(newattachments)));
+    changeinfo.attachments = CreateNoteAttachments(node->GetAttachments());
   }
-
-  model->FinishedUpdatingNode(node);
 
   std::unique_ptr<vivaldi::notes::NoteTreeNode> ret(CreateTreeNode(node));
 
@@ -602,7 +566,7 @@ bool NotesSearchFunction::RunAsync() {
   base::string16 needle = base::UTF8ToUTF16(params->query.substr(offset));
   if (needle.length() > 0) {
     ui::TreeNodeIterator<Notes_Node> iterator(
-      NotesModelFactory::GetForBrowserContext(GetProfile())->root_node());
+        NotesModelFactory::GetForBrowserContext(GetProfile())->root_node());
 
     while (iterator.has_next()) {
       Notes_Node* node = iterator.Next();

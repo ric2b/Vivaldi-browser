@@ -9,7 +9,6 @@
 #include "bindings/core/v8/ActiveScriptWrappable.h"
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/SecurityContext.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkletModuleResponsesMapProxy.h"
@@ -28,7 +27,6 @@ struct GlobalScopeCreationParams;
 
 class CORE_EXPORT WorkletGlobalScope
     : public WorkerOrWorkletGlobalScope,
-      public SecurityContext,
       public ActiveScriptWrappable<WorkletGlobalScope> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(WorkletGlobalScope);
@@ -37,11 +35,6 @@ class CORE_EXPORT WorkletGlobalScope
   ~WorkletGlobalScope() override;
 
   bool IsWorkletGlobalScope() const final { return true; }
-
-  void EvaluateClassicScript(
-      const KURL& script_url,
-      String source_code,
-      std::unique_ptr<Vector<char>> cached_meta_data) final;
 
   // Always returns false here as PaintWorkletGlobalScope and
   // AnimationWorkletGlobalScope don't have a #close() method on the global.
@@ -58,13 +51,11 @@ class CORE_EXPORT WorkletGlobalScope
   SecurityContext& GetSecurityContext() final { return *this; }
   bool IsSecureContext(String& error_message) const final;
 
-  using SecurityContext::GetSecurityOrigin;
-  using SecurityContext::GetContentSecurityPolicy;
-
   DOMTimerCoordinator* Timers() final {
+    // WorkletGlobalScopes don't have timers.
     NOTREACHED();
     return nullptr;
-  }  // WorkletGlobalScopes don't have timers.
+  }
 
   // Implementation of the "fetch and invoke a worklet script" algorithm:
   // https://drafts.css-houdini.org/worklets/#fetch-and-invoke-a-worklet-script
@@ -81,7 +72,7 @@ class CORE_EXPORT WorkletGlobalScope
   WorkletModuleResponsesMapProxy* ModuleResponsesMapProxy() const;
   void SetModuleResponsesMapProxyForTesting(WorkletModuleResponsesMapProxy*);
 
-  SecurityOrigin* DocumentSecurityOrigin() const {
+  const SecurityOrigin* DocumentSecurityOrigin() const {
     return document_security_origin_.get();
   }
 
@@ -98,14 +89,13 @@ class CORE_EXPORT WorkletGlobalScope
 
  private:
   EventTarget* ErrorEventTarget() final { return nullptr; }
-  void DidUpdateSecurityOrigin() final {}
 
   // The |url_| and |user_agent_| are inherited from the parent Document.
   const KURL url_;
   const String user_agent_;
 
   // Used for module fetch.
-  const scoped_refptr<SecurityOrigin> document_security_origin_;
+  const scoped_refptr<const SecurityOrigin> document_security_origin_;
 
   Member<WorkletModuleResponsesMapProxy> module_responses_map_proxy_;
 };

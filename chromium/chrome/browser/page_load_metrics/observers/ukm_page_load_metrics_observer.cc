@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/page_load_metrics/observers/ukm_page_load_metrics_observer.h"
+
+#include <memory>
+
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
@@ -10,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/metrics/net/network_metrics_provider.h"
 #include "content/public/browser/web_contents.h"
+#include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -27,6 +31,10 @@ const char kUkmFirstContentfulPaintName[] =
     "PaintTiming.NavigationToFirstContentfulPaint";
 const char kUkmFirstMeaningfulPaintName[] =
     "Experimental.PaintTiming.NavigationToFirstMeaningfulPaint";
+const char kUkmInteractiveName[] = "Experimental.NavigationToInteractive";
+const char kUkmFirstInputDelayName[] = "InteractiveTiming.FirstInputDelay";
+const char kUkmFirstInputTimestampName[] =
+    "InteractiveTiming.FirstInputTimestamp";
 const char kUkmForegroundDurationName[] = "PageTiming.ForegroundDuration";
 const char kUkmFailedProvisionaLoadName[] =
     "PageTiming.NavigationToFailedProvisionalLoad";
@@ -61,7 +69,7 @@ UkmPageLoadMetricsObserver::CreateIfNeeded(content::WebContents* web_contents) {
   if (!ukm::UkmRecorder::Get()) {
     return nullptr;
   }
-  return base::MakeUnique<UkmPageLoadMetricsObserver>(
+  return std::make_unique<UkmPageLoadMetricsObserver>(
       GetNQEService(web_contents));
 }
 
@@ -150,6 +158,16 @@ void UkmPageLoadMetricsObserver::OnComplete(
   RecordTimingMetrics(timing, info.source_id);
 }
 
+void UkmPageLoadMetricsObserver::OnLoadedResource(
+    const page_load_metrics::ExtraRequestCompleteInfo&
+        extra_request_complete_info) {
+  if (extra_request_complete_info.was_cached) {
+    cache_bytes_ += extra_request_complete_info.raw_body_bytes;
+  } else {
+    network_bytes_ += extra_request_complete_info.raw_body_bytes;
+  }
+}
+
 void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     ukm::SourceId source_id) {
@@ -179,6 +197,34 @@ void UkmPageLoadMetricsObserver::RecordTimingMetrics(
     builder.SetExperimental_PaintTiming_NavigationToFirstMeaningfulPaint(
         timing.paint_timing->first_meaningful_paint.value().InMilliseconds());
   }
+  if (timing.interactive_timing->interactive) {
+    base::TimeDelta time_to_interactive =
+        timing.interactive_timing->interactive.value();
+    if (!timing.interactive_timing->first_invalidating_input ||
+        timing.interactive_timing->first_invalidating_input.value() >
+            time_to_interactive) {
+      builder.SetExperimental_NavigationToInteractive(
+          time_to_interactive.InMilliseconds());
+    }
+  }
+  if (timing.interactive_timing->first_input_delay) {
+    base::TimeDelta first_input_delay =
+        timing.interactive_timing->first_input_delay.value();
+    builder.SetInteractiveTiming_FirstInputDelay(
+        first_input_delay.InMilliseconds());
+  }
+  if (timing.interactive_timing->first_input_timestamp) {
+    base::TimeDelta first_input_timestamp =
+        timing.interactive_timing->first_input_timestamp.value();
+    builder.SetInteractiveTiming_FirstInputTimestamp(
+        first_input_timestamp.InMilliseconds());
+  }
+
+  // Use a bucket spacing factor of 1.3 for bytes.
+  builder.SetNet_CacheBytes(ukm::GetExponentialBucketMin(cache_bytes_, 1.3));
+  builder.SetNet_NetworkBytes(
+      ukm::GetExponentialBucketMin(network_bytes_, 1.3));
+
   builder.Record(ukm::UkmRecorder::Get());
 }
 

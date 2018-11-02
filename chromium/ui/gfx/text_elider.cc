@@ -50,8 +50,9 @@ namespace {
 // width, the elided domain will occupy that extra width.
 base::string16 ElideEmail(const base::string16& email,
                           const FontList& font_list,
-                          float available_pixel_width) {
-  if (GetStringWidthF(email, font_list) <= available_pixel_width)
+                          float available_pixel_width,
+                          Typesetter typesetter) {
+  if (GetStringWidthF(email, font_list, typesetter) <= available_pixel_width)
     return email;
 
   // Split the email into its local-part (username) and domain-part. The email
@@ -66,17 +67,18 @@ base::string16 ElideEmail(const base::string16& email,
 
   // Subtract the @ symbol from the available width as it is mandatory.
   const base::string16 kAtSignUTF16 = ASCIIToUTF16("@");
-  available_pixel_width -= GetStringWidthF(kAtSignUTF16, font_list);
+  available_pixel_width -= GetStringWidthF(kAtSignUTF16, font_list, typesetter);
 
   // Check whether eliding the domain is necessary: if eliding the username
   // is sufficient, the domain will not be elided.
-  const float full_username_width = GetStringWidthF(username, font_list);
+  const float full_username_width =
+      GetStringWidthF(username, font_list, typesetter);
   const float available_domain_width =
       available_pixel_width -
       std::min(full_username_width,
                GetStringWidthF(username.substr(0, 1) + kEllipsisUTF16,
                                font_list));
-  if (GetStringWidthF(domain, font_list) > available_domain_width) {
+  if (GetStringWidthF(domain, font_list, typesetter) > available_domain_width) {
     // Elide the domain so that it only takes half of the available width.
     // Should the username not need all the width available in its half, the
     // domain will occupy the leftover width.
@@ -87,7 +89,8 @@ base::string16 ElideEmail(const base::string16& email,
         std::min(available_domain_width,
                  std::max(available_pixel_width - full_username_width,
                           available_pixel_width / 2));
-    domain = ElideText(domain, font_list, desired_domain_width, ELIDE_MIDDLE);
+    domain = ElideText(domain, font_list, desired_domain_width, ELIDE_MIDDLE,
+                       typesetter);
     // Failing to elide the domain such that at least one character remains
     // (other than the ellipsis itself) remains: return a single ellipsis.
     if (domain.length() <= 1U)
@@ -97,8 +100,9 @@ base::string16 ElideEmail(const base::string16& email,
   // Fit the username in the remaining width (at this point the elided username
   // is guaranteed to fit with at least one character remaining given all the
   // precautions taken earlier).
-  available_pixel_width -= GetStringWidthF(domain, font_list);
-  username = ElideText(username, font_list, available_pixel_width, ELIDE_TAIL);
+  available_pixel_width -= GetStringWidthF(domain, font_list, typesetter);
+  username = ElideText(username, font_list, available_pixel_width, ELIDE_TAIL,
+                       typesetter);
   return username + kAtSignUTF16 + domain;
 }
 #endif
@@ -146,7 +150,8 @@ base::string16 StringSlicer::CutString(size_t length,
 
 base::string16 ElideFilename(const base::FilePath& filename,
                              const FontList& font_list,
-                             float available_pixel_width) {
+                             float available_pixel_width,
+                             Typesetter typesetter) {
 #if defined(OS_WIN)
   base::string16 filename_utf16 = filename.value();
   base::string16 extension = filename.Extension();
@@ -166,12 +171,13 @@ base::string16 ElideFilename(const base::FilePath& filename,
 
   if (rootname.empty() || extension.empty()) {
     const base::string16 elided_name =
-        ElideText(filename_utf16, font_list, available_pixel_width, ELIDE_TAIL);
+        ElideText(filename_utf16, font_list, available_pixel_width, ELIDE_TAIL,
+                  typesetter);
     return base::i18n::GetDisplayStringInLTRDirectionality(elided_name);
   }
 
-  const float ext_width = GetStringWidthF(extension, font_list);
-  const float root_width = GetStringWidthF(rootname, font_list);
+  const float ext_width = GetStringWidthF(extension, font_list, typesetter);
+  const float root_width = GetStringWidthF(rootname, font_list, typesetter);
 
   // We may have trimmed the path.
   if (root_width + ext_width <= available_pixel_width) {
@@ -180,14 +186,15 @@ base::string16 ElideFilename(const base::FilePath& filename,
   }
 
   if (ext_width >= available_pixel_width) {
-    const base::string16 elided_name = ElideText(
-        rootname + extension, font_list, available_pixel_width, ELIDE_MIDDLE);
+    const base::string16 elided_name =
+        ElideText(rootname + extension, font_list, available_pixel_width,
+                  ELIDE_MIDDLE, typesetter);
     return base::i18n::GetDisplayStringInLTRDirectionality(elided_name);
   }
 
   float available_root_width = available_pixel_width - ext_width;
-  base::string16 elided_name =
-      ElideText(rootname, font_list, available_root_width, ELIDE_TAIL);
+  base::string16 elided_name = ElideText(
+      rootname, font_list, available_root_width, ELIDE_TAIL, typesetter);
   elided_name += extension;
   return base::i18n::GetDisplayStringInLTRDirectionality(elided_name);
 }
@@ -195,10 +202,12 @@ base::string16 ElideFilename(const base::FilePath& filename,
 base::string16 ElideText(const base::string16& text,
                          const FontList& font_list,
                          float available_pixel_width,
-                         ElideBehavior behavior) {
+                         ElideBehavior behavior,
+                         Typesetter typesetter) {
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
   DCHECK_NE(behavior, FADE_TAIL);
-  std::unique_ptr<RenderText> render_text(RenderText::CreateInstance());
+  auto render_text = RenderText::CreateFor(typesetter);
+
   render_text->SetCursorEnabled(false);
   // TODO(bshe): 5000 is out dated. We should remove it. See crbug.com/551660.
   // Do not bother accurately sizing strings over 5000 characters here, for
@@ -218,7 +227,7 @@ base::string16 ElideText(const base::string16& text,
     return text;
   }
   if (behavior == ELIDE_EMAIL)
-    return ElideEmail(text, font_list, available_pixel_width);
+    return ElideEmail(text, font_list, available_pixel_width, typesetter);
 
   const bool elide_in_middle = (behavior == ELIDE_MIDDLE);
   const bool elide_at_beginning = (behavior == ELIDE_HEAD);
@@ -463,22 +472,33 @@ void RectangleString::NewLine(bool output) {
 // can be broken into smaller methods sharing this state.
 class RectangleText {
  public:
+  static int Elide(const base::string16& input,
+                   const FontList& font_list,
+                   float available_pixel_width,
+                   int available_pixel_height,
+                   WordWrapBehavior wrap_behavior,
+                   Typesetter typesetter,
+                   std::vector<base::string16>* lines) {
+    RectangleText rect(font_list, available_pixel_width, available_pixel_height,
+                       wrap_behavior, typesetter, lines);
+    rect.Init();
+    rect.AddString(input);
+    return rect.Finalize();
+  }
+
   RectangleText(const FontList& font_list,
                 float available_pixel_width,
                 int available_pixel_height,
                 WordWrapBehavior wrap_behavior,
+                Typesetter typesetter,
                 std::vector<base::string16>* lines)
       : font_list_(font_list),
         line_height_(font_list.GetHeight()),
         available_pixel_width_(available_pixel_width),
         available_pixel_height_(available_pixel_height),
         wrap_behavior_(wrap_behavior),
-        current_width_(0),
-        current_height_(0),
-        last_line_ended_in_lf_(false),
-        lines_(lines),
-        insufficient_width_(false),
-        insufficient_height_(false) {}
+        typesetter_(typesetter),
+        lines_(lines) {}
 
   // Perform deferred initializions following creation.  Must be called
   // before any input can be added via AddString().
@@ -536,27 +556,33 @@ class RectangleText {
   // The wrap behavior for words that are too long to fit on a single line.
   const WordWrapBehavior wrap_behavior_;
 
+  // The typesetter that is rendering the text.
+  const Typesetter typesetter_;
+
   // The current running width.
-  float current_width_;
+  float current_width_ = 0;
 
   // The current running height.
-  int current_height_;
+  int current_height_ = 0;
 
   // The current line of text.
   base::string16 current_line_;
 
   // Indicates whether the last line ended with \n.
-  bool last_line_ended_in_lf_;
+  bool last_line_ended_in_lf_ = false;
 
   // The output vector of lines.
   std::vector<base::string16>* lines_;
 
   // Indicates whether a word was so long that it had to be truncated or elided
   // to fit the available width.
-  bool insufficient_width_;
+  bool insufficient_width_ = false;
 
   // Indicates whether there were too many lines for the available height.
-  bool insufficient_height_;
+  bool insufficient_height_ = false;
+
+  // Indicates whether the very first word was truncated.
+  bool first_word_truncated_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(RectangleText);
 };
@@ -591,7 +617,8 @@ int RectangleText::Finalize() {
   if (last_line_ended_in_lf_)
     lines_->push_back(base::string16());
   return (insufficient_width_ ? INSUFFICIENT_SPACE_HORIZONTAL : 0) |
-         (insufficient_height_ ? INSUFFICIENT_SPACE_VERTICAL : 0);
+         (insufficient_height_ ? INSUFFICIENT_SPACE_VERTICAL : 0) |
+         (first_word_truncated_ ? INSUFFICIENT_SPACE_FOR_FIRST_WORD : 0);
 }
 
 void RectangleText::AddLine(const base::string16& line) {
@@ -636,8 +663,8 @@ int RectangleText::WrapWord(const base::string16& word) {
   int lines_added = 0;
   bool first_fragment = true;
   while (!insufficient_height_ && !text.empty()) {
-    base::string16 fragment =
-        ElideText(text, font_list_, available_pixel_width_, TRUNCATE);
+    base::string16 fragment = ElideText(
+        text, font_list_, available_pixel_width_, TRUNCATE, typesetter_);
     // At least one character has to be added at every line, even if the
     // available space is too small.
     if (fragment.empty())
@@ -659,6 +686,8 @@ int RectangleText::AddWordOverflow(const base::string16& word) {
     if (!NewLine())
       return 0;
     lines_added++;
+  } else if (lines_->empty()) {
+    first_word_truncated_ = true;
   }
 
   if (wrap_behavior_ == IGNORE_LONG_WORDS) {
@@ -669,8 +698,8 @@ int RectangleText::AddWordOverflow(const base::string16& word) {
   } else {
     const ElideBehavior elide_behavior =
         (wrap_behavior_ == ELIDE_LONG_WORDS ? ELIDE_TAIL : TRUNCATE);
-    const base::string16 elided_word =
-        ElideText(word, font_list_, available_pixel_width_, elide_behavior);
+    const base::string16 elided_word = ElideText(
+        word, font_list_, available_pixel_width_, elide_behavior, typesetter_);
     AddToCurrentLine(elided_word);
     insufficient_width_ = true;
   }
@@ -741,15 +770,23 @@ int ElideRectangleText(const base::string16& input,
                        int available_pixel_height,
                        WordWrapBehavior wrap_behavior,
                        std::vector<base::string16>* lines) {
-  RectangleText rect(font_list,
-                     available_pixel_width,
-                     available_pixel_height,
-                     wrap_behavior,
-                     lines);
-  rect.Init();
-  rect.AddString(input);
-  return rect.Finalize();
+  return RectangleText::Elide(input, font_list, available_pixel_width,
+                              available_pixel_height, wrap_behavior,
+                              Typesetter::HARFBUZZ, lines);
 }
+
+#if defined(OS_MACOSX)
+int ElideRectangleTextForNativeUi(const base::string16& input,
+                                  const FontList& font_list,
+                                  float available_pixel_width,
+                                  int available_pixel_height,
+                                  WordWrapBehavior wrap_behavior,
+                                  std::vector<base::string16>* lines) {
+  return RectangleText::Elide(input, font_list, available_pixel_width,
+                              available_pixel_height, wrap_behavior,
+                              Typesetter::NATIVE, lines);
+}
+#endif
 
 base::string16 TruncateString(const base::string16& string,
                               size_t length,

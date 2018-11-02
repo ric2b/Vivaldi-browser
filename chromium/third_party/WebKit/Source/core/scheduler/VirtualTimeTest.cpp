@@ -9,14 +9,15 @@
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
+#include "public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "public/web/WebLocalFrame.h"
 #include "public/web/WebScriptExecutionCallback.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebView.h"
 
 namespace blink {
+namespace virtual_time_test {
 
-namespace {
 class ScriptExecutionCallbackHelper : public WebScriptExecutionCallback {
  public:
   const String Result() const { return result_; }
@@ -30,7 +31,6 @@ class ScriptExecutionCallbackHelper : public WebScriptExecutionCallback {
 
   String result_;
 };
-}  // namespace
 
 class VirtualTimeTest : public SimTest {
  protected:
@@ -60,15 +60,11 @@ class VirtualTimeTest : public SimTest {
   // Some task queues may have repeating v8 tasks that run forever so we impose
   // a hard (virtual) time limit.
   void RunTasksForPeriod(double delay_ms) {
-    Platform::Current()
-        ->CurrentThread()
-        ->Scheduler()
-        ->LoadingTaskRunner()
-        ->PostDelayedTask(
-            BLINK_FROM_HERE,
-            WTF::Bind(&VirtualTimeTest::StopVirtualTimeAndExitRunLoop,
-                      WTF::Unretained(this)),
-            TimeDelta::FromMillisecondsD(delay_ms));
+    scheduler::GetSingleThreadTaskRunnerForTesting()->PostDelayedTask(
+        FROM_HERE,
+        WTF::Bind(&VirtualTimeTest::StopVirtualTimeAndExitRunLoop,
+                  WTF::Unretained(this)),
+        TimeDelta::FromMillisecondsD(delay_ms));
     testing::EnterRunLoop();
   }
 };
@@ -205,6 +201,11 @@ TEST_F(VirtualTimeTest,
   // Finished loading, virtual time should be able to advance.
   main_resource.Finish();
   EXPECT_TRUE(WebView().Scheduler()->VirtualTimeAllowedToAdvance());
+
+  // The loading events are delayed for 10 virtual ms after they have run, we
+  // let tasks run for a little while to ensure we don't get any asserts on
+  // teardown as a result.
+  RunTasksForPeriod(10);
 }
 
 // http://crbug.com/633321
@@ -229,7 +230,7 @@ TEST_F(VirtualTimeTest, MAYBE_DOMTimersSuspended) {
 
   // Schedule a task to suspend virtual time at the same point in time.
   runner->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       WTF::Bind(
           [](WebViewScheduler* scheduler) {
             scheduler->SetVirtualTimePolicy(
@@ -252,4 +253,5 @@ TEST_F(VirtualTimeTest, MAYBE_DOMTimersSuspended) {
 #undef MAYBE_AllowVirtualTimeToAdvance
 #undef MAYBE_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading
 #undef MAYBE_DOMTimersSuspended
+}  // namespace virtual_time_test
 }  // namespace blink

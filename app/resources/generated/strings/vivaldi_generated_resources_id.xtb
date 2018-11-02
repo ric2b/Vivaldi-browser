@@ -9,6 +9,8 @@
 <translation id="1054153489933238809">Buka &amp;Gambar Asli di Tab Baru</translation>
 <translation id="1056898198331236512">Peringatan</translation>
 <translation id="1084824384139382525">Salin ala&amp;mat tautan</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural,
+        =1 {Lanjutkan Unduhan} other {Lanjutkan Unduhan}}</translation>
 <translation id="114140604515785785">Direktori akar ekstensi:</translation>
 <translation id="1163931534039071049">&amp;Lihat sumber bingkai</translation>
 <translation id="1165039591588034296">Galat</translation>
@@ -119,6 +121,7 @@
 <translation id="2868746137289129307">Ekstensi ini sudah usang dan telah di matikan berdasarkan kebijakan perusahaan. Ekstensi mungkin akan di aktifkan secara otomatis saat versi yang lebih baru sudah tersedia.</translation>
 <translation id="2890678560483811744">Di luar referensi batas halaman</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> tidak dapat berkomunikasi dengan pencetak ini. Pastikan pencetak terpasang dan coba lagi.</translation>
+<translation id="2911898792135283060">Buat Kata Sandi...</translation>
 <translation id="2916745397441987255">Cari semua ekstensi</translation>
 <translation id="2932883381142163287">Laporkan penyalahgunaan</translation>
 <translation id="2941112035454246133">Rendah</translation>
@@ -163,6 +166,8 @@
 <translation id="3487007233252413104">fungsi anonim</translation>
 <translation id="3505030558724226696">Mencabut akses perangkat</translation>
 <translation id="3511307672085573050">Salin Ala&amp;mat Tautan</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural,
+        =1 {Batalkan Unduhan} other {Batalkan Unduhan}}</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; ingin membagikan pencetak &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; dengan kelompok yang anda miliki: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Jika anda menerima, semua anggota kelompok akan dapat mencetak pada pencetak tersebut.</translation>
 <translation id="3587482841069643663">Semua</translation>
 <translation id="3618849550573277856">Cari “<ph name="LOOKUP_STRING" />”</translation>
@@ -203,6 +208,7 @@
 <translation id="4091434297613116013">Semua lembaran kertas</translation>
 <translation id="4096508467498758490">Jangan aktifkan semua ekstensi mode pengembang</translation>
 <translation id="4100839878934973028">Program lain di komputer anda menambahkan aplikasi yang dapat mengubah cara kerja Vivaldi.</translation>
+<translation id="4115080753528843955">Beberapa layanan konten menggunakan penanda unik dengan tujuan untuk memberikan akses ke konten yang diproteksi</translation>
 <translation id="411666854932687641">Memori Pribadi</translation>
 <translation id="4130207949184424187">Ekstensi ini telah mengubah halaman apa yang di tampilkan saat anda menelusuri dari Omnibox.</translation>
 <translation id="4131410914670010031">Hitam dan putih</translation>
@@ -333,9 +339,9 @@
 <translation id="6273677812470008672">Kualitas</translation>
 <translation id="6295855836753816081">Menyimpan...</translation>
 <translation id="6308937455967653460">Simpan tau&amp;tan sebagai...</translation>
-<translation id="6314335155547195432">Buat Kata Kunci</translation>
 <translation id="6326855256003666642">Penghitung Keepalive</translation>
 <translation id="6370021412472292592">Tidak dapat memuat manifest.</translation>
+<translation id="6374469231428023295">Coba Lagi</translation>
 <translation id="6398765197997659313">Keluar dari tampilan layar penuh</translation>
 <translation id="6406303162637086258">Simulasikan mulai ulang browser</translation>
 <translation id="6412931879992742813">Jendela penyamaran baru</translation>
@@ -404,7 +410,6 @@
 <translation id="7564847347806291057">Akhiri proses</translation>
 <translation id="7576690715254076113">Padukan</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Batal</translation>
 <translation id="7663719505383602579">Penerima: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Dipasang oleh Admin Anda</translation>
 <translation id="7685049629764448582">Memori JavaScript</translation>
@@ -503,6 +508,8 @@ Simpan berkas kunci anda di tempat yang aman. Anda akan membutuhkannya untuk mem
 <translation id="9027459031423301635">Buka Tautan di &amp;Tab Baru</translation>
 <translation id="9056810968620647706">Tidak di temukan kecocokan.</translation>
 <translation id="9088234649737575428"><ph name="PLUGIN_NAME" /> diblokir oleh kebijakan perusahaan</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural,
+       =1 {Unduhan dalam Proses} other {Unduhan dalam Proses}}</translation>
 <translation id="9153341767479566106">Ekstensi lainnya gagal di muat:</translation>
 <translation id="9170848237812810038">&amp;Urung</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" di tambahkan</translation>

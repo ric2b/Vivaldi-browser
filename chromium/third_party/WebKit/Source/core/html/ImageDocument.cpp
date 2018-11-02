@@ -27,6 +27,7 @@
 #include <limits>
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/RawDataDocumentParser.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/events/EventListener.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/ContentSettingsClient.h"
@@ -38,12 +39,12 @@
 #include "core/frame/UseCounter.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLBodyElement.h"
-#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLMetaElement.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/html_names.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/DocumentLoader.h"
@@ -52,14 +53,6 @@
 #include "core/page/Page.h"
 #include "platform/PlatformChromeClient.h"
 #include "platform/wtf/text/StringBuilder.h"
-
-namespace {
-
-// The base square size is set to 10 because it rounds nicely for both the
-// minimum scale (0.1) and maximum scale (5.0).
-const int kBaseCheckerSize = 10;
-
-}  // namespace
 
 namespace blink {
 
@@ -194,16 +187,12 @@ ImageDocument::ImageDocument(const DocumentInit& initializer)
       did_shrink_image_(false),
       should_shrink_image_(ShouldShrinkToFit()),
       image_is_loaded_(false),
-      style_checker_size_(0),
       style_mouse_cursor_mode_(kDefault),
       shrink_to_fit_mode_(GetFrame()->GetSettings()->GetViewportEnabled()
                               ? kViewport
                               : kDesktop) {
   SetCompatibilityMode(kQuirksMode);
   LockCompatibilityMode();
-  UseCounter::Count(*this, WebFeature::kImageDocument);
-  if (!IsInMainFrame())
-    UseCounter::Count(*this, WebFeature::kImageDocumentInFrame);
 }
 
 DocumentParser* ImageDocument::CreateParser() {
@@ -250,10 +239,10 @@ void ImageDocument::CreateDocumentStructure() {
                                "min-width: min-content;"
                                "height: 100%;"
                                "width: 100%;");
-    HTMLContentElement* content = HTMLContentElement::Create(*this);
-    div_element_->AppendChild(content);
+    HTMLSlotElement* slot = HTMLSlotElement::CreateUserAgentDefaultSlot(*this);
+    div_element_->AppendChild(slot);
 
-    ShadowRoot& shadow_root = body->EnsureUserAgentShadowRoot();
+    ShadowRoot& shadow_root = body->EnsureUserAgentShadowRootV1();
     shadow_root.AppendChild(div_element_);
   } else {
     body->setAttribute(styleAttr, "margin: 0px;");
@@ -274,7 +263,7 @@ void ImageDocument::CreateDocumentStructure() {
   if (ShouldShrinkToFit()) {
     // Add event listeners
     EventListener* listener = ImageEventListener::Create(this);
-    if (LocalDOMWindow* dom_window = this->domWindow())
+    if (LocalDOMWindow* dom_window = domWindow())
       dom_window->addEventListener(EventTypeNames::resize, listener, false);
 
     if (shrink_to_fit_mode_ == kDesktop) {
@@ -348,7 +337,7 @@ void ImageDocument::ImageClicked(int x, int y) {
 
     UpdateStyleAndLayout();
 
-    double scale = this->Scale();
+    double scale = Scale();
     double device_scale_factor =
         GetFrame()->View()->GetChromeClient()->WindowToViewportScalar(1.f);
 
@@ -379,30 +368,10 @@ void ImageDocument::UpdateImageStyle() {
     if (shrink_to_fit_mode_ == kViewport)
       image_style.Append("max-width: 100%;");
 
-    // Once the image has fully loaded, it is displayed atop a checkerboard to
-    // show transparency more faithfully.  The pattern is generated via CSS.
     if (image_is_loaded_) {
-      int new_checker_size = kBaseCheckerSize;
       MouseCursorMode new_cursor_mode = kDefault;
 
-      if (shrink_to_fit_mode_ == kViewport) {
-        double scale;
-
-        if (HasFinishedParsing()) {
-          // To ensure the checker pattern is visible for large images, the
-          // checker size is dynamically adjusted to account for how much the
-          // page is currently being scaled.
-          scale = GetFrame()->GetPage()->GetVisualViewport().Scale();
-        } else {
-          // The checker pattern is initialized based on how large the image is
-          // relative to the viewport.
-          int viewport_width =
-              GetFrame()->GetPage()->GetVisualViewport().Size().Width();
-          scale = viewport_width / static_cast<double>(CalculateDivWidth());
-        }
-
-        new_checker_size = std::round(std::max(1.0, new_checker_size / scale));
-      } else {
+      if (shrink_to_fit_mode_ != kViewport) {
         // In desktop mode, the user can click on the image to zoom in or out.
         DCHECK_EQ(shrink_to_fit_mode_, kDesktop);
         if (ImageFitsInWindow()) {
@@ -412,38 +381,12 @@ void ImageDocument::UpdateImageStyle() {
         }
       }
 
-      // The only things that can differ between updates are checker size and
+      // The only thing that can differ between updates is
       // the type of cursor being displayed.
-      if (new_checker_size == style_checker_size_ &&
-          new_cursor_mode == style_mouse_cursor_mode_) {
+      if (new_cursor_mode == style_mouse_cursor_mode_) {
         return;
       }
-      style_checker_size_ = new_checker_size;
       style_mouse_cursor_mode_ = new_cursor_mode;
-
-      image_style.Append("background-position: 0px 0px, ");
-      image_style.Append(AtomicString::Number(style_checker_size_));
-      image_style.Append("px ");
-      image_style.Append(AtomicString::Number(style_checker_size_));
-      image_style.Append("px;");
-
-      int tile_size = style_checker_size_ * 2;
-      image_style.Append("background-size: ");
-      image_style.Append(AtomicString::Number(tile_size));
-      image_style.Append("px ");
-      image_style.Append(AtomicString::Number(tile_size));
-      image_style.Append("px;");
-
-      // Generating the checkerboard pattern this way is not exactly cheap.
-      // If rasterization performance becomes an issue, we could look at using
-      // a cheaper shader (e.g. pre-generate a scaled tile + base64-encode +
-      // inline dataURI => single bitmap shader).
-      image_style.Append(
-          "background-image:"
-          "linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, "
-          "#eee 75%, #eee 100%),"
-          "linear-gradient(45deg, #eee 25%, white 25%, white 75%, "
-          "#eee 75%, #eee 100%);");
 
       if (shrink_to_fit_mode_ == kDesktop) {
         if (style_mouse_cursor_mode_ == kZoomIn)
@@ -492,7 +435,7 @@ void ImageDocument::RestoreImageSize() {
 
 bool ImageDocument::ImageFitsInWindow() const {
   DCHECK_EQ(shrink_to_fit_mode_, kDesktop);
-  return this->Scale() >= 1;
+  return Scale() >= 1;
 }
 
 int ImageDocument::CalculateDivWidth() {

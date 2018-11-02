@@ -39,7 +39,6 @@
 #include "chrome/browser/net/loading_predictor_observer.h"
 #include "chrome/browser/net/profile_network_context_service.h"
 #include "chrome/browser/net/profile_network_context_service_factory.h"
-#include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/policy/policy_helpers.h"
 #include "chrome/browser/predictors/loading_predictor.h"
@@ -65,7 +64,6 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_service.h"
 #include "components/net_log/chrome_net_log.h"
-#include "components/policy/core/browser/url_blacklist_manager.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #include "components/policy/core/common/cloud/policy_header_service.h"
 #include "components/policy/core/common/cloud/user_cloud_policy_manager.h"
@@ -77,10 +75,13 @@
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_network_transaction_factory.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/resource_context.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/network/ignore_errors_cert_verifier.h"
+#include "content/public/network/network_service.h"
 #include "content/public/network/url_request_context_builder_mojo.h"
 #include "extensions/features/features.h"
 #include "net/cert/caching_cert_verifier.h"
@@ -97,9 +98,6 @@
 #include "net/http/transport_security_persister.h"
 #include "net/net_features.h"
 #include "net/nqe/network_quality_estimator.h"
-#include "net/proxy/proxy_config_service_fixed.h"
-#include "net/proxy/proxy_script_fetcher_impl.h"
-#include "net/proxy/proxy_service.h"
 #include "net/reporting/reporting_service.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/client_cert_store.h"
@@ -116,10 +114,10 @@
 #include "net/url_request/url_request_intercepting_job_factory.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_job_factory_impl.h"
+#include "services/network/public/cpp/proxy_config_traits.h"
 #include "third_party/WebKit/public/public_features.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/extension_cookie_notifier.h"
 #include "extensions/browser/extension_protocols.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_throttle_manager.h"
@@ -149,6 +147,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/net/nss_context.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -437,8 +436,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   params->extension_info_map =
       extensions::ExtensionSystem::Get(profile)->info_map();
-  params->extension_cookie_notifier =
-      base::MakeUnique<ExtensionCookieNotifier>(profile);
 #endif
 
   if (auto* loading_predictor =
@@ -467,9 +464,19 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
   }
 #endif
 
-  params->proxy_config_service = ProxyServiceFactory::CreateProxyConfigService(
-      profile->GetProxyConfigTracker());
 #if defined(OS_CHROMEOS)
+  // Enable client certificates for the Chrome OS sign-in frame, if this feature
+  // is not disabled by a flag.
+  // Note that while this applies to the whole sign-in profile, client
+  // certificates will only be selected for the StoragePartition currently used
+  // in the sign-in frame (see SigninPartitionManager).
+  if (chromeos::switches::IsSigninFrameClientCertsEnabled() &&
+      chromeos::ProfileHelper::IsSigninProfile(profile)) {
+    // We only need the system slot for client certificates, not in NSS context
+    // (the sign-in profile's NSS context is not initialized).
+    params->system_key_slot_use_type = SystemKeySlotUseType::kUseForClientAuth;
+  }
+
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
   if (user_manager) {
     const user_manager::User* user =
@@ -488,7 +495,10 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
 
       // Use the device-wide system key slot only if the user is affiliated on
       // the device.
-      params->use_system_key_slot = user->IsAffiliated();
+      if (user->IsAffiliated()) {
+        params->system_key_slot_use_type =
+            SystemKeySlotUseType::kUseForClientAuthAndCertManagement;
+      }
     }
   }
 
@@ -547,17 +557,6 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
         policy::PolicyCertServiceFactory::CreateForProfile(profile);
   }
 #endif
-  // The URLBlacklistManager has to be created on the UI thread to register
-  // observers of |pref_service|, and it also has to clean up on
-  // ShutdownOnUIThread to release these observers on the right thread.
-  // Don't pass it in |profile_params_| to make sure it is correctly cleaned up,
-  // in particular when this ProfileIOData isn't |initialized_| during deletion.
-  scoped_refptr<base::SequencedTaskRunner> background_task_runner =
-      base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND});
-  url_blacklist_manager_.reset(new policy::URLBlacklistManager(
-      pref_service, background_task_runner, io_task_runner,
-      base::Bind(policy::OverrideBlacklistForURL)));
 
   // The CTPolicyManager shares the same constraints of needing to be cleaned
   // up on the UI thread.
@@ -651,7 +650,7 @@ ProfileIOData::AppRequestContext::~AppRequestContext() {
 ProfileIOData::ProfileParams::ProfileParams()
     : io_thread(NULL),
 #if defined(OS_CHROMEOS)
-      use_system_key_slot(false),
+      system_key_slot_use_type(SystemKeySlotUseType::kNone),
 #endif
       profile(NULL) {
 }
@@ -661,7 +660,7 @@ ProfileIOData::ProfileParams::~ProfileParams() {}
 ProfileIOData::ProfileIOData(Profile::ProfileType profile_type)
     : initialized_(false),
 #if defined(OS_CHROMEOS)
-      use_system_key_slot_(false),
+      system_key_slot_use_type_(SystemKeySlotUseType::kNone),
 #endif
       main_request_context_(nullptr),
       resource_context_(new ResourceContext(this)),
@@ -982,17 +981,21 @@ std::unique_ptr<net::ClientCertStore> ProfileIOData::CreateClientCertStore() {
   if (!client_cert_store_factory_.is_null())
     return client_cert_store_factory_.Run();
 #if defined(OS_CHROMEOS)
+  bool use_system_key_slot =
+      system_key_slot_use_type_ == SystemKeySlotUseType::kUseForClientAuth ||
+      system_key_slot_use_type_ ==
+          SystemKeySlotUseType::kUseForClientAuthAndCertManagement;
   return std::unique_ptr<net::ClientCertStore>(
       new chromeos::ClientCertStoreChromeOS(
           certificate_provider_ ? certificate_provider_->Copy() : nullptr,
           base::MakeUnique<chromeos::ClientCertFilterChromeOS>(
-              use_system_key_slot_, username_hash_),
+              use_system_key_slot, username_hash_),
           base::Bind(&CreateCryptoModuleBlockingPasswordDelegate,
-                     chrome::kCryptoModulePasswordClientAuth)));
+                     kCryptoModulePasswordClientAuth)));
 #elif defined(USE_NSS_CERTS)
   return std::unique_ptr<net::ClientCertStore>(new net::ClientCertStoreNSS(
       base::Bind(&CreateCryptoModuleBlockingPasswordDelegate,
-                 chrome::kCryptoModulePasswordClientAuth)));
+                 kCryptoModulePasswordClientAuth)));
 #elif defined(OS_WIN)
   return std::unique_ptr<net::ClientCertStore>(new net::ClientCertStoreWin());
 #elif defined(OS_MACOSX)
@@ -1082,8 +1085,6 @@ void ProfileIOData::Init(
   }
 #endif
 
-  chrome_network_delegate->set_url_blacklist_manager(
-      url_blacklist_manager_.get());
   chrome_network_delegate->set_profile(profile_params_->profile);
   chrome_network_delegate->set_profile_path(profile_params_->path);
   chrome_network_delegate->set_cookie_settings(
@@ -1110,8 +1111,7 @@ void ProfileIOData::Init(
   builder->set_shared_http_auth_handler_factory(
       io_thread_globals->system_request_context->http_auth_handler_factory());
 
-  io_thread->SetUpProxyConfigService(
-      builder.get(), std::move(profile_params_->proxy_config_service));
+  io_thread->SetUpProxyService(builder.get());
 
   builder->set_network_delegate(std::move(network_delegate));
 
@@ -1132,9 +1132,16 @@ void ProfileIOData::Init(
 
 #if defined(OS_CHROMEOS)
   username_hash_ = profile_params_->username_hash;
-  use_system_key_slot_ = profile_params_->use_system_key_slot;
-  if (use_system_key_slot_)
+  system_key_slot_use_type_ = profile_params_->system_key_slot_use_type;
+  // If we're using the system slot for certificate management, we also must
+  // have access to the user's slots.
+  DCHECK(!(username_hash_.empty() &&
+           system_key_slot_use_type_ ==
+               SystemKeySlotUseType::kUseForClientAuthAndCertManagement));
+  if (system_key_slot_use_type_ ==
+      SystemKeySlotUseType::kUseForClientAuthAndCertManagement) {
     EnableNSSSystemKeySlotForResourceContext(resource_context_.get());
+  }
 
   certificate_provider_ = std::move(profile_params_->certificate_provider);
 #endif
@@ -1180,7 +1187,9 @@ void ProfileIOData::Init(
   ct_verifier->AddLogs(io_thread_globals->ct_logs);
 
   ct_tree_tracker_.reset(new certificate_transparency::TreeStateTracker(
-      io_thread_globals->ct_logs, io_thread->net_log()));
+      io_thread_globals->ct_logs,
+      io_thread_globals->system_request_context->host_resolver(),
+      io_thread->net_log()));
   ct_verifier->SetObserver(ct_tree_tracker_.get());
 
   builder->set_ct_verifier(std::move(ct_verifier));
@@ -1201,11 +1210,19 @@ void ProfileIOData::Init(
   builder->SetCreateHttpTransactionFactoryCallback(
       base::BindOnce(&content::CreateDevToolsNetworkTransactionFactory));
 
-  main_network_context_ =
-      io_thread_globals->network_service->CreateNetworkContextWithBuilder(
-          std::move(profile_params_->main_network_context_request),
-          std::move(profile_params_->main_network_context_params),
-          std::move(builder), &main_request_context_);
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    main_request_context_owner_ = std::move(builder)->Create(
+        std::move(profile_params_->main_network_context_params).get(),
+        io_thread_globals->quic_disabled, io_thread->net_log());
+    main_request_context_ =
+        main_request_context_owner_.url_request_context.get();
+  } else {
+    main_network_context_ =
+        content::GetNetworkServiceImpl()->CreateNetworkContextWithBuilder(
+            std::move(profile_params_->main_network_context_request),
+            std::move(profile_params_->main_network_context_params),
+            std::move(builder), &main_request_context_);
+  }
 
   if (chrome_network_delegate_unowned->domain_reliability_monitor()) {
     // Save a pointer to shut down Domain Reliability cleanly before the
@@ -1219,14 +1236,6 @@ void ProfileIOData::Init(
     domain_reliability_monitor_unowned_->SetDiscardUploads(
         !GetMetricsEnabledStateOnIOThread());
   }
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extension_cookie_notifier_ =
-      std::move(profile_params_->extension_cookie_notifier);
-  // Cookie store will outlive notifier by order of declaration in
-  // profile_io_data.h.
-  extension_cookie_notifier_->AddStore(main_request_context_->cookie_store());
-#endif
 
   // Attach some things to the URLRequestContextBuilder's
   // TransportSecurityState.  Since no requests have been made yet, safe to do
@@ -1242,7 +1251,7 @@ void ProfileIOData::Init(
             "stricter security policies, such as with HTTP Public Key Pinning. "
             "Websites can use this feature to discover misconfigurations that "
             "prevent them from complying with stricter security policies that "
-            "they've opted in to."
+            "they\'ve opted in to."
           trigger:
             "Chrome observes that a user is loading a resource from a website "
             "that has opted in for security policy reports, and the connection "
@@ -1428,8 +1437,6 @@ void ProfileIOData::ShutdownOnUIThread(
   enable_metrics_.Destroy();
   safe_browsing_enabled_.Destroy();
   network_prediction_options_.Destroy();
-  if (url_blacklist_manager_)
-    url_blacklist_manager_->ShutdownOnUIThread();
   if (ct_policy_manager_)
     ct_policy_manager_->Shutdown();
   if (chrome_http_user_agent_settings_)
@@ -1486,9 +1493,4 @@ void ProfileIOData::SetCookieSettingsForTesting(
     content_settings::CookieSettings* cookie_settings) {
   DCHECK(!cookie_settings_.get());
   cookie_settings_ = cookie_settings;
-}
-
-policy::URLBlacklist::URLBlacklistState ProfileIOData::GetURLBlacklistState(
-    const GURL& url) const {
-  return url_blacklist_manager_->GetURLBlacklistState(url);
 }

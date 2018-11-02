@@ -32,6 +32,7 @@
 #define WorkerThreadableLoader_h
 
 #include <memory>
+#include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/loader/ThreadableLoaderClient.h"
@@ -42,7 +43,6 @@
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -87,16 +87,6 @@ class WorkerThreadableLoader final : public ThreadableLoader {
                                         ThreadableLoaderClient&,
                                         const ThreadableLoaderOptions&,
                                         const ResourceLoaderOptions&);
-  static WorkerThreadableLoader* Create(
-      WorkerGlobalScope& worker_global_scope,
-      ThreadableLoaderClient* client,
-      const ThreadableLoaderOptions& options,
-      const ResourceLoaderOptions& resource_loader_options) {
-    return new WorkerThreadableLoader(worker_global_scope, client, options,
-                                      resource_loader_options,
-                                      kLoadAsynchronously);
-  }
-
   ~WorkerThreadableLoader() override;
 
   // ThreadableLoader functions
@@ -108,14 +98,12 @@ class WorkerThreadableLoader final : public ThreadableLoader {
   void Trace(blink::Visitor*) override;
 
  private:
-  enum BlockingBehavior { kLoadSynchronously, kLoadAsynchronously };
-
   // A TaskForwarder forwards a task to the worker thread.
   class TaskForwarder : public GarbageCollectedFinalized<TaskForwarder> {
    public:
-    virtual ~TaskForwarder() {}
-    virtual void ForwardTask(const WebTraceLocation&, CrossThreadClosure) = 0;
-    virtual void ForwardTaskWithDoneSignal(const WebTraceLocation&,
+    virtual ~TaskForwarder() = default;
+    virtual void ForwardTask(const base::Location&, CrossThreadClosure) = 0;
+    virtual void ForwardTaskWithDoneSignal(const base::Location&,
                                            CrossThreadClosure) = 0;
     virtual void Abort() = 0;
 
@@ -187,8 +175,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
   WorkerThreadableLoader(WorkerGlobalScope&,
                          ThreadableLoaderClient*,
                          const ThreadableLoaderOptions&,
-                         const ResourceLoaderOptions&,
-                         BlockingBehavior);
+                         const ResourceLoaderOptions&);
   void DidStart(MainThreadLoaderHolder*);
 
   void DidSendData(unsigned long long bytes_sent,
@@ -212,7 +199,6 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
   ThreadableLoaderOptions threadable_loader_options_;
   ResourceLoaderOptions resource_loader_options_;
-  BlockingBehavior blocking_behavior_;
 
   // |*m_mainThreadLoaderHolder| lives in the main thread.
   CrossThreadPersistent<MainThreadLoaderHolder> main_thread_loader_holder_;

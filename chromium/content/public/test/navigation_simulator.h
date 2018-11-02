@@ -15,6 +15,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
 #include "net/base/host_port_pair.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -212,6 +213,9 @@ class NavigationSimulator : public WebContentsObserver {
   // navigations.
   void SetReloadType(ReloadType reload_type);
 
+  // Sets the HTTP method for the navigation.
+  void SetMethod(const std::string& method);
+
   // The following parameters can change during redirects. They should be
   // specified before calling |Start| if they need to apply to the navigation to
   // the original url. Otherwise, they should be specified before calling
@@ -221,6 +225,20 @@ class NavigationSimulator : public WebContentsObserver {
   // The following parameters can change at any point until the page fails or
   // commits. They should be specified before calling |Fail| or |Commit|.
   virtual void SetSocketAddress(const net::HostPortPair& socket_address);
+
+  // Sets the InterfaceProvider interface request to pass in as an argument to
+  // DidCommitProvisionalLoad for cross-document navigations. If not called,
+  // a stub will be passed in (which will never receive any interface requests).
+  //
+  // This interface connection would normally be created by the RenderFrame,
+  // with the client end bound to |remote_interfaces_| to allow the new document
+  // to access services exposed by the RenderFrameHost.
+  virtual void SetInterfaceProviderRequest(
+      service_manager::mojom::InterfaceProviderRequest request);
+
+  // Provides the contents mime type to be set at commit. It should be
+  // specified before calling |Commit|.
+  virtual void SetContentsMimeType(const std::string& contents_mime_type);
 
   // --------------------------------------------------------------------------
 
@@ -292,13 +310,8 @@ class NavigationSimulator : public WebContentsObserver {
   // NavigationHandle.
   void PrepareCompleteCallbackOnHandle();
 
-  // Simulates the DidFailProvisionalLoad IPC following a NavigationThrottle
-  // cancelling the navigation.
-  // PlzNavigate: this is not needed.
-  void FailFromThrottleCheck(NavigationThrottle::ThrottleCheckResult result);
-
   // Check if the navigation corresponds to a same-document navigation.
-  // PlzNavigate: only use on renderer-initiated navigations.
+  // Only use on renderer-initiated navigations.
   bool CheckIfSameDocument();
 
   // Infers from internal parameters whether the navigation created a new
@@ -333,6 +346,7 @@ class NavigationSimulator : public WebContentsObserver {
 
   GURL navigation_url_;
   net::HostPortPair socket_address_;
+  std::string initial_method_;
   bool browser_initiated_;
   bool same_document_ = false;
   Referrer referrer_;
@@ -340,6 +354,8 @@ class NavigationSimulator : public WebContentsObserver {
   ReloadType reload_type_ = ReloadType::NONE;
   int session_history_offset_ = 0;
   bool has_user_gesture_ = true;
+  service_manager::mojom::InterfaceProviderRequest interface_provider_request_;
+  std::string contents_mime_type_;
 
   // These are used to sanity check the content/public/ API calls emitted as
   // part of the navigation.

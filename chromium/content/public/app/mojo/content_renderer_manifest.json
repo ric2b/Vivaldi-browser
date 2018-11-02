@@ -7,6 +7,7 @@
         "browser": [
           "blink::mojom::OomIntervention",
           "blink::mojom::WebDatabase",
+          "content::mojom::AppCacheFrontend",
           "content::mojom::Child",
           "content::mojom::ChildControl",
           "content::mojom::ChildHistogramFetcher",
@@ -26,12 +27,15 @@
       },
       "requires": {
         "*": [ "app" ],
-        "content_browser": [ "renderer" ],
+        "content_browser": [
+          "dwrite_font_proxy",
+          "field_trials",
+          "renderer"
+        ],
         "metrics": [ "url_keyed_metrics" ],
         "device": [
           "device:power_monitor",
           "device:screen_orientation",
-          "device:sensors",
           "device:time_zone_monitor"
         ],
         "ui": [
@@ -51,8 +55,10 @@
           "blink::mojom::TextSuggestionBackend",
           "content::mojom::ImageDownloader",
           "content::mojom::FrameInputHandler",
-          "content::mojom::MediaStreamDispatcher",
-          "content::mojom::Widget"
+          "content::mojom::FullscreenVideoElementHandler",
+          "content::mojom::MediaStreamDeviceObserver",
+          "content::mojom::Widget",
+          "viz::mojom::InputTargetClient"
         ]
       },
       "requires": {

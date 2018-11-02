@@ -97,7 +97,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
                                               const ResourceResponse&) override;
   void DispatchDidReceiveResponse(unsigned long identifier,
                                   const ResourceResponse&,
-                                  WebURLRequest::FrameType,
+                                  network::mojom::RequestContextFrameType,
                                   WebURLRequest::RequestContext,
                                   Resource*,
                                   ResourceResponseType) override;
@@ -112,7 +112,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void DispatchDidFinishLoading(unsigned long identifier,
                                 double finish_time,
                                 int64_t encoded_data_length,
-                                int64_t decoded_body_length) override;
+                                int64_t decoded_body_length,
+                                bool blocked_cross_site_document) override;
   void DispatchDidFail(unsigned long identifier,
                        const ResourceError&,
                        int64_t encoded_data_length,
@@ -133,11 +134,9 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool IsMainFrame() const override;
   bool DefersLoading() const override;
   bool IsLoadComplete() const override;
-  bool PageDismissalEventBeingDispatched() const override;
   bool UpdateTimingInfoForIFrameNavigation(ResourceTimingInfo*) override;
-  void SendImagePing(const KURL&) override;
 
-  SecurityOrigin* GetSecurityOrigin() const override;
+  const SecurityOrigin* GetSecurityOrigin() const override;
 
   void PopulateResourceRequest(Resource::Type,
                                const ClientHintsPreferences&,
@@ -157,11 +156,21 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
       const ResourceRequest&,
       scoped_refptr<WebTaskRunner>) override;
 
+  ResourceLoadScheduler::ThrottlingPolicy InitialLoadThrottlingPolicy()
+      const override {
+    // Frame loading should normally start with |kTight| throttling, as the
+    // frame will be in layout-blocking state until the <body> tag is inserted.
+    return ResourceLoadScheduler::ThrottlingPolicy::kTight;
+  }
+
   bool IsDetached() const override { return frozen_state_; }
 
   FetchContext* Detach() override;
 
   void Trace(blink::Visitor*) override;
+
+  ResourceLoadPriority ModifyPriorityForExperiments(
+      ResourceLoadPriority) const override;
 
  private:
   struct FrozenState;
@@ -180,7 +189,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   LocalFrame* FrameOfImportsController() const;
 
   // FetchContext overrides:
-  WebFrameScheduler* GetFrameScheduler() override;
+  WebFrameScheduler* GetFrameScheduler() const override;
   scoped_refptr<WebTaskRunner> GetLoadingTaskRunner() override;
 
   // BaseFetchContext overrides:
@@ -198,7 +207,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
       WebURLRequest::RequestContext,
-      WebURLRequest::FrameType,
+      network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
@@ -209,15 +218,14 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   String GetOutgoingReferrer() const override;
   const KURL& Url() const override;
   const SecurityOrigin* GetParentSecurityOrigin() const override;
-  Optional<WebAddressSpace> GetAddressSpace() const override;
+  Optional<mojom::IPAddressSpace> GetAddressSpace() const override;
   const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
   void AddConsoleMessage(ConsoleMessage*) const override;
 
   ContentSettingsClient* GetContentSettingsClient() const;
   Settings* GetSettings() const;
   String GetUserAgent() const;
-  scoped_refptr<SecurityOrigin> GetRequestorOrigin();
-  scoped_refptr<SecurityOrigin> GetRequestorOriginForFrameLoading();
+  scoped_refptr<const SecurityOrigin> GetRequestorOrigin();
   ClientHintsPreferences GetClientHintsPreferences() const;
   float GetDevicePixelRatio() const;
   bool ShouldSendClientHint(mojom::WebClientHintsType,

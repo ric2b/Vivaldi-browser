@@ -54,16 +54,23 @@ void FillRegionOutsideVisibleRect(uint8_t* data,
 gfx::Size GetNaturalSize(const gfx::Size& visible_size,
                          int aspect_ratio_numerator,
                          int aspect_ratio_denominator) {
-  if (aspect_ratio_denominator == 0 ||
-      aspect_ratio_numerator < 0 ||
-      aspect_ratio_denominator < 0)
+  if (aspect_ratio_denominator <= 0 || aspect_ratio_numerator <= 0) {
     return gfx::Size();
+  }
 
   double aspect_ratio = aspect_ratio_numerator /
       static_cast<double>(aspect_ratio_denominator);
 
-  return gfx::Size(round(visible_size.width() * aspect_ratio),
-                   visible_size.height());
+  // The HTML spec requires that we always grow a dimension to match aspect
+  // ratio, rather than modify just the width:
+  // github.com/whatwg/html/commit/2e94aa64fcf9adbd2f70d8c2aecd192c8678e298
+  if (aspect_ratio_numerator > aspect_ratio_denominator) {
+    return gfx::Size(round(visible_size.width() * aspect_ratio),
+                     visible_size.height());
+  }
+
+  return gfx::Size(visible_size.width(),
+                   round(visible_size.height() / aspect_ratio));
 }
 
 void FillYUV(VideoFrame* frame, uint8_t y, uint8_t u, uint8_t v) {
@@ -388,7 +395,7 @@ void CopyRGBToVideoFrame(const uint8_t* source,
 scoped_refptr<VideoFrame> WrapAsI420VideoFrame(
     const scoped_refptr<VideoFrame>& frame) {
   DCHECK_EQ(VideoFrame::STORAGE_OWNED_MEMORY, frame->storage_type());
-  DCHECK_EQ(PIXEL_FORMAT_YV12A, frame->format());
+  DCHECK_EQ(PIXEL_FORMAT_I420A, frame->format());
 
   scoped_refptr<media::VideoFrame> wrapped_frame =
       media::VideoFrame::WrapVideoFrame(frame, PIXEL_FORMAT_I420,

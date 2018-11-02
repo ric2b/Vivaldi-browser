@@ -95,6 +95,9 @@
                                int windowId,
                                bool activePage = true);
 
+  // Starts loading in the current WebContents if this is needed.
+  void LoadTabContentsIfNecessary();
+
   content::WebContents::CreateParams GetWebContentsCreateParams(
       content::BrowserContext* context,
       const GURL site);
@@ -118,8 +121,12 @@
     GestureStateBlocked
   };
 
-  int mousedown_x_;
-  int mousedown_y_;
+  // For delayed context menu on Mac and Linux. Allows rocker and mouse
+  // gestures.
+  blink::WebFloatPoint down_position_in_widget_;
+  blink::WebFloatPoint down_position_in_screen_;
+  blink::WebFloatPoint move_position_in_widget_;
+  blink::WebFloatPoint move_position_in_screen_;
   bool fire_context_menu_;
 
   bool gesture_recording_;

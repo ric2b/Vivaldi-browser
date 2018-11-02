@@ -312,26 +312,6 @@ Notes_Node* Notes_Model::AddFolder(const Notes_Node* parent,
   return AddNode(AsMutable(parent), index, std::move(new_node));
 }
 
-void Notes_Model::StartUpdatingNode(const Notes_Node* node) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
-
-  for (auto& observer : observers_)
-    observer.OnWillChangeNotesNode(this, node);
-}
-
-void Notes_Model::FinishedUpdatingNode(const Notes_Node* node) {
-  if (!node) {
-    NOTREACHED();
-    return;
-  }
-
-  for (auto& observer : observers_)
-    observer.NotesNodeChanged(this, node);
-}
-
 void Notes_Model::SetTitle(const Notes_Node* node,
                            const base::string16& title) {
   if (!node) {
@@ -410,6 +390,43 @@ void Notes_Model::SetURL(const Notes_Node* node, const GURL& url) {
     mutable_node->SetURL(url);
     nodes_ordered_by_url_set_.insert(mutable_node);
   }
+
+  if (store_.get())
+    store_->ScheduleSave();
+
+  for (auto& observer : observers_)
+    observer.NotesNodeChanged(this, node);
+}
+
+void Notes_Model::ClearAttachments(const Notes_Node* node) {
+  if (!node) {
+    NOTREACHED();
+    return;
+  }
+
+  for (auto& observer : observers_)
+    observer.OnWillChangeNotesNode(this, node);
+
+  AsMutable(node)->ClearAttachments();
+
+  if (store_.get())
+    store_->ScheduleSave();
+
+  for (auto& observer : observers_)
+    observer.NotesNodeChanged(this, node);
+}
+
+void Notes_Model::AddAttachment(const Notes_Node* node,
+                                NoteAttachment&& attachment) {
+  if (!node) {
+    NOTREACHED();
+    return;
+  }
+
+  for (auto& observer : observers_)
+    observer.OnWillChangeNotesNode(this, node);
+
+  AsMutable(node)->AddAttachment(std::forward<NoteAttachment>(attachment));
 
   if (store_.get())
     store_->ScheduleSave();

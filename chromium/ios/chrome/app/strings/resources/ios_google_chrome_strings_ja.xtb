@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="1326317727527857210">他の端末と同じタブを使用するには、Chrome にログインします。</translation>
-<translation id="1685087038067318291">周囲のオブジェクトから送信されているウェブページを検出します。Bluetooth がオンになっている場合、Chrome は周囲のオブジェクトに関連付けられたウェブページを収集して、匿名で Google に送信し、最も役立つと判断されたウェブページを表示します。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome のプライバシーに関するお知らせ</translation>
+<translation id="1863312987075920112">このアプリケーションを使用すると、Chrome の<ph name="BEGIN_LINK_TOS" />利用規約<ph name="END_LINK_TOS" />と<ph name="BEGIN_LINK_PRIVACY" />プライバシーに関するお知らせ<ph name="END_LINK_PRIVACY" />に同意したことになります。</translation>
 <translation id="2147651015520127414">このウェブサイトの証明書が <ph name="ISSUER" /> 発行のものであると確認されました。</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. All rights reserved.</translation>
 <translation id="2342981853652716282">Chrome にログインすれば、ブックマーク、パスワード、その他の設定をどの端末からでもご利用いただけます。</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">アドオンが原因でChromeがクラッシュしました。次をアンインストールしてください:</translation>
 <translation id="4615174829807303908"><ph name="SIGNOUT_MANAGED_DOMAIN" /> で管理されているアカウントからログアウトします。Chrome データはこのデバイスから削除されますが、Google アカウントで保持されます。</translation>
 <translation id="5389212809648216794">カメラは別のアプリが使用中のため、Google Chrome では使用できません</translation>
-<translation id="5566557026214762153">このアプリケーションを使用すると、Chromeの<ph name="BEGIN_LINK" />利用規約<ph name="END_LINK" />に同意したことになります。</translation>
 <translation id="5639704535586432836">[設定] &gt; [プライバシー] &gt; [カメラ] &gt; [Google Chrome] の順に選択し、カメラをオンにします。</translation>
 <translation id="5642200033778930880">Google Chrome では、分割表示モードでカメラを使用することはできません</translation>
 <translation id="5703130498371792817">Chrome の使用感はいかがですか？<ph name="BEGIN_LINK" />このアプリを評価してください。<ph name="END_LINK" /></translation>

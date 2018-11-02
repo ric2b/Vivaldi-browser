@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_VARIATIONS_CLIENT_FILTERABLE_STATE_H_
 #define COMPONENTS_VARIATIONS_CLIENT_FILTERABLE_STATE_H_
 
+#include <string>
+
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "base/version.h"
@@ -12,7 +14,7 @@
 
 namespace variations {
 
-// A contianer for all of the client state which is used for filtering studies.
+// A container for all of the client state which is used for filtering studies.
 struct ClientFilterableState {
   static Study::Platform GetCurrentPlatform();
 

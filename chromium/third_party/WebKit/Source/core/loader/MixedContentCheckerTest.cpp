@@ -15,6 +15,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebMixedContent.h"
 #include "public/platform/WebMixedContentContextType.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 #include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -60,7 +61,7 @@ TEST(MixedContentCheckerTest, IsMixedContent) {
                                       << ", Target: " << test.target
                                       << ", Expectation: " << test.expectation);
     KURL origin_url(NullURL(), test.origin);
-    scoped_refptr<SecurityOrigin> security_origin(
+    scoped_refptr<const SecurityOrigin> security_origin(
         SecurityOrigin::Create(origin_url));
     KURL target_url(NullURL(), test.target);
     EXPECT_EQ(test.expectation, MixedContentChecker::IsMixedContent(
@@ -75,7 +76,8 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
       SecurityOrigin::CreateFromString("http://example.test"));
 
   ResourceRequest not_mixed_content("https://example.test/foo.jpg");
-  not_mixed_content.SetFrameType(WebURLRequest::kFrameTypeAuxiliary);
+  not_mixed_content.SetFrameType(
+      network::mojom::RequestContextFrameType::kAuxiliary);
   not_mixed_content.SetRequestContext(WebURLRequest::kRequestContextScript);
   EXPECT_EQ(WebMixedContentContextType::kNotMixedContent,
             MixedContentChecker::ContextTypeForInspector(
@@ -88,7 +90,8 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
                 &dummy_page_holder->GetFrame(), not_mixed_content));
 
   ResourceRequest blockable_mixed_content("http://example.test/foo.jpg");
-  blockable_mixed_content.SetFrameType(WebURLRequest::kFrameTypeAuxiliary);
+  blockable_mixed_content.SetFrameType(
+      network::mojom::RequestContextFrameType::kAuxiliary);
   blockable_mixed_content.SetRequestContext(
       WebURLRequest::kRequestContextScript);
   EXPECT_EQ(WebMixedContentContextType::kBlockable,
@@ -97,7 +100,8 @@ TEST(MixedContentCheckerTest, ContextTypeForInspector) {
 
   ResourceRequest optionally_blockable_mixed_content(
       "http://example.test/foo.jpg");
-  blockable_mixed_content.SetFrameType(WebURLRequest::kFrameTypeAuxiliary);
+  blockable_mixed_content.SetFrameType(
+      network::mojom::RequestContextFrameType::kAuxiliary);
   blockable_mixed_content.SetRequestContext(
       WebURLRequest::kRequestContextImage);
   EXPECT_EQ(WebMixedContentContextType::kOptionallyBlockable,
@@ -111,8 +115,8 @@ class MixedContentCheckerMockLocalFrameClient : public EmptyLocalFrameClient {
  public:
   MixedContentCheckerMockLocalFrameClient() : EmptyLocalFrameClient() {}
   MOCK_METHOD0(DidContainInsecureFormAction, void());
-  MOCK_METHOD1(DidDisplayContentWithCertificateErrors, void(const KURL&));
-  MOCK_METHOD1(DidRunContentWithCertificateErrors, void(const KURL&));
+  MOCK_METHOD0(DidDisplayContentWithCertificateErrors, void());
+  MOCK_METHOD0(DidRunContentWithCertificateErrors, void());
 };
 
 }  // namespace
@@ -128,14 +132,14 @@ TEST(MixedContentCheckerTest, HandleCertificateError) {
   KURL ran_url(NullURL(), "https://example-ran.test");
 
   dummy_page_holder->GetFrame().GetDocument()->SetURL(main_resource_url);
-  ResourceResponse response1;
-  response1.SetURL(ran_url);
-  EXPECT_CALL(*client, DidRunContentWithCertificateErrors(ran_url));
+  ResourceResponse response1(ran_url);
+  EXPECT_CALL(*client, DidRunContentWithCertificateErrors());
   MixedContentChecker::HandleCertificateError(
-      &dummy_page_holder->GetFrame(), response1, WebURLRequest::kFrameTypeNone,
+      &dummy_page_holder->GetFrame(), response1,
+      network::mojom::RequestContextFrameType::kNone,
       WebURLRequest::kRequestContextScript);
 
-  ResourceResponse response2;
+  ResourceResponse response2(displayed_url);
   WebURLRequest::RequestContext request_context =
       WebURLRequest::kRequestContextImage;
   ASSERT_EQ(
@@ -144,11 +148,10 @@ TEST(MixedContentCheckerTest, HandleCertificateError) {
           request_context, dummy_page_holder->GetFrame()
                                .GetSettings()
                                ->GetStrictMixedContentCheckingForPlugin()));
-  response2.SetURL(displayed_url);
-  EXPECT_CALL(*client, DidDisplayContentWithCertificateErrors(displayed_url));
+  EXPECT_CALL(*client, DidDisplayContentWithCertificateErrors());
   MixedContentChecker::HandleCertificateError(
-      &dummy_page_holder->GetFrame(), response2, WebURLRequest::kFrameTypeNone,
-      request_context);
+      &dummy_page_holder->GetFrame(), response2,
+      network::mojom::RequestContextFrameType::kNone, request_context);
 }
 
 TEST(MixedContentCheckerTest, DetectMixedForm) {

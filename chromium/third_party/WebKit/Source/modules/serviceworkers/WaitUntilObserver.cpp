@@ -15,7 +15,7 @@
 #include "platform/bindings/Microtask.h"
 #include "platform/wtf/Assertions.h"
 #include "public/platform/Platform.h"
-#include "public/platform/modules/serviceworker/service_worker_event_status.mojom-blink.h"
+#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom-blink.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -174,9 +174,10 @@ void WaitUntilObserver::WaitUntil(ScriptState* script_state,
   // waitUntil() is being used, opening or closing a window must happen in a
   // timeframe specified by windowInteractionTimeout(), otherwise the calls
   // will fail.
-  if (type_ == kNotificationClick)
+  if (type_ == kNotificationClick) {
     consume_window_interaction_timer_.StartOneShot(WindowInteractionTimeout(),
-                                                   BLINK_FROM_HERE);
+                                                   FROM_HERE);
+  }
 
   IncrementPendingPromiseCount();
   script_promise.Then(

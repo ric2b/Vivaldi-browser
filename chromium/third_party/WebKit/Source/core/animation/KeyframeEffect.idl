@@ -31,8 +31,9 @@
 // https://w3c.github.io/web-animations/#the-keyframeeffect-interfaces
 
 [
-    Constructor(Element? target, (sequence<Dictionary> or Dictionary)? effect, optional (unrestricted double or KeyframeEffectOptions) options),
-    ConstructorCallWith=ExecutionContext,
+    Constructor(Element? target, object? keyframes, optional (unrestricted double or KeyframeEffectOptions) options),
+    Constructor(KeyframeEffectReadOnly source),
+    ConstructorCallWith=ScriptState,
     RaisesException=Constructor,
     RuntimeEnabled=WebAnimationsAPI
 ] interface KeyframeEffect : KeyframeEffectReadOnly {

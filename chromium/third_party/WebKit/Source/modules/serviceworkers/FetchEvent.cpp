@@ -7,11 +7,11 @@
 #include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/BytesConsumerForDataConsumerHandle.h"
+#include "core/fetch/Request.h"
+#include "core/fetch/Response.h"
 #include "core/frame/UseCounter.h"
 #include "core/timing/WorkerGlobalScopePerformance.h"
-#include "modules/fetch/BytesConsumerForDataConsumerHandle.h"
-#include "modules/fetch/Request.h"
-#include "modules/fetch/Response.h"
 #include "modules/serviceworkers/FetchRespondWithObserver.h"
 #include "modules/serviceworkers/ServiceWorkerError.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
@@ -19,7 +19,6 @@
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/network/NetworkUtils.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerError.h"
 
@@ -121,7 +120,7 @@ FetchEvent::FetchEvent(ScriptState* script_state,
   }
 }
 
-FetchEvent::~FetchEvent() {}
+FetchEvent::~FetchEvent() = default;
 
 void FetchEvent::OnNavigationPreloadResponse(
     ScriptState* script_state,
@@ -198,7 +197,7 @@ void FetchEvent::OnNavigationPreloadComplete(
   info->SetFinalResponse(resource_response);
   info->AddFinalTransferSize(encoded_data_length);
   WorkerGlobalScopePerformance::performance(*worker_global_scope)
-      ->AddResourceTiming(*info);
+      ->GenerateAndAddResourceTiming(*info);
 }
 
 void FetchEvent::Trace(blink::Visitor* visitor) {

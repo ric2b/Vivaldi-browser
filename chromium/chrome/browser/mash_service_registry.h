@@ -11,12 +11,20 @@
 
 namespace mash_service_registry {
 
+// Process group used for the ash service and the ui service. Visible for test.
+constexpr char kAshAndUiProcessGroup[] = "ash_and_ui";
+
 // Starts one of Mash's embedded services.
 void RegisterOutOfProcessServices(
     content::ContentBrowserClient::OutOfProcessServiceMap* services);
 
 // Returns true if |name| identifies a mash related service.
 bool IsMashServiceName(const std::string& name);
+
+// If |service_name| identifies a mash related service returns an arbitrary
+// label that identifies the service or group of related services. Otherwise
+// returns the empty string.
+std::string GetMashServiceLabel(const std::string& service_name);
 
 // Returns true if the browser should exit when service |name| quits.
 bool ShouldTerminateOnServiceQuit(const std::string& name);

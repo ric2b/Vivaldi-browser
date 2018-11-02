@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "chromeos/components/tether/asynchronous_shutdown_object_container_impl.h"
 #include "chromeos/components/tether/crash_recovery_manager_impl.h"
 #include "chromeos/components/tether/fake_active_host.h"
@@ -16,6 +15,7 @@
 #include "chromeos/components/tether/fake_synchronous_shutdown_object_container.h"
 #include "chromeos/components/tether/fake_tether_disconnector.h"
 #include "chromeos/components/tether/synchronous_shutdown_object_container_impl.h"
+#include "chromeos/components/tether/tether_session_completion_logger.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
@@ -51,6 +51,7 @@ class FakeAsynchronousShutdownObjectContainerFactory
   std::unique_ptr<AsynchronousShutdownObjectContainer> BuildInstance(
       scoped_refptr<device::BluetoothAdapter> adapter,
       cryptauth::CryptAuthService* cryptauth_service,
+      TetherHostFetcher* tether_host_fetcher,
       NetworkStateHandler* network_state_handler,
       ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
       NetworkConnectionHandler* network_connection_handler,
@@ -75,6 +76,8 @@ class FakeSynchronousShutdownObjectContainerFactory
   std::unique_ptr<SynchronousShutdownObjectContainer> BuildInstance(
       AsynchronousShutdownObjectContainer* asychronous_container,
       NotificationPresenter* notification_presenter,
+      GmsCoreNotificationsStateTrackerImpl*
+          gms_core_notifications_state_tracker,
       PrefService* pref_service,
       NetworkStateHandler* network_state_handler,
       NetworkConnect* network_connect,
@@ -118,9 +121,9 @@ class TetherComponentImplTest : public testing::Test {
     was_synchronous_container_deleted_ = false;
     was_asynchronous_container_deleted_ = false;
 
-    fake_active_host_ = base::MakeUnique<FakeActiveHost>();
-    fake_host_scan_scheduler_ = base::MakeUnique<FakeHostScanScheduler>();
-    fake_tether_disconnector_ = base::MakeUnique<FakeTetherDisconnector>();
+    fake_active_host_ = std::make_unique<FakeActiveHost>();
+    fake_host_scan_scheduler_ = std::make_unique<FakeHostScanScheduler>();
+    fake_tether_disconnector_ = std::make_unique<FakeTetherDisconnector>();
 
     fake_synchronous_container_ = new FakeSynchronousShutdownObjectContainer(
         base::Bind(&TetherComponentImplTest::OnSynchronousContainerDeleted,
@@ -151,14 +154,16 @@ class TetherComponentImplTest : public testing::Test {
     CrashRecoveryManagerImpl::Factory::SetInstanceForTesting(
         fake_crash_recovery_manager_factory_.get());
 
-    component_ = base::MakeUnique<TetherComponentImpl>(
-        nullptr /* cryptauth_service */, nullptr /* notification_presenter */,
+    component_ = std::make_unique<TetherComponentImpl>(
+        nullptr /* cryptauth_service */, nullptr /* tether_host_fetcher */,
+        nullptr /* notification_presenter */,
+        nullptr /* gms_core_notifications_state_tracker */,
         nullptr /* pref_service */, nullptr /* network_state_handler */,
         nullptr /* managed_network_configuration_handler */,
         nullptr /* network_connect */, nullptr /* network_connection_handler */,
         nullptr /* adapter */);
 
-    test_observer_ = base::MakeUnique<TestTetherComponentObserver>();
+    test_observer_ = std::make_unique<TestTetherComponentObserver>();
     component_->AddObserver(test_observer_.get());
   }
 
@@ -215,7 +220,7 @@ TEST_F(TetherComponentImplTest, TestShutdown_Disconnected) {
   InvokeCrashRecoveryCallback();
   EXPECT_FALSE(test_observer_->shutdown_complete());
 
-  component_->RequestShutdown();
+  component_->RequestShutdown(TetherComponent::ShutdownReason::USER_CLOSED_LID);
   EXPECT_TRUE(was_synchronous_container_deleted_);
   EXPECT_FALSE(was_asynchronous_container_deleted_);
   EXPECT_FALSE(test_observer_->shutdown_complete());
@@ -235,7 +240,7 @@ TEST_F(TetherComponentImplTest, TestShutdown_Connecting) {
   EXPECT_FALSE(test_observer_->shutdown_complete());
 
   fake_active_host_->SetActiveHostConnecting("deviceId", "tetherNetworkGuid");
-  component_->RequestShutdown();
+  component_->RequestShutdown(TetherComponent::ShutdownReason::USER_CLOSED_LID);
   EXPECT_TRUE(was_synchronous_container_deleted_);
   EXPECT_FALSE(was_asynchronous_container_deleted_);
   EXPECT_FALSE(test_observer_->shutdown_complete());
@@ -243,6 +248,9 @@ TEST_F(TetherComponentImplTest, TestShutdown_Connecting) {
   // A disconnection attempt should have occurred.
   EXPECT_EQ("tetherNetworkGuid",
             fake_tether_disconnector_->last_disconnected_tether_network_guid());
+  EXPECT_EQ(
+      TetherSessionCompletionLogger::SessionCompletionReason::USER_CLOSED_LID,
+      *fake_tether_disconnector_->last_session_completion_reason());
 
   InvokeAsynchronousShutdownCallback();
   EXPECT_TRUE(was_asynchronous_container_deleted_);
@@ -255,7 +263,7 @@ TEST_F(TetherComponentImplTest, TestShutdown_Connected) {
 
   fake_active_host_->SetActiveHostConnected("deviceId", "tetherNetworkGuid",
                                             "wifiNetworkGuid");
-  component_->RequestShutdown();
+  component_->RequestShutdown(TetherComponent::ShutdownReason::USER_CLOSED_LID);
   EXPECT_TRUE(was_synchronous_container_deleted_);
   EXPECT_FALSE(was_asynchronous_container_deleted_);
   EXPECT_FALSE(test_observer_->shutdown_complete());
@@ -263,6 +271,9 @@ TEST_F(TetherComponentImplTest, TestShutdown_Connected) {
   // A disconnection attempt should have occurred.
   EXPECT_EQ("tetherNetworkGuid",
             fake_tether_disconnector_->last_disconnected_tether_network_guid());
+  EXPECT_EQ(
+      TetherSessionCompletionLogger::SessionCompletionReason::USER_CLOSED_LID,
+      *fake_tether_disconnector_->last_session_completion_reason());
 
   InvokeAsynchronousShutdownCallback();
   EXPECT_TRUE(was_asynchronous_container_deleted_);
@@ -270,7 +281,7 @@ TEST_F(TetherComponentImplTest, TestShutdown_Connected) {
 }
 
 TEST_F(TetherComponentImplTest, TestShutdown_BeforeCrashRecoveryComplete) {
-  component_->RequestShutdown();
+  component_->RequestShutdown(TetherComponent::ShutdownReason::USER_CLOSED_LID);
   EXPECT_FALSE(test_observer_->shutdown_complete());
 
   // A shutdown attempt should not have occurred since crash recovery has

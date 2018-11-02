@@ -9,14 +9,8 @@ component("common") {
   sources = [
     "blob_storage/blob_handle.cc",
     "blob_storage/blob_handle.h",
-    "blob_storage/blob_item_bytes_request.cc",
-    "blob_storage/blob_item_bytes_request.h",
-    "blob_storage/blob_item_bytes_response.cc",
-    "blob_storage/blob_item_bytes_response.h",
     "blob_storage/blob_storage_constants.cc",
     "blob_storage/blob_storage_constants.h",
-    "data_element.cc",
-    "data_element.h",
     "database/database_connections.cc",
     "database/database_connections.h",
     "database/database_identifier.cc",
@@ -29,9 +23,7 @@ component("common") {
     "fileapi/file_system_types.h",
     "fileapi/file_system_util.cc",
     "fileapi/file_system_util.h",
-    "quota/quota_status_code.cc",
-    "quota/quota_status_code.h",
-    "quota/quota_types.h",
+    "quota/quota_limit_type.h",
     "storage_common_export.h",
     "storage_histograms.cc",
     "storage_histograms.h",
@@ -55,16 +47,6 @@ component("common") {
     "//base/third_party/dynamic_annotations",
     "//net",
     "//url",
-  ]
-}
-
-mojom("mojo_bindings") {
-  sources = [
-    "quota/quota_types.mojom",
-  ]
-
-  public_deps = [
-    "//url/mojo:url_mojom_gurl",
   ]
 }
 

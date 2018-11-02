@@ -18,7 +18,7 @@ CreateCalendarResult::CreateCalendarResult() {}
 CalendarRow::CalendarRow() {}
 CalendarRow::~CalendarRow() {}
 
-CalendarRow::CalendarRow(std::string id,
+CalendarRow::CalendarRow(CalendarID id,
                          base::string16 name,
                          base::string16 description,
                          GURL url,
@@ -80,7 +80,7 @@ Calendar::Calendar(const Calendar& calendar)
 Calendar::~Calendar() {}
 
 CalendarResult::CalendarResult() {}
-CalendarResult::CalendarResult(const CalendarResult &) = default;
+CalendarResult::CalendarResult(const CalendarResult&) = default;
 CalendarResult::~CalendarResult() {}
 
 CalendarResult::CalendarResult(const CalendarRow& calendar_row)

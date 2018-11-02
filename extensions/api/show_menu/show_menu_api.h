@@ -13,11 +13,18 @@
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
+#include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/favicon_base/favicon_types.h"
 #include "components/renderer_context_menu/render_view_context_menu_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/show_menu.h"
+#include "third_party/icu/source/i18n/unicode/coll.h"
+
+namespace bookmarks {
+class BookmarkModel;
+class BookmarkNode;
+}
 
 namespace content {
 class BrowserContext;
@@ -37,14 +44,64 @@ class VivaldiContextMenu;
 
 namespace extensions {
 
+class BookmarkSorter {
+ public:
+  ~BookmarkSorter();
+
+  BookmarkSorter(vivaldi::show_menu::SortField sort_field,
+                 vivaldi::show_menu::SortOrder sort_order_test,
+                 bool group_folders);
+  void sort(std::vector<bookmarks::BookmarkNode*>& vector);
+  void setGroupFolders(bool group_folders) {group_folders_ = group_folders;}
+  bool isManualOrder() const
+      { return sort_field_ == vivaldi::show_menu::SORT_FIELD_NONE; }
+
+ private:
+  bool fallbackToTitleSort(const icu::Collator* collator,
+                           bookmarks::BookmarkNode *b1,
+                           bookmarks::BookmarkNode *b2,
+                           int l1,
+                           int l2);
+  bool fallbackToDateSort(bookmarks::BookmarkNode *b1,
+                          bookmarks::BookmarkNode *b2,
+                          int l1,
+                          int l2);
+
+  vivaldi::show_menu::SortField sort_field_;
+  vivaldi::show_menu::SortOrder sort_order_;
+  bool group_folders_;
+  std::unique_ptr<icu::Collator> collator_;
+};
+
 class ShowMenuCreateFunction;
 
-class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
+class VivaldiMenuController : public ui::SimpleMenuModel::Delegate,
+                              public bookmarks::BookmarkModelObserver {
  public:
   class Delegate {
    public:
     virtual void OnMenuActivated(int command_id, int event_flags) = 0;
     virtual void OnMenuCanceled()= 0;
+  };
+
+  struct BookmarkFolder {
+    int node_id;
+    int menu_id;
+    bool complete;
+  };
+
+  struct BookmarkSupport {
+    enum Icons {
+      kUrl = 0,
+      kFolder = 1,
+      kSpeeddial = 2,
+      kMax = 3,
+    };
+    BookmarkSupport();
+    ~BookmarkSupport();
+    const gfx::Image& iconForNode(const bookmarks::BookmarkNode* node) const;
+    base::string16 add_label;
+    std::vector<gfx::Image> icons;
   };
 
   VivaldiMenuController(Delegate* delegate,
@@ -67,11 +124,48 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   void MenuWillShow(ui::SimpleMenuModel* source) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
+  // bookmarks::BookmarkModelObserver
+  void BookmarkModelLoaded(bookmarks::BookmarkModel* model,
+                           bool ids_reassigned) override {}
+  void BookmarkNodeMoved(bookmarks::BookmarkModel* model,
+                                 const bookmarks::BookmarkNode* old_parent,
+                                 int old_index,
+                                 const bookmarks::BookmarkNode* new_parent,
+                                 int new_index) override {}
+  void BookmarkNodeAdded(bookmarks::BookmarkModel* model,
+                                 const bookmarks::BookmarkNode* parent,
+                                 int index) override {}
+  void BookmarkNodeRemoved(
+      bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* parent,
+      int old_index,
+      const bookmarks::BookmarkNode* node,
+      const std::set<GURL>& no_longer_bookmarked) override {}
+  void BookmarkNodeChanged(bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* node) override {}
+  void BookmarkNodeFaviconChanged(bookmarks::BookmarkModel* model,
+                                  const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeChildrenReordered(bookmarks::BookmarkModel* model,
+      const bookmarks::BookmarkNode* node) override {}
+  void BookmarkAllUserNodesRemoved(bookmarks::BookmarkModel* model,
+                                const std::set<GURL>& removed_urls) override {}
+
  private:
   const vivaldi::show_menu::MenuItem* getItemByCommandId(int command_id) const;
   void PopulateModel(const vivaldi::show_menu::MenuItem* menuitem,
-                     ui::SimpleMenuModel* menu_model);
+                     ui::SimpleMenuModel* menu_model,
+                     int parent_id);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
+  void PopulateBookmarks(const bookmarks::BookmarkNode* node,
+                         bookmarks::BookmarkModel* model,
+                         int parent_id,
+                         bool is_top_folder,
+                         int offset_in_folder,
+                         ui::SimpleMenuModel* menu_model);
+  void PopulateBookmarkFolder(ui::SimpleMenuModel* menu_model,
+                              int node_id,
+                              int offset);
+  bool IsBookmarkSeparator(const bookmarks::BookmarkNode* node);
   bool HasDeveloperTools();
   bool IsDeveloperTools(int command_id) const;
   void HandleDeveloperToolsCommand(int command_id);
@@ -91,15 +185,20 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   ui::SimpleMenuModel menu_model_;
   std::unique_ptr<::vivaldi::VivaldiContextMenu> menu_;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
+  base::string16 separator_;
+  base::string16 separator_description_;
+  std::unique_ptr<BookmarkSorter> bookmark_sorter_;
   content::WebContents* web_contents_;  // Not owned by us.
   Profile* profile_;
   std::map<int, std::string*> url_map_;
+  std::map<ui::SimpleMenuModel*, BookmarkFolder> bookmark_menu_model_map_;
   // State variables to reduce lookups in url_map_
   int current_highlighted_id_;
   bool is_url_highlighted_;
   // Initial selection
   int initial_selected_id_;
   bool is_shown_;
+  BookmarkSupport bookmark_support_;
 };
 
 // Based on BookmarkEventRouter, send command events to the javascript.
@@ -135,6 +234,8 @@ class ShowMenuAPI : public BrowserContextKeyedAPI,
   void CommandExecuted(int command_id, const std::string& parameter = "");
   void OnOpen();
   void OnUrlHighlighted(const std::string& url);
+  void OnBookmarkActivated(int id, int event_flags);
+  void OnAddBookmark(int id);
 
  private:
   friend class BrowserContextKeyedAPIFactory<ShowMenuAPI>;

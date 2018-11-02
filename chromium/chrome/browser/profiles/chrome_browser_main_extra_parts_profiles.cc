@@ -44,6 +44,7 @@
 #include "chrome/browser/plugins/plugin_prefs_factory.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_invalidator_factory.h"
+#include "chrome/browser/policy/policy_helpers.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/policy/schema_registry_service_factory.h"
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
@@ -80,6 +81,7 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/features.h"
 #include "components/feature_engagement/features.h"
+#include "components/policy/content/policy_blacklist_navigation_throttle.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "extensions/features/features.h"
 #include "ppapi/features/features.h"
@@ -90,9 +92,9 @@
 #include "chrome/browser/android/search_permissions/search_permissions_service.h"
 #else
 #include "chrome/browser/cryptauth/chrome_cryptauth_service_factory.h"
-#include "chrome/browser/media/router/media_router_ui_service_factory.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/ui/global_error/global_error_service_factory.h"
+#include "chrome/browser/ui/webui/media_router/media_router_ui_service_factory.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #endif
 
@@ -105,6 +107,7 @@
 #include "chrome/browser/chromeos/policy/user_policy_manager_factory_chromeos.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
+#include "chrome/browser/chromeos/smb_client/smb_service_factory.h"
 #include "chrome/browser/chromeos/tether/tether_service_factory.h"
 #include "chrome/browser/extensions/api/platform_keys/verify_trust_api.h"
 #else
@@ -205,7 +208,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   AccountReconcilorFactory::GetInstance();
   AccountTrackerServiceFactory::GetInstance();
   autofill::PersonalDataManagerFactory::GetInstance();
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_CONTENTS)
   BackgroundContentsServiceFactory::GetInstance();
 #endif
   BookmarkModelFactory::GetInstance();
@@ -244,6 +247,7 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 #if defined(OS_CHROMEOS)
   chromeos::CupsPrintJobManagerFactory::GetInstance();
   chromeos::SyncedPrintersManagerFactory::GetInstance();
+  chromeos::smb_client::SmbServiceFactory::GetInstance();
   TetherServiceFactory::GetInstance();
   extensions::VerifyTrustAPI::GetFactoryInstance();
 #endif
@@ -333,6 +337,8 @@ EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   prerender::PrerenderMessageFilter::EnsureShutdownNotifierFactoryBuilt();
   ProfileSyncServiceFactory::GetInstance();
   ProtocolHandlerRegistryFactory::GetInstance();
+  PolicyBlacklistFactory::GetInstance()->SetBlacklistOverride(
+      base::BindRepeating(policy::OverrideBlacklistForURL));
 #if defined(OS_ANDROID)
   SearchPermissionsService::Factory::GetInstance();
 #endif

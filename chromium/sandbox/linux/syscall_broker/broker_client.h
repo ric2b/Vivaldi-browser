@@ -10,14 +10,14 @@
 #include <unistd.h>
 
 #include "base/macros.h"
+#include "base/pickle.h"
 #include "sandbox/linux/syscall_broker/broker_channel.h"
-#include "sandbox/linux/syscall_broker/broker_common.h"
+#include "sandbox/linux/syscall_broker/broker_command.h"
 
 namespace sandbox {
-
 namespace syscall_broker {
 
-class BrokerPolicy;
+class BrokerPermissionList;
 
 // This class can be embedded in a sandboxed process and can be
 // used to perform certain system calls in another, presumably
@@ -34,52 +34,74 @@ class BrokerClient {
   // |ipc_channel| needs to be a suitable SOCK_SEQPACKET unix socket.
   // |fast_check_in_client| should be set to true and
   // |quiet_failures_for_tests| to false unless you are writing tests.
-  BrokerClient(const BrokerPolicy& policy,
+  BrokerClient(const BrokerPermissionList& policy,
                BrokerChannel::EndPoint ipc_channel,
+               const BrokerCommandSet& allowed_command_set,
                bool fast_check_in_client,
                bool quiet_failures_for_tests);
   ~BrokerClient();
 
+  // Get the file descriptor used for IPC. This is used for tests.
+  int GetIPCDescriptor() const { return ipc_channel_.get(); }
+
+  // The following public methods can be used in place of the equivalently
+  // name system calls. They all return -errno on errors. They are all async
+  // signal safe so they may be called from a SIGSYS trap handler.
+
   // Can be used in place of access().
   // X_OK will always return an error in practice since the broker process
   // doesn't support execute permissions.
-  // It's similar to the access() system call and will return -errno on errors.
-  // This is async signal safe.
   int Access(const char* pathname, int mode) const;
+
+  // Can be used in place of mkdir().
+  int Mkdir(const char* path, int mode) const;
 
   // Can be used in place of open().
   // The implementation only supports certain white listed flags and will
   // return -EPERM on other flags.
-  // It's similar to the open() system call and will return -errno on errors.
-  // This is async signal safe.
   int Open(const char* pathname, int flags) const;
 
-  // Can be used in place of stat()/stat64().
-  // It's similar to the stat() system call and will return -errno on errors.
-  // This is async signal safe.
-  int Stat(const char* pathname, struct stat* sb);
-  int Stat64(const char* pathname, struct stat64* sb);
+  // Can be used in place of Readlink().
+  int Readlink(const char* path, char* buf, size_t bufsize) const;
 
   // Can be used in place of rename().
-  // It's similar to the rename() system call and will return -errno on errors.
-  // This is async signal safe.
-  int Rename(const char* oldpath, const char* newpath);
+  int Rename(const char* oldpath, const char* newpath) const;
 
-  // Get the file descriptor used for IPC. This is used for tests.
-  int GetIPCDescriptor() const { return ipc_channel_.get(); }
+  // Can be used in place of rmdir().
+  int Rmdir(const char* path) const;
+
+  // Can be used in place of stat()/stat64().
+  int Stat(const char* pathname, struct stat* sb) const;
+  int Stat64(const char* pathname, struct stat64* sb) const;
+
+  // Can be used in place of rmdir().
+  int Unlink(const char* unlink) const;
 
  private:
-  int PathAndFlagsSyscall(IPCCommand syscall_type,
+  int PathOnlySyscall(BrokerCommand syscall_type, const char* pathname) const;
+
+  int PathAndFlagsSyscall(BrokerCommand syscall_type,
                           const char* pathname,
                           int flags) const;
 
-  int StatFamilySyscall(IPCCommand syscall_type,
+  int PathAndFlagsSyscallReturningFD(BrokerCommand syscall_type,
+                                     const char* pathname,
+                                     int flags) const;
+
+  int StatFamilySyscall(BrokerCommand syscall_type,
                         const char* pathname,
                         void* result_ptr,
                         size_t expected_result_size) const;
 
-  const BrokerPolicy& broker_policy_;
+  ssize_t SendRecvRequest(const base::Pickle& request_pickle,
+                          int recvmsg_flags,
+                          uint8_t* reply_buf,
+                          size_t reply_buf_size,
+                          int* returned_fd) const;
+
+  const BrokerPermissionList& broker_permission_list_;
   const BrokerChannel::EndPoint ipc_channel_;
+  const BrokerCommandSet allowed_command_set_;
   const bool fast_check_in_client_;  // Whether to forward a request that we
                                      // know will be denied to the broker. (Used
                                      // for tests).

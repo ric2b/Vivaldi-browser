@@ -21,12 +21,12 @@
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 
 using ::net::CertVerifier;
 using ::net::CompletionCallback;
 using ::net::HashValue;
 using ::net::SHA256HashValue;
-using ::net::SHA256HashValueLessThan;
 using ::net::X509Certificate;
 
 namespace content {
@@ -80,19 +80,20 @@ int IgnoreErrorsCertVerifier::Verify(const RequestParams& params,
                                      std::unique_ptr<Request>* out_req,
                                      const net::NetLogWithSource& net_log) {
   SPKIHashSet spki_fingerprints;
-  std::string cert_der;
   base::StringPiece cert_spki;
   SHA256HashValue hash;
-  if (X509Certificate::GetDEREncoded(params.certificate()->os_cert_handle(),
-                                     &cert_der) &&
-      net::asn1::ExtractSPKIFromDERCert(cert_der, &cert_spki)) {
+  if (net::asn1::ExtractSPKIFromDERCert(
+          net::x509_util::CryptoBufferAsStringPiece(
+              params.certificate()->cert_buffer()),
+          &cert_spki)) {
     crypto::SHA256HashString(cert_spki, &hash, sizeof(SHA256HashValue));
     spki_fingerprints.insert(hash);
   }
-  for (const X509Certificate::OSCertHandle& intermediate :
-       params.certificate()->GetIntermediateCertificates()) {
-    if (X509Certificate::GetDEREncoded(intermediate, &cert_der) &&
-        net::asn1::ExtractSPKIFromDERCert(cert_der, &cert_spki)) {
+  for (const auto& intermediate :
+       params.certificate()->intermediate_buffers()) {
+    if (net::asn1::ExtractSPKIFromDERCert(
+            net::x509_util::CryptoBufferAsStringPiece(intermediate.get()),
+            &cert_spki)) {
       crypto::SHA256HashString(cert_spki, &hash, sizeof(SHA256HashValue));
       spki_fingerprints.insert(hash);
     }
@@ -103,13 +104,12 @@ int IgnoreErrorsCertVerifier::Verify(const RequestParams& params,
   auto whitelist_end = whitelist_.end();
   auto fingerprints_begin = spki_fingerprints.begin();
   auto fingerprints_end = spki_fingerprints.end();
-  static const SHA256HashValueLessThan sha256_lt;
   bool ignore_errors = false;
   while (whitelist_begin != whitelist_end &&
          fingerprints_begin != fingerprints_end) {
-    if (sha256_lt(*whitelist_begin, *fingerprints_begin)) {
+    if (*whitelist_begin < *fingerprints_begin) {
       ++whitelist_begin;
-    } else if (sha256_lt(*fingerprints_begin, *whitelist_begin)) {
+    } else if (*fingerprints_begin < *whitelist_begin) {
       ++fingerprints_begin;
     } else {
       ignore_errors = true;

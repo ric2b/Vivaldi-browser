@@ -18,6 +18,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/id_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -30,6 +31,8 @@
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/loader/global_routing_id.h"
+#include "content/browser/renderer_host/media/render_frame_audio_input_stream_factory.h"
+#include "content/browser/renderer_host/media/render_frame_audio_output_stream_factory.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/browser/webui/web_ui_impl.h"
 #include "content/common/ax_content_node_data.h"
@@ -42,6 +45,7 @@
 #include "content/common/frame_replication_state.h"
 #include "content/common/image_downloader/image_downloader.mojom.h"
 #include "content/common/input/input_handler.mojom.h"
+#include "content/common/navigation_params.mojom.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_dialog_type.h"
@@ -53,6 +57,7 @@
 #include "services/device/public/interfaces/wake_lock_context.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom.h"
+#include "services/viz/public/interfaces/hit_test/input_target_client.mojom.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
@@ -91,12 +96,17 @@ class ListValue;
 
 namespace blink {
 struct FramePolicy;
-struct WebRemoteScrollProperties;
+struct WebScrollIntoViewParams;
 }
 
 namespace gfx {
 class Range;
 class Rect;
+}
+
+namespace network {
+class ResourceRequestBody;
+struct ResourceResponse;
 }
 
 namespace content {
@@ -120,22 +130,17 @@ class RenderWidgetHostDelegate;
 class RenderWidgetHostImpl;
 class RenderWidgetHostView;
 class RenderWidgetHostViewBase;
-class ResourceRequestBody;
 class SensorProviderProxyImpl;
 class StreamHandle;
 class TimeoutMonitor;
 class WebBluetoothServiceImpl;
-struct BeginNavigationParams;
 struct CommonNavigationParams;
 struct ContextMenuParams;
 struct FileChooserParams;
 struct FrameOwnerProperties;
-struct FileChooserParams;
-struct NavigationParams;
 struct RequestNavigationParams;
-struct ResourceResponse;
+struct ResourceTimingInfo;
 struct SubresourceLoaderParams;
-struct StartNavigationParams;
 
 class CONTENT_EXPORT RenderFrameHostImpl
     : public RenderFrameHost,
@@ -149,8 +154,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   using AXTreeSnapshotCallback =
       base::Callback<void(
           const ui::AXTreeUpdate&)>;
-  using SmartClipCallback = base::Callback<void(const base::string16& text,
-                                                const base::string16& html)>;
 
   // An accessibility reset is only allowed to prevent very rare corner cases
   // or race conditions where the browser and renderer get out of sync. If
@@ -165,10 +168,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Allows overriding the URLLoaderFactory creation for subresources.
   // Passing a null callback will restore the default behavior.
-  using CreateNetworkFactoryCallback =
-      base::Callback<void(mojom::URLLoaderFactoryRequest request,
-                          int process_id,
-                          mojom::URLLoaderFactoryPtrInfo original_factory)>;
+  // This method must be called either on the UI thread or before threads start.
+  // This callback is run on the UI thread.
+  using CreateNetworkFactoryCallback = base::Callback<void(
+      network::mojom::URLLoaderFactoryRequest request,
+      int process_id,
+      network::mojom::URLLoaderFactoryPtrInfo original_factory)>;
   static void SetNetworkFactoryForTesting(
       const CreateNetworkFactoryCallback& url_loader_factory_callback);
 
@@ -266,6 +271,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   mojom::FrameInputHandler* GetFrameInputHandler();
 
+  viz::mojom::InputTargetClient* GetInputTargetClient() {
+    return input_target_client_;
+  }
+
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
                          int opener_routing_id,
@@ -325,6 +334,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // cases, use GetLastCommittedURL instead.
   const GURL& last_successful_url() { return last_successful_url_; }
 
+  // Allows overriding the last committed origin in tests.
+  void SetLastCommittedOriginForTesting(const url::Origin& origin);
+
   // Fetch the link-rel canonical URL to be used for sharing to external
   // applications.
   void GetCanonicalUrlForSharing(
@@ -342,12 +354,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // FrameTreeNode. The proper way to check whether a frame is loading is to
   // call FrameTreeNode::IsLoading.
   bool is_loading() const { return is_loading_; }
-
-  // Sets this RenderFrameHost loading state. This is only used in the case of
-  // transfer navigations, where no DidStart/DidStopLoading notifications
-  // should be sent during the transfer.
-  // TODO(clamy): Remove this once PlzNavigate ships.
-  void set_is_loading(bool is_loading) { is_loading_ = is_loading; }
 
   // Returns true if this is a top-level frame, or if this frame's RenderFrame
   // is in a different process from its parent frame. Local roots are
@@ -389,12 +395,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void SetNavigationHandle(
       std::unique_ptr<NavigationHandleImpl> navigation_handle);
 
-  // Gives the ownership of |navigation_handle_| to the caller.
-  // This happens during transfer navigations, where it should be transferred
-  // from the RenderFrameHost that issued the initial request to the new
-  // RenderFrameHost that will issue the transferring request.
-  std::unique_ptr<NavigationHandleImpl> PassNavigationHandleOwnership();
-
   // Tells the renderer that this RenderFrame is being swapped out for one in a
   // different renderer process.  It should run its unload handler and move to
   // a blank document.  If |proxy| is not null, it should also create a
@@ -405,9 +405,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void SwapOut(RenderFrameProxyHost* proxy, bool is_loading);
 
   // Whether an ongoing navigation is waiting for a BeforeUnload ACK from the
-  // RenderFrame. Currently this only happens in cross-site navigations.
-  // PlzNavigate: this happens in every browser-initiated navigation that is not
-  // same-page.
+  // RenderFrame.
   bool is_waiting_for_beforeunload_ack() const {
     return is_waiting_for_beforeunload_ack_;
   }
@@ -423,53 +421,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // until SwapOut is called, at which point it is pending deletion.
   bool is_active() { return !is_waiting_for_swapout_ack_; }
 
-  // Sends the given navigation message. Use this rather than sending it
-  // yourself since this does the internal bookkeeping described below. This
-  // function takes ownership of the provided message pointer.
-  //
-  // If a cross-site request is in progress, we may be suspended while waiting
-  // for the onbeforeunload handler, so this function might buffer the message
-  // rather than sending it.
-  void Navigate(const CommonNavigationParams& common_params,
-                const StartNavigationParams& start_params,
-                const RequestNavigationParams& request_params);
-
   // Navigates to an interstitial page represented by the provided data URL.
   void NavigateToInterstitialURL(const GURL& data_url);
 
   // Stop the load in progress.
   void Stop();
 
-  // Returns whether navigation messages are currently suspended for this
-  // RenderFrameHost. Only true during a cross-site navigation, while waiting
-  // for the onbeforeunload handler.
-  bool are_navigations_suspended() const { return navigations_suspended_; }
-
-  // Suspends (or unsuspends) any navigation messages from being sent from this
-  // RenderFrameHost. This is called when a pending RenderFrameHost is created
-  // for a cross-site navigation, because we must suspend any navigations until
-  // we hear back from the old renderer's onbeforeunload handler. Note that it
-  // is important that only one navigation event happen after calling this
-  // method with |suspend| equal to true. If |suspend| is false and there is a
-  // suspended_nav_message_, this will send the message. This function should
-  // only be called to toggle the state; callers should check
-  // are_navigations_suspended() first. If |suspend| is false, the time that the
-  // user decided the navigation should proceed should be passed as
-  // |proceed_time|.
-  void SetNavigationsSuspended(bool suspend,
-                               const base::TimeTicks& proceed_time);
-
-  // Clears any suspended navigation state after a cross-site navigation is
-  // canceled or suspended. This is important if we later return to this
-  // RenderFrameHost.
-  void CancelSuspendedNavigations();
-
   // Runs the beforeunload handler for this frame. |for_navigation| indicates
-  // whether this call is for the current frame during a cross-process
-  // navigation. False means we're closing the entire tab. |is_reload|
-  // indicates whether the navigation is a reload of the page or not. If
-  // |for_navigation| is false, |is_reload| should be false as well.
-  // PlzNavigate: this call happens on all browser-initiated navigations.
+  // whether this call is for the current frame during a navigation. False means
+  // we're closing the entire tab. |is_reload| indicates whether the navigation
+  // is a reload of the page or not. If |for_navigation| is false, |is_reload|
+  // should be false as well.
   void DispatchBeforeUnload(bool for_navigation, bool is_reload);
 
   // Simulate beforeunload ack on behalf of renderer if it's unrenresponsive.
@@ -505,8 +467,18 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // renderer process to change the accessibility mode.
   void UpdateAccessibilityMode();
 
+#if defined(OS_ANDROID)
   // Samsung Galaxy Note-specific "smart clip" stylus text getter.
-  void RequestSmartClipExtract(SmartClipCallback callback, gfx::Rect rect);
+  using ExtractSmartClipDataCallback =
+      base::OnceCallback<void(const base::string16&, const base::string16&)>;
+
+  void RequestSmartClipExtract(ExtractSmartClipDataCallback callback,
+                               gfx::Rect rect);
+
+  void OnSmartClipDataExtracted(int32_t callback_id,
+                                const base::string16& text,
+                                const base::string16& html);
+#endif  // defined(OS_ANDROID)
 
   // Request a one-time snapshot of the accessibility tree without changing
   // the accessibility mode.
@@ -567,26 +539,24 @@ class CONTENT_EXPORT RenderFrameHostImpl
 #endif
 #endif
 
-  // PlzNavigate: Indicates that a navigation is ready to commit and can be
+  // Indicates that a navigation is ready to commit and can be
   // handled by this RenderFrame.
   // |subresource_loader_params| is used in network service land to pass
   // the parameters to create a custom subresource loader in the renderer
   // process, e.g. by AppCache etc.
   void CommitNavigation(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
+      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       std::unique_ptr<StreamHandle> body,
-      mojo::ScopedDataPipeConsumerHandle handle,
       const CommonNavigationParams& common_params,
       const RequestNavigationParams& request_params,
       bool is_view_source,
       base::Optional<SubresourceLoaderParams> subresource_loader_params,
       const base::UnguessableToken& devtools_navigation_token);
 
-  // PlzNavigate
   // Indicates that a navigation failed and that this RenderFrame should display
   // an error page.
   void FailedNavigation(const CommonNavigationParams& common_params,
-                        const BeginNavigationParams& begin_params,
                         const RequestNavigationParams& request_params,
                         bool has_stale_copy_in_cache,
                         int error_code,
@@ -651,7 +621,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // it will be used to kill processes that commit unauthorized URLs.
   bool CanCommitURL(const GURL& url);
 
-  // PlzNavigate: returns the PreviewsState of the last successful navigation
+  // Returns the PreviewsState of the last successful navigation
   // that made a network request. The PreviewsState is a bitmask of potentially
   // several Previews optimizations.
   PreviewsState last_navigation_previews_state() const {
@@ -700,6 +670,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
     return frame_host_associated_binding_;
   }
 
+  mojo::Binding<service_manager::mojom::InterfaceProvider>&
+  document_scoped_interface_provider_binding_for_testing() {
+    return document_scoped_interface_provider_binding_;
+  }
   void SetKeepAliveTimeoutForTesting(base::TimeDelta timeout);
 
   blink::WebSandboxFlags active_sandbox_flags() {
@@ -764,7 +738,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnDetach();
   void OnFrameFocused();
   void OnOpenURL(const FrameHostMsg_OpenURL_Params& params);
-  void OnCancelInitialHistoryLoad();
   void OnDocumentOnLoadCompleted(
       FrameMsg_UILoadMetricsReportType::Value report_type,
       base::TimeTicks ui_timestamp);
@@ -801,28 +774,21 @@ class CONTENT_EXPORT RenderFrameHostImpl
                                           uint32_t end_offset);
   void OnDidAccessInitialDocument();
   void OnDidChangeOpener(int32_t opener_routing_id);
-  void OnDidChangeName(const std::string& name, const std::string& unique_name);
-  void OnDidSetFramePolicyHeaders(
-      blink::WebSandboxFlags sandbox_flags,
-      const blink::ParsedFeaturePolicy& parsed_header);
 
   // A new set of CSP |policies| has been added to the document.
   void OnDidAddContentSecurityPolicies(
       const std::vector<ContentSecurityPolicy>& policies);
 
-  void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
-  void OnUpdateToUniqueOrigin(bool is_potentially_trustworthy_unique_origin);
   void OnDidChangeFramePolicy(int32_t frame_routing_id,
                               const blink::FramePolicy& frame_policy);
   void OnDidChangeFrameOwnerProperties(int32_t frame_routing_id,
                                        const FrameOwnerProperties& properties);
   void OnUpdateTitle(const base::string16& title,
                      blink::WebTextDirection title_direction);
-  void OnUpdateEncoding(const std::string& encoding);
   void OnDidBlockFramebust(const GURL& url);
-  void OnBeginNavigation(const CommonNavigationParams& common_params,
-                         const BeginNavigationParams& begin_params);
   void OnAbortNavigation();
+  void OnForwardResourceTimingToParent(
+      const ResourceTimingInfo& resource_timing);
   void OnDispatchLoad();
   void OnAccessibilityEvents(
       const std::vector<AccessibilityHostMsg_EventParams>& params,
@@ -833,6 +799,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnAccessibilityFindInPageResult(
       const AccessibilityHostMsg_FindInPageResultParams& params);
   void OnAccessibilityChildFrameHitTestResult(
+      int action_request_id,
       const gfx::Point& point,
       int child_frame_routing_id,
       int child_frame_browser_plugin_instance_id,
@@ -840,9 +807,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnAccessibilitySnapshotResponse(
       int callback_id,
       const AXContentTreeUpdate& snapshot);
-  void OnSmartClipDataExtracted(uint32_t id,
-                                base::string16 text,
-                                base::string16 html);
   void OnToggleFullscreen(bool enter_fullscreen);
   void OnSuddenTerminationDisablerChanged(
       bool present,
@@ -861,11 +825,13 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void OnFocusedNodeChanged(bool is_editable_element,
                             const gfx::Rect& bounds_in_frame_widget);
   void OnSetHasReceivedUserGesture();
+  void OnSetHasReceivedUserGestureBeforeNavigation(bool value);
   void OnScrollRectToVisibleInParentFrame(
       const gfx::Rect& rect_to_scroll,
-      const blink::WebRemoteScrollProperties& properties);
+      const blink::WebScrollIntoViewParams& params);
   void OnDidChangeLoadProgressExtended(
       const FrameMsg_ExtendedLoadingProgress_Params& params);
+  void OnFrameDidCallFocus();
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
   void OnShowPopup(const FrameHostMsg_ShowPopup_Params& params);
@@ -891,7 +857,27 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void IssueKeepAliveHandle(mojom::KeepAliveHandleRequest request) override;
   void DidCommitProvisionalLoad(
       std::unique_ptr<FrameHostMsg_DidCommitProvisionalLoad_Params>
-          validated_params) override;
+          validated_params,
+      service_manager::mojom::InterfaceProviderRequest
+          interface_provider_request) override;
+  void BeginNavigation(const CommonNavigationParams& common_params,
+                       mojom::BeginNavigationParamsPtr begin_params) override;
+  void SubresourceResponseStarted(const GURL& url,
+                                  const GURL& referrer,
+                                  const std::string& method,
+                                  ResourceType resource_type,
+                                  const std::string& ip,
+                                  uint32_t cert_status) override;
+  void DidChangeName(const std::string& name,
+                     const std::string& unique_name) override;
+  void EnforceInsecureRequestPolicy(
+      blink::WebInsecureRequestPolicy policy) override;
+  void EnforceInsecureNavigationsSet(const std::vector<uint32_t>& set) override;
+  void DidSetFramePolicyHeaders(
+      blink::WebSandboxFlags sandbox_flags,
+      const blink::ParsedFeaturePolicy& parsed_header) override;
+  void CancelInitialHistoryLoad() override;
+  void UpdateEncoding(const std::string& encoding) override;
 
   // Registers Mojo interfaces that this frame host makes available.
   void RegisterMojoInterfaces();
@@ -926,7 +912,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |body|.  It is important that the ResourceRequestBody has been validated
   // upon receipt from the renderer process to prevent it from forging access to
   // files without the user's consent.
-  void GrantFileAccessFromResourceRequestBody(const ResourceRequestBody& body);
+  void GrantFileAccessFromResourceRequestBody(
+      const network::ResourceRequestBody& body);
 
   void UpdatePermissionsForNavigation(
       const CommonNavigationParams& common_params,
@@ -958,13 +945,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // frames, it will return the current frame's view.
   RenderWidgetHostViewBase* GetViewForAccessibility();
 
-  // Sends a navigate message to the RenderFrame and notifies DevTools about
-  // navigation happening. Should be used instead of sending the message
-  // directly.
-  void SendNavigateMessage(const CommonNavigationParams& common_params,
-                           const StartNavigationParams& start_params,
-                           const RequestNavigationParams& request_params);
-
   // Returns the child FrameTreeNode if |child_frame_routing_id| is an
   // immediate child of this FrameTreeNode.  |child_frame_routing_id| is
   // considered untrusted, so the renderer process is killed if it refers to a
@@ -981,6 +961,12 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void DeleteWebBluetoothService(
       WebBluetoothServiceImpl* web_bluetooth_service);
 
+  // Creates connections to WebUSB interfaces bound to this frame.
+  void CreateUsbDeviceManager(device::mojom::UsbDeviceManagerRequest request);
+  void CreateUsbChooserService(device::mojom::UsbChooserServiceRequest request);
+
+  void CreateAudioInputStreamFactory(
+      mojom::RendererAudioInputStreamFactoryRequest request);
   void CreateAudioOutputStreamFactory(
       mojom::RendererAudioOutputStreamFactoryRequest request);
 
@@ -1035,8 +1021,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // based on its parent frame.
   void ResetFeaturePolicy();
 
-  // PlzNavigate: Called when the frame has consumed the StreamHandle and it
-  // can be released.
+  // Called when the frame has consumed the StreamHandle and it can be released.
   void OnStreamHandleConsumed(const GURL& stream_url);
 
   // TODO(ekaramad): One major purpose behind the API is to traverse the frame
@@ -1142,20 +1127,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // TODO(creis): Use this for main frames as well when RVH goes away.
   bool render_frame_created_;
 
-  // Whether we should buffer outgoing Navigate messages rather than sending
-  // them. This will be true when a RenderFrameHost is created for a cross-site
-  // request, until we hear back from the onbeforeunload handler of the old
-  // RenderFrameHost.
-  bool navigations_suspended_;
-
-  // Holds the parameters for a suspended navigation. This can only happen while
-  // this RFH is the pending RenderFrameHost of a RenderFrameHostManager. There
-  // will only ever be one suspended navigation, because RenderFrameHostManager
-  // will destroy the pending RenderFrameHost and create a new one if a second
-  // navigation occurs.
-  // PlzNavigate: unused as navigations are never suspended.
-  std::unique_ptr<NavigationParams> suspended_nav_params_;
-
   // When the last BeforeUnload message was sent.
   base::TimeTicks send_before_unload_start_time_;
 
@@ -1171,9 +1142,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Valid only when is_waiting_for_beforeunload_ack_ or
   // IsWaitingForUnloadACK is true.  This tells us if the unload request
   // is for closing the entire tab ( = false), or only this RenderFrameHost in
-  // the case of a navigation ( = true). Currently only cross-site navigations
-  // require a beforeUnload/unload ACK.
-  // PlzNavigate: all navigations require a beforeUnload ACK.
+  // the case of a navigation ( = true).
   bool unload_ack_is_for_navigation_;
 
   // The timeout monitor that runs from when the beforeunload is started in
@@ -1185,7 +1154,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // document or not.
   bool is_loading_;
 
-  // PlzNavigate
   // Used to track whether a commit is expected in this frame. Only used in
   // tests.
   bool pending_commit_;
@@ -1242,7 +1210,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::map<int, AXTreeSnapshotCallback> ax_tree_snapshot_callbacks_;
 
   // Samsung Galaxy Note-specific "smart clip" stylus text getter.
-  std::map<uint32_t, SmartClipCallback> smart_clip_callbacks_;
+#if defined(OS_ANDROID)
+  base::IDMap<std::unique_ptr<ExtractSmartClipDataCallback>>
+      smart_clip_callbacks_;
+#endif  // defined(OS_ANDROID)
 
   // Callback when an event is received, for testing.
   base::Callback<void(RenderFrameHostImpl*, ui::AXEvent, int)>
@@ -1253,8 +1224,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // already exists it will still be used.
   bool no_create_browser_accessibility_manager_for_testing_;
 
-  // PlzNavigate: Owns the stream used in navigations to store the body of the
-  // response once it has started.
+  // Owns the stream used in navigations to store the body of the response once
+  // it has started.
   std::unique_ptr<StreamHandle> stream_handle_;
 
   // Context shared for each mojom::PermissionService instance created for this
@@ -1271,8 +1242,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Tracks a navigation happening in this frame. Note that while there can be
   // two navigations in the same FrameTreeNode, there can only be one
   // navigation per RenderFrameHost.
-  // PlzNavigate: before the navigation is ready to be committed, the
-  // NavigationHandle for it is owned by the NavigationRequest.
+  // Before the navigation is ready to be committed, the NavigationHandle for it
+  // is owned by the NavigationRequest.
   std::unique_ptr<NavigationHandleImpl> navigation_handle_;
 
   // The associated WebUIImpl and its type. They will be set if the current
@@ -1299,9 +1270,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // audio streams).
   bool is_audible_;
 
-  // PlzNavigate: The Previews state of the last navigation. This is used during
-  // history navigation of subframes to ensure that subframes navigate with the
-  // same Previews status as the top-level frame.
+  // The Previews state of the last navigation. This is used during history
+  // navigation of subframes to ensure that subframes navigate with the same
+  // Previews status as the top-level frame.
   PreviewsState last_navigation_previews_state_;
 
   bool has_committed_any_navigation_ = false;
@@ -1318,7 +1289,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // If true then this frame's document has a focused element which is editable.
   bool has_focused_editable_element_;
 
-  typedef std::pair<CommonNavigationParams, BeginNavigationParams>
+  typedef std::pair<CommonNavigationParams, mojom::BeginNavigationParamsPtr>
       PendingNavigation;
   std::unique_ptr<PendingNavigation> pending_navigate_;
 
@@ -1336,6 +1307,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |FrameHostMsg_TextSurroundingSelectionResponse| message comes.
   TextSurroundingSelectionCallback text_surrounding_selection_callback_;
 
+  UniqueAudioInputStreamFactoryPtr audio_input_stream_factory_;
   UniqueAudioOutputStreamFactoryPtr audio_output_stream_factory_;
 
   // Hosts media::mojom::InterfaceFactory for the RenderFrame and forwards
@@ -1380,22 +1352,44 @@ class CONTENT_EXPORT RenderFrameHostImpl
   std::unique_ptr<JavaInterfaceProvider> java_interface_registry_;
 #endif
 
-  // Binding for the InterfaceProvider through which this RFHI exposes Mojo
-  // services to the corresonding RenderFrame.
+  // Binding for the InterfaceProvider through which this RenderFrameHostImpl
+  // exposes frame-scoped Mojo services to the currently active document in the
+  // corresponding RenderFrame.
   //
-  // Normally, whoever creates this RFHI, is responsible for creating a message
-  // pipe, then supplying the request end to BindInterfaceProviderRequest(), and
-  // plumbing the client end to the RenderFrame in the renderer process.
+  // GetInterface messages dispatched through this binding are guaranteed to
+  // originate from the document corresponding to the last committed navigation;
+  // or the inital empty document if no real navigation has ever been committed.
   //
-  // Currently the only exception to this rule are out-of-process iframes, where
-  // the child RFHI takes care of this internally in CreateRenderFrame().
+  // The InterfaceProvider interface connection is established as follows:
+  //
+  // 1) For the initial empty document, the call site that creates this
+  //    RenderFrameHost is responsible for creating a message pipe, binding its
+  //    request end to this instance by calling BindInterfaceProviderRequest(),
+  //    and plumbing the client end to the renderer process, and ultimately
+  //    supplying it to the RenderFrame synchronously at construction time.
+  //
+  //    The only exception to this rule are out-of-process child frames, whose
+  //    RenderFrameHosts take care of this internally in CreateRenderFrame().
+  //
+  // 2) For subsequent documents, the RenderFrame creates a new message pipe
+  //    every time a cross-document navigation is committed, and pushes its
+  //    request end to the browser process as part of DidCommitProvisionalLoad.
+  //    The client end will be used by the new document corresponding to the
+  //    committed naviagation to access services exposed by the RenderFrameHost.
+  //
+  // This is required to prevent GetInterface messages racing with navigation
+  // commit from being serviced in the security context corresponding to the
+  // wrong document in the RenderFrame. The benefit of the approach taken is
+  // that it does not necessitate using channel-associated InterfaceProvider
+  // interfaces.
   mojo::Binding<service_manager::mojom::InterfaceProvider>
-      interface_provider_binding_;
+      document_scoped_interface_provider_binding_;
 
   // IPC-friendly token that represents this host for AndroidOverlays, if we
   // have created one yet.
   base::Optional<base::UnguessableToken> overlay_routing_token_;
 
+  viz::mojom::InputTargetClient* input_target_client_ = nullptr;
   mojom::FrameInputHandlerPtr frame_input_handler_;
   std::unique_ptr<LegacyIPCFrameInputHandler> legacy_frame_input_handler_;
 

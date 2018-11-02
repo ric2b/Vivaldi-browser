@@ -42,8 +42,7 @@ class FolderHeaderView::FolderNameView : public views::Textfield {
   ~FolderNameView() override {}
 
   void OnFocus() override {
-    if (features::IsAppListFocusEnabled())
-      SelectAll(false);
+    SelectAll(false);
     Textfield::OnFocus();
   }
 
@@ -261,8 +260,6 @@ void FolderHeaderView::ContentsChanged(views::Textfield* sender,
 
 bool FolderHeaderView::HandleKeyEvent(views::Textfield* sender,
                                       const ui::KeyEvent& key_event) {
-  if (!features::IsAppListFocusEnabled())
-    return false;
   if (!CanProcessLeftRightKeyTraversal(key_event))
     return false;
   return ProcessLeftRightKeyTraversalForTextfield(folder_name_view_, key_event);

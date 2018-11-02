@@ -7,9 +7,9 @@
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/common/utils.h"
-#include "content/public/common/resource_request.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/url_request/redirect_info.h"
+#include "services/network/public/cpp/resource_request.h"
 
 namespace safe_browsing {
 
@@ -36,7 +36,7 @@ void RendererURLLoaderThrottle::DetachFromCurrentSequence() {
 }
 
 void RendererURLLoaderThrottle::WillStartRequest(
-    const content::ResourceRequest& request,
+    network::ResourceRequest* request,
     bool* defer) {
   DCHECK_EQ(0u, pending_checks_);
   DCHECK(!blocked_);
@@ -49,16 +49,17 @@ void RendererURLLoaderThrottle::WillStartRequest(
     safe_browsing_ = safe_browsing_ptr_.get();
   }
 
-  original_url_ = request.url;
+  original_url_ = request->url;
   pending_checks_++;
   // Use a weak pointer to self because |safe_browsing_| may not be owned by
   // this object.
   net::HttpRequestHeaders headers;
-  headers.CopyFrom(request.headers);
+  headers.CopyFrom(request->headers);
   safe_browsing_->CreateCheckerAndCheck(
-      render_frame_id_, mojo::MakeRequest(&url_checker_), request.url,
-      request.method, headers, request.load_flags, request.resource_type,
-      request.has_user_gesture,
+      render_frame_id_, mojo::MakeRequest(&url_checker_), request->url,
+      request->method, headers, request->load_flags,
+      static_cast<content::ResourceType>(request->resource_type),
+      request->has_user_gesture,
       base::BindOnce(&RendererURLLoaderThrottle::OnCheckUrlResult,
                      weak_factory_.GetWeakPtr()));
   safe_browsing_ = nullptr;
@@ -69,6 +70,7 @@ void RendererURLLoaderThrottle::WillStartRequest(
 
 void RendererURLLoaderThrottle::WillRedirectRequest(
     const net::RedirectInfo& redirect_info,
+    const network::ResourceResponseHead& response_head,
     bool* defer) {
   // If |blocked_| is true, the resource load has been canceled and there
   // shouldn't be such a notification.
@@ -88,7 +90,7 @@ void RendererURLLoaderThrottle::WillRedirectRequest(
 
 void RendererURLLoaderThrottle::WillProcessResponse(
     const GURL& response_url,
-    const content::ResourceResponseHead& response_head,
+    const network::ResourceResponseHead& response_head,
     bool* defer) {
   // If |blocked_| is true, the resource load has been canceled and there
   // shouldn't be such a notification.

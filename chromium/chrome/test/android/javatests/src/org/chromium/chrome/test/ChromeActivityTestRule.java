@@ -77,9 +77,6 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
     // The number of ms to wait for the rendering activity to be started.
     private static final int ACTIVITY_START_TIMEOUT_MS = 1000;
 
-    public static final String DISABLE_NETWORK_PREDICTION_FLAG =
-            "--disable-features=NetworkPrediction";
-
     private static final long OMNIBOX_FIND_SUGGESTION_TIMEOUT_MS = 10 * 1000;
 
     protected boolean mSkipClearAppData;
@@ -277,6 +274,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
                 });
             }
         }, secondsToWait);
+        ChromeTabUtils.waitForInteractable(tab);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         return result.get();
     }
@@ -332,6 +330,7 @@ public class ChromeActivityTestRule<T extends ChromeActivity> extends ActivityTe
             Assert.fail("Failed to create new tab");
         }
         ChromeTabUtils.waitForTabPageLoaded(tab, url);
+        ChromeTabUtils.waitForInteractable(tab);
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
         return tab;
     }

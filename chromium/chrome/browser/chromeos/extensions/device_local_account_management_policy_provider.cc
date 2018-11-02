@@ -10,7 +10,7 @@
 #include <string>
 
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -157,9 +157,6 @@ const char* const kSafeManifestEntries[] = {
     // Not useful since it will prevent app from running, but we don't care.
     emk::kKioskSecondaryApps,
 
-    // Whitelisted to only allow Google Now.
-    emk::kLauncherPage,
-
     // Special-cased in IsSafeForPublicSession().
     // emk::kManifestVersion,
 
@@ -211,10 +208,10 @@ const char* const kSafeManifestEntries[] = {
     // No constant in manifest_constants.cc. Declared as a feature, but unused.
     // "platforms",
 
-    // N/A on Chrome OS, so we don't care.
-    emk::kPlugins,
+    // Deprecated manifest entry, so we don't care.
+    "plugins",
 
-    // Stated 3D/WebGL/plugin requirements of an app.
+    // Stated 3D/WebGL requirements of an app.
     emk::kRequirements,
 
     // Execute some pages in a separate sandbox.  (Note: Using string literal
@@ -643,8 +640,8 @@ void LogPermissionUmaStats(const std::string& permission_string) {
   // Not a permission.
   if (!permission_info) return;
 
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Enterprise.PublicSession.ExtensionPermissions",
-                              permission_info->id());
+  base::UmaHistogramSparse("Enterprise.PublicSession.ExtensionPermissions",
+                           permission_info->id());
 }
 
 // Returns true for extensions that are considered safe for Public Sessions,

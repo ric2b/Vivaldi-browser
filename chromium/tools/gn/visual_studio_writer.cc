@@ -255,11 +255,9 @@ VisualStudioWriter::SolutionProject::SolutionProject(
     const std::string& _path,
     const std::string& _guid,
     const std::string& _label_dir_path,
-    const std::string& _config_name,
     const std::string& _config_platform)
     : SolutionEntry(_name, _path, _guid),
       label_dir_path(_label_dir_path),
-      config_name(_config_name),
       config_platform(_config_platform) {
   // Make sure all paths use the same drive letter case. This is especially
   // important when searching for the common path prefix.
@@ -288,9 +286,6 @@ VisualStudioWriter::VisualStudioWriter(const BuildSettings* build_settings,
       windows_sdk_version_(win_kit) {
   DCHECK(!win_kit.empty());
 
-  base::FilePath build_dir(base::FilePath::FromUTF8Unsafe(
-              build_settings->build_dir().actual_path()));
-  config_name_ = build_dir.BaseName().AsUTF8Unsafe();
   switch (version) {
     case Version::Vs2013:
       project_version_ = kProjectVersionVs2013;
@@ -413,7 +408,6 @@ bool VisualStudioWriter::WriteProjectFiles(const Target* target,
       project_name, vcxproj_path_str,
       MakeGuid(vcxproj_path_str, kGuidSeedProject),
       FilePathToUTF8(build_settings_->GetFullPath(target->label().dir())),
-      config_name_,
       project_config_platform));
 
   std::stringstream vcxproj_string_out;
@@ -460,10 +454,9 @@ bool VisualStudioWriter::WriteProjectFileContents(
     std::unique_ptr<XmlElementWriter> project_config =
         configurations->SubElement(
             "ProjectConfiguration",
-            XmlAttributes("Include", solution_project.config_name + '|' +
+            XmlAttributes("Include", std::string(kConfigurationName) + '|' +
                                          solution_project.config_platform));
-    project_config->SubElement("Configuration")
-        ->Text(solution_project.config_name);
+    project_config->SubElement("Configuration")->Text(kConfigurationName);
     project_config->SubElement("Platform")
         ->Text(solution_project.config_platform);
   }
@@ -527,6 +520,8 @@ bool VisualStudioWriter::WriteProjectFileContents(
 
   project.SubElement("PropertyGroup", XmlAttributes("Label", "UserMacros"));
 
+  std::string ninja_target = GetNinjaTarget(target);
+
   {
     std::unique_ptr<XmlElementWriter> properties =
         project.SubElement("PropertyGroup");
@@ -537,18 +532,9 @@ bool VisualStudioWriter::WriteProjectFileContents(
                            build_settings_->build_dir(),
                            PathOutput::DIR_INCLUDE_LAST_SLASH);
     }
-
-    bool renamed_output = !target->output_name().empty() &&
-                           target->output_name() != target->label().name();
-    properties->SubElement("TargetName")->Text(
-        renamed_output ? target->output_name() : "$(ProjectName)");
-    if (renamed_output) {
-      properties->SubElement("TargetPath")
-          ->Text("$(OutDir)\\"+ target->output_name());
-    } else
+    properties->SubElement("TargetName")->Text("$(ProjectName)");
     if (target->output_type() != Target::GROUP) {
-      properties->SubElement("TargetPath")
-          ->Text("$(OutDir)\\$(ProjectName)$(TargetExt)");
+      properties->SubElement("TargetPath")->Text("$(OutDir)\\" + ninja_target);
     }
   }
 
@@ -658,8 +644,6 @@ bool VisualStudioWriter::WriteProjectFileContents(
       XmlAttributes("Project",
                     "$(VCTargetsPath)\\BuildCustomizations\\masm.targets"));
   project.SubElement("ImportGroup", XmlAttributes("Label", "ExtensionTargets"));
-
-  std::string ninja_target = GetNinjaTarget(target);
 
   {
     std::unique_ptr<XmlElementWriter> build =
@@ -788,8 +772,7 @@ void VisualStudioWriter::WriteSolutionFileContents(
 
   out << "\tGlobalSection(SolutionConfigurationPlatforms) = preSolution"
       << std::endl;
-  const std::string config_mode_prefix_gn = std::string(kConfigurationName) + '|';
-  const std::string config_mode_prefix = config_name_ + '|';
+  const std::string config_mode_prefix = std::string(kConfigurationName) + '|';
   const std::string config_mode = config_mode_prefix + config_platform_;
   out << "\t\t" << config_mode << " = " << config_mode << std::endl;
   out << "\tEndGlobalSection" << std::endl;
@@ -799,12 +782,10 @@ void VisualStudioWriter::WriteSolutionFileContents(
   for (const std::unique_ptr<SolutionProject>& project : projects_) {
     const std::string project_config_mode =
         config_mode_prefix + project->config_platform;
-    const std::string project_config_mode_gn =
-        config_mode_prefix_gn + project->config_platform;
     out << "\t\t" << project->guid << '.' << config_mode
-        << ".ActiveCfg = " << project_config_mode_gn << std::endl;
+        << ".ActiveCfg = " << project_config_mode << std::endl;
     out << "\t\t" << project->guid << '.' << config_mode
-        << ".Build.0 = " << project_config_mode_gn << std::endl;
+        << ".Build.0 = " << project_config_mode << std::endl;
   }
   out << "\tEndGlobalSection" << std::endl;
 

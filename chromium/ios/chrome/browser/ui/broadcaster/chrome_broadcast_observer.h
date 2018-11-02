@@ -18,6 +18,18 @@
 
 #pragma mark - Scrolling events
 
+// Observer method for objects that care about the size of the scroll view
+// displaying the main content.
+- (void)broadcastScrollViewSize:(CGSize)scrollViewSize;
+
+// Observer method for objects that care about the height of the current page's
+// rendered contents.
+- (void)broadcastScrollViewContentSize:(CGSize)contentSize;
+
+// Observer method for objects that care about the content inset for the scroll
+// view displaying the main content area.
+- (void)broadcastScrollViewContentInset:(UIEdgeInsets)contentInset;
+
 // Observer method for objects that care about the current vertical (y-axis)
 // scroll offset of the tab content area.
 - (void)broadcastContentScrollOffset:(CGFloat)offset;
@@ -26,7 +38,11 @@
 // scrolling.
 - (void)broadcastScrollViewIsScrolling:(BOOL)scrolling;
 
-// Observer method for objects that care abotu whether the main content area is
+// Observer method for objects that care about whether the main content area is
+// zooming.
+- (void)broadcastScrollViewIsZooming:(BOOL)zooming;
+
+// Observer method for objects that care about whether the main content area is
 // being dragged.  Note that if a drag ends with residual velocity, it's
 // possible for |dragging| to be NO while |scrolling| is still YES.
 - (void)broadcastScrollViewIsDragging:(BOOL)dragging;

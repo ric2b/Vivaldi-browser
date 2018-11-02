@@ -14,6 +14,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/network_change_notifier.h"
 #include "net/log/net_log_with_source.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace base {
 class FuzzedDataProvider;
@@ -38,6 +39,7 @@ class FuzzedDatagramClientSocket : public DatagramClientSocket {
                           const IPEndPoint& address) override;
   int ConnectUsingDefaultNetwork(const IPEndPoint& address) override;
   NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override;
+  void ApplySocketTag(const SocketTag& tag) override;
 
   // DatagramSocket implementation:
   void Close() override;
@@ -52,7 +54,8 @@ class FuzzedDatagramClientSocket : public DatagramClientSocket {
            const CompletionCallback& callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback) override;
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override;
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
   int SetDoNotFragment() override;

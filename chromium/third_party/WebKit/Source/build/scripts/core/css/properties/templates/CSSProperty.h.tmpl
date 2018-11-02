@@ -10,9 +10,12 @@
 #define CSSProperty_h
 
 #include "core/CSSPropertyNames.h"
+#include "core/css/CSSValue.h"
+#include "core/css/properties/CSSUnresolvedProperty.h"
 #include "platform/heap/HeapAllocator.h"
 #include "platform/text/TextDirection.h"
 #include "platform/text/WritingMode.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -23,22 +26,28 @@ class CSSParserTokenRange;
 class LayoutObject;
 class Longhand;
 class Shorthand;
+class SVGComputedStyle;
 class StylePropertyShorthand;
 
 enum PhysicalBoxSide { kTopSide, kRightSide, kBottomSide, kLeftSide };
 
-class CSSProperty {
+class CSSProperty : public CSSUnresolvedProperty {
  public:
   CORE_EXPORT static const CSSProperty& Get(CSSPropertyID);
 
-  explicit constexpr CSSProperty(CSSPropertyID id) : id_(id) {}
-
-  // For backwards compatibility when passing around CSSProperty references.
-  // In case we need to call a function that hasn't been converted to using
-  // property classes yet.
-  CSSPropertyID PropertyID() const { return id_; }
-  bool IDEquals(CSSPropertyID id) const { return id_ == id; }
-
+  // For backwards compatibility when passing around CSSUnresolvedProperty
+  // references. In case we need to call a function that hasn't been converted
+  // to using property classes yet.
+  virtual CSSPropertyID PropertyID() const {
+    NOTREACHED();
+    return CSSPropertyInvalid;
+  }
+  bool IDEquals(CSSPropertyID id) const { return PropertyID() == id; }
+  bool IsResolvedProperty() const override { return true; }
+  virtual const WTF::String GetJSPropertyName() const {
+    NOTREACHED();
+    return g_empty_string;
+  }
   virtual bool IsInterpolable() const { return false; }
   virtual bool IsInherited() const { return false; }
   virtual bool IsCompositableProperty() const { return false; }
@@ -53,6 +62,43 @@ class CSSProperty {
   virtual bool IsEnabled() const { return true; }
   virtual bool IsAffectedByAll() const { return IsEnabled() && IsProperty(); }
   virtual bool IsLayoutDependent(const ComputedStyle* style, LayoutObject* layout_object) const { return false; }
+
+  // Properties that do not override this method:
+  // CSSPropertyWebkitFontSizeDelta
+  // CSSPropertyWebkitTextEmphasis
+  // CSSPropertyFontDisplay
+  // CSSPropertySrc
+  // CSSPropertyUnicodeRange
+  // CSSPropertyPage
+  // CSSPropertySize
+  // CSSPropertyWebkitMarginCollapse
+  // CSSPropertyWebkitMask
+  // CSSPropertyWebkitMaskRepeatX
+  // CSSPropertyWebkitMaskRepeatY
+  // CSSPropertyWebkitPerspectiveOriginX
+  // CSSPropertyWebkitPerspectiveOriginY
+  // CSSPropertyWebkitTextStroke
+  // CSSPropertyWebkitTransformOriginX
+  // CSSPropertyWebkitTransformOriginY
+  // CSSPropertyWebkitTransformOriginZ
+  // CSSPropertyMaxZoom
+  // CSSPropertyMinZoom
+  // CSSPropertyOrientation
+  // CSSPropertyUserZoom
+  // CSSPropertyMarker
+  // CSSPropertyAll
+  // CSSPropertyVariable (Variables are retrieved via Get(AtomicString))
+  virtual const CSSValue* CSSValueFromComputedStyleInternal(const ComputedStyle&,
+                                                            const SVGComputedStyle&,
+                                                            const LayoutObject*,
+                                                            Node*,
+                                                            bool allow_visited_style) const { return nullptr; }
+  // FIXME: Resolve computed auto alignment in applyProperty/ComputedStyle and
+  // remove this non-const Node parameter.
+  const CSSValue* CSSValueFromComputedStyle(const ComputedStyle&,
+                                            const LayoutObject*,
+                                            Node*,
+                                            bool allow_visited_style) const;
   virtual const CSSProperty& ResolveDirectionAwareProperty(
       TextDirection,
       WritingMode) const {
@@ -65,6 +111,8 @@ class CSSProperty {
                                                    Vector<const CSSProperty*>&);
 
  protected:
+  constexpr CSSProperty() : CSSUnresolvedProperty() {}
+
   static const StylePropertyShorthand& BorderDirections();
   static const CSSProperty& ResolveAfterToPhysicalProperty(
       TextDirection,
@@ -82,10 +130,13 @@ class CSSProperty {
       TextDirection,
       WritingMode,
       const StylePropertyShorthand&);
-
- private:
-  const CSSPropertyID id_;
 };
+
+DEFINE_TYPE_CASTS(CSSProperty,
+                  CSSUnresolvedProperty,
+                  unresolved,
+                  unresolved->IsResolvedProperty(),
+                  unresolved.IsResolvedProperty());
 
 CORE_EXPORT const CSSProperty& GetCSSPropertyVariable();
 {% for property_class_data in property_classes_by_property_id %}

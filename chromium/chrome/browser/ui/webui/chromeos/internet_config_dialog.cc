@@ -17,11 +17,14 @@
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
-#include "third_party/cros_system_api/dbus/service_constants.h"
 
 namespace chromeos {
 
 namespace {
+
+// Dialog height for configured networks that only require a passphrase.
+// This height includes room for a 'connecting' or error message.
+constexpr int kDialogHeightPasswordOnly = 365;
 
 void AddInternetStrings(content::WebUIDataSource* html_source) {
   // Add default strings first.
@@ -37,6 +40,7 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
       {"internetJoinType", IDS_SETTINGS_INTERNET_JOIN_TYPE},
       {"networkButtonConnect", IDS_SETTINGS_INTERNET_BUTTON_CONNECT},
       {"cancel", IDS_CANCEL},
+      {"close", IDS_CANCEL},
       {"save", IDS_SAVE},
   };
   for (const auto& entry : localized_strings)
@@ -46,12 +50,19 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
 }  // namespace
 
 // static
-void InternetConfigDialog::ShowDialogForNetworkState(
-    const NetworkState* network_state) {
+void InternetConfigDialog::ShowDialogForNetworkId(
+    const std::string& network_id) {
+  const NetworkState* network_state =
+      NetworkHandler::Get()->network_state_handler()->GetNetworkStateFromGuid(
+          network_id);
+  if (!network_state) {
+    LOG(ERROR) << "Network not found: " << network_id;
+    return;
+  }
   std::string network_type =
       chromeos::network_util::TranslateShillTypeToONC(network_state->type());
   InternetConfigDialog* dialog =
-      new InternetConfigDialog(network_type, network_state->guid());
+      new InternetConfigDialog(network_type, network_id);
   dialog->ShowSystemDialog();
 }
 
@@ -70,6 +81,18 @@ InternetConfigDialog::InternetConfigDialog(const std::string& network_type,
       network_id_(network_id) {}
 
 InternetConfigDialog::~InternetConfigDialog() {}
+
+void InternetConfigDialog::GetDialogSize(gfx::Size* size) const {
+  const NetworkState* network =
+      network_id_.empty() ? nullptr
+                          : NetworkHandler::Get()
+                                ->network_state_handler()
+                                ->GetNetworkStateFromGuid(network_id_);
+  int height = network && network->SecurityRequiresPassphraseOnly()
+                   ? kDialogHeightPasswordOnly
+                   : InternetConfigDialog::kDialogHeight;
+  size->SetSize(InternetConfigDialog::kDialogWidth, height);
+}
 
 std::string InternetConfigDialog::GetDialogArgs() const {
   base::DictionaryValue args;
@@ -90,9 +113,15 @@ InternetConfigDialogUI::InternetConfigDialogUI(content::WebUI* web_ui)
   AddInternetStrings(source);
   source->AddLocalizedString("title", IDS_SETTINGS_INTERNET_CONFIG);
   source->SetJsonPath("strings.js");
+#if BUILDFLAG(OPTIMIZE_WEBUI)
+  source->UseGzip();
+  source->SetDefaultResource(IDR_INTERNET_CONFIG_DIALOG_VULCANIZED_HTML);
+  source->AddResourcePath("crisper.js", IDR_INTERNET_CONFIG_DIALOG_CRISPER_JS);
+#else
   source->SetDefaultResource(IDR_INTERNET_CONFIG_DIALOG_HTML);
   source->AddResourcePath("internet_config_dialog.js",
                           IDR_INTERNET_CONFIG_DIALOG_JS);
+#endif
 
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 }

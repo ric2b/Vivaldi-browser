@@ -16,9 +16,6 @@
 [submodule "media/cdm/api"]
 	path = media/cdm/api
 	url = ../cdm.git
-[submodule "native_client"]
-	path = native_client
-	url = ../../native_client/src/native_client.git
 [submodule "third_party/SPIRV-Tools/src"]
 	path = third_party/SPIRV-Tools/src
 	url = ../../external/github.com/KhronosGroup/SPIRV-Tools.git
@@ -28,9 +25,6 @@
 [submodule "third_party/bidichecker"]
 	path = third_party/bidichecker
 	url = ../../external/bidichecker/lib.git
-[submodule "third_party/bison"]
-	path = third_party/bison
-	url = ../deps/bison.git
 [submodule "third_party/boringssl/src"]
 	path = third_party/boringssl/src
 	url = ../../boringssl/boringssl.git
@@ -88,15 +82,12 @@
 [submodule "third_party/glslang/src"]
 	path = third_party/glslang/src
 	url = ../../external/github.com/google/glslang.git
-[submodule "third_party/gnu_binutils"]
-	path = third_party/gnu_binutils
-	url = ../../native_client/deps/third_party/gnu_binutils.git
+[submodule "third_party/google_toolbox_for_mac/src"]
+	path = third_party/google_toolbox_for_mac/src
+	url = ../../external/github.com/google/google-toolbox-for-mac.git
 [submodule "third_party/googletest/src"]
 	path = third_party/googletest/src
 	url = ../../external/github.com/google/googletest.git
-[submodule "third_party/gperf"]
-	path = third_party/gperf
-	url = ../deps/gperf.git
 [submodule "third_party/hunspell_dictionaries"]
 	path = third_party/hunspell_dictionaries
 	url = ../deps/hunspell_dictionaries.git
@@ -151,21 +142,18 @@
 [submodule "third_party/lighttpd"]
 	path = third_party/lighttpd
 	url = ../deps/lighttpd.git
+[submodule "third_party/lss"]
+	path = third_party/lss
+	url = ../../linux-syscall-support.git
 [submodule "third_party/mesa/src"]
 	path = third_party/mesa/src
 	url = ../deps/mesa.git
-[submodule "third_party/mingw-w64/mingw/bin"]
-	path = third_party/mingw-w64/mingw/bin
-	url = ../../native_client/deps/third_party/mingw-w64/mingw/bin.git
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git
 [submodule "third_party/minizip/src"]
 	path = third_party/minizip/src
 	url = ../../external/github.com/nmoinvaz/minizip.git
-[submodule "third_party/nacl_sdk_binaries"]
-	path = third_party/nacl_sdk_binaries
-	url = ../deps/nacl_sdk_binaries.git
 [submodule "third_party/openh264/src"]
 	path = third_party/openh264/src
 	url = ../../external/github.com/cisco/openh264.git
@@ -175,9 +163,9 @@
 [submodule "third_party/pdfium"]
 	path = third_party/pdfium
 	url = ../../pdfium/pdfium.git
-[submodule "third_party/pefile"]
-	path = third_party/pefile
-	url = ../../external/pefile.git
+[submodule "third_party/perfetto"]
+	path = third_party/perfetto
+	url = ../../android/platform/external/perfetto.git
 [submodule "third_party/pyftpdlib/src"]
 	path = third_party/pyftpdlib/src
 	url = ../../external/pyftpdlib.git
@@ -256,9 +244,12 @@
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git
-[submodule "third_party/google_toolbox_for_mac/src"]
-	path = third_party/google_toolbox_for_mac/src
-	url = ../../external/github.com/google/google-toolbox-for-mac.git
-[submodule "third_party/lss"]
-	path = third_party/lss
-	url = ../../linux-syscall-support.git
+[submodule "third_party/pefile"]
+	path = third_party/pefile
+	url = ../../external/pefile.git
+[submodule "third_party/bison"]
+	path = third_party/bison
+	url = ../deps/bison.git
+[submodule "third_party/gperf"]
+	path = third_party/gperf
+	url = ../deps/gperf.git

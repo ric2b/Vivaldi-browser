@@ -33,7 +33,6 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/common/zygote_commands_linux.h"
-#include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
@@ -94,17 +93,14 @@ void KillAndReap(pid_t pid, ZygoteForkDelegate* helper) {
 
 Zygote::Zygote(int sandbox_flags,
                std::vector<std::unique_ptr<ZygoteForkDelegate>> helpers,
-               const std::vector<base::ProcessHandle>& extra_children,
-               const std::vector<int>& extra_fds)
+               const base::GlobalDescriptors::Descriptor& ipc_backchannel)
     : sandbox_flags_(sandbox_flags),
       helpers_(std::move(helpers)),
       initial_uma_index_(0),
-      extra_children_(extra_children),
-      extra_fds_(extra_fds),
-      to_reap_() {}
+      to_reap_(),
+      ipc_backchannel_(ipc_backchannel) {}
 
-Zygote::~Zygote() {
-}
+Zygote::~Zygote() {}
 
 bool Zygote::ProcessRequests() {
   // A SOCK_SEQPACKET socket is installed in fd 3. We get commands from the
@@ -243,17 +239,6 @@ bool Zygote::HandleRequestFromBrowser(int fd) {
     // TODO(eugenis): call __sanititizer_cov_dump() here to obtain code
     // coverage for the Zygote. Currently it's not possible because of
     // confusion over who is responsible for closing the file descriptor.
-    for (int fd : extra_fds_) {
-      PCHECK(0 == IGNORE_EINTR(close(fd)));
-    }
-#if !defined(SANITIZER_COVERAGE)
-    // TODO(eugenis): add watchdog thread before using this in builds not
-    // using sanitizer coverage.
-    CHECK(extra_children_.empty());
-#endif
-    for (base::ProcessHandle pid : extra_children_) {
-      PCHECK(pid == HANDLE_EINTR(waitpid(pid, nullptr, 0)));
-    }
     _exit(0);
     return false;
   }
@@ -610,8 +595,7 @@ base::ProcessId Zygote::ReadArgsAndFork(base::PickleIterator iter,
     mapping.push_back(base::GlobalDescriptors::Descriptor(key, fds[i].get()));
   }
 
-  mapping.push_back(base::GlobalDescriptors::Descriptor(
-      static_cast<uint32_t>(kSandboxIPCChannel), GetSandboxFD()));
+  mapping.push_back(ipc_backchannel_);
 
   // Returns twice, once per process.
   base::ProcessId child_pid =

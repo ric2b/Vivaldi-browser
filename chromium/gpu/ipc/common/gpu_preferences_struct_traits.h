@@ -5,7 +5,9 @@
 #ifndef GPU_IPC_COMMON_GPU_PREFERENCES_STRUCT_TRAITS_H_
 #define GPU_IPC_COMMON_GPU_PREFERENCES_STRUCT_TRAITS_H_
 
+#include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/ipc/common/gpu_preferences.mojom.h"
+#include "ui/gfx/mojo/buffer_types_struct_traits.h"
 
 namespace mojo {
 
@@ -56,11 +58,11 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
     out->in_process_gpu = prefs.in_process_gpu();
     out->disable_accelerated_video_decode =
         prefs.disable_accelerated_video_decode();
+    out->disable_accelerated_video_encode =
+        prefs.disable_accelerated_video_encode();
     out->gpu_startup_dialog = prefs.gpu_startup_dialog();
     out->disable_gpu_watchdog = prefs.disable_gpu_watchdog();
     out->gpu_sandbox_start_early = prefs.gpu_sandbox_start_early();
-    out->disable_vaapi_accelerated_video_encode =
-        prefs.disable_vaapi_accelerated_video_encode();
     out->disable_web_rtc_hw_encoding = prefs.disable_web_rtc_hw_encoding();
     if (!prefs.ReadEnableAcceleratedVpxDecode(
             &out->enable_accelerated_vpx_decode))
@@ -70,12 +72,13 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
     out->enable_nv12_dxgi_video = prefs.enable_nv12_dxgi_video();
     out->enable_media_foundation_vea_on_windows7 =
         prefs.enable_media_foundation_vea_on_windows7();
+    out->disable_software_rasterizer = prefs.disable_software_rasterizer();
+    out->log_gpu_control_list_decisions =
+        prefs.log_gpu_control_list_decisions();
     out->compile_shader_always_succeeds =
         prefs.compile_shader_always_succeeds();
     out->disable_gl_error_limit = prefs.disable_gl_error_limit();
     out->disable_glsl_translator = prefs.disable_glsl_translator();
-    out->disable_gpu_driver_bug_workarounds =
-        prefs.disable_gpu_driver_bug_workarounds();
     out->disable_shader_name_hashing = prefs.disable_shader_name_hashing();
     out->enable_gpu_command_logging = prefs.enable_gpu_command_logging();
     out->enable_gpu_debugging = prefs.enable_gpu_debugging();
@@ -96,6 +99,22 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
     out->enable_gpu_service_logging = prefs.enable_gpu_service_logging();
     out->enable_gpu_service_tracing = prefs.enable_gpu_service_tracing();
     out->use_passthrough_cmd_decoder = prefs.use_passthrough_cmd_decoder();
+    out->disable_biplanar_gpu_memory_buffers_for_video_frames =
+        prefs.disable_biplanar_gpu_memory_buffers_for_video_frames();
+
+    mojo::ArrayDataView<gfx::mojom::BufferUsageAndFormatDataView>
+        usage_and_format_list;
+    prefs.GetTextureTargetExceptionListDataView(&usage_and_format_list);
+    for (size_t i = 0; i < usage_and_format_list.size(); ++i) {
+      gfx::BufferUsageAndFormat usage_format;
+      if (!usage_and_format_list.Read(i, &usage_format))
+        return false;
+      out->texture_target_exception_list.push_back(usage_format);
+    }
+
+    out->disable_gpu_driver_bug_workarounds =
+        prefs.disable_gpu_driver_bug_workarounds();
+    out->ignore_gpu_blacklist = prefs.ignore_gpu_blacklist();
     return true;
   }
 
@@ -109,6 +128,10 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
       const gpu::GpuPreferences& prefs) {
     return prefs.disable_accelerated_video_decode;
   }
+  static bool disable_accelerated_video_encode(
+      const gpu::GpuPreferences& prefs) {
+    return prefs.disable_accelerated_video_encode;
+  }
   static bool gpu_startup_dialog(const gpu::GpuPreferences& prefs) {
     return prefs.gpu_startup_dialog;
   }
@@ -117,11 +140,6 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
   }
   static bool gpu_sandbox_start_early(const gpu::GpuPreferences& prefs) {
     return prefs.gpu_sandbox_start_early;
-  }
-
-  static bool disable_vaapi_accelerated_video_encode(
-      const gpu::GpuPreferences& prefs) {
-    return prefs.disable_vaapi_accelerated_video_encode;
   }
 
   static bool disable_web_rtc_hw_encoding(const gpu::GpuPreferences& prefs) {
@@ -145,6 +163,12 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
       const gpu::GpuPreferences& prefs) {
     return prefs.enable_media_foundation_vea_on_windows7;
   }
+  static bool disable_software_rasterizer(const gpu::GpuPreferences& prefs) {
+    return prefs.disable_software_rasterizer;
+  }
+  static bool log_gpu_control_list_decisions(const gpu::GpuPreferences& prefs) {
+    return prefs.log_gpu_control_list_decisions;
+  }
   static bool compile_shader_always_succeeds(const gpu::GpuPreferences& prefs) {
     return prefs.compile_shader_always_succeeds;
   }
@@ -153,10 +177,6 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
   }
   static bool disable_glsl_translator(const gpu::GpuPreferences& prefs) {
     return prefs.disable_glsl_translator;
-  }
-  static bool disable_gpu_driver_bug_workarounds(
-      const gpu::GpuPreferences& prefs) {
-    return prefs.disable_gpu_driver_bug_workarounds;
   }
   static bool disable_shader_name_hashing(const gpu::GpuPreferences& prefs) {
     return prefs.disable_shader_name_hashing;
@@ -210,6 +230,21 @@ struct StructTraits<gpu::mojom::GpuPreferencesDataView, gpu::GpuPreferences> {
   }
   static bool use_passthrough_cmd_decoder(const gpu::GpuPreferences& prefs) {
     return prefs.use_passthrough_cmd_decoder;
+  }
+  static bool disable_biplanar_gpu_memory_buffers_for_video_frames(
+      const gpu::GpuPreferences& prefs) {
+    return prefs.disable_biplanar_gpu_memory_buffers_for_video_frames;
+  }
+  static const std::vector<gfx::BufferUsageAndFormat>&
+  texture_target_exception_list(const gpu::GpuPreferences& prefs) {
+    return prefs.texture_target_exception_list;
+  }
+  static bool disable_gpu_driver_bug_workarounds(
+      const gpu::GpuPreferences& prefs) {
+    return prefs.disable_gpu_driver_bug_workarounds;
+  }
+  static bool ignore_gpu_blacklist(const gpu::GpuPreferences& prefs) {
+    return prefs.ignore_gpu_blacklist;
   }
 };
 

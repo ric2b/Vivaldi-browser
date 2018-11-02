@@ -6,12 +6,15 @@
 #include <string>
 
 #include "browser/vivaldi_browser_finder.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/api/tabs/windows_util.h"
 #include "chrome/browser/extensions/window_controller.h"
+#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "ui/base/ui_base_types.h"
@@ -26,6 +29,9 @@ namespace extensions {
 VivaldiWindowsAPI::VivaldiWindowsAPI(content::BrowserContext* context)
     : browser_context_(context) {
   BrowserList::GetInstance()->AddObserver(this);
+
+  registrar_.Add(this, chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
+                 content::NotificationService::AllSources());
 }
 
 VivaldiWindowsAPI::~VivaldiWindowsAPI() {}
@@ -41,6 +47,46 @@ static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiWindowsAPI> >::
 BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>*
 VivaldiWindowsAPI::GetFactoryInstance() {
   return g_factory.Pointer();
+}
+
+void VivaldiWindowsAPI::Observe(
+    int type,
+    const content::NotificationSource& source,
+    const content::NotificationDetails& details) {
+  switch (type) {
+    case chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED: {
+      // Browser close was cancelled so notify the client about this
+      // fact so it can re-enable chrome tab event.
+      Browser* browser = content::Source<Browser>(source).ptr();
+      DCHECK(browser);
+      ::vivaldi::DispatchEvent(
+          Profile::FromBrowserContext(browser_context_),
+          extensions::vivaldi::window_private::OnWindowCloseCancelled::
+              kEventName,
+          extensions::vivaldi::window_private::OnWindowCloseCancelled::Create(
+              browser->session_id().id()));
+      break;
+    }
+    default: {
+      NOTREACHED();
+      break;
+    }
+  }
+}
+
+void VivaldiWindowsAPI::Notify(app_modal::JavaScriptAppModalDialog* dialog) {
+  if (dialog->is_before_unload_dialog()) {
+    // We notify the UI which tab opened a beforeunload dialog so
+    // appropiate action can be taken.
+    int id = SessionTabHelper::IdForTab(dialog->web_contents());
+
+    ::vivaldi::DispatchEvent(
+        Profile::FromBrowserContext(browser_context_),
+        extensions::vivaldi::window_private::OnBeforeUnloadDialogOpened::
+            kEventName,
+        extensions::vivaldi::window_private::OnBeforeUnloadDialogOpened::Create(
+            id));
+  }
 }
 
 void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {

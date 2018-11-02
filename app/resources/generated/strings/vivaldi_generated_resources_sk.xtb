@@ -10,8 +10,13 @@
 <translation id="1054153489933238809">Otvoriť pôvodný &amp;obrázok v novom liste</translation>
 <translation id="1056898198331236512">Upozornenie</translation>
 <translation id="1084824384139382525">Kopírovať adre&amp;su odkazu</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural,
+        =1 {Pokračovať v sťahovaní} other {Pokračovať v sťahovaniach}}</translation>
 <translation id="1128109161498068552">Žiadnym stránkam nepovoliť používanie exkluzívnych správ na prístup k zariadeniam MIDI</translation>
 <translation id="114140604515785785">Koreňový adresár rozšírenia:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD, plural,
+        =1 {Momentálne prebieha sťahovanie. Chcete ho zrušiť a ukončiť súkromný režim?}
+        other {Momentálne prebieha sťahovanie # položiek. Chcete ich zrušiť a ukončiť súkromný režim?}}</translation>
 <translation id="1163931534039071049">&amp;Zobraziť zdrojový kód rámu</translation>
 <translation id="1165039591588034296">Chyba</translation>
 <translation id="1175364870820465910">&amp;Tlačiť...</translation>
@@ -40,6 +45,8 @@
 <translation id="1588438908519853928">Normálna</translation>
 <translation id="1588870296199743671">Otvoriť odkaz pomocou...</translation>
 <translation id="159359590073980872">Vyrovnávacia pamäť obrázkov</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD, plural, 
+       =1 {Prebieha sťahovanie} other {Prebiehajú sťahovania}}</translation>
 <translation id="1601560923496285236">Použiť</translation>
 <translation id="1603914832182249871">(Súkromný režim)</translation>
 <translation id="1620510694547887537">Kamera</translation>
@@ -58,12 +65,14 @@
 <translation id="176587472219019965">Nové &amp;okno</translation>
 <translation id="1769104665586091481">Otvoriť odkaz v novom &amp;okne</translation>
 <translation id="1789575671122666129">Vyskakovacie okná</translation>
+<translation id="1805822111539868586">Skontrolovať zobrazenia</translation>
 <translation id="1815083418640426271">Prilepiť ako obyčajný text</translation>
 <translation id="1828901632669367785">Tlačiť prostredníctvom dialógového okna systému…</translation>
 <translation id="1846308012215045257">Doplnok <ph name="PLUGIN_NAME" /> spustíte kliknutím pravým tlačidlom myši</translation>
 <translation id="1850508293116537636">Otočiť &amp;v smere hodinových ručičiek</translation>
 <translation id="1859234291848436338">Smer písania</translation>
 <translation id="1886996562706621347">Povoliť stránkam požiadať o nastavenie za predvolené obslužné nástroje protokolov (odporúčané)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Vybrať &amp;všetko</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Odstrániť všetko</translation>
@@ -141,6 +150,7 @@
 <translation id="2890678560483811744">Odkaz na stránku je mimo rozsahu</translation>
 <translation id="2902127500170292085">Rozšíreniu <ph name="EXTENSION_NAME" /> sa nepodarilo komunikovať s touto tlačiarňou. Skontrolujte, či je tlačiareň pripojená a skúste to znova.</translation>
 <translation id="2904456025988372123">Opýtať sa, keď sa stránky pokúsia sťahovať súbory automaticky po stiahnutí prvého súboru</translation>
+<translation id="2911898792135283060">Vygenerovať heslo...</translation>
 <translation id="2913331724188855103">Povoliť stránkam ukladať a čítať údaje súborov cookie (odporúčané)</translation>
 <translation id="2916745397441987255">Hľadať rozšírenia</translation>
 <translation id="2932883381142163287">Nahlásiť zneužitie</translation>
@@ -199,6 +209,8 @@
 <translation id="3494769164076977169">Opýtať sa, keď sa stránky pokúsia sťahovať súbory automaticky po stiahnutí prvého súboru (odporúčané)</translation>
 <translation id="3505030558724226696">Odvolať prístup k zariadeniam</translation>
 <translation id="3511307672085573050">Kopírovať adre&amp;su odkazu</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural,
+        =1 {Zrušiť sťahovanie} other {Zrušiť sťahovania}}</translation>
 <translation id="3523642406908660543">Opýtať sa, keď bude chcieť stránka použiť doplnok na prístup do počítača (odporúčané)</translation>
 <translation id="357886715122934472">Používateľ &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; chce zdieľať tlačiareň &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; so skupinou, ktorú vlastníte: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Ak žiadosť prijmete, tlačiareň budú môcť využívať všetci členovia skupiny.</translation>
 <translation id="3587482841069643663">Všetko</translation>
@@ -219,7 +231,7 @@
 <translation id="383891835335927981">Žiadne stránky neboli priblížené ani oddialené</translation>
 <translation id="385051799172605136">Naspäť</translation>
 <translation id="3855441664322950881">Zbaliť rozšírenie</translation>
-<translation id="3862134173397075045">Víta vás služba Cast v prehliadači Vivaldi!</translation>
+<translation id="3862134173397075045">Víta vás služba Prenášanie v prehliadači Vivaldi!</translation>
 <translation id="3866249974567520381">Popis</translation>
 <translation id="3899879303189199559">Offline viac ako rok</translation>
 <translation id="3905761538810670789">Opraviť aplikáciu</translation>
@@ -259,6 +271,7 @@
 <translation id="4256316378292851214">Uložiť &amp;video ako...</translation>
 <translation id="4278390842282768270">Povolený</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> kB (aktívne: <ph name="NUM_KILOBYTES_LIVE" /> kB)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD, plural, =1 {Pokračovať v sťahovaní} other {Pokračovať v sťahovaniach}}</translation>
 <translation id="4345587454538109430">Konfigurovať...</translation>
 <translation id="4348766275249686434">Zaznamenávať chyby</translation>
 <translation id="4363771538994847871">Nenašli sa žiadne ciele prenášania. Potrebujete pomoc?</translation>
@@ -356,6 +369,8 @@
 <translation id="5715711091495208045">Doplnok Broker: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Je nám ľúto, nemôžeme ukázať kód pre túto chybu.</translation>
 <translation id="5746169159649715125">Uložiť ako PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD, plural,
+        =1 {Zrušiť sťahovanie} other {Zrušiť sťahovania}}</translation>
 <translation id="5759728514498647443">Dokumenty odoslané na tlač prostredníctvom aplikácie <ph name="APP_NAME" /> môžete čítať pomocou aplikácie <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Uložiť &amp;zvuk ako...</translation>
 <translation id="577624874850706961">Hľadať súbory cookie</translation>
@@ -405,9 +420,9 @@
 <translation id="6295158916970320988">Všetky stránky</translation>
 <translation id="6295855836753816081">Ukladá sa...</translation>
 <translation id="6308937455967653460">Uložiť &amp;odkaz ako...</translation>
-<translation id="6314335155547195432">Generovať heslo</translation>
 <translation id="6326855256003666642">Počet akcií zabraňujúcich ukončeniu</translation>
 <translation id="6370021412472292592">Načítanie súpisky obsahu rozšírenia (manifest) zlyhalo.</translation>
+<translation id="6374469231428023295">Skúsiť znova</translation>
 <translation id="6385543213911723544">Stránky môžu ukladať a čítať údaje súborov cookie</translation>
 <translation id="6398765197997659313">Ukončiť režim celej obrazovky</translation>
 <translation id="6406303162637086258">Simulovať reštartovanie prehliadača</translation>
@@ -422,6 +437,7 @@
 <translation id="6518014396551869914">&amp;Kopírovať obrázok</translation>
 <translation id="6550675742724504774">Možnosti</translation>
 <translation id="6596092346130528198">Je toto stránka v novom liste, ktorú ste čakali?</translation>
+<translation id="6612358246767739896">Chránený obsah</translation>
 <translation id="6639554308659482635">Pamäť nástroja SQLite</translation>
 <translation id="6655190889273724601">Režim pre vývojárov</translation>
 <translation id="6691936601825168937">&amp;Dopredu</translation>
@@ -458,6 +474,7 @@
 <translation id="708060913198414444">K&amp;opírovať adresu zvuku</translation>
 <translation id="7084192839369222683">Spúšťať iba dôležitý obsah</translation>
 <translation id="7144878232160441200">Skúsiť znova</translation>
+<translation id="7152478047064750137">Toto rozšírenie nevyžaduje žiadne špeciálne povolenia</translation>
 <translation id="7175353351958621980">Načítané z:</translation>
 <translation id="7186088072322679094">Zachovať v paneli nástrojov</translation>
 <translation id="7206693748120342859">Sťahovanie doplnku <ph name="PLUGIN_NAME" />...</translation>
@@ -465,7 +482,7 @@
 <translation id="7270858098575133036">Opýtať sa, keď bude chcieť stránka použiť na prístup k zariadeniam MIDI správy exkluzívne pre systém</translation>
 <translation id="7287143125007575591">Prístup bol odmietnutý.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7293919849802650062">Víta vás služba Cast v prehliadači Vivaldi!</translation>
+<translation id="7293919849802650062">Víta vás služba Prenášanie v prehliadači Vivaldi!</translation>
 <translation id="7309257895202129721">Zobraziť &amp;ovládacie prvky</translation>
 <translation id="7311079019872751559">Prístup k doplnku mimo karantény</translation>
 <translation id="7339898014177206373">Nové okno</translation>
@@ -486,7 +503,6 @@
 <translation id="7564847347806291057">Ukončiť úlohu</translation>
 <translation id="7576690715254076113">Kompletovať</translation>
 <translation id="7629827748548208700">List: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Zrušiť</translation>
 <translation id="7661259717474717992">Povoliť stránkam ukladať a čítať údaje súborov cookie</translation>
 <translation id="7663719505383602579">Prijímač: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Nainštalované správcom</translation>
@@ -572,6 +588,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8708000541097332489">Vymazať pri ukončení</translation>
 <translation id="8714838604780058252">Grafika na pozadí</translation>
 <translation id="8719653885894320876">Doplnok <ph name="PLUGIN_NAME" /> sa nepodarilo stiahnuť</translation>
+<translation id="8725066075913043281">Skúsiť znova</translation>
 <translation id="873545264931343897">Po dokončení aktualizácie doplnku <ph name="PLUGIN_NAME" /> ho aktivujete opätovným načítaním stránky</translation>
 <translation id="8757090071857742562">Plochu sa nepodarilo prenášať. Skontrolujte, či ste potvrdili výzvu na zdieľanie obrazovky.</translation>
 <translation id="8770406935328356739">Koreňový adresár rozšírenia</translation>
@@ -585,6 +602,7 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="8823514049557262177">Kopírovať te&amp;xt odkazu</translation>
 <translation id="8845001906332463065">Získať pomoc</translation>
 <translation id="8859174528519900719">Podrámec: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">Generovať heslo…</translation>
 <translation id="8899285681604219177">Nepodporované typy rozšírení boli zakázané</translation>
 <translation id="8899851313684471736">Otvoriť odkaz v novom &amp;okne</translation>
 <translation id="8910146161325739742">Zdieľanie obrazovky</translation>
@@ -600,6 +618,8 @@ Súbor kľúča uložte na bezpečné miesto. Budete ho potrebovať na vytvoreni
 <translation id="9027459031423301635">Otvoriť odkaz v novom &amp;liste</translation>
 <translation id="9056810968620647706">Nenašli sa žiadne zhody.</translation>
 <translation id="9088234649737575428">Doplnok <ph name="PLUGIN_NAME" /> je blokovaný podnikovými pravidlami</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural,
+        =1 {Prebieha sťahovanie} other {Prebiehajú sťahovania}}</translation>
 <translation id="9137916601698928395">Otvoriť odkaz ako <ph name="USER" /></translation>
 <translation id="9153341767479566106">Ďalšie rozšírenia, ktoré sa nepodarilo načítať:</translation>
 <translation id="9170848237812810038">&amp;Naspäť</translation>

@@ -20,12 +20,10 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/common/manifest_handlers/kiosk_mode_info.h"
-#include "extensions/common/manifest_handlers/launcher_page_info.h"
 #include "extensions/common/manifest_handlers/mime_types_handler.h"
 #include "extensions/common/manifest_handlers/nacl_modules_handler.h"
 #include "extensions/common/manifest_handlers/oauth2_manifest_handler.h"
 #include "extensions/common/manifest_handlers/offline_enabled_info.h"
-#include "extensions/common/manifest_handlers/plugins_handler.h"
 #include "extensions/common/manifest_handlers/requirements_info.h"
 #include "extensions/common/manifest_handlers/sandboxed_page_info.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
@@ -56,15 +54,13 @@ void RegisterCommonManifestHandlers() {
   (new IconsHandler)->Register();
   (new IncognitoHandler)->Register();
   (new KioskModeHandler)->Register();
-  (new LauncherPageHandler)->Register();
   (new MimeTypesHandlerParser)->Register();
 #if BUILDFLAG(ENABLE_NACL)
   (new NaClModulesHandler)->Register();
 #endif
   (new OAuth2ManifestHandler)->Register();
   (new OfflineEnabledHandler)->Register();
-  (new PluginsHandler)->Register();
-  (new RequirementsHandler)->Register();  // Depends on plugins.
+  (new RequirementsHandler)->Register();
   (new SandboxedPageHandler)->Register();
   (new SharedModuleHandler)->Register();
   (new SocketsManifestHandler)->Register();

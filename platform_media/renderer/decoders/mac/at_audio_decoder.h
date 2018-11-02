@@ -80,6 +80,7 @@ class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
 
   AudioDecoderConfig config_;
   std::unique_ptr<ATCodecHelper> codec_helper_;
+  AudioStreamBasicDescription output_format_;
   ScopedAudioConverterRef converter_;
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;

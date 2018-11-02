@@ -9,6 +9,7 @@ import static junit.framework.Assert.assertTrue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.core.IsCollectionContaining.hasItems;
+import static org.junit.Assert.assertFalse;
 
 import android.support.test.filters.SmallTest;
 
@@ -19,14 +20,14 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.ChromeHome;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.ui.base.DeviceFormFactor;
 
 import java.util.Arrays;
 import java.util.List;
@@ -73,8 +74,7 @@ public class FeaturesAnnotationsTest {
      */
     @Test
     @SmallTest
-    @Restriction(UiRestriction.RESTRICTION_TYPE_PHONE)
-    @ChromeHome
+    @ChromeHome.Enable
     @EnableFeatures("One")
     public void testFeaturesIncludeValuesSetFromOtherRules() throws InterruptedException {
         mActivityRule.startMainActivityOnBlankPage();
@@ -119,6 +119,14 @@ public class FeaturesAnnotationsTest {
 
         assertThat(finalEnabledList, hasItems("Four"));
         assertThat(finalEnabledList.size(), equalTo(4));
+    }
+
+    @Test
+    @SmallTest
+    @ChromeHome.Enable
+    public void testChromeHomeSkipping() {
+        assertFalse("The test should only run on phones.", DeviceFormFactor.isTablet());
+        assertTrue("ChromeHome should be enabled.", FeatureUtilities.isChromeHomeEnabled());
     }
 
     private static List<String> getArgsList(boolean enabled) {

@@ -40,7 +40,9 @@ Benchmark timings are output by telemetry to stdout and written to
 
 """
 
+import logging
 import json
+import optparse
 import os
 import posixpath
 import shutil
@@ -61,15 +63,14 @@ sys.path.append(os.path.join(
     REPOSITORY_ROOT, 'third_party', 'catapult', 'devil'))
 
 import android_rndis_forwarder
+from chrome_telemetry_build import chromium_config
 from devil.android import device_utils
 from devil.android.sdk import intent
 import lighttpd_server
 from pylib import constants
-from pylib import pexpect
 from telemetry import android
 from telemetry import benchmark
 from telemetry import benchmark_runner
-from telemetry import project_config
 from telemetry import story
 from telemetry.value import scalar
 from telemetry.web_perf import timeline_based_measurement
@@ -80,9 +81,9 @@ QUIC_SERVER = os.path.join(BUILD_DIR, 'quic_server')
 CERT_PATH = os.path.join('net', 'data', 'ssl', 'certificates')
 QUIC_CERT_DIR = os.path.join(REPOSITORY_ROOT, CERT_PATH)
 QUIC_CERT_HOST = 'test.example.com'
-QUIC_CERT_FILENAME = 'quic_%s.crt' % QUIC_CERT_HOST
+QUIC_CERT_FILENAME = 'quic-chain.pem'
 QUIC_CERT = os.path.join(QUIC_CERT_DIR, QUIC_CERT_FILENAME)
-QUIC_KEY = os.path.join(QUIC_CERT_DIR, 'quic_%s.key.pkcs8' % QUIC_CERT_HOST)
+QUIC_KEY = os.path.join(QUIC_CERT_DIR, 'quic-leaf-cert.key')
 APP_APK = os.path.join(BUILD_DIR, 'apks', 'CronetPerfTest.apk')
 APP_PACKAGE = 'org.chromium.net'
 APP_ACTIVITY = '.CronetPerfTestActivity'
@@ -205,6 +206,11 @@ class CronetPerfTestMeasurement(
       results.AddValue(scalar.ScalarValue(results.current_page, test,
           'ms', jsonResults[test]))
 
+  def DidRunStory(self, platform, results):
+    # Skip parent implementation which calls into tracing_controller which this
+    # doesn't have.
+    pass
+
 
 class CronetPerfTestBenchmark(benchmark.Benchmark):
   # Benchmark implementation spawning off Cronet perf test measurement and
@@ -221,12 +227,6 @@ class CronetPerfTestBenchmark(benchmark.Benchmark):
   def CreateStorySet(self, options):
     return CronetPerfTestStorySet(self._device)
 
-  def GetExpectations(self):
-    class StoryExpectations(story.expectations.StoryExpectations):
-      def SetExpectations(self):
-        pass # Nothing disabled.
-    return StoryExpectations()
-
 
 class QuicServer(object):
 
@@ -235,15 +235,13 @@ class QuicServer(object):
     self._quic_server_doc_root = quic_server_doc_root
 
   def StartupQuicServer(self, device):
-    # Chromium's presubmit checks aren't smart enough to understand
-    # the redirect done in build/android/pylib/pexpect.py.
-    # pylint: disable=no-member
-    self._process = pexpect.spawn(QUIC_SERVER,
-                                  ['--quic_response_cache_dir=%s' %
-                                      self._quic_server_doc_root,
-                                   '--certificate_file=%s' % QUIC_CERT,
-                                   '--key_file=%s' % QUIC_KEY,
-                                   '--port=%d' % QUIC_PORT])
+    cmd = [QUIC_SERVER,
+           '--quic_response_cache_dir=%s' % self._quic_server_doc_root,
+           '--certificate_file=%s' % QUIC_CERT,
+           '--key_file=%s' % QUIC_KEY,
+           '--port=%d' % QUIC_PORT]
+    logging.info("Starting Quic Server: %s", cmd)
+    self._process = subprocess.Popen(cmd)
     assert self._process != None
     # Wait for quic_server to start serving.
     waited_s = 0
@@ -256,7 +254,7 @@ class QuicServer(object):
     # Push certificate to device.
     cert = open(QUIC_CERT, 'r').read()
     device_cert_path = posixpath.join(
-        device.GetExternalStoragePath(), CERT_PATH)
+        device.GetExternalStoragePath(), 'chromium_tests_root', CERT_PATH)
     device.RunShellCommand(['mkdir', '-p', device_cert_path], check_return=True)
     device.WriteFile(os.path.join(device_cert_path, QUIC_CERT_FILENAME), cert)
 
@@ -314,6 +312,13 @@ def GenerateLighttpdConfig(config_file, http_server_doc_root, http_server):
 
 
 def main():
+  parser = optparse.OptionParser()
+  parser.add_option('--output-format', default='html',
+                   help='The output format of the results file.')
+  parser.add_option('--output-dir', default=None,
+                   help='The directory for the output file. Default value is '
+                        'the base directory of this script.')
+  options, _ = parser.parse_args()
   constants.SetBuildType(BUILD_TYPE)
   # Install APK
   device = GetDevice()
@@ -339,19 +344,17 @@ def main():
   # allow benchmark_runner to in turn open this file up and find the
   # CronetPerfTestBenchmark class to run the benchmark.
   top_level_dir = os.path.dirname(os.path.realpath(__file__))
-  # The perf config file is required to continue using dependencies on the
-  # Chromium checkout in Telemetry.
-  perf_config_file = os.path.join(REPOSITORY_ROOT, 'tools', 'perf', 'core',
-      'binary_dependencies.json')
-  with open(perf_config_file, "w") as config_file:
-    config_file.write('{"config_type": "BaseConfig"}')
-  runner_config = project_config.ProjectConfig(
+  expectations_file = os.path.join(top_level_dir, 'expectations.config')
+  runner_config = chromium_config.ChromiumConfig(
       top_level_dir=top_level_dir,
       benchmark_dirs=[top_level_dir],
-      client_configs=[perf_config_file],
-      default_chrome_root=REPOSITORY_ROOT)
+      expectations_file=expectations_file)
   sys.argv.insert(1, 'run')
   sys.argv.insert(2, 'run.CronetPerfTestBenchmark')
+  sys.argv.insert(3, '--browser=any')
+  sys.argv.insert(4, '--output-format=' + options.output_format)
+  if options.output_dir:
+    sys.argv.insert(5, '--output-dir=' + options.output_dir)
   benchmark_runner.main(runner_config)
   # Shutdown.
   quic_server.ShutdownQuicServer()

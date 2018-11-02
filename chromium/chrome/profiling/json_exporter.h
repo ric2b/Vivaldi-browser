@@ -32,6 +32,10 @@ struct ExportParams {
   // what the context_id in the allocation mean.
   std::map<std::string, int> context_map;
 
+  // Some addresses represent strings rather than instruction pointers.
+  // The strings are assumed to already be escaped for JSON.
+  std::unordered_map<uint64_t, std::string> mapped_strings;
+
   // The type of browser [browser, renderer, gpu] that is being heap-dumped.
   mojom::ProcessType process_type = mojom::ProcessType::OTHER;
 
@@ -39,17 +43,11 @@ struct ExportParams {
   size_t min_size_threshold = 0;
   size_t min_count_threshold = 0;
 
-  // Whether or not the outputted JSON should filter strings (anonymized trace).
-  bool is_argument_filtering_enabled = false;
+  // Whether or not the paths should be stripped from mapped files. Doing so
+  // anonymizes the trace, since the paths could potentially contain a username.
+  // However, it prevents symbolization of locally built instances of Chrome.
+  bool strip_path_from_mapped_files = false;
 };
-
-// Creates a JSON-encoded string that is similar in form to traces created by
-// TracingControllerImpl. Metadata can be null.
-void ExportAllocationEventSetToJSON(
-    int pid,
-    const ExportParams& params,
-    std::unique_ptr<base::DictionaryValue> metadata,
-    std::ostream& out);
 
 // Creates a JSON string representing a JSON dictionary that contains memory
 // maps and v2 format stack traces.

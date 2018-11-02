@@ -16,7 +16,7 @@
 #include "net/reporting/reporting_context.h"
 #include "net/reporting/reporting_delegate.h"
 #include "net/reporting/reporting_header_parser.h"
-#include "net/reporting/reporting_persister.h"
+#include "net/reporting/reporting_uploader.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -28,12 +28,17 @@ class ReportingServiceImpl : public ReportingService {
   ReportingServiceImpl(std::unique_ptr<ReportingContext> context)
       : context_(std::move(context)) {}
 
-  ~ReportingServiceImpl() override {}
+  // ReportingService implementation:
+
+  ~ReportingServiceImpl() override = default;
 
   void QueueReport(const GURL& url,
                    const std::string& group,
                    const std::string& type,
                    std::unique_ptr<const base::Value> body) override {
+    DCHECK(context_);
+    DCHECK(context_->delegate());
+
     if (!context_->delegate()->CanQueueReport(url::Origin::Create(url)))
       return;
 
@@ -46,11 +51,15 @@ class ReportingServiceImpl : public ReportingService {
     ReportingHeaderParser::ParseHeader(context_.get(), url, header_value);
   }
 
-  void RemoveBrowsingData(
-      int data_type_mask,
-      base::Callback<bool(const GURL&)> origin_filter) override {
+  void RemoveBrowsingData(int data_type_mask,
+                          const base::RepeatingCallback<bool(const GURL&)>&
+                              origin_filter) override {
     ReportingBrowsingDataRemover::RemoveBrowsingData(
         context_->cache(), data_type_mask, origin_filter);
+  }
+
+  bool RequestIsUpload(const URLRequest& request) override {
+    return context_->uploader()->RequestIsUpload(request);
   }
 
  private:
@@ -61,7 +70,7 @@ class ReportingServiceImpl : public ReportingService {
 
 }  // namespace
 
-ReportingService::~ReportingService() {}
+ReportingService::~ReportingService() = default;
 
 // static
 std::unique_ptr<ReportingService> ReportingService::Create(

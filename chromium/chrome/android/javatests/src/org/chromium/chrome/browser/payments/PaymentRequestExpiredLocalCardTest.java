@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.payments;
 
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
+
 import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
@@ -21,7 +23,6 @@ import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
 import java.util.Calendar;
@@ -32,10 +33,7 @@ import java.util.concurrent.TimeoutException;
  * A payment integration test for a user that pays with an expired local credit card.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCallback {
     @Rule
     public PaymentRequestTestRule mRule =
@@ -120,7 +118,8 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
         mRule.clickInPaymentMethodAndWait(R.id.payments_section, mRule.getReadyForInput());
         mRule.clickInPaymentMethodAndWait(R.id.payments_add_option_button, mRule.getReadyToEdit());
         // Set the expiration date to past month of the current year.
-        mRule.setSpinnerSelectionsInCardEditorAndWait(new int[] {now.get(Calendar.MONTH) - 1, 0, 0},
+        mRule.setSpinnerSelectionsInCardEditorAndWait(
+                new int[] {now.get(Calendar.MONTH) - 1, 0, FIRST_BILLING_ADDRESS},
                 mRule.getBillingAddressChangeProcessed());
         mRule.setTextInCardEditorAndWait(
                 new String[] {"4111111111111111", "Jon Doe"}, mRule.getEditorTextUpdate());
@@ -129,7 +128,8 @@ public class PaymentRequestExpiredLocalCardTest implements MainActivityStartCall
 
         // Set the expiration date to the current month of the current year.
         mRule.setSpinnerSelectionsInCardEditorAndWait(
-                new int[] {now.get(Calendar.MONTH), 0, 0}, mRule.getExpirationMonthChange());
+                new int[] {now.get(Calendar.MONTH), 0, FIRST_BILLING_ADDRESS},
+                mRule.getExpirationMonthChange());
 
         mRule.clickInCardEditorAndWait(R.id.payments_edit_done_button, mRule.getReadyToPay());
     }

@@ -6,9 +6,8 @@
 
 #include <string>
 
-#import "base/mac/scoped_nsobject.h"
 #include "components/strings/grit/components_strings.h"
-#import "ios/chrome/browser/ui/image_util.h"
+#import "ios/chrome/browser/ui/image_util/image_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -44,8 +43,7 @@ UIImageView* ImageViewWithImageName(NSString* imageName) {
   UIImage* image =
       StretchableImageFromUIImage([UIImage imageNamed:imageName], 0, 0);
 
-  base::scoped_nsobject<UIImageView> imageView(
-      [[UIImageView alloc] initWithImage:image]);
+  UIImageView* imageView = [[UIImageView alloc] initWithImage:image];
   [imageView setTranslatesAutoresizingMaskIntoConstraints:NO];
   [imageView setFrame:kDefaultAccessorySeparatorRect];
 

@@ -4,7 +4,7 @@
 
 #include "media/gpu/vaapi/vaapi_picture_factory.h"
 
-#include "media/gpu/vaapi_wrapper.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "ui/gl/gl_bindings.h"
 
 #include "media/gpu/vaapi/vaapi_drm_picture.h"
@@ -42,7 +42,10 @@ std::unique_ptr<VaapiPicture> VaapiPictureFactory::Create(
     int32_t picture_buffer_id,
     const gfx::Size& size,
     uint32_t texture_id,
-    uint32_t client_texture_id) {
+    uint32_t client_texture_id,
+    uint32_t texture_target) {
+  DCHECK_EQ(texture_target, GetGLTextureTarget());
+
   std::unique_ptr<VaapiPicture> picture;
 
   // Select DRM(egl) / TFP(glx) at runtime with --use-gl=egl / --use-gl=desktop
@@ -50,14 +53,16 @@ std::unique_ptr<VaapiPicture> VaapiPictureFactory::Create(
     case kVaapiImplementationDrm:
       picture.reset(new VaapiDrmPicture(vaapi_wrapper, make_context_current_cb,
                                         bind_image_cb, picture_buffer_id, size,
-                                        texture_id, client_texture_id));
+                                        texture_id, client_texture_id,
+                                        texture_target));
       break;
 
 #if defined(USE_X11)
     case kVaapiImplementationX11:
       picture.reset(new VaapiTFPPicture(vaapi_wrapper, make_context_current_cb,
                                         bind_image_cb, picture_buffer_id, size,
-                                        texture_id, client_texture_id));
+                                        texture_id, client_texture_id,
+                                        texture_target));
 
       break;
 #endif  // USE_X11
@@ -88,16 +93,12 @@ uint32_t VaapiPictureFactory::GetGLTextureTarget() {
 #endif
 }
 
-gfx::BufferFormat VaapiPictureFactory::GetBufferFormatForAllocateMode() {
+gfx::BufferFormat VaapiPictureFactory::GetBufferFormat() {
 #if defined(USE_OZONE)
   return gfx::BufferFormat::BGRX_8888;
 #else
   return gfx::BufferFormat::RGBX_8888;
 #endif
-}
-
-gfx::BufferFormat VaapiPictureFactory::GetBufferFormatForImportMode() {
-  return gfx::BufferFormat::YVU_420;
 }
 
 }  // namespace media

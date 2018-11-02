@@ -21,13 +21,14 @@
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/layer_tree_settings.h"
 #include "content/app/mojo/mojo_init.h"
+#include "content/renderer/loader/web_data_consumer_handle_impl.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "content/test/mock_webclipboard_impl.h"
 #include "content/test/web_gesture_curve_mock.h"
 #include "media/base/media.h"
 #include "media/media_features.h"
 #include "net/cookies/cookie_monster.h"
-#include "third_party/WebKit/public/platform/InterfaceRegistry.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebNetworkStateNotifier.h"
@@ -163,8 +164,8 @@ TestBlinkWebUnitTestSupport::TestBlinkWebUnitTestSupport()
   // Initialize mojo firstly to enable Blink initialization to use it.
   InitializeMojo();
 
-  blink::Initialize(this,
-                    blink::InterfaceRegistry::GetEmptyInterfaceRegistry());
+  service_manager::BinderRegistry empty_registry;
+  blink::Initialize(this, &empty_registry);
   blink::SetLayoutTestMode(true);
   blink::WebRuntimeFeatures::EnableDatabase(true);
   blink::WebRuntimeFeatures::EnableNotifications(true);
@@ -225,6 +226,12 @@ std::unique_ptr<blink::WebURLLoaderFactory>
 TestBlinkWebUnitTestSupport::CreateDefaultURLLoaderFactory() {
   return std::make_unique<WebURLLoaderFactoryWithMock>(
       weak_factory_.GetWeakPtr());
+}
+
+std::unique_ptr<blink::WebDataConsumerHandle>
+TestBlinkWebUnitTestSupport::CreateDataConsumerHandle(
+    mojo::ScopedDataPipeConsumerHandle handle) {
+  return std::make_unique<WebDataConsumerHandleImpl>(std::move(handle));
 }
 
 blink::WebString TestBlinkWebUnitTestSupport::UserAgent() {
@@ -331,13 +338,15 @@ class TestWebRTCCertificateGenerator
     : public blink::WebRTCCertificateGenerator {
   void GenerateCertificate(
       const blink::WebRTCKeyParams& key_params,
-      std::unique_ptr<blink::WebRTCCertificateCallback> callback) override {
+      std::unique_ptr<blink::WebRTCCertificateCallback> callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     NOTIMPLEMENTED();
   }
   void GenerateCertificateWithExpiration(
       const blink::WebRTCKeyParams& key_params,
       uint64_t expires_ms,
-      std::unique_ptr<blink::WebRTCCertificateCallback> callback) override {
+      std::unique_ptr<blink::WebRTCCertificateCallback> callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override {
     NOTIMPLEMENTED();
   }
   bool IsSupportedKeyParams(const blink::WebRTCKeyParams& key_params) override {

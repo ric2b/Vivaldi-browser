@@ -40,9 +40,6 @@ namespace content {
 
 namespace {
 
-base::LazyInstance<WebRTCInternals>::Leaky g_webrtc_internals =
-    LAZY_INSTANCE_INITIALIZER;
-
 // Makes sure that |dict| has a ListValue under path "log".
 base::ListValue* EnsureLogList(base::DictionaryValue* dict) {
   base::ListValue* log = nullptr;
@@ -53,12 +50,14 @@ base::ListValue* EnsureLogList(base::DictionaryValue* dict) {
 
 // Removes the log entry associated with a given record.
 void FreeLogList(base::Value* value) {
-  DCHECK(value->IsType(base::Value::Type::DICTIONARY));
+  DCHECK(value->is_dict());
   auto* dict = static_cast<base::DictionaryValue*>(value);
   dict->Remove("log", nullptr);
 }
 
 }  // namespace
+
+WebRTCInternals* WebRTCInternals::g_webrtc_internals = nullptr;
 
 WebRTCInternals::PendingUpdate::PendingUpdate(
     const char* command,
@@ -94,6 +93,8 @@ WebRTCInternals::WebRTCInternals(int aggregate_updates_ms,
       should_block_power_saving_(should_block_power_saving),
       aggregate_updates_ms_(aggregate_updates_ms),
       weak_factory_(this) {
+  DCHECK(!g_webrtc_internals);
+
 // TODO(grunell): Shouldn't all the webrtc_internals* files be excluded from the
 // build if WebRTC is disabled?
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -115,13 +116,23 @@ WebRTCInternals::WebRTCInternals(int aggregate_updates_ms,
         event_log_recordings_file_path_.Append(FILE_PATH_LITERAL("event_log"));
   }
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
+
+  g_webrtc_internals = this;
 }
 
 WebRTCInternals::~WebRTCInternals() {
+  DCHECK(g_webrtc_internals);
+  g_webrtc_internals = nullptr;
+}
+
+WebRTCInternals* WebRTCInternals::CreateSingletonInstance() {
+  DCHECK(!g_webrtc_internals);
+  g_webrtc_internals = new WebRTCInternals;
+  return g_webrtc_internals;
 }
 
 WebRTCInternals* WebRTCInternals::GetInstance() {
-  return g_webrtc_internals.Pointer();
+  return g_webrtc_internals;
 }
 
 void WebRTCInternals::OnAddPeerConnection(int render_process_id,
@@ -268,7 +279,7 @@ void WebRTCInternals::RemoveObserver(WebRTCInternalsUIObserver* observer) {
   // Disables event log and audio debug recordings if enabled and the last
   // webrtc-internals page is going away.
   DisableAudioDebugRecordings();
-  DisableEventLogRecordings();
+  DisableLocalEventLogRecordings();
 
   // TODO(tommi): Consider removing all the peer_connection_data_.
   for (auto& dictionary : peer_connection_data_)
@@ -343,12 +354,16 @@ const base::FilePath& WebRTCInternals::GetAudioDebugRecordingsFilePath() const {
   return audio_debug_recordings_file_path_;
 }
 
-void WebRTCInternals::EnableEventLogRecordings(
+void WebRTCInternals::EnableLocalEventLogRecordings(
     content::WebContents* web_contents) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 #if BUILDFLAG(ENABLE_WEBRTC)
 #if defined(OS_ANDROID)
-  EnableEventLogRecordingsOnAllRenderProcessHosts();
+  auto* webrtc_event_log_manager = WebRtcEventLogManager::GetInstance();
+  if (webrtc_event_log_manager) {
+    webrtc_event_log_manager->EnableLocalLogging(
+        event_log_recordings_file_path_);
+  }
 #else
   DCHECK(web_contents);
   DCHECK(!select_file_dialog_);
@@ -362,26 +377,21 @@ void WebRTCInternals::EnableEventLogRecordings(
 #endif
 }
 
-void WebRTCInternals::DisableEventLogRecordings() {
+void WebRTCInternals::DisableLocalEventLogRecordings() {
 #if BUILDFLAG(ENABLE_WEBRTC)
   event_log_recordings_ = false;
   // Tear down the dialog since the user has unchecked the event log checkbox.
   select_file_dialog_ = nullptr;
-  for (RenderProcessHost::iterator i(
-           content::RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance())
-    i.GetCurrentValue()->StopWebRTCEventLog();
+  auto* webrtc_event_log_manager = WebRtcEventLogManager::GetInstance();
+  if (webrtc_event_log_manager) {
+    webrtc_event_log_manager->DisableLocalLogging();
+  }
 #endif
 }
 
 bool WebRTCInternals::IsEventLogRecordingsEnabled() const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return event_log_recordings_;
-}
-
-const base::FilePath& WebRTCInternals::GetEventLogFilePath() const {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  return event_log_recordings_file_path_;
 }
 
 void WebRTCInternals::SendUpdate(const char* command,
@@ -416,16 +426,21 @@ void WebRTCInternals::FileSelected(const base::FilePath& path,
 #if BUILDFLAG(ENABLE_WEBRTC)
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   switch (selection_type_) {
-    case SelectionType::kRtcEventLogs:
+    case SelectionType::kRtcEventLogs: {
       event_log_recordings_file_path_ = path;
-      EnableEventLogRecordingsOnAllRenderProcessHosts();
+      event_log_recordings_ = true;
+      auto* webrtc_event_log_manager = WebRtcEventLogManager::GetInstance();
+      if (webrtc_event_log_manager) {
+        webrtc_event_log_manager->EnableLocalLogging(path);
+      }
       break;
-    case SelectionType::kAudioDebugRecordings:
+    }
+    case SelectionType::kAudioDebugRecordings: {
       audio_debug_recordings_file_path_ = path;
       EnableAudioDebugRecordingsOnAllRenderProcessHosts();
       break;
-    default:
-      NOTREACHED();
+    }
+    default: { NOTREACHED(); }
   }
 #endif
 }
@@ -521,16 +536,6 @@ void WebRTCInternals::EnableAudioDebugRecordingsOnAllRenderProcessHosts() {
       FROM_HERE, base::BindOnce(&media::AudioManager::EnableDebugRecording,
                                 base::Unretained(audio_manager),
                                 audio_debug_recordings_file_path_));
-}
-
-void WebRTCInternals::EnableEventLogRecordingsOnAllRenderProcessHosts() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  event_log_recordings_ = true;
-  for (RenderProcessHost::iterator i(
-           content::RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance())
-    i.GetCurrentValue()->StartWebRTCEventLog(event_log_recordings_file_path_);
 }
 #endif
 

@@ -14,6 +14,7 @@
 
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "ui/gfx/gfx_export.h"
 #include "ui/gfx/text_constants.h"
 
@@ -67,10 +68,12 @@ class GFX_EXPORT StringSlicer {
 };
 
 // Elides |text| to fit the |available_pixel_width| with the specified behavior.
-GFX_EXPORT base::string16 ElideText(const base::string16& text,
-                                    const gfx::FontList& font_list,
-                                    float available_pixel_width,
-                                    ElideBehavior elide_behavior);
+GFX_EXPORT base::string16 ElideText(
+    const base::string16& text,
+    const gfx::FontList& font_list,
+    float available_pixel_width,
+    ElideBehavior elide_behavior,
+    Typesetter typesetter = Typesetter::DEFAULT);
 
 // Elide a filename to fit a given pixel width, with an emphasis on not hiding
 // the extension unless we have to. If filename contains a path, the path will
@@ -78,9 +81,11 @@ GFX_EXPORT base::string16 ElideText(const base::string16& text,
 // filename is forced to have LTR directionality, which means that in RTL UI
 // the elided filename is wrapped with LRE (Left-To-Right Embedding) mark and
 // PDF (Pop Directional Formatting) mark.
-GFX_EXPORT base::string16 ElideFilename(const base::FilePath& filename,
-                                        const gfx::FontList& font_list,
-                                        float available_pixel_width);
+GFX_EXPORT base::string16 ElideFilename(
+    const base::FilePath& filename,
+    const gfx::FontList& font_list,
+    float available_pixel_width,
+    Typesetter typesetter = Typesetter::DEFAULT);
 
 // Functions to elide strings when the font information is unknown. As opposed
 // to the above functions, ElideString() and ElideRectangleString() operate in
@@ -118,6 +123,7 @@ GFX_EXPORT bool ElideRectangleString(const base::string16& input,
 enum ReformattingResultFlags {
   INSUFFICIENT_SPACE_HORIZONTAL = 1 << 0,
   INSUFFICIENT_SPACE_VERTICAL = 1 << 1,
+  INSUFFICIENT_SPACE_FOR_FIRST_WORD = 1 << 2,
 };
 
 // Reformats |text| into output vector |lines| so that the resulting text fits
@@ -134,6 +140,17 @@ GFX_EXPORT int ElideRectangleText(const base::string16& text,
                                   int available_pixel_height,
                                   WordWrapBehavior wrap_behavior,
                                   std::vector<base::string16>* lines);
+
+#if defined(OS_MACOSX)
+// As above, but uses the native platform typesetter (CoreText on Mac).
+GFX_EXPORT int ElideRectangleTextForNativeUi(
+    const base::string16& input,
+    const FontList& font_list,
+    float available_pixel_width,
+    int available_pixel_height,
+    WordWrapBehavior wrap_behavior,
+    std::vector<base::string16>* lines);
+#endif  // OS_MACOSX
 
 // Truncates |string| to |length| characters. This breaks the string according
 // to the specified |break_type|, which must be either WORD_BREAK or

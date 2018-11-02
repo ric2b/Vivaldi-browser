@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
 <translation id="1326317727527857210">Щоб мати доступ до вкладок з інших пристроїв, увійдіть в обліковий запис Chrome.</translation>
-<translation id="1685087038067318291">Переглядайте веб-сторінки, надіслані об’єктами поблизу. Коли Bluetooth увімкнено, Chrome збирає веб-сторінки, пов’язані з об’єктами поблизу вас, і анонімно надсилає їх у Google, щоб показувати вам найцікавіші. <ph name="BEGIN_LINK" />Докладніше<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Примітка про конфіденційність Chrome</translation>
+<translation id="1863312987075920112">Користуючись цим додатком, ви приймаєте <ph name="BEGIN_LINK_TOS" />Умови використання<ph name="END_LINK_TOS" /> та <ph name="BEGIN_LINK_PRIVACY" />Примітку про конфіденційність<ph name="END_LINK_PRIVACY" /> Chrome.</translation>
 <translation id="2147651015520127414">Chrome підтвердив, що сертифікат цьому веб-сайту надала компанія <ph name="ISSUER" />.</translation>
 <translation id="2334084861041072223">Авторське право <ph name="YEAR" /> Google Inc. Усі права захищено.</translation>
 <translation id="2342981853652716282">Увійдіть в обліковий запис у Chrome, щоб мати доступ до своїх закладок, паролів та інших даних на всіх пристроях.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Деякі додатки спричиняють аварійне завершення роботи Chrome. Видаліть такі додатки:</translation>
 <translation id="4615174829807303908">Ви виходите з облікового запису, зареєстрованого в домені <ph name="SIGNOUT_MANAGED_DOMAIN" />. Дані Chrome буде видалено з цього пристрою, але вони залишаться у вашому обліковому записі Google.</translation>
 <translation id="5389212809648216794">Зараз Google Chrome не може використовувати камеру, оскільки її використовує інший додаток</translation>
-<translation id="5566557026214762153">Користуючись цією програмою, ви приймаєте <ph name="BEGIN_LINK" />Умови використання<ph name="END_LINK" /> Chrome.</translation>
 <translation id="5639704535586432836">Відкрийте меню "Параметри" &gt; "Приватність" &gt; "Камера" &gt; "Google Chrome" і ввімкніть камеру.</translation>
 <translation id="5642200033778930880">Google Chrome не може використовувати камеру в режимі розділеного екрана</translation>
 <translation id="5703130498371792817">Користуєтеся Chrome? <ph name="BEGIN_LINK" />Оцініть цей додаток<ph name="END_LINK" /></translation>

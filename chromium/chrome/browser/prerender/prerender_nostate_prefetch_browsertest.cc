@@ -14,7 +14,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/test/bind_test_util.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/threading/platform_thread.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/prerender/prerender_handle.h"
@@ -29,27 +31,81 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/appcache_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/url_loader_interceptor.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
+#include "net/cookies/cookie_store.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "net/url_request/url_request_context.h"
+#include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 using prerender::test_utils::DestructionWaiter;
 using prerender::test_utils::RequestCounter;
 using prerender::test_utils::TestPrerender;
 
+namespace {
+
+// Helper method that verifies cookies for PrefetchCookies* tests. When the
+// cookies expected from loading test/data/prerender/cookie.{js,html}. |loop| is
+// notified when the cookies are found; if the cookies are not found this will
+// wait forever.
+void CheckCookiesForPrefetchCookieTest(base::RunLoop* loop,
+                                       GURL url,
+                                       net::CookieStore* cookie_store,
+                                       const net::CookieList& cookies) {
+  bool found_chocolate = false;
+  bool found_oatmeal = false;
+  for (const auto& c : cookies) {
+    if (c.Name() == "chocolate-chip") {
+      EXPECT_EQ("the-best", c.Value());
+      found_chocolate = true;
+    }
+    if (c.Name() == "oatmeal") {
+      EXPECT_EQ("sublime", c.Value());
+      found_oatmeal = true;
+    }
+  }
+  if (found_oatmeal && found_chocolate) {
+    loop->Quit();
+  } else {
+    content::BrowserThread::PostDelayedTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&net::CookieStore::GetAllCookiesForURLAsync,
+                       base::Unretained(cookie_store), url,
+                       base::BindOnce(CheckCookiesForPrefetchCookieTest, loop,
+                                      url, cookie_store)),
+        base::TimeDelta::FromMilliseconds(250));
+  }
+}
+
+// Launches the CheckCookiesForPrefetchCookieTest from the IO thread.
+void LaunchPrefetchCookieTestFromIO(content::StoragePartition* storage,
+                                    base::RunLoop* loop,
+                                    GURL url) {
+  net::CookieStore* cookie_store =
+      storage->GetURLRequestContext()->GetURLRequestContext()->cookie_store();
+  cookie_store->GetAllCookiesForURLAsync(
+      url, base::BindOnce(CheckCookiesForPrefetchCookieTest, loop, url,
+                          cookie_store));
+}
+
+}  // namespace
+
 namespace prerender {
 
 const char k302RedirectPage[] = "/prerender/302_redirect.html";
 const char kPrefetchAppcache[] = "/prerender/prefetch_appcache.html";
 const char kPrefetchAppcacheManifest[] = "/prerender/appcache.manifest";
+const char kPrefetchCookiePage[] = "/prerender/cookie.html";
 const char kPrefetchImagePage[] = "/prerender/prefetch_image.html";
 const char kPrefetchJpeg[] = "/prerender/image.jpeg";
 const char kPrefetchLoaderPath[] = "/prerender/prefetch_loader.html";
@@ -62,9 +118,9 @@ const char kPrefetchResponseHeaderCSP[] =
     "/prerender/prefetch_response_csp.html";
 const char kPrefetchScript[] = "/prerender/prefetch.js";
 const char kPrefetchScript2[] = "/prerender/prefetch2.js";
-const char kServiceWorkerLoader[] = "/prerender/service_worker.html";
 const char kPrefetchSubresourceRedirectPage[] =
     "/prerender/prefetch_subresource_redirect.html";
+const char kServiceWorkerLoader[] = "/prerender/service_worker.html";
 
 class NoStatePrefetchBrowserTest
     : public test_utils::PrerenderInProcessBrowserTest,
@@ -219,31 +275,80 @@ IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, PrefetchSimple) {
   WaitForRequestCount(src_server()->GetURL(kPrefetchScript2), 0);
 }
 
+// Check cookie loading for prefetched pages.
+IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, PrefetchCookie) {
+  GURL url = src_server()->GetURL(kPrefetchCookiePage);
+  std::unique_ptr<TestPrerender> test_prerender =
+      PrefetchFromURL(url, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+
+  content::StoragePartition* storage_partition =
+      content::BrowserContext::GetStoragePartitionForSite(
+          current_browser()->profile(), url, false);
+  base::RunLoop loop;
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::BindOnce(LaunchPrefetchCookieTestFromIO, storage_partition, &loop,
+                     url));
+  loop.Run();
+  // Will timeout if cookies aren't found.
+}
+
+// Check cookie loading for a cross-domain prefetched pages.
+IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, PrefetchCookieCrossDomain) {
+  static const std::string secondary_domain = "www.foo.com";
+  GURL cross_domain_url(base::StringPrintf(
+      "http://%s:%d%s", secondary_domain.c_str(),
+      embedded_test_server()->host_port_pair().port(), kPrefetchCookiePage));
+
+  std::unique_ptr<TestPrerender> test_prerender =
+      PrefetchFromURL(cross_domain_url, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
+
+  content::StoragePartition* storage_partition =
+      content::BrowserContext::GetStoragePartitionForSite(
+          current_browser()->profile(), cross_domain_url, false);
+  base::RunLoop loop;
+  content::BrowserThread::PostTask(
+      content::BrowserThread::IO, FROM_HERE,
+      base::BindOnce(LaunchPrefetchCookieTestFromIO, storage_partition, &loop,
+                     cross_domain_url));
+  loop.Run();
+  // Will timeout if cookies aren't found.
+}
+
 // Check that the LOAD_PREFETCH flag is set.
 IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, PrefetchLoadFlag) {
-  // TODO(jam): use URLLoaderFactory for subresource.
-  // This will need a separate code path for network service:
-  //   -add way for the
-  //        storage_partition->GetNetworkContext()->CreateURLLoaderFactory
-  //        to return test defined factoory
-  //   -also add a URLLoader unittest to verify that if ResourceRequest has that
-  //        flag it is passed to the net::URLRequest
-  RequestCounter main_counter;
-  RequestCounter script_counter;
-  auto verify_prefetch_only = base::Bind([](net::URLRequest* request) {
-    EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
-  });
+  GURL prefetch_page = src_server()->GetURL(kPrefetchPage);
+  GURL prefetch_script = src_server()->GetURL(kPrefetchScript);
 
-  prerender::test_utils::InterceptRequestAndCount(
-      src_server()->GetURL(kPrefetchPage), &main_counter, verify_prefetch_only);
-  prerender::test_utils::InterceptRequestAndCount(
-      src_server()->GetURL(kPrefetchScript), &script_counter,
-      verify_prefetch_only);
+  bool use_interceptor_for_frame_requests =
+      base::FeatureList::IsEnabled(features::kNetworkService);
+  if (!use_interceptor_for_frame_requests) {
+    // Until http://crbug.com/747130 is fixed, navigation requests won't go
+    // through URLLoader.
+    prerender::test_utils::InterceptRequest(
+        prefetch_page,
+        base::Bind([](net::URLRequest* request) {
+          EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
+        }));
+  }
+
+  content::URLLoaderInterceptor interceptor(
+      base::Bind(
+          [](const GURL& prefetch_page, const GURL& prefetch_script,
+             content::URLLoaderInterceptor::RequestParams* params) {
+            if (params->url_request.url == prefetch_page ||
+                params->url_request.url == prefetch_script) {
+              EXPECT_TRUE(params->url_request.load_flags & net::LOAD_PREFETCH);
+            }
+            return false;
+          },
+          prefetch_page, prefetch_script),
+      use_interceptor_for_frame_requests, true);
 
   std::unique_ptr<TestPrerender> test_prerender =
       PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
-  main_counter.WaitForCount(1);
-  script_counter.WaitForCount(1);
+  WaitForRequestCount(prefetch_page, 1);
+  WaitForRequestCount(prefetch_script, 1);
 
   // Verify that the page load did not happen.
   test_prerender->WaitForLoads(0);
@@ -379,23 +484,37 @@ IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, Prefetch302Redirect) {
 // Checks that the load flags are set correctly for all resources in a 301
 // redirect chain.
 IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, Prefetch301LoadFlags) {
-  // TODO(jam): override frame URLLoaderFactory.
   std::string redirect_path =
       "/server-redirect/?" + net::EscapeQueryParamValue(kPrefetchPage, false);
   GURL redirect_url = src_server()->GetURL(redirect_path);
   GURL page_url = src_server()->GetURL(kPrefetchPage);
-  RequestCounter redirect_counter;
   auto verify_prefetch_only = base::Bind([](net::URLRequest* request) {
     EXPECT_TRUE(request->load_flags() & net::LOAD_PREFETCH);
   });
-  prerender::test_utils::InterceptRequestAndCount(
-      redirect_url, &redirect_counter, verify_prefetch_only);
-  RequestCounter page_counter;
-  prerender::test_utils::InterceptRequestAndCount(page_url, &page_counter,
-                                                  verify_prefetch_only);
+
+  bool use_interceptor = false;
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
+    use_interceptor = true;
+  } else {
+    // Until http://crbug.com/747130 is fixed, navigation requests won't go
+    // through URLLoader.
+    prerender::test_utils::InterceptRequest(page_url, verify_prefetch_only);
+  }
+
+  content::URLLoaderInterceptor interceptor(
+      base::Bind(
+          [](const GURL& page_url,
+             content::URLLoaderInterceptor::RequestParams* params) {
+            if (params->url_request.url == page_url)
+              EXPECT_TRUE(params->url_request.load_flags & net::LOAD_PREFETCH);
+            return false;
+          },
+          redirect_url),
+      use_interceptor, false);
+
   PrefetchFromFile(redirect_path, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
-  redirect_counter.WaitForCount(1);
-  page_counter.WaitForCount(1);
+  WaitForRequestCount(redirect_url, 1);
+  WaitForRequestCount(page_url, 1);
 }
 
 // Checks that a subresource 301 redirect is followed.
@@ -590,22 +709,25 @@ IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, HistoryUntouchedByPrefetch) {
 
 // Checks that prefetch requests have net::IDLE priority.
 IN_PROC_BROWSER_TEST_P(NoStatePrefetchBrowserTest, IssuesIdlePriorityRequests) {
-  // TODO(jam): use URLLoaderFactory for subresource.
   GURL script_url = src_server()->GetURL(kPrefetchScript);
-  RequestCounter script_counter;
-  prerender::test_utils::InterceptRequestAndCount(
-      script_url, &script_counter, base::Bind([](net::URLRequest* request) {
+  content::URLLoaderInterceptor interceptor(
+      base::BindLambdaForTesting(
+          [=](content::URLLoaderInterceptor::RequestParams* params) {
 #if defined(OS_ANDROID)
-        // On Android requests from prerenders do not get downgraded priority.
-        // See: https://crbug.com/652746.
-        constexpr net::RequestPriority kExpectedPriority = net::HIGHEST;
+            // On Android requests from prerenders do not get downgraded
+            // priority. See: https://crbug.com/652746.
+            constexpr net::RequestPriority kExpectedPriority = net::HIGHEST;
 #else
-        constexpr net::RequestPriority kExpectedPriority = net::IDLE;
+            constexpr net::RequestPriority kExpectedPriority = net::IDLE;
 #endif
-        EXPECT_EQ(kExpectedPriority, request->priority());
-      }));
+            if (params->url_request.url == script_url)
+              EXPECT_EQ(kExpectedPriority, params->url_request.priority);
+            return false;
+          }),
+      false, true);
+
   PrefetchFromFile(kPrefetchPage, FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
-  script_counter.WaitForCount(1);
+  WaitForRequestCount(script_url, 1);
 }
 
 // Checks that a registered ServiceWorker (SW) that is not currently running

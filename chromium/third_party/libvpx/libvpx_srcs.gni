@@ -332,6 +332,7 @@ libvpx_srcs_x86 = [
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/inv_txfm_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/inv_txfm_ssse3.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/mem_sse2.h",
+  "//third_party/libvpx/source/libvpx/vpx_dsp/x86/quantize_x86.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/transpose_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/txfm_common_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/vpx_asm_stubs.c",
@@ -449,6 +450,7 @@ libvpx_srcs_x86_ssse3 = [
 ]
 libvpx_srcs_x86_sse4_1 = [
   "//third_party/libvpx/source/libvpx/vp8/encoder/x86/quantize_sse4.c",
+  "//third_party/libvpx/source/libvpx/vp9/common/x86/vp9_highbd_iht4x4_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct16x16_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct32x32_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct4x4_add_sse4.c",
@@ -799,6 +801,7 @@ libvpx_srcs_x86_64 = [
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/inv_txfm_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/inv_txfm_ssse3.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/mem_sse2.h",
+  "//third_party/libvpx/source/libvpx/vpx_dsp/x86/quantize_x86.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/transpose_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/txfm_common_sse2.h",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/vpx_asm_stubs.c",
@@ -921,6 +924,7 @@ libvpx_srcs_x86_64_ssse3 = [
 ]
 libvpx_srcs_x86_64_sse4_1 = [
   "//third_party/libvpx/source/libvpx/vp8/encoder/x86/quantize_sse4.c",
+  "//third_party/libvpx/source/libvpx/vp9/common/x86/vp9_highbd_iht4x4_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct16x16_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct32x32_add_sse4.c",
   "//third_party/libvpx/source/libvpx/vpx_dsp/x86/highbd_idct4x4_add_sse4.c",

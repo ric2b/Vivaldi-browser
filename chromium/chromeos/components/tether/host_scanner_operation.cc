@@ -4,7 +4,8 @@
 
 #include "chromeos/components/tether/host_scanner_operation.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
 #include "chromeos/components/tether/host_scan_device_prioritizer.h"
@@ -31,17 +32,14 @@ std::vector<cryptauth::RemoteDevice> PrioritizeDevices(
 
 bool IsTetheringAvailableWithValidDeviceStatus(
     const TetherAvailabilityResponse* response) {
-  if (!response) {
+  if (!response)
     return false;
-  }
 
-  if (!response->has_device_status()) {
+  if (!response->has_device_status())
     return false;
-  }
 
-  if (!response->has_response_code()) {
+  if (!response->has_response_code())
     return false;
-  }
 
   const TetherAvailabilityResponse_ResponseCode response_code =
       response->response_code();
@@ -55,6 +53,22 @@ bool IsTetheringAvailableWithValidDeviceStatus(
   }
 
   return false;
+}
+
+bool AreGmsCoreNotificationsDisabled(
+    const TetherAvailabilityResponse* response) {
+  if (!response)
+    return false;
+
+  if (!response->has_response_code())
+    return false;
+
+  return response->response_code() ==
+             TetherAvailabilityResponse_ResponseCode::
+                 TetherAvailabilityResponse_ResponseCode_NOTIFICATIONS_DISABLED_LEGACY ||
+         response->response_code() ==
+             TetherAvailabilityResponse_ResponseCode::
+                 TetherAvailabilityResponse_ResponseCode_NOTIFICATIONS_DISABLED_WITH_NOTIFICATION_CHANNEL;
 }
 
 }  // namespace
@@ -89,7 +103,7 @@ HostScannerOperation::Factory::BuildInstance(
     BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
     TetherHostResponseRecorder* tether_host_response_recorder) {
-  return base::MakeUnique<HostScannerOperation>(
+  return std::make_unique<HostScannerOperation>(
       devices_to_connect, connection_manager, host_scan_device_prioritizer,
       tether_host_response_recorder);
 }
@@ -121,7 +135,7 @@ HostScannerOperation::HostScannerOperation(
           PrioritizeDevices(devices_to_connect, host_scan_device_prioritizer),
           connection_manager),
       tether_host_response_recorder_(tether_host_response_recorder),
-      clock_(base::MakeUnique<base::DefaultClock>()) {}
+      clock_(std::make_unique<base::DefaultClock>()) {}
 
 HostScannerOperation::~HostScannerOperation() = default;
 
@@ -136,8 +150,9 @@ void HostScannerOperation::RemoveObserver(Observer* observer) {
 void HostScannerOperation::NotifyObserversOfScannedDeviceList(
     bool is_final_scan_result) {
   for (auto& observer : observer_list_) {
-    observer.OnTetherAvailabilityResponse(scanned_device_list_so_far_,
-                                          is_final_scan_result);
+    observer.OnTetherAvailabilityResponse(
+        scanned_device_list_so_far_, gms_core_notifications_disabled_devices_,
+        is_final_scan_result);
   }
 }
 
@@ -149,7 +164,7 @@ void HostScannerOperation::OnDeviceAuthenticated(
   device_id_to_tether_availability_request_start_time_map_[remote_device
                                                                .GetDeviceId()] =
       clock_->Now();
-  SendMessageToDevice(remote_device, base::MakeUnique<MessageWrapper>(
+  SendMessageToDevice(remote_device, std::make_unique<MessageWrapper>(
                                          TetherAvailabilityRequest()));
 }
 
@@ -165,7 +180,14 @@ void HostScannerOperation::OnMessageReceived(
   TetherAvailabilityResponse* response =
       static_cast<TetherAvailabilityResponse*>(
           message_wrapper->GetProto().get());
-  if (!IsTetheringAvailableWithValidDeviceStatus(response)) {
+  if (AreGmsCoreNotificationsDisabled(response)) {
+    PA_LOG(INFO) << "Received TetherAvailabilityResponse from device with ID "
+                 << remote_device.GetTruncatedDeviceIdForLogs() << " which "
+                 << "indicates that Google Play Services notifications are "
+                 << "disabled. Response code: " << response->response_code();
+    gms_core_notifications_disabled_devices_.push_back(remote_device);
+    NotifyObserversOfScannedDeviceList(false /* is_final_scan_result */);
+  } else if (!IsTetheringAvailableWithValidDeviceStatus(response)) {
     // If the received message is invalid or if it states that tethering is
     // unavailable, ignore it.
     PA_LOG(INFO) << "Received TetherAvailabilityResponse from device with ID "

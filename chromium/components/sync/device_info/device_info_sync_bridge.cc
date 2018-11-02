@@ -174,7 +174,9 @@ base::Optional<ModelError> DeviceInfoSyncBridge::ApplySyncChanges(
       local_device_info_provider_->GetLocalDeviceInfo();
   // If our dependency was yanked out from beneath us, we cannot correctly
   // handle this request, and all our data will be deleted soon.
-  if (local_info == nullptr) {
+  // However, we can still handle the request if it only has metadata changes.
+  // This ensures we properly clears metadata on shutdown.
+  if (local_info == nullptr && !entity_changes.empty()) {
     return {};
   }
 

@@ -91,6 +91,7 @@ class ManagePasswordsUIController
   // without user interaction.
   virtual void UpdateIconAndBubbleState(ManagePasswordsIconView* icon);
 
+  // True iff the bubble is to be opened automatically.
   bool IsAutomaticallyOpeningBubble() const {
     return bubble_status_ == SHOULD_POP_UP;
   }
@@ -128,6 +129,8 @@ class ManagePasswordsUIController
   void NavigateToPasswordManagerSettingsPage() override;
   void NavigateToChromeSignIn() override;
   void OnDialogHidden() override;
+  bool AuthenticateUser() override;
+  bool ArePasswordsRevealedWhenBubbleIsOpened() const override;
 
  protected:
   explicit ManagePasswordsUIController(
@@ -156,6 +159,12 @@ class ManagePasswordsUIController
   // Check if |web_contents()| is attached to some Browser. Mocked in tests.
   virtual bool HasBrowserWindow() const;
 
+  // True if the bubble is to be opened automatically or after re-auth.
+  bool ShouldBubblePopUp() const {
+    return IsAutomaticallyOpeningBubble() ||
+           bubble_status_ == SHOULD_POP_UP_AFTER_REAUTH;
+  }
+
   // For Vivaldi, show the bubble without anchoring it to any icon, since we
   // don't have the location bar or the icon.
   virtual void VivaldiShowBubble();
@@ -178,6 +187,8 @@ class ManagePasswordsUIController
     // The bubble is to be popped up in the next call to
     // UpdateBubbleAndIconVisibility().
     SHOULD_POP_UP,
+    // The bubble is to be reopened after re-authentication.
+    SHOULD_POP_UP_AFTER_REAUTH,
     SHOWN,
     // Same as SHOWN but the icon is to be updated when the bubble is closed.
     SHOWN_PENDING_ICON_UPDATE,
@@ -196,6 +207,17 @@ class ManagePasswordsUIController
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
 
+  // Requests authentication and reopens the bubble if the controller still
+  // exists and is in a pending state.
+  void RequestAuthenticationAndReopenBubble();
+
+  // Re-opens the bubble. The password in the reopened bubble will be revealed
+  // if the authentication was successful.
+  void ReopenBubbleAfterAuth(bool auth_is_successful);
+
+  // Shows an authentication dialog and returns true if auth is successful.
+  virtual bool ShowAuthenticationDialog();
+
   // Timeout in seconds for the manual fallback for saving.
   static int save_fallback_timeout_in_seconds_;
 
@@ -212,6 +234,9 @@ class ManagePasswordsUIController
   // popup will be shown or the user saved/updated the password with the
   // fallback).
   base::OneShotTimer save_fallback_timer_;
+
+  // True iff bubble should pop up with revealed password value.
+  bool are_passwords_revealed_when_next_bubble_is_opened_;
 
   // The bubbles of different types can pop up unpredictably superseding each
   // other. However, closing the bubble may affect the state of

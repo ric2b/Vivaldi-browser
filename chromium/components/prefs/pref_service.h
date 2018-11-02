@@ -24,6 +24,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "components/prefs/persistent_pref_store.h"
 #include "components/prefs/prefs_export.h"
@@ -163,14 +164,13 @@ class COMPONENTS_PREFS_EXPORT PrefService {
 
   // You may wish to use PrefServiceFactory or one of its subclasses
   // for simplified construction.
-  PrefService(
-      PrefNotifierImpl* pref_notifier,
-      PrefValueStore* pref_value_store,
-      PersistentPrefStore* user_prefs,
-      PrefRegistry* pref_registry,
-      base::Callback<void(PersistentPrefStore::PrefReadError)>
-          read_error_callback,
-      bool async);
+  PrefService(std::unique_ptr<PrefNotifierImpl> pref_notifier,
+              std::unique_ptr<PrefValueStore> pref_value_store,
+              PersistentPrefStore* user_prefs,
+              PrefRegistry* pref_registry,
+              base::Callback<void(PersistentPrefStore::PrefReadError)>
+                  read_error_callback,
+              bool async);
   virtual ~PrefService();
 
   // Lands pending writes to disk. This should only be used if we need to save
@@ -244,6 +244,13 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   void SetUint64(const std::string& path, uint64_t value);
   uint64_t GetUint64(const std::string& path) const;
 
+  // Time helper methods that actually store the given value as a string, which
+  // represents the number of microseconds elapsed since the Windows epoch. Note
+  // that if obtaining the named value via GetDictionary or GetList, the Value
+  // type will be Type::STRING.
+  void SetTime(const std::string& path, base::Time value);
+  base::Time GetTime(const std::string& path) const;
+
   // Returns the value of the given preference, from the user pref store. If
   // the preference is not set in the user pref store, returns NULL.
   const base::Value* GetUserPrefValue(const std::string& path) const;
@@ -297,7 +304,7 @@ class COMPONENTS_PREFS_EXPORT PrefService {
   // We run the callback once, when initialization completes. The bool
   // parameter will be set to true for successful initialization,
   // false for unsuccessful.
-  void AddPrefInitObserver(base::Callback<void(bool)> callback);
+  void AddPrefInitObserver(base::OnceCallback<void(bool)> callback);
 
   // Returns the PrefRegistry object for this service. You should not
   // use this; the intent is for no registrations to take place after

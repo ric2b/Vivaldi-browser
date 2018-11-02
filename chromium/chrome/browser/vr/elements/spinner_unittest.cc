@@ -6,7 +6,6 @@
 
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/test/gtest_util.h"
 #include "cc/test/test_skcanvas.h"
 #include "chrome/browser/vr/elements/ui_texture.h"
@@ -49,12 +48,12 @@ void CheckArc(UiTexture* texture, float start_angle, float sweep_angle) {
 
 TEST(Spinner, Animation) {
   UiScene scene;
-  auto spinner_element = base::MakeUnique<TestSpinner>(kMaximumWidth);
+  auto spinner_element = std::make_unique<TestSpinner>(kMaximumWidth);
   spinner_element->SetInitializedForTesting();
   UiTexture* texture = spinner_element->GetTexture();
   scene.AddUiElement(kRoot, std::move(spinner_element));
   base::TimeTicks start_time = MsToTicks(1);
-  scene.OnBeginFrame(start_time, kForwardVector);
+  scene.OnBeginFrame(start_time, kStartHeadPose);
 
   struct TestCase {
     float start_angle;
@@ -73,7 +72,7 @@ TEST(Spinner, Animation) {
   };
 
   for (const auto& test_case : test_cases) {
-    scene.OnBeginFrame(MsToTicks(1) + test_case.delta, kForwardVector);
+    scene.OnBeginFrame(MsToTicks(1) + test_case.delta, kStartHeadPose);
     CheckArc(texture, test_case.start_angle, test_case.sweep_angle);
   }
 }

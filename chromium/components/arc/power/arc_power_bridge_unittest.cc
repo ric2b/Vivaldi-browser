@@ -4,6 +4,8 @@
 
 #include "components/arc/power/arc_power_bridge.h"
 
+#include <utility>
+
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -11,6 +13,7 @@
 #include "chromeos/dbus/power_manager/suspend.pb.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/common/power.mojom.h"
+#include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_power_instance.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/device/public/cpp/test/test_wake_lock_provider.h"
@@ -37,7 +40,7 @@ class ArcPowerBridgeTest : public testing::Test {
     wake_lock_provider_ = wake_lock_provider_ptr.get();
 
     connector_factory_ =
-        std::make_unique<service_manager::TestConnectorFactory>(
+        service_manager::TestConnectorFactory::CreateForUniqueService(
             std::move(wake_lock_provider_ptr));
     connector_ = connector_factory_->CreateConnector();
 
@@ -59,14 +62,16 @@ class ArcPowerBridgeTest : public testing::Test {
   // ArcPowerBridge::OnInstanceReady() being called.
   void CreatePowerInstance() {
     power_instance_ = std::make_unique<FakePowerInstance>();
-    bridge_service_->power()->SetInstance(power_instance_.get(),
-                                          mojom::PowerInstance::Version_);
+    bridge_service_->power()->SetInstance(power_instance_.get());
+    WaitForInstanceReady(bridge_service_->power());
   }
 
   // Destroys the FakePowerInstance. This results in
   // ArcPowerBridge::OnInstanceClosed() being called.
   void DestroyPowerInstance() {
-    bridge_service_->power()->SetInstance(nullptr, 0);
+    if (!power_instance_)
+      return;
+    bridge_service_->power()->CloseInstance(power_instance_.get());
     power_instance_.reset();
   }
 

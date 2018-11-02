@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">Google Chrome adalah browser web yang menjalankan halaman dan aplikasi web secepat kilat. Cepat, stabil, dan mudah digunakan. Jelajahi web secara lebih aman dengan perlindungan terhadap software perusak dan phishing yang disertakan dalam Google Chrome.</translation>
 <translation id="1718131156967340976">Pilih <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome tidak dapat menyinkronkan data Anda karena kesalahan saat masuk.</translation>
-<translation id="1759301979429102118">Detail dari kontak dapat membantu Anda mengisi formulir lebih cepat di Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Dapatkan bantuan tentang penggunaan Chrome OS</translation>
 <translation id="1795405610103747296">Instal Chrome di ponsel. Kami akan mengirimkan SMS ke ponsel Anda: <ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@ Tetap masuk akan menggabungkan informasi Chrome seperti bookmark, histori, dan s
 <translation id="2429317896000329049">Google Chrome tidak dapat menyinkronkan data Anda karena Sinkronisasi tidak tersedia untuk domain Anda.</translation>
 <translation id="2446511512801740068">Chrome telah kedaluwarsa karena tidak diluncurkan selama beberapa waktu. Pembaruan telah tersedia dan akan diterapkan setelah Anda meluncurkan ulang.</translation>
 <translation id="2485422356828889247">Uninstal</translation>
+<translation id="2534507159460261402">Google Pay (disalin ke Chrome)</translation>
 <translation id="2580411288591421699">Tak dapat memasang Google Chrome dengan versi yang sama dengan yang sedang aktif. Tutup dulu, baru coba lagi.</translation>
 <translation id="2586406160782125153">Tindakan ini akan menghapus data browsing dari perangkat ini. Untuk mengambil data nanti, login ke Chrome sebagai <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Logo Chrome</translation>
@@ -108,8 +108,6 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="3889417619312448367">Hapus Penginstalan Google Chrome</translation>
 <translation id="3898493977366060150">Browsing web dengan fitur smart dari Google</translation>
 <translation id="4028693306634653894">Akses Chrome lebih cepat</translation>
-<translation id="4031074602479304239">Chrome menghentikan situs ini agar tidak mengarahkan Anda ke</translation>
-<translation id="4042449298237264661">Komputer ini tidak akan menerima pembaruan Google Chrome lagi karena Windows XP dan Windows Vista sudah tidak didukung.</translation>
 <translation id="4050175100176540509">Peningkatan keamanan dan fitur baru yang penting tersedia di versi terbaru.</translation>
 <translation id="4053720452172726777">Sesuaikan dan kontrol Google Chrome</translation>
 <translation id="4147555960264124640">Anda masuk dengan akun yang dikelola dan memberikan administratornya kontrol atas profil Google Chrome Anda. Data Chrome Anda, seperti aplikasi, bookmark, histori, sandi, dan setelan lain selamanya akan dikaitkan ke <ph name="USER_NAME" />. Anda dapat menghapus data ini melalui Dasbor Akun Google, namun Anda tidak akan dapat mengaitkan data ini dengan akun yang lain. <ph name="LEARN_MORE" /></translation>
@@ -150,7 +148,6 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="5170938038195470297">Profil Anda tidak dapat digunakan karena berasal dari versi terbaru Google Chrome. Beberapa fitur mungkin tidak tersedia. Tentukan direktori profil yang berbeda atau gunakan versi Chrome yang lebih anyar.</translation>
 <translation id="5193136243808726294">Google Chrome OS tidak dapat membuka halaman ini.</translation>
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Persyaratan Layanan<ph name="END_TERMS_OF_SERVICE_LINK" /> Google Chrome</translation>
-<translation id="5243785881901838525">Google Payments (disalin ke Chrome)</translation>
 <translation id="5251420635869119124">Tamu dapat menggunakan Chrome tanpa meninggalkan apa pun.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome akan dimulai ulang dalam 1 detik.}other{Google Chrome akan dimulai ulang dalam # detik.}}</translation>
 <translation id="532046782124376502">Peringatan: Google Chrome tidak dapat mencegah ekstensi merekam histori browsing Anda. Untuk menonaktifkan ekstensi ini dalam mode penyamaran, batalkan memilih opsi ini.</translation>
@@ -179,15 +176,12 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Pembaruan OS &amp;Chrome</translation>
 <translation id="6235018212288296708">Inbound rule untuk Google Chrome guna mengizinkan lalu lintas mDNS.</translation>
-<translation id="6236285698028833233">Google Chrome telah berhenti memperbarui dan tidak lagi mendukung versi sistem operasi Anda ini.</translation>
 <translation id="6291089322031436445">Aplikasi Chrome Dev</translation>
 <translation id="6291549208091401781">Google Chrome sudah terpasang untuk semua pengguna di komputer Anda.</translation>
 <translation id="6338556085225130112">Memperbarui Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS terwujud karena <ph name="BEGIN_LINK_CROS_OSS" />software sumber terbuka<ph name="END_LINK_CROS_OSS" /> tambahan.</translation>
 <translation id="6393863479814692971">Chrome memerlukan izin akses ke kamera dan mikrofon untuk situs ini.</translation>
-<translation id="6400076122676892962">Komputer ini akan segera berhenti menerima pembaruan Google Chrome karena Mac OS X 10.6, 10.7, dan 10.8 sudah tidak didukung.</translation>
 <translation id="6410540444482791104">Anda dapat membantu menjadikan Chrome lebih aman dan lebih mudah digunakan dengan mengirim sebagian informasi sistem dan konten halaman secara otomatis ke Google untuk membantu mendeteksi aplikasi dan situs berbahaya.</translation>
-<translation id="6470176598693778404">Komputer ini tidak akan menerima pembaruan Google Chrome lagi karena Mac OS X 10.6, 10.7, dan 10.8 sudah tidak didukung.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Download sedang berlangsung. Ingin membatalkan download dan keluar dari Google Chrome?}other{# download sedang berlangsung. Ingin membatalkan download dan keluar dari Google Chrome?}}</translation>
 <translation id="6566149418543181476">Memperbarui Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Anda menggunakan <ph name="PROFILE_EMAIL" /> untuk menyinkronkan barang-barang Chrome. Untuk memperbarui preferensi sinkronisasi atau untuk menggunakan Chrome tanpa akun Google, kunjungi <ph name="SETTINGS_LINK" />.</translation>
@@ -208,7 +202,6 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="7164397146364144019">Anda dapat membantu membuat Chrome lebih aman dan lebih mudah digunakan dengan melaporkan detail secara otomatis tentang kemungkinan insiden keamanan ke Google.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> telah ditambahkan ke Chrome.</translation>
 <translation id="7242029209006116544">Anda masuk dengan akun yang dikelola dan memberikan administratornya kontrol atas profil Google Chrome Anda. Data Chrome Anda, seperti aplikasi, bookmark, histori, sandi, dan setelan lain selamanya akan dikaitkan ke <ph name="USER_NAME" />. Anda dapat menghapus data ini melalui Dasbor Akun Google, namun Anda tidak akan dapat mengaitkan data ini dengan akun yang lain. Anda dapat membuat profil baru secara opsional untuk menjaga agar data Chrome Anda tetap terpisah. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Komputer ini akan segera berhenti menerima pembaruan Google Chrome karena Windows XP dan Windows Vista sudah tidak didukung.</translation>
 <translation id="7330164299247909639">Gagal mengautentikasi sertifikat. Harap login kembali ke Google Chrome sebagai <ph name="USER_NAME" /> atau hubungi administrator untuk informasi lebih lanjut. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Jendela baru</translation>
 <translation id="7369650938475876456">Gunakan sandi kuat yang dibuat oleh Chrome</translation>
@@ -221,6 +214,7 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="7494905215383356681">Lisensi sumber terbuka Chrome</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Tampilkan Chrome OS dalam bahasa ini</translation>
+<translation id="7589360514048265910">Komputer ini tidak akan menerima update Google Chrome lagi karena Mac OS X 10.9 sudah tidak didukung.</translation>
 <translation id="7592736734348559088">Google Chrome tidak dapat menyinkronkan data karena detail ID masuk akun Anda belum diperbarui.</translation>
 <translation id="7626032353295482388">Selamat Menggunakan Chrome</translation>
 <translation id="7747138024166251722">Pemasang tidak dapat membuat direktori sementara. Periksa kapasitas kosong pada disk dan izin untuk memasang software.</translation>
@@ -236,6 +230,7 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="7896673875602241923">Seseorang telah masuk ke Chrome pada komputer ini sebagai <ph name="ACCOUNT_EMAIL_LAST" />. Harap buat pengguna Chrome baru untuk memisahkan informasi Anda.</translation>
 <translation id="7908168227788431038">Hampir selesai diperbarui! Luncurkan ulang Google Chrome untuk menyelesaikan pembaruan.</translation>
 <translation id="795025003224538582">Jangan memulai ulang</translation>
+<translation id="7962410387636238736">Komputer ini tidak akan menerima update Google Chrome lagi karena Windows XP dan Windows Vista sudah tidak didukung</translation>
 <translation id="8005540215158006229">Chrome hampir siap.</translation>
 <translation id="8008534537613507642">Instal Ulang Chrome</translation>
 <translation id="8030318113982266900">Memperbarui perangkat Anda ke saluran <ph name="CHANNEL_NAME" />...</translation>
@@ -266,7 +261,6 @@ Periksa email Anda di <ph name="ACCOUNT_EMAIL" /> untuk petunjuk lebih lanjut.</
 <translation id="8796108026289707191">Mulai ulang Google Chrome sekarang.</translation>
 <translation id="8823341990149967727">Chrome Terlalu Lawas</translation>
 <translation id="884296878221830158">Juga mengontrol halaman apa yang ditampilkan saat Anda memulai Chrome atau mengeklik tombol Beranda.</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Anda tidak memiliki hak yang diperlukan untuk pemasangan tingkat sistem. Coba jalankan lagi pemasang saat masuk sebagai Administrator.</translation>
 <translation id="8914504000324227558">Luncurkan Ulang Chrome</translation>
 <translation id="9026991721384951619">Chrome OS tidak dapat menyinkronkan data karena detail ID masuk akun Anda belum diperbarui.</translation>

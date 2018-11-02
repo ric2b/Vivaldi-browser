@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
 <translation id="1326317727527857210">Diğer cihazlarınızdaki sekmelerinize ulaşmak için Chrome'da oturum açın.</translation>
-<translation id="1685087038067318291">Etraftaki nesneler tarafından gönderilen web sayfalarını keşfedin. Bluetooth açıkken Chrome, etrafınızdaki nesnelerle ilişkilendirilen web sayfalarını toplayabilir ve sizin için en faydalı olanlarını bulmak üzere bunları anonim bir şekilde Google'a gönderebilir. <ph name="BEGIN_LINK" />Daha fazla bilgi edinin<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome Gizlilik Uyarısı</translation>
+<translation id="1863312987075920112">Bu uygulamayı kullanarak Chrome’un <ph name="BEGIN_LINK_TOS" />Hizmet Şartları<ph name="END_LINK_TOS" />'nı ve <ph name="BEGIN_LINK_PRIVACY" />Gizlilik Uyarısı<ph name="END_LINK_PRIVACY" />'nı kabul etmiş olursunuz.</translation>
 <translation id="2147651015520127414">Chrome, bu web sitesi sertifikasının <ph name="ISSUER" /> tarafından yayınlandığını doğruladı.</translation>
 <translation id="2334084861041072223">Telif Hakkı <ph name="YEAR" /> Google Inc. Tüm hakları saklıdır.</translation>
 <translation id="2342981853652716282">Tüm cihazlarınızda yer işaretlerinizi, şifrelerinizi almak ve daha pek çok şey yapmak için Chrome'da oturum açın.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Bazı eklentiler Chrome'un kilitlenmesine neden oluyor. Lütfen şunların yüklemelerini kaldırın:</translation>
 <translation id="4615174829807303908"><ph name="SIGNOUT_MANAGED_DOMAIN" /> tarafından yönetilen bir hesabın oturumunu kapatıyorsunuz. Bu işlemle Chrome verileriniz bu cihazdan silinir, ancak Google hesabınızda kalmaya devam eder.</translation>
 <translation id="5389212809648216794">Kameranız başka bir uygulama tarafından kullanıldığından Google Chrome, kameranızı kullanamıyor.</translation>
-<translation id="5566557026214762153">Bu uygulamayı kullandığınızda, Chrome'un <ph name="BEGIN_LINK" />Hizmet Şartları<ph name="END_LINK" />'nı kabul etmiş olursunuz.</translation>
 <translation id="5639704535586432836">Ayarlar &gt; Gizlilik &gt; Kamera &gt; Google Chrome'a gidin ve kamerayı açın.</translation>
 <translation id="5642200033778930880">Google Chrome, kameranızı Bölünmüş Görünüm modunda kullanamıyor</translation>
 <translation id="5703130498371792817">Chrome'u kullanmayı seviyor musunuz?<ph name="BEGIN_LINK" />Bu uygulamaya oy verin<ph name="END_LINK" /></translation>

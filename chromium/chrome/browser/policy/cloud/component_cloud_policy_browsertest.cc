@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/policy/test/local_policy_test_server.h"
@@ -178,8 +179,9 @@ class ComponentCloudPolicyTest : public ExtensionBrowserTest {
     SigninManager* signin_manager =
         SigninManagerFactory::GetForProfile(browser()->profile());
     ASSERT_TRUE(signin_manager);
-    signin_manager->SetAuthenticatedAccountInfo("12345",
-                                                PolicyBuilder::kFakeUsername);
+    signin_manager->StartSignInWithRefreshToken(
+        "", "account_id", "12345", PolicyBuilder::kFakeUsername,
+        SigninManager::OAuthTokenFetchedCallback());
 
     UserCloudPolicyManager* policy_manager =
         UserCloudPolicyManagerFactory::GetForBrowserContext(

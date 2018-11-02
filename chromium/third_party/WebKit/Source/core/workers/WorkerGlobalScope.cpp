@@ -47,9 +47,11 @@
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/probe/CoreProbes.h"
+#include "core/script/Modulator.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/InstalledScriptsManager.h"
 #include "core/workers/WorkerLocation.h"
+#include "core/workers/WorkerModuleTreeClient.h"
 #include "core/workers/WorkerNavigator.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
@@ -92,24 +94,6 @@ KURL WorkerGlobalScope::CompleteURL(const String& url) const {
     return KURL();
   // Always use UTF-8 in Workers.
   return KURL(BaseURL(), url);
-}
-
-void WorkerGlobalScope::EvaluateClassicScript(
-    const KURL& script_url,
-    String source_code,
-    std::unique_ptr<Vector<char>> cached_meta_data) {
-  DCHECK(IsContextThread());
-  CachedMetadataHandler* handler = CreateWorkerScriptCachedMetadataHandler(
-      script_url, cached_meta_data.get());
-  DCHECK(!source_code.IsNull());
-  ReportingProxy().WillEvaluateWorkerScript(
-      source_code.length(),
-      cached_meta_data.get() ? cached_meta_data->size() : 0);
-  bool success = ScriptController()->Evaluate(
-      ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
-                       script_url),
-      nullptr /* error_event */, handler, v8_cache_options_);
-  ReportingProxy().DidEvaluateWorkerScript(success);
 }
 
 void WorkerGlobalScope::Dispose() {
@@ -203,8 +187,8 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
         source_code.length(), cached_meta_data ? cached_meta_data->size() : 0);
     ScriptController()->Evaluate(
         ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown,
-                         response_url),
-        &error_event, handler, v8_cache_options_);
+                         handler, response_url),
+        &error_event, v8_cache_options_);
     if (error_event) {
       ScriptController()->RethrowExceptionFromImportedScript(error_event,
                                                              exception_state);
@@ -311,6 +295,32 @@ ExecutionContext* WorkerGlobalScope::GetExecutionContext() const {
   return const_cast<WorkerGlobalScope*>(this);
 }
 
+void WorkerGlobalScope::EvaluateClassicScript(
+    const KURL& script_url,
+    String source_code,
+    std::unique_ptr<Vector<char>> cached_meta_data) {
+  DCHECK(IsContextThread());
+  CachedMetadataHandler* handler = CreateWorkerScriptCachedMetadataHandler(
+      script_url, cached_meta_data.get());
+  DCHECK(!source_code.IsNull());
+  ReportingProxy().WillEvaluateWorkerScript(
+      source_code.length(),
+      cached_meta_data.get() ? cached_meta_data->size() : 0);
+  bool success = ScriptController()->Evaluate(
+      ScriptSourceCode(source_code, ScriptSourceLocationType::kUnknown, handler,
+                       script_url),
+      nullptr /* error_event */, v8_cache_options_);
+  ReportingProxy().DidEvaluateWorkerScript(success);
+}
+
+void WorkerGlobalScope::ImportModuleScript(
+    const KURL& module_url_record,
+    network::mojom::FetchCredentialsMode credentials_mode) {
+  Modulator* modulator = Modulator::From(ScriptController()->GetScriptState());
+  FetchModuleScript(module_url_record, credentials_mode,
+                    new WorkerModuleTreeClient(modulator));
+}
+
 WorkerGlobalScope::WorkerGlobalScope(
     std::unique_ptr<GlobalScopeCreationParams> creation_params,
     WorkerThread* thread,
@@ -368,10 +378,9 @@ void WorkerGlobalScope::ExceptionThrown(ErrorEvent* event) {
 }
 
 void WorkerGlobalScope::RemoveURLFromMemoryCache(const KURL& url) {
-  thread_->GetParentFrameTaskRunners()
-      ->Get(TaskType::kNetworking)
-      ->PostTask(BLINK_FROM_HERE,
-                 CrossThreadBind(&RemoveURLFromMemoryCacheInternal, url));
+  PostCrossThreadTask(
+      *thread_->GetParentFrameTaskRunners()->Get(TaskType::kNetworking),
+      FROM_HERE, CrossThreadBind(&RemoveURLFromMemoryCacheInternal, url));
 }
 
 void WorkerGlobalScope::SetWorkerSettings(
@@ -382,20 +391,6 @@ void WorkerGlobalScope::SetWorkerSettings(
       worker_settings_->GetGenericFontFamilySettings());
 }
 
-void WorkerGlobalScope::ApplyContentSecurityPolicyFromVector(
-    const Vector<CSPHeaderAndType>& headers) {
-  if (!GetContentSecurityPolicy()) {
-    ContentSecurityPolicy* csp = ContentSecurityPolicy::Create();
-    SetContentSecurityPolicy(csp);
-  }
-  for (const auto& policy_and_type : headers) {
-    GetContentSecurityPolicy()->DidReceiveHeader(
-        policy_and_type.first, policy_and_type.second,
-        kContentSecurityPolicyHeaderSourceHTTP);
-  }
-  GetContentSecurityPolicy()->BindToExecutionContext(GetExecutionContext());
-}
-
 void WorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(location_);
   visitor->Trace(navigator_);
@@ -403,7 +398,6 @@ void WorkerGlobalScope::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_error_events_);
   visitor->Trace(font_selector_);
   WorkerOrWorkletGlobalScope::Trace(visitor);
-  SecurityContext::Trace(visitor);
   Supplementable<WorkerGlobalScope>::Trace(visitor);
 }
 
@@ -411,6 +405,7 @@ void WorkerGlobalScope::TraceWrappers(
     const ScriptWrappableVisitor* visitor) const {
   Supplementable<WorkerGlobalScope>::TraceWrappers(visitor);
   WorkerOrWorkletGlobalScope::TraceWrappers(visitor);
+  visitor->TraceWrappers(navigator_);
 }
 
 }  // namespace blink

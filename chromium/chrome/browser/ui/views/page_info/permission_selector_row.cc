@@ -18,6 +18,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/combobox_model.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/combobox/combobox.h"
@@ -281,15 +282,15 @@ PermissionSelectorRow::PermissionSelectorRow(
   layout->StartRowWithPadding(1, PageInfoBubbleView::kPermissionColumnSetId, 0,
                               list_item_padding);
 
-  // Create the permission icon.
+  // Create the permission icon and label.
   icon_ = new NonAccessibleImageView();
-  const gfx::Image& image = PageInfoUI::GetPermissionIcon(permission);
-  icon_->SetImage(image.ToImageSkia());
   layout->AddView(icon_);
   // Create the label that displays the permission type.
   label_ =
       new views::Label(PageInfoUI::PermissionTypeToUIString(permission.type),
                        CONTEXT_BODY_TEXT_LARGE);
+  icon_->SetImage(
+      PageInfoUI::GetPermissionIcon(permission, label_->enabled_color()));
   layout->AddView(label_);
   // Create the menu model.
   menu_model_.reset(new PermissionMenuModel(
@@ -395,19 +396,18 @@ void PermissionSelectorRow::InitializeComboboxView(
 void PermissionSelectorRow::PermissionChanged(
     const PageInfoUI::PermissionInfo& permission) {
   // Change the permission icon to reflect the selected setting.
-  const gfx::Image& image = PageInfoUI::GetPermissionIcon(permission);
-  icon_->SetImage(image.ToImageSkia());
+  icon_->SetImage(PageInfoUI::GetPermissionIcon(
+      permission,
+      color_utils::DeriveDefaultIconColor(label_->enabled_color())));
 
   // Update the menu button text to reflect the new setting.
   if (menu_button_) {
-    menu_button_->SetText(PageInfoUI::PermissionActionToUIString(
-        profile_, permission.type, permission.setting,
-        permission.default_setting, content_settings::SETTING_SOURCE_USER));
-    menu_button_->SizeToPreferredSize();
     // Re-layout will be done at the |PageInfoBubbleView| level, since
     // that view may need to resize itself to accomodate the new sizes of its
     // contents.
-    menu_button_->InvalidateLayout();
+    menu_button_->SetText(PageInfoUI::PermissionActionToUIString(
+        profile_, permission.type, permission.setting,
+        permission.default_setting, content_settings::SETTING_SOURCE_USER));
   } else if (combobox_) {
     bool use_default = permission.setting == CONTENT_SETTING_DEFAULT;
     combobox_->UpdateSelectedIndex(use_default);

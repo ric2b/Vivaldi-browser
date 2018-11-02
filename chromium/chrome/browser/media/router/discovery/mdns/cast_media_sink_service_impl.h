@@ -65,7 +65,7 @@ class CastMediaSinkServiceImpl
     return task_runner_;
   }
 
-  void SetClockForTest(std::unique_ptr<base::Clock> clock);
+  void SetClockForTest(base::Clock* clock);
 
   // Marked virtual for tests.
   virtual void Start();
@@ -197,6 +197,14 @@ class CastMediaSinkServiceImpl
 
     static OpenParams GetFromFieldTrialParam();
   };
+
+  // Invokes |impl->OnDialSinkAdded| with |dial_sink| on |task_runner|. This
+  // method may be called on any thread, and may be called after |impl| is
+  // destroyed.
+  static void InvokeOnDialSinkAddedOnTaskRunner(
+      const base::WeakPtr<CastMediaSinkServiceImpl>& impl,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      const MediaSinkInternal& dial_sink);
 
   // Marked virtual for testing.
   virtual void OpenChannels(const std::vector<MediaSinkInternal>& cast_sinks,
@@ -333,7 +341,7 @@ class CastMediaSinkServiceImpl
   // NetworkService.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
 
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
 
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<CastMediaSinkServiceImpl> weak_ptr_factory_;

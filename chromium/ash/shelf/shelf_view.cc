@@ -15,6 +15,7 @@
 #include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/app_list_button.h"
+#include "ash/shelf/back_button.h"
 #include "ash/shelf/overflow_bubble.h"
 #include "ash/shelf/overflow_bubble_view.h"
 #include "ash/shelf/overflow_button.h"
@@ -76,6 +77,23 @@ const float kDraggedImageOpacity = 0.5f;
 
 namespace {
 
+// Helper to check if tablet mode is enabled.
+bool IsTabletModeEnabled() {
+  return Shell::Get()->tablet_mode_controller() &&
+         Shell::Get()
+             ->tablet_mode_controller()
+             ->IsTabletModeWindowManagerEnabled();
+}
+// The UMA histogram that logs the commands which are executed on non-app
+// context menus.
+constexpr char kNonAppContextMenuExecuteCommand[] =
+    "Apps.ContextMenuExecuteCommand.NotFromApp";
+
+// The UMA histogram that logs the commands which are executed on app context
+// menus.
+constexpr char kAppContextMenuExecuteCommand[] =
+    "Apps.ContextMenuExecuteCommand.FromApp";
+
 // A class to temporarily disable a given bounds animator.
 class BoundsAnimatorDisabler {
  public:
@@ -106,7 +124,7 @@ class ShelfFocusSearch : public views::FocusSearch {
       : FocusSearch(nullptr, true, true), view_model_(view_model) {}
   ~ShelfFocusSearch() override = default;
 
-  // views::FocusSearch overrides:
+  // views::FocusSearch:
   View* FindNextFocusableView(View* starting_view,
                               bool reverse,
                               Direction direction,
@@ -114,18 +132,26 @@ class ShelfFocusSearch : public views::FocusSearch {
                               views::FocusTraversable** focus_traversable,
                               View** focus_traversable_view) override {
     int index = view_model_->GetIndexOfView(starting_view);
-    if (index == -1)
-      return view_model_->view_at(0);
+    // The back button (item with index 0 on the model) only exists in tablet
+    // mode, so punt focus to the app list button (item with index 1 on the
+    // model).
+    const bool tablet_mode = IsTabletModeEnabled();
+    if (!tablet_mode && index == 0)
+      ++index;
 
+    // Increment or decrement index based on the cycle, unless we are at either
+    // edge, then we loop to the back or front. Skip the back button (item with
+    // index 0) when not in tablet mode.
     if (reverse) {
       --index;
-      if (index < 0)
+      if (index < 0 || (index == 0 && !tablet_mode))
         index = view_model_->view_size() - 1;
     } else {
       ++index;
       if (index >= view_model_->view_size())
-        index = 0;
+        index = tablet_mode ? 0 : 1;
     }
+
     return view_model_->view_at(index);
   }
 
@@ -177,6 +203,13 @@ void ReflectItemStatus(const ShelfItem& item, ShelfButton* button) {
       button->AddState(ShelfButton::STATE_ATTENTION);
       break;
   }
+
+  if (app_list::features::IsTouchableAppContextMenuEnabled()) {
+    if (item.has_notification)
+      button->AddState(ShelfButton::STATE_NOTIFICATION);
+    else
+      button->ClearState(ShelfButton::STATE_NOTIFICATION);
+  }
 }
 
 // Returns the id of the display on which |view| is shown.
@@ -196,6 +229,7 @@ bool ShelfButtonIsInDrag(const ShelfItemType item_type,
              ShelfButton::STATE_DRAGGING;
     case TYPE_DIALOG:
     case TYPE_APP_PANEL:
+    case TYPE_BACK_BUTTON:
     case TYPE_APP_LIST:
     case TYPE_UNDEFINED:
       return false;
@@ -262,6 +296,7 @@ ShelfView::ShelfView(ShelfModel* model, Shelf* shelf, ShelfWidget* shelf_widget)
       shelf_widget_(shelf_widget),
       view_model_(new views::ViewModel),
       tooltip_(this),
+      shelf_item_background_color_(kShelfDefaultBaseColor),
       weak_factory_(this) {
   DCHECK(model_);
   DCHECK(shelf_);
@@ -291,6 +326,10 @@ void ShelfView::Init() {
   overflow_button_->set_context_menu_controller(this);
   ConfigureChildView(overflow_button_);
   AddChildView(overflow_button_);
+
+  GetBackButton()->layer()->SetOpacity(IsTabletModeEnabled() ? 1.f : 0.f);
+  GetBackButton()->SetFocusBehavior(
+      IsTabletModeEnabled() ? FocusBehavior::ALWAYS : FocusBehavior::NEVER);
 
   // We'll layout when our bounds change.
 }
@@ -384,10 +423,25 @@ AppListButton* ShelfView::GetAppListButton() const {
   return nullptr;
 }
 
+BackButton* ShelfView::GetBackButton() const {
+  for (int i = 0; i < model_->item_count(); ++i) {
+    if (model_->items()[i].type == TYPE_BACK_BUTTON) {
+      views::View* view = view_model_->view_at(i);
+      CHECK_EQ(BackButton::kViewClassName, view->GetClassName());
+      return static_cast<BackButton*>(view);
+    }
+  }
+
+  NOTREACHED() << "Back button not found";
+  return nullptr;
+}
+
 bool ShelfView::ShouldHideTooltip(const gfx::Point& cursor_location) const {
   gfx::Rect tooltip_bounds;
   for (int i = 0; i < child_count(); ++i) {
     const views::View* child = child_at(i);
+    if (!IsTabletModeEnabled() && child == GetBackButton())
+      continue;
     if (child != overflow_button_ && ShouldShowTooltipForView(child))
       tooltip_bounds.Union(child->GetMirroredBounds());
   }
@@ -467,6 +521,7 @@ void ShelfView::ButtonPressed(views::Button* sender,
       break;
 
     case TYPE_APP_PANEL:
+    case TYPE_BACK_BUTTON:
     case TYPE_DIALOG:
       break;
 
@@ -703,8 +758,8 @@ void ShelfView::PointerPressedOnButton(views::View* view,
   if (index == -1 || view_model_->view_size() <= 1)
     return;  // View is being deleted, ignore request.
 
-  if (view == GetAppListButton())
-    return;  // View is not draggable, ignore request.
+  if (view == GetAppListButton() || view == GetBackButton())
+    return;  // Views are not draggable, ignore request.
 
   // Only when the repost event occurs on the same shelf item, we should ignore
   // the call in ShelfView::ButtonPressed(...).
@@ -764,18 +819,9 @@ void ShelfView::LayoutToIdealBounds() {
 }
 
 void ShelfView::UpdateShelfItemBackground(SkColor color) {
-  GetAppListButton()->UpdateShelfItemBackground(color);
+  shelf_item_background_color_ = color;
   overflow_button_->UpdateShelfItemBackground(color);
-}
-
-double ShelfView::GetAppListButtonAnimationCurrentValue() {
-  DCHECK(bounds_animator_);
-  const gfx::SlideAnimation* animation =
-      bounds_animator_->GetAnimationForView(GetAppListButton());
-  if (!animation)
-    return 0.0;
-
-  return animation->GetCurrentValue();
+  SchedulePaint();
 }
 
 void ShelfView::UpdateAllButtonsVisibilityInOverflowMode() {
@@ -806,30 +852,24 @@ void ShelfView::CalculateIdealBounds(gfx::Rect* overflow_bounds) const {
   int w = shelf_->PrimaryAxisValue(kShelfButtonSize, width());
   int h = shelf_->PrimaryAxisValue(height(), kShelfButtonSize);
 
-  const bool is_tablet_mode = Shell::Get()->tablet_mode_controller()
-                                  ? Shell::Get()
-                                        ->tablet_mode_controller()
-                                        ->IsTabletModeWindowManagerEnabled()
-                                  : false;
-
   for (int i = 0; i < view_model_->view_size(); ++i) {
     if (i < first_visible_index_) {
       view_model_->set_ideal_bounds(i, gfx::Rect(x, y, 0, 0));
       continue;
     }
 
-    int width = w;
-    int height = h;
-    // If this is the app list button and we are in tablet mode, make space for
-    // the back button (which is part of the app list button).
-    if (i == 0 && is_tablet_mode) {
-      width = shelf_->PrimaryAxisValue(2 * w, w);
-      height = shelf_->PrimaryAxisValue(h, 2 * h);
-    }
+    view_model_->set_ideal_bounds(i, gfx::Rect(x, y, w, h));
+    // If not in tablet mode do not increase |x| or |y|. Instead just let the
+    // next item (app list button) cover the back button, which will have
+    // opacity 0 anyways.
+    if (i == 0 && !IsTabletModeEnabled())
+      continue;
 
-    view_model_->set_ideal_bounds(i, gfx::Rect(x, y, width, height));
-    x = shelf_->PrimaryAxisValue(x + width + kShelfButtonSpacing, x);
-    y = shelf_->PrimaryAxisValue(y, y + height + kShelfButtonSpacing);
+    // There is no spacing between the first two elements. Do not worry about y
+    // since the back button only appears in tablet mode, which forces the shelf
+    // to be bottom aligned.
+    x = shelf_->PrimaryAxisValue(x + w + (i == 0 ? 0 : kShelfButtonSpacing), x);
+    y = shelf_->PrimaryAxisValue(y, y + h + kShelfButtonSpacing);
   }
 
   if (is_overflow_mode()) {
@@ -971,9 +1011,6 @@ void ShelfView::AnimateToIdealBounds() {
     // padding of the first gets properly transferred to the new first item.
     if (i && view->border())
       view->SetBorder(views::NullBorder());
-
-    if (view == GetAppListButton())
-      GetAppListButton()->OnBoundsAnimationStarted();
   }
   overflow_button_->SetBoundsRect(overflow_bounds);
 }
@@ -995,6 +1032,11 @@ views::View* ShelfView::CreateViewForItem(const ShelfItem& item) {
 
     case TYPE_APP_LIST: {
       view = new AppListButton(this, this, shelf_);
+      break;
+    }
+
+    case TYPE_BACK_BUTTON: {
+      view = new BackButton();
       break;
     }
 
@@ -1094,9 +1136,10 @@ void ShelfView::ContinueDrag(const ui::LocatedEvent& event) {
   target_index =
       std::min(indices.second, std::max(target_index, indices.first));
 
-  // The app list button is always first, and it is the only non-draggable item.
+  // The back button and app list button are always first, and they are the
+  // only non-draggable items.
   int first_draggable_item = model_->GetItemIndexForType(TYPE_APP_LIST) + 1;
-  DCHECK_EQ(1, first_draggable_item);
+  DCHECK_EQ(2, first_draggable_item);
   target_index = std::max(target_index, first_draggable_item);
   DCHECK_LT(target_index, model_->item_count());
 
@@ -1320,7 +1363,7 @@ void ShelfView::FinalizeRipOffDrag(bool cancel) {
 ShelfView::RemovableState ShelfView::RemovableByRipOff(int index) const {
   DCHECK(index >= 0 && index < model_->item_count());
   ShelfItemType type = model_->items()[index].type;
-  if (type == TYPE_APP_LIST || type == TYPE_DIALOG)
+  if (type == TYPE_APP_LIST || type == TYPE_DIALOG || type == TYPE_BACK_BUTTON)
     return NOT_REMOVABLE;
 
   if (model_->items()[index].pinned_by_policy)
@@ -1340,6 +1383,7 @@ bool ShelfView::SameDragType(ShelfItemType typea, ShelfItemType typeb) const {
     case TYPE_APP_PANEL:
     case TYPE_APP_LIST:
     case TYPE_APP:
+    case TYPE_BACK_BUTTON:
     case TYPE_DIALOG:
       return typeb == typea;
     case TYPE_UNDEFINED:
@@ -1537,6 +1581,38 @@ void ShelfView::OnBoundsChanged(const gfx::Rect& previous_bounds) {
 
   if (IsShowingOverflowBubble())
     overflow_bubble_->Hide();
+}
+
+void ShelfView::OnPaint(gfx::Canvas* canvas) {
+  if (overflow_mode_)
+    return;
+
+  cc::PaintFlags flags;
+  flags.setColor(shelf_item_background_color_);
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+
+  // Draws a round rect around the back button and app list button. This will
+  // just be a circle if the back button is hidden.
+  const gfx::PointF circle_center(
+      GetMirroredRect(GetAppListButton()->bounds()).origin() +
+      gfx::Vector2d(GetAppListButton()->GetCenterPoint().x(),
+                    GetAppListButton()->GetCenterPoint().y()));
+  if (GetBackButton()->layer()->opacity() <= 0.f) {
+    canvas->DrawCircle(circle_center, kAppListButtonRadius, flags);
+    return;
+  }
+
+  const gfx::PointF back_center(
+      GetMirroredRect(GetBackButton()->bounds()).x() + kShelfButtonSize / 2,
+      GetBackButton()->bounds().y() + kShelfButtonSize / 2);
+  const gfx::RectF background_bounds(
+      std::min(back_center.x(), circle_center.x()) - kAppListButtonRadius,
+      back_center.y() - kAppListButtonRadius,
+      std::abs(circle_center.x() - back_center.x()) + 2 * kAppListButtonRadius,
+      2 * kAppListButtonRadius);
+
+  canvas->DrawRoundRect(background_bounds, kAppListButtonRadius, flags);
 }
 
 views::FocusTraversable* ShelfView::GetPaneFocusTraversable() {
@@ -1749,11 +1825,15 @@ void ShelfView::AfterGetContextMenuItems(
     std::vector<mojom::MenuItemPtr> menu_items) {
   context_menu_id_ = shelf_id;
   const int64_t display_id = GetDisplayIdForView(this);
-  ShowMenu(std::make_unique<ShelfContextMenuModel>(
-               std::move(menu_items), model_->GetShelfItemDelegate(shelf_id),
-               display_id),
-           source, point, true /* context_menu */, source_type,
-           nullptr /* ink_drop */);
+  std::unique_ptr<ShelfContextMenuModel> menu_model =
+      std::make_unique<ShelfContextMenuModel>(
+          std::move(menu_items), model_->GetShelfItemDelegate(shelf_id),
+          display_id);
+  menu_model->set_histogram_name(ShelfItemForView(source)
+                                     ? kAppContextMenuExecuteCommand
+                                     : kNonAppContextMenuExecuteCommand);
+  ShowMenu(std::move(menu_model), source, point, true /* context_menu */,
+           source_type, nullptr /* ink_drop */);
 }
 
 void ShelfView::ShowContextMenuForView(views::View* source,
@@ -1767,7 +1847,7 @@ void ShelfView::ShowContextMenuForView(views::View* source,
     gfx::Rect shelf_bounds =
         is_overflow_mode()
             ? owner_overflow_bubble_->bubble_view()->GetBubbleBounds()
-            : ScreenUtil::GetDisplayBoundsWithShelf(shelf_window);
+            : screen_util::GetDisplayBoundsWithShelf(shelf_window);
 
     switch (shelf_->alignment()) {
       case SHELF_ALIGNMENT_BOTTOM:
@@ -1789,12 +1869,21 @@ void ShelfView::ShowContextMenuForView(views::View* source,
   const int64_t display_id = GetDisplayIdForView(this);
   const ShelfItem* item = ShelfItemForView(source);
   if (!item || !model_->GetShelfItemDelegate(item->id)) {
+    UMA_HISTOGRAM_ENUMERATION("Apps.ContextMenuShowSource.Shelf", source_type,
+                              ui::MENU_SOURCE_TYPE_LAST);
     context_menu_id_ = ShelfID();
-    ShowMenu(std::make_unique<ShelfContextMenuModel>(
-                 std::vector<mojom::MenuItemPtr>(), nullptr, display_id),
-             source, context_menu_point, true, source_type, nullptr);
+    std::unique_ptr<ShelfContextMenuModel> menu_model =
+        std::make_unique<ShelfContextMenuModel>(
+            std::vector<mojom::MenuItemPtr>(), nullptr, display_id);
+    menu_model->set_histogram_name(kNonAppContextMenuExecuteCommand);
+    ShowMenu(std::move(menu_model), source, context_menu_point, true,
+             source_type, nullptr);
     return;
   }
+
+  // Record the current time for the shelf button context menu user journey
+  // histogram.
+  shelf_button_context_menu_time_ = base::TimeTicks::Now();
 
   // Get any custom entries; show the context menu in AfterGetContextMenuItems.
   model_->GetShelfItemDelegate(item->id)->GetContextMenuItems(
@@ -1810,9 +1899,6 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
                          ui::MenuSourceType source_type,
                          views::InkDrop* ink_drop) {
   menu_model_ = std::move(menu_model);
-  menu_model_adapter_.reset(new views::MenuModelAdapter(
-      menu_model_.get(),
-      base::Bind(&ShelfView::OnMenuClosed, base::Unretained(this), ink_drop)));
 
   closing_event_time_ = base::TimeTicks();
   int run_types = 0;
@@ -1827,8 +1913,9 @@ void ShelfView::ShowMenu(std::unique_ptr<ui::MenuModel> menu_model,
     run_types |= views::MenuRunner::SEND_GESTURE_EVENTS_TO_OWNER;
   }
 
-  launcher_menu_runner_.reset(
-      new views::MenuRunner(menu_model_adapter_->CreateMenu(), run_types));
+  launcher_menu_runner_ = std::make_unique<views::MenuRunner>(
+      menu_model_.get(), run_types,
+      base::Bind(&ShelfView::OnMenuClosed, base::Unretained(this), ink_drop));
 
   views::MenuAnchorPosition menu_alignment = views::MENU_ANCHOR_TOPLEFT;
   gfx::Rect anchor = gfx::Rect(click_point, gfx::Size());
@@ -1878,11 +1965,18 @@ void ShelfView::OnMenuClosed(views::InkDrop* ink_drop) {
 
   closing_event_time_ = launcher_menu_runner_->closing_event_time();
 
+  if (shelf_button_context_menu_time_ != base::TimeTicks()) {
+    // If the context menu came from a ShelfButton.
+    UMA_HISTOGRAM_TIMES(
+        "Apps.ContextMenuUserJourneyTime.ShelfButton",
+        base::TimeTicks::Now() - shelf_button_context_menu_time_);
+    shelf_button_context_menu_time_ = base::TimeTicks();
+  }
+
   if (ink_drop)
     ink_drop->AnimateToState(views::InkDropState::DEACTIVATED);
 
   launcher_menu_runner_.reset();
-  menu_model_adapter_.reset();
   menu_model_.reset();
 
   // Auto-hide or alignment might have changed, but only for this shelf.
@@ -1892,6 +1986,19 @@ void ShelfView::OnMenuClosed(views::InkDrop* ink_drop) {
 void ShelfView::OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) {
   shelf_->NotifyShelfIconPositionsChanged();
   PreferredSizeChanged();
+
+  if (shelf_->is_tablet_mode_animation_running()) {
+    float opacity = 0.f;
+    const gfx::SlideAnimation* animation =
+        bounds_animator_->GetAnimationForView(GetBackButton());
+    if (animation)
+      opacity = static_cast<float>(animation->GetCurrentValue());
+    if (!IsTabletModeEnabled())
+      opacity = 1.f - opacity;
+
+    GetBackButton()->layer()->SetOpacity(opacity);
+    GetBackButton()->SetFocusBehavior(FocusBehavior::ALWAYS);
+  }
 }
 
 void ShelfView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
@@ -1916,8 +2023,9 @@ void ShelfView::OnBoundsAnimatorDone(views::BoundsAnimator* animator) {
     }
   }
 
-  if (GetAppListButton())
-    GetAppListButton()->OnBoundsAnimationFinished();
+  GetBackButton()->layer()->SetOpacity(IsTabletModeEnabled() ? 1.f : 0.f);
+  GetBackButton()->SetFocusBehavior(
+      IsTabletModeEnabled() ? FocusBehavior::ALWAYS : FocusBehavior::NEVER);
 }
 
 bool ShelfView::IsRepostEvent(const ui::Event& event) {

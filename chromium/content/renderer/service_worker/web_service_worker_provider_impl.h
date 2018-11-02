@@ -12,9 +12,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "third_party/WebKit/common/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/platform/web_feature.mojom.h"
 
 namespace blink {
@@ -44,6 +44,7 @@ class CONTENT_EXPORT WebServiceWorkerProviderImpl
   void RegisterServiceWorker(
       const blink::WebURL& web_pattern,
       const blink::WebURL& web_script_url,
+      blink::mojom::ServiceWorkerUpdateViaCache update_via_cache,
       std::unique_ptr<WebServiceWorkerRegistrationCallbacks>) override;
   void GetRegistration(
       const blink::WebURL& web_document_url,
@@ -64,7 +65,7 @@ class CONTENT_EXPORT WebServiceWorkerProviderImpl
   // Posts a message to the ServiceWorkerContainer for this provider.
   // Corresponds to Client#postMessage().
   void PostMessageToClient(
-      blink::mojom::ServiceWorkerObjectInfoPtr source,
+      std::unique_ptr<ServiceWorkerHandleReference> source_handle,
       const base::string16& message,
       std::vector<mojo::ScopedMessagePipeHandle> message_pipes);
   // For UseCounter purposes. Called when the controller service worker used a

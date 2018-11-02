@@ -31,18 +31,19 @@ class CONTENT_EXPORT WebIDBCursorImpl : public blink::WebIDBCursor {
  public:
   WebIDBCursorImpl(indexed_db::mojom::CursorAssociatedPtrInfo cursor,
                    int64_t transaction_id,
-                   scoped_refptr<base::SingleThreadTaskRunner> io_runner);
+                   scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+                   scoped_refptr<base::SingleThreadTaskRunner> callback_runner);
   ~WebIDBCursorImpl() override;
 
   void Advance(unsigned long count, blink::WebIDBCallbacks* callback) override;
-  void Continue(const blink::WebIDBKey& key,
-                const blink::WebIDBKey& primary_key,
+  void Continue(blink::WebIDBKeyView key,
+                blink::WebIDBKeyView primary_key,
                 blink::WebIDBCallbacks* callback) override;
   void PostSuccessHandlerCallback() override;
 
   void SetPrefetchData(const std::vector<IndexedDBKey>& keys,
                        const std::vector<IndexedDBKey>& primary_keys,
-                       const std::vector<blink::WebIDBValue>& values);
+                       std::vector<blink::WebIDBValue> values);
 
   void CachedAdvance(unsigned long count, blink::WebIDBCallbacks* callbacks);
   void CachedContinue(blink::WebIDBCallbacks* callbacks);
@@ -70,6 +71,7 @@ class CONTENT_EXPORT WebIDBCursorImpl : public blink::WebIDBCursor {
 
   IOThreadHelper* helper_;
   scoped_refptr<base::SingleThreadTaskRunner> io_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> callback_runner_;
 
   // Prefetch cache.
   base::circular_deque<IndexedDBKey> prefetch_keys_;

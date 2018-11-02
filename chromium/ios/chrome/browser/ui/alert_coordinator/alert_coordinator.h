@@ -8,7 +8,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/ios/block_types.h"
-#import "ios/chrome/browser/chrome_coordinator.h"
+#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 // A coordinator specialization for the case where the coordinator is creating
 // and managing a modal alert to be displayed to the user.
@@ -40,6 +40,10 @@
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
+    NS_UNAVAILABLE;
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                              browserState:
+                                  (ios::ChromeBrowserState*)browserState
     NS_UNAVAILABLE;
 
 // Adds an item at the end of the menu. It does nothing if |visible| is true or

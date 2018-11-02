@@ -22,7 +22,7 @@
  *   hasNotifications: boolean
  * }}
  */
-var ImportantSite;
+let ImportantSite;
 
 cr.define('settings', function() {
   /** @interface */
@@ -40,7 +40,7 @@ cr.define('settings', function() {
 
     /**
      * @return {!Promise<!Array<!ImportantSite>>}
-     *     A promise resolved when imporant sites are retrieved.
+     *     A promise resolved when important sites are retrieved.
      */
     getImportantSites() {}
 

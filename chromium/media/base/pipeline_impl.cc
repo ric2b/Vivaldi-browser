@@ -48,6 +48,7 @@ class PipelineImpl::RendererWrapper : public DemuxerHost,
                                       public RendererClient {
  public:
   RendererWrapper(scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+                  scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
                   MediaLog* media_log);
   ~RendererWrapper() final;
 
@@ -189,9 +190,10 @@ class PipelineImpl::RendererWrapper : public DemuxerHost,
 
 PipelineImpl::RendererWrapper::RendererWrapper(
     scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     MediaLog* media_log)
     : media_task_runner_(std::move(media_task_runner)),
-      main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      main_task_runner_(std::move(main_task_runner)),
       media_log_(media_log),
       demuxer_(nullptr),
       playback_rate_(kDefaultPlaybackRate),
@@ -652,6 +654,21 @@ void PipelineImpl::RendererWrapper::OnStatisticsUpdate(
   shared_state_.statistics.audio_memory_usage += stats.audio_memory_usage;
   shared_state_.statistics.video_memory_usage += stats.video_memory_usage;
 
+  if (!stats.audio_decoder_name.empty() &&
+      shared_state_.statistics.audio_decoder_name != stats.audio_decoder_name) {
+    shared_state_.statistics.audio_decoder_name = stats.audio_decoder_name;
+    main_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&PipelineImpl::OnAudioDecoderChange,
+                                  weak_pipeline_, stats.audio_decoder_name));
+  }
+  if (!stats.video_decoder_name.empty() &&
+      shared_state_.statistics.video_decoder_name != stats.video_decoder_name) {
+    shared_state_.statistics.video_decoder_name = stats.video_decoder_name;
+    main_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&PipelineImpl::OnVideoDecoderChange,
+                                  weak_pipeline_, stats.video_decoder_name));
+  }
+
   if (stats.video_frame_duration_average != kNoTimestamp) {
     shared_state_.statistics.video_frame_duration_average =
         stats.video_frame_duration_average;
@@ -972,7 +989,8 @@ void PipelineImpl::RendererWrapper::ReportMetadata() {
 }
 
 PipelineImpl::PipelineImpl(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> media_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     MediaLog* media_log)
     : media_task_runner_(media_task_runner),
       media_log_(media_log),
@@ -981,7 +999,8 @@ PipelineImpl::PipelineImpl(
       volume_(kDefaultVolume),
       weak_factory_(this) {
   DVLOG(2) << __func__;
-  renderer_wrapper_.reset(new RendererWrapper(media_task_runner_, media_log_));
+  renderer_wrapper_.reset(new RendererWrapper(
+      media_task_runner_, std::move(main_task_runner), media_log_));
 }
 
 PipelineImpl::~PipelineImpl() {
@@ -1383,6 +1402,24 @@ void PipelineImpl::OnVideoAverageKeyframeDistanceUpdate() {
 
   DCHECK(client_);
   client_->OnVideoAverageKeyframeDistanceUpdate();
+}
+
+void PipelineImpl::OnAudioDecoderChange(const std::string& name) {
+  DVLOG(2) << __func__;
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(IsRunning());
+
+  DCHECK(client_);
+  client_->OnAudioDecoderChange(name);
+}
+
+void PipelineImpl::OnVideoDecoderChange(const std::string& name) {
+  DVLOG(2) << __func__;
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(IsRunning());
+
+  DCHECK(client_);
+  client_->OnVideoDecoderChange(name);
 }
 
 void PipelineImpl::OnSeekDone() {

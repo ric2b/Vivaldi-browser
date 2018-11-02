@@ -7,12 +7,11 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "net/base/url_util.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "storage/common/quota/quota_status_code.h"
 
 namespace storage {
 
@@ -217,11 +216,11 @@ void HostStorageObservers::StartInitialization(
 
 void HostStorageObservers::GotHostUsageAndQuota(
     const StorageObserver::Filter& filter,
-    QuotaStatusCode status,
+    blink::mojom::QuotaStatusCode status,
     int64_t usage,
     int64_t quota) {
   initializing_ = false;
-  if (status != kQuotaStatusOk)
+  if (status != blink::mojom::QuotaStatusCode::kOk)
     return;
   initialized_ = true;
   cached_quota_ = quota;
@@ -258,7 +257,7 @@ void StorageTypeObservers::AddObserver(
   if (!host_observers) {
     // Because there are no null entries in host_observers_map_, the [] inserted
     // a blank pointer, so let's populate it.
-    host_observers = base::MakeUnique<HostStorageObservers>(quota_manager_);
+    host_observers = std::make_unique<HostStorageObservers>(quota_manager_);
   }
 
   host_observers->AddObserver(observer, params);
@@ -310,8 +309,9 @@ void StorageMonitor::AddObserver(
   DCHECK(observer);
 
   // Check preconditions.
-  if (params.filter.storage_type == kStorageTypeUnknown ||
-      params.filter.storage_type == kStorageTypeQuotaNotManaged ||
+  if (params.filter.storage_type == blink::mojom::StorageType::kUnknown ||
+      params.filter.storage_type ==
+          blink::mojom::StorageType::kQuotaNotManaged ||
       params.filter.origin.is_empty()) {
     NOTREACHED();
     return;
@@ -320,7 +320,7 @@ void StorageMonitor::AddObserver(
   auto& type_observers =
       storage_type_observers_map_[params.filter.storage_type];
   if (!type_observers)
-    type_observers = base::MakeUnique<StorageTypeObservers>(quota_manager_);
+    type_observers = std::make_unique<StorageTypeObservers>(quota_manager_);
 
   type_observers->AddObserver(observer, params);
 }
@@ -333,7 +333,7 @@ void StorageMonitor::RemoveObserver(StorageObserver* observer) {
 }
 
 const StorageTypeObservers* StorageMonitor::GetStorageTypeObservers(
-    StorageType storage_type) const {
+    blink::mojom::StorageType storage_type) const {
   auto it = storage_type_observers_map_.find(storage_type);
   if (it != storage_type_observers_map_.end())
     return it->second.get();
@@ -344,8 +344,8 @@ const StorageTypeObservers* StorageMonitor::GetStorageTypeObservers(
 void StorageMonitor::NotifyUsageChange(const StorageObserver::Filter& filter,
                                        int64_t delta) {
   // Check preconditions.
-  if (filter.storage_type == kStorageTypeUnknown ||
-      filter.storage_type == kStorageTypeQuotaNotManaged ||
+  if (filter.storage_type == blink::mojom::StorageType::kUnknown ||
+      filter.storage_type == blink::mojom::StorageType::kQuotaNotManaged ||
       filter.origin.is_empty()) {
     NOTREACHED();
     return;

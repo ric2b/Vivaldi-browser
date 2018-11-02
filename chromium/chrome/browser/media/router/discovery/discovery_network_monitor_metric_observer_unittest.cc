@@ -4,6 +4,8 @@
 
 #include "chrome/browser/media/router/discovery/discovery_network_monitor_metric_observer.h"
 
+#include <memory>
+
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -75,15 +77,15 @@ class DiscoveryNetworkMonitorMetricObserverTest : public ::testing::Test {
  public:
   DiscoveryNetworkMonitorMetricObserverTest()
       : mock_network_change_notifier_(
-            base::MakeUnique<MockNetworkChangeNotifier>()),
+            std::make_unique<MockNetworkChangeNotifier>()),
         task_runner_(new base::TestMockTimeTaskRunner()),
         task_runner_handle_(task_runner_),
         mock_clock_(task_runner_->GetMockTickClock()),
         start_ticks_(mock_clock_->NowTicks()),
-        metrics_(base::MakeUnique<MockMetrics>()),
+        metrics_(std::make_unique<MockMetrics>()),
         mock_metrics_(metrics_.get()),
-        metric_observer_(task_runner_->GetMockTickClock(),
-                         std::move(metrics_)) {}
+        clock_(task_runner_->GetMockTickClock()),
+        metric_observer_(clock_.get(), std::move(metrics_)) {}
 
  protected:
   base::TimeDelta time_advance_ = base::TimeDelta::FromMilliseconds(10);
@@ -94,6 +96,11 @@ class DiscoveryNetworkMonitorMetricObserverTest : public ::testing::Test {
   const base::TimeTicks start_ticks_;
   std::unique_ptr<MockMetrics> metrics_;
   MockMetrics* mock_metrics_;
+
+  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
+  // instance.
+  std::unique_ptr<base::TickClock> clock_;
+
   DiscoveryNetworkMonitorMetricObserver metric_observer_;
 };
 

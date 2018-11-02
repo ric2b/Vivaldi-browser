@@ -22,8 +22,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
  * Test suite for out of process heap profiling.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ProfilingProcessHostAndroidTest {
     private static final String TAG = "ProfilingProcessHostAndroidTest";
     @Rule
@@ -40,6 +39,20 @@ public class ProfilingProcessHostAndroidTest {
     @CommandLineFlags.Add({"memlog=browser"})
     public void testModeBrowser() throws Exception {
         TestAndroidShim profilingProcessHost = new TestAndroidShim();
-        Assert.assertTrue(profilingProcessHost.runTestForMode("browser"));
+        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", false, false));
+    }
+
+    @Test
+    @MediumTest
+    public void testModeBrowserDynamic() throws Exception {
+        TestAndroidShim profilingProcessHost = new TestAndroidShim();
+        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", true, false));
+    }
+
+    @Test
+    @MediumTest
+    public void testModeBrowserDynamicPseudo() throws Exception {
+        TestAndroidShim profilingProcessHost = new TestAndroidShim();
+        Assert.assertTrue(profilingProcessHost.runTestForMode("browser", true, true));
     }
 }

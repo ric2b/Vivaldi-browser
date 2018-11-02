@@ -12,7 +12,7 @@
 
 #include "base/bind.h"
 #include "base/guid.h"
-#include "base/memory/ptr_util.h"
+#include "base/json/json_writer.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -159,7 +159,7 @@ void OfflineInternalsUIMessageHandler::HandleStoredPagesCallback(
   base::ListValue results;
 
   for (const auto& page : pages) {
-    auto offline_page = base::MakeUnique<base::DictionaryValue>();
+    auto offline_page = std::make_unique<base::DictionaryValue>();
     offline_page->SetString("onlineUrl", page.url.spec());
     offline_page->SetString("namespace", page.client_id.name_space);
     offline_page->SetDouble("size", page.file_size);
@@ -182,7 +182,7 @@ void OfflineInternalsUIMessageHandler::HandleRequestQueueCallback(
   base::ListValue save_page_requests;
   if (result == offline_pages::GetRequestsResult::SUCCESS) {
     for (const auto& request : requests) {
-      auto save_page_request = base::MakeUnique<base::DictionaryValue>();
+      auto save_page_request = std::make_unique<base::DictionaryValue>();
       save_page_request->SetString("onlineUrl", request->url().spec());
       save_page_request->SetDouble("creationTime",
                                    request->creation_time().ToJsTime());
@@ -323,8 +323,18 @@ void OfflineInternalsUIMessageHandler::HandleGeneratePageBundle(
 
   prefetch_service_->GetPrefetchDispatcher()->AddCandidatePrefetchURLs(
       offline_pages::kSuggestedArticlesNamespace, prefetch_urls);
-  ResolveJavascriptCallback(base::Value(callback_id),
-                            base::Value("Added candidate URLs."));
+  std::string message("Added candidate URLs.\n");
+  // Construct a JSON array containing all the URLs. To guard against malicious
+  // URLs that might contain special characters, we create a ListValue and then
+  // serialize it into JSON, instead of doing direct string manipulation.
+  base::ListValue urls;
+  for (const auto& prefetch_url : prefetch_urls) {
+    urls.GetList().emplace_back(prefetch_url.url.spec());
+  }
+  std::string json;
+  base::JSONWriter::Write(urls, &json);
+  message.append(json);
+  ResolveJavascriptCallback(base::Value(callback_id), base::Value(message));
 }
 
 void OfflineInternalsUIMessageHandler::HandleGetOperation(
@@ -426,8 +436,8 @@ void OfflineInternalsUIMessageHandler::HandleGetEventLogs(
 
 void OfflineInternalsUIMessageHandler::HandleAddToRequestQueue(
     const base::ListValue* args) {
-  const base::Value* callback_id;
-  CHECK(args->Get(0, &callback_id));
+  std::string callback_id;
+  CHECK(args->GetString(0, &callback_id));
 
   if (request_coordinator_) {
     std::string url;
@@ -442,12 +452,22 @@ void OfflineInternalsUIMessageHandler::HandleAddToRequestQueue(
     params.url = GURL(url);
     params.client_id = offline_pages::ClientId(offline_pages::kAsyncNamespace,
                                                id_stream.str());
-    ResolveJavascriptCallback(
-        *callback_id,
-        base::Value(request_coordinator_->SavePageLater(params) > 0));
+    request_coordinator_->SavePageLater(
+        params,
+        base::Bind(
+            &OfflineInternalsUIMessageHandler::HandleSavePageLaterCallback,
+            weak_ptr_factory_.GetWeakPtr(), callback_id));
   } else {
-    ResolveJavascriptCallback(*callback_id, base::Value(false));
+    ResolveJavascriptCallback(base::Value(callback_id), base::Value(false));
   }
+}
+
+void OfflineInternalsUIMessageHandler::HandleSavePageLaterCallback(
+    std::string callback_id,
+    offline_pages::AddRequestResult result) {
+  ResolveJavascriptCallback(
+      base::Value(callback_id),
+      base::Value(result == offline_pages::AddRequestResult::SUCCESS));
 }
 
 void OfflineInternalsUIMessageHandler::RegisterMessages() {

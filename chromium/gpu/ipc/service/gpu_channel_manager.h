@@ -25,7 +25,7 @@
 #include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_feature_info.h"
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/native_widget_types.h"
@@ -48,11 +48,11 @@ class GpuChannel;
 class GpuChannelManagerDelegate;
 class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
+class MailboxManager;
 class Scheduler;
 class SyncPointManager;
 
 namespace gles2 {
-class MailboxManager;
 class Outputter;
 class ProgramCache;
 }  // namespace gles2
@@ -60,7 +60,7 @@ class ProgramCache;
 // A GpuChannelManager is a thread responsible for issuing rendering commands
 // managing the lifetimes of GPU channels and forwarding IPC requests from the
 // browser process to them based on the corresponding renderer ID.
-class GPU_EXPORT GpuChannelManager {
+class GPU_IPC_SERVICE_EXPORT GpuChannelManager {
  public:
   GpuChannelManager(const GpuPreferences& gpu_preferences,
                     GpuChannelManagerDelegate* delegate,
@@ -137,7 +137,7 @@ class GPU_EXPORT GpuChannelManager {
 
   bool is_exiting_for_lost_context() { return exiting_for_lost_context_; }
 
-  gles2::MailboxManager* mailbox_manager() { return mailbox_manager_.get(); }
+  MailboxManager* mailbox_manager() { return mailbox_manager_.get(); }
 
   gl::GLShareGroup* share_group() const { return share_group_.get(); }
 
@@ -174,7 +174,7 @@ class GPU_EXPORT GpuChannelManager {
 
   scoped_refptr<gl::GLShareGroup> share_group_;
 
-  std::unique_ptr<gles2::MailboxManager> mailbox_manager_;
+  std::unique_ptr<MailboxManager> mailbox_manager_;
   std::unique_ptr<gles2::Outputter> outputter_;
   GpuMemoryManager gpu_memory_manager_;
   Scheduler* scheduler_;

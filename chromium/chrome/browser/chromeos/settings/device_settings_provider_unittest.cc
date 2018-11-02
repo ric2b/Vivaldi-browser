@@ -235,6 +235,18 @@ class DeviceSettingsProviderTest : public DeviceSettingsTestBase {
     Mock::VerifyAndClearExpectations(this);
   }
 
+  // Helper routine to set HostnameTemplate policy.
+  void SetHostnameTemplate(const std::string& hostname_template) {
+    EXPECT_CALL(*this, SettingChanged(_)).Times(AtLeast(1));
+    em::NetworkHostnameProto* proto =
+        device_policy_.payload().mutable_network_hostname();
+    proto->set_device_hostname_template(hostname_template);
+    device_policy_.Build();
+    session_manager_client_.set_device_policy(device_policy_.GetBlob());
+    ReloadDeviceSettings();
+    Mock::VerifyAndClearExpectations(this);
+  }
+
   ScopedTestingLocalState local_state_;
 
   std::unique_ptr<DeviceSettingsProvider> provider_;
@@ -568,6 +580,21 @@ TEST_F(DeviceSettingsProviderTest, EmptyAllowedConnectionTypesForUpdate) {
   base::ListValue allowed_connections;
   allowed_connections.AppendInteger(0);
   VerifyPolicyValue(kAllowedConnectionTypesForUpdate, &allowed_connections);
+}
+
+TEST_F(DeviceSettingsProviderTest, DecodeHostnameTemplate) {
+  // By default DeviceHostnameTemplate policy should not be set.
+  VerifyPolicyValue(kDeviceHostnameTemplate, nullptr);
+
+  // Empty string means that the policy is not set.
+  SetHostnameTemplate("");
+  VerifyPolicyValue(kDeviceHostnameTemplate, nullptr);
+
+  // Check some meaningful value. Policy should be set.
+  const std::string hostname_template = "chromebook-${ASSET_ID}";
+  const base::Value template_value(hostname_template);
+  SetHostnameTemplate(hostname_template);
+  VerifyPolicyValue(kDeviceHostnameTemplate, &template_value);
 }
 
 TEST_F(DeviceSettingsProviderTest, DecodeLogUploadSettings) {

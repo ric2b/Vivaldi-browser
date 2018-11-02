@@ -30,8 +30,7 @@ const GpuDriverBugWorkaroundInfo kFeatureList[] = {
 GpuDriverBugList::GpuDriverBugList(const GpuControlListData& data)
     : GpuControlList(data) {}
 
-GpuDriverBugList::~GpuDriverBugList() {
-}
+GpuDriverBugList::~GpuDriverBugList() = default;
 
 // static
 std::unique_ptr<GpuDriverBugList> GpuDriverBugList::Create() {
@@ -102,6 +101,13 @@ void GpuDriverBugList::AppendAllWorkarounds(
 #define GPU_OP(type, name) workarounds->push_back(#name);
   GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)
 #undef GPU_OP
+}
+
+// static
+bool GpuDriverBugList::AreEntryIndicesValid(
+    const std::vector<uint32_t>& entry_indices) {
+  return GpuControlList::AreEntryIndicesValid(entry_indices,
+                                              kGpuDriverBugListEntryCount);
 }
 
 }  // namespace gpu

@@ -9,39 +9,21 @@
 #include "core/dom/Document.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/MessageEvent.h"
+#include "core/fetch/Request.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/MainThreadDebugger.h"
-#include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/DedicatedWorker.h"
 #include "core/workers/DedicatedWorkerObjectProxy.h"
 #include "core/workers/DedicatedWorkerThread.h"
-#include "core/workers/GlobalScopeCreationParams.h"
-#include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerInspectorProxy.h"
+#include "core/workers/WorkerOptions.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/WTF.h"
 #include "public/platform/TaskType.h"
-#include "services/service_manager/public/cpp/interface_provider.h"
-#include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
-#include "third_party/WebKit/public/platform/dedicated_worker_factory.mojom-blink.h"
+#include "services/network/public/interfaces/fetch_api.mojom-shared.h"
 
 namespace blink {
-namespace {
-
-service_manager::mojom::blink::InterfaceProviderPtrInfo
-ConnectToWorkerInterfaceProvider(Document* document,
-                                 scoped_refptr<SecurityOrigin> script_origin) {
-  mojom::blink::DedicatedWorkerFactoryPtr worker_factory;
-  document->GetInterfaceProvider()->GetInterface(&worker_factory);
-  service_manager::mojom::blink::InterfaceProviderPtrInfo
-      interface_provider_ptr;
-  worker_factory->CreateDedicatedWorker(
-      script_origin, mojo::MakeRequest(&interface_provider_ptr));
-  return interface_provider_ptr;
-}
-
-}  // namespace
 
 struct DedicatedWorkerMessagingProxy::QueuedTask {
   scoped_refptr<SerializedScriptValue> message;
@@ -51,9 +33,8 @@ struct DedicatedWorkerMessagingProxy::QueuedTask {
 
 DedicatedWorkerMessagingProxy::DedicatedWorkerMessagingProxy(
     ExecutionContext* execution_context,
-    DedicatedWorker* worker_object,
-    WorkerClients* worker_clients)
-    : ThreadedMessagingProxyBase(execution_context, worker_clients),
+    DedicatedWorker* worker_object)
+    : ThreadedMessagingProxyBase(execution_context),
       worker_object_(worker_object) {
   worker_object_proxy_ =
       DedicatedWorkerObjectProxy::Create(this, GetParentFrameTaskRunners());
@@ -62,11 +43,11 @@ DedicatedWorkerMessagingProxy::DedicatedWorkerMessagingProxy(
 DedicatedWorkerMessagingProxy::~DedicatedWorkerMessagingProxy() = default;
 
 void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
+    const WorkerOptions& options,
     const KURL& script_url,
-    const String& user_agent,
-    const String& source_code,
-    ReferrerPolicy referrer_policy,
-    const v8_inspector::V8StackTraceId& stack_id) {
+    const v8_inspector::V8StackTraceId& stack_id,
+    const String& source_code) {
   DCHECK(IsParentContextThread());
   if (AskedToTerminate()) {
     // Worker.terminate() could be called from JS before the thread was
@@ -74,26 +55,36 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     return;
   }
 
-  Document* document = ToDocument(GetExecutionContext());
-  SecurityOrigin* starter_origin = document->GetSecurityOrigin();
+  InitializeWorkerThread(
+      std::move(creation_params),
+      CreateBackingThreadStartupData(ToIsolate(GetExecutionContext())));
 
-  ContentSecurityPolicy* csp = document->GetContentSecurityPolicy();
-  DCHECK(csp);
+  if (options.type() == "classic") {
+    GetWorkerThread()->EvaluateClassicScript(
+        script_url, source_code, nullptr /* cached_meta_data */, stack_id);
+  } else if (options.type() == "module") {
+    network::mojom::FetchCredentialsMode credentials_mode;
+    bool result =
+        Request::ParseCredentialsMode(options.credentials(), &credentials_mode);
+    DCHECK(result);
+    GetWorkerThread()->ImportModuleScript(script_url, credentials_mode);
+  } else {
+    NOTREACHED();
+  }
 
-  auto global_scope_creation_params =
-      std::make_unique<GlobalScopeCreationParams>(
-          script_url, user_agent, source_code, nullptr, csp->Headers().get(),
-          referrer_policy, starter_origin, ReleaseWorkerClients(),
-          document->AddressSpace(),
-          OriginTrialContext::GetTokens(document).get(),
-          std::make_unique<WorkerSettings>(document->GetSettings()),
-          kV8CacheOptionsDefault,
-          ConnectToWorkerInterfaceProvider(document,
-                                           SecurityOrigin::Create(script_url)));
-
-  InitializeWorkerThread(std::move(global_scope_creation_params),
-                         CreateBackingThreadStartupData(ToIsolate(document)),
-                         script_url, stack_id);
+  // Post all queued tasks to the worker.
+  for (auto& queued_task : queued_early_tasks_) {
+    WTF::CrossThreadClosure task = CrossThreadBind(
+        &DedicatedWorkerObjectProxy::ProcessMessageFromWorkerObject,
+        CrossThreadUnretained(&WorkerObjectProxy()),
+        WTF::Passed(std::move(queued_task.message)),
+        WTF::Passed(std::move(queued_task.channels)),
+        CrossThreadUnretained(GetWorkerThread()), queued_task.stack_id);
+    PostCrossThreadTask(
+        *GetWorkerThread()->GetTaskRunner(TaskType::kPostedMessage), FROM_HERE,
+        std::move(task));
+  }
+  queued_early_tasks_.clear();
 }
 
 void DedicatedWorkerMessagingProxy::PostMessageToWorkerGlobalScope(
@@ -110,9 +101,9 @@ void DedicatedWorkerMessagingProxy::PostMessageToWorkerGlobalScope(
         CrossThreadUnretained(&WorkerObjectProxy()), std::move(message),
         WTF::Passed(std::move(channels)),
         CrossThreadUnretained(GetWorkerThread()), stack_id);
-    GetWorkerThread()
-        ->GetTaskRunner(TaskType::kPostedMessage)
-        ->PostTask(BLINK_FROM_HERE, std::move(task));
+    PostCrossThreadTask(
+        *GetWorkerThread()->GetTaskRunner(TaskType::kPostedMessage), FROM_HERE,
+        std::move(task));
   } else {
     // GetWorkerThread() returns nullptr while the worker thread is being
     // created. In that case, push events into the queue and dispatch them in
@@ -120,24 +111,6 @@ void DedicatedWorkerMessagingProxy::PostMessageToWorkerGlobalScope(
     queued_early_tasks_.push_back(
         QueuedTask{std::move(message), std::move(channels), stack_id});
   }
-}
-
-void DedicatedWorkerMessagingProxy::WorkerThreadCreated() {
-  DCHECK(IsParentContextThread());
-  ThreadedMessagingProxyBase::WorkerThreadCreated();
-
-  for (auto& queued_task : queued_early_tasks_) {
-    WTF::CrossThreadClosure task = CrossThreadBind(
-        &DedicatedWorkerObjectProxy::ProcessMessageFromWorkerObject,
-        CrossThreadUnretained(&WorkerObjectProxy()),
-        std::move(queued_task.message),
-        WTF::Passed(std::move(queued_task.channels)),
-        CrossThreadUnretained(GetWorkerThread()), queued_task.stack_id);
-    GetWorkerThread()
-        ->GetTaskRunner(TaskType::kPostedMessage)
-        ->PostTask(BLINK_FROM_HERE, std::move(task));
-  }
-  queued_early_tasks_.clear();
 }
 
 bool DedicatedWorkerMessagingProxy::HasPendingActivity() const {
@@ -191,13 +164,11 @@ void DedicatedWorkerMessagingProxy::DispatchErrorEvent(
   // The HTML spec requires to queue an error event using the DOM manipulation
   // task source.
   // https://html.spec.whatwg.org/multipage/workers.html#runtime-script-errors-2
-  GetWorkerThread()
-      ->GetTaskRunner(TaskType::kDOMManipulation)
-      ->PostTask(BLINK_FROM_HERE,
-                 CrossThreadBind(
-                     &DedicatedWorkerObjectProxy::ProcessUnhandledException,
-                     CrossThreadUnretained(worker_object_proxy_.get()),
-                     exception_id, CrossThreadUnretained(GetWorkerThread())));
+  PostCrossThreadTask(
+      *GetWorkerThread()->GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
+      CrossThreadBind(&DedicatedWorkerObjectProxy::ProcessUnhandledException,
+                      CrossThreadUnretained(worker_object_proxy_.get()),
+                      exception_id, CrossThreadUnretained(GetWorkerThread())));
 }
 
 void DedicatedWorkerMessagingProxy::Trace(blink::Visitor* visitor) {

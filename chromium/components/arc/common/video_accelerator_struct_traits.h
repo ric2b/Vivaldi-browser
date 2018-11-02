@@ -5,11 +5,20 @@
 #ifndef COMPONENTS_ARC_COMMON_VIDEO_ACCELERATOR_STRUCT_TRAITS_H_
 #define COMPONENTS_ARC_COMMON_VIDEO_ACCELERATOR_STRUCT_TRAITS_H_
 
-#include "components/arc/common/video_decode_accelerator.mojom.h"
+#include "components/arc/common/video_common.mojom.h"
 #include "components/arc/video_accelerator/video_frame_plane.h"
+#include "media/base/video_codecs.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace mojo {
+
+template <>
+struct EnumTraits<arc::mojom::VideoCodecProfile, media::VideoCodecProfile> {
+  static arc::mojom::VideoCodecProfile ToMojom(media::VideoCodecProfile input);
+
+  static bool FromMojom(arc::mojom::VideoCodecProfile input,
+                        media::VideoCodecProfile* output);
+};
 
 template <>
 struct StructTraits<arc::mojom::VideoFramePlaneDataView, arc::VideoFramePlane> {

@@ -19,7 +19,7 @@ namespace blink {
 
 class SVGPathNonInterpolableValue : public NonInterpolableValue {
  public:
-  ~SVGPathNonInterpolableValue() override {}
+  ~SVGPathNonInterpolableValue() override = default;
 
   static scoped_refptr<SVGPathNonInterpolableValue> Create(
       Vector<SVGPathSegType>& path_seg_types) {
@@ -95,7 +95,7 @@ InterpolationValue PathInterpolationFunctions::ConvertValue(
 class UnderlyingPathSegTypesChecker
     : public InterpolationType::ConversionChecker {
  public:
-  ~UnderlyingPathSegTypesChecker() final {}
+  ~UnderlyingPathSegTypesChecker() final = default;
 
   static std::unique_ptr<UnderlyingPathSegTypesChecker> Create(
       const InterpolationValue& underlying) {
@@ -157,7 +157,7 @@ PairwiseInterpolationValue PathInterpolationFunctions::MaybeMergeSingles(
           .PathSegTypes();
   const Vector<SVGPathSegType>& end_types =
       ToSVGPathNonInterpolableValue(*end.non_interpolable_value).PathSegTypes();
-  if (!PathSegTypesMatch(start_types, end_types))
+  if (start_types.size() == 0 || !PathSegTypesMatch(start_types, end_types))
     return nullptr;
 
   return PairwiseInterpolationValue(std::move(start.interpolable_value),

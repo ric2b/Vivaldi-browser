@@ -45,6 +45,7 @@ cr.define('extension_detail_view_tests', function() {
       item.set('data', extensionData);
       item.set('delegate', mockDelegate);
       item.set('inDevMode', false);
+      item.set('incognitoAvailable', true);
       document.body.appendChild(item);
     });
 
@@ -58,6 +59,9 @@ cr.define('extension_detail_view_tests', function() {
       expectTrue(testIsVisible('#icon'));
       expectTrue(testIsVisible('#enable-toggle'));
       expectFalse(testIsVisible('#extensions-options'));
+      expectTrue(
+          item.$.description.textContent.indexOf('This is an extension') !==
+          -1);
 
       // Check the checkboxes visibility and state. They should be visible
       // only if the associated option is enabled, and checked if the
@@ -108,10 +112,10 @@ cr.define('extension_detail_view_tests', function() {
 
       item.set('data.manifestHomePageUrl', 'http://example.com');
       Polymer.dom.flush();
-      expectTrue(testIsVisible('#developerWebsite'));
+      expectTrue(testIsVisible('#extensionWebsite'));
       item.set('data.manifestHomePageUrl', '');
       Polymer.dom.flush();
-      expectFalse(testIsVisible('#developerWebsite'));
+      expectFalse(testIsVisible('#extensionWebsite'));
 
       item.set('data.webStoreUrl', 'http://example.com');
       Polymer.dom.flush();
@@ -127,6 +131,23 @@ cr.define('extension_detail_view_tests', function() {
       Polymer.dom.flush();
       expectTrue(testIsVisible('#id-section'));
       expectTrue(testIsVisible('#inspectable-views'));
+
+      assertTrue(item.data.incognitoAccess.isEnabled);
+      item.set('incognitoAvailable', false);
+      Polymer.dom.flush();
+      expectFalse(testIsVisible('#allow-incognito'));
+
+      item.set('incognitoAvailable', true);
+      Polymer.dom.flush();
+      expectTrue(testIsVisible('#allow-incognito'));
+
+      // Ensure that the "Extension options" button is disabled when the item
+      // itself is disabled.
+      var extensionOptions = item.$$('#extensions-options');
+      assertFalse(extensionOptions.disabled);
+      item.set('data.state', chrome.developerPrivate.ExtensionState.DISABLED);
+      Polymer.dom.flush();
+      assertTrue(extensionOptions.disabled);
     });
 
     test(assert(TestNames.LayoutSource), function() {

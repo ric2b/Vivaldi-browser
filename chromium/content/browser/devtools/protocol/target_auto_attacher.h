@@ -11,7 +11,7 @@
 
 namespace content {
 
-class NavigationHandle;
+class NavigationHandleImpl;
 class RenderFrameHostImpl;
 
 namespace protocol {
@@ -31,11 +31,10 @@ class TargetAutoAttacher : public ServiceWorkerDevToolsManager::Observer {
   void SetAttachToFrames(bool attach_to_frames);
 
   void UpdateServiceWorkers();
-  void UpdateFrames();
   void AgentHostClosed(DevToolsAgentHost* host);
 
   bool ShouldThrottleFramesNavigation();
-  DevToolsAgentHost* AutoAttachToFrame(NavigationHandle* navigation_handle);
+  DevToolsAgentHost* AutoAttachToFrame(NavigationHandleImpl* navigation_handle);
 
  private:
   using Hosts = base::flat_set<scoped_refptr<DevToolsAgentHost>>;
@@ -46,11 +45,13 @@ class TargetAutoAttacher : public ServiceWorkerDevToolsManager::Observer {
                              bool waiting_for_debugger);
 
   // ServiceWorkerDevToolsManager::Observer implementation.
-  void WorkerCreated(ServiceWorkerDevToolsAgentHost* host) override;
-  void WorkerReadyForInspection(ServiceWorkerDevToolsAgentHost* host) override;
+  void WorkerCreated(ServiceWorkerDevToolsAgentHost* host,
+                     bool* should_pause_on_start) override;
   void WorkerVersionInstalled(ServiceWorkerDevToolsAgentHost* host) override;
   void WorkerVersionDoomed(ServiceWorkerDevToolsAgentHost* host) override;
   void WorkerDestroyed(ServiceWorkerDevToolsAgentHost* host) override;
+
+  void UpdateFrames();
 
   AttachCallback attach_callback_;
   DetachCallback detach_callback_;
@@ -60,6 +61,7 @@ class TargetAutoAttacher : public ServiceWorkerDevToolsManager::Observer {
   bool auto_attach_;
   bool wait_for_debugger_on_start_;
   bool attach_to_frames_;
+  bool auto_attaching_service_workers_ = false;
 
   Hosts auto_attached_hosts_;
 

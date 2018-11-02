@@ -20,9 +20,14 @@ WebGLQuery::WebGLQuery(WebGL2RenderingContextBase* ctx)
       target_(0),
       can_update_availability_(false),
       query_result_available_(false),
-      query_result_(0),
-      task_runner_(
-          ctx->canvas()->GetDocument().GetTaskRunner(TaskType::kUnthrottled)) {
+      query_result_(0) {
+  if (ctx->canvas()) {
+    task_runner_ =
+        ctx->canvas()->GetDocument().GetTaskRunner(TaskType::kUnthrottled);
+  } else {
+    // Fallback for OffscreenCanvas (no frame scheduler)
+    task_runner_ = Platform::Current()->CurrentThread()->GetWebTaskRunner();
+  }
   GLuint query;
   ctx->ContextGL()->GenQueriesEXT(1, &query);
   SetObject(query);
@@ -89,9 +94,10 @@ GLuint WebGLQuery::GetQueryResult() {
 void WebGLQuery::ScheduleAllowAvailabilityUpdate() {
   if (task_handle_.IsActive())
     return;
-  task_handle_ = task_runner_->PostCancellableTask(
-      BLINK_FROM_HERE, WTF::Bind(&WebGLQuery::AllowAvailabilityUpdate,
-                                 WrapWeakPersistent(this)));
+  task_handle_ =
+      PostCancellableTask(*task_runner_, FROM_HERE,
+                          WTF::Bind(&WebGLQuery::AllowAvailabilityUpdate,
+                                    WrapWeakPersistent(this)));
 }
 
 void WebGLQuery::AllowAvailabilityUpdate() {

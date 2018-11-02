@@ -13,8 +13,7 @@
 #include "base/hash.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "components/variations/variations_associated_data.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -26,6 +25,8 @@ namespace extensions {
 namespace GetVariationParams = api::metrics_private::GetVariationParams;
 namespace RecordUserAction = api::metrics_private::RecordUserAction;
 namespace RecordValue = api::metrics_private::RecordValue;
+namespace RecordBoolean = api::metrics_private::RecordBoolean;
+namespace RecordEnumerationValue = api::metrics_private::RecordEnumerationValue;
 namespace RecordSparseHashable = api::metrics_private::RecordSparseHashable;
 namespace RecordSparseValue = api::metrics_private::RecordSparseValue;
 namespace RecordPercentage = api::metrics_private::RecordPercentage;
@@ -140,8 +141,7 @@ ExtensionFunction::ResponseAction
 MetricsPrivateRecordSparseHashableFunction::Run() {
   auto params = RecordSparseHashable::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
-  // This UMA_HISTOGRAM_ macro is okay for non-runtime-constant strings.
-  UMA_HISTOGRAM_SPARSE_SLOWLY(params->metric_name, base::Hash(params->value));
+  base::UmaHistogramSparse(params->metric_name, base::Hash(params->value));
   return RespondNow(NoArguments());
 }
 
@@ -150,9 +150,27 @@ MetricsPrivateRecordSparseValueFunction::Run() {
   std::unique_ptr<RecordSparseValue::Params> params(
       RecordSparseValue::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
-  // This particular UMA_HISTOGRAM_ macro is okay for
-  // non-runtime-constant strings.
-  UMA_HISTOGRAM_SPARSE_SLOWLY(params->metric_name, params->value);
+  base::UmaHistogramSparse(params->metric_name, params->value);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction MetricsPrivateRecordBooleanFunction::Run() {
+  std::unique_ptr<RecordBoolean::Params> params(
+      RecordBoolean::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  base::UmaHistogramBoolean(params->metric_name, params->value);
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+MetricsPrivateRecordEnumerationValueFunction::Run() {
+  std::unique_ptr<RecordEnumerationValue::Params> params(
+      RecordEnumerationValue::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+  // Uses UmaHistogramExactLinear instead of UmaHistogramEnumeration
+  // because we don't have an enum type on params->value.
+  base::UmaHistogramExactLinear(params->metric_name, params->value,
+                                params->enum_size);
   return RespondNow(NoArguments());
 }
 

@@ -35,7 +35,8 @@ gclient_gni_file_name = os.path.join(sourcedir, "chromium/build/config/gclient_a
 if not os.access(gclient_gni_file_name, os.F_OK):
   with open(gclient_gni_file_name, "w") as f:
     f.write("""checkout_nacl=false
-    checkout_libaom=false""")
+    checkout_libaom=false
+    checkout_oculus_sdk=false""")
 
 extra_subprocess_flags = {}
 if is_windows:

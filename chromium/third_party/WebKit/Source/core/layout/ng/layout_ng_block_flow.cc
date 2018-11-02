@@ -5,7 +5,7 @@
 #include "core/layout/ng/layout_ng_block_flow.h"
 
 #include "core/layout/LayoutAnalyzer.h"
-#include "core/layout/ng/inline/ng_inline_fragment_iterator.h"
+#include "core/layout/ng/inline/ng_inline_fragment_traversal.h"
 #include "core/layout/ng/inline/ng_inline_node_data.h"
 #include "core/layout/ng/ng_fragment_builder.h"
 #include "core/layout/ng/ng_length_utils.h"
@@ -17,7 +17,7 @@ namespace blink {
 LayoutNGBlockFlow::LayoutNGBlockFlow(Element* element)
     : LayoutNGMixin<LayoutBlockFlow>(element) {}
 
-LayoutNGBlockFlow::~LayoutNGBlockFlow() {}
+LayoutNGBlockFlow::~LayoutNGBlockFlow() = default;
 
 bool LayoutNGBlockFlow::IsOfType(LayoutObjectType type) const {
   return type == kLayoutObjectNGBlockFlow ||
@@ -37,14 +37,6 @@ void LayoutNGBlockFlow::UpdateBlockLayout(bool relayout_children) {
 
   scoped_refptr<NGLayoutResult> result =
       NGBlockNode(this).Layout(*constraint_space);
-
-  // We need to update our margins as these are calculated once and stored in
-  // LayoutBox::margin_box_outsets_. Typically this happens within
-  // UpdateLogicalWidth and UpdateLogicalHeight.
-  //
-  // This primarily fixes cases where we are embedded inside another layout,
-  // for example LayoutView, LayoutFlexibleBox, etc.
-  UpdateMargins(*constraint_space);
 
   for (NGOutOfFlowPositionedDescendant descendant :
        result->OutOfFlowPositionedDescendants())
@@ -122,6 +114,7 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
   // physical in a single variable.
   LayoutUnit static_inline;
   LayoutUnit static_block;
+  LayoutBoxModelObject* css_container = ToLayoutBoxModelObject(Container());
 
   if (container_style->IsDisplayFlexibleOrGridBox()) {
     static_inline = Layer()->StaticInlinePosition();
@@ -131,9 +124,12 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
     Length logical_right;
     Length logical_top;
     Length logical_bottom;
-    ComputeInlineStaticDistance(logical_left, logical_right, this, container,
-                                container->LogicalWidth());
-    ComputeBlockStaticDistance(logical_top, logical_bottom, this, container);
+
+    ComputeInlineStaticDistance(
+        logical_left, logical_right, this, css_container,
+        ContainingBlockLogicalWidthForPositioned(css_container));
+    ComputeBlockStaticDistance(logical_top, logical_bottom, this,
+                               css_container);
     if (parent_style->IsLeftToRightDirection()) {
       if (!logical_left.IsAuto())
         static_inline = ValueForLength(logical_left, container->LogicalWidth());
@@ -172,17 +168,19 @@ void LayoutNGBlockFlow::UpdateOutOfFlowBlockLayout() {
       NGStaticPosition::Create(parent_style->GetWritingMode(),
                                parent_style->Direction(), static_location);
 
-  container_builder.AddOutOfFlowLegacyCandidate(NGBlockNode(this),
-                                                static_position);
+  // Set correct container for inline containing blocks.
+  container_builder.AddOutOfFlowLegacyCandidate(
+      NGBlockNode(this), static_position,
+      css_container->IsBox() ? nullptr : css_container);
 
-  // LayoutObject::ContainingBlock() is not equal to LayoutObject::Container()
-  // when css container is inline. NG uses css container's style to determine
-  // whether containing block can contain the node, and therefore must use
-  // ::Container() because that object has the right Style().
-  LayoutObject* css_container = Container();
-  DCHECK(css_container->IsBox());
-  NGOutOfFlowLayoutPart(NGBlockNode(ToLayoutBox(css_container)),
-                        *constraint_space, *container_style, &container_builder)
+  NGBoxStrut scrollbar_sizes;
+  if (css_container->IsBox())
+    scrollbar_sizes =
+        NGBlockNode(ToLayoutBox(css_container)).GetScrollbarSizes();
+  NGOutOfFlowLayoutPart(&container_builder,
+                        css_container->CanContainAbsolutePositionObjects(),
+                        css_container->CanContainFixedPositionObjects(),
+                        scrollbar_sizes, *constraint_space, *container_style)
       .Run(/* update_legacy */ false);
   scoped_refptr<NGLayoutResult> result = container_builder.ToBoxFragment();
   // These are the unpositioned OOF descendants of the current OOF block.
@@ -226,7 +224,8 @@ bool LayoutNGBlockFlow::LocalVisualRectFor(const LayoutObject* layout_object,
   // Investigate why.
   if (!box_fragment)
     return false;
-  NGInlineFragmentIterator children(*box_fragment, layout_object);
+  auto children =
+      NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, layout_object);
   for (const auto& child : children) {
     NGPhysicalOffsetRect child_visual_rect = child.fragment->SelfVisualRect();
     visual_rect->Unite(child_visual_rect + child.offset_to_container_box);

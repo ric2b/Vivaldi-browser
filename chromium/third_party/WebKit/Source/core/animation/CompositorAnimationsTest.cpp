@@ -82,10 +82,8 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
   std::unique_ptr<StringKeyframeVector> keyframe_vector5_;
   Persistent<StringKeyframeEffectModel> keyframe_animation_effect5_;
 
-  Persistent<Document> document_;
   Persistent<Element> element_;
   Persistent<DocumentTimeline> timeline_;
-  std::unique_ptr<DummyPageHolder> page_holder_;
 
   void SetUp() override {
     RenderingTest::SetUp();
@@ -113,13 +111,11 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
     keyframe_animation_effect5_ =
         StringKeyframeEffectModel::Create(*keyframe_vector5_);
 
-    page_holder_ = DummyPageHolder::Create();
-    document_ = &page_holder_->GetDocument();
-    document_->GetAnimationClock().ResetTimeForTesting();
+    GetAnimationClock().ResetTimeForTesting();
 
-    timeline_ = DocumentTimeline::Create(document_.Get());
+    timeline_ = DocumentTimeline::Create(&GetDocument());
     timeline_->ResetForTesting();
-    element_ = document_->createElement("test");
+    element_ = GetDocument().createElement("test");
 
     helper_.Initialize(nullptr, nullptr, nullptr, &ConfigureSettings);
     base_url_ = "http://www.test.com/";
@@ -156,22 +152,10 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
         timing, 0, std::numeric_limits<double>::quiet_NaN(), 0, effect,
         animations, player_playback_rate);
   }
-  bool GetAnimationBounds(FloatBox& bounding_box,
-                          const KeyframeEffectModelBase& effect,
-                          double min_value,
-                          double max_value) {
-    // As the compositor code only understands AnimatableValues, we must
-    // snapshot the effect to make those available.
-    // TODO(crbug.com/725385): Remove once compositor uses InterpolationTypes.
-    auto style = ComputedStyle::Create();
-    effect.SnapshotAllCompositorKeyframes(*element_.Get(), *style, nullptr);
-    return CompositorAnimations::GetAnimatedBoundingBox(bounding_box, effect,
-                                                        min_value, max_value);
-  }
 
   bool DuplicateSingleKeyframeAndTestIsCandidateOnResult(
       StringKeyframe* frame) {
-    EXPECT_EQ(frame->Offset(), 0);
+    EXPECT_EQ(frame->CheckedOffset(), 0);
     StringKeyframeVector frames;
     scoped_refptr<Keyframe> second = frame->CloneWithOffset(1);
 
@@ -264,7 +248,7 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
       scoped_refptr<StringKeyframe> to,
       scoped_refptr<StringKeyframe> c = nullptr,
       scoped_refptr<StringKeyframe> d = nullptr) {
-    EXPECT_EQ(from->Offset(), 0);
+    EXPECT_EQ(from->CheckedOffset(), 0);
     StringKeyframeVector frames;
     frames.push_back(from);
     EXPECT_LE(from->Offset(), to->Offset());
@@ -276,9 +260,9 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
     if (d) {
       frames.push_back(d);
       EXPECT_LE(c->Offset(), d->Offset());
-      EXPECT_EQ(d->Offset(), 1.0);
+      EXPECT_EQ(d->CheckedOffset(), 1.0);
     } else {
-      EXPECT_EQ(to->Offset(), 1.0);
+      EXPECT_EQ(to->CheckedOffset(), 1.0);
     }
     if (!HasFatalFailure()) {
       return StringKeyframeEffectModel::Create(frames);
@@ -287,9 +271,8 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
   }
 
   void SimulateFrame(double time) {
-    document_->GetAnimationClock().UpdateTime(time);
-    document_->GetPendingAnimations().Update(Optional<CompositorElementIdSet>(),
-                                             false);
+    GetAnimationClock().UpdateTime(time);
+    GetPendingAnimations().Update(Optional<CompositorElementIdSet>(), false);
     timeline_->ServiceAnimations(kTimingUpdateForAnimationFrame);
   }
 
@@ -330,7 +313,7 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
     WebURL url = URLTestHelpers::RegisterMockedURLLoadFromBase(
         WebString::FromUTF8(base_url_), testing_path,
         WebString::FromUTF8(file_name));
-    FrameTestHelpers::LoadFrame(helper_.WebView()->MainFrameImpl(),
+    FrameTestHelpers::LoadFrame(helper_.GetWebView()->MainFrameImpl(),
                                 base_url_ + file_name);
     ForceFullCompositingUpdate();
     URLTestHelpers::RegisterMockedURLUnregister(url);
@@ -339,7 +322,7 @@ class AnimationCompositorAnimationsTest : public RenderingTest {
   LocalFrame* GetFrame() const { return helper_.LocalMainFrame()->GetFrame(); }
 
   void ForceFullCompositingUpdate() {
-    helper_.WebView()->UpdateAllLifecyclePhases();
+    helper_.GetWebView()->UpdateAllLifecyclePhases();
   }
 
  private:
@@ -443,33 +426,6 @@ TEST_F(AnimationCompositorAnimationsTest,
   frames_mixed_properties.push_back(std::move(keyframe));
   EXPECT_FALSE(CanStartEffectOnCompositor(
       timing_, *StringKeyframeEffectModel::Create(frames_mixed_properties)));
-}
-
-TEST_F(AnimationCompositorAnimationsTest, AnimatedBoundingBox) {
-  Vector<String> transform_vector;
-  transform_vector.push_back("translate3d(0, 0, 0)");
-  transform_vector.push_back("translate3d(200px, 200px, 0)");
-  std::unique_ptr<StringKeyframeVector> frames =
-      CreateCompositableTransformKeyframeVector(transform_vector);
-  FloatBox bounds;
-  EXPECT_TRUE(GetAnimationBounds(
-      bounds, *StringKeyframeEffectModel::Create(*frames), 0, 1));
-  EXPECT_EQ(FloatBox(0.0f, 0.f, 0.0f, 200.0f, 200.0f, 0.0f), bounds);
-  bounds = FloatBox();
-  EXPECT_TRUE(GetAnimationBounds(
-      bounds, *StringKeyframeEffectModel::Create(*frames), -1, 1));
-  EXPECT_EQ(FloatBox(-200.0f, -200.0, 0.0, 400.0f, 400.0f, 0.0f), bounds);
-
-  transform_vector.push_back("translate3d(-300px, -400px, 1px)");
-  bounds = FloatBox();
-  frames = CreateCompositableTransformKeyframeVector(transform_vector);
-  EXPECT_TRUE(GetAnimationBounds(
-      bounds, *StringKeyframeEffectModel::Create(*frames), 0, 1));
-  EXPECT_EQ(FloatBox(-300.0f, -400.f, 0.0f, 500.0f, 600.0f, 1.0f), bounds);
-  bounds = FloatBox();
-  EXPECT_TRUE(GetAnimationBounds(
-      bounds, *StringKeyframeEffectModel::Create(*frames), -1, 2));
-  EXPECT_EQ(FloatBox(-1300.0f, -1600.f, 0.0f, 1500.0f, 1800.0f, 3.0f), bounds);
 }
 
 TEST_F(AnimationCompositorAnimationsTest,
@@ -1194,7 +1150,7 @@ TEST_F(AnimationCompositorAnimationsTest,
 
 TEST_F(AnimationCompositorAnimationsTest,
        cancelIncompatibleCompositorAnimations) {
-  Persistent<Element> element = document_->createElement("shared");
+  Persistent<Element> element = GetDocument().createElement("shared");
 
   LayoutObjectProxy* layout_object = LayoutObjectProxy::Create(element.Get());
   element->SetLayoutObject(layout_object);
@@ -1284,24 +1240,24 @@ void UpdateDummyEffectNode(ObjectPaintProperties& properties,
 
 TEST_F(AnimationCompositorAnimationsTest,
        canStartElementOnCompositorTransformSPv2) {
-  Persistent<Element> element = document_->createElement("shared");
+  Persistent<Element> element = GetDocument().createElement("shared");
   LayoutObjectProxy* layout_object = LayoutObjectProxy::Create(element.Get());
   element->SetLayoutObject(layout_object);
 
   ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
   auto& properties = layout_object->GetMutableForPainting()
                          .FirstFragment()
-                         .EnsureRarePaintData()
                          .EnsurePaintProperties();
 
   // Add a transform with a compositing reason, which should allow starting
   // animation.
-  UpdateDummyTransformNode(properties, kCompositingReasonActiveAnimation);
+  UpdateDummyTransformNode(properties,
+                           CompositingReason::kActiveTransformAnimation);
   EXPECT_TRUE(
       CompositorAnimations::CheckCanStartElementOnCompositor(*element).Ok());
 
   // Setting to CompositingReasonNone should produce false.
-  UpdateDummyTransformNode(properties, kCompositingReasonNone);
+  UpdateDummyTransformNode(properties, CompositingReason::kNone);
   EXPECT_FALSE(
       CompositorAnimations::CheckCanStartElementOnCompositor(*element).Ok());
 
@@ -1316,24 +1272,24 @@ TEST_F(AnimationCompositorAnimationsTest,
 
 TEST_F(AnimationCompositorAnimationsTest,
        canStartElementOnCompositorEffectSPv2) {
-  Persistent<Element> element = document_->createElement("shared");
+  Persistent<Element> element = GetDocument().createElement("shared");
   LayoutObjectProxy* layout_object = LayoutObjectProxy::Create(element.Get());
   element->SetLayoutObject(layout_object);
 
   ScopedSlimmingPaintV2ForTest enable_s_pv2(true);
   auto& properties = layout_object->GetMutableForPainting()
                          .FirstFragment()
-                         .EnsureRarePaintData()
                          .EnsurePaintProperties();
 
   // Add an effect with a compositing reason, which should allow starting
   // animation.
-  UpdateDummyEffectNode(properties, kCompositingReasonActiveAnimation);
+  UpdateDummyEffectNode(properties,
+                        CompositingReason::kActiveTransformAnimation);
   EXPECT_TRUE(
       CompositorAnimations::CheckCanStartElementOnCompositor(*element).Ok());
 
   // Setting to CompositingReasonNone should produce false.
-  UpdateDummyEffectNode(properties, kCompositingReasonNone);
+  UpdateDummyEffectNode(properties, CompositingReason::kNone);
   EXPECT_FALSE(
       CompositorAnimations::CheckCanStartElementOnCompositor(*element).Ok());
 

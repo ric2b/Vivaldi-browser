@@ -20,20 +20,19 @@ PerformanceNavigationTiming::PerformanceNavigationTiming(
     LocalFrame* frame,
     ResourceTimingInfo* info,
     double time_origin,
-    PerformanceServerTimingVector& serverTiming)
-    : PerformanceResourceTiming(info ? info->InitialURL().GetString() : "",
-                                "navigation",
-                                time_origin,
-                                0.0,
-                                0.0,
-                                serverTiming),
+    const WebVector<WebServerTimingInfo>& server_timing)
+    : PerformanceResourceTiming(
+          info ? info->FinalResponse().Url().GetString() : "",
+          "navigation",
+          time_origin,
+          server_timing),
       ContextClient(frame),
       resource_timing_info_(info) {
   DCHECK(frame);
   DCHECK(info);
 }
 
-PerformanceNavigationTiming::~PerformanceNavigationTiming() {}
+PerformanceNavigationTiming::~PerformanceNavigationTiming() = default;
 
 void PerformanceNavigationTiming::Trace(blink::Visitor* visitor) {
   ContextClient::Trace(visitor);
@@ -116,7 +115,7 @@ AtomicString PerformanceNavigationTiming::initiatorType() const {
 
 bool PerformanceNavigationTiming::GetAllowRedirectDetails() const {
   ExecutionContext* context = GetFrame() ? GetFrame()->GetDocument() : nullptr;
-  SecurityOrigin* security_origin = nullptr;
+  const SecurityOrigin* security_origin = nullptr;
   if (context)
     security_origin = context->GetSecurityOrigin();
   if (!security_origin)
@@ -267,9 +266,8 @@ DOMHighResTimeStamp PerformanceNavigationTiming::duration() const {
 }
 
 void PerformanceNavigationTiming::BuildJSONValue(
-    ScriptState* script_state,
     V8ObjectBuilder& builder) const {
-  PerformanceResourceTiming::BuildJSONValue(script_state, builder);
+  PerformanceResourceTiming::BuildJSONValue(builder);
   builder.AddNumber("unloadEventStart", unloadEventStart());
   builder.AddNumber("unloadEventEnd", unloadEventEnd());
   builder.AddNumber("domInteractive", domInteractive());

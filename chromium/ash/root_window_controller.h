@@ -31,12 +31,11 @@ class KeyboardController;
 
 namespace ui {
 class EventHandler;
-class MenuModel;
+class SimpleMenuModel;
 class WindowTreeHost;
 }
 
 namespace views {
-class MenuModelAdapter;
 class MenuRunner;
 class Widget;
 }
@@ -122,14 +121,8 @@ class ASH_EXPORT RootWindowController {
 
   Shelf* shelf() const { return shelf_.get(); }
 
-  // Initializes the shelf for this root window and notifies observers.
-  void InitializeShelf();
-
   // Returns the instance of the sidebar.
   Sidebar* sidebar() { return sidebar_.get(); }
-
-  // Enables projection touch HUD.
-  void SetTouchHudProjectionEnabled(bool enable);
 
   // Get touch HUDs associated with this root window controller.
   TouchHudDebug* touch_hud_debug() const { return touch_hud_debug_; }
@@ -245,9 +238,6 @@ class ASH_EXPORT RootWindowController {
   // Deactivate virtual keyboard on current root window controller.
   void DeactivateKeyboard(keyboard::KeyboardController* keyboard_controller);
 
-  // Tests if a window is associated with the virtual keyboard.
-  bool IsVirtualKeyboardWindow(aura::Window* window);
-
   // If touch exploration is enabled, update the touch exploration
   // controller so that synthesized touch events are anchored at this point.
   void SetTouchAccessibilityAnchorPoint(const gfx::Point& anchor_point);
@@ -276,6 +266,9 @@ class ASH_EXPORT RootWindowController {
 
   void InitLayoutManagers();
 
+  // Initializes the shelf for this root window and notifies observers.
+  void InitializeShelf();
+
   // Creates the containers (aura::Windows) used by the shell.
   void CreateContainers();
 
@@ -289,8 +282,8 @@ class ASH_EXPORT RootWindowController {
   // this.
   void ResetRootForNewWindowsIfNecessary();
 
-  // Callback for MenuModelAdapter.
-  void OnMenuClosed();
+  // Callback for MenuRunner.
+  void OnMenuClosed(const base::TimeTicks desktop_context_menu_show_time);
 
   std::unique_ptr<AshWindowTreeHost> ash_host_;
   std::unique_ptr<aura::WindowTreeHost> mus_window_tree_host_;
@@ -309,8 +302,7 @@ class ASH_EXPORT RootWindowController {
   std::unique_ptr<AlwaysOnTopController> always_on_top_controller_;
 
   // Manages the context menu.
-  std::unique_ptr<ui::MenuModel> menu_model_;
-  std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;
+  std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
 
   std::unique_ptr<StackingController> stacking_controller_;

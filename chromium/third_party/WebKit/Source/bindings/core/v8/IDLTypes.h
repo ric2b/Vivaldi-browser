@@ -8,10 +8,9 @@
 #include <type_traits>
 #include "bindings/core/v8/IDLTypesBase.h"
 #include "bindings/core/v8/NativeValueTraits.h"
-#include "bindings/core/v8/V8BindingForCore.h"
-#include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/TypeTraits.h"
+#include "platform/wtf/Optional.h"
+#include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
@@ -52,25 +51,7 @@ struct IDLPromise final : public IDLBaseHelper<ScriptPromise> {};
 // Sequence
 template <typename T>
 struct IDLSequence final : public IDLBase {
- private:
-  using CppType = typename NativeValueTraits<T>::ImplType;
-  using MaybeMemberCppType =
-      typename std::conditional<WTF::IsGarbageCollectedType<CppType>::value,
-                                Member<CppType>,
-                                CppType>::type;
-
- public:
-  // Two kinds of types need HeapVector:
-  // 1. Oilpan types, which are wrapped by Member<>.
-  // 2. IDL unions and dictionaries, which are not Oilpan types themselves (and
-  //    are thus not wrapped by Member<>) but have a trace() method and can
-  //    contain Oilpan members. They both also happen to specialize V8TypeOf,
-  //    which we use to recognize them.
-  using ImplType = typename std::conditional<
-      std::is_same<MaybeMemberCppType, Member<CppType>>::value ||
-          std::is_class<typename V8TypeOf<CppType>::Type>::value,
-      HeapVector<MaybeMemberCppType>,
-      Vector<CppType>>::type;
+  using ImplType = VectorOf<typename NativeValueTraits<T>::ImplType>;
 };
 
 // Record
@@ -81,26 +62,42 @@ struct IDLRecord final : public IDLBase {
                     std::is_same<Key, IDLUSVString>::value,
                 "IDLRecord keys must be of a WebIDL string type");
 
+  using ImplType =
+      VectorOfPairs<String, typename NativeValueTraits<Value>::ImplType>;
+};
+
+// Nullable (T?).
+// https://heycam.github.io/webidl/#idl-nullable-type
+// Types without a built-in notion of nullability are mapped to Optional<T>.
+template <typename InnerType, typename = void>
+struct IDLNullable final : public IDLBase {
  private:
-  // Record keys are always strings, so we do not need to introspect them.
-  using ValueCppType = typename NativeValueTraits<Value>::ImplType;
-  using MaybeMemberValueCppType = typename std::conditional<
-      WTF::IsGarbageCollectedType<ValueCppType>::value,
-      Member<ValueCppType>,
-      ValueCppType>::type;
+  using InnerTraits = NativeValueTraits<InnerType>;
+  using InnerResultType =
+      decltype(InnerTraits::NativeValue(std::declval<v8::Isolate*>(),
+                                        v8::Local<v8::Value>(),
+                                        std::declval<ExceptionState&>()));
 
  public:
-  // Two kinds of types need HeapVector:
-  // 1. Oilpan types, which are wrapped by Member<>.
-  // 2. IDL unions and dictionaries, which are not Oilpan types themselves (and
-  //    are thus not wrapped by Member<>) but have a trace() method and can
-  //    contain Oilpan members. They both also happen to specialize V8TypeOf,
-  //    which we use to recognize them.
-  using ImplType = typename std::conditional<
-      std::is_same<MaybeMemberValueCppType, Member<ValueCppType>>::value ||
-          std::is_class<typename V8TypeOf<ValueCppType>::Type>::value,
-      HeapVector<std::pair<String, MaybeMemberValueCppType>>,
-      Vector<std::pair<String, ValueCppType>>>::type;
+  using ResultType = WTF::Optional<std::decay_t<InnerResultType>>;
+  using ImplType = ResultType;
+  static inline ResultType NullValue() { return WTF::nullopt; }
+};
+template <typename InnerType>
+struct IDLNullable<InnerType,
+                   decltype(void(NativeValueTraits<InnerType>::NullValue()))>
+    final : public IDLBase {
+ private:
+  using InnerTraits = NativeValueTraits<InnerType>;
+  using InnerResultType =
+      decltype(InnerTraits::NativeValue(std::declval<v8::Isolate*>(),
+                                        v8::Local<v8::Value>(),
+                                        std::declval<ExceptionState&>()));
+
+ public:
+  using ResultType = InnerResultType;
+  using ImplType = typename InnerTraits::ImplType;
+  static inline ResultType NullValue() { return InnerTraits::NullValue(); }
 };
 
 }  // namespace blink

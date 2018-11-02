@@ -59,19 +59,17 @@ std::unique_ptr<DedicatedWorkerObjectProxy> DedicatedWorkerObjectProxy::Create(
       messaging_proxy_weak_ptr, parent_frame_task_runners));
 }
 
-DedicatedWorkerObjectProxy::~DedicatedWorkerObjectProxy() {}
+DedicatedWorkerObjectProxy::~DedicatedWorkerObjectProxy() = default;
 
 void DedicatedWorkerObjectProxy::PostMessageToWorkerObject(
     scoped_refptr<SerializedScriptValue> message,
     Vector<MessagePortChannel> channels,
     const v8_inspector::V8StackTraceId& stack_id) {
-  GetParentFrameTaskRunners()
-      ->Get(TaskType::kPostedMessage)
-      ->PostTask(BLINK_FROM_HERE,
-                 CrossThreadBind(
-                     &DedicatedWorkerMessagingProxy::PostMessageToWorkerObject,
-                     messaging_proxy_weak_ptr_, std::move(message),
-                     WTF::Passed(std::move(channels)), stack_id));
+  PostCrossThreadTask(
+      *GetParentFrameTaskRunners()->Get(TaskType::kPostedMessage), FROM_HERE,
+      CrossThreadBind(&DedicatedWorkerMessagingProxy::PostMessageToWorkerObject,
+                      messaging_proxy_weak_ptr_, std::move(message),
+                      WTF::Passed(std::move(channels)), stack_id));
 }
 
 void DedicatedWorkerObjectProxy::ProcessMessageFromWorkerObject(
@@ -102,13 +100,11 @@ void DedicatedWorkerObjectProxy::ReportException(
     const String& error_message,
     std::unique_ptr<SourceLocation> location,
     int exception_id) {
-  GetParentFrameTaskRunners()
-      ->Get(TaskType::kUnspecedTimer)
-      ->PostTask(
-          BLINK_FROM_HERE,
-          CrossThreadBind(&DedicatedWorkerMessagingProxy::DispatchErrorEvent,
-                          messaging_proxy_weak_ptr_, error_message,
-                          WTF::Passed(location->Clone()), exception_id));
+  PostCrossThreadTask(
+      *GetParentFrameTaskRunners()->Get(TaskType::kUnspecedTimer), FROM_HERE,
+      CrossThreadBind(&DedicatedWorkerMessagingProxy::DispatchErrorEvent,
+                      messaging_proxy_weak_ptr_, error_message,
+                      WTF::Passed(location->Clone()), exception_id));
 }
 
 void DedicatedWorkerObjectProxy::DidCreateWorkerGlobalScope(

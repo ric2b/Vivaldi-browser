@@ -29,6 +29,7 @@
         "fontsUpdated",
         "forcePseudoState",
         "mediaQueryResultChanged",
+        "willChangeStyleElement",
       ]
     },
     DOM: {
@@ -44,6 +45,7 @@
         "didRemoveDOMAttr",
         "domContentLoadedEventFired",
         "frameDocumentUpdated",
+        "frameDisconnected",
         "pseudoElementCreated",
         "pseudoElementDestroyed",
         "willModifyDOMAttr",
@@ -67,6 +69,11 @@
         "willModifyDOMAttr",
         "willRemoveDOMNode",
         "willSendXMLHttpOrFetchNetworkRequest",
+      ]
+    },
+    Emulation: {
+      probes: [
+        "frameStartedLoading",
       ]
     },
     LayerTree: {
@@ -145,7 +152,6 @@
         "RecalculateStyle",
         "UpdateLayout",
         "willRunJavaScriptDialog",
-        "windowCreated",
         "windowOpen",
       ]
     },

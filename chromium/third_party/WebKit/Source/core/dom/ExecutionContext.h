@@ -30,6 +30,7 @@
 
 #include <memory>
 
+#include "base/location.h"
 #include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleNotifier.h"
@@ -40,7 +41,6 @@
 #include "platform/loader/fetch/AccessControlStatus.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
-#include "public/platform/WebTraceLocation.h"
 #include "v8/include/v8.h"
 
 namespace service_manager {
@@ -97,15 +97,14 @@ class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier,
   virtual bool IsServiceWorkerGlobalScope() const { return false; }
   virtual bool IsAnimationWorkletGlobalScope() const { return false; }
   virtual bool IsAudioWorkletGlobalScope() const { return false; }
+  virtual bool IsLayoutWorkletGlobalScope() const { return false; }
   virtual bool IsPaintWorkletGlobalScope() const { return false; }
   virtual bool IsThreadedWorkletGlobalScope() const { return false; }
   virtual bool IsJSExecutionForbidden() const { return false; }
 
   virtual bool IsContextThread() const { return true; }
 
-  // TODO(hiroshige): Make GetSecurityOrigin() return |const SecurityOrigin*|.
-  // crbug.com/779730
-  SecurityOrigin* GetSecurityOrigin();
+  const SecurityOrigin* GetSecurityOrigin();
   SecurityOrigin* GetMutableSecurityOrigin();
 
   ContentSecurityPolicy* GetContentSecurityPolicy();

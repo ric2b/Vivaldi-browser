@@ -9,8 +9,11 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "content/browser/loader/layered_resource_handler.h"
+#include "content/browser/loader/resource_request_info_impl.h"
 #include "content/common/cross_site_document_classifier.h"
+#include "content/public/browser/resource_request_info.h"
 #include "content/public/common/resource_type.h"
 
 namespace net {
@@ -40,23 +43,24 @@ namespace content {
 class CONTENT_EXPORT CrossSiteDocumentResourceHandler
     : public LayeredResourceHandler {
  public:
-  // This enum backs a histogram. Update enums.xml if you make any updates, and
-  // put new entries before |kCount|.
+  // This enum backs a histogram, so do not change the order of entries or
+  // remove entries. Put new entries before |kCount| and update enums.xml (see
+  // the SiteIsolationResponseAction enum).
   enum class Action {
     // Logged at OnResponseStarted.
-    kResponseStarted,
+    kResponseStarted = 0,
 
     // Logged when a response is blocked without requiring sniffing.
-    kBlockedWithoutSniffing,
+    kBlockedWithoutSniffing = 1,
 
     // Logged when a response is blocked as a result of sniffing the content.
-    kBlockedAfterSniffing,
+    kBlockedAfterSniffing = 2,
 
     // Logged when a response is allowed without requiring sniffing.
-    kAllowedWithoutSniffing,
+    kAllowedWithoutSniffing = 3,
 
     // Logged when a response is allowed as a result of sniffing the content.
-    kAllowedAfterSniffing,
+    kAllowedAfterSniffing = 4,
 
     kCount
   };
@@ -69,7 +73,7 @@ class CONTENT_EXPORT CrossSiteDocumentResourceHandler
 
   // LayeredResourceHandler overrides:
   void OnResponseStarted(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller) override;
   void OnWillRead(scoped_refptr<net::IOBuffer>* buf,
                   int* buf_size,
@@ -86,19 +90,34 @@ class CONTENT_EXPORT CrossSiteDocumentResourceHandler
   FRIEND_TEST_ALL_PREFIXES(CrossSiteDocumentResourceHandlerTest,
                            OnWillReadDefer);
 
-  // ResourceController that manages the read buffer if a downstream handler
-  // defers during OnWillRead.
-  class OnWillReadController;
+  // A ResourceController subclass for running deferred operations.
+  class Controller;
 
   // Computes whether this response contains a cross-site document that needs to
   // be blocked from the renderer process.  This is a first approximation based
   // on the headers, and may be revised after some of the data is sniffed.
-  bool ShouldBlockBasedOnHeaders(ResourceResponse* response);
+  bool ShouldBlockBasedOnHeaders(network::ResourceResponse* response);
 
   // Once the downstream handler has allocated the buffer for OnWillRead
   // (possibly after deferring), this sets up sniffing into a local buffer.
   // Called by the OnWillReadController.
   void ResumeOnWillRead(scoped_refptr<net::IOBuffer>* buf, int* buf_size);
+
+  // Helpers for UMA and UKM logging.
+  static void LogBlockedResponseOnUIThread(
+      ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      bool needed_sniffing,
+      CrossSiteDocumentMimeType canonical_mime_type,
+      ResourceType resource_type,
+      int http_response_code);
+  static void LogBlockedResponse(ResourceRequestInfoImpl* resource_request_info,
+                                 bool needed_sniffing,
+                                 bool found_parser_breaker,
+                                 CrossSiteDocumentMimeType canonical_mime_type,
+                                 int http_response_code);
+
+  // WeakPtrFactory for |next_handler_|.
+  base::WeakPtrFactory<ResourceHandler> weak_next_handler_;
 
   // A local buffer for sniffing content and using for throwaway reads.
   // This is not shared with the renderer process.
@@ -107,6 +126,9 @@ class CONTENT_EXPORT CrossSiteDocumentResourceHandler
   // The buffer allocated by the next ResourceHandler for reads, which is used
   // if sniffing determines that we should proceed with the response.
   scoped_refptr<net::IOBuffer> next_handler_buffer_;
+
+  // The number of bytes written into |local_buffer_| by previous reads.
+  int local_buffer_bytes_read_ = 0;
 
   // The size of |next_handler_buffer_|.
   int next_handler_buffer_size_ = 0;
@@ -147,6 +169,12 @@ class CONTENT_EXPORT CrossSiteDocumentResourceHandler
   // Whether the next ResourceHandler has already been told that the read has
   // completed, and thus it is safe to cancel or detach on the next read.
   bool blocked_read_completed_ = false;
+
+  // The HTTP response code (e.g. 200 or 404) received in response to this
+  // resource request.
+  int http_response_code_ = 0;
+
+  base::WeakPtrFactory<CrossSiteDocumentResourceHandler> weak_this_;
 
   DISALLOW_COPY_AND_ASSIGN(CrossSiteDocumentResourceHandler);
 };

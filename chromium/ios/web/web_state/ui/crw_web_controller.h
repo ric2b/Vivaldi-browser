@@ -108,9 +108,6 @@ class WebStateImpl;
 // calling code must retain the ownership of |webState|.
 - (instancetype)initWithWebState:(web::WebStateImpl*)webState;
 
-// Return an image to use as replacement of a missing snapshot.
-+ (UIImage*)defaultSnapshotImage;
-
 // Replaces the currently displayed content with |contentView|.  The content
 // view will be dismissed for the next navigation.
 - (void)showTransientContentView:(CRWContentView*)contentView;
@@ -119,6 +116,11 @@ class WebStateImpl;
 // method for WebStateImpl::ClearTransientContent(). Callers should use the
 // WebStateImpl API instead of calling this method directly.
 - (void)clearTransientContentView;
+
+// Removes the back WebView. DANGER: this method is exposed for the sole purpose
+// of allowing WKBasedNavigationManagerImpl to reset the back-forward history.
+// Please reconsider before using this method.
+- (void)removeWebView;
 
 // Call to stop the CRWWebController from doing stuff, in particular to
 // stop all network requests. Called as part of the close sequence if it hasn't
@@ -151,14 +153,6 @@ class WebStateImpl;
 // Methods for navigation and properties to interrogate state.
 - (void)reload;
 - (void)stopLoading;
-// YES if the CRWWebController's view is deemed appropriate for saving in order
-// to generate an overlay placeholder view.
-- (BOOL)canUseViewForGeneratingOverlayPlaceholderView;
-
-// Notifies delegate that |currentNavItem| will be loaded with |url|.
-// TODO(crbug.com/674991): Remove this method when CRWWebDelegate is no longer
-// used.
-- (void)willLoadCurrentItemWithURL:(const GURL&)URL;
 
 // Loads the URL indicated by current session state.
 - (void)loadCurrentURL;
@@ -185,10 +179,6 @@ class WebStateImpl;
 // should be used only in the case where something has changed that the web view
 // only checks on creation, such that the whole object needs to be rebuilt.
 - (void)requirePageReconstruction;
-
-// Show overlay, don't reload web page. Used when the view will be
-// visible only briefly (e.g., tablet side swipe).
-- (void)setOverlayPreviewMode:(BOOL)overlayPreviewMode;
 
 // Records the state (scroll position, form values, whatever can be harvested)
 // from the current page into the current session entry.

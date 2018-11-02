@@ -28,7 +28,7 @@ void LayeredResourceHandler::SetDelegate(Delegate* delegate) {
 
 void LayeredResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   DCHECK(next_handler_.get());
   next_handler_->OnRequestRedirected(redirect_info, response,
@@ -36,7 +36,7 @@ void LayeredResourceHandler::OnRequestRedirected(
 }
 
 void LayeredResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   //return OnResponseStarted(response, std::move(controller), false, false);
   // Vivaldi specific save info override.
@@ -47,7 +47,7 @@ void LayeredResourceHandler::OnResponseStarted(
 }
 
 void LayeredResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller,
     bool open_when_done,
     bool ask_for_target) {

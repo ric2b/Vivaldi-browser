@@ -7,7 +7,6 @@ package org.chromium.components.signin.test.util;
 import android.accounts.Account;
 import android.accounts.AuthenticatorDescription;
 import android.app.Activity;
-import android.content.Context;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 
@@ -17,7 +16,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.components.signin.AccountManagerDelegate;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacade;
@@ -29,7 +27,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -112,25 +110,14 @@ public class FakeAccountManagerDelegate implements AccountManagerDelegate {
     /** Use {@link FakeProfileDataSource}. */
     public static final int ENABLE_PROFILE_DATA_SOURCE = 1;
 
-    private final Set<AccountHolder> mAccounts = new HashSet<>();
+    private final Set<AccountHolder> mAccounts = new LinkedHashSet<>();
     private final ObserverList<AccountsChangeObserver> mObservers = new ObserverList<>();
     private boolean mRegisterObserversCalled;
     private FakeProfileDataSource mFakeProfileDataSource;
 
-    @VisibleForTesting
     public FakeAccountManagerDelegate(@ProfileDataSourceFlag int profileDataSourceFlag) {
         if (profileDataSourceFlag == ENABLE_PROFILE_DATA_SOURCE) {
             mFakeProfileDataSource = new FakeProfileDataSource();
-        }
-    }
-
-    /** Will be removed after fixing downstream clients. */
-    @Deprecated
-    public FakeAccountManagerDelegate(Context context, Account... accounts) {
-        if (accounts != null) {
-            for (Account account : accounts) {
-                mAccounts.add(AccountHolder.builder(account).alwaysAccept(true).build());
-            }
         }
     }
 
@@ -231,27 +218,16 @@ public class FakeAccountManagerDelegate implements AccountManagerDelegate {
     public void addAccountHolderBlocking(AccountHolder accountHolder) {
         ThreadUtils.assertOnBackgroundThread();
 
-        CountDownLatch cacheUpdated = new CountDownLatch(1);
-        AccountsChangeObserver observer = () -> {
-            // Observers are invoked asynchronously, so this call may be unrelated to accountHolder,
-            // hereby this check that account is in AccountManagerFacade cache.
-            if (AccountManagerFacade.get().hasAccountForName(accountHolder.getAccount().name)) {
-                cacheUpdated.countDown();
-            }
-        };
-
+        final CountDownLatch cacheUpdated = new CountDownLatch(1);
         try {
             ThreadUtils.runOnUiThreadBlocking(() -> {
-                AccountManagerFacade.get().addObserver(observer);
                 addAccountHolderExplicitly(accountHolder);
+                AccountManagerFacade.get().waitForPendingUpdates(cacheUpdated::countDown);
             });
 
             cacheUpdated.await();
         } catch (InterruptedException e) {
-            throw new RuntimeException("Exception occurred while waiting for future", e);
-        } finally {
-            ThreadUtils.runOnUiThreadBlocking(
-                    () -> AccountManagerFacade.get().removeObserver(observer));
+            throw new RuntimeException("Exception occurred while waiting for updates", e);
         }
     }
 
@@ -265,26 +241,15 @@ public class FakeAccountManagerDelegate implements AccountManagerDelegate {
         ThreadUtils.assertOnBackgroundThread();
 
         CountDownLatch cacheUpdated = new CountDownLatch(1);
-        AccountsChangeObserver observer = () -> {
-            // Observers are invoked asynchronously, so this call may be unrelated to accountHolder,
-            // hereby this check that account isn't in AccountManagerFacade cache.
-            if (!AccountManagerFacade.get().hasAccountForName(accountHolder.getAccount().name)) {
-                cacheUpdated.countDown();
-            }
-        };
-
         try {
             ThreadUtils.runOnUiThreadBlocking(() -> {
-                AccountManagerFacade.get().addObserver(observer);
                 removeAccountHolderExplicitly(accountHolder);
+                AccountManagerFacade.get().waitForPendingUpdates(cacheUpdated::countDown);
             });
 
             cacheUpdated.await();
         } catch (InterruptedException e) {
-            throw new RuntimeException("Exception occurred while waiting for future", e);
-        } finally {
-            ThreadUtils.runOnUiThreadBlocking(
-                    () -> AccountManagerFacade.get().removeObserver(observer));
+            throw new RuntimeException("Exception occurred while waiting for updates", e);
         }
     }
 

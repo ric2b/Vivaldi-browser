@@ -43,7 +43,7 @@ WorkerContentSettingsClient* WorkerContentSettingsClient::Create(
   return new WorkerContentSettingsClient(std::move(client));
 }
 
-WorkerContentSettingsClient::~WorkerContentSettingsClient() {}
+WorkerContentSettingsClient::~WorkerContentSettingsClient() = default;
 
 bool WorkerContentSettingsClient::RequestFileSystemAccessSync() {
   if (!client_)
@@ -59,7 +59,7 @@ bool WorkerContentSettingsClient::AllowIndexedDB(const WebString& name) {
 
 bool WorkerContentSettingsClient::AllowRunningInsecureContent(
     bool enabled_per_settings,
-    SecurityOrigin* origin,
+    const SecurityOrigin* origin,
     const KURL& url) {
   if (client_) {
     return client_->AllowRunningInsecureContent(enabled_per_settings,

@@ -277,6 +277,7 @@ base::FilePath FindWindowsPython() {
 }  // namespace
 
 const char Setup::kBuildArgFileName[] = "args.gn";
+const char Setup::kBuildDefineArgFileName[] = "define_args.gn";
 
 Setup::Setup()
     : build_settings_(),
@@ -328,7 +329,7 @@ bool Setup::DoSetup(const std::string& build_dir, bool force_create) {
   if (default_args_) {
     Scope::KeyValueMap overrides;
     default_args_->GetCurrentScopeValues(&overrides);
-    build_settings_.build_args().AddArgOverrides(overrides);
+    build_settings_.build_args().AddDefaultArgOverrides(overrides);
   }
 
   if (fill_arguments_) {
@@ -359,6 +360,10 @@ SourceFile Setup::GetBuildArgFile() const {
   return SourceFile(build_settings_.build_dir().value() + kBuildArgFileName);
 }
 
+SourceFile Setup::GetBuildDefineArgFile() const {
+  return SourceFile(build_settings_.build_dir().value() + kBuildDefineArgFileName);
+}
+
 void Setup::RunPreMessageLoop() {
   // Will be decremented with the loader is drained.
   g_scheduler->IncrementWorkCount();
@@ -374,7 +379,8 @@ bool Setup::RunPostMessageLoop() {
     return false;
   }
 
-  if (!build_settings_.build_args().VerifyAllOverridesUsed(&err)) {
+  if (!build_settings_.build_args().VerifyAllOverridesUsed(&err) ||
+      !Scope::VerifyAllUpdatesUsed(&err)) {
     if (base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kFailOnUnusedArgs)) {
       err.PrintToStdout();
@@ -413,48 +419,40 @@ bool Setup::RunPostMessageLoop() {
 }
 
 bool Setup::FillArguments(const base::CommandLine& cmdline) {
-
-  std::string global_args;
   // Load arguments from HOMEDIR/.gn/args.gn into a string, add dependency
   {
     base::FilePath globalfile = base::GetHomeDir().AppendASCII(".gn/args.gn");
-    std::string file_contents;
-    // Ignore if file doesn't exist, continue with other args, if present.
-    if (base::ReadFileToString(globalfile, &file_contents)) {
-      global_args.append(file_contents);
-      global_args.append("\n"); // Just to be on the safe side
-      // If this file changes we want to regenerate ninja
-      g_scheduler->AddGenDependency(globalfile);
-    }
+    FillArgsFromFile(&globalfile, &user_args_input_file_);
   }
 
   // Use args from the environment variable GN_DEFINES to generally
-  // override settings
+  // override settings. Write to separate file, add dependency
+  // Only update when the define is set, always load if file exists
+  base::FilePath define_file = build_settings_.GetFullPath(GetBuildDefineArgFile());
   const char *the_define = std::getenv("GN_DEFINES");
-  std::string gn_defines(the_define ? the_define : "\"\"");
-  if (!gn_defines.empty()) {
+  if (the_define) {
+    std::string gn_defines(the_define);
     size_t len = gn_defines.length();
     if ((gn_defines[0] == '"' && gn_defines[len-1] == '"')||
         (gn_defines[0] == '\'' && gn_defines[len-1] == '\'')) {
         gn_defines.erase(len-1,1);
         gn_defines.erase(0,1);
     }
-    global_args.append(gn_defines);
-    global_args.append("\n"); // Just to be on the safe side
+    SaveArgsToFile(&define_file, &gn_defines);
   }
+  FillArgsFromFile(&define_file, &define_args_input_file_);
 
   // Use the args on the command line if specified, and save them. Do this even
   // if the list is empty (this means clear any defaults).
   if (cmdline.HasSwitch(switches::kArgs)) {
-    if (!FillArgsFromCommandLine(global_args + " " +
-          cmdline.GetSwitchValueASCII(switches::kArgs)))
+    if (!FillArgsFromCommandLine(cmdline.GetSwitchValueASCII(switches::kArgs)))
       return false;
     SaveArgsToFile();
     return true;
   }
 
   // No command line args given, use the arguments from the build dir (if any).
-  return FillArgsFromFile(NULL, &global_args);
+  return FillArgsFromFile();
 }
 
 bool Setup::FillArgsFromCommandLine(const std::string& args) {
@@ -464,44 +462,40 @@ bool Setup::FillArgsFromCommandLine(const std::string& args) {
   return FillArgsFromArgsInputFile();
 }
 
-bool Setup::FillArgsFromFile(SourceFile *arg_file,
-                             const std::string *global_args) {
+bool Setup::FillArgsFromFile(base::FilePath* arg_file,
+                             std::unique_ptr<InputFile>* input_file) {
   ScopedTrace setup_trace(TraceItem::TRACE_SETUP, "Load args file");
 
-  SourceFile build_arg_source_file = arg_file? *arg_file : GetBuildArgFile();
   base::FilePath build_arg_file =
-      build_settings_.GetFullPath(build_arg_source_file);
+      arg_file ? *arg_file : build_settings_.GetFullPath(GetBuildArgFile());
 
   std::string contents;
   if (base::ReadFileToString(build_arg_file, &contents)) {
     // Add a dependency on the build arguments file. If this changes, we want
     // to re-generate the build.
     g_scheduler->AddGenDependency(build_arg_file);
-  } else {
-    if (!global_args || global_args->empty())
-      return true;  // File doesn't exist, no extra args, use default args.
   }
-
-  if (global_args && !global_args->empty())
-    contents = *global_args + contents;
 
   if (contents.empty())
     return true;  // Empty file, do nothing.
 
-  args_input_file_ = std::make_unique<InputFile>(build_arg_source_file);
-  args_input_file_->SetContents(contents);
-  args_input_file_->set_friendly_name(
+  if (!input_file)
+    input_file = &args_input_file_;
+  *input_file = std::make_unique<InputFile>(GetBuildArgFile());
+  (*input_file)->SetContents(contents);
+  (*input_file)->set_friendly_name(
       "build arg file (use \"gn args <out_dir>\" to edit)");
 
   setup_trace.Done();  // Only want to count the load as part of the trace.
-  return FillArgsFromArgsInputFile();
+  return FillArgsFromArgsInputFile(input_file);
 }
 
-bool Setup::FillArgsFromArgsInputFile() {
+bool Setup::FillArgsFromArgsInputFile(std::unique_ptr<InputFile>* input_file) {
   ScopedTrace setup_trace(TraceItem::TRACE_SETUP, "Parse args");
 
   Err err;
-  args_tokens_ = Tokenizer::Tokenize(args_input_file_.get(), &err);
+  args_tokens_ = Tokenizer::Tokenize(
+      input_file ? input_file->get() : args_input_file_.get(), &err);
   if (err.has_error()) {
     err.PrintToStdout();
     return false;
@@ -528,28 +522,31 @@ bool Setup::FillArgsFromArgsInputFile() {
   Scope::KeyValueMap overrides;
   arg_scope.GetCurrentScopeValues(&overrides);
   build_settings_.build_args().AddArgOverrides(overrides);
+  build_settings_.build_args().set_build_args_dependency_files(
+      arg_scope.build_dependency_files());
   return true;
 }
 
-bool Setup::SaveArgsToFile() {
+bool Setup::SaveArgsToFile(base::FilePath *arg_file, const std::string* special_contents) {
   ScopedTrace setup_trace(TraceItem::TRACE_SETUP, "Save args file");
 
   // For the first run, the build output dir might not be created yet, so do
   // that so we can write a file into it. Ignore errors, we'll catch the error
   // when we try to write a file to it below.
   base::FilePath build_arg_file =
-      build_settings_.GetFullPath(GetBuildArgFile());
+      (arg_file ? *arg_file : build_settings_.GetFullPath(GetBuildArgFile()));
   base::CreateDirectory(build_arg_file.DirName());
 
-  std::string contents = args_input_file_->contents();
+  std::string contents =
+      (special_contents ? *special_contents : args_input_file_->contents());
   commands::FormatStringToString(contents, false, &contents);
 #if defined(OS_WIN)
   // Use Windows lineendings for this file since it will often open in
   // Notepad which can't handle Unix ones.
   base::ReplaceSubstringsAfterOffset(&contents, 0, "\n", "\r\n");
 #endif
-  if (base::WriteFile(build_arg_file, contents.c_str(),
-      static_cast<int>(contents.size())) == -1) {
+  Err err;
+  if (!WriteFileIfChanged(build_arg_file, contents.c_str(), &err)) {
     Err(Location(), "Args file could not be written.",
       "The file is \"" + FilePathToUTF8(build_arg_file) +
         "\"").PrintToStdout();
@@ -730,6 +727,7 @@ bool Setup::RunConfigFile() {
     return false;
   }
 
+  dotfile_scope_.AddBuildDependencyFile(SourceFile("//.gn"));
   dotfile_root_->Execute(&dotfile_scope_, &err);
   if (err.has_error()) {
     err.PrintToStdout();

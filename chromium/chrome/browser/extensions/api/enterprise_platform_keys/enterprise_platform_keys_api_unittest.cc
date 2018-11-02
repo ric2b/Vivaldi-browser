@@ -109,7 +109,9 @@ void GetCertificateCallbackTrue(
     const chromeos::attestation::AttestationFlow::CertificateCallback&
         callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, true, "certificate"));
+      FROM_HERE,
+      base::BindOnce(callback, chromeos::attestation::ATTESTATION_SUCCESS,
+                     "certificate"));
 }
 
 void GetCertificateCallbackFalse(
@@ -120,7 +122,10 @@ void GetCertificateCallbackFalse(
     const chromeos::attestation::AttestationFlow::CertificateCallback&
         callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::BindOnce(callback, false, ""));
+      FROM_HERE,
+      base::BindOnce(callback,
+                     chromeos::attestation::ATTESTATION_UNSPECIFIED_FAILURE,
+                     ""));
 }
 
 class EPKChallengeKeyTestBase : public BrowserWithTestWindowTest {
@@ -235,11 +240,11 @@ class EPKChallengeMachineKeyTest : public EPKChallengeKeyTestBase {
   }
 
   std::unique_ptr<base::ListValue> CreateArgsNoRegister() {
-    return CreateArgsInternal(base::MakeUnique<bool>(false));
+    return CreateArgsInternal(std::make_unique<bool>(false));
   }
 
   std::unique_ptr<base::ListValue> CreateArgsRegister() {
-    return CreateArgsInternal(base::MakeUnique<bool>(true));
+    return CreateArgsInternal(std::make_unique<bool>(true));
   }
 
   std::unique_ptr<base::ListValue> CreateArgsInternal(

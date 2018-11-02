@@ -16,6 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "media/audio/audio_manager_base.h"
 #include "media/base/audio_bus.h"
@@ -65,10 +66,11 @@ class AudioInputDevice::AudioThreadCallback
   void Process(uint32_t pending_data) override;
 
  private:
+  const base::TimeTicks start_time_;
   const double bytes_per_ms_;
   size_t current_segment_id_;
   uint32_t last_buffer_id_;
-  std::vector<std::unique_ptr<media::AudioBus>> audio_buses_;
+  std::vector<std::unique_ptr<const media::AudioBus>> audio_buses_;
   CaptureCallback* capture_callback_;
 
   // Used for informing AudioInputDevice that we have gotten data, i.e. the
@@ -369,8 +371,10 @@ AudioInputDevice::AudioThreadCallback::AudioThreadCallback(
     : AudioDeviceThread::Callback(
           audio_parameters,
           memory,
+          /*read only*/ true,
           ComputeAudioInputBufferSize(audio_parameters, 1u),
           total_segments),
+      start_time_(base::TimeTicks::Now()),
       bytes_per_ms_(static_cast<double>(audio_parameters.GetBytesPerSecond()) /
                     base::Time::kMillisecondsPerSecond),
       current_segment_id_(0u),
@@ -381,18 +385,21 @@ AudioInputDevice::AudioThreadCallback::AudioThreadCallback(
       frames_since_last_got_data_callback_(0),
       got_data_callback_(std::move(got_data_callback_)) {}
 
-AudioInputDevice::AudioThreadCallback::~AudioThreadCallback() = default;
+AudioInputDevice::AudioThreadCallback::~AudioThreadCallback() {
+  UMA_HISTOGRAM_LONG_TIMES("Media.Audio.Capture.InputStreamDuration",
+                           base::TimeTicks::Now() - start_time_);
+}
 
 void AudioInputDevice::AudioThreadCallback::MapSharedMemory() {
   shared_memory_.Map(memory_length_);
 
   // Create vector of audio buses by wrapping existing blocks of memory.
-  uint8_t* ptr = static_cast<uint8_t*>(shared_memory_.memory());
+  const uint8_t* ptr = static_cast<const uint8_t*>(shared_memory_.memory());
   for (uint32_t i = 0; i < total_segments_; ++i) {
-    media::AudioInputBuffer* buffer =
-        reinterpret_cast<media::AudioInputBuffer*>(ptr);
+    const media::AudioInputBuffer* buffer =
+        reinterpret_cast<const media::AudioInputBuffer*>(ptr);
     audio_buses_.push_back(
-        media::AudioBus::WrapMemory(audio_parameters_, buffer->audio));
+        media::AudioBus::WrapReadOnlyMemory(audio_parameters_, buffer->audio));
     ptr += segment_length_;
   }
 
@@ -404,12 +411,14 @@ void AudioInputDevice::AudioThreadCallback::MapSharedMemory() {
 }
 
 void AudioInputDevice::AudioThreadCallback::Process(uint32_t pending_data) {
+  TRACE_EVENT_BEGIN0("audio", "AudioInputDevice::AudioThreadCallback::Process");
   // The shared memory represents parameters, size of the data buffer and the
   // actual data buffer containing audio data. Map the memory into this
   // structure and parse out parameters and the data area.
-  uint8_t* ptr = static_cast<uint8_t*>(shared_memory_.memory());
+  const uint8_t* ptr = static_cast<const uint8_t*>(shared_memory_.memory());
   ptr += current_segment_id_ * segment_length_;
-  AudioInputBuffer* buffer = reinterpret_cast<AudioInputBuffer*>(ptr);
+  const AudioInputBuffer* buffer =
+      reinterpret_cast<const AudioInputBuffer*>(ptr);
 
   // Usually this will be equal but in the case of low sample rate (e.g. 8kHz,
   // the buffer may be bigger (on mac at least)).
@@ -434,7 +443,7 @@ void AudioInputDevice::AudioThreadCallback::Process(uint32_t pending_data) {
   last_buffer_id_ = buffer->params.id;
 
   // Use pre-allocated audio bus wrapping existing block of shared memory.
-  media::AudioBus* audio_bus = audio_buses_[current_segment_id_].get();
+  const media::AudioBus* audio_bus = audio_buses_[current_segment_id_].get();
 
   // Regularly inform that we have gotten data.
   frames_since_last_got_data_callback_ += audio_bus->frames();
@@ -450,14 +459,20 @@ void AudioInputDevice::AudioThreadCallback::Process(uint32_t pending_data) {
   const base::TimeTicks capture_time =
       base::TimeTicks() +
       base::TimeDelta::FromMicroseconds(buffer->params.capture_time);
-  DCHECK_GE(base::TimeTicks::Now(), capture_time);
+  const base::TimeTicks now_time = base::TimeTicks::Now();
+  DCHECK_GE(now_time, capture_time);
 
-  capture_callback_->Capture(
-      audio_bus, (base::TimeTicks::Now() - capture_time).InMilliseconds(),
-      buffer->params.volume, buffer->params.key_pressed);
+  capture_callback_->Capture(audio_bus,
+                             (now_time - capture_time).InMilliseconds(),
+                             buffer->params.volume, buffer->params.key_pressed);
 
   if (++current_segment_id_ >= total_segments_)
     current_segment_id_ = 0u;
+
+  TRACE_EVENT_END2(
+      "audio", "AudioInputDevice::AudioThreadCallback::Process",
+      "capture_time (ms)", (capture_time - base::TimeTicks()).InMillisecondsF(),
+      "now_time (ms)", (now_time - base::TimeTicks()).InMillisecondsF());
 }
 
 }  // namespace media

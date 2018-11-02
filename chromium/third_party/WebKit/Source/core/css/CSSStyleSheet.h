@@ -67,7 +67,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
 
   CSSStyleSheet* parentStyleSheet() const override;
   Node* ownerNode() const override { return owner_node_; }
-  MediaList* media() const override;
+  MediaList* media() override;
   String href() const override;
   String title() const override { return title_; }
   bool disabled() const override { return is_disabled_; }
@@ -117,7 +117,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   // Set by LinkStyle iff CORS-enabled fetch of stylesheet succeeded from this
   // origin.
   void SetAllowRuleAccessFromOrigin(
-      scoped_refptr<SecurityOrigin> allowed_origin);
+      scoped_refptr<const SecurityOrigin> allowed_origin);
 
   class RuleMutationScope {
     STACK_ALLOCATED();
@@ -173,13 +173,13 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet {
   MediaQueryResultList viewport_dependent_media_query_results_;
   MediaQueryResultList device_dependent_media_query_results_;
 
-  scoped_refptr<SecurityOrigin> allow_rule_access_from_origin_;
+  scoped_refptr<const SecurityOrigin> allow_rule_access_from_origin_;
 
   Member<Node> owner_node_;
   Member<CSSRule> owner_rule_;
 
   TextPosition start_position_;
-  mutable Member<MediaList> media_cssom_wrapper_;
+  Member<MediaList> media_cssom_wrapper_;
   mutable HeapVector<Member<CSSRule>> child_rule_cssom_wrappers_;
   mutable Member<CSSRuleList> rule_list_cssom_wrapper_;
   DISALLOW_COPY_AND_ASSIGN(CSSStyleSheet);

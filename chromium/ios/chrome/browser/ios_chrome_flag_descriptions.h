@@ -7,14 +7,14 @@
 
 namespace flag_descriptions {
 
+// Title and description for the flag to enable the adaptive toolbar.
+extern const char kAdaptiveToolbarName[];
+extern const char kAdaptiveToolbarDescription[];
+
 // Title and description for the flag to enable the new bookmark edit page in
 // the new bookmark UI.
 extern const char kBookmarkNewEditPageName[];
 extern const char kBookmarkNewEditPageDescription[];
-
-// Title and description for the flag to enable the new bookmark UI.
-extern const char kBookmarkNewGenerationName[];
-extern const char kBookmarkNewGenerationDescription[];
 
 // Title and description for the flag to control redirection to the task
 // scheduler.
@@ -28,6 +28,10 @@ extern const char kCaptivePortalDescription[];
 // Title and description for the flag to enable Clean Toolbar.
 extern const char kCleanToolbarName[];
 extern const char kCleanToolbarDescription[];
+
+// Title and description for the flag to enable Omnibox Clipping.
+extern const char kClippingTextfieldName[];
+extern const char kClippingTextfieldDescription[];
 
 // Title and description for the flag to enable Contextual Search.
 extern const char kContextualSearch[];
@@ -54,7 +58,10 @@ extern const char kInProductHelpDemoModeDescription[];
 // display of omnibox warnings about non-secure pages.
 extern const char kMarkHttpAsName[];
 extern const char kMarkHttpAsDescription[];
-extern const char kMarkHttpAsDangerous[];
+
+// Title and description for the flag to enable the Memex Tab Switcher.
+extern const char kMemexTabSwitcherName[];
+extern const char kMemexTabSwitcherDescription[];
 
 // Title and description for the flag to enable the new fullscreen
 // implementation.
@@ -85,11 +92,6 @@ extern const char kPasswordExportDescription[];
 extern const char kPhysicalWeb[];
 extern const char kPhysicalWebDescription[];
 
-// Title and description for the flag to have the toolbar use
-// UIViewPropertyAnimators.
-extern const char kPropertyAnimationsToolbarName[];
-extern const char kPropertyAnimationsToolbarDescription[];
-
 // Title and description for the flag to have the toolbar respect the safe area.
 extern const char kSafeAreaCompatibleToolbarName[];
 extern const char kSafeAreaCompatibleToolbarDescription[];
@@ -114,6 +116,11 @@ extern const char kNewPassKitDownloadDescription[];
 extern const char kNewFileDownloadName[];
 extern const char kNewFileDownloadDescription[];
 
+// Title and description for the flag to enable annotating web forms with
+// Autofill field type predictions as placeholder.
+extern const char kShowAutofillTypePredictionsName[];
+extern const char kShowAutofillTypePredictionsDescription[];
+
 // Title and description for the flag to enable the TabSwitcher to present the
 // BVC.
 extern const char kTabSwitcherPresentsBVCName[];
@@ -131,6 +138,11 @@ extern const char kWebPaymentsDescription[];
 // integration with Web Payments.
 extern const char kWebPaymentsNativeAppsName[];
 extern const char kWebPaymentsNativeAppsDescription[];
+
+// Title and description for the flag to enable WKHTTPSystemCookieStore usage
+// for main context URL requests.
+extern const char kWKHTTPSystemCookieStoreName[];
+extern const char kWKHTTPSystemCookieStoreDescription[];
 
 // Please insert your name/description above in alphabetical order.
 

@@ -26,6 +26,7 @@
 #define WebThread_h
 
 #include "WebCommon.h"
+#include "base/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 
 #include <stdint.h>
@@ -53,15 +54,11 @@ class BLINK_PLATFORM_EXPORT WebThread {
  public:
   // An IdleTask is passed a deadline in CLOCK_MONOTONIC seconds and is
   // expected to complete before this deadline.
-  class IdleTask {
-   public:
-    virtual ~IdleTask() {}
-    virtual void Run(double deadline_seconds) = 0;
-  };
+  using IdleTask = base::OnceCallback<void(double deadline_seconds)>;
 
   class BLINK_PLATFORM_EXPORT TaskObserver {
    public:
-    virtual ~TaskObserver() {}
+    virtual ~TaskObserver() = default;
     virtual void WillProcessTask() = 0;
     virtual void DidProcessTask() = 0;
   };
@@ -72,8 +69,9 @@ class BLINK_PLATFORM_EXPORT WebThread {
   // Default scheduler task queue does not give scheduler enough freedom to
   // manage task priorities and should not be used.
   // Use TaskRunnerHelper::Get instead (crbug.com/624696).
-  virtual WebTaskRunner* GetWebTaskRunner() { return nullptr; }
-  scoped_refptr<base::SingleThreadTaskRunner> GetSingleThreadTaskRunner();
+  virtual WebTaskRunner* GetWebTaskRunner() const { return nullptr; }
+  virtual scoped_refptr<base::SingleThreadTaskRunner>
+  GetSingleThreadTaskRunner() const;
 
   virtual bool IsCurrentThread() const = 0;
   virtual PlatformThreadId ThreadId() const { return 0; }
@@ -97,7 +95,7 @@ class BLINK_PLATFORM_EXPORT WebThread {
   // Returns the scheduler associated with the thread.
   virtual WebScheduler* Scheduler() const = 0;
 
-  virtual ~WebThread() {}
+  virtual ~WebThread() = default;
 };
 
 }  // namespace blink

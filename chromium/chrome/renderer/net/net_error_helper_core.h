@@ -14,6 +14,7 @@
 #include "build/build_config.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/net_error_info.h"
+#include "net/base/net_errors.h"
 #include "url/gurl.h"
 
 namespace error_page {
@@ -69,7 +70,7 @@ class NetErrorHelperCore {
 
     // Create extra Javascript bindings in the error page. Will only be invoked
     // after an error page has finished loading.
-    virtual void EnablePageHelperFunctions() = 0;
+    virtual void EnablePageHelperFunctions(net::Error net_error) = 0;
 
     // Updates the currently displayed error page with a new error code.  The
     // currently displayed error page must have finished loading, and must have
@@ -134,14 +135,15 @@ class NetErrorHelperCore {
                      bool is_visible);
   ~NetErrorHelperCore();
 
-  // Initializes |error_html| with the HTML of an error page in response to
+  // Sets values in |pending_error_page_info_|. If |error_html| is not null, it
+  // initializes |error_html| with the HTML of an error page in response to
   // |error|.  Updates internals state with the assumption the page will be
   // loaded immediately.
-  void GetErrorHTML(FrameType frame_type,
-                    const error_page::Error& error,
-                    bool is_failed_post,
-                    bool is_ignoring_cache,
-                    std::string* error_html);
+  void PrepareErrorPage(FrameType frame_type,
+                        const error_page::Error& error,
+                        bool is_failed_post,
+                        bool is_ignoring_cache,
+                        std::string* error_html);
 
   // These methods handle tracking the actual state of the page.
   void OnStartLoad(FrameType frame_type, PageType page_type);
@@ -208,11 +210,13 @@ class NetErrorHelperCore {
  private:
   struct ErrorPageInfo;
 
-  // Gets HTML for a main frame error page.  Depending on
+  // Sets values in |pending_error_page_info| for a main frame error page. If
+  // |error_html| is not null, it also fetches the string containing the error
+  // page HTML, and sets error_html to it. Depending on
   // |pending_error_page_info|, may use the navigation correction service, or
   // show a DNS probe error page.  May modify |pending_error_page_info|.
-  void GetErrorHtmlForMainFrame(ErrorPageInfo* pending_error_page_info,
-                                std::string* error_html);
+  void PrepareErrorPageForMainFrame(ErrorPageInfo* pending_error_page_info,
+                                    std::string* error_html);
 
   // Updates the currently displayed error page with a new error based on the
   // most recently received DNS probe result.  The page must have finished

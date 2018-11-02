@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/apps/app_info_dialog.h"
 
+#include <memory>
 #include <string>
 
 #include "build/build_config.h"
@@ -23,9 +24,9 @@ class AppInfoDialogBrowserTest : public DialogBrowserTest {
   AppInfoDialogBrowserTest() {}
 
   // DialogBrowserTest:
-  void ShowDialog(const std::string& name) override {
+  void ShowUi(const std::string& name) override {
     extension_environment_ =
-        base::MakeUnique<extensions::TestExtensionEnvironment>(nullptr);
+        std::make_unique<extensions::TestExtensionEnvironment>(nullptr);
     constexpr char kTestExtensionId[] = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     extension_ =
         extension_environment_->MakePackagedApp(kTestExtensionId, true);
@@ -52,8 +53,7 @@ class AppInfoDialogBrowserTest : public DialogBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(AppInfoDialogBrowserTest);
 };
 
-// Invokes a dialog that shows details of an installed extension. See
-// test_browser_dialog.h.
-IN_PROC_BROWSER_TEST_F(AppInfoDialogBrowserTest, InvokeDialog_default) {
-  RunDialog();
+// Invokes a dialog that shows details of an installed extension.
+IN_PROC_BROWSER_TEST_F(AppInfoDialogBrowserTest, InvokeUi_default) {
+  ShowAndVerifyUi();
 }

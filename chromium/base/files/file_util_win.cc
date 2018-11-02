@@ -80,6 +80,129 @@ void AppendModeCharacter(base::char16 mode_char, base::string16* mode) {
                1, mode_char);
 }
 
+bool DoCopyFile(const FilePath& from_path,
+                const FilePath& to_path,
+                bool fail_if_exists) {
+  AssertBlockingAllowed();
+  if (from_path.ReferencesParent() || to_path.ReferencesParent())
+    return false;
+
+  // NOTE: I suspect we could support longer paths, but that would involve
+  // analyzing all our usage of files.
+  if (from_path.value().length() >= MAX_PATH ||
+      to_path.value().length() >= MAX_PATH) {
+    return false;
+  }
+
+  // Unlike the posix implementation that copies the file manually and discards
+  // the ACL bits, CopyFile() copies the complete SECURITY_DESCRIPTOR and access
+  // bits, which is usually not what we want. We can't do much about the
+  // SECURITY_DESCRIPTOR but at least remove the read only bit.
+  const wchar_t* dest = to_path.value().c_str();
+  if (!::CopyFile(from_path.value().c_str(), dest, fail_if_exists)) {
+    // Copy failed.
+    return false;
+  }
+  DWORD attrs = GetFileAttributes(dest);
+  if (attrs == INVALID_FILE_ATTRIBUTES) {
+    return false;
+  }
+  if (attrs & FILE_ATTRIBUTE_READONLY) {
+    SetFileAttributes(dest, attrs & ~FILE_ATTRIBUTE_READONLY);
+  }
+  return true;
+}
+
+bool DoCopyDirectory(const FilePath& from_path,
+                     const FilePath& to_path,
+                     bool recursive,
+                     bool fail_if_exists) {
+  // NOTE(maruel): Previous version of this function used to call
+  // SHFileOperation().  This used to copy the file attributes and extended
+  // attributes, OLE structured storage, NTFS file system alternate data
+  // streams, SECURITY_DESCRIPTOR. In practice, this is not what we want, we
+  // want the containing directory to propagate its SECURITY_DESCRIPTOR.
+  AssertBlockingAllowed();
+
+  // NOTE: I suspect we could support longer paths, but that would involve
+  // analyzing all our usage of files.
+  if (from_path.value().length() >= MAX_PATH ||
+      to_path.value().length() >= MAX_PATH) {
+    return false;
+  }
+
+  // This function does not properly handle destinations within the source.
+  FilePath real_to_path = to_path;
+  if (PathExists(real_to_path)) {
+    real_to_path = MakeAbsoluteFilePath(real_to_path);
+    if (real_to_path.empty())
+      return false;
+  } else {
+    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
+    if (real_to_path.empty())
+      return false;
+  }
+  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
+  if (real_from_path.empty())
+    return false;
+  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
+    return false;
+
+  int traverse_type = FileEnumerator::FILES;
+  if (recursive)
+    traverse_type |= FileEnumerator::DIRECTORIES;
+  FileEnumerator traversal(from_path, recursive, traverse_type);
+
+  if (!PathExists(from_path)) {
+    DLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
+                << from_path.value().c_str();
+    return false;
+  }
+  // TODO(maruel): This is not necessary anymore.
+  DCHECK(recursive || DirectoryExists(from_path));
+
+  FilePath current = from_path;
+  bool from_is_dir = DirectoryExists(from_path);
+  bool success = true;
+  FilePath from_path_base = from_path;
+  if (recursive && DirectoryExists(to_path)) {
+    // If the destination already exists and is a directory, then the
+    // top level of source needs to be copied.
+    from_path_base = from_path.DirName();
+  }
+
+  while (success && !current.empty()) {
+    // current is the source path, including from_path, so append
+    // the suffix after from_path to to_path to create the target_path.
+    FilePath target_path(to_path);
+    if (from_path_base != current) {
+      if (!from_path_base.AppendRelativePath(current, &target_path)) {
+        success = false;
+        break;
+      }
+    }
+
+    if (from_is_dir) {
+      if (!DirectoryExists(target_path) &&
+          !::CreateDirectory(target_path.value().c_str(), NULL)) {
+        DLOG(ERROR) << "CopyDirectory() couldn't create directory: "
+                    << target_path.value().c_str();
+        success = false;
+      }
+    } else if (!DoCopyFile(current, target_path, fail_if_exists)) {
+      DLOG(ERROR) << "CopyDirectory() couldn't create file: "
+                  << target_path.value().c_str();
+      success = false;
+    }
+
+    current = traversal.Next();
+    if (!current.empty())
+      from_is_dir = traversal.GetInfo().IsDirectory();
+  }
+
+  return success;
+}
+
 }  // namespace
 
 FilePath MakeAbsoluteFilePath(const FilePath& input) {
@@ -165,92 +288,16 @@ bool ReplaceFile(const FilePath& from_path,
   return false;
 }
 
-bool CopyDirectory(const FilePath& from_path, const FilePath& to_path,
+bool CopyDirectory(const FilePath& from_path,
+                   const FilePath& to_path,
                    bool recursive) {
-  // NOTE(maruel): Previous version of this function used to call
-  // SHFileOperation().  This used to copy the file attributes and extended
-  // attributes, OLE structured storage, NTFS file system alternate data
-  // streams, SECURITY_DESCRIPTOR. In practice, this is not what we want, we
-  // want the containing directory to propagate its SECURITY_DESCRIPTOR.
-  AssertBlockingAllowed();
+  return DoCopyDirectory(from_path, to_path, recursive, false);
+}
 
-  // NOTE: I suspect we could support longer paths, but that would involve
-  // analyzing all our usage of files.
-  if (from_path.value().length() >= MAX_PATH ||
-      to_path.value().length() >= MAX_PATH) {
-    return false;
-  }
-
-  // This function does not properly handle destinations within the source.
-  FilePath real_to_path = to_path;
-  if (PathExists(real_to_path)) {
-    real_to_path = MakeAbsoluteFilePath(real_to_path);
-    if (real_to_path.empty())
-      return false;
-  } else {
-    real_to_path = MakeAbsoluteFilePath(real_to_path.DirName());
-    if (real_to_path.empty())
-      return false;
-  }
-  FilePath real_from_path = MakeAbsoluteFilePath(from_path);
-  if (real_from_path.empty())
-    return false;
-  if (real_to_path == real_from_path || real_from_path.IsParent(real_to_path))
-    return false;
-
-  int traverse_type = FileEnumerator::FILES;
-  if (recursive)
-    traverse_type |= FileEnumerator::DIRECTORIES;
-  FileEnumerator traversal(from_path, recursive, traverse_type);
-
-  if (!PathExists(from_path)) {
-    DLOG(ERROR) << "CopyDirectory() couldn't stat source directory: "
-                << from_path.value().c_str();
-    return false;
-  }
-  // TODO(maruel): This is not necessary anymore.
-  DCHECK(recursive || DirectoryExists(from_path));
-
-  FilePath current = from_path;
-  bool from_is_dir = DirectoryExists(from_path);
-  bool success = true;
-  FilePath from_path_base = from_path;
-  if (recursive && DirectoryExists(to_path)) {
-    // If the destination already exists and is a directory, then the
-    // top level of source needs to be copied.
-    from_path_base = from_path.DirName();
-  }
-
-  while (success && !current.empty()) {
-    // current is the source path, including from_path, so append
-    // the suffix after from_path to to_path to create the target_path.
-    FilePath target_path(to_path);
-    if (from_path_base != current) {
-      if (!from_path_base.AppendRelativePath(current, &target_path)) {
-        success = false;
-        break;
-      }
-    }
-
-    if (from_is_dir) {
-      if (!DirectoryExists(target_path) &&
-          !::CreateDirectory(target_path.value().c_str(), NULL)) {
-        DLOG(ERROR) << "CopyDirectory() couldn't create directory: "
-                    << target_path.value().c_str();
-        success = false;
-      }
-    } else if (!CopyFile(current, target_path)) {
-      DLOG(ERROR) << "CopyDirectory() couldn't create file: "
-                  << target_path.value().c_str();
-      success = false;
-    }
-
-    current = traversal.Next();
-    if (!current.empty())
-      from_is_dir = traversal.GetInfo().IsDirectory();
-  }
-
-  return success;
+bool CopyDirectoryExcl(const FilePath& from_path,
+                       const FilePath& to_path,
+                       bool recursive) {
+  return DoCopyDirectory(from_path, to_path, recursive, true);
 }
 
 bool PathExists(const FilePath& path) {
@@ -774,34 +821,7 @@ int GetMaximumPathComponentLength(const FilePath& path) {
 }
 
 bool CopyFile(const FilePath& from_path, const FilePath& to_path) {
-  AssertBlockingAllowed();
-  if (from_path.ReferencesParent() || to_path.ReferencesParent())
-    return false;
-
-  // NOTE: I suspect we could support longer paths, but that would involve
-  // analyzing all our usage of files.
-  if (from_path.value().length() >= MAX_PATH ||
-      to_path.value().length() >= MAX_PATH) {
-    return false;
-  }
-
-  // Unlike the posix implementation that copies the file manually and discards
-  // the ACL bits, CopyFile() copies the complete SECURITY_DESCRIPTOR and access
-  // bits, which is usually not what we want. We can't do much about the
-  // SECURITY_DESCRIPTOR but at least remove the read only bit.
-  const wchar_t* dest = to_path.value().c_str();
-  if (!::CopyFile(from_path.value().c_str(), dest, false)) {
-    // Copy failed.
-    return false;
-  }
-  DWORD attrs = GetFileAttributes(dest);
-  if (attrs == INVALID_FILE_ATTRIBUTES) {
-    return false;
-  }
-  if (attrs & FILE_ATTRIBUTE_READONLY) {
-    SetFileAttributes(dest, attrs & ~FILE_ATTRIBUTE_READONLY);
-  }
-  return true;
+  return DoCopyFile(from_path, to_path, false);
 }
 
 bool SetNonBlocking(int fd) {

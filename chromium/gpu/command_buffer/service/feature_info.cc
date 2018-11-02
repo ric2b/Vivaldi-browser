@@ -44,11 +44,10 @@ namespace {
 
 class ScopedPixelUnpackBufferOverride {
  public:
-  explicit ScopedPixelUnpackBufferOverride(
-      bool enable_es3,
-      GLuint binding_override)
+  explicit ScopedPixelUnpackBufferOverride(bool has_pixel_buffers,
+                                           GLuint binding_override)
       : orig_binding_(-1) {
-    if (enable_es3) {
+    if (has_pixel_buffers) {
       GLint orig_binding = 0;
       glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &orig_binding);
       if (static_cast<GLuint>(orig_binding) != binding_override) {
@@ -207,7 +206,7 @@ GpuTextureResultR16_L16 GpuTextureUMAHelper() {
 
 }  // anonymous namespace.
 
-FeatureInfo::FeatureFlags::FeatureFlags() {}
+FeatureInfo::FeatureFlags::FeatureFlags() = default;
 
 FeatureInfo::FeatureInfo() {
   InitializeBasicState(base::CommandLine::InitializedForCurrentProcess()
@@ -400,7 +399,16 @@ void FeatureInfo::InitializeFeatures() {
 
   bool enable_es3 = IsWebGL2OrES3Context();
 
-  ScopedPixelUnpackBufferOverride scoped_pbo_override(enable_es3, 0);
+  // Pixel buffer bindings can be manipulated by the client if ES3 is enabled or
+  // the GL_NV_pixel_buffer_object extension is exposed by ANGLE when using the
+  // passthrough command decoder
+  bool pixel_buffers_exposed =
+      enable_es3 || gl::HasExtension(extensions, "GL_NV_pixel_buffer_object");
+
+  // Both decoders may bind pixel buffers if exposing an ES3 or WebGL 2 context
+  // and the passthrough command decoder may also bind PBOs if
+  // NV_pixel_buffer_object is exposed.
+  ScopedPixelUnpackBufferOverride scoped_pbo_override(pixel_buffers_exposed, 0);
 
   AddExtensionString("GL_ANGLE_translated_shader_source");
   AddExtensionString("GL_CHROMIUM_async_pixel_transfers");
@@ -1050,9 +1058,9 @@ void FeatureInfo::InitializeFeatures() {
     validators_.g_l_state.AddValue(GL_TEXTURE_BINDING_RECTANGLE_ARB);
   }
 
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || defined(OS_CHROMEOS)
   // TODO(dcastagna): Determine ycbcr_420v_image on CrOS at runtime
-  // querying minigbm. crbug.com/646148
+  // querying minigbm. https://crbug.com/646148
   if (gl::GetGLImplementation() != gl::kGLImplementationOSMesaGL) {
     AddExtensionString("GL_CHROMIUM_ycbcr_420v_image");
     feature_flags_.chromium_image_ycbcr_420v = true;
@@ -1317,16 +1325,18 @@ void FeatureInfo::InitializeFeatures() {
       (gl_version_info_->IsAtLeastGL(2, 1) &&
        gl::HasExtension(extensions, "GL_ARB_texture_rg")) ||
       gl::HasExtension(extensions, "GL_EXT_texture_norm16")) {
+    // TODO(hubbe): Rename ext_texture_norm16 to texture_r16
     feature_flags_.ext_texture_norm16 = true;
     g_r16_is_present = true;
-    AddExtensionString("GL_EXT_texture_norm16");
 
     // Note: EXT_texture_norm16 is not exposed through WebGL API so we validate
     // only the combinations used internally.
+    validators_.pixel_type.AddValue(GL_UNSIGNED_SHORT);
     validators_.texture_format.AddValue(GL_RED_EXT);
     validators_.texture_internal_format.AddValue(GL_R16_EXT);
     validators_.texture_internal_format.AddValue(GL_RED_EXT);
     validators_.texture_unsized_internal_format.AddValue(GL_RED_EXT);
+    validators_.texture_internal_format_storage.AddValue(GL_R16_EXT);
   }
 
   UMA_HISTOGRAM_ENUMERATION(
@@ -1395,6 +1405,10 @@ void FeatureInfo::InitializeFeatures() {
   feature_flags_.khr_debug = gl_version_info_->IsAtLeastGL(4, 3) ||
                              gl_version_info_->IsAtLeastGLES(3, 2) ||
                              gl::HasExtension(extensions, "GL_KHR_debug");
+
+  feature_flags_.chromium_gpu_fence = gl::GLFence::IsGpuFenceSupported();
+  if (feature_flags_.chromium_gpu_fence)
+    AddExtensionString("GL_CHROMIUM_gpu_fence");
 
   feature_flags_.chromium_bind_generates_resource =
       gl::HasExtension(extensions, "GL_CHROMIUM_bind_generates_resource");
@@ -1762,8 +1776,7 @@ void FeatureInfo::AddExtensionString(const base::StringPiece& extension) {
   extensions_.insert(extension);
 }
 
-FeatureInfo::~FeatureInfo() {
-}
+FeatureInfo::~FeatureInfo() = default;
 
 }  // namespace gles2
 }  // namespace gpu

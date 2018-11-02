@@ -17,6 +17,7 @@
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
+#include "content/common/navigation_subresource_loader_params.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
@@ -24,11 +25,11 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
-#include "content/public/common/resource_request_body.h"
-#include "content/public/common/resource_response_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/cpp/resource_response_info.h"
 #include "ui/base/page_transition_types.h"
 
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
@@ -83,13 +84,13 @@ ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     base::WeakPtr<storage::BlobStorageContext> blob_storage_context,
     network::mojom::FetchRequestMode request_mode,
     network::mojom::FetchCredentialsMode credentials_mode,
-    FetchRedirectMode redirect_mode,
+    network::mojom::FetchRedirectMode redirect_mode,
     const std::string& integrity,
     bool keepalive,
     ResourceType resource_type,
     RequestContextType request_context_type,
-    RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body)
+    network::mojom::RequestContextFrameType frame_type,
+    scoped_refptr<network::ResourceRequestBody> body)
     : ServiceWorkerRequestHandler(context,
                                   provider_host,
                                   blob_storage_context,
@@ -167,7 +168,7 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
           blob_storage_context_, resource_context, request_mode_,
           credentials_mode_, redirect_mode_, integrity_, keepalive_,
           resource_type_, request_context_type_, frame_type_, body_,
-          ServiceWorkerFetchType::FETCH, base::nullopt, this));
+          ServiceWorkerFetchType::FETCH, this));
   url_job_ = std::make_unique<ServiceWorkerURLJobWrapper>(job->GetWeakPtr());
 
   resource_context_ = resource_context;
@@ -195,7 +196,7 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
 }
 
 void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
-    const ResourceRequest& resource_request,
+    const network::ResourceRequest& resource_request,
     ResourceContext* resource_context,
     LoaderCallback callback) {
   DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
@@ -224,8 +225,7 @@ void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
   url_job_ = std::make_unique<ServiceWorkerURLJobWrapper>(
       std::make_unique<ServiceWorkerURLLoaderJob>(
           std::move(callback), this, resource_request,
-          base::WrapRefCounted(context_->loader_factory_getter()),
-          blob_storage_context_));
+          base::WrapRefCounted(context_->loader_factory_getter())));
 
   resource_context_ = resource_context;
 
@@ -241,6 +241,37 @@ void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
   }
 
   // We will asynchronously continue on DidLookupRegistrationForMainResource.
+}
+
+base::Optional<SubresourceLoaderParams>
+ServiceWorkerControlleeRequestHandler::MaybeCreateSubresourceLoaderParams() {
+  DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
+
+  // We didn't create URLLoader for this request.
+  if (!url_job_)
+    return base::nullopt;
+
+  // DidLookupRegistrationForMainResource() for the request didn't find
+  // a matching service worker for this request, and
+  // ServiceWorkerProviderHost::AssociateRegistration() was not called.
+  if (!provider_host_ || !provider_host_->controller())
+    return base::nullopt;
+
+  // Otherwise let's send the controller service worker information along
+  // with the navigation commit.
+  // Note that |controller_info->endpoint| could be null if the controller
+  // service worker isn't starting up or running, e.g. in no-fetch worker
+  // cases. In that case the renderer frame won't get the controller pointer
+  // upon the navigation commit, and subresource loading will not be intercepted
+  // at least until the frame gets a new controller ptr by SetController.
+  SubresourceLoaderParams params;
+  auto controller_info = mojom::ControllerServiceWorkerInfo::New();
+  controller_info->endpoint =
+      provider_host_->GetControllerServiceWorkerPtr().PassInterface();
+  controller_info->object_info = provider_host_->GetOrCreateServiceWorkerHandle(
+      provider_host_->controller());
+  params.controller_service_worker_info = std::move(controller_info);
+  return params;
 }
 
 void ServiceWorkerControlleeRequestHandler::PrepareForMainResource(
@@ -331,7 +362,7 @@ void ServiceWorkerControlleeRequestHandler::
     force_update_started_ = true;
     context_->UpdateServiceWorker(
         registration.get(), true /* force_bypass_cache */,
-        true /* skip_script_comparison */, provider_host_.get(),
+        true /* skip_script_comparison */,
         base::Bind(&self::DidUpdateRegistration, weak_factory_.GetWeakPtr(),
                    registration));
     return;

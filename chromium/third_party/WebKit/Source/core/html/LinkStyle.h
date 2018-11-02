@@ -8,9 +8,8 @@
 #include "core/css/StyleEngine.h"
 #include "core/dom/Node.h"
 #include "core/html/LinkResource.h"
-#include "core/loader/resource/StyleSheetResource.h"
-#include "core/loader/resource/StyleSheetResourceClient.h"
-#include "platform/loader/fetch/ResourceOwner.h"
+#include "core/loader/resource/CSSStyleSheetResource.h"
+#include "platform/loader/fetch/ResourceClient.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
@@ -25,7 +24,7 @@ class KURL;
 // types might better be handled by a separate class, but dynamically
 // changing @rel makes it harder to move such a design so we are
 // sticking current way so far.
-class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
+class LinkStyle final : public LinkResource, ResourceClient {
   USING_GARBAGE_COLLECTED_MIXIN(LinkStyle);
 
  public:
@@ -59,12 +58,8 @@ class LinkStyle final : public LinkResource, ResourceOwner<StyleSheetResource> {
   CSSStyleSheet* Sheet() const { return sheet_.Get(); }
 
  private:
-  // From StyleSheetResourceClient
-  void SetCSSStyleSheet(const String& href,
-                        const KURL& base_url,
-                        ReferrerPolicy,
-                        const WTF::TextEncoding&,
-                        const CSSStyleSheetResource*) override;
+  // From ResourceClient
+  void NotifyFinished(Resource*) override;
   String DebugName() const override { return "LinkStyle"; }
   enum LoadReturnValue { kLoaded, kNotNeeded, kBail };
   LoadReturnValue LoadStylesheetIfNeeded(const KURL&,

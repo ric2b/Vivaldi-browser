@@ -17,6 +17,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace viz {
+class BeginFrameSource;
 class TestLayerTreeFrameSink;
 }
 
@@ -145,7 +146,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider);
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider);
   // Override this and call the base class to change what viz::ContextProvider
   // will be used, such as to prevent sharing the context with the
   // LayerTreeFrameSink. Or override it and create your own OutputSurface to
@@ -158,6 +159,10 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   base::SingleThreadTaskRunner* image_worker_task_runner() const {
     return image_worker_->task_runner().get();
+  }
+
+  void UseBeginFrameSource(viz::BeginFrameSource* begin_frame_source) {
+    begin_frame_source_ = begin_frame_source;
   }
 
  private:
@@ -192,6 +197,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   bool ended_ = false;
 
   int timeout_seconds_ = false;
+
+  viz::BeginFrameSource* begin_frame_source_ = nullptr;  // NOT OWNED.
 
   std::unique_ptr<LayerTreeTestLayerTreeFrameSinkClient>
       layer_tree_frame_sink_client_;

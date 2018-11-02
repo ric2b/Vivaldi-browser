@@ -16,9 +16,9 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/usb/usb_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
@@ -39,20 +39,10 @@
 #include "ui/message_center/notification_delegate.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
-#include "ash/system/system_notifier.h"  // nogncheck
-#endif
-
 namespace {
 
-// The WebUSB notification should be displayed for all profiles. On ChromeOS
-// that requires its notifier ID to be known by Ash so that it is not blocked in
-// multi-profile mode.
-#if defined(OS_CHROMEOS)
-#define kNotifierWebUsb ash::system_notifier::kNotifierWebUsb
-#else
+// The WebUSB notification should be displayed for all profiles.
 const char kNotifierWebUsb[] = "webusb.connected";
-#endif
 
 // Reasons the notification may be closed. These are used in histograms so do
 // not remove/reorder entries. Only add at the end just before
@@ -75,13 +65,6 @@ enum WebUsbNotificationClosed {
 void RecordNotificationClosure(WebUsbNotificationClosed disposition) {
   UMA_HISTOGRAM_ENUMERATION("WebUsb.NotificationClosed", disposition,
                             WEBUSB_NOTIFICATION_CLOSED_MAX);
-}
-
-Browser* GetBrowser() {
-  chrome::ScopedTabbedBrowserDisplayer browser_displayer(
-      ProfileManager::GetLastUsedProfileAllowedByPolicy());
-  DCHECK(browser_displayer.browser());
-  return browser_displayer.browser();
 }
 
 GURL GetActiveTabURL() {

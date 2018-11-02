@@ -23,6 +23,8 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 class FirstWebContentsProfiler : public content::WebContentsObserver {
@@ -244,7 +246,12 @@ void BeginFirstWebContentsProfiling() {
   DCHECK(!tab_strip->empty());
 
   content::WebContents* web_contents = tab_strip->GetActiveWebContents();
+
+  // NOTE(andre@vivaldi.com) : In Vivaldi we don't have a active tab when
+  // launcing with startup-tabs.
+  if (!vivaldi::IsVivaldiRunning()) {
   DCHECK(web_contents);
+  }
 
   const bool single_tab = browser_list->size() == 1 && tab_strip->count() == 1;
 

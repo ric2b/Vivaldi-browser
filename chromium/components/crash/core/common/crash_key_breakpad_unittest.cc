@@ -98,12 +98,12 @@ TEST_F(CrashKeyBreakpadTest, SetChunked) {
   // Since chunk1 through chunk3 are the same size as a storage slot,
   // and the storage NUL-terminates the value, ensure no bytes are
   // lost when chunking.
-  EXPECT_EQ(std::string(127, 'A'), storage()->GetValueForKey("chunky-1"));
+  EXPECT_EQ(std::string(127, 'A'), storage()->GetValueForKey("chunky__1"));
   EXPECT_EQ(std::string("A") + std::string(126, 'B'),
-            storage()->GetValueForKey("chunky-2"));
+            storage()->GetValueForKey("chunky__2"));
   EXPECT_EQ(std::string(2, 'B') + std::string(125, 'C'),
-            storage()->GetValueForKey("chunky-3"));
-  EXPECT_EQ(std::string(3, 'C'), storage()->GetValueForKey("chunky-4"));
+            storage()->GetValueForKey("chunky__3"));
+  EXPECT_EQ(std::string(3, 'C'), storage()->GetValueForKey("chunky__4"));
 
   std::string chunk4(240, 'D');
 
@@ -111,9 +111,10 @@ TEST_F(CrashKeyBreakpadTest, SetChunked) {
 
   ASSERT_EQ(2u, storage()->GetCount());
 
-  EXPECT_EQ(std::string(127, 'D'), storage()->GetValueForKey("chunky-1"));
-  EXPECT_EQ(std::string(240 - 127, 'D'), storage()->GetValueForKey("chunky-2"));
-  EXPECT_FALSE(storage()->GetValueForKey("chunky-3"));
+  EXPECT_EQ(std::string(127, 'D'), storage()->GetValueForKey("chunky__1"));
+  EXPECT_EQ(std::string(240 - 127, 'D'),
+            storage()->GetValueForKey("chunky__2"));
+  EXPECT_FALSE(storage()->GetValueForKey("chunky__3"));
 
   key.Clear();
 
@@ -130,41 +131,68 @@ TEST_F(CrashKeyBreakpadTest, SetTwoChunked) {
 
   ASSERT_EQ(2u, storage()->GetCount());
 
-  EXPECT_EQ(std::string(127, '1'), storage()->GetValueForKey("big-1"));
-  EXPECT_EQ(std::string(73, '1'), storage()->GetValueForKey("big-2"));
+  EXPECT_EQ(std::string(127, '1'), storage()->GetValueForKey("big__1"));
+  EXPECT_EQ(std::string(73, '1'), storage()->GetValueForKey("big__2"));
 
   key2.Set(std::string(256, '2').c_str());
 
   ASSERT_EQ(5u, storage()->GetCount());
 
-  EXPECT_EQ(std::string(127, '1'), storage()->GetValueForKey("big-1"));
-  EXPECT_EQ(std::string(73, '1'), storage()->GetValueForKey("big-2"));
-  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small-1"));
-  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small-2"));
-  EXPECT_EQ(std::string(2, '2'), storage()->GetValueForKey("small-3"));
+  EXPECT_EQ(std::string(127, '1'), storage()->GetValueForKey("big__1"));
+  EXPECT_EQ(std::string(73, '1'), storage()->GetValueForKey("big__2"));
+  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small__1"));
+  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small__2"));
+  EXPECT_EQ(std::string(2, '2'), storage()->GetValueForKey("small__3"));
 
   key1.Set(std::string(510, '3').c_str());
 
   ASSERT_EQ(8u, storage()->GetCount());
 
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-1"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-2"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-3"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-4"));
-  EXPECT_EQ(std::string(2, '3'), storage()->GetValueForKey("big-5"));
-  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small-1"));
-  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small-2"));
-  EXPECT_EQ(std::string(2, '2'), storage()->GetValueForKey("small-3"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__1"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__2"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__3"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__4"));
+  EXPECT_EQ(std::string(2, '3'), storage()->GetValueForKey("big__5"));
+  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small__1"));
+  EXPECT_EQ(std::string(127, '2'), storage()->GetValueForKey("small__2"));
+  EXPECT_EQ(std::string(2, '2'), storage()->GetValueForKey("small__3"));
 
   key2.Clear();
 
   ASSERT_EQ(5u, storage()->GetCount());
 
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-1"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-2"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-3"));
-  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big-4"));
-  EXPECT_EQ(std::string(2, '3'), storage()->GetValueForKey("big-5"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__1"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__2"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__3"));
+  EXPECT_EQ(std::string(127, '3'), storage()->GetValueForKey("big__4"));
+  EXPECT_EQ(std::string(2, '3'), storage()->GetValueForKey("big__5"));
+}
+
+TEST_F(CrashKeyBreakpadTest, ChunkSingleEntry) {
+  static CrashKeyString<200> crash_key("split");
+
+  EXPECT_EQ(0u, storage()->GetCount());
+
+  crash_key.Set("test");
+
+  ASSERT_EQ(1u, storage()->GetCount());
+  EXPECT_STREQ("test", storage()->GetValueForKey("split"));
+
+  crash_key.Set(std::string(127, 'z') + "bloop");
+
+  ASSERT_EQ(2u, storage()->GetCount());
+  EXPECT_EQ(std::string(127, 'z'), storage()->GetValueForKey("split__1"));
+  EXPECT_STREQ("bloop", storage()->GetValueForKey("split__2"));
+
+  crash_key.Set("abcdefg");
+
+  ASSERT_EQ(1u, storage()->GetCount());
+  EXPECT_STREQ("abcdefg", storage()->GetValueForKey("split"));
+
+  crash_key.Set("hijklmnop");
+
+  ASSERT_EQ(1u, storage()->GetCount());
+  EXPECT_STREQ("hijklmnop", storage()->GetValueForKey("split"));
 }
 
 }  // namespace crash_reporter

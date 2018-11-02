@@ -33,7 +33,7 @@ Polymer({
     /** @private {string} Text for label describing the lid-closed behavior. */
     lidClosedLabel_: String,
 
-    /** @private {boolean} Whether the system posesses a lid. */
+    /** @private {boolean} Whether the system possesses a lid. */
     hasLid_: Boolean,
 
     /**
@@ -149,7 +149,7 @@ Polymer({
    * @private
    */
   computeIdleOptions_: function(idleControlled) {
-    var options = [
+    const options = [
       {
         value: settings.IdleBehavior.DISPLAY_OFF_SLEEP,
         name: loadTimeData.getString('powerIdleDisplayOffSleep'),
@@ -180,7 +180,7 @@ Polymer({
 
   /** @private */
   onIdleSelectChange_: function() {
-    var behavior = /** @type {settings.IdleBehavior} */
+    const behavior = /** @type {settings.IdleBehavior} */
         (parseInt(this.$.idleSelect.value, 10));
     settings.DevicePageBrowserProxyImpl.getInstance().setIdleBehavior(behavior);
   },
@@ -213,7 +213,7 @@ Polymer({
    * @private
    */
   updateLidClosedLabelAndPref_: function(behavior, isControlled) {
-    var pref = {
+    const pref = {
       key: '',
       type: chrome.settingsPrivate.PrefType.BOOLEAN,
       // Most behaviors get a dedicated label and appear as checked.

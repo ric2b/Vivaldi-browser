@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_CHROMEOS_LOGIN_UI_LOGIN_DISPLAY_HOST_H_
 #define CHROME_BROWSER_CHROMEOS_LOGIN_UI_LOGIN_DISPLAY_HOST_H_
 
+#include <memory>
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
+#include "chrome/browser/chromeos/login/auth/auth_prewarmer.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "ui/gfx/native_widget_types.h"
@@ -17,7 +20,9 @@ class AccountId;
 
 namespace chromeos {
 
+class ArcKioskController;
 class AppLaunchController;
+class DemoAppLauncher;
 class LoginScreenContext;
 class OobeUI;
 class WebUILoginView;
@@ -31,7 +36,8 @@ class LoginDisplayHost {
   // Returns the default LoginDisplayHost instance if it has been created.
   static LoginDisplayHost* default_host() { return default_host_; }
 
-  virtual ~LoginDisplayHost() {}
+  LoginDisplayHost();
+  virtual ~LoginDisplayHost();
 
   // Creates UI implementation specific login display instance (views/WebUI).
   // The caller takes ownership of the returned value.
@@ -55,10 +61,6 @@ class LoginDisplayHost {
   // instance is gone.
   virtual void Finalize(base::OnceClosure completion_callback) = 0;
 
-  // Open the internet details dialog. If |network_id| is not empty, shows the
-  // details dialog for that network.
-  virtual void OpenInternetDetailDialog(const std::string& network_id) = 0;
-
   // Toggles status area visibility.
   virtual void SetStatusAreaVisible(bool visible) = 0;
 
@@ -73,7 +75,7 @@ class LoginDisplayHost {
 
   // Returns current AppLaunchController, if it exists.
   // Result should not be stored.
-  virtual AppLaunchController* GetAppLaunchController() = 0;
+  AppLaunchController* GetAppLaunchController();
 
   // Starts screen for adding user into session.
   // |completion_callback| is invoked after login display host shutdown.
@@ -84,25 +86,25 @@ class LoginDisplayHost {
   virtual void CancelUserAdding() = 0;
 
   // Starts sign in screen.
-  virtual void StartSignInScreen(const LoginScreenContext& context) = 0;
+  void StartSignInScreen(const LoginScreenContext& context);
 
   // Invoked when system preferences that affect the signin screen have changed.
   virtual void OnPreferencesChanged() = 0;
 
   // Initiates authentication network prewarming.
-  virtual void PrewarmAuthentication() = 0;
+  void PrewarmAuthentication();
 
   // Starts app launch splash screen. If |is_auto_launch| is true, the app is
   // being auto-launched with no delay.
-  virtual void StartAppLaunch(const std::string& app_id,
-                              bool diagnostic_mode,
-                              bool is_auto_launch) = 0;
+  void StartAppLaunch(const std::string& app_id,
+                      bool diagnostic_mode,
+                      bool is_auto_launch);
 
   // Starts the demo app launch.
-  virtual void StartDemoAppLaunch() = 0;
+  void StartDemoAppLaunch();
 
   // Starts ARC kiosk splash screen.
-  virtual void StartArcKiosk(const AccountId& account_id) = 0;
+  void StartArcKiosk(const AccountId& account_id);
 
   // Start voice interaction OOBE.
   virtual void StartVoiceInteractionOobe() = 0;
@@ -113,6 +115,30 @@ class LoginDisplayHost {
  protected:
   // Default LoginDisplayHost. Child class sets the reference.
   static LoginDisplayHost* default_host_;
+
+  virtual void OnStartSignInScreen(const LoginScreenContext& context) = 0;
+  virtual void OnStartAppLaunch() = 0;
+  virtual void OnStartArcKiosk() = 0;
+
+  // Deletes |auth_prewarmer_|.
+  void OnAuthPrewarmDone();
+
+  // Active instance of authentication prewarmer.
+  std::unique_ptr<AuthPrewarmer> auth_prewarmer_;
+
+  // App launch controller.
+  std::unique_ptr<AppLaunchController> app_launch_controller_;
+
+  // Demo app launcher.
+  std::unique_ptr<DemoAppLauncher> demo_app_launcher_;
+
+  // ARC kiosk controller.
+  std::unique_ptr<ArcKioskController> arc_kiosk_controller_;
+
+ private:
+  base::WeakPtrFactory<LoginDisplayHost> weak_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(LoginDisplayHost);
 };
 
 }  // namespace chromeos

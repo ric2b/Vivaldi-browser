@@ -103,11 +103,11 @@ void LayoutFullScreen::UpdateStyle(LayoutObject* parent) {
   fullscreen_style->GetFont().Update(nullptr);
 
   fullscreen_style->SetDisplay(EDisplay::kFlex);
-  fullscreen_style->SetJustifyContentPosition(kContentPositionCenter);
+  fullscreen_style->SetJustifyContentPosition(ContentPosition::kCenter);
   // TODO (lajava): Since the FullScrenn layout object is anonymous, its Default
   // Alignment (align-items) value can't be used to resolve its children Self
   // Alignment 'auto' values.
-  fullscreen_style->SetAlignItemsPosition(kItemPositionCenter);
+  fullscreen_style->SetAlignItemsPosition(ItemPosition::kCenter);
   fullscreen_style->SetFlexDirection(EFlexDirection::kColumn);
 
   fullscreen_style->SetPosition(EPosition::kFixed);
@@ -132,6 +132,9 @@ LayoutObject* LayoutFullScreen::WrapLayoutObject(LayoutObject* object,
   // FIXME: We should not modify the structure of the layout tree during
   // layout. crbug.com/370459
   DeprecatedDisableModifyLayoutTreeStructureAsserts disabler;
+
+  // A fullscreen <html> element should not be wrapped (see crbug.com/676432).
+  DCHECK(!object || object->GetNode() != document->documentElement());
 
   LayoutFullScreen* fullscreen_layout_object =
       LayoutFullScreen::CreateAnonymous(document);

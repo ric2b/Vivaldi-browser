@@ -199,6 +199,14 @@ class EXTBlendFuncExtendedDrawTest : public testing::TestWithParam<bool> {
 TEST_P(EXTBlendFuncExtendedDrawTest, ESSL1FragColor) {
   if (!IsApplicable())
     return;
+
+  // Fails on AMDGPU-PRO driver crbug.com/786219
+  gpu::GPUTestBotConfig bot_config;
+  if (bot_config.LoadCurrentConfig(nullptr) &&
+      bot_config.Matches("linux amd")) {
+    return;
+  }
+
   // clang-format off
   static const char* kFragColorShader =
       BFE_SHADER(
@@ -248,7 +256,7 @@ class EXTBlendFuncExtendedES3DrawTest : public EXTBlendFuncExtendedDrawTest {
   void SetUp() override {
     GLManager::Options options;
     options.size = gfx::Size(kWidth, kHeight);
-    options.context_type = gles2::CONTEXT_TYPE_OPENGLES3;
+    options.context_type = CONTEXT_TYPE_OPENGLES3;
     options.force_shader_name_hashing = GetParam();
     gl_.Initialize(options);
   }

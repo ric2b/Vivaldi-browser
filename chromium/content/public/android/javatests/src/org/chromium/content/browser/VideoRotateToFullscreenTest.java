@@ -5,6 +5,8 @@
 package org.chromium.content.browser;
 
 import android.content.pm.ActivityInfo;
+import android.provider.Settings;
+import android.support.test.filters.MediumTest;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -13,9 +15,11 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
+import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
 import org.chromium.content.browser.test.util.Criteria;
@@ -34,8 +38,8 @@ import java.util.concurrent.TimeoutException;
  * is rotated whilst watching a video.
  */
 @RunWith(ContentJUnit4ClassRunner.class)
-@CommandLineFlags.Add({"enable-features=VideoRotateToFullscreen",
-        MediaSwitches.IGNORE_AUTOPLAY_RESTRICTIONS_FOR_TESTS})
+@CommandLineFlags.
+Add({"enable-features=VideoRotateToFullscreen", MediaSwitches.AUTOPLAY_NO_GESTURE_REQUIRED_POLICY})
 public class VideoRotateToFullscreenTest {
     @Rule
     public ContentShellActivityTestRule mRule = new ContentShellActivityTestRule();
@@ -89,10 +93,10 @@ public class VideoRotateToFullscreenTest {
     }
 
     @Test
-    // @MediumTest
-    // @Feature({"VideoRotateToFullscreen"})
-    @DisabledTest(message = "crbug.com/726977")
+    @MediumTest
+    @Feature({"VideoRotateToFullscreen"})
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    @DisabledTest(message = "crbug.com/726977")
     public void testPortraitToLandscapeAndBack() throws Exception {
         // Start off in portrait screen orientation.
         mRule.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
@@ -107,14 +111,19 @@ public class VideoRotateToFullscreenTest {
         mRule.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         waitForScreenOrientation("\"landscape\"");
 
-        // Should enter fullscreen.
-        waitForContentsFullscreenState(true);
+        // Should enter fullscreen if there is no portrait system lock.
+        boolean autoRotateEnabled =
+                Settings.System.getInt(ContextUtils.getApplicationContext().getContentResolver(),
+                        Settings.System.ACCELEROMETER_ROTATION, 0)
+                == 1;
+        waitForContentsFullscreenState(autoRotateEnabled);
 
         // Rotate screen from landscape to portrait(?).
         mRule.getActivity().setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
         waitForScreenOrientation("\"portrait\"");
 
-        // Should exit fullscreen.
+        // Should no longer be fullscreen (either exitno longer be fullscreen
+        // (either exit or never went).
         waitForContentsFullscreenState(false);
     }
 }

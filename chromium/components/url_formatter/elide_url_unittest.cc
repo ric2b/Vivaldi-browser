@@ -180,7 +180,13 @@ void RunElisionTest(const std::vector<Testcase>& testcases) {
 }
 
 // Test eliding of commonplace URLs.
-TEST(TextEliderTest, TestGeneralEliding) {
+// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
+#if defined(OS_MACOSX)
+#define MAYBE_TestGeneralEliding DISABLED_TestGeneralEliding
+#else
+#define MAYBE_TestGeneralEliding TestGeneralEliding
+#endif
+TEST(TextEliderTest, MAYBE_TestGeneralEliding) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ProgressiveTestcase> progressive_testcases = {
       // Elide a non-www URL (www URLs are handled differently). In this first
@@ -347,22 +353,29 @@ TEST(TextEliderTest, TestElisionSpecialCases) {
        kEllipsisStr + "berkeley.edu:4430/" + kEllipsisStr + "/arbitfilename"},
 
       // Unescaping.
-      {"http://www/%E4%BD%A0%E5%A5%BD?q=%E4%BD%A0%E5%A5%BD#\xe4\xbd\xa0",
-       "www/\xe4\xbd\xa0\xe5\xa5\xbd?q=\xe4\xbd\xa0\xe5\xa5\xbd#" +
+      {"http://www/%E4%BD%A0%E5%A5%BD?"
+       "q=%E4%BD%A0%E5%A5%BD#\xe4\xbd\xa0\xe4\xbd\xa0\xe4\xbd\xa0",
+       "www/\xe4\xbd\xa0\xe5\xa5\xbd?q=\xe4\xbd\xa0\xe5\xa5\xbd#\xe4\xbd\xa0" +
            kEllipsisStr},
 
       // Invalid unescaping for path. The ref will always be valid UTF-8. We
       // don't bother to do too many edge cases, since these are handled by the
       // escaper unittest.
       {"http://www/%E4%A0%E5%A5%BD?q=%E4%BD%A0%E5%A5%BD#\xe4\xbd\xa0",
-       "www/%E4%A0%E5%A5%BD?q=\xe4\xbd\xa0\xe5\xa5\xbd#" + kEllipsisStr},
+       "www/%E4%A0%E5%A5%BD?q=\xe4\xbd\xa0\xe5\xa5\xbd#\xe4\xbd\xa0"},
   };
 
   RunElisionTest(testcases);
 }
 
 // Test eliding of file: URLs.
-TEST(TextEliderTest, TestFileURLEliding) {
+// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
+#if defined(OS_MACOSX)
+#define MAYBE_TestFileURLEliding DISABLED_TestFileURLEliding
+#else
+#define MAYBE_TestFileURLEliding TestFileURLEliding
+#endif
+TEST(TextEliderTest, MAYBE_TestFileURLEliding) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ProgressiveTestcase> progressive_testcases = {
     {"file:///C:/path1/path2/path3/filename",
@@ -742,7 +755,13 @@ TEST(TextEliderTest, FormatOriginForSecurityDisplay) {
       << "Explicitly test the url::Origin which takes an empty, invalid URL";
 }
 
-TEST(TextEliderTest, TestSimpleElisionMethod) {
+// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
+#if defined(OS_MACOSX)
+#define MAYBE_TestSimpleElisionMethod DISABLED_TestSimpleElisionMethod
+#else
+#define MAYBE_TestSimpleElisionMethod TestSimpleElisionMethod
+#endif
+TEST(TextEliderTest, MAYBE_TestSimpleElisionMethod) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ProgressiveTestcase> testcases = {
       {"https://www.abc.com/def/",
@@ -834,7 +853,14 @@ void RunElisionParsingTest(const std::vector<ParsingTestcase>& testcases) {
 }
 
 // Verify that during elision, the parsed URL components are properly modified.
-TEST(TextEliderTest, TestElisionParsingAdjustments) {
+// Disabled on Mac for the typesetter migration. http://crbug.com/803354.
+#if defined(OS_MACOSX)
+#define MAYBE_TestElisionParsingAdjustments \
+  DISABLED_TestElisionParsingAdjustments
+#else
+#define MAYBE_TestElisionParsingAdjustments TestElisionParsingAdjustments
+#endif
+TEST(TextEliderTest, MAYBE_TestElisionParsingAdjustments) {
   const std::string kEllipsisStr(gfx::kEllipsis);
   const std::vector<ParsingTestcase> testcases = {
       // HTTPS with path.

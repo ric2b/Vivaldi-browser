@@ -27,7 +27,8 @@ class NGLineBoxFragmentBuilder;
 class NGTextFragmentBuilder;
 struct NGPositionedFloat;
 
-// A class for inline layout (e.g. a <span> with no special style).
+// A class for laying out an inline formatting context, i.e. a block with inline
+// children.
 //
 // This class determines the position of NGInlineItem and build line boxes.
 //
@@ -51,34 +52,29 @@ class CORE_EXPORT NGInlineLayoutAlgorithm final
 
   bool IsHorizontalWritingMode() const { return is_horizontal_writing_mode_; }
 
-  void BidiReorder(NGInlineItemResults*);
+  void BidiReorder();
 
-  void PlaceItems(NGLineInfo*, const NGExclusionSpace&);
   void PlaceText(scoped_refptr<const ShapeResult>,
                  scoped_refptr<const ComputedStyle>,
-                 LayoutUnit* position,
+                 UBiDiLevel bidi_level,
                  NGInlineBoxState*,
                  NGTextFragmentBuilder*);
   void PlaceGeneratedContent(scoped_refptr<const ShapeResult>,
                              scoped_refptr<const ComputedStyle>,
-                             LayoutUnit* position,
                              NGInlineBoxState*,
                              NGTextFragmentBuilder*);
   NGInlineBoxState* PlaceAtomicInline(const NGInlineItem&,
                                       NGInlineItemResult*,
-                                      const NGLineInfo&,
-                                      LayoutUnit position);
+                                      const NGLineInfo&);
   void PlaceLayoutResult(NGInlineItemResult*,
-                         LayoutUnit position,
-                         NGInlineBoxState*);
+                         NGInlineBoxState*,
+                         LayoutUnit inline_offset = LayoutUnit());
+  bool PlaceOutOfFlowObjects(const NGLineInfo&, const NGLineHeightMetrics&);
   void PlaceListMarker(const NGInlineItem&,
                        NGInlineItemResult*,
                        const NGLineInfo&);
 
-  void ApplyTextAlign(const NGLineInfo&,
-                      ETextAlign,
-                      LayoutUnit* line_left,
-                      LayoutUnit inline_size);
+  LayoutUnit OffsetForTextAlign(const NGLineInfo&, ETextAlign) const;
   bool ApplyJustify(NGLineInfo*);
 
   LayoutUnit ComputeContentSize(const NGLineInfo&,

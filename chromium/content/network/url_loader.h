@@ -12,13 +12,13 @@
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "content/network/upload_progress_tracker.h"
-#include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/simple_watcher.h"
 #include "net/http/http_raw_request_headers.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/interfaces/url_loader.mojom.h"
 
 namespace net {
 class HttpResponseHeaders;
@@ -26,22 +26,22 @@ class HttpResponseHeaders;
 
 namespace network {
 class NetToMojoPendingBuffer;
+struct ResourceResponse;
 }
 
 namespace content {
 
 class NetworkContext;
-struct ResourceResponse;
 
-class CONTENT_EXPORT URLLoader : public mojom::URLLoader,
+class CONTENT_EXPORT URLLoader : public network::mojom::URLLoader,
                                  public net::URLRequest::Delegate {
  public:
   URLLoader(NetworkContext* context,
-            mojom::URLLoaderRequest url_loader_request,
+            network::mojom::URLLoaderRequest url_loader_request,
             int32_t options,
-            const ResourceRequest& request,
+            const network::ResourceRequest& request,
             bool report_raw_headers,
-            mojom::URLLoaderClientPtr url_loader_client,
+            network::mojom::URLLoaderClientPtr url_loader_client,
             const net::NetworkTrafficAnnotationTag& traffic_annotation,
             uint32_t process_id);
   ~URLLoader() override;
@@ -49,8 +49,9 @@ class CONTENT_EXPORT URLLoader : public mojom::URLLoader,
   // Called when the associated NetworkContext is going away.
   void Cleanup();
 
-  // mojom::URLLoader implementation:
+  // network::mojom::URLLoader implementation:
   void FollowRedirect() override;
+  void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
@@ -93,14 +94,14 @@ class CONTENT_EXPORT URLLoader : public mojom::URLLoader,
 
   NetworkContext* context_;
   int32_t options_;
-  ResourceType resource_type_;
+  int resource_type_;
   bool is_load_timing_enabled_;
   uint32_t process_id_;
   uint32_t render_frame_id_;
   bool connected_;
   std::unique_ptr<net::URLRequest> url_request_;
-  mojo::Binding<mojom::URLLoader> binding_;
-  mojom::URLLoaderClientPtr url_loader_client_;
+  mojo::Binding<network::mojom::URLLoader> binding_;
+  network::mojom::URLLoaderClientPtr url_loader_client_;
   int64_t total_written_bytes_ = 0;
 
   mojo::ScopedDataPipeProducerHandle response_body_stream_;
@@ -112,7 +113,7 @@ class CONTENT_EXPORT URLLoader : public mojom::URLLoader,
 
   // Used when deferring sending the data to the client until mime sniffing is
   // finished.
-  scoped_refptr<ResourceResponse> response_;
+  scoped_refptr<network::ResourceResponse> response_;
   mojo::ScopedDataPipeConsumerHandle consumer_handle_;
 
   bool report_raw_headers_;

@@ -11,22 +11,21 @@
 #include "base/callback.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/tabs/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
 #include "chrome/browser/ui/views/tabs/stacked_tab_strip_layout.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/window_finder.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
@@ -100,7 +99,7 @@ const int kMaximizedWindowInset = 10;  // DIPs.
 
 #if defined(OS_CHROMEOS)
 // Returns true if |tab_strip| browser window is snapped.
-bool IsSnapped(const TabStripImpl* tab_strip) {
+bool IsSnapped(const TabStrip* tab_strip) {
   DCHECK(tab_strip);
   ash::mojom::WindowStateType type =
       tab_strip->GetWidget()->GetNativeWindow()->GetProperty(
@@ -109,7 +108,7 @@ bool IsSnapped(const TabStripImpl* tab_strip) {
          type == ash::mojom::WindowStateType::RIGHT_SNAPPED;
 }
 #else
-bool IsSnapped(const TabStripImpl* tab_strip) {
+bool IsSnapped(const TabStrip* tab_strip) {
   return false;
 }
 #endif
@@ -196,7 +195,7 @@ TabDragController::TabDragController()
       attached_tabstrip_(NULL),
       can_release_capture_(true),
       offset_to_width_ratio_(0),
-      old_focused_view_tracker_(base::MakeUnique<views::ViewTracker>()),
+      old_focused_view_tracker_(std::make_unique<views::ViewTracker>()),
       last_move_screen_loc_(0),
       started_drag_(false),
       active_(true),
@@ -217,7 +216,7 @@ TabDragController::TabDragController()
       is_mutating_(false),
       attach_x_(-1),
       attach_index_(-1),
-      window_finder_(base::MakeUnique<WindowFinder>()),
+      window_finder_(std::make_unique<WindowFinder>()),
       weak_factory_(this) {
   instance_ = this;
 }
@@ -235,13 +234,13 @@ TabDragController::~TabDragController() {
     GetModel(source_tabstrip_)->RemoveObserver(this);
 
   if (event_source_ == EVENT_SOURCE_TOUCH) {
-    TabStripImpl* capture_tabstrip =
+    TabStrip* capture_tabstrip =
         attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
     capture_tabstrip->GetWidget()->ReleaseCapture();
   }
 }
 
-void TabDragController::Init(TabStripImpl* source_tabstrip,
+void TabDragController::Init(TabStrip* source_tabstrip,
                              Tab* source_tab,
                              const std::vector<Tab*>& tabs,
                              const gfx::Point& mouse_offset,
@@ -307,7 +306,7 @@ void TabDragController::Init(TabStripImpl* source_tabstrip,
 }
 
 // static
-bool TabDragController::IsAttachedTo(const TabStripImpl* tab_strip) {
+bool TabDragController::IsAttachedTo(const TabStrip* tab_strip) {
   return (instance_ && instance_->active() &&
           instance_->attached_tabstrip() == tab_strip);
 }
@@ -512,7 +511,7 @@ TabDragController::Liveness TabDragController::ContinueDragging(
 
   DCHECK(attached_tabstrip_);
 
-  TabStripImpl* target_tabstrip = source_tabstrip_;
+  TabStrip* target_tabstrip = source_tabstrip_;
   if (detach_behavior_ == DETACHABLE &&
       GetTargetTabStripForPoint(point_in_screen, &target_tabstrip) ==
           Liveness::DELETED) {
@@ -560,7 +559,7 @@ TabDragController::Liveness TabDragController::ContinueDragging(
 }
 
 TabDragController::DragBrowserResultType
-TabDragController::DragBrowserToNewTabStrip(TabStripImpl* target_tabstrip,
+TabDragController::DragBrowserToNewTabStrip(TabStrip* target_tabstrip,
                                             const gfx::Point& point_in_screen) {
   TRACE_EVENT1("views", "TabDragController::DragBrowserToNewTabStrip",
                "point_in_screen", point_in_screen.ToString());
@@ -798,7 +797,7 @@ TabDragController::DetachPosition TabDragController::GetDetachPosition(
 
 TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
     const gfx::Point& point_in_screen,
-    TabStripImpl** tab_strip) {
+    TabStrip** tab_strip) {
   *tab_strip = nullptr;
   TRACE_EVENT1("views", "TabDragController::GetTargetTabStripForPoint",
                "point_in_screen", point_in_screen.ToString());
@@ -823,7 +822,7 @@ TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
   // Do not allow dragging into a window with a modal dialog, it causes a weird
   // behavior.  See crbug.com/336691
   if (!GetModalTransient(local_window)) {
-    TabStripImpl* result = GetTabStripForWindow(local_window);
+    TabStrip* result = GetTabStripForWindow(local_window);
     if (result && DoesTabStripContain(result, point_in_screen)) {
       *tab_strip = result;
       return Liveness::ALIVE;
@@ -834,8 +833,7 @@ TabDragController::Liveness TabDragController::GetTargetTabStripForPoint(
   return Liveness::ALIVE;
 }
 
-TabStripImpl* TabDragController::GetTabStripForWindow(
-    gfx::NativeWindow window) {
+TabStrip* TabDragController::GetTabStripForWindow(gfx::NativeWindow window) {
   if (!window)
     return NULL;
   BrowserView* browser_view =
@@ -846,10 +844,8 @@ TabStripImpl* TabDragController::GetTabStripForWindow(
           Browser::FEATURE_TABSTRIP))
     return NULL;
 
-  // TabDragController is a helper for TabStripImpl and will only be used
-  // when the Impl (not the experimental one) is used.
-  TabStripImpl* other_tabstrip = browser_view->tabstrip()->AsTabStripImpl();
-  TabStripImpl* tab_strip =
+  TabStrip* other_tabstrip = browser_view->tabstrip();
+  TabStrip* tab_strip =
       attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   DCHECK(tab_strip);
 
@@ -858,7 +854,7 @@ TabStripImpl* TabDragController::GetTabStripForWindow(
 }
 
 bool TabDragController::DoesTabStripContain(
-    TabStripImpl* tabstrip,
+    TabStrip* tabstrip,
     const gfx::Point& point_in_screen) const {
   // Make sure the specified screen point is actually within the bounds of the
   // specified tabstrip...
@@ -870,7 +866,7 @@ bool TabDragController::DoesTabStripContain(
                                            point_in_screen.y());
 }
 
-void TabDragController::Attach(TabStripImpl* attached_tabstrip,
+void TabDragController::Attach(TabStrip* attached_tabstrip,
                                const gfx::Point& point_in_screen) {
   TRACE_EVENT1("views", "TabDragController::Attach",
                "point_in_screen", point_in_screen.ToString());
@@ -1036,9 +1032,7 @@ void TabDragController::DetachIntoNewBrowserAndRunMoveLoop(
   Detach(can_release_capture_ ? RELEASE_CAPTURE : DONT_RELEASE_CAPTURE);
 
   dragged_widget->SetVisibilityChangedAnimationsEnabled(false);
-  // TabDragController is a helper for TabStripImpl and will only be used
-  // when the Impl (not the experimental one) is used.
-  Attach(dragged_browser_view->tabstrip()->AsTabStripImpl(), gfx::Point());
+  Attach(dragged_browser_view->tabstrip(), gfx::Point());
   AdjustBrowserAndTabBoundsForDrag(last_tabstrip_width,
                                    point_in_screen,
                                    &drag_bounds);
@@ -1301,7 +1295,7 @@ gfx::Point TabDragController::GetAttachedDragPoint(
 }
 
 std::vector<Tab*> TabDragController::GetTabsMatchingDraggedContents(
-    TabStripImpl* tabstrip) {
+    TabStrip* tabstrip) {
   TabStripModel* model = GetModel(attached_tabstrip_);
   std::vector<Tab*> tabs;
   for (size_t i = 0; i < drag_data_.size(); ++i) {
@@ -1357,7 +1351,7 @@ void TabDragController::EndDragImpl(EndDragType type) {
   // Clear out drag data so we don't attempt to do anything with it.
   drag_data_.clear();
 
-  TabStripImpl* owning_tabstrip =
+  TabStrip* owning_tabstrip =
       attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   owning_tabstrip->DestroyDragController();
 }
@@ -1535,7 +1529,11 @@ void TabDragController::MaximizeAttachedWindow() {
   if (was_source_fullscreen_) {
     // In fullscreen mode it is only possible to get here if the source
     // was in "immersive fullscreen" mode, so toggle it back on.
-    GetAttachedBrowserWidget()->SetFullscreen(true);
+    BrowserView* browser_view = BrowserView::GetBrowserViewForNativeWindow(
+        GetAttachedBrowserWidget()->GetNativeWindow());
+    DCHECK(browser_view);
+    if (!browser_view->IsFullscreen())
+      chrome::ToggleFullscreenMode(browser_view->browser());
   }
 #endif
 }
@@ -1607,7 +1605,7 @@ void TabDragController::BringWindowUnderPointToFront(
   }
 }
 
-TabStripModel* TabDragController::GetModel(TabStripImpl* tabstrip) const {
+TabStripModel* TabDragController::GetModel(TabStrip* tabstrip) const {
   return static_cast<BrowserTabStripController*>(tabstrip->controller())->
       model();
 }
@@ -1627,7 +1625,7 @@ bool TabDragController::AreTabsConsecutive() {
 }
 
 gfx::Rect TabDragController::CalculateDraggedBrowserBounds(
-    TabStripImpl* source,
+    TabStrip* source,
     const gfx::Point& point_in_screen,
     std::vector<gfx::Rect>* drag_bounds) {
   gfx::Point center(0, source->height() / 2);
@@ -1726,7 +1724,7 @@ void TabDragController::AdjustBrowserAndTabBoundsForDrag(
 }
 
 Browser* TabDragController::CreateBrowserForDrag(
-    TabStripImpl* source,
+    TabStrip* source,
     const gfx::Point& point_in_screen,
     gfx::Vector2d* drag_offset,
     std::vector<gfx::Rect>* drag_bounds) {
@@ -1774,7 +1772,7 @@ gfx::Point TabDragController::GetCursorScreenPoint() {
 
 gfx::Vector2d TabDragController::GetWindowOffset(
     const gfx::Point& point_in_screen) {
-  TabStripImpl* owning_tabstrip =
+  TabStrip* owning_tabstrip =
       attached_tabstrip_ ? attached_tabstrip_ : source_tabstrip_;
   views::View* toplevel_view = owning_tabstrip->GetWidget()->GetContentsView();
 

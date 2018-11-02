@@ -3,6 +3,7 @@
 <translationbundle lang="hu">
 <translation id="102360288709523007">Használati statisztikák és hibajelentések küldésével segíthet a Chromium fejlesztésében.</translation>
 <translation id="1185134272377778587">A Chromium névjegye</translation>
+<translation id="1289966288285062467">Chromium – Adatvédelmi közlemény</translation>
 <translation id="1472013873724362412">Fiókja nem működik a Chromium rendszeren. Lépjen kapcsolatba domainrendszergazdájával, vagy használjon normál Google-fiókot a bejelentkezéshez.</translation>
 <translation id="1736662517232558588">A Chromium adatai törölve</translation>
 <translation id="1838412507805038478">A Chromium ellenőrizte, hogy a(z) <ph name="ISSUER" /> adta ki ezt a webhelytanúsítványt.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Kijelentkezik a Chromiumból?</translation>
 <translation id="6424492062988593837">A Chromium most még jobb lett! Új verzió áll rendelkezésre.</translation>
 <translation id="6604711459180487467">A helyadatokkal jobb felhasználói élményben lehet része a Chromium használatakor.</translation>
+<translation id="6626296268883197964">Az alkalmazás használatával Ön elfogadja a Chromium <ph name="BEGIN_LINK_TOS" />Általános Szerződési Feltételeit<ph name="END_LINK_TOS" /> és <ph name="BEGIN_LINK_PRIVACY" />Adatvédelmi közleményét<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="7099326575020694068">A Chromium Osztott nézet módban nem tudja használni a kamerát</translation>
-<translation id="7144758435978427212">Közeli objektumok által küldött weboldalak felfedezése. Ha a Bluetooth be van kapcsolva, a Chromium összegyűjtheti az Ön közelében található objektumokhoz társított weboldalakat, és névtelenül elküldheti őket a Google-nak, hogy megtalálja az Ön számára leghasznosabbakat. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" />.</translation>
 <translation id="7208566199746267865">A Chromium időt takarít meg Önnek azzal, hogy fiókjait az internetre viszi. A beállításokban tud fiókokat hozzáadni vagy eltávolítani.</translation>
 <translation id="7269362888766543920">Bizonyos bővítmények a Chromium összeomlását eredményezik. Próbálja meg eltávolítani őket.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">A Chromium mindenhol használható</translation>
 <translation id="7674213385180944843">Nyissa meg a Beállítások &gt; Adatvédelem &gt; Kamera &gt; Chromium elemet, és kapcsolja be a kamerát.</translation>
 <translation id="786327964234957808">A(z) <ph name="USER_EMAIL1" /> szinkronizált fiókról a következőre vált át: <ph name="USER_EMAIL2" />. A meglévő Chromium-adatokat a(z) <ph name="DOMAIN" /> kezeli. Ezzel törli az adatait erről az eszközről, viszont azok továbbra is megmaradnak a(z) <ph name="USER_EMAIL1" /> fiókban.</translation>
-<translation id="8111736072665034317">Az alkalmazás használatával Ön elfogadja a Chromium <ph name="BEGIN_LINK" />Általános Szerződési Feltételeit<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Tipp: <ph name="BEGIN_LINK" />Helyezze át a Chromiumot a Dockra<ph name="END_LINK" />.</translation>
 <translation id="8252885722420466166">Jobb Google-felhasználói élmény a Chromiumban a tartózkodási hely alapján.</translation>
 <translation id="8353224596138547809">Szeretné, hogy a Chromium mentse az oldalhoz tartozó jelszót?</translation>

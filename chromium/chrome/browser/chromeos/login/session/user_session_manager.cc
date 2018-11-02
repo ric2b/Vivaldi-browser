@@ -71,6 +71,7 @@
 #include "chrome/browser/google/google_brand_chromeos.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/nss_context.h"
+#include "chrome/browser/password_manager/password_store_factory.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -89,7 +90,7 @@
 #include "chromeos/cert_loader.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
-#include "chromeos/cryptohome/cryptohome_util.h"
+#include "chromeos/cryptohome/tpm_util.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
@@ -99,6 +100,8 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
+#include "components/password_manager/core/browser/password_store.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -125,7 +128,6 @@
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
-#include "ui/message_center/message_center.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_RLZ)
@@ -1260,7 +1262,7 @@ void UserSessionManager::CompleteProfileCreateAfterAuthTransfer(
 void UserSessionManager::PrepareTpmDeviceAndFinalizeProfile(Profile* profile) {
   BootTimesRecorder::Get()->AddLoginTimeMarker("TPMOwn-Start", false);
 
-  if (!cryptohome_util::TpmIsEnabled() || cryptohome_util::TpmIsBeingOwned()) {
+  if (!tpm_util::TpmIsEnabled() || tpm_util::TpmIsBeingOwned()) {
     FinalizePrepareProfile(profile);
     return;
   }
@@ -1279,7 +1281,7 @@ void UserSessionManager::PrepareTpmDeviceAndFinalizeProfile(Profile* profile) {
       base::BindOnce(&UserSessionManager::OnCryptohomeOperationCompleted,
                      AsWeakPtr(), profile);
   CryptohomeClient* client = DBusThreadManager::Get()->GetCryptohomeClient();
-  if (cryptohome_util::TpmIsOwned())
+  if (tpm_util::TpmIsOwned())
     client->TpmClearStoredPassword(std::move(callback));
   else
     client->TpmCanAttemptOwnership(std::move(callback));
@@ -1333,6 +1335,13 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
   }
 
   UpdateEasyUnlockKeys(user_context_);
+
+  // Save sync password hash and salt to profile prefs if they are available.
+  // These will be used to detect Gaia password reuses.
+  if (user_context_.GetSyncPasswordData().has_value()) {
+    login::SaveSyncPasswordDataToProfile(user_context_, profile);
+  }
+
   user_context_.ClearSecrets();
   if (TokenHandlesEnabled()) {
     CreateTokenUtilIfMissing();
@@ -1817,7 +1826,7 @@ void UserSessionManager::CheckEolStatus(Profile* profile) {
   std::map<Profile*, std::unique_ptr<EolNotification>, ProfileCompare>::iterator
       iter = eol_notification_handler_.find(profile);
   if (iter == eol_notification_handler_.end()) {
-    auto eol_notification = base::MakeUnique<EolNotification>(profile);
+    auto eol_notification = std::make_unique<EolNotification>(profile);
     iter = eol_notification_handler_
                .insert(std::make_pair(profile, std::move(eol_notification)))
                .first;

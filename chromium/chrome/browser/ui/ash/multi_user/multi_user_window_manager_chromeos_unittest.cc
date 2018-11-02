@@ -31,6 +31,8 @@
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
+#include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/ui/ash/chrome_new_window_client.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -38,6 +40,8 @@
 #include "chrome/browser/ui/ash/multi_user/user_switch_animator_chromeos.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "chrome/browser/ui/ash/test_wallpaper_controller.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
@@ -295,6 +299,10 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
 
   user_manager::ScopedUserManager user_manager_enabler_;
 
+  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
+
+  TestWallpaperController test_wallpaper_controller_;
+
   // The maximized window manager (if enabled).
   std::unique_ptr<TabletModeWindowManager> tablet_mode_window_manager_;
 
@@ -302,6 +310,8 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
 };
 
 void MultiUserWindowManagerChromeOSTest::SetUp() {
+  chromeos::DeviceSettingsService::Initialize();
+  chromeos::CrosSettings::Initialize();
   ash_test_helper()->set_test_shell_delegate(new TestShellDelegateChromeOS);
   ash::AshTestEnvironmentContent* test_environment =
       static_cast<ash::AshTestEnvironmentContent*>(
@@ -330,6 +340,9 @@ void MultiUserWindowManagerChromeOSTest::SetUpForThisManyWindows(int windows) {
   MultiUserWindowManager::SetInstanceForTest(multi_user_window_manager_);
   EXPECT_TRUE(multi_user_window_manager_);
   chromeos::WallpaperManager::Initialize();
+  wallpaper_controller_client_ = std::make_unique<WallpaperControllerClient>();
+  wallpaper_controller_client_->InitForTesting(
+      test_wallpaper_controller_.CreateInterfacePtr());
 }
 
 void MultiUserWindowManagerChromeOSTest::TearDown() {
@@ -343,7 +356,10 @@ void MultiUserWindowManagerChromeOSTest::TearDown() {
   MultiUserWindowManager::DeleteInstance();
   AshTestBase::TearDown();
   chromeos::WallpaperManager::Shutdown();
+  wallpaper_controller_client_.reset();
   profile_manager_.reset();
+  chromeos::CrosSettings::Shutdown();
+  chromeos::DeviceSettingsService::Shutdown();
 }
 
 std::string MultiUserWindowManagerChromeOSTest::GetStatus() {

@@ -57,9 +57,9 @@ void WaitForSignalTask(WorkerThread* worker_thread,
   EXPECT_TRUE(worker_thread->IsCurrentThread());
 
   // Notify the main thread that the debugger task is waiting for the signal.
-  worker_thread->GetParentFrameTaskRunners()
-      ->Get(TaskType::kUnspecedTimer)
-      ->PostTask(BLINK_FROM_HERE, CrossThreadBind(&testing::ExitRunLoop));
+  PostCrossThreadTask(
+      *worker_thread->GetParentFrameTaskRunners()->Get(TaskType::kInternalTest),
+      FROM_HERE, CrossThreadBind(&testing::ExitRunLoop));
   waitable_event->Wait();
 }
 
@@ -67,7 +67,7 @@ void WaitForSignalTask(WorkerThread* worker_thread,
 
 class WorkerThreadTest : public ::testing::Test {
  public:
-  WorkerThreadTest() {}
+  WorkerThreadTest() = default;
 
   void SetUp() override {
     reporting_proxy_ = std::make_unique<MockWorkerReportingProxy>();
@@ -138,7 +138,7 @@ class WorkerThreadTest : public ::testing::Test {
 
   ExitCode GetExitCode() { return worker_thread_->GetExitCodeForTesting(); }
 
-  scoped_refptr<SecurityOrigin> security_origin_;
+  scoped_refptr<const SecurityOrigin> security_origin_;
   std::unique_ptr<MockWorkerReportingProxy> reporting_proxy_;
   std::unique_ptr<WorkerThreadForTest> worker_thread_;
   Persistent<MockWorkerThreadLifecycleObserver> lifecycle_observer_;
@@ -298,10 +298,10 @@ TEST_F(WorkerThreadTest, Terminate_WhileDebuggerTaskIsRunningOnInitialization) {
 
   auto global_scope_creation_params =
       std::make_unique<GlobalScopeCreationParams>(
-          KURL("http://fake.url/"), "fake user agent", "// fake source code",
-          nullptr /* cachedMetaData */, headers.get(), kReferrerPolicyDefault,
-          security_origin_.get(), nullptr /* workerClients */,
-          kWebAddressSpaceLocal, nullptr /* originTrialToken */,
+          KURL("http://fake.url/"), "fake user agent", headers.get(),
+          kReferrerPolicyDefault, security_origin_.get(),
+          nullptr /* workerClients */, mojom::IPAddressSpace::kLocal,
+          nullptr /* originTrialToken */,
           std::make_unique<WorkerSettings>(Settings::Create().get()),
           kV8CacheOptionsDefault);
 
@@ -309,8 +309,7 @@ TEST_F(WorkerThreadTest, Terminate_WhileDebuggerTaskIsRunningOnInitialization) {
   // on initialization to run debugger tasks.
   worker_thread_->Start(std::move(global_scope_creation_params),
                         WorkerBackingThreadStartupData::CreateDefault(),
-                        std::make_unique<GlobalScopeInspectorCreationParams>(
-                            WorkerInspectorProxy::PauseOnWorkerStart::kPause),
+                        WorkerInspectorProxy::PauseOnWorkerStart::kPause,
                         ParentFrameTaskRunners::Create());
 
   // Used to wait for worker thread termination in a debugger task on the

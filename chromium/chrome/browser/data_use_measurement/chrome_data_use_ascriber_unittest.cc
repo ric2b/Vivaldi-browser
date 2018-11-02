@@ -9,7 +9,9 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "chrome/browser/data_use_measurement/page_load_capping/chrome_page_load_capping_features.h"
 #include "components/data_use_measurement/core/data_use_recorder.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -37,8 +39,13 @@ class MockPageLoadObserver
   MOCK_METHOD2(OnPageResourceLoad,
                void(const net::URLRequest& request,
                     data_use_measurement::DataUse* data_use));
-  MOCK_METHOD1(OnPageLoadComplete,
+  MOCK_METHOD1(OnPageDidFinishLoad,
                void(data_use_measurement::DataUse* data_use));
+  MOCK_METHOD1(OnPageLoadConcluded,
+               void(data_use_measurement::DataUse* data_use));
+  MOCK_METHOD2(OnNetworkBytesUpdate,
+               void(const net::URLRequest& request,
+                    data_use_measurement::DataUse* data_use));
 };
 
 }  // namespace
@@ -55,8 +62,12 @@ class ChromeDataUseAscriberTest : public testing::Test {
 
   void TearDown() override { recorders().clear(); }
 
+  void CreateAscriber() {
+    ascriber_ = std::make_unique<ChromeDataUseAscriber>();
+  }
+
   std::list<ChromeDataUseRecorder>& recorders() {
-    return ascriber_.data_use_recorders_;
+    return ascriber_->data_use_recorders_;
   }
 
   net::TestURLRequestContext* context() { return &context_; }
@@ -65,7 +76,7 @@ class ChromeDataUseAscriberTest : public testing::Test {
     return resource_context_.get();
   }
 
-  ChromeDataUseAscriber* ascriber() { return &ascriber_; }
+  ChromeDataUseAscriber* ascriber() { return ascriber_.get(); }
 
   std::unique_ptr<net::URLRequest> CreateNewRequest(std::string url,
                                                     bool is_main_frame,
@@ -87,14 +98,19 @@ class ChromeDataUseAscriberTest : public testing::Test {
     return request;
   }
 
+  DataUseAscriber::PageLoadObserver* page_load_capping_observer() {
+    return ascriber_->page_capping_observer_.get();
+  }
+
  private:
   content::TestBrowserThreadBundle thread_bundle_;
-  ChromeDataUseAscriber ascriber_;
+  std::unique_ptr<ChromeDataUseAscriber> ascriber_;
   net::TestURLRequestContext context_;
   std::unique_ptr<content::MockResourceContext> resource_context_;
 };
 
 TEST_F(ChromeDataUseAscriberTest, NoRecorderWithoutFrame) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -125,6 +141,7 @@ TEST_F(ChromeDataUseAscriberTest, NoRecorderWithoutFrame) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameShownAndHidden) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -151,6 +168,7 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameShownAndHidden) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameHiddenAndShown) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -177,6 +195,7 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameHiddenAndShown) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, RenderFrameHostChanged) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -207,6 +226,7 @@ TEST_F(ChromeDataUseAscriberTest, RenderFrameHostChanged) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, MainFrameNavigation) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -218,11 +238,7 @@ TEST_F(ChromeDataUseAscriberTest, MainFrameNavigation) {
   ascriber()->OnBeforeUrlRequest(request.get());
   EXPECT_EQ(2u, recorders().size());
 
-  // Navigation starts.
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
-
+  // Navigation commits.
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -248,6 +264,7 @@ TEST_F(ChromeDataUseAscriberTest, MainFrameNavigation) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAttributed) {
+  CreateAscriber();
   // A regression test that verifies that subframe requests in the second page
   // load in the same frame get attributed to the entry correctly.
   std::unique_ptr<net::URLRequest> page_load_a_main_frame_request =
@@ -260,9 +277,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAttributed) {
   ascriber()->OnBeforeUrlRequest(page_load_a_main_frame_request.get());
 
   // Commit the page load.
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -281,9 +295,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAttributed) {
   ascriber()->OnBeforeUrlRequest(page_load_b_main_frame_request.get());
 
   // Commit the second page load.
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test_2.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -319,9 +330,10 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAttributed) {
 
 // Verifies that navigation finish acts as the event that separates pageloads.
 // subresource requests started before the navigation commit has finished are
-// ascribed to the previous page load, and requests started after are ascribed
-// to the next page load.
+// ascribed to the previous page load at the time of the commit, and requests
+// started after are ascribed to the next page load.
 TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> page_load_a_mainresource = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
   std::unique_ptr<net::URLRequest> page_load_a_subresource =
@@ -331,9 +343,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
   // First page load 'a'.
   ascriber()->RenderFrameCreated(kRenderProcessId, kRenderFrameId, -1, -1);
   ascriber()->OnBeforeUrlRequest(page_load_a_mainresource.get());
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -343,6 +352,8 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
 
   ascriber()->OnBeforeUrlRequest(page_load_a_subresource.get());
   ascriber()->OnUrlRequestDestroyed(page_load_a_mainresource.get());
+
+  ascriber()->OnNetworkBytesReceived(page_load_a_subresource.get(), 100);
 
   EXPECT_EQ(1u, recorders().size());
   auto& page_load_a_recorder = recorders().front();
@@ -364,9 +375,7 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
 
   // Second page load 'b' on the same main render frame.
   ascriber()->OnBeforeUrlRequest(page_load_b_mainresource.get());
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test_2.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
+  EXPECT_EQ(100, page_load_a_recorder.data_use().total_bytes_received());
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -378,8 +387,8 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
   ascriber()->OnNetworkBytesReceived(page_load_b_subresource.get(), 200);
   ascriber()->OnNetworkBytesReceived(page_load_a_subresource.get(), 100);
 
-  // Previous page recorder still exists.
-  EXPECT_EQ(2u, recorders().size());
+  // Previous page recorder is gone.
+  EXPECT_EQ(1u, recorders().size());
   auto& page_load_b_recorder = recorders().back();
   EXPECT_EQ(RenderFrameHostID(kRenderProcessId, kRenderFrameId),
             page_load_b_recorder.main_frame_id());
@@ -391,7 +400,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
             page_load_b_recorder.data_use().traffic_type());
 
   // Verify the data usage.
-  EXPECT_EQ(100, page_load_a_recorder.data_use().total_bytes_received());
   EXPECT_EQ(200, page_load_b_recorder.data_use().total_bytes_received());
 
   std::unique_ptr<net::URLRequest> page_load_c_mainresource =
@@ -404,9 +412,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
   // Third page load 'c' on the same main render frame with
   // same_document_navigation set.
   ascriber()->OnBeforeUrlRequest(page_load_c_mainresource.get());
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test_c.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -419,7 +424,6 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
   ascriber()->OnNetworkBytesReceived(page_load_b_subresource.get(), 1000);
 
   // Data usage of page load 'c' should get merged to page load 'b'.
-  EXPECT_EQ(100, page_load_a_recorder.data_use().total_bytes_received());
   EXPECT_EQ(3200, page_load_b_recorder.data_use().total_bytes_received());
 
   ascriber()->OnUrlRequestDestroyed(page_load_a_subresource.get());
@@ -432,6 +436,7 @@ TEST_F(ChromeDataUseAscriberTest, SubResourceRequestsAfterNavigationFinish) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, FailedMainFrameNavigation) {
+  CreateAscriber();
   std::unique_ptr<net::URLRequest> request = CreateNewRequest(
       "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
 
@@ -445,7 +450,7 @@ TEST_F(ChromeDataUseAscriberTest, FailedMainFrameNavigation) {
 
   // Failed request will remove the pending entry.
   request->Cancel();
-  ascriber()->OnUrlRequestCompleted(*request, false);
+  ascriber()->OnUrlRequestCompleted(request.get(), false);
 
   ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
   ascriber()->OnUrlRequestDestroyed(request.get());
@@ -454,6 +459,12 @@ TEST_F(ChromeDataUseAscriberTest, FailedMainFrameNavigation) {
 }
 
 TEST_F(ChromeDataUseAscriberTest, PageLoadObserverNotified) {
+  // Make sure that the page load capping observer does not DCHECK.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {page_load_capping::features::kDetectingHeavyPages}, {});
+
+  CreateAscriber();
   // TODO(rajendrant): Handle PlzNavigate (http://crbug/664233).
   MockPageLoadObserver mock_observer;
   ascriber()->AddObserver(&mock_observer);
@@ -467,11 +478,7 @@ TEST_F(ChromeDataUseAscriberTest, PageLoadObserverNotified) {
 
   ascriber()->OnBeforeUrlRequest(request.get());
 
-  // Navigation starts.
-  ascriber()->DidStartMainFrameNavigation(GURL("http://test.com"),
-                                          kRenderProcessId, kRenderFrameId,
-                                          kNavigationHandle);
-
+  // Navigation starts and is ready to commit.
   ascriber()->ReadyToCommitMainFrameNavigation(
       content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
       kRenderFrameId);
@@ -479,11 +486,16 @@ TEST_F(ChromeDataUseAscriberTest, PageLoadObserverNotified) {
   EXPECT_EQ(2u, recorders().size());
   DataUse* data_use = &recorders().back().data_use();
 
+  EXPECT_CALL(mock_observer, OnNetworkBytesUpdate(testing::_, data_use))
+      .Times(2);
+  ascriber()->OnNetworkBytesSent(request.get(), 2);
+  ascriber()->OnNetworkBytesReceived(request.get(), 2);
+
   EXPECT_CALL(mock_observer, OnPageResourceLoad(testing::_, data_use)).Times(1);
-  ascriber()->OnUrlRequestCompleted(*request, false);
+  ascriber()->OnUrlRequestCompleted(request.get(), false);
 
   EXPECT_CALL(mock_observer, OnPageLoadCommit(data_use)).Times(1);
-  EXPECT_CALL(mock_observer, OnPageLoadComplete(testing::_)).Times(1);
+  EXPECT_CALL(mock_observer, OnPageLoadConcluded(testing::_)).Times(1);
   ascriber()->DidFinishMainFrameNavigation(
       kRenderProcessId, kRenderFrameId, GURL("http://mobile.test.com"), false,
       kPageTransition, base::TimeTicks::Now());
@@ -495,13 +507,89 @@ TEST_F(ChromeDataUseAscriberTest, PageLoadObserverNotified) {
   EXPECT_EQ(content::GlobalRequestID(kRenderProcessId, 0),
             recorder_entry.main_frame_request_id());
   EXPECT_EQ(GURL("http://mobile.test.com"), recorder_entry.data_use().url());
-  EXPECT_CALL(mock_observer, OnPageLoadComplete(&recorder_entry.data_use()))
-      .Times(1);
 
+  EXPECT_CALL(mock_observer, OnPageDidFinishLoad(&recorder_entry.data_use()))
+      .Times(1);
+  ascriber()->DidFinishLoad(kRenderProcessId, kRenderFrameId,
+                            GURL("http://mobile.test.com"));
+
+  EXPECT_CALL(mock_observer, OnPageLoadConcluded(&recorder_entry.data_use()))
+      .Times(1);
   ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
   ascriber()->OnUrlRequestDestroyed(request.get());
 
   EXPECT_EQ(0u, recorders().size());
+}
+
+TEST_F(ChromeDataUseAscriberTest, PageLoadObserverForErrorPageValidatedURL) {
+  CreateAscriber();
+  MockPageLoadObserver mock_observer;
+  ascriber()->AddObserver(&mock_observer);
+
+  std::unique_ptr<net::URLRequest> request = CreateNewRequest(
+      "http://test.com", true, kRequestId, kRenderProcessId, kRenderFrameId);
+
+  // Mainframe is created.
+  ascriber()->RenderFrameCreated(kRenderProcessId, kRenderFrameId, -1, -1);
+  EXPECT_EQ(1u, recorders().size());
+
+  ascriber()->OnBeforeUrlRequest(request.get());
+
+  // Navigation starts and is ready to commit.
+  ascriber()->ReadyToCommitMainFrameNavigation(
+      content::GlobalRequestID(kRenderProcessId, 0), kRenderProcessId,
+      kRenderFrameId);
+
+  EXPECT_EQ(2u, recorders().size());
+  DataUse* data_use = &recorders().back().data_use();
+
+  EXPECT_CALL(mock_observer, OnNetworkBytesUpdate(testing::_, data_use))
+      .Times(2);
+  ascriber()->OnNetworkBytesSent(request.get(), 2);
+  ascriber()->OnNetworkBytesReceived(request.get(), 2);
+
+  EXPECT_CALL(mock_observer, OnPageResourceLoad(testing::_, data_use)).Times(1);
+  ascriber()->OnUrlRequestCompleted(request.get(), false);
+
+  EXPECT_CALL(mock_observer, OnPageLoadCommit(data_use)).Times(1);
+  EXPECT_CALL(mock_observer, OnPageLoadConcluded(testing::_)).Times(1);
+  ascriber()->DidFinishMainFrameNavigation(
+      kRenderProcessId, kRenderFrameId, GURL("http://mobile.test.com"), false,
+      kPageTransition, base::TimeTicks::Now());
+
+  EXPECT_EQ(1u, recorders().size());
+  auto& recorder_entry = recorders().front();
+  EXPECT_EQ(RenderFrameHostID(kRenderProcessId, kRenderFrameId),
+            recorder_entry.main_frame_id());
+  EXPECT_EQ(content::GlobalRequestID(kRenderProcessId, 0),
+            recorder_entry.main_frame_request_id());
+  EXPECT_EQ(GURL("http://mobile.test.com"), recorder_entry.data_use().url());
+
+  // Now expect no DidFinishLoad observer call for "about:blank" validated URL.
+  EXPECT_CALL(mock_observer, OnPageDidFinishLoad(&recorder_entry.data_use()))
+      .Times(0);
+  ascriber()->DidFinishLoad(kRenderProcessId, kRenderFrameId,
+                            GURL("about:blank"));
+
+  EXPECT_CALL(mock_observer, OnPageLoadConcluded(&recorder_entry.data_use()))
+      .Times(1);
+  ascriber()->RenderFrameDeleted(kRenderProcessId, kRenderFrameId, -1, -1);
+  ascriber()->OnUrlRequestDestroyed(request.get());
+
+  EXPECT_EQ(0u, recorders().size());
+}
+
+// Verify that the page load capping observer is only created when the feature
+// is enabled.
+TEST_F(ChromeDataUseAscriberTest, CappingObserverNeedsFeature) {
+  CreateAscriber();
+  EXPECT_FALSE(page_load_capping_observer());
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatures(
+      {page_load_capping::features::kDetectingHeavyPages}, {});
+
+  CreateAscriber();
+  EXPECT_TRUE(page_load_capping_observer());
 }
 
 }  // namespace data_use_measurement

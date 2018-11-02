@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ko">
 <translation id="1326317727527857210">다른 기기에서 탭을 가져오려면 Chrome에 로그인하세요.</translation>
-<translation id="1685087038067318291">근처 사물에서 전송한 웹페이지를 탐색하세요. 블루투스를 사용 설정하면 Chrome은 근처 사물과 관련된 웹페이지를 수집한 후 익명으로 Google로 전달하여 사용자에게 가장 유용한 웹페이지를 찾습니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Chrome 개인정보처리방침</translation>
+<translation id="1863312987075920112">이 애플리케이션을 사용하면 Chrome의 <ph name="BEGIN_LINK_TOS" />서비스 약관<ph name="END_LINK_TOS" /> 및 <ph name="BEGIN_LINK_PRIVACY" />개인정보처리방침<ph name="END_LINK_PRIVACY" />에 동의하는 것으로 간주됩니다.</translation>
 <translation id="2147651015520127414">Chrome이 <ph name="ISSUER" />에서 이 웹사이트의 인증서를 발행했음을 확인했습니다.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. All rights reserved.</translation>
 <translation id="2342981853652716282">Chrome에 로그인하여 모든 기기에서 내 북마크, 비밀번호 등을 사용하세요.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">일부 부가기능이 Chrome을 비정상 종료시킵니다. 다음 항목을 제거하세요.</translation>
 <translation id="4615174829807303908"><ph name="SIGNOUT_MANAGED_DOMAIN" />에서 관리하는 계정에서 로그아웃합니다. 이렇게 하면 내 Chrome 데이터가 이 기기에서 삭제되지만 Google 계정에는 그대로 유지됩니다.</translation>
 <translation id="5389212809648216794">다른 애플리케이션에서 카메라를 사용하고 있으므로 Chrome에서 카메라를 사용할 수 없습니다.</translation>
-<translation id="5566557026214762153">이 애플리케이션을 사용하면 Chrome의 <ph name="BEGIN_LINK" />서비스 약관<ph name="END_LINK" />에 동의하게 됩니다.</translation>
 <translation id="5639704535586432836">설정 &gt; 개인정보 보호 &gt; 카메라 &gt; Chrome을 열고 카메라를 사용 설정하세요.</translation>
 <translation id="5642200033778930880">Chrome에서는 분할 모드에서 카메라를 사용할 수 없습니다.</translation>
 <translation id="5703130498371792817">Chrome 사용 소감을 알려주세요! <ph name="BEGIN_LINK" />앱 평가하기<ph name="END_LINK" /></translation>

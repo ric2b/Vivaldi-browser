@@ -48,7 +48,7 @@ EGLSurface eglCreatePixmapSurfaceFn(EGLDisplay dpy,
                                     const EGLint* attrib_list) override;
 EGLStreamKHR eglCreateStreamKHRFn(EGLDisplay dpy,
                                   const EGLint* attrib_list) override;
-EGLBoolean eglCreateStreamProducerD3DTextureNV12ANGLEFn(
+EGLBoolean eglCreateStreamProducerD3DTextureANGLEFn(
     EGLDisplay dpy,
     EGLStreamKHR stream,
     EGLAttrib* attrib_list) override;
@@ -65,6 +65,16 @@ EGLBoolean eglDestroyStreamKHRFn(EGLDisplay dpy, EGLStreamKHR stream) override;
 EGLBoolean eglDestroySurfaceFn(EGLDisplay dpy, EGLSurface surface) override;
 EGLBoolean eglDestroySyncKHRFn(EGLDisplay dpy, EGLSyncKHR sync) override;
 EGLint eglDupNativeFenceFDANDROIDFn(EGLDisplay dpy, EGLSyncKHR sync) override;
+EGLBoolean eglExportDMABUFImageMESAFn(EGLDisplay dpy,
+                                      EGLImageKHR image,
+                                      int* fds,
+                                      EGLint* strides,
+                                      EGLint* offsets) override;
+EGLBoolean eglExportDMABUFImageQueryMESAFn(EGLDisplay dpy,
+                                           EGLImageKHR image,
+                                           int* fourcc,
+                                           int* num_planes,
+                                           EGLuint64KHR* modifiers) override;
 EGLBoolean eglGetCompositorTimingANDROIDFn(EGLDisplay dpy,
                                            EGLSurface surface,
                                            EGLint numTimestamps,
@@ -186,7 +196,7 @@ EGLBoolean eglStreamConsumerGLTextureExternalKHRFn(
     EGLStreamKHR stream) override;
 EGLBoolean eglStreamConsumerReleaseKHRFn(EGLDisplay dpy,
                                          EGLStreamKHR stream) override;
-EGLBoolean eglStreamPostD3DTextureNV12ANGLEFn(
+EGLBoolean eglStreamPostD3DTextureANGLEFn(
     EGLDisplay dpy,
     EGLStreamKHR stream,
     void* texture,

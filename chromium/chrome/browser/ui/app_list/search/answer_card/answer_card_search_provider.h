@@ -14,12 +14,9 @@
 #include "url/gurl.h"
 
 class AppListControllerDelegate;
+class AppListModelUpdater;
 class Profile;
 class TemplateURLService;
-
-namespace app_list {
-class AppListModel;
-}
 
 namespace app_list {
 
@@ -28,7 +25,7 @@ class AnswerCardSearchProvider : public SearchProvider,
                                  public AnswerCardContents::Delegate {
  public:
   AnswerCardSearchProvider(Profile* profile,
-                           app_list::AppListModel* model,
+                           AppListModelUpdater* model_updater,
                            AppListControllerDelegate* list_controller,
                            std::unique_ptr<AnswerCardContents> contents0,
                            std::unique_ptr<AnswerCardContents> contents1);
@@ -36,7 +33,7 @@ class AnswerCardSearchProvider : public SearchProvider,
   ~AnswerCardSearchProvider() override;
 
   // SearchProvider overrides:
-  void Start(bool is_voice_query, const base::string16& query) override;
+  void Start(const base::string16& query) override;
 
   // AnswerCardContents::Delegate overrides:
   void UpdatePreferredSize(const AnswerCardContents* source) override;
@@ -91,8 +88,8 @@ class AnswerCardSearchProvider : public SearchProvider,
   // Unowned pointer to the associated profile.
   Profile* const profile_;
 
-  // Unowned pointer to app list model.
-  app_list::AppListModel* const model_;
+  // Unowned pointer to app list model updater.
+  AppListModelUpdater* const model_updater_;
 
   // Unowned pointer to app list controller.
   AppListControllerDelegate* const list_controller_;

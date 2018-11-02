@@ -31,7 +31,7 @@
 
 namespace blink {
 
-NodeIterator::NodePointer::NodePointer() {}
+NodeIterator::NodePointer::NodePointer() = default;
 
 NodeIterator::NodePointer::NodePointer(Node* n, bool b)
     : node(n), is_pointer_before_node(b) {}
@@ -206,6 +206,7 @@ void NodeIterator::Trace(blink::Visitor* visitor) {
 }
 
 void NodeIterator::TraceWrappers(const ScriptWrappableVisitor* visitor) const {
+  ScriptWrappable::TraceWrappers(visitor);
   NodeIteratorBase::TraceWrappers(visitor);
 }
 

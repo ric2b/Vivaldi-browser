@@ -144,7 +144,7 @@ void HeadlessDevToolsClientImpl::DispatchProtocolMessage(
       base::JSONReader::Read(json_message, base::JSON_PARSE_RFC);
   const base::DictionaryValue* message_dict;
   if (!message || !message->GetAsDictionary(&message_dict)) {
-    NOTREACHED() << "Badly formed reply";
+    NOTREACHED() << "Badly formed reply " << json_message;
     return;
   }
 
@@ -177,7 +177,7 @@ bool HeadlessDevToolsClientImpl::DispatchMessageReply(
     if (message_dict.GetDictionary("result", &result_dict)) {
       callback.callback_with_result.Run(*result_dict);
     } else if (message_dict.GetDictionary("error", &result_dict)) {
-      auto null_value = base::MakeUnique<base::Value>();
+      auto null_value = std::make_unique<base::Value>();
       DLOG(ERROR) << "Error in method call result: " << *result_dict;
       callback.callback_with_result.Run(*null_value);
     } else {

@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -21,10 +22,10 @@
 #include "chrome/browser/vr/ui.h"
 #include "chrome/browser/vr/ui_unsupported_mode.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "device/geolocation/public/interfaces/geolocation_config.mojom.h"
 #include "device/vr/android/gvr/cardboard_gamepad_data_provider.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_provider.h"
 #include "device/vr/vr_service.mojom.h"
+#include "services/device/public/interfaces/geolocation_config.mojom.h"
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 
 namespace base {
@@ -156,7 +157,11 @@ class VrShell : device::GvrGamepadDataProvider,
   void ContentWasShown();
 
   void ContentSurfaceChanged(jobject surface);
-  void GvrDelegateReady(gvr::ViewerType viewer_type);
+  void GvrDelegateReady(gvr::ViewerType viewer_type,
+                        device::mojom::VRDisplayFrameTransportOptionsPtr);
+
+  device::mojom::VRDisplayFrameTransportOptionsPtr
+  GetVRDisplayFrameTransportOptions();
 
   void OnPhysicalBackingSizeChanged(
       JNIEnv* env,
@@ -199,7 +204,8 @@ class VrShell : device::GvrGamepadDataProvider,
   void ConnectPresentingService(
       device::mojom::VRSubmitFrameClientPtr submit_client,
       device::mojom::VRPresentationProviderRequest request,
-      device::mojom::VRDisplayInfoPtr display_info);
+      device::mojom::VRDisplayInfoPtr display_info,
+      device::mojom::VRRequestPresentOptionsPtr present_options);
 
   // device::GvrGamepadDataProvider implementation.
   void UpdateGamepadData(device::GvrGamepadData) override;
@@ -218,10 +224,11 @@ class VrShell : device::GvrGamepadDataProvider,
   void OnAssetsLoaded(vr::AssetsLoadStatus status,
                       const base::Version& component_version);
 
+  void DidSwapBuffers();
+
  private:
   ~VrShell() override;
-  void PostToGlThread(const base::Location& from_here,
-                      const base::Closure& task);
+  void PostToGlThread(const base::Location& from_here, base::OnceClosure task);
   void SetUiState();
 
   void ProcessTabArray(JNIEnv* env, jobjectArray tabs, bool incognito);
@@ -233,6 +240,8 @@ class VrShell : device::GvrGamepadDataProvider,
   void ExitVrDueToUnsupportedMode(vr::UiUnsupportedMode mode);
 
   content::WebContents* GetNonNativePageWebContents() const;
+
+  void OnAssetsComponentReady();
 
   bool vr_shell_enabled_;
 
@@ -288,6 +297,9 @@ class VrShell : device::GvrGamepadDataProvider,
   device::CardboardGamepadDataFetcher* cardboard_gamepad_data_fetcher_ =
       nullptr;
   int64_t cardboard_gamepad_timer_ = 0;
+
+  // For GetVRDisplayFrameTransportOptions()
+  device::mojom::VRDisplayFrameTransportOptionsPtr frame_transport_options_;
 
   // Content id
   int content_id_ = 0;

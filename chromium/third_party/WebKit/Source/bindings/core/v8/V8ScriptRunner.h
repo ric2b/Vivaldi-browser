@@ -36,7 +36,6 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8BindingMacros.h"
 #include "platform/loader/fetch/AccessControlStatus.h"
-#include "platform/loader/fetch/ScriptFetchOptions.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "platform/wtf/text/WTFString.h"
@@ -51,9 +50,7 @@ namespace blink {
 class CachedMetadata;
 class CachedMetadataHandler;
 class ExecutionContext;
-class ScriptResource;
 class ScriptSourceCode;
-class ScriptStreamer;
 
 class CORE_EXPORT V8ScriptRunner final {
   STATIC_ONLY(V8ScriptRunner);
@@ -66,34 +63,9 @@ class CORE_EXPORT V8ScriptRunner final {
 
   // For the following methods, the caller sites have to hold
   // a HandleScope and a ContextScope.
+  // CachedMetadataHandler is set when metadata caching is supported.
   static v8::MaybeLocal<v8::Script> CompileScript(ScriptState*,
                                                   const ScriptSourceCode&,
-                                                  const ScriptFetchOptions&,
-                                                  AccessControlStatus,
-                                                  V8CacheOptions);
-  static v8::MaybeLocal<v8::Script> CompileScript(ScriptState*,
-                                                  const String&,
-                                                  const String& file_name,
-                                                  const String& source_map_url,
-                                                  const TextPosition&,
-                                                  ScriptSourceLocationType,
-                                                  CachedMetadataHandler*,
-                                                  AccessControlStatus,
-                                                  V8CacheOptions,
-                                                  const ReferrerScriptInfo&);
-  // CachedMetadataHandler is set when metadata caching is supported. For
-  // normal scripe resources, CachedMetadataHandler is from ScriptResource.
-  // For worker script, ScriptResource is null but CachedMetadataHandler may be
-  // set. When ScriptStreamer is set, ScriptResource must be set.
-  static v8::MaybeLocal<v8::Script> CompileScript(ScriptState*,
-                                                  v8::Local<v8::String>,
-                                                  const String& file_name,
-                                                  const String& source_map_url,
-                                                  const TextPosition&,
-                                                  ScriptSourceLocationType,
-                                                  ScriptResource*,
-                                                  ScriptStreamer*,
-                                                  CachedMetadataHandler*,
                                                   AccessControlStatus,
                                                   V8CacheOptions,
                                                   const ReferrerScriptInfo&);
@@ -107,11 +79,9 @@ class CORE_EXPORT V8ScriptRunner final {
                                                      v8::Local<v8::Script>,
                                                      ExecutionContext*);
   static v8::MaybeLocal<v8::Value> CompileAndRunInternalScript(
-      ScriptState*,
-      v8::Local<v8::String>,
       v8::Isolate*,
-      const String& = String(),
-      const TextPosition& = TextPosition());
+      ScriptState*,
+      const ScriptSourceCode&);
   static v8::MaybeLocal<v8::Value> RunCompiledInternalScript(
       v8::Isolate*,
       v8::Local<v8::Script>);
@@ -122,20 +92,20 @@ class CORE_EXPORT V8ScriptRunner final {
       int argc = 0,
       v8::Local<v8::Value> argv[] = nullptr);
   static v8::MaybeLocal<v8::Value> CallInternalFunction(
+      v8::Isolate*,
       v8::Local<v8::Function>,
       v8::Local<v8::Value> receiver,
       int argc,
-      v8::Local<v8::Value> info[],
-      v8::Isolate*);
+      v8::Local<v8::Value> info[]);
   static v8::MaybeLocal<v8::Value> CallFunction(v8::Local<v8::Function>,
                                                 ExecutionContext*,
                                                 v8::Local<v8::Value> receiver,
                                                 int argc,
                                                 v8::Local<v8::Value> info[],
                                                 v8::Isolate*);
-  static v8::MaybeLocal<v8::Value> EvaluateModule(v8::Local<v8::Module>,
-                                                  v8::Local<v8::Context>,
-                                                  v8::Isolate*);
+  static v8::MaybeLocal<v8::Value> EvaluateModule(v8::Isolate*,
+                                                  v8::Local<v8::Module>,
+                                                  v8::Local<v8::Context>);
 
   // Only to be used from ScriptModule::ReportException().
   static void ReportExceptionForModule(v8::Isolate*,

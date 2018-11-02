@@ -10,7 +10,6 @@
 #include <memory>
 #include <vector>
 
-#import "ios/chrome/browser/web/page_placeholder_tab_helper_delegate.h"
 #include "ios/net/request_tracker.h"
 #include "ios/web/public/user_agent.h"
 #include "ui/base/page_transition_types.h"
@@ -28,14 +27,12 @@ class GURL;
 @protocol PassKitDialogProvider;
 @class PasswordController;
 @class SnapshotManager;
-@protocol SnapshotOverlayProvider;
 @class FormSuggestionController;
 @protocol TabDelegate;
 @protocol TabDialogDelegate;
 @class Tab;
 @protocol TabHeadersDelegate;
 @class TabModel;
-@protocol TabSnapshottingDelegate;
 @protocol FindInPageControllerDelegate;
 
 namespace ios {
@@ -80,7 +77,7 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Chrome's WebContents in that it encapsulates rendering. Acts as the
 // delegate for the WebState in order to process info about pages having
 // loaded.
-@interface Tab : NSObject<PagePlaceholderTabHelperDelegate>
+@interface Tab : NSObject
 
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
@@ -96,9 +93,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // ID associated with this tab.
 @property(nonatomic, readonly) NSString* tabId;
 
-// |YES| if snapshot overlay should load from the grey image cache.
-@property(nonatomic, assign) BOOL useGreyImageCache;
-
 // The Webstate associated with this Tab.
 @property(nonatomic, readonly) web::WebState* webState;
 
@@ -106,7 +100,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 @property(nonatomic, readonly) BOOL canGoForward;
 @property(nonatomic, weak) id<TabDelegate> delegate;
 @property(nonatomic, weak) id<TabHeadersDelegate> tabHeadersDelegate;
-@property(nonatomic, weak) id<TabSnapshottingDelegate> tabSnapshottingDelegate;
 @property(nonatomic, readonly) id<FindInPageControllerDelegate>
     findInPageControllerDelegate;
 
@@ -123,7 +116,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
     OverscrollActionsController* overscrollActionsController;
 @property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
     overscrollActionsControllerDelegate;
-@property(nonatomic, weak) id<SnapshotOverlayProvider> snapshotOverlayProvider;
 
 // Delegate used to show HTTP Authentication dialogs.
 @property(nonatomic, weak) id<TabDialogDelegate> dialogDelegate;
@@ -188,52 +180,14 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // TODO(crbug.com/778823): Remove this code.
 - (void)updateFullscreenWithToolbarVisible:(BOOL)visible;
 
-// Returns a snapshot of the current page, backed by disk so it can be purged
-// and reloaded easily. The snapshot may be in memory, saved on disk or not
-// present at all.
-// 1) If the snapshot is in memory |block| will be called synchronously with
-// the existing image.
-// 2) If the snapshot is saven on disk |block| will be called asynchronously
-// once the image is retrieved.
-// 3) If the snapshot is not present at all |block| will be called
-// asynchronously with a new snapshot.
-// It is possible for |block| to not be called at all if there is no way to
-// build a snapshot. |block| will always call back on the original thread.
-- (void)retrieveSnapshot:(void (^)(UIImage*))callback;
-
-// Invalidates the cached snapshot for the webcontroller's current session and
-// forces a more recent snapshot to be generated and stored. Returns the
-// snapshot with or without the overlayed views (e.g. infobar, voice search
-// button, etc.), and either of the visible frame or of the full screen.
-- (UIImage*)updateSnapshotWithOverlay:(BOOL)shouldAddOverlay
-                     visibleFrameOnly:(BOOL)visibleFrameOnly;
-
-// Snaps a snapshot image for the current page including optional infobars.
-// Returns an autoreleased image cropped and scaled appropriately, with or
-// without the overlayed views (e.g. infobar, voice search button, etc.), and
-// either of the visible frame or of the full screen.
-// Returns nil if a snapshot cannot be generated.
-- (UIImage*)generateSnapshotWithOverlay:(BOOL)shouldAddOverlay
-                       visibleFrameOnly:(BOOL)visibleFrameOnly;
-
-// When snapshot coalescing is enabled, mutiple calls to generate a snapshot
-// with the same parameters may be coalesced.
-- (void)setSnapshotCoalescingEnabled:(BOOL)snapshotCoalescingEnabled;
-
-// Returns the rect (in |view|'s coordinate space) to include for snapshotting.
-- (CGRect)snapshotContentArea;
-
-// Called when the snapshot of the content will be taken.
-- (void)willUpdateSnapshot;
-
-// Requests deletion of the Tab snapshot.
-- (void)removeSnapshot;
-
 // Called when this tab is shown.
 - (void)wasShown;
 
 // Called when this tab is hidden.
 - (void)wasHidden;
+
+// Called before capturing a snapshot for Tab.
+- (void)willUpdateSnapshot;
 
 // Evaluates U2F result.
 - (void)evaluateU2FResultFromURL:(const GURL&)url;

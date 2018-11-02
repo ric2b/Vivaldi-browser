@@ -7,7 +7,6 @@
 #include "ui/base/models/menu_model.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/views/message_view.h"
-#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/notification_menu_model.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
@@ -33,13 +32,10 @@ void MessageViewContextMenuController::ShowContextMenuForView(
   if (!menu_model_ || menu_model_->GetItemCount() == 0)
     return;
 
-  menu_model_adapter_.reset(new views::MenuModelAdapter(
-      menu_model_.get(),
+  menu_runner_ = std::make_unique<views::MenuRunner>(
+      menu_model_.get(), views::MenuRunner::HAS_MNEMONICS,
       base::Bind(&MessageViewContextMenuController::OnMenuClosed,
-                 base::Unretained(this))));
-
-  menu_runner_.reset(new views::MenuRunner(menu_model_adapter_->CreateMenu(),
-                                           views::MenuRunner::HAS_MNEMONICS));
+                 base::Unretained(this)));
 
   menu_runner_->RunMenuAt(source->GetWidget()->GetTopLevelWidget(), NULL,
                           gfx::Rect(point, gfx::Size()),
@@ -48,7 +44,6 @@ void MessageViewContextMenuController::ShowContextMenuForView(
 
 void MessageViewContextMenuController::OnMenuClosed() {
   menu_runner_.reset();
-  menu_model_adapter_.reset();
   menu_model_.reset();
 }
 

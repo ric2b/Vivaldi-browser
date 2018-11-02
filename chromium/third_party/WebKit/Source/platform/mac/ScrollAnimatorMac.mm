@@ -312,7 +312,7 @@ class BlinkScrollbarPartAnimationTimer {
     start_time_ = WTF::CurrentTime();
     // Set the framerate of the animation. NSAnimation uses a default
     // framerate of 60 Hz, so use that here.
-    timer_.StartRepeating(TimeDelta::FromSecondsD(1.0 / 60.0), BLINK_FROM_HERE);
+    timer_.StartRepeating(TimeDelta::FromSecondsD(1.0 / 60.0), FROM_HERE);
   }
 
   void Stop() { timer_.Stop(); }
@@ -1040,12 +1040,11 @@ void ScrollAnimatorMac::UpdateScrollerStyle() {
 void ScrollAnimatorMac::StartScrollbarPaintTimer() {
   // Post a task with 1 ms delay to give a chance to run other immediate tasks
   // that may cancel this.
-  initial_scrollbar_paint_task_handle_ =
-      task_runner_->PostDelayedCancellableTask(
-          BLINK_FROM_HERE,
-          WTF::Bind(&ScrollAnimatorMac::InitialScrollbarPaintTask,
-                    WrapWeakPersistent(this)),
-          TimeDelta::FromMilliseconds(1));
+  initial_scrollbar_paint_task_handle_ = PostDelayedCancellableTask(
+      *task_runner_, FROM_HERE,
+      WTF::Bind(&ScrollAnimatorMac::InitialScrollbarPaintTask,
+                WrapWeakPersistent(this)),
+      TimeDelta::FromMilliseconds(1));
 }
 
 bool ScrollAnimatorMac::ScrollbarPaintTimerIsActive() const {
@@ -1069,8 +1068,8 @@ void ScrollAnimatorMac::SendContentAreaScrolledSoon(const ScrollOffset& delta) {
 
   if (send_content_area_scrolled_task_handle_.IsActive())
     return;
-  send_content_area_scrolled_task_handle_ = task_runner_->PostCancellableTask(
-      BLINK_FROM_HERE,
+  send_content_area_scrolled_task_handle_ = PostCancellableTask(
+      *task_runner_, FROM_HERE,
       WTF::Bind(&ScrollAnimatorMac::SendContentAreaScrolledTask,
                 WrapWeakPersistent(this)));
 }

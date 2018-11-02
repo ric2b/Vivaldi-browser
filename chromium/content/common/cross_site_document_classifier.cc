@@ -12,11 +12,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/resource_response_info.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/cpp/resource_response_info.h"
 
 using base::StringPiece;
 
@@ -27,51 +28,118 @@ namespace {
 // MIME types
 const char kTextHtml[] = "text/html";
 const char kTextXml[] = "text/xml";
-const char kAppRssXml[] = "application/rss+xml";
 const char kAppXml[] = "application/xml";
 const char kAppJson[] = "application/json";
+const char kImageSvg[] = "image/svg+xml";
 const char kTextJson[] = "text/json";
 const char kTextXjson[] = "text/x-json";
 const char kTextPlain[] = "text/plain";
 
-bool MatchesSignature(StringPiece data,
-                      const StringPiece signatures[],
-                      size_t arr_size) {
-  size_t offset = data.find_first_not_of(" \t\r\n");
-  // There is no not-whitespace character in this document.
-  if (offset == base::StringPiece::npos)
-    return false;
+// MIME type suffixes
+const char kJsonSuffix[] = "+json";
+const char kXmlSuffix[] = "+xml";
 
-  data.remove_prefix(offset);
-  for (size_t sig_index = 0; sig_index < arr_size; ++sig_index) {
-    if (base::StartsWith(data, signatures[sig_index],
-                         base::CompareCase::INSENSITIVE_ASCII))
-      return true;
+void AdvancePastWhitespace(StringPiece* data) {
+  size_t offset = data->find_first_not_of(" \t\r\n");
+  if (offset == base::StringPiece::npos) {
+    // |data| was entirely whitespace.
+    data->clear();
+  } else {
+    data->remove_prefix(offset);
   }
+}
+
+// Returns kYes if |data| starts with one of the string patterns in
+// |signatures|, kMaybe if |data| is a prefix of one of the patterns in
+// |signatures|, and kNo otherwise.
+//
+// When kYes is returned, the matching prefix is erased from |data|.
+CrossSiteDocumentClassifier::Result MatchesSignature(
+    StringPiece* data,
+    const StringPiece signatures[],
+    size_t arr_size,
+    base::CompareCase compare_case) {
+  for (size_t i = 0; i < arr_size; ++i) {
+    if (signatures[i].length() <= data->length()) {
+      if (base::StartsWith(*data, signatures[i], compare_case)) {
+        // When |signatures[i]| is a prefix of |data|, it constitutes a match.
+        // Strip the matching characters, and return.
+        data->remove_prefix(signatures[i].length());
+        return CrossSiteDocumentClassifier::kYes;
+      }
+    } else {
+      if (base::StartsWith(signatures[i], *data, compare_case)) {
+        // When |data| is a prefix of |signatures[i]|, that means that
+        // subsequent bytes in the stream could cause a match to occur.
+        return CrossSiteDocumentClassifier::kMaybe;
+      }
+    }
+  }
+  return CrossSiteDocumentClassifier::kNo;
+}
+
+// Returns true if |mime_type == prefix| or if |mime_type| starts with
+// |prefix + '+'|.  Returns false otherwise.
+//
+// For example:
+// - MatchesMimeTypePrefix("application/json", "application/json") -> true
+// - MatchesMimeTypePrefix("application/json+foo", "application/json") -> true
+// - MatchesMimeTypePrefix("application/jsonp", "application/json") -> false
+// - MatchesMimeTypePrefix("application/foo", "application/json") -> false
+bool MatchesMimeTypePrefix(base::StringPiece mime_type,
+                           base::StringPiece prefix) {
+  constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
+  if (!base::StartsWith(mime_type, prefix, kCaseInsensitive))
+    return false;
+  DCHECK_GE(mime_type.length(), prefix.length());
+
+  if (mime_type.length() == prefix.length()) {
+    // Given StartsWith results above, the above condition is our O(1) check if
+    // |base::LowerCaseEqualsASCII(mime_type, prefix)|.
+    DCHECK(base::LowerCaseEqualsASCII(mime_type, prefix));
+    return true;
+  }
+
+  if (mime_type[prefix.length()] == '+') {
+    // Given StartsWith results above, the above condition is our O(1) check if
+    // |base::StartsWith(mime_type, prefix + '+', kCaseInsensitive)|.
+    DCHECK(base::StartsWith(mime_type, prefix.as_string() + '+',
+                            kCaseInsensitive));
+    return true;
+  }
+
   return false;
 }
 
 }  // namespace
 
 CrossSiteDocumentMimeType CrossSiteDocumentClassifier::GetCanonicalMimeType(
-    const std::string& mime_type) {
-  if (base::LowerCaseEqualsASCII(mime_type, kTextHtml)) {
+    base::StringPiece mime_type) {
+  // Checking for image/svg+xml early ensures that it won't get classified as
+  // CROSS_SITE_DOCUMENT_MIME_TYPE_XML by the presence of the "+xml" suffix.
+  if (base::LowerCaseEqualsASCII(mime_type, kImageSvg))
+    return CROSS_SITE_DOCUMENT_MIME_TYPE_OTHERS;
+
+  if (base::LowerCaseEqualsASCII(mime_type, kTextHtml))
     return CROSS_SITE_DOCUMENT_MIME_TYPE_HTML;
-  }
 
-  if (base::LowerCaseEqualsASCII(mime_type, kTextPlain)) {
+  if (base::LowerCaseEqualsASCII(mime_type, kTextPlain))
     return CROSS_SITE_DOCUMENT_MIME_TYPE_PLAIN;
-  }
 
-  if (base::LowerCaseEqualsASCII(mime_type, kAppJson) ||
-      base::LowerCaseEqualsASCII(mime_type, kTextJson) ||
-      base::LowerCaseEqualsASCII(mime_type, kTextXjson)) {
+  // StartsWith rather than LowerCaseEqualsASCII is used to account both for
+  // mime types similar to 1) application/json and to 2)
+  // application/json+protobuf.
+  constexpr auto kCaseInsensitive = base::CompareCase::INSENSITIVE_ASCII;
+  if (MatchesMimeTypePrefix(mime_type, kAppJson) ||
+      MatchesMimeTypePrefix(mime_type, kTextJson) ||
+      MatchesMimeTypePrefix(mime_type, kTextXjson) ||
+      base::EndsWith(mime_type, kJsonSuffix, kCaseInsensitive)) {
     return CROSS_SITE_DOCUMENT_MIME_TYPE_JSON;
   }
 
-  if (base::LowerCaseEqualsASCII(mime_type, kTextXml) ||
-      base::LowerCaseEqualsASCII(mime_type, kAppRssXml) ||
-      base::LowerCaseEqualsASCII(mime_type, kAppXml)) {
+  if (MatchesMimeTypePrefix(mime_type, kAppXml) ||
+      MatchesMimeTypePrefix(mime_type, kTextXml) ||
+      base::EndsWith(mime_type, kXmlSuffix, kCaseInsensitive)) {
     return CROSS_SITE_DOCUMENT_MIME_TYPE_XML;
   }
 
@@ -124,28 +192,23 @@ bool CrossSiteDocumentClassifier::IsValidCorsHeaderSet(
   if (access_control_origin == "*" || access_control_origin == "null")
     return true;
 
-  // TODO(dsjang): The CORS spec only treats a fully specified URL, except for
-  // "*", but many websites are using just a domain for access_control_origin,
-  // and this is blocked by Webkit's CORS logic here :
-  // CrossOriginAccessControl::passesAccessControlCheck(). GURL is set
-  // is_valid() to false when it is created from a URL containing * in the
-  // domain part.
-
-  GURL cors_origin(access_control_origin);
-  return IsSameSite(frame_origin, cors_origin);
+  return IsSameSite(frame_origin, GURL(access_control_origin));
 }
 
 // This function is a slight modification of |net::SniffForHTML|.
-bool CrossSiteDocumentClassifier::SniffForHTML(StringPiece data) {
-  // The content sniffer used by Chrome and Firefox are using "<!--"
-  // as one of the HTML signatures, but it also appears in valid
-  // JavaScript, considered as well-formed JS by the browser.  Since
-  // we do not want to block any JS, we exclude it from our HTML
-  // signatures. This can weaken our document block policy, but we can
-  // break less websites.
-  // TODO(dsjang): parameterize |net::SniffForHTML| with an option
-  // that decides whether to include <!-- or not, so that we can
-  // remove this function.
+CrossSiteDocumentClassifier::Result CrossSiteDocumentClassifier::SniffForHTML(
+    StringPiece data) {
+  // The content sniffers used by Chrome and Firefox are using "<!--" as one of
+  // the HTML signatures, but it also appears in valid JavaScript, considered as
+  // well-formed JS by the browser.  Since we do not want to block any JS, we
+  // exclude it from our HTML signatures. This can weaken our document block
+  // policy, but we can break less websites.
+  //
+  // Note that <body> and <br> are not included below, since <b is a prefix of
+  // them.
+  //
+  // TODO(dsjang): parameterize |net::SniffForHTML| with an option that decides
+  // whether to include <!-- or not, so that we can remove this function.
   // TODO(dsjang): Once CrossSiteDocumentClassifier is moved into the browser
   // process, we should do single-thread checking here for the static
   // initializer.
@@ -162,91 +225,160 @@ bool CrossSiteDocumentClassifier::SniffForHTML(StringPiece data) {
       StringPiece("<a"),              // Mozilla
       StringPiece("<style"),          // Mozilla
       StringPiece("<title"),          // Mozilla
-      StringPiece("<b"),              // Mozilla
-      StringPiece("<body"),           // Mozilla
-      StringPiece("<br"),             // Mozilla
+      StringPiece("<b"),              // Mozilla (note: subsumes <body>, <br>)
       StringPiece("<p")               // Mozilla
   };
 
   while (data.length() > 0) {
-    if (MatchesSignature(data, kHtmlSignatures, arraysize(kHtmlSignatures)))
-      return true;
+    AdvancePastWhitespace(&data);
 
-    // If we cannot find "<!--", we fail sniffing this as HTML.
-    static const StringPiece kCommentBegins[] = {StringPiece("<!--")};
-    if (!MatchesSignature(data, kCommentBegins, arraysize(kCommentBegins)))
-      break;
+    Result signature_match =
+        MatchesSignature(&data, kHtmlSignatures, arraysize(kHtmlSignatures),
+                         base::CompareCase::INSENSITIVE_ASCII);
+    if (signature_match != kNo)
+      return signature_match;
 
-    // Search for --> and do SniffForHTML after that. If we can find the
-    // comment's end, we start HTML sniffing from there again.
-    static const char kEndComment[] = "-->";
-    size_t offset = data.find(kEndComment);
-    if (offset == base::StringPiece::npos)
-      break;
+    // "<!--" (the HTML comment syntax) is a special case, since it's valid JS
+    // as well. Skip over them.
+    static const StringPiece kBeginCommentSignature[] = {"<!--"};
+    Result comment_match = MatchesSignature(&data, kBeginCommentSignature,
+                                            arraysize(kBeginCommentSignature),
+                                            base::CompareCase::SENSITIVE);
+    if (comment_match != kYes)
+      return comment_match;
 
-    // Proceed to the index next to the ending comment (-->).
-    data.remove_prefix(offset + strlen(kEndComment));
+    // Look for an end comment.
+    static const StringPiece kEndComment = "-->";
+    size_t comment_end = data.find(kEndComment);
+    if (comment_end == base::StringPiece::npos)
+      return kMaybe;  // Hit end of data with open comment.
+    data.remove_prefix(comment_end + kEndComment.length());
   }
 
-  return false;
+  // All of |data| was consumed, without a clear determination.
+  return kMaybe;
 }
 
-bool CrossSiteDocumentClassifier::SniffForXML(base::StringPiece data) {
-  // TODO(dsjang): Chrome's mime_sniffer is using strncasecmp() for
-  // this signature. However, XML is case-sensitive. Don't we have to
-  // be more lenient only to block documents starting with the exact
-  // string <?xml rather than <?XML ?
+CrossSiteDocumentClassifier::Result CrossSiteDocumentClassifier::SniffForXML(
+    base::StringPiece data) {
   // TODO(dsjang): Once CrossSiteDocumentClassifier is moved into the browser
   // process, we should do single-thread checking here for the static
   // initializer.
+  AdvancePastWhitespace(&data);
   static const StringPiece kXmlSignatures[] = {StringPiece("<?xml")};
-  return MatchesSignature(data, kXmlSignatures, arraysize(kXmlSignatures));
+  return MatchesSignature(&data, kXmlSignatures, arraysize(kXmlSignatures),
+                          base::CompareCase::SENSITIVE);
 }
 
-bool CrossSiteDocumentClassifier::SniffForJSON(base::StringPiece data) {
-  // TODO(dsjang): We have to come up with a better way to sniff
-  // JSON. However, even RE cannot help us that much due to the fact
-  // that we don't do full parsing.  This DFA starts with state 0, and
-  // finds {, "/' and : in that order. We're avoiding adding a
-  // dependency on a regular expression library.
+CrossSiteDocumentClassifier::Result CrossSiteDocumentClassifier::SniffForJSON(
+    base::StringPiece data) {
+  // Currently this function looks for an opening brace ('{'), followed by a
+  // double-quoted string literal, followed by a colon. Importantly, such a
+  // sequence is a Javascript syntax error: although the JSON object syntax is
+  // exactly Javascript's object-initializer syntax, a Javascript object-
+  // initializer expression is not valid as a standalone Javascript statement.
+  //
+  // TODO(nick): We have to come up with a better way to sniff JSON. The
+  // following are known limitations of this function:
+  // https://crbug.com/795470/ Support non-dictionary values (e.g. lists)
   enum {
     kStartState,
     kLeftBraceState,
     kLeftQuoteState,
-    kColonState,
-    kTerminalState,
+    kEscapeState,
+    kRightQuoteState,
   } state = kStartState;
 
-  size_t length = data.length();
-  for (size_t i = 0; i < length && state < kColonState; ++i) {
+  for (size_t i = 0; i < data.length(); ++i) {
     const char c = data[i];
-    if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
-      continue;
+    if (state != kLeftQuoteState && state != kEscapeState) {
+      // Whitespace is ignored (outside of string literals)
+      if (c == ' ' || c == '\t' || c == '\r' || c == '\n')
+        continue;
+    } else {
+      // Inside string literals, control characters should result in rejection.
+      if ((c >= 0 && c < 32) || c == 127)
+        return kNo;
+    }
 
     switch (state) {
       case kStartState:
         if (c == '{')
           state = kLeftBraceState;
         else
-          state = kTerminalState;
+          return kNo;
         break;
       case kLeftBraceState:
-        if (c == '\"' || c == '\'')
+        if (c == '"')
           state = kLeftQuoteState;
         else
-          state = kTerminalState;
+          return kNo;
         break;
       case kLeftQuoteState:
-        if (c == ':')
-          state = kColonState;
+        if (c == '"')
+          state = kRightQuoteState;
+        else if (c == '\\')
+          state = kEscapeState;
         break;
-      case kColonState:
-      case kTerminalState:
-        NOTREACHED();
+      case kEscapeState:
+        // Simplification: don't bother rejecting hex escapes.
+        state = kLeftQuoteState;
+        break;
+      case kRightQuoteState:
+        if (c == ':')
+          return kYes;
+        else
+          return kNo;
         break;
     }
   }
-  return state == kColonState;
+  return kMaybe;
+}
+
+CrossSiteDocumentClassifier::Result
+CrossSiteDocumentClassifier::SniffForFetchOnlyResource(base::StringPiece data) {
+  // kScriptBreakingPrefixes contains prefixes that are conventionally used to
+  // prevent a JSON response from becoming a valid Javascript program (an attack
+  // vector known as XSSI). The presence of such a prefix is a strong signal
+  // that the resource is meant to be consumed only by the fetch API or
+  // XMLHttpRequest, and is meant to be protected from use in non-CORS, cross-
+  // origin contexts like <script>, <img>, etc.
+  //
+  // These prefixes work either by inducing a syntax error, or inducing an
+  // infinite loop. In either case, the prefix must create a guarantee that no
+  // matter what bytes follow it, the entire response would be worthless to
+  // execute as a <script>.
+  static const StringPiece kScriptBreakingPrefixes[] = {
+      // Parser breaker prefix.
+      //
+      // Built into angular.js (followed by a comma and a newline):
+      //   https://docs.angularjs.org/api/ng/service/$http
+      //
+      // Built into the Java Spring framework (followed by a comma and a space):
+      //   https://goo.gl/xP7FWn
+      //
+      // Observed on google.com (without a comma, followed by a newline).
+      StringPiece(")]}'"),
+
+      // Apache struts: https://struts.apache.org/plugins/json/#prefix
+      StringPiece("{}&&"),
+
+      // Spring framework (historically): https://goo.gl/JYPFAv
+      StringPiece("{} &&"),
+
+      // Infinite loops.
+      StringPiece("for(;;);"),  // observed on facebook.com
+      StringPiece("while(1);"), StringPiece("for (;;);"),
+      StringPiece("while (1);"),
+  };
+  Result has_parser_breaker = MatchesSignature(
+      &data, kScriptBreakingPrefixes, arraysize(kScriptBreakingPrefixes),
+      base::CompareCase::SENSITIVE);
+  if (has_parser_breaker != kNo)
+    return has_parser_breaker;
+
+  // A non-empty JSON object also effectively introduces a JS syntax error.
+  return SniffForJSON(data);
 }
 
 }  // namespace content

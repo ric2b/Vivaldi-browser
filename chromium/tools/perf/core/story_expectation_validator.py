@@ -4,6 +4,7 @@
 # found in the LICENSE file.
 """Script to check validity of StoryExpectations."""
 
+import optparse
 import argparse
 import json
 import os
@@ -14,7 +15,6 @@ path_util.AddTelemetryToPath()
 path_util.AddAndroidPylibToPath()
 
 
-from telemetry import decorators
 from telemetry.internal.browser import browser_options
 
 
@@ -27,35 +27,30 @@ CLUSTER_TELEMETRY_BENCHMARKS = [
 ]
 
 
-# TODO(rnephew): Remove this check when it is the norm to not use decorators.
-def check_decorators(benchmarks):
-  for benchmark in benchmarks:
-    if (decorators.GetDisabledAttributes(benchmark) or
-        decorators.GetEnabledAttributes(benchmark)):
-      raise Exception(
-          'Disabling or enabling telemetry benchmark with decorator detected. '
-          'Please use StoryExpectations instead. Contact rnephew@ for more '
-          'information. \nBenchmark: %s' % benchmark.Name())
-
-
-def validate_story_names(benchmarks):
+def validate_story_names(benchmarks, raw_expectations_data):
   for benchmark in benchmarks:
     if benchmark.Name() in CLUSTER_TELEMETRY_BENCHMARKS:
       continue
     b = benchmark()
+    b.AugmentExpectationsWithParser(raw_expectations_data)
     options = browser_options.BrowserFinderOptions()
-    # tabset_repeat is needed for tab_switcher benchmarks.
-    options.tabset_repeat = 1
-    # test_path required for blink_perf benchmark in contrib/.
-    options.test_path = ''
-    # shared_prefs_file required for benchmarks in contrib/vr_benchmarks/
-    options.shared_prefs_file = ''
+
+    # Add default values for any extra commandline options
+    # provided by the benchmark.
+    parser = optparse.OptionParser()
+    before, _ = parser.parse_args([])
+    benchmark.AddBenchmarkCommandLineArgs(parser)
+    after, _ = parser.parse_args([])
+    for extra_option in dir(after):
+        if extra_option not in dir(before):
+            setattr(options, extra_option, getattr(after, extra_option))
+
     story_set = b.CreateStorySet(options)
     failed_stories = b.GetBrokenExpectations(story_set)
     assert not failed_stories, 'Incorrect story names: %s' % str(failed_stories)
 
 
-def GetDisabledStories(benchmarks):
+def GetDisabledStories(benchmarks, raw_expectations_data):
   # Creates a dictionary of the format:
   # {
   #   'benchmark_name1' : {
@@ -71,7 +66,9 @@ def GetDisabledStories(benchmarks):
   for benchmark in benchmarks:
     name = benchmark.Name()
     disables[name] = {}
-    expectations = benchmark().GetExpectations().AsDict()['stories']
+    b = benchmark()
+    b.AugmentExpectationsWithParser(raw_expectations_data)
+    expectations = b.expectations.AsDict()['stories']
     for story in expectations:
       for conditions, reason in  expectations[story]:
         if not disables[name].get(story):
@@ -89,11 +86,11 @@ def main(args):
       help=('Prints list of disabled stories.'))
   options = parser.parse_args(args)
   benchmarks = benchmark_finders.GetAllBenchmarks()
-
+  with open(path_util.GetExpectationsPath()) as fp:
+    raw_expectations_data = fp.read()
   if options.list:
-    stories = GetDisabledStories(benchmarks)
+    stories = GetDisabledStories(benchmarks, raw_expectations_data)
     print json.dumps(stories, sort_keys=True, indent=4, separators=(',', ': '))
   else:
-    validate_story_names(benchmarks)
-    check_decorators(benchmarks)
+    validate_story_names(benchmarks, raw_expectations_data)
   return 0

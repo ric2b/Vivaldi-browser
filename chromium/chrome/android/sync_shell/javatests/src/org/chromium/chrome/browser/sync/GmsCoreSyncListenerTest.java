@@ -16,10 +16,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.content.browser.test.util.Criteria;
@@ -31,11 +30,8 @@ import java.util.concurrent.Callable;
  * Test suite for the GmsCoreSyncListener.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
-@RetryOnFailure // crbug.com/637448
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@DisabledTest // crbug.com/789947
 public class GmsCoreSyncListenerTest {
     @Rule
     public SyncTestRule mSyncTestRule = new SyncTestRule();

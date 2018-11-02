@@ -78,7 +78,7 @@ class SurfaceLayerTest : public testing::Test {
 class MockSurfaceReferenceFactory
     : public viz::SequenceSurfaceReferenceFactory {
  public:
-  MockSurfaceReferenceFactory() {}
+  MockSurfaceReferenceFactory() = default;
 
   // SequenceSurfaceReferenceFactory implementation.
   MOCK_CONST_METHOD1(SatisfySequence, void(const viz::SurfaceSequence&));
@@ -117,7 +117,7 @@ TEST_F(SurfaceLayerTest, MultipleFramesOneSurface) {
   EXPECT_CALL(*ref_factory, SatisfySequence(_)).Times(0);
 
   auto layer = SurfaceLayer::Create(ref_factory);
-  layer->SetPrimarySurfaceId(surface_id);
+  layer->SetPrimarySurfaceId(surface_id, base::nullopt);
   layer->SetFallbackSurfaceId(surface_id);
   layer_tree_host_->GetSurfaceSequenceGenerator()->set_frame_sink_id(
       viz::FrameSinkId(1, 1));
@@ -128,7 +128,7 @@ TEST_F(SurfaceLayerTest, MultipleFramesOneSurface) {
       FakeLayerTreeHost::Create(&fake_client_, &task_graph_runner_,
                                 animation_host2.get());
   auto layer2 = SurfaceLayer::Create(ref_factory);
-  layer2->SetPrimarySurfaceId(surface_id);
+  layer2->SetPrimarySurfaceId(surface_id, base::nullopt);
   layer2->SetFallbackSurfaceId(surface_id);
   layer_tree_host2->GetSurfaceSequenceGenerator()->set_frame_sink_id(
       viz::FrameSinkId(2, 2));
@@ -168,9 +168,10 @@ TEST_F(SurfaceLayerTest, PushProperties) {
   viz::SurfaceId primary_id(
       kArbitraryFrameSinkId,
       viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
-  layer->SetPrimarySurfaceId(primary_id);
+  layer->SetPrimarySurfaceId(primary_id, 1u);
+  layer->SetPrimarySurfaceId(primary_id, 2u);
   layer->SetFallbackSurfaceId(primary_id);
-  layer->SetDefaultBackgroundColor(SK_ColorBLUE);
+  layer->SetBackgroundColor(SK_ColorBLUE);
   layer->SetStretchContentToFillBounds(true);
 
   EXPECT_TRUE(layer_tree_host_->needs_surface_ids_sync());
@@ -195,14 +196,15 @@ TEST_F(SurfaceLayerTest, PushProperties) {
   // Verify that the primary and fallback SurfaceIds are pushed through.
   EXPECT_EQ(primary_id, layer_impl->primary_surface_id());
   EXPECT_EQ(primary_id, layer_impl->fallback_surface_id());
-  EXPECT_EQ(SK_ColorBLUE, layer_impl->default_background_color());
+  EXPECT_EQ(SK_ColorBLUE, layer_impl->background_color());
   EXPECT_TRUE(layer_impl->stretch_content_to_fill_bounds());
+  EXPECT_EQ(2u, layer_impl->deadline_in_frames());
 
   viz::SurfaceId fallback_id(
       kArbitraryFrameSinkId,
       viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
   layer->SetFallbackSurfaceId(fallback_id);
-  layer->SetDefaultBackgroundColor(SK_ColorGREEN);
+  layer->SetBackgroundColor(SK_ColorGREEN);
   layer->SetStretchContentToFillBounds(false);
 
   // Verify that fallback surface id is not recorded on the layer tree host as
@@ -218,7 +220,8 @@ TEST_F(SurfaceLayerTest, PushProperties) {
   // fallback viz::SurfaceId is pushed through.
   EXPECT_EQ(primary_id, layer_impl->primary_surface_id());
   EXPECT_EQ(fallback_id, layer_impl->fallback_surface_id());
-  EXPECT_EQ(SK_ColorGREEN, layer_impl->default_background_color());
+  EXPECT_EQ(SK_ColorGREEN, layer_impl->background_color());
+  EXPECT_EQ(base::nullopt, layer_impl->deadline_in_frames());
   EXPECT_FALSE(layer_impl->stretch_content_to_fill_bounds());
 }
 
@@ -239,14 +242,14 @@ TEST_F(SurfaceLayerTest, CheckSurfaceReferencesForClonedLayer) {
   // animation is done.
   scoped_refptr<SurfaceLayer> layer1 = SurfaceLayer::Create(ref_factory);
   layer1->SetLayerTreeHost(layer_tree_host_.get());
-  layer1->SetPrimarySurfaceId(old_surface_id);
+  layer1->SetPrimarySurfaceId(old_surface_id, base::nullopt);
   layer1->SetFallbackSurfaceId(old_surface_id);
 
   // This layer will eventually be switched be switched to show the new surface
   // id and will be retained when animation is done.
   scoped_refptr<SurfaceLayer> layer2 = SurfaceLayer::Create(ref_factory);
   layer2->SetLayerTreeHost(layer_tree_host_.get());
-  layer2->SetPrimarySurfaceId(old_surface_id);
+  layer2->SetPrimarySurfaceId(old_surface_id, base::nullopt);
   layer2->SetFallbackSurfaceId(old_surface_id);
 
   std::unique_ptr<SurfaceLayerImpl> layer_impl1 =
@@ -266,7 +269,7 @@ TEST_F(SurfaceLayerTest, CheckSurfaceReferencesForClonedLayer) {
       viz::LocalSurfaceId(2, base::UnguessableToken::Create()));
 
   // Switch the new layer to use |new_surface_id|.
-  layer2->SetPrimarySurfaceId(new_surface_id);
+  layer2->SetPrimarySurfaceId(new_surface_id, base::nullopt);
   layer2->SetFallbackSurfaceId(new_surface_id);
 
   SynchronizeTrees();
@@ -305,7 +308,7 @@ TEST_F(SurfaceLayerTest, CheckNeedsSurfaceIdsSyncForClonedLayers) {
 
   scoped_refptr<SurfaceLayer> layer1 = SurfaceLayer::Create(ref_factory);
   layer1->SetLayerTreeHost(layer_tree_host_.get());
-  layer1->SetPrimarySurfaceId(surface_id);
+  layer1->SetPrimarySurfaceId(surface_id, base::nullopt);
   layer1->SetFallbackSurfaceId(surface_id);
 
   // Verify the surface id is in SurfaceLayerIds() and needs_surface_ids_sync()
@@ -323,7 +326,7 @@ TEST_F(SurfaceLayerTest, CheckNeedsSurfaceIdsSyncForClonedLayers) {
   // Create the second layer that is a clone of the first.
   scoped_refptr<SurfaceLayer> layer2 = SurfaceLayer::Create(ref_factory);
   layer2->SetLayerTreeHost(layer_tree_host_.get());
-  layer2->SetPrimarySurfaceId(surface_id);
+  layer2->SetPrimarySurfaceId(surface_id, base::nullopt);
   layer2->SetFallbackSurfaceId(surface_id);
 
   // Verify that after creating the second layer with the same surface id that
@@ -370,7 +373,7 @@ class SurfaceLayerSwapPromise : public LayerTreeTest {
     layer_ = SurfaceLayer::Create(ref_factory_);
     viz::SurfaceId surface_id(kArbitraryFrameSinkId,
                               viz::LocalSurfaceId(1, kArbitraryToken));
-    layer_->SetPrimarySurfaceId(surface_id);
+    layer_->SetPrimarySurfaceId(surface_id, base::nullopt);
     layer_->SetFallbackSurfaceId(surface_id);
     testing::Mock::VerifyAndClearExpectations(ref_factory_.get());
 

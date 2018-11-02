@@ -26,6 +26,8 @@
 
 #include <memory>
 #include <utility>
+
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -34,7 +36,6 @@
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMArrayBufferView.h"
 #include "modules/peerconnection/RTCPeerConnection.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
 
@@ -71,7 +72,7 @@ RTCDataChannel* RTCDataChannel::Create(
     const WebRTCDataChannelInit& init,
     ExceptionState& exception_state) {
   std::unique_ptr<WebRTCDataChannelHandler> handler =
-      WTF::WrapUnique(peer_connection_handler->CreateDataChannel(label, init));
+      base::WrapUnique(peer_connection_handler->CreateDataChannel(label, init));
   if (!handler) {
     exception_state.ThrowDOMException(kNotSupportedError,
                                       "RTCDataChannel is not supported");
@@ -98,7 +99,7 @@ RTCDataChannel::RTCDataChannel(
   handler_->SetClient(this);
 }
 
-RTCDataChannel::~RTCDataChannel() {}
+RTCDataChannel::~RTCDataChannel() = default;
 
 void RTCDataChannel::Dispose() {
   if (stopped_)
@@ -310,7 +311,7 @@ void RTCDataChannel::Pause() {
 
 void RTCDataChannel::Unpause() {
   if (!scheduled_events_.IsEmpty() && !scheduled_event_timer_.IsActive())
-    scheduled_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    scheduled_event_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void RTCDataChannel::ContextDestroyed(ExecutionContext*) {
@@ -363,7 +364,7 @@ void RTCDataChannel::ScheduleDispatchEvent(Event* event) {
   scheduled_events_.push_back(event);
 
   if (!scheduled_event_timer_.IsActive())
-    scheduled_event_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    scheduled_event_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void RTCDataChannel::ScheduledEventTimerFired(TimerBase*) {

@@ -14,6 +14,7 @@
 #include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+#include "ui/events/ozone/layout/layout_util.h"
 #include "ui/ozone/platform/wayland/wayland_connection.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
 
@@ -37,6 +38,12 @@ WaylandKeyboard::WaylandKeyboard(wl_keyboard* keyboard,
       &WaylandKeyboard::Leave,     &WaylandKeyboard::Key,
       &WaylandKeyboard::Modifiers, &WaylandKeyboard::RepeatInfo,
   };
+
+#if BUILDFLAG(USE_XKBCOMMON)
+  auto* engine = static_cast<WaylandXkbKeyboardLayoutEngine*>(
+      KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
+  engine->SetEventModifiers(&event_modifiers_);
+#endif
 
   wl_keyboard_add_listener(obj_.get(), &listener, this);
 
@@ -95,18 +102,22 @@ void WaylandKeyboard::Key(void* data,
   if (dom_code == ui::DomCode::NONE)
     return;
 
-  uint8_t flags = keyboard->modifiers_;
+  uint8_t flags = keyboard->event_modifiers_.GetModifierFlags();
   DomKey dom_key;
   KeyboardCode key_code;
   if (!KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()->Lookup(
           dom_code, flags, &dom_key, &key_code))
     return;
 
-  // TODO(tonikitoo): handle repeat here.
   bool down = state == WL_KEYBOARD_KEY_STATE_PRESSED;
+
+  // TODO(tonikitoo,msisov): only the two lines below if not handling repeat.
+  int flag = ModifierDomKeyToEventFlag(dom_key);
+  keyboard->UpdateModifier(flag, down);
+
   ui::KeyEvent event(
       down ? ET_KEY_PRESSED : ET_KEY_RELEASED, key_code, dom_code,
-      keyboard->modifiers_, dom_key,
+      keyboard->event_modifiers_.GetModifierFlags(), dom_key,
       base::TimeTicks() + base::TimeDelta::FromMilliseconds(time));
   event.set_source_device_id(keyboard->obj_.id());
   keyboard->callback_.Run(&event);
@@ -120,13 +131,9 @@ void WaylandKeyboard::Modifiers(void* data,
                                 uint32_t mods_locked,
                                 uint32_t group) {
 #if BUILDFLAG(USE_XKBCOMMON)
-  WaylandKeyboard* keyboard = static_cast<WaylandKeyboard*>(data);
   auto* engine = static_cast<WaylandXkbKeyboardLayoutEngine*>(
       KeyboardLayoutEngineManager::GetKeyboardLayoutEngine());
-
-  keyboard->modifiers_ =
-      engine->UpdateModifiers(mods_depressed, mods_latched, mods_locked, group);
-
+  engine->UpdateModifiers(mods_depressed, mods_latched, mods_locked, group);
 #endif
 }
 
@@ -136,6 +143,27 @@ void WaylandKeyboard::RepeatInfo(void* data,
                                  int32_t delay) {
   // TODO(tonikitoo): Implement proper repeat handling.
   NOTIMPLEMENTED();
+}
+
+void WaylandKeyboard::UpdateModifier(int modifier_flag, bool down) {
+  if (modifier_flag == EF_NONE)
+    return;
+
+  int modifier = EventModifiers::GetModifierFromEventFlag(modifier_flag);
+  if (modifier == MODIFIER_NONE)
+    return;
+
+  // This mimics KeyboardEvDev, which matches chrome/x11.
+  // Currently EF_MOD3_DOWN means that the CapsLock key is currently down,
+  // and EF_CAPS_LOCK_ON means the caps lock state is enabled (and the
+  // key may or may not be down, but usually isn't). There does need to
+  // to be two different flags, since the physical CapsLock key is subject
+  // to remapping, but the caps lock state (which can be triggered in a
+  // variety of ways) is not.
+  if (modifier == MODIFIER_CAPS_LOCK)
+    event_modifiers_.UpdateModifier(MODIFIER_MOD3, down);
+  else
+    event_modifiers_.UpdateModifier(modifier, down);
 }
 
 }  // namespace ui

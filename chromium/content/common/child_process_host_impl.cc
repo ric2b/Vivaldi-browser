@@ -19,10 +19,8 @@
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
-#include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/common/child_process_messages.h"
 #include "content/public/common/bind_interface_helpers.h"
 #include "content/public/common/child_process_host_delegate.h"
 #include "content/public/common/content_paths.h"
@@ -37,8 +35,6 @@
 
 #if defined(OS_LINUX)
 #include "base/linux_util.h"
-#elif defined(OS_WIN)
-#include "content/common/font_cache_dispatcher_win.h"
 #endif  // OS_LINUX
 
 namespace {
@@ -65,10 +61,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
 #if defined(OS_LINUX)
   // Use /proc/self/exe rather than our known binary path so updates
   // can't swap out the binary from underneath us.
-  // When running under Valgrind, forking /proc/self/exe ends up forking the
-  // Valgrind executable, which then crashes. However, it's almost safe to
-  // assume that the updates won't happen while testing with Valgrind tools.
-  if (child_path.empty() && flags & CHILD_ALLOW_SELF && !RunningOnValgrind())
+  if (child_path.empty() && flags & CHILD_ALLOW_SELF)
     child_path = base::FilePath(base::kProcSelfExe);
 #endif
 
@@ -80,12 +73,7 @@ base::FilePath ChildProcessHost::GetChildPath(int flags) {
 }
 
 ChildProcessHostImpl::ChildProcessHostImpl(ChildProcessHostDelegate* delegate)
-    : delegate_(delegate),
-      opening_channel_(false) {
-#if defined(OS_WIN)
-  AddFilter(new FontCacheDispatcher());
-#endif
-}
+    : delegate_(delegate), opening_channel_(false) {}
 
 ChildProcessHostImpl::~ChildProcessHostImpl() {
   // If a channel was never created than it wasn't registered and the filters

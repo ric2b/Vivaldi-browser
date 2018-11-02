@@ -118,15 +118,18 @@ class MockClientGpuControl : public GpuControl {
   MOCK_CONST_METHOD0(GetCommandBufferID, CommandBufferId());
   MOCK_METHOD0(FlushPendingWork, void());
   MOCK_METHOD0(GenerateFenceSyncRelease, uint64_t());
-  MOCK_METHOD1(IsFenceSyncRelease, bool(uint64_t release));
-  MOCK_METHOD1(IsFenceSyncFlushed, bool(uint64_t release));
-  MOCK_METHOD1(IsFenceSyncFlushReceived, bool(uint64_t release));
   MOCK_METHOD1(IsFenceSyncReleased, bool(uint64_t release));
   MOCK_METHOD2(SignalSyncToken, void(const SyncToken& sync_token,
                                      const base::Closure& callback));
   MOCK_METHOD1(WaitSyncTokenHint, void(const SyncToken&));
   MOCK_METHOD1(CanWaitUnverifiedSyncToken, bool(const SyncToken&));
   MOCK_METHOD0(SetSnapshotRequested, void());
+  MOCK_METHOD2(CreateGpuFence,
+               void(uint32_t gpu_fence_id, ClientGpuFence source));
+  // OnceCallback isn't mockable?
+  void GetGpuFence(uint32_t gpu_fence_id,
+                   base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)>
+                       callback) override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockClientGpuControl);

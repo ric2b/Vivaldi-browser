@@ -9,11 +9,14 @@
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+#import "ios/chrome/browser/web/page_placeholder_tab_helper.h"
 #include "ios/chrome/common/ios_app_bundle_id_prefix.h"
 #include "ios/web/public/navigation_item.h"
+#import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -87,14 +90,24 @@ const CGFloat kMaxFloatDelta = 0.01;
   DCHECK(!CGSizeEqualToSize(size, CGSizeZero));
   PendingSnapshotRequest currentRequest;
   UIImage* snapshot = [_cache objectForKey:[self keyForTab:tab]];
-  if (snapshot) {
-    CGFloat tabContentAreaRatio = tab.snapshotContentArea.size.width /
-                                  tab.snapshotContentArea.size.height;
+  if (snapshot && [snapshot size].width >= size.width) {
+    // If tab is not in a state to take a snapshot, use the cached snapshot.
+    if (!tab.webState || !tab.webState->IsWebUsageEnabled() ||
+        PagePlaceholderTabHelper::FromWebState(tab.webState)
+            ->displaying_placeholder()) {
+      completionBlock(snapshot);
+      return currentRequest;
+    }
+
+    CGSize newSnapshotSize =
+        SnapshotTabHelper::FromWebState(tab.webState)->GetSnapshotSize();
+    CGFloat newSnapshotAreaRatio =
+        newSnapshotSize.width / newSnapshotSize.height;
     CGFloat cachedSnapshotRatio =
         [snapshot size].width / [snapshot size].height;
+
     // Check that the cached snapshot's ratio matches the content area ratio.
-    if (std::abs(tabContentAreaRatio - cachedSnapshotRatio) < kMaxFloatDelta &&
-        [snapshot size].width >= size.width) {
+    if (std::abs(newSnapshotAreaRatio - cachedSnapshotRatio) < kMaxFloatDelta) {
       // Cache hit.
       completionBlock(snapshot);
       return currentRequest;
@@ -104,29 +117,34 @@ const CGFloat kMaxFloatDelta = 0.01;
   // Cache miss.
   currentRequest = [self recordPendingRequestForTab:tab];
   NSString* key = [self keyForTab:tab];
-  [tab retrieveSnapshot:^(UIImage* snapshot) {
-    PendingSnapshotRequest requestForSession = [self pendingRequestForTab:tab];
-    // Cancel this request if another one has replaced it for this sessionId.
-    if (currentRequest.requestId != requestForSession.requestId)
-      return;
-    dispatch_async(_cacheQueue, ^{
-      DCHECK(![NSThread isMainThread]);
-      UIImage* resizedSnapshot =
-          [TabSwitcherCache resizedImage:snapshot toSize:size];
-      if ([self storeImage:resizedSnapshot forKey:key request:currentRequest]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-          // Cancel this request if another one has replaced it for this
-          // sessionId.
-          PendingSnapshotRequest requestForSession =
-              [self pendingRequestForTab:tab];
-          if (currentRequest.requestId != requestForSession.requestId)
-            return;
-          completionBlock(resizedSnapshot);
-          [self removePendingSnapshotRequest:currentRequest];
+  SnapshotTabHelper::FromWebState(tab.webState)
+      ->RetrieveColorSnapshot(^(UIImage* snapshot) {
+        PendingSnapshotRequest requestForSession =
+            [self pendingRequestForTab:tab];
+        // Cancel this request if another one has replaced it for this
+        // sessionId.
+        if (currentRequest.requestId != requestForSession.requestId)
+          return;
+        dispatch_async(_cacheQueue, ^{
+          DCHECK(![NSThread isMainThread]);
+          UIImage* resizedSnapshot =
+              [TabSwitcherCache resizedImage:snapshot toSize:size];
+          if ([self storeImage:resizedSnapshot
+                        forKey:key
+                       request:currentRequest]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+              // Cancel this request if another one has replaced it for this
+              // sessionId.
+              PendingSnapshotRequest requestForSession =
+                  [self pendingRequestForTab:tab];
+              if (currentRequest.requestId != requestForSession.requestId)
+                return;
+              completionBlock(resizedSnapshot);
+              [self removePendingSnapshotRequest:currentRequest];
+            });
+          }
         });
-      }
-    });
-  }];
+      });
   return currentRequest;
 }
 

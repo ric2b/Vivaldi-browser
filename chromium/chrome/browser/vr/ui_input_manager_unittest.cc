@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "cc/test/geometry_test_utils.h"
 #include "chrome/browser/vr/content_input_delegate.h"
@@ -33,8 +33,6 @@ namespace vr {
 
 constexpr UiInputManager::ButtonState kUp = UiInputManager::ButtonState::UP;
 constexpr UiInputManager::ButtonState kDown = UiInputManager::ButtonState::DOWN;
-constexpr UiInputManager::ButtonState kClick =
-    UiInputManager::ButtonState::CLICKED;
 
 class MockRect : public Rect {
  public:
@@ -46,25 +44,52 @@ class MockRect : public Rect {
   MOCK_METHOD1(OnMove, void(const gfx::PointF& position));
   MOCK_METHOD1(OnButtonDown, void(const gfx::PointF& position));
   MOCK_METHOD1(OnButtonUp, void(const gfx::PointF& position));
+  MOCK_METHOD1(OnFocusChanged, void(bool));
+  MOCK_METHOD1(OnInputEdited, void(const TextInputInfo&));
+  MOCK_METHOD1(OnInputCommitted, void(const TextInputInfo&));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRect);
 };
 
+class MockTextInput : public TextInput {
+ public:
+  MockTextInput()
+      : TextInput(1,
+                  base::RepeatingCallback<void(bool)>(),
+                  base::RepeatingCallback<void(const TextInputInfo&)>()) {}
+  ~MockTextInput() override = default;
+
+  MOCK_METHOD1(OnFocusChanged, void(bool));
+  MOCK_METHOD1(OnInputEdited, void(const TextInputInfo&));
+  MOCK_METHOD1(OnInputCommitted, void(const TextInputInfo&));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockTextInput);
+};
+
 class UiInputManagerTest : public testing::Test {
  public:
   void SetUp() override {
-    scene_ = base::MakeUnique<UiScene>();
-    input_manager_ = base::MakeUnique<UiInputManager>(scene_.get());
+    scene_ = std::make_unique<UiScene>();
+    input_manager_ = std::make_unique<UiInputManager>(scene_.get());
   }
 
-  StrictMock<MockRect>* CreateMockElement(float z_position) {
-    auto element = base::MakeUnique<StrictMock<MockRect>>();
+  StrictMock<MockRect>* CreateAndAddMockElement(float z_position) {
+    auto element = std::make_unique<StrictMock<MockRect>>();
     StrictMock<MockRect>* p_element = element.get();
     element->SetTranslate(0, 0, z_position);
-    element->SetVisible(true);
     scene_->AddUiElement(kRoot, std::move(element));
-    scene_->OnBeginFrame(base::TimeTicks(), kForwardVector);
+    scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
+    return p_element;
+  }
+
+  StrictMock<MockTextInput>* CreateAndAddMockInputElement(float z_position) {
+    auto element = std::make_unique<StrictMock<MockTextInput>>();
+    StrictMock<MockTextInput>* p_element = element.get();
+    element->SetTranslate(0, 0, z_position);
+    scene_->AddUiElement(kRoot, std::move(element));
+    scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
     return p_element;
   }
 
@@ -104,13 +129,87 @@ class UiInputManagerContentTest : public UiTest {
   UiInputManager* input_manager_;
 };
 
+TEST_F(UiInputManagerTest, FocusedElement) {
+  StrictMock<MockTextInput>* p_element1 = CreateAndAddMockInputElement(-5.f);
+  StrictMock<MockTextInput>* p_element2 = CreateAndAddMockInputElement(-5.f);
+  TextInputInfo edit(base::ASCIIToUTF16("asdfg"));
+
+  // Focus request triggers OnFocusChanged.
+  testing::Sequence s;
+  EXPECT_CALL(*p_element1, OnFocusChanged(true)).InSequence(s);
+  input_manager_->RequestFocus(p_element1->id());
+
+  // Edit goes to focused element.
+  EXPECT_CALL(*p_element1, OnInputEdited(edit)).InSequence(s);
+  input_manager_->OnInputEdited(edit);
+
+  // Commit goes to focused element.
+  EXPECT_CALL(*p_element1, OnInputCommitted(edit)).InSequence(s);
+  input_manager_->OnInputCommitted(edit);
+
+  // Focus on a different element triggers OnFocusChanged.
+  EXPECT_CALL(*p_element1, OnFocusChanged(false)).InSequence(s);
+  EXPECT_CALL(*p_element2, OnFocusChanged(true)).InSequence(s);
+  input_manager_->RequestFocus(p_element2->id());
+}
+
+// Verify that a focusable child clears focus off its parent. Note that the
+// child isn't any different from other elements in that it should also steal
+// focus from its parent.
+TEST_F(UiInputManagerTest, FocusableChildStealsFocus) {
+  StrictMock<MockRect>* p_element = CreateAndAddMockElement(-5.f);
+
+  auto child = std::make_unique<StrictMock<MockRect>>();
+  auto* p_child = child.get();
+  child->set_hit_testable(true);
+  child->set_focusable(true);
+  p_element->AddChild(std::move(child));
+  scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
+
+  // Focus element.
+  testing::Sequence s;
+  EXPECT_CALL(*p_element, OnFocusChanged(true)).InSequence(s);
+  input_manager_->RequestFocus(p_element->id());
+
+  // Focus child.
+  EXPECT_CALL(*p_child, OnHoverEnter(_)).InSequence(s);
+  EXPECT_CALL(*p_child, OnButtonDown(_)).InSequence(s);
+  HandleInput(kForwardVector, kDown);
+  EXPECT_CALL(*p_child, OnMove(_)).InSequence(s);
+  EXPECT_CALL(*p_child, OnButtonUp(_)).InSequence(s);
+  EXPECT_CALL(*p_element, OnFocusChanged(false)).InSequence(s);
+  HandleInput(kForwardVector, kUp);
+}
+
+// Verify that a non-focusable child does not clear focus off its parent.
+TEST_F(UiInputManagerTest, NonFocusableChildDoestNotStealFocus) {
+  StrictMock<MockRect>* p_element = CreateAndAddMockElement(-5.f);
+
+  auto child = std::make_unique<StrictMock<MockRect>>();
+  auto* p_child = child.get();
+  child->set_hit_testable(true);
+  child->set_focusable(false);
+  p_element->AddChild(std::move(child));
+  scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
+
+  // Focus element.
+  testing::Sequence s;
+  EXPECT_CALL(*p_element, OnFocusChanged(true)).InSequence(s);
+  input_manager_->RequestFocus(p_element->id());
+
+  // Focus child.
+  EXPECT_CALL(*p_child, OnHoverEnter(_)).InSequence(s);
+  EXPECT_CALL(*p_child, OnButtonDown(_)).InSequence(s);
+  EXPECT_CALL(*p_element, OnFocusChanged(false)).Times(0).InSequence(s);
+  HandleInput(kForwardVector, kDown);
+}
+
 TEST_F(UiInputManagerTest, ReticleRenderTarget) {
-  auto element = base::MakeUnique<Rect>();
+  auto element = std::make_unique<Rect>();
   UiElement* p_element = element.get();
   element->SetTranslate(0, 0, -1.f);
-  element->SetVisible(true);
   scene_->AddUiElement(kRoot, std::move(element));
-  scene_->OnBeginFrame(base::TimeTicks(), kForwardVector);
+  scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
 
   ControllerModel controller_model;
   controller_model.laser_direction = kBackwardVector;
@@ -134,7 +233,7 @@ TEST_F(UiInputManagerTest, ReticleRenderTarget) {
 // either directly at (forward) or directly away from (backward) a test element.
 // Verify mock expectations along the way to make failures easier to track.
 TEST_F(UiInputManagerTest, HoverClick) {
-  StrictMock<MockRect>* p_element = CreateMockElement(-5.f);
+  StrictMock<MockRect>* p_element = CreateAndAddMockElement(-5.f);
 
   // Move over the test element.
   EXPECT_CALL(*p_element, OnHoverEnter(_));
@@ -155,22 +254,17 @@ TEST_F(UiInputManagerTest, HoverClick) {
   HandleInput(kForwardVector, kUp);
   Mock::VerifyAndClearExpectations(p_element);
 
-  // Perform a click (both press and release) on the element.
-  EXPECT_CALL(*p_element, OnMove(_));
-  EXPECT_CALL(*p_element, OnButtonDown(_));
-  EXPECT_CALL(*p_element, OnButtonUp(_));
-  HandleInput(kForwardVector, kClick);
-  Mock::VerifyAndClearExpectations(p_element);
-
   // Move off of the element.
   EXPECT_CALL(*p_element, OnHoverLeave());
   HandleInput(kBackwardVector, kUp);
   Mock::VerifyAndClearExpectations(p_element);
 
   // Press while not on the element, move over the element, move away, then
-  // release. The element should receive no input.
+  // release. The element should receive hover events.
   HandleInput(kBackwardVector, kDown);
+  EXPECT_CALL(*p_element, OnHoverEnter(_));
   HandleInput(kForwardVector, kDown);
+  EXPECT_CALL(*p_element, OnHoverLeave());
   HandleInput(kBackwardVector, kUp);
   Mock::VerifyAndClearExpectations(p_element);
 
@@ -178,12 +272,10 @@ TEST_F(UiInputManagerTest, HoverClick) {
   EXPECT_CALL(*p_element, OnHoverEnter(_));
   EXPECT_CALL(*p_element, OnButtonDown(_));
   HandleInput(kForwardVector, kDown);
-  EXPECT_CALL(*p_element, OnMove(_));
+  EXPECT_CALL(*p_element, OnHoverLeave());
   HandleInput(kBackwardVector, kDown);
   Mock::VerifyAndClearExpectations(p_element);
-  EXPECT_CALL(*p_element, OnMove(_));
   EXPECT_CALL(*p_element, OnButtonUp(_));
-  EXPECT_CALL(*p_element, OnHoverLeave());
   HandleInput(kBackwardVector, kUp);
   Mock::VerifyAndClearExpectations(p_element);
 }
@@ -192,25 +284,30 @@ TEST_F(UiInputManagerTest, HoverClick) {
 // releasing the button. Upon release, the previous element should see its click
 // and hover states cleared, and the new element should see a hover.
 TEST_F(UiInputManagerTest, ReleaseButtonOnAnotherElement) {
-  StrictMock<MockRect>* p_front_element = CreateMockElement(-5.f);
-  StrictMock<MockRect>* p_back_element = CreateMockElement(5.f);
+  StrictMock<MockRect>* p_front_element = CreateAndAddMockElement(-5.f);
+  StrictMock<MockRect>* p_back_element = CreateAndAddMockElement(5.f);
 
+  // TODO(ymalik): We should test verify that the functions called on the
+  // element are in the element's local coordinate space, but that would require
+  // writing a matcher for gfx::Point3F.
   // Press on an element, move away, then release.
   EXPECT_CALL(*p_front_element, OnHoverEnter(_));
   EXPECT_CALL(*p_front_element, OnButtonDown(_));
-  EXPECT_CALL(*p_front_element, OnMove(_));
-  EXPECT_CALL(*p_front_element, OnMove(_));
-  EXPECT_CALL(*p_front_element, OnButtonUp(_));
+  HandleInput(kForwardVector, kDown);
   EXPECT_CALL(*p_front_element, OnHoverLeave());
   EXPECT_CALL(*p_back_element, OnHoverEnter(_));
-  HandleInput(kForwardVector, kDown);
   HandleInput(kBackwardVector, kDown);
+  EXPECT_CALL(*p_back_element, OnMove(_));
+  EXPECT_CALL(*p_front_element, OnButtonUp(_));
   HandleInput(kBackwardVector, kUp);
+  EXPECT_CALL(*p_back_element, OnHoverLeave());
+  EXPECT_CALL(*p_front_element, OnHoverEnter(_));
+  HandleInput(kForwardVector, kUp);
 }
 
 // Test that input is tolerant of disappearing elements.
 TEST_F(UiInputManagerTest, ElementDeletion) {
-  StrictMock<MockRect>* p_element = CreateMockElement(-5.f);
+  StrictMock<MockRect>* p_element = CreateAndAddMockElement(-5.f);
 
   // Hover on an element.
   EXPECT_CALL(*p_element, OnHoverEnter(_));
@@ -224,7 +321,7 @@ TEST_F(UiInputManagerTest, ElementDeletion) {
 
   // Re-add the element to the scene, and press on it to lock it for input.
   scene_->AddUiElement(kRoot, std::move(deleted_element));
-  scene_->OnBeginFrame(base::TimeTicks(), kForwardVector);
+  scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
   EXPECT_CALL(*p_element, OnHoverEnter(_));
   EXPECT_CALL(*p_element, OnButtonDown(_));
   HandleInput(kForwardVector, kDown);
@@ -242,13 +339,12 @@ TEST_F(UiInputManagerTest, ElementDeletion) {
 // testing along the laser's ray as well as the ray from the world origin to a
 // point far along the laser.
 TEST_F(UiInputManagerTest, HitTestStrategy) {
-  auto element = base::MakeUnique<Rect>();
+  auto element = std::make_unique<Rect>();
   auto* p_element = element.get();
   element->SetTranslate(0, 0, -2.5);
-  element->SetVisible(true);
   element->SetSize(1000.0f, 1000.0f);
   scene_->AddUiElement(kRoot, std::move(element));
-  scene_->OnBeginFrame(base::TimeTicks(), kForwardVector);
+  scene_->OnBeginFrame(base::TimeTicks(), kStartHeadPose);
 
   gfx::Point3F center;
   p_element->world_space_transform().TransformPoint(&center);

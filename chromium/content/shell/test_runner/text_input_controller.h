@@ -36,8 +36,12 @@ class TextInputController {
 
   void InsertText(const std::string& text);
   void UnmarkText();
+  void UnmarkAndUnselectText();
   void DoCommand(const std::string& text);
+  void ExtendSelectionAndDelete(int before, int after);
+  void DeleteSurroundingText(int before, int after);
   void SetMarkedText(const std::string& text, int start, int length);
+  void SetMarkedTextFromExistingText(int start, int length);
   bool HasMarkedText();
   std::vector<int> MarkedRange();
   std::vector<int> SelectedRange();

@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
+#include "base/macros.h"
 #include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/gaia_cookie_manager_service_factory.h"
@@ -24,17 +25,16 @@
 
 namespace {
 
-const char* kTestingGaiaId = "gaia_id";
-const char* kTestingUsername = "fake_username";
+const char kTestingGaiaId[] = "gaia_id";
+const char kTestingRefreshToken[] = "refresh_token";
+const char kTestingUsername[] = "fake_username";
 
 }  // namespace
 
 class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
  public:
   OneClickSigninSyncStarterTest()
-      : sync_starter_(NULL),
-        failed_count_(0),
-        succeeded_count_(0) {}
+      : sync_starter_(nullptr), failed_count_(0), succeeded_count_(0) {}
 
   // ChromeRenderViewHostTestHarness:
   void SetUp() override {
@@ -44,10 +44,10 @@ class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kDisableSync);
 
-    SigninManagerBase* signin_manager = static_cast<FakeSigninManager*>(
-        SigninManagerFactory::GetForProfile(profile()));
+    SigninManagerBase* signin_manager =
+        SigninManagerFactory::GetForProfile(profile());
 
-    signin_manager->Initialize(NULL);
+    signin_manager->Initialize(nullptr);
     signin_manager->SetAuthenticatedAccountInfo(kTestingGaiaId,
                                                 kTestingUsername);
   }
@@ -73,7 +73,7 @@ class OneClickSigninSyncStarterTest : public ChromeRenderViewHostTestHarness {
   void CreateSyncStarter(OneClickSigninSyncStarter::Callback callback) {
     sync_starter_ = new OneClickSigninSyncStarter(
         profile(), nullptr, kTestingGaiaId, kTestingUsername, std::string(),
-        "refresh_token", signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
+        kTestingRefreshToken, signin_metrics::AccessPoint::ACCESS_POINT_UNKNOWN,
         signin_metrics::Reason::REASON_UNKNOWN_REASON,
         OneClickSigninSyncStarter::CURRENT_PROFILE,
         OneClickSigninSyncStarter::SYNC_WITH_DEFAULT_SETTINGS,

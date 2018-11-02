@@ -205,6 +205,12 @@ def _AreLayoutNGDirectoriesModified(change):  # pylint: disable=C0103
     layout_ng_paths = [
         os.path.join('third_party', 'WebKit', 'Source', 'core', 'layout',
                      'ng'),
+        os.path.join('third_party', 'WebKit', 'Source', 'core', 'paint',
+                     'ng'),
+        os.path.join('third_party', 'WebKit', 'LayoutTests', 'FlagExpectations',
+                     'enable-blink-features=LayoutNG'),
+        os.path.join('third_party', 'WebKit', 'LayoutTests', 'flag-specific',
+                     'enable-blink-features=LayoutNG'),
     ]
     for affected_file in change.AffectedFiles():
         file_path = affected_file.LocalPath()
@@ -229,9 +235,11 @@ def PostUploadHook(cl, change, output_api):  # pylint: disable=C0103
         results.extend(output_api.EnsureCQIncludeTrybotsAreAdded(
             cl,
             ['master.tryserver.chromium.linux:'
-             'linux_layout_tests_slimming_paint_v2'],
-            'Automatically added slimming-paint-v2 tests to run on CQ due to '
-            'changes in paint or compositing directories.'))
+             'linux_layout_tests_slimming_paint_v2',
+             'master.tryserver.blink:linux_trusty_blink_rel'],
+            'Automatically added linux_layout_tests_slimming_paint_v2 and '
+            'linux_trusty_blink_rel to run on CQ due to changes in paint or '
+            'compositing directories.'))
     if _AreLayoutNGDirectoriesModified(change):
         results.extend(output_api.EnsureCQIncludeTrybotsAreAdded(
             cl,

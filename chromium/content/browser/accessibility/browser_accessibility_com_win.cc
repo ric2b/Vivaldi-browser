@@ -310,23 +310,17 @@ STDMETHODIMP BrowserAccessibilityComWin::get_text(LONG start_offset,
   HandleSpecialTextOffset(&end_offset);
 
   // The spec allows the arguments to be reversed.
-  if (start_offset > end_offset) {
-    LONG tmp = start_offset;
-    start_offset = end_offset;
-    end_offset = tmp;
-  }
+  if (start_offset > end_offset)
+    std::swap(start_offset, end_offset);
 
-  // The spec does not allow the start or end offsets to be out or range;
-  // we must return an error if so.
-  LONG len = text_str.length();
-  if (start_offset < 0)
+  LONG len = static_cast<LONG>(text_str.length());
+  if (start_offset < 0 || start_offset > len)
     return E_INVALIDARG;
-  if (end_offset > len)
+  if (end_offset < 0 || end_offset > len)
     return E_INVALIDARG;
 
   base::string16 substr =
       text_str.substr(start_offset, end_offset - start_offset);
-
   if (substr.empty())
     return S_FALSE;
 
@@ -1115,7 +1109,7 @@ STDMETHODIMP BrowserAccessibilityComWin::get_nodeInfo(
   *name_space_id = 0;
   *node_value = SysAllocString(value().c_str());
   *num_children = owner()->PlatformChildCount();
-  *unique_id = -AXPlatformNodeWin::unique_id();
+  *unique_id = -AXPlatformNodeWin::GetUniqueId();
 
   if (owner()->IsDocument()) {
     *node_type = NODETYPE_DOCUMENT;
@@ -1807,8 +1801,6 @@ void BrowserAccessibilityComWin::UpdateStep1ComputeWinAttributes() {
       owner()->GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
 
   win_attributes_->value = GetValue();
-
-  CalculateRelationships();
 }
 
 void BrowserAccessibilityComWin::UpdateStep2ComputeHypertext() {
@@ -1922,7 +1914,7 @@ void BrowserAccessibilityComWin::Destroy() {
 
 void BrowserAccessibilityComWin::Init(ui::AXPlatformNodeDelegate* delegate) {
   owner_ = static_cast<BrowserAccessibilityWin*>(delegate);
-  AXPlatformNodeBase::Init(delegate);
+  AXPlatformNodeWin::Init(delegate);
 }
 
 std::vector<base::string16> BrowserAccessibilityComWin::ComputeTextAttributes()

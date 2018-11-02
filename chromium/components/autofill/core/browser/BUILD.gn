@@ -266,10 +266,6 @@ static_library("browser") {
   }
 
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
-
-  if (is_mac) {
-    libs = [ "AddressBook.framework" ]
-  }
 }
 
 static_library("test_support") {
@@ -279,6 +275,8 @@ static_library("test_support") {
     "autofill_test_utils.h",
     "data_driven_test.cc",
     "data_driven_test.h",
+    "payments/test_payments_client.cc",
+    "payments/test_payments_client.h",
     "suggestion_test_helpers.h",
     "test_address_normalizer.cc",
     "test_address_normalizer.h",
@@ -286,10 +284,22 @@ static_library("test_support") {
     "test_autofill_client.h",
     "test_autofill_clock.cc",
     "test_autofill_clock.h",
+    "test_autofill_download_manager.cc",
+    "test_autofill_download_manager.h",
     "test_autofill_driver.cc",
     "test_autofill_driver.h",
     "test_autofill_external_delegate.cc",
     "test_autofill_external_delegate.h",
+    "test_autofill_manager.cc",
+    "test_autofill_manager.h",
+    "test_autofill_provider.cc",
+    "test_autofill_provider.h",
+    "test_credit_card_save_manager.cc",
+    "test_credit_card_save_manager.h",
+    "test_form_data_importer.cc",
+    "test_form_data_importer.h",
+    "test_form_structure.cc",
+    "test_form_structure.h",
     "test_personal_data_manager.cc",
     "test_personal_data_manager.h",
     "test_region_data_loader.cc",

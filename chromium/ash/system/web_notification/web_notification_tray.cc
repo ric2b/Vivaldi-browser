@@ -6,7 +6,7 @@
 
 #include <memory>
 
-#include "ash/accessibility/accessibility_delegate.h"
+#include "ash/accessibility/accessibility_controller.h"
 #include "ash/message_center/message_center_bubble.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
@@ -122,7 +122,7 @@ class WebNotificationItem : public views::View, public gfx::AnimationDelegate {
     views::View::SetVisible(false);
     set_owned_by_client();
 
-    SetLayoutManager(new views::FillLayout);
+    SetLayoutManager(std::make_unique<views::FillLayout>());
 
     animation_.reset(new gfx::SlideAnimation(this));
     animation_->SetContainer(container);
@@ -363,7 +363,7 @@ bool WebNotificationTray::ShowMessageCenterInternal(bool show_settings,
     // horizontal (i.e. bottom) shelves, anchor to the system tray.
     TrayBackgroundView* anchor_tray = this;
     if (shelf()->IsHorizontalAlignment())
-      anchor_tray = system_tray_;
+      anchor_tray = shelf()->GetSystemTrayAnchor();
 
     message_center_bubble_.reset(new WebNotificationBubbleWrapper(
         this, anchor_tray, message_center_bubble, show_by_click));
@@ -447,7 +447,7 @@ void WebNotificationTray::UpdateAfterShelfAlignmentChange() {
 void WebNotificationTray::AnchorUpdated() {
   if (message_center_bubble()) {
     UpdateClippingWindowBounds();
-    system_tray_->UpdateClippingWindowBounds();
+    shelf()->GetSystemTrayAnchor()->UpdateClippingWindowBounds();
     message_center_bubble()->bubble_view()->UpdateBubble();
     // Should check |message_center_bubble_| again here. Since UpdateBubble
     // above set the bounds of the bubble which will stop the current
@@ -490,7 +490,7 @@ base::string16 WebNotificationTray::GetAccessibleNameForBubble() {
 }
 
 bool WebNotificationTray::ShouldEnableExtraKeyboardAccessibility() {
-  return Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
+  return Shell::Get()->accessibility_controller()->IsSpokenFeedbackEnabled();
 }
 
 void WebNotificationTray::HideBubble(const views::TrayBubbleView* bubble_view) {

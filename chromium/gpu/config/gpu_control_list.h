@@ -149,6 +149,8 @@ class GPU_EXPORT GpuControlList {
     bool direct_rendering;
     Version gpu_count;
 
+    uint32_t test_group;
+
     // Return true if GL_VERSION string does not fit the entry info
     // on GL type and GL version.
     bool GLVersionInfoMismatch(const std::string& gl_version_string) const;
@@ -189,6 +191,8 @@ class GPU_EXPORT GpuControlList {
     const int* features;
     size_t disabled_extension_size;
     const char* const* disabled_extensions;
+    size_t disabled_webgl_extension_size;
+    const char* const* disabled_webgl_extensions;
     size_t cr_bug_size;
     const uint32_t* cr_bugs;
     Conditions conditions;
@@ -198,6 +202,8 @@ class GPU_EXPORT GpuControlList {
     bool Contains(OsType os_type,
                   const std::string& os_version,
                   const GPUInfo& gpu_info) const;
+
+    bool AppliesToTestGroup(uint32_t target_test_group) const;
 
     // Determines whether we needs more gpu info to make the blacklisting
     // decision.  It should only be checked if Contains() returns true.
@@ -223,6 +229,13 @@ class GPU_EXPORT GpuControlList {
   std::set<int32_t> MakeDecision(OsType os,
                                  const std::string& os_version,
                                  const GPUInfo& gpu_info);
+  // Same as the above function, but instead of using the entries with no
+  // "test_group" specified or "test_group" = 0, using the entries with
+  // "test_group" = |target_test_group|.
+  std::set<int32_t> MakeDecision(OsType os,
+                                 const std::string& os_version,
+                                 const GPUInfo& gpu_info,
+                                 uint32_t target_test_group);
 
   // Return the active entry indices from the last MakeDecision() call.
   const std::vector<uint32_t>& GetActiveEntries() const;
@@ -232,19 +245,15 @@ class GPU_EXPORT GpuControlList {
 
   // Collects all disabled extensions.
   std::vector<std::string> GetDisabledExtensions();
+  // Collects all disabled WebGL extensions.
+  std::vector<std::string> GetDisabledWebGLExtensions();
 
-  // Returns the description and bugs from active entries from the last
-  // MakeDecision() call.
-  //
+  // Returns the description and bugs from active entries provided.
   // Each problems has:
   // {
   //    "description": "Your GPU is too old",
   //    "crBugs": [1234],
   // }
-  void GetReasons(base::ListValue* problem_list, const std::string& tag) const;
-  // Similar to the previous function, but instead of using the active entries
-  // from the last MakeDecision() call, which may not happen at all, entries
-  // are provided.
   // The use case is we compute the entries from GPU process and send them to
   // browser process, and call GetReasons() in browser process.
   void GetReasons(base::ListValue* problem_list,
@@ -270,6 +279,11 @@ class GPU_EXPORT GpuControlList {
     control_list_logging_enabled_ = true;
     control_list_logging_name_ = control_list_logging_name;
   }
+
+ protected:
+  // Return false if an entry index goes beyond |total_entries|.
+  static bool AreEntryIndicesValid(const std::vector<uint32_t>& entry_indices,
+                                   size_t total_entries);
 
  private:
   friend class GpuControlListEntryTest;

@@ -128,11 +128,11 @@ Shadow::~Shadow() {}
 
 void Shadow::Render(UiElementRenderer* renderer,
                     const CameraModel& camera_model) const {
-  renderer->DrawShadow(camera_model.view_proj_matrix * world_space_transform(),
-                       size(), x_padding(), y_padding(),
-                       gfx::Tween::FloatValueBetween(depth_, 0.0f, 1.0f),
-                       SK_ColorBLACK, computed_opacity() * kShadowOpacity,
-                       corner_radius());
+  renderer->DrawShadow(
+      camera_model.view_proj_matrix * world_space_transform(), size(),
+      x_padding(), y_padding(),
+      gfx::Tween::FloatValueBetween(depth_, 0.0f, 1.0f), SK_ColorBLACK,
+      computed_opacity() * kShadowOpacity * intensity_, corner_radius());
 }
 
 void Shadow::LayOutChildren() {
@@ -146,6 +146,8 @@ void Shadow::LayOutChildren() {
                                             kXMaxShadowGradientFactor),
               gfx::Tween::FloatValueBetween(depth_, kYMinShadowGradientFactor,
                                             kYMaxShadowGradientFactor));
+  if (children().size() == 1u)
+    set_corner_radius(children().front()->corner_radii().MaxRadius());
 }
 
 Shadow::Renderer::Renderer()

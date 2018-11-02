@@ -4,18 +4,15 @@
 
 #include "gpu/command_buffer/service/gl_state_restorer_impl.h"
 
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/query_manager.h"
 
 namespace gpu {
 
-GLStateRestorerImpl::GLStateRestorerImpl(
-    base::WeakPtr<gles2::GLES2Decoder> decoder)
-    : decoder_(decoder) {
-}
+GLStateRestorerImpl::GLStateRestorerImpl(base::WeakPtr<DecoderContext> decoder)
+    : decoder_(decoder) {}
 
-GLStateRestorerImpl::~GLStateRestorerImpl() {
-}
+GLStateRestorerImpl::~GLStateRestorerImpl() = default;
 
 bool GLStateRestorerImpl::IsInitialized() {
   DCHECK(decoder_.get());

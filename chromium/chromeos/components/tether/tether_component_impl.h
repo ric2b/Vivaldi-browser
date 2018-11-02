@@ -35,8 +35,10 @@ namespace tether {
 
 class AsynchronousShutdownObjectContainer;
 class CrashRecoveryManager;
+class GmsCoreNotificationsStateTrackerImpl;
 class NotificationPresenter;
 class SynchronousShutdownObjectContainer;
+class TetherHostFetcher;
 
 // Initializes the Tether component.
 class TetherComponentImpl : public TetherComponent {
@@ -47,7 +49,10 @@ class TetherComponentImpl : public TetherComponent {
    public:
     static std::unique_ptr<TetherComponent> NewInstance(
         cryptauth::CryptAuthService* cryptauth_service,
+        TetherHostFetcher* tether_host_fetcher,
         NotificationPresenter* notification_presenter,
+        GmsCoreNotificationsStateTrackerImpl*
+            gms_core_notifications_state_tracker,
         PrefService* pref_service,
         NetworkStateHandler* network_state_handler,
         ManagedNetworkConfigurationHandler*
@@ -61,7 +66,10 @@ class TetherComponentImpl : public TetherComponent {
    protected:
     virtual std::unique_ptr<TetherComponent> BuildInstance(
         cryptauth::CryptAuthService* cryptauth_service,
+        TetherHostFetcher* tether_host_fetcher,
         NotificationPresenter* notification_presenter,
+        GmsCoreNotificationsStateTrackerImpl*
+            gms_core_notifications_state_tracker,
         PrefService* pref_service,
         NetworkStateHandler* network_state_handler,
         ManagedNetworkConfigurationHandler*
@@ -76,7 +84,10 @@ class TetherComponentImpl : public TetherComponent {
 
   TetherComponentImpl(
       cryptauth::CryptAuthService* cryptauth_service,
+      TetherHostFetcher* tether_host_fetcher,
       NotificationPresenter* notification_presenter,
+      GmsCoreNotificationsStateTrackerImpl*
+          gms_core_notifications_state_tracker,
       PrefService* pref_service,
       NetworkStateHandler* network_state_handler,
       ManagedNetworkConfigurationHandler* managed_network_configuration_handler,
@@ -86,7 +97,7 @@ class TetherComponentImpl : public TetherComponent {
   ~TetherComponentImpl() override;
 
   // TetherComponent:
-  void RequestShutdown() override;
+  void RequestShutdown(const ShutdownReason& shutdown_reason) override;
 
  private:
   void OnPreCrashStateRestored();
@@ -100,6 +111,7 @@ class TetherComponentImpl : public TetherComponent {
   std::unique_ptr<CrashRecoveryManager> crash_recovery_manager_;
 
   bool has_shutdown_been_requested_ = false;
+  ShutdownReason shutdown_reason_;
 
   base::WeakPtrFactory<TetherComponentImpl> weak_ptr_factory_;
 

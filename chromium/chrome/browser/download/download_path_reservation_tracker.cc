@@ -51,6 +51,12 @@ const size_t kTruncatedNameLengthLowerbound = 5;
 // possible filename.
 const size_t kIntermediateNameSuffixLength = sizeof(".crdownload") - 1;
 
+#if defined(OS_WIN)
+// On windows, zone identifier is appended to the downloaded file name during
+// annotation. That increases the length of the final target path.
+const size_t kZoneIdentifierLength = sizeof(":Zone.Identifier") - 1;
+#endif  // defined(OS_WIN)
+
 // Map of download path reservations. Each reserved path is associated with a
 // ReservationKey=DownloadItem*. This object is destroyed in |Revoke()| when
 // there are no more reservations.
@@ -172,8 +178,15 @@ bool CreateUniqueFilename(int max_path_component_length, base::FilePath* path) {
     // If the name length limit is available (max_length != -1), and the
     // the current name exceeds the limit, truncate.
     if (max_path_component_length != -1) {
+#if defined(OS_WIN)
+      int limit =
+          max_path_component_length -
+          std::max(kIntermediateNameSuffixLength, kZoneIdentifierLength) -
+          suffix.size();
+#else
       int limit = max_path_component_length - kIntermediateNameSuffixLength -
                   suffix.size();
+#endif  // defined(OS_WIN)
       // If truncation failed, give up uniquification.
       if (limit <= 0 || !TruncateFileName(&path_to_check, limit))
         break;
@@ -220,7 +233,12 @@ PathValidationResult ValidatePathAndResolveConflicts(
   // Check the limit of file name length if it could be obtained. When the
   // suggested name exceeds the limit, truncate or prompt the user.
   if (max_path_component_length != -1) {
+#if defined(OS_WIN)
+    int limit = max_path_component_length -
+                std::max(kIntermediateNameSuffixLength, kZoneIdentifierLength);
+#else
     int limit = max_path_component_length - kIntermediateNameSuffixLength;
+#endif  // defined(OS_WIN)
     if (limit <= 0 || !TruncateFileName(target_path, limit))
       return PathValidationResult::NAME_TOO_LONG;
   }

@@ -29,15 +29,4 @@ ImporterIE7PasswordInfo::~ImporterIE7PasswordInfo() {
 ImporterIE7PasswordInfo& ImporterIE7PasswordInfo::operator=(
     const ImporterIE7PasswordInfo& other) = default;
 
-ImportConfig::ImportConfig()
-    : imported_items(0) {
-}
-
-ImportConfig::~ImportConfig() {
-  // (Attempt to) wipe parameter string
-  for (std::vector<base::string16>::iterator it= arguments.begin(); it != arguments.end(); it++){
-    it->clear();
-  }
-}
-
 }  // namespace importer

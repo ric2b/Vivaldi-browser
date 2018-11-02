@@ -8,8 +8,9 @@
 
 #include <utility>
 
+#include "base/files/scoped_temp_dir.h"
 #include "base/memory/ref_counted.h"
-#include "base/test/test_simple_task_runner.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/client_policy_controller.h"
@@ -59,7 +60,7 @@ class GetPagesTaskTest : public testing::Test {
   }
 
  private:
-  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
   OfflinePageMetadataStoreTestUtil store_test_util_;
   OfflinePageItemGenerator generator_;
@@ -70,7 +71,7 @@ class GetPagesTaskTest : public testing::Test {
 };
 
 GetPagesTaskTest::GetPagesTaskTest()
-    : task_runner_(new base::TestSimpleTaskRunner),
+    : task_runner_(new base::TestMockTimeTaskRunner),
       task_runner_handle_(task_runner_),
       store_test_util_(task_runner_),
       runner_(task_runner_) {}
@@ -300,6 +301,39 @@ TEST_F(GetPagesTaskTest, GetPagesRemovedOnCacheReset) {
   result_set.insert(read_result().begin(), read_result().end());
   EXPECT_EQ(1UL, result_set.size());
   EXPECT_EQ(1UL, result_set.count(cct_item));
+}
+
+TEST_F(GetPagesTaskTest, SelectItemsForUpgrade) {
+  base::Time now = base::Time::Now();
+  std::vector<int> remaining_attempts = {3, 2, 2, 1};
+  std::vector<base::Time> creation_times = {
+      now, now, now - base::TimeDelta::FromDays(1), now};
+
+  // |expected_items| are items expected to be selected by the task.
+  std::vector<OfflinePageItem> expected_items;
+
+  generator()->SetNamespace(kDownloadNamespace);
+  for (size_t i = 0; i < remaining_attempts.size(); ++i) {
+    OfflinePageItem selected_item = generator()->CreateItem();
+    selected_item.upgrade_attempt = remaining_attempts[i];
+    selected_item.creation_time = creation_times[i];
+    store_util()->InsertItem(selected_item);
+    // This selected_item is expected in return and in this position.
+    expected_items.push_back(selected_item);
+
+    // Should be skipped (no more upgrade attempts available).
+    OfflinePageItem non_selected_item = generator()->CreateItem();
+    non_selected_item.upgrade_attempt = 0;
+    non_selected_item.creation_time = creation_times[i];
+    store_util()->InsertItem(non_selected_item);
+  }
+
+  runner()->RunTask(GetPagesTask::CreateTaskSelectingItemsMarkedForUpgrade(
+      store(), get_pages_callback()));
+
+  ASSERT_TRUE(expected_items.size() == read_result().size());
+  for (size_t i = 0; i < expected_items.size(); ++i)
+    EXPECT_EQ(expected_items[i], read_result()[i]);
 }
 
 }  // namespace offline_pages

@@ -30,6 +30,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.parameter.SkipCommandLineParameterization;
+import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.net.test.util.TestWebServer;
 import org.chromium.ui.display.DisplayAndroid;
@@ -459,8 +460,8 @@ public class AndroidScrollIntegrationTest {
         // Make sure we can't hit these values simply as a result of scrolling.
         assert (maxScrollXPix % dragStepSize) != 0;
         assert (maxScrollYPix % dragStepSize) != 0;
-        final int maxScrollXCss = (int) Math.floor(maxScrollXPix / deviceDIPScale);
-        final int maxScrollYCss = (int) Math.floor(maxScrollYPix / deviceDIPScale);
+        final int maxScrollXCss = (int) Math.round(maxScrollXPix / deviceDIPScale);
+        final int maxScrollYCss = (int) Math.round(maxScrollYPix / deviceDIPScale);
 
         setMaxScrollOnMainSync(testContainerView, maxScrollXPix, maxScrollYPix);
 
@@ -742,8 +743,10 @@ public class AndroidScrollIntegrationTest {
                 + "</div>");
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(
-                () -> testContainerView.getContentViewCore().addGestureStateListener(
-                        testGestureStateListener));
+                ()
+                        -> GestureListenerManager
+                                   .fromWebContents(testContainerView.getWebContents())
+                                   .addListener(testGestureStateListener));
         final CallbackHelper onScrollUpdateGestureConsumedHelper =
                 testGestureStateListener.getOnScrollUpdateGestureConsumedHelper();
 

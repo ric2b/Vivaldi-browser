@@ -66,7 +66,6 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "public/web/WebConsoleMessage.h"
-#include "public/web/WebDevToolsAgent.h"
 #include "public/web/WebSettings.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerContextClient.h"
 
@@ -131,17 +130,17 @@ void WebEmbeddedWorkerImpl::StartWorkerContext(
   //
   // https://crbug.com/590714
   KURL script_url = worker_start_data_.script_url;
-  worker_start_data_.address_space = kWebAddressSpacePublic;
+  worker_start_data_.address_space = mojom::IPAddressSpace::kPublic;
   if (NetworkUtils::IsReservedIPAddress(script_url.Host()))
-    worker_start_data_.address_space = kWebAddressSpacePrivate;
+    worker_start_data_.address_space = mojom::IPAddressSpace::kPrivate;
   if (SecurityOrigin::Create(script_url)->IsLocalhost())
-    worker_start_data_.address_space = kWebAddressSpaceLocal;
+    worker_start_data_.address_space = mojom::IPAddressSpace::kLocal;
 
   if (data.pause_after_download_mode ==
       WebEmbeddedWorkerStartData::kPauseAfterDownload)
     pause_after_download_state_ = kDoPauseAfterDownload;
 
-  instrumentation_token_ = data.instrumentation_token;
+  devtools_frame_token_ = data.devtools_frame_token;
   shadow_page_ = std::make_unique<WorkerShadowPage>(this);
   WebSettings* settings = shadow_page_->GetSettings();
 
@@ -198,39 +197,6 @@ void WebEmbeddedWorkerImpl::ResumeAfterDownload() {
   StartWorkerThread();
 }
 
-void WebEmbeddedWorkerImpl::AttachDevTools(int session_id) {
-  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
-  if (devtools_agent)
-    devtools_agent->Attach(session_id);
-}
-
-void WebEmbeddedWorkerImpl::ReattachDevTools(int session_id,
-                                             const WebString& saved_state) {
-  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
-  if (devtools_agent)
-    devtools_agent->Reattach(session_id, saved_state);
-  ResumeStartup();
-}
-
-void WebEmbeddedWorkerImpl::DetachDevTools(int session_id) {
-  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
-  if (devtools_agent)
-    devtools_agent->Detach(session_id);
-}
-
-void WebEmbeddedWorkerImpl::DispatchDevToolsMessage(int session_id,
-                                                    int call_id,
-                                                    const WebString& method,
-                                                    const WebString& message) {
-  if (asked_to_terminate_)
-    return;
-  WebDevToolsAgent* devtools_agent = shadow_page_->DevToolsAgent();
-  if (devtools_agent) {
-    devtools_agent->DispatchOnInspectorBackend(session_id, call_id, method,
-                                               message);
-  }
-}
-
 void WebEmbeddedWorkerImpl::AddMessageToConsole(
     const WebConsoleMessage& message) {
   MessageLevel web_core_message_level;
@@ -256,6 +222,12 @@ void WebEmbeddedWorkerImpl::AddMessageToConsole(
       kOtherMessageSource, web_core_message_level, message.text,
       SourceLocation::Create(message.url, message.line_number,
                              message.column_number, nullptr)));
+}
+
+void WebEmbeddedWorkerImpl::BindDevToolsAgent(
+    mojo::ScopedInterfaceEndpointHandle devtools_agent_request) {
+  shadow_page_->BindDevToolsAgent(mojom::blink::DevToolsAgentAssociatedRequest(
+      std::move(devtools_agent_request)));
 }
 
 void WebEmbeddedWorkerImpl::PostMessageToPageInspector(int session_id,
@@ -302,19 +274,11 @@ void WebEmbeddedWorkerImpl::OnShadowPageInitialized() {
       WebURLRequest::kRequestContextServiceWorker,
       network::mojom::FetchRequestMode::kSameOrigin,
       network::mojom::FetchCredentialsMode::kSameOrigin,
-      worker_start_data_.address_space, WTF::Closure(),
+      worker_start_data_.address_space, base::OnceClosure(),
       Bind(&WebEmbeddedWorkerImpl::OnScriptLoaderFinished,
            WTF::Unretained(this)));
   // Do nothing here since onScriptLoaderFinished() might have been already
   // invoked and |this| might have been deleted at this point.
-}
-
-void WebEmbeddedWorkerImpl::SendProtocolMessage(int session_id,
-                                                int call_id,
-                                                const WebString& message,
-                                                const WebString& state) {
-  worker_context_client_->SendDevToolsMessage(session_id, call_id, message,
-                                              state);
 }
 
 void WebEmbeddedWorkerImpl::ResumeStartup() {
@@ -324,13 +288,8 @@ void WebEmbeddedWorkerImpl::ResumeStartup() {
     shadow_page_->Initialize(worker_start_data_.script_url);
 }
 
-WebDevToolsAgentClient::WebKitClientMessageLoop*
-WebEmbeddedWorkerImpl::CreateClientMessageLoop() {
-  return worker_context_client_->CreateDevToolsMessageLoop();
-}
-
-const WebString& WebEmbeddedWorkerImpl::GetInstrumentationToken() {
-  return instrumentation_token_;
+const WebString& WebEmbeddedWorkerImpl::GetDevToolsFrameToken() {
+  return devtools_frame_token_;
 }
 
 void WebEmbeddedWorkerImpl::OnScriptLoaderFinished() {
@@ -359,7 +318,7 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
 
   // FIXME: this document's origin is pristine and without any extra privileges.
   // (crbug.com/254993)
-  SecurityOrigin* starter_origin = document->GetSecurityOrigin();
+  const SecurityOrigin* starter_origin = document->GetSecurityOrigin();
 
   WorkerClients* worker_clients = WorkerClients::Create();
   ProvideIndexedDBClientToWorker(worker_clients,
@@ -373,10 +332,10 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   ProvideServiceWorkerContainerClientToWorker(
       worker_clients, worker_context_client_->CreateServiceWorkerProvider());
 
-  if (RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
-    std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
-        worker_context_client_->CreateServiceWorkerFetchContext();
-    DCHECK(web_worker_fetch_context);
+  std::unique_ptr<WebWorkerFetchContext> web_worker_fetch_context =
+      worker_context_client_->CreateServiceWorkerFetchContext();
+  // |web_worker_fetch_context| is null in some unit tests.
+  if (web_worker_fetch_context) {
     ProvideWorkerFetchContextToWorker(worker_clients,
                                       std::move(web_worker_fetch_context));
   }
@@ -385,6 +344,9 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
       std::make_unique<WorkerSettings>(document->GetSettings());
 
   std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params;
+  String source_code;
+  std::unique_ptr<Vector<char>> cached_meta_data;
+
   // |main_script_loader_| isn't created if the InstalledScriptsManager had the
   // script.
   if (main_script_loader_) {
@@ -395,14 +357,14 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
         main_script_loader_->GetReferrerPolicy());
     global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, worker_start_data_.user_agent,
-        main_script_loader_->SourceText(),
-        main_script_loader_->ReleaseCachedMetadata(),
         document->GetContentSecurityPolicy()->Headers().get(),
         document->GetReferrerPolicy(), starter_origin, worker_clients,
         main_script_loader_->ResponseAddressSpace(),
         main_script_loader_->OriginTrialTokens(), std::move(worker_settings),
         static_cast<V8CacheOptions>(worker_start_data_.v8_cache_options),
         std::move(interface_provider_info_));
+    source_code = main_script_loader_->SourceText();
+    cached_meta_data = main_script_loader_->ReleaseCachedMetadata();
     main_script_loader_ = nullptr;
   } else {
     // ContentSecurityPolicy and ReferrerPolicy are applied to |document| at
@@ -410,7 +372,6 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
     // script.
     global_scope_creation_params = std::make_unique<GlobalScopeCreationParams>(
         worker_start_data_.script_url, worker_start_data_.user_agent,
-        "" /* SourceText */, nullptr /* CachedMetadata */,
         nullptr /* ContentSecurityPolicy */, kReferrerPolicyDefault,
         starter_origin, worker_clients, worker_start_data_.address_space,
         nullptr /* OriginTrialTokens */, std::move(worker_settings),
@@ -434,12 +395,16 @@ void WebEmbeddedWorkerImpl::StartWorkerThread() {
   worker_thread_->Start(
       std::move(global_scope_creation_params),
       WorkerBackingThreadStartupData::CreateDefault(),
-      std::make_unique<GlobalScopeInspectorCreationParams>(
-          worker_inspector_proxy_->ShouldPauseOnWorkerStart(document)),
+      worker_inspector_proxy_->ShouldPauseOnWorkerStart(document),
       ParentFrameTaskRunners::Create());
 
   worker_inspector_proxy_->WorkerThreadCreated(document, worker_thread_.get(),
                                                worker_start_data_.script_url);
+
+  // TODO(nhiroki): Support module workers (https://crbug.com/680046).
+  worker_thread_->EvaluateClassicScript(
+      worker_start_data_.script_url, source_code, std::move(cached_meta_data),
+      v8_inspector::V8StackTraceId());
 }
 
 }  // namespace blink

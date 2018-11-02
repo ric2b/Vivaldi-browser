@@ -485,11 +485,6 @@ void WebMediaPlayerMS::Pause() {
   paused_ = true;
 }
 
-bool WebMediaPlayerMS::SupportsSave() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  return false;
-}
-
 void WebMediaPlayerMS::Seek(double seconds) {
   DCHECK(thread_checker_.CalledOnValidThread());
 }
@@ -645,6 +640,11 @@ void WebMediaPlayerMS::Paint(blink::WebCanvas* canvas,
   const gfx::RectF dest_rect(rect.x, rect.y, rect.width, rect.height);
   video_renderer_.Paint(frame, canvas, dest_rect, flags, video_rotation_,
                         context_3d);
+}
+
+bool WebMediaPlayerMS::DidGetOpaqueResponseFromServiceWorker() const {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return false;
 }
 
 bool WebMediaPlayerMS::HasSingleSecurityOrigin() const {

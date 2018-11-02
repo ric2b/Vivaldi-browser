@@ -134,6 +134,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_OK_GOT_IT" desc="Label of a button by which the user confirms that they read and understood the information or instructions. Used in multiple contexts. [CHAR-LIMIT=20]">
         OK, got it
       </message>
+      <message name="IDS_GOT_IT" desc="Label of a button by which the user confirms that they read and understood the information or instructions. Used in multiple contexts. [CHAR-LIMIT=20]">
+        Got it
+      </message>
       <message name="IDS_CANCEL" desc="Label for a cancel button. Used in multiple contexts. [CHAR-LIMIT=20]">
         Cancel
       </message>
@@ -305,12 +308,22 @@ CHAR-LIMIT guidelines:
       <message name="IDS_PREFS_SEARCH_ENGINE" desc="Title for Search Engine preferences. [CHAR-LIMIT=32]">
         Search engine
       </message>
-      <message name="IDS_SEARCH_ENGINE_LOCATION_ALLOWED" desc="The text of a link displayed when location permission for a particular search engine is allowed.">
+      <message name="IDS_SEARCH_ENGINE_LOCATION_AND_NOTIFICATIONS_ALLOWED" desc="The text of a link displayed when location and notifications permissions for a particular search engine are allowed.">
+        Location and notifications are allowed
+      </message>
+      <message name="IDS_SEARCH_ENGINE_LOCATION_ALLOWED" desc="The text of a link displayed when the location permission for a particular search engine is allowed.">
         Location is allowed
       </message>
-      <message name="IDS_SEARCH_ENGINE_LOCATION_BLOCKED" desc="The text of a link displayed when location permission for a particular search engine is blocked.">
-        Location is blocked
+      <message name="IDS_SEARCH_ENGINE_NOTIFICATIONS_ALLOWED" desc="The text of a link displayed when the notifications permission for a particular search engine is allowed.">
+        Notifications are allowed
       </message>
+      <message name="IDS_SEARCH_ENGINE_NOTIFICATIONS_ALLOWED_SYSTEM_LOCATION_DISABLED" desc="The text of a link displayed when the location and notifications permissions for a particular search engine are allowed but system location location is turned off. Contains a link to the settings menu to change it.">
+        Notifications are allowed. Location is off for this device.
+      </message>
+      <message name="IDS_SEARCH_ENGINE_SYSTEM_LOCATION_DISABLED" desc="The text of a link displayed when the user has granted geolocation to a particular search engine but system location is turned off. Contains a link to the settings menu to change it.">
+        Location is off; turn it on in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
+      </message>
+
       <message name="IDS_SEARCH_ENGINE_RECENTLY_VISITED" desc="Header for the list of recently visited search engines.">
         Recently visited
       </message>
@@ -473,6 +486,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_PASSWORD_ENTRY_EDITOR_SET_LOCK_SCREEN" desc='Text prompting user to set device lock in order to view/copy passwords'>
         To view or copy your password here, set screen lock on this device.
       </message>
+      <message name="IDS_PASSWORD_EXPORT_SET_LOCK_SCREEN" desc="Text prompting user to set device lock in order to be able to export passwords">
+        Turn on screen lock in Settings to export your passwords from this device
+      </message>
       <message name="IDS_PASSWORD_GENERATION_POPUP_CONTENT_DESCRIPTION" desc="The text announced by the screen reader when the password generation popup is shown.">
         Showing password generation popup
       </message>
@@ -482,6 +498,9 @@ CHAR-LIMIT guidelines:
       <message name="IDS_SAVE_PASSWORD_PREFERENCES_EXPORT_ACTION_DESCRIPTION" desc="The description of a menu item to trigger exporting passwords from the password settings.">
         Export passwords stored with Chrome
       </message>
+      <message name="IDS_SETTINGS_PASSWORDS_EXPORT_DESCRIPTION" desc="Text shown to the user who initiated exporting passwords, as a warning before any passwords have been exported.">
+        Your passwords will be visible to anyone who can see the exported file.
+      </message>
 
       <!-- Lock Screen Fragment -->
       <message name="IDS_LOCKSCREEN_DESCRIPTION_COPY" desc="When a user attempts to copy a password for a particular website into clipboard in Chrome's settings, Chrome launches a lock screen to verify the user's identity and displays the following explanation.">
@@ -489,6 +508,9 @@ CHAR-LIMIT guidelines:
       </message>
       <message name="IDS_LOCKSCREEN_DESCRIPTION_VIEW" desc="When a user attempts to view a password for a particular website in Chrome's settings, Chrome launches a lock screen to verify the user's identity and displays the following explanation.">
         Unlock to view your password
+      </message>
+      <message name="IDS_LOCKSCREEN_DESCRIPTION_EXPORT" desc="When a user attempts to export saved passwords in Chrome's settings, Chrome launches a lock screen to verify the user's identity and displays the following explanation.">
+        Unlock to export your passwords
       </message>
 
       <!-- Homepage preferences -->
@@ -709,8 +731,8 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_READER_FOR_ACCESSIBILITY_TITLE" desc="Title of preference that allows the user to use simplified view on any articles, even if the page is mobile-friendly. Simplified view is the new user-facing name for Reader Mode, which extracts the content of an article and removes clutter from a web page and puts the result in a easier-to-read format.">
         Simplified view
       </message>
-      <message name="IDS_READER_FOR_ACCESSIBILITY_SUMMARY" desc="Summary of preference that allows the user to use simplified view on any articles, even if the page is mobile-friendly.">
-        Enable simplified view on all articles
+      <message name="IDS_READER_FOR_ACCESSIBILITY_SUMMARY" desc="Summary of preference that allows the user to use simplified view on any supported articles, even if the page is mobile-friendly.">
+        Offer to show articles in simplified view, when supported
       </message>
 
       <!-- Site settings -->
@@ -945,9 +967,6 @@ Your Google account may have other forms of browsing history like searches and a
       <message name="IDS_GEOLOCATION_PERMISSION_TITLE" desc="Title for the permission of accessing the current location of a device [CHAR-LIMIT=32]">
         Location access
       </message>
-      <message name="IDS_ANDROID_LOCATION_OFF" desc="Text in the search engine picker dialog, explaining to the user that the location service in Android is turned off. Contains a link to the settings menu to change it.">
-        Turn on location in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
-      </message>
       <message name="IDS_ANDROID_PERMISSION_OFF_PLURAL" desc="Text at the top of the Website list, explaining to the user that multiple permissions, such as the location service, are turned off. Contains a link to the settings menu to change it.">
         Turn on permissions for Chrome in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
@@ -955,10 +974,10 @@ Your Google account may have other forms of browsing history like searches and a
         Turn on permission for Chrome in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_ANDROID_LOCATION_OFF_GLOBALLY" desc="The message to show when Location has been turned off globally in Android. Contains a link to the settings menu to enable location.">
-        Location access is <ph name="BEGIN_LINK">&lt;link&gt;</ph>turned off for this device<ph name="END_LINK">&lt;/link&gt;</ph>.
+        Location access is off for this device. Turn it on in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <message name="IDS_ANDROID_LOCATION_ALSO_OFF_GLOBALLY" desc="The additional message to show when Location has not just been turned off for Chrome but also globally in Android. Contains a link to the settings menu to enable location.">
-        Location access is also <ph name="BEGIN_LINK">&lt;link&gt;</ph>turned off for this device<ph name="END_LINK">&lt;/link&gt;</ph>.
+        Location access is also off for this device. Turn it on in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Android Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
 
       <!-- Camera and microphone preferences -->
@@ -1136,6 +1155,17 @@ To obtain new licenses, connect to the internet and play your downloaded content
       </message>
       <message name="IDS_DATA_REDUCTION_PROMO_SNACKBAR_BUTTON" desc="Text to be displayed in the data reduction promo snackbar view button that takes the user to the data reduction settings page">
         View
+      </message>
+
+      <!-- Downloads preferences -->
+      <message name="IDS_DOWNLOAD_LOCATION_TITLE" desc="Title for 'Downloads location' preference that changes the default device directory that stores downloaded items.">
+        Location
+      </message>
+      <message name="IDS_DOWNLOADS_PRIMARY_STORAGE" desc="Option for setting the default download location to be internal storage (ie. on the device itself).">
+        Primary storage
+      </message>
+      <message name="IDS_DOWNLOADS_SECONDARY_STORAGE" desc="Option for setting the default download location to be external storage (ie. an SD card).">
+        Secondary storage
       </message>
 
       <!-- About Chrome preferences -->
@@ -1368,8 +1398,8 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_SYNC_SETTINGS" desc="Title for preference which enables sync'ing of settings. [CHAR-LIMT=32]">
         Settings
       </message>
-      <message name="IDS_PAYMENTS_INTEGRATION" desc="Title for preference which enables import of Google Payments data for Autofill.">
-        Cards and addresses using Google Payments
+      <message name="IDS_PAYMENTS_INTEGRATION" desc="Title for preference which enables import of Google Pay data for Autofill. 'Google Pay' should not be translated as it is the product name.">
+        Cards and addresses using Google Pay
       </message>
       <message name="IDS_SYNC_ENCRYPTION" desc="Preference category name for sync encryption. [CHAR-LIMT=32]">
         Encryption
@@ -1974,6 +2004,12 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_DOWNLOAD_NOTIFICATION_PENDING" desc="Download notification to be displayed when a download has been scheduled but has not started being fetched from the network.">
         Download pending…
       </message>
+      <message name="IDS_DOWNLOAD_NOTIFICATION_PENDING_NETWORK" desc="Download notification to be displayed when a download has been scheduled but has not started being fetched from the network because there is no network connection.">
+        Waiting for network…
+      </message>
+      <message name="IDS_DOWNLOAD_NOTIFICATION_PENDING_ANOTHER_DOWNLOAD" desc="Download notification to be displayed when a download has been scheduled but has not started being fetched from the network because another download is currently being downloaded.">
+        Waiting for another download…
+      </message>
       <message name="IDS_DOWNLOAD_CANT_OPEN_FILE" desc="Toast that appears when a downloaded file can't be opened.">
         Can’t open file
       </message>
@@ -2406,6 +2442,9 @@ To obtain new licenses, connect to the internet and play your downloaded content
       <message name="IDS_NTP_ALL_DISMISSED_REFRESH" desc="Text label for button to refresh the New Tab Page when all suggested content has been dismissed. [CHAR-LIMIT=20]">
         Refresh
       </message>
+      <message name="IDS_CONTEXTUAL_SUGGESTIONS_TITLE" desc="The title for a section containing a list of article suggestions based on the user's current webpage. The title tells users that the list contains articles viewed by people who also viewed the current webpage.">
+        People also viewed
+      </message>
 
       <!-- Toolbar button strings -->
       <message name="IDS_OPEN_TABS" desc="Text for button to enter the tab switcher and show tabs that are open on this device">
@@ -2610,17 +2649,6 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Offline
       </message>
 
-      <!-- Omnibox Placeholder Experiment -->
-      <message name="IDS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website.">
-        Search or type web address
-      </message>
-      <message name="IDS_TYPE_WHAT_YOU_ARE_LOOKING_FOR" desc="Prompt to enter what user is looking for into the text field that will either perform web searches or navigate to a website.">
-        Type what you’re looking for
-      </message>
-      <message name="IDS_FIND_NEWS_RECIPES_WEATHER" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website, with suggestions of finding news, recipes or weather.">
-         Find news, recipes, weather...
-      </message>
-
       <!-- Voice search -->
       <message name="IDS_VOICE_SEARCH_ERROR" desc="Toast when the voice search activity couldn't be started. [CHAR-LIMIT=40]">
         No enabled voice search available
@@ -2651,7 +2679,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
         URL copied.
       </message>
       <message name="IDS_CHROME_HOME_SURVEY_PROMPT" desc="Message shown that invites the user to take a survey about Chrome. 'Help' and 'improve' are imperative verbs. 'Take survey' is a tappable link. When tapped, a survey about Chrome opens.">
-        Help improve Chrome. <ph name="BEGIN_LINK">&lt;LINK&gt;</ph>Take survey.<ph name="END_LINK">&lt;/LINK&gt;</ph>
+        Help improve Chrome. <ph name="BEGIN_LINK">&lt;LINK&gt;</ph>Take survey<ph name="END_LINK">&lt;/LINK&gt;</ph>
       </message>
 
       <!-- Accessibility -->
@@ -2746,7 +2774,7 @@ To obtain new licenses, connect to the internet and play your downloaded content
         Close navigation drawer
       </message>
       <message name="IDS_ACCESSIBILITY_LIST_MENU_BUTTON" desc="Content description for the button that shows option menu for a list item.">
-        Options
+        <ph name="NAME_OF_LIST_ITEM">%1$s<ex>Movie Title</ex></ph> Options
       </message>
       <message name="IDS_ACCESSIBILITY_TOOLBAR_SCREEN_POSITION" desc="Accessibility announcement to inform users about a toolbar's location.">
         Options available near top of the screen
@@ -3025,6 +3053,9 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_WEBAPK_OFFLINE_DIALOG" desc="The message on the dialog shown when launching a WebAPK needs network connection.">
         To use <ph name="APP_NAME">%1$s<ex>PWA List</ex></ph> for the first time, please connect to the internet.
       </message>
+      <message name="IDS_WEBAPK_NOTIFICATION_CHANNEL_NAME" desc="The visible name of the notification channel of WebAPKs on Android O+.">
+        General
+      </message>
       <message name="IDS_WEBAPP_CANNOT_CONNECT_TO_SITE" desc="The message on the dialog shown when launching a WebAPK or a TWA with network failure.">
         Can't connect to the site
       </message>
@@ -3223,6 +3254,15 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_BOTTOM_SHEET_APP_MENU_IPH" desc="Label for in-product help that appears in the Chrome three-dot menu (navigation menu). In previous versions of Chrome, the menu contained Downloads, Bookmarks, and History. In this version of Chrome, these three items have been moved out of the menu. Tapping this help text will show the user where they can find these three items. 'Downloads', 'Bookmarks', and 'History' should use the same translations as in Chrome settings and menu items. The tone of this string is that of the user asking Chrome, 'where are these 3 things?'">
         Where are downloads, bookmarks, and history?
       </message>
+      <message name="IDS_CHROME_HOME_MENU_BOOKMARKS_HELP_BUBBLE" desc="Help text. Shown after a user taps the ‘Bookmarks’ item in the three-dot menu of mobile Chrome. Context: In Chrome Hub, ‘Bookmarks’ is moving from the three-dot menu to a bottom navigation bar, which can be accessed by swiping the address bar up. This help text notifies the user of the change. Please ensure ‘Bookmarks’ in this message matches the ‘Bookmarks’ menu item and button label.">
+        “Bookmarks” is moving. Next time, pull the address bar up.
+      </message>
+      <message name="IDS_CHROME_HOME_MENU_DOWNLOADS_HELP_BUBBLE" desc="Help text. Shown after a user taps the ‘Downloads’ item in the three-dot menu of mobile Chrome. Context: In Chrome Hub, ‘Downloads’ is moving from the three-dot menu to a bottom navigation bar, which can be accessed by swiping the address bar up. This help text notifies the user of the change. Please ensure ‘Downloads’ in this message matches the ‘Downloads’ menu item and button label.">
+        “Downloads” is moving. Next time, pull the address bar up.
+      </message>
+      <message name="IDS_CHROME_HOME_MENU_HISTORY_HELP_BUBBLE" desc="Help text. Shown after a user taps the ‘History’ item in the three-dot menu of mobile Chrome. Context: In Chrome Hub, ‘History’ is moving from the three-dot menu to a bottom navigation bar, which can be accessed by swiping the address bar up. This help text notifies the user of the change. Please ensure ‘History’ in this message matches the ‘History’ menu item and button label.">
+        “History” is moving. Next time, pull the address bar up.
+      </message>
       <message name="IDS_CHROME_HOME_PROMO_DIALOG_MESSAGE" desc="Dialog body text. Describes the new features available in the new Chrome. “Swipe up” (imperative) refers to the gesture on a mobile phone. “access” is a noun. “Popular” modifies both “sites and articles.” “Downloads” refers to items the user has downloaded in Chrome.">
         Swipe up for easy access to popular sites and articles, downloads, and more
       </message>
@@ -3250,6 +3290,9 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
       <message name="IDS_CHROME_HOME_OPT_OUT_SNACKBAR_ACTION" desc="Action button that appears on a snackbar after the user has turned off the new Chrome.">
         Take survey
       </message>
+      <message name="IDS_BOTTOM_SHEET_ACCESSIBILITY_TOOLBAR" desc="Accessibilty string read when the bottom toolbar, containing the adddress bar and some buttons, is focused. Informs users that they can pull up on the address bar to see their bookmarks and other content.">
+        Address bar. Swipe up to see downloads, bookmarks, and history.
+      </message>
 
       <!-- Photo picker -->
       <message name="IDS_PHOTO_PICKER_SELECT_IMAGES" desc="The label in the title bar of the Photo Picker dialog, suggesting which action the user should take.">
@@ -3269,7 +3312,7 @@ You must have Bluetooth and Location turned on in order to use the Physical Web.
 
       <!-- Interventions -->
       <message name="IDS_REDIRECT_BLOCKED_MESSAGE" desc="The message stating that a redirect (noun) was blocked on this page. This will be followed on a separate line with the address the user was being redirected to.">
-         Chrome stopped this site from taking you to
+         Redirect blocked to site:
       </message>
       <message name="IDS_REDIRECT_BLOCKED_SHORT_MESSAGE" desc="The short message stating that a redirect (noun) was blocked on this page.">
          Redirect blocked.

@@ -11,7 +11,7 @@
         "options": [
             {
                 "domain": "Browser",
-                "include": ["getVersion"]
+                "include": ["getVersion", "getHistograms", "getHistogram"]
             },
             {
                 "domain": "DOM",
@@ -40,7 +40,7 @@
             },
             {
                 "domain": "Network",
-                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "setUserAgentOverride", "setExtraHTTPHeaders", "canEmulateNetworkConditions", "emulateNetworkConditions", "setBypassServiceWorker", "setRequestInterception", "continueInterceptedRequest", "getResponseBodyForInterception"],
+                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "setUserAgentOverride", "setExtraHTTPHeaders", "canEmulateNetworkConditions", "emulateNetworkConditions", "setBypassServiceWorker", "setRequestInterception", "continueInterceptedRequest", "getResponseBodyForInterception", "setCacheDisabled"],
                 "include_events": ["requestWillBeSent", "responseReceived", "loadingFinished", "loadingFailed", "requestIntercepted"],
                 "async": ["clearBrowserCookies", "clearBrowserCache", "getCookies", "getAllCookies", "deleteCookies", "setCookie", "setCookies", "continueInterceptedRequest", "getResponseBodyForInterception"]
             },
@@ -48,9 +48,9 @@
                 "domain": "Page",
                 "include": ["enable", "disable", "reload", "navigate", "stopLoading", "getNavigationHistory", "navigateToHistoryEntry", "captureScreenshot",
                     "startScreencast", "stopScreencast", "screencastFrameAck", "handleJavaScriptDialog", "setColorPickerEnabled", "requestAppBanner",
-                    "printToPDF", "bringToFront", "setDownloadBehavior"],
+                    "printToPDF", "bringToFront", "setDownloadBehavior", "getAppManifest", "crash"],
                 "include_events": ["colorPicked", "interstitialShown", "interstitialHidden", "javascriptDialogOpening", "javascriptDialogClosed", "screencastVisibilityChanged", "screencastFrame"],
-                "async": ["captureScreenshot", "printToPDF", "navigate"]
+                "async": ["captureScreenshot", "printToPDF", "navigate", "getAppManifest"]
             },
             {
                 "domain": "Runtime",
@@ -69,7 +69,7 @@
             },
             {
                 "domain": "Storage",
-                "async": ["getUsageAndQuota"]
+                "async": ["getUsageAndQuota", "clearDataForOrigin"]
             },
             {
                 "domain": "SystemInfo",

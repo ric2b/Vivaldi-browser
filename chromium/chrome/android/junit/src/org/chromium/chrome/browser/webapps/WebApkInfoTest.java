@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.os.Bundle;
+import android.provider.Browser;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -112,8 +113,8 @@ public class WebApkInfoTest {
         bundle.putInt(WebApkMetaDataKeys.SHELL_APK_VERSION, SHELL_APK_VERSION);
         bundle.putString(WebApkMetaDataKeys.WEB_MANIFEST_URL, MANIFEST_URL);
         bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
-        bundle.putString(WebApkMetaDataKeys.ICON_URL, ICON_URL);
-        bundle.putString(WebApkMetaDataKeys.ICON_MURMUR2_HASH, ICON_MURMUR2_HASH + "L");
+        bundle.putString(WebApkMetaDataKeys.ICON_URLS_AND_ICON_MURMUR2_HASHES,
+                ICON_URL + " " + ICON_MURMUR2_HASH);
         WebApkTestHelper.registerWebApkWithMetaData(WEBAPK_PACKAGE_NAME, bundle);
 
         Intent intent = new Intent();
@@ -343,5 +344,48 @@ public class WebApkInfoTest {
         WebApkInfo info = WebApkInfo.create(intent);
         Assert.assertEquals(name, info.name());
         Assert.assertEquals(shortName, info.shortName());
+    }
+
+    /**
+     * Test that ShortcutSource#EXTERNAL_INTENT is rewritten to
+     * ShortcutSource#EXTERNAL_INTENT_FROM_CHROME if the WebAPK is launched from a
+     * browser with the same package name (e.g. web page link on Chrome Stable
+     * launches WebAPK whose host browser is Chrome Stable).
+     */
+    @Test
+    public void testOverrideExternalIntentSourceIfLaunchedFromChrome() {
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(WEBAPK_PACKAGE_NAME, bundle);
+
+        Intent intent = new Intent();
+        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WEBAPK_PACKAGE_NAME);
+        intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
+        intent.putExtra(ShortcutHelper.EXTRA_SOURCE, ShortcutSource.EXTERNAL_INTENT);
+        intent.putExtra(
+                Browser.EXTRA_APPLICATION_ID, RuntimeEnvironment.application.getPackageName());
+
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertEquals(ShortcutSource.EXTERNAL_INTENT_FROM_CHROME, info.source());
+    }
+
+    /**
+     * Test that ShortcutSource#EXTERNAL_INTENT is not rewritten when the WebAPK is launched
+     * from a non-browser app.
+     */
+    @Test
+    public void testOverrideExternalIntentSourceIfLaunchedFromNonChromeApp() {
+        Bundle bundle = new Bundle();
+        bundle.putString(WebApkMetaDataKeys.START_URL, START_URL);
+        WebApkTestHelper.registerWebApkWithMetaData(WEBAPK_PACKAGE_NAME, bundle);
+
+        Intent intent = new Intent();
+        intent.putExtra(WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME, WEBAPK_PACKAGE_NAME);
+        intent.putExtra(ShortcutHelper.EXTRA_URL, START_URL);
+        intent.putExtra(ShortcutHelper.EXTRA_SOURCE, ShortcutSource.EXTERNAL_INTENT);
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, "com.google.android.talk");
+
+        WebApkInfo info = WebApkInfo.create(intent);
+        Assert.assertEquals(ShortcutSource.EXTERNAL_INTENT, info.source());
     }
 }

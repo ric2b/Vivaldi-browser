@@ -27,9 +27,9 @@
 class SkCanvas;
 
 namespace gpu {
-namespace gles2 {
-class GLES2Implementation;
-}  // namespace gles2
+namespace raster {
+class RasterImplementationGLES;
+}  // namespace raster
 }  // namespace gpu
 
 namespace base {
@@ -57,9 +57,7 @@ class CC_PAINT_EXPORT DisplayItemList
 
   explicit DisplayItemList(UsageHint = kTopLevelDisplayItemList);
 
-  void Raster(SkCanvas* canvas,
-              ImageProvider* image_provider = nullptr,
-              SkPicture::AbortCallback* callback = nullptr) const;
+  void Raster(SkCanvas* canvas, ImageProvider* image_provider = nullptr) const;
 
   // TODO(vmpstr): This is only used to keep track of debugging info, so we can
   // probably remove it? But it would be nice to delimit painting in a block
@@ -82,10 +80,6 @@ class CC_PAINT_EXPORT DisplayItemList
   void EndPaintOfUnpaired(const gfx::Rect& visual_rect) {
     in_painting_ = false;
     if (usage_hint_ == kToBeReleasedAsPaintOpBuffer)
-      return;
-
-    // Empty paint item.
-    if (visual_rects_.size() == paint_op_buffer_.size())
       return;
 
     while (visual_rects_.size() < paint_op_buffer_.size())
@@ -178,7 +172,7 @@ class CC_PAINT_EXPORT DisplayItemList
  private:
   FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithNoOps);
   FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithOps);
-  friend gpu::gles2::GLES2Implementation;
+  friend gpu::raster::RasterImplementationGLES;
 
   ~DisplayItemList();
 

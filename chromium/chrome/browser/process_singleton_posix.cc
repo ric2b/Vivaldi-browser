@@ -67,13 +67,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/safe_strerror.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner_helpers.h"
-#include "base/single_thread_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -369,7 +369,7 @@ class ScopedSocket {
 
 // Returns a random string for uniquifying profile connections.
 std::string GenerateCookie() {
-  return base::Uint64ToString(base::RandUint64());
+  return base::NumberToString(base::RandUint64());
 }
 
 bool CheckCookie(const base::FilePath& path, const base::FilePath& cookie) {
@@ -777,10 +777,18 @@ ProcessSingleton::NotifyResult ProcessSingleton::NotifyOtherProcessWithTimeout(
   base::TimeDelta sleep_interval = timeout / retry_attempts;
 
   ScopedSocket socket;
+  int pid = 0;
   for (int retries = 0; retries <= retry_attempts; ++retries) {
     // Try to connect to the socket.
-    if (ConnectSocket(&socket, socket_path_, cookie_path_))
+    if (ConnectSocket(&socket, socket_path_, cookie_path_)) {
+#if defined(OS_MACOSX)
+      // On Mac, we want the open process' pid in case there are
+      // Apple Events to forward. See crbug.com/777863.
+      std::string hostname;
+      ParseLockPath(lock_path_, &hostname, &pid);
+#endif
       break;
+    }
 
     // If we're in a race with another process, they may be in Create() and have
     // created the lock but not attached to the socket.  So we check if the
@@ -788,7 +796,6 @@ ProcessSingleton::NotifyResult ProcessSingleton::NotifyOtherProcessWithTimeout(
     // chrome browser.  If so, we loop and try again for |timeout|.
 
     std::string hostname;
-    int pid;
     if (!ParseLockPath(lock_path_, &hostname, &pid)) {
       // No lockfile exists.
       return PROCESS_NONE;
@@ -838,6 +845,11 @@ ProcessSingleton::NotifyResult ProcessSingleton::NotifyOtherProcessWithTimeout(
     base::PlatformThread::Sleep(sleep_interval);
   }
 
+#if defined(OS_MACOSX)
+  if (pid > 0 && WaitForAndForwardOpenURLEvent(pid)) {
+    return PROCESS_NOTIFIED;
+  }
+#endif
   timeval socket_timeout = TimeDeltaToTimeVal(timeout);
   setsockopt(socket.fd(),
              SOL_SOCKET,
@@ -1134,7 +1146,7 @@ void ProcessSingleton::KillProcess(int pid) {
                                     << base::safe_strerror(errno);
 
   int error_code = (rv == 0) ? 0 : errno;
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       "Chrome.ProcessSingleton.TerminateProcessErrorCode.Posix", error_code);
 
   RemoteProcessInteractionResult action = TERMINATE_SUCCEEDED;

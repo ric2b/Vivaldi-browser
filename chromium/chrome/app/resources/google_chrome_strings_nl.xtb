@@ -35,7 +35,6 @@ Sommige functies zijn wellicht niet beschikbaar en wijzigingen in voorkeuren wor
 <translation id="1698376642261615901">Google Chrome is een webbrowser die bliksemsnel webpagina's en online applicaties kan weergeven. Het programma is snel, stabiel en gebruiksvriendelijk. Met Google Chrome kun je veiliger op internet surfen dankzij de ingebouwde bescherming tegen phishing en malware.</translation>
 <translation id="1718131156967340976">Selecteer <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome kan je gegevens niet synchroniseren vanwege een fout tijdens het inloggen.</translation>
-<translation id="1759301979429102118">Gegevens van je contacten kunnen je helpen sneller formulieren in te vullen in Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Hulp bij het gebruik van Chrome OS</translation>
 <translation id="1795405610103747296">Installeer Chrome op je telefoon. We sturen een sms naar je telefoon: <ph name="PHONE_NUMBER" /></translation>
@@ -63,6 +62,7 @@ Als je inlogt, worden Chrome-gegevens zoals bladwijzers, geschiedenis en andere 
 <translation id="2429317896000329049">Google Chrome kan je gegevens niet synchroniseren, omdat synchronisatie niet beschikbaar is voor je domein.</translation>
 <translation id="2446511512801740068">Chrome is verouderd omdat het programma al een tijd niet opnieuw is gestart. Er is een update beschikbaar die wordt toegepast zodra je het programma opnieuw start.</translation>
 <translation id="2485422356828889247">Installatie ongedaan maken</translation>
+<translation id="2534507159460261402">Google Pay (gekopieerd naar Chrome)</translation>
 <translation id="2580411288591421699">Kan dezelfde Google Chrome-versie die momenteel actief is, niet installeren. Sluit Google Chrome en probeer het opnieuw.</translation>
 <translation id="2586406160782125153">Hiermee worden je browsergegevens verwijderd van dit apparaat. Als je je gegevens later wilt terughalen, log je in bij Chrome als <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Chrome-logo</translation>
@@ -112,8 +112,6 @@ Controleer je e-mail op <ph name="ACCOUNT_EMAIL" /> voor verdere instructies.</t
 <translation id="3889417619312448367">Google Chrome verwijderen</translation>
 <translation id="3898493977366060150">Browsen met innovaties van Google</translation>
 <translation id="4028693306634653894">Chrome sneller openen</translation>
-<translation id="4031074602479304239">Chrome heeft voorkomen dat deze site je omleidde naar</translation>
-<translation id="4042449298237264661">Deze computer ontvangt geen Google Chrome-updates meer, omdat Windows XP en Windows Vista niet meer worden ondersteund.</translation>
 <translation id="4050175100176540509">Er zijn belangrijke beveiligingsverbeteringen en nieuwe functies beschikbaar in de nieuwste versie.</translation>
 <translation id="4053720452172726777">Google Chrome aanpassen en beheren</translation>
 <translation id="4147555960264124640">Je logt in op een beheerd account en geeft de beheerderscontrole over aan je Google Chrome-profiel. Je Chrome-gegevens zoals je apps, bladwijzers, geschiedenis, wachtwoorden en andere instellingen worden permanent gekoppeld aan <ph name="USER_NAME" />. Je kunt deze gegevens verwijderen via het Google Accounts Dashboard, maar je kunt deze gegevens niet koppelen aan een ander account. <ph name="LEARN_MORE" /></translation>
@@ -156,7 +154,6 @@ Controleer je e-mail op <ph name="ACCOUNT_EMAIL" /> voor verdere instructies.</t
 Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirectory op of gebruik een nieuwere versie van Chrome.</translation>
 <translation id="5193136243808726294">Google Chrome OS kan deze pagina niet openen.</translation>
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Servicevoorwaarden<ph name="END_TERMS_OF_SERVICE_LINK" /> van Google Chrome</translation>
-<translation id="5243785881901838525">Google Payments (gekopieerd naar Chrome)</translation>
 <translation id="5251420635869119124">Gasten kunnen Chrome gebruiken zonder iets achter te laten.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome wordt over één seconde opnieuw gestart.}other{Google Chrome wordt over # seconden opnieuw gestart.}}</translation>
 <translation id="532046782124376502">Waarschuwing: Google Chrome kan niet voorkomen dat extensies je browsegeschiedenis registreren. Als je deze extensie in de incognitomodus wilt uitschakelen, verwijder je het vinkje bij deze optie.</translation>
@@ -185,15 +182,12 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">&amp;Chrome OS updaten</translation>
 <translation id="6235018212288296708">Inkomende regel zodat Google Chrome mDNS-verkeer toestaat.</translation>
-<translation id="6236285698028833233">Google Chrome is gestopt met bijwerken en ondersteunt deze versie van je besturingssysteem niet meer.</translation>
 <translation id="6291089322031436445">Chrome Dev-apps</translation>
 <translation id="6291549208091401781">Google Chrome is al geïnstalleerd voor alle gebruikers op je computer.</translation>
 <translation id="6338556085225130112">Google Chrome updaten</translation>
 <translation id="6368958679917195344">Chrome OS wordt mogelijk gemaakt door aanvullende <ph name="BEGIN_LINK_CROS_OSS" />open source-software<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6393863479814692971">Chrome heeft toegangsrechten voor je camera en microfoon nodig voor deze site.</translation>
-<translation id="6400076122676892962">Deze computer ontvangt binnenkort geen Google Chrome-updates meer, omdat Mac OS X 10.6, 10.7 en 10.8 niet meer worden ondersteund.</translation>
 <translation id="6410540444482791104">Je kunt helpen Chrome veiliger en gebruiksvriendelijker te maken door automatisch bepaalde systeeminformatie en paginacontent naar Google te verzenden om te helpen bij de detectie van gevaarlijke apps en sites.</translation>
-<translation id="6470176598693778404">Deze computer ontvangt geen Google Chrome-updates meer, omdat Mac OS X 10.6, 10.7 en 10.8 niet meer worden ondersteund.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Er wordt momenteel een download uitgevoerd. Wil je de download annuleren en Google Chrome afsluiten?}other{Er worden momenteel # downloads uitgevoerd. Wil je de downloads annuleren en Google Chrome afsluiten?}}</translation>
 <translation id="6566149418543181476">Google Chrome updaten (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Je gebruikt <ph name="PROFILE_EMAIL" /> om je Chrome-bestanden te synchroniseren. Als je je synchronisatievoorkeur wilt bijwerken of Chrome zonder Google-account wilt gebruiken, ga je naar '<ph name="SETTINGS_LINK" />'.</translation>
@@ -214,7 +208,6 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7164397146364144019">Je kunt helpen Chrome veiliger en gebruiksvriendelijker te maken door automatisch informatie over mogelijke beveiligingsincidenten aan Google te melden.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> is toegevoegd aan Chrome.</translation>
 <translation id="7242029209006116544">Je logt in op een beheerd account waarmee de eigenaar van dat account beheer krijgt over je Google Chrome-profiel. Je Chrome-gegevens zoals je apps, bladwijzers, geschiedenis, wachtwoorden en andere instellingen worden permanent gekoppeld aan <ph name="USER_NAME" />. Je kunt deze gegevens verwijderen via het Google Accounts Dashboard, maar je kunt deze gegevens niet koppelen aan een ander account. Je kunt ook een nieuw profiel maken om je bestaande Chrome-gegevens gescheiden te houden. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Deze computer ontvangt binnenkort geen Google Chrome-updates meer, omdat Windows XP en Windows Vista niet meer worden ondersteund.</translation>
 <translation id="7330164299247909639">Verificatiecertificaat mislukt. Log opnieuw in bij Google Chrome als <ph name="USER_NAME" /> of neem contact op met je beheerder voor meer informatie. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Nieuw venster</translation>
 <translation id="7369650938475876456">Een sterk wachtwoord gebruiken dat is gegenereerd door Chrome</translation>
@@ -227,6 +220,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7494905215383356681">Open-sourcelicenties van Chrome</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Chrome OS weergeven in deze taal</translation>
+<translation id="7589360514048265910">Deze computer ontvangt geen Google Chrome-updates meer omdat Mac OS X 10.9 niet meer wordt ondersteund.</translation>
 <translation id="7592736734348559088">Google Chrome kan je gegevens niet synchroniseren omdat de inloggegevens voor je account zijn verouderd.</translation>
 <translation id="7626032353295482388">Welkom bij Chrome</translation>
 <translation id="7747138024166251722">Het installatieprogramma kan geen tijdelijke directory maken. Controleer of je nog schijfruimte hebt en of je toestemming hebt om software te installeren.</translation>
@@ -242,6 +236,7 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="7896673875602241923">Iemand heeft eerder bij Chrome op deze computer ingelogd als <ph name="ACCOUNT_EMAIL_LAST" />. Maak een nieuwe Chrome-gebruiker om je informatie gescheiden te houden.</translation>
 <translation id="7908168227788431038">Updaten bijna voltooid. Start Google Chrome opnieuw op om de update te voltooien.</translation>
 <translation id="795025003224538582">Niet opnieuw starten</translation>
+<translation id="7962410387636238736">Deze computer ontvangt geen Google Chrome-updates meer, omdat Windows XP en Windows Vista niet meer worden ondersteund</translation>
 <translation id="8005540215158006229">Chrome is bijna klaar.</translation>
 <translation id="8008534537613507642">Chrome opnieuw installeren</translation>
 <translation id="8030318113982266900">Je apparaat bijwerken naar <ph name="CHANNEL_NAME" /> kanaal...</translation>
@@ -272,7 +267,6 @@ Sommige functies zijn wellicht niet beschikbaar. Geef een andere profieldirector
 <translation id="8796108026289707191">Je moet Google Chrome nu opnieuw starten.</translation>
 <translation id="8823341990149967727">Chrome is verouderd</translation>
 <translation id="884296878221830158">Hiermee wordt ook gecontroleerd welke pagina wordt weergegeven wanneer je Chrome start of op de knop 'Homepage' klikt.</translation>
-<translation id="8851136666856101339">hoofd</translation>
 <translation id="8862326446509486874">Je hebt geen rechten om op systeemniveau te installeren. Meld je aan als beheerder en voer het installatieprogramma opnieuw uit.</translation>
 <translation id="8914504000324227558">Chrome opnieuw starten</translation>
 <translation id="9026991721384951619">Chrome OS kan je gegevens niet synchroniseren omdat de inloggegevens voor je account zijn verouderd.</translation>

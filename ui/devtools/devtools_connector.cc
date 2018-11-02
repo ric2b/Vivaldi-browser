@@ -288,7 +288,7 @@ DevtoolsConnectorItem::GetJavaScriptDialogManager(
 content::ColorChooser* DevtoolsConnectorItem::OpenColorChooser(
     content::WebContents* web_contents,
     SkColor color,
-    const std::vector<content::ColorSuggestion>& suggestions) {
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   if (devtools_delegate_) {
     return devtools_delegate_->OpenColorChooser(web_contents, color,
                                                 suggestions);
@@ -464,6 +464,18 @@ void UIBindingsDelegate::SetEyeDropperActive(bool active) {
 void UIBindingsDelegate::ShowCertificateViewer(const std::string& cert_chain) {
   if (ui_bindings_delegate_) {
     ui_bindings_delegate_->ShowCertificateViewer(cert_chain);
+  }
+}
+
+void UIBindingsDelegate::ConnectionReady() {
+  if (ui_bindings_delegate_) {
+    ui_bindings_delegate_->ConnectionReady();
+  }
+}
+
+void UIBindingsDelegate::SetOpenNewWindowForPopups(bool value) {
+  if (ui_bindings_delegate_) {
+    ui_bindings_delegate_->SetOpenNewWindowForPopups(value);
   }
 }
 

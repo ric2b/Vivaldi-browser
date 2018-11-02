@@ -19,10 +19,7 @@ class Layer;
 }
 
 namespace gpu {
-namespace gles2 {
-struct ContextCreationAttribHelper;
-}  // namespace gles2
-
+struct ContextCreationAttribs;
 struct SharedMemoryLimits;
 }
 
@@ -53,7 +50,7 @@ class CONTENT_EXPORT Compositor {
       base::Callback<void(scoped_refptr<viz::ContextProvider>)>;
   static void CreateContextProvider(
       gpu::SurfaceHandle handle,
-      gpu::gles2::ContextCreationAttribHelper attributes,
+      gpu::ContextCreationAttribs attributes,
       gpu::SharedMemoryLimits shared_memory_limits,
       ContextProviderCallback callback);
 
@@ -62,14 +59,13 @@ class CONTENT_EXPORT Compositor {
   static Compositor* Create(CompositorClient* client,
                             gfx::NativeWindow root_window);
 
+  virtual void SetRootWindow(gfx::NativeWindow root_window) = 0;
+
   // Attaches the layer tree.
   virtual void SetRootLayer(scoped_refptr<cc::Layer> root) = 0;
 
   // Set the output surface bounds.
   virtual void SetWindowBounds(const gfx::Size& size) = 0;
-
-  // Defer commits on the layer tree host.
-  virtual void SetDeferCommits(bool defer_commits) = 0;
 
   // Set the output surface which the compositor renders into.
   virtual void SetSurface(jobject surface) = 0;

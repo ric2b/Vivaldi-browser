@@ -8,7 +8,9 @@ mojom("mojo") {
   sources = [
     "accelerated_widget.mojom",
     "buffer_types.mojom",
+    "ca_layer_params.mojom",
     "color_space.mojom",
+    "gpu_fence_handle.mojom",
     "icc_profile.mojom",
     "overlay_transform.mojom",
     "selection_bound.mojom",

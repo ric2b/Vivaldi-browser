@@ -48,7 +48,6 @@
 <translation id="255937426064304553">Kiingereza cha Marekani cha Kimataifa</translation>
 <translation id="2563185590376525700">Chura</translation>
 <translation id="2649120831653069427">Samakiupinde</translation>
-<translation id="2656923396825879524">Mchoro wa 3 wa kijiometriki</translation>
 <translation id="2735698359135166290">Kibodi wastani ya Kiromania</translation>
 <translation id="2771816809568414714">Jibini</translation>
 <translation id="2781645665747935084">Kibelgiji</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">Kituruki-F</translation>
 <translation id="3619115746895587757">Kapuchino</translation>
 <translation id="3678559383040232393">Kibodi ya Kimalta</translation>
-<translation id="3728399474846997774">Mchoro wa 2 wa kijiometriki</translation>
-<translation id="3734201824773416162">Mchoro wa 1 wa kijiometriki</translation>
 <translation id="3801082500826908679">Kifaroe</translation>
 <translation id="3809272675881623365">Sungura</translation>
 <translation id="3815016854028376614">Mbinu ya kuingiza data ya Zhuyin</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">Kibodi ya Kiitaliano</translation>
 <translation id="3910699493603749297">Kibodi ya Khmer</translation>
 <translation id="391445228316373457">Kibodi ya Kinepali (Fonetiki)</translation>
-<translation id="3947050919258841761">Mchoro wa 5 wa kijiometriki</translation>
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="4070370845051020638">Mbinu ya Kikantoni ya kuingiza data</translation>
 <translation id="4072248638558688893">Kibodi ya Kitamil (Fonetiki)</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">Tumbili</translation>
 <translation id="4711094779914110278">Kituruki</translation>
 <translation id="4725511304875193254">Mbwa mlinzi</translation>
+<translation id="4737050008115666127">Uwanja wa kutua</translation>
 <translation id="4747271164117300400">Kimasedonia</translation>
 <translation id="4749157430980974800">Kibodi ya Kijojia</translation>
 <translation id="4755240240651974342">Kibodi ya Kifini</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">Kibodi ya Kinepali (InScript)</translation>
 <translation id="5469868506864199649">Kiitaliano</translation>
 <translation id="5500122897333236901">Kiaislandi</translation>
+<translation id="5508696409934741614">Nukta</translation>
 <translation id="5533555070048896610">Unukuzi wa mfumo wa kuandika (namaste → नमस्ते)</translation>
 <translation id="5605830556594064952">Dvorak ya Marekani</translation>
 <translation id="5640179856859982418">Kibodi ya Kiswizi</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">Kibodi ya Kiingereza cha Kanada</translation>
 <translation id="751507702149411736">Kibelarusi</translation>
 <translation id="7547811415869834682">Kiholanzi</translation>
+<translation id="7603724359189955920">Gridi</translation>
 <translation id="770015031906360009">Kigiriki</translation>
 <translation id="7706319470528945664">Kibodi ya Kireno</translation>
 <translation id="7774365994322694683">Ndege</translation>
 <translation id="7825423931463735974">Kibodi ya Kitamil (Tamil99)</translation>
 <translation id="7853966320808728790">BÉPO ya Kifaransa</translation>
-<translation id="7872088194351932564">Mchoro wa 4 wa kijiometriki</translation>
 <translation id="7896906914454843592">Kibodi Pana ya Marekani</translation>
 <translation id="7898607018410277265">Kibodi ya Kigujarati (Fonetiki Mpya)</translation>
 <translation id="7917972308273378936">Kibodi ya Kilithuania</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">Kibodi ya Colemak ya Marekani</translation>
 <translation id="8437209419043462667">Kimarekani</translation>
 <translation id="8467473010914675605">Mbinu ingizo ya Kikorea</translation>
+<translation id="8477649328507734757">Duara za kati moja</translation>
 <translation id="8521441079177373948">Kiingereza cha Uingereza</translation>
 <translation id="8551494947769799688">Kilatvia</translation>
 <translation id="8561206103590473338">Tembo</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">Kibodi ya Myanmar Myansan</translation>
 <translation id="9153744823707037316">Mbinu ya kuingiza data ya Array</translation>
 <translation id="9206487995878691001">Mbinu ya kuingiza data ya Cangjie</translation>
+<translation id="9219908252191632183">Mandhari ya mwezi mwandamo</translation>
 </translationbundle>

@@ -45,15 +45,6 @@ WebSecurityOrigin WebSecurityOrigin::Create(const WebURL& url) {
   return WebSecurityOrigin(SecurityOrigin::Create(url));
 }
 
-WebSecurityOrigin WebSecurityOrigin::CreateFromTupleWithSuborigin(
-    const WebString& protocol,
-    const WebString& host,
-    int port,
-    const WebString& suborigin) {
-  return WebSecurityOrigin(
-      SecurityOrigin::Create(protocol, host, port, suborigin));
-}
-
 WebSecurityOrigin WebSecurityOrigin::CreateUnique() {
   return WebSecurityOrigin(SecurityOrigin::CreateUnique());
 }
@@ -124,20 +115,20 @@ bool WebSecurityOrigin::CanAccessPasswordManager() const {
   return private_->CanAccessPasswordManager();
 }
 
-WebSecurityOrigin::WebSecurityOrigin(scoped_refptr<SecurityOrigin> origin)
+WebSecurityOrigin::WebSecurityOrigin(scoped_refptr<const SecurityOrigin> origin)
     : private_(std::move(origin)) {}
 
 WebSecurityOrigin& WebSecurityOrigin::operator=(
-    scoped_refptr<SecurityOrigin> origin) {
+    scoped_refptr<const SecurityOrigin> origin) {
   private_ = std::move(origin);
   return *this;
 }
 
-WebSecurityOrigin::operator scoped_refptr<SecurityOrigin>() const {
+WebSecurityOrigin::operator scoped_refptr<const SecurityOrigin>() const {
   return private_.Get();
 }
 
-SecurityOrigin* WebSecurityOrigin::Get() const {
+const SecurityOrigin* WebSecurityOrigin::Get() const {
   return private_.Get();
 }
 
@@ -148,5 +139,11 @@ WebSecurityOrigin::WebSecurityOrigin(const url::Origin& origin) {
 WebSecurityOrigin::operator url::Origin() const {
   return Get()->ToUrlOrigin();
 }
+
+#if DCHECK_IS_ON()
+bool WebSecurityOrigin::operator==(const WebSecurityOrigin& other) const {
+  return Get() == other.Get();
+}
+#endif
 
 }  // namespace blink

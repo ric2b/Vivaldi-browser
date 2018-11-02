@@ -84,7 +84,7 @@ class WTF_EXPORT ArrayBuffer : public RefCounted<ArrayBuffer> {
   bool IsNeutered() const { return is_neutered_; }
   bool IsShared() const { return contents_.IsShared(); }
 
-  ~ArrayBuffer() {}
+  ~ArrayBuffer() = default;
 
  protected:
   inline explicit ArrayBuffer(ArrayBufferContents&);
@@ -247,7 +247,7 @@ const void* ArrayBuffer::DataMaybeShared() const {
 }
 
 unsigned ArrayBuffer::ByteLength() const {
-  return contents_.SizeInBytes();
+  return contents_.DataLength();
 }
 
 scoped_refptr<ArrayBuffer> ArrayBuffer::Slice(int begin, int end) const {

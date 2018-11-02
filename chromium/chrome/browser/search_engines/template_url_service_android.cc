@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/format_macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -126,38 +125,28 @@ jboolean TemplateUrlServiceAndroid::IsDefaultSearchEngineGoogle(
 jboolean TemplateUrlServiceAndroid::DoesDefaultSearchEngineHaveLogo(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
+  // |kSearchProviderLogoURL| applies to all search engines (Google or
+  // third-party).
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           search_provider_logos::switches::kSearchProviderLogoURL)) {
     return true;
   }
 
+  // Google always has a logo.
   if (IsDefaultSearchEngineGoogle(env, obj))
     return true;
 
+  // Third-party search engines can have a doodle specified via the command
+  // line, or a static logo or doodle from the TemplateURLService.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          search_provider_logos::switches::kThirdPartyDoodleURL)) {
+    return true;
+  }
   const TemplateURL* default_search_provider =
       template_url_service_->GetDefaultSearchProvider();
-
-  if (base::FeatureList::IsEnabled(
-          search_provider_logos::features::kThirdPartyDoodles)) {
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            search_provider_logos::switches::kThirdPartyDoodleURL)) {
-      return true;
-    }
-    if (!base::GetFieldTrialParamValueByFeature(
-             search_provider_logos::features::kThirdPartyDoodles,
-             search_provider_logos::features::
-                 kThirdPartyDoodlesOverrideUrlParam)
-             .empty()) {
-      return true;
-    }
-    if (default_search_provider &&
-        default_search_provider->doodle_url().is_valid()) {
-      return true;
-    }
-  }
-
   return default_search_provider &&
-         default_search_provider->logo_url().is_valid();
+         (default_search_provider->doodle_url().is_valid() ||
+          default_search_provider->logo_url().is_valid());
 }
 
 jboolean
@@ -401,7 +390,7 @@ TemplateUrlServiceAndroid::AddSearchEngineForTesting(
   data.last_visited =
       base::Time::Now() - base::TimeDelta::FromDays((int) age_in_days);
   TemplateURL* t_url =
-      template_url_service_->Add(base::MakeUnique<TemplateURL>(data));
+      template_url_service_->Add(std::make_unique<TemplateURL>(data));
   CHECK(t_url) << "Failed adding template url for: " << keyword;
   return base::android::ConvertUTF16ToJavaString(env, t_url->data().keyword());
 }

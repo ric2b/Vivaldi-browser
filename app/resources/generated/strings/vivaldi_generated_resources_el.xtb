@@ -10,8 +10,10 @@
 <translation id="1054153489933238809">Άνοιγμα Αρχικής Εικόνας σε Νέα Καρτέλα</translation>
 <translation id="1056898198331236512">Προειδοποίηση</translation>
 <translation id="1084824384139382525">Αντιγραφή διεύθυνσης &amp;συνδέσμου</translation>
+<translation id="1110753181581583968">{NUM_DOWNLOAD, plural, =1 {Συνέχιση Λήψης} other {Συνέχιση Λήψεων}}</translation>
 <translation id="1128109161498068552">Να μην επιτρέπεται σε κανέναν ιστότοπο να χρησιμοποιεί αποκλειστικά μηνύματα συστήματος για την πρόσβαση σε συσκευές MIDI</translation>
 <translation id="114140604515785785">Κατάλογος ρίζας επέκτασης:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD, plural, =1 {Μία λήψη βρίσκεται σε εξέλιξη. Θέλετε να ακυρώσετε τη λήψη και να τερματίσετε την κατάσταση ανώνυμης περιήγησης;} other {# λήψεις βρίσκονται σε εξέλιξη. Θέλετε να ακυρώσετε τις λήψεις και να τερματίσετε την κατάσταση ανώνυμης περιήγησης;}}</translation>
 <translation id="1163931534039071049">&amp;Προβολή κώδικα πλαισίου</translation>
 <translation id="1165039591588034296">Σφάλμα</translation>
 <translation id="1175364870820465910">&amp;Εκτύπωση...</translation>
@@ -40,6 +42,7 @@
 <translation id="1588438908519853928">Κανονική λειτουργία</translation>
 <translation id="1588870296199743671">Άνοιγμα Συνδέσμου Με...</translation>
 <translation id="159359590073980872">Προσωρινή Μνήμη Εικόνας</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD,plural, =1{Λήψη σε εξέλιξη} other {Λήψεις σε εξέλιξη}}</translation>
 <translation id="1601560923496285236">Εφαρμογή</translation>
 <translation id="1603914832182249871">(Ανώνυμη περιήγηση)</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
@@ -58,12 +61,14 @@
 <translation id="176587472219019965">&amp;Νέο παράθυρο</translation>
 <translation id="1769104665586091481">Άνοιγμα Συνδέσμου σε Νέο Παρά&amp;θυρο</translation>
 <translation id="1789575671122666129">Αναδυόμενα παράθυρα</translation>
+<translation id="1805822111539868586">Επιθεώρηση προβολών</translation>
 <translation id="1815083418640426271">Επικόλληση ως Απλό Κείμενο</translation>
 <translation id="1828901632669367785">Εκτύπωση με χρήση του παραθύρου διαλόγου του συστήματος...</translation>
 <translation id="1846308012215045257">Κάντε κλικ για εκτέλεση της προσθήκης <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Περιστροφή &amp;προς τα δεξιά</translation>
 <translation id="1859234291848436338">Κατεύθυνση γραφής</translation>
 <translation id="1886996562706621347">Να επιτρέπεται σε ιστότοπους να ζητούν να γίνονται προεπιλεγμένα προγράμματα χειρισμού για πρωτόκολλα (συνιστάται)</translation>
+<translation id="1890674179660343635">&lt;span&gt;Αναγνωριστικό: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Επιλογή όλ&amp;ων</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> dpi</translation>
 <translation id="1963227389609234879">Κατάργηση όλων</translation>
@@ -141,6 +146,7 @@
 <translation id="2890678560483811744">Η αναφορά της σελίδας βρίσκεται εκτός ορίων</translation>
 <translation id="2902127500170292085">Δεν ήταν δυνατή η επικοινωνία της επέκτασης <ph name="EXTENSION_NAME" /> με αυτόν τον εκτυπωτή. Βεβαιωθείτε ότι ο εκτυπωτής είναι συνδεδεμένος και δοκιμάστε ξανά.</translation>
 <translation id="2904456025988372123">Να γίνεται ερώτηση όταν ένας ιστότοπος προσπαθεί να κατεβάσει αρχεία αυτόματα μετά το πρώτο αρχείο</translation>
+<translation id="2911898792135283060">Δημιουργία Κωδικού Πρόσβασης...</translation>
 <translation id="2913331724188855103">Να επιτρέπεται στους ιστότοπους η αποθήκευση και η ανάγνωση δεδομένων cookie (συνιστάται)</translation>
 <translation id="2916745397441987255">Αναζήτηση επεκτάσεων</translation>
 <translation id="2932883381142163287">Αναφορά κατάχρησης</translation>
@@ -199,6 +205,7 @@
 <translation id="3494769164076977169">Να γίνεται ερώτηση όταν ένας ιστότοπος προσπαθεί να κατεβάσει αυτόματα αρχεία μετά το πρώτο αρχείο (συνιστάται)</translation>
 <translation id="3505030558724226696">Ανάκληση πρόσβασης στη συσκευή</translation>
 <translation id="3511307672085573050">Αντιγραφή Διεύθυνσης &amp;Συνδέσμου</translation>
+<translation id="3512410469020716447">{NUM_DOWNLOAD, plural,  =1 {Ακύρωση Λήψης} other {Ακύρωση Λήψεων}}</translation>
 <translation id="3523642406908660543">Να γίνεται ερώτηση κάθε φορά που ένας ιστότοπος επιθυμεί να χρησιμοποιήσει μια προσθήκη για να αποκτήσει πρόσβαση στον υπολογιστή σας (συνιστάται)</translation>
 <translation id="357886715122934472">Ο χρήστης &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; θέλει να μοιραστεί έναν εκτυπωτή &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; με μια ομάδα που σας ανήκει: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Εάν δεχτείτε, όλα τα μέλη της ομάδας θα έχουν τη δυνατότητα να χρησιμοποιούν τον εκτυπωτή.</translation>
 <translation id="3587482841069643663">Όλες</translation>
@@ -259,6 +266,7 @@
 <translation id="4256316378292851214">Αποθήκευση&amp; Βίντεο ως...</translation>
 <translation id="4278390842282768270">Επιτρέπεται</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" />K (πραγματικά <ph name="NUM_KILOBYTES_LIVE" />K)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD, plural, =1 {Συνέχιση λήψης} other {Συνέχιση λήψεων}}</translation>
 <translation id="4345587454538109430">Διαμόρφωση...</translation>
 <translation id="4348766275249686434">Συλλέξτε τα λάθη</translation>
 <translation id="4363771538994847871">Δεν βρέθηκαν προορισμοί μετάδοσης. Χρειάζεστε βοήθεια;</translation>
@@ -356,6 +364,7 @@
 <translation id="5715711091495208045">Μεσάζων προσθηκών: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Συγγνώμη, δεν μπορούμε να δείξουμε τον κώδικα για αυτό το σφάλμα.</translation>
 <translation id="5746169159649715125">Αποθήκευση ως PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD, plural, =1 {Ακύρωση λήψης} other {Ακύρωση λήψεων}}</translation>
 <translation id="5759728514498647443">Είναι δυνατή η ανάγνωση των εγγράφων που στέλνετε για εκτύπωση μέσω <ph name="APP_NAME" /> με την εφαρμογή <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Αποθή&amp;κευση ήχου ως...</translation>
 <translation id="577624874850706961">Αναζήτηση cookie</translation>
@@ -405,9 +414,9 @@
 <translation id="6295158916970320988">Όλοι οι Ιστότοποι</translation>
 <translation id="6295855836753816081">Αποθήκευση…</translation>
 <translation id="6308937455967653460">Αποθήκευση συν&amp;δέσμου ως...</translation>
-<translation id="6314335155547195432">Δημιουργία Κωδικού Πρόσβασης</translation>
 <translation id="6326855256003666642">Πλήθος Keepalive</translation>
 <translation id="6370021412472292592">Δεν ήταν δυνατή η φόρτωση της δήλωσης (manifest).</translation>
+<translation id="6374469231428023295">Προσπαθήστε Ξανά</translation>
 <translation id="6385543213911723544">Οι ιστότοποι ενδέχεται να αποθηκεύουν και να διαβάζουν δεδομένα cookie</translation>
 <translation id="6398765197997659313">Έξοδος από πλήρη οθόνη</translation>
 <translation id="6406303162637086258">Προσομοίωση επανεκκίνησης προγράμματος περιήγησης</translation>
@@ -422,6 +431,7 @@
 <translation id="6518014396551869914">Αντι&amp;γραφή εικόνας</translation>
 <translation id="6550675742724504774">Επιλογές</translation>
 <translation id="6596092346130528198">Είναι Αυτή η Σελίδα Νέας Καρτέλας που Περιμένατε να Δείτε;</translation>
+<translation id="6612358246767739896">Προστατευμένο περιεχόμενο</translation>
 <translation id="6639554308659482635">Μνήμη SQLite</translation>
 <translation id="6655190889273724601">Λειτουργία προγραμματιστή</translation>
 <translation id="6691936601825168937">&amp;Προώθηση</translation>
@@ -458,6 +468,7 @@
 <translation id="708060913198414444">Α&amp;ντιγραφή διεύθυνσης ήχου</translation>
 <translation id="7084192839369222683">Να γίνεται εκτέλεση μόνο σημαντικού περιεχομένου</translation>
 <translation id="7144878232160441200">Δοκιμάστε ξανά</translation>
+<translation id="7152478047064750137">Αυτή η επέκταση δεν απαιτεί ειδικές άδειες</translation>
 <translation id="7175353351958621980">Φορτώθηκε από:</translation>
 <translation id="7186088072322679094">Διατήρηση στη Γραμμή Εργαλείων</translation>
 <translation id="7206693748120342859">Γίνεται λήψη της προσθήκης <ph name="PLUGIN_NAME" />…</translation>
@@ -486,7 +497,6 @@
 <translation id="7564847347806291057">Τερματισμός διαδικασίας</translation>
 <translation id="7576690715254076113">Συρραφή</translation>
 <translation id="7629827748548208700">Καρτέλα: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Ακύρωση</translation>
 <translation id="7661259717474717992">Να επιτρέπεται η αποθήκευση και ανάγνωση δεδομένων cookie από ιστότοπους</translation>
 <translation id="7663719505383602579">Δέκτης: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Εγκαταστάθηκε από το Διαχειριστή Σας</translation>
@@ -572,6 +582,7 @@
 <translation id="8708000541097332489">Διαγραφή κατά την έξοδο</translation>
 <translation id="8714838604780058252">Γραφικά φόντου</translation>
 <translation id="8719653885894320876">Η λήψη της προσθήκης <ph name="PLUGIN_NAME" /> απέτυχε</translation>
+<translation id="8725066075913043281">Προσπαθήστε ξανά</translation>
 <translation id="873545264931343897">Μόλις ολοκληρωθεί η ενημέρωση της προσθήκης <ph name="PLUGIN_NAME" />, επαναλάβετε τη φόρτωση της σελίδας για να την ενεργοποιήσετε</translation>
 <translation id="8757090071857742562">Δεν είναι δυνατή η μετάδοση της επιφάνειας εργασίας. Ελέγξτε για να διαπιστώσετε εάν έχετε επιβεβαιώσει την εντολή έναρξης της κοινής χρήσης της οθόνης σας.</translation>
 <translation id="8770406935328356739">Κατάλογος ρίζας επέκτασης</translation>
@@ -585,6 +596,7 @@
 <translation id="8823514049557262177">Αντιγραφή κειμένου συνδέσμου</translation>
 <translation id="8845001906332463065">Ζήτα βοήθεια</translation>
 <translation id="8859174528519900719">Υποπλαίσιο: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">Δημιουργία κωδικού πρόσβασης…</translation>
 <translation id="8899285681604219177">Απενεργοποίηση μη Υποστηριζόμενων Επεκτάσεων</translation>
 <translation id="8899851313684471736">Άνοιγμα συνδέσμου σε νέο παρά&amp;θυρο</translation>
 <translation id="8910146161325739742">Κοινή χρήση της οθόνης σας</translation>
@@ -600,6 +612,7 @@
 <translation id="9027459031423301635">Άνοιγμα Συνδέσμου σε Νέα Καρτέ&amp;λα</translation>
 <translation id="9056810968620647706">Δεν βρέθηκαν αντιστοιχίες.</translation>
 <translation id="9088234649737575428">Η προσθήκη <ph name="PLUGIN_NAME" /> αποκλείστηκε λόγω επιχειρηματικής πολιτικής</translation>
+<translation id="9103001804464916031">{NUM_DOWNLOAD, plural, =1 {Λήψη σε Εξέλιξη} other {Λήψεις σε Εξέλιξη}}</translation>
 <translation id="9137916601698928395">Άνοιγμα συνδέσμου ως <ph name="USER" /></translation>
 <translation id="9153341767479566106">Άλλες επεκτάσεις που απέτυχαν να φορτωθούν:</translation>
 <translation id="9170848237812810038">Αναί&amp;ρεση</translation>

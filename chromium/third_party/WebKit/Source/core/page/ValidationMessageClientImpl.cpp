@@ -52,7 +52,7 @@ ValidationMessageClientImpl* ValidationMessageClientImpl::Create(
   return new ValidationMessageClientImpl(web_view);
 }
 
-ValidationMessageClientImpl::~ValidationMessageClientImpl() {}
+ValidationMessageClientImpl::~ValidationMessageClientImpl() = default;
 
 LocalFrameView* ValidationMessageClientImpl::CurrentView() {
   return current_anchor_->GetDocument().View();
@@ -78,7 +78,7 @@ void ValidationMessageClientImpl::ShowValidationMessage(
   const double kMinimumSecondToShowValidationMessage = 5.0;
   const double kSecondPerCharacter = 0.05;
   finish_time_ =
-      MonotonicallyIncreasingTime() +
+      CurrentTimeTicksInSeconds() +
       std::max(kMinimumSecondToShowValidationMessage,
                (message.length() + sub_message.length()) * kSecondPerCharacter);
 
@@ -111,7 +111,7 @@ void ValidationMessageClientImpl::HideValidationMessage(const Element& anchor) {
   // This should be equal to or larger than transition duration of
   // #container.hiding in validation_bubble.css.
   const double kHidingAnimationDuration = 0.13333;
-  timer_->StartOneShot(kHidingAnimationDuration, BLINK_FROM_HERE);
+  timer_->StartOneShot(kHidingAnimationDuration, FROM_HERE);
 }
 
 void ValidationMessageClientImpl::HideValidationMessageImmediately(
@@ -144,7 +144,7 @@ void ValidationMessageClientImpl::DocumentDetached(const Document& document) {
 void ValidationMessageClientImpl::CheckAnchorStatus(TimerBase*) {
   DCHECK(current_anchor_);
   if ((!LayoutTestSupport::IsRunningLayoutTest() &&
-       MonotonicallyIncreasingTime() >= finish_time_) ||
+       CurrentTimeTicksInSeconds() >= finish_time_) ||
       !CurrentView()) {
     HideValidationMessage(*current_anchor_);
     return;

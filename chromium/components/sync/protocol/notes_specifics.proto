@@ -14,10 +14,14 @@ option optimize_for = LITE_RUNTIME;
 package sync_pb;
 
 // Corresponds to a single attachment itemt for a notes entry.
-message NotesAttachment {
+message NotesAttachmentDeprecated {
   optional string filename = 1;
   optional string content_type = 2;
   optional bytes content = 3;
+}
+
+message NoteAttachment {
+  optional string checksum = 1;
 }
 
 // Properties of bookmark sync objects.
@@ -33,8 +37,9 @@ message NotesSpecifics {
   // Corresponds to Notes_Entry::date_added() and is the internal value from
   // base::Time.
   optional int64 creation_time_us = 4;
-  // DEPRECATED: unused field, removed
-  optional NotesAttachment icon_deprecated = 5  [deprecated=true];
-  repeated NotesAttachment attachments = 6;
+  // DEPRECATED: unused fields, removed
+  optional NotesAttachmentDeprecated icon_deprecated = 5  [deprecated=true];
+  repeated NotesAttachmentDeprecated attachments_deprecated = 6  [deprecated=true];
   optional VivaldiSpecialNotesType special_node_type = 7;
+  repeated NoteAttachment attachments = 8;
 }

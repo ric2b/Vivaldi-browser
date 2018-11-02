@@ -3,7 +3,6 @@
 -CaptureScreenshotTest.*
 
 # FrameWatcher::WaitFrames times out http://crbug.com/785013
--CompositedScrollingBrowserTest.*
 -NonBlockingEventBrowserTest.*
 -TouchActionBrowserTest.*
 
@@ -28,6 +27,7 @@
 -PointerLockBrowserTest.*
 -SitePerProcessGestureBrowserTest.*
 -SitePerProcessHighDPIBrowserTest.*
+-SitePerProcessInternalsBrowserTest.*
 -SitePerProcessMouseWheelBrowserTest.*
 -TouchSelectionForCrossProcessFramesTests/TouchSelectionControllerClientAuraSiteIsolationTest.*
 
@@ -46,13 +46,18 @@
 -SitePerProcessBrowserTest.InputEventRouterGesturePreventDefaultTargetMapTest
 -SitePerProcessBrowserTest.InputEventRouterGestureTargetMapTest
 -SitePerProcessBrowserTest.InputEventRouterTouchpadGestureTargetTest
+-SitePerProcessBrowserTest.HitTestLayerSquashing
+-SitePerProcessBrowserTest.HitTestNestedFrames
+-SitePerProcessBrowserTest.HitTestWatermark
 -SitePerProcessBrowserTest.NavigateCrashedSubframeToSameSite
 -SitePerProcessBrowserTest.NestedSurfaceHitTestTest
+-SitePerProcessBrowserTest.OverlapSurfaceHitTestTest
 -SitePerProcessBrowserTest.PopupMenuTest
 -SitePerProcessBrowserTest.RootConsumesScrollDuringOverscrollGesture
 -SitePerProcessBrowserTest.ScrollBubblingFromNestedOOPIFTest
 -SitePerProcessBrowserTest.ScrollBubblingFromOOPIFTest
 -SitePerProcessBrowserTest.ScrollEventToOOPIF
+-SitePerProcessBrowserTest.ScrollLocalSubframeInOOPIF
 -SitePerProcessBrowserTest.SubframeTouchEventRouting
 -SitePerProcessBrowserTest.SurfaceHitTestPointerEventsNone
 -SitePerProcessBrowserTest.SurfaceHitTestTest
@@ -79,3 +84,18 @@
 
 # TODO: investigate flaky failure http://crbug.com/783434
 -GpuProcessHostBrowserTest.Shutdown
+
+# OnGpuSwapBuffersCompletedInternal not called. http://crbug.com/791557
+-MouseLatencyBrowserTest.CoalescedMouseMovesCorrectlyTerminated
+
+# TODO: investigate flaky failure http://crbug.com/790683
+-SitePerProcessBrowserTest.CrossSiteIframeBlockedByXFrameOptionsOrCSP
+
+# TODO: investigate flaky failures http://crbug.com/792739
+-SitePerProcessFeaturePolicyBrowserTest.TestFeaturePolicyReplicationFromRemoteFrames
+-IsolatedOriginTest.ProcessLimit
+-SitePerProcessBrowserTest.RFPHDestruction
+
+# Tests failures related to surface sync. http://crbug.com/793302
+-RenderWidgetInitialSizeTest.InitialSize
+-RenderWidgetTest.OnResize

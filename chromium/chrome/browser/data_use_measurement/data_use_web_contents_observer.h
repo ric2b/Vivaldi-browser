@@ -35,8 +35,6 @@ class DataUseWebContentsObserver
   // WebContentsObserver implementation:
   void RenderFrameCreated(content::RenderFrameHost* render_frame_host) override;
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
-  void DidStartNavigation(
-      content::NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
   void WasShown() override;
@@ -45,6 +43,8 @@ class DataUseWebContentsObserver
                               content::RenderFrameHost* new_host) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
 
  private:
   friend class content::WebContentsUserData<DataUseWebContentsObserver>;

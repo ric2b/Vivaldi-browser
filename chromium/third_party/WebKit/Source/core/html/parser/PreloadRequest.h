@@ -7,7 +7,7 @@
 
 #include <memory>
 #include "core/CoreExport.h"
-#include "core/dom/Script.h"
+#include "core/script/Script.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/loader/fetch/ClientHintsPreferences.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -21,6 +21,7 @@
 
 namespace blink {
 
+class CSSPreloaderResourceClient;
 class Document;
 
 class CORE_EXPORT PreloadRequest {
@@ -67,7 +68,7 @@ class CORE_EXPORT PreloadRequest {
 
   bool IsSafeToSendToAnotherThread() const;
 
-  Resource* Start(Document*);
+  Resource* Start(Document*, CSSPreloaderResourceClient*);
 
   void SetDefer(FetchParameters::DeferOption defer) { defer_ = defer; }
   void SetCharset(const String& charset) { charset_ = charset.IsolatedCopy(); }
@@ -131,7 +132,7 @@ class CORE_EXPORT PreloadRequest {
         resource_type_(resource_type),
         script_type_(ScriptType::kClassic),
         cross_origin_(kCrossOriginAttributeNotSet),
-        discovery_time_(MonotonicallyIncreasingTime()),
+        discovery_time_(CurrentTimeTicksInSeconds()),
         defer_(FetchParameters::kNoDefer),
         resource_width_(resource_width),
         client_hints_preferences_(client_hints_preferences),

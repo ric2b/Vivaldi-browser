@@ -10,12 +10,12 @@
 #include "base/macros.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/compositor_observer.h"
 
 namespace ui {
-class AcceleratedWidgetMac;
 class AcceleratedWidgetMacNSView;
 }
 
@@ -25,10 +25,8 @@ class RecyclableCompositorMac;
 
 class BrowserCompositorMacClient {
  public:
-  virtual NSView* BrowserCompositorMacGetNSView() const = 0;
-  virtual SkColor BrowserCompositorMacGetGutterColor(SkColor color) const = 0;
+  virtual SkColor BrowserCompositorMacGetGutterColor() const = 0;
   virtual void BrowserCompositorMacOnBeginFrame() = 0;
-  virtual viz::LocalSurfaceId GetLocalSurfaceId() const = 0;
   virtual void OnFrameTokenChanged(uint32_t frame_token) = 0;
 };
 
@@ -58,10 +56,7 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   // potentially visible).
   void ClearCompositorFrame();
 
-  // This may return nullptr, if this has detached itself from its
-  // ui::Compositor.
-  ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac();
-
+  gfx::AcceleratedWidget GetAcceleratedWidget();
   void DidCreateNewRendererCompositorFrameSink(
       viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
   void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
@@ -69,9 +64,12 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   void OnDidNotProduceFrame(const viz::BeginFrameAck& ack);
   void SetBackgroundColor(SkColor background_color);
   void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
+  void WasResized();
+  bool HasFrameOfSize(const gfx::Size& desired_size);
   void UpdateVSyncParameters(const base::TimeTicks& timebase,
                              const base::TimeDelta& interval);
   void SetNeedsBeginFrames(bool needs_begin_frames);
+  void SetWantsAnimateOnlyBeginFrames();
 
   // This is used to ensure that the ui::Compositor be attached to the
   // DelegatedFrameHost while the RWHImpl is visible.
@@ -96,6 +94,7 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
       const gfx::Rect& src_subrect,
       scoped_refptr<media::VideoFrame> target,
       const base::Callback<void(const gfx::Rect&, bool)>& callback);
+  viz::FrameSinkId GetRootFrameSinkId();
 
   // Indicate that the recyclable compositor should be destroyed, and no future
   // compositors should be recycled.
@@ -104,13 +103,13 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   // DelegatedFrameHostClient implementation.
   ui::Layer* DelegatedFrameHostGetLayer() const override;
   bool DelegatedFrameHostIsVisible() const override;
-  SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
+  SkColor DelegatedFrameHostGetGutterColor() const override;
   gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
   bool DelegatedFrameCanCreateResizeLock() const override;
   viz::LocalSurfaceId GetLocalSurfaceId() const override;
   std::unique_ptr<CompositorResizeLock> DelegatedFrameHostCreateResizeLock()
       override;
-  void OnBeginFrame() override;
+  void OnBeginFrame(base::TimeTicks frame_time) override;
   bool IsAutoResizeEnabled() const override;
   void OnFrameTokenChanged(uint32_t frame_token) override;
 
@@ -151,6 +150,9 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   State state_ = HasNoCompositor;
   void UpdateState();
   void TransitionToState(State new_state);
+  void GetViewProperties(gfx::Size* bounds_in_dip,
+                         float* scale_factor,
+                         gfx::ColorSpace* color_space) const;
 
   static void CopyCompleted(
       base::WeakPtr<BrowserCompositorMac> browser_compositor,
@@ -175,8 +177,16 @@ class CONTENT_EXPORT BrowserCompositorMac : public DelegatedFrameHostClient {
   std::unique_ptr<ui::Layer> root_layer_;
 
   SkColor background_color_ = SK_ColorWHITE;
+  const bool enable_viz_ = false;
   viz::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
+  // The surface for the delegated frame host, rendered into by the renderer
+  // process.
+  viz::LocalSurfaceId delegated_frame_host_surface_id_;
+  // The surface for the ui::Compositor, which will embed
+  // |delegated_frame_host_surface_id_| into its tree.
+  viz::LocalSurfaceId compositor_surface_id_;
+  viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
 
   base::WeakPtrFactory<BrowserCompositorMac> weak_factory_;
 };

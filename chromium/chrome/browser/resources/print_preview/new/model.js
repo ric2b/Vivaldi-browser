@@ -3,27 +3,51 @@
 // found in the LICENSE file.
 
 cr.exportPath('print_preview_new');
-
 /**
  * @typedef {{
- *   value: *,
- *   valid: boolean,
- *   available: boolean,
- *   updatesPreview: boolean
+ *    version: string,
+ *    recentDestinations: (!Array<!print_preview.RecentDestination> |
+ *                         undefined),
+ *    dpi: ({horizontal_dpi: number,
+ *           vertical_dpi: number,
+ *           is_default: (boolean | undefined)} | undefined),
+ *    mediaSize: ({height_microns: number,
+ *                 width_microns: number,
+ *                 custom_display_name: (string | undefined),
+ *                 is_default: (boolean | undefined)} | undefined),
+ *    marginsType: (print_preview.ticket_items.MarginsTypeValue | undefined),
+ *    customMargins: ({marginTop: number,
+ *                     marginBottom: number,
+ *                     marginLeft: number,
+ *                     marginRight: number} | undefined),
+ *    isColorEnabled: (boolean | undefined),
+ *    isDuplexEnabled: (boolean | undefined),
+ *    isHeaderFooterEnabled: (boolean | undefined),
+ *    isLandscapeEnabled: (boolean | undefined),
+ *    isCollateEnabled: (boolean | undefined),
+ *    isFitToPageEnabled: (boolean | undefined),
+ *    isCssBackgroundEnabled: (boolean | undefined),
+ *    scaling: (string | undefined),
+ *    vendor_options: (Object | undefined)
  * }}
  */
-print_preview_new.Setting;
+print_preview_new.SerializedSettings;
+
+(function() {
+'use strict';
+
+/** @type {number} Number of recent destinations to save. */
+const NUM_DESTINATIONS = 3;
 
 /**
- * @typedef {{
- *   previewLoading: boolean,
- *   previewFailed: boolean,
- *   cloudPrintError: string,
- *   privetExtensionError: string,
- *   invalidSettings: boolean,
- * }}
+ * Sticky setting names. Alphabetical except for fitToPage, which must be set
+ * after scaling in updateFromStickySettings().
+ * @type {Array<string>}
  */
-print_preview_new.State;
+const STICKY_SETTING_NAMES = [
+  'collate', 'color', 'cssBackground', 'dpi', 'duplex', 'headerFooter',
+  'layout', 'margins', 'mediaSize', 'scaling', 'fitToPage'
+];
 
 Polymer({
   is: 'print-preview-model',
@@ -32,127 +56,143 @@ Polymer({
     /**
      * Object containing current settings of Print Preview, for use by Polymer
      * controls.
-     * @type {{
-     *   pages: !print_preview_new.Setting,
-     *   copies: !print_preview_new.Setting,
-     *   collate: !print_preview_new.Setting,
-     *   layout: !print_preview_new.Setting,
-     *   color: !print_preview_new.Setting,
-     *   mediaSize: !print_preview_new.Setting,
-     *   margins: !print_preview_new.Setting,
-     *   dpi: !print_preview_new.Setting,
-     *   fitToPage: !print_preview_new.Setting,
-     *   scaling: !print_preview_new.Setting,
-     *   duplex: !print_preview_new.Setting,
-     *   cssBackground: !print_preview_new.Setting,
-     *   selectionOnly: !print_preview_new.Setting,
-     *   headerFooter: !print_preview_new.Setting,
-     *   rasterize: !print_preview_new.Setting,
-     *   vendorItems: !print_preview_new.Setting,
-     * }}
+     * @type {!print_preview_new.Settings}
      */
     settings: {
       type: Object,
       notify: true,
       value: {
         pages: {
-          value: [1, 2, 3, 4, 5],
+          value: [1],
+          unavailableValue: [],
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: '',
         },
         copies: {
           value: '1',
+          unavailableValue: '1',
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: '',
         },
         collate: {
           value: true,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: 'isCollateEnabled',
         },
         layout: {
           value: false, /* portrait */
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'isLandscapeEnabled',
         },
         color: {
           value: true, /* color */
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'isColorEnabled',
         },
         mediaSize: {
           value: {
             width_microns: 215900,
             height_microns: 279400,
           },
+          unavailableValue: {},
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'mediaSize',
         },
         margins: {
-          value: 0,
+          value: print_preview.ticket_items.MarginsTypeValue.DEFAULT,
+          unavailableValue: print_preview.ticket_items.MarginsTypeValue.DEFAULT,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'marginsType',
         },
         dpi: {
           value: {},
+          unavailableValue: {},
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: 'dpi',
         },
         fitToPage: {
           value: false,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'isFitToPageEnabled',
         },
         scaling: {
           value: '100',
+          unavailableValue: '100',
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'scaling',
         },
         duplex: {
           value: true,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: 'isDuplexEnabled',
         },
         cssBackground: {
           value: false,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'isCssBackgroundEnabled',
         },
         selectionOnly: {
           value: false,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: '',
         },
         headerFooter: {
           value: true,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: true,
+          key: 'isHeaderFooterEnabled',
         },
         rasterize: {
           value: false,
+          unavailableValue: false,
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: '',
         },
         vendorItems: {
           value: {},
+          unavailableValue: {},
           valid: true,
           available: true,
-          updatesPreview: false,
+          key: '',
+        },
+        // This does not represent a real setting value, and is used only to
+        // expose the availability of the other options settings section.
+        otherOptions: {
+          value: null,
+          unavailableValue: null,
+          valid: true,
+          available: true,
+        },
+        // This does not represent a real settings value, but is used to
+        // propagate the correctly formatted ranges for print tickets.
+        ranges: {
+          value: [],
+          unavailableValue: [],
+          valid: true,
+          available: true,
+          key: '',
         },
       },
     },
@@ -161,127 +201,66 @@ Polymer({
     destination: {
       type: Object,
       notify: true,
-      value: function() {
-        const dest = new print_preview.Destination(
-            'Foo Printer', print_preview.DestinationType.LOCAL,
-            print_preview.DestinationOrigin.LOCAL, 'Foo Printer', true,
-            print_preview.DestinationConnectionStatus.ONLINE,
-            {description: 'PrinterBrandAA 12345'});
-        dest.capabilities = {
-          version: '1.0',
-          printer: {
-            collate: {default: true},
-            color: {
-              option: [
-                {type: 'STANDARD_COLOR', is_default: true},
-                {type: 'STANDARD_MONOCHROME'}
-              ]
-            },
-            copies: {default: 1, max: 1000},
-            dpi: {
-              option: [
-                {horizontal_dpi: 200, vertical_dpi: 200, is_default: true},
-                {horizontal_dpi: 100, vertical_dpi: 100},
-              ]
-            },
-            duplex: {
-              option: [
-                {type: 'NO_DUPLEX', is_default: true}, {type: 'LONG_EDGE'},
-                {type: 'SHORT_EDGE'}
-              ]
-            },
-            page_orientation: {
-              option: [
-                {type: 'PORTRAIT', is_default: true}, {type: 'LANDSCAPE'},
-                {type: 'AUTO'}
-              ]
-            },
-            media_size: {
-              option: [
-                {
-                  name: 'NA_LETTER',
-                  width_microns: 215900,
-                  height_microns: 279400,
-                  is_default: true,
-                  custom_display_name: 'Letter',
-                },
-                {
-                  name: 'CUSTOM_SQUARE',
-                  width_microns: 215900,
-                  height_microns: 215900,
-                  custom_display_name: 'CUSTOM_SQUARE',
-                }
-              ]
-            },
-            vendor_capability: [],
-          }
-        };
-        return dest;
-      },
+    },
+
+    /** @type {!Array<!print_preview.RecentDestination>} */
+    recentDestinations: {
+      type: Array,
+      notify: true,
+      value: [],
     },
 
     /** @type {print_preview.DocumentInfo} */
     documentInfo: {
       type: Object,
       notify: true,
-      value: function() {
-        const info = new print_preview.DocumentInfo();
-        info.init(false, 'DocumentTitle', true);
-        info.updatePageCount(5);
-        info.fitToPageScaling_ = 94;
-        return info;
-      },
-    },
-
-    /** @type {!print_preview_new.State} */
-    state: {
-      type: Object,
-      notify: true,
-      value: {
-        previewLoading: false,
-        previewFailed: false,
-        cloudPrintError: '',
-        privetExtensionError: '',
-        invalidSettings: false,
-      },
     },
   },
 
-  observers:
-      ['updateSettingsAvailable_(' +
-       'destination.id, destination.capabilities, ' +
-       'documentInfo.isModifiable, documentInfo.hasCssMediaStyles,' +
-       'documentInfo.hasSelection)'],
-  /**
-   * @private {!Array<string>} List of capability types considered color.
-   * @const
-   */
-  COLOR_TYPES_: ['STANDARD_COLOR', 'CUSTOM_COLOR'],
+  observers: [
+    'updateSettings_(' +
+        'destination.id, destination.capabilities, ' +
+        'documentInfo.isModifiable, documentInfo.hasCssMediaStyles,' +
+        'documentInfo.hasSelection)',
+    'updateRecentDestinations_(destination, destination.capabilities)',
+    'stickySettingsChanged_(' +
+        'settings.collate.value, settings.layout.value, settings.color.value,' +
+        'settings.mediaSize.value, settings.margins.value, ' +
+        'settings.dpi.value, settings.fitToPage.value, ' +
+        'settings.scaling.value, settings.duplex.value, ' +
+        'settings.headerFooter.value, settings.cssBackground.value)',
+  ],
+
+  /** @private {boolean} */
+  initialized_: false,
 
   /**
-   * @private {!Array<string>} List of capability types considered monochrome.
-   * @const
-   */
-  MONOCHROME_TYPES_: ['STANDARD_MONOCHROME', 'CUSTOM_MONOCHROME'],
-
-  /**
-   * Updates the availability of the settings sections.
+   * Updates the availability of the settings sections and values of dpi and
+   *     media size settings.
    * @private
    */
-  updateSettingsAvailable_: function() {
+  updateSettings_: function() {
     const caps = (!!this.destination && !!this.destination.capabilities) ?
         this.destination.capabilities.printer :
         null;
+    this.updateSettingsAvailability_(caps);
+    this.updateSettingsValues_(caps);
+  },
+
+  /**
+   * @param {?print_preview.CddCapabilities} caps The printer capabilities.
+   * @private
+   */
+  updateSettingsAvailability_: function(caps) {
     const isSaveToPdf = this.destination.id ==
         print_preview.Destination.GooglePromotedId.SAVE_AS_PDF;
     const knownSizeToSaveAsPdf = isSaveToPdf &&
         (!this.documentInfo.isModifiable ||
          this.documentInfo.hasCssMediaStyles);
-
     this.set('settings.copies.available', !!caps && !!(caps.copies));
     this.set('settings.collate.available', !!caps && !!(caps.collate));
     this.set('settings.layout.available', this.isLayoutAvailable_(caps));
-    this.set('settings.color.available', this.isColorAvailable_(caps));
+    this.set('settings.color.available', this.destination.hasColorCapability);
     this.set('settings.margins.available', this.documentInfo.isModifiable);
     this.set(
         'settings.mediaSize.available',
@@ -301,10 +280,22 @@ Polymer({
         'settings.selectionOnly.available',
         this.documentInfo.isModifiable && this.documentInfo.hasSelection);
     this.set('settings.headerFooter.available', this.documentInfo.isModifiable);
-    this.set('settings.rasterize.available', !this.documentInfo.isModifiable);
+    this.set(
+        'settings.rasterize.available',
+        !this.documentInfo.isModifiable && !cr.isWindows && !cr.isMac);
+    this.set(
+        'settings.otherOptions.available',
+        this.settings.duplex.available ||
+            this.settings.cssBackground.available ||
+            this.settings.selectionOnly.available ||
+            this.settings.headerFooter.available ||
+            this.settings.rasterize.available);
   },
 
-  /** @param {?print_preview.CddCapabilities} caps The printer capabilities. */
+  /**
+   * @param {?print_preview.CddCapabilities} caps The printer capabilities.
+   * @private
+   */
   isLayoutAvailable_: function(caps) {
     if (!caps || !caps.page_orientation || !caps.page_orientation.option ||
         !this.documentInfo.isModifiable ||
@@ -321,18 +312,124 @@ Polymer({
     return hasLandscapeOption && hasAutoOrPortraitOption;
   },
 
-  /** @param {?print_preview.CddCapabilities} caps The printer capabilities. */
-  isColorAvailable_: function(caps) {
-    if (!caps || !caps.color || !caps.color.option)
-      return false;
-    let hasColor = false;
-    let hasMonochrome = false;
-    caps.color.option.forEach(option => {
-      const type = assert(option.type);
-      hasColor = hasColor || this.COLOR_TYPES_.includes(option.type);
-      hasMonochrome =
-          hasMonochrome || this.MONOCHROME_TYPES_.includes(option.type);
+  /**
+   * @param {?print_preview.CddCapabilities} caps The printer capabilities.
+   * @private
+   */
+  updateSettingsValues_: function(caps) {
+    if (this.settings.mediaSize.available) {
+      for (const option of caps.media_size.option) {
+        if (option.is_default) {
+          this.set('settings.mediaSize.value', option);
+          break;
+        }
+      }
+    }
+
+    if (this.settings.dpi.available) {
+      for (const option of caps.dpi.option) {
+        if (option.is_default) {
+          this.set('settings.dpi.value', option);
+          break;
+        }
+      }
+    } else if (
+        caps && caps.dpi && caps.dpi.option && caps.dpi.option.length > 0) {
+      this.set('settings.dpi.value', caps.dpi.option[0]);
+    }
+  },
+
+  /** @private */
+  updateRecentDestinations_: function() {
+    if (!this.initialized_)
+      return;
+
+    // Determine if this destination is already in the recent destinations,
+    // and where in the array it is located.
+    const newDestination =
+        print_preview.makeRecentDestination(assert(this.destination));
+    let indexFound = this.recentDestinations.findIndex(function(recent) {
+      return (
+          newDestination.id == recent.id &&
+          newDestination.origin == recent.origin);
     });
-    return hasColor && hasMonochrome;
+
+    // No change
+    if (indexFound == 0 &&
+        this.recentDestinations[0].capabilities ==
+            newDestination.capabilities) {
+      return;
+    }
+
+    // Shift the array so that the nth most recent destination is located at
+    // index n.
+    if (indexFound == -1 &&
+        this.recentDestinations.length == NUM_DESTINATIONS) {
+      indexFound = NUM_DESTINATIONS - 1;
+    }
+    if (indexFound != -1)
+      this.recentDestinations.splice(indexFound, 1);
+
+    // Add the most recent destination
+    this.recentDestinations.splice(0, 0, newDestination);
+    this.notifyPath('recentDestinations');
+
+    // Persist sticky settings.
+    this.stickySettingsChanged_();
+  },
+
+  /**
+   * @param {?string} savedSettingsStr The sticky settings from native layer
+   */
+  updateFromStickySettings: function(savedSettingsStr) {
+    this.initialized_ = true;
+    if (!savedSettingsStr)
+      return;
+
+    let savedSettings;
+    try {
+      savedSettings = /** @type {print_preview_new.SerializedSettings} */ (
+          JSON.parse(savedSettingsStr));
+    } catch (e) {
+      console.error('Unable to parse state ' + e);
+      return;  // use default values rather than updating.
+    }
+    if (savedSettings.version != 2)
+      return;
+
+    let recentDestinations = savedSettings.recentDestinations || [];
+    if (!Array.isArray(recentDestinations)) {
+      recentDestinations = [recentDestinations];
+    }
+    this.recentDestinations = recentDestinations;
+
+    // Reset initialized, or stickySettingsChanged_ will get called for
+    // every setting that gets set below.
+    this.initialized_ = false;
+    STICKY_SETTING_NAMES.forEach(settingName => {
+      const setting = this.get(settingName, this.settings);
+      const value = savedSettings[setting.key];
+      if (value != undefined)
+        this.set(`settings.${settingName}.value`, value);
+    });
+    this.initialized_ = true;
+  },
+
+  /** @private */
+  stickySettingsChanged_: function() {
+    if (!this.initialized_)
+      return;
+
+    const serialization = {
+      version: 2,
+      recentDestinations: this.recentDestinations,
+    };
+
+    STICKY_SETTING_NAMES.forEach(settingName => {
+      const setting = this.get(settingName, this.settings);
+      serialization[assert(setting.key)] = setting.value;
+    });
+    this.fire('save-sticky-settings', JSON.stringify(serialization));
   },
 });
+})();

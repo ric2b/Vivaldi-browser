@@ -51,7 +51,7 @@ class PreferredSizeLabel : public Label {
 // A simple View that hosts a RenderText object.
 class MultilineExample::RenderTextView : public View {
  public:
-  RenderTextView() : render_text_(gfx::RenderText::CreateInstanceForEditing()) {
+  RenderTextView() : render_text_(gfx::RenderText::CreateHarfBuzzInstance()) {
     render_text_->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
     render_text_->SetColor(SK_ColorBLACK);
     render_text_->SetMultiline(true);
@@ -159,7 +159,8 @@ void MultilineExample::CreateExampleView(View* container) {
   textfield_->set_controller(this);
   textfield_->SetText(kTestString);
 
-  GridLayout* layout = GridLayout::CreateAndInstall(container);
+  GridLayout* layout = container->SetLayoutManager(
+      std::make_unique<views::GridLayout>(container));
 
   ColumnSet* column_set = layout->AddColumnSet(0);
   column_set->AddColumn(GridLayout::LEADING, GridLayout::CENTER,

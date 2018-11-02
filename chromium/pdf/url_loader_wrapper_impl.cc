@@ -19,8 +19,9 @@
 namespace chrome_pdf {
 
 namespace {
+
 // We should read with delay to prevent block UI thread, and reduce CPU usage.
-const int kReadDelayMs = 2;
+constexpr base::TimeDelta kReadDelayMs = base::TimeDelta::FromMilliseconds(2);
 
 pp::URLRequestInfo MakeRangeRequest(pp::Instance* plugin_instance,
                                     const std::string& url,
@@ -155,11 +156,9 @@ bool URLLoaderWrapperImpl::IsMultipart() const {
   return is_multipart_;
 }
 
-bool URLLoaderWrapperImpl::GetByteRange(int* start, int* end) const {
+bool URLLoaderWrapperImpl::GetByteRangeStart(int* start) const {
   DCHECK(start);
-  DCHECK(end);
   *start = byte_range_.start();
-  *end = byte_range_.end();
   return byte_range_.IsValid();
 }
 

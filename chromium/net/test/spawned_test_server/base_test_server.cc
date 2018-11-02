@@ -269,8 +269,7 @@ const HostPortPair& BaseTestServer::host_port_pair() const {
 }
 
 const base::DictionaryValue& BaseTestServer::server_data() const {
-  DCHECK(started_);
-  DCHECK(server_data_.get());
+  DCHECK(server_data_);
   return *server_data_;
 }
 
@@ -445,7 +444,7 @@ bool BaseTestServer::SetAndParseServerData(const std::string& server_data,
   VLOG(1) << "Server data: " << server_data;
   base::JSONReader json_reader;
   std::unique_ptr<base::Value> value(json_reader.ReadToValue(server_data));
-  if (!value.get() || !value->IsType(base::Value::Type::DICTIONARY)) {
+  if (!value.get() || !value->is_dict()) {
     LOG(ERROR) << "Could not parse server data: "
                << json_reader.GetErrorMessage();
     return false;
@@ -579,6 +578,10 @@ bool BaseTestServer::GenerateArguments(base::DictionaryValue* arguments) const {
 
     if (ssl_options_.cert_serial != 0) {
       arguments->SetInteger("cert-serial", ssl_options_.cert_serial);
+    }
+
+    if (!ssl_options_.cert_common_name.empty()) {
+      arguments->SetString("cert-common-name", ssl_options_.cert_common_name);
     }
 
     // Check key exchange argument.

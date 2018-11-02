@@ -6,9 +6,9 @@
 #define NGLineBreaker_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/exclusions/ng_layout_opportunity.h"
 #include "core/layout/ng/inline/ng_inline_item_result.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
-#include "core/layout/ng/ng_layout_opportunity_iterator.h"
 #include "platform/fonts/shaping/HarfBuzzShaper.h"
 #include "platform/fonts/shaping/ShapeResultSpacing.h"
 #include "platform/text/TextBreakIterator.h"
@@ -22,6 +22,9 @@ class NGInlineItem;
 class NGInlineLayoutStateStack;
 struct NGPositionedFloat;
 
+// The line breaker needs to know which mode its in to properly handle floats.
+enum class NGLineBreakerMode { kContent, kMinContent, kMaxContent };
+
 // Represents a line breaker.
 //
 // This class measures each NGInlineItem and determines items to form a line,
@@ -31,13 +34,14 @@ class CORE_EXPORT NGLineBreaker {
 
  public:
   NGLineBreaker(NGInlineNode,
+                NGLineBreakerMode,
                 const NGConstraintSpace&,
                 Vector<NGPositionedFloat>*,
                 Vector<scoped_refptr<NGUnpositionedFloat>>*,
                 NGExclusionSpace*,
                 unsigned handled_float_index,
                 const NGInlineBreakToken* = nullptr);
-  ~NGLineBreaker() {}
+  ~NGLineBreaker() = default;
 
   // Compute the next line break point and produces NGInlineItemResults for
   // the line.
@@ -83,6 +87,13 @@ class CORE_EXPORT NGLineBreaker {
     }
   };
 
+  const String& Text() const { return break_iterator_.GetString(); }
+  NGInlineItemResult* AddItem(const NGInlineItem&,
+                              unsigned end_offset,
+                              NGInlineItemResults*);
+  NGInlineItemResult* AddItem(const NGInlineItem&, NGInlineItemResults*);
+  void ComputeCanBreakAfter(NGInlineItemResult*) const;
+
   void BreakLine(NGLineInfo*);
 
   void PrepareNextLine(const NGLayoutOpportunity&, NGLineInfo*);
@@ -91,59 +102,60 @@ class CORE_EXPORT NGLineBreaker {
   void ComputeLineLocation(NGLineInfo*) const;
 
   enum class LineBreakState {
-    // The current position is not breakable.
-    kNotBreakable,
-    // The current position is breakable.
-    kIsBreakable,
-    // Break by including trailing items (CloseTag).
-    kBreakAfterTrailings,
-    // Break immediately.
-    kForcedBreak
+    // The line breaking is complete.
+    kDone,
+
+    // Should complete the line at the earliest possible point.
+    // Trailing spaces, <br>, or close tags should be included to the line even
+    // when it is overflowing.
+    kTrailing,
+
+    // The initial state. Looking for items to break the line.
+    kContinue,
   };
 
-  LineBreakState HandleText(NGLineInfo*,
-                            const NGInlineItem&,
-                            NGInlineItemResult*);
+  LineBreakState HandleText(const NGInlineItem&, LineBreakState, NGLineInfo*);
   void BreakText(NGInlineItemResult*,
                  const NGInlineItem&,
                  LayoutUnit available_width,
                  NGLineInfo*);
-  static void AppendHyphen(const ComputedStyle&, NGLineInfo*);
+  LineBreakState HandleTrailingSpaces(const NGInlineItem&, NGLineInfo*);
+  void AppendHyphen(const ComputedStyle&, NGLineInfo*);
 
-  LineBreakState HandleControlItem(const NGInlineItem&, NGInlineItemResult*);
-  LineBreakState HandleAtomicInline(const NGInlineItem&,
-                                    NGInlineItemResult*,
-                                    const NGLineInfo&);
-  LineBreakState HandleFloat(const NGInlineItem&, NGInlineItemResult*);
+  LineBreakState HandleControlItem(const NGInlineItem&,
+                                   LineBreakState,
+                                   NGLineInfo*);
+  LineBreakState HandleBidiControlItem(const NGInlineItem&,
+                                       LineBreakState,
+                                       NGLineInfo*);
+  void HandleAtomicInline(const NGInlineItem&, NGLineInfo*);
+  void HandleFloat(const NGInlineItem&, NGInlineItemResult*);
 
   void HandleOpenTag(const NGInlineItem&, NGInlineItemResult*);
-  LineBreakState HandleCloseTag(const NGInlineItem&, NGInlineItemResults*);
+  void HandleCloseTag(const NGInlineItem&, NGInlineItemResults*);
 
-  void HandleOverflow(NGLineInfo*);
-  void HandleOverflow(NGLineInfo*,
-                      LayoutUnit available_width,
-                      bool force_break_anywhere);
+  LineBreakState HandleOverflow(NGLineInfo*);
+  LineBreakState HandleOverflow(NGLineInfo*, LayoutUnit available_width);
   void Rewind(NGLineInfo*, unsigned new_end);
 
   void TruncateOverflowingText(NGLineInfo*);
 
   void SetCurrentStyle(const ComputedStyle&);
-  bool IsFirstBreakOpportunity(unsigned, const NGLineInfo&) const;
-  LineBreakState ComputeIsBreakableAfter(NGInlineItemResult*) const;
 
   void MoveToNextOf(const NGInlineItem&);
   void MoveToNextOf(const NGInlineItemResult&);
-  void SkipCollapsibleWhitespaces();
 
   bool IsFirstFormattedLine() const;
   void ComputeBaseDirection();
 
   LineData line_;
   NGInlineNode node_;
+  NGLineBreakerMode mode_;
   const NGConstraintSpace& constraint_space_;
   Vector<NGPositionedFloat>* positioned_floats_;
   Vector<scoped_refptr<NGUnpositionedFloat>>* unpositioned_floats_;
   NGExclusionSpace* exclusion_space_;
+  scoped_refptr<const ComputedStyle> current_style_;
 
   unsigned item_index_ = 0;
   unsigned offset_ = 0;
@@ -167,7 +179,11 @@ class CORE_EXPORT NGLineBreaker {
   bool auto_wrap_ = false;
 
   // True when current box has 'word-break/word-wrap: break-word'.
-  bool break_if_overflow_ = false;
+  bool break_anywhere_if_overflow_ = false;
+
+  // Force LineBreakType::kBreakCharacter by ignoring the current style.
+  // Set to find grapheme cluster boundaries for 'break-word' after overflow.
+  bool override_break_anywhere_ = false;
 
   // True when breaking at soft hyphens (U+00AD) is allowed.
   bool enable_soft_hyphen_ = true;
@@ -176,6 +192,8 @@ class CORE_EXPORT NGLineBreaker {
   // quirks.
   // https://quirks.spec.whatwg.org/#the-line-height-calculation-quirk
   bool in_line_height_quirks_mode_ = false;
+
+  bool ignore_floats_ = false;
 };
 
 }  // namespace blink

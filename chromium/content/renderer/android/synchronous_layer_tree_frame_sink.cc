@@ -19,7 +19,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/surface_draw_quad.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/output_surface.h"
 #include "components/viz/service/display/output_surface_frame.h"
@@ -27,7 +27,7 @@
 #include "components/viz/service/display/texture_deleter.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
-#include "content/common/android/sync_compositor_messages.h"
+#include "content/common/input/sync_compositor_messages.h"
 #include "content/common/view_messages.h"
 #include "content/renderer/android/synchronous_compositor_filter.h"
 #include "content/renderer/android/synchronous_compositor_registry.h"
@@ -111,9 +111,9 @@ class SynchronousLayerTreeFrameSink::SoftwareOutputSurface
 
 SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
     scoped_refptr<viz::ContextProvider> context_provider,
-    scoped_refptr<viz::ContextProvider> worker_context_provider,
+    scoped_refptr<viz::RasterContextProvider> worker_context_provider,
+    scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    viz::SharedBitmapManager* shared_bitmap_manager,
     int routing_id,
     uint32_t layer_tree_frame_sink_id,
     std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
@@ -121,16 +121,17 @@ SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
     scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue)
     : cc::LayerTreeFrameSink(std::move(context_provider),
                              std::move(worker_context_provider),
+                             std::move(compositor_task_runner),
                              gpu_memory_buffer_manager,
                              nullptr),
       routing_id_(routing_id),
       layer_tree_frame_sink_id_(layer_tree_frame_sink_id),
       registry_(registry),
-      shared_bitmap_manager_(shared_bitmap_manager),
       sender_(RenderThreadImpl::current()->sync_compositor_message_filter()),
       memory_policy_(0u),
       frame_swap_message_queue_(frame_swap_message_queue),
-      local_surface_id_allocator_(new viz::LocalSurfaceIdAllocator),
+      parent_local_surface_id_allocator_(
+          new viz::ParentLocalSurfaceIdAllocator),
       begin_frame_source_(std::move(begin_frame_source)) {
   DCHECK(registry_);
   DCHECK(sender_);
@@ -167,8 +168,7 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   if (!cc::LayerTreeFrameSink::BindToClient(sink_client))
     return false;
 
-  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>(
-      viz::SurfaceManager::LifetimeType::SEQUENCES);
+  frame_sink_manager_ = std::make_unique<viz::FrameSinkManagerImpl>();
 
   DCHECK(begin_frame_source_);
   client_->SetBeginFrameSource(begin_frame_source_.get());
@@ -181,10 +181,10 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   constexpr bool root_support_is_root = true;
   constexpr bool child_support_is_root = false;
   constexpr bool needs_sync_points = true;
-  root_support_ = viz::CompositorFrameSinkSupport::Create(
+  root_support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
       this, frame_sink_manager_.get(), kRootFrameSinkId, root_support_is_root,
       needs_sync_points);
-  child_support_ = viz::CompositorFrameSinkSupport::Create(
+  child_support_ = std::make_unique<viz::CompositorFrameSinkSupport>(
       this, frame_sink_manager_.get(), kChildFrameSinkId, child_support_is_root,
       needs_sync_points);
 
@@ -202,9 +202,9 @@ bool SynchronousLayerTreeFrameSink::BindToClient(
   // TODO(crbug.com/692814): The Display never sends its resources out of
   // process so there is no reason for it to use a SharedBitmapManager.
   display_ = std::make_unique<viz::Display>(
-      shared_bitmap_manager_, nullptr /* gpu_memory_buffer_manager */,
-      software_renderer_settings, kRootFrameSinkId, std::move(output_surface),
-      nullptr /* scheduler */, nullptr /* current_task_runner */);
+      &shared_bitmap_manager_, software_renderer_settings, kRootFrameSinkId,
+      std::move(output_surface), nullptr /* scheduler */,
+      nullptr /* current_task_runner */);
   display_->Initialize(&display_client_,
                        frame_sink_manager_->surface_manager());
   display_->SetVisible(true);
@@ -222,7 +222,7 @@ void SynchronousLayerTreeFrameSink::DetachFromClient() {
   child_support_.reset();
   software_output_surface_ = nullptr;
   display_ = nullptr;
-  local_surface_id_allocator_ = nullptr;
+  parent_local_surface_id_allocator_ = nullptr;
   frame_sink_manager_ = nullptr;
   cc::LayerTreeFrameSink::DetachFromClient();
   CancelFallbackTick();
@@ -261,14 +261,15 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
 
     if (!root_local_surface_id_.is_valid() || display_size_ != display_size ||
         device_scale_factor_ != frame.metadata.device_scale_factor) {
-      root_local_surface_id_ = local_surface_id_allocator_->GenerateId();
+      root_local_surface_id_ = parent_local_surface_id_allocator_->GenerateId();
       display_size_ = display_size;
       device_scale_factor_ = frame.metadata.device_scale_factor;
     }
 
     if (!child_local_surface_id_.is_valid() || child_size_ != child_size ||
         device_scale_factor_ != frame.metadata.device_scale_factor) {
-      child_local_surface_id_ = local_surface_id_allocator_->GenerateId();
+      child_local_surface_id_ =
+          parent_local_surface_id_allocator_->GenerateId();
       child_size_ = child_size;
       device_scale_factor_ = frame.metadata.device_scale_factor;
     }

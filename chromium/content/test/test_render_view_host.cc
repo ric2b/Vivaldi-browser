@@ -97,10 +97,6 @@ TestRenderWidgetHostView::~TestRenderWidgetHostView() {
     manager->InvalidateFrameSinkId(frame_sink_id_);
 }
 
-RenderWidgetHost* TestRenderWidgetHostView::GetRenderWidgetHost() const {
-  return rwh_;
-}
-
 gfx::Vector2dF TestRenderWidgetHostView::GetLastScrollOffset() const {
   return gfx::Vector2dF();
 }
@@ -172,11 +168,6 @@ bool TestRenderWidgetHostView::HasAcceleratedSurface(
 
 #if defined(OS_MACOSX)
 
-ui::AcceleratedWidgetMac* TestRenderWidgetHostView::GetAcceleratedWidgetMac()
-    const {
-  return nullptr;
-}
-
 void TestRenderWidgetHostView::SetActive(bool active) {
   // <viettrungluu@gmail.com>: Do I need to do anything here?
 }
@@ -222,8 +213,17 @@ bool TestRenderWidgetHostView::LockMouse() {
 void TestRenderWidgetHostView::UnlockMouse() {
 }
 
+RenderWidgetHostImpl* TestRenderWidgetHostView::GetRenderWidgetHostImpl()
+    const {
+  return rwh_;
+}
+
 viz::FrameSinkId TestRenderWidgetHostView::GetFrameSinkId() {
   return frame_sink_id_;
+}
+
+viz::SurfaceId TestRenderWidgetHostView::GetCurrentSurfaceId() const {
+  return viz::SurfaceId();
 }
 
 void TestRenderWidgetHostView::OnFirstSurfaceActivation(

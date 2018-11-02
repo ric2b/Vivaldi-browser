@@ -36,7 +36,11 @@ namespace cc {
 PixelTest::PixelTest()
     : device_viewport_size_(gfx::Size(200, 200)),
       disable_picture_quad_image_filtering_(false),
-      output_surface_client_(new FakeOutputSurfaceClient) {}
+      output_surface_client_(new FakeOutputSurfaceClient) {
+  // Keep texture sizes exactly matching the bounds of the RenderPass to avoid
+  // floating point badness in texcoords.
+  renderer_settings_.dont_round_texture_sizes_for_pixel_tests = true;
+}
 
 PixelTest::~PixelTest() = default;
 
@@ -168,8 +172,7 @@ void PixelTest::SetUpGLWithoutRenderer(bool flipped_output_surface) {
   gpu_memory_buffer_manager_ =
       std::make_unique<viz::TestGpuMemoryBufferManager>();
   resource_provider_ = std::make_unique<DisplayResourceProvider>(
-      output_surface_->context_provider(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), settings_.resource_settings);
+      output_surface_->context_provider(), shared_bitmap_manager_.get());
 
   child_context_provider_ =
       base::MakeRefCounted<TestInProcessContextProvider>(nullptr);
@@ -200,8 +203,11 @@ void PixelTest::SetUpSoftwareRenderer() {
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
   resource_provider_ = std::make_unique<DisplayResourceProvider>(
-      nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
+      nullptr, shared_bitmap_manager_.get());
+  child_resource_provider_ = std::make_unique<LayerTreeResourceProvider>(
+      nullptr, shared_bitmap_manager_.get(), nullptr, true,
       settings_.resource_settings);
+
   auto renderer = std::make_unique<viz::SoftwareRenderer>(
       &renderer_settings_, output_surface_.get(), resource_provider_.get());
   software_renderer_ = renderer.get();

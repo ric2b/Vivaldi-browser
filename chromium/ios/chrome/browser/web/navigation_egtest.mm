@@ -6,7 +6,7 @@
 
 #include "base/ios/ios_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/ui/ui_util.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -19,6 +19,7 @@
 #error "This file requires ARC support."
 #endif
 
+using chrome_test_util::ContentSuggestionCollectionView;
 using chrome_test_util::BackButton;
 using chrome_test_util::ForwardButton;
 using chrome_test_util::OmniboxText;
@@ -305,10 +306,7 @@ std::unique_ptr<net::test_server::HttpResponse> WindowLocationHashHandlers(
       assertWithMatcher:grey_notNil()];
 
   // Verify that the forward button is not enabled.
-  // TODO(crbug.com/638674): Evaluate if size class determination can move to
-  // shared code.
-  if (UIApplication.sharedApplication.keyWindow.traitCollection
-          .horizontalSizeClass == UIUserInterfaceSizeClassCompact) {
+  if (IsCompact()) {
     // In horizontally compact environments, the forward button is not visible.
     [[EarlGrey selectElementWithMatcher:ForwardButton()]
         assertWithMatcher:grey_nil()];
@@ -321,6 +319,25 @@ std::unique_ptr<net::test_server::HttpResponse> WindowLocationHashHandlers(
     [[EarlGrey selectElementWithMatcher:disabledForwardButton]
         assertWithMatcher:grey_notNil()];
   }
+}
+
+// Test back-and-forward navigation from and to NTP.
+- (void)testHistoryBackAndForwardAroundNTP {
+  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
+  const GURL testURL = self.testServer->GetURL(kSimpleFileBasedTestURL);
+  [ChromeEarlGrey loadURL:testURL];
+  [ChromeEarlGrey waitForWebViewContainingText:"pony"];
+
+  // Tap the back button and verify NTP is loaded.
+  [[EarlGrey selectElementWithMatcher:BackButton()] performAction:grey_tap()];
+  [ChromeEarlGrey waitForPageToFinishLoading];
+  [[EarlGrey selectElementWithMatcher:ContentSuggestionCollectionView()]
+      assertWithMatcher:grey_notNil()];
+
+  // Tap the forward button and verify test page is loaded.
+  [[EarlGrey selectElementWithMatcher:ForwardButton()]
+      performAction:grey_tap()];
+  [ChromeEarlGrey waitForWebViewContainingText:"pony"];
 }
 
 // Tests navigating forward via window.history.forward() to an error page.

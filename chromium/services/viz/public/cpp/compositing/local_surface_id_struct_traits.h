@@ -13,8 +13,14 @@ namespace mojo {
 
 template <>
 struct StructTraits<viz::mojom::LocalSurfaceIdDataView, viz::LocalSurfaceId> {
-  static uint32_t parent_id(const viz::LocalSurfaceId& local_surface_id) {
-    return local_surface_id.parent_id();
+  static uint32_t parent_sequence_number(
+      const viz::LocalSurfaceId& local_surface_id) {
+    return local_surface_id.parent_sequence_number();
+  }
+
+  static uint32_t child_sequence_number(
+      const viz::LocalSurfaceId& local_surface_id) {
+    return local_surface_id.child_sequence_number();
   }
 
   static const base::UnguessableToken& nonce(
@@ -24,8 +30,9 @@ struct StructTraits<viz::mojom::LocalSurfaceIdDataView, viz::LocalSurfaceId> {
 
   static bool Read(viz::mojom::LocalSurfaceIdDataView data,
                    viz::LocalSurfaceId* out) {
-    out->parent_id_ = data.parent_id();
-    return data.ReadNonce(&out->nonce_);
+    out->parent_sequence_number_ = data.parent_sequence_number();
+    out->child_sequence_number_ = data.child_sequence_number();
+    return data.ReadNonce(&out->nonce_) && out->is_valid();
   }
 };
 

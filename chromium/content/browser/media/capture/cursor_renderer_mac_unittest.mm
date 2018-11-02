@@ -8,11 +8,12 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
-#include "base/test/simple_test_tick_clock.h"
+#include "base/test/scoped_task_environment.h"
+#include "base/time/time.h"
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/test/cocoa_helper.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
-#include "ui/gfx/test/ui_cocoa_test_helper.h"
 
 namespace content {
 
@@ -41,9 +42,12 @@ class CursorRendererMacTest : public ui::CocoaTest {
         initWithFrame:NSMakeRect(0, 0, kTestViewWidth, kTestViewHeight)]);
     view_ = view.get();
     [[test_window() contentView] addSubview:view_];
-    cursor_renderer_.reset(new CursorRendererMac(view_));
+    cursor_renderer_.reset(new CursorRendererMac(
+        CursorRenderer::CURSOR_DISPLAYED_ON_MOUSE_MOVEMENT));
+    cursor_renderer_->SetTargetView(view_);
     // Dis-associate mouse and cursor.
     StartEventTap();
+    [test_window() setPretendIsKeyWindow:YES];
   }
 
   void TearDown() override {
@@ -52,18 +56,26 @@ class CursorRendererMacTest : public ui::CocoaTest {
     ui::CocoaTest::TearDown();
   }
 
-  void SetTickClock(base::SimpleTestTickClock* clock) {
-    cursor_renderer_->tick_clock_ = clock;
+  bool CursorDisplayed() {
+    // Request rendering into a dummy video frame. If RenderCursorOnVideoFrame()
+    // returns true, then the cursor is being displayed.
+    if (!dummy_frame_) {
+      constexpr gfx::Size dummy_frame_size = gfx::Size(320, 200);
+      dummy_frame_ = media::VideoFrame::CreateZeroInitializedFrame(
+          media::PIXEL_FORMAT_I420, dummy_frame_size,
+          gfx::Rect(dummy_frame_size), dummy_frame_size, base::TimeDelta());
+    }
+    return RenderCursorOnVideoFrame(dummy_frame_.get(), nullptr);
   }
 
-  bool CursorDisplayed() { return cursor_renderer_->cursor_displayed_; }
-
-  void RenderCursorOnVideoFrame(media::VideoFrame* target) {
-    cursor_renderer_->RenderOnVideoFrame(target);
+  bool RenderCursorOnVideoFrame(media::VideoFrame* frame,
+                                CursorRendererUndoer* undoer) {
+    return cursor_renderer_->RenderOnVideoFrame(frame, frame->visible_rect(),
+                                                undoer);
   }
 
-  void SnapshotCursorState(gfx::Rect region_in_frame) {
-    cursor_renderer_->SnapshotCursorState(region_in_frame);
+  bool IsUserInteractingWithView() {
+    return cursor_renderer_->IsUserInteractingWithView();
   }
 
   // Here the |point| is in Aura coordinates (the origin (0, 0) is at top-left
@@ -71,12 +83,6 @@ class CursorRendererMacTest : public ui::CocoaTest {
   // it needs to be converted into Cocoa coordinates (the origin is at
   // bottom-left of the main screen) first, and then info Quartz coordinates
   // (the origin is at top-left of the main display).
-  void MoveMouseCursorWithinWindow(gfx::Point point) {
-    point.set_y(kTestViewHeight - point.y());
-    CGWarpMouseCursorPosition(gfx::ScreenPointToNSPoint(point));
-    cursor_renderer_->OnMouseEvent();
-  }
-
   void MoveMouseCursorWithinWindow() {
     CGWarpMouseCursorPosition(
         gfx::ScreenPointToNSPoint(gfx::Point(50, kTestViewHeight - 50)));
@@ -92,18 +98,24 @@ class CursorRendererMacTest : public ui::CocoaTest {
     cursor_renderer_->OnMouseEvent();
   }
 
+  void SimulateMouseWentIdle() {
+    EXPECT_TRUE(cursor_renderer_->mouse_activity_ended_timer_.IsRunning());
+    cursor_renderer_->mouse_activity_ended_timer_.Stop();
+    cursor_renderer_->OnMouseHasGoneIdle();
+  }
+
   // A very simple test of whether there are any non-zero pixels
   // in the region |rect| within |frame|.
   bool NonZeroPixelsInRegion(scoped_refptr<media::VideoFrame> frame,
                              gfx::Rect rect) {
     bool y_found = false, u_found = false, v_found = false;
     for (int y = rect.y(); y < rect.bottom(); ++y) {
-      uint8_t* yplane = frame->data(media::VideoFrame::kYPlane) +
-                        y * frame->row_bytes(media::VideoFrame::kYPlane);
-      uint8_t* uplane = frame->data(media::VideoFrame::kUPlane) +
-                        (y / 2) * frame->row_bytes(media::VideoFrame::kUPlane);
-      uint8_t* vplane = frame->data(media::VideoFrame::kVPlane) +
-                        (y / 2) * frame->row_bytes(media::VideoFrame::kVPlane);
+      uint8_t* yplane = frame->visible_data(media::VideoFrame::kYPlane) +
+                        y * frame->stride(media::VideoFrame::kYPlane);
+      uint8_t* uplane = frame->visible_data(media::VideoFrame::kUPlane) +
+                        (y / 2) * frame->stride(media::VideoFrame::kUPlane);
+      uint8_t* vplane = frame->visible_data(media::VideoFrame::kVPlane) +
+                        (y / 2) * frame->stride(media::VideoFrame::kVPlane);
       for (int x = rect.x(); x < rect.right(); ++x) {
         if (yplane[x] != 0)
           y_found = true;
@@ -135,82 +147,82 @@ class CursorRendererMacTest : public ui::CocoaTest {
   void StopEventTap() { CGEventTapEnable(event_tap_, false); }
 
  protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   NSView* view_;
   std::unique_ptr<CursorRendererMac> cursor_renderer_;
 
   CFMachPortRef event_tap_;
+
+  scoped_refptr<media::VideoFrame> dummy_frame_;
 };
 
 TEST_F(CursorRendererMacTest, CursorDuringMouseMovement) {
-  // Keep window activated.
-  [test_window() setPretendIsKeyWindow:YES];
-
+  // Cursor not displayed at start.
   EXPECT_FALSE(CursorDisplayed());
-
-  base::SimpleTestTickClock clock;
-  SetTickClock(&clock);
+  EXPECT_FALSE(IsUserInteractingWithView());
 
   // Cursor displayed after mouse movement.
   MoveMouseCursorWithinWindow();
   EXPECT_TRUE(CursorDisplayed());
+  EXPECT_TRUE(IsUserInteractingWithView());
 
-  // Cursor not be displayed after idle period.
-  clock.SetNowTicks(base::TimeTicks::Now());
-  clock.Advance(base::TimeDelta::FromSeconds(5));
-  SnapshotCursorState(gfx::Rect(10, 10, 200, 200));
+  // Cursor not displayed after idle period.
+  SimulateMouseWentIdle();
   EXPECT_FALSE(CursorDisplayed());
-  clock.SetNowTicks(base::TimeTicks::Now());
+  EXPECT_FALSE(IsUserInteractingWithView());
 
   // Cursor displayed with mouse movement following idle period.
   MoveMouseCursorWithinWindow();
-  SnapshotCursorState(gfx::Rect(10, 10, 200, 200));
   EXPECT_TRUE(CursorDisplayed());
+  EXPECT_TRUE(IsUserInteractingWithView());
 
   // Cursor not displayed if mouse outside the window
   MoveMouseCursorOutsideWindow();
-  SnapshotCursorState(gfx::Rect(10, 10, 200, 200));
   EXPECT_FALSE(CursorDisplayed());
 }
 
 TEST_F(CursorRendererMacTest, CursorOnActiveWindow) {
+  // Cursor not displayed at start.
   EXPECT_FALSE(CursorDisplayed());
+  EXPECT_FALSE(IsUserInteractingWithView());
 
   // Cursor displayed after mouse movement.
-  [test_window() setPretendIsKeyWindow:YES];
   MoveMouseCursorWithinWindow();
   EXPECT_TRUE(CursorDisplayed());
+  EXPECT_TRUE(IsUserInteractingWithView());
 
-  // Cursor not be displayed if window is not activated.
+  // Cursor not displayed if window is not activated.
   [test_window() setPretendIsKeyWindow:NO];
-  SnapshotCursorState(gfx::Rect(10, 10, 200, 200));
+  MoveMouseCursorWithinWindow();
   EXPECT_FALSE(CursorDisplayed());
+  EXPECT_TRUE(IsUserInteractingWithView());
 
   // Cursor is displayed again if window is activated again.
   [test_window() setPretendIsKeyWindow:YES];
   MoveMouseCursorWithinWindow();
-  SnapshotCursorState(gfx::Rect(10, 10, 200, 200));
   EXPECT_TRUE(CursorDisplayed());
+  EXPECT_TRUE(IsUserInteractingWithView());
 }
 
 TEST_F(CursorRendererMacTest, CursorRenderedOnFrame) {
-  // Keep window activated.
-  [test_window() setPretendIsKeyWindow:YES];
-
+  // Cursor not displayed at start.
   EXPECT_FALSE(CursorDisplayed());
 
   gfx::Size size(kTestViewWidth, kTestViewHeight);
   scoped_refptr<media::VideoFrame> frame =
-      media::VideoFrame::CreateZeroInitializedFrame(media::PIXEL_FORMAT_YV12,
+      media::VideoFrame::CreateZeroInitializedFrame(media::PIXEL_FORMAT_I420,
                                                     size, gfx::Rect(size), size,
                                                     base::TimeDelta());
 
-  MoveMouseCursorWithinWindow(gfx::Point(60, 60));
-  SnapshotCursorState(gfx::Rect(size));
+  MoveMouseCursorWithinWindow();
   EXPECT_TRUE(CursorDisplayed());
 
-  EXPECT_FALSE(NonZeroPixelsInRegion(frame, gfx::Rect(50, 50, 70, 70)));
-  RenderCursorOnVideoFrame(frame.get());
+  EXPECT_FALSE(NonZeroPixelsInRegion(frame, frame->visible_rect()));
+  CursorRendererUndoer undoer;
+  EXPECT_TRUE(RenderCursorOnVideoFrame(frame.get(), &undoer));
   EXPECT_TRUE(NonZeroPixelsInRegion(frame, gfx::Rect(50, 50, 70, 70)));
+  undoer.Undo(frame.get());
+  EXPECT_FALSE(NonZeroPixelsInRegion(frame, frame->visible_rect()));
 }
 
 }  // namespace content

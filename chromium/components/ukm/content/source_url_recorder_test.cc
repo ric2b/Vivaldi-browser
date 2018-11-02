@@ -22,6 +22,12 @@ class SourceUrlRecorderWebContentsObserverTest
     ukm::InitializeSourceUrlRecorderForWebContents(web_contents());
   }
 
+  GURL GetAssociatedURLForWebContentsDocument() {
+    const ukm::UkmSource* src = test_ukm_recorder_.GetSourceForSourceId(
+        ukm::GetSourceIdForWebContentsDocument(web_contents()));
+    return src ? src->url() : GURL();
+  }
+
  protected:
   ukm::TestAutoSetUkmRecorder test_ukm_recorder_;
 };
@@ -52,6 +58,8 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, InitialUrl) {
     EXPECT_EQ(final_url, kv.second->url());
     EXPECT_EQ(initial_url, kv.second->initial_url());
   }
+
+  EXPECT_EQ(final_url, GetAssociatedURLForWebContentsDocument());
 }
 
 TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreUrlInSubframe) {
@@ -69,6 +77,8 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreUrlInSubframe) {
     EXPECT_EQ(main_frame_url, kv.second->url());
     EXPECT_TRUE(kv.second->initial_url().is_empty());
   }
+
+  EXPECT_EQ(main_frame_url, GetAssociatedURLForWebContentsDocument());
 }
 
 TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreSameDocumentNavigation) {
@@ -86,4 +96,6 @@ TEST_F(SourceUrlRecorderWebContentsObserverTest, IgnoreSameDocumentNavigation) {
     EXPECT_EQ(url, kv.second->url());
     EXPECT_TRUE(kv.second->initial_url().is_empty());
   }
+
+  EXPECT_EQ(url, GetAssociatedURLForWebContentsDocument());
 }

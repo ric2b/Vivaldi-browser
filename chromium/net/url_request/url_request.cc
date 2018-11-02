@@ -31,6 +31,7 @@
 #include "net/log/net_log.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source_type.h"
+#include "net/reporting/reporting_service.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/redirect_util.h"
@@ -191,7 +192,8 @@ URLRequest::~URLRequest() {
   // on UserData associated with |this| and poke at it during teardown.
   job_.reset();
 
-  context_->RemoveURLRequest(this);
+  DCHECK_EQ(1u, context_->url_requests()->count(this));
+  context_->url_requests()->erase(this);
 
   int net_error = OK;
   // Log error only on failure, not cancellation, as even successful requests
@@ -574,11 +576,12 @@ URLRequest::URLRequest(const GURL& url,
       received_response_content_length_(0),
       creation_time_(base::TimeTicks::Now()),
       raw_header_size_(0),
+      is_pac_request_(false),
       traffic_annotation_(traffic_annotation) {
   // Sanity check out environment.
   DCHECK(base::ThreadTaskRunnerHandle::IsSet());
 
-  context->InsertURLRequest(this);
+  context->url_requests()->insert(this);
   net_log_.BeginEvent(
       NetLogEventType::REQUEST_ALIVE,
       base::Bind(&NetLogURLRequestConstructorCallback, &url, priority_));
@@ -1183,12 +1186,20 @@ void URLRequest::MaybeGenerateNetworkErrorLoggingReport() {
     details.server_ip = endpoint.address();
   // TODO(juliatuttle): Plumb this.
   details.protocol = kProtoUnknown;
-  details.status_code = GetResponseCode();
-  if (details.status_code == -1)
+  if (response_headers()) {
+    // HttpResponseHeaders::response_code() returns 0 if response code couldn't
+    // be parsed, which is also how NEL represents the same.
+    details.status_code = response_headers()->response_code();
+  } else {
     details.status_code = 0;
+  }
   details.elapsed_time =
       base::TimeTicks::Now() - load_timing_info_.request_start;
   details.type = status().ToNetError();
+
+  details.is_reporting_upload =
+      context()->reporting_service() &&
+      context()->reporting_service()->RequestIsUpload(*this);
 
   delegate->OnNetworkError(details);
 }

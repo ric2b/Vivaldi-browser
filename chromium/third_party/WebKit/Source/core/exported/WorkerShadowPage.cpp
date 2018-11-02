@@ -5,6 +5,7 @@
 #include "core/exported/WorkerShadowPage.h"
 
 #include "core/exported/WebViewImpl.h"
+#include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "platform/loader/fetch/SubstituteData.h"
@@ -16,8 +17,9 @@ namespace blink {
 
 WorkerShadowPage::WorkerShadowPage(Client* client)
     : client_(client),
-      web_view_(
-          WebViewImpl::Create(nullptr, mojom::PageVisibilityState::kVisible)),
+      web_view_(WebViewImpl::Create(nullptr,
+                                    mojom::PageVisibilityState::kVisible,
+                                    nullptr)),
       main_frame_(WebLocalFrameImpl::CreateMainFrame(web_view_,
                                                      this,
                                                      nullptr,
@@ -29,8 +31,13 @@ WorkerShadowPage::WorkerShadowPage(Client* client)
   // TODO(http://crbug.com/363843): This needs to find a better way to
   // not create graphics layers.
   web_view_->GetSettings()->SetAcceleratedCompositingEnabled(false);
+  // TODO(lunalu): Service worker and shared worker count feature usage on the
+  // blink side use counter. Once the blink side use counter is removed
+  // (crbug.com/811948), remove this instant from Settings.
+  main_frame_->GetFrame()->GetSettings()->SetIsShadowPage(true);
 
-  main_frame_->SetDevToolsAgentClient(client_);
+  main_frame_->SetDevToolsAgentImpl(
+      WebDevToolsAgentImpl::CreateForWorker(main_frame_, client_));
 }
 
 WorkerShadowPage::~WorkerShadowPage() {
@@ -83,11 +90,11 @@ WorkerShadowPage::CreateURLLoaderFactory() {
   return Platform::Current()->CreateDefaultURLLoaderFactory();
 }
 
-WebString WorkerShadowPage::GetInstrumentationToken() {
+WebString WorkerShadowPage::GetDevToolsFrameToken() {
   // TODO(dgozman): instrumentation token will have to be passed directly to
   // DevTools once we stop using a frame for workers. Currently, we rely on
   // the frame's instrumentation token to match the worker.
-  return client_->GetInstrumentationToken();
+  return client_->GetDevToolsFrameToken();
 }
 
 bool WorkerShadowPage::WasInitialized() const {
@@ -108,6 +115,11 @@ void WorkerShadowPage::AdvanceState(State new_state) {
       state_ = new_state;
       return;
   }
+}
+
+void WorkerShadowPage::BindDevToolsAgent(
+    mojom::blink::DevToolsAgentAssociatedRequest request) {
+  main_frame_->DevToolsAgentImpl()->BindRequest(std::move(request));
 }
 
 }  // namespace blink

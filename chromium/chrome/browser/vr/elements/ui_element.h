@@ -16,6 +16,7 @@
 #include "cc/animation/transform_operations.h"
 #include "chrome/browser/vr/animation_player.h"
 #include "chrome/browser/vr/databinding/binding_base.h"
+#include "chrome/browser/vr/elements/corner_radii.h"
 #include "chrome/browser/vr/elements/draw_phase.h"
 #include "chrome/browser/vr/elements/ui_element_iterator.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
@@ -43,6 +44,7 @@ class Animation;
 class SkiaSurfaceProvider;
 class UiElementRenderer;
 struct CameraModel;
+struct TextInputInfo;
 
 enum LayoutAlignment {
   NONE = 0,
@@ -113,7 +115,7 @@ class UiElement : public cc::AnimationTarget {
   };
 
   UiElementName name() const { return name_; }
-  void set_name(UiElementName name);
+  void SetName(UiElementName name);
   virtual void OnSetName();
 
   UiElementName owner_name_for_test() const { return owner_name_for_test_; }
@@ -122,11 +124,11 @@ class UiElement : public cc::AnimationTarget {
   }
 
   UiElementType type() const { return type_; }
-  void set_type(UiElementType type);
+  void SetType(UiElementType type);
   virtual void OnSetType();
 
   DrawPhase draw_phase() const { return draw_phase_; }
-  void set_draw_phase(DrawPhase draw_phase);
+  void SetDrawPhase(DrawPhase draw_phase);
   virtual void OnSetDrawPhase();
 
   // Returns true if the element needs to be re-drawn.
@@ -134,7 +136,7 @@ class UiElement : public cc::AnimationTarget {
 
   // Returns true if the element has been updated in any visible way.
   bool DoBeginFrame(const base::TimeTicks& time,
-                    const gfx::Vector3dF& head_direction);
+                    const gfx::Transform& head_pose);
 
   // Indicates whether the element should be tested for cursor input.
   bool IsHitTestable() const;
@@ -172,7 +174,8 @@ class UiElement : public cc::AnimationTarget {
 
   // Performs a hit test for the ray supplied in the request and populates the
   // result. The ray is in the world coordinate space.
-  void HitTest(const HitTestRequest& request, HitTestResult* result) const;
+  virtual void HitTest(const HitTestRequest& request,
+                       HitTestResult* result) const;
 
   int id() const { return id_; }
 
@@ -195,6 +198,10 @@ class UiElement : public cc::AnimationTarget {
   bool hit_testable() const { return hit_testable_; }
   void set_hit_testable(bool hit_testable) { hit_testable_ = hit_testable; }
 
+  bool focusable() const { return focusable_; }
+  void set_focusable(bool focusable);
+  virtual void OnSetFocusable();
+
   bool scrollable() const { return scrollable_; }
   void set_scrollable(bool scrollable) { scrollable_ = scrollable; }
 
@@ -205,9 +212,14 @@ class UiElement : public cc::AnimationTarget {
     event_handlers_ = event_handlers;
   }
 
+  // Editable elements should override these functions.
+  virtual void OnFocusChanged(bool focused);
+  virtual void OnInputEdited(const TextInputInfo& info);
+  virtual void OnInputCommitted(const TextInputInfo& info);
+
   gfx::SizeF size() const;
   void SetSize(float width, float hight);
-  virtual void OnSetSize(gfx::SizeF size);
+  virtual void OnSetSize(const gfx::SizeF& size);
 
   gfx::PointF local_origin() const { return local_origin_; }
 
@@ -228,9 +240,19 @@ class UiElement : public cc::AnimationTarget {
   float opacity() const { return opacity_; }
   virtual void SetOpacity(float opacity);
 
-  float corner_radius() const { return corner_radius_; }
+  CornerRadii corner_radii() const { return corner_radii_; }
+  void SetCornerRadii(const CornerRadii& radii);
+  virtual void OnSetCornerRadii(const CornerRadii& radii);
+
+  float corner_radius() const {
+    DCHECK(corner_radii_.AllEqual());
+    return corner_radii_.upper_left;
+  }
+
+  // Syntax sugar for setting all corner radii to the same value.
   void set_corner_radius(float corner_radius) {
-    corner_radius_ = corner_radius;
+    SetCornerRadii(
+        {corner_radius, corner_radius, corner_radius, corner_radius});
   }
 
   float computed_opacity() const;
@@ -261,6 +283,13 @@ class UiElement : public cc::AnimationTarget {
   bool bounds_contain_children() const { return bounds_contain_children_; }
   void set_bounds_contain_children(bool bounds_contain_children) {
     bounds_contain_children_ = bounds_contain_children;
+  }
+
+  bool contributes_to_parent_bounds() const {
+    return contributes_to_parent_bounds_;
+  }
+  void set_contributes_to_parent_bounds(bool value) {
+    contributes_to_parent_bounds_ = value;
   }
 
   float x_padding() const { return x_padding_; }
@@ -394,30 +423,37 @@ class UiElement : public cc::AnimationTarget {
   // situated in its parent's list of children. This is used to determine
   // whether each ancestor is the last child (which affects the lines we draw in
   // the tree).
-  void DumpHierarchy(std::vector<size_t> counts, std::ostringstream* os) const;
+  // TODO(vollick): generalize the configuration of the dump to selectively turn
+  // off or on a variety of features.
+  void DumpHierarchy(std::vector<size_t> counts,
+                     std::ostringstream* os,
+                     bool include_bindings) const;
   virtual void DumpGeometry(std::ostringstream* os) const;
+
+  // This is to be used only during the texture / size updated phase (i.e., to
+  // change your size based on your old size).
+  gfx::SizeF stale_size() const;
 
  protected:
   AnimationPlayer& animation_player() { return animation_player_; }
 
   base::TimeTicks last_frame_time() const { return last_frame_time_; }
 
-  // This is to be used only during the texture / size updated phase (i.e., to
-  // change your size based on your old size).
-  gfx::SizeF stale_size() const;
-
  private:
   virtual void OnUpdatedWorldSpaceTransform();
 
   // Returns true if the element has been updated in any visible way.
   virtual bool OnBeginFrame(const base::TimeTicks& time,
-                            const gfx::Vector3dF& look_at);
+                            const gfx::Transform& head_pose);
 
   // Valid IDs are non-negative.
   int id_ = -1;
 
   // If false, the reticle will not hit the element, even if visible.
   bool hit_testable_ = true;
+
+  // If false, clicking on the element doesn't give it focus.
+  bool focusable_ = true;
 
   // A signal to the input routing machinery that this element accepts scrolls.
   bool scrollable_ = false;
@@ -445,7 +481,7 @@ class UiElement : public cc::AnimationTarget {
 
   // The corner radius of the object. Analogous to the CSS property,
   // border-radius. This is in meters (same units as |size|).
-  float corner_radius_ = 0.0f;
+  CornerRadii corner_radii_ = {0, 0, 0, 0};
 
   // The computed opacity, incorporating opacity of parent objects.
   float computed_opacity_ = 1.0f;
@@ -472,6 +508,7 @@ class UiElement : public cc::AnimationTarget {
   // size to accommodate all descendants, adding in the padding below along the
   // x and y axes.
   bool bounds_contain_children_ = false;
+  bool contributes_to_parent_bounds_ = true;
   float x_padding_ = 0.0f;
   float y_padding_ = 0.0f;
 

@@ -11,8 +11,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
-#include "content/public/common/resource_response_info.h"
 #include "net/http/http_response_headers.h"
+#include "services/network/public/cpp/resource_response_info.h"
 
 namespace content {
 
@@ -21,6 +21,10 @@ namespace {
 // The gathering of UMA stats for site isolation is deactivated by default, and
 // only activated in renderer processes.
 static bool g_stats_gathering_enabled = false;
+
+bool IsYes(CrossSiteDocumentClassifier::Result result) {
+  return result == CrossSiteDocumentClassifier::Result::kYes;
+}
 
 bool IsRenderableStatusCode(int status_code) {
   // Chrome only uses the content of a response with one of these status codes
@@ -101,7 +105,7 @@ SiteIsolationStatsGatherer::OnReceivedResponse(
     const url::Origin& frame_origin,
     const GURL& response_url,
     ResourceType resource_type,
-    const ResourceResponseInfo& info) {
+    const network::ResourceResponseInfo& info) {
   if (!g_stats_gathering_enabled)
     return nullptr;
 
@@ -190,17 +194,17 @@ bool SiteIsolationStatsGatherer::OnReceivedFirstChunk(
     if (resp_data->canonical_mime_type == CROSS_SITE_DOCUMENT_MIME_TYPE_HTML) {
       bucket_prefix = "SiteIsolation.XSD.HTML";
       sniffed_as_target_document =
-          CrossSiteDocumentClassifier::SniffForHTML(data);
+          IsYes(CrossSiteDocumentClassifier::SniffForHTML(data));
     } else if (resp_data->canonical_mime_type ==
                CROSS_SITE_DOCUMENT_MIME_TYPE_XML) {
       bucket_prefix = "SiteIsolation.XSD.XML";
       sniffed_as_target_document =
-          CrossSiteDocumentClassifier::SniffForXML(data);
+          IsYes(CrossSiteDocumentClassifier::SniffForXML(data));
     } else if (resp_data->canonical_mime_type ==
                CROSS_SITE_DOCUMENT_MIME_TYPE_JSON) {
       bucket_prefix = "SiteIsolation.XSD.JSON";
       sniffed_as_target_document =
-          CrossSiteDocumentClassifier::SniffForJSON(data);
+          IsYes(CrossSiteDocumentClassifier::SniffForJSON(data));
     } else {
       NOTREACHED() << "Not a blockable mime type: "
                    << resp_data->canonical_mime_type;
@@ -222,11 +226,11 @@ bool SiteIsolationStatsGatherer::OnReceivedFirstChunk(
     // and JSON sniffer to a text document in the order, and block it
     // if any of them succeeds in sniffing.
     std::string bucket_prefix;
-    if (CrossSiteDocumentClassifier::SniffForHTML(data))
+    if (IsYes(CrossSiteDocumentClassifier::SniffForHTML(data)))
       bucket_prefix = "SiteIsolation.XSD.Plain.HTML";
-    else if (CrossSiteDocumentClassifier::SniffForXML(data))
+    else if (IsYes(CrossSiteDocumentClassifier::SniffForXML(data)))
       bucket_prefix = "SiteIsolation.XSD.Plain.XML";
-    else if (CrossSiteDocumentClassifier::SniffForJSON(data))
+    else if (IsYes(CrossSiteDocumentClassifier::SniffForJSON(data)))
       bucket_prefix = "SiteIsolation.XSD.Plain.JSON";
 
     if (bucket_prefix.size() > 0) {

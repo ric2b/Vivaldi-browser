@@ -12,6 +12,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/style/BorderEdge.h"
 #include "platform/LayoutUnit.h"
 #include "platform/geometry/LayoutRect.h"
 
@@ -62,10 +63,10 @@ LayoutSize CalculateFillTileSize(const LayoutBoxModelObject& obj,
   StyleImage* image = fill_layer.GetImage();
   EFillSizeType type = fill_layer.Size().type;
 
-  LayoutSize image_intrinsic_size = image->ImageSize(
-      obj.GetDocument(), obj.Style()->EffectiveZoom(), positioning_area_size);
+  LayoutSize image_intrinsic_size(image->ImageSize(
+      obj.GetDocument(), obj.Style()->EffectiveZoom(), positioning_area_size));
   switch (type) {
-    case kSizeLength: {
+    case EFillSizeType::kSizeLength: {
       LayoutSize tile_size(positioning_area_size);
 
       Length layer_width = fill_layer.Size().size.Width();
@@ -111,7 +112,7 @@ LayoutSize CalculateFillTileSize(const LayoutBoxModelObject& obj,
       tile_size.ClampNegativeToZero();
       return tile_size;
     }
-    case kSizeNone: {
+    case EFillSizeType::kSizeNone: {
       // If both values are 'auto' then the intrinsic width and/or height of the
       // image should be used, if any.
       if (!image_intrinsic_size.IsEmpty())
@@ -119,10 +120,10 @@ LayoutSize CalculateFillTileSize(const LayoutBoxModelObject& obj,
 
       // If the image has neither an intrinsic width nor an intrinsic height,
       // its size is determined as for 'contain'.
-      type = kContain;
+      type = EFillSizeType::kContain;
     }
-    case kContain:
-    case kCover: {
+    case EFillSizeType::kContain:
+    case EFillSizeType::kCover: {
       float horizontal_scale_factor =
           image_intrinsic_size.Width()
               ? positioning_area_size.Width().ToFloat() /
@@ -137,7 +138,7 @@ LayoutSize CalculateFillTileSize(const LayoutBoxModelObject& obj,
       // positioningAreaSize in that dimension, so that rounding of floating
       // point approximation to LayoutUnit do not shrink the image to smaller
       // than the positioningAreaSize.
-      if (type == kContain) {
+      if (type == EFillSizeType::kContain) {
         if (horizontal_scale_factor < vertical_scale_factor)
           return LayoutSize(
               positioning_area_size.Width(),
@@ -226,11 +227,11 @@ void BackgroundImageGeometry::SetRepeatX(const FillLayer& fill_layer,
   // handle large positions.
   if (unsnapped_tile_width) {
     LayoutUnit computed_x_position =
-        RoundedMinimumValueForLength(fill_layer.XPosition(),
+        RoundedMinimumValueForLength(fill_layer.PositionX(),
                                      unsnapped_available_width) -
         offset_for_cell;
     float number_of_tiles_in_position;
-    if (fill_layer.BackgroundXOrigin() == kRightEdge) {
+    if (fill_layer.BackgroundXOrigin() == BackgroundEdgeOrigin::kRight) {
       number_of_tiles_in_position =
           (snapped_available_width - computed_x_position + extra_offset)
               .ToFloat() /
@@ -262,11 +263,11 @@ void BackgroundImageGeometry::SetRepeatY(const FillLayer& fill_layer,
   // handle large positions.
   if (unsnapped_tile_height) {
     LayoutUnit computed_y_position =
-        RoundedMinimumValueForLength(fill_layer.YPosition(),
+        RoundedMinimumValueForLength(fill_layer.PositionY(),
                                      unsnapped_available_height) -
         offset_for_cell;
     float number_of_tiles_in_position;
-    if (fill_layer.BackgroundYOrigin() == kBottomEdge) {
+    if (fill_layer.BackgroundYOrigin() == BackgroundEdgeOrigin::kBottom) {
       number_of_tiles_in_position =
           (snapped_available_height - computed_y_position + extra_offset)
               .ToFloat() /
@@ -423,7 +424,7 @@ bool ShouldUseFixedAttachment(const FillLayer& fill_layer) {
     // on scroll of a page that has fixed background images.
     return false;
   }
-  return fill_layer.Attachment() == kFixedBackgroundAttachment;
+  return fill_layer.Attachment() == EFillAttachment::kFixed;
 }
 
 LayoutRect FixedAttachmentPositioningArea(const LayoutBoxModelObject& obj,
@@ -510,29 +511,88 @@ BackgroundImageGeometry::BackgroundImageGeometry(
   }
 }
 
+LayoutRectOutsets BackgroundImageGeometry::ComputeDestRectAdjustment(
+    const FillLayer& fill_layer,
+    PaintPhase paint_phase) const {
+  LayoutRectOutsets dest_adjust;
+
+  // Attempt to shrink the destination rect if possible:
+  //
+  //   * for background-clip content-box/padding-box, we can restrict to the
+  //     respective box.
+  //
+  //   * for border-box, we can inset individual edges iff the border fully
+  //     obscures the background.
+  //
+  switch (fill_layer.Clip()) {
+    case EFillBox::kContent:
+      dest_adjust += positioning_box_.PaddingOutsets();
+    // fall through
+    case EFillBox::kPadding:
+      dest_adjust += positioning_box_.BorderBoxOutsets();
+      break;
+    case EFillBox::kBorder: {
+      // It it unsafe to shrink dest if the layer is not painted as part of a
+      // regular background phase (e.g. paint_phase == kMask) or in the presence
+      // of non-SrcOver compositing.
+      // Also, if coordinate_offset_by_paint_rect_ is set, we're dealing with a
+      // LayoutView - for which dest_rect is overflowing (expanded to cover the
+      // whole canvas).
+      if (!ShouldPaintSelfBlockBackground(paint_phase) ||
+          fill_layer.Composite() != CompositeOperator::kCompositeSourceOver ||
+          coordinate_offset_by_paint_rect_) {
+        break;
+      }
+
+      BorderEdge edges[4];
+      positioning_box_.StyleRef().GetBorderEdgeInfo(edges);
+      const auto border_outsets = positioning_box_.BorderBoxOutsets();
+      if (edges[static_cast<unsigned>(BoxSide::kTop)].ObscuresBackground())
+        dest_adjust.SetTop(border_outsets.Top());
+      if (edges[static_cast<unsigned>(BoxSide::kRight)].ObscuresBackground())
+        dest_adjust.SetRight(border_outsets.Right());
+      if (edges[static_cast<unsigned>(BoxSide::kBottom)].ObscuresBackground())
+        dest_adjust.SetBottom(border_outsets.Bottom());
+      if (edges[static_cast<unsigned>(BoxSide::kLeft)].ObscuresBackground())
+        dest_adjust.SetLeft(border_outsets.Left());
+    } break;
+    case EFillBox::kText:
+      break;
+  }
+
+  return dest_adjust;
+}
+
 void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
-                                        const GlobalPaintFlags flags,
+                                        PaintPhase paint_phase,
+                                        GlobalPaintFlags flags,
                                         const FillLayer& fill_layer,
                                         const LayoutRect& paint_rect) {
   LayoutRect positioning_area;
-  LayoutRectOutsets box_outset;
+  LayoutPoint box_offset;
   if (!ShouldUseFixedAttachment(fill_layer)) {
     if (coordinate_offset_by_paint_rect_ || cell_using_container_background_)
       positioning_area.SetSize(positioning_size_override_);
     else
       positioning_area = paint_rect;
-    if (fill_layer.Origin() != kBorderFillBox) {
+
+    LayoutRectOutsets box_outset;
+    if (fill_layer.Origin() != EFillBox::kBorder) {
       box_outset = positioning_box_.BorderBoxOutsets();
-      if (fill_layer.Origin() == kContentFillBox)
+      if (fill_layer.Origin() == EFillBox::kContent)
         box_outset += positioning_box_.PaddingOutsets();
     }
     positioning_area.Contract(box_outset);
-    SetDestRect(paint_rect);
 
-    if (coordinate_offset_by_paint_rect_) {
-      box_outset.SetLeft(box_outset.Left() - paint_rect.Location().X());
-      box_outset.SetTop(box_outset.Top() - paint_rect.Location().Y());
-    }
+    auto dest_rect = paint_rect;
+    auto dest_adjust = ComputeDestRectAdjustment(fill_layer, paint_phase);
+    dest_rect.Contract(dest_adjust);
+    SetDestRect(dest_rect);
+
+    box_offset = LayoutPoint(box_outset.Left() - dest_adjust.Left(),
+                             box_outset.Top() - dest_adjust.Top());
+    if (coordinate_offset_by_paint_rect_)
+      box_offset -= paint_rect.Location();
   } else {
     SetHasNonLocalGeometry();
     offset_in_background_ = LayoutPoint();
@@ -563,9 +623,9 @@ void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
       positioning_area_size.Height() - TileSize().Height();
 
   LayoutUnit computed_x_position =
-      RoundedMinimumValueForLength(fill_layer.XPosition(), available_width) -
+      RoundedMinimumValueForLength(fill_layer.PositionX(), available_width) -
       offset_in_background_.X();
-  if (background_repeat_x == kRoundFill &&
+  if (background_repeat_x == EFillRepeat::kRoundFill &&
       positioning_area_size.Width() > LayoutUnit() &&
       fill_tile_size.Width() > LayoutUnit()) {
     int nr_tiles = std::max(
@@ -574,7 +634,7 @@ void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
 
     // Maintain aspect ratio if background-size: auto is set
     if (fill_layer.Size().size.Height().IsAuto() &&
-        background_repeat_y != kRoundFill) {
+        background_repeat_y != EFillRepeat::kRoundFill) {
       fill_tile_size.SetHeight(fill_tile_size.Height() * rounded_width /
                                fill_tile_size.Width());
     }
@@ -585,16 +645,16 @@ void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
     SetPhaseX(
         TileSize().Width()
             ? LayoutUnit(roundf(TileSize().Width() -
-                                fmodf((computed_x_position + box_outset.Left()),
+                                fmodf((computed_x_position + box_offset.X()),
                                       TileSize().Width())))
             : LayoutUnit());
     SetSpaceSize(LayoutSize());
   }
 
   LayoutUnit computed_y_position =
-      RoundedMinimumValueForLength(fill_layer.YPosition(), available_height) -
+      RoundedMinimumValueForLength(fill_layer.PositionY(), available_height) -
       offset_in_background_.Y();
-  if (background_repeat_y == kRoundFill &&
+  if (background_repeat_y == EFillRepeat::kRoundFill &&
       positioning_area_size.Height() > LayoutUnit() &&
       fill_tile_size.Height() > LayoutUnit()) {
     int nr_tiles = std::max(1, RoundToInt(positioning_area_size.Height() /
@@ -602,7 +662,7 @@ void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
     LayoutUnit rounded_height = positioning_area_size.Height() / nr_tiles;
     // Maintain aspect ratio if background-size: auto is set
     if (fill_layer.Size().size.Width().IsAuto() &&
-        background_repeat_x != kRoundFill) {
+        background_repeat_x != EFillRepeat::kRoundFill) {
       fill_tile_size.SetWidth(fill_tile_size.Width() * rounded_height /
                               fill_tile_size.Height());
     }
@@ -613,52 +673,54 @@ void BackgroundImageGeometry::Calculate(const LayoutBoxModelObject* container,
     SetPhaseY(
         TileSize().Height()
             ? LayoutUnit(roundf(TileSize().Height() -
-                                fmodf((computed_y_position + box_outset.Top()),
+                                fmodf((computed_y_position + box_offset.Y()),
                                       TileSize().Height())))
             : LayoutUnit());
     SetSpaceSize(LayoutSize());
   }
 
-  if (background_repeat_x == kRepeatFill) {
+  if (background_repeat_x == EFillRepeat::kRepeatFill) {
     SetRepeatX(fill_layer, fill_tile_size.Width(), available_width,
-               unsnapped_available_width, box_outset.Left(),
+               unsnapped_available_width, box_offset.X(),
                offset_in_background_.X());
-  } else if (background_repeat_x == kSpaceFill &&
+  } else if (background_repeat_x == EFillRepeat::kSpaceFill &&
              TileSize().Width() > LayoutUnit()) {
     LayoutUnit space = GetSpaceBetweenImageTiles(positioning_area_size.Width(),
                                                  TileSize().Width());
     if (space >= LayoutUnit())
-      SetSpaceX(space, available_width, box_outset.Left());
+      SetSpaceX(space, available_width, box_offset.X());
     else
-      background_repeat_x = kNoRepeatFill;
+      background_repeat_x = EFillRepeat::kNoRepeatFill;
   }
-  if (background_repeat_x == kNoRepeatFill) {
-    LayoutUnit x_offset = fill_layer.BackgroundXOrigin() == kRightEdge
-                              ? available_width - computed_x_position
-                              : computed_x_position;
-    SetNoRepeatX(box_outset.Left() + x_offset);
+  if (background_repeat_x == EFillRepeat::kNoRepeatFill) {
+    LayoutUnit x_offset =
+        fill_layer.BackgroundXOrigin() == BackgroundEdgeOrigin::kRight
+            ? available_width - computed_x_position
+            : computed_x_position;
+    SetNoRepeatX(box_offset.X() + x_offset);
     if (offset_in_background_.X() > TileSize().Width())
       SetDestRect(LayoutRect());
   }
 
-  if (background_repeat_y == kRepeatFill) {
+  if (background_repeat_y == EFillRepeat::kRepeatFill) {
     SetRepeatY(fill_layer, fill_tile_size.Height(), available_height,
-               unsnapped_available_height, box_outset.Top(),
+               unsnapped_available_height, box_offset.Y(),
                offset_in_background_.Y());
-  } else if (background_repeat_y == kSpaceFill &&
+  } else if (background_repeat_y == EFillRepeat::kSpaceFill &&
              TileSize().Height() > LayoutUnit()) {
     LayoutUnit space = GetSpaceBetweenImageTiles(positioning_area_size.Height(),
                                                  TileSize().Height());
     if (space >= LayoutUnit())
-      SetSpaceY(space, available_height, box_outset.Top());
+      SetSpaceY(space, available_height, box_offset.Y());
     else
-      background_repeat_y = kNoRepeatFill;
+      background_repeat_y = EFillRepeat::kNoRepeatFill;
   }
-  if (background_repeat_y == kNoRepeatFill) {
-    LayoutUnit y_offset = fill_layer.BackgroundYOrigin() == kBottomEdge
-                              ? available_height - computed_y_position
-                              : computed_y_position;
-    SetNoRepeatY(box_outset.Top() + y_offset);
+  if (background_repeat_y == EFillRepeat::kNoRepeatFill) {
+    LayoutUnit y_offset =
+        fill_layer.BackgroundYOrigin() == BackgroundEdgeOrigin::kBottom
+            ? available_height - computed_y_position
+            : computed_y_position;
+    SetNoRepeatY(box_offset.Y() + y_offset);
     if (offset_in_background_.Y() > TileSize().Height())
       SetDestRect(LayoutRect());
   }

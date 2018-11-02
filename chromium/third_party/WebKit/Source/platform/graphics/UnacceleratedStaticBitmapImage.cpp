@@ -20,6 +20,7 @@ UnacceleratedStaticBitmapImage::Create(sk_sp<SkImage> image) {
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(
     sk_sp<SkImage> image) {
+  CHECK(image);
   DCHECK(!image->isLazyGenerated());
 
   paint_image_ =
@@ -33,10 +34,10 @@ UnacceleratedStaticBitmapImage::Create(PaintImage image) {
 
 UnacceleratedStaticBitmapImage::UnacceleratedStaticBitmapImage(PaintImage image)
     : paint_image_(std::move(image)) {
-  DCHECK(paint_image_);
+  CHECK(paint_image_.GetSkImage());
 }
 
-UnacceleratedStaticBitmapImage::~UnacceleratedStaticBitmapImage() {}
+UnacceleratedStaticBitmapImage::~UnacceleratedStaticBitmapImage() = default;
 
 IntSize UnacceleratedStaticBitmapImage::Size() const {
   return IntSize(paint_image_.width(), paint_image_.height());
@@ -49,7 +50,7 @@ bool UnacceleratedStaticBitmapImage::IsPremultiplied() const {
 
 scoped_refptr<StaticBitmapImage>
 UnacceleratedStaticBitmapImage::MakeAccelerated(
-    WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) {
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) {
   if (!context_wrapper)
     return nullptr;  // Can happen if the context is lost.
 

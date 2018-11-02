@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread.h"
@@ -19,7 +18,6 @@
 #include "media/capture/video/chromeos/camera_device_delegate.h"
 #include "media/capture/video/chromeos/mock_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/mock_video_capture_client.h"
-#include "media/capture/video/chromeos/mojo/arc_camera3.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -83,14 +81,14 @@ class MockCameraBufferFactory : public CameraBufferFactory {
 std::unique_ptr<gfx::GpuMemoryBuffer> CreateMockGpuMemoryBuffer(
     const gfx::Size& size,
     gfx::BufferFormat format) {
-  auto mock_buffer = base::MakeUnique<unittest_internal::MockGpuMemoryBuffer>();
+  auto mock_buffer = std::make_unique<unittest_internal::MockGpuMemoryBuffer>();
   gfx::GpuMemoryBufferHandle fake_handle;
   fake_handle.native_pixmap_handle.fds.push_back(
       base::FileDescriptor(0, false));
   fake_handle.native_pixmap_handle.planes.push_back(
-      gfx::NativePixmapPlane(1280, 0, 1280 * 720, 0));
+      gfx::NativePixmapPlane(1280, 0, 1280 * 720));
   fake_handle.native_pixmap_handle.planes.push_back(
-      gfx::NativePixmapPlane(1280, 0, 1280 * 720 / 2, 0));
+      gfx::NativePixmapPlane(1280, 0, 1280 * 720 / 2));
   void* fake_mapped_address = reinterpret_cast<void*>(0xdeadbeef);
 
   EXPECT_CALL(*mock_buffer, Map()).WillRepeatedly(Return(true));
@@ -101,7 +99,7 @@ std::unique_ptr<gfx::GpuMemoryBuffer> CreateMockGpuMemoryBuffer(
 }
 
 std::unique_ptr<CameraBufferFactory> CreateMockCameraBufferFactory() {
-  auto buffer_factory = base::MakeUnique<MockCameraBufferFactory>();
+  auto buffer_factory = std::make_unique<MockCameraBufferFactory>();
   EXPECT_CALL(*buffer_factory, CreateGpuMemoryBuffer(_, _))
       .WillRepeatedly(Invoke(CreateMockGpuMemoryBuffer));
   EXPECT_CALL(*buffer_factory, ResolveStreamBufferFormat(_))
@@ -118,12 +116,12 @@ class StreamBufferManagerTest : public ::testing::Test {
     quit_ = false;
     arc::mojom::Camera3CallbackOpsRequest callback_ops_request =
         mojo::MakeRequest(&mock_callback_ops_);
-    device_context_ = base::MakeUnique<CameraDeviceContext>(
-        base::MakeUnique<unittest_internal::MockVideoCaptureClient>());
+    device_context_ = std::make_unique<CameraDeviceContext>(
+        std::make_unique<unittest_internal::MockVideoCaptureClient>());
 
-    stream_buffer_manager_ = base::MakeUnique<StreamBufferManager>(
+    stream_buffer_manager_ = std::make_unique<StreamBufferManager>(
         std::move(callback_ops_request),
-        base::MakeUnique<MockStreamCaptureInterface>(), device_context_.get(),
+        std::make_unique<MockStreamCaptureInterface>(), device_context_.get(),
         CreateMockCameraBufferFactory(), base::ThreadTaskRunnerHandle::Get());
   }
 

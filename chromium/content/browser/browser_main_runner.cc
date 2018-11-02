@@ -8,11 +8,11 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "base/debug/leak_annotations.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
 #include "base/trace_event/heap_profiler_allocation_context_tracker.h"
@@ -80,8 +80,6 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
       if (parameters.command_line.HasSwitch(switches::kBrowserStartupDialog))
         WaitForDebugger("Browser");
 
-      base::StatisticsRecorder::Initialize();
-
       notification_service_.reset(new NotificationServiceImpl);
 
 #if defined(OS_WIN)
@@ -97,7 +95,14 @@ class BrowserMainRunnerImpl : public BrowserMainRunner {
 
       main_loop_->Init();
 
-      main_loop_->EarlyInitialization();
+      if (parameters.created_main_parts_closure) {
+        parameters.created_main_parts_closure->Run(main_loop_->parts());
+        delete parameters.created_main_parts_closure;
+      }
+
+      const int early_init_error_code = main_loop_->EarlyInitialization();
+      if (early_init_error_code > 0)
+        return early_init_error_code;
 
       // Must happen before we try to use a message loop or display any UI.
       if (!main_loop_->InitializeToolkit())
@@ -242,7 +247,7 @@ BrowserMainRunner* BrowserMainRunner::Create() {
 
 // static
 bool BrowserMainRunner::ExitedMainMessageLoop() {
-  return !(g_exited_main_message_loop == nullptr) &&
+  return g_exited_main_message_loop.IsCreated() &&
          g_exited_main_message_loop.Get().IsSet();
 }
 

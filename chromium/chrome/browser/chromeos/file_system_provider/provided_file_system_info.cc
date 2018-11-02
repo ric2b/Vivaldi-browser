@@ -16,7 +16,8 @@ ProviderId::ProviderId(const std::string& internal_id,
 ProviderId::ProviderId() : type_(INVALID) {}
 
 // static
-ProviderId ProviderId::CreateFromExtensionId(const std::string& extension_id) {
+ProviderId ProviderId::CreateFromExtensionId(
+    const extensions::ExtensionId& extension_id) {
   return ProviderId(extension_id, EXTENSION);
 }
 
@@ -25,17 +26,23 @@ ProviderId ProviderId::CreateFromNativeId(const std::string& native_id) {
   return ProviderId(native_id, NATIVE);
 }
 
-const std::string& ProviderId::GetExtensionId() const {
+ProviderId ProviderId::FromString(const std::string& str) {
+  if (str.length() == 0)
+    return ProviderId();  // Invalid.
+
+  if (str[0] == '@')
+    return ProviderId::CreateFromNativeId(str.substr(1));
+
+  return ProviderId::CreateFromExtensionId(str);
+}
+
+const extensions::ExtensionId& ProviderId::GetExtensionId() const {
   CHECK_EQ(EXTENSION, type_);
   return internal_id_;
 }
 
 const std::string& ProviderId::GetNativeId() const {
   CHECK_EQ(NATIVE, type_);
-  return internal_id_;
-}
-
-const std::string& ProviderId::GetIdUnsafe() const {
   return internal_id_;
 }
 
@@ -52,13 +59,17 @@ std::string ProviderId::ToString() const {
     case NATIVE:
       return std::string("@") + internal_id_;
     case INVALID:
-      NOTREACHED();
       return "";
   }
 }
 
 bool ProviderId::operator==(const ProviderId& other) const {
-  return type_ == other.GetType() && internal_id_ == other.GetIdUnsafe();
+  return type_ == other.type_ && internal_id_ == other.internal_id_;
+}
+
+bool ProviderId::operator<(const ProviderId& other) const {
+  return std::tie(type_, internal_id_) <
+         std::tie(other.type_, other.internal_id_);
 }
 
 MountOptions::MountOptions()
@@ -91,7 +102,8 @@ ProvidedFileSystemInfo::ProvidedFileSystemInfo(
     const base::FilePath& mount_path,
     bool configurable,
     bool watchable,
-    extensions::FileSystemProviderSource source)
+    extensions::FileSystemProviderSource source,
+    const IconSet& icon_set)
     : provider_id_(provider_id),
       file_system_id_(mount_options.file_system_id),
       display_name_(mount_options.display_name),
@@ -101,23 +113,26 @@ ProvidedFileSystemInfo::ProvidedFileSystemInfo(
       mount_path_(mount_path),
       configurable_(configurable),
       watchable_(watchable),
-      source_(source) {
+      source_(source),
+      icon_set_(icon_set) {
   DCHECK_LE(0, mount_options.opened_files_limit);
 }
 
 ProvidedFileSystemInfo::ProvidedFileSystemInfo(
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const MountOptions& mount_options,
     const base::FilePath& mount_path,
     bool configurable,
     bool watchable,
-    extensions::FileSystemProviderSource source)
+    extensions::FileSystemProviderSource source,
+    const IconSet& icon_set)
     : ProvidedFileSystemInfo(ProviderId::CreateFromExtensionId(extension_id),
                              mount_options,
                              mount_path,
                              configurable,
                              watchable,
-                             source) {}
+                             source,
+                             icon_set) {}
 
 ProvidedFileSystemInfo::ProvidedFileSystemInfo(
     const ProvidedFileSystemInfo& other) = default;

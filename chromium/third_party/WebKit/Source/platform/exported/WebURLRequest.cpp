@@ -51,7 +51,7 @@ class URLRequestExtraDataContainer : public ResourceRequest::ExtraData {
     return base::AdoptRef(new URLRequestExtraDataContainer(extra_data));
   }
 
-  ~URLRequestExtraDataContainer() override {}
+  ~URLRequestExtraDataContainer() override = default;
 
   WebURLRequest::ExtraData* GetExtraData() const { return extra_data_.get(); }
 
@@ -68,14 +68,14 @@ class URLRequestExtraDataContainer : public ResourceRequest::ExtraData {
 // heap, which is otherwise disallowed by DISALLOW_NEW_EXCEPT_PLACEMENT_NEW
 // annotation on ResourceRequest.
 struct WebURLRequest::ResourceRequestContainer {
-  ResourceRequestContainer() {}
+  ResourceRequestContainer() = default;
   explicit ResourceRequestContainer(const ResourceRequest& r)
       : resource_request(r) {}
 
   ResourceRequest resource_request;
 };
 
-WebURLRequest::~WebURLRequest() {}
+WebURLRequest::~WebURLRequest() = default;
 
 WebURLRequest::WebURLRequest()
     : owned_resource_request_(new ResourceRequestContainer()),
@@ -217,7 +217,7 @@ WebURLRequest::RequestContext WebURLRequest::GetRequestContext() const {
   return resource_request_->GetRequestContext();
 }
 
-WebURLRequest::FrameType WebURLRequest::GetFrameType() const {
+network::mojom::RequestContextFrameType WebURLRequest::GetFrameType() const {
   return resource_request_->GetFrameType();
 }
 
@@ -241,7 +241,8 @@ void WebURLRequest::SetRequestContext(RequestContext request_context) {
   resource_request_->SetRequestContext(request_context);
 }
 
-void WebURLRequest::SetFrameType(FrameType frame_type) {
+void WebURLRequest::SetFrameType(
+    network::mojom::RequestContextFrameType frame_type) {
   resource_request_->SetFrameType(frame_type);
 }
 
@@ -328,12 +329,12 @@ void WebURLRequest::SetFetchCredentialsMode(
   return resource_request_->SetFetchCredentialsMode(mode);
 }
 
-WebURLRequest::FetchRedirectMode WebURLRequest::GetFetchRedirectMode() const {
+network::mojom::FetchRedirectMode WebURLRequest::GetFetchRedirectMode() const {
   return resource_request_->GetFetchRedirectMode();
 }
 
 void WebURLRequest::SetFetchRedirectMode(
-    WebURLRequest::FetchRedirectMode redirect) {
+    network::mojom::FetchRedirectMode redirect) {
   return resource_request_->SetFetchRedirectMode(redirect);
 }
 
@@ -407,10 +408,6 @@ network::mojom::CORSPreflightPolicy WebURLRequest::GetCORSPreflightPolicy()
   return resource_request_->CORSPreflightPolicy();
 }
 
-WebURLRequest::LoadingIPCType WebURLRequest::GetLoadingIPCType() const {
-  return resource_request_->GetLoadingIPCType();
-}
-
 void WebURLRequest::SetNavigationStartTime(double navigation_start_seconds) {
   resource_request_->SetNavigationStartTime(navigation_start_seconds);
 }
@@ -429,6 +426,13 @@ void WebURLRequest::SetInputPerfMetricReportPolicy(
     WebURLRequest::InputToLoadPerfMetricReportPolicy policy) {
   resource_request_->SetInputPerfMetricReportPolicy(
       static_cast<blink::InputToLoadPerfMetricReportPolicy>(policy));
+}
+
+base::Optional<WebString> WebURLRequest::GetSuggestedFilename() const {
+  if (!resource_request_->GetSuggestedFilename().has_value())
+    return base::Optional<WebString>();
+  return static_cast<WebString>(
+      resource_request_->GetSuggestedFilename().value());
 }
 
 const ResourceRequest& WebURLRequest::ToResourceRequest() const {

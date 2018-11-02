@@ -4,6 +4,7 @@
 
 #include "core/dom/ScriptedIdleTaskController.h"
 
+#include "base/location.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/IdleRequestOptions.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -15,7 +16,6 @@
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -29,7 +29,7 @@ class IdleRequestCallbackWrapper
       ScriptedIdleTaskController* controller) {
     return base::AdoptRef(new IdleRequestCallbackWrapper(id, controller));
   }
-  virtual ~IdleRequestCallbackWrapper() {}
+  virtual ~IdleRequestCallbackWrapper() = default;
 
   static void IdleTaskFired(
       scoped_refptr<IdleRequestCallbackWrapper> callback_wrapper,
@@ -57,7 +57,7 @@ class IdleRequestCallbackWrapper
     if (ScriptedIdleTaskController* controller =
             callback_wrapper->Controller()) {
       controller->CallbackFired(callback_wrapper->Id(),
-                                MonotonicallyIncreasingTime(),
+                                CurrentTimeTicksInSeconds(),
                                 IdleDeadline::CallbackType::kCalledByTimeout);
     }
     callback_wrapper->Cancel();
@@ -107,7 +107,7 @@ ScriptedIdleTaskController::ScriptedIdleTaskController(
   PauseIfNeeded();
 }
 
-ScriptedIdleTaskController::~ScriptedIdleTaskController() {}
+ScriptedIdleTaskController::~ScriptedIdleTaskController() = default;
 
 void ScriptedIdleTaskController::Trace(blink::Visitor* visitor) {
   visitor->Trace(idle_tasks_);
@@ -160,14 +160,13 @@ void ScriptedIdleTaskController::ScheduleCallback(
     scoped_refptr<internal::IdleRequestCallbackWrapper> callback_wrapper,
     long long timeout_millis) {
   scheduler_->PostIdleTask(
-      BLINK_FROM_HERE,
-      WTF::Bind(&internal::IdleRequestCallbackWrapper::IdleTaskFired,
-                callback_wrapper));
+      FROM_HERE, WTF::Bind(&internal::IdleRequestCallbackWrapper::IdleTaskFired,
+                           callback_wrapper));
   if (timeout_millis > 0) {
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kIdleTask)
         ->PostDelayedTask(
-            BLINK_FROM_HERE,
+            FROM_HERE,
             WTF::Bind(&internal::IdleRequestCallbackWrapper::TimeoutFired,
                       callback_wrapper),
             TimeDelta::FromMilliseconds(timeout_millis));
@@ -221,7 +220,7 @@ void ScriptedIdleTaskController::RunCallback(
   DCHECK(idle_task);
 
   double allotted_time_millis =
-      std::max((deadline_seconds - MonotonicallyIncreasingTime()) * 1000, 0.0);
+      std::max((deadline_seconds - CurrentTimeTicksInSeconds()) * 1000, 0.0);
 
   DEFINE_STATIC_LOCAL(
       CustomCountHistogram, idle_callback_deadline_histogram,
@@ -238,14 +237,6 @@ void ScriptedIdleTaskController::RunCallback(
           GetExecutionContext(), id, allotted_time_millis,
           callback_type == IdleDeadline::CallbackType::kCalledByTimeout));
   idle_task->invoke(IdleDeadline::Create(deadline_seconds, callback_type));
-
-  double overrun_millis =
-      std::max((MonotonicallyIncreasingTime() - deadline_seconds) * 1000, 0.0);
-
-  DEFINE_STATIC_LOCAL(
-      CustomCountHistogram, idle_callback_overrun_histogram,
-      ("WebCore.ScriptedIdleTaskController.IdleCallbackOverrun", 0, 10000, 50));
-  idle_callback_overrun_histogram.Count(overrun_millis);
 
   // Finally there is no need to keep the idle task alive.
   //
@@ -269,7 +260,7 @@ void ScriptedIdleTaskController::Unpause() {
   Vector<CallbackId> pending_timeouts;
   pending_timeouts_.swap(pending_timeouts);
   for (auto& id : pending_timeouts)
-    RunCallback(id, MonotonicallyIncreasingTime(),
+    RunCallback(id, CurrentTimeTicksInSeconds(),
                 IdleDeadline::CallbackType::kCalledByTimeout);
 
   // Repost idle tasks for any remaining callbacks.
@@ -277,7 +268,7 @@ void ScriptedIdleTaskController::Unpause() {
     scoped_refptr<internal::IdleRequestCallbackWrapper> callback_wrapper =
         internal::IdleRequestCallbackWrapper::Create(idle_task.key, this);
     scheduler_->PostIdleTask(
-        BLINK_FROM_HERE,
+        FROM_HERE,
         WTF::Bind(&internal::IdleRequestCallbackWrapper::IdleTaskFired,
                   callback_wrapper));
   }

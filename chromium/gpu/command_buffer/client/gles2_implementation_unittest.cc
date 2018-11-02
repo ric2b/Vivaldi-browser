@@ -130,7 +130,7 @@ class MockTransferBuffer : public TransferBufferInterface {
     }
   }
 
-  ~MockTransferBuffer() override {}
+  ~MockTransferBuffer() override = default;
 
   base::SharedMemoryHandle shared_memory_handle() const override;
   bool Initialize(unsigned int starting_buffer_size,
@@ -151,6 +151,7 @@ class MockTransferBuffer : public TransferBufferInterface {
   void FreePendingToken(void* p, unsigned int /* token */) override;
   unsigned int GetSize() const override;
   unsigned int GetFreeSize() const override;
+  unsigned int GetFragmentedFreeSize() const override;
   void ShrinkLastBlock(unsigned int new_size) override;
 
   size_t MaxTransferBufferSize() {
@@ -333,6 +334,10 @@ unsigned int MockTransferBuffer::GetSize() const {
 }
 
 unsigned int MockTransferBuffer::GetFreeSize() const {
+  return 0;
+}
+
+unsigned int MockTransferBuffer::GetFragmentedFreeSize() const {
   return 0;
 }
 
@@ -3196,9 +3201,11 @@ TEST_F(GLES2ImplementationTest, GetString) {
   // GL_CHROMIUM_map_sub is hard coded into GLES2Implementation.
   const char* expected_str =
       "foobar "
-      "GL_EXT_unpack_subimage "
+      "GL_CHROMIUM_image "
       "GL_CHROMIUM_map_sub "
-      "GL_CHROMIUM_image";
+      "GL_CHROMIUM_ordering_barrier "
+      "GL_CHROMIUM_sync_point "
+      "GL_EXT_unpack_subimage";
   const char kBad = 0x12;
   struct Cmds {
     cmd::SetBucketSize set_bucket_size1;
@@ -3725,23 +3732,10 @@ TEST_F(GLES2ImplementationTest, CreateAndConsumeTextureCHROMIUM) {
 
   Mailbox mailbox = Mailbox::Generate();
   Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, kTexturesStartId, mailbox.name);
-  GLuint id = gl_->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+  expected.cmd.Init(kTexturesStartId, mailbox.name);
+  GLuint id = gl_->CreateAndConsumeTextureCHROMIUM(mailbox.name);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
   EXPECT_EQ(kTexturesStartId, id);
-}
-
-TEST_F(GLES2ImplementationTest, ProduceTextureCHROMIUM) {
-  struct Cmds {
-    cmds::ProduceTextureCHROMIUMImmediate cmd;
-    GLbyte data[GL_MAILBOX_SIZE_CHROMIUM];
-  };
-
-  Mailbox mailbox = Mailbox::Generate();
-  Cmds expected;
-  expected.cmd.Init(GL_TEXTURE_2D, mailbox.name);
-  gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
 TEST_F(GLES2ImplementationTest, ProduceTextureDirectCHROMIUM) {
@@ -3752,9 +3746,8 @@ TEST_F(GLES2ImplementationTest, ProduceTextureDirectCHROMIUM) {
 
   Mailbox mailbox = Mailbox::Generate();
   Cmds expected;
-  expected.cmd.Init(kTexturesStartId, GL_TEXTURE_2D, mailbox.name);
-  gl_->ProduceTextureDirectCHROMIUM(
-      kTexturesStartId, GL_TEXTURE_2D, mailbox.name);
+  expected.cmd.Init(kTexturesStartId, mailbox.name);
+  gl_->ProduceTextureDirectCHROMIUM(kTexturesStartId, mailbox.name);
   EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
 }
 
@@ -3932,60 +3925,33 @@ TEST_F(GLES2ImplementationTest, AllowNestedTracesCHROMIUM) {
   EXPECT_EQ(GL_INVALID_OPERATION, CheckError());
 }
 
-TEST_F(GLES2ImplementationTest, InsertFenceSyncCHROMIUM) {
-  const GLuint64 kFenceSync = 123u;
-  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
-      .WillOnce(Return(kFenceSync));
-
-  struct Cmds {
-    cmds::InsertFenceSyncCHROMIUM insert_fence_sync;
-  };
-  Cmds expected;
-  expected.insert_fence_sync.Init(kFenceSync);
-
-  const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
-  EXPECT_EQ(kFenceSync, fence_sync);
-  EXPECT_EQ(0, memcmp(&expected, commands_, sizeof(expected)));
-}
-
 TEST_F(GLES2ImplementationTest, GenSyncTokenCHROMIUM) {
   const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
   const CommandBufferId kCommandBufferId =
       CommandBufferId::FromUnsafeValue(234u);
   const GLuint64 kFenceSync = 123u;
-  GLbyte sync_token_data[GL_SYNC_TOKEN_SIZE_CHROMIUM];
+  SyncToken sync_token;
 
   EXPECT_CALL(*gpu_control_, GetNamespaceID())
       .WillRepeatedly(Return(kNamespaceId));
   EXPECT_CALL(*gpu_control_, GetCommandBufferID())
       .WillRepeatedly(Return(kCommandBufferId));
 
-  gl_->GenSyncTokenCHROMIUM(kFenceSync, nullptr);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(false));
-  gl_->GenSyncTokenCHROMIUM(kFenceSync, sync_token_data);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushReceived(kFenceSync))
-      .WillOnce(Return(false));
-  gl_->GenSyncTokenCHROMIUM(kFenceSync, sync_token_data);
-  EXPECT_EQ(GL_INVALID_OPERATION, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushReceived(kFenceSync))
-      .WillOnce(Return(true));
-  ClearCommands();
-  gl_->GenSyncTokenCHROMIUM(kFenceSync, sync_token_data);
+  gl_->GenSyncTokenCHROMIUM(nullptr);
   EXPECT_TRUE(NoCommandsWritten());
+  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
+
+  const void* commands = GetPut();
+  cmds::InsertFenceSyncCHROMIUM insert_fence_sync;
+  insert_fence_sync.Init(kFenceSync);
+
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  EXPECT_CALL(*gpu_control_, EnsureWorkVisible());
+  gl_->GenSyncTokenCHROMIUM(sync_token.GetData());
+  EXPECT_EQ(0, memcmp(&insert_fence_sync, commands, sizeof(insert_fence_sync)));
   EXPECT_EQ(GL_NO_ERROR, CheckError());
 
-  SyncToken sync_token;
-  memcpy(&sync_token, sync_token_data, sizeof(SyncToken));
   EXPECT_TRUE(sync_token.verified_flush());
   EXPECT_EQ(kNamespaceId, sync_token.namespace_id());
   EXPECT_EQ(kCommandBufferId, sync_token.command_buffer_id());
@@ -3997,39 +3963,27 @@ TEST_F(GLES2ImplementationTest, GenUnverifiedSyncTokenCHROMIUM) {
   const CommandBufferId kCommandBufferId =
       CommandBufferId::FromUnsafeValue(234u);
   const GLuint64 kFenceSync = 123u;
-  GLbyte sync_token_data[GL_SYNC_TOKEN_SIZE_CHROMIUM];
+  SyncToken sync_token;
 
   EXPECT_CALL(*gpu_control_, GetNamespaceID())
       .WillRepeatedly(Return(kNamespaceId));
   EXPECT_CALL(*gpu_control_, GetCommandBufferID())
       .WillRepeatedly(Return(kCommandBufferId));
 
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync, nullptr);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(false));
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync, sync_token_data);
-  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushed(kFenceSync))
-      .WillOnce(Return(false));
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync, sync_token_data);
-  EXPECT_EQ(GL_INVALID_OPERATION, CheckError());
-
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushed(kFenceSync))
-      .WillOnce(Return(true));
-  ClearCommands();
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync, sync_token_data);
+  gl_->GenUnverifiedSyncTokenCHROMIUM(nullptr);
   EXPECT_TRUE(NoCommandsWritten());
+  EXPECT_EQ(GL_INVALID_VALUE, CheckError());
+
+  const void* commands = GetPut();
+  cmds::InsertFenceSyncCHROMIUM insert_fence_sync;
+  insert_fence_sync.Init(kFenceSync);
+
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  gl_->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+  EXPECT_EQ(0, memcmp(&insert_fence_sync, commands, sizeof(insert_fence_sync)));
   EXPECT_EQ(GL_NO_ERROR, CheckError());
 
-  SyncToken sync_token;
-  memcpy(&sync_token, sync_token_data, sizeof(SyncToken));
   EXPECT_FALSE(sync_token.verified_flush());
   EXPECT_EQ(kNamespaceId, sync_token.namespace_id());
   EXPECT_EQ(kCommandBufferId, sync_token.command_buffer_id());
@@ -4048,20 +4002,18 @@ TEST_F(GLES2ImplementationTest, VerifySyncTokensCHROMIUM) {
       CommandBufferId::FromUnsafeValue(234u);
   const GLuint64 kFenceSync = 123u;
   gpu::SyncToken sync_token;
-  GLbyte* sync_token_datas[] = { sync_token.GetData() };
+  GLbyte* sync_token_datas[] = {sync_token.GetData()};
 
   EXPECT_CALL(*gpu_control_, GetNamespaceID())
       .WillRepeatedly(Return(kNamespaceId));
   EXPECT_CALL(*gpu_control_, GetCommandBufferID())
       .WillRepeatedly(Return(kCommandBufferId));
 
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushed(kFenceSync))
-      .WillOnce(Return(true));
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync, sync_token.GetData());
-  ASSERT_TRUE(sync_token.HasData());
-  ASSERT_FALSE(sync_token.verified_flush());
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  gl_->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+  EXPECT_TRUE(sync_token.HasData());
+  EXPECT_FALSE(sync_token.verified_flush());
 
   ClearCommands();
   EXPECT_CALL(*gpu_control_, CanWaitUnverifiedSyncToken(sync_token))
@@ -4102,7 +4054,7 @@ TEST_F(GLES2ImplementationTest, VerifySyncTokensCHROMIUM_Sequence) {
   const GLuint64 kFenceSync2 = 234u;
   gpu::SyncToken sync_token1;
   gpu::SyncToken sync_token2;
-  GLbyte* sync_token_datas[] = { sync_token1.GetData(), sync_token2.GetData() };
+  GLbyte* sync_token_datas[] = {sync_token1.GetData(), sync_token2.GetData()};
 
   EXPECT_CALL(*gpu_control_, GetNamespaceID())
       .WillRepeatedly(Return(kNamespaceId));
@@ -4110,22 +4062,18 @@ TEST_F(GLES2ImplementationTest, VerifySyncTokensCHROMIUM_Sequence) {
       .WillRepeatedly(Return(kCommandBufferId));
 
   // Generate sync token 1.
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync1))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushed(kFenceSync1))
-      .WillOnce(Return(true));
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync1, sync_token1.GetData());
-  ASSERT_TRUE(sync_token1.HasData());
-  ASSERT_FALSE(sync_token1.verified_flush());
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync1));
+  gl_->GenUnverifiedSyncTokenCHROMIUM(sync_token1.GetData());
+  EXPECT_TRUE(sync_token1.HasData());
+  EXPECT_FALSE(sync_token1.verified_flush());
 
   // Generate sync token 2.
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync2))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushed(kFenceSync2))
-      .WillOnce(Return(true));
-  gl_->GenUnverifiedSyncTokenCHROMIUM(kFenceSync2, sync_token2.GetData());
-  ASSERT_TRUE(sync_token2.HasData());
-  ASSERT_FALSE(sync_token2.verified_flush());
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync2));
+  gl_->GenUnverifiedSyncTokenCHROMIUM(sync_token2.GetData());
+  EXPECT_TRUE(sync_token2.HasData());
+  EXPECT_FALSE(sync_token2.verified_flush());
 
   // Ensure proper sequence of checking and validating.
   Sequence sequence;
@@ -4135,10 +4083,8 @@ TEST_F(GLES2ImplementationTest, VerifySyncTokensCHROMIUM_Sequence) {
   EXPECT_CALL(*gpu_control_, CanWaitUnverifiedSyncToken(sync_token2))
       .InSequence(sequence)
       .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, EnsureWorkVisible())
-      .InSequence(sequence);
+  EXPECT_CALL(*gpu_control_, EnsureWorkVisible()).InSequence(sequence);
   gl_->VerifySyncTokensCHROMIUM(sync_token_datas, arraysize(sync_token_datas));
-  EXPECT_TRUE(NoCommandsWritten());
   EXPECT_EQ(GL_NO_ERROR, CheckError());
 
   EXPECT_TRUE(sync_token1.verified_flush());
@@ -4170,28 +4116,30 @@ TEST_F(GLES2ImplementationTest, VerifySyncTokensCHROMIUM_EmptySyncToken) {
 }
 
 TEST_F(GLES2ImplementationTest, WaitSyncTokenCHROMIUM) {
-  CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
-  CommandBufferId kCommandBufferId = CommandBufferId::FromUnsafeValue(234u);
-  GLuint64 kFenceSync = 456u;
+  const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
+  const CommandBufferId kCommandBufferId =
+      CommandBufferId::FromUnsafeValue(234u);
+  const GLuint64 kFenceSync = 456u;
 
   gpu::SyncToken sync_token;
   GLbyte* sync_token_data = sync_token.GetData();
 
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushReceived(kFenceSync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, GetNamespaceID()).WillOnce(Return(kNamespaceId));
-  EXPECT_CALL(*gpu_control_, GetCommandBufferID())
-      .WillOnce(Return(kCommandBufferId));
-  gl_->GenSyncTokenCHROMIUM(kFenceSync, sync_token_data);
-
   struct Cmds {
+    cmds::InsertFenceSyncCHROMIUM insert_fence_sync;
     cmds::WaitSyncTokenCHROMIUM wait_sync_token;
   };
   Cmds expected;
+  expected.insert_fence_sync.Init(kFenceSync);
   expected.wait_sync_token.Init(kNamespaceId, kCommandBufferId.GetUnsafeValue(),
                                 kFenceSync);
+
+  EXPECT_CALL(*gpu_control_, GetNamespaceID()).WillOnce(Return(kNamespaceId));
+  EXPECT_CALL(*gpu_control_, GetCommandBufferID())
+      .WillOnce(Return(kCommandBufferId));
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  EXPECT_CALL(*gpu_control_, EnsureWorkVisible());
+  gl_->GenSyncTokenCHROMIUM(sync_token_data);
 
   EXPECT_CALL(*gpu_control_, WaitSyncTokenHint(sync_token));
   gl_->WaitSyncTokenCHROMIUM(sync_token_data);
@@ -4220,7 +4168,7 @@ TEST_F(GLES2ImplementationTest, WaitSyncTokenCHROMIUMErrors) {
 
   // Unverified sync token should produce INVALID_OPERATION.
   ClearCommands();
-  gpu::SyncToken unverified_sync_token(CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken unverified_sync_token(CommandBufferNamespace::GPU_IO,
                                        gpu::CommandBufferId(), 0);
   EXPECT_CALL(*gpu_control_, CanWaitUnverifiedSyncToken(unverified_sync_token))
       .WillOnce(Return(false));
@@ -4512,19 +4460,20 @@ static void CountCallback(int* count) {
 }
 
 TEST_F(GLES2ImplementationTest, SignalSyncToken) {
-  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease()).WillOnce(Return(1));
-  const uint64_t fence_sync = gl_->InsertFenceSyncCHROMIUM();
-  gl_->ShallowFlushCHROMIUM();
+  const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
+  const CommandBufferId kCommandBufferId = CommandBufferId::FromUnsafeValue(1);
+  const uint64_t kFenceSync = 123u;
 
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(fence_sync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushReceived(fence_sync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, GetNamespaceID()).WillOnce(Return(GPU_IO));
+  EXPECT_CALL(*gpu_control_, GetNamespaceID())
+      .WillRepeatedly(Return(kNamespaceId));
   EXPECT_CALL(*gpu_control_, GetCommandBufferID())
-      .WillOnce(Return(CommandBufferId::FromUnsafeValue(1)));
+      .WillRepeatedly(Return(kCommandBufferId));
+
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  EXPECT_CALL(*gpu_control_, EnsureWorkVisible());
   gpu::SyncToken sync_token;
-  gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+  gl_->GenSyncTokenCHROMIUM(sync_token.GetData());
 
   int signaled_count = 0;
 
@@ -4543,19 +4492,18 @@ TEST_F(GLES2ImplementationTest, SignalSyncToken) {
 }
 
 TEST_F(GLES2ImplementationTest, SignalSyncTokenAfterContextLoss) {
-  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease()).WillOnce(Return(1));
-  const uint64_t fence_sync = gl_->InsertFenceSyncCHROMIUM();
-  gl_->ShallowFlushCHROMIUM();
+  const CommandBufferNamespace kNamespaceId = CommandBufferNamespace::GPU_IO;
+  const CommandBufferId kCommandBufferId = CommandBufferId::FromUnsafeValue(1);
+  const uint64_t kFenceSync = 123u;
 
-  EXPECT_CALL(*gpu_control_, IsFenceSyncRelease(fence_sync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, IsFenceSyncFlushReceived(fence_sync))
-      .WillOnce(Return(true));
-  EXPECT_CALL(*gpu_control_, GetNamespaceID()).WillOnce(Return(GPU_IO));
+  EXPECT_CALL(*gpu_control_, GetNamespaceID()).WillOnce(Return(kNamespaceId));
   EXPECT_CALL(*gpu_control_, GetCommandBufferID())
-      .WillOnce(Return(CommandBufferId::FromUnsafeValue(1)));
+      .WillOnce(Return(kCommandBufferId));
+  EXPECT_CALL(*gpu_control_, GenerateFenceSyncRelease())
+      .WillOnce(Return(kFenceSync));
+  EXPECT_CALL(*gpu_control_, EnsureWorkVisible());
   gpu::SyncToken sync_token;
-  gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+  gl_->GenSyncTokenCHROMIUM(sync_token.GetData());
 
   int signaled_count = 0;
 

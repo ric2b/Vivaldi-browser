@@ -33,7 +33,6 @@
 #include <memory>
 #include "base/command_line.h"
 #include "base/memory/discardable_memory_allocator.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/test_discardable_memory_allocator.h"
@@ -49,7 +48,6 @@
 #include "platform/network/mime/MockMimeRegistry.h"
 #include "platform/scheduler/base/real_time_domain.h"
 #include "platform/scheduler/base/task_queue_manager.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 #include "platform/wtf/CryptographicallyRandomNumber.h"
@@ -208,7 +206,7 @@ void TestingPlatformSupport::RunUntilIdle() {
 class ScopedUnittestsEnvironmentSetup::DummyPlatform final
     : public blink::Platform {
  public:
-  DummyPlatform() {}
+  DummyPlatform() = default;
 
   blink::WebThread* CurrentThread() override {
     static DummyThread dummy_thread;
@@ -229,7 +227,6 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
       WTF::WrapUnique(new base::TestDiscardableMemoryAllocator);
   base::DiscardableMemoryAllocator::SetInstance(
       discardable_memory_allocator_.get());
-  base::StatisticsRecorder::Initialize();
 
   dummy_platform_ = WTF::WrapUnique(new DummyPlatform);
   Platform::SetCurrentPlatformForTesting(dummy_platform_.get());
@@ -264,6 +261,6 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
   WebRuntimeFeatures::EnableTestOnlyFeatures(true);
 }
 
-ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup() {}
+ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup() = default;
 
 }  // namespace blink

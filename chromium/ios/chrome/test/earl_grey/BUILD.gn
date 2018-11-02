@@ -7,6 +7,7 @@ import("//ios/chrome/test/earl_grey/chrome_ios_eg_test.gni")
 group("all_tests") {
   testonly = true
   deps = [
+    ":ios_chrome_adaptive_toolbar_egtests",
     ":ios_chrome_bookmarks_egtests",
     ":ios_chrome_device_check_egtests",
     ":ios_chrome_external_url_egtests",
@@ -25,6 +26,7 @@ group("all_tests") {
 chrome_ios_eg_test("ios_chrome_integration_egtests") {
   deps = [
     "//ios/chrome/browser/autofill:eg_tests",
+    "//ios/chrome/browser/browser_state:eg_tests",
     "//ios/chrome/browser/context_menu:eg_tests",
     "//ios/chrome/browser/device_sharing:eg_tests",
     "//ios/chrome/browser/feature_engagement:eg_tests",
@@ -32,7 +34,16 @@ chrome_ios_eg_test("ios_chrome_integration_egtests") {
     "//ios/chrome/browser/net:eg_tests",
     "//ios/chrome/browser/ntp_tiles:eg_tests",
     "//ios/chrome/browser/passwords:eg_tests",
+    "//ios/chrome/browser/prerender:eg_tests",
   ]
+}
+
+chrome_ios_eg_test("ios_chrome_adaptive_toolbar_egtests") {
+  deps = [
+    ":test_support",
+    "//ios/chrome/browser/ui/toolbar/adaptive:eg_tests",
+  ]
+  hooks_target = "//ios/chrome/browser/ui/toolbar/adaptive:hooks"
 }
 
 chrome_ios_eg_test("ios_chrome_payments_egtests") {
@@ -206,7 +217,7 @@ source_set("test_support") {
     "//ios/chrome/browser/ui/authentication:authentication_ui",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/commands:commands",
-    "//ios/chrome/browser/ui/content_suggestions:content_suggestions",
+    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui",
     "//ios/chrome/browser/ui/omnibox:omnibox_internal",
     "//ios/chrome/browser/ui/payments:payments_ui",
     "//ios/chrome/browser/ui/settings:settings",

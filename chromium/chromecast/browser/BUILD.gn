@@ -30,6 +30,8 @@ cast_source_set("browser") {
     "cast_http_user_agent_settings.h",
     "cast_media_blocker.cc",
     "cast_media_blocker.h",
+    "cast_navigation_ui_data.cc",
+    "cast_navigation_ui_data.h",
     "cast_net_log.cc",
     "cast_net_log.h",
     "cast_network_delegate.cc",
@@ -70,6 +72,7 @@ cast_source_set("browser") {
 
   if (chromecast_branding == "public") {
     sources += [
+      "cast_browser_main_parts_simple.cc",
       "cast_content_browser_client_simple.cc",
       "cast_network_delegate_simple.cc",
       "pref_service_helper_simple.cc",
@@ -190,6 +193,43 @@ cast_source_set("browser") {
     deps += [
       "//media/mojo/interfaces:constants",
       "//media/mojo/services",
+    ]
+  }
+
+  if (enable_chromecast_extensions) {
+    sources += [
+      "extensions/api/identity/identity_api.cc",
+      "extensions/api/identity/identity_api.h",
+      "extensions/cast_display_info_provider.cc",
+      "extensions/cast_display_info_provider.h",
+      "extensions/cast_extension_host_delegate.cc",
+      "extensions/cast_extension_host_delegate.h",
+      "extensions/cast_extension_system.cc",
+      "extensions/cast_extension_system.h",
+      "extensions/cast_extension_system_factory.cc",
+      "extensions/cast_extension_system_factory.h",
+      "extensions/cast_extension_web_contents_observer.cc",
+      "extensions/cast_extension_web_contents_observer.h",
+      "extensions/cast_extensions_api_client.cc",
+      "extensions/cast_extensions_api_client.h",
+      "extensions/cast_extensions_browser_client.cc",
+      "extensions/cast_extensions_browser_client.h",
+      "extensions/cast_prefs.cc",
+      "extensions/cast_prefs.h",
+      "extensions/stub_storage_monitor.cc",
+    ]
+
+    deps += [
+      "//components/guest_view/browser",
+      "//components/keyed_service/content",
+      "//components/pref_registry",
+      "//components/storage_monitor",
+      "//components/user_prefs:user_prefs",
+      "//extensions/browser",
+      "//extensions/common",
+      "//extensions/common/api",
+      "//extensions/shell/common/api:api_registration_bundle_generator_registration",
+      "//google_apis:google_apis",
     ]
   }
 

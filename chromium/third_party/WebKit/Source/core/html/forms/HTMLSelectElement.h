@@ -29,7 +29,6 @@
 
 #include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
-#include "core/html/HTMLContentElement.h"
 #include "core/html/forms/HTMLFormControlElementWithState.h"
 #include "core/html/forms/HTMLOptionsCollection.h"
 #include "core/html/forms/OptionList.h"
@@ -170,6 +169,11 @@ class CORE_EXPORT HTMLSelectElement final
 
   void ResetTypeAheadSessionForTesting();
 
+  // Used for slot assignment.
+  static bool CanAssignToSelectSlot(const Node&);
+
+  bool HasNonInBodyInsertionMode() const override { return true; }
+
   void Trace(blink::Visitor*) override;
 
  protected:
@@ -202,7 +206,7 @@ class CORE_EXPORT HTMLSelectElement final
   bool IsPresentationAttribute(const QualifiedName&) const override;
 
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
-  void DidRecalcStyle() override;
+  void DidRecalcStyle(StyleRecalcChange) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
   void AppendToFormData(FormData&) override;
   void DidAddUserAgentShadowRoot(ShadowRoot&) override;

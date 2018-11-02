@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
+#include "base/version.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/extension_resource.h"
 #include "extensions/common/hashed_extension_id.h"
@@ -44,17 +45,22 @@ class PermissionsParser;
 // RuntimeData is protected by a lock.
 class Extension : public base::RefCountedThreadSafe<Extension> {
  public:
+  // Do not renumber or reorder these values, as they are stored on-disk in the
+  // user's preferences.
   enum State {
     DISABLED = 0,
-    ENABLED,
+    ENABLED = 1,
+
     // An external extension that the user uninstalled. We should not reinstall
     // such extensions on startup.
-    EXTERNAL_EXTENSION_UNINSTALLED,
+    EXTERNAL_EXTENSION_UNINSTALLED = 2,
+
     // DEPRECATED: Special state for component extensions.
-    // Maintained as a placeholder since states may be stored to disk.
-    ENABLED_COMPONENT_DEPRECATED,
-    // Add new states here as this enum is stored in prefs.
-    NUM_STATES
+    // ENABLED_COMPONENT_DEPRECATED = 3,
+
+    // Do not add more values. State is being removed.
+    // https://crbug.com/794205.
+    NUM_STATES = 4,
   };
 
   // A base class for parsed manifest data that APIs want to store on
@@ -241,7 +247,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   Manifest::Location location() const;
   const ExtensionId& id() const;
   const HashedExtensionId& hashed_id() const;
-  const base::Version* version() const { return version_.get(); }
+  const base::Version& version() const { return version_; }
   const std::string& version_name() const { return version_name_; }
   const std::string VersionString() const;
   const std::string GetVersionForDisplay() const;
@@ -401,7 +407,7 @@ class Extension : public base::RefCountedThreadSafe<Extension> {
   GURL extension_url_;
 
   // The extension's version.
-  std::unique_ptr<base::Version> version_;
+  base::Version version_;
 
   // The extension's user visible version name.
   std::string version_name_;

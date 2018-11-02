@@ -4,7 +4,7 @@
 
 #include "core/workers/WorkletModuleTreeClient.h"
 
-#include "core/dom/ModuleScript.h"
+#include "core/script/ModuleScript.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkletGlobalScope.h"
 #include "platform/CrossThreadFunctional.h"
@@ -29,8 +29,8 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
     // Step 3: "If script is null, then queue a task on outsideSettings's
     // responsible event loop to run these steps:"
     // The steps are implemented in WorkletPendingTasks::Abort().
-    outside_settings_task_runner_->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *outside_settings_task_runner_, FROM_HERE,
         CrossThreadBind(&WorkletPendingTasks::Abort,
                         WrapCrossThreadPersistent(pending_tasks_.Get())));
     return;
@@ -46,9 +46,9 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
   // case should already be handled above.
   //
   // Check whether a syntax error happens.
-  if (module_script->IsErrored()) {
-    outside_settings_task_runner_->PostTask(
-        BLINK_FROM_HERE,
+  if (module_script->HasErrorToRethrow()) {
+    PostCrossThreadTask(
+        *outside_settings_task_runner_, FROM_HERE,
         CrossThreadBind(&WorkletPendingTasks::Abort,
                         WrapCrossThreadPersistent(pending_tasks_.Get())));
     return;
@@ -57,18 +57,19 @@ void WorkletModuleTreeClient::NotifyModuleTreeLoadFinished(
   // TODO(nhiroki): Call WorkerReportingProxy::WillEvaluateWorkerScript() or
   // something like that (e.g., WillEvaluateModuleScript()).
   // Step 4: "Run a module script given script."
-  modulator_->ExecuteModule(module_script,
-                            Modulator::CaptureEvalErrorFlag::kReport);
+  ScriptValue error = modulator_->ExecuteModule(
+      module_script, Modulator::CaptureEvalErrorFlag::kReport);
+
   WorkletGlobalScope* global_scope = ToWorkletGlobalScope(
       ExecutionContext::From(modulator_->GetScriptState()));
-  global_scope->ReportingProxy().DidEvaluateModuleScript(
-      !module_script->IsErrored());
+
+  global_scope->ReportingProxy().DidEvaluateModuleScript(error.IsEmpty());
 
   // Step 5: "Queue a task on outsideSettings's responsible event loop to run
   // these steps:"
   // The steps are implemented in WorkletPendingTasks::DecrementCounter().
-  outside_settings_task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *outside_settings_task_runner_, FROM_HERE,
       CrossThreadBind(&WorkletPendingTasks::DecrementCounter,
                       WrapCrossThreadPersistent(pending_tasks_.Get())));
 };

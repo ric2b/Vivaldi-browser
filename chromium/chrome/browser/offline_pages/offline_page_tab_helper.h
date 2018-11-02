@@ -33,6 +33,7 @@ class OfflinePageTabHelper :
 
   void SetOfflinePage(const OfflinePageItem& offline_page,
                       const OfflinePageHeader& offline_header,
+                      bool is_trusted,
                       bool is_offline_preview);
 
   const OfflinePageItem* offline_page() {
@@ -43,8 +44,12 @@ class OfflinePageTabHelper :
     return offline_info_.offline_header;
   }
 
-  // Whether the page is an offline preview.
-  bool IsShowingOfflinePreview() const;
+  // Returns whether a trusted offline page is being displayed.
+  bool IsShowingTrustedOfflinePage() const;
+
+  // Returns nullptr if the page is not an offline preview. Returns the
+  // OfflinePageItem related to the page if the page is an offline preview.
+  const OfflinePageItem* GetOfflinePreviewItem() const;
 
   // Returns provisional offline page since actual navigation does not happen
   // during unit tests.
@@ -77,6 +82,9 @@ class OfflinePageTabHelper :
     // The offline header that is provided when offline page is loaded.
     OfflinePageHeader offline_header;
 
+    // Whether the page is deemed trusted or not.
+    bool is_trusted;
+
     // Whether the page is an offline preview. Offline page previews are shown
     // when a user's effective connection type is prohibitively slow.
     bool is_showing_offline_preview;
@@ -92,7 +100,19 @@ class OfflinePageTabHelper :
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
-  void SelectPageForURLDone(const OfflinePageItem* offline_page);
+  // Finalize the offline info when the navigation is done.
+  void FinalizeOfflineInfo(content::NavigationHandle* navigation_handle);
+
+  // Report the metrics essential to PrefetchService.
+  void ReportPrefetchMetrics(content::NavigationHandle* navigation_handle);
+
+  // Reload the URL in order to fetch the offline page on certain net errors.
+  void TryLoadingOfflinePageOnNetError(
+      content::NavigationHandle* navigation_handle);
+
+  void SelectPagesForURLDone(const std::vector<OfflinePageItem>& offline_pages);
+
+  void GetPageByOfflineIdDone(const OfflinePageItem* offline_page);
 
   void DuplicateCheckDoneForScheduleDownload(
       content::WebContents* web_contents,

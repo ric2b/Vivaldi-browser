@@ -20,26 +20,19 @@
     longhands: {
     },
 
-    // - property_class: true|"classname"
-    // Specifies the existence (and optionally name) of a CSSProperty for
-    // this property.
-    // * Add this flag if a property class has been implemented for this property.
-    // * If the classname for this is different to the name of the property,
-    //   specify a value for this flag.
-    //   e.g. property_class=CSSPropertyWebkitPadding.
-    // TODO(meade): When most properties have been implemented, modify this so
-    // that properties with default classnames do not get this flag, and
-    // introduce a 'not_implemented' flag instead.
-    property_class: {
-    },
-
     // - property_methods: ["method1", "method2"]
     // List of methods that are implemented in the CSSProperty for this
     // property.
     property_methods: {
       default: [],
       valid_type: "list",
-      valid_values: ["ParseSingleValue", "ParseShorthand", "IsLayoutDependent"],
+      valid_values: [
+        "ParseSingleValue",
+        "ParseShorthand",
+        "IsLayoutDependent",
+        "CSSValueFromComputedStyleInternal",
+        "ColorIncludingFallback"
+      ],
     },
     // - custom_apply_functions_all
     // - custom_apply_functions_initial
@@ -350,15 +343,13 @@
     // Animation Priority properties
     {
       name: "animation-delay",
-      property_class: "Delay",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "animation-direction",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       keywords: ["normal", "reverse", "alternate", "alternate-reverse"],
       separator: ",",
       custom_apply_functions_all: true,
@@ -366,8 +357,7 @@
     },
     {
       name: "animation-duration",
-      property_class: "Duration",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       typedom_types: ["Time"],
       separator: ",",
       custom_apply_functions_all: true,
@@ -375,15 +365,13 @@
     },
     {
       name: "animation-fill-mode",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "animation-iteration-count",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       keywords: ["infinite"],
       separator: ",",
       custom_apply_functions_all: true,
@@ -391,36 +379,31 @@
     },
     {
       name: "animation-name",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "animation-play-state",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "animation-timing-function",
-      property_class: "TimingFunction",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "transition-delay",
-      property_class: "Delay",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "transition-duration",
-      property_class: "Duration",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       typedom_types: ["Time"],
       separator: ",",
       custom_apply_functions_all: true,
@@ -428,15 +411,13 @@
     },
     {
       name: "transition-property",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
     {
       name: "transition-timing-function",
-      property_class: "TimingFunction",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
       priority: "Animation",
     },
@@ -446,8 +427,7 @@
     // (e.g. font-size / ems)
     {
       name: "color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       inherited: true,
       field_group: "inherited",
@@ -461,7 +441,7 @@
     },
     {
       name: "direction",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       affected_by_all: false,
       inherited: true,
       field_template: "keyword",
@@ -474,8 +454,7 @@
     },
     {
       name: "font-family",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       inherited: true,
       font: true,
@@ -486,7 +465,7 @@
     },
     {
       name: "font-kerning",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       name_for_methods: "Kerning",
@@ -495,8 +474,7 @@
     },
     {
       name: "font-size",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       font: true,
@@ -507,8 +485,7 @@
     },
     {
       name: "font-size-adjust",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       runtime_flag: "CSSFontSizeAdjust",
@@ -519,8 +496,7 @@
     },
     {
       name: "font-stretch",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       inherited: true,
       font: true,
@@ -530,8 +506,7 @@
     },
     {
       name: "font-style",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       inherited: true,
       font: true,
@@ -541,8 +516,7 @@
     },
     {
       name: "font-variant-ligatures",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       name_for_methods: "VariantLigatures",
@@ -552,8 +526,7 @@
     },
     {
       name: "font-variant-caps",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       name_for_methods: "VariantCaps",
@@ -562,8 +535,7 @@
     },
     {
       name: "font-variant-east-asian",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       name_for_methods: "VariantEastAsian",
@@ -572,8 +544,7 @@
     },
     {
       name: "font-variant-numeric",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       name_for_methods: "VariantNumeric",
@@ -582,8 +553,7 @@
     },
     {
       name: "font-weight",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       inherited: true,
@@ -594,8 +564,7 @@
     },
     {
       name: "font-feature-settings",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       inherited: true,
       font: true,
@@ -605,8 +574,7 @@
     },
     {
       name: "font-variation-settings",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       runtime_flag: "CSSVariableFonts",
@@ -617,7 +585,7 @@
     },
     {
       name: "-webkit-font-smoothing",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       type_name: "FontSmoothingMode",
@@ -625,8 +593,7 @@
     },
     {
       name: "-webkit-locale",
-      property_class: "AutoOrString",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       custom_apply_functions_value: true,
@@ -634,7 +601,7 @@
     },
     {
       name: "text-orientation",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -646,7 +613,7 @@
     },
     {
       name: "-webkit-text-orientation",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       type_name: "TextOrientation",
       custom_apply_functions_value: true,
@@ -654,7 +621,7 @@
     },
     {
       name: "writing-mode",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_template: "keyword",
       include_paths: ["platform/text/WritingMode.h"],
@@ -666,7 +633,7 @@
     },
     {
       name: "-webkit-writing-mode",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       type_name: "WritingMode",
       custom_apply_functions_value: true,
@@ -674,7 +641,7 @@
     },
     {
       name: "text-rendering",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       font: true,
       type_name: "TextRenderingMode",
@@ -682,8 +649,7 @@
     },
     {
       name: "zoom",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       field_group: "visual",
       field_template: "primitive",
@@ -695,45 +661,42 @@
     },
     {
       name: "align-content",
-      property_class: "AlignOrJustifyContent",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleContentAlignmentData.h"],
-      default_value: "StyleContentAlignmentData(kContentPositionNormal, kContentDistributionDefault, kOverflowAlignmentDefault)",
+      default_value: "StyleContentAlignmentData(ContentPosition::kNormal, ContentDistributionType::kDefault, OverflowAlignment::kDefault)",
       type_name: "StyleContentAlignmentData",
       converter: "ConvertContentAlignmentData",
     },
     {
       name: "align-items",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleSelfAlignmentData.h"],
-      default_value: "StyleSelfAlignmentData(kItemPositionNormal, kOverflowAlignmentDefault)",
+      default_value: "StyleSelfAlignmentData(ItemPosition::kNormal, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
     },
     {
       name: "alignment-baseline",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       svg: true,
     },
     {
       name: "align-self",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleSelfAlignmentData.h"],
-      default_value: "StyleSelfAlignmentData(kItemPositionAuto, kOverflowAlignmentDefault)",
+      default_value: "StyleSelfAlignmentData(ItemPosition::kAuto, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
     },
     {
       name: "backdrop-filter",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       runtime_flag: "CSSBackdropFilter",
@@ -748,6 +711,7 @@
     },
     {
       name: "backface-visibility",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["visible", "hidden"],
@@ -755,26 +719,22 @@
     },
     {
       name: "background-attachment",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "background-blend-mode",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "background-clip",
-      property_class: "BackgroundBox",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "background-color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "background",
       field_template: "external",
@@ -786,8 +746,7 @@
     },
     {
       name: "background-image",
-      property_class: "BackgroundOrMaskImage",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       keywords: ["auto", "none"],
       typedom_types: ["Image"],
@@ -795,21 +754,18 @@
     },
     {
       name: "background-origin",
-      property_class: "BackgroundBox",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "background-position-x",
-      property_class: "PositionX",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "background-position-y",
-      property_class: "PositionY",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
@@ -823,15 +779,13 @@
     },
     {
       name: "background-size",
-      property_class: "BackgroundOrMaskSize",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "baseline-shift",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       custom_apply_functions_inherit: true,
@@ -839,8 +793,7 @@
     },
     {
       name: "border-bottom-color",
-      property_class: "BorderColorSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -852,8 +805,7 @@
     },
     {
       name: "border-bottom-left-radius",
-      property_class: "BorderRadiusCorner",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -864,8 +816,7 @@
     },
     {
       name: "border-bottom-right-radius",
-      property_class: "BorderRadiusCorner",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -876,6 +827,7 @@
     },
     {
       name: "border-bottom-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "surround",
       field_template: "keyword",
       keywords: [
@@ -888,8 +840,7 @@
     },
     {
       name: "border-bottom-width",
-      property_class: "BorderWidthSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -903,7 +854,7 @@
     },
     {
       name: "border-collapse",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -912,28 +863,24 @@
     },
     {
       name: "border-image-outset",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "border-image-repeat",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "border-image-slice",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "border-image-source",
-      property_class: "ImageSource",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       keywords: ["none"],
       typedom_types: ["Image"],
@@ -941,15 +888,13 @@
     },
     {
       name: "border-image-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "border-left-color",
-      property_class: "BorderColorSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -961,6 +906,7 @@
     },
     {
       name: "border-left-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "surround",
       field_template: "keyword",
       keywords: [
@@ -973,8 +919,7 @@
     },
     {
       name: "border-left-width",
-      property_class: "BorderWidthSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -988,8 +933,7 @@
     },
     {
       name: "border-right-color",
-      property_class: "BorderColorSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1001,6 +945,7 @@
     },
     {
       name: "border-right-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "surround",
       field_template: "keyword",
       keywords: [
@@ -1013,8 +958,7 @@
     },
     {
       name: "border-right-width",
-      property_class: "BorderWidthSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1028,8 +972,7 @@
     },
     {
       name: "border-top-color",
-      property_class: "BorderColorSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1041,8 +984,7 @@
     },
     {
       name: "border-top-left-radius",
-      property_class: "BorderRadiusCorner",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1053,8 +995,7 @@
     },
     {
       name: "border-top-right-radius",
-      property_class: "BorderRadiusCorner",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1065,6 +1006,7 @@
     },
     {
       name: "border-top-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "surround",
       field_template: "keyword",
       keywords: [
@@ -1077,8 +1019,7 @@
     },
     {
       name: "border-top-width",
-      property_class: "BorderWidthSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "external",
@@ -1092,8 +1033,7 @@
     },
     {
       name: "bottom",
-      property_class: "OffsetSide",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1104,8 +1044,7 @@
     },
     {
       name: "box-shadow",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "pointer",
@@ -1117,6 +1056,7 @@
     },
     {
       name: "box-sizing",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "box",
       field_template: "keyword",
       keywords: ["content-box", "border-box"],
@@ -1124,6 +1064,7 @@
     },
     {
       name: "break-after",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       // Storage for this property also covers these legacy properties:
       // page-break-after, -webkit-column-break-after
       field_template: "keyword",
@@ -1136,6 +1077,7 @@
     },
     {
       name: "break-before",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       // Storage for this property also covers these legacy properties:
       // page-break-before, -webkit-column-break-before
       field_template: "keyword",
@@ -1148,6 +1090,7 @@
     },
     {
       name: "break-inside",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       // Storage for this property also covers these legacy properties:
       // page-break-inside, -webkit-column-break-inside
       field_template: "keyword",
@@ -1156,11 +1099,12 @@
     },
     {
       name: "buffered-rendering",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       svg: true,
     },
     {
       name: "caption-side",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -1169,8 +1113,7 @@
     },
     {
       name: "caret-color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -1183,14 +1126,14 @@
     },
     {
       name: "clear",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: ["none", "left", "right", "both"],
       default_value: "none",
     },
     {
       name: "clip",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "visual",
       field_template: "external",
@@ -1203,8 +1146,7 @@
     },
     {
       name: "clip-path",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "pointer",
@@ -1216,32 +1158,33 @@
     },
     {
       name: "clip-rule",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       type_name: "WindRule",
     },
     {
       name: "color-interpolation",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
     },
     {
       name: "color-interpolation-filters",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       type_name: "EColorInterpolation",
     },
     {
       name: "color-rendering",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
     },
     {
       name: "column-fill",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["balance", "auto"],
@@ -1250,8 +1193,7 @@
     },
     {
       name: "contain",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_size: 4,
       field_template: "primitive",
@@ -1262,8 +1204,7 @@
     },
     {
       name: "content",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/ContentData.h"],
@@ -1277,20 +1218,17 @@
     },
     {
       name: "counter-increment",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "counter-reset",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "cursor",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_template: "keyword",
       keywords: [
@@ -1307,30 +1245,28 @@
     },
     {
       name: "cx",
-      property_class: "ShapeLength",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLength",
     },
     {
       name: "cy",
-      property_class: "ShapeLength",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLength",
     },
     {
       name: "d",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertPathOrNone",
     },
     {
       name: "display",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: 'keyword',
       keywords: [
         "inline", "block", "list-item", "inline-block", "table", "inline-table",
@@ -1343,13 +1279,13 @@
     },
     {
       name: "dominant-baseline",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
     },
     {
       name: "empty-cells",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -1358,8 +1294,7 @@
     },
     {
       name: "fill",
-      property_class: "PaintStroke",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -1368,8 +1303,7 @@
     },
     {
       name: "fill-opacity",
-      property_class: "FillOrStrokeOpacity",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -1377,15 +1311,14 @@
     },
     {
       name: "fill-rule",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       type_name: "WindRule",
     },
     {
       name: "filter",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       field_group: "*",
@@ -1399,8 +1332,7 @@
     },
     {
       name: "flex-basis",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "<length>",
@@ -1409,6 +1341,7 @@
     },
     {
       name: "flex-direction",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["row", "row-reverse", "column", "column-reverse"],
@@ -1416,8 +1349,7 @@
     },
     {
       name: "flex-grow",
-      property_class: "FlexGrowOrShrink",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -1426,8 +1358,7 @@
     },
     {
       name: "flex-shrink",
-      property_class: "FlexGrowOrShrink",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -1436,6 +1367,7 @@
     },
     {
       name: "flex-wrap",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["nowrap", "wrap", "wrap-reverse"],
@@ -1443,6 +1375,7 @@
     },
     {
       name: "float",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: ["none", "left", "right"],
       default_value: "none",
@@ -1451,24 +1384,21 @@
     },
     {
       name: "flood-color",
-      property_class: "ColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       svg: true,
       converter: "ConvertColor",
     },
     {
       name: "flood-opacity",
-      property_class: "FloodOrStopOpacity",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertNumberOrPercentage",
     },
     {
       name: "grid-auto-columns",
-      property_class: "GridAutoLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["platform/wtf/Vector.h", "core/style/GridTrackSize.h"],
@@ -1478,10 +1408,9 @@
     },
     {
       name: "grid-auto-flow",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
-      field_size: 4, // TODO(shend): Make this use "kGridAutoFlowBits".
+      field_size: 4, // FIXME: Make this use "kGridAutoFlowBits".
       field_template: "primitive",
       default_value: "kAutoFlowRow",
       type_name: "GridAutoFlow",
@@ -1490,8 +1419,7 @@
     },
     {
       name: "grid-auto-rows",
-      property_class: "GridAutoLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["platform/wtf/Vector.h", "core/style/GridTrackSize.h"],
@@ -1501,8 +1429,7 @@
     },
     {
       name: "grid-column-end",
-      property_class: "GridLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/GridPosition.h"],
@@ -1512,8 +1439,7 @@
     },
     {
       name: "grid-column-gap",
-      property_class: "GridRowOrColumnGap",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "<length>",
       default_value: "Length(kFixed)",
@@ -1521,8 +1447,7 @@
     },
     {
       name: "grid-column-start",
-      property_class: "GridLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/GridPosition.h"],
@@ -1532,8 +1457,7 @@
     },
     {
       name: "grid-row-end",
-      property_class: "GridLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/GridPosition.h"],
@@ -1543,8 +1467,7 @@
     },
     {
       name: "grid-row-gap",
-      property_class: "GridRowOrColumnGap",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "<length>",
       default_value: "Length(kFixed)",
@@ -1552,8 +1475,7 @@
     },
     {
       name: "grid-row-start",
-      property_class: "GridLine",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/GridPosition.h"],
@@ -1563,14 +1485,12 @@
     },
     {
       name: "grid-template-areas",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "grid-template-columns",
-      property_class: "GridTemplateLine",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["platform/wtf/Vector.h", "core/style/GridTrackSize.h"],
@@ -1580,8 +1500,7 @@
     },
     {
       name: "grid-template-rows",
-      property_class: "GridTemplateLine",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["platform/wtf/Vector.h", "core/style/GridTrackSize.h"],
@@ -1591,8 +1510,7 @@
     },
     {
       name: "height",
-      property_class: "WidthOrHeight",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -1604,7 +1522,7 @@
     },
     {
       name: "hyphens",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -1614,7 +1532,7 @@
     },
     {
       name: "image-rendering",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -1626,8 +1544,7 @@
     },
     {
       name: "image-orientation",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       runtime_flag: "ImageOrientation",
       field_group: "*",
@@ -1639,6 +1556,7 @@
     },
     {
       name: "isolation",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["auto", "isolate"],
@@ -1646,41 +1564,37 @@
     },
     {
       name: "justify-content",
-      property_class: "AlignOrJustifyContent",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleContentAlignmentData.h"],
-      default_value: "StyleContentAlignmentData(kContentPositionNormal, kContentDistributionDefault, kOverflowAlignmentDefault)",
+      default_value: "StyleContentAlignmentData(ContentPosition::kNormal, ContentDistributionType::kDefault, OverflowAlignment::kDefault)",
       type_name: "StyleContentAlignmentData",
       converter: "ConvertContentAlignmentData",
     },
     {
       name: "justify-items",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleSelfAlignmentData.h"],
-      default_value: "StyleSelfAlignmentData(kItemPositionAuto, kOverflowAlignmentDefault)",
+      default_value: "StyleSelfAlignmentData(ItemPosition::kAuto, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
     },
     {
       name: "justify-self",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleSelfAlignmentData.h"],
-      default_value: "StyleSelfAlignmentData(kItemPositionAuto, kOverflowAlignmentDefault)",
+      default_value: "StyleSelfAlignmentData(ItemPosition::kAuto, OverflowAlignment::kDefault)",
       type_name: "StyleSelfAlignmentData",
       converter: "ConvertSelfOrDefaultAlignmentData",
     },
     {
       name: "left",
-      property_class: "OffsetSide",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1691,24 +1605,21 @@
     },
     {
       name: "letter-spacing",
-      property_class: "LetterAndWordSpacing",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       converter: "ConvertSpacing",
     },
     {
       name: "lighting-color",
-      property_class: "ColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       svg: true,
       converter: "ConvertColor",
     },
     {
       name: "line-height",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "inherited",
@@ -1720,8 +1631,7 @@
     },
     {
       name: "line-height-step",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       runtime_flag: "CSSSnapSize",
       field_group: "*",
@@ -1732,8 +1642,7 @@
     },
     {
       name: "list-style-image",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -1748,7 +1657,7 @@
     },
     {
       name: "list-style-position",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -1757,7 +1666,7 @@
     },
     {
       name: "list-style-type",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_template: "keyword",
       keywords: [
@@ -1779,8 +1688,7 @@
     },
     {
       name: "margin-bottom",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1789,8 +1697,7 @@
     },
     {
       name: "margin-left",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1799,8 +1706,7 @@
     },
     {
       name: "margin-right",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1809,8 +1715,7 @@
     },
     {
       name: "margin-top",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -1819,8 +1724,7 @@
     },
     {
       name: "marker-end",
-      property_class: "MarkerPoint",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       name_for_methods: "MarkerEndResource",
@@ -1828,8 +1732,7 @@
     },
     {
       name: "marker-mid",
-      property_class: "MarkerPoint",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       name_for_methods: "MarkerMidResource",
@@ -1837,8 +1740,7 @@
     },
     {
       name: "marker-start",
-      property_class: "MarkerPoint",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       name_for_methods: "MarkerStartResource",
@@ -1846,27 +1748,25 @@
     },
     {
       name: "mask",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       svg: true,
       name_for_methods: "MaskerResource",
       converter: "ConvertFragmentIdentifier",
     },
     {
       name: "mask-source-type",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSMaskSourceType",
       custom_apply_functions_all: true,
     },
     {
       name: "mask-type",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       svg: true,
     },
     {
       name: "max-height",
-      property_class: "MaxWidthOrHeight",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -1876,8 +1776,7 @@
     },
     {
       name: "max-width",
-      property_class: "MaxWidthOrHeight",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -1887,8 +1786,7 @@
     },
     {
       name: "min-height",
-      property_class: "MinWidthOrHeight",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -1898,8 +1796,7 @@
     },
     {
       name: "min-width",
-      property_class: "MinWidthOrHeight",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -1909,6 +1806,7 @@
     },
     {
       name: "mix-blend-mode",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       include_paths: ["public/platform/WebBlendMode.h"],
@@ -1923,6 +1821,7 @@
     },
     {
       name: "object-fit",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["fill", "contain", "cover", "none", "scale-down"],
@@ -1931,8 +1830,7 @@
     },
     {
       name: "object-position",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -1943,8 +1841,7 @@
     },
     {
       name: "offset-anchor",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       runtime_flag: "CSSOffsetPositionAnchor",
       field_group: "*",
@@ -1956,8 +1853,7 @@
     },
     {
       name: "offset-distance",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "<length>",
@@ -1966,8 +1862,7 @@
     },
     {
       name: "offset-path",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "pointer",
@@ -1979,8 +1874,7 @@
     },
     {
       name: "offset-position",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       runtime_flag: "CSSOffsetPositionAnchor",
       field_group: "*",
@@ -1992,20 +1886,18 @@
     },
     {
       name: "offset-rotate",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/StyleOffsetRotation.h"],
-      default_value: "StyleOffsetRotation(0, kOffsetRotationAuto)",
+      default_value: "StyleOffsetRotation(0, OffsetRotationType::kAuto)",
       type_name: "StyleOffsetRotation",
       converter: "ConvertOffsetRotate",
     },
     {
       name: "opacity",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       field_group: "*",
@@ -2016,8 +1908,7 @@
     },
     {
       name: "order",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -2027,8 +1918,7 @@
     },
     {
       name: "orphans",
-      property_class: "OrphansOrWidows",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -2038,8 +1928,7 @@
     },
     {
       name: "outline-color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2051,8 +1940,7 @@
     },
     {
       name: "outline-offset",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -2063,6 +1951,7 @@
     },
     {
       name: "outline-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: [
@@ -2075,8 +1964,7 @@
     },
     {
       name: "outline-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2088,7 +1976,7 @@
     },
     {
       name: "overflow-anchor",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: false,
       runtime_flag: "ScrollAnchoring",
       field_template: "keyword",
@@ -2099,7 +1987,7 @@
     },
     {
       name: "overflow-wrap",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2108,6 +1996,7 @@
     },
     {
       name: "overflow-x",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: [
         "visible", "hidden", "scroll", "auto", "overlay", "-webkit-paged-x",
@@ -2118,6 +2007,7 @@
     },
     {
       name: "overflow-y",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: [
         "visible", "hidden", "scroll", "auto", "overlay", "-webkit-paged-x",
@@ -2127,9 +2017,26 @@
       type_name: "EOverflow",
     },
     {
+      name: "overscroll-behavior-x",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSOverscrollBehavior",
+      field_template: "keyword",
+      keywords: ["auto", "contain", "none"],
+      default_value: "auto",
+      type_name: "EOverscrollBehavior",
+    },
+    {
+      name: "overscroll-behavior-y",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSOverscrollBehavior",
+      field_template: "keyword",
+      keywords: ["auto", "contain", "none"],
+      default_value: "auto",
+      type_name: "EOverscrollBehavior",
+    },
+    {
       name: "padding-bottom",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2138,8 +2045,7 @@
     },
     {
       name: "padding-left",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2148,8 +2054,7 @@
     },
     {
       name: "padding-right",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2158,8 +2063,7 @@
     },
     {
       name: "padding-top",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2168,16 +2072,14 @@
     },
     {
       name: "paint-order",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       converter: "ConvertPaintOrder",
     },
     {
       name: "perspective",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -2187,8 +2089,7 @@
     },
     {
       name: "perspective-origin",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2199,7 +2100,7 @@
     },
     {
       name: "pointer-events",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -2211,6 +2112,7 @@
     },
     {
       name: "position",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: [
         "static", "relative", "absolute", "fixed", "sticky"
@@ -2221,8 +2123,7 @@
     },
     {
       name: "quotes",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "pointer",
@@ -2234,6 +2135,7 @@
     },
     {
       name: "resize",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["none", "both", "horizontal", "vertical"],
@@ -2242,8 +2144,7 @@
     },
     {
       name: "right",
-      property_class: "OffsetSide",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2254,31 +2155,28 @@
     },
     {
       name: "r",
-      property_class: "ShapeLength",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLength",
     },
     {
       name: "rx",
-      property_class: "Radius",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLengthOrAuto",
     },
     {
       name: "ry",
-      property_class: "Radius",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLengthOrAuto",
     },
     {
       name: "scroll-behavior",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSOMSmoothScroll",
       field_group: "*",
       field_size: 2, // FIXME: Convert this to a keyword field
@@ -2287,72 +2185,110 @@
       type_name: "ScrollBehavior",
     },
     {
-      name: "overscroll-behavior-x",
-      property_class: "OverscrollBehaviorXOrY",
-      runtime_flag: "CSSOverscrollBehavior",
-      field_template: "keyword",
-      keywords: ["auto", "contain", "none"],
-      default_value: "auto",
-      type_name: "EOverscrollBehavior",
-    },
-    {
-      name: "overscroll-behavior-y",
-      property_class: "OverscrollBehaviorXOrY",
-      runtime_flag: "CSSOverscrollBehavior",
-      field_template: "keyword",
-      keywords: ["auto", "contain", "none"],
-      default_value: "auto",
-      type_name: "EOverscrollBehavior",
-    },
-    {
-      name: "scroll-snap-type",
-      property_class: true,
+      name: "scroll-margin-block-end",
       property_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
-      field_group: "*",
-      field_template: "external",
-      include_paths: ["core/style/ScrollSnap.h"],
-      default_value: "ScrollSnapType()",
-      getter: "GetScrollSnapType",
-      type_name: "ScrollSnapType",
-      converter: "ConvertSnapType",
+      direction_aware_options: {
+        logical_side: "after",
+        shorthand_for_physical_side: "scrollMarginShorthand",
+      },
     },
     {
-      name: "scroll-snap-align",
-      property_class: true,
+      name: "scroll-margin-block-start",
       property_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
-      field_group: "*",
-      field_template: "external",
-      include_paths: ["core/style/ScrollSnap.h"],
-      default_value: "ScrollSnapAlign()",
-      getter: "GetScrollSnapAlign",
-      type_name: "ScrollSnapAlign",
-      converter: "ConvertSnapAlign",
+      direction_aware_options: {
+        logical_side: "before",
+        shorthand_for_physical_side: "scrollMarginShorthand",
+      },
     },
     {
-      name: "scroll-snap-stop",
-      property_class: true,
+      name: "scroll-margin-bottom",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
-      field_template: "keyword",
-      keywords: ["normal", "always"],
-      default_value: "normal",
+      field_group: "*",
+      field_template: "primitive",
+      default_value: "0.0f",
+      type_name: "float",
+      converter: "ConvertComputedLength<float>",
     },
     {
-      name: "scroll-padding-top",
-      property_class: "ScrollPaddingSide",
+      name: "scroll-margin-inline-end",
       property_methods: ["ParseSingleValue"],
       runtime_flag: "CSSScrollSnapPoints",
+      direction_aware_options: {
+        logical_side: "end",
+        shorthand_for_physical_side: "scrollMarginShorthand",
+      },
+    },
+    {
+      name: "scroll-margin-inline-start",
+      property_methods: ["ParseSingleValue"],
+      runtime_flag: "CSSScrollSnapPoints",
+      direction_aware_options: {
+        logical_side: "start",
+        shorthand_for_physical_side: "scrollMarginShorthand",
+      },
+    },
+    {
+      name: "scroll-margin-left",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
-      field_template: "<length>",
-      default_value: "Length()",
+      field_template: "primitive",
+      default_value: "0.0f",
+      type_name: "float",
+      converter: "ConvertComputedLength<float>",
+    },
+    {
+      name: "scroll-margin-right",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
+      field_group: "*",
+      field_template: "primitive",
+      default_value: "0.0f",
+      type_name: "float",
+      converter: "ConvertComputedLength<float>",
+    },
+    {
+      name: "scroll-margin-top",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
+      field_group: "*",
+      field_template: "primitive",
+      default_value: "0.0f",
+      type_name: "float",
+      converter: "ConvertComputedLength<float>",
+    },
+    {
+      name: "scroll-padding-block-end",
+      property_methods: ["ParseSingleValue"],
+      runtime_flag: "CSSScrollSnapPoints",
+      include_paths: ["platform/Length.h"],
       typedom_types: ["Length", "Percent"],
+      type_name: "Length",
       converter: "ConvertLength",
+      direction_aware_options: {
+        logical_side: "after",
+        shorthand_for_physical_side: "scrollPaddingShorthand",
+      },
+    },
+    {
+      name: "scroll-padding-block-start",
+      property_methods: ["ParseSingleValue"],
+      runtime_flag: "CSSScrollSnapPoints",
+      include_paths: ["platform/Length.h"],
+      typedom_types: ["Length", "Percent"],
+      type_name: "Length",
+      converter: "ConvertLength",
+      direction_aware_options: {
+        logical_side: "before",
+        shorthand_for_physical_side: "scrollPaddingShorthand",
+      },
     },
     {
       name: "scroll-padding-bottom",
-      property_class: "ScrollPaddingSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
       field_template: "<length>",
@@ -2361,9 +2297,34 @@
       converter: "ConvertLength",
     },
     {
-      name: "scroll-padding-left",
-      property_class: "ScrollPaddingSide",
+      name: "scroll-padding-inline-end",
       property_methods: ["ParseSingleValue"],
+      runtime_flag: "CSSScrollSnapPoints",
+      include_paths: ["platform/Length.h"],
+      typedom_types: ["Length", "Percent"],
+      type_name: "Length",
+      converter: "ConvertLength",
+      direction_aware_options: {
+        logical_side: "end",
+        shorthand_for_physical_side: "scrollPaddingShorthand",
+      },
+    },
+    {
+      name: "scroll-padding-inline-start",
+      property_methods: ["ParseSingleValue"],
+      runtime_flag: "CSSScrollSnapPoints",
+      include_paths: ["platform/Length.h"],
+      typedom_types: ["Length", "Percent"],
+      type_name: "Length",
+      converter: "ConvertLength",
+      direction_aware_options: {
+        logical_side: "start",
+        shorthand_for_physical_side: "scrollPaddingShorthand",
+      },
+    },
+    {
+      name: "scroll-padding-left",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
       field_template: "<length>",
@@ -2373,8 +2334,7 @@
     },
     {
       name: "scroll-padding-right",
-      property_class: "ScrollPaddingSide",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
       field_template: "<length>",
@@ -2383,157 +2343,50 @@
       converter: "ConvertLength",
     },
     {
-      name: "scroll-padding-block-start",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      typedom_types: ["Length", "Percent"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "before",
-        shorthand_for_physical_side: "scrollPaddingShorthand",
-      },
-    },
-    {
-      name: "scroll-padding-block-end",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      typedom_types: ["Length", "Percent"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "after",
-        shorthand_for_physical_side: "scrollPaddingShorthand",
-      },
-    },
-    {
-      name: "scroll-padding-inline-start",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      typedom_types: ["Length", "Percent"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "start",
-        shorthand_for_physical_side: "scrollPaddingShorthand",
-      },
-    },
-    {
-      name: "scroll-padding-inline-end",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      typedom_types: ["Length", "Percent"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "end",
-        shorthand_for_physical_side: "scrollPaddingShorthand",
-      },
-    },
-    {
-      name: "scroll-snap-margin-top",
-      property_class: "ScrollSnapMarginSide",
-      property_methods: ["ParseSingleValue"],
+      name: "scroll-padding-top",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
       field_template: "<length>",
       default_value: "Length()",
+      typedom_types: ["Length", "Percent"],
       converter: "ConvertLength",
     },
     {
-      name: "scroll-snap-margin-bottom",
-      property_class: "ScrollSnapMarginSide",
-      property_methods: ["ParseSingleValue"],
+      name: "scroll-snap-align",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
-      field_template: "<length>",
-      default_value: "Length()",
-      converter: "ConvertLength",
+      field_template: "external",
+      include_paths: ["platform/scroll/ScrollSnapData.h"],
+      default_value: "ScrollSnapAlign()",
+      getter: "GetScrollSnapAlign",
+      type_name: "ScrollSnapAlign",
+      converter: "ConvertSnapAlign",
     },
     {
-      name: "scroll-snap-margin-left",
-      property_class: "ScrollSnapMarginSide",
-      property_methods: ["ParseSingleValue"],
+      name: "scroll-snap-stop",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
+      field_template: "keyword",
+      keywords: ["normal", "always"],
+      default_value: "normal",
+    },
+    {
+      name: "scroll-snap-type",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
       field_group: "*",
-      field_template: "<length>",
-      default_value: "Length()",
-      converter: "ConvertLength",
-    },
-    {
-      name: "scroll-snap-margin-right",
-      property_class: "ScrollSnapMarginSide",
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      field_group: "*",
-      field_template: "<length>",
-      default_value: "Length()",
-      converter: "ConvertLength",
-    },
-    {
-      name: "scroll-snap-margin-block-start",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "before",
-        shorthand_for_physical_side: "scrollSnapMarginShorthand",
-      },
-    },
-    {
-      name: "scroll-snap-margin-block-end",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "after",
-        shorthand_for_physical_side: "scrollSnapMarginShorthand",
-      },
-    },
-    {
-      name: "scroll-snap-margin-inline-start",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "start",
-        shorthand_for_physical_side: "scrollSnapMarginShorthand",
-      },
-    },
-    {
-      name: "scroll-snap-margin-inline-end",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
-      runtime_flag: "CSSScrollSnapPoints",
-      include_paths: ["platform/Length.h"],
-      type_name: "Length",
-      converter: "ConvertLength",
-      direction_aware_options: {
-        logical_side: "end",
-        shorthand_for_physical_side: "scrollSnapMarginShorthand",
-      },
+      field_template: "external",
+      include_paths: ["platform/scroll/ScrollSnapData.h"],
+      default_value: "ScrollSnapType()",
+      getter: "GetScrollSnapType",
+      type_name: "ScrollSnapType",
+      converter: "ConvertSnapType",
     },
     {
       name: "shape-image-threshold",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -2543,8 +2396,7 @@
     },
     {
       name: "shape-margin",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "<length>",
@@ -2553,8 +2405,7 @@
     },
     {
       name: "shape-outside",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2568,19 +2419,18 @@
     },
     {
       name: "shape-rendering",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
     },
     {
       name: "size",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       custom_apply_functions_all: true,
     },
     {
       name: "speak",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2592,24 +2442,21 @@
     },
     {
       name: "stop-color",
-      property_class: "ColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       svg: true,
       converter: "ConvertColor",
     },
     {
       name: "stop-opacity",
-      property_class: "FloodOrStopOpacity",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertNumberOrPercentage",
     },
     {
       name: "stroke",
-      property_class: "PaintStroke",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2618,8 +2465,7 @@
     },
     {
       name: "stroke-dasharray",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2628,8 +2474,7 @@
     },
     {
       name: "stroke-dashoffset",
-      property_class: "StrokeDashoffsetOrStrokeWidth",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2638,7 +2483,7 @@
     },
     {
       name: "stroke-linecap",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       name_for_methods: "CapStyle",
@@ -2646,7 +2491,7 @@
     },
     {
       name: "stroke-linejoin",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
       name_for_methods: "JoinStyle",
@@ -2654,8 +2499,7 @@
     },
     {
       name: "stroke-miterlimit",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2664,8 +2508,7 @@
     },
     {
       name: "stroke-opacity",
-      property_class: "FillOrStrokeOpacity",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2673,8 +2516,7 @@
     },
     {
       name: "stroke-width",
-      property_class: "StrokeDashoffsetOrStrokeWidth",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       svg: true,
@@ -2682,6 +2524,7 @@
     },
     {
       name: "table-layout",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_template: "keyword",
       keywords: [
         "auto", "fixed"
@@ -2690,8 +2533,7 @@
     },
     {
       name: "tab-size",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -2703,7 +2545,7 @@
     },
     {
       name: "text-align",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: false,
       inherited: true,
       field_template: "keyword",
@@ -2717,7 +2559,7 @@
     },
     {
       name: "text-align-last",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2726,13 +2568,13 @@
     },
     {
       name: "text-anchor",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       svg: true,
     },
     {
       name: "text-combine-upright",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2742,8 +2584,7 @@
     },
     {
       name: "text-decoration-color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2754,8 +2595,7 @@
     },
     {
       name: "text-decoration-line",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "visual",
       field_template: "multi_keyword",
       keywords: ["none", "underline", "overline", "line-through", "blink"],
@@ -2766,7 +2606,7 @@
     },
     {
       name: "text-decoration-skip-ink",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2775,7 +2615,7 @@
     },
     {
       name: "text-decoration-style",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["solid", "double", "dotted", "dashed", "wavy"],
@@ -2783,8 +2623,7 @@
     },
     {
       name: "text-indent",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -2794,7 +2633,7 @@
     },
     {
       name: "text-justify",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       runtime_flag: "CSS3Text",
       field_group: "*",
@@ -2807,6 +2646,7 @@
     },
     {
       name: "text-overflow",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["clip", "ellipsis"],
@@ -2814,8 +2654,7 @@
     },
     {
       name: "text-shadow",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -2828,8 +2667,7 @@
     },
     {
       name: "text-size-adjust",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -2841,7 +2679,7 @@
     },
     {
       name: "text-transform",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -2851,8 +2689,7 @@
     // FIXME: Implement support for 'under left' and 'under right' values.
     {
       name: "text-underline-position",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -2862,8 +2699,7 @@
     },
     {
       name: "top",
-      property_class: "OffsetSide",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "surround",
       field_template: "<length>",
@@ -2874,10 +2710,9 @@
     },
     {
       name: "touch-action",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
-      field_size: 6, // TODO(shend): Make this use "kTouchActionBits".
+      field_size: 6, // FIXME: Make this use "kTouchActionBits".
       field_template: "primitive",
       include_paths: ["platform/graphics/TouchAction.h"],
       default_value: "TouchAction::kTouchActionAuto",
@@ -2886,8 +2721,7 @@
     },
     {
       name: "transform",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       field_group: "*",
@@ -2901,7 +2735,7 @@
     },
     {
       name: "transform-box",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSTransformBox",
       field_template: "keyword",
       keywords: ["fill-box", "view-box"],
@@ -2909,8 +2743,7 @@
     },
     {
       name: "transform-origin",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -2922,6 +2755,7 @@
     },
     {
       name: "transform-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["flat", "preserve-3d"],
@@ -2930,8 +2764,7 @@
     },
     {
       name: "translate",
-      property_class: true,
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
@@ -2945,8 +2778,7 @@
     },
     {
       name: "rotate",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
@@ -2960,8 +2792,7 @@
     },
     {
       name: "scale",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       compositable: true,
       runtime_flag: "CSSIndependentTransformProperties",
@@ -2975,7 +2806,7 @@
     },
     {
       name: "unicode-bidi",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       affected_by_all: false,
       field_template: "keyword",
       include_paths: ["platform/text/UnicodeBidi.h"],
@@ -2988,19 +2819,19 @@
     },
     {
       name: "vector-effect",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       svg: true,
     },
     {
       name: "vertical-align",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_inherit: true,
       custom_apply_functions_value: true,
     },
     {
       name: "visibility",
-      property_class: true,
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       interpolable: true,
       inherited: true,
@@ -3010,22 +2841,21 @@
     },
     {
       name: "x",
-      property_class: "ShapeLength",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLength",
     },
     {
       name: "y",
-      property_class: "ShapeLength",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       svg: true,
       converter: "ConvertLength",
     },
     {
       name: "-webkit-appearance",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_size: 6,
       field_template: "primitive",
@@ -3034,6 +2864,7 @@
     },
     {
       name: "-webkit-app-region",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["none", "drag", "no-drag"],
@@ -3043,8 +2874,7 @@
     },
     {
       name: "-webkit-border-horizontal-spacing",
-      property_class: "WebkitBorderSpacing",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "inherited",
@@ -3056,14 +2886,12 @@
     },
     {
       name: "-webkit-border-image",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_value: true,
     },
     {
       name: "-webkit-border-vertical-spacing",
-      property_class: "WebkitBorderSpacing",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "inherited",
@@ -3077,6 +2905,7 @@
     // http://www.w3.org/TR/2009/WD-css3-flexbox-20090723/#alignment
     {
       name: "-webkit-box-align",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["stretch", "start", "center", "end", "baseline"],
@@ -3085,6 +2914,7 @@
     },
     {
       name: "-webkit-box-decoration-break",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "box",
       field_template: "keyword",
       keywords: ["slice", "clone"],
@@ -3092,7 +2922,7 @@
     },
     {
       name: "-webkit-box-direction",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -3101,8 +2931,7 @@
     },
     {
       name: "-webkit-box-flex",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "primitive",
       default_value: "0.0f",
@@ -3110,8 +2939,7 @@
     },
     {
       name: "-webkit-box-flex-group",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "primitive",
       default_value: "1",
@@ -3119,6 +2947,7 @@
     },
     {
       name: "-webkit-box-lines",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["single", "multiple"],
@@ -3126,8 +2955,7 @@
     },
     {
       name: "-webkit-box-ordinal-group",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "primitive",
       default_value: "1",
@@ -3136,6 +2964,7 @@
     },
     {
       name: "-webkit-box-orient",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["horizontal", "vertical"],
@@ -3143,6 +2972,7 @@
     },
     {
       name: "-webkit-box-pack",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["start", "center", "end", "justify"],
@@ -3150,8 +2980,7 @@
     },
     {
       name: "-webkit-box-reflect",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "pointer",
       include_paths: ["core/style/StyleReflection.h"],
@@ -3162,8 +2991,7 @@
     },
     {
       name: "column-count",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -3174,8 +3002,7 @@
     },
     {
       name: "column-gap",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -3187,8 +3014,7 @@
     },
     {
       name: "column-rule-color",
-      property_class: "ColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -3200,6 +3026,7 @@
     },
     {
       name: "column-rule-style",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: [
@@ -3211,8 +3038,7 @@
     },
     {
       name: "column-rule-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "external",
@@ -3224,8 +3050,7 @@
     },
     {
       name: "column-span",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["none", "all"],
@@ -3234,8 +3059,7 @@
     },
     {
       name: "column-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "*",
       field_template: "primitive",
@@ -3247,8 +3071,7 @@
     },
     {
       name: "-webkit-highlight",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -3259,8 +3082,7 @@
     },
     {
       name: "-webkit-hyphenate-character",
-      property_class: "AutoOrString",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -3272,7 +3094,7 @@
     },
     {
       name: "-webkit-line-break",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3282,15 +3104,14 @@
     },
     {
       name: "line-break",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       type_name: "LineBreak",
     },
     // An Apple extension.
     {
       name: "-webkit-line-clamp",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "external",
       include_paths: ["core/style/LineClampValue.h"],
@@ -3299,6 +3120,7 @@
     },
     {
       name: "-webkit-margin-after-collapse",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["collapse", "separate", "discard"],
@@ -3307,6 +3129,7 @@
     },
     {
       name: "-webkit-margin-before-collapse",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["collapse", "separate", "discard"],
@@ -3315,84 +3138,75 @@
     },
     {
       name: "-webkit-margin-bottom-collapse",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       name_for_methods: "MarginAfterCollapse",
       type_name: "EMarginCollapse",
     },
     {
       name: "-webkit-margin-top-collapse",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       name_for_methods: "MarginBeforeCollapse",
       type_name: "EMarginCollapse",
     },
     {
       name: "-webkit-mask-box-image-outset",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-box-image-repeat",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-box-image-slice",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-box-image-source",
-      property_class: "ImageSource",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_value: true,
     },
     {
       name: "-webkit-mask-box-image-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-clip",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-composite",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-image",
-      property_class: "BackgroundOrMaskImage",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-origin",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-position-x",
-      property_class: "PositionX",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-mask-position-y",
-      property_class: "PositionY",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
@@ -3406,28 +3220,25 @@
     },
     {
       name: "-webkit-mask-size",
-      property_class: "BackgroundOrMaskSize",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-perspective-origin-x",
-      property_class: "WebkitOriginX",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       converter: "ConvertLength",
     },
     {
       name: "-webkit-perspective-origin-y",
-      property_class: "WebkitOriginY",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       converter: "ConvertLength",
     },
     {
       name: "-webkit-print-color-adjust",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -3436,7 +3247,7 @@
     },
     {
       name: "-webkit-rtl-ordering",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -3448,7 +3259,7 @@
     },
     {
       name: "-webkit-ruby-position",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3458,8 +3269,7 @@
     },
     {
       name: "-webkit-tap-highlight-color",
-      property_class: "WebkitColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       inherited: true,
       field_group: "*",
       field_template: "<color>",
@@ -3468,14 +3278,13 @@
     },
     {
       name: "-webkit-text-combine",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       name_for_methods: "TextCombine",
     },
     {
       name: "-webkit-text-emphasis-color",
-      property_class: "WebkitColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -3487,8 +3296,7 @@
     },
     {
       name: "-webkit-text-emphasis-position",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_size: 2,
@@ -3499,15 +3307,13 @@
     },
     {
       name: "-webkit-text-emphasis-style",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       custom_apply_functions_all: true,
     },
     {
       name: "-webkit-text-fill-color",
-      property_class: "WebkitColorNoQuirks",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       inherited: true,
       field_group: "*",
       field_template: "external",
@@ -3519,7 +3325,7 @@
     },
     {
       name: "-webkit-text-security",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3528,8 +3334,7 @@
     },
     {
       name: "-webkit-text-stroke-color",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "ColorIncludingFallback"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -3542,8 +3347,7 @@
     },
     {
       name: "-webkit-text-stroke-width",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "primitive",
@@ -3553,27 +3357,25 @@
     },
     {
       name: "-webkit-transform-origin-x",
-      property_class: "WebkitOriginX",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       converter: "ConvertLength",
     },
     {
       name: "-webkit-transform-origin-y",
-      property_class: "WebkitOriginY",
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       converter: "ConvertLength",
     },
     {
       name: "-webkit-transform-origin-z",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       interpolable: true,
       converter: "ConvertComputedLength<float>",
     },
     {
       name: "-webkit-user-drag",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       field_group: "*",
       field_template: "keyword",
       keywords: ["auto", "none", "element"],
@@ -3581,7 +3383,7 @@
     },
     {
       name: "-webkit-user-modify",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3590,7 +3392,7 @@
     },
     {
       name: "user-select",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3599,7 +3401,7 @@
     },
     {
       name: "white-space",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       independent: true,
       inherited: true,
       field_template: "keyword",
@@ -3610,8 +3412,7 @@
     },
     {
       name: "widows",
-      property_class: "OrphansOrWidows",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       field_group: "*",
@@ -3621,8 +3422,7 @@
     },
     {
       name: "width",
-      property_class: "WidthOrHeight",
-      property_methods: ["ParseSingleValue", "IsLayoutDependent"],
+      property_methods: ["ParseSingleValue", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
       interpolable: true,
       field_group: "box",
@@ -3634,13 +3434,12 @@
     },
     {
       name: "will-change",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       custom_apply_functions_all: true,
     },
     {
       name: "word-break",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       field_group: "*",
       field_template: "keyword",
@@ -3650,8 +3449,7 @@
     },
     {
       name: "word-spacing",
-      property_class: "LetterAndWordSpacing",
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       inherited: true,
       converter: "ConvertSpacing",
@@ -3660,14 +3458,13 @@
     // property. So using the same handlers.
     {
       name: "word-wrap",
-      property_class: "Inherited",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
       inherited: true,
       name_for_methods: "OverflowWrap",
     },
     {
       name: "z-index",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       interpolable: true,
       field_group: "box",
       field_template: "primitive",
@@ -3680,7 +3477,6 @@
     // CSS logical props
     {
       name: "inline-size",
-      property_class: "InlineSizeOrLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3689,7 +3485,6 @@
     },
     {
       name: "block-size",
-      property_class: "BlockSizeOrLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3698,7 +3493,6 @@
     },
     {
       name: "min-inline-size",
-      property_class: "MinInlineSizeOrMinLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3707,7 +3501,6 @@
     },
     {
       name: "min-block-size",
-      property_class: "MinBlockSizeOrMinLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3716,7 +3509,6 @@
     },
     {
       name: "max-inline-size",
-      property_class: "MaxInlineSizeOrMaxLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3725,7 +3517,6 @@
     },
     {
       name: "max-block-size",
-      property_class: "MaxBlockSizeOrMaxLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3737,7 +3528,6 @@
 
     {
       name: "-webkit-border-end-color",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "end",
@@ -3746,7 +3536,6 @@
     },
     {
       name: "-webkit-border-end-style",
-      property_class: true,
       direction_aware_options: {
         logical_side: "end",
         shorthand_for_physical_side: "borderStyleShorthand",
@@ -3754,7 +3543,6 @@
     },
     {
       name: "-webkit-border-end-width",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "end",
@@ -3763,7 +3551,6 @@
     },
     {
       name: "-webkit-border-start-color",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "start",
@@ -3772,7 +3559,6 @@
     },
     {
       name: "-webkit-border-start-style",
-      property_class: true,
       direction_aware_options: {
         logical_side: "start",
         shorthand_for_physical_side: "borderStyleShorthand",
@@ -3780,7 +3566,6 @@
     },
     {
       name: "-webkit-border-start-width",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "start",
@@ -3789,7 +3574,6 @@
     },
     {
       name: "-webkit-border-before-color",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "before",
@@ -3798,7 +3582,6 @@
     },
     {
       name: "-webkit-border-before-style",
-      property_class: true,
       direction_aware_options: {
         logical_side: "before",
         shorthand_for_physical_side: "borderStyleShorthand",
@@ -3806,7 +3589,6 @@
     },
     {
       name: "-webkit-border-before-width",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "before",
@@ -3815,7 +3597,6 @@
     },
     {
       name: "-webkit-border-after-color",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "after",
@@ -3824,7 +3605,6 @@
     },
     {
       name: "-webkit-border-after-style",
-      property_class: true,
       direction_aware_options: {
         logical_side: "after",
         shorthand_for_physical_side: "borderStyleShorthand",
@@ -3832,7 +3612,6 @@
     },
     {
       name: "-webkit-border-after-width",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "after",
@@ -3841,7 +3620,6 @@
     },
     {
       name: "-webkit-margin-end",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "end",
@@ -3850,7 +3628,6 @@
     },
     {
       name: "-webkit-margin-start",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "start",
@@ -3859,7 +3636,6 @@
     },
     {
       name: "-webkit-margin-before",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "before",
@@ -3868,7 +3644,6 @@
     },
     {
       name: "-webkit-margin-after",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "after",
@@ -3877,7 +3652,6 @@
     },
     {
       name: "-webkit-padding-end",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "end",
@@ -3886,7 +3660,6 @@
     },
     {
       name: "-webkit-padding-start",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "start",
@@ -3895,7 +3668,6 @@
     },
     {
       name: "-webkit-padding-before",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "before",
@@ -3904,7 +3676,6 @@
     },
     {
       name: "-webkit-padding-after",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "after",
@@ -3913,7 +3684,6 @@
     },
     {
       name: "-webkit-logical-width",
-      property_class: "InlineSizeOrLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3922,7 +3692,6 @@
     },
     {
       name: "-webkit-logical-height",
-      property_class: "BlockSizeOrLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3931,7 +3700,6 @@
     },
     {
       name: "-webkit-min-logical-width",
-      property_class: "MinInlineSizeOrMinLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3940,7 +3708,6 @@
     },
     {
       name: "-webkit-min-logical-height",
-      property_class: "MinBlockSizeOrMinLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3949,7 +3716,6 @@
     },
     {
       name: "-webkit-max-logical-width",
-      property_class: "MaxInlineSizeOrMaxLogicalWidth",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "width",
@@ -3958,7 +3724,6 @@
     },
     {
       name: "-webkit-max-logical-height",
-      property_class: "MaxBlockSizeOrMaxLogicalHeight",
       property_methods: ["ParseSingleValue"],
       direction_aware_options: {
         logical_side: "height",
@@ -3971,26 +3736,22 @@
     // StyleBuilder
     {
       name: "all",
-      property_class: true,
       affected_by_all: false,
       builder_skip: true,
     },
     {
       name: "page",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       builder_skip: true,
     },
     {
       name: "-webkit-font-size-delta",
-      property_class: true,
       property_methods: ["ParseSingleValue"],
       builder_skip: true,
     },
     {
       name: "-webkit-text-decorations-in-effect",
-      property_class: true,
-      property_methods: ["ParseSingleValue"],
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       inherited: true,
       builder_skip: true,
     },
@@ -3998,43 +3759,36 @@
     // Descriptor only names
     {
       name: "font-display",
-      property_class: true,
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "max-zoom",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "min-zoom",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "orientation",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "src",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "unicode-range",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
     {
       name: "user-zoom",
-      property_class: "DescriptorOnly",
       is_descriptor: true,
       is_property: false,
     },
@@ -4047,8 +3801,7 @@
         "animation-delay", "animation-iteration-count", "animation-direction",
         "animation-fill-mode", "animation-play-state"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "background",
@@ -4058,20 +3811,17 @@
         "background-attachment", "background-origin", "background-clip",
         "background-color"
       ],
-      property_class: "Background",
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "background-position",
       longhands: ["background-position-x", "background-position-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "background-repeat",
       longhands: ["background-repeat-x", "background-repeat-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border",
@@ -4083,16 +3833,14 @@
         "border-image-source", "border-image-slice", "border-image-width",
         "border-image-outset", "border-image-repeat"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-bottom",
       longhands: [
         "border-bottom-width", "border-bottom-style", "border-bottom-color"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-color",
@@ -4100,8 +3848,7 @@
         "border-top-color", "border-right-color", "border-bottom-color",
         "border-left-color"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-image",
@@ -4109,16 +3856,14 @@
         "border-image-source", "border-image-slice", "border-image-width",
         "border-image-outset", "border-image-repeat"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-left",
       longhands: [
         "border-left-width", "border-left-style", "border-left-color"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-radius",
@@ -4126,24 +3871,21 @@
         "border-top-left-radius", "border-top-right-radius",
         "border-bottom-right-radius", "border-bottom-left-radius"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-right",
       longhands: [
         "border-right-width", "border-right-style", "border-right-color"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-spacing",
       longhands: [
         "-webkit-border-horizontal-spacing", "-webkit-border-vertical-spacing"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-style",
@@ -4151,16 +3893,14 @@
         "border-top-style", "border-right-style", "border-bottom-style",
         "border-left-style"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       keywords: ["none"],
       typedom_types: ["Image"],
     },
     {
       name: "border-top",
       longhands: ["border-top-width", "border-top-style", "border-top-color"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "border-width",
@@ -4168,20 +3908,17 @@
         "border-top-width", "border-right-width", "border-bottom-width",
         "border-left-width"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "flex",
       longhands: ["flex-grow", "flex-shrink", "flex-basis"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "flex-flow",
       longhands: ["flex-direction", "flex-wrap"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "font",
@@ -4190,8 +3927,7 @@
         "font-variant-numeric", "font-variant-east-asian", "font-weight",
         "font-stretch", "font-size", "line-height", "font-family"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "font-variant",
@@ -4199,8 +3935,7 @@
         "font-variant-ligatures", "font-variant-caps",
         "font-variant-numeric", "font-variant-east-asian"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       is_descriptor: true,
     },
     {
@@ -4209,26 +3944,22 @@
         "grid-template-rows", "grid-template-columns", "grid-template-areas",
         "grid-auto-flow", "grid-auto-rows", "grid-auto-columns"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand", "IsLayoutDependent"],
+      property_methods: ["ParseShorthand", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "place-content",
       longhands: ["align-content", "justify-content"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "place-items",
       longhands: ["align-items", "justify-items"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "place-self",
       longhands: ["align-self", "justify-self"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "grid-area",
@@ -4236,51 +3967,43 @@
         "grid-row-start", "grid-column-start", "grid-row-end",
         "grid-column-end"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "grid-column",
       longhands: ["grid-column-start", "grid-column-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "grid-gap",
       longhands: ["grid-row-gap", "grid-column-gap"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "grid-row",
       longhands: ["grid-row-start", "grid-row-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "grid-template",
       longhands: [
         "grid-template-rows", "grid-template-columns", "grid-template-areas"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand", "IsLayoutDependent"],
+      property_methods: ["ParseShorthand", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "list-style",
       longhands: ["list-style-type", "list-style-position", "list-style-image"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "margin",
       longhands: ["margin-top", "margin-right", "margin-bottom", "margin-left"],
-      property_class: true,
-      property_methods: ["ParseShorthand", "IsLayoutDependent"],
+      property_methods: ["ParseShorthand", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "marker",
       longhands: ["marker-start", "marker-mid", "marker-end"],
-      property_class: true,
       property_methods: ["ParseShorthand"],
     },
     {
@@ -4289,26 +4012,22 @@
         "offset-position", "offset-path", "offset-distance", "offset-rotate",
         "offset-anchor"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "outline",
       longhands: ["outline-color", "outline-style", "outline-width"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "overflow",
       longhands: ["overflow-x", "overflow-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "overscroll-behavior",
       longhands: ["overscroll-behavior-x", "overscroll-behavior-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSOverscrollBehavior",
     },
     {
@@ -4316,26 +4035,40 @@
       longhands: [
         "padding-top", "padding-right", "padding-bottom", "padding-left"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand", "IsLayoutDependent"],
+      property_methods: ["ParseShorthand", "IsLayoutDependent", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "page-break-after",
       longhands: ["break-after"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "page-break-before",
       longhands: ["break-before"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "page-break-inside",
       longhands: ["break-inside"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+    },
+    {
+      name: "scroll-margin",
+      longhands: ["scroll-margin-top", "scroll-margin-right", "scroll-margin-bottom", "scroll-margin-left"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
+    },
+    {
+      name: "scroll-margin-block",
+      longhands: ["scroll-margin-block-start", "scroll-margin-block-end"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
+    },
+    {
+      name: "scroll-margin-inline",
+      longhands: ["scroll-margin-inline-start", "scroll-margin-inline-end"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "CSSScrollSnapPoints",
     },
     {
       name: "scroll-padding",
@@ -4343,50 +4076,25 @@
         "scroll-padding-top", "scroll-padding-right", "scroll-padding-bottom",
         "scroll-padding-left"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
     },
     {
       name: "scroll-padding-block",
       longhands: ["scroll-padding-block-start", "scroll-padding-block-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
     },
     {
       name: "scroll-padding-inline",
       longhands: ["scroll-padding-inline-start", "scroll-padding-inline-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
-      runtime_flag: "CSSScrollSnapPoints",
-    },
-    {
-      name: "scroll-snap-margin",
-      longhands: ["scroll-snap-margin-top", "scroll-snap-margin-right", "scroll-snap-margin-bottom", "scroll-snap-margin-left"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
-      runtime_flag: "CSSScrollSnapPoints",
-    },
-    {
-      name: "scroll-snap-margin-block",
-      longhands: ["scroll-snap-margin-block-start", "scroll-snap-margin-block-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
-      runtime_flag: "CSSScrollSnapPoints",
-    },
-    {
-      name: "scroll-snap-margin-inline",
-      longhands: ["scroll-snap-margin-inline-start", "scroll-snap-margin-inline-end"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
       runtime_flag: "CSSScrollSnapPoints",
     },
     {
       name: "text-decoration",
       longhands: ["text-decoration-line", "text-decoration-style", "text-decoration-color"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "transition",
@@ -4394,8 +4102,7 @@
         "transition-property", "transition-duration",
         "transition-timing-function", "transition-delay"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-border-after",
@@ -4403,7 +4110,6 @@
         "-webkit-border-after-width", "-webkit-border-after-style",
         "-webkit-border-after-color"
       ],
-      property_class: true,
       property_methods: ["ParseShorthand"],
       direction_aware_options: {
         logical_side: "after",
@@ -4416,7 +4122,6 @@
         "-webkit-border-before-width", "-webkit-border-before-style",
         "-webkit-border-before-color"
       ],
-      property_class: true,
       property_methods: ["ParseShorthand"],
       direction_aware_options: {
         logical_side: "before",
@@ -4429,7 +4134,6 @@
         "-webkit-border-end-width", "-webkit-border-end-style",
         "-webkit-border-end-color"
       ],
-      property_class: true,
       property_methods: ["ParseShorthand"],
       direction_aware_options: {
         logical_side: "end",
@@ -4442,7 +4146,6 @@
         "-webkit-border-start-width", "-webkit-border-start-style",
         "-webkit-border-start-color"
       ],
-      property_class: true,
       property_methods: ["ParseShorthand"],
       direction_aware_options: {
         logical_side: "start",
@@ -4452,41 +4155,35 @@
     {
       name: "-webkit-column-break-after",
       longhands: ["break-after"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-column-break-before",
       longhands: ["break-before"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-column-break-inside",
       longhands: ["break-inside"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "column-rule",
       longhands: [
         "column-rule-width", "column-rule-style", "column-rule-color"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "columns",
       longhands: ["column-width", "column-count"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-margin-collapse",
       longhands: [
         "-webkit-margin-before-collapse", "-webkit-margin-after-collapse"
       ],
-      property_class: true,
       property_methods: ["ParseShorthand"],
     },
     {
@@ -4496,7 +4193,6 @@
         "-webkit-mask-position-y", "-webkit-mask-size", "-webkit-mask-repeat-x",
         "-webkit-mask-repeat-y", "-webkit-mask-origin", "-webkit-mask-clip"
       ],
-      property_class: "Background",
       property_methods: ["ParseShorthand"],
     },
     {
@@ -4506,31 +4202,26 @@
         "-webkit-mask-box-image-width", "-webkit-mask-box-image-outset",
         "-webkit-mask-box-image-repeat"
       ],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-mask-position",
       longhands: ["-webkit-mask-position-x", "-webkit-mask-position-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-mask-repeat",
       longhands: ["-webkit-mask-repeat-x", "-webkit-mask-repeat-y"],
-      property_class: true,
-      property_methods: ["ParseShorthand"],
+      property_methods: ["ParseShorthand", "CSSValueFromComputedStyleInternal"],
     },
     {
       name: "-webkit-text-emphasis",
       longhands: ["-webkit-text-emphasis-style", "-webkit-text-emphasis-color"],
-      property_class: true,
       property_methods: ["ParseShorthand"],
     },
     {
       name: "-webkit-text-stroke",
       longhands: ["-webkit-text-stroke-width", "-webkit-text-stroke-color"],
-      property_class: true,
       property_methods: ["ParseShorthand"],
     },
 

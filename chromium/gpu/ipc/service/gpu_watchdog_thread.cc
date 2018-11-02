@@ -29,8 +29,7 @@
 #endif
 
 #if defined(USE_X11)
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
+#include "ui/gfx/x/x11.h"
 #endif
 
 namespace gpu {
@@ -70,7 +69,7 @@ GpuWatchdogThread::GpuWatchdogThread()
 #if defined(USE_X11)
       display_(NULL),
       window_(0),
-      atom_(None),
+      atom_(x11::None),
       host_tty_(-1),
 #endif
       weak_factory_(this) {
@@ -134,7 +133,8 @@ GpuWatchdogThread::GpuWatchdogTaskObserver::GpuWatchdogTaskObserver(
     GpuWatchdogThread* watchdog)
     : watchdog_(watchdog) {}
 
-GpuWatchdogThread::GpuWatchdogTaskObserver::~GpuWatchdogTaskObserver() {}
+GpuWatchdogThread::GpuWatchdogTaskObserver::~GpuWatchdogTaskObserver() =
+    default;
 
 void GpuWatchdogThread::GpuWatchdogTaskObserver::WillProcessTask(
     const base::PendingTask& pending_task) {
@@ -428,7 +428,7 @@ void GpuWatchdogThread::SetupXServer() {
   display_ = XOpenDisplay(NULL);
   window_ = XCreateWindow(display_, DefaultRootWindow(display_), 0, 0, 1, 1, 0,
                           CopyFromParent, InputOutput, CopyFromParent, 0, NULL);
-  atom_ = XInternAtom(display_, "CHECK", False);
+  atom_ = XInternAtom(display_, "CHECK", x11::False);
   host_tty_ = GetActiveTTY();
 }
 

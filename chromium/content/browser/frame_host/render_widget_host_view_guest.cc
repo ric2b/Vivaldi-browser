@@ -4,12 +4,12 @@
 
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "build/build_config.h"
 #include "components/viz/common/surfaces/surface_sequence.h"
@@ -20,6 +20,7 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/mus_util.h"
+#include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/input/input_router.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
@@ -28,11 +29,11 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input/web_touch_event_traits.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "skia/ext/platform_canvas.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/geometry/dip_util.h"
 
@@ -88,6 +89,26 @@ RenderWidgetHostViewGuest* RenderWidgetHostViewGuest::Create(
       new RenderWidgetHostViewGuest(widget, guest, platform_view);
   view->Init();
   return view;
+}
+
+// static
+RenderWidgetHostViewBase* RenderWidgetHostViewGuest::GetRootView(
+    RenderWidgetHostViewBase* rwhv) {
+  // If we're a pdf in a WebView, we could have nested guest views here.
+  while (rwhv && rwhv->IsRenderWidgetHostViewGuest()) {
+    rwhv = static_cast<RenderWidgetHostViewGuest*>(rwhv)
+               ->GetOwnerRenderWidgetHostView();
+  }
+  if (!rwhv)
+    return nullptr;
+
+  // We could be a guest inside an oopif frame, in which case we're not the
+  // root.
+  if (rwhv->IsRenderWidgetHostViewChildFrame()) {
+    rwhv = static_cast<RenderWidgetHostViewChildFrame*>(rwhv)
+               ->GetRootRenderWidgetHostView();
+  }
+  return rwhv;
 }
 
 RenderWidgetHostViewGuest::RenderWidgetHostViewGuest(
@@ -214,9 +235,8 @@ void RenderWidgetHostViewGuest::ProcessAckedTouchEvent(
 }
 #endif
 
-void RenderWidgetHostViewGuest::ProcessMouseEvent(
-    const blink::WebMouseEvent& event,
-    const ui::LatencyInfo& latency) {
+void RenderWidgetHostViewGuest::PreProcessMouseEvent(
+    const blink::WebMouseEvent& event) {
   if (event.GetType() == blink::WebInputEvent::kMouseDown) {
     DCHECK(guest_->GetOwnerRenderWidgetHostView());
     RenderWidgetHost* embedder =
@@ -231,12 +251,10 @@ void RenderWidgetHostViewGuest::ProcessMouseEvent(
     MaybeSendSyntheticTapGesture(event.PositionInWidget(),
                                  event.PositionInScreen());
   }
-  host_->ForwardMouseEventWithLatencyInfo(event, latency);
 }
 
-void RenderWidgetHostViewGuest::ProcessTouchEvent(
-    const blink::WebTouchEvent& event,
-    const ui::LatencyInfo& latency) {
+void RenderWidgetHostViewGuest::PreProcessTouchEvent(
+    const blink::WebTouchEvent& event) {
   if (event.GetType() == blink::WebInputEvent::kTouchStart) {
     DCHECK(guest_->GetOwnerRenderWidgetHostView());
     RenderWidgetHost* embedder =
@@ -251,8 +269,6 @@ void RenderWidgetHostViewGuest::ProcessTouchEvent(
     MaybeSendSyntheticTapGesture(event.touches[0].PositionInWidget(),
                                  event.touches[0].PositionInScreen());
   }
-
-  host_->ForwardTouchEventWithLatencyInfo(event, latency);
 }
 
 gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
@@ -270,28 +286,6 @@ gfx::Rect RenderWidgetHostViewGuest::GetViewBounds() const {
 gfx::Rect RenderWidgetHostViewGuest::GetBoundsInRootWindow() {
   return GetViewBounds();
 }
-
-namespace {
-
-RenderWidgetHostViewBase* GetRootView(RenderWidgetHostViewBase* rwhv) {
-  // If we're a pdf in a WebView, we could have nested guest views here.
-  while (rwhv && rwhv->IsRenderWidgetHostViewGuest()) {
-    rwhv = static_cast<RenderWidgetHostViewGuest*>(rwhv)
-               ->GetOwnerRenderWidgetHostView();
-  }
-  if (!rwhv)
-    return nullptr;
-
-  // We could be a guest inside an oopif frame, in which case we're not the
-  // root.
-  if (rwhv->IsRenderWidgetHostViewChildFrame()) {
-    rwhv = static_cast<RenderWidgetHostViewChildFrame*>(rwhv)
-               ->GetRootRenderWidgetHostView();
-  }
-  return rwhv;
-}
-
-}  // namespace
 
 gfx::PointF RenderWidgetHostViewGuest::TransformPointToRootCoordSpaceF(
     const gfx::PointF& point) {
@@ -371,6 +365,10 @@ void RenderWidgetHostViewGuest::Destroy() {
   if (platform_view_)  // The platform view might have been destroyed already.
     platform_view_->Destroy();
 
+  RenderWidgetHostViewBase* root_view = GetRootView(this);
+  if (root_view)
+    root_view->GetCursorManager()->ViewBeingDestroyed(this);
+
   // RenderWidgetHostViewChildFrame::Destroy destroys this object.
   RenderWidgetHostViewChildFrame::Destroy();
 }
@@ -420,8 +418,9 @@ RenderWidgetHostViewGuest::GetTouchSelectionControllerClientManager() {
 
 void RenderWidgetHostViewGuest::SetTooltipText(
     const base::string16& tooltip_text) {
-  if (guest_)
-    guest_->SetTooltipText(tooltip_text);
+  RenderWidgetHostViewBase* root_view = GetRootView(this);
+  if (root_view)
+    root_view->SetTooltipText(tooltip_text);
 }
 
 void RenderWidgetHostViewGuest::SendSurfaceInfoToEmbedderImpl(
@@ -451,7 +450,7 @@ void RenderWidgetHostViewGuest::SubmitCompositorFrame(
 void RenderWidgetHostViewGuest::OnAttached() {
   RegisterFrameSinkId();
 #if defined(USE_AURA)
-  if (IsUsingMus()) {
+  if (switches::IsMusHostingViz()) {
     aura::Env::GetInstance()->ScheduleEmbed(
         GetWindowTreeClientFromRenderer(),
         base::BindOnce(&RenderWidgetHostViewGuest::OnGotEmbedToken,
@@ -515,9 +514,9 @@ void RenderWidgetHostViewGuest::UpdateCursor(const WebCursor& cursor) {
   // and so we will always hit this code path.
   if (!guest_)
     return;
-  RenderWidgetHostViewBase* rwhvb = GetOwnerRenderWidgetHostView();
-  if (rwhvb)
-    rwhvb->UpdateCursor(cursor);
+  RenderWidgetHostViewBase* rwhvb = GetRootView(this);
+  if (rwhvb && rwhvb->GetCursorManager())
+    rwhvb->GetCursorManager()->UpdateCursor(this, cursor);
 }
 
 void RenderWidgetHostViewGuest::SetIsLoading(bool is_loading) {
@@ -932,7 +931,7 @@ void RenderWidgetHostViewGuest::OnGotEmbedToken(
     return;
 
   guest_->SendMessageToEmbedder(
-      base::MakeUnique<BrowserPluginMsg_SetMusEmbedToken>(
+      std::make_unique<BrowserPluginMsg_SetMusEmbedToken>(
           guest_->browser_plugin_instance_id(), token));
 }
 #endif

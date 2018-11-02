@@ -15,7 +15,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
+#include "build/build_config.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -39,8 +41,7 @@ class RapporServiceImpl;
 
 // The hierarchy of bubble models:
 //
-// ContentSettingsBubbleModel                  - base class
-//   ContentSettingMediaStreamBubbleModel        - media (camera and mic)
+// ContentSettingBubbleModel                  - base class
 //   ContentSettingSimpleBubbleModel             - single content setting
 //     ContentSettingMixedScriptBubbleModel        - mixed script
 //     ContentSettingRPHBubbleModel                - protocol handlers
@@ -50,14 +51,17 @@ class RapporServiceImpl;
 //     ContentSettingSingleRadioGroup              - radio group
 //       ContentSettingCookiesBubbleModel            - cookies
 //       ContentSettingPopupBubbleModel              - popups
+//   ContentSettingMediaStreamBubbleModel        - media (camera and mic)
 //   ContentSettingSubresourceFilterBubbleModel  - filtered subresources
 //   ContentSettingDownloadsBubbleModel          - automatic downloads
+//   ContentSettingFramebustBlockBubbleModel     - blocked framebusts
 
 // Forward declaration necessary for downcasts.
-class ContentSettingMediaStreamBubbleModel;
 class ContentSettingSimpleBubbleModel;
+class ContentSettingMediaStreamBubbleModel;
 class ContentSettingSubresourceFilterBubbleModel;
 class ContentSettingDownloadsBubbleModel;
+class ContentSettingFramebustBlockBubbleModel;
 
 // This model provides data for ContentSettingBubble, and also controls
 // the action triggered when the allow / block radio buttons are triggered.
@@ -151,6 +155,8 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
     DISALLOW_COPY_AND_ASSIGN(BubbleContent);
   };
 
+  static const int kAllowButtonIndex;
+
   // Creates a bubble model for a particular |content_type|. Note that not all
   // bubbles fit this description.
   // TODO(msramek): Move this to ContentSettingSimpleBubbleModel or remove
@@ -203,13 +209,15 @@ class ContentSettingBubbleModel : public content::NotificationObserver {
   // Cast this bubble into ContentSettingDownloadsBubbleModel if possible.
   virtual ContentSettingDownloadsBubbleModel* AsDownloadsBubbleModel();
 
+  // Cast this bubble into ContentSettingFramebustBlockBubbleModel if possible.
+  virtual ContentSettingFramebustBlockBubbleModel*
+  AsFramebustBlockBubbleModel();
+
   // Sets the Rappor service used for testing.
   void SetRapporServiceImplForTesting(
       rappor::RapporServiceImpl* rappor_service) {
     rappor_service_ = rappor_service;
   }
-
-  static const int kAllowButtonIndex;
 
  protected:
   ContentSettingBubbleModel(
@@ -332,33 +340,6 @@ class ContentSettingRPHBubbleModel : public ContentSettingSimpleBubbleModel {
   DISALLOW_COPY_AND_ASSIGN(ContentSettingRPHBubbleModel);
 };
 
-// The model for the deceptive content bubble.
-class ContentSettingSubresourceFilterBubbleModel
-    : public ContentSettingBubbleModel {
- public:
-  ContentSettingSubresourceFilterBubbleModel(Delegate* delegate,
-                                             content::WebContents* web_contents,
-                                             Profile* profile);
-
-  ~ContentSettingSubresourceFilterBubbleModel() override;
-
- private:
-  void SetMessage();
-  void SetTitle();
-  void SetManageText();
-
-  // ContentSettingBubbleModel:
-  void OnManageCheckboxChecked(bool is_checked) override;
-  ContentSettingSubresourceFilterBubbleModel* AsSubresourceFilterBubbleModel()
-      override;
-  void OnLearnMoreClicked() override;
-  void OnDoneClicked() override;
-
-  bool is_checked_ = false;
-
-  DISALLOW_COPY_AND_ASSIGN(ContentSettingSubresourceFilterBubbleModel);
-};
-
 // The model of the content settings bubble for media settings.
 class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
  public:
@@ -418,6 +399,33 @@ class ContentSettingMediaStreamBubbleModel : public ContentSettingBubbleModel {
   DISALLOW_COPY_AND_ASSIGN(ContentSettingMediaStreamBubbleModel);
 };
 
+// The model for the deceptive content bubble.
+class ContentSettingSubresourceFilterBubbleModel
+    : public ContentSettingBubbleModel {
+ public:
+  ContentSettingSubresourceFilterBubbleModel(Delegate* delegate,
+                                             content::WebContents* web_contents,
+                                             Profile* profile);
+
+  ~ContentSettingSubresourceFilterBubbleModel() override;
+
+ private:
+  void SetMessage();
+  void SetTitle();
+  void SetManageText();
+
+  // ContentSettingBubbleModel:
+  void OnManageCheckboxChecked(bool is_checked) override;
+  ContentSettingSubresourceFilterBubbleModel* AsSubresourceFilterBubbleModel()
+      override;
+  void OnLearnMoreClicked() override;
+  void OnDoneClicked() override;
+
+  bool is_checked_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingSubresourceFilterBubbleModel);
+};
+
 // The model for automatic downloads setting.
 class ContentSettingDownloadsBubbleModel : public ContentSettingBubbleModel {
  public:
@@ -442,5 +450,37 @@ class ContentSettingDownloadsBubbleModel : public ContentSettingBubbleModel {
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingDownloadsBubbleModel);
 };
+
+#if !defined(OS_ANDROID)
+// The model for the blocked Framebust bubble.
+class ContentSettingFramebustBlockBubbleModel
+    : public ContentSettingBubbleModel,
+      public FramebustBlockTabHelper::Observer {
+ public:
+  ContentSettingFramebustBlockBubbleModel(Delegate* delegate,
+                                          content::WebContents* web_contents,
+                                          Profile* profile);
+
+  ~ContentSettingFramebustBlockBubbleModel() override;
+
+  // content::NotificationObserver:
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
+  // ContentSettingBubbleModel:
+  void OnListItemClicked(int index, int event_flags) override;
+  ContentSettingFramebustBlockBubbleModel* AsFramebustBlockBubbleModel()
+      override;
+
+  // FramebustBlockTabHelper::Observer:
+  void OnBlockedUrlAdded(const GURL& blocked_url) override;
+
+ private:
+  ListItem CreateListItem(const GURL& url);
+
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingFramebustBlockBubbleModel);
+};
+#endif  // !defined(OS_ANDROID)
 
 #endif  // CHROME_BROWSER_UI_CONTENT_SETTINGS_CONTENT_SETTING_BUBBLE_MODEL_H_

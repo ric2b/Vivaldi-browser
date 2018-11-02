@@ -16,6 +16,7 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "components/variations/client_filterable_state.h"
+#include "components/variations/service/safe_seed_manager.h"
 #include "components/variations/service/ui_string_overrider.h"
 #include "components/variations/service/variations_field_trial_creator.h"
 #include "components/variations/service/variations_service_client.h"
@@ -76,12 +77,10 @@ class VariationsService
 
   ~VariationsService() override;
 
-  // Creates field trials based on the variations seed loaded from local state.
-  // If there is a problem loading the seed data, all trials specified by the
-  // seed may not be created. Some field trials are configured to override or
-  // associate with (for reporting) specific features. These associations are
-  // registered with |feature_list|.
-  bool CreateTrialsFromSeed(base::FeatureList* feature_list);
+  // Enum used to choose whether GetVariationsServerURL will return an HTTPS
+  // URL or an HTTP one. The HTTP URL is used as a fallback for seed retrieval
+  // in cases where an HTTPS connection fails.
+  enum HttpOptions { USE_HTTP, USE_HTTPS };
 
   // Should be called before startup of the main message loop.
   void PerformPreMainMessageLoopStartup();
@@ -105,14 +104,13 @@ class VariationsService
   // to |StartRepeatedVariationsSeedFetch|.
   void SetRestrictMode(const std::string& restrict_mode);
 
-  // Exposed for testing.
-  void SetCreateTrialsFromSeedCalledForTesting(bool called);
-
   // Returns the variations server URL, which can vary if a command-line flag is
   // set and/or the variations restrict pref is set in |local_prefs|. Declared
-  // static for test purposes.
+  // static for test purposes. |http_options| determines whether to use the http
+  // or https URL.
   GURL GetVariationsServerURL(PrefService* local_prefs,
-                              const std::string& restrict_mode_override);
+                              const std::string& restrict_mode_overrided,
+                              HttpOptions http_options);
 
   // Returns the permanent country code stored for this client. Country code is
   // in the format of lowercase ISO 3166-1 alpha-2. Example: us, br, in
@@ -171,7 +169,7 @@ class VariationsService
 
  protected:
   // Starts the fetching process once, where |OnURLFetchComplete| is called with
-  // the response.
+  // the response. This calls DoFetchToURL with the set url.
   virtual void DoActualFetch();
 
   // Stores the seed to prefs. Set as virtual and protected so that it can be
@@ -179,9 +177,10 @@ class VariationsService
   virtual bool StoreSeed(const std::string& seed_data,
                          const std::string& seed_signature,
                          const std::string& country_code,
-                         const base::Time& date_fetched,
+                         base::Time date_fetched,
                          bool is_delta_compressed,
-                         bool is_gzip_compressed);
+                         bool is_gzip_compressed,
+                         bool fetched_insecurely);
 
   // Create an entropy provider based on low entropy. This is used to create
   // trials for studies that should only depend on low entropy, such as studies
@@ -221,6 +220,9 @@ class VariationsService
                            SafeMode_SuccessfulFetchClearsFailureStreaks);
   FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest,
                            SafeMode_NotModifiedFetchClearsFailureStreaks);
+  FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest, InsecurelyFetchedSetWhenHTTP);
+  FRIEND_TEST_ALL_PREFIXES(VariationsServiceTest,
+                           InsecurelyFetchedNotSetWhenHTTPS);
 
   // Set of different possible values to report for the
   // Variations.LoadPermanentConsistencyCountryResult histogram. This enum must
@@ -239,9 +241,12 @@ class VariationsService
     LOAD_COUNTRY_MAX,
   };
 
+  // Attempts a seed fetch from the set |url|. Returns true if the fetch was
+  // started successfully, false otherwise.
+  bool DoFetchFromURL(const GURL& url);
+
   // Calls FetchVariationsSeed once and repeats this periodically. See
-  // implementation for details on the period. Must be called after
-  // |CreateTrialsFromSeed|.
+  // implementation for details on the period.
   void StartRepeatedVariationsSeedFetch();
 
   // Checks if prerequisites for fetching the Variations seed are met, and if
@@ -268,6 +273,12 @@ class VariationsService
   //   (1) Resets failure streaks for Safe Mode.
   //   (2) Records the time of this fetch as the most recent successful fetch.
   void RecordSuccessfulFetch();
+
+  // Encrypts a string using the encrypted_messages component, input is passed
+  // in as |plaintext|, outputs a serialized EncryptedMessage protobuf as
+  // |encrypted|. Returns true on success, false on failure. The encryption can
+  // be done in-place.
+  bool EncryptString(const std::string& plaintext, std::string* encrypted);
 
   // Loads the country code to use for filtering permanent consistency studies,
   // updating the stored country code if the stored value was for a different
@@ -308,6 +319,10 @@ class VariationsService
   // The URL to use for querying the variations server.
   GURL variations_server_url_;
 
+  // HTTP URL used as a fallback if HTTPS fetches fail. If not set, retries
+  // over HTTP will not be attempted.
+  GURL insecure_variations_server_url_;
+
   // Tracks whether the initial request to the variations server had completed.
   bool initial_request_completed_;
 
@@ -330,6 +345,9 @@ class VariationsService
 
   // List of observers of the VariationsService.
   base::ObserverList<Observer> observer_list_;
+
+  // The main entry point for managing safe mode state.
+  SafeSeedManager safe_seed_manager_;
 
   // Member responsible for creating trials from a variations seed.
   VariationsFieldTrialCreator field_trial_creator_;

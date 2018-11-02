@@ -1835,6 +1835,91 @@ TEST_F(DiskCacheEntryTest, MemoryOnlyGetAvailableRange) {
   GetAvailableRange();
 }
 
+TEST_F(DiskCacheEntryTest, GetAvailableRangeBlockFileDiscontinuous) {
+  // crbug.com/791056 --- blockfile problem when there is a sub-KiB write before
+  // a bunch of full 1KiB blocks, and a GetAvailableRange is issued to which
+  // both are a potentially relevant.
+  InitCache();
+
+  std::string key("the first key");
+  disk_cache::Entry* entry;
+  ASSERT_THAT(CreateEntry(key, &entry), IsOk());
+
+  scoped_refptr<net::IOBuffer> buf_2k(new net::IOBuffer(2 * 1024));
+  CacheTestFillBuffer(buf_2k->data(), 2 * 1024, false);
+
+  const int kSmallSize = 612;  // sub-1k
+  scoped_refptr<net::IOBuffer> buf_small(new net::IOBuffer(kSmallSize));
+  CacheTestFillBuffer(buf_small->data(), kSmallSize, false);
+
+  // Sets some bits for blocks representing 1K ranges [1024, 3072),
+  // which will be relevant for the next GetAvailableRange call.
+  EXPECT_EQ(2 * 1024, WriteSparseData(entry, /* offset = */ 1024, buf_2k.get(),
+                                      /* size = */ 2 * 1024));
+
+  // Now record a partial write from start of the first kb.
+  EXPECT_EQ(kSmallSize, WriteSparseData(entry, /* offset = */ 0,
+                                        buf_small.get(), kSmallSize));
+
+  // Try to query a range starting from that block 0.
+  // The cache tracks: [0, 612) [1024, 3072).
+  // The request is for: [812, 2059) so response should be [1024, 2059), which
+  // has lenth = 1035. Previously this return a negative number for rv.
+  int64_t start = -1;
+  net::TestCompletionCallback cb;
+  int rv = entry->GetAvailableRange(812, 1247, &start, cb.callback());
+  EXPECT_EQ(1035, cb.GetResult(rv));
+  EXPECT_EQ(1024, start);
+
+  // Now query [512, 1536). This matches both [512, 612) and [1024, 1536),
+  // so this should return [512, 612).
+  rv = entry->GetAvailableRange(512, 1024, &start, cb.callback());
+  EXPECT_EQ(100, cb.GetResult(rv));
+  EXPECT_EQ(512, start);
+
+  // Now query next portion, [612, 1636). This now just should produce
+  // [1024, 1636)
+  rv = entry->GetAvailableRange(612, 1024, &start, cb.callback());
+  EXPECT_EQ(612, cb.GetResult(rv));
+  EXPECT_EQ(1024, start);
+
+  // Do a continuous small write, this one at [3072, 3684).
+  // This means the cache tracks [1024, 3072) via bitmaps and [3072, 3684)
+  // as the last write.
+  EXPECT_EQ(kSmallSize, WriteSparseData(entry, /* offset = */ 3072,
+                                        buf_small.get(), kSmallSize));
+
+  // Query [2048, 4096). Should get [2048, 3684)
+  rv = entry->GetAvailableRange(2048, 2048, &start, cb.callback());
+  EXPECT_EQ(1636, cb.GetResult(rv));
+  EXPECT_EQ(2048, start);
+
+  // Now write at [4096, 4708). Since only one sub-kb thing is tracked, this
+  // now tracks  [1024, 3072) via bitmaps and [4096, 4708) as the last write.
+  EXPECT_EQ(kSmallSize, WriteSparseData(entry, /* offset = */ 4096,
+                                        buf_small.get(), kSmallSize));
+
+  // Query [2048, 4096). Should get [2048, 3072)
+  rv = entry->GetAvailableRange(2048, 2048, &start, cb.callback());
+  EXPECT_EQ(1024, cb.GetResult(rv));
+  EXPECT_EQ(2048, start);
+
+  // Query 2K more after that: [3072, 5120). Should get [4096, 4708)
+  rv = entry->GetAvailableRange(3072, 2048, &start, cb.callback());
+  EXPECT_EQ(612, cb.GetResult(rv));
+  EXPECT_EQ(4096, start);
+
+  // Also double-check that offsets within later children are correctly
+  // computed.
+  EXPECT_EQ(kSmallSize, WriteSparseData(entry, /* offset = */ 0x200400,
+                                        buf_small.get(), kSmallSize));
+  rv = entry->GetAvailableRange(0x100000, 0x200000, &start, cb.callback());
+  EXPECT_EQ(kSmallSize, cb.GetResult(rv));
+  EXPECT_EQ(0x200400, start);
+
+  entry->Close();
+}
+
 // Tests that non-sequential writes that are not aligned with the minimum sparse
 // data granularity (1024 bytes) do in fact result in dropped data.
 TEST_F(DiskCacheEntryTest, SparseWriteDropped) {
@@ -2714,6 +2799,92 @@ TEST_F(DiskCacheEntryTest, SimpleCacheErrorThenDoom) {
       "SimpleCache.Http.ReadResult",
       disk_cache::READ_RESULT_SYNC_CHECKSUM_FAILURE, 1);
   entry->Doom();  // Should not crash.
+}
+
+TEST_F(DiskCacheEntryTest, SimpleCacheCreateAfterDiskLayerDoom) {
+  // Code coverage for what happens when a queued create runs after failure
+  // was noticed at SimpleSynchronousEntry layer.
+  SetSimpleCacheMode();
+  // Disable optimistic ops so we can block on CreateEntry and start
+  // WriteData off with an empty op queue.
+  SetCacheType(net::APP_CACHE);
+  InitCache();
+
+  const char key[] = "the key";
+  const int kSize1 = 10;
+  scoped_refptr<net::IOBuffer> buffer1(new net::IOBuffer(kSize1));
+  CacheTestFillBuffer(buffer1->data(), kSize1, false);
+
+  disk_cache::Entry* entry = nullptr;
+  ASSERT_EQ(net::OK, CreateEntry(key, &entry));
+  ASSERT_TRUE(entry != nullptr);
+
+  // Make an empty _1 file, to cause a stream 2 write to fail.
+  base::FilePath entry_file1_path = cache_path_.AppendASCII(
+      disk_cache::simple_util::GetFilenameFromKeyAndFileIndex(key, 1));
+  base::File entry_file1(entry_file1_path,
+                         base::File::FLAG_WRITE | base::File::FLAG_CREATE);
+  ASSERT_TRUE(entry_file1.IsValid());
+
+  entry->WriteData(2, 0, buffer1.get(), kSize1, net::CompletionCallback(),
+                   /* truncate= */ true);
+  entry->Close();
+
+  // At this point we have put WriteData & Close on the queue, and WriteData
+  // started, but we haven't given the event loop control so the failure
+  // hasn't been reported and handled here, so the entry is still active
+  // for the key. Queue up another create for same key, and run through the
+  // events.
+  disk_cache::Entry* entry2 = nullptr;
+  ASSERT_EQ(net::ERR_FAILED, CreateEntry(key, &entry2));
+  ASSERT_TRUE(entry2 == nullptr);
+
+  EXPECT_EQ(0, cache_->GetEntryCount());
+
+  // Should be able to create properly next time, though.
+  disk_cache::Entry* entry3 = nullptr;
+  ASSERT_EQ(net::OK, CreateEntry(key, &entry3));
+  ASSERT_TRUE(entry3 != nullptr);
+  entry3->Close();
+}
+
+TEST_F(DiskCacheEntryTest, SimpleCacheQueuedOpenOnDoomedEntry) {
+  // This tests the following sequence of ops:
+  // A = Create(K);
+  // Close(A);
+  // B = Open(K);
+  // Doom(K);
+  // Close(B);
+  //
+  // ... where the execution of the Open sits on the queue all the way till
+  // Doom. Currently this fails the open.
+
+  SetSimpleCacheMode();
+  // Disable optimistic ops so we can block on CreateEntry and start
+  // WriteData off with an empty op queue.
+  SetCacheType(net::APP_CACHE);
+  InitCache();
+
+  const char key[] = "the key";
+
+  disk_cache::Entry* entry = nullptr;
+  ASSERT_EQ(net::OK, CreateEntry(key, &entry));  // event loop!
+  ASSERT_TRUE(entry != nullptr);
+
+  entry->Close();
+
+  disk_cache::Entry* entry2 = nullptr;
+  // Done via cache_ -> no event loop.
+  net::TestCompletionCallback cb;
+  ASSERT_EQ(net::ERR_IO_PENDING,
+            cache_->OpenEntry(key, &entry2, cb.callback()));
+
+  cache_->DoomEntry(key, base::Bind([](int) {}));
+  // Now event loop.
+  EXPECT_EQ(net::ERR_FAILED, cb.WaitForResult());
+  ASSERT_TRUE(entry2 == nullptr);
+
+  EXPECT_EQ(0, cache_->GetEntryCount());
 }
 
 bool TruncatePath(const base::FilePath& file_path, int64_t length) {
@@ -3645,7 +3816,15 @@ TEST_F(DiskCacheEntryTest, SimpleCacheOpenCreateRaceWithNoIndex) {
 
   EXPECT_THAT(cb1.GetResult(rv1), IsError(net::ERR_FAILED));
   ASSERT_THAT(cb2.GetResult(rv2), IsOk());
+
+  // Try to get an alias for entry2. Open should succeed, and return the same
+  // pointer.
+  disk_cache::Entry* entry3 = nullptr;
+  ASSERT_EQ(net::OK, OpenEntry("key", &entry3));
+  EXPECT_EQ(entry3, entry2);
+
   entry2->Close();
+  entry3->Close();
 }
 
 // Checking one more scenario of overlapped reading of a bad entry.

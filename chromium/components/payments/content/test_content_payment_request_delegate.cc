@@ -15,7 +15,12 @@ TestContentPaymentRequestDelegate::TestContentPaymentRequestDelegate(
 TestContentPaymentRequestDelegate::~TestContentPaymentRequestDelegate() {}
 
 scoped_refptr<PaymentManifestWebDataService>
-TestContentPaymentRequestDelegate ::GetPaymentManifestWebDataService() const {
+TestContentPaymentRequestDelegate::GetPaymentManifestWebDataService() const {
+  return nullptr;
+}
+
+PaymentRequestDisplayManager*
+TestContentPaymentRequestDelegate::GetDisplayManager() {
   return nullptr;
 }
 
@@ -29,6 +34,10 @@ void TestContentPaymentRequestDelegate::CloseDialog() {
 
 void TestContentPaymentRequestDelegate::ShowErrorMessage() {
   core_delegate_.ShowErrorMessage();
+}
+
+void TestContentPaymentRequestDelegate::ShowProcessingSpinner() {
+  core_delegate_.ShowProcessingSpinner();
 }
 
 bool TestContentPaymentRequestDelegate::IsBrowserWindowActive() const {
@@ -85,6 +94,10 @@ std::string TestContentPaymentRequestDelegate::GetAuthenticatedEmail() const {
 PrefService* TestContentPaymentRequestDelegate::GetPrefService() {
   return core_delegate_.GetPrefService();
 }
+
+void TestContentPaymentRequestDelegate::EmbedPaymentHandlerWindow(
+    const GURL& url,
+    PaymentHandlerOpenWindowCallback callback) {}
 
 autofill::TestAddressNormalizer*
 TestContentPaymentRequestDelegate::test_address_normalizer() {

@@ -64,15 +64,15 @@ namespace blink {
 // static
 VibrationController::VibrationPattern
 VibrationController::SanitizeVibrationPattern(
-    const UnsignedLongOrUnsignedLongSequence& pattern) {
-  VibrationPattern sanitized;
+    const UnsignedLongOrUnsignedLongSequence& input) {
+  VibrationPattern pattern;
 
-  if (pattern.IsUnsignedLong())
-    sanitized.push_back(pattern.GetAsUnsignedLong());
-  else if (pattern.IsUnsignedLongSequence())
-    sanitized = pattern.GetAsUnsignedLongSequence();
+  if (input.IsUnsignedLong())
+    pattern.push_back(input.GetAsUnsignedLong());
+  else if (input.IsUnsignedLongSequence())
+    pattern = input.GetAsUnsignedLongSequence();
 
-  return sanitizeVibrationPatternInternal(sanitized);
+  return sanitizeVibrationPatternInternal(pattern);
 }
 
 VibrationController::VibrationController(LocalFrame& frame)
@@ -89,7 +89,7 @@ VibrationController::VibrationController(LocalFrame& frame)
       mojo::MakeRequest(&vibration_manager_));
 }
 
-VibrationController::~VibrationController() {}
+VibrationController::~VibrationController() = default;
 
 bool VibrationController::Vibrate(const VibrationPattern& pattern) {
   // Cancel clears the stored pattern and cancels any ongoing vibration.
@@ -111,7 +111,7 @@ bool VibrationController::Vibrate(const VibrationPattern& pattern) {
   // it also starts the timer. This is not a problem as calling |startOneShot|
   // repeatedly will just update the time at which to run |doVibrate|, it will
   // not be called more than once.
-  timer_do_vibrate_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  timer_do_vibrate_.StartOneShot(TimeDelta(), FROM_HERE);
 
   return true;
 }
@@ -130,8 +130,7 @@ void VibrationController::DoVibrate(TimerBase* timer) {
     is_calling_vibrate_ = true;
     vibration_manager_->Vibrate(
         pattern_[0],
-        ConvertToBaseCallback(
-            WTF::Bind(&VibrationController::DidVibrate, WrapPersistent(this))));
+        WTF::Bind(&VibrationController::DidVibrate, WrapPersistent(this)));
   }
 }
 
@@ -153,7 +152,7 @@ void VibrationController::DidVibrate() {
     pattern_.EraseAt(0);
   }
 
-  timer_do_vibrate_.StartOneShot(interval / 1000.0, BLINK_FROM_HERE);
+  timer_do_vibrate_.StartOneShot(interval / 1000.0, FROM_HERE);
 }
 
 void VibrationController::Cancel() {
@@ -162,8 +161,8 @@ void VibrationController::Cancel() {
 
   if (is_running_ && !is_calling_cancel_ && vibration_manager_) {
     is_calling_cancel_ = true;
-    vibration_manager_->Cancel(ConvertToBaseCallback(
-        WTF::Bind(&VibrationController::DidCancel, WrapPersistent(this))));
+    vibration_manager_->Cancel(
+        WTF::Bind(&VibrationController::DidCancel, WrapPersistent(this)));
   }
 
   is_running_ = false;
@@ -175,7 +174,7 @@ void VibrationController::DidCancel() {
   // A new vibration pattern may have been set while the mojo call for
   // |cancel| was in flight, so kick the timer to let |doVibrate| process the
   // pattern.
-  timer_do_vibrate_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  timer_do_vibrate_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void VibrationController::ContextDestroyed(ExecutionContext*) {

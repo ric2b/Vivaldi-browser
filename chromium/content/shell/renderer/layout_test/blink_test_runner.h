@@ -90,12 +90,8 @@ class BlinkTestRunner : public RenderViewObserver,
   void EnableAutoResizeMode(const blink::WebSize& min_size,
                             const blink::WebSize& max_size) override;
   void DisableAutoResizeMode(const blink::WebSize& new_size) override;
-  void ClearDevToolsLocalStorage() override;
-  void ShowDevTools(const std::string& settings,
-                    const std::string& frontend_url) override;
-  void CloseDevTools() override;
-  void EvaluateInWebInspector(int call_id, const std::string& script) override;
-  std::string EvaluateInWebInspectorOverlay(const std::string& script) override;
+  void NavigateSecondaryWindow(const GURL& url) override;
+  void InspectSecondaryWindow() override;
   void ClearAllDatabases() override;
   void SetDatabaseQuota(int quota) override;
   void SimulateWebNotificationClick(
@@ -139,9 +135,7 @@ class BlinkTestRunner : public RenderViewObserver,
   bool AllowExternalPages() override;
   void FetchManifest(
       blink::WebView* view,
-      const GURL& url,
-      const base::Callback<void(const blink::WebURLResponse& response,
-                                const std::string& data)>& callback) override;
+      base::OnceCallback<void(const GURL&, const Manifest&)> callback) override;
   void SetPermission(const std::string& name,
                      const std::string& value,
                      const GURL& origin,

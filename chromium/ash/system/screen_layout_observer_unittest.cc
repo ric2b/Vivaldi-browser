@@ -12,6 +12,7 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/strings/string16.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -21,6 +22,8 @@
 #include "ui/display/display_layout_builder.h"
 #include "ui/display/display_switches.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/manager/display_manager_utilities.h"
+#include "ui/display/test/display_manager_test_api.h"
 #include "ui/message_center/message_center.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_list.h"
@@ -56,6 +59,8 @@ class ScreenLayoutObserverTest : public AshTestBase {
   base::string16 GetSecondDisplayName();
 
   base::string16 GetMirroringDisplayNames();
+
+  base::string16 GetUnifiedDisplayName();
 
  private:
   const message_center::Notification* GetDisplayNotification() const;
@@ -110,6 +115,11 @@ base::string16 ScreenLayoutObserverTest::GetMirroringDisplayNames() {
   return display_names;
 }
 
+base::string16 ScreenLayoutObserverTest::GetUnifiedDisplayName() {
+  return base::UTF8ToUTF16(
+      display_manager()->GetDisplayNameForId(display::kUnifiedDisplayId));
+}
+
 const message_center::Notification*
 ScreenLayoutObserverTest::GetDisplayNotification() const {
   const message_center::NotificationList::Notifications notifications =
@@ -122,7 +132,34 @@ ScreenLayoutObserverTest::GetDisplayNotification() const {
   return nullptr;
 }
 
-TEST_F(ScreenLayoutObserverTest, DisplayNotifications) {
+class ScreenLayoutObserverTestMultiMirroring
+    : public ScreenLayoutObserverTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  ScreenLayoutObserverTestMultiMirroring() = default;
+  ~ScreenLayoutObserverTestMultiMirroring() override = default;
+
+ protected:
+  void SetUp() override {
+    bool should_disable_multi_mirroring = GetParam();
+    if (should_disable_multi_mirroring) {
+      base::CommandLine::ForCurrentProcess()->AppendSwitch(
+          ::switches::kDisableMultiMirroring);
+    }
+    ScreenLayoutObserverTest::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ScreenLayoutObserverTestMultiMirroring);
+};
+
+// Instantiate the boolean which is used to enable/disable multi-mirroring in
+// the parameterized tests.
+INSTANTIATE_TEST_CASE_P(,
+                        ScreenLayoutObserverTestMultiMirroring,
+                        testing::Bool());
+
+TEST_P(ScreenLayoutObserverTestMultiMirroring, DisplayNotifications) {
   Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
       true);
 
@@ -184,22 +221,55 @@ TEST_F(ScreenLayoutObserverTest, DisplayNotifications) {
             GetDisplayNotificationText());
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 
-  // Mirroring.
+  const int64_t first_display_id =
+      display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  const int64_t second_display_id = first_display_id + 1;
+  display::ManagedDisplayInfo first_display_info =
+      display::CreateDisplayInfo(first_display_id, gfx::Rect(1, 1, 500, 500));
+  display::ManagedDisplayInfo second_display_info =
+      display::CreateDisplayInfo(second_display_id, gfx::Rect(2, 2, 500, 500));
+  std::vector<display::ManagedDisplayInfo> display_info_list;
+  display_info_list.emplace_back(first_display_info);
+  display_info_list.emplace_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+
+  // Turn on mirror mode.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(true);
-  UpdateDisplay("400x400,200x200");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 
-  // Back to extended.
+  // Disconnect a display to end mirror mode.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(false);
-  UpdateDisplay("400x400,200x200");
-  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_EXTENDED,
-                                       GetSecondDisplayName()),
+  display_info_list.erase(display_info_list.end() - 1);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
             GetDisplayNotificationText());
+  EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
+
+  // Restore mirror mode.
+  CloseNotification();
+  display_info_list.emplace_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
+                                       GetMirroringDisplayNames()),
+            GetDisplayNotificationText());
+  EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
+
+  // Turn off mirror mode.
+  CloseNotification();
+  display_manager()->SetMirrorMode(display::MirrorMode::kOff, base::nullopt);
+  if (display_manager()->is_multi_mirroring_enabled()) {
+    EXPECT_EQ(
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
+        GetDisplayNotificationText());
+  } else {
+    EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_EXTENDED,
+                                         GetSecondDisplayName()),
+              GetDisplayNotificationText());
+  }
   EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
 
   // Resize the first display.
@@ -226,6 +296,50 @@ TEST_F(ScreenLayoutObserverTest, DisplayNotifications) {
   display::Display::SetInternalDisplayId(
       display_manager()->GetSecondaryDisplay().id());
   UpdateDisplay("400x400@1.5");
+  EXPECT_TRUE(GetDisplayNotificationText().empty());
+}
+
+// Zooming in Unified Mode results in display size changes rather than changes
+// in the UI scales, in which case, we still want to show a notification when
+// the source of change is not the settings ui.
+TEST_F(ScreenLayoutObserverTest, ZoomingInUnifiedModeNotification) {
+  Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
+      true);
+  UpdateDisplay("400x400,200x200");
+
+  // Enter unified mode.
+  display_manager()->SetUnifiedDesktopEnabled(true);
+
+  // Using keyboard shortcuts to change the zoom should result in a
+  // notification.
+  CloseNotification();
+  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(false /* up */));
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
+                GetUnifiedDisplayName(), base::UTF8ToUTF16("400x200")),
+            GetDisplayNotificationAdditionalText());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
+            GetDisplayNotificationText());
+
+  CloseNotification();
+  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(true /* up */));
+  EXPECT_EQ(l10n_util::GetStringFUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED,
+                GetUnifiedDisplayName(), base::UTF8ToUTF16("800x400")),
+            GetDisplayNotificationAdditionalText());
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_ASH_STATUS_TRAY_DISPLAY_RESOLUTION_CHANGED_TITLE),
+            GetDisplayNotificationText());
+
+  // However, when the source is the settings UI, the ScreenLayoutObserver does
+  // not produce a notification for resolution changes in Unified Mode. These
+  // are handled by the ResolutionNotificationController instead.
+  CloseNotification();
+  Shell::Get()->screen_layout_observer()->SetDisplayChangedFromSettingsUI(
+      display::kUnifiedDisplayId);
+  EXPECT_TRUE(display_manager()->ZoomInternalDisplay(false /* up */));
+  EXPECT_TRUE(GetDisplayNotificationAdditionalText().empty());
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 }
 
@@ -302,15 +416,14 @@ TEST_F(ScreenLayoutObserverTest, ExitMirrorModeBecauseOfDockedModeMessage) {
       display_manager()->GetSecondaryDisplay().id());
 
   // Mirroring.
-  display_manager()->SetSoftwareMirroring(true);
   UpdateDisplay("400x400,200x200");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
 
   // Docked.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(false);
   display::Display::SetInternalDisplayId(display_manager()->first_display_id());
   UpdateDisplay("200x200");
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
@@ -321,7 +434,13 @@ TEST_F(ScreenLayoutObserverTest, ExitMirrorModeBecauseOfDockedModeMessage) {
 // default.
 // Tests that exiting mirror mode because of adding a third display shows the
 // correct "3+ displays mirror mode is not supported" message.
-TEST_F(ScreenLayoutObserverTest, ExitMirrorModeBecauseOfThirdDisplayMessage) {
+TEST_P(ScreenLayoutObserverTestMultiMirroring,
+       ExitMirrorModeBecauseOfThirdDisplayMessage) {
+  if (display_manager()->is_multi_mirroring_enabled()) {
+    // This test is not neccessary when mirroring across 3+ displays is
+    // supported.
+    return;
+  }
   Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
       true);
   UpdateDisplay("400x400,200x200");
@@ -329,15 +448,14 @@ TEST_F(ScreenLayoutObserverTest, ExitMirrorModeBecauseOfThirdDisplayMessage) {
       display_manager()->GetSecondaryDisplay().id());
 
   // Mirroring.
-  display_manager()->SetSoftwareMirroring(true);
   UpdateDisplay("400x400,200x200");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
 
   // Adding a third display. Mirror mode for 3+ displays is not supported.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(false);
   UpdateDisplay("400x400,200x200,100x100");
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_DISPLAY_MIRRORING_NOT_SUPPORTED),
             GetDisplayNotificationText());
@@ -354,15 +472,14 @@ TEST_F(ScreenLayoutObserverTest,
       display_manager()->GetSecondaryDisplay().id());
 
   // Mirroring.
-  display_manager()->SetSoftwareMirroring(true);
   UpdateDisplay("400x400,200x200");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
 
   // Removing one of the displays. We show that we exited mirror mode.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(false);
   UpdateDisplay("400x400");
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
             GetDisplayNotificationText());
@@ -520,55 +637,73 @@ TEST_F(ScreenLayoutObserverTest, RotationNotification) {
   EXPECT_TRUE(GetDisplayNotificationText().empty());
 }
 
-// Test ScreenLayoutObserver with multi-mirroring enabled.
-class ScreenLayoutObserverMultiMirroringTest : public ScreenLayoutObserverTest {
- public:
-  ScreenLayoutObserverMultiMirroringTest() {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        ::switches::kEnableMultiMirroring);
-  }
-  ~ScreenLayoutObserverMultiMirroringTest() override = default;
-};
-
-TEST_F(ScreenLayoutObserverMultiMirroringTest,
-       ExitMirrorModeBecauseAddOrRemoveDisplayMessage) {
+TEST_F(ScreenLayoutObserverTest, MirrorModeAddOrRemoveDisplayMessage) {
   Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
       true);
-  UpdateDisplay("400x400,300x300,200x200");
-  display::Display::SetInternalDisplayId(
-      display_manager()->GetSecondaryDisplay().id());
+
+  const int64_t internal_display_id =
+      display::test::DisplayManagerTestApi(display_manager())
+          .SetFirstDisplayAsInternalDisplay();
+  constexpr int first_display_id = 11;
+  constexpr int second_display_id = 12;
+  display::ManagedDisplayInfo first_display_info =
+      display::CreateDisplayInfo(first_display_id, gfx::Rect(1, 1, 500, 500));
+  display::ManagedDisplayInfo second_display_info =
+      display::CreateDisplayInfo(second_display_id, gfx::Rect(2, 2, 500, 500));
+  std::vector<display::ManagedDisplayInfo> display_info_list;
+  display_info_list.push_back(display::CreateDisplayInfo(
+      internal_display_id, gfx::Rect(0, 0, 100, 100)));
+  display_info_list.push_back(first_display_info);
+  display_info_list.push_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
 
   // Mirroring across 3 displays.
-  display_manager()->SetSoftwareMirroring(true);
-  UpdateDisplay("400x400,300x300,200x200");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
 
-  // In ChromeOS running on device, mirror mode ends when a display is removed,
-  // because there's no registered display layout for the updated ID list and
-  // the mirror mode of the default layout is off. But the test is using
-  // different code path and the mirror mode persists until it is manually
-  // turned off, so we simulate to turn off mirror mode when removing the third
-  // display.
+  // Mirror mode persists when a display is removed.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(false);
-  UpdateDisplay("400x400,300x300");
+  display_info_list.erase(display_info_list.end() - 1);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_TRUE(GetDisplayNotificationText().empty());
+  EXPECT_TRUE(display_manager()->IsInMirrorMode());
+
+  // Turn off mirror mode.
+  CloseNotification();
+  display_manager()->SetMirrorMode(display::MirrorMode::kOff, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
             GetDisplayNotificationText());
 
-  // Mirroring across 2 displays.
+  // Turn on mirror mode.
   CloseNotification();
-  display_manager()->SetSoftwareMirroring(true);
-  UpdateDisplay("400x400,300x300");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
                                        GetMirroringDisplayNames()),
             GetDisplayNotificationText());
 
-  // Add the third display we removed before, the mirror mode is restored.
+  // Mirror mode ends when only one display is left.
   CloseNotification();
-  UpdateDisplay("400x400,300x300,200x200");
+  display_info_list.erase(display_info_list.end() - 1);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRROR_EXIT),
+            GetDisplayNotificationText());
+
+  // Mirror mode is restored when the display is reconncted.
+  CloseNotification();
+  display_info_list.push_back(first_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_EQ(l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_DISPLAY_MIRRORING,
+                                       GetMirroringDisplayNames()),
+            GetDisplayNotificationText());
+
+  // Add the other display, the mirror mode persists.
+  CloseNotification();
+  display_info_list.push_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_TRUE(GetDisplayNotificationText().empty());
+  EXPECT_TRUE(display_manager()->IsInMirrorMode());
 }
 
 }  // namespace ash

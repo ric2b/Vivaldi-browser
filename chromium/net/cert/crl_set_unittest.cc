@@ -3,7 +3,15 @@
 // found in the LICENSE file.
 
 #include "net/cert/crl_set.h"
+
+#include "base/files/file_util.h"
+#include "crypto/sha2.h"
+#include "net/cert/asn1_util.h"
 #include "net/cert/crl_set_storage.h"
+#include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -202,9 +210,8 @@ TEST(CRLSetTest, Parse) {
   EXPECT_EQ(std::string("\x64\x63\x49\xD2\x00\x03\x00\x00\x1D\x77", 10),
             serials[kExpectedNumSerials - 1]);
 
-  const std::string gia_spki_hash(
-      reinterpret_cast<const char*>(kGIASPKISHA256),
-      sizeof(kGIASPKISHA256));
+  const std::string gia_spki_hash(reinterpret_cast<const char*>(kGIASPKISHA256),
+                                  sizeof(kGIASPKISHA256));
   EXPECT_EQ(CRLSet::REVOKED,
             set->CheckSerial(
                 std::string("\x16\x7D\x75\x9D\x00\x03\x00\x00\x14\x55", 10),
@@ -316,6 +323,48 @@ TEST(CRLSetTest, BlockedSPKIs) {
   EXPECT_EQ(CRLSet::GOOD, set->CheckSPKI(""));
   EXPECT_EQ(CRLSet::REVOKED,
             set->CheckSPKI(reinterpret_cast<const char*>(spki_hash)));
+}
+
+TEST(CRLSetTest, BlockedSubjects) {
+  std::string crl_set_bytes;
+  EXPECT_TRUE(base::ReadFileToString(
+      GetTestCertsDirectory().AppendASCII("crlset_by_root_subject.raw"),
+      &crl_set_bytes));
+  scoped_refptr<CRLSet> set;
+  EXPECT_TRUE(CRLSetStorage::Parse(crl_set_bytes, &set));
+  ASSERT_TRUE(set.get() != NULL);
+
+  scoped_refptr<X509Certificate> root = CreateCertificateChainFromFile(
+      GetTestCertsDirectory(), "root_ca_cert.pem",
+      X509Certificate::FORMAT_AUTO);
+  base::StringPiece root_der =
+      net::x509_util::CryptoBufferAsStringPiece(root->cert_buffer());
+
+  base::StringPiece spki;
+  ASSERT_TRUE(asn1::ExtractSPKIFromDERCert(root_der, &spki));
+  SHA256HashValue spki_sha256;
+  crypto::SHA256HashString(spki, spki_sha256.data, sizeof(spki_sha256.data));
+
+  base::StringPiece subject;
+  ASSERT_TRUE(asn1::ExtractSubjectFromDERCert(root_der, &subject));
+
+  // Unrelated subjects are unaffected.
+  EXPECT_EQ(CRLSet::GOOD, set->CheckSubject("abcdef", ""));
+
+  // The subject in question is considered revoked if used with an unknown SPKI
+  // hash.
+  EXPECT_EQ(CRLSet::REVOKED,
+            set->CheckSubject(
+                subject,
+                base::StringPiece(reinterpret_cast<const char*>(kGIASPKISHA256),
+                                  sizeof(kGIASPKISHA256))));
+
+  // When used with the correct hash, that subject should be accepted.
+  EXPECT_EQ(CRLSet::GOOD,
+            set->CheckSubject(
+                subject, base::StringPiece(
+                             reinterpret_cast<const char*>(spki_sha256.data),
+                             sizeof(spki_sha256.data))));
 }
 
 TEST(CRLSetTest, Expired) {

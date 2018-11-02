@@ -49,7 +49,7 @@ const char* kQualityNames[] = {
 class GLHelperTest : public testing::Test {
  protected:
   void SetUp() override {
-    gpu::gles2::ContextCreationAttribHelper attributes;
+    gpu::ContextCreationAttribs attributes;
     attributes.alpha_size = 8;
     attributes.depth_size = 24;
     attributes.red_size = 8;
@@ -61,15 +61,17 @@ class GLHelperTest : public testing::Test {
     attributes.bind_generates_resource = false;
 
     context_ = gpu::GLInProcessContext::CreateWithoutInit();
-    auto result = context_->Initialize(nullptr,                 /* service */
-                                       nullptr,                 /* surface */
-                                       true,                    /* offscreen */
-                                       gpu::kNullSurfaceHandle, /* window */
-                                       nullptr, /* share_context */
-                                       attributes, gpu::SharedMemoryLimits(),
-                                       nullptr, /* gpu_memory_buffer_manager */
-                                       nullptr, /* image_factory */
-                                       base::ThreadTaskRunnerHandle::Get());
+    auto result =
+        context_->Initialize(nullptr,                 /* service */
+                             nullptr,                 /* surface */
+                             true,                    /* offscreen */
+                             gpu::kNullSurfaceHandle, /* window */
+                             nullptr,                 /* share_context */
+                             attributes, gpu::SharedMemoryLimits(),
+                             nullptr, /* gpu_memory_buffer_manager */
+                             nullptr, /* image_factory */
+                             nullptr /* gpu_channel_manager_delegate */,
+                             base::ThreadTaskRunnerHandle::Get());
     DCHECK_EQ(result, gpu::ContextResult::kSuccess);
     gl_ = context_->GetImplementation();
     gpu::ContextSupport* support = context_->GetImplementation();

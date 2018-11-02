@@ -27,6 +27,7 @@ class SourceFile {
 
   // Takes a known absolute source file. Always begins in a slash.
   explicit SourceFile(const base::StringPiece& p);
+  SourceFile(const SourceFile& other) = default;
   explicit SourceFile(const base::StringPiece& p,
                       const base::StringPiece& p_act);
 

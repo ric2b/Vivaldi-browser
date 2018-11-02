@@ -37,7 +37,7 @@ HTMLFormControlElementWithState::HTMLFormControlElementWithState(
     Document& doc)
     : HTMLFormControlElement(tag_name, doc) {}
 
-HTMLFormControlElementWithState::~HTMLFormControlElementWithState() {}
+HTMLFormControlElementWithState::~HTMLFormControlElementWithState() = default;
 
 Node::InsertionNotificationRequest
 HTMLFormControlElementWithState::InsertedInto(ContainerNode* insertion_point) {
@@ -85,6 +85,12 @@ void HTMLFormControlElementWithState::FinishParsingChildren() {
 
 bool HTMLFormControlElementWithState::IsFormControlElementWithState() const {
   return true;
+}
+
+void HTMLFormControlElementWithState::Trace(Visitor* visitor) {
+  visitor->Trace(prev_);
+  visitor->Trace(next_);
+  HTMLFormControlElement::Trace(visitor);
 }
 
 }  // namespace blink

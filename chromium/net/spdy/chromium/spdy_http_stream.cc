@@ -33,11 +33,13 @@ namespace net {
 const size_t SpdyHttpStream::kRequestBodyBufferSize = 1 << 14;  // 16KB
 
 SpdyHttpStream::SpdyHttpStream(const base::WeakPtr<SpdySession>& spdy_session,
+                               SpdyStreamId pushed_stream_id,
                                bool direct,
                                NetLogSource source_dependency)
     : MultiplexedHttpStream(
           std::make_unique<MultiplexedSessionHandle>(spdy_session)),
       spdy_session_(spdy_session),
+      pushed_stream_id_(pushed_stream_id),
       is_reused_(spdy_session_->IsReused()),
       source_dependency_(source_dependency),
       stream_(nullptr),
@@ -68,6 +70,7 @@ SpdyHttpStream::~SpdyHttpStream() {
 }
 
 int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
+                                     bool can_send_early,
                                      RequestPriority priority,
                                      const NetLogWithSource& stream_net_log,
                                      const CompletionCallback& callback) {
@@ -76,11 +79,10 @@ int SpdyHttpStream::InitializeStream(const HttpRequestInfo* request_info,
     return ERR_CONNECTION_CLOSED;
 
   request_info_ = request_info;
-  // TODO(bnc): Remove this condition once pushed headers are properly
-  // validated.  https://crbug.com/554220.
-  if (request_info_->method == "GET") {
-    int error = spdy_session_->GetPushStream(request_info_->url, priority,
-                                             &stream_, stream_net_log);
+  if (pushed_stream_id_ != kNoPushedStreamFound) {
+    int error =
+        spdy_session_->GetPushedStream(request_info_->url, pushed_stream_id_,
+                                       priority, &stream_, stream_net_log);
     if (error != OK)
       return error;
 

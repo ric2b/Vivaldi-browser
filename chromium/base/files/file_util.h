@@ -23,7 +23,7 @@
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
-#include <windows.h>
+#include "base/win/windows_types.h"
 #elif defined(OS_POSIX)
 #include <sys/stat.h>
 #include <unistd.h>
@@ -130,6 +130,12 @@ BASE_EXPORT bool CopyDirectory(const FilePath& from_path,
                                const FilePath& to_path,
                                bool recursive);
 
+// Like CopyDirectory() except trying to overwrite an existing file will not
+// work and will return false.
+BASE_EXPORT bool CopyDirectoryExcl(const FilePath& from_path,
+                                   const FilePath& to_path,
+                                   bool recursive);
+
 // Returns true if the given path exists on the local filesystem,
 // false otherwise.
 BASE_EXPORT bool PathExists(const FilePath& path);
@@ -178,6 +184,12 @@ BASE_EXPORT bool ReadFileToStringWithMaxSize(const FilePath& path,
 // in |buffer|. This function is protected against EINTR and partial reads.
 // Returns true iff |bytes| bytes have been successfully read from |fd|.
 BASE_EXPORT bool ReadFromFD(int fd, char* buffer, size_t bytes);
+
+// Performs the same function as CreateAndOpenTemporaryFileInDir(), but returns
+// the file-descriptor directly, rather than wrapping it into a FILE. Returns
+// -1 on failure.
+BASE_EXPORT int CreateAndOpenFdForTemporaryFileInDir(const FilePath& dir,
+                                                     FilePath* path);
 
 // The following functions use POSIX functionality that isn't supported by
 // Fuchsia.

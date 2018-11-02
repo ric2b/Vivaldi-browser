@@ -143,7 +143,8 @@ void ShellBrowserMainParts::PostMainMessageLoopStart() {
 #endif
 }
 
-void ShellBrowserMainParts::PreEarlyInitialization() {
+int ShellBrowserMainParts::PreEarlyInitialization() {
+  return content::RESULT_CODE_NORMAL_EXIT;
 }
 
 int ShellBrowserMainParts::PreCreateThreads() {
@@ -313,7 +314,7 @@ void ShellBrowserMainParts::CreateExtensionSystem() {
   DCHECK(browser_context_);
   extension_system_ = static_cast<ShellExtensionSystem*>(
       ExtensionSystem::Get(browser_context_.get()));
-  extension_system_->InitForRegularProfile(true);
+  extension_system_->InitForRegularProfile(true /* extensions_enabled */);
 }
 
 }  // namespace extensions

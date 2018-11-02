@@ -21,6 +21,7 @@
           "ash::mojom::NewWindowController",
           "ash::mojom::NightLightController",
           "ash::mojom::NoteTakingController",
+          "ash::mojom::ProcessCreationTimeRecorder",
           "ash::mojom::SessionController",
           "ash::mojom::ShelfController",
           "ash::mojom::ShutdownController",
@@ -34,7 +35,9 @@
         // Test-only interfaces.
         "test": [
           "ash::mojom::ShelfTestApi",
-          "ash::mojom::SystemTrayTestApi"
+          "ash::mojom::ShellTestApi",
+          "ash::mojom::SystemTrayTestApi",
+          "ash::mojom::TimeToFirstPresentRecorderTestApi"
         ],
         // Only chrome is allowed to use this (required as dbus runs in Chrome).
         "display": [
@@ -48,7 +51,8 @@
         "catalog": [ "directory" ],
         "local_state": [ "pref_client" ],
         "ui": [ "display_dev", "window_manager", "video_detector" ],
-        "touch_hud": [ "mash:launchable" ]
+        "touch_hud": [ "mash:launchable" ],
+        "data_decoder": [ "image_decoder" ]
       }
     }
   }

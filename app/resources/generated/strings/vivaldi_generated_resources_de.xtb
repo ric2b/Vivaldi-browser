@@ -150,6 +150,7 @@
 <translation id="2890678560483811744">Seitenbereich ist zu groß</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> konnte nicht mit diesem Drucker kommunizieren. Vergewissern Sie sich, dass der Drucker angeschlossen ist, und versuchen Sie es dann erneut.</translation>
 <translation id="2904456025988372123">Nachfragen, wenn eine Website versucht, nach der ersten Datei weitere Dateien automatisch herunterzuladen</translation>
+<translation id="2911898792135283060">Generiere Passwort…</translation>
 <translation id="2913331724188855103">Websites dürfen Cookiedaten speichern und lesen (empfohlen)</translation>
 <translation id="2916745397441987255">In Erweiterungen suchen</translation>
 <translation id="2932883381142163287">Missbrauch melden</translation>
@@ -419,7 +420,6 @@
 <translation id="6295158916970320988">Alle Websites</translation>
 <translation id="6295855836753816081">Wird gespeichert…</translation>
 <translation id="6308937455967653460">&amp;Link speichern unter...</translation>
-<translation id="6314335155547195432">Passwort generieren</translation>
 <translation id="6326855256003666642">Keepalive-Zahl</translation>
 <translation id="6370021412472292592">Manifest konnte nicht geladen werden.</translation>
 <translation id="6374469231428023295">Erneut versuchen</translation>
@@ -478,7 +478,7 @@
 <translation id="7175353351958621980">Geladen von:</translation>
 <translation id="7186088072322679094">In der Symbolleiste behalten</translation>
 <translation id="7206693748120342859"><ph name="PLUGIN_NAME" /> wird heruntergeladen...</translation>
-<translation id="7223775956298141902">Nanu… Sie haben keine Erweiterungen :-(</translation>
+<translation id="7223775956298141902">Sie haben keine Erweiterungen installiert :-(</translation>
 <translation id="7270858098575133036">Nachfragen, wenn eine Webseite mit systemexklusiven Nachrichten auf MIDI-Geräte zugreifen möchte</translation>
 <translation id="7287143125007575591">Zugriff verweigert.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
@@ -503,7 +503,6 @@
 <translation id="7564847347806291057">Prozess beenden</translation>
 <translation id="7576690715254076113">Sortieren</translation>
 <translation id="7629827748548208700">Tab: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Abbrechen</translation>
 <translation id="7661259717474717992">Speichern und Lesen von Cookiedaten zulassen</translation>
 <translation id="7663719505383602579">Empfänger: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Von Ihrem Administrator installiert</translation>
@@ -511,7 +510,7 @@
 <translation id="7701040980221191251">Keine</translation>
 <translation id="7701869757853594372">NUTZER-Handles</translation>
 <translation id="7704305437604973648">Aufgabe</translation>
-<translation id="7705600705238488017">Möchten Sie stattdessen den <ph name="BEGIN_LINK" />Chrome Webstore<ph name="END_LINK" /> durchsuchen?</translation>
+<translation id="7705600705238488017">Möchten Sie den <ph name="BEGIN_LINK" />Chrome Webstore<ph name="END_LINK" /> durchsuchen?</translation>
 <translation id="7710568461918838723">&amp;Streamen…</translation>
 <translation id="7751260505918304024">Alle anzeigen</translation>
 <translation id="7760004034676677601">Ist dies die Seite, die sie beim Start erwartet haben?</translation>

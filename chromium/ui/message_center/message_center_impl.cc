@@ -299,8 +299,12 @@ void MessageCenterImpl::RemoveNotificationImmediately(
   if (notification == NULL)
     return;
 
-  if (by_user && notification->pinned())
+  if (by_user && notification->pinned()) {
+    // When pinned, a popup will not be removed completely but moved into the
+    // message center bubble.
+    MarkSinglePopupAsShown(id, true);
     return;
+  }
 
   // In many cases |id| is a reference to an existing notification instance
   // but the instance can be destructed in this method. Hence copies the id
@@ -541,6 +545,17 @@ void MessageCenterImpl::ClickOnSettingsButton(const std::string& id) {
   }
 }
 
+void MessageCenterImpl::DisableNotification(const std::string& id) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!iterating_);
+  Notification* notification = notification_list_->GetNotificationById(id);
+
+  if (notification && notification->delegate()) {
+    notification->delegate()->DisableNotification();
+    RemoveNotificationsForNotifierId(notification->notifier_id());
+  }
+}
+
 void MessageCenterImpl::MarkSinglePopupAsShown(const std::string& id,
                                                bool mark_notification_as_read) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -553,7 +568,7 @@ void MessageCenterImpl::MarkSinglePopupAsShown(const std::string& id,
 // necessary.
 
 #if !defined(OS_CHROMEOS)
-  return this->RemoveNotification(id, false);
+  RemoveNotification(id, false);
 #else
   notification_list_->MarkSinglePopupAsShown(id, mark_notification_as_read);
   {
@@ -579,8 +594,6 @@ void MessageCenterImpl::DisplayedNotification(
     notification_list_->MarkSinglePopupAsDisplayed(id);
   scoped_refptr<NotificationDelegate> delegate =
       notification_list_->GetNotificationDelegate(id);
-  if (delegate.get())
-    delegate->Display();
   {
     internal::ScopedNotificationsIterationLock lock(this);
     for (auto& observer : observer_list_)
@@ -631,13 +644,13 @@ void MessageCenterImpl::PausePopupTimers() {
     popup_timers_controller_->PauseAll();
 }
 
-const base::string16& MessageCenterImpl::GetProductOSName() const {
-  return product_os_name_;
+const base::string16& MessageCenterImpl::GetSystemNotificationAppName() const {
+  return system_notification_app_name_;
 }
 
-void MessageCenterImpl::SetProductOSName(
-    const base::string16& product_os_name) {
-  product_os_name_ = product_os_name;
+void MessageCenterImpl::SetSystemNotificationAppName(
+    const base::string16& name) {
+  system_notification_app_name_ = name;
 }
 
 void MessageCenterImpl::DisableTimersForTest() {

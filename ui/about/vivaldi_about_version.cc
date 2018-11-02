@@ -15,16 +15,6 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
 
-#define BUILD_VERSION_normal 0
-#define BUILD_VERSION_snapshot 0
-#define BUILD_VERSION_preview 0
-#define BUILD_VERSION_beta 1
-#define BUILD_VERSION_final 1
-
-#define S(s) BUILD_VERSION_##s
-#define BUILD_VERSION(s) S(s)
-
-#define VIVALDI_BUILD_PUBLIC_RELEASE 1
 
 namespace vivaldi {
 

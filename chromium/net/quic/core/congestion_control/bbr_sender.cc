@@ -9,7 +9,6 @@
 
 #include "net/quic/core/congestion_control/rtt_stats.h"
 #include "net/quic/core/crypto/crypto_protocol.h"
-#include "net/quic/core/proto/cached_network_parameters.pb.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
@@ -22,7 +21,7 @@ namespace {
 const QuicByteCount kMaxSegmentSize = kDefaultTCPMSS;
 // The minimum CWND to ensure delayed acks don't reduce bandwidth measurements.
 // Does not inflate the pacing rate.
-const QuicByteCount kMinimumCongestionWindow = 4 * kMaxSegmentSize;
+const QuicByteCount kDefaultMinimumCongestionWindow = 4 * kMaxSegmentSize;
 
 // The gain used for the slow start, equal to 2/ln(2).
 const float kHighGain = 2.885f;
@@ -100,6 +99,7 @@ BbrSender::BbrSender(const RttStats* rtt_stats,
       initial_congestion_window_(initial_tcp_congestion_window *
                                  kDefaultTCPMSS),
       max_congestion_window_(max_tcp_congestion_window * kDefaultTCPMSS),
+      min_congestion_window_(kDefaultMinimumCongestionWindow),
       pacing_rate_(QuicBandwidth::Zero()),
       pacing_gain_(1),
       congestion_window_gain_(1),
@@ -211,7 +211,7 @@ void BbrSender::SetFromConfig(const QuicConfig& config,
   if (config.HasClientRequestedIndependentOption(k2RTT, perspective)) {
     num_startup_rtts_ = 2;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_rate_recovery &&
+  if (GetQuicReloadableFlag(quic_bbr_rate_recovery) &&
       config.HasClientRequestedIndependentOption(kBBRR, perspective)) {
     rate_based_recovery_ = true;
   }
@@ -221,60 +221,46 @@ void BbrSender::SetFromConfig(const QuicConfig& config,
   if (config.HasClientRequestedIndependentOption(kBBR2, perspective)) {
     max_aggregation_bytes_multiplier_ = 2;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_slower_startup &&
-      config.HasClientRequestedIndependentOption(kBBRS, perspective)) {
-    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_bbr_slower_startup);
+  if (config.HasClientRequestedIndependentOption(kBBRS, perspective)) {
     slower_startup_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_fully_drain_queue &&
-      config.HasClientRequestedIndependentOption(kBBR3, perspective)) {
-    QUIC_FLAG_COUNT(quic_reloadable_flag_quic_bbr_fully_drain_queue);
+  if (config.HasClientRequestedIndependentOption(kBBR3, perspective)) {
     fully_drain_queue_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_conservation_in_startup &&
-      config.HasClientRequestedIndependentOption(kBBS1, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_conservation_in_startup, 1,
-                      3);
+  if (config.HasClientRequestedIndependentOption(kBBS1, perspective)) {
     rate_based_startup_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_conservation_in_startup &&
-      config.HasClientRequestedIndependentOption(kBBS2, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_conservation_in_startup, 2,
-                      3);
+  if (config.HasClientRequestedIndependentOption(kBBS2, perspective)) {
     initial_conservation_in_startup_ = MEDIUM_GROWTH;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_conservation_in_startup &&
-      config.HasClientRequestedIndependentOption(kBBS3, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_conservation_in_startup, 3,
-                      3);
+  if (config.HasClientRequestedIndependentOption(kBBS3, perspective)) {
     initial_conservation_in_startup_ = GROWTH;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_ack_aggregation_window &&
-      config.HasClientRequestedIndependentOption(kBBR4, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_ack_aggregation_window, 1,
-                      2);
+  if (config.HasClientRequestedIndependentOption(kBBR4, perspective)) {
     max_ack_height_.SetWindowLength(2 * kBandwidthWindowSize);
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_ack_aggregation_window &&
-      config.HasClientRequestedIndependentOption(kBBR5, perspective)) {
-    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_ack_aggregation_window, 2,
-                      2);
+  if (config.HasClientRequestedIndependentOption(kBBR5, perspective)) {
     max_ack_height_.SetWindowLength(4 * kBandwidthWindowSize);
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_less_probe_rtt &&
+  if (GetQuicReloadableFlag(quic_bbr_less_probe_rtt) &&
       config.HasClientRequestedIndependentOption(kBBR6, perspective)) {
     QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_less_probe_rtt, 1, 3);
     probe_rtt_based_on_bdp_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_less_probe_rtt &&
+  if (GetQuicReloadableFlag(quic_bbr_less_probe_rtt) &&
       config.HasClientRequestedIndependentOption(kBBR7, perspective)) {
     QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_less_probe_rtt, 2, 3);
     probe_rtt_skipped_if_similar_rtt_ = true;
   }
-  if (FLAGS_quic_reloadable_flag_quic_bbr_less_probe_rtt &&
+  if (GetQuicReloadableFlag(quic_bbr_less_probe_rtt) &&
       config.HasClientRequestedIndependentOption(kBBR8, perspective)) {
     QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_bbr_less_probe_rtt, 3, 3);
     probe_rtt_disabled_if_app_limited_ = true;
+  }
+  if (GetQuicReloadableFlag(quic_one_tlp) &&
+      config.HasClientRequestedIndependentOption(kMIN1, perspective)) {
+    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_one_tlp, 2, 2);
+    min_congestion_window_ = kMaxSegmentSize;
   }
 }
 
@@ -373,14 +359,14 @@ QuicByteCount BbrSender::GetTargetCongestionWindow(float gain) const {
     congestion_window = gain * initial_congestion_window_;
   }
 
-  return std::max(congestion_window, kMinimumCongestionWindow);
+  return std::max(congestion_window, min_congestion_window_);
 }
 
 QuicByteCount BbrSender::ProbeRttCongestionWindow() const {
   if (probe_rtt_based_on_bdp_) {
     return GetTargetCongestionWindow(kModerateProbeRttMultiplier);
   }
-  return kMinimumCongestionWindow;
+  return min_congestion_window_;
 }
 
 void BbrSender::EnterStartupMode() {
@@ -719,7 +705,7 @@ void BbrSender::CalculateCongestionWindow(QuicByteCount bytes_acked) {
     target_window += max_ack_height_.GetBest();
   }
 
-  if (FLAGS_quic_reloadable_flag_quic_bbr_add_tso_cwnd) {
+  if (GetQuicReloadableFlag(quic_bbr_add_tso_cwnd)) {
     // QUIC doesn't have TSO, but it does have similarly quantized pacing, so
     // allow extra CWND to make QUIC's BBR CWND identical to TCP's.
     QuicByteCount tso_segs_goal = 0;
@@ -749,7 +735,7 @@ void BbrSender::CalculateCongestionWindow(QuicByteCount bytes_acked) {
   }
 
   // Enforce the limits on the congestion window.
-  congestion_window_ = std::max(congestion_window_, kMinimumCongestionWindow);
+  congestion_window_ = std::max(congestion_window_, min_congestion_window_);
   congestion_window_ = std::min(congestion_window_, max_congestion_window_);
 }
 
@@ -766,7 +752,7 @@ void BbrSender::CalculateRecoveryWindow(QuicByteCount bytes_acked,
   // Set up the initial recovery window.
   if (recovery_window_ == 0) {
     recovery_window_ = unacked_packets_->bytes_in_flight() + bytes_acked;
-    recovery_window_ = std::max(kMinimumCongestionWindow, recovery_window_);
+    recovery_window_ = std::max(min_congestion_window_, recovery_window_);
     return;
   }
 
@@ -789,7 +775,7 @@ void BbrSender::CalculateRecoveryWindow(QuicByteCount bytes_acked,
   // |bytes_acked| in response.
   recovery_window_ = std::max(
       recovery_window_, unacked_packets_->bytes_in_flight() + bytes_acked);
-  recovery_window_ = std::max(kMinimumCongestionWindow, recovery_window_);
+  recovery_window_ = std::max(min_congestion_window_, recovery_window_);
 }
 
 std::string BbrSender::GetDebugState() const {

@@ -75,6 +75,6 @@ int ExtensionIconSet::GetIconSizeFromPath(base::StringPiece path) const {
 
 void ExtensionIconSet::GetPaths(std::set<base::FilePath>* paths) const {
   CHECK(paths);
-  for (auto iter : map())
+  for (const auto& iter : map())
     paths->insert(base::FilePath::FromUTF8Unsafe(iter.second));
 }

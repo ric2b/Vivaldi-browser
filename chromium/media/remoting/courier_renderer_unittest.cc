@@ -4,7 +4,8 @@
 
 #include "media/remoting/courier_renderer.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -278,7 +279,7 @@ class CourierRendererTest : public testing::Test {
   }
 
   void SetUp() override {
-    controller_ = base::MakeUnique<RendererController>(
+    controller_ = std::make_unique<RendererController>(
         FakeRemoterFactory::CreateSharedSession(false));
     controller_->OnMetadataChanged(DefaultMetadata());
 
@@ -288,9 +289,8 @@ class CourierRendererTest : public testing::Test {
 
     renderer_.reset(new CourierRenderer(base::ThreadTaskRunnerHandle::Get(),
                                         controller_->GetWeakPtr(), nullptr));
-    clock_ = new base::SimpleTestTickClock();
-    renderer_->clock_.reset(clock_);
-    clock_->Advance(base::TimeDelta::FromSeconds(1));
+    renderer_->clock_ = &clock_;
+    clock_.Advance(base::TimeDelta::FromSeconds(1));
 
     RunPendingTasks();
   }
@@ -338,7 +338,7 @@ class CourierRendererTest : public testing::Test {
       ASSERT_FALSE(DidEncounterFatalError());
       IssueTimeUpdateRpc(base::TimeDelta::FromMilliseconds(100 + i * 800),
                          base::TimeDelta::FromSeconds(100));
-      clock_->Advance(base::TimeDelta::FromSeconds(1));
+      clock_.Advance(base::TimeDelta::FromSeconds(1));
       RunPendingTasks();
     }
   }
@@ -384,7 +384,7 @@ class CourierRendererTest : public testing::Test {
   std::unique_ptr<RendererClientImpl> render_client_;
   std::unique_ptr<FakeMediaResource> media_resource_;
   std::unique_ptr<CourierRenderer> renderer_;
-  base::SimpleTestTickClock* clock_;  // Owned by |renderer_|;
+  base::SimpleTestTickClock clock_;
 
   // RPC handles.
   const int receiver_renderer_handle_;
@@ -693,7 +693,7 @@ TEST_F(CourierRendererTest, OnPacingTooSlowly) {
   EXPECT_CALL(*render_client_, OnBufferingStateChange(BUFFERING_HAVE_ENOUGH))
       .Times(1);
   IssuesBufferingStateRpc(BufferingState::BUFFERING_HAVE_ENOUGH);
-  clock_->Advance(base::TimeDelta::FromSeconds(3));
+  clock_.Advance(base::TimeDelta::FromSeconds(3));
   VerifyAndReportTimeUpdates(0, 15);
   ASSERT_FALSE(DidEncounterFatalError());
 
@@ -701,7 +701,7 @@ TEST_F(CourierRendererTest, OnPacingTooSlowly) {
   // playback was continuously delayed for 10 times.
   renderer_->SetPlaybackRate(1);
   RunPendingTasks();
-  clock_->Advance(base::TimeDelta::FromSeconds(3));
+  clock_.Advance(base::TimeDelta::FromSeconds(3));
   VerifyAndReportTimeUpdates(15, 30);
   ASSERT_TRUE(DidEncounterFatalError());
 }
@@ -712,7 +712,7 @@ TEST_F(CourierRendererTest, OnFrameDropRateHigh) {
   for (int i = 0; i < 7; ++i) {
     ASSERT_FALSE(DidEncounterFatalError());  // Not enough measurements.
     IssueStatisticsUpdateRpc();
-    clock_->Advance(base::TimeDelta::FromSeconds(1));
+    clock_.Advance(base::TimeDelta::FromSeconds(1));
     RunPendingTasks();
   }
   ASSERT_TRUE(DidEncounterFatalError());

@@ -101,7 +101,6 @@
 #include "extensions/renderer/worker_script_context_set.h"
 #include "extensions/renderer/worker_thread_dispatcher.h"
 #include "gin/converter.h"
-#include "mojo/public/js/constants.h"
 #include "mojo/public/js/grit/mojo_bindings_resources.h"
 #include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -226,19 +225,8 @@ Dispatcher::Dispatcher(std::unique_ptr<DispatcherDelegate> delegate)
   const base::CommandLine& command_line =
       *(base::CommandLine::ForCurrentProcess());
 
-  std::unique_ptr<IPCMessageSender> ipc_message_sender =
-      IPCMessageSender::CreateMainThreadIPCMessageSender();
-  if (base::FeatureList::IsEnabled(features::kNativeCrxBindings)) {
-    // This Unretained is safe because the IPCMessageSender is guaranteed to
-    // outlive the bindings system.
-    auto system = std::make_unique<NativeExtensionBindingsSystem>(
-        std::move(ipc_message_sender));
-    delegate_->InitializeBindingsSystem(this, system->api_system());
-    bindings_system_ = std::move(system);
-  } else {
-    bindings_system_ = std::make_unique<JsExtensionBindingsSystem>(
-        &source_map_, std::move(ipc_message_sender));
-  }
+  bindings_system_ = CreateBindingsSystem(
+      IPCMessageSender::CreateMainThreadIPCMessageSender());
 
   set_idle_notifications_ =
       command_line.HasSwitch(switches::kExtensionProcess) ||
@@ -442,8 +430,13 @@ void Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
   context->set_service_worker_scope(service_worker_scope);
 
   if (ExtensionsClient::Get()->ExtensionAPIEnabledInExtensionServiceWorkers()) {
-    WorkerThreadDispatcher::Get()->AddWorkerData(service_worker_version_id,
-                                                 context, &source_map_);
+    WorkerThreadDispatcher* worker_dispatcher = WorkerThreadDispatcher::Get();
+    std::unique_ptr<IPCMessageSender> ipc_sender =
+        IPCMessageSender::CreateWorkerThreadIPCMessageSender(
+            worker_dispatcher, service_worker_version_id);
+    worker_dispatcher->AddWorkerData(
+        service_worker_version_id, context,
+        CreateBindingsSystem(std::move(ipc_sender)));
 
     // TODO(lazyboy): Make sure accessing |source_map_| in worker thread is
     // safe.
@@ -716,31 +709,6 @@ std::vector<Dispatcher::JsResourceInfo> Dispatcher::GetJsResources() {
       {"webViewEvents", IDR_WEB_VIEW_EVENTS_JS},
       {"webViewInternal", IDR_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS},
 
-      {mojo::kAssociatedBindingsModuleName, IDR_MOJO_ASSOCIATED_BINDINGS_JS},
-      {mojo::kBindingsModuleName, IDR_MOJO_BINDINGS_JS_DEPRECATED},
-      {mojo::kBufferModuleName, IDR_MOJO_BUFFER_JS},
-      {mojo::kCodecModuleName, IDR_MOJO_CODEC_JS},
-      {mojo::kConnectorModuleName, IDR_MOJO_CONNECTOR_JS},
-      {mojo::kControlMessageHandlerModuleName,
-       IDR_MOJO_CONTROL_MESSAGE_HANDLER_JS},
-      {mojo::kControlMessageProxyModuleName, IDR_MOJO_CONTROL_MESSAGE_PROXY_JS},
-      {mojo::kInterfaceControlMessagesMojom,
-       IDR_MOJO_INTERFACE_CONTROL_MESSAGES_MOJOM_JS},
-      {mojo::kInterfaceEndpointClientModuleName,
-       IDR_MOJO_INTERFACE_ENDPOINT_CLIENT_JS},
-      {mojo::kInterfaceEndpointHandleModuleName,
-       IDR_MOJO_INTERFACE_ENDPOINT_HANDLE_JS},
-      {mojo::kInterfaceTypesModuleName, IDR_MOJO_INTERFACE_TYPES_JS},
-      {mojo::kPipeControlMessageHandlerModuleName,
-       IDR_MOJO_PIPE_CONTROL_MESSAGE_HANDLER_JS},
-      {mojo::kPipeControlMessageProxyModuleName,
-       IDR_MOJO_PIPE_CONTROL_MESSAGE_PROXY_JS},
-      {mojo::kPipeControlMessagesMojom,
-       IDR_MOJO_PIPE_CONTROL_MESSAGES_MOJOM_JS},
-      {mojo::kRouterModuleName, IDR_MOJO_ROUTER_JS},
-      {mojo::kUnicodeModuleName, IDR_MOJO_UNICODE_JS},
-      {mojo::kValidatorModuleName, IDR_MOJO_VALIDATOR_JS},
-      {"async_waiter", IDR_ASYNC_WAITER_JS},
       {"keep_alive", IDR_KEEP_ALIVE_JS},
       {"mojo_bindings", IDR_MOJO_BINDINGS_JS, true},
       {"extensions/common/mojo/keep_alive.mojom", IDR_KEEP_ALIVE_MOJOM_JS},
@@ -1479,6 +1447,21 @@ void Dispatcher::RequireGuestViewModules(ScriptContext* context) {
   }
 
   vivaldi::VivaldiAddRequiredModules(context, module_system);
+}
+
+std::unique_ptr<ExtensionBindingsSystem> Dispatcher::CreateBindingsSystem(
+    std::unique_ptr<IPCMessageSender> ipc_sender) {
+  std::unique_ptr<ExtensionBindingsSystem> bindings_system;
+  if (base::FeatureList::IsEnabled(features::kNativeCrxBindings)) {
+    auto system =
+        std::make_unique<NativeExtensionBindingsSystem>(std::move(ipc_sender));
+    delegate_->InitializeBindingsSystem(this, system->api_system());
+    bindings_system = std::move(system);
+  } else {
+    bindings_system = std::make_unique<JsExtensionBindingsSystem>(
+        &source_map_, std::move(ipc_sender));
+  }
+  return bindings_system;
 }
 
 }  // namespace extensions

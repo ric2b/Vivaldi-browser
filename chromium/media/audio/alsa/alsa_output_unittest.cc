@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
+#include <memory>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -81,7 +81,7 @@ class MockAlsaWrapper : public AlsaWrapper {
 class MockAudioManagerAlsa : public AudioManagerAlsa {
  public:
   MockAudioManagerAlsa()
-      : AudioManagerAlsa(base::MakeUnique<TestAudioThread>(),
+      : AudioManagerAlsa(std::make_unique<TestAudioThread>(),
                          &fake_audio_log_factory_) {}
   MOCK_METHOD0(Init, void());
   MOCK_METHOD0(HasAudioOutputDevices, bool());
@@ -413,9 +413,9 @@ TEST_F(AlsaPcmOutputStreamTest, StartStop) {
   // Open the stream.
   AlsaPcmOutputStream* test_stream = CreateStream(kTestChannelLayout);
   ASSERT_TRUE(test_stream->Open());
-  base::SimpleTestTickClock* const tick_clock = new base::SimpleTestTickClock();
-  tick_clock->SetNowTicks(base::TimeTicks::Now());
-  test_stream->SetTickClockForTesting(base::WrapUnique(tick_clock));
+  base::SimpleTestTickClock tick_clock;
+  tick_clock.SetNowTicks(base::TimeTicks::Now());
+  test_stream->SetTickClockForTesting(&tick_clock);
 
   // Expect Device setup.
   EXPECT_CALL(mock_alsa_wrapper_, PcmDrop(kFakeHandle))
@@ -430,7 +430,7 @@ TEST_F(AlsaPcmOutputStreamTest, StartStop) {
   EXPECT_CALL(mock_alsa_wrapper_, PcmDelay(kFakeHandle, _))
       .WillRepeatedly(DoAll(SetArgPointee<1>(0), Return(0)));
   EXPECT_CALL(mock_callback,
-              OnMoreData(base::TimeDelta(), tick_clock->NowTicks(), 0, _))
+              OnMoreData(base::TimeDelta(), tick_clock.NowTicks(), 0, _))
       .WillRepeatedly(DoAll(ClearBuffer(), Return(kTestFramesPerPacket)));
   EXPECT_CALL(mock_alsa_wrapper_, PcmWritei(kFakeHandle, _, _))
       .WillRepeatedly(Return(kTestFramesPerPacket));
@@ -577,9 +577,9 @@ TEST_F(AlsaPcmOutputStreamTest, WritePacket_StopStream) {
 
 TEST_F(AlsaPcmOutputStreamTest, BufferPacket) {
   AlsaPcmOutputStream* test_stream = CreateStream(kTestChannelLayout);
-  base::SimpleTestTickClock* const tick_clock = new base::SimpleTestTickClock();
-  tick_clock->SetNowTicks(base::TimeTicks::Now());
-  test_stream->SetTickClockForTesting(base::WrapUnique(tick_clock));
+  base::SimpleTestTickClock tick_clock;
+  tick_clock.SetNowTicks(base::TimeTicks::Now());
+  test_stream->SetTickClockForTesting(&tick_clock);
   InitBuffer(test_stream);
   test_stream->buffer_->Clear();
 
@@ -593,7 +593,7 @@ TEST_F(AlsaPcmOutputStreamTest, BufferPacket) {
 
   // Return a partially filled packet.
   EXPECT_CALL(mock_callback,
-              OnMoreData(base::TimeDelta(), tick_clock->NowTicks(), 0, _))
+              OnMoreData(base::TimeDelta(), tick_clock.NowTicks(), 0, _))
       .WillOnce(DoAll(ClearBuffer(), Return(kTestFramesPerPacket / 2)));
 
   bool source_exhausted;
@@ -608,9 +608,9 @@ TEST_F(AlsaPcmOutputStreamTest, BufferPacket) {
 
 TEST_F(AlsaPcmOutputStreamTest, BufferPacket_Negative) {
   AlsaPcmOutputStream* test_stream = CreateStream(kTestChannelLayout);
-  base::SimpleTestTickClock* const tick_clock = new base::SimpleTestTickClock();
-  tick_clock->SetNowTicks(base::TimeTicks::Now());
-  test_stream->SetTickClockForTesting(base::WrapUnique(tick_clock));
+  base::SimpleTestTickClock tick_clock;
+  tick_clock.SetNowTicks(base::TimeTicks::Now());
+  test_stream->SetTickClockForTesting(&tick_clock);
   InitBuffer(test_stream);
   test_stream->buffer_->Clear();
 
@@ -623,7 +623,7 @@ TEST_F(AlsaPcmOutputStreamTest, BufferPacket_Negative) {
   EXPECT_CALL(mock_alsa_wrapper_, PcmAvailUpdate(_))
       .WillRepeatedly(Return(0));  // Buffer is full.
   EXPECT_CALL(mock_callback,
-              OnMoreData(base::TimeDelta(), tick_clock->NowTicks(), 0, _))
+              OnMoreData(base::TimeDelta(), tick_clock.NowTicks(), 0, _))
       .WillOnce(DoAll(ClearBuffer(), Return(kTestFramesPerPacket / 2)));
 
   bool source_exhausted;
@@ -638,9 +638,9 @@ TEST_F(AlsaPcmOutputStreamTest, BufferPacket_Negative) {
 
 TEST_F(AlsaPcmOutputStreamTest, BufferPacket_Underrun) {
   AlsaPcmOutputStream* test_stream = CreateStream(kTestChannelLayout);
-  base::SimpleTestTickClock* const tick_clock = new base::SimpleTestTickClock();
-  tick_clock->SetNowTicks(base::TimeTicks::Now());
-  test_stream->SetTickClockForTesting(base::WrapUnique(tick_clock));
+  base::SimpleTestTickClock tick_clock;
+  tick_clock.SetNowTicks(base::TimeTicks::Now());
+  test_stream->SetTickClockForTesting(&tick_clock);
   InitBuffer(test_stream);
   test_stream->buffer_->Clear();
 
@@ -651,7 +651,7 @@ TEST_F(AlsaPcmOutputStreamTest, BufferPacket_Underrun) {
   EXPECT_CALL(mock_alsa_wrapper_, PcmAvailUpdate(_))
       .WillRepeatedly(Return(0));  // Buffer is full.
   EXPECT_CALL(mock_callback,
-              OnMoreData(base::TimeDelta(), tick_clock->NowTicks(), 0, _))
+              OnMoreData(base::TimeDelta(), tick_clock.NowTicks(), 0, _))
       .WillOnce(DoAll(ClearBuffer(), Return(kTestFramesPerPacket / 2)));
 
   bool source_exhausted;

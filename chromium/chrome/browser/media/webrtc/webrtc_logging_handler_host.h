@@ -17,15 +17,17 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/rtp_dump_type.h"
-#include "chrome/browser/media/webrtc/webrtc_event_log_handler.h"
-#include "chrome/browser/media/webrtc/webrtc_rtp_dump_handler.h"
 #include "chrome/browser/media/webrtc/webrtc_text_log_handler.h"
 #include "content/public/browser/browser_message_filter.h"
 #include "content/public/browser/render_process_host.h"
 
-class Profile;
 class WebRtcLogUploader;
+class WebRtcRtpDumpHandler;
+struct WebRtcLoggingMessageData;
 
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 struct WebRtcLogPaths {
   base::FilePath log_path;  // todo: rename to directory.
@@ -57,7 +59,7 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   static const char kWebRtcLoggingHandlerHostKey[];
 
   WebRtcLoggingHandlerHost(int render_process_id,
-                           Profile* profile,
+                           content::BrowserContext* browser_context,
                            WebRtcLogUploader* log_uploader);
 
   // Sets meta data that will be uploaded along with the log and also written
@@ -122,24 +124,6 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
                    size_t packet_length,
                    bool incoming);
 
-  // Starts an RTC event log for each peerconnection on this RenderProcessHost.
-  // The call writes the most recent events and all future events for |duration|
-  // seconds to a file. After |duration|, recording stops and |callback| is
-  // invoked. If |duration| is zero, |callback| is run immediately and the
-  // logging will continue until StopWebRtcEventLogging() is explicitly invoked.
-  // Must be called on the UI thread.
-  void StartWebRtcEventLogging(
-      base::TimeDelta duration,
-      const WebRtcEventLogHandler::RecordingDoneCallback& callback,
-      const WebRtcEventLogHandler::RecordingErrorCallback& error_callback);
-
-  // Stops the RTC event logs. Must be called on the UI thread.
-  // |callback| is invoked once recording stops. If no recording was in
-  // progress, |error_callback| is invoked instead of |callback|.
-  void StopWebRtcEventLogging(
-      const WebRtcEventLogHandler::RecordingDoneCallback& callback,
-      const WebRtcEventLogHandler::RecordingErrorCallback& error_callback);
-
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   // Ensures that the WebRTC Logs directory exists and then grants render
   // process access to the 'WebRTC Logs' directory, and invokes |callback| with
@@ -170,8 +154,8 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   // Writes a formatted log |message| to the |circular_buffer_|.
   void LogToCircularBuffer(const std::string& message);
 
-  // Gets the log directory path for |profile_| and ensure it exists. Must be
-  // called on the FILE thread.
+  // Gets the log directory path for |browser_context_| and ensure it exists.
+  // Must be called on the FILE thread.
   base::FilePath GetLogDirectoryAndEnsureExists();
 
   void TriggerUpload(const UploadDoneCallback& callback,
@@ -226,15 +210,11 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   // The render process ID this object belongs to.
   const int render_process_id_;
 
-  // The profile associated with our renderer process.
-  Profile* const profile_;
+  // The browser context associated with our renderer process.
+  content::BrowserContext* const browser_context_;
 
   // Only accessed on the IO thread.
   bool upload_log_on_render_close_;
-
-  // The event log handler provides an interface for starting and stopping
-  // the WebRTC event log. It is a scoped_refptr to allow posting tasks.
-  scoped_refptr<WebRtcEventLogHandler> event_log_handler_;
 
   // The text log handler owns the WebRtcLogBuffer object and keeps track of
   // the logging state. It is a scoped_refptr to allow posting tasks.
@@ -246,7 +226,7 @@ class WebRtcLoggingHandlerHost : public content::BrowserMessageFilter {
   // The callback to call when StopRtpDump is called.
   content::RenderProcessHost::WebRtcStopRtpDumpCallback stop_rtp_dump_callback_;
 
-  // A pointer to the log uploader that's shared for all profiles.
+  // A pointer to the log uploader that's shared for all browser contexts.
   // Ownership lies with the browser process.
   WebRtcLogUploader* const log_uploader_;
 

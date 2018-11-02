@@ -14,7 +14,6 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/nix/mime_util_xdg.h"
 #include "base/nix/xdg_util.h"
 #include "base/process/launch.h"
@@ -321,7 +320,7 @@ SelectFileDialogImplKDE::CallKDialogOutput(const KDialogParams& params) {
                         params.parent, params.file_operation,
                         params.multiple_selection, &command_line);
 
-  auto results = base::MakeUnique<KDialogOutputParams>();
+  auto results = std::make_unique<KDialogOutputParams>();
   // Get output from KDialog
   base::GetAppOutputWithExitCode(command_line, &results->output,
                                  &results->exit_code);
@@ -343,9 +342,9 @@ void SelectFileDialogImplKDE::GetKDialogCommandLine(
   // Attach to the current Chrome window.
   if (parent != x11::None) {
     command_line->AppendSwitchNative(
-        desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE3 ?
-            "--embed" : "--attach",
-        base::Uint64ToString(parent));
+        desktop_ == base::nix::DESKTOP_ENVIRONMENT_KDE3 ? "--embed"
+                                                        : "--attach",
+        base::NumberToString(parent));
   }
 
   // Set the correct title for the dialog.

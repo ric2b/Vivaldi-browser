@@ -37,15 +37,13 @@ import java.util.concurrent.TimeoutException;
  * preferences set to English.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TranslateCompactInfoBarTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
             new ChromeActivityTestRule<>(ChromeActivity.class);
 
     private static final String TRANSLATE_PAGE = "/chrome/test/data/translate/fr_test.html";
-    private static final String ENABLE_COMPACT_UI_FEATURE = "enable-features=TranslateCompactUI";
 
     private InfoBarContainer mInfoBarContainer;
     private InfoBarTestAnimationListener mListener;
@@ -72,7 +70,6 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
-    @CommandLineFlags.Add(ENABLE_COMPACT_UI_FEATURE)
     public void testTranslateCompactInfoBarAppears() throws InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");
@@ -88,7 +85,6 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
-    @CommandLineFlags.Add(ENABLE_COMPACT_UI_FEATURE)
     public void testTranslateCompactInfoBarOverflowMenus()
             throws InterruptedException, TimeoutException {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
@@ -112,7 +108,6 @@ public class TranslateCompactInfoBarTest {
     @MediumTest
     @Feature({"Browser", "Main"})
     @Restriction(ChromeRestriction.RESTRICTION_TYPE_GOOGLE_PLAY_SERVICES)
-    @CommandLineFlags.Add(ENABLE_COMPACT_UI_FEATURE)
     public void testTabMenuDismissedOnOrientationChange() throws Exception {
         mActivityTestRule.loadUrl(mTestServer.getURL(TRANSLATE_PAGE));
         mListener.addInfoBarAnimationFinished("InfoBar not opened.");

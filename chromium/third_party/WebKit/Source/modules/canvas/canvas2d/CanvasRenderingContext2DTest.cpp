@@ -7,11 +7,12 @@
 #include <memory>
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutBoxModelObject.h"
@@ -21,11 +22,10 @@
 #include "modules/canvas/canvas2d/CanvasGradient.h"
 #include "modules/canvas/canvas2d/CanvasPattern.h"
 #include "modules/webgl/WebGLRenderingContext.h"
+#include "platform/graphics/Canvas2DLayerBridge.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/ColorCorrectionTestUtils.h"
-#include "platform/graphics/RecordingImageBufferSurface.h"
 #include "platform/graphics/StaticBitmapImage.h"
-#include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
 #include "platform/graphics/test/FakeGLES2Interface.h"
 #include "platform/graphics/test/FakeWebGraphicsContext3DProvider.h"
@@ -33,7 +33,6 @@
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/TestingPlatformSupportWithMockScheduler.h"
 #include "platform/wtf/ByteSwap.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -55,11 +54,10 @@ class FakeImageSource : public CanvasImageSource {
 
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
-                                               SnapshotReason,
                                                const FloatSize&) override;
 
   bool WouldTaintOrigin(
-      SecurityOrigin* destination_security_origin) const override {
+      const SecurityOrigin* destination_security_origin) const override {
     return false;
   }
   FloatSize ElementSize(const FloatSize&) const override {
@@ -68,7 +66,7 @@ class FakeImageSource : public CanvasImageSource {
   bool IsOpaque() const override { return is_opaque_; }
   bool IsAccelerated() const { return false; }
 
-  ~FakeImageSource() override {}
+  ~FakeImageSource() override = default;
 
  private:
   IntSize size_;
@@ -88,7 +86,6 @@ FakeImageSource::FakeImageSource(IntSize size, BitmapOpacity opacity)
 scoped_refptr<Image> FakeImageSource::GetSourceImageForCanvas(
     SourceImageStatus* status,
     AccelerationHint,
-    SnapshotReason,
     const FloatSize&) {
   if (status)
     *status = kNormalSourceImageStatus;
@@ -205,7 +202,7 @@ void CanvasRenderingContext2DTest::SetUp() {
     return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
   };
   SharedGpuContext::SetContextProviderFactoryForTesting(
-      WTF::Bind(factory, WTF::Unretained(&gl_)));
+      WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
 
   Page::PageClients page_clients;
   FillWithEmptyClients(page_clients);
@@ -253,24 +250,22 @@ void CanvasRenderingContext2DTest::TearDown() {
 std::unique_ptr<Canvas2DLayerBridge> CanvasRenderingContext2DTest::MakeBridge(
     const IntSize& size,
     Canvas2DLayerBridge::AccelerationMode acceleration_mode) {
-  std::unique_ptr<Canvas2DLayerBridge> bridge = WTF::WrapUnique(
-      new Canvas2DLayerBridge(size, 0, acceleration_mode, CanvasColorParams()));
+  std::unique_ptr<Canvas2DLayerBridge> bridge =
+      std::make_unique<Canvas2DLayerBridge>(size, 0, acceleration_mode,
+                                            CanvasColorParams());
   bridge->SetCanvasResourceHost(canvas_element_);
   return bridge;
 }
 
 //============================================================================
 
-class FakeAcceleratedImageBufferSurface
-    : public UnacceleratedImageBufferSurface {
+class FakeAcceleratedImageBufferSurface : public Canvas2DLayerBridge {
  public:
   FakeAcceleratedImageBufferSurface(const IntSize& size,
                                     CanvasColorParams color_params)
-      : UnacceleratedImageBufferSurface(size,
-                                        kInitializeImagePixels,
-                                        color_params),
+      : Canvas2DLayerBridge(size, 0, kDisableAcceleration, color_params),
         is_accelerated_(true) {}
-  ~FakeAcceleratedImageBufferSurface() override {}
+  ~FakeAcceleratedImageBufferSurface() override = default;
   bool IsAccelerated() const override { return is_accelerated_; }
   void SetIsAccelerated(bool is_accelerated) {
     if (is_accelerated != is_accelerated_)
@@ -291,19 +286,20 @@ class MockImageBufferSurfaceForOverwriteTesting : public Canvas2DLayerBridge {
                             0,
                             Canvas2DLayerBridge::kDisableAcceleration,
                             color_params) {}
-  ~MockImageBufferSurfaceForOverwriteTesting() override {}
+  ~MockImageBufferSurfaceForOverwriteTesting() override = default;
   MOCK_METHOD0(WillOverwriteCanvas, void());
 };
 
 //============================================================================
 
 #define TEST_OVERDRAW_SETUP(EXPECTED_OVERDRAWS)                                \
+  IntSize size(10, 10);                                                        \
   std::unique_ptr<MockImageBufferSurfaceForOverwriteTesting> mock_surface =    \
       std::make_unique<MockImageBufferSurfaceForOverwriteTesting>(             \
-          IntSize(10, 10), CanvasColorParams());                               \
+          size, CanvasColorParams());                                          \
   MockImageBufferSurfaceForOverwriteTesting* surface_ptr = mock_surface.get(); \
   CanvasElement().CreateImageBufferUsingSurfaceForTesting(                     \
-      std::move(mock_surface));                                                \
+      std::move(mock_surface), size);                                          \
   EXPECT_CALL(*surface_ptr, WillOverwriteCanvas()).Times(EXPECTED_OVERDRAWS);  \
   Context2d()->save();
 
@@ -520,313 +516,6 @@ TEST_F(CanvasRenderingContext2DTest, detectOverdrawWithCompositeOperations) {
                   fillRect(0, 0, 5, 5));
 }
 
-TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionByDefault) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionUnderOverdrawLimit) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->setGlobalAlpha(0.5f);  // To prevent overdraw optimization
-  for (int i = 0;
-       i < CanvasHeuristicParameters::kExpensiveOverdrawThreshold - 1; i++) {
-    Context2d()->fillRect(0, 0, 10, 10);
-  }
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, LayerPromotionOverOverdrawLimit) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->setGlobalAlpha(0.5f);  // To prevent overdraw optimization
-  for (int i = 0; i < CanvasHeuristicParameters::kExpensiveOverdrawThreshold;
-       i++) {
-    Context2d()->fillRect(0, 0, 10, 10);
-  }
-
-  EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionUnderImageSizeRatioLimit) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  NonThrowableExceptionState exception_state;
-  Element* source_canvas_element =
-      GetDocument().createElement("canvas", exception_state);
-  EXPECT_FALSE(exception_state.HadException());
-  HTMLCanvasElement* source_canvas =
-      static_cast<HTMLCanvasElement*>(source_canvas_element);
-  IntSize source_size(10,
-                      10 * CanvasHeuristicParameters::kExpensiveImageSizeRatio);
-  std::unique_ptr<UnacceleratedImageBufferSurface> source_surface =
-      std::make_unique<UnacceleratedImageBufferSurface>(source_size);
-  source_canvas->CreateImageBufferUsingSurfaceForTesting(
-      std::move(source_surface));
-
-  const ImageBitmapOptions default_options;
-  Optional<IntRect> crop_rect = IntRect(IntPoint(0, 0), source_size);
-  // Go through an ImageBitmap to avoid triggering a display list fallback
-  ImageBitmap* source_image_bitmap =
-      ImageBitmap::Create(source_canvas, crop_rect, default_options);
-
-  Context2d()->drawImage(GetScriptState(), source_image_bitmap, 0, 0, 1, 1, 0,
-                         0, 1, 1, exception_state);
-  EXPECT_FALSE(exception_state.HadException());
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, LayerPromotionOverImageSizeRatioLimit) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  NonThrowableExceptionState exception_state;
-  Element* source_canvas_element =
-      GetDocument().createElement("canvas", exception_state);
-  EXPECT_FALSE(exception_state.HadException());
-  HTMLCanvasElement* source_canvas =
-      static_cast<HTMLCanvasElement*>(source_canvas_element);
-  IntSize source_size(
-      10, 10 * CanvasHeuristicParameters::kExpensiveImageSizeRatio + 1);
-  std::unique_ptr<UnacceleratedImageBufferSurface> source_surface =
-      std::make_unique<UnacceleratedImageBufferSurface>(source_size);
-  source_canvas->CreateImageBufferUsingSurfaceForTesting(
-      std::move(source_surface));
-
-  const ImageBitmapOptions default_options;
-  Optional<IntRect> crop_rect = IntRect(IntPoint(0, 0), source_size);
-  // Go through an ImageBitmap to avoid triggering a display list fallback
-  ImageBitmap* source_image_bitmap =
-      ImageBitmap::Create(source_canvas, crop_rect, default_options);
-
-  Context2d()->drawImage(GetScriptState(), source_image_bitmap, 0, 0, 1, 1, 0,
-                         0, 1, 1, exception_state);
-  EXPECT_FALSE(exception_state.HadException());
-
-  EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest,
-       NoLayerPromotionUnderExpensivePathPointCount) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->beginPath();
-  Context2d()->moveTo(7, 5);
-  for (int i = 1; i < CanvasHeuristicParameters::kExpensivePathPointCount - 1;
-       i++) {
-    float angle_rad = twoPiFloat * i /
-                      (CanvasHeuristicParameters::kExpensivePathPointCount - 1);
-    Context2d()->lineTo(5 + 2 * cos(angle_rad), 5 + 2 * sin(angle_rad));
-  }
-  Context2d()->fill();
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest,
-       LayerPromotionOverExpensivePathPointCount) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->beginPath();
-  Context2d()->moveTo(7, 5);
-  for (int i = 1; i < CanvasHeuristicParameters::kExpensivePathPointCount + 1;
-       i++) {
-    float angle_rad = twoPiFloat * i /
-                      (CanvasHeuristicParameters::kExpensivePathPointCount + 1);
-    Context2d()->lineTo(5 + 2 * cos(angle_rad), 5 + 2 * sin(angle_rad));
-  }
-  Context2d()->fill();
-
-  EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, LayerPromotionWhenPathIsConcave) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->beginPath();
-  Context2d()->moveTo(1, 1);
-  Context2d()->lineTo(5, 5);
-  Context2d()->lineTo(9, 1);
-  Context2d()->lineTo(5, 9);
-  Context2d()->fill();
-
-  if (CanvasHeuristicParameters::kConcavePathsAreExpensive) {
-    EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  } else {
-    EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  }
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionWithRectangleClip) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->beginPath();
-  Context2d()->rect(1, 1, 2, 2);
-  Context2d()->clip();
-  Context2d()->fillRect(0, 0, 4, 4);
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, LayerPromotionWithComplexClip) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->beginPath();
-  Context2d()->moveTo(1, 1);
-  Context2d()->lineTo(5, 5);
-  Context2d()->lineTo(9, 1);
-  Context2d()->lineTo(5, 9);
-  Context2d()->clip();
-  Context2d()->fillRect(0, 0, 4, 4);
-
-  if (CanvasHeuristicParameters::kComplexClipsAreExpensive) {
-    EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  } else {
-    EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  }
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, LayerPromotionWithBlurredShadow) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->setShadowColor(String("red"));
-  Context2d()->setShadowBlur(1.0f);
-  Context2d()->fillRect(1, 1, 1, 1);
-
-  if (CanvasHeuristicParameters::kBlurredShadowsAreExpensive) {
-    EXPECT_TRUE(CanvasElement().ShouldBeDirectComposited());
-  } else {
-    EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  }
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, NoLayerPromotionWithSharpShadow) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->setShadowColor(String("red"));
-  Context2d()->setShadowOffsetX(1.0f);
-  Context2d()->fillRect(1, 1, 1, 1);
-
-  EXPECT_FALSE(CanvasElement().ShouldBeDirectComposited());
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, NoFallbackWithSmallState) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->fillRect(0, 0, 1, 1);  // To have a non-empty dirty rect.
-  for (int i = 0;
-       i < CanvasHeuristicParameters::kExpensiveRecordingStackDepth - 1; ++i) {
-    Context2d()->save();
-    Context2d()->translate(1.0f, 0.0f);
-  }
-  CanvasElement().FinalizeFrame();  // To close the current frame.
-
-  EXPECT_TRUE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, FallbackWithLargeState) {
-  CreateContext(kNonOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback);
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->fillRect(0, 0, 1, 1);  // To have a non-empty dirty rect.
-  for (int i = 0; i < CanvasHeuristicParameters::kExpensiveRecordingStackDepth;
-       ++i) {
-    Context2d()->save();
-    Context2d()->translate(1.0f, 0.0f);
-  }
-  CanvasElement().FinalizeFrame();  // To close the current frame.
-
-  EXPECT_FALSE(surface_ptr->IsRecording());
-}
-
-TEST_F(CanvasRenderingContext2DTest, OpaqueDisplayListFallsBackForText) {
-  // Verify that drawing text to an opaque canvas, which is expected to
-  // render with subpixel text anti-aliasing, results in falling out
-  // of display list mode because the current diplay list implementation
-  // does not support pixel geometry settings.
-  // See: crbug.com/583809
-  CreateContext(kOpaque);
-  auto surface = std::make_unique<RecordingImageBufferSurface>(
-      IntSize(10, 10), RecordingImageBufferSurface::kAllowFallback,
-      CanvasColorParams(kSRGBCanvasColorSpace, kRGBA8CanvasPixelFormat,
-                        kOpaque));
-  auto* surface_ptr = surface.get();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(surface));
-
-  Context2d()->fillText("Text", 0, 5);
-
-  EXPECT_FALSE(surface_ptr->IsRecording());
-}
-
 TEST_F(CanvasRenderingContext2DTest, ImageResourceLifetime) {
   NonThrowableExceptionState non_throwable_exception_state;
   Element* canvas_element =
@@ -857,13 +546,14 @@ TEST_F(CanvasRenderingContext2DTest, ImageResourceLifetime) {
 TEST_F(CanvasRenderingContext2DTest, GPUMemoryUpdateForAcceleratedCanvas) {
   CreateContext(kNonOpaque);
 
+  IntSize size(10, 10);
   std::unique_ptr<FakeAcceleratedImageBufferSurface> fake_accelerate_surface =
-      std::make_unique<FakeAcceleratedImageBufferSurface>(IntSize(10, 10),
+      std::make_unique<FakeAcceleratedImageBufferSurface>(size,
                                                           CanvasColorParams());
   FakeAcceleratedImageBufferSurface* fake_accelerate_surface_ptr =
       fake_accelerate_surface.get();
   CanvasElement().CreateImageBufferUsingSurfaceForTesting(
-      std::move(fake_accelerate_surface));
+      std::move(fake_accelerate_surface), size);
   // 800 = 10 * 10 * 4 * 2 where 10*10 is canvas size, 4 is num of bytes per
   // pixel per buffer, and 2 is an estimate of num of gpu buffers required
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
@@ -889,11 +579,12 @@ TEST_F(CanvasRenderingContext2DTest, GPUMemoryUpdateForAcceleratedCanvas) {
       ToHTMLCanvasElement(GetDocument().getElementById("d"));
   CanvasContextCreationAttributes attributes;
   anotherCanvas->GetCanvasRenderingContext("2d", attributes);
+  IntSize size2(10, 5);
   auto fake_accelerate_surface2 =
-      std::make_unique<FakeAcceleratedImageBufferSurface>(IntSize(10, 5),
+      std::make_unique<FakeAcceleratedImageBufferSurface>(size2,
                                                           CanvasColorParams());
   anotherCanvas->CreateImageBufferUsingSurfaceForTesting(
-      std::move(fake_accelerate_surface2));
+      std::move(fake_accelerate_surface2), size2);
   EXPECT_EQ(800, GetCurrentGPUMemoryUsage());
   EXPECT_EQ(1200, GetGlobalGPUMemoryUsage());
   EXPECT_EQ(2u, GetGlobalAcceleratedContextCount());
@@ -944,9 +635,10 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
   IntSize size(300, 300);
   std::unique_ptr<Canvas2DLayerBridge> bridge =
       MakeBridge(size, Canvas2DLayerBridge::kForceAccelerationForTesting);
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
+  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge),
+                                                          size);
 
-  EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+  EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
   EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
   EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
 
@@ -958,7 +650,7 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
     CanvasElement().FinalizeFrame();
 
     EXPECT_FALSE(exception_state.HadException());
-    EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+    EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
     EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
   }
@@ -968,17 +660,23 @@ TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
 
   EXPECT_FALSE(exception_state.HadException());
   if (CanvasHeuristicParameters::kGPUReadbackForcesNoAcceleration) {
-    EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
+    EXPECT_FALSE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
     EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
   } else {
-    EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+    EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
     EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     EXPECT_EQ(720000, GetGlobalGPUMemoryUsage());
   }
 }
 
-TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
+// https://crbug.com/791524
+#if defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+#define MAYBE_TextureUploadHeuristics DISABLED_TextureUploadHeuristics
+#else
+#define MAYBE_TextureUploadHeuristics TextureUploadHeuristics
+#endif  // defined(OS_ANDROID) && defined(ADDRESS_SANITIZER)
+TEST_F(CanvasRenderingContext2DTest, MAYBE_TextureUploadHeuristics) {
   ScopedCanvas2dFixedRenderingModeForTest canvas_2d_fixed_rendering_mode(false);
 
   enum TestVariants {
@@ -1005,9 +703,10 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
     IntSize size(dst_size, dst_size);
     std::unique_ptr<Canvas2DLayerBridge> bridge =
         MakeBridge(size, Canvas2DLayerBridge::kEnableAcceleration);
-    CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
+    CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge),
+                                                            size);
 
-    EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+    EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
     EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
     // 4 bytes per pixel * 2 buffers = 8
     EXPECT_EQ(8 * dst_size * dst_size, GetGlobalGPUMemoryUsage());
@@ -1023,11 +722,11 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
     EXPECT_FALSE(exception_state.HadException());
 
     if (test_variant == kLargeTextureDisablesAcceleration) {
-      EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
+      EXPECT_FALSE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
       EXPECT_EQ(0u, GetGlobalAcceleratedContextCount());
       EXPECT_EQ(0, GetGlobalGPUMemoryUsage());
     } else {
-      EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+      EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
       EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
       EXPECT_EQ(8 * dst_size * dst_size, GetGlobalGPUMemoryUsage());
     }
@@ -1037,11 +736,12 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
 TEST_F(CanvasRenderingContext2DTest, DisableAcceleration) {
   CreateContext(kNonOpaque);
 
+  IntSize size(10, 10);
   auto fake_accelerate_surface =
-      std::make_unique<FakeAcceleratedImageBufferSurface>(IntSize(10, 10),
+      std::make_unique<FakeAcceleratedImageBufferSurface>(size,
                                                           CanvasColorParams());
   CanvasElement().CreateImageBufferUsingSurfaceForTesting(
-      std::move(fake_accelerate_surface));
+      std::move(fake_accelerate_surface), size);
   CanvasRenderingContext2D* context = Context2d();
 
   // 800 = 10 * 10 * 4 * 2 where 10*10 is canvas size, 4 is num of bytes per
@@ -1051,10 +751,10 @@ TEST_F(CanvasRenderingContext2DTest, DisableAcceleration) {
   EXPECT_EQ(1u, GetGlobalAcceleratedContextCount());
 
   context->fillRect(10, 10, 100, 100);
-  EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+  EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
 
   CanvasElement().DisableAcceleration();
-  EXPECT_FALSE(CanvasElement().GetImageBuffer()->IsAccelerated());
+  EXPECT_FALSE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
 
   context->fillRect(10, 10, 100, 100);
 
@@ -1398,12 +1098,12 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
       MakeBridge(size, Canvas2DLayerBridge::kEnableAcceleration);
   // Force hibernatation to occur in an immediate task.
   bridge->DontUseIdleSchedulingForTesting();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
+  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge),
+                                                          size);
 
-  EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+  EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
   // Take a snapshot to trigger lazy resource provider creation
-  CanvasElement().GetImageBuffer()->NewImageSnapshot(kPreferAcceleration,
-                                                     kSnapshotReasonUnknown);
+  CanvasElement().Canvas2DBuffer()->NewImageSnapshot(kPreferAcceleration);
   EXPECT_TRUE(CanvasElement().GetLayoutBoxModelObject());
   PaintLayer* layer = CanvasElement().GetLayoutBoxModelObject()->Layer();
   EXPECT_TRUE(layer);
@@ -1436,9 +1136,10 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
       MakeBridge(size, Canvas2DLayerBridge::kEnableAcceleration);
   // Force hibernatation to occur in an immediate task.
   bridge->DontUseIdleSchedulingForTesting();
-  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge));
+  CanvasElement().CreateImageBufferUsingSurfaceForTesting(std::move(bridge),
+                                                          size);
 
-  EXPECT_TRUE(CanvasElement().GetImageBuffer()->IsAccelerated());
+  EXPECT_TRUE(CanvasElement().Canvas2DBuffer()->IsAccelerated());
 
   EXPECT_TRUE(CanvasElement().GetLayoutBoxModelObject());
   PaintLayer* layer = CanvasElement().GetLayoutBoxModelObject()->Layer();
@@ -1449,6 +1150,7 @@ TEST_F(CanvasRenderingContext2DTestWithTestingPlatform,
   GetDocument().GetPage()->SetVisibilityState(
       mojom::PageVisibilityState::kHidden, false);
   RunUntilIdle();  // Run hibernation task.
+
   // Never hibernate a canvas with no resource provider
   EXPECT_FALSE(layer->NeedsCompositingInputsUpdate());
 }

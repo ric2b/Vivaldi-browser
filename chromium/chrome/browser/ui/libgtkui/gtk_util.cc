@@ -15,6 +15,8 @@
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/environment.h"
+#include "base/memory/protected_memory.h"
+#include "base/memory/protected_memory_cfi.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
@@ -25,6 +27,7 @@
 #include "ui/events/keycodes/keyboard_code_conversion_x.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/linux_ui/linux_ui.h"
 
 namespace {
 
@@ -52,6 +55,14 @@ void CommonInitFromCommandLine(const base::CommandLine& command_line,
     free(argv[i]);
   }
 }
+
+using GtkSetState = void (*)(GtkWidgetPath*, gint, GtkStateFlags);
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetState>
+    _gtk_widget_path_iter_set_state;
+
+using GtkSetObjectName = void (*)(GtkWidgetPath*, gint, const char*);
+PROTECTED_MEMORY_SECTION base::ProtectedMemory<GtkSetObjectName>
+    _gtk_widget_path_iter_set_object_name;
 
 }  // namespace
 
@@ -229,6 +240,15 @@ void ParseButtonLayout(const std::string& button_string,
 }
 
 #if GTK_MAJOR_VERSION > 2
+namespace {
+
+float GetDeviceScaleFactor() {
+  views::LinuxUI* linux_ui = views::LinuxUI::instance();
+  return linux_ui ? linux_ui->GetDeviceScaleFactor() : 1;
+}
+
+}  // namespace
+
 void* GetGdkSharedLibrary() {
   std::string lib_name =
       "libgdk-" + std::to_string(GTK_MAJOR_VERSION) + ".so.0";
@@ -383,13 +403,15 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
           NOTREACHED();
       }
     } else {
-      static auto* _gtk_widget_path_iter_set_object_name =
-          reinterpret_cast<void (*)(GtkWidgetPath*, gint, const char*)>(dlsym(
-              GetGtkSharedLibrary(), "gtk_widget_path_iter_set_object_name"));
+      static base::ProtectedMemory<GtkSetObjectName>::Initializer init(
+          &_gtk_widget_path_iter_set_object_name,
+          reinterpret_cast<GtkSetObjectName>(dlsym(
+              GetGtkSharedLibrary(), "gtk_widget_path_iter_set_object_name")));
       switch (part_type) {
         case CSS_NAME: {
           if (GtkVersionCheck(3, 20)) {
-            _gtk_widget_path_iter_set_object_name(path, -1, t.token().c_str());
+            base::UnsanitizedCfiCall(_gtk_widget_path_iter_set_object_name)(
+                path, -1, t.token().c_str());
           } else {
             gtk_widget_path_iter_add_class(path, -1, t.token().c_str());
           }
@@ -401,7 +423,8 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
           gtk_widget_path_append_type(path, type);
           if (GtkVersionCheck(3, 20)) {
             if (t.token() == "GtkLabel")
-              _gtk_widget_path_iter_set_object_name(path, -1, "label");
+              base::UnsanitizedCfiCall(_gtk_widget_path_iter_set_object_name)(
+                  path, -1, "label");
           }
           break;
         }
@@ -429,11 +452,12 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
   gtk_widget_path_iter_add_class(path, -1, "chromium");
 
   if (GtkVersionCheck(3, 14)) {
-    static auto* _gtk_widget_path_iter_set_state =
-        reinterpret_cast<void (*)(GtkWidgetPath*, gint, GtkStateFlags)>(
-            dlsym(GetGtkSharedLibrary(), "gtk_widget_path_iter_set_state"));
-    DCHECK(_gtk_widget_path_iter_set_state);
-    _gtk_widget_path_iter_set_state(path, -1, state);
+    static base::ProtectedMemory<GtkSetState>::Initializer init(
+        &_gtk_widget_path_iter_set_state,
+        reinterpret_cast<GtkSetState>(
+            dlsym(GetGtkSharedLibrary(), "gtk_widget_path_iter_set_state")));
+    DCHECK(*_gtk_widget_path_iter_set_state);
+    base::UnsanitizedCfiCall(_gtk_widget_path_iter_set_state)(path, -1, state);
   }
 
   ScopedStyleContext child_context(gtk_style_context_new());
@@ -448,6 +472,7 @@ ScopedStyleContext AppendCssNodeToStyleContext(GtkStyleContext* context,
     }
     gtk_style_context_set_state(child_context, child_state);
   }
+  gtk_style_context_set_scale(child_context, std::ceil(GetDeviceScaleFactor()));
   gtk_style_context_set_parent(child_context, context);
   gtk_widget_path_unref(path);
   return child_context;

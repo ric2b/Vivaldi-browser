@@ -50,9 +50,9 @@ std::unique_ptr<base::DictionaryValue> CreateSuccessResponse(
     int command_id,
     std::unique_ptr<base::Value> result) {
   if (!result)
-    result = base::MakeUnique<base::DictionaryValue>();
+    result = std::make_unique<base::DictionaryValue>();
 
-  auto response = base::MakeUnique<base::DictionaryValue>();
+  auto response = std::make_unique<base::DictionaryValue>();
   response->SetInteger(kIdParam, command_id);
   response->Set(kResultParam, std::move(result));
   return response;
@@ -62,11 +62,11 @@ std::unique_ptr<base::DictionaryValue> CreateErrorResponse(
     int command_id,
     int error_code,
     const std::string& error_message) {
-  auto error_object = base::MakeUnique<base::DictionaryValue>();
+  auto error_object = std::make_unique<base::DictionaryValue>();
   error_object->SetInteger(kErrorCodeParam, error_code);
   error_object->SetString(kErrorMessageParam, error_message);
 
-  auto response = base::MakeUnique<base::DictionaryValue>();
+  auto response = std::make_unique<base::DictionaryValue>();
   response->SetInteger(kIdParam, command_id);
   response->Set(kErrorParam, std::move(error_object));
   return response;
@@ -82,7 +82,7 @@ std::unique_ptr<base::DictionaryValue> CreateInvalidParamResponse(
 
 std::unique_ptr<base::DictionaryValue> CreateBoundsDict(
     const HeadlessWebContentsImpl* web_contents) {
-  auto bounds_object = base::MakeUnique<base::DictionaryValue>();
+  auto bounds_object = std::make_unique<base::DictionaryValue>();
   gfx::Rect bounds = web_contents->web_contents()->GetContainerBounds();
   bounds_object->SetInteger("left", bounds.x());
   bounds_object->SetInteger("top", bounds.y());
@@ -157,7 +157,7 @@ void OnBeginFrameFinished(
     bool has_damage,
     bool main_frame_content_updated,
     std::unique_ptr<SkBitmap> bitmap) {
-  auto result = base::MakeUnique<base::DictionaryValue>();
+  auto result = std::make_unique<base::DictionaryValue>();
   result->SetBoolean("hasDamage", has_damage);
   result->SetBoolean("mainFrameContentUpdated", main_frame_content_updated);
 
@@ -247,6 +247,15 @@ std::unique_ptr<base::DictionaryValue> ParsePrintSettings(
   if (const base::Value* margin_right_value = params->FindKey("marginRight"))
     margin_right_in_inch = margin_right_value->GetDouble();
 
+  if (const base::Value* header_template_value =
+          params->FindKey("headerTemplate")) {
+    settings->header_template = header_template_value->GetString();
+  }
+  if (const base::Value* footer_template_value =
+          params->FindKey("footerTemplate")) {
+    settings->footer_template = footer_template_value->GetString();
+  }
+
   if (margin_top_in_inch < 0)
     return CreateInvalidParamResponse(command_id, "marginTop");
   if (margin_bottom_in_inch < 0)
@@ -317,7 +326,7 @@ HeadlessDevToolsManagerDelegate::~HeadlessDevToolsManagerDelegate() = default;
 
 bool HeadlessDevToolsManagerDelegate::HandleCommand(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     base::DictionaryValue* command) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -339,7 +348,7 @@ bool HeadlessDevToolsManagerDelegate::HandleCommand(
     // handle.
     find_it = unhandled_command_map_.find(method);
     if (find_it != unhandled_command_map_.end())
-      find_it->second.Run(agent_host, session_id, id_value->GetInt(), params);
+      find_it->second.Run(agent_host, client, id_value->GetInt(), params);
     return false;
   }
 
@@ -349,17 +358,16 @@ bool HeadlessDevToolsManagerDelegate::HandleCommand(
     return false;
 
   auto cmd_result =
-      find_it->second.Run(agent_host, session_id, id_value->GetInt(), params);
+      find_it->second.Run(agent_host, client, id_value->GetInt(), params);
   if (!cmd_result)
     return false;
-  agent_host->SendProtocolMessageToClient(session_id,
-                                          ToString(std::move(cmd_result)));
+  client->DispatchProtocolMessage(agent_host, ToString(std::move(cmd_result)));
   return true;
 }
 
 bool HeadlessDevToolsManagerDelegate::HandleAsyncCommand(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     base::DictionaryValue* command,
     const CommandCallback& callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -378,8 +386,7 @@ bool HeadlessDevToolsManagerDelegate::HandleAsyncCommand(
 
   const base::DictionaryValue* params = nullptr;
   command->GetDictionary("params", &params);
-  find_it->second.Run(agent_host, session_id, id_value->GetInt(), params,
-                      callback);
+  find_it->second.Run(agent_host, client, id_value->GetInt(), params, callback);
   return true;
 }
 
@@ -409,9 +416,9 @@ std::string HeadlessDevToolsManagerDelegate::GetFrontendResource(
   return content::DevToolsFrontendHost::GetFrontendResource(path).as_string();
 }
 
-void HeadlessDevToolsManagerDelegate::SessionDestroyed(
+void HeadlessDevToolsManagerDelegate::ClientDetached(
     content::DevToolsAgentHost* agent_host,
-    int session_id) {
+    content::DevToolsAgentHostClient* client) {
   if (!browser_)
     return;
 
@@ -424,12 +431,12 @@ void HeadlessDevToolsManagerDelegate::SessionDestroyed(
   if (!headless_contents)
     return;
 
-  headless_contents->SetBeginFrameEventsEnabled(session_id, false);
+  headless_contents->SetBeginFrameEventsEnabled(client, false);
 }
 
 void HeadlessDevToolsManagerDelegate::PrintToPDF(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params,
     const CommandCallback& callback) {
@@ -463,7 +470,7 @@ void HeadlessDevToolsManagerDelegate::PrintToPDF(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::CreateTarget(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   std::string url;
@@ -536,7 +543,7 @@ HeadlessDevToolsManagerDelegate::CreateTarget(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::CloseTarget(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   const base::Value* target_id_value = params->FindKey("targetId");
@@ -560,7 +567,7 @@ HeadlessDevToolsManagerDelegate::CloseTarget(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::CreateBrowserContext(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   HeadlessBrowserContext* browser_context =
@@ -577,7 +584,7 @@ HeadlessDevToolsManagerDelegate::CreateBrowserContext(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::DisposeBrowserContext(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   const base::Value* browser_context_id_value =
@@ -606,7 +613,7 @@ HeadlessDevToolsManagerDelegate::DisposeBrowserContext(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::GetWindowForTarget(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   const base::Value* target_id_value = params->FindKey("targetId");
@@ -621,7 +628,7 @@ HeadlessDevToolsManagerDelegate::GetWindowForTarget(
                                "No web contents for the given target id");
   }
 
-  auto result = base::MakeUnique<base::DictionaryValue>();
+  auto result = std::make_unique<base::DictionaryValue>();
   result->SetInteger("windowId", web_contents->window_id());
   result->Set("bounds", CreateBoundsDict(web_contents));
   return CreateSuccessResponse(command_id, std::move(result));
@@ -629,7 +636,7 @@ HeadlessDevToolsManagerDelegate::GetWindowForTarget(
 
 std::unique_ptr<base::DictionaryValue> HeadlessDevToolsManagerDelegate::Close(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   content::BrowserThread::PostTask(
@@ -642,7 +649,7 @@ std::unique_ptr<base::DictionaryValue> HeadlessDevToolsManagerDelegate::Close(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::GetWindowBounds(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   HeadlessWebContentsImpl* web_contents;
@@ -655,7 +662,7 @@ HeadlessDevToolsManagerDelegate::GetWindowBounds(
                                "Browser window not found");
   }
 
-  auto result = base::MakeUnique<base::DictionaryValue>();
+  auto result = std::make_unique<base::DictionaryValue>();
   result->Set("bounds", CreateBoundsDict(web_contents));
   return CreateSuccessResponse(command_id, std::move(result));
 }
@@ -663,7 +670,7 @@ HeadlessDevToolsManagerDelegate::GetWindowBounds(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::SetWindowBounds(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   HeadlessWebContentsImpl* web_contents;
@@ -744,7 +751,7 @@ HeadlessDevToolsManagerDelegate::SetWindowBounds(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::EmulateNetworkConditions(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   // Associate NetworkConditions to context
@@ -774,7 +781,7 @@ HeadlessDevToolsManagerDelegate::EmulateNetworkConditions(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::NetworkDisable(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   std::vector<HeadlessBrowserContext*> browser_contexts =
@@ -800,7 +807,7 @@ void HeadlessDevToolsManagerDelegate::SetNetworkConditions(
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::EnableHeadlessExperimental(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   content::WebContents* web_contents = agent_host->GetWebContents();
@@ -811,14 +818,14 @@ HeadlessDevToolsManagerDelegate::EnableHeadlessExperimental(
 
   HeadlessWebContentsImpl* headless_contents =
       HeadlessWebContentsImpl::From(browser_.get(), web_contents);
-  headless_contents->SetBeginFrameEventsEnabled(session_id, true);
+  headless_contents->SetBeginFrameEventsEnabled(client, true);
   return CreateSuccessResponse(command_id, nullptr);
 }
 
 std::unique_ptr<base::DictionaryValue>
 HeadlessDevToolsManagerDelegate::DisableHeadlessExperimental(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params) {
   content::WebContents* web_contents = agent_host->GetWebContents();
@@ -829,13 +836,13 @@ HeadlessDevToolsManagerDelegate::DisableHeadlessExperimental(
 
   HeadlessWebContentsImpl* headless_contents =
       HeadlessWebContentsImpl::From(browser_.get(), web_contents);
-  headless_contents->SetBeginFrameEventsEnabled(session_id, false);
+  headless_contents->SetBeginFrameEventsEnabled(client, false);
   return CreateSuccessResponse(command_id, nullptr);
 }
 
 void HeadlessDevToolsManagerDelegate::BeginFrame(
     content::DevToolsAgentHost* agent_host,
-    int session_id,
+    content::DevToolsAgentHostClient* client,
     int command_id,
     const base::DictionaryValue* params,
     const CommandCallback& callback) {
@@ -861,6 +868,7 @@ void HeadlessDevToolsManagerDelegate::BeginFrame(
   base::TimeTicks frame_timeticks;
   base::TimeTicks deadline;
   base::TimeDelta interval;
+  bool no_display_updates = false;
 
   if (const base::Value* frame_time_value = params->FindKey("frameTime")) {
     frame_time = base::Time::FromJsTime(frame_time_value->GetDouble());
@@ -893,6 +901,11 @@ void HeadlessDevToolsManagerDelegate::BeginFrame(
     deadline = frame_timeticks + delta;
   } else {
     deadline = frame_timeticks + interval;
+  }
+
+  if (const base::Value* no_display_updates_value =
+          params->FindKey("noDisplayUpdates")) {
+    no_display_updates = no_display_updates_value->GetBool();
   }
 
   bool capture_screenshot = false;
@@ -942,7 +955,7 @@ void HeadlessDevToolsManagerDelegate::BeginFrame(
   }
 
   headless_contents->BeginFrame(frame_timeticks, deadline, interval,
-                                capture_screenshot,
+                                no_display_updates, capture_screenshot,
                                 base::Bind(&OnBeginFrameFinished, command_id,
                                            callback, encoding, quality));
 }

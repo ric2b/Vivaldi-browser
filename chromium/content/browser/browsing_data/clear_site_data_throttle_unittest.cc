@@ -179,24 +179,17 @@ TEST_F(ClearSiteDataThrottleTest, ParseHeaderAndExecuteClearingTask) {
       // One data type.
       {"\"cookies\"", true, false, false},
       {"\"storage\"", false, true, false},
-
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      // Therefore, a header consisting solely of the "cache" parameter is
-      // invalid. As this test verifies the behavior of Clear-Site-Data with
-      // valid headers, we will omit such test case.
+      {"\"cache\"", false, false, true},
 
       // Two data types.
       {"\"cookies\", \"storage\"", true, true, false},
-
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      {"\"cookies\", \"cache\"", true, false, false},
-      {"\"storage\", \"cache\"", false, true, false},
+      {"\"cookies\", \"cache\"", true, false, true},
+      {"\"storage\", \"cache\"", false, true, true},
 
       // Three data types.
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      {"\"storage\", \"cache\", \"cookies\"", true, true, false},
-      {"\"cache\", \"cookies\", \"storage\"", true, true, false},
-      {"\"cookies\", \"storage\", \"cache\"", true, true, false},
+      {"\"storage\", \"cache\", \"cookies\"", true, true, true},
+      {"\"cache\", \"cookies\", \"storage\"", true, true, true},
+      {"\"cookies\", \"storage\", \"cache\"", true, true, true},
 
       // The wildcard datatype is not yet shipped.
       {"\"*\", \"storage\"", false, true, false},
@@ -214,16 +207,15 @@ TEST_F(ClearSiteDataThrottleTest, ParseHeaderAndExecuteClearingTask) {
 
       // Unknown types are ignored, but we still proceed with the deletion for
       // those that we recognize.
-      {"\"storage\", \"foo\"", false, true, false},
+      {"\"cache\", \"foo\"", false, false, true},
   };
 
   std::vector<TestCase> experimental_test_cases = {
       // Wildcard.
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      {"\"*\"", true, true, false},
-      {"\"*\", \"storage\"", true, true, false},
-      {"\"cache\", \"*\", \"storage\"", true, true, false},
-      {"\"*\", \"cookies\", \"*\"", true, true, false},
+      {"\"*\"", true, true, true},
+      {"\"*\", \"storage\"", true, true, true},
+      {"\"cache\", \"*\", \"storage\"", true, true, true},
+      {"\"*\", \"cookies\", \"*\"", true, true, true},
   };
 
   const std::vector<TestCase>* test_case_sets[] = {&standard_test_cases,
@@ -290,9 +282,6 @@ TEST_F(ClearSiteDataThrottleTest, InvalidHeader) {
                     {"\"passwords\"",
                      "Unrecognized type: \"passwords\".\n"
                      "No recognized types specified.\n"},
-                    {"\"cache\"",
-                     "The \"cache\" datatype is temporarily not supported.\n"
-                     "No recognized types specified.\n"},
                     // The wildcard datatype is not yet shipped.
                     {"[ \"*\" ]",
                      "Unrecognized type: [ \"*\" ].\n"
@@ -348,8 +337,11 @@ TEST_F(ClearSiteDataThrottleTest, LoadDoNotSaveCookies) {
   throttle.WillProcessResponse(&defer);
   EXPECT_TRUE(defer);
   EXPECT_EQ(1u, console_delegate->messages().size());
-  EXPECT_EQ("Cleared data types: \"cookies\".",
-            console_delegate->messages().front().text);
+  EXPECT_EQ(
+      "Cleared data types: \"cookies\". "
+      "Clearing channel IDs and HTTP authentication cache is currently "
+      "not supported, as it breaks active network connections.",
+      console_delegate->messages().front().text);
   EXPECT_EQ(console_delegate->messages().front().level,
             CONSOLE_MESSAGE_LEVEL_INFO);
   testing::Mock::VerifyAndClearExpectations(&throttle);
@@ -557,10 +549,13 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
     const char* url;
     const char* output;
   } kTestCases[] = {
-      // Successful deletion outputs one line.
+      // Successful deletion outputs one line, and in case of cookies, also
+      // a disclaimer about omitted data (crbug.com/798760).
       {"\"cookies\"", "https://origin1.com/foo",
        "Clear-Site-Data header on 'https://origin1.com/foo': "
-       "Cleared data types: \"cookies\".\n"},
+       "Cleared data types: \"cookies\". "
+       "Clearing channel IDs and HTTP authentication cache is currently "
+       "not supported, as it breaks active network connections.\n"},
 
       // Another successful deletion.
       {"\"storage\"", "https://origin2.com/foo",
@@ -589,9 +584,9 @@ TEST_F(ClearSiteDataThrottleTest, FormattedConsoleOutput) {
        "No recognized types specified.\n"},
 
       // Successful deletion on the same URL.
-      {"\"cookies\"", "https://origin3.com/bar",
+      {"\"cache\"", "https://origin3.com/bar",
        "Clear-Site-Data header on 'https://origin3.com/bar': "
-       "Cleared data types: \"cookies\".\n"},
+       "Cleared data types: \"cache\".\n"},
 
       // Redirect to the original URL.
       // Successful deletion outputs one line.

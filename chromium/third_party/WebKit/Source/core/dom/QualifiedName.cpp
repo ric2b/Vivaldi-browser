@@ -99,7 +99,7 @@ QualifiedName::QualifiedName(const AtomicString& p,
     impl_->Release();
 }
 
-QualifiedName::~QualifiedName() {}
+QualifiedName::~QualifiedName() = default;
 
 QualifiedName::QualifiedNameImpl::~QualifiedNameImpl() {
   GetQualifiedNameCache().erase(this);
@@ -121,7 +121,7 @@ void QualifiedName::InitAndReserveCapacityForSize(unsigned size) {
   GetQualifiedNameCache().ReserveCapacityForSize(
       size + 2 /*g_star_atom and g_null_atom */);
   new ((void*)&g_any_name)
-      QualifiedName(g_null_atom, g_star_atom, g_star_atom, true);
+      QualifiedName(g_null_atom, g_null_atom, g_star_atom, true);
   new ((void*)&g_null_name)
       QualifiedName(g_null_atom, g_null_atom, g_null_atom, true);
 }

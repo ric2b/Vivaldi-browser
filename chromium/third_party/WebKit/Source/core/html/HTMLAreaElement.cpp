@@ -53,7 +53,7 @@ inline HTMLAreaElement::HTMLAreaElement(Document& document)
 // HTMLAreaElement.h, when including HTMLAreaElement.h, msvc tries to expand
 // the destructor and causes a compile error because of lack of blink::Path
 // definition.
-HTMLAreaElement::~HTMLAreaElement() {}
+HTMLAreaElement::~HTMLAreaElement() = default;
 
 DEFINE_NODE_FACTORY(HTMLAreaElement)
 
@@ -210,7 +210,7 @@ void HTMLAreaElement::SetFocused(bool should_be_focused,
 
   HTMLAnchorElement::SetFocused(should_be_focused, focus_type);
 
-  HTMLImageElement* image_element = this->ImageElement();
+  HTMLImageElement* image_element = ImageElement();
   if (!image_element)
     return;
 
@@ -228,7 +228,7 @@ void HTMLAreaElement::UpdateFocusAppearanceWithOptions(
   if (!IsFocusable())
     return;
 
-  if (HTMLImageElement* image_element = this->ImageElement()) {
+  if (HTMLImageElement* image_element = ImageElement()) {
     image_element->UpdateFocusAppearanceWithOptions(selection_behavior,
                                                     options);
   }

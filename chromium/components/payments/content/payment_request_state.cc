@@ -92,7 +92,7 @@ void PaymentRequestState::GetAllPaymentAppsCallback(
     std::unique_ptr<ServiceWorkerPaymentInstrument> instrument =
         std::make_unique<ServiceWorkerPaymentInstrument>(
             context, top_level_origin, frame_origin, spec_,
-            std::move(app.second));
+            std::move(app.second), payment_request_delegate_);
     instrument->ValidateCanMakePayment(
         base::BindOnce(&PaymentRequestState::OnSWPaymentInstrumentValidated,
                        weak_ptr_factory_.GetWeakPtr()));
@@ -486,8 +486,8 @@ void PaymentRequestState::OnAddressNormalized(
     bool success,
     const autofill::AutofillProfile& normalized_profile) {
   delegate_->OnShippingAddressSelected(
-      PaymentResponseHelper::GetMojomPaymentAddressFromAutofillProfile(
-          normalized_profile, app_locale_));
+      data_util::GetPaymentAddressFromAutofillProfile(normalized_profile,
+                                                      app_locale_));
 }
 
 }  // namespace payments

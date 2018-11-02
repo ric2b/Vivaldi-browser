@@ -54,7 +54,7 @@ class URLResponseExtraDataContainer : public ResourceResponse::ExtraData {
     return base::AdoptRef(new URLResponseExtraDataContainer(extra_data));
   }
 
-  ~URLResponseExtraDataContainer() override {}
+  ~URLResponseExtraDataContainer() override = default;
 
   WebURLResponse::ExtraData* GetExtraData() const { return extra_data_.get(); }
 
@@ -71,7 +71,7 @@ class URLResponseExtraDataContainer : public ResourceResponse::ExtraData {
 // heap, which is otherwise disallowed by the DISALLOW_NEW_EXCEPT_PLACEMENT_NEW
 // annotation on ResourceResponse.
 struct WebURLResponse::ResourceResponseContainer {
-  ResourceResponseContainer() {}
+  ResourceResponseContainer() = default;
 
   explicit ResourceResponseContainer(const ResourceResponse& r)
       : resource_response(r) {}
@@ -79,7 +79,7 @@ struct WebURLResponse::ResourceResponseContainer {
   ResourceResponse resource_response;
 };
 
-WebURLResponse::~WebURLResponse() {}
+WebURLResponse::~WebURLResponse() = default;
 
 WebURLResponse::WebURLResponse()
     : owned_resource_response_(new ResourceResponseContainer()),
@@ -270,6 +270,25 @@ void WebURLResponse::SetSecurityDetails(
       sct_list);
 }
 
+WebURLResponse::WebSecurityDetails WebURLResponse::SecurityDetailsForTesting() {
+  const blink::ResourceResponse::SecurityDetails* security_details =
+      resource_response_->GetSecurityDetails();
+  std::vector<SignedCertificateTimestamp> sct_list;
+  for (const auto& iter : security_details->sct_list) {
+    sct_list.push_back(SignedCertificateTimestamp(
+        iter.status_, iter.origin_, iter.log_description_, iter.log_id_,
+        iter.timestamp_, iter.hash_algorithm_, iter.signature_algorithm_,
+        iter.signature_data_));
+  }
+  return WebSecurityDetails(
+      security_details->protocol, security_details->key_exchange,
+      security_details->key_exchange_group, security_details->cipher,
+      security_details->mac, security_details->subject_name,
+      security_details->san_list, security_details->issuer,
+      security_details->valid_from, security_details->valid_to,
+      security_details->certificate, SignedCertificateTimestampList(sct_list));
+}
+
 const ResourceResponse& WebURLResponse::ToResourceResponse() const {
   return *resource_response_;
 }
@@ -297,6 +316,11 @@ void WebURLResponse::SetWasFallbackRequiredByServiceWorker(bool value) {
 void WebURLResponse::SetResponseTypeViaServiceWorker(
     network::mojom::FetchResponseType value) {
   resource_response_->SetResponseTypeViaServiceWorker(value);
+}
+
+network::mojom::FetchResponseType WebURLResponse::ResponseTypeViaServiceWorker()
+    const {
+  return resource_response_->ResponseTypeViaServiceWorker();
 }
 
 void WebURLResponse::SetURLListViaServiceWorker(

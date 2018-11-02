@@ -864,7 +864,7 @@ static void serializedScriptValueAttributeAttributeGetter(const v8::FunctionCall
 
   TestObject* impl = V8TestObject::ToImpl(holder);
 
-  V8SetReturnValue(info, V8Deserialize(info.GetIsolate(), WTF::GetPtr(impl->serializedScriptValueAttribute())));
+  V8SetReturnValue(info, V8Deserialize(info.GetIsolate(), WTF::GetPtr(impl->serializedScriptValueAttribute()).get()));
 }
 
 static void serializedScriptValueAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -883,7 +883,7 @@ static void serializedScriptValueAttributeAttributeSetter(v8::Local<v8::Value> v
   if (exceptionState.HadException())
     return;
 
-  impl->setSerializedScriptValueAttribute(cppValue);
+  impl->setSerializedScriptValueAttribute(std::move(cppValue));
 }
 
 static void anyAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -1728,7 +1728,7 @@ static void doubleOrNullStringAttributeAttributeSetter(v8::Local<v8::Value> v8Va
 
   // Prepare the value to be set.
   DoubleOrString cppValue;
-  V8DoubleOrNullOrString::ToImpl(info.GetIsolate(), v8Value, cppValue, UnionTypeConversionMode::kNullable, exceptionState);
+  V8DoubleOrString::ToImpl(info.GetIsolate(), v8Value, cppValue, UnionTypeConversionMode::kNullable, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -5443,7 +5443,7 @@ static void voidMethodDoubleOrNullOrDOMStringArgMethod(const v8::FunctionCallbac
   }
 
   DoubleOrString arg;
-  V8DoubleOrNullOrString::ToImpl(info.GetIsolate(), info[0], arg, UnionTypeConversionMode::kNullable, exceptionState);
+  V8DoubleOrString::ToImpl(info.GetIsolate(), info[0], arg, UnionTypeConversionMode::kNullable, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -5546,7 +5546,7 @@ static void voidMethodArrayOfDoubleOrDOMStringArgMethod(const v8::FunctionCallba
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
   HeapVector<DoubleOrString> arg;
-  arg = ToImplArguments<HeapVector<DoubleOrString>>(info, 0, exceptionState);
+  arg = ToImplArguments<DoubleOrString>(info, 0, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -5797,7 +5797,7 @@ static void promiseMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
   if (!arg3.Prepare(exceptionState))
     return;
 
-  variadic = ToImplArguments<Vector<String>>(info, 3, exceptionState);
+  variadic = ToImplArguments<IDLString>(info, 3, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -5836,7 +5836,7 @@ static void promiseMethodWithoutExceptionStateMethod(const v8::FunctionCallbackI
 static void serializedScriptValueMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
-  V8SetReturnValue(info, V8Deserialize(info.GetIsolate(), impl->serializedScriptValueMethod()));
+  V8SetReturnValue(info, V8Deserialize(info.GetIsolate(), impl->serializedScriptValueMethod().get()));
 }
 
 static void xPathNSResolverMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -5914,7 +5914,7 @@ static void voidMethodSerializedScriptValueArgMethod(const v8::FunctionCallbackI
   if (exceptionState.HadException())
     return;
 
-  impl->voidMethodSerializedScriptValueArg(serializedScriptValueArg);
+  impl->voidMethodSerializedScriptValueArg(std::move(serializedScriptValueArg));
 }
 
 static void voidMethodXPathNSResolverArgMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -6455,7 +6455,7 @@ static void voidMethodDefaultDoubleOrStringArgsMethod(const v8::FunctionCallback
     defaultLongArg.SetDouble(10);
   }
   if (!info[1]->IsUndefined()) {
-    V8DoubleOrStringOrNull::ToImpl(info.GetIsolate(), info[1], defaultStringArg, UnionTypeConversionMode::kNullable, exceptionState);
+    V8DoubleOrString::ToImpl(info.GetIsolate(), info[1], defaultStringArg, UnionTypeConversionMode::kNullable, exceptionState);
     if (exceptionState.HadException())
       return;
   } else {
@@ -6495,7 +6495,7 @@ static void voidMethodVariadicStringArgMethod(const v8::FunctionCallbackInfo<v8:
   TestObject* impl = V8TestObject::ToImpl(info.Holder());
 
   Vector<String> variadicStringArgs;
-  variadicStringArgs = ToImplArguments<Vector<String>>(info, 0, exceptionState);
+  variadicStringArgs = ToImplArguments<IDLString>(info, 0, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -6518,7 +6518,7 @@ static void voidMethodStringArgVariadicStringArgMethod(const v8::FunctionCallbac
   if (!stringArg.Prepare())
     return;
 
-  variadicStringArgs = ToImplArguments<Vector<String>>(info, 1, exceptionState);
+  variadicStringArgs = ToImplArguments<IDLString>(info, 1, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -7264,7 +7264,7 @@ static void overloadedMethodL1Method(const v8::FunctionCallbackInfo<v8::Value>& 
   if (exceptionState.HadException())
     return;
 
-  restArgs = ToImplArguments<Vector<ScriptValue>>(info, 1, exceptionState);
+  restArgs = ToImplArguments<ScriptValue>(info, 1, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -7282,7 +7282,7 @@ static void overloadedMethodL2Method(const v8::FunctionCallbackInfo<v8::Value>& 
   if (!stringArg.Prepare())
     return;
 
-  restArgs = ToImplArguments<Vector<ScriptValue>>(info, 1, exceptionState);
+  restArgs = ToImplArguments<ScriptValue>(info, 1, exceptionState);
   if (exceptionState.HadException())
     return;
 
@@ -8531,7 +8531,7 @@ static void postMessageImpl(const char* interfaceName, TestObject* instance, con
   // FIXME: Only pass scriptState/exceptionState if instance really requires it.
   ScriptState* scriptState = ScriptState::Current(info.GetIsolate());
   message->UnregisterMemoryAllocatedWithCurrentScriptContext();
-  instance->postMessage(scriptState, message.get(), transferables.message_ports, exceptionState);
+  instance->postMessage(scriptState, std::move(message), transferables.message_ports, exceptionState);
 }
 
 static void activityLoggingForAllWorldsPerWorldBindingsVoidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info) {
@@ -12587,9 +12587,7 @@ void V8TestObject::activityLoggingAccessForAllWorldsMethodMethodCallback(const v
   ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   V8PerContextData* contextData = scriptState->PerContextData();
   if (contextData && contextData->ActivityLogger()) {
-    ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestObject", "activityLoggingAccessForAllWorldsMethod");
-    Vector<v8::Local<v8::Value>> loggerArgs = ToImplArguments<Vector<v8::Local<v8::Value>>>(info, 0, exceptionState);
-    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingAccessForAllWorldsMethod", info.Length(), loggerArgs.data());
+    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingAccessForAllWorldsMethod", info);
   }
   TestObjectV8Internal::activityLoggingAccessForAllWorldsMethodMethod(info);
 }
@@ -12819,9 +12817,7 @@ void V8TestObject::activityLoggingForAllWorldsPerWorldBindingsVoidMethodMethodCa
   ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   V8PerContextData* contextData = scriptState->PerContextData();
   if (contextData && contextData->ActivityLogger()) {
-    ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestObject", "activityLoggingForAllWorldsPerWorldBindingsVoidMethod");
-    Vector<v8::Local<v8::Value>> loggerArgs = ToImplArguments<Vector<v8::Local<v8::Value>>>(info, 0, exceptionState);
-    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForAllWorldsPerWorldBindingsVoidMethod", info.Length(), loggerArgs.data());
+    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForAllWorldsPerWorldBindingsVoidMethod", info);
   }
   TestObjectV8Internal::activityLoggingForAllWorldsPerWorldBindingsVoidMethodMethod(info);
 }
@@ -12832,9 +12828,7 @@ void V8TestObject::activityLoggingForAllWorldsPerWorldBindingsVoidMethodMethodCa
   ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   V8PerContextData* contextData = scriptState->PerContextData();
   if (contextData && contextData->ActivityLogger()) {
-    ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestObject", "activityLoggingForAllWorldsPerWorldBindingsVoidMethod");
-    Vector<v8::Local<v8::Value>> loggerArgs = ToImplArguments<Vector<v8::Local<v8::Value>>>(info, 0, exceptionState);
-    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForAllWorldsPerWorldBindingsVoidMethod", info.Length(), loggerArgs.data());
+    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForAllWorldsPerWorldBindingsVoidMethod", info);
   }
   TestObjectV8Internal::activityLoggingForAllWorldsPerWorldBindingsVoidMethodMethodForMainWorld(info);
 }
@@ -12845,9 +12839,7 @@ void V8TestObject::activityLoggingForIsolatedWorldsPerWorldBindingsVoidMethodMet
   ScriptState* scriptState = ScriptState::ForRelevantRealm(info);
   V8PerContextData* contextData = scriptState->PerContextData();
   if (contextData && contextData->ActivityLogger()) {
-    ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kExecutionContext, "TestObject", "activityLoggingForIsolatedWorldsPerWorldBindingsVoidMethod");
-    Vector<v8::Local<v8::Value>> loggerArgs = ToImplArguments<Vector<v8::Local<v8::Value>>>(info, 0, exceptionState);
-    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForIsolatedWorldsPerWorldBindingsVoidMethod", info.Length(), loggerArgs.data());
+    contextData->ActivityLogger()->LogMethod("TestObject.activityLoggingForIsolatedWorldsPerWorldBindingsVoidMethod", info);
   }
   TestObjectV8Internal::activityLoggingForIsolatedWorldsPerWorldBindingsVoidMethodMethod(info);
 }

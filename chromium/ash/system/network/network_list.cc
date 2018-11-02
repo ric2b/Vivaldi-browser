@@ -38,7 +38,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
-#include "chromeos/login/login_state.h"
 #include "chromeos/network/device_state.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_state.h"
@@ -67,7 +66,6 @@
 
 #include "ui/views/view.h"
 
-using chromeos::LoginState;
 using chromeos::NetworkHandler;
 using chromeos::NetworkStateHandler;
 using chromeos::ManagedNetworkConfigurationHandler;
@@ -84,7 +82,7 @@ const int kPowerStatusPaddingRight = 10;
 bool IsProhibitedByPolicy(const chromeos::NetworkState* network) {
   if (!NetworkTypePattern::WiFi().MatchesType(network->type()))
     return false;
-  if (!LoginState::IsInitialized() || !LoginState::Get()->IsUserLoggedIn())
+  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted())
     return false;
   ManagedNetworkConfigurationHandler* managed_configuration_handler =
       NetworkHandler::Get()->managed_network_configuration_handler();
@@ -195,7 +193,7 @@ class NetworkListView::SectionHeaderRowView : public views::View,
 
   void InitializeLayout() {
     TrayPopupUtils::ConfigureAsStickyHeader(this);
-    SetLayoutManager(new views::FillLayout);
+    SetLayoutManager(std::make_unique<views::FillLayout>());
     container_ = TrayPopupUtils::CreateSubHeaderRowView(false);
     AddChildView(container_);
 
@@ -298,11 +296,18 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
   }
 
   // chromeos::NetworkStateHandlerObserver
-  // Update state if the Cellular or Tether device state may have changed, or if
-  // the list of Cellular or Tether networks may have changed.
+
+  // Called when the available devices changes.
   void DeviceListChanged() override { UpdateState(); }
+
+  // Called when the state of a device changes (e.g. the enabled state).
+  void DevicePropertiesUpdated(const chromeos::DeviceState* device) override {
+    UpdateState();
+  }
+
   void NetworkListChanged() override { UpdateState(); }
 
+ private:
   void UpdateState() {
     NetworkStateHandler::TechnologyState cellular_state =
         network_state_handler_->GetTechnologyState(
@@ -400,7 +405,6 @@ class MobileHeaderRowView : public NetworkListView::SectionHeaderRowView,
     SetSubtitle(subtitle);
   }
 
- private:
   // When Tether is disabled because Bluetooth is off, then enabling Bluetooth
   // will enable Tether. If enabling Bluetooth takes longer than some timeout
   // period, it is assumed that there was an error. In that case, Tether will
@@ -696,14 +700,17 @@ NetworkListView::UpdateNetworkListEntries() {
       &wifi_header_view_, &wifi_separator_view_);
 
   // "Wifi Enabled / Disabled".
-  int wifi_message_id = 0;
-  if (!handler->IsTechnologyEnabled(NetworkTypePattern::WiFi()))
-    wifi_message_id = IDS_ASH_STATUS_TRAY_NETWORK_WIFI_DISABLED;
-  else if (!handler->FirstNetworkByType(NetworkTypePattern::WiFi()))
-    wifi_message_id = IDS_ASH_STATUS_TRAY_NETWORK_WIFI_ENABLED;
-  UpdateInfoLabel(wifi_message_id, index, &no_wifi_networks_view_);
-  if (wifi_message_id)
+  if (!handler->IsTechnologyEnabled(NetworkTypePattern::WiFi())) {
+    UpdateInfoLabel(IDS_ASH_STATUS_TRAY_NETWORK_WIFI_DISABLED, index,
+                    &no_wifi_networks_view_);
+    return new_guids;
+  }
+
+  if (!handler->FirstNetworkByType(NetworkTypePattern::WiFi())) {
+    UpdateInfoLabel(IDS_ASH_STATUS_TRAY_NETWORK_WIFI_ENABLED, index,
+                    &no_wifi_networks_view_);
     ++index;
+  }
 
   // Add Wi-Fi networks.
   std::unique_ptr<std::set<std::string>> new_wifi_guids =

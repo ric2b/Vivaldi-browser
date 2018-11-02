@@ -21,34 +21,33 @@ namespace media {
 typedef int VideoCaptureSessionId;
 
 // Storage type for the pixels.
-// TODO(mcasas): http://crbug.com/504160 Consider making this an enum class.
-// TODO(chfremer): Extend or remove this enum.
-enum VideoPixelStorage {
-  PIXEL_STORAGE_CPU,
-  PIXEL_STORAGE_MAX = PIXEL_STORAGE_CPU,
+// TODO(chfremer): https://crbug.com/788798 Extend or remove this enum.
+enum class VideoPixelStorage {
+  CPU,
+  MAX = CPU,
 };
 
 // Policies for capture devices that have source content that varies in size.
 // It is up to the implementation how the captured content will be transformed
 // (e.g., scaling and/or letterboxing) in order to produce video frames that
 // strictly adheree to one of these policies.
-enum ResolutionChangePolicy {
+enum class ResolutionChangePolicy {
   // Capture device outputs a fixed resolution all the time. The resolution of
   // the first frame is the resolution for all frames.
-  RESOLUTION_POLICY_FIXED_RESOLUTION,
+  FIXED_RESOLUTION,
 
   // Capture device is allowed to output frames of varying resolutions. The
   // width and height will not exceed the maximum dimensions specified. The
   // aspect ratio of the frames will match the aspect ratio of the maximum
   // dimensions as closely as possible.
-  RESOLUTION_POLICY_FIXED_ASPECT_RATIO,
+  FIXED_ASPECT_RATIO,
 
   // Capture device is allowed to output frames of varying resolutions not
   // exceeding the maximum dimensions specified.
-  RESOLUTION_POLICY_ANY_WITHIN_LIMIT,
+  ANY_WITHIN_LIMIT,
 
   // Must always be equal to largest entry in the enum.
-  RESOLUTION_POLICY_LAST = RESOLUTION_POLICY_ANY_WITHIN_LIMIT,
+  LAST = ANY_WITHIN_LIMIT,
 };
 
 // Potential values of the googPowerLineFrequency optional constraint passed to

@@ -15,18 +15,24 @@
 
 namespace blink {
 
-PageTestBase::PageTestBase() {}
+PageTestBase::PageTestBase() = default;
 
-PageTestBase::~PageTestBase() {}
+PageTestBase::~PageTestBase() = default;
 
 void PageTestBase::SetUp() {
   DCHECK(!dummy_page_holder_) << "Page should be set up only once";
   dummy_page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
+
+  // Use no-quirks (ake "strict") mode by default.
+  GetDocument().SetCompatibilityMode(Document::kNoQuirksMode);
 }
 
 void PageTestBase::SetUp(IntSize size) {
   DCHECK(!dummy_page_holder_) << "Page should be set up only once";
   dummy_page_holder_ = DummyPageHolder::Create(size);
+
+  // Use no-quirks (ake "strict") mode by default.
+  GetDocument().SetCompatibilityMode(Document::kNoQuirksMode);
 }
 
 void PageTestBase::SetupPageWithClients(
@@ -36,6 +42,9 @@ void PageTestBase::SetupPageWithClients(
   DCHECK(!dummy_page_holder_) << "Page should be set up only once";
   dummy_page_holder_ = DummyPageHolder::Create(
       IntSize(800, 600), clients, local_frame_client, setting_overrider);
+
+  // Use no-quirks (ake "strict") mode by default.
+  GetDocument().SetCompatibilityMode(Document::kNoQuirksMode);
 }
 
 void PageTestBase::TearDown() {
@@ -79,14 +88,20 @@ void PageTestBase::LoadAhem(LocalFrame& frame) {
 }
 
 // Both sets the inner html and runs the document lifecycle.
-void PageTestBase::SetBodyInnerHTML(const String& html_content) {
-  GetDocument().body()->SetInnerHTMLFromString(html_content,
+void PageTestBase::SetBodyInnerHTML(const String& body_content) {
+  GetDocument().body()->SetInnerHTMLFromString(body_content,
                                                ASSERT_NO_EXCEPTION);
   UpdateAllLifecyclePhases();
 }
 
 void PageTestBase::SetBodyContent(const std::string& body_content) {
   SetBodyInnerHTML(String::FromUTF8(body_content.c_str()));
+}
+
+void PageTestBase::SetHtmlInnerHTML(const std::string& html_content) {
+  GetDocument().documentElement()->SetInnerHTMLFromString(
+      String::FromUTF8(html_content.c_str()));
+  GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
 void PageTestBase::UpdateAllLifecyclePhases() {
@@ -99,6 +114,18 @@ StyleEngine& PageTestBase::GetStyleEngine() {
 
 Element* PageTestBase::GetElementById(const char* id) const {
   return GetDocument().getElementById(id);
+}
+
+AnimationClock& PageTestBase::GetAnimationClock() {
+  return GetDocument().GetAnimationClock();
+}
+
+PendingAnimations& PageTestBase::GetPendingAnimations() {
+  return GetDocument().GetPendingAnimations();
+}
+
+FocusController& PageTestBase::GetFocusController() const {
+  return GetDocument().GetPage()->GetFocusController();
 }
 
 }  // namespace blink

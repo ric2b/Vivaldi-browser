@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "cc/blink/web_layer_impl.h"
 #include "cc/layers/picture_image_layer.h"
 #include "cc/layers/solid_color_layer.h"
@@ -45,6 +46,16 @@
 namespace content {
 
 namespace {
+
+bool AreSurfaceReferencesEnabled() {
+#if defined(OS_ANDROID)
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kDisableSurfaceReferences);
+#else
+  // Surface references are always enabled for non-Android platforms.
+  return true;
+#endif
+}
 
 class IframeSurfaceReferenceFactory
     : public viz::SequenceSurfaceReferenceFactory {
@@ -169,11 +180,10 @@ ChildFrameCompositingHelper::ChildFrameCompositingHelper(
     : host_routing_id_(host_routing_id),
       browser_plugin_(browser_plugin),
       render_frame_proxy_(render_frame_proxy),
-      frame_(frame) {
-  enable_surface_references_ =
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableSurfaceReferences);
-  if (enable_surface_references_) {
+      frame_(frame),
+      enable_surface_references_(AreSurfaceReferencesEnabled()) {
+  // In some tests there is no RenderThreadImpl instance.
+  if (enable_surface_references_ || !RenderThreadImpl::current()) {
     surface_reference_factory_ = new viz::StubSurfaceReferenceFactory();
   } else {
     scoped_refptr<ThreadSafeSender> sender(
@@ -256,9 +266,9 @@ void ChildFrameCompositingHelper::SetPrimarySurfaceId(
 
   surface_layer_ = cc::SurfaceLayer::Create(surface_reference_factory_);
   surface_layer_->SetMasksToBounds(true);
-  surface_layer_->SetDefaultBackgroundColor(SK_ColorTRANSPARENT);
+  surface_layer_->SetBackgroundColor(SK_ColorTRANSPARENT);
 
-  surface_layer_->SetPrimarySurfaceId(surface_id);
+  surface_layer_->SetPrimarySurfaceId(surface_id, base::nullopt);
   surface_layer_->SetFallbackSurfaceId(fallback_surface_id_);
 
   std::unique_ptr<cc_blink::WebLayerImpl> layer(

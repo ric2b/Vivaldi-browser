@@ -38,10 +38,8 @@
 #include "modules/filesystem/DOMFilePath.h"
 #include "modules/filesystem/DirectoryEntry.h"
 #include "modules/filesystem/DirectoryReaderBase.h"
-#include "modules/filesystem/EntriesCallback.h"
 #include "modules/filesystem/Entry.h"
 #include "modules/filesystem/EntryBase.h"
-#include "modules/filesystem/EntryCallback.h"
 #include "modules/filesystem/FileSystemCallbacks.h"
 #include "modules/filesystem/MetadataCallback.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -70,7 +68,7 @@ DOMFileSystemBase::DOMFileSystemBase(ExecutionContext* context,
       filesystem_root_url_(root_url),
       clonable_(false) {}
 
-DOMFileSystemBase::~DOMFileSystemBase() {}
+DOMFileSystemBase::~DOMFileSystemBase() = default;
 
 void DOMFileSystemBase::Trace(blink::Visitor* visitor) {
   visitor->Trace(context_);
@@ -84,7 +82,7 @@ WebFileSystem* DOMFileSystemBase::FileSystem() const {
   return platform->FileSystem();
 }
 
-SecurityOrigin* DOMFileSystemBase::GetSecurityOrigin() const {
+const SecurityOrigin* DOMFileSystemBase::GetSecurityOrigin() const {
   return context_->GetSecurityOrigin();
 }
 
@@ -263,12 +261,13 @@ static bool VerifyAndGetDestinationPathForCopyOrMove(const EntryBase* source,
   return true;
 }
 
-void DOMFileSystemBase::Move(const EntryBase* source,
-                             EntryBase* parent,
-                             const String& new_name,
-                             EntryCallback* success_callback,
-                             ErrorCallbackBase* error_callback,
-                             SynchronousType synchronous_type) {
+void DOMFileSystemBase::Move(
+    const EntryBase* source,
+    EntryBase* parent,
+    const String& new_name,
+    EntryCallbacks::OnDidGetEntryCallback* success_callback,
+    ErrorCallbackBase* error_callback,
+    SynchronousType synchronous_type) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return;
@@ -292,12 +291,13 @@ void DOMFileSystemBase::Move(const EntryBase* source,
       std::move(callbacks));
 }
 
-void DOMFileSystemBase::Copy(const EntryBase* source,
-                             EntryBase* parent,
-                             const String& new_name,
-                             EntryCallback* success_callback,
-                             ErrorCallbackBase* error_callback,
-                             SynchronousType synchronous_type) {
+void DOMFileSystemBase::Copy(
+    const EntryBase* source,
+    EntryBase* parent,
+    const String& new_name,
+    EntryCallbacks::OnDidGetEntryCallback* success_callback,
+    ErrorCallbackBase* error_callback,
+    SynchronousType synchronous_type) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return;
@@ -369,9 +369,10 @@ void DOMFileSystemBase::RemoveRecursively(const EntryBase* entry,
                                   std::move(callbacks));
 }
 
-void DOMFileSystemBase::GetParent(const EntryBase* entry,
-                                  EntryCallback* success_callback,
-                                  ErrorCallbackBase* error_callback) {
+void DOMFileSystemBase::GetParent(
+    const EntryBase* entry,
+    EntryCallbacks::OnDidGetEntryCallback* success_callback,
+    ErrorCallbackBase* error_callback) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return;
@@ -386,12 +387,13 @@ void DOMFileSystemBase::GetParent(const EntryBase* entry,
                              path, true));
 }
 
-void DOMFileSystemBase::GetFile(const EntryBase* entry,
-                                const String& path,
-                                const FileSystemFlags& flags,
-                                EntryCallback* success_callback,
-                                ErrorCallbackBase* error_callback,
-                                SynchronousType synchronous_type) {
+void DOMFileSystemBase::GetFile(
+    const EntryBase* entry,
+    const String& path,
+    const FileSystemFlags& flags,
+    EntryCallbacks::OnDidGetEntryCallback* success_callback,
+    ErrorCallbackBase* error_callback,
+    SynchronousType synchronous_type) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return;
@@ -415,12 +417,13 @@ void DOMFileSystemBase::GetFile(const EntryBase* entry,
                              std::move(callbacks));
 }
 
-void DOMFileSystemBase::GetDirectory(const EntryBase* entry,
-                                     const String& path,
-                                     const FileSystemFlags& flags,
-                                     EntryCallback* success_callback,
-                                     ErrorCallbackBase* error_callback,
-                                     SynchronousType synchronous_type) {
+void DOMFileSystemBase::GetDirectory(
+    const EntryBase* entry,
+    const String& path,
+    const FileSystemFlags& flags,
+    EntryCallbacks::OnDidGetEntryCallback* success_callback,
+    ErrorCallbackBase* error_callback,
+    SynchronousType synchronous_type) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return;
@@ -444,11 +447,12 @@ void DOMFileSystemBase::GetDirectory(const EntryBase* entry,
                                   std::move(callbacks));
 }
 
-int DOMFileSystemBase::ReadDirectory(DirectoryReaderBase* reader,
-                                     const String& path,
-                                     EntriesCallback* success_callback,
-                                     ErrorCallbackBase* error_callback,
-                                     SynchronousType synchronous_type) {
+int DOMFileSystemBase::ReadDirectory(
+    DirectoryReaderBase* reader,
+    const String& path,
+    DirectoryReaderOnDidReadCallback* success_callback,
+    ErrorCallbackBase* error_callback,
+    SynchronousType synchronous_type) {
   if (!FileSystem()) {
     ReportError(error_callback, FileError::kAbortErr);
     return 0;

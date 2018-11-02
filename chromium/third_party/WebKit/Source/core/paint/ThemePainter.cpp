@@ -60,7 +60,7 @@ WebFallbackThemeEngine::State GetWebFallbackThemeState(const Node* node) {
 
 }  // anonymous namespace
 
-ThemePainter::ThemePainter() {}
+ThemePainter::ThemePainter() = default;
 
 bool ThemePainter::Paint(const LayoutObject& o,
                          const PaintInfo& paint_info,
@@ -333,7 +333,8 @@ void ThemePainter::PaintSliderTicks(const LayoutObject& o,
       tick_rect.SetX(tick_position);
     else
       tick_rect.SetY(tick_position);
-    paint_info.context.FillRect(tick_rect, o.ResolveColor(CSSPropertyColor));
+    paint_info.context.FillRect(tick_rect,
+                                o.ResolveColor(GetCSSPropertyColor()));
   }
 }
 

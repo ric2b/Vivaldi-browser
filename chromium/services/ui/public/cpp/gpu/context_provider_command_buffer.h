@@ -17,8 +17,9 @@
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/common/scheduling_priority.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "services/ui/public/cpp/gpu/command_buffer_metrics.h"
@@ -29,11 +30,15 @@ namespace gpu {
 class CommandBufferProxyImpl;
 class GpuChannelHost;
 struct GpuFeatureInfo;
+class GpuMemoryBufferManager;
 class TransferBuffer;
 namespace gles2 {
 class GLES2CmdHelper;
 class GLES2Implementation;
 class GLES2TraceImplementation;
+}
+namespace raster {
+class RasterImplementationGLES;
 }
 }
 
@@ -43,14 +48,17 @@ class GrContextForGLES2Interface;
 
 namespace ui {
 
-// Implementation of viz::ContextProvider that provides a GL implementation over
-// command buffer to the GPU process.
+// Implementation of viz::ContextProvider that provides a GL implementation
+// over command buffer to the GPU process.
 class ContextProviderCommandBuffer
-    : public viz::ContextProvider,
+    : public base::RefCountedThreadSafe<ContextProviderCommandBuffer>,
+      public viz::ContextProvider,
+      public viz::RasterContextProvider,
       public base::trace_event::MemoryDumpProvider {
  public:
   ContextProviderCommandBuffer(
       scoped_refptr<gpu::GpuChannelHost> channel,
+      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       int32_t stream_id,
       gpu::SchedulingPriority stream_priority,
       gpu::SurfaceHandle surface_handle,
@@ -58,7 +66,7 @@ class ContextProviderCommandBuffer
       bool automatic_flushes,
       bool support_locking,
       const gpu::SharedMemoryLimits& memory_limits,
-      const gpu::gles2::ContextCreationAttribHelper& attributes,
+      const gpu::ContextCreationAttribs& attributes,
       ContextProviderCommandBuffer* shared_context_provider,
       command_buffer_metrics::ContextType type);
 
@@ -67,9 +75,12 @@ class ContextProviderCommandBuffer
   // on the default framebuffer.
   uint32_t GetCopyTextureInternalFormat();
 
-  // viz::ContextProvider implementation.
+  // viz::ContextProvider / viz::RasterContextProvider implementation.
+  void AddRef() const override;
+  void Release() const override;
   gpu::ContextResult BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
+  gpu::raster::RasterInterface* RasterInterface() override;
   gpu::ContextSupport* ContextSupport() override;
   class GrContext* GrContext() override;
   viz::ContextCacheController* CacheController() override;
@@ -91,6 +102,7 @@ class ContextProviderCommandBuffer
       scoped_refptr<base::SingleThreadTaskRunner> default_task_runner);
 
  protected:
+  friend class base::RefCountedThreadSafe<ContextProviderCommandBuffer>;
   ~ContextProviderCommandBuffer() override;
 
   void OnLostContext();
@@ -129,11 +141,12 @@ class ContextProviderCommandBuffer
   const bool automatic_flushes_;
   const bool support_locking_;
   const gpu::SharedMemoryLimits memory_limits_;
-  const gpu::gles2::ContextCreationAttribHelper attributes_;
+  const gpu::ContextCreationAttribs attributes_;
   const command_buffer_metrics::ContextType context_type_;
 
   scoped_refptr<SharedProviders> shared_providers_;
   scoped_refptr<gpu::GpuChannelHost> channel_;
+  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   scoped_refptr<base::SingleThreadTaskRunner> default_task_runner_;
 
   base::Lock context_lock_;  // Referenced by command_buffer_.
@@ -142,6 +155,7 @@ class ContextProviderCommandBuffer
   std::unique_ptr<gpu::TransferBuffer> transfer_buffer_;
   std::unique_ptr<gpu::gles2::GLES2Implementation> gles2_impl_;
   std::unique_ptr<gpu::gles2::GLES2TraceImplementation> trace_impl_;
+  std::unique_ptr<gpu::raster::RasterImplementationGLES> raster_impl_;
   std::unique_ptr<skia_bindings::GrContextForGLES2Interface> gr_context_;
   std::unique_ptr<viz::ContextCacheController> cache_controller_;
 

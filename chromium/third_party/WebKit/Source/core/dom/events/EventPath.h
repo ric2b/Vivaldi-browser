@@ -80,6 +80,7 @@ class CORE_EXPORT EventPath final
   void AdjustForTouchEvent(const TouchEvent&);
 
   bool DisabledFormControlExistsInPath() const;
+  bool HasEventListenersInPath(const AtomicString& event_type) const;
 
   NodeEventContext& TopNodeEventContext();
 
@@ -92,7 +93,7 @@ class CORE_EXPORT EventPath final
   }
 
  private:
-  EventPath();
+  EventPath() = delete;
 
   void Initialize();
   void CalculatePath();

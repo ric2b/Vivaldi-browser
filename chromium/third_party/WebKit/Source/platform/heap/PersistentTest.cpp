@@ -8,6 +8,7 @@
 #include "platform/CrossThreadFunctional.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/HeapTestUtilities.h"
+#include "platform/wtf/Functional.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -23,9 +24,9 @@ class Receiver : public GarbageCollected<Receiver> {
 TEST(PersistentTest, BindCancellation) {
   Receiver* receiver = new Receiver;
   int counter = 0;
-  WTF::RepeatingClosure function =
-      WTF::Bind(&Receiver::Increment, WrapWeakPersistent(receiver),
-                WTF::Unretained(&counter));
+  base::RepeatingClosure function =
+      WTF::BindRepeating(&Receiver::Increment, WrapWeakPersistent(receiver),
+                         WTF::Unretained(&counter));
 
   function.Run();
   EXPECT_EQ(1, counter);

@@ -7,11 +7,12 @@
 
 #include "base/feature_list.h"
 
-// Feature to choose whether the toolbar uses UIViewPropertyAnimators.
-extern const base::Feature kPropertyAnimationsToolbar;
-
 // Feature to choose whether to use the clean Toolbar stack or
 // WebToolbarController.
 extern const base::Feature kCleanToolbar;
+
+// Feature to choose whether to use the memex prototype tab switcher or the
+// regular native tab switcher.
+extern const base::Feature kMemexTabSwitcher;
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLBAR_TOOLBAR_CONTROLLER_BASE_FEATURE_H_

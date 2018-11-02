@@ -67,7 +67,10 @@ class NET_EXPORT NetworkErrorLoggingService
 
   void OnNetworkError(const ErrorDetails& details) override;
 
-  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
+  void RemoveBrowsingData(
+      const base::RepeatingCallback<bool(const GURL&)>& origin_filter) override;
+
+  void SetTickClockForTesting(base::TickClock* tick_clock);
 
  private:
   // NEL Policy set by an origin.
@@ -113,7 +116,7 @@ class NET_EXPORT NetworkErrorLoggingService
       const std::string& type,
       const ErrorDetails& details) const;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
+  base::TickClock* tick_clock_;
 
   // Unowned.
   ReportingService* reporting_service_;

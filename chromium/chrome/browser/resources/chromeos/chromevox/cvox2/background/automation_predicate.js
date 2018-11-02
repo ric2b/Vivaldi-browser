@@ -95,7 +95,8 @@ AutomationPredicate.button = function(node) {
  * @return {boolean}
  */
 AutomationPredicate.editText = function(node) {
-  return node.state.editable && node.parent && !node.parent.state.editable;
+  return node.role == Role.TEXT_FIELD ||
+      (node.state.editable && node.parent && !node.parent.state.editable);
 };
 
 /** @type {AutomationPredicate.Unary} */
@@ -144,7 +145,7 @@ AutomationPredicate.landmark = AutomationPredicate.roles([
  * @return {boolean}
  */
 AutomationPredicate.visitedLink = function(node) {
-  return node.state.visited;
+  return node.state[State.VISITED];
 };
 
 /**
@@ -224,11 +225,20 @@ AutomationPredicate.object = function(node) {
   if (node.name && node.name.length > constants.OBJECT_MAX_CHARCOUNT)
     return false;
 
-  return node.state.focusable ||
-      (AutomationPredicate.leafOrStaticText(node) &&
-       (/\S+/.test(node.name) ||
-        (node.role != Role.LINE_BREAK && node.role != Role.STATIC_TEXT &&
-         node.role != Role.INLINE_TEXT_BOX)));
+  // Given no other information, ChromeVox wants to visit focusable
+  // (e.g. tabindex=0) nodes only when it has a name or is a control.
+  if (node.state.focusable &&
+      (node.name || node.state[State.EDITABLE] ||
+       AutomationPredicate.formField(node)))
+    return true;
+
+  // Otherwise, leaf or static text nodes that don't contain only whitespace
+  // should be visited with the exception of non-text only nodes. This covers
+  // cases where an author might make a link with a name of ' '.
+  return AutomationPredicate.leafOrStaticText(node) &&
+      (/\S+/.test(node.name) ||
+       (node.role != Role.LINE_BREAK && node.role != Role.STATIC_TEXT &&
+        node.role != Role.INLINE_TEXT_BOX));
 };
 
 /**
@@ -319,12 +329,14 @@ AutomationPredicate.root = function(node) {
       return node.root.role == Role.DESKTOP;
     case Role.ROOT_WEB_AREA:
       if (node.parent && node.parent.role == Role.WEB_VIEW &&
-          !node.parent.state[chrome.automation.StateType.FOCUSED]) {
+          !node.parent.state[State.FOCUSED]) {
         // If parent web view is not focused, we should allow this root web area
         // to be crossed when performing traversals up the ancestry chain.
         return false;
       }
-      return !node.parent || node.parent.root.role == Role.DESKTOP;
+      return !node.parent || !node.parent.root ||
+          (node.parent.root.role == Role.DESKTOP &&
+           node.parent.role == Role.WEB_VIEW);
     default:
       return false;
   }
@@ -489,6 +501,15 @@ AutomationPredicate.supportsImageData =
 AutomationPredicate.contextualBraille = function(node) {
   return node.parent != null && node.parent.role == Role.ROW &&
       AutomationPredicate.cellLike(node);
+};
+
+/**
+ * Matches against a node that handles multi line key commands.
+ * @param {!AutomationNode} node
+ * @return {boolean}
+ */
+AutomationPredicate.multiline = function(node) {
+  return node.state[State.MULTILINE] || node.state[State.RICHLY_EDITABLE];
 };
 
 });  // goog.scope

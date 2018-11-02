@@ -12,6 +12,7 @@
 #include "ui/aura/window_observer.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/text_input_type.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/keyboard/container_behavior.h"
@@ -20,6 +21,7 @@
 #include "ui/keyboard/keyboard_export.h"
 #include "ui/keyboard/keyboard_layout_delegate.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/notification_manager.h"
 
 namespace aura {
 class Window;
@@ -144,6 +146,10 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // region of the screen, an empty rectangle will get returned.
   const gfx::Rect GetWorkspaceObscuringBounds() const;
 
+  // Returns the current bounds that affect the window layout of the various
+  // lock screens.
+  const gfx::Rect GetKeyboardLockScreenOffsetBounds() const;
+
   KeyboardControllerState GetStateForTest() const { return state_; }
 
   const gfx::Rect AdjustSetBoundsRequest(
@@ -156,8 +162,7 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
 
   // Handle mouse and touch events on the keyboard. The effects of this method
   // will not stop propagation to the keyboard extension.
-  void HandlePointerEvent(bool isMouseButtonPressed,
-                          const gfx::Vector2d& kb_scoped_location);
+  void HandlePointerEvent(const ui::LocatedEvent& event);
 
   // Moves an already loaded keyboard.
   void MoveKeyboard(const gfx::Rect new_bounds);
@@ -264,6 +269,8 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   KeyboardControllerState state_;
 
   ContainerType enqueued_container_type_;
+
+  NotificationManager notification_manager_;
 
   static KeyboardController* instance_;
 

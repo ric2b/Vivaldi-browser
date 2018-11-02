@@ -51,7 +51,7 @@ namespace blink {
 IDBCursor* IDBCursor::Create(std::unique_ptr<WebIDBCursor> backend,
                              WebIDBCursorDirection direction,
                              IDBRequest* request,
-                             IDBAny* source,
+                             const Source& source,
                              IDBTransaction* transaction) {
   return new IDBCursor(std::move(backend), direction, request, source,
                        transaction);
@@ -60,7 +60,7 @@ IDBCursor* IDBCursor::Create(std::unique_ptr<WebIDBCursor> backend,
 IDBCursor::IDBCursor(std::unique_ptr<WebIDBCursor> backend,
                      WebIDBCursorDirection direction,
                      IDBRequest* request,
-                     IDBAny* source,
+                     const Source& source,
                      IDBTransaction* transaction)
     : backend_(std::move(backend)),
       request_(request),
@@ -69,19 +69,17 @@ IDBCursor::IDBCursor(std::unique_ptr<WebIDBCursor> backend,
       transaction_(transaction) {
   DCHECK(backend_);
   DCHECK(request_);
-  DCHECK(source_->GetType() == IDBAny::kIDBObjectStoreType ||
-         source_->GetType() == IDBAny::kIDBIndexType);
+  DCHECK(!source_.IsNull());
   DCHECK(transaction_);
 }
 
-IDBCursor::~IDBCursor() {}
+IDBCursor::~IDBCursor() = default;
 
 void IDBCursor::Trace(blink::Visitor* visitor) {
   visitor->Trace(request_);
   visitor->Trace(source_);
   visitor->Trace(transaction_);
-  visitor->Trace(key_);
-  visitor->Trace(primary_key_);
+  visitor->Trace(value_);
   ScriptWrappable::Trace(visitor);
 }
 
@@ -132,9 +130,9 @@ IDBRequest* IDBCursor::update(ScriptState* script_state,
   }
 
   IDBObjectStore* object_store = EffectiveObjectStore();
-  return object_store->put(script_state, kWebIDBPutModeCursorUpdate,
-                           IDBAny::Create(this), value, primary_key_,
-                           exception_state);
+  return object_store->DoPut(script_state, kWebIDBPutModeCursorUpdate,
+                             IDBRequest::Source::FromIDBCursor(this), value,
+                             IdbPrimaryKey(), exception_state);
 }
 
 void IDBCursor::advance(unsigned count, ExceptionState& exception_state) {
@@ -190,10 +188,11 @@ void IDBCursor::Continue(ScriptState* script_state,
     return;
   }
 
-  IDBKey* key = key_value.IsUndefined() || key_value.IsNull()
-                    ? nullptr
-                    : ScriptValue::To<IDBKey*>(script_state->GetIsolate(),
-                                               key_value, exception_state);
+  std::unique_ptr<IDBKey> key =
+      key_value.IsUndefined() || key_value.IsNull()
+          ? nullptr
+          : ScriptValue::To<std::unique_ptr<IDBKey>>(
+                script_state->GetIsolate(), key_value, exception_state);
   if (exception_state.HadException())
     return;
   if (key && !key->IsValid()) {
@@ -201,7 +200,7 @@ void IDBCursor::Continue(ScriptState* script_state,
                                       IDBDatabase::kNotValidKeyErrorMessage);
     return;
   }
-  Continue(key, nullptr, std::move(metrics), exception_state);
+  Continue(std::move(key), nullptr, std::move(metrics), exception_state);
 }
 
 void IDBCursor::continuePrimaryKey(ScriptState* script_state,
@@ -223,7 +222,7 @@ void IDBCursor::continuePrimaryKey(ScriptState* script_state,
     return;
   }
 
-  if (source_->GetType() != IDBAny::kIDBIndexType) {
+  if (!source_.IsIDBIndex()) {
     exception_state.ThrowDOMException(kInvalidAccessError,
                                       "The cursor's source is not an index.");
     return;
@@ -242,8 +241,8 @@ void IDBCursor::continuePrimaryKey(ScriptState* script_state,
     return;
   }
 
-  IDBKey* key = ScriptValue::To<IDBKey*>(script_state->GetIsolate(), key_value,
-                                         exception_state);
+  std::unique_ptr<IDBKey> key = ScriptValue::To<std::unique_ptr<IDBKey>>(
+      script_state->GetIsolate(), key_value, exception_state);
   if (exception_state.HadException())
     return;
   if (!key->IsValid()) {
@@ -252,8 +251,9 @@ void IDBCursor::continuePrimaryKey(ScriptState* script_state,
     return;
   }
 
-  IDBKey* primary_key = ScriptValue::To<IDBKey*>(
-      script_state->GetIsolate(), primary_key_value, exception_state);
+  std::unique_ptr<IDBKey> primary_key =
+      ScriptValue::To<std::unique_ptr<IDBKey>>(
+          script_state->GetIsolate(), primary_key_value, exception_state);
   if (exception_state.HadException())
     return;
   if (!primary_key->IsValid()) {
@@ -262,11 +262,12 @@ void IDBCursor::continuePrimaryKey(ScriptState* script_state,
     return;
   }
 
-  Continue(key, primary_key, std::move(metrics), exception_state);
+  Continue(std::move(key), std::move(primary_key), std::move(metrics),
+           exception_state);
 }
 
-void IDBCursor::Continue(IDBKey* key,
-                         IDBKey* primary_key,
+void IDBCursor::Continue(std::unique_ptr<IDBKey> key,
+                         std::unique_ptr<IDBKey> primary_key,
                          IDBRequest::AsyncTraceState metrics,
                          ExceptionState& exception_state) {
   DCHECK(transaction_->IsActive());
@@ -274,13 +275,15 @@ void IDBCursor::Continue(IDBKey* key,
   DCHECK(!IsDeleted());
   DCHECK(!primary_key || (key && primary_key));
 
+  const IDBKey* current_primary_key = IdbPrimaryKey();
+
   if (key) {
     DCHECK(key_);
     if (direction_ == kWebIDBCursorDirectionNext ||
         direction_ == kWebIDBCursorDirectionNextNoDuplicate) {
-      const bool ok =
-          key_->IsLessThan(key) || (primary_key && key_->IsEqual(key) &&
-                                    primary_key_->IsLessThan(primary_key));
+      const bool ok = key_->IsLessThan(key.get()) ||
+                      (primary_key && key_->IsEqual(key.get()) &&
+                       current_primary_key->IsLessThan(primary_key.get()));
       if (!ok) {
         exception_state.ThrowDOMException(
             kDataError,
@@ -289,9 +292,9 @@ void IDBCursor::Continue(IDBKey* key,
       }
 
     } else {
-      const bool ok = key->IsLessThan(key_.Get()) ||
-                      (primary_key && key->IsEqual(key_.Get()) &&
-                       primary_key->IsLessThan(primary_key_.Get()));
+      const bool ok = key->IsLessThan(key_.get()) ||
+                      (primary_key && key->IsEqual(key_.get()) &&
+                       primary_key->IsLessThan(current_primary_key));
       if (!ok) {
         exception_state.ThrowDOMException(kDataError,
                                           "The parameter is greater than or "
@@ -307,7 +310,7 @@ void IDBCursor::Continue(IDBKey* key,
   request_->SetPendingCursor(this);
   request_->AssignNewMetrics(std::move(metrics));
   got_value_ = false;
-  backend_->Continue(key, primary_key,
+  backend_->Continue(WebIDBKeyView(key.get()), WebIDBKeyView(primary_key.get()),
                      request_->CreateWebCallbacks().release());
 }
 
@@ -347,15 +350,11 @@ IDBRequest* IDBCursor::Delete(ScriptState* script_state,
     return nullptr;
   }
 
-  IDBKeyRange* key_range = IDBKeyRange::only(primary_key_, exception_state);
-  DCHECK(!exception_state.HadException());
-
-  IDBRequest* request =
-      IDBRequest::Create(script_state, IDBAny::Create(this), transaction_.Get(),
-                         std::move(metrics));
-  transaction_->BackendDB()->DeleteRange(
-      transaction_->Id(), EffectiveObjectStore()->Id(), key_range,
-      request->CreateWebCallbacks().release());
+  IDBRequest* request = IDBRequest::Create(
+      script_state, this, transaction_.Get(), std::move(metrics));
+  transaction_->BackendDB()->Delete(
+      transaction_->Id(), EffectiveObjectStore()->Id(),
+      WebIDBKeyView(IdbPrimaryKey()), request->CreateWebCallbacks().release());
   return request;
 }
 
@@ -372,31 +371,43 @@ void IDBCursor::Close() {
 
 ScriptValue IDBCursor::key(ScriptState* script_state) {
   key_dirty_ = false;
-  return ScriptValue::From(script_state, key_);
+  return ScriptValue::From(script_state, key_.get());
 }
 
 ScriptValue IDBCursor::primaryKey(ScriptState* script_state) {
   primary_key_dirty_ = false;
-  return ScriptValue::From(script_state, primary_key_);
+  const IDBKey* primary_key = primary_key_unless_injected_.get();
+  if (!primary_key) {
+#if DCHECK_IS_ON()
+    DCHECK(value_has_injected_primary_key_);
+
+    IDBObjectStore* object_store = EffectiveObjectStore();
+    DCHECK(object_store->autoIncrement() &&
+           !object_store->IdbKeyPath().IsNull());
+#endif  // DCHECK_IS_ON()
+
+    primary_key = value_->Value()->PrimaryKey();
+  }
+  return ScriptValue::From(script_state, primary_key);
 }
 
 ScriptValue IDBCursor::value(ScriptState* script_state) {
   DCHECK(IsCursorWithValue());
 
-  IDBObjectStore* object_store = EffectiveObjectStore();
   IDBAny* value;
-  if (!value_) {
-    value = IDBAny::CreateUndefined();
-  } else if (object_store->autoIncrement() &&
-             !object_store->IdbKeyPath().IsNull()) {
-    scoped_refptr<IDBValue> idb_value = IDBValue::Create(
-        value_.get(), primary_key_, object_store->IdbKeyPath());
+  if (value_) {
+    value = value_;
 #if DCHECK_IS_ON()
-    AssertPrimaryKeyValidOrInjectable(script_state, idb_value.get());
+    if (value_has_injected_primary_key_) {
+      IDBObjectStore* object_store = EffectiveObjectStore();
+      DCHECK(object_store->autoIncrement() &&
+             !object_store->IdbKeyPath().IsNull());
+      AssertPrimaryKeyValidOrInjectable(script_state, value_->Value());
+    }
 #endif  // DCHECK_IS_ON()
-    value = IDBAny::Create(std::move(idb_value));
+
   } else {
-    value = IDBAny::Create(value_);
+    value = IDBAny::CreateUndefined();
   }
 
   value_dirty_ = false;
@@ -404,37 +415,66 @@ ScriptValue IDBCursor::value(ScriptState* script_state) {
   return script_value;
 }
 
-ScriptValue IDBCursor::source(ScriptState* script_state) const {
-  return ScriptValue::From(script_state, source_);
+void IDBCursor::source(Source& source) const {
+  source = source_;
 }
 
-void IDBCursor::SetValueReady(IDBKey* key,
-                              IDBKey* primary_key,
-                              scoped_refptr<IDBValue> value) {
-  key_ = key;
+void IDBCursor::SetValueReady(std::unique_ptr<IDBKey> key,
+                              std::unique_ptr<IDBKey> primary_key,
+                              std::unique_ptr<IDBValue> value) {
+  key_ = std::move(key);
   key_dirty_ = true;
 
-  primary_key_ = primary_key;
+  primary_key_unless_injected_ = std::move(primary_key);
   primary_key_dirty_ = true;
 
-  if (IsCursorWithValue()) {
-    value_ = std::move(value);
-    value_dirty_ = true;
+  got_value_ = true;
+
+  if (!IsCursorWithValue())
+    return;
+
+  value_dirty_ = true;
+#if DCHECK_IS_ON()
+  value_has_injected_primary_key_ = false;
+#endif  // DCHECK_IS_ON()
+
+  if (!value) {
+    value_ = nullptr;
+    return;
   }
 
-  got_value_ = true;
+  IDBObjectStore* object_store = EffectiveObjectStore();
+  if (object_store->autoIncrement() && !object_store->IdbKeyPath().IsNull()) {
+    value->SetInjectedPrimaryKey(std::move(primary_key_unless_injected_),
+                                 object_store->IdbKeyPath());
+#if DCHECK_IS_ON()
+    value_has_injected_primary_key_ = true;
+#endif  // DCHECK_IS_ON()
+  }
+
+  value_ = IDBAny::Create(std::move(value));
+}
+
+const IDBKey* IDBCursor::IdbPrimaryKey() const {
+  if (primary_key_unless_injected_ || !value_)
+    return primary_key_unless_injected_.get();
+
+#if DCHECK_IS_ON()
+  DCHECK(value_has_injected_primary_key_);
+#endif  // DCHECK_IS_ON()
+  return value_->Value()->PrimaryKey();
 }
 
 IDBObjectStore* IDBCursor::EffectiveObjectStore() const {
-  if (source_->GetType() == IDBAny::kIDBObjectStoreType)
-    return source_->IdbObjectStore();
-  return source_->IdbIndex()->objectStore();
+  if (source_.IsIDBObjectStore())
+    return source_.GetAsIDBObjectStore();
+  return source_.GetAsIDBIndex()->objectStore();
 }
 
 bool IDBCursor::IsDeleted() const {
-  if (source_->GetType() == IDBAny::kIDBObjectStoreType)
-    return source_->IdbObjectStore()->IsDeleted();
-  return source_->IdbIndex()->IsDeleted();
+  if (source_.IsIDBObjectStore())
+    return source_.GetAsIDBObjectStore()->IsDeleted();
+  return source_.GetAsIDBIndex()->IsDeleted();
 }
 
 WebIDBCursorDirection IDBCursor::StringToDirection(

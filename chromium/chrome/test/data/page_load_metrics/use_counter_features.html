@@ -2,6 +2,7 @@
   <head><title>UseCounter Features Test</title></head>
   <body>
     <div id="div"></div>
+    <link href="data:text/css,#foo { color: red; }" rel="stylesheet">
     <p id="para">TEST</p>
   <script type="text/javascript">
   for (var i = 0; i < 3; i++) {
@@ -10,6 +11,7 @@
         { transform: 'translateY(-300px)' }
     ]);
     document.getElementById("para").firstChild.wholeText;
+    navigator.vibrate(10);
   }
   </script>
   </body>

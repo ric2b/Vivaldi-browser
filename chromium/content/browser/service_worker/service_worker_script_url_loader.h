@@ -8,11 +8,11 @@
 #include "base/macros.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/content_export.h"
-#include "content/public/common/resource_request.h"
-#include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/net_adapters.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/interfaces/url_loader.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -45,33 +45,36 @@ struct HttpResponseInfoIOBuffer;
 // worker. If the script is identical, the load succeeds but no script is
 // written, and ServiceWorkerVersion is told to terminate startup.
 class CONTENT_EXPORT ServiceWorkerScriptURLLoader
-    : public mojom::URLLoader,
-      public mojom::URLLoaderClient {
+    : public network::mojom::URLLoader,
+      public network::mojom::URLLoaderClient {
  public:
   ServiceWorkerScriptURLLoader(
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
-      const ResourceRequest& resource_request,
-      mojom::URLLoaderClientPtr client,
+      const network::ResourceRequest& resource_request,
+      network::mojom::URLLoaderClientPtr client,
       scoped_refptr<ServiceWorkerVersion> version,
       scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation);
   ~ServiceWorkerScriptURLLoader() override;
 
-  // mojom::URLLoader:
+  // network::mojom::URLLoader:
   void FollowRedirect() override;
+  void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
   void ResumeReadingBodyFromNet() override;
 
-  // mojom::URLLoaderClient for the network load:
-  void OnReceiveResponse(const ResourceResponseHead& response_head,
-                         const base::Optional<net::SSLInfo>& ssl_info,
-                         mojom::DownloadedTempFilePtr downloaded_file) override;
-  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         const ResourceResponseHead& response_head) override;
+  // network::mojom::URLLoaderClient for the network load:
+  void OnReceiveResponse(
+      const network::ResourceResponseHead& response_head,
+      const base::Optional<net::SSLInfo>& ssl_info,
+      network::mojom::DownloadedTempFilePtr downloaded_file) override;
+  void OnReceiveRedirect(
+      const net::RedirectInfo& redirect_info,
+      const network::ResourceResponseHead& response_head) override;
   void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override;
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
@@ -130,14 +133,14 @@ class CONTENT_EXPORT ServiceWorkerScriptURLLoader
   std::unique_ptr<ServiceWorkerCacheWriter> cache_writer_;
 
   // Used for fetching the script from network.
-  mojom::URLLoaderPtr network_loader_;
-  mojo::Binding<mojom::URLLoaderClient> network_client_binding_;
+  network::mojom::URLLoaderPtr network_loader_;
+  mojo::Binding<network::mojom::URLLoaderClient> network_client_binding_;
   mojo::ScopedDataPipeConsumerHandle network_consumer_;
   mojo::SimpleWatcher network_watcher_;
   bool network_load_completed_ = false;
 
   // Used for responding with the fetched script to this loader's client.
-  mojom::URLLoaderClientPtr client_;
+  network::mojom::URLLoaderClientPtr client_;
   mojo::ScopedDataPipeProducerHandle client_producer_;
 
   State state_ = State::kNotStarted;

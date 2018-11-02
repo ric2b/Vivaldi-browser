@@ -5,6 +5,7 @@
 module ash.mojom;
 
 import "ash/public/interfaces/login_user_info.mojom";
+import "components/password_manager/public/interfaces/sync_password_data.mojom";
 import "components/proximity_auth/public/interfaces/auth_type.mojom";
 import "components/signin/public/interfaces/account_id.mojom";
 import "mojo/common/string16.mojom";
@@ -18,6 +19,10 @@ interface LoginScreen {
   // Displays the lock screen. |did_show| is true iff the lock UI was
   // successfully displayed.
   ShowLockScreen() => (bool did_show);
+
+  // Displays the login screen. |did_show| is true iff the login UI was
+  // successfully displayed.
+  ShowLoginScreen() => (bool did_show);
 
   // Requests to show error message in the ash lock screen.
   // TODO(xiaoyinh): login_attempts is probabaly not needed from chrome,
@@ -74,6 +79,9 @@ interface LoginScreen {
   SetDevChannelInfo(string os_version_label_text,
                     string enterprise_info_text,
                     string bluetooth_name);
+
+  // Check if the login/lock screen is ready for a password.
+  IsReadyForPassword() => (bool is_ready);
 };
 
 // Allows ash lock screen to control a client (e.g. Chrome browser). Requests
@@ -86,11 +94,14 @@ interface LoginScreenClient {
   // chrome will request lock screen to show error messages.
   // |account_id|:           The account id of the user we are authenticating.
   // |hashed_password|:      The hashed password of the user.
+  // |sync_password_data|:   Sync password related data used for password
+  //                         reuse detection.
   // |authenticated_by_pin|: True if we are using pin to authenticate.
   //
   // The result will be set to true if auth was successful, false if not.
   AuthenticateUser(signin.mojom.AccountId account_id,
                    string hashed_password,
+                   password_manager.mojom.SyncPasswordData sync_password_data,
                    bool authenticated_by_pin) => (bool auth_success);
 
   // Request to attempt easy unlock in chrome.
@@ -119,6 +130,9 @@ interface LoginScreenClient {
 
   // Close add user screen.
   CancelAddUser();
+
+  // Launches guest mode.
+  LoginAsGuest();
 
   // User with |account_id| has reached maximum incorrect password attempts.
   OnMaxIncorrectPasswordAttempted(signin.mojom.AccountId account_id);

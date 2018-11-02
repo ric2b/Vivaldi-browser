@@ -68,20 +68,22 @@ class ArcMetricsServiceFactory
 }  // namespace
 
 // static
-BrowserContextKeyedServiceFactory* ArcMetricsService::GetFactory() {
-  return ArcMetricsServiceFactory::GetInstance();
-}
-
-// static
 ArcMetricsService* ArcMetricsService::GetForBrowserContext(
     content::BrowserContext* context) {
   return ArcMetricsServiceFactory::GetForBrowserContext(context);
+}
+
+// static
+ArcMetricsService* ArcMetricsService::GetForBrowserContextForTesting(
+    content::BrowserContext* context) {
+  return ArcMetricsServiceFactory::GetForBrowserContextForTesting(context);
 }
 
 ArcMetricsService::ArcMetricsService(content::BrowserContext* context,
                                      ArcBridgeService* bridge_service)
     : arc_bridge_service_(bridge_service),
       process_observer_(this),
+      native_bridge_type_(NativeBridgeType::UNKNOWN),
       weak_ptr_factory_(this) {
   arc_bridge_service_->metrics()->SetHost(this);
   arc_bridge_service_->process()->AddObserver(&process_observer_);
@@ -186,6 +188,33 @@ void ArcMetricsService::ReportBootProgress(
   session_manager_client->GetArcStartTime(base::BindOnce(
       &ArcMetricsService::OnArcStartTimeRetrieved,
       weak_ptr_factory_.GetWeakPtr(), std::move(events), boot_type));
+}
+
+void ArcMetricsService::ReportNativeBridge(
+    mojom::NativeBridgeType native_bridge_type) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  VLOG(2) << "Mojo native bridge type is " << native_bridge_type;
+
+  // Save value for RecordNativeBridgeUMA instead of recording
+  // immediately since it must appear in every metrics interval
+  // uploaded to UMA.
+  switch (native_bridge_type) {
+    case mojom::NativeBridgeType::NONE:
+      native_bridge_type_ = NativeBridgeType::NONE;
+      return;
+    case mojom::NativeBridgeType::HOUDINI:
+      native_bridge_type_ = NativeBridgeType::HOUDINI;
+      return;
+    case mojom::NativeBridgeType::NDK_TRANSLATION:
+      native_bridge_type_ = NativeBridgeType::NDK_TRANSLATION;
+      return;
+  }
+  NOTREACHED() << native_bridge_type;
+}
+
+void ArcMetricsService::RecordNativeBridgeUMA() {
+  UMA_HISTOGRAM_ENUMERATION("Arc.NativeBridge", native_bridge_type_,
+                            NativeBridgeType::COUNT);
 }
 
 ArcMetricsService::ProcessObserver::ProcessObserver(

@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-define("mojo/public/js/lib/interface_endpoint_handle", [
-  "mojo/public/js/interface_types",
-  "timer",
-], function(types, timer) {
+(function() {
+  var internal = mojo.internal;
 
   var AssociationEvent = {
     // The interface has been associated with a message pipe.
@@ -16,7 +14,7 @@ define("mojo/public/js/lib/interface_endpoint_handle", [
 
   function State(interfaceId, associatedGroupController) {
     if (interfaceId === undefined) {
-      interfaceId = types.kInvalidInterfaceId;
+      interfaceId = internal.kInvalidInterfaceId;
     }
 
     this.interfaceId = interfaceId;
@@ -34,20 +32,20 @@ define("mojo/public/js/lib/interface_endpoint_handle", [
 
   State.prototype.isValid = function() {
     return this.pendingAssociation ||
-        types.isValidInterfaceId(this.interfaceId);
+        internal.isValidInterfaceId(this.interfaceId);
   };
 
   State.prototype.close = function(disconnectReason) {
     var cachedGroupController;
     var cachedPeerState;
-    var cachedId = types.kInvalidInterfaceId;
+    var cachedId = internal.kInvalidInterfaceId;
 
     if (!this.pendingAssociation) {
-      if (types.isValidInterfaceId(this.interfaceId)) {
+      if (internal.isValidInterfaceId(this.interfaceId)) {
         cachedGroupController = this.associatedGroupController;
         this.associatedGroupController = null;
         cachedId = this.interfaceId;
-        this.interfaceId = types.kInvalidInterfaceId;
+        this.interfaceId = internal.kInvalidInterfaceId;
       }
     } else {
       this.pendingAssociation = false;
@@ -73,7 +71,7 @@ define("mojo/public/js/lib/interface_endpoint_handle", [
 
   State.prototype.setAssociationEventHandler = function(handler) {
     if (!this.pendingAssociation &&
-        !types.isValidInterfaceId(this.interfaceId)) {
+        !internal.isValidInterfaceId(this.interfaceId)) {
       return;
     }
 
@@ -84,11 +82,11 @@ define("mojo/public/js/lib/interface_endpoint_handle", [
 
     this.associationEventHandler_ = handler;
     if (!this.pendingAssociation) {
-      timer.createOneShot(0, this.runAssociationEventHandler.bind(this,
-          AssociationEvent.ASSOCIATED));
+      setTimeout(this.runAssociationEventHandler.bind(this,
+          AssociationEvent.ASSOCIATED), 0);
     } else if (!this.peerState_) {
-      timer.createOneShot(0, this.runAssociationEventHandler.bind(this,
-          AssociationEvent.PEER_CLOSED_BEFORE_ASSOCIATION));
+      setTimeout(this.runAssociationEventHandler.bind(this,
+          AssociationEvent.PEER_CLOSED_BEFORE_ASSOCIATION), 0);
     }
   };
 
@@ -178,10 +176,7 @@ define("mojo/public/js/lib/interface_endpoint_handle", [
     this.state_ = new State();
   };
 
-  var exports = {};
-  exports.AssociationEvent = AssociationEvent;
-  exports.InterfaceEndpointHandle = InterfaceEndpointHandle;
-  exports.createPairPendingAssociation = createPairPendingAssociation;
-
-  return exports;
-});
+  internal.AssociationEvent = AssociationEvent;
+  internal.InterfaceEndpointHandle = InterfaceEndpointHandle;
+  internal.createPairPendingAssociation = createPairPendingAssociation;
+})();

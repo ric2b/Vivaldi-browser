@@ -23,15 +23,15 @@ class FakeUiElementRenderer : public UiElementRenderer {
                         const gfx::Transform& view_proj_matrix,
                         const gfx::RectF& copy_rect,
                         float opacity,
-                        gfx::SizeF element_size,
+                        const gfx::SizeF& element_size,
                         float corner_radius) override;
 
   void DrawGradientQuad(const gfx::Transform& view_proj_matrix,
                         const SkColor edge_color,
                         const SkColor center_color,
                         float opacity,
-                        gfx::SizeF element_size,
-                        float corner_radius) override;
+                        const gfx::SizeF& element_size,
+                        const CornerRadii& corner_radii) override;
 
   void DrawGradientGridQuad(const gfx::Transform& view_proj_matrix,
                             const SkColor edge_color,
@@ -58,6 +58,9 @@ class FakeUiElementRenderer : public UiElementRenderer {
                   SkColor color,
                   float opacity,
                   float corner_radius) override;
+
+  void DrawStars(float t,
+                 const gfx::Transform& model_view_proj_matrix) override;
 
  private:
   float opacity_ = -1.f;

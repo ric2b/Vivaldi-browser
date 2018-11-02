@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "ash/app_list/model/search_result.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -188,7 +188,7 @@ class WebstoreProviderTest : public InProcessBrowserTest {
   void RunQuery(const std::string& query,
                 const std::string& mock_server_response) {
     mock_server_response_ = mock_server_response;
-    webstore_provider_->Start(false, base::UTF8ToUTF16(query));
+    webstore_provider_->Start(base::UTF8ToUTF16(query));
 
     if (webstore_provider_->query_pending_ && !mock_server_response.empty()) {
       DCHECK(!run_loop_);

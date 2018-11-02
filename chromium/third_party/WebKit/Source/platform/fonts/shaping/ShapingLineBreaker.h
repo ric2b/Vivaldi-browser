@@ -41,7 +41,7 @@ class PLATFORM_EXPORT ShapingLineBreaker final {
                      const LazyLineBreakIterator*,
                      ShapeResultSpacing<String>* = nullptr,
                      const Hyphenation* = nullptr);
-  ~ShapingLineBreaker() {}
+  ~ShapingLineBreaker() = default;
 
   // Represents details of the result of |ShapeLine()|.
   struct Result {
@@ -54,11 +54,6 @@ class PLATFORM_EXPORT ShapingLineBreaker final {
     // The hyphen glyph is not included in the |ShapeResult|, and that appending
     // a hyphen glyph may overflow the specified available space.
     bool is_hyphenated;
-
-    // True if trailing spaces hang over the given |available_space|.
-    // False when the result does not have trailing spaces, or trailing spaces
-    // do not hang.
-    bool has_hanging_spaces;
   };
 
   // Shapes a line of text by finding a valid and appropriate break opportunity

@@ -6,10 +6,10 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -191,7 +191,7 @@ void LocationBarView::Init() {
 
   // Initialize the Omnibox view.
   omnibox_view_ = new OmniboxViewViews(
-      this, base::MakeUnique<ChromeOmniboxClient>(this, profile()),
+      this, std::make_unique<ChromeOmniboxClient>(this, profile()),
       command_updater(), is_popup_mode_, this, font_list);
   omnibox_view_->Init();
   AddChildView(omnibox_view_);
@@ -241,14 +241,17 @@ void LocationBarView::Init() {
   add_icon(zoom_view_ = new ZoomView(delegate_));
   add_icon(manage_passwords_icon_view_ =
                new ManagePasswordsIconViews(command_updater()));
-  add_icon(save_credit_card_icon_view_ =
-               new autofill::SaveCardIconView(command_updater(), browser_));
+  if (browser_)
+    add_icon(save_credit_card_icon_view_ =
+                 new autofill::SaveCardIconView(command_updater(), browser_));
   add_icon(translate_icon_view_ = new TranslateIconView(command_updater()));
 #if defined(OS_CHROMEOS)
-  add_icon(intent_picker_view_ = new IntentPickerView(browser_));
+  if (browser_)
+    add_icon(intent_picker_view_ = new IntentPickerView(browser_));
 #endif
   add_icon(find_bar_icon_ = new FindBarIcon());
-  add_icon(star_view_ = new StarView(command_updater(), browser_));
+  if (browser_)
+    add_icon(star_view_ = new StarView(command_updater(), browser_));
 
   clear_all_button_ = views::CreateVectorImageButton(this);
   clear_all_button_->SetTooltipText(
@@ -451,10 +454,12 @@ gfx::Size LocationBarView::CalculatePreferredSize() const {
 
   // Compute width of omnibox-trailing content.
   int trailing_width = edge_thickness;
-  trailing_width += IncrementalMinimumWidth(star_view_) +
-                    IncrementalMinimumWidth(translate_icon_view_) +
-                    IncrementalMinimumWidth(save_credit_card_icon_view_) +
-                    IncrementalMinimumWidth(manage_passwords_icon_view_) +
+  if (star_view_)
+    trailing_width += IncrementalMinimumWidth(star_view_);
+  trailing_width += IncrementalMinimumWidth(translate_icon_view_);
+  if (save_credit_card_icon_view_)
+    trailing_width += IncrementalMinimumWidth(save_credit_card_icon_view_);
+  trailing_width += IncrementalMinimumWidth(manage_passwords_icon_view_) +
                     IncrementalMinimumWidth(zoom_view_);
 #if defined(OS_CHROMEOS)
   if (intent_picker_view_)
@@ -537,12 +542,15 @@ void LocationBarView::Layout() {
   };
 
 #if defined(OS_CHROMEOS)
-  add_trailing_decoration(intent_picker_view_);
+  if (intent_picker_view_)
+    add_trailing_decoration(intent_picker_view_);
 #endif
-  add_trailing_decoration(star_view_);
+  if (star_view_)
+    add_trailing_decoration(star_view_);
   add_trailing_decoration(find_bar_icon_);
   add_trailing_decoration(translate_icon_view_);
-  add_trailing_decoration(save_credit_card_icon_view_);
+  if (save_credit_card_icon_view_)
+    add_trailing_decoration(save_credit_card_icon_view_);
   add_trailing_decoration(manage_passwords_icon_view_);
   add_trailing_decoration(zoom_view_);
   for (ContentSettingViews::const_reverse_iterator i(
@@ -612,7 +620,7 @@ void LocationBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   } else {
     // This border color will be blended on top of the toolbar (which may use an
     // image in the case of themes).
-    SetBackground(base::MakeUnique<BackgroundWith1PxBorder>(
+    SetBackground(std::make_unique<BackgroundWith1PxBorder>(
         GetColor(BACKGROUND), GetBorderColor()));
   }
   SchedulePaint();
@@ -640,6 +648,7 @@ void LocationBarView::Update(const WebContents* contents) {
       ShouldShowLocationIconText(),
       !contents && ShouldAnimateLocationIconTextVisibilityChange());
   OnChanged();  // NOTE: Calls Layout().
+  last_update_security_level_ = GetToolbarModel()->GetSecurityLevel(false);
 }
 
 void LocationBarView::ResetTabState(WebContents* contents) {
@@ -772,7 +781,7 @@ bool LocationBarView::IsVirtualKeyboardVisible() {
 
 bool LocationBarView::RefreshSaveCreditCardIconView() {
   WebContents* web_contents = GetWebContents();
-  if (!web_contents)
+  if (!save_credit_card_icon_view_ || !web_contents)
     return false;
 
   const bool was_visible = save_credit_card_icon_view_->visible();
@@ -883,10 +892,13 @@ bool LocationBarView::ShouldShowLocationIconText() const {
 }
 
 bool LocationBarView::ShouldAnimateLocationIconTextVisibilityChange() const {
-  // Text for extension URLs should not be animated (their security level is
-  // SecurityLevel::NONE).
   using SecurityLevel = security_state::SecurityLevel;
   SecurityLevel level = GetToolbarModel()->GetSecurityLevel(false);
+  // Do not animate transitions from HTTP_SHOW_WARNING to DANGEROUS, since the
+  // transition can look confusing/messy.
+  if (level == SecurityLevel::DANGEROUS &&
+      last_update_security_level_ == SecurityLevel::HTTP_SHOW_WARNING)
+    return false;
   return level == SecurityLevel::DANGEROUS ||
          level == SecurityLevel::HTTP_SHOW_WARNING;
 }

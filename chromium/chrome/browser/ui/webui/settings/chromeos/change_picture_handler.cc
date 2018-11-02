@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/settings/chromeos/change_picture_handler.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/base64.h"
@@ -164,13 +165,13 @@ void ChangePictureHandler::HandleChooseFile(const base::ListValue* args) {
 void ChangePictureHandler::HandleDiscardPhoto(const base::ListValue* args) {
   DCHECK(args->empty());
   AccessibilityManager::Get()->PlayEarcon(
-      SOUND_OBJECT_DELETE, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_OBJECT_DELETE, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 }
 
 void ChangePictureHandler::HandlePhotoTaken(const base::ListValue* args) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   AccessibilityManager::Get()->PlayEarcon(
-      SOUND_CAMERA_SNAP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_CAMERA_SNAP, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 
   std::string image_url;
   if (!args || args->GetSize() != 1 || !args->GetString(0, &image_url))
@@ -298,10 +299,16 @@ void ChangePictureHandler::HandleSelectImage(const base::ListValue* args) {
   if (image_type == "old") {
     // Previous image (from camera or manually uploaded) re-selected.
     DCHECK(!previous_image_.isNull());
-    std::unique_ptr<user_manager::UserImage> user_image =
-        base::MakeUnique<user_manager::UserImage>(
-            previous_image_, previous_image_bytes_, previous_image_format_);
-    user_image->MarkAsSafe();
+    std::unique_ptr<user_manager::UserImage> user_image;
+    if (previous_image_format_ == user_manager::UserImage::FORMAT_PNG &&
+        previous_image_bytes_) {
+      user_image = std::make_unique<user_manager::UserImage>(
+          previous_image_, previous_image_bytes_, previous_image_format_);
+      user_image->MarkAsSafe();
+    } else {
+      user_image = user_manager::UserImage::CreateAndEncode(
+          previous_image_, user_manager::UserImage::FORMAT_JPEG);
+    }
     user_image_manager->SaveUserImage(std::move(user_image));
 
     UMA_HISTOGRAM_EXACT_LINEAR("UserImage.ChangeChoice",
@@ -375,7 +382,7 @@ void ChangePictureHandler::SetImageFromCamera(
     const gfx::ImageSkia& photo,
     base::RefCountedBytes* photo_bytes) {
   std::unique_ptr<user_manager::UserImage> user_image =
-      base::MakeUnique<user_manager::UserImage>(
+      std::make_unique<user_manager::UserImage>(
           photo, photo_bytes, user_manager::UserImage::FORMAT_PNG);
   user_image->MarkAsSafe();
   ChromeUserManager::Get()

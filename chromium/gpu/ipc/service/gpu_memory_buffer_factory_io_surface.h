@@ -15,7 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "gpu/command_buffer/service/image_factory.h"
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -27,7 +27,7 @@ class GLImage;
 
 namespace gpu {
 
-class GPU_EXPORT GpuMemoryBufferFactoryIOSurface
+class GPU_IPC_SERVICE_EXPORT GpuMemoryBufferFactoryIOSurface
     : public GpuMemoryBufferFactory,
       public ImageFactory {
  public:
@@ -54,11 +54,11 @@ class GPU_EXPORT GpuMemoryBufferFactoryIOSurface
       unsigned internalformat,
       int client_id,
       SurfaceHandle surface_handle) override;
-  scoped_refptr<gl::GLImage> CreateAnonymousImage(
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      gfx::BufferUsage usage,
-      unsigned internalformat) override;
+  scoped_refptr<gl::GLImage> CreateAnonymousImage(const gfx::Size& size,
+                                                  gfx::BufferFormat format,
+                                                  gfx::BufferUsage usage,
+                                                  unsigned internalformat,
+                                                  bool* is_cleared) override;
   unsigned RequiredTextureType() override;
   bool SupportsFormatRGB() override;
 
@@ -71,8 +71,8 @@ class GPU_EXPORT GpuMemoryBufferFactoryIOSurface
   IOSurfaceMap io_surfaces_;
   base::Lock io_surfaces_lock_;
 
-  // Assign unique ids to service side (anonymous) images for memory dumps.
-  int next_service_gmb_id_ = 1;
+  // Assign unique ids to anonymous images to differentiate in memory dumps.
+  int next_anonymous_image_id_ = 1;
 
   DISALLOW_COPY_AND_ASSIGN(GpuMemoryBufferFactoryIOSurface);
 };

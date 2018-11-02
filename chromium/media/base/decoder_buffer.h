@@ -23,8 +23,12 @@
 #include "media/base/timestamp_constants.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
+#include "platform_media/common/feature_toggles.h"
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
+#include "platform_media/renderer/decoders/pass_through_decoder_texture.h"
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
 
 namespace media {
 
@@ -152,7 +156,7 @@ class MEDIA_EXPORT DecoderBuffer
     return data_ == NULL;
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
   std::unique_ptr<AutoReleasedPassThroughDecoderTexture> PassWrappedTexture() {
     return std::move(wrapped_texture_);
   }
@@ -161,7 +165,7 @@ class MEDIA_EXPORT DecoderBuffer
       media::AutoReleasedPassThroughDecoderTexture> wrapped_texture) {
     wrapped_texture_ = std::move(wrapped_texture);
   }
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)  && defined(PLATFORM_MEDIA_HWA)
 
   bool is_key_frame() const {
     DCHECK(!end_of_stream());
@@ -208,9 +212,9 @@ class MEDIA_EXPORT DecoderBuffer
   DiscardPadding discard_padding_;
   bool is_key_frame_;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
   std::unique_ptr<media::AutoReleasedPassThroughDecoderTexture> wrapped_texture_;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(PLATFORM_MEDIA_HWA)
 
   // Constructor helper method for memory allocations.
   void Initialize();

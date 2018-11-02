@@ -147,6 +147,7 @@
 <translation id="2890678560483811744">Plage de pages hors limite</translation>
 <translation id="2902127500170292085">Communication impossible entre l’extension "<ph name="EXTENSION_NAME" />" et cette imprimante. Veuillez vous assurer que l’imprimante est branchée, puis réessayer.</translation>
 <translation id="2904456025988372123">Me demander lorsqu’un site tente de télécharger des fichiers automatiquement après le premier fichier</translation>
+<translation id="2911898792135283060">Générer le mot de passe...</translation>
 <translation id="2913331724188855103">Autoriser les sites à enregistrer et à lire les données des cookies (recommandé)</translation>
 <translation id="2916745397441987255">Rechercher des extensions</translation>
 <translation id="2932883381142163287">Signaler un abus</translation>
@@ -415,7 +416,6 @@
 <translation id="6295158916970320988">Tous les sites</translation>
 <translation id="6295855836753816081">Enregistrement…</translation>
 <translation id="6308937455967653460">Enregistrer le lie&amp;n sous...</translation>
-<translation id="6314335155547195432">Générer un mot de passe</translation>
 <translation id="6326855256003666642">Nombre de keepalive (pour extensions)</translation>
 <translation id="6370021412472292592">Impossible de charger le manifeste.</translation>
 <translation id="6374469231428023295">Réessayer</translation>
@@ -499,7 +499,6 @@
 <translation id="7564847347806291057">Arrêter le processus</translation>
 <translation id="7576690715254076113">Assembler</translation>
 <translation id="7629827748548208700">Onglet : <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Annuler</translation>
 <translation id="7661259717474717992">Autoriser les sites à enregistrer et à lire les données des cookies</translation>
 <translation id="7663719505383602579">Destinataire : <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Installée par votre administrateur</translation>

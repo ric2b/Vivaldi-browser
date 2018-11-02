@@ -18,11 +18,14 @@
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/settings/install_attributes.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/ash/test_wallpaper_controller.h"
+#include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_prefs.h"
@@ -151,7 +154,15 @@ class ChromeArcUtilTest : public testing::Test {
 
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
         std::make_unique<FakeUserManagerWithLocalState>());
+    // Used by FakeChromeUserManager.
     chromeos::WallpaperManager::Initialize();
+    chromeos::DeviceSettingsService::Initialize();
+    chromeos::CrosSettings::Initialize();
+    wallpaper_controller_client_ =
+        std::make_unique<WallpaperControllerClient>();
+    wallpaper_controller_client_->InitForTesting(
+        test_wallpaper_controller_.CreateInterfacePtr());
+
     profile_ = std::make_unique<TestingProfile>();
     profile_->set_profile_name(kTestProfileName);
   }
@@ -161,6 +172,7 @@ class ChromeArcUtilTest : public testing::Test {
     chromeos::WallpaperManager::Shutdown();
     user_manager_enabler_.reset();
     command_line_.reset();
+    wallpaper_controller_client_.reset();
   }
 
   TestingProfile* profile() { return profile_.get(); }
@@ -178,6 +190,8 @@ class ChromeArcUtilTest : public testing::Test {
   }
 
  private:
+  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
+  TestWallpaperController test_wallpaper_controller_;
   std::unique_ptr<base::test::ScopedCommandLine> command_line_;
   content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
@@ -252,7 +266,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_PublicAccount) {
   ScopedLogIn login(GetFakeUserManager(),
                     AccountId::FromUserEmail("public_user@gmail.com"),
                     user_manager::USER_TYPE_PUBLIC_ACCOUNT);
-  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfile(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_ActiveDirectoryEnabled) {
@@ -333,7 +347,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_GuestAccount) {
       {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(),
                     GetFakeUserManager()->GetGuestAccountId());
-  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 // Demo account is interpreted as EphemeralDataUser.
@@ -341,7 +355,7 @@ TEST_F(ChromeArcUtilTest, IsArcAllowedForProfile_DemoAccount) {
   base::CommandLine::ForCurrentProcess()->InitFromArgv(
       {"", "--arc-availability=officially-supported"});
   ScopedLogIn login(GetFakeUserManager(), user_manager::DemoAccountId());
-  EXPECT_FALSE(IsArcAllowedForProfileOnFirstCall(profile()));
+  EXPECT_TRUE(IsArcAllowedForProfileOnFirstCall(profile()));
 }
 
 TEST_F(ChromeArcUtilTest, IsArcCompatibleFileSystemUsedForProfile) {
@@ -612,42 +626,7 @@ TEST_F(ChromeArcUtilTest, IsActiveDirectoryUserForProfile_AD) {
   EXPECT_TRUE(IsActiveDirectoryUserForProfile(profile()));
 }
 
-class ArcMigrationTest : public testing::Test {
- protected:
-  ArcMigrationTest() {}
-  ~ArcMigrationTest() override {}
-
-  void SetUp() override {
-    user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(
-        std::make_unique<FakeUserManagerWithLocalState>());
-    // Used by FakeChromeUserManager.
-    chromeos::WallpaperManager::Initialize();
-    profile_ = std::make_unique<TestingProfile>();
-    profile_->set_profile_name(kTestProfileName);
-  }
-
-  void TearDown() override {
-    profile_.reset();
-    chromeos::WallpaperManager::Shutdown();
-    user_manager_enabler_.reset();
-    command_line_.reset();
-  }
-
-  TestingProfile* profile() { return profile_.get(); }
-
-  chromeos::FakeChromeUserManager* GetFakeUserManager() const {
-    return static_cast<chromeos::FakeChromeUserManager*>(
-        user_manager::UserManager::Get());
-  }
-
- private:
-  std::unique_ptr<base::test::ScopedCommandLine> command_line_;
-  content::TestBrowserThreadBundle thread_bundle_;
-  std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
-  std::unique_ptr<TestingProfile> profile_;
-
-  DISALLOW_COPY_AND_ASSIGN(ArcMigrationTest);
-};
+using ArcMigrationTest = ChromeArcUtilTest;
 
 TEST_F(ArcMigrationTest, IsMigrationAllowedUnmanagedUser) {
   ScopedLogIn login(GetFakeUserManager(),

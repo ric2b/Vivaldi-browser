@@ -12,12 +12,15 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "components/viz/client/client_layer_tree_frame_sink.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "services/ui/public/interfaces/cursor/cursor.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/public/interfaces/window_tree_constants.mojom.h"
 #include "ui/aura/aura_export.h"
+#include "ui/aura/local/layer_tree_frame_sink_local.h"
 #include "ui/aura/mus/mus_types.h"
 #include "ui/aura/mus/window_mus.h"
 #include "ui/aura/window_port.h"
@@ -37,7 +40,7 @@ namespace aura {
 class ClientSurfaceEmbedder;
 class PropertyConverter;
 class Window;
-class WindowPortMusTestApi;
+class WindowPortMusTest;
 class WindowTreeClient;
 class WindowTreeClientPrivate;
 class WindowTreeHostMus;
@@ -83,6 +86,9 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void SetExtendedHitRegionForChildren(const gfx::Insets& mouse_insets,
                                        const gfx::Insets& touch_insets);
 
+  // See description in mojom for details on this.
+  void SetHitTestMask(const base::Optional<gfx::Rect>& rect);
+
   // Embeds a new client in this Window. See WindowTreeClient::Embed() for
   // details on arguments.
   void Embed(ui::mojom::WindowTreeClientPtr client,
@@ -99,7 +105,7 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   viz::FrameSinkId GetFrameSinkId() const override;
 
  private:
-  friend class WindowPortMusTestApi;
+  friend class WindowPortMusTest;
   friend class WindowTreeClient;
   friend class WindowTreeClientPrivate;
   friend class WindowTreeHostMus;
@@ -280,6 +286,8 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   void UpdatePrimarySurfaceId();
   void UpdateClientSurfaceEmbedder();
 
+  void OnSurfaceChanged(const viz::SurfaceInfo& surface_info);
+
   WindowTreeClient* window_tree_client_;
 
   Window* window_ = nullptr;
@@ -294,7 +302,7 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   viz::SurfaceInfo fallback_surface_info_;
 
   viz::LocalSurfaceId local_surface_id_;
-  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  viz::ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
   gfx::Size last_surface_size_in_pixels_;
 
   ui::CursorData cursor_;
@@ -305,7 +313,10 @@ class AURA_EXPORT WindowPortMus : public WindowPort, public WindowMus {
   // When a frame sink is created
   // for a local aura::Window, we need keep a weak ptr of it, so we can update
   // the local surface id when necessary.
-  base::WeakPtr<viz::ClientLayerTreeFrameSink> local_layer_tree_frame_sink_;
+  base::WeakPtr<cc::LayerTreeFrameSink> local_layer_tree_frame_sink_;
+  bool is_frame_sink_id_added_to_compositor_ = false;
+
+  base::WeakPtrFactory<WindowPortMus> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowPortMus);
 };

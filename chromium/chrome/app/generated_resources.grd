@@ -763,7 +763,7 @@ are declared in build/common.gypi.
             Save Password
           </message>
           <message name="IDS_CONTENT_CONTEXT_GENERATEPASSWORD" desc="In Title Case: The name of the Generate Password command in the content area context menu">
-            Generate Password
+            Generate Password...
           </message>
         </if>
       </if>
@@ -785,7 +785,7 @@ are declared in build/common.gypi.
         </message>
       </if>
       <!-- Since Flash is a proper noun we don't have to distinguish between title and non-title case. -->
-      <message name="IDS_CONTENT_CONTEXT_ENABLE_FLASH" desc="The name of the Enable Flash command on the blocked plugin context menu">
+      <message name="IDS_CONTENT_CONTEXT_ENABLE_FLASH" desc="The name of the Enable Flash command on the blocked plugin context menu. 'Flash' is the name of a plugin and should not be translated.">
         Enable Flash
       </message>
 
@@ -1189,6 +1189,9 @@ are declared in build/common.gypi.
           Show all
         </message>
       </if>
+      <message name="IDS_DOWNLOAD_STARTED" desc="Message announced to screenreader users when a download starts.">
+        Download started
+      </message>
       <!-- Download Error Messages-->
       <!-- *_STATUS_*: Short message in the download on the shelf.-->
       <!-- *_DESCRIPTION_*: Corresponding more descriptive message on the download page.-->
@@ -1403,10 +1406,6 @@ are declared in build/common.gypi.
                  desc="The title of a download notification: the current download status is in progress.">
                  Paused <ph name="FILE_NAME">$1<ex>somedocument.pdf</ex></ph>
         </message>
-        <message name="IDS_DOWNLOAD_STATUS_DOWNLOADED_TITLE"
-                 desc="The title of a download notification: the current download status is finished successufully.">
-                 <ph name="FILE_NAME">$1<ex>somedocument.pdf</ex></ph> downloaded
-        </message>
         <message name="IDS_DOWNLOAD_STATUS_DOWNLOAD_FAILED_TITLE"
                  desc="The title of a download notification: the current download status is failed.">
                  <ph name="FILE_NAME">$1<ex>somedocument.pdf</ex></ph> download unsuccessful
@@ -1414,11 +1413,6 @@ are declared in build/common.gypi.
         <message name="IDS_DOWNLOAD_STATUS_COMPLETE_TITLE"
                  desc="The title of a download notification: the current download status is finished successufully.">
                  Download complete
-        </message>
-        <message name="IDS_DOWNLOAD_NOTIFICATION_STATUS"
-                 desc="Size and units downloaded and total, the origin domain, and the current status od download.">
-          <ph name="DOWNLOAD_RECEIVED_AND_TOTAL">$1<ex>54/154 MB</ex></ph>, <ph name="SUB_STATUS_TEXT">$2<ex>24 secs remaining</ex></ph>
-From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         </message>
         <message name="IDS_DOWNLOAD_NOTIFICATION_STATUS_COMPLETED"
                  desc="Size and units downloaded, and the origin domain.">
@@ -2329,13 +2323,13 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
       <message name="IDS_BLOCKED_JAVASCRIPT_LINK" desc="Link to JavaScript section of content blocking management dialog, displayed in bubble when a page tries to run JavaScript.">
         Manage JavaScript blocking...
       </message>
-      <message name="IDS_BLOCKED_PLUGINS_TITLE" desc="Bubble info header text when a page is not allowed to run Flash.">
+      <message name="IDS_BLOCKED_PLUGINS_TITLE" desc="Bubble info header text when a page is not allowed to run Flash. 'Flash' is the name of a plugin and should not be translated.">
         Flash was blocked on this page
       </message>
-      <message name="IDS_BLOCKED_PLUGINS_MESSAGE" desc="Tooltip on the icon when a page is not allowed to run Flash.">
+      <message name="IDS_BLOCKED_PLUGINS_MESSAGE" desc="Tooltip on the icon when a page is not allowed to run Flash. 'Flash' is the name of a plugin and should not be translated.">
         Flash was blocked on this page.
       </message>
-      <message name="IDS_BLOCKED_PLUGINS_LOAD_ALL" desc="Button to load all blocked plugins on a page, displayed in bubble when a page tries to display plugins.">
+      <message name="IDS_BLOCKED_PLUGINS_LOAD_ALL" desc="Button to load all blocked plugins on a page, displayed in bubble when a page tries to display plugins. 'Flash' is the name of a plugin and should not be translated.">
         Run Flash this time
       </message>
       <message name="IDS_BLOCKED_SOUND_TITLE" desc="Tooltip and bubble info header text when a page is not allowed to play sound.">
@@ -3316,23 +3310,20 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         <message name="IDS_UTILITY_PROCESS_MEDIA_GALLERY_UTILITY_NAME" desc="The name of the utility process used for checking media files.">
           Media File Checker
         </message>
-        <message name="IDS_UTILITY_PROCESS_MEDIA_LIBRARY_FILE_CHECKER_NAME" desc="The name of the utility process used for checking media library files.">
-          Media Library File Checker
-        </message>
         <message name="IDS_UTILITY_PROCESS_ZIP_FILE_INSTALLER_NAME" desc="The name of the utility process used for unpacking zip files.">
           Zip File Installer
         </message>
       </if>
       <if expr="enable_print_preview">
-        <message name="IDS_UTILITY_PROCESS_PWG_RASTER_CONVERTOR_NAME" desc="The name of the utility process used for converting PDFs to the PWG Raster format.">
-          PWG Raster Convertor
+        <message name="IDS_UTILITY_PROCESS_PRINTING_SERVICE_NAME" desc="The name of the utility process used for printing conversions.">
+          Printing service
         </message>
       </if>
       <message name="IDS_UTILITY_PROCESS_PATCH_NAME" desc="The name of the utility process used for patching file operations.">
           Patch Service
       </message>
 
-      <!-- Theme preview info bar -->
+      <!-- Theme preview infobar -->
       <message name="IDS_THEME_INSTALL_INFOBAR_LABEL" desc="Text displayed on an infobar when a theme has been installed.">
         Installed theme "<ph name="THEME_NAME">$1<ex>Snowflake Theme</ex></ph>".
       </message>
@@ -4174,9 +4165,6 @@ From <ph name="DOWNLOAD_DOMAIN">$3<ex>example.com</ex></ph>
         <message name="IDS_EXTENSIONS_INFO_LINK" desc="The text for the link that opens the App Info dialog for the extension, displaying permissions and other useful information about the app.">
           Details
         </message>
-        <message name="IDS_EXTENSIONS_SHOW_BUTTON" desc="The text for the Show link.">
-          Show button
-        </message>
         <message name="IDS_EXTENSIONS_LOG_LEVEL_INFO" desc="Alt-text indicating a low severity level for the error icon in the chrome://extensions page.">
           Log
         </message>
@@ -4971,7 +4959,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Click to enable <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph>
       </message>
 
-      <!-- Session Crashed Info Bar/Bubble-->
+      <!-- Session Crashed Infobar/Bubble-->
       <message name="IDS_SESSION_CRASHED_BUBBLE_TITLE" desc="Title of the session crashed bubble view.">
         Restore pages?
       </message>
@@ -4979,25 +4967,25 @@ Keep your key file in a safe place. You will need it to create new versions of y
         usage statistics
       </message>
 
-      <!-- Unimplemented Flags Info Bar-->
+      <!-- Unimplemented Flags Infobar-->
       <message name="IDS_UNIMPLEMENTED_FLAGS_WARNING_MESSAGE" desc="Message shown when a command-line flag is used that is not implemented by this build. [Keep it short so it fits in the infobar.]">
         <ph name="BAD_FLAG">$1<ex>--enable-heap-profiling</ex></ph> is not implemented in this build.
       </message>
 
-      <!-- Bad Flags Info Bar-->
+      <!-- Bad Flags Infobar-->
       <message name="IDS_BAD_FLAGS_WARNING_MESSAGE" desc="Message shown when an unsupported command-line flag is used. [Keep it short so it fits in the infobar.]">
         You are using an unsupported command-line flag: <ph name="BAD_FLAG">$1<ex>--no-sandbox</ex></ph>. Stability and security will suffer.
       </message>
 
-      <!-- Pepper Broker Info bar -->
+      <!-- Pepper Broker Infobar -->
       <if expr="is_android">
         <message name="IDS_PEPPER_BROKER_MESSAGE" desc="Mobile: Message shown when a pepper plugin wants to launch its broker. This message is followed by a 'Learn more' link.">
-          <ph name="PEPPER_PLUGIN_NAME">$1<ex>Shockwave Flash</ex></ph> on <ph name="PEPPER_PLUGIN_DOMAIN">$2<ex>example.com</ex></ph> wants to access your device.
+          <ph name="PEPPER_PLUGIN_NAME">$1<ex>Flash</ex></ph> on <ph name="PEPPER_PLUGIN_DOMAIN">$2<ex>example.com</ex></ph> wants to access your device.
         </message>
       </if>
       <if expr="not is_android">
         <message name="IDS_PEPPER_BROKER_MESSAGE" desc="Message shown when a pepper plugin wants to launch its broker. This message is followed by a 'Learn more' link.">
-          <ph name="PEPPER_PLUGIN_NAME">$1<ex>Shockwave Flash</ex></ph> on <ph name="PEPPER_PLUGIN_DOMAIN">$2<ex>example.com</ex></ph> wants to access your computer.
+          <ph name="PEPPER_PLUGIN_NAME">$1<ex>Flash</ex></ph> on <ph name="PEPPER_PLUGIN_DOMAIN">$2<ex>example.com</ex></ph> wants to access your computer.
         </message>
       </if>
       <message name="IDS_PEPPER_BROKER_ALLOW_BUTTON" desc="Text for the allow button on the pepper broker launch prompt">
@@ -5044,7 +5032,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Manage unsandboxed plugin blocking...
       </message>
 
-      <!-- Blocked Displaying/Running Insecure Content info bar -->
+      <!-- Blocked Displaying/Running Insecure Content bubble -->
       <if expr="use_titlecase">
         <message name="IDS_BLOCKED_DISPLAYING_INSECURE_CONTENT_TITLE" desc="Title of the bubble shown when a message has asked Chrome to display mixed content.">
           Insecure Content Blocked
@@ -5112,7 +5100,7 @@ Keep your key file in a safe place. You will need it to create new versions of y
       <message name="IDS_FLASH_LOADING_MESSAGE" desc="Shown while loading until full list of modules is retrieved">
       Loading...
       </message>
-      <message name="IDS_FLASH_TITLE_MESSAGE" desc="Shown while loading until full list of modules is retrieved">
+      <message name="IDS_FLASH_TITLE_MESSAGE" desc="Shown while loading until full list of modules is retrieved. 'Flash' is the name of a plugin and should not be translated.">
       About Flash
       </message>
 
@@ -5185,7 +5173,12 @@ Keep your key file in a safe place. You will need it to create new versions of y
         Clear input
       </message>
       <if expr="is_android">
-        <message name="IDS_SEARCH_OR_TYPE_URL" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a URL. [CHAR-LIMIT=38]" formatter_data="android_java">
+        <message name="IDS_SEARCH_OR_TYPE_WEB_ADDRESS" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a website. [CHAR-LIMIT=38]" formatter_data="android_java">
+          Search or type web address
+        </message>
+      </if>
+      <if expr="enable_vr">
+        <message name="IDS_SEARCH_OR_TYPE_URL" desc="Prompt to enter text into the text field that will either perform web searches or navigate to a URL. [CHAR-LIMIT=38]">
           Search or type URL
         </message>
       </if>
@@ -5321,24 +5314,44 @@ the Bookmarks menu.">
         Respond to Accessibility Events
       </message>
       <if expr="is_android">
-        <message name="IDS_ACCESSIBILITY_EVENTS_INFOBAR_QUESTION" desc="Question asked on the info bar whenever URL wants to listen to accessibility events, for example if the user has a screen reader or braille device enabled">
-          <ph name="URL">
-            $1<ex>maps.google.com</ex>
-          </ph> wants to respond to accessibility events.
+        <message name="IDS_ACCESSIBILITY_EVENTS_INFOBAR_TEXT" desc="Text requesting permission for a site to listen to accessibility events, for example if the user has a screen reader or braille device enabled">
+          <ph name="URL">$1<ex>maps.google.com</ex></ph> wants to respond to accessibility events.
         </message>
       </if>
 
       <!-- Clipboard permission -->
       <message name="IDS_CLIPBOARD_PERMISSION_FRAGMENT" desc="Permission request shown if the user is visiting a site that wants to read data from the system clipboard. Follows a prompt: 'This site would like to:'">
-        See text and images you copy to the clipboard
+        See text and images copied to the clipboard
       </message>
       <if expr="is_android">
-        <message name="IDS_CLIPBOARD_INFOBAR_QUESTION" desc="Question asked on the info bar whenever URL wants to read data from the system clipboard">
-          <ph name="URL">
-            $1<ex>maps.google.com</ex>
-          </ph> wants to see text and images you copy to the clipboard.
+        <message name="IDS_CLIPBOARD_INFOBAR_TEXT" desc="Text requesting permission for a site to read data from the system clipboard">
+          <ph name="URL">$1<ex>maps.google.com</ex></ph> wants to see text and images copied to the clipboard
         </message>
       </if>
+      <message name="IDS_ALLOWED_CLIPBOARD_TITLE" desc="Title of the info bubble shown when a page has been allowed access to read the contents of the system clipboard.">
+        Clipboard read access allowed
+      </message>
+      <message name="IDS_ALLOWED_CLIPBOARD_MESSAGE" desc="Info bubble message and location bar icon tooltip text shown when a page has been allowed access to read the contents of the system clipboard.">
+        This page can see text and images copied to the clipboard.
+      </message>
+      <message name="IDS_ALLOWED_CLIPBOARD_BLOCK" desc="Radio button to block read access to the clipboard">
+        Always block <ph name="HOST">$1<ex>example.com</ex></ph> from seeing the clipboard
+      </message>
+      <message name="IDS_ALLOWED_CLIPBOARD_NO_ACTION" desc="Radio button to keep allowing read access to the system clipboard">
+        Continue allowing this site to see the clipboard
+      </message>
+      <message name="IDS_BLOCKED_CLIPBOARD_TITLE" desc="Title of the info bubble shown when a page has been denied access to read the contents of the system clipboard.">
+        Clipboard read access denied
+      </message>
+      <message name="IDS_BLOCKED_CLIPBOARD_MESSAGE" desc="Info bubble message and location bar icon tooltip text shown when a page has been denied access to read the system clipboard.">
+        This page has been blocked from seeing text and images copied to the clipboard
+      </message>
+      <message name="IDS_BLOCKED_CLIPBOARD_UNBLOCK" desc="Radio button choice to unblock a site from reading the system clipboard.">
+        Always allow <ph name="HOST">$1<ex>mail.google.com</ex></ph> to see the clipboard
+      </message>
+      <message name="IDS_BLOCKED_CLIPBOARD_NO_ACTION" desc="Radio button choice to continue blocking a site from reading the system clipboard.">
+        Continue blocking this site from seeing the clipboard
+      </message>
 
       <!-- Feature Engagement Tracker strings -->
       <message name="IDS_BOOKMARK_PROMO_0" desc="Text shown on promotional UI appearing next to the Bookmarks button, which encourages users to use it.">
@@ -5399,15 +5412,18 @@ the Bookmarks menu.">
       <message name="IDS_BROWSER_HANGMONITOR_RENDERER_WAIT" desc="The label of the 'wait' button, which exits the dialog without doing anything and continues to wait for the page to become responsive.">
         Wait
       </message>
-
       <if expr="use_titlecase">
-        <message name="IDS_BROWSER_HANGMONITOR_RENDERER_END" desc="The label of the 'exit' button, which stops the unresponsive page.">
-          Exit Page
+        <message name="IDS_BROWSER_HANGMONITOR_RENDERER_END" desc="The label of the 'exit' button, which stops the unresponsive page. If having no explicit # makes the phrasing awkward, feel free to add a # as necessary. [ICU Syntax]">
+          {NUM_PAGES, plural,
+          =1 {Exit Page}
+          other {Exit Pages}}
         </message>
       </if>
       <if expr="not use_titlecase">
-        <message name="IDS_BROWSER_HANGMONITOR_RENDERER_END" desc="The label of the 'exit' button, which stops the unresponsive page.">
-          Exit page
+        <message name="IDS_BROWSER_HANGMONITOR_RENDERER_END" desc="The label of the 'exit' button, which stops the unresponsive page. If having no explicit # makes the phrasing awkward, feel free to add a # as necessary. [ICU Syntax]">
+          {NUM_PAGES, plural,
+          =1 {Exit page}
+          other {Exit pages}}
         </message>
       </if>
       <message name="IDS_BROWSER_HANGMONITOR_PLUGIN_INFOBAR" desc="The text of the infobar notifying the user that a plugin has hung">
@@ -5693,56 +5709,11 @@ the Bookmarks menu.">
         </message>
       </if>
 
-      <!-- MD Feedback Strings -->
-      <message name="IDS_MD_FEEDBACK_DIALOG_TITLE" desc="Text for feedback dialog. This appears in the OS taskbar and the top of the dialog window when the title is shown.">
-        Feedback
-      </message>
-      <message name="IDS_MD_FEEDBACK_HEADING" desc="Header text of the feedback dialog.">
-        Tell us what's happening
-      </message>
-      <message name="IDS_MD_FEEDBACK_OPEN_ENDED_LABEL" desc="Label for the open ended feedback input box that is initially blank. Users can write open ended feedback before submission.">
-        Please enter your feedback here.
-      </message>
-      <message name="IDS_MD_FEEDBACK_URL_LABEL" desc="Label for the text input that may be prepopulated with the URL to be reported. Users are able to modify this text before submission..">
-        URL
-      </message>
-      <message name="IDS_MD_FEEDBACK_USER_EMAIL_LABEL" desc="Label for the text input that may be prepopulated with the user's email. Users are able to modify this text before submission.">
-        Email
-      </message>
-      <message name="IDS_MD_FEEDBACK_CANCEL_BUTTON" desc="Text for Cancel button of the feedback dialog. When clicked, the dialog will close without sending the feedback.">
-        Cancel
-      </message>
-      <message name="IDS_MD_FEEDBACK_SEND_REPORT_BUTTON" desc="Text for Send Report button of the feedback dialog. When clicked, the feedback report will be sent.">
-        Send
-      </message>
-      <message name="IDS_MD_FEEDBACK_SCREENSHOT_LABEL" desc="Label for the checkbox to indicate whether the shown screenshot should be included in the feedback report.">
-        Include this screenshot
-      </message>
-      <message name="IDS_MD_FEEDBACK_SEND_SYSTEM_INFO_LABEL" desc="Label for the checkbox to indicate whether the system info should be included in the feedback report.">
-        Send system information
-      </message>
-      <if expr="_google_chrome">
-        <message name="IDS_MD_FEEDBACK_PRIVACY_NOTE" desc="Text for the privacy note shown on the feedback dialog.">
-          Your Chrome and operating system version will be submitted in addition
-          to any information you choose to include above. If you include your email
-          address, Google may contact you regarding your feedback report. This feedback
-          is used to diagnose problems and help improve Chrome. Any personal information
-          you submit, whether explicitly or incidentally will be protected in
-          accordance with our privacy policies.<ph name="BEGIN_BOLD">&lt;strong&gt;
-          </ph> By submitting this feedback, you agree that Google may use feedback
-          that you provide to improve any Google product or service.
-          <ph name="END_BOLD">&lt;/strong&gt;</ph>
-        </message>
-      </if>
-      <message name="IDS_MD_FEEDBACK_ADDITIONAL_INFO_LABEL" desc="Text for the group label to indicate that some fields are optional.">
-        Additional info (optional)
-      </message>
-
       <!-- Clear Browsing Data -->
       <message name="IDS_CLEAR_BROWSING_DATA_TITLE" desc="Dialog title">
         Clear browsing data
       </message>
-      <message name="IDS_FLASH_PERMISSION_FRAGMENT" desc="Permission asked in the permission bubble when a URL wants to use Flash Plugins on the page. Preceded by the prompt 'This site would like to:'">
+      <message name="IDS_FLASH_PERMISSION_FRAGMENT" desc="Permission asked in the permission bubble when a URL wants to use Flash Plugins on the page. Preceded by the prompt 'This site would like to:'. 'Flash' is the name of a plugin and should not be translated.">
         Run Flash
       </message>
       <message name="IDS_CLEAR_BROWSING_DATA_HISTORY_FOOTER" desc="A text shown at the bottom of the Clear Browsing Data dialog, informing the user that deleting Chrome browsing history will not delete other forms of history stored at Google My Activity.">
@@ -5879,13 +5850,13 @@ I don't think this site should be blocked!
 
       <!-- Automatic updates -->
       <if expr="is_macosx">
-        <message name="IDS_PROMOTE_INFOBAR_TEXT" desc="The text to show in the automatic update setup info bar.  Mac-only.">
+        <message name="IDS_PROMOTE_INFOBAR_TEXT" desc="The text to show in the automatic update setup infobar.  Mac-only.">
           <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> may not be able to keep itself updated.
         </message>
-        <message name="IDS_PROMOTE_INFOBAR_PROMOTE_BUTTON" desc="The 'Set up automatic updates' button in the automatic update setup info bar.  Mac-only.">
+        <message name="IDS_PROMOTE_INFOBAR_PROMOTE_BUTTON" desc="The 'Set up automatic updates' button in the automatic update setup infobar.  Mac-only.">
           Set up automatic updates
         </message>
-        <message name="IDS_PROMOTE_INFOBAR_DONT_ASK_BUTTON" desc="The 'Don't ask again' button in the automatic update setup info bar.  Mac-only.">
+        <message name="IDS_PROMOTE_INFOBAR_DONT_ASK_BUTTON" desc="The 'Don't ask again' button in the automatic update setup infobar.  Mac-only.">
           Don't ask again
         </message>
         <message name="IDS_PROMOTE_AUTHENTICATION_PROMPT" desc="The prompt displayed in the authentication dialog when setting up automatic updates for all users.  The system will add a sentence asking for an administrator's name and password.  Mac-only.">
@@ -5953,41 +5924,46 @@ I don't think this site should be blocked!
       </if>
 
       <!-- Settings reset prompt dialog messages -->
-      <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_SEARCH_ENGINE" desc="The title for the settings reset dialog when the user's search engine setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
-        Restore default search engine?
-      </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_STARTUP_PAGE" desc="The title for the settings reset dialog when the user's startup page setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
-        Restore default startup page?
-      </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_HOMEPAGE" desc="The title for the settings reset dialog when the user's homepage setting has been modified by. The dialog will ask users if they want to restore their modified setting to its original default value.">
-        Restore default homepage?
-      </message>
+      <if expr="not use_titlecase">
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_SEARCH_ENGINE" desc="The title for the settings reset dialog when the user's search engine setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore default search engine?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_STARTUP_PAGE" desc="The title for the settings reset dialog when the user's startup page setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore default startup page?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_HOMEPAGE" desc="The title for the settings reset dialog when the user's homepage setting has been modified by. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore default homepage?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_ACCEPT_BUTTON_LABEL" desc="The settings reset dialog asks users if they want to restore a Chrome setting that has been modified by an unwanted software or extension to its original default value. This text is displayed on the main button in the dialog that, when clicked, will restore the setting.">
+          Restore
+        </message>
+      </if>
+      <if expr="use_titlecase">
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_SEARCH_ENGINE" desc="In Title Case: The title for the settings reset dialog when the user's search engine setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore Default Search Engine?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_STARTUP_PAGE" desc="In Title Case: The title for the settings reset dialog when the user's startup page setting has been modified. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore Default Startup Page?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_TITLE_HOMEPAGE" desc="In Title Case: The title for the settings reset dialog when the user's homepage setting has been modified by. The dialog will ask users if they want to restore their modified setting to its original default value.">
+          Restore Default Homepage?
+        </message>
+        <message name="IDS_SETTINGS_RESET_PROMPT_ACCEPT_BUTTON_LABEL" desc="In Title Case: The settings reset dialog asks users if they want to restore a Chrome setting that has been modified by an unwanted software or extension to its original default value. This text is displayed on the main button in the dialog that, when clicked, will restore the setting.">
+          Restore
+        </message>
+      </if>
+
       <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_SEARCH_ENGINE_NO_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their search engine has been modified, for example by unwanted software or extension, to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default if the user clicks the Restore button.">
         Your search engine was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>.
-      </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_SEARCH_ENGINE_WITH_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their search engine has been modified by an extension to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default value if the user clicks the Restore button.">
-        Your search engine was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>. To disable extensions that change your search engine, click Restore.
       </message>
       <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_STARTUP_PAGE_SINGLE_NO_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their startup page setting has been modified, for example by unwanted software or extension, to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default value if the user clicks the Restore button.">
         Your startup page was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>.
       </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_STARTUP_PAGE_SINGLE_WITH_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their startup page has been modified by an extension to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default value if the user clicks the Restore button.">
-        Your startup page was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>. To disable extensions that change your startup page, click Restore.
-      </message>
       <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_STARTUP_PAGE_MULTIPLE_NO_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their startup page setting has been modified, for example by unwanted software or extension, to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default if the user clicks the Restore button.">
         Your startup pages were changed to include <ph name="URL">$1<ex>www.some-domain.com</ex></ph>.
       </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_STARTUP_PAGE_MULTIPLE_WITH_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their startup page has been modified by an extension to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default if the user clicks the Restore button.">
-        Your startup pages were changed to include <ph name="URL">$1<ex>www.some-domain.com</ex></ph>. To disable extensions that change your startup page, click Restore.
-      </message>
       <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_HOMEPAGE_NO_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their homepage setting has been modified, for example by unwanted software or extension, to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default value if the user clicks the Restore button.">
         Your homepage was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>.
-      </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_EXPLANATION_FOR_HOMEPAGE_WITH_EXTENSIONS" desc="This text is shown in the settings reset dialog to inform the user that their homepagesetting has been modified by an extension to something that they might not want. The value of the setting that is shown in the text is the possibly unwanted setting that will be reset to its original default value if the user clicks the Restore button.">
-        Your homepage page was changed to <ph name="URL">$1<ex>www.some-domain.com</ex></ph>. To disable extensions that change your homepage, click Restore.
-      </message>
-      <message name="IDS_SETTINGS_RESET_PROMPT_ACCEPT_BUTTON_LABEL" desc="The settings reset dialog asks users if they want to restore a Chrome setting that has been modified by an unwanted software or extension to its original default value. This text is displayed on the main button in the dialog that, when clicked, will restore the setting.">
-        Restore
       </message>
 
       <!-- Upgrade bubble messages -->
@@ -6040,6 +6016,9 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_PRINT_PREVIEW_FAILED" desc="Message to display when print preview fails.">
           Print preview failed.
+        </message>
+        <message name="IDS_PRINT_PREVIEW_UNSUPPORTED_CLOUD_PRINTER" desc="Message to display when an unsupported cloud printer is selected.">
+          The selected Google Cloud Print device is no longer supported. Try setting up the printer in your computer's system settings.
         </message>
         <message name="IDS_PRINT_PREVIEW_PRINT_BUTTON" desc="Print button.">
           Print
@@ -6249,6 +6228,9 @@ I don't think this site should be blocked!
         </message>
         <message name="IDS_PRINT_PREVIEW_OFFLINE" desc="Shown when printer is currently offline.">
           Currently offline
+        </message>
+        <message name="IDS_PRINT_PREVIEW_NO_LONGER_SUPPORTED" desc="Shown when printer is no longer supported.">
+          No longer supported.
         </message>
         <message name="IDS_PRINT_PREVIEW_EXTENSION_DESTINATION_ICON_TOOLTIP" desc="Tooltip for the icon shown in print destination list next to print destination provided by an extension.">
           Documents you send to print via <ph name="APP_NAME">$1<ex>A Chrome app</ex></ph> can be read by <ph name="APP_NAME">$1<ex>A Chrome app</ex></ph>.
@@ -6918,8 +6900,8 @@ I don't think this site should be blocked!
       <message name="IDS_AUTOFILL_DIALOG_PLACEHOLDER_EXPIRY_YEAR" desc="The placeholder/label text for credit card expiration year in the card unmask dialog.">
         Year
       </message>
-      <message name="IDS_AUTOFILL_FROM_GOOGLE_ACCOUNT" desc="The name of the Google product that stores user addresses or credit cards in the cloud." formatter_data="android_java">
-        Google Payments
+      <message name="IDS_AUTOFILL_FROM_GOOGLE_ACCOUNT" desc="The name of the Google product that stores user addresses or credit cards in the cloud. This should not be translated." formatter_data="android_java">
+        Google Pay
       </message>
 
       <if expr="not is_linux or chromeos">
@@ -7533,6 +7515,21 @@ I don't think this site should be blocked!
       <message name="IDS_PROFILES_SYNC_SETTINGS_LINK" desc="The link text to the Chrome sync settings page in the avatar menu tutorial card.">
         Settings
       </message>
+      <message name="IDS_PROFILES_DICE_SIGNIN_BUTTON" desc="Button in the profile user menu to sign in and turn on Sync.">
+        Sign in
+      </message>
+      <message name="IDS_PROFILES_DICE_SIGNIN_FIRST_ACCOUNT_BUTTON" desc="Button to sign in and turn on Sync for a specific web account.">
+        Sync to <ph name="ACCOUNT_FULL_NAME">$1<ex>John Doe</ex></ph>
+      </message>
+      <message name="IDS_PROFILES_DICE_SIGNIN_FIRST_ACCOUNT_BUTTON_NO_NAME" desc="Button to sign in and turn on Sync for a web account when the name is empty.">
+        Sync to your account
+      </message>
+      <message name="IDS_PROFILES_DICE_SIGNIN_PROMO" desc="Text describing the benefits of signing in and turning on Sync.">
+        Sign in for a personalized browsing experience, synced across your devices
+      </message>
+      <message name="IDS_PROFILES_DICE_SIGNIN_WITH_ANOTHER_ACCOUNT_BUTTON" desc="Button to sign in and turn on Sync with another web account.">
+        Sync to another account
+      </message>
       <message name="IDS_PROFILES_ACCOUNT_REMOVAL_BUTTON" desc="Text of the ok button on the account removal view in the avatar menu bubble.">
         Remove account
       </message>
@@ -7808,6 +7805,21 @@ I don't think this site should be blocked!
       <message name="IDS_USER_NOT_ALLOWED_BY_POLICY" desc="The error message shown when the user tries to use a profile that is blocked by policy">
         This user has been disabled by your administrator.
       </message>
+      <message name="IDS_OLD_PROFILES_DISABLED_TITLE" desc="The title of the error page shown when the user tries to use an old profile that is disabled by policy">
+        Can't use this profile
+      </message>
+      <message name="IDS_OLD_PROFILES_DISABLED_MESSAGE" desc="The error message shown when the user tries to use an old profile that is disabled by policy">
+        Your administrator has made a system-wide change that disables some old profiles.
+      </message>
+      <message name="IDS_OLD_PROFILES_DISABLED_ADD_PERSON_SUGGESTION" desc="The suggestion that tells the user to create a new profile when the user tries to use an old profile that is disabled by policy">
+        To continue, click OK, then click Add Person to create a new profile for your email address.
+      </message>
+      <message name="IDS_OLD_PROFILES_DISABLED_ADD_PERSON_SUGGESTION_WITH_DOMAIN" desc="The suggestion that tells the user to create a new profile with the domain when the user tries to use an old profile that is disabled by policy">
+        To continue, click OK, then click Add Person to create a new profile for your <ph name="DOMAIN">$1<ex>example.com</ex></ph> email address.
+      </message>
+      <message name="IDS_OLD_PROFILES_DISABLED_REMOVED_OLD_PROFILE" desc="The suggestion that tells the user to delete old profile when the user tries to use an old profile that is disabled by policy">
+        Although you can no longer access your old profile, you can remove it.
+      </message>
       <if expr="is_android">
         <message name="IDS_SYNC_USER_NAME_IN_USE_ERROR" desc="Mobile: An error message shown when a user tries to sign in to sync using a user name that's already in use by another profile.">
           This account is already being used on this device.
@@ -7826,6 +7838,9 @@ I don't think this site should be blocked!
       <message name="IDS_SYNC_CONFIRMATION_TITLE" desc="Title of the sync confirmation dialog in the tab modal signin flow">
         You've signed in and turned on Sync
       </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_TITLE" desc="Title of the sync confirmation dialog in the tab modal signin flow">
+        Get even more from Chrome
+      </message>
 
       <!-- "Chrome sync" is the Google Cloud Based service used for sync. Thus this string resource is set to "Chrome sync" even for Chromium builds. -->
       <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_TITLE" desc="Title of the chrome sync section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
@@ -7834,23 +7849,44 @@ I don't think this site should be blocked!
       <message name="IDS_SYNC_CONFIRMATION_CHROME_SYNC_MESSAGE" desc="Body of the chrome sync section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Your bookmarks, history, passwords, and other settings will be synced to your Google Account so you can use them on all your devices
       </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_CHROME_SYNC_MESSAGE" desc="Body of the chrome sync section of the sync confirmation dialog in the tab modal signin flow">
+        Sync your bookmarks, passwords, and history on all your devices
+      </message>
       <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_TITLE" desc="Title of the personalize services section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Personalize Google services
       </message>
       <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_BODY" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow" formatter_data="android_java">
         Google may use your browsing history to personalize Search, ads, and other Google services
       </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_PERSONALIZE_SERVICES_BODY" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow">
+        Get more personalized experiences, such as better content suggestions and smarter Translate
+      </message>
       <message name="IDS_SYNC_CONFIRMATION_PERSONALIZE_SERVICES_BODY_CHILD_ACCOUNT" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow for child accounts" formatter_data="android_java">
         Google may use your browsing history to personalize Search and other Google services
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_GOOGLE_SERVICES_BODY" desc="Body of the google services section of the sync confirmation dialog in the tab modal signin flow">
+        Bring powerful Google services like spell check and tap to search to Chrome
       </message>
       <message name="IDS_SYNC_CONFIRMATION_SYNC_SETTINGS_LINK_BODY" desc="Label of the section containing the link to go to the sync setting page.">
         Want to manage sync and personalization before they’re turned on? Visit <ph name="BEGIN_LINK">&lt;a id="settingsLink" href="chrome://settings"&gt;</ph>Settings<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>.
       </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_SYNC_SETTINGS_LINK_BODY" desc="Label of the section containing the link to go to the sync setting page.">
+        You can customize what information Google collects in <ph name="BEGIN_LINK">&lt;a id="settingsLink" href="chrome://settings"&gt;</ph>Settings<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph> anytime.
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_SYNC_SETTINGS_DESCRIPTION" desc="Body of the personalize services section of the sync confirmation dialog in the tab modal signin flow for child accounts">
+        Google may use your browsing activity, content on some sites you visit, and other browser interactions to personalize Chrome and other Google services like Translate, Search, and ads.
+      </message>
       <message name="IDS_SYNC_CONFIRMATION_CONFIRM_BUTTON_LABEL" desc="Label of the confirmation button in the sync confirmation dialog of the tab modal signin flow">
         Ok, got it
       </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_CONFIRM_BUTTON_LABEL" desc="Label of the confirmation button in the sync confirmation dialog of the tab modal signin flow">
+        Yes, I'm in
+      </message>
       <message name="IDS_SYNC_CONFIRMATION_UNDO_BUTTON_LABEL" desc="Label of the undo button in the sync confirmation dialog of the tab modal signin flow">
         Undo
+      </message>
+      <message name="IDS_SYNC_CONFIRMATION_DICE_UNDO_BUTTON_LABEL" desc="Label of the undo button in the sync confirmation dialog of the tab modal signin flow">
+        No thanks
       </message>
 
       <!--- Sync Confirmation section of the tab modal signin flow when sync is disabled by policy -->
@@ -7916,25 +7952,25 @@ I don't think this site should be blocked!
         Continue
       </message>
 
-      <message name="IDS_PLUGIN_OUTDATED_PROMPT" desc="Info Bar message when an outdated plugin was disabled">
+      <message name="IDS_PLUGIN_OUTDATED_PROMPT" desc="Infobar message when an outdated plugin was disabled">
         <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph> was blocked because it is out of date.
       </message>
-      <message name="IDS_PLUGIN_ENABLE_TEMPORARILY" desc="Info Bar button to run a blocked outdated plugin">
+      <message name="IDS_PLUGIN_ENABLE_TEMPORARILY" desc="Infobar button to run a blocked outdated plugin">
         Run this time
       </message>
-      <message name="IDS_PLUGIN_CRASHED_PROMPT" desc="Info Bar message to notify about a crashed plugin">
-       <ph name="PLUGIN_NAME">$1<ex>Shockwave</ex> has crashed.</ph>
+      <message name="IDS_PLUGIN_CRASHED_PROMPT" desc="Infobar message to notify about a crashed plugin">
+       <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph> has crashed.
       </message>
       <if expr="is_win">
-        <message name="IDS_PLUGIN_DISCONNECTED_PROMPT" desc="Info Bar message to notify that the channel connecting to a plugin has encountered an error.">
-          <ph name="PLUGIN_NAME">$1<ex>Shockwave</ex> has encountered an error.</ph>
+        <message name="IDS_PLUGIN_DISCONNECTED_PROMPT" desc="Infobar message to notify that the channel connecting to a plugin has encountered an error.">
+          <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph> has encountered an error.
         </message>
       </if>
-      <message name="IDS_RELOAD_PAGE_WITH_PLUGIN" desc="Info Bar button to reload the page where a plugin crashed or disconnected.">
+      <message name="IDS_RELOAD_PAGE_WITH_PLUGIN" desc="Infobar button to reload the page where a plugin crashed or disconnected.">
         Reload
       </message>
-      <message name="IDS_PLUGIN_INITIALIZATION_ERROR_PROMPT" desc="Info Bar message to notify that we couldn't load a plugin">
-        Could not load <ph name="PLUGIN_NAME">$1<ex>Shockwave</ex>.</ph>
+      <message name="IDS_PLUGIN_INITIALIZATION_ERROR_PROMPT" desc="Infobar message to notify that we couldn't load a plugin">
+        Could not load <ph name="PLUGIN_NAME">$1<ex>Flash</ex></ph>.
       </message>
 
       <!-- External Protocol Dialog -->
@@ -8498,13 +8534,22 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <!-- Translate Bubble -->
       <if expr="toolkit_views or is_macosx">
         <if expr="not use_titlecase">
-          <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE" desc="Text to show for the translate bubble label when that page is in specified language and ask if should translate.">
-            Would you like to translate this page?
+          <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_TITLE" desc="Title text for the translate bubble when asking to translate a page.">
+            Do you want to translate this page?
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_NEW" desc="Text to show for the translate bubble label when that page is in specified language and ask if should translate.">
             Do you want Google to translate this page from <ph name="source_language">$1<ex>Spanish</ex></ph> to <ph name="target_language">$2<ex>English</ex></ph>?
           </message>
-          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED" desc="Text to show for the translate bubble link label to jump to the advanced panel.">
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_LINK" desc="Text to show for the translate bubble link label to jump to the advanced panel.">
+            Options
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_BUTTON" desc="Text to show for the translate bubble button to jump to the advanced panel.">
+            Options
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_MENU_BUTTON" desc="Text to show for the translate bubble menu button to jump to the advanced panel, specifically to change which languages are translated between.">
+            Change languages
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_TITLE" desc="Title text for the options panel.">
             Options
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_ACCEPT" desc="Text to show for the translate bubble button to accept translation.">
@@ -8513,6 +8558,9 @@ Please help our engineers fix this problem. Tell us what happened right before y
           <message name="IDS_TRANSLATE_BUBBLE_DENY" desc="Text to show for the translate bubble menu item to deny translation.">
             Nope
           </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ALWAYS_TRANSLATE_LANG" desc="Text to show for the translate bubble menu item to always translate the specified language">
+            Always translate <ph name="language">$1<ex>French</ex></ph>
+          </message>
           <message name="IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_LANG" desc="Text to show for the translate bubble menu item to never translate the specified language">
             Never translate <ph name="language">$1<ex>French</ex></ph>
           </message>
@@ -8520,10 +8568,13 @@ Please help our engineers fix this problem. Tell us what happened right before y
             Never translate this site
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_TRANSLATING" desc="Text to show for the translate bubble label when page is currently being translated by servers">
-            This page is being translated...
+            Translating...
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_TRANSLATED" desc="Text to show for the translate bubble label when the page has been translated from one language to another">
             This page has been translated.
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_TRANSLATED_TITLE" desc="Title text for the translate bubble label when the page has been translated from one language to another">
+            Translated
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_REVERT" desc="Text to show for the translate bubble button to revert translation of translated page">
             Show original
@@ -8543,6 +8594,9 @@ Please help our engineers fix this problem. Tell us what happened right before y
           <message name="IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE" desc="Text to show for the translate bubble label when the page could not be translated.">
             This page could not be translated.
           </message>
+          <message name="IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE_TITLE" desc="Title text for the translate bubble label when the page could not be translated.">
+            This page could not be translated
+          </message>
           <message name="IDS_TRANSLATE_BUBBLE_PAGE_LANGUAGE" desc="Text to show for the translate bubble label next to the combobox of the page language">
             Page language:
           </message>
@@ -8554,13 +8608,22 @@ Please help our engineers fix this problem. Tell us what happened right before y
           </message>
         </if>
         <if expr="use_titlecase">
-          <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE" desc="In Title Case: Text to show for the translate bubble label when that page is in specified language and ask if should translate.">
-            Would You Like To Translate This Page?
+          <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_TITLE" desc="In Title Case: Title text for the translate bubble when asking to translate a page.">
+            Do You Want To Translate This Page?
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_BEFORE_TRANSLATE_NEW" desc="In Title Case: Text to show for the translate bubble label when that page is in specified language and ask if should translate.">
             Do You Want Google To Translate This Page From <ph name="source_language">$1<ex>Spanish</ex></ph> To <ph name="target_language">$2<ex>English</ex></ph>?
           </message>
-          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED" desc="In Title Case: Text to show for the translate bubble link label to jump to the advanced panel.">
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_LINK" desc="In Title Case: Text to show for the translate bubble link label to jump to the advanced panel.">
+            Options
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_BUTTON" desc="In Title Case: Text to show for the translate bubble button to jump to the advanced panel.">
+            Options
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_MENU_BUTTON" desc="In Title Case: Text to show for the translate bubble menu button to jump to the advanced panel, specifically to change which languages are translated between.">
+            Change Languages
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ADVANCED_TITLE" desc="In Title Case: Title text for the options panel.">
             Options
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_ACCEPT" desc="In Title Case: Text to show for the translate bubble button to accept translation.">
@@ -8569,6 +8632,9 @@ Please help our engineers fix this problem. Tell us what happened right before y
           <message name="IDS_TRANSLATE_BUBBLE_DENY" desc="In Title Case: Text to show for the translate bubble menu item to deny translation.">
             Nope
           </message>
+          <message name="IDS_TRANSLATE_BUBBLE_ALWAYS_TRANSLATE_LANG" desc="In Title Case: Text to show for the translate bubble menu item to always translate the specified language">
+            Always Translate <ph name="language">$1<ex>French</ex></ph>
+          </message>
           <message name="IDS_TRANSLATE_BUBBLE_NEVER_TRANSLATE_LANG" desc="In Title Case: Text to show for the translate bubble menu item to never translate the specified language">
             Never Translate <ph name="language">$1<ex>French</ex></ph>
           </message>
@@ -8576,10 +8642,13 @@ Please help our engineers fix this problem. Tell us what happened right before y
             Never Translate This Site
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_TRANSLATING" desc="In Title Case: Text to show for the translate bubble label when page is currently being translated by servers">
-            This Page Is Being Translated...
+            Translating...
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_TRANSLATED" desc="In Title Case: Text to show for the translate bubble label when the page has been translated from one language to another">
             This Page Has Been Translated.
+          </message>
+          <message name="IDS_TRANSLATE_BUBBLE_TRANSLATED_TITLE" desc="In Title Case: Title text for the translate bubble label when the page has been translated from one language to another">
+            Translated
           </message>
           <message name="IDS_TRANSLATE_BUBBLE_REVERT" desc="In Title Case: Text to show for the translate bubble button to revert translation of translated page">
             Show Original
@@ -8599,6 +8668,9 @@ Please help our engineers fix this problem. Tell us what happened right before y
           <message name="IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE" desc="In Title Case: Text to show for the translate bubble label when the page could not be translated.">
             This Page Could Not Be Translated.
           </message>
+          <message name="IDS_TRANSLATE_BUBBLE_COULD_NOT_TRANSLATE_TITLE" desc="In Title Case: Title text for the translate bubble label when the page could not be translated.">
+            This Page Could Not Be Translated
+          </message>
           <message name="IDS_TRANSLATE_BUBBLE_PAGE_LANGUAGE" desc="In Title Case: Text to show for the translate bubble label next to the combobox of the page language">
             Page Language:
           </message>
@@ -8615,7 +8687,7 @@ Please help our engineers fix this problem. Tell us what happened right before y
       </if>
 
       <!-- Web and message center notifications -->
-      <message name="IDS_NOTIFICATION_PERMISSIONS" desc="Text requesting permission for Web Notifications.">
+      <message name="IDS_NOTIFICATIONS_INFOBAR_TEXT" desc="Text requesting permission for Web Notifications.">
         <ph name="site">$1<ex>mail.google.com</ex></ph> wants to send you notifications.
       </message>
       <message name="IDS_NOTIFICATION_PERMISSIONS_FRAGMENT" desc="Permission sentence fragment to show following the prompt 'This site wants to:' in a permissions request">
@@ -9049,17 +9121,13 @@ Please help our engineers fix this problem. Tell us what happened right before y
 
       <!-- Geolocation messages -->
       <if expr="not is_android">
-        <message name="IDS_GEOLOCATION_INFOBAR_QUESTION" desc="Question asked on the info bar whenever URL wants to access the user's physical location">
-          <ph name="URL">
-            $1<ex>maps.google.com</ex>
-          </ph> wants to use your computer's location.
+        <message name="IDS_GEOLOCATION_INFOBAR_TEXT" desc="Text requesting permission for a site to access the user's physical location">
+          <ph name="URL">$1<ex>maps.google.com</ex></ph> wants to use your computer's location.
         </message>
       </if>
       <if expr="is_android">
-        <message name="IDS_GEOLOCATION_INFOBAR_QUESTION" desc="Mobile: Question asked on the info bar whenever URL wants to access the user's physical location">
-          <ph name="URL">
-            $1<ex>maps.google.com</ex>
-          </ph> wants to use your device's location.
+        <message name="IDS_GEOLOCATION_INFOBAR_TEXT" desc="Mobile: Text requesting permission for a site to access the user's physical location">
+          <ph name="URL">$1<ex>maps.google.com</ex></ph> wants to use your device's location.
         </message>
       </if>
       <message name="IDS_GEOLOCATION_INFOBAR_PERMISSION_FRAGMENT" desc="Permission fragment used in the permission bubble, after 'This site wants to:' asking for permission to access the user's physical location.">
@@ -9088,10 +9156,8 @@ Please help our engineers fix this problem. Tell us what happened right before y
       </message>
 
       <!-- Web MIDI messages -->
-      <message name="IDS_MIDI_SYSEX_INFOBAR_QUESTION" desc="Question asked on the info bar whenever URL wants to access MIDI devices with system exclusive messages.">
-        <ph name="URL">
-          $1<ex>www.google.com</ex>
-        </ph> wants to get full control of your MIDI devices.
+      <message name="IDS_MIDI_SYSEX_INFOBAR_TEXT" desc="Text requesting permission for a site to access MIDI devices with system exclusive messages.">
+        <ph name="URL">$1<ex>www.google.com</ex></ph> wants to get full control of your MIDI devices.
       </message>
       <message name="IDS_MIDI_SYSEX_PERMISSION_FRAGMENT" desc="Permission asked in the permission bubble when a URL wants to access MIDI devices with system exclusive messages, along with other permissions requests. Preceded by the prompt 'This site would like to:'">
         Use your MIDI devices
@@ -9180,20 +9246,27 @@ Please help our engineers fix this problem. Tell us what happened right before y
         <message name="IDS_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_FRAGMENT" desc="Permission fragment shown in the permissions bubble when a web page requests access to the computer's protected media identifier.">
           Know your unique device identifier
         </message>
-        <message name="IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_QUESTION" desc="Question asked on the infobar whenever URL wants to access protected media identifier. It shows the origin of the URL.">
+        <message name="IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_TEXT" desc="Text requesting permission for a site to access protected media identifier. It shows the origin of the URL.">
           <ph name="URL">$1<ex>https://www.youtube.com</ex></ph> wants to uniquely identify your device to play protected content.
         </message>
       </if>
 
-      <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TITLE" desc="The title text that is used in the manage passwords bubble when the user has generated a password.">
-        Password saved
-      </message>
+      <if expr="use_titlecase">
+        <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TITLE" desc="In Title Case: The title text that is used in the manage passwords bubble when the user has generated a password.">
+            Password Saved
+        </message>
+      </if>
+      <if expr="not use_titlecase">
+        <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TITLE" desc="The title text that is used in the manage passwords bubble when the user has generated a password.">
+          Password saved
+        </message>
+      </if>
       <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT" desc="A message that the browser shows after saving a password it has autogenerated for the user. This message appears in a bubble and contains a link to all the user's saved autogenerated passwords. The link text is a separate string in the translation console and appears here as placeholder text.">
-        Access your passwords from any device at <ph name="SAVED_PASSWORDS_LINK">$1<ex>passwords.google.com</ex></ph>
+        View and manage saved passwords at <ph name="SAVED_PASSWORDS_LINK">$1<ex>passwords.google.com</ex></ph>
       </message>
       <if expr="is_android">
         <message name="IDS_MANAGE_PASSWORDS_CONFIRM_GENERATED_TEXT_INFOBAR" desc="A message that the browser shows after saving a password it has autogenerated for the user. This message appears in an infobar and contains a link to all the user's saved autogenerated passwords. The link text is a separate string in the translation console and appears here as placeholder text.">
-          Password saved. Access your passwords from any device at <ph name="SAVED_PASSWORDS_LINK">$1<ex>passwords.google.com</ex></ph>
+          Password saved. View and manage saved passwords at <ph name="SAVED_PASSWORDS_LINK">$1<ex>passwords.google.com</ex></ph>
         </message>
       </if>
       <message name="IDS_MANAGE_PASSWORDS_BUBBLE_LINK" desc="The label of the 'Manage passwords' link in the Manage Passwords bubble view">
@@ -9215,8 +9288,11 @@ Please help our engineers fix this problem. Tell us what happened right before y
       <message name="IDS_MANAGE_PASSWORDS_UNDO" desc="The text that is used in the manage passwords bubble when a password is deleted.">
         Undo
       </message>
+      <message name="IDS_MANAGE_PASSWORDS_UNDO_TOOLTIP" desc="Tooltip text for restoring a deleted password (undoing removal)">
+        Restore deleted password for <ph name="USERNAME">$1<ex>user@gmail.com</ex></ph>
+      </message>
       <message name="IDS_MANAGE_PASSWORDS_DELETE" desc="The tooltip of a button that is used in the manage passwords bubble for removing the credential.">
-        Delete
+        Delete password for <ph name="USERNAME">$1<ex>user@gmail.com</ex></ph>
       </message>
 
       <message name="IDS_MANAGE_PASSWORDS_SHOW_PASSWORD" desc="The tooltip of a button that is used in the manage pending password bubble for revealing the password.">
@@ -9404,16 +9480,16 @@ Please help our engineers fix this problem. Tell us what happened right before y
       </message>
 
       <!-- Media Capture messages -->
-      <message name="IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO" desc="Question asked on the info bar whenever a web page requests access to the computer's microphone and camera.">
+      <message name="IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO_INFOBAR_TEXT" desc="Text requesting permission for a site to access the computer's microphone and camera.">
         <ph name="HOST">$1<ex>html5rocks.com</ex></ph> wants to use your camera and microphone.
       </message>
-      <message name="IDS_MEDIA_CAPTURE_AUDIO_ONLY" desc="Question asked on the info bar whenever a web page requests access to the computer's microphone.">
+      <message name="IDS_MEDIA_CAPTURE_AUDIO_ONLY_INFOBAR_TEXT" desc="Text requesting permission for a site to access the computer's microphone.">
         <ph name="HOST">$1<ex>html5rocks.com</ex></ph> wants to use your microphone.
       </message>
-      <message name="IDS_MEDIA_CAPTURE_VIDEO_ONLY" desc="Question asked on the info bar whenever a web page requests access to the computer's camera.">
+      <message name="IDS_MEDIA_CAPTURE_VIDEO_ONLY_INFOBAR_TEXT" desc="Text requesting permission for a site to access the computer's camera.">
         <ph name="HOST">$1<ex>html5rocks.com</ex></ph> wants to use your camera.
       </message>
-      <message name="IDS_MEDIA_CAPTURE_SCREEN" desc="Question asked on the info bar whenever a web page requests access to the device's screen.">
+      <message name="IDS_MEDIA_CAPTURE_SCREEN_INFOBAR_TEXT" desc="Text requesting permission for a site to access the device's screen.">
         <ph name="HOST">$1<ex>html5rocks.com</ex></ph> wants to share your screen.
       </message>
       <message name="IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO_PERMISSION_FRAGMENT" desc="Permission fragment shown in the permissions bubble when a web page requests access to the computer's microphone and camera.">
@@ -9434,27 +9510,19 @@ Please help our engineers fix this problem. Tell us what happened right before y
 
       <!-- Quota messages -->
       <if expr="is_android">
-        <message name="IDS_REQUEST_QUOTA_INFOBAR_QUESTION" desc="Mobile: For Android device. Question asked on the info bar whenever webapp requests new (larger) quota to persistently store data on the device (e.g. for persistent-type filesystem).">
-          <ph name="URL">
-            $1<ex>html5rocks.com</ex>
-          </ph> wants to permanently store data on your device.
+        <message name="IDS_REQUEST_QUOTA_INFOBAR_TEXT" desc="Mobile: For Android device. Text requesting permission for a site to use a new (larger) quota to persistently store data on the device (e.g. for persistent-type filesystem).">
+          <ph name="URL">$1<ex>html5rocks.com</ex></ph> wants to permanently store data on your device.
         </message>
-        <message name="IDS_REQUEST_LARGE_QUOTA_INFOBAR_QUESTION" desc="Mobile: For Android device. Question asked on the info bar whenever webapp requests new (larger) quota to persistently store large data on the user's device (e.g. for persistent-type filesystem).">
-          <ph name="URL">
-            $1<ex>html5rocks.com</ex>
-          </ph> wants to permanently store large data on your device.
+        <message name="IDS_REQUEST_LARGE_QUOTA_INFOBAR_TEXT" desc="Mobile: For Android device. Text requesting permission for a site to use a new (larger) quota to persistently store large data on the user's device (e.g. for persistent-type filesystem).">
+          <ph name="URL">$1<ex>html5rocks.com</ex></ph> wants to permanently store large data on your device.
         </message>
       </if>
       <if expr="not is_android">
-        <message name="IDS_REQUEST_QUOTA_INFOBAR_QUESTION" desc="Question asked on the info bar whenever webapp requests new (larger) quota to persistently store data on the user's local computer (e.g. for persistent-type filesystem).">
-          <ph name="URL">
-            $1<ex>html5rocks.com</ex>
-          </ph> wants to permanently store data on your local computer.
+        <message name="IDS_REQUEST_QUOTA_INFOBAR_TEXT" desc="Text requesting permission for a site to use a new (larger) quota to persistently store data on the user's local computer (e.g. for persistent-type filesystem).">
+          <ph name="URL">$1<ex>html5rocks.com</ex></ph> wants to permanently store data on your local computer.
         </message>
-        <message name="IDS_REQUEST_LARGE_QUOTA_INFOBAR_QUESTION" desc="Question asked on the info bar whenever webapp requests new (larger) quota to persistently store large data on the user's local computer (e.g. for persistent-type filesystem).">
-          <ph name="URL">
-            $1<ex>html5rocks.com</ex>
-          </ph> wants to permanently store large data on your local computer.
+        <message name="IDS_REQUEST_LARGE_QUOTA_INFOBAR_TEXT" desc="Text requesting permission for a site to use a new (larger) quota to persistently store large data on the user's local computer (e.g. for persistent-type filesystem).">
+          <ph name="URL">$1<ex>html5rocks.com</ex></ph> wants to permanently store large data on your local computer.
         </message>
       </if>
       <message name="IDS_REQUEST_QUOTA_PERMISSION_FRAGMENT" desc="Permission fragment presented in the permission bubble when the webapp requests new larger quota to persistently store data on the device. Follows a 'This site would like to:' prompt.">
@@ -9845,7 +9913,7 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
           Next
         </message>
         <message name="IDS_METRO_MISSING_PLUGIN_PROMPT"
-                 desc="Info Bar message to let user do something about the missing plugin">
+                 desc="Infobar message to let user do something about the missing plugin">
           <ph name="PLUGIN_NAME">$1<ex>Quicktime</ex></ph> is required to display some elements on this page.
         </message>
         <message name="IDS_METRO_NPAPI_PLUGIN_PROMPT"
@@ -10692,14 +10760,6 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
         Communications
       </message>
     </if>
-    <if expr="chromeos">
-      <message name="IDS_BEAMFORMING_ON_DEFAULT_AUDIO_INPUT_DEVICE_NAME" desc="Default audio input device (microphone) with a narrow angle coverage. Only the user in front of the device (i.e. you) will be listened to. This is typically presented to users in a drop-down list of device choices.">
-        Default (pick up just you)
-      </message>
-      <message name="IDS_BEAMFORMING_OFF_DEFAULT_AUDIO_INPUT_DEVICE_NAME" desc="Default audio input device (microphone) with a wide angle coverage. All the sounds in the vicinity will be listend to. This is typically presented to users in a drop-down list of device choices.">
-        Default (pick up everything)
-      </message>
-    </if>
 
     <if expr="is_android">
       <!-- Data Use -->
@@ -10747,13 +10807,13 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
         "<ph name="CHROME_EXTENSION_NAME">$1<ex>Chrome extension name</ex></ph>" wants to connect
       </message>
       <message name="IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label shown to the user to inform them that no USB devices were found matching the requirements that the application provided.">
-        No compatible devices found
+        No compatible devices found.
       </message>
       <message name="IDS_DEVICE_CHOOSER_DEVICE_NAME_WITH_ID" desc="To distinguish devices with the same name, the device chooser shows the device name with id.">
         <ph name="DEVICE_NAME">$1<ex>device name</ex></ph> (<ph name="DEVICE_ID">$2<ex>device id</ex></ph>)
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT" desc="The label shown to the user to inform them that no Bluetooth devices were found matching the requirements that the application provided.">
-        No compatible devices found
+        No compatible devices found.
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_TURN_ADAPTER_OFF" desc="Text of a link the user can click to get help information when Bluetooth adapter is turned off.">
         <ph name="TURN_ON_BLUETOOTH_LINK">$1<ex>Turn on Bluetooth</ex></ph> to allow pairing
@@ -10764,8 +10824,17 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING" desc="The label that is used to indicate the chooser is scanning for Bluetooth devices.">
         ''' while scanning for devices...
       </message>
-      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN" desc="Text of a link the user can click to start a new scan for Bluetooth devices.">
-        re-scan
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN" desc="Text of a button the user can click to start a new scan for Bluetooth devices.">
+        Re-scan
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN_TOOLTIP" desc="Tooltip for the button that lets the user start a new scan for Bluetooth devices.">
+        Re-scan Bluetooth devices
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING_LABEL" desc="Text on label that indicates a scan for Bluetooth devices is in progress.">
+        Scanning...
+      </message>
+      <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING_LABEL_TOOLTIP" desc="Tooltip for the label that shows while scanning for Bluetooth devices.">
+        Scanning for Bluetooth devices...
       </message>
       <message name="IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT" desc="Label on the button that closes the Bluetooth chooser popup and pairs the selected device.">
         Pair
@@ -10816,7 +10885,7 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
     <message name="IDS_BLOCKED_ADS_INFOBAR_MESSAGE" desc="The mini infobar message shown to users on Android when Chrome has blocked ads on the site because the site tends to show intrusive ads. Will be presented as a sentence, next to a Details link to expand the infobar.">
       Ads blocked.
     </message>
-    <message name="IDS_BLOCKED_ADS_PROMPT_TITLE" desc="Title of the prompt shown to users on Desktop in the omnibox when Chrome has blocked ads on the site because the site tends to show intrusive ads. The title will stand alone next to an icon so there is no need for a period.">
+    <message name="IDS_BLOCKED_ADS_PROMPT_TITLE" desc="Title of the prompt shown to users in the omnibox or infobar when Chrome has blocked ads on the site because the site tends to show intrusive ads. The title will stand alone next to an icon so there is no need for a period." formatter_data="android_java">
       Ads blocked
     </message>
     <message name="IDS_BLOCKED_ADS_PROMPT_EXPLANATION" desc="Longer explanation that Chrome has blocked ads on the site. To be shown in an expanded infobar / bubble">
@@ -10829,6 +10898,23 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
     <if expr="is_win">
       <message name="IDS_UTILITY_PROCESS_UTILITY_WIN_NAME" desc="The name of the utility process used to handle Windows utility operations.">
         Windows Utilities
+      </message>
+    </if>
+
+    <!-- Framebust / Blocked Redirection intervention message -->
+    <if expr="not is_android">
+      <!-- Android strings are declared in android_chrome_strings.grd. -->
+      <message name="IDS_REDIRECT_BLOCKED_MESSAGE" desc="The message stating that a redirect (noun) was blocked on this page. This will be followed on a separate line with the address the user was being redirected to.">
+        Redirect blocked to site:
+      </message>
+      <message name="IDS_REDIRECT_BLOCKED_TITLE" desc="The short message stating that a redirect (noun) was blocked on this page. Same as IDS_REDIRECT_BLOCKED_SHORT_MESSAGE but without the period.">
+         Redirect blocked
+      </message>
+      <message name="IDS_REDIRECT_BLOCKED_TOOLTIP" desc="Tooltip text that appears when the user hovers over the &quot;Redirect blocked&quot; icon in the address bar. It means that a redirect (noun) was blocked by Chrome on this page.">
+         Redirect blocked on this page.
+      </message>
+      <message name="IDS_REDIRECT_BLOCKED_GOT_IT" desc="The text of the OK button for the blocked redirect dialog.">
+        Got it
       </message>
     </if>
 
@@ -10926,10 +11012,22 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
       Your downloads appear here
     </message>
 
-    <!-- Automation info bar -->
+    <!-- Automation infobar -->
     <message name="IDS_CONTROLLED_BY_AUTOMATION" desc="Message shown when the browser session is being controlled by an automated test.">
       Chrome is being controlled by automated test software.
     </message>
+
+    <!-- Security Key permission -->
+    <message name="IDS_SECURITY_KEY_ATTESTATION_PERMISSION_FRAGMENT" desc="Permission request shown when a site requests attestation information from a Security Key. This follows a prompt: 'This site would like to:'">
+      See the serial number of your security key
+    </message>
+    <if expr="is_android">
+      <message name="IDS_SECURITY_KEY_ATTESTATION_INFOBAR_QUESTION" desc="Wording of an info bar prompt when a site requests attestation information from a Security Key.">
+        <ph name="URL">
+          $1<ex>maps.google.com</ex>
+        </ph> wants to see the serial number of your security key
+      </message>
+    </if>
 
     <!-- Media capture notification strings -->
     <if expr="is_android or enable_vr">
@@ -10956,6 +11054,9 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
 
       <!-- VR browser -->
       <!-- TODO(https://crbug.com/731802): Only build these when the VR browser is supported. -->
+      <message name="IDS_VR_UPDATE_KEYBOARD_PROMPT" desc="Text shown when the keyboard is not installed or needs to be updated on the user's device">
+        Install or update Daydream Keyboard to use Chrome in VR
+      </message>
       <message name="IDS_VR_SHELL_EXIT_PROMPT_DESCRIPTION" desc="Text on the exit prompt that shows up when the user tries to use a feature that is not supported in VR">
         This feature is not supported in VR
       </message>
@@ -10988,13 +11089,32 @@ For more information, visit our <ph name="BEGIN_LINK">&lt;a target="_blank" href
         Exit
       </message>
       <!-- TODO(https://crbug.com/774199): Make this <if expr="is_android"> -->
-      <message name="IDS_VR_POWERED_BY_CHROME_MESSAGE" desc="A message indicating that the current page is running in Chrome.">
-        Powered by Chrome
+      <message name="IDS_VR_RUNNING_IN_CHROME_MESSAGE" desc="A message indicating that the current page is running in Chrome.">
+        Running in Chrome
       </message>
       <message name="IDS_VR_NO_SPEECH_RECOGNITION_RESULT" desc="Text to be shown if speech recognition failed to recognize a speech due to either no sound or noise.">
         Sorry, didn't catch that.
       </message>
+      <message name="IDS_VR_COMPONENT_UPDATE_READY" desc="Text to be shown to indicate a VR component update is ready to be applied.">
+        Update ready
+      </message>
+      <message name="IDS_VR_COMPONENT_APPLY" desc="Text to be shown on the button to apply a new component update.">
+        Apply
+      </message>
     </if>
+
+    <message name="IDS_CONFIRM_FILE_UPLOAD_TITLE" desc="Title of dialog for confirming that many files are about to be uploaded / given to the site. [ICU Syntax]">
+      {0, plural,
+        =1 {Upload one file to this site?}
+        other {Upload # files to this site?}
+      }
+    </message>
+    <message name="IDS_CONFIRM_FILE_UPLOAD_TEXT" desc="A message warning the user that they're about upload potentially many files to the site. This mentions where the files are from. The number of files are in the dialog title.">
+      This will upload all files from "<ph name="FOLDER_PATH">$1<ex>Desktop</ex></ph>". Only do this if you trust the site.
+    </message>
+    <message name="IDS_CONFIRM_FILE_UPLOAD_OK_BUTTON" desc="Button title confirming to upload multiple files to the site.">
+      Upload
+    </message>
   </messages>
  </release>
 </grit>

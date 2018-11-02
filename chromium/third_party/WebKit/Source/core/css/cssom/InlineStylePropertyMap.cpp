@@ -4,15 +4,9 @@
 
 #include "core/css/cssom/InlineStylePropertyMap.h"
 
-#include "bindings/core/v8/Iterable.h"
-#include "core/CSSPropertyNames.h"
-#include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
-#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyValueSet.h"
-#include "core/css/cssom/CSSUnsupportedStyleValue.h"
-#include "core/css/cssom/StyleValueFactory.h"
-#include "core/css/properties/CSSProperty.h"
+#include "core/css/CSSVariableReferenceValue.h"
 
 namespace blink {
 
@@ -27,69 +21,46 @@ const CSSValue* InlineStylePropertyMap::GetCustomProperty(
       property_name);
 }
 
-Vector<String> InlineStylePropertyMap::getProperties() {
-  Vector<String> result;
-  CSSPropertyValueSet& inline_style_set =
-      owner_element_->EnsureMutableInlineStyle();
-  for (unsigned i = 0; i < inline_style_set.PropertyCount(); i++) {
-    CSSPropertyID property_id = inline_style_set.PropertyAt(i).Id();
-    if (property_id == CSSPropertyVariable) {
-      CSSPropertyValueSet::PropertyReference property_reference =
-          inline_style_set.PropertyAt(i);
-      const CSSCustomPropertyDeclaration& custom_declaration =
-          ToCSSCustomPropertyDeclaration(property_reference.Value());
-      result.push_back(custom_declaration.GetName());
-    } else {
-      result.push_back(getPropertyNameString(property_id));
-    }
-  }
-  return result;
+void InlineStylePropertyMap::SetProperty(CSSPropertyID property_id,
+                                         const CSSValue& value) {
+  owner_element_->SetInlineStyleProperty(property_id, value);
 }
 
-void InlineStylePropertyMap::SetProperty(CSSPropertyID property_id,
-                                         const CSSValue* value) {
-  owner_element_->SetInlineStyleProperty(property_id, value);
+void InlineStylePropertyMap::SetCustomProperty(
+    const AtomicString& property_name,
+    const CSSValue& value) {
+  DCHECK(value.IsVariableReferenceValue());
+  CSSVariableData* variable_data =
+      ToCSSVariableReferenceValue(value).VariableDataValue();
+  owner_element_->SetInlineStyleProperty(
+      CSSPropertyVariable,
+      *CSSCustomPropertyDeclaration::Create(property_name, variable_data));
 }
 
 void InlineStylePropertyMap::RemoveProperty(CSSPropertyID property_id) {
   owner_element_->RemoveInlineStyleProperty(property_id);
 }
 
-HeapVector<StylePropertyMap::StylePropertyMapEntry>
-InlineStylePropertyMap::GetIterationEntries() {
-  // TODO(779841): Needs to be sorted.
-  HeapVector<StylePropertyMap::StylePropertyMapEntry> result;
+void InlineStylePropertyMap::RemoveCustomProperty(
+    const AtomicString& property_name) {
+  owner_element_->RemoveInlineStyleProperty(property_name);
+}
+
+void InlineStylePropertyMap::ForEachProperty(
+    const IterationCallback& callback) {
   CSSPropertyValueSet& inline_style_set =
       owner_element_->EnsureMutableInlineStyle();
   for (unsigned i = 0; i < inline_style_set.PropertyCount(); i++) {
-    CSSPropertyValueSet::PropertyReference property_reference =
-        inline_style_set.PropertyAt(i);
-    CSSPropertyID property_id = property_reference.Id();
-    String name;
-    CSSStyleValueOrCSSStyleValueSequence value;
-    if (property_id == CSSPropertyVariable) {
-      const CSSCustomPropertyDeclaration& custom_declaration =
+    const auto& property_reference = inline_style_set.PropertyAt(i);
+    if (property_reference.Id() == CSSPropertyVariable) {
+      const auto& decl =
           ToCSSCustomPropertyDeclaration(property_reference.Value());
-      name = custom_declaration.GetName();
-      // TODO(meade): Eventually custom properties will support other types, so
-      // actually return them instead of always returning a
-      // CSSUnsupportedStyleValue.
-      // TODO(779477): Should these return CSSUnparsedValues?
-      value.SetCSSStyleValue(
-          CSSUnsupportedStyleValue::Create(custom_declaration.CustomCSSText()));
+      callback(decl.GetName(), property_reference.Value());
     } else {
-      name = getPropertyNameString(property_id);
-      CSSStyleValueVector style_value_vector =
-          StyleValueFactory::CssValueToStyleValueVector(
-              property_id, property_reference.Value());
-      if (style_value_vector.size() == 1)
-        value.SetCSSStyleValue(style_value_vector[0]);
-      else
-        value.SetCSSStyleValueSequence(style_value_vector);
+      callback(property_reference.Property().GetPropertyNameAtomicString(),
+               property_reference.Value());
     }
-    result.push_back(std::make_pair(name, value));
   }
-  return result;
 }
 
 }  // namespace blink

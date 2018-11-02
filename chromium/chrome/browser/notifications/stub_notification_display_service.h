@@ -13,20 +13,34 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/browser/notifications/notification_common.h"
-#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_display_service_impl.h"
 #include "ui/message_center/notification.h"
+
+namespace content {
+class BrowserContext;
+}
 
 class Profile;
 
 // Implementation of the NotificationDisplayService interface that can be used
 // for testing purposes. Supports additional methods enabling instrumenting the
 // faked underlying notification system.
-class StubNotificationDisplayService : public NotificationDisplayService {
+class StubNotificationDisplayService : public NotificationDisplayServiceImpl {
  public:
   // Factory function to be used with NotificationDisplayServiceFactory's
   // SetTestingFactory method, overriding the default display service.
   static std::unique_ptr<KeyedService> FactoryForTests(
       content::BrowserContext* browser_context);
+
+  typedef base::RepeatingCallback<void(
+      NotificationCommon::Operation operation,
+      NotificationHandler::Type notification_type,
+      const GURL& origin,
+      const std::string& notification_id,
+      const base::Optional<int>& action_index,
+      const base::Optional<base::string16>& reply,
+      const base::Optional<bool>& by_user)>
+      ProcessNotificationOperationCallback;
 
   explicit StubNotificationDisplayService(Profile* profile);
   ~StubNotificationDisplayService() override;
@@ -44,6 +58,18 @@ class StubNotificationDisplayService : public NotificationDisplayService {
   const NotificationCommon::Metadata* GetMetadataForNotification(
       const message_center::Notification& notification);
 
+  // Simulates the notification identified by |notification_id| being clicked
+  // on, optionally with the given |action_index| and |reply|.
+  void SimulateClick(NotificationHandler::Type notification_type,
+                     const std::string& notification_id,
+                     base::Optional<int> action_index,
+                     base::Optional<base::string16> reply);
+
+  // Simulates a click on the settings button of the notification identified by
+  // |notification_id|.
+  void SimulateSettingsClick(NotificationHandler::Type notification_type,
+                             const std::string& notification_id);
+
   // Simulates the notification identified by |notification_id| being closed due
   // to external events, such as the user dismissing it when |by_user| is set.
   // Will wait for the close event to complete. When |silent| is set, the
@@ -59,6 +85,9 @@ class StubNotificationDisplayService : public NotificationDisplayService {
   void RemoveAllNotifications(NotificationHandler::Type notification_type,
                               bool by_user);
 
+  void SetProcessNotificationOperationDelegate(
+      const ProcessNotificationOperationCallback& delegate);
+
   // NotificationDisplayService implementation:
   void Display(NotificationHandler::Type notification_type,
                const message_center::Notification& notification,
@@ -66,6 +95,14 @@ class StubNotificationDisplayService : public NotificationDisplayService {
   void Close(NotificationHandler::Type notification_type,
              const std::string& notification_id) override;
   void GetDisplayed(const DisplayedNotificationsCallback& callback) override;
+  void ProcessNotificationOperation(
+      NotificationCommon::Operation operation,
+      NotificationHandler::Type notification_type,
+      const GURL& origin,
+      const std::string& notification_id,
+      const base::Optional<int>& action_index,
+      const base::Optional<base::string16>& reply,
+      const base::Optional<bool>& by_user) override;
 
  private:
   // Data to store for a notification that's being shown through this service.
@@ -83,9 +120,17 @@ class StubNotificationDisplayService : public NotificationDisplayService {
     std::unique_ptr<NotificationCommon::Metadata> metadata;
   };
 
+  // Returns an iterator to the notification matching the given properties. If
+  // there is no notification that matches, returns the end() iterator.
+  std::vector<NotificationData>::iterator FindNotification(
+      NotificationHandler::Type notification_type,
+      const std::string& notification_id);
+
   base::RepeatingClosure notification_added_closure_;
   std::vector<NotificationData> notifications_;
   Profile* profile_;
+
+  ProcessNotificationOperationCallback process_notification_operation_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(StubNotificationDisplayService);
 };

@@ -44,7 +44,7 @@ constexpr int kLargeBubbleRadiusDp = 56;
 constexpr float kLargeBubbleOpacity = 0.46;
 
 // The note action background color.
-constexpr int kBubbleColor = SkColorSetARGBMacro(0x9E, 0x9E, 0x9E, 0xFF);
+constexpr int kBubbleColor = SkColorSetRGB(0x9E, 0x9E, 0x9E);
 
 // The note action icon size.
 constexpr int kIconSizeDp = 16;
@@ -343,7 +343,7 @@ const views::View* NoteActionLaunchButton::TestApi::BackgroundView() const {
 
 NoteActionLaunchButton::NoteActionLaunchButton(
     mojom::TrayActionState initial_note_action_state) {
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   background_ = new BackgroundView();
   AddChildView(background_);

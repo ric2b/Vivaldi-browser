@@ -415,7 +415,6 @@
 <translation id="6295158916970320988">Kaikki sivustot</translation>
 <translation id="6295855836753816081">Tallennetaan…</translation>
 <translation id="6308937455967653460">Tallenna lin&amp;kki nimellä...</translation>
-<translation id="6314335155547195432">Luo salasana</translation>
 <translation id="6326855256003666642">Keepalive-määrä</translation>
 <translation id="6370021412472292592">Manifestia ei voitu ladata.</translation>
 <translation id="6374469231428023295">Yritä uudelleen</translation>
@@ -499,7 +498,6 @@
 <translation id="7564847347806291057">Lopeta prosessi</translation>
 <translation id="7576690715254076113">Kokoa</translation>
 <translation id="7629827748548208700">Välilehti: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Peruuta</translation>
 <translation id="7661259717474717992">Salli sivustojen tallentaa ja lukea evästetietoja</translation>
 <translation id="7663719505383602579">Vastaanottaja: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Ylläpitäjän asentama</translation>

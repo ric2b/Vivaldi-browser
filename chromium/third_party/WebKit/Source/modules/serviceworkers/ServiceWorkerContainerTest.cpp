@@ -18,13 +18,12 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/page/FocusController.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "modules/serviceworkers/NavigatorServiceWorker.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerClientsInfo.h"
@@ -78,7 +77,7 @@ struct StubScriptFunction {
 
 class ScriptValueTest {
  public:
-  virtual ~ScriptValueTest() {}
+  virtual ~ScriptValueTest() = default;
   virtual void operator()(ScriptValue) const = 0;
 };
 
@@ -106,7 +105,7 @@ class ExpectDOMException : public ScriptValueTest {
                      const String& expected_message)
       : expected_name_(expected_name), expected_message_(expected_message) {}
 
-  ~ExpectDOMException() override {}
+  ~ExpectDOMException() override = default;
 
   void operator()(ScriptValue value) const override {
     DOMException* exception = V8DOMException::ToImplWithTypeCheck(
@@ -127,11 +126,12 @@ class ExpectDOMException : public ScriptValueTest {
 
 class NotReachedWebServiceWorkerProvider : public WebServiceWorkerProvider {
  public:
-  ~NotReachedWebServiceWorkerProvider() override {}
+  ~NotReachedWebServiceWorkerProvider() override = default;
 
   void RegisterServiceWorker(
       const WebURL& pattern,
       const WebURL& script_url,
+      mojom::ServiceWorkerUpdateViaCache update_via_cache,
       std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
       override {
     ADD_FAILURE()
@@ -145,41 +145,38 @@ class NotReachedWebServiceWorkerProvider : public WebServiceWorkerProvider {
   }
 };
 
-class ServiceWorkerContainerTest : public ::testing::Test {
+class ServiceWorkerContainerTest : public PageTestBase {
  protected:
-  ServiceWorkerContainerTest() : page_(DummyPageHolder::Create()) {}
+  void SetUp() override { PageTestBase::SetUp(IntSize()); }
 
   ~ServiceWorkerContainerTest() override {
-    page_.reset();
     V8GCController::CollectAllGarbageForTesting(GetIsolate());
   }
 
-  ExecutionContext* GetExecutionContext() { return &(page_->GetDocument()); }
+  ExecutionContext* GetExecutionContext() { return &GetDocument(); }
   NavigatorServiceWorker* GetNavigatorServiceWorker() {
-    return NavigatorServiceWorker::From(page_->GetDocument());
+    return NavigatorServiceWorker::From(GetDocument());
   }
   v8::Isolate* GetIsolate() { return v8::Isolate::GetCurrent(); }
   ScriptState* GetScriptState() {
-    return ToScriptStateForMainWorld(page_->GetDocument().GetFrame());
+    return ToScriptStateForMainWorld(GetDocument().GetFrame());
   }
 
   void Provide(std::unique_ptr<WebServiceWorkerProvider> provider) {
     Supplement<Document>::ProvideTo(
-        page_->GetDocument(), ServiceWorkerContainerClient::SupplementName(),
-        new ServiceWorkerContainerClient(page_->GetDocument(),
-                                         std::move(provider)));
+        GetDocument(), ServiceWorkerContainerClient::SupplementName(),
+        new ServiceWorkerContainerClient(GetDocument(), std::move(provider)));
   }
 
   void SetPageURL(const String& url) {
     // For URL completion.
-    page_->GetDocument().SetURL(KURL(NullURL(), url));
+    GetDocument().SetURL(KURL(NullURL(), url));
 
     // The basis for security checks.
-    page_->GetDocument().SetSecurityOrigin(
-        SecurityOrigin::CreateFromString(url));
+    GetDocument().SetSecurityOrigin(SecurityOrigin::CreateFromString(url));
 
     if (url.StartsWith("https://") || url.StartsWith("http://localhost/")) {
-      page_->GetDocument().SetSecureContextStateForTesting(
+      GetDocument().SetSecureContextStateForTesting(
           SecureContextState::kSecure);
     }
   }
@@ -212,9 +209,6 @@ class ServiceWorkerContainerTest : public ::testing::Test {
         container->getRegistration(GetScriptState(), document_url);
     ExpectRejected(GetScriptState(), promise, value_test);
   }
-
- private:
-  std::unique_ptr<DummyPageHolder> page_;
 };
 
 TEST_F(ServiceWorkerContainerTest, Register_NonSecureOriginIsRejected) {
@@ -282,7 +276,7 @@ class StubWebServiceWorkerProvider {
   // other methods must not be called after the
   // StubWebServiceWorkerProvider dies.
   std::unique_ptr<WebServiceWorkerProvider> Provider() {
-    return WTF::WrapUnique(new WebServiceWorkerProviderImpl(*this));
+    return std::make_unique<WebServiceWorkerProviderImpl>(*this);
   }
 
   size_t RegisterCallCount() { return register_call_count_; }
@@ -300,16 +294,18 @@ class StubWebServiceWorkerProvider {
     WebServiceWorkerProviderImpl(StubWebServiceWorkerProvider& owner)
         : owner_(owner) {}
 
-    ~WebServiceWorkerProviderImpl() override {}
+    ~WebServiceWorkerProviderImpl() override = default;
 
     void RegisterServiceWorker(
         const WebURL& pattern,
         const WebURL& script_url,
+        mojom::ServiceWorkerUpdateViaCache update_via_cache,
         std::unique_ptr<WebServiceWorkerRegistrationCallbacks> callbacks)
         override {
       owner_.register_call_count_++;
       owner_.register_scope_ = pattern;
       owner_.register_script_url_ = script_url;
+      owner_.update_via_cache_ = update_via_cache;
       registration_callbacks_to_delete_.push_back(std::move(callbacks));
     }
 
@@ -364,9 +360,9 @@ TEST_F(ServiceWorkerContainerTest,
                                      options);
 
     EXPECT_EQ(1ul, stub_provider.RegisterCallCount());
-    EXPECT_EQ(WebURL(KURL(NullURL(), "http://localhost/x/y/")),
+    EXPECT_EQ(WebURL(KURL("http://localhost/x/y/")),
               stub_provider.RegisterScope());
-    EXPECT_EQ(WebURL(KURL(NullURL(), "http://localhost/x/y/worker.js")),
+    EXPECT_EQ(WebURL(KURL("http://localhost/x/y/worker.js")),
               stub_provider.RegisterScriptURL());
     EXPECT_EQ(mojom::ServiceWorkerUpdateViaCache::kImports,
               stub_provider.UpdateViaCache());
@@ -387,9 +383,37 @@ TEST_F(ServiceWorkerContainerTest,
     ScriptState::Scope script_scope(GetScriptState());
     container->getRegistration(GetScriptState(), "");
     EXPECT_EQ(1ul, stub_provider.GetRegistrationCallCount());
-    EXPECT_EQ(WebURL(KURL(NullURL(), "http://localhost/x/index.html")),
+    EXPECT_EQ(WebURL(KURL("http://localhost/x/index.html")),
               stub_provider.GetRegistrationURL());
     EXPECT_EQ(mojom::ServiceWorkerUpdateViaCache::kImports,
+              stub_provider.UpdateViaCache());
+  }
+}
+
+TEST_F(ServiceWorkerContainerTest,
+       RegisterUnregister_UpdateViaCacheOptionDelegatesToProvider) {
+  SetPageURL("http://localhost/x/index.html");
+
+  StubWebServiceWorkerProvider stub_provider;
+  Provide(stub_provider.Provider());
+
+  ServiceWorkerContainer* container = ServiceWorkerContainer::Create(
+      GetExecutionContext(), GetNavigatorServiceWorker());
+
+  // register
+  {
+    ScriptState::Scope script_scope(GetScriptState());
+    RegistrationOptions options;
+    options.setUpdateViaCache("none");
+    container->registerServiceWorker(GetScriptState(), "/x/y/worker.js",
+                                     options);
+
+    EXPECT_EQ(1ul, stub_provider.RegisterCallCount());
+    EXPECT_EQ(WebURL(KURL(KURL(), "http://localhost/x/y/")),
+              stub_provider.RegisterScope());
+    EXPECT_EQ(WebURL(KURL(KURL(), "http://localhost/x/y/worker.js")),
+              stub_provider.RegisterScriptURL());
+    EXPECT_EQ(mojom::ServiceWorkerUpdateViaCache::kNone,
               stub_provider.UpdateViaCache());
   }
 }

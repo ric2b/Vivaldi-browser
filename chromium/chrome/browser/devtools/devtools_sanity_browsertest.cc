@@ -42,7 +42,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -1799,7 +1798,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsReattachAfterCrashTest,
 
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest, AutoAttachToWindowOpen) {
   OpenDevToolsWindow(kWindowOpenTestPage, false);
-  DispatchOnTestSuite(window_, "enableAutoAttachToCreatedPages");
+  DevToolsWindowTesting::Get(window_)->SetOpenNewWindowForPopups(true);
   DevToolsWindowCreationObserver observer;
   ASSERT_TRUE(content::ExecuteScript(
       GetInspectedTab(), "window.open('window_open.html', '_blank');"));
@@ -1840,7 +1839,7 @@ IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest, InspectSharedWorker) {
 
 // Flaky on multiple platforms. See http://crbug.com/432444
 IN_PROC_BROWSER_TEST_F(WorkerDevToolsSanityTest,
-                       DISABLED_PauseInSharedWorkerInitialization) {
+                       PauseInSharedWorkerInitialization) {
   ASSERT_TRUE(spawned_test_server()->Start());
   GURL url = spawned_test_server()->GetURL(kReloadSharedWorkerTestPage);
   ui_test_utils::NavigateToURL(browser(), url);
@@ -2028,9 +2027,8 @@ class MockWebUIProvider
 // This tests checks that window is correctly initialized when DevTools is
 // opened while navigation through history with forward and back actions.
 // (crbug.com/627407)
-// Flaky on Windows and ChromeOS. http://crbug.com/628174#c4
 IN_PROC_BROWSER_TEST_F(DevToolsSanityTest,
-                       DISABLED_TestWindowInitializedOnNavigateBack) {
+                       TestWindowInitializedOnNavigateBack) {
   TestChromeWebUIControllerFactory test_factory;
   MockWebUIProvider mock_provider("dummyurl",
                                   "<script>\n"

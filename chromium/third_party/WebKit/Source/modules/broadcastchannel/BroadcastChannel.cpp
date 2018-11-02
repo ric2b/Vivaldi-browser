@@ -49,7 +49,7 @@ BroadcastChannel* BroadcastChannel::Create(ExecutionContext* execution_context,
   return new BroadcastChannel(execution_context, name);
 }
 
-BroadcastChannel::~BroadcastChannel() {}
+BroadcastChannel::~BroadcastChannel() = default;
 
 void BroadcastChannel::Dispose() {
   close();
@@ -101,8 +101,8 @@ void BroadcastChannel::OnMessage(BlinkCloneableMessage message) {
       nullptr, std::move(message.message),
       GetExecutionContext()->GetSecurityOrigin()->ToString());
   event->SetTarget(this);
-  bool success = GetExecutionContext()->GetEventQueue()->EnqueueEvent(
-      BLINK_FROM_HERE, event);
+  bool success =
+      GetExecutionContext()->GetEventQueue()->EnqueueEvent(FROM_HERE, event);
   DCHECK(success);
   ALLOW_UNUSED_LOCAL(success);
 }
@@ -124,14 +124,14 @@ BroadcastChannel::BroadcastChannel(ExecutionContext* execution_context,
   // channel.
   mojom::blink::BroadcastChannelClientAssociatedPtrInfo local_client_info;
   binding_.Bind(mojo::MakeRequest(&local_client_info));
-  binding_.set_connection_error_handler(ConvertToBaseCallback(
-      WTF::Bind(&BroadcastChannel::OnError, WrapWeakPersistent(this))));
+  binding_.set_connection_error_handler(
+      WTF::Bind(&BroadcastChannel::OnError, WrapWeakPersistent(this)));
 
   // Remote BroadcastChannelClient for messages send from this channel to the
   // browser.
   auto remote_cient_request = mojo::MakeRequest(&remote_client_);
-  remote_client_.set_connection_error_handler(ConvertToBaseCallback(
-      WTF::Bind(&BroadcastChannel::OnError, WrapWeakPersistent(this))));
+  remote_client_.set_connection_error_handler(
+      WTF::Bind(&BroadcastChannel::OnError, WrapWeakPersistent(this)));
 
   provider->ConnectToChannel(origin_, name_, std::move(local_client_info),
                              std::move(remote_cient_request));

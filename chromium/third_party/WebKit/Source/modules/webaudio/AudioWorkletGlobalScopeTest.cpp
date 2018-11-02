@@ -17,10 +17,10 @@
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
-#include "core/dom/MessageChannel.h"
-#include "core/dom/MessagePort.h"
+#include "core/messaging/MessageChannel.h"
+#include "core/messaging/MessagePort.h"
 #include "core/origin_trials/OriginTrialContext.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerInspectorProxy.h"
@@ -52,12 +52,12 @@ static const float kTestingSampleRate = 44100;
 
 }  // namespace
 
-class AudioWorkletGlobalScopeTest : public ::testing::Test {
+class AudioWorkletGlobalScopeTest : public PageTestBase {
  public:
   void SetUp() override {
     AudioWorkletThread::CreateSharedBackingThreadForTest();
-    page_ = DummyPageHolder::Create();
-    Document* document = page_->GetFrame().GetDocument();
+    PageTestBase::SetUp(IntSize());
+    Document* document = &GetDocument();
     document->SetURL(KURL("https://example.com/"));
     document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
     reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
@@ -66,69 +66,62 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
   std::unique_ptr<AudioWorkletThread> CreateAudioWorkletThread() {
     std::unique_ptr<AudioWorkletThread> thread =
         AudioWorkletThread::Create(nullptr, *reporting_proxy_);
-    Document* document = page_->GetFrame().GetDocument();
+    Document* document = &GetDocument();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), document->UserAgent(), "" /* source_code */,
-            nullptr /* cached_meta_data */,
+            document->Url(), document->UserAgent(),
             nullptr /* content_security_policy_parsed_headers */,
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
             nullptr /* worker_clients */, document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             nullptr /* worker_settings */, kV8CacheOptionsDefault),
-        WTF::nullopt,
-        std::make_unique<GlobalScopeInspectorCreationParams>(
-            WorkerInspectorProxy::PauseOnWorkerStart::kDontPause),
+        WTF::nullopt, WorkerInspectorProxy::PauseOnWorkerStart::kDontPause,
         ParentFrameTaskRunners::Create());
     return thread;
   }
 
   void RunBasicTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    thread->GetTaskRunner(TaskType::kUnthrottled)
-        ->PostTask(
-            BLINK_FROM_HERE,
-            CrossThreadBind(
-                &AudioWorkletGlobalScopeTest::RunBasicTestOnWorkletThread,
-                CrossThreadUnretained(this), CrossThreadUnretained(thread),
-                CrossThreadUnretained(&waitable_event)));
+    PostCrossThreadTask(
+        *thread->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
+        CrossThreadBind(
+            &AudioWorkletGlobalScopeTest::RunBasicTestOnWorkletThread,
+            CrossThreadUnretained(this), CrossThreadUnretained(thread),
+            CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
   }
 
   void RunSimpleProcessTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    thread->GetTaskRunner(TaskType::kUnthrottled)
-        ->PostTask(BLINK_FROM_HERE,
-                   CrossThreadBind(&AudioWorkletGlobalScopeTest::
-                                       RunSimpleProcessTestOnWorkletThread,
-                                   CrossThreadUnretained(this),
-                                   CrossThreadUnretained(thread),
-                                   CrossThreadUnretained(&waitable_event)));
+    PostCrossThreadTask(
+        *thread->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
+        CrossThreadBind(
+            &AudioWorkletGlobalScopeTest::RunSimpleProcessTestOnWorkletThread,
+            CrossThreadUnretained(this), CrossThreadUnretained(thread),
+            CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
   }
 
   void RunParsingTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    thread->GetTaskRunner(TaskType::kUnthrottled)
-        ->PostTask(
-            BLINK_FROM_HERE,
-            CrossThreadBind(
-                &AudioWorkletGlobalScopeTest::RunParsingTestOnWorkletThread,
-                CrossThreadUnretained(this), CrossThreadUnretained(thread),
-                CrossThreadUnretained(&waitable_event)));
+    PostCrossThreadTask(
+        *thread->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
+        CrossThreadBind(
+            &AudioWorkletGlobalScopeTest::RunParsingTestOnWorkletThread,
+            CrossThreadUnretained(this), CrossThreadUnretained(thread),
+            CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
   }
 
   void RunParsingParameterDescriptorTest(WorkerThread* thread) {
     WaitableEvent waitable_event;
-    thread->GetTaskRunner(TaskType::kUnthrottled)
-        ->PostTask(
-            BLINK_FROM_HERE,
-            CrossThreadBind(
-                &AudioWorkletGlobalScopeTest::
-                    RunParsingParameterDescriptorTestOnWorkletThread,
-                CrossThreadUnretained(this), CrossThreadUnretained(thread),
-                CrossThreadUnretained(&waitable_event)));
+    PostCrossThreadTask(
+        *thread->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
+        CrossThreadBind(&AudioWorkletGlobalScopeTest::
+                            RunParsingParameterDescriptorTestOnWorkletThread,
+                        CrossThreadUnretained(this),
+                        CrossThreadUnretained(thread),
+                        CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
   }
 
@@ -139,8 +132,9 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
     ScriptState* script_state =
         global_scope->ScriptController()->GetScriptState();
     EXPECT_TRUE(script_state);
+    KURL js_url("https://example.com/worklet.js");
     ScriptModule module = ScriptModule::Compile(
-        script_state->GetIsolate(), source_code, "worklet.js",
+        script_state->GetIsolate(), source_code, js_url, js_url,
         ScriptFetchOptions(), kSharableCrossOrigin,
         TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
@@ -365,7 +359,6 @@ class AudioWorkletGlobalScopeTest : public ::testing::Test {
     wait_event->Signal();
   }
 
-  std::unique_ptr<DummyPageHolder> page_;
   std::unique_ptr<WorkerReportingProxy> reporting_proxy_;
 };
 

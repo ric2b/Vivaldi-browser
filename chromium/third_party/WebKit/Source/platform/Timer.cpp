@@ -54,14 +54,14 @@ TimerBase::~TimerBase() {
 
 void TimerBase::Start(TimeDelta next_fire_interval,
                       TimeDelta repeat_interval,
-                      const WebTraceLocation& caller) {
+                      const base::Location& caller) {
 #if DCHECK_IS_ON()
   DCHECK_EQ(thread_, CurrentThread());
 #endif
 
   location_ = caller;
   repeat_interval_ = repeat_interval;
-  SetNextFireTime(TimerMonotonicallyIncreasingTime(), next_fire_interval);
+  SetNextFireTime(TimerCurrentTimeTicksInSeconds(), next_fire_interval);
 }
 
 void TimerBase::Stop() {
@@ -71,12 +71,12 @@ void TimerBase::Stop() {
 
   repeat_interval_ = TimeDelta();
   next_fire_time_ = TimeTicks();
-  weak_ptr_factory_.RevokeAll();
+  weak_ptr_factory_.InvalidateWeakPtrs();
 }
 
 TimeDelta TimerBase::NextFireIntervalDelta() const {
   DCHECK(IsActive());
-  TimeTicks current = TimerMonotonicallyIncreasingTime();
+  TimeTicks current = TimerCurrentTimeTicksInSeconds();
   if (next_fire_time_ < current)
     return TimeDelta();
   return next_fire_time_ - current;
@@ -93,13 +93,13 @@ void TimerBase::MoveToNewTaskRunner(scoped_refptr<WebTaskRunner> task_runner) {
   }
 
   bool active = IsActive();
-  weak_ptr_factory_.RevokeAll();
+  weak_ptr_factory_.InvalidateWeakPtrs();
   web_task_runner_ = std::move(task_runner);
 
   if (!active)
     return;
 
-  TimeTicks now = TimerMonotonicallyIncreasingTime();
+  TimeTicks now = TimerCurrentTimeTicksInSeconds();
   TimeTicks next_fire_time = std::max(next_fire_time_, now);
   next_fire_time_ = TimeTicks();
 
@@ -126,11 +126,11 @@ void TimerBase::SetNextFireTime(TimeTicks now, TimeDelta delay) {
     next_fire_time_ = new_time;
 
     // Cancel any previously posted task.
-    weak_ptr_factory_.RevokeAll();
+    weak_ptr_factory_.InvalidateWeakPtrs();
 
     TimerTaskRunner()->PostDelayedTask(
         location_,
-        WTF::Bind(&TimerBase::RunInternal, weak_ptr_factory_.CreateWeakPtr()),
+        WTF::Bind(&TimerBase::RunInternal, weak_ptr_factory_.GetWeakPtr()),
         delay);
   }
 }
@@ -140,7 +140,7 @@ void TimerBase::RunInternal() {
   if (!CanFire())
     return;
 
-  weak_ptr_factory_.RevokeAll();
+  weak_ptr_factory_.InvalidateWeakPtrs();
 
   TRACE_EVENT0("blink", "TimerBase::run");
 #if DCHECK_IS_ON()
@@ -150,7 +150,7 @@ void TimerBase::RunInternal() {
 #endif
 
   if (!repeat_interval_.is_zero()) {
-    TimeTicks now = TimerMonotonicallyIncreasingTime();
+    TimeTicks now = TimerCurrentTimeTicksInSeconds();
     // This computation should be drift free, and it will cope if we miss a
     // beat, which can easily happen if the thread is busy.  It will also cope
     // if we get called slightly before m_unalignedNextFireTime, which can
@@ -170,7 +170,7 @@ bool TimerBase::Comparator::operator()(const TimerBase* a,
 }
 
 // static
-TimeTicks TimerBase::TimerMonotonicallyIncreasingTime() const {
+TimeTicks TimerBase::TimerCurrentTimeTicksInSeconds() const {
   return TimeTicks::FromSeconds(
       TimerTaskRunner()->MonotonicallyIncreasingVirtualTimeSeconds());
 }

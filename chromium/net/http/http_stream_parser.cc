@@ -207,16 +207,20 @@ HttpStreamParser::HttpStreamParser(ClientSocketHandle* connection,
       sent_last_chunk_(false),
       upload_error_(OK),
       weak_ptr_factory_(this) {
+  CHECK(connection_) << "ClientSocketHandle passed to HttpStreamParser must "
+                        "not be NULL. See crbug.com/790776";
   io_callback_ = base::Bind(&HttpStreamParser::OnIOComplete,
                             weak_ptr_factory_.GetWeakPtr());
 }
 
 HttpStreamParser::~HttpStreamParser() = default;
 
-int HttpStreamParser::SendRequest(const std::string& request_line,
-                                  const HttpRequestHeaders& headers,
-                                  HttpResponseInfo* response,
-                                  const CompletionCallback& callback) {
+int HttpStreamParser::SendRequest(
+    const std::string& request_line,
+    const HttpRequestHeaders& headers,
+    const NetworkTrafficAnnotationTag& traffic_annotation,
+    HttpResponseInfo* response,
+    const CompletionCallback& callback) {
   DCHECK_EQ(STATE_NONE, io_state_);
   DCHECK(callback_.is_null());
   DCHECK(!callback.is_null());
@@ -228,6 +232,7 @@ int HttpStreamParser::SendRequest(const std::string& request_line,
 
   DVLOG(1) << __func__ << "() request_line = \"" << request_line << "\""
            << " headers = \"" << headers.ToString() << "\"";
+  traffic_annotation_ = MutableNetworkTrafficAnnotationTag(traffic_annotation);
   response_ = response;
 
   // Put the peer's IP address and port into the response.
@@ -455,8 +460,9 @@ int HttpStreamParser::DoSendHeaders() {
     response_->request_time = base::Time::Now();
 
   io_state_ = STATE_SEND_HEADERS_COMPLETE;
-  return connection_->socket()
-      ->Write(request_headers_.get(), bytes_remaining, io_callback_);
+  return connection_->socket()->Write(
+      request_headers_.get(), bytes_remaining, io_callback_,
+      NetworkTrafficAnnotationTag(traffic_annotation_));
 }
 
 int HttpStreamParser::DoSendHeadersComplete(int result) {
@@ -503,10 +509,9 @@ int HttpStreamParser::DoSendHeadersComplete(int result) {
 int HttpStreamParser::DoSendBody() {
   if (request_body_send_buf_->BytesRemaining() > 0) {
     io_state_ = STATE_SEND_BODY_COMPLETE;
-    return connection_->socket()
-        ->Write(request_body_send_buf_.get(),
-                request_body_send_buf_->BytesRemaining(),
-                io_callback_);
+    return connection_->socket()->Write(
+        request_body_send_buf_.get(), request_body_send_buf_->BytesRemaining(),
+        io_callback_, NetworkTrafficAnnotationTag(traffic_annotation_));
   }
 
   if (request_->upload_data_stream->is_chunked() && sent_last_chunk_) {

@@ -52,6 +52,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/sessions/content/content_record_password_state.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/ukm/content/source_url_recorder.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -66,6 +67,7 @@
 #include "extensions/features/features.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
+#include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/re2/src/re2/re2.h"
 #include "url/url_constants.h"
@@ -266,8 +268,15 @@ bool ChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
 }
 
 bool ChromePasswordManagerClient::IsFillingEnabledForCurrentPage() const {
-  return !DidLastPageLoadEncounterSSLErrors() &&
-         IsPasswordManagementEnabledForCurrentPage();
+  const bool ssl_errors = net::IsCertStatusError(GetMainFrameCertStatus());
+
+  if (log_manager_->IsLoggingActive()) {
+    password_manager::BrowserSavePasswordProgressLogger logger(
+        log_manager_.get());
+    logger.LogBoolean(Logger::STRING_SSL_ERRORS_PRESENT, ssl_errors);
+  }
+
+  return !ssl_errors && IsPasswordManagementEnabledForCurrentPage();
 }
 
 bool ChromePasswordManagerClient::IsFillingFallbackEnabledForCurrentPage()
@@ -502,23 +511,14 @@ void ChromePasswordManagerClient::LogPasswordReuseDetectedEvent() {
 }
 #endif
 
-ukm::UkmRecorder* ChromePasswordManagerClient::GetUkmRecorder() {
-  return ukm::UkmRecorder::Get();
-}
-
 ukm::SourceId ChromePasswordManagerClient::GetUkmSourceId() {
-  // TODO(crbug.com/732846): The UKM Source should be recycled (e.g. from the
-  // web contents), once the UKM framework provides a mechanism for that.
-  if (!ukm_source_id_)
-    ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
-  return *ukm_source_id_;
+  return ukm::GetSourceIdForWebContentsDocument(web_contents());
 }
 
 PasswordManagerMetricsRecorder&
 ChromePasswordManagerClient::GetMetricsRecorder() {
   if (!metrics_recorder_) {
-    metrics_recorder_.emplace(GetUkmRecorder(), GetUkmSourceId(),
-                              GetMainFrameURL());
+    metrics_recorder_.emplace(GetUkmSourceId(), GetMainFrameURL());
   }
   return metrics_recorder_.value();
 }
@@ -529,7 +529,6 @@ void ChromePasswordManagerClient::DidFinishNavigation(
     return;
 
   if (!navigation_handle->IsSameDocument()) {
-    ukm_source_id_.reset();
     // Send any collected metrics by destroying the metrics recorder.
     metrics_recorder_.reset();
   }
@@ -611,21 +610,12 @@ bool ChromePasswordManagerClient::WasLastNavigationHTTPError() const {
   return false;
 }
 
-bool ChromePasswordManagerClient::DidLastPageLoadEncounterSSLErrors() const {
+net::CertStatus ChromePasswordManagerClient::GetMainFrameCertStatus() const {
   content::NavigationEntry* entry =
       web_contents()->GetController().GetLastCommittedEntry();
-  bool ssl_errors = true;
-  if (!entry) {
-    ssl_errors = false;
-  } else {
-    ssl_errors = net::IsCertStatusError(entry->GetSSL().cert_status);
-  }
-  if (log_manager_->IsLoggingActive()) {
-    password_manager::BrowserSavePasswordProgressLogger logger(
-        log_manager_.get());
-    logger.LogBoolean(Logger::STRING_SSL_ERRORS_PRESENT, ssl_errors);
-  }
-  return ssl_errors;
+  if (!entry)
+    return 0;
+  return entry->GetSSL().cert_status;
 }
 
 bool ChromePasswordManagerClient::IsIncognito() const {
@@ -641,10 +631,14 @@ autofill::AutofillManager*
 ChromePasswordManagerClient::GetAutofillManagerForMainFrame() {
   autofill::ContentAutofillDriverFactory* factory =
       autofill::ContentAutofillDriverFactory::FromWebContents(web_contents());
-  return factory
-             ? factory->DriverForFrame(web_contents()->GetMainFrame())
-                   ->autofill_manager()
-             : nullptr;
+  if (factory) {
+    autofill::ContentAutofillDriver* driver =
+        factory->DriverForFrame(web_contents()->GetMainFrame());
+    // |driver| can be NULL if the tab is being closed.
+    if (driver)
+      return driver->autofill_manager();
+  }
+  return nullptr;
 }
 
 void ChromePasswordManagerClient::SetTestObserver(
@@ -779,7 +773,7 @@ const password_manager::LogManager* ChromePasswordManagerClient::GetLogManager()
 
 // static
 void ChromePasswordManagerClient::BindCredentialManager(
-    password_manager::mojom::CredentialManagerAssociatedRequest request,
+    password_manager::mojom::CredentialManagerRequest request,
     content::RenderFrameHost* render_frame_host) {
   // Only valid for the main frame.
   if (render_frame_host->GetParent())

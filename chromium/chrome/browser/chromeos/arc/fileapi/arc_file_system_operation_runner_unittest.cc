@@ -14,6 +14,7 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/common/file_system.mojom.h"
+#include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_file_system_instance.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -38,23 +39,21 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
   void SetUp() override {
     arc_service_manager_ = std::make_unique<ArcServiceManager>();
     profile_ = std::make_unique<TestingProfile>();
-    ArcFileSystemBridge::GetFactory()->SetTestingFactoryAndUse(
-        profile_.get(),
-        [](content::BrowserContext* context) -> std::unique_ptr<KeyedService> {
-          return std::make_unique<ArcFileSystemBridge>(
-              context, ArcServiceManager::Get()->arc_bridge_service());
-        });
+    ArcFileSystemBridge::GetForBrowserContextForTesting(profile_.get());
     runner_ = ArcFileSystemOperationRunner::CreateForTesting(
         profile_.get(), arc_service_manager_->arc_bridge_service());
     arc_service_manager_->arc_bridge_service()->file_system()->SetInstance(
         &file_system_instance_);
+    WaitForInstanceReady(
+        arc_service_manager_->arc_bridge_service()->file_system());
 
     // Run the message loop until FileSystemInstance::Init() is called.
-    base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(file_system_instance_.InitCalled());
   }
 
   void TearDown() override {
+    arc_service_manager_->arc_bridge_service()->file_system()->CloseInstance(
+        &file_system_instance_);
     // Explicitly calls Shutdown() to detach from services.
     if (runner_)
       runner_->Shutdown();
@@ -164,8 +163,8 @@ TEST_F(ArcFileSystemOperationRunnerTest, DeferAndDiscard) {
 }
 
 TEST_F(ArcFileSystemOperationRunnerTest, FileInstanceUnavailable) {
-  arc_service_manager_->arc_bridge_service()->file_system()->SetInstance(
-      nullptr);
+  arc_service_manager_->arc_bridge_service()->file_system()->CloseInstance(
+      &file_system_instance_);
 
   int counter = 0;
   CallSetShouldDefer(false);

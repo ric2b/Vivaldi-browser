@@ -30,9 +30,9 @@
 #include <memory>
 #include "core/dom/ParserContentPolicy.h"
 #include "core/dom/ScriptableDocumentParser.h"
+#include "core/script/XMLParserScriptRunner.h"
+#include "core/script/XMLParserScriptRunnerHost.h"
 #include "core/xml/parser/XMLErrors.h"
-#include "core/xml/parser/XMLParserScriptRunner.h"
-#include "core/xml/parser/XMLParserScriptRunnerHost.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/ResourceClient.h"
 #include "platform/text/SegmentedString.h"
@@ -109,7 +109,7 @@ class XMLDocumentParser final : public ScriptableDocumentParser,
     USING_FAST_MALLOC(PendingCallback);
 
    public:
-    virtual ~PendingCallback() {}
+    virtual ~PendingCallback() = default;
     virtual void Call(XMLDocumentParser*) = 0;
   };
 

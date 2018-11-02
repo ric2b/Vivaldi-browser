@@ -172,7 +172,7 @@ void PaymentManifestDownloader::InitiateDownload(
   fetcher->SetRequestContext(context_.get());
   fetcher->Start();
 
-  auto download = base::MakeUnique<Download>();
+  auto download = std::make_unique<Download>();
   download->request_type = request_type;
   download->fetcher = std::move(fetcher);
   download->callback = std::move(callback);
@@ -184,9 +184,9 @@ void PaymentManifestDownloader::InitiateDownload(
 }
 
 bool PaymentManifestDownloader::IsValidManifestUrl(const GURL& url) {
-  return url.is_valid() && (url.SchemeIs(url::kHttpsScheme) ||
-                            (url.SchemeIs(url::kHttpScheme) &&
-                             net::IsLocalhost(url.HostNoBracketsPiece())));
+  return url.is_valid() &&
+         (url.SchemeIs(url::kHttpsScheme) ||
+          (url.SchemeIs(url::kHttpScheme) && net::IsLocalhost(url)));
 }
 
 }  // namespace payments

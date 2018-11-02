@@ -273,6 +273,10 @@
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="View" id="DMP-yk-Fru"/>
                 </menuItem>
+                <menuItem title="Bookmarks" tag="40029" id="fca-He-1wV">
+                    <modifierMask key="keyEquivalentModifierMask"/>
+                    <menu key="submenu" title="Bookmarks" id="kcG-jq-3mE"/>
+                </menuItem>
                 <menuItem title="Tools" tag="54902" id="zDR-w9-sL6">
                     <modifierMask key="keyEquivalentModifierMask"/>
                     <menu key="submenu" title="Tools" id="iZX-5w-bUA"/>
@@ -307,10 +311,6 @@
                             </menuItem>
                         </items>
                     </menu>
-                </menuItem>
-                <menuItem title="Bookmarks" tag="40029" id="fca-He-1wV">
-                    <modifierMask key="keyEquivalentModifierMask"/>
-                    <menu key="submenu" title="Bookmarks" id="kcG-jq-3mE"/>
                 </menuItem>
                 <menuItem title="Help" tag="54903" id="TZK-wy-1pY">
                     <modifierMask key="keyEquivalentModifierMask"/>

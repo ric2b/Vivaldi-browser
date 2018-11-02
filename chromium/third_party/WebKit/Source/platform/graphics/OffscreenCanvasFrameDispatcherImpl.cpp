@@ -45,7 +45,7 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
   if (frame_sink_id_.is_valid()) {
     // Only frameless canvas pass an invalid frame sink id; we don't create
     // mojo channel for this special case.
-    current_local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    current_local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
     DCHECK(!sink_.is_bound());
     mojom::blink::OffscreenCanvasProviderPtr provider;
     Platform::Current()->GetInterfaceProvider()->GetInterface(
@@ -64,16 +64,17 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
       std::make_unique<OffscreenCanvasResourceProvider>(width, height);
 }
 
-OffscreenCanvasFrameDispatcherImpl::~OffscreenCanvasFrameDispatcherImpl() {
-}
+OffscreenCanvasFrameDispatcherImpl::~OffscreenCanvasFrameDispatcherImpl() =
+    default;
 
 namespace {
 
-void UpdatePlaceholderImage(WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
-                            scoped_refptr<WebTaskRunner> task_runner,
-                            int placeholder_canvas_id,
-                            scoped_refptr<blink::StaticBitmapImage> image,
-                            unsigned resource_id) {
+void UpdatePlaceholderImage(
+    base::WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
+    scoped_refptr<WebTaskRunner> task_runner,
+    int placeholder_canvas_id,
+    scoped_refptr<blink::StaticBitmapImage> image,
+    unsigned resource_id) {
   DCHECK(IsMainThread());
   OffscreenCanvasPlaceholder* placeholder_canvas =
       OffscreenCanvasPlaceholder::GetPlaceholderById(placeholder_canvas_id);
@@ -120,15 +121,12 @@ void OffscreenCanvasFrameDispatcherImpl::PostImageToPlaceholder(
   scoped_refptr<WebTaskRunner> dispatcher_task_runner =
       Platform::Current()->CurrentThread()->GetWebTaskRunner();
 
-  Platform::Current()
-      ->MainThread()
-      ->Scheduler()
-      ->CompositorTaskRunner()
-      ->PostTask(BLINK_FROM_HERE,
-                 CrossThreadBind(UpdatePlaceholderImage, this->CreateWeakPtr(),
-                                 WTF::Passed(std::move(dispatcher_task_runner)),
-                                 placeholder_canvas_id_, std::move(image),
-                                 resource_id));
+  PostCrossThreadTask(
+      *Platform::Current()->MainThread()->Scheduler()->CompositorTaskRunner(),
+      FROM_HERE,
+      CrossThreadBind(UpdatePlaceholderImage, this->GetWeakPtr(),
+                      WTF::Passed(std::move(dispatcher_task_runner)),
+                      placeholder_canvas_id_, std::move(image), resource_id));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
@@ -204,10 +202,13 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
     if (SharedGpuContext::IsGpuCompositingEnabled()) {
       // Case 3: canvas is not gpu-accelerated, but compositor is.
       commit_type = kCommitSoftwareCanvasGPUCompositing;
+      scoped_refptr<StaticBitmapImage> accelerated_image =
+          image->MakeAccelerated(SharedGpuContext::ContextProviderWrapper());
+      if (!accelerated_image)
+        return;
       offscreen_canvas_resource_provider_
-          ->SetTransferableResourceToStaticBitmapImage(
-              resource, image->MakeAccelerated(
-                            SharedGpuContext::ContextProviderWrapper()));
+          ->SetTransferableResourceToStaticBitmapImage(resource,
+                                                       accelerated_image);
     } else {
       // Case 4: both canvas and compositor are not gpu accelerated.
       commit_type = kCommitSoftwareCanvasSoftwareCompositing;
@@ -249,7 +250,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
 
   frame.render_pass_list.push_back(std::move(pass));
 
-  double elapsed_time = WTF::MonotonicallyIncreasingTime() - commit_start_time;
+  double elapsed_time = WTF::CurrentTimeTicksInSeconds() - commit_start_time;
 
   switch (commit_type) {
     case kCommitGPUCanvasGPUCompositing:
@@ -336,7 +337,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
   }
 
   if (change_size_for_next_commit_) {
-    current_local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    current_local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
     change_size_for_next_commit_ = false;
   }
 

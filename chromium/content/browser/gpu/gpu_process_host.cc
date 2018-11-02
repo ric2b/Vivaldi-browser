@@ -21,6 +21,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -56,7 +57,6 @@
 #include "gpu/config/gpu_driver_bug_list.h"
 #include "gpu/config/gpu_driver_bug_workaround_type.h"
 #include "gpu/ipc/host/shader_disk_cache.h"
-#include "gpu/ipc/service/switches.h"
 #include "media/base/media_switches.h"
 #include "media/media_features.h"
 #include "mojo/edk/embedder/embedder.h"
@@ -108,6 +108,7 @@ int GpuProcessHost::gpu_crash_count_ = 0;
 int GpuProcessHost::gpu_recent_crash_count_ = 0;
 bool GpuProcessHost::crashed_before_ = false;
 int GpuProcessHost::swiftshader_crash_count_ = 0;
+// FEATURE_FORCE_ACCESS_TO_GPU
 bool GpuProcessHost::force_allow_access_to_gpu_ = false;
 
 namespace {
@@ -133,7 +134,6 @@ static const char* const kSwitchNames[] = {
     switches::kEnableHeapProfiling,
     switches::kEnableLogging,
     switches::kEnableOOPRasterization,
-    switches::kEnableViz,
     switches::kHeadless,
     switches::kLoggingLevel,
     switches::kEnableLowEndDeviceMode,
@@ -161,12 +161,9 @@ static const char* const kSwitchNames[] = {
 #if defined(USE_X11)
     switches::kX11Display,
 #endif
-    switches::kGpuTestingGLVendor,
-    switches::kGpuTestingGLRenderer,
-    switches::kGpuTestingGLVersion,
-    switches::kDisableGpuDriverBugWorkarounds,
+    switches::kGpuBlacklistTestGroup,
+    switches::kGpuDriverBugListTestGroup,
     switches::kUseCmdDecoder,
-    switches::kIgnoreGpuBlacklist,
     switches::kForceVideoOverlays,
 #if defined(OS_ANDROID)
     switches::kMadviseRandomExecutableCode,
@@ -201,13 +198,6 @@ void SendGpuProcessMessage(base::WeakPtr<GpuProcessHost> host,
     host->Send(message);
   else
     delete message;
-}
-
-void RouteMessageToOzoneOnUI(const IPC::Message& message) {
-  DCHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
-  ui::OzonePlatform::GetInstance()
-      ->GetGpuPlatformSupportHost()
-      ->OnMessageReceived(message);
 }
 
 #endif  // defined(USE_OZONE)
@@ -366,9 +356,7 @@ bool GpuProcessHost::ValidateHost(GpuProcessHost* host) {
           switches::kSingleProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kInProcessGPU) ||
-      (host->valid_ &&
-       (host->swiftshader_rendering_ ||
-        !GpuDataManagerImpl::GetInstance()->ShouldUseSwiftShader()))) {
+      host->valid_) {
     return true;
   }
 
@@ -384,8 +372,11 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
   DCHECK(gpu_data_manager);
 
-  if (!(force_allow_access_to_gpu_ || gpu_data_manager->GpuAccessAllowed(nullptr)))
+  // FEATURE_FORCE_ACCESS_TO_GPU
+  if (!(force_allow_access_to_gpu_ || gpu_data_manager->GpuAccessAllowed(nullptr))) {
+    DLOG(ERROR) << "!GpuDataManagerImpl::GpuAccessAllowed()";
     return nullptr;
+  }
 
   if (g_gpu_process_hosts[kind] && ValidateHost(g_gpu_process_hosts[kind]))
     return g_gpu_process_hosts[kind];
@@ -394,8 +385,10 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
     return nullptr;
 
   // Do not create a new process if browser is shutting down.
-  if (BrowserMainRunner::ExitedMainMessageLoop())
+  if (BrowserMainRunner::ExitedMainMessageLoop()) {
+    DLOG(ERROR) << "BrowserMainRunner::ExitedMainMessageLoop()";
     return nullptr;
+  }
 
   static int last_host_id = 0;
   int host_id;
@@ -410,9 +403,11 @@ GpuProcessHost* GpuProcessHost::Get(GpuProcessKind kind, bool force_create) {
   host->RecordProcessCrash();
 
   delete host;
+  DLOG(ERROR) << "GpuProcessHost::Init() failed";
   return nullptr;
 }
 
+// FEATURE_FORCE_ACCESS_TO_GPU
 // static
 void GpuProcessHost::SetForceAllowAccessToGpu(bool enable) {
   force_allow_access_to_gpu_ = enable;
@@ -500,7 +495,7 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
 GpuProcessHost::~GpuProcessHost() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  SendOutstandingReplies();
+  SendOutstandingReplies(EstablishChannelStatus::GPU_HOST_INVALID);
 
   if (status_ == UNKNOWN) {
     RunRequestGPUInfoCallbacks(gpu::GPUInfo());
@@ -519,7 +514,7 @@ GpuProcessHost::~GpuProcessHost() {
   if (g_gpu_process_hosts[kind_] == this)
     g_gpu_process_hosts[kind_] = nullptr;
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(OS_ANDROID)
   UMA_HISTOGRAM_COUNTS_100("GPU.AtExitSurfaceCount",
                            gpu::GpuSurfaceTracker::Get()->GetSurfaceCount());
 #endif
@@ -539,8 +534,8 @@ GpuProcessHost::~GpuProcessHost() {
         status == base::TERMINATION_STATUS_PROCESS_CRASHED) {
       // Windows always returns PROCESS_CRASHED on abnormal termination, as it
       // doesn't have a way to distinguish the two.
-      UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.GPUProcessExitCode",
-                                  std::max(0, std::min(100, exit_code)));
+      base::UmaHistogramSparse("GPU.GPUProcessExitCode",
+                               std::max(0, std::min(100, exit_code)));
     }
 
     switch (status) {
@@ -641,13 +636,40 @@ bool GpuProcessHost::Init() {
 #if defined(USE_OZONE)
   // Ozone needs to send the primary DRM device to GPU process as early as
   // possible to ensure the latter always has a valid device. crbug.com/608839
-  ui::OzonePlatform::GetInstance()
-      ->GetGpuPlatformSupportHost()
-      ->OnGpuProcessLaunched(
-          host_id_, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
-          base::ThreadTaskRunnerHandle::Get(),
-          base::Bind(&SendGpuProcessMessage, weak_ptr_factory_.GetWeakPtr()));
-#endif
+  // When running with mus, the OzonePlatform may not have been created yet. So
+  // defer the callback until OzonePlatform instance is created.
+  auto send_callback = base::BindRepeating(&SendGpuProcessMessage,
+                                           weak_ptr_factory_.GetWeakPtr());
+  // Create the callback that should run on the current thread (i.e. IO thread).
+  auto io_callback = base::BindOnce(
+      [](int host_id,
+         const base::RepeatingCallback<void(IPC::Message*)>& send_callback,
+         ui::OzonePlatform* platform) {
+        DCHECK_CURRENTLY_ON(BrowserThread::IO);
+        platform->GetGpuPlatformSupportHost()->OnGpuProcessLaunched(
+            host_id, BrowserThread::GetTaskRunnerForThread(BrowserThread::UI),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+            send_callback);
+      },
+      host_id_, send_callback);
+  // The callback registered in ozone can be called in any thread. So use an
+  // intermediary callback that bounces to the IO thread if needed, before
+  // running the callback.
+  auto bounce_callback = base::BindOnce(
+      [](base::TaskRunner* task_runner,
+         base::OnceCallback<void(ui::OzonePlatform*)> callback,
+         ui::OzonePlatform* platform) {
+        if (task_runner->RunsTasksInCurrentSequence()) {
+          std::move(callback).Run(platform);
+        } else {
+          task_runner->PostTask(FROM_HERE,
+                                base::BindOnce(std::move(callback), platform));
+        }
+      },
+      base::RetainedRef(base::ThreadTaskRunnerHandle::Get()),
+      base::Passed(&io_callback));
+  ui::OzonePlatform::RegisterStartupCallback(std::move(bounce_callback));
+#endif  // defined(USE_OZONE)
 
   return true;
 }
@@ -664,7 +686,7 @@ bool GpuProcessHost::Send(IPC::Message* msg) {
     // Channel is hosed, but we may not get destroyed for a while. Send
     // outstanding channel creation failures now so that the caller can restart
     // with a new process/channel without waiting.
-    SendOutstandingReplies();
+    SendOutstandingReplies(EstablishChannelStatus::GPU_HOST_INVALID);
   }
   return result;
 }
@@ -672,8 +694,9 @@ bool GpuProcessHost::Send(IPC::Message* msg) {
 bool GpuProcessHost::OnMessageReceived(const IPC::Message& message) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if defined(USE_OZONE)
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::BindOnce(&RouteMessageToOzoneOnUI, message));
+  ui::OzonePlatform::GetInstance()
+      ->GetGpuPlatformSupportHost()
+      ->OnMessageReceived(message);
 #endif
   return true;
 }
@@ -698,6 +721,7 @@ void GpuProcessHost::EstablishGpuChannel(
   TRACE_EVENT0("gpu", "GpuProcessHost::EstablishGpuChannel");
 
   // If GPU features are already blacklisted, no need to establish the channel.
+  // FEATURE_FORCE_ACCESS_TO_GPU
   if (!(force_allow_access_to_gpu_ || GpuDataManagerImpl::GetInstance()->GpuAccessAllowed(nullptr))) {
     DVLOG(1) << "GPU blacklisted, refusing to open a GPU channel.";
     callback.Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
@@ -755,6 +779,8 @@ void GpuProcessHost::ConnectFrameSinkManager(
   viz::mojom::FrameSinkManagerParamsPtr params =
       viz::mojom::FrameSinkManagerParams::New();
   params->restart_id = host_id_;
+  params->number_of_frames_to_activation_deadline =
+      switches::GetDeadlineToSynchronizeSurfaces();
   params->frame_sink_manager = std::move(request);
   params->frame_sink_manager_client = std::move(client);
   params->compositing_mode_watcher = std::move(mode_watcher);
@@ -800,6 +826,7 @@ void GpuProcessHost::OnChannelEstablished(
 
   // Currently if any of the GPU features are blacklisted, we don't establish a
   // GPU channel.
+  // FEATURE_FORCE_ACCESS_TO_GPU
   if (channel_handle.is_valid() &&
       !(force_allow_access_to_gpu_ || gpu_data_manager->GpuAccessAllowed(nullptr))) {
     gpu_service_ptr_->CloseChannel(client_id);
@@ -859,7 +886,7 @@ void GpuProcessHost::OnProcessCrashed(int exit_code) {
           cache_key.first, base::Time(), base::Time::Max(), base::Bind([] {}));
     }
   }
-  SendOutstandingReplies();
+  SendOutstandingReplies(EstablishChannelStatus::GPU_HOST_INVALID);
   RecordProcessCrash();
   GpuDataManagerImpl::GetInstance()->ProcessCrashed(
       process_->GetTerminationStatus(true /* known_dead */, nullptr));
@@ -881,10 +908,10 @@ void GpuProcessHost::DidInitialize(
   }
 
   GpuDataManagerImpl* gpu_data_manager = GpuDataManagerImpl::GetInstance();
-  if (!gpu_data_manager->ShouldUseSwiftShader()) {
-    gpu_data_manager->UpdateGpuInfo(gpu_info);
-    gpu_data_manager->UpdateGpuFeatureInfo(gpu_feature_info);
-  }
+  // Update GpuFeatureInfo first, because UpdateGpuInfo() will notify all
+  // listeners.
+  gpu_data_manager->UpdateGpuFeatureInfo(gpu_feature_info);
+  gpu_data_manager->UpdateGpuInfo(gpu_info);
   RunRequestGPUInfoCallbacks(gpu_data_manager->GetGPUInfo());
 }
 
@@ -1092,7 +1119,7 @@ bool GpuProcessHost::LaunchGpuProcess() {
   bool current_gpu_type_enabled =
       swiftshader_rendering_ ? gpu_enabled_ : hardware_gpu_enabled_;
   if (!current_gpu_type_enabled) {
-    SendOutstandingReplies();
+    SendOutstandingReplies(EstablishChannelStatus::GPU_ACCESS_DENIED);
     return false;
   }
 
@@ -1113,7 +1140,9 @@ bool GpuProcessHost::LaunchGpuProcess() {
   return true;
 }
 
-void GpuProcessHost::SendOutstandingReplies() {
+void GpuProcessHost::SendOutstandingReplies(
+    EstablishChannelStatus failure_status) {
+  DCHECK_NE(failure_status, EstablishChannelStatus::SUCCESS);
   valid_ = false;
 
   // First send empty channel handles for all EstablishChannel requests.
@@ -1121,8 +1150,7 @@ void GpuProcessHost::SendOutstandingReplies() {
     auto callback = channel_requests_.front();
     channel_requests_.pop();
     callback.Run(mojo::ScopedMessagePipeHandle(), gpu::GPUInfo(),
-                 gpu::GpuFeatureInfo(),
-                 EstablishChannelStatus::GPU_HOST_INVALID);
+                 gpu::GpuFeatureInfo(), failure_status);
   }
 
   while (!create_gpu_memory_buffer_requests_.empty()) {
@@ -1184,6 +1212,7 @@ void GpuProcessHost::RecordProcessCrash() {
           !disable_crash_limit) {
         // SwiftShader is too unstable to use. Disable it for current session.
         gpu_enabled_ = false;
+        GpuDataManagerImpl::GetInstance()->DisableSwiftShader();
       }
     } else {
       ++gpu_crash_count_;

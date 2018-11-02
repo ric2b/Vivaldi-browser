@@ -24,8 +24,8 @@ namespace {
 
 class MockPlatform final : public TestingPlatformSupportWithMockScheduler {
  public:
-  MockPlatform() {}
-  ~MockPlatform() override {}
+  MockPlatform() = default;
+  ~MockPlatform() override = default;
 
   // From blink::Platform:
   void CacheMetadata(const WebURL& url, Time, const char*, size_t) override {
@@ -39,8 +39,7 @@ class MockPlatform final : public TestingPlatformSupportWithMockScheduler {
 };
 
 ResourceResponse CreateTestResourceResponse() {
-  ResourceResponse response;
-  response.SetURL(URLTestHelpers::ToKURL("https://example.com/"));
+  ResourceResponse response(URLTestHelpers::ToKURL("https://example.com/"));
   response.SetHTTPStatusCode(200);
   return response;
 }
@@ -78,8 +77,7 @@ TEST(
 TEST(ResourceTest, RevalidateWithFragment) {
   ScopedTestingPlatformSupport<MockPlatform> mock;
   KURL url("http://127.0.0.1:8000/foo.html");
-  ResourceResponse response;
-  response.SetURL(url);
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
@@ -89,17 +87,15 @@ TEST(ResourceTest, RevalidateWithFragment) {
   // shouldn't trigger a securiy check.
   url.SetFragmentIdentifier("bar");
   resource->SetRevalidatingRequest(ResourceRequest(url));
-  ResourceResponse revalidating_response;
-  revalidating_response.SetURL(url);
+  ResourceResponse revalidating_response(url);
   revalidating_response.SetHTTPStatusCode(304);
   resource->ResponseReceived(revalidating_response, nullptr);
 }
 
 TEST(ResourceTest, Vary) {
   ScopedTestingPlatformSupport<MockPlatform> mock;
-  KURL url("http://127.0.0.1:8000/foo.html");
-  ResourceResponse response;
-  response.SetURL(url);
+  const KURL url("http://127.0.0.1:8000/foo.html");
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
 
   Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
@@ -152,11 +148,12 @@ TEST(ResourceTest, Vary) {
   EXPECT_FALSE(resource->MustReloadDueToVaryHeader(new_request));
 }
 
-TEST(ResourceTest, RevalidationSucceeded) {
+TEST(ResourceTest, RevalidationFailed) {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
-  Resource* resource = MockResource::Create(ResourceRequest("data:text/html,"));
-  ResourceResponse response;
+  const KURL url("http://test.example.com/");
+  Resource* resource = MockResource::Create(ResourceRequest(url));
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
   const char kData[5] = "abcd";
@@ -164,22 +161,77 @@ TEST(ResourceTest, RevalidationSucceeded) {
   resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
+  CachedMetadataHandler* original_cache_handler = resource->CacheHandler();
+  EXPECT_TRUE(original_cache_handler);
+
+  // Simulate revalidation start.
+  resource->SetRevalidatingRequest(ResourceRequest(url));
+
+  EXPECT_EQ(original_cache_handler, resource->CacheHandler());
+
+  Persistent<MockResourceClient> client = new MockResourceClient;
+  resource->AddClient(client, nullptr);
+
+  ResourceResponse revalidating_response(url);
+  revalidating_response.SetHTTPStatusCode(200);
+  resource->ResponseReceived(revalidating_response, nullptr);
+
+  EXPECT_FALSE(resource->IsCacheValidator());
+  EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
+  EXPECT_FALSE(resource->ResourceBuffer());
+  EXPECT_TRUE(resource->CacheHandler());
+  EXPECT_NE(original_cache_handler, resource->CacheHandler());
+  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(url));
+
+  resource->AppendData(kData, 4);
+
+  EXPECT_FALSE(client->NotifyFinishedCalled());
+
+  resource->FinishForTest();
+
+  EXPECT_TRUE(client->NotifyFinishedCalled());
+
+  resource->RemoveClient(client);
+  EXPECT_FALSE(resource->IsAlive());
+}
+
+TEST(ResourceTest, RevalidationSucceeded) {
+  ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
+      platform_;
+  const KURL url("http://test.example.com/");
+  Resource* resource = MockResource::Create(ResourceRequest(url));
+  ResourceResponse response(url);
+  response.SetHTTPStatusCode(200);
+  resource->ResponseReceived(response, nullptr);
+  const char kData[5] = "abcd";
+  resource->AppendData(kData, 4);
+  resource->FinishForTest();
+  GetMemoryCache()->Add(resource);
+
+  CachedMetadataHandler* original_cache_handler = resource->CacheHandler();
+  EXPECT_TRUE(original_cache_handler);
+
   // Simulate a successful revalidation.
-  resource->SetRevalidatingRequest(ResourceRequest("data:text/html,"));
+  resource->SetRevalidatingRequest(ResourceRequest(url));
 
-  Persistent<MockResourceClient> client = new MockResourceClient(resource);
+  EXPECT_EQ(original_cache_handler, resource->CacheHandler());
 
-  ResourceResponse revalidating_response;
+  Persistent<MockResourceClient> client = new MockResourceClient;
+  resource->AddClient(client, nullptr);
+
+  ResourceResponse revalidating_response(url);
   revalidating_response.SetHTTPStatusCode(304);
   resource->ResponseReceived(revalidating_response, nullptr);
+
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_EQ(4u, resource->ResourceBuffer()->size());
-  EXPECT_EQ(resource,
-            GetMemoryCache()->ResourceForURL(KURL("data:text/html,")));
+  EXPECT_EQ(original_cache_handler, resource->CacheHandler());
+  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(url));
+
   GetMemoryCache()->Remove(resource);
 
-  client->RemoveAsClient();
+  resource->RemoveClient(client);
   EXPECT_FALSE(resource->IsAlive());
   EXPECT_FALSE(client->NotifyFinishedCalled());
 }
@@ -187,29 +239,30 @@ TEST(ResourceTest, RevalidationSucceeded) {
 TEST(ResourceTest, RevalidationSucceededForResourceWithoutBody) {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
-  Resource* resource = MockResource::Create(ResourceRequest("data:text/html,"));
-  ResourceResponse response;
+  const KURL url("http://test.example.com/");
+  Resource* resource = MockResource::Create(ResourceRequest(url));
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
   resource->FinishForTest();
   GetMemoryCache()->Add(resource);
 
   // Simulate a successful revalidation.
-  resource->SetRevalidatingRequest(ResourceRequest("data:text/html,"));
+  resource->SetRevalidatingRequest(ResourceRequest(url));
 
-  Persistent<MockResourceClient> client = new MockResourceClient(resource);
+  Persistent<MockResourceClient> client = new MockResourceClient;
+  resource->AddClient(client, nullptr);
 
-  ResourceResponse revalidating_response;
+  ResourceResponse revalidating_response(url);
   revalidating_response.SetHTTPStatusCode(304);
   resource->ResponseReceived(revalidating_response, nullptr);
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_FALSE(resource->ResourceBuffer());
-  EXPECT_EQ(resource,
-            GetMemoryCache()->ResourceForURL(KURL("data:text/html,")));
+  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(url));
   GetMemoryCache()->Remove(resource);
 
-  client->RemoveAsClient();
+  resource->RemoveClient(client);
   EXPECT_FALSE(resource->IsAlive());
   EXPECT_FALSE(client->NotifyFinishedCalled());
 }
@@ -217,8 +270,9 @@ TEST(ResourceTest, RevalidationSucceededForResourceWithoutBody) {
 TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
-  Resource* resource = MockResource::Create(ResourceRequest("data:text/html,"));
-  ResourceResponse response;
+  const KURL url("http://test.example.com/");
+  Resource* resource = MockResource::Create(ResourceRequest(url));
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   response.AddHTTPHeaderField("keep-alive", "keep-alive value");
   response.AddHTTPHeaderField("expires", "expires value");
@@ -231,7 +285,7 @@ TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
   GetMemoryCache()->Add(resource);
 
   // Simulate a successful revalidation.
-  resource->SetRevalidatingRequest(ResourceRequest("data:text/html,"));
+  resource->SetRevalidatingRequest(ResourceRequest(url));
 
   // Validate that these headers pre-update.
   EXPECT_EQ("keep-alive value",
@@ -249,10 +303,11 @@ TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
   EXPECT_EQ("custom value",
             resource->GetResponse().HttpHeaderField("x-custom"));
 
-  Persistent<MockResourceClient> client = new MockResourceClient(resource);
+  Persistent<MockResourceClient> client = new MockResourceClient;
+  resource->AddClient(client, nullptr);
 
   // Perform a revalidation step.
-  ResourceResponse revalidating_response;
+  ResourceResponse revalidating_response(url);
   revalidating_response.SetHTTPStatusCode(304);
   // Headers that aren't copied with an 304 code.
   revalidating_response.AddHTTPHeaderField("keep-alive", "garbage");
@@ -282,8 +337,6 @@ TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
             resource->GetResponse().HttpHeaderField("proxy-connection"));
   EXPECT_EQ("updated", resource->GetResponse().HttpHeaderField("x-custom"));
 
-  client->RemoveAsClient();
-
   resource->RemoveClient(client);
   EXPECT_FALSE(resource->IsAlive());
   EXPECT_FALSE(client->NotifyFinishedCalled());
@@ -292,10 +345,11 @@ TEST(ResourceTest, RevalidationSucceededUpdateHeaders) {
 TEST(ResourceTest, RedirectDuringRevalidation) {
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
       platform_;
-  Resource* resource =
-      MockResource::Create(ResourceRequest("https://example.com/1"));
-  ResourceResponse response;
-  response.SetURL(KURL("https://example.com/1"));
+  const KURL url("http://test.example.com/1");
+  const KURL redirect_target_url("http://test.example.com/2");
+
+  Resource* resource = MockResource::Create(ResourceRequest(url));
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
   const char kData[5] = "abcd";
@@ -304,58 +358,59 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
   GetMemoryCache()->Add(resource);
 
   EXPECT_FALSE(resource->IsCacheValidator());
-  EXPECT_EQ("https://example.com/1",
-            resource->GetResourceRequest().Url().GetString());
-  EXPECT_EQ("https://example.com/1",
-            resource->LastResourceRequest().Url().GetString());
+  EXPECT_EQ(url, resource->GetResourceRequest().Url());
+  EXPECT_EQ(url, resource->LastResourceRequest().Url());
+
+  CachedMetadataHandler* original_cache_handler = resource->CacheHandler();
+  EXPECT_TRUE(original_cache_handler);
 
   // Simulate a revalidation.
-  resource->SetRevalidatingRequest(ResourceRequest("https://example.com/1"));
+  resource->SetRevalidatingRequest(ResourceRequest(url));
   EXPECT_TRUE(resource->IsCacheValidator());
-  EXPECT_EQ("https://example.com/1",
-            resource->GetResourceRequest().Url().GetString());
-  EXPECT_EQ("https://example.com/1",
-            resource->LastResourceRequest().Url().GetString());
+  EXPECT_EQ(url, resource->GetResourceRequest().Url());
+  EXPECT_EQ(url, resource->LastResourceRequest().Url());
+  EXPECT_EQ(original_cache_handler, resource->CacheHandler());
 
-  Persistent<MockResourceClient> client = new MockResourceClient(resource);
+  Persistent<MockResourceClient> client = new MockResourceClient;
+  resource->AddClient(client, nullptr);
 
   // The revalidating request is redirected.
-  ResourceResponse redirect_response;
-  redirect_response.SetURL(KURL("https://example.com/1"));
-  redirect_response.SetHTTPHeaderField("location", "https://example.com/2");
+  ResourceResponse redirect_response(url);
+  redirect_response.SetHTTPHeaderField(
+      "location", AtomicString(redirect_target_url.GetString()));
   redirect_response.SetHTTPStatusCode(308);
-  ResourceRequest redirected_revalidating_request("https://example.com/2");
+  ResourceRequest redirected_revalidating_request(redirect_target_url);
   resource->WillFollowRedirect(redirected_revalidating_request,
                                redirect_response);
   EXPECT_FALSE(resource->IsCacheValidator());
-  EXPECT_EQ("https://example.com/1",
-            resource->GetResourceRequest().Url().GetString());
-  EXPECT_EQ("https://example.com/2",
-            resource->LastResourceRequest().Url().GetString());
+  EXPECT_EQ(url, resource->GetResourceRequest().Url());
+  EXPECT_EQ(redirect_target_url, resource->LastResourceRequest().Url());
+  EXPECT_FALSE(resource->CacheHandler());
 
   // The final response is received.
-  ResourceResponse revalidating_response;
-  revalidating_response.SetURL(KURL("https://example.com/2"));
+  ResourceResponse revalidating_response(redirect_target_url);
   revalidating_response.SetHTTPStatusCode(200);
   resource->ResponseReceived(revalidating_response, nullptr);
+
+  EXPECT_TRUE(resource->CacheHandler());
+
   const char kData2[4] = "xyz";
   resource->AppendData(kData2, 3);
   resource->FinishForTest();
   EXPECT_FALSE(resource->IsCacheValidator());
-  EXPECT_EQ("https://example.com/1",
-            resource->GetResourceRequest().Url().GetString());
-  EXPECT_EQ("https://example.com/2",
-            resource->LastResourceRequest().Url().GetString());
+  EXPECT_EQ(url, resource->GetResourceRequest().Url());
+  EXPECT_EQ(redirect_target_url, resource->LastResourceRequest().Url());
   EXPECT_FALSE(resource->IsCacheValidator());
   EXPECT_EQ(200, resource->GetResponse().HttpStatusCode());
   EXPECT_EQ(3u, resource->ResourceBuffer()->size());
-  EXPECT_EQ(resource,
-            GetMemoryCache()->ResourceForURL(KURL("https://example.com/1")));
+  EXPECT_EQ(resource, GetMemoryCache()->ResourceForURL(url));
 
   EXPECT_TRUE(client->NotifyFinishedCalled());
 
   // Test the case where a client is added after revalidation is completed.
-  Persistent<MockResourceClient> client2 = new MockResourceClient(resource);
+  Persistent<MockResourceClient> client2 = new MockResourceClient;
+  resource->AddClient(client2,
+                      Platform::Current()->CurrentThread()->GetWebTaskRunner());
 
   // Because the client is added asynchronously,
   // |runUntilIdle()| is called to make |client2| to be notified.
@@ -365,8 +420,8 @@ TEST(ResourceTest, RedirectDuringRevalidation) {
 
   GetMemoryCache()->Remove(resource);
 
-  client->RemoveAsClient();
-  client2->RemoveAsClient();
+  resource->RemoveClient(client);
+  resource->RemoveClient(client2);
   EXPECT_FALSE(resource->IsAlive());
 }
 

@@ -19,7 +19,7 @@ const bool kIncludeSubdomains = true;
 const bool kExcludeSubdomains = false;
 const bool kSuccess = true;
 const bool kError = false;
-const std::string kServerCert = "quic_test.example.com.crt";
+const std::string kServerCert = "quic-chain.pem";
 NSDate* const kDistantFuture = [NSDate distantFuture];
 }  // namespace
 
@@ -67,10 +67,10 @@ class PkpTest : public CronetTestBase {
         [url_session_ dataTaskWithURL:request_url_];
     StartDataTaskAndWaitForCompletion(dataTask);
     if (expected_success) {
-      ASSERT_TRUE(IsResponseSuccessful());
+      ASSERT_TRUE(IsResponseSuccessful(dataTask));
     } else {
-      ASSERT_FALSE(IsResponseSuccessful());
-      ASSERT_FALSE(IsResponseCanceled());
+      ASSERT_FALSE(IsResponseSuccessful(dataTask));
+      ASSERT_FALSE(IsResponseCanceled(dataTask));
     }
   }
 

@@ -110,13 +110,12 @@ if (widevine_cdm_binary_files != []) {
       "//build/config:exe_and_shlib_deps",
     ]
 
-    if (is_mac) {
-      ldflags = [
-        "-install_name",
-        "@loader_path/libwidevinecdm.dylib",
-      ]
-    } else if (is_posix && !is_mac) {
+    if (is_posix && !is_mac) {
       cflags = [ "-fvisibility=hidden" ]
+    }
+
+    if (is_mac) {
+      ldflags = [ "-Wl,-install_name,@loader_path/libwidevinecdm.dylib" ]
     }
   }
 } else {

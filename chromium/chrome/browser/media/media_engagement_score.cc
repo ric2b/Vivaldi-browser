@@ -32,15 +32,15 @@ const char MediaEngagementScore::kHighScoreUpperThresholdParamName[] =
 
 namespace {
 
-const int kScoreMinVisitsParamDefault = 5;
-const double kHighScoreLowerThresholdParamDefault = 0.5;
-const double kHighScoreUpperThresholdParamDefault = 0.7;
+const int kScoreMinVisitsParamDefault = 20;
+const double kHighScoreLowerThresholdParamDefault = 0.2;
+const double kHighScoreUpperThresholdParamDefault = 0.3;
 
 std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
     const HostContentSettingsMap* settings,
     const GURL& origin_url) {
   if (!settings)
-    return base::MakeUnique<base::DictionaryValue>();
+    return std::make_unique<base::DictionaryValue>();
 
   std::unique_ptr<base::DictionaryValue> value =
       base::DictionaryValue::From(settings->GetWebsiteSetting(
@@ -49,7 +49,7 @@ std::unique_ptr<base::DictionaryValue> GetScoreDictForSettings(
 
   if (value.get())
     return value;
-  return base::MakeUnique<base::DictionaryValue>();
+  return std::make_unique<base::DictionaryValue>();
 }
 
 }  // namespace
@@ -81,6 +81,15 @@ MediaEngagementScore::MediaEngagementScore(base::Clock* clock,
     : MediaEngagementScore(clock,
                            origin,
                            GetScoreDictForSettings(settings, origin)) {
+  settings_map_ = settings;
+}
+
+MediaEngagementScore::MediaEngagementScore(
+    base::Clock* clock,
+    const GURL& origin,
+    std::unique_ptr<base::DictionaryValue> score_dict,
+    HostContentSettingsMap* settings)
+    : MediaEngagementScore(clock, origin, std::move(score_dict)) {
   settings_map_ = settings;
 }
 
@@ -192,12 +201,10 @@ bool MediaEngagementScore::UpdateScoreDict() {
 }
 
 void MediaEngagementScore::Recalculate() {
-  // Update the engagement score.
-  actual_score_ = 0;
-  if (visits() >= GetScoreMinVisits()) {
-    actual_score_ =
-        static_cast<double>(media_playbacks()) / static_cast<double>(visits());
-  }
+  // Use the minimum visits to compute the score to allow websites that would
+  // surely have a high MEI to pass the bar early.
+  double effective_visits = std::max(visits(), GetScoreMinVisits());
+  actual_score_ = static_cast<double>(media_playbacks()) / effective_visits;
 
   // Recalculate whether the engagement score is considered high.
   if (is_high_) {

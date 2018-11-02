@@ -5,6 +5,7 @@
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
@@ -18,6 +19,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
+#include "content/browser/scoped_active_url.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
@@ -131,6 +133,10 @@ bool RenderFrameProxyHost::Send(IPC::Message *msg) {
 }
 
 bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
+  // Crash reports trigerred by IPC messages for this proxy should be associated
+  // with the URL of the current RenderFrameHost that is being proxied.
+  ScopedActiveURL scoped_active_url(this);
+
   if (cross_process_frame_connector_.get() &&
       cross_process_frame_connector_->OnMessageReceived(msg))
     return true;
@@ -228,9 +234,8 @@ void RenderFrameProxyHost::SetFocusedFrame() {
 
 void RenderFrameProxyHost::ScrollRectToVisible(
     const gfx::Rect& rect_to_scroll,
-    const blink::WebRemoteScrollProperties properties) {
-  Send(new FrameMsg_ScrollRectToVisible(routing_id_, rect_to_scroll,
-                                        properties));
+    const blink::WebScrollIntoViewParams& params) {
+  Send(new FrameMsg_ScrollRectToVisible(routing_id_, rect_to_scroll, params));
 }
 
 void RenderFrameProxyHost::SetDestructionCallback(
@@ -291,7 +296,8 @@ void RenderFrameProxyHost::OnOpenURL(
       current_rfh, validated_url, site_instance_.get(), std::vector<GURL>(),
       params.referrer, ui::PAGE_TRANSITION_LINK, GlobalRequestID(),
       params.should_replace_current_entry, params.uses_post ? "POST" : "GET",
-      params.resource_request_body, params.extra_headers);
+      params.resource_request_body, params.extra_headers,
+      params.suggested_filename);
 }
 
 void RenderFrameProxyHost::OnRouteMessageEvent(

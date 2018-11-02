@@ -29,24 +29,17 @@
 #include "services/resource_coordinator/public/cpp/resource_coordinator_features.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
-#include "components/prefs/pref_service.h"
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::NavigationController;
 using content::RenderWidgetHost;
 using content::WebContents;
 
 namespace {
-
 size_t g_max_loaded_tab_count_for_testing = 0;
-
-// Vivaldi specific timeout used when we start loading restored pinned tabs.
-const int kVivaldiFirstPinnedTabLoadTimeoutMS = 1500;
-
 }  // namespace
 
 void TabLoader::Observe(int type,
@@ -100,39 +93,32 @@ void TabLoader::SetTabLoadingEnabled(bool enable_tab_loading) {
 // static
 void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
                             const base::TimeTicks& restore_started) {
-  if (vivaldi::IsVivaldiRunning()) {
-    Profile* current_profile = g_browser_process->profile_manager()
-                                   ->GetLastUsedProfileAllowedByPolicy();
-    PrefService* prefs = current_profile->GetPrefs();
-    bool always_load_pinned =
-        prefs->GetBoolean(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore);
-    if (prefs->GetBoolean(vivaldiprefs::kTabsDeferLoadingAfterRestore)) {
-      std::vector<RestoredTab> tabs_to_load;
-      for (auto& restored_tab : tabs) {
-        // We want to always start loading of internal pages.
-        if ((always_load_pinned && restored_tab.is_pinned()) ||
-            restored_tab.is_internal_page()) {
-          tabs_to_load.push_back(restored_tab);
-        } else {
-          // If we do not load it mark it as discarded.
-          g_browser_process->GetTabManager()->SetIsDiscarded(
-              restored_tab.contents());
-        }
-      }
-      if (!shared_tab_loader_)
-        shared_tab_loader_ = new TabLoader(restore_started);
-      shared_tab_loader_->StartLoading(tabs_to_load);
-      return;
-    }
-  }
-
   if (!shared_tab_loader_)
     shared_tab_loader_ = new TabLoader(restore_started);
-
-  if (!vivaldi::IsVivaldiRunning()) {
+  if (vivaldi::IsVivaldiRunning()) {
+    // NOTE(andre@vivaldi.com) : Make sure we don't start loading of contents in
+    // the tabstrip until the content has been moved into webview. (We had
+    // issues with this in the transition to GuestViewCrossProcessFrames. See
+    // bugs VB-39149, VB-38823 et al.
+    std::vector<RestoredTab> tabs_to_load;
+    for (auto& restored_tab : tabs) {
+      // Mark all restored tabs as discarded, loading will should only be done
+      // after the final container (ie. inside a guestview) has been created.
+      // See logic in WebViewGuest::DidAttachToEmbedder.
+      if (restored_tab.is_internal_page()) {
+        tabs_to_load.push_back(restored_tab);
+      }
+      else {
+        g_browser_process->GetTabManager()->SetIsDiscarded(
+          restored_tab.contents());
+      }
+    }
+    // Only start loading internal pages to get favicons and title.
+    shared_tab_loader_->StartLoading(tabs_to_load);
+  } else {
   shared_tab_loader_->stats_collector_->TrackTabs(tabs);
-  }
   shared_tab_loader_->StartLoading(tabs);
+  }
 }
 
 // static
@@ -275,22 +261,9 @@ void TabLoader::LoadNextTab() {
 
 void TabLoader::StartFirstTimer() {
   force_load_timer_.Stop();
-  if (vivaldi::IsVivaldiRunning()) {
-    Profile* current_profile = g_browser_process->profile_manager()
-                                   ->GetLastUsedProfileAllowedByPolicy();
-    PrefService* prefs = current_profile->GetPrefs();
-    if (prefs->GetBoolean(vivaldiprefs::kTabsDeferLoadingAfterRestore) &&
-        prefs->GetBoolean(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore)) {
-      force_load_timer_.Start(FROM_HERE,
-                              base::TimeDelta::FromMilliseconds(
-                                  kVivaldiFirstPinnedTabLoadTimeoutMS),
-                              this, &TabLoader::ForceLoadTimerFired);
-    }
-  } else {
   force_load_timer_.Start(FROM_HERE,
                           delegate_->GetFirstTabLoadingTimeout(),
                           this, &TabLoader::ForceLoadTimerFired);
-  }
 }
 
 void TabLoader::StartTimer() {

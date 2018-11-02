@@ -360,6 +360,33 @@ TEST_F(NetworkSessionConfiguratorTest,
 }
 
 TEST_F(NetworkSessionConfiguratorTest,
+       QuicMaxTimeOnNonDefaultNetworkFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["max_time_on_non_default_network_seconds"] = "10";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_EQ(base::TimeDelta::FromSeconds(10),
+            params_.quic_max_time_on_non_default_network);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
+       QuicMaxNumMigrationsToNonDefaultNetworkFromFieldTrialParams) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params
+      ["max_migrations_to_non_default_network_on_path_degrading"] = "4";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_EQ(
+      4, params_.quic_max_migrations_to_non_default_network_on_path_degrading);
+}
+
+TEST_F(NetworkSessionConfiguratorTest,
        QuicAllowServerMigrationFromFieldTrialParams) {
   std::map<std::string, std::string> field_trial_params;
   field_trial_params["allow_server_migration"] = "true";
@@ -734,6 +761,17 @@ TEST_F(NetworkSessionConfiguratorTest, SimpleCacheTrialDisable) {
   EXPECT_EQ(net::URLRequestContextBuilder::HttpCacheParams::DISK_SIMPLE,
             ChooseCacheType(command_line));
 #endif
+}
+
+TEST_F(NetworkSessionConfiguratorTest, QuicHeadersIncludeH2StreamDependency) {
+  std::map<std::string, std::string> field_trial_params;
+  field_trial_params["headers_include_h2_stream_dependency"] = "true";
+  variations::AssociateVariationParams("QUIC", "Enabled", field_trial_params);
+  base::FieldTrialList::CreateFieldTrial("QUIC", "Enabled");
+
+  ParseFieldTrials();
+
+  EXPECT_TRUE(params_.quic_headers_include_h2_stream_dependency);
 }
 
 }  // namespace network_session_configurator

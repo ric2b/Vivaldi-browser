@@ -12,7 +12,7 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/service_worker_modes.h"
 #include "net/http/http_util.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -40,8 +40,10 @@ ServiceWorkerRegistrationObjectHost::~ServiceWorkerRegistrationObjectHost() {
 blink::mojom::ServiceWorkerRegistrationObjectInfoPtr
 ServiceWorkerRegistrationObjectHost::CreateObjectInfo() {
   auto info = blink::mojom::ServiceWorkerRegistrationObjectInfo::New();
-  info->options = blink::mojom::ServiceWorkerRegistrationOptions::New(
-      registration_->pattern());
+  info->options = blink::mojom::ServiceWorkerRegistrationOptions::New();
+  info->options->scope = registration_->pattern();
+  // TODO(crbug.com/675540): Set update_via_cache when it is included in
+  // registration_.
   info->registration_id = registration_->id();
   bindings_.AddBinding(this, mojo::MakeRequest(&info->host_ptr_info));
   if (!remote_registration_)
@@ -100,7 +102,7 @@ void ServiceWorkerRegistrationObjectHost::Update(UpdateCallback callback) {
 
   context_->UpdateServiceWorker(
       registration_.get(), false /* force_bypass_cache */,
-      false /* skip_script_comparison */, provider_host_,
+      false /* skip_script_comparison */,
       base::AdaptCallbackForRepeating(
           base::BindOnce(&ServiceWorkerRegistrationObjectHost::UpdateComplete,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback))));

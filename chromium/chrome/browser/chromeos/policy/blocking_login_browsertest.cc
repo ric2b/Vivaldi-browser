@@ -8,14 +8,13 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
+#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -161,8 +160,8 @@ class BlockingLoginTest
     ExistingUserController* controller =
         ExistingUserController::current_controller();
     ASSERT_TRUE(controller);
-    WebUILoginDisplay* login_display =
-        static_cast<WebUILoginDisplay*>(controller->login_display());
+    LoginDisplayWebUI* login_display =
+        static_cast<LoginDisplayWebUI*>(controller->login_display());
     ASSERT_TRUE(login_display);
 
     login_display->ShowSigninScreenForCreds(username, "password");
@@ -201,7 +200,7 @@ class BlockingLoginTest
   // next response used.
   // Returns a reference to that response, so that it can be further customized.
   net::test_server::BasicHttpResponse& PushResponse(net::HttpStatusCode code) {
-    auto response = base::MakeUnique<net::test_server::BasicHttpResponse>();
+    auto response = std::make_unique<net::test_server::BasicHttpResponse>();
     net::test_server::BasicHttpResponse* response_ptr = response.get();
     response->set_code(code);
     responses_.push_back(std::move(response));

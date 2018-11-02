@@ -248,7 +248,13 @@ TEST_F(ContextMenuJsTest, UnsupportedReferrerPolicy) {
 
 // Tests that getElementFromPoint finds an element at the bottom of a very long
 // page.
-TEST_F(ContextMenuJsTest, FLAKY_LinkOfTextFromTallPage) {
+// TODO(crbug.com/796418): This test is flaky on devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_LinkOfTextFromTallPage LinkOfTextFromTallPage
+#else
+#define MAYBE_LinkOfTextFromTallPage FLAKY_LinkOfTextFromTallPage
+#endif
+TEST_F(ContextMenuJsTest, MAYBE_LinkOfTextFromTallPage) {
   const char kHtml[] =
       "<html><body>"
       " <div style='height:4000px'></div>"
@@ -297,7 +303,13 @@ TEST_F(ContextMenuJsTest, LinkOfTextWithoutCalloutProperty) {
 // Tests that a callout information about a link is displayed when
 // -webkit-touch-callout property is set to default. Please see:
 // https://developer.mozilla.org/en-US/docs/Web/CSS/-webkit-touch-callout
-TEST_F(ContextMenuJsTest, LinkOfTextWithCalloutDefault) {
+// TODO(crbug.com/796343): This test is flaky on iOS 11 device.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_LinkOfTextWithCalloutDefault LinkOfTextWithCalloutDefault
+#else
+#define MAYBE_LinkOfTextWithCalloutDefault FLAKY_LinkOfTextWithCalloutDefault
+#endif
+TEST_F(ContextMenuJsTest, MAYBE_LinkOfTextWithCalloutDefault) {
   const char kLinkHtml[] =
       "<a href='%s' style='-webkit-touch-callout:default;'>link</a>";
 

@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Par Chromium</translation>
 <translation id="1298199220304005244">Saņemt palīdzību par Chromium OS izmantošanu</translation>
 <translation id="1396446129537741364">Chromium mēģina rādīt paroles.</translation>
-<translation id="1403254041219632970">Nākamajās Chromium versijās vairs netiks atbalstītas operētājsistēmas Mac OS X 10.6, 10.7 un 10.8.</translation>
 <translation id="1414495520565016063">Esat pierakstījies operētājsistēmā Chromium!</translation>
-<translation id="1440917365206527807">Pārlūkā Chromium tika apturēta novirzīšana no šīs vietnes uz:</translation>
 <translation id="1444754455097148408">Chromium atklātā pirmkoda licences</translation>
 <translation id="1502360822835740515">Iestatiet Chromium par noklusējuma pārlūku</translation>
 <translation id="151962892725702025">Chromium OS nevarēja sinhronizēt jūsu datus, jo jūsu domēnā nav pieejama sinhronizācija.</translation>
-<translation id="1559451348202814456">Iespējams, Chromium nedarbosies pareizi, jo tas vairs netiek atbalstīts operētājsistēmās Mac OS X 10.6, 10.7 un 10.8.</translation>
 <translation id="1585657529869845941">Noklikšķiniet uz pogas <ph name="BEGIN_BOLD" />Pārslēgt jebkurā gadījumā<ph name="END_BOLD" />, ja tāda tiek parādīta.</translation>
 <translation id="1653828314016431939">Labi — restartēt tūlīt</translation>
 <translation id="1668054258064581266">Kad konts būs noņemts no Chromium, iespējams, būs atkārtoti jāielādē atvērtās cilnes, lai izmaiņas stātos spēkā.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Lai lietotu atjauninājumu, operētājsistēma Chromium ir jārestartē.</translation>
 <translation id="2647554856022461007">Chromium var izmantot tīmekļa pakalpojumus, lai uzlabotu jūsu pārlūkošanas pieredzi. Varat arī atspējot šos pakalpojumus. <ph name="BEGIN_LINK" />Uzziniet vairāk<ph name="END_LINK" />.</translation>
 <translation id="2648074677641340862">Instalācijas laikā radās operētājsistēmas kļūda. Lejupielādējiet Chromium vēlreiz.</translation>
-<translation id="2685838254101182273">Operētājsistēmas Chromium atjaunināšana ir apturēta, un vairs netiek atbalstīta šī jūsu operētājsistēmas versija.</translation>
 <translation id="2705403826523567092">Pierakstieties, lai personalizētu pārlūkošanas iespējas, kas tiek sinhronizētas ierīcēs.</translation>
 <translation id="2711502716910134313">Chromium cilne</translation>
 <translation id="2718390899429598676">Papildu drošības nolūkos Chromium šifrēs jūsu datus.</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">Lūdzu, izrakstieties un pierakstieties vēlreiz, lai šīs izmaiņas stātos spēkā.</translation>
 <translation id="4469812139324097969">Pārlūks Chromium ir novecojis, jo jau kādu laiku tas nav restartēts. Atjauninājums ir pieejams un tiks lietots, tiklīdz veiksiet atkārtotu palaišanu.</translation>
 <translation id="4488554488975128561">Varat palīdzēt uzlabot Chromium drošību un lietošanas ērtumu, automātiski nosūtot noteiktu sistēmas informāciju un lapas saturu Google serveriem, lai palīdzētu noteikt bīstamas lietotnes un vietnes.</translation>
-<translation id="4549794359424059447">Nākamajās Chromium versijās vairs netiks atbalstītas operētājsistēmas Windows XP un Windows Vista.</translation>
 <translation id="4567424176335768812">Jūs esat pierakstījies kā <ph name="USER_EMAIL_ADDRESS" />. Tagad varat piekļūt savām grāmatzīmēm, vēsturei un citiem iestatījumiem visās ierīcēs, kurās esat pierakstījies.</translation>
 <translation id="459535195905078186">Chromium lietotnes</translation>
 <translation id="4611246891205775468">Pārlūkam Chromium ir nepieciešama atļauja piekļūt jūsu mikrofonam šajā vietnē.</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">Autentificēšanas sertifikāts nedarbojās. Lūdzu, vēlreiz pierakstieties pārlūkā Chromium vai sazinieties ar administratoru, lai iegūtu plašāku informāciju. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Atjaunināšana ir gandrīz pabeigta. Restartējiet ierīci, lai pabeigtu atjaunināšanu.</translation>
 <translation id="5942520288919337908">Paplašinājums <ph name="EXTENSION_NAME" /> ir pievienots pārlūkam Chromium.</translation>
-<translation id="59625444380784159">Izmantojot datus no savas kontaktinformācijas, pakalpojumā Chromium varat ērtāk aizpildīt veidlapas.</translation>
 <translation id="5987687638152509985">Lai sāktu sinhronizēšanu, atjauniniet Chromium.</translation>
 <translation id="6055895534982063517">Ir pieejama jauna Chromium versija, un tā ir ātrāka nekā jebkad agrāk.</translation>
 <translation id="6063093106622310249">&amp;Atvērt pārlūkā Chromium</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">Tagad pārlūkā Chromium ir vieglāk izmantot Google kontu, kā arī ir atvieglota lietošana datoros, ko izmanto vairākas personas.</translation>
 <translation id="6373523479360886564">Vai tiešām vēlaties atinstalēt pārlūku Chromium?</translation>
 <translation id="6394232988457703198">Restartējiet Chromium tūlīt.</translation>
+<translation id="6400072781405947421">Iespējams, Chromium nedarbosies pareizi, jo tas vairs netiek atbalstīts operētājsistēmā Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium ir tīmekļa pārlūks, kas darbina tīmekļa lapas un lietojumprogrammas zibenīgā ātrumā. Tas ir ātrs, stabils un ērti lietojams. Pārlūkojiet tīmekli vēl drošāk ar aizsardzību pret ļaunprātīgu programmatūru un pikšķerēšanu, kas iebūvēta pārlūkā Chromium.</translation>
 <translation id="6475912303565314141">Tas nosaka arī to, kāda lapa tiks rādīta, kad atvērsiet pārlūku Chromium.</translation>
 <translation id="6485906693002546646">Chromium satura sinhronizēšanai jūs izmantojat kontu <ph name="PROFILE_EMAIL" />. Lai atjauninātu savas sinhronizācijas preferences vai izmantotu Chromium bez Google konta, dodieties uz: <ph name="SETTINGS_LINK" />.</translation>
@@ -174,13 +169,13 @@ Dažas funkcijas var nebūt pieejamas. Norādiet citu profila direktoriju vai iz
 <translation id="6734291798041940871">Pārlūks Chromium jau ir instalēts visiem lietotājiem jūsu datorā.</translation>
 <translation id="6810143991807788455">Palīdziet uzlabot pārlūku Chromium, ziņojot par pašreizējiem iestatījumiem.</translation>
 <translation id="6857782730669500492">Chromium — <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (kopēts pārlūkā Chromium)</translation>
 <translation id="6893813176749746474">Pārlūks Chromium ir atjaunināts, bet jūs neesat to izmantojis vismaz 30 dienas.</translation>
 <translation id="6944967875980567883">Pārlūkā Chromium ielādētie moduļi</translation>
 <translation id="6964305034639999644">Atvērt saiti inko&amp;gnito režīma logā</translation>
 <translation id="6970811910055250180">Notiek ierīces atjaunināšana...</translation>
 <translation id="705851970750939768">Atjaunināt Chromium</translation>
 <translation id="7066436765290594559">Chromium OS nevarēja sinhronizēt jūsu datus. Lūdzu, atjauniniet savu sinhronizācijas ieejas frāzi.</translation>
-<translation id="707471633328071618">Google Payments (kopēta pārlūkā Chromium)</translation>
 <translation id="7162152143154757523">Chromium var efektīvāk labot pareizrakstības kļūdas, nosūtot pārlūkā rakstīto uz Google serveriem un tādējādi ļaujot izmantot to pašu pareizrakstības pārbaudes tehnoloģiju, kas tiek izmantota pakalpojumā Google meklēšana.</translation>
 <translation id="7205698830395646142">Paslēpšana Chromium izvēlnē</translation>
 <translation id="7223968959479464213">Uzdevumu pārvaldnieks — Chromium</translation>
@@ -238,7 +233,6 @@ Papildu norādījumus skatiet e-pasta ziņojumā šeit: <ph name="ACCOUNT_EMAIL"
 <translation id="872034308864968620">Ļaut Chromium darboties fonā</translation>
 <translation id="8803635938069941624">Chromium OS noteikumi</translation>
 <translation id="8821041990367117597">Chromium nevarēja sinhronizēt jūsu datus, jo jūsu konta pierakstīšanās informācija ir novecojusi.</translation>
-<translation id="8851136666856101339">galvenais</translation>
 <translation id="8862326446509486874">Jums nav vajadzīgo tiesību, lai instalētu sistēmas līmenī. Mēģiniet vēlreiz palaist instalēšanas programmu kā administrators.</translation>
 <translation id="8897323336392112261">Tas nosaka arī to, kāda lapa tiks rādīta, kad atvērsiet pārlūku Chromium vai noklikšķināsiet uz pogas “Sākums”.</translation>
 <translation id="8907580949721785412">Chromium mēģina rādīt paroles. Lai to atļautu, ierakstiet savu Windows paroli.</translation>

@@ -123,7 +123,7 @@ class OAuth2TokenService {
     // Called when receiving request for access token.
     virtual void OnAccessTokenRequested(const std::string& account_id,
                                         const std::string& consumer_id,
-                                        const ScopeSet& scopes) = 0;
+                                        const ScopeSet& scopes) {}
     // Called when access token fetching finished successfully or
     // unsuccessfully. |expiration_time| are only valid with
     // successful completion.
@@ -131,9 +131,9 @@ class OAuth2TokenService {
                                             const std::string& consumer_id,
                                             const ScopeSet& scopes,
                                             GoogleServiceAuthError error,
-                                            base::Time expiration_time) = 0;
+                                            base::Time expiration_time) {}
     virtual void OnTokenRemoved(const std::string& account_id,
-                                const ScopeSet& scopes) = 0;
+                                const ScopeSet& scopes) {}
   };
 
   explicit OAuth2TokenService(
@@ -344,15 +344,10 @@ class OAuth2TokenService {
       const ScopeSet& scopes,
       Consumer* consumer);
 
-  // Returns true if GetCacheEntry would return a valid cache entry for the
-  // given scopes.
-  bool HasCacheEntry(const RequestParameters& client_scopes);
-
-  // Posts a task to fire the Consumer callback with the cached token.  Must
-  // Must only be called if HasCacheEntry() returns true.
-  void StartCacheLookupRequest(RequestImpl* request,
-                               const RequestParameters& client_scopes,
-                               Consumer* consumer);
+  // Posts a task to fire the Consumer callback with the cached token.
+  void InformConsumerWithCacheEntry(const CacheEntry* cache_entry,
+                                    RequestImpl* request,
+                                    const RequestParameters& client_scopes);
 
   // Returns a currently valid OAuth2 access token for the given set of scopes,
   // or NULL if none have been cached. Note the user of this method should

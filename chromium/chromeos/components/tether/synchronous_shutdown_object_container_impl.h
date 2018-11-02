@@ -28,9 +28,11 @@ class ActiveHostNetworkStateUpdater;
 class AsynchronousShutdownObjectContainer;
 class NetworkConnectionHandlerTetherDelegate;
 class DeviceIdTetherNetworkGuidMap;
+class GmsCoreNotificationsStateTrackerImpl;
 class HostScanner;
 class HostScanScheduler;
 class HostScanDevicePrioritizerImpl;
+class HotspotUsageDurationTracker;
 class KeepAliveScheduler;
 class HostConnectionMetricsLogger;
 class MasterHostScanCache;
@@ -43,6 +45,7 @@ class TetherConnector;
 class TetherDisconnector;
 class TetherHostResponseRecorder;
 class TetherNetworkDisconnectionHandler;
+class TetherSessionCompletionLogger;
 class WifiHotspotConnector;
 
 // Concrete SynchronousShutdownObjectContainer implementation.
@@ -54,6 +57,8 @@ class SynchronousShutdownObjectContainerImpl
     static std::unique_ptr<SynchronousShutdownObjectContainer> NewInstance(
         AsynchronousShutdownObjectContainer* asychronous_container,
         NotificationPresenter* notification_presenter,
+        GmsCoreNotificationsStateTrackerImpl*
+            gms_core_notifications_state_tracker,
         PrefService* pref_service,
         NetworkStateHandler* network_state_handler,
         NetworkConnect* network_connect,
@@ -64,6 +69,8 @@ class SynchronousShutdownObjectContainerImpl
     virtual std::unique_ptr<SynchronousShutdownObjectContainer> BuildInstance(
         AsynchronousShutdownObjectContainer* asychronous_container,
         NotificationPresenter* notification_presenter,
+        GmsCoreNotificationsStateTrackerImpl*
+            gms_core_notifications_state_tracker,
         PrefService* pref_service,
         NetworkStateHandler* network_state_handler,
         NetworkConnect* network_connect,
@@ -77,6 +84,8 @@ class SynchronousShutdownObjectContainerImpl
   SynchronousShutdownObjectContainerImpl(
       AsynchronousShutdownObjectContainer* asychronous_container,
       NotificationPresenter* notification_presenter,
+      GmsCoreNotificationsStateTrackerImpl*
+          gms_core_notifications_state_tracker,
       PrefService* pref_service,
       NetworkStateHandler* network_state_handler,
       NetworkConnect* network_connect,
@@ -96,6 +105,8 @@ class SynchronousShutdownObjectContainerImpl
   std::unique_ptr<TetherHostResponseRecorder> tether_host_response_recorder_;
   std::unique_ptr<DeviceIdTetherNetworkGuidMap>
       device_id_tether_network_guid_map_;
+  std::unique_ptr<TetherSessionCompletionLogger>
+      tether_session_completion_logger_;
   std::unique_ptr<HostScanDevicePrioritizerImpl> host_scan_device_prioritizer_;
   std::unique_ptr<WifiHotspotConnector> wifi_hotspot_connector_;
   std::unique_ptr<ActiveHost> active_host_;
@@ -107,6 +118,7 @@ class SynchronousShutdownObjectContainerImpl
   std::unique_ptr<NotificationRemover> notification_remover_;
   std::unique_ptr<KeepAliveScheduler> keep_alive_scheduler_;
   std::unique_ptr<base::Clock> clock_;
+  std::unique_ptr<HotspotUsageDurationTracker> hotspot_usage_duration_tracker_;
   std::unique_ptr<HostScanner> host_scanner_;
   std::unique_ptr<HostScanScheduler> host_scan_scheduler_;
   std::unique_ptr<HostConnectionMetricsLogger> host_connection_metrics_logger_;

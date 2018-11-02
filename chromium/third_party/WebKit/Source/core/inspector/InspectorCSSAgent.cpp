@@ -25,6 +25,7 @@
 
 #include "core/inspector/InspectorCSSAgent.h"
 
+#include "base/macros.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
 #include "core/StylePropertyShorthand.h"
@@ -42,6 +43,7 @@
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSStyleSheet.h"
 #include "core/css/CSSVariableData.h"
+#include "core/css/FontSizeFunctions.h"
 #include "core/css/MediaList.h"
 #include "core/css/MediaQuery.h"
 #include "core/css/MediaValues.h"
@@ -57,6 +59,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleRuleUsageTracker.h"
 #include "core/dom/DOMException.h"
+#include "core/dom/DOMNodeIds.h"
 #include "core/dom/Node.h"
 #include "core/dom/Text.h"
 #include "core/frame/LocalFrame.h"
@@ -74,7 +77,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/LayoutText.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/Page.h"
@@ -152,7 +155,7 @@ HeapVector<Member<Element>> ElementsFromRect(LayoutRect rect,
   top_padding = bottom_padding = (rect.Height() / 2).ToUnsigned();
   HitTestResult result(request, center, top_padding, right_padding,
                        bottom_padding, left_padding);
-  document.GetFrame()->ContentLayoutItem().HitTest(result);
+  document.GetFrame()->ContentLayoutObject()->HitTest(result);
   HeapVector<Member<Element>> elements;
   Node* previous_node = nullptr;
   for (const auto hit_test_result_node : result.ListBasedTestResult()) {
@@ -271,7 +274,7 @@ bool GetColorsFromRect(LayoutRect rect,
       continue;
 
     Color background_color =
-        style->VisitedDependentColor(CSSPropertyBackgroundColor);
+        style->VisitedDependentColor(GetCSSPropertyBackgroundColor());
     bool found_non_transparent_color = false;
     if (background_color.Alpha() != 0) {
       found_non_transparent_color = true;
@@ -353,20 +356,19 @@ static unsigned ComputePseudoClassMask(
 }
 
 class InspectorCSSAgent::StyleSheetAction : public InspectorHistory::Action {
-  WTF_MAKE_NONCOPYABLE(StyleSheetAction);
-
  public:
   StyleSheetAction(const String& name) : InspectorHistory::Action(name) {}
 
   virtual std::unique_ptr<protocol::CSS::CSSStyle> TakeSerializedStyle() {
     return nullptr;
   }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(StyleSheetAction);
 };
 
 class InspectorCSSAgent::SetStyleSheetTextAction final
     : public InspectorCSSAgent::StyleSheetAction {
-  WTF_MAKE_NONCOPYABLE(SetStyleSheetTextAction);
-
  public:
   SetStyleSheetTextAction(InspectorStyleSheetBase* style_sheet,
                           const String& text)
@@ -410,12 +412,11 @@ class InspectorCSSAgent::SetStyleSheetTextAction final
   Member<InspectorStyleSheetBase> style_sheet_;
   String text_;
   String old_text_;
+  DISALLOW_COPY_AND_ASSIGN(SetStyleSheetTextAction);
 };
 
 class InspectorCSSAgent::ModifyRuleAction final
     : public InspectorCSSAgent::StyleSheetAction {
-  WTF_MAKE_NONCOPYABLE(ModifyRuleAction);
-
  public:
   enum Type {
     kSetRuleSelector,
@@ -530,12 +531,11 @@ class InspectorCSSAgent::ModifyRuleAction final
   SourceRange old_range_;
   SourceRange new_range_;
   Member<CSSRule> css_rule_;
+  DISALLOW_COPY_AND_ASSIGN(ModifyRuleAction);
 };
 
 class InspectorCSSAgent::SetElementStyleAction final
     : public InspectorCSSAgent::StyleSheetAction {
-  WTF_MAKE_NONCOPYABLE(SetElementStyleAction);
-
  public:
   SetElementStyleAction(InspectorStyleSheetForInlineStyle* style_sheet,
                         const String& text)
@@ -582,12 +582,11 @@ class InspectorCSSAgent::SetElementStyleAction final
   Member<InspectorStyleSheetForInlineStyle> style_sheet_;
   String text_;
   String old_text_;
+  DISALLOW_COPY_AND_ASSIGN(SetElementStyleAction);
 };
 
 class InspectorCSSAgent::AddRuleAction final
     : public InspectorCSSAgent::StyleSheetAction {
-  WTF_MAKE_NONCOPYABLE(AddRuleAction);
-
  public:
   AddRuleAction(InspectorStyleSheet* style_sheet,
                 const String& rule_text,
@@ -632,6 +631,7 @@ class InspectorCSSAgent::AddRuleAction final
   String old_text_;
   SourceRange location_;
   SourceRange added_range_;
+  DISALLOW_COPY_AND_ASSIGN(AddRuleAction);
 };
 
 // static
@@ -662,7 +662,7 @@ InspectorCSSAgent::InspectorCSSAgent(
       resource_content_loader_client_id_(
           resource_content_loader->CreateClientId()) {}
 
-InspectorCSSAgent::~InspectorCSSAgent() {}
+InspectorCSSAgent::~InspectorCSSAgent() = default;
 
 void InspectorCSSAgent::Restore() {
   if (state_->booleanProperty(CSSAgentState::kCssAgentEnabled, false))
@@ -1107,7 +1107,7 @@ Response InspectorCSSAgent::getComputedStyleForNode(
       continue;
     (*style)->addItem(
         protocol::CSS::CSSComputedStyleProperty::create()
-            .setName(getPropertyNameString(property_id))
+            .setName(property_class.GetPropertyNameString())
             .setValue(computed_style_info->GetPropertyValue(property_id))
             .build());
   }
@@ -2114,12 +2114,12 @@ HeapVector<Member<CSSStyleDeclaration>> InspectorCSSAgent::MatchingStyles(
 }
 
 CSSStyleDeclaration* InspectorCSSAgent::FindEffectiveDeclaration(
-    CSSPropertyID property_id,
+    const CSSProperty& property_class,
     const HeapVector<Member<CSSStyleDeclaration>>& styles) {
   if (!styles.size())
     return nullptr;
 
-  String longhand = getPropertyNameString(property_id);
+  String longhand = property_class.GetPropertyNameString();
   CSSStyleDeclaration* found_style = nullptr;
 
   for (unsigned i = 0; i < styles.size(); ++i) {
@@ -2155,8 +2155,9 @@ Response InspectorCSSAgent::setEffectivePropertyValueForNode(
     return Response::Error("Can't edit a node from a non-active document");
 
   CSSPropertyID property_id = cssPropertyID(property_name);
+  const CSSProperty& property_class = CSSProperty::Get(property_id);
   CSSStyleDeclaration* style =
-      FindEffectiveDeclaration(property_id, MatchingStyles(element));
+      FindEffectiveDeclaration(property_class, MatchingStyles(element));
   if (!style)
     return Response::Error("Can't find a style to edit");
 
@@ -2182,10 +2183,11 @@ Response InspectorCSSAgent::setEffectivePropertyValueForNode(
   Vector<StylePropertyShorthand, 4> shorthands;
   getMatchingShorthandsForLonghand(property_id, &shorthands);
 
-  String shorthand = shorthands.size() > 0
-                         ? getPropertyNameString(shorthands[0].id())
-                         : String();
-  String longhand = getPropertyNameString(property_id);
+  String shorthand =
+      shorthands.size() > 0
+          ? CSSProperty::Get(shorthands[0].id()).GetPropertyNameString()
+          : String();
+  String longhand = property_class.GetPropertyNameString();
 
   int found_index = -1;
   Vector<CSSPropertySourceData>& properties = source_data->property_data;
@@ -2321,7 +2323,21 @@ Response InspectorCSSAgent::getBackgroundColors(
       CSSComputedStyleDeclaration::Create(body, true);
   const CSSValue* body_font_size =
       computed_style_body->GetPropertyCSSValue(GetCSSPropertyFontSize());
-  *computed_body_font_size = body_font_size->CssText();
+  if (body_font_size) {
+    *computed_body_font_size = body_font_size->CssText();
+  } else {
+    // This is an extremely rare and pathological case -
+    // just return the baseline default to avoid a crash.
+    // crbug.com/738777
+    unsigned default_font_size_keyword =
+        FontSizeFunctions::InitialKeywordSize();
+    float default_font_size_pixels = FontSizeFunctions::FontSizeForKeyword(
+        &document, default_font_size_keyword, false);
+    *computed_body_font_size =
+        CSSPrimitiveValue::Create(default_font_size_pixels,
+                                  CSSPrimitiveValue::UnitType::kPixels)
+            ->CssText();
+  }
 
   return Response::OK();
 }
@@ -2333,6 +2349,10 @@ void InspectorCSSAgent::SetCoverageEnabled(bool enabled) {
 
   for (Document* document : dom_agent_->Documents())
     document->GetStyleEngine().SetRuleUsageTracker(tracker_);
+}
+
+void InspectorCSSAgent::WillChangeStyleElement(Element* element) {
+  resource_container_->EraseStyleElementContent(DOMNodeIds::IdForNode(element));
 }
 
 Response InspectorCSSAgent::startRuleUsageTracking() {

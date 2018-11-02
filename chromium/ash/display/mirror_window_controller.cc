@@ -13,6 +13,7 @@
 #include "ash/host/ash_window_tree_host.h"
 #include "ash/host/ash_window_tree_host_init_params.h"
 #include "ash/host/root_window_transformer.h"
+#include "ash/public/cpp/config.h"
 #include "ash/root_window_settings.h"
 #include "ash/shell.h"
 #include "base/strings/stringprintf.h"
@@ -23,6 +24,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/layout.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/reflector.h"
 #include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
@@ -105,9 +107,18 @@ display::DisplayManager::MultiDisplayMode GetCurrentMultiDisplayMode() {
   display::DisplayManager* display_manager = Shell::Get()->display_manager();
   return display_manager->IsInUnifiedMode()
              ? display::DisplayManager::UNIFIED
-             : (display_manager->IsInMirrorMode()
+             : (display_manager->IsInSoftwareMirrorMode()
                     ? display::DisplayManager::MIRRORING
                     : display::DisplayManager::EXTENDED);
+}
+
+int64_t GetCurrentReflectingSourceId() {
+  display::DisplayManager* display_manager = Shell::Get()->display_manager();
+  if (display_manager->IsInUnifiedMode())
+    return display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  if (display_manager->IsInSoftwareMirrorMode())
+    return display_manager->mirroring_source_id();
+  return display::kInvalidDisplayId;
 }
 
 }  // namespace
@@ -135,27 +146,26 @@ MirrorWindowController::~MirrorWindowController() {
 
 void MirrorWindowController::UpdateWindow(
     const std::vector<display::ManagedDisplayInfo>& display_info_list) {
-  static int mirror_host_count = 0;
   display::DisplayManager* display_manager = Shell::Get()->display_manager();
-  const display::Display& primary =
-      display::Screen::GetScreen()->GetPrimaryDisplay();
-  const display::ManagedDisplayInfo& source_display_info =
-      display_manager->GetDisplayInfo(primary.id());
+  DCHECK(display_manager->IsInSoftwareMirrorMode() ||
+         display_manager->IsInUnifiedMode());
+  static int mirror_host_count = 0;
 
   multi_display_mode_ = GetCurrentMultiDisplayMode();
+  reflecting_source_id_ = GetCurrentReflectingSourceId();
 
   for (const display::ManagedDisplayInfo& display_info : display_info_list) {
     std::unique_ptr<RootWindowTransformer> transformer;
-    if (display_manager->IsInMirrorMode()) {
+    if (display_manager->IsInSoftwareMirrorMode()) {
       transformer.reset(CreateRootWindowTransformerForMirroredDisplay(
-          source_display_info, display_info));
-    } else if (display_manager->IsInUnifiedMode()) {
+          display_manager->GetDisplayInfo(reflecting_source_id_),
+          display_info));
+    } else {
+      DCHECK(display_manager->IsInUnifiedMode());
       display::Display display =
           display_manager->GetMirroringDisplayById(display_info.id());
       transformer.reset(CreateRootWindowTransformerForUnifiedDesktop(
-          primary.bounds(), display));
-    } else {
-      NOTREACHED();
+          display::Screen::GetScreen()->GetPrimaryDisplay().bounds(), display));
     }
 
     if (mirroring_host_info_map_.find(display_info.id()) ==
@@ -195,8 +205,7 @@ void MirrorWindowController::UpdateWindow(
         AshWindowTreeHost* unified_ash_host =
             Shell::Get()
                 ->window_tree_host_manager()
-                ->GetAshWindowTreeHostForDisplayId(
-                    display::Screen::GetScreen()->GetPrimaryDisplay().id());
+                ->GetAshWindowTreeHostForDisplayId(reflecting_source_id_);
         unified_ash_host->RegisterMirroringHost(host_info->ash_host.get());
         aura::client::SetScreenPositionClient(host->window(),
                                               screen_position_client_.get());
@@ -212,19 +221,22 @@ void MirrorWindowController::UpdateWindow(
       host_info->ash_host->SetRootWindowTransformer(std::move(transformer));
       mirror_window->SetBounds(host->window()->bounds());
       mirror_window->Show();
-      if (reflector_) {
-        reflector_->AddMirroringLayer(mirror_window->layer());
-      } else if (aura::Env::GetInstance()->context_factory_private()) {
-        reflector_ =
-            aura::Env::GetInstance()
-                ->context_factory_private()
-                ->CreateReflector(
-                    Shell::GetPrimaryRootWindow()->GetHost()->compositor(),
-                    mirror_window->layer());
-      } else {
-        // TODO: Config::MUS needs to support reflector.
-        // http://crbug.com/601869.
-        NOTIMPLEMENTED();
+      // The classic config creates the accelerated widget synchronously. Mus
+      // (without viz) creates the reflector in OnAcceleratedWidgetOverridden.
+      if (host->GetAcceleratedWidget() != gfx::kNullAcceleratedWidget) {
+        DCHECK_EQ(Shell::GetAshConfig(), Config::CLASSIC);
+        if (reflector_) {
+          reflector_->AddMirroringLayer(mirror_window->layer());
+        } else if (aura::Env::GetInstance()->context_factory_private()) {
+          reflector_ =
+              aura::Env::GetInstance()
+                  ->context_factory_private()
+                  ->CreateReflector(
+                      Shell::GetRootWindowForDisplayId(reflecting_source_id_)
+                          ->GetHost()
+                          ->compositor(),
+                      mirror_window->layer());
+        }
       }
     } else {
       AshWindowTreeHost* ash_host =
@@ -251,6 +263,13 @@ void MirrorWindowController::UpdateWindow(
       }
     }
   }
+
+  if (mirroring_host_info_map_.empty() && reflector_) {
+    // Close the mirror window if all displays are disconnected.
+    aura::Env::GetInstance()->context_factory_private()->RemoveReflector(
+        reflector_.get());
+    reflector_.reset();
+  }
 }
 
 void MirrorWindowController::UpdateWindow() {
@@ -276,9 +295,10 @@ void MirrorWindowController::UpdateWindow() {
 void MirrorWindowController::CloseIfNotNecessary() {
   display::DisplayManager::MultiDisplayMode new_mode =
       GetCurrentMultiDisplayMode();
-  if (multi_display_mode_ != new_mode) {
+  int64_t new_reflecting_source_id = GetCurrentReflectingSourceId();
+  if (multi_display_mode_ != new_mode ||
+      reflecting_source_id_ != new_reflecting_source_id) {
     Close(true);
-    multi_display_mode_ = new_mode;
   } else {
     UpdateWindow();
   }
@@ -318,6 +338,22 @@ void MirrorWindowController::OnHostResized(aura::WindowTreeHost* host) {
   }
 }
 
+void MirrorWindowController::OnAcceleratedWidgetOverridden(
+    aura::WindowTreeHost* host) {
+  DCHECK_NE(host->GetAcceleratedWidget(), gfx::kNullAcceleratedWidget);
+  DCHECK_NE(Shell::GetAshConfig(), Config::CLASSIC);
+  DCHECK(!switches::IsMusHostingViz());
+  MirroringHostInfo* info = mirroring_host_info_map_[host->GetDisplayId()];
+  if (reflector_) {
+    reflector_->AddMirroringLayer(info->mirror_window->layer());
+  } else if (aura::Env::GetInstance()->context_factory_private()) {
+    reflector_ =
+        aura::Env::GetInstance()->context_factory_private()->CreateReflector(
+            Shell::GetPrimaryRootWindow()->GetHost()->compositor(),
+            info->mirror_window->layer());
+  }
+}
+
 display::Display MirrorWindowController::GetDisplayForRootWindow(
     const aura::Window* root) const {
   for (const auto& pair : mirroring_host_info_map_) {
@@ -335,7 +371,8 @@ display::Display MirrorWindowController::GetDisplayForRootWindow(
 
 AshWindowTreeHost* MirrorWindowController::GetAshWindowTreeHostForDisplayId(
     int64_t id) {
-  CHECK_EQ(1u, mirroring_host_info_map_.count(id));
+  if (mirroring_host_info_map_.count(id) == 0)
+    return nullptr;
   return mirroring_host_info_map_[id]->ash_host.get();
 }
 
@@ -379,7 +416,7 @@ void MirrorWindowController::CloseAndDeleteHost(MirroringHostInfo* host_info,
   host_info->ash_host->PrepareForShutdown();
   // TODO: |reflector_| should always be non-null here, but isn't in MUS yet
   // because of http://crbug.com/601869.
-  if (reflector_)
+  if (reflector_ && host_info->mirror_window->layer()->GetCompositor())
     reflector_->RemoveMirroringLayer(host_info->mirror_window->layer());
 
   // EventProcessor may be accessed after this call if the mirroring window

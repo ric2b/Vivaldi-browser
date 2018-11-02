@@ -50,7 +50,7 @@ class WebGraphicsContext3DProviderForTests
     return gpu_feature_info_;
   }
   viz::GLHelper* GetGLHelper() override { return nullptr; }
-  void SetLostContextCallback(const base::Closure&) override {}
+  void SetLostContextCallback(base::Closure) override {}
   void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char*, int32_t id)>) {}
   void SignalQuery(uint32_t, base::OnceClosure) override {}
@@ -169,11 +169,6 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
     }
   }
 
-  GLuint64 InsertFenceSyncCHROMIUM() override {
-    static GLuint64 sync_point_generator = 0;
-    return ++sync_point_generator;
-  }
-
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override {
     memcpy(&most_recently_waited_sync_token_, sync_token,
            sizeof(most_recently_waited_sync_token_));
@@ -204,10 +199,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
   }
 
   void ProduceTextureDirectCHROMIUM(GLuint texture,
-                                    GLenum target,
                                     const GLbyte* mailbox) override {
-    ASSERT_EQ(target, DrawingBufferTextureTarget());
-
     if (!create_image_chromium_fail_) {
       ASSERT_TRUE(texture_sizes_.Contains(texture));
       most_recently_produced_size_ = texture_sizes_.at(texture);
@@ -266,10 +258,10 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
     }
   }
 
-  void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override {
+  void GenSyncTokenCHROMIUM(GLbyte* sync_token) override {
     static uint64_t unique_id = 1;
     gpu::SyncToken source(
-        gpu::GPU_IO, 1, gpu::CommandBufferId::FromUnsafeValue(unique_id++), 2);
+        gpu::GPU_IO, gpu::CommandBufferId::FromUnsafeValue(unique_id++), 2);
     memcpy(sync_token, &source, sizeof(source));
   }
 

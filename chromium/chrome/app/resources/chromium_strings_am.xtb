@@ -11,13 +11,10 @@
 <translation id="1185134272377778587">ስለChromium</translation>
 <translation id="1298199220304005244">Chromium ስርዓተ ክወና መጠቀም ላይ እገዛ ያግኙ</translation>
 <translation id="1396446129537741364">Chromium የይለፍ ቃላትን ለማሳየት እየሞከረ ነው።</translation>
-<translation id="1403254041219632970">የወደፊት የChromium ስሪቶች ከአሁን በኋላ Mac OS X 10.6፣ 10.7 ወይም 10.8 አይደግፉም።</translation>
 <translation id="1414495520565016063">ወደ Chromium ገብተዋል!</translation>
-<translation id="1440917365206527807">Chromium ይህን ጣቢያ ወደዚህ እንዳይወስደዎት አቁሞታል፦</translation>
 <translation id="1444754455097148408">Chromium የክፍት ምንጭ ፈቃዶች</translation>
 <translation id="1502360822835740515">Chromiumን የእርስዎ ነባሪ አሳሽ ያድርጉ</translation>
 <translation id="151962892725702025">ማመሳሰል ለጎራዎ ስለማይገኝ Chromium OS ውሂብዎን ማመሳሰል አይችልም።</translation>
-<translation id="1559451348202814456">Chromium ከአሁን በኋላ በMac OS X 10.6፣ 10.7 ወይም 10.8 ላይ ከእንግዲህ ስለማይደገፍ በአግባቡ ላይሰራ ይችላል።</translation>
 <translation id="1585657529869845941"><ph name="BEGIN_BOLD" />ለማንኛውም ቀይር<ph name="END_BOLD" /> ከመጣ ጠቅ ያድርጉት</translation>
 <translation id="1653828314016431939">እሺ - አሁን ዳግም አስጀምር</translation>
 <translation id="1668054258064581266">መለያዎን ከChromium ካስወገዱ በኋላ፣ ክፍት ትሮችዎ እንዲሰሩ መልሰው መጫን ሊኖርብዎ ይችላል።</translation>
@@ -50,7 +47,6 @@
 <translation id="2587578672395088481">Chromium OS ዝማኔውን ለመተግበር ዳግም መጀመር አለበት።</translation>
 <translation id="2647554856022461007">Chromium የአሰሳ ተሞክሮዎን ለማሻሻል የድር አገልግሎቶችን ሊጠቀም ይችላል። እነዚህን አገልግሎቶች በአማራጭነት ሊያሰናክሏቸው ይችላሉ። <ph name="BEGIN_LINK" />የበለጠ ለመረዳት<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">በጭነት ጊዜ የስርዓተ ክወና ስህተት ተፈጥሯል። እባክዎ Chromiumን እንደገና ያውርዱት።</translation>
-<translation id="2685838254101182273">Chromium ማዘመን አቁሟል፣ እና ከአሁን በኋላ ይህን የስርዓተ ክወናዎን ስሪት አይደግፍም።</translation>
 <translation id="2705403826523567092">በመላ መሣሪያዎች ላይ ግላዊነት የተላበሰ የአሰሳ ተሞክሮን ለማግኘት በመለያ ይግቡ</translation>
 <translation id="2711502716910134313">የChromium ትር</translation>
 <translation id="2718390899429598676">ለተጨማሪ ደህንነት ሲባል Chromium ውሂብዎን ያመሰጥረዋል።</translation>
@@ -108,7 +104,6 @@
 <translation id="4458285410772214805">ይሄ ለውጥ እንዲተገበር እባክዎ ይውጡ እና እንደገና ይግቡ።</translation>
 <translation id="4469812139324097969">Chromium ለሆነ ጊዜ ያህል ዳግም ስላልተጀመረ ጊዜው አልፎበታል። አንድ ዝማኔ አለ እና ልክ ዳግም ሲያስጀምሩት ይተገበራል።</translation>
 <translation id="4488554488975128561">አደገኛ መተግበሪያዎች እና ጣቢያዎች እንዲገኙ ለማገዝ አንዳንድ የሥርዓት መረጃን እና የገጽ ይዘትን ለGoogle በመላክ Chromium ደህንነቱ ይበልጥ የተጠበቀ እና ለመጠቀም ይበልጥ የቀለለ እንዲሆን ማድረግ ይችላሉ።</translation>
-<translation id="4549794359424059447">የወደፊት የChromium ስሪቶች ከአሁን በኋላ Windows XP ወይም Windows Vistaን አይደግፉም።</translation>
 <translation id="4567424176335768812">እንደ <ph name="USER_EMAIL_ADDRESS" /> ሆነው ገብተዋል። አሁን የእርስዎን ዕልባቶች፣ ታሪክ እና ሌሎች ቅንብሮች በመለያ በገቡ ሁሉም መሣሪያዎችዎ ላይ መድረስ ይችላሉ።</translation>
 <translation id="459535195905078186">የChromium መተግበሪያዎች</translation>
 <translation id="4611246891205775468">Chromium ለዚህ ጣቢያ የእርስዎን ማይክራፎን ለመድረስ ፈቃድ ይፈልጋል።</translation>
@@ -147,7 +142,6 @@
 <translation id="5902536751647951209">የማረጋገጫ እውቅና ማረጋገጫ አልተሳካም። እባክዎ እንደገና ወደ Chromium ይግቡ ወይም ለተጨማሪ መረጃ አስተዳዳሪዎን ያነጋግሩ። <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">የተዘመነ ለመሆን ጥቂት ብቻ ቀርቷል! ዝማኔውን ለማጠናቀቅ መሣሪያዎን ዳግም ያስጀምሩት።</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> ወደ Chromium ታክሏል።</translation>
-<translation id="59625444380784159">የእውቂያዎችዎ ዝርዝሮች በChromium ውስጥ ቅጾችን በበለጠ ፍጥነት እንዲሞሉ ያግዘዎታል።</translation>
 <translation id="5987687638152509985">ስምረትን ለመጀመር Chromiumን ያዘምኑ</translation>
 <translation id="6055895534982063517">አዲስ የChromium ስሪት ይገኛል፣ እና ከመቼውም በበለጠ ፈጣን ሆኗል።</translation>
 <translation id="6063093106622310249">በChromium ውስጥ &amp;ክፈት</translation>
@@ -161,6 +155,7 @@
 <translation id="6334986366598267305">አሁን Chromiumን ከGoogle መለያዎ ጋር እና በተጋሩ ኮምፒውተሮች ላይ መጠቀም ይበልጥ ቀላል ነው።</translation>
 <translation id="6373523479360886564">እርግጠኛ ነዎት Chromiumን ማራገፍ ይፈልጋሉ?</translation>
 <translation id="6394232988457703198">አሁን Chromiumን ዳግም ማስጀመር አለብዎት።</translation>
+<translation id="6400072781405947421">Chromium ከእንግዲህ በMac OS X 10.9 ላይ ስለማይደገፍ በአግባቡ ላይሰራ ይችላል።</translation>
 <translation id="6403826409255603130">Chromium ድረ-ገጾችን እና መተግበሪያዎችን እጅግ በጣም ፈጣን በሆነ ፍጥነት የሚያሄድ ድር አሳሽ ነው። ፈጣን፣ የረጋ እና ለመጠቀም ቀላል ነው። Chromium ውስጥ አብሮ በተሰራላቸው የተንኮል-አዘል ሶፍትዌር እና የማስገሪያ መከላከያዎች አማካኝነት ደህንነትዎ ይበልጥ በተጠበቀ ሁኔታ ድሩን ያስሱ።</translation>
 <translation id="6475912303565314141">እንዲሁም Chromiumን ሲጀምሩት የሚታየውን ገጽ ይቆጣጠራል።</translation>
 <translation id="6485906693002546646">የChromium ነገሮችዎን ለማመሳሰል <ph name="PROFILE_EMAIL" />ን እየተጠቀሙ ነው። የማመሳሰል ምርጫዎን ለማዘመን ወይም Chromium ያለGoogle መለያ መጠቀም የሚፈልጉ ከሆኑ <ph name="SETTINGS_LINK" />ን ይጎብኙ።</translation>
@@ -176,13 +171,13 @@
 <translation id="6734291798041940871">Chromium ለሁሉም በእርስዎ ኮምፒውተር ላይ ላሉ ተጠቃሚዎች አስቀድሞ ተጭኗል።</translation>
 <translation id="6810143991807788455">የአሁኖቹ ቅንብሮችን ሪፖርት በማድረግ Chromium የተሻለ እንዲሆን ያግዙ</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (ወደ Chromium ተቀድቷል)</translation>
 <translation id="6893813176749746474">Chromium ተዘምኗል፣ ግን ቢያንስ ለ30 ቀኖች አልተጠቀሙበትም።</translation>
 <translation id="6944967875980567883">Chromium ላይ የተጫኑ ሞዱሎች</translation>
 <translation id="6964305034639999644">አገናኙን በChromium ማን&amp;ነትን በማያሳውቅ መስኮት ውስጥ ክፈት</translation>
 <translation id="6970811910055250180">መሣሪያዎን በማዘመን ላይ...</translation>
 <translation id="705851970750939768">Chromiumን አዘምን</translation>
 <translation id="7066436765290594559">Chromium OS የእርስዎን ውሂብ ማመሳሰል አልቻለም። የእርስዎን የማመሳሰያ የይለፍ ሐረግ እባክዎ ያዘምኑ።</translation>
-<translation id="707471633328071618">Google Payments (ወደ Chromium ተቀድቷል)</translation>
 <translation id="7162152143154757523">Chromium አሳሹ ላይ የሚተይቡትን ለGoogle አገልጋዮች በመላክ ይበልጥ አዋቂ የሆነ ፊደል አራሚ ሊያቀርብልዎት ይችላል፣ ይህም Google ፍለጋ የሚጠቀመውን ተመሳሳዩ የፊደል አራሚ ቴክኖሎጂ እንዲጠቀሙ ያስችልዎታል።</translation>
 <translation id="7205698830395646142">በChromium ምናሌ ውስጥ ደብቅ</translation>
 <translation id="7223968959479464213">ተግባር መሪ - Chromium</translation>
@@ -242,7 +237,6 @@ Chromium ቅንብሮችዎን ማስመለስ አልቻለም።</translation>
 <translation id="872034308864968620">Chromium ጀርባ ላይ ያሂድ</translation>
 <translation id="8803635938069941624">የChromium OS ውል</translation>
 <translation id="8821041990367117597">የመለያ መግቢያ ዝርዝሮችዎ ጊዜ ያለፈባቸው ስለሆኑ Chromium ውሂብዎን ማመሳሰል አልቻለም።</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">ለስርዓተ-ደረጃ ጭነት ተገቢ መብቶች የሉዎትም። ጫኚውን እንደ አስተዳዳሪ በማሄድ እንደገና ይሞክሩ።</translation>
 <translation id="8897323336392112261">እንዲሁም Chromiumን ሲጀምሩት ወይም የመነሻ አዝራሩን ጠቅ ሲያደርጉት የሚታየውን ገጽ ይቆጣጠራል።</translation>
 <translation id="8907580949721785412">Chromium የይለፍ ቃሎችን ለማሳየት እየሞከረ ነው። ይህንን ለመፍቀድ የWindows የይለፍ ቃልዎን ይተይቡ።</translation>

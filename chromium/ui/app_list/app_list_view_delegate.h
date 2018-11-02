@@ -5,8 +5,10 @@
 #ifndef UI_APP_LIST_APP_LIST_VIEW_DELEGATE_H_
 #define UI_APP_LIST_APP_LIST_VIEW_DELEGATE_H_
 
+#include <string>
 #include <vector>
 
+#include "base/strings/string16.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/app_list/app_list_export.h"
@@ -19,10 +21,15 @@ namespace views {
 class View;
 }
 
+namespace ui {
+class MenuModel;
+}
+
 namespace app_list {
 
 class AppListModel;
 class AppListViewDelegateObserver;
+class SearchModel;
 class SearchResult;
 class SpeechUIModel;
 
@@ -31,19 +38,24 @@ class APP_LIST_EXPORT AppListViewDelegate {
   virtual ~AppListViewDelegate() {}
   // Gets the model associated with the view delegate. The model may be owned
   // by the delegate, or owned elsewhere (e.g. a profile keyed service).
+  // Note: Don't call this method under //chrome/browser/.
   virtual AppListModel* GetModel() = 0;
+
+  // Gets the search model associated with the view delegate. The model may be
+  // owned by the delegate, or owned elsewhere (e.g. a profile keyed service).
+  // Note: Don't call this method under //chrome/browser/.
+  virtual SearchModel* GetSearchModel() = 0;
 
   // Gets the SpeechUIModel for the app list. Owned by the AppListViewDelegate.
   virtual SpeechUIModel* GetSpeechUI() = 0;
 
-  // Invoked to start a new search. Delegate collects query input from
-  // SearchBoxModel and populates SearchResults. Both models are sub models
-  // of AppListModel.
-  virtual void StartSearch() = 0;
+  // Invoked to start a new search. This collects a list of search results
+  // matching the raw query, which is an unhandled string typed into the search
+  // box by the user.
+  virtual void StartSearch(const base::string16& raw_query) = 0;
 
   // Invoked to open the search result.
   virtual void OpenSearchResult(SearchResult* result,
-                                bool auto_launch,
                                 int event_flags) = 0;
 
   // Called to invoke a custom action on |result|.  |action_index| corresponds
@@ -51,13 +63,6 @@ class APP_LIST_EXPORT AppListViewDelegate {
   virtual void InvokeSearchResultAction(SearchResult* result,
                                         int action_index,
                                         int event_flags) = 0;
-
-  // Gets the timeout for auto-launching the first search result, or 0 if the
-  //  auto-launch should not happen for the current search session.
-  virtual base::TimeDelta GetAutoLaunchTimeout() = 0;
-
-  // Invoked when the auto-launch is canceled by the user action.
-  virtual void AutoLaunchCanceled() = 0;
 
   // Invoked when the app list UI is created.
   virtual void ViewInitialized() = 0;
@@ -77,22 +82,19 @@ class APP_LIST_EXPORT AppListViewDelegate {
   // the returned view.
   virtual views::View* CreateStartPageWebView(const gfx::Size& size) = 0;
 
-  // Creates the web views for the user-specified custom pages. The caller takes
-  // ownership of the returned views.
-  virtual std::vector<views::View*> CreateCustomPageWebViews(
-      const gfx::Size& size) = 0;
-
-  // Invoked when the custom launcher page's animation changes.
-  virtual void CustomLauncherPageAnimationChanged(double progress) = 0;
-
-  // Invoked when the custom launcher page's subpage should be popped.
-  virtual void CustomLauncherPagePopSubpage() = 0;
-
   // Returns true if the delegate supports speech recognition.
   virtual bool IsSpeechRecognitionEnabled() = 0;
 
   // Gets the wallpaper prominent colors.
   virtual void GetWallpaperProminentColors(std::vector<SkColor>* colors) = 0;
+
+  // Activates (opens) the item.
+  virtual void ActivateItem(const std::string& id, int event_flags) = 0;
+
+  // Returns the context menu model for this item, or NULL if there is currently
+  // no menu for the item (e.g. during install).
+  // Note the returned menu model is owned by this item.
+  virtual ui::MenuModel* GetContextMenuModel(const std::string& id) = 0;
 
   // Add/remove observer for AppListViewDelegate.
   virtual void AddObserver(AppListViewDelegateObserver* observer) = 0;

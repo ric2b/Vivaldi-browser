@@ -13,12 +13,10 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.payments.mojom.BasicCardNetwork;
 import org.chromium.payments.mojom.BasicCardType;
@@ -26,17 +24,16 @@ import org.chromium.payments.mojom.BasicCardType;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
+import javax.annotation.Nullable;
+
 /**
  * A payment integration test for service worker based payment apps.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         // For all the tests in this file, we expect abort exception when there is no supported
         // payment instruments instead of showing payment request UI.
-        "enable-features=" + ChromeFeatureList.NO_CREDIT_CARD_ABORT,
-})
+        "enable-features=" + ChromeFeatureList.NO_CREDIT_CARD_ABORT})
 public class PaymentRequestServiceWorkerPaymentAppTest {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule = new PaymentRequestTestRule(
@@ -47,20 +44,23 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
      *
      * @param supportedMethodNames The supported payment methods of the mock payment app.
      * @param capabilities         The capabilities of the mocked payment app.
+     * @param name                 The payment app name.
+     * @param icon                 The payment app icon.
      */
     private void installMockServiceWorkerPaymentApp(final String[] supportedMethodNames,
-            final ServiceWorkerPaymentApp.Capabilities[] capabilities) {
-        PaymentAppFactory.getInstance().addAdditionalFactory((webContents, methodNames,
-                                                                     callback) -> {
-            callback.onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents,
-                    0 /* registrationId */,
-                    UriUtils.parseUriFromString("https://bobpay.com") /* scope */,
-                    "BobPay" /* label */, "test@bobpay.com" /* sublabel*/,
-                    "https://bobpay.com" /* tertiarylabel */, new ColorDrawable() /* icon */,
-                    supportedMethodNames /* methodNames */, capabilities /* capabilities */,
-                    new String[0] /* preferredRelatedApplicationIds */));
-            callback.onAllPaymentAppsCreated();
-        });
+            final ServiceWorkerPaymentApp.Capabilities[] capabilities, @Nullable final String name,
+            @Nullable final ColorDrawable icon) {
+        PaymentAppFactory.getInstance().addAdditionalFactory(
+                (webContents, methodNames, callback) -> {
+                    callback.onPaymentAppCreated(new ServiceWorkerPaymentApp(webContents,
+                            0 /* registrationId */,
+                            UriUtils.parseUriFromString("https://bobpay.com") /* scope */,
+                            name /* name */, "test@bobpay.com" /* userHint */,
+                            "https://bobpay.com" /* origin */, icon /* icon */,
+                            supportedMethodNames /* methodNames */, capabilities /* capabilities */,
+                            new String[0] /* preferredRelatedApplicationIds */));
+                    callback.onAllPaymentAppsCreated();
+                });
     }
 
     @Test
@@ -68,8 +68,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
     @Feature({"Payments"})
     public void testNoSupportedPaymentMethods()
             throws InterruptedException, ExecutionException, TimeoutException {
-        installMockServiceWorkerPaymentApp(
-                new String[0], new ServiceWorkerPaymentApp.Capabilities[0]);
+        installMockServiceWorkerPaymentApp(new String[0],
+                new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -84,8 +84,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
     public void testHasSupportedPaymentMethods()
             throws InterruptedException, ExecutionException, TimeoutException {
         String[] supportedMethodNames = {"https://bobpay.com"};
-        installMockServiceWorkerPaymentApp(
-                supportedMethodNames, new ServiceWorkerPaymentApp.Capabilities[0]);
+        installMockServiceWorkerPaymentApp(supportedMethodNames,
+                new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -100,7 +100,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
             throws InterruptedException, ExecutionException, TimeoutException {
         String[] supportedMethodNames = {"https://bobpay.com", "basic-card"};
         ServiceWorkerPaymentApp.Capabilities[] capabilities = {};
-        installMockServiceWorkerPaymentApp(supportedMethodNames, capabilities);
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, capabilities, "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -160,7 +161,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
         int[] types = {BasicCardType.CREDIT};
         ServiceWorkerPaymentApp.Capabilities[] capabilities = {
                 new ServiceWorkerPaymentApp.Capabilities(networks, types)};
-        installMockServiceWorkerPaymentApp(supportedMethodNames, capabilities);
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, capabilities, "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -212,7 +214,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
         int[] types = {BasicCardType.CREDIT};
         ServiceWorkerPaymentApp.Capabilities[] capabilities = {
                 new ServiceWorkerPaymentApp.Capabilities(networks, types)};
-        installMockServiceWorkerPaymentApp(supportedMethodNames, capabilities);
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, capabilities, "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -265,7 +268,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
         int[] types = {BasicCardType.CREDIT, BasicCardType.DEBIT};
         ServiceWorkerPaymentApp.Capabilities[] capabilities = {
                 new ServiceWorkerPaymentApp.Capabilities(networks, types)};
-        installMockServiceWorkerPaymentApp(supportedMethodNames, capabilities);
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, capabilities, "BobPay", new ColorDrawable());
 
         ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
 
@@ -314,8 +318,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
     public void testDoNotCallCanMakePayment()
             throws InterruptedException, ExecutionException, TimeoutException {
         String[] supportedMethodNames = {"basic-card"};
-        installMockServiceWorkerPaymentApp(
-                supportedMethodNames, new ServiceWorkerPaymentApp.Capabilities[0]);
+        installMockServiceWorkerPaymentApp(supportedMethodNames,
+                new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", new ColorDrawable());
 
         // Sets setCanMakePaymentForTesting(false) to return false for CanMakePayment since there is
         // no real sw payment app, so if CanMakePayment is called then no payment instruments will
@@ -332,8 +336,8 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
     public void testCallCanMakePayment()
             throws InterruptedException, ExecutionException, TimeoutException {
         String[] supportedMethodNames = {"https://bobpay.com", "basic-card"};
-        installMockServiceWorkerPaymentApp(
-                supportedMethodNames, new ServiceWorkerPaymentApp.Capabilities[0]);
+        installMockServiceWorkerPaymentApp(supportedMethodNames,
+                new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", new ColorDrawable());
 
         // Sets setCanMakePaymentForTesting(false) to return false for CanMakePayment since there is
         // no real sw payment app, so if CanMakePayment is called then no payment instruments will
@@ -343,5 +347,65 @@ public class PaymentRequestServiceWorkerPaymentAppTest {
         mPaymentRequestTestRule.openPageAndClickBuyAndWait(mPaymentRequestTestRule.getShowFailed());
         mPaymentRequestTestRule.expectResultContains(
                 new String[] {"show() rejected", "The payment method", "not supported"});
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Payments"})
+    public void testCanPreselect()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String[] supportedMethodNames = {"https://bobpay.com"};
+        installMockServiceWorkerPaymentApp(supportedMethodNames,
+                new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", new ColorDrawable());
+
+        ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
+
+        mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyForInput());
+        Assert.assertNotNull(mPaymentRequestTestRule.getSelectedPaymentInstrumentLabel());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Payments"})
+    public void testCanNotPreselectWithoutName()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String[] supportedMethodNames = {"https://bobpay.com"};
+        installMockServiceWorkerPaymentApp(supportedMethodNames,
+                new ServiceWorkerPaymentApp.Capabilities[0], null, new ColorDrawable());
+
+        ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
+
+        mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyForInput());
+        Assert.assertNull(mPaymentRequestTestRule.getSelectedPaymentInstrumentLabel());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Payments"})
+    public void testCanNotPreselectWithoutIcon()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String[] supportedMethodNames = {"https://bobpay.com"};
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, new ServiceWorkerPaymentApp.Capabilities[0], "BobPay", null);
+
+        ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
+
+        mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyForInput());
+        Assert.assertNull(mPaymentRequestTestRule.getSelectedPaymentInstrumentLabel());
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"Payments"})
+    public void testCanNotPreselectWithoutNameAndIcon()
+            throws InterruptedException, ExecutionException, TimeoutException {
+        String[] supportedMethodNames = {"https://bobpay.com"};
+        installMockServiceWorkerPaymentApp(
+                supportedMethodNames, new ServiceWorkerPaymentApp.Capabilities[0], null, null);
+
+        ServiceWorkerPaymentAppBridge.setCanMakePaymentForTesting(true);
+
+        mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyForInput());
+        Assert.assertNull(mPaymentRequestTestRule.getSelectedPaymentInstrumentLabel());
     }
 }

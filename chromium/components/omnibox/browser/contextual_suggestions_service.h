@@ -9,8 +9,8 @@
 #include <string>
 
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/signin/core/browser/access_token_fetcher.h"
 #include "net/url_request/url_fetcher_delegate.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 #include "url/gurl.h"
 
 class OAuth2TokenService;
@@ -39,6 +39,9 @@ class ContextualSuggestionsService : public KeyedService {
   // experimental suggestions service. It's possible the non-experimental
   // service may decide to offer general-purpose suggestions.
   //
+  // |visit_time| is the time of the visit for the URL for which suggestions
+  // should be fetched.
+  //
   // |template_url_service| may be null, but some services may be disabled.
   //
   // |fetcher_delegate| is used to create a fetcher that is used to perform a
@@ -55,6 +58,7 @@ class ContextualSuggestionsService : public KeyedService {
   // instantiates |token_fetcher_|.
   void CreateContextualSuggestionsRequest(
       const std::string& current_url,
+      const base::Time& visit_time,
       const TemplateURLService* template_url_service,
       net::URLFetcherDelegate* fetcher_delegate,
       ContextualSuggestionsCallback callback);
@@ -112,6 +116,7 @@ class ContextualSuggestionsService : public KeyedService {
   // This function is called by CreateContextualSuggestionsRequest. See its
   // function definition for details on the parameters.
   void CreateExperimentalRequest(const std::string& current_url,
+                                 const base::Time& visit_time,
                                  const GURL& suggest_url,
                                  net::URLFetcherDelegate* fetcher_delegate,
                                  ContextualSuggestionsCallback callback);
@@ -128,7 +133,7 @@ class ContextualSuggestionsService : public KeyedService {
 
   // Helper for fetching OAuth2 access tokens. This is non-null when an access
   // token request is currently in progress.
-  std::unique_ptr<AccessTokenFetcher> token_fetcher_;
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher> token_fetcher_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextualSuggestionsService);
 };

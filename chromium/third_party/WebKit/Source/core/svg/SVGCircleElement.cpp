@@ -65,16 +65,11 @@ Path SVGCircleElement::AsPath() const {
   float r = length_context.ValueForLength(svg_style.R(), style,
                                           SVGLengthMode::kOther);
   if (r > 0) {
-    path.AddEllipse(
-        FloatRect(length_context.ValueForLength(svg_style.Cx(), style,
-                                                SVGLengthMode::kWidth) -
-                      r,
-                  length_context.ValueForLength(svg_style.Cy(), style,
-                                                SVGLengthMode::kHeight) -
-                      r,
-                  r * 2, r * 2));
+    FloatPoint center(length_context.ResolveLengthPair(svg_style.Cx(),
+                                                       svg_style.Cy(), style));
+    FloatSize radii(r, r);
+    path.AddEllipse(FloatRect(center - radii, radii.ScaledBy(2)));
   }
-
   return path;
 }
 
@@ -85,13 +80,13 @@ void SVGCircleElement::CollectStyleForPresentationAttribute(
   SVGAnimatedPropertyBase* property = PropertyFromAttribute(name);
   if (property == cx_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            cx_->CssValue());
+                                            &cx_->CssValue());
   } else if (property == cy_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            cy_->CssValue());
+                                            &cy_->CssValue());
   } else if (property == r_) {
     AddPropertyToPresentationAttributeStyle(style, property->CssPropertyId(),
-                                            r_->CssValue());
+                                            &r_->CssValue());
   } else {
     SVGGeometryElement::CollectStyleForPresentationAttribute(name, value,
                                                              style);

@@ -38,7 +38,7 @@ bool FocusEvent::IsFocusEvent() const {
   return true;
 }
 
-FocusEvent::FocusEvent() {}
+FocusEvent::FocusEvent() = default;
 
 FocusEvent::FocusEvent(const AtomicString& type,
                        bool can_bubble,
@@ -51,7 +51,7 @@ FocusEvent::FocusEvent(const AtomicString& type,
               can_bubble,
               cancelable,
               ComposedMode::kComposed,
-              TimeTicks::Now(),
+              CurrentTimeTicks(),
               view,
               detail,
               source_capabilities),

@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Questo dispositivo è gestito da <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Verticale</translation>
 <translation id="2067602449040652523">Luminosità della tastiera</translation>
-<translation id="207439088875642105">Si tratta di un account di minori gestito da <ph name="FIRST_PARENT_EMAIL" /> e <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Interrompi la trasmissione di <ph name="TAB_NAME" /> su <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Caricabatterie a basso consumo</translation>
 <translation id="2144487987174258011">Riavvia per aggiornare Adobe Flash Player</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Audio in formato mono</translation>
 <translation id="3009178788565917040">Uscita</translation>
 <translation id="3019353588588144572">Tempo rimanente al caricamento completo della batteria: <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Si tratta di un account di minori gestito da <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3077734595579995578">maiusc</translation>
 <translation id="3087734570205094154">In basso</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Ingrandimento dello schermo</translation>
 <translation id="3477079411857374384">CTRL + MAIUSC + barra spaziatrice</translation>
 <translation id="3510164367642747937">Evidenzia il puntatore del mouse</translation>
+<translation id="3513798432020909783">Account gestito da <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Torna a "<ph name="FROM_LOCALE" />" (è necessario riavviare)</translation>
 <translation id="3582792037806681688">L'accesso simultaneo è stato vietato per un utente di questa sessione</translation>
 <translation id="3595596368722241419">Batteria carica</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Blocca</translation>
 <translation id="3798670284305777884">Altoparlante (interno)</translation>
 <translation id="3846575436967432996">Nessuna informazione di rete disponibile</translation>
+<translation id="385051799172605136">Indietro</translation>
 <translation id="3891340733213178823">Premi due volte Ctrl+Maiusc+Q per uscire.</translation>
 <translation id="3893630138897523026">ChromeVox (lettura vocale)</translation>
 <translation id="3899995891769452915">Input vocale</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Tethering istantaneo</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">A questa sessione sono già stati aggiunti tutti gli utenti disponibili.</translation>
+<translation id="5457599981699367932">Esplora come ospite</translation>
 <translation id="553675580533261935">Uscita dalla sessione</translation>
 <translation id="5548285847212963613">L'estensione "<ph name="EXTENSION_NAME" />" può essere utile per il collegamento a questa rete.</translation>
 <translation id="5571066253365925590">Bluetooth attivo</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Trascinamento al tocco</translation>
 <translation id="5777841717266010279">Interrompere la condivisione dello schermo?</translation>
 <translation id="57838592816432529">Disattiva audio</translation>
+<translation id="5832805196449965646">Aggiungi persona</translation>
 <translation id="5860033963881614850">Off</translation>
 <translation id="5895138241574237353">Riavvia</translation>
 <translation id="5901316534475909376">MAIUSC+ESC</translation>
@@ -273,6 +275,7 @@ Utilizza questa funzione solo con gli account che consideri attendibili.</transl
 <translation id="7829386189513694949">Segnale forte</translation>
 <translation id="7904094684485781019">L'amministratore di questo account ha bloccato l'accesso simultaneo.</translation>
 <translation id="7933084174919150729">L'Assistente Google è disponibile solo per il profilo principale.</translation>
+<translation id="79341161159229895">Account gestito da <ph name="FIRST_PARENT_EMAIL" /> e <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Ricerca di reti mobili...</translation>
 <translation id="7982789257301363584">Rete</translation>
 <translation id="7994370417837006925">Accesso simultaneo</translation>
@@ -289,6 +292,7 @@ Utilizza questa funzione solo con gli account che consideri attendibili.</transl
 <translation id="8261506727792406068">Elimina</translation>
 <translation id="8308637677604853869">Menu precedente</translation>
 <translation id="8351131234907093545">Crea nota</translation>
+<translation id="8392451568018454956">Menu Opzioni per <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Impostazioni</translation>
 <translation id="8433186206711564395">Impostazioni di rete</translation>
 <translation id="8433977262951327081">La scorciatoia per mostrare il fumetto del menu di opzioni di immissione nella shelf è cambiata. Utilizza <ph name="NEW_SHORTCUT" /> invece di <ph name="OLD_SHORTCUT" />.</translation>
@@ -321,7 +325,7 @@ Le finestre, le notifiche e le finestre di dialogo successive potrebbero essere 
 <translation id="9091626656156419976">Schermo <ph name="DISPLAY_NAME" /> rimosso</translation>
 <translation id="9111102763498581341">Sblocca</translation>
 <translation id="9151726767154816831">Riavvia ed esegui Powerwash per aggiornare</translation>
-<translation id="9194617393863864469">Accedi a un altro utente...</translation>
+<translation id="9194617393863864469">Accedi con un altro account utente...</translation>
 <translation id="9201131092683066720">Percentuale di caricamento della batteria: <ph name="PERCENTAGE" />%.</translation>
 <translation id="9210037371811586452">Uscita dalla modalità Desktop unificato</translation>
 <translation id="923686485342484400">Premi due volte Control Maiusc Q per uscire.</translation>

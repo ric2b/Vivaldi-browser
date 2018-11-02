@@ -7,11 +7,11 @@
 #include <string>
 #include <utility>
 
-#include "ash/accessibility/test_accessibility_delegate.h"
+#include "ash/accessibility/accessibility_controller.h"
+#include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/app_list/test_app_list_presenter_impl.h"
 #include "ash/frame/custom_frame_view_ash.h"
 #include "ash/public/cpp/app_types.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
@@ -24,7 +24,6 @@
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
 #include "ash/shell_test_api.h"
-#include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/fullscreen_window_finder.h"
 #include "ash/wm/overview/window_selector_controller.h"
@@ -37,7 +36,6 @@
 #include "ash/wm/workspace/backdrop_delegate.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
 #include "ash/wm/workspace_controller_test_api.h"
-#include "base/command_line.h"
 #include "base/run_loop.h"
 #include "chromeos/audio/chromeos_sounds.h"
 #include "ui/app_list/app_list_features.h"
@@ -189,11 +187,6 @@ TEST_F(WorkspaceLayoutManagerTest, KeepMinimumVisibilityInDisplays) {
   UpdateDisplay("300x400,400x500");
   aura::Window::Windows root_windows = Shell::Get()->GetAllRootWindows();
 
-  if (Shell::GetAshConfig() != Config::CLASSIC) {
-    // TODO(sky): should work for mus/mash once http://crbug.com/706589 is
-    // fixed.
-    return;
-  }
   Shell::Get()->display_manager()->SetLayoutForCurrentDisplays(
       display::test::CreateDisplayLayout(Shell::Get()->display_manager(),
                                          display::DisplayPlacement::TOP, 0));
@@ -608,6 +601,54 @@ TEST_F(WorkspaceLayoutManagerTest,
   EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
 }
 
+// Tests that under the case of two snapped windows, if there is a display work
+// area width change, the snapped window width is updated upon snapped width
+// ratio (crbug.com/688583).
+TEST_F(WorkspaceLayoutManagerTest, AdjustSnappedBoundsWidth) {
+  UpdateDisplay("300x400");
+  // Create two snapped windows, one left snapped, one right snapped.
+  std::unique_ptr<aura::Window> window1(
+      CreateTestWindow(gfx::Rect(10, 20, 100, 200)));
+  wm::WindowState* window1_state = wm::GetWindowState(window1.get());
+  const wm::WMEvent snap_left(wm::WM_EVENT_SNAP_LEFT);
+  window1_state->OnWMEvent(&snap_left);
+  const gfx::Rect work_area =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+  const gfx::Rect expected_left_snapped_bounds = gfx::Rect(
+      work_area.x(), work_area.y(), work_area.width() / 2, work_area.height());
+  EXPECT_EQ(expected_left_snapped_bounds, window1->bounds());
+
+  std::unique_ptr<aura::Window> window2(
+      CreateTestWindow(gfx::Rect(10, 20, 100, 200)));
+  wm::WindowState* window2_state = wm::GetWindowState(window2.get());
+  const wm::WMEvent snap_right(wm::WM_EVENT_SNAP_RIGHT);
+  window2_state->OnWMEvent(&snap_right);
+  const gfx::Rect expected_right_snapped_bounds =
+      gfx::Rect(work_area.right() - work_area.width() / 2, work_area.y(),
+                work_area.width() / 2, work_area.height());
+  EXPECT_EQ(expected_right_snapped_bounds, window2->bounds());
+
+  // Set shelf alignment to left, which will change display work area.
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAlignment(SHELF_ALIGNMENT_LEFT);
+  const gfx::Rect new_work_area =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+  EXPECT_NE(work_area, new_work_area);
+  const gfx::Rect new_expected_left_snapped_bounds =
+      gfx::Rect(new_work_area.x(), new_work_area.y(), new_work_area.width() / 2,
+                new_work_area.height());
+  EXPECT_EQ(new_expected_left_snapped_bounds, window1->bounds());
+  const gfx::Rect new_expected_right_snapped_bounds = gfx::Rect(
+      new_work_area.right() - new_work_area.width() / 2, new_work_area.y(),
+      new_work_area.width() / 2, new_work_area.height());
+  EXPECT_EQ(new_expected_right_snapped_bounds, window2->bounds());
+
+  // Set shelf alignment to bottom again.
+  shelf->SetAlignment(SHELF_ALIGNMENT_BOTTOM);
+  EXPECT_EQ(expected_left_snapped_bounds, window1->bounds());
+  EXPECT_EQ(expected_right_snapped_bounds, window2->bounds());
+}
+
 // Do not adjust window bounds to ensure minimum visibility for transient
 // windows (crbug.com/624806).
 TEST_F(WorkspaceLayoutManagerTest,
@@ -642,7 +683,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, Maximize) {
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
   // Maximized window fills the work area, not the whole display.
   EXPECT_EQ(
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
       window->bounds().ToString());
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
   EXPECT_EQ(bounds.ToString(), window->bounds().ToString());
@@ -735,16 +776,16 @@ TEST_F(WorkspaceLayoutManagerSoloTest, MaximizeRootWindowResize) {
       CreateTestWindowInShellWithBounds(bounds));
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
   gfx::Rect initial_work_area_bounds =
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get());
+      screen_util::GetMaximizedWindowBoundsInParent(window.get());
   EXPECT_EQ(initial_work_area_bounds.ToString(), window->bounds().ToString());
   // Enlarge the root window.  We should still match the work area size.
   UpdateDisplay("900x700");
   EXPECT_EQ(
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
       window->bounds().ToString());
   EXPECT_NE(
       initial_work_area_bounds.ToString(),
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()).ToString());
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()).ToString());
 }
 
 // Tests normal->fullscreen->normal.
@@ -953,10 +994,11 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
   Shelf* shelf = GetPrimaryShelf();
   shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
 
-  window->SetBounds(ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()));
+  window->SetBounds(
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()));
   gfx::Rect window_bounds = window->bounds();
   EXPECT_EQ(
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
       window_bounds.ToString());
 
   // The window size should not get touched while we are in lock screen.
@@ -969,7 +1011,7 @@ TEST_F(WorkspaceLayoutManagerSoloTest, NotResizeWhenScreenIsLocked) {
   GetSessionControllerClient()->UnlockScreen();
   shelf_layout_manager->UpdateVisibilityState();
   EXPECT_EQ(
-      ScreenUtil::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
+      screen_util::GetMaximizedWindowBoundsInParent(window.get()).ToString(),
       window_bounds.ToString());
   EXPECT_EQ(window_bounds.ToString(), window->bounds().ToString());
 }
@@ -1302,9 +1344,10 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
 TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
   WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
   WorkspaceControllerTestApi test_helper(wc);
-  TestAccessibilityDelegate* accessibility_delegate =
-      static_cast<TestAccessibilityDelegate*>(
-          Shell::Get()->accessibility_delegate());
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(client.CreateInterfacePtrAndBind());
 
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithDelegate(
@@ -1318,44 +1361,41 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
 
   generator.MoveMouseTo(300, 300);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 
   generator.MoveMouseRelativeTo(window.get(), 10, 10);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 
   // Enable spoken feedback.
-  Shell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
-      ash::A11Y_NOTIFICATION_NONE);
-  Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
-      ash::A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(
-      Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled());
+  controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
+  EXPECT_TRUE(controller->IsSpokenFeedbackEnabled());
 
   generator.MoveMouseTo(300, 300);
   generator.ClickLeftButton();
-  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST,
-            accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST, client.GetPlayedEarconAndReset());
 
   generator.MoveMouseRelativeTo(window.get(), 10, 10);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 
   // Disable spoken feedback. Shadow underlay is restored.
-  Shell::Get()->accessibility_delegate()->ToggleSpokenFeedback(
-      A11Y_NOTIFICATION_NONE);
-  Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
-      A11Y_NOTIFICATION_NONE);
-  EXPECT_FALSE(
-      Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled());
+  controller->SetSpokenFeedbackEnabled(false, A11Y_NOTIFICATION_NONE);
+  EXPECT_FALSE(controller->IsSpokenFeedbackEnabled());
 
   generator.MoveMouseTo(300, 300);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 
   generator.MoveMouseTo(70, 70);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 }
 
 TEST_F(WorkspaceLayoutManagerBackdropTest,
@@ -1438,14 +1478,13 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
 TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
   WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
   WorkspaceControllerTestApi test_helper(wc);
-  TestAccessibilityDelegate* accessibility_delegate =
-      static_cast<TestAccessibilityDelegate*>(
-          Shell::Get()->accessibility_delegate());
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
+  TestAccessibilityControllerClient client;
+  controller->SetClient(client.CreateInterfacePtrAndBind());
 
-  accessibility_delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
-  Shell::Get()->system_tray_notifier()->NotifyAccessibilityStatusChanged(
-      A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(accessibility_delegate->IsSpokenFeedbackEnabled());
+  controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
+  EXPECT_TRUE(controller->IsSpokenFeedbackEnabled());
 
   aura::test::TestWindowDelegate delegate;
   std::unique_ptr<aura::Window> window_arc(CreateTestWindowInShellWithDelegate(
@@ -1474,12 +1513,13 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
   ui::test::EventGenerator& generator = GetEventGenerator();
   generator.MoveMouseTo(300, 300);
   generator.ClickLeftButton();
-  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST,
-            accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(chromeos::SOUND_VOLUME_ADJUST, client.GetPlayedEarconAndReset());
 
   generator.MoveMouseTo(70, 70);
   generator.ClickLeftButton();
-  EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
+  controller->FlushMojoForTest();
+  EXPECT_EQ(kNoSoundKey, client.GetPlayedEarconAndReset());
 }
 
 class WorkspaceLayoutManagerKeyboardTest : public AshTestBase {
@@ -1497,7 +1537,8 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTestBase {
   }
 
   void ShowKeyboard() {
-    layout_manager_->OnKeyboardBoundsChanging(keyboard_bounds_);
+    layout_manager_->OnKeyboardWorkspaceDisplacingBoundsChanging(
+        keyboard_bounds_);
     restore_work_area_insets_ = GetPrimaryDisplay().GetWorkAreaInsets();
     Shell::Get()->SetDisplayWorkAreaInsets(
         Shell::GetPrimaryRootWindow(),
@@ -1507,7 +1548,7 @@ class WorkspaceLayoutManagerKeyboardTest : public AshTestBase {
   void HideKeyboard() {
     Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
                                            restore_work_area_insets_);
-    layout_manager_->OnKeyboardBoundsChanging(gfx::Rect());
+    layout_manager_->OnKeyboardWorkspaceDisplacingBoundsChanging(gfx::Rect());
   }
 
   // Initializes the keyboard bounds using the bottom half of the work area.
@@ -1681,8 +1722,6 @@ TEST_F(WorkspaceLayoutManagerKeyboardTest,
 
 // Test that backdrop works in split view mode.
 TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropForSplitScreenTest) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kAshEnableTabletSplitView);
   ShowTopWindowBackdropForContainer(default_container(), true);
   Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
 

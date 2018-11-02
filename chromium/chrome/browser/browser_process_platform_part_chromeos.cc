@@ -25,6 +25,7 @@
 #include "chrome/browser/chromeos/system/system_clock.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/chromeos/system/timezone_util.h"
+#include "chrome/browser/component_updater/cros_component_installer.h"
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
@@ -100,6 +101,19 @@ void BrowserProcessPlatformPart::ShutdownSessionManager() {
   session_manager_.reset();
 }
 
+void BrowserProcessPlatformPart::InitializeCrosComponentManager() {
+  DCHECK(!cros_component_manager_);
+  cros_component_manager_ =
+      std::make_unique<component_updater::CrOSComponentManager>();
+
+  // Register all installed components for regular update.
+  cros_component_manager_->RegisterInstalled();
+}
+
+void BrowserProcessPlatformPart::ShutdownCrosComponentManager() {
+  cros_component_manager_.reset();
+}
+
 void BrowserProcessPlatformPart::RegisterKeepAlive() {
   DCHECK(!keep_alive_);
   keep_alive_.reset(
@@ -155,9 +169,9 @@ void BrowserProcessPlatformPart::StartTearDown() {
   profile_helper_.reset();
 }
 
-std::unique_ptr<policy::BrowserPolicyConnector>
+std::unique_ptr<policy::ChromeBrowserPolicyConnector>
 BrowserProcessPlatformPart::CreateBrowserPolicyConnector() {
-  return std::unique_ptr<policy::BrowserPolicyConnector>(
+  return std::unique_ptr<policy::ChromeBrowserPolicyConnector>(
       new policy::BrowserPolicyConnectorChromeOS());
 }
 
@@ -191,16 +205,6 @@ chromeos::system::SystemClock* BrowserProcessPlatformPart::GetSystemClock() {
 
 void BrowserProcessPlatformPart::DestroySystemClock() {
   system_clock_.reset();
-}
-
-void BrowserProcessPlatformPart::AddCompatibleCrOSComponent(
-    const std::string& name) {
-  compatible_cros_components_.insert(name);
-}
-
-bool BrowserProcessPlatformPart::IsCompatibleCrOSComponent(
-    const std::string& name) {
-  return compatible_cros_components_.count(name) > 0;
 }
 
 ui::InputDeviceControllerClient*

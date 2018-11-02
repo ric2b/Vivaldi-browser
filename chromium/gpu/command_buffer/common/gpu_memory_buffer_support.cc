@@ -8,6 +8,7 @@
 #include <GLES2/gl2extchromium.h>
 
 #include "base/logging.h"
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
 
 namespace gpu {
@@ -117,13 +118,7 @@ bool IsImageFromGpuMemoryBufferFormatSupported(
     case gfx::BufferFormat::RGBA_F16:
       return capabilities.texture_half_float_linear;
     case gfx::BufferFormat::YUV_420_BIPLANAR:
-#if defined(OS_CHROMEOS) && defined(ARCH_CPU_ARM_FAMILY)
-      // TODO(dcastagna): Determine ycbcr_420v_image on CrOS at runtime
-      // querying minigbm. crbug.com/646148
-      return true;
-#else
       return capabilities.image_ycbcr_420v;
-#endif
   }
 
   NOTREACHED();
@@ -163,6 +158,26 @@ bool IsImageSizeValidForGpuMemoryBufferFormat(const gfx::Size& size,
 
   NOTREACHED();
   return false;
+}
+
+uint32_t GetPlatformSpecificTextureTarget() {
+#if defined(OS_MACOSX)
+  return GL_TEXTURE_RECTANGLE_ARB;
+#elif defined(OS_ANDROID) || defined(OS_LINUX)
+  return GL_TEXTURE_EXTERNAL_OES;
+#elif defined(OS_WIN)
+  return GL_TEXTURE_2D;
+#else
+  return 0;
+#endif
+}
+
+GPU_EXPORT uint32_t GetBufferTextureTarget(gfx::BufferUsage usage,
+                                           gfx::BufferFormat format,
+                                           const Capabilities& capabilities) {
+  bool found = base::ContainsValue(capabilities.texture_target_exception_list,
+                                   gfx::BufferUsageAndFormat(usage, format));
+  return found ? gpu::GetPlatformSpecificTextureTarget() : GL_TEXTURE_2D;
 }
 
 }  // namespace gpu

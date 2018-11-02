@@ -46,6 +46,13 @@ class CalendarEventRouter : public CalendarModelObserver {
   void OnEventChanged(CalendarService* service,
                       const calendar::EventRow& row) override;
 
+  void OnCalendarCreated(CalendarService* service,
+                         const calendar::CalendarRow& row) override;
+  void OnCalendarDeleted(CalendarService* service,
+                         const calendar::CalendarRow& row) override;
+  void OnCalendarChanged(CalendarService* service,
+                         const calendar::CalendarRow& row) override;
+
   void ExtensiveCalendarChangesBeginning(CalendarService* model) override;
   void ExtensiveCalendarChangesEnded(CalendarService* model) override;
 

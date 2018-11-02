@@ -11,8 +11,8 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -20,7 +20,6 @@
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/suggestions/blacklist_store.h"
 #include "components/suggestions/features.h"
 #include "components/suggestions/image_manager.h"
@@ -28,7 +27,6 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "google_apis/gaia/gaia_constants.h"
-#include "google_apis/gaia/oauth2_token_service.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
@@ -39,6 +37,7 @@
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
+#include "services/identity/public/cpp/identity_manager.h"
 
 using base::TimeDelta;
 
@@ -118,16 +117,14 @@ int GetMinimumSuggestionsCount() {
 }  // namespace
 
 SuggestionsServiceImpl::SuggestionsServiceImpl(
-    SigninManagerBase* signin_manager,
-    OAuth2TokenService* token_service,
+    identity::IdentityManager* identity_manager,
     syncer::SyncService* sync_service,
     net::URLRequestContextGetter* url_request_context,
     std::unique_ptr<SuggestionsStore> suggestions_store,
     std::unique_ptr<ImageManager> thumbnail_manager,
     std::unique_ptr<BlacklistStore> blacklist_store,
     std::unique_ptr<base::TickClock> tick_clock)
-    : signin_manager_(signin_manager),
-      token_service_(token_service),
+    : identity_manager_(identity_manager),
       sync_service_(sync_service),
       sync_service_observer_(this),
       sync_state_(INITIALIZED_ENABLED_HISTORY),
@@ -401,10 +398,11 @@ void SuggestionsServiceImpl::IssueRequestIfNoneOngoing(const GURL& url) {
   }
 
   OAuth2TokenService::ScopeSet scopes{GaiaConstants::kChromeSyncOAuth2Scope};
-  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
-      "suggestions_service", signin_manager_, token_service_, scopes,
+  token_fetcher_ = identity_manager_->CreateAccessTokenFetcherForPrimaryAccount(
+      "suggestions_service", scopes,
       base::BindOnce(&SuggestionsServiceImpl::AccessTokenAvailable,
-                     base::Unretained(this), url));
+                     base::Unretained(this), url),
+      identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void SuggestionsServiceImpl::AccessTokenAvailable(
@@ -412,8 +410,8 @@ void SuggestionsServiceImpl::AccessTokenAvailable(
     const GoogleServiceAuthError& error,
     const std::string& access_token) {
   DCHECK(token_fetcher_);
-  std::unique_ptr<AccessTokenFetcher> token_fetcher_deleter(
-      std::move(token_fetcher_));
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
+      token_fetcher_deleter(std::move(token_fetcher_));
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     blacklist_upload_backoff_.InformOfRequest(/*succeeded=*/false);
@@ -481,11 +479,11 @@ SuggestionsServiceImpl::CreateSuggestionsRequest(
   request->SetRequestContext(url_request_context_);
   // Add Chrome experiment state to the request headers.
   net::HttpRequestHeaders headers;
-  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
-  // not affect transmission of experiments coming from the variations server.
-  bool is_signed_in = false;
-  variations::AppendVariationHeaders(request->GetOriginalURL(), false, false,
-                                     is_signed_in, &headers);
+  // Note: It's OK to pass SignedIn::kNo if it's unknown, as it does not affect
+  // transmission of experiments coming from the variations server.
+  variations::AppendVariationHeaders(request->GetOriginalURL(),
+                                     variations::InIncognito::kNo,
+                                     variations::SignedIn::kNo, &headers);
   request->SetExtraRequestHeaders(headers.ToString());
   if (!access_token.empty()) {
     request->AddExtraRequestHeader(
@@ -505,8 +503,8 @@ void SuggestionsServiceImpl::OnURLFetchComplete(const net::URLFetcher* source) {
   if (request_status.status() != net::URLRequestStatus::SUCCESS) {
     // This represents network errors (i.e. the server did not provide a
     // response).
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Suggestions.FailedRequestErrorCode",
-                                -request_status.error());
+    base::UmaHistogramSparse("Suggestions.FailedRequestErrorCode",
+                             -request_status.error());
     DVLOG(1) << "Suggestions server request failed with error: "
              << request_status.error() << ": "
              << net::ErrorToString(request_status.error());
@@ -516,7 +514,7 @@ void SuggestionsServiceImpl::OnURLFetchComplete(const net::URLFetcher* source) {
   }
 
   const int response_code = request->GetResponseCode();
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Suggestions.FetchResponseCode", response_code);
+  base::UmaHistogramSparse("Suggestions.FetchResponseCode", response_code);
   if (response_code != net::HTTP_OK) {
     // A non-200 response code means that server has no (longer) suggestions for
     // this user. Aggressively clear the cache.

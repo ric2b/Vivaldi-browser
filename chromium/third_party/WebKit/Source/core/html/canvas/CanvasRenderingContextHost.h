@@ -13,11 +13,11 @@
 #include "platform/bindings/ScriptState.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
-#include "platform/graphics/ImageBuffer.h"
 #include "platform/heap/GarbageCollected.h"
 
 namespace blink {
 
+class CanvasRenderingContext;
 class FontSelector;
 class StaticBitmapImage;
 class KURL;
@@ -36,6 +36,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin {
   virtual bool OriginClean() const = 0;
   virtual void SetOriginTainted() = 0;
   virtual const IntSize& Size() const = 0;
+  virtual CanvasRenderingContext* RenderingContext() const = 0;
 
   virtual ExecutionContext* GetTopExecutionContext() const = 0;
   virtual DispatchEventResult HostDispatchEvent(Event*) = 0;
@@ -47,8 +48,6 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin {
                                ExceptionState&);
 
   virtual void DiscardImageBuffer() = 0;
-  virtual ImageBuffer* GetImageBuffer() const = 0;
-  virtual ImageBuffer* GetOrCreateImageBuffer() = 0;
 
   // If WebGL1 is disabled by enterprise policy or command line switch.
   virtual bool IsWebGL1Enabled() const = 0;
@@ -63,8 +62,12 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin {
   // TODO(fserb): remove this.
   virtual bool IsOffscreenCanvas() const { return false; }
 
+  bool IsPaintable() const;
+
  protected:
   virtual ~CanvasRenderingContextHost() {}
+
+  scoped_refptr<StaticBitmapImage> CreateTransparentImage(const IntSize&) const;
 };
 
 }  // namespace blink

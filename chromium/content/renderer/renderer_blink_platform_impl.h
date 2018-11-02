@@ -18,14 +18,13 @@
 #include "cc/blink/web_compositor_support_impl.h"
 #include "components/viz/client/client_shared_bitmap_manager.h"
 #include "content/child/blink_platform_impl.h"
-#include "content/common/clipboard.mojom.h"
 #include "content/common/content_export.h"
 #include "content/common/file_utilities.mojom.h"
 #include "content/common/possibly_associated_interface_ptr.h"
-#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
 #include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBFactory.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 #include "third_party/WebKit/public/platform/modules/webdatabase/web_database.mojom.h"
@@ -65,7 +64,6 @@ class LocalStorageCachedAreas;
 class NotificationDispatcher;
 class PlatformEventObserverBase;
 class ThreadSafeSender;
-class WebClipboardImpl;
 class WebDatabaseObserverImpl;
 
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
@@ -168,7 +166,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void SampleGamepads(device::Gamepads&) override;
   std::unique_ptr<blink::WebRTCPeerConnectionHandler>
   CreateRTCPeerConnectionHandler(
-      blink::WebRTCPeerConnectionHandlerClient* client) override;
+      blink::WebRTCPeerConnectionHandlerClient* client,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   std::unique_ptr<blink::WebRTCCertificateGenerator>
   CreateRTCCertificateGenerator() override;
   std::unique_ptr<blink::WebMediaRecorderHandler> CreateMediaRecorderHandler()
@@ -181,7 +180,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::WebMediaStreamTrack* track) override;
   void CreateHTMLVideoElementCapturer(
       blink::WebMediaStream* web_media_stream,
-      blink::WebMediaPlayer* web_media_player) override;
+      blink::WebMediaPlayer* web_media_player,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   void CreateHTMLAudioElementCapturer(
       blink::WebMediaStream* web_media_stream,
       blink::WebMediaPlayer* web_media_player) override;
@@ -207,9 +207,10 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void StartListening(blink::WebPlatformEventType,
                       blink::WebPlatformEventListener*) override;
   void StopListening(blink::WebPlatformEventType) override;
-  void QueryStorageUsageAndQuota(const blink::WebURL& storage_partition,
-                                 blink::WebStorageQuotaType,
-                                 blink::WebStorageQuotaCallbacks) override;
+  void QueryStorageUsageAndQuota(
+      const blink::WebSecurityOrigin& storage_partition,
+      blink::mojom::StorageType,
+      QueryStorageUsageAndQuotaCallback) override;
   blink::WebThread* CurrentThread() override;
   blink::BlameContext* GetTopLevelBlameContext() override;
   void RecordRappor(const char* metric,
@@ -268,11 +269,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   // destructed.
   void SetCompositorThread(blink::scheduler::WebThreadBase* compositor_thread);
 
-  // Return the mojo interface for making ClipboardHost calls.
-  mojom::ClipboardHost& GetClipboardHost();
-
  private:
-  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+  PossiblyAssociatedInterfacePtr<network::mojom::URLLoaderFactory>
   CreateNetworkURLLoaderFactory();
 
   bool CheckPreparsedJsCachingEnabled() const;
@@ -296,8 +294,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
 
   std::unique_ptr<blink::WebThread> main_thread_;
   std::unique_ptr<service_manager::Connector> connector_;
-
-  std::unique_ptr<WebClipboardImpl> clipboard_;
 
   class FileUtilities;
   std::unique_ptr<FileUtilities> file_utilities_;
@@ -347,7 +343,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<blink::mojom::ThreadSafeWebDatabaseHostPtr> web_database_host_;
 
   mojom::FileUtilitiesHostPtrInfo file_utilities_host_info_;
-  mojom::ClipboardHostPtr clipboard_host_;
 
   scoped_refptr<NotificationDispatcher> notification_dispatcher_;
 

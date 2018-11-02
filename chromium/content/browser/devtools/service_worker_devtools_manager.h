@@ -9,12 +9,21 @@
 
 #include <map>
 
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/unguessable_token.h"
-#include "content/public/browser/devtools_agent_host.h"
+#include "content/common/content_export.h"
+#include "third_party/WebKit/public/web/devtools_agent.mojom.h"
+#include "url/gurl.h"
+
+namespace network {
+struct ResourceRequest;
+struct ResourceResponseHead;
+struct URLLoaderCompletionStatus;
+}
 
 namespace content {
 
@@ -22,58 +31,19 @@ class BrowserContext;
 class ServiceWorkerDevToolsAgentHost;
 class ServiceWorkerContextCore;
 
-// Manages WorkerDevToolsAgentHost's for Service Workers.
-// This class lives on UI thread.
+// Manages ServiceWorkerDevToolsAgentHost's. This class lives on UI thread.
 class CONTENT_EXPORT ServiceWorkerDevToolsManager {
  public:
-  using WorkerId = std::pair<int, int>;
-  using AgentList = std::vector<scoped_refptr<ServiceWorkerDevToolsAgentHost>>;
-
   class Observer {
    public:
-    virtual void WorkerCreated(ServiceWorkerDevToolsAgentHost* host) {}
-    virtual void WorkerReadyForInspection(
-        ServiceWorkerDevToolsAgentHost* host) {}
+    virtual void WorkerCreated(ServiceWorkerDevToolsAgentHost* host,
+                               bool* should_pause_on_start) {}
     virtual void WorkerVersionInstalled(ServiceWorkerDevToolsAgentHost* host) {}
     virtual void WorkerVersionDoomed(ServiceWorkerDevToolsAgentHost* host) {}
     virtual void WorkerDestroyed(ServiceWorkerDevToolsAgentHost* host) {}
 
    protected:
     virtual ~Observer() {}
-  };
-
-  class ServiceWorkerIdentifier {
-   public:
-    ServiceWorkerIdentifier(
-        const ServiceWorkerContextCore* context,
-        base::WeakPtr<ServiceWorkerContextCore> context_weak,
-        int64_t version_id,
-        const GURL& url,
-        const GURL& scope,
-        const base::UnguessableToken& devtools_worker_token);
-    ServiceWorkerIdentifier(const ServiceWorkerIdentifier& other);
-    ~ServiceWorkerIdentifier();
-
-    bool Matches(const ServiceWorkerIdentifier& other) const;
-
-    const ServiceWorkerContextCore* context() const { return context_; }
-    base::WeakPtr<ServiceWorkerContextCore> context_weak() const {
-      return context_weak_;
-    }
-    int64_t version_id() const { return version_id_; }
-    GURL url() const { return url_; }
-    GURL scope() const { return scope_; }
-    const base::UnguessableToken& devtools_worker_token() const {
-      return devtools_worker_token_;
-    }
-
-   private:
-    const ServiceWorkerContextCore* const context_;
-    const base::WeakPtr<ServiceWorkerContextCore> context_weak_;
-    const int64_t version_id_;
-    const GURL url_;
-    const GURL scope_;
-    const base::UnguessableToken devtools_worker_token_;
   };
 
   // Returns the ServiceWorkerDevToolsManager singleton.
@@ -88,18 +58,38 @@ class CONTENT_EXPORT ServiceWorkerDevToolsManager {
       BrowserContext* browser_context,
       std::vector<scoped_refptr<ServiceWorkerDevToolsAgentHost>>* result);
 
-  // Returns true when the worker must be paused on start because a DevTool
-  // window for the same former ServiceWorkerIdentifier is still opened or
-  // debug-on-start is enabled in chrome://serviceworker-internals.
-  bool WorkerCreated(int worker_process_id,
+  void WorkerCreated(int worker_process_id,
                      int worker_route_id,
-                     const ServiceWorkerIdentifier& service_worker_id,
-                     bool is_installed_version);
-  void WorkerReadyForInspection(int worker_process_id, int worker_route_id);
+                     const ServiceWorkerContextCore* context,
+                     base::WeakPtr<ServiceWorkerContextCore> context_weak,
+                     int64_t version_id,
+                     const GURL& url,
+                     const GURL& scope,
+                     bool is_installed_version,
+                     base::UnguessableToken* devtools_worker_token,
+                     bool* pause_on_start);
+  void WorkerReadyForInspection(
+      int worker_process_id,
+      int worker_route_id,
+      blink::mojom::DevToolsAgentAssociatedPtrInfo devtools_agent_ptr_info);
   void WorkerVersionInstalled(int worker_process_id, int worker_route_id);
   void WorkerVersionDoomed(int worker_process_id, int worker_route_id);
   void WorkerDestroyed(int worker_process_id, int worker_route_id);
-  void RemoveInspectedWorkerData(WorkerId id);
+  void NavigationPreloadRequestSent(int worker_process_id,
+                                    int worker_route_id,
+                                    const std::string& request_id,
+                                    const network::ResourceRequest& request);
+  void NavigationPreloadResponseReceived(
+      int worker_process_id,
+      int worker_route_id,
+      const std::string& request_id,
+      const GURL& url,
+      const network::ResourceResponseHead& head);
+  void NavigationPreloadCompleted(
+      int worker_process_id,
+      int worker_route_id,
+      const std::string& request_id,
+      const network::URLLoaderCompletionStatus& status);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -108,25 +98,26 @@ class CONTENT_EXPORT ServiceWorkerDevToolsManager {
   bool debug_service_worker_on_start() const {
     return debug_service_worker_on_start_;
   }
+  void AgentHostDestroyed(ServiceWorkerDevToolsAgentHost* agent_host);
 
  private:
   friend struct base::DefaultSingletonTraits<ServiceWorkerDevToolsManager>;
   friend class ServiceWorkerDevToolsAgentHost;
 
-  using AgentHostMap = std::map<WorkerId, ServiceWorkerDevToolsAgentHost*>;
+  using WorkerId = std::pair<int, int>;
 
   ServiceWorkerDevToolsManager();
   ~ServiceWorkerDevToolsManager();
 
-  AgentHostMap::iterator FindExistingWorkerAgentHost(
-      const ServiceWorkerIdentifier& service_worker_id);
-
-  // Resets to its initial state as if newly created.
-  void ResetForTesting();
-
   base::ObserverList<Observer> observer_list_;
-  AgentHostMap workers_;
   bool debug_service_worker_on_start_;
+
+  // We retatin agent hosts as long as the service worker is alive.
+  std::map<WorkerId, scoped_refptr<ServiceWorkerDevToolsAgentHost>> live_hosts_;
+
+  // Clients may retain agent host for the terminated shared worker,
+  // and we reconnect them when shared worker is restarted.
+  base::flat_set<ServiceWorkerDevToolsAgentHost*> terminated_hosts_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerDevToolsManager);
 };

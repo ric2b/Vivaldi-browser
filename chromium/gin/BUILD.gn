@@ -2,8 +2,17 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
+import("//build/config/allocator.gni")
 import("//testing/test.gni")
 import("//v8/gni/v8.gni")
+
+# "features" to avoid collision with existing gin_features.h file.
+buildflag_header("features") {
+  header = "features.h"
+
+  flags = [ "USE_PARTITION_ALLOC=$use_partition_alloc" ]
+}
 
 component("gin") {
   sources = [
@@ -29,15 +38,6 @@ component("gin") {
     "isolate_holder.cc",
     "modules/console.cc",
     "modules/console.h",
-    "modules/file_module_provider.cc",
-    "modules/file_module_provider.h",
-    "modules/module_registry.cc",
-    "modules/module_registry.h",
-    "modules/module_registry_observer.h",
-    "modules/module_runner_delegate.cc",
-    "modules/module_runner_delegate.h",
-    "modules/timer.cc",
-    "modules/timer.h",
     "object_template_builder.cc",
     "object_template_builder.h",
     "per_context_data.cc",
@@ -87,6 +87,7 @@ component("gin") {
   defines = [ "GIN_IMPLEMENTATION" ]
 
   public_deps = [
+    ":features",
     "//base",
     "//v8",
   ]
@@ -121,19 +122,8 @@ executable("gin_shell") {
 source_set("gin_test") {
   testonly = true
   sources = [
-    "test/file.cc",
-    "test/file.h",
-    "test/file_runner.cc",
-    "test/file_runner.h",
-    "test/gc.cc",
-    "test/gc.h",
-    "test/gtest.cc",
-    "test/gtest.h",
     "test/v8_test.cc",
     "test/v8_test.h",
-  ]
-  data = [
-    "test/expect.js",
   ]
 
   public_deps = [
@@ -155,13 +145,10 @@ test("gin_unittests") {
     "converter_unittest.cc",
     "data_object_builder_unittest.cc",
     "interceptor_unittest.cc",
-    "modules/module_registry_unittest.cc",
-    "modules/timer_unittest.cc",
     "per_context_data_unittest.cc",
     "shell/gin_shell_unittest.cc",
     "shell_runner_unittest.cc",
     "test/run_all_unittests.cc",
-    "test/run_js_tests.cc",
     "v8_isolate_memory_dump_provider_unittest.cc",
     "v8_platform_unittest.cc",
     "wrappable_unittest.cc",
@@ -174,13 +161,13 @@ test("gin_unittests") {
     "//v8",
   ]
 
-  configs += [ "//v8:external_startup_data" ]
+  configs += [
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
+    "//v8:external_startup_data",
+  ]
 
   data = [
-    "modules/module_registry_unittests.js",
     "shell/hello_world.js",
-    "test/file_unittests.js",
-    "test/gtest_unittests.js",
     "../OWNERS",
   ]
 

@@ -46,7 +46,7 @@ public class TextSuggestionMenuTest {
 
     @Before
     public void setUp() throws Throwable {
-        mRule.setUp();
+        mRule.setUpForUrl(ImeActivityTestRule.INPUT_FORM_HTML);
         mRule.fullyLoadUrl(URL);
     }
 
@@ -112,11 +112,8 @@ public class TextSuggestionMenuTest {
         });
 
         // Add a spelling marker on "hello".
-        // Note: we disable spell checking first to avoid the spell checker immediately clearing
-        // the added marker.
         JavaScriptUtils.executeJavaScriptAndWaitForResult(webContents,
-                "internals.setSpellCheckingEnabled(false);"
-                        + "const div = document.getElementById('div');"
+                "const div = document.getElementById('div');"
                         + "const text = div.firstChild;"
                         + "const range = document.createRange();"
                         + "range.setStart(text, 0);"
@@ -176,6 +173,18 @@ public class TextSuggestionMenuTest {
         textToCommit.setSpan(suggestionSpan3, 6, 11, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
 
         mRule.commitText(textToCommit, 1);
+
+        // Wait for renderer to acknowledge commitText().
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                try {
+                    return DOMUtils.getNodeContents(webContents, "div").equals("hello world");
+                } catch (InterruptedException | TimeoutException e) {
+                    return false;
+                }
+            }
+        });
 
         DOMUtils.clickNode(cvc, "span");
         waitForMenuToShow(cvc);

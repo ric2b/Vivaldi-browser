@@ -11,7 +11,6 @@
 #include "chrome/common/chrome_content_client.h"
 #include "extensions/common/url_pattern_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "url/origin.h"
 
 namespace extensions {
 

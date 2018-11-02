@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/memory/scoped_refptr.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
@@ -48,35 +47,35 @@ class IDBRequestQueueItem {
  public:
   IDBRequestQueueItem(IDBRequest*,
                       DOMException*,
-                      WTF::Closure on_result_load_complete);
+                      base::OnceClosure on_result_load_complete);
   IDBRequestQueueItem(IDBRequest*,
                       int64_t,
-                      WTF::Closure on_result_load_complete);
-  IDBRequestQueueItem(IDBRequest*, WTF::Closure on_result_load_complete);
+                      base::OnceClosure on_result_load_complete);
+  IDBRequestQueueItem(IDBRequest*, base::OnceClosure on_result_load_complete);
   IDBRequestQueueItem(IDBRequest*,
-                      IDBKey*,
-                      WTF::Closure on_result_load_complete);
+                      std::unique_ptr<IDBKey>,
+                      base::OnceClosure on_result_load_complete);
   IDBRequestQueueItem(IDBRequest*,
-                      scoped_refptr<IDBValue>,
+                      std::unique_ptr<IDBValue>,
                       bool attach_loader,
-                      WTF::Closure on_load_complete);
+                      base::OnceClosure on_load_complete);
   IDBRequestQueueItem(IDBRequest*,
-                      const Vector<scoped_refptr<IDBValue>>&,
+                      Vector<std::unique_ptr<IDBValue>>,
                       bool attach_loader,
-                      WTF::Closure on_result_load_complete);
+                      base::OnceClosure on_result_load_complete);
   IDBRequestQueueItem(IDBRequest*,
-                      IDBKey*,
-                      IDBKey* primary_key,
-                      scoped_refptr<IDBValue>,
+                      std::unique_ptr<IDBKey>,
+                      std::unique_ptr<IDBKey> primary_key,
+                      std::unique_ptr<IDBValue>,
                       bool attach_loader,
-                      WTF::Closure on_result_load_complete);
+                      base::OnceClosure on_result_load_complete);
   IDBRequestQueueItem(IDBRequest*,
                       std::unique_ptr<WebIDBCursor>,
-                      IDBKey*,
-                      IDBKey* primary_key,
-                      scoped_refptr<IDBValue>,
+                      std::unique_ptr<IDBKey>,
+                      std::unique_ptr<IDBKey> primary_key,
+                      std::unique_ptr<IDBValue>,
                       bool attach_loader,
-                      WTF::Closure on_result_load_complete);
+                      base::OnceClosure on_result_load_complete);
   ~IDBRequestQueueItem();
 
   // False if this result still requires post-processing.
@@ -127,23 +126,23 @@ class IDBRequestQueueItem {
   // The IDBRequest that will receive a callback for this result.
   Persistent<IDBRequest> request_;
 
-  // The key argument to the IDBRequest callback.
-  //
-  // Only used if mode_ is kKeyPrimaryKeyValue.
-  Persistent<IDBKey> key_;
-
-  // The primary_key argument to the IDBRequest callback.
-  //
-  // Only used if mode_ is kKeyPrimaryKeyValue.
-  Persistent<IDBKey> primary_key_;
-
   // The error argument to the IDBRequest callback.
   //
   // Only used if the mode_ is kError.
   Persistent<DOMException> error_;
 
+  // The key argument to the IDBRequest callback.
+  //
+  // Only used if mode_ is kKeyPrimaryKeyValue.
+  std::unique_ptr<IDBKey> key_;
+
+  // The primary_key argument to the IDBRequest callback.
+  //
+  // Only used if mode_ is kKeyPrimaryKeyValue.
+  std::unique_ptr<IDBKey> primary_key_;
+
   // All the values that will be passed back to the IDBRequest.
-  Vector<scoped_refptr<IDBValue>> values_;
+  Vector<std::unique_ptr<IDBValue>> values_;
 
   // The cursor argument to the IDBRequest callback.
   std::unique_ptr<WebIDBCursor> cursor_;
@@ -155,7 +154,7 @@ class IDBRequestQueueItem {
   std::unique_ptr<IDBRequestLoader> loader_;
 
   // Called when result post-processing has completed.
-  WTF::Closure on_result_load_complete_;
+  base::OnceClosure on_result_load_complete_;
 
   // The integer value argument to the IDBRequest callback.
   int64_t int64_value_;

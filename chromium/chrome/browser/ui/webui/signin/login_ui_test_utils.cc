@@ -5,12 +5,15 @@
 #include "chrome/browser/ui/webui/signin/login_ui_test_utils.h"
 
 #include "base/run_loop.h"
+#include "base/scoped_observer.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/signin/signin_tracker_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/signin_view_controller_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/notification_service.h"
@@ -100,6 +103,30 @@ class SignInObserver : public SigninTracker::Observer {
   scoped_refptr<MessageLoopRunner> message_loop_runner_;
 };
 
+// Synchronously waits for the Sync confirmation to be closed.
+class SyncConfirmationClosedObserver : public LoginUIService::Observer {
+ public:
+  void WaitForConfirmationClosed() {
+    if (sync_confirmation_closed_)
+      return;
+
+    base::RunLoop run_loop;
+    quit_closure_ = run_loop.QuitClosure();
+    run_loop.Run();
+  }
+
+ private:
+  void OnSyncConfirmationUIClosed(
+      LoginUIService::SyncConfirmationUIClosedResult result) override {
+    sync_confirmation_closed_ = true;
+    if (quit_closure_)
+      std::move(quit_closure_).Run();
+  }
+
+  bool sync_confirmation_closed_ = false;
+  base::OnceClosure quit_closure_;
+};
+
 void RunLoopFor(base::TimeDelta duration) {
   base::RunLoop run_loop;
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -127,16 +154,25 @@ class SigninViewControllerTestUtil {
         signin_view_controller->GetModalDialogWebContentsForTesting();
     DCHECK_NE(dialog_web_contents, nullptr);
     std::string message;
-    std::string js =
-        "if (document.getElementById('confirmButton') == null) {"
+    std::string find_button_js =
+        "if (document.readyState != 'complete') {"
+        "  window.domAutomationController.send('DocumentNotReady');"
+        "} else if (document.getElementById('confirmButton') == null) {"
         "  window.domAutomationController.send('NotFound');"
         "} else {"
-        "  document.getElementById('confirmButton').click();"
         "  window.domAutomationController.send('Ok');"
         "}";
-    EXPECT_TRUE(content::ExecuteScriptAndExtractString(dialog_web_contents, js,
-                                                       &message));
-    return message == "Ok";
+    EXPECT_TRUE(content::ExecuteScriptAndExtractString(
+        dialog_web_contents, find_button_js, &message));
+    if (message != "Ok")
+      return false;
+
+    // This cannot be a synchronous call, because it closes the window as a side
+    // effect, which may cause the javascript execution to never finish.
+    content::ExecuteScriptAsync(
+        dialog_web_contents,
+        "document.getElementById('confirmButton').click();");
+    return true;
 #endif
   }
 };
@@ -158,32 +194,19 @@ void WaitUntilUIReady(Browser* browser) {
   ASSERT_EQ("ready", message);
 }
 
-void WaitUntilElementExistsInSigninFrame(Browser* browser,
-                                         const std::string& element_id) {
-  std::string message;
-  std::string js =
-      "function WaitForElementById(elementId) {"
-      "  var retries = 10; /* 10 seconds. */"
-      "  function CheckelementExists() {"
-      "    if (document.getElementById(elementId) != null) {"
-      "      window.domAutomationController.send('found');"
-      "    } else if (retries > 0) { "
-      "      retries--;"
-      "      window.setTimeout(CheckelementExists, 1000);"
-      "    } else {"
-      "      window.domAutomationController.send('failed');"
-      "    }"
-      "  }"
-      "  CheckelementExists();"
-      "}"
-      "WaitForElementById('" + element_id + "');";
-  content::WebContents* web_contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      signin::GetAuthFrame(web_contents, "signin-frame"), js, &message));
+void WaitUntilElementExistsInSigninFrame(
+    Browser* browser,
+    const std::vector<std::string>& element_ids) {
+  for (int attempt = 0; attempt < 10; ++attempt) {
+    for (const std::string& element_id : element_ids) {
+      if (ElementExistsInSigninFrame(browser, element_id)) {
+        return;
+      }
+    }
+    RunLoopFor(base::TimeDelta::FromMilliseconds(1000));
+  }
 
-  ASSERT_EQ("found", message) <<
-      "Failed to find element with id " << element_id;
+  FAIL();
 }
 
 bool ElementExistsInSigninFrame(Browser* browser,
@@ -203,18 +226,18 @@ bool ElementExistsInSigninFrame(Browser* browser,
 void SigninInNewGaiaFlow(Browser* browser,
                          const std::string& email,
                          const std::string& password) {
-  std::string js = "document.getElementById('Email').value = '" + email + "';"
-                   "document.getElementById('next').click();";
-
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
+
+  WaitUntilElementExistsInSigninFrame(browser, {"identifierId"});
+  std::string js = "document.getElementById('identifierId').value = '" + email +
+                   "'; document.getElementById('identifierNext').click();";
   ASSERT_TRUE(content::ExecuteScript(
       signin::GetAuthFrame(web_contents, "signin-frame"), js));
 
-  WaitUntilElementExistsInSigninFrame(browser, "Passwd");
-  js = "document.getElementById('Passwd').value = '" + password + "';"
-       "document.getElementById('signIn').click();";
-
+  WaitUntilElementExistsInSigninFrame(browser, {"password"});
+  js = "document.getElementById('password').value = '" + password + "';" +
+       "document.getElementById('passwordNext').click();";
   ASSERT_TRUE(content::ExecuteScript(
       signin::GetAuthFrame(web_contents, "signin-frame"), js));
 }
@@ -222,13 +245,18 @@ void SigninInNewGaiaFlow(Browser* browser,
 void SigninInOldGaiaFlow(Browser* browser,
                          const std::string& email,
                          const std::string& password) {
-  std::string js =
-      "document.getElementById('Email').value = '" + email + "';"
-      "document.getElementById('Passwd').value = '" + password + "';"
-      "document.getElementById('signIn').click();";
-
   content::WebContents* web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
+
+  WaitUntilElementExistsInSigninFrame(browser, {"Email"});
+  std::string js = "document.getElementById('Email').value = '" + email + ";" +
+                   "document.getElementById('next').click();";
+  ASSERT_TRUE(content::ExecuteScript(
+      signin::GetAuthFrame(web_contents, "signin-frame"), js));
+
+  WaitUntilElementExistsInSigninFrame(browser, {"Passwd"});
+  js = "document.getElementById('Passwd').value = '" + password + "';" +
+       "document.getElementById('signIn').click();";
   ASSERT_TRUE(content::ExecuteScript(
       signin::GetAuthFrame(web_contents, "signin-frame"), js));
 }
@@ -236,8 +264,8 @@ void SigninInOldGaiaFlow(Browser* browser,
 void ExecuteJsToSigninInSigninFrame(Browser* browser,
                                     const std::string& email,
                                     const std::string& password) {
-  WaitUntilElementExistsInSigninFrame(browser, "Email");
-  if (ElementExistsInSigninFrame(browser, "next"))
+  WaitUntilElementExistsInSigninFrame(browser, {"identifierNext", "next"});
+  if (ElementExistsInSigninFrame(browser, "identifierNext"))
     SigninInNewGaiaFlow(browser, email, password);
   else
     SigninInOldGaiaFlow(browser, email, password);
@@ -283,10 +311,19 @@ bool SignInWithUI(Browser* browser,
 }
 
 bool DismissSyncConfirmationDialog(Browser* browser, base::TimeDelta timeout) {
+  SyncConfirmationClosedObserver confirmation_closed_observer;
+  ScopedObserver<LoginUIService, LoginUIService::Observer>
+      scoped_confirmation_closed_observer(&confirmation_closed_observer);
+  scoped_confirmation_closed_observer.Add(
+      LoginUIServiceFactory::GetForProfile(browser->profile()));
+
   const base::Time expire_time = base::Time::Now() + timeout;
   while (base::Time::Now() <= expire_time) {
-    if (SigninViewControllerTestUtil::TryDismissSyncConfirmationDialog(browser))
+    if (SigninViewControllerTestUtil::TryDismissSyncConfirmationDialog(
+            browser)) {
+      confirmation_closed_observer.WaitForConfirmationClosed();
       return true;
+    }
     RunLoopFor(base::TimeDelta::FromMilliseconds(1000));
   }
   return false;

@@ -7,23 +7,21 @@
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/android/shortcut_helper.h"
-#include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
-#include "chrome/browser/android/webapk/webapk_metrics.h"
 #include "chrome/browser/banners/app_banner_manager_android.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/installable/installable_manager.h"
+#include "chrome/browser/installable/installable_metrics.h"
+#include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/AddToHomescreenManager_jni.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/modules/installation/installation.mojom.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -35,7 +33,7 @@ namespace {
 
 // The length of time to allow the add to homescreen data fetcher to run before
 // timing out and generating an icon.
-const int kDataTimeoutInMilliseconds = 4000;
+const int kDataTimeoutInMilliseconds = 8000;
 
 }  // namespace
 
@@ -74,7 +72,8 @@ void AddToHomescreenManager::AddShortcut(
         ->InstallAsync(web_contents, data_fetcher_->shortcut_info(),
                        data_fetcher_->primary_icon(),
                        data_fetcher_->badge_icon(),
-                       webapk::INSTALL_SOURCE_MENU);
+                       InstallableMetrics::GetInstallSource(
+                           web_contents, InstallTrigger::MENU));
   } else {
     base::string16 user_title =
         base::android::ConvertJavaStringToUTF16(env, j_user_title);
@@ -95,17 +94,11 @@ void AddToHomescreenManager::Start(content::WebContents* web_contents) {
   // Icon generation depends on having a valid visible URL.
   DCHECK(web_contents->GetVisibleURL().is_valid());
 
-  bool check_webapk_compatible = false;
-  if (ChromeWebApkHost::CanInstallWebApk() &&
-      InstallableManager::IsContentSecure(web_contents)) {
-    check_webapk_compatible = true;
-  }
-
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_AddToHomescreenManager_showDialog(env, java_ref_);
 
-  data_fetcher_ = base::MakeUnique<AddToHomescreenDataFetcher>(
-      web_contents, kDataTimeoutInMilliseconds, check_webapk_compatible, this);
+  data_fetcher_ = std::make_unique<AddToHomescreenDataFetcher>(
+      web_contents, kDataTimeoutInMilliseconds, this);
 }
 
 AddToHomescreenManager::~AddToHomescreenManager() {}
@@ -124,23 +117,20 @@ void AddToHomescreenManager::RecordAddToHomescreen() {
       base::Time::Now());
 }
 
-void AddToHomescreenManager::OnDidDetermineWebApkCompatibility(
-    bool is_webapk_compatible) {
-  is_webapk_compatible_ = is_webapk_compatible;
-}
-
 void AddToHomescreenManager::OnUserTitleAvailable(
     const base::string16& user_title,
-    const GURL& url) {
+    const GURL& url,
+    bool is_webapk_compatible) {
+  is_webapk_compatible_ = is_webapk_compatible;
+
   JNIEnv* env = base::android::AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_user_title =
       base::android::ConvertUTF16ToJavaString(env, user_title);
-  // Trim down the app URL to the domain and registry.
-  std::string trimmed_url =
-      net::registry_controlled_domains::GetDomainAndRegistry(
-          url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  ScopedJavaLocalRef<jstring> j_url =
-      base::android::ConvertUTF8ToJavaString(env, trimmed_url);
+  // Trim down the app URL to the origin. Elide cryptographic schemes so HTTP
+  // is still shown.
+  ScopedJavaLocalRef<jstring> j_url = base::android::ConvertUTF16ToJavaString(
+      env, url_formatter::FormatUrlForSecurityDisplay(
+               url, url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
   Java_AddToHomescreenManager_onUserTitleAvailable(
       env, java_ref_, j_user_title, j_url,
       !is_webapk_compatible_ /* isTitleEditable */);

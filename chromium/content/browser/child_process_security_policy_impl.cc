@@ -15,11 +15,13 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "content/browser/bad_message.h"
 #include "content/browser/isolated_origin_util.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/site_isolation_policy.h"
+#include "content/browser/site_isolation_policy.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_data.h"
@@ -27,10 +29,10 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/bindings_policy.h"
-#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/filename_util.h"
 #include "net/url_request/url_request.h"
+#include "services/network/public/cpp/resource_request_body.h"
 #include "storage/browser/fileapi/file_permission_policy.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_url.h"
@@ -88,13 +90,6 @@ bool IsMalformedBlobUrl(const GURL& url) {
   std::string canonical_origin = url::Origin::Create(url).Serialize();
   canonical_origin.append(1, '/');
   if (base::StartsWith(url.GetContent(), canonical_origin,
-                       base::CompareCase::INSENSITIVE_ASCII))
-    return false;
-
-  // blob:blobinternal:// is used by blink for stream URLs. This doesn't survive
-  // url::Origin canonicalization -- blobinternal is a fake scheme -- but allow
-  // it anyway. TODO(nick): Added speculatively, might be unnecessary.
-  if (base::StartsWith(url.GetContent(), "blobinternal://",
                        base::CompareCase::INSENSITIVE_ASCII))
     return false;
 
@@ -809,40 +804,40 @@ bool ChildProcessSecurityPolicyImpl::CanReadAllFiles(
 bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
     int child_id,
     const storage::FileSystemContext* file_system_context,
-    const scoped_refptr<ResourceRequestBody>& body) {
+    const scoped_refptr<network::ResourceRequestBody>& body) {
   if (!body)
     return true;
 
-  for (const ResourceRequestBody::Element& element : *body->elements()) {
+  for (const network::DataElement& element : *body->elements()) {
     switch (element.type()) {
-      case ResourceRequestBody::Element::TYPE_FILE:
+      case network::DataElement::TYPE_FILE:
         if (!CanReadFile(child_id, element.path()))
           return false;
         break;
 
-      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
+      case network::DataElement::TYPE_FILE_FILESYSTEM:
         if (!CanReadFileSystemFile(child_id, file_system_context->CrackURL(
                                                  element.filesystem_url())))
           return false;
         break;
 
-      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
+      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
         // TYPE_DISK_CACHE_ENTRY can't be sent via IPC according to
         // content/common/resource_messages.cc
         NOTREACHED();
         return false;
 
-      case ResourceRequestBody::Element::TYPE_BYTES:
-      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
+      case network::DataElement::TYPE_BYTES:
+      case network::DataElement::TYPE_BYTES_DESCRIPTION:
         // Data is self-contained within |body| - no need to check access.
         break;
 
-      case ResourceRequestBody::Element::TYPE_BLOB:
+      case network::DataElement::TYPE_BLOB:
         // No need to validate - the unguessability of the uuid of the blob is a
         // sufficient defense against access from an unrelated renderer.
         break;
 
-      case ResourceRequestBody::Element::TYPE_UNKNOWN:
+      case network::DataElement::TYPE_UNKNOWN:
       default:
         // Fail safe - deny access.
         NOTREACHED();
@@ -854,7 +849,7 @@ bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
 
 bool ChildProcessSecurityPolicyImpl::CanReadRequestBody(
     SiteInstance* site_instance,
-    const scoped_refptr<ResourceRequestBody>& body) {
+    const scoped_refptr<network::ResourceRequestBody>& body) {
   DCHECK(site_instance);
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -1066,10 +1061,15 @@ bool ChildProcessSecurityPolicyImpl::CanAccessDataForOrigin(int child_id,
   if (!can_access) {
     // Returning false here will result in a renderer kill.  Set some crash
     // keys that will help understand the circumstances of that kill.
-    base::debug::SetCrashKeyValue("requested_site_url", site_url.spec());
-    base::debug::SetCrashKeyValue("requested_origin", url.GetOrigin().spec());
-    base::debug::SetCrashKeyValue("killed_process_origin_lock",
-                                  state->second->origin_lock().spec());
+    base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
+                                   site_url.spec());
+    base::debug::SetCrashKeyString(bad_message::GetKilledProcessOriginLockKey(),
+                                   state->second->origin_lock().spec());
+
+    static auto* requested_origin_key = base::debug::AllocateCrashKeyString(
+        "requested_origin", base::debug::CrashKeySize::Size64);
+    base::debug::SetCrashKeyString(requested_origin_key,
+                                   url.GetOrigin().spec());
   }
   return can_access;
 }
@@ -1156,16 +1156,13 @@ bool ChildProcessSecurityPolicyImpl::CanSendMidiSysExMessage(int child_id) {
 void ChildProcessSecurityPolicyImpl::AddIsolatedOrigins(
     std::vector<url::Origin> origins_to_add) {
   // Filter out origins that cannot be used as an isolated origin.
-  auto end_of_valid_origins =
-      std::remove_if(origins_to_add.begin(), origins_to_add.end(),
-                     [](const url::Origin& origin) {
-                       if (IsolatedOriginUtil::IsValidIsolatedOrigin(origin))
-                         return false;  // Don't remove.
+  base::EraseIf(origins_to_add, [](const url::Origin& origin) {
+    if (IsolatedOriginUtil::IsValidIsolatedOrigin(origin))
+      return false;  // Don't remove.
 
-                       LOG(ERROR) << "Invalid isolated origin: " << origin;
-                       return true;  // Remove.
-                     });
-  origins_to_add.erase(end_of_valid_origins, origins_to_add.end());
+    LOG(ERROR) << "Invalid isolated origin: " << origin;
+    return true;  // Remove.
+  });
 
   // Taking the lock once and doing a batch insertion via base::flat_set::insert
   // is important because of performance characteristics of base::flat_set.

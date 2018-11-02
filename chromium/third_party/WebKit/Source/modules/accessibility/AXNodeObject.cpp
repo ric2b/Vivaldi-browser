@@ -28,6 +28,8 @@
 
 #include "modules/accessibility/AXNodeObject.h"
 
+#include <math.h>
+
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/Element.h"
 #include "core/dom/FlatTreeTraversal.h"
@@ -93,8 +95,8 @@ AXNodeObject::~AXNodeObject() {
   DCHECK(!node_);
 }
 
-void AXNodeObject::AlterSliderValue(bool increase) {
-  if (RoleValue() != kSliderRole)
+void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
+  if (!IsSlider() && !IsSpinButton())
     return;
 
   float value;
@@ -345,6 +347,8 @@ AccessibilityRole AXNodeObject::NativeAccessibilityRoleIgnoringAria() const {
 
   if (IsHTMLSummaryElement(*GetNode())) {
     ContainerNode* parent = FlatTreeTraversal::Parent(*GetNode());
+    if (parent && IsHTMLSlotElement(parent))
+      parent = FlatTreeTraversal::Parent(*parent);
     if (parent && IsHTMLDetailsElement(parent))
       return kDisclosureTriangleRole;
     return kUnknownRole;
@@ -618,11 +622,10 @@ bool AXNodeObject::HasContentEditableAttributeSet() const {
          EqualIgnoringASCIICase(content_editable_value, "true");
 }
 
-// TODO(dmazzoni) Find a more appropriate name or consider returning false
-// for everything but a searchbox or textfield, as a combobox and spinbox
-// can contain a field but should not be considered edit controls themselves.
-// Combo box text fields should return true though.
 bool AXNodeObject::IsTextControl() const {
+  if (!GetNode())
+    return false;
+
   if (HasContentEditableAttributeSet())
     return true;
 
@@ -630,9 +633,14 @@ bool AXNodeObject::IsTextControl() const {
     case kTextFieldRole:
     case kTextFieldWithComboBoxRole:
     case kSearchBoxRole:
-    // TODO(dmazzoni): kSpinButtonRole might need to be removed.
-    case kSpinButtonRole:
       return true;
+    case kSpinButtonRole:
+      // When it's a native spin button, it behaves like a text box, i.e. users
+      // can type in it and navigate around using cursors.
+      if (const auto* input = ToHTMLInputElementOrNull(*GetNode())) {
+        return input->IsTextField();
+      }
+      return false;
     default:
       return false;
   }
@@ -778,7 +786,7 @@ bool AXNodeObject::ComputeIsEditableRoot() const {
     // Editable roots created by the user agent are handled by
     // |IsNativeTextControl| above.
     ShadowRoot* root = node->ContainingShadowRoot();
-    return !root || root->GetType() != ShadowRootType::kUserAgent;
+    return !root || !root->IsUserAgent();
   }
   return false;
 }
@@ -953,9 +961,19 @@ bool AXNodeObject::IsSlider() const {
   return RoleValue() == kSliderRole;
 }
 
+bool AXNodeObject::IsSpinButton() const {
+  return RoleValue() == kSpinButtonRole;
+}
+
 bool AXNodeObject::IsNativeSlider() const {
   if (auto* input = ToHTMLInputElementOrNull(GetNode()))
     return input->type() == InputTypeNames::range;
+  return false;
+}
+
+bool AXNodeObject::IsNativeSpinButton() const {
+  if (auto* input = ToHTMLInputElementOrNull(GetNode()))
+    return input->type() == InputTypeNames::number;
   return false;
 }
 
@@ -1009,7 +1027,7 @@ AXRestriction AXNodeObject::Restriction() const {
 
   // Check aria-readonly if supported by current role.
   bool is_read_only;
-  if (CanSupportAriaReadOnly() &&
+  if (SupportsARIAReadOnly() &&
       HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kReadOnly,
                                     is_read_only)) {
     // ARIA overrides other readonly state markup.
@@ -1029,6 +1047,9 @@ AXRestriction AXNodeObject::Restriction() const {
 }
 
 AccessibilityExpanded AXNodeObject::IsExpanded() const {
+  if (!SupportsARIAExpanded())
+    return kExpandedUndefined;
+
   if (GetNode() && IsHTMLSummaryElement(*GetNode())) {
     if (GetNode()->parentNode() &&
         IsHTMLDetailsElement(GetNode()->parentNode()))
@@ -1156,7 +1177,7 @@ unsigned AXNodeObject::HierarchicalLevel() const {
 
 // TODO: rename this just AutoComplete, it's not only ARIA.
 String AXNodeObject::AriaAutoComplete() const {
-  if (IsARIATextControl()) {
+  if (IsNativeTextControl() || IsARIATextControl()) {
     const AtomicString& aria_auto_complete =
         GetAOMPropertyOrARIAAttribute(AOMStringProperty::kAutocomplete)
             .DeprecatedLower();
@@ -1337,8 +1358,9 @@ String AXNodeObject::GetText() const {
     return String();
 
   if (IsNativeTextControl() &&
-      (IsHTMLTextAreaElement(*node) || IsHTMLInputElement(*node)))
+      (IsHTMLTextAreaElement(*node) || IsHTMLInputElement(*node))) {
     return ToTextControlElement(*node).value();
+  }
 
   if (!node->IsElementNode())
     return String();
@@ -1417,7 +1439,7 @@ InvalidState AXNodeObject::GetInvalidState() const {
 }
 
 int AXNodeObject::PosInSet() const {
-  if (SupportsSetSizeAndPosInSet()) {
+  if (SupportsARIASetSizeAndPosInSet()) {
     uint32_t pos_in_set;
     if (HasAOMPropertyOrARIAAttribute(AOMUIntProperty::kPosInSet, pos_in_set))
       return pos_in_set;
@@ -1429,7 +1451,7 @@ int AXNodeObject::PosInSet() const {
 }
 
 int AXNodeObject::SetSize() const {
-  if (SupportsSetSizeAndPosInSet()) {
+  if (SupportsARIASetSizeAndPosInSet()) {
     int32_t set_size;
     if (HasAOMPropertyOrARIAAttribute(AOMIntProperty::kSetSize, set_size))
       return set_size;
@@ -1535,14 +1557,39 @@ bool AXNodeObject::ValueForRange(float* out_value) const {
     return true;
   }
 
-  if (IsNativeSlider()) {
+  if (IsNativeSlider() || IsNativeSpinButton()) {
     *out_value = ToHTMLInputElement(*GetNode()).valueAsNumber();
-    return true;
+    return isfinite(*out_value);
   }
 
   if (auto* meter = ToHTMLMeterElementOrNull(GetNode())) {
     *out_value = meter->value();
     return true;
+  }
+
+  // In ARIA 1.1, default values for aria-valuenow were changed as below.
+  // - scrollbar, slider : half way between aria-valuemin and aria-valuemax
+  // - separator : 50
+  // - spinbutton : 0
+  switch (AriaRoleAttribute()) {
+    case kScrollBarRole:
+    case kSliderRole: {
+      float min_value, max_value;
+      if (MinValueForRange(&min_value) && MaxValueForRange(&max_value)) {
+        *out_value = (min_value + max_value) / 2.0f;
+        return true;
+      }
+    }
+    case kSplitterRole: {
+      *out_value = 50.0f;
+      return true;
+    }
+    case kSpinButtonRole: {
+      *out_value = 0.0f;
+      return true;
+    }
+    default:
+      break;
   }
 
   return false;
@@ -1555,9 +1602,9 @@ bool AXNodeObject::MaxValueForRange(float* out_value) const {
     return true;
   }
 
-  if (IsNativeSlider()) {
-    *out_value = ToHTMLInputElement(*GetNode()).Maximum();
-    return true;
+  if (IsNativeSlider() || IsNativeSpinButton()) {
+    *out_value = static_cast<float>(ToHTMLInputElement(*GetNode()).Maximum());
+    return isfinite(*out_value);
   }
 
   if (auto* meter = ToHTMLMeterElementOrNull(GetNode())) {
@@ -1588,9 +1635,9 @@ bool AXNodeObject::MinValueForRange(float* out_value) const {
     return true;
   }
 
-  if (IsNativeSlider()) {
-    *out_value = ToHTMLInputElement(*GetNode()).Minimum();
-    return true;
+  if (IsNativeSlider() || IsNativeSpinButton()) {
+    *out_value = static_cast<float>(ToHTMLInputElement(*GetNode()).Minimum());
+    return isfinite(*out_value);
   }
 
   if (auto* meter = ToHTMLMeterElementOrNull(GetNode())) {
@@ -1615,11 +1662,11 @@ bool AXNodeObject::MinValueForRange(float* out_value) const {
 }
 
 bool AXNodeObject::StepValueForRange(float* out_value) const {
-  if (IsNativeSlider()) {
+  if (IsNativeSlider() || IsNativeSpinButton()) {
     Decimal step =
         ToHTMLInputElement(*GetNode()).CreateStepRange(kRejectAny).Step();
     *out_value = step.ToString().ToFloat();
-    return true;
+    return isfinite(*out_value);
   }
 
   switch (AriaRoleAttribute()) {
@@ -2309,7 +2356,7 @@ bool AXNodeObject::OnNativeIncrementAction() {
   LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
       Frame::NotifyUserActivation(frame, UserGestureToken::kNewGesture);
-  AlterSliderValue(true);
+  AlterSliderOrSpinButtonValue(true);
   return true;
 }
 
@@ -2317,7 +2364,7 @@ bool AXNodeObject::OnNativeDecrementAction() {
   LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
   std::unique_ptr<UserGestureIndicator> gesture_indicator =
       Frame::NotifyUserActivation(frame, UserGestureToken::kNewGesture);
-  AlterSliderValue(false);
+  AlterSliderOrSpinButtonValue(false);
   return true;
 }
 

@@ -53,7 +53,7 @@ using ::testing::StrictMock;
 namespace {
 class EmulatingRGBImageStub : public gl::GLImageStub {
  protected:
-  ~EmulatingRGBImageStub() override {}
+  ~EmulatingRGBImageStub() override = default;
   bool EmulatingRGB() const override {
     return true;
   }
@@ -3169,9 +3169,9 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeTextureCHROMIUM) {
   Texture* texture = texture_ref->texture();
   EXPECT_EQ(kServiceTextureId, texture->service_id());
 
-  ProduceTextureCHROMIUMImmediate& produce_cmd =
-      *GetImmediateAs<ProduceTextureCHROMIUMImmediate>();
-  produce_cmd.Init(GL_TEXTURE_2D, mailbox.name);
+  ProduceTextureDirectCHROMIUMImmediate& produce_cmd =
+      *GetImmediateAs<ProduceTextureDirectCHROMIUMImmediate>();
+  produce_cmd.Init(client_texture_id_, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -3203,7 +3203,7 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeTextureCHROMIUM) {
 
   CreateAndConsumeTextureINTERNALImmediate& consume_cmd =
       *GetImmediateAs<CreateAndConsumeTextureINTERNALImmediate>();
-  consume_cmd.Init(GL_TEXTURE_2D, new_texture_id, mailbox.name);
+  consume_cmd.Init(new_texture_id, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -3245,7 +3245,7 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeDirectTextureCHROMIUM) {
 
   ProduceTextureDirectCHROMIUMImmediate& produce_cmd =
       *GetImmediateAs<ProduceTextureDirectCHROMIUMImmediate>();
-  produce_cmd.Init(client_texture_id_, GL_TEXTURE_2D, mailbox.name);
+  produce_cmd.Init(client_texture_id_, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -3279,7 +3279,7 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeDirectTextureCHROMIUM) {
   GLuint new_texture_id = kNewClientId;
   CreateAndConsumeTextureINTERNALImmediate& consume_cmd =
       *GetImmediateAs<CreateAndConsumeTextureINTERNALImmediate>();
-  consume_cmd.Init(GL_TEXTURE_2D, new_texture_id, mailbox.name);
+  consume_cmd.Init(new_texture_id, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -3310,29 +3310,6 @@ TEST_P(GLES2DecoderTest, ProduceAndConsumeDirectTextureCHROMIUM) {
   EXPECT_EQ(static_cast<GLenum>(GL_UNSIGNED_BYTE), type);
 }
 
-TEST_P(GLES2DecoderTest, ProduceTextureCHROMIUMInvalidTarget) {
-  Mailbox mailbox = Mailbox::Generate();
-
-  DoBindTexture(GL_TEXTURE_CUBE_MAP, client_texture_id_, kServiceTextureId);
-  DoTexImage2D(
-      GL_TEXTURE_CUBE_MAP_POSITIVE_X, 0, GL_RGBA, 3, 1, 0, GL_RGBA,
-      GL_UNSIGNED_BYTE, 0, 0);
-  TextureRef* texture_ref =
-      group().texture_manager()->GetTexture(client_texture_id_);
-  ASSERT_TRUE(texture_ref != NULL);
-  Texture* texture = texture_ref->texture();
-  EXPECT_EQ(kServiceTextureId, texture->service_id());
-
-  ProduceTextureDirectCHROMIUMImmediate& produce_cmd =
-      *GetImmediateAs<ProduceTextureDirectCHROMIUMImmediate>();
-  produce_cmd.Init(client_texture_id_, GL_TEXTURE_2D, mailbox.name);
-  EXPECT_EQ(error::kNoError,
-            ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
-
-  // ProduceTexture should fail it the texture and produce targets don't match.
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-}
-
 TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidMailbox) {
   // Attempt to consume the mailbox when no texture has been produced with it.
   Mailbox mailbox = Mailbox::Generate();
@@ -3341,9 +3318,6 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidMailbox) {
   EXPECT_CALL(*gl_, GenTextures(1, _))
       .WillOnce(SetArgPointee<1>(kNewServiceId))
       .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, BindTexture(GL_TEXTURE_2D, _))
-        .Times(2)
-        .RetiresOnSaturation();
   EXPECT_CALL(*gl_, ActiveTexture(GL_TEXTURE1)).Times(1).RetiresOnSaturation();
 
   ActiveTexture& texture_cmd = *GetImmediateAs<ActiveTexture>();
@@ -3352,7 +3326,7 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidMailbox) {
 
   CreateAndConsumeTextureINTERNALImmediate& consume_cmd =
       *GetImmediateAs<CreateAndConsumeTextureINTERNALImmediate>();
-  consume_cmd.Init(GL_TEXTURE_2D, new_texture_id, mailbox.name);
+  consume_cmd.Init(new_texture_id, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
 
@@ -3366,8 +3340,8 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidMailbox) {
       group().texture_manager()->GetTexture(new_texture_id);
   ASSERT_TRUE(texture_ref != NULL);
   Texture* texture = texture_ref->texture();
-  // New texture should have the correct target type.
-  EXPECT_TRUE(texture->target() == GL_TEXTURE_2D);
+  // New texture should be unbound to a target.
+  EXPECT_TRUE(texture->target() == GL_NONE);
   // New texture should have a valid service_id.
   EXPECT_EQ(kNewServiceId, texture->service_id());
 }
@@ -3382,7 +3356,7 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidTexture) {
 
   ProduceTextureDirectCHROMIUMImmediate& produce_cmd =
       *GetImmediateAs<ProduceTextureDirectCHROMIUMImmediate>();
-  produce_cmd.Init(client_texture_id_, GL_TEXTURE_2D, mailbox.name);
+  produce_cmd.Init(client_texture_id_, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
   EXPECT_EQ(GL_NO_ERROR, GetGLError());
@@ -3391,66 +3365,12 @@ TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidTexture) {
   GLuint new_texture_id = 0;
   CreateAndConsumeTextureINTERNALImmediate& consume_cmd =
       *GetImmediateAs<CreateAndConsumeTextureINTERNALImmediate>();
-  consume_cmd.Init(GL_TEXTURE_2D, new_texture_id, mailbox.name);
+  consume_cmd.Init(new_texture_id, mailbox.name);
   EXPECT_EQ(error::kNoError,
             ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
 
   // CreateAndConsumeTexture should fail.
   EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-}
-
-TEST_P(GLES2DecoderTest, CreateAndConsumeTextureCHROMIUMInvalidTarget) {
-  Mailbox mailbox = Mailbox::Generate();
-
-  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
-  TextureRef* texture_ref =
-      group().texture_manager()->GetTexture(client_texture_id_);
-  ASSERT_TRUE(texture_ref != NULL);
-
-  ProduceTextureDirectCHROMIUMImmediate& produce_cmd =
-      *GetImmediateAs<ProduceTextureDirectCHROMIUMImmediate>();
-  produce_cmd.Init(client_texture_id_, GL_TEXTURE_2D, mailbox.name);
-  EXPECT_EQ(error::kNoError,
-            ExecuteImmediateCmd(produce_cmd, sizeof(mailbox.name)));
-  EXPECT_EQ(GL_NO_ERROR, GetGLError());
-
-  EXPECT_CALL(*gl_, GenTextures(1, _))
-      .WillOnce(SetArgPointee<1>(kNewServiceId))
-      .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, BindTexture(GL_TEXTURE_CUBE_MAP, _))
-        .Times(2)
-        .RetiresOnSaturation();
-  EXPECT_CALL(*gl_, ActiveTexture(GL_TEXTURE1)).Times(1).RetiresOnSaturation();
-
-  ActiveTexture& texture_cmd = *GetImmediateAs<ActiveTexture>();
-  texture_cmd.Init(GL_TEXTURE1);
-  EXPECT_EQ(error::kNoError, ExecuteCmd(texture_cmd));
-
-  // Attempt to consume the mailbox with a different target.
-  GLuint new_texture_id = kNewClientId;
-  CreateAndConsumeTextureINTERNALImmediate& consume_cmd =
-      *GetImmediateAs<CreateAndConsumeTextureINTERNALImmediate>();
-  consume_cmd.Init(GL_TEXTURE_CUBE_MAP, new_texture_id, mailbox.name);
-  EXPECT_EQ(error::kNoError,
-            ExecuteImmediateCmd(consume_cmd, sizeof(mailbox.name)));
-
-  // CreateAndConsumeTexture should fail if the produced texture had a different
-  // target.
-  EXPECT_EQ(GL_INVALID_OPERATION, GetGLError());
-
-  // Make sure the new client_id is associated with a texture ref even though
-  // CreateAndConsumeTexture failed.
-  texture_ref = group().texture_manager()->GetTexture(new_texture_id);
-  ASSERT_TRUE(texture_ref != NULL);
-  Texture* texture = texture_ref->texture();
-  // New texture should have the correct target type.
-  EXPECT_TRUE(texture->target() == GL_TEXTURE_CUBE_MAP);
-  // New texture should have a valid service_id.
-  EXPECT_EQ(kNewServiceId, texture->service_id());
-
-  // Make sure the client_id did not become associated with the produced texture
-  // service_id.
-  EXPECT_NE(kServiceTextureId, texture->service_id());
 }
 
 TEST_P(GLES2DecoderManualInitTest, DepthTextureBadArgs) {
@@ -3773,7 +3693,7 @@ TEST_P(GLES2DecoderTest, ReleaseTexImage2DCHROMIUM) {
 
 class MockGLImage : public gl::GLImage {
  public:
-  MockGLImage() {}
+  MockGLImage() = default;
 
   // Overridden from gl::GLImage:
   MOCK_METHOD0(GetSize, gfx::Size());
@@ -3796,7 +3716,7 @@ class MockGLImage : public gl::GLImage {
                     const std::string&));
 
  protected:
-  virtual ~MockGLImage() {}
+  virtual ~MockGLImage() = default;
 };
 
 TEST_P(GLES2DecoderWithShaderTest, CopyTexImage) {
@@ -4160,9 +4080,29 @@ TEST_P(GLES2DecoderManualInitTest, TexImage2DFloatConvertsFormatDesktop) {
                                     GL_LUMINANCE_ALPHA32F_ARB);
 }
 
+TEST_P(GLES2DecoderManualInitTest, TexImage2Dnorm16OnGLES2) {
+  InitState init;
+  init.extensions = "GL_EXT_texture_norm16";
+  init.gl_version = "opengl es 2.0";
+  InitDecoder(init);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 16, 17, 0, GL_RED, GL_UNSIGNED_SHORT,
+               0, 0);
+}
+
+TEST_P(GLES2DecoderManualInitTest, TexImage2Dnorm16OnGLES3) {
+  InitState init;
+  init.extensions = "GL_EXT_texture_norm16";
+  init.gl_version = "opengl es 3.0";
+  InitDecoder(init);
+  DoBindTexture(GL_TEXTURE_2D, client_texture_id_, kServiceTextureId);
+  DoTexImage2D(GL_TEXTURE_2D, 0, GL_R16_EXT, 16, 17, 0, GL_RED,
+               GL_UNSIGNED_SHORT, 0, 0);
+}
+
 class GLES2DecoderCompressedFormatsTest : public GLES2DecoderManualInitTest {
  public:
-  GLES2DecoderCompressedFormatsTest() {}
+  GLES2DecoderCompressedFormatsTest() = default;
 
   static bool ValueInArray(GLint value, GLint* array, GLint count) {
     for (GLint ii = 0; ii < count; ++ii) {
@@ -4357,7 +4297,7 @@ TEST_P(GLES2DecoderManualInitTest, TexStorageInvalidSize) {
 class GLES2DecoderTexStorageFormatAndTypeTest
     : public GLES2DecoderManualInitTest {
  public:
-  GLES2DecoderTexStorageFormatAndTypeTest() {}
+  GLES2DecoderTexStorageFormatAndTypeTest() = default;
 
   void DoTexStorageFormatAndType(const InitState& init,
                                  GLenum format,

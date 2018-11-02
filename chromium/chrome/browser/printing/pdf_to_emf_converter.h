@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "base/callback.h"
+#include "base/callback_forward.h"
 #include "base/memory/ref_counted_memory.h"
 
 namespace printing {
@@ -17,11 +17,11 @@ struct PdfRenderSettings;
 
 class PdfConverter {
  public:
-  using StartCallback = base::Callback<void(int page_count)>;
+  using StartCallback = base::OnceCallback<void(int page_count)>;
   using GetPageCallback =
-      base::Callback<void(int page_number,
-                          float scale_factor,
-                          std::unique_ptr<MetafilePlayer> file)>;
+      base::RepeatingCallback<void(int page_number,
+                                   float scale_factor,
+                                   std::unique_ptr<MetafilePlayer> file)>;
   virtual ~PdfConverter();
 
   // Starts conversion of PDF provided as |data|. Calls |start_callback|
@@ -29,7 +29,7 @@ class PdfConverter {
   static std::unique_ptr<PdfConverter> StartPdfConverter(
       const scoped_refptr<base::RefCountedMemory>& data,
       const PdfRenderSettings& conversion_settings,
-      const StartCallback& start_callback);
+      StartCallback start_callback);
 
   // Requests conversion of the page. |page_number| is 0-base page number in
   // PDF provided in Start() call.
@@ -38,6 +38,16 @@ class PdfConverter {
   virtual void GetPage(int page_number,
                        const GetPageCallback& get_page_callback) = 0;
 };
+
+// Object used by tests to exercise the temporary file creation failure code
+// path. As long as this object is alive, the PdfConverter will fail when
+// creating temporary files.
+class ScopedSimulateFailureCreatingTempFileForTests {
+ public:
+  ScopedSimulateFailureCreatingTempFileForTests();
+  ~ScopedSimulateFailureCreatingTempFileForTests();
+};
+
 }  // namespace printing
 
 #endif  // CHROME_BROWSER_PRINTING_PDF_TO_EMF_CONVERTER_H_

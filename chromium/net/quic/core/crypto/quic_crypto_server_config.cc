@@ -35,12 +35,14 @@
 #include "net/quic/platform/api/quic_bug_tracker.h"
 #include "net/quic/platform/api/quic_clock.h"
 #include "net/quic/platform/api/quic_endian.h"
+#include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_hostname_utils.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_reference_counted.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "third_party/boringssl/src/include/openssl/sha.h"
+#include "third_party/boringssl/src/include/openssl/ssl.h"
 
 using std::string;
 
@@ -151,13 +153,15 @@ QuicCryptoServerConfig::ConfigOptions::~ConfigOptions() {}
 QuicCryptoServerConfig::QuicCryptoServerConfig(
     QuicStringPiece source_address_token_secret,
     QuicRandom* server_nonce_entropy,
-    std::unique_ptr<ProofSource> proof_source)
+    std::unique_ptr<ProofSource> proof_source,
+    bssl::UniquePtr<SSL_CTX> ssl_ctx)
     : replay_protection_(true),
       chlo_multiplier_(kMultiplier),
       configs_lock_(),
       primary_config_(nullptr),
       next_config_promotion_time_(QuicWallTime::Zero()),
       proof_source_(std::move(proof_source)),
+      ssl_ctx_(std::move(ssl_ctx)),
       source_address_token_future_secs_(3600),
       source_address_token_lifetime_secs_(86400),
       enable_serving_sct_(false),
@@ -1313,7 +1317,7 @@ void QuicCryptoServerConfig::EvaluateClientHelloAfterGetProof(
   QUIC_DVLOG(1) << "No 0-RTT replay protection in QUIC_VERSION_33 and higher.";
   // If the server nonce is empty and we're requiring handshake confirmation
   // for DoS reasons then we must reject the CHLO.
-  if (FLAGS_quic_reloadable_flag_quic_require_handshake_confirmation &&
+  if (GetQuicReloadableFlag(quic_require_handshake_confirmation) &&
       info->server_nonce.empty()) {
     info->reject_reasons.push_back(SERVER_NONCE_REQUIRED_FAILURE);
   }
@@ -1451,7 +1455,7 @@ void QuicCryptoServerConfig::BuildRejection(
     QuicByteCount total_framing_overhead,
     QuicByteCount chlo_packet_size,
     CryptoHandshakeMessage* out) const {
-  if (FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support &&
+  if (GetQuicReloadableFlag(enable_quic_stateless_reject_support) &&
       use_stateless_rejects) {
     QUIC_DVLOG(1) << "QUIC Crypto server config returning stateless reject "
                   << "with server-designated connection ID "
@@ -1490,6 +1494,12 @@ void QuicCryptoServerConfig::BuildRejection(
   QuicStringPiece client_cached_cert_hashes;
   if (client_hello.GetStringPiece(kCCRT, &client_cached_cert_hashes)) {
     params->client_cached_cert_hashes = client_cached_cert_hashes.as_string();
+  } else {
+    if (GetQuicReloadableFlag(quic_2rtt_drop_client_cached_certs)) {
+      params->client_cached_cert_hashes.clear();
+      QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_2rtt_drop_client_cached_certs,
+                        1, 2);
+    }
   }
 
   const string compressed =
@@ -1553,9 +1563,18 @@ string QuicCryptoServerConfig::CompressChain(
     return *cached_value;
   }
 
-  const string compressed =
-      CertCompressor::CompressChain(chain->certs, client_common_set_hashes,
-                                    client_common_set_hashes, common_sets);
+  string compressed;
+  if (GetQuicReloadableFlag(quic_2rtt_drop_client_cached_certs)) {
+    compressed =
+        CertCompressor::CompressChain(chain->certs, client_common_set_hashes,
+                                      client_cached_cert_hashes, common_sets);
+    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_2rtt_drop_client_cached_certs,
+                      2, 2);
+  } else {
+    compressed =
+        CertCompressor::CompressChain(chain->certs, client_common_set_hashes,
+                                      client_common_set_hashes, common_sets);
+  }
 
   // Insert the newly compressed cert to cache.
   compressed_certs_cache->Insert(chain, client_common_set_hashes,
@@ -1785,6 +1804,14 @@ string QuicCryptoServerConfig::NewSourceAddressToken(
 int QuicCryptoServerConfig::NumberOfConfigs() const {
   QuicReaderMutexLock locked(&configs_lock_);
   return configs_.size();
+}
+
+ProofSource* QuicCryptoServerConfig::proof_source() const {
+  return proof_source_.get();
+}
+
+SSL_CTX* QuicCryptoServerConfig::ssl_ctx() const {
+  return ssl_ctx_.get();
 }
 
 HandshakeFailureReason QuicCryptoServerConfig::ParseSourceAddressToken(

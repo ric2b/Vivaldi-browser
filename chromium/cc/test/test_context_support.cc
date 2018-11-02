@@ -17,7 +17,7 @@ namespace cc {
 TestContextSupport::TestContextSupport()
     : out_of_order_callbacks_(false), weak_ptr_factory_(this) {}
 
-TestContextSupport::~TestContextSupport() {}
+TestContextSupport::~TestContextSupport() = default;
 
 void TestContextSupport::FlushPendingWork() {}
 
@@ -40,6 +40,10 @@ void TestContextSupport::SignalQuery(uint32_t query,
       FROM_HERE, base::BindOnce(&TestContextSupport::CallAllSyncPointCallbacks,
                                 weak_ptr_factory_.GetWeakPtr()));
 }
+
+void TestContextSupport::GetGpuFence(
+    uint32_t gpu_fence_id,
+    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) {}
 
 void TestContextSupport::SetAggressivelyFreeResources(
     bool aggressively_free_resources) {}
@@ -103,5 +107,34 @@ bool TestContextSupport::ThreadSafeShallowLockDiscardableTexture(
 }
 void TestContextSupport::CompleteLockDiscardableTexureOnContextThread(
     uint32_t texture_id) {}
+bool TestContextSupport::ThreadsafeDiscardableTextureIsDeletedForTracing(
+    uint32_t texture_id) {
+  NOTIMPLEMENTED();
+  return false;
+}
+
+void TestContextSupport::CreateTransferCacheEntry(
+    const ClientTransferCacheEntry& entry) {
+  NOTIMPLEMENTED();
+}
+bool TestContextSupport::ThreadsafeLockTransferCacheEntry(
+    TransferCacheEntryType entry_type,
+    uint32_t entry_id) {
+  NOTIMPLEMENTED();
+  return false;
+}
+void TestContextSupport::UnlockTransferCacheEntries(
+    const std::vector<std::pair<TransferCacheEntryType, uint32_t>>& entries) {
+  NOTIMPLEMENTED();
+}
+void TestContextSupport::DeleteTransferCacheEntry(
+    TransferCacheEntryType entry_type,
+    uint32_t entry_id) {
+  NOTIMPLEMENTED();
+}
+unsigned int TestContextSupport::GetTransferBufferFreeSize() const {
+  NOTIMPLEMENTED();
+  return 0;
+}
 
 }  // namespace cc

@@ -282,7 +282,7 @@ void SyncSchedulerImpl::ScheduleClearServerData(const ClearParams& params) {
   DCHECK(started_) << "Scheduler must be running to clear.";
 
   pending_clear_params_ = std::make_unique<ClearParams>(params);
-  TrySyncCycleJob();
+  TryCanaryJob();
 }
 
 bool SyncSchedulerImpl::CanRunJobNow(JobPriority priority) {

@@ -10,13 +10,10 @@
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/user_metrics.h"
-#include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/prefs/pref_service.h"
 #import "components/signin/ios/browser/account_consistency_service.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_controller.h"
 #import "ios/chrome/browser/history/history_tab_helper.h"
 #include "ios/chrome/browser/pref_names.h"
@@ -179,7 +176,6 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 - (void)dealloc {
   UMA_HISTOGRAM_COUNTS(kPrerendersPerSessionCountHistogramName,
                        successfulPrerendersPerSessionCount_);
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
   [self cancelPrerender];
 }
 
@@ -256,17 +252,8 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   }
 
   if ([tab loadFinished]) {
-    // If the page has finished loading, take a snapshot.  If the page is
-    // still loading, do nothing, as CRWWebController will automatically take
-    // a snapshot once the load completes.
-    [tab updateSnapshotWithOverlay:YES visibleFrameOnly:YES];
-
     [[OmniboxGeolocationController sharedInstance] finishPageLoadForTab:tab
                                                             loadSuccess:YES];
-
-    if (!webState->GetLastCommittedURL().SchemeIs(kChromeUIScheme)) {
-      base::RecordAction(base::UserMetricsAction("MobilePageLoaded"));
-    }
   }
 
   [tab setDelegate:nil];
@@ -341,6 +328,15 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
   return nil;
 }
 
+// Override the CRWNativeContentProvider methods to cancel any prerenders that
+// require native content.
+- (id<CRWNativeContent>)controllerForUnhandledContentAtURL:(const GURL&)URL
+                                                  webState:
+                                                      (web::WebState*)webState {
+  [self schedulePrerenderCancel];
+  return nil;
+}
+
 #pragma mark -
 #pragma mark Private Methods
 
@@ -369,7 +365,7 @@ bool IsPrerenderTabEvictionExperimentalGroup() {
 
   web::WebState::CreateParams createParams(browserState_);
   webState_ = web::WebState::Create(createParams);
-  AttachTabHelpers(webState_.get());
+  AttachTabHelpers(webState_.get(), /*for_prerender=*/true);
 
   Tab* tab = LegacyTabHelper::GetTabForWebState(webState_.get());
   DCHECK(tab);

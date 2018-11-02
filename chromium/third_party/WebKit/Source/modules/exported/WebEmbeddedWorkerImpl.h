@@ -39,7 +39,6 @@
 #include "modules/serviceworkers/ServiceWorkerContentSettingsProxy.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
-#include "public/web/WebDevToolsAgentClient.h"
 #include "public/web/WebEmbeddedWorker.h"
 #include "public/web/WebEmbeddedWorkerStartData.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -70,14 +69,9 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void StartWorkerContext(const WebEmbeddedWorkerStartData&) override;
   void TerminateWorkerContext() override;
   void ResumeAfterDownload() override;
-  void AttachDevTools(int session_id) override;
-  void ReattachDevTools(int session_id, const WebString& saved_state) override;
-  void DetachDevTools(int session_id) override;
-  void DispatchDevToolsMessage(int session_id,
-                               int call_id,
-                               const WebString& method,
-                               const WebString& message) override;
   void AddMessageToConsole(const WebConsoleMessage&) override;
+  void BindDevToolsAgent(
+      mojo::ScopedInterfaceEndpointHandle devtools_agent_request) override;
 
   void PostMessageToPageInspector(int session_id, const WTF::String&);
 
@@ -94,15 +88,9 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   void OnShadowPageInitialized() override;
 
  private:
-  // WebDevToolsAgentClient overrides.
-  void SendProtocolMessage(int session_id,
-                           int call_id,
-                           const WebString&,
-                           const WebString&) override;
+  // WebDevToolsAgentImpl::Client overrides.
   void ResumeStartup() override;
-  WebDevToolsAgentClient::WebKitClientMessageLoop* CreateClientMessageLoop()
-      override;
-  const WebString& GetInstrumentationToken() override;
+  const WebString& GetDevToolsFrameToken() override;
 
   void OnScriptLoaderFinished();
   void StartWorkerThread();
@@ -140,7 +128,7 @@ class MODULES_EXPORT WebEmbeddedWorkerImpl final
   WaitingForDebuggerState waiting_for_debugger_state_;
   // Unique worker token used by DevTools to attribute different instrumentation
   // to the same worker.
-  WebString instrumentation_token_;
+  WebString devtools_frame_token_;
 
   service_manager::mojom::blink::InterfaceProviderPtrInfo
       interface_provider_info_;

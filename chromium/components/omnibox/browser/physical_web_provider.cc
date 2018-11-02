@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -237,8 +236,11 @@ void PhysicalWebProvider::ConstructZeroSuggestMatches(
         AutocompleteMatchType::PHYSICAL_WEB);
     match.destination_url = url;
 
+    // Because the user did not type a related input to get this clipboard
+    // suggestion, preserve the path and subdomain so the user has extra
+    // context.
     match.contents = url_formatter::FormatUrl(
-        url, AutocompleteMatch::GetFormatTypes(false, false, false),
+        url, AutocompleteMatch::GetFormatTypes(false, true, true),
         net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
     match.contents_class.push_back(
         ACMatchClassification(0, ACMatchClassification::URL));
@@ -267,7 +269,7 @@ void PhysicalWebProvider::ConstructQuerySuggestMatches(
   bookmarks::TitledUrlIndex index(nullptr);
   std::vector<std::unique_ptr<PhysicalWebNode>> nodes;
   for (const auto& metadata_item : *metadata_list) {
-    nodes.push_back(base::MakeUnique<PhysicalWebNode>(metadata_item));
+    nodes.push_back(std::make_unique<PhysicalWebNode>(metadata_item));
     index.Add(nodes.back().get());
   }
 

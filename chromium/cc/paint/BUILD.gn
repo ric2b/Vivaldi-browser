@@ -8,6 +8,8 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 cc_component("paint") {
   output_name = "cc_paint"
   sources = [
+    "decode_stashing_image_provider.cc",
+    "decode_stashing_image_provider.h",
     "decoded_draw_image.cc",
     "decoded_draw_image.h",
     "discardable_image_map.cc",
@@ -60,22 +62,27 @@ cc_component("paint") {
     "paint_text_blob_builder.h",
     "paint_typeface.cc",
     "paint_typeface.h",
+    "paint_typeface_transfer_cache_entry.cc",
+    "paint_typeface_transfer_cache_entry.h",
     "raw_memory_transfer_cache_entry.cc",
     "raw_memory_transfer_cache_entry.h",
     "record_paint_canvas.cc",
     "record_paint_canvas.h",
     "render_surface_filters.cc",
     "render_surface_filters.h",
-    "scoped_image_flags.cc",
-    "scoped_image_flags.h",
+    "scoped_raster_flags.cc",
+    "scoped_raster_flags.h",
     "skia_paint_canvas.cc",
     "skia_paint_canvas.h",
     "skia_paint_image_generator.cc",
     "skia_paint_image_generator.h",
     "solid_color_analyzer.cc",
     "solid_color_analyzer.h",
+    "transfer_cache_deserialize_helper.h",
     "transfer_cache_entry.cc",
     "transfer_cache_entry.h",
+    "transfer_cache_serialize_helper.cc",
+    "transfer_cache_serialize_helper.h",
   ]
 
   defines = [ "CC_PAINT_IMPLEMENTATION=1" ]
@@ -106,6 +113,7 @@ fuzzer_test("paint_op_buffer_fuzzer") {
   libfuzzer_options = [ "max_len=4096" ]
 
   deps = [
+    "//cc:test_support",
     "//cc/paint",
   ]
 }
@@ -118,6 +126,7 @@ fuzzer_test("paint_op_buffer_eq_fuzzer") {
   libfuzzer_options = [ "max_len=4096" ]
 
   deps = [
+    "//cc:test_support",
     "//cc/paint",
   ]
 }

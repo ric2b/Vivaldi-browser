@@ -27,7 +27,6 @@
 
 #include <memory>
 
-#include "platform/WebTaskRunner.h"
 #include "platform/bindings/DOMDataStore.h"
 #include "platform/bindings/ScriptForbiddenScope.h"
 #include "platform/bindings/V8Binding.h"
@@ -59,7 +58,7 @@ static void MicrotasksCompletedCallback(v8::Isolate* isolate) {
 }
 
 V8PerIsolateData::V8PerIsolateData(
-    WebTaskRunner* task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     V8ContextSnapshotMode v8_context_snapshot_mode)
     : v8_context_snapshot_mode_(v8_context_snapshot_mode),
       isolate_holder_(
@@ -97,7 +96,9 @@ V8PerIsolateData::V8PerIsolateData(
 // main thread.
 V8PerIsolateData::V8PerIsolateData()
     : v8_context_snapshot_mode_(V8ContextSnapshotMode::kTakeSnapshot),
-      isolate_holder_(&startup_data_),
+      isolate_holder_(
+          Platform::Current()->MainThread()->GetSingleThreadTaskRunner(),
+          &startup_data_),
       interface_template_map_for_v8_context_snapshot_(GetIsolate()),
       string_cache_(WTF::WrapUnique(new StringCache(GetIsolate()))),
       private_property_(V8PrivateProperty::Create()),
@@ -112,15 +113,16 @@ V8PerIsolateData::V8PerIsolateData()
   g_main_thread_per_isolate_data = this;
 }
 
-V8PerIsolateData::~V8PerIsolateData() {}
+V8PerIsolateData::~V8PerIsolateData() = default;
 
 v8::Isolate* V8PerIsolateData::MainThreadIsolate() {
   DCHECK(g_main_thread_per_isolate_data);
   return g_main_thread_per_isolate_data->GetIsolate();
 }
 
-v8::Isolate* V8PerIsolateData::Initialize(WebTaskRunner* task_runner,
-                                          V8ContextSnapshotMode context_mode) {
+v8::Isolate* V8PerIsolateData::Initialize(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    V8ContextSnapshotMode context_mode) {
   V8PerIsolateData* data = nullptr;
   if (context_mode == V8ContextSnapshotMode::kTakeSnapshot) {
     data = new V8PerIsolateData();
@@ -329,12 +331,12 @@ v8::Local<v8::Object> V8PerIsolateData::FindInstanceInPrototypeChain(
       templ);
 }
 
-void V8PerIsolateData::AddEndOfScopeTask(WTF::Closure task) {
+void V8PerIsolateData::AddEndOfScopeTask(base::OnceClosure task) {
   end_of_scope_tasks_.push_back(std::move(task));
 }
 
 void V8PerIsolateData::RunEndOfScopeTasks() {
-  Vector<WTF::Closure> tasks;
+  Vector<base::OnceClosure> tasks;
   tasks.swap(end_of_scope_tasks_);
   for (auto& task : tasks)
     std::move(task).Run();

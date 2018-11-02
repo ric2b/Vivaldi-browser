@@ -492,8 +492,16 @@ UI.Widget = class extends Common.Object {
       for (var child of this._children) {
         if (child._visible) {
           child.focus();
-          break;
+          return;
         }
+      }
+      var child = this.contentElement.traverseNextNode(this.contentElement);
+      while (child) {
+        if (child instanceof UI.XWidget) {
+          child.focus();
+          return;
+        }
+        child = child.traverseNextNode(this.contentElement);
       }
     }
   }
@@ -699,7 +707,7 @@ UI.WidgetFocusRestorer = class {
 /**
  * @override
  * @param {?Node} child
- * @return {?Node}
+ * @return {!Node}
  * @suppress {duplicate}
  */
 Element.prototype.appendChild = function(child) {

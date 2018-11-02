@@ -79,8 +79,9 @@ GURL GetSyncServiceURL(const base::CommandLine& command_line,
   // will go to the standard sync servers.
   GURL result(internal::kSyncDevServerUrl);
 
-  if (channel == version_info::Channel::STABLE ||
-      channel == version_info::Channel::BETA) {
+  if ((channel == version_info::Channel::STABLE ||
+       channel == version_info::Channel::BETA) &&
+      version_info::IsOfficialBuild()) {
     result = GURL(internal::kSyncServerUrl);
   }
 

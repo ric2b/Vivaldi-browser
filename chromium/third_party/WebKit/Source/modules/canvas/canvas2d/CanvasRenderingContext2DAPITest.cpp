@@ -8,8 +8,8 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/PageTestBase.h"
 #include "modules/accessibility/AXObject.h"
@@ -18,7 +18,6 @@
 #include "modules/canvas/canvas2d/CanvasPattern.h"
 #include "modules/canvas/canvas2d/HitRegionOptions.h"
 #include "modules/webgl/WebGLRenderingContext.h"
-#include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -40,7 +39,7 @@ class CanvasRenderingContext2DAPITest : public PageTestBase {
   Persistent<HTMLCanvasElement> canvas_element_;
 };
 
-CanvasRenderingContext2DAPITest::CanvasRenderingContext2DAPITest() {}
+CanvasRenderingContext2DAPITest::CanvasRenderingContext2DAPITest() = default;
 
 CanvasRenderingContext2D* CanvasRenderingContext2DAPITest::Context2d() const {
   // If the following check fails, perhaps you forgot to call createContext

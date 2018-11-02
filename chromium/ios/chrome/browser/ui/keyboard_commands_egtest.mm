@@ -7,7 +7,6 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/ntp/new_tab_page_controller.h"
 #include "ios/chrome/browser/ui/ui_util.h"
@@ -73,7 +72,6 @@ using chrome_test_util::RecentTabsMenuButton;
 }
 
 // Waits for the bookmark editor to display.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code.
 - (void)waitForSingleBookmarkEditorToDisplay {
   BOOL (^block)
   () = ^BOOL {
@@ -145,24 +143,16 @@ using chrome_test_util::RecentTabsMenuButton;
 }
 
 // Tests that keyboard commands are not registered when the Bookmarks UI is
-// shown on iPhone and registered on iPad.
+// shown.
 - (void)testKeyboardCommandsNotRegistered_BookmarksPresented {
-  // TODO(crbug.com/782551): Rewrite this test for the new Bookmarks UI.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(kBookmarkNewGeneration);
-
   // Open Bookmarks
   [ChromeEarlGreyUI openToolsMenu];
   [ChromeEarlGreyUI tapToolsMenuButton:chrome_test_util::BookmarksMenuButton()];
 
-  if (IsIPadIdiom()) {
-    [self verifyKeyboardCommandsAreRegistered];
-  } else {
-    [self verifyNoKeyboardCommandsAreRegistered];
+  [self verifyNoKeyboardCommandsAreRegistered];
 
-    [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Exit")]
-        performAction:grey_tap()];
-  }
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+      performAction:grey_tap()];
 }
 
 // Tests that keyboard commands are not registered when the Recent Tabs UI is

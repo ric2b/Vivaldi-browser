@@ -9,12 +9,12 @@
 #include "base/memory/ptr_util.h"
 #include "cc/resources/layer_tree_resource_provider.h"
 #include "cc/resources/video_resource_updater.h"
+#include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/render_pass.h"
 #include "components/viz/common/quads/solid_color_draw_quad.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/quads/yuv_video_draw_quad.h"
 #include "media/base/video_frame.h"
-#include "platform/wtf/WeakPtr.h"
 
 namespace cc {
 class VideoFrameExternalResources;
@@ -34,9 +34,11 @@ VideoFrameResourceProvider::VideoFrameResourceProvider(
       weak_ptr_factory_(this) {}
 
 VideoFrameResourceProvider::~VideoFrameResourceProvider() {
-  viz::ContextProvider::ScopedContextLock lock(context_provider_);
-  resource_updater_ = nullptr;
-  resource_provider_ = nullptr;
+  if (context_provider_) {
+    viz::ContextProvider::ScopedContextLock lock(context_provider_);
+    resource_updater_ = nullptr;
+    resource_provider_ = nullptr;
+  }
 }
 
 void VideoFrameResourceProvider::ObtainContextProvider() {

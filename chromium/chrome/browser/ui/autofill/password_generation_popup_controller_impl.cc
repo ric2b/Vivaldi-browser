@@ -225,12 +225,12 @@ void PasswordGenerationPopupControllerImpl::OnSavedPasswordsLinkClicked() {
 #if defined(OS_ANDROID)
   chrome::android::PreferencesLauncher::ShowPasswordSettings();
 #else
-  chrome::NavigateParams params(
+  NavigateParams params(
       chrome::FindBrowserWithWebContents(web_contents_),
       GURL(password_manager::kPasswordManagerAccountDashboardURL),
       ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  chrome::Navigate(&params);
+  Navigate(&params);
 #endif
 }
 
@@ -274,6 +274,9 @@ PasswordGenerationPopupControllerImpl::GetSuggestions() {
 }
 
 #if !defined(OS_ANDROID)
+void PasswordGenerationPopupControllerImpl::SetTypesetter(
+    gfx::Typesetter typesetter) {}
+
 int PasswordGenerationPopupControllerImpl::GetElidedValueWidthForRow(int row) {
   return 0;
 }

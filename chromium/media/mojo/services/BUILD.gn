@@ -12,12 +12,16 @@ import("//testing/test.gni")
 component("services") {
   output_name = "media_mojo_services"
   sources = [
+    "cdm_service.cc",
+    "cdm_service.h",
     "gpu_mojo_media_client.cc",
     "gpu_mojo_media_client.h",
     "interface_factory_impl.cc",
     "interface_factory_impl.h",
     "media_interface_provider.cc",
     "media_interface_provider.h",
+    "media_metrics_provider.cc",
+    "media_metrics_provider.h",
     "media_mojo_export.h",
     "media_resource_shim.cc",
     "media_resource_shim.h",
@@ -88,6 +92,7 @@ component("services") {
   ]
 
   deps = [
+    "//gpu/ipc/service",
     "//media:shared_memory_support",
     "//media/cdm:cdm_manager",
     "//media/gpu",
@@ -118,6 +123,10 @@ component("services") {
       "mojo_cdm_file_io.h",
       "mojo_cdm_helper.cc",
       "mojo_cdm_helper.h",
+      "mojo_cdm_proxy.cc",
+      "mojo_cdm_proxy.h",
+      "mojo_cdm_proxy_service.cc",
+      "mojo_cdm_proxy_service.h",
     ]
     deps += [ "//media/cdm:cdm_api" ]
 
@@ -223,7 +232,9 @@ source_set("unit_tests") {
   testonly = true
 
   sources = [
+    "media_metrics_provider_unittest.cc",
     "mojo_audio_input_stream_unittest.cc",
+    "mojo_audio_output_stream_provider_unittest.cc",
     "mojo_audio_output_stream_unittest.cc",
     "mojo_jpeg_decode_accelerator_service_unittest.cc",
     "mojo_video_encode_accelerator_service_unittest.cc",
@@ -237,6 +248,7 @@ source_set("unit_tests") {
     "//components/ukm:test_support",
     "//media:test_support",
     "//media/mojo:test_support",
+    "//mojo/edk/system",
     "//services/metrics/public/cpp:ukm_builders",
     "//testing/gmock",
     "//testing/gtest",

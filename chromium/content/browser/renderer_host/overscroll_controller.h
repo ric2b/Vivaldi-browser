@@ -10,11 +10,13 @@
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
+#include "ui/events/blink/did_overscroll_params.h"
 
 namespace content {
 
-class RenderWidgetHostViewAuraOverscrollTest;
 class OverscrollControllerDelegate;
+class OverscrollControllerTest;
+class RenderWidgetHostViewAuraOverscrollTest;
 
 // Indicates the direction that the scroll is heading in relative to the screen,
 // with the top being NORTH.
@@ -37,11 +39,9 @@ enum class OverscrollSource {
 // overscroll gesture. This controller receives the events that are dispatched
 // to the renderer, and the ACKs of events, and updates the overscroll gesture
 // status accordingly.
+// Exported for testing.
 class CONTENT_EXPORT OverscrollController {
  public:
-  // Exported for testing.
-  // TODO(mcnee): Tests needing CONTENT_EXPORT are BrowserPlugin specific.
-  // Remove after removing BrowserPlugin (crbug.com/533069).
   OverscrollController();
   virtual ~OverscrollController();
 
@@ -51,11 +51,14 @@ class CONTENT_EXPORT OverscrollController {
   // further processing should cease.
   bool WillHandleEvent(const blink::WebInputEvent& event);
 
+  // This is called whenever an overscroll event is generated on the renderer
+  // side. This is called before ReceivedEventAck. The params contains an
+  // OverscrollBehavior that can prevent overscroll navigation.
+  void OnDidOverscroll(const ui::DidOverscrollParams& params);
+
   // This must be called when the ACK for any event comes in. This updates the
   // overscroll gesture status as appropriate.
-  // Virtual and exported for testing.
-  // TODO(mcnee): Tests needing CONTENT_EXPORT and virtual are BrowserPlugin
-  // specific. Remove after removing BrowserPlugin (crbug.com/533069).
+  // Virtual for testing.
   virtual void ReceivedEventACK(const blink::WebInputEvent& event,
                                 bool processed);
 
@@ -73,14 +76,22 @@ class CONTENT_EXPORT OverscrollController {
   void Cancel();
 
  private:
+  friend class OverscrollControllerTest;
   friend class RenderWidgetHostViewAuraOverscrollTest;
 
   // Different scrolling states.
-  enum ScrollState {
-    STATE_UNKNOWN,
-    STATE_PENDING,
-    STATE_CONTENT_SCROLLING,
-    STATE_OVERSCROLLING,
+  enum class ScrollState {
+    NONE,
+
+    // Either a mouse-wheel or a gesture-scroll-update event is consumed by the
+    // renderer in which case no overscroll should be initiated until the end of
+    // the user interaction.
+    CONTENT_CONSUMING,
+
+    // Overscroll controller has initiated overscrolling and will consume all
+    // subsequent gesture-scroll-update events, preventing them from being
+    // forwarded to the renderer.
+    OVERSCROLLING,
   };
 
   // Returns true if the event indicates that the in-progress overscroll gesture
@@ -128,12 +139,8 @@ class CONTENT_EXPORT OverscrollController {
   // Source of the current overscroll gesture.
   OverscrollSource overscroll_source_ = OverscrollSource::NONE;
 
-  // Used to keep track of the scrolling state.
-  // If scrolling starts, and some scroll events are consumed at the beginning
-  // of the scroll (i.e. some content on the web-page was scrolled), then do not
-  // process any of the subsequent scroll events for generating overscroll
-  // gestures.
-  ScrollState scroll_state_ = STATE_UNKNOWN;
+  // Current scrolling state.
+  ScrollState scroll_state_ = ScrollState::NONE;
 
   // The amount of overscroll in progress. These values are invalid when
   // |overscroll_mode_| is set to OVERSCROLL_NONE.
@@ -143,6 +150,8 @@ class CONTENT_EXPORT OverscrollController {
   // The delegate that receives the overscroll updates. The delegate is not
   // owned by this controller.
   OverscrollControllerDelegate* delegate_ = nullptr;
+
+  bool wheel_scroll_latching_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(OverscrollController);
 };

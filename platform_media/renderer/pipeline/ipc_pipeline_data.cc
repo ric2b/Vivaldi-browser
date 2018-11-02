@@ -16,19 +16,6 @@
 
 namespace {
 
-#if 0
-std::unique_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) {
-  VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-          << " size of allocation " << size;
-  std::unique_ptr<base::SharedMemory> shm(new base::SharedMemory());
-  if (!shm->CreateAnonymous(size)) {
-    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-               << " allocation failed for size " << size;
-    return std::unique_ptr<base::SharedMemory>();
-  }
-  return shm;
-}
-#else
 std::unique_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) {
   VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " size of allocation " << size;
@@ -41,9 +28,9 @@ std::unique_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) {
   }
 
   base::SharedMemoryHandle platform_handle;
-  bool readonly = false;
   size_t shared_memory_size = 0;
-  MojoResult result = mojo::UnwrapSharedMemoryHandle(std::move(handle), &platform_handle, &shared_memory_size, &readonly);
+  mojo::UnwrappedSharedMemoryHandleProtection protection;
+  MojoResult result = mojo::UnwrapSharedMemoryHandle(std::move(handle), &platform_handle, &shared_memory_size, &protection);
   if (result != MOJO_RESULT_OK) {
     LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                << " unwrapping of shared memory handle failed for size " << size;
@@ -51,9 +38,11 @@ std::unique_ptr<base::SharedMemory> AllocateSharedMemory(size_t size) {
   }
   DCHECK_EQ(shared_memory_size, size);
 
-  return std::make_unique<base::SharedMemory>(platform_handle, readonly);
+  bool read_only =
+      protection == mojo::UnwrappedSharedMemoryHandleProtection::kReadOnly;
+  return std::make_unique<base::SharedMemory>(platform_handle, read_only);
 }
-#endif
+
 }  // namespace
 
 namespace media {

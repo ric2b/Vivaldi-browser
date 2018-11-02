@@ -22,7 +22,6 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/resource_request_body.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
@@ -35,13 +34,14 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
-
-namespace {
+namespace service_worker_write_to_cache_job_unittest {
 
 const char kHeaders[] =
     "HTTP/1.1 200 OK\n"
@@ -270,8 +270,6 @@ class ResponseVerifier : public base::RefCounted<ResponseVerifier> {
   size_t bytes_read_;
 };
 
-}  // namespace
-
 class ServiceWorkerWriteToCacheJobTest : public testing::Test {
  public:
   ServiceWorkerWriteToCacheJobTest()
@@ -319,10 +317,11 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
         request_.get(), context_wrapper(), &blob_storage_context_, process_id,
         provider_id, false, network::mojom::FetchRequestMode::kNoCORS,
         network::mojom::FetchCredentialsMode::kOmit,
-        FetchRedirectMode::FOLLOW_MODE, std::string() /* integrity */,
-        false /* keepalive */, RESOURCE_TYPE_SERVICE_WORKER,
-        REQUEST_CONTEXT_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_FRAME_TYPE_NONE,
-        scoped_refptr<ResourceRequestBody>());
+        network::mojom::FetchRedirectMode::kFollow,
+        std::string() /* integrity */, false /* keepalive */,
+        RESOURCE_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_TYPE_SERVICE_WORKER,
+        network::mojom::RequestContextFrameType::kNone,
+        scoped_refptr<network::ResourceRequestBody>());
   }
 
   int NextVersionId() { return next_version_id_++; }
@@ -331,9 +330,10 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
 
     // A new unstored registration/version.
-    registration_ = new ServiceWorkerRegistration(
-        blink::mojom::ServiceWorkerRegistrationOptions(scope_), 1L,
-        context()->AsWeakPtr());
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = scope_;
+    registration_ =
+        new ServiceWorkerRegistration(options, 1L, context()->AsWeakPtr());
     version_ =
         new ServiceWorkerVersion(registration_.get(), script_url_,
                                  NextVersionId(), context()->AsWeakPtr());
@@ -685,4 +685,5 @@ TEST_F(ServiceWorkerWriteToCacheJobTest, FailedWriteHeadersToCache) {
   EXPECT_EQ(net::ERR_FAILED, request_->status().error());
 }
 
+}  // namespace service_worker_write_to_cache_job_unittest
 }  // namespace content

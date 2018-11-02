@@ -35,7 +35,7 @@
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebVector.h"
-#include "public/platform/modules/serviceworker/service_worker_state.mojom-shared.h"
+#include "third_party/WebKit/common/service_worker/service_worker_state.mojom-shared.h"
 
 namespace blink {
 
@@ -52,11 +52,11 @@ class WebServiceWorker {
   // Blink is owning this handle.
   class Handle {
    public:
-    virtual ~Handle() {}
+    virtual ~Handle() = default;
     virtual WebServiceWorker* ServiceWorker() { return nullptr; }
   };
 
-  virtual ~WebServiceWorker() {}
+  virtual ~WebServiceWorker() = default;
 
   // Sets ServiceWorkerProxy, with which callee can start making upcalls
   // to the ServiceWorker object via the client. This doesn't pass the
@@ -72,10 +72,10 @@ class WebServiceWorker {
 
   // Callee receives ownership of the passed vector.
   // FIXME: Blob refs should be passed to maintain ref counts. crbug.com/351753
-  virtual void PostMessage(WebServiceWorkerProvider*,
-                           const WebString&,
-                           const WebSecurityOrigin&,
-                           WebVector<MessagePortChannel>) = 0;
+  virtual void PostMessageToWorker(WebServiceWorkerProvider*,
+                                   const WebString&,
+                                   const WebSecurityOrigin&,
+                                   WebVector<MessagePortChannel>) = 0;
 
   virtual void Terminate() {}
 };

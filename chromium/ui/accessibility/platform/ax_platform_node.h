@@ -33,7 +33,7 @@ class AX_EXPORT AXPlatformNode {
   static AXPlatformNode* Create(AXPlatformNodeDelegate* delegate);
 
   // Cast a gfx::NativeViewAccessible to an AXPlatformNode if it is one,
-  // or return NULL if it's not an instance of this class.
+  // or return nullptr if it's not an instance of this class.
   static AXPlatformNode* FromNativeViewAccessible(
       gfx::NativeViewAccessible accessible);
 
@@ -69,6 +69,9 @@ class AX_EXPORT AXPlatformNode {
   // Return this object's delegate.
   virtual AXPlatformNodeDelegate* GetDelegate() const = 0;
 
+  // Return the unique ID
+  int32_t GetUniqueId() const;
+
  protected:
   AXPlatformNode();
   virtual ~AXPlatformNode();
@@ -80,6 +83,8 @@ class AX_EXPORT AXPlatformNode {
 
   static base::LazyInstance<NativeWindowHandlerCallback>::Leaky
       native_window_handler_;
+
+  DISALLOW_COPY_AND_ASSIGN(AXPlatformNode);
 };
 
 }  // namespace ui

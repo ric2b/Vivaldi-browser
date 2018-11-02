@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "platform/PlatformExport.h"
 #include "platform/scheduler/base/task_queue.h"
@@ -17,6 +18,7 @@
 #include "platform/scheduler/child/web_task_runner_impl.h"
 #include "platform/scheduler/renderer/task_queue_throttler.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
+#include "platform/scheduler/util/tracing_helper.h"
 
 namespace base {
 namespace trace_event {
@@ -52,8 +54,9 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void DisableVirtualTimeForTesting() override;
   bool VirtualTimeAllowedToAdvance() const override;
   void SetVirtualTimePolicy(VirtualTimePolicy virtual_time_policy) override;
-  void GrantVirtualTimeBudget(base::TimeDelta budget,
-                              WTF::Closure budget_exhausted_callback) override;
+  void GrantVirtualTimeBudget(
+      base::TimeDelta budget,
+      base::OnceClosure budget_exhausted_callback) override;
   void SetMaxVirtualTimeTaskStarvationCount(
       int max_task_starvation_count) override;
   void AudioStateChanged(bool is_audio_playing) override;
@@ -83,8 +86,8 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
-  WTF::WeakPtr<WebViewSchedulerImpl> CreateWeakPtr() {
-    return weak_factory_.CreateWeakPtr();
+  base::WeakPtr<WebViewSchedulerImpl> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
   }
 
  private:
@@ -104,6 +107,7 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   // number of active connections.
   void UpdateBackgroundBudgetPoolThrottlingState();
 
+  TraceableVariableController tracing_controller_;
   std::set<WebFrameSchedulerImpl*> frame_schedulers_;
   WebScheduler::InterventionReporter* intervention_reporter_;  // Not owned.
   RendererSchedulerImpl* renderer_scheduler_;
@@ -116,7 +120,7 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   bool nested_runloop_;
   CPUTimeBudgetPool* background_time_budget_pool_;  // Not owned.
   WebViewScheduler::WebViewSchedulerDelegate* delegate_;  // Not owned.
-  WTF::WeakPtrFactory<WebViewSchedulerImpl> weak_factory_;
+  base::WeakPtrFactory<WebViewSchedulerImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(WebViewSchedulerImpl);
 };

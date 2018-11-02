@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -84,7 +85,8 @@ std::unique_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner) {
   if (scanner->IsEnd())
     return nullptr;
 
-  std::unique_ptr<CreditCardField> credit_card_field(new CreditCardField);
+  // Using 'new' to access private constructor.
+  auto credit_card_field = base::WrapUnique(new CreditCardField());
   size_t saved_cursor = scanner->SaveCursor();
 
   // Credit card fields can appear in many different orders.
@@ -168,13 +170,14 @@ std::unique_ptr<FormField> CreditCardField::Parse(AutofillScanner* scanner) {
           scanner->Advance();
           return std::move(credit_card_field);
         } else {
-          // Put the scanner back to the field right after the current cvv.
+          // Chances that verification field is the first of a card are really
+          // low.
           scanner->Advance();
-          scanner->Advance();
+          credit_card_field->verification_ = nullptr;
         }
+      } else {
+        continue;
       }
-
-      continue;
     }
 
     // TODO(crbug.com/591816): Make sure parsing cc-numbers of type password

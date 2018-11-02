@@ -8,7 +8,6 @@
 
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/payments/contact_info_editor_view_controller.h"
@@ -16,6 +15,7 @@
 #include "chrome/browser/ui/views/payments/cvc_unmask_view_controller.h"
 #include "chrome/browser/ui/views/payments/error_message_view_controller.h"
 #include "chrome/browser/ui/views/payments/order_summary_view_controller.h"
+#include "chrome/browser/ui/views/payments/payment_handler_web_flow_view_controller.h"
 #include "chrome/browser/ui/views/payments/payment_method_view_controller.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
 #include "chrome/browser/ui/views/payments/payment_sheet_view_controller.h"
@@ -71,9 +71,9 @@ PaymentRequestDialogView::PaymentRequestDialogView(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   request->spec()->AddObserver(this);
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  view_stack_ = base::MakeUnique<ViewStack>();
+  view_stack_ = std::make_unique<ViewStack>();
   view_stack_->set_owned_by_client();
   AddChildView(view_stack_.get());
 
@@ -149,7 +149,7 @@ void PaymentRequestDialogView::CloseDialog() {
 
 void PaymentRequestDialogView::ShowErrorMessage() {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<ErrorMessageViewController>(
+                        std::make_unique<ErrorMessageViewController>(
                             request_->spec(), request_->state(), this),
                         &controller_map_),
                     /* animate = */ false);
@@ -157,6 +157,29 @@ void PaymentRequestDialogView::ShowErrorMessage() {
 
   if (observer_for_testing_)
     observer_for_testing_->OnErrorMessageShown();
+}
+
+void PaymentRequestDialogView::ShowProcessingSpinner() {
+  throbber_.Start();
+  throbber_overlay_.SetVisible(true);
+  if (observer_for_testing_)
+    observer_for_testing_->OnProcessingSpinnerShown();
+}
+
+bool PaymentRequestDialogView::IsInteractive() const {
+  return !throbber_overlay_.visible();
+}
+
+void PaymentRequestDialogView::ShowPaymentHandlerScreen(
+    const GURL& url,
+    PaymentHandlerOpenWindowCallback callback) {
+  view_stack_->Push(CreateViewAndInstallController(
+                        std::make_unique<PaymentHandlerWebFlowViewController>(
+                            request_->spec(), request_->state(), this,
+                            GetProfile(), url, std::move(callback)),
+                        &controller_map_),
+                    /* animate = */ true);
+  HideProcessingSpinner();
 }
 
 void PaymentRequestDialogView::OnStartUpdating(
@@ -220,7 +243,7 @@ void PaymentRequestDialogView::ShowContactProfileSheet() {
 
 void PaymentRequestDialogView::ShowOrderSummary() {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<OrderSummaryViewController>(
+                        std::make_unique<OrderSummaryViewController>(
                             request_->spec(), request_->state(), this),
                         &controller_map_),
                     /* animate = */ true);
@@ -230,7 +253,7 @@ void PaymentRequestDialogView::ShowOrderSummary() {
 
 void PaymentRequestDialogView::ShowPaymentMethodSheet() {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<PaymentMethodViewController>(
+                        std::make_unique<PaymentMethodViewController>(
                             request_->spec(), request_->state(), this),
                         &controller_map_),
                     /* animate = */ true);
@@ -251,7 +274,7 @@ void PaymentRequestDialogView::ShowShippingProfileSheet() {
 
 void PaymentRequestDialogView::ShowShippingOptionSheet() {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<ShippingOptionViewController>(
+                        std::make_unique<ShippingOptionViewController>(
                             request_->spec(), request_->state(), this),
                         &controller_map_),
                     /* animate = */ true);
@@ -265,7 +288,7 @@ void PaymentRequestDialogView::ShowCvcUnmaskPrompt(
         result_delegate,
     content::WebContents* web_contents) {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<CvcUnmaskViewController>(
+                        std::make_unique<CvcUnmaskViewController>(
                             request_->spec(), request_->state(), this,
                             credit_card, result_delegate, web_contents),
                         &controller_map_),
@@ -282,7 +305,7 @@ void PaymentRequestDialogView::ShowCreditCardEditor(
     autofill::CreditCard* credit_card) {
   view_stack_->Push(
       CreateViewAndInstallController(
-          base::MakeUnique<CreditCardEditorViewController>(
+          std::make_unique<CreditCardEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               next_ui_tag, std::move(on_edited), std::move(on_added),
               credit_card),
@@ -299,7 +322,7 @@ void PaymentRequestDialogView::ShowShippingAddressEditor(
     autofill::AutofillProfile* profile) {
   view_stack_->Push(
       CreateViewAndInstallController(
-          base::MakeUnique<ShippingAddressEditorViewController>(
+          std::make_unique<ShippingAddressEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               std::move(on_edited), std::move(on_added), profile),
           &controller_map_),
@@ -315,7 +338,7 @@ void PaymentRequestDialogView::ShowContactInfoEditor(
     autofill::AutofillProfile* profile) {
   view_stack_->Push(
       CreateViewAndInstallController(
-          base::MakeUnique<ContactInfoEditorViewController>(
+          std::make_unique<ContactInfoEditorViewController>(
               request_->spec(), request_->state(), this, back_navigation_type,
               std::move(on_edited), std::move(on_added), profile),
           &controller_map_),
@@ -329,14 +352,11 @@ void PaymentRequestDialogView::EditorViewUpdated() {
     observer_for_testing_->OnEditorViewUpdated();
 }
 
-void PaymentRequestDialogView::ShowProcessingSpinner() {
-  throbber_.Start();
-  throbber_overlay_.SetVisible(true);
-}
-
 void PaymentRequestDialogView::HideProcessingSpinner() {
   throbber_.Stop();
   throbber_overlay_.SetVisible(false);
+  if (observer_for_testing_)
+    observer_for_testing_->OnProcessingSpinnerHidden();
 }
 
 Profile* PaymentRequestDialogView::GetProfile() {
@@ -346,7 +366,7 @@ Profile* PaymentRequestDialogView::GetProfile() {
 
 void PaymentRequestDialogView::ShowInitialPaymentSheet() {
   view_stack_->Push(CreateViewAndInstallController(
-                        base::MakeUnique<PaymentSheetViewController>(
+                        std::make_unique<PaymentSheetViewController>(
                             request_->spec(), request_->state(), this),
                         &controller_map_),
                     /* animate = */ false);
@@ -371,8 +391,8 @@ void PaymentRequestDialogView::SetupSpinnerOverlay() {
   // would be under it.
   throbber_overlay_.SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
 
-  views::GridLayout* layout =
-      views::GridLayout::CreateAndInstall(&throbber_overlay_);
+  views::GridLayout* layout = throbber_overlay_.SetLayoutManager(
+      std::make_unique<views::GridLayout>(&throbber_overlay_));
   views::ColumnSet* throbber_columns = layout->AddColumnSet(0);
   throbber_columns->AddPaddingColumn(0.5, 0);
   throbber_columns->AddColumn(views::GridLayout::Alignment::CENTER,

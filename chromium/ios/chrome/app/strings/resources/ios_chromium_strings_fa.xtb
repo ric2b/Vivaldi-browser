@@ -3,6 +3,7 @@
 <translationbundle lang="fa">
 <translation id="102360288709523007">‏‫با ارسال آمار کاربرد و گزارش‌های خرابی به Google، به بهبود Chromium کمک کنید.</translation>
 <translation id="1185134272377778587">‏درباره Chromium</translation>
+<translation id="1289966288285062467">‏اعلان حریم خصوصی Chromium</translation>
 <translation id="1472013873724362412">‏حساب شما در Chromium کار نمی‌کند. لطفاً با سرپرست دامنه‌تان تماس بگیرید یا از یک حساب Google معمولی برای ثبت ورود استفاده کنید.</translation>
 <translation id="1736662517232558588">‏داده‌های Chromium پاک شد</translation>
 <translation id="1838412507805038478">‏Chromium تأیید کرد که <ph name="ISSUER" /> گواهینامه این وب‌سایت را صادر کرده است.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">‏از Chromium خارج می‌شوید؟</translation>
 <translation id="6424492062988593837">‏Chromium بهتر شده است! نسخه جدید آن در دسترس است.</translation>
 <translation id="6604711459180487467">‏تجربه بهتری از Chromium بر مبنای مکانتان کسب کنید.</translation>
+<translation id="6626296268883197964">‏استفاده از این برنامه به‌معنای اعلام موافقت شما با <ph name="BEGIN_LINK_TOS" />شرایط و ضوابط<ph name="END_LINK_TOS" /> و <ph name="BEGIN_LINK_PRIVACY" />اعلان حریم خصوصی<ph name="END_LINK_PRIVACY" /> Chromium است.</translation>
 <translation id="7099326575020694068">‏Chromium نمی‌تواند از دوربین درحالت Split View (نمای تقسیم) استفاده کند</translation>
-<translation id="7144758435978427212">‏صفحه‌های وبی را که توسط اشیای اطراف ارسال می‌شوند کشف کنید. وقتی بلوتوث روشن است، Chromium می‌تواند صفحه‌های وب مرتبط با اشیای اطراف شما را جمع‌آوری کند و برای پیدا کردن مفیدترینشان، آن صفحه‌ها را به‌صورت ناشناس به Google ارسال کند. <ph name="BEGIN_LINK" />بیشتر بدانید<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">‏Chromium با آوردن حساب‌هایتان به وب، در وقت شما صرفه‌جویی می‌کند. در «تنظیمات» می‌توانید حساب‌ها را اضافه یا حذف کنید.</translation>
 <translation id="7269362888766543920">‏برخی از افزونه‌ها باعث خرابی Chromium می‌شوند. لطفاً آن‌ها را حذف نصب کنید.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">‏استفاده از Chromium در همه‌جا</translation>
 <translation id="7674213385180944843">‏Settings (تنظیمات) &gt; Privacy (حریم خصوصی) &gt; Camera (دوربین) &gt; Chromium را باز کنید و دوربین را روشن کنید.</translation>
 <translation id="786327964234957808">‏هم‌اکنون درحال تغییر حساب‌های همگام‌سازی از <ph name="USER_EMAIL1" /> به <ph name="USER_EMAIL2" /> هستید. داده‌های موجود Chromium شما توسط <ph name="DOMAIN" /> مدیریت می‌شوند. با این کار، داده‌هایتان از این دستگاه حذف می‌شود اما همچنان در <ph name="USER_EMAIL1" /> باقی می‌ماند.</translation>
-<translation id="8111736072665034317">‏با استفاده از این برنامه، با <ph name="BEGIN_LINK" />شرایط و ضوابط<ph name="END_LINK" /> Chromium موافقت می‌کنید.</translation>
 <translation id="8175055321229419309">‏نکته: <ph name="BEGIN_LINK" />Chromium را به لنگرگاهتان انتقال دهید<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">‏با استفاده از مکانتان در Chromium، تجربه بهتری از Google داشته باشید.</translation>
 <translation id="8353224596138547809">‏آیا می‌خواهید Chromium گذرواژه این سایت را ذخیره کند؟</translation>

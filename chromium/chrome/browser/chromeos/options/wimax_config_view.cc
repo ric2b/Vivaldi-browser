@@ -7,10 +7,10 @@
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/chromeos/enrollment_dialog_view.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/net/shill_error.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ash/network/enrollment_dialog_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "chromeos/login/login_state.h"
@@ -212,7 +212,8 @@ void WimaxConfigView::Init() {
   WifiConfigView::ParseUIProperty(
       &passphrase_ui_data_, wimax, ::onc::wifi::kPassphrase);
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   const int column_view_set_id = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(column_view_set_id);

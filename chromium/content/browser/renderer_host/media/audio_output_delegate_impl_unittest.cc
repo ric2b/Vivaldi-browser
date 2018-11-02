@@ -27,6 +27,8 @@
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/media_switches.h"
+#include "media/mojo/interfaces/audio_output_stream.mojom.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -103,6 +105,17 @@ class DummyAudioOutputStream : public media::AudioOutputStream {
   void Close() override {}
 };
 
+class MockAudioOutputStreamObserver
+    : public media::mojom::AudioOutputStreamObserver {
+ public:
+  ~MockAudioOutputStreamObserver() override = default;
+
+  // media::mojom::AudioOutputStreamObserver implementation
+  MOCK_METHOD0(DidStartPlaying, void());
+  MOCK_METHOD0(DidStopPlaying, void());
+  MOCK_METHOD1(DidChangeAudibleState, void(bool));
+};
+
 }  // namespace
 
 class AudioOutputDelegateTest : public testing::Test {
@@ -120,8 +133,26 @@ class AudioOutputDelegateTest : public testing::Test {
 
     audio_manager_.reset(new media::FakeAudioManager(
         std::make_unique<media::AudioThreadImpl>(), &log_factory_));
+    audio_log_ = log_factory_.CreateAudioLog(
+        media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER);
   }
+
   ~AudioOutputDelegateTest() { audio_manager_->Shutdown(); }
+
+  mojo::StrongBindingPtr<media::mojom::AudioOutputStreamObserver>
+  CreateObserverBinding(
+      media::mojom::AudioOutputStreamObserverPtr* observer_ptr) {
+    return mojo::MakeStrongBinding(
+        std::make_unique<MockAudioOutputStreamObserver>(),
+        mojo::MakeRequest(observer_ptr));
+  }
+
+  MockAudioOutputStreamObserver& GetMockObserver(
+      mojo::StrongBindingPtr<media::mojom::AudioOutputStreamObserver>*
+          observer_binding) {
+    return *static_cast<MockAudioOutputStreamObserver*>(
+        (*observer_binding)->impl());
+  }
 
   // Test bodies are here, so that we can run them on the IO thread.
   void CreateTest(base::Closure done) {
@@ -130,17 +161,21 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(event_handler_, GotOnStreamCreated());
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       SyncWithAllThreads();
 
@@ -150,23 +185,42 @@ class AudioOutputDelegateTest : public testing::Test {
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, done);
   }
 
-  void PlayTest(base::Closure done) {
+  void PlayTest(base::Closure done, bool use_bound_observer) {
     EXPECT_CALL(media_observer_,
                 OnCreatingAudioStream(kRenderProcessId, kRenderFrameId));
     EXPECT_CALL(event_handler_, GotOnStreamCreated());
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    if (use_bound_observer) {
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying())
+          .Times(0);
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying())
+          .Times(0);
+    }
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
+      media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+      auto observer_binding = CreateObserverBinding(&observer_ptr);
+      if (use_bound_observer) {
+        InSequence s;
+        EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+        EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
+      }
+
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
+
+      if (!use_bound_observer)
+        observer_binding->Close();
 
       delegate.OnPlayStream();
 
@@ -184,17 +238,21 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(event_handler_, GotOnStreamCreated());
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       delegate.OnPauseStream();
 
@@ -216,13 +274,21 @@ class AudioOutputDelegateTest : public testing::Test {
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
+      media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+      auto observer_binding = CreateObserverBinding(&observer_ptr);
+      InSequence s;
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
+
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       delegate.OnPlayStream();
       delegate.OnPauseStream();
@@ -246,13 +312,19 @@ class AudioOutputDelegateTest : public testing::Test {
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
+      media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+      auto observer_binding = CreateObserverBinding(&observer_ptr);
+      InSequence s;
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+      EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
+
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       delegate.OnPlayStream();
       delegate.OnPlayStream();
@@ -271,6 +343,10 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(event_handler_, GotOnStreamCreated());
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     DummyAudioOutputStream stream;
     {
@@ -278,11 +354,11 @@ class AudioOutputDelegateTest : public testing::Test {
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       delegate.GetControllerForTesting()->StartDiverting(&stream);
 
@@ -307,11 +383,10 @@ class AudioOutputDelegateTest : public testing::Test {
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), nullptr, kDefaultDeviceId);
 
       delegate.GetControllerForTesting()->StartDiverting(&stream);
 
@@ -332,6 +407,11 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(event_handler_, GotOnStreamCreated());
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    InSequence s;
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
 
     DummyAudioOutputStream stream;
     {
@@ -339,11 +419,11 @@ class AudioOutputDelegateTest : public testing::Test {
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       delegate.OnPlayStream();
       delegate.GetControllerForTesting()->StartDiverting(&stream);
@@ -371,16 +451,18 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
     EXPECT_CALL(mirroring_manager_, RemoveDiverter(NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying());
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying());
 
     auto socket = std::make_unique<base::CancelableSyncSocket>();
     auto reader = AudioSyncReader::Create(Params(), socket.get());
     auto delegate = std::make_unique<AudioOutputDelegateImpl>(
         std::move(reader), std::move(socket), &event_handler_,
-        audio_manager_.get(),
-        log_factory_.CreateAudioLog(
-            media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
-        &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-        kRenderProcessId, Params(), kDefaultDeviceId);
+        audio_manager_.get(), audio_log_.get(), &mirroring_manager_,
+        &media_observer_, kStreamId, kRenderFrameId, kRenderProcessId, Params(),
+        std::move(observer_ptr), kDefaultDeviceId);
 
     delegate->OnPlayStream();
     delegate->GetControllerForTesting()->OnError();
@@ -400,17 +482,19 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
     EXPECT_CALL(mirroring_manager_, RemoveDiverter(NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
-          &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          audio_manager_.get(), audio_log_.get(), &mirroring_manager_,
+          &media_observer_, kStreamId, kRenderFrameId, kRenderProcessId,
+          Params(), std::move(observer_ptr), kDefaultDeviceId);
     }
     SyncWithAllThreads();
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE, done);
@@ -423,17 +507,21 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
     EXPECT_CALL(mirroring_manager_, RemoveDiverter(NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
 
       SyncWithAllThreads();
 
@@ -450,17 +538,21 @@ class AudioOutputDelegateTest : public testing::Test {
     EXPECT_CALL(mirroring_manager_,
                 AddDiverter(kRenderProcessId, kRenderFrameId, NotNull()));
     EXPECT_CALL(mirroring_manager_, RemoveDiverter(NotNull()));
+    media::mojom::AudioOutputStreamObserverPtr observer_ptr;
+    auto observer_binding = CreateObserverBinding(&observer_ptr);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStartPlaying()).Times(0);
+    EXPECT_CALL(GetMockObserver(&observer_binding), DidStopPlaying()).Times(0);
 
     {
       auto socket = std::make_unique<base::CancelableSyncSocket>();
       auto reader = AudioSyncReader::Create(Params(), socket.get());
       AudioOutputDelegateImpl delegate(
           std::move(reader), std::move(socket), &event_handler_,
-          audio_manager_.get(),
-          log_factory_.CreateAudioLog(
-              media::AudioLogFactory::AUDIO_OUTPUT_CONTROLLER),
+          audio_manager_.get(), audio_log_.get(),
+
           &mirroring_manager_, &media_observer_, kStreamId, kRenderFrameId,
-          kRenderProcessId, Params(), kDefaultDeviceId);
+          kRenderProcessId, Params(), std::move(observer_ptr),
+          kDefaultDeviceId);
       SyncWithAllThreads();
 
       delegate.GetControllerForTesting()->OnError();
@@ -476,6 +568,7 @@ class AudioOutputDelegateTest : public testing::Test {
   StrictMock<MockEventHandler> event_handler_;
   StrictMock<MockObserver> media_observer_;
   media::FakeAudioLogFactory log_factory_;
+  std::unique_ptr<media::AudioLog> audio_log_;
 
  private:
   void SyncWithAllThreads() {
@@ -521,7 +614,16 @@ TEST_F(AudioOutputDelegateTest, Play) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&AudioOutputDelegateTest::PlayTest, base::Unretained(this),
-                     l.QuitClosure()));
+                     l.QuitClosure(), true /* use_bound_observer */));
+  l.Run();
+}
+
+TEST_F(AudioOutputDelegateTest, PlayWithUnboundObserver) {
+  base::RunLoop l;
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&AudioOutputDelegateTest::PlayTest, base::Unretained(this),
+                     l.QuitClosure(), false /* use_bound_observer */));
   l.Run();
 }
 

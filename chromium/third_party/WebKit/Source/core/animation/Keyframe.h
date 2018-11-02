@@ -64,11 +64,12 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
   USING_FAST_MALLOC(Keyframe);
 
  public:
-  virtual ~Keyframe() {}
+  virtual ~Keyframe() = default;
 
   // TODO(smcgruer): The keyframe offset should be immutable.
-  void SetOffset(double offset) { offset_ = offset; }
-  double Offset() const { return offset_; }
+  void SetOffset(WTF::Optional<double> offset) { offset_ = offset; }
+  WTF::Optional<double> Offset() const { return offset_; }
+  double CheckedOffset() const { return offset_.value(); }
 
   // TODO(smcgruer): The keyframe composite operation should be immutable.
   void SetComposite(EffectModel::CompositeOperation composite) {
@@ -120,7 +121,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
     USING_FAST_MALLOC(PropertySpecificKeyframe);
 
    public:
-    virtual ~PropertySpecificKeyframe() {}
+    virtual ~PropertySpecificKeyframe() = default;
     double Offset() const { return offset_; }
     TimingFunction& Easing() const { return *easing_; }
     EffectModel::CompositeOperation Composite() const { return composite_; }
@@ -191,10 +192,8 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
 
  protected:
   Keyframe()
-      : offset_(NullValue()),
-        composite_(),
-        easing_(LinearTimingFunction::Shared()) {}
-  Keyframe(double offset,
+      : offset_(), composite_(), easing_(LinearTimingFunction::Shared()) {}
+  Keyframe(WTF::Optional<double> offset,
            WTF::Optional<EffectModel::CompositeOperation> composite,
            scoped_refptr<TimingFunction> easing)
       : offset_(offset), composite_(composite), easing_(std::move(easing)) {
@@ -202,7 +201,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
       easing_ = LinearTimingFunction::Shared();
   }
 
-  double offset_;
+  WTF::Optional<double> offset_;
   WTF::Optional<EffectModel::CompositeOperation> composite_;
   scoped_refptr<TimingFunction> easing_;
   DISALLOW_COPY_AND_ASSIGN(Keyframe);

@@ -72,7 +72,6 @@ class MockNavigationManagerDelegate : public NavigationManagerDelegate {
 
   MOCK_METHOD0(ClearTransientContent, void());
   MOCK_METHOD0(RecordPageStateInNavigationItem, void());
-  MOCK_METHOD1(WillLoadCurrentItemWithUrl, void(const GURL&));
   MOCK_METHOD1(OnGoToIndexSameDocumentNavigation,
                void(NavigationInitiationType type));
   MOCK_METHOD0(WillChangeUserAgentType, void());
@@ -82,6 +81,7 @@ class MockNavigationManagerDelegate : public NavigationManagerDelegate {
   MOCK_METHOD1(OnNavigationItemsPruned, void(size_t));
   MOCK_METHOD0(OnNavigationItemChanged, void());
   MOCK_METHOD1(OnNavigationItemCommitted, void(const LoadCommittedDetails&));
+  MOCK_METHOD0(RemoveWebView, void());
 
  private:
   WebState* GetWebState() override { return nullptr; }
@@ -2122,14 +2122,12 @@ TEST_P(NavigationManagerTest, VisibleItemDefaultsToLastCommittedItem) {
 TEST_P(NavigationManagerTest, LoadURLWithParamsWithExtraHeadersAndPostData) {
   NavigationManager::WebLoadParams params(GURL("http://www.url.com/0"));
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
-  params.extra_headers.reset(@{@"Content-Type" : @"text/plain"});
-  params.post_data.reset([NSData data]);
+  params.extra_headers = @{@"Content-Type" : @"text/plain"};
+  params.post_data = [NSData data];
 
   EXPECT_CALL(navigation_manager_delegate(), RecordPageStateInNavigationItem())
       .Times(1);
   EXPECT_CALL(navigation_manager_delegate(), ClearTransientContent()).Times(1);
-  EXPECT_CALL(navigation_manager_delegate(),
-              WillLoadCurrentItemWithUrl(::testing::Ref(params.url)));
   EXPECT_CALL(navigation_manager_delegate(), LoadCurrentItem()).Times(1);
 
   navigation_manager()->LoadURLWithParams(params);
@@ -2161,8 +2159,6 @@ TEST_P(NavigationManagerTest, LoadURLWithParamsSavesStateOnCurrentItem) {
   EXPECT_CALL(navigation_manager_delegate(), RecordPageStateInNavigationItem())
       .Times(1);
   EXPECT_CALL(navigation_manager_delegate(), ClearTransientContent()).Times(1);
-  EXPECT_CALL(navigation_manager_delegate(),
-              WillLoadCurrentItemWithUrl(::testing::Ref(params.url)));
   EXPECT_CALL(navigation_manager_delegate(), LoadCurrentItem()).Times(1);
 
   navigation_manager()->LoadURLWithParams(params);
@@ -2232,6 +2228,8 @@ TEST_P(NavigationManagerTest, GoToIndexDifferentDocument) {
 
   EXPECT_EQ(1, navigation_manager()->GetLastCommittedItemIndex());
   EXPECT_EQ(-1, navigation_manager()->GetPendingItemIndex());
+  EXPECT_FALSE(navigation_manager()->GetItemAtIndex(0)->GetTransitionType() &
+               ui::PAGE_TRANSITION_FORWARD_BACK);
 
   EXPECT_CALL(navigation_manager_delegate(), RecordPageStateInNavigationItem());
   EXPECT_CALL(navigation_manager_delegate(), ClearTransientContent());
@@ -2247,6 +2245,8 @@ TEST_P(NavigationManagerTest, GoToIndexDifferentDocument) {
   }
 
   navigation_manager()->GoToIndex(0);
+  EXPECT_TRUE(navigation_manager()->GetItemAtIndex(0)->GetTransitionType() &
+              ui::PAGE_TRANSITION_FORWARD_BACK);
 
   if (GetParam() == TEST_LEGACY_NAVIGATION_MANAGER) {
     // Since LoadCurrentItem() is noop in test, we can only verify that the
@@ -2277,6 +2277,8 @@ TEST_P(NavigationManagerTest, GoToIndexSameDocument) {
 
   EXPECT_EQ(1, navigation_manager()->GetLastCommittedItemIndex());
   EXPECT_EQ(-1, navigation_manager()->GetPendingItemIndex());
+  EXPECT_FALSE(navigation_manager()->GetItemAtIndex(0)->GetTransitionType() &
+               ui::PAGE_TRANSITION_FORWARD_BACK);
 
   EXPECT_CALL(navigation_manager_delegate(), RecordPageStateInNavigationItem());
   EXPECT_CALL(navigation_manager_delegate(), ClearTransientContent());
@@ -2291,6 +2293,8 @@ TEST_P(NavigationManagerTest, GoToIndexSameDocument) {
   }
 
   navigation_manager()->GoToIndex(0);
+  EXPECT_TRUE(navigation_manager()->GetItemAtIndex(0)->GetTransitionType() &
+              ui::PAGE_TRANSITION_FORWARD_BACK);
 
   if (GetParam() == TEST_LEGACY_NAVIGATION_MANAGER) {
     EXPECT_EQ(0, navigation_manager()->GetLastCommittedItemIndex());
@@ -2318,6 +2322,8 @@ TEST_P(NavigationManagerTest, GoToIndexDifferentUserAgentType) {
 
   EXPECT_CALL(navigation_manager_delegate(), WillChangeUserAgentType());
   navigation_manager()->GoToIndex(0);
+  EXPECT_TRUE(navigation_manager()->GetItemAtIndex(0)->GetTransitionType() &
+              ui::PAGE_TRANSITION_FORWARD_BACK);
 }
 
 TEST_P(NavigationManagerTest, LoadIfNecessary) {

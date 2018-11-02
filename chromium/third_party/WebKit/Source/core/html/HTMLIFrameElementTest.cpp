@@ -13,7 +13,7 @@ namespace blink {
 
 class HTMLIFrameElementTest : public ::testing::Test {
  public:
-  scoped_refptr<SecurityOrigin> GetOriginForFeaturePolicy(
+  scoped_refptr<const SecurityOrigin> GetOriginForFeaturePolicy(
       HTMLIFrameElement* element) {
     return element->GetOriginForFeaturePolicy();
   }
@@ -23,14 +23,14 @@ class HTMLIFrameElementTest : public ::testing::Test {
 // and that frames which should inherit their parent document's origin do so.
 TEST_F(HTMLIFrameElementTest, FramesUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
   HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
 
   frame_element->setAttribute(HTMLNames::srcAttr, "about:blank");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_TRUE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -53,7 +53,7 @@ TEST_F(HTMLIFrameElementTest, FramesUseCorrectOrigin) {
 // sandboxed iframe.
 TEST_F(HTMLIFrameElementTest, SandboxFramesUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -61,7 +61,7 @@ TEST_F(HTMLIFrameElementTest, SandboxFramesUseCorrectOrigin) {
 
   frame_element->setAttribute(HTMLNames::sandboxAttr, "");
   frame_element->setAttribute(HTMLNames::srcAttr, "http://example.com/");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_FALSE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -78,7 +78,7 @@ TEST_F(HTMLIFrameElementTest, SandboxFramesUseCorrectOrigin) {
 // parent document's origin for the container policy.
 TEST_F(HTMLIFrameElementTest, SameOriginSandboxFramesUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -86,7 +86,7 @@ TEST_F(HTMLIFrameElementTest, SameOriginSandboxFramesUseCorrectOrigin) {
 
   frame_element->setAttribute(HTMLNames::sandboxAttr, "allow-same-origin");
   frame_element->setAttribute(HTMLNames::srcAttr, "http://example.com/");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_TRUE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -97,14 +97,14 @@ TEST_F(HTMLIFrameElementTest, SameOriginSandboxFramesUseCorrectOrigin) {
 // container policy in a srcdoc iframe.
 TEST_F(HTMLIFrameElementTest, SrcdocFramesUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
   HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
 
   frame_element->setAttribute(HTMLNames::srcdocAttr, "<title>title</title>");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_TRUE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -114,7 +114,7 @@ TEST_F(HTMLIFrameElementTest, SrcdocFramesUseCorrectOrigin) {
 // sandboxed iframe with a srcdoc.
 TEST_F(HTMLIFrameElementTest, SandboxedSrcdocFramesUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -122,7 +122,7 @@ TEST_F(HTMLIFrameElementTest, SandboxedSrcdocFramesUseCorrectOrigin) {
 
   frame_element->setAttribute(HTMLNames::sandboxAttr, "");
   frame_element->setAttribute(HTMLNames::srcdocAttr, "<title>title</title>");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_FALSE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -133,7 +133,7 @@ TEST_F(HTMLIFrameElementTest, SandboxedSrcdocFramesUseCorrectOrigin) {
 // relative to the parent document.
 TEST_F(HTMLIFrameElementTest, RelativeURLsUseCorrectOrigin) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -141,7 +141,7 @@ TEST_F(HTMLIFrameElementTest, RelativeURLsUseCorrectOrigin) {
 
   // Host-relative URLs should resolve to the same domain as the parent.
   frame_element->setAttribute(HTMLNames::srcAttr, "index2.html");
-  scoped_refptr<SecurityOrigin> effective_origin =
+  scoped_refptr<const SecurityOrigin> effective_origin =
       GetOriginForFeaturePolicy(frame_element);
   EXPECT_TRUE(
       effective_origin->IsSameSchemeHostPort(document->GetSecurityOrigin()));
@@ -159,7 +159,7 @@ TEST_F(HTMLIFrameElementTest, RelativeURLsUseCorrectOrigin) {
 // Test that the correct container policy is constructed on an iframe element.
 TEST_F(HTMLIFrameElementTest, DefaultContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -177,7 +177,7 @@ TEST_F(HTMLIFrameElementTest, DefaultContainerPolicy) {
 // restricted to the domain in the src attribute.
 TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -238,7 +238,7 @@ TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
 // policy which is restricted to a unique origin.
 TEST_F(HTMLIFrameElementTest, SandboxAttributeContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -264,7 +264,7 @@ TEST_F(HTMLIFrameElementTest, SandboxAttributeContainerPolicy) {
 // containing document.
 TEST_F(HTMLIFrameElementTest, SameOriginSandboxAttributeContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -290,7 +290,7 @@ TEST_F(HTMLIFrameElementTest, SameOriginSandboxAttributeContainerPolicy) {
 // iframe element.
 TEST_F(HTMLIFrameElementTest, ConstructEmptyContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -305,7 +305,7 @@ TEST_F(HTMLIFrameElementTest, ConstructEmptyContainerPolicy) {
 // to enable features in the frame.
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicy) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -330,7 +330,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicy) {
 // is used to enable fullscreen in the frame.
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowFullscreen) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -348,7 +348,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowFullscreen) {
 // attribute is used to enable the paymentrequest API in the frame.
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowPaymentRequest) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -376,7 +376,7 @@ TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowPaymentRequest) {
 // allowpaymentrequest,) while fullscreen should be enabled for all origins.
 TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowAttributes) {
   Document* document = Document::CreateForTest();
-  KURL document_url = KURL(NullURL(), "http://example.com");
+  const KURL document_url("http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 

@@ -239,6 +239,14 @@ bool ShouldQuicEstimateInitialRtt(
       GetVariationParam(quic_trial_params, "estimate_initial_rtt"), "true");
 }
 
+bool ShouldQuicHeadersIncludeH2StreamDependencies(
+    const VariationParameters& quic_trial_params) {
+  return base::LowerCaseEqualsASCII(
+      GetVariationParam(quic_trial_params,
+                        "headers_include_h2_stream_dependency"),
+      "true");
+}
+
 bool ShouldQuicConnectUsingDefaultNetwork(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
@@ -274,6 +282,32 @@ bool ShouldQuicMigrateSessionsEarlyV2(
       GetVariationParam(quic_trial_params, "migrate_sessions_early_v2"),
       "true");
 }
+
+int GetQuicMaxTimeOnNonDefaultNetworkSeconds(
+    const VariationParameters& quic_trial_params) {
+  int value;
+  if (base::StringToInt(
+          GetVariationParam(quic_trial_params,
+                            "max_time_on_non_default_network_seconds"),
+          &value)) {
+    return value;
+  }
+  return 0;
+}
+
+int GetQuicMaxNumMigrationsToNonDefaultNetworkOnPathDegrading(
+    const VariationParameters& quic_trial_params) {
+  int value;
+  if (base::StringToInt(
+          GetVariationParam(
+              quic_trial_params,
+              "max_migrations_to_non_default_network_on_path_degrading"),
+          &value)) {
+    return value;
+  }
+  return 0;
+}
+
 bool ShouldQuicAllowServerMigration(
     const VariationParameters& quic_trial_params) {
   return base::LowerCaseEqualsASCII(
@@ -367,6 +401,8 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicRaceCertVerification(quic_trial_params);
     params->quic_estimate_initial_rtt =
         ShouldQuicEstimateInitialRtt(quic_trial_params);
+    params->quic_headers_include_h2_stream_dependency =
+        ShouldQuicHeadersIncludeH2StreamDependencies(quic_trial_params);
     params->quic_connect_using_default_network =
         ShouldQuicConnectUsingDefaultNetwork(quic_trial_params);
     params->quic_migrate_sessions_on_network_change =
@@ -377,6 +413,19 @@ void ConfigureQuicParams(base::StringPiece quic_trial_group,
         ShouldQuicMigrateSessionsOnNetworkChangeV2(quic_trial_params);
     params->quic_migrate_sessions_early_v2 =
         ShouldQuicMigrateSessionsEarlyV2(quic_trial_params);
+    int max_time_on_non_default_network_seconds =
+        GetQuicMaxTimeOnNonDefaultNetworkSeconds(quic_trial_params);
+    if (max_time_on_non_default_network_seconds > 0) {
+      params->quic_max_time_on_non_default_network =
+          base::TimeDelta::FromSeconds(max_time_on_non_default_network_seconds);
+    }
+    int max_migrations_to_non_default_network_on_path_degrading =
+        GetQuicMaxNumMigrationsToNonDefaultNetworkOnPathDegrading(
+            quic_trial_params);
+    if (max_migrations_to_non_default_network_on_path_degrading > 0) {
+      params->quic_max_migrations_to_non_default_network_on_path_degrading =
+          max_migrations_to_non_default_network_on_path_degrading;
+    }
     params->quic_allow_server_migration =
         ShouldQuicAllowServerMigration(quic_trial_params);
     params->quic_host_whitelist = GetQuicHostWhitelist(quic_trial_params);

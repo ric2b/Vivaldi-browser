@@ -19,7 +19,9 @@ MockMediaSource::MockMediaSource(const std::string& filename,
                                  size_t initial_append_size)
     : current_position_(0),
       initial_append_size_(initial_append_size),
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
       file_path_(GetTestDataFilePath(filename)),
+#endif
       mimetype_(mimetype),
       chunk_demuxer_(new ChunkDemuxer(
           base::Bind(&MockMediaSource::DemuxerOpened, base::Unretained(this)),

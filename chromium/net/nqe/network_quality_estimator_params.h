@@ -21,6 +21,11 @@ namespace net {
 // Forces NQE to return a specific effective connection type. Set using the
 // |params| provided to the NetworkQualityEstimatorParams constructor.
 NET_EXPORT extern const char kForceEffectiveConnectionType[];
+NET_EXPORT extern const char kEffectiveConnectionTypeSlow2GOnCellular[];
+
+// HTTP RTT thresholds for different effective connection types.
+NET_EXPORT extern const base::TimeDelta
+    kHttpRttEffectiveConnectionTypeThresholds[EFFECTIVE_CONNECTION_TYPE_LAST];
 
 // NetworkQualityEstimatorParams computes the configuration parameters for
 // the network quality estimator.
@@ -45,10 +50,6 @@ class NET_EXPORT NetworkQualityEstimatorParams {
   // value is obtained from |params|. If the value from |params| is unavailable,
   // a default value is used.
   EffectiveConnectionTypeAlgorithm GetEffectiveConnectionTypeAlgorithm() const;
-
-  // Returns a descriptive name corresponding to |connection_type|.
-  static const char* GetNameForConnectionType(
-      NetworkChangeNotifier::ConnectionType connection_type);
 
   // Returns the default observation for connection |type|. The default
   // observations are different for different connection types (e.g., 2G, 3G,
@@ -87,20 +88,13 @@ class NET_EXPORT NetworkQualityEstimatorParams {
     return weight_multiplier_per_signal_strength_level_;
   }
 
-  // Returns the fraction of URL requests that should record the correlation
-  // UMA.
-  double correlation_uma_logging_probability() const {
-    return correlation_uma_logging_probability_;
-  }
-
   // Returns an unset value if the effective connection type has not been forced
   // via the |params| provided to this class. Otherwise, returns a value set to
-  // the effective connection type that has been forced.
-  base::Optional<EffectiveConnectionType> forced_effective_connection_type()
-      const {
-    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    return forced_effective_connection_type_;
-  }
+  // the effective connection type that has been forced. Forced ECT can be
+  // forced based on |connection_type| (e.g. Slow-2G on cellular, and default on
+  // other connection type).
+  base::Optional<EffectiveConnectionType> GetForcedEffectiveConnectionType(
+      NetworkChangeNotifier::ConnectionType connection_type);
 
   void SetForcedEffectiveConnectionType(
       EffectiveConnectionType forced_effective_connection_type) {
@@ -139,6 +133,14 @@ class NET_EXPORT NetworkQualityEstimatorParams {
     effective_connection_type_algorithm_ = algorithm;
   }
 
+  // Number of bytes received during a throughput observation window of duration
+  // 1 HTTP RTT should be at least the value returned by this method times
+  // the typical size of a congestion window. If not, the throughput observation
+  // window is heuristically determined as hanging.
+  double throughput_hanging_requests_cwnd_size_multiplier() const {
+    return throughput_hanging_requests_cwnd_size_multiplier_;
+  }
+
   // Returns the multiplier by which the transport RTT should be multipled when
   // computing the HTTP RTT. The multiplied value of the transport RTT serves
   // as a lower bound to the HTTP RTT estimate. e.g., if the multiplied
@@ -155,6 +157,24 @@ class NET_EXPORT NetworkQualityEstimatorParams {
   // 100 msec. Returns a negative value if the param is not set.
   double upper_bound_http_rtt_transport_rtt_multiplier() const {
     return upper_bound_http_rtt_transport_rtt_multiplier_;
+  }
+
+  // For the purpose of estimating the HTTP RTT, a request is marked as hanging
+  // only if its RTT is at least this times the transport RTT estimate.
+  int hanging_request_http_rtt_upper_bound_transport_rtt_multiplier() const {
+    return hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_;
+  }
+
+  // For the purpose of estimating the HTTP RTT, a request is marked as hanging
+  // only if its RTT is at least this times the HTTP RTT estimate.
+  int hanging_request_http_rtt_upper_bound_http_rtt_multiplier() const {
+    return hanging_request_http_rtt_upper_bound_http_rtt_multiplier_;
+  }
+
+  // For the purpose of estimating the HTTP RTT, a request is marked as hanging
+  // only if its RTT is at least as much the value returned by this method.
+  base::TimeDelta hanging_request_upper_bound_min_http_rtt() const {
+    return hanging_request_upper_bound_min_http_rtt_;
   }
 
   // Returns the number of transport RTT observations that should be available
@@ -236,14 +256,18 @@ class NET_EXPORT NetworkQualityEstimatorParams {
 
   const size_t throughput_min_requests_in_flight_;
   const int throughput_min_transfer_size_kilobytes_;
+  const double throughput_hanging_requests_cwnd_size_multiplier_;
   const double weight_multiplier_per_second_;
   const double weight_multiplier_per_signal_strength_level_;
-  const double correlation_uma_logging_probability_;
   base::Optional<EffectiveConnectionType> forced_effective_connection_type_;
+  const bool forced_effective_connection_type_on_cellular_only_;
   bool persistent_cache_reading_enabled_;
   const base::TimeDelta min_socket_watcher_notification_interval_;
   const double lower_bound_http_rtt_transport_rtt_multiplier_;
   const double upper_bound_http_rtt_transport_rtt_multiplier_;
+  const int hanging_request_http_rtt_upper_bound_transport_rtt_multiplier_;
+  const int hanging_request_http_rtt_upper_bound_http_rtt_multiplier_;
+  const base::TimeDelta hanging_request_upper_bound_min_http_rtt_;
   const size_t http_rtt_transport_rtt_min_count_;
   const base::TimeDelta increase_in_transport_rtt_logging_interval_;
   const base::TimeDelta recent_time_threshold_;

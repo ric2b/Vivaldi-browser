@@ -31,7 +31,7 @@ UninstallView::UninstallView(int* user_selection,
       user_selection_(*user_selection),
       quit_closure_(quit_closure) {
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
-      views::TEXT, views::CONTROL));
+      views::TEXT, views::TEXT));
   SetupControls();
 }
 
@@ -47,7 +47,8 @@ void UninstallView::SetupControls() {
   using views::ColumnSet;
   using views::GridLayout;
 
-  GridLayout* layout = GridLayout::CreateAndInstall(this);
+  GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // Message to confirm uninstallation.
   int column_set_id = 0;

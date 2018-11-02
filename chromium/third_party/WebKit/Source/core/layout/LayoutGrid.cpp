@@ -45,7 +45,8 @@ struct ContentAlignmentData {
   STACK_ALLOCATED();
 
  public:
-  ContentAlignmentData(){};
+  ContentAlignmentData() = default;
+  ;
   ContentAlignmentData(LayoutUnit position, LayoutUnit distribution)
       : position_offset(position), distribution_offset(distribution) {}
 
@@ -62,7 +63,7 @@ LayoutGrid::LayoutGrid(Element* element)
     UseCounter::Count(GetDocument(), WebFeature::kCSSGridLayout);
 }
 
-LayoutGrid::~LayoutGrid() {}
+LayoutGrid::~LayoutGrid() = default;
 
 LayoutGrid* LayoutGrid::CreateAnonymous(Document* document) {
   LayoutGrid* layout_grid = new LayoutGrid(nullptr);
@@ -109,15 +110,17 @@ StyleSelfAlignmentData LayoutGrid::SelfAlignmentForChild(
 StyleSelfAlignmentData LayoutGrid::DefaultAlignment(
     GridAxis axis,
     const ComputedStyle& style) const {
-  return axis == kGridRowAxis ? style.ResolvedJustifyItems(kItemPositionNormal)
-                              : style.ResolvedAlignItems(kItemPositionNormal);
+  return axis == kGridRowAxis
+             ? style.ResolvedJustifyItems(ItemPosition::kNormal)
+             : style.ResolvedAlignItems(ItemPosition::kNormal);
 }
 
 bool LayoutGrid::DefaultAlignmentIsStretchOrNormal(
     GridAxis axis,
     const ComputedStyle& style) const {
   ItemPosition alignment = DefaultAlignment(axis, style).GetPosition();
-  return alignment == kItemPositionStretch || alignment == kItemPositionNormal;
+  return alignment == ItemPosition::kStretch ||
+         alignment == ItemPosition::kNormal;
 }
 
 bool LayoutGrid::SelfAlignmentChangedSize(GridAxis axis,
@@ -125,11 +128,11 @@ bool LayoutGrid::SelfAlignmentChangedSize(GridAxis axis,
                                           const ComputedStyle& new_style,
                                           const LayoutBox& child) const {
   return SelfAlignmentForChild(axis, child, &old_style).GetPosition() ==
-                 kItemPositionStretch
+                 ItemPosition::kStretch
              ? SelfAlignmentForChild(axis, child, &new_style).GetPosition() !=
-                   kItemPositionStretch
+                   ItemPosition::kStretch
              : SelfAlignmentForChild(axis, child, &new_style).GetPosition() ==
-                   kItemPositionStretch;
+                   ItemPosition::kStretch;
 }
 
 bool LayoutGrid::DefaultAlignmentChangedSize(
@@ -459,8 +462,9 @@ LayoutUnit LayoutGrid::GuttersSize(const Grid& grid,
   // If the startLine is the start line of a collapsed track we need to go
   // backwards till we reach a non collapsed track. If we find a non collapsed
   // track we need to add that gap.
+  size_t non_empty_tracks_before_start_line = 0;
   if (start_line && grid.IsEmptyAutoRepeatTrack(direction, start_line)) {
-    size_t non_empty_tracks_before_start_line = start_line;
+    non_empty_tracks_before_start_line = start_line;
     auto begin = grid.AutoRepeatEmptyTracks(direction)->begin();
     for (auto it = begin; *it != start_line; ++it) {
       DCHECK(non_empty_tracks_before_start_line);
@@ -485,8 +489,17 @@ LayoutUnit LayoutGrid::GuttersSize(const Grid& grid,
       DCHECK(non_empty_tracks_after_end_line);
       --non_empty_tracks_after_end_line;
     }
-    if (non_empty_tracks_after_end_line)
-      gap_accumulator += gap;
+    if (non_empty_tracks_after_end_line) {
+      // We shouldn't count the gap twice if the span starts and ends
+      // in a collapsed track bewtween two non-empty tracks.
+      if (!non_empty_tracks_before_start_line)
+        gap_accumulator += gap;
+    } else if (non_empty_tracks_before_start_line) {
+      // We shouldn't count the gap if the the span starts and ends in
+      // a collapsed but there isn't non-empty tracks afterwards (it's
+      // at the end of the grid).
+      gap_accumulator -= gap;
+    }
   }
 
   return gap_accumulator;
@@ -1145,7 +1158,7 @@ Vector<LayoutUnit> LayoutGrid::TrackSizesForComputedStyle(
 
 const StyleContentAlignmentData& LayoutGrid::ContentAlignmentNormalBehavior() {
   static const StyleContentAlignmentData kNormalBehavior = {
-      kContentPositionNormal, kContentDistributionStretch};
+      ContentPosition::kNormal, ContentDistributionType::kStretch};
   return kNormalBehavior;
 }
 
@@ -1225,7 +1238,9 @@ void LayoutGrid::LayoutGridItems() {
     LayoutRect grid_area_rect(
         GridAreaLogicalPosition(area),
         LayoutSize(child_grid_area_width, child_grid_area_height));
-    if (!grid_area_rect.Contains(child->FrameRect()))
+    LayoutRect child_overflow_rect = child->FrameRect();
+    child_overflow_rect.SetSize(child->VisualOverflowRect().Size());
+    if (!grid_area_rect.Contains(child_overflow_rect))
       grid_items_overflowing_grid_area_.push_back(child);
   }
 }
@@ -1375,13 +1390,13 @@ static LayoutUnit ComputeOverflowAlignmentOffset(OverflowAlignment overflow,
                                                  LayoutUnit child_size) {
   LayoutUnit offset = track_size - child_size;
   switch (overflow) {
-    case kOverflowAlignmentSafe:
+    case OverflowAlignment::kSafe:
       // If overflow is 'safe', we have to make sure we don't overflow the
       // 'start' edge (potentially cause some data loss as the overflow is
       // unreachable).
       return offset.ClampNegativeToZero();
-    case kOverflowAlignmentUnsafe:
-    case kOverflowAlignmentDefault:
+    case OverflowAlignment::kUnsafe:
+    case OverflowAlignment::kDefault:
       // If we overflow our alignment container and overflow is 'true'
       // (default), we ignore the overflow and just return the value regardless
       // (which may cause data loss as we overflow the 'start' edge).
@@ -1817,11 +1832,12 @@ GridAxisPosition LayoutGrid::ColumnAxisPositionForChild(
   bool has_same_writing_mode =
       child.StyleRef().GetWritingMode() == StyleRef().GetWritingMode();
   bool child_is_ltr = child.StyleRef().IsLeftToRightDirection();
-  if (!HasStaticPositionForChild(child, kForRows))
+  if (child.IsOutOfFlowPositioned() &&
+      !HasStaticPositionForChild(child, kForRows))
     return kGridAxisStart;
 
   switch (AlignSelfForChild(child).GetPosition()) {
-    case kItemPositionSelfStart:
+    case ItemPosition::kSelfStart:
       // TODO (lajava): Should we implement this logic in a generic utility
       // function?
       // Aligns the alignment subject to be flush with the edge of the alignment
@@ -1838,7 +1854,7 @@ GridAxisPosition LayoutGrid::ColumnAxisPositionForChild(
       // self-start is based on the child's block-flow direction. That's why we
       // need to check against the grid container's block-flow direction.
       return has_same_writing_mode ? kGridAxisStart : kGridAxisEnd;
-    case kItemPositionSelfEnd:
+    case ItemPosition::kSelfEnd:
       // TODO (lajava): Should we implement this logic in a generic utility
       // function?
       // Aligns the alignment subject to be flush with the edge of the alignment
@@ -1855,37 +1871,37 @@ GridAxisPosition LayoutGrid::ColumnAxisPositionForChild(
       // self-end is based on the child's block-flow direction. That's why we
       // need to check against the grid container's block-flow direction.
       return has_same_writing_mode ? kGridAxisEnd : kGridAxisStart;
-    case kItemPositionLeft:
+    case ItemPosition::kLeft:
       // Aligns the alignment subject to be flush with the alignment container's
       // 'line-left' edge. The alignment axis (column axis) is always orthogonal
       // to the inline axis, hence this value behaves as 'start'.
       return kGridAxisStart;
-    case kItemPositionRight:
+    case ItemPosition::kRight:
       // Aligns the alignment subject to be flush with the alignment container's
       // 'line-right' edge. The alignment axis (column axis) is always
       // orthogonal to the inline axis, hence this value behaves as 'start'.
       return kGridAxisStart;
-    case kItemPositionCenter:
+    case ItemPosition::kCenter:
       return kGridAxisCenter;
     // Only used in flex layout, otherwise equivalent to 'start'.
-    case kItemPositionFlexStart:
+    case ItemPosition::kFlexStart:
     // Aligns the alignment subject to be flush with the alignment container's
     // 'start' edge (block-start) in the column axis.
-    case kItemPositionStart:
+    case ItemPosition::kStart:
       return kGridAxisStart;
     // Only used in flex layout, otherwise equivalent to 'end'.
-    case kItemPositionFlexEnd:
+    case ItemPosition::kFlexEnd:
     // Aligns the alignment subject to be flush with the alignment container's
     // 'end' edge (block-end) in the column axis.
-    case kItemPositionEnd:
+    case ItemPosition::kEnd:
       return kGridAxisEnd;
-    case kItemPositionStretch:
+    case ItemPosition::kStretch:
       return kGridAxisStart;
-    case kItemPositionBaseline:
-    case kItemPositionLastBaseline:
+    case ItemPosition::kBaseline:
+    case ItemPosition::kLastBaseline:
       return kGridAxisStart;
-    case kItemPositionAuto:
-    case kItemPositionNormal:
+    case ItemPosition::kAuto:
+    case ItemPosition::kNormal:
       break;
   }
 
@@ -1898,11 +1914,12 @@ GridAxisPosition LayoutGrid::RowAxisPositionForChild(
   bool has_same_direction =
       child.StyleRef().Direction() == StyleRef().Direction();
   bool grid_is_ltr = StyleRef().IsLeftToRightDirection();
-  if (!HasStaticPositionForChild(child, kForColumns))
+  if (child.IsOutOfFlowPositioned() &&
+      !HasStaticPositionForChild(child, kForColumns))
     return kGridAxisStart;
 
   switch (JustifySelfForChild(child).GetPosition()) {
-    case kItemPositionSelfStart:
+    case ItemPosition::kSelfStart:
       // TODO (lajava): Should we implement this logic in a generic utility
       // function?
       // Aligns the alignment subject to be flush with the edge of the alignment
@@ -1918,7 +1935,7 @@ GridAxisPosition LayoutGrid::RowAxisPositionForChild(
       // self-start is based on the child's inline-flow direction. That's why we
       // need to check against the grid container's direction.
       return has_same_direction ? kGridAxisStart : kGridAxisEnd;
-    case kItemPositionSelfEnd:
+    case ItemPosition::kSelfEnd:
       // TODO (lajava): Should we implement this logic in a generic utility
       // function?
       // Aligns the alignment subject to be flush with the edge of the alignment
@@ -1934,37 +1951,37 @@ GridAxisPosition LayoutGrid::RowAxisPositionForChild(
       // self-end is based on the child's inline-flow direction. That's why we
       // need to check against the grid container's direction.
       return has_same_direction ? kGridAxisEnd : kGridAxisStart;
-    case kItemPositionLeft:
+    case ItemPosition::kLeft:
       // Aligns the alignment subject to be flush with the alignment container's
       // 'line-left' edge. We want the physical 'left' side, so we have to take
       // account, container's inline-flow direction.
       return grid_is_ltr ? kGridAxisStart : kGridAxisEnd;
-    case kItemPositionRight:
+    case ItemPosition::kRight:
       // Aligns the alignment subject to be flush with the alignment container's
       // 'line-right' edge. We want the physical 'right' side, so we have to
       // take account, container's inline-flow direction.
       return grid_is_ltr ? kGridAxisEnd : kGridAxisStart;
-    case kItemPositionCenter:
+    case ItemPosition::kCenter:
       return kGridAxisCenter;
     // Only used in flex layout, otherwise equivalent to 'start'.
-    case kItemPositionFlexStart:
+    case ItemPosition::kFlexStart:
     // Aligns the alignment subject to be flush with the alignment container's
     // 'start' edge (inline-start) in the row axis.
-    case kItemPositionStart:
+    case ItemPosition::kStart:
       return kGridAxisStart;
     // Only used in flex layout, otherwise equivalent to 'end'.
-    case kItemPositionFlexEnd:
+    case ItemPosition::kFlexEnd:
     // Aligns the alignment subject to be flush with the alignment container's
     // 'end' edge (inline-end) in the row axis.
-    case kItemPositionEnd:
+    case ItemPosition::kEnd:
       return kGridAxisEnd;
-    case kItemPositionStretch:
+    case ItemPosition::kStretch:
       return kGridAxisStart;
-    case kItemPositionBaseline:
-    case kItemPositionLastBaseline:
+    case ItemPosition::kBaseline:
+    case ItemPosition::kLastBaseline:
       return kGridAxisStart;
-    case kItemPositionAuto:
-    case kItemPositionNormal:
+    case ItemPosition::kAuto:
+    case ItemPosition::kNormal:
       break;
   }
 
@@ -2050,11 +2067,12 @@ LayoutUnit LayoutGrid::ResolveAutoStartGridPosition(
   int last_line = NumTracks(kForColumns, grid_);
   ContentPosition position = StyleRef().ResolvedJustifyContentPosition(
       ContentAlignmentNormalBehavior());
-  if (position == kContentPositionEnd)
+  if (position == ContentPosition::kEnd)
     return column_positions_[last_line] - ClientLogicalWidth();
-  if (position == kContentPositionStart ||
+  if (position == ContentPosition::kStart ||
       StyleRef().ResolvedJustifyContentDistribution(
-          ContentAlignmentNormalBehavior()) == kContentDistributionStretch)
+          ContentAlignmentNormalBehavior()) ==
+          ContentDistributionType::kStretch)
     return column_positions_[0] - BorderAndPaddingLogicalLeft();
   return LayoutUnit();
 }
@@ -2069,11 +2087,12 @@ LayoutUnit LayoutGrid::ResolveAutoEndGridPosition(
   int last_line = NumTracks(kForColumns, grid_);
   ContentPosition position = StyleRef().ResolvedJustifyContentPosition(
       ContentAlignmentNormalBehavior());
-  if (position == kContentPositionEnd)
+  if (position == ContentPosition::kEnd)
     return column_positions_[last_line];
-  if (position == kContentPositionStart ||
+  if (position == ContentPosition::kStart ||
       StyleRef().ResolvedJustifyContentDistribution(
-          ContentAlignmentNormalBehavior()) == kContentDistributionStretch) {
+          ContentAlignmentNormalBehavior()) ==
+          ContentDistributionType::kStretch) {
     return column_positions_[0] - BorderAndPaddingLogicalLeft() +
            ClientLogicalWidth();
   }
@@ -2225,20 +2244,20 @@ void LayoutGrid::GridAreaPositionForChild(const LayoutBox& child,
 ContentPosition static ResolveContentDistributionFallback(
     ContentDistributionType distribution) {
   switch (distribution) {
-    case kContentDistributionSpaceBetween:
-      return kContentPositionStart;
-    case kContentDistributionSpaceAround:
-      return kContentPositionCenter;
-    case kContentDistributionSpaceEvenly:
-      return kContentPositionCenter;
-    case kContentDistributionStretch:
-      return kContentPositionStart;
-    case kContentDistributionDefault:
-      return kContentPositionNormal;
+    case ContentDistributionType::kSpaceBetween:
+      return ContentPosition::kStart;
+    case ContentDistributionType::kSpaceAround:
+      return ContentPosition::kCenter;
+    case ContentDistributionType::kSpaceEvenly:
+      return ContentPosition::kCenter;
+    case ContentDistributionType::kStretch:
+      return ContentPosition::kStart;
+    case ContentDistributionType::kDefault:
+      return ContentPosition::kNormal;
   }
 
   NOTREACHED();
-  return kContentPositionNormal;
+  return ContentPosition::kNormal;
 }
 
 static ContentAlignmentData ContentDistributionOffset(
@@ -2246,8 +2265,8 @@ static ContentAlignmentData ContentDistributionOffset(
     ContentPosition& fallback_position,
     ContentDistributionType distribution,
     unsigned number_of_grid_tracks) {
-  if (distribution != kContentDistributionDefault &&
-      fallback_position == kContentPositionNormal)
+  if (distribution != ContentDistributionType::kDefault &&
+      fallback_position == ContentPosition::kNormal)
     fallback_position = ResolveContentDistributionFallback(distribution);
 
   if (available_free_space <= 0)
@@ -2255,20 +2274,20 @@ static ContentAlignmentData ContentDistributionOffset(
 
   LayoutUnit distribution_offset;
   switch (distribution) {
-    case kContentDistributionSpaceBetween:
+    case ContentDistributionType::kSpaceBetween:
       if (number_of_grid_tracks < 2)
         return {};
       return {LayoutUnit(), available_free_space / (number_of_grid_tracks - 1)};
-    case kContentDistributionSpaceAround:
+    case ContentDistributionType::kSpaceAround:
       if (number_of_grid_tracks < 1)
         return {};
       distribution_offset = available_free_space / number_of_grid_tracks;
       return {distribution_offset / 2, distribution_offset};
-    case kContentDistributionSpaceEvenly:
+    case ContentDistributionType::kSpaceEvenly:
       distribution_offset = available_free_space / (number_of_grid_tracks + 1);
       return {distribution_offset, distribution_offset};
-    case kContentDistributionStretch:
-    case kContentDistributionDefault:
+    case ContentDistributionType::kStretch:
+    case ContentDistributionType::kDefault:
       return {};
   }
 
@@ -2303,39 +2322,39 @@ ContentAlignmentData LayoutGrid::ComputeContentPositionAndDistributionOffset(
   // https://drafts.csswg.org/css-align/#overflow-values
   if (available_free_space == 0 ||
       (available_free_space < 0 &&
-       content_alignment_data.Overflow() == kOverflowAlignmentSafe))
+       content_alignment_data.Overflow() == OverflowAlignment::kSafe))
     return {LayoutUnit(), LayoutUnit()};
 
   bool is_row_axis = direction == kForColumns;
   switch (position) {
-    case kContentPositionLeft:
+    case ContentPosition::kLeft:
       // The align-content's axis is always orthogonal to the inline-axis.
       return {LayoutUnit(), LayoutUnit()};
-    case kContentPositionRight:
+    case ContentPosition::kRight:
       if (is_row_axis)
         return {available_free_space, LayoutUnit()};
       // The align-content's axis is always orthogonal to the inline-axis.
       return {LayoutUnit(), LayoutUnit()};
-    case kContentPositionCenter:
+    case ContentPosition::kCenter:
       return {available_free_space / 2, LayoutUnit()};
     // Only used in flex layout, for other layout, it's equivalent to 'End'.
-    case kContentPositionFlexEnd:
-    case kContentPositionEnd:
+    case ContentPosition::kFlexEnd:
+    case ContentPosition::kEnd:
       if (is_row_axis)
         return {StyleRef().IsLeftToRightDirection() ? available_free_space
                                                     : LayoutUnit(),
                 LayoutUnit()};
       return {available_free_space, LayoutUnit()};
     // Only used in flex layout, for other layout, it's equivalent to 'Start'.
-    case kContentPositionFlexStart:
-    case kContentPositionStart:
+    case ContentPosition::kFlexStart:
+    case ContentPosition::kStart:
       if (is_row_axis)
         return {StyleRef().IsLeftToRightDirection() ? LayoutUnit()
                                                     : available_free_space,
                 LayoutUnit()};
       return {LayoutUnit(), LayoutUnit()};
-    case kContentPositionBaseline:
-    case kContentPositionLastBaseline:
+    case ContentPosition::kBaseline:
+    case ContentPosition::kLastBaseline:
       // FIXME: These two require implementing Baseline Alignment. For now, we
       // always 'start' align the child. crbug.com/234191
       if (is_row_axis)
@@ -2343,7 +2362,7 @@ ContentAlignmentData LayoutGrid::ComputeContentPositionAndDistributionOffset(
                                                     : available_free_space,
                 LayoutUnit()};
       return {LayoutUnit(), LayoutUnit()};
-    case kContentPositionNormal:
+    case ContentPosition::kNormal:
       break;
   }
 

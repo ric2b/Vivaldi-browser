@@ -5,17 +5,30 @@
 #ifndef StaticBitmapImage_h
 #define StaticBitmapImage_h
 
+#include "base/memory/weak_ptr.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
+#include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/Image.h"
-#include "platform/wtf/WeakPtr.h"
+#include "platform/wtf/typed_arrays/Uint8Array.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
+namespace WTF {
+
+class ArrayBufferContents;
+
+}  // namespace WTF
+
+namespace gpu {
+namespace gles2 {
+class GLES2Interface;
+}
+}  // namespace gpu
+
 namespace blink {
 
-class WebGraphicsContext3DProvider;
 class WebGraphicsContext3DProviderWrapper;
 
 class PLATFORM_EXPORT StaticBitmapImage : public Image {
@@ -26,18 +39,22 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   // associated.
   static scoped_refptr<StaticBitmapImage> Create(
       sk_sp<SkImage>,
-      WeakPtr<WebGraphicsContext3DProviderWrapper> = nullptr);
+      base::WeakPtr<WebGraphicsContext3DProviderWrapper> = nullptr);
   static scoped_refptr<StaticBitmapImage> Create(PaintImage);
+  static scoped_refptr<StaticBitmapImage> Create(scoped_refptr<Uint8Array>&&,
+                                                 const SkImageInfo&);
+  static scoped_refptr<StaticBitmapImage> Create(WTF::ArrayBufferContents&,
+                                                 const SkImageInfo&);
 
   bool IsStaticBitmapImage() const override { return true; }
 
   // Methods overridden by all sub-classes
-  virtual ~StaticBitmapImage() {}
+  virtual ~StaticBitmapImage() = default;
   // Creates a gpu copy of the image using the given ContextProvider. Should
   // not be called if IsTextureBacked() is already true. May return null if the
   // conversion failed (for instance if the context had an error).
   virtual scoped_refptr<StaticBitmapImage> MakeAccelerated(
-      WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) = 0;
+      base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_wrapper) = 0;
 
   // Methods have common implementation for all sub-classes
   bool CurrentFrameIsComplete() override { return true; }
@@ -49,18 +66,22 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   virtual bool IsValid() const { return true; }
   virtual void Transfer() {}
   virtual void Abandon() {}
+
   // Creates a non-gpu copy of the image, or returns this if image is already
   // non-gpu.
   virtual scoped_refptr<StaticBitmapImage> MakeUnaccelerated() { return this; }
 
   // Methods overridden by AcceleratedStaticBitmapImage only
-  virtual void CopyToTexture(WebGraphicsContext3DProvider*,
+  // Assumes the destination texture has already been allocated.
+  virtual bool CopyToTexture(gpu::gles2::GLES2Interface*,
                              GLenum,
                              GLuint,
+                             bool,
                              bool,
                              const IntPoint&,
                              const IntRect&) {
     NOTREACHED();
+    return false;
   }
 
   // EnsureMailbox modifies the internal state of an accelerated static bitmap
@@ -79,12 +100,13 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   //   Use kUnverifiedSyncToken
   // Case 3: Passing to a gpu context on the same stream.
   //   Use kOrderingBarrier
-  virtual void EnsureMailbox(MailboxSyncMode) { NOTREACHED(); }
-  virtual gpu::Mailbox GetMailbox() {
+  virtual void EnsureMailbox(MailboxSyncMode, GLenum filter) { NOTREACHED(); }
+  virtual const gpu::Mailbox& GetMailbox() const {
     NOTREACHED();
-    return gpu::Mailbox();
+    static const gpu::Mailbox mailbox;
+    return mailbox;
   }
-  virtual gpu::SyncToken GetSyncToken();
+  virtual const gpu::SyncToken& GetSyncToken() const;
   virtual void UpdateSyncToken(gpu::SyncToken) { NOTREACHED(); }
   virtual bool IsPremultiplied() const { return true; }
 
@@ -94,6 +116,13 @@ class PLATFORM_EXPORT StaticBitmapImage : public Image {
   scoped_refptr<StaticBitmapImage> ConvertToColorSpace(
       sk_sp<SkColorSpace>,
       SkTransferFunctionBehavior);
+
+  static bool ConvertToArrayBufferContents(
+      scoped_refptr<StaticBitmapImage> src_image,
+      WTF::ArrayBufferContents& dest_contents,
+      const IntRect&,
+      const CanvasColorParams&,
+      bool is_accelerated = false);
 
  protected:
   // Helper for sub-classes

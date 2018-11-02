@@ -24,7 +24,8 @@
 
 namespace base {
 
-#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL)
+#if defined(OS_BSD) || defined(OS_MACOSX) || defined(OS_NACL) || \
+    defined(OS_ANDROID) && __ANDROID_API__ < 21
 typedef struct stat stat_wrapper_t;
 #elif defined(OS_POSIX)
 typedef struct stat64 stat_wrapper_t;
@@ -333,6 +334,12 @@ class BASE_EXPORT File {
 #elif defined(OS_POSIX)
   static Error OSErrorToFileError(int saved_errno);
 #endif
+
+  // Gets the last global error (errno or GetLastError()) and converts it to the
+  // closest base::File::Error equivalent via OSErrorToFileError(). The returned
+  // value is only trustworthy immediately after another base::File method
+  // fails. base::File never resets the global error to zero.
+  static Error GetLastFileError();
 
   // Converts an error value to a human-readable form. Used for logging.
   static std::string ErrorToString(Error error);

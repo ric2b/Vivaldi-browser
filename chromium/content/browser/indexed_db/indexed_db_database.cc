@@ -259,8 +259,6 @@ class IndexedDBDatabase::OpenRequest
 
   void UpgradeTransactionFinished(bool committed) override {
     // Ownership of connection was already passed along in OnUpgradeNeeded.
-    DCHECK(!connection_);
-
     if (committed) {
       DCHECK_EQ(pending_->version, db_->metadata_.version);
       pending_->callbacks->OnSuccess(std::unique_ptr<IndexedDBConnection>(),
@@ -1300,16 +1298,16 @@ Status IndexedDBDatabase::PutOperation(
   IndexedDBBackingStore::RecordIdentifier record_identifier;
   if (params->put_mode == blink::kWebIDBPutModeAddOnly) {
     bool found = false;
-    Status s = backing_store_->KeyExistsInObjectStore(
+    Status found_status = backing_store_->KeyExistsInObjectStore(
         transaction->BackingStoreTransaction(), id(), params->object_store_id,
         *key, &record_identifier, &found);
-    if (!s.ok())
-      return s;
+    if (!found_status.ok())
+      return found_status;
     if (found) {
       params->callbacks->OnError(
           IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionConstraintError,
                                  "Key already exists in the object store."));
-      return s;
+      return found_status;
     }
   }
 

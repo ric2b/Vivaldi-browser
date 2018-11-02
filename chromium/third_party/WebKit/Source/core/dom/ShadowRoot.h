@@ -49,7 +49,12 @@ class StringOrTrustedHTML;
 class V0InsertionPoint;
 class WhitespaceAttacher;
 
-enum class ShadowRootType { kUserAgent, V0, kOpen, kClosed };
+enum class ShadowRootType {
+  V0,
+  kOpen,
+  kClosed,
+  kUserAgentV1
+};
 
 class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   DEFINE_WRAPPERTYPEINFO();
@@ -93,8 +98,10 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   }
   bool IsV1() const {
     return GetType() == ShadowRootType::kOpen ||
-           GetType() == ShadowRootType::kClosed;
+           GetType() == ShadowRootType::kClosed ||
+           GetType() == ShadowRootType::kUserAgentV1;
   }
+  bool IsUserAgent() const { return GetType() == ShadowRootType::kUserAgentV1; }
 
   void AttachLayoutTree(AttachContext&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
@@ -127,6 +134,7 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   unsigned ChildShadowRootCount() const { return child_shadow_root_count_; }
 
   void RecalcStyle(StyleRecalcChange);
+  void RecalcStylesForReattach();
   void RebuildLayoutTree(WhitespaceAttacher&);
 
   void RegisterScopedHTMLStyleChild();
@@ -189,11 +197,13 @@ class CORE_EXPORT ShadowRoot final : public DocumentFragment, public TreeScope {
   Member<ShadowRootRareDataV0> shadow_root_rare_data_v0_;
   TraceWrapperMember<StyleSheetList> style_sheet_list_;
   Member<SlotAssignment> slot_assignment_;
-  unsigned child_shadow_root_count_ : 13;
-  unsigned type_ : 2;
-  unsigned registered_with_parent_shadow_root_ : 1;
-  unsigned descendant_insertion_points_is_valid_ : 1;
-  unsigned delegates_focus_ : 1;
+  unsigned short child_shadow_root_count_;
+  // TODO(kochi): Once kUserAgentTypeV0 is gone, shrink this to 2.
+  unsigned short type_ : 3;
+  unsigned short registered_with_parent_shadow_root_ : 1;
+  unsigned short descendant_insertion_points_is_valid_ : 1;
+  unsigned short delegates_focus_ : 1;
+  unsigned short unused_ : 10;
 };
 
 inline Element* ShadowRoot::ActiveElement() const {
@@ -205,6 +215,10 @@ inline ShadowRoot* Element::ShadowRootIfV1() const {
   if (root && root->IsV1())
     return root;
   return nullptr;
+}
+
+inline bool Node::IsInUserAgentShadowRoot() const {
+  return ContainingShadowRoot() && ContainingShadowRoot()->IsUserAgent();
 }
 
 DEFINE_NODE_TYPE_CASTS(ShadowRoot, IsShadowRoot());

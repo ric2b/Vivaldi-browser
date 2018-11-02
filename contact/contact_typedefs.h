@@ -12,8 +12,9 @@
 namespace contact {
 
 typedef int64_t ContactID;
-typedef int64_t EmailID;
+typedef int64_t EmailAddressID;
 typedef int64_t PhonenumberID;
+typedef int64_t PostalAddressID;
 typedef int64_t PropertyID;
 
 }  // namespace contact

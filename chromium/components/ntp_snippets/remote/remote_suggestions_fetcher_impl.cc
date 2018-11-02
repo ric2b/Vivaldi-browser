@@ -4,7 +4,7 @@
 
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher_impl.h"
 
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -15,10 +15,10 @@
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/ntp_snippets/user_classifier.h"
-#include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request_status.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 
 using language::UrlLanguageHistogram;
 using net::HttpRequestHeaders;
@@ -140,7 +140,7 @@ RemoteSuggestionsFetcherImpl::RemoteSuggestionsFetcherImpl(
       parse_json_callback_(parse_json_callback),
       fetch_url_(api_endpoint),
       api_key_(api_key),
-      clock_(new base::DefaultClock()),
+      clock_(base::DefaultClock::GetInstance()),
       user_classifier_(user_classifier) {}
 
 RemoteSuggestionsFetcherImpl::~RemoteSuggestionsFetcherImpl() = default;
@@ -161,25 +161,25 @@ void RemoteSuggestionsFetcherImpl::FetchSnippets(
     const RequestParams& params,
     SnippetsAvailableCallback callback) {
   if (!params.interactive_request) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
+    base::UmaHistogramSparse(
         "NewTabPage.Snippets.FetchTimeLocal",
         GetMinuteOfTheDay(/*local_time=*/true,
-                          /*reduced_resolution=*/true, clock_.get()));
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
+                          /*reduced_resolution=*/true, clock_));
+    base::UmaHistogramSparse(
         "NewTabPage.Snippets.FetchTimeUTC",
         GetMinuteOfTheDay(/*local_time=*/false,
-                          /*reduced_resolution=*/true, clock_.get()));
+                          /*reduced_resolution=*/true, clock_));
   }
 
   JsonRequest::Builder builder;
   builder.SetLanguageHistogram(language_histogram_)
       .SetParams(params)
       .SetParseJsonCallback(parse_json_callback_)
-      .SetClock(clock_.get())
+      .SetClock(clock_)
       .SetUrlRequestContextGetter(url_request_context_getter_)
       .SetUserClassifier(*user_classifier_);
 
-  if (signin_manager_->IsAuthenticated() || signin_manager_->AuthInProgress()) {
+  if (signin_manager_->IsAuthenticated()) {
     // Signed-in: get OAuth token --> fetch suggestions.
     pending_requests_.emplace(std::move(builder), std::move(callback));
     StartTokenRequest();
@@ -234,10 +234,11 @@ void RemoteSuggestionsFetcherImpl::StartTokenRequest() {
   }
 
   OAuth2TokenService::ScopeSet scopes{kContentSuggestionsApiScope};
-  token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
+  token_fetcher_ = std::make_unique<identity::PrimaryAccountAccessTokenFetcher>(
       "ntp_snippets", signin_manager_, token_service_, scopes,
       base::BindOnce(&RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished,
-                     base::Unretained(this)));
+                     base::Unretained(this)),
+      identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
@@ -246,8 +247,8 @@ void RemoteSuggestionsFetcherImpl::AccessTokenFetchFinished(
   // Delete the fetcher only after we leave this method (which is called from
   // the fetcher itself).
   DCHECK(token_fetcher_);
-  std::unique_ptr<AccessTokenFetcher> token_fetcher_deleter(
-      std::move(token_fetcher_));
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
+      token_fetcher_deleter(std::move(token_fetcher_));
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     AccessTokenError(error);

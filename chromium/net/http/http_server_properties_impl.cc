@@ -21,7 +21,9 @@
 namespace net {
 
 HttpServerPropertiesImpl::HttpServerPropertiesImpl(base::TickClock* clock)
-    : broken_alternative_services_(this, clock ? clock : &default_clock_),
+    : broken_alternative_services_(
+          this,
+          clock ? clock : base::DefaultTickClock::GetInstance()),
       quic_server_info_map_(kDefaultMaxQuicServerEntries),
       max_server_configs_stored_in_properties_(kDefaultMaxQuicServerEntries) {
   canonical_suffixes_.push_back(".ggpht.com");
@@ -175,7 +177,7 @@ HttpServerPropertiesImpl::recently_broken_alternative_services() const {
   return broken_alternative_services_.recently_broken_alternative_services();
 }
 
-void HttpServerPropertiesImpl::Clear() {
+void HttpServerPropertiesImpl::Clear(base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   spdy_servers_map_.Clear();
   alternative_service_map_.Clear();
@@ -185,6 +187,11 @@ void HttpServerPropertiesImpl::Clear() {
   server_network_stats_map_.Clear();
   quic_server_info_map_.Clear();
   canonical_server_info_map_.clear();
+
+  if (!callback.is_null()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  std::move(callback));
+  }
 }
 
 bool HttpServerPropertiesImpl::SupportsRequestPriority(

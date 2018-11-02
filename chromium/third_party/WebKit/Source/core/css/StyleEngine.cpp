@@ -52,9 +52,10 @@
 #include "core/html/HTMLSlotElement.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/html_names.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutObject.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
+#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGStyleElement.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontSelector.h"
@@ -180,8 +181,8 @@ CSSStyleSheet& StyleEngine::EnsureInspectorStyleSheet() {
       StyleSheetContents::Create(CSSParserContext::Create(*document_));
   inspector_style_sheet_ = CSSStyleSheet::Create(contents, *document_);
   MarkDocumentDirty();
-  // TODO(rune@opera.com): Making the active stylesheets up-to-date here is
-  // required by some inspector tests, at least. I theory this should not be
+  // TODO(futhark@chromium.org): Making the active stylesheets up-to-date here
+  // is required by some inspector tests, at least. I theory this should not be
   // necessary. Need to investigate to figure out if/why.
   UpdateActiveStyle();
   return *inspector_style_sheet_;
@@ -282,7 +283,7 @@ void StyleEngine::WatchedSelectorsChanged() {
   DCHECK(IsMaster());
   DCHECK(global_rule_set_);
   global_rule_set_->InitWatchedSelectorsRuleSet(GetDocument());
-  // TODO(rune@opera.com): Should be able to use RuleSetInvalidation here.
+  // TODO(futhark@chromium.org): Should be able to use RuleSetInvalidation here.
   GetDocument().SetNeedsStyleRecalc(
       kSubtreeStyleChange, StyleChangeReasonForTracing::Create(
                                StyleChangeReason::kDeclarativeContent));
@@ -309,6 +310,8 @@ void StyleEngine::MediaQueryAffectingValueChanged(
 }
 
 void StyleEngine::MediaQueryAffectingValueChanged() {
+  if (ClearMediaQueryDependentRuleSets(active_user_style_sheets_))
+    MarkUserStyleDirty();
   if (GetDocumentStyleSheetCollection().MediaQueryAffectingValueChanged())
     SetNeedsActiveStyleUpdate(GetDocument());
   MediaQueryAffectingValueChanged(active_tree_scopes_);
@@ -655,6 +658,18 @@ CSSStyleSheet* StyleEngine::ParseSheet(Element& element,
                                             GetDocument().Encoding());
   style_sheet->Contents()->ParseStringAtPosition(text, start_position);
   return style_sheet;
+}
+
+void StyleEngine::CollectUserStyleFeaturesTo(RuleFeatureSet& features) const {
+  for (unsigned i = 0; i < active_user_style_sheets_.size(); ++i) {
+    CSSStyleSheet* sheet = active_user_style_sheets_[i].first;
+    features.ViewportDependentMediaQueryResults().AppendVector(
+        sheet->ViewportDependentMediaQueryResults());
+    features.DeviceDependentMediaQueryResults().AppendVector(
+        sheet->DeviceDependentMediaQueryResults());
+    DCHECK(sheet->Contents()->HasRuleSet());
+    features.Add(sheet->Contents()->GetRuleSet().Features());
+  }
 }
 
 void StyleEngine::CollectScopedStyleFeaturesTo(RuleFeatureSet& features) const {
@@ -1049,8 +1064,8 @@ void StyleEngine::SetPreferredStylesheetSetNameIfNotSet(const String& name) {
   if (!preferred_stylesheet_set_name_.IsEmpty())
     return;
   preferred_stylesheet_set_name_ = name;
-  // TODO(rune@opera.com): Setting the selected set here is wrong if the set
-  // has been previously set by through Document.selectedStylesheetSet. Our
+  // TODO(futhark@chromium.org): Setting the selected set here is wrong if the
+  // set has been previously set by through Document.selectedStylesheetSet. Our
   // current implementation ignores the effect of Document.selectedStylesheetSet
   // and either only collects persistent style, or additionally preferred
   // style when present.
@@ -1060,9 +1075,9 @@ void StyleEngine::SetPreferredStylesheetSetNameIfNotSet(const String& name) {
 
 void StyleEngine::SetSelectedStylesheetSetName(const String& name) {
   selected_stylesheet_set_name_ = name;
-  // TODO(rune@opera.com): Setting Document.selectedStylesheetSet currently
-  // has no other effect than the ability to read back the set value using
-  // the same api. If it did have an effect, we should have marked the
+  // TODO(futhark@chromium.org): Setting Document.selectedStylesheetSet
+  // currently has no other effect than the ability to read back the set value
+  // using the same api. If it did have an effect, we should have marked the
   // document scope dirty and triggered an update of the active stylesheets
   // from here.
 }

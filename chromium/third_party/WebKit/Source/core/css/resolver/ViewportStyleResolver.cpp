@@ -46,7 +46,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 
@@ -176,8 +175,10 @@ void ViewportStyleResolver::AddViewportRule(StyleRuleViewport& viewport_rule,
   // We cannot use mergeAndOverrideOnConflict() here because it doesn't
   // respect the !important declaration (but addRespectingCascade() does).
   for (unsigned i = 0; i < property_count; ++i) {
+    CSSPropertyValueSet::PropertyReference property =
+        property_set.PropertyAt(i);
     property_set_->AddRespectingCascade(
-        property_set.PropertyAt(i).ToCSSPropertyValue());
+        CSSPropertyValue(property.PropertyMetadata(), property.Value()));
   }
 }
 

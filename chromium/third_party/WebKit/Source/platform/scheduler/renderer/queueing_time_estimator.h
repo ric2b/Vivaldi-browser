@@ -10,6 +10,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/scheduler/renderer/main_thread_task_queue.h"
 #include "platform/scheduler/renderer/renderer_metrics_helper.h"
+#include "third_party/WebKit/common/page/launching_process_state.h"
 
 #include <array>
 #include <vector>
@@ -25,11 +26,11 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
    public:
     virtual void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time,
                                                   bool is_disjoint_window) = 0;
-    virtual void OnReportSplitExpectedQueueingTime(
+    virtual void OnReportFineGrainedExpectedQueueingTime(
         const char* split_description,
         base::TimeDelta queueing_time) = 0;
-    Client() {}
-    virtual ~Client() {}
+    Client() = default;
+    virtual ~Client() = default;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Client);
@@ -54,7 +55,8 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
     explicit Calculator(int steps_per_window);
     static const char* GetReportingMessageFromQueueType(
         MainThreadTaskQueue::QueueType queue_type);
-    static const char* GetReportingMessageFromFrameType(FrameType frame_type);
+    static const char* GetReportingMessageFromFrameStatus(
+        FrameStatus frame_status);
 
     void UpdateStatusFromTaskQueue(MainThreadTaskQueue* queue);
     void AddQueueingTime(base::TimeDelta queuing_time);
@@ -103,9 +105,9 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
         MainThreadTaskQueue::QueueType::kOther;
 
     // Variables to split Expected Queueing Time by frame type.
-    std::array<base::TimeDelta, static_cast<int>(FrameType::kCount)>
-        eqt_by_frame_type_;
-    FrameType current_frame_type_ = FrameType::kNone;
+    std::array<base::TimeDelta, static_cast<int>(FrameStatus::kCount)>
+        eqt_by_frame_status_;
+    FrameStatus current_frame_status_ = FrameStatus::kNone;
   };
 
   class State {
@@ -124,7 +126,7 @@ class PLATFORM_EXPORT QueueingTimeEstimator {
     base::TimeTicks step_start_time;
     base::TimeTicks current_task_start_time;
     // |renderer_backgrounded| is the renderer's current status.
-    bool renderer_backgrounded = false;
+    bool renderer_backgrounded = kLaunchingProcessIsBackgrounded;
     bool processing_task = false;
     Calculator calculator_;
 

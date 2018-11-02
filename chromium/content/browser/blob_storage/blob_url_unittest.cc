@@ -273,12 +273,12 @@ class BlobURLRequestJobTest : public testing::TestWithParam<bool> {
       GetHandleFromBuilder();  // To add to StorageContext.
       const_cast<storage::BlobStorageRegistry&>(blob_context_.registry())
           .CreateUrlMapping(url, blob_data_->uuid());
-      ResourceRequest request;
+      network::ResourceRequest request;
       request.url = url;
       request.method = method;
       request.headers = extra_headers;
 
-      mojom::URLLoaderPtr url_loader;
+      network::mojom::URLLoaderPtr url_loader;
       TestURLLoaderClient url_loader_client;
       scoped_refptr<BlobURLLoaderFactory> factory =
           BlobURLLoaderFactory::Create(
@@ -286,7 +286,7 @@ class BlobURLRequestJobTest : public testing::TestWithParam<bool> {
                              base::Unretained(this)));
       base::RunLoop().RunUntilIdle();
       factory->CreateLoaderAndStart(mojo::MakeRequest(&url_loader), 0, 0,
-                                    mojom::kURLLoadOptionNone, request,
+                                    network::mojom::kURLLoadOptionNone, request,
                                     url_loader_client.CreateInterfacePtr(),
                                     net::MutableNetworkTrafficAnnotationTag(
                                         TRAFFIC_ANNOTATION_FOR_TESTS));

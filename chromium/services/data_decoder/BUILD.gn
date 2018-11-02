@@ -55,10 +55,14 @@ source_set("tests") {
     "//skia",
     "//testing/gtest",
     "//third_party/WebKit/public:blink",
+    "//tools/v8_context_snapshot",
     "//ui/gfx",
   ]
 
-  configs += [ "//v8:external_startup_data" ]
+  configs += [
+    "//tools/v8_context_snapshot:use_v8_context_snapshot",
+    "//v8:external_startup_data",
+  ]
 }
 
 service_manifest("manifest") {
@@ -73,6 +77,7 @@ fuzzer_test("xml_parser_fuzzer") {
   deps = [
     ":lib",
     "//base",
+    "//third_party/libxml:libxml",
   ]
   dict = "//testing/libfuzzer/fuzzers/dicts/xml.dict"
   seed_corpus = "xml_parser_fuzzer_corpus"

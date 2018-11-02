@@ -14,6 +14,7 @@
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
+#include "gpu/command_buffer/client/raster_implementation_gles.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "gpu/ipc/gl_in_process_context.h"
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
@@ -24,7 +25,7 @@ namespace ui {
 
 // static
 scoped_refptr<InProcessContextProvider> InProcessContextProvider::Create(
-    const gpu::gles2::ContextCreationAttribHelper& attribs,
+    const gpu::ContextCreationAttribs& attribs,
     InProcessContextProvider* shared_context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
@@ -43,7 +44,7 @@ InProcessContextProvider::CreateOffscreen(
     gpu::ImageFactory* image_factory,
     InProcessContextProvider* shared_context,
     bool support_locking) {
-  gpu::gles2::ContextCreationAttribHelper attribs;
+  gpu::ContextCreationAttribs attribs;
   attribs.alpha_size = 8;
   attribs.blue_size = 8;
   attribs.green_size = 8;
@@ -60,7 +61,7 @@ InProcessContextProvider::CreateOffscreen(
 }
 
 InProcessContextProvider::InProcessContextProvider(
-    const gpu::gles2::ContextCreationAttribHelper& attribs,
+    const gpu::ContextCreationAttribs& attribs,
     InProcessContextProvider* shared_context,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
@@ -83,6 +84,14 @@ InProcessContextProvider::~InProcessContextProvider() {
          context_thread_checker_.CalledOnValidThread());
 }
 
+void InProcessContextProvider::AddRef() const {
+  base::RefCountedThreadSafe<InProcessContextProvider>::AddRef();
+}
+
+void InProcessContextProvider::Release() const {
+  base::RefCountedThreadSafe<InProcessContextProvider>::Release();
+}
+
 gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
   // This is called on the thread the context will be used.
   DCHECK(context_thread_checker_.CalledOnValidThread());
@@ -98,7 +107,8 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
       !window_, /* is_offscreen */
       window_, (shared_context_ ? shared_context_->context_.get() : nullptr),
       attribs_, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager_,
-      image_factory_, base::ThreadTaskRunnerHandle::Get());
+      image_factory_, nullptr /* gpu_channel_manager_delegate */,
+      base::ThreadTaskRunnerHandle::Get());
 
   if (bind_result_ != gpu::ContextResult::kSuccess)
     return bind_result_;
@@ -110,6 +120,10 @@ gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
       base::StringPrintf("%s-%p", debug_name_.c_str(), context_.get());
   context_->GetImplementation()->TraceBeginCHROMIUM(
       "gpu_toplevel", unique_context_name.c_str());
+
+  raster_context_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
+      context_->GetImplementation(), context_->GetImplementation(),
+      context_->GetImplementation()->capabilities());
 
   return bind_result_;
 }
@@ -130,6 +144,12 @@ gpu::gles2::GLES2Interface* InProcessContextProvider::ContextGL() {
   return context_->GetImplementation();
 }
 
+gpu::raster::RasterInterface* InProcessContextProvider::RasterInterface() {
+  CheckValidThreadOrLockAcquired();
+
+  return raster_context_.get();
+}
+
 gpu::ContextSupport* InProcessContextProvider::ContextSupport() {
   CheckValidThreadOrLockAcquired();
 
@@ -142,8 +162,13 @@ class GrContext* InProcessContextProvider::GrContext() {
   if (gr_context_)
     return gr_context_->get();
 
+  size_t max_resource_cache_bytes;
+  size_t max_glyph_cache_texture_bytes;
+  skia_bindings::GrContextForGLES2Interface::DefaultCacheLimitsForTests(
+      &max_resource_cache_bytes, &max_glyph_cache_texture_bytes);
   gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(
-      ContextGL(), ContextCapabilities()));
+      ContextGL(), ContextCapabilities(), max_resource_cache_bytes,
+      max_glyph_cache_texture_bytes));
   cache_controller_->SetGrContext(gr_context_->get());
 
   return gr_context_->get();

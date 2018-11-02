@@ -75,13 +75,13 @@ ResourceMessageFilter* ResourceHandler::GetFilter() const {
  * if we add new subclasses, chromium will still use the abstract definition.
  */
 void ResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   OnResponseStarted(response, std::move(controller), false, false);
 }
 
 void ResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller,
     bool open_when_done,
     bool ask_for_target) {

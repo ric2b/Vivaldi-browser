@@ -4,8 +4,11 @@
 
 #include "core/css/parser/CSSPropertyParser.h"
 
+#include "core/css/CSSColorValue.h"
 #include "core/css/CSSValueList.h"
+#include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
+#include "core/testing/DummyPageHolder.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -294,6 +297,51 @@ TEST(CSSPropertyParserTest, GridPositionLimit8) {
       StrictCSSParserContext(SecureContextMode::kSecureContext));
   DCHECK(value);
   EXPECT_EQ(GetGridPositionInteger(*value), -1000);
+}
+
+TEST(CSSPropertyParserTest, ColorFunction) {
+  const CSSValue* value = CSSParser::ParseSingleValue(
+      CSSPropertyBackgroundColor, "rgba(0, 0, 0, 1)",
+      StrictCSSParserContext(SecureContextMode::kSecureContext));
+  ASSERT_TRUE(value);
+  EXPECT_EQ(Color::kBlack, cssvalue::ToCSSColorValue(*value).Value());
+}
+
+TEST(CSSPropertyParserTest, IncompleteColor) {
+  const CSSValue* value = CSSParser::ParseSingleValue(
+      CSSPropertyBackgroundColor, "rgba(123 45",
+      StrictCSSParserContext(SecureContextMode::kSecureContext));
+  ASSERT_FALSE(value);
+}
+
+TEST(CSSPropertyParserTest, ClipPathEllipse) {
+  std::unique_ptr<DummyPageHolder> dummy_holder =
+      DummyPageHolder::Create(IntSize(500, 500));
+  Document* doc = &dummy_holder->GetDocument();
+  CSSParserContext* context = CSSParserContext::Create(
+      kHTMLStandardMode, SecureContextMode::kSecureContext,
+      CSSParserContext::kDynamicProfile, doc);
+
+  CSSParser::ParseSingleValue(CSSPropertyClipPath,
+                              "ellipse(1px 2px at invalid)", context);
+
+  EXPECT_FALSE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseTwoRadius));
+  CSSParser::ParseSingleValue(CSSPropertyClipPath, "ellipse(1px 2px)", context);
+  EXPECT_TRUE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseTwoRadius));
+
+  EXPECT_FALSE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseOneRadius));
+  CSSParser::ParseSingleValue(CSSPropertyClipPath, "ellipse(1px)", context);
+  EXPECT_TRUE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseOneRadius));
+
+  EXPECT_FALSE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseNoRadius));
+  CSSParser::ParseSingleValue(CSSPropertyClipPath, "ellipse()", context);
+  EXPECT_TRUE(
+      UseCounter::IsCounted(*doc, WebFeature::kBasicShapeEllipseNoRadius));
 }
 
 }  // namespace blink

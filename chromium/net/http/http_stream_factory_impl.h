@@ -36,10 +36,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
   class NET_EXPORT_PRIVATE JobController;
   class NET_EXPORT_PRIVATE JobFactory;
   class NET_EXPORT_PRIVATE Request;
-  // RequestStream may only be called if |for_websockets| is false.
-  // RequestWebSocketHandshakeStream may only be called if |for_websockets|
-  // is true.
-  HttpStreamFactoryImpl(HttpNetworkSession* session, bool for_websockets);
+  HttpStreamFactoryImpl(HttpNetworkSession* session);
   ~HttpStreamFactoryImpl() override;
 
   // HttpStreamFactory interface
@@ -126,6 +123,7 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
       HttpStreamRequest::Delegate* delegate,
       WebSocketHandshakeStreamBase::CreateHelper* create_helper,
       HttpStreamRequest::StreamType stream_type,
+      bool is_websocket,
       bool enable_ip_based_pooling,
       bool enable_alternative_services,
       const NetLogWithSource& net_log);
@@ -157,11 +155,6 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
   // priorities.
   bool ProxyServerSupportsPriorities(const ProxyInfo& proxy_info) const;
 
-  // Adds the count of JobControllers that are not completed to UMA histogram if
-  // the count is a multiple of 100: 100, 200, 400, etc. Break down
-  // JobControllers count based on the type of JobController.
-  void AddJobControllerCountToHistograms();
-
   HttpNetworkSession* const session_;
 
   // All Requests/Preconnects are assigned with a JobController to manage
@@ -177,11 +170,6 @@ class NET_EXPORT_PRIVATE HttpStreamFactoryImpl : public HttpStreamFactory {
   // Set of proxy servers that support request priorities to which subsequent
   // preconnects should be skipped.
   std::set<PreconnectingProxyServer> preconnecting_proxy_servers_;
-
-  const bool for_websockets_;
-
-  // The count of JobControllers that was most recently logged to histograms.
-  size_t last_logged_job_controller_count_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpStreamFactoryImpl);
 };

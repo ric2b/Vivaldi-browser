@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">‏درباره Chromium</translation>
 <translation id="1298199220304005244">‏دریافت راهنمایی برای استفاده از سیستم عامل Chromium </translation>
 <translation id="1396446129537741364">‏Chromium می‌خواهد گذرواژه‌ها را نشان دهد.</translation>
-<translation id="1403254041219632970">‏نسخه‌های آینده Chromium دیگر از Mac OS X نسخه ۱۰٫۶،‏ ۱۰٫۷ یا ۱۰٫۸ پشتیبانی نمی‌کند.</translation>
 <translation id="1414495520565016063">‏شما وارد سیستم Chromium شدید!</translation>
-<translation id="1440917365206527807">‏Chromium مانع هدایت شما توسط این سایت به اینجا شده است</translation>
 <translation id="1444754455097148408">‏مجوزهای منبع باز Chromium</translation>
 <translation id="1502360822835740515">‏Chromium مرورگر پیش‌فرض شود</translation>
 <translation id="151962892725702025">‏سیستم‌عامل Chromium قادر به همگام‌سازی داده‌های شما نبود زیرا همگام‌سازی برای دامنه شما قابل دسترسی نیست.</translation>
-<translation id="1559451348202814456">‏Chromium ممکن است درست کار نکند، زیرا دیگر در Mac OS X نسخه ۱۰٫۶،‏ ۱۰٫۷ یا ۱۰٫۸ پشتیبانی نمی‌شود.</translation>
 <translation id="1585657529869845941">درصورتی‌که نمایان شد، روی <ph name="BEGIN_BOLD" />به‌هرصورت جابه‌جایی<ph name="END_BOLD" /> کلیک کنید</translation>
 <translation id="1653828314016431939">تأیید - اکنون راه‌اندازی شود</translation>
 <translation id="1668054258064581266">‏پس از حذف حسابتان از Chromium، ممکن است لازم باشد برای اعمال تغییرات، برگه‌های بازتان را تازه‌سازی کنید.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">‏برای اعمال به‌روزرسانی، Chromium OS باید راه‌اندازی مجدد شود.</translation>
 <translation id="2647554856022461007">‏ممکن است Chromium برای بهبود تجربه مرور شما از سرویس‌های وب استفاده کند. می‌توانید به‌صورت اختیاری این سرویس‌ها را غیرفعال کنید. <ph name="BEGIN_LINK" />بیشتر بدانید<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">‏یک خطای سیستم عامل در طول نصب روی داد. لطفاً Chromium را دوباره نصب کنید.</translation>
-<translation id="2685838254101182273">‏Chromium دیگر به‌روزرسانی نمی‌شود ودیگر از این نسخه سیستم عامل پشتیبانی نمی‌کند.</translation>
 <translation id="2705403826523567092">برای تجربه مرور شخصی‌سازی‌شده و همگام‌سازی‌شده در تمام دستگاه‌ها، به سیستم وارد شوید</translation>
 <translation id="2711502716910134313">‏برگه Chromium</translation>
 <translation id="2718390899429598676">‏برای امنیت بیشتر، Chromium داده‌های شما را رمزگذاری می‌کند.</translation>
@@ -105,7 +101,6 @@
 <translation id="4458285410772214805">لطفاً از سیستم خارج شوید و دوباره وارد آن شوید تا این تغییر اعمال شود.</translation>
 <translation id="4469812139324097969">‏Chromium قدیمی است چون برای مدتی راه‌اندازی مجدد نشده است. یک نسخه به‌روز دردسترس است و به‌محض راه‌اندازی مجدد اعمال خواهد شد.</translation>
 <translation id="4488554488975128561">‏می‌توانید با ارسال خودکار برخی از اطلاعات سیستم و محتوای صفحه به Google‏، Chromium را ایمن‌تر و آسان‌تر کنید. Google از این اطلاعات برای شناسایی برنامه‌ها و سایت‌های خطرناک استفاده می‌کند.</translation>
-<translation id="4549794359424059447">‏نسخه‌های آینده Chromium دیگر از Windows XP یا Windows Vista پشتیبانی نمی‌کند.</translation>
 <translation id="4567424176335768812">با حساب <ph name="USER_EMAIL_ADDRESS" /> وارد سیستم شده‌اید. اکنون در همه دستگاه‌هایی که با آنها به سیستم وارد شده‌اید می‌توانید به نشانک‌ها، سابقه و دیگر تنظیماتتان دسترسی داشته باشید.</translation>
 <translation id="459535195905078186">‏برنامه‌های Chromium</translation>
 <translation id="4611246891205775468">‏Chromium برای این سایت به مجوز دسترسی به میکروفون نیاز دارد.</translation>
@@ -144,7 +139,6 @@
 <translation id="5902536751647951209">‏گواهینامه احراز هویت تأیید نشد. لطفاً دوباره به سیستم Chromium وارد شوید یا برای دریافت اطلاعات بیشتر با سرپرستتان تماس بگیرید. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">تقریباً به‌روز شده است! برای تمام کردن به‌روزرسانی، دستگاهتان را دوباره راه‌اندازی کنید.</translation>
 <translation id="5942520288919337908">‏<ph name="EXTENSION_NAME" /> به Chromium اضافه شده است.</translation>
-<translation id="59625444380784159">‏جزئیات مخاطبین شما می‌تواند به شما کمک کند فرم‌ها را سریع‌تر در Chromium تکمیل کنید.</translation>
 <translation id="5987687638152509985">‏به‌روزرسانی Chromium برای شروع همگام‌سازی</translation>
 <translation id="6055895534982063517">‏نسخه جدیدی از Chromium وجود دارد که سریع‌تر از همیشه است.</translation>
 <translation id="6063093106622310249">‏&amp;باز کردن در Chromium</translation>
@@ -158,6 +152,7 @@
 <translation id="6334986366598267305">‏اکنون استفاده از Chromium با حساب Google شما و در رایانه‌های مشترک آسان‌تر شده است.</translation>
 <translation id="6373523479360886564">‏آیا مطمئن هستید که می‌خواهید Chromium را حذف نصب کنید؟</translation>
 <translation id="6394232988457703198">‏هم‌اکنون باید Chromium را راه‌اندازی مجدد کنید.</translation>
+<translation id="6400072781405947421">‏Chromium ممکن است درست کار نکند، زیرا دیگر در Mac OS X نسخه ۱۰.۹ پشتیبانی نمی‌شود.</translation>
 <translation id="6403826409255603130">‏Chromium یک مرورگر وب است که صفحات وب و برنامه‌ها را با سرعت بسیار زیاد اجرا می‌کند. این مرورگر خیلی سریع، پایدار و دارای کاربرد آسان است. با محافظت در مقابل بدافزار و فیشینگ طراحی شده در داخل Chromium، با امنیت بیشتری وب را مرور کنید.</translation>
 <translation id="6475912303565314141">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chromium نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="6485906693002546646">‏شما از <ph name="PROFILE_EMAIL" /> برای همگام‌سازی موارد Chromium خودتان استفاده می‌کنید. برای به‌روزرسانی تنظیمات ترجیحی همگام‌سازی‌تان یا استفاده از Chromium بدون حساب Google، به <ph name="SETTINGS_LINK" /> مراجعه کنید.</translation>
@@ -173,13 +168,13 @@
 <translation id="6734291798041940871">‏Chromium از قبل برای همه کاربران این رایانه نصب شده است.</translation>
 <translation id="6810143991807788455">‏با گزارش تنظیمات کنونی، به بهتر شدن Chromium کمک کنید</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">‏Google Pay (در Chromium کپی شد)</translation>
 <translation id="6893813176749746474">‏Chromium به‌روز شده است اما حداقل ۳۰ روز از آن استفاده نکرده‌اید.</translation>
 <translation id="6944967875980567883">‏مدول‌ها در Chromium بارگیری شدند</translation>
 <translation id="6964305034639999644">‏باز کردن پیوند در پنجره &amp;ناشناس Chromium</translation>
 <translation id="6970811910055250180">درحال به‌روزرسانی دستگاه شما…</translation>
 <translation id="705851970750939768">‏به‌روزرسانی Chromium</translation>
 <translation id="7066436765290594559">‏سیستم‌عامل Chromium قادر به همگام‌سازی داده‌های شما نبود. لطفاً رمز عبارتی همگام‌سازی خود را به‌روز کنید.</translation>
-<translation id="707471633328071618">‏Google Payments (در Chromium کپی شد)</translation>
 <translation id="7162152143154757523">‏Chromium می‌تواند با ارسال مواردی که در مرورگر تایپ‌ می‌کنید به سرورهای Google، غلط گیر املایی هوشمندانه‌تری به شما ارائه دهد و به شما امکان دهد از همان فناوری غلط گیر املایی استفاده شده در جستجوی Google استفاده کنید.</translation>
 <translation id="7205698830395646142">‏پنهان در منوی Chromium</translation>
 <translation id="7223968959479464213">‏مدیر فعالیت‌ها - Chromium</translation>
@@ -238,7 +233,6 @@ Chromium قادر به بازیابی تنظیمات شما نیست.</translati
 <translation id="872034308864968620">‏اجازه به Chromium Run برای اجرا در پس‌زمینه</translation>
 <translation id="8803635938069941624">‏شرایط Chromium OS</translation>
 <translation id="8821041990367117597">‏Chromium قادر به همگام‌سازی داده‌های شما نبود زیرا جزئیات ورود به حساب شما به‌روز نیست.</translation>
-<translation id="8851136666856101339">اصلی</translation>
 <translation id="8862326446509486874">شما حقوق لازم برای نصب در سطح سیستم را ندارید. دوباره به‌عنوان سرپرست نصب‌کننده را اجرا کنید.</translation>
 <translation id="8897323336392112261">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chromium یا کلیک روی دکمه صفحه اصلی نشان داده می‌شود، کنترل می‌کند.</translation>
 <translation id="8907580949721785412">‏Chromium در حال تلاش برای نشان دادن گذرواژه‌هاست. برای اجازه به این کار، گذرواژه Windows خود را تایپ کنید.</translation>

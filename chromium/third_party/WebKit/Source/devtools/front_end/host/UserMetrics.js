@@ -92,7 +92,8 @@ Host.UserMetrics.Action = {
   StyleRuleCopied: 27,
   CoverageStarted: 28,
   Audits2Started: 29,
-  Audits2Finished: 30
+  Audits2Finished: 30,
+  ShowedThirdPartyBadges: 31,
 };
 
 Host.UserMetrics._PanelCodes = {
@@ -105,7 +106,7 @@ Host.UserMetrics._PanelCodes = {
   audits: 7,
   console: 8,
   layers: 9,
-  'drawer-console': 10,
+  'drawer-console-view': 10,
   'drawer-animations': 11,
   'drawer-network.config': 12,
   'drawer-rendering': 13,

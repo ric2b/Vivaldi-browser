@@ -7,8 +7,8 @@ without changes to the corresponding grd file. -->
       <emit emit_type='prepend'></emit>
     </output>
     <output filename="grit/webui_resources_map.cc"
-            type="resource_file_map_source" />
-    <output filename="grit/webui_resources_map.h" type="resource_map_header" />
+            type="gzipped_resource_file_map_source" />
+    <output filename="grit/webui_resources_map.h" type="gzipped_resource_map_header" />
     <output filename="webui_resources.pak" type="data_package" />
   </outputs>
   <release seq="1">
@@ -384,6 +384,9 @@ without changes to the corresponding grd file. -->
                  file="html/util.html" type="chrome_html" compress="gzip" />
       <structure name="IDR_WEBUI_HTML_WEBUI_LISTENER_BEHAVIOR"
                  file="html/web_ui_listener_behavior.html" type="chrome_html"
+                 compress="gzip" />
+      <structure name="IDR_WEBUI_HTML_WEBUI_LISTENER_TRACKER"
+                 file="html/webui_listener_tracker.html" type="chrome_html"
                  compress="gzip" />
 
       <structure name="IDR_WEBUI_JS_ACTION_LINK"

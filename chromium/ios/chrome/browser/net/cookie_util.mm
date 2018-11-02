@@ -11,11 +11,11 @@
 
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_scheduler/post_task.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/net/cookies/cookie_store_ios_persistent.h"
+#import "ios/net/cookies/system_cookie_store.h"
 #include "ios/web/public/web_thread.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
@@ -55,7 +55,7 @@ std::unique_ptr<net::CookieMonster> CreateCookieMonster(
     const CookieStoreConfig& config) {
   if (config.path.empty()) {
     // Empty path means in-memory store.
-    return base::MakeUnique<net::CookieMonster>(nullptr);
+    return std::make_unique<net::CookieMonster>(nullptr);
   }
 
   const bool restore_old_session_cookies =
@@ -86,7 +86,8 @@ CookieStoreConfig::CookieStoreConfig(const base::FilePath& path,
 CookieStoreConfig::~CookieStoreConfig() {}
 
 std::unique_ptr<net::CookieStore> CreateCookieStore(
-    const CookieStoreConfig& config) {
+    const CookieStoreConfig& config,
+    std::unique_ptr<net::SystemCookieStore> system_cookie_store) {
   if (config.cookie_store_type == CookieStoreConfig::COOKIE_MONSTER)
     return CreateCookieMonster(config);
 
@@ -98,8 +99,8 @@ std::unique_ptr<net::CookieStore> CreateCookieStore(
         config.path, true /* restore_old_session_cookies */,
         config.crypto_delegate);
   }
-  return base::MakeUnique<net::CookieStoreIOSPersistent>(
-      persistent_store.get());
+  return std::make_unique<net::CookieStoreIOSPersistent>(
+      persistent_store.get(), std::move(system_cookie_store));
 }
 
 bool ShouldClearSessionCookies() {

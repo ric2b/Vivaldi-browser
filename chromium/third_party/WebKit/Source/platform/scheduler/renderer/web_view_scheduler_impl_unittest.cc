@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/location.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/metrics/field_trial_params.h"
@@ -14,12 +15,10 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "components/viz/test/ordered_simple_task_runner.h"
 #include "platform/WebTaskRunner.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
 #include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
-#include "public/platform/WebTraceLocation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,17 +32,15 @@ namespace web_view_scheduler_impl_unittest {
 
 class WebViewSchedulerImplTest : public ::testing::Test {
  public:
-  WebViewSchedulerImplTest() {}
-  ~WebViewSchedulerImplTest() override {}
+  WebViewSchedulerImplTest() = default;
+  ~WebViewSchedulerImplTest() override = default;
 
   void SetUp() override {
-    clock_.reset(new base::SimpleTestTickClock());
-    clock_->Advance(base::TimeDelta::FromMicroseconds(5000));
+    clock_.Advance(base::TimeDelta::FromMicroseconds(5000));
     mock_task_runner_ =
-        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(clock_.get(), true);
-    scheduler_.reset(
-        new RendererSchedulerImpl(CreateTaskQueueManagerWithUnownedClockForTest(
-            nullptr, mock_task_runner_, clock_.get())));
+        base::MakeRefCounted<cc::OrderedSimpleTaskRunner>(&clock_, true);
+    scheduler_.reset(new RendererSchedulerImpl(
+        CreateTaskQueueManagerForTest(nullptr, mock_task_runner_, &clock_)));
     web_view_scheduler_.reset(
         new WebViewSchedulerImpl(nullptr, nullptr, scheduler_.get(),
                                  DisableBackgroundTimerThrottling()));
@@ -67,11 +64,13 @@ class WebViewSchedulerImplTest : public ::testing::Test {
   }
 
   scoped_refptr<WebTaskRunner> ThrottleableTaskRunner() {
-    return WebTaskRunnerImpl::Create(ThrottleableTaskQueue(), base::nullopt);
+    return WebTaskRunnerImpl::Create(ThrottleableTaskQueue(),
+                                     TaskType::kInternalTest);
   }
 
   scoped_refptr<WebTaskRunner> LoadingTaskRunner() {
-    return WebTaskRunnerImpl::Create(LoadingTaskQueue(), base::nullopt);
+    return WebTaskRunnerImpl::Create(LoadingTaskQueue(),
+                                     TaskType::kInternalTest);
   }
 
   scoped_refptr<TaskQueue> ThrottleableTaskQueue() {
@@ -82,7 +81,7 @@ class WebViewSchedulerImplTest : public ::testing::Test {
     return web_frame_scheduler_->LoadingTaskQueue();
   }
 
-  std::unique_ptr<base::SimpleTestTickClock> clock_;
+  base::SimpleTestTickClock clock_;
   scoped_refptr<cc::OrderedSimpleTaskRunner> mock_task_runner_;
   std::unique_ptr<RendererSchedulerImpl> scheduler_;
   std::unique_ptr<WebViewSchedulerImpl> web_view_scheduler_;
@@ -122,7 +121,7 @@ void RunRepeatingTask(scoped_refptr<TaskQueue> task_queue, int* run_count) {
   ++*run_count;
   TaskQueue* task_queue_ptr = task_queue.get();
   task_queue_ptr->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(std::move(task_queue_ptr), run_count),
+      FROM_HERE, MakeRepeatingTask(std::move(task_queue_ptr), run_count),
       TimeDelta::FromMilliseconds(1));
 }
 
@@ -133,7 +132,7 @@ TEST_F(WebViewSchedulerImplTest, RepeatingTimer_PageInForeground) {
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -146,7 +145,7 @@ TEST_F(WebViewSchedulerImplTest,
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -168,7 +167,7 @@ TEST_F(WebViewSchedulerImplTest, RepeatingLoadingTask_PageInBackground) {
 
   int run_count = 0;
   LoadingTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(LoadingTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(LoadingTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -188,10 +187,10 @@ TEST_F(WebViewSchedulerImplTest, RepeatingTimers_OneBackgroundOneForeground) {
   int run_count1 = 0;
   int run_count2 = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count1),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count1),
       TimeDelta::FromMilliseconds(1));
   ThrottleableTaskQueueForScheduler(web_frame_scheduler2.get())
-      ->PostDelayedTask(BLINK_FROM_HERE,
+      ->PostDelayedTask(FROM_HERE,
                         MakeRepeatingTask(ThrottleableTaskQueueForScheduler(
                                               web_frame_scheduler2.get()),
                                           &run_count2),
@@ -213,7 +212,7 @@ void RunVirtualTimeRecorderTask(base::SimpleTestTickClock* clock,
       task_runner->MonotonicallyIncreasingVirtualTimeSeconds() * 1000.0);
 }
 
-WTF::Closure MakeVirtualTimeRecorderTask(
+base::OnceClosure MakeVirtualTimeRecorderTask(
     base::SimpleTestTickClock* clock,
     scoped_refptr<WebTaskRunner> task_runner,
     std::vector<base::TimeTicks>* out_real_times,
@@ -236,20 +235,20 @@ TEST_F(WebViewSchedulerImplTest, VirtualTime_TimerFastForwarding) {
   web_view_scheduler_->EnableVirtualTime();
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(2));
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(20));
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(200));
 
@@ -273,21 +272,21 @@ TEST_F(WebViewSchedulerImplTest, VirtualTime_LoadingTaskFastForwarding) {
   web_view_scheduler_->EnableVirtualTime();
 
   LoadingTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), LoadingTaskRunner(),
-                                  &real_times, &virtual_times_ms),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, LoadingTaskRunner(), &real_times,
+                                  &virtual_times_ms),
       TimeDelta::FromMilliseconds(2));
 
   LoadingTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), LoadingTaskRunner(),
-                                  &real_times, &virtual_times_ms),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, LoadingTaskRunner(), &real_times,
+                                  &virtual_times_ms),
       TimeDelta::FromMilliseconds(20));
 
   LoadingTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), LoadingTaskRunner(),
-                                  &real_times, &virtual_times_ms),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, LoadingTaskRunner(), &real_times,
+                                  &virtual_times_ms),
       TimeDelta::FromMilliseconds(200));
 
   mock_task_runner_->RunUntilIdle();
@@ -307,7 +306,7 @@ TEST_F(WebViewSchedulerImplTest,
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunTasksWhile(mock_task_runner_->TaskRunCountBelow(2000));
@@ -329,9 +328,8 @@ void DelayedRunOrderTask(int index,
                          scoped_refptr<TaskQueue> task_queue,
                          std::vector<int>* out_run_order) {
   out_run_order->push_back(index);
-  task_queue->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&RunOrderTask, index + 1, base::Unretained(out_run_order)));
+  task_queue->PostTask(FROM_HERE, base::Bind(&RunOrderTask, index + 1,
+                                             base::Unretained(out_run_order)));
 }
 }
 
@@ -342,17 +340,16 @@ TEST_F(WebViewSchedulerImplTest, VirtualTime_NotAllowedToAdvance) {
   web_view_scheduler_->EnableVirtualTime();
 
   ThrottleableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&RunOrderTask, 0, base::Unretained(&run_order)));
+      FROM_HERE, base::Bind(&RunOrderTask, 0, base::Unretained(&run_order)));
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(&DelayedRunOrderTask, 1, base::Passed(ThrottleableTaskQueue()),
                  base::Unretained(&run_order)),
       TimeDelta::FromMilliseconds(2));
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(&DelayedRunOrderTask, 3, base::Passed(ThrottleableTaskQueue()),
                  base::Unretained(&run_order)),
       TimeDelta::FromMilliseconds(4));
@@ -370,17 +367,16 @@ TEST_F(WebViewSchedulerImplTest, VirtualTime_AllowedToAdvance) {
   web_view_scheduler_->EnableVirtualTime();
 
   ThrottleableTaskQueue()->PostTask(
-      BLINK_FROM_HERE,
-      base::Bind(&RunOrderTask, 0, base::Unretained(&run_order)));
+      FROM_HERE, base::Bind(&RunOrderTask, 0, base::Unretained(&run_order)));
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(&DelayedRunOrderTask, 1, base::Passed(ThrottleableTaskQueue()),
                  base::Unretained(&run_order)),
       TimeDelta::FromMilliseconds(2));
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(&DelayedRunOrderTask, 3, base::Passed(ThrottleableTaskQueue()),
                  base::Unretained(&run_order)),
       TimeDelta::FromMilliseconds(4));
@@ -393,8 +389,9 @@ TEST_F(WebViewSchedulerImplTest, VirtualTime_AllowedToAdvance) {
 class WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling
     : public WebViewSchedulerImplTest {
  public:
-  WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling() {}
-  ~WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling() override {}
+  WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling() = default;
+  ~WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling() override =
+      default;
 
   bool DisableBackgroundTimerThrottling() const override { return true; }
 };
@@ -405,7 +402,7 @@ TEST_F(WebViewSchedulerImplTestWithDisabledBackgroundTimerThrottling,
 
   int run_count = 0;
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
+      FROM_HERE, MakeRepeatingTask(ThrottleableTaskQueue(), &run_count),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
@@ -424,8 +421,7 @@ TEST_F(WebViewSchedulerImplTest, VirtualTimeSettings_NewWebFrameScheduler) {
 
   ThrottleableTaskQueueForScheduler(web_frame_scheduler.get())
       ->PostDelayedTask(
-          BLINK_FROM_HERE,
-          base::Bind(&RunOrderTask, 1, base::Unretained(&run_order)),
+          FROM_HERE, base::Bind(&RunOrderTask, 1, base::Unretained(&run_order)),
           TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunUntilIdle();
@@ -454,8 +450,7 @@ TEST_F(WebViewSchedulerImplTest, DeleteWebFrameSchedulers_InTask) {
                 nullptr, WebFrameScheduler::FrameType::kSubframe)
             .release();
     ThrottleableTaskQueueForScheduler(web_frame_scheduler)
-        ->PostDelayedTask(BLINK_FROM_HERE,
-                          MakeDeletionTask(web_frame_scheduler),
+        ->PostDelayedTask(FROM_HERE, MakeDeletionTask(web_frame_scheduler),
                           TimeDelta::FromMilliseconds(1));
   }
   mock_task_runner_->RunUntilIdle();
@@ -463,7 +458,7 @@ TEST_F(WebViewSchedulerImplTest, DeleteWebFrameSchedulers_InTask) {
 
 TEST_F(WebViewSchedulerImplTest, DeleteWebViewScheduler_InTask) {
   ThrottleableTaskQueue()->PostTask(
-      BLINK_FROM_HERE, MakeDeletionTask(web_view_scheduler_.release()));
+      FROM_HERE, MakeDeletionTask(web_view_scheduler_.release()));
   mock_task_runner_->RunUntilIdle();
 }
 
@@ -480,18 +475,17 @@ TEST_F(WebViewSchedulerImplTest, DeleteThrottledQueue_InTask) {
 
   int run_count = 0;
   timer_task_queue->PostDelayedTask(
-      BLINK_FROM_HERE, MakeRepeatingTask(timer_task_queue, &run_count),
+      FROM_HERE, MakeRepeatingTask(timer_task_queue, &run_count),
       TimeDelta::FromMilliseconds(1));
 
-  // Note this will run at time t = 10s since we start at time t = 5000us, and
-  // it will prevent further tasks from running (i.e. the RepeatingTask) by
-  // deleting the WebFrameScheduler.
-  timer_task_queue->PostDelayedTask(BLINK_FROM_HERE,
+  // Note this will run at time t = 10s since we start at time t = 5000us.
+  // However, we still should run all tasks after frame scheduler deletion.
+  timer_task_queue->PostDelayedTask(FROM_HERE,
                                     MakeDeletionTask(web_frame_scheduler),
                                     TimeDelta::FromMilliseconds(9990));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(100));
-  EXPECT_EQ(10, run_count);
+  EXPECT_EQ(90015, run_count);
 }
 
 TEST_F(WebViewSchedulerImplTest, VirtualTimePauseCount_DETERMINISTIC_LOADING) {
@@ -594,7 +588,7 @@ TEST_F(WebViewSchedulerImplTest, PauseTimersWhileVirtualTimeIsPaused) {
   web_view_scheduler_->EnableVirtualTime();
 
   ThrottleableTaskQueueForScheduler(web_frame_scheduler.get())
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  base::Bind(&RunOrderTask, 1, base::Unretained(&run_order)));
 
   mock_task_runner_->RunUntilIdle();
@@ -617,26 +611,26 @@ TEST_F(WebViewSchedulerImplTest, VirtualTimeBudgetExhaustedCallback) {
   web_view_scheduler_->EnableVirtualTime();
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(1));
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(2));
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(5));
 
   ThrottleableTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
-      MakeVirtualTimeRecorderTask(clock_.get(), ThrottleableTaskRunner(),
+      FROM_HERE,
+      MakeVirtualTimeRecorderTask(&clock_, ThrottleableTaskRunner(),
                                   &real_times, &virtual_times_ms),
       TimeDelta::FromMilliseconds(7));
 
@@ -662,7 +656,7 @@ TEST_F(WebViewSchedulerImplTest, VirtualTimeBudgetExhaustedCallback) {
 namespace {
 class MockObserver : public WebViewScheduler::VirtualTimeObserver {
  public:
-  ~MockObserver() override {}
+  ~MockObserver() override = default;
 
   void OnVirtualTimeAdvanced(base::TimeDelta virtual_time_offset) override {
     virtual_time_log_.push_back(base::StringPrintf(
@@ -692,14 +686,14 @@ TEST_F(WebViewSchedulerImplTest, VirtualTimeObserver) {
   web_view_scheduler_->AddVirtualTimeObserver(&mock_observer);
   web_view_scheduler_->EnableVirtualTime();
 
-  ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&NopTask), TimeDelta::FromMilliseconds(200));
+  ThrottleableTaskQueue()->PostDelayedTask(FROM_HERE, base::Bind(&NopTask),
+                                           TimeDelta::FromMilliseconds(200));
 
-  ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&NopTask), TimeDelta::FromMilliseconds(20));
+  ThrottleableTaskQueue()->PostDelayedTask(FROM_HERE, base::Bind(&NopTask),
+                                           TimeDelta::FromMilliseconds(20));
 
-  ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&NopTask), TimeDelta::FromMilliseconds(2));
+  ThrottleableTaskQueue()->PostDelayedTask(FROM_HERE, base::Bind(&NopTask),
+                                           TimeDelta::FromMilliseconds(2));
 
   web_view_scheduler_->GrantVirtualTimeBudget(
       base::TimeDelta::FromMilliseconds(1000),
@@ -725,7 +719,7 @@ void RepostingTask(scoped_refptr<TaskQueue> task_queue,
   if (++(*count) >= max_count)
     return;
 
-  task_queue->PostTask(BLINK_FROM_HERE,
+  task_queue->PostTask(FROM_HERE,
                        base::Bind(&RepostingTask, task_queue, max_count,
                                   base::Unretained(count)));
 }
@@ -745,7 +739,7 @@ TEST_F(WebViewSchedulerImplTest, MaxVirtualTimeTaskStarvationCountOneHundred) {
   int delayed_task_run_at_count = 0;
   RepostingTask(ThrottleableTaskQueue(), 1000, &count);
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(DelayedTask, base::Unretained(&count),
                  base::Unretained(&delayed_task_run_at_count)),
       base::TimeDelta::FromMilliseconds(10));
@@ -776,7 +770,7 @@ TEST_F(WebViewSchedulerImplTest,
   int delayed_task_run_at_count = 0;
   RepostingTask(ThrottleableTaskQueue(), 1000, &count);
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(DelayedTask, WTF::Unretained(&count),
                  WTF::Unretained(&delayed_task_run_at_count)),
       base::TimeDelta::FromMilliseconds(10));
@@ -804,7 +798,7 @@ TEST_F(WebViewSchedulerImplTest, MaxVirtualTimeTaskStarvationCountZero) {
   int delayed_task_run_at_count = 0;
   RepostingTask(ThrottleableTaskQueue(), 1000, &count);
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       base::Bind(DelayedTask, WTF::Unretained(&count),
                  WTF::Unretained(&delayed_task_run_at_count)),
       base::TimeDelta::FromMilliseconds(10));
@@ -869,10 +863,10 @@ TEST_F(WebViewSchedulerImplTest, BackgroundTimerThrottling) {
                                   base::TimeDelta::FromMilliseconds(2500));
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
+      FROM_HERE, base::Bind(&ExpensiveTestTask, &clock_, &run_times),
       TimeDelta::FromMilliseconds(1));
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
+      FROM_HERE, base::Bind(&ExpensiveTestTask, &clock_, &run_times),
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunUntilTime(base::TimeTicks() +
@@ -889,10 +883,10 @@ TEST_F(WebViewSchedulerImplTest, BackgroundTimerThrottling) {
   web_view_scheduler_->SetPageVisible(false);
 
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
+      FROM_HERE, base::Bind(&ExpensiveTestTask, &clock_, &run_times),
       TimeDelta::FromMicroseconds(1));
   ThrottleableTaskQueue()->PostDelayedTask(
-      BLINK_FROM_HERE, base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
+      FROM_HERE, base::Bind(&ExpensiveTestTask, &clock_, &run_times),
       TimeDelta::FromMicroseconds(1));
 
   mock_task_runner_->RunUntilIdle();
@@ -933,10 +927,9 @@ TEST_F(WebViewSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
 
   for (size_t i = 0; i < 3; ++i) {
     ThrottleableTaskQueueForScheduler(web_frame_scheduler1.get())
-        ->PostDelayedTask(
-            BLINK_FROM_HERE,
-            base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
-            TimeDelta::FromMilliseconds(1));
+        ->PostDelayedTask(FROM_HERE,
+                          base::Bind(&ExpensiveTestTask, &clock_, &run_times),
+                          TimeDelta::FromMilliseconds(1));
   }
 
   mock_task_runner_->RunUntilTime(base::TimeTicks() +
@@ -955,10 +948,9 @@ TEST_F(WebViewSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
 
   for (size_t i = 0; i < 3; ++i) {
     ThrottleableTaskQueueForScheduler(web_frame_scheduler1.get())
-        ->PostDelayedTask(
-            BLINK_FROM_HERE,
-            base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
-            TimeDelta::FromMilliseconds(1));
+        ->PostDelayedTask(FROM_HERE,
+                          base::Bind(&ExpensiveTestTask, &clock_, &run_times),
+                          TimeDelta::FromMilliseconds(1));
   }
 
   mock_task_runner_->RunUntilTime(base::TimeTicks() +
@@ -976,10 +968,9 @@ TEST_F(WebViewSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
 
   for (size_t i = 0; i < 3; ++i) {
     ThrottleableTaskQueueForScheduler(web_frame_scheduler2.get())
-        ->PostDelayedTask(
-            BLINK_FROM_HERE,
-            base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
-            TimeDelta::FromMilliseconds(1));
+        ->PostDelayedTask(FROM_HERE,
+                          base::Bind(&ExpensiveTestTask, &clock_, &run_times),
+                          TimeDelta::FromMilliseconds(1));
   }
 
   mock_task_runner_->RunUntilTime(base::TimeTicks() +
@@ -1002,10 +993,9 @@ TEST_F(WebViewSchedulerImplTest, OpenWebSocketExemptsFromBudgetThrottling) {
 
   for (size_t i = 0; i < 3; ++i) {
     ThrottleableTaskQueueForScheduler(web_frame_scheduler1.get())
-        ->PostDelayedTask(
-            BLINK_FROM_HERE,
-            base::Bind(&ExpensiveTestTask, clock_.get(), &run_times),
-            TimeDelta::FromMilliseconds(1));
+        ->PostDelayedTask(FROM_HERE,
+                          base::Bind(&ExpensiveTestTask, &clock_, &run_times),
+                          TimeDelta::FromMilliseconds(1));
   }
 
   mock_task_runner_->RunUntilIdle();

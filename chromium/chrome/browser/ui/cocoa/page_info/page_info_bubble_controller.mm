@@ -11,6 +11,7 @@
 #include "base/i18n/rtl.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "chrome/browser/certificate_viewer.h"
@@ -51,6 +52,7 @@
 #import "ui/base/cocoa/hover_image_button.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #import "ui/gfx/mac/coordinate_conversion.h"
 #include "ui/gfx/scoped_ns_graphics_context_save_gstate_mac.h"
@@ -144,6 +146,16 @@ NSPoint AnchorPointForWindow(NSWindow* parent) {
   Browser* browser = chrome::FindBrowserWithWindow(parent);
   DCHECK(browser);
   return GetPageInfoAnchorPointForBrowser(browser);
+}
+
+NSImage* GetNSImageFromImageSkia(const gfx::ImageSkia& image) {
+  return NSImageFromImageSkiaWithColorSpace(image,
+                                            base::mac::GetSRGBColorSpace());
+}
+
+SkColor GetRelatedTextColor() {
+  return skia::NSDeviceColorToSkColor(
+      [[NSColor textColor] colorUsingColorSpaceName:NSDeviceRGBColorSpace]);
 }
 
 }  // namespace
@@ -451,7 +463,9 @@ bool IsInternalURL(const GURL& url) {
   info.setting = CONTENT_SETTING_ALLOW;
   cookiesView_ = [self
       addInspectLinkToView:siteSettingsSectionView
-               sectionIcon:PageInfoUI::GetPermissionIcon(info).ToNSImage()
+               sectionIcon:GetNSImageFromImageSkia(
+                               PageInfoUI::GetPermissionIcon(
+                                   info, GetRelatedTextColor()))
               sectionTitle:l10n_util::GetStringUTF16(IDS_PAGE_INFO_COOKIES)
                   linkText:l10n_util::GetPluralNSStringF(
                                IDS_PAGE_INFO_NUM_COOKIES, 0)];
@@ -559,8 +573,6 @@ bool IsInternalURL(const GURL& url) {
   presenter_->OpenSiteSettingsView();
 }
 
-// TODO(lgarron): Move some of this to the presenter for separation of concerns
-// and platform unification. (https://crbug.com/571533)
 - (void)openConnectionHelp:(id)sender {
   DCHECK(webContents_);
   DCHECK(presenter_);
@@ -904,7 +916,6 @@ bool IsInternalURL(const GURL& url) {
   // Determine the largest possible size for this button. The size is the width
   // of the connection section minus the padding on both sides minus the
   // connection image size and spacing.
-  // TODO(lgarron): handle this sizing in -performLayout.
   CGFloat maxTitleWidth =
       containerFrame.size.width - kSectionHorizontalPadding * 2;
 
@@ -975,7 +986,8 @@ bool IsInternalURL(const GURL& url) {
     certificateView_ =
         [self addInspectLinkToView:siteSettingsSectionView_
                        sectionIcon:NSImageFromImageSkia(
-                                       PageInfoUI::GetCertificateIcon())
+                                       PageInfoUI::GetCertificateIcon(
+                                           GetRelatedTextColor()))
                       sectionTitle:l10n_util::GetStringUTF16(
                                        IDS_PAGE_INFO_CERTIFICATE)
                           linkText:linkText];
@@ -1102,7 +1114,8 @@ bool IsInternalURL(const GURL& url) {
       PageInfoUI::PermissionTypeToUIString(permissionInfo.type);
   bool isRTL = base::i18n::IsRTL();
   base::scoped_nsobject<NSImage> image(
-      [PageInfoUI::GetPermissionIcon(permissionInfo).ToNSImage() retain]);
+      [GetNSImageFromImageSkia(PageInfoUI::GetPermissionIcon(
+          permissionInfo, GetRelatedTextColor())) retain]);
 
   NSPoint position;
   NSImageView* imageView;
@@ -1248,7 +1261,8 @@ bool IsInternalURL(const GURL& url) {
       PageInfoUI::ChosenObjectToUIString(*objectInfo));
   bool isRTL = base::i18n::IsRTL();
   base::scoped_nsobject<NSImage> image(
-      [PageInfoUI::GetChosenObjectIcon(*objectInfo, false).ToNSImage() retain]);
+      [GetNSImageFromImageSkia(PageInfoUI::GetChosenObjectIcon(
+          *objectInfo, false, GetRelatedTextColor())) retain]);
 
   NSPoint position;
   NSImageView* imageView;

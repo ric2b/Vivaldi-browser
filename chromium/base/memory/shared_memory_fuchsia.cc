@@ -138,9 +138,8 @@ SharedMemoryHandle SharedMemory::handle() const {
 SharedMemoryHandle SharedMemory::TakeHandle() {
   SharedMemoryHandle handle(shm_);
   handle.SetOwnershipPassesToIPC(true);
+  Unmap();
   shm_ = SharedMemoryHandle();
-  memory_ = nullptr;
-  mapped_size_ = 0;
   return handle;
 }
 
@@ -149,7 +148,7 @@ SharedMemoryHandle SharedMemory::DuplicateHandle(
   return handle.Duplicate();
 }
 
-SharedMemoryHandle SharedMemory::GetReadOnlyHandle() {
+SharedMemoryHandle SharedMemory::GetReadOnlyHandle() const {
   zx_handle_t duped_handle;
   const int kNoWriteOrExec =
       ZX_DEFAULT_VMO_RIGHTS &

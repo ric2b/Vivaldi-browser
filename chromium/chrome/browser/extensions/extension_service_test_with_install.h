@@ -112,10 +112,7 @@ class ExtensionServiceTestWithInstall : public ExtensionServiceTestBase,
                        const base::FilePath& in_path,
                        UpdateState expected_state);
 
-  void UninstallExtension(const std::string& id, bool use_helper);
-  void UninstallExtension(const std::string& id,
-                          bool use_helper,
-                          Extension::State expected_state);
+  void UninstallExtension(const std::string& id);
 
   void TerminateExtension(const std::string& id);
 

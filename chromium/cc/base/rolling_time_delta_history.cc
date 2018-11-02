@@ -13,7 +13,7 @@ namespace cc {
 RollingTimeDeltaHistory::RollingTimeDeltaHistory(size_t max_size)
     : max_size_(max_size) {}
 
-RollingTimeDeltaHistory::~RollingTimeDeltaHistory() {}
+RollingTimeDeltaHistory::~RollingTimeDeltaHistory() = default;
 
 void RollingTimeDeltaHistory::InsertSample(base::TimeDelta time) {
   if (max_size_ == 0)
@@ -26,14 +26,27 @@ void RollingTimeDeltaHistory::InsertSample(base::TimeDelta time) {
 
   TimeDeltaMultiset::iterator it = sample_set_.insert(time);
   chronological_sample_deque_.push_back(it);
+  percentile_cache_.clear();
 }
 
 void RollingTimeDeltaHistory::Clear() {
   chronological_sample_deque_.clear();
   sample_set_.clear();
+  percentile_cache_.clear();
 }
 
 base::TimeDelta RollingTimeDeltaHistory::Percentile(double percent) const {
+  auto pair =
+      percentile_cache_.insert(std::make_pair(percent, base::TimeDelta()));
+  auto it = pair.first;
+  bool inserted = pair.second;
+  if (inserted)
+    it->second = ComputePercentile(percent);
+  return it->second;
+}
+
+base::TimeDelta RollingTimeDeltaHistory::ComputePercentile(
+    double percent) const {
   if (sample_set_.size() == 0)
     return base::TimeDelta();
 

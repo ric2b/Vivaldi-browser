@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/signin/browser_state_data_remover.h"
 
+#include <memory>
+
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/prefs/pref_service.h"
@@ -51,7 +53,7 @@ void BrowserStateDataRemover::SetForgetLastUsername() {
 
 void BrowserStateDataRemover::RemoveBrowserStateData(ProceduralBlock callback) {
   DCHECK(!callback_);
-  callback_.reset([callback copy]);
+  callback_ = [callback copy];
 
   ClearBrowsingDataCommand* command = [[ClearBrowsingDataCommand alloc]
       initWithBrowserState:browser_state_
@@ -72,7 +74,7 @@ void BrowserStateDataRemover::NotifyWithDetails(
   CHECK(RemoveAllUserBookmarksIOS(browser_state_))
       << "Failed to remove all user bookmarks.";
   reading_list_remover_helper_ =
-      base::MakeUnique<reading_list::ReadingListRemoverHelper>(browser_state_);
+      std::make_unique<reading_list::ReadingListRemoverHelper>(browser_state_);
   reading_list_remover_helper_->RemoveAllUserReadingListItemsIOS(
       base::Bind(&BrowserStateDataRemover::ReadingListCleaned,
                  base::Unretained(this), details));
@@ -96,7 +98,7 @@ void BrowserStateDataRemover::ReadingListCleaned(
   }
 
   if (callback_)
-    callback_.get()();
+    callback_();
 
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }

@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "url/gurl.h"
 
 namespace content {
 class NavigationHandle;
@@ -44,11 +45,6 @@ class ChromeDataUseAscriberService : public KeyedService {
   // are propagated.
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host);
 
-  // Called when a navigation is started. Propagates main frame navigation
-  // start to the |ascriber_| on the IO thread. NavigationHandle methods
-  // cannot be called on the IO thread, so the pointer is cast to void*.
-  void DidStartNavigation(content::NavigationHandle* navigation_handle);
-
   // Called when the navigation is ready to be committed in a renderer.
   // Propagates the event to the |ascriber_| on the IO thread. NavigationHandle
   // methods cannot be called on the IO thread, so the pointer is cast to void*.
@@ -65,6 +61,10 @@ class ChromeDataUseAscriberService : public KeyedService {
 
   // Forwarded from DataUseWebContentsObserver
   void DidFinishNavigation(content::NavigationHandle* navigation_handle);
+
+  // Forwarded from DataUseWebContentsObserver
+  void DidFinishLoad(content::RenderFrameHost* main_render_frame_host,
+                     const GURL& validated_url);
 
  private:
   friend class ChromeDataUseAscriberServiceTest;

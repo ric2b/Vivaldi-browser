@@ -14,9 +14,12 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/optional.h"
+#include "base/process/kill.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/loader/chrome_navigation_data.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
+#include "chrome/browser/page_load_metrics/observers/histogram_suffixes.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
@@ -24,17 +27,20 @@
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "chrome/common/page_load_metrics/test/page_load_metrics_test_util.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "components/data_reduction_proxy/content/browser/data_reduction_proxy_pingback_client_impl.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
-#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_pingback_client.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_page_load_timing.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "content/public/test/web_contents_tester.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
+#include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 
 namespace data_reduction_proxy {
 
 namespace {
 
 const char kDefaultTestUrl[] = "http://google.com";
+const int kMemoryKb = 1024;
 
 data_reduction_proxy::DataReductionProxyData* DataForNavigationHandle(
     content::WebContents* web_contents,
@@ -53,10 +59,12 @@ data_reduction_proxy::DataReductionProxyData* DataForNavigationHandle(
 // Pingback client responsible for recording the timing information it receives
 // from a SendPingback call.
 class TestPingbackClient
-    : public data_reduction_proxy::DataReductionProxyPingbackClient {
+    : public data_reduction_proxy::DataReductionProxyPingbackClientImpl {
  public:
   TestPingbackClient()
-      : data_reduction_proxy::DataReductionProxyPingbackClient(nullptr),
+      : data_reduction_proxy::DataReductionProxyPingbackClientImpl(
+            nullptr,
+            base::ThreadTaskRunnerHandle::Get()),
         send_pingback_called_(false) {}
   ~TestPingbackClient() override {}
 
@@ -129,6 +137,25 @@ class TestDataReductionProxyMetricsObserver
     return pingback_client_;
   }
 
+  void RequestProcessDump(
+      base::ProcessId pid,
+      memory_instrumentation::MemoryInstrumentation::RequestGlobalDumpCallback
+          callback) override {
+    memory_instrumentation::mojom::GlobalMemoryDumpPtr global_dump(
+        memory_instrumentation::mojom::GlobalMemoryDump::New());
+
+    memory_instrumentation::mojom::ProcessMemoryDumpPtr pmd(
+        memory_instrumentation::mojom::ProcessMemoryDump::New());
+    pmd->pid = pid;
+    pmd->process_type = memory_instrumentation::mojom::ProcessType::RENDERER;
+    pmd->os_dump = memory_instrumentation::mojom::OSMemDump::New();
+    pmd->os_dump->private_footprint_kb = kMemoryKb;
+
+    global_dump->process_dumps.push_back(std::move(pmd));
+    callback.Run(true, memory_instrumentation::GlobalMemoryDump::MoveFrom(
+                           std::move(global_dump)));
+  }
+
  private:
   content::WebContents* web_contents_;
   TestPingbackClient* pingback_client_;
@@ -185,6 +212,11 @@ class DataReductionProxyMetricsObserverTest
     NavigateToUntrackedUrl();
   }
 
+  void SimulateRendererCrash() {
+    observer()->RenderProcessGone(
+        base::TerminationStatus::TERMINATION_STATUS_ABNORMAL_TERMINATION);
+  }
+
   // Verify that, if expected and actual are set, their values are equal.
   // Otherwise, verify that both are unset.
   void ExpectEqualOrUnset(const base::Optional<base::TimeDelta>& expected,
@@ -213,6 +245,10 @@ class DataReductionProxyMetricsObserverTest
     ExpectEqualOrUnset(timing_.paint_timing->first_image_paint,
                        pingback_client_->timing()->first_image_paint);
     EXPECT_EQ(opt_out_expected_, pingback_client_->timing()->opt_out_occurred);
+    EXPECT_EQ(timing_.document_timing->load_event_start
+                  ? static_cast<int64_t>(kMemoryKb)
+                  : 0,
+              pingback_client_->timing()->renderer_memory_usage_kb);
   }
 
   void ValidateLoFiInPingback(bool lofi_expected) {
@@ -220,30 +256,39 @@ class DataReductionProxyMetricsObserverTest
     EXPECT_EQ(lofi_expected, pingback_client_->data().lofi_received());
   }
 
+  void ValidateRendererCrash(bool renderer_crashed) {
+    EXPECT_TRUE(pingback_client_->send_pingback_called());
+    EXPECT_EQ(renderer_crashed,
+              pingback_client_->timing()->host_id !=
+                  content::ChildProcessHost::kInvalidUniqueID);
+  }
+
   void ValidateHistograms() {
     ValidateHistogramsForSuffix(
-        internal::kHistogramDOMContentLoadedEventFiredSuffix,
+        ::internal::kHistogramDOMContentLoadedEventFiredSuffix,
         timing_.document_timing->dom_content_loaded_event_start);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstLayoutSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramFirstLayoutSuffix,
                                 timing_.document_timing->first_layout);
-    ValidateHistogramsForSuffix(internal::kHistogramLoadEventFiredSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramLoadEventFiredSuffix,
                                 timing_.document_timing->load_event_start);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstContentfulPaintSuffix,
-                                timing_.paint_timing->first_contentful_paint);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstMeaningfulPaintSuffix,
-                                timing_.paint_timing->first_meaningful_paint);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstImagePaintSuffix,
+    ValidateHistogramsForSuffix(
+        ::internal::kHistogramFirstContentfulPaintSuffix,
+        timing_.paint_timing->first_contentful_paint);
+    ValidateHistogramsForSuffix(
+        ::internal::kHistogramFirstMeaningfulPaintSuffix,
+        timing_.paint_timing->first_meaningful_paint);
+    ValidateHistogramsForSuffix(::internal::kHistogramFirstImagePaintSuffix,
                                 timing_.paint_timing->first_image_paint);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstPaintSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramFirstPaintSuffix,
                                 timing_.paint_timing->first_paint);
-    ValidateHistogramsForSuffix(internal::kHistogramFirstTextPaintSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramFirstTextPaintSuffix,
                                 timing_.paint_timing->first_text_paint);
-    ValidateHistogramsForSuffix(internal::kHistogramParseStartSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramParseStartSuffix,
                                 timing_.parse_timing->parse_start);
     ValidateHistogramsForSuffix(
-        internal::kHistogramParseBlockedOnScriptLoadSuffix,
+        ::internal::kHistogramParseBlockedOnScriptLoadSuffix,
         timing_.parse_timing->parse_blocked_on_script_load_duration);
-    ValidateHistogramsForSuffix(internal::kHistogramParseDurationSuffix,
+    ValidateHistogramsForSuffix(::internal::kHistogramParseDurationSuffix,
                                 timing_.parse_timing->parse_stop.value() -
                                     timing_.parse_timing->parse_start.value());
   }
@@ -350,7 +395,7 @@ class DataReductionProxyMetricsObserverTest
  protected:
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
     tracker->AddObserver(
-        base::MakeUnique<TestDataReductionProxyMetricsObserver>(
+        std::make_unique<TestDataReductionProxyMetricsObserver>(
             web_contents(), pingback_client_.get(), data_reduction_proxy_used_,
             is_using_lofi_));
   }
@@ -437,7 +482,7 @@ TEST_F(DataReductionProxyMetricsObserverTest, OnCompletePingback) {
 
   ResetTest();
   std::unique_ptr<DataReductionProxyData> data =
-      base::MakeUnique<DataReductionProxyData>();
+      std::make_unique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
   data->set_request_url(GURL(kDefaultTestUrl));
   data->set_lofi_received(true);
@@ -483,7 +528,7 @@ TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationCompression) {
   RunTest(true, false, false);
 
   std::unique_ptr<DataReductionProxyData> data =
-      base::MakeUnique<DataReductionProxyData>();
+      std::make_unique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
   data->set_request_url(GURL(kDefaultTestUrl));
 
@@ -566,7 +611,7 @@ TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationInflation) {
   RunTest(true, false, false);
 
   std::unique_ptr<DataReductionProxyData> data =
-      base::MakeUnique<DataReductionProxyData>();
+      std::make_unique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
   data->set_request_url(GURL(kDefaultTestUrl));
 
@@ -641,6 +686,29 @@ TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationInflation) {
 
   ValidateDataHistograms(network_resources, drp_resources, network_bytes,
                          drp_bytes, ocl_bytes);
+}
+
+TEST_F(DataReductionProxyMetricsObserverTest, ProcessIdSentOnRendererCrash) {
+  ResetTest();
+  RunTest(true, false, false);
+  std::unique_ptr<DataReductionProxyData> data =
+      std::make_unique<DataReductionProxyData>();
+  data->set_used_data_reduction_proxy(true);
+  data->set_request_url(GURL(kDefaultTestUrl));
+  SimulateRendererCrash();
+
+  // When the renderer crashes, the pingback should report that.
+  ValidateRendererCrash(true);
+
+  ResetTest();
+  RunTest(true, false, false);
+  data = std::make_unique<DataReductionProxyData>();
+  data->set_used_data_reduction_proxy(true);
+  data->set_request_url(GURL(kDefaultTestUrl));
+  NavigateToUntrackedUrl();
+
+  // When the renderer does not crash, the pingback should report that.
+  ValidateRendererCrash(false);
 }
 
 }  //  namespace data_reduction_proxy

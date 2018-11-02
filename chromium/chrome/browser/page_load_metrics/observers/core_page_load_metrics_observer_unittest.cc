@@ -4,7 +4,8 @@
 
 #include "chrome/browser/page_load_metrics/observers/core_page_load_metrics_observer.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/page_load_metrics/page_load_tracker.h"
@@ -16,6 +17,7 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_utils.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
 
 namespace {
@@ -30,7 +32,7 @@ class CorePageLoadMetricsObserverTest
     : public page_load_metrics::PageLoadMetricsObserverTestHarness {
  protected:
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
-    tracker->AddObserver(base::MakeUnique<CorePageLoadMetricsObserver>());
+    tracker->AddObserver(std::make_unique<CorePageLoadMetricsObserver>());
   }
 
   void SetUp() override {
@@ -870,4 +872,54 @@ TEST_F(CorePageLoadMetricsObserverTest, TimeToInteractiveStatusDidNotReachFMP) {
   histogram_tester().ExpectUniqueSample(
       internal::kHistogramTimeToInteractiveStatus,
       internal::TIME_TO_INTERACTIVE_DID_NOT_REACH_FIRST_MEANINGFUL_PAINT, 1);
+}
+
+TEST_F(CorePageLoadMetricsObserverTest, FirstInputDelayAndTimestamp) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.interactive_timing->first_input_delay =
+      base::TimeDelta::FromMilliseconds(5);
+  // Pick a value that lines up with a histogram bucket.
+  timing.interactive_timing->first_input_timestamp =
+      base::TimeDelta::FromMilliseconds(4780);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateTimingUpdate(timing);
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples(internal::kHistogramFirstInputDelay),
+      testing::ElementsAre(base::Bucket(5, 1)));
+  EXPECT_THAT(
+      histogram_tester().GetAllSamples(internal::kHistogramFirstInputTimestamp),
+      testing::ElementsAre(base::Bucket(4780, 1)));
+}
+
+TEST_F(CorePageLoadMetricsObserverTest,
+       FirstInputDelayAndTimestampBackgrounded) {
+  page_load_metrics::mojom::PageLoadTiming timing;
+  page_load_metrics::InitPageLoadTimingForTest(&timing);
+  timing.navigation_start = base::Time::FromDoubleT(1);
+  timing.interactive_timing->first_input_delay =
+      base::TimeDelta::FromMilliseconds(5);
+  timing.interactive_timing->first_input_timestamp =
+      base::TimeDelta::FromMilliseconds(5000);
+  PopulateRequiredTimingFields(&timing);
+
+  NavigateAndCommit(GURL(kDefaultTestUrl));
+
+  // Background the tab, then foreground it.
+  web_contents()->WasHidden();
+  web_contents()->WasShown();
+
+  SimulateTimingUpdate(timing);
+  // Navigate again to force histogram recording.
+  NavigateAndCommit(GURL(kDefaultTestUrl2));
+
+  histogram_tester().ExpectTotalCount(internal::kHistogramFirstInputDelay, 0);
+  histogram_tester().ExpectTotalCount(internal::kHistogramFirstInputTimestamp,
+                                      0);
 }

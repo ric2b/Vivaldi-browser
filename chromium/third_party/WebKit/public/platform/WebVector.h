@@ -42,23 +42,30 @@ namespace blink {
 //
 // Sample usage:
 //
-//   void Foo(WebVector<int>& result)
-//   {
-//       WebVector<int> data(10);
-//       for (size_t i = 0; i < data.size(); ++i)
-//           data[i] = ...
-//       result.swap(data);
+//   void Foo(WebVector<int>& result) {
+//     WebVector<int> data(10);
+//     for (size_t i = 0; i < data.size(); ++i)
+//         data[i] = ...
+//     result.Swap(data);
+//   }
+//
+// In-place element construction:
+//
+//   WebVector<WebString> Foo() {
+//     WebVector<WebString> data;
+//     data.reserve(10);
+//     WebUChar* buffer = ....;
+//     data.emplace_back(buffer, buffer_size);
+//     return data;
 //   }
 //
 // It is also possible to assign from any container that implements begin()
 // and end().
 //
-//   void Foo(const std::vector<WTF::String>& input)
-//   {
-//       WebVector<WebString> strings = input;
-//       ...
+//   void Foo(const std::vector<WTF::String>& input) {
+//     WebVector<WebString> strings = input;
+//     ...
 //   }
-//
 template <typename T>
 class WebVector {
  public:
@@ -66,9 +73,15 @@ class WebVector {
   using iterator = typename std::vector<T>::iterator;
   using const_iterator = typename std::vector<T>::const_iterator;
 
-  ~WebVector() {}
+  ~WebVector() = default;
 
-  explicit WebVector(size_t size = 0) : data_(size) {}
+  // Create an empty vector.
+  //
+  // The vector can be populated using reserve() and emplace_back().
+  WebVector() = default;
+
+  // Create a vector with |size| default-constructed elements.
+  explicit WebVector(size_t size) : data_(size) {}
 
   template <typename U>
   WebVector(const U* values, size_t size) : data_(values, values + size) {}
@@ -78,11 +91,11 @@ class WebVector {
   template <typename C>
   WebVector(const C& other) : data_(other.begin(), other.end()) {}
 
-  WebVector(WebVector<T>&& other) { Swap(other); }
+  WebVector(WebVector<T>&& other) noexcept { Swap(other); }
 
-  WebVector(std::vector<T>&& other) : data_(std::move(other)) {}
+  WebVector(std::vector<T>&& other) noexcept : data_(std::move(other)) {}
 
-  std::vector<T> ReleaseVector() { return std::move(data_); }
+  std::vector<T> ReleaseVector() noexcept { return std::move(data_); }
 
   WebVector& operator=(const WebVector& other) {
     if (this != &other)
@@ -90,7 +103,7 @@ class WebVector {
     return *this;
   }
 
-  WebVector& operator=(WebVector&& other) {
+  WebVector& operator=(WebVector&& other) noexcept {
     if (this != &other)
       Swap(other);
     return *this;
@@ -103,7 +116,7 @@ class WebVector {
     return *this;
   }
 
-  WebVector<T>& operator=(std::vector<T>&& other) {
+  WebVector<T>& operator=(std::vector<T>&& other) noexcept {
     data_ = std::move(other);
     return *this;
   }
@@ -119,9 +132,16 @@ class WebVector {
   }
 
   size_t size() const { return data_.size(); }
+  void resize(size_t new_size) {
+    DCHECK_LE(new_size, data_.capacity());
+    data_.resize(new_size);
+  }
   bool empty() const { return data_.empty(); }
   // TODO(slangley): Remove all uses of IsEmpty.
   bool IsEmpty() const { return empty(); }
+
+  size_t capacity() const { return data_.capacity(); }
+  void reserve(size_t new_capacity) { data_.reserve(new_capacity); }
 
   T& operator[](size_t i) {
     DCHECK_LT(i, data_.size());
@@ -140,6 +160,12 @@ class WebVector {
   iterator end() { return data_.end(); }
   const_iterator begin() const { return data_.begin(); }
   const_iterator end() const { return data_.end(); }
+
+  template <typename... Args>
+  void emplace_back(Args&&... args) {
+    DCHECK_LT(data_.size(), data_.capacity());
+    data_.emplace_back(std::forward<Args>(args)...);
+  }
 
   void Swap(WebVector<T>& other) { data_.swap(other.data_); }
 

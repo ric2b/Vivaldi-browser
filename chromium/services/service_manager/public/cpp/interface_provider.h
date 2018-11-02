@@ -29,8 +29,8 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT InterfaceProvider {
 
     void SetBinderForName(
         const std::string& name,
-        const base::Callback<void(mojo::ScopedMessagePipeHandle)>& binder) {
-      provider_->SetBinderForName(name, binder);
+        base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)> binder) {
+      provider_->SetBinderForName(name, std::move(binder));
     }
 
     bool HasBinderForName(const std::string& name) {
@@ -76,9 +76,6 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT InterfaceProvider {
   // be called before any calls to GetInterface() are made.
   void Forward(const ForwardCallback& callback);
 
-  // Returns a raw pointer to the remote InterfaceProvider.
-  mojom::InterfaceProvider* get() { return interface_provider_.get(); }
-
   // Sets a closure to be run when the remote InterfaceProvider pipe is closed.
   void SetConnectionLostClosure(const base::Closure& connection_lost_closure);
 
@@ -120,15 +117,16 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT InterfaceProvider {
 
   void SetBinderForName(
       const std::string& name,
-      const base::Callback<void(mojo::ScopedMessagePipeHandle)>& binder) {
-    binders_[name] = binder;
+      base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)> binder) {
+    binders_[name] = std::move(binder);
   }
   bool HasBinderForName(const std::string& name) const;
   void ClearBinderForName(const std::string& name);
   void ClearBinders();
 
-  using BinderMap = std::map<
-      std::string, base::Callback<void(mojo::ScopedMessagePipeHandle)>>;
+  using BinderMap =
+      std::map<std::string,
+               base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)>>;
   BinderMap binders_;
 
   mojom::InterfaceProviderPtr interface_provider_;

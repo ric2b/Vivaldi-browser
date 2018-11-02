@@ -170,6 +170,8 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   viz::BeginFrameAck CurrentBeginFrameAckForActiveTree() const;
 
+  void ClearHistoryOnNavigation();
+
  protected:
   // Virtual for testing.
   virtual base::TimeTicks Now() const;
@@ -189,7 +191,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   SchedulerStateMachine::BeginImplFrameDeadlineMode
       begin_impl_frame_deadline_mode_ =
-          SchedulerStateMachine::BEGIN_IMPL_FRAME_DEADLINE_MODE_NONE;
+          SchedulerStateMachine::BeginImplFrameDeadlineMode::NONE;
   base::TimeTicks deadline_;
   base::TimeTicks deadline_scheduled_at_;
 
@@ -202,8 +204,9 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
 
   SchedulerStateMachine state_machine_;
   bool inside_process_scheduled_actions_ = false;
+  bool inside_scheduled_action_ = false;
   SchedulerStateMachine::Action inside_action_ =
-      SchedulerStateMachine::ACTION_NONE;
+      SchedulerStateMachine::Action::NONE;
 
   bool stopped_ = false;
 
@@ -237,6 +240,7 @@ class CC_EXPORT Scheduler : public viz::BeginFrameObserverBase {
                          BeginFrameResult result);
   void OnBeginImplFrameDeadline();
   void PollToAdvanceCommitState();
+  void BeginMainFrameAnimateAndLayoutOnly(const viz::BeginFrameArgs& args);
 
   bool IsInsideAction(SchedulerStateMachine::Action action) {
     return inside_action_ == action;

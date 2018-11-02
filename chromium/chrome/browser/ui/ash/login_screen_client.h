@@ -7,6 +7,7 @@
 
 #include "ash/public/interfaces/login_screen.mojom.h"
 #include "base/macros.h"
+#include "components/password_manager/public/interfaces/sync_password_data.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
@@ -25,10 +26,12 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
    public:
     Delegate();
     virtual ~Delegate();
-    virtual void HandleAuthenticateUser(const AccountId& account_id,
-                                        const std::string& hashed_password,
-                                        bool authenticated_by_pin,
-                                        AuthenticateUserCallback callback) = 0;
+    virtual void HandleAuthenticateUser(
+        const AccountId& account_id,
+        const std::string& hashed_password,
+        const password_manager::SyncPasswordData& sync_password_data,
+        bool authenticated_by_pin,
+        AuthenticateUserCallback callback) = 0;
     virtual void HandleAttemptUnlock(const AccountId& account_id) = 0;
     virtual void HandleHardlockPod(const AccountId& account_id) = 0;
     virtual void HandleRecordClickOnLockIcon(const AccountId& account_id) = 0;
@@ -38,18 +41,22 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
     // focus has been handed over to a lock screen app. For example, this might
     // fail if a hander for lock screen apps focus has not been set.
     virtual bool HandleFocusLockScreenApps(bool reverse) = 0;
+    virtual void HandleLoginAsGuest() = 0;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(Delegate);
   };
 
+  static bool HasInstance();
   static LoginScreenClient* Get();
 
   // ash::mojom::LoginScreenClient:
-  void AuthenticateUser(const AccountId& account_id,
-                        const std::string& hashed_password,
-                        bool authenticated_by_pin,
-                        AuthenticateUserCallback callback) override;
+  void AuthenticateUser(
+      const AccountId& account_id,
+      const std::string& hashed_password,
+      const password_manager::SyncPasswordData& sync_password_data,
+      bool authenticated_by_pin,
+      AuthenticateUserCallback callback) override;
   void AttemptUnlock(const AccountId& account_id) override;
   void HardlockPod(const AccountId& account_id) override;
   void RecordClickOnLockIcon(const AccountId& account_id) override;
@@ -58,11 +65,14 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   void LoadWallpaper(const AccountId& account_id) override;
   void SignOutUser() override;
   void CancelAddUser() override;
+  void LoginAsGuest() override;
   void OnMaxIncorrectPasswordAttempted(const AccountId& account_id) override;
   void FocusLockScreenApps(bool reverse) override;
 
   // Wrappers around the mojom::LockScreen interface.
   void ShowLockScreen(ash::mojom::LoginScreen::ShowLockScreenCallback on_shown);
+  void ShowLoginScreen(
+      ash::mojom::LoginScreen::ShowLoginScreenCallback on_shown);
   void ShowErrorMessage(int32_t login_attempts,
                         const std::string& error_text,
                         const std::string& help_link_text,
@@ -81,6 +91,8 @@ class LoginScreenClient : public ash::mojom::LoginScreenClient {
   void SetDevChannelInfo(const std::string& os_version_label_text,
                          const std::string& enterprise_info_text,
                          const std::string& bluetooth_name);
+  void IsReadyForPassword(
+      ash::mojom::LoginScreen::IsReadyForPasswordCallback callback);
 
   void SetDelegate(Delegate* delegate);
 

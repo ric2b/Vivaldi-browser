@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/passwords/account_chooser_dialog_view.h"
 
+#include <memory>
+
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -14,6 +16,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/constrained_window/constrained_window_views.h"
+#include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -51,17 +54,17 @@ Profile* GetProfileFromWebContents(content::WebContents* web_contents) {
 views::ScrollView* CreateCredentialsView(
     const PasswordDialogController::FormsVector& forms,
     views::ButtonListener* button_listener,
-    net::URLRequestContextGetter* request_context) {
+    network::mojom::URLLoaderFactory* loader_factory) {
   views::View* list_view = new views::View;
   list_view->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical));
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
   int item_height = 0;
   for (const auto& form : forms) {
     std::pair<base::string16, base::string16> titles =
         GetCredentialLabelsForAccountChooser(*form);
-    CredentialsItemView* credential_view = new CredentialsItemView(
-        button_listener, titles.first, titles.second, kButtonHoverColor,
-        form.get(), request_context);
+    CredentialsItemView* credential_view =
+        new CredentialsItemView(button_listener, titles.first, titles.second,
+                                kButtonHoverColor, form.get(), loader_factory);
     credential_view->SetLowerLabelColor(kAutoSigninTextColor);
     ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
     gfx::Insets insets =
@@ -124,7 +127,7 @@ void AccountChooserDialogView::AddedToWidget() {
   std::pair<base::string16, gfx::Range> title_content =
       controller_->GetAccoutChooserTitle();
   std::unique_ptr<views::StyledLabel> title_label =
-      base::MakeUnique<views::StyledLabel>(title_content.first, this);
+      std::make_unique<views::StyledLabel>(title_content.first, this);
   title_label->SetTextContext(views::style::CONTEXT_DIALOG_TITLE);
   if (!title_content.second.is_empty())
     title_label->AddStyleRange(title_content.second, GetLinkStyle());
@@ -177,10 +180,12 @@ void AccountChooserDialogView::ButtonPressed(views::Button* sender,
 }
 
 void AccountChooserDialogView::InitWindow() {
-  SetLayoutManager(new views::FillLayout());
-  AddChildView(CreateCredentialsView(
-      controller_->GetLocalForms(), this,
-      GetProfileFromWebContents(web_contents_)->GetRequestContext()));
+  SetLayoutManager(std::make_unique<views::FillLayout>());
+  AddChildView(
+      CreateCredentialsView(controller_->GetLocalForms(), this,
+                            content::BrowserContext::GetDefaultStoragePartition(
+                                GetProfileFromWebContents(web_contents_))
+                                ->GetURLLoaderFactoryForBrowserProcess()));
 }
 
 AccountChooserPrompt* CreateAccountChooserPromptView(

@@ -10,6 +10,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/location.h"
@@ -54,6 +55,7 @@
 #include "third_party/WebKit/public/platform/WebRTCStatsRequest.h"
 #include "third_party/WebKit/public/platform/WebRTCVoidRequest.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/api/rtpreceiverinterface.h"
@@ -211,7 +213,8 @@ class MockRTCStatsReportCallback : public blink::WebRTCStatsReportCallback {
  public:
   explicit MockRTCStatsReportCallback(
       std::unique_ptr<blink::WebRTCStatsReport>* result)
-      : main_thread_(base::ThreadTaskRunnerHandle::Get()), result_(result) {
+      : main_thread_(blink::scheduler::GetSingleThreadTaskRunnerForTesting()),
+        result_(result) {
     DCHECK(result_);
   }
 
@@ -245,8 +248,10 @@ class RTCPeerConnectionHandlerUnderTest : public RTCPeerConnectionHandler {
   RTCPeerConnectionHandlerUnderTest(
       WebRTCPeerConnectionHandlerClient* client,
       PeerConnectionDependencyFactory* dependency_factory)
-      : RTCPeerConnectionHandler(client, dependency_factory) {
-  }
+      : RTCPeerConnectionHandler(
+            client,
+            dependency_factory,
+            blink::scheduler::GetSingleThreadTaskRunnerForTesting()) {}
 
   MockPeerConnectionImpl* native_peer_connection() {
     return static_cast<MockPeerConnectionImpl*>(
@@ -305,6 +310,7 @@ class RTCPeerConnectionHandlerTest : public ::testing::Test {
                               media::AudioParameters::kAudioCDSampleRate,
                               media::CHANNEL_LAYOUT_STEREO,
                               media::AudioParameters::kAudioCDSampleRate / 100),
+            false /* hotword_enabled */, false /* disable_local_echo */,
             AudioProcessingProperties(),
             base::Bind(&RTCPeerConnectionHandlerTest::OnAudioSourceStarted),
             mock_dependency_factory_.get());
@@ -556,11 +562,6 @@ TEST_F(RTCPeerConnectionHandlerTest, NoCallbacksToClientAfterStop) {
   pc_handler_->observer()->OnDataChannel(remote_data_channel);
 
   RunMessageLoopsUntilIdle();
-}
-
-TEST_F(RTCPeerConnectionHandlerTest, DestructAllHandlers) {
-  EXPECT_CALL(*mock_client_.get(), ReleasePeerConnectionHandler()).Times(1);
-  RTCPeerConnectionHandler::DestructAllHandlers();
 }
 
 TEST_F(RTCPeerConnectionHandlerTest, CreateOffer) {

@@ -52,7 +52,7 @@ int InspectorWorkerAgent::s_last_connection_ = 0;
 InspectorWorkerAgent::InspectorWorkerAgent(InspectedFrames* inspected_frames)
     : inspected_frames_(inspected_frames) {}
 
-InspectorWorkerAgent::~InspectorWorkerAgent() {}
+InspectorWorkerAgent::~InspectorWorkerAgent() = default;
 
 void InspectorWorkerAgent::Restore() {
   if (!AutoAttachEnabled())
@@ -231,7 +231,7 @@ void InspectorWorkerAgent::ConnectToProxy(WorkerInspectorProxy* proxy,
   connection_to_session_id_.Set(connection, session_id);
 
   proxy->ConnectToInspector(connection,
-                            inspected_frames_->InstrumentationToken(), this);
+                            inspected_frames_->GetDevToolsFrameToken(), this);
   DCHECK(GetFrontend());
   AttachedSessionIds()->setBoolean(session_id, true);
   GetFrontend()->attachedToTarget(session_id,

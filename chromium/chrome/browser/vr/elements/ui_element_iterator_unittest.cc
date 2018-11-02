@@ -5,7 +5,6 @@
 #include "chrome/browser/vr/elements/ui_element.h"
 
 #include "base/containers/adapters.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/gtest_util.h"
 #include "chrome/browser/vr/ui_scene.h"
 
@@ -23,32 +22,32 @@ namespace {
 //       7 kUrlBar
 //     8 kCeiling
 void MakeTree(UiScene* scene) {
-  auto element = base::MakeUnique<UiElement>();
-  element->set_name(k2dBrowsingRoot);
+  auto element = std::make_unique<UiElement>();
+  element->SetName(k2dBrowsingRoot);
   scene->AddUiElement(kRoot, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(kFloor);
+  element = std::make_unique<UiElement>();
+  element->SetName(kFloor);
   scene->AddUiElement(k2dBrowsingRoot, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(k2dBrowsingContentGroup);
+  element = std::make_unique<UiElement>();
+  element->SetName(k2dBrowsingContentGroup);
   scene->AddUiElement(k2dBrowsingRoot, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(kBackplane);
+  element = std::make_unique<UiElement>();
+  element->SetName(kBackplane);
   scene->AddUiElement(k2dBrowsingContentGroup, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(kContentQuad);
+  element = std::make_unique<UiElement>();
+  element->SetName(kContentQuad);
   scene->AddUiElement(k2dBrowsingContentGroup, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(kUrlBar);
+  element = std::make_unique<UiElement>();
+  element->SetName(kUrlBar);
   scene->AddUiElement(k2dBrowsingContentGroup, std::move(element));
 
-  element = base::MakeUnique<UiElement>();
-  element->set_name(kCeiling);
+  element = std::make_unique<UiElement>();
+  element->SetName(kCeiling);
   scene->AddUiElement(k2dBrowsingRoot, std::move(element));
 }
 

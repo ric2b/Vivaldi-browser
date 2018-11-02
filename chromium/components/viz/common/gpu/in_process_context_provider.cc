@@ -14,11 +14,10 @@
 #include "components/viz/common/resources/platform_color.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
-#include "gpu/command_buffer/service/framebuffer_completeness_cache.h"
+#include "gpu/command_buffer/client/raster_implementation_gles.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
-#include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/ipc/common/surface_handle.h"
@@ -30,14 +29,13 @@
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
-#include "ui/gfx/native_widget_types.h"
 
 namespace viz {
 
 namespace {
 
-gpu::gles2::ContextCreationAttribHelper CreateAttributes() {
-  gpu::gles2::ContextCreationAttribHelper attributes;
+gpu::ContextCreationAttribs CreateAttributes() {
+  gpu::ContextCreationAttribs attributes;
   attributes.alpha_size = -1;
   attributes.depth_size = 0;
   attributes.stencil_size = 8;
@@ -52,9 +50,10 @@ gpu::gles2::ContextCreationAttribHelper CreateAttributes() {
 
 InProcessContextProvider::InProcessContextProvider(
     scoped_refptr<gpu::InProcessCommandBuffer::Service> service,
-    gpu::SurfaceHandle widget,
+    gpu::SurfaceHandle surface_handle,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     gpu::ImageFactory* image_factory,
+    gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
     const gpu::SharedMemoryLimits& limits,
     InProcessContextProvider* shared_context)
     : attributes_(CreateAttributes()),
@@ -62,19 +61,28 @@ InProcessContextProvider::InProcessContextProvider(
       context_result_(context_->Initialize(
           std::move(service),
           nullptr,
-          (widget == gpu::kNullSurfaceHandle),
-          widget,
+          (surface_handle == gpu::kNullSurfaceHandle),
+          surface_handle,
           (shared_context ? shared_context->context_.get() : nullptr),
           attributes_,
           limits,
           gpu_memory_buffer_manager,
           image_factory,
+          gpu_channel_manager_delegate,
           base::ThreadTaskRunnerHandle::Get())),
       cache_controller_(std::make_unique<ContextCacheController>(
           context_->GetImplementation(),
           base::ThreadTaskRunnerHandle::Get())) {}
 
 InProcessContextProvider::~InProcessContextProvider() = default;
+
+void InProcessContextProvider::AddRef() const {
+  base::RefCountedThreadSafe<InProcessContextProvider>::AddRef();
+}
+
+void InProcessContextProvider::Release() const {
+  base::RefCountedThreadSafe<InProcessContextProvider>::Release();
+}
 
 gpu::ContextResult InProcessContextProvider::BindToCurrentThread() {
   return context_result_;
@@ -92,8 +100,15 @@ class GrContext* InProcessContextProvider::GrContext() {
   if (gr_context_)
     return gr_context_->get();
 
+  size_t max_resource_cache_bytes;
+  size_t max_glyph_cache_texture_bytes;
+  skia_bindings::GrContextForGLES2Interface::
+      DetermineCacheLimitsFromAvailableMemory(&max_resource_cache_bytes,
+                                              &max_glyph_cache_texture_bytes);
+
   gr_context_.reset(new skia_bindings::GrContextForGLES2Interface(
-      ContextGL(), ContextCapabilities()));
+      ContextGL(), ContextCapabilities(), max_resource_cache_bytes,
+      max_glyph_cache_texture_bytes));
   return gr_context_->get();
 }
 

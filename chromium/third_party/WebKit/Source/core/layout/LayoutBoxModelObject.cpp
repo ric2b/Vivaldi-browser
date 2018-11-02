@@ -77,27 +77,6 @@ typedef HashMap<const LayoutBoxModelObject*, LayoutBoxModelObject*>
     ContinuationMap;
 static ContinuationMap* g_continuation_map = nullptr;
 
-void LayoutBoxModelObject::SetSelectionState(SelectionState state) {
-  if (state == SelectionState::kInside &&
-      GetSelectionState() != SelectionState::kNone)
-    return;
-
-  if ((state == SelectionState::kStart &&
-       GetSelectionState() == SelectionState::kEnd) ||
-      (state == SelectionState::kEnd &&
-       GetSelectionState() == SelectionState::kStart))
-    LayoutObject::SetSelectionState(SelectionState::kStartAndEnd);
-  else
-    LayoutObject::SetSelectionState(state);
-
-  // FIXME: We should consider whether it is OK propagating to ancestor
-  // LayoutInlines. This is a workaround for http://webkit.org/b/32123
-  // The containing block can be null in case of an orphaned tree.
-  LayoutBlock* containing_block = ContainingBlock();
-  if (containing_block && !containing_block->IsLayoutView())
-    containing_block->SetSelectionState(state);
-}
-
 void LayoutBoxModelObject::ContentChanged(ContentChangeType change_type) {
   if (!HasLayer())
     return;
@@ -150,42 +129,42 @@ BackgroundPaintLocation LayoutBoxModelObject::GetBackgroundPaintLocation(
   BackgroundPaintLocation paint_location = kBackgroundPaintInScrollingContents;
   const FillLayer* layer = &(Style()->BackgroundLayers());
   for (; layer; layer = layer->Next()) {
-    if (layer->Attachment() == kLocalBackgroundAttachment)
+    if (layer->Attachment() == EFillAttachment::kLocal)
       continue;
 
     // Solid color layers with an effective background clip of the padding box
     // can be treated as local.
     if (!layer->GetImage() && !layer->Next() &&
-        ResolveColor(CSSPropertyBackgroundColor).Alpha() > 0) {
+        ResolveColor(GetCSSPropertyBackgroundColor()).Alpha() > 0) {
       EFillBox clip = layer->Clip();
-      if (clip == kPaddingFillBox)
+      if (clip == EFillBox::kPadding)
         continue;
       // A border box can be treated as a padding box if the border is opaque or
       // there is no border and we don't have custom scrollbars.
-      if (clip == kBorderFillBox) {
+      if (clip == EFillBox::kBorder) {
         if (!has_custom_scrollbars &&
             (Style()->BorderTopWidth() == 0 ||
-             !ResolveColor(CSSPropertyBorderTopColor).HasAlpha()) &&
+             !ResolveColor(GetCSSPropertyBorderTopColor()).HasAlpha()) &&
             (Style()->BorderLeftWidth() == 0 ||
-             !ResolveColor(CSSPropertyBorderLeftColor).HasAlpha()) &&
+             !ResolveColor(GetCSSPropertyBorderLeftColor()).HasAlpha()) &&
             (Style()->BorderRightWidth() == 0 ||
-             !ResolveColor(CSSPropertyBorderRightColor).HasAlpha()) &&
+             !ResolveColor(GetCSSPropertyBorderRightColor()).HasAlpha()) &&
             (Style()->BorderBottomWidth() == 0 ||
-             !ResolveColor(CSSPropertyBorderBottomColor).HasAlpha())) {
+             !ResolveColor(GetCSSPropertyBorderBottomColor()).HasAlpha())) {
           continue;
         }
         // If we have an opaque background color only, we can safely paint it
         // into both the scrolling contents layer and the graphics layer to
         // preserve LCD text.
         if (layer == (&Style()->BackgroundLayers()) &&
-            ResolveColor(CSSPropertyBackgroundColor).Alpha() < 255)
+            ResolveColor(GetCSSPropertyBackgroundColor()).Alpha() < 255)
           return kBackgroundPaintInGraphicsLayer;
         paint_location |= kBackgroundPaintInGraphicsLayer;
         continue;
       }
       // A content fill box can be treated as a padding fill box if there is no
       // padding.
-      if (clip == kContentFillBox && Style()->PaddingTop().IsZero() &&
+      if (clip == EFillBox::kContent && Style()->PaddingTop().IsZero() &&
           Style()->PaddingLeft().IsZero() && Style()->PaddingRight().IsZero() &&
           Style()->PaddingBottom().IsZero()) {
         continue;
@@ -367,8 +346,8 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   // gets the same layout after changing position property, although no
   // re-raster (rect-based invalidation) is needed, display items should
   // still update their paint offset.
-  // For SPv2, invalidation for paint offset change is done during PrePaint.
-  if (old_style && !RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+  // For SPv175, invalidation for paint offset change is done during PrePaint.
+  if (old_style && !RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
     bool new_style_is_fixed_position =
         Style()->GetPosition() == EPosition::kFixed;
     bool old_style_is_fixed_position =
@@ -487,7 +466,7 @@ void LayoutBoxModelObject::InvalidateStickyConstraints() {
 
 void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
   DCHECK(!HasLayer() && !Layer());
-  GetMutableForPainting().FirstFragment().EnsureRarePaintData().SetLayer(
+  GetMutableForPainting().FirstFragment().SetLayer(
       std::make_unique<PaintLayer>(*this));
   SetHasLayer(true);
   Layer()->InsertOnlyThisLayerAfterStyleChange();
@@ -496,7 +475,7 @@ void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
 void LayoutBoxModelObject::DestroyLayer() {
   DCHECK(HasLayer() && Layer());
   SetHasLayer(false);
-  FirstFragment().GetRarePaintData()->SetLayer(nullptr);
+  GetMutableForPainting().FirstFragment().SetLayer(nullptr);
 }
 
 bool LayoutBoxModelObject::HasSelfPaintingLayer() const {

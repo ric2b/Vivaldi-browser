@@ -2,7 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//build/config/chrome_build.gni")
 import("//build/config/compiler/compiler.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
@@ -12,10 +11,6 @@ import("//components/nacl/features.gni")
 import("//third_party/icu/config.gni")
 import("//ui/base/ui_features.gni")
 import("//v8/gni/v8.gni")
-
-if (is_vivaldi) {
-  import("//vivaldi/gn/config/version.gni")
-}
 
 config("mini_installer_compiler_flags") {
   # Disable buffer security checking.
@@ -138,6 +133,7 @@ template("generate_mini_installer") {
       "$root_out_dir/locales/en-US.pak",
       "$root_out_dir/setup.exe",
       "$root_out_dir/v8_context_snapshot.bin",
+      "//chrome/tools/build/win/makecab.py",
       release_file,
     ]
 

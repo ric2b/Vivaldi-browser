@@ -17,7 +17,6 @@
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/pattern.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -192,10 +191,11 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   DCHECK(!instance_);
   instance_ = this;
 
-  // ShelfModel initializes the app list item.
+  // ShelfModel initializes the app list item and back button.
   DCHECK(model_);
-  DCHECK_EQ(1, model_->item_count());
-  DCHECK_EQ(ash::kAppListId, model_->items()[0].id.app_id);
+  DCHECK_EQ(2, model_->item_count());
+  DCHECK_EQ(ash::kBackButtonId, model_->items()[0].id.app_id);
+  DCHECK_EQ(ash::kAppListId, model_->items()[1].id.app_id);
 
   // Start observing the shelf controller.
   if (ConnectToShelfController()) {
@@ -258,7 +258,7 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
   }
   app_window_controllers_.push_back(std::move(extension_app_window_controller));
   app_window_controllers_.push_back(
-      base::MakeUnique<ArcAppWindowLauncherController>(this));
+      std::make_unique<ArcAppWindowLauncherController>(this));
 }
 
 ChromeLauncherController::~ChromeLauncherController() {
@@ -713,7 +713,7 @@ ChromeLauncherController::ScopedPinSyncDisabler
 ChromeLauncherController::GetScopedPinSyncDisabler() {
   // Only one temporary disabler should not exist at a time.
   DCHECK(should_sync_pin_changes_);
-  return base::MakeUnique<base::AutoReset<bool>>(&should_sync_pin_changes_,
+  return std::make_unique<base::AutoReset<bool>>(&should_sync_pin_changes_,
                                                  false);
 }
 
@@ -972,8 +972,10 @@ void ChromeLauncherController::UpdateAppLaunchersFromPref() {
       profile()->GetPrefs(), launcher_controller_helper_.get());
 
   int index = 0;
-  // Skip app list items if it exists.
-  if (model_->items()[0].type == ash::TYPE_APP_LIST)
+  // Skip the app list and back button if they exist.
+  if (model_->items()[0].type == ash::TYPE_BACK_BUTTON)
+    ++index;
+  if (model_->items()[1].type == ash::TYPE_APP_LIST)
     ++index;
 
   // Apply pins in two steps. At the first step, go through the list of apps to
@@ -1104,7 +1106,7 @@ void ChromeLauncherController::CreateBrowserShortcutLauncherItem() {
   browser_shortcut.image = *rb.GetImageSkiaNamed(IDR_PRODUCT_LOGO_32);
   browser_shortcut.title = l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);
   std::unique_ptr<BrowserShortcutLauncherItemController> item_delegate =
-      base::MakeUnique<BrowserShortcutLauncherItemController>(model_);
+      std::make_unique<BrowserShortcutLauncherItemController>(model_);
   BrowserShortcutLauncherItemController* item_controller = item_delegate.get();
   // Set the delegate first to avoid constructing another one in ShelfItemAdded.
   model_->SetShelfItemDelegate(browser_shortcut.id, std::move(item_delegate));
@@ -1162,7 +1164,7 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
   // one for some functions of LauncherControllerHelper or create a new one.
   if (!launcher_controller_helper_.get()) {
     launcher_controller_helper_ =
-        base::MakeUnique<LauncherControllerHelper>(profile_);
+        std::make_unique<LauncherControllerHelper>(profile_);
   } else {
     launcher_controller_helper_->set_profile(profile_);
   }
@@ -1173,13 +1175,13 @@ void ChromeLauncherController::AttachProfile(Profile* profile_to_attach) {
   // reloaded. However - having it not multi profile aware would cause problems
   // if the icon cache gets deleted upon user switch.
   std::unique_ptr<AppIconLoader> chrome_app_icon_loader =
-      base::MakeUnique<extensions::ChromeAppIconLoader>(
+      std::make_unique<extensions::ChromeAppIconLoader>(
           profile_, extension_misc::EXTENSION_ICON_SMALL, this);
   app_icon_loaders_.push_back(std::move(chrome_app_icon_loader));
 
   if (arc::IsArcAllowedForProfile(profile_)) {
     std::unique_ptr<AppIconLoader> arc_app_icon_loader =
-        base::MakeUnique<ArcAppIconLoader>(
+        std::make_unique<ArcAppIconLoader>(
             profile_, extension_misc::EXTENSION_ICON_SMALL, this);
     app_icon_loaders_.push_back(std::move(arc_app_icon_loader));
   }
@@ -1243,16 +1245,22 @@ void ChromeLauncherController::OnShelfItemAdded(int32_t index,
   DCHECK(shelf_controller_) << " Unexpected model sync";
   DCHECK(!applying_remote_shelf_model_changes_) << " Unexpected model change";
 
+  // Ignore the back button; it should already exist in the local ShelfModel.
+  if (item.id.app_id == ash::kBackButtonId) {
+    DCHECK_EQ(0, model_->ItemIndexByID(item.id));
+    return;
+  }
+
   // Ignore the AppList item; it should already exist in the local ShelfModel.
   if (item.id.app_id == ash::kAppListId) {
-    DCHECK_EQ(0, model_->ItemIndexByID(item.id));
+    DCHECK_EQ(1, model_->ItemIndexByID(item.id));
     return;
   }
 
   // Ash items should be sent without images for efficiency.
   DCHECK(item.image.isNull()) << " Chrome does not need item images from Ash";
   DCHECK_LE(index, model_->item_count()) << " Index out of bounds";
-  DCHECK_GT(index, 0) << " Items can not preceed the AppList";
+  DCHECK_GT(index, 1) << " Items can not preceed the AppList";
   index = std::min(std::max(index, 1), model_->item_count());
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, true);
   model_->AddAt(index, item);
@@ -1313,7 +1321,7 @@ void ChromeLauncherController::OnShelfItemDelegateChanged(
   base::AutoReset<bool> reset(&applying_remote_shelf_model_changes_, true);
   if (delegate.is_bound()) {
     model_->SetShelfItemDelegate(id,
-                                 base::MakeUnique<ash::RemoteShelfItemDelegate>(
+                                 std::make_unique<ash::RemoteShelfItemDelegate>(
                                      id, std::move(delegate)));
   } else {
     model_->SetShelfItemDelegate(id, nullptr);
@@ -1389,6 +1397,7 @@ void ChromeLauncherController::ShelfItemMoved(int start_index,
     shelf_controller_->MoveShelfItem(item.id, target_index);
 
   // Update the pin position preference as needed.
+  DCHECK_NE(ash::TYPE_BACK_BUTTON, item.type);
   DCHECK_NE(ash::TYPE_APP_LIST, item.type);
   if (ItemTypeIsPinned(item) && should_sync_pin_changes_)
     SyncPinPosition(item.id);

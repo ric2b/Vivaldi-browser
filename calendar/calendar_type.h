@@ -43,7 +43,7 @@ enum UpdateCalendarFields {
 class CalendarRow {
  public:
   CalendarRow();
-  CalendarRow(std::string id,
+  CalendarRow(CalendarID id,
               base::string16 name,
               base::string16 description,
               GURL url,
@@ -57,8 +57,8 @@ class CalendarRow {
 
   CalendarRow(const CalendarRow& row);
 
-  std::string id() const { return id_; }
-  void set_id(std::string id) { id_ = id; }
+  CalendarID id() const { return id_; }
+  void set_id(CalendarID id) { id_ = id; }
 
   base::string16 name() const { return name_; }
   void set_name(base::string16 name) { name_ = name; }
@@ -92,7 +92,7 @@ class CalendarRow {
  protected:
   void Swap(CalendarRow* other);
 
-  std::string id_;
+  CalendarID id_;
   base::string16 name_;
   base::string16 description_;
   GURL url_;
@@ -107,7 +107,7 @@ class CalendarRow {
 class CalendarResult : public CalendarRow {
  public:
   CalendarResult();
-  CalendarResult(const CalendarResult &);
+  CalendarResult(const CalendarResult&);
   ~CalendarResult();
   CalendarResult(const CalendarRow& calendar_row);
   void SwapResult(CalendarResult* other);
@@ -121,7 +121,7 @@ struct Calendar {
   ~Calendar();
   Calendar(const Calendar& calendar);
 
-  std::string id;
+  CalendarID id;
   base::string16 name;
   base::string16 description;
   GURL url;

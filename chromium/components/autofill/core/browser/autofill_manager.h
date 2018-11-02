@@ -161,7 +161,8 @@ class AutofillManager : public AutofillHandler,
   // Will send an upload based on the |form_structure| data and the local
   // Autofill profile data. |observed_submission| is specified if the upload
   // follows an observed submission event.
-  virtual void StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
+  // return false if the upload couldn't start.
+  virtual bool StartUploadProcess(std::unique_ptr<FormStructure> form_structure,
                                   const base::TimeTicks& timestamp,
                                   bool observed_submission);
 
@@ -179,7 +180,6 @@ class AutofillManager : public AutofillHandler,
   void OnDidPreviewAutofillFormData() override;
   void OnFormsSeen(const std::vector<FormData>& forms,
                    const base::TimeTicks timestamp) override;
-  bool OnFormSubmitted(const FormData& form) override;
   void OnDidEndTextFieldEditing() override;
   void OnHidePopup() override;
   void OnSetDataList(const std::vector<base::string16>& values,
@@ -238,8 +238,10 @@ class AutofillManager : public AutofillHandler,
                        std::string* profile_backend_id) const;
 
   // AutofillHandler:
-  bool OnWillSubmitFormImpl(const FormData& form,
-                            const base::TimeTicks timestamp) override;
+  bool OnFormSubmittedImpl(const FormData& form,
+                           bool known_success,
+                           SubmissionSource source,
+                           base::TimeTicks timestamp) override;
   void OnTextFieldDidChangeImpl(const FormData& form,
                                 const FormFieldData& field,
                                 const gfx::RectF& bounding_box,
@@ -264,9 +266,7 @@ class AutofillManager : public AutofillHandler,
   }
 
   // Exposed for testing.
-  AutofillExternalDelegate* external_delegate() {
-    return external_delegate_;
-  }
+  AutofillExternalDelegate* external_delegate() { return external_delegate_; }
 
   // Exposed for testing.
   void set_download_manager(AutofillDownloadManager* manager) {
@@ -405,9 +405,12 @@ class AutofillManager : public AutofillHandler,
 
   // Returns a list of values from the stored credit cards that match |type| and
   // the value of |field| and returns the labels of the matching credit cards.
+  // |is_all_server_suggestions| will be set to true if there is no credit card
+  // suggestions or all suggestions come from Payments server.
   std::vector<Suggestion> GetCreditCardSuggestions(
       const FormFieldData& field,
-      const AutofillType& type) const;
+      const AutofillType& type,
+      bool* is_all_server_suggestions) const;
 
   // Parses the forms using heuristic matching and querying the Autofill server.
   void ParseForms(const std::vector<FormData>& forms);
@@ -563,6 +566,7 @@ class AutofillManager : public AutofillHandler,
 
   friend class AutofillManagerTest;
   friend class FormStructureBrowserTest;
+  friend class SaveCardBubbleViewsBrowserTestBase;
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            DeterminePossibleFieldTypesForUpload);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
@@ -603,6 +607,17 @@ class AutofillManager : public AutofillHandler,
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, QualityMetrics);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
                            QualityMetrics_BasedOnAutocomplete);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillMetricsTest,
+      QualityMetrics_LoggedCorrecltyForOnlyFillWhenFocusedField);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
+                           QualityMetrics_LoggedCorrecltyForRationalizationOk);
+  FRIEND_TEST_ALL_PREFIXES(
+      AutofillMetricsTest,
+      QualityMetrics_LoggedCorrecltyForRationalizationGood);
+  FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
+                           QualityMetrics_LoggedCorrecltyForRationalizationBad);
+
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, SaneMetricsWithCacheMismatch);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, TestExternalDelegate);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
@@ -613,8 +628,7 @@ class AutofillManager : public AutofillHandler,
                            UserHappinessFormInteraction_AddressForm);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest,
                            UserHappinessFormInteraction_CreditCardForm);
-  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
-                           OnLoadedServerPredictions);
+  FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, OnLoadedServerPredictions);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest,
                            OnLoadedServerPredictions_ResetManager);
   FRIEND_TEST_ALL_PREFIXES(AutofillManagerTest, DontOfferToSavePaymentsCard);

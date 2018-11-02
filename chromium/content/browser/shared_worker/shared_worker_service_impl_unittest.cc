@@ -20,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "content/browser/shared_worker/shared_worker_connector_impl.h"
-#include "content/browser/shared_worker/worker_storage_partition.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -30,6 +29,7 @@
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/test_support/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/common/message_port/message_port_channel.h"
 
@@ -43,10 +43,8 @@ class SharedWorkerServiceImplTest : public RenderViewHostImplTestHarness {
       RenderProcessHost* process_host,
       int frame_id) {
     mojom::SharedWorkerConnectorPtr connector;
-    SharedWorkerConnectorImpl::CreateInternal(
-        process_host->GetID(), frame_id,
-        process_host->GetBrowserContext()->GetResourceContext(), *partition_,
-        mojo::MakeRequest(&connector));
+    SharedWorkerConnectorImpl::Create(process_host->GetID(), frame_id,
+                                      mojo::MakeRequest(&connector));
     return connector;
   }
 
@@ -77,18 +75,7 @@ class SharedWorkerServiceImplTest : public RenderViewHostImplTestHarness {
   }
 
  protected:
-  SharedWorkerServiceImplTest()
-      : browser_context_(new TestBrowserContext()),
-        partition_(new WorkerStoragePartition(
-            BrowserContext::GetDefaultStoragePartition(browser_context_.get())
-                ->GetURLRequestContext(),
-            nullptr /* media_url_request_context */,
-            nullptr /* appcache_service */,
-            nullptr /* quota_manager */,
-            nullptr /* filesystem_context */,
-            nullptr /* database_tracker */,
-            nullptr /* indexed_db_context */,
-            nullptr /* service_worker_context */)) {}
+  SharedWorkerServiceImplTest() : browser_context_(new TestBrowserContext()) {}
 
   void SetUp() override {
     RenderViewHostImplTestHarness::SetUp();
@@ -99,14 +86,11 @@ class SharedWorkerServiceImplTest : public RenderViewHostImplTestHarness {
   }
 
   void TearDown() override {
-    static_cast<SharedWorkerServiceImpl*>(SharedWorkerService::GetInstance())
-        ->ResetForTesting();
     browser_context_.reset();
     RenderViewHostImplTestHarness::TearDown();
   }
 
   std::unique_ptr<TestBrowserContext> browser_context_;
-  std::unique_ptr<WorkerStoragePartition> partition_;
   static std::queue<mojom::SharedWorkerFactoryRequest>
       s_factory_request_received_;
   std::unique_ptr<MockRenderProcessHostFactory> render_process_host_factory_;
@@ -125,21 +109,6 @@ template <typename T>
 static bool CheckEquality(const T& expected, const T& actual) {
   EXPECT_EQ(expected, actual);
   return expected == actual;
-}
-
-std::vector<uint8_t> StringPieceToVector(base::StringPiece s) {
-  return std::vector<uint8_t>(s.begin(), s.end());
-}
-
-void BlockingReadFromMessagePort(MessagePortChannel port,
-                                 std::vector<uint8_t>* message) {
-  base::RunLoop run_loop;
-  port.SetCallback(run_loop.QuitClosure(), base::ThreadTaskRunnerHandle::Get());
-  run_loop.Run();
-
-  std::vector<MessagePortChannel> should_be_empty;
-  EXPECT_TRUE(port.GetMessage(message, &should_be_empty));
-  EXPECT_TRUE(should_be_empty.empty());
 }
 
 class MockSharedWorker : public mojom::SharedWorker {
@@ -178,6 +147,10 @@ class MockSharedWorker : public mojom::SharedWorker {
   void Terminate() override {
     // Allow duplicate events.
     terminate_received_ = true;
+  }
+  void BindDevToolsAgent(
+      blink::mojom::DevToolsAgentAssociatedRequest request) override {
+    NOTREACHED();
   }
 
   mojo::Binding<mojom::SharedWorker> binding_;
@@ -219,7 +192,6 @@ class MockSharedWorkerFactory : public mojom::SharedWorkerFactory {
       mojom::SharedWorkerInfoPtr info,
       bool pause_on_start,
       const base::UnguessableToken& devtools_worker_token,
-      int32_t route_id,
       blink::mojom::WorkerContentSettingsProxyPtr content_settings,
       mojom::SharedWorkerHostPtr host,
       mojom::SharedWorkerRequest request,
@@ -229,7 +201,6 @@ class MockSharedWorkerFactory : public mojom::SharedWorkerFactory {
     create_params_ = std::make_unique<CreateParams>();
     create_params_->info = std::move(info);
     create_params_->pause_on_start = pause_on_start;
-    create_params_->route_id = route_id;
     create_params_->content_settings = std::move(content_settings);
     create_params_->host = std::move(host);
     create_params_->request = std::move(request);
@@ -239,7 +210,6 @@ class MockSharedWorkerFactory : public mojom::SharedWorkerFactory {
   struct CreateParams {
     mojom::SharedWorkerInfoPtr info;
     bool pause_on_start;
-    int32_t route_id;
     blink::mojom::WorkerContentSettingsProxyPtr content_settings;
     mojom::SharedWorkerHostPtr host;
     mojom::SharedWorkerRequest request;
@@ -326,7 +296,7 @@ void ConnectToSharedWorker(mojom::SharedWorkerConnectorPtr connector,
   mojom::SharedWorkerInfoPtr info(
       mojom::SharedWorkerInfo::New(GURL(url), name, std::string(),
                                    blink::kWebContentSecurityPolicyTypeReport,
-                                   blink::kWebAddressSpacePublic));
+                                   blink::mojom::IPAddressSpace::kPublic));
 
   mojo::MessagePipe message_pipe;
   *local_port = MessagePortChannel(std::move(message_pipe.handle0));
@@ -390,11 +360,12 @@ TEST_F(SharedWorkerServiceImplTest, BasicTest) {
       client.CheckReceivedOnConnected(std::set<blink::mojom::WebFeature>()));
 
   // Verify that |port| corresponds to |connector->local_port()|.
-  std::vector<uint8_t> expected_message(StringPieceToVector("test1"));
-  local_port.PostMessage(expected_message.data(), expected_message.size(),
-                         std::vector<MessagePortChannel>());
-  std::vector<uint8_t> received_message;
-  BlockingReadFromMessagePort(port, &received_message);
+  std::string expected_message("test1");
+  EXPECT_TRUE(mojo::test::WriteTextMessage(local_port.GetHandle().get(),
+                                           expected_message));
+  std::string received_message;
+  EXPECT_TRUE(
+      mojo::test::ReadTextMessage(port.GetHandle().get(), &received_message));
   EXPECT_EQ(expected_message, received_message);
 
   // Send feature from shared worker to host.
@@ -465,11 +436,12 @@ TEST_F(SharedWorkerServiceImplTest, TwoRendererTest) {
       client0.CheckReceivedOnConnected(std::set<blink::mojom::WebFeature>()));
 
   // Verify that |port0| corresponds to |connector0->local_port()|.
-  std::vector<uint8_t> expected_message0(StringPieceToVector("test1"));
-  local_port0.PostMessage(expected_message0.data(), expected_message0.size(),
-                          std::vector<MessagePortChannel>());
-  std::vector<uint8_t> received_message0;
-  BlockingReadFromMessagePort(port0, &received_message0);
+  std::string expected_message0("test1");
+  EXPECT_TRUE(mojo::test::WriteTextMessage(local_port0.GetHandle().get(),
+                                           expected_message0));
+  std::string received_message0;
+  EXPECT_TRUE(
+      mojo::test::ReadTextMessage(port0.GetHandle().get(), &received_message0));
   EXPECT_EQ(expected_message0, received_message0);
 
   auto feature1 = static_cast<blink::mojom::WebFeature>(124);
@@ -522,11 +494,12 @@ TEST_F(SharedWorkerServiceImplTest, TwoRendererTest) {
   EXPECT_TRUE(client1.CheckReceivedOnConnected({feature1, feature2}));
 
   // Verify that |worker_msg_port2| corresponds to |connector1->local_port()|.
-  std::vector<uint8_t> expected_message1(StringPieceToVector("test2"));
-  local_port1.PostMessage(expected_message1.data(), expected_message1.size(),
-                          std::vector<MessagePortChannel>());
-  std::vector<uint8_t> received_message1;
-  BlockingReadFromMessagePort(port1, &received_message1);
+  std::string expected_message1("test2");
+  EXPECT_TRUE(mojo::test::WriteTextMessage(local_port1.GetHandle().get(),
+                                           expected_message1));
+  std::string received_message1;
+  EXPECT_TRUE(
+      mojo::test::ReadTextMessage(port1.GetHandle().get(), &received_message1));
   EXPECT_EQ(expected_message1, received_message1);
 
   worker_host->OnFeatureUsed(feature1);

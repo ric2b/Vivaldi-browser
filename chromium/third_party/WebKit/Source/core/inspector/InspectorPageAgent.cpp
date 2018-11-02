@@ -72,7 +72,6 @@
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/Base64.h"
@@ -88,7 +87,6 @@ static const char kPageAgentEnabled[] = "pageAgentEnabled";
 static const char kPageAgentScriptsToEvaluateOnLoad[] =
     "pageAgentScriptsToEvaluateOnLoad";
 static const char kScreencastEnabled[] = "screencastEnabled";
-static const char kAutoAttachToCreatedPages[] = "autoAttachToCreatedPages";
 static const char kLifecycleEventsEnabled[] = "lifecycleEventsEnabled";
 }
 
@@ -414,7 +412,8 @@ InspectorPageAgent::ResourceType InspectorPageAgent::ToResourceType(
       return InspectorPageAgent::kImageResource;
     case Resource::kFont:
       return InspectorPageAgent::kFontResource;
-    case Resource::kMedia:
+    case Resource::kAudio:
+    case Resource::kVideo:
       return InspectorPageAgent::kMediaResource;
     case Resource::kManifest:
       return InspectorPageAgent::kManifestResource;
@@ -526,11 +525,6 @@ Response InspectorPageAgent::removeScriptToEvaluateOnNewDocument(
   return removeScriptToEvaluateOnLoad(identifier);
 }
 
-Response InspectorPageAgent::setAutoAttachToCreatedPages(bool auto_attach) {
-  state_->setBoolean(PageAgentState::kAutoAttachToCreatedPages, auto_attach);
-  return Response::OK();
-}
-
 Response InspectorPageAgent::setLifecycleEventsEnabled(bool enabled) {
   state_->setBoolean(PageAgentState::kLifecycleEventsEnabled, enabled);
   if (!enabled)
@@ -591,19 +585,6 @@ Response InspectorPageAgent::reload(
                                         ? kFrameLoadTypeReloadBypassingCache
                                         : kFrameLoadTypeReload,
                                     ClientRedirectPolicy::kNotClientRedirect);
-  return Response::OK();
-}
-
-Response InspectorPageAgent::navigate(const String& url,
-                                      Maybe<String> referrer,
-                                      Maybe<String> transitionType,
-                                      String* out_frame_id,
-                                      Maybe<String>* out_loader_id,
-                                      Maybe<String>* errorText) {
-  LocalFrame* frame = inspected_frames_->Root();
-  *out_frame_id = IdentifiersFactory::FrameId(frame);
-  DocumentLoader* loader = frame->Loader().GetDocumentLoader();
-  *out_loader_id = IdentifiersFactory::LoaderId(loader);
   return Response::OK();
 }
 
@@ -803,7 +784,7 @@ void InspectorPageAgent::DidClearDocumentOfWindowObject(LocalFrame* frame) {
 }
 
 void InspectorPageAgent::DomContentLoadedEventFired(LocalFrame* frame) {
-  double timestamp = MonotonicallyIncreasingTime();
+  double timestamp = CurrentTimeTicksInSeconds();
   if (frame == inspected_frames_->Root())
     GetFrontend()->domContentEventFired(timestamp);
   DocumentLoader* loader = frame->Loader().GetDocumentLoader();
@@ -811,7 +792,7 @@ void InspectorPageAgent::DomContentLoadedEventFired(LocalFrame* frame) {
 }
 
 void InspectorPageAgent::LoadEventFired(LocalFrame* frame) {
-  double timestamp = MonotonicallyIncreasingTime();
+  double timestamp = CurrentTimeTicksInSeconds();
   if (frame == inspected_frames_->Root())
     GetFrontend()->loadEventFired(timestamp);
   DocumentLoader* loader = frame->Loader().GetDocumentLoader();
@@ -926,13 +907,6 @@ void InspectorPageAgent::Did(const probe::RecalculateStyle&) {
 void InspectorPageAgent::PageLayoutInvalidated(bool resized) {
   if (enabled_ && client_)
     client_->PageLayoutInvalidated(resized);
-}
-
-void InspectorPageAgent::WindowCreated(LocalFrame* created) {
-  if (enabled_ && state_->booleanProperty(
-                      PageAgentState::kAutoAttachToCreatedPages, false)) {
-    client_->WaitForCreateWindow(this, created);
-  }
 }
 
 void InspectorPageAgent::WindowOpen(Document* document,

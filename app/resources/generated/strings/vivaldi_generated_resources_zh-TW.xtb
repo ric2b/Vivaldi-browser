@@ -146,6 +146,7 @@
 <translation id="2890678560483811744">參照的網頁超出範圍</translation>
 <translation id="2902127500170292085">「<ph name="EXTENSION_NAME" />」無法與這部印表機進行通訊，請確認您已插上印表機，然後再試一次。</translation>
 <translation id="2904456025988372123">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我</translation>
+<translation id="2911898792135283060">產生密碼...</translation>
 <translation id="2913331724188855103">允許網站儲存及讀取 Cookie 資料 (建議)</translation>
 <translation id="2916745397441987255">搜尋擴充功能</translation>
 <translation id="2932883381142163287">檢舉濫用情形</translation>
@@ -413,7 +414,6 @@
 <translation id="6295158916970320988">全部站點</translation>
 <translation id="6295855836753816081">正在儲存...</translation>
 <translation id="6308937455967653460">另存連結(&amp;K)...</translation>
-<translation id="6314335155547195432">產生密碼</translation>
 <translation id="6326855256003666642">Keepalive 數量</translation>
 <translation id="6370021412472292592">無法載入元數據檔案。</translation>
 <translation id="6374469231428023295">再試一次</translation>
@@ -497,7 +497,6 @@
 <translation id="7564847347806291057">結束</translation>
 <translation id="7576690715254076113">自動分頁</translation>
 <translation id="7629827748548208700">分頁：<ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">取消</translation>
 <translation id="7661259717474717992">允許網站儲存及讀取 Cookie 資料</translation>
 <translation id="7663719505383602579">接收端：<ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">由您的管理員安裝</translation>

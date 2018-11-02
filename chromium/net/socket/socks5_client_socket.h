@@ -20,6 +20,7 @@
 #include "net/dns/host_resolver.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
 namespace net {
@@ -37,7 +38,8 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSocket : public StreamSocket {
   // always pass it a hostname. This means the DNS resolving is done
   // proxy side.
   SOCKS5ClientSocket(std::unique_ptr<ClientSocketHandle> transport_socket,
-                     const HostResolver::RequestInfo& req_info);
+                     const HostResolver::RequestInfo& req_info,
+                     const NetworkTrafficAnnotationTag& traffic_annotation);
 
   // On destruction Disconnect() is called.
   ~SOCKS5ClientSocket() override;
@@ -60,6 +62,7 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSocket : public StreamSocket {
   void ClearConnectionAttempts() override {}
   void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
   int64_t GetTotalReceivedBytes() const override;
+  void ApplySocketTag(const SocketTag& tag) override;
 
   // Socket implementation.
   int Read(IOBuffer* buf,
@@ -67,7 +70,8 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSocket : public StreamSocket {
            const CompletionCallback& callback) override;
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback) override;
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override;
 
   int SetReceiveBufferSize(int32_t size) override;
   int SetSendBufferSize(int32_t size) override;
@@ -154,6 +158,9 @@ class NET_EXPORT_PRIVATE SOCKS5ClientSocket : public StreamSocket {
   HostResolver::RequestInfo host_request_info_;
 
   NetLogWithSource net_log_;
+
+  // Traffic annotation for socket control.
+  NetworkTrafficAnnotationTag traffic_annotation_;
 
   DISALLOW_COPY_AND_ASSIGN(SOCKS5ClientSocket);
 };

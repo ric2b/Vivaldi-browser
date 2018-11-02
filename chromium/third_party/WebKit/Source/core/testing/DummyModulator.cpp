@@ -5,7 +5,7 @@
 #include "core/testing/DummyModulator.h"
 
 #include "bindings/core/v8/ScriptValue.h"
-#include "core/dom/ScriptModuleResolver.h"
+#include "core/script/ScriptModuleResolver.h"
 
 namespace blink {
 
@@ -13,7 +13,7 @@ namespace {
 
 class EmptyScriptModuleResolver final : public ScriptModuleResolver {
  public:
-  EmptyScriptModuleResolver() {}
+  EmptyScriptModuleResolver() = default;
 
   // We ignore {Unr,R}egisterModuleScript() calls caused by
   // ModuleScript::CreateForTest().
@@ -37,7 +37,7 @@ class EmptyScriptModuleResolver final : public ScriptModuleResolver {
 
 DummyModulator::DummyModulator() : resolver_(new EmptyScriptModuleResolver()) {}
 
-DummyModulator::~DummyModulator() {}
+DummyModulator::~DummyModulator() = default;
 
 void DummyModulator::Trace(blink::Visitor* visitor) {
   visitor->Trace(resolver_);
@@ -49,7 +49,7 @@ ReferrerPolicy DummyModulator::GetReferrerPolicy() {
   return kReferrerPolicyDefault;
 }
 
-SecurityOrigin* DummyModulator::GetSecurityOriginForFetch() {
+const SecurityOrigin* DummyModulator::GetSecurityOriginForFetch() {
   NOTREACHED();
   return nullptr;
 }
@@ -113,7 +113,8 @@ ModuleImportMeta DummyModulator::HostGetImportMetaProperties(
 }
 
 ScriptModule DummyModulator::CompileModule(const String& script,
-                                           const String& url_str,
+                                           const KURL& source_url,
+                                           const KURL& base_url,
                                            const ScriptFetchOptions&,
                                            AccessControlStatus,
                                            const TextPosition&,
@@ -123,16 +124,6 @@ ScriptModule DummyModulator::CompileModule(const String& script,
 }
 
 ScriptValue DummyModulator::InstantiateModule(ScriptModule) {
-  NOTREACHED();
-  return ScriptValue();
-}
-
-ScriptModuleState DummyModulator::GetRecordStatus(ScriptModule) {
-  NOTREACHED();
-  return ScriptModuleState::kErrored;
-}
-
-ScriptValue DummyModulator::GetError(const ModuleScript*) {
   NOTREACHED();
   return ScriptValue();
 }

@@ -4,8 +4,9 @@
 
 #include "components/viz/service/main/viz_main_impl.h"
 
+#include <memory>
+
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/single_thread_task_runner.h"
@@ -29,7 +30,7 @@
 #include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_CHROMEOS) && BUILDFLAG(USE_VAAPI)
-#include "media/gpu/vaapi_wrapper.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #endif
 
 namespace {
@@ -87,8 +88,8 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
   // split into separate processes. Until then this is necessary to be able to
   // run Mushrome (chrome --mus) with Mus running in the browser process.
   if (!base::PowerMonitor::Get()) {
-    power_monitor_ = base::MakeUnique<base::PowerMonitor>(
-        base::MakeUnique<base::PowerMonitorDeviceSource>());
+    power_monitor_ = std::make_unique<base::PowerMonitor>(
+        std::make_unique<base::PowerMonitorDeviceSource>());
   }
 
   if (!gpu_init_) {
@@ -125,7 +126,7 @@ VizMainImpl::VizMainImpl(Delegate* delegate,
 
   CreateUkmRecorderIfNeeded(dependencies.connector);
 
-  gpu_service_ = base::MakeUnique<GpuServiceImpl>(
+  gpu_service_ = std::make_unique<GpuServiceImpl>(
       gpu_init_->gpu_info(), gpu_init_->TakeWatchdogThread(),
       io_thread_ ? io_thread_->task_runner()
                  : dependencies_.io_thread_task_runner,
@@ -276,7 +277,8 @@ void VizMainImpl::CreateFrameSinkManagerOnCompositorThread(
   mojom::FrameSinkManagerClientPtr client(
       std::move(params->frame_sink_manager_client));
   frame_sink_manager_ = std::make_unique<FrameSinkManagerImpl>(
-      SurfaceManager::LifetimeType::REFERENCES, display_provider_.get());
+      SurfaceManager::LifetimeType::REFERENCES,
+      params->number_of_frames_to_activation_deadline, display_provider_.get());
   frame_sink_manager_->BindAndSetClient(std::move(params->frame_sink_manager),
                                         nullptr, std::move(client));
 }

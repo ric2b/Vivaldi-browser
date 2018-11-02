@@ -18,10 +18,6 @@ namespace aura {
 class Window;
 }
 
-namespace gfx {
-class Image;
-}
-
 namespace keyboard {
 class KeyboardUI;
 }
@@ -88,12 +84,7 @@ class ASH_EXPORT ShellDelegate {
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
 
-  // Get the product name.
-  virtual base::string16 GetProductName() const = 0;
-
   virtual void OpenKeyboardShortcutHelpPage() const {}
-
-  virtual gfx::Image GetDeprecatedAcceleratorImage() const = 0;
 
   // Creator of Shell owns this; it's assumed this outlives Shell.
   virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;

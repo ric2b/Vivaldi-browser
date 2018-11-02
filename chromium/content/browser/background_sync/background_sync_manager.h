@@ -105,7 +105,7 @@ class CONTENT_EXPORT BackgroundSyncManager
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
       bool last_chance,
-      const ServiceWorkerVersion::LegacyStatusCallback& callback);
+      ServiceWorkerVersion::StatusCallback callback);
 
  protected:
   explicit BackgroundSyncManager(
@@ -120,16 +120,15 @@ class CONTENT_EXPORT BackgroundSyncManager
       const GURL& origin,
       const std::string& backend_key,
       const std::string& data,
-      const ServiceWorkerStorage::StatusCallback& callback);
+      ServiceWorkerStorage::StatusCallback callback);
   virtual void GetDataFromBackend(
       const std::string& backend_key,
-      const ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback&
-          callback);
+      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback);
   virtual void DispatchSyncEvent(
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
-      blink::mojom::BackgroundSyncEventLastChance last_chance,
-      const ServiceWorkerVersion::LegacyStatusCallback& callback);
+      bool last_chance,
+      ServiceWorkerVersion::StatusCallback callback);
   virtual void ScheduleDelayedTask(base::OnceClosure callback,
                                    base::TimeDelta delay);
   virtual void HasMainFrameProviderHost(const GURL& origin,
@@ -176,7 +175,7 @@ class CONTENT_EXPORT BackgroundSyncManager
   // Write all registrations for a given |sw_registration_id| to persistent
   // storage.
   void StoreRegistrations(int64_t sw_registration_id,
-                          const ServiceWorkerStorage::StatusCallback& callback);
+                          ServiceWorkerStorage::StatusCallback callback);
 
   // Removes the active registration if it is in the map.
   void RemoveActiveRegistration(int64_t sw_registration_id,

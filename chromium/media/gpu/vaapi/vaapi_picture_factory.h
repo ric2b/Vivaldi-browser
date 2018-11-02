@@ -39,7 +39,8 @@ class MEDIA_GPU_EXPORT VaapiPictureFactory {
       int32_t picture_buffer_id,
       const gfx::Size& size,
       uint32_t texture_id,
-      uint32_t client_texture_id);
+      uint32_t client_texture_id,
+      uint32_t texture_target);
 
   // Return the type of the VaapiPicture implementation for the given GL
   // implementation.
@@ -51,8 +52,7 @@ class MEDIA_GPU_EXPORT VaapiPictureFactory {
 
   // Buffer format to use for output buffers backing PictureBuffers. This is
   // the format decoded frames in VASurfaces are converted into.
-  gfx::BufferFormat GetBufferFormatForAllocateMode();
-  gfx::BufferFormat GetBufferFormatForImportMode();
+  gfx::BufferFormat GetBufferFormat();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(VaapiPictureFactory);

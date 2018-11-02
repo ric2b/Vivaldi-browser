@@ -34,9 +34,9 @@ WebPointerEvent::WebPointerEvent(const WebTouchEvent& touch_event,
                                  const WebTouchPoint& touch_point)
     : WebInputEvent(sizeof(WebPointerEvent)),
       WebPointerProperties(touch_point),
-      // TODO(crbug.com/731725): This mapping needs a times by 2.
-      width(touch_point.radius_x),
-      height(touch_point.radius_y) {
+      scroll_capable(true),
+      width(touch_point.radius_x * 2.f),
+      height(touch_point.radius_y * 2.f) {
   // WebInutEvent attributes
   SetFrameScale(touch_event.FrameScale());
   SetFrameTranslate(touch_event.FrameTranslate());
@@ -56,6 +56,7 @@ WebPointerEvent::WebPointerEvent(WebInputEvent::Type type,
                                  const WebMouseEvent& mouse_event)
     : WebInputEvent(sizeof(WebPointerEvent)),
       WebPointerProperties(mouse_event),
+      scroll_capable(false),
       width(1),
       height(1) {
   DCHECK_GE(type, WebInputEvent::kPointerTypeFirst);
@@ -65,6 +66,16 @@ WebPointerEvent::WebPointerEvent(WebInputEvent::Type type,
   SetTimeStampSeconds(mouse_event.TimeStampSeconds());
   SetType(type);
   SetModifiers(mouse_event.GetModifiers());
+}
+
+WebPointerEvent WebPointerEvent::CreatePointerCausesUaActionEvent(
+    WebPointerProperties::PointerType type,
+    double time_stamp_seconds) {
+  WebPointerEvent event;
+  event.pointer_type = type;
+  event.SetTimeStampSeconds(time_stamp_seconds);
+  event.SetType(WebInputEvent::Type::kPointerCausedUaAction);
+  return event;
 }
 
 WebPointerEvent WebPointerEvent::WebPointerEventInRootFrame() const {

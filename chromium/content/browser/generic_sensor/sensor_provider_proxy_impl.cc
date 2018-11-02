@@ -36,25 +36,22 @@ void SensorProviderProxyImpl::Bind(
 
 void SensorProviderProxyImpl::GetSensor(
     device::mojom::SensorType type,
-    device::mojom::SensorRequest sensor_request,
     GetSensorCallback callback) {
   ServiceManagerConnection* connection =
       ServiceManagerConnection::GetForProcess();
 
   if (!connection || !CheckPermission(type)) {
-    std::move(callback).Run(nullptr, nullptr);
+    std::move(callback).Run(nullptr);
     return;
   }
 
   if (!sensor_provider_) {
     connection->GetConnector()->BindInterface(
         device::mojom::kServiceName, mojo::MakeRequest(&sensor_provider_));
-    sensor_provider_.set_connection_error_handler(
-        base::BindOnce(&device::mojom::SensorProviderPtr::reset,
-                       base::Unretained(&sensor_provider_)));
+    sensor_provider_.set_connection_error_handler(base::BindOnce(
+        &SensorProviderProxyImpl::OnConnectionError, base::Unretained(this)));
   }
-  sensor_provider_->GetSensor(type, std::move(sensor_request),
-                              std::move(callback));
+  sensor_provider_->GetSensor(type, std::move(callback));
 }
 
 bool SensorProviderProxyImpl::CheckPermission(
@@ -71,6 +68,13 @@ bool SensorProviderProxyImpl::CheckPermission(
       permission_manager_->GetPermissionStatus(
           PermissionType::SENSORS, requesting_origin, embedding_origin);
   return permission_status == blink::mojom::PermissionStatus::GRANTED;
+}
+
+void SensorProviderProxyImpl::OnConnectionError() {
+  // Close all the upstream bindings to notify them of this failure as the
+  // GetSensorCallbacks will never be called.
+  binding_set_.CloseAllBindings();
+  sensor_provider_.reset();
 }
 
 }  // namespace content

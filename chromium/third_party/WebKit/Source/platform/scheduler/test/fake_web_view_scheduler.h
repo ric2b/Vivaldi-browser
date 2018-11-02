@@ -18,7 +18,7 @@ class FakeWebViewScheduler : public WebViewScheduler {
 
   class Builder {
    public:
-    Builder() {}
+    Builder() = default;
 
     Builder& SetIsPlayingAudio(bool is_playing_audio) {
       is_playing_audio_ = is_playing_audio;
@@ -63,7 +63,7 @@ class FakeWebViewScheduler : public WebViewScheduler {
   void AddVirtualTimeObserver(VirtualTimeObserver* observer) override {}
   void RemoveVirtualTimeObserver(VirtualTimeObserver* observer) override {}
   void GrantVirtualTimeBudget(base::TimeDelta budget,
-                              WTF::Closure callback) override {}
+                              base::OnceClosure callback) override {}
   void SetMaxVirtualTimeTaskStarvationCount(int count) override {}
   void AudioStateChanged(bool is_audio_playing) override {}
   bool HasActiveConnectionForTest() const override { return false; }

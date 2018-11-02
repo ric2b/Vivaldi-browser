@@ -29,6 +29,9 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
   DataReductionProxyData();
   ~DataReductionProxyData() override;
 
+  // Allow copying.
+  DataReductionProxyData(const DataReductionProxyData& other);
+
   // Whether the DataReductionProxy was used for this request or navigation.
   // Also true if the user is the holdback experiment, and the request would
   // otherwise be eligible to use the proxy.
@@ -51,7 +54,15 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
     lite_page_received_ = lite_page_received;
   }
 
-  // Whether a lite page response was seen for the request or navigation.
+  // Whether a Lo-Fi (or empty-image) page policy directive was received for
+  // the navigation.
+  bool lofi_policy_received() const { return lofi_policy_received_; }
+  void set_lofi_policy_received(bool lofi_policy_received) {
+    lofi_policy_received_ = lofi_policy_received;
+  }
+
+  // Whether a server Lo-Fi page response was seen for the request or
+  // navigation.
   bool lofi_received() const { return lofi_received_; }
   void set_lofi_received(bool lofi_received) { lofi_received_ = lofi_received; }
 
@@ -124,6 +135,10 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
   // Whether a lite page response was seen for the request or navigation.
   bool lite_page_received_;
 
+  // Whether server Lo-Fi directive was received for this navigation. True if
+  // the proxy returns the empty-image page-policy for the main frame response.
+  bool lofi_policy_received_;
+
   // Whether a lite page response was seen for the request or navigation.
   bool lofi_received_;
 
@@ -142,7 +157,7 @@ class DataReductionProxyData : public base::SupportsUserData::Data {
   // data saver session. Only present on main frame requests.
   base::Optional<uint64_t> page_id_;
 
-  DISALLOW_COPY_AND_ASSIGN(DataReductionProxyData);
+  DISALLOW_ASSIGN(DataReductionProxyData);
 };
 
 }  // namespace data_reduction_proxy

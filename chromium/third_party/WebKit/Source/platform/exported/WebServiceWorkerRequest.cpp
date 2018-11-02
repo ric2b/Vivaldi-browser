@@ -29,11 +29,12 @@ class WebServiceWorkerRequestPrivate
   network::mojom::FetchCredentialsMode credentials_mode_ =
       network::mojom::FetchCredentialsMode::kOmit;
   mojom::FetchCacheMode cache_mode_ = mojom::FetchCacheMode::kDefault;
-  WebURLRequest::FetchRedirectMode redirect_mode_ =
-      WebURLRequest::kFetchRedirectModeFollow;
+  network::mojom::FetchRedirectMode redirect_mode_ =
+      network::mojom::FetchRedirectMode::kFollow;
   WebURLRequest::RequestContext request_context_ =
       WebURLRequest::kRequestContextUnspecified;
-  WebURLRequest::FrameType frame_type_ = WebURLRequest::kFrameTypeNone;
+  network::mojom::RequestContextFrameType frame_type_ =
+      network::mojom::RequestContextFrameType::kNone;
   WebString integrity_;
   bool keepalive_ = false;
   WebString client_id_;
@@ -199,11 +200,12 @@ mojom::FetchCacheMode WebServiceWorkerRequest::CacheMode() const {
 }
 
 void WebServiceWorkerRequest::SetRedirectMode(
-    WebURLRequest::FetchRedirectMode redirect_mode) {
+    network::mojom::FetchRedirectMode redirect_mode) {
   private_->redirect_mode_ = redirect_mode;
 }
 
-WebURLRequest::FetchRedirectMode WebServiceWorkerRequest::RedirectMode() const {
+network::mojom::FetchRedirectMode WebServiceWorkerRequest::RedirectMode()
+    const {
   return private_->redirect_mode_;
 }
 
@@ -218,11 +220,12 @@ WebURLRequest::RequestContext WebServiceWorkerRequest::GetRequestContext()
 }
 
 void WebServiceWorkerRequest::SetFrameType(
-    WebURLRequest::FrameType frame_type) {
+    network::mojom::RequestContextFrameType frame_type) {
   private_->frame_type_ = frame_type;
 }
 
-WebURLRequest::FrameType WebServiceWorkerRequest::GetFrameType() const {
+network::mojom::RequestContextFrameType WebServiceWorkerRequest::GetFrameType()
+    const {
   return private_->frame_type_;
 }
 

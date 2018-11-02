@@ -49,6 +49,26 @@ void MenuModelAdapter::BuildMenu(MenuItemView* menu) {
   menu->ChildrenChanged();
 }
 
+void MenuModelAdapter::VivaldiUpdateMenu(MenuItemView* menu,
+                                         ui::MenuModel* model) {
+  // Clear the menu.
+  if (menu->HasSubmenu()) {
+    const int subitem_count = menu->GetSubmenu()->child_count();
+    for (int i = 0; i < subitem_count; ++i)
+      menu->RemoveMenuItemAt(0);
+  }
+
+  // Leave entries in the map if the menu is being shown.  This
+  // allows the map to find the menu model of submenus being closed
+  // so ui::MenuModel::MenuClosed() can be called.
+  if (!menu->GetMenuController())
+    menu_map_.clear();
+  menu_map_[menu] = model;
+
+  // Repopulate the menu.
+  BuildMenuImpl(menu, model);
+}
+
 MenuItemView* MenuModelAdapter::CreateMenu() {
   MenuItemView* item = new MenuItemView(this);
   BuildMenu(item);

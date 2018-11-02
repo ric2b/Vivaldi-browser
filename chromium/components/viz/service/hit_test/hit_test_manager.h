@@ -37,6 +37,7 @@ class VIZ_SERVICE_EXPORT HitTestManager : public SurfaceObserver {
       const SurfaceId& surface_id) const;
 
   // SurfaceObserver:
+  void OnSurfaceCreated(const SurfaceId& surface_id) override {}
   void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) override {}
   void OnSurfaceActivated(const SurfaceId& surface_id) override;
   void OnSurfaceDestroyed(const SurfaceId& surface_id) override {}
@@ -45,7 +46,6 @@ class VIZ_SERVICE_EXPORT HitTestManager : public SurfaceObserver {
   void OnSurfaceDiscarded(const SurfaceId& surface_id) override;
   void OnSurfaceDamageExpected(const SurfaceId& surface_id,
                                const BeginFrameArgs& args) override {}
-  void OnSurfaceSubtreeDamaged(const SurfaceId& surface_id) override {}
 
  private:
   friend class TestHitTestManager;

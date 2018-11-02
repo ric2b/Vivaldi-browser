@@ -13,6 +13,11 @@ namespace blink {
 
 namespace {
 
+#define EXPECT_ITEM_OFFSET(item, type, start, end) \
+  EXPECT_EQ(type, (item).Type());                  \
+  EXPECT_EQ(start, (item).StartOffset());          \
+  EXPECT_EQ(end, (item).EndOffset());
+
 static scoped_refptr<ComputedStyle> CreateWhitespaceStyle(
     EWhiteSpace whitespace) {
   scoped_refptr<ComputedStyle> style(ComputedStyle::Create());
@@ -363,6 +368,28 @@ TEST_F(NGInlineItemsBuilderTest, NewLines) {
   EXPECT_EQ(NGInlineItem::kControl, items_[5].Type());
 }
 
+TEST_F(NGInlineItemsBuilderTest, IgnorablePre) {
+  SetWhiteSpace(EWhiteSpace::kPre);
+  EXPECT_EQ(
+      "apple"
+      "\x0c"
+      "orange"
+      "\n"
+      "grape",
+      TestAppend("apple"
+                 "\x0c"
+                 "orange"
+                 "\n"
+                 "grape"));
+  EXPECT_EQ("{}", collapsed_);
+  EXPECT_EQ(5u, items_.size());
+  EXPECT_ITEM_OFFSET(items_[0], NGInlineItem::kText, 0u, 5u);
+  EXPECT_ITEM_OFFSET(items_[1], NGInlineItem::kControl, 5u, 6u);
+  EXPECT_ITEM_OFFSET(items_[2], NGInlineItem::kText, 6u, 12u);
+  EXPECT_ITEM_OFFSET(items_[3], NGInlineItem::kControl, 12u, 13u);
+  EXPECT_ITEM_OFFSET(items_[4], NGInlineItem::kText, 13u, 18u);
+}
+
 TEST_F(NGInlineItemsBuilderTest, Empty) {
   Vector<NGInlineItem> items;
   NGInlineItemsBuilderForOffsetMapping builder(&items);
@@ -372,6 +399,29 @@ TEST_F(NGInlineItemsBuilderTest, Empty) {
 
   EXPECT_EQ("", builder.ToString());
   EXPECT_EQ("{}", GetCollapsed(builder.GetOffsetMappingBuilder()));
+}
+
+class CollapsibleSpaceTest : public NGInlineItemsBuilderTest,
+                             public ::testing::WithParamInterface<UChar> {};
+
+INSTANTIATE_TEST_CASE_P(NGInlineItemsBuilderTest,
+                        CollapsibleSpaceTest,
+                        ::testing::Values(kSpaceCharacter,
+                                          kTabulationCharacter,
+                                          kNewlineCharacter));
+
+TEST_P(CollapsibleSpaceTest, CollapsedSpaceAfterNoWrap) {
+  UChar space = GetParam();
+  Vector<NGInlineItem> items;
+  NGInlineItemsBuilderForOffsetMapping builder(&items);
+  scoped_refptr<ComputedStyle> nowrap_style(ComputedStyle::Create());
+  nowrap_style->SetWhiteSpace(EWhiteSpace::kNowrap);
+  builder.Append(String("nowrap") + space, nowrap_style.get());
+  builder.Append(" wrap", style_.get());
+  EXPECT_EQ(String("nowrap "
+                   u"\u200B"
+                   "wrap"),
+            builder.ToString());
 }
 
 TEST_F(NGInlineItemsBuilderTest, BidiBlockOverride) {

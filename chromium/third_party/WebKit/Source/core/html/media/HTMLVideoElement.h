@@ -121,10 +121,9 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   // CanvasImageSource implementation
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
-                                               SnapshotReason,
                                                const FloatSize&) override;
   bool IsVideoElement() const override { return true; }
-  bool WouldTaintOrigin(SecurityOrigin*) const override;
+  bool WouldTaintOrigin(const SecurityOrigin*) const override;
   FloatSize ElementSize(const FloatSize&) const override;
   const KURL& SourceURL() const override { return currentSrc(); }
   bool IsHTMLVideoElement() const override { return true; }
@@ -147,7 +146,7 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   bool IsRemotingInterstitialVisible() const;
 
   void MediaRemotingStarted(const WebString& remote_device_friendly_name) final;
-  void MediaRemotingStopped() final;
+  void MediaRemotingStopped(WebLocalizedString::Name error_msg) final;
   WebMediaPlayer::DisplayType DisplayType() const final;
 
  private:

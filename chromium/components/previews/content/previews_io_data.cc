@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -18,6 +19,8 @@
 #include "components/previews/content/previews_ui_service.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_opt_out_store.h"
+#include "components/previews/core/previews_switches.h"
+#include "components/previews/core/previews_user_data.h"
 #include "net/base/load_flags.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/url_request/url_request.h"
@@ -76,12 +79,17 @@ bool IsServerWhitelistedType(PreviewsType type) {
   return false;
 }
 
+bool IsPreviewsBlacklistIgnoredViaFlag() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kIgnorePreviewsBlacklist);
+}
+
 }  // namespace
 
 PreviewsIOData::PreviewsIOData(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
-    : blacklist_ignored_(false),
+    : blacklist_ignored_(IsPreviewsBlacklistIgnoredViaFlag()),
       ui_task_runner_(ui_task_runner),
       io_task_runner_(io_task_runner),
       page_id_(1u),
@@ -133,7 +141,7 @@ void PreviewsIOData::InitializeOnIOThread(
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   previews_black_list_.reset(
       new PreviewsBlackList(std::move(previews_opt_out_store),
-                            base::MakeUnique<base::DefaultClock>(), this));
+                            base::DefaultClock::GetInstance(), this));
   ui_task_runner_->PostTask(
       FROM_HERE, base::Bind(&PreviewsUIService::SetIOData, previews_ui_service_,
                             weak_factory_.GetWeakPtr()));
@@ -147,29 +155,36 @@ void PreviewsIOData::SetPreviewsBlacklistForTesting(
 void PreviewsIOData::LogPreviewNavigation(const GURL& url,
                                           bool opt_out,
                                           PreviewsType type,
-                                          base::Time time) const {
+                                          base::Time time,
+                                          uint64_t page_id) const {
   ui_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&PreviewsUIService::LogPreviewNavigation,
-                            previews_ui_service_, url, type, opt_out, time));
+      FROM_HERE,
+      base::BindOnce(&PreviewsUIService::LogPreviewNavigation,
+                     previews_ui_service_, url, type, opt_out, time, page_id));
 }
 
-void PreviewsIOData::LogPreviewDecisionMade(PreviewsEligibilityReason reason,
-                                            const GURL& url,
-                                            base::Time time,
-                                            PreviewsType type) const {
+void PreviewsIOData::LogPreviewDecisionMade(
+    PreviewsEligibilityReason reason,
+    const GURL& url,
+    base::Time time,
+    PreviewsType type,
+    std::vector<PreviewsEligibilityReason>&& passed_reasons,
+    uint64_t page_id) const {
   LogPreviewsEligibilityReason(reason, type);
   ui_task_runner_->PostTask(
       FROM_HERE, base::Bind(&PreviewsUIService::LogPreviewDecisionMade,
-                            previews_ui_service_, reason, url, time, type));
+                            previews_ui_service_, reason, url, time, type,
+                            base::Passed(std::move(passed_reasons)), page_id));
 }
 
 void PreviewsIOData::AddPreviewNavigation(const GURL& url,
                                           bool opt_out,
-                                          PreviewsType type) {
+                                          PreviewsType type,
+                                          uint64_t page_id) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   base::Time time =
       previews_black_list_->AddPreviewNavigation(url, opt_out, type);
-  LogPreviewNavigation(url, opt_out, type, time);
+  LogPreviewNavigation(url, opt_out, type, time, page_id);
 }
 
 void PreviewsIOData::ClearBlackList(base::Time begin_time,
@@ -199,26 +214,33 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
     PreviewsType type,
     net::EffectiveConnectionType effective_connection_type_threshold,
     const std::vector<std::string>& host_blacklist_from_server) const {
-  if (!request.url().has_host()) {
+  if (!request.url().has_host() || !PreviewsUserData::GetData(request)) {
     // Don't capture UMA on this case, as it is not important and can happen
     // when navigating to files on disk, etc.
     return false;
   }
+
+  std::vector<PreviewsEligibilityReason> passed_reasons;
+  uint64_t page_id = PreviewsUserData::GetData(request)->page_id();
   if (is_enabled_callback_.is_null() || !previews_black_list_) {
     LogPreviewDecisionMade(PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE,
-                           request.url(), base::Time::Now(), type);
+                           request.url(), base::Time::Now(), type,
+                           std::move(passed_reasons), page_id);
     return false;
   }
+  passed_reasons.push_back(PreviewsEligibilityReason::BLACKLIST_UNAVAILABLE);
+
   if (!is_enabled_callback_.Run(type))
     return false;
 
   if (!blacklist_ignored_) {
     // The blacklist will disallow certain hosts for periods of time based on
     // user's opting out of the preview.
-    PreviewsEligibilityReason status =
-        previews_black_list_->IsLoadedAndAllowed(request.url(), type);
+    PreviewsEligibilityReason status = previews_black_list_->IsLoadedAndAllowed(
+        request.url(), type, &passed_reasons);
     if (status != PreviewsEligibilityReason::ALLOWED) {
-      LogPreviewDecisionMade(status, request.url(), base::Time::Now(), type);
+      LogPreviewDecisionMade(status, request.url(), base::Time::Now(), type,
+                             std::move(passed_reasons), page_id);
       return false;
     }
   }
@@ -232,16 +254,20 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
             net::EFFECTIVE_CONNECTION_TYPE_OFFLINE) {
       LogPreviewDecisionMade(
           PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE, request.url(),
-          base::Time::Now(), type);
+          base::Time::Now(), type, std::move(passed_reasons), page_id);
       return false;
     }
+    passed_reasons.push_back(
+        PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE);
 
     if (network_quality_estimator->GetEffectiveConnectionType() >
         effective_connection_type_threshold) {
       LogPreviewDecisionMade(PreviewsEligibilityReason::NETWORK_NOT_SLOW,
-                             request.url(), base::Time::Now(), type);
+                             request.url(), base::Time::Now(), type,
+                             std::move(passed_reasons), page_id);
       return false;
     }
+    passed_reasons.push_back(PreviewsEligibilityReason::NETWORK_NOT_SLOW);
   }
 
   // LOAD_VALIDATE_CACHE or LOAD_BYPASS_CACHE mean the user reloaded the page.
@@ -250,9 +276,11 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
       request.load_flags() &
           (net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE)) {
     LogPreviewDecisionMade(PreviewsEligibilityReason::RELOAD_DISALLOWED,
-                           request.url(), base::Time::Now(), type);
+                           request.url(), base::Time::Now(), type,
+                           std::move(passed_reasons), page_id);
     return false;
   }
+  passed_reasons.push_back(PreviewsEligibilityReason::RELOAD_DISALLOWED);
 
   // Check provided blacklist, if any. This type of blacklist was added for
   // Finch provided blacklist for Client LoFi.
@@ -261,9 +289,11 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
       host_blacklist_from_server.end()) {
     LogPreviewDecisionMade(
         PreviewsEligibilityReason::HOST_BLACKLISTED_BY_SERVER, request.url(),
-        base::Time::Now(), type);
+        base::Time::Now(), type, std::move(passed_reasons), page_id);
     return false;
   }
+  passed_reasons.push_back(
+      PreviewsEligibilityReason::HOST_BLACKLISTED_BY_SERVER);
 
   // Check whitelist from the server, if provided.
   if (IsServerWhitelistedType(type)) {
@@ -273,21 +303,26 @@ bool PreviewsIOData::ShouldAllowPreviewAtECT(
           !previews_opt_guide_->IsWhitelisted(request, type)) {
         LogPreviewDecisionMade(
             PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER,
-            request.url(), base::Time::Now(), type);
+            request.url(), base::Time::Now(), type, std::move(passed_reasons),
+            page_id);
         return false;
       }
+      passed_reasons.push_back(
+          PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER);
     } else {
       // Since server optimization guidance not configure, allow the preview
       // but with qualified eligibility reason.
       LogPreviewDecisionMade(
           PreviewsEligibilityReason::ALLOWED_WITHOUT_OPTIMIZATION_HINTS,
-          request.url(), base::Time::Now(), type);
+          request.url(), base::Time::Now(), type, std::move(passed_reasons),
+          page_id);
       return true;
     }
   }
 
   LogPreviewDecisionMade(PreviewsEligibilityReason::ALLOWED, request.url(),
-                         base::Time::Now(), type);
+                         base::Time::Now(), type, std::move(passed_reasons),
+                         page_id);
   return true;
 }
 

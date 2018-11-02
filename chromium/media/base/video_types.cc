@@ -16,12 +16,12 @@ std::string VideoPixelFormatToString(VideoPixelFormat format) {
       return "PIXEL_FORMAT_I420";
     case PIXEL_FORMAT_YV12:
       return "PIXEL_FORMAT_YV12";
-    case PIXEL_FORMAT_YV16:
-      return "PIXEL_FORMAT_YV16";
-    case PIXEL_FORMAT_YV12A:
-      return "PIXEL_FORMAT_YV12A";
-    case PIXEL_FORMAT_YV24:
-      return "PIXEL_FORMAT_YV24";
+    case PIXEL_FORMAT_I422:
+      return "PIXEL_FORMAT_I422";
+    case PIXEL_FORMAT_I420A:
+      return "PIXEL_FORMAT_I420A";
+    case PIXEL_FORMAT_I444:
+      return "PIXEL_FORMAT_I444";
     case PIXEL_FORMAT_NV12:
       return "PIXEL_FORMAT_NV12";
     case PIXEL_FORMAT_NV21:
@@ -60,12 +60,8 @@ std::string VideoPixelFormatToString(VideoPixelFormat format) {
       return "PIXEL_FORMAT_YUV422P12";
     case PIXEL_FORMAT_YUV444P12:
       return "PIXEL_FORMAT_YUV444P12";
-    case PIXEL_FORMAT_Y8:
-      return "PIXEL_FORMAT_Y8";
     case PIXEL_FORMAT_Y16:
       return "PIXEL_FORMAT_Y16";
-    case PIXEL_FORMAT_I422:
-      return "PIXEL_FORMAT_I422";
   }
   NOTREACHED() << "Invalid VideoPixelFormat provided: " << format;
   return "";
@@ -75,9 +71,9 @@ bool IsYuvPlanar(VideoPixelFormat format) {
   switch (format) {
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV12A:
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I420A:
+    case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_MT21:
@@ -90,7 +86,6 @@ bool IsYuvPlanar(VideoPixelFormat format) {
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
-    case PIXEL_FORMAT_I422:
       return true;
 
     case PIXEL_FORMAT_UNKNOWN:
@@ -101,7 +96,6 @@ bool IsYuvPlanar(VideoPixelFormat format) {
     case PIXEL_FORMAT_RGB24:
     case PIXEL_FORMAT_RGB32:
     case PIXEL_FORMAT_MJPEG:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_Y16:
       return false;
   }
@@ -113,8 +107,8 @@ bool IsOpaque(VideoPixelFormat format) {
     case PIXEL_FORMAT_UNKNOWN:
     case PIXEL_FORMAT_I420:
     case PIXEL_FORMAT_YV12:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_UYVY:
@@ -132,11 +126,9 @@ bool IsOpaque(VideoPixelFormat format) {
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_Y16:
-    case PIXEL_FORMAT_I422:
       return true;
-    case PIXEL_FORMAT_YV12A:
+    case PIXEL_FORMAT_I420A:
     case PIXEL_FORMAT_ARGB:
     case PIXEL_FORMAT_RGB32:
       break;

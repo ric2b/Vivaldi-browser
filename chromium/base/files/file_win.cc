@@ -8,8 +8,10 @@
 #include <stdint.h>
 
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/threading/thread_restrictions.h"
+
+#include <windows.h>
 
 namespace base {
 
@@ -234,7 +236,7 @@ File::Error File::Lock() {
 
   BOOL result = LockFile(file_.Get(), 0, 0, MAXDWORD, MAXDWORD);
   if (!result)
-    return OSErrorToFileError(GetLastError());
+    return GetLastFileError();
   return FILE_OK;
 }
 
@@ -245,7 +247,7 @@ File::Error File::Unlock() {
 
   BOOL result = UnlockFile(file_.Get(), 0, 0, MAXDWORD, MAXDWORD);
   if (!result)
-    return OSErrorToFileError(GetLastError());
+    return GetLastFileError();
   return FILE_OK;
 }
 
@@ -264,7 +266,7 @@ File File::Duplicate() const {
                          0,  // dwDesiredAccess ignored due to SAME_ACCESS
                          FALSE,  // !bInheritHandle
                          DUPLICATE_SAME_ACCESS)) {
-    return File(OSErrorToFileError(GetLastError()));
+    return File(GetLastFileError());
   }
 
   File other(other_handle);
@@ -284,6 +286,7 @@ File::Error File::OSErrorToFileError(DWORD last_error) {
   switch (last_error) {
     case ERROR_SHARING_VIOLATION:
       return FILE_ERROR_IN_USE;
+    case ERROR_ALREADY_EXISTS:
     case ERROR_FILE_EXISTS:
       return FILE_ERROR_EXISTS;
     case ERROR_FILE_NOT_FOUND:
@@ -310,8 +313,9 @@ File::Error File::OSErrorToFileError(DWORD last_error) {
     case ERROR_DISK_CORRUPT:
       return FILE_ERROR_IO;
     default:
-      UMA_HISTOGRAM_SPARSE_SLOWLY("PlatformFile.UnknownErrors.Windows",
-                                  last_error);
+      UmaHistogramSparse("PlatformFile.UnknownErrors.Windows", last_error);
+      // This function should only be called for errors.
+      DCHECK_NE(static_cast<DWORD>(ERROR_SUCCESS), last_error);
       return FILE_ERROR_FAILED;
   }
 }
@@ -348,6 +352,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
   }
 
   if (!disposition) {
+    ::SetLastError(ERROR_INVALID_PARAMETER);
+    error_details_ = FILE_ERROR_FAILED;
     NOTREACHED();
     return;
   }
@@ -400,7 +406,7 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
     else if (flags & (FLAG_CREATE_ALWAYS | FLAG_CREATE))
       created_ = true;
   } else {
-    error_details_ = OSErrorToFileError(GetLastError());
+    error_details_ = GetLastFileError();
   }
 }
 
@@ -413,6 +419,11 @@ bool File::Flush() {
 
 void File::SetPlatformFile(PlatformFile file) {
   file_.Set(file);
+}
+
+// static
+File::Error File::GetLastFileError() {
+  return File::OSErrorToFileError(GetLastError());
 }
 
 }  // namespace base

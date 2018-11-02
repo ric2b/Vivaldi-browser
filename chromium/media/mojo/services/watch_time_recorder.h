@@ -23,18 +23,24 @@ namespace media {
 // See mojom::WatchTimeRecorder for documentation.
 class MEDIA_MOJO_EXPORT WatchTimeRecorder : public mojom::WatchTimeRecorder {
  public:
-  explicit WatchTimeRecorder(mojom::PlaybackPropertiesPtr properties);
+  WatchTimeRecorder(mojom::PlaybackPropertiesPtr properties,
+                    const url::Origin& untrusted_top_origin,
+                    bool is_top_frame,
+                    uint64_t player_id);
   ~WatchTimeRecorder() override;
-
-  static void CreateWatchTimeRecorderProvider(
-      mojom::WatchTimeRecorderProviderRequest request);
 
   // mojom::WatchTimeRecorder implementation:
   void RecordWatchTime(WatchTimeKey key, base::TimeDelta watch_time) override;
   void FinalizeWatchTime(
       const std::vector<WatchTimeKey>& watch_time_keys) override;
   void OnError(PipelineStatus status) override;
+  void SetAudioDecoderName(const std::string& name) override;
+  void SetVideoDecoderName(const std::string& name) override;
+
   void UpdateUnderflowCount(int32_t count) override;
+
+  // Test helper method for determining if keys are not reported to UMA.
+  static bool ShouldReportUmaForTesting(WatchTimeKey key);
 
  private:
   // Records a UKM event based on |aggregate_watch_time_info_|; only recorded
@@ -44,18 +50,31 @@ class MEDIA_MOJO_EXPORT WatchTimeRecorder : public mojom::WatchTimeRecorder {
 
   const mojom::PlaybackPropertiesPtr properties_;
 
-  // Mapping of WatchTime metric keys to MeanTimeBetweenRebuffers (MTBR) and
-  // smooth rate (had zero rebuffers) keys.
-  struct RebufferMapping {
-    RebufferMapping(const RebufferMapping& copy);
-    RebufferMapping(WatchTimeKey watch_time_key,
-                    base::StringPiece mtbr_key,
-                    base::StringPiece smooth_rate_key);
+  // For privacy, only record the top origin. "Untrusted" signals that this
+  // value comes from the renderer and should not be used for security checks.
+  // TODO(crbug.com/787209): Stop getting origin from the renderer.
+  const url::Origin untrusted_top_origin_;
+  const bool is_top_frame_;
+
+  // The provider ID which constructed this recorder. Used to record a UKM entry
+  // at destruction that can be correlated with the final status for the
+  // associated WebMediaPlayerImpl instance.
+  const uint64_t player_id_;
+
+  // Mapping of WatchTime metric keys to MeanTimeBetweenRebuffers (MTBR), smooth
+  // rate (had zero rebuffers), and discard (<7s watch time) keys.
+  struct ExtendedMetricsKeyMap {
+    ExtendedMetricsKeyMap(const ExtendedMetricsKeyMap& copy);
+    ExtendedMetricsKeyMap(WatchTimeKey watch_time_key,
+                          base::StringPiece mtbr_key,
+                          base::StringPiece smooth_rate_key,
+                          base::StringPiece discard_key);
     const WatchTimeKey watch_time_key;
     const base::StringPiece mtbr_key;
     const base::StringPiece smooth_rate_key;
+    const base::StringPiece discard_key;
   };
-  const std::vector<RebufferMapping> rebuffer_keys_;
+  const std::vector<ExtendedMetricsKeyMap> extended_metrics_keys_;
 
   using WatchTimeInfo = base::flat_map<WatchTimeKey, base::TimeDelta>;
   WatchTimeInfo watch_time_info_;
@@ -64,7 +83,13 @@ class MEDIA_MOJO_EXPORT WatchTimeRecorder : public mojom::WatchTimeRecorder {
   WatchTimeInfo aggregate_watch_time_info_;
 
   int underflow_count_ = 0;
+  int total_underflow_count_ = 0;
   PipelineStatus pipeline_status_ = PIPELINE_OK;
+
+  // Decoder name associated with this recorder. Reported to UKM as a
+  // base::PersistentHash().
+  std::string audio_decoder_name_;
+  std::string video_decoder_name_;
 
   DISALLOW_COPY_AND_ASSIGN(WatchTimeRecorder);
 };

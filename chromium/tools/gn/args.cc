@@ -6,6 +6,7 @@
 
 #include "base/sys_info.h"
 #include "build/build_config.h"
+#include "tools/gn/source_file.h"
 #include "tools/gn/string_utils.h"
 #include "tools/gn/variables.h"
 
@@ -132,6 +133,12 @@ void Args::AddArgOverrides(const Scope::KeyValueMap& overrides,
     overrides_[cur_override.first] = cur_override.second;
     all_overrides_[cur_override.first] = cur_override.second;
   }
+}
+
+void Args::AddDefaultArgOverrides(const Scope::KeyValueMap& overrides) {
+  base::AutoLock lock(lock_);
+  for (const auto& cur_override : overrides)
+    overrides_[cur_override.first] = cur_override.second;
 }
 
 const Value* Args::GetArgOverride(const char* name) const {

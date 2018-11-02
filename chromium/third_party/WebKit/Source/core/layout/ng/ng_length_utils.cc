@@ -179,10 +179,15 @@ LayoutUnit ResolveBlockLength(const NGConstraintSpace& constraint_space,
     case kMinContent:
     case kMaxContent:
     case kFitContent:
+#if DCHECK_IS_ON()
       // Due to how content_size is calculated, it should always include border
-      // and padding.
-      if (content_size != LayoutUnit(-1))
+      // and padding. We cannot check for this if we are block-fragmented,
+      // though, because then the block-start border/padding may be in a
+      // different fragmentainer than the block-end border/padding.
+      if (content_size != LayoutUnit(-1) &&
+          !constraint_space.HasBlockFragmentation())
         DCHECK_GE(content_size, border_and_padding.BlockSum());
+#endif  // DCHECK_IS_ON()
       return content_size;
     case kDeviceWidth:
     case kDeviceHeight:
@@ -237,9 +242,6 @@ MinMaxSize ComputeMinAndMaxContentContribution(
   computed_sizes.min_size = std::max(computed_sizes.min_size, min);
   computed_sizes.max_size = std::max(computed_sizes.max_size, min);
 
-  NGBoxStrut margins = ComputeMarginsForSelf(*space, style);
-  computed_sizes.min_size += margins.InlineSum();
-  computed_sizes.max_size += margins.InlineSum();
   return computed_sizes;
 }
 
@@ -480,6 +482,28 @@ NGBoxStrut ComputeMarginsForSelf(const NGConstraintSpace& constraint_space,
                                  const ComputedStyle& style) {
   return ComputePhysicalMargins(constraint_space, style)
       .ConvertToLogical(style.GetWritingMode(), style.Direction());
+}
+
+NGBoxStrut ComputeMinMaxMargins(const ComputedStyle& parent_style,
+                                NGLayoutInputNode child) {
+  // An inline child just produces line-boxes which don't have any margins.
+  if (child.IsInline())
+    return NGBoxStrut();
+
+  Length inline_start_margin_length =
+      child.Style().MarginStartUsing(parent_style);
+  Length inline_end_margin_length = child.Style().MarginEndUsing(parent_style);
+
+  // TODO(ikilpatrick): We may want to re-visit calculated margins at some
+  // point. Currently "margin-left: calc(10px + 50%)" will resolve to 0px, but
+  // 10px would be more correct, (as percentages resolve to zero).
+  NGBoxStrut margins;
+  if (inline_start_margin_length.IsFixed())
+    margins.inline_start = LayoutUnit(inline_start_margin_length.Value());
+  if (inline_end_margin_length.IsFixed())
+    margins.inline_end = LayoutUnit(inline_end_margin_length.Value());
+
+  return margins;
 }
 
 NGBoxStrut ComputeBorders(const NGConstraintSpace& constraint_space,

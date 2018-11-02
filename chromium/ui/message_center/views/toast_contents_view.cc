@@ -191,9 +191,15 @@ void ToastContentsView::StartFadeOut() {
     collection_->IncrementDeferCounter();
   fade_animation_->Stop();
 
-  closing_animation_ = (is_closing_ ? fade_animation_.get() : NULL);
-  fade_animation_->Reset(1);
-  fade_animation_->Hide();
+  closing_animation_ = (is_closing_ ? fade_animation_.get() : nullptr);
+  if (GetWidget()->GetLayer()->opacity() > 0.0) {
+    fade_animation_->Reset(1);
+    fade_animation_->Hide();
+  } else {
+    // If the layer is already transparent, do not trigger animation again.
+    // It happens when the toast is removed by touch gesture.
+    OnBoundsAnimationEndedOrCancelled(fade_animation_.get());
+  }
 }
 
 void ToastContentsView::OnBoundsAnimationEndedOrCancelled(
@@ -330,47 +336,6 @@ void ToastContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 const char* ToastContentsView::GetClassName() const {
   return kViewClassName;
-}
-
-void ToastContentsView::ClickOnNotification(
-    const std::string& notification_id) {
-  if (collection_)
-    collection_->ClickOnNotification(notification_id);
-}
-
-void ToastContentsView::ClickOnSettingsButton(
-    const std::string& notification_id) {
-  if (collection_)
-    collection_->ClickOnSettingsButton(notification_id);
-}
-
-void ToastContentsView::UpdateNotificationSize(
-    const std::string& notification_id) {
-  if (collection_)
-    collection_->UpdateNotificationSize(notification_id);
-}
-
-void ToastContentsView::RemoveNotification(
-    const std::string& notification_id,
-    bool by_user) {
-  if (collection_)
-    collection_->RemoveNotification(notification_id, by_user);
-}
-
-void ToastContentsView::ClickOnNotificationButton(
-    const std::string& notification_id,
-    int button_index) {
-  if (collection_)
-    collection_->ClickOnNotificationButton(notification_id, button_index);
-}
-
-void ToastContentsView::ClickOnNotificationButtonWithReply(
-    const std::string& notification_id,
-    int button_index,
-    const base::string16& reply) {
-  if (collection_)
-    collection_->ClickOnNotificationButtonWithReply(notification_id,
-                                                    button_index, reply);
 }
 
 void ToastContentsView::CreateWidget(

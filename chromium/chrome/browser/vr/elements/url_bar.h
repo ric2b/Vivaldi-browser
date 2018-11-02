@@ -23,33 +23,27 @@ struct UrlBarColors;
 
 class UrlBar : public TexturedElement {
  public:
-  UrlBar(int preferred_width,
-         const base::Callback<void()>& back_button_callback,
-         const base::Callback<void(UiUnsupportedMode)>& failure_callback);
+  UrlBar(
+      int preferred_width,
+      const base::RepeatingCallback<void()>& url_click_callback,
+      const base::RepeatingCallback<void(UiUnsupportedMode)>& failure_callback);
   ~UrlBar() override;
 
-  void OnHoverEnter(const gfx::PointF& position) override;
-  void OnHoverLeave() override;
-  void OnMove(const gfx::PointF& position) override;
   void OnButtonDown(const gfx::PointF& position) override;
   void OnButtonUp(const gfx::PointF& position) override;
-  bool LocalHitTest(const gfx::PointF& point) const override;
 
-  void SetHistoryButtonsEnabled(bool can_go_back);
   void SetToolbarState(const ToolbarState& state);
-
   void SetColors(const UrlBarColors& colors);
 
  private:
   UiTexture* GetTexture() const override;
-  void OnStateUpdated(const gfx::PointF& position);
 
   std::unique_ptr<UrlBarTexture> texture_;
-  base::Callback<void()> back_button_callback_;
-  base::Callback<void(UiUnsupportedMode)> failure_callback_;
-  bool can_go_back_ = false;
-  bool down_ = false;
+  base::RepeatingCallback<void()> url_click_callback_;
+  base::RepeatingCallback<void(UiUnsupportedMode)> failure_callback_;
+
   bool security_region_down_ = false;
+  bool url_down_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(UrlBar);
 };

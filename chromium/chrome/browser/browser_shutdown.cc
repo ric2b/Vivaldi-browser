@@ -30,8 +30,8 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/crash_keys.h"
 #include "chrome/common/pref_names.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/metrics/metrics_service.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -55,7 +55,7 @@
 #include "chrome/browser/lifetime/termination_notification.h"
 #endif
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 #include "chrome/browser/background/background_mode_manager.h"
 #endif
 
@@ -67,7 +67,6 @@
 #include "components/rlz/rlz_tracker.h"
 #endif
 
-using base::Time;
 using base::TimeDelta;
 
 namespace browser_shutdown {
@@ -76,7 +75,7 @@ namespace {
 // Whether the browser is trying to quit (e.g., Quit chosen from menu).
 bool g_trying_to_quit = false;
 
-Time* g_shutdown_started = nullptr;
+base::Time* g_shutdown_started = nullptr;
 ShutdownType g_shutdown_type = NOT_VALID;
 int g_shutdown_num_processes;
 int g_shutdown_num_processes_slow;
@@ -120,8 +119,10 @@ ShutdownType GetShutdownType() {
 void OnShutdownStarting(ShutdownType type) {
   if (g_shutdown_type != NOT_VALID)
     return;
-  base::debug::SetCrashKeyValue(crash_keys::kShutdownType,
-                                ToShutdownTypeString(type));
+
+  static crash_reporter::CrashKeyString<8> shutdown_type_key("shutdown-type");
+  shutdown_type_key.Set(ToShutdownTypeString(type));
+
 #if !defined(OS_CHROMEOS)
   // Start the shutdown tracing. Note that On ChromeOS this has already been
   // called in AttemptUserExit().
@@ -134,7 +135,7 @@ void OnShutdownStarting(ShutdownType type) {
   // thread, and we'd really like to avoid anything which might add further
   // delays to shutdown time.
   DCHECK(!g_shutdown_started);
-  g_shutdown_started = new Time(Time::Now());
+  g_shutdown_started = new base::Time(base::Time::Now());
 
   // Call FastShutdown on all of the RenderProcessHosts.  This will be
   // a no-op in some cases, so we still need to go through the normal
@@ -264,7 +265,7 @@ void ShutdownPostThreadsStop(int shutdown_flags) {
     // Measure total shutdown time as late in the process as possible
     // and then write it to a file to be read at startup.
     // We can't use prefs since all services are shutdown at this point.
-    TimeDelta shutdown_delta = Time::Now() - *g_shutdown_started;
+    TimeDelta shutdown_delta = base::Time::Now() - *g_shutdown_started;
     std::string shutdown_ms =
         base::Int64ToString(shutdown_delta.InMilliseconds());
     int len = static_cast<int>(shutdown_ms.length()) + 1;
@@ -356,9 +357,9 @@ void SetTryingToQuit(bool quitting) {
     pref_service->ClearPref(prefs::kRestartLastSessionOnShutdown);
   }
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
   BackgroundModeManager::set_should_restart_in_background(false);
-#endif  // BUILDFLAG(ENABLE_BACKGROUND)
+#endif  // BUILDFLAG(ENABLE_BACKGROUND_MODE)
 }
 
 bool IsTryingToQuit() {

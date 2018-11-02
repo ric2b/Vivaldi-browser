@@ -122,6 +122,7 @@ class IPCAudioDecoderTest : public testing::Test {
 // Note: The expected results are partly decoder-dependent.  The same
 // differences in duration, etc., occur when decoding via IPCDemuxer.
 
+#if defined(PLATFORM_MEDIA_MP3)
 TEST_F(IPCAudioDecoderTest, MP3) {
 #if defined(OS_MACOSX)
   if (base::mac::IsAtLeastOS10_12()) {
@@ -150,6 +151,7 @@ TEST_F(IPCAudioDecoderTest, CorruptMP3) {
           base::TimeDelta::FromMicroseconds(1018800), 44930, 44928);
 #endif
 }
+#endif // PLATFORM_MEDIA_MP3
 
 TEST_F(IPCAudioDecoderTest, AAC) {
   RunTest("sfx.m4a",

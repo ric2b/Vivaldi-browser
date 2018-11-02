@@ -27,6 +27,7 @@
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
+#include "ui/gl/gl_surface_presentation_helper.h"
 #include "ui/gl/gl_visual_picker_glx.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
@@ -288,7 +289,7 @@ class SGIVideoSyncProviderThreadShim {
         base::TimeDelta::FromSeconds(1) / 60;
 
     task_runner_->PostTask(FROM_HERE,
-                           base::Bind(callback, now, kDefaultInterval));
+                           base::BindOnce(callback, now, kDefaultInterval));
   }
 
  private:
@@ -325,8 +326,8 @@ class SGIVideoSyncVSyncProvider
         cancel_vsync_flag_(shim_->cancel_vsync_flag()),
         vsync_lock_(shim_->vsync_lock()) {
     vsync_thread_->task_runner()->PostTask(
-        FROM_HERE, base::Bind(&SGIVideoSyncProviderThreadShim::Initialize,
-                              base::Unretained(shim_.get())));
+        FROM_HERE, base::BindOnce(&SGIVideoSyncProviderThreadShim::Initialize,
+                                  base::Unretained(shim_.get())));
   }
 
   ~SGIVideoSyncVSyncProvider() override {
@@ -347,13 +348,20 @@ class SGIVideoSyncVSyncProvider
           new gfx::VSyncProvider::UpdateVSyncCallback(callback));
       vsync_thread_->task_runner()->PostTask(
           FROM_HERE,
-          base::Bind(
-              &SGIVideoSyncProviderThreadShim::GetVSyncParameters,
-              base::Unretained(shim_.get()),
-              base::Bind(&SGIVideoSyncVSyncProvider::PendingCallbackRunner,
-                         AsWeakPtr())));
+          base::BindOnce(&SGIVideoSyncProviderThreadShim::GetVSyncParameters,
+                         base::Unretained(shim_.get()),
+                         base::BindRepeating(
+                             &SGIVideoSyncVSyncProvider::PendingCallbackRunner,
+                             AsWeakPtr())));
     }
   }
+
+  bool GetVSyncParametersIfAvailable(base::TimeTicks* timebase,
+                                     base::TimeDelta* interval) override {
+    return false;
+  }
+
+  bool SupportGetVSyncParametersIfAvailable() override { return false; }
 
  private:
   void PendingCallbackRunner(const base::TimeTicks timebase,
@@ -560,10 +568,6 @@ NativeViewGLSurfaceGLX::NativeViewGLSurfaceGLX(gfx::AcceleratedWidget window)
       config_(nullptr),
       visual_id_(CopyFromParent) {}
 
-GLXDrawable NativeViewGLSurfaceGLX::GetDrawableHandle() const {
-  return glx_window_;
-}
-
 bool NativeViewGLSurfaceGLX::Initialize(GLSurfaceFormat format) {
   XWindowAttributes attributes;
   if (!XGetWindowAttributes(g_display, parent_window_, &attributes)) {
@@ -606,8 +610,12 @@ bool NativeViewGLSurfaceGLX::Initialize(GLSurfaceFormat format) {
 
   if (g_glx_oml_sync_control_supported) {
     vsync_provider_.reset(new OMLSyncControlVSyncProvider(glx_window_));
+    presentation_helper_ = std::make_unique<GLSurfacePresentationHelper>(
+        vsync_provider_.get(), true);
   } else if (g_glx_sgi_video_sync_supported) {
     vsync_provider_.reset(new SGIVideoSyncVSyncProvider(parent_window_));
+    presentation_helper_ = std::make_unique<GLSurfacePresentationHelper>(
+        vsync_provider_.get(), false);
   } else {
     // Assume a refresh rate of 59.9 Hz, which will cause us to skip
     // 1 frame every 10 seconds on a 60Hz monitor, but will prevent us
@@ -619,13 +627,16 @@ bool NativeViewGLSurfaceGLX::Initialize(GLSurfaceFormat format) {
         base::TimeDelta::FromSeconds(1) / 59.9;
     vsync_provider_.reset(
         new gfx::FixedVSyncProvider(kDefaultTimebase, kDefaultInterval));
+    presentation_helper_ = std::make_unique<GLSurfacePresentationHelper>(
+        kDefaultTimebase, kDefaultInterval);
   }
 
   return true;
 }
 
 void NativeViewGLSurfaceGLX::Destroy() {
-  vsync_provider_.reset();
+  presentation_helper_ = nullptr;
+  vsync_provider_ = nullptr;
   if (glx_window_) {
     glXDestroyWindow(g_display, glx_window_);
     glx_window_ = 0;
@@ -655,10 +666,11 @@ bool NativeViewGLSurfaceGLX::IsOffscreen() {
 
 gfx::SwapResult NativeViewGLSurfaceGLX::SwapBuffers(
     const PresentationCallback& callback) {
-  // TODO(penghuang): Provide presentation feedback. https://crbug.com/776877
   TRACE_EVENT2("gpu", "NativeViewGLSurfaceGLX:RealSwapBuffers", "width",
                GetSize().width(), "height", GetSize().height());
+  presentation_helper_->PreSwapBuffers(callback);
   glXSwapBuffers(g_display, GetDrawableHandle());
+  presentation_helper_->PostSwapBuffers();
   return gfx::SwapResult::SWAP_ACK;
 }
 
@@ -668,6 +680,10 @@ gfx::Size NativeViewGLSurfaceGLX::GetSize() {
 
 void* NativeViewGLSurfaceGLX::GetHandle() {
   return reinterpret_cast<void*>(GetDrawableHandle());
+}
+
+bool NativeViewGLSurfaceGLX::SupportsPresentationCallback() {
+  return true;
 }
 
 bool NativeViewGLSurfaceGLX::SupportsPostSubBuffer() {
@@ -694,10 +710,16 @@ gfx::SwapResult NativeViewGLSurfaceGLX::PostSubBuffer(
     int width,
     int height,
     const PresentationCallback& callback) {
-  // TODO(penghuang): Provide presentation feedback. https://crbug.com/776877
   DCHECK(g_driver_glx.ext.b_GLX_MESA_copy_sub_buffer);
+  presentation_helper_->PreSwapBuffers(callback);
   glXCopySubBufferMESA(g_display, GetDrawableHandle(), x, y, width, height);
+  presentation_helper_->PostSwapBuffers();
   return gfx::SwapResult::SWAP_ACK;
+}
+
+bool NativeViewGLSurfaceGLX::OnMakeCurrent(GLContext* context) {
+  presentation_helper_->OnMakeCurrent(context, this);
+  return GLSurfaceGLX::OnMakeCurrent(context);
 }
 
 gfx::VSyncProvider* NativeViewGLSurfaceGLX::GetVSyncProvider() {
@@ -719,6 +741,10 @@ void NativeViewGLSurfaceGLX::ForwardExposeEvent(XEvent* event) {
 bool NativeViewGLSurfaceGLX::CanHandleEvent(XEvent* event) {
   return event->type == Expose &&
          event->xexpose.window == static_cast<Window>(window_);
+}
+
+GLXDrawable NativeViewGLSurfaceGLX::GetDrawableHandle() const {
+  return glx_window_;
 }
 
 UnmappedNativeViewGLSurfaceGLX::UnmappedNativeViewGLSurfaceGLX(

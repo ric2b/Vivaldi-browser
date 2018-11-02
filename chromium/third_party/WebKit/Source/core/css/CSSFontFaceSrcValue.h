@@ -29,7 +29,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "core/css/CSSValue.h"
 #include "core/loader/resource/FontResource.h"
-#include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/weborigin/Referrer.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -68,7 +67,7 @@ class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
 
   bool HasFailedOrCanceledSubresources() const;
 
-  FontResource* Fetch(ExecutionContext*) const;
+  FontResource* Fetch(ExecutionContext*, FontResourceClient*) const;
 
   bool Equals(const CSSFontFaceSrcValue&) const;
 
@@ -103,20 +102,23 @@ class CORE_EXPORT CSSFontFaceSrcValue : public CSSValue {
 
   class FontResourceHelper
       : public GarbageCollectedFinalized<FontResourceHelper>,
-        public ResourceOwner<FontResource> {
+        public FontResourceClient {
     USING_GARBAGE_COLLECTED_MIXIN(FontResourceHelper);
 
    public:
-    static FontResourceHelper* Create(FontResource* resource) {
-      return new FontResourceHelper(resource);
+    static FontResourceHelper* Create(FontResource* resource,
+                                      WebTaskRunner* task_runner) {
+      return new FontResourceHelper(resource, task_runner);
     }
 
     virtual void Trace(blink::Visitor* visitor) {
-      ResourceOwner<FontResource>::Trace(visitor);
+      FontResourceClient::Trace(visitor);
     }
 
    private:
-    FontResourceHelper(FontResource* resource) { SetResource(resource); }
+    FontResourceHelper(FontResource* resource, WebTaskRunner* task_runner) {
+      SetResource(resource, task_runner);
+    }
 
     String DebugName() const override {
       return "CSSFontFaceSrcValue::FontResourceHelper";

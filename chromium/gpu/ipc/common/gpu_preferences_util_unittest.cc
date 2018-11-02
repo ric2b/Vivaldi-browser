@@ -32,7 +32,13 @@ class ScopedGpuPreferences {
 
 }  // namespace
 
-TEST(GpuPreferencesUtilTest, EncodeDecode) {
+// TODO(https://crbug.com/799458): Fix this test.
+#if defined(OS_WIN)
+#define MAYBE_EncodeDecode DISABLED_EncodeDecode
+#else
+#define MAYBE_EncodeDecode EncodeDecode
+#endif
+TEST(GpuPreferencesUtilTest, MAYBE_EncodeDecode) {
   {  // Testing default values.
     ScopedGpuPreferences scoped_input_prefs, scoped_decoded_prefs;
     GpuPreferences& input_prefs = scoped_input_prefs.Ref();
@@ -66,10 +72,10 @@ TEST(GpuPreferencesUtilTest, EncodeDecode) {
     GPU_PREFERENCES_FIELD(single_process, true)
     GPU_PREFERENCES_FIELD(in_process_gpu, true)
     GPU_PREFERENCES_FIELD(disable_accelerated_video_decode, true)
+    GPU_PREFERENCES_FIELD(disable_accelerated_video_encode, true)
     GPU_PREFERENCES_FIELD(gpu_startup_dialog, true)
     GPU_PREFERENCES_FIELD(disable_gpu_watchdog, true)
     GPU_PREFERENCES_FIELD(gpu_sandbox_start_early, true)
-    GPU_PREFERENCES_FIELD(disable_vaapi_accelerated_video_encode, true)
     GPU_PREFERENCES_FIELD(disable_web_rtc_hw_encoding, true)
     GPU_PREFERENCES_FIELD(enable_accelerated_vpx_decode,
                           GpuPreferences::VPX_VENDOR_AMD)
@@ -77,10 +83,11 @@ TEST(GpuPreferencesUtilTest, EncodeDecode) {
     GPU_PREFERENCES_FIELD(enable_zero_copy_dxgi_video, true)
     GPU_PREFERENCES_FIELD(enable_nv12_dxgi_video, true)
     GPU_PREFERENCES_FIELD(enable_media_foundation_vea_on_windows7, true)
+    GPU_PREFERENCES_FIELD(disable_software_rasterizer, true)
+    GPU_PREFERENCES_FIELD(log_gpu_control_list_decisions, true)
     GPU_PREFERENCES_FIELD(compile_shader_always_succeeds, true)
     GPU_PREFERENCES_FIELD(disable_gl_error_limit, true)
     GPU_PREFERENCES_FIELD(disable_glsl_translator, true)
-    GPU_PREFERENCES_FIELD(disable_gpu_driver_bug_workarounds, true)
     GPU_PREFERENCES_FIELD(disable_shader_name_hashing, true)
     GPU_PREFERENCES_FIELD(enable_gpu_command_logging, true)
     GPU_PREFERENCES_FIELD(enable_gpu_debugging, true)
@@ -98,6 +105,10 @@ TEST(GpuPreferencesUtilTest, EncodeDecode) {
     GPU_PREFERENCES_FIELD(enable_gpu_service_logging, true)
     GPU_PREFERENCES_FIELD(enable_gpu_service_tracing, true)
     GPU_PREFERENCES_FIELD(use_passthrough_cmd_decoder, true)
+    GPU_PREFERENCES_FIELD(disable_biplanar_gpu_memory_buffers_for_video_frames,
+                          true)
+    GPU_PREFERENCES_FIELD(disable_gpu_driver_bug_workarounds, true)
+    GPU_PREFERENCES_FIELD(ignore_gpu_blacklist, true)
 
     // Make sure every field is encoded/decoded.
     std::string encoded = GpuPreferencesToSwitchValue(input_prefs);

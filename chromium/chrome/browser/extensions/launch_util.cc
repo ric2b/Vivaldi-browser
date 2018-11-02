@@ -4,6 +4,8 @@
 
 #include "chrome/browser/extensions/launch_util.h"
 
+#include <memory>
+
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
@@ -83,7 +85,7 @@ void SetLaunchType(content::BrowserContext* context,
 
   ExtensionPrefs::Get(context)->UpdateExtensionPref(
       extension_id, kPrefLaunchType,
-      base::MakeUnique<base::Value>(static_cast<int>(launch_type)));
+      std::make_unique<base::Value>(static_cast<int>(launch_type)));
 
   // Sync the launch type.
   const Extension* extension =
@@ -98,10 +100,7 @@ LaunchContainer GetLaunchContainer(const ExtensionPrefs* prefs,
   LaunchContainer manifest_launch_container =
       AppLaunchInfo::GetLaunchContainer(extension);
 
-  const LaunchContainer kInvalidLaunchContainer =
-      static_cast<LaunchContainer>(-1);
-
-  LaunchContainer result = kInvalidLaunchContainer;
+  base::Optional<LaunchContainer> result;
 
   if (manifest_launch_container == LAUNCH_CONTAINER_PANEL) {
     // Apps with app.launch.container = 'panel' should always respect the
@@ -137,12 +136,12 @@ LaunchContainer GetLaunchContainer(const ExtensionPrefs* prefs,
   }
 
   // All paths should set |result|.
-  if (result == kInvalidLaunchContainer) {
+  if (!result) {
     DLOG(FATAL) << "Failed to set a launch container.";
     result = LAUNCH_CONTAINER_TAB;
   }
 
-  return result;
+  return *result;
 }
 
 bool HasPreferredLaunchContainer(const ExtensionPrefs* prefs,

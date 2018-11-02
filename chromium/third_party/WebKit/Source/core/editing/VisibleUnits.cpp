@@ -34,11 +34,10 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/FrameSelection.h"
-#include "core/editing/InlineBoxPosition.h"
+#include "core/editing/LocalCaretRect.h"
 #include "core/editing/Position.h"
 #include "core/editing/PositionIterator.h"
 #include "core/editing/PositionWithAffinity.h"
-#include "core/editing/RenderedPosition.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/VisibleSelection.h"
@@ -58,9 +57,6 @@
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutItem.h"
-#include "core/layout/api/LayoutViewItem.h"
-#include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
@@ -677,92 +673,6 @@ bool IsEndOfEditableOrNonEditableContent(
   return IsTextControlElement(next_position.DeepEquivalent().AnchorNode());
 }
 
-static LocalCaretRect ComputeLocalCaretRect(
-    const LayoutObject* layout_object,
-    const InlineBoxPosition box_position) {
-  return LocalCaretRect(
-      layout_object, layout_object->LocalCaretRect(box_position.inline_box,
-                                                   box_position.offset_in_box));
-}
-
-template <typename Strategy>
-LocalCaretRect LocalCaretRectOfPositionTemplate(
-    const PositionWithAffinityTemplate<Strategy>& position) {
-  if (position.IsNull())
-    return LocalCaretRect();
-  Node* const node = position.AnchorNode();
-  LayoutObject* const layout_object = node->GetLayoutObject();
-  if (!layout_object)
-    return LocalCaretRect();
-
-  const InlineBoxPosition& box_position = ComputeInlineBoxPosition(position);
-
-  if (box_position.inline_box) {
-    return ComputeLocalCaretRect(
-        LineLayoutAPIShim::LayoutObjectFrom(
-            box_position.inline_box->GetLineLayoutItem()),
-        box_position);
-  }
-  // DeleteSelectionCommandTest.deleteListFromTable goes here.
-  return LocalCaretRect(
-      layout_object,
-      layout_object->LocalCaretRect(
-          nullptr, position.GetPosition().ComputeEditingOffset()));
-}
-
-// This function was added because the caret rect that is calculated by
-// using the line top value instead of the selection top.
-template <typename Strategy>
-LocalCaretRect LocalSelectionRectOfPositionTemplate(
-    const PositionWithAffinityTemplate<Strategy>& position) {
-  if (position.IsNull())
-    return LocalCaretRect();
-  Node* const node = position.AnchorNode();
-  if (!node->GetLayoutObject())
-    return LocalCaretRect();
-
-  const InlineBoxPosition& box_position = ComputeInlineBoxPosition(position);
-
-  if (!box_position.inline_box)
-    return LocalCaretRect();
-
-  LayoutObject* const layout_object = LineLayoutAPIShim::LayoutObjectFrom(
-      box_position.inline_box->GetLineLayoutItem());
-
-  const LayoutRect& rect = layout_object->LocalCaretRect(
-      box_position.inline_box, box_position.offset_in_box);
-
-  if (rect.IsEmpty())
-    return LocalCaretRect();
-
-  const InlineBox* const box = box_position.inline_box;
-  if (layout_object->Style()->IsHorizontalWritingMode()) {
-    return LocalCaretRect(
-        layout_object,
-        LayoutRect(LayoutPoint(rect.X(), box->Root().SelectionTop()),
-                   LayoutSize(rect.Width(), box->Root().SelectionHeight())));
-  }
-
-  return LocalCaretRect(
-      layout_object,
-      LayoutRect(LayoutPoint(box->Root().SelectionTop(), rect.Y()),
-                 LayoutSize(box->Root().SelectionHeight(), rect.Height())));
-}
-
-LocalCaretRect LocalCaretRectOfPosition(const PositionWithAffinity& position) {
-  return LocalCaretRectOfPositionTemplate<EditingStrategy>(position);
-}
-
-static LocalCaretRect LocalSelectionRectOfPosition(
-    const PositionWithAffinity& position) {
-  return LocalSelectionRectOfPositionTemplate<EditingStrategy>(position);
-}
-
-LocalCaretRect LocalCaretRectOfPosition(
-    const PositionInFlatTreeWithAffinity& position) {
-  return LocalCaretRectOfPositionTemplate<EditingInFlatTreeStrategy>(position);
-}
-
 static LayoutUnit BoundingBoxLogicalHeight(LayoutObject* o,
                                            const LayoutRect& rect) {
   return o->Style()->IsHorizontalWritingMode() ? rect.Height() : rect.Width();
@@ -797,7 +707,7 @@ VisiblePosition VisiblePositionForContentsPoint(const IntPoint& contents_point,
                            HitTestRequest::kActive |
                            HitTestRequest::kIgnoreClipping;
   HitTestResult result(request, contents_point);
-  frame->GetDocument()->GetLayoutViewItem().HitTest(result);
+  frame->GetDocument()->GetLayoutView()->HitTest(result);
 
   if (Node* node = result.InnerNode()) {
     return CreateVisiblePosition(PositionRespectingEditingBoundary(

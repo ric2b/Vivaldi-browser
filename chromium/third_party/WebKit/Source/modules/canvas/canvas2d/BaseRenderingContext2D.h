@@ -7,7 +7,7 @@
 
 #include "bindings/modules/v8/canvas_image_source.h"
 #include "bindings/modules/v8/string_or_canvas_gradient_or_canvas_pattern.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/ImageData.h"
 #include "modules/ModulesExport.h"
 #include "modules/canvas/canvas2d/CanvasGradient.h"
 #include "modules/canvas/canvas2d/CanvasPath.h"
@@ -15,6 +15,7 @@
 #include "modules/canvas/canvas2d/CanvasStyle.h"
 #include "platform/graphics/CanvasHeuristicParameters.h"
 #include "platform/graphics/ColorBehavior.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/paint/PaintCanvas.h"
 #include "third_party/skia/include/effects/SkComposeImageFilter.h"
 
@@ -23,7 +24,6 @@ namespace blink {
 class CanvasImageSource;
 class Color;
 class Image;
-class ImageBuffer;
 class Path2D;
 class SVGMatrixTearOff;
 
@@ -70,7 +70,7 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   void setShadowOffsetY(double);
 
   double shadowBlur() const;
-  void setShadowBlur(double);
+  virtual void setShadowBlur(double);
 
   String shadowColor() const;
   void setShadowColor(const String&);
@@ -224,8 +224,15 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
   virtual int Width() const = 0;
   virtual int Height() const = 0;
 
-  virtual bool HasImageBuffer() const = 0;
-  virtual ImageBuffer* GetImageBuffer() const = 0;
+  virtual bool IsAccelerated() const {
+    NOTREACHED();
+    return false;
+  }
+  virtual bool HasCanvas2DBuffer() const { return false; }
+  virtual bool CanCreateCanvas2DBuffer() const {
+    NOTREACHED();
+    return false;
+  };
 
   virtual bool ParseColorOrCurrentColor(Color&,
                                         const String& color_string) const = 0;
@@ -248,7 +255,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual void WillDrawImage(CanvasImageSource*) const {}
 
-  virtual CanvasColorSpace ColorSpace() const { return kSRGBCanvasColorSpace; };
   virtual String ColorSpaceAsString() const {
     return kSRGBCanvasColorSpaceName;
   }
@@ -339,6 +345,20 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void UnwindStateStack();
 
+  virtual CanvasColorParams ColorParams() const { return CanvasColorParams(); };
+  virtual bool WritePixels(const SkImageInfo& orig_info,
+                           const void* pixels,
+                           size_t row_bytes,
+                           int x,
+                           int y) {
+    NOTREACHED();
+    return false;
+  }
+  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const {
+    NOTREACHED();
+    return nullptr;
+  }
+
   enum DrawType {
     kClipFill,  // Fill that is already known to cover the current clip
     kUntransformedUnclippedFill
@@ -367,6 +387,9 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual void DisableAcceleration() {}
   virtual void DidInvokeGPUReadbackInCurrentFrame() {}
+
+  virtual bool IsPaint2D() const { return false; }
+  virtual void WillOverwriteCanvas() {}
 
  private:
   void RealizeSaves();
@@ -400,8 +423,23 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   void ClearCanvas();
   bool RectContainsTransformedRect(const FloatRect&, const SkIRect&) const;
+  // Sets the origin to be tainted by the content of the canvas, such
+  // as a cross-origin image. This is as opposed to some other reason
+  // such as tainting from a filter applied to the canvas.
+  void SetOriginTaintedByContent();
 
   ImageDataColorSettings GetColorSettingsAsImageDataColorSettings() const;
+
+  void PutByteArray(const unsigned char* source,
+                    const IntSize& source_size,
+                    const IntRect& source_rect,
+                    const IntPoint& dest_point);
+  virtual bool IsCanvas2DBufferValid() const {
+    NOTREACHED();
+    return false;
+  }
+
+  bool origin_tainted_by_content_;
 };
 
 template <typename DrawFunc, typename ContainsFunc>

@@ -135,7 +135,7 @@ void MainThreadDebugger::DidClearContextsForFrame(LocalFrame* frame) {
 
 void MainThreadDebugger::ContextCreated(ScriptState* script_state,
                                         LocalFrame* frame,
-                                        SecurityOrigin* origin) {
+                                        const SecurityOrigin* origin) {
   DCHECK(IsMainThread());
   v8::HandleScope handles(script_state->GetIsolate());
   DOMWrapperWorld& world = script_state->World();
@@ -236,6 +236,11 @@ void MainThreadDebugger::runMessageLoopOnPause(int context_group_id) {
       WeakIdentifierMap<LocalFrame>::Lookup(context_group_id);
   // Do not pause in Context of detached frame.
   if (!paused_frame)
+    return;
+  // TODO(crbug.com/788219): this is a temporary hack that disables breakpoint
+  // for paint worklet.
+  if (paused_frame->GetDocument() &&
+      !paused_frame->GetDocument()->Lifecycle().StateAllowsTreeMutations())
     return;
   DCHECK(paused_frame == paused_frame->LocalFrameRoot());
   paused_ = true;

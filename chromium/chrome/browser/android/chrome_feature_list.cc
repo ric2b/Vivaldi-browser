@@ -44,6 +44,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kClearOldBrowsingData,
     &features::kCopylessPaste,
     &features::kDownloadsForeground,
+    &features::kDownloadsLocationChange,
     &features::kImportantSitesInCbd,
     &features::kMaterialDesignIncognitoNTP,
     &features::kServiceWorkerPaymentApps,
@@ -53,11 +54,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &features::kVrBrowsing,
     &features::kWebPayments,
     &features::kTabsInCbd,
+    &kAdjustWebApkInstallationSpace,
     &kAllowReaderForAccessibility,
     &kAndroidPayIntegrationV1,
     &kAndroidPayIntegrationV2,
     &kAndroidPaymentApps,
-    &kAndroidSigninPromos,
     &kCCTBackgroundTab,
     &kCCTExternalLinkHandling,
     &kCCTPostMessageAPI,
@@ -68,6 +69,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kChromeHomeDestroySuggestions,
     &kChromeHomeDropAllButFirstThumbnail,
     &kChromeHomeInactivitySheetExpansion,
+    &kChromeHomeMenuItemsExpandSheet,
     &kChromeHomePersistentIph,
     &kChromeHomePromo,
     &kChromeHomePromoInfoOnly,
@@ -84,15 +86,15 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kContentSuggestionsSettings,
     &kContentSuggestionsThumbnailDominantColor,
     &kContextualSearchMlTapSuppression,
-    &kContextualSearchRankerQuery,
     &kContextualSearchSecondTap,
+    &kContextualSearchTapDisableOverride,
+    &kContextualSuggestionsAboveArticles,
     &kContextualSuggestionsCarousel,
     &kCustomContextMenu,
     &kCustomFeedbackUi,
     &kDontPrefetchLibraries,
     &kDownloadHomeShowStorageInfo,
     &data_reduction_proxy::features::kDataReductionMainMenu,
-    &data_reduction_proxy::features::kDataReductionSiteBreakdown,
     &kFullscreenActivity,
     &kImprovedA2HS,
     &kLanguagesPreference,
@@ -102,7 +104,6 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kNTPCondensedTileLayoutFeature,
     &kNTPModernLayoutFeature,
     &kNTPLaunchAfterInactivity,
-    &kNTPOfflinePagesFeature,
     &NTPShowGoogleGInOmniboxFeature,
     &kOmniboxSpareRenderer,
     &kPayWithGoogleV1,
@@ -114,6 +115,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kReaderModeInCCT,
     &kSearchEnginePromoExistingDevice,
     &kSearchEnginePromoNewDevice,
+    &kSoleIntegration,
     &kSpannableInlineAutocomplete,
     &kSpecialLocaleFeature,
     &kSpecialLocaleWrapper,
@@ -136,6 +138,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &offline_pages::kBackgroundLoaderForDownloadsFeature,
     &offline_pages::kOfflinePagesCTFeature,    // See crbug.com/620421.
     &offline_pages::kOfflinePagesCTV2Feature,  // See crbug.com/734753.
+    &offline_pages::kOfflinePagesDescriptivePendingStatusFeature,
     &offline_pages::kOfflinePagesSharingFeature,
     &omnibox::kAndroidChromeHomePersonalizedSuggestions,
     &password_manager::features::kPasswordExport,
@@ -157,8 +160,11 @@ const base::Feature* FindFeatureExposedToJava(const std::string& feature_name) {
 }  // namespace
 
 // Alphabetical:
+const base::Feature kAdjustWebApkInstallationSpace = {
+    "AdjustWebApkInstallationSpace", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kAllowReaderForAccessibility = {
-    "AllowReaderForAccessibility", base::FEATURE_DISABLED_BY_DEFAULT};
+    "AllowReaderForAccessibility", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kAndroidPayIntegrationV1{"AndroidPayIntegrationV1",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
@@ -169,11 +175,8 @@ const base::Feature kAndroidPayIntegrationV2{"AndroidPayIntegrationV2",
 const base::Feature kAndroidPaymentApps{"AndroidPaymentApps",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kAndroidSigninPromos{"AndroidSigninPromos",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kCCTBackgroundTab{"CCTBackgroundTab",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kCCTExternalLinkHandling{"CCTExternalLinkHandling",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
@@ -201,6 +204,9 @@ const base::Feature kChromeHomeDropAllButFirstThumbnail{
 
 const base::Feature kChromeHomeInactivitySheetExpansion{
     "ChromeHomeInactivitySheetExpansion", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kChromeHomeMenuItemsExpandSheet{
+    "ChromeHomeMenuItemsExpandSheet", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kChromeHomePersistentIph{"ChromeHomePersistentIph",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
@@ -236,7 +242,7 @@ const base::Feature kChromeMemexFeature{"ChromeMemex",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kChromeSmartSelection{"ChromeSmartSelection",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kContentSuggestionsScrollToLoad{
     "ContentSuggestionsScrollToLoad", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -251,14 +257,17 @@ const base::Feature kContentSuggestionsThumbnailDominantColor{
 const base::Feature kContextualSearchMlTapSuppression{
     "ContextualSearchMlTapSuppression", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kContextualSearchRankerQuery{
-    "ContextualSearchRankerQuery", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kContextualSearchSecondTap{
     "ContextualSearchSecondTap", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kContextualSearchTapDisableOverride{
+    "ContextualSearchTapDisableOverride", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kContextualSuggestionsCarousel{
     "ContextualSuggestionsCarousel", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextualSuggestionsAboveArticles{
+    "ContextualSuggestionsAboveArticles", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kCustomContextMenu{"CustomContextMenu",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -312,9 +321,6 @@ const base::Feature kNTPModernLayoutFeature{"NTPModernLayout",
 const base::Feature kNTPLaunchAfterInactivity{
     "NTPLaunchAfterInactivity", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kNTPOfflinePagesFeature{"NTPOfflinePages",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature NTPShowGoogleGInOmniboxFeature{
     "NTPShowGoogleGInOmnibox", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -341,6 +347,9 @@ const base::Feature kPwaPersistentNotification{
 
 const base::Feature kReaderModeInCCT{"ReaderModeInCCT",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSoleIntegration{"SoleIntegration",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSpannableInlineAutocomplete{
     "SpannableInlineAutocomplete", base::FEATURE_ENABLED_BY_DEFAULT};

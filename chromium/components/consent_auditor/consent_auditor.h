@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_CONSENT_AUDITOR_CONSENT_AUDITOR_H_
 #define COMPONENTS_CONSENT_AUDITOR_CONSENT_AUDITOR_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,14 +16,19 @@ namespace syncer {
 class UserEventService;
 }
 
+namespace sync_pb {
+class UserEventSpecifics;
+}
+
 class PrefService;
 class PrefRegistrySimple;
 
 namespace consent_auditor {
 
+enum class ConsentStatus { REVOKED, GIVEN };
+
 class ConsentAuditor : public KeyedService {
  public:
-  enum class ConsentStatus { REVOKED, GIVEN };
 
   ConsentAuditor(PrefService* pref_service,
                  syncer::UserEventService* user_event_service,
@@ -56,6 +62,12 @@ class ConsentAuditor : public KeyedService {
                           const std::string& confirmation_text);
 
  private:
+  std::unique_ptr<sync_pb::UserEventSpecifics> ConstructUserConsent(
+      const std::string& feature,
+      const std::vector<int>& consent_grd_ids,
+      const std::vector<std::string>& placeholder_replacements,
+      ConsentStatus status);
+
   PrefService* pref_service_;
   syncer::UserEventService* user_event_service_;
   std::string app_version_;

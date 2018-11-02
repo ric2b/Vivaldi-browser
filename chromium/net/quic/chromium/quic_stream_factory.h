@@ -84,6 +84,7 @@ enum QuicConnectionMigrationStatus {
   MIGRATION_STATUS_NON_MIGRATABLE_STREAM,
   MIGRATION_STATUS_DISABLED,
   MIGRATION_STATUS_NO_ALTERNATE_NETWORK,
+  MIGRATION_STATUS_ON_PATH_DEGRADING_DISABLED,
   MIGRATION_STATUS_MAX
 };
 
@@ -118,6 +119,23 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
               NetErrorDetails* net_error_details,
               const CompletionCallback& callback);
 
+  // This function must be called after Request() returns ERR_IO_PENDING.
+  // Returns true if Request() requires host resolution and it hasn't completed
+  // yet. If true is returned, |callback| will run when host resolution
+  // completes. It will be called with the result after host resolution during
+  // the connection process. For example, if host resolution returns OK and then
+  // crypto handshake returns ERR_IO_PENDING, then |callback| will run with
+  // ERR_IO_PENDING.
+  bool WaitForHostResolution(const CompletionCallback& callback);
+
+  // Tells QuicStreamRequest it should expect OnHostResolutionComplete()
+  // to be called in the future.
+  void ExpectOnHostResolution();
+
+  // Will be called by the associated QuicStreamFactory::Job when host
+  // resolution completes asynchronously after Request().
+  void OnHostResolutionComplete(int rv);
+
   void OnRequestComplete(int rv);
 
   // Helper method that calls |factory_|'s GetTimeDelayForWaitingJob(). It
@@ -143,6 +161,12 @@ class NET_EXPORT_PRIVATE QuicStreamRequest {
   CompletionCallback callback_;
   NetErrorDetails* net_error_details_;  // Unowned.
   std::unique_ptr<QuicChromiumClientSession::Handle> session_;
+
+  // Set in Request(). If true, then OnHostResolutionComplete() is expected to
+  // be called in the future.
+  bool expect_on_host_resolution_;
+  // Callback passed to WaitForHostResolution().
+  CompletionCallback host_resolution_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicStreamRequest);
 };
@@ -211,9 +235,12 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
       bool migrate_sessions_early,
       bool migrate_sessions_on_network_change_v2,
       bool migrate_sessions_early_v2,
+      base::TimeDelta max_time_on_non_default_network,
+      int max_migrations_to_non_default_network_on_path_degrading,
       bool allow_server_migration,
       bool race_cert_verification,
       bool estimate_initial_rtt,
+      bool headers_include_h2_stream_dependency,
       const QuicTagVector& connection_options,
       const QuicTagVector& client_connection_options,
       bool enable_token_binding);
@@ -249,9 +276,6 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // Called by a session when it becomes idle.
   void OnIdleSession(QuicChromiumClientSession* session);
-
-  // Returns true if QUIC is know to be broken for |session|.
-  bool IsQuicBroken(QuicChromiumClientSession* session);
 
   // Called by a session when it is going away and no more streams should be
   // created on it.
@@ -369,7 +393,9 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   typedef std::map<QuicServerId, std::unique_ptr<CertVerifierJob>>
       CertVerifierJobMap;
 
-  bool OnResolution(const QuicSessionKey& key, const AddressList& address_list);
+  bool HasMatchingIpSession(const QuicSessionKey& key,
+                            const AddressList& address_list);
+  void OnJobHostResolutionComplete(Job* job, int rv);
   void OnJobComplete(Job* job, int rv);
   void OnCertVerifyJobComplete(CertVerifierJob* job, int rv);
   bool HasActiveSession(const QuicServerId& server_id) const;
@@ -506,6 +532,13 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
   // connection experiences poor connectivity.
   const bool migrate_sessions_early_v2_;
 
+  // Maximum time sessions could use on non-default network before try to
+  // migrate back to default network.
+  const base::TimeDelta max_time_on_non_default_network_;
+
+  // Maximum number of migrations to non default network on path degrading.
+  const int max_migrations_to_non_default_network_on_path_degrading_;
+
   // Set if migration should be attempted on active sessions when primary
   // interface changes.
   const bool migrate_sessions_on_network_change_;
@@ -523,6 +556,10 @@ class NET_EXPORT_PRIVATE QuicStreamFactory
 
   // If true, estimate the initial RTT based on network type.
   bool estimate_initial_rtt;
+
+  // If true, client headers will include HTTP/2 stream dependency info
+  // derived from SpdyPriority.
+  bool headers_include_h2_stream_dependency_;
 
   // Local address of socket that was created in CreateSession.
   IPEndPoint local_address_;

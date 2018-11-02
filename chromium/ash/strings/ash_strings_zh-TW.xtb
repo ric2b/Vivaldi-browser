@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">這個裝置由 <ph name="DOMAIN" /> 管理。</translation>
 <translation id="2050339315714019657">縱向</translation>
 <translation id="2067602449040652523">鍵盤亮度</translation>
-<translation id="207439088875642105">這是由 <ph name="FIRST_PARENT_EMAIL" /> 和 <ph name="SECOND_PARENT_EMAIL" /> 所管理的兒童專用帳戶</translation>
 <translation id="2122028596993374965">停止將 <ph name="TAB_NAME" /> 投放到「<ph name="RECEIVER_NAME" />」</translation>
 <translation id="2127372758936585790">低功率充電器</translation>
 <translation id="2144487987174258011">重新啟動以便更新 Adobe Flash Player</translation>
@@ -93,11 +92,10 @@
 <translation id="3000461861112256445">單聲道音訊</translation>
 <translation id="3009178788565917040">輸出</translation>
 <translation id="3019353588588144572">電池剩餘充電時間：<ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">這是由 <ph name="MANAGER_EMAIL" /> 所管理的兒童專用帳戶</translation>
 <translation id="3077734595579995578">Shift</translation>
 <translation id="3087734570205094154">置底</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (藍牙)</translation>
-<translation id="3126069444801937830">重新啟用即可更新</translation>
+<translation id="3126069444801937830">重新啟動即可更新</translation>
 <translation id="3147142846278915599">啟動器 (正在同步處理應用程式...)</translation>
 <translation id="315116470104423982">行動數據</translation>
 <translation id="3153444934357957346">使用多帳戶登入功能時，一次最多只能登入 <ph name="MULTI_PROFILE_USER_LIMIT" /> 個帳戶。</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">畫面放大鏡</translation>
 <translation id="3477079411857374384">Ctrl + Shift + 空格鍵</translation>
 <translation id="3510164367642747937">醒目顯示滑鼠游標</translation>
+<translation id="3513798432020909783">這個帳戶是由 <ph name="MANAGER_EMAIL" /> 管理</translation>
 <translation id="3573179567135747900">改回「<ph name="FROM_LOCALE" />」(需要重新啟動)</translation>
 <translation id="3582792037806681688">這個工作階段的使用者已遭禁用多重登入</translation>
 <translation id="3595596368722241419">電池已充滿</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">鎖定</translation>
 <translation id="3798670284305777884">喇叭 (內部)</translation>
 <translation id="3846575436967432996">沒有可用的網路資訊</translation>
+<translation id="385051799172605136">返回</translation>
 <translation id="3891340733213178823">按兩下 Ctrl+Shift+Q 鍵即可登出。</translation>
 <translation id="3893630138897523026">ChromeVox (互動朗讀)</translation>
 <translation id="3899995891769452915">語音輸入</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">即時網路共用</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">現有使用者已全部加入這個工作階段。</translation>
+<translation id="5457599981699367932">以訪客身分瀏覽</translation>
 <translation id="553675580533261935">結束工作階段</translation>
 <translation id="5548285847212963613">「<ph name="EXTENSION_NAME" />」擴充功能可協助連線至這個網路。</translation>
 <translation id="5571066253365925590">藍牙已啟用</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">輕觸拖曳</translation>
 <translation id="5777841717266010279">停止共用螢幕？</translation>
 <translation id="57838592816432529">靜音</translation>
+<translation id="5832805196449965646">新增使用者</translation>
 <translation id="5860033963881614850">關閉</translation>
 <translation id="5895138241574237353">重新啟動</translation>
 <translation id="5901316534475909376">Shift + Esc 鍵</translation>
@@ -273,6 +275,7 @@
 <translation id="7829386189513694949">訊號穩定</translation>
 <translation id="7904094684485781019">這個帳戶的管理員已禁止多重登入。</translation>
 <translation id="7933084174919150729">Google 個人助理僅適用於主要設定檔。</translation>
+<translation id="79341161159229895">這個帳戶是由 <ph name="FIRST_PARENT_EMAIL" /> 和 <ph name="SECOND_PARENT_EMAIL" /> 管理</translation>
 <translation id="7977927628060636163">正在搜尋行動網路...</translation>
 <translation id="7982789257301363584">網路</translation>
 <translation id="7994370417837006925">多帳戶登入</translation>
@@ -289,6 +292,7 @@
 <translation id="8261506727792406068">刪除</translation>
 <translation id="8308637677604853869">前一個選單</translation>
 <translation id="8351131234907093545">寫筆記</translation>
+<translation id="8392451568018454956"><ph name="USER_EMAIL_ADDRESS" /> 的選項選單</translation>
 <translation id="8428213095426709021">設定</translation>
 <translation id="8433186206711564395">網路設定</translation>
 <translation id="8433977262951327081">在檔案櫃中顯示輸入選項選單方塊的快速鍵已變更，請改用：<ph name="NEW_SHORTCUT" /> (停用 <ph name="OLD_SHORTCUT" />)。</translation>

@@ -38,7 +38,7 @@ class MojoChannelImpl : public ArcBridgeHostImpl::MojoChannel {
     // Delay registration to the ConnectionHolder until the version is ready.
   }
 
-  ~MojoChannelImpl() override { holder_->SetInstance(nullptr, 0); }
+  ~MojoChannelImpl() override { holder_->CloseInstance(ptr_.get()); }
 
   void set_connection_error_handler(base::OnceClosure error_handler) {
     ptr_.set_connection_error_handler(std::move(error_handler));
@@ -246,6 +246,11 @@ void ArcBridgeHostImpl::OnTracingInstanceReady(
 
 void ArcBridgeHostImpl::OnTtsInstanceReady(mojom::TtsInstancePtr tts_ptr) {
   OnInstanceReady(arc_bridge_service_->tts(), std::move(tts_ptr));
+}
+
+void ArcBridgeHostImpl::OnUsbHostInstanceReady(
+    mojom::UsbHostInstancePtr usb_host_ptr) {
+  OnInstanceReady(arc_bridge_service_->usb_host(), std::move(usb_host_ptr));
 }
 
 void ArcBridgeHostImpl::OnVideoInstanceReady(

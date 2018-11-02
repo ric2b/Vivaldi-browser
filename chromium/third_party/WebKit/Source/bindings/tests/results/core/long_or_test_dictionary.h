@@ -14,6 +14,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8TestDictionary.h"
 #include "core/CoreExport.h"
@@ -76,6 +77,7 @@ inline void V8SetReturnValue(const CallbackInfo& callbackInfo, LongOrTestDiction
 template <>
 struct NativeValueTraits<LongOrTestDictionary> : public NativeValueTraitsBase<LongOrTestDictionary> {
   CORE_EXPORT static LongOrTestDictionary NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  CORE_EXPORT static LongOrTestDictionary NullValue() { return LongOrTestDictionary(); }
 };
 
 template <>

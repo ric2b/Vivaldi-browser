@@ -10,6 +10,7 @@
 #include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
+#include "ash/wm/window_state_delegate.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_event_handler_test_helper.h"
@@ -350,6 +351,39 @@ TEST_F(MultiWindowResizeControllerTest, ClickOutside) {
   EXPECT_FALSE(IsShowing());
 }
 
+namespace {
+
+class TestWindowStateDelegate : public wm::WindowStateDelegate {
+ public:
+  TestWindowStateDelegate() = default;
+  ~TestWindowStateDelegate() override = default;
+
+  // wm::WindowStateDelegate:
+  void OnDragStarted(int component) override { component_ = component; }
+  void OnDragFinished(bool cancel, const gfx::Point& location) override {
+    location_ = location;
+  }
+
+  int GetComponentAndReset() {
+    int result = component_;
+    component_ = -1;
+    return result;
+  }
+
+  gfx::Point GetLocationAndReset() {
+    gfx::Point p = location_;
+    location_.SetPoint(0, 0);
+    return p;
+  }
+
+ private:
+  gfx::Point location_;
+  int component_ = -1;
+  DISALLOW_COPY_AND_ASSIGN(TestWindowStateDelegate);
+};
+
+}  // namespace
+
 // Tests dragging to resize two snapped windows.
 TEST_F(MultiWindowResizeControllerTest, TwoSnappedWindows) {
   UpdateDisplay("400x300");
@@ -370,6 +404,8 @@ TEST_F(MultiWindowResizeControllerTest, TwoSnappedWindows) {
   const wm::WMEvent snap_right(wm::WM_EVENT_SNAP_RIGHT);
   w2_state->OnWMEvent(&snap_right);
   EXPECT_EQ(mojom::WindowStateType::RIGHT_SNAPPED, w2_state->GetStateType());
+  EXPECT_EQ(0.5f, *w1_state->snapped_width_ratio());
+  EXPECT_EQ(0.5f, *w2_state->snapped_width_ratio());
 
   ui::test::EventGenerator& generator = GetEventGenerator();
   generator.MoveMouseTo(w1->bounds().CenterPoint());
@@ -379,6 +415,10 @@ TEST_F(MultiWindowResizeControllerTest, TwoSnappedWindows) {
   ShowNow();
   EXPECT_FALSE(HasPendingShow());
   EXPECT_TRUE(IsShowing());
+
+  // Setup delegates
+  auto* window_state_delegate1 = new TestWindowStateDelegate();
+  w1_state->SetDelegate(base::WrapUnique(window_state_delegate1));
 
   // Move the mouse over the resize widget.
   ASSERT_TRUE(resize_widget());
@@ -399,6 +439,13 @@ TEST_F(MultiWindowResizeControllerTest, TwoSnappedWindows) {
   EXPECT_EQ(gfx::Rect(0, 0, 300, 252), w1->bounds());
   EXPECT_EQ(mojom::WindowStateType::RIGHT_SNAPPED, w2_state->GetStateType());
   EXPECT_EQ(gfx::Rect(300, 0, 100, 252), w2->bounds());
+  EXPECT_EQ(0.75f, *w1_state->snapped_width_ratio());
+  EXPECT_EQ(0.25f, *w2_state->snapped_width_ratio());
+
+  // Dragging should call the WindowStateDelegate.
+  EXPECT_EQ(HTRIGHT, window_state_delegate1->GetComponentAndReset());
+  EXPECT_EQ(gfx::Point(300, 173),
+            window_state_delegate1->GetLocationAndReset());
 }
 
 }  // namespace ash

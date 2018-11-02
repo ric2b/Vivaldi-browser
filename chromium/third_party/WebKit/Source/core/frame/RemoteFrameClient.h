@@ -20,7 +20,7 @@ class SecurityOrigin;
 
 class RemoteFrameClient : public FrameClient {
  public:
-  ~RemoteFrameClient() override {}
+  ~RemoteFrameClient() override = default;
 
   virtual void Navigate(const ResourceRequest&,
                         bool should_replace_current_entry) = 0;
@@ -29,10 +29,15 @@ class RemoteFrameClient : public FrameClient {
 
   // Forwards a postMessage for a remote frame.
   virtual void ForwardPostMessage(MessageEvent*,
-                                  scoped_refptr<SecurityOrigin> target,
+                                  scoped_refptr<const SecurityOrigin> target,
                                   LocalFrame* source_frame) const = 0;
 
-  virtual void FrameRectsChanged(const IntRect& frame_rect) = 0;
+  // Forwards a change to the rects of a remote frame. |local_frame_rect| is the
+  // size of the frame in its parent's coordinate space prior to applying CSS
+  // transforms. |screen_space_rect| is in the screen's coordinate space, after
+  // CSS transforms are applied.
+  virtual void FrameRectsChanged(const IntRect& local_frame_rect,
+                                 const IntRect& screen_space_rect) = 0;
 
   virtual void UpdateRemoteViewportIntersection(
       const IntRect& viewport_intersection) = 0;

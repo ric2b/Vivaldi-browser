@@ -40,6 +40,10 @@ class CronetEnvironment {
  public:
   using PkpVector = std::vector<std::unique_ptr<URLRequestContextConfig::Pkp>>;
 
+  // A special thread priority value that indicates that the thread priority
+  // should not be altered when a thread is created.
+  static const double kKeepDefaultThreadPriority;
+
   // Initialize Cronet environment globals. Must be called only once on the
   // main thread.
   static void Initialize();
@@ -79,10 +83,6 @@ class CronetEnvironment {
   bool quic_enabled() const { return quic_enabled_; }
   bool brotli_enabled() const { return brotli_enabled_; }
 
-  void set_quic_user_agent_id(const std::string& quic_user_agent_id) {
-    quic_user_agent_id_ = quic_user_agent_id;
-  }
-
   void set_accept_language(const std::string& accept_language) {
     accept_language_ = accept_language;
   }
@@ -113,14 +113,19 @@ class CronetEnvironment {
     enable_pkp_bypass_for_local_trust_anchors_ = enable;
   }
 
+  // Sets priority of the network thread. The |priority| should be a
+  // floating point number between 0.0 to 1.0, where 1.0 is highest priority.
+  void SetNetworkThreadPriority(double priority);
+
   // Returns the URLRequestContext associated with this object.
   net::URLRequestContext* GetURLRequestContext() const;
 
   // Return the URLRequestContextGetter associated with this object.
   net::URLRequestContextGetter* GetURLRequestContextGetter() const;
 
-  // Used by Cronet tests.
+  // The methods below are used for testing.
   base::SingleThreadTaskRunner* GetFileThreadRunnerForTesting() const;
+  base::SingleThreadTaskRunner* GetNetworkThreadRunnerForTesting() const;
 
  private:
   // Extends the base thread class to add the Cronet specific cleanup logic.
@@ -143,7 +148,7 @@ class CronetEnvironment {
   void InitializeOnNetworkThread();
 
   // Returns the task runner for the network thread.
-  base::SingleThreadTaskRunner* GetNetworkThreadTaskRunner();
+  base::SingleThreadTaskRunner* GetNetworkThreadTaskRunner() const;
 
   // Runs a closure on the network thread.
   void PostToNetworkThread(const base::Location& from_here,
@@ -164,6 +169,10 @@ class CronetEnvironment {
   void SetHostResolverRulesOnNetworkThread(const std::string& rules,
                                            base::WaitableEvent* event);
 
+  // Sets priority of the network thread. This method should only be called
+  // on the network thread.
+  void SetNetworkThreadPriorityOnNetworkThread(double priority);
+
   std::string getDefaultQuicUserAgentId() const;
 
   // Prepares the Cronet environment to be destroyed. The method must be
@@ -174,7 +183,6 @@ class CronetEnvironment {
   bool http2_enabled_;
   bool quic_enabled_;
   bool brotli_enabled_;
-  std::string quic_user_agent_id_;
   std::string accept_language_;
   std::string experimental_options_;
   // Effective experimental options. Kept for NetLog.
@@ -197,6 +205,7 @@ class CronetEnvironment {
   std::unique_ptr<net::NetLog> net_log_;
   std::unique_ptr<net::FileNetLogObserver> file_net_log_observer_;
   bool enable_pkp_bypass_for_local_trust_anchors_;
+  double network_thread_priority_;
   std::unique_ptr<CronetPrefsManager> cronet_prefs_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(CronetEnvironment);

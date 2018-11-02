@@ -17,8 +17,7 @@ ProxyInfo::ProxyInfo()
 
 ProxyInfo::ProxyInfo(const ProxyInfo& other) = default;
 
-ProxyInfo::~ProxyInfo() {
-}
+ProxyInfo::~ProxyInfo() = default;
 
 void ProxyInfo::Use(const ProxyInfo& other) {
   proxy_resolve_start_time_ = other.proxy_resolve_start_time_;
@@ -65,6 +64,10 @@ void ProxyInfo::OverrideProxyList(const ProxyList& proxy_list) {
   proxy_list_ = proxy_list;
 }
 
+void ProxyInfo::SetAlternativeProxy(const ProxyServer& proxy_server) {
+  alternative_proxy_ = proxy_server;
+}
+
 std::string ProxyInfo::ToPacString() const {
   return proxy_list_.ToPacString();
 }
@@ -91,6 +94,12 @@ void ProxyInfo::Reset() {
   config_source_ = PROXY_CONFIG_SOURCE_UNKNOWN;
   did_bypass_proxy_ = false;
   did_use_pac_script_ = false;
+}
+
+const NetworkTrafficAnnotationTag ProxyInfo::traffic_annotation() const {
+  // TODO(crbug.com/656607): Get appropriate annotation from the origin of
+  // config_source_.
+  return NO_TRAFFIC_ANNOTATION_BUG_656607;
 }
 
 }  // namespace net

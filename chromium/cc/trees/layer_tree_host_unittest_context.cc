@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "cc/layers/heads_up_display_layer.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/painted_scrollbar_layer.h"
@@ -38,6 +39,7 @@
 #include "components/viz/common/resources/single_release_callback.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/GLES2/gl2extchromium.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "media/base/media.h"
 
 using media::VideoFrame;
@@ -86,7 +88,8 @@ class LayerTreeHostContextTest : public LayerTreeTest {
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider) override {
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider)
+      override {
     base::AutoLock lock(context3d_lock_);
 
     std::unique_ptr<TestWebGraphicsContext3D> compositor_context3d =
@@ -897,11 +900,8 @@ class LayerTreeHostContextTestDontUseLostResources
     gpu::Mailbox mailbox;
     gl->GenMailboxCHROMIUM(mailbox.name);
 
-    const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
-    gl->ShallowFlushCHROMIUM();
-
     gpu::SyncToken sync_token;
-    gl->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gl->GenSyncTokenCHROMIUM(sync_token.GetData());
 
     scoped_refptr<Layer> root = Layer::Create();
     root->SetBounds(gfx::Size(10, 10));
@@ -1349,7 +1349,11 @@ class UIResourceLostBeforeCommit : public UIResourceLostTestSimple {
   UIResourceId test_id1_;
 };
 
-SINGLE_AND_MULTI_THREAD_TEST_F(UIResourceLostBeforeCommit);
+// http://crbug.com/803532 : Flaky on Win 7 (dbg).
+#if defined(NDEBUG) || defined(OS_WIN)
+SINGLE_THREAD_TEST_F(UIResourceLostBeforeCommit);
+#endif
+MULTI_THREAD_TEST_F(UIResourceLostBeforeCommit);
 
 // Losing UI resource before the pending trees is activated but after the
 // commit.  Impl-side-painting only.
@@ -1605,11 +1609,7 @@ class LayerTreeHostContextTestLoseAfterSendingBeginMainFrame
 SINGLE_AND_MULTI_THREAD_TEST_F(
     LayerTreeHostContextTestLoseAfterSendingBeginMainFrame);
 
-// This test causes context loss on the worker context but not the compositor
-// context and checks that draw still occurs. The resources might be in a bad
-// state e.g. null sync tokens but that shouldn't cause the draw to fail.
-class LayerTreeHostContextTestLoseWorkerContextDuringPrepareTiles
-    : public LayerTreeTest {
+class LayerTreeHostContextTestWorkerContextLostRecovery : public LayerTreeTest {
  protected:
   void SetupTree() override {
     PaintFlags flags;
@@ -1628,27 +1628,31 @@ class LayerTreeHostContextTestLoseWorkerContextDuringPrepareTiles
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void WillPrepareTilesOnThread(LayerTreeHostImpl* host_impl) override {
-    viz::ContextProvider::ScopedContextLock scoped_context(
+    if (did_lose_context)
+      return;
+    did_lose_context = true;
+    viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
         host_impl->layer_tree_frame_sink()->worker_context_provider());
-    gpu::gles2::GLES2Interface* gl = scoped_context.ContextGL();
-    gl->LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
+    gpu::raster::RasterInterface* ri = scoped_context.RasterInterface();
+    ri->LoseContextCHROMIUM(GL_GUILTY_CONTEXT_RESET_ARB,
                             GL_INNOCENT_CONTEXT_RESET_ARB);
   }
 
-  void DrawLayersOnThread(LayerTreeHostImpl* host_impl) override {
-    ++num_draws_;
-  }
+  void DidInitializeLayerTreeFrameSink() override { num_frame_sinks_++; }
 
   void DidCommitAndDrawFrame() override { EndTest(); }
 
-  void AfterTest() override { EXPECT_EQ(1, num_draws_); }
+  void AfterTest() override {
+    EXPECT_TRUE(did_lose_context);
+    EXPECT_EQ(num_frame_sinks_, 2);
+  }
 
   FakeContentLayerClient client_;
-  int num_draws_ = 0;
+  bool did_lose_context = false;
+  int num_frame_sinks_ = 0;
 };
 
-MULTI_THREAD_TEST_F(
-    LayerTreeHostContextTestLoseWorkerContextDuringPrepareTiles);
+MULTI_THREAD_TEST_F(LayerTreeHostContextTestWorkerContextLostRecovery);
 
 }  // namespace
 }  // namespace cc

@@ -177,6 +177,8 @@ class WebInputEvent {
     kTouchMove,
     kTouchEnd,
     kTouchCancel,
+    // TODO(nzolghadr): This event should be replaced with
+    // kPointerCausedUaAction
     kTouchScrollStarted,
     kTouchTypeLast = kTouchScrollStarted,
 
@@ -186,7 +188,8 @@ class WebInputEvent {
     kPointerUp,
     kPointerMove,
     kPointerCancel,
-    kPointerTypeLast = kPointerCancel,
+    kPointerCausedUaAction,
+    kPointerTypeLast = kPointerCausedUaAction,
 
     kTypeLast = kTouchTypeLast
   };
@@ -245,6 +248,11 @@ class WebInputEvent {
     // Represents movement as a result of content changing under the cursor,
     // not actual physical movement of the pointer
     kRelativeMotionEvent = 1 << 22,
+
+    // Indication this event was injected by the devtools.
+    // TODO(dtapuska): Remove this flag once we are able to bind callbacks
+    // in event sending.
+    kFromDebugger = 1 << 23,
 
     // The set of non-stateful modifiers that specifically change the
     // interpretation of the key being pressed. For example; IsLeft,
@@ -380,6 +388,7 @@ class WebInputEvent {
       CASE_TYPE(PointerUp);
       CASE_TYPE(PointerMove);
       CASE_TYPE(PointerCancel);
+      CASE_TYPE(PointerCausedUaAction);
     }
 #undef CASE_TYPE
     NOTREACHED();

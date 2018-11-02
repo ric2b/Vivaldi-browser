@@ -27,21 +27,21 @@ class MockWebClipboardImpl : public blink::WebMockClipboard {
   MockWebClipboardImpl();
   virtual ~MockWebClipboardImpl();
 
-  uint64_t SequenceNumber(Buffer) override;
-  bool IsFormatAvailable(blink::WebClipboard::Format format,
-                         blink::WebClipboard::Buffer buffer) override;
+  uint64_t SequenceNumber(blink::mojom::ClipboardBuffer) override;
+  bool IsFormatAvailable(blink::mojom::ClipboardFormat format,
+                         blink::mojom::ClipboardBuffer buffer) override;
   blink::WebVector<blink::WebString> ReadAvailableTypes(
-      blink::WebClipboard::Buffer buffer,
+      blink::mojom::ClipboardBuffer buffer,
       bool* containsFilenames) override;
 
-  blink::WebString ReadPlainText(blink::WebClipboard::Buffer buffer) override;
-  blink::WebString ReadHTML(blink::WebClipboard::Buffer buffer,
+  blink::WebString ReadPlainText(blink::mojom::ClipboardBuffer buffer) override;
+  blink::WebString ReadHTML(blink::mojom::ClipboardBuffer buffer,
                             blink::WebURL* url,
                             unsigned* fragmentStart,
                             unsigned* fragmentEnd) override;
-  blink::WebBlobInfo ReadImage(blink::WebClipboard::Buffer buffer) override;
-  blink::WebImage ReadRawImage(blink::WebClipboard::Buffer buffer) override;
-  blink::WebString ReadCustomData(blink::WebClipboard::Buffer buffer,
+  blink::WebBlobInfo ReadImage(blink::mojom::ClipboardBuffer buffer) override;
+  blink::WebImage ReadRawImage(blink::mojom::ClipboardBuffer buffer) override;
+  blink::WebString ReadCustomData(blink::mojom::ClipboardBuffer buffer,
                                   const blink::WebString& type) override;
 
   void WritePlainText(const blink::WebString& plain_text) override;
@@ -49,8 +49,6 @@ class MockWebClipboardImpl : public blink::WebMockClipboard {
                  const blink::WebURL& url,
                  const blink::WebString& plainText,
                  bool writeSmartPaste) override;
-  virtual void writeURL(
-      const blink::WebURL& url, const blink::WebString& title);
   void WriteImage(const blink::WebImage& image,
                   const blink::WebURL& url,
                   const blink::WebString& title) override;

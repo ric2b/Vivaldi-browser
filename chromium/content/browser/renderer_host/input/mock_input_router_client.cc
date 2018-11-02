@@ -36,9 +36,7 @@ InputEventAckState MockInputRouterClient::FilterInputEvent(
   return filter_state_;
 }
 
-void MockInputRouterClient::IncrementInFlightEventCount(
-    blink::WebInputEvent::Type event_type) {
-  last_in_flight_event_type_ = event_type;
+void MockInputRouterClient::IncrementInFlightEventCount() {
   ++in_flight_event_count_;
 }
 
@@ -65,12 +63,23 @@ void MockInputRouterClient::OnSetWhiteListedTouchAction(
 void MockInputRouterClient::DidStopFlinging() {
 }
 
+void MockInputRouterClient::SetNeedsBeginFrameForFlingProgress() {}
+
 void MockInputRouterClient::ForwardGestureEventWithLatencyInfo(
     const blink::WebGestureEvent& gesture_event,
     const ui::LatencyInfo& latency_info) {
   if (input_router_)
     input_router_->SendGestureEvent(
         GestureEventWithLatencyInfo(gesture_event, latency_info));
+}
+
+void MockInputRouterClient::ForwardWheelEventWithLatencyInfo(
+    const blink::WebMouseWheelEvent& wheel_event,
+    const ui::LatencyInfo& latency_info) {
+  if (input_router_) {
+    input_router_->SendWheelEvent(
+        MouseWheelEventWithLatencyInfo(wheel_event, latency_info));
+  }
 }
 
 bool MockInputRouterClient::GetAndResetFilterEventCalled() {

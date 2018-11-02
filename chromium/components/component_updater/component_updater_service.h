@@ -159,9 +159,11 @@ class OnDemandUpdater {
   friend class DownloadableStringsComponentInstallerPolicy;
   friend class ::ComponentsUI;
   friend class ::PluginObserver;
+  friend class SwReporterOnDemandFetcher;
 #if defined(OS_CHROMEOS)
-  friend class CrOSComponent;
+  friend class CrOSComponentManager;
 #endif  // defined(OS_CHROMEOS)
+  friend class VrAssetsComponentInstallerPolicy;
 
   // Triggers an update check for a component. |id| is a value
   // returned by GetCrxComponentID(). If an update for this component is already

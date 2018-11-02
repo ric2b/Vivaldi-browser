@@ -7,17 +7,18 @@
 
 #include <memory>
 
+#include "base/location.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/v8_blob_callback.h"
 #include "core/CoreExport.h"
 #include "core/typed_arrays/DOMTypedArray.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/StaticBitmapImage.h"
 #include "platform/heap/Handle.h"
 #include "platform/image-encoders/ImageEncoder.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -26,20 +27,17 @@ class ExecutionContext;
 class CORE_EXPORT CanvasAsyncBlobCreator
     : public GarbageCollectedFinalized<CanvasAsyncBlobCreator> {
  public:
-  static CanvasAsyncBlobCreator* Create(
-      DOMUint8ClampedArray* unpremultiplied_rgba_image_data,
-      const String& mime_type,
-      const IntSize&,
-      V8BlobCallback*,
-      double start_time,
-      ExecutionContext*);
-  static CanvasAsyncBlobCreator* Create(
-      DOMUint8ClampedArray* unpremultiplied_rgba_image_data,
-      const String& mime_type,
-      const IntSize&,
-      double start_time,
-      ExecutionContext*,
-      ScriptPromiseResolver*);
+  static CanvasAsyncBlobCreator* Create(scoped_refptr<StaticBitmapImage>,
+                                        const String& mime_type,
+                                        V8BlobCallback*,
+                                        double start_time,
+                                        ExecutionContext*);
+  static CanvasAsyncBlobCreator* Create(scoped_refptr<StaticBitmapImage>,
+                                        const String& mime_type,
+                                        double start_time,
+                                        ExecutionContext*,
+                                        ScriptPromiseResolver*);
+
   void ScheduleAsyncBlobCreation(const double& quality);
   virtual ~CanvasAsyncBlobCreator();
   enum MimeType {
@@ -74,9 +72,8 @@ class CORE_EXPORT CanvasAsyncBlobCreator
   virtual void Trace(blink::Visitor*);
 
  protected:
-  CanvasAsyncBlobCreator(DOMUint8ClampedArray* data,
+  CanvasAsyncBlobCreator(scoped_refptr<StaticBitmapImage>,
                          MimeType,
-                         const IntSize&,
                          V8BlobCallback*,
                          double,
                          ExecutionContext*,
@@ -84,22 +81,25 @@ class CORE_EXPORT CanvasAsyncBlobCreator
   // Methods are virtual for unit testing
   virtual void ScheduleInitiateEncoding(double quality);
   virtual void IdleEncodeRows(double deadline_seconds);
-  virtual void PostDelayedTaskToCurrentThread(const WebTraceLocation&,
-                                              WTF::Closure,
+  virtual void PostDelayedTaskToCurrentThread(const base::Location&,
+                                              base::OnceClosure,
                                               double delay_ms);
   virtual void SignalAlternativeCodePathFinishedForTesting() {}
   virtual void CreateBlobAndReturnResult();
   virtual void CreateNullAndReturnResult();
 
   void InitiateEncoding(double quality, double deadline_seconds);
+
+ protected:
   IdleTaskStatus idle_task_status_;
+  bool fail_encoder_initialization_for_test_;
 
  private:
   friend class CanvasAsyncBlobCreatorTest;
 
   void Dispose();
 
-  Member<DOMUint8ClampedArray> data_;
+  scoped_refptr<StaticBitmapImage> image_;
   std::unique_ptr<ImageEncoder> encoder_;
   Vector<unsigned char> encoded_image_;
   int num_rows_completed_;
@@ -107,9 +107,11 @@ class CORE_EXPORT CanvasAsyncBlobCreator
 
   SkPixmap src_data_;
   const MimeType mime_type_;
+
+  // Chrome metrics use
   double start_time_;
-  double schedule_initiate_start_time_;
-  double elapsed_time_;
+  double schedule_idle_task_start_time_;
+  bool static_bitmap_image_loaded_;
 
   ToBlobFunctionType function_type_;
 
@@ -126,6 +128,9 @@ class CORE_EXPORT CanvasAsyncBlobCreator
 
   // Used for OffscreenCanvas only
   Member<ScriptPromiseResolver> script_promise_resolver_;
+
+  void LoadStaticBitmapImage();
+  bool EncodeImage(const double&);
 
   // PNG, JPEG
   bool InitializeEncoder(double quality);

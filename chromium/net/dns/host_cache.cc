@@ -418,19 +418,12 @@ size_t HostCache::max_entries() const {
 
 // static
 std::unique_ptr<HostCache> HostCache::CreateDefaultCache() {
-// Cache capacity is determined by the field trial.
 #if defined(ENABLE_BUILT_IN_DNS)
   const size_t kDefaultMaxEntries = 1000;
 #else
   const size_t kDefaultMaxEntries = 100;
 #endif
-  const size_t kSaneMaxEntries = 1 << 20;
-  size_t max_entries = 0;
-  base::StringToSizeT(base::FieldTrialList::FindFullName("HostCacheSize"),
-                      &max_entries);
-  if ((max_entries == 0) || (max_entries > kSaneMaxEntries))
-    max_entries = kDefaultMaxEntries;
-  return std::make_unique<HostCache>(max_entries);
+  return std::make_unique<HostCache>(kDefaultMaxEntries);
 }
 
 void HostCache::EvictOneEntry(base::TimeTicks now) {
@@ -549,6 +542,33 @@ void HostCache::RecordErase(EraseReason reason,
 void HostCache::RecordEraseAll(EraseReason reason, base::TimeTicks now) {
   for (const auto& it : entries_)
     RecordErase(reason, now, it.second);
+}
+
+bool HostCache::HasEntry(base::StringPiece hostname,
+                         HostCache::Entry::Source* source_out,
+                         HostCache::EntryStaleness* stale_out) {
+  net::HostCache::Key cache_key;
+  hostname.CopyToString(&cache_key.hostname);
+
+  const HostCache::Entry* entry =
+      LookupStale(cache_key, base::TimeTicks::Now(), stale_out);
+  if (!entry) {
+    // Might not have found the cache entry because the address_family or
+    // host_resolver_flags in cache_key do not match those used for the
+    // original DNS lookup. Try another common combination of address_family
+    // and host_resolver_flags in an attempt to find a matching cache entry.
+    cache_key.address_family = net::ADDRESS_FAMILY_IPV4;
+    cache_key.host_resolver_flags =
+        net::HOST_RESOLVER_DEFAULT_FAMILY_SET_DUE_TO_NO_IPV6;
+    entry = LookupStale(cache_key, base::TimeTicks::Now(), stale_out);
+    if (!entry)
+      return false;
+  }
+
+  if (source_out != nullptr)
+    *source_out = entry->source();
+
+  return true;
 }
 
 }  // namespace net

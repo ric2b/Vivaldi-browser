@@ -95,8 +95,8 @@ void TargetGenerator::GenerateTarget(Scope* scope,
   if (g_scheduler->verbose_logging())
     g_scheduler->Log("Defining target", label.GetUserVisibleName(true));
 
-  std::unique_ptr<Target> target =
-      std::make_unique<Target>(scope->settings(), label);
+  std::unique_ptr<Target> target = std::make_unique<Target>(
+      scope->settings(), label, scope->build_dependency_files());
   target->set_defined_from(function_call);
 
   // Create and call out to the proper generator.
@@ -189,19 +189,6 @@ bool TargetGenerator::FillPublic() {
                                   scope_->GetSourceDir(), &dest_public, err_))
     return false;
   target_->public_headers().swap(dest_public);
-  return true;
-}
-
-bool TargetGenerator::FillInputs() {
-  const Value* value = scope_->GetValue(variables::kInputs, true);
- if (!value)
-   return true;
-
-  Target::FileList dest_inputs;
-  if (!ExtractListOfRelativeFiles(scope_->settings()->build_settings(), *value,
-                                  scope_->GetSourceDir(), &dest_inputs, err_))
-    return false;
-  target_->inputs().swap(dest_inputs);
   return true;
 }
 

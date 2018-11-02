@@ -46,7 +46,7 @@
 #include "core/html/HTMLMapElement.h"
 #include "core/html_names.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/svg/SVGTreeScopeResources.h"
@@ -74,7 +74,7 @@ TreeScope::TreeScope(Document& document)
   root_node_->SetTreeScope(this);
 }
 
-TreeScope::~TreeScope() {}
+TreeScope::~TreeScope() = default;
 
 void TreeScope::ResetTreeScope() {
   selection_ = nullptr;
@@ -237,7 +237,7 @@ HitTestResult HitTestInDocument(Document* document,
     return HitTestResult();
 
   HitTestResult result(request, LayoutPoint(hit_point));
-  document->GetLayoutViewItem().HitTest(result);
+  document->GetLayoutView()->HitTest(result);
   return result;
 }
 
@@ -309,7 +309,7 @@ HeapVector<Member<Element>> TreeScope::ElementsFromPoint(double x,
                          HitTestRequest::kListBased |
                          HitTestRequest::kPenetratingList);
   HitTestResult result(request, LayoutPoint(hit_point));
-  document.GetLayoutViewItem().HitTest(result);
+  document.GetLayoutView()->HitTest(result);
 
   return ElementsFromHitTestResult(result);
 }

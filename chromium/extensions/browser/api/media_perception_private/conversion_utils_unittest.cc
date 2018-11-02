@@ -15,6 +15,7 @@ namespace extensions {
 namespace {
 
 const char kTestDeviceContext[] = "Video camera";
+const char kTestConfiguration[] = "dummy_config";
 const char kFakePacketLabel1[] = "Packet1";
 const char kFakePacketLabel3[] = "Packet3";
 const char kFakeEntityLabel3[] = "Region3";
@@ -37,6 +38,38 @@ void InitializeVideoStreamParam(media_perception::VideoStreamParam& param,
   param.width = std::make_unique<int>(width);
   param.height = std::make_unique<int>(height);
   param.frame_rate = std::make_unique<int>(frame_rate);
+}
+
+void InitializeFakeAudioPerception(mri::AudioPerception* audio_perception) {
+  audio_perception->set_timestamp_us(10086);
+
+  mri::AudioLocalization* audio_localization =
+      audio_perception->mutable_audio_localization();
+  audio_localization->set_azimuth_radians(1.5);
+  audio_localization->add_azimuth_scores(2.0);
+  audio_localization->add_azimuth_scores(5.0);
+
+  mri::AudioHumanPresenceDetection* detection =
+      audio_perception->mutable_audio_human_presence_detection();
+  detection->set_human_presence_likelihood(0.4);
+
+  mri::AudioSpectrogram* noise_spectrogram =
+      detection->mutable_noise_spectrogram();
+  noise_spectrogram->add_values(0.1);
+  noise_spectrogram->add_values(0.2);
+
+  mri::AudioSpectrogram* frame_spectrogram =
+      detection->mutable_frame_spectrogram();
+  frame_spectrogram->add_values(0.3);
+}
+
+void InitializeFakeAudioVisualPerception(
+    mri::AudioVisualPerception* audio_visual_perception) {
+  audio_visual_perception->set_timestamp_us(91008);
+
+  mri::AudioVisualHumanPresenceDetection* detection =
+      audio_visual_perception->mutable_audio_visual_human_presence_detection();
+  detection->set_human_presence_likelihood(0.5);
 }
 
 void InitializeFakeFramePerception(const int index,
@@ -91,6 +124,14 @@ void InitializeFakeFramePerception(const int index,
   mri::Entity* entity_three = frame_perception->add_entity();
   entity_three->set_type(mri::Entity::LABELED_REGION);
   entity_three->set_label(kFakeEntityLabel3);
+
+  // Add fake video human presence detection.
+  mri::VideoHumanPresenceDetection* detection =
+      frame_perception->mutable_video_human_presence_detection();
+  detection->set_human_presence_likelihood(0.1);
+  detection->set_motion_detected_likelihood(0.2);
+  detection->set_light_condition(mri::VideoHumanPresenceDetection::BLACK_FRAME);
+  detection->set_light_condition_likelihood(0.3);
 }
 
 void ValidateFramePerceptionResult(
@@ -177,6 +218,68 @@ void ValidateFramePerceptionResult(
   EXPECT_EQ(*entity_result_three.entity_label, kFakeEntityLabel3);
   EXPECT_EQ(entity_result_three.type,
             media_perception::ENTITY_TYPE_LABELED_REGION);
+
+  // Validate video human presence detection.
+  const media_perception::VideoHumanPresenceDetection* detection_result =
+      frame_perception_result.video_human_presence_detection.get();
+  ASSERT_TRUE(detection_result->human_presence_likelihood);
+  EXPECT_EQ(*detection_result->human_presence_likelihood, 0.1);
+  ASSERT_TRUE(detection_result->motion_detected_likelihood);
+  EXPECT_EQ(*detection_result->motion_detected_likelihood, 0.2);
+  EXPECT_EQ(detection_result->light_condition,
+            media_perception::LIGHT_CONDITION_BLACK_FRAME);
+  ASSERT_TRUE(detection_result->light_condition_likelihood);
+  EXPECT_EQ(*detection_result->light_condition_likelihood, 0.3);
+}
+
+void ValidateAudioPerceptionResult(
+    const media_perception::AudioPerception& audio_perception_result) {
+  ASSERT_TRUE(audio_perception_result.timestamp_us);
+  EXPECT_EQ(*audio_perception_result.timestamp_us, 10086);
+
+  // Validate audio localization.
+  const media_perception::AudioLocalization* audio_localization =
+      audio_perception_result.audio_localization.get();
+  ASSERT_TRUE(audio_localization);
+  ASSERT_TRUE(audio_localization->azimuth_radians);
+  EXPECT_EQ(*audio_localization->azimuth_radians, 1.5);
+  ASSERT_EQ(2u, audio_localization->azimuth_scores->size());
+  EXPECT_EQ(audio_localization->azimuth_scores->at(0), 2.0);
+  EXPECT_EQ(audio_localization->azimuth_scores->at(1), 5.0);
+
+  // Validate audio human presence detection.
+  const media_perception::AudioHumanPresenceDetection* presence_detection =
+      audio_perception_result.audio_human_presence_detection.get();
+  ASSERT_TRUE(presence_detection);
+  ASSERT_TRUE(presence_detection->human_presence_likelihood);
+  EXPECT_EQ(*presence_detection->human_presence_likelihood, 0.4);
+
+  const media_perception::AudioSpectrogram* noise_spectrogram =
+      presence_detection->noise_spectrogram.get();
+  ASSERT_TRUE(noise_spectrogram);
+  ASSERT_EQ(2u, noise_spectrogram->values->size());
+  EXPECT_EQ(noise_spectrogram->values->at(0), 0.1);
+  EXPECT_EQ(noise_spectrogram->values->at(1), 0.2);
+
+  const media_perception::AudioSpectrogram* frame_spectrogram =
+      presence_detection->frame_spectrogram.get();
+  ASSERT_TRUE(frame_spectrogram);
+  ASSERT_EQ(1u, frame_spectrogram->values->size());
+  EXPECT_EQ(frame_spectrogram->values->at(0), 0.3);
+}
+
+void ValidateAudioVisualPerceptionResult(
+    const media_perception::AudioVisualPerception& perception_result) {
+  ASSERT_TRUE(perception_result.timestamp_us);
+  EXPECT_EQ(*perception_result.timestamp_us, 91008);
+
+  // Validate audio-visual human presence detection.
+  const media_perception::AudioVisualHumanPresenceDetection*
+      presence_detection =
+          perception_result.audio_visual_human_presence_detection.get();
+  ASSERT_TRUE(presence_detection);
+  ASSERT_TRUE(presence_detection->human_presence_likelihood);
+  EXPECT_EQ(*presence_detection->human_presence_likelihood, 0.5);
 }
 
 void InitializeFakeImageFrameData(mri::ImageFrame* image_frame) {
@@ -213,13 +316,25 @@ TEST(MediaPerceptionConversionUtilsTest, MediaPerceptionProtoToIdl) {
   mri::FramePerception* frame_perception =
       media_perception.add_frame_perception();
   InitializeFakeFramePerception(kFrameId, frame_perception);
+  mri::AudioPerception* audio_perception =
+      media_perception.add_audio_perception();
+  InitializeFakeAudioPerception(audio_perception);
+  mri::AudioVisualPerception* audio_visual_perception =
+      media_perception.add_audio_visual_perception();
+  InitializeFakeAudioVisualPerception(audio_visual_perception);
   media_perception::MediaPerception media_perception_result =
       media_perception::MediaPerceptionProtoToIdl(media_perception);
   EXPECT_EQ(*media_perception_result.timestamp, 1);
   ASSERT_TRUE(media_perception_result.frame_perceptions);
   ASSERT_EQ(1u, media_perception_result.frame_perceptions->size());
+  ASSERT_TRUE(media_perception_result.audio_perceptions);
+  ASSERT_EQ(1u, media_perception_result.audio_perceptions->size());
   ValidateFramePerceptionResult(
       kFrameId, media_perception_result.frame_perceptions->at(0));
+  ValidateAudioPerceptionResult(
+      media_perception_result.audio_perceptions->at(0));
+  ValidateAudioVisualPerceptionResult(
+      media_perception_result.audio_visual_perceptions->at(0));
 }
 
 TEST(MediaPerceptionConversionUtilsTest, DiagnosticsProtoToIdl) {
@@ -258,9 +373,12 @@ TEST(MediaPerceptionConversionUtilsTest, DiagnosticsProtoToIdl) {
 TEST(MediaPerceptionConversionUtilsTest, StateProtoToIdl) {
   mri::State state;
   state.set_status(mri::State::RUNNING);
+  state.set_configuration(kTestConfiguration);
   media_perception::State state_result =
       media_perception::StateProtoToIdl(state);
   EXPECT_EQ(state_result.status, media_perception::STATUS_RUNNING);
+  ASSERT_TRUE(state_result.configuration);
+  EXPECT_EQ(*state_result.configuration, kTestConfiguration);
 
   state.set_status(mri::State::STARTED);
   state.set_device_context(kTestDeviceContext);
@@ -284,6 +402,13 @@ TEST(MediaPerceptionConversionUtilsTest, StateIdlToProto) {
   mri::State state_proto = StateIdlToProto(state);
   EXPECT_EQ(state_proto.status(), mri::State::UNINITIALIZED);
   EXPECT_FALSE(state_proto.has_device_context());
+
+  state.status = media_perception::STATUS_RUNNING;
+  state.configuration = std::make_unique<std::string>(kTestConfiguration);
+  state_proto = StateIdlToProto(state);
+  EXPECT_EQ(state_proto.status(), mri::State::RUNNING);
+  ASSERT_TRUE(state_proto.has_configuration());
+  EXPECT_EQ(state_proto.configuration(), kTestConfiguration);
 
   state.status = media_perception::STATUS_SUSPENDED;
   state.device_context = std::make_unique<std::string>(kTestDeviceContext);

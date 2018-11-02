@@ -4,10 +4,13 @@
 
 package org.chromium.chrome.browser.vr_shell;
 
+import android.support.annotation.IntDef;
+
 import org.junit.Assert;
 
 import org.chromium.base.Log;
 import org.chromium.base.test.util.UrlUtils;
+import org.chromium.chrome.browser.UrlConstants;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content.browser.test.util.Criteria;
@@ -15,6 +18,8 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.WebContents;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -46,8 +51,21 @@ public class VrTestFramework {
     public static final int POLL_TIMEOUT_SHORT_MS = 1000;
     public static final int POLL_TIMEOUT_LONG_MS = 10000;
 
+    public static final String[] NATIVE_URLS_OF_INTEREST = {UrlConstants.BOOKMARKS_FOLDER_URL,
+            UrlConstants.BOOKMARKS_UNCATEGORIZED_URL, UrlConstants.BOOKMARKS_URL,
+            UrlConstants.DOWNLOADS_URL, UrlConstants.NATIVE_HISTORY_URL, UrlConstants.NTP_URL,
+            UrlConstants.RECENT_TABS_URL};
+
     private static final String TAG = "VrTestFramework";
-    static final String TEST_DIR = "chrome/test/data/android/webvr_instrumentation";
+    static final String TEST_DIR = "chrome/test/data/vr/e2e_test_files";
+
+    // Test status enum
+    private static final int STATUS_RUNNING = 0;
+    private static final int STATUS_PASSED = 1;
+    private static final int STATUS_FAILED = 2;
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({STATUS_RUNNING, STATUS_PASSED, STATUS_FAILED})
+    private @interface TestStatus {}
 
     private ChromeActivityTestRule mRule;
     private WebContents mFirstTabWebContents;
@@ -97,7 +115,7 @@ public class VrTestFramework {
             throws InterruptedException {
         int result = mRule.loadUrl(url, timeoutSec);
         Assert.assertTrue("JavaScript initialization successful",
-                pollJavaScriptBoolean("isInitializationComplete()", POLL_TIMEOUT_SHORT_MS,
+                pollJavaScriptBoolean("isInitializationComplete()", POLL_TIMEOUT_LONG_MS,
                         mRule.getActivity().getActivityTab().getWebContents()));
         return result;
     }
@@ -131,15 +149,24 @@ public class VrTestFramework {
     }
 
     /**
-     * Ends the test harness test and checks whether there it passed.
-     * @param webContents The WebContents for the tab to check results in.
-     * @return "Passed" if test passed, String with failure reason otherwise.
+     * Retrieves the current status of the JavaScript test and returns an enum corresponding to it.
+     * @param webContents The WebContents for the tab to check the status in.
+     * @return A TestStatus integer corresponding to the current state of the JavaScript test
      */
-    public static String checkResults(WebContents webContents) {
-        if (runJavaScriptOrFail("testPassed", POLL_TIMEOUT_SHORT_MS, webContents).equals("true")) {
-            return "Passed";
+    @TestStatus
+    public static int checkTestStatus(WebContents webContents) {
+        String resultString =
+                runJavaScriptOrFail("resultString", POLL_TIMEOUT_SHORT_MS, webContents);
+        boolean testPassed = Boolean.parseBoolean(
+                runJavaScriptOrFail("testPassed", POLL_TIMEOUT_SHORT_MS, webContents));
+        if (testPassed) {
+            return STATUS_PASSED;
+        } else if (!testPassed && resultString.equals("\"\"")) {
+            return STATUS_RUNNING;
+        } else {
+            // !testPassed && !resultString.equals("\"\"")
+            return STATUS_FAILED;
         }
-        return runJavaScriptOrFail("resultString", POLL_TIMEOUT_SHORT_MS, webContents);
     }
 
     /**
@@ -148,7 +175,20 @@ public class VrTestFramework {
      * @param webContents The WebContents for the tab to check test results in.
      */
     public static void endTest(WebContents webContents) {
-        Assert.assertEquals("Passed", checkResults(webContents));
+        switch (checkTestStatus(webContents)) {
+            case STATUS_PASSED:
+                break;
+            case STATUS_FAILED:
+                String resultString =
+                        runJavaScriptOrFail("resultString", POLL_TIMEOUT_SHORT_MS, webContents);
+                Assert.fail("JavaScript testharness failed with result: " + resultString);
+                break;
+            case STATUS_RUNNING:
+                Assert.fail("Attempted to end test in Java without finishing in JavaScript.");
+                break;
+            default:
+                Assert.fail("Received unknown test status.");
+        }
     }
 
     /**
@@ -188,17 +228,39 @@ public class VrTestFramework {
      * @param webContents The WebContents for the tab the JavaScript step is in.
      */
     public static void waitOnJavaScriptStep(WebContents webContents) {
-        if (!pollJavaScriptBoolean("javascriptDone", POLL_TIMEOUT_LONG_MS, webContents)) {
-            String reason = "Polling JavaScript boolean javascriptDone timed out.";
+        // Make sure we aren't trying to wait on a JavaScript test step without the code to do so.
+        Assert.assertTrue("Attempted to wait on a JavaScript step without the code to do so. You "
+                        + "either forgot to import webvr_e2e.js or are incorrectly using a Java "
+                        + "method.",
+                Boolean.parseBoolean(runJavaScriptOrFail("typeof javascriptDone !== 'undefined'",
+                        POLL_TIMEOUT_SHORT_MS, webContents)));
+
+        // Actually wait for the step to finish
+        boolean success =
+                pollJavaScriptBoolean("javascriptDone", POLL_TIMEOUT_LONG_MS, webContents);
+
+        // Check what state we're in to make sure javascriptDone wasn't called because the test
+        // failed.
+        int testStatus = checkTestStatus(webContents);
+        if (!success || testStatus == STATUS_FAILED) {
+            // Failure states: Either polling failed or polling succeeded, but because the test
+            // failed.
+            String reason;
+            if (!success) {
+                reason = "Polling JavaScript boolean javascriptDone timed out.";
+            } else {
+                reason = "Polling JavaScript boolean javascriptDone succeeded, but test failed.";
+            }
             String resultString =
                     runJavaScriptOrFail("resultString", POLL_TIMEOUT_SHORT_MS, webContents);
-            if (resultString.equals("")) {
+            if (resultString.equals("\"\"")) {
                 reason += " Did not obtain specific reason from testharness.";
             } else {
                 reason += " Testharness reported failure: " + resultString;
             }
             Assert.fail(reason);
         }
+
         // Reset the synchronization boolean
         runJavaScriptOrFail("javascriptDone = false", POLL_TIMEOUT_SHORT_MS, webContents);
     }

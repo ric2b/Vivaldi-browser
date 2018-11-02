@@ -56,7 +56,6 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="1409879593029778104">Stažení souboru <ph name="FILE_NAME" /> bylo zabráněno, protože soubor již existuje.</translation>
 <translation id="1414981605391750300">Kontaktování Googlu. Může to chvíli trvat…</translation>
 <translation id="1416550906796893042">Verze aplikace</translation>
-<translation id="1423209968422390786">Přístup k poloze je v tomto zařízení <ph name="BEGIN_LINK" />vypnut<ph name="END_LINK" />.</translation>
 <translation id="1430915738399379752">Tisk</translation>
 <translation id="1445680696957526815">Komponenty prohlížeče Chrome navzájem nejsou kompatibilní. Je možné, že se Chrome zrovna upgraduje. Pokud problém přetrvává, zkuste Chrome odinstalovat a poté znovu nainstalovat.</translation>
 <translation id="1446450296470737166">Povolit úplné ovládání zařízení MIDI</translation>
@@ -84,6 +83,7 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="1660204651932907780">Povolit webům přehrávat zvuky (doporučeno)</translation>
 <translation id="1670399744444387456">Základní</translation>
 <translation id="1671236975893690980">Nevyřízené stahování…</translation>
+<translation id="1674523662097951983">Položka Záložky se přesouvá. Příště přejeďte prstem nahoru z adresního řádku.</translation>
 <translation id="169033420419426091">Stažení souboru <ph name="FILE_NAME" /> se nezdařilo, protože není k dispozici SD karta.</translation>
 <translation id="1709438864123551175">Spořič dat</translation>
 <translation id="1718835860248848330">Poslední hodina</translation>
@@ -98,7 +98,8 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="1832521218263067499">Narušení zabezpečení</translation>
 <translation id="1853692000353488670">Nová anonymní karta</translation>
 <translation id="1880072593381090678">Oblíbené stránky z Chromu</translation>
-<translation id="1891331835972267886">Aplikace <ph name="APP_NAME" /> se otevře v Chromu. Pokračováním vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany osobních údajů<ph name="END_LINK2" />.</translation>
+<translation id="1887786770086287077">Přístup k poloze je v tomto zařízení vypnut. Zapnete jej v <ph name="BEGIN_LINK" />Nastavení Android<ph name="END_LINK" />.</translation>
+<translation id="1891331835972267886">Aplikace <ph name="APP_NAME" /> se otevře v Chromu. Pokračováním vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany soukromí<ph name="END_LINK2" />.</translation>
 <translation id="189172778771606813">Zavřít vysouvací panel navigace</translation>
 <translation id="1897409700584096124">Web vysílá</translation>
 <translation id="1919345977826869612">Reklamy</translation>
@@ -110,12 +111,14 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="1946005195648379376">Nastavte, jak má Google využívat vaši historii procházení k personalizaci Vyhledávání a dalších služeb Google.</translation>
 <translation id="1952172573699511566">Pokud to bude možné, budou weby zobrazovat text ve vašem preferovaném jazyce.</translation>
 <translation id="1966710179511230534">Aktualizujte prosím své přihlašovací údaje.</translation>
+<translation id="196723829409668860">Lidé si také zobrazili</translation>
 <translation id="1974060860693918893">Rozšířená nastavení</translation>
 <translation id="1984937141057606926">Povoleno, s výjimkou souborů cookie třetí strany</translation>
 <translation id="1989112275319619282">Procházet</translation>
 <translation id="1993768208584545658">Web <ph name="SITE" /> žádá o spárování</translation>
 <translation id="1994173015038366702">Adresa URL webu</translation>
 <translation id="200815880754187296">Ostatní aplikace: <ph name="KILOBYTES" /> kB</translation>
+<translation id="2015632741368427174">Bylo zablokováno přesměrování na tento web:</translation>
 <translation id="2017836877785168846">Vymaže historii a automatická dokončení v adresním řádku.</translation>
 <translation id="2021896219286479412">Ovládání webu na celé obrazovce</translation>
 <translation id="2038563949887743358">Zapnout funkci Verze webu pro PC</translation>
@@ -179,6 +182,7 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="2536728043171574184">Prohlížíte offline kopii stránky</translation>
 <translation id="2546283357679194313">Soubory cookie a data webových stránek</translation>
 <translation id="2567385386134582609">OBRÁZEK</translation>
+<translation id="2570922361219980984">Přístup k poloze je vypnut také v tomto zařízení. Zapnete jej v <ph name="BEGIN_LINK" />Nastavení Android<ph name="END_LINK" />.</translation>
 <translation id="257931822824936280">Rozbaleno – kliknutím sbalíte</translation>
 <translation id="2581165646603367611">Tímto vymažete soubory cookie, mezipaměť a další data webů, která Chrome považuje za nedůležitá.</translation>
 <translation id="2587052924345400782">Je dostupná novější verze</translation>
@@ -205,7 +209,6 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="2876764156902388290">Chrome tuto stránku zobrazuje s menším využitím dat</translation>
 <translation id="2888126860611144412">O aplikaci Chrome</translation>
 <translation id="2891154217021530873">Zastavit načítání stránky</translation>
-<translation id="2892933203342091350">Povolit zjednodušené zobrazení ve všech článcích</translation>
 <translation id="2900528713135656174">Vytvořit událost</translation>
 <translation id="2902702728133930130">Spuštění Chromu se nezdařilo kvůli neočekávané chybě.</translation>
 <translation id="2903493209154104877">Adresy</translation>
@@ -225,6 +228,7 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="3029704984691124060">Heslové fráze se neshodují</translation>
 <translation id="3030708446010914655">Adresní řádek najdete zde</translation>
 <translation id="3036750288708366620"><ph name="BEGIN_LINK" />Zobrazit nápovědu<ph name="END_LINK" /></translation>
+<translation id="305593374596241526">Určování polohy je vypnuté, zapnete jej v <ph name="BEGIN_LINK" />nastavení zařízení Android<ph name="END_LINK" />.</translation>
 <translation id="307908932405420782">Brzy se zobrazí další články. Užijte si ráno.</translation>
 <translation id="3089395242580810162">Otevřít na anonymní kartě</translation>
 <translation id="311456632243022227">V Chromu byly otevřeny odkazy</translation>
@@ -248,6 +252,7 @@ Chcete-li fyzický web používat, je třeba aktivovat Bluetooth a určování 
 <translation id="3269093882174072735">Načíst obrázek</translation>
 <translation id="3269956123044984603">Chcete-li získat přístup ke kartám ze svých ostatních zařízení, zapněte v nastavení účtu Android možnost Automatická synchronizace dat.</translation>
 <translation id="3282568296779691940">Přihlášení do Chrome</translation>
+<translation id="32895400574683172">Oznámení jsou povolena</translation>
 <translation id="3295602654194328831">Skrýt informace</translation>
 <translation id="3303414029551471755">Chcete pokračovat ke stažení obsahu?</translation>
 <translation id="3321222012623826478">Tato služba potřebuje odeslat adresu tohoto webu anonymně do Googlu k ověření.</translation>
@@ -288,7 +293,6 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="3632295766818638029">Zrušit maskování hesla</translation>
 <translation id="363596933471559332">Přihlašovat se na weby automaticky pomocí uložených identifikačních údajů. Když je tato funkce vypnutá, budete před každým přihlášením na web požádáni o ověření.</translation>
 <translation id="3649663272864015643">Je vybrána domovská karta</translation>
-<translation id="3656115297268584622">Zapněte v <ph name="BEGIN_LINK" />Nastavení Android<ph name="END_LINK" /> určování polohy.</translation>
 <translation id="3661699943263275414">Weby třetích stran mohou ukládat a číst data souborů cookie</translation>
 <translation id="3662546969139119822">Zde žádná historie není</translation>
 <translation id="3672452749423051839">Návrhy při chybách navigace</translation>
@@ -310,7 +314,6 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="3859306556332390985">Přetočit dopředu</translation>
 <translation id="3894427358181296146">Přidat složku</translation>
 <translation id="3895926599014793903">Vynutit aktivaci přiblížení</translation>
-<translation id="3917783807003067648">Přístup k poloze je blokován</translation>
 <translation id="3927692899758076493">Bezpatková</translation>
 <translation id="3928666092801078803">Sloučit má data</translation>
 <translation id="393697183122708255">Hlasové vyhledávání není k dispozici</translation>
@@ -326,7 +329,6 @@ Chcete-li vyhledávací dotaz upravit, proveďte výběr dlouhým stisknutím. C
 <translation id="3988466920954086464">Na tomto panelu naleznete výsledky dynamického vyhledávání</translation>
 <translation id="3997476611815694295">Nedůležité úložiště</translation>
 <translation id="4002066346123236978">Název</translation>
-<translation id="4031074602479304239">Chrome tomuto webu zabránil v přesměrování na adresu</translation>
 <translation id="4042870126885713738">Zobrazovat návrhy, pokud nelze vyhledat webovou adresu nebo navázat připojení.</translation>
 <translation id="4046123991198612571">Další skladba</translation>
 <translation id="4056223980640387499">Sépie</translation>
@@ -401,7 +403,7 @@ Na stránce <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> moh
 <translation id="4714588616299687897">Uspořte až 60 % svých dat</translation>
 <translation id="4719927025381752090">Nabízet překlad</translation>
 <translation id="4720023427747327413">Otevřít v aplikaci <ph name="PRODUCT_NAME" /></translation>
-<translation id="472631402238783923">Pomozte Chrome zlepšit. <ph name="BEGIN_LINK" />Zúčastněte se průzkumu<ph name="END_LINK" />.</translation>
+<translation id="4720982865791209136">Pomozte Chrome zlepšit. <ph name="BEGIN_LINK" />Zúčastněte se průzkumu<ph name="END_LINK" />.</translation>
 <translation id="4730876730346568982">Přepínáte účty pro synchronizaci z <ph name="ACCOUNT_EMAIL_OLD" /> na <ph name="ACCOUNT_EMAIL_NEW" />. Vaše existující data prohlížeče Chrome jsou spravována doménou <ph name="MANAGED_DOMAIN" />. Touto akcí svá data smažete z tohoto zařízení, v účtu <ph name="ACCOUNT_EMAIL_OLD" /> však zůstanou.</translation>
 <translation id="473775607612524610">Aktualizovat</translation>
 <translation id="4738836084190194332">Poslední synchronizace: <ph name="WHEN" /></translation>
@@ -413,6 +415,7 @@ Na stránce <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> moh
 <translation id="4807963036345170158">Spořič dat je vypnutý</translation>
 <translation id="4811736444948656478">Je otevřen navigační panel na poloviční výšku</translation>
 <translation id="4816465935029283692">Typy dat</translation>
+<translation id="482201002591920174">Primární úložiště</translation>
 <translation id="4837753911714442426">Otevřít možnosti tisku stránky</translation>
 <translation id="4842092870884894799">Je zobrazeno vyskakovací okno generování hesla</translation>
 <translation id="4850886885716139402">Zobrazit</translation>
@@ -472,7 +475,6 @@ Na stránce <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> moh
 <translation id="5327248766486351172">Název</translation>
 <translation id="5335288049665977812">Povolit webům spouštět JavaScript (doporučeno)</translation>
 <translation id="5345040418939504969">Záložka <ph name="BOOKMARK_TITLE" /> byla smazána</translation>
-<translation id="5345083863238459644">Přístup k poloze je <ph name="BEGIN_LINK" />vypnut také v tomto zařízení<ph name="END_LINK" />.</translation>
 <translation id="5372829067651257087">Adresa byla zkopírována.</translation>
 <translation id="5400569084694353794">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />zásadami ochrany soukromí<ph name="END_LINK2" /> prohlížeče Chrome.</translation>
 <translation id="5403644198645076998">Povolit pouze určité weby</translation>
@@ -499,7 +501,9 @@ Na stránce <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> moh
 <translation id="5534640966246046842">Web byl zkopírován</translation>
 <translation id="5537099431952529648">Ty a tví rodiče můžete spravovat synchronizaci a přizpůsobení Chromu v <ph name="BEGIN_LINK1" />Nastavení<ph name="END_LINK1" /></translation>
 <translation id="5556459405103347317">Načíst znovu</translation>
+<translation id="5561549206367097665">Čekání na síť…</translation>
 <translation id="557283862590186398">Chrome pro tento web potřebuje oprávnění k přístupu k mikrofonu.</translation>
+<translation id="55737423895878184">Určování polohy a oznámení jsou povoleny</translation>
 <translation id="5578795271662203820">Hledat obrázek pomocí <ph name="SEARCH_ENGINE" /></translation>
 <translation id="5585019845078534178">Karty</translation>
 <translation id="5595485650161345191">Upravit adresu</translation>
@@ -508,6 +512,7 @@ Na stránce <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" /> moh
 <translation id="5620928963363755975">Stažené soubory a stránky můžete najít pomocí tlačítka Další možnosti</translation>
 <translation id="5626134646977739690">Jméno:</translation>
 <translation id="5639724618331995626">Povolit všechny weby</translation>
+<translation id="5646376287012673985">Poloha</translation>
 <translation id="5648166631817621825">Posledních 7 dní</translation>
 <translation id="5655963694829536461">Hledat ve stažených souborech</translation>
 <translation id="5659593005791499971">E-mail</translation>
@@ -541,19 +546,19 @@ Nejste však neviditelní. Anonymní režim neskryje vaši aktivitu před zaměs
 <translation id="5854790677617711513">Starší než 30 dnů</translation>
 <translation id="5858741533101922242">Chrome nemůže zapnout adaptér Bluetooth</translation>
 <translation id="5860033963881614850">Vypnuto</translation>
-<translation id="5867841422488265304">Zadejte dotaz nebo webovou adresu</translation>
+<translation id="5864419784173784555">Čekání na další stahování…</translation>
 <translation id="5869522115854928033">Uložená hesla</translation>
 <translation id="5878455346526065919">Blokovat reklamy na webech, které často zobrazují rušivé reklamy</translation>
 <translation id="5902828464777634901">Všechna místní data uložená tímto webem, včetně souborů cookie, budou smazána.</translation>
 <translation id="5911030830365207728">Překladač Google</translation>
 <translation id="5916664084637901428">Zapnuto</translation>
 <translation id="5919204609460789179">Chcete-li zahájit synchronizaci, aktualizujte aplikaci <ph name="PRODUCT_NAME" /></translation>
-<translation id="5923939907038835197">Hledejte zprávy, recepty, počasí...</translation>
 <translation id="5939518447894949180">Resetovat</translation>
 <translation id="5942872142862698679">K vyhledávání se používá Google</translation>
 <translation id="5956665950594638604">Otevřít centrum nápovědy Chrome na nové kartě</translation>
 <translation id="5958275228015807058">Najděte stažené soubory a stránky</translation>
 <translation id="5962718611393537961">Klepnutím sbalíte</translation>
+<translation id="5974562976030145789">Položka Stažené soubory se přesouvá. Příště přejeďte prstem nahoru z adresního řádku.</translation>
 <translation id="6000066717592683814">Ponechat Google</translation>
 <translation id="6031101910111098835">Sbaleno – kliknutím rozbalíte</translation>
 <translation id="6039379616847168523">Přejít na další kartu</translation>
@@ -569,6 +574,7 @@ Nejste však neviditelní. Anonymní režim neskryje vaši aktivitu před zaměs
 <translation id="6127379762771434464">Položka byla odstraněna</translation>
 <translation id="6138140242378429169">Optimalizovat stránku pro mobily</translation>
 <translation id="6140912465461743537">Země/Region</translation>
+<translation id="6154478581116148741">Chcete-li z tohoto zařízení exportovat svá hesla, zapněte v Nastavení zámek obrazovky</translation>
 <translation id="6159335304067198720">Úspora dat: <ph name="PERCENT" /></translation>
 <translation id="6165508094623778733">Další informace</translation>
 <translation id="6177111841848151710">Pro aktuální vyhledávač blokováno</translation>
@@ -577,6 +583,8 @@ Nejste však neviditelní. Anonymní režim neskryje vaši aktivitu před zaměs
 <translation id="618555311922999635">Je otevřen navigační panel na plnou výšku</translation>
 <translation id="6192792657125177640">Výjimky</translation>
 <translation id="6210748933810148297">Nejste <ph name="EMAIL" />?</translation>
+<translation id="6216432067784365534"><ph name="NAME_OF_LIST_ITEM" /> – možnosti</translation>
+<translation id="6221633008163990886">Chcete-li exportovat hesla, odemkněte zařízení</translation>
 <translation id="6232535412751077445">Pokud povolíte požadavek Do Not Track, bude připojován k datům provozu prohlížení. Účinek tohoto požadavku závisí na tom, zda na něj budou webové stránky reagovat a jak jej budou interpretovat.
 
 Některé weby mohou například na tento požadavek reagovat tak, že vám zobrazí reklamy, které nejsou založeny na ostatních navštívených webových stránkách. Řada webů bude i nadále shromažďovat vaše údaje o prohlížení a používat je například ke zlepšení zabezpečení, poskytování obsahu, reklam a doporučení a ke generování statistik pro přehledy.</translation>
@@ -597,6 +605,7 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="6404511346730675251">Upravit záložku</translation>
 <translation id="6406506848690869874">Synchronizace</translation>
 <translation id="6409731863280057959">Vyskakovací okna</translation>
+<translation id="6411957228448379013">Adresní řádek. Přejetím prstem nahoru zobrazíte stažené soubory, záložky a historii.</translation>
 <translation id="641643625718530986">Tisk…</translation>
 <translation id="6416782512398055893">Staženo: <ph name="MBS" /> MB</translation>
 <translation id="6433501201775827830">Vyberte vyhledávač</translation>
@@ -613,7 +622,6 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="6538442820324228105">Staženo: <ph name="GBS" /> GB</translation>
 <translation id="654446541061731451">Vyberte kartu, kterou chcete přenést</translation>
 <translation id="6545017243486555795">Vymazat všechna data</translation>
-<translation id="6550675742724504774">Možnosti</translation>
 <translation id="6556716549745717622">Blokovat, pokud web často zobrazuje rušivé reklamy (doporučeno)</translation>
 <translation id="6560414384669816528">Vyhledávat pomocí Sogou</translation>
 <translation id="6566259936974865419">Chrome vám ušetřil <ph name="GIGABYTES" /> GB</translation>
@@ -649,7 +657,6 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="6831043979455480757">Přeložit</translation>
 <translation id="6846298663435243399">Načítání…</translation>
 <translation id="6850830437481525139">Zavřené karty: <ph name="TAB_COUNT" /></translation>
-<translation id="6856477143496886355">Karty a adresy pomocí služby Google Payments</translation>
 <translation id="6864459304226931083">Stáhnout obrázek</translation>
 <translation id="6865313869410766144">Automatické vyplňování formulářů</translation>
 <translation id="6868088497967843822">Přihlaste se a synchronizujte záložky, historii, hesla a další nastavení do všech svých zařízení.</translation>
@@ -660,7 +667,9 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="6896758677409633944">Kopírovat</translation>
 <translation id="6905163627763043954">Vyzkoušet</translation>
 <translation id="6910211073230771657">Smazáno</translation>
+<translation id="6914783257214138813">Vaše hesla uvidí každý, kdo může zobrazit exportovaný soubor.</translation>
 <translation id="6945221475159498467">Vybrat</translation>
+<translation id="6959661084585705671">Sekundární úložiště</translation>
 <translation id="6963766334940102469">Smazat záložky</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6978479750597523876">Obnovit nastavení překladače</translation>
@@ -676,6 +685,7 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="7022756207310403729">Otevřít v prohlížeči</translation>
 <translation id="7029809446516969842">Hesla</translation>
 <translation id="7031882061095297553">Synchronizace s účty</translation>
+<translation id="7034608350006174882">Karty a adresy pomocí služby Google Pay</translation>
 <translation id="7053983685419859001">Blokovat</translation>
 <translation id="7062545763355031412">Přijmout a přepnout účet</translation>
 <translation id="7063006564040364415">K synchronizačnímu serveru se nelze připojit.</translation>
@@ -729,7 +739,6 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="7596558890252710462">Operační systém</translation>
 <translation id="7600965453749440009">Jazyk <ph name="LANGUAGE" /> nikdy nepřekládat</translation>
 <translation id="7605594153474022051">Synchronizace nefunguje</translation>
-<translation id="7607552448134703340">Zadejte, co hledáte</translation>
 <translation id="7612619742409846846">Jste přihlášeni do Googlu jako</translation>
 <translation id="7619072057915878432">Stahování souboru <ph name="FILE_NAME" /> se nezdařilo z důvodu selhání sítě.</translation>
 <translation id="7620146066550602128">Vyzkoušejte <ph name="BEGIN_LINK" />snazší způsob procházení<ph name="END_LINK" /></translation>
@@ -816,6 +825,7 @@ Některé weby mohou například na tento požadavek reagovat tak, že vám zobr
 <translation id="8487700953926739672">Dostupné offline</translation>
 <translation id="8489271220582375723">Otevřít stránku historie</translation>
 <translation id="8493948351860045254">Uvolnit místo</translation>
+<translation id="8494508527479967437">Položka Historie se přesouvá. Příště přejeďte prstem nahoru z adresního řádku.</translation>
 <translation id="8497726226069778601">Zatím tu nic není...</translation>
 <translation id="8503813439785031346">Uživatelské jméno</translation>
 <translation id="8514477925623180633">Exportovat hesla uložená v Chromu</translation>
@@ -840,14 +850,15 @@ Chcete-li získat nové licence, připojte se k internetu a přehrajte stažen
 <translation id="8676374126336081632">Vymazat vstup</translation>
 <translation id="8687353297350450808">{N_BARS,plural, =1{Síla signálu: # čárka}few{Síla signálu: # čárky}many{Síla signálu: # čárky}other{Síla signálu: # čárek}}</translation>
 <translation id="869891660844655955">Datum vypršení platnosti</translation>
+<translation id="8712637175834984815">Hotovo</translation>
 <translation id="8719023831149562936">Aktuální kartu nelze přenést</translation>
 <translation id="8725066075913043281">Zkusit znovu</translation>
-<translation id="8728487861892616501">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany osobních údajů<ph name="END_LINK2" /> prohlížeče Chrome a <ph name="BEGIN_LINK3" />upozorněním ve věci ochrany osobních údajů pro účty Google spravované prostřednictvím služby Family Link<ph name="END_LINK3" />.</translation>
+<translation id="8728487861892616501">Používáním této aplikace vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany soukromí<ph name="END_LINK2" /> prohlížeče Chrome a <ph name="BEGIN_LINK3" />upozorněním ve věci ochrany soukromí pro účty Google spravované prostřednictvím služby Family Link<ph name="END_LINK3" />.</translation>
 <translation id="8730621377337864115">Hotovo</translation>
 <translation id="8748850008226585750">Skrytý obsah</translation>
 <translation id="8788968922598763114">Znovu otevřít naposledy zavřenou kartu</translation>
 <translation id="8812260976093120287">Na některých webech můžete platit pomocí výše uvedených podporovaných platebních aplikací v zařízení.</translation>
-<translation id="8816439037877937734">Aplikace <ph name="APP_NAME" /> se otevře v Chromu. Pokračováním vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany osobních údajů<ph name="END_LINK2" /> prohlížeče Chrome a <ph name="BEGIN_LINK3" />upozorněním ve věci ochrany osobních údajů pro účty Google spravované prostřednictvím služby Family Link<ph name="END_LINK3" />.</translation>
+<translation id="8816439037877937734">Aplikace <ph name="APP_NAME" /> se otevře v Chromu. Pokračováním vyjadřujete souhlas se <ph name="BEGIN_LINK1" />smluvními podmínkami<ph name="END_LINK1" /> a <ph name="BEGIN_LINK2" />upozorněním ve věci ochrany soukromí<ph name="END_LINK2" /> prohlížeče Chrome a <ph name="BEGIN_LINK3" />upozorněním ve věci ochrany soukromí pro účty Google spravované prostřednictvím služby Family Link<ph name="END_LINK3" />.</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="883635517171802338">Bránit webům v zobrazování vyskakovacích oken (doporučeno)</translation>
 <translation id="883806473910249246">Při stahování obsahu došlo k chybě.</translation>
@@ -871,6 +882,7 @@ Chcete-li získat nové licence, připojte se k internetu a přehrajte stažen
 <translation id="8993760627012879038">Otevřít novou kartu v anonymním režimu</translation>
 <translation id="8998729206196772491">Přihlašujete se pomocí účtu spravovaného doménou <ph name="MANAGED_DOMAIN" /> a poskytujete jeho správci kontrolu nad svými daty prohlížeče Chrome. Vaše data budou trvale přidružena k tomuto účtu. Odhlášením z Chromu svá data smažete z tohoto zařízení, ve vašem účtu Google však uložena zůstanou.</translation>
 <translation id="9019902583201351841">Spravováno vašimi rodiči</translation>
+<translation id="9040142327097499898">Oznámení jsou povolena. Poloha je v tomto zařízení vypnutá.</translation>
 <translation id="9050666287014529139">Heslová fráze</translation>
 <translation id="9060538597317784206">Zobrazit aplikaci <ph name="APP_NAME" /> v Obchodě Play. Hodnocení: <ph name="APP_RATING" />.</translation>
 <translation id="9063523880881406963">Vypnout funkci Verzi webu pro PC</translation>
@@ -880,6 +892,7 @@ Chcete-li získat nové licence, připojte se k internetu a přehrajte stažen
 <translation id="9086455579313502267">Nelze získat přístup k síti.</translation>
 <translation id="9099018167121903954">Staženo: <ph name="KILOBYTES" /> kB</translation>
 <translation id="9099292894781394535">Úspora dat</translation>
+<translation id="9100505651305367705">Nabízet zjednodušené zobrazení článků (pokud je podporováno)</translation>
 <translation id="9100610230175265781">Je vyžadována heslová fráze</translation>
 <translation id="9133515669113036225">Resetovat identifikační údaje zařízení</translation>
 <translation id="9133703968756164531"><ph name="ITEM_NAME" /> (<ph name="ITEM_ID" />)</translation>

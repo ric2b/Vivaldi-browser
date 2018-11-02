@@ -42,8 +42,7 @@
 #include "core/html_names.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
 #include "modules/accessibility/AXObject.h"
@@ -69,7 +68,7 @@ class WebAXSparseAttributeClientAdapter : public AXSparseAttributeClient {
  public:
   WebAXSparseAttributeClientAdapter(WebAXSparseAttributeClient& attribute_map)
       : attribute_map_(attribute_map) {}
-  virtual ~WebAXSparseAttributeClientAdapter() {}
+  virtual ~WebAXSparseAttributeClientAdapter() = default;
 
  private:
   WebAXSparseAttributeClient& attribute_map_;
@@ -1505,9 +1504,7 @@ WebAXObject WebAXObject::FromWebDocument(const WebDocument& web_document) {
   const Document* document = web_document.ConstUnwrap<Document>();
   AXObjectCacheImpl* cache =
       ToAXObjectCacheImpl(document->GetOrCreateAXObjectCache());
-  return cache ? WebAXObject(cache->GetOrCreate(
-                     ToLayoutView(LayoutAPIShim::LayoutObjectFrom(
-                         document->GetLayoutViewItem()))))
+  return cache ? WebAXObject(cache->GetOrCreate(document->GetLayoutView()))
                : WebAXObject();
 }
 

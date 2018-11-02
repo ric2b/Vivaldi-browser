@@ -7,10 +7,8 @@
 
 #include <memory>
 
-#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -21,16 +19,16 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/toolbar/test_toolbar_model.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
-#include "ios/chrome/browser/bookmarks/bookmark_new_generation_features.h"
 #import "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_paths.h"
-#include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
+#import "ios/chrome/browser/tabs/tab_model_observer.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/ui/activity_services/share_protocol.h"
 #import "ios/chrome/browser/ui/activity_services/share_to_data.h"
@@ -78,10 +76,10 @@ using web::WebStateImpl;
 
 // Private methods in BrowserViewController to test.
 @interface BrowserViewController (
-    Testing)<CRWNativeContentProvider, PassKitDialogProvider>
+    Testing)<CRWNativeContentProvider, PassKitDialogProvider, TabModelObserver>
 - (void)pageLoadStarted:(NSNotification*)notification;
 - (void)pageLoadComplete:(NSNotification*)notification;
-- (void)tabSelected:(Tab*)tab;
+- (void)tabSelected:(Tab*)tab notifyToolbar:(BOOL)notifyToolbar;
 - (void)tabDeselected:(NSNotification*)notification;
 - (void)tabCountChanged:(NSNotification*)notification;
 @end
@@ -127,7 +125,7 @@ using web::WebStateImpl;
   if ((self = [super
            initWithRepresentedObject:[OCMockObject
                                          niceMockForClass:[TabModel class]]])) {
-    _webStateList = base::MakeUnique<WebStateList>(&_webStateListDelegate);
+    _webStateList = std::make_unique<WebStateList>(&_webStateListDelegate);
   }
   return self;
 }
@@ -141,13 +139,15 @@ using web::WebStateImpl;
 @interface TestWebToolbarController : UIViewController
 - (void)setTabCount:(NSInteger)tabCount;
 - (void)updateToolbarState;
+- (void)adjustToolbarHeight;
 - (void)setShareButtonEnabled:(BOOL)enabled;
-- (id)toolsPopupController;
 - (BOOL)isOmniboxFirstResponder;
 - (BOOL)showingOmniboxPopup;
 - (void)selectedTabChanged;
-- (void)dismissToolsMenuPopup;
 - (void)cancelOmniboxEdit;
+- (void)setBackgroundAlpha:(CGFloat)alpha;
+- (void)browserStateDestroyed;
+- (void)stop;
 
 - (ToolbarButtonUpdater*)buttonUpdater;
 - (void)setToolsMenuStateProvider:(id)provider;
@@ -162,11 +162,11 @@ using web::WebStateImpl;
 - (void)updateToolbarState {
   return;
 }
-- (void)setShareButtonEnabled:(BOOL)enabled {
+- (void)adjustToolbarHeight {
   return;
 }
-- (id)toolsPopupController {
-  return nil;
+- (void)setShareButtonEnabled:(BOOL)enabled {
+  return;
 }
 - (BOOL)isOmniboxFirstResponder {
   return NO;
@@ -175,9 +175,6 @@ using web::WebStateImpl;
   return NO;
 }
 - (void)selectedTabChanged {
-  return;
-}
-- (void)dismissToolsMenuPopup {
   return;
 }
 - (void)cancelOmniboxEdit {
@@ -195,6 +192,15 @@ using web::WebStateImpl;
 - (void)start {
   return;
 }
+- (void)setBackgroundAlpha:(CGFloat)alpha {
+  return;
+}
+- (void)browserStateDestroyed {
+  return;
+}
+- (void)stop {
+  return;
+}
 @end
 
 #pragma mark -
@@ -207,13 +213,6 @@ class BrowserViewControllerTest : public BlockCleanupTest {
  protected:
   void SetUp() override {
     BlockCleanupTest::SetUp();
-    // Disable Contextual Search on the command line.
-    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kDisableContextualSearch)) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kDisableContextualSearch);
-    }
-
     // Set up a TestChromeBrowserState instance.
     TestChromeBrowserState::Builder test_cbs_builder;
     test_cbs_builder.AddTestingFactory(
@@ -264,6 +263,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     [currentTab setWebState:webStateImpl_.get()];
     webStateImpl_->SetWebController(webControllerMock);
 
+    SnapshotTabHelper::CreateForWebState(webStateImpl_.get(),
+                                         [[NSUUID UUID] UUIDString]);
+
     id passKitController =
         [OCMockObject niceMockForClass:[PKAddPassesViewController class]];
     passKitViewController_ = passKitController;
@@ -313,6 +315,7 @@ class BrowserViewControllerTest : public BlockCleanupTest {
 
   void TearDown() override {
     [[bvc_ view] removeFromSuperview];
+    [bvc_ browserStateDestroyed];
     [bvc_ shutdown];
 
     BlockCleanupTest::TearDown();
@@ -334,36 +337,10 @@ class BrowserViewControllerTest : public BlockCleanupTest {
   UIWindow* window_;
 };
 
-// TODO(crbug.com/228714): These tests pretty much only tested that BVC passed
-// notifications on to the toolbar, and that the toolbar worked correctly. The
-// former should be an integration test, and the latter should be a toolbar
-// test.  Leaving DISABLED_ for now to remind us to move them to toolbar tests.
-TEST_F(BrowserViewControllerTest, DISABLED_TestPageLoadStarted) {
-  NSDictionary* userInfoWithThisTab =
-      [NSDictionary dictionaryWithObject:tab_ forKey:kTabModelTabKey];
-  NSNotification* notification = [NSNotification
-      notificationWithName:kTabModelTabWillStartLoadingNotification
-                    object:nil
-                  userInfo:userInfoWithThisTab];
-  [bvc_ pageLoadStarted:notification];
-  EXPECT_TRUE([bvc_ testing_isLoading]);
-}
-
-TEST_F(BrowserViewControllerTest, DISABLED_TestPageLoadComplete) {
-  NSDictionary* userInfoWithThisTab =
-      [NSDictionary dictionaryWithObject:tab_ forKey:kTabModelTabKey];
-  NSNotification* notification = [NSNotification
-      notificationWithName:kTabModelTabDidFinishLoadingNotification
-                    object:nil
-                  userInfo:userInfoWithThisTab];
-  [bvc_ pageLoadComplete:notification];
-  EXPECT_FALSE([bvc_ testing_isLoading]);
-}
-
 TEST_F(BrowserViewControllerTest, TestTabSelected) {
   id tabMock = (id)tab_;
   [[tabMock expect] wasShown];
-  [bvc_ tabSelected:tab_];
+  [bvc_ tabSelected:tab_ notifyToolbar:YES];
   EXPECT_EQ([[tab_ view] superview], static_cast<UIView*>([bvc_ contentArea]));
   EXPECT_OCMOCK_VERIFY(tabMock);
 }
@@ -375,7 +352,7 @@ TEST_F(BrowserViewControllerTest, TestTabSelectedIsNewTab) {
   id tabMock = (id)tab_;
   [tabMock onSelector:@selector(url) callBlockExpectation:block];
   [[tabMock expect] wasShown];
-  [bvc_ tabSelected:tab_];
+  [bvc_ tabSelected:tab_ notifyToolbar:YES];
   EXPECT_EQ([[tab_ view] superview], static_cast<UIView*>([bvc_ contentArea]));
   EXPECT_OCMOCK_VERIFY(tabMock);
 }
@@ -383,32 +360,14 @@ TEST_F(BrowserViewControllerTest, TestTabSelectedIsNewTab) {
 TEST_F(BrowserViewControllerTest, TestTabDeselected) {
   OCMockObject* tabMock = static_cast<OCMockObject*>(tab_);
   [[tabMock expect] wasHidden];
-  NSDictionary* userInfoWithThisTab =
-      [NSDictionary dictionaryWithObject:tab_ forKey:kTabModelTabKey];
-  NSNotification* notification =
-      [NSNotification notificationWithName:kTabModelTabDeselectedNotification
-                                    object:nil
-                                  userInfo:userInfoWithThisTab];
-  [bvc_ tabDeselected:notification];
+  [bvc_ tabModel:nil didDeselectTab:tab_];
   EXPECT_OCMOCK_VERIFY(tabMock);
 }
 
 TEST_F(BrowserViewControllerTest, TestNativeContentController) {
   id<CRWNativeContent> controller =
-      [bvc_ controllerForURL:GURL(kChromeUIBookmarksURL)
+      [bvc_ controllerForURL:GURL(kChromeUINewTabURL)
                     webState:webStateImpl_.get()];
-  EXPECT_TRUE(controller != nil);
-  // TODO(crbug.com/753599): When the old bookmark is gone, rewrite the
-  // following so that it will expect PageNotAvailable only.
-  if (base::FeatureList::IsEnabled(kBookmarkNewGeneration) || !IsIPadIdiom()) {
-    EXPECT_TRUE(
-        [controller isMemberOfClass:[PageNotAvailableController class]]);
-  } else {
-    EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
-  }
-
-  controller = [bvc_ controllerForURL:GURL(kChromeUINewTabURL)
-                             webState:webStateImpl_.get()];
   EXPECT_TRUE(controller != nil);
   EXPECT_TRUE([controller isMemberOfClass:[NewTabPageController class]]);
 

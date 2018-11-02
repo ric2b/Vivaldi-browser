@@ -16,8 +16,8 @@
 #include "content/browser/service_worker/service_worker_write_to_cache_job.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/resource_response.h"
 #include "net/cert/cert_status_flags.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "third_party/WebKit/common/mime_util/mime_util.h"
 
 namespace content {
@@ -31,13 +31,13 @@ ServiceWorkerScriptURLLoader::ServiceWorkerScriptURLLoader(
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    const ResourceRequest& resource_request,
-    mojom::URLLoaderClientPtr client,
+    const network::ResourceRequest& resource_request,
+    network::mojom::URLLoaderClientPtr client,
     scoped_refptr<ServiceWorkerVersion> version,
     scoped_refptr<URLLoaderFactoryGetter> loader_factory_getter,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
     : request_url_(resource_request.url),
-      resource_type_(resource_request.resource_type),
+      resource_type_(static_cast<ResourceType>(resource_request.resource_type)),
       version_(version),
       network_client_binding_(this),
       network_watcher_(FROM_HERE, mojo::SimpleWatcher::ArmingPolicy::MANUAL),
@@ -94,7 +94,7 @@ ServiceWorkerScriptURLLoader::ServiceWorkerScriptURLLoader(
                                                      cache_resource_id);
   AdvanceState(State::kStarted);
 
-  mojom::URLLoaderClientPtr network_client;
+  network::mojom::URLLoaderClientPtr network_client;
   network_client_binding_.Bind(mojo::MakeRequest(&network_client));
   loader_factory_getter->GetNetworkFactory()->CreateLoaderAndStart(
       mojo::MakeRequest(&network_loader_), routing_id, request_id, options,
@@ -106,6 +106,10 @@ ServiceWorkerScriptURLLoader::~ServiceWorkerScriptURLLoader() = default;
 void ServiceWorkerScriptURLLoader::FollowRedirect() {
   // Resource requests for service worker scripts should not follow redirects.
   // See comments in OnReceiveRedirect().
+  NOTREACHED();
+}
+
+void ServiceWorkerScriptURLLoader::ProceedWithResponse() {
   NOTREACHED();
 }
 
@@ -125,9 +129,9 @@ void ServiceWorkerScriptURLLoader::ResumeReadingBodyFromNet() {
 // URLLoaderClient for network loader ------------------------------------------
 
 void ServiceWorkerScriptURLLoader::OnReceiveResponse(
-    const ResourceResponseHead& response_head,
+    const network::ResourceResponseHead& response_head,
     const base::Optional<net::SSLInfo>& ssl_info,
-    mojom::DownloadedTempFilePtr downloaded_file) {
+    network::mojom::DownloadedTempFilePtr downloaded_file) {
   if (!version_->context() || version_->is_redundant()) {
     CommitCompleted(network::URLLoaderCompletionStatus(net::ERR_FAILED));
     return;
@@ -206,7 +210,7 @@ void ServiceWorkerScriptURLLoader::OnReceiveResponse(
 
 void ServiceWorkerScriptURLLoader::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
-    const ResourceResponseHead& response_head) {
+    const network::ResourceResponseHead& response_head) {
   // Resource requests for service worker scripts should not follow redirects.
   //
   // Step 7.5: "Set request's redirect mode to "error"."

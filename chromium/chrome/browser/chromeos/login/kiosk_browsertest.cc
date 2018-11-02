@@ -239,7 +239,7 @@ bool IsAppInstalled(const std::string& app_id, const std::string& version) {
       extensions::ExtensionSystem::Get(app_profile)
           ->extension_service()
           ->GetInstalledExtension(app_id);
-  return app != nullptr && version == app->version()->GetString();
+  return app != nullptr && version == app->version().GetString();
 }
 
 extensions::Manifest::Type GetAppType(const std::string& app_id) {
@@ -617,7 +617,7 @@ class KioskTest : public OobeBaseTest {
   }
 
   const base::Version& GetInstalledAppVersion() {
-    return *GetInstalledApp()->version();
+    return GetInstalledApp()->version();
   }
 
   extensions::Manifest::Location GetInstalledAppLocation() {
@@ -2313,8 +2313,8 @@ class KioskVirtualKeyboardTest : public KioskTest {
 IN_PROC_BROWSER_TEST_F(KioskVirtualKeyboardTest, RestrictFeatures) {
   // Mock existence of audio input.
   // We cannot do this in SetUp because it's overriden in RunTestOnMainThread.
-  mock_audio_manager_ = base::MakeUnique<media::MockAudioManager>(
-      base::MakeUnique<media::TestAudioThread>());
+  mock_audio_manager_ = std::make_unique<media::MockAudioManager>(
+      std::make_unique<media::TestAudioThread>());
   mock_audio_manager_->SetHasInputDevices(true);
 
   set_test_app_id(kTestVirtualKeyboardKioskApp);
@@ -2335,12 +2335,6 @@ class KioskHiddenWebUITest : public KioskTest,
                              public ash::WallpaperControllerObserver {
  public:
   KioskHiddenWebUITest() : wallpaper_loaded_(false) {}
-
-  // KioskTest overrides:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    KioskTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kDisableBootAnimation);
-  }
 
   void SetUpOnMainThread() override {
     LoginDisplayHostWebUI::DisableRestrictiveProxyCheckForTest();

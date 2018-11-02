@@ -52,6 +52,16 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Called when focus is returned from ash::SystemTray.
+   */
+  Oobe.focusReturned = function() {
+    if (Oobe.getInstance().currentScreen &&
+        Oobe.getInstance().currentScreen.onFocusReturned) {
+      Oobe.getInstance().currentScreen.onFocusReturned();
+    }
+  };
+
+  /**
    * Handle accelerators. These are passed from native code instead of a JS
    * event handler in order to make sure that embedded iframes cannot swallow
    * them.
@@ -303,6 +313,14 @@ cr.define('cr.ui', function() {
   Oobe.skipToLoginForTesting = function() {
     Oobe.disableSigninUI();
     chrome.send('skipToLoginForTesting');
+  };
+
+  /**
+   * Skip to update screen for telemetry.
+   */
+  Oobe.skipToUpdateForTesting = function() {
+    Oobe.disableSigninUI();
+    chrome.send('skipToUpdateForTesting');
   };
 
   /**

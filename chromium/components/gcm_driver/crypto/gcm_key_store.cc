@@ -316,6 +316,11 @@ void GCMKeyStore::DidLoadKeys(
   for (const EncryptionData& entry : *entries) {
     DCHECK_EQ(1, entry.keys_size());
 
+    // This is a defensive check added for https://crbug.com/818594 and only
+    // exists on the M65 branch.
+    if (!entry.keys_size())
+      continue;
+
     std::string authorized_entity;
     if (entry.has_authorized_entity())
       authorized_entity = entry.authorized_entity();

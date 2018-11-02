@@ -5,12 +5,7 @@
 #include "net/proxy/proxy_config_service_linux.h"
 
 #include <errno.h>
-#if defined(USE_GCONF)
-#include <gconf/gconf-client.h>
-#endif  // defined(USE_GCONF)
 #include <limits.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <sys/inotify.h>
 #include <unistd.h>
 
@@ -18,8 +13,6 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/compiler_specific.h"
-#include "base/debug/leak_annotations.h"
 #include "base/files/file_descriptor_watcher_posix.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -36,14 +29,11 @@
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/timer/timer.h"
-#include "net/base/net_errors.h"
-#include "net/http/http_util.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_server.h"
-#include "url/url_canon.h"
 
 #if defined(USE_GIO)
-#include "library_loaders/libgio.h"  // nogncheck
+#include <gio/gio.h>
 #endif  // defined(USE_GIO)
 
 namespace net {
@@ -94,8 +84,7 @@ std::string FixupProxyHostScheme(ProxyServer::Scheme scheme,
 
 }  // namespace
 
-ProxyConfigServiceLinux::Delegate::~Delegate() {
-}
+ProxyConfigServiceLinux::Delegate::~Delegate() = default;
 
 bool ProxyConfigServiceLinux::Delegate::GetProxyFromEnvVarForScheme(
     base::StringPiece variable,
@@ -204,324 +193,8 @@ namespace {
 
 const int kDebounceTimeoutMilliseconds = 250;
 
-#if defined(USE_GCONF)
-// This setting getter uses gconf, as used in GNOME 2 and some GNOME 3 desktops.
-class SettingGetterImplGConf : public ProxyConfigServiceLinux::SettingGetter {
- public:
-  SettingGetterImplGConf()
-      : client_(nullptr),
-        system_proxy_id_(0),
-        system_http_proxy_id_(0),
-        notify_delegate_(nullptr),
-        debounce_timer_(new base::OneShotTimer()) {}
-
-  ~SettingGetterImplGConf() override {
-    // client_ should have been released before now, from
-    // Delegate::OnDestroy(), while running on the UI thread. However
-    // on exiting the process, it may happen that Delegate::OnDestroy()
-    // task is left pending on the glib loop after the loop was quit,
-    // and pending tasks may then be deleted without being run.
-    if (client_) {
-      // gconf client was not cleaned up.
-      if (task_runner_->RunsTasksInCurrentSequence()) {
-        // We are on the UI thread so we can clean it safely. This is
-        // the case at least for ui_tests running under Valgrind in
-        // bug 16076.
-        VLOG(1) << "~SettingGetterImplGConf: releasing gconf client";
-        ShutDown();
-      } else {
-        // This is very bad! We are deleting the setting getter but we're not on
-        // the UI thread. This is not supposed to happen: the setting getter is
-        // owned by the proxy config service's delegate, which is supposed to be
-        // destroyed on the UI thread only. We will get change notifications to
-        // a deleted object if we continue here, so fail now.
-        LOG(FATAL) << "~SettingGetterImplGConf: deleting on wrong thread!";
-      }
-    }
-    DCHECK(!client_);
-  }
-
-  bool Init(const scoped_refptr<base::SingleThreadTaskRunner>& glib_task_runner)
-      override {
-    DCHECK(glib_task_runner->RunsTasksInCurrentSequence());
-    DCHECK(!client_);
-    DCHECK(!task_runner_.get());
-    task_runner_ = glib_task_runner;
-
-    client_ = gconf_client_get_default();
-    if (!client_) {
-      // It's not clear whether/when this can return NULL.
-      LOG(ERROR) << "Unable to create a gconf client";
-      task_runner_ = nullptr;
-      return false;
-    }
-    GError* error = nullptr;
-    bool added_system_proxy = false;
-    // We need to add the directories for which we'll be asking
-    // for notifications, and we might as well ask to preload them.
-    // These need to be removed again in ShutDown(); we are careful
-    // here to only leave client_ non-NULL if both have been added.
-    gconf_client_add_dir(client_, "/system/proxy",
-                         GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
-    if (!error) {
-      added_system_proxy = true;
-      gconf_client_add_dir(client_, "/system/http_proxy",
-                           GCONF_CLIENT_PRELOAD_ONELEVEL, &error);
-    }
-    if (!error)
-      return true;
-
-    LOG(ERROR) << "Error requesting gconf directory: " << error->message;
-    g_error_free(error);
-    if (added_system_proxy)
-      gconf_client_remove_dir(client_, "/system/proxy", nullptr);
-    g_object_unref(client_);
-    client_ = nullptr;
-    task_runner_ = nullptr;
-    return false;
-  }
-
-  void ShutDown() override {
-    if (client_) {
-      DCHECK(task_runner_->RunsTasksInCurrentSequence());
-      // We must explicitly disable gconf notifications here, because the gconf
-      // client will be shared between all setting getters, and they do not all
-      // have the same lifetimes. (For instance, incognito sessions get their
-      // own, which is destroyed when the session ends.)
-      gconf_client_notify_remove(client_, system_http_proxy_id_);
-      gconf_client_notify_remove(client_, system_proxy_id_);
-      gconf_client_remove_dir(client_, "/system/http_proxy", nullptr);
-      gconf_client_remove_dir(client_, "/system/proxy", nullptr);
-      g_object_unref(client_);
-      client_ = nullptr;
-      task_runner_ = nullptr;
-    }
-    debounce_timer_.reset();
-  }
-
-  bool SetUpNotifications(
-      ProxyConfigServiceLinux::Delegate* delegate) override {
-    DCHECK(client_);
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    GError* error = nullptr;
-    notify_delegate_ = delegate;
-    // We have to keep track of the IDs returned by gconf_client_notify_add() so
-    // that we can remove them in ShutDown(). (Otherwise, notifications will be
-    // delivered to this object after it is deleted, which is bad, m'kay?)
-    system_proxy_id_ = gconf_client_notify_add(client_, "/system/proxy",
-                                               OnGConfChangeNotification, this,
-                                               nullptr, &error);
-    if (!error) {
-      system_http_proxy_id_ = gconf_client_notify_add(
-          client_, "/system/http_proxy", OnGConfChangeNotification, this,
-          nullptr, &error);
-    }
-    if (!error) {
-      // Simulate a change to avoid possibly losing updates before this point.
-      OnChangeNotification();
-      return true;
-    }
-
-    LOG(ERROR) << "Error requesting gconf notifications: " << error->message;
-    g_error_free(error);
-    ShutDown();
-    return false;
-  }
-
-  const scoped_refptr<base::SequencedTaskRunner>& GetNotificationTaskRunner()
-      override {
-    return task_runner_;
-  }
-
-  ProxyConfigSource GetConfigSource() override {
-    return PROXY_CONFIG_SOURCE_GCONF;
-  }
-
-  bool GetString(StringSetting key, std::string* result) override {
-    switch (key) {
-      case PROXY_MODE:
-        return GetStringByPath("/system/proxy/mode", result);
-      case PROXY_AUTOCONF_URL:
-        return GetStringByPath("/system/proxy/autoconfig_url", result);
-      case PROXY_HTTP_HOST:
-        return GetStringByPath("/system/http_proxy/host", result);
-      case PROXY_HTTPS_HOST:
-        return GetStringByPath("/system/proxy/secure_host", result);
-      case PROXY_FTP_HOST:
-        return GetStringByPath("/system/proxy/ftp_host", result);
-      case PROXY_SOCKS_HOST:
-        return GetStringByPath("/system/proxy/socks_host", result);
-    }
-    return false;  // Placate compiler.
-  }
-  bool GetBool(BoolSetting key, bool* result) override {
-    switch (key) {
-      case PROXY_USE_HTTP_PROXY:
-        return GetBoolByPath("/system/http_proxy/use_http_proxy", result);
-      case PROXY_USE_SAME_PROXY:
-        return GetBoolByPath("/system/http_proxy/use_same_proxy", result);
-      case PROXY_USE_AUTHENTICATION:
-        return GetBoolByPath("/system/http_proxy/use_authentication", result);
-    }
-    return false;  // Placate compiler.
-  }
-  bool GetInt(IntSetting key, int* result) override {
-    switch (key) {
-      case PROXY_HTTP_PORT:
-        return GetIntByPath("/system/http_proxy/port", result);
-      case PROXY_HTTPS_PORT:
-        return GetIntByPath("/system/proxy/secure_port", result);
-      case PROXY_FTP_PORT:
-        return GetIntByPath("/system/proxy/ftp_port", result);
-      case PROXY_SOCKS_PORT:
-        return GetIntByPath("/system/proxy/socks_port", result);
-    }
-    return false;  // Placate compiler.
-  }
-  bool GetStringList(StringListSetting key,
-                     std::vector<std::string>* result) override {
-    switch (key) {
-      case PROXY_IGNORE_HOSTS:
-        return GetStringListByPath("/system/http_proxy/ignore_hosts", result);
-    }
-    return false;  // Placate compiler.
-  }
-
-  bool BypassListIsReversed() override {
-    // This is a KDE-specific setting.
-    return false;
-  }
-
-  bool MatchHostsUsingSuffixMatching() override { return false; }
-
- private:
-  bool GetStringByPath(base::StringPiece key, std::string* result) {
-    DCHECK(client_);
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    GError* error = nullptr;
-    gchar* value = gconf_client_get_string(client_, key.data(), &error);
-    if (HandleGError(error, key.data()))
-      return false;
-    if (!value)
-      return false;
-    *result = value;
-    g_free(value);
-    return true;
-  }
-  bool GetBoolByPath(base::StringPiece key, bool* result) {
-    DCHECK(client_);
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    GError* error = nullptr;
-    // We want to distinguish unset values from values defaulting to
-    // false. For that we need to use the type-generic
-    // gconf_client_get() rather than gconf_client_get_bool().
-    GConfValue* gconf_value = gconf_client_get(client_, key.data(), &error);
-    if (HandleGError(error, key.data()))
-      return false;
-    if (!gconf_value) {
-      // Unset.
-      return false;
-    }
-    if (gconf_value->type != GCONF_VALUE_BOOL) {
-      gconf_value_free(gconf_value);
-      return false;
-    }
-    gboolean bool_value = gconf_value_get_bool(gconf_value);
-    *result = static_cast<bool>(bool_value);
-    gconf_value_free(gconf_value);
-    return true;
-  }
-  bool GetIntByPath(base::StringPiece key, int* result) {
-    DCHECK(client_);
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    GError* error = nullptr;
-    int value = gconf_client_get_int(client_, key.data(), &error);
-    if (HandleGError(error, key.data()))
-      return false;
-    // We don't bother to distinguish an unset value because callers
-    // don't care. 0 is returned if unset.
-    *result = value;
-    return true;
-  }
-  bool GetStringListByPath(base::StringPiece key,
-                           std::vector<std::string>* result) {
-    DCHECK(client_);
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    GError* error = nullptr;
-    GSList* list =
-        gconf_client_get_list(client_, key.data(), GCONF_VALUE_STRING, &error);
-    if (HandleGError(error, key.data()))
-      return false;
-    if (!list)
-      return false;
-    for (GSList *it = list; it; it = it->next) {
-      result->push_back(static_cast<char*>(it->data));
-      g_free(it->data);
-    }
-    g_slist_free(list);
-    return true;
-  }
-
-  // Logs and frees a glib error. Returns false if there was no error
-  // (error is NULL).
-  bool HandleGError(GError* error, base::StringPiece key) {
-    if (!error)
-      return false;
-
-    LOG(ERROR) << "Error getting gconf value for " << key << ": "
-               << error->message;
-    g_error_free(error);
-    return true;
-  }
-
-  // This is the callback from the debounce timer.
-  void OnDebouncedNotification() {
-    DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    CHECK(notify_delegate_);
-    // Forward to a method on the proxy config service delegate object.
-    notify_delegate_->OnCheckProxyConfigSettings();
-  }
-
-  void OnChangeNotification() {
-    // We don't use Reset() because the timer may not yet be running.
-    // (In that case Stop() is a no-op.)
-    debounce_timer_->Stop();
-    debounce_timer_->Start(FROM_HERE,
-        base::TimeDelta::FromMilliseconds(kDebounceTimeoutMilliseconds),
-        this, &SettingGetterImplGConf::OnDebouncedNotification);
-  }
-
-  // gconf notification callback, dispatched on the default glib main loop.
-  static void OnGConfChangeNotification(GConfClient* client, guint cnxn_id,
-                                        GConfEntry* entry, gpointer user_data) {
-    VLOG(1) << "gconf change notification for key "
-            << gconf_entry_get_key(entry);
-    // We don't track which key has changed, just that something did change.
-    SettingGetterImplGConf* setting_getter =
-        reinterpret_cast<SettingGetterImplGConf*>(user_data);
-    setting_getter->OnChangeNotification();
-  }
-
-  GConfClient* client_;
-  // These ids are the values returned from gconf_client_notify_add(), which we
-  // will need in order to later call gconf_client_notify_remove().
-  guint system_proxy_id_;
-  guint system_http_proxy_id_;
-
-  ProxyConfigServiceLinux::Delegate* notify_delegate_;
-  std::unique_ptr<base::OneShotTimer> debounce_timer_;
-
-  // Task runner for the thread that we make gconf calls on. It should
-  // be the UI thread and all our methods should be called on this
-  // thread. Only for assertions.
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
-
-  DISALLOW_COPY_AND_ASSIGN(SettingGetterImplGConf);
-};
-#endif  // defined(USE_GCONF)
-
 #if defined(USE_GIO)
-const char kProxyGConfSchema[] = "org.gnome.system.proxy";
+const char kProxyGSettingsSchema[] = "org.gnome.system.proxy";
 
 // This setting getter uses gsettings, as used in most GNOME 3 desktops.
 class SettingGetterImplGSettings
@@ -544,7 +217,7 @@ class SettingGetterImplGSettings
     // after the loop was quit, and pending tasks may then be deleted
     // without being run.
     if (client_) {
-      // gconf client was not cleaned up.
+      // gsettings client was not cleaned up.
       if (task_runner_->RunsTasksInCurrentSequence()) {
         // We are on the UI thread so we can clean it safely. This is
         // the case at least for ui_tests running under Valgrind in
@@ -559,18 +232,8 @@ class SettingGetterImplGSettings
     DCHECK(!client_);
   }
 
-  bool SchemaExists(base::StringPiece schema_name) {
-    const gchar* const* schemas = libgio_loader_.g_settings_list_schemas();
-    while (*schemas) {
-      if (!strcmp(schema_name.data(), static_cast<const char*>(*schemas)))
-        return true;
-      schemas++;
-    }
-    return false;
-  }
-
-  // LoadAndCheckVersion() must be called *before* Init()!
-  bool LoadAndCheckVersion(base::Environment* env);
+  // CheckVersion() must be called *before* Init()!
+  bool CheckVersion(base::Environment* env);
 
   bool Init(const scoped_refptr<base::SingleThreadTaskRunner>& glib_task_runner)
       override {
@@ -578,18 +241,19 @@ class SettingGetterImplGSettings
     DCHECK(!client_);
     DCHECK(!task_runner_.get());
 
-    if (!SchemaExists(kProxyGConfSchema) ||
-        !(client_ = libgio_loader_.g_settings_new(kProxyGConfSchema))) {
+    if (!g_settings_schema_source_lookup(g_settings_schema_source_get_default(),
+                                         kProxyGSettingsSchema, FALSE) ||
+        !(client_ = g_settings_new(kProxyGSettingsSchema))) {
       // It's not clear whether/when this can return NULL.
       LOG(ERROR) << "Unable to create a gsettings client";
       return false;
     }
     task_runner_ = glib_task_runner;
     // We assume these all work if the above call worked.
-    http_client_ = libgio_loader_.g_settings_get_child(client_, "http");
-    https_client_ = libgio_loader_.g_settings_get_child(client_, "https");
-    ftp_client_ = libgio_loader_.g_settings_get_child(client_, "ftp");
-    socks_client_ = libgio_loader_.g_settings_get_child(client_, "socks");
+    http_client_ = g_settings_get_child(client_, "http");
+    https_client_ = g_settings_get_child(client_, "https");
+    ftp_client_ = g_settings_get_child(client_, "ftp");
+    socks_client_ = g_settings_get_child(client_, "socks");
     DCHECK(http_client_ && https_client_ && ftp_client_ && socks_client_);
     return true;
   }
@@ -714,7 +378,7 @@ class SettingGetterImplGSettings
                        base::StringPiece key,
                        std::string* result) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    gchar* value = libgio_loader_.g_settings_get_string(client, key.data());
+    gchar* value = g_settings_get_string(client, key.data());
     if (!value)
       return false;
     *result = value;
@@ -723,20 +387,19 @@ class SettingGetterImplGSettings
   }
   bool GetBoolByPath(GSettings* client, base::StringPiece key, bool* result) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    *result = static_cast<bool>(
-        libgio_loader_.g_settings_get_boolean(client, key.data()));
+    *result = static_cast<bool>(g_settings_get_boolean(client, key.data()));
     return true;
   }
   bool GetIntByPath(GSettings* client, base::StringPiece key, int* result) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    *result = libgio_loader_.g_settings_get_int(client, key.data());
+    *result = g_settings_get_int(client, key.data());
     return true;
   }
   bool GetStringListByPath(GSettings* client,
                            base::StringPiece key,
                            std::vector<std::string>* result) {
     DCHECK(task_runner_->RunsTasksInCurrentSequence());
-    gchar** list = libgio_loader_.g_settings_get_strv(client, key.data());
+    gchar** list = g_settings_get_strv(client, key.data());
     if (!list)
       return false;
     for (size_t i = 0; list[i]; ++i) {
@@ -787,69 +450,24 @@ class SettingGetterImplGSettings
   // thread. Only for assertions.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
-  LibGioLoader libgio_loader_;
-
   DISALLOW_COPY_AND_ASSIGN(SettingGetterImplGSettings);
 };
 
-bool SettingGetterImplGSettings::LoadAndCheckVersion(
+bool SettingGetterImplGSettings::CheckVersion(
     base::Environment* env) {
-  // LoadAndCheckVersion() must be called *before* Init()!
+  // CheckVersion() must be called *before* Init()!
   DCHECK(!client_);
 
-  // The APIs to query gsettings were introduced after the minimum glib
-  // version we target, so we can't link directly against them. We load them
-  // dynamically at runtime, and if they don't exist, return false here. (We
-  // support linking directly via gyp flags though.) Additionally, even when
-  // they are present, we do two additional checks to make sure we should use
-  // them and not gconf. First, we attempt to load the schema for proxy
-  // settings. Second, we check for the program that was used in older
-  // versions of GNOME to configure proxy settings, and return false if it
-  // exists. Some distributions (e.g. Ubuntu 11.04) have the API and schema
-  // but don't use gsettings for proxy settings, but they do have the old
-  // binary, so we detect these systems that way.
-
-  {
-    // TODO(phajdan.jr): Redesign the code to load library on different thread.
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-
-    // Try also without .0 at the end; on some systems this may be required.
-    if (!libgio_loader_.Load("libgio-2.0.so.0") &&
-        !libgio_loader_.Load("libgio-2.0.so")) {
-      VLOG(1) << "Cannot load gio library. Will fall back to gconf.";
-      return false;
-    }
-
-    // g_type_init will be deprecated in 2.36. 2.35 is the development
-    // version for 2.36, hence do not call g_type_init starting 2.35.
-    // http://developer.gnome.org/gobject/unstable/gobject-Type-Information.html#g-type-init
-    if (libgio_loader_.glib_check_version(2, 35, 0)) {
-      libgio_loader_.g_type_init();
-    }
-  }
-
   GSettings* client = nullptr;
-  if (SchemaExists(kProxyGConfSchema)) {
-    ANNOTATE_SCOPED_MEMORY_LEAK;  // http://crbug.com/380782
-    client = libgio_loader_.g_settings_new(kProxyGConfSchema);
+  if (g_settings_schema_source_lookup(g_settings_schema_source_get_default(),
+                                      kProxyGSettingsSchema, FALSE)) {
+    client = g_settings_new(kProxyGSettingsSchema);
   }
   if (!client) {
-    VLOG(1) << "Cannot create gsettings client. Will fall back to gconf.";
+    VLOG(1) << "Cannot create gsettings client.";
     return false;
   }
   g_object_unref(client);
-
-  // Yes, we're on the UI thread. Yes, we're accessing the file system.
-  // Sadly, we don't have much choice. We need the proxy settings and we
-  // need them now, and to figure out where to get them, we have to check
-  // for this binary. See http://crbug.com/69057 for additional details.
-  {
-    base::ThreadRestrictions::ScopedAllowIO allow_io;
-    if (base::ExecutableExistsInPath(env, "gnome-network-properties")) {
-      VLOG(1) << "Found gnome-network-properties. Will fall back to gconf.";
-      return false;
-    }
-  }
 
   VLOG(1) << "All gsettings tests OK. Will get proxy config from gsettings.";
   return true;
@@ -865,7 +483,7 @@ int StringToIntOrDefault(base::StringPiece value, int default_value) {
   return default_value;
 }
 
-// This is the KDE version that reads kioslaverc and simulates gconf.
+// This is the KDE version that reads kioslaverc and simulates gsettings.
 // Doing this allows the main Delegate code, as well as the unit tests
 // for it, to stay the same - and the settings map fairly well besides.
 class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter {
@@ -906,10 +524,10 @@ class SettingGetterImplKDE : public ProxyConfigServiceLinux::SettingGetter {
         // back as well. So if there is a .kde4 directory, check the timestamps
         // of the config directories within and use the newest one.
         // Note that we should currently be running in the UI thread, because in
-        // the gconf version, that is the only thread that can access the proxy
-        // settings (a gconf restriction). As noted below, the initial read of
-        // the proxy settings will be done in this thread anyway, so we check
-        // for .kde4 here in this thread as well.
+        // the gsettings version, that is the only thread that can access the
+        // proxy settings (a gsettings restriction). As noted below, the initial
+        // read of the proxy settings will be done in this thread anyway, so we
+        // check for .kde4 here in this thread as well.
         base::FilePath kde3_path = base::FilePath(home).Append(".kde");
         base::FilePath kde3_config = KDEHomeToConfigPath(kde3_path);
         base::FilePath kde4_path = base::FilePath(home).Append(".kde4");
@@ -1379,7 +997,7 @@ bool ProxyConfigServiceLinux::Delegate::GetProxyFromSettings(
     host += ":" + base::IntToString(port);
   }
 
-  // gconf settings do not appear to distinguish between SOCKS version. We
+  // gsettings settings do not appear to distinguish between SOCKS version. We
   // default to version 5. For more information on this policy decision, see:
   // http://code.google.com/p/chromium/issues/detail?id=55912#c2
   ProxyServer::Scheme scheme = (host_key == SettingGetter::PROXY_SOCKS_HOST) ?
@@ -1398,9 +1016,8 @@ bool ProxyConfigServiceLinux::Delegate::GetConfigFromSettings(
     ProxyConfig* config) {
   std::string mode;
   if (!setting_getter_->GetString(SettingGetter::PROXY_MODE, &mode)) {
-    // We expect this to always be set, so if we don't see it then we
-    // probably have a gconf/gsettings problem, and so we don't have a valid
-    // proxy config.
+    // We expect this to always be set, so if we don't see it then we probably
+    // have a gsettings problem, and so we don't have a valid proxy config.
     return false;
   }
   if (mode == "none") {
@@ -1538,6 +1155,7 @@ ProxyConfigServiceLinux::Delegate::Delegate(
     : env_var_getter_(std::move(env_var_getter)) {
   // Figure out which SettingGetterImpl to use, if any.
   switch (base::nix::GetDesktopEnvironment(env_var_getter_.get())) {
+    case base::nix::DESKTOP_ENVIRONMENT_CINNAMON:
     case base::nix::DESKTOP_ENVIRONMENT_GNOME:
     case base::nix::DESKTOP_ENVIRONMENT_PANTHEON:
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
@@ -1546,15 +1164,10 @@ ProxyConfigServiceLinux::Delegate::Delegate(
       std::unique_ptr<SettingGetterImplGSettings> gs_getter(
           new SettingGetterImplGSettings());
       // We have to load symbols and check the GNOME version in use to decide
-      // if we should use the gsettings getter. See LoadAndCheckVersion().
-      if (gs_getter->LoadAndCheckVersion(env_var_getter_.get()))
+      // if we should use the gsettings getter. See CheckVersion().
+      if (gs_getter->CheckVersion(env_var_getter_.get()))
         setting_getter_ = std::move(gs_getter);
       }
-#endif
-#if defined(USE_GCONF)
-      // Fall back on gconf if gsettings is unavailable or incorrect.
-      if (!setting_getter_)
-        setting_getter_.reset(new SettingGetterImplGConf());
 #endif
       break;
     case base::nix::DESKTOP_ENVIRONMENT_KDE3:
@@ -1578,7 +1191,7 @@ void ProxyConfigServiceLinux::Delegate::SetUpAndFetchInitialConfig(
     const scoped_refptr<base::SingleThreadTaskRunner>& glib_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& main_task_runner) {
   // We should be running on the default glib main loop thread right
-  // now. gconf can only be accessed from this thread.
+  // now. gsettings can only be accessed from this thread.
   DCHECK(glib_task_runner->RunsTasksInCurrentSequence());
   glib_task_runner_ = glib_task_runner;
   main_task_runner_ = main_task_runner;
@@ -1596,7 +1209,7 @@ void ProxyConfigServiceLinux::Delegate::SetUpAndFetchInitialConfig(
   // the ProxyService.
 
   // Note: It would be nice to prioritize environment variables
-  // and only fall back to gconf if env vars were unset. But
+  // and only fall back to gsettings if env vars were unset. But
   // gnome-terminal "helpfully" sets http_proxy and no_proxy, and it
   // does so even if the proxy mode is set to auto, which would
   // mislead us.
@@ -1609,7 +1222,7 @@ void ProxyConfigServiceLinux::Delegate::SetUpAndFetchInitialConfig(
     VLOG(1) << "Obtained proxy settings from "
             << ProxyConfigSourceToString(cached_config_.source());
 
-    // If gconf proxy mode is "none", meaning direct, then we take
+    // If gsettings proxy mode is "none", meaning direct, then we take
     // that to be a valid config and will not check environment
     // variables. The alternative would have been to look for a proxy
     // whereever we can find one.
@@ -1656,7 +1269,7 @@ void ProxyConfigServiceLinux::Delegate::SetUpAndFetchInitialConfig(
 }
 
 // Depending on the SettingGetter in use, this method will be called
-// on either the UI thread (GConf) or the file thread (KDE).
+// on either the UI thread (GSettings) or the file thread (KDE).
 void ProxyConfigServiceLinux::Delegate::SetUpNotifications() {
   scoped_refptr<base::SequencedTaskRunner> required_loop =
       setting_getter_->GetNotificationTaskRunner();
@@ -1698,7 +1311,7 @@ ProxyConfigService::ConfigAvailability
 }
 
 // Depending on the SettingGetter in use, this method will be called
-// on either the UI thread (GConf) or the file thread (KDE).
+// on either the UI thread (GSettings) or the file thread (KDE).
 void ProxyConfigServiceLinux::Delegate::OnCheckProxyConfigSettings() {
   scoped_refptr<base::SequencedTaskRunner> required_loop =
       setting_getter_->GetNotificationTaskRunner();

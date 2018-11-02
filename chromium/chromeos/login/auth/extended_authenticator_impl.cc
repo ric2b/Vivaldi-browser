@@ -11,6 +11,7 @@
 #include "base/strings/string_util.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/cryptohome_client.h"
@@ -90,7 +91,7 @@ void ExtendedAuthenticatorImpl::CreateMount(
   cryptohome::Identification id(account_id);
   cryptohome::MountRequest mount;
   for (size_t i = 0; i < keys.size(); i++) {
-    KeyDefinitionToKey(keys[i], mount.mutable_create()->add_keys());
+    cryptohome::KeyDefinitionToKey(keys[i], mount.mutable_create()->add_keys());
   }
   UserContext context(account_id);
   Key key(keys.front().secret);
@@ -102,15 +103,10 @@ void ExtendedAuthenticatorImpl::CreateMount(
     auth_key->mutable_data()->set_label(key.GetLabel());
   }
   auth_key->set_secret(key.GetSecret());
-  cryptohome::HomedirMethods::GetInstance()->MountEx(
-      id,
-      auth,
-      mount,
-      base::Bind(&ExtendedAuthenticatorImpl::OnMountComplete,
-                 this,
-                 "MountEx",
-                 context,
-                 success_callback));
+  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
+      id, auth, mount,
+      base::BindOnce(&ExtendedAuthenticatorImpl::OnMountComplete, this,
+                     "MountEx", context, success_callback));
 }
 
 void ExtendedAuthenticatorImpl::AddKey(const UserContext& context,
@@ -188,12 +184,12 @@ void ExtendedAuthenticatorImpl::DoAuthenticateToMount(
     const UserContext& user_context) {
   RecordStartMarker("MountEx");
   const Key* const key = user_context.GetKey();
-  cryptohome::HomedirMethods::GetInstance()->MountEx(
+  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
       cryptohome::Identification(user_context.GetAccountId()),
       cryptohome::CreateAuthorizationRequest(key->GetLabel(), key->GetSecret()),
       cryptohome::MountRequest(),
-      base::Bind(&ExtendedAuthenticatorImpl::OnMountComplete, this, "MountEx",
-                 user_context, success_callback));
+      base::BindOnce(&ExtendedAuthenticatorImpl::OnMountComplete, this,
+                     "MountEx", user_context, success_callback));
 }
 
 void ExtendedAuthenticatorImpl::DoAuthenticateToCheck(
@@ -216,7 +212,7 @@ void ExtendedAuthenticatorImpl::DoAddKey(const cryptohome::KeyDefinition& key,
   RecordStartMarker("AddKeyEx");
 
   cryptohome::AddKeyRequest request;
-  KeyDefinitionToKey(key, request.mutable_key());
+  cryptohome::KeyDefinitionToKey(key, request.mutable_key());
   request.set_clobber_if_exists(clobber_if_exists);
   const Key* const auth_key = user_context.GetKey();
   cryptohome::HomedirMethods::GetInstance()->AddKeyEx(
@@ -269,17 +265,19 @@ void ExtendedAuthenticatorImpl::OnMountComplete(
     const std::string& time_marker,
     const UserContext& user_context,
     const ResultCallback& success_callback,
-    bool success,
-    cryptohome::MountError return_code,
-    const std::string& mount_hash) {
+    base::Optional<cryptohome::BaseReply> reply) {
+  cryptohome::MountError return_code = cryptohome::BaseReplyToMountError(reply);
   RecordEndMarker(time_marker);
-  UserContext copy = user_context;
-  copy.SetUserIDHash(mount_hash);
   if (return_code == cryptohome::MOUNT_ERROR_NONE) {
+    const std::string& mount_hash =
+        cryptohome::BaseReplyToMountHash(reply.value());
     if (!success_callback.is_null())
       success_callback.Run(mount_hash);
-    if (old_consumer_)
+    if (old_consumer_) {
+      UserContext copy = user_context;
+      copy.SetUserIDHash(mount_hash);
       old_consumer_->OnAuthSuccess(copy);
+    }
     return;
   }
   AuthState state = FAILED_MOUNT;
@@ -288,11 +286,12 @@ void ExtendedAuthenticatorImpl::OnMountComplete(
       return_code == cryptohome::MOUNT_ERROR_TPM_NEEDS_REBOOT) {
     state = FAILED_TPM;
   }
-  if (return_code == cryptohome::MOUNT_ERROR_USER_DOES_NOT_EXIST) {
+  if (return_code == cryptohome::MOUNT_ERROR_USER_DOES_NOT_EXIST)
     state = NO_MOUNT;
-  }
+
   if (consumer_)
     consumer_->OnAuthenticationFailure(state);
+
   if (old_consumer_) {
     AuthFailure failure(AuthFailure::COULD_NOT_MOUNT_CRYPTOHOME);
     old_consumer_->OnAuthFailure(failure);

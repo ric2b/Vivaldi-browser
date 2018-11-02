@@ -8,7 +8,7 @@
 #include "base/optional.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/texture_manager.h"
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
+#include "gpu/ipc/service/command_buffer_stub.h"
 #include "media/base/video_frame.h"
 #include "media/gpu/android/codec_image.h"
 #include "media/gpu/android/codec_wrapper.h"
@@ -43,7 +43,7 @@ class MEDIA_GPU_EXPORT VideoFrameFactoryImpl : public VideoFrameFactory {
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-      OutputWithReleaseMailboxCB output_cb) override;
+      VideoDecoder::OutputCB output_cb) override;
   void RunAfterPendingVideoFrames(base::OnceClosure closure) override;
 
  private:
@@ -62,7 +62,7 @@ class MEDIA_GPU_EXPORT VideoFrameFactoryImpl : public VideoFrameFactory {
 // GpuVideoFrameFactory is an implementation detail of VideoFrameFactoryImpl. It
 // may be created on any thread but only accessed on the gpu thread thereafter.
 class GpuVideoFrameFactory
-    : public gpu::GpuCommandBufferStub::DestructionObserver {
+    : public gpu::CommandBufferStub::DestructionObserver {
  public:
   GpuVideoFrameFactory();
   ~GpuVideoFrameFactory() override;
@@ -78,7 +78,7 @@ class GpuVideoFrameFactory
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-      VideoFrameFactory::OutputWithReleaseMailboxCB output_cb,
+      VideoDecoder::OutputCB output_cb,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // Set our image group.  Must be called before the first call to
@@ -117,7 +117,7 @@ class GpuVideoFrameFactory
   // destructed).
   std::map<gpu::gles2::TextureRef*, scoped_refptr<gpu::gles2::TextureRef>>
       texture_refs_;
-  gpu::GpuCommandBufferStub* stub_;
+  gpu::CommandBufferStub* stub_;
 
   // Callback to notify us that an image has been destroyed.
   CodecImage::DestructionCb destruction_cb_;

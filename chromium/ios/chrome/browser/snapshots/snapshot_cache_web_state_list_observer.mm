@@ -6,8 +6,7 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
-#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
-#import "ios/chrome/browser/tabs/tab.h"
+#import "ios/chrome/browser/web/tab_id_tab_helper.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -28,19 +27,19 @@ void SnapshotCacheWebStateListObserver::WebStateActivatedAt(
     web::WebState* old_web_state,
     web::WebState* new_web_state,
     int active_index,
-    bool user_action) {
-  if (!user_action)
+    int reason) {
+  if (!(reason & WebStateListObserver::CHANGE_REASON_USER_ACTION))
     return;
 
   NSMutableSet<NSString*>* set = [NSMutableSet set];
   if (active_index > 0) {
     web::WebState* web_state = web_state_list->GetWebStateAt(active_index - 1);
-    [set addObject:LegacyTabHelper::GetTabForWebState(web_state).tabId];
+    [set addObject:TabIdTabHelper::FromWebState(web_state)->tab_id()];
   }
 
   if (active_index + 1 < web_state_list->count()) {
     web::WebState* web_state = web_state_list->GetWebStateAt(active_index + 1);
-    [set addObject:LegacyTabHelper::GetTabForWebState(web_state).tabId];
+    [set addObject:TabIdTabHelper::FromWebState(web_state)->tab_id()];
   }
 
   snapshot_cache_.pinnedIDs = [set copy];

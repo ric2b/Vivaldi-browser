@@ -51,8 +51,6 @@
 #include "media/capture/video/chromeos/local_gpu_memory_buffer_manager.h"
 #include "media/capture/video/chromeos/video_capture_device_arc_chromeos.h"
 #include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
-#include "mojo/edk/embedder/embedder.h"
-#include "mojo/edk/embedder/scoped_ipc_support.h"
 #endif
 
 #if defined(OS_MACOSX)
@@ -148,8 +146,8 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
 
   // Trampoline methods to workaround GMOCK problems with std::unique_ptr<>.
   Buffer ReserveOutputBuffer(const gfx::Size& dimensions,
-                             media::VideoPixelFormat format,
-                             media::VideoPixelStorage storage,
+                             VideoPixelFormat format,
+                             VideoPixelStorage storage,
                              int frame_feedback_id) override {
     DoReserveOutputBuffer();
     NOTREACHED() << "This should never be called";
@@ -171,8 +169,8 @@ class MockVideoCaptureClient : public VideoCaptureDevice::Client {
     DoOnIncomingCapturedVideoFrame();
   }
   Buffer ResurrectLastOutputBuffer(const gfx::Size& dimensions,
-                                   media::VideoPixelFormat format,
-                                   media::VideoPixelStorage storage,
+                                   VideoPixelFormat format,
+                                   VideoPixelStorage storage,
                                    int frame_feedback_id) {
     DoResurrectLastOutputBuffer();
     NOTREACHED() << "This should never be called";
@@ -226,39 +224,6 @@ class MockImageCaptureClient
   mojom::PhotoStatePtr state_;
 };
 
-#if defined(OS_CHROMEOS)
-
-class MojoEnabledTestEnvironment final : public testing::Environment {
- public:
-  MojoEnabledTestEnvironment() : mojo_ipc_thread_("MojoIpcThread") {}
-
-  ~MojoEnabledTestEnvironment() final = default;
-
-  void SetUp() final {
-    mojo::edk::Init();
-    mojo_ipc_thread_.StartWithOptions(
-        base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
-    mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
-        mojo_ipc_thread_.task_runner(),
-        mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
-    VLOG(1) << "Mojo initialized";
-  }
-
-  void TearDown() final {
-    mojo_ipc_support_.reset();
-    VLOG(1) << "Mojo IPC tear down";
-  }
-
- private:
-  base::Thread mojo_ipc_thread_;
-  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
-};
-
-testing::Environment* const mojo_test_env =
-    testing::AddGlobalTestEnvironment(new MojoEnabledTestEnvironment());
-
-#endif
-
 }  // namespace
 
 class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
@@ -288,7 +253,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
   void SetUp() override {
 #if defined(OS_CHROMEOS)
     dbus_setter_->SetPowerManagerClient(
-        base::MakeUnique<chromeos::FakePowerManagerClient>());
+        std::make_unique<chromeos::FakePowerManagerClient>());
 #endif
 #if defined(OS_ANDROID)
     static_cast<VideoCaptureDeviceFactoryAndroid*>(
@@ -325,7 +290,7 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
     for (const auto& descriptor : *device_descriptors_) {
       if (IsDeviceUsableForTesting(descriptor)) {
         DLOG(INFO) << "Using camera " << descriptor.GetNameAndModel();
-        return base::MakeUnique<VideoCaptureDeviceDescriptor>(descriptor);
+        return std::make_unique<VideoCaptureDeviceDescriptor>(descriptor);
       }
     }
     DLOG(WARNING) << "No usable camera found";
@@ -336,10 +301,18 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
       DLOG(WARNING) << "No camera found";
       return nullptr;
     }
+#if defined(OS_WIN)
+    // Dump the camera model to help debugging.
+    // TODO(alaoui.rda@gmail.com): remove after http://crbug.com/730068 is
+    // fixed.
+    LOG(INFO) << "Using camera "
+              << device_descriptors_->front().GetNameAndModel();
+#else
     DLOG(INFO) << "Using camera "
                << device_descriptors_->front().GetNameAndModel();
-    ;
-    return base::MakeUnique<VideoCaptureDeviceDescriptor>(
+#endif
+
+    return std::make_unique<VideoCaptureDeviceDescriptor>(
         device_descriptors_->front());
   }
 
@@ -638,7 +611,7 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
       &MockImageCaptureClient::DoOnPhotoTaken, image_capture_client_);
 
   base::RunLoop run_loop;
-  base::Closure quit_closure = media::BindToCurrentLoop(run_loop.QuitClosure());
+  base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectPhotoTaken())
       .Times(1)
       .WillOnce(RunClosure(quit_closure));
@@ -688,7 +661,7 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
                      image_capture_client_);
 
   base::RunLoop run_loop;
-  base::Closure quit_closure = media::BindToCurrentLoop(run_loop.QuitClosure());
+  base::Closure quit_closure = BindToCurrentLoop(run_loop.QuitClosure());
   EXPECT_CALL(*image_capture_client_.get(), OnCorrectGetPhotoState())
       .Times(1)
       .WillOnce(RunClosure(quit_closure));

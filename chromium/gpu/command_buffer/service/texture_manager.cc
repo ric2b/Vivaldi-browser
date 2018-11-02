@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <set>
+#include <tuple>
 #include <utility>
 
 #include "base/bits.h"
@@ -251,6 +252,9 @@ class FormatTypeValidator {
         {GL_RG, GL_RG, GL_FLOAT},
         {GL_RED, GL_RED, GL_HALF_FLOAT_OES},
         {GL_RG, GL_RG, GL_HALF_FLOAT_OES},
+
+        // Exposed by GL_EXT_texture_norm16
+        {GL_RED, GL_RED, GL_UNSIGNED_SHORT},
     };
 
     for (size_t ii = 0; ii < arraysize(kSupportedFormatTypes); ++ii) {
@@ -280,21 +284,16 @@ class FormatTypeValidator {
   }
 
  private:
-  // TODO(zmo): once std::tuple is allowed, switch over to that.
-  struct FormatType {
-    GLenum internal_format;
-    GLenum format;
-    GLenum type;
-  };
-
+  // FormatType is a tuple of <internal_format, format, type>
+  typedef std::tuple<GLenum, GLenum, GLenum> FormatType;
   struct FormatTypeCompare {
     bool operator() (const FormatType& lhs, const FormatType& rhs) const {
-      return (lhs.internal_format < rhs.internal_format ||
-              ((lhs.internal_format == rhs.internal_format) &&
-               (lhs.format < rhs.format)) ||
-              ((lhs.internal_format == rhs.internal_format) &&
-               (lhs.format == rhs.format) &&
-               (lhs.type < rhs.type)));
+      return (std::get<0>(lhs) < std::get<0>(rhs) ||
+              ((std::get<0>(lhs) == std::get<0>(rhs)) &&
+               (std::get<1>(lhs) < std::get<1>(rhs))) ||
+              ((std::get<0>(lhs) == std::get<0>(rhs)) &&
+               (std::get<1>(lhs) == std::get<1>(rhs)) &&
+               (std::get<2>(lhs) < std::get<2>(rhs))));
     }
   };
 
@@ -429,9 +428,9 @@ DecoderTextureState::DecoderTextureState(
       unpack_image_height_workaround_with_unpack_buffer(
           workarounds.unpack_image_height_workaround_with_unpack_buffer) {}
 
-TextureManager::DestructionObserver::DestructionObserver() {}
+TextureManager::DestructionObserver::DestructionObserver() = default;
 
-TextureManager::DestructionObserver::~DestructionObserver() {}
+TextureManager::DestructionObserver::~DestructionObserver() = default;
 
 TextureManager::~TextureManager() {
   for (unsigned int i = 0; i < destruction_observers_.size(); i++)
@@ -476,30 +475,6 @@ void TextureManager::Destroy() {
   }
 
   DCHECK_EQ(0u, memory_type_tracker_->GetMemRepresented());
-}
-
-TextureBase::TextureBase(GLuint service_id)
-    : service_id_(service_id), target_(GL_NONE), mailbox_manager_(nullptr) {}
-
-TextureBase::~TextureBase() {
-  DCHECK_EQ(nullptr, mailbox_manager_);
-}
-
-void TextureBase::SetTarget(GLenum target) {
-  DCHECK_EQ(0u, target_);  // you can only set this once.
-  target_ = target;
-}
-
-void TextureBase::DeleteFromMailboxManager() {
-  if (mailbox_manager_) {
-    mailbox_manager_->TextureDeleted(this);
-    mailbox_manager_ = nullptr;
-  }
-}
-
-void TextureBase::SetMailboxManager(MailboxManager* mailbox_manager) {
-  DCHECK(!mailbox_manager_ || mailbox_manager_ == mailbox_manager);
-  mailbox_manager_ = mailbox_manager;
 }
 
 TexturePassthrough::TexturePassthrough(GLuint service_id, GLenum target)
@@ -648,8 +623,7 @@ Texture::LevelInfo::LevelInfo(const LevelInfo& rhs)
       estimated_size(rhs.estimated_size),
       internal_workaround(rhs.internal_workaround) {}
 
-Texture::LevelInfo::~LevelInfo() {
-}
+Texture::LevelInfo::~LevelInfo() = default;
 
 Texture::FaceInfo::FaceInfo()
     : num_mip_levels(0) {
@@ -657,8 +631,7 @@ Texture::FaceInfo::FaceInfo()
 
 Texture::FaceInfo::FaceInfo(const FaceInfo& other) = default;
 
-Texture::FaceInfo::~FaceInfo() {
-}
+Texture::FaceInfo::~FaceInfo() = default;
 
 Texture::CanRenderCondition Texture::GetCanRenderCondition() const {
   if (target_ == 0)
@@ -3542,6 +3515,7 @@ GLenum TextureManager::ExtractFormatFromStorageFormat(GLenum internalformat) {
     case GL_R8_SNORM:
     case GL_R16F:
     case GL_R32F:
+    case GL_R16_EXT:
       return GL_RED;
     case GL_R8UI:
     case GL_R8I:
@@ -3690,6 +3664,8 @@ GLenum TextureManager::ExtractTypeFromStorageFormat(GLenum internalformat) {
       return GL_UNSIGNED_SHORT;
     case GL_R16I:
       return GL_SHORT;
+    case GL_R16_EXT:
+      return GL_UNSIGNED_SHORT;
     case GL_R32UI:
       return GL_UNSIGNED_INT;
     case GL_R32I:

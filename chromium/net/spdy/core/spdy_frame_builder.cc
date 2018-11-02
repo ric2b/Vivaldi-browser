@@ -26,7 +26,7 @@ SpdyFrameBuilder::SpdyFrameBuilder(size_t size, ZeroCopyOutputBuffer* output)
       length_(0),
       offset_(0) {}
 
-SpdyFrameBuilder::~SpdyFrameBuilder() {}
+SpdyFrameBuilder::~SpdyFrameBuilder() = default;
 
 char* SpdyFrameBuilder::GetWritableBuffer(size_t length) {
   if (!CanWrite(length)) {
@@ -120,7 +120,7 @@ bool SpdyFrameBuilder::BeginNewFrameInternal(uint8_t raw_frame_type,
   return success;
 }
 
-bool SpdyFrameBuilder::WriteStringPiece32(const SpdyStringPiece& value) {
+bool SpdyFrameBuilder::WriteStringPiece32(const SpdyStringPiece value) {
   if (!WriteUInt32(value.size())) {
     return false;
   }

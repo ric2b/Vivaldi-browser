@@ -75,12 +75,12 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/storage_util.h"
 #include "content/renderer/web_database_observer_impl.h"
-#include "content/renderer/webclipboard_impl.h"
 #include "content/renderer/webfileutilities_impl.h"
 #include "content/renderer/webgraphicscontext3d_provider_impl.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
 #include "content/renderer/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "device/sensors/public/cpp/motion_data.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -97,8 +97,8 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/ui/public/cpp/gpu/context_provider_command_buffer.h"
 #include "storage/common/database/database_identifier.h"
-#include "storage/common/quota/quota_types.h"
 #include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "third_party/WebKit/public/platform/BlameContext.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
@@ -145,10 +145,6 @@
 #include "third_party/WebKit/public/platform/linux/WebSandboxSupport.h"
 #include "third_party/icu/source/common/unicode/utf16.h"
 #endif
-#endif
-
-#if defined(OS_WIN)
-#include "content/common/child_process_messages.h"
 #endif
 
 #if defined(USE_AURA)
@@ -210,8 +206,8 @@ media::AudioParameters GetAudioHardwareParams() {
       .output_params();
 }
 
-mojom::URLLoaderFactoryPtr GetBlobURLLoaderFactoryGetter() {
-  mojom::URLLoaderFactoryPtr blob_loader_factory;
+network::mojom::URLLoaderFactoryPtr GetBlobURLLoaderFactoryGetter() {
+  network::mojom::URLLoaderFactoryPtr blob_loader_factory;
   RenderThreadImpl::current()->GetRendererHost()->GetBlobURLLoaderFactory(
       mojo::MakeRequest(&blob_loader_factory));
   return blob_loader_factory;
@@ -298,9 +294,7 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     thread_safe_sender_ = RenderThreadImpl::current()->thread_safe_sender();
     shared_bitmap_manager_ =
         RenderThreadImpl::current()->shared_bitmap_manager();
-    blob_registry_.reset(new WebBlobRegistryImpl(
-        RenderThreadImpl::current()->GetIOTaskRunner().get(),
-        base::ThreadTaskRunnerHandle::Get(), thread_safe_sender_.get()));
+    blob_registry_.reset(new WebBlobRegistryImpl(thread_safe_sender_.get()));
     web_idb_factory_.reset(new WebIDBFactoryImpl(
         sync_message_filter_,
         RenderThreadImpl::current()->GetIOTaskRunner().get()));
@@ -368,18 +362,19 @@ RendererBlinkPlatformImpl::CreateDefaultURLLoaderFactoryGetter() {
           : ChildURLLoaderFactoryGetterImpl::URLLoaderFactoryGetterCallback());
 }
 
-PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+PossiblyAssociatedInterfacePtr<network::mojom::URLLoaderFactory>
 RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   DCHECK(render_thread);
-  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory> url_loader_factory;
+  PossiblyAssociatedInterfacePtr<network::mojom::URLLoaderFactory>
+      url_loader_factory;
 
   if (base::FeatureList::IsEnabled(features::kNetworkService)) {
-    mojom::URLLoaderFactoryPtr factory_ptr;
+    network::mojom::URLLoaderFactoryPtr factory_ptr;
     connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
     url_loader_factory = std::move(factory_ptr);
   } else {
-    mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
+    network::mojom::URLLoaderFactoryAssociatedPtr factory_ptr;
     render_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
     url_loader_factory = std::move(factory_ptr);
   }
@@ -388,7 +383,7 @@ RendererBlinkPlatformImpl::CreateNetworkURLLoaderFactory() {
   // avoid thread hops and prevent jank on the main thread from affecting
   // requests from other threads this object should live on the IO thread.
   if (base::FeatureList::IsEnabled(features::kOutOfBlinkCORS)) {
-    mojom::URLLoaderFactoryPtr factory_ptr;
+    network::mojom::URLLoaderFactoryPtr factory_ptr;
     RenderThreadImpl::current()->GetIOTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce(&CORSURLLoaderFactory::CreateAndBind,
                                   url_loader_factory.PassInterface(),
@@ -420,10 +415,8 @@ blink::WebClipboard* RendererBlinkPlatformImpl::Clipboard() {
       GetContentClient()->renderer()->OverrideWebClipboard();
   if (clipboard)
     return clipboard;
-  if (!clipboard_) {
-    clipboard_ = std::make_unique<WebClipboardImpl>(GetClipboardHost());
-  }
-  return clipboard_.get();
+
+  return BlinkPlatformImpl::Clipboard();
 }
 
 blink::WebFileUtilities* RendererBlinkPlatformImpl::GetFileUtilities() {
@@ -920,7 +913,8 @@ RendererBlinkPlatformImpl::CreateMediaRecorderHandler() {
 
 std::unique_ptr<WebRTCPeerConnectionHandler>
 RendererBlinkPlatformImpl::CreateRTCPeerConnectionHandler(
-    WebRTCPeerConnectionHandlerClient* client) {
+    WebRTCPeerConnectionHandlerClient* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   RenderThreadImpl* render_thread = RenderThreadImpl::current();
   DCHECK(render_thread);
   if (!render_thread)
@@ -929,7 +923,8 @@ RendererBlinkPlatformImpl::CreateRTCPeerConnectionHandler(
 #if BUILDFLAG(ENABLE_WEBRTC)
   PeerConnectionDependencyFactory* rtc_dependency_factory =
       render_thread->GetPeerConnectionDependencyFactory();
-  return rtc_dependency_factory->CreateRTCPeerConnectionHandler(client);
+  return rtc_dependency_factory->CreateRTCPeerConnectionHandler(client,
+                                                                task_runner);
 #else
   return nullptr;
 #endif  // BUILDFLAG(ENABLE_WEBRTC)
@@ -984,13 +979,15 @@ RendererBlinkPlatformImpl::CreateCanvasCaptureHandler(
 
 void RendererBlinkPlatformImpl::CreateHTMLVideoElementCapturer(
     WebMediaStream* web_media_stream,
-    WebMediaPlayer* web_media_player) {
+    WebMediaPlayer* web_media_player,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
 #if BUILDFLAG(ENABLE_WEBRTC)
   DCHECK(web_media_stream);
   DCHECK(web_media_player);
   AddVideoTrackToMediaStream(
       HtmlVideoElementCapturerSource::CreateFromWebMediaPlayerImpl(
-          web_media_player, content::RenderThread::Get()->GetIOTaskRunner()),
+          web_media_player, content::RenderThread::Get()->GetIOTaskRunner(),
+          task_runner),
       false,  // is_remote
       web_media_stream);
 #endif
@@ -1126,7 +1123,7 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
   // antialiasing. But we do need those attributes for the "own
   // offscreen surface" optimization which supports directly drawing
   // to a custom surface backed frame buffer.
-  gpu::gles2::ContextCreationAttribHelper attributes;
+  gpu::ContextCreationAttribs attributes;
   attributes.alpha_size = web_attributes.support_alpha ? 8 : -1;
   attributes.depth_size = web_attributes.support_depth ? 24 : 0;
   attributes.stencil_size = web_attributes.support_stencil ? 8 : 0;
@@ -1144,19 +1141,21 @@ RendererBlinkPlatformImpl::CreateOffscreenGraphicsContext3DProvider(
   DCHECK_GT(web_attributes.web_gl_version, 0u);
   DCHECK_LE(web_attributes.web_gl_version, 2u);
   if (web_attributes.web_gl_version == 2)
-    attributes.context_type = gpu::gles2::CONTEXT_TYPE_WEBGL2;
+    attributes.context_type = gpu::CONTEXT_TYPE_WEBGL2;
   else
-    attributes.context_type = gpu::gles2::CONTEXT_TYPE_WEBGL1;
+    attributes.context_type = gpu::CONTEXT_TYPE_WEBGL1;
 
   constexpr bool automatic_flushes = true;
   constexpr bool support_locking = false;
 
   scoped_refptr<ui::ContextProviderCommandBuffer> provider(
       new ui::ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), kGpuStreamIdDefault,
-          kGpuStreamPriorityDefault, gpu::kNullSurfaceHandle,
-          GURL(top_document_web_url), automatic_flushes, support_locking,
-          gpu::SharedMemoryLimits(), attributes, share_context,
+          std::move(gpu_channel_host),
+          RenderThreadImpl::current()->GetGpuMemoryBufferManager(),
+          kGpuStreamIdDefault, kGpuStreamPriorityDefault,
+          gpu::kNullSurfaceHandle, GURL(top_document_web_url),
+          automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
+          attributes, share_context,
           ui::command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_WEBGL));
   return std::make_unique<WebGraphicsContext3DProviderImpl>(
       std::move(provider), is_software_rendering);
@@ -1264,9 +1263,11 @@ RendererBlinkPlatformImpl::CreatePlatformEventObserverFromType(
     case blink::kWebPlatformEventTypeDeviceMotion:
       return std::make_unique<DeviceMotionEventPump>(thread);
     case blink::kWebPlatformEventTypeDeviceOrientation:
-      return std::make_unique<DeviceOrientationEventPump>(thread);
+      return std::make_unique<DeviceOrientationEventPump>(thread,
+                                                          false /* absolute */);
     case blink::kWebPlatformEventTypeDeviceOrientationAbsolute:
-      return std::make_unique<DeviceOrientationAbsoluteEventPump>(thread);
+      return std::make_unique<DeviceOrientationEventPump>(thread,
+                                                          true /* absolute */);
     case blink::kWebPlatformEventTypeGamepad:
       return std::make_unique<GamepadSharedMemoryReader>(thread);
     default:
@@ -1332,12 +1333,12 @@ void RendererBlinkPlatformImpl::SendFakeDeviceEventDataForTesting(
 
   switch (type) {
     case blink::kWebPlatformEventTypeDeviceMotion:
-      if (!(g_test_device_motion_data == nullptr))
+      if (g_test_device_motion_data.IsCreated())
         data = &g_test_device_motion_data.Get();
       break;
     case blink::kWebPlatformEventTypeDeviceOrientation:
     case blink::kWebPlatformEventTypeDeviceOrientationAbsolute:
-      if (!(g_test_device_orientation_data == nullptr))
+      if (g_test_device_orientation_data.IsCreated())
         data = &g_test_device_orientation_data.Get();
       break;
     default:
@@ -1365,13 +1366,11 @@ void RendererBlinkPlatformImpl::StopListening(
 //------------------------------------------------------------------------------
 
 void RendererBlinkPlatformImpl::QueryStorageUsageAndQuota(
-    const blink::WebURL& storage_partition,
-    blink::WebStorageQuotaType type,
-    blink::WebStorageQuotaCallbacks callbacks) {
+    const blink::WebSecurityOrigin& storage_partition,
+    blink::mojom::StorageType type,
+    QueryStorageUsageAndQuotaCallback callback) {
   QuotaDispatcher::ThreadSpecificInstance(default_task_runner_)
-      ->QueryStorageUsageAndQuota(
-          storage_partition, static_cast<storage::StorageType>(type),
-          QuotaDispatcher::CreateWebStorageQuotaCallbacksWrapper(callbacks));
+      ->QueryStorageUsageAndQuota(storage_partition, type, std::move(callback));
 }
 
 //------------------------------------------------------------------------------
@@ -1437,13 +1436,6 @@ void RendererBlinkPlatformImpl::InitializeWebDatabaseHostIfNeeded() {
 blink::mojom::WebDatabaseHost& RendererBlinkPlatformImpl::GetWebDatabaseHost() {
   InitializeWebDatabaseHostIfNeeded();
   return **web_database_host_;
-}
-
-mojom::ClipboardHost& RendererBlinkPlatformImpl::GetClipboardHost() {
-  if (!clipboard_host_) {
-    GetConnector()->BindInterface(mojom::kBrowserServiceName, &clipboard_host_);
-  }
-  return *clipboard_host_;
 }
 
 }  // namespace content

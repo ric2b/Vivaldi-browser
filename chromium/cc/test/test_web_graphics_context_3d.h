@@ -15,6 +15,7 @@
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -22,7 +23,7 @@
 #include "base/synchronization/lock.h"
 #include "cc/test/ordered_texture_map.h"
 #include "cc/test/test_texture.h"
-#include "components/viz/common/gpu/context_provider.h"
+#include "gpu/command_buffer/common/capabilities.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/gfx/geometry/rect.h"
@@ -192,12 +193,9 @@ class TestWebGraphicsContext3D {
                              const void* pixels) {}
 
   virtual void genMailboxCHROMIUM(GLbyte* mailbox);
-  virtual void produceTextureCHROMIUM(GLenum target, const GLbyte* mailbox) {}
   virtual void produceTextureDirectCHROMIUM(GLuint texture,
-                                            GLenum target,
                                             const GLbyte* mailbox) {}
-  virtual GLuint createAndConsumeTextureCHROMIUM(GLenum target,
-                                                 const GLbyte* mailbox);
+  virtual GLuint createAndConsumeTextureCHROMIUM(const GLbyte* mailbox);
 
   virtual void loseContextCHROMIUM(GLenum current, GLenum other);
 
@@ -270,8 +268,7 @@ class TestWebGraphicsContext3D {
                                                     GLenum internalformat,
                                                     GLenum usage);
 
-  virtual GLuint64 insertFenceSync();
-  virtual void genSyncToken(GLuint64 fence_sync, GLbyte* sync_token);
+  virtual void genSyncToken(GLbyte* sync_token);
   virtual void waitSyncToken(const GLbyte* sync_token);
   virtual void verifySyncTokens(GLbyte** sync_tokens, GLsizei count);
 
@@ -503,7 +500,7 @@ class TestWebGraphicsContext3D {
   gpu::SyncToken last_waited_sync_token_;
   int unpack_alignment_;
 
-  unsigned bound_buffer_;
+  base::flat_map<unsigned, unsigned> bound_buffer_;
   TextureTargets texture_targets_;
 
   scoped_refptr<Namespace> namespace_;

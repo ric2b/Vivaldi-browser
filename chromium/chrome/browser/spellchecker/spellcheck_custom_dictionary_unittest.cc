@@ -67,8 +67,6 @@ class SpellcheckCustomDictionaryTest : public testing::Test {
     // Use SetTestingFactoryAndUse to force creation and initialization.
     SpellcheckServiceFactory::GetInstance()->SetTestingFactoryAndUse(
         &profile_, &BuildSpellcheckService);
-
-    StatisticsRecorder::Initialize();
   }
 
   // A wrapper around SpellcheckCustomDictionary::LoadDictionaryFile private
@@ -328,7 +326,7 @@ TEST_F(SpellcheckCustomDictionaryTest, GetAllSyncDataHasLimit) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS - 1; i++) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*dictionary, change);
   EXPECT_EQ(spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS - 1,
@@ -441,13 +439,13 @@ TEST_F(SpellcheckCustomDictionaryTest, MergeDataAndStartSyncing) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS / 2; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
 
   SpellcheckCustomDictionary::Change change2;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS / 2; ++i) {
-    change2.AddWord("bar" + base::Uint64ToString(i));
+    change2.AddWord("bar" + base::NumberToString(i));
   }
   Apply(*custom_dictionary2, change2);
 
@@ -538,7 +536,7 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionaryTooBigBeforeSyncing) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS + 1; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
 
@@ -584,8 +582,8 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionaryTooBigAndServerFull) {
   SpellcheckCustomDictionary::Change change;
   SpellcheckCustomDictionary::Change change2;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
-    change2.AddWord("bar" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
+    change2.AddWord("bar" + base::NumberToString(i));
   }
   change.AddWord("foo");
   Apply(*custom_dictionary, change);
@@ -638,8 +636,8 @@ TEST_F(SpellcheckCustomDictionaryTest, ServerTooBig) {
   SpellcheckCustomDictionary::Change change;
   SpellcheckCustomDictionary::Change change2;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS + 1; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
-    change2.AddWord("bar" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
+    change2.AddWord("bar" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
   Apply(*custom_dictionary2, change2);
@@ -690,7 +688,7 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionaryTooBigToStartSyncing) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS - 1; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
 
@@ -738,7 +736,7 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionaryTooBigToContiueSyncing) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS - 1; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
 
@@ -852,7 +850,7 @@ TEST_F(SpellcheckCustomDictionaryTest, LoadAfterSyncStartTooBigToSync) {
   std::unique_ptr<std::set<std::string>> custom_words(
       new std::set<std::string>);
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS; ++i) {
-    custom_words->insert(custom_words->end(), "foo" + base::Uint64ToString(i));
+    custom_words->insert(custom_words->end(), "foo" + base::NumberToString(i));
   }
   OnLoaded(*custom_dictionary, std::move(custom_words));
   EXPECT_EQ(0, error_counter);
@@ -884,7 +882,7 @@ TEST_F(SpellcheckCustomDictionaryTest, LoadDuplicatesAfterSync) {
 
   SpellcheckCustomDictionary::Change change;
   for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS / 2; ++i) {
-    change.AddWord("foo" + base::Uint64ToString(i));
+    change.AddWord("foo" + base::NumberToString(i));
   }
   Apply(*custom_dictionary, change);
 
@@ -1057,7 +1055,7 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionarySyncLimit) {
 
     SpellcheckCustomDictionary::Change change;
     for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS; ++i) {
-      change.AddWord("foo" + base::Uint64ToString(i));
+      change.AddWord("foo" + base::NumberToString(i));
     }
     Apply(*custom_dictionary, change);
 
@@ -1102,7 +1100,7 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionarySyncLimit) {
     // different from those on the server.
     SpellcheckCustomDictionary::Change change;
     for (size_t i = 0; i < spellcheck::MAX_SYNCABLE_DICTIONARY_WORDS; ++i) {
-      change.AddWord("bar" + base::Uint64ToString(i));
+      change.AddWord("bar" + base::NumberToString(i));
     }
     Apply(*client_custom_dictionary, change);
 
@@ -1142,10 +1140,6 @@ TEST_F(SpellcheckCustomDictionaryTest, DictionarySyncLimit) {
 TEST_F(SpellcheckCustomDictionaryTest, MAYBE_RecordSizeStatsCorrectly) {
   // Record a baseline.
   SpellCheckHostMetrics::RecordCustomWordCountStats(123);
-
-  // Determine if test failures are due the statistics recorder not being
-  // available or because the histogram just isn't there: crbug.com/230534.
-  EXPECT_TRUE(StatisticsRecorder::IsActive());
 
   HistogramBase* histogram =
       StatisticsRecorder::FindHistogram("SpellCheck.CustomWords");

@@ -26,6 +26,7 @@
 #ifndef VerticalPositionCache_h
 #define VerticalPositionCache_h
 
+#include "base/macros.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "platform/fonts/FontBaseline.h"
 #include "platform/wtf/Allocator.h"
@@ -38,10 +39,9 @@ const int kPositionUndefined = 0x80000000;
 
 class VerticalPositionCache {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(VerticalPositionCache);
 
  public:
-  VerticalPositionCache() {}
+  VerticalPositionCache() = default;
 
   int Get(LineLayoutItem layout_object, FontBaseline baseline_type) const {
     const HashMap<LineLayoutItem, int>& map_to_check =
@@ -66,6 +66,7 @@ class VerticalPositionCache {
  private:
   HashMap<LineLayoutItem, int> alphabetic_positions_;
   HashMap<LineLayoutItem, int> ideographic_positions_;
+  DISALLOW_COPY_AND_ASSIGN(VerticalPositionCache);
 };
 
 }  // namespace blink

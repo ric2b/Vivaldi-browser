@@ -114,9 +114,6 @@ class PrerenderContents : public content::NotificationObserver,
   void SetPrerenderMode(PrerenderMode mode);
   PrerenderMode prerender_mode() const { return prerender_mode_; }
 
-  // Returns true iff the method given is valid for prerendering.
-  bool IsValidHttpMethod(const std::string& method);
-
   static Factory* CreateFactory();
 
   // Returns a PrerenderContents from the given web_contents, if it's used for
@@ -226,11 +223,6 @@ class PrerenderContents : public content::NotificationObserver,
 
   std::unique_ptr<base::DictionaryValue> GetAsValue() const;
 
-  // Returns whether a pending cross-site navigation is happening.
-  // This could happen with renderer-issued navigations, such as a
-  // MouseEvent being dispatched by a link to a website installed as an app.
-  bool IsCrossSiteNavigationPending() const;
-
   // Marks prerender as used and releases any throttled resource requests.
   void PrepareForUse();
 
@@ -314,6 +306,9 @@ class PrerenderContents : public content::NotificationObserver,
 
   // chrome::mojom::PrerenderCanceler:
   void CancelPrerenderForPrinting() override;
+  void CancelPrerenderForUnsupportedMethod() override;
+  void CancelPrerenderForUnsupportedScheme(const GURL& url) override;
+  void CancelPrerenderForSyncDeferredRedirect() override;
 
   void OnPrerenderCancelerRequest(
       chrome::mojom::PrerenderCancelerRequest request);

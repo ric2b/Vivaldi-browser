@@ -16,7 +16,7 @@
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_thread.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -109,7 +109,9 @@ ServiceWorkerRegistrationInfo ServiceWorkerRegistration::GetInfo() {
                   : ServiceWorkerRegistrationInfo::IS_NOT_DELETED,
       GetVersionInfo(active_version_.get()),
       GetVersionInfo(waiting_version_.get()),
-      GetVersionInfo(installing_version_.get()), resources_total_size_bytes_);
+      GetVersionInfo(installing_version_.get()), resources_total_size_bytes_,
+      navigation_preload_state_.enabled,
+      navigation_preload_state_.header.length());
 }
 
 void ServiceWorkerRegistration::SetActiveVersion(
@@ -199,7 +201,16 @@ void ServiceWorkerRegistration::ActivateWaitingVersionWhenReady() {
     return;
   }
 
-  StartLameDuckTimerIfNeeded();
+  if (IsLameDuckActiveVersion()) {
+    if (ServiceWorkerUtils::IsServicificationEnabled() &&
+        active_version()->running_status() == EmbeddedWorkerStatus::RUNNING) {
+      // If the waiting worker is ready and the active worker needs to be
+      // swapped out, ask the active worker to trigger idle timer as soon as
+      // possible.
+      active_version()->event_dispatcher()->SetIdleTimerDelayToZero();
+    }
+    StartLameDuckTimer();
+  }
 }
 
 void ServiceWorkerRegistration::ClaimClients() {
@@ -237,11 +248,10 @@ void ServiceWorkerRegistration::ClearWhenReady() {
     Clear();
 }
 
-void ServiceWorkerRegistration::AbortPendingClear(
-    const StatusCallback& callback) {
+void ServiceWorkerRegistration::AbortPendingClear(StatusCallback callback) {
   DCHECK(context_);
   if (!is_uninstalling()) {
-    callback.Run(SERVICE_WORKER_OK);
+    std::move(callback).Run(SERVICE_WORKER_OK);
     return;
   }
   is_uninstalling_ = false;
@@ -252,24 +262,36 @@ void ServiceWorkerRegistration::AbortPendingClear(
   DCHECK(most_recent_version.get());
   context_->storage()->NotifyInstallingRegistration(this);
   context_->storage()->StoreRegistration(
-      this,
-      most_recent_version.get(),
-      base::Bind(&ServiceWorkerRegistration::OnRestoreFinished,
-                 this,
-                 callback,
-                 most_recent_version));
+      this, most_recent_version.get(),
+      base::BindOnce(&ServiceWorkerRegistration::OnRestoreFinished, this,
+                     std::move(callback), most_recent_version));
 }
 
 void ServiceWorkerRegistration::OnNoControllees(ServiceWorkerVersion* version) {
   if (!context_)
     return;
   DCHECK_EQ(active_version(), version);
-  if (is_uninstalling_)
+  if (is_uninstalling_) {
     Clear();
-  else if (IsReadyToActivate())
+    return;
+  }
+
+  if (IsReadyToActivate()) {
     ActivateWaitingVersion(true /* delay */);
-  else
-    StartLameDuckTimerIfNeeded();
+    return;
+  }
+
+  if (IsLameDuckActiveVersion()) {
+    if (ServiceWorkerUtils::IsServicificationEnabled() &&
+        should_activate_when_ready_ &&
+        active_version()->running_status() == EmbeddedWorkerStatus::RUNNING) {
+      // If the waiting worker is ready and the active worker needs to be
+      // swapped out, ask the active worker to trigger idle timer as soon as
+      // possible.
+      active_version()->event_dispatcher()->SetIdleTimerDelayToZero();
+    }
+    StartLameDuckTimer();
+  }
 }
 
 void ServiceWorkerRegistration::OnNoWork(ServiceWorkerVersion* version) {
@@ -291,7 +313,7 @@ bool ServiceWorkerRegistration::IsReadyToActivate() const {
     return true;
   }
   if (IsLameDuckActiveVersion()) {
-    return !active->HasWork() ||
+    return !active->HasWorkInBrowser() ||
            waiting->TimeSinceSkipWaiting() > kMaxLameDuckTime ||
            active->TimeSinceNoControllees() > kMaxLameDuckTime;
   }
@@ -305,10 +327,10 @@ bool ServiceWorkerRegistration::IsLameDuckActiveVersion() const {
          !active_version()->HasControllee();
 }
 
-void ServiceWorkerRegistration::StartLameDuckTimerIfNeeded() {
-  if (!IsLameDuckActiveVersion() || lame_duck_timer_.IsRunning()) {
+void ServiceWorkerRegistration::StartLameDuckTimer() {
+  DCHECK(IsLameDuckActiveVersion());
+  if (lame_duck_timer_.IsRunning())
     return;
-  }
 
   lame_duck_timer_.Start(
       FROM_HERE, kMaxLameDuckTime,
@@ -396,8 +418,6 @@ void ServiceWorkerRegistration::ContinueActivation(
   activating_version->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::ACTIVATE,
       base::BindOnce(&ServiceWorkerRegistration::DispatchActivateEvent, this,
-                     activating_version),
-      base::BindOnce(&ServiceWorkerRegistration::OnActivateEventFinished, this,
                      activating_version));
 }
 
@@ -417,7 +437,7 @@ void ServiceWorkerRegistration::DeleteVersion(
     // Delete the records from the db.
     context_->storage()->DeleteRegistration(
         id(), pattern().GetOrigin(),
-        base::Bind(&ServiceWorkerRegistration::OnDeleteFinished, protect));
+        base::BindOnce(&ServiceWorkerRegistration::OnDeleteFinished, protect));
     // But not from memory if there is a version in the pipeline.
     // TODO(falken): Fix this logic. There could be a running register job for
     // this registration that hasn't set installing_version() yet.
@@ -464,7 +484,12 @@ void ServiceWorkerRegistration::RegisterRegistrationFinishedCallback(
 }
 
 void ServiceWorkerRegistration::DispatchActivateEvent(
-    scoped_refptr<ServiceWorkerVersion> activating_version) {
+    scoped_refptr<ServiceWorkerVersion> activating_version,
+    ServiceWorkerStatusCode start_worker_status) {
+  if (start_worker_status != SERVICE_WORKER_OK) {
+    OnActivateEventFinished(activating_version, start_worker_status);
+    return;
+  }
   if (activating_version != active_version()) {
     OnActivateEventFinished(activating_version, SERVICE_WORKER_ERROR_FAILED);
     return;
@@ -475,8 +500,8 @@ void ServiceWorkerRegistration::DispatchActivateEvent(
       << "Worker stopped too soon after it was started.";
   int request_id = activating_version->StartRequest(
       ServiceWorkerMetrics::EventType::ACTIVATE,
-      base::Bind(&ServiceWorkerRegistration::OnActivateEventFinished, this,
-                 activating_version));
+      base::BindOnce(&ServiceWorkerRegistration::OnActivateEventFinished, this,
+                     activating_version));
   activating_version->event_dispatcher()->DispatchActivateEvent(
       activating_version->CreateSimpleEventCallback(request_id));
 }
@@ -507,7 +532,7 @@ void ServiceWorkerRegistration::OnActivateEventFinished(
   // 'activated' as the arguments."
   activating_version->SetStatus(ServiceWorkerVersion::ACTIVATED);
   context_->storage()->UpdateToActiveState(
-      this, base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+      this, base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
 }
 
 void ServiceWorkerRegistration::OnDeleteFinished(
@@ -557,16 +582,16 @@ void ServiceWorkerRegistration::Clear() {
 }
 
 void ServiceWorkerRegistration::OnRestoreFinished(
-    const StatusCallback& callback,
+    StatusCallback callback,
     scoped_refptr<ServiceWorkerVersion> version,
     ServiceWorkerStatusCode status) {
   if (!context_) {
-    callback.Run(SERVICE_WORKER_ERROR_ABORT);
+    std::move(callback).Run(SERVICE_WORKER_ERROR_ABORT);
     return;
   }
   context_->storage()->NotifyDoneInstallingRegistration(
       this, version.get(), status);
-  callback.Run(status);
+  std::move(callback).Run(status);
 }
 
 }  // namespace content

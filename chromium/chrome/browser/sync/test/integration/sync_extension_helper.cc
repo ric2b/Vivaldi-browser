@@ -100,10 +100,11 @@ std::string SyncExtensionHelper::InstallExtension(
 
 void SyncExtensionHelper::UninstallExtension(
     Profile* profile, const std::string& name) {
-  ExtensionService::UninstallExtensionHelper(
-      extensions::ExtensionSystem::Get(profile)->extension_service(),
-      crx_file::id_util::GenerateId(name),
-      extensions::UNINSTALL_REASON_SYNC);
+  extensions::ExtensionSystem::Get(profile)
+      ->extension_service()
+      ->UninstallExtension(crx_file::id_util::GenerateId(name),
+                           extensions::UNINSTALL_REASON_SYNC,
+                           nullptr /* error */);
 }
 
 std::vector<std::string> SyncExtensionHelper::GetInstalledExtensionNames(
@@ -311,7 +312,8 @@ bool SyncExtensionHelper::ExtensionNameToIndex(const std::string& name,
 }
 
 void SyncExtensionHelper::SetupProfile(Profile* profile) {
-  extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(true);
+  extensions::ExtensionSystem::Get(profile)->InitForRegularProfile(
+      true /* extensions_enabled */);
   profile_extensions_.insert(make_pair(profile, ExtensionNameMap()));
 }
 

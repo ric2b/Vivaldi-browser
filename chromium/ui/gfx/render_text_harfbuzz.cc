@@ -137,6 +137,16 @@ bool AsciiBreak(UChar32 first_char, UChar32 current_char) {
   return scripts_size != 0;
 }
 
+// When a string of "unusual" characters ends, the run usually breaks. However,
+// variation selectors should still attach to the run of unusual characters.
+// Detect this situation so that FindRunBreakingCharacter() can continue
+// tracking the unusual block. Otherwise, just returns |current|.
+UBlockCode MaybeCombineUnusualBlock(UBlockCode preceding, UBlockCode current) {
+  return IsUnusualBlockCode(preceding) && current == UBLOCK_VARIATION_SELECTORS
+             ? preceding
+             : current;
+}
+
 // Returns the boundary between a special and a regular character. Special
 // characters are brackets or characters that satisfy |IsUnusualBlockCode|.
 size_t FindRunBreakingCharacter(const base::string16& text,
@@ -156,7 +166,8 @@ size_t FindRunBreakingCharacter(const base::string16& text,
 
   while (iter.Advance() && iter.array_pos() < run_length) {
     const UChar32 current_char = iter.get();
-    const UBlockCode current_block = ublock_getCode(current_char);
+    const UBlockCode current_block =
+        MaybeCombineUnusualBlock(first_block, ublock_getCode(current_char));
     const bool block_break = current_block != first_block &&
         (first_block_unusual || IsUnusualBlockCode(current_block));
     if (block_break || current_char == '\n' ||
@@ -1126,8 +1137,13 @@ SelectionModel RenderTextHarfBuzz::AdjacentWordSelectionModel(
     pos = std::min(selection.caret_pos() + 1, text().length());
     while (iter.Advance()) {
       pos = iter.pos();
-      if (iter.IsWord() && pos > selection.caret_pos())
+      if (iter.IsWord() && pos > selection.caret_pos()) {
+        // In Windows, word move advances past any characters separating the
+        // end of the current word from the next word.
+        while (iter.Advance() && !iter.IsWord())
+          pos = iter.pos();
         break;
+      }
     }
   } else {  // direction == CURSOR_LEFT
     // Notes: We always iterate words from the beginning.
@@ -1209,7 +1225,8 @@ std::vector<Rect> RenderTextHarfBuzz::GetSubstringBounds(const Range& range) {
             run.GetGraphemeSpanForCharRange(this, intersection);
         int start_x = std::ceil(selected_span.start() - line_start_x);
         int end_x = std::ceil(selected_span.end() - line_start_x);
-        gfx::Rect rect(start_x, 0, end_x - start_x, line.size.height());
+        gfx::Rect rect(start_x, 0, end_x - start_x,
+                       std::ceil(line.size.height()));
         rects.push_back(rect + GetLineOffset(line_index));
       }
     }

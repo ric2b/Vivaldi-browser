@@ -71,7 +71,7 @@
 
 namespace blink {
 
-using PropertySet = HashSet<CSSPropertyID>;
+using PropertySet = HashSet<const CSSProperty*>;
 
 namespace {
 
@@ -106,9 +106,9 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
     keyframe->SetEasing(default_timing_function);
     const CSSPropertyValueSet& properties = style_keyframe->Properties();
     for (unsigned j = 0; j < properties.PropertyCount(); j++) {
-      CSSPropertyID property = properties.PropertyAt(j).Id();
-      specified_properties_for_use_counter.insert(property);
-      if (property == CSSPropertyAnimationTimingFunction) {
+      const CSSProperty& property = properties.PropertyAt(j).Property();
+      specified_properties_for_use_counter.insert(&property);
+      if (property.PropertyID() == CSSPropertyAnimationTimingFunction) {
         const CSSValue& value = properties.PropertyAt(j).Value();
         scoped_refptr<TimingFunction> timing_function;
         if (value.IsInheritedValue() && parent_style->Animations()) {
@@ -136,13 +136,15 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
 
   DEFINE_STATIC_LOCAL(SparseHistogram, property_histogram,
                       ("WebCore.Animation.CSSProperties"));
-  for (CSSPropertyID property : specified_properties_for_use_counter) {
-    DCHECK(isValidCSSPropertyID(property));
-    UseCounter::CountAnimatedCSS(element_for_scoping->GetDocument(), property);
+  for (const CSSProperty* property : specified_properties_for_use_counter) {
+    DCHECK(isValidCSSPropertyID(property->PropertyID()));
+    UseCounter::CountAnimatedCSS(element_for_scoping->GetDocument(),
+                                 property->PropertyID());
 
     // TODO(crbug.com/458925): Remove legacy histogram and counts
     property_histogram.Sample(
-        UseCounter::MapCSSPropertyIdToCSSSampleIdForHistogram(property));
+        UseCounter::MapCSSPropertyIdToCSSSampleIdForHistogram(
+            property->PropertyID()));
   }
 
   // Merge duplicate keyframes.
@@ -150,10 +152,11 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
                    Keyframe::CompareOffsets);
   size_t target_index = 0;
   for (size_t i = 1; i < keyframes.size(); i++) {
-    if (keyframes[i]->Offset() == keyframes[target_index]->Offset()) {
+    if (keyframes[i]->CheckedOffset() ==
+        keyframes[target_index]->CheckedOffset()) {
       for (const auto& property : keyframes[i]->Properties()) {
         keyframes[target_index]->SetCSSPropertyValue(
-            property.GetCSSProperty().PropertyID(),
+            property.GetCSSProperty(),
             keyframes[i]->CssPropertyValue(property));
       }
     } else {
@@ -167,22 +170,22 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
   // Add 0% and 100% keyframes if absent.
   scoped_refptr<StringKeyframe> start_keyframe =
       keyframes.IsEmpty() ? nullptr : keyframes[0];
-  if (!start_keyframe || keyframes[0]->Offset() != 0) {
+  if (!start_keyframe || keyframes[0]->CheckedOffset() != 0) {
     start_keyframe = StringKeyframe::Create();
     start_keyframe->SetOffset(0);
     start_keyframe->SetEasing(default_timing_function);
     keyframes.push_front(start_keyframe);
   }
   scoped_refptr<StringKeyframe> end_keyframe = keyframes[keyframes.size() - 1];
-  if (end_keyframe->Offset() != 1) {
+  if (end_keyframe->CheckedOffset() != 1) {
     end_keyframe = StringKeyframe::Create();
     end_keyframe->SetOffset(1);
     end_keyframe->SetEasing(default_timing_function);
     keyframes.push_back(end_keyframe);
   }
   DCHECK_GE(keyframes.size(), 2U);
-  DCHECK(!keyframes.front()->Offset());
-  DCHECK_EQ(keyframes.back()->Offset(), 1);
+  DCHECK_EQ(keyframes.front()->CheckedOffset(), 0);
+  DCHECK_EQ(keyframes.back()->CheckedOffset(), 1);
 
   StringKeyframeEffectModel* model = StringKeyframeEffectModel::Create(
       keyframes, EffectModel::kCompositeReplace, &keyframes[0]->Easing());
@@ -195,7 +198,7 @@ StringKeyframeEffectModel* CreateKeyframeEffectModel(
 
 }  // namespace
 
-CSSAnimations::CSSAnimations() {}
+CSSAnimations::CSSAnimations() = default;
 
 bool CSSAnimations::IsAnimationForInspector(const Animation& animation) {
   for (const auto& running_animation : running_animations_) {
@@ -329,7 +332,7 @@ void CSSAnimations::CalculateAnimationUpdate(CSSAnimationUpdate& update,
 
       const bool is_paused =
           CSSTimingData::GetRepeated(animation_data->PlayStateList(), i) ==
-          kAnimPlayStatePaused;
+          EAnimPlayState::kPaused;
 
       Timing timing = animation_data->ConvertToTiming(i);
       Timing specified_timing = timing;
@@ -612,7 +615,7 @@ void CSSAnimations::MaybeApplyPendingUpdate(Element* element) {
     if (property.IsCSSCustomProperty()) {
       animation->setId(property.CustomPropertyName());
     } else {
-      animation->setId(getPropertyName(property.GetCSSProperty().PropertyID()));
+      animation->setId(property.GetCSSProperty().GetPropertyName());
     }
     // Set the current time as the start time for retargeted transitions
     if (retargeted_compositor_transitions.Contains(property)) {
@@ -1177,7 +1180,7 @@ void CSSAnimations::TransitionEventDelegate::OnEventCondition(
     String property_name =
         property_.IsCSSCustomProperty()
             ? property_.CustomPropertyName()
-            : getPropertyNameString(property_.GetCSSProperty().PropertyID());
+            : property_.GetCSSProperty().GetPropertyNameString();
     const Timing& timing = animation_node.SpecifiedTiming();
     double elapsed_time = timing.iteration_duration;
     const AtomicString& event_type = EventTypeNames::transitionend;
@@ -1223,8 +1226,8 @@ const StylePropertyShorthand& CSSAnimations::PropertiesForTransitionAll() {
 
 // Properties that affect animations are not allowed to be affected by
 // animations. http://w3c.github.io/web-animations/#not-animatable-section
-bool CSSAnimations::IsAnimationAffectingProperty(CSSPropertyID property) {
-  switch (property) {
+bool CSSAnimations::IsAnimationAffectingProperty(const CSSProperty& property) {
+  switch (property.PropertyID()) {
     case CSSPropertyAnimation:
     case CSSPropertyAnimationDelay:
     case CSSPropertyAnimationDirection:

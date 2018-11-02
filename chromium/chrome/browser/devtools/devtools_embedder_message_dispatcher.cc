@@ -168,6 +168,7 @@ DevToolsEmbedderMessageDispatcher::CreateForDevToolsFrontend(
   d->RegisterHandlerWithCallback("setIsDocked",
                                  &Delegate::SetIsDocked, delegate);
   d->RegisterHandler("openInNewTab", &Delegate::OpenInNewTab, delegate);
+  d->RegisterHandler("showItemInFolder", &Delegate::ShowItemInFolder, delegate);
   d->RegisterHandler("save", &Delegate::SaveToFile, delegate);
   d->RegisterHandler("append", &Delegate::AppendToFile, delegate);
   d->RegisterHandler("requestFileSystems",
@@ -217,6 +218,9 @@ DevToolsEmbedderMessageDispatcher::CreateForDevToolsFrontend(
                                  &Delegate::Reattach, delegate);
   d->RegisterHandler("readyForTest",
                      &Delegate::ReadyForTest, delegate);
+  d->RegisterHandler("connectionReady", &Delegate::ConnectionReady, delegate);
+  d->RegisterHandler("setOpenNewWindowForPopups",
+                     &Delegate::SetOpenNewWindowForPopups, delegate);
   d->RegisterHandler("registerExtensionsAPI", &Delegate::RegisterExtensionsAPI,
                      delegate);
   return d;

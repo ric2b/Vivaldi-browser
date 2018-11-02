@@ -87,7 +87,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     std::string script =
         "navigator.credentials.create({ publicKey: {"
         "  challenge: new TextEncoder().encode('climb a mountain'),"
-        "  rp: { id: '1098237235409872', name: 'Acme' },"
+        "  rp: { id: 'example.com', name: 'Acme' },"
         "  user: { "
         "    id: new TextEncoder().encode('1098237235409872'),"
         "    name: 'avery.a.jones@example.com',"
@@ -102,6 +102,53 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ASSERT_EQ(
         "NotSupportedError: Parameters for this operation are not supported.",
         result);
+  }
+
+  // Attempt to create a publicKeyCredential.
+  void CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectNotAllowed(
+      content::WebContents* web_contents) {
+    std::string result;
+    std::string script =
+        "navigator.credentials.create({ publicKey: {"
+        "  challenge: new TextEncoder().encode('climb a mountain'),"
+        "  rp: { id: 'a.example.com', name: 'Acme' },"
+        "  user: { "
+        "    id: new TextEncoder().encode('1098237235409872'),"
+        "    name: 'avery.a.jones@example.com',"
+        "    displayName: 'Avery A. Jones', "
+        "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
+        "  pubKeyCredParams: [{ type: 'public-key', alg: '-7'}],"
+        "  timeout: 60000,"
+        "  excludeList: [] }"
+        "}).catch(c => window.domAutomationController.send(c.toString()));";
+    ASSERT_TRUE(
+        content::ExecuteScriptAndExtractString(web_contents, script, &result));
+    ASSERT_EQ("NotAllowedError: The operation is not allowed.", result);
+  }
+
+  // Attempt to create a publicKeyCredential with an invalid relying party.
+  void CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectInvalidRpId(
+      content::WebContents* web_contents) {
+    std::string result;
+    std::string script =
+        "navigator.credentials.create({ publicKey: {"
+        "  challenge: new TextEncoder().encode('climb a mountain'),"
+        "  rp: { id: 'localhost', name: 'Acme' },"
+        "  user: { "
+        "    id: new TextEncoder().encode('1098237235409872'),"
+        "    name: 'avery.a.jones@example.com',"
+        "    displayName: 'Avery A. Jones', "
+        "    icon: 'https://pics.acme.com/00/p/aBjjjpqPb.png'},"
+        "  pubKeyCredParams: [{ type: 'public-key', alg: '-7'}],"
+        "  timeout: 60000,"
+        "  excludeList: [] }"
+        "}).catch(c => window.domAutomationController.send(c.toString()));";
+    ASSERT_TRUE(
+        content::ExecuteScriptAndExtractString(web_contents, script, &result));
+    ASSERT_EQ(
+        "SecurityError: The relying party ID 'localhost' is not a registrable "
+        "domain suffix of, nor equal to 'https://www.example.com",
+        result.substr(0, 124));
   }
 
   // Schedules a call to be made to navigator.credentials.store() in the
@@ -121,8 +168,8 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
   }
 
   // Tests that when navigator.credentials.store() is called in an `unload`
-  // handler before a same-RenderFrame navigation, the request is guaranteed to
-  // be serviced in the context of the initial document.
+  // handler before a same-RenderFrame navigation, the request is either dropped
+  // or serviced in the context of the old document.
   //
   // If |preestablish_mojo_pipe| is set, then the CredentialManagerClient will
   // establish the Mojo connection to the ContentCredentialManager ahead of
@@ -142,8 +189,8 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ChromePasswordManagerClient* client =
         ChromePasswordManagerClient::FromWebContents(WebContents());
 
+    EXPECT_FALSE(client->has_binding_for_credential_manager());
     if (preestablish_mojo_pipe) {
-      EXPECT_FALSE(client->has_binding_for_credential_manager());
       ASSERT_NO_FATAL_FAILURE(
           TriggerNavigatorGetPasswordCredentialsAndExpectHasResult(
               WebContents(), false));
@@ -159,11 +206,13 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     ui_test_utils::NavigateToURL(browser(), a_url2);
     ASSERT_EQ(old_rfh, WebContents()->GetMainFrame());
 
-    // Ensure that the old document no longer has a Mojo connection to the
-    // ContentCredentialManager, nor can it get one later.
+    // Ensure that the old document no longer has a mojom::CredentialManager
+    // interface connection to the ContentCredentialManager, nor can it get one
+    // later.
     //
     // The sequence of events for same-RFH navigations is as follows:
     //  1.) FrameHostMsg_DidStartProvisionalLoad
+    //  ... waiting for first response byte ...
     //  2.) FrameLoader::PrepareForCommit
     //  2.1) Document::Shutdown (old Document)
     //  3.) mojom::FrameHost::DidCommitProvisionalLoad (new load)
@@ -172,25 +221,38 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     //  5.) content::WaitForLoadStop inside NavigateToURL returns
     //  6.) NavigateToURL returns
     //
-    // After Step 2.1, the old Document cannot issue a new Mojo InterfaceRequest
-    // anymore. Plus, because the AssociatedInterfaceRegistry, through which the
-    // associated interface to the ContentCredentialManager is retrieved, is
-    // itself Channel-associated, any InterfaceRequest messages that may have
-    // been issued before or during Step 2.1, will be guaranteed to arrive to
-    // the browser side before DidCommitProvisionalLoad in Step 3.
+    // After Step 2.1, the old Document no longer executes any author JS, so
+    // there can be no more calls to the Credential Management API, hence no
+    // more InterfaceRequests for mojom::CredentialManager.
     //
-    // Hence it is sufficient to check that the Mojo connection is closed now.
+    // Because the InterfaceRegistry, through which the client end of the
+    // mojom::CredentialManager interface to the ContentCredentialManager is
+    // retrieved, is re-bound by the RenderFrameHostImpl to a new pipe on
+    // DidCommitProvisionalLoad, any InterfaceRequest messages issued before or
+    // during Step 2.1 will either have already been dispatched on the browser
+    // side and serviced before DidCommitProvisionalLoad in Step 3, or will be
+    // ignored altogether.
+    //
+    // Hence it is sufficient to check that the Mojo connection is closed now
+    // after NavigateToURL above has returned.
     EXPECT_FALSE(client->has_binding_for_credential_manager());
 
-    // Ensure that the navigator.credentials.store() call was serviced in the
-    // context of the old URL, |a_url|.
+    // Ensure that the navigator.credentials.store() call issued on the previous
+    // mojom::CredentialManager connection was either serviced in the context of
+    // the old URL, |a_url|, or dropped altogether.
     //
-    // The CredentialManager Mojo interface is Channel-associated, so message
-    // ordering with legacy IPC messages is preserved. Therefore, servicing the
-    // store() called from the `unload` handler, triggered from
-    // FrameLoader::PrepareForCommit, will be serviced before
-    // DidCommitProvisionalLoad, thus before DidFinishNavigation,
-    ASSERT_TRUE(client->was_store_ever_called());
+    // The behavior is non-deterministic because the mojom::CredentialManager
+    // interface is not Channel-associated, so message ordering with legacy IPC
+    // messages is not preserved.
+    //
+    // If the store() method invoked from the `unload` handler (in Step 2.1)
+    // happens to be speedily dispatched before DidCommitProvisionalLoad, it
+    // will have been serviced in the context of the old document. Otherwise the
+    // ContentCredentialManager should have closed the underlying interface
+    // connection in response to DidCommitProvisionalLoad in Step 3, and the
+    // method call should be ignored.
+    if (!client->was_store_ever_called())
+      return;
 
     BubbleObserver prompt_observer(WebContents());
     prompt_observer.WaitForAutomaticSavePrompt();
@@ -253,8 +315,7 @@ class CredentialManagerBrowserTest : public PasswordManagerBrowserTestBase {
     // The sufficient conditions for this are:
     //  -- The swapped out RFH is destroyed, so the RenderFrame cannot
     //     establish a new Mojo connection to ContentCredentialManager anymore.
-    //  -- There is no already existing Mojo connection to
-    //  ContentCredentialManager
+    //  -- There is no pre-existing Mojo connection to ContentCredentialManager
     //     either, which could be used to call store() in the future.
     //  -- There have not been any calls to store() in the past.
     rfh_destruction_observer.WaitUntilDeleted();
@@ -990,9 +1051,9 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, CredentialsAutofilled) {
 
   // Reload the page and make sure it's autofilled.
   NavigateToFile("/password/password_form.html");
-  WaitForElementValue("username_field", "user");
   content::SimulateMouseClickAt(
       WebContents(), 0, blink::WebMouseEvent::Button::kLeft, gfx::Point(1, 1));
+  WaitForElementValue("username_field", "user");
   WaitForElementValue("password_field", "12345");
 }
 
@@ -1000,13 +1061,25 @@ IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest, CredentialsAutofilled) {
 // algorithm, we get a NotSupportedError.
 IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
                        CreatePublicKeyCredentialAlgorithmNotSupported) {
-  const GURL a_url1 = https_test_server().GetURL("a.com", "/title1.html");
-
+  const GURL a_url1 =
+      https_test_server().GetURL("www.example.com", "/title1.html");
   // Navigate to a mostly empty page.
   ui_test_utils::NavigateToURL(browser(), a_url1);
 
   ASSERT_NO_FATAL_FAILURE(
       CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectNotSupported(
+          WebContents()));
+}
+
+// Tests that when navigator.credentials.create() is called with an invalid
+// relying party id, we get a SecurityError
+IN_PROC_BROWSER_TEST_F(CredentialManagerBrowserTest,
+                       CreatePublicKeyCredentialInvalidRp) {
+  const GURL a_url1 =
+      https_test_server().GetURL("www.example.com", "/title1.html");
+  ui_test_utils::NavigateToURL(browser(), a_url1);
+  ASSERT_NO_FATAL_FAILURE(
+      CreatePublicKeyCredentialWithUnsupportedAlgorithmAndExpectInvalidRpId(
           WebContents()));
 }
 

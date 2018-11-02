@@ -10,7 +10,6 @@
 #include "core/css/MediaValuesCached.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
-#include "core/layout/api/LayoutViewItem.h"
 
 namespace blink {
 
@@ -20,7 +19,7 @@ MediaValues* MediaValuesDynamic::Create(Document& document) {
 
 MediaValues* MediaValuesDynamic::Create(LocalFrame* frame) {
   if (!frame || !frame->View() || !frame->GetDocument() ||
-      frame->GetDocument()->GetLayoutViewItem().IsNull())
+      !frame->GetDocument()->GetLayoutView())
     return MediaValuesCached::Create();
   return new MediaValuesDynamic(frame);
 }

@@ -135,10 +135,9 @@ class AppSession::AppWindowHandler : public AppWindowRegistry::Observer {
                                               ->GetAccountId())) {
       // If we were in demo mode, we disabled all our network technologies,
       // re-enable them.
-      NetworkStateHandler* handler =
-          NetworkHandler::Get()->network_state_handler();
-      handler->SetTechnologyEnabled(NetworkTypePattern::NonVirtual(), true,
-                                    chromeos::network_handler::ErrorCallback());
+      NetworkHandler::Get()->network_state_handler()->SetTechnologyEnabled(
+          NetworkTypePattern::Physical(), true,
+          chromeos::network_handler::ErrorCallback());
     }
 
     app_session_->OnLastAppWindowClosed();
@@ -153,7 +152,7 @@ class AppSession::AppWindowHandler : public AppWindowRegistry::Observer {
   DISALLOW_COPY_AND_ASSIGN(AppWindowHandler);
 };
 
-class AppSession::BrowserWindowHandler : public chrome::BrowserListObserver {
+class AppSession::BrowserWindowHandler : public BrowserListObserver {
  public:
   BrowserWindowHandler() {
     BrowserList::AddObserver(this);
@@ -172,7 +171,7 @@ class AppSession::BrowserWindowHandler : public chrome::BrowserListObserver {
     browser->window()->Close();
   }
 
-  // chrome::BrowserListObserver overrides:
+  // BrowserListObserver overrides:
   void OnBrowserAdded(Browser* browser) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "bindings/core/v8/V8BindingForCore.h"
 #include "core/timing/Performance.h"
 
 #include "core/frame/PerformanceMonitor.h"
@@ -51,14 +52,13 @@ class PerformanceTest : public ::testing::Test {
  protected:
   void SetUp() override {
     page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-    page_holder_->GetDocument().SetURL(KURL(NullURL(), "https://example.com"));
+    page_holder_->GetDocument().SetURL(KURL("https://example.com"));
     performance_ = Performance::Create(page_holder_->GetDocument().domWindow());
     performance_->time_origin_ = kTimeOrigin;
 
     // Create another dummy page holder and pretend this is the iframe.
     another_page_holder_ = DummyPageHolder::Create(IntSize(400, 300));
-    another_page_holder_->GetDocument().SetURL(
-        KURL(NullURL(), "https://iframed.com/bar"));
+    another_page_holder_->GetDocument().SetURL(KURL("https://iframed.com/bar"));
   }
 
   bool ObservingLongTasks() {
@@ -174,8 +174,7 @@ TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
 
   auto* document_loader = page_holder->GetFrame().Loader().GetDocumentLoader();
   ASSERT_TRUE(document_loader);
-  document_loader->GetTiming().SetNavigationStart(
-      MonotonicallyIncreasingTime());
+  document_loader->GetTiming().SetNavigationStart(CurrentTimeTicksInSeconds());
 
   EXPECT_EQ(&page_holder->GetFrame(), perf->GetFrame());
   EXPECT_EQ(&page_holder->GetFrame(), timing->GetFrame());
@@ -199,16 +198,19 @@ TEST(PerformanceLifetimeTest, SurviveContextSwitch) {
 // Make sure the output entries with the same timestamps follow the insertion
 // order. (http://crbug.com/767560)
 TEST_F(PerformanceTest, EnsureEntryListOrder) {
+  V8TestingScope scope;
   FakeTimer timer(kTimeOrigin);
 
   DummyExceptionStateForTesting exception_state;
   timer.AdvanceTimer(2);
   for (int i = 0; i < 8; i++) {
-    performance_->mark(String::Number(i), exception_state);
+    performance_->mark(scope.GetScriptState(), String::Number(i),
+                       exception_state);
   }
   timer.AdvanceTimer(2);
   for (int i = 8; i < 17; i++) {
-    performance_->mark(String::Number(i), exception_state);
+    performance_->mark(scope.GetScriptState(), String::Number(i),
+                       exception_state);
   }
   PerformanceEntryVector entries = performance_->getEntries();
   EXPECT_EQ(17U, entries.size());

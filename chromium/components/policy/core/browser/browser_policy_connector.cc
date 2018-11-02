@@ -12,8 +12,8 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -82,8 +82,8 @@ bool MatchDomain(const base::string16& domain, const base::string16& pattern,
     ReportRegexSuccessMetric(false);
     UMA_HISTOGRAM_ENUMERATION("Enterprise.DomainWhitelistRegexFailure",
                               index, arraysize(kNonManagedDomainPatterns));
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Enterprise.DomainWhitelistRegexFailureStatus",
-                                status);
+    base::UmaHistogramSparse("Enterprise.DomainWhitelistRegexFailureStatus",
+                             status);
     return false;
   }
   ReportRegexSuccessMetric(true);
@@ -108,16 +108,12 @@ BrowserPolicyConnector::~BrowserPolicyConnector() {
 void BrowserPolicyConnector::InitInternal(
     PrefService* local_state,
     std::unique_ptr<DeviceManagementService> device_management_service) {
-  DCHECK(!is_initialized());
-
   device_management_service_ = std::move(device_management_service);
 
   policy_statistics_collector_.reset(new policy::PolicyStatisticsCollector(
       base::Bind(&GetChromePolicyDetails), GetChromeSchema(),
       GetPolicyService(), local_state, base::ThreadTaskRunnerHandle::Get()));
   policy_statistics_collector_->Initialize();
-
-  InitPolicyProviders();
 }
 
 void BrowserPolicyConnector::Shutdown() {
@@ -167,6 +163,5 @@ void BrowserPolicyConnector::RegisterPrefs(PrefRegistrySimple* registry) {
       policy_prefs::kUserPolicyRefreshRate,
       CloudPolicyRefreshScheduler::kDefaultRefreshDelayMs);
 }
-
 
 }  // namespace policy

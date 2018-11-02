@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">O Google Chrome é um navegador que executa páginas e aplicativos da web em alta velocidade. É rápido, estável e fácil de usar. Navegue pela web de forma segura com proteção contra malware e phishing integrada ao Google Chrome.</translation>
 <translation id="1718131156967340976">Selecione o <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">O Google Chrome não pôde sincronizar seus dados devido a um erro no login.</translation>
-<translation id="1759301979429102118">Detalhes dos seus contatos podem ajudar a preencher formulários de forma mais rápida no Google Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Obter ajuda para usar o Chrome OS</translation>
 <translation id="1795405610103747296">Instale o Chrome no seu smartphone. Enviaremos um SMS para seu número: <ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@ Se você decidir fazer login assim mesmo, as informações do Google Chrome, com
 <translation id="2429317896000329049">O Google Chrome não pôde sincronizar seus dados porque a sincronização não está disponível para seu domínio.</translation>
 <translation id="2446511512801740068">O Chrome está desatualizado porque não foi reiniciado durante algum tempo. Uma atualização está disponível e será aplicada assim que você reiniciá-lo.</translation>
 <translation id="2485422356828889247">Desinstalar</translation>
+<translation id="2534507159460261402">Google Pay (copiado para o Chrome)</translation>
 <translation id="2580411288591421699">Não é possível instalar a mesma versão do Google Chrome que está em execução. Feche o Google Chrome e tente novamente.</translation>
 <translation id="2586406160782125153">Essa ação excluirá seus dados de navegação desse dispositivo. Para recuperar seus dados mais tarde, faça login no Chrome como <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Logotipo do Google Chrome</translation>
@@ -108,8 +108,6 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="3889417619312448367">Desinstalar o Google Chrome</translation>
 <translation id="3898493977366060150">Navegação na Web com a tecnologia do Google</translation>
 <translation id="4028693306634653894">Acesse o Chrome mais rapidamente</translation>
-<translation id="4031074602479304239">O Chrome impediu que este site levasse você para</translation>
-<translation id="4042449298237264661">Este computador não receberá mais atualizações do Google Chrome porque o Windows XP e o Windows Vista não são mais compatíveis.</translation>
 <translation id="4050175100176540509">Melhorias de segurança importantes e novos recursos estão disponíveis na versão mais recente.</translation>
 <translation id="4053720452172726777">Personalizar e controlar o Google Chrome</translation>
 <translation id="4147555960264124640">Você está fazendo login com uma conta gerenciada e concedendo ao administrador da conta o controle sobre seu perfil do Google Chrome. Seus dados do Google Chrome, como aplicativos, favoritos, histórico, senhas e outras configurações serão permanentemente vinculados a <ph name="USER_NAME" />. Você pode excluir esses dados pelo painel das Contas do Google, mas não pode associá-los a outra conta. <ph name="LEARN_MORE" /></translation>
@@ -151,7 +149,6 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="5170938038195470297">Seu perfil não pode ser utilizado pois foi criado em uma versão mais recente do Google Chrome. Alguns recursos podem não estar disponíveis. Especifique um diretório de perfil diferente ou utilize uma versão mais recente do Google Chrome.</translation>
 <translation id="5193136243808726294">O Google Chrome OS não pode abrir essa página.</translation>
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Termos de Serviço<ph name="END_TERMS_OF_SERVICE_LINK" /> do Google Chrome</translation>
-<translation id="5243785881901838525">Google Payments (copiado para o Chrome)</translation>
 <translation id="5251420635869119124">Convidados podem usar o Google Chrome sem deixar nada para trás.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{O Google Chrome será reiniciado em 1 segundo.}one{O Google Chrome será reiniciado em # segundos.}other{O Google Chrome será reiniciado em # segundos.}}</translation>
 <translation id="532046782124376502">Aviso: o Google Chrome não impede que as extensões registrem seu histórico de navegação. Para desativar esta extensão no modo anônimo, desmarque esta opção.</translation>
@@ -180,15 +177,12 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Atualizar o Chrome OS</translation>
 <translation id="6235018212288296708">Regra interna do Google Chrome que permite o tráfego mDNS.</translation>
-<translation id="6236285698028833233">O Google Chrome parou de ser atualizado e não oferece mais suporte para esta versão de seu sistema operacional.</translation>
 <translation id="6291089322031436445">Apps do Chrome Dev</translation>
 <translation id="6291549208091401781">O Google Chrome já está instalado para todos os usuários do seu computador.</translation>
 <translation id="6338556085225130112">Atualizando o Google Chrome</translation>
 <translation id="6368958679917195344">O sistema operacional do Chrome tornou-se possível graças a um <ph name="BEGIN_LINK_CROS_OSS" />software de código aberto<ph name="END_LINK_CROS_OSS" /> adicional.</translation>
 <translation id="6393863479814692971">O Chrome precisa de permissão para este site acessar sua câmera e seu microfone.</translation>
-<translation id="6400076122676892962">Este computador em breve parará de receber atualizações do Google Chrome porque o Mac OS X 10.6, 10.7 e 10.8 não serão mais compatíveis.</translation>
 <translation id="6410540444482791104">Você pode ajudar a tornar o Chrome mais seguro e mais fácil de usar, enviando automaticamente algumas informações do sistema e conteúdos de página ao Google para ajudar a detectar apps e sites perigosos.</translation>
-<translation id="6470176598693778404">Este computador não receberá mais atualizações do Google Chrome porque o Mac OS X 10.6, 10.7 e 10.8 não são mais compatíveis.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Um download está em andamento. Quer cancelar o download e sair do Google Chrome?}one{# downloads estão em andamento. Quer cancelar os downloads e sair do Google Chrome?}other{# downloads estão em andamento. Quer cancelar os downloads e sair do Google Chrome?}}</translation>
 <translation id="6566149418543181476">Atualizando o Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Você está usando <ph name="PROFILE_EMAIL" /> para sincronizar suas informações do Google Chrome. Para atualizar suas preferências de sincronização ou usar o Chrome sem uma Conta do Google, vá para <ph name="SETTINGS_LINK" />.</translation>
@@ -209,7 +203,6 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="7164397146364144019">Você pode ajudar a tornar o Google Chrome mais seguro e mais fácil de usar, informando automaticamente ao Google detalhes sobre possíveis incidentes de segurança.</translation>
 <translation id="7185038942300673794">A extensão <ph name="EXTENSION_NAME" /> foi adicionada ao Google Chrome.</translation>
 <translation id="7242029209006116544">Você está fazendo login com uma conta gerenciada e concedendo ao administrador da conta o controle sobre seu perfil do Google Chrome. Seus dados do Google Chrome, como aplicativos, favoritos, histórico, senhas e outras configurações serão permanentemente vinculados a <ph name="USER_NAME" />. Você pode excluir esses dados pelo painel das Contas do Google, mas não pode associá-los a outra conta. Você tem a opção de criar um novo perfil para manter seus dados existentes do Google Chrome separados. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Este computador em breve parará de receber atualizações do Google Chrome porque o Windows XP e Windows Vista não serão mais compatíveis.</translation>
 <translation id="7330164299247909639">Falha no certificado de autenticação. Faça login novamente no Google Chrome como <ph name="USER_NAME" /> ou entre em contato com o administrador para receber mais informações. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Nova janela</translation>
 <translation id="7369650938475876456">Use uma senha forte gerada pelo Chrome</translation>
@@ -222,6 +215,7 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="7494905215383356681">Licenças de código aberto do Google Chrome</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Exibir o Chrome OS neste idioma</translation>
+<translation id="7589360514048265910">Este computador não receberá mais atualizações do Google Chrome, porque o Mac OS X 10.9 não é mais compatível.</translation>
 <translation id="7592736734348559088">O Google Chrome não pôde sincronizar seus dados, pois os detalhes de login da sua conta estão desatualizados.</translation>
 <translation id="7626032353295482388">Bem-vindo ao Google Chrome</translation>
 <translation id="7747138024166251722">O instalador não conseguiu criar um diretório temporário. Verifique se há espaço livre em disco e se há permissão para a instalação de software.</translation>
@@ -237,6 +231,7 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="7896673875602241923">Anteriormente, alguém fez login no Chrome neste computador como <ph name="ACCOUNT_EMAIL_LAST" />. Crie um novo usuário do Chrome para manter suas informações separadas.</translation>
 <translation id="7908168227788431038">Atualização quase concluída. Reinicie o Google Chrome para concluí-la.</translation>
 <translation id="795025003224538582">Não reiniciar</translation>
+<translation id="7962410387636238736">Este computador não receberá mais atualizações do Google Chrome porque o Windows XP e o Windows Vista não são mais compatíveis</translation>
 <translation id="8005540215158006229">O Google Chrome está quase pronto.</translation>
 <translation id="8008534537613507642">Reinstalar o Google Chrome</translation>
 <translation id="8030318113982266900">Atualizando seu dispositivo para o canal <ph name="CHANNEL_NAME" />...</translation>
@@ -267,7 +262,6 @@ Verifique seu e-mail em <ph name="ACCOUNT_EMAIL" /> para ver mais instruções.<
 <translation id="8796108026289707191">Você deve reiniciar o Google Chrome agora.</translation>
 <translation id="8823341990149967727">O Google Chrome está desatualizado</translation>
 <translation id="884296878221830158">Controla também qual página deve ser exibida quando você inicia o Chrome ou clica no botão "Página inicial".</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">Você não tem os direitos adequados para instalação no nível do sistema. Tente executar o instalador novamente como administrador.</translation>
 <translation id="8914504000324227558">Reiniciar o Google Chrome</translation>
 <translation id="9026991721384951619">O Chrome OS não pôde sincronizar seus dados porque os detalhes de login da sua conta estão desatualizados.</translation>

@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "ui/base/material_design/material_design_controller.h"
+#include "ui/gfx/color_palette.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_ripple.h"
 #include "ui/views/background.h"
@@ -28,30 +29,34 @@ std::unique_ptr<views::Border> CreateBorderWithVerticalSpacing(
 }
 
 // Sets the accessible name of |parent| to the text from |first| and |second|.
-// Also set the combined text as the tooltip for |parent| if either |first| or
-// |second|'s text is cut off or elided.
+// Also set the combined text as the tooltip for |parent| if |set_tooltip| is
+// true and either |first| or |second|'s text is cut off or elided.
 void SetTooltipAndAccessibleName(views::Button* parent,
                                  views::StyledLabel* first,
                                  views::Label* second,
                                  const gfx::Rect& available_space,
-                                 int taken_width) {
+                                 int taken_width,
+                                 bool set_tooltip) {
   const base::string16 accessible_name =
       second == nullptr ? first->text()
                         : base::JoinString({first->text(), second->text()},
                                            base::ASCIIToUTF16("\n"));
+  if (set_tooltip) {
+    const int available_width = available_space.width() - taken_width;
 
-  // |views::StyledLabel|s only add tooltips for any links they may have.
-  // However, since |HoverButton| will never insert a link inside its child
-  // |StyledLabel|, decide whether it needs a tooltip by checking whether the
-  // available space is smaller than its preferred size.
-  bool first_truncated = first->GetPreferredSize().width() >
-                         (available_space.width() - taken_width);
-  base::string16 second_tooltip;
-  if (second != nullptr)
-    second->GetTooltipText(gfx::Point(), &second_tooltip);
-  parent->SetTooltipText(first_truncated || !second_tooltip.empty()
-                             ? accessible_name
-                             : base::string16());
+    // |views::StyledLabel|s only add tooltips for any links they may have.
+    // However, since |HoverButton| will never insert a link inside its child
+    // |StyledLabel|, decide whether it needs a tooltip by checking whether the
+    // available space is smaller than its preferred size.
+    bool first_truncated = first->GetPreferredSize().width() > available_width;
+    bool second_truncated = false;
+    if (second != nullptr)
+      second_truncated = second->GetPreferredSize().width() > available_width;
+
+    parent->SetTooltipText(first_truncated || second_truncated
+                               ? accessible_name
+                               : base::string16());
+  }
   parent->SetAccessibleName(accessible_name);
 }
 
@@ -62,7 +67,6 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
     : views::LabelButton(button_listener, text),
       title_(nullptr),
       subtitle_(nullptr) {
-  DCHECK(button_listener);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   SetFocusPainter(nullptr);
 
@@ -99,11 +103,11 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
   // more vertical spacing.
   constexpr int kLargeIconHeight = 20;
   const int icon_height = icon_view->GetPreferredSize().height();
+  const bool is_small_icon = icon_height <= kLargeIconHeight;
   int remaining_vert_spacing =
-      icon_height <= kLargeIconHeight
+      is_small_icon
           ? layout_provider->GetDistanceMetric(DISTANCE_CONTROL_LIST_VERTICAL)
-          : layout_provider->GetDistanceMetric(
-                views::DISTANCE_CONTROL_VERTICAL_TEXT_PADDING);
+          : 12;
   const int total_height = icon_height + remaining_vert_spacing * 2;
 
   // If the padding given to the top and bottom of the HoverButton (i.e., on
@@ -115,14 +119,20 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
       views::style::GetLineHeight(views::style::CONTEXT_LABEL,
                                   views::style::STYLE_PRIMARY) *
       num_labels;
-  if (combined_line_height > icon_view->GetPreferredSize().height())
+  if (combined_line_height > icon_height)
     remaining_vert_spacing = (total_height - combined_line_height) / 2;
 
   SetBorder(CreateBorderWithVerticalSpacing(remaining_vert_spacing));
 
-  views::GridLayout* grid_layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* grid_layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
+  // Badging may make the icon slightly wider (but not taller). However, the
+  // layout should be the same whether or not the icon is badged, so allow the
+  // badged part of the icon to extend into the padding.
+  const int badge_spacing = icon_view->GetPreferredSize().width() - icon_height;
   const int icon_label_spacing = layout_provider->GetDistanceMetric(
-      views::DISTANCE_RELATED_LABEL_HORIZONTAL);
+                                     views::DISTANCE_RELATED_LABEL_HORIZONTAL) -
+                                 badge_spacing;
 
   constexpr float kFixed = 0.f;
   constexpr float kStretchy = 1.f;
@@ -175,7 +185,7 @@ HoverButton::HoverButton(views::ButtonListener* button_listener,
     grid_layout->AddView(subtitle_);
   }
   SetTooltipAndAccessibleName(this, title_, subtitle_, GetLocalBounds(),
-                              taken_width_);
+                              taken_width_, auto_compute_tooltip_);
 
   // Since this constructor doesn't use the |LabelButton|'s image / label Views,
   // make sure the minimum size is correct according to the |grid_layout|.
@@ -202,7 +212,7 @@ void HoverButton::SetTitleTextWithHintRange(const base::string16& title_text,
   }
   title_->SizeToFit(0);
   SetTooltipAndAccessibleName(this, title_, subtitle_, GetLocalBounds(),
-                              taken_width_);
+                              taken_width_, auto_compute_tooltip_);
 }
 
 views::Button::KeyClickAction HoverButton::GetKeyClickActionForEvent(
@@ -276,6 +286,42 @@ views::View* HoverButton::GetTooltipHandlerForPoint(const gfx::Point& point) {
 void HoverButton::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   if (title_) {
     SetTooltipAndAccessibleName(this, title_, subtitle_, GetLocalBounds(),
-                                taken_width_);
+                                taken_width_, auto_compute_tooltip_);
   }
+}
+
+void HoverButton::SetStyle(Style style) {
+  SkColor background_color = 0, subtitle_text_color = 0;
+  switch (style) {
+    case STYLE_PROMINENT:
+      // White text on |gfx::kGoogleBlue500| would be adjusted by
+      // AutoColorRedability. However, this specific combination has an
+      // exception (http://go/mdcontrast). So, disable AutoColorReadability.
+      title_->set_auto_color_readability_enabled(false);
+      background_color = GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_ProminentButtonColor);
+      subtitle_text_color = GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_TextOnProminentButtonColor);
+      break;
+    case STYLE_ERROR:
+      background_color = gfx::kGoogleRed700;
+      subtitle_text_color = SK_ColorWHITE;
+      break;
+    default:
+      NOTREACHED();
+  }
+  SetBackground(views::CreateSolidBackground(background_color));
+  SetTitleTextStyle(views::style::STYLE_DIALOG_BUTTON_DEFAULT,
+                    background_color);
+  SetSubtitleColor(subtitle_text_color);
+}
+
+void HoverButton::SetTitleTextStyle(views::style::TextStyle text_style,
+                                    SkColor background_color) {
+  title_->SetDisplayedOnBackgroundColor(background_color);
+  title_->SetDefaultTextStyle(text_style);
+}
+
+void HoverButton::SetSubtitleColor(SkColor color) {
+  subtitle_->SetEnabledColor(color);
 }

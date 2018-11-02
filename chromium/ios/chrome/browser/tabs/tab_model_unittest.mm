@@ -5,7 +5,6 @@
 #import <objc/runtime.h>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
@@ -76,8 +75,8 @@ class TabModelTest : public PlatformTest {
  public:
   TabModelTest()
       : scoped_browser_state_manager_(
-            base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())),
-        web_client_(base::MakeUnique<ChromeWebClient>()) {
+            std::make_unique<TestChromeBrowserStateManager>(base::FilePath())),
+        web_client_(std::make_unique<ChromeWebClient>()) {
     DCHECK_CURRENTLY_ON(web::WebThread::UI);
 
     TestChromeBrowserState::Builder test_cbs_builder;
@@ -130,8 +129,7 @@ class TabModelTest : public PlatformTest {
       session_storage.lastCommittedItemIndex = -1;
       [sessions addObject:session_storage];
     }
-    return base::scoped_nsobject<SessionWindowIOS>(
-        [[SessionWindowIOS alloc] initWithSessions:sessions selectedIndex:1]);
+    return [[SessionWindowIOS alloc] initWithSessions:sessions selectedIndex:1];
   }
 
   web::TestWebThreadBundle thread_bundle_;
@@ -879,7 +877,7 @@ TEST_F(TabModelTest, MoveTabs) {
 TEST_F(TabModelTest, ParentTabModel) {
   std::unique_ptr<web::WebState> web_state = web::WebState::Create(
       web::WebState::CreateParams(chrome_browser_state_.get()));
-  AttachTabHelpers(web_state.get());
+  AttachTabHelpers(web_state.get(), /*for_prerender=*/false);
 
   Tab* tab = LegacyTabHelper::GetTabForWebState(web_state.get());
   EXPECT_NSEQ(nil, [tab parentTabModel]);

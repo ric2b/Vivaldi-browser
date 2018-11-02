@@ -7,7 +7,7 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/chrome/browser/chrome_coordinator.h"
+#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 // A coordinator specialization for the case where the coordinator is
 // creating and managing the root view controller for a UIWindow.
@@ -19,6 +19,10 @@
 
 - (nullable instancetype)initWithBaseViewController:
     (nullable UIViewController*)viewController NS_UNAVAILABLE;
+- (nullable instancetype)
+initWithBaseViewController:(nullable UIViewController*)viewController
+              browserState:(nullable ios::ChromeBrowserState*)browserState
+    NS_UNAVAILABLE;
 
 @property(weak, nonatomic, readonly, nullable) UIWindow* window;
 

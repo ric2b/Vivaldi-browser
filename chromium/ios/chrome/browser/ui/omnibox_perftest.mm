@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #import "base/test/ios/wait_util.h"
 #include "base/time/time.h"
 #include "components/toolbar/test_toolbar_model.h"
@@ -18,6 +17,7 @@
 #include "ios/chrome/browser/ui/toolbar/toolbar_model_impl_ios.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_delegate.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #include "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
@@ -80,11 +80,11 @@ class OmniboxPerfTest : public PerfTest {
 
     // Create a WebStateList that will always return the test WebState as
     // the active WebState.
-    web_state_list_ = base::MakeUnique<WebStateList>(&web_state_list_delegate_);
+    web_state_list_ = std::make_unique<WebStateList>(&web_state_list_delegate_);
     std::unique_ptr<web::TestWebState> web_state =
-        base::MakeUnique<web::TestWebState>();
+        std::make_unique<web::TestWebState>();
     std::unique_ptr<web::TestNavigationManager> navigation_manager =
-        base::MakeUnique<web::TestNavigationManager>();
+        std::make_unique<web::TestNavigationManager>();
     web_state->SetNavigationManager(std::move(navigation_manager));
     web_state_list_->InsertWebState(0, std::move(web_state),
                                     WebStateList::INSERT_FORCE_INDEX,
@@ -119,6 +119,8 @@ class OmniboxPerfTest : public PerfTest {
     toolbarView.frame = toolbarFrame;
     // Add toolbar to window.
     [window_ addSubview:toolbarView];
+    AddNamedGuide(kOmniboxGuide, window_);
+    [toolbar_ didMoveToParentViewController:nil];
     base::test::ios::WaitUntilCondition(^bool() {
       return IsToolbarLoaded(window_);
     });
@@ -259,7 +261,8 @@ TEST_F(OmniboxPerfTest, TestTypeOneCharInTextField) {
 
 // Measures the amount of time it takes to type in the word "google" one
 // letter at a time.
-TEST_F(OmniboxPerfTest, TestTypingInTextField) {
+// TODO(crbug.com/799488): Re-enable this test.
+TEST_F(OmniboxPerfTest, DISABLED_TestTypingInTextField) {
   OmniboxTextFieldIOS* textField = (OmniboxTextFieldIOS*)FindViewByClass(
       [toolbar_ view], [OmniboxTextFieldIOS class]);
   // The characters to type into the omnibox text field.

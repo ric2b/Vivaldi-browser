@@ -34,6 +34,7 @@ class VivaldiContextMenu {
   virtual void Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void SetSelectedItem(int id) {}
+  virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
 };
 
 }  // namespace vivaldi

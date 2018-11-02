@@ -30,10 +30,13 @@ source_set("ntp_header") {
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_util",
+    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui_util",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/browser/ui/image_util",
     "//ios/chrome/browser/ui/toolbar",
     "//ios/chrome/browser/ui/toolbar:resource_macros",
+    "//ios/chrome/browser/ui/toolbar:toolbar_ui",
+    "//ios/chrome/browser/ui/toolbar/clean:toolbar_ui",
     "//ios/chrome/browser/ui/toolbar/public",
     "//ios/chrome/browser/ui/toolbar/public:toolbar_base_feature",
     "//ios/chrome/common",
@@ -48,7 +51,6 @@ source_set("ntp_controller") {
     "new_tab_page_controller.mm",
   ]
   deps = [
-    ":modal_ntp",
     ":ntp",
     ":ntp_internal",
     "//base",
@@ -59,7 +61,6 @@ source_set("ntp_controller") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/content_suggestions",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
@@ -67,9 +68,11 @@ source_set("ntp_controller") {
     "//ios/chrome/browser/ui:notifications",
     "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/content_suggestions",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
     "//ios/chrome/browser/ui/ntp/recent_tabs",
     "//ios/chrome/browser/ui/toolbar",
+    "//ios/chrome/browser/ui/toolbar:toolbar_ui",
     "//ios/public/provider/chrome/browser/voice",
     "//ui/base",
   ]
@@ -78,11 +81,6 @@ source_set("ntp_controller") {
 source_set("ntp_internal") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "centering_scrollview.h",
-    "centering_scrollview.mm",
-    "google_landing_consumer.h",
-    "google_landing_mediator.h",
-    "google_landing_mediator.mm",
     "incognito_view.h",
     "incognito_view.mm",
     "incognito_view_controller.h",
@@ -107,7 +105,6 @@ source_set("ntp_internal") {
     ":ntp_header",
   ]
   deps = [
-    ":modal_ntp",
     ":ntp",
     ":ntp_tile",
     "resources:bookmarks_bar_bg",
@@ -161,7 +158,6 @@ source_set("ntp_internal") {
     "//components/suggestions",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
-    "//ios/chrome/browser/bookmarks:features",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/history",
@@ -175,9 +171,7 @@ source_set("ntp_internal") {
     "//ios/chrome/browser/ui:notifications",
     "//ios/chrome/browser/ui/bookmarks",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/content_suggestions",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
-    "//ios/chrome/browser/ui/content_suggestions:content_suggestions_util",
     "//ios/chrome/browser/ui/content_suggestions/cells",
     "//ios/chrome/browser/ui/context_menu",
     "//ios/chrome/browser/ui/favicon",
@@ -215,32 +209,16 @@ source_set("ntp_tile") {
   ]
 }
 
-# TODO(crbug.com/768817): Remove the following once new bookmarks are enabled by
-# default.
-source_set("modal_ntp") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  sources = [
-    "modal_ntp.h",
-    "modal_ntp.mm",
-  ]
-  deps = [
-    "//ios/chrome/browser/bookmarks:features",
-    "//ios/chrome/browser/ui:ui_util",
-  ]
-}
-
 source_set("unit_tests") {
   configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
-    "centering_scrollview_unittest.mm",
     "new_tab_page_bar_unittest.mm",
     "new_tab_page_controller_unittest.mm",
     "notification_promo_whats_new_unittest.mm",
     "ntp_tile_saver_unittest.mm",
   ]
   deps = [
-    ":modal_ntp",
     ":ntp",
     ":ntp_controller",
     ":ntp_internal",
@@ -257,7 +235,6 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/bookmarks",
-    "//ios/chrome/browser/bookmarks:features",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/favicon",
     "//ios/chrome/browser/search_engines",
@@ -288,12 +265,10 @@ source_set("eg_tests") {
     "new_tab_page_egtest.mm",
   ]
   deps = [
-    ":modal_ntp",
     ":ntp_controller",
     "//components/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
-    "//ios/chrome/browser/bookmarks:features",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",

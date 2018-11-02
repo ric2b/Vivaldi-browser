@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -156,8 +155,8 @@ std::vector<std::string> GetSortedExtensionIMEs(
   return extension_ime_list;
 }
 
-}  // anonymous namespace
-#endif
+}  // namespace
+#endif  // defined(OS_CHROMEOS)
 
 LanguageSettingsPrivateGetLanguageListFunction::
     LanguageSettingsPrivateGetLanguageListFunction()
@@ -184,8 +183,8 @@ LanguageSettingsPrivateGetLanguageListFunction::Run() {
                                                    locales.end());
 
   // Get the list of spell check languages and convert to a set.
-  std::vector<std::string> spellcheck_languages;
-  spellcheck::SpellCheckLanguages(&spellcheck_languages);
+  std::vector<std::string> spellcheck_languages =
+      spellcheck::SpellCheckLanguages();
   const std::unordered_set<std::string> spellcheck_language_set(
       spellcheck_languages.begin(), spellcheck_languages.end());
 
@@ -354,7 +353,9 @@ LanguageSettingsPrivateMoveLanguageFunction::Run() {
       NOTREACHED();
   }
 
-  translate_prefs->RearrangeLanguage(language_code, where,
+  // On Desktop we can only move languages by one position.
+  const int offset = 1;
+  translate_prefs->RearrangeLanguage(language_code, where, offset,
                                      supported_language_codes);
 
   return RespondNow(NoArguments());
@@ -445,7 +446,7 @@ LanguageSettingsPrivateAddSpellcheckWordFunction::Run() {
       SpellcheckServiceFactory::GetForContext(browser_context());
   bool success = service->GetCustomDictionary()->AddWord(params->word);
 
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(success)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(success)));
 }
 
 LanguageSettingsPrivateRemoveSpellcheckWordFunction::
@@ -464,7 +465,7 @@ LanguageSettingsPrivateRemoveSpellcheckWordFunction::Run() {
       SpellcheckServiceFactory::GetForContext(browser_context());
   bool success = service->GetCustomDictionary()->RemoveWord(params->word);
 
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(success)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(success)));
 }
 
 LanguageSettingsPrivateGetTranslateTargetLanguageFunction::
@@ -481,7 +482,7 @@ LanguageSettingsPrivateGetTranslateTargetLanguageFunction::Run() {
   language::LanguageModel* language_model =
       LanguageModelFactory::GetForBrowserContext(profile);
   return RespondNow(OneArgument(
-      base::MakeUnique<base::Value>(TranslateService::GetTargetLanguage(
+      std::make_unique<base::Value>(TranslateService::GetTargetLanguage(
           profile->GetPrefs(), language_model))));
 }
 

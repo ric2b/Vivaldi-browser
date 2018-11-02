@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/eula_screen_handler.h"
 
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -15,8 +16,8 @@
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_view.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
+#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/ui/login_web_dialog.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -236,7 +237,7 @@ void EulaScreenHandler::HandleOnInstallationSettingsPopupOpened() {
 void EulaScreenHandler::UpdateLocalizedValues(
     ::login::SecureModuleUsed secure_module_used) {
   base::DictionaryValue updated_secure_module_strings;
-  auto builder = base::MakeUnique<::login::LocalizedValuesBuilder>(
+  auto builder = std::make_unique<::login::LocalizedValuesBuilder>(
       &updated_secure_module_strings);
   if (secure_module_used == ::login::SecureModuleUsed::TPM) {
     builder->Add("eulaTpmDesc", IDS_EULA_TPM_DESCRIPTION);

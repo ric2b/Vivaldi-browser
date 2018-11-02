@@ -19,7 +19,6 @@
 #include "content/public/common/renderer_preferences.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/aura/window.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -73,8 +72,7 @@ class SearchAnswerWebView : public views::WebView {
     OnVisibilityEvent(false);
     // Focus Behavior is originally set in WebView::SetWebContents, but
     // overriden here because we do not want the webview to get focus.
-    if (features::IsAppListFocusEnabled())
-      SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+    SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   }
 
   void RemovedFromWidget() override {
@@ -134,7 +132,7 @@ void ParseResponseHeaders(const net::HttpResponseHeaders* headers,
 }  // namespace
 
 AnswerCardWebContents::AnswerCardWebContents(Profile* profile)
-    : web_view_(base::MakeUnique<SearchAnswerWebView>(profile)),
+    : web_view_(std::make_unique<SearchAnswerWebView>(profile)),
       web_contents_(
           content::WebContents::Create(content::WebContents::CreateParams(
               profile,
@@ -198,8 +196,7 @@ content::WebContents* AnswerCardWebContents::OpenURLFromTab(
 
   // Open the user-clicked link in the browser taking into account the requested
   // disposition.
-  chrome::NavigateParams new_tab_params(profile_, params.url,
-                                        params.transition);
+  NavigateParams new_tab_params(profile_, params.url, params.transition);
 
   new_tab_params.disposition = params.disposition;
 
@@ -208,10 +205,10 @@ content::WebContents* AnswerCardWebContents::OpenURLFromTab(
     // activated window with the new activated tab after the user closes the
     // launcher. So it's "background" relative to the launcher itself.
     new_tab_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-    new_tab_params.window_action = chrome::NavigateParams::SHOW_WINDOW_INACTIVE;
+    new_tab_params.window_action = NavigateParams::SHOW_WINDOW_INACTIVE;
   }
 
-  chrome::Navigate(&new_tab_params);
+  Navigate(&new_tab_params);
 
   base::RecordAction(base::UserMetricsAction("SearchAnswer_OpenedUrl"));
 

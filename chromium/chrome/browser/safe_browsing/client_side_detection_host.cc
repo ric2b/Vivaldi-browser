@@ -20,7 +20,6 @@
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/common/render_messages.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
@@ -33,7 +32,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/url_constants.h"
@@ -42,7 +40,6 @@
 
 using content::BrowserThread;
 using content::NavigationEntry;
-using content::ResourceRequestDetails;
 using content::ResourceType;
 using content::WebContents;
 
@@ -368,8 +365,6 @@ bool ClientSideDetectionHost::OnMessageReceived(
   IPC_BEGIN_MESSAGE_MAP(ClientSideDetectionHost, message)
     IPC_MESSAGE_HANDLER(SafeBrowsingHostMsg_PhishingDetectionDone,
                         OnPhishingDetectionDone)
-    IPC_MESSAGE_HANDLER(SafeBrowsingHostMsg_SubresourceResponseStarted,
-                        OnSubresourceResponseStarted)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -378,7 +373,8 @@ bool ClientSideDetectionHost::OnMessageReceived(
 void ClientSideDetectionHost::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (browse_info_.get() && should_extract_malware_features_ &&
-      navigation_handle->HasCommitted() && !navigation_handle->IsDownload()) {
+      navigation_handle->HasCommitted() && !navigation_handle->IsDownload() &&
+      !navigation_handle->IsSameDocument()) {
     content::ResourceType resource_type =
         navigation_handle->IsInMainFrame() ? content::RESOURCE_TYPE_MAIN_FRAME
                                            : content::RESOURCE_TYPE_SUB_FRAME;
@@ -443,6 +439,16 @@ void ClientSideDetectionHost::DidFinishNavigation(
                  weak_factory_.GetWeakPtr()),
       web_contents(), csd_service_, database_manager_.get(), this);
   classification_request_->Start();
+}
+
+void ClientSideDetectionHost::SubresourceResponseStarted(
+    const GURL& url,
+    const GURL& referrer,
+    const std::string& method,
+    content::ResourceType resource_type,
+    const std::string& ip) {
+  if (browse_info_.get() && should_extract_malware_features_ && url.is_valid())
+    UpdateIPUrlMap(ip, url.spec(), method, referrer.spec(), resource_type);
 }
 
 void ClientSideDetectionHost::OnSafeBrowsingHit(
@@ -579,16 +585,6 @@ void ClientSideDetectionHost::OnPhishingDetectionDone(
                      weak_factory_.GetWeakPtr()));
     }
   }
-}
-
-void ClientSideDetectionHost::OnSubresourceResponseStarted(
-    const std::string& ip,
-    const GURL& url,
-    const std::string& method,
-    const GURL& referrer,
-    content::ResourceType resource_type) {
-  if (browse_info_.get() && should_extract_malware_features_ && url.is_valid())
-    UpdateIPUrlMap(ip, url.spec(), method, referrer.spec(), resource_type);
 }
 
 void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,

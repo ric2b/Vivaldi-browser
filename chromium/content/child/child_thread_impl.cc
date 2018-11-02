@@ -34,12 +34,12 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/tracing/child/child_trace_message_filter.h"
 #include "content/child/child_histogram_fetcher_impl.h"
 #include "content/child/child_process.h"
 #include "content/child/thread_safe_sender.h"
-#include "content/common/child_process_messages.h"
 #include "content/common/field_trial_recorder.mojom.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/public/common/connection_filter.h"
@@ -77,10 +77,6 @@
 
 #if defined(OS_MACOSX)
 #include "base/allocator/allocator_interception_mac.h"
-#endif
-
-#if defined(OS_WIN)
-#include "content/child/dwrite_font_proxy/dwrite_font_proxy_init_impl_win.h"
 #endif
 
 namespace content {
@@ -236,6 +232,7 @@ base::LazyInstance<QuitClosure>::DestructorAtExit g_quit_closure =
 
 std::unique_ptr<mojo::edk::IncomingBrokerClientInvitation>
 InitializeMojoIPCChannel() {
+  TRACE_EVENT0("startup", "InitializeMojoIPCChannel");
   mojo::edk::ScopedPlatformHandle platform_channel;
 #if defined(OS_WIN)
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -432,6 +429,7 @@ void ChildThreadImpl::ConnectChannel(
 }
 
 void ChildThreadImpl::Init(const Options& options) {
+  TRACE_EVENT0("startup", "ChildThreadImpl::Init");
   g_lazy_tls.Pointer()->Set(this);
   on_channel_error_called_ = false;
   message_loop_ = base::MessageLoop::current();
@@ -584,10 +582,6 @@ void ChildThreadImpl::Init(const Options& options) {
     field_trial_syncer_->InitFieldTrialObserving(
         *base::CommandLine::ForCurrentProcess());
   }
-
-#if defined(OS_WIN)
-  UpdateDWriteFontProxySender(thread_safe_sender());
-#endif
 }
 
 void ChildThreadImpl::InitTracing() {
@@ -664,11 +658,19 @@ bool ChildThreadImpl::Send(IPC::Message* msg) {
 
 #if defined(OS_WIN)
 void ChildThreadImpl::PreCacheFont(const LOGFONT& log_font) {
-  Send(new ChildProcessHostMsg_PreCacheFont(log_font));
+  GetFontCacheWin()->PreCacheFont(log_font);
 }
 
 void ChildThreadImpl::ReleaseCachedFonts() {
-  Send(new ChildProcessHostMsg_ReleaseCachedFonts());
+  GetFontCacheWin()->ReleaseCachedFonts();
+}
+
+mojom::FontCacheWin* ChildThreadImpl::GetFontCacheWin() {
+  if (!font_cache_win_ptr_) {
+    GetConnector()->BindInterface(mojom::kBrowserServiceName,
+                                  &font_cache_win_ptr_);
+  }
+  return font_cache_win_ptr_.get();
 }
 #endif
 

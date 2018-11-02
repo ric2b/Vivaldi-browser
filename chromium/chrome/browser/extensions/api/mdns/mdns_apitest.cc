@@ -2,13 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/extensions/api/mdns/mdns_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/media/router/discovery/mdns/mock_dns_sd_registry.h"
+#include "chrome/browser/media/router/test/mock_dns_sd_registry.h"
 #include "chrome/common/extensions/api/mdns.h"
 #include "extensions/common/switches.h"
 #include "extensions/test/result_catcher.h"
@@ -35,7 +36,7 @@ class MDnsAPITest : public ExtensionApiTest {
 
   void SetUpTestDnsSdRegistry() {
     extensions::MDnsAPI* api = extensions::MDnsAPI::Get(profile());
-    dns_sd_registry_ = base::MakeUnique<media_router::MockDnsSdRegistry>(api);
+    dns_sd_registry_ = std::make_unique<media_router::MockDnsSdRegistry>(api);
     EXPECT_CALL(*dns_sd_registry_, AddObserver(api))
         .Times(1);
     api->SetDnsSdRegistryForTesting(dns_sd_registry_.get());

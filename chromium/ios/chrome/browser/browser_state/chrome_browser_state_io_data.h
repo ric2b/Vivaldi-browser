@@ -50,6 +50,7 @@ class ProxyConfigService;
 class ProxyService;
 class ReportSender;
 class SSLConfigService;
+class SystemCookieStore;
 class TransportSecurityPersister;
 class TransportSecurityState;
 class URLRequestJobFactoryImpl;
@@ -163,9 +164,13 @@ class ChromeBrowserStateIOData {
     scoped_refptr<net::SSLConfigService> ssl_config_service;
 
     // We need to initialize the ProxyConfigService from the UI thread
-    // because on linux it relies on initializing things through gconf,
+    // because on linux it relies on initializing things through gsettings,
     // and needs to be on the main thread.
     std::unique_ptr<net::ProxyConfigService> proxy_config_service;
+
+    // SystemCookieStore should be initialized from the UI thread as it depends
+    // on the |browser_state|.
+    std::unique_ptr<net::SystemCookieStore> system_cookie_store;
 
     // The browser state this struct was populated from. It's passed as a void*
     // to ensure it's not accidentally used on the IO thread.

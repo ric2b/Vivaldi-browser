@@ -292,8 +292,12 @@ void SimpleSynchronousEntry::CreateEntry(
 
 // static
 int SimpleSynchronousEntry::DoomEntry(const FilePath& path,
+                                      net::CacheType cache_type,
                                       uint64_t entry_hash) {
+  base::TimeTicks start = base::TimeTicks::Now();
   const bool deleted_well = DeleteFilesForEntryHash(path, entry_hash);
+  SIMPLE_CACHE_UMA(TIMES, "DiskDoomLatency", cache_type,
+                   base::TimeTicks::Now() - start);
   return deleted_well ? net::OK : net::ERR_FAILED;
 }
 
@@ -1004,7 +1008,6 @@ bool SimpleSynchronousEntry::OpenFiles(SimpleEntryStat* out_entry_stat) {
     SimpleFileTracker::FileHandle file =
         file_tracker_->Acquire(this, SubFileForFileIndex(i));
     bool success = file.IsOK() && file->GetInfo(&file_info);
-    base::Time file_last_modified;
     if (!success) {
       DLOG(WARNING) << "Could not get platform file info.";
       continue;
@@ -1461,7 +1464,7 @@ int SimpleSynchronousEntry::GetEOFRecordData(base::File* file,
 
 void SimpleSynchronousEntry::Doom() const {
   DCHECK_EQ(0u, entry_file_key_.doom_generation);
-  DeleteFilesForEntryHash(path_, entry_file_key_.entry_hash);
+  DoomEntry(path_, cache_type_, entry_file_key_.entry_hash);
 }
 
 // static

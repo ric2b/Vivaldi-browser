@@ -5,9 +5,14 @@
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 import("//build/config/ui.gni")
+import("//ui/gl/features.gni")
 
 config("gpu_implementation") {
   defines = [ "GPU_IMPLEMENTATION" ]
+}
+
+config("gpu_gles2_implementation") {
+  defines = [ "GPU_GLES2_IMPLEMENTATION" ]
 }
 
 config("gpu_util_implementation") {
@@ -17,14 +22,19 @@ config("gpu_util_implementation") {
 component("gpu") {
   public_deps = [
     "//gpu/command_buffer/client:client_sources",
-    "//gpu/command_buffer/client:gles2_cmd_helper_sources",
     "//gpu/command_buffer/common:common_sources",
     "//gpu/command_buffer/service:service_sources",
     "//gpu/config:config_sources",
-    "//gpu/ipc:command_buffer_sources",
     "//gpu/ipc/client:ipc_client_sources",
     "//gpu/ipc/common:ipc_common_sources",
-    "//gpu/ipc/service:ipc_service_sources",
+  ]
+}
+
+component("gles2") {
+  public_deps = [
+    "//gpu/command_buffer/client:gles2_cmd_helper_sources",
+    "//gpu/command_buffer/common:gles2_sources",
+    "//gpu/command_buffer/service:gles2_sources",
   ]
 }
 
@@ -34,83 +44,87 @@ component("gpu_util") {
   ]
 }
 
-shared_library("command_buffer_gles2") {
-  sources = [
-    # TODO(hendrikw): Move egl out of gles2_conform_support.
-    "gles2_conform_support/egl/config.cc",
-    "gles2_conform_support/egl/config.h",
-    "gles2_conform_support/egl/context.cc",
-    "gles2_conform_support/egl/context.h",
-    "gles2_conform_support/egl/display.cc",
-    "gles2_conform_support/egl/display.h",
-    "gles2_conform_support/egl/egl.cc",
-    "gles2_conform_support/egl/surface.cc",
-    "gles2_conform_support/egl/surface.h",
-    "gles2_conform_support/egl/test_support.cc",
-    "gles2_conform_support/egl/test_support.h",
-    "gles2_conform_support/egl/thread_state.cc",
-    "gles2_conform_support/egl/thread_state.h",
-  ]
+if (!use_static_angle) {
+  shared_library("command_buffer_gles2") {
+    sources = [
+      # TODO(hendrikw): Move egl out of gles2_conform_support.
+      "gles2_conform_support/egl/config.cc",
+      "gles2_conform_support/egl/config.h",
+      "gles2_conform_support/egl/context.cc",
+      "gles2_conform_support/egl/context.h",
+      "gles2_conform_support/egl/display.cc",
+      "gles2_conform_support/egl/display.h",
+      "gles2_conform_support/egl/egl.cc",
+      "gles2_conform_support/egl/surface.cc",
+      "gles2_conform_support/egl/surface.h",
+      "gles2_conform_support/egl/test_support.cc",
+      "gles2_conform_support/egl/test_support.h",
+      "gles2_conform_support/egl/thread_state.cc",
+      "gles2_conform_support/egl/thread_state.h",
+    ]
 
-  deps = [
-    ":gpu",
-    "//base",
-    "//build/config:exe_and_shlib_deps",
-    "//gpu/command_buffer/client:gles2_c_lib",
-    "//gpu/command_buffer/client:gles2_implementation",
-    "//gpu/command_buffer/common:gles2_utils",
-    "//ui/gl:gl",
-  ]
+    deps = [
+      ":gpu",
+      "//base",
+      "//build/config:exe_and_shlib_deps",
+      "//gpu/command_buffer/client:gles2_c_lib",
+      "//gpu/command_buffer/client:gles2_cmd_helper",
+      "//gpu/command_buffer/client:gles2_implementation",
+      "//gpu/command_buffer/service:gles2",
+      "//ui/gl",
+      "//ui/gl/init",
+    ]
 
-  defines = [
-    "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
-    "EGLAPIENTRY=",
-  ]
-  if (is_android) {
-    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
-  }
-  if (current_os == "win") {
-    defines += [ "EGLAPI=__declspec(dllexport)" ]
-  } else {
-    defines += [ "EGLAPI=__attribute__((visibility(\"default\")))" ]
-  }
-}
-
-test("command_buffer_gles2_tests") {
-  sources = [
-    "command_buffer/tests/command_buffer_gles2_tests_main.cc",
-    "command_buffer/tests/egl_test.cc",
-  ]
-
-  deps = [
-    ":command_buffer_gles2",
-    "//base",
-    "//base/test:test_support",
-    "//base/third_party/dynamic_annotations",
-    "//testing/gmock",
-    "//testing/gtest",
-  ]
-
-  defines = [
-    "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
-    "EGLAPIENTRY=",
-  ]
-  if (current_os == "win") {
-    defines += [ "EGLAPI=__declspec(dllimport)" ]
-  } else {
-    defines += [ "EGLAPI=" ]
+    defines = [
+      "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
+      "EGLAPIENTRY=",
+    ]
+    if (is_android) {
+      configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    }
+    if (current_os == "win") {
+      defines += [ "EGLAPI=__declspec(dllexport)" ]
+    } else {
+      defines += [ "EGLAPI=__attribute__((visibility(\"default\")))" ]
+    }
   }
 
-  libs = []
+  test("command_buffer_gles2_tests") {
+    sources = [
+      "command_buffer/tests/command_buffer_gles2_tests_main.cc",
+      "command_buffer/tests/egl_test.cc",
+    ]
 
-  if (is_android) {
-    libs += [ "android" ]
-    deps += [ "//ui/android:ui_java" ]
+    deps = [
+      ":command_buffer_gles2",
+      "//base",
+      "//base/test:test_support",
+      "//base/third_party/dynamic_annotations",
+      "//testing/gmock",
+      "//testing/gtest",
+    ]
+
+    defines = [
+      "COMMAND_BUFFER_GLES_LIB_SUPPORT_ONLY",
+      "EGLAPIENTRY=",
+    ]
+    if (current_os == "win") {
+      defines += [ "EGLAPI=__declspec(dllimport)" ]
+    } else {
+      defines += [ "EGLAPI=" ]
+    }
+
+    libs = []
+
+    if (is_android) {
+      libs += [ "android" ]
+      deps += [ "//ui/android:ui_java" ]
+    }
+    if (is_linux && !is_component_build) {
+      configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
+    }
   }
-  if (is_linux && !is_component_build) {
-    configs += [ "//build/config/gcc:rpath_for_built_shared_libraries" ]
-  }
-}
+}  # if (!use_static_angle)
 
 static_library("test_support") {
   testonly = true
@@ -126,10 +140,12 @@ static_library("test_support") {
   ]
 
   public_deps = [
+    ":gles2",
     ":gpu",
     "//gpu/command_buffer/client:gles2_interface",
   ]
   deps = [
+    "//gpu/command_buffer/common",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gl:gl_unittest_utils",
@@ -198,6 +214,7 @@ test("gl_tests") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   deps = [
+    ":gles2",
     ":gpu",
     ":test_support",
     "//base",
@@ -208,6 +225,7 @@ test("gl_tests") {
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/ipc:gl_in_process_context",
+    "//gpu/ipc/service",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/angle:translator",
@@ -215,6 +233,7 @@ test("gl_tests") {
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gl",
+    "//ui/gl/init",
   ]
 
   libs = []
@@ -244,6 +263,7 @@ test("gpu_unittests") {
     "command_buffer/client/mapped_memory_unittest.cc",
     "command_buffer/client/program_info_manager_unittest.cc",
     "command_buffer/client/query_tracker_unittest.cc",
+    "command_buffer/client/raster_implementation_gles_unittest.cc",
     "command_buffer/client/ring_buffer_test.cc",
     "command_buffer/client/transfer_buffer_unittest.cc",
     "command_buffer/client/vertex_array_object_manager_unittest.cc",
@@ -355,7 +375,13 @@ test("gpu_unittests") {
   }
 
   if (is_android) {
-    sources += [ "ipc/client/gpu_memory_buffer_impl_android_hardware_buffer_unittest.cc" ]
+    sources += [
+      "ipc/client/gpu_memory_buffer_impl_android_hardware_buffer_unittest.cc",
+    ]
+  }
+
+  if (is_posix && !is_mac) {
+    sources += [ "command_buffer/service/gpu_fence_manager_unittest.cc" ]
   }
 
   # TODO(geofflang): Run passthrough command decoder unittests on more platforms
@@ -372,12 +398,14 @@ test("gpu_unittests") {
   configs += [ "//build/config:precompiled_headers" ]
 
   deps = [
+    ":gles2",
     ":gpu",
     ":test_support",
     "//base",
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations",
     "//cc/paint",
+    "//components/viz/common:resource_format",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
@@ -454,7 +482,9 @@ test("command_buffer_perftests") {
     ":gpu",
     "//base",
     "//base/test:test_support",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
     "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/service:gles2",
     "//testing/gtest",
     "//testing/perf",
     "//ui/gfx/geometry",
@@ -480,10 +510,10 @@ fuzzer_test("gpu_fuzzer") {
   ]
 
   deps = [
+    ":gles2",
     ":gpu",
     "//base",
     "//base/third_party/dynamic_annotations",
-    "//gpu/command_buffer/common:gles2_utils",
     "//ui/gfx/geometry",
     "//ui/gl",
     "//ui/gl:test_support",
@@ -501,10 +531,10 @@ if (is_linux) {
     defines = [ "GPU_FUZZER_USE_ANGLE" ]
 
     deps = [
+      ":gles2",
       ":gpu",
       "//base",
       "//base/third_party/dynamic_annotations",
-      "//gpu/command_buffer/common:gles2_utils",
       "//ui/gfx/geometry",
       "//ui/gl",
       "//ui/gl:test_support",
@@ -524,10 +554,10 @@ if (is_linux) {
     ]
 
     deps = [
+      ":gles2",
       ":gpu",
       "//base",
       "//base/third_party/dynamic_annotations",
-      "//gpu/command_buffer/common:gles2_utils",
       "//ui/gfx/geometry",
       "//ui/gl",
       "//ui/gl:test_support",
@@ -544,10 +574,10 @@ if (is_linux) {
     defines = [ "GPU_FUZZER_USE_SWIFTSHADER" ]
 
     deps = [
+      ":gles2",
       ":gpu",
       "//base",
       "//base/third_party/dynamic_annotations",
-      "//gpu/command_buffer/common:gles2_utils",
       "//ui/gfx/geometry",
       "//ui/gl",
       "//ui/gl:test_support",

@@ -5,9 +5,10 @@
 #ifndef IOS_WEB_WEB_STATE_NAVIGATION_CONTEXT_IMPL_H_
 #define IOS_WEB_WEB_STATE_NAVIGATION_CONTEXT_IMPL_H_
 
+#import <WebKit/WebKit.h>
+
 #include <memory>
 
-#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #import "ios/web/public/web_state/navigation_context.h"
@@ -43,6 +44,7 @@ class NavigationContextImpl : public NavigationContext {
   ~NavigationContextImpl() override;
 
   // Setters for navigation context data members.
+  void SetUrl(const GURL& url);
   void SetIsSameDocument(bool is_same_document);
   void SetIsPost(bool is_post);
   void SetError(NSError* error);
@@ -54,6 +56,10 @@ class NavigationContextImpl : public NavigationContext {
   int GetNavigationItemUniqueID() const;
   void SetNavigationItemUniqueID(int unique_id);
 
+  // Optional WKNavigationType of the associated navigation in WKWebView.
+  void SetWKNavigationType(WKNavigationType wk_navigation_type);
+  WKNavigationType GetWKNavigationType() const;
+
  private:
   NavigationContextImpl(WebState* web_state,
                         const GURL& url,
@@ -62,13 +68,14 @@ class NavigationContextImpl : public NavigationContext {
 
   WebState* web_state_ = nullptr;
   GURL url_;
-  ui::PageTransition page_transition_;
+  const ui::PageTransition page_transition_;
   bool is_same_document_ = false;
   bool is_post_ = false;
-  base::scoped_nsobject<NSError> error_;
+  NSError* error_;
   scoped_refptr<net::HttpResponseHeaders> response_headers_;
   bool is_renderer_initiated_ = false;
   int navigation_item_unique_id_ = -1;
+  WKNavigationType wk_navigation_type_ = WKNavigationTypeOther;
 
   DISALLOW_COPY_AND_ASSIGN(NavigationContextImpl);
 };

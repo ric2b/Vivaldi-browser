@@ -6,6 +6,7 @@
 
 #include "content/browser/cache_storage/cache_storage_manager.h"
 #include "content/public/browser/browser_thread.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 
 namespace content {
 
@@ -27,7 +28,7 @@ void CacheStorageQuotaClient::OnQuotaManagerDestroyed() {
 }
 
 void CacheStorageQuotaClient::GetOriginUsage(const GURL& origin_url,
-                                             storage::StorageType type,
+                                             blink::mojom::StorageType type,
                                              const GetUsageCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -40,7 +41,7 @@ void CacheStorageQuotaClient::GetOriginUsage(const GURL& origin_url,
 }
 
 void CacheStorageQuotaClient::GetOriginsForType(
-    storage::StorageType type,
+    blink::mojom::StorageType type,
     const GetOriginsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -53,7 +54,7 @@ void CacheStorageQuotaClient::GetOriginsForType(
 }
 
 void CacheStorageQuotaClient::GetOriginsForHost(
-    storage::StorageType type,
+    blink::mojom::StorageType type,
     const std::string& host,
     const GetOriginsCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
@@ -68,27 +69,28 @@ void CacheStorageQuotaClient::GetOriginsForHost(
 
 void CacheStorageQuotaClient::DeleteOriginData(
     const GURL& origin,
-    storage::StorageType type,
+    blink::mojom::StorageType type,
     const DeletionCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!cache_manager_) {
-    callback.Run(storage::kQuotaErrorAbort);
+    callback.Run(blink::mojom::QuotaStatusCode::kErrorAbort);
     return;
   }
 
   if (!DoesSupport(type)) {
-    callback.Run(storage::kQuotaStatusOk);
+    callback.Run(blink::mojom::QuotaStatusCode::kOk);
     return;
   }
 
   cache_manager_->DeleteOriginData(origin, callback);
 }
 
-bool CacheStorageQuotaClient::DoesSupport(storage::StorageType type) const {
+bool CacheStorageQuotaClient::DoesSupport(
+    blink::mojom::StorageType type) const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  return type == storage::kStorageTypeTemporary;
+  return type == blink::mojom::StorageType::kTemporary;
 }
 
 }  // namespace content

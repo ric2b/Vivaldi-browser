@@ -2,10 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/** @fileoverview Handles interprocess communcation for the privacy page. */
+/** @fileoverview Handles interprocess communication for the privacy page. */
 
 /** @typedef {{enabled: boolean, managed: boolean}} */
-var MetricsReporting;
+let MetricsReporting;
 
 cr.define('settings', function() {
   /** @interface */

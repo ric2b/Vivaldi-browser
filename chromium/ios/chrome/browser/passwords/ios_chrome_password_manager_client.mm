@@ -24,6 +24,7 @@
 #include "ios/chrome/browser/passwords/password_manager_internals_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 
@@ -164,7 +165,7 @@ void IOSChromePasswordManagerClient::ForceSavePassword() {
 bool IOSChromePasswordManagerClient::IsSavingAndFillingEnabledForCurrentPage()
     const {
   return *saving_passwords_enabled_ && !IsIncognito() &&
-         !DidLastPageLoadEncounterSSLErrors() &&
+         !net::IsCertStatusError(GetMainFrameCertStatus()) &&
          IsFillingEnabledForCurrentPage();
 }
 
@@ -182,17 +183,14 @@ IOSChromePasswordManagerClient::GetLogManager() const {
   return log_manager_.get();
 }
 
-ukm::UkmRecorder* IOSChromePasswordManagerClient::GetUkmRecorder() {
-  return GetApplicationContext()->GetUkmRecorder();
-}
-
 ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
-  // TODO(crbug.com/732846): The UKM Source should be recycled (e.g. from the
-  // web contents), once the UKM framework provides a mechanism for that.
+  // TODO(crbug.com/792662): Update this to get a shared UKM SourceId (e.g.
+  // from web state), once the UKM framework provides a mechanism for that.
   if (ukm_source_url_ != delegate_.lastCommittedURL) {
     metrics_recorder_.reset();
     ukm_source_url_ = delegate_.lastCommittedURL;
     ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
+    ukm::UkmRecorder::Get()->UpdateSourceURL(ukm_source_id_, ukm_source_url_);
   }
   return ukm_source_id_;
 }
@@ -203,7 +201,7 @@ IOSChromePasswordManagerClient::GetMetricsRecorder() {
     // Query source_id first, because that has the side effect of initializing
     // |ukm_source_url_|.
     ukm::SourceId source_id = GetUkmSourceId();
-    metrics_recorder_.emplace(GetUkmRecorder(), source_id, ukm_source_url_);
+    metrics_recorder_.emplace(source_id, ukm_source_url_);
   }
   return metrics_recorder_.value();
 }

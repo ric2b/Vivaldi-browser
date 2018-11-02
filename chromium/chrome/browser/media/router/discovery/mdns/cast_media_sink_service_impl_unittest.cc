@@ -12,7 +12,7 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/timer/mock_timer.h"
 #include "chrome/browser/media/router/media_router_feature.h"
-#include "chrome/browser/media/router/test_helper.h"
+#include "chrome/browser/media/router/test/test_helper.h"
 #include "components/cast_channel/cast_socket.h"
 #include "components/cast_channel/cast_socket_service.h"
 #include "components/cast_channel/cast_test_util.h"
@@ -30,43 +30,24 @@ using ::testing::Return;
 using ::testing::SaveArg;
 using ::testing::WithArgs;
 
+namespace media_router {
+
 namespace {
 
-net::IPEndPoint CreateIPEndPoint(int num) {
-  net::IPAddress ip_address;
-  CHECK(ip_address.AssignFromIPLiteral(
-      base::StringPrintf("192.168.0.10%d", num)));
-  return net::IPEndPoint(ip_address, 8009 + num);
-}
-
-media_router::MediaSinkInternal CreateCastSink(int num) {
+MediaSinkInternal CreateCastSink(int num) {
   std::string friendly_name = base::StringPrintf("friendly name %d", num);
   std::string unique_id = base::StringPrintf("id %d", num);
   net::IPEndPoint ip_endpoint = CreateIPEndPoint(num);
 
-  media_router::MediaSink sink(unique_id, friendly_name,
-                               media_router::SinkIconType::CAST);
-  media_router::CastSinkExtraData extra_data;
+  MediaSink sink(unique_id, friendly_name, SinkIconType::CAST);
+  CastSinkExtraData extra_data;
   extra_data.ip_endpoint = ip_endpoint;
   extra_data.port = ip_endpoint.port();
   extra_data.model_name = base::StringPrintf("model name %d", num);
   extra_data.cast_channel_id = num;
   extra_data.capabilities = cast_channel::CastDeviceCapability::AUDIO_OUT |
                             cast_channel::CastDeviceCapability::VIDEO_OUT;
-  return media_router::MediaSinkInternal(sink, extra_data);
-}
-
-media_router::MediaSinkInternal CreateDialSink(int num) {
-  std::string friendly_name = base::StringPrintf("friendly name %d", num);
-  std::string unique_id = base::StringPrintf("id %d", num);
-  net::IPEndPoint ip_endpoint = CreateIPEndPoint(num);
-
-  media_router::MediaSink sink(unique_id, friendly_name,
-                               media_router::SinkIconType::GENERIC);
-  media_router::DialSinkExtraData extra_data;
-  extra_data.ip_address = ip_endpoint.address();
-  extra_data.model_name = base::StringPrintf("model name %d", num);
-  return media_router::MediaSinkInternal(sink, extra_data);
+  return MediaSinkInternal(sink, extra_data);
 }
 
 MATCHER_P(RetryParamEq, expected, "") {
@@ -88,8 +69,6 @@ MATCHER_P(OpenParamEq, expected, "") {
 
 }  // namespace
 
-namespace media_router {
-
 class CastMediaSinkServiceImplTest : public ::testing::Test {
  public:
   CastMediaSinkServiceImplTest()
@@ -105,7 +84,7 @@ class CastMediaSinkServiceImplTest : public ::testing::Test {
   }
 
   void SetUp() override {
-    auto mock_timer = base::MakeUnique<base::MockTimer>(
+    auto mock_timer = std::make_unique<base::MockTimer>(
         true /*retain_user_task*/, false /*is_repeating*/);
     mock_timer_ = mock_timer.get();
     media_sink_service_impl_.SetTimerForTest(std::move(mock_timer));
@@ -358,10 +337,10 @@ TEST_F(CastMediaSinkServiceImplTest, TestMultipleOpenChannels) {
   net::IPEndPoint ip_endpoint2 = CreateIPEndPoint(2);
   net::IPEndPoint ip_endpoint3 = CreateIPEndPoint(3);
 
-  base::SimpleTestClock* clock = new base::SimpleTestClock();
+  base::SimpleTestClock clock;
   base::Time start_time = base::Time::Now();
-  clock->SetNow(start_time);
-  media_sink_service_impl_.SetClockForTest(base::WrapUnique(clock));
+  clock.SetNow(start_time);
+  media_sink_service_impl_.SetClockForTest(&clock);
 
   EXPECT_CALL(*mock_cast_socket_service_,
               OpenSocketInternal(ip_endpoint1, _, _));
@@ -379,7 +358,7 @@ TEST_F(CastMediaSinkServiceImplTest, TestMultipleOpenChannels) {
   socket2.SetErrorState(cast_channel::ChannelError::NONE);
 
   base::TimeDelta delta = base::TimeDelta::FromSeconds(2);
-  clock->Advance(delta);
+  clock.Advance(delta);
   base::HistogramTester tester;
 
   media_sink_service_impl_.OnChannelOpened(

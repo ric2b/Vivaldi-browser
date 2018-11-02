@@ -12,7 +12,7 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/origin_trials/OriginTrialContext.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerReportingProxy.h"
 #include "modules/animationworklet/AnimationWorklet.h"
@@ -32,14 +32,14 @@
 
 namespace blink {
 
-class AnimationWorkletGlobalScopeTest : public ::testing::Test {
+class AnimationWorkletGlobalScopeTest : public PageTestBase {
  public:
-  AnimationWorkletGlobalScopeTest() {}
+  AnimationWorkletGlobalScopeTest() = default;
 
   void SetUp() override {
     AnimationWorkletThread::CreateSharedBackingThreadForTest();
-    page_ = DummyPageHolder::Create();
-    Document* document = page_->GetFrame().GetDocument();
+    PageTestBase::SetUp(IntSize());
+    Document* document = &GetDocument();
     document->SetURL(KURL("https://example.com/"));
     document->UpdateSecurityOrigin(SecurityOrigin::Create(document->Url()));
     reporting_proxy_ = std::make_unique<WorkerReportingProxy>();
@@ -55,19 +55,16 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
 
     WorkerClients* clients = WorkerClients::Create();
 
-    Document* document = page_->GetFrame().GetDocument();
+    Document* document = &GetDocument();
     thread->Start(
         std::make_unique<GlobalScopeCreationParams>(
-            document->Url(), document->UserAgent(), "" /* source_code */,
-            nullptr /* cached_meta_data */,
+            document->Url(), document->UserAgent(),
             nullptr /* content_security_policy_parsed_headers */,
             document->GetReferrerPolicy(), document->GetSecurityOrigin(),
             clients, document->AddressSpace(),
             OriginTrialContext::GetTokens(document).get(),
             nullptr /* worker_settings */, kV8CacheOptionsDefault),
-        WTF::nullopt,
-        std::make_unique<GlobalScopeInspectorCreationParams>(
-            WorkerInspectorProxy::PauseOnWorkerStart::kDontPause),
+        WTF::nullopt, WorkerInspectorProxy::PauseOnWorkerStart::kDontPause,
         ParentFrameTaskRunners::Create());
     return thread;
   }
@@ -79,11 +76,11 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
   void RunTestOnWorkletThread(TestCalback callback) {
     std::unique_ptr<WorkerThread> worklet = CreateAnimationWorkletThread();
     WaitableEvent waitable_event;
-    worklet->GetTaskRunner(TaskType::kUnthrottled)
-        ->PostTask(BLINK_FROM_HERE,
-                   CrossThreadBind(callback, CrossThreadUnretained(this),
-                                   CrossThreadUnretained(worklet.get()),
-                                   CrossThreadUnretained(&waitable_event)));
+    PostCrossThreadTask(
+        *worklet->GetTaskRunner(TaskType::kInternalTest), FROM_HERE,
+        CrossThreadBind(callback, CrossThreadUnretained(this),
+                        CrossThreadUnretained(worklet.get()),
+                        CrossThreadUnretained(&waitable_event)));
     waitable_event.Wait();
 
     worklet->Terminate();
@@ -267,8 +264,9 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
     ScriptState* script_state =
         global_scope->ScriptController()->GetScriptState();
     EXPECT_TRUE(script_state);
+    const KURL js_url("https://example.com/worklet.js");
     ScriptModule module = ScriptModule::Compile(
-        script_state->GetIsolate(), source_code, "worklet.js",
+        script_state->GetIsolate(), source_code, js_url, js_url,
         ScriptFetchOptions(), kSharableCrossOrigin,
         TextPosition::MinimumPosition(), ASSERT_NO_EXCEPTION);
     EXPECT_FALSE(module.IsNull());
@@ -278,7 +276,6 @@ class AnimationWorkletGlobalScopeTest : public ::testing::Test {
     return value.IsEmpty();
   }
 
-  std::unique_ptr<DummyPageHolder> page_;
   std::unique_ptr<WorkerReportingProxy> reporting_proxy_;
 };
 

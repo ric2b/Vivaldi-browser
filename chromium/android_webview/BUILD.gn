@@ -57,6 +57,7 @@ generate_jni("native_jni") {
     "java/src/org/chromium/android_webview/AwResource.java",
     "java/src/org/chromium/android_webview/AwSettings.java",
     "java/src/org/chromium/android_webview/AwTokenBindingManager.java",
+    "java/src/org/chromium/android_webview/AwTracingController.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
     "java/src/org/chromium/android_webview/AwWebResourceResponse.java",
     "java/src/org/chromium/android_webview/InputStreamUtil.java",
@@ -616,6 +617,10 @@ source_set("common") {
     "browser/surfaces_instance.cc",
     "browser/surfaces_instance.h",
     "browser/token_binding_manager_bridge.cc",
+    "browser/tracing/aw_trace_event_args_whitelist.cc",
+    "browser/tracing/aw_trace_event_args_whitelist.h",
+    "browser/tracing/aw_tracing_controller.cc",
+    "browser/tracing/aw_tracing_controller.h",
     "browser/tracing/aw_tracing_delegate.cc",
     "browser/tracing/aw_tracing_delegate.h",
     "common/android_webview_message_generator.cc",
@@ -664,6 +669,8 @@ source_set("common") {
     "renderer/aw_render_thread_observer.h",
     "renderer/aw_render_view_ext.cc",
     "renderer/aw_render_view_ext.h",
+    "renderer/aw_url_loader_throttle_provider.cc",
+    "renderer/aw_url_loader_throttle_provider.h",
     "renderer/print_render_frame_observer.cc",
     "renderer/print_render_frame_observer.h",
   ]
@@ -684,6 +691,7 @@ source_set("common") {
     "//components/crash/content/app",
     "//components/crash/content/browser",
     "//components/google/core/browser",
+    "//components/keyed_service/content",
     "//components/metrics",
     "//components/metrics:gpu",
     "//components/metrics:net",
@@ -691,7 +699,9 @@ source_set("common") {
     "//components/navigation_interception",
     "//components/network_session_configurator/common",
     "//components/policy:generated",
+    "//components/policy/content/",
     "//components/policy/core/browser",
+    "//components/policy/core/common",
     "//components/prefs",
     "//components/printing/browser",
     "//components/printing/common",
@@ -723,9 +733,7 @@ source_set("common") {
     "//gin",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
-    "//gpu/command_buffer/common:gles2_utils",
     "//gpu/command_buffer/service",
-    "//gpu/config:crash_keys",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings",
     "//media",
@@ -807,6 +815,7 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwSettings.java",
     "java/src/org/chromium/android_webview/AwSwitches.java",
     "java/src/org/chromium/android_webview/AwTokenBindingManager.java",
+    "java/src/org/chromium/android_webview/AwTracingController.java",
     "java/src/org/chromium/android_webview/AwViewMethods.java",
     "java/src/org/chromium/android_webview/AwViewAndroidDelegate.java",
     "java/src/org/chromium/android_webview/AwWebContentsDelegate.java",
@@ -832,6 +841,7 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/ResourcesContextWrapperFactory.java",
     "java/src/org/chromium/android_webview/ScrollAccessibilityHelper.java",
     "java/src/org/chromium/android_webview/SslUtil.java",
+    "java/src/org/chromium/android_webview/WebViewChromiumRunQueue.java",
     "java/src/org/chromium/android_webview/permission/AwGeolocationCallback.java",
     "java/src/org/chromium/android_webview/permission/AwPermissionRequest.java",
     "java/src/org/chromium/android_webview/policy/AwPolicyProvider.java",
@@ -880,8 +890,7 @@ android_library("android_webview_java") {
     "//components/safe_browsing/db:sb_threat_values",
   ]
 
-  # Manifest used for linting (determining unused resources).
-  android_manifest = system_webview_android_manifest
+  android_manifest_for_lint = system_webview_android_manifest
 }
 
 java_strings_grd("strings_grd") {
@@ -947,7 +956,9 @@ android_library("android_webview_platform_services_java") {
 }
 
 android_library("android_webview_commandline_java") {
-  java_files = [ "java/src/org/chromium/android_webview/command_line/CommandLineUtil.java" ]
+  java_files = [
+    "java/src/org/chromium/android_webview/command_line/CommandLineUtil.java",
+  ]
 
   deps = [
     "//base:base_java",

@@ -1,0 +1,14 @@
+Name: Motion Animator for Objective-C
+URL: https://github.com/material-motion/motion-animator-objc
+Version: 0
+Revision: ff39ecc69fdee46d388cc9f882201d54c3d5039c
+License: Apache 2.0
+License File: LICENSE
+Security Critical: yes
+
+Description:
+This library provides APIs that turn Motion Interchange motion specifications
+into animations.
+
+Local Modifications:
+None

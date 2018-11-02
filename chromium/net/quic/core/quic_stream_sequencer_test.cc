@@ -12,6 +12,7 @@
 
 #include "net/quic/core/quic_stream.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/platform/api/quic_test.h"
@@ -60,7 +61,7 @@ class QuicStreamSequencerTest : public QuicTest {
  public:
   void ConsumeData(size_t num_bytes) {
     char buffer[1024];
-    ASSERT_GT(arraysize(buffer), num_bytes);
+    ASSERT_GT(QUIC_ARRAYSIZE(buffer), num_bytes);
     struct iovec iov;
     iov.iov_base = buffer;
     iov.iov_len = num_bytes;
@@ -90,7 +91,7 @@ class QuicStreamSequencerTest : public QuicTest {
   bool VerifyReadableRegions(const std::vector<string>& expected) {
     iovec iovecs[5];
     size_t num_iovecs =
-        sequencer_->GetReadableRegions(iovecs, arraysize(iovecs));
+        sequencer_->GetReadableRegions(iovecs, QUIC_ARRAYSIZE(iovecs));
     return VerifyReadableRegion(expected) &&
            VerifyIovecs(iovecs, num_iovecs, expected);
   }
@@ -384,7 +385,7 @@ class QuicSequencerRandomTest : public QuicStreamSequencerTest {
   typedef std::vector<Frame> FrameList;
 
   void CreateFrames() {
-    int payload_size = arraysize(kPayload) - 1;
+    int payload_size = QUIC_ARRAYSIZE(kPayload) - 1;
     int remaining_payload = payload_size;
     while (remaining_payload != 0) {
       int size = std::min(OneToN(6), remaining_payload);
@@ -406,10 +407,10 @@ class QuicSequencerRandomTest : public QuicStreamSequencerTest {
 
   void ReadAvailableData() {
     // Read all available data
-    char output[arraysize(kPayload) + 1];
+    char output[QUIC_ARRAYSIZE(kPayload) + 1];
     iovec iov;
     iov.iov_base = output;
-    iov.iov_len = arraysize(output);
+    iov.iov_len = QUIC_ARRAYSIZE(output);
     int bytes_read = sequencer_->Readv(&iov, 1);
     EXPECT_NE(0, bytes_read);
     output_.append(output, bytes_read);
@@ -439,7 +440,7 @@ TEST_F(QuicSequencerRandomTest, RandomFramesNoDroppingNoBackup) {
     list_.erase(list_.begin() + index);
   }
 
-  ASSERT_EQ(arraysize(kPayload) - 1, output_.size());
+  ASSERT_EQ(QUIC_ARRAYSIZE(kPayload) - 1, output_.size());
   EXPECT_EQ(kPayload, output_);
 }
 
@@ -453,7 +454,7 @@ TEST_F(QuicSequencerRandomTest, RandomFramesNoDroppingBackup) {
 
   EXPECT_CALL(stream_, OnDataAvailable()).Times(AnyNumber());
 
-  while (output_.size() != arraysize(kPayload) - 1) {
+  while (output_.size() != QUIC_ARRAYSIZE(kPayload) - 1) {
     if (!list_.empty() && OneToN(2) == 1) {  // Send data
       int index = OneToN(list_.size()) - 1;
       OnFrame(list_[index].first, list_[index].second.data());
@@ -470,7 +471,7 @@ TEST_F(QuicSequencerRandomTest, RandomFramesNoDroppingBackup) {
         ASSERT_EQ(0, iovs_peeked);
         ASSERT_FALSE(sequencer_->GetReadableRegion(peek_iov, &timestamp));
       }
-      int total_bytes_to_peek = arraysize(buffer);
+      int total_bytes_to_peek = QUIC_ARRAYSIZE(buffer);
       for (int i = 0; i < iovs_peeked; ++i) {
         int bytes_to_peek =
             std::min<int>(peek_iov[i].iov_len, total_bytes_to_peek);
@@ -564,7 +565,7 @@ TEST_F(QuicStreamSequencerTest, MarkConsumedWithMissingPacket) {
   sequencer_->MarkConsumed(6);
 }
 
-TEST_F(QuicStreamSequencerTest, DontAcceptOverlappingFrames) {
+TEST_F(QuicStreamSequencerTest, OverlappingFramesReceived) {
   // The peer should never send us non-identical stream frames which contain
   // overlapping byte ranges - if they do, we close the connection.
   QuicStreamId id =
@@ -574,10 +575,59 @@ TEST_F(QuicStreamSequencerTest, DontAcceptOverlappingFrames) {
   sequencer_->OnStreamFrame(frame1);
 
   QuicStreamFrame frame2(id, false, 2, QuicStringPiece("hello"));
-  EXPECT_CALL(stream_,
-              CloseConnectionWithDetails(QUIC_OVERLAPPING_STREAM_DATA, _))
-      .Times(1);
+  if (GetQuicReloadableFlag(quic_allow_receiving_overlapping_data)) {
+    EXPECT_CALL(stream_,
+                CloseConnectionWithDetails(QUIC_OVERLAPPING_STREAM_DATA, _))
+        .Times(0);
+  } else {
+    EXPECT_CALL(stream_,
+                CloseConnectionWithDetails(QUIC_OVERLAPPING_STREAM_DATA, _))
+        .Times(1);
+  }
   sequencer_->OnStreamFrame(frame2);
+}
+
+TEST_F(QuicStreamSequencerTest, DataAvailableOnOverlappingFrames) {
+  if (!GetQuicReloadableFlag(quic_allow_receiving_overlapping_data)) {
+    return;
+  }
+  QuicStreamId id =
+      QuicSpdySessionPeer::GetNthClientInitiatedStreamId(session_, 0);
+  const string data(1000, '.');
+
+  // Received [0, 1000).
+  QuicStreamFrame frame1(id, false, 0, data);
+  EXPECT_CALL(stream_, OnDataAvailable());
+  sequencer_->OnStreamFrame(frame1);
+  // Consume [0, 500).
+  QuicStreamSequencerTest::ConsumeData(500);
+  EXPECT_EQ(500u, sequencer_->NumBytesConsumed());
+  EXPECT_EQ(500u, sequencer_->NumBytesBuffered());
+
+  // Received [500, 1500).
+  QuicStreamFrame frame2(id, false, 500, data);
+  // Do not call OnDataAvailable as there are readable bytes left in the buffer.
+  EXPECT_CALL(stream_, OnDataAvailable()).Times(0);
+  sequencer_->OnStreamFrame(frame2);
+  // Consume [1000, 1500).
+  QuicStreamSequencerTest::ConsumeData(1000);
+  EXPECT_EQ(1500u, sequencer_->NumBytesConsumed());
+  EXPECT_EQ(0u, sequencer_->NumBytesBuffered());
+
+  // Received [1498, 1503).
+  QuicStreamFrame frame3(id, false, 1498, QuicStringPiece("hello"));
+  EXPECT_CALL(stream_, OnDataAvailable());
+  sequencer_->OnStreamFrame(frame3);
+  QuicStreamSequencerTest::ConsumeData(3);
+  EXPECT_EQ(1503u, sequencer_->NumBytesConsumed());
+  EXPECT_EQ(0u, sequencer_->NumBytesBuffered());
+
+  // Received [1000, 1005).
+  QuicStreamFrame frame4(id, false, 1000, QuicStringPiece("hello"));
+  EXPECT_CALL(stream_, OnDataAvailable()).Times(0);
+  sequencer_->OnStreamFrame(frame4);
+  EXPECT_EQ(1503u, sequencer_->NumBytesConsumed());
+  EXPECT_EQ(0u, sequencer_->NumBytesBuffered());
 }
 
 TEST_F(QuicStreamSequencerTest, InOrderTimestamps) {

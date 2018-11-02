@@ -5,6 +5,8 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "content/browser/storage_partition_impl.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -17,6 +19,7 @@
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "net/dns/mock_host_resolver.h"
 
 namespace content {
 
@@ -32,10 +35,21 @@ class RenderProcessKilledObserver : public WebContentsObserver {
 
   void RenderProcessGone(base::TerminationStatus status) override {
     killed_ = true;
+    run_loop_.Quit();
+  }
+
+  void WaitUntilRenderProcessDied() {
+    if (killed_)
+      return;
+    run_loop_.Run();
   }
 
  private:
   bool killed_ = false;
+
+  // Used to wait for the render process being killed. Android doesn't
+  // immediately kill the render process.
+  base::RunLoop run_loop_;
 };
 
 class WebUITestWebUIControllerFactory : public WebUIControllerFactory {
@@ -143,6 +157,7 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, WebUIBindingsNoHttp) {
   NavigateToURL(shell(), test_url);
   RenderProcessKilledObserver killed_observer(shell()->web_contents());
   ASSERT_FALSE(CheckCanLoadHttp());
+  killed_observer.WaitUntilRenderProcessDied();
   ASSERT_TRUE(killed_observer.killed());
 }
 
@@ -151,6 +166,38 @@ IN_PROC_BROWSER_TEST_F(NetworkServiceBrowserTest, NoWebUIBindingsHttp) {
   GURL test_url("chrome://webui/nobinding/");
   NavigateToURL(shell(), test_url);
   ASSERT_TRUE(CheckCanLoadHttp());
+}
+
+class NetworkServiceInProcessBrowserTest : public ContentBrowserTest {
+ public:
+  NetworkServiceInProcessBrowserTest() {
+    std::vector<base::Feature> features;
+    features.push_back(features::kNetworkService);
+    features.push_back(features::kNetworkServiceInProcess);
+    scoped_feature_list_.InitWithFeatures(features,
+                                          std::vector<base::Feature>());
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    EXPECT_TRUE(embedded_test_server()->Start());
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
+  DISALLOW_COPY_AND_ASSIGN(NetworkServiceInProcessBrowserTest);
+};
+
+// Verifies that in-process network service works.
+IN_PROC_BROWSER_TEST_F(NetworkServiceInProcessBrowserTest, Basic) {
+  GURL test_url = embedded_test_server()->GetURL("foo.com", "/echo");
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      BrowserContext::GetDefaultStoragePartition(
+          shell()->web_contents()->GetBrowserContext()));
+  NavigateToURL(shell(), test_url);
+  ASSERT_EQ(net::OK,
+            LoadBasicRequest(partition->GetNetworkContext(), test_url));
 }
 
 }  // namespace

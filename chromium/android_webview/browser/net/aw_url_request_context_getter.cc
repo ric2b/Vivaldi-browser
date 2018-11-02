@@ -4,6 +4,7 @@
 
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 
+#include <memory>
 #include <utility>
 #include <vector>
 
@@ -17,12 +18,10 @@
 #include "android_webview/browser/net/init_native_callback.h"
 #include "android_webview/browser/net/token_binding_manager.h"
 #include "android_webview/common/aw_content_client.h"
-
 #include "base/base_paths_android.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/sys_info.h"
@@ -30,6 +29,7 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "components/network_session_configurator/common/network_switches.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -49,13 +49,14 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_stream_factory.h"
 #include "net/log/file_net_log_observer.h"
-#include "net/log/net_log.h"
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_util.h"
 #include "net/net_features.h"
 #include "net/proxy/proxy_service.h"
 #include "net/socket/next_proto.h"
 #include "net/ssl/channel_id_service.h"
+#include "net/ssl/ssl_config.h"
+#include "net/ssl/ssl_config_service.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
 #include "net/url_request/url_request_context.h"
@@ -78,7 +79,6 @@ bool g_created_url_request_context_builder = false;
 bool g_check_cleartext_permitted = false;
 
 
-const base::FilePath::CharType kChannelIDFilename[] = "Origin Bound Certs";
 const char kProxyServerSwitch[] = "proxy-server";
 
 void ApplyCmdlineOverridesToHostResolver(
@@ -123,13 +123,13 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   // AwContentBrowserClient::IsHandledURL.
   bool set_protocol = aw_job_factory->SetProtocolHandler(
       url::kFileScheme,
-      base::MakeUnique<net::FileProtocolHandler>(
+      std::make_unique<net::FileProtocolHandler>(
           base::CreateTaskRunnerWithTraits(
               {base::MayBlock(), base::TaskPriority::BACKGROUND,
                base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})));
   DCHECK(set_protocol);
   set_protocol = aw_job_factory->SetProtocolHandler(
-      url::kDataScheme, base::MakeUnique<net::DataProtocolHandler>());
+      url::kDataScheme, std::make_unique<net::DataProtocolHandler>());
   DCHECK(set_protocol);
   set_protocol = aw_job_factory->SetProtocolHandler(
       url::kBlobScheme,
@@ -159,7 +159,7 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   // This logical dependency is also the reason why the Content
   // URLRequestInterceptor has to be added as an interceptor rather than as a
   // ProtocolHandler.
-  request_interceptors.push_back(base::MakeUnique<AwRequestInterceptor>());
+  request_interceptors.push_back(std::make_unique<AwRequestInterceptor>());
 
   // The chain of responsibility will execute the handlers in reverse to the
   // order in which the elements of the chain are created.
@@ -175,14 +175,35 @@ std::unique_ptr<net::URLRequestJobFactory> CreateJobFactory(
   return job_factory;
 }
 
+// For Android WebView, do not enforce the policies outlined in
+// https://security.googleblog.com/2017/09/chromes-plan-to-distrust-symantec.html
+// as those will be handled by Android itself on its own schedule. Otherwise,
+// it returns the default SSLConfig.
+class AwSSLConfigService : public net::SSLConfigService {
+ public:
+  AwSSLConfigService() { default_config_.symantec_enforcement_disabled = true; }
+
+  void GetSSLConfig(net::SSLConfig* config) override {
+    *config = default_config_;
+  }
+
+ private:
+  ~AwSSLConfigService() override = default;
+
+  net::SSLConfig default_config_;
+};
+
 }  // namespace
 
 AwURLRequestContextGetter::AwURLRequestContextGetter(
     const base::FilePath& cache_path,
+    const base::FilePath& channel_id_path,
     std::unique_ptr<net::ProxyConfigService> config_service,
-    PrefService* user_pref_service)
+    PrefService* user_pref_service,
+    net::NetLog* net_log)
     : cache_path_(cache_path),
-      net_log_(new net::NetLog()),
+      channel_id_path_(channel_id_path),
+      net_log_(net_log),
       proxy_config_service_(std::move(config_service)),
       http_user_agent_settings_(new AwHttpUserAgentSettings()) {
   // CreateSystemProxyConfigService for Android must be called on main thread.
@@ -223,7 +244,7 @@ AwURLRequestContextGetter::AwURLRequestContextGetter(
     std::unique_ptr<base::DictionaryValue> constants_dict =
         net::GetNetConstants();
     // Add a dictionary with client information
-    auto dict = base::MakeUnique<base::DictionaryValue>();
+    auto dict = std::make_unique<base::DictionaryValue>();
 
     dict->SetString("name", version_info::GetProductName());
     dict->SetString("version", version_info::GetVersionNumber());
@@ -243,7 +264,7 @@ AwURLRequestContextGetter::AwURLRequestContextGetter(
 
     file_net_log_observer_ = net::FileNetLogObserver::CreateUnbounded(
         net_log_path, std::move(constants_dict));
-    file_net_log_observer_->StartObserving(net_log_.get(),
+    file_net_log_observer_->StartObserving(net_log_,
                                            net::NetLogCaptureMode::Default());
   }
 }
@@ -257,21 +278,16 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
 
   net::URLRequestContextBuilder builder;
 
-  AwBrowserContext* browser_context = AwBrowserContext::GetDefault();
-  DCHECK(browser_context);
-
-  builder.set_network_delegate(base::MakeUnique<AwNetworkDelegate>());
+  builder.set_network_delegate(std::make_unique<AwNetworkDelegate>());
 #if !BUILDFLAG(DISABLE_FTP_SUPPORT)
   builder.set_ftp_enabled(false);  // Android WebView does not support ftp yet.
 #endif
   DCHECK(proxy_config_service_.get());
   std::unique_ptr<net::ChannelIDService> channel_id_service;
   if (TokenBindingManager::GetInstance()->is_enabled()) {
-    base::FilePath channel_id_path =
-        browser_context->GetPath().Append(kChannelIDFilename);
     scoped_refptr<net::SQLiteChannelIDStore> channel_id_db;
     channel_id_db = new net::SQLiteChannelIDStore(
-        channel_id_path,
+        channel_id_path_,
         base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskPriority::BACKGROUND}));
 
@@ -290,10 +306,10 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
     builder.set_proxy_service(net::ProxyService::CreateFixed(proxy));
   } else {
     builder.set_proxy_service(net::ProxyService::CreateWithoutProxyResolver(
-        std::move(proxy_config_service_), net_log_.get()));
+        std::move(proxy_config_service_), net_log_));
   }
-  builder.set_net_log(net_log_.get());
-  builder.SetCookieAndChannelIdStores(base::MakeUnique<AwCookieStoreWrapper>(),
+  builder.set_net_log(net_log_);
+  builder.SetCookieAndChannelIdStores(std::make_unique<AwCookieStoreWrapper>(),
                                       std::move(channel_id_service));
 
   net::URLRequestContextBuilder::HttpCacheParams cache_params;
@@ -316,6 +332,8 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
       CreateAuthHandlerFactory(host_resolver.get()));
   builder.set_host_resolver(std::move(host_resolver));
 
+  builder.set_ssl_config_service(base::MakeRefCounted<AwSSLConfigService>());
+
   url_request_context_ = builder.Build();
 #if DCHECK_IS_ON()
   g_created_url_request_context_builder = true;
@@ -328,6 +346,21 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   url_request_context_->set_job_factory(job_factory_.get());
   url_request_context_->set_http_user_agent_settings(
       http_user_agent_settings_.get());
+}
+
+// static
+void AwURLRequestContextGetter::RegisterPrefs(PrefRegistrySimple* registry) {
+  registry->RegisterStringPref(prefs::kAuthServerWhitelist, std::string());
+  registry->RegisterStringPref(prefs::kAuthAndroidNegotiateAccountType,
+                               std::string());
+}
+
+// static
+void AwURLRequestContextGetter::set_check_cleartext_permitted(bool permitted) {
+#if DCHECK_IS_ON()
+  DCHECK(!g_created_url_request_context_builder);
+#endif
+  g_check_cleartext_permitted = permitted;
 }
 
 net::URLRequestContext* AwURLRequestContextGetter::GetURLRequestContext() {
@@ -348,18 +381,6 @@ void AwURLRequestContextGetter::SetHandlersAndInterceptors(
     content::URLRequestInterceptorScopedVector request_interceptors) {
   std::swap(protocol_handlers_, *protocol_handlers);
   request_interceptors_.swap(request_interceptors);
-}
-
-net::NetLog* AwURLRequestContextGetter::GetNetLog() {
-  return net_log_.get();
-}
-
-// static
-void AwURLRequestContextGetter::set_check_cleartext_permitted(bool permitted) {
-#if DCHECK_IS_ON()
-    DCHECK(!g_created_url_request_context_builder);
-#endif
-    g_check_cleartext_permitted = permitted;
 }
 
 std::unique_ptr<net::HttpAuthHandlerFactory>

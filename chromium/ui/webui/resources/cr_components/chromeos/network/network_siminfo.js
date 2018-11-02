@@ -19,6 +19,7 @@ var ErrorType = {
 
 var PIN_MIN_LENGTH = 4;
 var PUK_MIN_LENGTH = 8;
+var TOGGLE_DEBOUNCE_MS = 500;
 
 Polymer({
   is: 'network-siminfo',
@@ -62,6 +63,15 @@ Polymer({
     },
 
     /**
+     * Set to true when a SIM operation is in progress. Used to disable buttons.
+     * @private
+     */
+    inProgress_: {
+      type: Boolean,
+      value: false,
+    },
+
+    /**
      * Set to an ErrorType value after an incorrect PIN or PUK entry.
      * @private {ErrorType}
      */
@@ -71,7 +81,11 @@ Polymer({
     },
   },
 
+  /** @private {boolean} */
   sendSimLockEnabled_: false,
+
+  /** @private {boolean|undefined} */
+  setLockEnabled_: undefined,
 
   /** @override */
   detached: function() {
@@ -92,16 +106,48 @@ Polymer({
     var simLockStatus = this.networkProperties.Cellular.SIMLockStatus;
     this.pukRequired_ =
         !!simLockStatus && simLockStatus.LockType == CrOnc.LockType.PUK;
-    this.lockEnabled_ = !!simLockStatus && simLockStatus.LockEnabled;
+    var lockEnabled = !!simLockStatus && simLockStatus.LockEnabled;
+    if (lockEnabled != this.lockEnabled_) {
+      this.setLockEnabled_ = lockEnabled;
+      this.updateLockEnabled_();
+    } else {
+      this.setLockEnabled_ = undefined;
+    }
+  },
+
+  /**
+   * Wrapper method to prevent changing |lockEnabled_| while a dialog is open
+   * to avoid confusion while a SIM operation is in progress. This must be
+   * called after closing any dialog (and not opening another) to set the
+   * correct state.
+   * @private
+   */
+  updateLockEnabled_: function() {
+    if (this.setLockEnabled_ === undefined || this.$.enterPinDialog.open ||
+        this.$.changePinDialog.open || this.$.unlockPinDialog.open ||
+        this.$.unlockPukDialog.open) {
+      return;
+    }
+    this.lockEnabled_ = this.setLockEnabled_;
+    this.setLockEnabled_ = undefined;
+  },
+
+  /** @private */
+  delayUpdateLockEnabled_: function() {
+    setTimeout(() => {
+      this.updateLockEnabled_();
+    }, TOGGLE_DEBOUNCE_MS);
   },
 
   /** @private */
   pukRequiredChanged_: function() {
     if (this.$.unlockPukDialog.open) {
-      if (this.pukRequired_)
+      if (this.pukRequired_) {
         this.$.unlockPuk.focus();
-      else
+      } else {
         this.$.unlockPukDialog.close();
+        this.delayUpdateLockEnabled_();
+      }
       return;
     }
 
@@ -141,6 +187,9 @@ Polymer({
     this.error_ = ErrorType.NONE;
     this.$.enterPin.value = '';
     this.$.enterPinDialog.showModal();
+    requestAnimationFrame(() => {
+      this.$.enterPin.focus();
+    });
   },
 
   /**
@@ -160,13 +209,16 @@ Polymer({
       currentPin: pin,
       requirePin: this.sendSimLockEnabled_,
     });
+    this.inProgress_ = true;
     this.networkingPrivate.setCellularSimState(guid, simState, () => {
+      this.inProgress_ = false;
       if (chrome.runtime.lastError) {
         this.error_ = ErrorType.INCORRECT_PIN;
         this.$.enterPin.inputElement.select();
       } else {
         this.error_ = ErrorType.NONE;
         this.$.enterPinDialog.close();
+        this.delayUpdateLockEnabled_();
       }
     });
   },
@@ -185,6 +237,9 @@ Polymer({
     this.$.changePinNew1.value = '';
     this.$.changePinNew2.value = '';
     this.$.changePinDialog.showModal();
+    requestAnimationFrame(() => {
+      this.$.changePinOld.focus();
+    });
   },
 
   /**
@@ -204,13 +259,16 @@ Polymer({
       currentPin: this.$.changePinOld.value,
       newPin: newPin
     });
+    this.inProgress_ = true;
     this.networkingPrivate.setCellularSimState(guid, simState, () => {
+      this.inProgress_ = false;
       if (chrome.runtime.lastError) {
         this.error_ = ErrorType.INCORRECT_PIN;
         this.$.changePinOld.inputElement.select();
       } else {
         this.error_ = ErrorType.NONE;
         this.$.changePinDialog.close();
+        this.delayUpdateLockEnabled_();
       }
     });
   },
@@ -241,13 +299,16 @@ Polymer({
     if (!this.validatePin_(pin))
       return;
 
+    this.inProgress_ = true;
     this.networkingPrivate.unlockCellularSim(guid, pin, '', () => {
+      this.inProgress_ = false;
       if (chrome.runtime.lastError) {
         this.error_ = ErrorType.INCORRECT_PIN;
         this.$.unlockPin.inputElement.select();
       } else {
         this.error_ = ErrorType.NONE;
         this.$.unlockPinDialog.close();
+        this.delayUpdateLockEnabled_();
       }
     });
   },
@@ -257,6 +318,9 @@ Polymer({
     this.error_ = ErrorType.NONE;
     this.$.unlockPin.value = '';
     this.$.unlockPinDialog.showModal();
+    requestAnimationFrame(() => {
+      this.$.unlockPin.focus();
+    });
   },
 
   /** @private */
@@ -266,6 +330,9 @@ Polymer({
     this.$.unlockPin1.value = '';
     this.$.unlockPin2.value = '';
     this.$.unlockPukDialog.showModal();
+    requestAnimationFrame(() => {
+      this.$.unlockPuk.focus();
+    });
   },
 
   /**
@@ -283,13 +350,16 @@ Polymer({
     if (!this.validatePin_(pin, this.$.unlockPin2.value))
       return;
 
+    this.inProgress_ = true;
     this.networkingPrivate.unlockCellularSim(guid, pin, puk, () => {
+      this.inProgress_ = false;
       if (chrome.runtime.lastError) {
         this.error_ = ErrorType.INCORRECT_PUK;
         this.$.unlockPuk.inputElement.select();
       } else {
         this.error_ = ErrorType.NONE;
         this.$.unlockPukDialog.close();
+        this.delayUpdateLockEnabled_();
       }
     });
   },

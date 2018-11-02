@@ -19,16 +19,16 @@
 #include "gpu/command_buffer/service/common_decoder.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/shader_manager.h"
-#include "gpu/gpu_export.h"
+#include "gpu/gpu_gles2_export.h"
 
 namespace gpu {
 
+class DecoderClient;
 struct GpuPreferences;
 
 namespace gles2 {
 
 class FeatureInfo;
-class GLES2DecoderClient;
 class ProgramCache;
 class ProgramManager;
 class ProgressReporter;
@@ -38,7 +38,7 @@ class ShaderManager;
 // This is used to track which attributes a particular program needs
 // so we can verify at glDrawXXX time that every attribute is either disabled
 // or if enabled that it points to a valid source.
-class GPU_EXPORT Program : public base::RefCounted<Program> {
+class GPU_GLES2_EXPORT Program : public base::RefCounted<Program> {
  public:
   static const int kMaxAttachedShaders = 2;
 
@@ -327,7 +327,7 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
   // Performs glLinkProgram and related activities.
   bool Link(ShaderManager* manager,
             VaryingsPackingOption varyings_packing_option,
-            GLES2DecoderClient* client);
+            DecoderClient* client);
 
   // Performs glValidateProgram and related activities.
   void Validate();
@@ -642,7 +642,7 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
 //
 // NOTE: To support shared resources an instance of this class will
 // need to be shared by multiple GLES2Decoders.
-class GPU_EXPORT ProgramManager {
+class GPU_GLES2_EXPORT ProgramManager {
  public:
   ProgramManager(ProgramCache* program_cache,
                  uint32_t max_varying_vectors,

@@ -26,9 +26,9 @@
 #ifndef DragState_h
 #define DragState_h
 
+#include "base/macros.h"
 #include "core/page/DragActions.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -36,10 +36,8 @@ class DataTransfer;
 class Node;
 
 class DragState final : public GarbageCollected<DragState> {
-  WTF_MAKE_NONCOPYABLE(DragState);
-
  public:
-  DragState() {}
+  DragState() = default;
 
   // Element that may be a drag source, for the current mouse gesture.
   Member<Node> drag_src_;
@@ -51,6 +49,9 @@ class DragState final : public GarbageCollected<DragState> {
     visitor->Trace(drag_src_);
     visitor->Trace(drag_data_transfer_);
   }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DragState);
 };
 
 }  // namespace blink

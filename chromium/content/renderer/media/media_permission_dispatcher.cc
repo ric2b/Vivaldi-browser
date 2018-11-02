@@ -70,14 +70,12 @@ void MediaPermissionDispatcher::OnNavigation() {
 
 void MediaPermissionDispatcher::HasPermission(
     Type type,
-    const GURL& security_origin,
     const PermissionStatusCB& permission_status_cb) {
   if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&MediaPermissionDispatcher::HasPermission, weak_ptr_,
-                       type, security_origin,
-                       media::BindToCurrentLoop(permission_status_cb)));
+                       type, media::BindToCurrentLoop(permission_status_cb)));
     return;
   }
 
@@ -88,21 +86,18 @@ void MediaPermissionDispatcher::HasPermission(
 
   GetPermissionService()->HasPermission(
       MediaPermissionTypeToPermissionDescriptor(type),
-      url::Origin::Create(security_origin),
       base::BindOnce(&MediaPermissionDispatcher::OnPermissionStatus, weak_ptr_,
                      request_id));
 }
 
 void MediaPermissionDispatcher::RequestPermission(
     Type type,
-    const GURL& security_origin,
     const PermissionStatusCB& permission_status_cb) {
   if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&MediaPermissionDispatcher::RequestPermission, weak_ptr_,
-                       type, security_origin,
-                       media::BindToCurrentLoop(permission_status_cb)));
+                       type, media::BindToCurrentLoop(permission_status_cb)));
     return;
   }
 
@@ -113,7 +108,6 @@ void MediaPermissionDispatcher::RequestPermission(
 
   GetPermissionService()->RequestPermission(
       MediaPermissionTypeToPermissionDescriptor(type),
-      url::Origin::Create(security_origin),
       blink::WebUserGestureIndicator::IsProcessingUserGesture(),
       base::BindOnce(&MediaPermissionDispatcher::OnPermissionStatus, weak_ptr_,
                      request_id));

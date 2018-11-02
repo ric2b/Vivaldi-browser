@@ -72,13 +72,13 @@ class CORE_EXPORT AnimationEffectReadOnly : public ScriptWrappable {
 
   class EventDelegate : public GarbageCollectedFinalized<EventDelegate> {
    public:
-    virtual ~EventDelegate() {}
+    virtual ~EventDelegate() = default;
     virtual bool RequiresIterationEvents(const AnimationEffectReadOnly&) = 0;
     virtual void OnEventCondition(const AnimationEffectReadOnly&) = 0;
     virtual void Trace(blink::Visitor* visitor) {}
   };
 
-  virtual ~AnimationEffectReadOnly() {}
+  virtual ~AnimationEffectReadOnly() = default;
 
   virtual bool IsKeyframeEffectReadOnly() const { return false; }
   virtual bool IsKeyframeEffect() const { return false; }
@@ -111,6 +111,7 @@ class CORE_EXPORT AnimationEffectReadOnly : public ScriptWrappable {
   const Timing& SpecifiedTiming() const { return timing_; }
   virtual AnimationEffectTimingReadOnly* timing();
   void UpdateSpecifiedTiming(const Timing&);
+  EventDelegate* GetEventDelegate() { return event_delegate_; }
 
   void getComputedTiming(ComputedTimingProperties&);
   ComputedTimingProperties getComputedTiming();

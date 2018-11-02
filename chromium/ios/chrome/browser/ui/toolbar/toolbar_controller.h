@@ -7,31 +7,33 @@
 
 #import <UIKit/UIKit.h>
 
-#import "base/mac/scoped_nsobject.h"
 #import "ios/chrome/browser/ui/activity_services/requirements/activity_service_positioner.h"
 #import "ios/chrome/browser/ui/bubble/bubble_view_anchor_point_provider.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_ui_element.h"
+#import "ios/chrome/browser/ui/toolbar/legacy_toolbar_view.h"
 #import "ios/chrome/browser/ui/toolbar/public/abstract_toolbar.h"
 #import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_constants.h"
-#import "ios/chrome/browser/ui/toolbar/toolbar_view.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_presentation_provider.h"
 #import "ios/chrome/browser/ui/tools_menu/public/tools_menu_presentation_state_provider.h"
 
 @protocol ApplicationCommands;
 @protocol BrowserCommands;
 class ReadingListModel;
+@protocol ToolbarCommands;
 
 // Base class for a toolbar, containing the standard button set that is
 // common across different types of toolbars and action handlers for those
 // buttons (forwarding to the delegate). This is not intended to be used
 // on its own, but to be subclassed by more specific toolbars that provide
 // more buttons in the empty space.
-@interface ToolbarController : UIViewController<ActivityServicePositioner,
+@interface ToolbarController : UIViewController<AbstractToolbar,
+                                                ActivityServicePositioner,
                                                 BubbleViewAnchorPointProvider,
-                                                AbstractToolbar,
+                                                FullscreenUIElement,
                                                 ToolsMenuPresentationProvider>
 
 // The top-level toolbar view.
-@property(nonatomic, strong) ToolbarView* view;
+@property(nonatomic, strong) LegacyToolbarView* view;
 // The view for the toolbar shadow image.  This is a subview of |view| to
 // allow clients to alter the visibility of the shadow without affecting other
 // components of the toolbar.
@@ -45,16 +47,18 @@ class ReadingListModel;
 @property(nonatomic, readwrite, assign) ReadingListModel* readingListModel;
 
 // The command dispatcher this and any subordinate objects should use.
-@property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
-    dispatcher;
+@property(nonatomic, readonly, weak)
+    id<ApplicationCommands, BrowserCommands, ToolbarCommands>
+        dispatcher;
 
 // Designated initializer.
 //   |style| determines how the toolbar draws itself.
 //   |dispatcher| is is the dispatcher for calling methods handled in other
 //     parts of the app.
-- (instancetype)initWithStyle:(ToolbarControllerStyle)style
-                   dispatcher:
-                       (id<ApplicationCommands, BrowserCommands>)dispatcher
+- (instancetype)
+initWithStyle:(ToolbarControllerStyle)style
+   dispatcher:
+       (id<ApplicationCommands, BrowserCommands, ToolbarCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

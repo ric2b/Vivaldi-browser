@@ -4,13 +4,13 @@
 
 #include "platform/scheduler/child/webthread_impl_for_worker_scheduler.h"
 
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/synchronization/waitable_event.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/scheduler/child/web_scheduler_impl.h"
 #include "platform/scheduler/child/worker_scheduler_impl.h"
-#include "public/platform/WebTraceLocation.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -28,10 +28,8 @@ class MockTask {
   MOCK_METHOD0(Run, void());
 };
 
-class MockIdleTask : public blink::WebThread::IdleTask {
+class MockIdleTask {
  public:
-  ~MockIdleTask() override {}
-
   MOCK_METHOD1(Run, void(double deadline));
 };
 
@@ -39,7 +37,7 @@ class TestObserver : public blink::WebThread::TaskObserver {
  public:
   explicit TestObserver(std::string* calls) : calls_(calls) {}
 
-  ~TestObserver() override {}
+  ~TestObserver() override = default;
 
   void WillProcessTask() override { calls_->append(" willProcessTask"); }
 
@@ -71,9 +69,9 @@ void ShutdownOnThread(WebThreadImplForWorkerScheduler* thread) {
 
 class WebThreadImplForWorkerSchedulerTest : public ::testing::Test {
  public:
-  WebThreadImplForWorkerSchedulerTest() {}
+  WebThreadImplForWorkerSchedulerTest() = default;
 
-  ~WebThreadImplForWorkerSchedulerTest() override {}
+  ~WebThreadImplForWorkerSchedulerTest() override = default;
 
   void SetUp() override {
     thread_.reset(new WebThreadImplForWorkerScheduler("test thread"));
@@ -85,7 +83,7 @@ class WebThreadImplForWorkerSchedulerTest : public ::testing::Test {
     base::WaitableEvent completion(
         base::WaitableEvent::ResetPolicy::AUTOMATIC,
         base::WaitableEvent::InitialState::NOT_SIGNALED);
-    thread_->GetTaskRunner()->PostTask(
+    thread_->GetSingleThreadTaskRunner()->PostTask(
         from_here,
         base::Bind(&WebThreadImplForWorkerSchedulerTest::RunOnWorkerThreadTask,
                    base::Unretained(this), task, &completion));
@@ -115,8 +113,8 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestDefaultTask) {
     completion.Signal();
   }));
 
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *thread_->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&MockTask::Run, WTF::CrossThreadUnretained(&task)));
   completion.Wait();
 }
@@ -133,27 +131,29 @@ TEST_F(WebThreadImplForWorkerSchedulerTest,
     completion.Signal();
   }));
 
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *thread_->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&MockTask::Run, WTF::CrossThreadUnretained(&task)));
   thread_.reset();
 }
 
 TEST_F(WebThreadImplForWorkerSchedulerTest, TestIdleTask) {
-  std::unique_ptr<MockIdleTask> task(new MockIdleTask());
+  MockIdleTask task;
   base::WaitableEvent completion(
       base::WaitableEvent::ResetPolicy::AUTOMATIC,
       base::WaitableEvent::InitialState::NOT_SIGNALED);
 
-  EXPECT_CALL(*task, Run(_));
-  ON_CALL(*task, Run(_)).WillByDefault(Invoke([&completion](double) {
+  EXPECT_CALL(task, Run(_));
+  ON_CALL(task, Run(_)).WillByDefault(Invoke([&completion](double) {
     completion.Signal();
   }));
 
-  thread_->PostIdleTask(BLINK_FROM_HERE, task.release());
+  thread_->PostIdleTask(
+      FROM_HERE, base::BindOnce(&MockIdleTask::Run, WTF::Unretained(&task)));
   // We need to post a wake-up task or idle work will never happen.
-  thread_->GetWebTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE, CrossThreadBind([] {}), TimeDelta::FromMilliseconds(50));
+  PostDelayedCrossThreadTask(*thread_->GetWebTaskRunner(), FROM_HERE,
+                             CrossThreadBind([] {}),
+                             TimeDelta::FromMilliseconds(50));
 
   completion.Wait();
 }
@@ -164,8 +164,8 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestTaskObserver) {
 
   RunOnWorkerThread(FROM_HERE,
                     base::Bind(&AddTaskObserver, thread_.get(), &observer));
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *thread_->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&RunTestTask, WTF::CrossThreadUnretained(&calls)));
   RunOnWorkerThread(FROM_HERE,
                     base::Bind(&RemoveTaskObserver, thread_.get(), &observer));
@@ -187,11 +187,11 @@ TEST_F(WebThreadImplForWorkerSchedulerTest, TestShutdown) {
   EXPECT_CALL(delayed_task, Run()).Times(0);
 
   RunOnWorkerThread(FROM_HERE, base::Bind(&ShutdownOnThread, thread_.get()));
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *thread_->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&MockTask::Run, WTF::CrossThreadUnretained(&task)));
-  thread_->GetWebTaskRunner()->PostDelayedTask(
-      BLINK_FROM_HERE,
+  PostDelayedCrossThreadTask(
+      *thread_->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&MockTask::Run,
                       WTF::CrossThreadUnretained(&delayed_task)),
       TimeDelta::FromMilliseconds(50));

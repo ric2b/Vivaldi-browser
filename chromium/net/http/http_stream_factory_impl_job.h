@@ -152,8 +152,6 @@ class HttpStreamFactoryImpl::Job {
     websocket_handshake_stream_create_helper() = 0;
 
     virtual void MaybeSetWaitTimeForMainJob(const base::TimeDelta& delay) = 0;
-
-    virtual bool for_websockets() = 0;
   };
 
   // Job is owned by |delegate|, hence |delegate| is valid for the lifetime of
@@ -192,6 +190,7 @@ class HttpStreamFactoryImpl::Job {
       NextProto alternative_protocol,
       QuicTransportVersion quic_version,
       const ProxyServer& alternative_proxy_server,
+      bool is_websocket,
       bool enable_ip_based_pooling,
       NetLog* net_log);
   virtual ~Job();
@@ -254,10 +253,6 @@ class HttpStreamFactoryImpl::Job {
 
   bool should_reconsider_proxy() const { return should_reconsider_proxy_; }
 
-  // TODO(xunjieli): Added to investigate crbug.com/711721. Remove when no
-  // longer needed.
-  void LogHistograms() const;
-
   NetErrorDetails* net_error_details() { return &net_error_details_; }
 
  private:
@@ -318,6 +313,11 @@ class HttpStreamFactoryImpl::Job {
   int StartInternal();
   int DoInitConnectionImpl();
 
+  // If this is a QUIC alt job, then this function is called when host
+  // resolution completes. It's called with the next result after host
+  // resolution, not the result of host resolution itself.
+  void OnQuicHostResolution(int result);
+
   // Each of these methods corresponds to a State value.  Those with an input
   // argument receive the result from the previous state.  If a method returns
   // ERR_IO_PENDING, then the result from OnIOComplete will be passed to the
@@ -337,7 +337,7 @@ class HttpStreamFactoryImpl::Job {
   void ResumeInitConnection();
   // Creates a SpdyHttpStream or a BidirectionalStreamImpl from the given values
   // and sets to |stream_| or |bidirectional_stream_impl_| respectively. Does
-  // nothing if |stream_factory_| is for WebSockets.
+  // nothing if |stream_factory_| is for WebSocket.
   int SetSpdyHttpStreamOrBidirectionalStreamImpl(
       base::WeakPtr<SpdySession> session,
       bool direct);
@@ -415,9 +415,6 @@ class HttpStreamFactoryImpl::Job {
   std::unique_ptr<ClientSocketHandle> connection_;
   HttpNetworkSession* const session_;
 
-  // |state_| is only used for LogHistograms().
-  State state_;
-
   State next_state_;
 
   // The server we are trying to reach, could be that of the origin or of the
@@ -431,6 +428,9 @@ class HttpStreamFactoryImpl::Job {
   // Alternative proxy server that should be used by |this| to fetch the
   // request.
   const ProxyServer alternative_proxy_server_;
+
+  // True if request is for Websocket.
+  const bool is_websocket_;
 
   // Enable pooling to a SpdySession with matching IP and certificate
   // even if the SpdySessionKey is different.
@@ -464,6 +464,10 @@ class HttpStreamFactoryImpl::Job {
 
   QuicStreamRequest quic_request_;
 
+  // Only valid for a QUIC job. Set when a QUIC connection is started. If true,
+  // then OnQuicHostResolution() is expected to be called in the future.
+  bool expect_on_quic_host_resolution_;
+
   // True if this job used an existing QUIC session.
   bool using_existing_quic_session_;
 
@@ -490,6 +494,12 @@ class HttpStreamFactoryImpl::Job {
 
   // Initialized when we have an existing SpdySession.
   base::WeakPtr<SpdySession> existing_spdy_session_;
+
+  // Once Job claims a pushed stream on a SpdySession, |pushed_stream_id_| is
+  // the ID of the claimed stream, and |existing_spdy_session_| points to that
+  // SpdySession.  Otherwise |pushed_stream_id_| is set to kNoPushedStreamFound
+  // (but |existing_spdy_session_| can still be non-null).
+  SpdyStreamId pushed_stream_id_;
 
   // True if not connecting to an Https proxy for an Http url.
   const bool spdy_session_direct_;
@@ -527,6 +537,7 @@ class HttpStreamFactoryImpl::JobFactory {
       const SSLConfig& proxy_ssl_config,
       HostPortPair destination,
       GURL origin_url,
+      bool is_websocket,
       bool enable_ip_based_pooling,
       NetLog* net_log);
 
@@ -543,6 +554,7 @@ class HttpStreamFactoryImpl::JobFactory {
       GURL origin_url,
       NextProto alternative_protocol,
       QuicTransportVersion quic_version,
+      bool is_websocket,
       bool enable_ip_based_pooling,
       NetLog* net_log);
 
@@ -558,6 +570,7 @@ class HttpStreamFactoryImpl::JobFactory {
       HostPortPair destination,
       GURL origin_url,
       const ProxyServer& alternative_proxy_server,
+      bool is_websocket,
       bool enable_ip_based_pooling,
       NetLog* net_log);
 };

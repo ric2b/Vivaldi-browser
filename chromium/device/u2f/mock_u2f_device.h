@@ -18,8 +18,6 @@ namespace device {
 
 class MockU2fDevice : public U2fDevice {
  public:
-  static constexpr uint8_t kSign = 0x1;
-  static constexpr uint8_t kRegister = 0x5;
 
   MockU2fDevice();
   ~MockU2fDevice() override;
@@ -45,6 +43,8 @@ class MockU2fDevice : public U2fDevice {
   static void WrongData(U2fApduCommand* cmd, DeviceCallback& cb);
   static void NoErrorSign(U2fApduCommand* cmd, DeviceCallback& cb);
   static void NoErrorRegister(U2fApduCommand* cmd, DeviceCallback& cb);
+  static void SignWithCorruptedResponse(U2fApduCommand* cmd,
+                                        DeviceCallback& cb);
   static void WinkDoNothing(WinkCallback& cb);
 
  private:

@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
 <translation id="1326317727527857210">Vahelehtede hankimiseks oma teistest seadmetest logige Chrome'i sisse.</translation>
-<translation id="1685087038067318291">Avastage lähedalasuvate objektide saadetud veebilehti. Kui Bluetooth on sisse lülitatud, kogub Chrome teie ümbruses olevate objektidega seotud veebilehed kokku ja saadab need anonüümselt Google'i teenusele, et leida teie jaoks kõige kasulikumad lehed. <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome'i privaatsust.</translation>
+<translation id="1863312987075920112">Seda rakendust kasutades nõustute Chrome'i <ph name="BEGIN_LINK_TOS" />teenusetingimuste<ph name="END_LINK_TOS" /> ja <ph name="BEGIN_LINK_PRIVACY" />privaatsusteatisega<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="2147651015520127414">Chrome kinnitas, et veebisaidi sertifikaadi väljastas <ph name="ISSUER" />.</translation>
 <translation id="2334084861041072223">Autoriõigus <ph name="YEAR" /> Google Inc. Kõik õigused on kaitstud.</translation>
 <translation id="2342981853652716282">Logige Chrome'i sisse, et kõikides oma seadmetes kasutada järjehoidjaid, paroole ja muud.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Mõned pistikprogrammid põhjustavad Chrome'i kokkujooksmise. Desinstallige need:</translation>
 <translation id="4615174829807303908">Logite välja kontolt, mida haldab <ph name="SIGNOUT_MANAGED_DOMAIN" />. Selle tulemusel kustutatakse seadmes olevad Chrome'i andmed, kuid need jäävad alles teie Google'i kontole.</translation>
 <translation id="5389212809648216794">Google Chrome ei saa kaamerat kasutada, kuna seda kasutab muu rakendus</translation>
-<translation id="5566557026214762153">Rakenduse kasutamisega nõustute Chrome'i <ph name="BEGIN_LINK" />teenusetingimustega<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Tehke valikud Seaded &gt; Privaatsus &gt; Kaamera &gt; Google Chrome ja lülitage kaamera sisse.</translation>
 <translation id="5642200033778930880">Google Chrome ei saa kaamerat poolitatud vaate režiimis kasutada</translation>
 <translation id="5703130498371792817">Kas teile meeldib Chrome? <ph name="BEGIN_LINK" />Hinnake seda rakendust<ph name="END_LINK" /></translation>

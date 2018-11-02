@@ -4,6 +4,8 @@
 
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -15,16 +17,15 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "media/gpu/d3d11_video_decode_accelerator_win.h"
 #include "media/gpu/dxva_video_decode_accelerator_win.h"
 #endif
 #if defined(OS_MACOSX)
 #include "media/gpu/vt_video_decode_accelerator_mac.h"
 #endif
 #if BUILDFLAG(USE_V4L2_CODEC)
-#include "media/gpu/v4l2_device.h"
-#include "media/gpu/v4l2_slice_video_decode_accelerator.h"
-#include "media/gpu/v4l2_video_decode_accelerator.h"
+#include "media/gpu/v4l2/v4l2_device.h"
+#include "media/gpu/v4l2/v4l2_slice_video_decode_accelerator.h"
+#include "media/gpu/v4l2/v4l2_video_decode_accelerator.h"
 #include "ui/gl/gl_surface_egl.h"
 #endif
 #if defined(OS_ANDROID)
@@ -34,7 +35,7 @@
 #include "media/gpu/android/device_info.h"
 #endif
 #if BUILDFLAG(USE_VAAPI)
-#include "media/gpu/vaapi_video_decode_accelerator.h"
+#include "media/gpu/vaapi/vaapi_video_decode_accelerator.h"
 #include "ui/gl/gl_implementation.h"
 #endif
 
@@ -48,7 +49,7 @@ GpuVideoDecodeAcceleratorFactory::Create(
     const BindGLImageCallback& bind_image_cb) {
   return base::WrapUnique(new GpuVideoDecodeAcceleratorFactory(
       get_gl_context_cb, make_context_current_cb, bind_image_cb,
-      GetGLES2DecoderCallback(), AndroidOverlayMojoFactoryCB()));
+      GetContextGroupCallback(), AndroidOverlayMojoFactoryCB()));
 }
 
 // static
@@ -57,11 +58,11 @@ GpuVideoDecodeAcceleratorFactory::CreateWithGLES2Decoder(
     const GetGLContextCallback& get_gl_context_cb,
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb,
-    const GetGLES2DecoderCallback& get_gles2_decoder_cb,
+    const GetContextGroupCallback& get_context_group_cb,
     const AndroidOverlayMojoFactoryCB& overlay_factory_cb) {
   return base::WrapUnique(new GpuVideoDecodeAcceleratorFactory(
       get_gl_context_cb, make_context_current_cb, bind_image_cb,
-      get_gles2_decoder_cb, overlay_factory_cb));
+      get_context_group_cb, overlay_factory_cb));
 }
 
 // static
@@ -137,7 +138,6 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
                                            const gpu::GpuPreferences&) const;
   const CreateVDAFp create_vda_fps[] = {
 #if defined(OS_WIN)
-    &GpuVideoDecodeAcceleratorFactory::CreateD3D11VDA,
     &GpuVideoDecodeAcceleratorFactory::CreateDXVAVDA,
 #endif
 #if BUILDFLAG(USE_V4L2_CODEC)
@@ -167,21 +167,6 @@ GpuVideoDecodeAcceleratorFactory::CreateVDA(
 }
 
 #if defined(OS_WIN)
-std::unique_ptr<VideoDecodeAccelerator>
-GpuVideoDecodeAcceleratorFactory::CreateD3D11VDA(
-    const gpu::GpuDriverBugWorkarounds& workarounds,
-    const gpu::GpuPreferences& gpu_preferences) const {
-  std::unique_ptr<VideoDecodeAccelerator> decoder;
-  if (!base::FeatureList::IsEnabled(kD3D11VideoDecoding))
-    return decoder;
-  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
-    DVLOG(0) << "Initializing D3D11 HW decoder for windows.";
-    decoder.reset(new D3D11VideoDecodeAccelerator(
-        get_gl_context_cb_, make_context_current_cb_, bind_image_cb_));
-  }
-  return decoder;
-}
-
 std::unique_ptr<VideoDecodeAccelerator>
 GpuVideoDecodeAcceleratorFactory::CreateDXVAVDA(
     const gpu::GpuDriverBugWorkarounds& workarounds,
@@ -257,9 +242,9 @@ GpuVideoDecodeAcceleratorFactory::CreateAndroidVDA(
   std::unique_ptr<VideoDecodeAccelerator> decoder;
   decoder.reset(new AndroidVideoDecodeAccelerator(
       AVDACodecAllocator::GetInstance(base::ThreadTaskRunnerHandle::Get()),
-      base::MakeUnique<AndroidVideoSurfaceChooserImpl>(
+      std::make_unique<AndroidVideoSurfaceChooserImpl>(
           DeviceInfo::GetInstance()->IsSetOutputSurfaceSupported()),
-      make_context_current_cb_, get_gles2_decoder_cb_, overlay_factory_cb_,
+      make_context_current_cb_, get_context_group_cb_, overlay_factory_cb_,
       DeviceInfo::GetInstance()));
   return decoder;
 }
@@ -269,12 +254,12 @@ GpuVideoDecodeAcceleratorFactory::GpuVideoDecodeAcceleratorFactory(
     const GetGLContextCallback& get_gl_context_cb,
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const BindGLImageCallback& bind_image_cb,
-    const GetGLES2DecoderCallback& get_gles2_decoder_cb,
+    const GetContextGroupCallback& get_context_group_cb,
     const AndroidOverlayMojoFactoryCB& overlay_factory_cb)
     : get_gl_context_cb_(get_gl_context_cb),
       make_context_current_cb_(make_context_current_cb),
       bind_image_cb_(bind_image_cb),
-      get_gles2_decoder_cb_(get_gles2_decoder_cb),
+      get_context_group_cb_(get_context_group_cb),
       overlay_factory_cb_(overlay_factory_cb) {}
 
 GpuVideoDecodeAcceleratorFactory::~GpuVideoDecodeAcceleratorFactory() = default;

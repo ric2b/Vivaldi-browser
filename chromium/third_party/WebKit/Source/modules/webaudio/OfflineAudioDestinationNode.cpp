@@ -36,7 +36,6 @@
 #include "platform/audio/AudioUtilities.h"
 #include "platform/audio/DenormalDisabler.h"
 #include "platform/audio/HRTFDatabaseLoader.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -115,8 +114,8 @@ void OfflineAudioDestinationHandler::StartRendering() {
   // Rendering was not started. Starting now.
   if (!is_rendering_started_) {
     is_rendering_started_ = true;
-    GetRenderingThread()->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *GetRenderingThread()->GetWebTaskRunner(), FROM_HERE,
         CrossThreadBind(&OfflineAudioDestinationHandler::StartOfflineRendering,
                         WrapRefCounted(this)));
     return;
@@ -124,8 +123,8 @@ void OfflineAudioDestinationHandler::StartRendering() {
 
   // Rendering is already started, which implicitly means we resume the
   // rendering by calling |doOfflineRendering| on the render thread.
-  GetRenderingThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *GetRenderingThread()->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(&OfflineAudioDestinationHandler::DoOfflineRendering,
                       WrapRefCounted(this)));
 }
@@ -203,7 +202,7 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
     if (!gc_lock.HasLock()) {
       // To ensure that the rendering step eventually happens, repost.
       GetRenderingThread()->GetWebTaskRunner()->PostTask(
-          BLINK_FROM_HERE,
+          FROM_HERE,
           WTF::Bind(&OfflineAudioDestinationHandler::DoOfflineRendering,
                     WrapRefCounted(this)));
       return;
@@ -250,8 +249,8 @@ void OfflineAudioDestinationHandler::SuspendOfflineRendering() {
   DCHECK(!IsMainThread());
 
   // The actual rendering has been suspended. Notify the context.
-  task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *task_runner_, FROM_HERE,
       CrossThreadBind(&OfflineAudioDestinationHandler::NotifySuspend,
                       WrapRefCounted(this), Context()->CurrentSampleFrame()));
 }
@@ -260,8 +259,8 @@ void OfflineAudioDestinationHandler::FinishOfflineRendering() {
   DCHECK(!IsMainThread());
 
   // The actual rendering has been completed. Notify the context.
-  task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *task_runner_, FROM_HERE,
       CrossThreadBind(&OfflineAudioDestinationHandler::NotifyComplete,
                       WrapRefCounted(this)));
 }

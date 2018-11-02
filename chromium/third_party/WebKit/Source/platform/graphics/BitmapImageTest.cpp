@@ -349,6 +349,13 @@ TEST_F(BitmapImageTest, ImageForDefaultFrame_SingleFrame) {
   EXPECT_EQ(image_->ImageForDefaultFrame(), image_);
 }
 
+TEST_F(BitmapImageTest, GIFRepetitionCount) {
+  LoadImage("/LayoutTests/images/resources/three-frames_loop-three-times.gif");
+  auto paint_image = image_->PaintImageForCurrentFrame();
+  EXPECT_EQ(paint_image.repetition_count(), 3);
+  EXPECT_EQ(paint_image.FrameCount(), 3u);
+}
+
 class BitmapImageTestWithMockDecoder : public BitmapImageTest,
                                        public MockImageDecoderClient {
  public:

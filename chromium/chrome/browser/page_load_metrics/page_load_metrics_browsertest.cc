@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -11,10 +13,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/string_util.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
@@ -71,6 +73,8 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_filter.h"
+#include "testing/gmock/include/gmock/gmock.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "url/gurl.h"
 
@@ -82,7 +86,7 @@ void FailAllNetworkTransactions(net::URLRequestContextGetter* getter) {
       getter->GetURLRequestContext()->http_transaction_factory()->GetCache());
   DCHECK(cache);
   std::unique_ptr<net::FailingHttpTransactionFactory> factory =
-      base::MakeUnique<net::FailingHttpTransactionFactory>(cache->GetSession(),
+      std::make_unique<net::FailingHttpTransactionFactory>(cache->GetSession(),
                                                            net::ERR_FAILED);
   // Throw away old version; since this is a browser test, there is no
   // need to restore the old state.
@@ -144,7 +148,7 @@ class PageLoadMetricsWaiter
     if (expectations_satisfied())
       return;
 
-    run_loop_ = base::MakeUnique<base::RunLoop>();
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
     run_loop_ = nullptr;
 
@@ -299,7 +303,7 @@ class PageLoadMetricsWaiter
     // load.
     ASSERT_FALSE(did_add_observer_);
     tracker->AddObserver(
-        base::MakeUnique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
+        std::make_unique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
     did_add_observer_ = true;
   }
 
@@ -310,7 +314,7 @@ class PageLoadMetricsWaiter
     // load.
     ASSERT_FALSE(did_add_observer_);
     tracker->AddObserver(
-        base::MakeUnique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
+        std::make_unique<WaiterMetricsObserver>(weak_factory_.GetWeakPtr()));
     did_add_observer_ = true;
   }
 
@@ -335,6 +339,8 @@ using TimingField = PageLoadMetricsWaiter::TimingField;
 using WebFeature = blink::mojom::WebFeature;
 }  // namespace
 
+using testing::UnorderedElementsAre;
+
 class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
  public:
   PageLoadMetricsBrowserTest() {
@@ -347,7 +353,7 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
   void PreRunTestOnMainThread() override {
     InProcessBrowserTest::PreRunTestOnMainThread();
 
-    test_ukm_recorder_ = base::MakeUnique<ukm::TestAutoSetUkmRecorder>();
+    test_ukm_recorder_ = std::make_unique<ukm::TestAutoSetUkmRecorder>();
   }
 
   // Force navigation to a new page, so the currently tracked page load runs its
@@ -356,6 +362,17 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
   // sufficient.
   void NavigateToUntrackedUrl() {
     ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
+  }
+
+  std::string GetRecordedPageLoadMetricNames() {
+    auto entries = histogram_tester_.GetTotalCountsForPrefix("PageLoad.");
+    std::vector<std::string> names;
+    std::transform(
+        entries.begin(), entries.end(), std::back_inserter(names),
+        [](const std::pair<std::string, base::HistogramBase::Count>& entry) {
+          return entry.first;
+        });
+    return base::JoinString(names, ",");
   }
 
   bool NoPageLoadMetricsRecorded() {
@@ -372,7 +389,7 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
   std::unique_ptr<PageLoadMetricsWaiter> CreatePageLoadMetricsWaiter() {
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
-    return base::MakeUnique<PageLoadMetricsWaiter>(web_contents);
+    return std::make_unique<PageLoadMetricsWaiter>(web_contents);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -385,7 +402,8 @@ class PageLoadMetricsBrowserTest : public InProcessBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPage) {
@@ -438,13 +456,13 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPage) {
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NewPageInNewForegroundTab) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
-  chrome::NavigateParams params(browser(),
-                                embedded_test_server()->GetURL("/title1.html"),
-                                ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(),
+                        embedded_test_server()->GetURL("/title1.html"),
+                        ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 
-  chrome::Navigate(&params);
-  auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(params.target_contents);
+  Navigate(&params);
+  auto waiter = std::make_unique<PageLoadMetricsWaiter>(params.target_contents);
   waiter->AddPageExpectation(TimingField::LOAD_EVENT);
   waiter->Wait();
 
@@ -628,7 +646,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NonHtmlMainResource) {
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/circle.svg"));
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NonHttpOrHttpsUrl) {
@@ -636,7 +655,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NonHttpOrHttpsUrl) {
 
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIVersionURL));
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, HttpErrorPage) {
@@ -645,7 +665,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, HttpErrorPage) {
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/page_load_metrics/404.html"));
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, ChromeErrorPage) {
@@ -663,7 +684,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, ChromeErrorPage) {
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/title1.html"));
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, Ignore204Pages) {
@@ -672,7 +694,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, Ignore204Pages) {
   ui_test_utils::NavigateToURL(browser(),
                                embedded_test_server()->GetURL("/page204.html"));
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, IgnoreDownloads) {
@@ -693,7 +716,8 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, IgnoreDownloads) {
   downloads_observer.WaitForFinished();
 
   NavigateToUntrackedUrl();
-  EXPECT_TRUE(NoPageLoadMetricsRecorded());
+  EXPECT_TRUE(NoPageLoadMetricsRecorded())
+      << "Recorded metrics: " << GetRecordedPageLoadMetricNames();
 }
 
 IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, NoDocumentWrite) {
@@ -858,20 +882,19 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortNewNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/title1.html"));
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::TestNavigationManager manager(
       browser()->tab_strip_model()->GetActiveWebContents(), url);
 
-  chrome::Navigate(&params);
+  Navigate(&params);
   EXPECT_TRUE(manager.WaitForRequestStart());
 
   GURL url2(embedded_test_server()->GetURL("/title2.html"));
-  chrome::NavigateParams params2(browser(), url2,
-                                 ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  NavigateParams params2(browser(), url2, ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
 
   auto waiter = CreatePageLoadMetricsWaiter();
   waiter->AddPageExpectation(TimingField::LOAD_EVENT);
-  chrome::Navigate(&params2);
+  Navigate(&params2);
   waiter->Wait();
 
   histogram_tester_.ExpectTotalCount(
@@ -882,18 +905,18 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortReload) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/title1.html"));
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::TestNavigationManager manager(
       browser()->tab_strip_model()->GetActiveWebContents(), url);
 
-  chrome::Navigate(&params);
+  Navigate(&params);
   EXPECT_TRUE(manager.WaitForRequestStart());
 
-  chrome::NavigateParams params2(browser(), url, ui::PAGE_TRANSITION_RELOAD);
+  NavigateParams params2(browser(), url, ui::PAGE_TRANSITION_RELOAD);
 
   auto waiter = CreatePageLoadMetricsWaiter();
   waiter->AddPageExpectation(TimingField::LOAD_EVENT);
-  chrome::Navigate(&params2);
+  Navigate(&params2);
   waiter->Wait();
 
   histogram_tester_.ExpectTotalCount(
@@ -910,11 +933,11 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, MAYBE_AbortClose) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/title1.html"));
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::TestNavigationManager manager(
       browser()->tab_strip_model()->GetActiveWebContents(), url);
 
-  chrome::Navigate(&params);
+  Navigate(&params);
   EXPECT_TRUE(manager.WaitForRequestStart());
 
   browser()->tab_strip_model()->GetActiveWebContents()->Close();
@@ -929,28 +952,28 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, AbortMultiple) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   GURL url(embedded_test_server()->GetURL("/title1.html"));
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::TestNavigationManager manager(
       browser()->tab_strip_model()->GetActiveWebContents(), url);
 
-  chrome::Navigate(&params);
+  Navigate(&params);
   EXPECT_TRUE(manager.WaitForRequestStart());
 
   GURL url2(embedded_test_server()->GetURL("/title2.html"));
-  chrome::NavigateParams params2(browser(), url2, ui::PAGE_TRANSITION_TYPED);
+  NavigateParams params2(browser(), url2, ui::PAGE_TRANSITION_TYPED);
   content::TestNavigationManager manager2(
       browser()->tab_strip_model()->GetActiveWebContents(), url2);
-  chrome::Navigate(&params2);
+  Navigate(&params2);
 
   EXPECT_TRUE(manager2.WaitForRequestStart());
   manager.WaitForNavigationFinished();
 
   GURL url3(embedded_test_server()->GetURL("/title3.html"));
-  chrome::NavigateParams params3(browser(), url3, ui::PAGE_TRANSITION_TYPED);
+  NavigateParams params3(browser(), url3, ui::PAGE_TRANSITION_TYPED);
 
   auto waiter = CreatePageLoadMetricsWaiter();
   waiter->AddPageExpectation(TimingField::LOAD_EVENT);
-  chrome::Navigate(&params3);
+  Navigate(&params3);
   waiter->Wait();
 
   manager2.WaitForNavigationFinished();
@@ -967,11 +990,10 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   ui_test_utils::NavigateToURL(browser(), first_url);
 
   GURL second_url(embedded_test_server()->GetURL("/title2.html"));
-  chrome::NavigateParams params(browser(), second_url,
-                                ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), second_url, ui::PAGE_TRANSITION_LINK);
   content::TestNavigationManager manager(
       browser()->tab_strip_model()->GetActiveWebContents(), second_url);
-  chrome::Navigate(&params);
+  Navigate(&params);
   EXPECT_TRUE(manager.WaitForRequestStart());
 
   {
@@ -1191,7 +1213,43 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
       static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
   histogram_tester_.ExpectBucketCount(
       internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kNavigatorVibrate), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kDataUriHasOctothorpe), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
       static_cast<int32_t>(WebFeature::kPageVisits), 1);
+}
+
+// Test UseCounter UKM features observed.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
+                       UseCounterUkmFeaturesLogged) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  auto waiter = CreatePageLoadMetricsWaiter();
+  waiter->AddPageExpectation(TimingField::LOAD_EVENT);
+  GURL url = embedded_test_server()->GetURL(
+      "/page_load_metrics/use_counter_features.html");
+  ui_test_utils::NavigateToURL(browser(), url);
+  waiter->Wait();
+  NavigateToUntrackedUrl();
+
+  const auto& entries =
+      test_ukm_recorder_->GetEntriesByName(internal::kUkmUseCounterEventName);
+  EXPECT_EQ(2u, entries.size());
+  std::vector<int64_t> ukm_features;
+  for (const auto* entry : entries) {
+    test_ukm_recorder_->ExpectEntrySourceHasUrl(entry, url);
+    const auto* metric =
+        test_ukm_recorder_->FindMetric(entry, internal::kUkmUseCounterFeature);
+    EXPECT_TRUE(metric);
+    ukm_features.push_back(metric->value);
+  }
+  EXPECT_THAT(ukm_features,
+              UnorderedElementsAre(
+                  static_cast<int64_t>(WebFeature::kNavigatorVibrate),
+                  static_cast<int64_t>(WebFeature::kDataUriHasOctothorpe)));
 }
 
 // Test UseCounter Features observed in a child frame are recorded, exactly
@@ -1213,6 +1271,9 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, UseCounterFeaturesInIframe) {
   histogram_tester_.ExpectBucketCount(
       internal::kFeaturesHistogramName,
       static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kNavigatorVibrate), 1);
   histogram_tester_.ExpectBucketCount(
       internal::kFeaturesHistogramName,
       static_cast<int32_t>(WebFeature::kPageVisits), 1);
@@ -1239,6 +1300,23 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   histogram_tester_.ExpectBucketCount(
       internal::kFeaturesHistogramName,
       static_cast<int32_t>(WebFeature::kV8Element_Animate_Method), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kNavigatorVibrate), 1);
+  histogram_tester_.ExpectBucketCount(
+      internal::kFeaturesHistogramName,
+      static_cast<int32_t>(WebFeature::kPageVisits), 1);
+}
+
+// Test UseCounter Features observed for SVG pages.
+IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
+                       UseCounterObserveSVGImagePage) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL(
+                                              "/page_load_metrics/circle.svg"));
+  NavigateToUntrackedUrl();
+
   histogram_tester_.ExpectBucketCount(
       internal::kFeaturesHistogramName,
       static_cast<int32_t>(WebFeature::kPageVisits), 1);
@@ -1348,7 +1426,7 @@ class SessionRestorePaintWaiter : public SessionRestoreObserver {
   // SessionRestoreObserver implementation:
   void OnWillRestoreTab(content::WebContents* contents) override {
     chrome::InitializePageLoadMetricsForWebContents(contents);
-    auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(contents);
+    auto waiter = std::make_unique<PageLoadMetricsWaiter>(contents);
     waiter->AddPageExpectation(TimingField::FIRST_PAINT);
     waiter->AddPageExpectation(TimingField::FIRST_CONTENTFUL_PAINT);
     waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
@@ -1460,7 +1538,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   NavigateToUntrackedUrl();
   Browser* new_browser = QuitBrowserAndRestore(browser());
 
-  auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(
+  auto waiter = std::make_unique<PageLoadMetricsWaiter>(
       new_browser->tab_strip_model()->GetActiveWebContents());
   waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
   ui_test_utils::NavigateToURL(new_browser, GetTestURL());
@@ -1485,7 +1563,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   }
 
   // Load a new page after session restore.
-  auto waiter = base::MakeUnique<PageLoadMetricsWaiter>(
+  auto waiter = std::make_unique<PageLoadMetricsWaiter>(
       new_browser->tab_strip_model()->GetActiveWebContents());
   waiter->AddPageExpectation(TimingField::FIRST_MEANINGFUL_PAINT);
   ui_test_utils::NavigateToURL(new_browser, GetTestURL());
@@ -1609,7 +1687,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   // Set up the restore data: one window with two tabs.
   std::vector<const sessions::SessionWindow*> session;
   sessions::SessionWindow window;
-  auto tab1 = base::MakeUnique<sessions::SessionTab>();
+  auto tab1 = std::make_unique<sessions::SessionTab>();
   {
     sync_pb::SessionTab sync_data;
     sync_data.set_tab_visual_index(0);
@@ -1620,7 +1698,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestorePageLoadMetricsBrowserTest,
   }
   window.tabs.push_back(std::move(tab1));
 
-  auto tab2 = base::MakeUnique<sessions::SessionTab>();
+  auto tab2 = std::make_unique<sessions::SessionTab>();
   {
     sync_pb::SessionTab sync_data;
     sync_data.set_tab_visual_index(1);

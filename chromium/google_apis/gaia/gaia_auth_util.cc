@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "net/base/url_util.h"
 #include "net/url_request/url_fetcher.h"
 #include "net/url_request/url_request.h"
 #include "url/gurl.h"
@@ -197,6 +198,16 @@ void MarkURLFetcherAsGaia(net::URLFetcher* fetcher) {
   DCHECK(fetcher);
   fetcher->SetURLRequestUserData(kURLRequestUserDataKey,
                                  base::Bind(&GaiaURLRequestUserData::Create));
+}
+
+bool ShouldSkipSavePasswordForGaiaURL(const GURL& url) {
+  if (!IsGaiaSignonRealm(url.GetOrigin()))
+    return false;
+
+  std::string should_skip_password;
+  if (!net::GetValueForKeyInQuery(url, "ssp", &should_skip_password))
+    return false;
+  return should_skip_password == "1";
 }
 
 }  // namespace gaia

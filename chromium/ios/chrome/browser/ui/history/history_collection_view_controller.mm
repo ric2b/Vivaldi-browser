@@ -43,6 +43,7 @@
 #include "ios/chrome/browser/ui/history/ios_browsing_history_driver.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/util/pasteboard_util.h"
+#import "ios/chrome/browser/ui/util/top_view_controller.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/ActivityIndicator/src/MDCActivityIndicator.h"
 #import "ios/third_party/material_components_ios/src/components/Collections/src/MaterialCollections.h"
@@ -202,6 +203,13 @@ const CGFloat kSeparatorInset = 10;
       UIEdgeInsetsMake(0, kSeparatorInset, 0, kSeparatorInset);
   self.styler.allowsItemInlay = NO;
 
+  // Never adjust the content inset on iOS11 or it will create padding on top of
+  // the first cell.
+  if (@available(iOS 11, *)) {
+    [self.collectionView setContentInsetAdjustmentBehavior:
+                             UIScrollViewContentInsetAdjustmentNever];
+  }
+
   self.clearsSelectionOnViewWillAppear = NO;
   self.collectionView.keyboardDismissMode =
       UIScrollViewKeyboardDismissModeOnDrag;
@@ -211,6 +219,17 @@ const CGFloat kSeparatorInset = 10;
       initWithTarget:self
               action:@selector(displayContextMenuInvokedByGestureRecognizer:)];
   [self.collectionView addGestureRecognizer:longPressRecognizer];
+}
+
+// Since contentInsetAdjustmentBehavior is
+// UIScrollViewContentInsetAdjustmentNever on iOS11, update the horizontal
+// insets manually to respect the safeArea.
+- (void)viewSafeAreaInsetsDidChange {
+  [super viewSafeAreaInsetsDidChange];
+  UIEdgeInsets collectionContentInsets = self.collectionView.contentInset;
+  collectionContentInsets.left = self.view.safeAreaInsets.left;
+  collectionContentInsets.right = self.view.safeAreaInsets.right;
+  self.collectionView.contentInset = collectionContentInsets;
 }
 
 - (BOOL)isEditing {
@@ -644,21 +663,20 @@ const CGFloat kSeparatorInset = 10;
         self.isSearching ? l10n_util::GetNSString(IDS_HISTORY_NO_SEARCH_RESULTS)
                          : l10n_util::GetNSString(IDS_HISTORY_NO_RESULTS);
     entriesStatusItem = noResultsItem;
-  } else {
+  } else if (self.shouldShowNoticeAboutOtherFormsOfBrowsingHistory) {
     HistoryEntriesStatusItem* historyEntriesStatusItem =
         [[HistoryEntriesStatusItem alloc] initWithType:ItemTypeEntriesStatus];
     historyEntriesStatusItem.delegate = self;
     historyEntriesStatusItem.hidden = self.isSearching;
-    historyEntriesStatusItem.showsOtherBrowsingDataNotice =
-        _shouldShowNoticeAboutOtherFormsOfBrowsingHistory;
     entriesStatusItem = historyEntriesStatusItem;
   }
-  // Replace the item in the first section, which is always present.
+  // Replace the item in the first section if it exists. Then insert the new
+  // item if it exists.
   NSArray* items = [self.collectionViewModel
       itemsInSectionWithIdentifier:kEntriesStatusSectionIdentifier];
   if ([items count]) {
-    // There should only ever be one item in this section.
-    DCHECK([items count] == 1);
+    // There should only ever be at most one item in this section.
+    DCHECK([items count] <= 1);
     // Only update if the item has changed.
     if ([items[0] isEqual:entriesStatusItem]) {
       return;
@@ -673,9 +691,11 @@ const CGFloat kSeparatorInset = 10;
           fromSectionWithIdentifier:kEntriesStatusSectionIdentifier];
       [self.collectionView deleteItemsAtIndexPaths:@[ indexPath ]];
     }
-    [self.collectionViewModel addItem:entriesStatusItem
-              toSectionWithIdentifier:kEntriesStatusSectionIdentifier];
-    [self.collectionView insertItemsAtIndexPaths:@[ indexPath ]];
+    if (entriesStatusItem) {
+      [self.collectionViewModel addItem:entriesStatusItem
+                toSectionWithIdentifier:kEntriesStatusSectionIdentifier];
+      [self.collectionView insertItemsAtIndexPaths:@[ indexPath ]];
+    }
   }
                                 completion:nil];
 }
@@ -812,15 +832,15 @@ const CGFloat kSeparatorInset = 10;
   __weak HistoryCollectionViewController* weakSelf = self;
   web::ContextMenuParams params;
   params.location = touchLocation;
-  params.view.reset(self.collectionView);
+  params.view = self.collectionView;
   NSString* menuTitle =
       base::SysUTF16ToNSString(url_formatter::FormatUrl(entry.URL));
-  params.menu_title.reset([menuTitle copy]);
+  params.menu_title = [menuTitle copy];
 
   // Present sheet/popover using controller that is added to view hierarchy.
-  UIViewController* topController = [params.view window].rootViewController;
-  while (topController.presentedViewController)
-    topController = topController.presentedViewController;
+  // TODO(crbug.com/754642): Remove TopPresentedViewController().
+  UIViewController* topController =
+      top_view_controller::TopPresentedViewController();
 
   self.contextMenuCoordinator =
       [[ContextMenuCoordinator alloc] initWithBaseViewController:topController

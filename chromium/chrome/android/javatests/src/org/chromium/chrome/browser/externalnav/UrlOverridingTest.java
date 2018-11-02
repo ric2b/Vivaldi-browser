@@ -24,6 +24,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.RetryOnFailure;
@@ -52,8 +53,7 @@ import java.util.concurrent.TimeoutException;
  * Test suite for verifying the behavior of various URL overriding actions.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class UrlOverridingTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -317,10 +317,12 @@ public class UrlOverridingTest {
     public void testNavigationWithFallbackURL()
             throws InterruptedException, UnsupportedEncodingException {
         String fallbackUrl = mTestServer.getURL(FALLBACK_LANDING_PATH);
-        String originalUrl = mTestServer.getURL(
-                NAVIGATION_WITH_FALLBACK_URL_PAGE + "?replace_text="
-                + Base64.encodeToString("PARAM_FALLBACK_URL".getBytes("utf-8"), Base64.URL_SAFE)
-                + ":" + Base64.encodeToString(fallbackUrl.getBytes("utf-8"), Base64.URL_SAFE));
+        String originalUrl = mTestServer.getURL(NAVIGATION_WITH_FALLBACK_URL_PAGE + "?replace_text="
+                + Base64.encodeToString(
+                          ApiCompatibilityUtils.getBytesUtf8("PARAM_FALLBACK_URL"), Base64.URL_SAFE)
+                + ":"
+                + Base64.encodeToString(
+                          ApiCompatibilityUtils.getBytesUtf8(fallbackUrl), Base64.URL_SAFE));
         loadUrlAndWaitForIntentUrl(originalUrl, true, 0, false, fallbackUrl);
     }
 
@@ -333,11 +335,12 @@ public class UrlOverridingTest {
         // the iframe in NAVIGATION_WITH_FALLBACK_URL_PARENT_FRAME_PAGE, have to go through the
         // embedded test server twice and, as such, have to be base64-encoded twice.
         String fallbackUrl = mTestServer.getURL(FALLBACK_LANDING_PATH);
-        byte[] paramBase64Name = "PARAM_BASE64_NAME".getBytes("utf-8");
-        byte[] base64ParamFallbackUrl = Base64.encode("PARAM_FALLBACK_URL".getBytes("utf-8"),
-                Base64.URL_SAFE);
-        byte[] paramBase64Value = "PARAM_BASE64_VALUE".getBytes("utf-8");
-        byte[] base64FallbackUrl = Base64.encode(fallbackUrl.getBytes("utf-8"), Base64.URL_SAFE);
+        byte[] paramBase64Name = ApiCompatibilityUtils.getBytesUtf8("PARAM_BASE64_NAME");
+        byte[] base64ParamFallbackUrl = Base64.encode(
+                ApiCompatibilityUtils.getBytesUtf8("PARAM_FALLBACK_URL"), Base64.URL_SAFE);
+        byte[] paramBase64Value = ApiCompatibilityUtils.getBytesUtf8("PARAM_BASE64_VALUE");
+        byte[] base64FallbackUrl =
+                Base64.encode(ApiCompatibilityUtils.getBytesUtf8(fallbackUrl), Base64.URL_SAFE);
 
         String originalUrl = mTestServer.getURL(
                 NAVIGATION_WITH_FALLBACK_URL_PARENT_FRAME_PAGE

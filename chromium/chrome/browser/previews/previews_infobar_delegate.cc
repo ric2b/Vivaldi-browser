@@ -98,7 +98,7 @@ void InformPLMOfOptOut(content::WebContents* web_contents) {
 
 PreviewsInfoBarDelegate::~PreviewsInfoBarDelegate() {
   if (!on_dismiss_callback_.is_null())
-    on_dismiss_callback_.Run(false);
+    std::move(on_dismiss_callback_).Run(false);
 
   RecordPreviewsInfoBarAction(previews_type_, infobar_dismissed_action_);
 }
@@ -110,7 +110,7 @@ void PreviewsInfoBarDelegate::Create(
     base::Time previews_freshness,
     bool is_data_saver_user,
     bool is_reload,
-    const OnDismissPreviewsInfobarCallback& on_dismiss_callback,
+    OnDismissPreviewsInfobarCallback on_dismiss_callback,
     previews::PreviewsUIService* previews_ui_service) {
   PreviewsInfoBarTabHelper* infobar_tab_helper =
       PreviewsInfoBarTabHelper::FromWebContents(web_contents);
@@ -126,7 +126,7 @@ void PreviewsInfoBarDelegate::Create(
 
   std::unique_ptr<PreviewsInfoBarDelegate> delegate(new PreviewsInfoBarDelegate(
       infobar_tab_helper, previews_type, previews_freshness, is_data_saver_user,
-      is_reload, on_dismiss_callback));
+      is_reload, std::move(on_dismiss_callback)));
 
 #if defined(OS_ANDROID)
   std::unique_ptr<infobars::InfoBar> infobar_ptr(
@@ -137,6 +137,9 @@ void PreviewsInfoBarDelegate::Create(
 #endif
 
   infobar_service->AddInfoBar(std::move(infobar_ptr));
+  uint64_t page_id = (infobar_tab_helper->previews_user_data())
+                         ? infobar_tab_helper->previews_user_data()->page_id()
+                         : 0;
 
   if (previews_ui_service) {
     // Not in incognito mode or guest mode.
@@ -146,7 +149,7 @@ void PreviewsInfoBarDelegate::Create(
         web_contents->GetController()
             .GetLastCommittedEntry()
             ->GetRedirectChain()[0] /* GURL */,
-        base::Time::Now());
+        base::Time::Now(), page_id);
   }
 
   RecordPreviewsInfoBarAction(previews_type, INFOBAR_SHOWN);
@@ -159,7 +162,7 @@ PreviewsInfoBarDelegate::PreviewsInfoBarDelegate(
     base::Time previews_freshness,
     bool is_data_saver_user,
     bool is_reload,
-    const OnDismissPreviewsInfobarCallback& on_dismiss_callback)
+    OnDismissPreviewsInfobarCallback on_dismiss_callback)
     : ConfirmInfoBarDelegate(),
       infobar_tab_helper_(infobar_tab_helper),
       previews_type_(previews_type),
@@ -169,7 +172,7 @@ PreviewsInfoBarDelegate::PreviewsInfoBarDelegate(
       message_text_(l10n_util::GetStringUTF16(
           is_data_saver_user ? IDS_PREVIEWS_INFOBAR_SAVED_DATA_TITLE
                              : IDS_PREVIEWS_INFOBAR_FASTER_PAGE_TITLE)),
-      on_dismiss_callback_(on_dismiss_callback) {}
+      on_dismiss_callback_(std::move(on_dismiss_callback)) {}
 
 infobars::InfoBarDelegate::InfoBarIdentifier
 PreviewsInfoBarDelegate::GetIdentifier() const {
@@ -222,8 +225,7 @@ base::string16 PreviewsInfoBarDelegate::GetLinkText() const {
 bool PreviewsInfoBarDelegate::LinkClicked(WindowOpenDisposition disposition) {
   infobar_dismissed_action_ = INFOBAR_LOAD_ORIGINAL_CLICKED;
   if (!on_dismiss_callback_.is_null())
-    on_dismiss_callback_.Run(true);
-  on_dismiss_callback_.Reset();
+    std::move(on_dismiss_callback_).Run(true);
 
   content::WebContents* web_contents =
       InfoBarService::WebContentsFromInfoBar(infobar());

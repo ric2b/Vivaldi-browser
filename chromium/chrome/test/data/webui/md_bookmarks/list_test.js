@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 suite('<bookmarks-list>', function() {
-  var list;
-  var store;
+  let list;
+  let store;
 
   setup(function() {
-    var nodes = testTree(createFolder('10', [
+    const nodes = testTree(createFolder('10', [
       createItem('1'),
       createFolder('3', []),
       createItem('5'),
@@ -30,14 +30,14 @@ suite('<bookmarks-list>', function() {
   });
 
   test('renders correct <bookmark-item> elements', function() {
-    var items = list.root.querySelectorAll('bookmarks-item');
-    var ids = Array.from(items).map((item) => item.itemId);
+    const items = list.root.querySelectorAll('bookmarks-item');
+    const ids = Array.from(items).map((item) => item.itemId);
 
     assertDeepEquals(['1', '3', '5', '7'], ids);
   });
 
   test('shift-selects multiple items', function() {
-    var items = list.root.querySelectorAll('bookmarks-item');
+    const items = list.root.querySelectorAll('bookmarks-item');
 
     customClick(items[0]);
 
@@ -80,9 +80,9 @@ suite('<bookmarks-list>', function() {
 });
 
 suite('<bookmarks-list> integration test', function() {
-  var list;
-  var store;
-  var items;
+  let list;
+  let store;
+  let items;
 
   setup(function() {
     store = new bookmarks.TestStore({
@@ -159,5 +159,40 @@ suite('<bookmarks-list> integration test', function() {
         ['1', '3', '5', '7', '9'],
         normalizeIterable(store.data.selection.items));
     assertDeepEquals('5', store.data.selection.anchor);
+  });
+});
+
+suite('<bookmarks-list> command manager integration test', function() {
+  let app;
+  let store;
+
+  setup(function() {
+    store = new bookmarks.TestStore({
+      nodes: testTree(createFolder('1', [])),
+      selectedFolder: '1',
+    });
+    store.replaceSingleton();
+    store.setReducersEnabled(true);
+
+    app = document.createElement('bookmarks-app');
+    app.style.height = '100%';
+    app.style.width = '100%';
+    app.style.position = 'absolute';
+
+    replaceBody(app);
+
+    Polymer.dom.flush();
+  });
+
+  test('show context menu', () => {
+    const list = app.$$('bookmarks-list');
+    list.fire('contextmenu', {clientX: 0, clientY: 0});
+
+    const commandManager = app.$$('bookmarks-command-manager');
+
+    assertEquals(MenuSource.LIST, commandManager.menuSource_);
+    assertDeepEquals(
+        [Command.ADD_BOOKMARK, Command.ADD_FOLDER],
+        commandManager.menuCommands_);
   });
 });

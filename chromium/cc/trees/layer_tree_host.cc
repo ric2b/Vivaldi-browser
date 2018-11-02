@@ -67,9 +67,9 @@ static base::AtomicSequenceNumber s_image_decode_sequence_number;
 
 namespace cc {
 
-LayerTreeHost::InitParams::InitParams() {}
+LayerTreeHost::InitParams::InitParams() = default;
 
-LayerTreeHost::InitParams::~InitParams() {}
+LayerTreeHost::InitParams::~InitParams() = default;
 
 std::unique_ptr<LayerTreeHost> LayerTreeHost::CreateThreaded(
     scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner,
@@ -77,7 +77,6 @@ std::unique_ptr<LayerTreeHost> LayerTreeHost::CreateThreaded(
   DCHECK(params->main_task_runner.get());
   DCHECK(impl_task_runner.get());
   DCHECK(params->settings);
-  DCHECK(params->ukm_recorder_factory);
   std::unique_ptr<LayerTreeHost> layer_tree_host(
       new LayerTreeHost(params, CompositorMode::THREADED));
   layer_tree_host->InitializeThreaded(params->main_task_runner,
@@ -280,8 +279,8 @@ const LayerTreeDebugState& LayerTreeHost::GetDebugState() const {
   return debug_state_;
 }
 
-void LayerTreeHost::RequestMainFrameUpdate() {
-  client_->UpdateLayerTreeHost();
+void LayerTreeHost::RequestMainFrameUpdate(VisualStateUpdate requested_update) {
+  client_->UpdateLayerTreeHost(requested_update);
 }
 
 // This function commits the LayerTreeHost to an impl tree. When modifying
@@ -320,14 +319,31 @@ void LayerTreeHost::FinishCommitOnImplThread(
 
   sync_tree->set_source_frame_number(SourceFrameNumber());
 
+  // Set presentation token if any pending .
+  bool request_presentation_time = false;
+  if (!pending_presentation_time_callbacks_.empty()) {
+    request_presentation_time = true;
+    frame_to_presentation_time_callbacks_[SourceFrameNumber()] =
+        std::move(pending_presentation_time_callbacks_);
+    pending_presentation_time_callbacks_.clear();
+  } else if (!frame_to_presentation_time_callbacks_.empty()) {
+    // There are pending callbacks. Keep requesting the presentation callback
+    // in case a previous frame was dropped (the callbacks run when the frame
+    // makes it to screen).
+    request_presentation_time = true;
+  }
+  sync_tree->set_request_presentation_time(request_presentation_time);
+
   if (needs_full_tree_sync_)
     TreeSynchronizer::SynchronizeTrees(root_layer(), sync_tree);
 
   // Track the navigation state before pushing properties since it overwrites
   // the |content_source_id_| on the sync tree.
   bool did_navigate = content_source_id_ != sync_tree->content_source_id();
-  if (did_navigate)
+  if (did_navigate) {
+    proxy_->ClearHistoryOnNavigation();
     host_impl->ClearImageCacheOnNavigation();
+  }
 
   {
     TRACE_EVENT0("cc", "LayerTreeHostInProcess::PushProperties");
@@ -670,6 +686,22 @@ bool LayerTreeHost::UpdateLayers() {
   return result;
 }
 
+void LayerTreeHost::DidPresentCompositorFrame(
+    const std::vector<int>& source_frames,
+    base::TimeTicks time,
+    base::TimeDelta refresh,
+    uint32_t flags) {
+  for (int frame : source_frames) {
+    if (!frame_to_presentation_time_callbacks_.count(frame))
+      continue;
+
+    for (auto& callback : frame_to_presentation_time_callbacks_[frame])
+      std::move(callback).Run(time, refresh, flags);
+
+    frame_to_presentation_time_callbacks_.erase(frame);
+  }
+}
+
 void LayerTreeHost::DidCompletePageScaleAnimation() {
   did_complete_scale_animation_ = true;
 }
@@ -932,6 +964,11 @@ bool LayerTreeHost::IsThreaded() const {
   return compositor_mode_ == CompositorMode::THREADED;
 }
 
+void LayerTreeHost::RequestPresentationTimeForNextFrame(
+    PresentationTimeCallback callback) {
+  pending_presentation_time_callbacks_.push_back(std::move(callback));
+}
+
 void LayerTreeHost::SetRootLayer(scoped_refptr<Layer> root_layer) {
   if (root_layer_.get() == root_layer.get())
     return;
@@ -954,9 +991,9 @@ void LayerTreeHost::SetRootLayer(scoped_refptr<Layer> root_layer) {
   SetNeedsFullTreeSync();
 }
 
-LayerTreeHost::ViewportLayers::ViewportLayers() {}
+LayerTreeHost::ViewportLayers::ViewportLayers() = default;
 
-LayerTreeHost::ViewportLayers::~ViewportLayers() {}
+LayerTreeHost::ViewportLayers::~ViewportLayers() = default;
 
 void LayerTreeHost::RegisterViewportLayers(const ViewportLayers& layers) {
   DCHECK(!layers.inner_viewport_scroll ||

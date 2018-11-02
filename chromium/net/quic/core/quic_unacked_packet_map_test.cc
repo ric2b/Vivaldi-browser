@@ -4,6 +4,7 @@
 
 #include "net/quic/core/quic_unacked_packet_map.h"
 
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/quic_test_utils.h"
 
@@ -16,20 +17,12 @@ namespace {
 // Default packet length.
 const uint32_t kDefaultLength = 1000;
 
-class MockStreamNotifier : public StreamNotifierInterface {
- public:
-  MOCK_METHOD2(OnStreamFrameAcked,
-               void(const QuicStreamFrame&, QuicTime::Delta));
-  MOCK_METHOD1(OnStreamFrameRetransmitted, void(const QuicStreamFrame&));
-  MOCK_METHOD1(OnStreamFrameDiscarded, void(const QuicStreamFrame&));
-};
-
 class QuicUnackedPacketMapTest : public QuicTest {
  protected:
   QuicUnackedPacketMapTest()
       : unacked_packets_(),
         now_(QuicTime::Zero() + QuicTime::Delta::FromMilliseconds(1000)) {
-    unacked_packets_.SetStreamNotifier(&notifier_);
+    unacked_packets_.SetSessionNotifier(&notifier_);
   }
 
   ~QuicUnackedPacketMapTest() override {}
@@ -115,7 +108,7 @@ class QuicUnackedPacketMapTest : public QuicTest {
   }
   QuicUnackedPacketMap unacked_packets_;
   QuicTime now_;
-  MockStreamNotifier notifier_;
+  MockSessionNotifier notifier_;
 };
 
 TEST_F(QuicUnackedPacketMapTest, RttOnly) {
@@ -124,7 +117,7 @@ TEST_F(QuicUnackedPacketMapTest, RttOnly) {
   unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, now_, false);
 
   QuicPacketNumber unacked[] = {1};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyInFlightPackets(nullptr, 0);
   VerifyRetransmittablePackets(nullptr, 0);
 
@@ -140,18 +133,18 @@ TEST_F(QuicUnackedPacketMapTest, RetransmittableInflightAndRtt) {
   unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
-  VerifyRetransmittablePackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyRetransmittablePackets(unacked, QUIC_ARRAYSIZE(unacked));
 
   unacked_packets_.RemoveRetransmittability(1);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 
   unacked_packets_.IncreaseLargestObserved(1);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 
   unacked_packets_.RemoveFromInFlight(1);
@@ -166,15 +159,15 @@ TEST_F(QuicUnackedPacketMapTest, StopRetransmission) {
   unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {1};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
-  EXPECT_CALL(notifier_, OnStreamFrameDiscarded(_)).Times(1);
   unacked_packets_.CancelRetransmissionsForStream(stream_id);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 }
 
@@ -184,17 +177,18 @@ TEST_F(QuicUnackedPacketMapTest, StopRetransmissionOnOtherStream) {
   unacked_packets_.AddSentPacket(&packet, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {1};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
   // Stop retransmissions on another stream and verify the packet is unchanged.
-  EXPECT_CALL(notifier_, OnStreamFrameDiscarded(_)).Times(0);
   unacked_packets_.CancelRetransmissionsForStream(stream_id + 2);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 }
 
 TEST_F(QuicUnackedPacketMapTest, StopRetransmissionAfterRetransmission) {
@@ -205,15 +199,15 @@ TEST_F(QuicUnackedPacketMapTest, StopRetransmissionAfterRetransmission) {
   unacked_packets_.AddSentPacket(&packet2, 1, LOSS_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1, 2};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {2};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
-  EXPECT_CALL(notifier_, OnStreamFrameDiscarded(_)).Times(1);
   unacked_packets_.CancelRetransmissionsForStream(stream_id);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 }
 
@@ -226,25 +220,26 @@ TEST_F(QuicUnackedPacketMapTest, RetransmittedPacket) {
   unacked_packets_.AddSentPacket(&packet2, 1, LOSS_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1, 2};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {2};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
   unacked_packets_.RemoveRetransmittability(1);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 
   unacked_packets_.IncreaseLargestObserved(2);
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   VerifyRetransmittablePackets(nullptr, 0);
 
   unacked_packets_.RemoveFromInFlight(2);
   QuicPacketNumber unacked2[] = {1};
-  VerifyUnackedPackets(unacked2, arraysize(unacked2));
-  VerifyInFlightPackets(unacked2, arraysize(unacked2));
+  VerifyUnackedPackets(unacked2, QUIC_ARRAYSIZE(unacked2));
+  VerifyInFlightPackets(unacked2, QUIC_ARRAYSIZE(unacked2));
   VerifyRetransmittablePackets(nullptr, 0);
 
   unacked_packets_.RemoveFromInFlight(1);
@@ -261,10 +256,11 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitThreeTimes) {
   unacked_packets_.AddSentPacket(&packet2, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1, 2};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {1, 2};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
   // Early retransmit 1 as 3 and send new data as 4.
   unacked_packets_.IncreaseLargestObserved(2);
@@ -277,11 +273,12 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitThreeTimes) {
   unacked_packets_.AddSentPacket(&packet4, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked2[] = {1, 3, 4};
-  VerifyUnackedPackets(unacked2, arraysize(unacked2));
+  VerifyUnackedPackets(unacked2, QUIC_ARRAYSIZE(unacked2));
   QuicPacketNumber pending2[] = {3, 4};
-  VerifyInFlightPackets(pending2, arraysize(pending2));
+  VerifyInFlightPackets(pending2, QUIC_ARRAYSIZE(pending2));
   QuicPacketNumber retransmittable2[] = {3, 4};
-  VerifyRetransmittablePackets(retransmittable2, arraysize(retransmittable2));
+  VerifyRetransmittablePackets(retransmittable2,
+                               QUIC_ARRAYSIZE(retransmittable2));
 
   // Early retransmit 3 (formerly 1) as 5, and remove 1 from unacked.
   unacked_packets_.IncreaseLargestObserved(4);
@@ -293,11 +290,12 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitThreeTimes) {
   unacked_packets_.AddSentPacket(&packet6, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked3[] = {3, 5, 6};
-  VerifyUnackedPackets(unacked3, arraysize(unacked3));
+  VerifyUnackedPackets(unacked3, QUIC_ARRAYSIZE(unacked3));
   QuicPacketNumber pending3[] = {3, 5, 6};
-  VerifyInFlightPackets(pending3, arraysize(pending3));
+  VerifyInFlightPackets(pending3, QUIC_ARRAYSIZE(pending3));
   QuicPacketNumber retransmittable3[] = {5, 6};
-  VerifyRetransmittablePackets(retransmittable3, arraysize(retransmittable3));
+  VerifyRetransmittablePackets(retransmittable3,
+                               QUIC_ARRAYSIZE(retransmittable3));
 
   // Early retransmit 5 as 7 and ensure in flight packet 3 is not removed.
   unacked_packets_.IncreaseLargestObserved(6);
@@ -307,17 +305,18 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitThreeTimes) {
   unacked_packets_.AddSentPacket(&packet7, 5, LOSS_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked4[] = {3, 5, 7};
-  VerifyUnackedPackets(unacked4, arraysize(unacked4));
+  VerifyUnackedPackets(unacked4, QUIC_ARRAYSIZE(unacked4));
   QuicPacketNumber pending4[] = {3, 5, 7};
-  VerifyInFlightPackets(pending4, arraysize(pending4));
+  VerifyInFlightPackets(pending4, QUIC_ARRAYSIZE(pending4));
   QuicPacketNumber retransmittable4[] = {7};
-  VerifyRetransmittablePackets(retransmittable4, arraysize(retransmittable4));
+  VerifyRetransmittablePackets(retransmittable4,
+                               QUIC_ARRAYSIZE(retransmittable4));
 
   // Remove the older two transmissions from in flight.
   unacked_packets_.RemoveFromInFlight(3);
   unacked_packets_.RemoveFromInFlight(5);
   QuicPacketNumber pending5[] = {7};
-  VerifyInFlightPackets(pending5, arraysize(pending5));
+  VerifyInFlightPackets(pending5, QUIC_ARRAYSIZE(pending5));
 }
 
 TEST_F(QuicUnackedPacketMapTest, RetransmitFourTimes) {
@@ -328,10 +327,11 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitFourTimes) {
   unacked_packets_.AddSentPacket(&packet2, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked[] = {1, 2};
-  VerifyUnackedPackets(unacked, arraysize(unacked));
-  VerifyInFlightPackets(unacked, arraysize(unacked));
+  VerifyUnackedPackets(unacked, QUIC_ARRAYSIZE(unacked));
+  VerifyInFlightPackets(unacked, QUIC_ARRAYSIZE(unacked));
   QuicPacketNumber retransmittable[] = {1, 2};
-  VerifyRetransmittablePackets(retransmittable, arraysize(retransmittable));
+  VerifyRetransmittablePackets(retransmittable,
+                               QUIC_ARRAYSIZE(retransmittable));
 
   // Early retransmit 1 as 3.
   unacked_packets_.IncreaseLargestObserved(2);
@@ -342,11 +342,12 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitFourTimes) {
   unacked_packets_.AddSentPacket(&packet3, 1, LOSS_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked2[] = {1, 3};
-  VerifyUnackedPackets(unacked2, arraysize(unacked2));
+  VerifyUnackedPackets(unacked2, QUIC_ARRAYSIZE(unacked2));
   QuicPacketNumber pending2[] = {3};
-  VerifyInFlightPackets(pending2, arraysize(pending2));
+  VerifyInFlightPackets(pending2, QUIC_ARRAYSIZE(pending2));
   QuicPacketNumber retransmittable2[] = {3};
-  VerifyRetransmittablePackets(retransmittable2, arraysize(retransmittable2));
+  VerifyRetransmittablePackets(retransmittable2,
+                               QUIC_ARRAYSIZE(retransmittable2));
 
   // TLP 3 (formerly 1) as 4, and don't remove 1 from unacked.
   SerializedPacket packet4(CreateNonRetransmittablePacket(4));
@@ -355,11 +356,12 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitFourTimes) {
   unacked_packets_.AddSentPacket(&packet5, 0, NOT_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked3[] = {1, 3, 4, 5};
-  VerifyUnackedPackets(unacked3, arraysize(unacked3));
+  VerifyUnackedPackets(unacked3, QUIC_ARRAYSIZE(unacked3));
   QuicPacketNumber pending3[] = {3, 4, 5};
-  VerifyInFlightPackets(pending3, arraysize(pending3));
+  VerifyInFlightPackets(pending3, QUIC_ARRAYSIZE(pending3));
   QuicPacketNumber retransmittable3[] = {4, 5};
-  VerifyRetransmittablePackets(retransmittable3, arraysize(retransmittable3));
+  VerifyRetransmittablePackets(retransmittable3,
+                               QUIC_ARRAYSIZE(retransmittable3));
 
   // Early retransmit 4 as 6 and ensure in flight packet 3 is removed.
   unacked_packets_.IncreaseLargestObserved(5);
@@ -371,11 +373,12 @@ TEST_F(QuicUnackedPacketMapTest, RetransmitFourTimes) {
   unacked_packets_.AddSentPacket(&packet6, 4, LOSS_RETRANSMISSION, now_, true);
 
   QuicPacketNumber unacked4[] = {4, 6};
-  VerifyUnackedPackets(unacked4, arraysize(unacked4));
+  VerifyUnackedPackets(unacked4, QUIC_ARRAYSIZE(unacked4));
   QuicPacketNumber pending4[] = {6};
-  VerifyInFlightPackets(pending4, arraysize(pending4));
+  VerifyInFlightPackets(pending4, QUIC_ARRAYSIZE(pending4));
   QuicPacketNumber retransmittable4[] = {6};
-  VerifyRetransmittablePackets(retransmittable4, arraysize(retransmittable4));
+  VerifyRetransmittablePackets(retransmittable4,
+                               QUIC_ARRAYSIZE(retransmittable4));
 }
 
 TEST_F(QuicUnackedPacketMapTest, SendWithGap) {

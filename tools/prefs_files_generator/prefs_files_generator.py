@@ -88,6 +88,7 @@ def generate_prefs_list(current_path, prefs_definitions):
 
     result["name"] = 'k' + pref_name
     result["path"] = current_path
+    result["comment"] = prefs_definitions.get('description', None)
 
     return [result]
 
@@ -122,8 +123,10 @@ def main():
         "origin_name": args.prefs_definitions.name,
         "header_guard": prefs_names_header_guard,
         "pref_names":
-            '\n'.join(['extern const char %(name)s[];' % {
-                'name': pref['name']
+            '\n'.join(['%(comment)sextern const char %(name)s[];' % {
+                'name': pref['name'],
+                'comment':
+                    ('// '+ pref['comment'] + '\n') if pref['comment'] else ''
             } for pref in prefs_list])
 
     })

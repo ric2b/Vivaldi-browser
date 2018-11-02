@@ -68,7 +68,7 @@ struct PassthroughResources {
   // Mapping of client texture IDs to TexturePassthrough objects used to make
   // sure all textures used by mailboxes are not deleted until all textures
   // using the mailbox are deleted
-  std::unordered_map<GLuint, scoped_refptr<TexturePassthrough>>
+  ClientServiceMap<GLuint, scoped_refptr<TexturePassthrough>>
       texture_object_map;
 
   // Mapping of client buffer IDs that are mapped to the shared memory used to
@@ -107,9 +107,9 @@ class ScopedTexture2DBindingReset {
   GLint texture_;
 };
 
-class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
+class GPU_GLES2_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
  public:
-  GLES2DecoderPassthroughImpl(GLES2DecoderClient* client,
+  GLES2DecoderPassthroughImpl(DecoderClient* client,
                               CommandBufferServiceBase* command_buffer_service,
                               Outputter* outputter,
                               ContextGroup* group);
@@ -126,14 +126,14 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
                        int num_entries,
                        int* entries_processed);
 
-  base::WeakPtr<GLES2Decoder> AsWeakPtr() override;
+  base::WeakPtr<DecoderContext> AsWeakPtr() override;
 
   gpu::ContextResult Initialize(
       const scoped_refptr<gl::GLSurface>& surface,
       const scoped_refptr<gl::GLContext>& context,
       bool offscreen,
       const DisallowedFeatures& disallowed_features,
-      const ContextCreationAttribHelper& attrib_helper) override;
+      const ContextCreationAttribs& attrib_helper) override;
 
   // Destroys the graphics context.
   void Destroy(bool have_context) override;
@@ -201,6 +201,9 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // Gets the QueryManager for this context.
   QueryManager* GetQueryManager() override;
 
+  // Gets the GpuFenceManager for this context.
+  GpuFenceManager* GetGpuFenceManager() override;
+
   // Gets the FramebufferManager for this context.
   FramebufferManager* GetFramebufferManager() override;
 
@@ -212,6 +215,8 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   // Gets the ImageManager for this context.
   ImageManager* GetImageManagerForTest() override;
+
+  ServiceTransferCache* GetTransferCacheForTest() override;
 
   // Returns false if there are no pending queries.
   bool HasPendingQueries() const override;
@@ -388,7 +393,7 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
 
   void ExitCommandProcessingEarly() { commands_to_process_ = 0; }
 
-  GLES2DecoderClient* client_;
+  DecoderClient* client_;
 
   int commands_to_process_;
 
@@ -449,8 +454,24 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
   // Mailboxes
   MailboxManager* mailbox_manager_;
 
+  std::unique_ptr<GpuFenceManager> gpu_fence_manager_;
+
   // State tracking of currently bound 2D textures (client IDs)
   size_t active_texture_unit_;
+
+  enum class TextureTarget : uint8_t {
+    k2D = 0,
+    kCubeMap = 1,
+    k2DArray = 2,
+    k3D = 3,
+    k2DMultisample = 4,
+    kExternal = 5,
+    kRectangle = 6,
+
+    kUnkown = 7,
+    kCount = kUnkown,
+  };
+  static TextureTarget GLenumToTextureTarget(GLenum target);
 
   struct BoundTexture {
     BoundTexture();
@@ -463,7 +484,14 @@ class GPU_EXPORT GLES2DecoderPassthroughImpl : public GLES2Decoder {
     GLuint client_id = 0;
     scoped_refptr<TexturePassthrough> texture;
   };
-  std::unordered_map<GLenum, std::vector<BoundTexture>> bound_textures_;
+
+  // Use a limit that is at least ANGLE's IMPLEMENTATION_MAX_ACTIVE_TEXTURES
+  // constant
+  static constexpr size_t kMaxTextureUnits = 64;
+  static constexpr size_t kNumTextureTypes =
+      static_cast<size_t>(TextureTarget::kCount);
+  std::array<std::array<BoundTexture, kMaxTextureUnits>, kNumTextureTypes>
+      bound_textures_;
 
   // State tracking of currently bound buffers
   std::unordered_map<GLenum, GLuint> bound_buffers_;

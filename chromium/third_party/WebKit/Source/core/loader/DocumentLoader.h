@@ -53,22 +53,24 @@
 #include "platform/loader/fetch/SubstituteData.h"
 #include "platform/wtf/HashSet.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
+#include "public/web/WebGlobalObjectReusePolicy.h"
 
 #include <memory>
 
 namespace blink {
 
 class ApplicationCacheHost;
-class SubresourceFilter;
-class ResourceFetcher;
+class CSSPreloaderResourceClient;
 class Document;
 class DocumentParser;
+class FrameLoader;
 class HistoryItem;
 class LocalFrame;
 class LocalFrameClient;
-class FrameLoader;
+class ResourceFetcher;
 class ResourceTimingInfo;
 class SerializedScriptValue;
+class SubresourceFilter;
 class WebServiceWorkerNetworkProvider;
 struct ViewportDescriptionWrapper;
 
@@ -100,11 +102,10 @@ class CORE_EXPORT DocumentLoader
 
   unsigned long MainResourceIdentifier() const;
 
-  void ReplaceDocumentWhileExecutingJavaScriptURL(
-      const KURL&,
-      Document* owner_document,
-      bool should_reuse_default_view,
-      const String& source);
+  void ReplaceDocumentWhileExecutingJavaScriptURL(const KURL&,
+                                                  Document* owner_document,
+                                                  WebGlobalObjectReusePolicy,
+                                                  const String& source);
 
   const AtomicString& MimeType() const;
 
@@ -202,7 +203,9 @@ class CORE_EXPORT DocumentLoader
   void DispatchLinkHeaderPreloads(ViewportDescriptionWrapper*,
                                   LinkLoader::MediaPreloadPolicy);
 
-  Resource* StartPreload(Resource::Type, FetchParameters&);
+  Resource* StartPreload(Resource::Type,
+                         FetchParameters&,
+                         CSSPreloaderResourceClient*);
 
   void SetServiceWorkerNetworkProvider(
       std::unique_ptr<WebServiceWorkerNetworkProvider>);
@@ -218,6 +221,8 @@ class CORE_EXPORT DocumentLoader
   void SetSourceLocation(std::unique_ptr<SourceLocation>);
 
   void LoadFailed(const ResourceError&);
+
+  void SetUserActivated();
 
   void Trace(blink::Visitor*) override;
 
@@ -242,9 +247,10 @@ class CORE_EXPORT DocumentLoader
                  ClientRedirectPolicy,
                  const base::UnguessableToken& devtools_navigation_token);
 
-  static bool ShouldClearWindowName(const LocalFrame&,
-                                    SecurityOrigin* previous_security_origin,
-                                    const Document& new_document);
+  static bool ShouldClearWindowName(
+      const LocalFrame&,
+      const SecurityOrigin* previous_security_origin,
+      const Document& new_document);
 
   Vector<KURL> redirect_chain_;
 
@@ -256,7 +262,7 @@ class CORE_EXPORT DocumentLoader
   enum class InstallNewDocumentReason { kNavigation, kJavascriptURL };
   void InstallNewDocument(const KURL&,
                           Document* owner_document,
-                          bool should_reuse_default_view,
+                          WebGlobalObjectReusePolicy,
                           const AtomicString& mime_type,
                           const AtomicString& encoding,
                           InstallNewDocumentReason,
@@ -264,7 +270,7 @@ class CORE_EXPORT DocumentLoader
                           const KURL& overriding_url);
   void DidInstallNewDocument(Document*);
   void WillCommitNavigation();
-  void DidCommitNavigation();
+  void DidCommitNavigation(WebGlobalObjectReusePolicy);
 
   void CommitNavigation(const AtomicString& mime_type,
                         const KURL& overriding_url = KURL());
@@ -275,7 +281,6 @@ class CORE_EXPORT DocumentLoader
   LocalFrameClient& GetLocalFrameClient() const;
 
   void CommitData(const char* bytes, size_t length);
-  void ClearMainResourceHandle();
 
   bool MaybeCreateArchive();
 
@@ -315,7 +320,6 @@ class CORE_EXPORT DocumentLoader
   Member<LocalFrame> frame_;
   Member<ResourceFetcher> fetcher_;
 
-  Member<RawResource> main_resource_;
   Member<HistoryItem> history_item_;
 
   // The parser that was created when the current Document was installed.
@@ -362,11 +366,6 @@ class CORE_EXPORT DocumentLoader
 
   bool was_blocked_after_csp_;
 
-  static bool ShouldPersistUserGestureValue(
-      const SecurityOrigin* previous_security_origin,
-      const SecurityOrigin* new_security_origin);
-  static bool CheckOriginIsHttpOrHttps(const SecurityOrigin*);
-
   // PlzNavigate: set when committing a navigation. The data has originally been
   // captured when the navigation was sent to the browser process, and it is
   // sent back at commit time.
@@ -379,6 +378,9 @@ class CORE_EXPORT DocumentLoader
   bool in_data_received_;
   scoped_refptr<SharedBuffer> data_buffer_;
   base::UnguessableToken devtools_navigation_token_;
+
+  // Whether this load request comes from a user activation.
+  bool user_activated_;
 };
 
 DECLARE_WEAK_IDENTIFIER_MAP(DocumentLoader);

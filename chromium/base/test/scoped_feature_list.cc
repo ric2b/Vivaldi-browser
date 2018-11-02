@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 
@@ -20,7 +21,7 @@ namespace test {
 namespace {
 
 std::vector<StringPiece> GetFeatureVector(
-    const std::initializer_list<Feature>& features) {
+    const std::vector<Feature>& features) {
   std::vector<StringPiece> output;
   for (const Feature& feature : features) {
     output.push_back(feature.name);
@@ -116,8 +117,8 @@ void ScopedFeatureList::InitFromCommandLine(
 }
 
 void ScopedFeatureList::InitWithFeatures(
-    const std::initializer_list<Feature>& enabled_features,
-    const std::initializer_list<Feature>& disabled_features) {
+    const std::vector<Feature>& enabled_features,
+    const std::vector<Feature>& disabled_features) {
   InitWithFeaturesAndFieldTrials(enabled_features, {}, disabled_features);
 }
 
@@ -136,9 +137,9 @@ void ScopedFeatureList::InitAndDisableFeature(const Feature& feature) {
 }
 
 void ScopedFeatureList::InitWithFeaturesAndFieldTrials(
-    const std::initializer_list<Feature>& enabled_features,
-    const std::initializer_list<FieldTrial*>& trials_for_enabled_features,
-    const std::initializer_list<Feature>& disabled_features) {
+    const std::vector<Feature>& enabled_features,
+    const std::vector<FieldTrial*>& trials_for_enabled_features,
+    const std::vector<Feature>& disabled_features) {
   DCHECK_LE(trials_for_enabled_features.size(), enabled_features.size());
 
   Features merged_features;
@@ -166,7 +167,8 @@ void ScopedFeatureList::InitWithFeaturesAndFieldTrials(
 
   // Add the field trial overrides. This assumes that |enabled_features| are at
   // the begining of |merged_features.enabled_feature_list|, in the same order.
-  FieldTrial* const* trial_it = trials_for_enabled_features.begin();
+  std::vector<FieldTrial*>::const_iterator trial_it =
+      trials_for_enabled_features.begin();
   auto feature_it = merged_features.enabled_feature_list.begin();
   std::vector<std::unique_ptr<std::string>> features_with_trial;
   features_with_trial.reserve(trials_for_enabled_features.size());
@@ -191,8 +193,17 @@ void ScopedFeatureList::InitAndEnableFeatureWithParameters(
     field_trial_list_ = std::make_unique<base::FieldTrialList>(nullptr);
   }
 
-  std::string kTrialName = "scoped_feature_list_trial_name";
+  // TODO(crbug.com/794021) Remove this unique field trial name hack when there
+  // is a cleaner solution.
+  // Ensure that each call to this method uses a distinct field trial name.
+  // Otherwise, nested calls might fail due to the shared FieldTrialList
+  // already having the field trial registered.
+  static int num_calls = 0;
+  ++num_calls;
+  std::string kTrialName =
+      "scoped_feature_list_trial_name" + base::NumberToString(num_calls);
   std::string kTrialGroup = "scoped_feature_list_trial_group";
+
   field_trial_override_ =
       base::FieldTrialList::CreateFieldTrial(kTrialName, kTrialGroup);
   DCHECK(field_trial_override_);

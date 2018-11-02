@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
@@ -38,26 +37,21 @@ class UserClassifierTest : public testing::Test {
   }
 
   UserClassifier* CreateUserClassifier() {
-    auto test_clock = base::MakeUnique<base::SimpleTestClock>();
-    test_clock_ = test_clock.get();
-
     base::Time now;
     CHECK(base::Time::FromUTCString(kNowString, &now));
-    test_clock_->SetNow(now);
+    test_clock_.SetNow(now);
 
     user_classifier_ =
-        base::MakeUnique<UserClassifier>(&test_prefs_, std::move(test_clock));
+        std::make_unique<UserClassifier>(&test_prefs_, &test_clock_);
     return user_classifier_.get();
   }
 
-  base::SimpleTestClock* test_clock() { return test_clock_; }
+  base::SimpleTestClock* test_clock() { return &test_clock_; }
 
  private:
   TestingPrefServiceSimple test_prefs_;
   std::unique_ptr<UserClassifier> user_classifier_;
-
-  // Owned by the UserClassifier.
-  base::SimpleTestClock* test_clock_;
+  base::SimpleTestClock test_clock_;
 
   DISALLOW_COPY_AND_ASSIGN(UserClassifierTest);
 };

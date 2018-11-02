@@ -19,12 +19,9 @@ namespace blink {
 template <typename T>
 class TraceWrapperV8Reference {
  public:
-  explicit TraceWrapperV8Reference(void* parent) : parent_(parent) {}
+  TraceWrapperV8Reference() = default;
 
-  TraceWrapperV8Reference(v8::Isolate* isolate,
-                          void* parent,
-                          v8::Local<T> handle)
-      : parent_(parent) {
+  TraceWrapperV8Reference(v8::Isolate* isolate, v8::Local<T> handle) {
     InternalSet(isolate, handle);
     handle_.SetWeak();
   }
@@ -52,6 +49,7 @@ class TraceWrapperV8Reference {
 
   bool IsEmpty() const { return handle_.IsEmpty(); }
   void Clear() { handle_.Reset(); }
+  ALWAYS_INLINE const v8::Persistent<T>& Get() const { return handle_; }
   ALWAYS_INLINE v8::Persistent<T>& Get() { return handle_; }
 
   template <typename S>
@@ -75,7 +73,6 @@ class TraceWrapperV8Reference {
   }
 
   v8::Persistent<T> handle_;
-  void* parent_;
 };
 
 }  // namespace blink

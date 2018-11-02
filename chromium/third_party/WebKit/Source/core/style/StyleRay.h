@@ -20,14 +20,13 @@ class StyleRay : public BasicShape {
   };
 
   static scoped_refptr<StyleRay> Create(float angle, RaySize, bool contain);
-  virtual ~StyleRay() {}
+  virtual ~StyleRay() = default;
 
   float Angle() const { return angle_; }
   RaySize Size() const { return size_; }
   bool Contain() const { return contain_; }
 
   void GetPath(Path&, const FloatRect&) override;
-  scoped_refptr<BasicShape> Blend(const BasicShape*, double) const override;
   bool operator==(const BasicShape&) const override;
 
   ShapeType GetType() const override { return kStyleRayType; }

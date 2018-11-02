@@ -69,9 +69,11 @@ class APP_LIST_EXPORT AppsContainerView : public AppListPage,
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
+  const char* GetClassName() const override;
 
   // AppListPage overrides:
   void OnWillBeShown() override;
+  void OnWillBeHidden() override;
   gfx::Rect GetSearchBoxBounds() const override;
   gfx::Rect GetSearchBoxBoundsForState(
       AppListModel::State state) const override;
@@ -132,9 +134,6 @@ class APP_LIST_EXPORT AppsContainerView : public AppListPage,
   size_t top_icon_animation_pending_count_ = 0u;
 
   const bool is_fullscreen_app_list_enabled_;
-
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppsContainerView);
 };

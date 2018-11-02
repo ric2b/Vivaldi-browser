@@ -26,8 +26,26 @@
 #include "device/gamepad/gamepad_data_fetcher.h"
 #include "device/gamepad/gamepad_standard_mappings.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "device/gamepad/xinput_haptic_gamepad_win.h"
 
 namespace device {
+
+// XInputGetStateEx uses a slightly larger struct than XInputGetState.
+struct XInputGamepadEx {
+  WORD wButtons;
+  BYTE bLeftTrigger;
+  BYTE bRightTrigger;
+  SHORT sThumbLX;
+  SHORT sThumbLY;
+  SHORT sThumbRX;
+  SHORT sThumbRY;
+  DWORD dwPaddingReserved;
+};
+
+struct XInputStateEx {
+  DWORD dwPacketNumber;
+  XInputGamepadEx Gamepad;
+};
 
 class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
  public:
@@ -40,12 +58,23 @@ class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
 
   GamepadSource source() override;
 
+  // GamepadDataFetcher implementation.
   void GetGamepadData(bool devices_changed_hint) override;
+
+  void PlayEffect(
+      int pad_index,
+      mojom::GamepadHapticEffectType,
+      mojom::GamepadEffectParametersPtr,
+      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback) override;
+
+  void ResetVibration(
+      int pad_index,
+      mojom::GamepadHapticsManager::ResetVibrationActuatorCallback) override;
 
  private:
   void OnAddedToProvider() override;
 
-  // The three function types we use from xinput1_3.dll.
+  // The function types we use from xinput1_3.dll.
   typedef void(WINAPI* XInputEnableFunc)(BOOL enable);
   typedef DWORD(WINAPI* XInputGetCapabilitiesFunc)(
       DWORD dwUserIndex,
@@ -53,6 +82,8 @@ class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
       XINPUT_CAPABILITIES* pCapabilities);
   typedef DWORD(WINAPI* XInputGetStateFunc)(DWORD dwUserIndex,
                                             XINPUT_STATE* pState);
+  typedef DWORD(WINAPI* XInputGetStateExFunc)(DWORD dwUserIndex,
+                                              XInputStateEx* pState);
 
   // Get functions from dynamically loading the xinput dll.
   // Returns true if loading was successful.
@@ -66,11 +97,14 @@ class GamepadPlatformDataFetcherWin : public GamepadDataFetcher {
   bool xinput_available_;
 
   // Function pointers to XInput functionality, retrieved in
-  // |GetXinputDllFunctions|.
+  // |GetXInputDllFunctions|.
   XInputGetCapabilitiesFunc xinput_get_capabilities_;
   XInputGetStateFunc xinput_get_state_;
+  XInputGetStateExFunc xinput_get_state_ex_;
+  XInputHapticGamepadWin::XInputSetStateFunc xinput_set_state_;
 
-  bool xinuput_connected_[XUSER_MAX_COUNT];
+  bool xinput_connected_[XUSER_MAX_COUNT];
+  std::unique_ptr<XInputHapticGamepadWin> haptics_[XUSER_MAX_COUNT];
 
   DISALLOW_COPY_AND_ASSIGN(GamepadPlatformDataFetcherWin);
 };

@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
 <translation id="1326317727527857210">Ha hozzá szeretne férni lapjaihoz a többi eszközéről, jelentkezzen be a Chrome-ba.</translation>
-<translation id="1685087038067318291">Közeli objektumok által küldött weboldalak felfedezése. Ha a Bluetooth be van kapcsolva, a Chrome összegyűjtheti az Ön közelében található objektumokhoz társított weboldalakat, és névtelenül elküldheti őket a Google-nak, hogy megtalálja az Ön számára leghasznosabbakat. <ph name="BEGIN_LINK" />További információ<ph name="END_LINK" />.</translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome – Adatvédelmi közlemény</translation>
+<translation id="1863312987075920112">Az alkalmazás használatával elfogadja a Chrome <ph name="BEGIN_LINK_TOS" />Általános Szerződési Feltételeit<ph name="END_LINK_TOS" /> és <ph name="BEGIN_LINK_PRIVACY" />Adatvédelmi közleményét<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="2147651015520127414">A Chrome ellenőrizte, hogy a(z) <ph name="ISSUER" /> adta ki ezt a webhelytanúsítványt.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Minden jog fenntartva.</translation>
 <translation id="2342981853652716282">Jelentkezzen be a Chrome-ba, hogy az összes eszközén hozzáférhessen könyvjelzőihez, jelszavaihoz és más beállításaihoz.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Bizonyos bővítmények a Chrome összeomlását eredményezik. Távolítsa el a következő(ke)t:</translation>
 <translation id="4615174829807303908">Kijelentkezik egy <ph name="SIGNOUT_MANAGED_DOMAIN" /> által felügyelt fiókból. Ezzel törli az eszközön található Chrome-adatokat, amelyek azonban Google-fiókjában megmaradnak.</translation>
 <translation id="5389212809648216794">A Google Chrome nem tudja használni a kamerát, mivel egy másik alkalmazás használja</translation>
-<translation id="5566557026214762153">Az alkalmazás használatával elfogadja a Chrome <ph name="BEGIN_LINK" />Általános Szerződési Feltételeit<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Nyissa meg a Beállítások &gt; Adatvédelem &gt; Kamera &gt; Google Chrome elemet, és kapcsolja be a kamerát.</translation>
 <translation id="5642200033778930880">A Google Chrome Osztott nézet módban nem tudja használni a kamerát</translation>
 <translation id="5703130498371792817">Kedveli a Chrome-ot? <ph name="BEGIN_LINK" />Értékelje az alkalmazást<ph name="END_LINK" /></translation>

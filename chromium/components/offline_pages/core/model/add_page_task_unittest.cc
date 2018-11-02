@@ -15,7 +15,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/test_simple_task_runner.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/offline_pages/core/model/offline_page_item_generator.h"
 #include "components/offline_pages/core/offline_page_item.h"
@@ -70,7 +70,7 @@ class AddPageTaskTest : public testing::Test,
   AddPageResult last_add_page_result() { return last_add_page_result_; }
 
  private:
-  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
   OfflinePageMetadataStoreTestUtil store_test_util_;
   OfflinePageItemGenerator generator_;
@@ -80,7 +80,7 @@ class AddPageTaskTest : public testing::Test,
 };
 
 AddPageTaskTest::AddPageTaskTest()
-    : task_runner_(new base::TestSimpleTaskRunner()),
+    : task_runner_(new base::TestMockTimeTaskRunner()),
       task_runner_handle_(task_runner_),
       store_test_util_(task_runner_),
       runner_(task_runner_),
@@ -109,7 +109,7 @@ AddPageTask::AddPageTaskCallback AddPageTaskTest::add_page_callback() {
 }
 
 void AddPageTaskTest::AddPage(const OfflinePageItem& page) {
-  auto task = base::MakeUnique<AddPageTask>(store(), page, add_page_callback());
+  auto task = std::make_unique<AddPageTask>(store(), page, add_page_callback());
   runner()->RunTask(std::move(task));
 }
 
@@ -188,7 +188,7 @@ TEST_F(AddPageTaskTest, AddTwoIdenticalPages) {
 TEST_F(AddPageTaskTest, AddPageWithInvalidStore) {
   generator()->SetNamespace(kTestNamespace);
   OfflinePageItem page = generator()->CreateItem();
-  auto task = base::MakeUnique<AddPageTask>(nullptr, page, add_page_callback());
+  auto task = std::make_unique<AddPageTask>(nullptr, page, add_page_callback());
   runner()->RunTask(std::move(task));
 
   // Start checking if the page is added into the store.

@@ -6,11 +6,12 @@
 
 namespace gpu {
 
-Capabilities::PerStagePrecisions::PerStagePrecisions() {
-}
+Capabilities::PerStagePrecisions::PerStagePrecisions() = default;
 
-Capabilities::Capabilities() {}
+Capabilities::Capabilities() = default;
 
 Capabilities::Capabilities(const Capabilities& other) = default;
+
+Capabilities::~Capabilities() = default;
 
 }  // namespace gpu

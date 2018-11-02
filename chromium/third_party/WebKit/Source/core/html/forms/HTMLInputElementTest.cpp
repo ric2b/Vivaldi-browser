@@ -15,26 +15,18 @@
 #include "core/html/forms/DateTimeChooser.h"
 #include "core/html/forms/HTMLFormElement.h"
 #include "core/html/forms/HTMLOptionElement.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
 
-class HTMLInputElementTest : public ::testing::Test {
+class HTMLInputElementTest : public PageTestBase {
  protected:
-  Document& GetDocument() { return page_holder_->GetDocument(); }
   HTMLInputElement& TestElement() {
     Element* element = GetDocument().getElementById("test");
     DCHECK(element);
     return ToHTMLInputElement(*element);
   }
-
- private:
-  void SetUp() override {
-    page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-  }
-
-  std::unique_ptr<DummyPageHolder> page_holder_;
 };
 
 TEST_F(HTMLInputElementTest, FilteredDataListOptionsNoList) {
@@ -169,6 +161,7 @@ TEST_F(HTMLInputElementTest, RadioKeyDownDCHECKFailure) {
 }
 
 TEST_F(HTMLInputElementTest, DateTimeChooserSizeParamRespectsScale) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   GetDocument().View()->GetFrame().GetPage()->GetVisualViewport().SetScale(2.f);
   GetDocument().body()->SetInnerHTMLFromString(
       "<input type='date' style='width:200px;height:50px' />");

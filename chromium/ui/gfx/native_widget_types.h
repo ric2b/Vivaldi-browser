@@ -14,6 +14,8 @@
 #include "base/android/scoped_java_ref.h"
 #elif defined(OS_MACOSX)
 #include <objc/objc.h>
+#elif defined(OS_WIN)
+#include "base/win/windows_types.h"
 #endif
 
 // This file provides cross platform typedefs for native widget types.
@@ -52,7 +54,6 @@ class Event;
 #endif  // defined(USE_AURA)
 
 #if defined(OS_WIN)
-#include <windows.h>  // NOLINT
 typedef struct HFONT__* HFONT;
 struct IAccessible;
 #elif defined(OS_IOS)
@@ -187,7 +188,7 @@ constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
 typedef UIView* AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
 #elif defined(OS_MACOSX)
-typedef NSView* AcceleratedWidget;
+typedef uint64_t AcceleratedWidget;
 constexpr AcceleratedWidget kNullAcceleratedWidget = 0;
 #elif defined(OS_ANDROID)
 typedef ANativeWindow* AcceleratedWidget;

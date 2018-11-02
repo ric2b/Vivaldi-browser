@@ -281,10 +281,8 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
   DCHECK_EQ(static_cast<FrameFetchContext*>(fetch_context_.get())->frame(),
             web_frame);
 
-  if (!watch_time_recorder_provider_) {
-    remote_interfaces_->GetInterface(
-        mojo::MakeRequest(&watch_time_recorder_provider_));
-  }
+  media::mojom::MediaMetricsProviderPtr metrics_provider;
+  remote_interfaces_->GetInterface(mojo::MakeRequest(&metrics_provider));
 
   scoped_refptr<base::SingleThreadTaskRunner>
       video_frame_compositor_task_runner;
@@ -328,9 +326,7 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
           media_observer, max_keyframe_distance_to_disable_background_video,
           max_keyframe_distance_to_disable_background_video_mse,
           enable_instant_source_buffer_gc, embedded_media_experience_enabled,
-          watch_time_recorder_provider_.get(),
-          base::Bind(&MediaFactory::CreateVideoDecodeStatsRecorder,
-                     base::Unretained(this)),
+          std::move(metrics_provider),
           base::Bind(&blink::WebSurfaceLayerBridge::Create, layer_tree_view),
           RenderThreadImpl::current()->SharedMainThreadContextProvider()));
 
@@ -383,8 +379,7 @@ MediaFactory::CreateRendererFactorySelector(
   // level uses the MediaPlayerRenderer as its underlying media::Renderer.
   auto mojo_media_player_renderer_factory =
       std::make_unique<media::MojoRendererFactory>(
-          media::MojoRendererFactory::GetGpuFactoriesCB(),
-          remote_interfaces_->get());
+          media::MojoRendererFactory::GetGpuFactoriesCB(), remote_interfaces_);
 
   // Always give |factory_selector| a MediaPlayerRendererClient factory. WMPI
   // might fallback to it if the final redirected URL is an HLS url.
@@ -570,15 +565,6 @@ media::CdmFactory* MediaFactory::GetCdmFactory() {
 #endif  // BUILDFLAG(ENABLE_MEDIA_REMOTING)
 
   return cdm_factory_.get();
-}
-
-media::mojom::VideoDecodeStatsRecorderPtr
-MediaFactory::CreateVideoDecodeStatsRecorder() {
-  DCHECK(remote_interfaces_);
-  media::mojom::VideoDecodeStatsRecorderPtr recorder_ptr;
-  service_manager::GetInterface(remote_interfaces_->get(), &recorder_ptr);
-
-  return recorder_ptr;
 }
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA)

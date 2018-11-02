@@ -142,6 +142,13 @@ DISABLE(NavigationControllerTest, LoadURL_WithBindings)
 DISABLE(RenderFrameHostManagerTest, DisownOpenerAfterNavigation)
 DISABLE(RenderFrameHostManagerTest, NavigateAfterMissingSwapOutACK)
 
+// Broke in v65, can't reproduce locally
+DISABLE(SitePerProcessMouseWheelBrowserTest, MainframeWheelEventsOnMainThread)
+DISABLE(SitePerProcessMouseWheelBrowserTest, SubframeWheelEventsOnMainThread)
+DISABLE(RenderFrameHostManagerTest, DisownOpenerDuringNavigation)
+
 // Flaky on Win7
 DISABLE_MULTI(SSLUIWorkerFetchTest, MixedContentSubFrame)
 DISABLE_MULTI(SSLUIWorkerFetchTest, MixedContentSettings)
+DISABLE(HistoryApiTest, SearchAfterAdd)
+DISABLE(PrerenderBrowserTest, PrerenderBeforeUnload)

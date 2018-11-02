@@ -17,6 +17,7 @@
 #include "content/common/accessibility_messages.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/ax_text_utils.h"
+#include "ui/accessibility/platform/ax_unique_id.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -854,6 +855,27 @@ bool BrowserAccessibility::IsOffscreen() const {
   return offscreen;
 }
 
+std::set<int32_t> BrowserAccessibility::GetReverseRelations(
+    ui::AXIntAttribute attr,
+    int32_t dst_id) {
+  DCHECK(manager_);
+  return manager_->ax_tree()->GetReverseRelations(attr, dst_id);
+}
+
+std::set<int32_t> BrowserAccessibility::GetReverseRelations(
+    ui::AXIntListAttribute attr,
+    int32_t dst_id) {
+  DCHECK(manager_);
+  return manager_->ax_tree()->GetReverseRelations(attr, dst_id);
+}
+
+const ui::AXUniqueId& BrowserAccessibility::GetUniqueId() const {
+  // This is not the same as GetData().id which comes from Blink, because
+  // those ids are only unique within the Blink process. We need one that is
+  // unique for the browser process.
+  return unique_id_;
+}
+
 gfx::NativeViewAccessible BrowserAccessibility::GetNativeViewAccessible() {
   // TODO(703369) On Windows, where we have started to migrate to an
   // AXPlatformNode implementation, the BrowserAccessibilityWin subclass has
@@ -985,13 +1007,7 @@ bool BrowserAccessibility::AccessibilityPerformAction(
   }
 
   if (data.action == ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE) {
-    // target_rect is in screen coordinates.  We need to convert this to frame
-    // coordinates because that's what BrowserAccessiblity cares about.
-    gfx::Rect target =
-        data.target_rect -
-        manager_->GetRootManager()->GetViewBounds().OffsetFromOrigin();
-
-    manager_->ScrollToMakeVisible(*this, target);
+    manager_->ScrollToMakeVisible(*this, data.target_rect);
     return true;
   }
 

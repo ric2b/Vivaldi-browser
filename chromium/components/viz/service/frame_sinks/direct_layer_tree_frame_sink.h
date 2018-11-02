@@ -9,10 +9,11 @@
 #include "base/threading/thread_checker.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display_client.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/viz_service_export.h"
+#include "services/viz/privileged/interfaces/compositing/display_private.mojom.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 
 namespace cc {
@@ -39,8 +40,10 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       CompositorFrameSinkSupportManager* support_manager,
       FrameSinkManagerImpl* frame_sink_manager,
       Display* display,
+      mojom::DisplayClient* display_client,
       scoped_refptr<ContextProvider> context_provider,
-      scoped_refptr<ContextProvider> worker_context_provider,
+      scoped_refptr<RasterContextProvider> worker_context_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       SharedBitmapManager* shared_bitmap_manager);
   DirectLayerTreeFrameSink(
@@ -48,6 +51,7 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
       CompositorFrameSinkSupportManager* support_manager,
       FrameSinkManagerImpl* frame_sink_manager,
       Display* display,
+      mojom::DisplayClient* display_client,
       scoped_refptr<VulkanContextProvider> vulkan_context_provider);
   ~DirectLayerTreeFrameSink() override;
 
@@ -62,9 +66,8 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
                               const RenderPassList& render_passes) override;
   void DisplayDidDrawAndSwap() override;
-
- protected:
-  std::unique_ptr<CompositorFrameSinkSupport> support_;  // protected for test.
+  void DisplayDidReceiveCALayerParams(
+      const gfx::CALayerParams& ca_layer_params) override;
 
  private:
   // mojom::CompositorFrameSinkClient implementation:
@@ -89,12 +92,16 @@ class VIZ_SERVICE_EXPORT DirectLayerTreeFrameSink
   // This class is only meant to be used on a single thread.
   THREAD_CHECKER(thread_checker_);
 
+  std::unique_ptr<CompositorFrameSinkSupport> support_;
+
   const FrameSinkId frame_sink_id_;
   LocalSurfaceId local_surface_id_;
   CompositorFrameSinkSupportManager* const support_manager_;
   FrameSinkManagerImpl* frame_sink_manager_;
-  LocalSurfaceIdAllocator local_surface_id_allocator_;
+  ParentLocalSurfaceIdAllocator parent_local_surface_id_allocator_;
   Display* display_;
+  // |display_client_| may be nullptr on platforms that do not use it.
+  mojom::DisplayClient* display_client_ = nullptr;
   gfx::Size last_swap_frame_size_;
   float device_scale_factor_ = 1.f;
   bool is_lost_ = false;

@@ -12,9 +12,9 @@
 namespace blink {
 namespace scheduler {
 
-FakeRendererScheduler::FakeRendererScheduler() {}
+FakeRendererScheduler::FakeRendererScheduler() = default;
 
-FakeRendererScheduler::~FakeRendererScheduler() {}
+FakeRendererScheduler::~FakeRendererScheduler() = default;
 
 std::unique_ptr<blink::WebThread> FakeRendererScheduler::CreateMainThread() {
   return nullptr;
@@ -80,6 +80,8 @@ bool FakeRendererScheduler::IsHighPriorityWorkAnticipated() {
 void FakeRendererScheduler::SetRendererHidden(bool hidden) {}
 
 void FakeRendererScheduler::SetRendererBackgrounded(bool backgrounded) {}
+
+void FakeRendererScheduler::SetSchedulerKeepActive(bool keep_active) {}
 
 std::unique_ptr<FakeRendererScheduler::RendererPauseHandle>
 FakeRendererScheduler::PauseRenderer() {

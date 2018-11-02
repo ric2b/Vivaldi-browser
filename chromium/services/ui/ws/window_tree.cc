@@ -344,6 +344,7 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
   }
 
   Display* display = display_manager()->GetDisplayById(display_to_create.id());
+  const bool display_already_existed = display != nullptr;
   if (!display) {
     // Create a display if the window manager is extending onto a new display.
     display = display_manager()->AddDisplayForWindowManager(
@@ -362,7 +363,7 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
       display->GetWindowManagerDisplayRootForUser(
           window_manager_state_->user_id());
   DCHECK(display_root);
-  DCHECK(display_root->root()->children().empty());
+  display_root->root()->RemoveAllChildren();
 
   // NOTE: this doesn't resize the window in any way. We assume the client takes
   // care of any modifications it needs to do.
@@ -374,6 +375,13 @@ ServerWindow* WindowTree::ProcessSetDisplayRoot(
   if (is_moving_to_new_display) {
     DCHECK(old_parent);
     window_manager_state_->DeleteWindowManagerDisplayRoot(old_parent);
+  }
+  if (display_already_existed &&
+      display->platform_display()->GetAcceleratedWidget()) {
+    // Notify the window manager that the dispay's accelerated widget is already
+    // available, if the display is being reused for a new window tree host.
+    window_manager_internal_->WmOnAcceleratedWidgetForDisplay(
+        display->GetId(), display->platform_display()->GetAcceleratedWidget());
   }
   return window;
 }
@@ -1504,8 +1512,23 @@ void WindowTree::DispatchInputEventImpl(ServerWindow* target,
   // Should only get events from windows attached to a host.
   DCHECK(event_source_wms_);
   bool matched_pointer_watcher = EventMatchesPointerWatcher(event);
+
+  // Pass the root window of the display supplying the event. This is necessary
+  // for Ash to determine the event position in the unified desktop mode, where
+  // each physical display mirrors part of a single virtual display.
+  Display* display = window_server_->display_manager()->GetDisplayById(
+      event_location.display_id);
+  WindowManagerDisplayRoot* event_display_root = nullptr;
+  if (display && window_manager_state_) {
+    event_display_root = display->GetWindowManagerDisplayRootForUser(
+        window_manager_state_->user_id());
+  }
+  ServerWindow* display_root_window =
+      event_display_root ? event_display_root->GetClientVisibleRoot() : nullptr;
+
   client()->OnWindowInputEvent(
       event_ack_id_, TransportIdForWindow(target), event_location.display_id,
+      display_root_window ? TransportIdForWindow(display_root_window) : Id(),
       event_location.raw_location, ui::Event::Clone(event),
       matched_pointer_watcher);
 }
@@ -1916,9 +1939,10 @@ void WindowTree::OnWindowInputEventAck(uint32_t event_id,
       event_location = targeted_event->event_location();
       callback = targeted_event->TakeCallback();
     } while (!event_queue_.empty() && !GetDisplay(target));
-    if (target)
+    if (GetDisplay(target)) {
       DispatchInputEventImpl(target, *event, event_location,
                              std::move(callback));
+    }
   }
 }
 

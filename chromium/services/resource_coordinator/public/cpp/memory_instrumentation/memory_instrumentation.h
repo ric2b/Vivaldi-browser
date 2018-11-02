@@ -10,6 +10,7 @@
 #include "base/threading/thread_local_storage.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/coordinator.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
 #include "services/resource_coordinator/public/cpp/resource_coordinator_export.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -30,9 +31,10 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
   using MemoryDumpType = base::trace_event::MemoryDumpType;
   using MemoryDumpLevelOfDetail = base::trace_event::MemoryDumpLevelOfDetail;
   using RequestGlobalDumpCallback =
-      base::Callback<void(bool success, mojom::GlobalMemoryDumpPtr)>;
+      base::RepeatingCallback<void(bool success,
+                                   std::unique_ptr<GlobalMemoryDump> dump)>;
   using RequestGlobalMemoryDumpAndAppendToTraceCallback =
-      base::Callback<void(bool success, uint64_t dump_id)>;
+      base::RepeatingCallback<void(bool success, uint64_t dump_id)>;
 
   static void CreateInstance(service_manager::Connector*,
                              const std::string& service_name);
@@ -44,7 +46,29 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
   //  (false, nullptr) if failed.
   // The callback (if not null), will be posted on the same thread of the
   // RequestGlobalDump() call.
+  // TODO(lalitm): this is temporary until we migrate task manager, metrics
+  // etc to use the new method.
   void RequestGlobalDump(RequestGlobalDumpCallback);
+
+  // Requests a global memory dump with |allocator_dump_names| indicating
+  // the name of allocator dumps in which the consumer is interested. If
+  // |allocator_dump_names| is empty, no dumps will be returned.
+  // Returns asynchronously, via the callback argument:
+  //  (true, global_dump) if succeeded;
+  //  (false, global_dump) if failed, with global_dump being non-null
+  //  but missing data.
+  // The callback (if not null), will be posted on the same thread of the
+  // RequestGlobalDump() call.
+  void RequestGlobalDump(const std::vector<std::string>& allocator_dump_names,
+                         RequestGlobalDumpCallback);
+
+  // Requests a global memory dump.
+  // Returns asynchronously, via the callback argument, the global memory
+  // dump with the process memory dump for the given pid or null if the dump
+  // failed.
+  // The callback (if not null), will be posted on the same thread of the
+  // RequestGlobalDumpForPid() call.
+  void RequestGlobalDumpForPid(base::ProcessId pid, RequestGlobalDumpCallback);
 
   // Requests a global memory dump and serializes the result into the trace.
   // This requires that both tracing and the memory-infra category have been
@@ -58,15 +82,6 @@ class SERVICES_RESOURCE_COORDINATOR_PUBLIC_CPP_EXPORT MemoryInstrumentation {
       MemoryDumpType,
       MemoryDumpLevelOfDetail,
       RequestGlobalMemoryDumpAndAppendToTraceCallback);
-
-  // Requests a global dump retrieving only the memory maps for all the client
-  // processes registered. Does not add anything to the trace. The returned
-  // GlobalMemoryDump will have only the |os_dump| field populated.
-  // Returns asynchronously, via the callback argument:
-  //  (true, global_dump) if succeeded;
-  //  (false, nullptr) if failed.
-  // The callback will be posted on the same thread of the caller.
-  void GetVmRegionsForHeapProfiler(RequestGlobalDumpCallback);
 
  private:
   MemoryInstrumentation(service_manager::Connector* connector,

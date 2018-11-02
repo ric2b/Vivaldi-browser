@@ -15,8 +15,9 @@
 #include "cc/test/test_in_process_context_provider.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_implementation_gles.h"
 #include "gpu/command_buffer/client/shared_memory_limits.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/gl_in_process_context.h"
 #include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
@@ -33,21 +34,24 @@
 namespace cc {
 namespace {
 
+class NoOpImageProvider : public ImageProvider {
+ public:
+  ~NoOpImageProvider() override = default;
+
+  ScopedDecodedDrawImage GetDecodedDrawImage(
+      const DrawImage& draw_image) override {
+    SkBitmap bitmap;
+    bitmap.allocPixelsFlags(SkImageInfo::MakeN32Premul(10, 10),
+                            SkBitmap::kZeroPixels_AllocFlag);
+    sk_sp<SkImage> image = SkImage::MakeFromBitmap(bitmap);
+    return ScopedDecodedDrawImage(DecodedDrawImage(
+        image, SkSize::Make(10, 10), SkSize::Make(1, 1), kLow_SkFilterQuality));
+  }
+};
+
 class OopPixelTest : public testing::Test {
  public:
   void SetUp() override {
-    bool is_offscreen = true;
-    gpu::gles2::ContextCreationAttribHelper attribs;
-    attribs.alpha_size = -1;
-    attribs.depth_size = 24;
-    attribs.stencil_size = 8;
-    attribs.samples = 0;
-    attribs.sample_buffers = 0;
-    attribs.fail_if_major_perf_caveat = false;
-    attribs.bind_generates_resource = false;
-    // Enable OOP rasterization.
-    attribs.enable_oop_rasterization = true;
-
     // Add an OOP rasterization command line flag so that we set
     // |chromium_raster_transport| features flag.
     // TODO(vmpstr): Is there a better way to do this?
@@ -57,17 +61,48 @@ class OopPixelTest : public testing::Test {
           switches::kEnableOOPRasterization);
     }
 
+    // Setup a GL context for reading back pixels.
+    bool is_offscreen = true;
+    gpu::ContextCreationAttribs attribs;
+    attribs.alpha_size = -1;
+    attribs.depth_size = 24;
+    attribs.stencil_size = 8;
+    attribs.samples = 0;
+    attribs.sample_buffers = 0;
+    attribs.fail_if_major_perf_caveat = false;
+    attribs.bind_generates_resource = false;
+
     context_ = gpu::GLInProcessContext::CreateWithoutInit();
     auto result = context_->Initialize(
         nullptr, nullptr, is_offscreen, gpu::kNullSurfaceHandle, nullptr,
         attribs, gpu::SharedMemoryLimits(), &gpu_memory_buffer_manager_,
-        &image_factory_, base::ThreadTaskRunnerHandle::Get());
+        &image_factory_, nullptr, base::ThreadTaskRunnerHandle::Get());
 
     ASSERT_EQ(result, gpu::ContextResult::kSuccess);
-    ASSERT_TRUE(context_->GetCapabilities().supports_oop_raster);
+
+    // Setup a second context with OOP rasterization enabled and a
+    // RasterInterface on top of it.
+    attribs.enable_oop_rasterization = true;
+
+    raster_context_ = gpu::GLInProcessContext::CreateWithoutInit();
+    result = raster_context_->Initialize(
+        nullptr, nullptr, is_offscreen, gpu::kNullSurfaceHandle, nullptr,
+        attribs, gpu::SharedMemoryLimits(), &gpu_memory_buffer_manager_,
+        &image_factory_, nullptr, base::ThreadTaskRunnerHandle::Get());
+    ASSERT_EQ(result, gpu::ContextResult::kSuccess);
+    ASSERT_TRUE(raster_context_->GetCapabilities().supports_oop_raster);
+    raster_implementation_ =
+        std::make_unique<gpu::raster::RasterImplementationGLES>(
+            raster_context_->GetImplementation(),
+            raster_context_->GetImplementation(),
+            raster_context_->GetCapabilities());
   }
 
-  void TearDown() override { context_.reset(); }
+  void TearDown() override {
+    raster_implementation_.reset();
+    raster_context_.reset();
+    context_.reset();
+  }
 
   struct RasterOptions {
     SkColor background_color = SK_ColorBLACK;
@@ -77,8 +112,7 @@ class OopPixelTest : public testing::Test {
     GrPixelConfig pixel_config = kRGBA_8888_GrPixelConfig;
     gfx::Rect bitmap_rect;
     gfx::Rect playback_rect;
-    float post_translate_x = 0.f;
-    float post_translate_y = 0.f;
+    gfx::Vector2dF post_translate = {0.f, 0.f};
     float post_scale = 1.f;
   };
 
@@ -93,48 +127,61 @@ class OopPixelTest : public testing::Test {
   SkBitmap Raster(scoped_refptr<DisplayItemList> display_item_list,
                   const RasterOptions& options) {
     gpu::gles2::GLES2Interface* gl = context_->GetImplementation();
-    GLuint texture_id;
-    GLuint fbo_id;
     int width = options.bitmap_rect.width();
     int height = options.bitmap_rect.height();
 
-    // Create and allocate a texture.
-    gl->GenTextures(1, &texture_id);
-    gl->BindTexture(GL_TEXTURE_2D, texture_id);
-    gl->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
-                   GL_UNSIGNED_BYTE, nullptr);
-    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    // Create and allocate a texture on the raster interface.
+    GLuint raster_texture_id;
+    raster_implementation_->GenTextures(1, &raster_texture_id);
+    raster_implementation_->BindTexture(GL_TEXTURE_2D, raster_texture_id);
+    raster_implementation_->TexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height,
+                                       0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    raster_implementation_->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                                          GL_LINEAR);
 
-    // Create an fbo and bind the texture to it.
+    EXPECT_EQ(raster_implementation_->GetError(),
+              static_cast<unsigned>(GL_NO_ERROR));
+
+    // "Out of process" raster! \o/
+    raster_implementation_->BeginRasterCHROMIUM(
+        raster_texture_id, options.background_color, options.msaa_sample_count,
+        options.use_lcd_text, options.use_distance_field_text,
+        options.pixel_config);
+    raster_implementation_->RasterCHROMIUM(
+        display_item_list.get(), &image_provider_,
+        options.bitmap_rect.OffsetFromOrigin(), options.playback_rect,
+        options.post_translate, options.post_scale);
+    raster_implementation_->EndRasterCHROMIUM();
+
+    // Produce a mailbox and insert an ordering barrier (assumes the raster
+    // interface and gl are on the same scheduling group).
+    gpu::Mailbox mailbox;
+    raster_implementation_->GenMailboxCHROMIUM(mailbox.name);
+    raster_implementation_->ProduceTextureDirectCHROMIUM(raster_texture_id,
+                                                         mailbox.name);
+    raster_implementation_->OrderingBarrierCHROMIUM();
+
+    EXPECT_EQ(raster_implementation_->GetError(),
+              static_cast<unsigned>(GL_NO_ERROR));
+
+    // Import the texture in gl, create an fbo and bind the texture to it.
+    GLuint gl_texture_id = gl->CreateAndConsumeTextureCHROMIUM(mailbox.name);
+    GLuint fbo_id;
     gl->GenFramebuffers(1, &fbo_id);
     gl->BindFramebuffer(GL_FRAMEBUFFER, fbo_id);
     gl->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                             GL_TEXTURE_2D, texture_id, 0);
-
-    EXPECT_EQ(gl->GetError(), static_cast<unsigned>(GL_NO_ERROR));
-
-    // "Out of process" raster! \o/
-    gl->BeginRasterCHROMIUM(texture_id, options.background_color,
-                            options.msaa_sample_count, options.use_lcd_text,
-                            options.use_distance_field_text,
-                            options.pixel_config);
-    gl->RasterCHROMIUM(display_item_list.get(), options.bitmap_rect.x(),
-                       options.bitmap_rect.y(), options.playback_rect.x(),
-                       options.playback_rect.y(), options.playback_rect.width(),
-                       options.playback_rect.height(), options.post_translate_x,
-                       options.post_translate_y, options.post_scale);
-    gl->EndRasterCHROMIUM();
-    gl->Flush();
-
-    EXPECT_EQ(gl->GetError(), static_cast<unsigned>(GL_NO_ERROR));
+                             GL_TEXTURE_2D, gl_texture_id, 0);
 
     // Read the data back.
     std::unique_ptr<unsigned char[]> data(
         new unsigned char[width * height * 4]);
     gl->ReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, data.get());
 
-    gl->DeleteTextures(1, &texture_id);
+    gl->DeleteTextures(1, &gl_texture_id);
     gl->DeleteFramebuffers(1, &fbo_id);
+
+    gl->OrderingBarrierCHROMIUM();
+    raster_implementation_->DeleteTextures(1, &raster_texture_id);
 
     // Swizzle rgba->bgra if needed.
     std::vector<SkPMColor> colors;
@@ -199,8 +246,13 @@ class OopPixelTest : public testing::Test {
     }
     gpu::Capabilities capabilities;
     gpu::gles2::GLES2Interface* gl = context_->GetImplementation();
-    skia_bindings::GrContextForGLES2Interface scoped_grcontext(gl,
-                                                               capabilities);
+    size_t max_resource_cache_bytes;
+    size_t max_glyph_cache_texture_bytes;
+    skia_bindings::GrContextForGLES2Interface::DefaultCacheLimitsForTests(
+        &max_resource_cache_bytes, &max_glyph_cache_texture_bytes);
+    skia_bindings::GrContextForGLES2Interface scoped_grcontext(
+        gl, capabilities, max_resource_cache_bytes,
+        max_glyph_cache_texture_bytes);
     SkImageInfo image_info = SkImageInfo::MakeN32Premul(
         options.bitmap_rect.width(), options.bitmap_rect.height());
     auto surface = SkSurface::MakeRenderTarget(scoped_grcontext.get(),
@@ -208,9 +260,8 @@ class OopPixelTest : public testing::Test {
     SkCanvas* canvas = surface->getCanvas();
     canvas->drawColor(options.background_color);
 
-    gfx::AxisTransform2d raster_transform(
-        options.post_scale,
-        gfx::Vector2dF(options.post_translate_x, options.post_translate_y));
+    gfx::AxisTransform2d raster_transform(options.post_scale,
+                                          options.post_translate);
     // TODO(enne): add a target colorspace to BeginRasterCHROMIUM etc.
     gfx::ColorSpace target_color_space;
     raster_source->PlaybackToCanvas(canvas, target_color_space,
@@ -244,7 +295,10 @@ class OopPixelTest : public testing::Test {
   viz::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestImageFactory image_factory_;
   std::unique_ptr<gpu::GLInProcessContext> context_;
+  std::unique_ptr<gpu::GLInProcessContext> raster_context_;
+  std::unique_ptr<gpu::raster::RasterImplementationGLES> raster_implementation_;
   gl::DisableNullDrawGLBindings enable_pixel_output_;
+  NoOpImageProvider image_provider_;
 };
 
 TEST_F(OopPixelTest, DrawColor) {
@@ -364,8 +418,7 @@ TEST_F(OopPixelTest, DrawRectScaleTransformOptions) {
   options.bitmap_rect = {5, 5, 20, 20};
   options.playback_rect = {3, 2, 15, 12};
   options.background_color = SK_ColorCYAN;
-  options.post_translate_x = 0.5f;
-  options.post_translate_y = 0.25f;
+  options.post_translate = {0.5f, 0.25f};
   options.post_scale = 2.f;
 
   auto actual = Raster(display_item_list, options);
@@ -396,8 +449,7 @@ TEST_F(OopPixelTest, DrawRectQueryMiddleOfDisplayList) {
   options.bitmap_rect = {0, 10, 1, 10};
   options.playback_rect = {0, 10, 1, 10};
   options.background_color = SK_ColorGRAY;
-  options.post_translate_x = 0.f;
-  options.post_translate_y = 0.f;
+  options.post_translate = {0.f, 0.f};
   options.post_scale = 2.f;
 
   auto actual = Raster(display_item_list, options);

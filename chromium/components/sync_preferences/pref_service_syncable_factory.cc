@@ -4,6 +4,8 @@
 
 #include "components/sync_preferences/pref_service_syncable_factory.h"
 
+#include <memory>
+
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -30,7 +32,8 @@ void PrefServiceSyncableFactory::SetManagedPolicies(
     policy::BrowserPolicyConnector* connector) {
 #if !defined(OS_IOS)
   set_managed_prefs(new policy::ConfigurationPolicyPrefStore(
-      service, connector->GetHandlerList(), policy::POLICY_LEVEL_MANDATORY));
+      connector, service, connector->GetHandlerList(),
+      policy::POLICY_LEVEL_MANDATORY));
 #else
   NOTREACHED();
 #endif
@@ -41,7 +44,8 @@ void PrefServiceSyncableFactory::SetRecommendedPolicies(
     policy::BrowserPolicyConnector* connector) {
 #if !defined(OS_IOS)
   set_recommended_prefs(new policy::ConfigurationPolicyPrefStore(
-      service, connector->GetHandlerList(), policy::POLICY_LEVEL_RECOMMENDED));
+      connector, service, connector->GetHandlerList(),
+      policy::POLICY_LEVEL_RECOMMENDED));
 #else
   NOTREACHED();
 #endif
@@ -56,18 +60,16 @@ std::unique_ptr<PrefServiceSyncable> PrefServiceSyncableFactory::CreateSyncable(
     user_prefs::PrefRegistrySyncable* pref_registry,
     std::unique_ptr<PrefValueStore::Delegate> delegate) {
   TRACE_EVENT0("browser", "PrefServiceSyncableFactory::CreateSyncable");
-  PrefNotifierImpl* pref_notifier = new PrefNotifierImpl();
-
-  std::unique_ptr<PrefServiceSyncable> pref_service(new PrefServiceSyncable(
-      pref_notifier,
-      new PrefValueStore(managed_prefs_.get(), supervised_user_prefs_.get(),
-                         extension_prefs_.get(), command_line_prefs_.get(),
-                         user_prefs_.get(), recommended_prefs_.get(),
-                         pref_registry->defaults().get(), pref_notifier,
-                         std::move(delegate)),
-      user_prefs_.get(), pref_registry, pref_model_associator_client_,
-      read_error_callback_, async_));
-  return pref_service;
+  auto pref_notifier = std::make_unique<PrefNotifierImpl>();
+  auto pref_value_store = std::make_unique<PrefValueStore>(
+      managed_prefs_.get(), supervised_user_prefs_.get(),
+      extension_prefs_.get(), command_line_prefs_.get(), user_prefs_.get(),
+      recommended_prefs_.get(), pref_registry->defaults().get(),
+      pref_notifier.get(), std::move(delegate));
+  return std::make_unique<PrefServiceSyncable>(
+      std::move(pref_notifier), std::move(pref_value_store), user_prefs_.get(),
+      pref_registry, pref_model_associator_client_, read_error_callback_,
+      async_);
 }
 
 }  // namespace sync_preferences

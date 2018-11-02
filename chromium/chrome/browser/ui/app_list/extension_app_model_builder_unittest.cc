@@ -19,6 +19,7 @@
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/common/chrome_constants.h"
@@ -27,11 +28,11 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/app_sorting.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/uninstall_reason.h"
-#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -42,11 +43,10 @@ using extensions::ExtensionSystem;
 namespace {
 
 // Get a set of all apps in |model|.
-std::set<std::string> GetModelContent(
-    app_list::AppListModelUpdater* model_updater) {
+std::set<std::string> GetModelContent(AppListModelUpdater* model_updater) {
   std::set<std::string> content;
   for (size_t i = 0; i < model_updater->ItemCount(); ++i)
-    content.insert(model_updater->ItemAt(i)->name());
+    content.insert(model_updater->ItemAtForTest(i)->name());
   return content;
 }
 
@@ -94,7 +94,7 @@ class ExtensionAppModelBuilderTest : public AppListTestBase {
   void CreateBuilder() {
     ResetBuilder();  // Destroy any existing builder in the correct order.
 
-    model_updater_ = std::make_unique<app_list::FakeAppListModelUpdater>();
+    model_updater_ = std::make_unique<FakeAppListModelUpdater>();
     controller_ = std::make_unique<test::TestAppListControllerDelegate>();
     builder_ = std::make_unique<ExtensionAppModelBuilder>(controller_.get());
     builder_->Initialize(nullptr, profile_.get(), model_updater_.get());
@@ -106,7 +106,7 @@ class ExtensionAppModelBuilderTest : public AppListTestBase {
     model_updater_.reset();
   }
 
-  std::unique_ptr<app_list::FakeAppListModelUpdater> model_updater_;
+  std::unique_ptr<FakeAppListModelUpdater> model_updater_;
   std::unique_ptr<test::TestAppListControllerDelegate> controller_;
   std::unique_ptr<ExtensionAppModelBuilder> builder_;
   std::set<std::string> default_apps_;
@@ -141,7 +141,7 @@ TEST_F(ExtensionAppModelBuilderTest, HideWebStore) {
   service_->AddExtension(enterprise_store.get());
 
   // Web stores should be present in the model.
-  app_list::FakeAppListModelUpdater model_updater1;
+  FakeAppListModelUpdater model_updater1;
   ExtensionAppModelBuilder builder1(controller_.get());
   builder1.Initialize(nullptr, profile_.get(), &model_updater1);
   EXPECT_TRUE(model_updater1.FindItem(store->id()));
@@ -155,7 +155,7 @@ TEST_F(ExtensionAppModelBuilderTest, HideWebStore) {
   EXPECT_FALSE(model_updater1.FindItem(enterprise_store->id()));
 
   // Build a new model; web stores should NOT be present.
-  app_list::FakeAppListModelUpdater model_updater2;
+  FakeAppListModelUpdater model_updater2;
   ExtensionAppModelBuilder builder2(controller_.get());
   builder2.Initialize(nullptr, profile_.get(), &model_updater2);
   EXPECT_FALSE(model_updater2.FindItem(store->id()));
@@ -269,7 +269,7 @@ TEST_F(ExtensionAppModelBuilderTest, InvalidOrdinal) {
       extensions::ExtensionPrefs::Get(profile_.get());
   scoped_prefs->UpdateExtensionPref(
       kHostedAppId, "page_ordinal",
-      base::MakeUnique<base::Value>("a corrupted ordinal"));
+      std::make_unique<base::Value>("a corrupted ordinal"));
 
   // This should not assert or crash.
   CreateBuilder();

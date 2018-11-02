@@ -13,8 +13,8 @@ namespace gpu {
 
 class GpuBlacklistTest : public testing::Test {
  public:
-  GpuBlacklistTest() { }
-  ~GpuBlacklistTest() override {}
+  GpuBlacklistTest() = default;
+  ~GpuBlacklistTest() override = default;
 
   const GPUInfo& gpu_info() const {
     return gpu_info_;
@@ -30,6 +30,8 @@ class GpuBlacklistTest : public testing::Test {
         kFeatureListForEntry1,  // features
         0,                      // DisabledExtensions size
         nullptr,                // DisabledExtensions
+        0,                      // DisabledWebGLExtensions size
+        nullptr,                // DisabledWebGLExtensions
         0,                      // CrBugs size
         nullptr,                // CrBugs
         {

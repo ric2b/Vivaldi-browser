@@ -179,11 +179,12 @@ class ThreadHeapStats {
   void DecreaseAllocatedObjectSize(size_t delta);
   size_t AllocatedObjectSize() { return allocated_object_size_; }
   void IncreaseMarkedObjectSize(size_t delta);
-  size_t MarkedObjectSize() { return marked_object_size_; }
+  size_t MarkedObjectSize() const { return marked_object_size_; }
   void IncreaseAllocatedSpace(size_t delta);
   void DecreaseAllocatedSpace(size_t delta);
   size_t AllocatedSpace() { return allocated_space_; }
-  size_t ObjectSizeAtLastGC() { return object_size_at_last_gc_; }
+  size_t ObjectSizeAtLastGC() const { return object_size_at_last_gc_; }
+  double LiveObjectRateSinceLastGC() const;
   void IncreaseWrapperCount(size_t delta) { wrapper_count_ += delta; }
   void DecreaseWrapperCount(size_t delta) { wrapper_count_ -= delta; }
   size_t WrapperCount() { return AcquireLoad(&wrapper_count_); }
@@ -511,6 +512,9 @@ class PLATFORM_EXPORT ThreadHeap {
   void EnableIncrementalMarkingBarrier();
   void DisableIncrementalMarkingBarrier();
 
+  // Write barrier used after adding an object to the graph.
+  void WriteBarrier(const void* value);
+
 #if defined(ADDRESS_SANITIZER)
   void PoisonEagerArena();
   void PoisonAllHeaps();
@@ -536,6 +540,10 @@ class PLATFORM_EXPORT ThreadHeap {
 
   void CommitCallbackStacks();
   void DecommitCallbackStacks();
+
+  // Fast write barrier assuming that incremental marking is running and
+  // |value| is not nullptr.
+  void WriteBarrierInternal(BasePage*, const void* value);
 
   ThreadState* thread_state_;
   ThreadHeapStats stats_;
@@ -567,6 +575,8 @@ class PLATFORM_EXPORT ThreadHeap {
 
   static ThreadHeap* main_thread_heap_;
 
+  template <typename T>
+  friend class Member;
   friend class ThreadState;
 };
 

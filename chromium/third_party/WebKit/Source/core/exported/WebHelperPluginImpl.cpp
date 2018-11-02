@@ -61,11 +61,10 @@ bool WebHelperPluginImpl::Initialize(const String& plugin_type,
   Vector<String> attribute_names;
   Vector<String> attribute_values;
   DCHECK(frame->GetFrame()->GetDocument()->Url().IsValid());
-  plugin_container_ =
-      ToWebPluginContainerImpl(frame->GetFrame()->Client()->CreatePlugin(
-          *object_element_, frame->GetFrame()->GetDocument()->Url(),
-          attribute_names, attribute_values, plugin_type, false,
-          LocalFrameClient::kAllowDetachedPlugin));
+  plugin_container_ = frame->GetFrame()->Client()->CreatePlugin(
+      *object_element_, frame->GetFrame()->GetDocument()->Url(),
+      attribute_names, attribute_values, plugin_type, false,
+      LocalFrameClient::kAllowDetachedPlugin);
 
   if (!plugin_container_)
     return false;
@@ -90,8 +89,8 @@ void WebHelperPluginImpl::Destroy() {
   // Removing this causes one Chrome test to fail with a timeout.
   object_element_->GetDocument()
       .GetTaskRunner(TaskType::kUnspecedTimer)
-      ->PostTask(BLINK_FROM_HERE, WTF::Bind(&WebHelperPluginImpl::ReallyDestroy,
-                                            WTF::Unretained(this)));
+      ->PostTask(FROM_HERE, WTF::Bind(&WebHelperPluginImpl::ReallyDestroy,
+                                      WTF::Unretained(this)));
 }
 
 WebPlugin* WebHelperPluginImpl::GetPlugin() {

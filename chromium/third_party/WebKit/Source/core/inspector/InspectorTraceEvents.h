@@ -7,9 +7,9 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/css/CSSSelector.h"
-#include "core/inspector/InspectorBaseAgent.h"
 #include "platform/heap/Handle.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/instrumentation/tracing/TracedValue.h"
@@ -69,16 +69,11 @@ class ExecuteScript;
 class ParseHTML;
 }
 
-class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
-  WTF_MAKE_NONCOPYABLE(InspectorTraceEvents);
-
+class CORE_EXPORT InspectorTraceEvents
+    : public GarbageCollected<InspectorTraceEvents> {
  public:
-  InspectorTraceEvents() {}
+  InspectorTraceEvents() = default;
 
-  void Init(CoreProbeSink*,
-            protocol::UberDispatcher*,
-            protocol::DictionaryValue*) override;
-  void Dispose() override;
   void WillSendRequest(ExecutionContext*,
                        unsigned long identifier,
                        DocumentLoader*,
@@ -98,7 +93,8 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
                         DocumentLoader*,
                         double monotonic_finish_time,
                         int64_t encoded_data_length,
-                        int64_t decoded_body_length);
+                        int64_t decoded_body_length,
+                        bool blocked_cross_site_document);
   void DidFailLoading(unsigned long identifier,
                       DocumentLoader*,
                       const ResourceError&);
@@ -114,10 +110,10 @@ class CORE_EXPORT InspectorTraceEvents : public InspectorAgent {
 
   void PaintTiming(Document*, const char* name, double timestamp);
 
-  void Trace(blink::Visitor*) override;
+  void Trace(blink::Visitor*) {}
 
  private:
-  Member<CoreProbeSink> instrumenting_agents_;
+  DISALLOW_COPY_AND_ASSIGN(InspectorTraceEvents);
 };
 
 namespace InspectorLayoutEvent {
@@ -247,8 +243,7 @@ Data(const LayoutObject*, LayoutInvalidationReasonForTracing);
 }
 
 namespace InspectorPaintInvalidationTrackingEvent {
-std::unique_ptr<TracedValue> Data(const LayoutObject*,
-                                  const LayoutObject& paint_container);
+std::unique_ptr<TracedValue> Data(const LayoutObject&);
 }
 
 namespace InspectorScrollInvalidationTrackingEvent {
@@ -256,30 +251,35 @@ std::unique_ptr<TracedValue> Data(const LayoutObject&);
 }
 
 namespace InspectorChangeResourcePriorityEvent {
-std::unique_ptr<TracedValue> Data(unsigned long identifier,
+std::unique_ptr<TracedValue> Data(DocumentLoader*,
+                                  unsigned long identifier,
                                   const ResourceLoadPriority&);
 }
 
 namespace InspectorSendRequestEvent {
-std::unique_ptr<TracedValue> Data(unsigned long identifier,
+std::unique_ptr<TracedValue> Data(DocumentLoader*,
+                                  unsigned long identifier,
                                   LocalFrame*,
                                   const ResourceRequest&);
 }
 
 namespace InspectorReceiveResponseEvent {
-std::unique_ptr<TracedValue> Data(unsigned long identifier,
+std::unique_ptr<TracedValue> Data(DocumentLoader*,
+                                  unsigned long identifier,
                                   LocalFrame*,
                                   const ResourceResponse&);
 }
 
 namespace InspectorReceiveDataEvent {
-std::unique_ptr<TracedValue> Data(unsigned long identifier,
+std::unique_ptr<TracedValue> Data(DocumentLoader*,
+                                  unsigned long identifier,
                                   LocalFrame*,
                                   int encoded_data_length);
 }
 
 namespace InspectorResourceFinishEvent {
-std::unique_ptr<TracedValue> Data(unsigned long identifier,
+std::unique_ptr<TracedValue> Data(DocumentLoader*,
+                                  unsigned long identifier,
                                   double finish_time,
                                   bool did_fail,
                                   int64_t encoded_data_length,
@@ -410,7 +410,7 @@ struct V8CacheResult {
     int cache_size;
     bool rejected;
   };
-  V8CacheResult() {}
+  V8CacheResult() = default;
   V8CacheResult(Optional<ProduceResult>, Optional<ConsumeResult>);
 
   Optional<ProduceResult> produce_result;
@@ -477,7 +477,7 @@ std::unique_ptr<TracedValue> EndData(const HitTestRequest&,
 }
 
 namespace InspectorAsyncTask {
-std::unique_ptr<TracedValue> Data(const String&);
+std::unique_ptr<TracedValue> Data(const StringView&);
 }
 
 CORE_EXPORT String ToHexString(const void* p);

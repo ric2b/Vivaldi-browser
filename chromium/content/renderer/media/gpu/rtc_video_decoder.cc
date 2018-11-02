@@ -45,6 +45,9 @@ const uint32_t kNumVDAErrorsBeforeSWFallback = 5;
 // resources.
 static const size_t kMaxInFlightDecodes = 8;
 
+// Maximum number of pending WebRTC buffers that are waiting for shared memory.
+static const size_t kMaxNumOfPendingBuffers = 8;
+
 // Number of allocated shared memory segments.
 static const size_t kNumSharedMemorySegments = 16;
 
@@ -382,13 +385,21 @@ void RTCVideoDecoder::PictureReady(const media::Picture& picture) {
     return;
   }
 
+  media::PictureBuffer& pb = it->second;
+  if (picture.size_changed()) {
+    DCHECK(pb.size() != picture.visible_rect().size());
+    DVLOG(3) << __func__ << " Updating size of PictureBuffer[" << pb.id()
+             << "] from:" << pb.size().ToString()
+             << " to:" << picture.visible_rect().size().ToString();
+    pb.set_size(picture.visible_rect().size());
+  }
+
   uint32_t timestamp = 0;
   gfx::Rect visible_rect;
   GetBufferData(picture.bitstream_buffer_id(), &timestamp, &visible_rect);
   if (!picture.visible_rect().IsEmpty())
     visible_rect = picture.visible_rect();
 
-  const media::PictureBuffer& pb = it->second;
   if (visible_rect.IsEmpty() || !gfx::Rect(pb.size()).Contains(visible_rect)) {
     LOG(ERROR) << "Invalid picture size: " << visible_rect.ToString()
                << " should fit in " << pb.size().ToString();
@@ -410,9 +421,8 @@ void RTCVideoDecoder::PictureReady(const media::Picture& picture) {
 
   // Create a WebRTC video frame.
   webrtc::VideoFrame decoded_image(
-      new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(
-          frame, WebRtcVideoFrameAdapter::CopyTextureFrameCallback()),
-      timestamp, 0, webrtc::kVideoRotation_0);
+      new rtc::RefCountedObject<WebRtcVideoFrameAdapter>(frame), timestamp, 0,
+      webrtc::kVideoRotation_0);
 
   // Invoke decode callback. WebRTC expects no callback after Release.
   {
@@ -606,7 +616,7 @@ bool RTCVideoDecoder::SaveToPendingBuffers_Locked(
            << ". decode_buffers_ size=" << decode_buffers_.size()
            << ". available_shm size=" << available_shm_segments_.size();
   // Queued too many buffers. Something goes wrong.
-  if (pending_buffers_.size() >= rtc_video_decoder::kMaxNumOfPendingBuffers) {
+  if (pending_buffers_.size() >= kMaxNumOfPendingBuffers) {
     LOG(WARNING) << "Too many pending buffers!";
     return false;
   }

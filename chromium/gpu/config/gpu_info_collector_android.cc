@@ -22,7 +22,12 @@
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_features.h"
 #include "ui/gl/gl_surface.h"
+
+#if BUILDFLAG(USE_STATIC_ANGLE)
+#include <EGL/egl.h>
+#endif  // BUILDFLAG(USE_STATIC_ANGLE)
 
 namespace {
 
@@ -68,6 +73,12 @@ std::string GetDriverVersionFromString(const std::string& version_string) {
 }
 
 gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
+#if BUILDFLAG(USE_STATIC_ANGLE)
+#pragma push_macro("eglGetProcAddress")
+#undef eglGetProcAddress
+#define LOOKUP_FUNC(x) \
+  auto x##Fn = reinterpret_cast<gl::x##Proc>(eglGetProcAddress(#x))
+#else  // BUILDFLAG(USE_STATIC_ANGLE)
   // Go through the process of loading GL libs and initializing an EGL
   // context so that we can get GL vendor/version/renderer strings.
   base::NativeLibrary gles_library, egl_library;
@@ -112,6 +123,7 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
   };
 
 #define LOOKUP_FUNC(x) auto x##Fn = reinterpret_cast<gl::x##Proc>(get_func(#x))
+#endif  // BUILDFLAG(USE_STATIC_ANGLE)
 
   LOOKUP_FUNC(eglGetError);
   LOOKUP_FUNC(eglQueryString);
@@ -131,6 +143,9 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
   LOOKUP_FUNC(glGetIntegerv);
 
 #undef LOOKUP_FUNC
+#if BUILDFLAG(USE_STATIC_ANGLE)
+#pragma pop_macro("eglGetProcAddress")
+#endif  // BUILDFLAG(USE_STATIC_ANGLE)
 
   EGLDisplay curr_display = eglGetCurrentDisplayFn();
   EGLContext curr_context = eglGetCurrentContextFn();
@@ -218,20 +233,6 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
 
   std::string egl_extensions = eglQueryStringFn(temp_display, EGL_EXTENSIONS);
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kGpuTestingGLVendor)) {
-    gpu_info->gl_vendor =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVendor);
-  }
-  if (command_line->HasSwitch(switches::kGpuTestingGLRenderer)) {
-    gpu_info->gl_renderer =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLRenderer);
-  }
-  if (command_line->HasSwitch(switches::kGpuTestingGLVersion)) {
-    gpu_info->gl_version =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVersion);
-  }
-
   GLint max_samples = 0;
   glGetIntegervFn(GL_MAX_SAMPLES, &max_samples);
   gpu_info->max_msaa_samples = base::IntToString(max_samples);
@@ -282,11 +283,18 @@ gpu::CollectInfoResult CollectDriverInfo(gpu::GPUInfo* gpu_info) {
 namespace gpu {
 
 CollectInfoResult CollectContextGraphicsInfo(GPUInfo* gpu_info) {
-  /// TODO(tobiasjs) Check if CollectGraphicsInfo in gpu_main.cc
-  /// really only needs basic graphics info on all platforms, and if
-  /// so switch it to using that and make this the NOP that it really
-  /// should be, to avoid potential double collection of info.
-  return CollectBasicGraphicsInfo(gpu_info);
+  // When command buffer is compiled as a standalone library, the process might
+  // not have a Java environment.
+  if (base::android::IsVMInitialized()) {
+    gpu_info->machine_model_name =
+        base::android::BuildInfo::GetInstance()->model();
+  }
+
+  // At this point GL bindings have been initialized already.
+  CollectInfoResult result = CollectGraphicsInfoGL(gpu_info);
+  gpu_info->basic_info_state = result;
+  gpu_info->context_info_state = result;
+  return result;
 }
 
 CollectInfoResult CollectBasicGraphicsInfo(GPUInfo* gpu_info) {

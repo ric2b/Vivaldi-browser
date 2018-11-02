@@ -87,7 +87,7 @@ Output = function() {
    * @type {cvox.QueueMode}
    * @private
    */
-  this.queueMode_ = cvox.QueueMode.QUEUE;
+  this.queueMode_;
 
   /**
    * @type {boolean}
@@ -122,7 +122,7 @@ Output.SPACE = ' ';
 Output.ROLE_INFO_ = {
   alert: {msgId: 'role_alert'},
   alertDialog: {msgId: 'role_alertdialog', outputContextFirst: true},
-  article: {msgId: 'role_article', inherits: 'abstractContainer'},
+  article: {msgId: 'role_article', inherits: 'abstractItem'},
   application: {msgId: 'role_application', inherits: 'abstractContainer'},
   banner: {msgId: 'role_banner', inherits: 'abstractContainer'},
   button: {msgId: 'role_button', earconId: 'BUTTON'},
@@ -152,7 +152,8 @@ Output.ROLE_INFO_ = {
   list: {msgId: 'role_list'},
   listBox: {msgId: 'role_listbox', earconId: 'LISTBOX'},
   listBoxOption: {msgId: 'role_listitem', earconId: 'LIST_ITEM'},
-  listItem: {msgId: 'role_listitem', earconId: 'LIST_ITEM'},
+  listItem:
+      {msgId: 'role_listitem', earconId: 'LIST_ITEM', inherits: 'abstractItem'},
   log: {
     msgId: 'role_log',
   },
@@ -286,6 +287,16 @@ Output.RULES = {
       enter: `$nameFromNode $role $state $description`,
       leave: `@exited_container($role)`
     },
+    abstractItem: {
+      // Note that ChromeVox generally does not output position/count. Only for
+      // some roles (see sub-output rules) or when explicitly provided by an
+      // author (via posInSet), do we include them in the output.
+      enter: `$nameFromNode $role $state $restriction $description
+          $if($posInSet, @describe_index($posInSet, $setSize))`,
+      speak: `$state $name= $role
+          $if($posInSet, @describe_index($posInSet, $setSize))
+          $description $restriction`
+    },
     abstractRange: {
       speak: `$if($valueForRange, $valueForRange, $value)
           $if($minValueForRange, @aria_value_min($minValueForRange))
@@ -304,25 +315,13 @@ Output.RULES = {
     },
     cell: {
       enter: {
-        speak: `@cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
-            $tableCellRowIndex),
-            $if($ariaCellColumnIndex, $ariaCellColumnIndex,
-            $tableCellColumnIndex)) $node(tableColumnHeader) $state`,
-        braille: `$state @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
-            $tableCellRowIndex),
-            $if($ariaCellColumnIndex, $ariaCellColumnIndex,
-            $tableCellColumnIndex)) $node(tableColumnHeader)`,
+        speak: `$cellIndexText $node(tableColumnHeader) $state`,
+        braille: `$state $cellIndexText $node(tableColumnHeader)`,
       },
-      speak: `$name @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
-          $tableCellRowIndex),
-          $if($ariaCellColumnIndex, $ariaCellColumnIndex,
-          $tableCellColumnIndex)) $node(tableColumnHeader)
+      speak: `$name $cellIndexText $node(tableColumnHeader)
           $state $description`,
       braille: `$state
-          $name @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
-          $tableCellRowIndex),
-          $if($ariaCellColumnIndex, $ariaCellColumnIndex,
-          $tableCellColumnIndex)) $node(tableColumnHeader) $description`
+          $name $cellIndexText $node(tableColumnHeader) $description`
     },
     checkBox: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
@@ -365,6 +364,9 @@ Output.RULES = {
     },
     inlineTextBox: {speak: `$name=`},
     inputTime: {enter: `$nameFromNode $role $state $restriction $description`},
+    labelText: {
+      speak: `$name $value $state $restriction $description`,
+    },
     lineBreak: {speak: `$name=`},
     link: {
       enter: `$nameFromNode= $role $state $restriction`,
@@ -385,7 +387,6 @@ Output.RULES = {
       speak: `$state $name $role @describe_index($posInSet, $setSize)
           $description $restriction`
     },
-    listItem: {enter: `$name= $role $state $description`},
     listMarker: {speak: `$name`},
     menu: {
       enter: `$name $role`,
@@ -415,17 +416,18 @@ Output.RULES = {
     },
     paragraph: {speak: `$descendants`},
     popUpButton: {
-      speak: `$value $name $role @aria_has_popup
+      speak: `$if($value, $value, $descendants) $name $role @aria_has_popup
           $state $restriction $description`
     },
     radioButton: {
       speak: `$if($checked, $earcon(CHECK_ON), $earcon(CHECK_OFF))
           $if($checked, @describe_radio_selected($name),
-          @describe_radio_unselected($name)) $description $state
-          $restriction`
+          @describe_radio_unselected($name))
+          @describe_index($posInSet, $setSize)
+          $description $state $restriction`
     },
     rootWebArea: {enter: `$name`, speak: `$if($name, $name, $docUrl)`},
-    region: {speak: `$state $nameOrTextContent $description`},
+    region: {speak: `$state $nameOrTextContent $description $roleDescription`},
     row: {enter: `$node(tableRowHeader)`},
     rowHeader: {speak: `$nameOrTextContent $description $state`},
     staticText: {speak: `$name=`},
@@ -450,8 +452,11 @@ Output.RULES = {
           $description`,
     },
     textField: {
-      speak: `$name $value $if($multiline, @tag_textarea,
-          $if($inputType, $inputType, $role)) $description $state $restriction`,
+      speak: `$name $value
+          $if($roleDescription, $roleDescription,
+              $if($multiline, @tag_textarea,
+                  $if($inputType, $inputType, $role)))
+          $description $state $restriction`,
       braille: ``
     },
     timer: {speak: `$nameFromNode $descendants $value $state $description`},
@@ -603,6 +608,12 @@ Output.isTruthy = function(node, attrib) {
   switch (attrib) {
     case 'checked':
       return node.checked && node.checked !== 'false';
+
+    // Chrome automatically calculates these attributes.
+    case 'posInSet':
+      return node.htmlAttributes['aria-posinset'];
+    case 'setSize':
+      return node.htmlAttributes['aria-setsize'];
     default:
       return node[attrib] !== undefined || node.state[attrib];
   }
@@ -833,11 +844,13 @@ Output.prototype = {
    */
   go: function() {
     // Speech.
-    var queueMode = cvox.QueueMode.FLUSH;
-    if (Output.forceModeForNextSpeechUtterance_ !== undefined)
-      queueMode = Output.forceModeForNextSpeechUtterance_;
-    else if (this.queueMode_ !== undefined)
-      queueMode = this.queueMode_;
+    var queueMode = cvox.QueueMode.CATEGORY_FLUSH;
+    if (this.queueMode_ !== undefined) {
+      queueMode = /** @type{cvox.QueueMode} */ (this.queueMode_);
+    } else if (Output.forceModeForNextSpeechUtterance_ !== undefined) {
+      queueMode = /** @type{cvox.QueueMode} */ (
+          Output.forceModeForNextSpeechUtterance_);
+    }
 
     if (this.speechBuffer_.length > 0)
       Output.forceModeForNextSpeechUtterance_ = undefined;
@@ -1106,14 +1119,26 @@ Output.prototype = {
               this.format_(node, formatString, buff);
           }
         } else if (token == 'descendants') {
-          if (!node || AutomationPredicate.leafOrStaticText(node))
+          if (!node)
             return;
 
-          // Construct a range to the leftmost and rightmost leaves.
-          var leftmost = AutomationUtil.findNodePre(
-              node, Dir.FORWARD, AutomationPredicate.leafOrStaticText);
-          var rightmost = AutomationUtil.findNodePre(
-              node, Dir.BACKWARD, AutomationPredicate.leafOrStaticText);
+          var leftmost = node;
+          var rightmost = node;
+          if (AutomationPredicate.leafOrStaticText(node)) {
+            // Find any deeper leaves, if any, by starting from one level down.
+            leftmost = node.firstChild;
+            rightmost = node.lastChild;
+            if (!leftmost || !rightmost)
+              return;
+          }
+
+          // Construct a range to the leftmost and rightmost leaves. This range
+          // gets rendered below which results in output that is the same as if
+          // a user navigated through the entire subtree of |node|.
+          leftmost = AutomationUtil.findNodePre(
+              leftmost, Dir.FORWARD, AutomationPredicate.leafOrStaticText);
+          rightmost = AutomationUtil.findNodePre(
+              rightmost, Dir.BACKWARD, AutomationPredicate.leafOrStaticText);
           if (!leftmost || !rightmost)
             return;
 
@@ -1167,6 +1192,24 @@ Output.prototype = {
           value = String(value + 1);
           options.annotation.push(token);
           this.append_(buff, value, options);
+        } else if (token == 'cellIndexText') {
+          if (node.htmlAttributes['aria-coltext']) {
+            var value = node.htmlAttributes['aria-coltext'];
+            var row = node;
+            while (row && row.role != RoleType.ROW)
+              row = row.parent;
+            if (!row || !row.htmlAttributes['aria-rowtext'])
+              return;
+            value += row.htmlAttributes['aria-rowtext'];
+            this.append_(buff, value, options);
+          } else {
+            this.format_(
+                node, ` @cell_summary($if($ariaCellRowIndex, $ariaCellRowIndex,
+                    $tableCellRowIndex),
+                $if($ariaCellColumnIndex, $ariaCellColumnIndex,
+                     $tableCellColumnIndex))`,
+                buff);
+          }
         } else if (token == 'node') {
           if (!tree.firstChild || !node[tree.firstChild.value])
             return;

@@ -38,7 +38,7 @@ namespace blink {
 
 struct FillSize {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-  FillSize() : type(kSizeLength) {}
+  FillSize() : type(EFillSizeType::kSizeLength) {}
 
   FillSize(EFillSizeType t, const LengthSize& l) : type(t), size(l) {}
 
@@ -60,8 +60,8 @@ class CORE_EXPORT FillLayer {
   ~FillLayer();
 
   StyleImage* GetImage() const { return image_.Get(); }
-  const Length& XPosition() const { return x_position_; }
-  const Length& YPosition() const { return y_position_; }
+  const Length& PositionX() const { return position_x_; }
+  const Length& PositionY() const { return position_y_; }
   BackgroundEdgeOrigin BackgroundXOrigin() const {
     return static_cast<BackgroundEdgeOrigin>(background_x_origin_);
   }
@@ -101,8 +101,8 @@ class CORE_EXPORT FillLayer {
   }
 
   bool IsImageSet() const { return image_set_; }
-  bool IsXPositionSet() const { return x_pos_set_; }
-  bool IsYPositionSet() const { return y_pos_set_; }
+  bool IsPositionXSet() const { return pos_x_set_; }
+  bool IsPositionYSet() const { return pos_y_set_; }
   bool IsBackgroundXOriginSet() const { return background_x_origin_set_; }
   bool IsBackgroundYOriginSet() const { return background_y_origin_set_; }
   bool IsAttachmentSet() const { return attachment_set_; }
@@ -112,54 +112,56 @@ class CORE_EXPORT FillLayer {
   bool IsRepeatYSet() const { return repeat_y_set_; }
   bool IsCompositeSet() const { return composite_set_; }
   bool IsBlendModeSet() const { return blend_mode_set_; }
-  bool IsSizeSet() const { return size_type_ != kSizeNone; }
+  bool IsSizeSet() const {
+    return size_type_ != static_cast<unsigned>(EFillSizeType::kSizeNone);
+  }
   bool IsMaskSourceTypeSet() const { return mask_source_type_set_; }
 
   void SetImage(StyleImage* i) {
     image_ = i;
     image_set_ = true;
   }
-  void SetXPosition(const Length& position) {
-    x_position_ = position;
-    x_pos_set_ = true;
+  void SetPositionX(const Length& position) {
+    position_x_ = position;
+    pos_x_set_ = true;
     background_x_origin_set_ = false;
-    background_x_origin_ = kLeftEdge;
+    background_x_origin_ = static_cast<unsigned>(BackgroundEdgeOrigin::kLeft);
   }
-  void SetYPosition(const Length& position) {
-    y_position_ = position;
-    y_pos_set_ = true;
+  void SetPositionY(const Length& position) {
+    position_y_ = position;
+    pos_y_set_ = true;
     background_y_origin_set_ = false;
-    background_y_origin_ = kTopEdge;
+    background_y_origin_ = static_cast<unsigned>(BackgroundEdgeOrigin::kTop);
   }
   void SetBackgroundXOrigin(BackgroundEdgeOrigin origin) {
-    background_x_origin_ = origin;
+    background_x_origin_ = static_cast<unsigned>(origin);
     background_x_origin_set_ = true;
   }
   void SetBackgroundYOrigin(BackgroundEdgeOrigin origin) {
-    background_y_origin_ = origin;
+    background_y_origin_ = static_cast<unsigned>(origin);
     background_y_origin_set_ = true;
   }
   void SetAttachment(EFillAttachment attachment) {
     DCHECK(!cached_properties_computed_);
-    attachment_ = attachment;
+    attachment_ = static_cast<unsigned>(attachment);
     attachment_set_ = true;
   }
   void SetClip(EFillBox b) {
     DCHECK(!cached_properties_computed_);
-    clip_ = b;
+    clip_ = static_cast<unsigned>(b);
     clip_set_ = true;
   }
   void SetOrigin(EFillBox b) {
     DCHECK(!cached_properties_computed_);
-    origin_ = b;
+    origin_ = static_cast<unsigned>(b);
     origin_set_ = true;
   }
   void SetRepeatX(EFillRepeat r) {
-    repeat_x_ = r;
+    repeat_x_ = static_cast<unsigned>(r);
     repeat_x_set_ = true;
   }
   void SetRepeatY(EFillRepeat r) {
-    repeat_y_ = r;
+    repeat_y_ = static_cast<unsigned>(r);
     repeat_y_set_ = true;
   }
   void SetComposite(CompositeOperator c) {
@@ -170,14 +172,14 @@ class CORE_EXPORT FillLayer {
     blend_mode_ = static_cast<unsigned>(b);
     blend_mode_set_ = true;
   }
-  void SetSizeType(EFillSizeType b) { size_type_ = b; }
+  void SetSizeType(EFillSizeType b) { size_type_ = static_cast<unsigned>(b); }
   void SetSizeLength(const LengthSize& length) { size_length_ = length; }
   void SetSize(const FillSize& f) {
-    size_type_ = f.type;
+    size_type_ = static_cast<unsigned>(f.type);
     size_length_ = f.size;
   }
   void SetMaskSourceType(EMaskSourceType m) {
-    mask_source_type_ = m;
+    mask_source_type_ = static_cast<unsigned>(m);
     mask_source_type_set_ = true;
   }
 
@@ -185,12 +187,12 @@ class CORE_EXPORT FillLayer {
     image_.Clear();
     image_set_ = false;
   }
-  void ClearXPosition() {
-    x_pos_set_ = false;
+  void ClearPositionX() {
+    pos_x_set_ = false;
     background_x_origin_set_ = false;
   }
-  void ClearYPosition() {
-    y_pos_set_ = false;
+  void ClearPositionY() {
+    pos_y_set_ = false;
     background_y_origin_set_ = false;
   }
 
@@ -201,7 +203,9 @@ class CORE_EXPORT FillLayer {
   void ClearRepeatY() { repeat_y_set_ = false; }
   void ClearComposite() { composite_set_ = false; }
   void ClearBlendMode() { blend_mode_set_ = false; }
-  void ClearSize() { size_type_ = kSizeNone; }
+  void ClearSize() {
+    size_type_ = static_cast<unsigned>(EFillSizeType::kSizeNone);
+  }
   void ClearMaskSourceType() { mask_source_type_set_ = false; }
 
   FillLayer& operator=(const FillLayer&);
@@ -222,7 +226,8 @@ class CORE_EXPORT FillLayer {
   }
 
   bool HasFixedImage() const {
-    if (image_ && attachment_ == kFixedBackgroundAttachment)
+    if (image_ &&
+        static_cast<EFillAttachment>(attachment_) == EFillAttachment::kFixed)
       return true;
     return next_ ? next_->HasFixedImage() : false;
   }
@@ -253,14 +258,19 @@ class CORE_EXPORT FillLayer {
   void ComputeCachedPropertiesIfNeeded() const;
 
   static EFillAttachment InitialFillAttachment(EFillLayerType) {
-    return kScrollBackgroundAttachment;
+    return EFillAttachment::kScroll;
   }
-  static EFillBox InitialFillClip(EFillLayerType) { return kBorderFillBox; }
+  static EFillBox InitialFillClip(EFillLayerType) { return EFillBox::kBorder; }
   static EFillBox InitialFillOrigin(EFillLayerType type) {
-    return type == kBackgroundFillLayer ? kPaddingFillBox : kBorderFillBox;
+    return type == EFillLayerType::kBackground ? EFillBox::kPadding
+                                               : EFillBox::kBorder;
   }
-  static EFillRepeat InitialFillRepeatX(EFillLayerType) { return kRepeatFill; }
-  static EFillRepeat InitialFillRepeatY(EFillLayerType) { return kRepeatFill; }
+  static EFillRepeat InitialFillRepeatX(EFillLayerType) {
+    return EFillRepeat::kRepeatFill;
+  }
+  static EFillRepeat InitialFillRepeatY(EFillLayerType) {
+    return EFillRepeat::kRepeatFill;
+  }
   static CompositeOperator InitialFillComposite(EFillLayerType) {
     return kCompositeSourceOver;
   }
@@ -268,7 +278,7 @@ class CORE_EXPORT FillLayer {
     return WebBlendMode::kNormal;
   }
   static EFillSizeType InitialFillSizeType(EFillLayerType) {
-    return kSizeLength;
+    return EFillSizeType::kSizeLength;
   }
   static LengthSize InitialFillSizeLength(EFillLayerType) {
     return LengthSize();
@@ -276,31 +286,32 @@ class CORE_EXPORT FillLayer {
   static FillSize InitialFillSize(EFillLayerType type) {
     return FillSize(InitialFillSizeType(type), InitialFillSizeLength(type));
   }
-  static Length InitialFillXPosition(EFillLayerType) {
+  static Length InitialFillPositionX(EFillLayerType) {
     return Length(0.0, kPercent);
   }
-  static Length InitialFillYPosition(EFillLayerType) {
+  static Length InitialFillPositionY(EFillLayerType) {
     return Length(0.0, kPercent);
   }
   static StyleImage* InitialFillImage(EFillLayerType) { return nullptr; }
   static EMaskSourceType InitialFillMaskSourceType(EFillLayerType) {
-    return kMaskAlpha;
+    return EMaskSourceType::kAlpha;
   }
 
  private:
   friend class ComputedStyle;
 
-  FillLayer() {}
+  FillLayer() = default;
 
   bool ImageIsOpaque(const Document&, const ComputedStyle&) const;
   bool ImageTilesLayer() const;
+  bool LayerPropertiesEqual(const FillLayer&) const;
 
   FillLayer* next_;
 
   Persistent<StyleImage> image_;
 
-  Length x_position_;
-  Length y_position_;
+  Length position_x_;
+  Length position_y_;
 
   LengthSize size_length_;
 
@@ -322,8 +333,8 @@ class CORE_EXPORT FillLayer {
   unsigned origin_set_ : 1;
   unsigned repeat_x_set_ : 1;
   unsigned repeat_y_set_ : 1;
-  unsigned x_pos_set_ : 1;
-  unsigned y_pos_set_ : 1;
+  unsigned pos_x_set_ : 1;
+  unsigned pos_y_set_ : 1;
   unsigned background_x_origin_set_ : 1;
   unsigned background_y_origin_set_ : 1;
   unsigned composite_set_ : 1;

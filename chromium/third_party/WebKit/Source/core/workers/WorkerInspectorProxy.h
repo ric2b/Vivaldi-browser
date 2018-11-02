@@ -5,6 +5,7 @@
 #ifndef WorkerInspectorProxy_h
 #define WorkerInspectorProxy_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ThreadDebugger.h"
@@ -32,7 +33,7 @@ class CORE_EXPORT WorkerInspectorProxy final
 
   class CORE_EXPORT PageInspector {
    public:
-    virtual ~PageInspector() {}
+    virtual ~PageInspector() = default;
     virtual void DispatchMessageFromWorker(WorkerInspectorProxy*,
                                            int session_id,
                                            const String& message) = 0;
@@ -72,22 +73,6 @@ class CORE_EXPORT WorkerInspectorProxy final
   HashMap<int, PageInspector*> page_inspectors_;
   String url_;
   String inspector_id_;
-};
-
-struct CORE_EXPORT GlobalScopeInspectorCreationParams final {
-  WTF_MAKE_NONCOPYABLE(GlobalScopeInspectorCreationParams);
-  USING_FAST_MALLOC(GlobalScopeInspectorCreationParams);
-
- public:
-  explicit GlobalScopeInspectorCreationParams(
-      WorkerInspectorProxy::PauseOnWorkerStart pause_on_start);
-  GlobalScopeInspectorCreationParams(
-      WorkerInspectorProxy::PauseOnWorkerStart pause_on_start,
-      const v8_inspector::V8StackTraceId&);
-  ~GlobalScopeInspectorCreationParams() = default;
-
-  WorkerInspectorProxy::PauseOnWorkerStart pause_on_start;
-  v8_inspector::V8StackTraceId stack_id;
 };
 
 }  // namespace blink

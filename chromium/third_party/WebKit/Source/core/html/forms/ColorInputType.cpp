@@ -37,6 +37,7 @@
 #include "core/dom/events/ScopedEventQueue.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/WebFeature.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/forms/ColorChooser.h"
@@ -79,7 +80,7 @@ InputType* ColorInputType::Create(HTMLInputElement& element) {
   return new ColorInputType(element);
 }
 
-ColorInputType::~ColorInputType() {}
+ColorInputType::~ColorInputType() = default;
 
 void ColorInputType::Trace(blink::Visitor* visitor) {
   visitor->Trace(chooser_);
@@ -148,13 +149,20 @@ void ColorInputType::HandleDOMActivateEvent(Event* event) {
   if (GetElement().IsDisabledFormControl())
     return;
 
-  if (!Frame::HasTransientUserActivation(GetElement().GetDocument().GetFrame()))
+  Document& document = GetElement().GetDocument();
+  if (!Frame::HasTransientUserActivation(document.GetFrame()))
     return;
 
-  ChromeClient* chrome_client = this->GetChromeClient();
-  if (chrome_client && !chooser_)
-    chooser_ = chrome_client->OpenColorChooser(
-        GetElement().GetDocument().GetFrame(), this, ValueAsColor());
+  ChromeClient* chrome_client = GetChromeClient();
+  if (chrome_client && !chooser_) {
+    UseCounter::Count(
+        document,
+        (event->UnderlyingEvent() && event->UnderlyingEvent()->isTrusted())
+            ? WebFeature::kColorInputTypeChooserByTrustedClick
+            : WebFeature::kColorInputTypeChooserByUntrustedClick);
+    chooser_ = chrome_client->OpenColorChooser(document.GetFrame(), this,
+                                               ValueAsColor());
+  }
 
   event->SetDefaultHandled();
 }
@@ -238,8 +246,8 @@ bool ColorInputType::ShouldShowSuggestions() const {
   return GetElement().FastHasAttribute(listAttr);
 }
 
-Vector<ColorSuggestion> ColorInputType::Suggestions() const {
-  Vector<ColorSuggestion> suggestions;
+Vector<mojom::blink::ColorSuggestionPtr> ColorInputType::Suggestions() const {
+  Vector<mojom::blink::ColorSuggestionPtr> suggestions;
   HTMLDataListElement* data_list = GetElement().DataList();
   if (data_list) {
     HTMLDataListOptionsCollection* options = data_list->options();
@@ -251,9 +259,8 @@ Vector<ColorSuggestion> ColorInputType::Suggestions() const {
       Color color;
       if (!color.SetFromString(option->value()))
         continue;
-      ColorSuggestion suggestion(
-          color, option->label().Left(kMaxSuggestionLabelLength));
-      suggestions.push_back(suggestion);
+      suggestions.push_back(mojom::blink::ColorSuggestion::New(
+          color.Rgb(), option->label().Left(kMaxSuggestionLabelLength)));
       if (suggestions.size() >= kMaxSuggestions)
         break;
     }

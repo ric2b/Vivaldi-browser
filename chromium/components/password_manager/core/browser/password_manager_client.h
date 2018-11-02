@@ -12,6 +12,7 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "net/cert/cert_status_flags.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 class PrefService;
@@ -182,9 +183,8 @@ class PasswordManagerClient {
   // Returns true if last navigation page had HTTP error i.e 5XX or 4XX
   virtual bool WasLastNavigationHTTPError() const;
 
-  // Returns whether any SSL certificate errors were encountered as a result of
-  // the last page load.
-  virtual bool DidLastPageLoadEncounterSSLErrors() const;
+  // Obtains the cert status for the main frame.
+  virtual net::CertStatus GetMainFrameCertStatus() const;
 
   // If this browsing session should not be persisted.
   virtual bool IsIncognito() const;
@@ -238,12 +238,8 @@ class PasswordManagerClient {
   virtual void LogPasswordReuseDetectedEvent() = 0;
 #endif
 
-  // Gets the UKM service associated with this client (for metrics).
-  virtual ukm::UkmRecorder* GetUkmRecorder() = 0;
-
   // Gets a ukm::SourceId that is associated with the WebContents object
-  // and its last committed main frame navigation. Note that the URL binding
-  // has to happen by the caller at a later point.
+  // and its last committed main frame navigation.
   virtual ukm::SourceId GetUkmSourceId() = 0;
 
   // Gets a metrics recorder for the currently committed navigation.

@@ -65,6 +65,8 @@ class CORE_TEMPLATE_CLASS_EXPORT LayoutNGMixin : public Base {
   }
   void SetPaintFragment(scoped_refptr<const NGPhysicalFragment>) override;
   void ClearPaintFragment() { paint_fragment_ = nullptr; }
+  Vector<NGPaintFragment*> GetPaintFragments(
+      const LayoutObject&) const override;
 
  protected:
   bool IsOfType(LayoutObject::LayoutObjectType) const override;
@@ -74,8 +76,6 @@ class CORE_TEMPLATE_CLASS_EXPORT LayoutNGMixin : public Base {
   const NGPhysicalBoxFragment* CurrentFragment() const override;
 
   const NGBaseline* FragmentBaseline(NGBaselineAlgorithmType) const;
-
-  void UpdateMargins(const NGConstraintSpace&);
 
   std::unique_ptr<NGInlineNodeData> ng_inline_node_data_;
 

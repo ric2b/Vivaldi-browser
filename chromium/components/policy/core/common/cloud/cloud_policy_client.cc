@@ -10,7 +10,6 @@
 #include "base/bind_helpers.h"
 #include "base/guid.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/signing_service.h"
@@ -345,26 +344,20 @@ void CloudPolicyClient::Unregister() {
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void CloudPolicyClient::UploadCertificate(
+void CloudPolicyClient::UploadEnterpriseMachineCertificate(
     const std::string& certificate_data,
     const CloudPolicyClient::StatusCallback& callback) {
-  CHECK(is_registered());
-  std::unique_ptr<DeviceManagementRequestJob> request_job(
-      service_->CreateJob(DeviceManagementRequestJob::TYPE_UPLOAD_CERTIFICATE,
-                          GetRequestContext()));
-  request_job->SetDMToken(dm_token_);
-  request_job->SetClientID(client_id_);
+  UploadCertificate(certificate_data,
+                    em::DeviceCertUploadRequest::ENTERPRISE_MACHINE_CERTIFICATE,
+                    callback);
+}
 
-  em::DeviceManagementRequest* request = request_job->GetRequest();
-  request->mutable_cert_upload_request()->set_device_certificate(
-      certificate_data);
-
-  const DeviceManagementRequestJob::Callback job_callback =
-      base::Bind(&CloudPolicyClient::OnCertificateUploadCompleted,
-                 weak_ptr_factory_.GetWeakPtr(), request_job.get(), callback);
-
-  request_jobs_.push_back(std::move(request_job));
-  request_jobs_.back()->Start(job_callback);
+void CloudPolicyClient::UploadEnterpriseEnrollmentCertificate(
+    const std::string& certificate_data,
+    const CloudPolicyClient::StatusCallback& callback) {
+  UploadCertificate(
+      certificate_data,
+      em::DeviceCertUploadRequest::ENTERPRISE_ENROLLMENT_CERTIFICATE, callback);
 }
 
 void CloudPolicyClient::UploadDeviceStatus(
@@ -559,6 +552,31 @@ int CloudPolicyClient::GetActiveRequestCountForTest() const {
   return request_jobs_.size();
 }
 
+void CloudPolicyClient::UploadCertificate(
+    const std::string& certificate_data,
+    em::DeviceCertUploadRequest::CertificateType certificate_type,
+    const CloudPolicyClient::StatusCallback& callback) {
+  CHECK(is_registered());
+  std::unique_ptr<DeviceManagementRequestJob> request_job(
+      service_->CreateJob(DeviceManagementRequestJob::TYPE_UPLOAD_CERTIFICATE,
+                          GetRequestContext()));
+  request_job->SetDMToken(dm_token_);
+  request_job->SetClientID(client_id_);
+
+  em::DeviceManagementRequest* request = request_job->GetRequest();
+  em::DeviceCertUploadRequest* upload_request =
+      request->mutable_cert_upload_request();
+  upload_request->set_device_certificate(certificate_data);
+  upload_request->set_certificate_type(certificate_type);
+
+  const DeviceManagementRequestJob::Callback job_callback = base::BindRepeating(
+      &CloudPolicyClient::OnCertificateUploadCompleted,
+      weak_ptr_factory_.GetWeakPtr(), request_job.get(), callback);
+
+  request_jobs_.push_back(std::move(request_job));
+  request_jobs_.back()->Start(job_callback);
+}
+
 void CloudPolicyClient::OnRetryRegister(DeviceManagementRequestJob* job) {
   DCHECK_EQ(policy_fetch_request_job_.get(), job);
   // If the initial request managed to get to the server but the response didn't
@@ -657,7 +675,7 @@ void CloudPolicyClient::OnPolicyFetchCompleted(
             << type << ", entity: " << entity_id << ", ignoring";
         continue;
       }
-      responses_[key] = base::MakeUnique<em::PolicyFetchResponse>(response);
+      responses_[key] = std::make_unique<em::PolicyFetchResponse>(response);
     }
     state_keys_to_upload_.clear();
     NotifyPolicyFetched();

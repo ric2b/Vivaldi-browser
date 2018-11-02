@@ -33,12 +33,16 @@ checkffmpeg () {
       # chromium/third_party/ffmpeg/chromium/config/Chromium/linux/x64/libavutil/ffversion.h
       if [ -r "$1" ]; then
         if [ `grep -aom1 'FFmpeg version N-[0-9]\+-' "$1" | cut -f2 -d-` -ge "89284" ]; then
-          if [[ -n "$LD_PRELOAD" ]]; then
-            export LD_PRELOAD="$LD_PRELOAD:$1"
-          else
-            export LD_PRELOAD="$1"
+          # Check the dependencies are satisfied as the user may have obtained this from
+          # another distro
+          if ! LANGUAGE=en ldd "$1" 2>&1 | grep -qm1 'not \(a dynamic executable\|found\)'; then
+            if [[ -n "$LD_PRELOAD" ]]; then
+              export LD_PRELOAD="$LD_PRELOAD:$1"
+            else
+              export LD_PRELOAD="$1"
+            fi
+            export VIVALDI_FFMPEG_FOUND=YES
           fi
-          export VIVALDI_FFMPEG_FOUND=YES
         fi
       fi
     fi

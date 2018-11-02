@@ -37,6 +37,7 @@
 #define LayoutBlockFlow_h
 
 #include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/layout/FloatingObjects.h"
 #include "core/layout/LayoutBlock.h"
@@ -44,7 +45,6 @@
 #include "core/layout/line/LineBoxList.h"
 #include "core/layout/line/RootInlineBox.h"
 #include "core/layout/line/TrailingObjects.h"
-#include "core/layout/ng/ng_layout_result.h"
 
 namespace blink {
 
@@ -59,7 +59,11 @@ class LayoutMultiColumnFlowThread;
 class LayoutMultiColumnSpannerPlaceholder;
 class LayoutRubyRun;
 class MarginInfo;
+class NGBreakToken;
+class NGConstraintSpace;
+class NGLayoutResult;
 class NGPaintFragment;
+class NGPhysicalFragment;
 
 struct NGInlineNodeData;
 
@@ -458,19 +462,16 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   virtual void ResetNGInlineNodeData() {}
   virtual bool HasNGInlineNodeData() const { return false; }
   virtual NGPaintFragment* PaintFragment() const { return nullptr; }
+  virtual Vector<NGPaintFragment*> GetPaintFragments(const LayoutObject&) const;
   virtual scoped_refptr<NGLayoutResult> CachedLayoutResult(
       const NGConstraintSpace&,
-      NGBreakToken*) const {
-    return nullptr;
-  }
-  virtual scoped_refptr<NGLayoutResult> CachedLayoutResultForTesting() {
-    return nullptr;
-  }
+      NGBreakToken*) const;
+  virtual scoped_refptr<NGLayoutResult> CachedLayoutResultForTesting();
   virtual void SetCachedLayoutResult(const NGConstraintSpace&,
                                      NGBreakToken*,
-                                     scoped_refptr<NGLayoutResult>) {}
+                                     scoped_refptr<NGLayoutResult>);
   virtual void WillCollectInlines() {}
-  virtual void SetPaintFragment(scoped_refptr<const NGPhysicalFragment>) {}
+  virtual void SetPaintFragment(scoped_refptr<const NGPhysicalFragment>);
   virtual void ClearPaintFragment() {}
   virtual const NGPhysicalBoxFragment* CurrentFragment() const {
     return nullptr;
@@ -761,7 +762,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   // Allocated only when some of these fields have non-default values
   struct LayoutBlockFlowRareData {
-    WTF_MAKE_NONCOPYABLE(LayoutBlockFlowRareData);
     USING_FAST_MALLOC(LayoutBlockFlowRareData);
 
    public:
@@ -806,6 +806,7 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     bool did_break_at_line_to_avoid_widow_ : 1;
     bool discard_margin_before_ : 1;
     bool discard_margin_after_ : 1;
+    DISALLOW_COPY_AND_ASSIGN(LayoutBlockFlowRareData);
   };
 
   const FloatingObjects* GetFloatingObjects() const {

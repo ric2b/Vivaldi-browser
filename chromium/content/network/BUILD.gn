@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//services/service_manager/public/service_manifest.gni")
 
 group("network") {
@@ -18,7 +19,7 @@ group("network") {
   }
 }
 
-source_set("network_sources") {
+jumbo_source_set("network_sources") {
   # Depend on via ":network above.
   visibility = [
     ":network",
@@ -35,8 +36,8 @@ source_set("network_sources") {
   sources = [
     "cache_url_loader.cc",
     "cache_url_loader.h",
-    "cookie_manager.cc",
-    "cookie_manager.h",
+    "data_pipe_element_reader.cc",
+    "data_pipe_element_reader.h",
     "http_server_properties_pref_delegate.cc",
     "http_server_properties_pref_delegate.h",
     "network_change_manager.cc",
@@ -71,12 +72,14 @@ source_set("network_sources") {
     "upload_progress_tracker.h",
     "url_loader.cc",
     "url_loader.h",
+    "url_request_context_builder_mojo.cc",
   ]
 
   configs += [ "//content:content_implementation" ]
 
   deps = [
     "//base",
+    "//components/cookie_config",
     "//components/network_session_configurator/browser",
     "//components/network_session_configurator/common",
     "//components/prefs",
@@ -87,12 +90,18 @@ source_set("network_sources") {
     "//content/public/network:network_sources",
     "//mojo/public/cpp/bindings",
     "//net",
+    "//net:extras",
     "//net:net_browser_services",
+    "//services/network:network_service",
     "//services/network/public/cpp",
     "//services/proxy_resolver/public/interfaces",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
   ]
+
+  if (is_linux) {
+    deps += [ "//sandbox/linux:sandbox_services" ]
+  }
 }
 
 service_manifest("manifest") {

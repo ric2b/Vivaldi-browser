@@ -18,7 +18,7 @@ namespace blink {
 class UnderlyingImageListChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
-  ~UnderlyingImageListChecker() final {}
+  ~UnderlyingImageListChecker() final = default;
 
   static std::unique_ptr<UnderlyingImageListChecker> Create(
       const InterpolationValue& underlying) {
@@ -70,17 +70,17 @@ InterpolationValue CSSImageListInterpolationType::MaybeConvertStyleImageList(
 class InheritedImageListChecker
     : public CSSInterpolationType::CSSConversionChecker {
  public:
-  ~InheritedImageListChecker() final {}
+  ~InheritedImageListChecker() final = default;
 
   static std::unique_ptr<InheritedImageListChecker> Create(
-      CSSPropertyID property,
+      const CSSProperty& property,
       const StyleImageList& inherited_image_list) {
     return WTF::WrapUnique(
         new InheritedImageListChecker(property, inherited_image_list));
   }
 
  private:
-  InheritedImageListChecker(CSSPropertyID property,
+  InheritedImageListChecker(const CSSProperty& property,
                             const StyleImageList& inherited_image_list)
       : property_(property), inherited_image_list_(inherited_image_list) {}
 
@@ -92,7 +92,7 @@ class InheritedImageListChecker
     return inherited_image_list_ == inherited_image_list;
   }
 
-  CSSPropertyID property_;
+  const CSSProperty& property_;
   StyleImageList inherited_image_list_;
 };
 

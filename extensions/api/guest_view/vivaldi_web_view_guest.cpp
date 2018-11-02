@@ -24,7 +24,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/webui/site_settings_helper.h"
-#include "chrome/common/insecure_content_renderer.mojom.h"
+#include "chrome/common/content_settings_renderer.mojom.h"
 #include "chrome/common/render_messages.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
@@ -104,8 +104,8 @@ ExtensionHostForWebContents::~ExtensionHostForWebContents() {
 namespace {
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  chrome::mojom::InsecureContentRendererPtr renderer;
-  frame->GetRemoteInterfaces()->GetInterface(&renderer);
+  chrome::mojom::ContentSettingsRendererAssociatedPtr renderer;
+  frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
 
@@ -556,19 +556,25 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
       !(mouse_event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown) &&
       !gesture_recording_) {
     gesture_recording_ = true;
-    mousedown_x_ = mouse_event.PositionInWidget().x;
-    mousedown_y_ = mouse_event.PositionInWidget().y;
+    down_position_in_widget_ = move_position_in_widget_ =
+      mouse_event.PositionInWidget();
+    down_position_in_screen_ = move_position_in_screen_ =
+      mouse_event.PositionInScreen();
     fire_context_menu_ = true;
     return true;
   } else if (gesture_recording_ &&
              (mouse_event.GetType() == blink::WebInputEvent::kMouseMove ||
               mouse_event.GetType() == blink::WebInputEvent::kMouseUp)) {
-    int dx = mouse_event.PositionInWidget().x - mousedown_x_;
-    int dy = mouse_event.PositionInWidget().y - mousedown_y_;
+    if (mouse_event.GetType() == blink::WebInputEvent::kMouseMove) {
+      move_position_in_widget_ = mouse_event.PositionInWidget();
+      move_position_in_screen_ = mouse_event.PositionInScreen();
+    }
 
     // If we went over the 5px threshold to cancel the context menu,
     // the flag is set. It persists if we go under the threshold by
     // moving you mouse into the original coords, which is expected.
+    int dx = move_position_in_widget_.x - down_position_in_widget_.x;
+    int dy = move_position_in_widget_.y - down_position_in_widget_.y;
     if (abs(dx) >= 5 || abs(dy) >= 5) {
       fire_context_menu_ = false;
     }
@@ -583,17 +589,12 @@ bool WebViewGuest::OnMouseEvent(const blink::WebMouseEvent& mouse_event) {
       if (fire_context_menu_) {
         // Send the originally-culled right mouse down at original coords
         event_copy.SetType(blink::WebInputEvent::kMouseDown);
-
-        int screenx = event_copy.PositionInScreen().x;
-        screenx -= (mouse_event.PositionInWidget().x - mousedown_x_);
-
-        int screeny = event_copy.PositionInScreen().y;
-        screeny -= (mouse_event.PositionInWidget().y - mousedown_y_);
-
-        event_copy.SetPositionInScreen(screenx, screeny);
-
-        event_copy.SetPositionInWidget(mousedown_x_, mousedown_y_);
-
+        event_copy.SetPositionInScreen(down_position_in_screen_.x,
+            down_position_in_screen_.y);
+        // Note: Have to use up position for widget location for correct
+        // behavior on hidpi systems.
+        event_copy.SetPositionInWidget(mouse_event.PositionInWidget().x,
+            mouse_event.PositionInWidget().y);
         render_view_host->GetWidget()->ForwardMouseEvent(event_copy);
 
         // Mac will not reset rocker gestures when a context menu closes
@@ -739,7 +740,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
   Browser* browser = chrome::FindBrowserWithID(windowId);
 
   if (!browser || !browser->window()) {
-    // TODO(gisli@vivaldi.com): Error message?
+    NOTREACHED();
     return;
   }
 
@@ -761,14 +762,14 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
       TabStripModel::ADD_FORCE_INDEX | TabStripModel::ADD_INHERIT_OPENER;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
-  chrome::NavigateParams navigate_params(browser, guest->web_contents());
+  NavigateParams navigate_params(browser, guest->web_contents());
   navigate_params.disposition = active
                                     ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                     : WindowOpenDisposition::NEW_BACKGROUND_TAB;
   navigate_params.tabstrip_index = index;
   navigate_params.tabstrip_add_types = add_types;
   navigate_params.source_contents = web_contents();
-  chrome::Navigate(&navigate_params);
+  Navigate(&navigate_params);
 
   if (!browser->is_vivaldi()){
   if (active)
@@ -887,6 +888,45 @@ void WebViewGuest::OnMouseLeave() {
 void WebViewGuest::ShowRepostFormWarningDialog(WebContents* source) {
   TabModalConfirmDialog::Create(new RepostFormWarningController(source),
                                 source);
+}
+
+void WebViewGuest::LoadTabContentsIfNecessary() {
+  // NOTE(andre@vivaldi.com) : This logic was moved here as we now never starts
+  // loading contents in the session restore code. This is to ensure that the
+  // webcontents is a guest before starting loading.
+  Profile* current_profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  PrefService* prefs = current_profile->GetPrefs();
+  bool lazy_load =
+      prefs->GetBoolean(vivaldiprefs::kTabsDeferLoadingAfterRestore);
+  bool always_load_pinned =
+      prefs->GetBoolean(vivaldiprefs::kTabsAlwaysLoadPinnedAfterRestore);
+  TabStripModel* tab_strip;
+  int tab_index;
+  ::vivaldi::VivaldiStartupTabUserData* viv_startup_data =
+      static_cast<::vivaldi::VivaldiStartupTabUserData *>(
+          web_contents()->GetUserData(
+              ::vivaldi::kVivaldiStartupTabUserDataKey));
+
+  if (ExtensionTabUtil::GetTabStripModel(web_contents(), &tab_strip,
+                                         &tab_index)) {
+    if (!lazy_load ||
+        (always_load_pinned && tab_strip->IsTabPinned(tab_index))) {
+      web_contents()->GetController().LoadIfNecessary();
+    }
+
+    if (viv_startup_data) {
+      // Since we start off as discarded we need to reload the page.
+      web_contents()->GetController().Reload(content::ReloadType::NORMAL,
+                                             false);
+      // Then check if we need to make a tab active, this must be done when
+      // starting with tabs through the commandline or through start with pages.
+      if (viv_startup_data->start_as_active()) {
+        tab_strip->ActivateTabAt(tab_index, false);
+      }
+    }
+  }
+  web_contents()->SetUserData("VivaldiStartupTab", nullptr);
 }
 
 }  // namespace extensions

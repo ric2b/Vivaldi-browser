@@ -11,12 +11,11 @@
 #include "base/command_line.h"
 #include "chrome/browser/ui/ash/tablet_mode_client_observer.h"
 #include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace {
 
-TabletModeClient* g_instance = nullptr;
+TabletModeClient* g_tablet_mode_client_instance = nullptr;
 
 }  // namespace
 
@@ -24,13 +23,13 @@ TabletModeClient::TabletModeClient()
     : auto_hide_title_bars_(!base::CommandLine::ForCurrentProcess()->HasSwitch(
           ash::switches::kAshDisableTabletAutohideTitlebars)),
       binding_(this) {
-  DCHECK(!g_instance);
-  g_instance = this;
+  DCHECK(!g_tablet_mode_client_instance);
+  g_tablet_mode_client_instance = this;
 }
 
 TabletModeClient::~TabletModeClient() {
-  DCHECK_EQ(this, g_instance);
-  g_instance = nullptr;
+  DCHECK_EQ(this, g_tablet_mode_client_instance);
+  g_tablet_mode_client_instance = nullptr;
 }
 
 void TabletModeClient::Init() {
@@ -48,7 +47,7 @@ void TabletModeClient::InitForTesting(
 
 // static
 TabletModeClient* TabletModeClient::Get() {
-  return g_instance;
+  return g_tablet_mode_client_instance;
 }
 
 void TabletModeClient::AddObserver(TabletModeClientObserver* observer) {

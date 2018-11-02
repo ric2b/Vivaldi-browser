@@ -9,6 +9,9 @@
 #include <set>
 
 #include "base/bind.h"
+#include "base/bit_cast.h"
+#include "base/debug/crash_logging.h"
+#include "base/rand_util.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/tick_clock.h"
 #include "base/trace_event/trace_event.h"
@@ -21,15 +24,31 @@
 #include "platform/scheduler/base/work_queue.h"
 #include "platform/scheduler/base/work_queue_sets.h"
 
-static const double kLongTaskTraceEventThreshold = 0.05;
-
 namespace blink {
 namespace scheduler {
 
 namespace {
+
+const double kLongTaskTraceEventThreshold = 0.05;
+const double kSamplingRateForRecordingCPUTime = 0.01;
+
 double MonotonicTimeInSeconds(base::TimeTicks time_ticks) {
   return (time_ticks - base::TimeTicks()).InSecondsF();
 }
+
+// Magic value to protect against memory corruption and bail out
+// early when detected.
+constexpr int kMemoryCorruptionSentinelValue = 0xdeadbeef;
+
+void SweepCanceledDelayedTasksInQueue(
+    internal::TaskQueueImpl* queue,
+    std::map<TimeDomain*, base::TimeTicks>* time_domain_now) {
+  TimeDomain* time_domain = queue->GetTimeDomain();
+  if (time_domain_now->find(time_domain) == time_domain_now->end())
+    time_domain_now->insert(std::make_pair(time_domain, time_domain->Now()));
+  queue->SweepCanceledDelayedTasks(time_domain_now->at(time_domain));
+}
+
 }  // namespace
 
 TaskQueueManager::TaskQueueManager(
@@ -37,11 +56,9 @@ TaskQueueManager::TaskQueueManager(
     : real_time_domain_(new RealTimeDomain()),
       graceful_shutdown_helper_(new internal::GracefulQueueShutdownHelper()),
       controller_(std::move(controller)),
-      task_was_run_on_quiescence_monitored_queue_(false),
-      work_batch_size_(1),
-      task_count_(0),
-      currently_executing_task_queue_(nullptr),
-      observer_(nullptr),
+      random_generator_(base::RandUint64()),
+      uniform_distribution_(0.0, 1.0),
+      memory_corruption_sentinel_(kMemoryCorruptionSentinelValue),
       weak_factory_(this) {
   // TODO(altimin): Create a sequence checker here.
   DCHECK(controller_->RunsTasksInCurrentSequence());
@@ -85,13 +102,8 @@ std::unique_ptr<TaskQueueManager> TaskQueueManager::TakeOverCurrentThread() {
   return std::unique_ptr<TaskQueueManager>(
       new TaskQueueManager(internal::ThreadControllerImpl::Create(
           base::MessageLoop::current(),
-          std::make_unique<base::DefaultTickClock>())));
+          base::DefaultTickClock::GetInstance())));
 }
-
-TaskQueueManager::AnyThread::AnyThread()
-    : do_work_running_count(0),
-      immediate_do_work_posted_count(0),
-      is_nested(false) {}
 
 void TaskQueueManager::RegisterTimeDomain(TimeDomain* time_domain) {
   time_domains_.insert(time_domain);
@@ -104,7 +116,7 @@ void TaskQueueManager::UnregisterTimeDomain(TimeDomain* time_domain) {
 
 std::unique_ptr<internal::TaskQueueImpl> TaskQueueManager::CreateTaskQueueImpl(
     const TaskQueue::Spec& spec) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   TimeDomain* time_domain =
       spec.time_domain ? spec.time_domain : real_time_domain_.get();
   DCHECK(time_domains_.find(time_domain) != time_domains_.end());
@@ -116,7 +128,7 @@ std::unique_ptr<internal::TaskQueueImpl> TaskQueueManager::CreateTaskQueueImpl(
 }
 
 void TaskQueueManager::SetObserver(Observer* observer) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   observer_ = observer;
 }
 
@@ -124,7 +136,7 @@ void TaskQueueManager::UnregisterTaskQueueImpl(
     std::unique_ptr<internal::TaskQueueImpl> task_queue) {
   TRACE_EVENT1("renderer.scheduler", "TaskQueueManager::UnregisterTaskQueue",
                "queue_name", task_queue->GetName());
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
 
   selector_.RemoveQueue(task_queue.get());
 
@@ -172,12 +184,35 @@ void TaskQueueManager::OnBeginNestedRunLoop() {
   {
     base::AutoLock lock(any_thread_lock_);
     any_thread().immediate_do_work_posted_count++;
-    any_thread().is_nested = true;
+    any_thread().nesting_depth++;
   }
-  if (observer_)
+  main_thread_only().nesting_depth++;
+  if (observer_ && main_thread_only().nesting_depth == 1)
     observer_->OnBeginNestedRunLoop();
 
   controller_->ScheduleWork();
+}
+
+void TaskQueueManager::OnExitNestedRunLoop() {
+  {
+    base::AutoLock lock(any_thread_lock_);
+    any_thread().nesting_depth--;
+  }
+  main_thread_only().nesting_depth--;
+  DCHECK_GE(main_thread_only().nesting_depth, 0);
+  if (main_thread_only().nesting_depth == 0) {
+    // While we were nested some non-nestable tasks may have become eligible to
+    // run. We push them back onto the front of their original work queues.
+    while (!main_thread_only().non_nestable_task_queue.empty()) {
+      NonNestableTask& non_nestable_task =
+          *main_thread_only().non_nestable_task_queue.begin();
+      non_nestable_task.task_queue->RequeueDeferredNonNestableTask(
+          std::move(non_nestable_task.task), non_nestable_task.work_type);
+      main_thread_only().non_nestable_task_queue.pop_front();
+    }
+    if (observer_)
+      observer_->OnExitNestedRunLoop();
+  }
 }
 
 void TaskQueueManager::OnQueueHasIncomingImmediateWork(
@@ -203,7 +238,7 @@ void TaskQueueManager::MaybeScheduleImmediateWorkLocked(
   {
     MoveableAutoLock auto_lock(std::move(lock));
     // Unless we're nested, try to avoid posting redundant DoWorks.
-    if (!any_thread().is_nested &&
+    if (any_thread().nesting_depth == 0 &&
         (any_thread().do_work_running_count == 1 ||
          any_thread().immediate_do_work_posted_count > 0)) {
       return;
@@ -222,7 +257,7 @@ void TaskQueueManager::MaybeScheduleDelayedWork(
     TimeDomain* requesting_time_domain,
     base::TimeTicks now,
     base::TimeTicks run_time) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   // Make sure we don't cancel another TimeDomain's wake-up.
   DCHECK(!next_delayed_do_work_ ||
          next_delayed_do_work_.time_domain() == requesting_time_domain);
@@ -232,7 +267,7 @@ void TaskQueueManager::MaybeScheduleDelayedWork(
     // Unless we're nested, don't post a delayed DoWork if there's an immediate
     // DoWork in flight or we're inside a DoWork. We can rely on DoWork posting
     // a delayed continuation as needed.
-    if (!any_thread().is_nested &&
+    if (any_thread().nesting_depth == 0 &&
         (any_thread().immediate_do_work_posted_count > 0 ||
          any_thread().do_work_running_count == 1)) {
       return;
@@ -254,7 +289,7 @@ void TaskQueueManager::MaybeScheduleDelayedWork(
 
 void TaskQueueManager::CancelDelayedWork(TimeDomain* requesting_time_domain,
                                          base::TimeTicks run_time) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   if (next_delayed_do_work_.run_time() != run_time)
     return;
 
@@ -264,12 +299,13 @@ void TaskQueueManager::CancelDelayedWork(TimeDomain* requesting_time_domain,
 }
 
 void TaskQueueManager::DoWork(WorkType work_type) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  CHECK(Validate());
+
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   TRACE_EVENT1("renderer.scheduler", "TaskQueueManager::DoWork", "delayed",
                work_type == WorkType::kDelayed);
 
   LazyNow lazy_now(real_time_domain()->CreateLazyNow());
-  bool is_nested = controller_->IsNested();
 
   // This must be done before running any tasks because they could invoke a
   // nested run loop and we risk having a stale |next_delayed_do_work_|.
@@ -279,7 +315,6 @@ void TaskQueueManager::DoWork(WorkType work_type) {
   for (int i = 0; i < work_batch_size_; i++) {
     IncomingImmediateWorkMap queues_to_reload;
 
-    bool was_nested = false;
     {
       base::AutoLock lock(any_thread_lock_);
       if (i == 0) {
@@ -289,21 +324,9 @@ void TaskQueueManager::DoWork(WorkType work_type) {
           any_thread().immediate_do_work_posted_count--;
           DCHECK_GE(any_thread().immediate_do_work_posted_count, 0);
         }
-      } else {
-        // Ideally we'd have an OnNestedMessageloopExit observer, but in it's
-        // absence we may need to clear this flag after running a task (which
-        // ran a nested messageloop).
-        // TODO(altimin): Add OnNestedMessageLoopExit observer.
-        if (any_thread().is_nested && !is_nested)
-          was_nested = true;
-        any_thread().is_nested = is_nested;
       }
-      DCHECK_EQ(any_thread().is_nested, controller_->IsNested());
       std::swap(queues_to_reload, any_thread().has_incoming_immediate_work);
     }
-
-    if (observer_ && was_nested)
-      observer_->OnExitNestedRunLoop();
 
     // It's important we call ReloadEmptyWorkQueues out side of the lock to
     // avoid a lock order inversion.
@@ -317,8 +340,7 @@ void TaskQueueManager::DoWork(WorkType work_type) {
 
     // NB this may unregister |work_queue|.
     base::TimeTicks time_after_task;
-    switch (ProcessTaskFromWorkQueue(work_queue, is_nested, lazy_now,
-                                     &time_after_task)) {
+    switch (ProcessTaskFromWorkQueue(work_queue, lazy_now, &time_after_task)) {
       case ProcessTaskResult::kDeferred:
         // If a task was deferred, try again with another task.
         continue;
@@ -328,23 +350,24 @@ void TaskQueueManager::DoWork(WorkType work_type) {
         return;  // The TaskQueueManager got deleted, we must bail out.
     }
 
+    CHECK(Validate());
+
     lazy_now = time_after_task.is_null() ? real_time_domain()->CreateLazyNow()
                                          : LazyNow(time_after_task);
 
     // Only run a single task per batch in nested run loops so that we can
     // properly exit the nested loop when someone calls RunLoop::Quit().
-    if (is_nested)
+    if (main_thread_only().nesting_depth > 0)
       break;
   }
 
-  if (!is_nested)
+  if (main_thread_only().nesting_depth == 0)
     CleanUpQueues();
 
   // TODO(alexclarke): Consider refactoring the above loop to terminate only
   // when there's no more work left to be done, rather than posting a
   // continuation task.
 
-  bool was_nested = false;
   {
     MoveableAutoLock lock(any_thread_lock_);
     base::Optional<NextTaskDelay> next_delay =
@@ -353,23 +376,15 @@ void TaskQueueManager::DoWork(WorkType work_type) {
     any_thread().do_work_running_count--;
     DCHECK_GE(any_thread().do_work_running_count, 0);
 
-    if (any_thread().is_nested && !is_nested)
-      was_nested = true;
-    any_thread().is_nested = is_nested;
-    DCHECK_EQ(any_thread().is_nested, controller_->IsNested());
-
     PostDoWorkContinuationLocked(next_delay, &lazy_now, std::move(lock));
   }
-
-  if (observer_ && was_nested)
-    observer_->OnExitNestedRunLoop();
 }
 
 void TaskQueueManager::PostDoWorkContinuationLocked(
     base::Optional<NextTaskDelay> next_delay,
     LazyNow* lazy_now,
     MoveableAutoLock lock) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
 
   {
     MoveableAutoLock auto_lock(std::move(lock));
@@ -388,7 +403,7 @@ void TaskQueueManager::PostDoWorkContinuationLocked(
     if (any_thread().immediate_do_work_posted_count > 0)
       return;
 
-    if (next_delay->Delay() <= base::TimeDelta()) {
+    if (next_delay->delay() <= base::TimeDelta()) {
       // If a delayed DoWork is pending then we don't need to post a
       // continuation because it should run immediately.
       if (next_delayed_do_work_ &&
@@ -401,23 +416,23 @@ void TaskQueueManager::PostDoWorkContinuationLocked(
   }
 
   // We avoid holding |any_thread_lock_| while posting the task.
-  if (next_delay->Delay() <= base::TimeDelta()) {
+  if (next_delay->delay() <= base::TimeDelta()) {
     controller_->ScheduleWork();
   } else {
-    base::TimeTicks run_time = lazy_now->Now() + next_delay->Delay();
+    base::TimeTicks run_time = lazy_now->Now() + next_delay->delay();
 
     if (next_delayed_do_work_.run_time() == run_time)
       return;
 
     next_delayed_do_work_ =
         NextDelayedDoWork(run_time, next_delay->time_domain());
-    controller_->ScheduleDelayedWork(next_delay->Delay());
+    controller_->ScheduleDelayedWork(next_delay->delay());
   }
 }
 
 base::Optional<TaskQueueManager::NextTaskDelay>
 TaskQueueManager::ComputeDelayTillNextTaskLocked(LazyNow* lazy_now) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
 
   // Unfortunately because |any_thread_lock_| is held it's not safe to call
   // ReloadEmptyWorkQueues here (possible lock order inversion), however this
@@ -468,123 +483,212 @@ void TaskQueueManager::DidQueueTask(
 
 TaskQueueManager::ProcessTaskResult TaskQueueManager::ProcessTaskFromWorkQueue(
     internal::WorkQueue* work_queue,
-    bool is_nested,
     LazyNow time_before_task,
     base::TimeTicks* time_after_task) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   base::WeakPtr<TaskQueueManager> protect = GetWeakPtr();
   internal::TaskQueueImpl::Task pending_task =
       work_queue->TakeTaskFromWorkQueue();
+  bool should_record_thread_time = ShouldRecordCPUTimeForTask();
 
   // It's possible the task was canceled, if so bail out.
-  if (pending_task.task.IsCancelled())
+  // The task should be non-null, but it seems to be possible to due
+  // a hard-to-track bug. The first check is a defence against this bug,
+  // and this check isn't expected to be true in practice.
+  if (!pending_task.task || pending_task.task.IsCancelled())
     return ProcessTaskResult::kExecuted;
 
   internal::TaskQueueImpl* queue = work_queue->task_queue();
   if (queue->GetQuiescenceMonitored())
     task_was_run_on_quiescence_monitored_queue_ = true;
-
-  if (pending_task.nestable == base::Nestable::kNonNestable && is_nested) {
-    // Defer non-nestable work to the main task runner.  NOTE these tasks can be
-    // arbitrarily delayed so the additional delay should not be a problem.
-    // TODO(skyostil): Figure out a way to not forget which task queue the
-    // task is associated with. See http://crbug.com/522843.
-    controller_->PostNonNestableTask(pending_task.posted_from,
-                                     std::move(pending_task.task));
+  if (pending_task.nestable == base::Nestable::kNonNestable &&
+      main_thread_only().nesting_depth > 0) {
+    // Defer non-nestable work. NOTE these tasks can be arbitrarily delayed so
+    // the additional delay should not be a problem.
+    // Note because we don't delete queues while nested, it's perfectly OK to
+    // store the raw pointer for |queue| here.
+    NonNestableTask deferred_task{std::move(pending_task), queue,
+                                  work_queue->queue_type()};
+    // We push these tasks onto the front to make sure that when requeued they
+    // are pushed in the right order.
+    main_thread_only().non_nestable_task_queue.push_front(
+        std::move(deferred_task));
     return ProcessTaskResult::kDeferred;
   }
 
-  double task_start_time_sec = 0;
   base::TimeTicks task_start_time;
   TRACE_TASK_EXECUTION("TaskQueueManager::ProcessTaskFromWorkQueue",
                        pending_task);
-  if (queue->GetShouldNotifyObservers()) {
-    for (auto& observer : task_observers_)
-      observer.WillProcessTask(pending_task);
-    queue->NotifyWillProcessTask(pending_task);
 
-    bool notify_time_observers = !controller_->IsNested() &&
-                                 (task_time_observers_.might_have_observers() ||
-                                  queue->RequiresTaskTiming());
-    if (notify_time_observers) {
-      task_start_time = time_before_task.Now();
-      task_start_time_sec = MonotonicTimeInSeconds(task_start_time);
-      for (auto& observer : task_time_observers_)
-        observer.WillProcessTask(task_start_time_sec);
-      queue->OnTaskStarted(pending_task, task_start_time);
-    }
+  NotifyWillProcessTaskObservers(pending_task, queue, time_before_task,
+                                 &task_start_time);
+
+  base::ThreadTicks task_start_thread_time;
+  if (should_record_thread_time)
+    task_start_thread_time = base::ThreadTicks::Now();
+  base::debug::SetCrashKeyString(main_thread_only().file_name_crash_key,
+                                 pending_task.posted_from.file_name());
+  base::debug::SetCrashKeyString(main_thread_only().function_name_crash_key,
+                                 pending_task.posted_from.function_name());
+
+  {
+    TRACE_EVENT1("renderer.scheduler", "TaskQueueManager::RunTask", "queue",
+                 queue->GetName());
+    // NOTE when TaskQueues get unregistered a reference ends up getting
+    // retained by |queues_to_delete_| which is cleared at the top of |DoWork|.
+    // This means we are OK to use raw pointers here.
+    internal::TaskQueueImpl* prev_executing_task_queue =
+        currently_executing_task_queue_;
+    currently_executing_task_queue_ = queue;
+    task_annotator_.RunTask("TaskQueueManager::PostTask", &pending_task);
+    // Detect if the TaskQueueManager just got deleted.  If this happens we must
+    // not access any member variables after this point.
+    if (!protect)
+      return ProcessTaskResult::kTaskQueueManagerDeleted;
+
+    currently_executing_task_queue_ = prev_executing_task_queue;
   }
 
-  TRACE_EVENT1("renderer.scheduler", "TaskQueueManager::RunTask", "queue",
-               queue->GetName());
-  // NOTE when TaskQueues get unregistered a reference ends up getting retained
-  // by |queues_to_delete_| which is cleared at the top of |DoWork|. This means
-  // we are OK to use raw pointers here.
-  internal::TaskQueueImpl* prev_executing_task_queue =
-      currently_executing_task_queue_;
-  currently_executing_task_queue_ = queue;
-  task_annotator_.RunTask("TaskQueueManager::PostTask", &pending_task);
-  // Detect if the TaskQueueManager just got deleted.  If this happens we must
-  // not access any member variables after this point.
-  if (!protect)
-    return ProcessTaskResult::kTaskQueueManagerDeleted;
+  base::ThreadTicks task_end_thread_time;
+  if (should_record_thread_time)
+    task_end_thread_time = base::ThreadTicks::Now();
 
-  currently_executing_task_queue_ = prev_executing_task_queue;
+  NotifyDidProcessTaskObservers(
+      pending_task, queue,
+      should_record_thread_time
+          ? base::Optional<base::TimeDelta>(task_end_thread_time -
+                                            task_start_thread_time)
+          : base::nullopt,
+      task_start_time, time_after_task);
 
+  return ProcessTaskResult::kExecuted;
+}
+
+void TaskQueueManager::NotifyWillProcessTaskObservers(
+    const internal::TaskQueueImpl::Task& pending_task,
+    internal::TaskQueueImpl* queue,
+    LazyNow time_before_task,
+    base::TimeTicks* task_start_time) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+               "TaskQueueManager::NotifyWillProcessTaskObservers");
+  if (!queue->GetShouldNotifyObservers())
+    return;
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.WillProcessTaskObservers");
+    for (auto& observer : task_observers_)
+      observer.WillProcessTask(pending_task);
+  }
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.QueueNotifyWillProcessTask");
+    queue->NotifyWillProcessTask(pending_task);
+  }
+
+  bool notify_time_observers = main_thread_only().nesting_depth == 0 &&
+                               (task_time_observers_.might_have_observers() ||
+                                queue->RequiresTaskTiming());
+  if (!notify_time_observers)
+    return;
+  *task_start_time = time_before_task.Now();
+  double task_start_time_sec = MonotonicTimeInSeconds(*task_start_time);
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.WillProcessTaskTimeObservers");
+    for (auto& observer : task_time_observers_)
+      observer.WillProcessTask(task_start_time_sec);
+  }
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.QueueOnTaskStarted");
+    queue->OnTaskStarted(pending_task, *task_start_time);
+  }
+}
+
+void TaskQueueManager::NotifyDidProcessTaskObservers(
+    const internal::TaskQueueImpl::Task& pending_task,
+    internal::TaskQueueImpl* queue,
+    base::Optional<base::TimeDelta> thread_time,
+    base::TimeTicks task_start_time,
+    base::TimeTicks* time_after_task) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+               "TaskQueueManager::NotifyDidProcessTaskObservers");
+
+  if (!queue->GetShouldNotifyObservers())
+    return;
+
+  double task_start_time_sec = MonotonicTimeInSeconds(task_start_time);
   double task_end_time_sec = 0;
-  if (queue->GetShouldNotifyObservers()) {
-    if (task_start_time_sec) {
-      *time_after_task = real_time_domain()->Now();
-      task_end_time_sec = MonotonicTimeInSeconds(*time_after_task);
 
-      for (auto& observer : task_time_observers_)
-        observer.DidProcessTask(task_start_time_sec, task_end_time_sec);
-    }
+  if (task_start_time_sec) {
+    *time_after_task = real_time_domain()->Now();
+    task_end_time_sec = MonotonicTimeInSeconds(*time_after_task);
 
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.DidProcessTaskTimeObservers");
+    for (auto& observer : task_time_observers_)
+      observer.DidProcessTask(task_start_time_sec, task_end_time_sec);
+  }
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.DidProcessTaskObservers");
     for (auto& observer : task_observers_)
       observer.DidProcessTask(pending_task);
+  }
+
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.QueueNotifyDidProcessTask");
     queue->NotifyDidProcessTask(pending_task);
   }
 
-  if (task_start_time_sec && task_end_time_sec)
-    queue->OnTaskCompleted(pending_task, task_start_time, *time_after_task);
+  {
+    TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+                 "TaskQueueManager.QueueOnTaskCompleted");
+    if (task_start_time_sec && task_end_time_sec)
+      queue->OnTaskCompleted(pending_task, task_start_time, *time_after_task,
+                             thread_time);
+  }
 
   if (task_start_time_sec && task_end_time_sec &&
       task_end_time_sec - task_start_time_sec > kLongTaskTraceEventThreshold) {
     TRACE_EVENT_INSTANT1("blink", "LongTask", TRACE_EVENT_SCOPE_THREAD,
                          "duration", task_end_time_sec - task_start_time_sec);
   }
-
-  return ProcessTaskResult::kExecuted;
 }
 
 void TaskQueueManager::SetWorkBatchSize(int work_batch_size) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   DCHECK_GE(work_batch_size, 1);
   work_batch_size_ = work_batch_size;
 }
 
 void TaskQueueManager::AddTaskObserver(
     base::MessageLoop::TaskObserver* task_observer) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   task_observers_.AddObserver(task_observer);
 }
 
 void TaskQueueManager::RemoveTaskObserver(
     base::MessageLoop::TaskObserver* task_observer) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   task_observers_.RemoveObserver(task_observer);
 }
 
 void TaskQueueManager::AddTaskTimeObserver(
     TaskTimeObserver* task_time_observer) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   task_time_observers_.AddObserver(task_time_observer);
 }
 
 void TaskQueueManager::RemoveTaskTimeObserver(
     TaskTimeObserver* task_time_observer) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   task_time_observers_.RemoveObserver(task_time_observer);
 }
 
@@ -613,7 +717,7 @@ std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
 TaskQueueManager::AsValueWithSelectorResult(
     bool should_run,
     internal::WorkQueue* selected_work_queue) const {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   std::unique_ptr<base::trace_event::TracedValue> state(
       new base::trace_event::TracedValue());
   base::TimeTicks now = real_time_domain()->CreateLazyNow().Now();
@@ -644,7 +748,7 @@ TaskQueueManager::AsValueWithSelectorResult(
   state->EndArray();
   {
     base::AutoLock lock(any_thread_lock_);
-    state->SetBoolean("is_nested", any_thread().is_nested);
+    state->SetInteger("nesting_depth", any_thread().nesting_depth);
     state->SetInteger("do_work_running_count",
                       any_thread().do_work_running_count);
     state->SetInteger("immediate_do_work_posted_count",
@@ -660,7 +764,7 @@ TaskQueueManager::AsValueWithSelectorResult(
 }
 
 void TaskQueueManager::OnTaskQueueEnabled(internal::TaskQueueImpl* queue) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   DCHECK(queue->IsQueueEnabled());
   // Only schedule DoWork if there's something to do.
   if (queue->HasTaskToRunImmediately() && !queue->BlockedByFence())
@@ -669,7 +773,7 @@ void TaskQueueManager::OnTaskQueueEnabled(internal::TaskQueueImpl* queue) {
 
 void TaskQueueManager::OnTriedToSelectBlockedWorkQueue(
     internal::WorkQueue* work_queue) {
-  DCHECK(main_thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(main_thread_checker_);
   DCHECK(!work_queue->Empty());
   if (observer_)
     observer_->OnTriedToExecuteBlockedTask();
@@ -678,19 +782,6 @@ void TaskQueueManager::OnTriedToSelectBlockedWorkQueue(
 bool TaskQueueManager::HasImmediateWorkForTesting() const {
   return !selector_.EnabledWorkQueuesEmpty();
 }
-
-namespace {
-
-void SweepCanceledDelayedTasksInQueue(
-    internal::TaskQueueImpl* queue,
-    std::map<TimeDomain*, base::TimeTicks>* time_domain_now) {
-  TimeDomain* time_domain = queue->GetTimeDomain();
-  if (time_domain_now->find(time_domain) == time_domain_now->end())
-    time_domain_now->insert(std::make_pair(time_domain, time_domain->Now()));
-  queue->SweepCanceledDelayedTasks(time_domain_now->at(time_domain));
-}
-
-}  // namespace
 
 void TaskQueueManager::SweepCanceledDelayedTasks() {
   std::map<TimeDomain*, base::TimeTicks> time_domain_now;
@@ -755,6 +846,31 @@ base::TickClock* TaskQueueManager::GetClock() const {
 
 base::TimeTicks TaskQueueManager::NowTicks() const {
   return controller_->GetClock()->NowTicks();
+}
+
+bool TaskQueueManager::ShouldRecordCPUTimeForTask() {
+  return uniform_distribution_(random_generator_) <
+         kSamplingRateForRecordingCPUTime;
+}
+
+void TaskQueueManager::SetRandomSeed(uint64_t value) {
+  random_generator_.seed(value);
+}
+
+bool TaskQueueManager::Validate() {
+  return memory_corruption_sentinel_ == kMemoryCorruptionSentinelValue;
+}
+
+void TaskQueueManager::EnableCrashKeys(
+    const char* file_name_crash_key_name,
+    const char* function_name_crash_key_name) {
+  DCHECK(!main_thread_only().file_name_crash_key);
+  DCHECK(!main_thread_only().function_name_crash_key);
+  main_thread_only().file_name_crash_key = base::debug::AllocateCrashKeyString(
+      file_name_crash_key_name, base::debug::CrashKeySize::Size64);
+  main_thread_only().function_name_crash_key =
+      base::debug::AllocateCrashKeyString(function_name_crash_key_name,
+                                          base::debug::CrashKeySize::Size64);
 }
 
 }  // namespace scheduler

@@ -107,7 +107,7 @@ void DownloadUrlOnUIThread(std::unique_ptr<DownloadUrlParameters> parameters) {
   BrowserContext* browser_context = render_process_host->GetBrowserContext();
   DownloadManager* download_manager =
       BrowserContext::GetDownloadManager(browser_context);
-  RecordDownloadSource(INITIATED_BY_RENDERER);
+  parameters->set_download_source(DownloadSource::FROM_RENDERER);
   download_manager->DownloadUrl(std::move(parameters));
 }
 
@@ -526,9 +526,7 @@ void RenderFrameMessageFilter::GetCookies(int render_frame_id,
 
   // If we crash here, figure out what URL the renderer was requesting.
   // http://crbug.com/99242
-  char url_buf[128];
-  base::strlcpy(url_buf, url.spec().c_str(), arraysize(url_buf));
-  base::debug::Alias(url_buf);
+  DEBUG_ALIAS_FOR_GURL(url_buf, url);
 
   net::URLRequestContext* context = GetRequestContextForURL(url);
   context->cookie_store()->GetCookieListWithOptionsAsync(

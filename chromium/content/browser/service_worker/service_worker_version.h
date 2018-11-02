@@ -42,8 +42,9 @@
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/common/origin_trials/trial_token_validator.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_client.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom.h"
 #include "ui/base/mojo/window_open_disposition.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -62,8 +63,44 @@ class ServiceWorkerContextCore;
 class ServiceWorkerInstalledScriptsSender;
 class ServiceWorkerProviderHost;
 class ServiceWorkerRegistration;
-struct ServiceWorkerClientInfo;
 struct ServiceWorkerVersionInfo;
+
+namespace service_worker_controllee_request_handler_unittest {
+class ServiceWorkerControlleeRequestHandlerTest;
+FORWARD_DECLARE_TEST(ServiceWorkerControlleeRequestHandlerTest,
+                     ActivateWaitingVersion);
+FORWARD_DECLARE_TEST(ServiceWorkerControlleeRequestHandlerTest,
+                     FallbackWithNoFetchHandler);
+}  // namespace service_worker_controllee_request_handler_unittest
+
+namespace service_worker_version_unittest {
+class ServiceWorkerVersionTest;
+class ServiceWorkerRequestTimeoutTest;
+class ServiceWorkerFailToStartTest;
+FORWARD_DECLARE_TEST(ServiceWorkerFailToStartTest, Timeout);
+FORWARD_DECLARE_TEST(ServiceWorkerRequestTimeoutTest, RequestTimeout);
+FORWARD_DECLARE_TEST(ServiceWorkerStallInStoppingTest, DetachThenRestart);
+FORWARD_DECLARE_TEST(ServiceWorkerStallInStoppingTest,
+                     DetachThenRestartNoCrash);
+FORWARD_DECLARE_TEST(ServiceWorkerStallInStoppingTest, DetachThenStart);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, IdleTimeout);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, MixedRequestTimeouts);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, RegisterForeignFetchScopes);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, RequestCustomizedTimeout);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, RequestNowTimeout);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, RestartWorker);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, RequestNowTimeoutKill);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, SetDevToolsAttached);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_DoNotDeferTimer);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_FreshWorker);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_NonActiveWorker);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_RunningWorker);
+FORWARD_DECLARE_TEST(ServiceWorkerVersionTest, StaleUpdate_StartWorker);
+}  // namespace service_worker_version_unittest
+
+namespace service_worker_registration_unittest {
+class ServiceWorkerActivationTest;
+}  // namespace service_worker_registration_unittest
 
 // This class corresponds to a specific version of a ServiceWorker
 // script for a given pattern. When a script is upgraded, there may be
@@ -77,12 +114,10 @@ class CONTENT_EXPORT ServiceWorkerVersion
       public base::RefCounted<ServiceWorkerVersion>,
       public EmbeddedWorkerInstance::Listener {
  public:
-  // TODO(crbug.com/755477): LegacyStatusCallback which does not use
-  // OnceCallback is deprecated and should be removed soon.
-  using LegacyStatusCallback = base::Callback<void(ServiceWorkerStatusCode)>;
   using StatusCallback = base::OnceCallback<void(ServiceWorkerStatusCode)>;
   using SimpleEventCallback =
-      base::Callback<void(blink::mojom::ServiceWorkerEventStatus, base::Time)>;
+      base::OnceCallback<void(blink::mojom::ServiceWorkerEventStatus,
+                              base::Time)>;
 
   // Current version status; some of the status (e.g. INSTALLED and ACTIVATED)
   // should be persisted unlike running status.
@@ -209,7 +244,11 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Stops the worker if it is idle (has no in-flight requests) or timed out
   // ping.
-  void StopWorkerIfIdle();
+  //
+  // S13nServiceWorker:
+  // |requested_from_renderer| should be true if StopWorkerIfIdle() is called by
+  // mojom::EmbeddedWorkerInstanceHost::RequestTermination().
+  void StopWorkerIfIdle(bool requested_from_renderer);
 
   // Skips waiting and forces this version to become activated.
   void SkipWaitingFromDevTools();
@@ -224,14 +263,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Starts an update now.
   void StartUpdate();
 
-  // Starts the worker if it isn't already running, and calls |task| when the
-  // worker is running, or |error_callback| if starting the worker failed.
-  // If the worker is already running, |task| is executed synchronously (before
-  // this method returns).
-  // |purpose| is used for UMA.
+  // Starts the worker if it isn't already running. Calls |callback| with
+  // SERVICE_WORKER_OK when the worker started up successfully or if it is
+  // already running. Otherwise, calls |callback| with an error code.
+  // If the worker is already running, |callback| is executed synchronously
+  // (before this method returns). |purpose| is used for UMA.
   void RunAfterStartWorker(ServiceWorkerMetrics::EventType purpose,
-                           base::OnceClosure task,
-                           StatusCallback error_callback);
+                           StatusCallback callback);
 
   // Call this while the worker is running before dispatching an event to the
   // worker. This informs ServiceWorkerVersion about the event in progress. The
@@ -263,7 +301,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
   bool StartExternalRequest(const std::string& request_uuid);
 
   // Informs ServiceWorkerVersion that an event has finished being dispatched.
-  // Returns false if no pending requests with the provided id exist, for
+  // Returns false if no inflight requests with the provided id exist, for
   // example if the request has already timed out.
   // Pass the result of the event to |was_handled|, which is used to record
   // statistics based on the event status.
@@ -289,10 +327,18 @@ class CONTENT_EXPORT ServiceWorkerVersion
     return event_dispatcher_.get();
   }
 
-  // This must be called when the worker is running.
-  // Returns the 'controller' interface of this worker.
+  // S13nServiceWorker:
+  // Returns the 'controller' interface ptr of this worker. It is expected
+  // that the worker is already starting or running, or is going to be started
+  // soon.
+  // TODO(kinuko): Relying on the callsites to start the worker when it's
+  // not running is a bit sketchy, maybe this should queue a task to check
+  // if the pending request is pending too long? https://crbug.com/797222
   mojom::ControllerServiceWorker* controller() {
-    DCHECK(controller_ptr_.is_bound());
+    if (!controller_ptr_.is_bound()) {
+      DCHECK(!controller_request_.is_pending());
+      controller_request_ = mojo::MakeRequest(&controller_ptr_);
+    }
     return controller_ptr_.get();
   }
 
@@ -394,9 +440,17 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // Used to allow tests to change wall clock for testing.
   void SetClockForTesting(base::Clock* clock);
 
-  // Returns true if the service worker has work to do: it has pending
-  // requests, in-progress streaming URLRequestJobs, or pending start callbacks.
-  bool HasWork() const;
+  // Non-S13nServiceWorker: returns true if the service worker has work to do:
+  // it has inflight requests, in-progress streaming URLRequestJobs, or pending
+  // start callbacks.
+  //
+  // S13nServiceWorker: returns true if the worker has work on the browser.
+  // Note that this method may return false even when the service worker still
+  // has work to do; clients may dispatch events to the service worker directly.
+  // You can ensure no inflight requests exist when HasWorkInBrowser() returns
+  // false and |idle_timer_fired_in_renderer_| is true, or when the worker is
+  // stopped.
+  bool HasWorkInBrowser() const;
 
   // Returns the number of pending external request count of this worker.
   size_t GetExternalRequestCountForTest() const {
@@ -421,50 +475,85 @@ class CONTENT_EXPORT ServiceWorkerVersion
   friend class base::RefCounted<ServiceWorkerVersion>;
   friend class ServiceWorkerReadFromCacheJobTest;
   friend class ServiceWorkerVersionBrowserTest;
-  friend class ServiceWorkerActivationTest;
+  friend class service_worker_registration_unittest::
+      ServiceWorkerActivationTest;
 
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
+  FRIEND_TEST_ALL_PREFIXES(service_worker_controllee_request_handler_unittest::
+                               ServiceWorkerControlleeRequestHandlerTest,
                            ActivateWaitingVersion);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
+  FRIEND_TEST_ALL_PREFIXES(service_worker_controllee_request_handler_unittest::
+                               ServiceWorkerControlleeRequestHandlerTest,
                            FallbackWithNoFetchHandler);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerJobTest, Register);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, IdleTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, SetDevToolsAttached);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_FreshWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
-                           StaleUpdate_NonActiveWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_StartWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, StaleUpdate_RunningWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest,
-                           StaleUpdate_DoNotDeferTimer);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerRequestTimeoutTest, RequestTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerFailToStartTest, Timeout);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      IdleTimeout);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      SetDevToolsAttached);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StaleUpdate_FreshWorker);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StaleUpdate_NonActiveWorker);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StaleUpdate_StartWorker);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StaleUpdate_RunningWorker);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      StaleUpdate_DoNotDeferTimer);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerRequestTimeoutTest,
+      RequestTimeout);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerFailToStartTest,
+      Timeout);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionBrowserTest,
                            TimeoutStartingWorker);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionBrowserTest,
                            TimeoutWorkerInEvent);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenStart);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest, DetachThenRestart);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerStallInStoppingTest,
-                           DetachThenRestartNoCrash);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestNowTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestNowTimeoutKill);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RequestCustomizedTimeout);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, RestartWorker);
-  FRIEND_TEST_ALL_PREFIXES(ServiceWorkerVersionTest, MixedRequestTimeouts);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerStallInStoppingTest,
+      DetachThenStart);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerStallInStoppingTest,
+      DetachThenRestart);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerStallInStoppingTest,
+      DetachThenRestartNoCrash);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      RequestNowTimeout);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      RestartWorker);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      RequestNowTimeoutKill);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      RequestCustomizedTimeout);
+  FRIEND_TEST_ALL_PREFIXES(
+      service_worker_version_unittest::ServiceWorkerVersionTest,
+      MixedRequestTimeouts);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, EarlyResponse);
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerURLRequestJobTest, CancelRequest);
 
   class PingController;
 
-  struct RequestInfo {
-    RequestInfo(int id,
-                ServiceWorkerMetrics::EventType event_type,
-                const base::TimeTicks& expiration,
-                TimeoutBehavior timeout_behavior);
-    ~RequestInfo();
+  // Contains timeout info for InflightRequest.
+  struct InflightRequestTimeoutInfo {
+    InflightRequestTimeoutInfo(int id,
+                               ServiceWorkerMetrics::EventType event_type,
+                               const base::TimeTicks& expiration,
+                               TimeoutBehavior timeout_behavior);
+    ~InflightRequestTimeoutInfo();
     // Compares |expiration|, or |id| if |expiration| is the same.
-    bool operator<(const RequestInfo& other) const;
+    bool operator<(const InflightRequestTimeoutInfo& other) const;
 
     const int id;
     const ServiceWorkerMetrics::EventType event_type;
@@ -472,22 +561,25 @@ class CONTENT_EXPORT ServiceWorkerVersion
     const TimeoutBehavior timeout_behavior;
   };
 
-  struct PendingRequest {
-    PendingRequest(StatusCallback error_callback,
-                   base::Time time,
-                   const base::TimeTicks& time_ticks,
-                   ServiceWorkerMetrics::EventType event_type);
-    ~PendingRequest();
+  // Keeps track of the status of each request, which starts at StartRequest()
+  // and ends at FinishRequest().
+  struct InflightRequest {
+    InflightRequest(StatusCallback error_callback,
+                    base::Time time,
+                    const base::TimeTicks& time_ticks,
+                    ServiceWorkerMetrics::EventType event_type);
+    ~InflightRequest();
 
     StatusCallback error_callback;
     base::Time start_time;
     base::TimeTicks start_time_ticks;
     ServiceWorkerMetrics::EventType event_type;
     // Points to this request's entry in |request_timeouts_|.
-    std::set<RequestInfo>::iterator timeout_iter;
+    std::set<InflightRequestTimeoutInfo>::iterator timeout_iter;
   };
 
-  using ServiceWorkerClients = std::vector<ServiceWorkerClientInfo>;
+  using ServiceWorkerClientPtrs =
+      std::vector<blink::mojom::ServiceWorkerClientInfoPtr>;
 
   // The timeout timer interval.
   static constexpr base::TimeDelta kTimeoutTimerDelay =
@@ -534,6 +626,9 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void SetCachedMetadata(const GURL& url,
                          const std::vector<uint8_t>& data) override;
   void ClearCachedMetadata(const GURL& url) override;
+  void ClaimClients(ClaimClientsCallback callback) override;
+  void GetClients(blink::mojom::ServiceWorkerClientQueryOptionsPtr options,
+                  GetClientsCallback callback) override;
 
   void OnSetCachedMetadataFinished(int64_t callback_id,
                                    size_t size,
@@ -545,22 +640,19 @@ class CONTENT_EXPORT ServiceWorkerVersion
   // This corresponds to the spec's get(id) steps.
   void OnGetClient(int request_id, const std::string& client_uuid);
 
-  // This corresponds to the spec's matchAll(options) steps.
-  void OnGetClients(int request_id,
-                    const ServiceWorkerClientQueryOptions& options);
-
   // Currently used for Clients.openWindow() only.
   void OnOpenNewTab(int request_id, const GURL& url);
 
   // Currently used for PaymentRequestEvent.openWindow() only.
-  void OnOpenNewPopup(int request_id, const GURL& url);
+  void OnOpenPaymentHandlerWindow(int request_id, const GURL& url);
 
   void OnOpenWindow(int request_id,
                     GURL url,
                     WindowOpenDisposition disposition);
-  void OnOpenWindowFinished(int request_id,
-                            ServiceWorkerStatusCode status,
-                            const ServiceWorkerClientInfo& client_info);
+  void OnOpenWindowFinished(
+      int request_id,
+      ServiceWorkerStatusCode status,
+      const blink::mojom::ServiceWorkerClientInfo& client_info);
 
   void OnPostMessageToClient(
       const std::string& client_uuid,
@@ -570,15 +662,16 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void OnNavigateClient(int request_id,
                         const std::string& client_uuid,
                         const GURL& url);
-  void OnNavigateClientFinished(int request_id,
-                                ServiceWorkerStatusCode status,
-                                const ServiceWorkerClientInfo& client_info);
+  void OnNavigateClientFinished(
+      int request_id,
+      ServiceWorkerStatusCode status,
+      const blink::mojom::ServiceWorkerClientInfo& client_info);
   void OnSkipWaiting(int request_id);
-  void OnClaimClients(int request_id);
   void OnPongFromWorker();
 
-  void OnFocusClientFinished(int request_id,
-                             const ServiceWorkerClientInfo& client_info);
+  void OnFocusClientFinished(
+      int request_id,
+      const blink::mojom::ServiceWorkerClientInfo& client_info);
 
   void DidEnsureLiveRegistrationForStartWorker(
       ServiceWorkerMetrics::EventType purpose,
@@ -598,11 +691,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
                              blink::mojom::ServiceWorkerEventStatus status,
                              base::Time dispatch_event_time);
 
-  void OnGetClientFinished(int request_id,
-                           const ServiceWorkerClientInfo& client_info);
+  void OnGetClientFinished(
+      int request_id,
+      blink::mojom::ServiceWorkerClientInfoPtr client_info);
 
-  void OnGetClientsFinished(int request_id,
-                            std::unique_ptr<ServiceWorkerClients> clients);
+  void OnGetClientsFinished(GetClientsCallback callback,
+                            std::unique_ptr<ServiceWorkerClientPtrs> clients);
 
   // The timeout timer periodically calls OnTimeoutTimer, which stops the worker
   // if it is excessively idle or unresponsive to ping.
@@ -623,7 +717,7 @@ class CONTENT_EXPORT ServiceWorkerVersion
                                bool is_browser_startup_complete,
                                ServiceWorkerStatusCode status);
 
-  bool MaybeTimeOutRequest(const RequestInfo& info);
+  bool MaybeTimeoutRequest(const InflightRequestTimeoutInfo& info);
   void SetAllRequestExpirations(const base::TimeTicks& expiration);
 
   // Returns the reason the embedded worker failed to start, using information
@@ -650,6 +744,12 @@ class CONTENT_EXPORT ServiceWorkerVersion
   void CleanUpExternalRequest(const std::string& request_uuid,
                               ServiceWorkerStatusCode status);
 
+  // Called if no inflight events exist on the browser process.
+  // Non-S13nServiceWorker: Triggers OnNoWork().
+  // S13nServiceWorker: Triggers OnNoWork() if the renderer-side idle timeout
+  // has been fired or the worker has been stopped.
+  void OnNoWorkInBrowser();
+
   const int64_t version_id_;
   const int64_t registration_id_;
   const GURL script_url_;
@@ -671,13 +771,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Holds in-flight requests, including requests due to outstanding push,
   // fetch, sync, etc. events.
-  base::IDMap<std::unique_ptr<PendingRequest>> pending_requests_;
+  base::IDMap<std::unique_ptr<InflightRequest>> inflight_requests_;
 
   // Keeps track of in-flight requests for timeout purposes. Requests are sorted
   // by their expiration time (soonest to expire at the beginning of the
   // set). The timeout timer periodically checks |request_timeouts_| for entries
   // that should time out.
-  std::set<RequestInfo> request_timeouts_;
+  std::set<InflightRequestTimeoutInfo> request_timeouts_;
 
   // Container for pending external requests for this service worker.
   // (key, value): (request uuid, request id).
@@ -686,7 +786,13 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // Connected to ServiceWorkerContextClient while the worker is running.
   mojom::ServiceWorkerEventDispatcherPtr event_dispatcher_;
+
+  // S13nServiceWorker: connected to the controller service worker.
+  // |controller_request_| is non-null only when the |controller_ptr_| is
+  // requested before the worker is started, it is passed to the worker (and
+  // becomes null) once it's started.
   mojom::ControllerServiceWorkerPtr controller_ptr_;
+  mojom::ControllerServiceWorkerRequest controller_request_;
 
   std::unique_ptr<ServiceWorkerInstalledScriptsSender>
       installed_scripts_sender_;
@@ -695,8 +801,14 @@ class CONTENT_EXPORT ServiceWorkerVersion
 
   // The number of fetch event responses that the service worker is streaming to
   // the browser process. We try to not stop the service worker while there is
-  // an ongoing response.
-  int pending_stream_response_count_ = 0;
+  // an inflight response.
+  int inflight_stream_response_count_ = 0;
+
+  // S13nServiceWorker:
+  // Set to true if the worker has no inflight events and the idle timer has
+  // been triggered. Set back to false if another event starts since the worker
+  // is no longer idle.
+  bool idle_timer_fired_in_renderer_ = false;
 
   // Keeps track of the provider hosting this running service worker for this
   // version. |provider_host_| is always valid as long as this version is

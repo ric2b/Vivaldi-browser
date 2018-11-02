@@ -8,13 +8,12 @@
 
 #include <algorithm>
 
-#include "gpu/command_buffer/service/texture_manager.h"
+#include "gpu/command_buffer/service/texture_base.h"
 
 namespace gpu {
 namespace gles2 {
 
-MailboxManagerImpl::MailboxManagerImpl() {
-}
+MailboxManagerImpl::MailboxManagerImpl() = default;
 
 MailboxManagerImpl::~MailboxManagerImpl() {
   DCHECK(mailbox_to_textures_.empty());

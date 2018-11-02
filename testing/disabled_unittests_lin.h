@@ -29,6 +29,8 @@ DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
 // Seems to have broken in v64, at least flaky
 DISABLE(SitePerProcessBrowserTest, ScrollFocusedEditableElementIntoView)
 
+DISABLE(InputImeApiTest, BasicApiTest)
+
 // ===============================================================
 //                      TEMPORARY - MEDIA
 // ===============================================================
@@ -104,6 +106,8 @@ DISABLE(MSE_ClearKey/EncryptedMediaTest, Playback_VideoOnly_MP4/0)
 
 DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
 #endif
+
+DISABLE(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscardH264Mp4_Sync)
 
 // content_browsertests
 
@@ -222,3 +226,10 @@ DISABLE(ProprietaryCodecs/BasicPlaybackTest, PlayToEnd/2)
 DISABLE(ProprietaryCodecs/BasicPlaybackTest, PlayToEnd/3)
 
 #endif
+
+// Flaky on Linux
+DISABLE(PopupsOnlyUiDelegateTest, ManyPopupNotifications)
+DISABLE(ExtensionWindowLastFocusedTest, NoTabIdForDevToolsAndAppWindows)
+DISABLE(ProfileHelperTest, OpenNewWindowForProfile)
+DISABLE(AccessibilityFullscreenBrowserTest, InsideIFrame)
+DISABLE(SingleClientDirectorySyncTest, DeleteDirectoryWhenCorrupted)

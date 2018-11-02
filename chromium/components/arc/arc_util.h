@@ -51,9 +51,6 @@ bool ShouldArcAlwaysStart();
 // Store UI is added.
 void SetArcAlwaysStartForTesting(bool play_store_available);
 
-// Returns true if ARC should only start after the user has logged in.
-bool ShouldArcOnlyStartAfterLogin();
-
 // Returns true if ARC is installed and running ARC kiosk apps on the current
 // device is officially supported.
 // It doesn't follow that ARC is available for user sessions and
@@ -77,6 +74,13 @@ void SetArcAvailableCommandLineForTesting(base::CommandLine* command_line);
 // that ARC availability was checked before and IsArcKioskAvailable()
 // should also return true in that case.
 bool IsArcKioskMode();
+
+// Returns true if current user is a robot account user.
+// These are Public Session and ARC Kiosk users.
+// As it can return true only when user is already initialized, it implies
+// that ARC availability was checked before.
+// The check is basically IsArcKioskMode() | IsPublicSessionMode().
+bool IsRobotAccountMode();
 
 // Returns true if ARC is allowed for the given user. Note this should not be
 // used as a signal of whether ARC is allowed alone because it only considers

@@ -658,11 +658,11 @@ scoped_refptr<ComputedStyle> StyleResolver::StyleForElement(
 
     // TODO(dominicc): Remove this counter when Issue 590014 is fixed.
     if (element->HasTagName(HTMLNames::summaryTag)) {
-      MatchedPropertiesRange properties =
+      MatchedPropertiesRange matched_range =
           collector.MatchedResult().AuthorRules();
-      for (auto it = properties.begin(); it != properties.end(); ++it) {
+      for (const auto& matched : matched_range) {
         const CSSValue* value =
-            it->properties->GetPropertyCSSValue(CSSPropertyDisplay);
+            matched.properties->GetPropertyCSSValue(CSSPropertyDisplay);
         if (value && value->IsIdentifierValue() &&
             ToCSSIdentifierValue(*value).GetValueID() == CSSValueBlock) {
           UseCounter::Count(
@@ -1904,10 +1904,10 @@ bool StyleResolver::HasAuthorBackground(const StyleResolverState& state) {
   FillLayer old_fill = cached_ua_style->background_layers;
   FillLayer new_fill = state.Style()->BackgroundLayers();
   // Exclude background-repeat from comparison by resetting it.
-  old_fill.SetRepeatX(kNoRepeatFill);
-  old_fill.SetRepeatY(kNoRepeatFill);
-  new_fill.SetRepeatX(kNoRepeatFill);
-  new_fill.SetRepeatY(kNoRepeatFill);
+  old_fill.SetRepeatX(EFillRepeat::kNoRepeatFill);
+  old_fill.SetRepeatY(EFillRepeat::kNoRepeatFill);
+  new_fill.SetRepeatX(EFillRepeat::kNoRepeatFill);
+  new_fill.SetRepeatY(EFillRepeat::kNoRepeatFill);
 
   return (old_fill != new_fill || cached_ua_style->background_color !=
                                       state.Style()->BackgroundColor());
@@ -1944,9 +1944,8 @@ void StyleResolver::ApplyCallbackSelectors(StyleResolverState& state) {
   StyleRuleList* rules = collector.MatchedStyleRuleList();
   if (!rules)
     return;
-  for (size_t i = 0; i < rules->size(); i++)
-    state.Style()->AddCallbackSelector(
-        rules->at(i)->SelectorList().SelectorsText());
+  for (auto rule : *rules)
+    state.Style()->AddCallbackSelector(rule->SelectorList().SelectorsText());
 }
 
 // Font properties are also handled by FontStyleResolver outside the main

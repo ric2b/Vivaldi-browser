@@ -10,7 +10,6 @@
 #include <memory>
 #include <vector>
 
-#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/public/navigation_item_list.h"
@@ -216,6 +215,9 @@ class NavigationManagerImpl : public NavigationManager {
 
   // Subclass specific implementation to update session state.
   virtual void FinishGoToIndex(int index, NavigationInitiationType type) = 0;
+
+  // Returns true if the subclass uses placeholder URLs and this is such a URL.
+  virtual bool IsPlaceholderUrl(const GURL& url) const;
 
   // The primary delegate for this manager.
   NavigationManagerDelegate* delegate_;

@@ -1,39 +1,43 @@
 # Copyright (c) 2015-2017 Vivaldi Technologies AS. All rights reserved
 
-post_process_target("//chrome:browser_dependencies") {
+update_target("//chrome:browser_dependencies") {
   public_deps += [ "//vivaldi/sync:browser" ]
 }
 
-post_process_target("//chrome/browser:browser") {
+update_target("//chrome/browser:browser") {
   public_deps += [ "//vivaldi/sync:browser" ]
 }
 
-post_process_target("//chrome:chrome_android_core") {
-  deps += [ "//vivaldi/sync:browser" ]
+if (is_android) {
+  update_target("//chrome:chrome_android_core") {
+    deps += [ "//vivaldi/sync:browser" ]
+  }
 }
 
-post_process_target("//components/browser_sync:browser_sync") {
+update_target("//components/browser_sync:browser_sync") {
   deps += [ "//vivaldi/sync/glue" ]
 }
 
-post_process_template("//chrome/test:sync_integration_tests") {
-  deps += [ "//vivaldi/sync" ]
+if (!is_android) {
+  update_template_instance("//chrome/test:sync_integration_tests") {
+    deps += [ "//vivaldi/sync" ]
+  }
+
+  update_target("//chrome/test:sync_integration_test_support") {
+    public_deps += [
+      "//vivaldi/sync/test:sync_integration_testsupport",
+    ]
+  }
 }
 
-post_process_target("//chrome/test:sync_integration_test_support") {
-  public_deps += [
-    "//vivaldi/sync/test:sync_integration_testsupport",
-  ]
-}
-
-post_process_target("//components/sync:test_support_fake_server") {
+update_target("//components/sync:test_support_fake_server") {
   public_deps += [
     "//vivaldi/sync/test:fake_server",
     "//vivaldi/sync/test:unit_tests",
   ]
 }
 
-post_process_target("//components/sync:sync") {
+update_target("//components/sync:sync") {
   public_deps += [
     "//vivaldi/sync/test:fake_server",
   ]

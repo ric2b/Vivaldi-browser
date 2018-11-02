@@ -4,13 +4,12 @@
 
 #include "content/browser/frame_host/navigation_request_info.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 
 namespace content {
 
 NavigationRequestInfo::NavigationRequestInfo(
     const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
+    mojom::BeginNavigationParamsPtr begin_params,
     const GURL& site_for_cookies,
     bool is_main_frame,
     bool parent_is_main_frame,
@@ -18,9 +17,9 @@ NavigationRequestInfo::NavigationRequestInfo(
     int frame_tree_node_id,
     bool is_for_guests_only,
     bool report_raw_headers,
-    blink::mojom::PageVisibilityState page_visibility_state)
+    bool is_prerendering)
     : common_params(common_params),
-      begin_params(begin_params),
+      begin_params(std::move(begin_params)),
       site_for_cookies(site_for_cookies),
       is_main_frame(is_main_frame),
       parent_is_main_frame(parent_is_main_frame),
@@ -28,7 +27,7 @@ NavigationRequestInfo::NavigationRequestInfo(
       frame_tree_node_id(frame_tree_node_id),
       is_for_guests_only(is_for_guests_only),
       report_raw_headers(report_raw_headers),
-      page_visibility_state(page_visibility_state) {}
+      is_prerendering(is_prerendering) {}
 
 NavigationRequestInfo::~NavigationRequestInfo() {}
 

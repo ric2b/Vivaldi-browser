@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/i18n/rtl.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -55,7 +54,7 @@ std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
   security_interstitials::MetricsHelper::ReportDetails reporting_info;
   reporting_info.metric_prefix = kMetricsName;
   std::unique_ptr<ChromeMetricsHelper> metrics_helper =
-      base::MakeUnique<ChromeMetricsHelper>(web_contents, request_url,
+      std::make_unique<ChromeMetricsHelper>(web_contents, request_url,
                                             reporting_info, kMetricsName);
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(false);
   return metrics_helper;
@@ -74,10 +73,15 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const net::SSLInfo& ssl_info,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(
+    : SSLBlockingPageBase(
           web_contents,
+          certificate_reporting::ErrorReport::INTERSTITIAL_CAPTIVE_PORTAL,
+          ssl_info,
           request_url,
-          base::MakeUnique<SSLErrorControllerClient>(
+          std::move(ssl_cert_reporter),
+          false /* overridable */,
+          base::Time::Now(),
+          std::make_unique<SSLErrorControllerClient>(
               web_contents,
               ssl_info,
               request_url,
@@ -85,13 +89,6 @@ CaptivePortalBlockingPage::CaptivePortalBlockingPage(
       login_url_(login_url),
       ssl_info_(ssl_info),
       callback_(callback) {
-  if (ssl_cert_reporter) {
-    cert_report_helper_.reset(new CertReportHelper(
-        std::move(ssl_cert_reporter), web_contents, request_url, ssl_info,
-        certificate_reporting::ErrorReport::INTERSTITIAL_CAPTIVE_PORTAL, false,
-        base::Time::Now(), nullptr));
-  }
-
   captive_portal::CaptivePortalMetrics::LogCaptivePortalBlockingPageEvent(
       captive_portal::CaptivePortalMetrics::SHOW_ALL);
 }
@@ -209,8 +206,8 @@ void CaptivePortalBlockingPage::PopulateInterstitialStrings(
   load_time_data->SetString("explanationParagraph", base::string16());
   load_time_data->SetString("finalParagraph", base::string16());
 
-  if (cert_report_helper_)
-    cert_report_helper_->PopulateExtendedReportingOption(load_time_data);
+  if (cert_report_helper())
+    cert_report_helper()->PopulateExtendedReportingOption(load_time_data);
   else
     load_time_data->SetBoolean(security_interstitials::kDisplayCheckBox, false);
 }
@@ -227,6 +224,8 @@ void CaptivePortalBlockingPage::CommandReceived(const std::string& command) {
   security_interstitials::SecurityInterstitialCommand cmd =
       static_cast<security_interstitials::SecurityInterstitialCommand>(
           command_num);
+  cert_report_helper()->HandleReportingCommands(cmd,
+                                                controller()->GetPrefService());
   switch (cmd) {
     case security_interstitials::CMD_OPEN_LOGIN:
       captive_portal::CaptivePortalMetrics::LogCaptivePortalBlockingPageEvent(
@@ -246,18 +245,6 @@ void CaptivePortalBlockingPage::CommandReceived(const std::string& command) {
 #else
       CaptivePortalTabHelper::OpenLoginTabForWebContents(web_contents(), true);
 #endif
-      break;
-    case security_interstitials::CMD_DO_REPORT:
-      controller()->SetReportingPreference(true);
-      safe_browsing::SetExtendedReportingPrefAndMetric(
-          controller()->GetPrefService(), true,
-          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
-      break;
-    case security_interstitials::CMD_DONT_REPORT:
-      controller()->SetReportingPreference(false);
-      safe_browsing::SetExtendedReportingPrefAndMetric(
-          controller()->GetPrefService(), false,
-          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
       break;
     case security_interstitials::CMD_OPEN_REPORTING_PRIVACY:
       controller()->OpenExtendedReportingPrivacyPolicy(true);
@@ -286,13 +273,7 @@ void CaptivePortalBlockingPage::OnProceed() {
 }
 
 void CaptivePortalBlockingPage::OnDontProceed() {
-  UpdateMetricsAfterSecurityInterstitial();
-  if (cert_report_helper_) {
-    // Finish collecting information about invalid certificates, if the
-    // user opted in to.
-    cert_report_helper_->FinishCertCollection(
-        certificate_reporting::ErrorReport::USER_DID_NOT_PROCEED);
-  }
+  OnInterstitialClosing();
 
   // Need to explicity deny the certificate via the callback, otherwise memory
   // is leaked.

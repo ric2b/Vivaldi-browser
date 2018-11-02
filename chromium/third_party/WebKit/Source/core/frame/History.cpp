@@ -147,7 +147,7 @@ bool History::ShouldThrottleStateObjectChanges() {
   if (state_flood_guard.count > kStateUpdateLimit) {
     static constexpr auto kStateUpdateLimitResetInterval =
         TimeDelta::FromSeconds(10);
-    const auto now = TimeTicks::Now();
+    const auto now = CurrentTimeTicks();
     if (now - state_flood_guard.last_updated > kStateUpdateLimitResetInterval) {
       state_flood_guard.count = 0;
       state_flood_guard.last_updated = now;
@@ -231,7 +231,7 @@ KURL History::UrlForState(const String& url_string) {
 }
 
 bool History::CanChangeToUrl(const KURL& url,
-                             SecurityOrigin* document_origin,
+                             const SecurityOrigin* document_origin,
                              const KURL& document_url) {
   if (!url.IsValid())
     return false;
@@ -248,7 +248,8 @@ bool History::CanChangeToUrl(const KURL& url,
   if (!EqualIgnoringPathQueryAndFragment(url, document_url))
     return false;
 
-  scoped_refptr<SecurityOrigin> requested_origin = SecurityOrigin::Create(url);
+  scoped_refptr<const SecurityOrigin> requested_origin =
+      SecurityOrigin::Create(url);
   if (requested_origin->IsUnique() ||
       !requested_origin->IsSameSchemeHostPort(document_origin)) {
     return false;

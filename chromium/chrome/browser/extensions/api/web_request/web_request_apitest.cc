@@ -2,12 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -19,6 +22,8 @@
 #include "chrome/browser/extensions/extension_with_management_policy_apitest.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/extensions/test_extension_dir.h"
+#include "chrome/browser/net/profile_network_context_service.h"
+#include "chrome/browser/net/profile_network_context_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -26,10 +31,12 @@
 #include "chrome/browser/ui/login/login_handler.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/login/scoped_test_public_session_login_state.h"
+#include "components/prefs/pref_service.h"
+#include "components/proxy_config/proxy_config_dictionary.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
@@ -251,8 +258,8 @@ void TearDownDevToolsFrontendInterceptorOnIO() {
 
 class ExtensionWebRequestApiTest : public ExtensionApiTest {
  public:
-  void SetUpInProcessBrowserTestFixture() override {
-    ExtensionApiTest::SetUpInProcessBrowserTestFixture();
+  void SetUpOnMainThread() override {
+    ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 
@@ -750,7 +757,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Load an extension that registers a listener for webRequest events, and
-  // wait 'til it's initialized.
+  // wait until it's initialized.
   ExtensionTestMessageListener listener("ready", false);
   const Extension* extension =
       LoadExtension(test_data_dir_.AppendASCII("webrequest_activetab"));
@@ -760,7 +767,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   // Navigate the browser to a page in a new tab.
   const std::string kHost = "a.com";
   GURL url = embedded_test_server()->GetURL(kHost, "/iframe_cross_site.html");
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   ui_test_utils::NavigateToURL(&params);
 
@@ -853,7 +860,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   int port = embedded_test_server()->port();
 
   // Load an extension that registers a listener for webRequest events, and
-  // wait 'til it's initialized.
+  // wait until it's initialized.
   ExtensionTestMessageListener listener("ready", false);
   const Extension* extension = LoadExtension(
       test_data_dir_.AppendASCII("webrequest_clients_google_com"));
@@ -886,7 +893,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
                                     testcase.main_frame_url, port));
     }
 
-    chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_TYPED);
+    NavigateParams params(browser(), url, ui::PAGE_TRANSITION_TYPED);
     ui_test_utils::NavigateToURL(&params);
 
     EXPECT_EQ(expected_requests_observed,
@@ -950,6 +957,53 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
   // This request should not be observed by the extension.
   EXPECT_EQ(expected_requests_observed,
             GetWebRequestCountFromBackgroundPage(extension, profile()));
+}
+
+// Verify that requests for PAC scripts are protected properly.
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+                       WebRequestPacRequestProtection) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Load an extension that registers a listener for webRequest events, and
+  // wait until it's initialized.
+  ExtensionTestMessageListener listener("ready", false);
+  const Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("webrequest_pac_request"));
+  ASSERT_TRUE(extension) << message_;
+  EXPECT_TRUE(listener.WaitUntilSatisfied());
+
+  // Configure a PAC script. Need to do this after the extension is loaded, so
+  // that the PAC isn't already loaded by the time the extension starts
+  // affecting requests.
+  PrefService* pref_service = browser()->profile()->GetPrefs();
+  pref_service->Set(proxy_config::prefs::kProxy,
+                    *ProxyConfigDictionary::CreatePacScript(
+                        embedded_test_server()->GetURL("/self.pac").spec(),
+                        true /* pac_mandatory */));
+  // Flush the proxy configuration change over the Mojo pipe to avoid any races.
+  ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
+      ->FlushProxyConfigMonitorForTesting();
+
+  // Navigate to a page. The URL doesn't matter.
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/title2.html"));
+
+  // The extension should not have seen the PAC request.
+  EXPECT_EQ(0, GetCountFromBackgroundPage(extension, profile(),
+                                          "window.pacRequestCount"));
+
+  // The extension should have seen the request for the main frame.
+  EXPECT_EQ(1, GetCountFromBackgroundPage(extension, profile(),
+                                          "window.title2RequestCount"));
+
+  // The PAC request should have succeeded, as should the subsequent URL
+  // request.
+  EXPECT_EQ(content::PAGE_TYPE_NORMAL, browser()
+                                           ->tab_strip_model()
+                                           ->GetActiveWebContents()
+                                           ->GetController()
+                                           .GetLastCommittedEntry()
+                                           ->GetPageType());
 }
 
 // Checks that the Dice response header is protected for Gaia URLs, but not
@@ -1404,7 +1458,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTestWithManagementPolicy,
 
   // Navigate the browser to a page in a new tab.
   GURL url = embedded_test_server()->GetURL(protected_domain, "/empty.html");
-  chrome::NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
   ui_test_utils::NavigateToURL(&params);
 

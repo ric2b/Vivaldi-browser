@@ -4,10 +4,10 @@
 
 #include "chrome/browser/android/vr_shell/mailbox_to_surface_bridge.h"
 
+#include <memory>
 #include <string>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/sys_info.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "components/viz/common/gpu/context_provider.h"
@@ -77,7 +77,7 @@ GLuint CompileShader(gpu::gles2::GLES2Interface* gl,
     if (status == GL_FALSE) {
       GLint info_log_length = 0;
       gl->GetShaderiv(shader_handle, GL_INFO_LOG_LENGTH, &info_log_length);
-      auto str_info_log = base::MakeUnique<GLchar[]>(info_log_length + 1);
+      auto str_info_log = std::make_unique<GLchar[]>(info_log_length + 1);
       gl->GetShaderInfoLog(shader_handle, info_log_length, nullptr,
                            str_info_log.get());
       DLOG(ERROR) << "Error compiling shader: " << str_info_log.get();
@@ -113,7 +113,7 @@ GLuint CreateAndLinkProgram(gpu::gles2::GLES2Interface* gl,
       GLint info_log_length;
       gl->GetProgramiv(program_handle, GL_INFO_LOG_LENGTH, &info_log_length);
 
-      auto str_info_log = base::MakeUnique<GLchar[]>(info_log_length + 1);
+      auto str_info_log = std::make_unique<GLchar[]>(info_log_length + 1);
       gl->GetProgramInfoLog(program_handle, info_log_length, nullptr,
                             str_info_log.get());
       DLOG(ERROR) << "Error compiling program: " << str_info_log.get();
@@ -130,8 +130,7 @@ GLuint ConsumeTexture(gpu::gles2::GLES2Interface* gl,
   TRACE_EVENT0("gpu", "MailboxToSurfaceBridge::ConsumeTexture");
   gl->WaitSyncTokenCHROMIUM(mailbox.sync_token.GetConstData());
 
-  return gl->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D,
-                                             mailbox.mailbox.name);
+  return gl->CreateAndConsumeTextureCHROMIUM(mailbox.mailbox.name);
 }
 
 }  // namespace
@@ -177,7 +176,7 @@ void MailboxToSurfaceBridge::CreateSurface(
   gpu::GpuSurfaceTracker* tracker = gpu::GpuSurfaceTracker::Get();
   ANativeWindow_acquire(window);
   // Skip ANativeWindow_setBuffersGeometry, the default size appears to work.
-  auto surface = base::MakeUnique<gl::ScopedJavaSurface>(surface_texture);
+  auto surface = std::make_unique<gl::ScopedJavaSurface>(surface_texture);
   surface_handle_ =
       tracker->AddSurfaceForNativeWidget(gpu::GpuSurfaceTracker::SurfaceRecord(
           window, surface->j_surface().obj()));
@@ -212,7 +211,7 @@ void MailboxToSurfaceBridge::CreateSurface(
             // See GetCompositorContextAttributes in
             // content/browser/renderer_host/compositor_impl_android.cc
             // and crbug.com/699330.
-            gpu::gles2::ContextCreationAttribHelper attributes;
+            gpu::ContextCreationAttribs attributes;
             attributes.alpha_size = -1;
             attributes.red_size = 8;
             attributes.green_size = 8;

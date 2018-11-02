@@ -1,5 +1,5 @@
 
-post_process_template("//chrome/browser:browser") {
+update_template_instance("//chrome/browser:browser") {
   sources += [
     "//vivaldi/browser/menus/vivaldi_menu_enums.h",
     "//vivaldi/browser/shell_integration/vivaldi_shell_integration.h",
@@ -21,19 +21,44 @@ post_process_template("//chrome/browser:browser") {
   }
 }
 
-post_process_template("//chrome/browser/ui:ui") {
+update_target("//chrome/browser/extensions:extensions") {
+  sources += [
+    "//vivaldi/browser/extensions/browser_extension_window_controller_viv.cc",
+  ]
+}
+
+update_template_instance("//chrome/browser/ui:ui") {
   sources += [
     "//vivaldi/browser/launch_update_notifier.h",
     "//vivaldi/browser/launch_update_notifier_win.cc",
     "//vivaldi/browser/launch_update_notifier_posix.cc",
     "//vivaldi/browser/startup_vivaldi_browser.cpp",
     "//vivaldi/browser/startup_vivaldi_browser.h",
+    "//vivaldi/browser/ui/viv_tab_contents_synced_tab_delegate.cc",
   ]
+  if (!is_android) {
+    sources += [
+      "//vivaldi/browser/ui/viv_settings_import_data_handler.cc",
+      "//vivaldi/browser/ui/viv_toolbar_actions_model.cc",
+    ]
+  }
+  if (toolkit_views) {
+    sources += [
+      "//vivaldi/browser/ui/viv_page_info_bubble_view.cc",
+    ]
+  }
+  if (use_aura) {
+    sources += [
+      "//vivaldi/browser/ui/viv_web_drag_bookmark_handler_aura.cc",
+    ]
+  }
 }
 
-post_process_target("//chrome/common:constants") {
-  sources += [
-    "//vivaldi/browser/win/vivaldi_standalone.cpp",
-    "//vivaldi/browser/win/vivaldi_standalone.h",
-  ]
+update_target("//chrome/common:constants") {
+  if (is_win) {
+    sources += [
+      "//vivaldi/browser/win/vivaldi_utils.cc",
+      "//vivaldi/browser/win/vivaldi_utils.h",
+    ]
+  }
 }

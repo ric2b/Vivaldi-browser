@@ -219,7 +219,9 @@ class CommitBeforeSwapAckSentHelper
   // DidCommitProvisionalLoadInterceptor:
   void WillDispatchDidCommitProvisionalLoad(
       RenderFrameHost* render_frame_host,
-      ::FrameHostMsg_DidCommitProvisionalLoad_Params*) override {
+      ::FrameHostMsg_DidCommitProvisionalLoad_Params* params,
+      service_manager::mojom::InterfaceProviderRequest*
+          interface_provider_request) override {
     base::MessageLoop::ScopedNestableTaskAllower allow(
         base::MessageLoop::current());
     FrameWatcher(web_contents()).WaitFrames(1);
@@ -668,7 +670,7 @@ class CompositingRenderWidgetHostViewBrowserTestTabCapture
             gfx::Rect(output_size.width() / 2 - 1, 0, 2, output_size.height()));
 
         scoped_refptr<media::VideoFrame> video_frame =
-            media::VideoFrame::CreateFrame(media::PIXEL_FORMAT_YV12,
+            media::VideoFrame::CreateFrame(media::PIXEL_FORMAT_I420,
                                            output_size, gfx::Rect(output_size),
                                            output_size, base::TimeDelta());
 

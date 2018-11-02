@@ -11,7 +11,7 @@
 #include "platform_media/common/feature_toggles.h"
 
 #include "platform_media/renderer/decoders/mac/at_codec_helper.h"
-
+#if defined(PLATFORM_MEDIA_MP3)
 namespace media {
 
 class ATMP3Helper final : public ATCodecHelper {
@@ -31,5 +31,5 @@ class ATMP3Helper final : public ATCodecHelper {
 };
 
 }  // namespace media
-
+#endif
 #endif  // PLATFORM_MEDIA_RENDERER_DECODERS_MAC_AT_MP3_HELPER_H_

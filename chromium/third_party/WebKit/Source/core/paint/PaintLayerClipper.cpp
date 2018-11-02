@@ -62,14 +62,7 @@ static bool HasOverflowClip(
 }
 
 bool ClipRectsContext::ShouldRespectRootLayerClip() const {
-  if (respect_overflow_clip == kIgnoreOverflowClip)
-    return false;
-
-  if (root_layer->IsRootLayer() &&
-      respect_overflow_clip_for_viewport == kIgnoreOverflowClip)
-    return false;
-
-  return true;
+  return respect_overflow_clip == kRespectOverflowClip;
 }
 
 static void AdjustClipRectsForChildren(
@@ -290,11 +283,38 @@ void PaintLayerClipper::CalculateRectsWithGeometryMapper(
       PaintLayer* enclosing_pagination_layer =
           layer_.EnclosingPaginationLayer();
       layer_.ConvertToLayerCoords(enclosing_pagination_layer, offset);
-      offset.MoveBy(fragment_data.GetRarePaintData()->PaginationOffset());
+      offset.MoveBy(fragment_data.PaginationOffset());
       offset.MoveBy(enclosing_pagination_layer->VisualOffsetFromAncestor(
           context.root_layer));
     } else {
-      layer_.ConvertToLayerCoords(context.root_layer, offset);
+      const auto* current_transform =
+          fragment_data.PreEffectProperties().Transform();
+      const auto& root_fragment =
+          context.root_layer->GetLayoutObject().FirstFragment();
+      const auto* root_transform =
+          root_fragment.LocalBorderBoxProperties()->Transform();
+      if (&layer_ == context.root_layer ||
+          current_transform == root_transform) {
+        offset.MoveBy(fragment_data.PaintOffset());
+        offset.MoveBy(-root_fragment.PaintOffset());
+      } else {
+        const TransformationMatrix& transform =
+            GeometryMapper::SourceToDestinationProjection(current_transform,
+                                                          root_transform);
+
+        if (transform.IsIdentityOr2DTranslation()) {
+          offset.MoveBy(fragment_data.PaintOffset());
+          // The transform should be an integer translation, up to floating
+          // point error.
+          offset.Move(LayoutSize((float)transform.E(), (float)transform.F()));
+          offset.MoveBy(-root_fragment.PaintOffset());
+        } else {
+          // This branch can happen due to perspective transforms.
+          // TODO(chrishtr): investigate whether the paint code is broken
+          // in this case.
+          layer_.ConvertToLayerCoords(context.root_layer, offset);
+        }
+      }
     }
   }
   layer_bounds = LayoutRect(offset, LayoutSize(layer_.PixelSnappedSize()));
@@ -323,6 +343,8 @@ void PaintLayerClipper::CalculateRects(
     ClipRect& background_rect,
     ClipRect& foreground_rect,
     const LayoutPoint* offset_from_root) const {
+  // This feature is not supported for this method.
+  DCHECK(context.respect_overflow_clip != kIgnoreOverflowClipAndScroll);
   if (use_geometry_mapper_) {
     DCHECK(fragment_data);
     auto* local_borderbox = fragment_data->LocalBorderBoxProperties();
@@ -425,10 +447,16 @@ void PaintLayerClipper::CalculateClipRects(const ClipRectsContext& context,
     // rootLayer may be across some transformed layer boundary, for example, in
     // the PaintLayerCompositor overlapMap, where clipRects are needed in view
     // space.
-    ApplyClipRects(context, layout_object,
-                   LayoutPoint(layout_object.LocalToAncestorPoint(
-                       FloatPoint(), &context.root_layer->GetLayoutObject())),
-                   clip_rects);
+    LayoutPoint offset(layout_object.LocalToAncestorPoint(
+        FloatPoint(), &context.root_layer->GetLayoutObject()));
+    if (context.respect_overflow_clip == kIgnoreOverflowClipAndScroll &&
+        context.root_layer->ScrollsOverflow() &&
+        layer_.ScrollsWithRespectTo(context.root_layer)) {
+      offset.Move(LayoutSize(
+          context.root_layer->GetScrollableArea()->GetScrollOffset()));
+    }
+
+    ApplyClipRects(context, layout_object, offset, clip_rects);
   }
 }
 
@@ -474,22 +502,33 @@ void PaintLayerClipper::CalculateBackgroundClipRectWithGeometryMapper(
   // rects, so we should add methods to GeometryMapper that guarantee there
   // are tight results, or else signal an error.
   if (HasOverflowClip(layer_)) {
+    // Implement the following special case: if computing clip rects with
+    // respect to the root, don't exclude overlay scrollbars for the background
+    // rect if layer_ is the same as the root.
+    OverlayScrollbarClipBehavior clip_behavior =
+        context.overlay_scrollbar_clip_behavior;
+    if (&layer_ == context.root_layer)
+      clip_behavior = kIgnorePlatformOverlayScrollbarSize;
+
     FloatClipRect clip_rect((FloatRect(LocalVisualRect(context))));
       clip_rect.MoveBy(FloatPoint(fragment_data.PaintOffset()));
 
-    GeometryMapper::LocalToAncestorVisualRect(
-        source_property_tree_state, destination_property_tree_state, clip_rect);
-    output.SetRect(clip_rect);
+      GeometryMapper::LocalToAncestorVisualRect(source_property_tree_state,
+                                                destination_property_tree_state,
+                                                clip_rect, clip_behavior);
+      output.SetRect(clip_rect);
   } else {
     const FloatClipRect& clipped_rect_in_root_layer_space =
         GeometryMapper::LocalToAncestorClipRect(
-            source_property_tree_state, destination_property_tree_state);
+            source_property_tree_state, destination_property_tree_state,
+            context.overlay_scrollbar_clip_behavior);
     output.SetRect(clipped_rect_in_root_layer_space);
   }
 
   // TODO(chrishtr): generalize to multiple fragments.
   output.MoveBy(
       -context.root_layer->GetLayoutObject().FirstFragment().PaintOffset());
+
   output.Move(context.sub_pixel_accumulation);
 }
 
@@ -524,8 +563,15 @@ void PaintLayerClipper::InitializeCommonClipRectState(
   } else {
     const auto* ancestor_overflow_clip = ancestor_properties->OverflowClip();
     if (ancestor_overflow_clip) {
-      DCHECK_EQ(destination_property_tree_state.Clip(),
-                ancestor_overflow_clip->Parent());
+      if (const auto* ancestor_rounded_clip =
+              ancestor_properties->InnerBorderRadiusClip()) {
+        DCHECK_EQ(destination_property_tree_state.Clip(),
+                  ancestor_rounded_clip->Parent());
+        DCHECK_EQ(ancestor_rounded_clip, ancestor_overflow_clip->Parent());
+      } else {
+        DCHECK_EQ(destination_property_tree_state.Clip(),
+                  ancestor_overflow_clip->Parent());
+      }
       destination_property_tree_state.SetClip(ancestor_overflow_clip);
     }
   }
@@ -609,7 +655,13 @@ bool PaintLayerClipper::ShouldClipOverflow(
     const ClipRectsContext& context) const {
   if (&layer_ == context.root_layer && !context.ShouldRespectRootLayerClip())
     return false;
-  return HasOverflowClip(layer_);
+  // Embedded objects with border radius need to compute clip rects when
+  // painting child mask layers. We do not have access to paint phases here,
+  // so always claim to clip and ignore it later when painting the foreground
+  // phases.
+  return HasOverflowClip(layer_) ||
+         (layer_.GetLayoutObject().IsLayoutEmbeddedContent() &&
+          layer_.GetLayoutObject().StyleRef().HasBorderRadius());
 }
 
 }  // namespace blink

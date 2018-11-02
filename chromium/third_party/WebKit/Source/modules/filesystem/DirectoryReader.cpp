@@ -30,34 +30,35 @@
 
 #include "modules/filesystem/DirectoryReader.h"
 
+#include "bindings/modules/v8/V8EntriesCallback.h"
+#include "bindings/modules/v8/V8ErrorCallback.h"
 #include "core/fileapi/FileError.h"
-#include "modules/filesystem/EntriesCallback.h"
 #include "modules/filesystem/Entry.h"
-#include "modules/filesystem/ErrorCallback.h"
 #include "modules/filesystem/FileSystemCallbacks.h"
 
 namespace blink {
 
 namespace {
 
-void RunEntriesCallback(EntriesCallback* callback,
+void RunEntriesCallback(V8EntriesCallback* callback,
                         HeapVector<Member<Entry>>* entries) {
   callback->handleEvent(*entries);
 }
 
 }  // namespace
 
-class DirectoryReader::EntriesCallbackHelper final : public EntriesCallback {
+class DirectoryReader::EntriesCallbackHelper final
+    : public DirectoryReaderOnDidReadCallback {
  public:
   explicit EntriesCallbackHelper(DirectoryReader* reader) : reader_(reader) {}
 
-  void handleEvent(const EntryHeapVector& entries) override {
+  void OnDidReadDirectoryEntries(const EntryHeapVector& entries) override {
     reader_->AddEntries(entries);
   }
 
   void Trace(blink::Visitor* visitor) override {
     visitor->Trace(reader_);
-    EntriesCallback::Trace(visitor);
+    DirectoryReaderOnDidReadCallback::Trace(visitor);
   }
 
  private:
@@ -85,10 +86,10 @@ DirectoryReader::DirectoryReader(DOMFileSystemBase* file_system,
                                  const String& full_path)
     : DirectoryReaderBase(file_system, full_path), is_reading_(false) {}
 
-DirectoryReader::~DirectoryReader() {}
+DirectoryReader::~DirectoryReader() = default;
 
-void DirectoryReader::readEntries(EntriesCallback* entries_callback,
-                                  ErrorCallback* error_callback) {
+void DirectoryReader::readEntries(V8EntriesCallback* entries_callback,
+                                  V8ErrorCallback* error_callback) {
   if (!is_reading_) {
     is_reading_ = true;
     Filesystem()->ReadDirectory(this, full_path_,
@@ -130,7 +131,7 @@ void DirectoryReader::AddEntries(const EntryHeapVector& entries) {
   entries_.AppendVector(entries);
   error_callback_ = nullptr;
   if (entries_callback_) {
-    EntriesCallback* entries_callback = entries_callback_.Release();
+    V8EntriesCallback* entries_callback = entries_callback_.Release();
     EntryHeapVector entries;
     entries.swap(entries_);
     entries_callback->handleEvent(entries);

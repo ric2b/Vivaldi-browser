@@ -142,10 +142,8 @@ class SessionRestoreTest : public InProcessBrowserTest {
     if (url.is_empty()) {
       chrome::NewEmptyWindow(profile);
     } else {
-      chrome::NavigateParams params(profile,
-                                    url,
-                                    ui::PAGE_TRANSITION_LINK);
-      chrome::Navigate(&params);
+      NavigateParams params(profile, url, ui::PAGE_TRANSITION_LINK);
+      Navigate(&params);
     }
     Browser* new_browser = window_observer.WaitForSingleNewBrowser();
     // Stop loading anything more if we are running out of space.
@@ -959,7 +957,13 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUI) {
             new_tab->GetMainFrame()->GetEnabledBindings());
 }
 
-IN_PROC_BROWSER_TEST_F(SessionRestoreTest, RestoreWebUISettings) {
+// http://crbug.com/803510 : Flaky on Win7 Tests (dbg)
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_RestoreWebUISettings DISABLED_RestoreWebUISettings
+#else
+#define MAYBE_RestoreWebUISettings RestoreWebUISettings
+#endif
+IN_PROC_BROWSER_TEST_F(SessionRestoreTest, MAYBE_RestoreWebUISettings) {
   const GURL webui_url("chrome://settings");
   ui_test_utils::NavigateToURL(browser(), webui_url);
   content::WebContents* old_tab =
@@ -1102,8 +1106,7 @@ IN_PROC_BROWSER_TEST_F(SessionRestoreTest, ActiveIndexUpdatedAtInsert) {
       browser(), url2_, WindowOpenDisposition::NEW_BACKGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
 
-  chrome::NavigateParams navigate_params(browser(), url3_,
-                                         ui::PAGE_TRANSITION_TYPED);
+  NavigateParams navigate_params(browser(), url3_, ui::PAGE_TRANSITION_TYPED);
   navigate_params.tabstrip_index = 0;
   navigate_params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
   ui_test_utils::NavigateToURL(&navigate_params);

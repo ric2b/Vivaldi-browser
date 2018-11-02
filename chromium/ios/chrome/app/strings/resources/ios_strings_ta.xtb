@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> உருப்படிகள்</translation>
 <translation id="1491277525950327607">அமைப்பை நிலைமாற்ற, இருமுறை தட்டவும்</translation>
 <translation id="152234381334907219">எப்போதும் சேமிக்காதவை</translation>
+<translation id="1532451416480227577">Google Pay இல் உள்ள முகவரிகளையும் கிரெடிட் கார்டுகளையும் காட்டு</translation>
 <translation id="1540800554400757039">முகவரி 1</translation>
 <translation id="1545749641540134597">QR குறியீட்டை ஸ்கேன் செய்க</translation>
 <translation id="1580783302095112590">மின்னஞ்சல் அனுப்பப்பட்டது.</translation>
@@ -96,6 +97,7 @@
 <translation id="2718352093833049315">வைஃபையில் மட்டும்</translation>
 <translation id="2747003861858887689">முந்தைய புலம்</translation>
 <translation id="2780046210906776326">மின்னஞ்சல் கணக்குகள் எதுவுமில்லை</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">தாவல் மாற்றியிலிருந்து வெளியேறு</translation>
 <translation id="283291358677939992">பக்கத்தில் கண்டறி...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@
 <translation id="4378154925671717803">தொலைபேசி</translation>
 <translation id="441868831736628555">தனியுரிமை அறிக்கை</translation>
 <translation id="4460091562821778167">ஒவ்வொரு முறையும் எந்தப் பயன்பாட்டைப் பயன்படுத்த வேண்டும் எனக் கேள்</translation>
+<translation id="4496373720959965247">தாவல்களைச் சேர்த்து, பக்கங்களுக்கு இடையில் மாறலாம்</translation>
 <translation id="4508750114462689118">உள்நுழைவு விளம்பரத்தை மூடு</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> இல் சேமித்த கடவுச்சொற்களைப் பார்க்கலாம் மற்றும் நிர்வகிக்கலாம்.</translation>
 <translation id="4536418791685807335">மீண்டும் உள்நுழைந்து முயலவும்.</translation>
@@ -217,12 +220,12 @@
 <translation id="5300589172476337783">காண்பி</translation>
 <translation id="5317780077021120954">சேமி</translation>
 <translation id="5327248766486351172">பெயர்</translation>
+<translation id="533632423981297619">ஏற்றிய கோப்பைப் பார்க்கக்கூடிய அனைவரும் உங்கள் கடவுச்சொற்களைப் பார்க்க முடியும். பிறருடன் இந்தக் கோப்பைப் பகிர வேண்டாம்.</translation>
 <translation id="5388358297987318779">படத்தைத் திற</translation>
 <translation id="5409365236829784218">இந்தக் கோப்பைத் திறக்கக்கூடிய பயன்பாடுகள் எதுவும் நிறுவப்படவில்லை.</translation>
 <translation id="5433691172869980887">பயனர்பெயர் நகலெடுக்கப்பட்டது</translation>
 <translation id="54401264925851789">பக்க பாதுகாப்புத் தகவல்</translation>
 <translation id="5525269841082836315">கடவுச்சொற்றொடரை உருவாக்கவும்</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">ஹேண்ட்ஆஃப் இந்தச் சாதனத்தில் ஒரு இணையதளத்தில் உலாவத் தொடங்கி, அதே தளத்தில், Mac இல் தொடர்ந்து எளிதாக உலாவ அனுமதிக்கிறது. தற்போது திறந்து வைத்திருக்கும் இணையதளம், உங்கள் Mac இன் ஐகான்கள் பட்டியலில் காட்டப்படும்.
 
 அமைப்புகளின் பொது பிரிவிலும் ஹேண்ட்ஆஃப் இயக்கப்பட்டிருக்க வேண்டும் மற்றும் உங்கள் சாதனங்கள் ஒரே iCloud கணக்கைப் பயன்படுத்த வேண்டும்.</translation>
@@ -247,7 +250,6 @@
 <translation id="5911030830365207728">Google மொழியாக்கம்</translation>
 <translation id="5916664084637901428">இயக்கு</translation>
 <translation id="5948291296578561264">உங்கள் பட நூலகத்தில் படங்களைச் சேமிக்க இது அனுமதிக்கும்.</translation>
-<translation id="5953603475187800576">Google Payments இல் உள்ள முகவரிகளையும் கிரெடிட் கார்டுகளையும் காட்டு</translation>
 <translation id="5955891643922670672">ஆஃப்லைன் பதிப்பைப் பார்க்கிறீர்கள்</translation>
 <translation id="5964480694698977962">புதிய மறைநிலைத் தாவலை உருவாக்கு</translation>
 <translation id="5965679971710331625">உள்நுழைந்துள்ளீர்கள்</translation>
@@ -337,7 +339,6 @@
 <translation id="7514365320538308">பதிவிறக்கு</translation>
 <translation id="7537586195939242955">வருந்துகிறோம், இந்த நேரத்தில் உங்கள் பாஸை பாஸ்புக்கில் நிறுவ முடியாது.</translation>
 <translation id="7561196759112975576">எப்போதும்</translation>
-<translation id="7588950540487816470">இயல்நிலை இணையம்</translation>
 <translation id="7603852183842204213">பாப்-அப்கள் தடுக்கப்பட்டன (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">ஒத்திசைவு வேலை செய்யவில்லை</translation>
 <translation id="7638584964844754484">தவறான கடவுத்தொடர்</translation>
@@ -350,6 +351,7 @@
 <translation id="780301667611848630">தேவையில்லை</translation>
 <translation id="7859704718976024901">உலாவல் வரலாறு</translation>
 <translation id="7938254975914653459">ஃபேஸ்டைம்</translation>
+<translation id="7939128259257418052">கடவுச்சொற்களை ஏற்று...</translation>
 <translation id="7947953824732555851">ஏற்று உள்நுழைக</translation>
 <translation id="7961015016161918242">எப்போதும் இல்லை</translation>
 <translation id="7971521879845308059">பாப்-அப்களைத் தடு</translation>
@@ -407,7 +409,6 @@
 <translation id="9083392325882095631">1 உருப்படி</translation>
 <translation id="9100610230175265781">கடவுச்சொற்றொடர் தேவை</translation>
 <translation id="9148126808321036104">மீண்டும் உள்நுழைக</translation>
-<translation id="91549621916703028">உங்கள் அனைத்துப் பணிகளுக்கும் பல தாவல்களை உருவாக்கலாம்</translation>
 <translation id="9157836665414082580">உரையாடல்களை மறை</translation>
 <translation id="9188680907066685419">நிர்வகிக்கப்படும் கணக்கிலிருந்து வெளியேறு</translation>
 <translation id="9203116392574189331">ஹேண்ட்ஆஃப்</translation>

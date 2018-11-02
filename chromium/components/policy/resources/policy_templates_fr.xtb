@@ -46,39 +46,6 @@
 
        La valeur de cette règle est définie en millisecondes.</translation>
 <translation id="1151353063931113432">Autoriser les images sur ces sites</translation>
-<translation id="1151545095291359187">Configure les paramètres de gestion d'extension pour <ph name="PRODUCT_NAME" />.
-
-          Cette règle contrôle plusieurs paramètres, y compris ceux contrôlés par des règles associées à une extension. Le cas échéant, elle remplace les anciennes règles.
-
-          Cette règle fait correspondre un ID d'extension ou une URL de mise à jour avec sa configuration. Avec un ID d'extension, la configuration n'est appliquée qu'à l'extension spécifiée. Une configuration par défaut peut être définie pour l'ID spécial <ph name="DEFAULT_SCOPE" />, lequel s'applique à toutes les extensions dépourvues d'une configuration personnalisée dans cette règle. Avec une URL de mise à jour, la configuration est appliquée à l'ensemble des extensions avec l'URL de mise à jour telle qu'elle est indiquée dans le fichier manifeste de cette extension, comme précisé sur la page <ph name="LINK_TO_EXTENSION_DOC1" />.
-
-          La configuration de chaque extension (ou des extensions ayant la même URL de mise à jour) constitue un autre dictionnaire pouvant contenir les champs documentés ci-dessous.
-
-          <ph name="INSTALLATION_MODE" /> : mappe vers une chaîne qui indique le mode d'installation de l'extension. Les chaînes valides sont les suivantes :
-          * <ph name="ALLOWED" /> : permet l'installation de l'extension par l'utilisateur. Il s'agit du comportement par défaut.
-          * <ph name="BLOCKED" /> : bloque l'installation de l'extension.
-          * <ph name="FORCE_INSTALLED" /> : l'extension est installée automatiquement et ne peut pas être supprimée par l'utilisateur.
-          * <ph name="NORMAL_INSTALLED" /> : l'extension est installée automatiquement, mais elle peut être désactivée par l'utilisateur.
-
-          Le champ "<ph name="INSTALLATION_MODE" />" peut également être configuré pour plusieurs extensions, dont l'extension <ph name="DEFAULT_SCOPE" /> (comme paramètre par défaut) et les extensions ayant la même URL de mise à jour. Dans ce cas, seules les valeurs <ph name="ALLOWED" /> et <ph name="BLOCKED" /> peuvent être utilisées.
-
-          Si le mode est défini sur "<ph name="FORCE_INSTALLED" />" ou "<ph name="NORMAL_INSTALLED" />", une URL de mise à jour ("<ph name="UPDATE_URL" />") doit également être configurée. Notez que l'URL de mise à jour définie dans cette règle est seulement utilisée pour l'installation initiale ; les mises à jour ultérieures de l'extension utiliseront l'URL qui est indiquée dans le fichier manifeste de l'extension. L'URL de mise à jour doit toujours pointer vers un document XML "Update Manifest", comme précisé ci-dessus.
-
-          <ph name="BLOCKED_PERMISSIONS" /> : mappe vers une liste de chaînes indiquant les autorisations d'API bloquées pour l'extension. Les noms des autorisations sont identiques aux chaînes d'autorisations déclarées dans le fichier manifeste de l'extension, comme indiqué sur la page <ph name="LINK_TO_EXTENSION_DOC3" />. Ce paramètre peut également être configuré pour l'extension "<ph name="DEFAULT_SCOPE" />". Si l'extension nécessite une autorisation qui figure sur la liste de blocage, son chargement n'est pas autorisé. Si elle contient une autorisation bloquée en tant qu'exigence facultative, elle est traitée normalement, mais les autorisations en conflit seront refusées automatiquement au moment de l'exécution.
-
-          <ph name="ALLOWED_PERMISSIONS" /> : semblable à "<ph name="BLOCKED_PERMISSIONS" />", mais autorise explicitement certaines autorisations qui sont peut-être bloquées par une liste de blocage globale ; la configuration étant donc impossible pour l'extension "<ph name="DEFAULT_SCOPE" />". Notez que ce paramètre n'accorde pas automatiquement d'autorisations aux extensions.
-
-          <ph name="MINIMUM_VERSION_REQUIRED" /> : mappe vers une chaîne de version. Le format de cette chaîne de version est identique à celui utilisé dans le fichier manifeste de l'extension, comme indiqué sur la page <ph name="LINK_TO_EXTENSION_DOC4" />. Une extension présentant une version plus ancienne que la version minimale spécifiée sera désactivée. Cela s'applique également aux extensions de type "force-installed".
-
-          Les paramètres suivants ne peuvent être utilisés que pour la configuration "<ph name="DEFAULT_SCOPE" />" par défaut :
-
-          <ph name="INSTALL_SOURCES" /> : chaque élément de cette liste est un schéma de correspondance de style extension (voir <ph name="LINK_TO_MATCH_PATTERNS" />). Les utilisateurs pourront facilement installer des éléments depuis n'importe quelle URL correspondant à un élément de cette liste. L'emplacement du fichier <ph name="EXTENSION_SUFFIX_WILDCARD" /> et la page de téléchargement (page de provenance) doivent tous deux être autorisés par ces schémas.
-
-          <ph name="ALLOWED_TYPES" /> : ce paramètre ajoute à la liste blanche les types d'extensions ou d'applications qui peuvent être installés dans <ph name="PRODUCT_NAME" />. Il s'agit d'une liste de chaînes qui peuvent prendre les valeurs suivantes : <ph name="VALID_ALLOWED_TYPES" />. Pour obtenir davantage d'informations sur ces types, veuillez consulter la documentation relative aux extensions de <ph name="PRODUCT_NAME" />.
-          <ph name="BLOCKED_INSTALL_MESSAGE" /> : si un utilisateur essaie d'installer une extension, mais que celle-ci est bloquée par une règle, le Chrome Web Store affiche un message d'erreur générique. Ce paramètre vous permet d'ajouter du texte au message d'erreur. Cela peut être utilisé pour rediriger les utilisateurs vers votre centre d'assistance, expliquer pourquoi une extension spécifique est bloquée ou pour tout autre message. Ce message d'erreur sera tronqué s'il dépasse 1 000 caractères.
-          <ph name="RUNTIME_BLOCKED_HOSTS" /> : accepte une liste d'hôtes avec lesquels une extension ne pourra pas interagir. Cela inclut l'injection de JavaScript, la modification et l'affichage de webRequests/webNavigation, ainsi que la modification et l'affichage de cookies. Le format est semblable à Match Patterns (<ph name="LINK_TO_MATCH_PATTERNS" />), sauf qu'aucun chemin ne peut être défini. Par exemple : "*://*.example.com". Les caractères génériques TLD (par exemple : "*://example.*") sont également acceptés.
-          <ph name="RUNTIME_ALLOWED_HOSTS" /> : accepte une liste d'hôtes avec lesquels une extension peut interagir, qu'ils soient répertoriés dans <ph name="RUNTIME_BLOCKED_HOSTS" /> ou non. Il s'agit du même format que <ph name="RUNTIME_BLOCKED_HOSTS" />.
-          </translation>
 <translation id="1152117524387175066">Indiquer l'état de l'interrupteur du mode développeur au moment du démarrage.
 
       Si la règle est définie sur "False", l'état de l'interrupteur du mode développeur n'est pas communiqué.</translation>
@@ -182,6 +149,7 @@ Vous ne devriez pas configurer cette règle si vous avez sélectionné un autre 
 
 Pour consulter des exemples détaillés, rendez-vous sur :
 <ph name="PROXY_HELP_URL" /></translation>
+<translation id="1503487916067509762">Active le blocage de l'injection de logiciels tiers</translation>
 <translation id="1504431521196476721">Attestation à distance</translation>
 <translation id="1509692106376861764">Cette règle a été supprimée à partir de la version 29 de <ph name="PRODUCT_NAME" />.</translation>
 <translation id="1522425503138261032">Autoriser les sites à suivre la position géographique des utilisateurs</translation>
@@ -301,6 +269,7 @@ Si ce paramètre n'est pas défini, les utilisateurs peuvent ouvrir normalement 
 <translation id="1969212217917526199">Remplace des règles sur les versions de débogage de l'hôte d'accès à distance.
 
           La valeur est analysée sous la forme d'un dictionnaire JSON de correspondances nom de règle/valeur de règle.</translation>
+<translation id="1969808853498848952">Toujours exécuter les plug-ins qui nécessitent une autorisation (obsolète)</translation>
 <translation id="1988371335297483117">Il est possible de télécharger les charges utiles de mise à jour automatique pour <ph name="PRODUCT_OS_NAME" /> via HTTP plutôt que HTTPS. Cela permet une mise en cache transparente lors des téléchargements via HTTP.
 
       Si cette règle est définie sur "True", le téléchargement des charges utiles de mise à jour automatique est effectué par <ph name="PRODUCT_OS_NAME" /> via HTTP. Si cette règle est définie sur "False", ou si elle n'est pas configurée, HTTPS est utilisé pour le téléchargement des charges utiles de mise à jour automatique.</translation>
@@ -514,6 +483,9 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
 <translation id="2466131534462628618">L'authentification de portail captif ignore le proxy</translation>
 <translation id="2482676533225429905">Messagerie native</translation>
 <translation id="2483146640187052324">Prédire les actions réseau lors d'une connexion au réseau</translation>
+<translation id="2485721741875148980">Si cette règle est définie sur "True", l'utilisateur doit se connecter à <ph name="PRODUCT_NAME" /> avec son propre profil pour pouvoir utiliser le navigateur. La valeur par défaut de BrowserGuestModeEnabled sera définie sur "False". Sachez que les profils existants non signés seront verrouillés et inaccessibles une fois cette règle activée. Pour plus d'informations, consultez l'article du centre d'aide.
+
+      Si cette règle est définie sur "False" ou si elle n'est pas configurée, l'utilisateur peut utiliser le navigateur sans se connecter à <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2486371469462493753">Désactive l'application des règles de transparence des certificats pour les URL répertoriées.
 
       Cette règle autorise à ne pas communiquer les certificats associés aux noms d'hôte dans la liste d'URL répertoriées, contrairement à ce que prévoient les règles de transparence des certificats. Ainsi, les certificats qui n'auraient pas été jugés fiables pour ne pas avoir été communiqués au public comme il se doit, peuvent continuer d'être utilisés, même si cela rend plus difficile la détection des certificats ayant été indiqués ou non concernant ces hôtes.
@@ -684,6 +656,15 @@ Si cette règle n'est pas configurée, le paramètre "AllowJavaScript" est utili
           Cette règle est facultative. Si vous ne la définissez pas, aucun remplacement des termes de recherche n'est effectué.
 
           Cette règle ne s'applique que si la règle 'DefaultSearchProviderEnabled' est activée.</translation>
+<translation id="306887062252197004">Cette règle permet aux utilisateurs de la fonctionnalité WebDriver d'ignorer
+      les règles pouvant affecter son fonctionnement.
+
+      Actuellement, cette règle désactive les règles SitePerProcess et IsolateOrigins.
+
+      Si elle est activée, WebDriver pourra ignorer les règles
+      incompatibles.
+      Si elle est désactivée ou pas configurée, WebDriver ne sera pas autorisée
+      à ignorer les règles incompatibles.</translation>
 <translation id="3069958900488014740">Permet la désactivation de l'optimisation WPAD (Web Proxy Auto-Discovery) dans <ph name="PRODUCT_NAME" />.
 
       Si cette règle est définie sur "False", l'optimisation WPAD est désactivée. Par conséquent, l'attente est plus longue dans <ph name="PRODUCT_NAME" /> pour obtenir une réponse des serveurs WPAD basés sur le DNS. Si la règle n'est pas configurée ou si elle est activée, l'optimisation WPAD est activée.
@@ -826,6 +807,7 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
 <translation id="3512226956150568738">Si le modèle de l'appareil client était déjà compatible avec ARC avant que la migration vers ext4 soit nécessaire pour exécuter ARC, et si la règle "ArcEnabled" est définie sur "true", cette option se comportera comme "AskUser" (valeur 3). Dans tous les autres cas (si le modèle de l'appareil n'était pas compatible avec ARC auparavant, ou si la règle "ArcEnabled" est définie sur "false"), cette valeur est équivalente à "DisallowArc" (valeur 0).</translation>
 <translation id="3528000905991875314">Activer les pages d'erreur alternatives</translation>
 <translation id="3547954654003013442">Paramètres de proxy</translation>
+<translation id="3577251398714997599">Paramètre des annonces pour les sites présentant des annonces intrusives</translation>
 <translation id="3591584750136265240">Configurer le mode d'authentification lors de la connexion</translation>
 <translation id="3627678165642179114">Activer ou désactiver le service Web de correction orthographique</translation>
 <translation id="3646859102161347133">Définir le type de loupe</translation>
@@ -838,7 +820,15 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
       Consultez la page https://developers.google.com/safe-browsing pour en savoir plus sur la navigation sécurisée.</translation>
 <translation id="3709266154059827597">Configurer la liste noire d'installation des extensions</translation>
 <translation id="3711895659073496551">Arrêter</translation>
+<translation id="3732106275571017176">Ce paramètre permet aux utilisateurs de basculer d'un compte Google à l'autre dans la zone de contenu de la fenêtre de leur navigateur une fois qu'ils sont connectés sur leur appareil <ph name="PRODUCT_OS_NAME" />.
+
+      Si cette règle est définie sur "false", ils ne seront pas autorisés à se connecter à un autre compte depuis la zone de contenu d'un navigateur n'étant pas en mode navigation privée.
+
+      Si elle est définie sur "true" ou si elle n'est pas configurée, le comportement par défaut sera utilisé : ils pourront se connecter à un autre compte depuis la zone de contenu du navigateur, sauf pour les comptes enfant où cela sera bloqué pour la zone de contenu hors navigation privée.
+
+      Dans le cas où la connexion à un autre compte ne doit pas être autorisée par l'intermédiaire du mode navigation privée, pensez à bloquer ce mode à l'aide de la règle IncognitoModeAvailability.</translation>
 <translation id="3736879847913515635">Autoriser l'ajout de personnes dans le gestionnaire d'utilisateurs</translation>
+<translation id="3737544779868348650">Nom d'hôte du réseau de l'appareil</translation>
 <translation id="3750220015372671395">Bloquer la génération de clé sur ces sites</translation>
 <translation id="3756011779061588474">Bloquer le mode développeur</translation>
 <translation id="3758089716224084329">Permet de préciser le serveur proxy utilisé par <ph name="PRODUCT_NAME" /> et d'empêcher les utilisateurs de modifier les paramètres de proxy.
@@ -855,6 +845,7 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
       Si ces règles ne sont pas configurées, les utilisateurs peuvent choisir eux-mêmes leurs paramètres de proxy.</translation>
 <translation id="3758249152301468420">Désactiver les outils de développement</translation>
 <translation id="3765260570442823273">Durée du message d'avertissement avant la déconnexion pour cause d'inactivité</translation>
+<translation id="377044054160169374">Application de l'intervention en cas d'expérience abusive</translation>
 <translation id="3780152581321609624">Inclure un port non standard dans le SPN Kerberos</translation>
 <translation id="3780319008680229708">Si cette règle est définie sur "true", l'icône Cast de la barre d'outils s'afficher toujours dans la barre d'outils ou dans le menu à développer et les utilisateurs ne peuvent pas la supprimer.
 
@@ -883,6 +874,7 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
       Si vous ne définissez pas cette règle, le répertoire de téléchargement par défaut est utilisé et l'utilisateur est en mesure d'en changer.</translation>
 <translation id="3805659594028420438">Activer l'extension des certificats TLS liés au domaine (obsolète)</translation>
 <translation id="3808945828600697669">Répertorier les plug-ins désactivés</translation>
+<translation id="3811562426301733860">Autoriser les annonces sur tous les sites</translation>
 <translation id="3816312845600780067">Activer le raccourci clavier permettant d'ignorer le processus de connexion automatique</translation>
 <translation id="3820526221169548563">Activer la fonctionnalité d'accessibilité du clavier à l'écran
 
@@ -1004,6 +996,11 @@ Cette option est habituellement désactivée dans le cadre de la protection cont
 
                       La valeur de cette règle doit être indiquée en millisecondes.</translation>
 <translation id="4105989332710272578">Désactiver l'application des règles de transparence des certificats pour une liste d'URL</translation>
+<translation id="4111405663956464686">Avertissement : La règle relative à la version TLS maximale sera entièrement supprimée du produit <ph name="PRODUCT_NAME" /> à partir de la version 72 environ (autour de janvier 2019).
+
+      Si cette règle n'est pas définie, <ph name="PRODUCT_NAME" /> utilise la version maximale par défaut.
+
+      Cette règle peut également être définie sur l'une des valeurs suivantes : "tls1.2" ou "tls1.3". Si elle est configurée, <ph name="PRODUCT_NAME" /> n'utilisera pas de versions de SSL/TLS supérieures à la version spécifiée. Toute valeur non reconnue sera ignorée.</translation>
 <translation id="4121350739760194865">Empêcher les promotions pour des applications de s'afficher sur la page Nouvel onglet</translation>
 <translation id="4157003184375321727">Indiquer la version du système d'exploitation et du micrologiciel</translation>
 <translation id="4183229833636799228">Paramètre par défaut pour le plug-in "<ph name="FLASH_PLUGIN_NAME" />"</translation>
@@ -1063,6 +1060,12 @@ Cette option est habituellement désactivée dans le cadre de la protection cont
 <translation id="4320376026953250541">Microsoft Windows XP SP2 ou version ultérieure</translation>
 <translation id="4322842393287974810">Autoriser l'application kiosque lancée automatiquement sans délai à contrôler la version de l'application <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Ajouter un bouton de déconnexion dans la barre d'état système</translation>
+<translation id="4346674324214534449">Vous permet de définir si les annonces doivent être bloquées sur les sites présentant des annonces intrusives.
+
+      Si cette règle est définie sur 2, les annonces seront bloquées sur les sites présentant des annonces intrusives.
+      Toutefois, ce comportement ne se déclenchera pas si la règle SafeBrowsingEnabled est définie sur False.
+      Si cette règle est définie sur 1, les annonces ne seront pas bloquées sur les sites présentant des annonces intrusives.
+      Si cette règle n'est pas définie, la valeur "2" sera utilisée.</translation>
 <translation id="4347908978527632940">Si la valeur est définie sur "True" et si l'utilisateur est supervisé, d'autres applications Android peuvent envoyer une requête concernant les restrictions Web de ce dernier via un fournisseur de contenu.
 
           Si la valeur est définie sur "False" ou si elle n'est pas définie, le fournisseur de contenu n'envoie aucune information.</translation>
@@ -1130,10 +1133,19 @@ Si cette règle n'est pas configurée, la valeur par défaut globale est utilis�
 <translation id="4531706050939927436">L'installation des applications Android peut être forcée depuis la Console d'administration Google via Google Play. Elles n'utilisent pas cette règle.</translation>
 <translation id="4534500438517478692">Nom de la restriction Android :</translation>
 <translation id="4541530620466526913">Comptes locaux de l'appareil</translation>
+<translation id="4544079461524242527">Configure les paramètres de gestion d'extension pour <ph name="PRODUCT_NAME" />.
+
+          Cette règle contrôle plusieurs paramètres, y compris ceux contrôlés par des règles associées à une extension. Le cas échéant, elle remplace les anciennes règles.
+
+          Cette règle fait correspondre un ID d'extension ou une URL de mise à jour avec sa configuration. Avec un ID d'extension, la configuration n'est appliquée qu'à l'extension spécifiée. Une configuration par défaut peut être définie pour l'ID spécial <ph name="DEFAULT_SCOPE" />, lequel s'applique à toutes les extensions dépourvues d'une configuration personnalisée dans cette règle. Avec une URL de mise à jour, la configuration est appliquée à l'ensemble des extensions avec l'URL de mise à jour telle qu'elle est indiquée dans le fichier manifeste de cette extension, comme indiqué sur la page <ph name="LINK_TO_EXTENSION_DOC1" />.
+
+          Pour accéder à une description complète de la structure et des paramètres possibles pour cette règle, veuillez consulter https://www.chromium.org/administrators/policy-list-3/extension-settings-full.
+          </translation>
 <translation id="4555850956567117258">Activer l'attestation à distance pour l'utilisateur</translation>
 <translation id="4557134566541205630">URL de la page Nouvel onglet du moteur de recherche par défaut</translation>
 <translation id="4600786265870346112">Activer le grand curseur</translation>
 <translation id="4604931264910482931">Configurer la liste noire de messagerie native</translation>
+<translation id="4613508646038788144">Si cette règle est définie sur "false", le logiciel tiers sera autorisé à injecter du code exécutable dans les processus de Chrome. Si elle est définie sur "true" ou si elle n'est pas configurée, le logiciel tiers ne pourra pas injecter de code exécutable dans les processus de Chrome.</translation>
 <translation id="4617338332148204752">Ignorer la vérification des balises Meta dans <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="4625915093043961294">Configurer la liste blanche d'installation des extensions</translation>
 <translation id="4632343302005518762">Autoriser <ph name="PRODUCT_FRAME_NAME" /> à gérer les types de contenu répertoriés</translation>
@@ -1147,6 +1159,12 @@ Si cette règle n'est pas configurée, la valeur par défaut globale est utilis�
 <translation id="465099050592230505">URL de boutique en ligne d'entreprise (abandonné)</translation>
 <translation id="4665897631924472251">Paramètres de gestion pour les extensions</translation>
 <translation id="4668325077104657568">Paramètres d'images par défaut</translation>
+<translation id="4671708336564240458">Vous permet de définir si les sites présentant une expérience abusive doivent être autorisés ou non à ouvrir de nouvelles fenêtres ou de nouveaux onglets.
+
+      Si cette règle est définie sur True, les sites présentant une expérience abusive ne pourront pas ouvrir de nouvelles fenêtres ou de nouveaux onglets.
+      Toutefois, ce comportement ne se déclenchera pas si la règle SafeBrowsingEnabled est définie sur False.
+      Si cette règle est définie sur False, les sites à l'expérience abusive seront autorisés à ouvrir de nouvelles fenêtres ou de nouveaux onglets.
+      Si cette règle n'est pas définie, True sera utilisé.</translation>
 <translation id="467236746355332046">Fonctionnalités compatibles :</translation>
 <translation id="4674167212832291997">Personnalise la liste des formats d'URL qui doivent toujours être affichés par <ph name="PRODUCT_FRAME_NAME" />.
 
@@ -1244,6 +1262,7 @@ Si cette règle n'est pas configurée, la valeur par défaut globale est utilis�
 <translation id="489803897780524242">Paramètre contrôlant le positionnement des termes de recherche pour le moteur de recherche par défaut</translation>
 <translation id="4899708173828500852">Activer la navigation sécurisée</translation>
 <translation id="4906194810004762807">Fréquence d'actualisation des règles de l'appareil</translation>
+<translation id="4923806312383904642">Autoriser WebDriver à ignorer les règles incompatibles</translation>
 <translation id="494613465159630803">Récepteur Cast</translation>
 <translation id="4962262530309732070">Si cette règle est définie sur "True" ou n'est pas définie, <ph name="PRODUCT_NAME" /> permettra d'ajouter une personne à partir du gestionnaire d'utilisateurs.
 
@@ -1285,6 +1304,13 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
 <translation id="5130288486815037971">Activation ou non des suites de chiffrement RC4 dans TLS</translation>
 <translation id="5141670636904227950">Activer la loupe plein écran sur l'écran de connexion</translation>
 <translation id="5142301680741828703">Toujours rendre les formats d'URL suivants dans <ph name="PRODUCT_FRAME_NAME" /></translation>
+<translation id="5147665094011258322">Déterminez le nom d'hôte de l'appareil utilisé pour les requêtes DHCP.
+
+      Si cette règle est définie sur une chaîne non vide, la chaîne servira de nom d'hôte de l'appareil lors de la requête DHCP.
+
+      La chaîne peut contenir les variables ${ASSET_ID}, ${SERIAL_NUM}, ${MAC_ADDR} qui seront remplacées par des valeurs sur l'appareil avant l'utilisation comme nom d'hôte. Le résultat de cette substitution doit former un nom d'hôte valide (conformément à la RFC 1035, section 3.1).
+
+      Si cette règle n'est pas définie ou si la valeur après substitution ne constitue pas un nom d'hôte valide, aucun nom d'hôte ne sera défini dans la requête DHCP. </translation>
 <translation id="5148753489738115745">Permet de spécifier les paramètres supplémentaires utilisés lorsque <ph name="PRODUCT_FRAME_NAME" /> lance <ph name="PRODUCT_NAME" />.
 
           Si cette règle n'est pas configurée, la ligne de commande par défaut est utilisée.</translation>
@@ -1397,6 +1423,7 @@ Lorsque cette règle n'est pas configurée, le paramètre par défaut utilisé c
 Si cette règle n'est pas configurée, la valeur par défaut globale sera utilisée pour tous les sites à partir de la règle "DefaultCookiesSetting", si elle est définie, ou à défaut, à partir de la configuration personnelle de l'utilisateur.</translation>
 <translation id="5469825884154817306">Bloquer les images sur ces sites</translation>
 <translation id="5475361623548884387">Activer l'impression</translation>
+<translation id="547601067149622666">Ne pas autoriser les annonces sur les sites présentant des annonces intrusives</translation>
 <translation id="5499375345075963939">Cette règle n'est active qu'en mode "point de vente".
 
       Lorsque sa valeur est configurée, et si elle ne correspond pas à 0, l'utilisateur connecté en mode démonstration est déconnecté automatiquement après la durée d'inactivité définie.
@@ -1803,6 +1830,7 @@ Si cette règle n'est pas configurée, la valeur par défaut globale est utilis�
       Si cette règle est désactivée ou si elle n'est pas configurée, seuls les profils locaux standards sont utilisés.
 
       La règle <ph name="SYNC_DISABLED_POLICY_NAME" /> entraîne la désactivation de la synchronisation des données, remplaçant ainsi RoamingProfileSupportEnabled.</translation>
+<translation id="6735701345096330595">Forcer l'activation des langues de la vérification orthographique</translation>
 <translation id="6757438632136860443">Cette règle permet de définir une liste de formats d'URL spécifiant les sites qui sont autorisés à exécuter le plug-in "<ph name="FLASH_PLUGIN_NAME" />".
 
           Si cette règle n'est pas configurée, la valeur par défaut globale sera utilisée pour tous les sites à partir de la règle "DefaultPluginsSetting", si elle est définie, ou à défaut, à partir de la configuration personnelle de l'utilisateur.</translation>
@@ -1917,7 +1945,6 @@ Si elle n'est pas configurée, l'utilisateur peut être invité à effectuer l'i
 <translation id="706669471845501145">Autoriser les sites à afficher des notifications sur le bureau</translation>
 <translation id="7072406291414141328">Active la limitation de la bande passante réseau</translation>
 <translation id="7079519252486108041">Bloquer les fenêtres pop-up sur ces sites</translation>
-<translation id="7091198954851103976">Toujours exécuter les plug-ins qui nécessitent une autorisation</translation>
 <translation id="7106631983877564505">Activer le verrouillage lorsque les appareils exécutant <ph name="PRODUCT_OS_NAME" /> sont inactifs ou en veille.
 
       Si vous activez ce paramètre, les utilisateurs sont invités à fournir un mot de passe pour réactiver l'appareil lorsqu'il est en veille.
@@ -2031,6 +2058,10 @@ Si elle est définie sur "False" ou si elle n'est pas configurée, ces publicit�
 
       Si cette règle n'est pas configurée, ou si elle est définie sur "False", <ph name="TLS_FALSE_START" /> est activé. Si elle est définie sur "True", <ph name="TLS_FALSE_START" /> est désactivé.</translation>
 <translation id="7433714841194914373">Activer la recherche instantanée</translation>
+<translation id="7443061725198440541">Si cette règle n'est pas définie ou activée, l'utilisateur est autorisé à utiliser la vérification orthographique.
+
+       Si cette règle est désactivée, l'utilisateur n'est pas autorisé à utiliser la vérification orthographique. La règle SpellcheckLanguage est également ignorée lorsque cette règle est désactivée.
+      </translation>
 <translation id="7443616896860707393">Invites d'authentification de base HTTP (Basic Auth) multi-domaine</translation>
 <translation id="7469554574977894907">Activer les suggestions de recherche</translation>
 <translation id="7474249562477552702">Définir si les certificats signés par SHA-1 émis par les ancres d'approbation locales sont autorisés</translation>
@@ -2076,6 +2107,7 @@ Si cette règle n'est pas configurée, la valeur par défaut globale sera utilis
 Si vous activez ce paramètre, <ph name="PRODUCT_NAME" /> utilise les paramètres régionaux spécifiés. Si les paramètres régionaux configurés ne sont pas compatibles, le navigateur applique la valeur "en-US". 
 
 Si ce paramètre est désactivé ou s'il n'est pas configuré, <ph name="PRODUCT_NAME" /> utilise les paramètres régionaux favoris de l'utilisateur (s'ils ont été configurés), les paramètres régionaux du système ou les paramètres régionaux de remplacement ("en-US").</translation>
+<translation id="7643883929273267746">Limiter les comptes visibles dans <ph name="PRODUCT_NAME" /></translation>
 <translation id="7651739109954974365">Détermine si l'itinérance des données doit être activée pour l'appareil. Si cette règle est définie sur "true", l'itinérance des données est autorisée. Si cette règle n'est pas configurée ou si elle est définie sur "false", l'itinérance des données n'est pas possible.</translation>
 <translation id="7683777542468165012">Actualisation dynamique des stratégies</translation>
 <translation id="7694807474048279351">Planifie un démarrage automatique après une mise à jour de <ph name="PRODUCT_OS_NAME" />.
@@ -2171,13 +2203,6 @@ Si cette règle n'est pas configurée, la règle "AllowImages" est utilisée, et
 <translation id="787125417158068494">Si la règle est définie sur SyncDisabled ou n'est pas configurée, les certificats <ph name="PRODUCT_OS_NAME" /> ne sont pas disponibles pour les applications ARC.
 
       Si la règle est définie sur CopyCaCerts, tous les certificats CA installés via ONC avec <ph name="WEB_TRUSTED_BIT" /> sont disponibles pour les applications ARC.</translation>
-<translation id="7872535148622213208">
-        Cette règle répertorie les origines (URL) à considérer comme contexte
-        sécurisé. L'objectif est de permettre aux organisations de configurer
-        un serveur de test pour les développements Web internes.
-        Le principe est le même que pour l'indicateur "unsafely-treat-insecure-origin-as-secure".
-        Pour en savoir plus sur les contextes sécurisés, consultez le site https://www.w3.org/TR/secure-contexts/
-        </translation>
 <translation id="7882585827992171421">Cette règle n'est active qu'en mode "point de vente".
 
        Détermine l'identifiant de l'extension à utiliser comme économiseur d'écran sur l'écran de connexion. L'extension doit faire partie de l'AppPack configuré pour ce domaine via la règle DeviceAppPack.</translation>
@@ -2332,9 +2357,6 @@ Il est conseillé de configurer les règles sur Windows via GPO, même si la ges
 <translation id="8344454543174932833">Importer les favoris du navigateur par défaut à la première exécution</translation>
 <translation id="8359734107661430198">Activer l'API ExampleDeprecatedFeature jusqu'au 09/02/2008</translation>
 <translation id="8369602308428138533">Délai d'arrêt de l'écran (secteur)</translation>
-<translation id="8370471134641900314">Si cette règle est définie sur "True", l'utilisateur doit se connecter à <ph name="PRODUCT_NAME" /> avec son propre profil pour pouvoir utiliser le navigateur. La valeur par défaut de BrowserGuestModeEnabled sera définie sur "False".
-
-      Si cette règle est définie sur "False" ou si elle n'est pas configurée, l'utilisateur peut employer le navigateur sans se connecter à <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8382184662529825177">Autoriser l'utilisation de l'attestation à distance pour assurer la protection du contenu de l'appareil</translation>
 <translation id="838870586332499308">Activer l'itinérance des données</translation>
 <translation id="8390049129576938611">Désactive la visionneuse de documents PDF intégrée dans <ph name="PRODUCT_NAME" />. Les fichiers PDF sont alors traités comme des téléchargements que l'utilisateur peut ouvrir avec l'application par défaut.
@@ -2345,6 +2367,13 @@ Il est conseillé de configurer les règles sur Windows via GPO, même si la ges
 <translation id="8424255554404582727">Définir la rotation de l'écran par défaut (réappliquée à chaque redémarrage)</translation>
 <translation id="8426231401662877819">Faire pivoter l'écran vers la droite de 90 degrés</translation>
 <translation id="8451988835943702790">Utiliser la page "Nouvel onglet" comme page d'accueil</translation>
+<translation id="8460677879226618710">Contient une liste de schémas utilisés pour contrôler la visibilité des comptes dans <ph name="PRODUCT_NAME" />.
+
+      Le compte sur cet appareil sera visible dans <ph name="PRODUCT_NAME" /> si son nom correspond à l'un des schémas de la liste. Sinon, le compte sera filtré et masqué.
+
+      Le caractère générique "*" peut être utilisé pour remplacer des caractères arbitraires. Le caractère d'échappement est "\". Ainsi, pour spécifier les caractères "*" ou "\", saisissez "\" devant ceux-ci.
+
+      Si cette règle n'est pas configurée, tous les comptes Google présents sur l'appareil seront visibles dans <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8465065632133292531">Paramètres pour l'URL instantanée utilisant POST</translation>
 <translation id="847472800012384958">Interdire à tous les sites d'afficher des fenêtres pop-up</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2446,6 +2475,20 @@ Si vous désactivez ce paramètre ou s'il n'est pas défini, le nom canonique du
       Si ce paramètre n'est pas défini, l'utilisateur peut décider d'utiliser ou non cette fonction.</translation>
 <translation id="8870318296973696995">Page d'accueil</translation>
 <translation id="8882006618241293596">Bloquer le plug-in "<ph name="FLASH_PLUGIN_NAME" />" sur ces sites</translation>
+<translation id="8894962626537183708">
+      Cette règle répertorie les origines (URL) à considérer comme contexte sécurisé. L'objectif est de permettre aux organisations de configurer un serveur de test pour les développements Web internes. Cela permet aux développeurs de tester les fonctionnalités nécessitant des contextes sécurisés sans avoir à déployer TLS sur le serveur de test.
+      Définir une liste d'URL dans cette règle a le même effet qu'utiliser l'indicateur de ligne de commande "--unsafely-treat-insecure-origin-as-secure" avec une liste des URL en question séparées par une virgule. Si la règle est définie, elle remplace l'indicateur de ligne de commande.
+      Pour en savoir plus sur les contextes sécurisés, consultez https://www.w3.org/TR/secure-contexts/.
+      </translation>
+<translation id="890403179930035128">Active de manière forcée les langues pour la vérification orthographique. Les langues non compatibles de cette liste seront ignorées.
+
+      Si vous activez cette règle, la vérification orthographique sera activée pour les langues spécifiées, en plus des langues pour lesquelles l'utilisateur a activé la vérification orthographique.
+
+      Si vous ne configurez pas cette règle ou que vous la désactivez, aucune modification ne sera apportée aux préférences de correction orthographique de l'utilisateur.
+
+      Si la règle SpellcheckEnabled est définie sur "désactivé", cette règle n'aura aucun effet.
+
+      Actuellement, les langues compatibles sont les suivantes : af, bg, ca, cs, da, de, el, en-AU, en-CA, en-GB, en-US, es, es-419, es-AR, es-ES, es-MX, es-US, et, fa, fo, fr, he, hi, hr, hu, id, it, ko, lt, lv, nb, nl, pl, pt-BR, pt-PT, ro, ru, sh, sk, sl, sq, sr, sv, ta, tg, tr, uk et vi.</translation>
 <translation id="8906768759089290519">Activer le mode invité</translation>
 <translation id="8908294717014659003">Vous permet de définir si les sites Web sont autorisés à accéder aux périphériques de capture multimédia. L'accès aux périphériques de capture multimédia peut être autorisé par défaut, ou l'utilisateur doit confirmer son autorisation chaque fois qu'un site Web souhaite accéder à ceux-ci.
 
@@ -2533,14 +2576,10 @@ Si ce paramètre est désactivé, les utilisateurs ne peuvent pas ouvrir de page
 Si cette règle n'est pas configurée, ce paramètre est activé et l'utilisateur est en mesure d'utiliser le mode navigation privée.</translation>
 <translation id="915194831143859291">Si la règle est définie sur "False" ou n'est pas configurée, <ph name="PRODUCT_OS_NAME" /> permet à l'utilisateur d'arrêter l'appareil.
       Si cette règle est définie sur "True", <ph name="PRODUCT_OS_NAME" /> déclenche un redémarrage lorsque l'utilisateur arrête l'appareil. <ph name="PRODUCT_OS_NAME" /> remplace toutes les occurrences des boutons d'arrêt de l'interface utilisateur par des boutons de redémarrage. Si l'utilisateur arrête l'appareil au moyen du bouton Marche/Arrêt, celui-ci ne redémarre pas automatiquement, même si la règle est activée.</translation>
+<translation id="9158929520101169054">Autoriser la connexion multicompte dans le navigateur</translation>
 <translation id="9187743794267626640">Désactiver le montage de périphériques de stockage externe</translation>
 <translation id="9197740283131855199">Pourcentage d'adaptation du délai d'assombrissement de l'écran si l'utilisateur devient actif après la réduction de la luminosité</translation>
 <translation id="9200828125069750521">Paramètres pour l'URL d'image utilisant POST</translation>
-<translation id="9212233969680267790">Avertissement : La règle relative à la version TLS maximale sera entièrement supprimée du produit <ph name="PRODUCT_NAME" /> à partir de la version 66 environ (autour de février 2018).
-
-      Si cette règle n'est pas définie, <ph name="PRODUCT_NAME" /> utilise la version maximale par défaut.
-
-      Cette règle peut également être définie sur l'une des valeurs suivantes : "tls1.2" ou "tls1.3". Si elle est configurée, <ph name="PRODUCT_NAME" /> n'utilisera pas de versions de SSL/TLS supérieures à la version spécifiée. Toute valeur non reconnue sera ignorée.</translation>
 <translation id="9213347477683611358">Configurez l'image de fond d'écran qui s'affiche sur l'écran de connexion de l'appareil si aucun utilisateur ne s'est encore connecté à celui-ci. Pour définir cette règle, indiquez l'URL à laquelle l'appareil Chrome OS peut télécharger l'image de fond d'écran ainsi qu'un hachage chiffré, utilisé pour vérifier l'intégrité du téléchargement. L'image doit être au format JPEG et ne doit pas dépasser 16 Mo. L'URL doit être accessible sans authentification. L'image de fond d'écran est téléchargée et mise en cache. Elle est à nouveau téléchargée dès que l'URL ou le hachage sont modifiés.
 
       La règle doit prendre la forme d'une chaîne indiquant l'URL et le hachage au format JSON, conformément à l'exemple suivant :
@@ -2558,4 +2597,5 @@ Si cette règle n'est pas configurée, ce paramètre est activé et l'utilisateu
 <translation id="930930237275114205">Définir le répertoire de données utilisateur de <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="934390688529359269">Active la connexion forcée pour <ph name="PRODUCT_NAME" /></translation>
 <translation id="944817693306670849">Définir la taille du cache disque</translation>
+<translation id="982497069985795632">Activer la vérification orthographique</translation>
 </translationbundle>

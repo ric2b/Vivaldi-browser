@@ -18,6 +18,7 @@
 #include "base/observer_list.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
+#include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/browser/chromeos/file_system_provider/observer.h"
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_info.h"
 #include "chrome/browser/chromeos/file_system_provider/service.h"
@@ -26,7 +27,7 @@
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/storage_monitor/removable_storage_observer.h"
-#include "device/media_transfer_protocol/mtp_storage_info.pb.h"
+#include "device/media_transfer_protocol/public/interfaces/mtp_storage_info.mojom.h"
 
 class Profile;
 
@@ -140,6 +141,9 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   bool configurable() const { return configurable_; }
   bool watchable() const { return watchable_; }
   const std::string& file_system_type() const { return file_system_type_; }
+  const chromeos::file_system_provider::IconSet& icon_set() const {
+    return icon_set_;
+  }
 
  private:
   Volume();
@@ -214,6 +218,9 @@ class Volume : public base::SupportsWeakPtr<Volume> {
   // Identifier for the file system type
   std::string file_system_type_;
 
+  // Volume icon set.
+  chromeos::file_system_provider::IconSet icon_set_;
+
   DISALLOW_COPY_AND_ASSIGN(Volume);
 };
 
@@ -232,7 +239,8 @@ class VolumeManager : public KeyedService,
  public:
   // Returns MediaTransferProtocolManager. Used for injecting
   // FakeMediaTransferProtocolManager for testing.
-  typedef base::Callback<const MtpStorageInfo*(const std::string&)>
+  typedef base::Callback<const device::mojom::MtpStorageInfo*(
+      const std::string&)>
       GetMtpStorageInfoCallback;
 
   VolumeManager(
@@ -287,9 +295,12 @@ class VolumeManager : public KeyedService,
   void OnFileSystemBeingUnmounted() override;
 
   // chromeos::disks::DiskMountManager::Observer overrides.
-  void OnDiskEvent(
+  void OnAutoMountableDiskEvent(
       chromeos::disks::DiskMountManager::DiskEvent event,
-      const chromeos::disks::DiskMountManager::Disk* disk) override;
+      const chromeos::disks::DiskMountManager::Disk& disk) override;
+  void OnBootDeviceDiskEvent(
+      chromeos::disks::DiskMountManager::DiskEvent event,
+      const chromeos::disks::DiskMountManager::Disk& disk) override;
   void OnDeviceEvent(chromeos::disks::DiskMountManager::DeviceEvent event,
                      const std::string& device_path) override;
   void OnMountEvent(chromeos::disks::DiskMountManager::MountEvent event,

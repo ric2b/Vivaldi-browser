@@ -13,11 +13,11 @@
 #include "content/renderer/service_worker/service_worker_dispatcher.h"
 #include "content/renderer/service_worker/service_worker_handle_reference.h"
 #include "content/renderer/service_worker/web_service_worker_provider_impl.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerProxy.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 
 using blink::WebSecurityOrigin;
 using blink::WebString;
@@ -26,18 +26,19 @@ namespace content {
 
 namespace {
 
-class HandleImpl : public blink::WebServiceWorker::Handle {
+class ServiceWorkerHandleImpl : public blink::WebServiceWorker::Handle {
  public:
-  explicit HandleImpl(const scoped_refptr<WebServiceWorkerImpl>& worker)
+  explicit ServiceWorkerHandleImpl(
+      const scoped_refptr<WebServiceWorkerImpl>& worker)
       : worker_(worker) {}
-  ~HandleImpl() override {}
+  ~ServiceWorkerHandleImpl() override {}
 
   blink::WebServiceWorker* ServiceWorker() override { return worker_.get(); }
 
  private:
   scoped_refptr<WebServiceWorkerImpl> worker_;
 
-  DISALLOW_COPY_AND_ASSIGN(HandleImpl);
+  DISALLOW_COPY_AND_ASSIGN(ServiceWorkerHandleImpl);
 };
 
 }  // namespace
@@ -83,7 +84,7 @@ blink::mojom::ServiceWorkerState WebServiceWorkerImpl::GetState() const {
   return state_;
 }
 
-void WebServiceWorkerImpl::PostMessage(
+void WebServiceWorkerImpl::PostMessageToWorker(
     blink::WebServiceWorkerProvider* provider,
     const WebString& message,
     const WebSecurityOrigin& source_origin,
@@ -105,7 +106,7 @@ WebServiceWorkerImpl::CreateHandle(
     const scoped_refptr<WebServiceWorkerImpl>& worker) {
   if (!worker)
     return nullptr;
-  return std::make_unique<HandleImpl>(worker);
+  return std::make_unique<ServiceWorkerHandleImpl>(worker);
 }
 
 WebServiceWorkerImpl::~WebServiceWorkerImpl() {

@@ -43,6 +43,13 @@ bool IsTestDataRoot(const base::FilePath& candidate) {
 }
 
 base::FilePath TestDataRootInternal() {
+#if defined(OS_FUCHSIA)
+  base::FilePath asset_path("/pkg/assets");
+  if (!IsTestDataRoot(asset_path)) {
+    LOG(WARNING) << "Test data root seems invalid, continuing anyway";
+  }
+  return asset_path;
+#else  // defined(OS_FUCHSIA)
 #if !defined(OS_WIN)
   const char* environment_value = getenv("CRASHPAD_TEST_DATA_ROOT");
 #else  // defined(OS_WIN)
@@ -88,6 +95,7 @@ base::FilePath TestDataRootInternal() {
   }
 
   return base::FilePath(base::FilePath::kCurrentDirectory);
+#endif  // defined(OS_FUCHSIA)
 }
 
 #if defined(OS_WIN) && defined(ARCH_CPU_64_BITS)
@@ -119,12 +127,12 @@ base::FilePath TestPaths::Executable() {
 // static
 base::FilePath TestPaths::ExpectedExecutableBasename(
     const base::FilePath::StringType& name) {
-#if defined(CRASHPAD_IN_CHROMIUM)
+#if defined(CRASHPAD_IS_IN_CHROMIUM)
   base::FilePath::StringType executable_name(
       FILE_PATH_LITERAL("crashpad_tests"));
-#else  // CRASHPAD_IN_CHROMIUM
+#else  // CRASHPAD_IS_IN_CHROMIUM
   base::FilePath::StringType executable_name(name);
-#endif  // CRASHPAD_IN_CHROMIUM
+#endif  // CRASHPAD_IS_IN_CHROMIUM
 
 #if defined(OS_WIN)
   executable_name += FILE_PATH_LITERAL(".exe");
@@ -162,9 +170,9 @@ base::FilePath TestPaths::BuildArtifact(
 
   base::FilePath::StringType test_name =
       FILE_PATH_LITERAL("crashpad_") + module + FILE_PATH_LITERAL("_test");
-#if !defined(CRASHPAD_IN_CHROMIUM)
+#if !defined(CRASHPAD_IS_IN_CHROMIUM)
   CHECK(Executable().BaseName().RemoveFinalExtension().value() == test_name);
-#endif  // !CRASHPAD_IN_CHROMIUM
+#endif  // !CRASHPAD_IS_IN_CHROMIUM
 
   base::FilePath::StringType extension;
   switch (file_type) {

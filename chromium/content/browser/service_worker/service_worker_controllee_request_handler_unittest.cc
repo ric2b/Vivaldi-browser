@@ -23,9 +23,7 @@
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/resource_context.h"
-#include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
-#include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/common/service_worker_modes.h"
 #include "content/public/test/mock_resource_context.h"
@@ -34,16 +32,15 @@
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
-
-namespace {
+namespace service_worker_controllee_request_handler_unittest {
 
 int kMockProviderId = 1;
-
-}
 
 class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
  public:
@@ -67,13 +64,13 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
               base::WeakPtr<storage::BlobStorageContext>(),
               fetch_type,
               network::mojom::FetchCredentialsMode::kOmit,
-              FetchRedirectMode::FOLLOW_MODE,
+              network::mojom::FetchRedirectMode::kFollow,
               std::string() /* integrity */,
               false /* keepalive */,
               type,
               REQUEST_CONTEXT_TYPE_HYPERLINK,
-              REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
-              scoped_refptr<ResourceRequestBody>())),
+              network::mojom::RequestContextFrameType::kTopLevel,
+              scoped_refptr<network::ResourceRequestBody>())),
           job_(nullptr) {}
 
     ServiceWorkerURLRequestJob* MaybeCreateJob() {
@@ -106,9 +103,10 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
     // A new unstored registration/version.
     scope_ = GURL("https://host/scope/");
     script_url_ = GURL("https://host/script.js");
-    registration_ = new ServiceWorkerRegistration(
-        blink::mojom::ServiceWorkerRegistrationOptions(scope_), 1L,
-        context()->AsWeakPtr());
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = scope_;
+    registration_ =
+        new ServiceWorkerRegistration(options, 1L, context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(), script_url_, 1L, context()->AsWeakPtr());
 
@@ -435,4 +433,5 @@ TEST_F(ServiceWorkerControlleeRequestHandlerTest, FallbackWithNoOfflineHeader) {
 }
 #endif  // BUILDFLAG(ENABLE_OFFLINE_PAGE
 
+}  // namespace service_worker_controllee_request_handler_unittest
 }  // namespace content

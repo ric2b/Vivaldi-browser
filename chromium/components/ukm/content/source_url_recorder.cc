@@ -16,10 +16,12 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "url/gurl.h"
 
-namespace {
+namespace ukm {
+
+namespace internal {
 
 // SourceUrlRecorderWebContentsObserver is responsible for recording UKM source
-// URLs, for all main frame navigations in a given WebContents.
+// URLs, for all (any only) main frame navigations in a given WebContents.
 // SourceUrlRecorderWebContentsObserver records both the final URL for a
 // navigation, and, if the navigation was redirected, the initial URL as well.
 class SourceUrlRecorderWebContentsObserver
@@ -37,6 +39,8 @@ class SourceUrlRecorderWebContentsObserver
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
 
+  ukm::SourceId GetLastCommittedSourceId();
+
  private:
   explicit SourceUrlRecorderWebContentsObserver(
       content::WebContents* web_contents);
@@ -49,12 +53,15 @@ class SourceUrlRecorderWebContentsObserver
   // Map from navigation ID to the initial URL for that navigation.
   base::flat_map<int64_t, GURL> pending_navigations_;
 
+  int64_t last_committed_source_id_;
+
   DISALLOW_COPY_AND_ASSIGN(SourceUrlRecorderWebContentsObserver);
 };
 
 SourceUrlRecorderWebContentsObserver::SourceUrlRecorderWebContentsObserver(
     content::WebContents* web_contents)
-    : content::WebContentsObserver(web_contents) {}
+    : content::WebContentsObserver(web_contents),
+      last_committed_source_id_(ukm::kInvalidSourceId) {}
 
 void SourceUrlRecorderWebContentsObserver::DidStartNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -82,6 +89,14 @@ void SourceUrlRecorderWebContentsObserver::DidFinishNavigation(
   if (it == pending_navigations_.end())
     return;
 
+  DCHECK(navigation_handle->IsInMainFrame());
+  DCHECK(!navigation_handle->IsSameDocument());
+
+  if (navigation_handle->HasCommitted()) {
+    last_committed_source_id_ = ukm::ConvertToSourceId(
+        navigation_handle->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
+  }
+
   GURL initial_url = std::move(it->second);
   pending_navigations_.erase(it);
 
@@ -92,9 +107,16 @@ void SourceUrlRecorderWebContentsObserver::DidFinishNavigation(
   MaybeRecordUrl(navigation_handle, initial_url);
 }
 
+ukm::SourceId SourceUrlRecorderWebContentsObserver::GetLastCommittedSourceId() {
+  return last_committed_source_id_;
+}
+
 void SourceUrlRecorderWebContentsObserver::MaybeRecordUrl(
     content::NavigationHandle* navigation_handle,
     const GURL& initial_url) {
+  DCHECK(navigation_handle->IsInMainFrame());
+  DCHECK(!navigation_handle->IsSameDocument());
+
   ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
   if (!ukm_recorder)
     return;
@@ -119,15 +141,22 @@ void SourceUrlRecorderWebContentsObserver::CreateForWebContents(
   }
 }
 
-}  // namespace
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(SourceUrlRecorderWebContentsObserver);
-
-namespace ukm {
+}  // namespace internal
 
 void InitializeSourceUrlRecorderForWebContents(
     content::WebContents* web_contents) {
-  SourceUrlRecorderWebContentsObserver::CreateForWebContents(web_contents);
+  internal::SourceUrlRecorderWebContentsObserver::CreateForWebContents(
+      web_contents);
+}
+
+SourceId GetSourceIdForWebContentsDocument(content::WebContents* web_contents) {
+  internal::SourceUrlRecorderWebContentsObserver* obs =
+      internal::SourceUrlRecorderWebContentsObserver::FromWebContents(
+          web_contents);
+  return obs ? obs->GetLastCommittedSourceId() : kInvalidSourceId;
 }
 
 }  // namespace ukm
+
+DEFINE_WEB_CONTENTS_USER_DATA_KEY(
+    ukm::internal::SourceUrlRecorderWebContentsObserver);

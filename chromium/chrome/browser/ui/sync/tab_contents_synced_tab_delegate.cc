@@ -185,7 +185,3 @@ SessionID::id_type TabContentsSyncedTabDelegate::GetSourceTabID() const {
           web_contents_);
   return helper->source_tab_id();
 }
-
-std::string TabContentsSyncedTabDelegate::GetExtData() const {
-  return web_contents_->GetExtData();
-}

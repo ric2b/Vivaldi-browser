@@ -66,6 +66,7 @@ var AutomationNode = chrome.automation.AutomationNode;
 var Dir = constants.Dir;
 var Movement = cursors.Movement;
 var RoleType = chrome.automation.RoleType;
+var StateType = chrome.automation.StateType;
 var Unit = cursors.Unit;
 
 /**
@@ -197,8 +198,9 @@ cursors.Cursor.prototype = {
     if (!adjustedNode)
       return null;
 
-    // Make no adjustments if we're within editable content.
-    if (adjustedNode.state.editable)
+    // Make no adjustments if we're within non-rich editable content.
+    if (adjustedNode.state[StateType.EDITABLE] &&
+        !adjustedNode.state[StateType.RICHLY_EDITABLE])
       return adjustedNode;
 
     // Selections over line break nodes are broken.
@@ -236,8 +238,12 @@ cursors.Cursor.prototype = {
     if (!this.node)
       return -1;
 
-    if (this.node.state.editable) {
-      return this.index_ == cursors.NODE_INDEX ? 0 : this.index_;
+    if (this.node.state[StateType.EDITABLE]) {
+      if (!this.node.state[StateType.RICHLY_EDITABLE])
+        return this.index_;
+      return this.index_ == cursors.NODE_INDEX ?
+          (this.node.indexInParent || 0) :
+          this.index_;
     } else if (
         this.node.role == RoleType.INLINE_TEXT_BOX &&
         // Selections under a line break are broken.
@@ -538,9 +544,30 @@ cursors.WrappingCursor.prototype = {
       if (!endpoint)
         return this;
 
+      // Finds any explicitly provided focus.
+      var getDirectedFocus = function(node) {
+        return dir == Dir.FORWARD ? node.nextFocus : node.previousFocus;
+      };
+
       // Case 1: forwards (find the root-like node).
-      while (!AutomationPredicate.root(endpoint) && endpoint.parent)
+      var directedFocus;
+      while (!AutomationPredicate.root(endpoint) && endpoint.parent) {
+        if (directedFocus = getDirectedFocus(endpoint)) {
+          window.last = directedFocus;
+          break;
+        }
         endpoint = endpoint.parent;
+      }
+
+      if (directedFocus) {
+        directedFocus =
+            (dir == Dir.FORWARD ?
+                 AutomationUtil.findNodePre(
+                     directedFocus, dir, AutomationPredicate.object) :
+                 AutomationUtil.findLastNode(directedFocus, pred)) ||
+            directedFocus;
+        return new cursors.WrappingCursor(directedFocus, cursors.NODE_INDEX);
+      }
 
       // Always play a wrap earcon when moving forward.
       var playEarcon = dir == Dir.FORWARD;
@@ -666,12 +693,15 @@ cursors.Range.prototype = {
   },
 
   /**
-   * Returns true if this range covers a single node's text content or less.
+   * Returns true if this range covers less than a node.
    * @return {boolean}
    */
   isSubNode: function() {
-    return this.start.node === this.end.node && this.start.index > -1 &&
-        this.end.index > -1;
+    var startIndex = this.start.index;
+    var endIndex = this.end.index;
+    return this.start.node === this.end.node && startIndex != -1 &&
+        endIndex != -1 && startIndex != endIndex &&
+        (startIndex != 0 || endIndex != this.start.getText().length);
   },
 
   /**
@@ -741,6 +771,13 @@ cursors.Range.prototype = {
       var endIndex = this.end.index_ == cursors.NODE_INDEX ?
           this.end.selectionIndex_ + 1 :
           this.end.selectionIndex_;
+
+      // Richly editables should always set a caret, but not select. This makes
+      // it possible to navigate through content editables using ChromeVox keys
+      // and not hear selections as you go.
+      if (startNode.state[StateType.RICHLY_EDITABLE] ||
+          endNode.state[StateType.RICHLY_EDITABLE])
+        endIndex = startIndex;
 
       chrome.automation.setDocumentSelection({
         anchorObject: startNode,

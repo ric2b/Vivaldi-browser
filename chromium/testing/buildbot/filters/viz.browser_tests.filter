@@ -1,0 +1,44 @@
+# FrameWatcher::WaitFrames Doesn't Work in Viz crbug.com/785013
+-WebViewTests/WebViewFocusTest.TouchFocusesEmbedder/0
+
+# HostFrameSinkManager::CreateRootCompositorFrameSink Crash crbug.com/796575
+-AppWindowApiTest.OnBoundsChangedEvent
+-ForceMaximizeOnFirstRunTest.*TwoRuns
+-ForceMaximizePolicyFalseTest.GeneralFirstRun
+-ShelfAppBrowserTest.LaunchAppFromDisplayWithoutFocus0
+-ShelfAppBrowserTest.LaunchAppFromDisplayWithoutFocus1
+
+# PictureLayerTilingSet::ComputeSkewport crash crbug.com/796594
+-LoginFeedbackTest.Basic
+
+# RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedderImpl crash
+# crbug.com/797801
+-HostedAppProcessModelTest.IframeNavigationsInsideHostedApp/1
+
+# Tab Capture is still in development: crbug.com/754864
+-CastStreamingApiTestWithPixelOutput.EndToEnd
+-ChromeScreenshotGrabberBrowserTest.TakeScreenshot
+-TabCaptureApiPixelTest.EndToEndThroughWebRTC
+-TabCaptureApiPixelTest.EndToEndWithoutRemoting
+-TabCaptureApiPixelTest.OffscreenTabEndToEnd
+-TabCaptureApiPixelTest.OffscreenTabEvilTests
+
+# WaitForChildFrameSurfaceReady crashes crbug.com/787945
+-WebViewTests/WebViewTest.InterstitialPageFocusedWidget/1
+-WebViewTests/WebViewTest.ReloadAfterCrash/1
+
+# WebViewBrowserTest::ScrollWaiter Doesn't Work in Viz crbug.com/796336
+-WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/0
+-WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/1
+-WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/2
+-WebViewScrollBubbling/WebViewGuestScrollTouchTest.TestGuestGestureScrollsBubble/3
+
+# FrameSinkManagerImpl::RegisterFrameSinkHierarchy Crash crbug.com/796344
+# Linux and Windows failures
+-WebViewTests/WebViewTest.Shim_TestAssignSrcAfterCrash/0
+-WebViewTests/WebViewTest.Shim_TestContentScriptIsInjectedAfterTerminateAndReloadWebView/0
+-WebViewTests/WebViewTest.Shim_TestReloadAfterTerminate/0
+-WebViewTests/WebViewTest.Shim_TestTerminateAfterExit/0
+
+# Windows only failures
+-ExtensionApiTabTest.TabsOnUpdated

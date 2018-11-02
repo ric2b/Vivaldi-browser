@@ -204,16 +204,15 @@ bool SavedpasswordsGetFunction::RunAsync() {
 
 void SavedpasswordsGetFunction::OnGetPasswordStoreResults(
     std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
-  bool found = false;
+  results_ = passwords::Get::Results::Create(false, "");
   for (const auto& result : results) {
     if (base::UTF16ToUTF8(result->username_value) == username_) {
       results_ = passwords::Get::Results::Create(
-          base::UTF16ToASCII(result->password_value));
-      found = true;
+          true, base::UTF16ToASCII(result->password_value));
     }
   }
 
-  SendResponse(found);
+  SendResponse(true);
 
   // Balance the AddRef in RunAsync
   Release();

@@ -30,7 +30,7 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_renderer_data.h"
-#include "chrome/browser/ui/views/tabs/tab_strip_impl.h"
+#include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/feature_engagement/features.h"
@@ -204,7 +204,7 @@ BrowserTabStripController::~BrowserTabStripController() {
   model_->RemoveObserver(this);
 }
 
-void BrowserTabStripController::InitFromModel(TabStripImpl* tabstrip) {
+void BrowserTabStripController::InitFromModel(TabStrip* tabstrip) {
   tabstrip_ = tabstrip;
 
   UpdateStackedLayout();
@@ -323,8 +323,8 @@ void BrowserTabStripController::OnDropIndexUpdate(int index,
 void BrowserTabStripController::PerformDrop(bool drop_before,
                                             int index,
                                             const GURL& url) {
-  chrome::NavigateParams params(browser_view_->browser(), url,
-                                ui::PAGE_TRANSITION_LINK);
+  NavigateParams params(browser_view_->browser(), url,
+                        ui::PAGE_TRANSITION_LINK);
   params.tabstrip_index = index;
 
   if (drop_before) {
@@ -335,11 +335,11 @@ void BrowserTabStripController::PerformDrop(bool drop_before,
     params.disposition = WindowOpenDisposition::CURRENT_TAB;
     params.source_contents = model_->GetWebContentsAt(index);
   }
-  params.window_action = chrome::NavigateParams::SHOW_WINDOW;
-  chrome::Navigate(&params);
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  Navigate(&params);
 }
 
-bool BrowserTabStripController::IsCompatibleWith(TabStripImpl* other) const {
+bool BrowserTabStripController::IsCompatibleWith(TabStrip* other) const {
   Profile* other_profile = other->controller()->GetProfile();
   return other_profile == GetProfile();
 }

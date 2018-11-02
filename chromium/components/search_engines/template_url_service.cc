@@ -14,7 +14,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -511,7 +510,7 @@ void TemplateURLService::RegisterOmniboxKeyword(
   data.SetShortName(base::UTF8ToUTF16(extension_name));
   data.SetKeyword(base::UTF8ToUTF16(keyword));
   data.SetURL(template_url_string);
-  Add(base::MakeUnique<TemplateURL>(data, TemplateURL::OMNIBOX_API_EXTENSION,
+  Add(std::make_unique<TemplateURL>(data, TemplateURL::OMNIBOX_API_EXTENSION,
                                     extension_id, extension_install_time,
                                     false));
 }
@@ -632,7 +631,7 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
            actions.added_engines.begin();
        i < actions.added_engines.end();
        ++i) {
-    AddNoNotify(base::MakeUnique<TemplateURL>(*i), true);
+    AddNoNotify(std::make_unique<TemplateURL>(*i), true);
   }
 
   base::AutoReset<DefaultSearchChangeOrigin> change_origin(
@@ -715,7 +714,7 @@ void TemplateURLService::OnWebDataServiceRequestDone(
   }
 
   std::unique_ptr<OwnedTemplateURLVector> template_urls =
-      base::MakeUnique<OwnedTemplateURLVector>();
+      std::make_unique<OwnedTemplateURLVector>();
   int new_resource_keyword_version = 0;
   {
     GetSearchProvidersUsingKeywordResult(
@@ -928,7 +927,7 @@ syncer::SyncError TemplateURLService::ProcessSyncChanges(
       TemplateURLData data(turl->data());
       data.id = kInvalidTemplateURLID;
       std::unique_ptr<TemplateURL> added_ptr =
-          base::MakeUnique<TemplateURL>(data);
+          std::make_unique<TemplateURL>(data);
       TemplateURL* added = added_ptr.get();
       if (AddNoNotify(std::move(added_ptr), true)) {
         should_notify = true;
@@ -1335,7 +1334,7 @@ void TemplateURLService::Init(const Initializer* initializers,
       data.SetShortName(base::UTF8ToUTF16(initializers[i].content));
       data.SetKeyword(base::UTF8ToUTF16(initializers[i].keyword));
       data.SetURL(initializers[i].url);
-      AddNoNotify(base::MakeUnique<TemplateURL>(data), true);
+      AddNoNotify(std::make_unique<TemplateURL>(data), true);
 
       // Set the first provided identifier to be the default.
       if (i == 0)
@@ -1817,7 +1816,7 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
             ? TemplateURL::NORMAL_CONTROLLED_BY_EXTENSION
             : TemplateURL::NORMAL;
     initial_default_search_provider_ =
-        data ? base::MakeUnique<TemplateURL>(*data, initial_engine_type)
+        data ? std::make_unique<TemplateURL>(*data, initial_engine_type)
              : nullptr;
     default_search_provider_source_ = source;
     return changed;
@@ -1875,7 +1874,7 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
       // (2) If the user deleted the pre-populated default and we subsequently
       // lost their user-selected value.
       default_search_provider_ =
-          AddNoNotify(base::MakeUnique<TemplateURL>(*data), true);
+          AddNoNotify(std::make_unique<TemplateURL>(*data), true);
     }
   } else if (source == DefaultSearchManager::FROM_USER) {
     default_search_provider_ = GetTemplateURLForGUID(data->sync_guid);
@@ -1889,7 +1888,7 @@ bool TemplateURLService::ApplyDefaultSearchChangeNoMetrics(
     } else {
       new_data.id = kInvalidTemplateURLID;
       default_search_provider_ =
-          AddNoNotify(base::MakeUnique<TemplateURL>(new_data), true);
+          AddNoNotify(std::make_unique<TemplateURL>(new_data), true);
     }
     if (default_search_provider_ && prefs_) {
       prefs_->SetString(prefs::kSyncedDefaultSearchProviderGUID,
@@ -2071,7 +2070,7 @@ void TemplateURLService::UpdateProvidersCreatedByPolicy(
       new_data.sync_guid = base::GenerateGUID();
     new_data.created_by_policy = true;
     std::unique_ptr<TemplateURL> new_dse_ptr =
-        base::MakeUnique<TemplateURL>(new_data);
+        std::make_unique<TemplateURL>(new_data);
     TemplateURL* new_dse = new_dse_ptr.get();
     if (AddNoNotify(std::move(new_dse_ptr), true))
       default_search_provider_ = new_dse;
@@ -2276,7 +2275,7 @@ bool TemplateURLService::MergeInSyncTemplateURL(
     TemplateURLData data(sync_turl->data());
     data.id = kInvalidTemplateURLID;
     std::unique_ptr<TemplateURL> added_ptr =
-        base::MakeUnique<TemplateURL>(data);
+        std::make_unique<TemplateURL>(data);
     TemplateURL* added = added_ptr.get();
     base::AutoReset<DefaultSearchChangeOrigin> change_origin(
         &dsp_change_origin_, DSP_CHANGE_SYNC_ADD);

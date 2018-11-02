@@ -22,6 +22,10 @@ if (enable_vr) {
       "features",
     ]
     sources += [
+      "orientation/orientation_device.cc",
+      "orientation/orientation_device.h",
+      "orientation/orientation_device_provider.cc",
+      "orientation/orientation_device_provider.h",
       "vr_device.h",
       "vr_device_base.cc",
       "vr_device_base.h",
@@ -34,7 +38,11 @@ if (enable_vr) {
       "//base",
       "//gpu/ipc/common:interfaces",
       "//mojo/public/cpp/bindings",
+      "//services/device/public/cpp/generic_sensor",
+      "//services/service_manager/public/cpp",
+      "//ui/display",
       "//ui/gfx",
+      "//ui/gfx/mojo:mojo",
     ]
 
     if (enable_gvr_services) {
@@ -63,7 +71,9 @@ if (enable_vr) {
         "//third_party/WebKit/public:blink_headers",
       ]
       ldflags = [ "-landroid" ]
-      libs = [ "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a" ]
+      libs = [
+        "//third_party/gvr-android-sdk/libgvr_shim_static_${current_cpu}.a",
+      ]
       configs += [ "//third_party/gvr-android-sdk:libgvr_config" ]
     }
 
@@ -87,13 +97,38 @@ if (enable_vr) {
       ]
     }
 
-    if (is_win && enable_openvr) {
-      libs = [ "d3d11.lib" ]
+    if (is_win && (enable_openvr || enable_oculus_vr)) {
+      libs = [
+        "d3d11.lib",
+        "DXGI.lib",
+      ]
+
       sources += [
         "windows/d3d11_texture_helper.cc",
         "windows/d3d11_texture_helper.h",
         "windows/flip_pixel_shader.h",
         "windows/flip_vertex_shader.h",
+      ]
+    }
+
+    if (enable_oculus_vr) {
+      deps += [
+        "//device/gamepad",
+        "//device/gamepad/public/cpp:shared_with_blink",
+        "//third_party/libovr",
+      ]
+
+      sources += [
+        "oculus/oculus_device.cc",
+        "oculus/oculus_device.h",
+        "oculus/oculus_device_provider.cc",
+        "oculus/oculus_device_provider.h",
+        "oculus/oculus_gamepad_data_fetcher.cc",
+        "oculus/oculus_gamepad_data_fetcher.h",
+        "oculus/oculus_render_loop.cc",
+        "oculus/oculus_render_loop.h",
+        "oculus/oculus_type_converters.cc",
+        "oculus/oculus_type_converters.h",
       ]
     }
   }
@@ -104,6 +139,10 @@ if (enable_vr) {
     defines = [ "DEVICE_VR_IMPLEMENTATION" ]
 
     sources = [
+      "test/fake_orientation_provider.cc",
+      "test/fake_orientation_provider.h",
+      "test/fake_sensor_provider.cc",
+      "test/fake_sensor_provider.h",
       "test/fake_vr_device.cc",
       "test/fake_vr_device.h",
       "test/fake_vr_device_provider.cc",
@@ -122,6 +161,7 @@ if (enable_vr) {
       ":vr",
       "//base",
       "//mojo/public/cpp/bindings",
+      "//services/device/public/cpp/generic_sensor",
       "//testing/gmock",
     ]
   }
@@ -131,6 +171,28 @@ if (enable_vr) {
     # compile this when webvr is disabled.
     sources = [
       "empty.cc",
+    ]
+  }
+}
+
+if (enable_openvr) {
+  shared_library("openvr_mock") {
+    output_name = "mock_vr_clients/bin/vrclient"
+    if (target_cpu == "x64" && is_win) {
+      output_name = "mock_vr_clients/bin/vrclient_x64"
+    }
+
+    sources = [
+      "openvr/test/fake_openvr_impl_api.cc",
+    ]
+
+    libs = [
+      "d3d11.lib",
+      "DXGI.lib",
+    ]
+
+    deps = [
+      "//base",
     ]
   }
 }
@@ -166,5 +228,6 @@ mojom_component("mojo_bindings") {
     "//gpu/ipc/common:interfaces",
     "//mojo/common:common_custom_types",
     "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo:mojo",
   ]
 }

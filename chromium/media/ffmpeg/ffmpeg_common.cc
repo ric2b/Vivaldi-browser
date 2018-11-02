@@ -479,23 +479,20 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   // actually handle capabilities requests correctly. http://crbug.com/784610
   VideoCodecProfile profile = VIDEO_CODEC_PROFILE_UNKNOWN;
   switch (codec) {
-#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if !BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
     case kCodecH264:
-      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
-      format = PIXEL_FORMAT_YV12;
+      format = PIXEL_FORMAT_I420;
       profile = H264PROFILE_BASELINE;
       break;
 #endif
     case kCodecVP8:
-#if defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
-      format = PIXEL_FORMAT_YV12;
+#if !BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+      format = PIXEL_FORMAT_I420;
 #endif
       profile = VP8PROFILE_ANY;
       break;
     case kCodecVP9:
-      // TODO(dalecurtis): This is incorrect; see http://crbug.com/784627.
-      format = PIXEL_FORMAT_YV12;
+      format = PIXEL_FORMAT_I420;
       profile = VP9PROFILE_PROFILE0;
       break;
     case kCodecAV1:
@@ -515,16 +512,16 @@ bool AVStreamToVideoDecoderConfig(const AVStream* stream,
   }
 
   // Pad out |coded_size| for subsampled YUV formats.
-  if (format != PIXEL_FORMAT_YV24 && format != PIXEL_FORMAT_UNKNOWN) {
+  if (format != PIXEL_FORMAT_I444 && format != PIXEL_FORMAT_UNKNOWN) {
     coded_size.set_width((coded_size.width() + 1) / 2 * 2);
-    if (format != PIXEL_FORMAT_YV16)
+    if (format != PIXEL_FORMAT_I422)
       coded_size.set_height((coded_size.height() + 1) / 2 * 2);
   }
 
   AVDictionaryEntry* webm_alpha =
       av_dict_get(stream->metadata, "alpha_mode", nullptr, 0);
   if (webm_alpha && !strcmp(webm_alpha->value, "1")) {
-    format = PIXEL_FORMAT_YV12A;
+    format = PIXEL_FORMAT_I420A;
   }
 
   VideoRotation video_rotation = VIDEO_ROTATION_0;
@@ -690,19 +687,18 @@ VideoPixelFormat AVPixelFormatToVideoPixelFormat(AVPixelFormat pixel_format) {
   switch (pixel_format) {
     case AV_PIX_FMT_YUV444P:
     case AV_PIX_FMT_YUVJ444P:
-      return PIXEL_FORMAT_YV24;
+      return PIXEL_FORMAT_I444;
 
-    // TODO(dalecurtis): These are incorrect; see http://crbug.com/784627. This
-    // should actually be PIXEL_FORMAT_I420 and PIXEL_FORMAT_I422.
     case AV_PIX_FMT_YUV420P:
     case AV_PIX_FMT_YUVJ420P:
-      return PIXEL_FORMAT_YV12;
+      return PIXEL_FORMAT_I420;
+
     case AV_PIX_FMT_YUV422P:
     case AV_PIX_FMT_YUVJ422P:
-      return PIXEL_FORMAT_YV16;
+      return PIXEL_FORMAT_I422;
 
     case AV_PIX_FMT_YUVA420P:
-      return PIXEL_FORMAT_YV12A;
+      return PIXEL_FORMAT_I420A;
 
     case AV_PIX_FMT_YUV420P9LE:
       return PIXEL_FORMAT_YUV420P9;
@@ -733,16 +729,13 @@ VideoPixelFormat AVPixelFormatToVideoPixelFormat(AVPixelFormat pixel_format) {
 
 AVPixelFormat VideoPixelFormatToAVPixelFormat(VideoPixelFormat video_format) {
   switch (video_format) {
-    // TODO(dalecurtis): These are incorrect; see http://crbug.com/784627.
-    // FFmpeg actually has no YVU format...
-    case PIXEL_FORMAT_YV16:
-      return AV_PIX_FMT_YUV422P;
-    case PIXEL_FORMAT_YV12:
+    case PIXEL_FORMAT_I420:
       return AV_PIX_FMT_YUV420P;
-
-    case PIXEL_FORMAT_YV12A:
+    case PIXEL_FORMAT_I422:
+      return AV_PIX_FMT_YUV422P;
+    case PIXEL_FORMAT_I420A:
       return AV_PIX_FMT_YUVA420P;
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I444:
       return AV_PIX_FMT_YUV444P;
     case PIXEL_FORMAT_YUV420P9:
       return AV_PIX_FMT_YUV420P9LE;

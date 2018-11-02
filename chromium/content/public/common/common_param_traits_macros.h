@@ -11,14 +11,11 @@
 #include "build/build_config.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/resource_type.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/common/webplugininfo_param_traits.h"
 #include "ipc/ipc_message_macros.h"
 #include "net/base/network_change_notifier.h"
-#include "net/base/request_priority.h"
-#include "net/http/http_request_headers.h"
-#include "net/nqe/effective_connection_type.h"
+#include "services/network/public/cpp/network_param_ipc_traits.h"
 #include "third_party/WebKit/public/platform/WebHistoryScrollRestorationType.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
@@ -47,8 +44,6 @@ IPC_ENUM_TRAITS_VALIDATE(ui::PageTransition,
                           ui::PageTransition::PAGE_TRANSITION_LAST_CORE))
 IPC_ENUM_TRAITS_MAX_VALUE(net::NetworkChangeNotifier::ConnectionType,
                           net::NetworkChangeNotifier::CONNECTION_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(net::EffectiveConnectionType,
-                          net::EFFECTIVE_CONNECTION_TYPE_LAST - 1)
 IPC_ENUM_TRAITS_MAX_VALUE(content::ConsoleMessageLevel,
                           content::CONSOLE_MESSAGE_LEVEL_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFrameSerializerCacheControlPolicy,
@@ -64,9 +59,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::EditingBehavior,
                           content::EDITING_BEHAVIOR_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(WindowOpenDisposition,
                           WindowOpenDisposition::MAX_VALUE)
-IPC_ENUM_TRAITS_MAX_VALUE(net::RequestPriority, net::MAXIMUM_PRIORITY)
-IPC_ENUM_TRAITS_MAX_VALUE(content::ResourceType,
-                          content::RESOURCE_TYPE_LAST_TYPE - 1)
 IPC_ENUM_TRAITS_MAX_VALUE(content::V8CacheOptions,
                           content::V8_CACHE_OPTIONS_LAST)
 #if defined(OS_ANDROID)
@@ -202,7 +194,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(spatial_navigation_enabled)
   IPC_STRUCT_TRAITS_MEMBER(v8_cache_options)
   IPC_STRUCT_TRAITS_MEMBER(serve_resources_only_from_cache)
-  IPC_STRUCT_TRAITS_MEMBER(pepper_accelerated_video_decode_enabled)
+  IPC_STRUCT_TRAITS_MEMBER(accelerated_video_decode_enabled)
   IPC_STRUCT_TRAITS_MEMBER(animation_policy)
   IPC_STRUCT_TRAITS_MEMBER(user_gesture_required_for_presentation)
   IPC_STRUCT_TRAITS_MEMBER(text_track_margin_percentage)
@@ -248,6 +240,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::WebPreferences)
   IPC_STRUCT_TRAITS_MEMBER(media_controls_enabled)
   IPC_STRUCT_TRAITS_MEMBER(do_not_update_selection_on_mutating_selection_range)
   IPC_STRUCT_TRAITS_MEMBER(autoplay_policy)
+  IPC_STRUCT_TRAITS_MEMBER(low_priority_iframes_threshold)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(blink::mojom::WindowFeatures)
@@ -282,11 +275,6 @@ IPC_STRUCT_TRAITS_BEGIN(ui::AXRelativeBounds)
   IPC_STRUCT_TRAITS_MEMBER(offset_container_id)
   IPC_STRUCT_TRAITS_MEMBER(bounds)
   IPC_STRUCT_TRAITS_MEMBER(transform)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(net::HttpRequestHeaders::HeaderKeyValuePair)
-  IPC_STRUCT_TRAITS_MEMBER(key)
-  IPC_STRUCT_TRAITS_MEMBER(value)
 IPC_STRUCT_TRAITS_END()
 
 #endif  // CONTENT_PUBLIC_COMMON_COMMON_PARAM_TRAITS_MACROS_H_

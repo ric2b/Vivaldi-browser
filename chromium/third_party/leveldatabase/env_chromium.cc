@@ -4,6 +4,7 @@
 
 #include "third_party/leveldatabase/env_chromium.h"
 
+#include <atomic>
 #include <utility>
 
 #if defined(OS_POSIX)
@@ -12,6 +13,7 @@
 #endif
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
@@ -43,6 +45,9 @@ using base::trace_event::ProcessMemoryDump;
 using leveldb::FileLock;
 using leveldb::Slice;
 using leveldb::Status;
+
+const base::Feature kLevelDBFileHandleEviction{
+    "LevelDBFileHandleEviction", base::FEATURE_ENABLED_BY_DEFAULT};
 
 namespace leveldb_env {
 
@@ -96,18 +101,12 @@ class Semaphore {
 
 namespace {
 
+std::atomic<int32_t> g_num_files_opened_past_handle_limit = ATOMIC_VAR_INIT(0);
+
 const FilePath::CharType table_extension[] = FILE_PATH_LITERAL(".ldb");
 
 static const FilePath::CharType kLevelDBTestDirectoryPrefix[] =
     FILE_PATH_LITERAL("leveldb-test-");
-
-static base::File::Error LastFileError() {
-#if defined(OS_WIN)
-  return base::File::OSErrorToFileError(GetLastError());
-#else
-  return base::File::OSErrorToFileError(errno);
-#endif
-}
 
 // Making direct platform in lieu of using base::FileEnumerator because the
 // latter can fail quietly without return an error result.
@@ -249,7 +248,7 @@ class ChromiumSequentialFile : public leveldb::SequentialFile {
     TRACE_EVENT1("leveldb", "ChromiumSequentialFile::Read", "size", n);
     int bytes_read = file_.ReadAtCurrentPosNoBestEffort(scratch, n);
     if (bytes_read == -1) {
-      base::File::Error error = LastFileError();
+      base::File::Error error = base::File::GetLastFileError();
       uma_logger_->RecordErrorAt(kSequentialFileRead);
       return MakeIOError(filename_, base::File::ErrorToString(error),
                          kSequentialFileRead, error);
@@ -262,7 +261,7 @@ class ChromiumSequentialFile : public leveldb::SequentialFile {
 
   Status Skip(uint64_t n) override {
     if (file_.Seek(base::File::FROM_CURRENT, n) == -1) {
-      base::File::Error error = LastFileError();
+      base::File::Error error = base::File::GetLastFileError();
       uma_logger_->RecordErrorAt(kSequentialFileSkip);
       return MakeIOError(filename_, base::File::ErrorToString(error),
                          kSequentialFileSkip, error);
@@ -290,12 +289,26 @@ class ChromiumRandomAccessFile : public leveldb::RandomAccessFile {
         uma_logger_(uma_logger),
         file_semaphore_(file_semaphore),
         open_before_read_(!file_semaphore->TryAcquire()) {
-    if (open_before_read_)
+    if (open_before_read_) {
       file_.Close();  // Open file on every access.
+      int32_t result = g_num_files_opened_past_handle_limit.fetch_add(
+                           1, std::memory_order_relaxed) +
+                       1;
+      TRACE_COUNTER1("leveldb",
+                     "ChromiumRandomAccessFile::NumFilesPastHandleLimit",
+                     result);
+    }
   }
   virtual ~ChromiumRandomAccessFile() {
-    if (!open_before_read_)
+    if (!open_before_read_) {
       file_semaphore_->Release();
+      int32_t result = g_num_files_opened_past_handle_limit.fetch_sub(
+                           1, std::memory_order_relaxed) -
+                       1;
+      TRACE_COUNTER1("leveldb",
+                     "ChromiumRandomAccessFile::NumFilesPastHandleLimit",
+                     result);
+    }
   }
 
   Status Read(uint64_t offset,
@@ -389,7 +402,7 @@ Status ChromiumWritableFile::SyncParent() {
                        f.error_details());
   }
   if (!f.Flush()) {
-    base::File::Error error = LastFileError();
+    base::File::Error error = base::File::GetLastFileError();
     uma_logger_->RecordOSError(kSyncParent, error);
     return MakeIOError(parent_dir_, base::File::ErrorToString(error),
                        kSyncParent, error);
@@ -403,7 +416,7 @@ Status ChromiumWritableFile::Append(const Slice& data) {
   DCHECK(uma_logger_);
   int bytes_written = file_.WriteAtCurrentPos(data.data(), data.size());
   if (static_cast<size_t>(bytes_written) != data.size()) {
-    base::File::Error error = LastFileError();
+    base::File::Error error = base::File::GetLastFileError();
     uma_logger_->RecordOSError(kWritableFileAppend, error);
     return MakeIOError(filename_, base::File::ErrorToString(error),
                        kWritableFileAppend, error);
@@ -428,7 +441,7 @@ Status ChromiumWritableFile::Sync() {
   TRACE_EVENT0("leveldb", "WritableFile::Sync");
 
   if (!file_.Flush()) {
-    base::File::Error error = LastFileError();
+    base::File::Error error = base::File::GetLastFileError();
     uma_logger_->RecordErrorAt(kWritableFileSync);
     return MakeIOError(filename_, base::File::ErrorToString(error),
                        kWritableFileSync, error);
@@ -754,7 +767,10 @@ ChromiumEnv::ChromiumEnv(const std::string& name)
       name_(name),
       bgsignal_(&mu_),
       started_bgthread_(false),
-      file_semaphore_(new Semaphore(MaxOpenFiles())) {
+      file_semaphore_(
+          new Semaphore(base::FeatureList::IsEnabled(kLevelDBFileHandleEviction)
+                            ? MaxOpenFiles()
+                            : std::numeric_limits<intptr_t>::max())) {
   uma_ioerror_base_name_ = name_ + ".IOError.BFE";
 }
 

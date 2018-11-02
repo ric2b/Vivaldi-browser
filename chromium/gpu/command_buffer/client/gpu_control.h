@@ -19,9 +19,14 @@
 #include "gpu/gpu_export.h"
 
 extern "C" typedef struct _ClientBuffer* ClientBuffer;
+extern "C" typedef struct _ClientGpuFence* ClientGpuFence;
 
 namespace base {
 class Lock;
+}
+
+namespace gfx {
+class GpuFence;
 }
 
 namespace gpu {
@@ -31,8 +36,8 @@ struct SyncToken;
 // Common interface for GpuControl implementations.
 class GPU_EXPORT GpuControl {
  public:
-  GpuControl() {}
-  virtual ~GpuControl() {}
+  GpuControl() = default;
+  virtual ~GpuControl() = default;
 
   virtual void SetGpuControlClient(GpuControlClient* gpu_control_client) = 0;
 
@@ -51,6 +56,11 @@ class GPU_EXPORT GpuControl {
   // Runs |callback| when a query created via glCreateQueryEXT() has cleared
   // passed the glEndQueryEXT() point.
   virtual void SignalQuery(uint32_t query, const base::Closure& callback) = 0;
+
+  virtual void CreateGpuFence(uint32_t gpu_fence_id, ClientGpuFence source) = 0;
+  virtual void GetGpuFence(
+      uint32_t gpu_fence_id,
+      base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) = 0;
 
   // Sets a lock this will be held on every callback from the GPU
   // implementation. This lock must be set and must be held on every call into
@@ -84,16 +94,6 @@ class GPU_EXPORT GpuControl {
   // flushed before they can be used by other contexts. Furthermore, the flush
   // must be verified before sending a sync token across channel boundaries.
   virtual uint64_t GenerateFenceSyncRelease() = 0;
-
-  // Returns true if the fence sync is valid.
-  virtual bool IsFenceSyncRelease(uint64_t release) = 0;
-
-  // Returns true if the client has flushed the fence sync.
-  virtual bool IsFenceSyncFlushed(uint64_t release) = 0;
-
-  // Returns true if the service has received the fence sync. Used for verifying
-  // sync tokens.
-  virtual bool IsFenceSyncFlushReceived(uint64_t release) = 0;
 
   // Returns true if the service has released (executed) the fence sync. Some
   // implementations may support calling this from any thread without holding

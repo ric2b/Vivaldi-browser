@@ -12,6 +12,9 @@
 <translation id="1084824384139382525">Copiar &amp;endereço do link</translation>
 <translation id="1128109161498068552">Não permitir que os sites utilizem mensagens exclusivas do sistema para aceder a dispositivos MIDI</translation>
 <translation id="114140604515785785">Diretório raiz da extensão:</translation>
+<translation id="1163361280229063150">{NUM_DOWNLOAD, plural, 
+	=1 {Uma transferência está atualmente em curso. Pretende cancelar a transferência e sair do modo de navegação privada?}
+	other {# transferências estão atualmente em curso. Pretende cancelar as transferências e sair do modo de navegação privada?}}</translation>
 <translation id="1163931534039071049">&amp;Ver fonte da moldura</translation>
 <translation id="1165039591588034296">Erro</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -40,6 +43,8 @@
 <translation id="1588438908519853928">Normal</translation>
 <translation id="1588870296199743671">Abrir ligação com...</translation>
 <translation id="159359590073980872">Cache de imagem</translation>
+<translation id="1594233345027811150">{NUM_DOWNLOAD, plural, 
+	=1{Transferência em curso} other {Transferências em curso}}</translation>
 <translation id="1601560923496285236">Aplicar</translation>
 <translation id="1603914832182249871">(Modo Privado)</translation>
 <translation id="1620510694547887537">Câmara</translation>
@@ -58,12 +63,14 @@
 <translation id="176587472219019965">&amp;Nova janela</translation>
 <translation id="1769104665586091481">Abrir ligação numa nova &amp;janela</translation>
 <translation id="1789575671122666129">Pop-ups</translation>
+<translation id="1805822111539868586">Inspecionar vistas</translation>
 <translation id="1815083418640426271">Colar sem formatação</translation>
 <translation id="1828901632669367785">Imprimir utilizando a janela de diálogo do sistema...</translation>
 <translation id="1846308012215045257">CTRL+Clique para executar <ph name="PLUGIN_NAME" /></translation>
 <translation id="1850508293116537636">Rodar para a &amp;direita</translation>
 <translation id="1859234291848436338">Direcção da escrita</translation>
 <translation id="1886996562706621347">Permitir que os sites peçam para se tornarem os processadores de protocolos predefinidos (recomendado)</translation>
+<translation id="1890674179660343635">&lt;span&gt;ID: &lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="1901303067676059328">Seleccion&amp;ar tudo</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> ppp</translation>
 <translation id="1963227389609234879">Remover tudo</translation>
@@ -259,6 +266,8 @@
 <translation id="4256316378292851214">Guardar &amp;vídeo como...</translation>
 <translation id="4278390842282768270">Permitido</translation>
 <translation id="4309420042698375243"><ph name="NUM_KILOBYTES" /> K (<ph name="NUM_KILOBYTES_LIVE" /> K em directo)</translation>
+<translation id="4321136812570927563">{NUM_DOWNLOAD,plural, 
+	=1 {Continuar transferência} other {Continuar transferências}}</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recolher erros</translation>
 <translation id="4363771538994847871">Não foi encontrado nenhum destino para transmissão. Precisa de ajuda?</translation>
@@ -356,6 +365,8 @@
 <translation id="5715711091495208045">Mediador de plug-ins: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5729996640881880439">Lamentamos, não somos capazes de lhe mostrar o código deste erro.</translation>
 <translation id="5746169159649715125">Guardar como PDF</translation>
+<translation id="5749861707650047230">{NUM_DOWNLOAD, plural, 
+=1{Cancelar transferência} other {Cancelar transferências}}</translation>
 <translation id="5759728514498647443">Os documentos enviados para impressão através de <ph name="APP_NAME" /> podem ser lidos por <ph name="APP_NAME" />.</translation>
 <translation id="5764483294734785780">Gua&amp;rdar áudio como...</translation>
 <translation id="577624874850706961">Pesquisar cookies</translation>
@@ -404,9 +415,9 @@
 <translation id="6295158916970320988">Todos os sites</translation>
 <translation id="6295855836753816081">A guardar...</translation>
 <translation id="6308937455967653460">Guardar lin&amp;k como...</translation>
-<translation id="6314335155547195432">Gerar palavra-passe</translation>
 <translation id="6326855256003666642">Manutenção de atividade</translation>
 <translation id="6370021412472292592">Impossível carregar o manifesto.</translation>
+<translation id="6374469231428023295">Tente novamente</translation>
 <translation id="6385543213911723544">Os sites podem guardar e ler os dados de cookies</translation>
 <translation id="6398765197997659313">Sair do modo de ecrã inteiro</translation>
 <translation id="6406303162637086258">Simular reinício do navegador</translation>
@@ -421,6 +432,7 @@
 <translation id="6518014396551869914">Cop&amp;iar imagem</translation>
 <translation id="6550675742724504774">Opções</translation>
 <translation id="6596092346130528198">É esta a página de novo separador de que estava à espera?</translation>
+<translation id="6612358246767739896">Conteúdo protegido</translation>
 <translation id="6639554308659482635">Memória SQLite</translation>
 <translation id="6655190889273724601">Modo de programador</translation>
 <translation id="6691936601825168937">A&amp;vançar</translation>
@@ -457,6 +469,7 @@
 <translation id="708060913198414444">C&amp;opiar endereço do áudio</translation>
 <translation id="7084192839369222683">Executar apenas conteúdo importante</translation>
 <translation id="7144878232160441200">Repetir</translation>
+<translation id="7152478047064750137">Esta extensão não requer autorizações especiais</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7186088072322679094">Manter na barra de ferramentas</translation>
 <translation id="7206693748120342859">A transferir <ph name="PLUGIN_NAME" />...</translation>
@@ -485,7 +498,6 @@
 <translation id="7564847347806291057">Concluir processo</translation>
 <translation id="7576690715254076113">Agrupar</translation>
 <translation id="7629827748548208700">Separador: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Cancelar</translation>
 <translation id="7661259717474717992">Permitir que os sites guardem e leiam dados de cookies</translation>
 <translation id="7663719505383602579">Recetor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada pelo administrador</translation>
@@ -571,6 +583,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8708000541097332489">Limpar à saída</translation>
 <translation id="8714838604780058252">Imagens em segundo plano</translation>
 <translation id="8719653885894320876">A transferência do <ph name="PLUGIN_NAME" /> falhou</translation>
+<translation id="8725066075913043281">Tentar novamente</translation>
 <translation id="873545264931343897">Quando a atualização do <ph name="PLUGIN_NAME" /> estiver concluída, atualize a página para o ativar</translation>
 <translation id="8757090071857742562">Não é possível transmitir o ambiente de trabalho. Verifique se confirmou a mensagem para começar a partilhar o seu ecrã.</translation>
 <translation id="8770406935328356739">Diretório da extensão</translation>
@@ -584,6 +597,7 @@ Mantenha o seu ficheiro de chave num local seguro, pois irá precisar dele para 
 <translation id="8823514049557262177">Copiar te&amp;xto da ligação</translation>
 <translation id="8845001906332463065">Obter ajuda</translation>
 <translation id="8859174528519900719">Subestrutura: <ph name="SUBFRAME_SITE" /></translation>
+<translation id="8876309039915144086">Gerar senha...</translation>
 <translation id="8899285681604219177">Extensões não suportadas desativadas</translation>
 <translation id="8899851313684471736">Abrir link numa nova &amp;janela</translation>
 <translation id="8910146161325739742">Partilhar o seu ecrã</translation>

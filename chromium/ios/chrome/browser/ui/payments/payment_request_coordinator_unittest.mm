@@ -170,7 +170,7 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingAddress) {
 
   // Call the ShippingAddressSelectionCoordinator delegate method.
   [coordinator shippingAddressSelectionCoordinator:nil
-                          didSelectShippingAddress:profiles().back().get()];
+                          didSelectShippingAddress:profiles().back()];
 }
 
 // Tests that calling the ShippingOptionSelectionCoordinator delegate method
@@ -188,8 +188,8 @@ TEST_F(PaymentRequestCoordinatorTest, DidSelectShippingOption) {
   payments::PaymentShippingOption shipping_option;
   shipping_option.id = "123456";
   shipping_option.label = "1-Day";
-  shipping_option.amount.value = "0.99";
-  shipping_option.amount.currency = "USD";
+  shipping_option.amount->value = "0.99";
+  shipping_option.amount->currency = "USD";
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject

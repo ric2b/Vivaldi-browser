@@ -8,6 +8,7 @@
 #include "base/atomicops.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/single_sample_metrics.h"
 #include "base/single_thread_task_runner.h"
@@ -89,10 +90,29 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     kUseCaseCount,
     kFirstUseCase = kNone,
   };
+
+  // Don't use except for tracing.
+  struct TaskDescriptionForTracing {
+    base::Optional<TaskType> task_type;
+    MainThreadTaskQueue::QueueType queue_type;
+
+    // Required in order to wrap in TraceableState.
+    constexpr bool operator!=(const TaskDescriptionForTracing& rhs) const {
+      return task_type != rhs.task_type || queue_type != rhs.queue_type;
+    }
+  };
+
   static const char* UseCaseToString(UseCase use_case);
   static const char* RAILModeToString(v8::RAILMode rail_mode);
   static const char* VirtualTimePolicyToString(
       WebViewScheduler::VirtualTimePolicy virtual_time_policy);
+  // The lowest bucket for fine-grained Expected Queueing Time reporting.
+  static const int kMinExpectedQueueingTimeBucket = 1;
+  // The highest bucket for fine-grained Expected Queueing Time reporting, in
+  // microseconds.
+  static const int kMaxExpectedQueueingTimeBucket = 4 * 1000 * 1000;
+  // The number of buckets for fine-grained Expected Queueing Time reporting.
+  static const int kNumberExpectedQueueingTimeBuckets = 50;
 
   explicit RendererSchedulerImpl(
       std::unique_ptr<TaskQueueManager> task_queue_manager);
@@ -117,6 +137,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void DidAnimateForInputOnCompositorThread() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
+  void SetSchedulerKeepActive(bool keep_active) override;
 #if defined(OS_ANDROID)
   void PauseTimersForAndroidWebView();
   void ResumeTimersForAndroidWebView();
@@ -157,7 +178,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // QueueingTimeEstimator::Client implementation:
   void OnQueueingTimeForWindowEstimated(base::TimeDelta queueing_time,
                                         bool is_disjoint_window) override;
-  void OnReportSplitExpectedQueueingTime(
+  void OnReportFineGrainedExpectedQueueingTime(
       const char* split_description,
       base::TimeDelta queueing_time) override;
 
@@ -165,7 +186,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   scoped_refptr<MainThreadTaskQueue> CompositorTaskQueue();
   scoped_refptr<MainThreadTaskQueue> LoadingTaskQueue();
   scoped_refptr<MainThreadTaskQueue> TimerTaskQueue();
-  scoped_refptr<MainThreadTaskQueue> kV8TaskQueue();
+  scoped_refptr<MainThreadTaskQueue> V8TaskQueue();
 
   // Returns a new task queue created with given params.
   scoped_refptr<MainThreadTaskQueue> NewTaskQueue(
@@ -197,6 +218,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // Tells the scheduler that all TaskQueues should use virtual time. Returns
   // the TimeTicks that virtual time offsets will be relative to.
   base::TimeTicks EnableVirtualTime();
+  bool IsVirualTimeEnabled() const;
 
   // Migrates all task queues to real time.
   void DisableVirtualTimeForTesting();
@@ -207,8 +229,9 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void SetMaxVirtualTimeTaskStarvationCount(int max_task_starvation_count);
   void AddVirtualTimeObserver(VirtualTimeObserver*);
   void RemoveVirtualTimeObserver(VirtualTimeObserver*);
-  void IncrementVirtualTimePauseCount();
+  base::TimeTicks IncrementVirtualTimePauseCount();
   void DecrementVirtualTimePauseCount();
+  void MaybeAdvanceVirtualTime(base::TimeTicks new_virtual_time);
 
   void AddWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
   void RemoveWebViewScheduler(WebViewSchedulerImpl* web_view_scheduler);
@@ -271,7 +294,8 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   void OnTaskCompleted(MainThreadTaskQueue* queue,
                        const TaskQueue::Task& task,
                        base::TimeTicks start,
-                       base::TimeTicks end);
+                       base::TimeTicks end,
+                       base::Optional<base::TimeDelta> thread_time);
 
   // base::trace_event::TraceLog::EnabledStateObserver implementation:
   void OnTraceLogEnabled() override;
@@ -349,7 +373,7 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     Policy()
         : rail_mode_(v8::PERFORMANCE_ANIMATION),
           should_disable_throttling_(false) {}
-    ~Policy() {}
+    ~Policy() = default;
 
     TaskQueuePolicy& compositor_queue_policy() {
       return policies_[static_cast<size_t>(
@@ -565,6 +589,10 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   // TaskQueueThrottler.
   void VirtualTimeResumed();
 
+  // This controller should be initialized before any TraceableVariables
+  // because they require one to initialize themselves.
+  TraceableVariableController tracing_controller_;
+
   MainThreadSchedulerHelper helper_;
   IdleHelper idle_helper_;
   IdleCanceledDelayedTaskSweeper idle_canceled_delayed_task_sweeper_;
@@ -623,19 +651,26 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     base::TimeTicks current_task_start_time;
     base::TimeDelta most_recent_expected_queueing_time;
     base::TimeDelta compositor_frame_interval;
-    base::TimeDelta longest_jank_free_task_duration;
+    TraceableCounter<base::TimeDelta, kTracingCategoryNameDebug>
+        longest_jank_free_task_duration;
     base::Optional<base::TimeTicks> last_audio_state_change;
-    int renderer_pause_count;  // Renderer is paused if non-zero.
-    int navigation_task_expected_count;
+    TraceableCounter<int, kTracingCategoryNameInfo>
+        renderer_pause_count;  // Renderer is paused if non-zero.
+    TraceableCounter<int, kTracingCategoryNameDebug>
+        navigation_task_expected_count;
     TraceableState<ExpensiveTaskPolicy, kTracingCategoryNameInfo>
         expensive_task_policy;
     TraceableState<v8::RAILMode, kTracingCategoryNameInfo>
         rail_mode_for_tracing;  // Don't use except for tracing.
-    bool renderer_hidden;
+    TraceableState<bool, kTracingCategoryNameDebug> renderer_hidden;
     TraceableState<bool, kTracingCategoryNameDefault> renderer_backgrounded;
-    bool stopping_when_backgrounded_enabled;
-    bool stopped_when_backgrounded;
-    bool was_shutdown;
+    TraceableState<bool, kTracingCategoryNameDefault>
+        keep_active_fetch_or_worker;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        stopping_when_backgrounded_enabled;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        stopped_when_backgrounded;
+    TraceableState<bool, kTracingCategoryNameInfo> was_shutdown;
     TraceableCounter<base::TimeDelta, kTracingCategoryNameInfo>
         loading_task_estimated_cost;
     TraceableCounter<base::TimeDelta, kTracingCategoryNameInfo>
@@ -643,17 +678,23 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     TraceableState<bool, kTracingCategoryNameInfo> loading_tasks_seem_expensive;
     TraceableState<bool, kTracingCategoryNameInfo> timer_tasks_seem_expensive;
     TraceableState<bool, kTracingCategoryNameDefault> touchstart_expected_soon;
-    bool have_seen_a_begin_main_frame;
-    bool have_reported_blocking_intervention_in_current_policy;
-    bool have_reported_blocking_intervention_since_navigation;
-    bool has_visible_render_widget_with_touch_handler;
-    bool begin_frame_not_expected_soon;
-    bool in_idle_period_for_testing;
-    bool use_virtual_time;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        have_seen_a_begin_main_frame;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        have_reported_blocking_intervention_in_current_policy;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        have_reported_blocking_intervention_since_navigation;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        has_visible_render_widget_with_touch_handler;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        begin_frame_not_expected_soon;
+    TraceableState<bool, kTracingCategoryNameDebug> in_idle_period_for_testing;
+    TraceableState<bool, kTracingCategoryNameInfo> use_virtual_time;
     TraceableState<bool, kTracingCategoryNameDefault> is_audio_playing;
-    bool compositor_will_send_main_frame_not_expected;
-    bool has_navigated;
-    bool pause_timers_for_webview;
+    TraceableState<bool, kTracingCategoryNameDebug>
+        compositor_will_send_main_frame_not_expected;
+    TraceableState<bool, kTracingCategoryNameDebug> has_navigated;
+    TraceableState<bool, kTracingCategoryNameDebug> pause_timers_for_webview;
     std::unique_ptr<base::SingleSampleMetric> max_queueing_time_metric;
     base::TimeDelta max_queueing_time;
     base::TimeTicks background_status_changed_at;
@@ -661,8 +702,11 @@ class PLATFORM_EXPORT RendererSchedulerImpl
     RAILModeObserver* rail_mode_observer;                 // Not owned.
     WakeUpBudgetPool* wake_up_budget_pool;                // Not owned.
     RendererMetricsHelper metrics_helper;
-    RendererProcessType process_type;
-
+    TraceableState<RendererProcessType, kTracingCategoryNameDefault>
+        process_type;
+    TraceableState<base::Optional<TaskDescriptionForTracing>,
+                   kTracingCategoryNameInfo>
+        task_description_for_tracing;  // Don't use except for tracing.
     base::ObserverList<VirtualTimeObserver> virtual_time_observers;
     base::TimeTicks initial_virtual_time;
     VirtualTimePolicy virtual_time_policy;
@@ -681,20 +725,28 @@ class PLATFORM_EXPORT RendererSchedulerImpl
   };
 
   struct AnyThread {
-    AnyThread();
+    explicit AnyThread(RendererSchedulerImpl* renderer_scheduler_impl);
     ~AnyThread();
 
     base::TimeTicks last_idle_period_end_time;
     base::TimeTicks fling_compositor_escalation_deadline;
     UserModel user_model;
-    bool awaiting_touch_start_response;
-    bool in_idle_period;
-    bool begin_main_frame_on_critical_path;
-    bool last_gesture_was_compositor_driven;
-    bool default_gesture_prevented;
-    bool have_seen_a_potentially_blocking_gesture;
-    bool waiting_for_meaningful_paint;
-    bool have_seen_input_since_navigation;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        awaiting_touch_start_response;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        in_idle_period;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        begin_main_frame_on_critical_path;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        last_gesture_was_compositor_driven;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        default_gesture_prevented;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        have_seen_a_potentially_blocking_gesture;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        waiting_for_meaningful_paint;
+    TraceableState<bool, kTracingCategoryNameInfo>
+        have_seen_input_since_navigation;
   };
 
   struct CompositorThreadOnly {

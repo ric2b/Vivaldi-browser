@@ -22,10 +22,10 @@
 <translation id="1821985195704844674">ટ્રી ગ્રિડ</translation>
 <translation id="1822429046913737220">AM/PM</translation>
 <translation id="1832974991323546415">રિમોટ ઉપકરણ પર ચલાવો</translation>
-<translation id="1854180393107901205">કાસ્ટ કરવાનું રોકો</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">સ્થિતિ</translation>
 <translation id="1938124657309484470">મૂલ્ય <ph name="MAXIMUM_DATE_OR_TIME" /> અથવા પહેલાંનું હોવું આવશ્યક છે.</translation>
+<translation id="1993104285338243655">મીરરીંગ પર સ્વિચ કર્યુંં</translation>
 <translation id="2060505056492490888">'<ph name="DOT" />' નો ઉપયોગ '<ph name="INVALIDDOMAIN" />' માં ખોટી જગ્યાએ થયો છે.</translation>
 <translation id="2148716181193084225">આજે</translation>
 <translation id="2226276347425096477">કૃપા કરીને આ ટેક્સ્ટને <ph name="MAX_CHARACTERS" /> અક્ષર અથવા તેથી ઓછા સુધી નાનો કરો (તમે હાલમાં <ph name="CURRENT_LENGTH" /> અક્ષરોનો ઉપયોગ કરી રહ્યા છો).</translation>
@@ -51,6 +51,7 @@
 <translation id="2940813599313844715">ઑબ્જેક્ટ</translation>
 <translation id="2942448076852699108">હાઇલાઇટ કરેલ સામગ્રી</translation>
 <translation id="3040011195152428237">લિંક</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" />MB</translation>
 <translation id="3075154866155599887">કૃપા કરીને માન્ય કિંમત દાખલ કરો. ફીલ્ડ અપૂર્ણ છે અથવા અમાન્ય તારીખ ધરાવે છે.</translation>
 <translation id="3078740164268491126">કોષ્ટક</translation>
 <translation id="3086746722712840547">નોંધ</translation>
@@ -63,6 +64,7 @@
 <translation id="3639613635497528239">મૂવીની બાકી સેકન્ડની સંખ્યા</translation>
 <translation id="3706100364254443312">સ્વિચ</translation>
 <translation id="3732799496749320381">mm</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3785482301506746191">મૂવી સમયનું સ્ક્રબર</translation>
 <translation id="3808586225841795776">ટર્મ</translation>
 <translation id="3822383571486410024">કૃપા કરીને આ ટેક્સ્ટને <ph name="MIN_CHARACTERS" /> અક્ષર અથવા તેથી વધુ સુધી લંબાવો (તમે હાલમાં <ph name="CURRENT_LENGTH" /> અક્ષરોનો ઉપયોગ કરી રહ્યાં છો).</translation>
@@ -93,6 +95,7 @@
 <translation id="5117590920725113268">આગલો મહિનો દર્શાવો</translation>
 <translation id="512758898067543763">પંક્તિ હેડર</translation>
 <translation id="5164977714490026579">મૂલ્ય <ph name="MINIMUM" /> જેટલું અથવા આનાથી વધુ હોવું આવશ્યક છે.</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">કૃપા કરીને '<ph name="ATSIGN" />' ની આગળનો ભાગ દાખલ કરો. '<ph name="INVALIDADDRESS" />' અપૂર્ણ છે.</translation>
 <translation id="5406322316791861025">આકૃતિ</translation>
 <translation id="5453733299334684579">ટ્રી આઇટમ</translation>
@@ -126,6 +129,7 @@
 <translation id="6643016212128521049">સાફ કરો</translation>
 <translation id="668171684555832681">અન્ય...</translation>
 <translation id="6692633176391053278">સ્ટેપર</translation>
+<translation id="6709570249143506788">ખરાબ પ્લેબૅક ક્વૉલિટી</translation>
 <translation id="6755330956360078551">ટૂલટીપ</translation>
 <translation id="6790428901817661496">ચલાવો</translation>
 <translation id="6820355525329141109">પ્લગિન લોડ કરી શક્યાં નથી.</translation>
@@ -141,6 +145,7 @@
 <translation id="727747134524199931">કૉલમ હેડર</translation>
 <translation id="7364796246159120393">ફાઇલ પસંદ કરો</translation>
 <translation id="739024184232394898">અન્ય...</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="7491962110804786152">ટેબ</translation>
 <translation id="7514365320538308">ડાઉનલોડ કરો</translation>
 <translation id="7673697353781729403">કલાક</translation>
@@ -173,6 +178,8 @@
 <translation id="8785498733064193001">પ્લેબૅક શરૂ કરો</translation>
 <translation id="8845239796550121995">હમણાં તમારા TV પર કાસ્ટ કરી રહ્યાં છીએ</translation>
 <translation id="8851136666856101339">મુખ્ય</translation>
+<translation id="8875657656876809964">વીડિઓ પ્લેબૅક ભૂલ</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
 <translation id="8987927404178983737">મહિનો</translation>
 <translation id="901493112792887934">સેકન્ડ્સમાં વર્તમાન સમય</translation>
 <translation id="9048119486235211610">નેવિગેશન</translation>
@@ -182,6 +189,7 @@
 <translation id="9132465097189459683">અન્ય...</translation>
 <translation id="9138385573473225930">ચેતવણી</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, <ph name="WEEK_START_DATE" /> થી શરૂ કરીને</translation>
+<translation id="916607977885256133">ચિત્ર-માં-ચિત્ર</translation>
 <translation id="947831847158436616">કોષ</translation>
 <translation id="966787709310836684">મેનૂ</translation>
 </translationbundle>

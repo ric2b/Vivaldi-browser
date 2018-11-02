@@ -7,7 +7,7 @@
 namespace blink {
 
 struct SameSizeAsDisplayItem {
-  virtual ~SameSizeAsDisplayItem() {}  // Allocate vtable pointer.
+  virtual ~SameSizeAsDisplayItem() = default;  // Allocate vtable pointer.
   void* pointer;
   LayoutRect rect;
   LayoutUnit outset;
@@ -87,7 +87,6 @@ static WTF::String SpecialDrawingTypeAsDebugString(DisplayItem::Type type) {
     DEBUG_STRING_CASE(PrintedContentPDFURLRect);
     DEBUG_STRING_CASE(Resizer);
     DEBUG_STRING_CASE(SVGClip);
-    DEBUG_STRING_CASE(SVGClipBoundsHack);
     DEBUG_STRING_CASE(SVGFilter);
     DEBUG_STRING_CASE(SVGMask);
     DEBUG_STRING_CASE(ScrollbarBackButtonEnd);
@@ -185,6 +184,8 @@ WTF::String DisplayItem::TypeAsDebugString(Type type) {
     return "End" + ClipTypeAsDebugString(endClipTypeToClipType(type));
 
   PAINT_PHASE_BASED_DEBUG_STRINGS(FloatClip);
+  if (type == kFloatClipClipPathBounds)
+    return "FloatClipClipPathBounds";
   if (IsEndFloatClipType(type))
     return "End" + TypeAsDebugString(endFloatClipTypeToFloatClipType(type));
 
@@ -192,6 +193,9 @@ WTF::String DisplayItem::TypeAsDebugString(Type type) {
     return ScrollTypeAsDebugString(type);
   if (IsEndScrollType(type))
     return "End" + ScrollTypeAsDebugString(endScrollTypeToScrollType(type));
+
+  PAINT_PHASE_BASED_DEBUG_STRINGS(SVGTransform);
+  PAINT_PHASE_BASED_DEBUG_STRINGS(SVGEffect);
 
   if (IsTransform3DType(type))
     return Transform3DTypeAsDebugString(type);
@@ -226,15 +230,24 @@ void DisplayItem::PropertiesAsJSON(JSONObject& json) const {
   if (IsTombstone())
     json.SetBoolean("ISTOMBSTONE", true);
 
-  json.SetString("client", String::Format("%p", &Client()));
+  json.SetString("id", GetId().ToString());
   json.SetString("visualRect", VisualRect().ToString());
   if (OutsetForRasterEffects())
     json.SetDouble("outset", OutsetForRasterEffects().ToDouble());
-  json.SetString("type", TypeAsDebugString(GetType()));
   if (skipped_cache_)
     json.SetBoolean("skippedCache", true);
 }
 
 #endif
+
+String DisplayItem::Id::ToString() const {
+#if DCHECK_IS_ON()
+  return String::Format("%p:%s:%d", &client,
+                        DisplayItem::TypeAsDebugString(type).Ascii().data(),
+                        fragment);
+#else
+  return String::Format("%p:%d:%d", &client, static_cast<int>(type), fragment);
+#endif
+}
 
 }  // namespace blink

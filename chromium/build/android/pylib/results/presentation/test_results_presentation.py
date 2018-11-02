@@ -386,6 +386,10 @@ def main():
            '(Output of the swarming.py collect '
            '--task-summary-json=XXX command.)')
   parser.add_argument(
+      '--task-output-dir',
+      help='(Swarming Merge Script API) '
+           'Directory containing all swarming task results.')
+  parser.add_argument(
       'positional', nargs='*',
       help='output.json from shards.')
 
@@ -454,7 +458,9 @@ def main():
   if args.output_json:
     with open(json_file) as original_json_file:
       json_object = json.load(original_json_file)
-      json_object['links'] = {'result_details': result_details_link}
+      json_object['links'] = {
+          'result_details (logcats, flakiness links)': result_details_link
+      }
       with open(args.output_json, 'w') as f:
         json.dump(json_object, f)
   else:

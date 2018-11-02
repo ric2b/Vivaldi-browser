@@ -22,7 +22,6 @@
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "third_party/WebKit/common/sandbox_flags.h"
@@ -157,8 +156,11 @@ FrameTreeNode::FrameTreeNode(FrameTree* frame_tree,
           name,
           unique_name,
           false /* should enforce strict mixed content checking */,
+          std::vector<uint32_t>()
+          /* hashes of hosts for insecure request upgrades */,
           false /* is a potentially trustworthy unique origin */,
-          false /* has received a user gesture */),
+          false /* has received a user gesture */,
+          false /* has received a user gesture before nav */),
       is_created_by_script_(is_created_by_script),
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
@@ -392,6 +394,16 @@ void FrameTreeNode::SetInsecureRequestPolicy(
   replication_state_.insecure_request_policy = policy;
 }
 
+void FrameTreeNode::SetInsecureNavigationsSet(
+    const std::vector<uint32_t>& insecure_navigations_set) {
+  DCHECK(std::is_sorted(insecure_navigations_set.begin(),
+                        insecure_navigations_set.end()));
+  if (insecure_navigations_set == replication_state_.insecure_navigations_set)
+    return;
+  render_manager_.OnEnforceInsecureNavigationsSet(insecure_navigations_set);
+  replication_state_.insecure_navigations_set = insecure_navigations_set;
+}
+
 void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
   pending_frame_policy_.sandbox_flags = frame_policy.sandbox_flags;
 
@@ -427,23 +439,16 @@ FrameTreeNode* FrameTreeNode::NextSibling() const {
 bool FrameTreeNode::IsLoading() const {
   RenderFrameHostImpl* current_frame_host =
       render_manager_.current_frame_host();
-  RenderFrameHostImpl* pending_frame_host =
-      render_manager_.pending_frame_host();
 
   DCHECK(current_frame_host);
 
-  if (IsBrowserSideNavigationEnabled()) {
-    if (navigation_request_)
-      return true;
+  if (navigation_request_)
+    return true;
 
-    RenderFrameHostImpl* speculative_frame_host =
-        render_manager_.speculative_frame_host();
-    if (speculative_frame_host && speculative_frame_host->is_loading())
-      return true;
-  } else {
-    if (pending_frame_host && pending_frame_host->is_loading())
-      return true;
-  }
+  RenderFrameHostImpl* speculative_frame_host =
+      render_manager_.speculative_frame_host();
+  if (speculative_frame_host && speculative_frame_host->is_loading())
+    return true;
   return current_frame_host->is_loading();
 }
 
@@ -582,6 +587,13 @@ void FrameTreeNode::DidStopLoading() {
 
   // Notify the RenderFrameHostManager of the event.
   render_manager()->OnDidStopLoading();
+
+  // Notify accessibility that the user is no longer trying to load or
+  // reload a page.
+  BrowserAccessibilityManager* manager =
+      current_frame_host()->browser_accessibility_manager();
+  if (manager)
+    manager->DidStopLoading();
 }
 
 void FrameTreeNode::DidChangeLoadProgress(double load_progress) {
@@ -629,27 +641,25 @@ void FrameTreeNode::BeforeUnloadCanceled() {
   DCHECK(current_frame_host);
   current_frame_host->ResetLoadingState();
 
-  if (IsBrowserSideNavigationEnabled()) {
-    RenderFrameHostImpl* speculative_frame_host =
-        render_manager_.speculative_frame_host();
-    if (speculative_frame_host)
-      speculative_frame_host->ResetLoadingState();
-    // Note: there is no need to set an error code on the NavigationHandle here
-    // as it has not been created yet. It is only created when the
-    // BeforeUnloadACK is received.
-    if (navigation_request_)
-      ResetNavigationRequest(false, true);
-  } else {
-    RenderFrameHostImpl* pending_frame_host =
-        render_manager_.pending_frame_host();
-    if (pending_frame_host)
-      pending_frame_host->ResetLoadingState();
-  }
+  RenderFrameHostImpl* speculative_frame_host =
+      render_manager_.speculative_frame_host();
+  if (speculative_frame_host)
+    speculative_frame_host->ResetLoadingState();
+  // Note: there is no need to set an error code on the NavigationHandle here
+  // as it has not been created yet. It is only created when the
+  // BeforeUnloadACK is received.
+  if (navigation_request_)
+    ResetNavigationRequest(false, true);
 }
 
 void FrameTreeNode::OnSetHasReceivedUserGesture() {
   render_manager_.OnSetHasReceivedUserGesture();
   replication_state_.has_received_user_gesture = true;
+}
+
+void FrameTreeNode::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
+  render_manager_.OnSetHasReceivedUserGestureBeforeNavigation(value);
+  replication_state_.has_received_user_gesture_before_nav = value;
 }
 
 FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {

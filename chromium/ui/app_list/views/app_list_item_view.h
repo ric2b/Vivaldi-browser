@@ -28,6 +28,7 @@ class ProgressBar;
 namespace app_list {
 
 class AppListItem;
+class AppListViewDelegate;
 class AppsGridView;
 
 class APP_LIST_EXPORT AppListItemView : public views::Button,
@@ -38,7 +39,9 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   // Internal class name.
   static const char kViewClassName[];
 
-  AppListItemView(AppsGridView* apps_grid_view, AppListItem* item);
+  AppListItemView(AppsGridView* apps_grid_view,
+                  AppListItem* item,
+                  AppListViewDelegate* delegate);
   ~AppListItemView() override;
 
   // Set the icon of this image, adding a drop shadow if |has_shadow|.
@@ -125,6 +128,9 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   void OnTouchDragTimer(const gfx::Point& tap_down_location,
                         const gfx::Point& tap_down_root_location);
 
+  // Records the context menu user journey time.
+  void OnContextMenuClosed(const base::TimeTicks& open_time);
+
   // views::ContextMenuController overrides:
   void ShowContextMenuForView(views::View* source,
                               const gfx::Point& point,
@@ -158,6 +164,7 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   AppListItem* item_weak_;  // Owned by AppListModel. Can be NULL.
 
+  AppListViewDelegate* delegate_;     // Unowned.
   AppsGridView* apps_grid_view_;      // Parent view, owns this.
   views::ImageView* icon_;            // Strongly typed child view.
   views::Label* title_;               // Strongly typed child view.
@@ -186,6 +193,8 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   base::OneShotTimer mouse_drag_timer_;
   // A timer to defer showing drag UI when the app item is touch pressed.
   base::OneShotTimer touch_drag_timer_;
+
+  base::WeakPtrFactory<AppListItemView> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListItemView);
 };

@@ -20,12 +20,14 @@
 #include "chrome/browser/ui/window_sizer/window_sizer.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/favicon/content/content_favicon_driver.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
@@ -45,6 +47,11 @@
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
+
+#if defined(OS_WIN)
+#include "browser/win/vivaldi_utils.h"
+#include "chrome/browser/browser_shutdown.h"
+#endif  // defined(OS_WIN)
 
 using extensions::AppWindow;
 
@@ -417,6 +424,26 @@ void VivaldiNativeAppWindowViews::Hide() {
 }
 
 void VivaldiNativeAppWindowViews::Close() {
+  // NOTE(pettern): This will abort the currently open thumbnail
+  // generating windows, but if this is not the last window,
+  // the rest will continue.  This is not ideal, but avoids
+  // lingering processes until AppWindows are no longer used
+  // for thumbnail generation. See VB-38712.
+  extensions::VivaldiUtilitiesAPI* utils_api =
+    extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
+      window_->GetProfile());
+  DCHECK(utils_api);
+  utils_api->CloseAllThumbnailWindows();
+
+#if defined(OS_WIN)
+  // This must be as early as possible.
+  bool should_quit_if_last_browser =
+    browser_shutdown::IsTryingToQuit() ||
+    KeepAliveRegistry::GetInstance()->IsKeepingAliveOnlyByBrowserOrigin();
+  if (should_quit_if_last_browser) {
+    vivaldi::OnShutdownStarted();
+  }
+#endif  // defined(OS_WIN)
   if (widget_) {
     widget_->Close();
   }

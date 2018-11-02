@@ -14,7 +14,8 @@
 #include "base/containers/queue.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/common/surfaces/stub_surface_reference_factory.h"
 #include "components/viz/common/surfaces/surface_info.h"
 #include "components/viz/service/surfaces/direct_surface_reference_factory.h"
@@ -46,18 +47,23 @@ SurfaceManager::TemporaryReferenceData::TemporaryReferenceData() = default;
 
 SurfaceManager::TemporaryReferenceData::~TemporaryReferenceData() = default;
 
-SurfaceManager::SurfaceManager(LifetimeType lifetime_type)
+SurfaceManager::SurfaceManager(LifetimeType lifetime_type,
+                               uint32_t number_of_frames_to_activation_deadline)
     : lifetime_type_(lifetime_type),
-      dependency_tracker_(this),
+      dependency_tracker_(this, number_of_frames_to_activation_deadline),
       root_surface_id_(FrameSinkId(0u, 0u),
                        LocalSurfaceId(1u, base::UnguessableToken::Create())),
       weak_factory_(this) {
   thread_checker_.DetachFromThread();
   if (using_surface_references()) {
     reference_factory_ = new StubSurfaceReferenceFactory();
-    temporary_reference_timer_.Start(
-        FROM_HERE, base::TimeDelta::FromSeconds(10), this,
-        &SurfaceManager::MarkOldTemporaryReference);
+
+    // Android WebView doesn't have a task runner and doesn't need the timer.
+    if (base::SequencedTaskRunnerHandle::IsSet()) {
+      temporary_reference_timer_.Start(
+          FROM_HERE, base::TimeDelta::FromSeconds(10), this,
+          &SurfaceManager::MarkOldTemporaryReferences);
+    }
     // TODO(kylechar): After collecting UMA stats on the number of old temporary
     // references, we may want to turn the timer off when there are no temporary
     // references to avoid waking the thread unnecessarily.
@@ -68,9 +74,24 @@ SurfaceManager::SurfaceManager(LifetimeType lifetime_type)
 }
 
 SurfaceManager::~SurfaceManager() {
+  // Garbage collect surfaces here to avoid calling back into
+  // SurfaceDependencyTracker as members of SurfaceManager are being
+  // destroyed.
+  temporary_references_.clear();
+  temporary_reference_ranges_.clear();
+  // Create a copy of the children set as RemoveSurfaceReferenceImpl below will
+  // mutate that set.
+  base::flat_set<SurfaceId> children(
+      GetSurfacesReferencedByParent(root_surface_id_));
+  for (const auto& child : children)
+    RemoveSurfaceReferenceImpl(root_surface_id_, child);
+
+  GarbageCollectSurfaces();
+
   // All SurfaceClients and their surfaces are supposed to be
   // destroyed before SurfaceManager.
-  DCHECK_EQ(surfaces_to_destroy_.size(), surface_map_.size());
+  DCHECK(surface_map_.empty());
+  DCHECK(surfaces_to_destroy_.empty());
 }
 
 #if DCHECK_IS_ON()
@@ -119,7 +140,7 @@ Surface* SurfaceManager::CreateSurface(
   }
   if (it == surface_map_.end()) {
     surface_map_[surface_info.id()] =
-        base::MakeUnique<Surface>(surface_info, this, surface_client,
+        std::make_unique<Surface>(surface_info, this, surface_client,
                                   begin_frame_source, needs_sync_tokens);
     if (lifetime_type_ == LifetimeType::REFERENCES) {
       // We can get into a situation where multiple CompositorFrames arrive for
@@ -130,6 +151,8 @@ Surface* SurfaceManager::CreateSurface(
       // real reference is received, is added to prevent this from happening.
       AddTemporaryReference(surface_info.id());
     }
+    for (auto& observer : observer_list_)
+      observer.OnSurfaceCreated(surface_info.id());
     return surface_map_[surface_info.id()].get();
   }
 
@@ -141,7 +164,10 @@ Surface* SurfaceManager::CreateSurface(
 
   DCHECK(IsMarkedForDestruction(surface_info.id()));
   surfaces_to_destroy_.erase(surface_info.id());
-  surface->ResetSeenFirstFrameActivation();
+  SurfaceDiscarded(surface);
+  surface->Reset(surface_client);
+  for (auto& observer : observer_list_)
+    observer.OnSurfaceCreated(surface_info.id());
   return surface;
 }
 
@@ -151,12 +177,6 @@ void SurfaceManager::DestroySurface(const SurfaceId& surface_id) {
   for (auto& observer : observer_list_)
     observer.OnSurfaceDestroyed(surface_id);
   surfaces_to_destroy_.insert(surface_id);
-}
-
-void SurfaceManager::SurfaceSubtreeDamaged(const SurfaceId& surface_id) {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  for (auto& observer : observer_list_)
-    observer.OnSurfaceSubtreeDamaged(surface_id);
 }
 
 void SurfaceManager::RequireSequence(const SurfaceId& surface_id,
@@ -200,13 +220,9 @@ void SurfaceManager::InvalidateFrameSinkId(const FrameSinkId& frame_sink_id) {
 
 void SurfaceManager::SetFrameSinkDebugLabel(const FrameSinkId& frame_sink_id,
                                             const std::string& debug_label) {
-#if DCHECK_IS_ON()
   auto it = valid_frame_sink_labels_.find(frame_sink_id);
   DCHECK(it != valid_frame_sink_labels_.end());
   it->second = debug_label;
-#else
-  NOTREACHED();
-#endif
 }
 
 std::string SurfaceManager::GetFrameSinkDebugLabel(
@@ -482,7 +498,6 @@ void SurfaceManager::RemoveTemporaryReference(const SurfaceId& surface_id,
 }
 
 Surface* SurfaceManager::GetLatestInFlightSurface(
-    const FrameSinkId& parent,
     const SurfaceId& primary_surface_id,
     const SurfaceId& fallback_surface_id) {
   if (!using_surface_references())
@@ -506,17 +521,26 @@ Surface* SurfaceManager::GetLatestInFlightSurface(
   if (it == temporary_reference_ranges_.end())
     return fallback_surface;
 
+  const base::flat_set<SurfaceId>& fallback_parents =
+      GetSurfacesThatReferenceChild(fallback_surface_id);
+
   const std::vector<LocalSurfaceId>& temp_surfaces = it->second;
   for (const LocalSurfaceId& local_surface_id : base::Reversed(temp_surfaces)) {
-    // The in-flight surface cannot be newer than the primary surface ID.
-    if (local_surface_id.parent_id() >
-        primary_surface_id.local_surface_id().parent_id()) {
+    // The in-flight surface must be older than the primary surface ID.
+    if (local_surface_id == primary_surface_id.local_surface_id() ||
+        local_surface_id.parent_sequence_number() >
+            primary_surface_id.local_surface_id().parent_sequence_number() ||
+        local_surface_id.child_sequence_number() >
+            primary_surface_id.local_surface_id().child_sequence_number()) {
       continue;
     }
 
-    // |parent| must own this temporary reference.
     SurfaceId surface_id(fallback_surface_id.frame_sink_id(), local_surface_id);
-    if (parent != temporary_references_[surface_id].owner)
+    base::Optional<FrameSinkId> owner = temporary_references_[surface_id].owner;
+    // Determine if the owner of this temporary reference matches one of the
+    // parents of the fallback surface. Typically a surface has a single parent
+    // so this operation should be cheap.
+    if (!IsOwnerAmongFallbackParents(fallback_parents, owner))
       continue;
 
     Surface* surface = GetSurfaceForId(surface_id);
@@ -527,7 +551,7 @@ Surface* SurfaceManager::GetLatestInFlightSurface(
   return fallback_surface;
 }
 
-void SurfaceManager::MarkOldTemporaryReference() {
+void SurfaceManager::MarkOldTemporaryReferences() {
   if (temporary_references_.empty()) {
     UMA_HISTOGRAM_EXACT_LINEAR(kUmaNumOldTemporaryReferences, 0, kUmaStatMax);
     return;
@@ -672,6 +696,18 @@ void SurfaceManager::SurfaceReferencesToStringImpl(const SurfaceId& surface_id,
 
 bool SurfaceManager::IsMarkedForDestruction(const SurfaceId& surface_id) {
   return surfaces_to_destroy_.count(surface_id) != 0;
+}
+
+bool SurfaceManager::IsOwnerAmongFallbackParents(
+    const base::flat_set<SurfaceId>& fallback_parents,
+    const base::Optional<FrameSinkId>& owner) const {
+  if (!owner)
+    return false;
+
+  return std::find_if(fallback_parents.begin(), fallback_parents.end(),
+                      [owner](const SurfaceId& parent) {
+                        return parent.frame_sink_id() == owner;
+                      }) != fallback_parents.end();
 }
 
 void SurfaceManager::SurfaceWillBeDrawn(Surface* surface) {

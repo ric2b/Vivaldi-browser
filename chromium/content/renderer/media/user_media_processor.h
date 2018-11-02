@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -22,12 +23,7 @@
 #include "third_party/WebKit/public/platform/modules/mediastream/media_devices.mojom.h"
 #include "third_party/WebKit/public/web/WebUserMediaRequest.h"
 
-namespace base {
-class TaskRunner;
-}
-
 namespace blink {
-class WebMediaConstraints;
 class WebMediaStream;
 class WebMediaStreamSource;
 class WebString;
@@ -71,8 +67,7 @@ class CONTENT_EXPORT UserMediaProcessor
       RenderFrame* render_frame,
       PeerConnectionDependencyFactory* dependency_factory,
       std::unique_ptr<MediaStreamDeviceObserver> media_stream_device_observer,
-      MediaDevicesDispatcherCallback media_devices_dispatcher_cb,
-      const scoped_refptr<base::TaskRunner>& worker_task_runner);
+      MediaDevicesDispatcherCallback media_devices_dispatcher_cb);
   ~UserMediaProcessor() override;
 
   // It can be assumed that the output of CurrentRequest() remains the same
@@ -131,7 +126,6 @@ class CONTENT_EXPORT UserMediaProcessor
   // http://crbug.com/764293
   virtual MediaStreamAudioSource* CreateAudioSource(
       const MediaStreamDevice& device,
-      const blink::WebMediaConstraints& constraints,
       const MediaStreamSource::ConstraintsCallback& source_ready,
       bool* has_sw_echo_cancellation);
   virtual MediaStreamVideoSource* CreateVideoSource(
@@ -175,7 +169,6 @@ class CONTENT_EXPORT UserMediaProcessor
 
   blink::WebMediaStreamSource InitializeAudioSourceObject(
       const MediaStreamDevice& device,
-      const blink::WebMediaConstraints& constraints,
       bool* is_pending);
 
   void CreateVideoTracks(
@@ -184,7 +177,6 @@ class CONTENT_EXPORT UserMediaProcessor
 
   void CreateAudioTracks(
       const MediaStreamDevices& devices,
-      const blink::WebMediaConstraints& constraints,
       blink::WebVector<blink::WebMediaStreamTrack>* webkit_tracks);
 
   // Callback function triggered when all native versions of the
@@ -260,9 +252,7 @@ class CONTENT_EXPORT UserMediaProcessor
   void FinalizeSelectVideoDeviceSettings(
       const blink::WebUserMediaRequest& web_request,
       const VideoCaptureSettings& settings);
-  void FinalizeSelectVideoContentSettings(
-      const blink::WebUserMediaRequest& web_request,
-      const VideoCaptureSettings& settings);
+  void SelectVideoContentSettings();
 
   void GenerateStreamForCurrentRequestInfo();
 
@@ -289,8 +279,6 @@ class CONTENT_EXPORT UserMediaProcessor
   std::unique_ptr<RequestInfo> current_request_info_;
   MediaDevicesDispatcherCallback media_devices_dispatcher_cb_;
   base::OnceClosure request_completed_cb_;
-
-  const scoped_refptr<base::TaskRunner> worker_task_runner_;
 
   const int render_frame_id_;
 

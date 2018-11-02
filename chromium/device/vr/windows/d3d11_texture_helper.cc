@@ -30,7 +30,6 @@ bool D3D11TextureHelper::CopyTextureToBackBuffer(bool flipY) {
     return false;
 
   HRESULT hr = render_state_.keyed_mutex_->AcquireSync(1, kAcquireWaitMS);
-  DCHECK(SUCCEEDED(hr) && hr != WAIT_TIMEOUT && hr != WAIT_ABANDONED);
   if (FAILED(hr) || hr == WAIT_TIMEOUT || hr == WAIT_ABANDONED) {
     // We failed to acquire the lock.  We'll drop this frame, but subsequent
     // frames won't be affected.
@@ -235,13 +234,39 @@ void D3D11TextureHelper::AllocateBackBuffer() {
   }
 }
 
-Microsoft::WRL::ComPtr<ID3D11Texture2D> D3D11TextureHelper::GetBackbuffer() {
+const Microsoft::WRL::ComPtr<ID3D11Texture2D>&
+D3D11TextureHelper::GetBackbuffer() {
   return render_state_.target_texture_;
 }
 
 void D3D11TextureHelper::SetBackbuffer(
     Microsoft::WRL::ComPtr<ID3D11Texture2D> back_buffer) {
   render_state_.target_texture_ = back_buffer;
+}
+
+Microsoft::WRL::ComPtr<IDXGIAdapter> D3D11TextureHelper::GetAdapter() {
+  Microsoft::WRL::ComPtr<IDXGIFactory1> dxgi_factory;
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter;
+  HRESULT hr = CreateDXGIFactory1(IID_PPV_ARGS(dxgi_factory.GetAddressOf()));
+  if (FAILED(hr))
+    return nullptr;
+  if (adapter_index_ >= 0) {
+    dxgi_factory->EnumAdapters(adapter_index_, adapter.GetAddressOf());
+  } else {
+    // We don't have a valid adapter index, lets see if we have a valid LUID.
+    Microsoft::WRL::ComPtr<IDXGIFactory4> dxgi_factory4;
+    hr = dxgi_factory.As(&dxgi_factory4);
+    if (FAILED(hr))
+      return nullptr;
+    dxgi_factory4->EnumAdapterByLuid(adapter_luid_,
+                                     IID_PPV_ARGS(adapter.GetAddressOf()));
+  }
+  return adapter;
+}
+
+Microsoft::WRL::ComPtr<ID3D11Device> D3D11TextureHelper::GetDevice() {
+  EnsureInitialized();
+  return render_state_.d3d11_device_;
 }
 
 bool D3D11TextureHelper::EnsureInitialized() {
@@ -260,9 +285,14 @@ bool D3D11TextureHelper::EnsureInitialized() {
   flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
+  Microsoft::WRL::ComPtr<IDXGIAdapter> adapter = GetAdapter();
+  if (!adapter) {
+    return false;
+  }
+
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device;
   HRESULT hr = D3D11CreateDevice(
-      NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, feature_levels,
+      adapter.Get(), D3D_DRIVER_TYPE_UNKNOWN, NULL, flags, feature_levels,
       arraysize(feature_levels), D3D11_SDK_VERSION, d3d11_device.GetAddressOf(),
       &feature_level_out, render_state_.d3d11_device_context_.GetAddressOf());
   if (SUCCEEDED(hr)) {
@@ -272,6 +302,17 @@ bool D3D11TextureHelper::EnsureInitialized() {
     }
   }
   return SUCCEEDED(hr);
+}
+
+bool D3D11TextureHelper::SetAdapterIndex(int32_t index) {
+  adapter_index_ = index;
+  return (index >= 0);
+}
+
+bool D3D11TextureHelper::SetAdapterLUID(const LUID& luid) {
+  adapter_luid_ = luid;
+  adapter_index_ = -1;
+  return true;
 }
 
 }  // namespace device

@@ -4,6 +4,8 @@
 
 #include "content/browser/site_instance_impl.h"
 
+#include <string>
+
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
 #include "base/macros.h"
@@ -13,8 +15,8 @@
 #include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/site_isolation_policy.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_process_host_factory.h"
 #include "content/public/browser/web_ui_controller_factory.h"
@@ -409,8 +411,10 @@ GURL SiteInstance::GetSiteForURL(BrowserContext* browser_context,
     return isolated_origin.GetURL();
   }
 
-  // If the url has a host, then determine the site.
-  if (!origin.host().empty()) {
+  // If the url has a host, then determine the site.  Skip file URLs to avoid a
+  // situation where site URL of file://localhost/ would mismatch Blink's origin
+  // (which ignores the hostname in this case - see https://crbug.com/776160).
+  if (!origin.host().empty() && origin.scheme() != url::kFileScheme) {
     // Only keep the scheme and registered domain of |origin|.
     std::string domain = net::registry_controlled_domains::GetDomainAndRegistry(
         origin.host(),
@@ -460,8 +464,7 @@ bool SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
   // Let the content embedder enable site isolation for specific URLs. Use the
   // canonical site url for this check, so that schemes with nested origins
   // (blob and filesystem) work properly.
-  if (GetContentClient()->IsSupplementarySiteIsolationModeEnabled() &&
-      GetContentClient()->browser()->DoesSiteRequireDedicatedProcess(
+  if (GetContentClient()->browser()->DoesSiteRequireDedicatedProcess(
           browser_context, site_url)) {
     return true;
   }
@@ -563,9 +566,10 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
           HAS_WRONG_LOCK:
         // We should never attempt to reassign a different origin lock to a
         // process.
-        base::debug::SetCrashKeyValue("requested_site_url", site_.spec());
-        base::debug::SetCrashKeyValue(
-            "killed_process_origin_lock",
+        base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
+                                       site_.spec());
+        base::debug::SetCrashKeyString(
+            bad_message::GetKilledProcessOriginLockKey(),
             policy->GetOriginLock(process_->GetID()).spec());
         CHECK(false) << "Trying to lock a process to " << site_
                      << " but the process is already locked to "
@@ -583,9 +587,10 @@ void SiteInstanceImpl::LockToOriginIfNeeded() {
     // If the site that we've just committed doesn't require a dedicated
     // process, make sure we aren't putting it in a process for a site that
     // does.
-    base::debug::SetCrashKeyValue("requested_site_url", site_.spec());
-    base::debug::SetCrashKeyValue(
-        "killed_process_origin_lock",
+    base::debug::SetCrashKeyString(bad_message::GetRequestedSiteURLKey(),
+                                   site_.spec());
+    base::debug::SetCrashKeyString(
+        bad_message::GetKilledProcessOriginLockKey(),
         policy->GetOriginLock(process_->GetID()).spec());
     CHECK_EQ(lock_state,
              ChildProcessSecurityPolicyImpl::CheckOriginLockResult::NO_LOCK)

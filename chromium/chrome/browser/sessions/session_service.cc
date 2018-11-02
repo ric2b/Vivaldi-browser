@@ -593,9 +593,6 @@ bool SessionService::RestoreIfNecessary(const std::vector<GURL>& urls_to_open,
     sessions::TabRestoreService* tab_restore_service =
         TabRestoreServiceFactory::GetForProfileIfExisting(profile());
     if (pref.type == SessionStartupPref::LAST &&
-        // NOTE(pettern@vivaldi.com): We don't restore old session when opening
-        // a new window.
-        !vivaldi::IsVivaldiRunning() &&
         (!tab_restore_service || !tab_restore_service->IsRestoring())) {
       SessionRestore::RestoreSession(
           profile(), browser,

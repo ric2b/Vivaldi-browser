@@ -69,7 +69,6 @@ void ExtensionAppResult::Open(int event_flags) {
   if (display_type() != DISPLAY_RECOMMENDATION) {
     RecordHistogram(APP_SEARCH_RESULT);
     extensions::RecordAppListSearchLaunch(extension);
-    base::RecordAction(base::UserMetricsAction("AppList_ClickOnAppFromSearch"));
   }
 
   controller()->ActivateApp(
@@ -80,7 +79,7 @@ void ExtensionAppResult::Open(int event_flags) {
 }
 
 std::unique_ptr<SearchResult> ExtensionAppResult::Duplicate() const {
-  std::unique_ptr<SearchResult> copy = base::MakeUnique<ExtensionAppResult>(
+  std::unique_ptr<SearchResult> copy = std::make_unique<ExtensionAppResult>(
       profile(), app_id(), controller(),
       display_type() == DISPLAY_RECOMMENDATION);
   copy->set_title(title());

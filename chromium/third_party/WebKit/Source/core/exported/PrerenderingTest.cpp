@@ -60,10 +60,10 @@ WebURL ToWebURL(const char* url) {
   return WebURL(blink::URLTestHelpers::ToKURL(url));
 }
 
-class TestPrerendererClient : public WebPrerendererClient {
+class TestWebPrerendererClient : public WebPrerendererClient {
  public:
-  TestPrerendererClient() {}
-  virtual ~TestPrerendererClient() {}
+  TestWebPrerendererClient() = default;
+  virtual ~TestWebPrerendererClient() = default;
 
   void SetExtraDataForNextPrerender(WebPrerender::ExtraData* extra_data) {
     DCHECK(!extra_data_);
@@ -171,14 +171,14 @@ class PrerenderingTest : public ::testing::Test {
         WebString::FromUTF8(base_url), blink::testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
     web_view_helper_.Initialize();
-    web_view_helper_.WebView()->SetPrerendererClient(&prerenderer_client_);
+    web_view_helper_.GetWebView()->SetPrerendererClient(&prerenderer_client_);
 
-    FrameTestHelpers::LoadFrame(web_view_helper_.WebView()->MainFrameImpl(),
+    FrameTestHelpers::LoadFrame(web_view_helper_.GetWebView()->MainFrameImpl(),
                                 std::string(base_url) + file_name);
   }
 
   void NavigateAway() {
-    FrameTestHelpers::LoadFrame(web_view_helper_.WebView()->MainFrameImpl(),
+    FrameTestHelpers::LoadFrame(web_view_helper_.GetWebView()->MainFrameImpl(),
                                 "about:blank");
   }
 
@@ -220,11 +220,11 @@ class PrerenderingTest : public ::testing::Test {
     return &prerendering_support_;
   }
 
-  TestPrerendererClient* PrerendererClient() { return &prerenderer_client_; }
+  TestWebPrerendererClient* PrerendererClient() { return &prerenderer_client_; }
 
  private:
   TestPrerenderingSupport prerendering_support_;
-  TestPrerendererClient prerenderer_client_;
+  TestWebPrerendererClient prerenderer_client_;
 
   FrameTestHelpers::WebViewHelper web_view_helper_;
 };
@@ -237,7 +237,8 @@ TEST_F(PrerenderingTest, SinglePrerender) {
   WebPrerender web_prerender = PrerendererClient()->ReleaseWebPrerender();
   EXPECT_FALSE(web_prerender.IsNull());
   EXPECT_EQ(ToWebURL("http://prerender.com/"), web_prerender.Url());
-  EXPECT_EQ(kPrerenderRelTypePrerender, web_prerender.RelTypes());
+  EXPECT_EQ(static_cast<unsigned>(kPrerenderRelTypePrerender),
+            web_prerender.RelTypes());
 
   EXPECT_EQ(1u, PrerenderingSupport()->AddCount(web_prerender));
   EXPECT_EQ(1u, PrerenderingSupport()->TotalCount());

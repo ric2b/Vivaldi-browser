@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_switches.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
@@ -23,9 +24,14 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/optional.h"
+#include "base/sys_info.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
+#include "ui/base/class_property.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/views/widget/widget.h"
@@ -78,10 +84,23 @@ SplitViewController::~SplitViewController() {
 
 // static
 bool SplitViewController::ShouldAllowSplitView() {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+#if defined(GOOGLE_CHROME_BUILD)
+  // We decided to disable splitscreen on M65 stable channel unless it is
+  // explicity enabled by the user, and keep it enabled by default for all other
+  // channels on M65. From M66, it will be enabled by default on all channels.
+  // So this restriction will be removed after M65 branch is cut.
+  // See https://crbug.com/800501 for details.
+  constexpr char kChromeOSReleaseTrack[] = "CHROMEOS_RELEASE_TRACK";
+  constexpr char kChromeOSStableChannelString[] = "stable";
+  std::string channel;
+  if (base::SysInfo::GetLsbReleaseValue(kChromeOSReleaseTrack, &channel) &&
+      channel.find(kChromeOSStableChannelString) != std::string::npos &&
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kAshEnableTabletSplitView)) {
     return false;
   }
+#endif
+
   if (!Shell::Get()
            ->tablet_mode_controller()
            ->IsTabletModeWindowManagerEnabled()) {
@@ -100,6 +119,16 @@ bool SplitViewController::IsLeftWindowOnTopOrLeftOfScreen(
 }
 
 bool SplitViewController::CanSnap(aura::Window* window) {
+  // In M65, some ARC apps can be freely resized and thus are capble of
+  // displaying in splitscreen, but splitscreen is not supported for ARC apps
+  // windows yet in M65, thus we should explicity return false here for ARC apps
+  // windows. Otherwise we may see issues as in https://crbug.com/808748. It
+  // will be reverted later in M66.
+  if (window->GetProperty(aura::client::kAppType) ==
+      static_cast<int>(AppType::ARC_APP)) {
+    return false;
+  }
+
   if (!wm::CanActivateWindow(window))
     return false;
   if (!wm::GetWindowState(window)->CanSnap())
@@ -151,6 +180,7 @@ void SplitViewController::SnapWindow(aura::Window* window,
     default_snap_position_ = snap_position;
     split_view_divider_ =
         std::make_unique<SplitViewDivider>(this, window->GetRootWindow());
+    splitview_start_time_ = base::Time::Now();
   }
 
   State previous_state = state_;
@@ -189,6 +219,7 @@ void SplitViewController::SnapWindow(aura::Window* window,
     window->parent()->StackChildBelow(stacking_target, window);
 
   NotifySplitViewStateChanged(previous_state, state_);
+  base::RecordAction(base::UserMetricsAction("SplitView_SnapWindow"));
 }
 
 void SplitViewController::SwapWindows() {
@@ -202,6 +233,9 @@ void SplitViewController::SwapWindows() {
 
   SnapWindow(new_left_window, LEFT);
   SnapWindow(new_right_window, RIGHT);
+
+  base::RecordAction(
+      base::UserMetricsAction("SplitView_DoubleTapDividerSwapWindows"));
 }
 
 aura::Window* SplitViewController::GetDefaultSnappedWindow() {
@@ -255,7 +289,7 @@ gfx::Rect SplitViewController::GetSnappedWindowBoundsInScreen(
 gfx::Rect SplitViewController::GetDisplayWorkAreaBoundsInParent(
     aura::Window* window) const {
   aura::Window* root_window = window->GetRootWindow();
-  return ScreenUtil::GetDisplayWorkAreaBoundsInParent(
+  return screen_util::GetDisplayWorkAreaBoundsInParent(
       root_window->GetChildById(kShellWindowId_DefaultContainer));
 }
 
@@ -271,6 +305,7 @@ void SplitViewController::StartResize(const gfx::Point& location_in_screen) {
   is_resizing_ = true;
   split_view_divider_->UpdateDividerBounds(is_resizing_);
   previous_event_location_ = location_in_screen;
+  base::RecordAction(base::UserMetricsAction("SplitView_ResizeWindows"));
 }
 
 void SplitViewController::Resize(const gfx::Point& location_in_screen) {
@@ -319,10 +354,19 @@ void SplitViewController::EndResize(const gfx::Point& location_in_screen) {
   // Check if one of the snapped windows needs to be closed.
   if (ShouldEndSplitViewAfterResizing()) {
     aura::Window* active_window = GetActiveWindowAfterResizingUponExit();
+
+    // Track the window that needs to be put back into the overview list if we
+    // remain in overview mode.
+    aura::Window* insert_overview_window = nullptr;
+    if (Shell::Get()->window_selector_controller()->IsSelecting())
+      insert_overview_window = GetDefaultSnappedWindow();
     EndSplitView();
     if (active_window) {
       EndOverview();
       wm::ActivateWindow(active_window);
+    } else if (insert_overview_window) {
+      Shell::Get()->window_selector_controller()->window_selector()->AddItem(
+          insert_overview_window);
     }
   }
 }
@@ -358,6 +402,9 @@ void SplitViewController::EndSplitView() {
   NotifySplitViewStateChanged(previous_state, state_);
 
   Shell::Get()->NotifySplitViewModeEnded();
+  base::RecordAction(base::UserMetricsAction("SplitView_EndSplitView"));
+  UMA_HISTOGRAM_LONG_TIMES("Ash.SplitView.TimeInSplitView",
+                           base::Time::Now() - splitview_start_time_);
 }
 
 void SplitViewController::AddObserver(Observer* observer) {

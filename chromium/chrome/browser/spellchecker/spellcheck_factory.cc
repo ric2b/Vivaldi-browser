@@ -61,7 +61,7 @@ KeyedService* SpellcheckServiceFactory::BuildServiceInstanceFor(
 
   // Instantiates Metrics object for spellchecking for use.
   spellcheck->StartRecordingMetrics(
-      prefs->GetBoolean(spellcheck::prefs::kEnableSpellcheck));
+      prefs->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
 
   return spellcheck;
 }
@@ -69,6 +69,8 @@ KeyedService* SpellcheckServiceFactory::BuildServiceInstanceFor(
 void SpellcheckServiceFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* user_prefs) {
   user_prefs->RegisterListPref(spellcheck::prefs::kSpellCheckDictionaries,
+                               base::MakeUnique<base::ListValue>());
+  user_prefs->RegisterListPref(spellcheck::prefs::kSpellCheckForcedDictionaries,
                                base::MakeUnique<base::ListValue>());
   // Continue registering kSpellCheckDictionary for preference migration.
   // TODO(estade): remove: crbug.com/751275
@@ -82,8 +84,8 @@ void SpellcheckServiceFactory::RegisterProfilePrefs(
 #else
   uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
 #endif
-  user_prefs->RegisterBooleanPref(
-      spellcheck::prefs::kEnableSpellcheck, true, flags);
+  user_prefs->RegisterBooleanPref(spellcheck::prefs::kSpellCheckEnable, true,
+                                  flags);
 }
 
 content::BrowserContext* SpellcheckServiceFactory::GetBrowserContextToUse(

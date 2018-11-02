@@ -17,6 +17,7 @@
 #include "base/scoped_observer.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/local_shared_objects_container.h"
+#include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/common/custom_handlers/protocol_handler.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/content_settings_usages_state.h"
@@ -203,6 +204,13 @@ class TabSpecificContentSettings
   // Called when audio has been blocked on the page.
   void OnAudioBlocked();
 
+  // Updates the blocked framebust icon in the location bar. The
+  // |click_callback| will be called (if it is non-null) if the blocked URL is
+  // ever clicked on in the resulting UI.
+  void OnFramebustBlocked(
+      const GURL& blocked_url,
+      FramebustBlockTabHelper::ClickCallback click_callback);
+
   // Returns whether a particular kind of content has been blocked for this
   // page.
   bool IsContentBlocked(ContentSettingsType content_type) const;
@@ -380,6 +388,13 @@ class TabSpecificContentSettings
   // Block all content. Used for testing content setting bubbles.
   void BlockAllContentForTesting();
 
+  // Stores content settings changed by the user via PageInfo.
+  void ContentSettingChangedViaPageInfo(ContentSettingsType type);
+
+  // Returns true if the user changed the given ContentSettingsType via PageInfo
+  // since the last navigation.
+  bool HasContentSettingChangedViaPageInfo(ContentSettingsType type) const;
+
  private:
   friend class content::WebContentsUserData<TabSpecificContentSettings>;
 
@@ -411,6 +426,9 @@ class TabSpecificContentSettings
 
   // Clears the MIDI settings.
   void ClearMidiContentSettings();
+
+  // Clears settings changed by the user via PageInfo since the last navigation.
+  void ClearContentSettingsChangedViaPageInfo();
 
   // Updates Geolocation settings on navigation.
   void GeolocationDidNavigate(content::NavigationHandle* navigation_handle);
@@ -475,6 +493,10 @@ class TabSpecificContentSettings
 
   // Observer to watch for content settings changed.
   ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_;
+
+  // Stores content settings changed by the user via page info since the last
+  // navigation. Used to determine whether to display the settings in page info.
+  std::set<ContentSettingsType> content_settings_changed_via_page_info_;
 
   DISALLOW_COPY_AND_ASSIGN(TabSpecificContentSettings);
 };

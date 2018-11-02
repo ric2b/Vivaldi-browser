@@ -34,12 +34,12 @@ class MenuModel;
 
 namespace views {
 class BoundsAnimator;
-class MenuModelAdapter;
 class MenuRunner;
 }
 
 namespace ash {
 class AppListButton;
+class BackButton;
 class DragImageView;
 class OverflowBubble;
 class OverflowButton;
@@ -99,6 +99,7 @@ class ASH_EXPORT ShelfView : public views::View,
   }
 
   AppListButton* GetAppListButton() const;
+  BackButton* GetBackButton() const;
 
   // Returns true if the mouse cursor exits the area for launcher tooltip.
   // There are thin gaps between launcher buttons but the tooltip shouldn't hide
@@ -183,11 +184,6 @@ class ASH_EXPORT ShelfView : public views::View,
   ShelfView* main_shelf() { return main_shelf_; }
 
   const ShelfButton* drag_view() const { return drag_view_; }
-
-  // Returns the AppListButton's current animation value, or 0.0 if the
-  // animation is not running. Used to synchronize AppListButton and ShelfView's
-  // icons' animations.
-  double GetAppListButtonAnimationCurrentValue();
 
  private:
   friend class ShelfViewTestAPI;
@@ -301,6 +297,7 @@ class ASH_EXPORT ShelfView : public views::View,
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
   void OnBoundsChanged(const gfx::Rect& previous_bounds) override;
+  void OnPaint(gfx::Canvas* canvas) override;
   FocusTraversable* GetPaneFocusTraversable() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void ViewHierarchyChanged(
@@ -363,7 +360,7 @@ class ASH_EXPORT ShelfView : public views::View,
                 ui::MenuSourceType source_type,
                 views::InkDrop* ink_drop);
 
-  // Callback for MenuModelAdapter.
+  // Callback for MenuRunner.
   void OnMenuClosed(views::InkDrop* ink_drop);
 
   // Overridden from views::BoundsAnimatorObserver:
@@ -436,7 +433,6 @@ class ASH_EXPORT ShelfView : public views::View,
 
   // Manages the context menu, and the list menu.
   std::unique_ptr<ui::MenuModel> menu_model_;
-  std::unique_ptr<views::MenuModelAdapter> menu_model_adapter_;
   std::unique_ptr<views::MenuRunner> launcher_menu_runner_;
   std::unique_ptr<ScopedRootWindowForNewWindows>
       scoped_root_window_for_new_windows_;
@@ -450,6 +446,10 @@ class ASH_EXPORT ShelfView : public views::View,
 
   // The timestamp of the event which closed the last menu - or 0.
   base::TimeTicks closing_event_time_;
+
+  // The timestamp of the event which opened the last context menu on a
+  // ShelfButton. Used in metrics.
+  base::TimeTicks shelf_button_context_menu_time_;
 
   // True if a drag and drop operation created/pinned the item in the launcher
   // and it needs to be deleted/unpinned again if the operation gets cancelled.
@@ -500,6 +500,10 @@ class ASH_EXPORT ShelfView : public views::View,
 
   // Tracks UMA metrics based on shelf button press actions.
   ShelfButtonPressedMetricTracker shelf_button_pressed_metric_tracker_;
+
+  // Color used to paint the background behind the app list button and back
+  // button.
+  SkColor shelf_item_background_color_;
 
   base::WeakPtrFactory<ShelfView> weak_factory_;
 

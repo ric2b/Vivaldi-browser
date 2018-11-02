@@ -10,6 +10,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
 #include "crypto/signature_verifier.h"
@@ -32,7 +33,7 @@ using std::string;
 namespace net {
 
 ProofVerifyDetailsChromium::ProofVerifyDetailsChromium()
-    : pkp_bypassed(false) {}
+    : pkp_bypassed(false), is_fatal_cert_error(false) {}
 
 ProofVerifyDetailsChromium::~ProofVerifyDetailsChromium() {}
 
@@ -226,9 +227,9 @@ QuicAsyncStatus ProofVerifierChromium::Job::VerifyProof(
   // Note that this is a completely synchronous operation: The CT Log Verifier
   // gets all the data it needs for SCT verification and does not do any
   // external communication.
-  cert_transparency_verifier_->Verify(cert_.get(), std::string(), cert_sct,
-                                      &verify_details_->ct_verify_result.scts,
-                                      net_log_);
+  cert_transparency_verifier_->Verify(
+      hostname, cert_.get(), std::string(), cert_sct,
+      &verify_details_->ct_verify_result.scts, net_log_);
 
   // We call VerifySignature first to avoid copying of server_config and
   // signature.
@@ -378,8 +379,7 @@ int ProofVerifierChromium::Job::DoVerifyCert(int result) {
 }
 
 int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.QuicSession.CertVerificationResult",
-                              -result);
+  base::UmaHistogramSparse("Net.QuicSession.CertVerificationResult", -result);
   cert_verifier_request_.reset();
 
   const CertVerifyResult& cert_verify_result =
@@ -490,6 +490,10 @@ int ProofVerifierChromium::Job::DoVerifyCertComplete(int result) {
       result = ct_result;
   }
 
+  verify_details_->is_fatal_cert_error =
+      IsCertStatusError(cert_status) && !IsCertStatusMinorError(cert_status) &&
+      transport_security_state_->ShouldSSLErrorsBeFatal(hostname_);
+
   if (result != OK) {
     std::string error_string = ErrorToString(result);
     error_details_ = StringPrintf("Failed to verify certificate chain: %s",
@@ -518,7 +522,7 @@ bool ProofVerifierChromium::Job::VerifySignature(
 
   size_t size_bits;
   X509Certificate::PublicKeyType type;
-  X509Certificate::GetPublicKeyInfo(cert_->os_cert_handle(), &size_bits, &type);
+  X509Certificate::GetPublicKeyInfo(cert_->cert_buffer(), &size_bits, &type);
   if (type == X509Certificate::kPublicKeyTypeRSA) {
     crypto::SignatureVerifier::HashAlgorithm hash_alg =
         crypto::SignatureVerifier::SHA256;

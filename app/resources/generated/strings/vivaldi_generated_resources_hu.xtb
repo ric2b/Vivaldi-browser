@@ -149,6 +149,7 @@
 <translation id="2890678560483811744">Tartományon kívüli oldalra való hivatkozás</translation>
 <translation id="2902127500170292085">A(z) <ph name="EXTENSION_NAME" /> nem tud kommunikálni ezzel a nyomtatóval. Győződj meg róla, hogy a nyomtató be van kapcsolva, majd próbáld újra.</translation>
 <translation id="2904456025988372123">Kérdezzen rá, ha egy webhely automatikusan próbál letölteni fájlokat az első fájl után</translation>
+<translation id="2911898792135283060">Jelszó generálása...</translation>
 <translation id="2913331724188855103">Süti-adatok mentésének és olvasásának engedélyezése a webhelyeken (ajánlott)</translation>
 <translation id="2916745397441987255">Bővítmény keresése</translation>
 <translation id="2932883381142163287">Visszaélés bejelentése</translation>
@@ -418,7 +419,6 @@
 <translation id="6295158916970320988">Az összes webhely</translation>
 <translation id="6295855836753816081">Mentés…</translation>
 <translation id="6308937455967653460">Hivatkozás mentése &amp;másként...</translation>
-<translation id="6314335155547195432">Jelszó generálása</translation>
 <translation id="6326855256003666642">Életben tartási számláló</translation>
 <translation id="6370021412472292592">Jegyzékfájl nem tölthető be.</translation>
 <translation id="6374469231428023295">Újrapróbálás</translation>
@@ -502,7 +502,6 @@
 <translation id="7564847347806291057">Folyamat leállítása</translation>
 <translation id="7576690715254076113">Szétválogatás</translation>
 <translation id="7629827748548208700">Lap: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Mégse</translation>
 <translation id="7661259717474717992">A webhelyek süti-adatokat menthetnek el és olvashatnak</translation>
 <translation id="7663719505383602579">Fogadó fél: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Rendszergazda által telepítve</translation>

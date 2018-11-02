@@ -4,6 +4,8 @@
 
 #include "core/layout/ng/inline/ng_physical_text_fragment.h"
 
+#include "core/dom/Node.h"
+#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/ng/geometry/ng_physical_offset_rect.h"
 #include "core/layout/ng/inline/ng_line_height_metrics.h"
 #include "core/style/ComputedStyle.h"
@@ -14,36 +16,47 @@ NGPhysicalOffsetRect NGPhysicalTextFragment::SelfVisualRect() const {
   if (!shape_result_)
     return {};
 
-  // TODO(kojii): Copying InlineTextBox logic from
-  // InlineFlowBox::ComputeOverflow().
-  //
-  // InlineFlowBox::ComputeOverflow() computes GlpyhOverflow first
-  // (ComputeGlyphOverflow) then AddTextBoxVisualOverflow(). We probably don't
-  // have to keep these two steps separated.
-
-  // Glyph bounds is in logical coordinate, origin at the baseline.
-  FloatRect visual_float_rect = shape_result_->Bounds();
+  // Glyph bounds is in logical coordinate, origin at the alphabetic baseline.
+  LayoutRect visual_rect = EnclosingLayoutRect(shape_result_->Bounds());
 
   // Make the origin at the logical top of this fragment.
-  // ShapeResult::Bounds() is in logical coordinate with alphabetic baseline.
   const ComputedStyle& style = Style();
-  const SimpleFontData* font_data = style.GetFont().PrimaryFont();
-  visual_float_rect.SetY(
-      visual_float_rect.Y() +
-      font_data->GetFontMetrics().FixedAscent(kAlphabeticBaseline));
-
-  // TODO(kojii): Copying from AddTextBoxVisualOverflow()
-  if (float stroke_width = style.TextStrokeWidth()) {
-    visual_float_rect.Inflate(stroke_width / 2.0f);
+  const Font& font = style.GetFont();
+  const SimpleFontData* font_data = font.PrimaryFont();
+  if (font_data) {
+    visual_rect.SetY(visual_rect.Y() + font_data->GetFontMetrics().FixedAscent(
+                                           kAlphabeticBaseline));
   }
 
-  // TODO(kojii): Implement emphasis marks.
+  if (float stroke_width = style.TextStrokeWidth()) {
+    visual_rect.Inflate(LayoutUnit::FromFloatCeil(stroke_width / 2.0f));
+  }
+
+  if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone) {
+    LayoutUnit emphasis_mark_height =
+        LayoutUnit(font.EmphasisMarkHeight(style.TextEmphasisMarkString()));
+    DCHECK_GT(emphasis_mark_height, LayoutUnit());
+    if (style.GetTextEmphasisLineLogicalSide() == LineLogicalSide::kOver) {
+      visual_rect.ShiftYEdgeTo(
+          std::min(visual_rect.Y(), -emphasis_mark_height));
+    } else {
+      LayoutUnit logical_height =
+          style.IsHorizontalWritingMode() ? Size().height : Size().width;
+      visual_rect.ShiftMaxYEdgeTo(
+          std::max(visual_rect.MaxY(), logical_height + emphasis_mark_height));
+    }
+  }
 
   if (ShadowList* text_shadow = style.TextShadow()) {
-    // TODO(kojii): Implement text shadow.
+    LayoutRectOutsets text_shadow_logical_outsets =
+        LayoutRectOutsets(text_shadow->RectOutsetsIncludingOriginal())
+            .LineOrientationOutsets(style.GetWritingMode());
+    text_shadow_logical_outsets.ClampNegativeToZero();
+    visual_rect.Expand(text_shadow_logical_outsets);
   }
 
-  LayoutRect visual_rect = EnclosingLayoutRect(visual_float_rect);
+  visual_rect = LayoutRect(EnclosingIntRect(visual_rect));
+
   switch (LineOrientation()) {
     case NGLineOrientation::kHorizontal:
       return NGPhysicalOffsetRect(visual_rect);
@@ -56,6 +69,22 @@ NGPhysicalOffsetRect NGPhysicalTextFragment::SelfVisualRect() const {
   }
   NOTREACHED();
   return {};
+}
+
+bool NGPhysicalTextFragment::IsLineBreak() const {
+  // TODO(xiaochengh): Introduce and set a text fragment type flag in fragment
+  // builder, instead of check text content string.
+  return Text() == "\n";
+}
+
+bool NGPhysicalTextFragment::IsAnonymousText() const {
+  // TODO(xiaochengh): Introduce and set a flag for anonymous text.
+  const LayoutObject* layout_object = GetLayoutObject();
+  if (layout_object && layout_object->IsText() &&
+      ToLayoutText(layout_object)->IsTextFragment())
+    return !ToLayoutTextFragment(layout_object)->AssociatedTextNode();
+  const Node* node = GetNode();
+  return !node || node->IsPseudoElement();
 }
 
 }  // namespace blink

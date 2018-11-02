@@ -33,6 +33,14 @@ class MockLocalWPT(object):
         self.apply_patch_called += 1
         return error
 
+    # This is a dummy stub intended to be replaced in tests.
+    def is_commit_affecting_directory(self, _, __):
+        return False
+
+    # This is a dummy stub intended to be replaced in tests.
+    def commits_in_range(self, _, __):
+        return []
+
     def seek_change_id(self, change_id):
         return change_id in self.change_ids
 

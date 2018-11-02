@@ -19,6 +19,7 @@
 #include "base/containers/queue.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/shared_memory_handle.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/kill.h"
@@ -26,7 +27,6 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
-#include "components/viz/common/quads/shared_bitmap.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
@@ -51,6 +51,7 @@
 #include "ipc/ipc_listener.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
+#include "services/viz/public/interfaces/hit_test/input_target_client.mojom.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
@@ -78,6 +79,7 @@ class WebMouseEvent;
 
 namespace cc {
 struct BeginFrameAck;
+class RenderFrameMetadata;
 }  // namespace cc
 
 namespace gfx {
@@ -385,9 +387,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const ui::LatencyInfo& latency);  // Virtual for testing.
   void ForwardMouseEventWithLatencyInfo(const blink::WebMouseEvent& mouse_event,
                                         const ui::LatencyInfo& latency);
-  virtual void ForwardWheelEventWithLatencyInfo(
+  void ForwardWheelEventWithLatencyInfo(
       const blink::WebMouseWheelEvent& wheel_event,
-      const ui::LatencyInfo& latency);  // Virtual for testing.
+      const ui::LatencyInfo& latency) override;
 
   // Returns an emulator for this widget. See TouchEmulator for more details.
   TouchEmulator* GetTouchEmulator();
@@ -562,12 +564,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
                         const gfx::Range& range);
 
   size_t in_flight_event_count() const { return in_flight_event_count_; }
-  blink::WebInputEvent::Type hang_monitor_event_type() const {
-    return hang_monitor_event_type_;
-  }
-  blink::WebInputEvent::Type last_event_type() const {
-    return last_event_type_;
-  }
 
   bool renderer_initialized() const { return renderer_initialized_; }
 
@@ -604,6 +600,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // viz::mojom::CompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
+  void SetWantsAnimateOnlyBeginFrames() override;
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& local_surface_id,
       viz::CompositorFrame frame,
@@ -624,12 +621,22 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       mojom::WidgetInputHandlerHostRequest host_request);
   void SetWidget(mojom::WidgetPtr widget);
 
+  viz::mojom::InputTargetClient* input_target_client() {
+    return input_target_client_.get();
+  }
+
+  void SetInputTargetClient(
+      viz::mojom::InputTargetClientPtr input_target_client);
+
   // InputRouterImplClient overrides.
   mojom::WidgetInputHandler* GetWidgetInputHandler() override;
   void OnImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
   void OnImeCancelComposition() override;
+
+  void ProgressFling(base::TimeTicks current_time);
+  void StopFling();
 
  protected:
   // ---------------------------------------------------------------------------
@@ -639,6 +646,28 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Callback for notification that we failed to receive any rendered graphics
   // from a newly loaded page. Used for testing.
   virtual void NotifyNewContentRenderingTimeoutForTesting() {}
+
+  // Can be overriden for subclass based testing.
+  virtual void OnGpuSwapBuffersCompletedInternal(
+      const ui::LatencyInfo& latency_info);
+
+  // InputAckHandler
+  void OnKeyboardEventAck(const NativeWebKeyboardEventWithLatencyInfo& event,
+                          InputEventAckSource ack_source,
+                          InputEventAckState ack_result) override;
+  void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
+                       InputEventAckSource ack_source,
+                       InputEventAckState ack_result) override;
+  void OnWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
+                       InputEventAckSource ack_source,
+                       InputEventAckState ack_result) override;
+  void OnTouchEventAck(const TouchEventWithLatencyInfo& event,
+                       InputEventAckSource ack_source,
+                       InputEventAckState ack_result) override;
+  void OnGestureEventAck(const GestureEventWithLatencyInfo& event,
+                         InputEventAckSource ack_source,
+                         InputEventAckState ack_result) override;
+  void OnUnexpectedEventAck(UnexpectedEventAckType type) override;
 
   // ---------------------------------------------------------------------------
 
@@ -660,6 +689,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostTest,
                            ShorterDelayHangMonitorTimeout);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, AutoResizeWithScale);
+  FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
+                           AutoResizeWithBrowserInitiatedResize);
   FRIEND_TEST_ALL_PREFIXES(DevToolsManagerTest,
                            NoUnresponsiveDialogInInspectedContents);
   friend class MockRenderWidgetHost;
@@ -681,9 +712,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // NotifyRendererResponsive.
   void RendererIsResponsive();
 
-  void OnGpuSwapBuffersCompletedInternal(const ui::LatencyInfo& latency_info);
-
-
   // IPC message handlers
   void OnRenderProcessGone(int status, int error_code);
   void OnClose();
@@ -704,7 +732,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnUnlockMouse();
   void OnShowDisambiguationPopup(const gfx::Rect& rect_pixels,
                                  const gfx::Size& size,
-                                 const viz::SharedBitmapId& id);
+                                 base::SharedMemoryHandle handle);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
   void OnSetNeedsBeginFrames(bool needs_begin_frames);
@@ -732,36 +760,18 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& event,
       const ui::LatencyInfo& latency_info) override;
-  void IncrementInFlightEventCount(
-      blink::WebInputEvent::Type event_type) override;
+  void IncrementInFlightEventCount() override;
   void DecrementInFlightEventCount(InputEventAckSource ack_source) override;
   void OnHasTouchEventHandlers(bool has_handlers) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
   void OnSetWhiteListedTouchAction(
       cc::TouchAction white_listed_touch_action) override {}
+  void SetNeedsBeginFrameForFlingProgress() override;
 
   // Dispatch input events with latency information
   void DispatchInputEventWithLatencyInfo(const blink::WebInputEvent& event,
                                          ui::LatencyInfo* latency);
-
-  // InputAckHandler
-  void OnKeyboardEventAck(const NativeWebKeyboardEventWithLatencyInfo& event,
-                          InputEventAckSource ack_source,
-                          InputEventAckState ack_result) override;
-  void OnMouseEventAck(const MouseEventWithLatencyInfo& event,
-                       InputEventAckSource ack_source,
-                       InputEventAckState ack_result) override;
-  void OnWheelEventAck(const MouseWheelEventWithLatencyInfo& event,
-                       InputEventAckSource ack_source,
-                       InputEventAckState ack_result) override;
-  void OnTouchEventAck(const TouchEventWithLatencyInfo& event,
-                       InputEventAckSource ack_source,
-                       InputEventAckState ack_result) override;
-  void OnGestureEventAck(const GestureEventWithLatencyInfo& event,
-                         InputEventAckSource ack_source,
-                         InputEventAckState ack_result) override;
-  void OnUnexpectedEventAck(UnexpectedEventAckType type) override;
 
   // Called when there is a new auto resize (using a post to avoid a stack
   // which may get in recursive loops).
@@ -785,15 +795,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Starts a hang monitor timeout. If there's already a hang monitor timeout
   // the new one will only fire if it has a shorter delay than the time
   // left on the existing timeouts.
-  void StartHangMonitorTimeout(base::TimeDelta delay,
-                               blink::WebInputEvent::Type event_type);
+  void StartHangMonitorTimeout(base::TimeDelta delay);
 
   // Stops all existing hang monitor timeouts and assumes the renderer is
   // responsive.
   void StopHangMonitorTimeout();
-
-  // Used for UMA logging how long the renderer was unresponsive.
-  void LogHangMonitorUnresponsive();
 
   // Once both the frame and its swap messages arrive, we call this method to
   // process the messages. Virtual for tests.
@@ -803,6 +809,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void DidAllocateSharedBitmap(
       uint32_t last_shared_bitmap_sequence_number) override;
   void SetupInputRouter();
+
+  void OnRenderFrameMetadata(const cc::RenderFrameMetadata& metadata);
+
+  bool SurfacePropertiesMismatch(
+      const RenderWidgetSurfaceProperties& first,
+      const RenderWidgetSurfaceProperties& second) const;
 
 #if defined(OS_MACOSX)
   device::mojom::WakeLock* GetWakeLock();
@@ -904,9 +916,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // operation to finish.
   base::TimeTicks repaint_start_time_;
 
-  // Used for UMA histogram logging to measure how long the renderer is hanging.
-  base::TimeTicks hang_start_time_;
-
   // Set to true if we shouldn't send input events from the render widget.
   bool ignore_input_events_;
 
@@ -987,12 +996,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // This value indicates how long to wait before we consider a renderer hung.
   base::TimeDelta hung_renderer_delay_;
 
-  // Type of the last blocking event that started the hang monitor.
-  blink::WebInputEvent::Type hang_monitor_event_type_;
-
-  // Type of the last blocking event sent to the renderer.
-  blink::WebInputEvent::Type last_event_type_;
-
   // This value indicates how long to wait for a new compositor frame from a
   // renderer process before clearing any previously displayed content.
   base::TimeDelta new_content_rendering_delay_;
@@ -1031,6 +1034,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   viz::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_;
 
   viz::CompositorFrameMetadata last_frame_metadata_;
+  cc::RenderFrameMetadata last_render_frame_metadata_;
 
   // Last non-zero frame token received from the renderer. Any swap messsages
   // having a token less than or equal to this value will be processed.
@@ -1060,6 +1064,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   mojom::WidgetInputHandlerAssociatedPtr associated_widget_input_handler_;
   mojom::WidgetInputHandlerPtr widget_input_handler_;
   std::unique_ptr<mojom::WidgetInputHandler> legacy_widget_input_handler_;
+  viz::mojom::InputTargetClientPtr input_target_client_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

@@ -16,7 +16,6 @@
 #include "content/shell/test_runner/layout_and_paint_async_then.h"
 #include "content/shell/test_runner/layout_dump.h"
 #include "content/shell/test_runner/mock_content_settings_client.h"
-#include "content/shell/test_runner/mock_credential_manager_client.h"
 #include "content/shell/test_runner/mock_screen_orientation_client.h"
 #include "content/shell/test_runner/mock_web_speech_recognizer.h"
 #include "content/shell/test_runner/pixel_dump.h"
@@ -37,7 +36,6 @@
 #include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/WebCanvas.h"
 #include "third_party/WebKit/public/platform/WebData.h"
-#include "third_party/WebKit/public/platform/WebPasswordCredential.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
@@ -316,16 +314,15 @@ void TestRunnerForSpecificView::GetManifestThen(
 
   delegate()->FetchManifest(
       web_view(),
-      web_view()->MainFrame()->ToWebLocalFrame()->GetDocument().ManifestURL(),
-      base::Bind(&TestRunnerForSpecificView::GetManifestCallback,
-                 weak_factory_.GetWeakPtr(),
-                 base::Passed(std::move(persistent_callback))));
+      base::BindOnce(&TestRunnerForSpecificView::GetManifestCallback,
+                     weak_factory_.GetWeakPtr(),
+                     std::move(persistent_callback)));
 }
 
 void TestRunnerForSpecificView::GetManifestCallback(
     v8::UniquePersistent<v8::Function> callback,
-    const blink::WebURLResponse& response,
-    const std::string& data) {
+    const GURL& manifest_url,
+    const content::Manifest& manifest) {
   PostV8CallbackWithArgs(std::move(callback), 0, nullptr);
 }
 

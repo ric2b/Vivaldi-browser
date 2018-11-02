@@ -75,8 +75,6 @@
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/layout/ng/layout_ng_list_item.h"
 #include "core/layout/ng/layout_ng_table_cell.h"
@@ -89,7 +87,6 @@
 #include "core/page/Page.h"
 #include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
-#include "core/paint/RarePaintData.h"
 #include "core/style/ContentData.h"
 #include "core/style/CursorData.h"
 #include "platform/InstanceCounters.h"
@@ -102,6 +99,7 @@
 #include "platform/wtf/allocator/Partitions.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 #ifndef NDEBUG
 #include <stdio.h>
 #endif
@@ -137,7 +135,7 @@ LayoutObject::SetLayoutNeededForbiddenScope::~SetLayoutNeededForbiddenScope() {
 #endif
 
 struct SameSizeAsLayoutObject : DisplayItemClient {
-  ~SameSizeAsLayoutObject() override {}  // Allocate vtable pointer.
+  ~SameSizeAsLayoutObject() override = default;  // Allocate vtable pointer.
   void* pointers[5];
   Member<void*> members[1];
 #if DCHECK_IS_ON()
@@ -145,9 +143,10 @@ struct SameSizeAsLayoutObject : DisplayItemClient {
 #endif
   unsigned bitfields_;
   unsigned bitfields2_;
+  // The following fields are in FragmentData.
   LayoutRect visual_rect_;
   LayoutPoint paint_offset_;
-  std::unique_ptr<RarePaintData> rare_paint_data_;
+  std::unique_ptr<int> rare_data_;
   std::unique_ptr<FragmentData> next_fragment_;
 };
 
@@ -660,19 +659,16 @@ bool LayoutObject::IsFixedPositionObjectInPagedMedia() const {
 }
 
 bool LayoutObject::ScrollRectToVisible(const LayoutRect& rect,
-                                       const ScrollAlignment& align_x,
-                                       const ScrollAlignment& align_y,
-                                       ScrollType scroll_type,
-                                       bool make_visible_in_visual_viewport,
-                                       ScrollBehavior scroll_behavior) {
+                                       const WebScrollIntoViewParams& params) {
   LayoutBox* enclosing_box = EnclosingBox();
   if (!enclosing_box)
     return false;
 
   GetDocument().GetPage()->GetSmoothScrollSequencer()->AbortAnimations();
-  enclosing_box->ScrollRectToVisibleRecursive(
-      rect, align_x, align_y, scroll_type, make_visible_in_visual_viewport,
-      scroll_behavior, scroll_type == kProgrammaticScroll);
+  WebScrollIntoViewParams new_params(params);
+  new_params.is_for_scroll_sequence =
+      params.GetScrollType() == kProgrammaticScroll;
+  enclosing_box->ScrollRectToVisibleRecursive(rect, new_params);
   GetDocument().GetPage()->GetSmoothScrollSequencer()->RunQueuedAnimations();
 
   return true;
@@ -1122,8 +1118,7 @@ const LayoutBoxModelObject& LayoutObject::ContainerForPaintInvalidation()
   // frame's LayoutView so that we generate invalidations on the window.
   const LayoutView* layout_view = View();
   while (const LayoutObject* owner_object =
-             LayoutAPIShim::ConstLayoutObjectFrom(
-                 layout_view->GetFrame()->OwnerLayoutItem()))
+             layout_view->GetFrame()->OwnerLayoutObject())
     layout_view = owner_object->View();
 
   DCHECK(layout_view);
@@ -1281,10 +1276,9 @@ LayoutRect LayoutObject::VisualRectIncludingCompositedScrolling(
 
 void LayoutObject::ClearPreviousVisualRects() {
   fragment_.SetVisualRect(LayoutRect());
-  if (fragment_.GetRarePaintData()) {
-    fragment_.GetRarePaintData()->SetLocationInBacking(LayoutPoint());
-    fragment_.GetRarePaintData()->SetSelectionVisualRect(LayoutRect());
-  }
+  fragment_.SetLocationInBacking(LayoutPoint());
+  fragment_.SetSelectionVisualRect(LayoutRect());
+
   // Ensure check paint invalidation of subtree that would be triggered by
   // location change if we had valid previous location.
   SetMayNeedPaintInvalidationSubtree();
@@ -1605,7 +1599,7 @@ void LayoutObject::FirstLineStyleDidChange(const ComputedStyle& old_style,
     SetNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::kStyleChange);
 }
 
-void LayoutObject::MarkAncestorsForOverflowRecalcIfNeeded() {
+void LayoutObject::MarkContainerChainForOverflowRecalcIfNeeded() {
   LayoutObject* object = this;
   do {
     // Cell and row need to propagate the flag to their containing section and
@@ -1624,7 +1618,7 @@ void LayoutObject::SetNeedsOverflowRecalcAfterStyleChange() {
   SetSelfNeedsOverflowRecalcAfterStyleChange();
   SetMayNeedPaintInvalidation();
   if (!needed_recalc)
-    MarkAncestorsForOverflowRecalcIfNeeded();
+    MarkContainerChainForOverflowRecalcIfNeeded();
 }
 
 DISABLE_CFI_PERF
@@ -1899,7 +1893,7 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
     // Ditto.
     if (NeedsOverflowRecalcAfterStyleChange() &&
         old_style->GetPosition() != style_->GetPosition())
-      MarkAncestorsForOverflowRecalcIfNeeded();
+      MarkContainerChainForOverflowRecalcIfNeeded();
 
     SetNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::kStyleChange);
   } else if (diff.NeedsPositionedMovementLayout()) {
@@ -1924,8 +1918,8 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
   }
 
   if (diff.NeedsFullPaintInvalidation() && old_style) {
-    if (ResolveColor(*old_style, CSSPropertyBackgroundColor) !=
-            ResolveColor(CSSPropertyBackgroundColor) ||
+    if (ResolveColor(*old_style, GetCSSPropertyBackgroundColor()) !=
+            ResolveColor(GetCSSPropertyBackgroundColor()) ||
         old_style->BackgroundLayers() != StyleRef().BackgroundLayers())
       SetBackgroundChangedSinceLastPaintInvalidation();
   }
@@ -2970,7 +2964,7 @@ CompositingState LayoutObject::GetCompositingState() const {
 }
 
 CompositingReasons LayoutObject::AdditionalCompositingReasons() const {
-  return kCompositingReasonNone;
+  return CompositingReason::kNone;
 }
 
 bool LayoutObject::HitTest(HitTestResult& result,
@@ -3252,10 +3246,9 @@ Element* LayoutObject::OffsetParent(const Element* base) const {
     // TODO(kochi): If |base| or |node| is nested deep in shadow roots, this
     // loop may get expensive, as isUnclosedNodeOf() can take up to O(N+M) time
     // (N and M are depths).
-    if (base &&
-        (node->IsClosedShadowHiddenFrom(*base) ||
-         (node->IsInShadowTree() && node->ContainingShadowRoot()->GetType() ==
-                                        ShadowRootType::kUserAgent))) {
+    if (base && (node->IsClosedShadowHiddenFrom(*base) ||
+                 (node->IsInShadowTree() &&
+                  node->ContainingShadowRoot()->IsUserAgent()))) {
       // If 'position: fixed' node is found while traversing up, terminate the
       // loop and return null.
       if (ancestor->IsFixedPositioned())
@@ -3528,9 +3521,8 @@ void LayoutObject::ClearPaintInvalidationFlags() {
 #if DCHECK_IS_ON()
   DCHECK(!ShouldCheckForPaintInvalidation() || PaintInvalidationStateIsDirty());
 #endif
-  if (fragment_.GetRarePaintData() &&
-      !RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
-    fragment_.GetRarePaintData()->SetPartialInvalidationRect(LayoutRect());
+  if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled())
+    fragment_.SetPartialInvalidationRect(LayoutRect());
 
   ClearShouldDoFullPaintInvalidation();
   bitfields_.SetMayNeedPaintInvalidation(false);
@@ -3684,74 +3676,6 @@ bool LayoutObject::CanBeSelectionLeaf() const {
   if (SlowFirstChild() || Style()->Visibility() != EVisibility::kVisible)
     return false;
   return CanBeSelectionLeafInternal();
-}
-
-FloatRect LayoutObject::LocalReferenceBoxForClipPath() const {
-  if (IsSVGChild())
-    return ObjectBoundingBox();
-
-  if (IsBox())
-    return FloatRect(ToLayoutBox(*this).BorderBoxRect());
-
-  SECURITY_DCHECK(IsLayoutInline());
-  const LayoutInline& layout_inline = ToLayoutInline(*this);
-  // This somewhat convoluted computation matches what Gecko does.
-  // See crbug.com/641907.
-  LayoutRect inline_b_box = layout_inline.LinesBoundingBox();
-  const InlineFlowBox* flow_box = layout_inline.FirstLineBox();
-  inline_b_box.SetHeight(flow_box ? flow_box->FrameRect().Height()
-                                  : LayoutUnit(0));
-  return FloatRect(inline_b_box);
-}
-
-Optional<FloatRect> LayoutObject::LocalClipPathBoundingBox() const {
-  if (IsText() || !StyleRef().ClipPath())
-    return WTF::nullopt;
-
-  FloatRect reference_box = LocalReferenceBoxForClipPath();
-  ClipPathOperation& clip_path = *StyleRef().ClipPath();
-  if (clip_path.GetType() == ClipPathOperation::SHAPE) {
-    ShapeClipPathOperation& shape = ToShapeClipPathOperation(clip_path);
-    if (!shape.IsValid())
-      return WTF::nullopt;
-    const Path& path = shape.GetPath(reference_box);
-    return path.BoundingRect();
-  }
-
-  DCHECK_EQ(clip_path.GetType(), ClipPathOperation::REFERENCE);
-  LayoutSVGResourceClipper* clipper = nullptr;
-  if (IsSVGChild()) {
-    SVGResources* resources =
-        SVGResourcesCache::CachedResourcesForLayoutObject(this);
-    if (!resources)
-      return WTF::nullopt;
-    clipper = resources->Clipper();
-  } else {
-    // TODO(crbug.com/109212): Doesn't work with external SVG references.
-    Node* node = GetNode();
-    if (!node)
-      return WTF::nullopt;
-    SVGElement* path_element =
-        ToReferenceClipPathOperation(clip_path).FindElement(
-            node->GetTreeScope());
-    if (!IsSVGClipPathElement(path_element))
-      return WTF::nullopt;
-    clipper = ToLayoutSVGResourceClipper(
-        ToLayoutSVGResourceContainer(path_element->GetLayoutObject()));
-  }
-  if (!clipper)
-    return WTF::nullopt;
-
-  FloatRect bounding_box = clipper->ResourceBoundingBox(reference_box);
-  if (!IsSVGChild() &&
-      clipper->ClipPathUnits() == SVGUnitTypes::kSvgUnitTypeUserspaceonuse) {
-    // With kSvgUnitTypeUserspaceonuse, the clip path layout is relative to
-    // the current transform space, and the reference box is unused.
-    // While SVG object has no concept of paint offset, HTML object's
-    // local space is shifted by paint offset.
-    bounding_box.MoveBy(reference_box.Location());
-  }
-  return bounding_box;
 }
 
 }  // namespace blink

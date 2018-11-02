@@ -23,6 +23,7 @@ namespace tether {
 class ActiveHost;
 class DisconnectTetheringRequestSender;
 class NetworkConfigurationRemover;
+class TetherSessionCompletionLogger;
 
 // Handles lost Wi-Fi connections for ongoing tether sessions. When a tether
 // connection is in progress, the device is connected to an underlying Wi-Fi
@@ -35,7 +36,8 @@ class TetherNetworkDisconnectionHandler : public NetworkStateHandlerObserver {
       ActiveHost* active_host,
       NetworkStateHandler* network_state_handler,
       NetworkConfigurationRemover* network_configuration_remover,
-      DisconnectTetheringRequestSender* disconnect_tethering_request_sender);
+      DisconnectTetheringRequestSender* disconnect_tethering_request_sender,
+      TetherSessionCompletionLogger* tether_session_completion_logger);
   ~TetherNetworkDisconnectionHandler() override;
 
   // NetworkStateHandlerObserver:
@@ -44,7 +46,8 @@ class TetherNetworkDisconnectionHandler : public NetworkStateHandlerObserver {
  private:
   friend class TetherNetworkDisconnectionHandlerTest;
 
-  void HandleActiveWifiNetworkDisconnection(const std::string& network_guid);
+  void HandleActiveWifiNetworkDisconnection(const std::string& network_guid,
+                                            const std::string& network_path);
 
   void SetTaskRunnerForTesting(
       scoped_refptr<base::TaskRunner> test_task_runner);
@@ -53,6 +56,7 @@ class TetherNetworkDisconnectionHandler : public NetworkStateHandlerObserver {
   NetworkStateHandler* network_state_handler_;
   NetworkConfigurationRemover* network_configuration_remover_;
   DisconnectTetheringRequestSender* disconnect_tethering_request_sender_;
+  TetherSessionCompletionLogger* tether_session_completion_logger_;
 
   scoped_refptr<base::TaskRunner> task_runner_;
   base::WeakPtrFactory<TetherNetworkDisconnectionHandler> weak_ptr_factory_;

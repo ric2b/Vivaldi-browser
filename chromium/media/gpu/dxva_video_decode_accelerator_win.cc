@@ -506,7 +506,25 @@ class VP9ConfigChangeDetector : public ConfigChangeDetector {
           color_space_.matrix = VideoColorSpace::MatrixID::BT709;
           break;
       }
+
+      gfx::Size new_size(fhdr.frame_width, fhdr.frame_height);
+      if (!size_.IsEmpty() && !pending_config_changed_ && !config_changed_ &&
+          size_ != new_size) {
+        pending_config_changed_ = true;
+        DVLOG(1) << "Configuration changed from " << size_.ToString() << " to "
+                 << new_size.ToString();
+      }
+      size_ = new_size;
+
+      // Resolution changes can happen on any frame technically, so wait for a
+      // keyframe before signaling the config change.
+      if (fhdr.IsKeyframe() && pending_config_changed_) {
+        config_changed_ = true;
+        pending_config_changed_ = false;
+      }
     }
+    if (pending_config_changed_)
+      DVLOG(3) << "Deferring config change until next keyframe...";
     return true;
   }
   VideoColorSpace current_color_space(
@@ -519,6 +537,8 @@ class VP9ConfigChangeDetector : public ConfigChangeDetector {
   }
 
  private:
+  gfx::Size size_;
+  bool pending_config_changed_ = false;
   VideoColorSpace color_space_;
   Vp9Parser parser_;
 };
@@ -564,6 +584,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       support_copy_nv12_textures_(gpu_preferences.enable_nv12_dxgi_video &&
                                   !workarounds.disable_nv12_dxgi_video),
       support_delayed_copy_nv12_textures_(
+          !gpu_preferences.use_passthrough_cmd_decoder &&
           base::FeatureList::IsEnabled(kDelayCopyNV12Textures) &&
           !workarounds.disable_delayed_copy_nv12),
       use_dx11_(false),
@@ -634,7 +655,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   }
 
   // Unfortunately, the profile is currently unreliable for
-  // VP9 (crbug.com/592074) so also try to use fp16 if HDR is on.
+  // VP9 (https://crbug.com/592074) so also try to use fp16 if HDR is on.
   if (config.target_color_space.IsHDR()) {
     use_fp16_ = true;
   }
@@ -1721,19 +1742,13 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
       use_dx11_ && gl::GLSurfaceEGL::HasEGLExtension("EGL_ANGLE_keyed_mutex");
 
   if (!use_dx11_ ||
-      !gl::g_driver_egl.ext.b_EGL_ANGLE_stream_producer_d3d_texture_nv12 ||
+      !gl::g_driver_egl.ext.b_EGL_ANGLE_stream_producer_d3d_texture ||
       !gl::g_driver_egl.ext.b_EGL_KHR_stream ||
       !gl::g_driver_egl.ext.b_EGL_KHR_stream_consumer_gltexture ||
       !gl::g_driver_egl.ext.b_EGL_NV_stream_consumer_gltexture_yuv) {
     support_share_nv12_textures_ = false;
     support_copy_nv12_textures_ = false;
   }
-
-  // The MS VP9 MFT doesn't pass through the bind flags we specify, so
-  // textures aren't created with D3D11_BIND_SHADER_RESOURCE and can't be used
-  // from ANGLE.
-  if (using_ms_vp9_mft_)
-    support_share_nv12_textures_ = false;
 
   return true;
 }
@@ -1783,15 +1798,8 @@ bool DXVAVideoDecodeAccelerator::SetDecoderInputMediaType() {
     RETURN_ON_HR_FAILURE(hr, "Failed to set interlace mode", false);
   }
 
-  hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags
-  RETURN_ON_HR_FAILURE(hr, "Failed to set decoder input type", false);
-  return true;
-}
-
-bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
-    const GUID& subtype) {
-  bool result = SetTransformOutputType(decoder_.Get(), subtype, 0, 0);
-
+  // These bind flags _must_ be set before SetInputType or SetOutputType to
+  // ensure that we get the proper surfaces created under the hood.
   if (GetPictureBufferMechanism() == PictureBufferMechanism::BIND) {
     Microsoft::WRL::ComPtr<IMFAttributes> out_attributes;
     HRESULT hr =
@@ -1807,7 +1815,14 @@ bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
     out_attributes->SetUINT32(MF_SA_D3D11_SHARED_WITHOUT_MUTEX, TRUE);
   }
 
-  return result;
+  hr = decoder_->SetInputType(0, media_type.Get(), 0);  // No flags
+  RETURN_ON_HR_FAILURE(hr, "Failed to set decoder input type", false);
+  return true;
+}
+
+bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
+    const GUID& subtype) {
+  return SetTransformOutputType(decoder_.Get(), subtype, 0, 0);
 }
 
 bool DXVAVideoDecodeAccelerator::SendMFTMessage(MFT_MESSAGE_TYPE msg,

@@ -143,10 +143,6 @@ void MixerOutputStreamAlsa::SetAlsaWrapperForTest(
   alsa_ = std::move(alsa);
 }
 
-bool MixerOutputStreamAlsa::IsFixedSampleRate() {
-  return fixed_sample_rate_ != kInvalidSampleRate;
-}
-
 bool MixerOutputStreamAlsa::Start(int sample_rate, int channels) {
   if (!alsa_) {
     alsa_ = std::make_unique<AlsaWrapper>();
@@ -427,22 +423,9 @@ void MixerOutputStreamAlsa::DefineAlsaParameters() {
     LOG(DFATAL) << "ALSA avail min must be no larger than the buffer size";
     alsa_avail_min_ = alsa_period_size_;
   }
-
-  fixed_sample_rate_ = GetSwitchValueNonNegativeInt(
-      switches::kAlsaFixedOutputSampleRate, kInvalidSampleRate);
-  if (fixed_sample_rate_ != kInvalidSampleRate) {
-    LOG(INFO) << "Setting fixed sample rate to " << fixed_sample_rate_;
-  }
 }
 
 int MixerOutputStreamAlsa::DetermineOutputRate(int requested_sample_rate) {
-  if (fixed_sample_rate_ != kInvalidSampleRate) {
-    LOG(INFO) << "Requested output rate is " << requested_sample_rate;
-    LOG(INFO) << "Cannot change rate since it is fixed to "
-              << fixed_sample_rate_;
-    return fixed_sample_rate_;
-  }
-
   unsigned int unsigned_output_sample_rate = requested_sample_rate;
 
   // Try the requested sample rate. If the ALSA driver doesn't know how to deal
@@ -490,6 +473,13 @@ void MixerOutputStreamAlsa::UpdateRenderingDelay(int newly_pushed_frames) {
 
   snd_htimestamp_t status_timestamp = {};
   alsa_->PcmStatusGetHtstamp(pcm_status_, &status_timestamp);
+  if (status_timestamp.tv_sec == 0 && status_timestamp.tv_nsec == 0) {
+    // ALSA didn't actually give us a timestamp.
+    rendering_delay_.timestamp_microseconds = kNoTimestamp;
+    rendering_delay_.delay_microseconds = 0;
+    return;
+  }
+
   rendering_delay_.timestamp_microseconds =
       TimespecToMicroseconds(status_timestamp);
   snd_pcm_sframes_t delay_frames = alsa_->PcmStatusGetDelay(pcm_status_);

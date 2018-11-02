@@ -25,7 +25,6 @@
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/content_paths.h"
-#include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_context.h"
@@ -33,7 +32,6 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_web_contents.h"
-#include "ipc/ipc_message.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -58,6 +56,7 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "net/url_request/url_request_test_job.h"
 #include "net/url_request/url_request_test_util.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
@@ -487,7 +486,7 @@ class ResourceLoaderTest : public testing::Test,
   }
   void DidReceiveRedirect(ResourceLoader* loader,
                           const GURL& new_url,
-                          ResourceResponse* response) override {
+                          network::ResourceResponse* response) override {
     EXPECT_EQ(loader, loader_.get());
     EXPECT_EQ(0, did_finish_loading_);
     EXPECT_EQ(0, did_receive_response_);
@@ -495,7 +494,7 @@ class ResourceLoaderTest : public testing::Test,
     ++did_received_redirect_;
   }
   void DidReceiveResponse(ResourceLoader* loader,
-                          ResourceResponse* response) override {
+                          network::ResourceResponse* response) override {
     EXPECT_EQ(loader, loader_.get());
     EXPECT_EQ(0, did_finish_loading_);
     EXPECT_EQ(0, did_receive_response_);

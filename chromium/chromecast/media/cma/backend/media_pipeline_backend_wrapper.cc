@@ -39,8 +39,8 @@ MediaPipelineBackendWrapper::~MediaPipelineBackendWrapper() {
 
   if (playing_) {
     LOG(WARNING) << "Destroying media backend while still in 'playing' state";
-    if (audio_decoder_ && !IsSfx()) {
-      backend_manager_->UpdatePlayingAudioCount(-1);
+    if (audio_decoder_) {
+      backend_manager_->UpdatePlayingAudioCount(IsSfx(), -1);
     }
   }
 }
@@ -74,7 +74,7 @@ MediaPipelineBackendWrapper::CreateAudioDecoder() {
     delegate = backend_manager_->buffer_delegate();
   }
 
-  audio_decoder_ = base::MakeUnique<AudioDecoderWrapper>(
+  audio_decoder_ = std::make_unique<AudioDecoderWrapper>(
       backend_manager_, real_decoder, content_type_, delegate);
   return audio_decoder_.get();
 }
@@ -136,8 +136,8 @@ void MediaPipelineBackendWrapper::SetPlaying(bool playing) {
     return;
   }
   playing_ = playing;
-  if (audio_decoder_ && !IsSfx()) {
-    backend_manager_->UpdatePlayingAudioCount(playing_ ? 1 : -1);
+  if (audio_decoder_) {
+    backend_manager_->UpdatePlayingAudioCount(IsSfx(), (playing_ ? 1 : -1));
   }
 }
 

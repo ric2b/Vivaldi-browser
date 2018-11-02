@@ -36,8 +36,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -766,8 +766,6 @@ class HostResolverImpl::ProcTask
   // mutate.
   void DoLookup(const base::TimeTicks& start_time,
                 const uint32_t attempt_number) {
-    TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION scoped_heap_context(
-        "net/dns/proctask");
     AddressList results;
     int os_error = 0;
     int error = params_.resolver_proc->Resolve(key_.hostname,
@@ -1524,8 +1522,8 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
         } else {
           UmaAsyncDnsResolveStatus(RESOLVE_STATUS_PROC_SUCCESS);
         }
-        UMA_HISTOGRAM_SPARSE_SLOWLY("Net.DNS.DnsTask.Errors",
-                                    std::abs(dns_task_error_));
+        base::UmaHistogramSparse("Net.DNS.DnsTask.Errors",
+                                 std::abs(dns_task_error_));
         resolver_->OnDnsTaskResolve(dns_task_error_);
       } else {
         UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.FallbackFail", duration);
@@ -1711,11 +1709,9 @@ class HostResolverImpl::Job : public PrioritizedDispatcher::Job,
 
     if (category == RESOLVE_FAIL || category == RESOLVE_ABORT) {
       if (duration < base::TimeDelta::FromMilliseconds(10))
-        UMA_HISTOGRAM_SPARSE_SLOWLY("Net.DNS.ResolveError.Fast",
-                                    std::abs(error));
+        base::UmaHistogramSparse("Net.DNS.ResolveError.Fast", std::abs(error));
       else
-        UMA_HISTOGRAM_SPARSE_SLOWLY("Net.DNS.ResolveError.Slow",
-                                    std::abs(error));
+        base::UmaHistogramSparse("Net.DNS.ResolveError.Slow", std::abs(error));
     }
   }
 
@@ -2111,6 +2107,15 @@ void HostResolverImpl::SetDnsClientEnabled(bool enabled) {
 
 HostCache* HostResolverImpl::GetHostCache() {
   return cache_.get();
+}
+
+bool HostResolverImpl::HasCached(base::StringPiece hostname,
+                                 HostCache::Entry::Source* source_out,
+                                 HostCache::EntryStaleness* stale_out) const {
+  if (!cache_)
+    return false;
+
+  return cache_->HasEntry(hostname, source_out, stale_out);
 }
 
 std::unique_ptr<base::Value> HostResolverImpl::GetDnsConfigAsValue() const {
@@ -2574,8 +2579,8 @@ void HostResolverImpl::OnDnsTaskResolve(int net_error) {
   AbortDnsTasks();
 
   UMA_HISTOGRAM_BOOLEAN("AsyncDNS.DnsClientEnabled", false);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("AsyncDNS.DnsClientDisabledReason",
-                              std::abs(net_error));
+  base::UmaHistogramSparse("AsyncDNS.DnsClientDisabledReason",
+                           std::abs(net_error));
 }
 
 void HostResolverImpl::SetDnsClient(std::unique_ptr<DnsClient> dns_client) {

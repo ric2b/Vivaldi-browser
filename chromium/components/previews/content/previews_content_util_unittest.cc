@@ -88,22 +88,23 @@ class PreviewsContentUtilTest : public testing::Test {
   net::TestURLRequestContext context_;
 };
 
-TEST_F(PreviewsContentUtilTest, DetermineClientPreviewsStateClientLoFi) {
+TEST_F(PreviewsContentUtilTest, DetermineEnabledClientPreviewsStateClientLoFi) {
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitFromCommandLine("ClientLoFi", std::string());
   EXPECT_EQ(content::CLIENT_LOFI_ON,
-            previews::DetermineClientPreviewsState(*CreateHttpsRequest(),
-                                                   previews_decider()));
-  EXPECT_EQ(content::CLIENT_LOFI_ON, previews::DetermineClientPreviewsState(
-                                         *CreateRequest(), previews_decider()));
+            previews::DetermineEnabledClientPreviewsState(*CreateHttpsRequest(),
+                                                          previews_decider()));
+  EXPECT_EQ(content::CLIENT_LOFI_ON,
+            previews::DetermineEnabledClientPreviewsState(*CreateRequest(),
+                                                          previews_decider()));
 }
 
 TEST_F(PreviewsContentUtilTest,
-       DetermineClientPreviewsStateNoScriptAndClientLoFi) {
+       DetermineEnabledClientPreviewsStateNoScriptAndClientLoFi) {
   // First, verify no client previews enabled.
   EXPECT_EQ(content::PREVIEWS_UNSPECIFIED,
-            previews::DetermineClientPreviewsState(*CreateHttpsRequest(),
-                                                   previews_decider()));
+            previews::DetermineEnabledClientPreviewsState(*CreateHttpsRequest(),
+                                                          previews_decider()));
 
   // Now, enable both Client LoFi and NoScript.
   base::test::ScopedFeatureList scoped_feature_list;
@@ -112,33 +113,71 @@ TEST_F(PreviewsContentUtilTest,
 
   // Verify NoScript takes precendence over LoFi (for https).
   EXPECT_EQ(content::NOSCRIPT_ON,
-            previews::DetermineClientPreviewsState(*CreateHttpsRequest(),
-                                                   previews_decider()));
-  EXPECT_EQ(content::NOSCRIPT_ON, previews::DetermineClientPreviewsState(
+            previews::DetermineEnabledClientPreviewsState(*CreateHttpsRequest(),
+                                                          previews_decider()));
+  EXPECT_EQ(content::NOSCRIPT_ON, previews::DetermineEnabledClientPreviewsState(
                                       *CreateRequest(), previews_decider()));
 
   // Verify non-HTTP[S] URL has no previews enabled.
   std::unique_ptr<net::URLRequest> data_url_request(
       CreateRequestWithURL(GURL("data://someblob")));
   EXPECT_EQ(content::PREVIEWS_UNSPECIFIED,
-            previews::DetermineClientPreviewsState(*data_url_request,
-                                                   previews_decider()));
+            previews::DetermineEnabledClientPreviewsState(*data_url_request,
+                                                          previews_decider()));
+}
+
+TEST_F(PreviewsContentUtilTest,
+       DetermineCommittedClientPreviewsStateClientLoFi) {
+  // Server bits take precendence over NoScript:
+  EXPECT_EQ(content::SERVER_LITE_PAGE_ON | content::SERVER_LOFI_ON |
+                content::CLIENT_LOFI_ON,
+            previews::DetermineCommittedClientPreviewsState(
+                *CreateHttpsRequest(),
+                content::SERVER_LITE_PAGE_ON | content::SERVER_LOFI_ON |
+                    content::CLIENT_LOFI_ON | content::NOSCRIPT_ON));
+
+  // For HTTPS, NoScript has precendence over Client LoFi:
+  EXPECT_EQ(content::NOSCRIPT_ON,
+            previews::DetermineCommittedClientPreviewsState(
+                *CreateHttpsRequest(),
+                content::CLIENT_LOFI_ON | content::NOSCRIPT_ON));
+
+  // HTTP allows Client LoFi:
+  EXPECT_EQ(
+      content::CLIENT_LOFI_ON,
+      previews::DetermineCommittedClientPreviewsState(
+          *CreateRequest(), content::CLIENT_LOFI_ON | content::NOSCRIPT_ON));
 }
 
 TEST_F(PreviewsContentUtilTest, GetMainFramePreviewsType) {
-  // Main frame preview cases:
+  // Simple cases:
   EXPECT_EQ(previews::PreviewsType::LITE_PAGE,
             previews::GetMainFramePreviewsType(content::SERVER_LITE_PAGE_ON));
+  EXPECT_EQ(previews::PreviewsType::LOFI,
+            previews::GetMainFramePreviewsType(content::SERVER_LOFI_ON));
   EXPECT_EQ(previews::PreviewsType::NOSCRIPT,
             previews::GetMainFramePreviewsType(content::NOSCRIPT_ON));
+  EXPECT_EQ(previews::PreviewsType::LOFI,
+            previews::GetMainFramePreviewsType(content::CLIENT_LOFI_ON));
 
   // NONE cases:
   EXPECT_EQ(previews::PreviewsType::NONE,
             previews::GetMainFramePreviewsType(content::PREVIEWS_UNSPECIFIED));
   EXPECT_EQ(previews::PreviewsType::NONE,
-            previews::GetMainFramePreviewsType(content::CLIENT_LOFI_ON));
-  EXPECT_EQ(previews::PreviewsType::NONE,
-            previews::GetMainFramePreviewsType(content::SERVER_LOFI_ON));
+            previews::GetMainFramePreviewsType(content::PREVIEWS_NO_TRANSFORM));
+
+  // Precedence cases:
+  EXPECT_EQ(previews::PreviewsType::LITE_PAGE,
+            previews::GetMainFramePreviewsType(
+                content::SERVER_LITE_PAGE_ON | content::SERVER_LOFI_ON |
+                content::NOSCRIPT_ON | content::CLIENT_LOFI_ON));
+  EXPECT_EQ(previews::PreviewsType::LOFI,
+            previews::GetMainFramePreviewsType(content::SERVER_LOFI_ON |
+                                               content::NOSCRIPT_ON |
+                                               content::CLIENT_LOFI_ON));
+  EXPECT_EQ(previews::PreviewsType::NOSCRIPT,
+            previews::GetMainFramePreviewsType(content::NOSCRIPT_ON |
+                                               content::CLIENT_LOFI_ON));
 }
 
 }  // namespace

@@ -1,7 +1,6 @@
 static_library("apis") {
   public_deps = [
-    #"//chrome/browser/extensions:extensions",
-    #"//vivaldi/ui:ui",
+    "//chrome/common:mojo_bindings",
   ]
   deps = [
     "../tools",

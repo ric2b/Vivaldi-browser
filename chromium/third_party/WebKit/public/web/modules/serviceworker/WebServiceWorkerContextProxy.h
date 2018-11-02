@@ -54,7 +54,7 @@ class WebURLResponse;
 // All methods of this class must be called on the worker thread.
 class WebServiceWorkerContextProxy {
  public:
-  virtual ~WebServiceWorkerContextProxy() {}
+  virtual ~WebServiceWorkerContextProxy() = default;
 
   virtual void SetRegistration(
       std::unique_ptr<WebServiceWorkerRegistration::Handle>) = 0;
@@ -107,13 +107,11 @@ class WebServiceWorkerContextProxy {
 
   virtual bool HasFetchEventHandler() = 0;
 
-  enum LastChanceOption { kIsNotLastChance, kIsLastChance };
-
   // Once the ServiceWorker has finished handling the sync event,
   // didHandleSyncEvent is called on the context client.
   virtual void DispatchSyncEvent(int sync_event_id,
                                  const WebString& tag,
-                                 LastChanceOption) = 0;
+                                 bool last_chance) = 0;
 
   virtual void DispatchAbortPaymentEvent(int event_id) = 0;
 

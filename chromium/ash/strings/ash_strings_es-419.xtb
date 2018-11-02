@@ -47,7 +47,6 @@
 <translation id="2049639323467105390"><ph name="DOMAIN" /> administra esta cuenta.</translation>
 <translation id="2050339315714019657">Vertical</translation>
 <translation id="2067602449040652523">Brillo del teclado</translation>
-<translation id="207439088875642105">Esta es una cuenta para niños administrada por <ph name="FIRST_PARENT_EMAIL" /> y <ph name="SECOND_PARENT_EMAIL" />.</translation>
 <translation id="2122028596993374965">Detener la transmisión de <ph name="TAB_NAME" /> a <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Carga lenta</translation>
 <translation id="2144487987174258011">Reinicia para actualizar Adobe Flash Player</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Audio mono</translation>
 <translation id="3009178788565917040">Salida</translation>
 <translation id="3019353588588144572">Tiempo restante hasta que la batería esté completamente cargada: <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Esta es una cuenta para niños administrada por <ph name="MANAGER_EMAIL" />.</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">Inferior</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Lupa</translation>
 <translation id="3477079411857374384">Control-Mayúscula-Espacio</translation>
 <translation id="3510164367642747937">Resaltar el cursor del mouse</translation>
+<translation id="3513798432020909783">Cuenta administrada por <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Volver a "<ph name="FROM_LOCALE" />" (debes reiniciar).</translation>
 <translation id="3582792037806681688">Se inhabilitó el acceso múltiple para un usuario en esta sesión.</translation>
 <translation id="3595596368722241419">Batería completa</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Bloquear</translation>
 <translation id="3798670284305777884">Altavoz (interno)</translation>
 <translation id="3846575436967432996">No hay información de red disponible.</translation>
+<translation id="385051799172605136">Atrás</translation>
 <translation id="3891340733213178823">Presiona Ctrl + Mayús + Q dos veces para salir.</translation>
 <translation id="3893630138897523026">ChromeVox (comentarios por voz)</translation>
 <translation id="3899995891769452915">Entrada de voz</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Conexión instantánea mediante dispositivo portátil</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Todos los usuarios disponibles ya se agregaron a esta sesión.</translation>
+<translation id="5457599981699367932">Navegar como invitado</translation>
 <translation id="553675580533261935">Salir de la sesión</translation>
 <translation id="5548285847212963613">La extensión "<ph name="EXTENSION_NAME" />" puede ayudarte a conectarte a la red.</translation>
 <translation id="5571066253365925590">Bluetooth activado</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Función tocar y arrastrar</translation>
 <translation id="5777841717266010279">¿Dejar de compartir la pantalla?</translation>
 <translation id="57838592816432529">Silenciar</translation>
+<translation id="5832805196449965646">Agregar un usuario</translation>
 <translation id="5860033963881614850">Desactivado</translation>
 <translation id="5895138241574237353">Reiniciar</translation>
 <translation id="5901316534475909376">Mayúscula + Esc</translation>
@@ -273,6 +275,7 @@ Usa esta función solo con cuentas de confianza.</translation>
 <translation id="7829386189513694949">Señal fuerte</translation>
 <translation id="7904094684485781019">El administrador de esta cuenta inhabilitó el acceso múltiple.</translation>
 <translation id="7933084174919150729">El Asistente de Google solo está disponible para el perfil principal.</translation>
+<translation id="79341161159229895">Cuenta administrada por <ph name="FIRST_PARENT_EMAIL" /> y <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Buscando redes móviles…</translation>
 <translation id="7982789257301363584">Red</translation>
 <translation id="7994370417837006925">Acceso múltiple</translation>
@@ -289,6 +292,7 @@ Usa esta función solo con cuentas de confianza.</translation>
 <translation id="8261506727792406068">Borrar</translation>
 <translation id="8308637677604853869">Menú anterior</translation>
 <translation id="8351131234907093545">Crear nota</translation>
+<translation id="8392451568018454956">Menú de opciones para <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Configuración</translation>
 <translation id="8433186206711564395">Opciones de red</translation>
 <translation id="8433977262951327081">El acceso directo para mostrar el cuadro con el menú de opciones de entrada en la biblioteca cambió. Usa <ph name="NEW_SHORTCUT" /> en lugar de <ph name="OLD_SHORTCUT" />.</translation>

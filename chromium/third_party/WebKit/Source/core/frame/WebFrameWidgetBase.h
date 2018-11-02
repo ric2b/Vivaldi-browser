@@ -88,8 +88,6 @@ class CORE_EXPORT WebFrameWidgetBase
                          WebDragOperation) override;
   void DragSourceSystemDragEnded() override;
 
-  void TransferActiveWheelFlingAnimation(
-      const WebActiveWheelFlingParameters&) override;
   WebLocalFrame* FocusedWebLocalFrameInWidget() const override;
 
   // Called when a drag-n-drop operation should begin.
@@ -111,7 +109,7 @@ class CORE_EXPORT WebFrameWidgetBase
   bool IsFlinging() const override;
 
   // Image decode functionality.
-  void RequestDecode(const PaintImage&, WTF::Function<void(bool)> callback);
+  void RequestDecode(const PaintImage&, base::OnceCallback<void(bool)>);
 
   // This method returns the focused frame belonging to this WebWidget, that
   // is, a focused frame with the same local root as the one corresponding

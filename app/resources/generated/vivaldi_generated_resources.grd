@@ -77,6 +77,9 @@
       <message name="IDS_IMPORTER_LOCK_TITLE" desc="Dialog title for importer lock dialog">
         Close Browser Before Importing
       </message>
+      <message name="IDS_EXTENSIONS_SHOW_BUTTON" desc="The text for the Show link.">
+        Show button
+      </message>
     </messages>
   </release>
 </grit>

@@ -20,12 +20,11 @@ static bool RectIsLargerArea(const gfx::Rect& a, const gfx::Rect b) {
 }
 
 SimpleEnclosedRegion::SimpleEnclosedRegion(const Region& region) {
-  for (Region::Iterator it(region); it.has_rect(); it.next())
-    Union(it.rect());
+  for (gfx::Rect rect : region)
+    Union(rect);
 }
 
-SimpleEnclosedRegion::~SimpleEnclosedRegion() {
-}
+SimpleEnclosedRegion::~SimpleEnclosedRegion() = default;
 
 void SimpleEnclosedRegion::Subtract(const gfx::Rect& sub_rect) {
   // We want to keep as much of the current rect as we can, so find the one

@@ -25,6 +25,7 @@
 #include "services/preferences/public/cpp/pref_service_main.h"
 #include "services/preferences/public/cpp/scoped_pref_update.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
+#include "services/preferences/unittest_common.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
@@ -45,7 +46,8 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
         service_factory_(std::move(service_factory)),
         connector_callback_(std::move(connector_callback)) {
     registry_.AddInterface<service_manager::mojom::ServiceFactory>(
-        base::Bind(&ServiceTestClient::Create, base::Unretained(this)));
+        base::BindRepeating(&ServiceTestClient::Create,
+                            base::Unretained(this)));
   }
 
  protected:
@@ -55,8 +57,10 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
     registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
-  void CreateService(service_manager::mojom::ServiceRequest request,
-                     const std::string& name) override {
+  void CreateService(
+      service_manager::mojom::ServiceRequest request,
+      const std::string& name,
+      service_manager::mojom::PIDReceiverPtr pid_receiver) override {
     if (name == prefs::mojom::kServiceName) {
       pref_service_context_.reset(new service_manager::ServiceContext(
           service_factory_.Run(), std::move(request)));
@@ -83,13 +87,9 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
   base::OnceCallback<void(service_manager::Connector*)> connector_callback_;
 };
 
-constexpr int kInitialValue = 1;
-constexpr int kUpdatedValue = 2;
-constexpr char kKey[] = "some_key";
-constexpr char kOtherKey[] = "some_other_key";
-constexpr char kDictionaryKey[] = "a.dictionary.pref";
 constexpr char kInitialKey[] = "initial_key";
 constexpr char kOtherInitialKey[] = "other_initial_key";
+constexpr int kUpdatedValue = 2;
 
 class PrefServiceFactoryTest : public service_manager::test::ServiceTest {
  public:
@@ -163,7 +163,7 @@ class PrefServiceFactoryTest : public service_manager::test::ServiceTest {
                    std::unique_ptr<PrefService>* out) {
     ConnectToPrefService(
         connector, std::move(pref_registry),
-        base::Bind(&PrefServiceFactoryTest::OnCreate, callback, out));
+        base::BindRepeating(&PrefServiceFactoryTest::OnCreate, callback, out));
   }
 
   scoped_refptr<PrefRegistrySimple> GetInitialPrefRegistry() {
@@ -181,7 +181,7 @@ class PrefServiceFactoryTest : public service_manager::test::ServiceTest {
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
     pref_registry->RegisterIntegerPref(kKey, kInitialValue,
                                        PrefRegistry::PUBLIC);
-    pref_registry->RegisterIntegerPref(kOtherKey, kInitialValue,
+    pref_registry->RegisterIntegerPref(kOtherDictionaryKey, kInitialValue,
                                        PrefRegistry::PUBLIC);
     pref_registry->RegisterDictionaryPref(kDictionaryKey, PrefRegistry::PUBLIC);
     pref_registry->RegisterForeignPref(kInitialKey);
@@ -192,7 +192,7 @@ class PrefServiceFactoryTest : public service_manager::test::ServiceTest {
   scoped_refptr<PrefRegistrySimple> CreateDefaultForeignPrefRegistry() {
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
     pref_registry->RegisterForeignPref(kKey);
-    pref_registry->RegisterForeignPref(kOtherKey);
+    pref_registry->RegisterForeignPref(kOtherDictionaryKey);
     pref_registry->RegisterForeignPref(kDictionaryKey);
     return pref_registry;
   }
@@ -202,7 +202,8 @@ class PrefServiceFactoryTest : public service_manager::test::ServiceTest {
     PrefChangeRegistrar registrar;
     registrar.Init(pref_service);
     base::RunLoop run_loop;
-    registrar.Add(key, base::Bind(&OnPrefChanged, run_loop.QuitClosure(), key));
+    registrar.Add(
+        key, base::BindRepeating(&OnPrefChanged, run_loop.QuitClosure(), key));
     run_loop.Run();
   }
 
@@ -305,10 +306,10 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_Defaults) {
     auto pref_registry = base::MakeRefCounted<PrefRegistrySimple>();
     pref_registry->RegisterIntegerPref(kKey, kInitialValue,
                                        PrefRegistry::PUBLIC);
-    pref_registry->RegisterForeignPref(kOtherKey);
+    pref_registry->RegisterForeignPref(kOtherDictionaryKey);
     auto pref_registry2 = base::MakeRefCounted<PrefRegistrySimple>();
     pref_registry2->RegisterForeignPref(kKey);
-    pref_registry2->RegisterIntegerPref(kOtherKey, kInitialValue,
+    pref_registry2->RegisterIntegerPref(kOtherDictionaryKey, kInitialValue,
                                         PrefRegistry::PUBLIC);
     CreateAsync(std::move(pref_registry), connector(), done_closure,
                 &pref_service);
@@ -319,8 +320,8 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_Defaults) {
 
   EXPECT_EQ(kInitialValue, pref_service->GetInteger(kKey));
   EXPECT_EQ(kInitialValue, pref_service2->GetInteger(kKey));
-  EXPECT_EQ(kInitialValue, pref_service->GetInteger(kOtherKey));
-  EXPECT_EQ(kInitialValue, pref_service2->GetInteger(kOtherKey));
+  EXPECT_EQ(kInitialValue, pref_service->GetInteger(kOtherDictionaryKey));
+  EXPECT_EQ(kInitialValue, pref_service2->GetInteger(kOtherDictionaryKey));
 }
 
 // Check that read-only pref store changes are observed.
@@ -355,8 +356,8 @@ TEST_F(PrefServiceFactoryTest, ReadOnlyPrefStore_Layering) {
   // This update is needed to check that the change to kKey has propagated even
   // though we will not observe it change.
   below_user_prefs_pref_store()->SetValue(
-      kOtherKey, std::make_unique<base::Value>(kUpdatedValue), 0);
-  WaitForPrefChange(pref_service.get(), kOtherKey);
+      kOtherDictionaryKey, std::make_unique<base::Value>(kUpdatedValue), 0);
+  WaitForPrefChange(pref_service.get(), kOtherDictionaryKey);
   EXPECT_EQ(kInitialValue, pref_service->GetInteger(kKey));
 }
 
@@ -527,7 +528,8 @@ TEST_F(PrefServiceFactoryTest, MultipleClients_SubPrefUpdates_Basic) {
       // Watch for an unexpected change to kDictionaryKey.
       PrefChangeRegistrar registrar;
       registrar.Init(pref_service2.get());
-      registrar.Add(kDictionaryKey, base::Bind(&Fail, pref_service2.get()));
+      registrar.Add(kDictionaryKey,
+                    base::BindRepeating(&Fail, pref_service2.get()));
 
       // Make and wait for a change to another pref to ensure an unexpected
       // change to kDictionaryKey is detected.
@@ -597,7 +599,8 @@ TEST_F(PrefServiceFactoryTest,
   }
   PrefChangeRegistrar registrar;
   registrar.Init(pref_service2.get());
-  registrar.Add(kDictionaryKey, base::Bind(&Fail, pref_service2.get()));
+  registrar.Add(kDictionaryKey,
+                base::BindRepeating(&Fail, pref_service2.get()));
   pref_service->SetInteger(kKey, kUpdatedValue);
   WaitForPrefChange(pref_service2.get(), kKey);
 }

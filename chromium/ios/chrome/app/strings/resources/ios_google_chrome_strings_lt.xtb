@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="lt">
 <translation id="1326317727527857210">Prisijunkite prie „Chrome“, kad pasiektumėte skirtukus iš kitų įrenginių.</translation>
-<translation id="1685087038067318291">Atraskite netoliese esančių objektų siunčiamus tinklalapius. Kai „Bluetooth“ įjungta, „Chrome“ gali rinkti tinklalapius, susijusius su netoli jūsų esančiais objektais, ir anonimiškai siųsti juos „Google“ paslaugai, kad būtų rasti naudingiausi tinklalapiai. <ph name="BEGIN_LINK" />Sužinokite daugiau<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">„Google Chrome“ privatumo pranešimas</translation>
+<translation id="1863312987075920112">Naudodami šią programą sutinkate su „Chrome“ <ph name="BEGIN_LINK_TOS" />paslaugų teikimo sąlygomis<ph name="END_LINK_TOS" /> ir <ph name="BEGIN_LINK_PRIVACY" />privatumo pranešimo<ph name="END_LINK_PRIVACY" /> sąlygomis.</translation>
 <translation id="2147651015520127414">„Chrome“ patvirtino, kad „<ph name="ISSUER" />“ išdavė šį svetainės sertifikatą.</translation>
 <translation id="2334084861041072223">Autorių teisės priklauso „Google Inc.“, <ph name="YEAR" /> m. Visos teisės saugomos.</translation>
 <translation id="2342981853652716282">Prisijunkite prie „Chrome“, kad galėtumėte naudoti žymes, slaptažodžius ir kitus nustatymus visuose įrenginiuose.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Dėl tam tikrų priedų „Chrome“ užstringa . Pašalinkite:</translation>
 <translation id="4615174829807303908">Atsijungiate nuo paskyros, kurią valdo <ph name="SIGNOUT_MANAGED_DOMAIN" />. „Chrome“ duomenys bus ištrinti iš šio įrenginio, bet liks „Google“ paskyroje.</translation>
 <translation id="5389212809648216794">„Google Chrome“ negali naudoti fotoaparato, nes jį naudoja kita programa</translation>
-<translation id="5566557026214762153">Naudod. šią programą sutinkate su „Chrome“ <ph name="BEGIN_LINK" />paslaugų teikimo sąlygomis<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Atidarykite „Nustatymai“ &gt; „Privatumas“ &gt; „Fotoaparatas“ &gt; „Google Chrome“ ir įjunkite fotoaparatą.</translation>
 <translation id="5642200033778930880">„Google Chrome“ negali naudoti fotoaparato padalyto rodinio režimu</translation>
 <translation id="5703130498371792817">Mėgaujatės „Chrome“? <ph name="BEGIN_LINK" />Įvertinkite šią programą<ph name="END_LINK" /></translation>

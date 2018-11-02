@@ -4,6 +4,7 @@
 
 #include "net/quic/core/tls_client_handshaker.h"
 #include "net/quic/core/tls_server_handshaker.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_test.h"
 #include "net/quic/test_tools/crypto_test_utils.h"
 #include "net/quic/test_tools/fake_proof_source.h"
@@ -178,17 +179,14 @@ class TestQuicCryptoClientStream : public TestQuicCryptoStream {
   explicit TestQuicCryptoClientStream(QuicSession* session)
       : TestQuicCryptoStream(session),
         proof_verifier_(new FakeProofVerifier),
-        ssl_ctx_(SSL_CTX_new(TLS_with_buffers_method())),
+        ssl_ctx_(TlsClientHandshaker::CreateSslCtx()),
         handshaker_(new TlsClientHandshaker(
             this,
             session,
             QuicServerId("test.example.com", 443),
             proof_verifier_.get(),
             ssl_ctx_.get(),
-            crypto_test_utils::ProofVerifyContextForTesting())) {
-    SSL_CTX_set_min_proto_version(ssl_ctx_.get(), TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(ssl_ctx_.get(), TLS1_3_VERSION);
-  }
+            crypto_test_utils::ProofVerifyContextForTesting())) {}
 
   ~TestQuicCryptoClientStream() override = default;
 
@@ -212,16 +210,11 @@ class TestQuicCryptoServerStream : public TestQuicCryptoStream {
                              FakeProofSource* proof_source)
       : TestQuicCryptoStream(session),
         proof_source_(proof_source),
-        ssl_ctx_(SSL_CTX_new(TLS_with_buffers_method())),
+        ssl_ctx_(TlsServerHandshaker::CreateSslCtx()),
         handshaker_(new TlsServerHandshaker(this,
                                             session,
                                             ssl_ctx_.get(),
-                                            proof_source_)) {
-    SSL_CTX_set_min_proto_version(ssl_ctx_.get(), TLS1_3_VERSION);
-    SSL_CTX_set_max_proto_version(ssl_ctx_.get(), TLS1_3_VERSION);
-    SSL_CTX_set_tlsext_servername_callback(
-        ssl_ctx_.get(), TlsServerHandshaker::SelectCertificateCallback);
-  }
+                                            proof_source_)) {}
 
   ~TestQuicCryptoServerStream() override = default;
 
@@ -286,10 +279,10 @@ TEST_F(TlsHandshakerTest, CryptoHandshake) {
   client_stream_.CryptoConnect();
   MoveStreamFrames(&client_stream_, server_stream_.get());
 
-  // TODO(nharper): Once encryption keys are set, check that
-  // encryption_established() is true on the streams.
   EXPECT_TRUE(client_stream_.handshake_confirmed());
+  EXPECT_TRUE(client_stream_.encryption_established());
   EXPECT_TRUE(server_stream_->handshake_confirmed());
+  EXPECT_TRUE(server_stream_->encryption_established());
 }
 
 TEST_F(TlsHandshakerTest, HandshakeWithAsyncProofSource) {
@@ -309,10 +302,10 @@ TEST_F(TlsHandshakerTest, HandshakeWithAsyncProofSource) {
 
   MoveStreamFrames(&client_stream_, server_stream_.get());
 
-  // TODO(nharper): Once encryption keys are set, check that
-  // encryption_established() is true on the streams.
   EXPECT_TRUE(client_stream_.handshake_confirmed());
+  EXPECT_TRUE(client_stream_.encryption_established());
   EXPECT_TRUE(server_stream_->handshake_confirmed());
+  EXPECT_TRUE(server_stream_->encryption_established());
 }
 
 TEST_F(TlsHandshakerTest, CancelPendingProofSource) {
@@ -350,10 +343,10 @@ TEST_F(TlsHandshakerTest, HandshakeWithAsyncProofVerifier) {
 
   MoveStreamFrames(&client_stream_, server_stream_.get());
 
-  // TODO(nharper): Once encryption keys are set, check that
-  // encryption_established() is true on the streams.
   EXPECT_TRUE(client_stream_.handshake_confirmed());
+  EXPECT_TRUE(client_stream_.encryption_established());
   EXPECT_TRUE(server_stream_->handshake_confirmed());
+  EXPECT_TRUE(server_stream_->encryption_established());
 }
 
 TEST_F(TlsHandshakerTest, ClientConnectionClosedOnTlsAlert) {
@@ -373,7 +366,7 @@ TEST_F(TlsHandshakerTest, ClientConnectionClosedOnTlsAlert) {
   };
   QuicStreamFrame alert(kCryptoStreamId, false,
                         client_stream_.stream_bytes_read(),
-                        QuicStringPiece(alert_msg, arraysize(alert_msg)));
+                        QuicStringPiece(alert_msg, QUIC_ARRAYSIZE(alert_msg)));
   client_stream_.OnStreamFrame(alert);
 
   EXPECT_FALSE(client_stream_.handshake_confirmed());
@@ -394,7 +387,7 @@ TEST_F(TlsHandshakerTest, ServerConnectionClosedOnTlsAlert) {
   };
   QuicStreamFrame alert(kCryptoStreamId, false,
                         server_stream_->stream_bytes_read(),
-                        QuicStringPiece(alert_msg, arraysize(alert_msg)));
+                        QuicStringPiece(alert_msg, QUIC_ARRAYSIZE(alert_msg)));
   server_stream_->OnStreamFrame(alert);
 
   EXPECT_FALSE(server_stream_->handshake_confirmed());

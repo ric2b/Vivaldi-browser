@@ -14,8 +14,10 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "components/feedback/anonymizer_tool.h"
 #include "components/feedback/system_logs/system_logs_source.h"
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/api/feedback_private/access_rate_limiter.h"
@@ -28,11 +30,14 @@ namespace extensions {
 // - A source may not be accessed too frequently by an extension.
 class LogSourceAccessManager {
  public:
-  using ReadLogSourceCallback =
-      base::Callback<void(const api::feedback_private::ReadLogSourceResult&)>;
+  using ReadLogSourceCallback = base::OnceCallback<void(
+      std::unique_ptr<api::feedback_private::ReadLogSourceResult>)>;
 
   explicit LogSourceAccessManager(content::BrowserContext* context);
   ~LogSourceAccessManager();
+
+  // Call this to override the maximum burst access count of the rate limiter.
+  static void SetMaxNumBurstAccessesForTesting(int num_accesses);
 
   // To override the default rate-limiting mechanism of this function, pass in
   // a TimeDelta representing the desired minimum time between consecutive reads
@@ -50,7 +55,7 @@ class LogSourceAccessManager {
   // feedback_private.idl for more info about the actual parameters.
   bool FetchFromSource(const api::feedback_private::ReadLogSourceParams& params,
                        const std::string& extension_id,
-                       const ReadLogSourceCallback& callback);
+                       ReadLogSourceCallback callback);
 
   // Each log source may not have more than this number of readers accessing it,
   // regardless of extension.
@@ -109,7 +114,7 @@ class LogSourceAccessManager {
       const std::string& extension_id,
       ResourceId resource_id,
       bool delete_source,
-      const ReadLogSourceCallback& callback,
+      ReadLogSourceCallback callback,
       std::unique_ptr<system_logs::SystemLogsResponse> response);
 
   // Removes an existing log source handle indicated by |id| from
@@ -149,6 +154,10 @@ class LogSourceAccessManager {
   // Provides a timer clock implementation for keeping track of access times.
   // Can override the default clock for testing.
   std::unique_ptr<base::TickClock> tick_clock_;
+
+  // For removing PII from log strings from log sources.
+  scoped_refptr<base::SequencedTaskRunner> task_runner_for_anonymizer_;
+  scoped_refptr<feedback::AnonymizerToolContainer> anonymizer_container_;
 
   base::WeakPtrFactory<LogSourceAccessManager> weak_factory_;
 

@@ -36,19 +36,6 @@ void InterstitialPageNavigatorImpl::DidStartProvisionalLoad(
   // Do not proceed if the interstitial itself has been disabled.
   if (!enabled_)
     return;
-
-  // The interstitial page should only navigate once.
-  DCHECK(!render_frame_host->navigation_handle());
-  render_frame_host->SetNavigationHandle(NavigationHandleImpl::Create(
-      url, redirect_chain, render_frame_host->frame_tree_node(),
-      false,                 /* is_renderer_initiated */
-      false,                 /* is_same_document */
-      navigation_start,      /* navigation_state */
-      0,                     /* pending_nav_entry_id */
-      false,                 /* started_in_context_menu */
-      CSPDisposition::CHECK, /* should_check_main_world_csp */
-      false                  /* is_form_submission */
-      ));
 }
 
 void InterstitialPageNavigatorImpl::DidNavigate(

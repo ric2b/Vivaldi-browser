@@ -21,21 +21,6 @@
         "enum": [ "pending", "success", "failure" ]
       },
       {
-        "id": "SyncLoginDetails",
-        "type": "object",
-        "description": "Information available following a successful sync login",
-        "properties": {
-          "username": {
-            "type": "string",
-            "description": "The user name used to log it to sync"
-          },
-          "password": {
-            "type": "string",
-            "description": "The sync encryption password"
-          }
-        }
-      },
-      {
         "id": "SyncToken",
         "type": "object",
         "description": "Information available following a successful sync login",
@@ -75,7 +60,7 @@
         "description": "Contains information about the last sync cycle and the state of the sync engine",
         "properties":{
           "last_sync_time": {
-            "type": "string",
+            "type": "number",
             "description": "The last time a sync cycle started"
           },
           "last_download_updates_status": {
@@ -99,14 +84,10 @@
     ],
     "functions": [
       {
-        "name": "loginComplete",
+        "name": "start",
         "type": "function",
-        "description": "Indicates that the sync login completed successfully",
+        "description": "Causes sync to be started using the provided token.",
         "parameters": [
-          {
-            "name": "loginDetails",
-            "$ref": "SyncLoginDetails"
-          },
           {
             "name": "token",
             "$ref": "SyncToken"
@@ -116,7 +97,7 @@
       {
         "name": "refreshToken",
         "type": "function",
-        "description": "Indicates that the a new access token to the sync account was obtained",
+        "description": "Indicates that the a new access token to the sync account was obtained.",
         "parameters": [
           {
             "name": "token",
@@ -300,13 +281,13 @@
     ],
     "events": [
       {
-        "name": "onLoginDone",
+        "name": "onEngineStarted",
         "type": "function",
         "description": "Fired when the sync engine has started.",
         "parameters": []
       },
       {
-        "name": "onSyncEngineInitFailed",
+        "name": "onEngineInitFailed",
         "type": "function",
         "description": "Fired when the sync engine has failed to start.",
         "parameters": []
@@ -324,7 +305,7 @@
         "parameters": []
       },
       {
-        "name": "onLogoutDone",
+        "name": "onEngineStopped",
         "type": "function",
         "description": "Fired when the user has been logged out, either from a UI action or from a server request.",
         "parameters": []

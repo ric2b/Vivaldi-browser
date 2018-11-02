@@ -54,12 +54,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyNoneQuality) {
       CreateMatrix(SkSize::Make(0.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kNone_SkFilterQuality, key.filter_quality());
+  EXPECT_TRUE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   // Since the original decode will be used, the locked_bytes is that of the
   // original image.
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
@@ -75,12 +76,12 @@ TEST(SoftwareImageDecodeCacheTest,
       CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kMedium_SkFilterQuality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(50, key.target_size().width());
   EXPECT_EQ(50, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(50u * 50u * 4u, key.locked_bytes());
 }
 
@@ -93,12 +94,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityDropsToLowIfMipLevel0) {
       CreateMatrix(SkSize::Make(0.75f, 0.75f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -111,13 +113,13 @@ TEST(SoftwareImageDecodeCacheTest, LowUnscalableFormatStaysLow) {
       CreateMatrix(SkSize::Make(0.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key =
-      ImageDecodeCacheKey::FromDrawImage(draw_image, kARGB_4444_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kARGB_4444_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -130,13 +132,13 @@ TEST(SoftwareImageDecodeCacheTest, HighUnscalableFormatBecomesLow) {
       CreateMatrix(SkSize::Make(1.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key =
-      ImageDecodeCacheKey::FromDrawImage(draw_image, kARGB_4444_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kARGB_4444_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -149,12 +151,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyLowQualityKeptLowIfUpscale) {
       CreateMatrix(SkSize::Make(1.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -168,12 +171,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQuality) {
       quality, CreateMatrix(SkSize::Make(0.5f, 0.4f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(quality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(50, key.target_size().width());
   EXPECT_EQ(50, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(50u * 50u * 4u, key.locked_bytes());
 }
 
@@ -187,12 +190,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityDropToLowIfEnlarging) {
       quality, CreateMatrix(SkSize::Make(1.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -206,12 +210,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityDropToLowIfIdentity) {
       quality, CreateMatrix(SkSize::Make(1.f, 1.f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -226,12 +231,13 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(1.001f, 1.001f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -246,12 +252,13 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(0.999f, 0.999f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -266,13 +273,14 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(0.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
 
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -286,12 +294,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt1_5Scale) {
       quality, CreateMatrix(SkSize::Make(1.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(500, key.target_size().width());
   EXPECT_EQ(200, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(500u * 200u * 4u, key.locked_bytes());
 }
 
@@ -305,12 +314,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt1_0cale) {
       quality, CreateMatrix(SkSize::Make(1.f, 1.f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(500, key.target_size().width());
   EXPECT_EQ(200, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(500u * 200u * 4u, key.locked_bytes());
 }
 
@@ -324,12 +334,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyLowQualityAt0_75Scale) {
       quality, CreateMatrix(SkSize::Make(0.75f, 0.75f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(500, key.target_size().width());
   EXPECT_EQ(200, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(500u * 200u * 4u, key.locked_bytes());
 }
 
@@ -343,12 +354,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt0_5Scale) {
       quality, CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(quality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(250, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(250u * 100u * 4u, key.locked_bytes());
 }
 
@@ -362,12 +373,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt0_49Scale) {
       quality, CreateMatrix(SkSize::Make(0.49f, 0.49f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(quality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(250, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(250u * 100u * 4u, key.locked_bytes());
 }
 
@@ -381,12 +392,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt0_1Scale) {
       quality, CreateMatrix(SkSize::Make(0.1f, 0.1f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(quality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(62, key.target_size().width());
   EXPECT_EQ(25, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(62u * 25u * 4u, key.locked_bytes());
 }
 
@@ -400,12 +411,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyMediumQualityAt0_01Scale) {
       quality, CreateMatrix(SkSize::Make(0.01f, 0.01f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(quality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(7, key.target_size().width());
   EXPECT_EQ(3, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(7u * 3u * 4u, key.locked_bytes());
 }
 
@@ -420,12 +431,12 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(0.5f, 0.2f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kMedium_SkFilterQuality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(50, key.target_size().width());
   EXPECT_EQ(50, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(50u * 50u * 4u, key.locked_bytes());
 }
 
@@ -439,12 +450,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyUpscaleIsLowQuality) {
       quality, CreateMatrix(SkSize::Make(2.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -461,12 +473,12 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyHighQualityDropToMediumIfTooLarge) {
       quality, CreateMatrix(SkSize::Make(0.45f, 0.45f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kMedium_SkFilterQuality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(2277, key.target_size().width());
   EXPECT_EQ(1024, key.target_size().height());
-  EXPECT_FALSE(key.can_use_original_size_decode());
   EXPECT_EQ(2277u * 1024u * 4u, key.locked_bytes());
 }
 
@@ -481,12 +493,13 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(0.5f, 1.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -500,12 +513,13 @@ TEST(SoftwareImageDecodeCacheTest, ImageKeyHighQualityDropToLowIfIdentity) {
       quality, CreateMatrix(SkSize::Make(1.f, 1.f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -520,12 +534,13 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(1.001f, 1.001f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -540,12 +555,13 @@ TEST(SoftwareImageDecodeCacheTest,
       quality, CreateMatrix(SkSize::Make(0.999f, 0.999f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 }
 
@@ -559,12 +575,13 @@ TEST(SoftwareImageDecodeCacheTest, OriginalDecodesAreEqual) {
       quality, CreateMatrix(SkSize::Make(0.5f, 0.5), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kNone_SkFilterQuality, key.filter_quality());
+  EXPECT_TRUE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
-  EXPECT_TRUE(key.can_use_original_size_decode());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, key.locked_bytes());
 
   DrawImage another_draw_image(
@@ -572,13 +589,13 @@ TEST(SoftwareImageDecodeCacheTest, OriginalDecodesAreEqual) {
       quality, CreateMatrix(SkSize::Make(1.5f, 1.5), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto another_key =
-      ImageDecodeCacheKey::FromDrawImage(another_draw_image, kN32_SkColorType);
+  auto another_key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      another_draw_image, kN32_SkColorType);
   EXPECT_EQ(another_draw_image.frame_key(), another_key.frame_key());
-  EXPECT_EQ(kNone_SkFilterQuality, another_key.filter_quality());
+  EXPECT_TRUE(another_key.is_nearest_neighbor());
   EXPECT_EQ(100, another_key.target_size().width());
   EXPECT_EQ(100, another_key.target_size().height());
-  EXPECT_TRUE(another_key.can_use_original_size_decode());
+  EXPECT_EQ(another_key.type(), SoftwareImageDecodeCache::CacheKey::kOriginal);
   EXPECT_EQ(100u * 100u * 4u, another_key.locked_bytes());
 
   EXPECT_TRUE(key == another_key);
@@ -595,9 +612,10 @@ TEST(SoftwareImageDecodeCacheTest, ImageRectDoesNotContainSrcRect) {
       quality, CreateMatrix(SkSize::Make(1.f, 1.f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kLow_SkFilterQuality, key.filter_quality());
+  EXPECT_FALSE(key.is_nearest_neighbor());
   EXPECT_EQ(100, key.target_size().width());
   EXPECT_EQ(100, key.target_size().height());
   EXPECT_EQ(gfx::Rect(25, 35, 75, 65), key.src_rect());
@@ -615,9 +633,10 @@ TEST(SoftwareImageDecodeCacheTest, ImageRectDoesNotContainSrcRectWithScale) {
       quality, CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
 
-  auto key = ImageDecodeCacheKey::FromDrawImage(draw_image, kN32_SkColorType);
+  auto key = SoftwareImageDecodeCache::CacheKey::FromDrawImage(
+      draw_image, kN32_SkColorType);
   EXPECT_EQ(draw_image.frame_key(), key.frame_key());
-  EXPECT_EQ(kMedium_SkFilterQuality, key.filter_quality());
+  EXPECT_EQ(key.type(), SoftwareImageDecodeCache::CacheKey::kSubrectAndScale);
   EXPECT_EQ(40, key.target_size().width());
   EXPECT_EQ(35, key.target_size().height());
   EXPECT_EQ(gfx::Rect(20, 30, 80, 70), key.src_rect());
@@ -651,6 +670,36 @@ TEST(SoftwareImageDecodeCacheTest, GetTaskForImageSameImage) {
   TestTileTaskRunner::ProcessTask(result.task.get());
 
   cache.UnrefImage(draw_image);
+  cache.UnrefImage(draw_image);
+}
+
+TEST(SoftwareImageDecodeCacheTest, GetTaskForImageProcessUnrefCancel) {
+  TestSoftwareImageDecodeCache cache;
+  PaintImage paint_image = CreatePaintImage(100, 100);
+  bool is_decomposable = true;
+  SkFilterQuality quality = kHigh_SkFilterQuality;
+
+  DrawImage draw_image(
+      paint_image, SkIRect::MakeWH(paint_image.width(), paint_image.height()),
+      quality, CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
+      PaintImage::kDefaultFrameIndex, DefaultColorSpace());
+  ImageDecodeCache::TaskResult result =
+      cache.GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
+  EXPECT_TRUE(result.need_unref);
+  EXPECT_TRUE(result.task);
+
+  TestTileTaskRunner::ProcessTask(result.task.get());
+  cache.UnrefImage(draw_image);
+
+  result =
+      cache.GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
+  EXPECT_TRUE(result.need_unref);
+  EXPECT_TRUE(result.task);
+
+  TestTileTaskRunner::CancelTask(result.task.get());
+  TestTileTaskRunner::CompleteTask(result.task.get());
+  // This is expected to pass instead of DCHECKing since we're reducing the ref
+  // for an image which isn't locked to begin with.
   cache.UnrefImage(draw_image);
 }
 
@@ -985,7 +1034,6 @@ TEST(SoftwareImageDecodeCacheTest, GetDecodedImageForDraw) {
   EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
   EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
   EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_FALSE(decoded_draw_image.is_at_raster_decode());
 
   cache.DrawWithImageFinished(draw_image, decoded_draw_image);
   cache.UnrefImage(draw_image);
@@ -1019,7 +1067,6 @@ TEST(SoftwareImageDecodeCacheTest,
   EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
   EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
   EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_FALSE(decoded_draw_image.is_at_raster_decode());
 
   cache.DrawWithImageFinished(draw_image, decoded_draw_image);
   cache.UnrefImage(draw_image);
@@ -1045,7 +1092,6 @@ TEST(SoftwareImageDecodeCacheTest, GetDecodedImageForDrawAtRasterDecode) {
   EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
   EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
   EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_TRUE(decoded_draw_image.is_at_raster_decode());
 
   cache.DrawWithImageFinished(draw_image, decoded_draw_image);
 }
@@ -1071,7 +1117,6 @@ TEST(SoftwareImageDecodeCacheTest,
   EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
   EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
   EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_TRUE(decoded_draw_image.is_at_raster_decode());
 
   DecodedDrawImage another_decoded_draw_image =
       cache.GetDecodedImageForDraw(draw_image);
@@ -1080,97 +1125,6 @@ TEST(SoftwareImageDecodeCacheTest,
 
   cache.DrawWithImageFinished(draw_image, decoded_draw_image);
   cache.DrawWithImageFinished(draw_image, another_decoded_draw_image);
-}
-
-TEST(SoftwareImageDecodeCacheTest,
-     GetDecodedImageForDrawAtRasterDecodeDoesNotPreventTasks) {
-  TestSoftwareImageDecodeCache cache;
-  bool is_decomposable = true;
-  SkFilterQuality quality = kHigh_SkFilterQuality;
-
-  PaintImage paint_image = CreatePaintImage(100, 100);
-  DrawImage draw_image(
-      paint_image, SkIRect::MakeWH(paint_image.width(), paint_image.height()),
-      quality, CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
-      PaintImage::kDefaultFrameIndex, DefaultColorSpace());
-
-  DecodedDrawImage decoded_draw_image =
-      cache.GetDecodedImageForDraw(draw_image);
-  EXPECT_TRUE(decoded_draw_image.image());
-  EXPECT_EQ(50, decoded_draw_image.image()->width());
-  EXPECT_EQ(50, decoded_draw_image.image()->height());
-  EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().width());
-  EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
-  EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
-  EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_TRUE(decoded_draw_image.is_at_raster_decode());
-
-  ImageDecodeCache::TaskResult result =
-      cache.GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
-  EXPECT_TRUE(result.need_unref);
-  EXPECT_TRUE(result.task);
-
-  TestTileTaskRunner::ProcessTask(result.task.get());
-
-  DecodedDrawImage another_decoded_draw_image =
-      cache.GetDecodedImageForDraw(draw_image);
-  // This should get the new decoded/locked image, not the one we're using at
-  // raster.
-  // TODO(vmpstr): We can possibly optimize this so that the decode simply moves
-  // the image to the right spot.
-  EXPECT_NE(decoded_draw_image.image()->uniqueID(),
-            another_decoded_draw_image.image()->uniqueID());
-  EXPECT_FALSE(another_decoded_draw_image.is_at_raster_decode());
-
-  cache.DrawWithImageFinished(draw_image, decoded_draw_image);
-  cache.DrawWithImageFinished(draw_image, another_decoded_draw_image);
-  cache.UnrefImage(draw_image);
-}
-
-TEST(SoftwareImageDecodeCacheTest,
-     GetDecodedImageForDrawAtRasterDecodeIsUsedForLockedCache) {
-  TestSoftwareImageDecodeCache cache;
-  bool is_decomposable = true;
-  SkFilterQuality quality = kHigh_SkFilterQuality;
-
-  PaintImage paint_image = CreatePaintImage(100, 100);
-  DrawImage draw_image(
-      paint_image, SkIRect::MakeWH(paint_image.width(), paint_image.height()),
-      quality, CreateMatrix(SkSize::Make(0.5f, 0.5f), is_decomposable),
-      PaintImage::kDefaultFrameIndex, DefaultColorSpace());
-
-  DecodedDrawImage decoded_draw_image =
-      cache.GetDecodedImageForDraw(draw_image);
-  EXPECT_TRUE(decoded_draw_image.image());
-  EXPECT_EQ(50, decoded_draw_image.image()->width());
-  EXPECT_EQ(50, decoded_draw_image.image()->height());
-  EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().width());
-  EXPECT_FLOAT_EQ(0.5f, decoded_draw_image.scale_adjustment().height());
-  EXPECT_EQ(kLow_SkFilterQuality, decoded_draw_image.filter_quality());
-  EXPECT_FALSE(decoded_draw_image.is_scale_adjustment_identity());
-  EXPECT_TRUE(decoded_draw_image.is_at_raster_decode());
-
-  ImageDecodeCache::TaskResult result =
-      cache.GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
-  EXPECT_TRUE(result.need_unref);
-  EXPECT_TRUE(result.task);
-
-  // If we finish the draw here, then we will use it for the locked decode
-  // instead of decoding again.
-  cache.DrawWithImageFinished(draw_image, decoded_draw_image);
-
-  TestTileTaskRunner::ProcessTask(result.task.get());
-
-  DecodedDrawImage another_decoded_draw_image =
-      cache.GetDecodedImageForDraw(draw_image);
-  // This should get the decoded/locked image which we originally decoded at
-  // raster time, since it's now in the locked cache.
-  EXPECT_EQ(decoded_draw_image.image()->uniqueID(),
-            another_decoded_draw_image.image()->uniqueID());
-  EXPECT_FALSE(another_decoded_draw_image.is_at_raster_decode());
-
-  cache.DrawWithImageFinished(draw_image, another_decoded_draw_image);
-  cache.UnrefImage(draw_image);
 }
 
 TEST(SoftwareImageDecodeCacheTest, ZeroSizedImagesAreSkipped) {
@@ -1638,20 +1592,18 @@ TEST(SoftwareImageDecodeCacheTest, RemoveUnusedImage) {
   std::vector<PaintImage::FrameKey> frame_keys;
 
   for (int i = 0; i < 10; ++i) {
+    SCOPED_TRACE(i);
     PaintImage paint_image = CreatePaintImage(100, 100);
     DrawImage draw_image(
         paint_image, SkIRect::MakeWH(paint_image.width(), paint_image.height()),
         quality, CreateMatrix(SkSize::Make(1.0f, 1.0f), is_decomposable),
         PaintImage::kDefaultFrameIndex, DefaultColorSpace());
     frame_keys.push_back(draw_image.frame_key());
-    DecodedDrawImage decoded_draw_image =
-        cache.GetDecodedImageForDraw(draw_image);
     ImageDecodeCache::TaskResult result = cache.GetTaskForImageAndRef(
         draw_image, ImageDecodeCache::TracingInfo());
     EXPECT_TRUE(result.need_unref);
     EXPECT_TRUE(result.task);
     TestTileTaskRunner::ProcessTask(result.task.get());
-    cache.DrawWithImageFinished(draw_image, decoded_draw_image);
     cache.UnrefImage(draw_image);
   }
 
@@ -1716,6 +1668,36 @@ TEST(SoftwareImageDecodeCacheTest, CacheDecodesExpectedFrames) {
   EXPECT_EQ(generator->frames_decoded().count(3u), 1u);
   generator->reset_frames_decoded();
   cache.DrawWithImageFinished(subset_draw_image, decoded_image);
+}
+
+TEST(SoftwareImageDecodeCacheTest, SizeSubrectingIsHandled) {
+  const int min_dimension = 4 * 1024 + 2;
+  TestSoftwareImageDecodeCache cache;
+  bool is_decomposable = true;
+  SkFilterQuality quality = kLow_SkFilterQuality;
+
+  auto paint_image =
+      CreateDiscardablePaintImage(gfx::Size(min_dimension, min_dimension),
+                                  DefaultColorSpace().ToSkColorSpace(), false);
+  DrawImage draw_image(paint_image, SkIRect::MakeXYWH(0, 0, 10, 10), quality,
+                       CreateMatrix(SkSize::Make(1.f, 1.f), is_decomposable),
+                       PaintImage::kDefaultFrameIndex, DefaultColorSpace());
+
+  ImageDecodeCache::TaskResult result =
+      cache.GetTaskForImageAndRef(draw_image, ImageDecodeCache::TracingInfo());
+  EXPECT_TRUE(result.task);
+  EXPECT_TRUE(result.need_unref);
+
+  TestTileTaskRunner::ProcessTask(result.task.get());
+
+  DecodedDrawImage decoded_draw_image =
+      cache.GetDecodedImageForDraw(draw_image);
+  // Since we didn't allocate any backing for the memory, we expect this to be
+  // false. This test is here to ensure that we at least got to the point where
+  // we tried to decode something instead of recursing infinitely.
+  EXPECT_FALSE(decoded_draw_image.image());
+  cache.DrawWithImageFinished(draw_image, decoded_draw_image);
+  cache.UnrefImage(draw_image);
 }
 
 }  // namespace

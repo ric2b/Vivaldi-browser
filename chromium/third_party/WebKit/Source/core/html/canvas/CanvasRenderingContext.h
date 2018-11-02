@@ -28,8 +28,8 @@
 
 #include "base/macros.h"
 #include "core/CoreExport.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "platform/graphics/CanvasColorParams.h"
@@ -44,7 +44,6 @@ namespace blink {
 
 class CanvasImageSource;
 class HTMLCanvasElement;
-class ImageData;
 class ImageBitmap;
 class WebLayer;
 
@@ -62,7 +61,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   USING_PRE_FINALIZER(CanvasRenderingContext, Dispose);
 
  public:
-  virtual ~CanvasRenderingContext() {}
+  virtual ~CanvasRenderingContext() = default;
 
   // A Canvas can either be "2D" or "webgl" but never both. If you request a 2D
   // canvas and the existing context is already 2D, just return that. If the
@@ -90,9 +89,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
 
   const CanvasColorParams& ColorParams() const { return color_params_; }
 
-  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint,
-                                                    SnapshotReason) const = 0;
-  virtual ImageData* ToImageData(SnapshotReason reason) { return nullptr; }
+  virtual scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const = 0;
   virtual ContextType GetContextType() const = 0;
   virtual bool IsComposited() const = 0;
   virtual bool IsAccelerated() const = 0;
@@ -164,13 +161,18 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   virtual void SetFilterQuality(SkFilterQuality) { NOTREACHED(); }
   virtual void Reshape(int width, int height) { NOTREACHED(); }
   virtual void MarkLayerComposited() { NOTREACHED(); }
-  virtual ImageData* PaintRenderingResultsToImageData(SourceDrawingBuffer) {
+  virtual scoped_refptr<Uint8Array> PaintRenderingResultsToDataArray(
+      SourceDrawingBuffer) {
     NOTREACHED();
     return nullptr;
   }
   virtual int ExternallyAllocatedBufferCountPerPixel() {
     NOTREACHED();
     return 0;
+  }
+  virtual IntSize DrawingBufferSize() const {
+    NOTREACHED();
+    return IntSize(0, 0);
   }
 
   // ImageBitmap-specific interface
@@ -179,7 +181,7 @@ class CORE_EXPORT CanvasRenderingContext : public ScriptWrappable,
   // OffscreenCanvas-specific methods
   virtual ImageBitmap* TransferToImageBitmap(ScriptState*) { return nullptr; }
 
-  bool WouldTaintOrigin(CanvasImageSource*, SecurityOrigin*);
+  bool WouldTaintOrigin(CanvasImageSource*, const SecurityOrigin*);
   void DidMoveToNewDocument(Document*);
 
   void DetachHost() { host_ = nullptr; }

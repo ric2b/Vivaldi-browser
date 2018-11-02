@@ -44,7 +44,6 @@ class Arguments;
 namespace test_runner {
 
 class MockContentSettingsClient;
-class MockCredentialManagerClient;
 class MockScreenOrientationClient;
 class MockWebSpeechRecognizer;
 class SpellCheckClient;
@@ -98,7 +97,6 @@ class TestRunner : public WebTestRunner {
   bool ShouldDumpBackForwardList() const override;
   blink::WebContentSettingsClient* GetWebContentSettings() const override;
   blink::WebTextCheckClient* GetWebTextCheckClient() const override;
-  void InitializeWebViewWithMocks(blink::WebView* web_view) override;
   void SetFocus(blink::WebView* web_view, bool focus) override;
 
   // Methods used by WebViewTestClient and WebFrameTestClient.
@@ -111,7 +109,6 @@ class TestRunner : public WebTestRunner {
   std::string customDumpText() const;
   void ShowDevTools(const std::string& settings,
                     const std::string& frontend_url);
-  void ClearDevToolsLocalStorage();
   void SetV8CacheDisabled(bool);
   void setShouldDumpAsText(bool);
   void setShouldDumpAsMarkup(bool);
@@ -160,10 +157,6 @@ class TestRunner : public WebTestRunner {
   bool shouldDumpNavigationPolicy() const;
 
   midi::mojom::Result midiAccessorResult();
-
-  // Methods used by MockColorChooser:
-  void DidOpenChooser();
-  void DidCloseChooser();
 
   bool ShouldDumpConsoleMessages() const;
   bool ShouldDumpJavaScriptDialogs() const;
@@ -485,15 +478,14 @@ class TestRunner : public WebTestRunner {
                         const std::string& frontend_url);
   void CloseWebInspector();
 
+  void NavigateSecondaryWindow(const GURL& url);
+  void InspectSecondaryWindow();
+
   // Inspect chooser state
   bool IsChooserShown();
 
   // Allows layout tests to exec scripts at WebInspector side.
   void EvaluateInWebInspector(int call_id, const std::string& script);
-  // Allows layout tests to evaluate scripts in InspectorOverlay page.
-  // Script may have an output represented as a string, return values of other
-  // types would be ignored.
-  std::string EvaluateInWebInspectorOverlay(const std::string& script);
 
   // Clears all databases.
   void ClearAllDatabases();
@@ -539,16 +531,6 @@ class TestRunner : public WebTestRunner {
                                       double confidence);
   void SetMockSpeechRecognitionError(const std::string& error,
                                      const std::string& message);
-
-  // Credential Manager mock functions
-  // TODO(mkwst): Support FederatedCredential.
-  void SetMockCredentialManagerResponse(const std::string& id,
-                                        const std::string& name,
-                                        const std::string& avatar,
-                                        const std::string& password);
-  void ClearMockCredentialManagerResponse();
-
-  void SetMockCredentialManagerError(const std::string& error);
 
   // Takes care of notifying the delegate after a change to layout test runtime
   // flags.
@@ -622,7 +604,6 @@ class TestRunner : public WebTestRunner {
 
   bool use_mock_theme_;
 
-  std::unique_ptr<MockCredentialManagerClient> credential_manager_client_;
   std::unique_ptr<MockScreenOrientationClient> mock_screen_orientation_client_;
   std::unique_ptr<MockWebSpeechRecognizer> speech_recognizer_;
   std::unique_ptr<SpellCheckClient> spellcheck_;

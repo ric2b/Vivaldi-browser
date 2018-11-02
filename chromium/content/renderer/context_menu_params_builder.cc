@@ -41,8 +41,8 @@ ContextMenuParams ContextMenuParamsBuilder::Build(
   params.referrer_policy = data.referrer_policy;
   params.suggested_filename = data.suggested_filename.Utf16();
   params.input_field_type = data.input_field_type;
-  params.vivaldi_input_type = data.vivaldiInputType.Utf8();
   params.vivaldi_keyword_url = data.vivaldi_keyword_url;
+  params.vivaldi_input_type = data.vivaldiInputType.Utf8();
 
   if (!data.image_response.IsNull()) {
     GetContentClient()->renderer()->AddImageContextMenuProperties(

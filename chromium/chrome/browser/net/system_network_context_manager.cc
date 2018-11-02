@@ -23,29 +23,11 @@
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/public/network/network_service.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "net/net_features.h"
 
 namespace {
-
-content::mojom::NetworkContextParamsPtr CreateNetworkContextParams() {
-  // TODO(mmenke): Set up parameters here (in memory cookie store, etc).
-  content::mojom::NetworkContextParamsPtr network_context_params =
-      CreateDefaultNetworkContextParams();
-
-  network_context_params->context_name = std::string("system");
-
-  network_context_params->http_cache_enabled = false;
-
-  // These are needed for PAC scripts that use file or data URLs (Or FTP URLs?).
-  network_context_params->enable_data_url_support = true;
-  network_context_params->enable_file_url_support = true;
-#if !BUILDFLAG(DISABLE_FTP_SUPPORT)
-  network_context_params->enable_ftp_url_support = true;
-#endif
-
-  return network_context_params;
-}
 
 // Called on IOThread to disable QUIC for HttpNetworkSessions not using the
 // network service. Note that re-enabling QUIC dynamically is not supported for
@@ -55,7 +37,8 @@ void DisableQuicOnIOThread(
     safe_browsing::SafeBrowsingService* safe_browsing_service) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
-  // Disable QUIC for HttpNetworkSessions using IOThread's NetworkService.
+  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+    content::GetNetworkServiceImpl()->DisableQuic();
   io_thread->DisableQuic();
 
   // Safebrowsing isn't yet using the IOThread's NetworkService, so must be
@@ -68,15 +51,16 @@ void DisableQuicOnIOThread(
 base::LazyInstance<SystemNetworkContextManager>::Leaky
     g_system_network_context_manager = LAZY_INSTANCE_INITIALIZER;
 
-content::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
+network::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
   if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
     // SetUp should already have been called.
     DCHECK(io_thread_network_context_);
     return io_thread_network_context_.get();
   }
 
-  if (!network_service_network_context_) {
-    content::mojom::NetworkService* network_service =
+  if (!network_service_network_context_ ||
+      network_service_network_context_.encountered_error()) {
+    network::mojom::NetworkService* network_service =
         content::GetNetworkService();
     if (!is_quic_allowed_)
       network_service->DisableQuic();
@@ -87,9 +71,9 @@ content::mojom::NetworkContext* SystemNetworkContextManager::GetContext() {
   return network_service_network_context_.get();
 }
 
-content::mojom::URLLoaderFactory*
+network::mojom::URLLoaderFactory*
 SystemNetworkContextManager::GetURLLoaderFactory() {
-  if (!url_loader_factory_) {
+  if (!url_loader_factory_ || url_loader_factory_.encountered_error()) {
     GetContext()->CreateURLLoaderFactory(
         mojo::MakeRequest(&url_loader_factory_), 0);
   }
@@ -97,11 +81,17 @@ SystemNetworkContextManager::GetURLLoaderFactory() {
 }
 
 void SystemNetworkContextManager::SetUp(
-    content::mojom::NetworkContextRequest* network_context_request,
-    content::mojom::NetworkContextParamsPtr* network_context_params,
+    network::mojom::NetworkContextRequest* network_context_request,
+    network::mojom::NetworkContextParamsPtr* network_context_params,
     bool* is_quic_allowed) {
-  *network_context_request = mojo::MakeRequest(&io_thread_network_context_);
-  *network_context_params = CreateNetworkContextParams();
+  if (!base::FeatureList::IsEnabled(features::kNetworkService)) {
+    *network_context_request = mojo::MakeRequest(&io_thread_network_context_);
+    *network_context_params = CreateNetworkContextParams();
+  } else {
+    // Just use defaults if the network service is enabled, since
+    // CreateNetworkContextParams() can only be called once.
+    *network_context_params = CreateDefaultNetworkContextParams();
+  }
   *is_quic_allowed = is_quic_allowed_;
 }
 
@@ -139,4 +129,37 @@ void SystemNetworkContextManager::DisableQuic() {
       content::BrowserThread::IO, FROM_HERE,
       base::BindOnce(&DisableQuicOnIOThread, io_thread,
                      base::Unretained(safe_browsing_service)));
+}
+
+void SystemNetworkContextManager::FlushProxyConfigMonitorForTesting() {
+  proxy_config_monitor_.FlushForTesting();
+}
+
+void SystemNetworkContextManager::FlushNetworkInterfaceForTesting() {
+  DCHECK(network_service_network_context_);
+  network_service_network_context_.FlushForTesting();
+  if (url_loader_factory_)
+    url_loader_factory_.FlushForTesting();
+}
+
+network::mojom::NetworkContextParamsPtr
+SystemNetworkContextManager::CreateNetworkContextParams() {
+  // TODO(mmenke): Set up parameters here (in memory cookie store, etc).
+  network::mojom::NetworkContextParamsPtr network_context_params =
+      CreateDefaultNetworkContextParams();
+
+  network_context_params->context_name = std::string("system");
+
+  network_context_params->http_cache_enabled = false;
+
+  // These are needed for PAC scripts that use file or data URLs (Or FTP URLs?).
+  network_context_params->enable_data_url_support = true;
+  network_context_params->enable_file_url_support = true;
+#if !BUILDFLAG(DISABLE_FTP_SUPPORT)
+  network_context_params->enable_ftp_url_support = true;
+#endif
+
+  proxy_config_monitor_.AddToNetworkContextParams(network_context_params.get());
+
+  return network_context_params;
 }

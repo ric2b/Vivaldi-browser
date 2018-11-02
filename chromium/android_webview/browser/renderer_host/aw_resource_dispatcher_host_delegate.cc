@@ -292,7 +292,7 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
       content::ResourceRequestInfo::ForRequest(request);
 
   std::unique_ptr<IoThreadClientThrottle> ioThreadThrottle =
-      base::MakeUnique<IoThreadClientThrottle>(request_info->GetChildID(),
+      std::make_unique<IoThreadClientThrottle>(request_info->GetChildID(),
                                                request_info->GetRenderFrameID(),
                                                request);
 
@@ -322,7 +322,7 @@ void AwResourceDispatcherHostDelegate::RequestBeginning(
   if (!is_main_frame)
     InterceptNavigationDelegate::UpdateUserGestureCarryoverInfo(request);
   throttles->push_back(
-      base::MakeUnique<web_restrictions::WebRestrictionsResourceThrottle>(
+      std::make_unique<web_restrictions::WebRestrictionsResourceThrottle>(
           AwBrowserContext::GetDefault()->GetWebRestrictionProvider(),
           request->url(), is_main_frame));
 }
@@ -331,7 +331,7 @@ void AwResourceDispatcherHostDelegate::OnRequestRedirected(
     const GURL& redirect_url,
     net::URLRequest* request,
     content::ResourceContext* resource_context,
-    content::ResourceResponse* response) {
+    network::ResourceResponse* response) {
   AddExtraHeadersIfNeeded(request, resource_context);
 }
 
@@ -413,7 +413,7 @@ bool AwResourceDispatcherHostDelegate::HandleExternalProtocol(
 void AwResourceDispatcherHostDelegate::OnResponseStarted(
     net::URLRequest* request,
     content::ResourceContext* resource_context,
-    content::ResourceResponse* response) {
+    network::ResourceResponse* response) {
   const content::ResourceRequestInfo* request_info =
       content::ResourceRequestInfo::ForRequest(request);
   if (!request_info) {

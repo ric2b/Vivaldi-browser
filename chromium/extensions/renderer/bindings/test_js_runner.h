@@ -55,6 +55,20 @@ class TestJSRunner : public JSRunner {
     DISALLOW_COPY_AND_ASSIGN(AllowErrors);
   };
 
+  // A scoped object that suspends script execution through the JSRunner. While
+  // in scope, function calls to JSRunner will be queued up, and finally run
+  // upon Suspension destruction.
+  // Note: *not* allowed to be nested; only one can be active at a time.
+  // Constructing multiple instances at the same time will DCHECK.
+  class Suspension {
+   public:
+    Suspension();
+    ~Suspension();
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Suspension);
+  };
+
   TestJSRunner();
   // Provides a callback to be called just before JS will be executed.
   explicit TestJSRunner(const base::Closure& will_call_js);
@@ -64,7 +78,8 @@ class TestJSRunner : public JSRunner {
   void RunJSFunction(v8::Local<v8::Function> function,
                      v8::Local<v8::Context> context,
                      int argc,
-                     v8::Local<v8::Value> argv[]) override;
+                     v8::Local<v8::Value> argv[],
+                     ResultCallback callback) override;
   v8::MaybeLocal<v8::Value> RunJSFunctionSync(
       v8::Local<v8::Function> function,
       v8::Local<v8::Context> context,
@@ -72,7 +87,25 @@ class TestJSRunner : public JSRunner {
       v8::Local<v8::Value> argv[]) override;
 
  private:
+  friend class Suspension;
+
+  struct PendingCall {
+    PendingCall();
+    ~PendingCall();
+    PendingCall(PendingCall&& other);
+
+    v8::Isolate* isolate;
+    v8::Global<v8::Function> function;
+    v8::Global<v8::Context> context;
+    std::vector<v8::Global<v8::Value>> arguments;
+    ResultCallback callback;
+  };
+
+  // Runs all pending calls.
+  void Flush();
+
   base::Closure will_call_js_;
+  std::vector<PendingCall> pending_calls_;
 
   DISALLOW_COPY_AND_ASSIGN(TestJSRunner);
 };

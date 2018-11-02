@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved
 
 #ifndef EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
 #define EXTRAPARTS_VIVALDI_BROWSER_MAIN_EXTRA_PARTS_H_
@@ -14,21 +14,10 @@ class VivaldiBrowserMainExtraParts : public ChromeBrowserMainExtraParts {
 
   // Overridden from ChromeBrowserMainExtraParts:
   void PostEarlyInitialization() override;
-
-#if defined(OS_MACOSX)
-  void PostEarlyInitializationMac();
-  void PreProfileInitMac();
-#endif
-#if defined(OS_WIN)
-  void PostEarlyInitializationWin();
-#endif
-#if defined(OS_LINUX)
-  void PostEarlyInitializationLinux();
-#endif
-
   void PreProfileInit() override;
   void PostProfileInit() override;
 
+  static VivaldiBrowserMainExtraParts* Create();
  private:
   void EnsureBrowserContextKeyedServiceFactoriesBuilt();
 

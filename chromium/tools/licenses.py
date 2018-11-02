@@ -105,13 +105,13 @@ PRUNE_DIRS = (VCS_METADATA_DIRS +
                'layout_tests'))            # lots of subdirs
 
 ADDITIONAL_PATHS = (
-    os.path.join('breakpad'),
     os.path.join('chrome', 'common', 'extensions', 'docs', 'examples'),
     os.path.join('chrome', 'test', 'chromeos', 'autotest'),
     os.path.join('chrome', 'test', 'data'),
     os.path.join('native_client'),
     os.path.join('testing', 'gmock'),
     os.path.join('testing', 'gtest'),
+    os.path.join('third_party', 'boringssl', 'src', 'third_party', 'fiat'),
     os.path.join('tools', 'gyp'),
     os.path.join('tools', 'page_cycler', 'acid3'),
     os.path.join('url', 'third_party', 'mozilla'),
@@ -287,6 +287,7 @@ KNOWN_NON_IOS_LIBRARIES = set([
     os.path.join('third_party', 'libXNVCtrl'),
     os.path.join('third_party', 'libevent'),
     os.path.join('third_party', 'libjpeg'),
+    os.path.join('third_party', 'libovr'),
     os.path.join('third_party', 'libusb'),
     os.path.join('third_party', 'libxslt'),
     os.path.join('third_party', 'lss'),
@@ -613,7 +614,7 @@ def GenerateCredits(
     entries.extend(licenses_vivaldi.GetEntries(
                   entry_template, EvaluateTemplate))
 
-    entries.sort(key=lambda entry: (entry['name'], entry['content']))
+    entries.sort(key=lambda entry: (entry['name'].lower(), entry['content']))
     for entry_id, entry in enumerate(entries):
         entry['content'] = entry['content'].replace('{{id}}', str(entry_id))
 

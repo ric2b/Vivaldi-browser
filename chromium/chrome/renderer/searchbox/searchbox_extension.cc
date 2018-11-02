@@ -175,8 +175,9 @@ v8::Local<v8::Object> GenerateMostVisitedItemData(
       .Set("dataGenerationTime",
            mv_item.data_generation_time.is_null()
                ? v8::Local<v8::Value>(v8::Null(isolate))
-               : v8::Date::New(isolate,
-                               mv_item.data_generation_time.ToJsTime()));
+               : v8::Date::New(isolate->GetCurrentContext(),
+                               mv_item.data_generation_time.ToJsTime())
+                     .ToLocalChecked());
 
   // If the suggestion already has a favicon, we populate the element with it.
   if (!mv_item.favicon.spec().empty())
@@ -549,6 +550,7 @@ class NewTabPageBindings : public gin::Wrappable<NewTabPageBindings> {
   // Handlers for JS properties.
   static bool IsInputInProgress();
   static v8::Local<v8::Value> GetMostVisited(v8::Isolate* isolate);
+  static bool GetMostVisitedAvailable(v8::Isolate* isolate);
   static v8::Local<v8::Value> GetThemeBackgroundInfo(v8::Isolate* isolate);
 
   // Handlers for JS functions visible to all NTPs.
@@ -592,6 +594,8 @@ gin::ObjectTemplateBuilder NewTabPageBindings::GetObjectTemplateBuilder(
   return gin::Wrappable<NewTabPageBindings>::GetObjectTemplateBuilder(isolate)
       .SetProperty("isInputInProgress", &NewTabPageBindings::IsInputInProgress)
       .SetProperty("mostVisited", &NewTabPageBindings::GetMostVisited)
+      .SetProperty("mostVisitedAvailable",
+                   &NewTabPageBindings::GetMostVisitedAvailable)
       .SetProperty("themeBackgroundInfo",
                    &NewTabPageBindings::GetThemeBackgroundInfo)
       .SetMethod("checkIsUserSignedIntoChromeAs",
@@ -656,6 +660,15 @@ v8::Local<v8::Value> NewTabPageBindings::GetMostVisited(v8::Isolate* isolate) {
                                                 render_view_id, rid));
   }
   return v8_mv_items;
+}
+
+// static
+bool NewTabPageBindings::GetMostVisitedAvailable(v8::Isolate* isolate) {
+  const SearchBox* search_box = GetSearchBoxForCurrentContext();
+  if (!search_box)
+    return false;
+
+  return search_box->AreMostVisitedItemsAvailable();
 }
 
 // static

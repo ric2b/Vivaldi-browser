@@ -84,6 +84,7 @@ void VivaldiSigninManager::SignOut(
     return;
   }
 
+  ClearAuthenticatedAccountId();
   ClearTransientSigninData();
 
   const std::string account_id = GetAuthenticatedAccountId();

@@ -34,6 +34,7 @@
 #include "content/public/browser/browser_context.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "storage/browser/fileapi/watcher_manager.h"
 
 namespace extensions {
@@ -55,26 +56,13 @@ struct MountOptions;
 // Registers preferences to remember registered file systems between reboots.
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
-// Holds information for a providing extension.
-struct ProvidingExtensionInfo {
-  ProvidingExtensionInfo();
-  ~ProvidingExtensionInfo();
-
-  std::string extension_id;
-  std::string name;
-  extensions::FileSystemProviderCapabilities capabilities;
-};
-
 // Manages and registers the file system provider service. Maintains provided
 // file systems.
 class Service : public KeyedService,
                 public extensions::ExtensionRegistryObserver,
                 public ProvidedFileSystemObserver {
  public:
-  typedef base::Callback<std::unique_ptr<ProvidedFileSystemInterface>(
-      Profile* profile,
-      const ProvidedFileSystemInfo& file_system_info)>
-      FileSystemFactoryCallback;
+  typedef std::map<ProviderId, std::unique_ptr<ProviderInterface>> ProviderMap;
 
   // Reason for unmounting. In case of UNMOUNT_REASON_SHUTDOWN, the file system
   // will be remounted automatically after a reboot. In case of
@@ -89,11 +77,6 @@ class Service : public KeyedService,
 
   // KeyedService:
   void Shutdown() override;
-
-  // Sets a custom ProvidedFileSystemInterface factory. Used by unit tests,
-  // where an event router is not available.
-  void SetExtensionProviderForTesting(
-      std::unique_ptr<ProviderInterface> provider);
 
   // Sets a custom Registry implementation. Used by unit tests.
   void SetRegistryForTesting(std::unique_ptr<RegistryInterface> registry);
@@ -128,6 +111,9 @@ class Service : public KeyedService,
   // items are copied.
   std::vector<ProvidedFileSystemInfo> GetProvidedFileSystemInfoList();
 
+  // Returns an immutable map of all registered providers.
+  const ProviderMap& GetProviders() const;
+
   // Returns a provided file system with |file_system_id|, handled by
   // the extension with |provider_id|. If not found, then returns NULL.
   ProvidedFileSystemInterface* GetProvidedFileSystem(
@@ -138,16 +124,6 @@ class Service : public KeyedService,
   // |mount_point_name|. If not found, then returns NULL.
   ProvidedFileSystemInterface* GetProvidedFileSystem(
       const std::string& mount_point_name);
-
-  // Returns a list of information of all currently installed providing
-  // extensions.
-  std::vector<ProvidingExtensionInfo> GetProvidingExtensionInfoList() const;
-
-  // Fills information of the specified providing extension and returns true.
-  // If the extension is not a provider, or it doesn't exist, then false is
-  // returned.
-  bool GetProvidingExtensionInfo(const std::string& extension_id,
-                                 ProvidingExtensionInfo* result) const;
 
   // Adds and removes observers.
   void AddObserver(Observer* observer);
@@ -171,9 +147,13 @@ class Service : public KeyedService,
   void OnWatcherListChanged(const ProvidedFileSystemInfo& file_system_info,
                             const Watchers& watchers) override;
 
-  // Registers a FileSystemFactory for the passed |provider_id|.
-  void RegisterNativeProvider(const ProviderId& provider_id,
-                              std::unique_ptr<ProviderInterface> provider);
+  // Registers a provider. Restores all remembered mounts.
+  void RegisterProvider(std::unique_ptr<ProviderInterface> provider);
+
+  // Unregisters a provider. Unmounts all currently mounted file systems.
+  // If the reason is UNMOUNT_REASON_USER then they will not be automatically
+  // restored on the next registration.
+  void UnregisterProvider(const ProviderId& provider_id, UnmountReason reason);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FileSystemProviderServiceTest, RememberFileSystem);
@@ -207,7 +187,13 @@ class Service : public KeyedService,
   // |provider_id| provided file system.
   void RestoreFileSystems(const ProviderId& provider_id);
 
-  // Returns a file system provider for the passed |provider_id|.
+  // Unmounts all currently mounted file systems for this provider. If
+  // reason is UNMOUNT_REASON_USER then the file systems will not be remembered
+  // for automagical remount in the future.
+  void UnmountFileSystems(const ProviderId& provider_id, UnmountReason reason);
+
+  // Returns a file system provider for the passed |provider_id|. If not found
+  // then returns nullptr.
   ProviderInterface* GetProvider(const ProviderId& provider_id);
 
   Profile* profile_;
@@ -218,9 +204,7 @@ class Service : public KeyedService,
   std::map<std::string, FileSystemKey> mount_point_name_to_key_map_;
   std::unique_ptr<RegistryInterface> registry_;
   base::ThreadChecker thread_checker_;
-  std::unordered_map<std::string, std::unique_ptr<ProviderInterface>>
-      native_provider_map_;
-  std::unique_ptr<ProviderInterface> extension_provider_;
+  ProviderMap provider_map_;
 
   base::WeakPtrFactory<Service> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(Service);

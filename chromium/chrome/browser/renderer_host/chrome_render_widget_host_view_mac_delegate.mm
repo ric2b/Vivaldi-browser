@@ -109,11 +109,22 @@ using content::RenderViewHost;
                       isValidItem:(BOOL*)valid {
   SEL action = [item action];
 
+  Profile* profile = Profile::FromBrowserContext(
+      renderWidgetHost_->GetProcess()->GetBrowserContext());
+  DCHECK(profile);
+  PrefService* pref = profile->GetPrefs();
+  const PrefService::Preference* spellCheckEnablePreference =
+      pref->FindPreference(spellcheck::prefs::kSpellCheckEnable);
+  DCHECK(spellCheckEnablePreference);
+  const bool spellCheckUserModifiable =
+      spellCheckEnablePreference->IsUserModifiable();
+
   // For now, this action is always enabled for render view;
   // this is sub-optimal.
   // TODO(suzhe): Plumb the "can*" methods up from WebCore.
   if (action == @selector(checkSpelling:)) {
-    *valid = RenderViewHost::From(renderWidgetHost_) != nullptr;
+    *valid = spellCheckUserModifiable &&
+             (RenderViewHost::From(renderWidgetHost_) != nullptr);
     return YES;
   }
 
@@ -121,17 +132,18 @@ using content::RenderViewHost;
   // is still necessary.
   if (action == @selector(toggleContinuousSpellChecking:)) {
     if ([(id)item respondsToSelector:@selector(setState:)]) {
-      content::RenderProcessHost* host = renderWidgetHost_->GetProcess();
-      Profile* profile = Profile::FromBrowserContext(host->GetBrowserContext());
-      DCHECK(profile);
       NSCellStateValue checkedState =
-          profile->GetPrefs()->GetBoolean(
-              spellcheck::prefs::kEnableSpellcheck)
-              ? NSOnState
-              : NSOffState;
+          pref->GetBoolean(spellcheck::prefs::kSpellCheckEnable) ? NSOnState
+                                                                 : NSOffState;
       [(id)item setState:checkedState];
     }
-    *valid = YES;
+    *valid = spellCheckUserModifiable;
+    return YES;
+  }
+
+  if (action == @selector(showGuessPanel:) ||
+      action == @selector(toggleGrammarChecking:)) {
+    *valid = spellCheckUserModifiable;
     return YES;
   }
 
@@ -217,9 +229,8 @@ using content::RenderViewHost;
   Profile* profile = Profile::FromBrowserContext(host->GetBrowserContext());
   DCHECK(profile);
   PrefService* pref = profile->GetPrefs();
-  pref->SetBoolean(
-      spellcheck::prefs::kEnableSpellcheck,
-      !pref->GetBoolean(spellcheck::prefs::kEnableSpellcheck));
+  pref->SetBoolean(spellcheck::prefs::kSpellCheckEnable,
+                   !pref->GetBoolean(spellcheck::prefs::kSpellCheckEnable));
 }
 
 // END Spellchecking methods

@@ -60,7 +60,7 @@ struct WebLayerStickyPositionConstraint;
 
 class WebLayer {
  public:
-  virtual ~WebLayer() {}
+  virtual ~WebLayer() = default;
 
   // Returns a positive ID that will be unique across all WebLayers allocated in
   // this process.
@@ -233,6 +233,12 @@ class WebLayer {
   // scroll, and whether the overscroll should cause UI affordance such as
   // glow/bounce etc.
   virtual void SetOverscrollBehavior(const WebOverscrollBehavior&) = 0;
+
+  // SnapContainerData contains the necessary information a layer needs to
+  // perform snapping. The CSS scroll snap could enforce the scroll positions
+  // that a scroll container's scroll port may end at after a scrolling
+  // operation has completed.
+  virtual void SetSnapContainerData(base::Optional<cc::SnapContainerData>) = 0;
 
   // Sets the cc-side layer client.
   virtual void SetLayerClient(cc::LayerClient*) = 0;

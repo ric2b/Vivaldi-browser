@@ -195,6 +195,7 @@ class MoveBlinkSource(object):
 
 Update file contents without moving files.
 
+NOAUTOREVERT=true
 Bug: 768828
 """)
 
@@ -204,16 +205,17 @@ Bug: 768828
         _log.info('Will move %d files', len(file_pairs))
 
         git = Git(cwd=self._repo_root)
+        files_set = self._get_checked_in_files(git)
         for i, (src, dest) in enumerate(file_pairs):
             src_from_repo = self._fs.join('third_party', 'WebKit', src)
+            if src_from_repo.replace('\\', '/') not in files_set:
+                _log.info('%s is not in the repository', src)
+                continue
             dest_from_repo = self._fs.join('third_party', 'blink', dest)
             self._fs.maybe_make_directory(self._repo_root, 'third_party', 'blink', self._fs.dirname(dest))
             if self._options.run_git:
-                if git.exists(src_from_repo):
-                    git.move(src_from_repo, dest_from_repo)
-                    _log.info('[%d/%d] Git moved %s', i + 1, len(file_pairs), src)
-                else:
-                    _log.info('%s is not in the repository', src)
+                git.move(src_from_repo, dest_from_repo)
+                _log.info('[%d/%d] Git moved %s', i + 1, len(file_pairs), src)
             else:
                 self._fs.move(self._fs.join(self._repo_root, src_from_repo),
                               self._fs.join(self._repo_root, dest_from_repo))
@@ -234,8 +236,16 @@ Bug: 768828
 
 Move and rename files.
 
+NOAUTOREVERT=true
 Bug: 768828
 """)
+
+    def _get_checked_in_files(self, git):
+        files_text = git.run(['ls-files',
+                              'third_party/WebKit/Source',
+                              'third_party/WebKit/common',
+                              'third_party/WebKit/public'])
+        return set(files_text.split('\n'))
 
     def _create_basename_maps(self, file_pairs):
         basename_map = {}
@@ -297,6 +307,11 @@ Bug: 768828
         content = content.replace('//third_party/WebKit/Source/*', '//third_party/blink/renderer/*')
         content = content.replace('//third_party/WebKit/public/*', '//third_party/blink/renderer/public/*')
 
+        # Update mojom variables
+        content = content.replace('export_header = "third_party/WebKit/common',
+                                  'export_header = "third_party/blink/common')
+        content = content.replace('export_header_blink = "third_party/WebKit/Source',
+                                  'export_header_blink = "third_party/blink/renderer')
         return self._update_basename(content)
 
     def _update_owners(self, content):
@@ -317,6 +332,7 @@ Bug: 768828
 
     def _update_mojom(self, content):
         content = content.replace('third_party/WebKit/public', 'third_party/blink/renderer/public')
+        content = content.replace('third_party/WebKit/common', 'third_party/blink/common')
         return content
 
     def _update_typemap(self, content):

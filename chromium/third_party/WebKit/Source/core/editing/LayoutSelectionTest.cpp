@@ -11,7 +11,13 @@
 #include "core/editing/testing/EditingTestBase.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
+#include "core/layout/LayoutTextFragment.h"
+#include "core/layout/ng/inline/ng_physical_text_fragment.h"
+#include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/paint/ng/ng_paint_fragment.h"
+#include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/wtf/Assertions.h"
+#include "platform/wtf/Functional.h"
 
 namespace blink {
 
@@ -63,7 +69,7 @@ static bool TestLayoutObjectState(LayoutObject* object,
 }
 
 using IsTypeOf =
-    WTF::RepeatingFunction<bool(const LayoutObject& layout_object)>;
+    base::RepeatingCallback<bool(const LayoutObject& layout_object)>;
 using IsTypeOfSimple = bool(const LayoutObject& layout_object);
 #define USING_LAYOUTOBJECT_FUNC(member_func)                   \
   static bool member_func(const LayoutObject& layout_object) { \
@@ -72,6 +78,7 @@ using IsTypeOfSimple = bool(const LayoutObject& layout_object);
 
 USING_LAYOUTOBJECT_FUNC(IsLayoutBlock);
 USING_LAYOUTOBJECT_FUNC(IsLayoutBlockFlow);
+USING_LAYOUTOBJECT_FUNC(IsLayoutNGBlockFlow);
 USING_LAYOUTOBJECT_FUNC(IsLayoutInline);
 USING_LAYOUTOBJECT_FUNC(IsBR);
 USING_LAYOUTOBJECT_FUNC(IsListItem);
@@ -83,7 +90,7 @@ USING_LAYOUTOBJECT_FUNC(IsSVGText);
 USING_LAYOUTOBJECT_FUNC(IsLayoutEmbeddedContent);
 
 static IsTypeOf IsLayoutTextFragmentOf(const String& text) {
-  return WTF::Bind(
+  return WTF::BindRepeating(
       [](const String& text, const LayoutObject& object) {
         if (!object.IsText())
           return false;
@@ -96,6 +103,10 @@ static IsTypeOf IsLayoutTextFragmentOf(const String& text) {
 
 static bool IsSVGTSpan(const LayoutObject& layout_object) {
   return layout_object.GetName() == String("LayoutSVGTSpan");
+}
+
+static bool IsLegacyBlockFlow(const LayoutObject& layout_object) {
+  return layout_object.IsLayoutBlockFlow() && !layout_object.IsLayoutNGMixin();
 }
 
 static bool TestLayoutObject(LayoutObject* object,
@@ -126,7 +137,7 @@ static bool TestLayoutObject(LayoutObject* object,
                              InvalidateOption invalidate) {
   return TestLayoutObject(
       object,
-      WTF::Bind(
+      WTF::BindRepeating(
           [](const String& text, const LayoutObject& object) {
             if (!object.IsText())
               return false;
@@ -150,9 +161,10 @@ static bool TestLayoutObject(LayoutObject* object,
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObject) {
   SetBodyContent("foo<br>bar");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
@@ -166,9 +178,10 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectTruncateVisibilityHidden) {
       "<span style='visibility:hidden;'>before</span>"
       "foo"
       "<span style='visibility:hidden;'>after</span>");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
@@ -181,9 +194,10 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectTruncateVisibilityHidden) {
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObjectBRs) {
   SetBodyContent("<br><br>foo<br><br>");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsBR, kStart, ShouldInvalidate);
@@ -202,9 +216,10 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectListStyleImage) {
       "image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=)}"
       "</style>"
       "<ul><li>foo<li>bar</ul>");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlockFlow, kContain, NotInvalidate);
@@ -218,7 +233,7 @@ TEST_F(LayoutSelectionTest, TraverseLayoutObjectListStyleImage) {
 }
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObjectCrossingShadowBoundary) {
-  Selection().SetSelection(SetSelectionTextToBody(
+  Selection().SetSelectionAndEndTyping(SetSelectionTextToBody(
       "^foo"
       "<div>"
       "<template data-mode=open>"
@@ -246,7 +261,7 @@ TEST_F(LayoutSelectionTest,
   SetBodyContent(
       "<div id='d1'>div1</div><div id='d2'>foo<span>bar</span>baz</div>");
   Node* span = GetDocument().QuerySelector("span");
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(Position(span->firstChild(), 0),
                             Position(span->firstChild(), 3))
@@ -264,7 +279,7 @@ TEST_F(LayoutSelectionTest,
 
   Node* d1 = GetDocument().QuerySelector("#d1");
   Node* d2 = GetDocument().QuerySelector("#d2");
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(Position(d1, 0), Position(d2, 0))
           .Build());
@@ -283,9 +298,10 @@ TEST_F(LayoutSelectionTest,
 
 TEST_F(LayoutSelectionTest, TraverseLayoutObjectLineWrap) {
   SetBodyContent("bar\n");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("bar\n", kStartAndEnd, ShouldInvalidate);
@@ -298,9 +314,10 @@ TEST_F(LayoutSelectionTest, FirstLetter) {
   SetBodyContent(
       "<style>::first-letter { color: red; }</style>"
       "<span>foo</span>");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
@@ -312,7 +329,8 @@ TEST_F(LayoutSelectionTest, FirstLetter) {
 
 TEST_F(LayoutSelectionTest, FirstLetterClearSeletion) {
   InsertStyleElement("div::first-letter { color: red; }");
-  Selection().SetSelection(SetSelectionTextToBody("fo^o<div>bar</div>b|az"));
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("fo^o<div>bar</div>b|az"));
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
@@ -349,9 +367,9 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
                         ->nextSibling()
                         ->nextSibling();
   // <div>fo^o</div><div>bar</div>b|az
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SetBaseAndExtent({foo, 2}, {baz, 1})
-                               .Build());
+  Selection().SetSelectionAndEndTyping(SelectionInDOMTree::Builder()
+                                           .SetBaseAndExtent({foo, 2}, {baz, 1})
+                                           .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
@@ -364,9 +382,9 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
   TEST_NEXT("baz", kEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
   // <div>foo</div><div>bar</div>ba^z|
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SetBaseAndExtent({baz, 2}, {baz, 3})
-                               .Build());
+  Selection().SetSelectionAndEndTyping(SelectionInDOMTree::Builder()
+                                           .SetBaseAndExtent({baz, 2}, {baz, 3})
+                                           .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
@@ -385,7 +403,7 @@ TEST_F(LayoutSelectionTest, FirstLetterUpdateSeletion) {
 }
 
 TEST_F(LayoutSelectionTest, CommitAppearanceIfNeededNotCrash) {
-  Selection().SetSelection(SetSelectionTextToBody(
+  Selection().SetSelectionAndEndTyping(SetSelectionTextToBody(
       "<div>"
       "<template data-mode=open>foo</template>"
       "<span>|bar<span>"  // <span> is not appeared in flat tree.
@@ -397,7 +415,7 @@ TEST_F(LayoutSelectionTest, CommitAppearanceIfNeededNotCrash) {
 TEST_F(LayoutSelectionTest, SelectImage) {
   const SelectionInDOMTree& selection =
       SetSelectionTextToBody("^<img style=\"width:100px; height:100px\"/>|");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutImage, kStartAndEnd, ShouldInvalidate);
@@ -409,7 +427,7 @@ TEST_F(LayoutSelectionTest, SelectImage) {
 TEST_F(LayoutSelectionTest, MoveOnSameNode_Start) {
   const SelectionInDOMTree& selection =
       SetSelectionTextToBody("f^oo<span>b|ar</span>");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
@@ -428,7 +446,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_Start) {
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
   // "fo^o<span>b|ar</span>"
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent({selection.Base().AnchorNode(), 2},
                             selection.Extent())
@@ -447,7 +465,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_Start) {
 TEST_F(LayoutSelectionTest, MoveOnSameNode_End) {
   const SelectionInDOMTree& selection =
       SetSelectionTextToBody("f^oo<span>b|ar</span>");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foo", kStart, ShouldInvalidate);
@@ -466,7 +484,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_End) {
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
   // "fo^o<span>ba|r</span>"
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(selection.Base(),
                             {selection.Extent().AnchorNode(), 2})
@@ -484,7 +502,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_End) {
 
 TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd) {
   const SelectionInDOMTree& selection = SetSelectionTextToBody("f^oob|ar");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
@@ -499,7 +517,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd) {
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
   // "f^ooba|r"
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(selection.Base(),
                             {selection.Extent().AnchorNode(), 5})
@@ -515,7 +533,7 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd) {
 
 TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd_Collapse) {
   const SelectionInDOMTree& selection = SetSelectionTextToBody("f^oob|ar");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT("foobar", kStartAndEnd, ShouldInvalidate);
@@ -530,9 +548,10 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd_Collapse) {
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
   // "foo^|bar"
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .Collapse({selection.Base().AnchorNode(), 3})
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .Collapse({selection.Base().AnchorNode(), 3})
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   // "foobar" should be invalidated.
   TEST_NEXT(IsLayoutBlock, kNone, NotInvalidate);
@@ -544,9 +563,10 @@ TEST_F(LayoutSelectionTest, MoveOnSameNode_StartAndEnd_Collapse) {
 
 TEST_F(LayoutSelectionTest, ContentEditableButton) {
   SetBodyContent("<input type=button value=foo contenteditable>");
-  Selection().SetSelection(SelectionInDOMTree::Builder()
-                               .SelectAllChildren(*GetDocument().body())
-                               .Build());
+  Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SelectAllChildren(*GetDocument().body())
+          .Build());
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutButton, kContain, NotInvalidate);
@@ -556,7 +576,8 @@ TEST_F(LayoutSelectionTest, ContentEditableButton) {
 }
 
 TEST_F(LayoutSelectionTest, ClearSelection) {
-  Selection().SetSelection(SetSelectionTextToBody("<div>f^o|o</div>"));
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("<div>f^o|o</div>"));
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
@@ -583,7 +604,7 @@ TEST_F(LayoutSelectionTest, ClearSelection) {
 TEST_F(LayoutSelectionTest, SVG) {
   const SelectionInDOMTree& selection =
       SetSelectionTextToBody("<svg><text x=10 y=10>fo^o|bar</text></svg>");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
@@ -601,7 +622,7 @@ TEST_F(LayoutSelectionTest, SVG) {
   TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(selection.Base(),
                             {selection.Extent().AnchorNode(), 4})
@@ -620,7 +641,7 @@ TEST_F(LayoutSelectionTest, SVG) {
 TEST_F(LayoutSelectionTest, SVGAncestor) {
   const SelectionInDOMTree& selection = SetSelectionTextToBody(
       "<svg><text x=10 y=10><tspan>fo^o|bar</tspan></text></svg>");
-  Selection().SetSelection(selection);
+  Selection().SetSelectionAndEndTyping(selection);
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsSVGRoot, kNone, NotInvalidate);
@@ -640,7 +661,7 @@ TEST_F(LayoutSelectionTest, SVGAncestor) {
   TEST_NEXT("foobar", kStartAndEnd, NotInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
 
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(selection.Base(),
                             {selection.Extent().AnchorNode(), 4})
@@ -657,12 +678,190 @@ TEST_F(LayoutSelectionTest, SVGAncestor) {
 }
 
 TEST_F(LayoutSelectionTest, Embed) {
-  Selection().SetSelection(
+  Selection().SetSelectionAndEndTyping(
       SetSelectionTextToBody("^<embed type=foobar></embed>|"));
   Selection().CommitAppearanceIfNeeded();
   TEST_NEXT(IsLayoutBlock, kContain, NotInvalidate);
   TEST_NEXT(IsLayoutEmbeddedContent, kStartAndEnd, ShouldInvalidate);
   TEST_NO_NEXT_LAYOUT_OBJECT();
+}
+
+class NGLayoutSelectionTest
+    : public LayoutSelectionTest,
+      private ScopedLayoutNGForTest,
+      private ScopedLayoutNGPaintFragmentsForTest,
+      private ScopedPaintUnderInvalidationCheckingForTest {
+ public:
+  NGLayoutSelectionTest()
+      : ScopedLayoutNGForTest(true),
+        ScopedLayoutNGPaintFragmentsForTest(true),
+        ScopedPaintUnderInvalidationCheckingForTest(true) {}
+};
+
+static const NGPaintFragment* FindNGPaintFragmentInternal(
+    const NGPaintFragment* paint,
+    const LayoutObject* layout_object) {
+  if (paint->GetLayoutObject() == layout_object)
+    return paint;
+  for (const auto& child : paint->Children()) {
+    if (const NGPaintFragment* child_fragment =
+            FindNGPaintFragmentInternal(child.get(), layout_object))
+      return child_fragment;
+  }
+  return nullptr;
+}
+
+static const NGPhysicalTextFragment& GetNGPhysicalTextFragment(
+    const LayoutObject* layout_object) {
+  DCHECK(layout_object->IsText());
+  LayoutBlockFlow* block_flow = layout_object->EnclosingNGBlockFlow();
+  DCHECK(block_flow);
+  DCHECK(block_flow->IsLayoutNGMixin());
+  LayoutNGBlockFlow* layout_ng = ToLayoutNGBlockFlow(block_flow);
+  const NGPaintFragment* paint_fragment =
+      FindNGPaintFragmentInternal(layout_ng->PaintFragment(), layout_object);
+  const NGPhysicalFragment& physical_fragment =
+      paint_fragment->PhysicalFragment();
+  return ToNGPhysicalTextFragment(physical_fragment);
+}
+
+TEST_F(NGLayoutSelectionTest, SelectOnOneText) {
+#ifndef NDEBUG
+  // This line prohibits compiler optimization removing the debug function.
+  PrintLayoutTreeForDebug();
+#endif
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("foo<span>b^a|r</span>");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("foo", kNone, NotInvalidate);
+  TEST_NEXT(IsLayoutInline, kNone, NotInvalidate);
+  TEST_NEXT("bar", kStartAndEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+
+  LayoutObject* const foo =
+      GetDocument().body()->firstChild()->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(0u, 0u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo)));
+  LayoutObject* const bar = GetDocument()
+                                .body()
+                                ->firstChild()
+                                ->nextSibling()
+                                ->firstChild()
+                                ->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(4u, 5u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(bar)));
+}
+
+TEST_F(NGLayoutSelectionTest, FirstLetterInAnotherBlockFlow) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody(
+      "<style>:first-letter { float: right}</style>^fo|o");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutTextFragmentOf("f"), kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutTextFragmentOf("oo"), kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  Node* const foo = GetDocument().body()->firstChild()->nextSibling();
+  const LayoutTextFragment* const foo_f =
+      ToLayoutTextFragment(AssociatedLayoutObjectOf(*foo, 0));
+  EXPECT_EQ(std::make_pair(0u, 1u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo_f)));
+  const LayoutTextFragment* const foo_oo =
+      ToLayoutTextFragment(AssociatedLayoutObjectOf(*foo, 1));
+  EXPECT_EQ(std::make_pair(1u, 2u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo_oo)));
+}
+
+TEST_F(NGLayoutSelectionTest, TwoNGBlockFlows) {
+  const SelectionInDOMTree& selection =
+      SetSelectionTextToBody("<div>f^oo</div><div>ba|r</div>");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  LayoutObject* const foo =
+      GetDocument().body()->firstChild()->firstChild()->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(1u, 3u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo)));
+  LayoutObject* const bar = GetDocument()
+                                .body()
+                                ->firstChild()
+                                ->nextSibling()
+                                ->firstChild()
+                                ->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(0u, 2u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(bar)));
+}
+
+TEST_F(NGLayoutSelectionTest, MixedBlockFlowsAsSibling) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody(
+      "<div>f^oo</div>"
+      "<div contenteditable>ba|r</div>");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLegacyBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  LayoutObject* const foo =
+      GetDocument().body()->firstChild()->firstChild()->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(1u, 3u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo)));
+  EXPECT_EQ(2u, Selection().LayoutSelectionEnd().value());
+}
+
+TEST_F(NGLayoutSelectionTest, MixedBlockFlowsAnscestor) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody(
+      "<div contenteditable>f^oo"
+      "<div contenteditable=false>ba|r</div></div>");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLegacyBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  EXPECT_EQ(1u, Selection().LayoutSelectionStart().value());
+  LayoutObject* const bar = GetDocument()
+                                .body()
+                                ->firstChild()
+                                ->firstChild()
+                                ->nextSibling()
+                                ->firstChild()
+                                ->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(0u, 2u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(bar)));
+}
+
+TEST_F(NGLayoutSelectionTest, MixedBlockFlowsDecendant) {
+  const SelectionInDOMTree& selection = SetSelectionTextToBody(
+      "<div contenteditable=false>f^oo"
+      "<div contenteditable>ba|r</div></div>");
+  Selection().SetSelectionAndEndTyping(selection);
+  Selection().CommitAppearanceIfNeeded();
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT(IsLayoutNGBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("foo", kStart, ShouldInvalidate);
+  TEST_NEXT(IsLegacyBlockFlow, kContain, NotInvalidate);
+  TEST_NEXT("bar", kEnd, ShouldInvalidate);
+  TEST_NO_NEXT_LAYOUT_OBJECT();
+  LayoutObject* const foo =
+      GetDocument().body()->firstChild()->firstChild()->GetLayoutObject();
+  EXPECT_EQ(std::make_pair(1u, 3u), Selection().LayoutSelectionStartEndForNG(
+                                        GetNGPhysicalTextFragment(foo)));
+  EXPECT_EQ(2u, Selection().LayoutSelectionEnd().value());
 }
 
 }  // namespace blink

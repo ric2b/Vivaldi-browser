@@ -52,16 +52,11 @@ Value Template::Invoke(Scope* scope,
     if (!non_nestable.Enter(err))
       return Value();
 
-    // <Vivaldi>
-    if (!functions::PrePostProcessTheTemplate(false, invocation_scope.get(),
-                  invocation, args, block, err, scope))
-      return Value();
-    // </Vivaldi>
     block->Execute(invocation_scope.get(), err);
     if (err->has_error())
       return Value();
     // <Vivaldi>
-    if (!functions::PrePostProcessTheTemplate(true, invocation_scope.get(),
+    if (!functions::UpdateTheTemplate(invocation_scope.get(),
                   invocation, args, block, err, scope))
       return Value();
     const Value *disabled =

@@ -77,7 +77,7 @@ TextControlElement::TextControlElement(const QualifiedName& tag_name,
           : kSelectionHasNoDirection;
 }
 
-TextControlElement::~TextControlElement() {}
+TextControlElement::~TextControlElement() = default;
 
 void TextControlElement::DispatchFocusEvent(
     Element* old_focused_element,
@@ -459,6 +459,7 @@ bool TextControlElement::SetSelectionRange(
           .SetShouldCloseTyping(true)
           .SetShouldClearTypingStyle(true)
           .SetDoNotSetFocus(true)
+          .SetIsDirectional(direction != kSelectionHasNoDirection)
           .Build());
   return did_change;
 }
@@ -944,8 +945,7 @@ TextControlElement* EnclosingTextControl(const Node* container) {
     return nullptr;
   Element* ancestor = container->OwnerShadowHost();
   return ancestor && IsTextControlElement(*ancestor) &&
-                 container->ContainingShadowRoot()->GetType() ==
-                     ShadowRootType::kUserAgent
+                 container->ContainingShadowRoot()->IsUserAgent()
              ? ToTextControlElement(ancestor)
              : nullptr;
 }

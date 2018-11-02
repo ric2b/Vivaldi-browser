@@ -5,16 +5,18 @@
 #include "modules/notifications/NotificationManager.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "bindings/modules/v8/v8_notification_permission_callback.h"
 #include "core/frame/Frame.h"
 #include "core/frame/LocalFrame.h"
 #include "modules/notifications/Notification.h"
-#include "modules/notifications/NotificationPermissionCallback.h"
 #include "modules/permissions/PermissionUtils.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
+#include "public/platform/modules/notifications/WebNotificationData.h"
+#include "public/platform/modules/notifications/notification.mojom-blink.h"
 #include "public/platform/modules/permissions/permission.mojom-blink.h"
 #include "public/platform/modules/permissions/permission_status.mojom-blink.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -46,7 +48,7 @@ const char* NotificationManager::SupplementName() {
 NotificationManager::NotificationManager(ExecutionContext& execution_context)
     : Supplement<ExecutionContext>(execution_context) {}
 
-NotificationManager::~NotificationManager() {}
+NotificationManager::~NotificationManager() = default;
 
 mojom::blink::PermissionStatus NotificationManager::GetPermissionStatus() {
   if (GetSupplementable()->IsContextDestroyed())
@@ -63,15 +65,15 @@ mojom::blink::PermissionStatus NotificationManager::GetPermissionStatus() {
 
 ScriptPromise NotificationManager::RequestPermission(
     ScriptState* script_state,
-    NotificationPermissionCallback* deprecated_callback) {
+    V8NotificationPermissionCallback* deprecated_callback) {
   ExecutionContext* context = ExecutionContext::From(script_state);
 
   if (!permission_service_) {
     ConnectToPermissionService(context,
                                mojo::MakeRequest(&permission_service_));
-    permission_service_.set_connection_error_handler(ConvertToBaseCallback(
+    permission_service_.set_connection_error_handler(
         WTF::Bind(&NotificationManager::OnPermissionServiceConnectionError,
-                  WrapWeakPersistent(this))));
+                  WrapWeakPersistent(this)));
   }
 
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
@@ -80,23 +82,21 @@ ScriptPromise NotificationManager::RequestPermission(
   Document* doc = ToDocumentOrNull(context);
   permission_service_->RequestPermission(
       CreatePermissionDescriptor(mojom::blink::PermissionName::NOTIFICATIONS),
-      context->GetSecurityOrigin(),
       Frame::HasTransientUserActivation(doc ? doc->GetFrame() : nullptr),
-      ConvertToBaseCallback(
-          WTF::Bind(&NotificationManager::OnPermissionRequestComplete,
-                    WrapPersistent(this), WrapPersistent(resolver),
-                    WrapPersistent(deprecated_callback))));
+      WTF::Bind(&NotificationManager::OnPermissionRequestComplete,
+                WrapPersistent(this), WrapPersistent(resolver),
+                WrapPersistentCallbackFunction(deprecated_callback)));
 
   return promise;
 }
 
 void NotificationManager::OnPermissionRequestComplete(
     ScriptPromiseResolver* resolver,
-    NotificationPermissionCallback* deprecated_callback,
+    V8NotificationPermissionCallback* deprecated_callback,
     mojom::blink::PermissionStatus status) {
   String status_string = Notification::PermissionString(status);
   if (deprecated_callback)
-    deprecated_callback->handleEvent(status_string);
+    deprecated_callback->InvokeAndReportException(nullptr, status_string);
 
   resolver->Resolve(status_string);
 }
@@ -109,15 +109,21 @@ void NotificationManager::OnPermissionServiceConnectionError() {
   permission_service_.reset();
 }
 
+void NotificationManager::DisplayNonPersistentNotification(
+    const WebNotificationData& notification_data) {
+  // TODO(crbug.com/595685): Pass the notification resources through here too.
+  GetNotificationService()->DisplayNonPersistentNotification(notification_data);
+}
+
 const mojom::blink::NotificationServicePtr&
 NotificationManager::GetNotificationService() {
   if (!notification_service_) {
     if (auto* provider = GetSupplementable()->GetInterfaceProvider()) {
       provider->GetInterface(mojo::MakeRequest(&notification_service_));
 
-      notification_service_.set_connection_error_handler(ConvertToBaseCallback(
+      notification_service_.set_connection_error_handler(
           WTF::Bind(&NotificationManager::OnNotificationServiceConnectionError,
-                    WrapWeakPersistent(this))));
+                    WrapWeakPersistent(this)));
     }
   }
 

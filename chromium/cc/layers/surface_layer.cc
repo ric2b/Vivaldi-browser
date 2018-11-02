@@ -27,12 +27,13 @@ class SatisfySwapPromise : public SwapPromise {
       : reference_returner_(reference_returner),
         main_task_runner_(std::move(main_task_runner)) {}
 
-  ~SatisfySwapPromise() override {}
+  ~SatisfySwapPromise() override = default;
 
  private:
   void DidActivate() override {}
 
-  void WillSwap(viz::CompositorFrameMetadata* metadata) override {}
+  void WillSwap(viz::CompositorFrameMetadata* compositor_frame_metadata,
+                RenderFrameMetadata* render_frame_metadata) override {}
 
   void DidSwap() override {
     main_task_runner_->PostTask(FROM_HERE, reference_returner_);
@@ -64,10 +65,15 @@ SurfaceLayer::~SurfaceLayer() {
   DCHECK(!layer_tree_host());
 }
 
-void SurfaceLayer::SetPrimarySurfaceId(const viz::SurfaceId& surface_id) {
-  if (primary_surface_id_ == surface_id)
+void SurfaceLayer::SetPrimarySurfaceId(
+    const viz::SurfaceId& surface_id,
+    base::Optional<uint32_t> deadline_in_frames) {
+  if (primary_surface_id_ == surface_id &&
+      deadline_in_frames_ == deadline_in_frames) {
     return;
+  }
   primary_surface_id_ = surface_id;
+  deadline_in_frames_ = deadline_in_frames;
   UpdateDrawsContent(HasDrawableContent());
   SetNeedsCommit();
 }
@@ -88,13 +94,6 @@ void SurfaceLayer::SetFallbackSurfaceId(const viz::SurfaceId& surface_id) {
     layer_tree_host()->AddSurfaceLayerId(fallback_surface_id_);
   }
   SetNeedsCommit();
-}
-
-void SurfaceLayer::SetDefaultBackgroundColor(SkColor background_color) {
-  if (default_background_color_ == background_color)
-    return;
-  default_background_color_ = background_color;
-  SetNeedsPushProperties();
 }
 
 void SurfaceLayer::SetStretchContentToFillBounds(
@@ -136,10 +135,11 @@ void SurfaceLayer::PushPropertiesTo(LayerImpl* layer) {
   Layer::PushPropertiesTo(layer);
   TRACE_EVENT0("cc", "SurfaceLayer::PushPropertiesTo");
   SurfaceLayerImpl* layer_impl = static_cast<SurfaceLayerImpl*>(layer);
-  layer_impl->SetPrimarySurfaceId(primary_surface_id_);
+  layer_impl->SetPrimarySurfaceId(primary_surface_id_,
+                                  std::move(deadline_in_frames_));
+  deadline_in_frames_.reset();
   layer_impl->SetFallbackSurfaceId(fallback_surface_id_);
   layer_impl->SetStretchContentToFillBounds(stretch_content_to_fill_bounds_);
-  layer_impl->SetDefaultBackgroundColor(default_background_color_);
 }
 
 void SurfaceLayer::RemoveReference(base::Closure reference_returner) {

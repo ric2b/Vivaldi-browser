@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Dit apparaat wordt beheerd door <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Staand</translation>
 <translation id="2067602449040652523">Toetsenbordhelderheid</translation>
-<translation id="207439088875642105">Dit is een account voor kinderen dat wordt beheerd door <ph name="FIRST_PARENT_EMAIL" /> en <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Casten van <ph name="TAB_NAME" /> naar <ph name="RECEIVER_NAME" /> stopzetten</translation>
 <translation id="2127372758936585790">Laag-vermogen-lader</translation>
 <translation id="2144487987174258011">Start opnieuw op om Adobe Flash Player te updaten</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">Monogeluid</translation>
 <translation id="3009178788565917040">Uitgang</translation>
 <translation id="3019353588588144572">Resterende tijd totdat de batterij volledig is opgeladen: <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Dit is een account voor kinderen dat wordt beheerd door <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">Onderaan</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">Vergrootglas</translation>
 <translation id="3477079411857374384">Ctrl-Shift-spatiebalk</translation>
 <translation id="3510164367642747937">Muisaanwijzer markeren</translation>
+<translation id="3513798432020909783">Account wordt beheerd door <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Teruggaan naar '<ph name="FROM_LOCALE" />' (opnieuw starten vereist)</translation>
 <translation id="3582792037806681688">Toegang tot meerdere accounts is niet toegestaan voor een gebruiker in deze sessie</translation>
 <translation id="3595596368722241419">Batterij is vol</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">Vergrendelen</translation>
 <translation id="3798670284305777884">Luidspreker (intern)</translation>
 <translation id="3846575436967432996">Geen netwerkinformatie beschikbaar</translation>
+<translation id="385051799172605136">Vorige</translation>
 <translation id="3891340733213178823">Druk twee keer op Ctrl+Shift+Q om uit te loggen.</translation>
 <translation id="3893630138897523026">ChromeVox (gesproken feedback)</translation>
 <translation id="3899995891769452915">Spraakinvoer</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">Instant-tethering</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">Alle beschikbare gebruikers zijn al aan deze sessie toegevoegd.</translation>
+<translation id="5457599981699367932">Gebruiken als gast</translation>
 <translation id="553675580533261935">Sessie sluiten</translation>
 <translation id="5548285847212963613">Met de extensie '<ph name="EXTENSION_NAME" />' kun je verbinding maken met dit netwerk.</translation>
 <translation id="5571066253365925590">Bluetooth ingeschakeld</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">Tikken en slepen</translation>
 <translation id="5777841717266010279">Stoppen met scherm delen?</translation>
 <translation id="57838592816432529">Dempen</translation>
+<translation id="5832805196449965646">Persoon toevoegen</translation>
 <translation id="5860033963881614850">Uit</translation>
 <translation id="5895138241574237353">Opnieuw starten</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
@@ -273,6 +275,7 @@ Gebruik deze functie alleen met accounts die je vertrouwt.</translation>
 <translation id="7829386189513694949">Sterk signaal</translation>
 <translation id="7904094684485781019">De beheerder van dit account heeft toegang tot meerdere accounts niet toegestaan.</translation>
 <translation id="7933084174919150729">De Google Assistent is alleen beschikbaar voor het primaire profiel.</translation>
+<translation id="79341161159229895">Account wordt beheerd door <ph name="FIRST_PARENT_EMAIL" /> en <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Mobiele netwerken zoeken…</translation>
 <translation id="7982789257301363584">Netwerk</translation>
 <translation id="7994370417837006925">Toegang tot meerdere accounts</translation>
@@ -289,6 +292,7 @@ Gebruik deze functie alleen met accounts die je vertrouwt.</translation>
 <translation id="8261506727792406068">Verwijderen</translation>
 <translation id="8308637677604853869">Vorig menu</translation>
 <translation id="8351131234907093545">Notitie maken</translation>
+<translation id="8392451568018454956">Optiemenu voor <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Instellingen</translation>
 <translation id="8433186206711564395">Netwerkinstellingen</translation>
 <translation id="8433977262951327081">De sneltoets om de ballon van het menu met invoeropties op de plank weer te geven, is gewijzigd. Gebruik <ph name="NEW_SHORTCUT" /> in plaats van <ph name="OLD_SHORTCUT" />.</translation>

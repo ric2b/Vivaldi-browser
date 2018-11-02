@@ -8,15 +8,14 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
+#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chromeos/chromeos_switches.h"
@@ -46,7 +45,7 @@ class UserAddingScreenWaiter : public UserAddingScreen::Observer {
   void Wait() {
     if (!UserAddingScreen::Get()->IsRunning())
       return;
-    run_loop_ = base::MakeUnique<base::RunLoop>();
+    run_loop_ = std::make_unique<base::RunLoop>();
     run_loop_->Run();
   }
 
@@ -104,7 +103,7 @@ IN_PROC_BROWSER_TEST_F(ChromeSessionManagerTest, OobeNewUser) {
       chrome::NOTIFICATION_SESSION_STARTED,
       content::NotificationService::AllSources());
 
-  WebUILoginDisplay* login_display = static_cast<WebUILoginDisplay*>(
+  LoginDisplayWebUI* login_display = static_cast<LoginDisplayWebUI*>(
       ExistingUserController::current_controller()->login_display());
   login_display->ShowSigninScreenForCreds(kTestUsers[0].email, "fake_password");
 

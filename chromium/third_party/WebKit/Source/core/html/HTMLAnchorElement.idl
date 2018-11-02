@@ -23,10 +23,9 @@
 interface HTMLAnchorElement : HTMLElement {
     [CEReactions, Reflect] attribute DOMString target;
     [CEReactions, Reflect] attribute DOMString download;
-    // FIXME: ping should be a DOMTokenList.
-    [CEReactions, Reflect] attribute DOMString ping;
+    [CEReactions, Reflect] attribute USVString ping;
     [CEReactions, Reflect] attribute DOMString rel;
-    // FIXME: readonly attribute DOMTokenList relList;
+    [SameObject, PutForwards=value] readonly attribute DOMTokenList relList;
     [CEReactions, Reflect] attribute DOMString hreflang;
     [CEReactions, Reflect] attribute DOMString type;
     [CEReactions, Reflect, ReflectOnly=("","no-referrer","origin","no-referrer-when-downgrade","origin-when-cross-origin","unsafe-url"), ReflectMissing="", ReflectInvalid=""] attribute DOMString referrerPolicy;

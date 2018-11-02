@@ -33,13 +33,15 @@ namespace app_list {
 
 namespace {
 
-void DoCloseAnimation(base::TimeDelta animation_duration, ui::Layer* layer) {
+void DoAnimation(base::TimeDelta animation_duration,
+                 ui::Layer* layer,
+                 float target_opacity) {
   ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
   animation.SetTransitionDuration(animation_duration);
   animation.SetTweenType(gfx::Tween::EASE_OUT);
   animation.SetPreemptionStrategy(
       ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
-  layer->SetOpacity(0.0f);
+  layer->SetOpacity(target_opacity);
 }
 
 }  // namespace
@@ -74,7 +76,8 @@ void ContentsView::Init(AppListModel* model) {
   search_results_page_view_ = new SearchResultPageView();
 
   // Search result containers.
-  AppListModel::SearchResults* results = view_delegate->GetModel()->results();
+  SearchModel::SearchResults* results =
+      view_delegate->GetSearchModel()->results();
 
   if (features::IsAnswerCardEnabled()) {
     search_result_answer_card_view_ =
@@ -222,18 +225,11 @@ void ContentsView::ActivePageChanged() {
     app_list_main_view_->search_box_view()->Layout();
     app_list_main_view_->search_box_view()->SetBackButtonLabel(folder_active);
   }
-
-  // Whenever the page changes, the custom launcher page is considered to have
-  // been reset.
-  app_list_main_view_->model()->ClearCustomLauncherPageSubpages();
-  app_list_main_view_->search_box_view()->ResetTabFocus(false);
 }
 
 void ContentsView::ShowSearchResults(bool show) {
   int search_page = GetPageIndexForState(AppListModel::STATE_SEARCH_RESULTS);
   DCHECK_GE(search_page, 0);
-
-  search_results_page_view_->ClearSelectedIndex();
 
   SetActiveStateInternal(show ? search_page : page_before_search_, show, true);
 }
@@ -384,12 +380,6 @@ bool ContentsView::Back() {
     case AppListModel::STATE_START:
       // Close the app list when Back() is called from the start page.
       return false;
-    case AppListModel::STATE_CUSTOM_LAUNCHER_PAGE:
-      if (app_list_main_view_->model()->PopCustomLauncherPageSubpage())
-        app_list_main_view_->view_delegate()->CustomLauncherPagePopSubpage();
-      else
-        SetActiveState(AppListModel::STATE_START);
-      break;
     case AppListModel::STATE_APPS:
       if (apps_container_view_->IsInFolderView()) {
         apps_container_view_->app_list_folder_view()->CloseFolderPage();
@@ -404,6 +394,7 @@ bool ContentsView::Back() {
       GetSearchBoxView()->SetSearchBoxActive(false);
       ShowSearchResults(false);
       break;
+    case AppListModel::STATE_CUSTOM_LAUNCHER_PAGE_DEPRECATED:
     case AppListModel::INVALID_STATE:  // Falls through.
       NOTREACHED();
       break;
@@ -452,31 +443,6 @@ void ContentsView::Layout() {
   }
 }
 
-bool ContentsView::OnKeyPressed(const ui::KeyEvent& event) {
-  if (features::IsAppListFocusEnabled())
-    return false;
-  // TODO(weidongg/766807) Remove this function when the flag is enabled by
-  // default.
-  if (app_list_pages_[GetActivePageIndex()]->OnKeyPressed(event))
-    return true;
-  if (event.key_code() != ui::VKEY_TAB &&
-      !GetSearchBoxView()->IsArrowKey(event))
-    return false;
-  if (is_fullscreen_app_list_enabled_) {
-    if (event.key_code() == ui::VKEY_TAB)
-      GetSearchBoxView()->MoveTabFocus(event.IsShiftDown());
-    else
-      GetSearchBoxView()->MoveArrowFocus(event);
-    return true;
-  }
-  if (event.IsShiftDown()) {
-    GetSearchBoxView()->MoveTabFocus(true);
-    return true;
-  }
-
-  return false;
-}
-
 const char* ContentsView::GetClassName() const {
   return "ContentsView";
 }
@@ -509,8 +475,15 @@ int ContentsView::GetDisplayHeight() const {
 
 void ContentsView::FadeOutOnClose(base::TimeDelta animation_duration) {
   DCHECK(is_fullscreen_app_list_enabled_);
-  DoCloseAnimation(animation_duration, this->layer());
-  DoCloseAnimation(animation_duration, GetSearchBoxView()->layer());
+  DoAnimation(animation_duration, layer(), 0.0f);
+  DoAnimation(animation_duration, GetSearchBoxView()->layer(), 0.0f);
+}
+
+void ContentsView::FadeInOnOpen(base::TimeDelta animation_duration) {
+  GetSearchBoxView()->layer()->SetOpacity(0.0f);
+  layer()->SetOpacity(0.0f);
+  DoAnimation(animation_duration, layer(), 1.0f);
+  DoAnimation(animation_duration, GetSearchBoxView()->layer(), 1.0f);
 }
 
 views::View* ContentsView::GetSelectedView() const {

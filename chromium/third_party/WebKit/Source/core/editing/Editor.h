@@ -38,15 +38,14 @@
 #include "core/editing/WritingDirection.h"
 #include "core/editing/finder/FindOptions.h"
 #include "core/events/InputEvent.h"
-#include "core/layout/ScrollAlignment.h"
 #include "platform/PasteMode.h"
 #include "platform/heap/Handle.h"
+#include "platform/scroll/ScrollAlignment.h"
 
 namespace blink {
 
 class CompositeEditCommand;
 class DragData;
-class EditorClient;
 class EditorInternalCommand;
 class FrameSelection;
 class LocalFrame;
@@ -64,7 +63,6 @@ enum class DeleteDirection;
 enum class DeleteMode { kSimple, kSmart };
 enum class InsertMode { kSimple, kSmart };
 enum class DragSourceType { kHTMLSource, kPlainTextSource };
-enum class TypingContinuation { kContinue, kEnd };
 
 enum EditorCommandSource { kCommandFromMenuOrKeyBinding, kCommandFromDOM };
 enum EditorParagraphSeparator {
@@ -77,8 +75,6 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   static Editor* Create(LocalFrame&);
   ~Editor();
 
-  EditorClient& Client() const;
-
   CompositeEditCommand* LastEditCommand() { return last_edit_command_.Get(); }
 
   void HandleKeyboardEvent(KeyboardEvent*);
@@ -87,8 +83,8 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   bool CanEdit() const;
   bool CanEditRichly() const;
 
-  bool CanDHTMLCut();
-  bool CanDHTMLCopy();
+  bool CanDHTMLCut(EditorCommandSource);
+  bool CanDHTMLCopy(EditorCommandSource);
 
   bool CanCut() const;
   bool CanCopy() const;
@@ -227,11 +223,15 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   void AddToKillRing(const EphemeralRange&);
 
-  void PasteAsFragment(DocumentFragment*, bool smart_replace, bool match_style);
-  void PasteAsPlainText(const String&, bool smart_replace);
+  void PasteAsFragment(DocumentFragment*,
+                       bool smart_replace,
+                       bool match_style,
+                       EditorCommandSource);
+  void PasteAsPlainText(const String&, bool smart_replace, EditorCommandSource);
 
   Element* FindEventTargetFrom(const VisibleSelection&) const;
   Element* FindEventTargetFromSelection() const;
+  Element* FindEventTargetForClipboardEvent(EditorCommandSource) const;
 
   bool FindString(const String&, FindOptions);
 
@@ -244,6 +244,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
                            FindOptions);
 
   const VisibleSelection& Mark() const;  // Mark, to be used as emacs uses it.
+  bool MarkIsDirectional() const;
   void SetMark();
 
   void ComputeAndSetTypingStyle(CSSPropertyValueSet*, InputEvent::InputType);
@@ -329,6 +330,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   EditorParagraphSeparator default_paragraph_separator_;
   bool overwrite_mode_enabled_;
   Member<EditingStyle> typing_style_;
+  bool mark_is_directional_ = false;
 
   explicit Editor(LocalFrame&);
 
@@ -339,17 +341,19 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
 
   bool CanDeleteRange(const EphemeralRange&) const;
 
-  bool TryDHTMLCopy();
-  bool TryDHTMLCut();
-  bool TryDHTMLPaste(PasteMode);
+  // Returns true if Editor should continue with default processing.
+  bool DispatchCopyEvent(EditorCommandSource);
+  bool DispatchCutEvent(EditorCommandSource);
+  bool DispatchPasteEvent(PasteMode, EditorCommandSource);
+  bool DispatchClipboardEvent(const AtomicString&,
+                              DataTransferAccessPolicy,
+                              EditorCommandSource,
+                              PasteMode = kAllMimeTypes);
 
   bool CanSmartReplaceWithPasteboard(Pasteboard*);
-  void PasteAsPlainTextWithPasteboard(Pasteboard*);
-  void PasteWithPasteboard(Pasteboard*);
+  void PasteAsPlainTextWithPasteboard(Pasteboard*, EditorCommandSource);
+  void PasteWithPasteboard(Pasteboard*, EditorCommandSource);
   void WriteSelectionToPasteboard();
-  bool DispatchCPPEvent(const AtomicString&,
-                        DataTransferAccessPolicy,
-                        PasteMode = kAllMimeTypes);
 
   void RevealSelectionAfterEditingOperation(
       const ScrollAlignment& = ScrollAlignment::kAlignCenterIfNeeded);
@@ -372,6 +376,10 @@ inline const VisibleSelection& Editor::Mark() const {
   return mark_;
 }
 
+inline bool Editor::MarkIsDirectional() const {
+  return mark_is_directional_;
+}
+
 inline bool Editor::MarkedTextMatchesAreHighlighted() const {
   return are_marked_text_matches_highlighted_;
 }
@@ -387,10 +395,6 @@ inline void Editor::ClearTypingStyle() {
 inline void Editor::SetTypingStyle(EditingStyle* style) {
   typing_style_ = style;
 }
-
-// TODO(yosin): We should move |Transpose()| into |ExecuteTranspose()| in
-// "EditorCommand.cpp"
-void Transpose(LocalFrame&);
 
 }  // namespace blink
 

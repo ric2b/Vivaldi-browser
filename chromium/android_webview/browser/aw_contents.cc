@@ -5,6 +5,7 @@
 #include "android_webview/browser/aw_contents.h"
 
 #include <limits>
+#include <memory>
 #include <utility>
 
 #include "android_webview/browser/aw_autofill_client.h"
@@ -47,7 +48,6 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/memory_pressure_listener.h"
-#include "base/memory/ptr_util.h"
 #include "base/pickle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
@@ -77,10 +77,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/renderer_preferences.h"
+#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "gpu/config/gpu_info.h"
 #include "jni/AwContents_jni.h"
 #include "net/base/auth.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/rect_f.h"
@@ -229,7 +231,7 @@ AwContents::AwContents(std::unique_ptr<WebContents> web_contents)
   icon_helper_.reset(new IconHelper(web_contents_.get()));
   icon_helper_->SetListener(this);
   web_contents_->SetUserData(android_webview::kAwContentsUserDataKey,
-                             base::MakeUnique<AwContentsUserData>(this));
+                             std::make_unique<AwContentsUserData>(this));
   browser_view_renderer_.RegisterWithWebContents(web_contents_.get());
 
   CompositorID compositor_id;
@@ -283,11 +285,11 @@ void AwContents::SetJavaPeers(
   AwContentsIoThreadClient::Associate(web_contents_.get(), io_thread_client);
 
   InterceptNavigationDelegate::Associate(
-      web_contents_.get(), base::MakeUnique<InterceptNavigationDelegate>(
+      web_contents_.get(), std::make_unique<InterceptNavigationDelegate>(
                                env, intercept_navigation_delegate));
 
   if (!autofill_provider.is_null()) {
-    autofill_provider_ = base::MakeUnique<autofill::AutofillProviderAndroid>(
+    autofill_provider_ = std::make_unique<autofill::AutofillProviderAndroid>(
         autofill_provider, web_contents_.get());
   }
 
@@ -841,9 +843,8 @@ base::android::ScopedJavaLocalRef<jbyteArray> AwContents::GetCertificate(
     return ScopedJavaLocalRef<jbyteArray>();
 
   // Convert the certificate and return it
-  std::string der_string;
-  net::X509Certificate::GetDEREncoded(
-      entry->GetSSL().certificate->os_cert_handle(), &der_string);
+  base::StringPiece der_string = net::x509_util::CryptoBufferAsStringPiece(
+      entry->GetSSL().certificate->cert_buffer());
   return base::android::ToJavaByteArray(
       env, reinterpret_cast<const uint8_t*>(der_string.data()),
       der_string.length());
@@ -1177,8 +1178,13 @@ void AwContents::OnWebLayoutContentsSizeChanged(
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null())
     return;
+  gfx::Size contents_size_css =
+      content::UseZoomForDSFEnabled()
+          ? ScaleToRoundedSize(contents_size,
+                               1 / browser_view_renderer_.dip_scale())
+          : contents_size;
   Java_AwContents_onWebLayoutContentsSizeChanged(
-      env, obj, contents_size.width(), contents_size.height());
+      env, obj, contents_size_css.width(), contents_size_css.height());
 }
 
 jlong AwContents::CapturePicture(JNIEnv* env,

@@ -32,6 +32,7 @@
 #include "core/CoreExport.h"
 #include "core/css/StyleAutoColor.h"
 #include "core/css/StyleColor.h"
+#include "core/css/properties/CSSProperty.h"
 #include "core/style/BorderValue.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "core/style/ComputedStyleInitialValues.h"
@@ -43,6 +44,7 @@
 #include "platform/LengthBox.h"
 #include "platform/LengthPoint.h"
 #include "platform/LengthSize.h"
+#include "platform/geometry/LayoutRectOutsets.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/TouchAction.h"
 #include "platform/runtime_enabled_features.h"
@@ -65,6 +67,7 @@ struct BorderEdge;
 class ContentData;
 class CounterDirectives;
 class CSSAnimationData;
+class FloodColor;
 class CSSTransitionData;
 class CSSVariableData;
 class FilterOperations;
@@ -82,9 +85,31 @@ class StyleResolver;
 class StyleSelfAlignmentData;
 class TransformationMatrix;
 
-class ContentData;
-
 typedef Vector<scoped_refptr<ComputedStyle>, 4> PseudoStyleCache;
+
+namespace CSSLonghand {
+
+class BackgroundColor;
+class BorderBottomColor;
+class BorderLeftColor;
+class BorderRightColor;
+class BorderTopColor;
+class CaretColor;
+class Color;
+class ColumnRuleColor;
+class FloodColor;
+class Fill;
+class LightingColor;
+class OutlineColor;
+class StopColor;
+class Stroke;
+class TextDecorationColor;
+class WebkitTapHighlightColor;
+class WebkitTextEmphasisColor;
+class WebkitTextFillColor;
+class WebkitTextStrokeColor;
+
+}  // namespace CSSLonghand
 
 // ComputedStyle stores the computed value [1] for every CSS property on an
 // element and provides the interface between the style engine and the rest of
@@ -152,6 +177,29 @@ class ComputedStyle : public ComputedStyleBase,
   // Used by CSS animations. We can't allow them to animate based off visited
   // colors.
   friend class CSSPropertyEquality;
+
+  // Accesses GetColor().
+  friend class ComputedStyleUtils;
+  // These get visited and unvisited colors separately.
+  friend class CSSLonghand::BackgroundColor;
+  friend class CSSLonghand::BorderBottomColor;
+  friend class CSSLonghand::BorderLeftColor;
+  friend class CSSLonghand::BorderRightColor;
+  friend class CSSLonghand::BorderTopColor;
+  friend class CSSLonghand::CaretColor;
+  friend class CSSLonghand::Color;
+  friend class CSSLonghand::ColumnRuleColor;
+  friend class CSSLonghand::FloodColor;
+  friend class CSSLonghand::Fill;
+  friend class CSSLonghand::LightingColor;
+  friend class CSSLonghand::OutlineColor;
+  friend class CSSLonghand::StopColor;
+  friend class CSSLonghand::Stroke;
+  friend class CSSLonghand::TextDecorationColor;
+  friend class CSSLonghand::WebkitTapHighlightColor;
+  friend class CSSLonghand::WebkitTextEmphasisColor;
+  friend class CSSLonghand::WebkitTextFillColor;
+  friend class CSSLonghand::WebkitTextStrokeColor;
   // Editing has to only reveal unvisited info.
   friend class ApplyStyleCommand;
   // Editing has to only reveal unvisited info.
@@ -187,7 +235,7 @@ class ComputedStyle : public ComputedStyleBase,
   ALWAYS_INLINE ComputedStyle(const ComputedStyle&);
 
   static scoped_refptr<ComputedStyle> CreateInitialStyle();
-  // TODO(shend): Remove this. Initial style should not be mutable.
+  // TODO(crbug.com/794841): Remove this. Initial style should not be mutable.
   CORE_EXPORT static ComputedStyle& MutableInitialStyle();
 
  public:
@@ -195,6 +243,10 @@ class ComputedStyle : public ComputedStyleBase,
   static scoped_refptr<ComputedStyle> CreateAnonymousStyleWithDisplay(
       const ComputedStyle& parent_style,
       EDisplay);
+  static scoped_refptr<ComputedStyle>
+  CreateInheritedDisplayContentsStyleIfNeeded(
+      const ComputedStyle& parent_style,
+      const ComputedStyle& layout_parent_style);
   CORE_EXPORT static scoped_refptr<ComputedStyle> Clone(const ComputedStyle&);
   static const ComputedStyle& InitialStyle() { return MutableInitialStyle(); }
   static void InvalidateInitialStyle();
@@ -355,8 +407,6 @@ class ComputedStyle : public ComputedStyleBase,
   void SetBorderImageOutset(const BorderImageLengthBox&);
 
   // Border width properties.
-  // TODO(nainar): Move all fixed point logic to a separate class.
-  // border-top-width
   float BorderTopWidth() const {
     if (BorderTopStyle() == EBorderStyle::kNone ||
         BorderTopStyle() == EBorderStyle::kHidden)
@@ -670,52 +720,50 @@ class ComputedStyle : public ComputedStyleBase,
       SetScrollPaddingBottom(v);
   }
 
-  // scroll-snap-margin-block-start
-  const Length& ScrollSnapMarginBlockStart() const {
-    return IsHorizontalWritingMode() ? ScrollSnapMarginTop()
-                                     : ScrollSnapMarginLeft();
+  // scroll-margin-block-start
+  float ScrollMarginBlockStart() const {
+    return IsHorizontalWritingMode() ? ScrollMarginTop() : ScrollMarginLeft();
   }
-  void SetScrollSnapMarginBlockStart(const Length& v) {
+  void SetScrollMarginBlockStart(float v) {
     if (IsHorizontalWritingMode())
-      SetScrollSnapMarginTop(v);
+      SetScrollMarginTop(v);
     else
-      SetScrollSnapMarginLeft(v);
+      SetScrollMarginLeft(v);
   }
 
-  // scroll-snap-margin-block-end
-  const Length& ScrollSnapMarginBlockEnd() const {
-    return IsHorizontalWritingMode() ? ScrollSnapMarginBottom()
-                                     : ScrollSnapMarginRight();
+  // scroll-margin-block-end
+  float ScrollMarginBlockEnd() const {
+    return IsHorizontalWritingMode() ? ScrollMarginBottom()
+                                     : ScrollMarginRight();
   }
-  void SetScrollSnapMarginBlockEnd(const Length& v) {
+  void SetScrollMarginBlockEnd(float v) {
     if (IsHorizontalWritingMode())
-      SetScrollSnapMarginBottom(v);
+      SetScrollMarginBottom(v);
     else
-      SetScrollSnapMarginRight(v);
+      SetScrollMarginRight(v);
   }
 
-  // scroll-snap-margin-inline-start
-  const Length& ScrollSnapMarginInlineStart() const {
-    return IsHorizontalWritingMode() ? ScrollSnapMarginLeft()
-                                     : ScrollSnapMarginTop();
+  // scroll-margin-inline-start
+  float ScrollMarginInlineStart() const {
+    return IsHorizontalWritingMode() ? ScrollMarginLeft() : ScrollMarginTop();
   }
-  void SetScrollSnapMarginInlineStart(const Length& v) {
+  void SetScrollMarginInlineStart(float v) {
     if (IsHorizontalWritingMode())
-      SetScrollSnapMarginLeft(v);
+      SetScrollMarginLeft(v);
     else
-      SetScrollSnapMarginTop(v);
+      SetScrollMarginTop(v);
   }
 
-  // scroll-snap-margin-inline-end
-  const Length& ScrollSnapMarginInlineEnd() const {
-    return IsHorizontalWritingMode() ? ScrollSnapMarginRight()
-                                     : ScrollSnapMarginBottom();
+  // scroll-margin-inline-end
+  float ScrollMarginInlineEnd() const {
+    return IsHorizontalWritingMode() ? ScrollMarginRight()
+                                     : ScrollMarginBottom();
   }
-  void SetScrollSnapMarginInlineEnd(const Length& v) {
+  void SetScrollMarginInlineEnd(float v) {
     if (IsHorizontalWritingMode())
-      SetScrollSnapMarginRight(v);
+      SetScrollMarginRight(v);
     else
-      SetScrollSnapMarginBottom(v);
+      SetScrollMarginBottom(v);
   }
 
   // shape-image-threshold (aka -webkit-shape-image-threshold)
@@ -830,6 +878,7 @@ class ComputedStyle : public ComputedStyleBase,
     SetTextEmphasisMarkInternal(mark);
   }
   const AtomicString& TextEmphasisMarkString() const;
+  LineLogicalSide GetTextEmphasisLineLogicalSide() const;
 
   // -webkit-text-emphasis-color (aka -epub-text-emphasis-color)
   void SetTextEmphasisColor(const StyleColor& color) {
@@ -997,7 +1046,7 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // Comparison operators
-  // TODO(shend): Replace callers of operator== wth a named method instead, e.g.
+  // FIXME: Replace callers of operator== wth a named method instead, e.g.
   // inheritedEquals().
   CORE_EXPORT bool operator==(const ComputedStyle& other) const;
   bool operator!=(const ComputedStyle& other) const {
@@ -1382,10 +1431,10 @@ class ComputedStyle : public ComputedStyleBase,
            !PaddingTop().IsZero() || !PaddingBottom().IsZero();
   }
   void ResetPadding() {
-    SetPaddingTop(kFixed);
-    SetPaddingBottom(kFixed);
-    SetPaddingLeft(kFixed);
-    SetPaddingRight(kFixed);
+    SetPaddingTop(Length(kFixed));
+    SetPaddingBottom(Length(kFixed));
+    SetPaddingLeft(Length(kFixed));
+    SetPaddingRight(Length(kFixed));
   }
   void SetPadding(const LengthBox& b) {
     SetPaddingTop(b.top_);
@@ -1705,7 +1754,7 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Motion utility functions.
   bool HasOffset() const {
-    return (OffsetPosition().X() != Length(kAuto)) || OffsetPath();
+    return !OffsetPosition().X().IsAuto() || OffsetPath();
   }
 
   // Direction utility functions.
@@ -2147,16 +2196,15 @@ class ComputedStyle : public ComputedStyleBase,
     return ShadowListHasCurrentColor(BoxShadow());
   }
   bool HasBackground() const {
-    Color color = VisitedDependentColor(CSSPropertyBackgroundColor);
+    Color color = VisitedDependentColor(GetCSSPropertyBackgroundColor());
     if (color.Alpha())
       return true;
     return HasBackgroundImage();
   }
 
   // Color utility functions.
-  // TODO(sashab): Rename this to just getColor(), and add a comment explaining
-  // how it works.
-  CORE_EXPORT Color VisitedDependentColor(CSSPropertyID color_property) const;
+  CORE_EXPORT Color
+  VisitedDependentColor(const CSSProperty& color_property) const;
 
   // -webkit-appearance utility functions.
   bool HasAppearance() const { return Appearance() != kNoControlPart; }
@@ -2383,8 +2431,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   StyleColor DecorationColorIncludingFallback(bool visited_link) const;
-  Color ColorIncludingFallback(CSSPropertyID color_property,
-                               bool visited_link) const;
 
   Color StopColor() const { return SvgStyle().StopColor(); }
   Color FloodColor() const { return SvgStyle().FloodColor(); }

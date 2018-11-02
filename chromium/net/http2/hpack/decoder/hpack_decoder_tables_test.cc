@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "net/http2/hpack/http2_hpack_constants.h"
 #include "net/http2/platform/api/http2_string.h"
 #include "net/http2/tools/failure.h"
 #include "net/http2/tools/http2_random.h"
@@ -56,7 +57,7 @@ void ShuffleCollection(C* collection, RandomBase* r) {
 
 class HpackDecoderStaticTableTest : public ::testing::Test {
  protected:
-  HpackDecoderStaticTableTest() {}
+  HpackDecoderStaticTableTest() = default;
 
   std::vector<StaticEntry> shuffled_static_entries() {
     std::vector<StaticEntry> entries = MakeSpecStaticEntries();

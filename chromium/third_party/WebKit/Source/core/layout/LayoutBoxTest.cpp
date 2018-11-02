@@ -153,6 +153,7 @@ TEST_F(LayoutBoxTest, TopLeftLocationFlipped) {
 }
 
 TEST_F(LayoutBoxTest, TableRowCellTopLeftLocationFlipped) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   SetBodyInnerHTML(R"HTML(
     <div style='writing-mode: vertical-rl'>
       <table style='border-spacing: 0'>
@@ -394,6 +395,23 @@ TEST_F(LayoutBoxTest, DeferredInvalidation) {
   obj->ImageChanged(image, ImageResourceObserver::CanDeferInvalidation::kNo);
   EXPECT_EQ(obj->FullPaintInvalidationReason(),
             PaintInvalidationReason::kImage);
+}
+
+TEST_F(LayoutBoxTest, MarkerContainerLayoutOverflowRect) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      html { font-size: 16px; }
+    </style>
+    <div id='target' style='display: list-item;'>
+      <div style='overflow: hidden; line-height:100px;'>hello</div>
+    </div>
+  )HTML");
+
+  LayoutBox* marker_container =
+      ToLayoutBox(GetLayoutObjectByElementId("target")->SlowFirstChild());
+  // Unit marker_container's frame_rect which y-pos starts from 0 and marker's
+  // frame_rect.
+  EXPECT_TRUE(marker_container->LayoutOverflowRect().Height() > LayoutUnit(50));
 }
 
 }  // namespace blink

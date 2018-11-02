@@ -1,4 +1,4 @@
 
-post_process_target("//components/history/core/browser:browser") {
+update_target("//components/history/core/browser:browser") {
   deps += [ "//vivaldi/prefs:prefs" ]
 }

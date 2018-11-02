@@ -31,6 +31,7 @@
 #include "core/html_names.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutIFrame.h"
+#include "core/policy/IFramePolicy.h"
 #include "platform/runtime_enabled_features.h"
 
 namespace blink {
@@ -47,11 +48,12 @@ DEFINE_NODE_FACTORY(HTMLIFrameElement)
 
 void HTMLIFrameElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(sandbox_);
+  visitor->Trace(policy_);
   HTMLFrameElementBase::Trace(visitor);
   Supplementable<HTMLIFrameElement>::Trace(visitor);
 }
 
-HTMLIFrameElement::~HTMLIFrameElement() {}
+HTMLIFrameElement::~HTMLIFrameElement() = default;
 
 void HTMLIFrameElement::SetCollapsed(bool collapse) {
   if (collapsed_by_client_ == collapse)
@@ -67,6 +69,14 @@ void HTMLIFrameElement::SetCollapsed(bool collapse) {
 
 DOMTokenList* HTMLIFrameElement::sandbox() const {
   return sandbox_.Get();
+}
+
+Policy* HTMLIFrameElement::policy() {
+  if (!policy_) {
+    policy_ = new IFramePolicy(&GetDocument(), ContainerPolicy(),
+                               GetOriginForFeaturePolicy());
+  }
+  return policy_.Get();
 }
 
 bool HTMLIFrameElement::IsPresentationAttribute(
@@ -109,7 +119,7 @@ void HTMLIFrameElement::ParseAttribute(
   const AtomicString& value = params.new_value;
   if (name == nameAttr) {
     if (IsInDocumentTree() && GetDocument().IsHTMLDocument()) {
-      HTMLDocument& document = ToHTMLDocument(this->GetDocument());
+      HTMLDocument& document = ToHTMLDocument(GetDocument());
       document.RemoveNamedItem(name_);
       document.AddNamedItem(value);
     }
@@ -206,8 +216,9 @@ void HTMLIFrameElement::ParseAttribute(
 ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
     Vector<String>* messages,
     bool* old_syntax) const {
-  scoped_refptr<SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
-  scoped_refptr<SecurityOrigin> self_origin = GetDocument().GetSecurityOrigin();
+  scoped_refptr<const SecurityOrigin> src_origin = GetOriginForFeaturePolicy();
+  scoped_refptr<const SecurityOrigin> self_origin =
+      GetDocument().GetSecurityOrigin();
   ParsedFeaturePolicy container_policy = ParseFeaturePolicyAttribute(
       allow_, self_origin, src_origin, messages, old_syntax);
 
@@ -254,6 +265,10 @@ ParsedFeaturePolicy HTMLIFrameElement::ConstructContainerPolicy(
       container_policy.push_back(whitelist);
     }
   }
+
+  // Update Policy associated with this iframe, if exists.
+  if (policy_)
+    policy_->UpdateContainerPolicy(container_policy, src_origin);
 
   return container_policy;
 }

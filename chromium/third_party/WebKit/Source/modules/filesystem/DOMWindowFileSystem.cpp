@@ -30,8 +30,6 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
 #include "modules/filesystem/DOMFileSystem.h"
-#include "modules/filesystem/EntryCallback.h"
-#include "modules/filesystem/ErrorCallback.h"
 #include "modules/filesystem/FileSystemCallback.h"
 #include "modules/filesystem/FileSystemCallbacks.h"
 #include "modules/filesystem/LocalFileSystem.h"
@@ -46,7 +44,7 @@ void DOMWindowFileSystem::webkitRequestFileSystem(
     int type,
     long long size,
     FileSystemCallback* success_callback,
-    ErrorCallback* error_callback) {
+    V8ErrorCallback* error_callback) {
   if (!window.IsCurrentlyDisplayedInFrame())
     return;
 
@@ -63,6 +61,8 @@ void DOMWindowFileSystem::webkitRequestFileSystem(
                                ScriptErrorCallback::Wrap(error_callback),
                                FileError::kSecurityErr);
     return;
+  } else if (document->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(document, WebFeature::kFileAccessedFileSystem);
   }
 
   FileSystemType file_system_type = static_cast<FileSystemType>(type);
@@ -83,8 +83,8 @@ void DOMWindowFileSystem::webkitRequestFileSystem(
 void DOMWindowFileSystem::webkitResolveLocalFileSystemURL(
     LocalDOMWindow& window,
     const String& url,
-    EntryCallback* success_callback,
-    ErrorCallback* error_callback) {
+    V8EntryCallback* success_callback,
+    V8ErrorCallback* error_callback) {
   if (!window.IsCurrentlyDisplayedInFrame())
     return;
 
@@ -92,7 +92,7 @@ void DOMWindowFileSystem::webkitResolveLocalFileSystemURL(
   if (!document)
     return;
 
-  SecurityOrigin* security_origin = document->GetSecurityOrigin();
+  const SecurityOrigin* security_origin = document->GetSecurityOrigin();
   KURL completed_url = document->CompleteURL(url);
   if (!security_origin->CanAccessFileSystem() ||
       !security_origin->CanRequest(completed_url)) {
@@ -100,6 +100,8 @@ void DOMWindowFileSystem::webkitResolveLocalFileSystemURL(
                                ScriptErrorCallback::Wrap(error_callback),
                                FileError::kSecurityErr);
     return;
+  } else if (document->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(document, WebFeature::kFileAccessedFileSystem);
   }
 
   if (!completed_url.IsValid()) {
@@ -111,9 +113,9 @@ void DOMWindowFileSystem::webkitResolveLocalFileSystemURL(
 
   LocalFileSystem::From(*document)->ResolveURL(
       document, completed_url,
-      ResolveURICallbacks::Create(success_callback,
-                                  ScriptErrorCallback::Wrap(error_callback),
-                                  document));
+      ResolveURICallbacks::Create(
+          ResolveURICallbacks::OnDidGetEntryV8Impl::Create(success_callback),
+          ScriptErrorCallback::Wrap(error_callback), document));
 }
 
 static_assert(

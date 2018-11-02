@@ -34,10 +34,32 @@ const char kAutoplayAttemptUkmVideoTrackMetric[] = "VideoTrack";
 const char kAutoplayAttemptUkmUserGestureRequiredMetric[] =
     "UserGestureRequired";
 const char kAutoplayAttemptUkmMutedMetric[] = "Muted";
+const char kAutoplayAttemptUkmHighMediaEngagementMetric[] =
+    "HighMediaEngagement";
+const char kAutoplayAttemptUkmUserGestureStatusMetric[] = "UserGestureStatus";
 
 const char kAutoplayMutedUnmuteUkmEvent[] = "Media.Autoplay.Muted.UnmuteAction";
 const char kAutoplayMutedUnmuteUkmSourceMetric[] = "Source";
 const char kAutoplayMutedUnmuteUkmResultMetric[] = "Result";
+
+// Returns a int64_t with the following structure:
+// 0b0001 set if there is a user gesture on the stack.
+// 0b0010 set if there was a user gesture on the page.
+// 0b0100 set if there was a user gesture propagated after navigation.
+int64_t GetUserGestureStatusForUkmMetric(LocalFrame* frame) {
+  DCHECK(frame);
+
+  int64_t result = 0;
+
+  if (Frame::HasTransientUserActivation(frame, false))
+    result |= 0x01;
+  if (frame->HasBeenActivated())
+    result |= 0x02;
+  if (frame->HasReceivedUserGestureBeforeNavigation())
+    result |= 0x04;
+
+  return result;
+}
 
 }  // namespace
 
@@ -66,15 +88,15 @@ bool AutoplayUmaHelper::operator==(const EventListener& other) const {
 
 void AutoplayUmaHelper::OnLoadStarted() {
   if (element_->GetLoadType() == WebMediaPlayer::kLoadTypeURL)
-    load_start_time_ms_ = MonotonicallyIncreasingTimeMS();
+    load_start_time_ms_ = CurrentTimeTicksInMilliseconds();
 }
 
 void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
   int32_t autoplay_wait_time_ms = -1;
   if (load_start_time_ms_ != 0.0) {
-    autoplay_wait_time_ms = static_cast<int32_t>(
-        std::min<int64_t>(MonotonicallyIncreasingTimeMS() - load_start_time_ms_,
-                          std::numeric_limits<int32_t>::max()));
+    autoplay_wait_time_ms = static_cast<int32_t>(std::min<int64_t>(
+        CurrentTimeTicksInMilliseconds() - load_start_time_ms_,
+        std::numeric_limits<int32_t>::max()));
   }
   DEFINE_STATIC_LOCAL(EnumerationHistogram, video_histogram,
                       ("Media.Video.Autoplay",
@@ -183,6 +205,9 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
 
   // Record UKM autoplay event.
   if (element_->GetDocument().IsInMainFrame()) {
+    LocalFrame* frame = element_->GetDocument().GetFrame();
+    DCHECK(frame);
+
     std::unique_ptr<ukm::UkmEntryBuilder> builder =
         CreateUkmBuilder(kAutoplayAttemptUkmEvent);
     builder->AddMetric(kAutoplayAttemptUkmSourceMetric,
@@ -195,6 +220,10 @@ void AutoplayUmaHelper::OnAutoplayInitiated(AutoplaySource source) {
         kAutoplayAttemptUkmUserGestureRequiredMetric,
         element_->GetAutoplayPolicy().IsGestureNeededForPlayback());
     builder->AddMetric(kAutoplayAttemptUkmMutedMetric, element_->muted());
+    builder->AddMetric(kAutoplayAttemptUkmHighMediaEngagementMetric,
+                       element_->GetDocument().HasHighMediaEngagement());
+    builder->AddMetric(kAutoplayAttemptUkmUserGestureStatusMetric,
+                       GetUserGestureStatusForUkmMetric(frame));
   }
 
   element_->addEventListener(EventTypeNames::playing, this, false);
@@ -335,11 +364,11 @@ void AutoplayUmaHelper::OnVisibilityChangedForMutedVideoOffscreenDuration(
 
   if (is_visible) {
     muted_video_autoplay_offscreen_duration_ms_ +=
-        static_cast<int64_t>(MonotonicallyIncreasingTimeMS()) -
+        static_cast<int64_t>(CurrentTimeTicksInMilliseconds()) -
         muted_video_autoplay_offscreen_start_time_ms_;
   } else {
     muted_video_autoplay_offscreen_start_time_ms_ =
-        static_cast<int64_t>(MonotonicallyIncreasingTimeMS());
+        static_cast<int64_t>(CurrentTimeTicksInMilliseconds());
   }
 
   is_visible_ = is_visible;
@@ -384,10 +413,10 @@ void AutoplayUmaHelper::MaybeStartRecordingMutedVideoPlayMethodBecomeVisible() {
     return;
 
   muted_video_play_method_visibility_observer_ = new ElementVisibilityObserver(
-      element_,
-      WTF::Bind(&AutoplayUmaHelper::
-                    OnVisibilityChangedForMutedVideoPlayMethodBecomeVisible,
-                WrapWeakPersistent(this)));
+      element_, WTF::BindRepeating(
+                    &AutoplayUmaHelper::
+                        OnVisibilityChangedForMutedVideoPlayMethodBecomeVisible,
+                    WrapWeakPersistent(this)));
   muted_video_play_method_visibility_observer_->Start();
   SetContext(&element_->GetDocument());
 }
@@ -413,14 +442,14 @@ void AutoplayUmaHelper::MaybeStartRecordingMutedVideoOffscreenDuration() {
 
   // Start recording muted video playing offscreen duration.
   muted_video_autoplay_offscreen_start_time_ms_ =
-      static_cast<int64_t>(MonotonicallyIncreasingTimeMS());
+      static_cast<int64_t>(CurrentTimeTicksInMilliseconds());
   is_visible_ = false;
   muted_video_offscreen_duration_visibility_observer_ =
       new ElementVisibilityObserver(
-          element_,
-          WTF::Bind(&AutoplayUmaHelper::
-                        OnVisibilityChangedForMutedVideoOffscreenDuration,
-                    WrapWeakPersistent(this)));
+          element_, WTF::BindRepeating(
+                        &AutoplayUmaHelper::
+                            OnVisibilityChangedForMutedVideoOffscreenDuration,
+                        WrapWeakPersistent(this)));
   muted_video_offscreen_duration_visibility_observer_->Start();
   element_->addEventListener(EventTypeNames::pause, this, false);
   SetContext(&element_->GetDocument());
@@ -432,7 +461,7 @@ void AutoplayUmaHelper::MaybeStopRecordingMutedVideoOffscreenDuration() {
 
   if (!is_visible_) {
     muted_video_autoplay_offscreen_duration_ms_ +=
-        static_cast<int64_t>(MonotonicallyIncreasingTimeMS()) -
+        static_cast<int64_t>(CurrentTimeTicksInMilliseconds()) -
         muted_video_autoplay_offscreen_start_time_ms_;
   }
 

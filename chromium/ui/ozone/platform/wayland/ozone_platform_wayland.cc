@@ -75,18 +75,17 @@ class OzonePlatformWayland : public OzonePlatform {
   }
 
   void InitializeUI(const InitParams& args) override {
-    connection_.reset(new WaylandConnection);
-    if (!connection_->Initialize())
-      LOG(FATAL) << "Failed to initialize Wayland platform";
-
 #if BUILDFLAG(USE_XKBCOMMON)
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
-        std::make_unique<WaylandXkbKeyboardLayoutEngine>(
+        std::make_unique<WaylandXkbKeyboardLayoutEngineImpl>(
             xkb_evdev_code_converter_));
 #else
     KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
         std::make_unique<StubKeyboardLayoutEngine>());
 #endif
+    connection_.reset(new WaylandConnection);
+    if (!connection_->Initialize())
+      LOG(FATAL) << "Failed to initialize Wayland platform";
 
     cursor_factory_.reset(new BitmapCursorFactoryOzone);
     overlay_manager_.reset(new StubOverlayManager);

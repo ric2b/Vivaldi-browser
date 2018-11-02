@@ -502,4 +502,13 @@ WebDatabase::State AutofillWebDataBackendImpl::RemoveExpiredFormElementsImpl(
   return WebDatabase::COMMIT_NOT_NEEDED;
 }
 
+WebDatabase::State AutofillWebDataBackendImpl::RemoveOrphanAutofillTableRows(
+    WebDatabase* db) {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
+  if (AutofillTable::FromWebDatabase(db)->RemoveOrphanAutofillTableRows()) {
+    return WebDatabase::COMMIT_NEEDED;
+  }
+  return WebDatabase::COMMIT_NOT_NEEDED;
+}
+
 }  // namespace autofill

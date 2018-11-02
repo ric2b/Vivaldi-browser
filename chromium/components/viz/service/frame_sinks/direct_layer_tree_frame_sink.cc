@@ -4,11 +4,13 @@
 
 #include "components/viz/service/frame_sinks/direct_layer_tree_frame_sink.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "cc/trees/layer_tree_frame_sink_client.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_manager.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
@@ -21,18 +23,22 @@ DirectLayerTreeFrameSink::DirectLayerTreeFrameSink(
     CompositorFrameSinkSupportManager* support_manager,
     FrameSinkManagerImpl* frame_sink_manager,
     Display* display,
+    mojom::DisplayClient* display_client,
     scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider,
+    scoped_refptr<RasterContextProvider> worker_context_provider,
+    scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     SharedBitmapManager* shared_bitmap_manager)
     : LayerTreeFrameSink(std::move(context_provider),
                          std::move(worker_context_provider),
+                         std::move(compositor_task_runner),
                          gpu_memory_buffer_manager,
                          shared_bitmap_manager),
       frame_sink_id_(frame_sink_id),
       support_manager_(support_manager),
       frame_sink_manager_(frame_sink_manager),
-      display_(display) {
+      display_(display),
+      display_client_(display_client) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   capabilities_.must_always_swap = true;
   // Display and DirectLayerTreeFrameSink share a GL context, so sync
@@ -45,12 +51,14 @@ DirectLayerTreeFrameSink::DirectLayerTreeFrameSink(
     CompositorFrameSinkSupportManager* support_manager,
     FrameSinkManagerImpl* frame_sink_manager,
     Display* display,
+    mojom::DisplayClient* display_client,
     scoped_refptr<VulkanContextProvider> vulkan_context_provider)
     : LayerTreeFrameSink(std::move(vulkan_context_provider)),
       frame_sink_id_(frame_sink_id),
       support_manager_(support_manager),
       frame_sink_manager_(frame_sink_manager),
-      display_(display) {
+      display_(display),
+      display_client_(display_client) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   capabilities_.must_always_swap = true;
 }
@@ -70,7 +78,7 @@ bool DirectLayerTreeFrameSink::BindToClient(
   support_ = support_manager_->CreateCompositorFrameSinkSupport(
       this, frame_sink_id_, is_root,
       capabilities_.delegated_sync_points_required);
-  begin_frame_source_ = base::MakeUnique<ExternalBeginFrameSource>(this);
+  begin_frame_source_ = std::make_unique<ExternalBeginFrameSource>(this);
   client_->SetBeginFrameSource(begin_frame_source_.get());
 
   // Avoid initializing GL context here, as this should be sharing the
@@ -98,7 +106,7 @@ void DirectLayerTreeFrameSink::SubmitCompositorFrame(CompositorFrame frame) {
   if (!local_surface_id_.is_valid() ||
       frame.size_in_pixels() != last_swap_frame_size_ ||
       frame.device_scale_factor() != device_scale_factor_) {
-    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
     last_swap_frame_size_ = frame.size_in_pixels();
     device_scale_factor_ = frame.device_scale_factor();
     display_->SetLocalSurfaceId(local_surface_id_, device_scale_factor_);
@@ -130,6 +138,15 @@ void DirectLayerTreeFrameSink::DisplayDidDrawAndSwap() {
   // This notification is not relevant to our client outside of tests. We
   // unblock the client from DidDrawCallback() when the surface is going to
   // be drawn.
+}
+
+void DirectLayerTreeFrameSink::DisplayDidReceiveCALayerParams(
+    const gfx::CALayerParams& ca_layer_params) {
+  // If |ca_layer_params| should have content only when there exists a client
+  // to send it to.
+  DCHECK(ca_layer_params.is_empty || display_client_);
+  if (display_client_)
+    display_client_->OnDisplayReceivedCALayerParams(ca_layer_params);
 }
 
 void DirectLayerTreeFrameSink::DidReceiveCompositorFrameAck(

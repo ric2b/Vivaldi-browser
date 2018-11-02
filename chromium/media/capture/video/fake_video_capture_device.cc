@@ -49,10 +49,10 @@ enum class PixelFormatMatchType : int {
 };
 
 PixelFormatMatchType DetermineFormatMatchType(
-    media::VideoPixelFormat supported_format,
-    media::VideoPixelFormat requested_format) {
-  if (requested_format == media::PIXEL_FORMAT_I420 &&
-      supported_format == media::PIXEL_FORMAT_MJPEG) {
+    VideoPixelFormat supported_format,
+    VideoPixelFormat requested_format) {
+  if (requested_format == PIXEL_FORMAT_I420 &&
+      supported_format == PIXEL_FORMAT_MJPEG) {
     return PixelFormatMatchType::SUPPORTED_THROUGH_CONVERSION;
   }
   return (requested_format == supported_format)
@@ -60,7 +60,7 @@ PixelFormatMatchType DetermineFormatMatchType(
              : PixelFormatMatchType::INCOMPATIBLE;
 }
 
-const media::VideoCaptureFormat& FindClosestSupportedFormat(
+const VideoCaptureFormat& FindClosestSupportedFormat(
     const VideoCaptureFormat& requested_format,
     const VideoCaptureFormats& supported_formats) {
   DCHECK(!supported_formats.empty());
@@ -197,7 +197,7 @@ std::unique_ptr<FrameDeliverer> FrameDelivererFactory::CreateFrameDeliverer(
       painter_format = PacmanFramePainter::Format::I420;
   }
   auto frame_painter =
-      base::MakeUnique<PacmanFramePainter>(painter_format, device_state_);
+      std::make_unique<PacmanFramePainter>(painter_format, device_state_);
 
   FakeVideoCaptureDevice::DeliveryMode delivery_mode = delivery_mode_;
   if (format.pixel_format == PIXEL_FORMAT_MJPEG &&
@@ -213,14 +213,14 @@ std::unique_ptr<FrameDeliverer> FrameDelivererFactory::CreateFrameDeliverer(
   switch (delivery_mode) {
     case FakeVideoCaptureDevice::DeliveryMode::USE_DEVICE_INTERNAL_BUFFERS:
       if (format.pixel_format == PIXEL_FORMAT_MJPEG) {
-        return base::MakeUnique<JpegEncodingFrameDeliverer>(
+        return std::make_unique<JpegEncodingFrameDeliverer>(
             std::move(frame_painter));
       } else {
-        return base::MakeUnique<OwnBufferFrameDeliverer>(
+        return std::make_unique<OwnBufferFrameDeliverer>(
             std::move(frame_painter));
       }
     case FakeVideoCaptureDevice::DeliveryMode::USE_CLIENT_PROVIDED_BUFFERS:
-      return base::MakeUnique<ClientBufferFrameDeliverer>(
+      return std::make_unique<ClientBufferFrameDeliverer>(
           std::move(frame_painter));
   }
   NOTREACHED();
@@ -575,7 +575,7 @@ void ClientBufferFrameDeliverer::PaintAndDeliverNextFrame(
       capture_buffer.handle_provider->GetHandleForInProcessAccess();
   DCHECK(buffer_access->data()) << "Buffer has NO backing memory";
 
-  DCHECK_EQ(PIXEL_STORAGE_CPU, device_state()->format.pixel_storage);
+  DCHECK_EQ(VideoPixelStorage::CPU, device_state()->format.pixel_storage);
 
   uint8_t* data_ptr = buffer_access->data();
   memset(data_ptr, 0, buffer_access->mapped_size());

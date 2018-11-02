@@ -30,6 +30,10 @@
 
 #include "modules/websockets/DocumentWebSocketChannel.h"
 
+#include <memory>
+
+#include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/FileReaderLoader.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
@@ -48,7 +52,6 @@
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/websockets/InspectorWebSocketEvents.h"
 #include "modules/websockets/WebSocketChannelClient.h"
-#include "modules/websockets/WebSocketFrame.h"
 #include "modules/websockets/WebSocketHandleImpl.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "platform/WebFrameScheduler.h"
@@ -58,22 +61,29 @@
 #include "platform/network/WebSocketHandshakeRequest.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebSocketHandshakeThrottle.h"
-#include "public/platform/WebTraceLocation.h"
 #include "public/platform/WebURL.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
+
+namespace {
+
+enum WebSocketOpCode {
+  kOpCodeText = 0x1,
+  kOpCodeBinary = 0x2,
+};
+
+}  // namespace
 
 class DocumentWebSocketChannel::BlobLoader final
     : public GarbageCollectedFinalized<DocumentWebSocketChannel::BlobLoader>,
       public FileReaderLoaderClient {
  public:
   BlobLoader(scoped_refptr<BlobDataHandle>, DocumentWebSocketChannel*);
-  ~BlobLoader() override {}
+  ~BlobLoader() override = default;
 
   void Cancel();
 
@@ -157,7 +167,7 @@ DocumentWebSocketChannel* DocumentWebSocketChannel::CreateForTesting(
     std::unique_ptr<WebSocketHandshakeThrottle> handshake_throttle) {
   return new DocumentWebSocketChannel(
       ThreadableLoadingContext::Create(*document), client, std::move(location),
-      WTF::WrapUnique(handle), std::move(handshake_throttle));
+      base::WrapUnique(handle), std::move(handshake_throttle));
 }
 
 // static
@@ -182,8 +192,7 @@ DocumentWebSocketChannel::DocumentWebSocketChannel(
       identifier_(CreateUniqueIdentifier()),
       loading_context_(loading_context),
       sending_quota_(0),
-      received_data_size_for_flow_control_(
-          kReceivedDataSizeForFlowControlHighWaterMark * 2),  // initial quota
+      received_data_size_for_flow_control_(0),
       sent_size_of_top_message_(0),
       location_at_construction_(std::move(location)),
       handshake_throttle_(std::move(handshake_throttle)),
@@ -240,7 +249,7 @@ bool DocumentWebSocketChannel::Connect(const KURL& url,
     GetDocument()
         ->GetTaskRunner(TaskType::kNetworking)
         ->PostTask(
-            BLINK_FROM_HERE,
+            FROM_HERE,
             WTF::Bind(&DocumentWebSocketChannel::TearDownFailedConnection,
                       WrapPersistent(this)));
     return true;
@@ -270,7 +279,6 @@ bool DocumentWebSocketChannel::Connect(const KURL& url,
     throttle_passed_ = true;
   }
 
-  FlowControlIfNecessary();
   TRACE_EVENT_INSTANT1("devtools.timeline", "WebSocketCreate",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorWebSocketCreateEvent::Data(
@@ -296,7 +304,7 @@ void DocumentWebSocketChannel::Send(const CString& message) {
   // FIXME: Change the inspector API to show the entire message instead
   // of individual frames.
   probe::didSendWebSocketFrame(GetDocument(), identifier_,
-                               WebSocketFrame::kOpCodeText, true,
+                               WebSocketOpCode::kOpCodeText, true,
                                message.data(), message.length());
   messages_.push_back(new Message(message));
   ProcessSendQueue();
@@ -314,7 +322,7 @@ void DocumentWebSocketChannel::Send(
   // Since Binary data are not displayed in Inspector, this does not
   // affect actual behavior.
   probe::didSendWebSocketFrame(GetDocument(), identifier_,
-                               WebSocketFrame::kOpCodeBinary, true, "", 0);
+                               WebSocketOpCode::kOpCodeBinary, true, "", 0);
   messages_.push_back(new Message(std::move(blob_data_handle)));
   ProcessSendQueue();
 }
@@ -328,7 +336,7 @@ void DocumentWebSocketChannel::Send(const DOMArrayBuffer& buffer,
   // FIXME: Change the inspector API to show the entire message instead
   // of individual frames.
   probe::didSendWebSocketFrame(
-      GetDocument(), identifier_, WebSocketFrame::kOpCodeBinary, true,
+      GetDocument(), identifier_, WebSocketOpCode::kOpCodeBinary, true,
       static_cast<const char*>(buffer.Data()) + byte_offset, byte_length);
   // buffer.slice copies its contents.
   // FIXME: Reduce copy by sending the data immediately when we don't need to
@@ -346,7 +354,7 @@ void DocumentWebSocketChannel::SendTextAsCharVector(
   // FIXME: Change the inspector API to show the entire message instead
   // of individual frames.
   probe::didSendWebSocketFrame(GetDocument(), identifier_,
-                               WebSocketFrame::kOpCodeText, true, data->data(),
+                               WebSocketOpCode::kOpCodeText, true, data->data(),
                                data->size());
   messages_.push_back(
       new Message(std::move(data), kMessageTypeTextAsCharVector));
@@ -361,7 +369,7 @@ void DocumentWebSocketChannel::SendBinaryAsCharVector(
   // FIXME: Change the inspector API to show the entire message instead
   // of individual frames.
   probe::didSendWebSocketFrame(GetDocument(), identifier_,
-                               WebSocketFrame::kOpCodeBinary, true,
+                               WebSocketOpCode::kOpCodeBinary, true,
                                data->data(), data->size());
   messages_.push_back(
       new Message(std::move(data), kMessageTypeBinaryAsCharVector));
@@ -516,6 +524,12 @@ void DocumentWebSocketChannel::FlowControlIfNecessary() {
   received_data_size_for_flow_control_ = 0;
 }
 
+void DocumentWebSocketChannel::InitialFlowControl() {
+  DCHECK_EQ(received_data_size_for_flow_control_, 0u);
+  DCHECK(handle_);
+  handle_->FlowControl(kReceivedDataSizeForFlowControlHighWaterMark * 2);
+}
+
 void DocumentWebSocketChannel::AbortAsyncOperations() {
   if (blob_loader_) {
     blob_loader_->Cancel();
@@ -568,6 +582,8 @@ void DocumentWebSocketChannel::DidConnect(WebSocketHandle* handle,
         std::make_unique<ConnectInfo>(selected_protocol, extensions);
     return;
   }
+
+  InitialFlowControl();
 
   handshake_throttle_.reset();
 
@@ -664,17 +680,15 @@ void DocumentWebSocketChannel::DidReceiveData(WebSocketHandle* handle,
   if (!fin) {
     return;
   }
-  // FIXME: Change the inspector API to show the entire message instead
-  // of individual frames.
-  WebSocketFrame::OpCode opcode = receiving_message_type_is_text_
-                                      ? WebSocketFrame::kOpCodeText
-                                      : WebSocketFrame::kOpCodeBinary;
-  WebSocketFrame frame(opcode, receiving_message_data_.data(),
-                       receiving_message_data_.size(), WebSocketFrame::kFinal);
   if (GetDocument()) {
-    probe::didReceiveWebSocketFrame(GetDocument(), identifier_, frame.op_code,
-                                    frame.masked, frame.payload,
-                                    frame.payload_length);
+    // FIXME: Change the inspector API to show the entire message instead
+    // of individual frames.
+    auto opcode = receiving_message_type_is_text_
+                      ? WebSocketOpCode::kOpCodeText
+                      : WebSocketOpCode::kOpCodeBinary;
+    probe::didReceiveWebSocketFrame(GetDocument(), identifier_, opcode, false,
+                                    receiving_message_data_.data(),
+                                    receiving_message_data_.size());
   }
   if (receiving_message_type_is_text_) {
     String message = receiving_message_data_.IsEmpty()
@@ -690,7 +704,7 @@ void DocumentWebSocketChannel::DidReceiveData(WebSocketHandle* handle,
     }
   } else {
     std::unique_ptr<Vector<char>> binary_data =
-        WTF::WrapUnique(new Vector<char>);
+        std::make_unique<Vector<char>>();
     binary_data->swap(receiving_message_data_);
     client_->DidReceiveBinaryMessage(std::move(binary_data));
   }
@@ -752,6 +766,10 @@ void DocumentWebSocketChannel::OnSuccess() {
   throttle_passed_ = true;
   handshake_throttle_ = nullptr;
   if (connect_info_) {
+    // No flow control quota is supplied to the browser until we are ready to
+    // receive messages. This fixes crbug.com/786776.
+    InitialFlowControl();
+
     client_->DidConnect(std::move(connect_info_->selected_protocol),
                         std::move(connect_info_->extensions));
     connect_info_.reset();

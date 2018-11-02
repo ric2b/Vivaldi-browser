@@ -13,15 +13,16 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
-#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
 #include "chrome/renderer/extensions/chrome_extensions_dispatcher_delegate.h"
+#include "chrome/renderer/extensions/extension_process_policy.h"
 #include "chrome/renderer/extensions/renderer_permissions_policy_delegate.h"
 #include "chrome/renderer/extensions/resource_request_policy.h"
 #include "chrome/renderer/media/cast_ipc_dispatcher.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -304,6 +305,15 @@ ChromeExtensionsRendererClient::CreateBrowserPluginDelegate(
     return new extensions::ExtensionsGuestViewContainer(render_frame);
   return new extensions::MimeHandlerViewContainer(render_frame, mime_type,
                                                   original_url);
+}
+
+// static
+blink::WebFrame* ChromeExtensionsRendererClient::FindFrame(
+    blink::WebLocalFrame* relative_to_frame,
+    const std::string& name) {
+  content::RenderFrame* result = extensions::ExtensionFrameHelper::FindFrame(
+      content::RenderFrame::FromWebFrame(relative_to_frame), name);
+  return result ? result->GetWebFrame() : nullptr;
 }
 
 void ChromeExtensionsRendererClient::RunScriptsAtDocumentStart(

@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_UI_CONTENT_SETTINGS_CONTENT_SETTING_IMAGE_MODEL_H_
 #define CHROME_BROWSER_UI_CONTENT_SETTINGS_CONTENT_SETTING_IMAGE_MODEL_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
@@ -25,6 +28,29 @@ struct VectorIcon;
 // that are displayed in the location bar.
 class ContentSettingImageModel {
  public:
+  // The type of the content setting image model. This enum is used in
+  // histograms and thus is append-only.
+  enum class ImageType {
+    COOKIES = 0,
+    IMAGES = 1,
+    JAVASCRIPT = 2,
+    PPAPI_BROKER = 3,
+    PLUGINS = 4,
+    POPUPS = 5,
+    GEOLOCATION = 6,
+    MIXEDSCRIPT = 7,
+    PROTOCOL_HANDLERS = 8,
+    MEDIASTREAM = 9,
+    ADS = 10,
+    AUTOMATIC_DOWNLOADS = 11,
+    MIDI_SYSEX = 12,
+    SOUND = 13,
+    FRAMEBUST = 14,
+    CLIPBOARD_READ = 15,
+
+    NUM_IMAGE_TYPES
+  };
+
   virtual ~ContentSettingImageModel() {}
 
   // Generates a vector of all image models to be used within one window.
@@ -34,7 +60,11 @@ class ContentSettingImageModel {
   // Returns the corresponding index into the above vector for the given
   // ContentSettingsType. For testing.
   static size_t GetContentSettingImageModelIndexForTesting(
-      ContentSettingsType content_type);
+      ImageType image_type);
+
+  // Factory method.
+  static std::unique_ptr<ContentSettingImageModel> CreateForContentType(
+      ImageType image_type);
 
   // Notifies this model that its setting might have changed and it may need to
   // update its visibility, icon and tooltip.
@@ -42,10 +72,10 @@ class ContentSettingImageModel {
 
   // Creates the model for the bubble that will be attached to this image.
   // The bubble model is owned by the caller.
-  virtual ContentSettingBubbleModel* CreateBubbleModel(
+  ContentSettingBubbleModel* CreateBubbleModel(
       ContentSettingBubbleModel::Delegate* delegate,
       content::WebContents* web_contents,
-      Profile* profile) = 0;
+      Profile* profile);
 
   // Whether the animation should be run for the given |web_contents|.
   virtual bool ShouldRunAnimation(content::WebContents* web_contents) = 0;
@@ -69,8 +99,16 @@ class ContentSettingImageModel {
   int explanatory_string_id() const { return explanatory_string_id_; }
   const base::string16& get_tooltip() const { return tooltip_; }
 
+  ImageType image_type() const { return image_type_; }
+
  protected:
-  ContentSettingImageModel();
+  explicit ContentSettingImageModel(ImageType type);
+
+  // Internal implementation by subclasses of bubble model creation.
+  virtual ContentSettingBubbleModel* CreateBubbleModelImpl(
+      ContentSettingBubbleModel::Delegate* delegate,
+      content::WebContents* web_contents,
+      Profile* profile) = 0;
 
   void set_icon(const gfx::VectorIcon& icon, const gfx::VectorIcon& badge) {
     icon_ = &icon;
@@ -90,6 +128,7 @@ class ContentSettingImageModel {
   const gfx::VectorIcon* icon_badge_;
   int explanatory_string_id_;
   base::string16 tooltip_;
+  const ImageType image_type_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingImageModel);
 };
@@ -97,21 +136,17 @@ class ContentSettingImageModel {
 // A subclass for an image model tied to a single content type.
 class ContentSettingSimpleImageModel : public ContentSettingImageModel {
  public:
-  explicit ContentSettingSimpleImageModel(ContentSettingsType content_type);
+  ContentSettingSimpleImageModel(ImageType type,
+                                 ContentSettingsType content_type);
 
   // ContentSettingImageModel implementation.
-  ContentSettingBubbleModel* CreateBubbleModel(
+  ContentSettingBubbleModel* CreateBubbleModelImpl(
       ContentSettingBubbleModel::Delegate* delegate,
       content::WebContents* web_contents,
       Profile* profile) override;
   bool ShouldRunAnimation(content::WebContents* web_contents) override;
   void SetAnimationHasRun(content::WebContents* web_contents) override;
 
-  // Factory method. Used only for testing.
-  static std::unique_ptr<ContentSettingImageModel>
-  CreateForContentTypeForTesting(ContentSettingsType content_type);
-
- protected:
   ContentSettingsType content_type() { return content_type_; }
 
  private:
@@ -128,7 +163,7 @@ class ContentSettingSubresourceFilterImageModel
 
   void UpdateFromWebContents(content::WebContents* web_contents) override;
 
-  ContentSettingBubbleModel* CreateBubbleModel(
+  ContentSettingBubbleModel* CreateBubbleModelImpl(
       ContentSettingBubbleModel::Delegate* delegate,
       content::WebContents* web_contents,
       Profile* profile) override;
@@ -138,6 +173,24 @@ class ContentSettingSubresourceFilterImageModel
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContentSettingSubresourceFilterImageModel);
+};
+
+class ContentSettingFramebustBlockImageModel : public ContentSettingImageModel {
+ public:
+  ContentSettingFramebustBlockImageModel();
+
+  void UpdateFromWebContents(content::WebContents* web_contents) override;
+
+  ContentSettingBubbleModel* CreateBubbleModelImpl(
+      ContentSettingBubbleModel::Delegate* delegate,
+      content::WebContents* web_contents,
+      Profile* profile) override;
+
+  bool ShouldRunAnimation(content::WebContents* web_contents) override;
+  void SetAnimationHasRun(content::WebContents* web_contents) override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContentSettingFramebustBlockImageModel);
 };
 
 #endif  // CHROME_BROWSER_UI_CONTENT_SETTINGS_CONTENT_SETTING_IMAGE_MODEL_H_

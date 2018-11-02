@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> vienumi</translation>
 <translation id="1491277525950327607">Veiciet dubultskārienu, lai pārslēgtu iestatījumu.</translation>
 <translation id="152234381334907219">Jaunākie saglabātie</translation>
+<translation id="1532451416480227577">Rādīt adreses un kredītkartes no pakalpojuma Google Pay</translation>
 <translation id="1540800554400757039">1. adrese</translation>
 <translation id="1545749641540134597">Skenējiet QR kodu</translation>
 <translation id="1580783302095112590">E-pasts nosūtīts.</translation>
@@ -96,6 +97,7 @@ Piemēram, dažas vietnes var atbildēt uz šo pieprasījumu un rādīt reklāma
 <translation id="2718352093833049315">Tikai Wi-Fi</translation>
 <translation id="2747003861858887689">Iepriekšējais lauks</translation>
 <translation id="2780046210906776326">Nav e-pasta kontu</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Aizvērt ciļņu pārslēdzēju</translation>
 <translation id="283291358677939992">Atrast lapā...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@ Piemēram, dažas vietnes var atbildēt uz šo pieprasījumu un rādīt reklāma
 <translation id="4378154925671717803">Tālrunis</translation>
 <translation id="441868831736628555">Konfidencialitātes paziņojums</translation>
 <translation id="4460091562821778167">Vaicāt man, kuru lietotni izmantot katru reizi</translation>
+<translation id="4496373720959965247">Pievienojiet cilnes un pārslēdzieties starp lapām</translation>
 <translation id="4508750114462689118">Aizvērt pierakstīšanās piedāvājumu</translation>
 <translation id="4526249700380860531">Skatīt un pārvaldīt saglabātās paroles vietnē <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Mēģiniet pierakstīties vēlreiz.</translation>
@@ -217,12 +220,12 @@ Jūsu dati ir šifrēti, izmantojot jūsu sinhronizācijas ieejas frāzi. Lai s�
 <translation id="5300589172476337783">Rādīt</translation>
 <translation id="5317780077021120954">Saglabāt</translation>
 <translation id="5327248766486351172">Nosaukums</translation>
+<translation id="533632423981297619">Jūsu paroles būs redzamas ikvienam, kas var skatīt eksportēto failu. Nekopīgojiet šo failu ne ar vienu.</translation>
 <translation id="5388358297987318779">Atvērt attēlu</translation>
 <translation id="5409365236829784218">Nav instalēta neviena lietotne, ar kuru atvērt šo failu.</translation>
 <translation id="5433691172869980887">Lietotājvārds ir nokopēts.</translation>
 <translation id="54401264925851789">Lapas drošības informācija</translation>
 <translation id="5525269841082836315">Ieejas frāz. izveide</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Izmantojot funkciju Handoff, varat pārlūkot vietni šajā ierīcē un pēc tam turpināt pārlūkošanu Mac datorā. Atvērtā vietne būs redzama Mac datora ikonjoslā Dock.
 
 Funkcija Handoff ir jāiespējo arī iestatījumu sadaļā General (Vispārīgi), un ierīcēm ir jāizmanto viens iCloud konts.</translation>
@@ -247,7 +250,6 @@ Funkcija Handoff ir jāiespējo arī iestatījumu sadaļā General (Vispārīgi)
 <translation id="5911030830365207728">Google tulkotājs</translation>
 <translation id="5916664084637901428">Iesl.</translation>
 <translation id="5948291296578561264">Šādi varat saglabāt fotoattēlus savā fotoattēlu bibliotēkā.</translation>
-<translation id="5953603475187800576">Rādīt adreses un kredītkartes no pakalpojuma Google Payments</translation>
 <translation id="5955891643922670672">Tiek skatīta bezsaistes versija</translation>
 <translation id="5964480694698977962">Izveidot jaunu inkognito cilni.</translation>
 <translation id="5965679971710331625">Jūs esat pierakstījies</translation>
@@ -337,7 +339,6 @@ Jūsu dati tika šifrēti, izmantojot jūsu sinhronizācijas ieejas frāzi šād
 <translation id="7514365320538308">Lejupielādēt</translation>
 <translation id="7537586195939242955">Diemžēl pašlaik jūsu atļauju nevar instalēt lietotnē Passbook.</translation>
 <translation id="7561196759112975576">Vienmēr</translation>
-<translation id="7588950540487816470">Fiziskais tīmeklis</translation>
 <translation id="7603852183842204213">Bloķ. uznir. logi (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sinhronizācija nedarbojas</translation>
 <translation id="7638584964844754484">Nepareiza ieejas frāze</translation>
@@ -350,6 +351,7 @@ Jūsu dati tika šifrēti, izmantojot jūsu sinhronizācijas ieejas frāzi šād
 <translation id="780301667611848630">Nē, paldies</translation>
 <translation id="7859704718976024901">Pārlūkošanas vēsture</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Eksportēt paroles...</translation>
 <translation id="7947953824732555851">Pieņemt un pierakst.</translation>
 <translation id="7961015016161918242">Nekad</translation>
 <translation id="7971521879845308059">Bl. uzn. logus</translation>
@@ -407,7 +409,6 @@ Jūsu dati tika šifrēti, izmantojot jūsu sinhronizācijas ieejas frāzi šād
 <translation id="9083392325882095631">1 vienums</translation>
 <translation id="9100610230175265781">Jāievada ieejas frāze.</translation>
 <translation id="9148126808321036104">Pierakstieties vēlreiz</translation>
-<translation id="91549621916703028">Izveidojiet vairākas cilnes visiem saviem uzdevumiem.</translation>
 <translation id="9157836665414082580">Nerādīt dialoglodziņus</translation>
 <translation id="9188680907066685419">Izrakstīšanās no pārvaldīta konta</translation>
 <translation id="9203116392574189331">Handoff</translation>

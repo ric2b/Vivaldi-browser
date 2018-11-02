@@ -25,8 +25,13 @@ class UrlCheckerDelegate;
 
 // BrowserURLLoaderThrottle is used in the browser process to query
 // SafeBrowsing to determine whether a URL and also its redirect URLs are safe
-// to load. It defers response processing until all URL checks are completed;
-// cancels the load if any URLs turn out to be bad.
+// to load.
+//
+// This throttle never defers starting the URL request or following redirects,
+// no matter on mobile or desktop. If any of the checks for the original URL
+// and redirect chain are not complete by the time the response headers are
+// available, the request is deferred until all the checks are done. It cancels
+// the load if any URLs turn out to be bad.
 class BrowserURLLoaderThrottle : public content::URLLoaderThrottle {
  public:
   static std::unique_ptr<BrowserURLLoaderThrottle> MaybeCreate(
@@ -36,12 +41,13 @@ class BrowserURLLoaderThrottle : public content::URLLoaderThrottle {
   ~BrowserURLLoaderThrottle() override;
 
   // content::URLLoaderThrottle implementation.
-  void WillStartRequest(const content::ResourceRequest& request,
+  void WillStartRequest(network::ResourceRequest* request,
                         bool* defer) override;
   void WillRedirectRequest(const net::RedirectInfo& redirect_info,
+                           const network::ResourceResponseHead& response_head,
                            bool* defer) override;
   void WillProcessResponse(const GURL& response_url,
-                           const content::ResourceResponseHead& response_head,
+                           const network::ResourceResponseHead& response_head,
                            bool* defer) override;
 
  private:

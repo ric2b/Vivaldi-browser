@@ -150,11 +150,13 @@ bool AAC::Parse(const std::vector<uint8_t>& data, MediaLog* media_log) {
   return true;
 }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
 int AAC::GetSamplesPerSecond() const {
   if (extension_frequency_ > 0)
     return extension_frequency_;
   return frequency_;
 }
+#endif
 
 int AAC::GetOutputSamplesPerSecond(bool sbr_in_mimetype) const {
   if (extension_frequency_ > 0)

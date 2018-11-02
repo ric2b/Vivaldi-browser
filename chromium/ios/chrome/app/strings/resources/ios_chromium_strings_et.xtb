@@ -3,6 +3,7 @@
 <translationbundle lang="et">
 <translation id="102360288709523007">Aidake muuta Chromium paremaks, saates Google'ile kasutusstatistikat ja krahhiaruandeid.</translation>
 <translation id="1185134272377778587">Teave Chromiumi kohta</translation>
+<translation id="1289966288285062467">Chromiumi privaatsusteatis</translation>
 <translation id="1472013873724362412">Teie konto ei tööta Chromiumis. Võtke ühendust domeeni administraatoriga või kasutage sisselogimiseks tavalist Google'i kontot.</translation>
 <translation id="1736662517232558588">Chromiumi andmed kustutati</translation>
 <translation id="1838412507805038478">Chromium kinnitas, et veebisaidi sertifikaadi väljastas <ph name="ISSUER" />.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Kas logida Chromiumist välja?</translation>
 <translation id="6424492062988593837">Chromium muutus just veelgi paremaks! Saadaval on uus versioon.</translation>
 <translation id="6604711459180487467">Täiustage Chromiumis oma kasutuskogemust asukohateabe abil.</translation>
+<translation id="6626296268883197964">Seda rakendust kasutades nõustute Chromiumi <ph name="BEGIN_LINK_TOS" />teenusetingimuste<ph name="END_LINK_TOS" /> ja <ph name="BEGIN_LINK_PRIVACY" />privaatsusteatisega<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="7099326575020694068">Chromium ei saa poolitatud vaate režiimis kaamerat kasutada</translation>
-<translation id="7144758435978427212">Avastage lähedalasuvate objektide saadetud veebilehti. Kui Bluetooth on sisse lülitatud, kogub Chromium teie ümbruses olevate objektidega seotud veebilehed kokku ja saadab need anonüümselt Google'ile, et leida teie jaoks kõige kasulikumad lehed. <ph name="BEGIN_LINK" />Lisateave<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium säästab aega, tuues teie kontod veebi. Kontosid saate lisada või eemaldada menüüs Seaded.</translation>
 <translation id="7269362888766543920">Mõned pistikprogrammid põhjustavad Chromiumi kokkujooksmise. Proovige need desinstallida.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Kasutage Chromiumit kõikjal</translation>
 <translation id="7674213385180944843">Avage menüü Seaded &gt; Privaatsus &gt; Kaamera &gt; Chromium ja lülitage kaamera sisse.</translation>
 <translation id="786327964234957808">Vahetate sünkroonitavad kontod aadressilt <ph name="USER_EMAIL1" /> aadressile <ph name="USER_EMAIL2" />. Teie olemasolevaid Chromiumi andmeid haldab domeen <ph name="DOMAIN" />. Teie andmed kustutatakse sellest seadmest, kuid need jäävad alles kontole <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Seda rakendust kasutades nõustute Chromiumi <ph name="BEGIN_LINK" />teenusetingimustega<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Nõuanne: <ph name="BEGIN_LINK" />lisage Chromium dokki<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Täiustage Chromiumis oma Google'i teenuste kasutuskogemust asukohateabe abil.</translation>
 <translation id="8353224596138547809">Kas soovite, et Chromium salvestaks parooli, mida selle saidi jaoks kasutate?</translation>

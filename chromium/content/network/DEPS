@@ -1,5 +1,6 @@
 # Tight rules since this will move to services/network. See README.
 include_rules = [
+  "+components/cookie_config",
   "+components/network_session_configurator",
   # Prefs are used to create an independent file with a persisted key:value
   # store for networking-related data (Like which servers support QUIC), rather
@@ -9,17 +10,11 @@ include_rules = [
   "+content/common/content_export.h",
   "+content/common/loader_util.h",
   "+content/network",
-  "+content/public/common/appcache_info.h",
   "+content/public/common/content_client.h",
+  "+content/public/common/content_features.h",
   "+content/public/common/content_switches.h",
   "+content/public/common/network_service.mojom.h",
-  "+content/public/common/referrer.h",
-  "+content/public/common/resource_request.h",
-  "+content/public/common/resource_request_body.h",
-  "+content/public/common/resource_response.h",
   "+content/public/common/url_constants.h",
-  "+content/public/common/url_loader.mojom.h",
-  "+content/public/common/url_loader_factory.mojom.h",
   "+content/public/network",
   "+services/network",
   "+services/service_manager/public",

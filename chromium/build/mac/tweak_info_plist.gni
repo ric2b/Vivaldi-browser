@@ -74,6 +74,9 @@ template("tweak_info_plist") {
     outputs = [
       _output_name,
     ]
+    if (!defined(args)) {
+      args = []
+    }
     args += [
       "--plist",
       rebase_path(_source_name, root_build_dir),

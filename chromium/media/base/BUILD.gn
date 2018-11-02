@@ -214,7 +214,6 @@ source_set("base") {
     "sample_format.h",
     "sample_rates.cc",
     "sample_rates.h",
-    "scoped_callback_runner.h",
     "seekable_buffer.cc",
     "seekable_buffer.h",
     "serial_runner.cc",
@@ -299,7 +298,6 @@ source_set("base") {
     # TODO(crbug.com/167187): Fix size_t to int truncations.
     "//build/config/compiler:no_size_t_to_int_warning",
 
-    "//media:media_dependent_config",
     "//media:subcomponent_config",
   ]
 
@@ -474,7 +472,6 @@ source_set("unit_tests") {
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
     "renderer_factory_selector_unittest.cc",
-    "scoped_callback_runner_unittest.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
     "silent_sink_suspender_unittest.cc",

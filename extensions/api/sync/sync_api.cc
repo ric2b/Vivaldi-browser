@@ -83,14 +83,14 @@ void SyncEventRouter::OnEncryptionPasswordRequested() {
                 vivaldi::sync::OnEncryptionPasswordRequested::Create());
 }
 
-void SyncEventRouter::OnLoginDone() {
-  DispatchEvent(vivaldi::sync::OnLoginDone::kEventName,
-                vivaldi::sync::OnLoginDone::Create());
+void SyncEventRouter::OnEngineStarted() {
+  DispatchEvent(vivaldi::sync::OnEngineStarted::kEventName,
+                vivaldi::sync::OnEngineStarted::Create());
 }
 
-void SyncEventRouter::OnSyncEngineInitFailed() {
-  DispatchEvent(vivaldi::sync::OnSyncEngineInitFailed::kEventName,
-                vivaldi::sync::OnSyncEngineInitFailed::Create());
+void SyncEventRouter::OnEngineInitFailed() {
+  DispatchEvent(vivaldi::sync::OnEngineInitFailed::kEventName,
+                vivaldi::sync::OnEngineInitFailed::Create());
 }
 
 void SyncEventRouter::OnBeginSyncing() {
@@ -103,9 +103,9 @@ void SyncEventRouter::OnEndSyncing() {
                 vivaldi::sync::OnEndSyncing::Create());
 }
 
-void SyncEventRouter::OnLogoutDone() {
-  DispatchEvent(vivaldi::sync::OnLogoutDone::kEventName,
-                vivaldi::sync::OnLogoutDone::Create());
+void SyncEventRouter::OnEngineStopped() {
+  DispatchEvent(vivaldi::sync::OnEngineStopped::kEventName,
+                vivaldi::sync::OnEngineStopped::Create());
 }
 
 void SyncEventRouter::OnDeletingSyncManager() {
@@ -115,19 +115,21 @@ void SyncEventRouter::OnDeletingSyncManager() {
 
 SyncAPI::SyncAPI(content::BrowserContext* context) : browser_context_(context) {
   EventRouter* event_router = EventRouter::Get(browser_context_);
-  event_router->RegisterObserver(this, vivaldi::sync::OnLogoutDone::kEventName);
-  event_router->RegisterObserver(this, vivaldi::sync::OnLoginDone::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::sync::OnEngineStarted::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::sync::OnEngineStopped::kEventName);
   event_router->RegisterObserver(this,
                                  vivaldi::sync::OnBeginSyncing::kEventName);
   event_router->RegisterObserver(this, vivaldi::sync::OnEndSyncing::kEventName);
-  event_router->RegisterObserver(
-      this, vivaldi::sync::OnSyncEngineInitFailed::kEventName);
+  event_router->RegisterObserver(this,
+                                 vivaldi::sync::OnEngineInitFailed::kEventName);
   event_router->RegisterObserver(
       this, vivaldi::sync::OnAccessTokenRequested::kEventName);
 }
 
 static base::LazyInstance<
-    BrowserContextKeyedAPIFactory<SyncAPI> >::DestructorAtExit g_factory =
+    BrowserContextKeyedAPIFactory<SyncAPI>>::DestructorAtExit g_factory =
     LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -148,9 +150,9 @@ void SyncAPI::Shutdown() {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
 }
 
-bool SyncLoginCompleteFunction::RunAsync() {
-  std::unique_ptr<vivaldi::sync::LoginComplete::Params> params(
-      vivaldi::sync::LoginComplete::Params::Create(*args_));
+bool SyncStartFunction::RunAsync() {
+  std::unique_ptr<vivaldi::sync::Start::Params> params(
+      vivaldi::sync::Start::Params::Create(*args_));
 
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
@@ -158,9 +160,8 @@ bool SyncLoginCompleteFunction::RunAsync() {
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
   DCHECK(sync_manager);
 
-  sync_manager->SetToken(true, params->login_details.username,
-                         params->login_details.password, params->token.token,
-                         params->token.expire, params->token.account_id);
+  sync_manager->SetToken(true, params->token.account_id, params->token.token,
+                         params->token.expire);
 
   SendResponse(true);
   return true;
@@ -179,9 +180,8 @@ bool SyncRefreshTokenFunction::RunAsync() {
     return false;
   }
 
-  sync_manager->SetToken(false, std::string(), std::string(),
-                         params->token.token, params->token.expire,
-                         params->token.account_id);
+  sync_manager->SetToken(false, params->token.account_id, params->token.token,
+                         params->token.expire);
 
   SendResponse(true);
   return true;
@@ -308,7 +308,7 @@ bool SyncGetTypesFunction::RunAsync() {
 bool SyncGetStatusFunction::RunAsync() {
   VivaldiSyncManager* sync_manager =
       VivaldiSyncManagerFactory::GetForProfileVivaldi(GetProfile());
-  if (!sync_manager) {
+  if (!sync_manager || !sync_manager->IsEngineInitialized()) {
     error_ = "Sync manager is unavailable";
     return false;
   }
@@ -319,8 +319,7 @@ bool SyncGetStatusFunction::RunAsync() {
   extensions::vivaldi::sync::SyncStatusInfo status_info;
   status_info.is_encrypting_everything =
       sync_manager->IsEncryptEverythingEnabled();
-  status_info.last_sync_time = base::UTF16ToUTF8(
-      base::TimeFormatShortDateAndTime(cycle_snapshot.sync_start_time()));
+  status_info.last_sync_time = cycle_snapshot.sync_start_time().ToJsTime();
   status_info.last_commit_status = SyncerErrorToOperationResult(
       cycle_snapshot.model_neutral_state().commit_result);
   status_info.last_download_updates_status = SyncerErrorToOperationResult(

@@ -6,16 +6,16 @@
 #define CHROME_BROWSER_CHROMEOS_ACCESSIBILITY_ACCESSIBILITY_MANAGER_H_
 
 #include <set>
+#include <string>
 
 #include "ash/public/cpp/accessibility_types.h"
-#include "ash/shell_observer.h"
+#include "ash/public/interfaces/accessibility_controller.mojom.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
 #include "chrome/browser/extensions/api/braille_display_private/braille_controller.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -27,6 +27,8 @@
 #include "extensions/browser/extension_system.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 
+class Browser;
+class DictationChromeos;
 class Profile;
 
 namespace gfx {
@@ -37,7 +39,6 @@ namespace chromeos {
 
 class AccessibilityExtensionLoader;
 class AccessibilityHighlightManager;
-class SelectToSpeakEventHandler;
 class SwitchAccessEventHandler;
 
 enum AccessibilityNotificationType {
@@ -79,10 +80,12 @@ typedef AccessibilityStatusCallbackList::Subscription
 class ChromeVoxPanelWidgetObserver;
 
 enum class PlaySoundOption {
-  ALWAYS = 0,               // The sound is always played.
-  SPOKEN_FEEDBACK_ENABLED,  // The sound is played only if spoken feedback is
-                            // enabled, or --ash-enable-system-sounds flag is
-                            // used.
+  // The sound is always played.
+  ALWAYS = 0,
+
+  // The sound is played only if spoken feedback is enabled, or
+  // --ash-enable-system-sounds flag is used.
+  ONLY_IF_SPOKEN_FEEDBACK_ENABLED,
 };
 
 // AccessibilityManager changes the statuses of accessibility features
@@ -94,7 +97,6 @@ class AccessibilityManager
       public extensions::ExtensionRegistryObserver,
       public user_manager::UserManager::UserSessionStateObserver,
       public session_manager::SessionManagerObserver,
-      public ash::ShellObserver,
       public input_method::InputMethodManager::Observer {
  public:
   // Creates an instance of AccessibilityManager, this should be called once,
@@ -104,6 +106,9 @@ class AccessibilityManager
   static void Shutdown();
   // Returns the existing instance. If there is no instance, returns NULL.
   static AccessibilityManager* Get();
+
+  // Show the accessibility help as a tab in the browser.
+  static void ShowAccessibilityHelp(Browser* browser);
 
   // On a user's first login into a device, any a11y features enabled/disabled
   // by the user on the login screen are enabled/disabled in the user's profile.
@@ -147,9 +152,6 @@ class AccessibilityManager
   // Returns true if spoken feedback is enabled, or false if not.
   bool IsSpokenFeedbackEnabled() const;
 
-  // Toggles whether Chrome OS spoken feedback is on or off.
-  void ToggleSpokenFeedback(ash::AccessibilityNotificationVisibility notify);
-
   // Enables or disables the high contrast mode for Chrome.
   void EnableHighContrast(bool enabled);
 
@@ -177,6 +179,9 @@ class AccessibilityManager
   void EnableMonoAudio(bool enabled);
   // Returns true if mono audio output is enabled, otherwise false.
   bool IsMonoAudioEnabled() const;
+
+  // Starts or stops darkening the screen.
+  void SetDarkenScreen(bool darken);
 
   // Invoked to enable or disable caret highlighting.
   void SetCaretHighlightEnabled(bool enabled);
@@ -221,10 +226,6 @@ class AccessibilityManager
   // user_manager::UserManager::UserSessionStateObserver overrides:
   void ActiveUserChanged(const user_manager::User* active_user) override;
 
-  // ShellObserver overrides:
-  void OnFullscreenStateChanged(bool is_fullscreen,
-                                aura::Window* root_window) override;
-
   void SetProfileForTest(Profile* profile);
 
   static void SetBrailleControllerForTest(
@@ -264,13 +265,14 @@ class AccessibilityManager
   void OnViewFocusedInArc(const gfx::Rect& bounds_in_screen);
 
   // Plays an earcon. Earcons are brief and distinctive sounds that indicate
-  // when their mapped event has occurred. The sound key enums can be found in
+  // the their mapped event has occurred. The |sound_key| enums can be found in
   // chromeos/audio/chromeos_sounds.h.
   bool PlayEarcon(int sound_key, PlaySoundOption option);
 
   // Forward an accessibility gesture from the touch exploration controller
   // to ChromeVox.
-  void HandleAccessibilityGesture(ui::AXGesture gesture);
+  // TODO(warx): |gesture| comes from ui::ToString() on a ui::AXGesture.
+  void HandleAccessibilityGesture(const std::string& gesture);
 
   // Update the touch exploration controller so that synthesized
   // touch events are anchored at this point.
@@ -299,6 +301,9 @@ class AccessibilityManager
   // Set the keys to be captured by Switch Access.
   void SetSwitchAccessKeys(const std::set<int>& key_codes);
 
+  // Starts or stops dictation (type what you speak).
+  void ToggleDictation();
+
  protected:
   AccessibilityManager();
   ~AccessibilityManager() override;
@@ -312,9 +317,9 @@ class AccessibilityManager
   void UpdateAlwaysShowMenuFromPref();
   void OnLargeCursorChanged();
   void UpdateStickyKeysFromPref();
-  void UpdateSpokenFeedbackFromPref();
+  void OnSpokenFeedbackChanged();
   void OnHighContrastChanged();
-  void UpdateAutoclickFromPref();
+  void OnAutoclickChanged();
   void UpdateAutoclickDelayFromPref();
   void UpdateVirtualKeyboardFromPref();
   void OnMonoAudioChanged();
@@ -389,7 +394,6 @@ class AccessibilityManager
 
   bool sticky_keys_enabled_;
   bool spoken_feedback_enabled_;
-  bool autoclick_enabled_;
   base::TimeDelta autoclick_delay_ms_;
   bool virtual_keyboard_enabled_;
   bool caret_highlight_enabled_;
@@ -429,13 +433,17 @@ class AccessibilityManager
 
   std::unique_ptr<AccessibilityExtensionLoader> select_to_speak_loader_;
 
-  std::unique_ptr<chromeos::SelectToSpeakEventHandler>
-      select_to_speak_event_handler_;
-
   std::unique_ptr<AccessibilityExtensionLoader> switch_access_loader_;
 
   std::unique_ptr<chromeos::SwitchAccessEventHandler>
       switch_access_event_handler_;
+
+  // Ash's mojom::AccessibilityController used to SetDarkenScreen.
+  ash::mojom::AccessibilityControllerPtr accessibility_controller_;
+
+  bool app_terminating_ = false;
+
+  std::unique_ptr<DictationChromeos> dictation_;
 
   base::WeakPtrFactory<AccessibilityManager> weak_ptr_factory_;
 

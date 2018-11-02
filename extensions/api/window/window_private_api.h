@@ -6,6 +6,9 @@
 #include "base/lazy_instance.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/browser_list_observer.h"
+#include "components/app_modal/javascript_app_modal_dialog.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/schema/window_private.h"
 
@@ -15,7 +18,9 @@ namespace extensions {
 This API will listen window events and do the appropriate actions
 based on that.
 */
-class VivaldiWindowsAPI : public chrome::BrowserListObserver,
+class VivaldiWindowsAPI : public BrowserListObserver,
+                          public content::NotificationObserver,
+                          public app_modal::AppModalDialogObserver,
                           public BrowserContextKeyedAPI {
  public:
   explicit VivaldiWindowsAPI(content::BrowserContext* context);
@@ -27,6 +32,14 @@ class VivaldiWindowsAPI : public chrome::BrowserListObserver,
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>* GetFactoryInstance();
 
+  // content::NotificationObserver implementation.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
+  // AppModalDialogObserver implementation.
+  void Notify(app_modal::JavaScriptAppModalDialog* dialog) override;
+
  protected:
   // chrome::BrowserListObserver implementation
   void OnBrowserRemoved(Browser* browser) override;
@@ -35,6 +48,8 @@ class VivaldiWindowsAPI : public chrome::BrowserListObserver,
   friend class BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>;
 
   content::BrowserContext* browser_context_;
+
+  content::NotificationRegistrar registrar_;
 
   // BrowserContextKeyedAPI implementation.
   static const char* service_name() { return "WindowsAPI"; }

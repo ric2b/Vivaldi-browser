@@ -38,7 +38,7 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
       CompositorFilterOperations filter,
       float opacity,
       SkBlendMode blend_mode,
-      CompositingReasons direct_compositing_reasons = kCompositingReasonNone,
+      CompositingReasons direct_compositing_reasons = CompositingReason::kNone,
       const CompositorElementId& compositor_element_id = CompositorElementId(),
       const FloatPoint& paint_offset = FloatPoint()) {
     return base::AdoptRef(new EffectPaintPropertyNode(
@@ -56,7 +56,7 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
       CompositorFilterOperations filter,
       float opacity,
       SkBlendMode blend_mode,
-      CompositingReasons direct_compositing_reasons = kCompositingReasonNone,
+      CompositingReasons direct_compositing_reasons = CompositingReason::kNone,
       const CompositorElementId& compositor_element_id = CompositorElementId(),
       const FloatPoint& paint_offset = FloatPoint()) {
     bool parent_changed = PaintPropertyNode::Update(std::move(parent));
@@ -119,8 +119,8 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
     return Parent() == o.Parent() &&
            local_transform_space_ == o.local_transform_space_ &&
            output_clip_ == o.output_clip_ && color_filter_ == o.color_filter_ &&
-           filter_.EqualsIgnoringReferenceFilters(o.filter_) &&
-           opacity_ == o.opacity_ && blend_mode_ == o.blend_mode_ &&
+           filter_ == o.filter_ && opacity_ == o.opacity_ &&
+           blend_mode_ == o.blend_mode_ &&
            direct_compositing_reasons_ == o.direct_compositing_reasons_ &&
            compositor_element_id_ == o.compositor_element_id_ &&
            paint_offset_ == o.paint_offset_;
@@ -132,11 +132,12 @@ class PLATFORM_EXPORT EffectPaintPropertyNode
   std::unique_ptr<JSONObject> ToJSON() const;
 
   bool HasDirectCompositingReasons() const {
-    return direct_compositing_reasons_ != kCompositingReasonNone;
+    return direct_compositing_reasons_ != CompositingReason::kNone;
   }
 
   bool RequiresCompositingForAnimation() const {
-    return direct_compositing_reasons_ & kCompositingReasonActiveAnimation;
+    return direct_compositing_reasons_ &
+           CompositingReason::kComboActiveAnimation;
   }
 
   const CompositorElementId& GetCompositorElementId() const {

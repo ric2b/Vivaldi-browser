@@ -46,7 +46,6 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLSourceElement.h"
-#include "core/html/HTMLTrackElement.h"
 #include "core/html/TimeRanges.h"
 #include "core/html/media/AutoplayPolicy.h"
 #include "core/html/media/HTMLMediaElementControlsList.h"
@@ -58,6 +57,7 @@
 #include "core/html/track/AudioTrackList.h"
 #include "core/html/track/AutomaticTrackSelection.h"
 #include "core/html/track/CueTimeline.h"
+#include "core/html/track/HTMLTrackElement.h"
 #include "core/html/track/InbandTextTrack.h"
 #include "core/html/track/TextTrackContainer.h"
 #include "core/html/track/TextTrackList.h"
@@ -67,7 +67,7 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/IntersectionGeometry.h"
 #include "core/layout/LayoutMedia.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
@@ -650,11 +650,27 @@ void HTMLMediaElement::ParseAttribute(
   }
 }
 
-void HTMLMediaElement::FinishParsingChildren() {
-  HTMLElement::FinishParsingChildren();
+void HTMLMediaElement::ParserDidSetAttributes() {
+  HTMLElement::ParserDidSetAttributes();
 
   if (FastHasAttribute(mutedAttr))
     muted_ = true;
+}
+
+// This method is being used as a way to know that cloneNode finished cloning
+// attribute as there is no callback notifying about the end of a cloning
+// operation. Indeed, it is required per spec to set the muted state based on
+// the content attribute when the object is created.
+void HTMLMediaElement::CopyNonAttributePropertiesFromElement(
+    const Element& other) {
+  HTMLElement::CopyNonAttributePropertiesFromElement(other);
+
+  if (FastHasAttribute(mutedAttr))
+    muted_ = true;
+}
+
+void HTMLMediaElement::FinishParsingChildren() {
+  HTMLElement::FinishParsingChildren();
 
   if (Traversal<HTMLTrackElement>::FirstChild(*this))
     ScheduleTextTrackResourceLoad();
@@ -709,7 +725,7 @@ void HTMLMediaElement::AttachLayoutTree(AttachContext& context) {
     GetLayoutObject()->UpdateFromElement();
 }
 
-void HTMLMediaElement::DidRecalcStyle() {
+void HTMLMediaElement::DidRecalcStyle(StyleRecalcChange) {
   if (GetLayoutObject())
     GetLayoutObject()->UpdateFromElement();
 }
@@ -720,14 +736,14 @@ void HTMLMediaElement::ScheduleTextTrackResourceLoad() {
   pending_action_flags_ |= kLoadTextTrackResource;
 
   if (!load_timer_.IsActive())
-    load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    load_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void HTMLMediaElement::ScheduleNextSourceChild() {
   // Schedule the timer to try the next <source> element WITHOUT resetting state
   // ala invokeLoadAlgorithm.
   pending_action_flags_ |= kLoadMediaResource;
-  load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  load_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void HTMLMediaElement::ScheduleEvent(const AtomicString& event_name) {
@@ -739,7 +755,7 @@ void HTMLMediaElement::ScheduleEvent(Event* event) {
   BLINK_MEDIA_LOG << "ScheduleEvent(" << (void*)this << ")"
                   << " - scheduling '" << event->type() << "'";
 #endif
-  async_event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
+  async_event_queue_->EnqueueEvent(FROM_HERE, event);
 }
 
 void HTMLMediaElement::LoadTimerFired(TimerBase*) {
@@ -1014,9 +1030,19 @@ void HTMLMediaElement::SelectMediaResource() {
     // has neither a src attribute nor a source element child: set the
     // networkState to kNetworkEmpty, and abort these steps; the synchronous
     // section ends.
+    // TODO(mlamouri): Setting the network state to empty implies that there
+    // should be no |web_media_player_|. However, if a previous playback ended
+    // due to an error, we can get here and still have one. Decide on a plan
+    // to deal with this properly. https://crbug.com/789737
     load_state_ = kWaitingForSource;
     SetShouldDelayLoadEvent(false);
-    SetNetworkState(kNetworkEmpty);
+    if (!GetWebMediaPlayer() || (ready_state_ < kHaveFutureData &&
+                                 ready_state_maximum_ < kHaveFutureData)) {
+      SetNetworkState(kNetworkEmpty);
+    } else {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kHTMLMediaElementEmptyLoadWithFutureData);
+    }
     UpdateDisplayState();
 
     BLINK_MEDIA_LOG << "selectMediaResource(" << (void*)this
@@ -1289,7 +1315,7 @@ void HTMLMediaElement::DeferLoad() {
   ChangeNetworkStateFromLoadingToIdle();
   // 3. Queue a task to set the element's delaying-the-load-event
   // flag to false. This stops delaying the load event.
-  deferred_load_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  deferred_load_timer_.StartOneShot(TimeDelta(), FROM_HERE);
   // 4. Wait for the task to be run.
   deferred_load_state_ = kWaitingForStopDelayingLoadEventTask;
   // Continued in executeDeferredLoad().
@@ -1440,18 +1466,32 @@ bool HTMLMediaElement::IsSafeToLoadURL(const KURL& url,
   return true;
 }
 
-bool HTMLMediaElement::IsMediaDataCORSSameOrigin(SecurityOrigin* origin) const {
-  // hasSingleSecurityOrigin() tells us whether the origin in the src is
-  // the same as the actual request (i.e. after redirect).
-  // didPassCORSAccessCheck() means it was a successful CORS-enabled fetch
-  // (vs. non-CORS-enabled or failed).
-  // taintsCanvas() does checkAccess() on the URL plus allow data sources,
-  // to ensure that it is not a URL that requires CORS (basically same
-  // origin).
-  return HasSingleSecurityOrigin() &&
-         ((GetWebMediaPlayer() &&
-           GetWebMediaPlayer()->DidPassCORSAccessCheck()) ||
-          !origin->TaintsCanvas(currentSrc()));
+bool HTMLMediaElement::IsMediaDataCORSSameOrigin(
+    const SecurityOrigin* origin) const {
+  // If a service worker handled the request, we don't know if the origin in the
+  // src is the same as the actual response URL so can't rely on URL checks
+  // alone. So detect an opaque response via
+  // DidGetOpaqueResponseFromServiceWorker().
+  if (GetWebMediaPlayer() &&
+      GetWebMediaPlayer()->DidGetOpaqueResponseFromServiceWorker()) {
+    return false;
+  }
+
+  // At this point, either a service worker was not used, or it didn't provide
+  // an opaque response, so continue with the normal checks.
+
+  // HasSingleSecurityOrigin() tells us whether the origin in the src
+  // is the same as the actual request (i.e. after redirects).
+  if (!HasSingleSecurityOrigin())
+    return false;
+
+  // DidPassCORSAccessCheck() means it was a successful CORS-enabled fetch (vs.
+  // non-CORS-enabled or failed). TaintsCanvas() does CheckAccess() on the URL
+  // plus allows data sources, to ensure that it is not a URL that requires
+  // CORS (basically same origin).
+  return (GetWebMediaPlayer() &&
+          GetWebMediaPlayer()->DidPassCORSAccessCheck()) ||
+         !origin->TaintsCanvas(currentSrc());
 }
 
 bool HTMLMediaElement::IsInCrossOriginFrame() const {
@@ -1465,7 +1505,7 @@ void HTMLMediaElement::StartProgressEventTimer() {
   previous_progress_time_ = WTF::CurrentTime();
   // 350ms is not magic, it is in the spec!
   progress_event_timer_.StartRepeating(TimeDelta::FromMilliseconds(350),
-                                       BLINK_FROM_HERE);
+                                       FROM_HERE);
 }
 
 void HTMLMediaElement::WaitForSourceChange() {
@@ -1876,7 +1916,41 @@ void HTMLMediaElement::AddPlayedRange(double start, double end) {
 }
 
 bool HTMLMediaElement::SupportsSave() const {
-  return GetWebMediaPlayer() && GetWebMediaPlayer()->SupportsSave();
+  // Check if download is disabled per settings.
+  if (GetDocument().GetSettings() &&
+      GetDocument().GetSettings()->GetHideDownloadUI()) {
+    return false;
+  }
+
+  // URLs that lead to nowhere are ignored.
+  if (current_src_.IsNull() || current_src_.IsEmpty())
+    return false;
+
+  // If we have no source, we can't download.
+  if (network_state_ == kNetworkEmpty || network_state_ == kNetworkNoSource)
+    return false;
+
+  // It is not useful to offer a save feature on local files.
+  if (current_src_.IsLocalFile())
+    return false;
+
+  // MediaStream can't be downloaded.
+  if (IsMediaStreamURL(current_src_.GetString()))
+    return false;
+
+  // MediaSource can't be downloaded.
+  if (HasMediaSource())
+    return false;
+
+  // HLS stream shouldn't have a download button.
+  if (IsHLSURL(current_src_))
+    return false;
+
+  // Infinite streams don't have a clear end at which to finish the download.
+  if (duration() == std::numeric_limits<double>::infinity())
+    return false;
+
+  return true;
 }
 
 void HTMLMediaElement::SetIgnorePreloadNone() {
@@ -2536,7 +2610,7 @@ void HTMLMediaElement::StartPlaybackProgressTimer() {
 
   previous_progress_time_ = WTF::CurrentTime();
   playback_progress_timer_.StartRepeating(kMaxTimeupdateEventFrequency,
-                                          BLINK_FROM_HERE);
+                                          FROM_HERE);
 }
 
 void HTMLMediaElement::PlaybackProgressTimerFired(TimerBase*) {
@@ -2564,7 +2638,7 @@ void HTMLMediaElement::PlaybackProgressTimerFired(TimerBase*) {
 void HTMLMediaElement::ScheduleTimeupdateEvent(bool periodic_event) {
   // Per spec, consult current playback position to check for changing time.
   double media_time = CurrentPlaybackPosition();
-  TimeTicks now = TimeTicks::Now();
+  TimeTicks now = CurrentTimeTicks();
 
   bool have_not_recently_fired_timeupdate =
       (now - last_time_update_event_wall_time_) >= kMaxTimeupdateEventFrequency;
@@ -2605,7 +2679,7 @@ void HTMLMediaElement::AudioTrackChanged(AudioTrack* track) {
     media_source_->OnTrackChanged(track);
 
   if (!audio_tracks_timer_.IsActive())
-    audio_tracks_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    audio_tracks_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void HTMLMediaElement::AudioTracksTimerFired(TimerBase*) {
@@ -2751,7 +2825,7 @@ void HTMLMediaElement::ForgetResourceSpecificTracks() {
   // algorithm.  The order is explicitly specified as text, then audio, and
   // finally video.  Also 'removetrack' events should not be fired.
   if (text_tracks_) {
-    TrackDisplayUpdateScope scope(this->GetCueTimeline());
+    TrackDisplayUpdateScope scope(GetCueTimeline());
     text_tracks_->RemoveAllInbandTracks();
   }
 
@@ -3510,7 +3584,7 @@ void HTMLMediaElement::DidEnterFullscreen() {
   // Cache this in case the player is destroyed before leaving fullscreen.
   in_overlay_fullscreen_video_ = UsesOverlayFullscreenVideo();
   if (in_overlay_fullscreen_video_) {
-    GetDocument().GetLayoutViewItem().Compositor()->SetNeedsCompositingUpdate(
+    GetDocument().GetLayoutView()->Compositor()->SetNeedsCompositingUpdate(
         kCompositingUpdateRebuildTree);
   }
 }
@@ -3524,7 +3598,7 @@ void HTMLMediaElement::DidExitFullscreen() {
   }
 
   if (in_overlay_fullscreen_video_) {
-    GetDocument().GetLayoutViewItem().Compositor()->SetNeedsCompositingUpdate(
+    GetDocument().GetLayoutView()->Compositor()->SetNeedsCompositingUpdate(
         kCompositingUpdateRebuildTree);
   }
   in_overlay_fullscreen_video_ = false;
@@ -3582,7 +3656,7 @@ void HTMLMediaElement::AssertShadowRootChildren(ShadowRoot& shadow_root) {
 }
 
 TextTrackContainer& HTMLMediaElement::EnsureTextTrackContainer() {
-  ShadowRoot& shadow_root = EnsureUserAgentShadowRoot();
+  ShadowRoot& shadow_root = EnsureUserAgentShadowRootV1();
   AssertShadowRootChildren(shadow_root);
 
   Node* first_child = shadow_root.firstChild();
@@ -3711,7 +3785,7 @@ void HTMLMediaElement::EnsureMediaControls() {
   if (GetMediaControls())
     return;
 
-  ShadowRoot& shadow_root = EnsureUserAgentShadowRoot();
+  ShadowRoot& shadow_root = EnsureUserAgentShadowRootV1();
   media_controls_ =
       CoreInitializer::GetInstance().CreateMediaControls(*this, shadow_root);
 
@@ -3876,6 +3950,7 @@ void HTMLMediaElement::TraceWrappers(
   visitor->TraceWrappers(audio_tracks_);
   visitor->TraceWrappers(text_tracks_);
   HTMLElement::TraceWrappers(visitor);
+  Supplementable<HTMLMediaElement>::TraceWrappers(visitor);
 }
 
 void HTMLMediaElement::CreatePlaceholderTracksIfNecessary() {
@@ -3943,13 +4018,10 @@ void HTMLMediaElement::ScheduleResolvePlayPromises() {
   if (play_promise_resolve_task_handle_.IsActive())
     return;
 
-  play_promise_resolve_task_handle_ =
-      GetDocument()
-          .GetTaskRunner(TaskType::kMediaElementEvent)
-          ->PostCancellableTask(
-              BLINK_FROM_HERE,
-              WTF::Bind(&HTMLMediaElement::ResolveScheduledPlayPromises,
-                        WrapWeakPersistent(this)));
+  play_promise_resolve_task_handle_ = PostCancellableTask(
+      *GetDocument().GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
+      WTF::Bind(&HTMLMediaElement::ResolveScheduledPlayPromises,
+                WrapWeakPersistent(this)));
 }
 
 void HTMLMediaElement::ScheduleRejectPlayPromises(ExceptionCode code) {
@@ -3973,13 +4045,10 @@ void HTMLMediaElement::ScheduleRejectPlayPromises(ExceptionCode code) {
   // TODO(nhiroki): Bind this error code to a cancellable task instead of a
   // member field.
   play_promise_error_code_ = code;
-  play_promise_reject_task_handle_ =
-      GetDocument()
-          .GetTaskRunner(TaskType::kMediaElementEvent)
-          ->PostCancellableTask(
-              BLINK_FROM_HERE,
-              WTF::Bind(&HTMLMediaElement::RejectScheduledPlayPromises,
-                        WrapWeakPersistent(this)));
+  play_promise_reject_task_handle_ = PostCancellableTask(
+      *GetDocument().GetTaskRunner(TaskType::kMediaElementEvent), FROM_HERE,
+      WTF::Bind(&HTMLMediaElement::RejectScheduledPlayPromises,
+                WrapWeakPersistent(this)));
 }
 
 void HTMLMediaElement::ScheduleNotifyPlaying() {
@@ -4111,7 +4180,7 @@ void HTMLMediaElement::AudioSourceProviderImpl::Trace(blink::Visitor* visitor) {
 void HTMLMediaElement::ActivateViewportIntersectionMonitoring(bool activate) {
   if (activate && !check_viewport_intersection_timer_.IsActive()) {
     check_viewport_intersection_timer_.StartRepeating(
-        kCheckViewportIntersectionInterval, BLINK_FROM_HERE);
+        kCheckViewportIntersectionInterval, FROM_HERE);
   } else if (!activate) {
     check_viewport_intersection_timer_.Stop();
   }

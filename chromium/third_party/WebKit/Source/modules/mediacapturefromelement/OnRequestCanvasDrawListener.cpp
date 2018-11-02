@@ -12,7 +12,7 @@ OnRequestCanvasDrawListener::OnRequestCanvasDrawListener(
     std::unique_ptr<WebCanvasCaptureHandler> handler)
     : CanvasDrawListener(std::move(handler)) {}
 
-OnRequestCanvasDrawListener::~OnRequestCanvasDrawListener() {}
+OnRequestCanvasDrawListener::~OnRequestCanvasDrawListener() = default;
 
 // static
 OnRequestCanvasDrawListener* OnRequestCanvasDrawListener::Create(
@@ -22,7 +22,7 @@ OnRequestCanvasDrawListener* OnRequestCanvasDrawListener::Create(
 
 void OnRequestCanvasDrawListener::SendNewFrame(
     sk_sp<SkImage> image,
-    WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider) {
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider) {
   frame_capture_requested_ = false;
   CanvasDrawListener::SendNewFrame(image, context_provider);
 }

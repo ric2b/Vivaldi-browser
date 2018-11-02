@@ -246,13 +246,13 @@ void ContactService::OnContactChanged(const ContactRow& row) {
 
 base::CancelableTaskTracker::TaskId ContactService::CreateContact(
     ContactRow ev,
-    const CreateContactCallback& callback,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<CreateContactResult> query_results =
-      std::shared_ptr<CreateContactResult>(new CreateContactResult());
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -263,13 +263,13 @@ base::CancelableTaskTracker::TaskId ContactService::CreateContact(
 
 base::CancelableTaskTracker::TaskId ContactService::AddProperty(
     AddPropertyObject ev,
-    const AddPropertyCallback& callback,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<UpdateContactResult> query_results =
-      std::shared_ptr<UpdateContactResult>(new UpdateContactResult());
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -278,15 +278,46 @@ base::CancelableTaskTracker::TaskId ContactService::AddProperty(
       base::Bind(callback, query_results));
 }
 
-base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
-    UpdatePropertyObject update_property,
-    const UpdatePropertyCallback& callback,
+base::CancelableTaskTracker::TaskId ContactService::AddEmailAddress(
+    EmailAddressRow email,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<UpdateContactResult> query_results =
-      std::shared_ptr<UpdateContactResult>(new UpdateContactResult());
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&ContactBackend::AddEmailAddress, contact_backend_, email,
+                 query_results),
+      base::Bind(callback, query_results));
+}
+
+base::CancelableTaskTracker::TaskId ContactService::UpdateEmailAddress(
+    EmailAddressRow email,
+    const ContactCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&ContactBackend::UpdateEmailAddress, contact_backend_, email,
+                 query_results),
+      base::Bind(callback, query_results));
+}
+
+base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
+    UpdatePropertyObject update_property,
+    const ContactCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -297,13 +328,13 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateProperty(
 
 base::CancelableTaskTracker::TaskId ContactService::RemoveProperty(
     RemovePropertyObject ev,
-    const RemovePropertyCallback& callback,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<UpdateContactResult> query_results =
-      std::shared_ptr<UpdateContactResult>(new UpdateContactResult());
+  std::shared_ptr<ContactResults> query_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -327,17 +358,32 @@ base::CancelableTaskTracker::TaskId ContactService::GetAllContacts(
                                    base::Bind(callback, query_results));
 }
 
+base::CancelableTaskTracker::TaskId ContactService::GetAllEmailAddresses(
+  const QueryEmailAddressesCallback& callback,
+  base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr <contact::EmailAddressRows> query_results =
+    std::shared_ptr<EmailAddressRows>(new EmailAddressRows());
+
+  return tracker->PostTaskAndReply(backend_task_runner_.get(), FROM_HERE,
+    base::Bind(&ContactBackend::GetAllEmailAddresses,
+      contact_backend_, query_results),
+    base::Bind(callback, query_results));
+}
+
 base::CancelableTaskTracker::TaskId ContactService::UpdateContact(
     ContactID contact_id,
     Contact contact,
-    const UpdateContactCallback& callback,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<UpdateContactResult> update_results =
-      std::shared_ptr<UpdateContactResult>(new UpdateContactResult());
+  std::shared_ptr<ContactResults> update_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,
@@ -348,14 +394,14 @@ base::CancelableTaskTracker::TaskId ContactService::UpdateContact(
 
 base::CancelableTaskTracker::TaskId ContactService::DeleteContact(
     ContactID contact_id,
-    const DeleteContactCallback& callback,
+    const ContactCallback& callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Contact service being called after cleanup";
 
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  std::shared_ptr<DeleteContactResult> delete_results =
-      std::shared_ptr<DeleteContactResult>(new DeleteContactResult());
+  std::shared_ptr<ContactResults> delete_results =
+      std::shared_ptr<ContactResults>(new ContactResults());
 
   return tracker->PostTaskAndReply(
       backend_task_runner_.get(), FROM_HERE,

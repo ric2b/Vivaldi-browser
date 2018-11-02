@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/certificate_selector.h"
 
+#include <memory>
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
@@ -24,7 +25,7 @@ class TestCertificateSelector : public chrome::CertificateSelector {
                           content::WebContents* web_contents)
       : chrome::CertificateSelector(std::move(identities), web_contents) {
     std::unique_ptr<views::Label> label =
-        base::MakeUnique<views::Label>(l10n_util::GetStringFUTF16(
+        std::make_unique<views::Label>(l10n_util::GetStringFUTF16(
             IDS_CLIENT_CERT_DIALOG_TEXT, base::ASCIIToUTF16("example.com")));
     label->SetMultiLine(true);
     label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -45,7 +46,7 @@ class CertificateSelectorDialogTest : public DialogBrowserTest {
   CertificateSelectorDialogTest() {}
 
   // DialogBrowserTest:
-  void ShowDialog(const std::string& name) override {
+  void ShowUi(const std::string& name) override {
     cert_1_ =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "client_1.pem");
     cert_2_ =
@@ -65,8 +66,7 @@ class CertificateSelectorDialogTest : public DialogBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(CertificateSelectorDialogTest);
 };
 
-// Invokes a dialog that allows the user select a certificate. See
-// test_browser_dialog.h.
-IN_PROC_BROWSER_TEST_F(CertificateSelectorDialogTest, InvokeDialog_default) {
-  RunDialog();
+// Invokes a dialog that allows the user select a certificate.
+IN_PROC_BROWSER_TEST_F(CertificateSelectorDialogTest, InvokeUi_default) {
+  ShowAndVerifyUi();
 }

@@ -12,7 +12,6 @@
 
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "content/common/service_worker/service_worker_client_info.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/platform_notification_data.h"
@@ -42,16 +41,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerResponseError,
 IPC_ENUM_TRAITS_MAX_VALUE(blink::mojom::ServiceWorkerClientType,
                           blink::mojom::ServiceWorkerClientType::kLast)
 
-IPC_ENUM_TRAITS_MAX_VALUE(network::mojom::FetchResponseType,
-                          network::mojom::FetchResponseType::kLast)
-
 IPC_ENUM_TRAITS_MAX_VALUE(content::ServiceWorkerFetchType,
                           content::ServiceWorkerFetchType::LAST)
-
-IPC_STRUCT_TRAITS_BEGIN(content::ExtendableMessageEventSource)
-  IPC_STRUCT_TRAITS_MEMBER(client_info)
-  IPC_STRUCT_TRAITS_MEMBER(service_worker_info)
-IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerFetchRequest)
   IPC_STRUCT_TRAITS_MEMBER(mode)
@@ -93,25 +84,13 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(side_data_blob)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(blink::mojom::ServiceWorkerObjectInfo)
-  IPC_STRUCT_TRAITS_MEMBER(handle_id)
-  IPC_STRUCT_TRAITS_MEMBER(url)
-  IPC_STRUCT_TRAITS_MEMBER(state)
-  IPC_STRUCT_TRAITS_MEMBER(version_id)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerClientInfo)
+IPC_STRUCT_TRAITS_BEGIN(blink::mojom::ServiceWorkerClientInfo)
   IPC_STRUCT_TRAITS_MEMBER(client_uuid)
   IPC_STRUCT_TRAITS_MEMBER(page_visibility_state)
   IPC_STRUCT_TRAITS_MEMBER(is_focused)
   IPC_STRUCT_TRAITS_MEMBER(url)
   IPC_STRUCT_TRAITS_MEMBER(frame_type)
   IPC_STRUCT_TRAITS_MEMBER(client_type)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerClientQueryOptions)
-  IPC_STRUCT_TRAITS_MEMBER(client_type)
-  IPC_STRUCT_TRAITS_MEMBER(include_uncontrolled)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::PushEventPayload)
@@ -149,11 +128,6 @@ IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_GetClient,
                     int /* request_id */,
                     std::string /* client_uuid */)
 
-// Asks the browser to retrieve clients of the sender ServiceWorker.
-IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_GetClients,
-                    int /* request_id */,
-                    content::ServiceWorkerClientQueryOptions)
-
 // Sends MessageEvent to a client (renderer->browser).
 IPC_MESSAGE_ROUTED3(
     ServiceWorkerHostMsg_PostMessageToClient,
@@ -166,8 +140,8 @@ IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_OpenNewTab,
                     int /* request_id */,
                     GURL /* url */)
 
-// Ask the browser to open a popup tab/window (renderer->browser).
-IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_OpenNewPopup,
+// Ask the browser to open a Payment Handler window (renderer->browser).
+IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_OpenPaymentHandlerWindow,
                     int /* request_id */,
                     GURL /* url */)
 
@@ -184,11 +158,6 @@ IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_NavigateClient,
 
 // Asks the browser to force this worker to become activated.
 IPC_MESSAGE_ROUTED1(ServiceWorkerHostMsg_SkipWaiting,
-                    int /* request_id */)
-
-// Asks the browser to have this worker take control of pages that match
-// its scope.
-IPC_MESSAGE_ROUTED1(ServiceWorkerHostMsg_ClaimClients,
                     int /* request_id */)
 
 //---------------------------------------------------------------------------
@@ -208,27 +177,16 @@ IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ServiceWorkerStateChanged,
 // Sent via EmbeddedWorker to dispatch events.
 IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidSkipWaiting,
                      int /* request_id */)
-IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_DidClaimClients,
-                     int /* request_id */)
-IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_ClaimClientsError,
-                     int /* request_id */,
-                     blink::mojom::ServiceWorkerErrorType,
-                     base::string16 /* message */)
 
 // Sent via EmbeddedWorker as a response of GetClient.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidGetClient,
                      int /* request_id */,
-                     content::ServiceWorkerClientInfo)
-
-// Sent via EmbeddedWorker as a response of GetClients.
-IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_DidGetClients,
-                     int /* request_id */,
-                     std::vector<content::ServiceWorkerClientInfo>)
+                     blink::mojom::ServiceWorkerClientInfo)
 
 // Sent via EmbeddedWorker as a response of OpenWindow.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_OpenWindowResponse,
                      int /* request_id */,
-                     content::ServiceWorkerClientInfo /* client */)
+                     blink::mojom::ServiceWorkerClientInfo /* client */)
 
 // Sent via EmbeddedWorker as an error response of OpenWindow.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_OpenWindowError,
@@ -238,12 +196,12 @@ IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_OpenWindowError,
 // Sent via EmbeddedWorker as a response of FocusClient.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_FocusClientResponse,
                      int /* request_id */,
-                     content::ServiceWorkerClientInfo /* client */)
+                     blink::mojom::ServiceWorkerClientInfo /* client */)
 
 // Sent via EmbeddedWorker as a response of NavigateClient.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_NavigateClientResponse,
                      int /* request_id */,
-                     content::ServiceWorkerClientInfo /* client */)
+                     blink::mojom::ServiceWorkerClientInfo /* client */)
 
 // Sent via EmbeddedWorker as an error response of NavigateClient.
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_NavigateClientError,

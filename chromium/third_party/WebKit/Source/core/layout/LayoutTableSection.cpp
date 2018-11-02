@@ -53,7 +53,7 @@ void LayoutTableSection::TableGridRow::
 void LayoutTableSection::TableGridRow::UpdateLogicalHeightForCell(
     const LayoutTableCell* cell) {
   // We ignore height settings on rowspan cells.
-  if (cell->RowSpan() != 1)
+  if (cell->ResolvedRowSpan() != 1)
     return;
 
   Length cell_logical_height = cell->StyleRef().LogicalHeight();
@@ -102,7 +102,7 @@ LayoutTableSection::LayoutTableSection(Element* element)
   SetInline(false);  // our object is not Inline
 }
 
-LayoutTableSection::~LayoutTableSection() {}
+LayoutTableSection::~LayoutTableSection() = default;
 
 void LayoutTableSection::StyleDidChange(StyleDifference diff,
                                         const ComputedStyle* old_style) {
@@ -144,7 +144,8 @@ void LayoutTableSection::AddChild(LayoutObject* child,
     LayoutObject* last = before_child;
     if (!last)
       last = LastRow();
-    if (last && last->IsAnonymous() && !last->IsBeforeOrAfterContent()) {
+    if (last && last->IsAnonymous() && last->IsTablePart() &&
+        !last->IsBeforeOrAfterContent()) {
       if (before_child == last)
         before_child = last->SlowFirstChild();
       last->AddChild(child, before_child);
@@ -237,7 +238,7 @@ void LayoutTableSection::AddCell(LayoutTableCell* cell, LayoutTableRow* row) {
     return;
 
   DCHECK(cell);
-  unsigned r_span = cell->RowSpan();
+  unsigned r_span = cell->ResolvedRowSpan();
   unsigned c_span = cell->ColSpan();
   if (r_span > 1 || c_span > 1)
     has_spanning_cells_ = true;
@@ -305,7 +306,7 @@ bool LayoutTableSection::RowHasOnlySpanningCells(unsigned row) {
     if (!grid_cell.HasCells())
       return false;
 
-    if (grid_cell.Cells()[0]->RowSpan() == 1)
+    if (grid_cell.Cells()[0]->ResolvedRowSpan() == 1)
       return false;
   }
 
@@ -315,7 +316,7 @@ bool LayoutTableSection::RowHasOnlySpanningCells(unsigned row) {
 void LayoutTableSection::PopulateSpanningRowsHeightFromCell(
     LayoutTableCell* cell,
     struct SpanningRowsHeight& spanning_rows_height) {
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
 
   spanning_rows_height.spanning_cell_height_ignoring_border_spacing =
@@ -352,7 +353,7 @@ void LayoutTableSection::DistributeExtraRowSpanHeightToPercentRows(
   if (!extra_row_spanning_height || !total_percent)
     return;
 
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
   float percent = std::min(total_percent, 100.0f);
   const int table_height = row_pos_[grid_.size()] + extra_row_spanning_height;
@@ -412,7 +413,7 @@ void LayoutTableSection::DistributeWholeExtraRowSpanHeightToPercentRows(
   if (!extra_row_spanning_height || !total_percent)
     return;
 
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
   double remainder = 0;
 
@@ -440,7 +441,7 @@ void LayoutTableSection::DistributeExtraRowSpanHeightToAutoRows(
   if (!extra_row_spanning_height || !total_auto_rows_height)
     return;
 
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
   int accumulated_position_increase = 0;
   double remainder = 0;
@@ -470,7 +471,7 @@ void LayoutTableSection::DistributeExtraRowSpanHeightToRemainingRows(
   if (!extra_row_spanning_height || !total_remaining_rows_height)
     return;
 
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
   int accumulated_position_increase = 0;
   double remainder = 0;
@@ -496,8 +497,8 @@ void LayoutTableSection::DistributeExtraRowSpanHeightToRemainingRows(
 static bool CellIsFullyIncludedInOtherCell(const LayoutTableCell* cell1,
                                            const LayoutTableCell* cell2) {
   return (cell1->RowIndex() >= cell2->RowIndex() &&
-          (cell1->RowIndex() + cell1->RowSpan()) <=
-              (cell2->RowIndex() + cell2->RowSpan()));
+          (cell1->RowIndex() + cell1->ResolvedRowSpan()) <=
+              (cell2->RowIndex() + cell2->ResolvedRowSpan()));
 }
 
 // To avoid unneeded extra height distributions, we apply the following sorting
@@ -508,7 +509,7 @@ static bool CompareRowSpanCellsInHeightDistributionOrder(
   // Sorting bigger height cell first if cells are at same index with same span
   // because we will skip smaller height cell to distribute it's extra height.
   if (cell1->RowIndex() == cell2->RowIndex() &&
-      cell1->RowSpan() == cell2->RowSpan())
+      cell1->ResolvedRowSpan() == cell2->ResolvedRowSpan())
     return (cell1->LogicalHeightForRowSizing() >
             cell2->LogicalHeightForRowSizing());
   // Sorting inner most cell first because if inner spanning cell'e extra height
@@ -539,10 +540,10 @@ unsigned LayoutTableSection::CalcRowHeightHavingOnlySpanningCells(
   for (const auto& row_span_cell : grid_[row].grid_cells) {
     DCHECK(row_span_cell.HasCells());
     LayoutTableCell* cell = row_span_cell.Cells()[0];
-    DCHECK_GE(cell->RowSpan(), 2u);
+    DCHECK_GE(cell->ResolvedRowSpan(), 2u);
 
     const unsigned cell_row_index = cell->RowIndex();
-    const unsigned cell_row_span = cell->RowSpan();
+    const unsigned cell_row_span = cell->ResolvedRowSpan();
 
     // As we are going from the top of the table to the bottom to calculate the
     // row heights for rows that only contain spanning cells and all previous
@@ -589,7 +590,7 @@ void LayoutTableSection::UpdateRowsHeightHavingOnlySpanningCells(
   DCHECK(spanning_rows_height.row_height.size());
 
   int accumulated_position_increase = 0;
-  const unsigned row_span = cell->RowSpan();
+  const unsigned row_span = cell->ResolvedRowSpan();
   const unsigned row_index = cell->RowIndex();
 
   DCHECK_EQ(row_span, spanning_rows_height.row_height.size());
@@ -643,7 +644,7 @@ void LayoutTableSection::DistributeRowSpanHeightToRows(
 
     unsigned row_index = cell->RowIndex();
 
-    unsigned row_span = cell->RowSpan();
+    unsigned row_span = cell->ResolvedRowSpan();
 
     unsigned spanning_cell_end_index = row_index + row_span;
     unsigned last_spanning_cell_end_index = last_row_index + last_row_span;
@@ -798,7 +799,7 @@ void LayoutTableSection::UpdateBaselineForCell(LayoutTableCell* cell,
     grid_[row].baseline = std::max(grid_[row].baseline, baseline_position);
 
     LayoutUnit cell_start_row_baseline_descent;
-    if (cell->RowSpan() == 1) {
+    if (cell->ResolvedRowSpan() == 1) {
       baseline_descent =
           std::max(baseline_descent,
                    cell->LogicalHeightForRowSizing() - baseline_position);
@@ -885,14 +886,14 @@ int LayoutTableSection::CalcRowLogicalHeight() {
           // we'll stay in this mode until we get to a row where we're past all
           // rowspanned cells that we encountered while in this mode.
           DCHECK(state.IsPaginated());
-          unsigned row_index_below_cell = r + cell->RowSpan();
+          unsigned row_index_below_cell = r + cell->ResolvedRowSpan();
           index_of_first_stretchable_row =
               std::max(index_of_first_stretchable_row, row_index_below_cell);
-        } else if (cell->RowSpan() > 1) {
+        } else if (cell->ResolvedRowSpan() > 1) {
           DCHECK(!row_span_cells.Contains(cell));
 
           cell->SetIsSpanningCollapsedRow(false);
-          unsigned end_row = cell->RowSpan() + r;
+          unsigned end_row = cell->ResolvedRowSpan() + r;
           for (unsigned spanning = r; spanning < end_row; spanning++) {
             if (RowHasVisibilityCollapse(spanning)) {
               cell->SetIsSpanningCollapsedRow(true);
@@ -909,7 +910,7 @@ int LayoutTableSection::CalcRowLogicalHeight() {
           cell->ForceChildLayout();
         }
 
-        if (cell->RowSpan() == 1)
+        if (cell->ResolvedRowSpan() == 1)
           row_pos_[r + 1] = std::max(
               row_pos_[r + 1], row_pos_[r] + cell->LogicalHeightForRowSizing());
 
@@ -1209,7 +1210,7 @@ void LayoutTableSection::LayoutRows() {
 
       int r_height;
       int row_logical_top;
-      unsigned row_span = std::max(1U, cell->RowSpan());
+      unsigned row_span = std::max(1U, cell->ResolvedRowSpan());
       unsigned end_row_index = std::min(r + row_span, total_rows) - 1;
       LayoutTableRow* last_row_object = grid_[end_row_index].row;
       if (last_row_object && row) {
@@ -1240,7 +1241,7 @@ void LayoutTableSection::LayoutRows() {
       // Calculate total collapsed height affecting one cell.
       int collapsed_height = 0;
       if (is_any_row_collapsed_) {
-        unsigned end_row = cell->RowSpan() + r;
+        unsigned end_row = cell->ResolvedRowSpan() + r;
         for (unsigned spanning = r; spanning < end_row; spanning++) {
           collapsed_height += row_collapsed_height_[spanning];
         }
@@ -1646,6 +1647,7 @@ void LayoutTableSection::RecalcCells() {
   c_row_ = 0;
   grid_.clear();
 
+  bool resized_grid = false;
   for (LayoutTableRow* row = FirstRow(); row; row = row->NextRow()) {
     unsigned insertion_row = c_row_;
     ++c_row_;
@@ -1657,8 +1659,21 @@ void LayoutTableSection::RecalcCells() {
     grid_[insertion_row].SetRowLogicalHeightToRowStyleLogicalHeight();
 
     for (LayoutTableCell* cell = row->FirstCell(); cell;
-         cell = cell->NextCell())
+         cell = cell->NextCell()) {
+      // For rowspan, "the value zero means that the cell is to span all the
+      // remaining rows in the row group." Calculate the size of the full
+      // row grid now so that we can use it to count the remaining rows in
+      // ResolvedRowSpan().
+      if (!cell->ParsedRowSpan() && !resized_grid) {
+        unsigned c_row = row->RowIndex() + 1;
+        for (LayoutTableRow* remaining_row = row; remaining_row;
+             remaining_row = remaining_row->NextRow())
+          c_row++;
+        EnsureRows(c_row);
+        resized_grid = true;
+      }
       AddCell(cell, row);
+    }
   }
 
   grid_.ShrinkToFit();
@@ -1868,10 +1883,20 @@ void LayoutTableSection::RelayoutCellIfFlexed(LayoutTableCell& cell,
                                               int row_height) {
   // Force percent height children to lay themselves out again.
   // This will cause these children to grow to fill the cell.
+  // FIXME: There is still more work to do here to fully match WinIE (should
+  // it become necessary to do so).  In quirks mode, WinIE behaves like we
+  // do, but it will clip the cells that spill out of the table section.
+  // strict mode, Mozilla and WinIE both regrow the table to accommodate the
+  // new height of the cell (thus letting the percentages cause growth one
+  // time only). We may also not be handling row-spanning cells correctly.
+  //
+  // Note also the oddity where replaced elements always flex, and yet blocks/
+  // tables do not necessarily flex. WinIE is crazy and inconsistent, and we
+  // can't hope to match the behavior perfectly, but we'll continue to refine it
+  // as we discover new bugs. :)
   bool cell_children_flex = false;
   bool flex_all_children = CellHasExplicitlySpecifiedHeight(cell) ||
-                           (GetDocument().InQuirksMode() &&
-                            !Table()->Style()->LogicalHeight().IsAuto() &&
+                           (!Table()->Style()->LogicalHeight().IsAuto() &&
                             row_height != cell.LogicalHeight());
 
   for (LayoutObject* child = cell.FirstChild(); child;
@@ -1922,7 +1947,7 @@ int LayoutTableSection::LogicalHeightForRow(
     const LayoutTableCell* cell = grid_cell.PrimaryCell();
     if (!cell || grid_cell.InColSpan())
       continue;
-    unsigned row_span = cell->RowSpan();
+    unsigned row_span = cell->ResolvedRowSpan();
     if (row_span == 1) {
       logical_height =
           std::max(logical_height, cell->LogicalHeightForRowSizing());

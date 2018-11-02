@@ -6,12 +6,12 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/callback.h"
 #include "base/guid.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -27,7 +27,6 @@
 #include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/notifications/notifier_state_tracker.h"
 #include "chrome/browser/notifications/notifier_state_tracker_factory.h"
-#include "chrome/browser/notifications/web_notification_delegate.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/notifications/notification_style.h"
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
@@ -376,10 +375,7 @@ bool NotificationsApiFunction::CreateNotification(
       base::UTF8ToUTF16(extension_->name()), extension_->url(),
       message_center::NotifierId(message_center::NotifierId::APPLICATION,
                                  extension_->id()),
-      optional_fields,
-      new WebNotificationDelegate(NotificationHandler::Type::EXTENSION,
-                                  GetProfile(), notification_id,
-                                  extension_->url()));
+      optional_fields, nullptr /* delegate */);
 
   // Apply the "requireInteraction" flag. The value defaults to false.
   notification.set_never_timeout(options->require_interaction &&
@@ -606,7 +602,7 @@ bool NotificationsCreateFunction::RunNotificationsApi() {
       notification_id = base::RandBytesAsString(16);
   }
 
-  SetResult(base::MakeUnique<base::Value>(notification_id));
+  SetResult(std::make_unique<base::Value>(notification_id));
 
   // TODO(crbug.com/749402): Cap the length of notification Ids to a certain
   // limit if the histogram indicates that this is safe to do.
@@ -639,7 +635,7 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
           CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
   if (!matched_notification) {
-    SetResult(base::MakeUnique<base::Value>(false));
+    SetResult(std::make_unique<base::Value>(false));
     SendResponse(true);
     return true;
   }
@@ -653,7 +649,7 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
   // TODO(dewittj): Add more human-readable error strings if this fails.
   bool could_update_notification = UpdateNotification(
       params_->notification_id, &params_->options, &notification);
-  SetResult(base::MakeUnique<base::Value>(could_update_notification));
+  SetResult(std::make_unique<base::Value>(could_update_notification));
   if (!could_update_notification)
     return false;
 
@@ -676,7 +672,7 @@ bool NotificationsClearFunction::RunNotificationsApi() {
   bool cancel_result = GetDisplayHelper()->Close(
       CreateScopedIdentifier(extension_->id(), params_->notification_id));
 
-  SetResult(base::MakeUnique<base::Value>(cancel_result));
+  SetResult(std::make_unique<base::Value>(cancel_result));
   SendResponse(true);
 
   return true;
@@ -721,7 +717,7 @@ bool NotificationsGetPermissionLevelFunction::RunNotificationsApi() {
           : api::notifications::PERMISSION_LEVEL_DENIED;
 
   SetResult(
-      base::MakeUnique<base::Value>(api::notifications::ToString(result)));
+      std::make_unique<base::Value>(api::notifications::ToString(result)));
   SendResponse(true);
 
   return true;

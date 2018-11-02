@@ -26,69 +26,14 @@
 #ifndef PropertySetCSSStyleDeclaration_h
 #define PropertySetCSSStyleDeclaration_h
 
-#include "core/css/CSSStyleDeclaration.h"
+#include "core/css/AbstractPropertySetCSSStyleDeclaration.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/wtf/HashMap.h"
 
 namespace blink {
 
-class CSSRule;
-class CSSValue;
-class Element;
-class ExceptionState;
-class ExecutionContext;
 class MutableCSSPropertyValueSet;
 class PropertyRegistry;
-class StyleSheetContents;
-
-class AbstractPropertySetCSSStyleDeclaration : public CSSStyleDeclaration {
- public:
-  virtual Element* ParentElement() const { return nullptr; }
-  StyleSheetContents* ContextStyleSheet() const;
-
-  virtual void Trace(blink::Visitor*);
-
- private:
-  CSSRule* parentRule() const override { return nullptr; }
-  unsigned length() const final;
-  String item(unsigned index) const final;
-  String getPropertyValue(const String& property_name) final;
-  String getPropertyPriority(const String& property_name) final;
-  String GetPropertyShorthand(const String& property_name) final;
-  bool IsPropertyImplicit(const String& property_name) final;
-  void setProperty(const ExecutionContext*,
-                   const String& property_name,
-                   const String& value,
-                   const String& priority,
-                   ExceptionState&) final;
-  String removeProperty(const String& property_name, ExceptionState&) final;
-  String CssFloat() const;
-  void SetCSSFloat(const String&, ExceptionState&);
-  String cssText() const final;
-  void setCSSText(const ExecutionContext*,
-                  const String&,
-                  ExceptionState&) final;
-  const CSSValue* GetPropertyCSSValueInternal(CSSPropertyID) final;
-  const CSSValue* GetPropertyCSSValueInternal(
-      AtomicString custom_property_name) final;
-  String GetPropertyValueInternal(CSSPropertyID) final;
-  void SetPropertyInternal(CSSPropertyID,
-                           const String& custom_property_name,
-                           const String& value,
-                           bool important,
-                           SecureContextMode,
-                           ExceptionState&) final;
-
-  bool CssPropertyMatches(CSSPropertyID, const CSSValue*) const final;
-
- protected:
-  enum MutationType { kNoChanges, kPropertyChanged };
-  virtual void WillMutate() {}
-  virtual void DidMutate(MutationType) {}
-  virtual MutableCSSPropertyValueSet& PropertySet() const = 0;
-  virtual PropertyRegistry* GetPropertyRegistry() const = 0;
-  virtual bool IsKeyframeStyle() const { return false; }
-};
 
 class PropertySetCSSStyleDeclaration
     : public AbstractPropertySetCSSStyleDeclaration {
@@ -107,53 +52,6 @@ class PropertySetCSSStyleDeclaration
   PropertyRegistry* GetPropertyRegistry() const override { return nullptr; }
 
   Member<MutableCSSPropertyValueSet> property_set_;  // Cannot be null
-};
-
-class StyleRuleCSSStyleDeclaration : public PropertySetCSSStyleDeclaration {
- public:
-  static StyleRuleCSSStyleDeclaration* Create(
-      MutableCSSPropertyValueSet& property_set,
-      CSSRule* parent_rule) {
-    return new StyleRuleCSSStyleDeclaration(property_set, parent_rule);
-  }
-
-  void Reattach(MutableCSSPropertyValueSet&);
-
-  virtual void Trace(blink::Visitor*);
-  virtual void TraceWrappers(const ScriptWrappableVisitor*) const;
-
- protected:
-  StyleRuleCSSStyleDeclaration(MutableCSSPropertyValueSet&, CSSRule*);
-  ~StyleRuleCSSStyleDeclaration() override;
-
-  CSSStyleSheet* ParentStyleSheet() const override;
-
-  CSSRule* parentRule() const override { return parent_rule_; }
-
-  void WillMutate() override;
-  void DidMutate(MutationType) override;
-  PropertyRegistry* GetPropertyRegistry() const final;
-
-  TraceWrapperMember<CSSRule> parent_rule_;
-};
-
-class InlineCSSStyleDeclaration final
-    : public AbstractPropertySetCSSStyleDeclaration {
- public:
-  explicit InlineCSSStyleDeclaration(Element* parent_element)
-      : parent_element_(parent_element) {}
-
-  virtual void Trace(blink::Visitor*);
-
- private:
-  MutableCSSPropertyValueSet& PropertySet() const override;
-  CSSStyleSheet* ParentStyleSheet() const override;
-  Element* ParentElement() const override { return parent_element_; }
-
-  void DidMutate(MutationType) override;
-  PropertyRegistry* GetPropertyRegistry() const final;
-
-  Member<Element> parent_element_;
 };
 
 }  // namespace blink

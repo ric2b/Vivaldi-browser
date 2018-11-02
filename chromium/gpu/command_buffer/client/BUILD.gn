@@ -15,19 +15,12 @@ group("client") {
       ":client_sources",
     ]
   }
-
-  if (!is_nacl) {
-    deps = [
-      "//cc/paint",
-      "//skia",
-    ]
-  }
 }
 
 group("gles2_cmd_helper") {
   if (is_component_build) {
     public_deps = [
-      "//gpu",
+      "//gpu:gles2",
     ]
   } else {
     public_deps = [
@@ -46,8 +39,6 @@ source_set("client_sources") {
     "client_discardable_manager.h",
     "client_discardable_texture_manager.cc",
     "client_discardable_texture_manager.h",
-    "client_transfer_cache.cc",
-    "client_transfer_cache.h",
     "cmd_buffer_helper.cc",
     "cmd_buffer_helper.h",
     "fenced_allocator.cc",
@@ -69,19 +60,13 @@ source_set("client_sources") {
 
   public_deps = [
     "//base",
-    "//gpu/command_buffer/common:gles2_utils",
   ]
   deps = [
-    ":gles2_interface",
     "//gpu/command_buffer/common:common_sources",
     "//gpu/ipc/common:surface_handle_type",
     "//ui/gfx:memory_buffer",
     "//ui/gfx/geometry",
   ]
-
-  if (!is_nacl) {
-    deps += [ "//cc/paint" ]
-  }
 }
 
 source_set("gles2_cmd_helper_sources") {
@@ -92,12 +77,13 @@ source_set("gles2_cmd_helper_sources") {
     "gles2_cmd_helper_autogen.h",
   ]
 
-  configs += [ "//gpu:gpu_implementation" ]
+  configs += [ "//gpu:gpu_gles2_implementation" ]
 
   deps = [
-    ":client_sources",
+    ":client",
     "//base",
-    "//gpu/command_buffer/common:common_sources",
+    "//gpu/command_buffer/common",
+    "//gpu/command_buffer/common:gles2_sources",
   ]
 }
 
@@ -116,6 +102,8 @@ gles2_implementation_source_files = [
   "client_context_state.h",
   "client_context_state_autogen.h",
   "client_context_state_impl_autogen.h",
+  "client_transfer_cache.cc",
+  "client_transfer_cache.h",
   "gles2_impl_export.h",
   "gles2_implementation.cc",
   "gles2_implementation.h",
@@ -150,6 +138,17 @@ source_set("gles2_interface") {
   ]
 }
 
+source_set("raster_interface") {
+  sources = [
+    "raster_interface.h",
+  ]
+  public_configs = [ "//third_party/khronos:khronos_headers" ]
+  deps = [
+    "//base",
+    "//components/viz/common:resource_format",
+  ]
+}
+
 # Library emulates GLES2 using command_buffers.
 component("gles2_implementation") {
   sources = gles2_implementation_source_files
@@ -158,20 +157,28 @@ component("gles2_implementation") {
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]
 
   deps = [
+    ":client",
     ":gles2_cmd_helper",
     ":gles2_interface",
     "//base",
-    "//gpu/command_buffer/client",
     "//gpu/command_buffer/common",
+    "//gpu/command_buffer/common:gles2",
     "//gpu/command_buffer/common:gles2_utils",
     "//ui/gfx/geometry",
   ]
 
   if (!is_nacl) {
     deps += [
+      ":raster_interface",
       "//cc/paint",
+      "//components/viz/common:resource_format",
       "//ui/gfx:color_space",
       "//ui/gfx/ipc/color",
+    ]
+
+    sources += [
+      "raster_implementation_gles.cc",
+      "raster_implementation_gles.h",
     ]
   }
 }
@@ -191,6 +198,7 @@ component("gles2_implementation_no_check") {
     ":gles2_interface",
     "//base",
     "//gpu/command_buffer/common",
+    "//gpu/command_buffer/common:gles2",
     "//gpu/command_buffer/common:gles2_utils",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -210,7 +218,6 @@ component("gles2_c_lib") {
   defines = [ "GLES2_C_LIB_IMPLEMENTATION" ]
 
   deps = [
-    ":client",
     ":gles2_interface",
     "//base",
     "//base/third_party/dynamic_annotations",
@@ -228,8 +235,6 @@ component("gles2_c_lib_nocheck") {
     "GLES2_CONFORMANCE_TESTS=1",
   ]
   deps = [
-    ":client",
-    ":gles2_implementation_no_check",
     ":gles2_interface",
     "//base",
     "//base/third_party/dynamic_annotations",

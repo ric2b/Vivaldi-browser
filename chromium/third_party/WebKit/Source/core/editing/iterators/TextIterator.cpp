@@ -329,8 +329,7 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
         if (EntersTextControls() && layout_object->IsTextControl()) {
           ShadowRoot* user_agent_shadow_root =
               ToElement(node_)->UserAgentShadowRoot();
-          DCHECK(user_agent_shadow_root->GetType() ==
-                 ShadowRootType::kUserAgent);
+          DCHECK(user_agent_shadow_root->IsUserAgent());
           node_ = user_agent_shadow_root;
           iteration_progress_ = kHandledNone;
           ++shadow_depth_;
@@ -438,7 +437,7 @@ void TextIteratorAlgorithm<Strategy>::Advance() {
             // TODO(kochi): Make sure we treat closed shadow as user agent
             // shadow here.
             DCHECK(shadow_root->GetType() == ShadowRootType::kClosed ||
-                   shadow_root->GetType() == ShadowRootType::kUserAgent);
+                   shadow_root->IsUserAgent());
             node_ = &shadow_root->host();
             iteration_progress_ = kHandledUserAgentShadowRoot;
             --shadow_depth_;
@@ -791,7 +790,8 @@ void TextIteratorAlgorithm<Strategy>::ExitNode() {
   // of how this mismatch will cause problems.
   if (last_text_node_ && ShouldEmitNewlineAfterNode(*node_)) {
     // use extra newline to represent margin bottom, as needed
-    bool add_newline = ShouldEmitExtraNewlineForNode(node_);
+    const bool add_newline = !behavior_.SuppressesExtraNewlineEmission() &&
+                             ShouldEmitExtraNewlineForNode(node_);
 
     // FIXME: We need to emit a '\n' as we leave an empty block(s) that
     // contain a VisiblePosition when doing selection preservation.

@@ -34,10 +34,10 @@
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/Forward.h"
 #include "core/editing/SetSelectionOptions.h"
-#include "core/layout/ScrollAlignment.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/heap/Handle.h"
+#include "platform/scroll/ScrollAlignment.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
@@ -49,6 +49,7 @@ class LocalFrame;
 class FrameCaret;
 class GranularityStrategy;
 class GraphicsContext;
+class NGPhysicalTextFragment;
 class Range;
 class SelectionEditor;
 class LayoutSelection;
@@ -93,12 +94,7 @@ class CORE_EXPORT FrameSelection final
   VisibleSelection ComputeVisibleSelectionInDOMTreeDeprecated() const;
 
   void SetSelection(const SelectionInDOMTree&, const SetSelectionOptions&);
-
-  // TODO(editing-dev): We should rename this function to
-  // SetSelectionAndEndTyping()
-  // Set selection with end of typing processing == close typing and clear
-  // typing style.
-  void SetSelection(const SelectionInDOMTree&);
+  void SetSelectionAndEndTyping(const SelectionInDOMTree&);
   void SelectAll(SetSelectionBy);
   void SelectAll();
   void Clear();
@@ -180,12 +176,8 @@ class CORE_EXPORT FrameSelection final
   bool FrameIsFocusedAndActive() const;
   void PageActivationChanged();
 
-  void SetUseSecureKeyboardEntryWhenActive(bool);
-
   bool IsHandleVisible() const { return is_handle_visible_; }
   bool ShouldShrinkNextTap() const { return should_shrink_next_tap_; }
-
-  void UpdateSecureKeyboardEntryIfActive();
 
   // Returns true if a word is selected.
   bool SelectWordAroundCaret();
@@ -226,6 +218,8 @@ class CORE_EXPORT FrameSelection final
   WTF::Optional<unsigned> LayoutSelectionStart() const;
   WTF::Optional<unsigned> LayoutSelectionEnd() const;
   void ClearLayoutSelection();
+  std::pair<unsigned, unsigned> LayoutSelectionStartEndForNG(
+      const NGPhysicalTextFragment&);
 
   void Trace(blink::Visitor*);
 
@@ -249,13 +243,6 @@ class CORE_EXPORT FrameSelection final
 
   void FocusedOrActiveStateChanged();
 
-  void SetUseSecureKeyboardEntry(bool);
-
-  void UpdateSelectionIfNeeded(const Position& base,
-                               const Position& extent,
-                               const Position& start,
-                               const Position& end);
-
   GranularityStrategy* GetGranularityStrategy();
 
   IntRect ComputeRectToScroll(RevealExtentOption);
@@ -274,6 +261,9 @@ class CORE_EXPORT FrameSelection final
 
   bool focused_ : 1;
   bool is_handle_visible_ = false;
+  // TODO(editing-dev): We should change is_directional_ type to enum.
+  // as directional can have three values forward, backward or directionless.
+  bool is_directional_;
   bool should_shrink_next_tap_ = false;
 
   // Controls text granularity used to adjust the selection's extent in
@@ -281,7 +271,6 @@ class CORE_EXPORT FrameSelection final
   std::unique_ptr<GranularityStrategy> granularity_strategy_;
 
   const Member<FrameCaret> frame_caret_;
-  bool use_secure_keyboard_entry_when_active_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(FrameSelection);
 };

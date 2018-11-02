@@ -13,7 +13,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
@@ -125,11 +125,11 @@ WebDisplayMode MediaValues::CalculateDisplayMode(LocalFrame* frame) {
 
 bool MediaValues::CalculateThreeDEnabled(LocalFrame* frame) {
   DCHECK(frame);
-  DCHECK(!frame->ContentLayoutItem().IsNull());
-  DCHECK(frame->ContentLayoutItem().Compositor());
+  DCHECK(frame->ContentLayoutObject());
+  DCHECK(frame->ContentLayoutObject()->Compositor());
   bool three_d_enabled = false;
-  if (LayoutViewItem view = frame->ContentLayoutItem())
-    three_d_enabled = view.Compositor()->HasAcceleratedCompositing();
+  if (LayoutView* view = frame->ContentLayoutObject())
+    three_d_enabled = view->Compositor()->HasAcceleratedCompositing();
   return three_d_enabled;
 }
 

@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/IDLTypes.h"
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
@@ -15,19 +17,18 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "bindings/modules/v8/V8Request.h"
-#include "bindings/modules/v8/V8Response.h"
+#include "bindings/core/v8/V8Request.h"
+#include "bindings/core/v8/V8Response.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/BodyStreamBuffer.h"
+#include "core/fetch/FormDataBytesConsumer.h"
+#include "core/fetch/GlobalFetch.h"
+#include "core/fetch/Request.h"
+#include "core/fetch/Response.h"
+#include "core/fetch/ResponseInit.h"
 #include "core/frame/Frame.h"
-#include "core/testing/DummyPageHolder.h"
-#include "modules/fetch/BodyStreamBuffer.h"
-#include "modules/fetch/FormDataBytesConsumer.h"
-#include "modules/fetch/GlobalFetch.h"
-#include "modules/fetch/Request.h"
-#include "modules/fetch/Response.h"
-#include "modules/fetch/ResponseInit.h"
-#include "platform/wtf/PtrUtil.h"
+#include "core/testing/PageTestBase.h"
 #include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/cache_storage/cache_storage.mojom-blink.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
@@ -238,17 +239,17 @@ class NotImplementedErrorCache : public ErrorWebCacheForTests {
       : ErrorWebCacheForTests(CacheStorageError::kErrorNotImplemented) {}
 };
 
-class CacheStorageTest : public ::testing::Test {
+class CacheStorageTest : public PageTestBase {
  public:
-  CacheStorageTest() : page_(DummyPageHolder::Create(IntSize(1, 1))) {}
+  void SetUp() override { PageTestBase::SetUp(IntSize(1, 1)); }
 
   Cache* CreateCache(ScopedFetcherForTests* fetcher,
                      WebServiceWorkerCache* web_cache) {
-    return Cache::Create(fetcher, WTF::WrapUnique(web_cache));
+    return Cache::Create(fetcher, base::WrapUnique(web_cache));
   }
 
   ScriptState* GetScriptState() {
-    return ToScriptStateForMainWorld(page_->GetDocument().GetFrame());
+    return ToScriptStateForMainWorld(GetDocument().GetFrame());
   }
   ExecutionContext* GetExecutionContext() {
     return ExecutionContext::From(GetScriptState());
@@ -337,9 +338,6 @@ class CacheStorageTest : public ::testing::Test {
 
     ScriptValue* value_;
   };
-
-  // Lifetime is that of the text fixture.
-  std::unique_ptr<DummyPageHolder> page_;
 };
 
 RequestInfo StringToRequestInfo(const String& value) {

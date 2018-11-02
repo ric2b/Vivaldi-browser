@@ -7,23 +7,21 @@
 #import <Foundation/Foundation.h>
 #include <memory>
 
-#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
-#include "base/values.h"
 #import "ios/web/navigation/crw_navigation_item_holder.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #include "ios/web/navigation/navigation_item_impl_list.h"
 #import "ios/web/navigation/navigation_manager_delegate.h"
+#include "ios/web/navigation/placeholder_navigation_util.h"
+#include "ios/web/navigation/wk_based_restore_session_util.h"
 #include "ios/web/public/load_committed_details.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/web_state/ui/crw_web_view_navigation_proxy.h"
 #import "net/base/mac/url_conversions.h"
-#include "net/base/url_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -127,6 +125,10 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
       last_committed_item ? last_committed_item->GetURL() : GURL::EmptyGURL(),
       &transient_url_rewriters_);
   RemoveTransientURLRewriters();
+  // Ignore URL rewrite if this is a placeholder URL
+  if (placeholder_navigation_util::IsPlaceholderUrl(url)) {
+    pending_item_->SetURL(url);
+  }
   UpdatePendingItemUserAgentType(user_agent_override_option,
                                  GetLastCommittedNonAppSpecificItem(),
                                  pending_item_.get());
@@ -160,28 +162,54 @@ void WKBasedNavigationManagerImpl::AddPendingItem(
 }
 
 void WKBasedNavigationManagerImpl::CommitPendingItem() {
+  bool last_committed_item_was_empty_window_open_item =
+      empty_window_open_item_ != nullptr;
+
   if (pending_item_index_ == -1) {
     pending_item_->ResetForCommit();
     pending_item_->SetTimestamp(
         time_smoother_.GetSmoothedTime(base::Time::Now()));
 
-    // WKBackForwardList's |currentItem| would have already been updated when
-    // this method is called and it is the last committed item.
     id<CRWWebViewNavigationProxy> proxy =
         delegate_->GetWebViewNavigationProxy();
-    SetNavigationItemInWKItem(proxy.backForwardList.currentItem,
-                              std::move(pending_item_));
+
+    // If WKBackForwardList exists but |currentItem| is nil at this point, it is
+    // because the current navigation is an empty window open navigation.
+    // If |currentItem| is not nil, it is the last committed item in the
+    // WKWebView.
+    if (proxy.backForwardList && !proxy.backForwardList.currentItem) {
+      // WKWebView's URL should be about:blank for empty window open item.
+      DCHECK_EQ(url::kAboutBlankURL, net::GURLWithNSURL(proxy.URL).spec());
+      // There should be no back-forward history for empty window open item.
+      DCHECK_EQ(0UL, proxy.backForwardList.backList.count);
+      DCHECK_EQ(0UL, proxy.backForwardList.forwardList.count);
+
+      empty_window_open_item_ = std::move(pending_item_);
+    } else {
+      empty_window_open_item_.reset();
+      SetNavigationItemInWKItem(proxy.backForwardList.currentItem,
+                                std::move(pending_item_));
+    }
   }
 
   pending_item_index_ = -1;
-  previous_item_index_ = last_committed_item_index_;
-  last_committed_item_index_ = GetWKCurrentItemIndex();
+  // If the last committed item is the empty window open item, then don't update
+  // previous item because the new commit replaces the last committed item.
+  if (!last_committed_item_was_empty_window_open_item) {
+    previous_item_index_ = last_committed_item_index_;
+  }
+  // If the newly committed item is the empty window open item, fake an index of
+  // 0 because WKBackForwardList is empty at this point.
+  last_committed_item_index_ =
+      empty_window_open_item_ ? 0 : GetWKCurrentItemIndex();
   OnNavigationItemCommitted();
 }
 
 int WKBasedNavigationManagerImpl::GetIndexForOffset(int offset) const {
-  int result = (pending_item_index_ == -1) ? GetWKCurrentItemIndex()
-                                           : pending_item_index_;
+  int current_item_index = pending_item_index_;
+  if (pending_item_index_ == -1) {
+    current_item_index = empty_window_open_item_ ? 0 : GetWKCurrentItemIndex();
+  }
 
   if (offset < 0 && GetTransientItem() && pending_item_index_ == -1) {
     // Going back from transient item that added to the end navigation stack
@@ -189,8 +217,7 @@ int WKBasedNavigationManagerImpl::GetIndexForOffset(int offset) const {
     // index back.
     offset++;
   }
-  result += offset;
-  return result;
+  return current_item_index + offset;
 }
 
 int WKBasedNavigationManagerImpl::GetPreviousItemIndex() const {
@@ -244,6 +271,10 @@ void WKBasedNavigationManagerImpl::DiscardNonCommittedItems() {
 }
 
 int WKBasedNavigationManagerImpl::GetItemCount() const {
+  if (empty_window_open_item_) {
+    return 1;
+  }
+
   id<CRWWebViewNavigationProxy> proxy = delegate_->GetWebViewNavigationProxy();
   if (proxy) {
     int count_current_page = proxy.backForwardList.currentItem ? 1 : 0;
@@ -263,6 +294,10 @@ NavigationItem* WKBasedNavigationManagerImpl::GetItemAtIndex(
 
 int WKBasedNavigationManagerImpl::GetIndexOfItem(
     const NavigationItem* item) const {
+  if (item == empty_window_open_item_.get()) {
+    return 0;
+  }
+
   for (int index = 0; index < GetItemCount(); index++) {
     if (GetNavigationItemFromWKItem(GetWKItemAtIndex(index)) == item) {
       return index;
@@ -285,12 +320,14 @@ int WKBasedNavigationManagerImpl::GetPendingItemIndex() const {
 
 int WKBasedNavigationManagerImpl::GetLastCommittedItemIndex() const {
   // WKBackForwardList's |currentItem| is usually the last committed item,
-  // except when the pending navigation is a back-forward navigation, in which
-  // case it is actually the pending item. As a workaround, fall back to
-  // last_committed_item_index_. This is not 100% correct (since
-  // last_committed_item_index_ is only updated for main frame navigations),
-  // but is the best possible answer.
-  if (pending_item_index_ >= 0) {
+  // except two cases:
+  // 1) when the pending navigation is a back-forward navigation, in which
+  //    case it is actually the pending item. As a workaround, fall back to
+  //    last_committed_item_index_. This is not 100% correct (since
+  //    last_committed_item_index_ is only updated for main frame navigations),
+  //    but is the best possible answer.
+  // 2) when the last committed item is an empty window open item.
+  if (pending_item_index_ >= 0 || empty_window_open_item_) {
     return last_committed_item_index_;
   }
   return GetWKCurrentItemIndex();
@@ -310,6 +347,11 @@ bool WKBasedNavigationManagerImpl::CanGoForward() const {
 }
 
 bool WKBasedNavigationManagerImpl::CanGoToOffset(int offset) const {
+  // If the last committed item is the empty window.open item, no back-forward
+  // navigation is allowed.
+  if (empty_window_open_item_) {
+    return offset == 0;
+  }
   int index = GetIndexForOffset(offset);
   return index >= 0 && index < GetItemCount();
 }
@@ -361,11 +403,19 @@ bool WKBasedNavigationManagerImpl::CanPruneAllButLastCommittedItem() const {
 void WKBasedNavigationManagerImpl::Restore(
     int last_committed_item_index,
     std::vector<std::unique_ptr<NavigationItem>> items) {
-  DCHECK(GetItemCount() == 0 && !GetPendingItem());
   DCHECK_LT(last_committed_item_index, static_cast<int>(items.size()));
   DCHECK(items.empty() || last_committed_item_index >= 0);
   if (items.empty())
     return;
+
+  DiscardNonCommittedItems();
+  if (GetItemCount() > 0) {
+    delegate_->RemoveWebView();
+  }
+  DCHECK_EQ(0, GetItemCount());
+  pending_item_index_ = -1;
+  previous_item_index_ = -1;
+  last_committed_item_index_ = -1;
 
   // This function restores session history by loading a magic local file
   // (restore_session.html) into the web view. The session history is encoded
@@ -375,42 +425,31 @@ void WKBasedNavigationManagerImpl::Restore(
   // TODO(crbug.com/771200): Retain these original NavigationItems restored from
   // storage and associate them with new WKBackForwardListItems created after
   // history restore so information such as scroll position is restored.
-
-  // The URLs and titles of the restored entries are stored in two separate
-  // lists instead of a single list of objects to reduce the size of the JSON
-  // string to be included in the query parameter.
-  base::Value restored_urls(base::Value::Type::LIST);
-  base::Value restored_titles(base::Value::Type::LIST);
-  restored_urls.GetList().reserve(items.size());
-  restored_titles.GetList().reserve(items.size());
-  for (size_t index = 0; index < items.size(); index++) {
-    restored_urls.GetList().push_back(
-        base::Value(items[index]->GetURL().spec()));
-    restored_titles.GetList().push_back(base::Value(items[index]->GetTitle()));
-  }
-  base::Value session(base::Value::Type::DICTIONARY);
-  int offset = last_committed_item_index + 1 - items.size();
-  session.SetKey("offset", base::Value(offset));
-  session.SetKey("urls", std::move(restored_urls));
-  session.SetKey("titles", std::move(restored_titles));
-
-  std::string session_json;
-  base::JSONWriter::Write(session, &session_json);
-
-  std::string restore_session_resource_path = base::SysNSStringToUTF8(
-      [base::mac::FrameworkBundle() pathForResource:@"restore_session"
-                                             ofType:@"html"]);
-  std::string url_spec = base::StringPrintf(
-      "%s://%s", url::kFileScheme, restore_session_resource_path.c_str());
-  GURL url = net::AppendQueryParameter(GURL(url_spec), "session", session_json);
+  GURL url = CreateRestoreSessionUrl(last_committed_item_index, items);
 
   WebLoadParams params(url);
+  // It's not clear how this transition type will be used and what's the impact.
+  // For now, use RELOAD because restoring history is kind of like a reload of
+  // the current page.
   params.transition_type = ui::PAGE_TRANSITION_RELOAD;
   LoadURLWithParams(params);
+
+  GetPendingItemImpl()->SetVirtualURL(
+      items[last_committed_item_index]->GetVirtualURL());
 }
 
 NavigationItemImpl* WKBasedNavigationManagerImpl::GetNavigationItemImplAtIndex(
     size_t index) const {
+  if (empty_window_open_item_) {
+    // Return nullptr for index != 0 instead of letting the code fall through
+    // (which in most cases will return null anyways because wk_item should be
+    // nil) for the slim chance that WKBackForwardList has been updated for a
+    // new navigation but WKWebView has not triggered the |didCommitNavigation:|
+    // callback. NavigationItem for the new wk_item should not be returned until
+    // after DidCommitPendingItem() is called.
+    return index == 0 ? empty_window_open_item_.get() : nullptr;
+  }
+
   WKBackForwardListItem* wk_item = GetWKItemAtIndex(index);
   NavigationItemImpl* item = GetNavigationItemFromWKItem(wk_item);
 
@@ -436,12 +475,30 @@ NavigationItemImpl* WKBasedNavigationManagerImpl::GetNavigationItemImplAtIndex(
           net::GURLWithNSURL(prev_wk_item.URL),
           nullptr /* use default rewriters only */);
   new_item->SetTimestamp(time_smoother_.GetSmoothedTime(base::Time::Now()));
+  const GURL& url = new_item->GetURL();
+  // If this navigation item has a restore_session.html URL, then it was created
+  // to restore session history and will redirect to the target URL encoded in
+  // the query parameter automatically. Set virtual URL to the target URL so the
+  // internal restore_session.html is not exposed in the UI and to URL-sensing
+  // components outside of //ios/web layer.
+  if (IsRestoreSessionUrl(url)) {
+    GURL virtual_url;
+    bool success = ExtractTargetURL(url, &virtual_url);
+    DCHECK(success);
+    if (success)
+      new_item->SetVirtualURL(virtual_url);
+  }
+
   SetNavigationItemInWKItem(wk_item, std::move(new_item));
   return GetNavigationItemFromWKItem(wk_item);
 }
 
 NavigationItemImpl* WKBasedNavigationManagerImpl::GetLastCommittedItemImpl()
     const {
+  if (empty_window_open_item_) {
+    return empty_window_open_item_.get();
+  }
+
   int index = GetLastCommittedItemIndex();
   return index == -1 ? nullptr
                      : GetNavigationItemImplAtIndex(static_cast<size_t>(index));
@@ -461,9 +518,22 @@ void WKBasedNavigationManagerImpl::FinishGoToIndex(
     int index,
     NavigationInitiationType type) {
   DiscardNonCommittedItems();
+  NavigationItem* item = GetItemAtIndex(index);
+  item->SetTransitionType(ui::PageTransitionFromInt(
+      item->GetTransitionType() | ui::PAGE_TRANSITION_FORWARD_BACK));
   WKBackForwardListItem* wk_item = GetWKItemAtIndex(index);
-  DCHECK(wk_item);
-  [delegate_->GetWebViewNavigationProxy() goToBackForwardListItem:wk_item];
+  if (wk_item) {
+    [delegate_->GetWebViewNavigationProxy() goToBackForwardListItem:wk_item];
+  } else {
+    DCHECK(index == 0 && empty_window_open_item_)
+        << " wk_item should not be nullptr. index: " << index
+        << " has_empty_window_open_item: "
+        << (empty_window_open_item_ != nullptr);
+  }
+}
+
+bool WKBasedNavigationManagerImpl::IsPlaceholderUrl(const GURL& url) const {
+  return placeholder_navigation_util::IsPlaceholderUrl(url);
 }
 
 int WKBasedNavigationManagerImpl::GetWKCurrentItemIndex() const {

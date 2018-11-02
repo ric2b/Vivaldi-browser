@@ -95,7 +95,7 @@ BreakingNewsGCMAppHandler::BreakingNewsGCMAppHandler(
     PrefService* pref_service,
     std::unique_ptr<SubscriptionManager> subscription_manager,
     const ParseJSONCallback& parse_json_callback,
-    std::unique_ptr<base::Clock> clock,
+    base::Clock* clock,
     std::unique_ptr<base::OneShotTimer> token_validation_timer,
     std::unique_ptr<base::OneShotTimer> forced_subscription_timer)
     : gcm_driver_(gcm_driver),
@@ -103,7 +103,7 @@ BreakingNewsGCMAppHandler::BreakingNewsGCMAppHandler(
       pref_service_(pref_service),
       subscription_manager_(std::move(subscription_manager)),
       parse_json_callback_(parse_json_callback),
-      clock_(std::move(clock)),
+      clock_(clock),
       token_validation_timer_(std::move(token_validation_timer)),
       forced_subscription_timer_(std::move(forced_subscription_timer)),
       weak_ptr_factory_(this) {
@@ -112,6 +112,8 @@ BreakingNewsGCMAppHandler::BreakingNewsGCMAppHandler(
 #endif  // !OS_ANDROID
   DCHECK(token_validation_timer_);
   DCHECK(!token_validation_timer_->IsRunning());
+  DCHECK(forced_subscription_timer_);
+  DCHECK(!forced_subscription_timer_->IsRunning());
 }
 
 BreakingNewsGCMAppHandler::~BreakingNewsGCMAppHandler() {
@@ -170,6 +172,8 @@ void BreakingNewsGCMAppHandler::Subscribe(bool force_token_retrieval) {
     return;
   }
 
+  // TODO(vitaliii): Use |BindOnce| instead of |Bind|, because the callback is
+  // meant to be run only once.
   instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
       ->GetToken(kBreakingNewsGCMSenderId, kGCMScope,
                  /*options=*/std::map<std::string, std::string>(),
@@ -180,6 +184,12 @@ void BreakingNewsGCMAppHandler::Subscribe(bool force_token_retrieval) {
 void BreakingNewsGCMAppHandler::DidRetrieveToken(
     const std::string& subscription_token,
     InstanceID::Result result) {
+  if (!IsListening()) {
+    // After we requested the token, |StopListening| has been called. Thus,
+    // ignore the token.
+    return;
+  }
+
   metrics::OnTokenRetrieved(result);
 
   switch (result) {
@@ -215,6 +225,8 @@ void BreakingNewsGCMAppHandler::ResubscribeIfInvalidToken() {
 
   // InstanceIDAndroid::ValidateToken just returns |true| on Android. Instead it
   // is ok to retrieve a token, because it is cached.
+  // TODO(vitaliii): Use |BindOnce| instead of |Bind|, because the callback is
+  // meant to be run only once.
   instance_id_driver_->GetInstanceID(kBreakingNewsGCMAppID)
       ->GetToken(
           kBreakingNewsGCMSenderId, kGCMScope,
@@ -226,6 +238,12 @@ void BreakingNewsGCMAppHandler::ResubscribeIfInvalidToken() {
 void BreakingNewsGCMAppHandler::DidReceiveTokenForValidation(
     const std::string& new_token,
     InstanceID::Result result) {
+  if (!IsListening()) {
+    // After we requested the token, |StopListening| has been called. Thus,
+    // ignore the token.
+    return;
+  }
+
   metrics::OnTokenRetrieved(result);
 
   base::Optional<base::TimeDelta> time_since_last_validation;

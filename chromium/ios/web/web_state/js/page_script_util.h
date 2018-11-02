@@ -17,8 +17,16 @@ class BrowserState;
 NSString* GetPageScript(NSString* script_file_name);
 
 // Returns an autoreleased string containing the JavaScript to be injected into
-// the web view as early as possible.
-NSString* GetEarlyPageScript(BrowserState* browser_state);
+// the main frame of the web view as early as possible.
+NSString* GetDocumentStartScriptForMainFrame(BrowserState* browser_state);
+
+// Returns an autoreleased string containing the JavaScript to be injected into
+// all frames of the web view as early as possible.
+NSString* GetDocumentStartScriptForAllFrames(BrowserState* browser_state);
+
+// Returns an autoreleased string containing the JavaScript to be injected into
+// all frames of the web view at the end of the document load.
+NSString* GetDocumentEndScriptForAllFrames(BrowserState* browser_state);
 
 }  // namespace web
 

@@ -148,14 +148,14 @@ bool IsAddPersonEnabled() {
 
 // Executes the action specified by the URL's Hash parameter, if any. Deletes
 // itself after the action would be performed.
-class UrlHashHelper : public chrome::BrowserListObserver {
+class UrlHashHelper : public BrowserListObserver {
  public:
   UrlHashHelper(Browser* browser, const std::string& hash);
   ~UrlHashHelper() override;
 
   void ExecuteUrlHash();
 
-  // chrome::BrowserListObserver overrides:
+  // BrowserListObserver overrides:
   void OnBrowserRemoved(Browser* browser) override;
 
  private:
@@ -471,8 +471,9 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
     // password token, the user must perform a full online reauth.
     RecordAuthenticatedLaunchUserEvent(
         AuthenticatedLaunchUserEvent::GAIA_REAUTH_DIALOG);
-    UserManagerProfileDialog::ShowReauthDialog(
-        browser_context, email_address_, signin_metrics::Reason::REASON_UNLOCK);
+    UserManagerProfileDialog::ShowReauthDialogWithProfilePath(
+        browser_context, email_address_, profile_path,
+        signin_metrics::Reason::REASON_UNLOCK);
   } else if (entry->IsSigninRequired() && entry->IsSupervised()) {
     // Supervised profile will only be locked when force-sign-in is enabled
     // and it shouldn't be unlocked. Display the error message directly via
@@ -491,8 +492,11 @@ void UserManagerScreenHandler::HandleAuthenticatedLaunchUser(
     // in with an email address matched RestrictSigninToPattern policy already.
     RecordAuthenticatedLaunchUserEvent(
         AuthenticatedLaunchUserEvent::USED_PROFILE_BLOCKED_WARNING);
-    DisplayErrorMessage(
-        l10n_util::GetStringUTF16(IDS_USER_NOT_ALLOWED_BY_POLICY), web_ui());
+    LoginUIServiceFactory::GetForProfile(
+        Profile::FromWebUI(web_ui())->GetOriginalProfile())
+        ->SetProfileBlockingErrorMessage();
+    UserManagerProfileDialog::ShowDialogAndDisplayErrorMessage(
+        web_ui()->GetWebContents()->GetBrowserContext());
   } else {
     // Fresh sign in via user manager without existing email address.
     RecordAuthenticatedLaunchUserEvent(
@@ -657,7 +661,7 @@ void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
   // Copy result into return_value.
   base::DictionaryValue return_value;
   for (const auto& item : result) {
-    auto stat = base::MakeUnique<base::DictionaryValue>();
+    auto stat = std::make_unique<base::DictionaryValue>();
     stat->SetKey("count", base::Value(item.count));
     return_value.SetWithoutPathExpansion(item.category, std::move(stat));
   }
@@ -771,7 +775,6 @@ void UserManagerScreenHandler::GetLocalizedValues(
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_BUTTON));
   localized_strings->SetString("passwordFieldAccessibleName",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_PASSWORD_FIELD_ACCESSIBLE_NAME));
-  localized_strings->SetString("bootIntoWallpaper", "off");
 
   // For AccountPickerScreen, the remove user warning overlay.
   localized_strings->SetString("removeUserWarningButtonTitle",
@@ -898,7 +901,7 @@ void UserManagerScreenHandler::SendUserList() {
     if (entry->IsOmitted())
       continue;
 
-    auto profile_value = base::MakeUnique<base::DictionaryValue>();
+    auto profile_value = std::make_unique<base::DictionaryValue>();
     base::FilePath profile_path = entry->GetPath();
 
     profile_value->SetString(kKeyUsername, entry->GetUserName());

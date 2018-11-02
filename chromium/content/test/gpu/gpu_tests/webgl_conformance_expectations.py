@@ -56,10 +56,9 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_s3tc_srgb',
         ['win', 'mac', 'linux', 'android'])
+    self.Skip('WebglExtension_EXT_disjoint_timer_query', bug=808744)
 
     # Extensions not available under D3D9
-    self.Fail('WebglExtension_EXT_disjoint_timer_query',
-        ['win', 'd3d9'])
     self.Fail('WebglExtension_EXT_sRGB',
         ['win', 'd3d9'])
 
@@ -70,8 +69,6 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['win', 'd3d9'])
 
     # Android general
-    self.Fail('WebglExtension_EXT_disjoint_timer_query',
-        ['android'])
     self.Fail('WebglExtension_EXT_frag_depth',
         ['android'])
     self.Fail('WebglExtension_EXT_shader_texture_lod',
@@ -220,6 +217,16 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Flaky('conformance/programs/program-test.html',
         ['win', 'nvidia', 'passthrough', 'd3d11'], bug=737016)
 
+    # Passthrough command decoder / Win / OpenGL / NVIDIA
+    self.Fail('conformance/renderbuffers/' +
+        'depth-renderbuffer-initialization.html',
+        ['win', 'passthrough', 'opengl', 'nvidia'], bug=794339)
+
+    # Passthrough command decoder / Win / OpenGL / Intel
+    self.Fail('conformance/renderbuffers/' +
+        'depth-renderbuffer-initialization.html',
+        ['win', 'passthrough', 'opengl', 'intel'], bug=794339)
+
     # Win failures
     # TODO(kbr): re-enable suppression for same test below once fixed.
     self.Skip('conformance/glsl/bugs/sampler-struct-function-arg.html',
@@ -266,14 +273,18 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         'tex-2d-rgba-rgba-unsigned_short_4_4_4_4.html',
         ['win10', ('nvidia', 0x1cb3)], bug=728670)
 
+    # Win7 / NVIDIA D3D9 failures
+    self.Flaky('conformance/canvas/canvas-test.html',
+        ['win7', 'nvidia', 'd3d9'], bug=690248)
+
+    # Win / Intel
+    self.Fail('conformance/rendering/rendering-stencil-large-viewport.html',
+        ['win', 'intel', 'd3d11'], bug=782317)
+
     # Win7 / Intel failures
     self.Fail('conformance/textures/misc/' +
               'copy-tex-image-and-sub-image-2d.html',
               ['win7', 'intel', 'no_passthrough'])
-
-    # Win7 / NVIDIA D3D9 failures
-    self.Flaky('conformance/canvas/canvas-test.html',
-        ['win7', 'nvidia', 'd3d9'], bug=690248)
 
     # Win AMD failures
     # This test is probably flaky on all AMD, but only visible on the
@@ -448,6 +459,10 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     # self.Fail('conformance/rendering/texture-switch-performance.html',
     #     ['mac', 'amd', 'release'], bug=735483)
 
+    # Mac Intel
+    self.Fail('conformance/rendering/rendering-stencil-large-viewport.html',
+        ['mac', 'intel'], bug=782317)
+
     # Mac Retina NVidia failures
     self.Fail('conformance/attribs/gl-disabled-vertex-attrib.html',
         ['mac', ('nvidia', 0xfe9)], bug=635081)
@@ -497,6 +512,15 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         ['linux', 'amd', 'no_angle'], bug=479260)
     self.Fail('conformance/glsl/misc/shaders-with-invariance.html',
         ['linux', 'amd', 'no_passthrough'], bug=479952)
+
+    # Linux passthrough AMD
+    self.Fail('conformance/renderbuffers/' +
+        'depth-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'amd'], bug=794339)
+    self.Fail('conformance/renderbuffers/' +
+        'stencil-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'amd'], bug=794339)
+
     # Intel
     # See https://bugs.freedesktop.org/show_bug.cgi?id=94477
     self.Skip('conformance/glsl/bugs/temp-expressions-should-not-crash.html',
@@ -505,13 +529,17 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Fail('conformance/rendering/clipping-wide-points.html',
         ['linux', 'intel'], bug=642822)
 
-    self.Fail('WebglExtension_EXT_disjoint_timer_query',
-        ['linux', 'intel'], bug=687210)
-
     # Linux Intel HD 630
     self.Fail('conformance/textures/misc/texture-size-limit.html',
         ['linux', ('intel', 0x5912)], bug=745888)
 
+    # Linux passthrough Intel
+    self.Fail('conformance/renderbuffers/' +
+        'depth-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'intel'], bug=794339)
+    self.Fail('conformance/renderbuffers/' +
+        'stencil-renderbuffer-initialization.html',
+        ['linux', 'passthrough', 'intel'], bug=794339)
     ####################
     # Android failures #
     ####################
@@ -608,6 +636,12 @@ class WebGLConformanceExpectations(GpuTestExpectations):
         bug=752291)
 
     # Nexus 5X
+    # The following two tests just started timing out randomly on the
+    # android_optional_gpu_tests_rel tryserver with no apparent cause.
+    self.Flaky('deqp/data/gles2/shaders/conversions.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
+    self.Flaky('deqp/data/gles2/shaders/swizzles.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
     # This one is causing intermittent timeouts on the device, and it
     # looks like when that happens, the next test also always times
     # out. Skip it for now until it's fixed and running reliably.
@@ -625,9 +659,21 @@ class WebGLConformanceExpectations(GpuTestExpectations):
     self.Skip('conformance/glsl/misc/shader-with-non-reserved-words.html',
         ['android', ('qualcomm', 'Adreno (TM) 418'), 'no_passthrough'],
         bug=609883)
+    self.Flaky('conformance/ogles/GL/all/all_001_to_004.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
+    self.Flaky('conformance/ogles/GL/cos/cos_001_to_006.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
+    self.Flaky('conformance/ogles/GL/swizzlers/swizzlers_041_to_048.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
+    self.Flaky('conformance/textures/image_bitmap_from_video/' +
+        'tex-2d-luminance-luminance-unsigned_byte.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
     self.Flaky('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-rgb-rgb-unsigned_byte.html',
         ['android', ('qualcomm', 'Adreno (TM) 418')], bug=716496)
+    self.Flaky('conformance/textures/misc/' +
+        'tex-video-using-tex-unit-non-zero.html',
+        ['android', ('qualcomm', 'Adreno (TM) 418')], bug=793050)
     self.Fail('conformance/uniforms/uniform-samplers-test.html',
         ['android', ('qualcomm', 'Adreno (TM) 418'), 'no_passthrough'],
         bug=610951)

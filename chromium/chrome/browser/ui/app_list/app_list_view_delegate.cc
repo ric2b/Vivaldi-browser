@@ -6,11 +6,13 @@
 
 #include <stddef.h>
 
+#include <utility>
 #include <vector>
 
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/app_list_view_state.h"
-#include "ash/app_list/model/search_box_model.h"
+#include "ash/app_list/model/search/search_model.h"
+#include "ash/app_list/model/speech/speech_ui_model.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
@@ -20,10 +22,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
-#include "chrome/browser/ui/app_list/custom_launcher_page_contents.h"
-#include "chrome/browser/ui/app_list/launcher_page_event_dispatcher.h"
+#include "chrome/browser/ui/app_list/search/search_controller.h"
 #include "chrome/browser/ui/app_list/search/search_controller_factory.h"
 #include "chrome/browser/ui/app_list/search/search_resource_manager.h"
 #include "chrome/browser/ui/app_list/start_page_service.h"
@@ -45,19 +47,14 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_constants.h"
-#include "extensions/common/manifest_handlers/launcher_page_info.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate_observer.h"
-#include "ui/app_list/search_controller.h"
-#include "ui/app_list/speech_ui_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/controls/webview/webview.h"
 
 namespace {
-
-const int kAutoLaunchDefaultTimeoutMilliSec = 50;
 
 // The UMA histogram that logs which state search results are opened from.
 const char kAppListSearchResultOpenSourceHistogram[] =
@@ -88,10 +85,33 @@ void RecordHistogram(bool is_tablet_mode, app_list::AppListViewState state) {
 
 }  // namespace
 
+namespace app_list {
+
+SpeechRecognitionState ToSpeechRecognitionState(SpeechRecognizerState state) {
+  switch (state) {
+    case SPEECH_RECOGNIZER_OFF:
+      return SPEECH_RECOGNITION_OFF;
+    case SPEECH_RECOGNIZER_READY:
+      return SPEECH_RECOGNITION_READY;
+    case SPEECH_RECOGNIZER_RECOGNIZING:
+      return SPEECH_RECOGNITION_RECOGNIZING;
+    case SPEECH_RECOGNIZER_IN_SPEECH:
+      return SPEECH_RECOGNITION_IN_SPEECH;
+    case SPEECH_RECOGNIZER_STOPPING:
+      return SPEECH_RECOGNITION_STOPPING;
+    case SPEECH_RECOGNIZER_NETWORK_ERROR:
+      return SPEECH_RECOGNITION_NETWORK_ERROR;
+  }
+}
+
+}  // namespace app_list
+
 AppListViewDelegate::AppListViewDelegate(AppListControllerDelegate* controller)
     : controller_(controller),
       profile_(nullptr),
       model_(nullptr),
+      search_model_(nullptr),
+      model_updater_(nullptr),
       template_url_service_observer_(this),
       observer_binding_(this),
       weak_ptr_factory_(this) {
@@ -129,22 +149,24 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
 
   if (profile_) {
     DCHECK(model_);
+    DCHECK(search_model_);
+    DCHECK(model_updater_);
     // |search_controller_| will be destroyed on profile switch. Before that,
     // delete |model_|'s search results to clear any dangling pointers.
-    model_->results()->DeleteAll();
+    search_model_->results()->DeleteAll();
 
     // Note: |search_resource_manager_| has a reference to |speech_ui_| so must
     // be destroyed first.
     search_resource_manager_.reset();
     search_controller_.reset();
-    launcher_page_event_dispatcher_.reset();
-    custom_page_contents_.clear();
     app_list::StartPageService* start_page_service =
         app_list::StartPageService::Get(profile_);
     if (start_page_service)
       start_page_service->RemoveObserver(this);
     app_sync_ui_state_watcher_.reset();
-    model_ = NULL;
+    model_ = nullptr;
+    search_model_ = nullptr;
+    model_updater_ = nullptr;
   }
 
   template_url_service_observer_.RemoveAll();
@@ -167,8 +189,11 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
       TemplateURLServiceFactory::GetForProfile(profile_);
   template_url_service_observer_.Add(template_url_service);
 
-  model_ = app_list::AppListSyncableServiceFactory::GetForProfile(profile_)
-               ->GetModel();
+  app_list::AppListSyncableService* syncable_service =
+      app_list::AppListSyncableServiceFactory::GetForProfile(profile_);
+  model_ = syncable_service->GetModel();
+  search_model_ = syncable_service->GetSearchModel();
+  model_updater_ = syncable_service->GetModelUpdater();
 
   // After |model_| is initialized, make a GetWallpaperColors mojo call to set
   // wallpaper colors for |model_|.
@@ -176,13 +201,15 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
       base::Bind(&AppListViewDelegate::OnGetWallpaperColorsCallback,
                  weak_ptr_factory_.GetWeakPtr()));
 
-  app_sync_ui_state_watcher_.reset(new AppSyncUIStateWatcher(profile_, model_));
+  app_sync_ui_state_watcher_ =
+      std::make_unique<AppSyncUIStateWatcher>(profile_, model_updater_);
 
   SetUpSearchUI();
   OnTemplateURLServiceChanged();
 
   // Clear search query.
-  model_->search_box()->Update(base::string16(), false);
+  model_updater_->UpdateSearchBox(base::string16(),
+                                  false /* initiated_by_user */);
 }
 
 void AppListViewDelegate::OnGetWallpaperColorsCallback(
@@ -196,15 +223,17 @@ void AppListViewDelegate::SetUpSearchUI() {
   if (start_page_service)
     start_page_service->AddObserver(this);
 
-  speech_ui_->SetSpeechRecognitionState(start_page_service
-                                            ? start_page_service->state()
-                                            : app_list::SPEECH_RECOGNITION_OFF,
-                                        false);
+  speech_ui_->SetSpeechRecognitionState(
+      start_page_service
+          ? app_list::ToSpeechRecognitionState(start_page_service->state())
+          : app_list::SPEECH_RECOGNITION_OFF,
+      false);
 
   search_resource_manager_.reset(new app_list::SearchResourceManager(
-      profile_, model_->search_box(), speech_ui_.get()));
+      profile_, model_updater_, speech_ui_.get()));
 
-  search_controller_ = CreateSearchController(profile_, model_, controller_);
+  search_controller_ =
+      app_list::CreateSearchController(profile_, model_updater_, controller_);
 }
 
 void AppListViewDelegate::OnWallpaperColorsChanged(
@@ -217,30 +246,35 @@ void AppListViewDelegate::OnWallpaperColorsChanged(
     observer.OnWallpaperColorsChanged();
 }
 
+AppListModelUpdater* AppListViewDelegate::GetModelUpdater() {
+  return model_updater_;
+}
+
 app_list::AppListModel* AppListViewDelegate::GetModel() {
   return model_;
+}
+
+app_list::SearchModel* AppListViewDelegate::GetSearchModel() {
+  return search_model_;
 }
 
 app_list::SpeechUIModel* AppListViewDelegate::GetSpeechUI() {
   return speech_ui_.get();
 }
 
-void AppListViewDelegate::StartSearch() {
+void AppListViewDelegate::StartSearch(const base::string16& raw_query) {
   if (search_controller_) {
-    search_controller_->Start();
+    search_controller_->Start(raw_query);
     controller_->OnSearchStarted();
   }
 }
 
 void AppListViewDelegate::OpenSearchResult(app_list::SearchResult* result,
-                                           bool auto_launch,
                                            int event_flags) {
-  if (auto_launch)
-    base::RecordAction(base::UserMetricsAction("AppList_AutoLaunched"));
-
   // Record the search metric if the SearchResult is not a suggested app.
   if (result->display_type() != app_list::SearchResult::DISPLAY_RECOMMENDATION)
-    RecordHistogram(model_->tablet_mode(), model_->state_fullscreen());
+    RecordHistogram(model_updater_->TabletMode(),
+                    model_updater_->StateFullscreen());
 
   search_controller_->OpenResult(result, event_flags);
 }
@@ -250,17 +284,6 @@ void AppListViewDelegate::InvokeSearchResultAction(
     int action_index,
     int event_flags) {
   search_controller_->InvokeResultAction(result, action_index, event_flags);
-}
-
-base::TimeDelta AppListViewDelegate::GetAutoLaunchTimeout() {
-  return auto_launch_timeout_;
-}
-
-void AppListViewDelegate::AutoLaunchCanceled() {
-  if (model_ && model_->search_box()->is_voice_query()) {
-    base::RecordAction(base::UserMetricsAction("AppList_AutoLaunchCanceled"));
-  }
-  auto_launch_timeout_ = base::TimeDelta();
 }
 
 void AppListViewDelegate::ViewInitialized() {
@@ -306,7 +329,7 @@ void AppListViewDelegate::StartSpeechRecognitionForHotword(
   // Don't start the recognizer or stop the hotword session if there is a
   // network error. Show the network error message instead.
   if (service) {
-    if (service->state() == app_list::SPEECH_RECOGNITION_NETWORK_ERROR) {
+    if (service->state() == SPEECH_RECOGNIZER_NETWORK_ERROR) {
       speech_ui_->SetSpeechRecognitionState(
           app_list::SPEECH_RECOGNITION_NETWORK_ERROR, true);
       return;
@@ -315,23 +338,14 @@ void AppListViewDelegate::StartSpeechRecognitionForHotword(
   }
 }
 
-void AppListViewDelegate::OnSpeechResult(const base::string16& result,
-                                         bool is_final) {
-  speech_ui_->SetSpeechResult(result, is_final);
-  if (is_final) {
-    auto_launch_timeout_ =
-        base::TimeDelta::FromMilliseconds(kAutoLaunchDefaultTimeoutMilliSec);
-    model_->search_box()->Update(result, true);
-  }
-}
-
 void AppListViewDelegate::OnSpeechSoundLevelChanged(int16_t level) {
   speech_ui_->UpdateSoundLevel(level);
 }
 
 void AppListViewDelegate::OnSpeechRecognitionStateChanged(
-    app_list::SpeechRecognitionState new_state) {
-  speech_ui_->SetSpeechRecognitionState(new_state, false);
+    SpeechRecognizerState new_state) {
+  speech_ui_->SetSpeechRecognitionState(
+      app_list::ToSpeechRecognitionState(new_state), false);
 }
 
 views::View* AppListViewDelegate::CreateStartPageWebView(
@@ -356,44 +370,6 @@ views::View* AppListViewDelegate::CreateStartPageWebView(
   return web_view;
 }
 
-std::vector<views::View*> AppListViewDelegate::CreateCustomPageWebViews(
-    const gfx::Size& size) {
-  std::vector<views::View*> web_views;
-
-  for (const auto& contents : custom_page_contents_) {
-    content::WebContents* web_contents = contents->web_contents();
-
-    // The web contents should belong to the current profile.
-    DCHECK_EQ(profile_, web_contents->GetBrowserContext());
-
-    // Make the webview transparent.
-    content::RenderWidgetHostView* render_view_host_view =
-        web_contents->GetRenderViewHost()->GetWidget()->GetView();
-    // The RenderWidgetHostView may be null if the renderer has crashed.
-    if (render_view_host_view)
-      render_view_host_view->SetBackgroundColor(SK_ColorTRANSPARENT);
-
-    views::WebView* web_view =
-        new views::WebView(web_contents->GetBrowserContext());
-    web_view->SetPreferredSize(size);
-    web_view->SetResizeBackgroundColor(SK_ColorTRANSPARENT);
-    web_view->SetWebContents(web_contents);
-    web_views.push_back(web_view);
-  }
-
-  return web_views;
-}
-
-void AppListViewDelegate::CustomLauncherPageAnimationChanged(double progress) {
-  if (launcher_page_event_dispatcher_)
-    launcher_page_event_dispatcher_->ProgressChanged(progress);
-}
-
-void AppListViewDelegate::CustomLauncherPagePopSubpage() {
-  if (launcher_page_event_dispatcher_)
-    launcher_page_event_dispatcher_->PopSubpage();
-}
-
 bool AppListViewDelegate::IsSpeechRecognitionEnabled() {
   app_list::StartPageService* service =
       app_list::StartPageService::Get(profile_);
@@ -403,6 +379,14 @@ bool AppListViewDelegate::IsSpeechRecognitionEnabled() {
 void AppListViewDelegate::GetWallpaperProminentColors(
     std::vector<SkColor>* colors) {
   *colors = wallpaper_prominent_colors_;
+}
+
+void AppListViewDelegate::ActivateItem(const std::string& id, int event_flags) {
+  model_updater_->ActivateChromeItem(id, event_flags);
+}
+
+ui::MenuModel* AppListViewDelegate::GetContextMenuModel(const std::string& id) {
+  return model_updater_->GetContextMenuModel(id);
 }
 
 void AppListViewDelegate::AddObserver(
@@ -424,7 +408,7 @@ void AppListViewDelegate::OnTemplateURLServiceChanged() {
       default_provider->GetEngineType(
           template_url_service->search_terms_data()) == SEARCH_ENGINE_GOOGLE;
 
-  model_->SetSearchEngineIsGoogle(is_google);
+  model_updater_->SetSearchEngineIsGoogle(is_google);
 
   app_list::StartPageService* start_page_service =
       app_list::StartPageService::Get(profile_);

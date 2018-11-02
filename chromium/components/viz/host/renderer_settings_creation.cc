@@ -35,15 +35,11 @@ bool GetSwitchValueAsInt(const base::CommandLine* command_line,
 
 }  // namespace
 
-ResourceSettings CreateResourceSettings(
-    const BufferToTextureTargetMap& image_targets) {
-  ResourceSettings resource_settings;
-  resource_settings.buffer_to_texture_target_map = image_targets;
-  return resource_settings;
+ResourceSettings CreateResourceSettings() {
+  return ResourceSettings();
 }
 
-RendererSettings CreateRendererSettings(
-    const BufferToTextureTargetMap& image_targets) {
+RendererSettings CreateRendererSettings() {
   RendererSettings renderer_settings;
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   renderer_settings.partial_swap_enabled =
@@ -53,16 +49,12 @@ RendererSettings CreateRendererSettings(
 #elif defined(OS_MACOSX)
   renderer_settings.release_overlay_resources_after_gpu_query = true;
 #endif
-  renderer_settings.gl_composited_overlay_candidate_quad_border =
-      command_line->HasSwitch(
-          switches::kGlCompositedOverlayCandidateQuadBorder);
+  renderer_settings.tint_gl_composited_content =
+      command_line->HasSwitch(switches::kTintGlCompositedContent);
   renderer_settings.show_overdraw_feedback =
       command_line->HasSwitch(switches::kShowOverdrawFeedback);
   renderer_settings.enable_draw_occlusion =
       command_line->HasSwitch(switches::kEnableDrawOcclusion);
-  renderer_settings.resource_settings = CreateResourceSettings(image_targets);
-  renderer_settings.disallow_non_exact_resource_reuse =
-      command_line->HasSwitch(switches::kDisallowNonExactResourceReuse);
   renderer_settings.allow_antialiasing =
       !command_line->HasSwitch(switches::kDisableCompositedAntialiasing);
   renderer_settings.use_skia_renderer =

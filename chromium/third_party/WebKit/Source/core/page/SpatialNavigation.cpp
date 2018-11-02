@@ -154,7 +154,8 @@ bool HasOffscreenRect(Node* node, WebFocusType type) {
 
   DCHECK(!frame_view->NeedsLayout());
 
-  LayoutRect container_viewport_rect(frame_view->VisibleContentRect());
+  LayoutRect container_viewport_rect(
+      frame_view->LayoutViewportScrollableArea()->VisibleContentRect());
   // We want to select a node if it is currently off screen, but will be
   // exposed after we scroll. Adjust the viewport to post-scrolling position.
   // If the container has overflow:hidden, we cannot scroll, so we do not pass
@@ -223,7 +224,8 @@ bool ScrollInDirection(LocalFrame* frame, WebFocusType type) {
         return false;
     }
 
-    frame->View()->ScrollBy(ScrollOffset(dx, dy), kUserScroll);
+    frame->View()->LayoutViewportScrollableArea()->ScrollBy(
+        ScrollOffset(dx, dy), kUserScroll);
     return true;
   }
   return false;
@@ -305,8 +307,7 @@ bool IsScrollableNode(const Node* node) {
   return false;
 }
 
-Node* ScrollableEnclosingBoxOrParentFrameForNodeInDirection(WebFocusType type,
-                                                            Node* node) {
+Node* ScrollableAreaOrDocumentOf(Node* node) {
   DCHECK(node);
   Node* parent = node;
   do {
@@ -315,9 +316,19 @@ Node* ScrollableEnclosingBoxOrParentFrameForNodeInDirection(WebFocusType type,
       parent = ToDocument(parent)->GetFrame()->DeprecatedLocalOwner();
     else
       parent = parent->ParentOrShadowHostNode();
-  } while (parent && !IsNavigableContainer(parent, type));
+  } while (parent && !IsScrollableAreaOrDocument(parent));
 
   return parent;
+}
+
+bool IsScrollableAreaOrDocument(const Node* node) {
+  if (!node)
+    return false;
+
+  return node->IsDocumentNode() ||
+         (node->IsFrameOwnerElement() &&
+          ToHTMLFrameOwnerElement(node)->ContentFrame()) ||
+         IsScrollableNode(node);
 }
 
 bool IsNavigableContainer(const Node* node, WebFocusType type) {
@@ -380,9 +391,11 @@ bool CanScrollInDirection(const LocalFrame* frame, WebFocusType type) {
   if ((type == kWebFocusTypeUp || type == kWebFocusTypeDown) &&
       kScrollbarAlwaysOff == vertical_mode)
     return false;
-  LayoutSize size(frame->View()->ContentsSize());
-  LayoutSize offset(frame->View()->ScrollOffsetInt());
-  LayoutRect rect(frame->View()->VisibleContentRect(kIncludeScrollbars));
+  ScrollableArea* scrollable_area =
+      frame->View()->LayoutViewportScrollableArea();
+  LayoutSize size(scrollable_area->ContentsSize());
+  LayoutSize offset(scrollable_area->ScrollOffsetInt());
+  LayoutRect rect(scrollable_area->VisibleContentRect(kIncludeScrollbars));
 
   switch (type) {
     case kWebFocusTypeLeft:
@@ -401,22 +414,9 @@ bool CanScrollInDirection(const LocalFrame* frame, WebFocusType type) {
 
 static LayoutRect RectToAbsoluteCoordinates(LocalFrame* initial_frame,
                                             const LayoutRect& initial_rect) {
-  LayoutRect rect = initial_rect;
-  for (Frame* frame = initial_frame; frame; frame = frame->Tree().Parent()) {
-    if (!frame->IsLocalFrame())
-      continue;
-    // FIXME: Spatial navigation is broken for OOPI.
-    Element* element = frame->DeprecatedLocalOwner();
-    if (element) {
-      do {
-        rect.Move(element->OffsetLeft(), element->OffsetTop());
-        LayoutObject* layout_object = element->GetLayoutObject();
-        element = layout_object ? layout_object->OffsetParent() : nullptr;
-      } while (element);
-      rect.Move((-ToLocalFrame(frame)->View()->ScrollOffsetInt()));
-    }
-  }
-  return rect;
+  return LayoutRect(
+      initial_frame->View()->ContentsToRootFrame(initial_rect.Location()),
+      initial_rect.Size());
 }
 
 LayoutRect NodeRectInAbsoluteCoordinates(Node* node, bool ignore_border) {
@@ -446,7 +446,9 @@ LayoutRect NodeRectInAbsoluteCoordinates(Node* node, bool ignore_border) {
 
 LayoutRect FrameRectInAbsoluteCoordinates(LocalFrame* frame) {
   return RectToAbsoluteCoordinates(
-      frame, LayoutRect(frame->View()->VisibleContentRect()));
+      frame,
+      LayoutRect(
+          frame->View()->LayoutViewportScrollableArea()->VisibleContentRect()));
 }
 
 // This method calculates the exitPoint from the startingRect and the entryPoint

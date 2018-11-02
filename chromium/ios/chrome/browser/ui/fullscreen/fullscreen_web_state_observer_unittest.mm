@@ -4,9 +4,10 @@
 
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_web_state_observer.h"
 
-#include "base/memory/ptr_util.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
 #import "ios/chrome/browser/ui/fullscreen/test/fullscreen_model_test_util.h"
+#import "ios/chrome/browser/ui/fullscreen/test/test_fullscreen_controller.h"
+#import "ios/chrome/browser/ui/fullscreen/test/test_fullscreen_mediator.h"
 #import "ios/web/public/navigation_item.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -20,20 +21,24 @@
 
 class FullscreenWebStateObserverTest : public PlatformTest {
  public:
-  FullscreenWebStateObserverTest() : PlatformTest(), observer_(&model_) {
-    // Set up model.
-    SetUpFullscreenModelForTesting(&model_, 100.0);
+  FullscreenWebStateObserverTest()
+      : PlatformTest(),
+        controller_(&model_),
+        mediator_(&controller_, &model_),
+        observer_(&controller_, &model_, &mediator_) {
     // Set up a TestNavigationManager.
     std::unique_ptr<web::TestNavigationManager> navigation_manager =
-        base::MakeUnique<web::TestNavigationManager>();
+        std::make_unique<web::TestNavigationManager>();
     navigation_manager_ = navigation_manager.get();
     web_state_.SetNavigationManager(std::move(navigation_manager));
     // Begin observing the WebState.
     observer_.SetWebState(&web_state_);
+    // Set up model.
+    SetUpFullscreenModelForTesting(&model_, 100.0);
   }
 
   ~FullscreenWebStateObserverTest() override {
-    // Stop observing the WebState.
+    mediator_.Disconnect();
     observer_.SetWebState(nullptr);
   }
 
@@ -45,6 +50,8 @@ class FullscreenWebStateObserverTest : public PlatformTest {
 
  private:
   FullscreenModel model_;
+  TestFullscreenController controller_;
+  TestFullscreenMediator mediator_;
   web::TestWebState web_state_;
   web::TestNavigationManager* navigation_manager_;
   FullscreenWebStateObserver observer_;
@@ -75,11 +82,11 @@ TEST_F(FullscreenWebStateObserverTest, DisableDuringLoad) {
 TEST_F(FullscreenWebStateObserverTest, DisableForBrokenSSL) {
   std::unique_ptr<web::NavigationItem> item = web::NavigationItem::Create();
   item->GetSSL().security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
-  navigation_manager().SetLastCommittedItem(item.get());
+  navigation_manager().SetVisibleItem(item.get());
   EXPECT_TRUE(model().enabled());
   web_state().OnVisibleSecurityStateChanged();
   EXPECT_FALSE(model().enabled());
-  navigation_manager().SetLastCommittedItem(nullptr);
+  navigation_manager().SetVisibleItem(nullptr);
   web_state().OnVisibleSecurityStateChanged();
   EXPECT_TRUE(model().enabled());
 }

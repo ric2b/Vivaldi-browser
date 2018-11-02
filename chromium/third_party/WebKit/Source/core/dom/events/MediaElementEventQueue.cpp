@@ -46,7 +46,7 @@ MediaElementEventQueue::MediaElementEventQueue(EventTarget* owner,
              &MediaElementEventQueue::TimerFired),
       is_closed_(false) {}
 
-MediaElementEventQueue::~MediaElementEventQueue() {}
+MediaElementEventQueue::~MediaElementEventQueue() = default;
 
 void MediaElementEventQueue::Trace(blink::Visitor* visitor) {
   visitor->Trace(owner_);
@@ -54,7 +54,7 @@ void MediaElementEventQueue::Trace(blink::Visitor* visitor) {
   EventQueue::Trace(visitor);
 }
 
-bool MediaElementEventQueue::EnqueueEvent(const WebTraceLocation& from_here,
+bool MediaElementEventQueue::EnqueueEvent(const base::Location& from_here,
                                           Event* event) {
   if (is_closed_)
     return false;

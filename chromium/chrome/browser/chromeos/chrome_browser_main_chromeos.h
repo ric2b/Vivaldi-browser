@@ -14,10 +14,7 @@
 #include "chrome/browser/memory/memory_kills_monitor.h"
 #include "chromeos/system/version_loader.h"
 
-class NightLightClient;
 class NotificationPlatformBridge;
-class TabletModeClient;
-class WallpaperControllerClient;
 
 namespace lock_screen_apps {
 class StateController;
@@ -31,7 +28,6 @@ class VoiceInteractionControllerClient;
 namespace chromeos {
 
 class ArcKioskAppManager;
-class DataPromoNotification;
 class EventRewriterController;
 class EventRewriterDelegateImpl;
 class ExtensionVolumeObserver;
@@ -50,7 +46,6 @@ class ExternalLoader;
 }
 
 namespace internal {
-class ChromeLauncherControllerInitializer;
 class DBusServices;
 class SystemTokenCertDBInitializer;
 }
@@ -61,6 +56,10 @@ class UserActivityLoggingController;
 }  // namespace ml
 }  // namespace power
 
+// ChromeBrowserMainParts implementation for chromeos specific code.
+// NOTE: Chromeos UI (Ash) support should be added to
+// ChromeBrowserMainExtraPartsAsh instead. This class should not depend on
+// src/ash or chrome/browser/ui/ash.
 class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
  public:
   explicit ChromeBrowserMainPartsChromeos(
@@ -68,7 +67,7 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   ~ChromeBrowserMainPartsChromeos() override;
 
   // ChromeBrowserMainParts overrides.
-  void PreEarlyInitialization() override;
+  int PreEarlyInitialization() override;
   void PreMainMessageLoopStart() override;
   void PostMainMessageLoopStart() override;
   void ServiceManagerConnectionStarted(
@@ -90,7 +89,6 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
   std::unique_ptr<ExtensionVolumeObserver> extension_volume_observer_;
   std::unique_ptr<PowerPrefs> power_prefs_;
   std::unique_ptr<IdleActionWarningObserver> idle_action_warning_observer_;
-  std::unique_ptr<DataPromoNotification> data_promo_notification_;
   std::unique_ptr<RendererFreezer> renderer_freezer_;
   std::unique_ptr<PowerMetricsReporter> power_metrics_reporter_;
   std::unique_ptr<WakeOnWifiManager> wake_on_wifi_manager_;
@@ -100,9 +98,6 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<internal::SystemTokenCertDBInitializer>
       system_token_certdb_initializer_;
-
-  std::unique_ptr<internal::ChromeLauncherControllerInitializer>
-      chrome_launcher_controller_initializer_;
 
   std::unique_ptr<ShutdownPolicyForwarder> shutdown_policy_forwarder_;
 
@@ -121,12 +116,8 @@ class ChromeBrowserMainPartsChromeos : public ChromeBrowserMainPartsLinux {
 
   std::unique_ptr<memory::MemoryKillsMonitor::Handle> memory_kills_monitor_;
 
-  std::unique_ptr<TabletModeClient> tablet_mode_client_;
   std::unique_ptr<lock_screen_apps::StateController>
       lock_screen_apps_state_controller_;
-
-  std::unique_ptr<NightLightClient> night_light_client_;
-  std::unique_ptr<WallpaperControllerClient> wallpaper_controller_client_;
 
   // TODO(estade): Remove this when Chrome OS uses native notifications by
   // default (as it will be instantiated elsewhere). For now it's necessary to

@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "base/sequence_checker.h"
 #include "chrome/browser/browser_process_platform_part_base.h"
@@ -32,12 +31,15 @@ class TimeZoneResolverManager;
 }
 
 namespace policy {
-class BrowserPolicyConnector;
 class BrowserPolicyConnectorChromeOS;
 }
 
 namespace ui {
 class InputDeviceControllerClient;
+}
+
+namespace component_updater {
+class CrOSComponentManager;
 }
 
 class ScopedKeepAlive;
@@ -58,6 +60,9 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
 
   void InitializeSessionManager();
   void ShutdownSessionManager();
+
+  void InitializeCrosComponentManager();
+  void ShutdownCrosComponentManager();
 
   // Disable the offline interstitial easter egg if the device is enterprise
   // enrolled.
@@ -90,23 +95,23 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
     return device_disabling_manager_.get();
   }
 
+  component_updater::CrOSComponentManager* cros_component_manager() {
+    return cros_component_manager_.get();
+  }
+
   chromeos::system::TimeZoneResolverManager* GetTimezoneResolverManager();
 
   chromeos::TimeZoneResolver* GetTimezoneResolver();
 
   // Overridden from BrowserProcessPlatformPartBase:
   void StartTearDown() override;
-  std::unique_ptr<policy::BrowserPolicyConnector> CreateBrowserPolicyConnector()
-      override;
+  std::unique_ptr<policy::ChromeBrowserPolicyConnector>
+  CreateBrowserPolicyConnector() override;
   void RegisterInProcessServices(
       content::ContentBrowserClient::StaticServiceMap* services) override;
 
   chromeos::system::SystemClock* GetSystemClock();
   void DestroySystemClock();
-
-  void AddCompatibleCrOSComponent(const std::string& name);
-
-  bool IsCompatibleCrOSComponent(const std::string& name);
 
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient();
 
@@ -136,7 +141,8 @@ class BrowserProcessPlatformPart : public BrowserProcessPlatformPartBase {
 
   std::unique_ptr<ScopedKeepAlive> keep_alive_;
 
-  base::flat_set<std::string> compatible_cros_components_;
+  std::unique_ptr<component_updater::CrOSComponentManager>
+      cros_component_manager_;
 
 #if defined(USE_OZONE)
   std::unique_ptr<ui::InputDeviceControllerClient>

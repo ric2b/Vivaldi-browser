@@ -190,12 +190,19 @@ OverlayCandidate::OverlayCandidate()
 
 OverlayCandidate::OverlayCandidate(const OverlayCandidate& other) = default;
 
-OverlayCandidate::~OverlayCandidate() {}
+OverlayCandidate::~OverlayCandidate() = default;
 
 // static
 bool OverlayCandidate::FromDrawQuad(DisplayResourceProvider* resource_provider,
+                                    const SkMatrix44& output_color_matrix,
                                     const viz::DrawQuad* quad,
                                     OverlayCandidate* candidate) {
+  // It is currently not possible to set a color conversion matrix on an HW
+  // overlay plane.
+  // TODO(dcastagna): Remove this check once crbug.com/792757 is resolved.
+  if (!output_color_matrix.isIdentity())
+    return false;
+
   // We don't support an opacity value different than one for an overlay plane.
   if (quad->shared_quad_state->opacity != 1.f)
     return false;
@@ -365,7 +372,7 @@ bool OverlayCandidate::FromStreamVideoQuad(
   return true;
 }
 
-OverlayCandidateList::OverlayCandidateList() {}
+OverlayCandidateList::OverlayCandidateList() = default;
 
 OverlayCandidateList::OverlayCandidateList(const OverlayCandidateList& other) =
     default;
@@ -373,7 +380,7 @@ OverlayCandidateList::OverlayCandidateList(const OverlayCandidateList& other) =
 OverlayCandidateList::OverlayCandidateList(OverlayCandidateList&& other) =
     default;
 
-OverlayCandidateList::~OverlayCandidateList() {}
+OverlayCandidateList::~OverlayCandidateList() = default;
 
 OverlayCandidateList& OverlayCandidateList::operator=(
     const OverlayCandidateList& other) = default;

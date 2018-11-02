@@ -4,6 +4,7 @@
 
 #include "modules/payments/PaymentRequestUpdateEvent.h"
 
+#include "base/location.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptFunction.h"
 #include "bindings/core/v8/V8BindingForCore.h"
@@ -13,7 +14,6 @@
 #include "modules/payments/PaymentUpdater.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/TaskType.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 namespace {
@@ -85,7 +85,7 @@ class UpdatePaymentDetailsErrorFunction : public ScriptFunction {
 
 }  // namespace
 
-PaymentRequestUpdateEvent::~PaymentRequestUpdateEvent() {}
+PaymentRequestUpdateEvent::~PaymentRequestUpdateEvent() = default;
 
 PaymentRequestUpdateEvent* PaymentRequestUpdateEvent::Create(
     ExecutionContext* execution_context,
@@ -123,7 +123,7 @@ void PaymentRequestUpdateEvent::updateWith(ScriptState* script_state,
   wait_for_update_ = true;
 
   DCHECK(!abort_timer_.IsActive());
-  abort_timer_.StartOneShot(kAbortTimeout, BLINK_FROM_HERE);
+  abort_timer_.StartOneShot(kAbortTimeout, FROM_HERE);
 
   promise.Then(
       UpdatePaymentDetailsFunction::CreateFunction(script_state, this),

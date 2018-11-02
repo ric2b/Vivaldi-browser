@@ -8,10 +8,10 @@
 #include <utility>
 #include <vector>
 
-#include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/child/child_process.h"
 #include "content/renderer/media/mock_peer_connection_impl.h"
@@ -19,6 +19,7 @@
 #include "content/renderer/media/webrtc/webrtc_media_stream_adapter_map.h"
 #include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
 #include "third_party/webrtc/media/base/fakemediaengine.h"
@@ -64,11 +65,12 @@ class WebRtcSetRemoteDescriptionObserverHandlerTest : public ::testing::Test {
         std::unique_ptr<cricket::MediaEngineInterface>(
             new cricket::FakeMediaEngine())));
     dependency_factory_.reset(new MockPeerConnectionDependencyFactory());
-    main_thread_ = base::ThreadTaskRunnerHandle::Get();
+    main_thread_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
     scoped_refptr<WebRtcMediaStreamAdapterMap> map =
         new WebRtcMediaStreamAdapterMap(
-            dependency_factory_.get(),
-            new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get()));
+            dependency_factory_.get(), main_thread_,
+            new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get(),
+                                                 main_thread_));
     observer_ = new WebRtcSetRemoteDescriptionObserverForTest();
     observer_handler_ = WebRtcSetRemoteDescriptionObserverHandler::Create(
         main_thread_, pc_, map, observer_);
@@ -96,9 +98,9 @@ class WebRtcSetRemoteDescriptionObserverHandlerTest : public ::testing::Test {
     run_loop->Quit();
   }
 
-  // Message loop and child process are needed for task queues and threading to
-  // work, as is necessary to create tracks and adapters.
-  base::MessageLoop message_loop_;
+  // The ScopedTaskEnvironment prevents the ChildProcess from leaking a
+  // TaskScheduler.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ChildProcess child_process_;
 
   scoped_refptr<webrtc::MockPeerConnection> pc_;

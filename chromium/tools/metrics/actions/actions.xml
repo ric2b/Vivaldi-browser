@@ -973,6 +973,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Accel_Toggle_Dictation">
+  <owner>dtseng@chromium.org</owner>
+  <description>
+    Metric recorded when the user starts or stops dictation using keyboard
+    shortcut.
+  </description>
+</action>
+
 <action name="Accel_Toggle_High_Contrast">
   <owner>dmazzoni@chromium.org</owner>
   <description>
@@ -1044,8 +1052,13 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Accel_Touch_Hud_Clear">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <obsolete>
+    Deprecated 12/2017. Keyboard accelerator replaced with flag.
+  </obsolete>
+  <owner>jamescook@chromium.org</owner>
+  <description>
+    Debugging accelerator used to turn off the touch hud projection feature.
+  </description>
 </action>
 
 <action name="Accel_VolumeDown_F9">
@@ -1194,6 +1207,24 @@ should be able to be added at any place in this file.
   <owner>miu@chromium.org</owner>
   <description>
     User clicked the tab alert indicator button to unmute the tab.
+  </description>
+</action>
+
+<action name="Android.BookmarkPage.RemoveItem">
+  <owner>huayinz@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed an item on the native Android bookmark page by clicking
+    &quot;delete&quot; from the &quot;more&quot; menu.
+  </description>
+</action>
+
+<action name="Android.BookmarkPage.SelectFromMenu">
+  <owner>huayinz@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User selected an item on the native Android bookmark page by clicking
+    &quot;select&quot; from the &quot;more&quot; menu.
   </description>
 </action>
 
@@ -1449,6 +1480,15 @@ should be able to be added at any place in this file.
   <owner>ianwen@chromium.org</owner>
   <description>
     User opened the navigation drawer in Chrome's download manager.
+  </description>
+</action>
+
+<action name="Android.DownloadManager.RemoveItem">
+  <owner>huayinz@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User removed an item on the native Android download page by clicking
+    &quot;delete&quot; from the &quot;more&quot; menu.
   </description>
 </action>
 
@@ -1780,23 +1820,41 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="AppList_AutoLaunchCanceled">
+  <obsolete>Voice search in Launcher is not supported anymore.</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="AppList_AutoLaunched">
+  <obsolete>Voice search in Launcher is not supported anymore.</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
 <action name="AppList_ClickOnApp">
+  <owner>vadimt@chromium.org</owner>
+  <description>
+    User clicks an icon in app grid. Chrome and Files are counted. Folders,
+    suggested apps and search results aren't.
+  </description>
+</action>
+
+<action name="AppList_ClickOnAppFromSearch">
+  <obsolete>
+    Deprecated in favor of a more general AppList_OpenSearchResult event.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
 
-<action name="AppList_ClickOnAppFromSearch">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+<action name="AppList_EnterSearch">
+  <owner>vadimt@chromium.org</owner>
+  <description>CrOS Launcher entered search mode.</description>
+</action>
+
+<action name="AppList_FullToPeeking">
+  <owner>vadimt@chromium.org</owner>
+  <description>CrOS Launcher went from full to peeking state.</description>
 </action>
 
 <action name="AppList_HotwordRecognized">
@@ -1804,7 +1862,33 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AppList_LeaveSearch">
+  <owner>vadimt@chromium.org</owner>
+  <description>CrOS Launcher left search mode.</description>
+</action>
+
+<action name="AppList_OpenSearchResult">
+  <owner>vadimt@chromium.org</owner>
+  <description>User opens a search result in CrOS Launcher.</description>
+</action>
+
+<action name="AppList_OpenSuggestedApp">
+  <owner>vadimt@chromium.org</owner>
+  <description>
+    User opens an app from the suggestions row in CrOS Launcher.
+  </description>
+</action>
+
+<action name="AppList_PeekingToFull">
+  <owner>vadimt@chromium.org</owner>
+  <description>
+    CrOS Launcher went from peeking to full state or, in a search mode, from
+    half to full.
+  </description>
+</action>
+
 <action name="AppList_Search">
+  <obsolete>Name was bad. Renamed to AppList_OpenSearchResult.</obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -1825,6 +1909,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.InstantApps">
+  <obsolete>
+    Deprecated in favor of Apps.AppListSearchResultOpenType histogram.
+  </obsolete>
   <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the an instant app from a Play Store app search
@@ -1833,6 +1920,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Arc.Launcher.Search.OpenPlayStore.UninstalledApps">
+  <obsolete>
+    Deprecated in favor of Apps.AppListSearchResultOpenType histogram.
+  </obsolete>
   <owner>hejq@chromium.org</owner>
   <description>
     Recorded when the user opens the installing page of a Play Store app search
@@ -2557,6 +2647,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="BindingsMismatchTerminate_RVH_WebUI">
+  <obsolete>
+    Replaced in 1/2018 with bad_message::RVH_WEB_UI_BINDINGS_MISMATCH.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>
@@ -11504,6 +11597,15 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileFreTOSLinkTapped">
+  <owner>justincohen@chromium.org</owner>
+  <description>
+    User tapped on the TOS link on the first run welcome view.  This metric is
+    only recorded if and after the TOS are accepted. This metric is specific to
+    iOS.
+  </description>
+</action>
+
 <action name="MobileGoToBackground">
   <owner>tedchoc@chromium.org</owner>
   <description>
@@ -15234,6 +15336,12 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="PageLoadInIncognito" not_user_triggered="true">
+  <owner>dullweber@chromium.org</owner>
+  <owner>msramek@chromium.org</owner>
+  <description>A page was loaded in incognito mode.</description>
+</action>
+
 <action name="PageLoadSRP" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -16132,6 +16240,11 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="SearchAnswer_StoppedLoading">
+  <obsolete>
+    Deprecated in favor of analysing proportion of shown
+    (SearchAnswer.AnswerVisibleTime total) vs. successfully loaded
+    (SearchAnswer.RequestResult.REQUEST_RESULT_RECEIVED_ANSWER) cards.
+  </obsolete>
   <owner>vadimt@chromium.org</owner>
   <description>Answer card successfully loads.</description>
 </action>
@@ -17386,8 +17499,15 @@ should be able to be added at any place in this file.
 <action name="SoftwareReporter.CleanupWebui_StartCleanup">
   <owner>alito@chromium.org</owner>
   <description>
-    The cleaner accepted the cleanup operation offered on the Chrome Cleaner
+    The cleaner started the cleanup operation offered on the Chrome Cleaner
     webui.
+  </description>
+</action>
+
+<action name="SoftwareReporter.CleanupWebui_StartScanning">
+  <owner>ftirelo@chromium.org</owner>
+  <description>
+    The cleaner started the scan operation offered on the Chrome Cleaner webui.
   </description>
 </action>
 
@@ -17525,6 +17645,36 @@ should be able to be added at any place in this file.
   <owner>steimel@chromium.org</owner>
   <owner>media-dev@chromium.org</owner>
   <description>User unmuted site via the tab strip.</description>
+</action>
+
+<action name="SplitView_DoubleTapDividerSwapWindows">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when the user double tapped on the split divider to swap windows in
+    tablet mode on Chrome OS.
+  </description>
+</action>
+
+<action name="SplitView_EndSplitView">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when the user ended split view mode in tablet mode on Chrome OS.
+  </description>
+</action>
+
+<action name="SplitView_ResizeWindows">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when the user dragged the split divider to resize the windows in
+    tablet mode on Chrome OS.
+  </description>
+</action>
+
+<action name="SplitView_SnapWindow">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when a window was just snapped in tablet mode on Chrome OS.
+  </description>
 </action>
 
 <action name="StackedTab_DragActiveTab">
@@ -18552,6 +18702,22 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Tablet_LongPressOverviewButtonEnterSplitView">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when the user long pressed the overview button to enter split view
+    in tablet mode on Chrome OS.
+  </description>
+</action>
+
+<action name="Tablet_LongPressOverviewButtonExitSplitView">
+  <owner>xdai@chromium.org</owner>
+  <description>
+    Recorded when the user long pressed the overview button to exit split view
+    in tablet mode on Chrome OS.
+  </description>
+</action>
+
 <action name="Tablet_QuickSwitch">
   <owner>sammiequon@chromium.org</owner>
   <description>
@@ -18610,6 +18776,9 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="Terminate_ProcessMismatch_CreateNewWidget">
+  <obsolete>
+    Replaced in 1/2018 with bad_message::WCI_NEW_WIDGET_PROCESS_MISMATCH.
+  </obsolete>
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
 </action>

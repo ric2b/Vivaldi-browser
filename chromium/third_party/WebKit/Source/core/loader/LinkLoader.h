@@ -33,11 +33,11 @@
 #define LinkLoader_h
 
 #include "core/CoreExport.h"
-#include "core/dom/Modulator.h"
 #include "core/loader/LinkLoaderClient.h"
+#include "core/script/Modulator.h"
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/PrerenderClient.h"
-#include "platform/loader/fetch/ResourceOwner.h"
+#include "platform/loader/fetch/Resource.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {

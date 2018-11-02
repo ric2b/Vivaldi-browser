@@ -240,7 +240,16 @@ void WindowOcclusionTracker::MarkRootWindowAsDirtyAndMaybeRecomputeOcclusionIf(
   if (!root_window)
     return;
   auto root_window_state_it = root_windows_.find(root_window);
-  DCHECK(root_window_state_it != root_windows_.end());
+
+  // This may be called if a WindowObserver or a LayoutManager changes |window|
+  // after Window::AddChild() has added it to a new root but before
+  // OnWindowAddedToRootWindow() is called on |this|. In that case, do nothing
+  // here and rely on OnWindowAddedToRootWindow() to mark the new root as dirty.
+  if (root_window_state_it == root_windows_.end()) {
+    DCHECK(WindowIsTracked(window));
+    return;
+  }
+
   if (root_window_state_it->second.dirty)
     return;
   if (predicate()) {
@@ -324,10 +333,13 @@ void WindowOcclusionTracker::TrackedWindowRemovedFromRoot(Window* window) {
 
 void WindowOcclusionTracker::RemoveObserverFromWindowAndDescendants(
     Window* window) {
-  if (WindowIsTracked(window))
+  if (WindowIsTracked(window)) {
     DCHECK(window->HasObserver(this));
-  else
+  } else {
     window->RemoveObserver(this);
+    window->layer()->GetAnimator()->RemoveObserver(this);
+    animated_windows_.erase(window);
+  }
   for (Window* child_window : window->children())
     RemoveObserverFromWindowAndDescendants(child_window);
 }
@@ -432,9 +444,15 @@ void WindowOcclusionTracker::OnWindowStackingChanged(Window* window) {
 
 void WindowOcclusionTracker::OnWindowDestroyed(Window* window) {
   DCHECK(!window->GetRootWindow() || (window == window->GetRootWindow()));
-  // Animations should be completed or aborted before a window is destroyed.
-  DCHECK(!WindowIsAnimated(window));
   tracked_windows_.erase(window);
+  // Animations should be completed or aborted before a window is destroyed.
+  DCHECK(!window->layer()->GetAnimator()->IsAnimatingOnePropertyOf(
+      kSkipWindowWhenPropertiesAnimated));
+  // |window| must be removed from |animated_windows_| to prevent an invalid
+  // access in CleanupAnimatedWindows() if |window| is being destroyed from a
+  // LayerAnimationObserver after an animation has ended but before |this| has
+  // been notified.
+  animated_windows_.erase(window);
 }
 
 void WindowOcclusionTracker::OnWindowAddedToRootWindow(Window* window) {

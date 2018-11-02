@@ -64,7 +64,7 @@ class CONTENT_EXPORT RedirectToFileResourceHandler
 
   // LayeredResourceHandler implementation:
   void OnResponseStarted(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller,
       bool open_when_done,
       bool ask_for_target) override;
@@ -100,7 +100,7 @@ class CONTENT_EXPORT RedirectToFileResourceHandler
   bool BufIsFull() const;
 
   // If populated, OnResponseStarted completion is pending on file creation.
-  scoped_refptr<ResourceResponse> response_pending_file_creation_;
+  scoped_refptr<network::ResourceResponse> response_pending_file_creation_;
   CreateTemporaryFileStreamFunction create_temporary_file_stream_;
 
   // We allocate a single, fixed-size IO buffer (buf_) used to read from the

@@ -25,15 +25,16 @@ namespace extensions {
 
 using vivaldi::contacts::Contact;
 using vivaldi::contacts::ContactPropertyName;
-using vivaldi::contacts::Email;
+using vivaldi::contacts::EmailAddress;
 using vivaldi::contacts::Phonenumber;
+using vivaldi::contacts::PostalAddress;
 
 namespace OnContactCreated = vivaldi::contacts::OnContactCreated;
 namespace OnContactRemoved = vivaldi::contacts::OnContactRemoved;
 namespace OnContactChanged = vivaldi::contacts::OnContactChanged;
 
 typedef std::vector<vivaldi::contacts::Contact> ContactList;
-typedef std::vector<vivaldi::contacts::Email> EmailItemList;
+typedef std::vector<vivaldi::contacts::EmailAddress> EmailItemList;
 
 namespace {
 
@@ -58,21 +59,25 @@ base::Time GetTime(double ms_from_epoch) {
 ContactPropertyNameEnum APIAddpropertyTypeToInternal(
     ContactPropertyName transition) {
   switch (transition) {
-    case vivaldi::contacts::CONTACT_PROPERTY_NAME_EMAIL:
-      return ContactPropertyNameEnum::EMAIL;
     case vivaldi::contacts::CONTACT_PROPERTY_NAME_PHONENUMBER:
       return ContactPropertyNameEnum::PHONENUMBER;
+    case vivaldi::contacts::CONTACT_PROPERTY_NAME_POSTALADDRESS:
+      return ContactPropertyNameEnum::POSTAL_ADDRESS;
     default:
       NOTREACHED();
   }
   return ContactPropertyNameEnum::NONE;
 }
 
-Email GetEmail(const contact::EmailRow& row) {
-  Email email;
-  email.id = base::Int64ToString(row.email_id());
-  email.email.reset(new std::string(row.email()));
+EmailAddress GetEmail(const contact::EmailAddressRow& row) {
+  EmailAddress email;
+  email.id = base::Int64ToString(row.email_address_id());
+  email.email_address.reset(
+      new std::string(base::UTF16ToUTF8(row.email_address())));
   email.type.reset(new std::string(row.type()));
+  email.trusted.reset(new bool(row.trusted()));
+  email.is_default.reset(new bool(row.is_default()));
+  email.obsolete.reset(new bool(row.obsolete()));
 
   return email;
 }
@@ -80,10 +85,20 @@ Email GetEmail(const contact::EmailRow& row) {
 Phonenumber GetPhonenumber(const contact::PhonenumberRow& row) {
   Phonenumber phonenumber;
   phonenumber.id = base::Int64ToString(row.phonenumber_id());
-  phonenumber.phonenumber.reset(new std::string(row.phonenumber()));
+  phonenumber.phone_number.reset(new std::string(row.phonenumber()));
   phonenumber.type.reset(new std::string(row.type()));
 
   return phonenumber;
+}
+
+PostalAddress GetPostalAddress(const contact::PostalAddressRow& row) {
+  PostalAddress postaladdress;
+  postaladdress.id = base::Int64ToString(row.postal_address_id());
+  postaladdress.postal_address.reset(
+      new std::string(base::UTF16ToUTF8(row.postal_address())));
+  postaladdress.type.reset(new std::string(row.type()));
+
+  return postaladdress;
 }
 
 Contact GetContact(const contact::ContactRow& row) {
@@ -92,13 +107,20 @@ Contact GetContact(const contact::ContactRow& row) {
   contact.name.reset(new std::string(base::UTF16ToUTF8(row.name())));
   contact.birthday.reset(new double(MilliSecondsFromTime(row.birthday())));
   contact.note.reset(new std::string(base::UTF16ToUTF8(row.note())));
+  contact.avatar_url.reset(
+      new std::string(base::UTF16ToUTF8(row.avatar_url())));
+  contact.generated_from_sent_mail = row.generated_from_sent_mail();
 
-  for (const contact::EmailRow& visit : row.emails()) {
-    contact.emails.push_back(GetEmail(visit));
+  for (const contact::EmailAddressRow& visit : row.emails()) {
+    contact.email_addresses.push_back(GetEmail(visit));
   }
 
   for (const contact::PhonenumberRow& phonenumber : row.phones()) {
-    contact.phonenumbers.push_back(GetPhonenumber(phonenumber));
+    contact.phone_numbers.push_back(GetPhonenumber(phonenumber));
+  }
+
+  for (const contact::PostalAddressRow& postaladdress : row.postaladdresses()) {
+    contact.postal_addresses.push_back(GetPostalAddress(postaladdress));
   }
 
   return contact;
@@ -195,13 +217,22 @@ std::unique_ptr<Contact> CreateVivaldiContact(
   contact->birthday.reset(
       new double(MilliSecondsFromTime(contact_res.birthday())));
   contact->note.reset(new std::string(base::UTF16ToUTF8(contact_res.note())));
+  contact->avatar_url.reset(
+      new std::string(base::UTF16ToUTF8(contact_res.avatar_url())));
+  contact->separator = contact_res.separator();
+  contact->generated_from_sent_mail = contact_res.generated_from_sent_mail();
 
-  for (const contact::EmailRow& visit : contact_res.emails()) {
-    contact->emails.push_back(GetEmail(visit));
+  for (const contact::EmailAddressRow& visit : contact_res.emails()) {
+    contact->email_addresses.push_back(GetEmail(visit));
   }
 
   for (const contact::PhonenumberRow& phonenumber : contact_res.phones()) {
-    contact->phonenumbers.push_back(GetPhonenumber(phonenumber));
+    contact->phone_numbers.push_back(GetPhonenumber(phonenumber));
+  }
+
+  for (const contact::PostalAddressRow& postaladdress :
+       contact_res.postaladdresses()) {
+    contact->postal_addresses.push_back(GetPostalAddress(postaladdress));
   }
 
   return contact;
@@ -236,6 +267,35 @@ void ContactsGetAllFunction::GetAllComplete(
       ArgumentList(vivaldi::contacts::GetAll::Results::Create(contactList)));
 }
 
+ContactsGetAllEmailAddressesFunction::~ContactsGetAllEmailAddressesFunction() {}
+
+ExtensionFunction::ResponseAction ContactsGetAllEmailAddressesFunction::Run() {
+  ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
+
+  model->GetAllEmailAddresses(
+      base::Bind(
+          &ContactsGetAllEmailAddressesFunction::GetAllEmailAddressesComplete,
+          this),
+      &task_tracker_);
+
+  return RespondLater();  // GetAllEmailAddressesComplete() will be called
+                          // asynchronously.
+}
+
+void ContactsGetAllEmailAddressesFunction::GetAllEmailAddressesComplete(
+    std::shared_ptr<contact::EmailAddressRows> results) {
+  EmailItemList emailList;
+
+  if (results && !results->empty()) {
+    for (const contact::EmailAddressRow& emailAddress : *results) {
+      emailList.push_back(GetEmail(emailAddress));
+    }
+
+    Respond(ArgumentList(
+        vivaldi::contacts::GetAllEmailAddresses::Results::Create(emailList)));
+  }
+}
+
 Profile* ContactAsyncFunction::GetProfile() const {
   return Profile::FromBrowserContext(browser_context());
 }
@@ -267,6 +327,22 @@ ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
     updated_contact.updateFields |= contact::NOTE;
   }
 
+  if (params->changes.avatar_url.get()) {
+    updated_contact.avatar_url = base::UTF8ToUTF16(*params->changes.avatar_url);
+    updated_contact.updateFields |= contact::AVATAR_URL;
+  }
+
+  if (params->changes.separator.get()) {
+    updated_contact.separator = *params->changes.separator;
+    updated_contact.updateFields |= contact::SEPARATOR;
+  }
+
+  if (params->changes.generated_from_sent_mail.get()) {
+    updated_contact.generated_from_sent_mail =
+        *params->changes.generated_from_sent_mail;
+    updated_contact.updateFields |= contact::GENERATED_FROM_SENT_MAIL;
+  }
+
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->UpdateContact(
@@ -279,11 +355,11 @@ ExtensionFunction::ResponseAction ContactsUpdateFunction::Run() {
 }
 
 void ContactsUpdateFunction::UpdateContactComplete(
-    std::shared_ptr<contact::UpdateContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(Error("Error updating contact"));
   } else {
-    Contact ev = GetContact(results->updated_contact_result);
+    Contact ev = GetContact(results->contact);
     Respond(ArgumentList(
         extensions::vivaldi::contacts::Update::Results::Create(ev)));
   }
@@ -311,7 +387,7 @@ ExtensionFunction::ResponseAction ContactsDeleteFunction::Run() {
 }
 
 void ContactsDeleteFunction::DeleteContactComplete(
-    std::shared_ptr<contact::DeleteContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(Error("Error deleting contact"));
   } else {
@@ -342,6 +418,27 @@ ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
     createContact.set_note(note);
   }
 
+  if (params->contact.avatar_url.get()) {
+    base::string16 avatar_url;
+    avatar_url = base::UTF8ToUTF16(*params->contact.avatar_url);
+    createContact.set_avatar_url(avatar_url);
+  }
+
+  if (params->contact.separator.get()) {
+    base::string16 avatar_url;
+    avatar_url = base::UTF8ToUTF16(*params->contact.avatar_url);
+    createContact.set_avatar_url(avatar_url);
+  }
+
+  if (params->contact.separator.get()) {
+    createContact.set_separator(*params->contact.separator);
+  }
+
+  if (params->contact.generated_from_sent_mail.get()) {
+    createContact.set_generated_from_sent_mail(
+        *params->contact.generated_from_sent_mail);
+  }
+
   ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
 
   model->CreateContact(
@@ -351,11 +448,11 @@ ExtensionFunction::ResponseAction ContactsCreateFunction::Run() {
 }
 
 void ContactsCreateFunction::CreateComplete(
-    std::shared_ptr<contact::CreateContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(Error("Error creating contact"));
   } else {
-    Contact ev = GetContact(results->createdRow);
+    Contact ev = GetContact(results->contact);
     Respond(ArgumentList(
         extensions::vivaldi::contacts::Create::Results::Create(ev)));
   }
@@ -390,12 +487,11 @@ ExtensionFunction::ResponseAction ContactsAddPropertyItemFunction::Run() {
 }
 
 void ContactsAddPropertyItemFunction::AddPropertyComplete(
-    std::shared_ptr<contact::UpdateContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(Error("Error adding property value"));
   } else {
-    extensions::vivaldi::contacts::Contact ev =
-        GetContact(results->updated_contact_result);
+    extensions::vivaldi::contacts::Contact ev = GetContact(results->contact);
     Respond(ArgumentList(
         extensions::vivaldi::contacts::AddPropertyItem::Results::Create(ev)));
   }
@@ -439,13 +535,13 @@ ExtensionFunction::ResponseAction ContactsUpdatePropertyItemFunction::Run() {
 }
 
 void ContactsUpdatePropertyItemFunction::UpdatePropertyComplete(
-    std::shared_ptr<contact::UpdateContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(
         Error("Error updating property value or the property does not exist"));
   } else {
     extensions::vivaldi::contacts::Contact contact =
-        GetContact(results->updated_contact_result);
+        GetContact(results->contact);
     Respond(ArgumentList(
         extensions::vivaldi::contacts::UpdatePropertyItem::Results::Create(
             contact)));
@@ -488,14 +584,141 @@ ExtensionFunction::ResponseAction ContactsRemovePropertyItemFunction::Run() {
 }
 
 void ContactsRemovePropertyItemFunction::RemovePropertyComplete(
-    std::shared_ptr<contact::UpdateContactResult> results) {
+    std::shared_ptr<contact::ContactResults> results) {
   if (!results->success) {
     Respond(Error("Error removing property value"));
   } else {
     extensions::vivaldi::contacts::Contact contact =
-        GetContact(results->updated_contact_result);
+        GetContact(results->contact);
     Respond(ArgumentList(
         extensions::vivaldi::contacts::RemovePropertyItem::Results::Create(
+            contact)));
+  }
+}
+
+ExtensionFunction::ResponseAction ContactsAddEmailAddressFunction::Run() {
+  std::unique_ptr<vivaldi::contacts::AddEmailAddress::Params> params(
+      vivaldi::contacts::AddEmailAddress::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  contact::EmailAddressRow add_email;
+  contact::ContactID contact_id;
+
+  if (!GetIdAsInt64(params->email_to_add.contact_id, &contact_id)) {
+    return RespondNow(Error("Error. Invalid contact id"));
+  }
+
+  add_email.set_contact_id(contact_id);
+
+  if (params->email_to_add.email_address.get()) {
+    base::string16 email_address;
+    email_address = base::UTF8ToUTF16(*params->email_to_add.email_address);
+    add_email.set_email_address(email_address);
+  }
+
+  if (params->email_to_add.is_default.get()) {
+    bool defaultEmailAddress = false;
+    defaultEmailAddress = (*params->email_to_add.is_default);
+    add_email.set_is_default(defaultEmailAddress);
+  }
+
+  if (params->email_to_add.trusted.get()) {
+    bool isTrusted = false;
+    isTrusted = (*params->email_to_add.trusted);
+    add_email.set_trusted(isTrusted);
+  }
+
+  if (params->email_to_add.obsolete.get()) {
+    bool isObsolete = false;
+    isObsolete = (*params->email_to_add.obsolete);
+    add_email.set_obsolete(isObsolete);
+  }
+
+  ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
+
+  model->AddEmailAddress(
+      add_email,
+      base::Bind(&ContactsAddEmailAddressFunction::AddEmailAddressComplete,
+                 this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void ContactsAddEmailAddressFunction::AddEmailAddressComplete(
+    std::shared_ptr<contact::ContactResults> results) {
+  if (!results->success) {
+    Respond(Error("Error adding email address"));
+  } else {
+    extensions::vivaldi::contacts::Contact ev = GetContact(results->contact);
+    Respond(ArgumentList(
+        extensions::vivaldi::contacts::AddEmailAddress::Results::Create(ev)));
+  }
+}
+
+ExtensionFunction::ResponseAction ContactsUpdateEmailAddressFunction::Run() {
+  std::unique_ptr<vivaldi::contacts::UpdateEmailAddress::Params> params(
+      vivaldi::contacts::UpdateEmailAddress::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  contact::EmailAddressRow updated_email;
+  contact::ContactID contact_id;
+
+  if (!GetIdAsInt64(params->email_to_update.contact_id, &contact_id)) {
+    return RespondNow(Error("Error. Invalid contact id"));
+  }
+
+  updated_email.set_contact_id(contact_id);
+
+  contact::EmailAddressID email_address_id;
+  if (!GetIdAsInt64(params->email_address_id, &email_address_id)) {
+    return RespondNow(Error("Error. Invalid email address id"));
+  }
+
+  updated_email.set_email_address_id(email_address_id);
+
+  base::string16 email_address;
+  email_address = base::UTF8ToUTF16(*params->email_to_update.email_address);
+  updated_email.set_email_address(email_address);
+
+  if (params->email_to_update.is_default.get()) {
+    bool defaultEmailAddress = false;
+    defaultEmailAddress = (*params->email_to_update.is_default);
+    updated_email.set_is_default(defaultEmailAddress);
+  }
+
+  if (params->email_to_update.trusted.get()) {
+    bool isTrusted = false;
+    isTrusted = (*params->email_to_update.trusted);
+    updated_email.set_trusted(isTrusted);
+  }
+
+  if (params->email_to_update.obsolete.get()) {
+    bool isObsolete = false;
+    isObsolete = (*params->email_to_update.obsolete);
+    updated_email.set_obsolete(isObsolete);
+  }
+
+  ContactService* model = ContactServiceFactory::GetForProfile(GetProfile());
+
+  model->UpdateEmailAddress(
+      updated_email,
+      base::Bind(
+          &ContactsUpdateEmailAddressFunction::UpdateEmailAddressComplete,
+          this),
+      &task_tracker_);
+  return RespondLater();
+}
+
+void ContactsUpdateEmailAddressFunction::UpdateEmailAddressComplete(
+    std::shared_ptr<contact::ContactResults> results) {
+  if (!results->success) {
+    Respond(Error(
+        "Error updating email address or the email address does not exist"));
+  } else {
+    extensions::vivaldi::contacts::Contact contact =
+        GetContact(results->contact);
+    Respond(ArgumentList(
+        extensions::vivaldi::contacts::UpdateEmailAddress::Results::Create(
             contact)));
   }
 }

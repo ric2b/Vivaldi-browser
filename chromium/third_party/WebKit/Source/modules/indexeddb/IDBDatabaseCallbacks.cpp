@@ -27,6 +27,8 @@
 
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/WebIDBDatabaseCallbacksImpl.h"
+#include "public/platform/WebVector.h"
+#include "public/platform/modules/indexeddb/WebIDBObservation.h"
 
 namespace blink {
 
@@ -36,7 +38,7 @@ IDBDatabaseCallbacks* IDBDatabaseCallbacks::Create() {
 
 IDBDatabaseCallbacks::IDBDatabaseCallbacks() : database_(nullptr) {}
 
-IDBDatabaseCallbacks::~IDBDatabaseCallbacks() {}
+IDBDatabaseCallbacks::~IDBDatabaseCallbacks() = default;
 
 void IDBDatabaseCallbacks::Trace(blink::Visitor* visitor) {
   visitor->Trace(database_);
@@ -65,14 +67,14 @@ void IDBDatabaseCallbacks::OnComplete(int64_t transaction_id) {
 }
 
 void IDBDatabaseCallbacks::OnChanges(
-    const std::unordered_map<int32_t, std::vector<int32_t>>&
-        observation_index_map,
-    const WebVector<WebIDBObservation>& observations,
-    const TransactionMap& transactions) {
+    const WebIDBDatabaseCallbacks::ObservationIndexMap& observation_index_map,
+    WebVector<WebIDBObservation> observations,
+    const WebIDBDatabaseCallbacks::TransactionMap& transactions) {
   if (!database_)
     return;
 
-  database_->OnChanges(observation_index_map, observations, transactions);
+  database_->OnChanges(observation_index_map, std::move(observations),
+                       transactions);
 }
 
 void IDBDatabaseCallbacks::Connect(IDBDatabase* database) {

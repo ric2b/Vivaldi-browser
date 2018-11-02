@@ -42,7 +42,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
  public:
   explicit MockBaseFetchContext(ExecutionContext* execution_context)
       : execution_context_(execution_context) {}
-  ~MockBaseFetchContext() override {}
+  ~MockBaseFetchContext() override = default;
 
   // BaseFetchContext overrides:
   KURL GetSiteForCookies() const override { return KURL(); }
@@ -61,7 +61,7 @@ class MockBaseFetchContext final : public BaseFetchContext {
   void CountDeprecation(WebFeature) const override {}
   bool ShouldBlockFetchByMixedContentCheck(
       WebURLRequest::RequestContext,
-      WebURLRequest::FrameType,
+      network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override {
@@ -79,13 +79,13 @@ class MockBaseFetchContext final : public BaseFetchContext {
   }
   const KURL& Url() const override { return execution_context_->Url(); }
 
-  SecurityOrigin* GetSecurityOrigin() const override {
+  const SecurityOrigin* GetSecurityOrigin() const override {
     return execution_context_->GetSecurityOrigin();
   }
   const SecurityOrigin* GetParentSecurityOrigin() const override {
     return nullptr;
   }
-  Optional<WebAddressSpace> GetAddressSpace() const override {
+  Optional<mojom::IPAddressSpace> GetAddressSpace() const override {
     return WTF::make_optional(
         execution_context_->GetSecurityContext().AddressSpace());
   }
@@ -121,7 +121,7 @@ class BaseFetchContextTest : public ::testing::Test {
 };
 
 TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
-  EXPECT_EQ(kWebAddressSpacePublic,
+  EXPECT_EQ(mojom::IPAddressSpace::kPublic,
             execution_context_->GetSecurityContext().AddressSpace());
 
   struct TestCase {
@@ -172,8 +172,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
 
 TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
   execution_context_->GetSecurityContext().SetAddressSpace(
-      kWebAddressSpacePrivate);
-  EXPECT_EQ(kWebAddressSpacePrivate,
+      mojom::IPAddressSpace::kPrivate);
+  EXPECT_EQ(mojom::IPAddressSpace::kPrivate,
             execution_context_->GetSecurityContext().AddressSpace());
 
   struct TestCase {
@@ -224,8 +224,8 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
 
 TEST_F(BaseFetchContextTest, SetIsExternalRequestForLocalContext) {
   execution_context_->GetSecurityContext().SetAddressSpace(
-      kWebAddressSpaceLocal);
-  EXPECT_EQ(kWebAddressSpaceLocal,
+      mojom::IPAddressSpace::kLocal);
+  EXPECT_EQ(mojom::IPAddressSpace::kLocal,
             execution_context_->GetSecurityContext().AddressSpace());
 
   struct TestCase {

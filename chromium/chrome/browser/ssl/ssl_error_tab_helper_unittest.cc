@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ssl/ssl_error_tab_helper.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/time/time.h"
 #include "chrome/browser/interstitials/chrome_metrics_helper.h"
@@ -25,7 +27,7 @@ std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
     content::WebContents* web_contents) {
   security_interstitials::MetricsHelper::ReportDetails report_details;
   report_details.metric_prefix = kMetricsName;
-  return base::MakeUnique<ChromeMetricsHelper>(web_contents, GURL(),
+  return std::make_unique<ChromeMetricsHelper>(web_contents, GURL(),
                                                report_details, kMetricsName);
 }
 
@@ -42,6 +44,7 @@ class TestSSLBlockingPage : public SSLBlockingPage {
             request_url,
             0,
             base::Time::NowFromSystemTime(),
+            GURL(),
             nullptr /* ssl_cert_reporter */,
             true /* overridable */,
             CreateMetricsHelper(web_contents),
@@ -159,6 +162,40 @@ TEST_F(SSLErrorTabHelperTest, MultipleBlockingPages) {
   EXPECT_TRUE(blocking_page1_destroyed);
   EXPECT_FALSE(blocking_page2_destroyed);
   EXPECT_TRUE(blocking_page3_destroyed);
+}
+
+// Tests that the helper properly handles a navigation that finishes without
+// committing.
+TEST_F(SSLErrorTabHelperTest, NavigationDoesNotCommit) {
+  std::unique_ptr<content::NavigationHandle> committed_handle =
+      CreateHandle(true, false);
+  bool committed_blocking_page_destroyed = false;
+  CreateAssociatedBlockingPage(committed_handle.get(),
+                               &committed_blocking_page_destroyed);
+  SSLErrorTabHelper* helper =
+      SSLErrorTabHelper::FromWebContents(web_contents());
+  helper->DidFinishNavigation(committed_handle.get());
+  EXPECT_FALSE(committed_blocking_page_destroyed);
+
+  // Simulate a navigation that does not commit.
+  std::unique_ptr<content::NavigationHandle> non_committed_handle =
+      CreateHandle(false, false);
+  bool non_committed_blocking_page_destroyed = false;
+  CreateAssociatedBlockingPage(non_committed_handle.get(),
+                               &non_committed_blocking_page_destroyed);
+  helper->DidFinishNavigation(non_committed_handle.get());
+
+  // The blocking page for the non-committed navigation should have been cleaned
+  // up, but the one for the previous committed navigation should still be
+  // around.
+  EXPECT_TRUE(non_committed_blocking_page_destroyed);
+  EXPECT_FALSE(committed_blocking_page_destroyed);
+
+  // When a navigation does commit, the previous one should be cleaned up.
+  std::unique_ptr<content::NavigationHandle> next_committed_handle =
+      CreateHandle(true, false);
+  helper->DidFinishNavigation(next_committed_handle.get());
+  EXPECT_TRUE(committed_blocking_page_destroyed);
 }
 
 }  // namespace

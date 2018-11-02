@@ -26,15 +26,13 @@
 #include "core/editing/CaretDisplayItemClient.h"
 
 #include "core/editing/EditingUtilities.h"
+#include "core/editing/LocalCaretRect.h"
 #include "core/editing/PositionWithAffinity.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutBlockItem.h"
-#include "core/layout/api/LayoutItem.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/paint/FindPaintOffsetAndVisualRectNeedingUpdate.h"
 #include "core/paint/ObjectPaintInvalidator.h"
 #include "core/paint/PaintInfo.h"
@@ -74,27 +72,25 @@ LayoutBlock* CaretDisplayItemClient::CaretLayoutBlock(const Node* node) {
                           : layout_object->ContainingBlock();
 }
 
-static LayoutRect MapCaretRectToCaretPainter(
-    const LayoutBlockItem& caret_painter_item,
-    const LocalCaretRect& caret_rect) {
+static LayoutRect MapCaretRectToCaretPainter(const LayoutBlock* caret_block,
+                                             const LocalCaretRect& caret_rect) {
   // FIXME: This shouldn't be called on un-rooted subtrees.
   // FIXME: This should probably just use mapLocalToAncestor.
   // Compute an offset between the caretLayoutItem and the caretPainterItem.
 
-  // TODO(layout-dev): We should allow constructing a "const layout item" from a
-  // |const LayoutObject*| that allows using all const functions.
-  LayoutItem caret_layout_item =
-      LayoutItem(const_cast<LayoutObject*>(caret_rect.layout_object));
-  DCHECK(caret_layout_item.IsDescendantOf(caret_painter_item));
+  LayoutObject* caret_layout_object =
+      const_cast<LayoutObject*>(caret_rect.layout_object);
+  DCHECK(caret_layout_object->IsDescendantOf(caret_block));
 
   LayoutRect result_rect = caret_rect.rect;
-  caret_painter_item.FlipForWritingMode(result_rect);
-  while (caret_layout_item != caret_painter_item) {
-    LayoutItem container_item = caret_layout_item.Container();
-    if (container_item.IsNull())
+  caret_block->FlipForWritingMode(result_rect);
+  while (caret_layout_object != caret_block) {
+    LayoutObject* container_object = caret_layout_object->Container();
+    if (!container_object)
       return LayoutRect();
-    result_rect.Move(caret_layout_item.OffsetFromContainer(container_item));
-    caret_layout_item = container_item;
+    result_rect.Move(
+        caret_layout_object->OffsetFromContainer(container_object));
+    caret_layout_object = container_object;
   }
   return result_rect;
 }
@@ -111,9 +107,9 @@ LayoutRect CaretDisplayItemClient::ComputeCaretRect(
 
   // Get the layoutObject that will be responsible for painting the caret
   // (which is either the layoutObject we just found, or one of its containers).
-  const LayoutBlockItem caret_painter_item =
-      LayoutBlockItem(CaretLayoutBlock(caret_position.AnchorNode()));
-  return MapCaretRectToCaretPainter(caret_painter_item, caret_rect);
+  const LayoutBlock* caret_block =
+      CaretLayoutBlock(caret_position.AnchorNode());
+  return MapCaretRectToCaretPainter(caret_block, caret_rect);
 }
 
 void CaretDisplayItemClient::ClearPreviousVisualRect(const LayoutBlock& block) {
@@ -171,7 +167,7 @@ void CaretDisplayItemClient::UpdateStyleAndLayoutIfNeeded(
   Color new_color;
   if (caret_position.AnchorNode()) {
     new_color = caret_position.AnchorNode()->GetLayoutObject()->ResolveColor(
-        CSSPropertyCaretColor);
+        GetCSSPropertyCaretColor());
   }
   if (new_color != color_) {
     needs_paint_invalidation_ = true;

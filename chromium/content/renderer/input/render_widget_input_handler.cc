@@ -13,13 +13,16 @@
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
 #include "cc/trees/swap_promise_monitor.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/common/input/input_event_ack.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/input_event_ack_state.h"
+#include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
+#include "content/renderer/render_frame_proxy.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_widget.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
@@ -30,9 +33,11 @@
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
+#include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "ui/events/blink/web_input_event_traits.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/latency/latency_info.h"
 
@@ -157,21 +162,41 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
 
 RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
-int RenderWidgetInputHandler::GetWidgetRoutingIdAtPoint(
+viz::FrameSinkId RenderWidgetInputHandler::GetFrameSinkIdAtPoint(
     const gfx::Point& point) {
-  blink::WebNode result_node =
-      widget_->GetWebWidget()
-          ->HitTestResultAt(blink::WebPoint(point.x(), point.y()))
-          .GetNode();
+  gfx::PointF point_in_pixel(point);
+  if (UseZoomForDSFEnabled()) {
+    point_in_pixel = gfx::ConvertPointToPixel(
+        widget_->GetOriginalDeviceScaleFactor(), point_in_pixel);
+  }
+  blink::WebNode result_node = widget_->GetWebWidget()
+                                   ->HitTestResultAt(blink::WebPoint(
+                                       point_in_pixel.x(), point_in_pixel.y()))
+                                   .GetNode();
+
+  // TODO(crbug.com/797828): When the node is null the caller may
+  // need to do extra checks. Like maybe update the layout and then
+  // call the hit-testing API. Either way it might be better to have
+  // a DCHECK for the node rather than a null check here.
+  if (result_node.IsNull()) {
+    return viz::FrameSinkId(RenderThread::Get()->GetClientId(),
+                            widget_->routing_id());
+  }
 
   blink::WebFrame* result_frame =
       blink::WebFrame::FromFrameOwnerElement(result_node);
-  if (!result_frame) {
-    // This means that the node is not an iframe itself. So we just return the
-    // the frame containing the node.
-    result_frame = result_node.GetDocument().GetFrame();
+  if (result_frame && result_frame->IsWebRemoteFrame()) {
+    viz::FrameSinkId frame_sink_id =
+        RenderFrameProxy::FromWebFrame(result_frame->ToWebRemoteFrame())
+            ->frame_sink_id();
+    if (frame_sink_id.is_valid())
+      return frame_sink_id;
   }
-  return RenderFrame::GetRoutingIdForWebFrame(result_frame);
+  // Return the FrameSinkId for the current widget if the point did not hit
+  // test to a remote frame, or the remote frame doesn't have a valid
+  // FrameSinkId yet.
+  return viz::FrameSinkId(RenderThread::Get()->GetClientId(),
+                          widget_->routing_id());
 }
 
 void RenderWidgetInputHandler::HandleInputEvent(
@@ -330,10 +355,14 @@ void RenderWidgetInputHandler::HandleInputEvent(
     const WebGestureEvent& gesture_event =
         static_cast<const WebGestureEvent&>(input_event);
     if (gesture_event.source_device == blink::kWebGestureDeviceTouchpad) {
-      delegate_->ObserveGestureEventAndResult(
-          gesture_event,
+      gfx::Vector2dF latest_overscroll_delta =
           event_overscroll ? event_overscroll->latest_overscroll_delta
-                           : gfx::Vector2dF(),
+                           : gfx::Vector2dF();
+      cc::OverscrollBehavior overscroll_behavior =
+          event_overscroll ? event_overscroll->overscroll_behavior
+                           : cc::OverscrollBehavior();
+      delegate_->ObserveGestureEventAndResult(
+          gesture_event, latest_overscroll_delta, overscroll_behavior,
           processed != WebInputEventResult::kNotHandled);
     }
   }

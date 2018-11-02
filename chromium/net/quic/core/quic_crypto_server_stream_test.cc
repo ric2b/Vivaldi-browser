@@ -20,6 +20,8 @@
 #include "net/quic/core/quic_crypto_client_stream.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_session.h"
+#include "net/quic/core/tls_client_handshaker.h"
+#include "net/quic/core/tls_server_handshaker.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
@@ -66,12 +68,14 @@ class QuicCryptoServerStreamTest : public QuicTestWithParam<bool> {
   explicit QuicCryptoServerStreamTest(std::unique_ptr<ProofSource> proof_source)
       : server_crypto_config_(QuicCryptoServerConfig::TESTING,
                               QuicRandom::GetInstance(),
-                              std::move(proof_source)),
+                              std::move(proof_source),
+                              TlsServerHandshaker::CreateSslCtx()),
         server_compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
         server_id_(kServerHostname, kServerPort, PRIVACY_MODE_DISABLED),
-        client_crypto_config_(crypto_test_utils::ProofVerifierForTesting()) {
-    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = false;
+        client_crypto_config_(crypto_test_utils::ProofVerifierForTesting(),
+                              TlsClientHandshaker::CreateSslCtx()) {
+    SetQuicReloadableFlag(enable_quic_stateless_reject_support, false);
   }
 
   void Initialize() { InitializeServer(); }
@@ -180,8 +184,7 @@ class QuicCryptoServerStreamTest : public QuicTestWithParam<bool> {
   crypto_test_utils::FakeClientOptions client_options_;
 
   // Which QUIC versions the client and server support.
-  QuicTransportVersionVector supported_versions_ =
-      AllSupportedTransportVersions();
+  ParsedQuicVersionVector supported_versions_ = AllSupportedVersions();
 };
 
 INSTANTIATE_TEST_CASE_P(Tests, QuicCryptoServerStreamTest, testing::Bool());
@@ -209,6 +212,22 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterCHLO) {
   EXPECT_TRUE(server_stream()->handshake_confirmed());
 }
 
+TEST_P(QuicCryptoServerStreamTest, ConnectedAfterTlsHandshake) {
+  FLAGS_quic_supports_tls_handshake = true;
+  client_options_.only_tls_versions = true;
+  supported_versions_.clear();
+  for (QuicTransportVersion transport_version :
+       AllSupportedTransportVersions()) {
+    supported_versions_.push_back(
+        ParsedQuicVersion(PROTOCOL_TLS1_3, transport_version));
+  }
+  Initialize();
+  CompleteCryptoHandshake();
+  EXPECT_EQ(PROTOCOL_TLS1_3, server_stream()->handshake_protocol());
+  EXPECT_TRUE(server_stream()->encryption_established());
+  EXPECT_TRUE(server_stream()->handshake_confirmed());
+}
+
 TEST_P(QuicCryptoServerStreamTest, ForwardSecureAfterCHLO) {
   Initialize();
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
@@ -231,7 +250,7 @@ TEST_P(QuicCryptoServerStreamTest, ForwardSecureAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
-  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
+  SetQuicReloadableFlag(enable_quic_stateless_reject_support, true);
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ true);
@@ -265,7 +284,7 @@ TEST_P(QuicCryptoServerStreamTest, StatelessRejectAfterCHLO) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
-  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
+  SetQuicReloadableFlag(enable_quic_stateless_reject_support, true);
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ true);
@@ -312,7 +331,7 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterStatelessHandshake) {
 }
 
 TEST_P(QuicCryptoServerStreamTest, NoStatelessRejectIfNoClientSupport) {
-  FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
+  SetQuicReloadableFlag(enable_quic_stateless_reject_support, true);
   Initialize();
 
   // The server is configured to use stateless rejects, but the client does not
@@ -435,7 +454,7 @@ TEST_P(QuicCryptoServerStreamTest, SendSCUPAfterHandshakeComplete) {
   // crypto_test_utils::MovePackets stops processing parsing following packets.
   // Actually, crypto stream test should use QuicSession instead of
   // QuicSpdySession (b/32366134).
-  FLAGS_quic_reloadable_flag_quic_send_max_header_list_size = false;
+  SetQuicReloadableFlag(quic_send_max_header_list_size, false);
   Initialize();
 
   InitializeFakeClient(/* supports_stateless_rejects= */ false);

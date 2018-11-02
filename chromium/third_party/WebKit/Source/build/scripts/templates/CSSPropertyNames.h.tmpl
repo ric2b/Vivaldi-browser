@@ -32,11 +32,6 @@ const CSSPropertyID lastUnresolvedCSSProperty = static_cast<CSSPropertyID>({{las
 const int numCSSPropertyIDs = lastUnresolvedCSSProperty + 1;
 const size_t maxCSSPropertyNameLength = {{max_name_length}};
 
-const char* getPropertyName(CSSPropertyID);
-const WTF::AtomicString& getPropertyNameAtomicString(CSSPropertyID);
-WTF::String CORE_EXPORT getPropertyNameString(CSSPropertyID);
-WTF::String getJSPropertyName(CSSPropertyID);
-
 inline bool isCSSPropertyIDWithName(int id)
 {
     return id >= firstCSSProperty && id <= lastUnresolvedCSSProperty;

@@ -40,7 +40,9 @@ class ProprietaryMediaGpuChannel : public IPC::Listener, public IPC::Sender
   void OnNewMediaPipeline(int32_t route_id, int32_t command_buffer_route_id);
   void OnDestroyMediaPipeline(int32_t route_id);
   bool OnPipelineMessageReceived(const IPC::Message& message);
+#if defined(PLATFORM_MEDIA_HWA)
   bool AllowHardwareDecode();
+#endif
 
   gpu::GpuChannel* const channel_;
   base::IDMap<std::unique_ptr<media::IPCMediaPipeline>> media_pipelines_;

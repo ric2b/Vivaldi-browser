@@ -3,6 +3,7 @@
 <translationbundle lang="te">
 <translation id="102360288709523007">Googleకి వినియోగ గణాంకాలు, క్రాష్ నివేదికలు పంపి Chromium మెరుగుపరచడంలో సహాయపడండి.</translation>
 <translation id="1185134272377778587">Chromium గురించి</translation>
+<translation id="1289966288285062467">Chromium గోప్యతా ప్రకటన</translation>
 <translation id="1472013873724362412">మీ ఖాతా Chromiumలో పని చేయదు. దయచేసి మీ డొమైన్ నిర్వాహకుడిని సంప్రదించండి లేదా సైన్ ఇన్ చేయడానికి సాధారణ Google ఖాతాని ఉపయోగించండి.</translation>
 <translation id="1736662517232558588">Chromium డేటా తీసేసింది</translation>
 <translation id="1838412507805038478">Chromium ఈ వెబ్‌సైట్ ప్రమాణపత్రాన్ని <ph name="ISSUER" /> జారీ చేసినట్లు ధృవీకరించింది.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Chromium నుండి సైన్ అవుట్ చేయాలా?</translation>
 <translation id="6424492062988593837">Chrome ఇప్పుడే మెరుగుపరచబడింది! క్రొత్త సంస్కరణ అందుబాటులో ఉంది.</translation>
 <translation id="6604711459180487467">మీ స్థానం ఆధారంగా Chromiumలో మెరుగైన అనుభవాన్ని పొందండి.</translation>
+<translation id="6626296268883197964">ఈ యాప్‌ని ఉపయోగించడం ద్వారా, మీరు Chromium <ph name="BEGIN_LINK_TOS" />సేవా నిబంధనలు<ph name="END_LINK_TOS" /> మరియు <ph name="BEGIN_LINK_PRIVACY" />గోప్యతా ప్రకటన<ph name="END_LINK_PRIVACY" />ని అంగీకరిస్తున్నారు.</translation>
 <translation id="7099326575020694068">Chromium విభజన వీక్షణ మోడ్‌లో మీ కెమెరాను ఉపయోగించలేదు</translation>
-<translation id="7144758435978427212">సమీప ఆబ్జెక్ట్‌ల ద్వారా పంపబడిన వెబ్ పేజీలను కనుగొంటుంది. బ్లూటూత్ ఆన్ చేసినప్పుడు, Chromium మీ చుట్టుప్రక్కల ఆబ్జెక్ట్‌లతో అనుబంధించబడిన వెబ్ పేజీలను సేకరించవచ్చు మరియు వాటిలో అత్యంత ఉపయోగకరమైనవి కనుగొనడానికి వాటిని అనామకంగా Googleకు పంపవచ్చు. <ph name="BEGIN_LINK" />మరింత తెలుసుకోండి<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium మీ ఖాతాలను వెబ్‌లో అందించడం ద్వారా మీకు సమయాన్ని ఆదా చేస్తుంది. మీరు సెట్టింగ్‌ల్లో ఖాతాలను జోడించవచ్చు లేదా తీసివేయవచ్చు.</translation>
 <translation id="7269362888766543920">కొన్ని యాడ్-ఆన్‌లు Chromium క్రాష్ అయ్యేలా చేసాయి. దయచేసి వాటిని అన్‌ఇన్‌స్టాల్ చేయడానికి ప్రయత్నించండి.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Chromiumని అంతటా ఉపయోగించండి</translation>
 <translation id="7674213385180944843">సెట్టింగ్‌లు &gt; గోప్యత &gt; కెమెరా &gt; Chromium తెరిచి, కెమెరాను ఆన్ చేయండి.</translation>
 <translation id="786327964234957808">మీరు సమకాలీకరణ ఖాతాలను <ph name="USER_EMAIL1" /> నుండి <ph name="USER_EMAIL2" />కి మారుస్తున్నారు. ఇప్పటికే ఉన్న మీ Chromium డేటా <ph name="DOMAIN" /> నిర్వహణలో ఉంది. దీని వలన మీ డేటా ఈ పరికరం నుండి తొలగించబడుతుంది, కానీ మీ డేటా <ph name="USER_EMAIL1" />లో అలాగే ఉంటుంది.</translation>
-<translation id="8111736072665034317">ఈ అనువర్తనం ఉపయోగిస్తూ, మీరు Chromium <ph name="BEGIN_LINK" />సేవా నిబంధనల<ph name="END_LINK" />కు అంగీకరిస్తున్నారు.</translation>
 <translation id="8175055321229419309">చిట్కా: <ph name="BEGIN_LINK" />Chromiumని మీ డాక్‌కి తరలించండి<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">మీ స్థానం ఆధారంగా Chromiumలో మెరుగైన Google అనుభవాన్ని పొందండి.</translation>
 <translation id="8353224596138547809">మీరు Chromium ఈ సైట్ కోసం మీ పాస్‌వర్డ్‌ను సేవ్ చేయాలనుకుంటున్నారా?</translation>

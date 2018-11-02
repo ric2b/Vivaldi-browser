@@ -12,16 +12,18 @@ bindings_core_output_dir = "$bindings_output_dir/core"
 
 # Global constructors
 core_global_constructors_original_interfaces = [
-  "Window",
-  "SharedWorkerGlobalScope",
   "DedicatedWorkerGlobalScope",
+  "LayoutWorkletGlobalScope",
+  "SharedWorkerGlobalScope",
+  "Window",
 ]
 
 # The size and the order in the following list must match to the previous one.
 core_global_constructors_original_interface_basenames = [
-  "window",
-  "shared_worker_global_scope",
   "dedicated_worker_global_scope",
+  "layout_worklet_global_scope",
+  "shared_worker_global_scope",
+  "window",
 ]
 
 # The interfaces aren't technically files, but we can treat them as file names
@@ -97,13 +99,14 @@ core_idl_files =
                     "css/cssom/CSSUnparsedValue.idl",
                     "css/cssom/CSSVariableReferenceValue.idl",
                     "css/cssom/StylePropertyMap.idl",
-                    "css/cssom/StylePropertyMapReadonly.idl",
+                    "css/cssom/StylePropertyMapReadOnly.idl",
                     "dom/AccessibleNode.idl",
                     "dom/AccessibleNodeList.idl",
                     "dom/Attr.idl",
                     "dom/CDATASection.idl",
                     "dom/CharacterData.idl",
                     "dom/Comment.idl",
+                    "dom/ComputedAccessibleNode.idl",
                     "dom/DOMException.idl",
                     "dom/DOMImplementation.idl",
                     "dom/DOMStringList.idl",
@@ -115,8 +118,6 @@ core_idl_files =
                     "dom/Element.idl",
                     "dom/IdleDeadline.idl",
                     "dom/Iterator.idl",
-                    "dom/MessageChannel.idl",
-                    "dom/MessagePort.idl",
                     "dom/MutationObserver.idl",
                     "dom/MutationRecord.idl",
                     "dom/NamedNodeMap.idl",
@@ -124,7 +125,7 @@ core_idl_files =
                     "dom/NodeFilter.idl",
                     "dom/NodeIterator.idl",
                     "dom/NodeList.idl",
-                    "dom/Policy.idl",
+                    "policy/Policy.idl",
                     "dom/ProcessingInstruction.idl",
                     "dom/Range.idl",
                     "dom/ShadowRoot.idl",
@@ -166,6 +167,10 @@ core_idl_files =
                     "events/TransitionEvent.idl",
                     "events/UIEvent.idl",
                     "events/WheelEvent.idl",
+                    "fetch/Body.idl",
+                    "fetch/Headers.idl",
+                    "fetch/Request.idl",
+                    "fetch/Response.idl",
                     "fileapi/Blob.idl",
                     "fileapi/File.idl",
                     "fileapi/FileList.idl",
@@ -245,13 +250,12 @@ core_idl_files =
                     "html/HTMLTemplateElement.idl",
                     "html/HTMLTimeElement.idl",
                     "html/HTMLTitleElement.idl",
-                    "html/HTMLTrackElement.idl",
                     "html/HTMLUListElement.idl",
                     "html/HTMLUnknownElement.idl",
-                    "html/ImageData.idl",
-                    "html/TextMetrics.idl",
                     "html/TimeRanges.idl",
                     "html/VoidCallback.idl",
+                    "html/canvas/ImageData.idl",
+                    "html/canvas/TextMetrics.idl",
                     "html/custom/CustomElementRegistry.idl",
                     "html/forms/FormData.idl",
                     "html/forms/HTMLButtonElement.idl",
@@ -272,6 +276,7 @@ core_idl_files =
                     "html/media/HTMLAudioElement.idl",
                     "html/media/MediaError.idl",
                     "html/track/AudioTrackList.idl",
+                    "html/track/HTMLTrackElement.idl",
                     "html/track/TextTrack.idl",
                     "html/track/TextTrackCue.idl",
                     "html/track/TextTrackCueList.idl",
@@ -287,7 +292,10 @@ core_idl_files =
                     "inspector/InspectorOverlayHost.idl",
                     "intersection_observer/IntersectionObserver.idl",
                     "intersection_observer/IntersectionObserverEntry.idl",
+                    "layout/custom/LayoutWorkletGlobalScope.idl",
                     "loader/appcache/ApplicationCache.idl",
+                    "messaging/MessageChannel.idl",
+                    "messaging/MessagePort.idl",
                     "mojo/Mojo.idl",
                     "mojo/MojoHandle.idl",
                     "mojo/MojoWatcher.idl",
@@ -453,8 +461,8 @@ core_idl_with_modules_dependency_files =
                     "frame/Navigator.idl",
                     "frame/Screen.idl",
                     "frame/Window.idl",
-                    "html/HTMLCanvasElement.idl",
                     "html/HTMLIFrameElement.idl",
+                    "html/canvas/HTMLCanvasElement.idl",
                     "html/forms/HTMLInputElement.idl",
                     "html/media/HTMLMediaElement.idl",
                     "html/media/HTMLVideoElement.idl",
@@ -489,10 +497,13 @@ core_dependency_idl_files =
                     "dom/ParentNode.idl",
                     "dom/events/EventListener.idl",
                     "events/NavigatorEvents.idl",
+                    "fetch/WindowFetch.idl",
+                    "fetch/WorkerFetch.idl",
                     "fileapi/URLFileAPI.idl",
                     "frame/NavigatorAutomationInformation.idl",
                     "frame/NavigatorConcurrentHardware.idl",
                     "frame/NavigatorCookies.idl",
+                    "frame/NavigatorDeviceMemory.idl",
                     "frame/NavigatorID.idl",
                     "frame/NavigatorLanguage.idl",
                     "frame/NavigatorOnLine.idl",
@@ -503,6 +514,7 @@ core_dependency_idl_files =
                     "fullscreen/ElementFullscreen.idl",
                     "html/HTMLHyperlinkElementUtils.idl",
                     "imagebitmap/ImageBitmapFactories.idl",
+                    "layout/custom/CSSLayoutWorklet.idl",
                     "svg/SVGDocument.idl",
                     "svg/SVGFilterPrimitiveStandardAttributes.idl",
                     "svg/SVGFitToViewBox.idl",
@@ -531,12 +543,15 @@ core_callback_function_idl_files =
                     "dom/FrameRequestCallback.idl",
                     "dom/FunctionStringCallback.idl",
                     "dom/IdleRequestCallback.idl",
+                    "dom/VoidFunction.idl",
                   ],
                   "abspath")
 
 core_dictionary_idl_files =
     get_path_info([
                     "animation/AnimationEffectTimingProperties.idl",
+                    "animation/BaseKeyframe.idl",
+                    "animation/BasePropertyIndexedKeyframe.idl",
                     "animation/ComputedTimingProperties.idl",
                     "animation/DocumentTimelineOptions.idl",
                     "animation/KeyframeAnimationOptions.idl",
@@ -582,6 +597,7 @@ core_dictionary_idl_files =
                     "events/TransitionEventInit.idl",
                     "events/UIEventInit.idl",
                     "events/WheelEventInit.idl",
+                    "fetch/ResponseInit.idl",
                     "fileapi/BlobPropertyBag.idl",
                     "fileapi/FilePropertyBag.idl",
                     "frame/ScrollIntoViewOptions.idl",
@@ -594,8 +610,8 @@ core_dictionary_idl_files =
                     "geometry/DOMRectInit.idl",
                     "html/FocusOptions.idl",
                     "html/AssignedNodesOptions.idl",
-                    "html/ImageDataColorSettings.idl",
                     "html/canvas/CanvasContextCreationAttributes.idl",
+                    "html/canvas/ImageDataColorSettings.idl",
                     "html/track/TrackEventInit.idl",
                     "imagebitmap/ImageBitmapOptions.idl",
                     "input/InputDeviceCapabilitiesInit.idl",
@@ -618,7 +634,9 @@ core_dictionary_idl_files =
                     "mojo/test/MojoInterfaceRequestEventInit.idl",
                     "offscreencanvas/ImageEncodeOptions.idl",
                     "page/scrolling/ScrollStateInit.idl",
+                    "timing/PerformanceMarkOptions.idl",
                     "timing/PerformanceObserverInit.idl",
+                    "workers/WorkerOptions.idl",
                     "workers/WorkletOptions.idl",
                   ],
                   "abspath")
@@ -647,19 +665,21 @@ webcore_testing_idl_files =
                     "testing/SequenceTest.idl",
                     "testing/TypeConversions.idl",
                     "testing/UnionTypesTest.idl",
+                    "testing/WorkerInternals.idl",
                   ],
                   "abspath")
 
 # Testing IDL files that have partial interfaces in modules.
 webcore_testing_idl_with_modules_dependency_files =
-    get_path_info([
-                    "testing/Internals.idl",
-                    "testing/WorkerInternals.idl",
-                  ],
-                  "abspath")
+    get_path_info([ "testing/Internals.idl" ], "abspath")
 
 webcore_testing_dependency_idl_files =
-    get_path_info([ "testing/OriginTrialsTestPartial.idl" ], "abspath")
+    get_path_info([
+                    "fetch/testing/InternalsFetch.idl",
+                    "fetch/testing/WorkerInternalsFetch.idl",
+                    "testing/OriginTrialsTestPartial.idl",
+                  ],
+                  "abspath")
 
 if (snake_case_source_files) {
   generated_webcore_testing_idl_files =

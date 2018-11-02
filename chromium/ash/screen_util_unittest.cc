@@ -4,7 +4,6 @@
 
 #include "ash/screen_util.h"
 
-#include "ash/public/cpp/config.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_util.h"
@@ -33,29 +32,29 @@ TEST_F(ScreenUtilTest, Bounds) {
   // Maximized bounds. By default the shelf is 47px tall (ash::kShelfSize).
   EXPECT_EQ(
       gfx::Rect(0, 0, 600, 552).ToString(),
-      ScreenUtil::GetMaximizedWindowBoundsInParent(primary->GetNativeView())
+      screen_util::GetMaximizedWindowBoundsInParent(primary->GetNativeView())
           .ToString());
   EXPECT_EQ(
       gfx::Rect(0, 0, 500, 452).ToString(),
-      ScreenUtil::GetMaximizedWindowBoundsInParent(secondary->GetNativeView())
+      screen_util::GetMaximizedWindowBoundsInParent(secondary->GetNativeView())
           .ToString());
 
   // Display bounds
   EXPECT_EQ("0,0 600x600",
-            ScreenUtil::GetDisplayBoundsInParent(primary->GetNativeView())
+            screen_util::GetDisplayBoundsInParent(primary->GetNativeView())
                 .ToString());
   EXPECT_EQ("0,0 500x500",
-            ScreenUtil::GetDisplayBoundsInParent(secondary->GetNativeView())
+            screen_util::GetDisplayBoundsInParent(secondary->GetNativeView())
                 .ToString());
 
   // Work area bounds
   EXPECT_EQ(
       gfx::Rect(0, 0, 600, 552).ToString(),
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(primary->GetNativeView())
+      screen_util::GetDisplayWorkAreaBoundsInParent(primary->GetNativeView())
           .ToString());
   EXPECT_EQ(
       gfx::Rect(0, 0, 500, 452).ToString(),
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(secondary->GetNativeView())
+      screen_util::GetDisplayWorkAreaBoundsInParent(secondary->GetNativeView())
           .ToString());
 }
 
@@ -111,11 +110,11 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
 
   UpdateDisplay("500x400");
   EXPECT_EQ("0,0 500x400",
-            ScreenUtil::GetDisplayBoundsWithShelf(window).ToString());
+            screen_util::GetDisplayBoundsWithShelf(window).ToString());
 
   UpdateDisplay("500x400,600x400");
   EXPECT_EQ("0,0 500x400",
-            ScreenUtil::GetDisplayBoundsWithShelf(window).ToString());
+            screen_util::GetDisplayBoundsWithShelf(window).ToString());
 
   // Move to the 2nd physical display. Shelf's display still should be
   // the first.
@@ -123,18 +122,14 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
   ASSERT_EQ("800,0 100x100", widget->GetWindowBoundsInScreen().ToString());
 
   EXPECT_EQ("0,0 500x400",
-            ScreenUtil::GetDisplayBoundsWithShelf(window).ToString());
+            screen_util::GetDisplayBoundsWithShelf(window).ToString());
 
   UpdateDisplay("600x500");
   EXPECT_EQ("0,0 600x500",
-            ScreenUtil::GetDisplayBoundsWithShelf(window).ToString());
+            screen_util::GetDisplayBoundsWithShelf(window).ToString());
 }
 
 TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
-  // TODO: requires unified desktop mode. http://crbug.com/581462.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   UpdateDisplay("500x400,400x600,300x600,200x300,600x200,350x400");
   display_manager()->SetUnifiedDesktopEnabled(true);
 
@@ -163,12 +158,12 @@ TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktopGrid) {
   // Regardless of where the window is, the shelf is always in the top left
   // display in the matrix.
   EXPECT_EQ(gfx::Rect(0, 0, 499, 400),
-            ScreenUtil::GetDisplayBoundsWithShelf(window));
+            screen_util::GetDisplayBoundsWithShelf(window));
 
   // Move to the bottom right display.
   widget->SetBounds(gfx::Rect(620, 940, 100, 100));
   EXPECT_EQ(gfx::Rect(0, 0, 499, 400),
-            ScreenUtil::GetDisplayBoundsWithShelf(window));
+            screen_util::GetDisplayBoundsWithShelf(window));
 }
 
 }  // namespace ash

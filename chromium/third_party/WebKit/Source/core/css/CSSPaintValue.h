@@ -15,7 +15,7 @@
 
 namespace blink {
 
-class CSSPaintValue : public CSSImageGeneratorValue {
+class CORE_EXPORT CSSPaintValue : public CSSImageGeneratorValue {
  public:
   static CSSPaintValue* Create(CSSCustomIdentValue* name) {
     return new CSSPaintValue(name);
@@ -37,9 +37,9 @@ class CSSPaintValue : public CSSImageGeneratorValue {
   scoped_refptr<Image> GetImage(const ImageResourceObserver&,
                                 const Document&,
                                 const ComputedStyle&,
-                                const IntSize& container_size);
+                                const LayoutSize& container_size);
   bool IsFixedSize() const { return false; }
-  IntSize FixedSize(const Document&) { return IntSize(); }
+  FloatSize FixedSize(const Document&) { return FloatSize(); }
 
   bool IsPending() const { return true; }
   bool KnownToBeOpaque(const Document&, const ComputedStyle&) const;

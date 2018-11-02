@@ -9,6 +9,7 @@
 
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/command_line.h"
@@ -19,13 +20,13 @@
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/crash_keys.h"
 #include "chrome/common/open_search_description_document_handler.mojom.h"
 #include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
 #include "chrome/renderer/web_apps.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/translate/content/renderer/translate_helper.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/renderer/render_frame.h"
@@ -168,8 +169,6 @@ bool ChromeRenderFrameObserver::OnMessageReceived(const IPC::Message& message) {
     return false;
 
   IPC_BEGIN_MESSAGE_MAP(ChromeRenderFrameObserver, message)
-    IPC_MESSAGE_HANDLER(ChromeFrameMsg_GetWebApplicationInfo,
-                        OnGetWebApplicationInfo)
 #if BUILDFLAG(ENABLE_PRINTING)
     IPC_MESSAGE_HANDLER(PrintMsg_PrintNodeUnderContextMenu,
                         OnPrintNodeUnderContextMenu)
@@ -181,7 +180,8 @@ bool ChromeRenderFrameObserver::OnMessageReceived(const IPC::Message& message) {
 }
 
 void ChromeRenderFrameObserver::OnSetIsPrerendering(
-    prerender::PrerenderMode mode) {
+    prerender::PrerenderMode mode,
+    const std::string& histogram_prefix) {
   if (mode != prerender::NO_PRERENDER) {
     // If the PrerenderHelper for this frame already exists, don't create it. It
     // can already be created for subframes during handling of
@@ -192,7 +192,7 @@ void ChromeRenderFrameObserver::OnSetIsPrerendering(
 
     // The PrerenderHelper will destroy itself either after recording histograms
     // or on destruction of the RenderView.
-    new prerender::PrerenderHelper(render_frame(), mode);
+    new prerender::PrerenderHelper(render_frame(), mode, histogram_prefix);
   }
 }
 
@@ -215,7 +215,8 @@ void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
   SkBitmap thumbnail;
   gfx::Size original_size;
   if (!context_node.IsNull() && context_node.IsElementNode()) {
-    blink::WebImage image = context_node.To<WebElement>().ImageContents();
+    blink::WebImage image =
+        context_node.To<WebElement>().ImageContents();
     original_size = image.Size();
     thumbnail = Downscale(image,
                           thumbnail_min_area_pixels,
@@ -261,7 +262,8 @@ void ChromeRenderFrameObserver::OnPrintNodeUnderContextMenu() {
 #endif
 }
 
-void ChromeRenderFrameObserver::OnGetWebApplicationInfo() {
+void ChromeRenderFrameObserver::GetWebApplicationInfo(
+    const GetWebApplicationInfoCallback& callback) {
   WebLocalFrame* frame = render_frame()->GetWebFrame();
 
   WebApplicationInfo web_app_info;
@@ -298,8 +300,7 @@ void ChromeRenderFrameObserver::OnGetWebApplicationInfo() {
   web_app_info.description =
       web_app_info.description.substr(0, chrome::kMaxMetaTagAttributeLength);
 
-  Send(new ChromeFrameHostMsg_DidGetWebApplicationInfo(routing_id(),
-                                                       web_app_info));
+  std::move(callback).Run(web_app_info);
 }
 
 void ChromeRenderFrameObserver::SetClientSidePhishingDetection(
@@ -356,8 +357,8 @@ void ChromeRenderFrameObserver::DidCommitProvisionalLoad(
   if (frame->Parent())
     return;
 
-  base::debug::SetCrashKeyValue(
-      crash_keys::kViewCount,
+  static crash_reporter::CrashKeyString<8> view_count_key("view-count");
+  view_count_key.Set(
       base::NumberToString(content::RenderView::GetRenderViewCount()));
 
 #if !defined(OS_ANDROID)
@@ -463,4 +464,17 @@ void ChromeRenderFrameObserver::SetWindowFeatures(
     blink::mojom::WindowFeaturesPtr window_features) {
   render_frame()->GetRenderView()->GetWebView()->SetWindowFeatures(
       content::ConvertMojoWindowFeaturesToWebWindowFeatures(*window_features));
+}
+
+void ChromeRenderFrameObserver::UpdateBrowserControlsState(
+    content::BrowserControlsState constraints,
+    content::BrowserControlsState current,
+    bool animate) {
+#if defined(OS_ANDROID)
+  render_frame()->GetRenderView()->UpdateBrowserControlsState(constraints,
+                                                              current, animate);
+#else
+  // TODO(https://crbug.com/676224): remove this reporting.
+  mojo::ReportBadMessage("UpdateBrowserControlsState is OS_ANDROID only.");
+#endif
 }

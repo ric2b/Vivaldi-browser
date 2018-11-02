@@ -31,15 +31,28 @@ _CONFIG = [
 
             # //base constructs that are allowed everywhere
             'base::AdoptRef',
+            'base::Location',
             'base::MakeRefCounted',
             'base::Optional',
             'base::SingleThreadTaskRunner',
             'base::UnguessableToken',
+            'base::WeakPtr',
+            'base::WeakPtrFactory',
             'base::make_optional',
             'base::make_span',
             'base::nullopt',
             'base::span',
             'logging::GetVlogLevel',
+
+            # //base/callback.h is allowed, but you need to use WTF::Bind or
+            # WTF::BindRepeating to create callbacks in Blink.
+            'base::OnceCallback',
+            'base::OnceClosure',
+            'base::RepeatingCallback',
+            'base::RepeatingClosure',
+
+            # //base/memory/ptr_util.h.
+            'base::WrapUnique',
 
             # Debugging helpers from //base/debug are allowed everywhere.
             'base::debug::.+',
@@ -75,8 +88,12 @@ _CONFIG = [
 
             # Blink uses Mojo, so it needs mojo::Binding, mojo::InterfacePtr, et
             # cetera, as well as generated Mojo bindings.
-            'mojo::.+',
+            # Note that the Mojo callback helpers are explicitly forbidden:
+            # Blink already has a signal for contexts being destroyed, and
+            # other types of failures should be explicitly signalled.
+            'mojo::(?!WrapCallback).+',
             '(?:.+::)?mojom::.+',
+            "service_manager::BinderRegistry",
             # TODO(dcheng): Remove this once Connector isn't needed in Blink
             # anymore.
             'service_manager::Connector',
@@ -86,6 +103,9 @@ _CONFIG = [
             # but still needed for interop with WebKit/common. Note that other
             # STL types such as std::unique_ptr are encouraged.
             'std::.+',
+
+            # Blink uses UKM for logging e.g. always-on leak detection (crbug/757374)
+            'ukm::.+',
         ],
         'disallowed': ['.+'],
     },
@@ -113,8 +133,12 @@ _CONFIG = [
             'third_party/WebKit/Source/core/html/media/',
             'third_party/WebKit/Source/modules/vr/',
             'third_party/WebKit/Source/modules/webgl/',
+            'third_party/WebKit/Source/modules/xr/',
         ],
-        'allowed': ['gpu::gles2::GLES2Interface'],
+        # These modules need access to GL drawing.
+        'allowed': [
+            'gpu::gles2::GLES2Interface',
+        ],
     },
     {
         'paths': [

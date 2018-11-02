@@ -10,24 +10,46 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/logging.h"
+#include "base/process/process.h"
+#include "build/build_config.h"
+#include "content/network/network_context.h"
 #include "content/public/common/content_features.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/test_host_resolver.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "net/cert/mock_cert_verifier.h"
+#include "net/cert/test_root_certs.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "services/network/public/interfaces/network_change_manager.mojom.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
+
+#if defined(OS_ANDROID)
+#include "base/test/android/url_utils.h"
+#include "base/test/test_support_android.h"
+#endif
 
 namespace content {
 
 class NetworkServiceTestHelper::NetworkServiceTestImpl
-    : public content::mojom::NetworkServiceTest {
+    : public network::mojom::NetworkServiceTest {
  public:
-  NetworkServiceTestImpl() = default;
-  ~NetworkServiceTestImpl() override = default;
+  NetworkServiceTestImpl() {
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kUseMockCertVerifierForTesting)) {
+      mock_cert_verifier_ = std::make_unique<net::MockCertVerifier>();
+      NetworkContext::SetCertVerifierForTesting(mock_cert_verifier_.get());
+    }
+  }
 
-  // content::mojom::NetworkServiceTest:
-  void AddRules(std::vector<content::mojom::RulePtr> rules,
+  ~NetworkServiceTestImpl() override {
+    NetworkContext::SetCertVerifierForTesting(nullptr);
+  }
+
+  // network::mojom::NetworkServiceTest:
+  void AddRules(std::vector<network::mojom::RulePtr> rules,
                 AddRulesCallback callback) override {
     for (const auto& rule : rules) {
       test_host_resolver_.host_resolver()->AddRule(rule->host_pattern,
@@ -45,21 +67,45 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   }
 
   void SimulateCrash() override {
-    CHECK(false) << "Crash NetworkService process for testing.";
+    LOG(ERROR) << "Intentionally issuing kill signal to current process to"
+               << " simulate NetworkService crash for testing.";
+    // Use |Process::Terminate()| instead of |CHECK()| to avoid 'Fatal error'
+    // dialog on Windows debug.
+    base::Process::Current().Terminate(1, false);
   }
 
-  void BindRequest(content::mojom::NetworkServiceTestRequest request) {
+  void MockCertVerifierSetDefaultResult(
+      int32_t default_result,
+      MockCertVerifierSetDefaultResultCallback callback) override {
+    mock_cert_verifier_->set_default_result(default_result);
+    std::move(callback).Run();
+  }
+
+  void MockCertVerifierAddResultForCertAndHost(
+      const scoped_refptr<net::X509Certificate>& cert,
+      const std::string& host_pattern,
+      const net::CertVerifyResult& verify_result,
+      int32_t rv,
+      MockCertVerifierAddResultForCertAndHostCallback callback) override {
+    mock_cert_verifier_->AddResultForCertAndHost(cert, host_pattern,
+                                                 verify_result, rv);
+    std::move(callback).Run();
+  }
+
+  void BindRequest(network::mojom::NetworkServiceTestRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 
  private:
-  mojo::BindingSet<content::mojom::NetworkServiceTest> bindings_;
-  content::TestHostResolver test_host_resolver_;
+  mojo::BindingSet<network::mojom::NetworkServiceTest> bindings_;
+  TestHostResolver test_host_resolver_;
+  std::unique_ptr<net::MockCertVerifier> mock_cert_verifier_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceTestImpl);
 };
 
-NetworkServiceTestHelper::NetworkServiceTestHelper() = default;
+NetworkServiceTestHelper::NetworkServiceTestHelper()
+    : network_service_test_impl_(new NetworkServiceTestImpl) {}
 
 NetworkServiceTestHelper::~NetworkServiceTestHelper() = default;
 
@@ -79,14 +125,20 @@ void NetworkServiceTestHelper::RegisterNetworkBinders(
       sandbox_type == service_manager::SANDBOX_TYPE_NETWORK) {
     // Register the EmbeddedTestServer's certs, so that any SSL connections to
     // it succeed. Only do this when file I/O is allowed in the current process.
+#if defined(OS_ANDROID)
+    base::InitAndroidTestPaths(base::android::GetIsolatedTestRoot());
+#endif
     net::EmbeddedTestServer::RegisterTestCerts();
+
+    // Also add the QUIC test certificate.
+    net::TestRootCerts* root_certs = net::TestRootCerts::GetInstance();
+    root_certs->AddFromFile(
+        net::GetTestCertsDirectory().AppendASCII("quic-root.pem"));
   }
 }
 
 void NetworkServiceTestHelper::BindNetworkServiceTestRequest(
-    content::mojom::NetworkServiceTestRequest request) {
-  if (!network_service_test_impl_)
-    network_service_test_impl_ = std::make_unique<NetworkServiceTestImpl>();
+    network::mojom::NetworkServiceTestRequest request) {
   network_service_test_impl_->BindRequest(std::move(request));
 }
 

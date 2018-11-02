@@ -4,6 +4,8 @@
 
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 
+#include <memory>
+
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
 #include "core/frame/FrameView.h"
@@ -69,13 +71,13 @@ class MockWebScreenOrientationClient final : public WebScreenOrientationClient {
 void DidEnterFullscreen(Document* document) {
   DCHECK(document);
   Fullscreen::From(*document).DidEnterFullscreen();
-  document->ServiceScriptedAnimations(WTF::MonotonicallyIncreasingTime());
+  document->ServiceScriptedAnimations(WTF::CurrentTimeTicksInSeconds());
 }
 
 void DidExitFullscreen(Document* document) {
   DCHECK(document);
   Fullscreen::From(*document).DidExitFullscreen();
-  document->ServiceScriptedAnimations(WTF::MonotonicallyIncreasingTime());
+  document->ServiceScriptedAnimations(WTF::CurrentTimeTicksInSeconds());
 }
 
 class MockChromeClientForOrientationLockDelegate final
@@ -91,12 +93,12 @@ class MockChromeClientForOrientationLockDelegate final
   // async due to IPC, emulate that by posting tasks:
   void EnterFullscreen(LocalFrame& frame) override {
     Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+        FROM_HERE,
         WTF::Bind(DidEnterFullscreen, WrapPersistent(frame.GetDocument())));
   }
   void ExitFullscreen(LocalFrame& frame) override {
     Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+        FROM_HERE,
         WTF::Bind(DidExitFullscreen, WrapPersistent(frame.GetDocument())));
   }
 
@@ -190,7 +192,7 @@ class MediaControlsOrientationLockDelegateTest
     ScreenOrientationController* controller =
         ScreenOrientationController::From(*GetDocument().GetFrame());
     controller->lock(kWebScreenOrientationLockLandscape,
-                     WTF::WrapUnique(new DummyScreenOrientationCallback));
+                     std::make_unique<DummyScreenOrientationCallback>());
     EXPECT_TRUE(controller->MaybeHasActiveLock());
   }
 

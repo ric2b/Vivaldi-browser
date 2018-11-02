@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -27,6 +28,20 @@
 
 namespace autofill {
 namespace payments {
+namespace {
+
+int kAllDetectableValues =
+    CreditCardSaveManager::DetectedValue::CVC |
+    CreditCardSaveManager::DetectedValue::CARDHOLDER_NAME |
+    CreditCardSaveManager::DetectedValue::ADDRESS_NAME |
+    CreditCardSaveManager::DetectedValue::ADDRESS_LINE |
+    CreditCardSaveManager::DetectedValue::LOCALITY |
+    CreditCardSaveManager::DetectedValue::ADMINISTRATIVE_AREA |
+    CreditCardSaveManager::DetectedValue::POSTAL_CODE |
+    CreditCardSaveManager::DetectedValue::COUNTRY_CODE |
+    CreditCardSaveManager::DetectedValue::HAS_GOOGLE_PAYMENTS_ACCOUNT;
+
+}  // namespace
 
 class PaymentsClientTest : public testing::Test,
                            public PaymentsClientUnmaskDelegate,
@@ -59,6 +74,15 @@ class PaymentsClientTest : public testing::Test,
   void DisableAutofillSendBillingCustomerNumberExperiment() {
     scoped_feature_list_.InitAndDisableFeature(
         kAutofillSendBillingCustomerNumber);
+  }
+
+  void EnableAutofillUpstreamSendDetectedValuesExperiment() {
+    scoped_feature_list_.InitAndEnableFeature(
+        kAutofillUpstreamSendDetectedValues);
+  }
+
+  void EnableAutofillUpstreamSendPanFirstSixExperiment() {
+    scoped_feature_list_.InitAndEnableFeature(kAutofillUpstreamSendPanFirstSix);
   }
 
   // PaymentsClientUnmaskDelegate:
@@ -99,8 +123,9 @@ class PaymentsClientTest : public testing::Test,
   void StartGettingUploadDetails() {
     token_service_->AddAccount("example@gmail.com");
     identity_provider_->LogIn("example@gmail.com");
-    client_->GetUploadDetails(BuildTestProfiles(), std::vector<const char*>(),
-                              "language-LOCALE");
+    client_->GetUploadDetails(BuildTestProfiles(), kAllDetectableValues,
+                              /*pan_first_six=*/"411111",
+                              std::vector<const char*>(), "language-LOCALE");
   }
 
   void StartUploading(bool include_cvc) {
@@ -262,6 +287,50 @@ TEST_F(PaymentsClientTest, GetDetailsRemovesNonLocationData) {
   EXPECT_TRUE(GetUploadData().find("0162") == std::string::npos);
   EXPECT_TRUE(GetUploadData().find("834") == std::string::npos);
   EXPECT_TRUE(GetUploadData().find("0090") == std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsIncludesDetectedValuesInRequestIfExperimentOn) {
+  EnableAutofillUpstreamSendDetectedValuesExperiment();
+
+  StartGettingUploadDetails();
+
+  // Verify that the detected values were included in the request.
+  std::string detected_values_string =
+      "\"detected_values\":" + std::to_string(kAllDetectableValues);
+  EXPECT_TRUE(GetUploadData().find(detected_values_string) !=
+              std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsDoesNotIncludeDetectedValuesInRequestIfExperimentOff) {
+  StartGettingUploadDetails();
+
+  // Verify that the detected values were left out of the request.
+  std::string detected_values_string =
+      "\"detected_values\":" + std::to_string(kAllDetectableValues);
+  EXPECT_TRUE(GetUploadData().find(detected_values_string) ==
+              std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsIncludesPanFirstSixInRequestIfExperimentOn) {
+  EnableAutofillUpstreamSendPanFirstSixExperiment();
+
+  StartGettingUploadDetails();
+
+  // Verify that the value of pan_first_six was included in the request.
+  EXPECT_TRUE(GetUploadData().find("\"pan_first6\":\"411111\"") !=
+              std::string::npos);
+}
+
+TEST_F(PaymentsClientTest,
+       GetDetailsDoesNotIncludePanFirstSixInRequestIfExperimentOff) {
+  StartGettingUploadDetails();
+
+  // Verify that the value of pan_first_six was left out of the request.
+  EXPECT_TRUE(GetUploadData().find("\"pan_first6\":\"411111\"") ==
+              std::string::npos);
 }
 
 TEST_F(PaymentsClientTest, UploadSuccessWithoutServerId) {

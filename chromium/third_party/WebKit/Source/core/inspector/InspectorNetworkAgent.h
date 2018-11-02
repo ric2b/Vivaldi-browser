@@ -45,7 +45,6 @@ namespace blink {
 
 class Document;
 class DocumentLoader;
-class EncodedFormData;
 class ExecutionContext;
 struct FetchInitiatorInfo;
 class LocalFrame;
@@ -82,7 +81,8 @@ class CORE_EXPORT InspectorNetworkAgent final
                        const FetchInitiatorInfo&,
                        ResourceRequestBlockedReason,
                        Resource::Type);
-  void DidChangeResourcePriority(unsigned long identifier,
+  void DidChangeResourcePriority(DocumentLoader*,
+                                 unsigned long identifier,
                                  ResourceLoadPriority);
   void WillSendRequest(ExecutionContext*,
                        unsigned long identifier,
@@ -91,7 +91,7 @@ class CORE_EXPORT InspectorNetworkAgent final
                        const ResourceResponse& redirect_response,
                        const FetchInitiatorInfo&,
                        Resource::Type);
-  void MarkResourceAsCached(unsigned long identifier);
+  void MarkResourceAsCached(DocumentLoader*, unsigned long identifier);
   void DidReceiveResourceResponse(unsigned long identifier,
                                   DocumentLoader*,
                                   const ResourceResponse&,
@@ -100,13 +100,15 @@ class CORE_EXPORT InspectorNetworkAgent final
                       DocumentLoader*,
                       const char* data,
                       int data_length);
-  void DidReceiveEncodedDataLength(unsigned long identifier,
+  void DidReceiveEncodedDataLength(DocumentLoader*,
+                                   unsigned long identifier,
                                    int encoded_data_length);
   void DidFinishLoading(unsigned long identifier,
                         DocumentLoader*,
                         double monotonic_finish_time,
                         int64_t encoded_data_length,
-                        int64_t decoded_body_length);
+                        int64_t decoded_body_length,
+                        bool blocked_cross_site_document);
   void DidReceiveCORSRedirectResponse(unsigned long identifier,
                                       DocumentLoader*,
                                       const ResourceResponse&,
@@ -130,7 +132,6 @@ class CORE_EXPORT InspectorNetworkAgent final
                    const AtomicString& method,
                    const KURL&,
                    bool async,
-                   scoped_refptr<EncodedFormData> body,
                    const HTTPHeaderMap& headers,
                    bool include_crendentials);
   void DidFailXHRLoading(ExecutionContext*,
@@ -199,7 +200,8 @@ class CORE_EXPORT InspectorNetworkAgent final
 
   // Called from frontend
   protocol::Response enable(Maybe<int> total_buffer_size,
-                            Maybe<int> resource_buffer_size) override;
+                            Maybe<int> resource_buffer_size,
+                            Maybe<int> max_post_data_size) override;
   protocol::Response disable() override;
   protocol::Response setUserAgentOverride(const String&) override;
   protocol::Response setExtraHTTPHeaders(
@@ -234,6 +236,9 @@ class CORE_EXPORT InspectorNetworkAgent final
       const String& origin,
       std::unique_ptr<protocol::Array<String>>* certificate) override;
 
+  protocol::Response getRequestPostData(const String& request_id,
+                                        String* post_data) override;
+
   // Called from other agents.
   protocol::Response GetResponseBody(const String& request_id,
                                      String* content,
@@ -242,10 +247,11 @@ class CORE_EXPORT InspectorNetworkAgent final
                             const KURL&,
                             String* content,
                             bool* base64_encoded);
-  bool CacheDisabled();
 
  private:
-  void Enable(int total_buffer_size, int resource_buffer_size);
+  void Enable(int total_buffer_size,
+              int resource_buffer_size,
+              int max_post_data_size);
   void WillSendRequestInternal(ExecutionContext*,
                                unsigned long identifier,
                                DocumentLoader*,
@@ -295,6 +301,7 @@ class CORE_EXPORT InspectorNetworkAgent final
   HeapHashSet<Member<XMLHttpRequest>> replay_xhrs_;
   HeapHashSet<Member<XMLHttpRequest>> replay_xhrs_to_be_deleted_;
   TaskRunnerTimer<InspectorNetworkAgent> remove_finished_replay_xhr_timer_;
+  int max_post_data_size_;
 };
 
 }  // namespace blink

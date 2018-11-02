@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> elementos</translation>
 <translation id="1491277525950327607">Toca dos veces para activar o desactivar esta opción</translation>
 <translation id="152234381334907219">Contraseñas que nunca se guardan</translation>
+<translation id="1532451416480227577">Mostrar direcciones y tarjetas crédito de Google Pay</translation>
 <translation id="1540800554400757039">Dirección 1</translation>
 <translation id="1545749641540134597">Escanea el código QR</translation>
 <translation id="1580783302095112590">Correo enviado</translation>
@@ -96,6 +97,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="2718352093833049315">Solo en Wi-Fi</translation>
 <translation id="2747003861858887689">Campo anterior</translation>
 <translation id="2780046210906776326">No hay cuentas de correo</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Salir de la función de cambio de pestaña</translation>
 <translation id="283291358677939992">Buscar en la página...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" /> (<ph name="URL" />)</translation>
@@ -179,6 +181,7 @@ Por ejemplo, algunos sitios web pueden responder a la solicitud mostrándote anu
 <translation id="4378154925671717803">Teléfono</translation>
 <translation id="441868831736628555">Aviso de privacidad</translation>
 <translation id="4460091562821778167">Preguntarme qué aplicación se usa cada vez</translation>
+<translation id="4496373720959965247">Añade pestañas y cambia de una página a otra</translation>
 <translation id="4508750114462689118">Cierra el inicio de sesión en la promoción</translation>
 <translation id="4526249700380860531">Consulta y administra contraseñas guardadas en la página <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Prueba a iniciar sesión de nuevo.</translation>
@@ -217,12 +220,12 @@ Tus datos se han cifrado con tu frase de contraseña de sincronización. Introd�
 <translation id="5300589172476337783">Mostrar</translation>
 <translation id="5317780077021120954">Guardar</translation>
 <translation id="5327248766486351172">Nombre</translation>
+<translation id="533632423981297619">Cualquier usuario que pueda ver el archivo exportado podrá ver tus contraseñas. No compartas el archivo con nadie.</translation>
 <translation id="5388358297987318779">Abrir imagen</translation>
 <translation id="5409365236829784218">Ninguna aplicación instalada puede abrir este archivo.</translation>
 <translation id="5433691172869980887">Se ha copiado el nombre de usuario</translation>
 <translation id="54401264925851789">Información de seguridad de la página</translation>
 <translation id="5525269841082836315">Crear frase de contraseña</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoff te permite empezar a navegar en un sitio web en este dispositivo y continuar fácilmente en tu Mac más tarde. El sitio web abierto actualmente aparecerá en el Dock de tu Mac.
 
 Handoff también debe estar habilitado en la sección General de Configuración, y los dispositivos deben utilizar la misma cuenta de iCloud.</translation>
@@ -247,7 +250,6 @@ Handoff también debe estar habilitado en la sección General de Configuración,
 <translation id="5911030830365207728">Traductor de Google</translation>
 <translation id="5916664084637901428">Activar</translation>
 <translation id="5948291296578561264">Esta acción te permite guardar fotos en tu biblioteca.</translation>
-<translation id="5953603475187800576">Mostrar direcciones y tarjetas de crédito de Google Payments</translation>
 <translation id="5955891643922670672">Viendo versión sin conexión</translation>
 <translation id="5964480694698977962">Crear nueva pestaña de incógnito.</translation>
 <translation id="5965679971710331625">Has iniciado sesión</translation>
@@ -337,7 +339,6 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="7514365320538308">Descargar</translation>
 <translation id="7537586195939242955">No se puede instalar tu tarjeta en Passbook en este momento.</translation>
 <translation id="7561196759112975576">Siempre</translation>
-<translation id="7588950540487816470">Web física</translation>
 <translation id="7603852183842204213">Pop-ups bloqueados (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronización no funciona</translation>
 <translation id="7638584964844754484">Frase de contraseña incorrecta</translation>
@@ -350,6 +351,7 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="780301667611848630">No, gracias</translation>
 <translation id="7859704718976024901">Historial de navegación</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Exportar contraseñas...</translation>
 <translation id="7947953824732555851">Aceptar y acceder</translation>
 <translation id="7961015016161918242">Nunca</translation>
 <translation id="7971521879845308059">Bloquear pop-ups</translation>
@@ -407,7 +409,6 @@ Tus datos se cifraron con tu frase de contraseña de sincronización el <ph name
 <translation id="9083392325882095631">1 elemento</translation>
 <translation id="9100610230175265781">Se debe introducir una frase de contraseña</translation>
 <translation id="9148126808321036104">Volver a iniciar sesión</translation>
-<translation id="91549621916703028">Crea varias pestañas para todas tus tareas</translation>
 <translation id="9157836665414082580">Quitar cuadros de diálogo</translation>
 <translation id="9188680907066685419">Cierra sesión en la cuenta gestionada</translation>
 <translation id="9203116392574189331">Handoff</translation>

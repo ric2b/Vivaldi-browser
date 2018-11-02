@@ -4,8 +4,6 @@
 
 #include "ui/ozone/platform/x11/ozone_platform_x11.h"
 
-#include <X11/Xlib.h>
-
 #include <memory>
 #include <utility>
 
@@ -17,6 +15,7 @@
 #include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/platform/x11/x11_event_source_libevent.h"
 #include "ui/events/system_input_injector.h"
+#include "ui/gfx/x/x11.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
 #include "ui/ozone/platform/x11/x11_surface_factory.h"
@@ -68,7 +67,6 @@ class OzonePlatformX11 : public OzonePlatform {
       const gfx::Rect& bounds) override {
     std::unique_ptr<X11WindowOzone> window = std::make_unique<X11WindowOzone>(
         window_manager_.get(), delegate, bounds);
-    window->Create();
     window->SetTitle(base::ASCIIToUTF16("Ozone X11"));
     return std::move(window);
   }
@@ -115,9 +113,9 @@ class OzonePlatformX11 : public OzonePlatform {
     if (common_initialized_)
       return;
 
-    // In single process mode XInitThreads() must be the first Xlib call.
-    if (params.single_process)
-      XInitThreads();
+    // Always initialze in multi-thread mode, since this is used only during
+    // development.
+    XInitThreads();
 
     ui::SetDefaultX11ErrorHandlers();
 

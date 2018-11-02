@@ -7,7 +7,6 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/AnimationWorkletProxyClient.h"
 #include "core/dom/Document.h"
-#include "core/frame/LocalFrame.h"
 #include "core/page/ChromeClient.h"
 #include "core/workers/WorkerClients.h"
 #include "modules/animationworklet/AnimationWorkletMessagingProxy.h"
@@ -16,14 +15,9 @@
 
 namespace blink {
 
-// static
-AnimationWorklet* AnimationWorklet::Create(LocalFrame* frame) {
-  return new AnimationWorklet(frame);
-}
+AnimationWorklet::AnimationWorklet(Document* document) : Worklet(document) {}
 
-AnimationWorklet::AnimationWorklet(LocalFrame* frame) : Worklet(frame) {}
-
-AnimationWorklet::~AnimationWorklet() {}
+AnimationWorklet::~AnimationWorklet() = default;
 
 bool AnimationWorklet::NeedsToCreateGlobalScope() {
   // For now, create only one global scope per document.
@@ -43,8 +37,8 @@ WorkletGlobalScopeProxy* AnimationWorklet::CreateGlobalScope() {
   ProvideAnimationWorkletProxyClientTo(worker_clients, proxy_client);
 
   AnimationWorkletMessagingProxy* proxy =
-      new AnimationWorkletMessagingProxy(GetExecutionContext(), worker_clients);
-  proxy->Initialize();
+      new AnimationWorkletMessagingProxy(GetExecutionContext());
+  proxy->Initialize(worker_clients);
   return proxy;
 }
 

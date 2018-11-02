@@ -55,7 +55,8 @@ VideoDecodeAcceleratorCapabilities::VideoDecodeAcceleratorCapabilities()
 VideoDecodeAcceleratorCapabilities::VideoDecodeAcceleratorCapabilities(
     const VideoDecodeAcceleratorCapabilities& other) = default;
 
-VideoDecodeAcceleratorCapabilities::~VideoDecodeAcceleratorCapabilities() {}
+VideoDecodeAcceleratorCapabilities::~VideoDecodeAcceleratorCapabilities() =
+    default;
 
 GPUInfo::GPUDevice::GPUDevice()
     : vendor_id(0),
@@ -63,7 +64,7 @@ GPUInfo::GPUDevice::GPUDevice()
       active(false) {
 }
 
-GPUInfo::GPUDevice::~GPUDevice() { }
+GPUInfo::GPUDevice::~GPUDevice() = default;
 
 GPUInfo::GPUInfo()
     : optimus(false),
@@ -91,7 +92,7 @@ GPUInfo::GPUInfo()
 
 GPUInfo::GPUInfo(const GPUInfo& other) = default;
 
-GPUInfo::~GPUInfo() { }
+GPUInfo::~GPUInfo() = default;
 
 const GPUInfo::GPUDevice& GPUInfo::active_gpu() const {
   if (gpu.active)
@@ -100,7 +101,7 @@ const GPUInfo::GPUDevice& GPUInfo::active_gpu() const {
     if (secondary_gpu.active)
       return secondary_gpu;
   }
-  DLOG(ERROR) << "No active GPU found, returning primary GPU.";
+  DLOG(WARNING) << "No active GPU found, returning primary GPU.";
   return gpu;
 }
 
@@ -133,6 +134,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     int process_crash_count;
     bool in_process_gpu;
     bool passthrough_cmd_decoder;
+    bool direct_composition;
     bool supports_overlays;
     bool can_support_threaded_texture_mailbox;
     CollectInfoResult basic_info_state;
@@ -193,6 +195,7 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
   enumerator->AddInt("processCrashCount", process_crash_count);
   enumerator->AddBool("inProcessGpu", in_process_gpu);
   enumerator->AddBool("passthroughCmdDecoder", passthrough_cmd_decoder);
+  enumerator->AddBool("directComposition", direct_composition);
   enumerator->AddBool("supportsOverlays", supports_overlays);
   enumerator->AddBool("canSupportThreadedTextureMailbox",
                       can_support_threaded_texture_mailbox);

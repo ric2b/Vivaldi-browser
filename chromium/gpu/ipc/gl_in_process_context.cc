@@ -59,10 +59,11 @@ class GLInProcessContextImpl
       bool is_offscreen,
       SurfaceHandle window,
       GLInProcessContext* share_context,
-      const gpu::gles2::ContextCreationAttribHelper& attribs,
+      const gpu::ContextCreationAttribs& attribs,
       const SharedMemoryLimits& mem_limits,
       GpuMemoryBufferManager* gpu_memory_buffer_manager,
       ImageFactory* image_factory,
+      GpuChannelManagerDelegate* gpu_channel_manager_delegate,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
   const gpu::Capabilities& GetCapabilities() const override;
   const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const override;
@@ -77,7 +78,7 @@ class GLInProcessContextImpl
       const gpu::InProcessCommandBuffer::PresentationCallback& callback)
       override;
   void SetLock(base::Lock* lock) override;
-  gpu::gles2::ContextGroup* ContextGroupForTesting() const override;
+  gpu::ServiceTransferCache* GetTransferCacheForTest() const override;
 
  private:
   void OnSignalSyncPoint(const base::Closure& callback);
@@ -142,9 +143,9 @@ void GLInProcessContextImpl::SetLock(base::Lock* lock) {
   NOTREACHED();
 }
 
-gpu::gles2::ContextGroup* GLInProcessContextImpl::ContextGroupForTesting()
+gpu::ServiceTransferCache* GLInProcessContextImpl::GetTransferCacheForTest()
     const {
-  return command_buffer_->ContextGroupForTesting();
+  return command_buffer_->GetTransferCacheForTest();
 }
 
 gpu::ContextResult GLInProcessContextImpl::Initialize(
@@ -153,10 +154,11 @@ gpu::ContextResult GLInProcessContextImpl::Initialize(
     bool is_offscreen,
     SurfaceHandle window,
     GLInProcessContext* share_context,
-    const gles2::ContextCreationAttribHelper& attribs,
+    const ContextCreationAttribs& attribs,
     const SharedMemoryLimits& mem_limits,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
     ImageFactory* image_factory,
+    GpuChannelManagerDelegate* gpu_channel_manager_delegate,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // If a surface is provided, we are running in a webview and should not have
   // a task runner. We must have a task runner in all other cases.
@@ -183,7 +185,8 @@ gpu::ContextResult GLInProcessContextImpl::Initialize(
 
   auto result = command_buffer_->Initialize(
       surface, is_offscreen, window, attribs, share_command_buffer,
-      gpu_memory_buffer_manager, image_factory, std::move(task_runner));
+      gpu_memory_buffer_manager, image_factory, gpu_channel_manager_delegate,
+      std::move(task_runner));
   if (result != gpu::ContextResult::kSuccess) {
     DLOG(ERROR) << "Failed to initialize InProcessCommmandBuffer";
     return result;

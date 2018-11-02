@@ -14,7 +14,7 @@
 #include "components/viz/common/gpu/context_cache_controller.h"
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/viz_common_export.h"
-#include "gpu/command_buffer/common/gles2_cmd_utils.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/ipc/in_process_command_buffer.h"
 #include "ui/gfx/native_widget_types.h"
 
@@ -22,6 +22,7 @@ class GrContext;
 
 namespace gpu {
 class GLInProcessContext;
+class GpuChannelManagerDelegate;
 class GpuMemoryBufferManager;
 class ImageFactory;
 struct SharedMemoryLimits;
@@ -33,16 +34,26 @@ class GrContextForGLES2Interface;
 
 namespace viz {
 
-class VIZ_COMMON_EXPORT InProcessContextProvider : public ContextProvider {
+// A ContextProvider used in the viz process to setup command buffers between
+// the compositor and gpu thread.
+// TODO(kylechar): Rename VizProcessContextProvider and move to
+// components/viz/service.
+class VIZ_COMMON_EXPORT InProcessContextProvider
+    : public base::RefCountedThreadSafe<InProcessContextProvider>,
+      public ContextProvider {
  public:
   InProcessContextProvider(
       scoped_refptr<gpu::InProcessCommandBuffer::Service> service,
-      gpu::SurfaceHandle widget,
+      gpu::SurfaceHandle surface_handle,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       gpu::ImageFactory* image_factory,
+      gpu::GpuChannelManagerDelegate* gpu_channel_manager_delegate,
       const gpu::SharedMemoryLimits& limits,
       InProcessContextProvider* shared_context);
 
+  // ContextProvider implementation.
+  void AddRef() const override;
+  void Release() const override;
   gpu::ContextResult BindToCurrentThread() override;
   gpu::gles2::GLES2Interface* ContextGL() override;
   gpu::ContextSupport* ContextSupport() override;
@@ -73,7 +84,7 @@ class VIZ_COMMON_EXPORT InProcessContextProvider : public ContextProvider {
   ~InProcessContextProvider() override;
 
  private:
-  const gpu::gles2::ContextCreationAttribHelper attributes_;
+  const gpu::ContextCreationAttribs attributes_;
 
   base::Lock context_lock_;
   std::unique_ptr<gpu::GLInProcessContext> context_;

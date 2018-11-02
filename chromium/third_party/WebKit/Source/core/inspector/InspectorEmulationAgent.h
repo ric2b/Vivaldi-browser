@@ -9,7 +9,9 @@
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/protocol/Emulation.h"
+#include "core/loader/FrameLoaderTypes.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
+#include "platform/wtf/Optional.h"
 #include "platform/wtf/Time.h"
 
 namespace blink {
@@ -27,14 +29,7 @@ class CORE_EXPORT InspectorEmulationAgent final
     : public InspectorBaseAgent<protocol::Emulation::Metainfo>,
       public WebViewScheduler::VirtualTimeObserver {
  public:
-  class Client {
-   public:
-    virtual ~Client() {}
-
-    virtual void SetCPUThrottlingRate(double rate) {}
-  };
-
-  static InspectorEmulationAgent* Create(WebLocalFrameImpl*, Client*);
+  explicit InspectorEmulationAgent(WebLocalFrameImpl*);
   ~InspectorEmulationAgent() override;
 
   // protocol::Dispatcher::EmulationCommandHandler implementation.
@@ -50,6 +45,7 @@ class CORE_EXPORT InspectorEmulationAgent final
       const String& policy,
       protocol::Maybe<double> virtual_time_budget_ms,
       protocol::Maybe<int> max_virtual_time_task_starvation_count,
+      protocol::Maybe<bool> wait_for_navigation,
       double* virtual_time_base_ms) override;
   protocol::Response setNavigatorOverrides(const String& platform) override;
   protocol::Response setDefaultBackgroundColorOverride(
@@ -69,6 +65,9 @@ class CORE_EXPORT InspectorEmulationAgent final
       protocol::Maybe<protocol::Page::Viewport>) override;
   protocol::Response clearDeviceMetricsOverride() override;
 
+  // InspectorInstrumentation API
+  void FrameStartedLoading(LocalFrame*, FrameLoadType);
+
   // InspectorBaseAgent overrides.
   protocol::Response disable() override;
   void Restore() override;
@@ -80,13 +79,23 @@ class CORE_EXPORT InspectorEmulationAgent final
   void Trace(blink::Visitor*) override;
 
  private:
-  InspectorEmulationAgent(WebLocalFrameImpl*, Client*);
   WebViewImpl* GetWebViewImpl();
   void VirtualTimeBudgetExpired();
 
+  struct PendingVirtualTimePolicy {
+    WebViewScheduler::VirtualTimePolicy policy;
+    WTF::Optional<double> virtual_time_budget_ms;
+    WTF::Optional<int> max_virtual_time_task_starvation_count;
+  };
+  WTF::TimeTicks ApplyVirtualTimePolicy(
+      const PendingVirtualTimePolicy& new_policy);
+
   Member<WebLocalFrameImpl> web_local_frame_;
-  Client* client_;
-  bool virtual_time_observer_registered_;
+  bool virtual_time_setup_ = false;
+
+  // Supports a virtual time policy change scheduled to occur after any
+  // navigation has started.
+  WTF::Optional<PendingVirtualTimePolicy> pending_virtual_time_policy_;
 
   DISALLOW_COPY_AND_ASSIGN(InspectorEmulationAgent);
 };

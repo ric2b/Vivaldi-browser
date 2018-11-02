@@ -30,7 +30,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "bindings/core/v8/ActiveScriptWrappable.h"
-#include "bindings/modules/v8/string_or_string_sequence.h"
+#include "bindings/core/v8/string_or_string_sequence.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMStringList.h"
 #include "modules/EventModules.h"
@@ -47,6 +47,7 @@
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/indexeddb/WebIDBDatabase.h"
+#include "public/platform/modules/indexeddb/WebIDBDatabaseCallbacks.h"
 
 namespace blink {
 
@@ -118,10 +119,9 @@ class MODULES_EXPORT IDBDatabase final
   void OnVersionChange(int64_t old_version, int64_t new_version);
   void OnAbort(int64_t, DOMException*);
   void OnComplete(int64_t);
-  void OnChanges(const std::unordered_map<int32_t, std::vector<int32_t>>&
-                     observation_index_map,
-                 const WebVector<WebIDBObservation>& observations,
-                 const IDBDatabaseCallbacks::TransactionMap& transactions);
+  void OnChanges(const WebIDBDatabaseCallbacks::ObservationIndexMap&,
+                 WebVector<WebIDBObservation> observations,
+                 const WebIDBDatabaseCallbacks::TransactionMap& transactions);
 
   // ScriptWrappable
   bool HasPendingActivity() const final;

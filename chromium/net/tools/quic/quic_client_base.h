@@ -59,7 +59,7 @@ class QuicClientBase {
   };
 
   QuicClientBase(const QuicServerId& server_id,
-                 const QuicTransportVersionVector& supported_versions,
+                 const ParsedQuicVersionVector& supported_versions,
                  const QuicConfig& config,
                  QuicConnectionHelperInterface* helper,
                  QuicAlarmFactory* alarm_factory,
@@ -142,12 +142,11 @@ class QuicClientBase {
     crypto_config_.tb_key_params = QuicTagVector{kTB10};
   }
 
-  const QuicTransportVersionVector& supported_versions() const {
+  const ParsedQuicVersionVector& supported_versions() const {
     return supported_versions_;
   }
 
-  void SetSupportedTransportVersions(
-      const QuicTransportVersionVector& versions) {
+  void SetSupportedVersions(const ParsedQuicVersionVector& versions) {
     supported_versions_ = versions;
   }
 
@@ -206,10 +205,6 @@ class QuicClientBase {
     }
   }
   void reset_writer() { writer_.reset(); }
-
-  QuicByteCount initial_max_packet_length() {
-    return initial_max_packet_length_;
-  }
 
   ProofVerifier* proof_verifier() const;
 
@@ -278,14 +273,6 @@ class QuicClientBase {
 
   QuicAlarmFactory* alarm_factory() { return alarm_factory_.get(); }
 
-  void set_num_sent_client_hellos(int num_sent_client_hellos) {
-    num_sent_client_hellos_ = num_sent_client_hellos;
-  }
-
-  void set_num_stateless_rejects_received(int num_stateless_rejects_received) {
-    num_stateless_rejects_received_ = num_stateless_rejects_received;
-  }
-
   // Subclasses may need to explicitly clear the session on destruction
   // if they create it with objects that will be destroyed before this is.
   // You probably want to call this if you override CreateQuicSpdyClientSession.
@@ -329,7 +316,7 @@ class QuicClientBase {
   // element, with subsequent elements in descending order (versions can be
   // skipped as necessary). We will always pick supported_versions_[0] as the
   // initial version to use.
-  QuicTransportVersionVector supported_versions_;
+  ParsedQuicVersionVector supported_versions_;
 
   // The initial value of maximum packet size of the connection.  If set to
   // zero, the default is used.

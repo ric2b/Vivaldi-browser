@@ -56,6 +56,7 @@
 #include "content/public/test/web_contents_tester.h"
 #include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "net/http/http_status_code.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_fetcher_delegate.h"
@@ -849,9 +850,8 @@ TEST_F(DownloadProtectionServiceTest,
   scoped_refptr<net::X509Certificate> test_cert(
       ReadTestCertificate("test_cn.pem"));
   ASSERT_TRUE(test_cert.get());
-  std::string test_cert_der;
-  net::X509Certificate::GetDEREncoded(test_cert->os_cert_handle(),
-                                      &test_cert_der);
+  std::string test_cert_der(
+      net::x509_util::CryptoBufferAsStringPiece(test_cert->cert_buffer()));
   EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _))
       .WillRepeatedly(TrustSignature(test_cert_der));
   EXPECT_CALL(*sb_service_->mock_database_manager(),
@@ -2089,10 +2089,8 @@ TEST_F(DownloadProtectionServiceTest, GetCertificateWhitelistStrings) {
   scoped_refptr<net::X509Certificate> issuer_cert(
       ReadTestCertificate("issuer.pem"));
   ASSERT_TRUE(issuer_cert.get());
-  std::string issuer_der;
-  net::X509Certificate::GetDEREncoded(issuer_cert->os_cert_handle(),
-                                      &issuer_der);
-  std::string hashed = base::SHA1HashString(issuer_der);
+  std::string hashed = base::SHA1HashString(std::string(
+      net::x509_util::CryptoBufferAsStringPiece(issuer_cert->cert_buffer())));
   std::string cert_base =
       "cert/" + base::HexEncode(hashed.data(), hashed.size());
 
@@ -2476,11 +2474,11 @@ TEST_F(DownloadProtectionServiceTest,
 TEST_F(DownloadProtectionServiceTest,
        VerifyReferrerChainWithEmptyNavigationHistory) {
   // Setup a web_contents with "http://example.com" as its last committed url.
-  content::WebContents* web_contents =
+  std::unique_ptr<content::WebContents> web_contents(
       content::WebContentsTester::CreateTestWebContents(profile_.get(),
-                                                        nullptr);
+                                                        nullptr));
   content::WebContentsTester* web_contents_tester =
-      content::WebContentsTester::For(web_contents);
+      content::WebContentsTester::For(web_contents.get());
   web_contents_tester->SetLastCommittedURL(GURL("http://example.com"));
 
   NiceMockDownloadItem item;
@@ -2489,12 +2487,13 @@ TEST_F(DownloadProtectionServiceTest,
       "http://example.com/",                                        // referrer
       FILE_PATH_LITERAL("a.tmp"),                                   // tmp_path
       FILE_PATH_LITERAL("a.exe"));  // final_path
-  ON_CALL(item, GetWebContents()).WillByDefault(Return(web_contents));
+  ON_CALL(item, GetWebContents()).WillByDefault(Return(web_contents.get()));
 
-  std::unique_ptr<ReferrerChain> referrer_chain =
+  std::unique_ptr<ReferrerChainData> referrer_chain_data =
       download_service_->IdentifyReferrerChain(item);
+  ReferrerChain* referrer_chain = referrer_chain_data->GetReferrerChain();
 
-  ASSERT_EQ(1, referrer_chain->size());
+  ASSERT_EQ(1u, referrer_chain_data->referrer_chain_length());
   EXPECT_EQ(item.GetUrlChain().back(), referrer_chain->Get(0).url());
   EXPECT_EQ(web_contents->GetLastCommittedURL().spec(),
             referrer_chain->Get(0).referrer_url());

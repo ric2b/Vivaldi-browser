@@ -53,12 +53,12 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/crash_keys.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/installer/util/util_constants.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browser_watcher/stability_paths.h"
+#include "components/crash/core/common/crash_keys.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
 #include "components/metrics/component_metrics_provider.h"
@@ -400,20 +400,6 @@ ChromeMetricsServiceClient::ChromeMetricsServiceClient(
 
 ChromeMetricsServiceClient::~ChromeMetricsServiceClient() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  static const base::Feature kDeleteMetricsFile{
-      "DeleteMetricsFile", base::FEATURE_ENABLED_BY_DEFAULT};
-
-  base::GlobalHistogramAllocator* allocator =
-      base::GlobalHistogramAllocator::Get();
-  if (allocator && base::FeatureList::IsEnabled(kDeleteMetricsFile)) {
-    // A normal shutdown is almost complete so there is no benefit in keeping a
-    // file with no new data to be processed during the next startup sequence.
-    // Deleting the file during shutdown adds an extra disk-access or two to
-    // shutdown but eliminates the unnecessary processing of the contents during
-    // startup only to find nothing.
-    allocator->DeletePersistentLocation();
-  }
 }
 
 // static
@@ -614,7 +600,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       base::MakeUnique<metrics::ScreenInfoMetricsProvider>());
 
   metrics_service_->RegisterMetricsProvider(CreateFileMetricsProvider(
-      ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
+      metrics_state_manager_->IsMetricsReportingEnabled()));
 
   metrics_service_->RegisterMetricsProvider(
       base::MakeUnique<metrics::DriveMetricsProvider>(

@@ -24,7 +24,6 @@
 #include "extensions/renderer/source_map.h"
 #include "extensions/renderer/v8_helpers.h"
 #include "gin/converter.h"
-#include "gin/modules/module_registry.h"
 #include "third_party/WebKit/public/web/WebContextFeatures.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
 
@@ -91,7 +90,7 @@ class DefaultExceptionHandler : public ModuleSystem::ExceptionHandler {
     std::string stack_trace = "<stack trace unavailable>";
     v8::Local<v8::Value> v8_stack_trace;
     if (try_catch.StackTrace(context_->v8_context()).ToLocal(&v8_stack_trace)) {
-      v8::String::Utf8Value stack_value(v8_stack_trace);
+      v8::String::Utf8Value stack_value(context_->isolate(), v8_stack_trace);
       if (*stack_value)
         stack_trace.assign(*stack_value, stack_value.length());
       else
@@ -143,13 +142,13 @@ std::string ModuleSystem::ExceptionHandler::CreateExceptionString(
   std::string resource_name = "<unknown resource>";
   if (!message->GetScriptOrigin().ResourceName().IsEmpty()) {
     v8::String::Utf8Value resource_name_v8(
-        message->GetScriptOrigin().ResourceName());
+        context_->isolate(), message->GetScriptOrigin().ResourceName());
     resource_name.assign(*resource_name_v8, resource_name_v8.length());
   }
 
   std::string error_message = "<no error message>";
   if (!message->Get().IsEmpty()) {
-    v8::String::Utf8Value error_message_v8(message->Get());
+    v8::String::Utf8Value error_message_v8(context_->isolate(), message->Get());
     error_message.assign(*error_message_v8, error_message_v8.length());
   }
 
@@ -169,17 +168,13 @@ ModuleSystem::ModuleSystem(ScriptContext* context, const SourceMap* source_map)
       context_(context),
       source_map_(source_map),
       natives_enabled_(0),
-      exception_handler_(new DefaultExceptionHandler(context)),
-      weak_factory_(this) {
+      exception_handler_(new DefaultExceptionHandler(context)) {
   RouteFunction(
       "require",
       base::Bind(&ModuleSystem::RequireForJs, base::Unretained(this)));
   RouteFunction(
       "requireNative",
       base::Bind(&ModuleSystem::RequireNative, base::Unretained(this)));
-  RouteFunction(
-      "requireAsync",
-      base::Bind(&ModuleSystem::RequireAsync, base::Unretained(this)));
   RouteFunction("loadScript",
                 base::Bind(&ModuleSystem::LoadScript, base::Unretained(this)));
   RouteFunction("privates",
@@ -190,12 +185,9 @@ ModuleSystem::ModuleSystem(ScriptContext* context, const SourceMap* source_map)
   SetPrivate(global, kModulesField, v8::Object::New(isolate));
   SetPrivate(global, kModuleSystem, v8::External::New(isolate, this));
 
-  gin::ModuleRegistry::From(context->v8_context())->AddObserver(this);
   if (context_->GetRenderFrame() &&
       context_->context_type() == Feature::BLESSED_EXTENSION_CONTEXT &&
       ContextNeedsMojoBindings(context_)) {
-    context_->GetRenderFrame()->EnsureMojoBuiltinsAreAvailable(
-        context->isolate(), context->v8_context());
     blink::WebContextFeatures::EnableMojoJS(context->v8_context(), true);
   }
 }
@@ -288,7 +280,7 @@ v8::Local<v8::Value> ModuleSystem::RequireForJsInner(
   if (!create)
     return v8::Undefined(GetIsolate());
 
-  exports = LoadModule(*v8::String::Utf8Value(module_name));
+  exports = LoadModule(*v8::String::Utf8Value(GetIsolate(), module_name));
   SetPrivateProperty(v8_context, modules, module_name, exports);
   return handle_scope.Escape(exports);
 }
@@ -363,18 +355,6 @@ void ModuleSystem::OverrideNativeHandlerForTest(const std::string& name) {
   overridden_native_handlers_.insert(name);
 }
 
-void ModuleSystem::RunString(const std::string& code, const std::string& name) {
-  v8::HandleScope handle_scope(GetIsolate());
-  v8::Local<v8::String> v8_code;
-  v8::Local<v8::String> v8_name;
-  if (!ToV8String(GetIsolate(), code.c_str(), &v8_code) ||
-      !ToV8String(GetIsolate(), name.c_str(), &v8_name)) {
-    Warn(GetIsolate(), "Too long code or name.");
-    return;
-  }
-  RunString(v8_code, v8_name);
-}
-
 // static
 void ModuleSystem::NativeLazyFieldGetter(
     v8::Local<v8::Name> property,
@@ -422,7 +402,7 @@ void ModuleSystem::LazyFieldGetterInner(
     Warn(isolate, "Cannot find module.");
     return;
   }
-  std::string name = *v8::String::Utf8Value(v8_module_name);
+  std::string name = *v8::String::Utf8Value(isolate, v8_module_name);
 
   // As part of instantiating a module, we delete the getter and replace it with
   // the property directly. If we're trying to load the same module a second
@@ -459,7 +439,7 @@ void ModuleSystem::LazyFieldGetterInner(
   }
 
   if (!IsTrue(module->Has(context, field))) {
-    std::string field_str = *v8::String::Utf8Value(field);
+    std::string field_str = *v8::String::Utf8Value(isolate, field);
     Fatal(module_system->context_,
           "Lazy require of " + name + "." + field_str + " did not set the " +
               field_str + " field");
@@ -593,7 +573,7 @@ v8::Local<v8::Value> ModuleSystem::RunString(v8::Local<v8::String> code,
 void ModuleSystem::RequireNative(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK_EQ(1, args.Length());
-  std::string native_name = *v8::String::Utf8Value(args[0]);
+  std::string native_name = *v8::String::Utf8Value(args.GetIsolate(), args[0]);
   v8::Local<v8::Object> object;
   if (RequireNativeFromString(native_name).ToLocal(&object))
     args.GetReturnValue().Set(object);
@@ -631,39 +611,9 @@ v8::MaybeLocal<v8::Object> ModuleSystem::RequireNativeFromString(
   return i->second->NewInstance();
 }
 
-void ModuleSystem::RequireAsync(
-    const v8::FunctionCallbackInfo<v8::Value>& args) {
-  CHECK_EQ(1, args.Length());
-  std::string module_name = *v8::String::Utf8Value(args[0]);
-  v8::Local<v8::Context> v8_context = context_->v8_context();
-  v8::Local<v8::Promise::Resolver> resolver(
-      v8::Promise::Resolver::New(v8_context).ToLocalChecked());
-  args.GetReturnValue().Set(resolver->GetPromise());
-  std::unique_ptr<v8::Global<v8::Promise::Resolver>> global_resolver(
-      new v8::Global<v8::Promise::Resolver>(GetIsolate(), resolver));
-  gin::ModuleRegistry* module_registry =
-      gin::ModuleRegistry::From(v8_context);
-  if (!module_registry) {
-    Warn(GetIsolate(), "Extension view no longer exists");
-    auto maybe = resolver->Reject(
-        v8_context,
-        v8::Exception::Error(ToV8StringUnsafe(
-            GetIsolate(),
-            "Extension view no longer exists")));
-    CHECK(IsTrue(maybe));
-    return;
-  }
-  module_registry->LoadModule(
-      GetIsolate(), module_name,
-      base::Bind(&ModuleSystem::OnModuleLoaded, weak_factory_.GetWeakPtr(),
-                 base::Passed(&global_resolver)));
-  if (module_registry->available_modules().count(module_name) == 0)
-    LoadModule(module_name);
-}
-
 void ModuleSystem::LoadScript(const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK_EQ(1, args.Length());
-  std::string module_name = *v8::String::Utf8Value(args[0]);
+  std::string module_name = *v8::String::Utf8Value(GetIsolate(), args[0]);
 
   v8::HandleScope handle_scope(GetIsolate());
   v8::Local<v8::Context> v8_context = context()->v8_context();
@@ -687,9 +637,9 @@ v8::Local<v8::String> ModuleSystem::WrapSource(v8::Local<v8::String> source) {
   // Keep in order with the arguments in RequireForJsInner.
   v8::Local<v8::String> left = ToV8StringUnsafe(
       GetIsolate(),
-      "(function(define, require, requireNative, requireAsync, loadScript, "
-      "exports, console, privates, apiBridge, bindingUtil, getInternalApi,"
-      "$Array, $Function, $JSON, $Object, $RegExp, $String, $Error) {"
+      "(function(require, requireNative, loadScript, exports, console, "
+      "privates, apiBridge, bindingUtil, getInternalApi, $Array, $Function, "
+      "$JSON, $Object, $RegExp, $String, $Error) {"
       "'use strict';");
   v8::Local<v8::String> right = ToV8StringUnsafe(GetIsolate(), "\n})");
   return handle_scope.Escape(v8::Local<v8::String>(
@@ -759,9 +709,6 @@ v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
 
   v8::Local<v8::Function> func = v8::Local<v8::Function>::Cast(func_as_value);
 
-  v8::Local<v8::Object> define_object = v8::Object::New(GetIsolate());
-  gin::ModuleRegistry::InstallGlobals(GetIsolate(), define_object);
-
   v8::Local<v8::Object> exports = v8::Object::New(GetIsolate());
 
   v8::Local<v8::FunctionTemplate> tmpl = v8::FunctionTemplate::New(
@@ -810,14 +757,10 @@ v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
 
   // These must match the argument order in WrapSource.
   v8::Local<v8::Value> args[] = {
-      // AMD.
-      GetPropertyUnsafe(v8_context, define_object, "define"),
       // CommonJS.
       GetPropertyUnsafe(v8_context, natives, "require",
                         v8::NewStringType::kInternalized),
       GetPropertyUnsafe(v8_context, natives, "requireNative",
-                        v8::NewStringType::kInternalized),
-      GetPropertyUnsafe(v8_context, natives, "requireAsync",
                         v8::NewStringType::kInternalized),
       GetPropertyUnsafe(v8_context, natives, "loadScript",
                         v8::NewStringType::kInternalized),
@@ -848,39 +791,6 @@ v8::Local<v8::Value> ModuleSystem::LoadModuleWithNativeAPIBridge(
     }
   }
   return handle_scope.Escape(exports);
-}
-
-void ModuleSystem::OnDidAddPendingModule(
-    const std::string& id,
-    const std::vector<std::string>& dependencies) {
-  bool module_system_managed = source_map_->Contains(id);
-
-  gin::ModuleRegistry* registry =
-      gin::ModuleRegistry::From(context_->v8_context());
-  DCHECK(registry);
-  for (const auto& dependency : dependencies) {
-    // If a dependency is not available, and either the module or this
-    // dependency is managed by ModuleSystem, attempt to load it. Other
-    // gin::ModuleRegistry users (WebUI and users of the mojoPrivate API) are
-    // responsible for loading their module dependencies when required.
-    if (registry->available_modules().count(dependency) == 0 &&
-        (module_system_managed || source_map_->Contains(dependency))) {
-      LoadModule(dependency);
-    }
-  }
-  registry->AttemptToLoadMoreModules(GetIsolate());
-}
-
-void ModuleSystem::OnModuleLoaded(
-    std::unique_ptr<v8::Global<v8::Promise::Resolver>> resolver,
-    v8::Local<v8::Value> value) {
-  if (!is_valid())
-    return;
-  v8::HandleScope handle_scope(GetIsolate());
-  v8::Local<v8::Promise::Resolver> resolver_local(
-      v8::Local<v8::Promise::Resolver>::New(GetIsolate(), *resolver));
-  auto maybe = resolver_local->Resolve(context()->v8_context(), value);
-  CHECK(IsTrue(maybe));
 }
 
 void ModuleSystem::ClobberExistingNativeHandler(const std::string& name) {

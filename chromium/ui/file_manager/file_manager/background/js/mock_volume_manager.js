@@ -129,19 +129,21 @@ MockVolumeManager.createMockVolumeInfo = function(type, volumeId, label) {
   fileSystem.entries['/'] = new MockDirectoryEntry(fileSystem, '');
 
   var volumeInfo = new VolumeInfoImpl(
-      type,
-      volumeId,
-      fileSystem,
-      '',      // error
-      '',      // deviceType
-      '',      // devicePath
-      false,   // isReadOnly
-      false,   // isReadOnlyRemovableDevice
+      type, volumeId, fileSystem,
+      '',                                         // error
+      '',                                         // deviceType
+      '',                                         // devicePath
+      false,                                      // isReadOnly
+      false,                                      // isReadOnlyRemovableDevice
       {isCurrentProfile: true, displayName: ''},  // profile
-      label,   // label
-      '',      // extensionId
-      false,   // hasMedia
-      false);  // configurable
+      label,                                      // label
+      undefined,                                  // providerId
+      false,                                      // hasMedia
+      false,                                      // configurable
+      false,                                      // watchable
+      'network',                                  // source
+      '',                                         // diskFileSystemType
+      {});                                        // iconSet
 
   return volumeInfo;
 };
@@ -273,17 +275,21 @@ MockVolumeManagerWrapper.createMockVolumeInfo =
   var fileSystem = new MockFileSystem(volumeId, 'filesystem:' + volumeId);
   fileSystem.entries['/'] = new MockDirectoryEntry(fileSystem, '');
   var volumeInfo = new VolumeInfoImpl(
-      type,
-      volumeId,
-      fileSystem,
-      '',     // error
-      '',     // deviceType
-      '',     // devicePath
-      false,  // isReadonly
-      false,  // isReadOnlyRemovableDevice
+      type, volumeId, fileSystem,
+      '',                                         // error
+      '',                                         // deviceType
+      '',                                         // devicePath
+      false,                                      // isReadonly
+      false,                                      // isReadOnlyRemovableDevice
       {isCurrentProfile: true, displayName: ''},  // profile
-      label,  // label
-      '',     // extensionId
-      false); // hasMedia
+      label,                                      // label
+      undefined,                                  // providerId
+      {},                                         // iconSet
+      false,                                      // hasMedia
+      false,                                      // configurable
+      false,                                      // watchable
+      'network',                                  // source
+      '',                                         // diskFileSystemType
+      {});                                        // iconSet
   return volumeInfo;
 };

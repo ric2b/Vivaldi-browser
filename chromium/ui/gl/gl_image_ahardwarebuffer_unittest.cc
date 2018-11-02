@@ -18,7 +18,7 @@ namespace {
 const uint8_t kGreen[] = {0x0, 0xFF, 0x0, 0xFF};
 
 template <gfx::BufferFormat format>
-class GLImageAHardwareBufferTestDelegate {
+class GLImageAHardwareBufferTestDelegate : public GLImageTestDelegateBase {
  public:
   scoped_refptr<GLImage> CreateSolidColorImage(const gfx::Size& size,
                                                const uint8_t color[4]) const {
@@ -76,10 +76,7 @@ class GLImageAHardwareBufferTestDelegate {
     EXPECT_EQ(unlock_result, 0);
 
     auto image = base::MakeRefCounted<GLImageAHardwareBuffer>(size);
-    EGLint attribs[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
-    EGLClientBuffer client_buffer = eglGetNativeClientBufferANDROID(buffer);
-    bool rv =
-        image->Initialize(EGL_NATIVE_BUFFER_ANDROID, client_buffer, attribs);
+    bool rv = image->Initialize(buffer, /* preserved */ true);
     EXPECT_TRUE(rv);
     return image;
   }

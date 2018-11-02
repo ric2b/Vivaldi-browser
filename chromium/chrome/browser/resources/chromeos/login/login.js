@@ -43,6 +43,7 @@ cr.define('cr.ui.Oobe', function() {
       login.PasswordChangedScreen.register();
       login.SupervisedUserCreationScreen.register();
       login.TermsOfServiceScreen.register();
+      login.SyncConsentScreen.register();
       login.ArcTermsOfServiceScreen.register();
       login.AppLaunchSplashScreen.register();
       login.ArcKioskSplashScreen.register();
@@ -54,6 +55,7 @@ cr.define('cr.ui.Oobe', function() {
       login.EncryptionMigrationScreen.register();
       login.VoiceInteractionValuePropScreen.register();
       login.WaitForContainerReadyScreen.register();
+      login.UpdateRequiredScreen.register();
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));
@@ -81,6 +83,14 @@ cr.define('cr.ui.Oobe', function() {
       loadTimeData.overrideValues(data);
       i18nTemplate.process(document, loadTimeData);
       Oobe.getInstance().updateLocalizedContent_();
+    },
+
+    /**
+     * Updates "device in tablet mode" state when tablet mode is changed.
+     * @param {Boolean} isInTabletMode True when in tablet mode.
+     */
+    setTabletModeState: function(isInTabletMode) {
+      Oobe.getInstance().setTabletModeState_(isInTabletMode);
     },
   };
 });

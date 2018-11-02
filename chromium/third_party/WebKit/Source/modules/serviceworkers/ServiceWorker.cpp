@@ -34,14 +34,14 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/MessagePort.h"
 #include "core/dom/events/Event.h"
+#include "core/messaging/MessagePort.h"
 #include "modules/EventTargetModules.h"
 #include "modules/serviceworkers/ServiceWorkerContainerClient.h"
 #include "platform/bindings/ScriptState.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebString.h"
-#include "public/platform/modules/serviceworker/service_worker_state.mojom-blink.h"
+#include "third_party/WebKit/common/service_worker/service_worker_state.mojom-blink.h"
 
 namespace blink {
 
@@ -75,7 +75,7 @@ void ServiceWorker::postMessage(ScriptState* script_state,
   }
 
   WebString message_string = message->ToWireString();
-  handle_->ServiceWorker()->PostMessage(
+  handle_->ServiceWorker()->PostMessageToWorker(
       client->Provider(), message_string,
       WebSecurityOrigin(GetExecutionContext()->GetSecurityOrigin()),
       std::move(channels));
@@ -156,7 +156,7 @@ ServiceWorker::ServiceWorker(ExecutionContext* execution_context,
   handle_->ServiceWorker()->SetProxy(this);
 }
 
-ServiceWorker::~ServiceWorker() {}
+ServiceWorker::~ServiceWorker() = default;
 
 void ServiceWorker::Trace(blink::Visitor* visitor) {
   AbstractWorker::Trace(visitor);

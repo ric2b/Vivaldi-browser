@@ -23,7 +23,6 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
-#include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_gesture.h"
@@ -124,7 +123,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   static RenderViewImpl* Create(
       CompositorDependencies* compositor_deps,
       mojom::CreateViewParamsPtr params,
-      const RenderWidget::ShowCallback& show_callback);
+      const RenderWidget::ShowCallback& show_callback,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   // Used by content_layouttest_support to hook into the creation of
   // RenderViewImpls.
@@ -282,7 +282,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
                              blink::WebNavigationPolicy policy,
                              bool suppress_opener,
                              blink::WebSandboxFlags sandbox_flags) override;
-  blink::WebWidget* CreatePopup(blink::WebPopupType popup_type) override;
+  blink::WebWidget* CreatePopup(blink::WebLocalFrame* creator,
+                                blink::WebPopupType popup_type) override;
   int64_t GetSessionStorageNamespaceId() override;
   void PrintPage(blink::WebLocalFrame* frame) override;
   bool EnumerateChosenDirectory(
@@ -318,7 +319,7 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void PageImportanceSignalsChanged() override;
   void DidAutoResize(const blink::WebSize& newSize) override;
   blink::WebRect RootWindowRect() override;
-  void DidFocus() override;
+  void DidFocus(blink::WebLocalFrame* calling_frame) override;
 
 #if defined(OS_ANDROID)
   // Only used on Android since all other platforms implement
@@ -372,6 +373,10 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
 
   void UpdateWebViewWithDeviceScaleFactor();
 
+  bool renderer_wide_named_frame_lookup() {
+    return renderer_wide_named_frame_lookup_;
+  }
+
  protected:
   // RenderWidget overrides:
   blink::WebWidget* GetWebWidget() const override;
@@ -386,7 +391,8 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void ResizeWebWidget() override;
 
   RenderViewImpl(CompositorDependencies* compositor_deps,
-                 const mojom::CreateViewParams& params);
+                 const mojom::CreateViewParams& params,
+                 scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   void Initialize(mojom::CreateViewParamsPtr params,
                   const RenderWidget::ShowCallback& show_callback);
@@ -519,7 +525,6 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   void OnPluginActionAt(const gfx::Point& location,
                         const blink::WebPluginAction& action);
   void OnMoveOrResizeStarted();
-  void OnReleaseDisambiguationPopupBitmap(const viz::SharedBitmapId& id);
   void OnResolveTapDisambiguation(double timestamp_seconds,
                                   gfx::Point tap_viewport_offset,
                                   bool is_long_press);
@@ -786,12 +791,14 @@ class CONTENT_EXPORT RenderViewImpl : public RenderWidget,
   // constructors call the AddObservers method of RenderViewImpl.
   std::unique_ptr<StatsCollectionObserver> stats_collection_observer_;
 
-  std::map<viz::SharedBitmapId, std::unique_ptr<viz::SharedBitmap>>
-      disambiguation_bitmaps_;
-
   std::unique_ptr<IdleUserDetector> idle_user_detector_;
 
   blink::WebScopedVirtualTimePauser history_navigation_virtual_time_pauser_;
+
+  // Whether lookup of frames in the created RenderView (e.g. lookup via
+  // window.open or via <a target=...>) should be renderer-wide (i.e. going
+  // beyond the usual opener-relationship-based BrowsingInstance boundaries).
+  bool renderer_wide_named_frame_lookup_;
 
   // ---------------------------------------------------------------------------
   // ADDING NEW DATA? Please see if it fits appropriately in one of the above

@@ -87,14 +87,16 @@ class NET_EXPORT ReportingCache {
   // endpoint.
   //
   // All parameters correspond to the desired values for the fields in
-  // |Client|.
+  // ReportingClient.
   //
   // |endpoint| must use a cryptographic scheme.
   virtual void SetClient(const url::Origin& origin,
                          const GURL& endpoint,
                          ReportingClient::Subdomains subdomains,
                          const std::string& group,
-                         base::TimeTicks expires) = 0;
+                         base::TimeTicks expires,
+                         int priority,
+                         int client) = 0;
 
   virtual void MarkClientUsed(const url::Origin& origin,
                               const GURL& endpoint) = 0;
@@ -125,6 +127,13 @@ class NET_EXPORT ReportingCache {
       const url::Origin& origin,
       const std::string& group,
       std::vector<const ReportingClient*>* clients_out) const = 0;
+
+  // Gets all of the endpoints in the cache configured for a particular origin.
+  // Does not pay attention to wildcard hosts; only returns endpoints configured
+  // by |origin| itself.
+  virtual void GetEndpointsForOrigin(
+      const url::Origin& origin,
+      std::vector<GURL>* endpoints_out) const = 0;
 
   // Removes a set of clients.
   //

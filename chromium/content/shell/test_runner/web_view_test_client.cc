@@ -40,12 +40,6 @@ WebViewTestClient::~WebViewTestClient() {}
 // The output from these methods in layout test mode should match that
 // expected by the layout tests. See EditingDelegate.m in DumpRenderTree.
 
-void WebViewTestClient::DidChangeContents() {
-  if (test_runner()->shouldDumpEditingCallbacks())
-    delegate()->PrintMessage(
-        "EDITING DELEGATE: webViewDidChange:WebViewDidChangeNotification\n");
-}
-
 blink::WebView* WebViewTestClient::CreateView(
     blink::WebLocalFrame* frame,
     const blink::WebURLRequest& request,
@@ -95,7 +89,7 @@ WebTestDelegate* WebViewTestClient::delegate() {
   return web_view_test_proxy_base_->delegate();
 }
 
-void WebViewTestClient::DidFocus() {
+void WebViewTestClient::DidFocus(blink::WebLocalFrame* calling_frame) {
   test_runner()->SetFocus(web_view_test_proxy_base_->web_view(), true);
 }
 

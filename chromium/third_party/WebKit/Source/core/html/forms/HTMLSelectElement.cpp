@@ -50,6 +50,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLHRElement.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/html/forms/FormController.h"
 #include "core/html/forms/FormData.h"
 #include "core/html/forms/HTMLFormElement.h"
@@ -99,11 +100,17 @@ HTMLSelectElement::HTMLSelectElement(Document& document)
 
 HTMLSelectElement* HTMLSelectElement::Create(Document& document) {
   HTMLSelectElement* select = new HTMLSelectElement(document);
-  select->EnsureUserAgentShadowRoot();
+  select->EnsureUserAgentShadowRootV1();
   return select;
 }
 
-HTMLSelectElement::~HTMLSelectElement() {}
+HTMLSelectElement::~HTMLSelectElement() = default;
+
+// static
+bool HTMLSelectElement::CanAssignToSelectSlot(const Node& node) {
+  return node.HasTagName(optionTag) || node.HasTagName(optgroupTag) ||
+         node.HasTagName(hrTag);
+}
 
 const AtomicString& HTMLSelectElement::FormControlType() const {
   DEFINE_STATIC_LOCAL(const AtomicString, select_multiple, ("select-multiple"));
@@ -465,7 +472,7 @@ HTMLOptionElement* HTMLSelectElement::NextValidOption(int list_index,
                                                       SkipDirection direction,
                                                       int skip) const {
   DCHECK(direction == kSkipBackwards || direction == kSkipForwards);
-  const ListItems& list_items = this->GetListItems();
+  const ListItems& list_items = GetListItems();
   HTMLOptionElement* last_good_option = nullptr;
   int size = list_items.size();
   for (list_index += direction; list_index >= 0 && list_index < size;
@@ -669,7 +676,7 @@ void HTMLSelectElement::ListBoxOnChange() {
 void HTMLSelectElement::DispatchInputAndChangeEventForMenuList() {
   DCHECK(UsesMenuList());
 
-  HTMLOptionElement* selected_option = this->SelectedOption();
+  HTMLOptionElement* selected_option = SelectedOption();
   if (last_on_change_option_.Get() != selected_option) {
     last_on_change_option_ = selected_option;
     DispatchInputEvent();
@@ -688,7 +695,7 @@ void HTMLSelectElement::ScrollToSelection() {
 }
 
 void HTMLSelectElement::SetOptionsChangedOnLayoutObject() {
-  if (LayoutObject* layout_object = this->GetLayoutObject()) {
+  if (LayoutObject* layout_object = GetLayoutObject()) {
     if (!UsesMenuList())
       return;
     ToLayoutMenuList(layout_object)
@@ -868,7 +875,7 @@ void HTMLSelectElement::SetSuggestedOption(HTMLOptionElement* option) {
     return;
   suggested_option_ = option;
 
-  if (LayoutObject* layout_object = this->GetLayoutObject()) {
+  if (LayoutObject* layout_object = GetLayoutObject()) {
     layout_object->UpdateFromElement();
     ScrollToOption(option);
   }
@@ -889,9 +896,8 @@ void HTMLSelectElement::ScrollToOption(HTMLOptionElement* option) {
   if (!has_pending_task) {
     GetDocument()
         .GetTaskRunner(TaskType::kUserInteraction)
-        ->PostTask(BLINK_FROM_HERE,
-                   WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
-                             WrapPersistent(this)));
+        ->PostTask(FROM_HERE, WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
+                                        WrapPersistent(this)));
   }
 }
 
@@ -1015,7 +1021,7 @@ void HTMLSelectElement::SelectOption(HTMLOptionElement* element,
   }
 
   // For the menu list case, this is what makes the selected element appear.
-  if (LayoutObject* layout_object = this->GetLayoutObject())
+  if (LayoutObject* layout_object = GetLayoutObject())
     layout_object->UpdateFromElement();
   // PopupMenu::updateFromElement() posts an O(N) task.
   if (PopupIsVisible() && should_update_popup)
@@ -1029,7 +1035,7 @@ void HTMLSelectElement::SelectOption(HTMLOptionElement* element,
       DispatchInputEvent();
       DispatchChangeEvent();
     }
-    if (LayoutObject* layout_object = this->GetLayoutObject()) {
+    if (LayoutObject* layout_object = GetLayoutObject()) {
       // Need to check usesMenuList() again because event handlers might
       // change the status.
       if (UsesMenuList()) {
@@ -1196,7 +1202,7 @@ void HTMLSelectElement::ParseMultipleAttribute(const AtomicString& value) {
 }
 
 void HTMLSelectElement::AppendToFormData(FormData& form_data) {
-  const AtomicString& name = this->GetName();
+  const AtomicString& name = GetName();
   if (name.IsEmpty())
     return;
 
@@ -1291,7 +1297,7 @@ void HTMLSelectElement::MenuListDefaultEventHandler(Event* event) {
 
     const String& key = key_event->key();
     bool handled = true;
-    const ListItems& list_items = this->GetListItems();
+    const ListItems& list_items = GetListItems();
     HTMLOptionElement* option = SelectedOption();
     int list_index = option ? option->ListIndex() : -1;
 
@@ -1434,7 +1440,7 @@ HTMLOptionElement* HTMLSelectElement::EventTargetOption(const Event& event) {
 }
 
 int HTMLSelectElement::ListIndexForOption(const HTMLOptionElement& option) {
-  const ListItems& items = this->GetListItems();
+  const ListItems& items = GetListItems();
   size_t length = items.size();
   for (size_t i = 0; i < length; ++i) {
     if (items[i].Get() == &option)
@@ -1821,9 +1827,8 @@ void HTMLSelectElement::Trace(blink::Visitor* visitor) {
 }
 
 void HTMLSelectElement::DidAddUserAgentShadowRoot(ShadowRoot& root) {
-  HTMLContentElement* content = HTMLContentElement::Create(GetDocument());
-  content->setAttribute(selectAttr, "option,optgroup,hr");
-  root.AppendChild(content);
+  root.AppendChild(
+      HTMLSlotElement::CreateUserAgentCustomAssignSlot(GetDocument()));
 }
 
 HTMLOptionElement* HTMLSelectElement::SpatialNavigationFocusedOption() {
@@ -1963,8 +1968,8 @@ void HTMLSelectElement::HidePopup() {
     popup_->Hide();
 }
 
-void HTMLSelectElement::DidRecalcStyle() {
-  HTMLFormControlElementWithState::DidRecalcStyle();
+void HTMLSelectElement::DidRecalcStyle(StyleRecalcChange change) {
+  HTMLFormControlElementWithState::DidRecalcStyle(change);
   if (PopupIsVisible())
     popup_->UpdateFromElement(PopupMenu::kByStyleChange);
 }

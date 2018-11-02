@@ -125,7 +125,7 @@ const int64_t kDelayAfterNetworkChangesMs = 2000;
 // TODO(eroman): Figure out what Internet Explorer does.
 class DefaultPollPolicy : public ProxyService::PacPollPolicy {
  public:
-  DefaultPollPolicy() {}
+  DefaultPollPolicy() = default;
 
   Mode GetNextDelay(int initial_error,
                     TimeDelta current_delay,
@@ -180,7 +180,7 @@ class ProxyConfigServiceDirect : public ProxyConfigService {
 // Proxy resolver that fails every time.
 class ProxyResolverNull : public ProxyResolver {
  public:
-  ProxyResolverNull() {}
+  ProxyResolverNull() = default;
 
   // ProxyResolver implementation.
   int GetProxyForURL(const GURL& url,
@@ -322,8 +322,8 @@ std::unique_ptr<base::Value> NetLogFinishedResolvingProxyCallback(
 #if defined(OS_CHROMEOS)
 class UnsetProxyConfigService : public ProxyConfigService {
  public:
-  UnsetProxyConfigService() {}
-  ~UnsetProxyConfigService() override {}
+  UnsetProxyConfigService() = default;
+  ~UnsetProxyConfigService() override = default;
 
   void AddObserver(Observer* observer) override {}
   void RemoveObserver(Observer* observer) override {}
@@ -773,18 +773,17 @@ class ProxyService::ProxyScriptDeciderPoller {
 const ProxyService::PacPollPolicy*
     ProxyService::ProxyScriptDeciderPoller::poll_policy_ = NULL;
 
-// ProxyService::PacRequest ---------------------------------------------------
+// ProxyService::Request ---------------------------------------------------
 
-class ProxyService::PacRequest
-    : public base::RefCounted<ProxyService::PacRequest> {
+class ProxyService::Request : public base::RefCounted<ProxyService::Request> {
  public:
-  PacRequest(ProxyService* service,
-             const GURL& url,
-             const std::string& method,
-             ProxyDelegate* proxy_delegate,
-             ProxyInfo* results,
-             const CompletionCallback& user_callback,
-             const NetLogWithSource& net_log)
+  Request(ProxyService* service,
+          const GURL& url,
+          const std::string& method,
+          ProxyDelegate* proxy_delegate,
+          ProxyInfo* results,
+          const CompletionCallback& user_callback,
+          const NetLogWithSource& net_log)
       : service_(service),
         user_callback_(user_callback),
         results_(results),
@@ -811,7 +810,7 @@ class ProxyService::PacRequest
 
     return resolver()->GetProxyForURL(
         url_, results_,
-        base::Bind(&PacRequest::QueryComplete, base::Unretained(this)),
+        base::Bind(&Request::QueryComplete, base::Unretained(this)),
         &resolve_job_, net_log_);
   }
 
@@ -892,15 +891,15 @@ class ProxyService::PacRequest
   }
 
  private:
-  friend class base::RefCounted<ProxyService::PacRequest>;
+  friend class base::RefCounted<ProxyService::Request>;
 
-  ~PacRequest() {}
+  ~Request() = default;
 
   // Callback for when the ProxyResolver request has completed.
   void QueryComplete(int result_code) {
     result_code = QueryDidComplete(result_code);
 
-    // Remove this completed PacRequest from the service's pending list.
+    // Remove this completed Request from the service's pending list.
     /// (which will probably cause deletion of |this|).
     if (!user_callback_.is_null()) {
       CompletionCallback callback = user_callback_;
@@ -1020,7 +1019,7 @@ int ProxyService::ResolveProxy(const GURL& raw_url,
                                const std::string& method,
                                ProxyInfo* result,
                                const CompletionCallback& callback,
-                               PacRequest** pac_request,
+                               Request** pac_request,
                                ProxyDelegate* proxy_delegate,
                                const NetLogWithSource& net_log) {
   DCHECK(!callback.is_null());
@@ -1032,7 +1031,7 @@ int ProxyService::ResolveProxyHelper(const GURL& raw_url,
                                      const std::string& method,
                                      ProxyInfo* result,
                                      const CompletionCallback& callback,
-                                     PacRequest** pac_request,
+                                     Request** pac_request,
                                      ProxyDelegate* proxy_delegate,
                                      const NetLogWithSource& net_log) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -1066,8 +1065,8 @@ int ProxyService::ResolveProxyHelper(const GURL& raw_url,
   if (callback.is_null())
     return ERR_IO_PENDING;
 
-  scoped_refptr<PacRequest> req(new PacRequest(
-      this, url, method, proxy_delegate, result, callback, net_log));
+  scoped_refptr<Request> req(new Request(this, url, method, proxy_delegate,
+                                         result, callback, net_log));
 
   if (current_state_ == STATE_READY) {
     // Start the resolve request.
@@ -1146,7 +1145,7 @@ void ProxyService::SuspendAllPendingRequests() {
   for (PendingRequests::iterator it = pending_requests_.begin();
        it != pending_requests_.end();
        ++it) {
-    PacRequest* req = it->get();
+    Request* req = it->get();
     if (req->is_started()) {
       req->CancelResolveJob();
 
@@ -1161,14 +1160,14 @@ void ProxyService::SetReady() {
   current_state_ = STATE_READY;
 
   // Make a copy in case |this| is deleted during the synchronous completion
-  // of one of the requests. If |this| is deleted then all of the PacRequest
+  // of one of the requests. If |this| is deleted then all of the Request
   // instances will be Cancel()-ed.
   PendingRequests pending_copy = pending_requests_;
 
   for (PendingRequests::iterator it = pending_copy.begin();
        it != pending_copy.end();
        ++it) {
-    PacRequest* req = it->get();
+    Request* req = it->get();
     if (!req->is_started() && !req->was_cancelled()) {
       req->net_log()->EndEvent(
           NetLogEventType::PROXY_SERVICE_WAITING_FOR_INIT_PAC);
@@ -1256,7 +1255,7 @@ int ProxyService::ReconsiderProxyAfterError(const GURL& url,
                                             int net_error,
                                             ProxyInfo* result,
                                             const CompletionCallback& callback,
-                                            PacRequest** pac_request,
+                                            Request** pac_request,
                                             ProxyDelegate* proxy_delegate,
                                             const NetLogWithSource& net_log) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -1329,25 +1328,25 @@ void ProxyService::ReportSuccess(const ProxyInfo& result,
   }
 }
 
-void ProxyService::CancelPacRequest(PacRequest* req) {
+void ProxyService::CancelRequest(Request* req) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(req);
   req->Cancel();
   RemovePendingRequest(req);
 }
 
-LoadState ProxyService::GetLoadState(const PacRequest* req) const {
+LoadState ProxyService::GetLoadState(const Request* req) const {
   CHECK(req);
   if (current_state_ == STATE_WAITING_FOR_INIT_PROXY_RESOLVER)
     return init_proxy_resolver_->GetLoadState();
   return req->GetLoadState();
 }
 
-bool ProxyService::ContainsPendingRequest(PacRequest* req) {
+bool ProxyService::ContainsPendingRequest(Request* req) {
   return pending_requests_.count(req) == 1;
 }
 
-void ProxyService::RemovePendingRequest(PacRequest* req) {
+void ProxyService::RemovePendingRequest(Request* req) {
   DCHECK(ContainsPendingRequest(req));
   pending_requests_.erase(req);
 }
@@ -1502,7 +1501,7 @@ ProxyService::CreateSystemProxyConfigService(
 
   // Assume we got called on the thread that runs the default glib
   // main loop, so the current thread is where we should be running
-  // gconf calls from.
+  // gsettings calls from.
   scoped_refptr<base::SingleThreadTaskRunner> glib_thread_task_runner =
       base::ThreadTaskRunnerHandle::Get();
 

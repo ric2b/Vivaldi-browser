@@ -30,19 +30,21 @@
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/public/common/zygote_features.h"
 #include "media/base/media_switches.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gl/gl_switches.h"
 
-#if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-#include "content/public/browser/zygote_handle_linux.h"
-#endif  // defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
-
 #if defined(OS_WIN)
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/sandbox_types.h"
+#endif
+
+#if BUILDFLAG(USE_ZYGOTE_HANDLE)
+#include "content/public/common/zygote_handle.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -105,10 +107,9 @@ class UtilitySandboxedProcessLauncherDelegate
                              exposed_files.value().c_str());
     return result == sandbox::SBOX_ALL_OK;
   }
+#endif  // OS_WIN
 
-#elif defined(OS_POSIX)
-
-#if !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#if BUILDFLAG(USE_ZYGOTE_HANDLE)
   ZygoteHandle GetZygote() override {
     if (service_manager::IsUnsandboxedSandboxType(sandbox_type_) ||
         sandbox_type_ == service_manager::SANDBOX_TYPE_NETWORK ||
@@ -117,9 +118,11 @@ class UtilitySandboxedProcessLauncherDelegate
     }
     return GetGenericZygote();
   }
-#endif  // !defined(OS_MACOSX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
+#endif  // BUILDFLAG(USE_ZYGOTE_HANDLE)
+
+#if defined(OS_POSIX)
   base::EnvironmentMap GetEnvironment() override { return env_; }
-#endif  // OS_WIN
+#endif  // OS_POSIX
 
   service_manager::SandboxType GetSandboxType() override {
     return sandbox_type_;
@@ -224,6 +227,12 @@ void UtilityProcessHostImpl::AddFilter(BrowserMessageFilter* filter) {
   process_->AddFilter(filter);
 }
 
+void UtilityProcessHostImpl::SetLaunchCallback(
+    base::OnceCallback<void(base::ProcessId)> callback) {
+  DCHECK(!launched_);
+  launch_callback_ = std::move(callback);
+}
+
 bool UtilityProcessHostImpl::StartProcess() {
   if (started_)
     return true;
@@ -301,6 +310,7 @@ bool UtilityProcessHostImpl::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
+      network::switches::kNoReferrers,
       switches::kHostResolverRules,
       switches::kIgnoreCertificateErrors,
       switches::kIgnoreCertificateErrorsSPKIList,
@@ -313,9 +323,11 @@ bool UtilityProcessHostImpl::StartProcess() {
 #endif
 #if defined(USE_AURA)
       switches::kMus,
+      switches::kMusHostingViz,
 #endif
       switches::kUseFakeDeviceForMediaStream,
       switches::kUseFileForFakeVideoCapture,
+      switches::kUseMockCertVerifierForTesting,
 #if defined(OS_WIN)
       switches::kForceMediaFoundationVideoCapture,
 #endif  // defined(OS_WIN)
@@ -368,6 +380,12 @@ bool UtilityProcessHostImpl::OnMessageReceived(const IPC::Message& message) {
           client_.get(), message));
 
   return true;
+}
+
+void UtilityProcessHostImpl::OnProcessLaunched() {
+  launched_ = true;
+  if (launch_callback_)
+    std::move(launch_callback_).Run(process_->GetProcess().Pid());
 }
 
 void UtilityProcessHostImpl::OnProcessLaunchFailed(int error_code) {

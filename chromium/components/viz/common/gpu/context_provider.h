@@ -26,21 +26,17 @@ class Lock;
 namespace gpu {
 class ContextSupport;
 struct GpuFeatureInfo;
+
 namespace gles2 {
 class GLES2Interface;
 }
+
 }  // namespace gpu
 
 namespace viz {
 
-class VIZ_COMMON_EXPORT ContextProvider
-    : public base::RefCountedThreadSafe<ContextProvider> {
+class VIZ_COMMON_EXPORT ContextProvider {
  public:
-  // Hold an instance of this lock while using a context across multiple
-  // threads. This only works for ContextProviders that will return a valid
-  // lock from GetLock(), so is not always supported. Most use of
-  // ContextProvider should be single-thread only on the thread that
-  // BindToCurrentThread is run on.
   class VIZ_COMMON_EXPORT ScopedContextLock {
    public:
     explicit ScopedContextLock(ContextProvider* context_provider);
@@ -56,6 +52,10 @@ class VIZ_COMMON_EXPORT ContextProvider
     std::unique_ptr<ContextCacheController::ScopedBusy> busy_;
   };
 
+  // RefCounted interface.
+  virtual void AddRef() const = 0;
+  virtual void Release() const = 0;
+
   // Bind the 3d context to the current thread. This should be called before
   // accessing the contexts. Calling it more than once should have no effect.
   // Once this function has been called, the class should only be accessed
@@ -64,42 +64,54 @@ class VIZ_COMMON_EXPORT ContextProvider
   // can be used to provide access from multiple threads.
   virtual gpu::ContextResult BindToCurrentThread() = 0;
 
-  virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
-  virtual gpu::ContextSupport* ContextSupport() = 0;
-  virtual class GrContext* GrContext() = 0;
-  virtual ContextCacheController* CacheController() = 0;
-
-  // Invalidates the cached OpenGL state in GrContext.
-  // See skia GrContext::resetContext for details.
-  virtual void InvalidateGrContext(uint32_t state) = 0;
-
-  // Returns the capabilities of the currently bound 3d context.
-  virtual const gpu::Capabilities& ContextCapabilities() const = 0;
-
-  // Returns feature blacklist decisions and driver bug workarounds info.
-  virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const = 0;
-
-  // Adds/removes an observer to be called when the context is lost. This should
-  // be called from the same thread that the context is bound to. To avoid
-  // races, it should be called before BindToCurrentThread().
-  // Implementation note: Implementations must avoid post-tasking the to the
-  // observer directly as the observer may remove itself before the task runs.
+  // Adds/removes an observer to be called when the context is lost. AddObserver
+  // should be called before BindToCurrentThread from the same thread that the
+  // context is bound to, or any time while the lock is acquired after checking
+  // for context loss.
+  // NOTE: Implementations must avoid post-tasking the to the observer directly
+  // as the observer may remove itself before the task runs.
   virtual void AddObserver(ContextLostObserver* obs) = 0;
   virtual void RemoveObserver(ContextLostObserver* obs) = 0;
 
-  // Below are helper methods for ScopedContextLock. Use that instead of calling
-  // these directly.
-  //
-  // Detaches debugging thread checkers to allow use of the provider from the
-  // current thread. This can be called on any thread.
-  virtual void DetachFromThread() {}
   // Returns the lock that should be held if using this context from multiple
   // threads. This can be called on any thread.
+  // NOTE: Helper method for ScopedContextLock. Use that instead of calling this
+  // directly.
   virtual base::Lock* GetLock() = 0;
 
+  // Get a CacheController interface to the 3d context.  The context provider
+  // must have been successfully bound to a thread before calling this.
+  virtual ContextCacheController* CacheController() = 0;
+
+  // Get a ContextSupport interface to the 3d context.  The context provider
+  // must have been successfully bound to a thread before calling this.
+  virtual gpu::ContextSupport* ContextSupport() = 0;
+
+  // Get a Skia GPU raster interface to the 3d context.  The context provider
+  // must have been successfully bound to a thread before calling this.  Returns
+  // nullptr if a GrContext fails to initialize on this context.
+  virtual class GrContext* GrContext() = 0;
+
+  // Invalidates the cached OpenGL state in GrContext.  The context provider
+  // must have been successfully bound to a thread before calling this.
+  // See skia GrContext::resetContext for details.
+  virtual void InvalidateGrContext(uint32_t state) = 0;
+
+  // Returns the capabilities of the currently bound 3d context.  The context
+  // provider must have been successfully bound to a thread before calling this.
+  virtual const gpu::Capabilities& ContextCapabilities() const = 0;
+
+  // Returns feature blacklist decisions and driver bug workarounds info.  The
+  // context provider must have been successfully bound to a thread before
+  // calling this.
+  virtual const gpu::GpuFeatureInfo& GetGpuFeatureInfo() const = 0;
+
+  // Get a GLES2 interface to the 3d context.  The context provider must have
+  // been successfully bound to a thread before calling this.
+  virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
+
  protected:
-  friend class base::RefCountedThreadSafe<ContextProvider>;
-  virtual ~ContextProvider() {}
+  virtual ~ContextProvider() = default;
 };
 
 }  // namespace viz

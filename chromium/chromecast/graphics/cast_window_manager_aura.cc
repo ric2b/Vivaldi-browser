@@ -8,6 +8,7 @@
 #include "chromecast/graphics/cast_focus_client_aura.h"
 #include "ui/aura/client/default_capture_client.h"
 #include "ui/aura/client/focus_change_observer.h"
+#include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/layout_manager.h"
 #include "ui/aura/window.h"
@@ -16,8 +17,41 @@
 #include "ui/base/ime/input_method_factory.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
+#include "ui/wm/core/default_screen_position_client.h"
 
 namespace chromecast {
+namespace {
+
+gfx::Transform GetPrimaryDisplayRotationTransform() {
+  gfx::Transform rotation;
+  display::Display display(display::Screen::GetScreen()->GetPrimaryDisplay());
+  switch (display.rotation()) {
+    case display::Display::ROTATE_0:
+      break;
+    case display::Display::ROTATE_90:
+      // TODO(dnicoara): Figure out why this is not correct.
+      // rotation.Translate(display.height(), 0);
+      rotation.Translate(
+          (display.bounds().height() + display.bounds().width()) / 2, 0);
+      rotation.Rotate(90);
+      break;
+    case display::Display::ROTATE_180:
+      rotation.Translate(display.bounds().width(), display.bounds().height());
+      rotation.Rotate(180);
+      break;
+    case display::Display::ROTATE_270:
+      // TODO(dnicoara): Figure out why this is not correct.
+      // rotation.Translate(0, display.width());
+      rotation.Translate(
+          0, (display.bounds().height() + display.bounds().width()) / 2);
+      rotation.Rotate(270);
+      break;
+  }
+
+  return rotation;
+}
+
+}  // namespace
 
 // An ui::EventTarget that ignores events.
 class CastEventIgnorer : public ui::EventTargeter {
@@ -184,6 +218,13 @@ void CastWindowManagerAura::Setup() {
 
   gfx::Size display_size =
       display::Screen::GetScreen()->GetPrimaryDisplay().GetSizeInPixel();
+  display::Display::Rotation rotation =
+      display::Screen::GetScreen()->GetPrimaryDisplay().rotation();
+  if (rotation == display::Display::ROTATE_90 ||
+      rotation == display::Display::ROTATE_270) {
+    display_size = gfx::Size(display_size.height(), display_size.width());
+  }
+
   LOG(INFO) << "Starting window manager, screen size: " << display_size.width()
             << "x" << display_size.height();
   CHECK(aura::Env::GetInstance());
@@ -191,6 +232,7 @@ void CastWindowManagerAura::Setup() {
       new CastWindowTreeHost(enable_input_, gfx::Rect(display_size)));
   window_tree_host_->InitHost();
   window_tree_host_->window()->SetLayoutManager(new CastLayoutManager());
+  window_tree_host_->SetRootTransform(GetPrimaryDisplayRotationTransform());
 
   // Allow seeing through to the hardware video plane:
   window_tree_host_->compositor()->SetBackgroundColor(SK_ColorTRANSPARENT);
@@ -202,6 +244,11 @@ void CastWindowManagerAura::Setup() {
   aura::client::SetWindowParentingClient(window_tree_host_->window(), this);
   capture_client_.reset(
       new aura::client::DefaultCaptureClient(window_tree_host_->window()));
+
+  screen_position_client_.reset(new wm::DefaultScreenPositionClient());
+  aura::client::SetScreenPositionClient(
+      window_tree_host_->window()->GetRootWindow(),
+      screen_position_client_.get());
 
   window_tree_host_->Show();
 }

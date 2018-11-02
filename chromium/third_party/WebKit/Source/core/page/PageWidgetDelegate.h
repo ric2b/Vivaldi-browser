@@ -45,7 +45,7 @@ class WebInputEvent;
 class WebKeyboardEvent;
 class WebMouseEvent;
 class WebMouseWheelEvent;
-class WebTouchEvent;
+class WebPointerEvent;
 
 class CORE_EXPORT PageWidgetEventHandler {
  public:
@@ -60,11 +60,18 @@ class CORE_EXPORT PageWidgetEventHandler {
   virtual WebInputEventResult HandleKeyEvent(const WebKeyboardEvent&) = 0;
   virtual WebInputEventResult HandleCharEvent(const WebKeyboardEvent&) = 0;
   virtual WebInputEventResult HandleGestureEvent(const WebGestureEvent&) = 0;
-  virtual WebInputEventResult HandleTouchEvent(
+  virtual WebInputEventResult HandlePointerEvent(
       LocalFrame& main_frame,
-      const WebTouchEvent&,
+      const WebPointerEvent&,
       const std::vector<const WebInputEvent*>&);
   virtual ~PageWidgetEventHandler() {}
+  virtual WebInputEventResult DispatchBufferedTouchEvents() = 0;
+
+ protected:
+  virtual WebInputEventResult HandleInputEventInternal(
+      const WebCoalescedInputEvent&) = 0;
+  WebInputEventResult HandleInputEventIncludingTouch(
+      const WebCoalescedInputEvent&);
 };
 
 // Common implementation of WebViewImpl and WebPagePopupImpl.
@@ -75,15 +82,17 @@ class CORE_EXPORT PageWidgetDelegate {
   // For the following methods, the |root| argument indicates a root localFrame
   // from which to start performing the specified operation.
 
-  // See documents of methods with the same names in FrameView class.
-  static void UpdateAllLifecyclePhases(Page&, LocalFrame& root);
+  // See comment of WebWidget::UpdateLifecycle.
+  static void UpdateLifecycle(Page&,
+                              LocalFrame& root,
+                              WebWidget::LifecycleUpdate requested_update);
 
+  // See documents of methods with the same names in FrameView class.
   static void Paint(Page&, WebCanvas*, const WebRect&, LocalFrame& root);
   static void PaintIgnoringCompositing(Page&,
                                        WebCanvas*,
                                        const WebRect&,
                                        LocalFrame& root);
-
   // See FIXME in the function body about nullptr |root|.
   static WebInputEventResult HandleInputEvent(
       PageWidgetEventHandler&,

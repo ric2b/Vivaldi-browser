@@ -95,7 +95,6 @@ chrome.developerPrivate.ViewType = {
   EXTENSION_DIALOG: 'EXTENSION_DIALOG',
   EXTENSION_GUEST: 'EXTENSION_GUEST',
   EXTENSION_POPUP: 'EXTENSION_POPUP',
-  LAUNCHER_PAGE: 'LAUNCHER_PAGE',
   PANEL: 'PANEL',
   TAB_CONTENTS: 'TAB_CONTENTS',
 };
@@ -582,8 +581,7 @@ chrome.developerPrivate.DeleteExtensionErrorsProperties;
 
 /**
  * Runs auto update for extensions and apps immediately.
- * @param {function(boolean):void=} callback Called with the boolean result,
- *     true if autoUpdate is successful.
+ * @param {function():void=} callback Called after update check completes.
  * @see https://developer.chrome.com/extensions/developerPrivate#method-autoUpdate
  */
 chrome.developerPrivate.autoUpdate = function(callback) {};

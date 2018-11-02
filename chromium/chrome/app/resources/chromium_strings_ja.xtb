@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Chromium について</translation>
 <translation id="1298199220304005244">Chromium OS の使用に関するアドバイス</translation>
 <translation id="1396446129537741364">Chromium はパスワードを表示しようとしています。</translation>
-<translation id="1403254041219632970">Chromium の今後のバージョンでは Mac OS X 10.6、10.7、10.8 はサポートされなくなります。</translation>
 <translation id="1414495520565016063">Chromium にログインしました</translation>
-<translation id="1440917365206527807">Chromium で、このサイトから以下のリダイレクト先へのアクセスが中止されました</translation>
 <translation id="1444754455097148408">Chromium オープンソース ライセンス</translation>
 <translation id="1502360822835740515">Chromium をデフォルトのブラウザにする</translation>
 <translation id="151962892725702025">お使いのドメインでは同期を利用できないため、Chromium OS はデータを同期できませんでした。</translation>
-<translation id="1559451348202814456">Mac OS X 10.6、10.7、10.8 はサポートされなくなったため、Chromium は正常に機能しない可能性があります。</translation>
 <translation id="1585657529869845941">[<ph name="BEGIN_BOLD" />切り替える<ph name="END_BOLD" />] をクリックします（表示された場合）</translation>
 <translation id="1653828314016431939">OK - 今すぐ再起動</translation>
 <translation id="1668054258064581266">Chromium からアカウントを削除したら、場合によっては開いているタブを再読み込みして変更を反映させる必要があります。</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">アップデートを適用するには Chromium OS を再起動する必要があります。</translation>
 <translation id="2647554856022461007">Chromium は、より快適なブラウジングを提供する目的でウェブサービスを使用することがあります。これらのサービスは無効にすることもできます。<ph name="BEGIN_LINK" />詳細<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">インストール中にオペレーティング システム エラーが発生しました。Chromium をダウンロードし直してください。</translation>
-<translation id="2685838254101182273">Chromium はアップデートの提供を中止しています。お使いのバージョンのオペレーティング システムには対応していません。</translation>
 <translation id="2705403826523567092">ログインすると、個人向けにカスタマイズされたブラウジング環境をさまざまな端末間で同期して使用できます</translation>
 <translation id="2711502716910134313">Chromium タブ</translation>
 <translation id="2718390899429598676">セキュリティ強化のため、Chromium ではデータが暗号化されます。</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">変更内容を反映するには、一度ログアウトして、もう一度ログインしてください。</translation>
 <translation id="4469812139324097969">Chromium はしばらく再起動していないため最新ではありません。再起動するとすぐにアップデートが適用されます。</translation>
 <translation id="4488554488975128561">危険なアプリやサイトの検出に役立てるために一部のシステム情報やページのコンテンツを Google に自動送信して、Chromium の安全性と利便性の向上にご協力ください。</translation>
-<translation id="4549794359424059447">Chromium の今後のバージョンでは Windows XP と Windows Vista はサポートされなくなります。</translation>
 <translation id="4567424176335768812"><ph name="USER_EMAIL_ADDRESS" /> としてログインしています。ログインしているすべてのデバイスで、ブックマーク、履歴、その他の設定にアクセスできます。</translation>
 <translation id="459535195905078186">Chromium アプリ</translation>
 <translation id="4611246891205775468">このサイトを利用するには、Chromium でマイクの使用を許可する必要があります。</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">認証証明書でエラーが発生しました。Chromium にログインし直すか、管理者に詳細をお問い合わせください。<ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">端末を再起動して更新を完了してください。</translation>
 <translation id="5942520288919337908">「<ph name="EXTENSION_NAME" />」を Chromium に追加しました。</translation>
-<translation id="59625444380784159">連絡先から詳細を取得すると、Chromium でのフォームの記入が楽になります。</translation>
 <translation id="5987687638152509985">同期を開始するには、Chromium を更新します</translation>
 <translation id="6055895534982063517">Chromium がさらに速くなりました！最新バージョンをぜひお試しください。</translation>
 <translation id="6063093106622310249">Chromium で開く(&amp;O)</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">共有パソコンの Chromium で Google アカウントが簡単に使用できるようになりました。</translation>
 <translation id="6373523479360886564">Chromium をアンインストールしてもよろしいですか？</translation>
 <translation id="6394232988457703198">今すぐ Chromium を再起動してください。</translation>
+<translation id="6400072781405947421">Mac OS X 10.9 はサポートされなくなったため、Chromium は正常に機能しない可能性があります。</translation>
 <translation id="6403826409255603130">Chromium は、ウェブページやアプリケーションを高速に実行できるスピードと、高い安定性を兼ね備えた非常に使いやすいウェブブラウザです。不正なソフトウェアやフィッシングに対する保護機能が組み込まれており、ウェブを安全にブラウジングできます。</translation>
 <translation id="6475912303565314141">この拡張機能では、Chromium の起動時に表示されるページも制御されます。</translation>
 <translation id="6485906693002546646">Chromium データの同期に <ph name="PROFILE_EMAIL" /> を使用しています。同期設定を更新する、または Google アカウントなしで Chromium を使用するには、<ph name="SETTINGS_LINK" /> にアクセスしてください。</translation>
@@ -174,13 +169,13 @@
 <translation id="6734291798041940871">Chromium は既にパソコンのすべてのユーザーに対してインストールされています。</translation>
 <translation id="6810143991807788455">現在の設定を送信して Chromium の品質向上にご協力ください</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay（Chromium にコピー）</translation>
 <translation id="6893813176749746474">Chromium が更新されましたが、30 日以上使用されていません。</translation>
 <translation id="6944967875980567883">Chromium に読み込まれているモジュール</translation>
 <translation id="6964305034639999644">Chromium のシークレット ウインドウでリンクを開く(&amp;G)</translation>
 <translation id="6970811910055250180">お使いの端末を更新しています...</translation>
 <translation id="705851970750939768">Chromium を更新</translation>
 <translation id="7066436765290594559">Chromium OS はデータを同期できませんでした。同期パスフレーズを更新してください。</translation>
-<translation id="707471633328071618">Google ペイメント（Chromium にコピー）</translation>
 <translation id="7162152143154757523">Chromium ではブラウザに入力された内容を Google のサーバーに送信することで高度なスペルチェックを実現し、Google 検索で使用されるスペルチェック テクノロジーを活用できます。</translation>
 <translation id="7205698830395646142">Chromium メニューで非表示</translation>
 <translation id="7223968959479464213">タスク マネージャ - Chromium</translation>
@@ -240,7 +235,6 @@
 <translation id="872034308864968620">Chromium をバックグラウンドで実行する</translation>
 <translation id="8803635938069941624">Chromium OS 利用規約</translation>
 <translation id="8821041990367117597">アカウントのログイン情報が最新ではないため、Chromium はデータを同期できませんでした。</translation>
-<translation id="8851136666856101339">本文</translation>
 <translation id="8862326446509486874">権限が不十分なためシステムレベルのインストールができません。管理者権限でインストールしてください。</translation>
 <translation id="8897323336392112261">この拡張機能では、Chromium の起動時、またはホーム ボタンのクリック時に表示されるページも制御されます。</translation>
 <translation id="8907580949721785412">Chromium でパスワードを表示しようとしています。続行するには、Windows のパスワードを入力してください。</translation>

@@ -22,6 +22,7 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "skia/ext/platform_canvas.h"
@@ -79,7 +80,7 @@ HeadsUpDisplayLayerImpl::HeadsUpDisplayLayerImpl(LayerTreeImpl* tree_impl,
       paint_time_graph_(16.0, 48.0),
       fade_step_(0) {}
 
-HeadsUpDisplayLayerImpl::~HeadsUpDisplayLayerImpl() {}
+HeadsUpDisplayLayerImpl::~HeadsUpDisplayLayerImpl() = default;
 
 std::unique_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
     LayerTreeImpl* tree_impl) {
@@ -87,7 +88,8 @@ std::unique_ptr<LayerImpl> HeadsUpDisplayLayerImpl::CreateLayerImpl(
 }
 
 void HeadsUpDisplayLayerImpl::AcquireResource(
-    ResourceProvider* resource_provider) {
+    DrawMode draw_mode,
+    LayerTreeResourceProvider* resource_provider) {
   for (auto& resource : resources_) {
     if (!resource_provider->InUseByConsumer(resource->id())) {
       resource.swap(resources_.back());
@@ -96,14 +98,25 @@ void HeadsUpDisplayLayerImpl::AcquireResource(
   }
 
   auto resource = std::make_unique<ScopedResource>(resource_provider);
-  resource->Allocate(
-      internal_content_bounds_, viz::ResourceTextureHint::kFramebuffer,
-      resource_provider->best_render_buffer_format(), gfx::ColorSpace());
+  switch (draw_mode) {
+    case DRAW_MODE_NONE:
+    case DRAW_MODE_RESOURCELESS_SOFTWARE:
+      NOTREACHED();
+      break;
+    case DRAW_MODE_HARDWARE:
+      resource->AllocateGpuTexture(
+          internal_content_bounds_, viz::ResourceTextureHint::kFramebuffer,
+          resource_provider->best_render_buffer_format(), gfx::ColorSpace());
+      break;
+    case DRAW_MODE_SOFTWARE:
+      resource->AllocateSoftware(internal_content_bounds_, gfx::ColorSpace());
+      break;
+  }
   resources_.push_back(std::move(resource));
 }
 
 void HeadsUpDisplayLayerImpl::ReleaseUnmatchedSizeResources(
-    ResourceProvider* resource_provider) {
+    LayerTreeResourceProvider* resource_provider) {
   base::EraseIf(resources_,
                 [this](const std::unique_ptr<ScopedResource>& resource) {
                   return internal_content_bounds_ != resource->size();
@@ -124,7 +137,7 @@ bool HeadsUpDisplayLayerImpl::WillDraw(
                 resource_provider->max_texture_size()));
 
   ReleaseUnmatchedSizeResources(resource_provider);
-  AcquireResource(resource_provider);
+  AcquireResource(draw_mode, resource_provider);
   return LayerImpl::WillDraw(draw_mode, resource_provider);
 }
 
@@ -157,7 +170,7 @@ void HeadsUpDisplayLayerImpl::AppendQuads(viz::RenderPass* render_pass,
 
 void HeadsUpDisplayLayerImpl::UpdateHudTexture(
     DrawMode draw_mode,
-    ResourceProvider* resource_provider,
+    LayerTreeResourceProvider* resource_provider,
     viz::ContextProvider* context_provider,
     const viz::RenderPassList& list) {
   if (draw_mode == DRAW_MODE_RESOURCELESS_SOFTWARE || !resources_.back()->id())
@@ -166,10 +179,10 @@ void HeadsUpDisplayLayerImpl::UpdateHudTexture(
   if (context_provider) {
     ScopedGpuRaster gpu_raster(context_provider);
 
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider,
-                                             resources_.back()->id());
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(resource_provider,
+                                                      resources_.back()->id());
 
-    ResourceProvider::ScopedSkSurface scoped_surface(
+    LayerTreeResourceProvider::ScopedSkSurface scoped_surface(
         context_provider->GrContext(), lock.GetTexture(), lock.target(),
         lock.size(), lock.format(), false /* use_distance_field_text */,
         false /* can_use_lcd_text */, 0 /* msaa_sample_count */);

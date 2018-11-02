@@ -33,13 +33,20 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_handle.h"
+#include "base/win/windows_types.h"
 #endif
 
 namespace base {
 
 #if defined(OS_WIN)
+// _WINDOWS_ will be defined if Windows.h was included - include Windows.h first
+// to get access to the full struct definition.
+#if defined(_WINDOWS_)
 struct IoCounters : public IO_COUNTERS {
 };
+#else
+struct IoCounters;
+#endif
 #elif defined(OS_POSIX)
 struct IoCounters {
   uint64_t ReadOperationCount;
@@ -245,7 +252,7 @@ class BASE_EXPORT ProcessMetrics {
   // otherwise.
   bool GetIOCounters(IoCounters* io_counters) const;
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_AIX) || defined(OS_ANDROID)
   // Returns the number of file descriptors currently open by the process, or
   // -1 on error.
   int GetOpenFdCount() const;
@@ -253,7 +260,7 @@ class BASE_EXPORT ProcessMetrics {
   // Returns the soft limit of file descriptors that can be opened by the
   // process, or -1 on error.
   int GetOpenFdSoftLimit() const;
-#endif  // defined(OS_LINUX) || defined(OS_AIX)
+#endif  // defined(OS_LINUX) || defined(OS_AIX) || defined(OS_ANDROID)
 
 #if defined(OS_LINUX) || defined(OS_ANDROID)
   // Bytes of swap as reported by /proc/[pid]/status.

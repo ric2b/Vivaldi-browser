@@ -55,7 +55,7 @@ PushMessageData::PushMessageData(const char* data, unsigned bytes_size) {
   data_.Append(data, bytes_size);
 }
 
-PushMessageData::~PushMessageData() {}
+PushMessageData::~PushMessageData() = default;
 
 DOMArrayBuffer* PushMessageData::arrayBuffer() const {
   return DOMArrayBuffer::Create(data_.data(), data_.size());
@@ -77,7 +77,8 @@ ScriptValue PushMessageData::json(ScriptState* script_state,
                                   ExceptionState& exception_state) const {
   ScriptState::Scope scope(script_state);
   v8::Local<v8::Value> parsed =
-      FromJSONString(script_state->GetIsolate(), text(), exception_state);
+      FromJSONString(script_state->GetIsolate(), script_state->GetContext(),
+                     text(), exception_state);
   if (exception_state.HadException())
     return ScriptValue();
 

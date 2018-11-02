@@ -52,7 +52,7 @@ namespace blink {
 
 class WebGraphicsContext3DProvider {
  public:
-  virtual ~WebGraphicsContext3DProvider() {}
+  virtual ~WebGraphicsContext3DProvider() = default;
 
   virtual gpu::gles2::GLES2Interface* ContextGL() = 0;
   virtual bool BindToCurrentThread() = 0;
@@ -70,7 +70,7 @@ class WebGraphicsContext3DProvider {
   // CompositingModeWatcher.
   virtual bool IsSoftwareRendering() const = 0;
 
-  virtual void SetLostContextCallback(const base::Closure&) = 0;
+  virtual void SetLostContextCallback(base::RepeatingClosure) = 0;
   virtual void SetErrorMessageCallback(
       base::RepeatingCallback<void(const char* msg, int32_t id)>) = 0;
   virtual void SignalQuery(uint32_t, base::OnceClosure) = 0;

@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/test/simple_test_clock.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "net/reporting/reporting_context.h"
 #include "net/reporting/reporting_delegate.h"
 #include "net/reporting/reporting_uploader.h"
@@ -66,9 +68,12 @@ class TestReportingUploader : public ReportingUploader {
   }
 
   // ReportingUploader implementation:
+
   void StartUpload(const GURL& url,
                    const std::string& json,
-                   const Callback& callback) override;
+                   UploadCallback callback) override;
+
+  bool RequestIsUpload(const URLRequest& request) override;
 
  private:
   std::vector<std::unique_ptr<PendingUpload>> pending_uploads_;
@@ -102,15 +107,11 @@ class TestReportingDelegate : public ReportingDelegate {
 // Clock, TickClock, Timer, and ReportingUploader.
 class TestReportingContext : public ReportingContext {
  public:
-  TestReportingContext(const ReportingPolicy& policy);
+  TestReportingContext(base::Clock* clock,
+                       base::TickClock* tick_clock,
+                       const ReportingPolicy& policy);
   ~TestReportingContext();
 
-  base::SimpleTestClock* test_clock() {
-    return reinterpret_cast<base::SimpleTestClock*>(clock());
-  }
-  base::SimpleTestTickClock* test_tick_clock() {
-    return reinterpret_cast<base::SimpleTestTickClock*>(tick_clock());
-  }
   base::MockTimer* test_delivery_timer() { return delivery_timer_; }
   base::MockTimer* test_garbage_collection_timer() {
     return garbage_collection_timer_;
@@ -123,8 +124,12 @@ class TestReportingContext : public ReportingContext {
   }
 
  private:
-  // Owned by the Persister and GarbageCollector, respectively, but referenced
-  // here to preserve type:
+  int RandIntCallback(int min, int max);
+
+  int rand_counter_;
+
+  // Owned by the DeliveryAgent and GarbageCollector, respectively, but
+  // referenced here to preserve type:
 
   base::MockTimer* delivery_timer_;
   base::MockTimer* garbage_collection_timer_;
@@ -151,10 +156,8 @@ class ReportingTestBase : public ::testing::Test {
 
   const ReportingPolicy& policy() { return context_->policy(); }
 
-  base::SimpleTestClock* clock() { return context_->test_clock(); }
-  base::SimpleTestTickClock* tick_clock() {
-    return context_->test_tick_clock();
-  }
+  base::SimpleTestClock* clock() { return &clock_; }
+  base::SimpleTestTickClock* tick_clock() { return &tick_clock_; }
   base::MockTimer* delivery_timer() { return context_->test_delivery_timer(); }
   base::MockTimer* garbage_collection_timer() {
     return context_->test_garbage_collection_timer();
@@ -172,8 +175,6 @@ class ReportingTestBase : public ::testing::Test {
     return context_->garbage_collector();
   }
 
-  ReportingPersister* persister() { return context_->persister(); }
-
   base::TimeTicks yesterday();
   base::TimeTicks now();
   base::TimeTicks tomorrow();
@@ -188,6 +189,8 @@ class ReportingTestBase : public ::testing::Test {
                      base::Time now,
                      base::TimeTicks now_ticks);
 
+  base::SimpleTestClock clock_;
+  base::SimpleTestTickClock tick_clock_;
   std::unique_ptr<TestReportingContext> context_;
 
   DISALLOW_COPY_AND_ASSIGN(ReportingTestBase);

@@ -6,11 +6,21 @@
 
 #include "ash/public/interfaces/accessibility_controller.mojom.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
+#include "base/time/time.h"
+#include "chromeos/audio/chromeos_sounds.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
+
+constexpr base::TimeDelta kShutdownSoundDuration =
+    base::TimeDelta::FromMilliseconds(1000);
+
+void CopyResult(base::TimeDelta* dest, base::TimeDelta src) {
+  *dest = src;
+}
 
 class TestAccessibilityController : ash::mojom::AccessibilityController {
  public:
@@ -27,6 +37,7 @@ class TestAccessibilityController : ash::mojom::AccessibilityController {
   void SetClient(ash::mojom::AccessibilityControllerClientPtr client) override {
     was_client_set_ = true;
   }
+  void SetDarkenScreen(bool darken) override {}
 
   bool was_client_set() const { return was_client_set_; }
 
@@ -35,6 +46,42 @@ class TestAccessibilityController : ash::mojom::AccessibilityController {
   bool was_client_set_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TestAccessibilityController);
+};
+
+class FakeAccessibilityControllerClient : public AccessibilityControllerClient {
+ public:
+  FakeAccessibilityControllerClient() = default;
+  ~FakeAccessibilityControllerClient() override = default;
+
+  // AccessibilityControllerClient:
+  void TriggerAccessibilityAlert(
+      ash::mojom::AccessibilityAlert alert) override {
+    last_a11y_alert_ = alert;
+  }
+
+  void PlayEarcon(int32_t sound_key) override { last_sound_key_ = sound_key; }
+
+  void PlayShutdownSound(PlayShutdownSoundCallback callback) override {
+    std::move(callback).Run(kShutdownSoundDuration);
+  }
+
+  void HandleAccessibilityGesture(const std::string& gesture) override {
+    last_a11y_gesture_ = gesture;
+  }
+
+  ash::mojom::AccessibilityAlert last_a11y_alert() const {
+    return last_a11y_alert_;
+  }
+  int32_t last_sound_key() const { return last_sound_key_; }
+  std::string last_a11y_gesture() const { return last_a11y_gesture_; }
+
+ private:
+  ash::mojom::AccessibilityAlert last_a11y_alert_ =
+      ash::mojom::AccessibilityAlert::NONE;
+  int32_t last_sound_key_ = -1;
+  std::string last_a11y_gesture_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeAccessibilityControllerClient);
 };
 
 }  // namespace
@@ -50,19 +97,35 @@ class AccessibilityControllerClientTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(AccessibilityControllerClientTest);
 };
 
-TEST_F(AccessibilityControllerClientTest, TriggerAccessibilityAlert) {
-  AccessibilityControllerClient client;
+TEST_F(AccessibilityControllerClientTest, MethodCalls) {
+  FakeAccessibilityControllerClient client;
   TestAccessibilityController controller;
   client.InitForTesting(controller.CreateInterfacePtr());
   client.FlushForTesting();
 
-  // Tests that singleton was initialized and client is set.
-  EXPECT_EQ(&client, AccessibilityControllerClient::Get());
+  // Tests client is set.
   EXPECT_TRUE(controller.was_client_set());
 
   // Tests TriggerAccessibilityAlert method call.
   const ash::mojom::AccessibilityAlert alert =
       ash::mojom::AccessibilityAlert::SCREEN_ON;
   client.TriggerAccessibilityAlert(alert);
-  EXPECT_EQ(alert, client.last_a11y_alert_for_test());
+  EXPECT_EQ(alert, client.last_a11y_alert());
+
+  // Tests PlayEarcon method call.
+  const int32_t sound_key = chromeos::SOUND_SHUTDOWN;
+  client.PlayEarcon(sound_key);
+  EXPECT_EQ(sound_key, client.last_sound_key());
+
+  // Tests PlayShutdownSound method call.
+  base::TimeDelta sound_duration;
+  client.PlayShutdownSound(
+      base::BindOnce(&CopyResult, base::Unretained(&sound_duration)));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(kShutdownSoundDuration, sound_duration);
+
+  // Tests HandleAccessibilityGesture method call.
+  const std::string gesture("click");
+  client.HandleAccessibilityGesture(gesture);
+  EXPECT_EQ(gesture, client.last_a11y_gesture());
 }

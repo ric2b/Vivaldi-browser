@@ -11,10 +11,10 @@
 namespace base {
 namespace internal {
 
-TaskTrackerPosix::TaskTrackerPosix() = default;
+TaskTrackerPosix::TaskTrackerPosix(StringPiece name) : TaskTracker(name) {}
 TaskTrackerPosix::~TaskTrackerPosix() = default;
 
-void TaskTrackerPosix::RunOrSkipTask(std::unique_ptr<Task> task,
+void TaskTrackerPosix::RunOrSkipTask(Task task,
                                      Sequence* sequence,
                                      bool can_run_task) {
   DCHECK(watch_file_descriptor_message_loop_);

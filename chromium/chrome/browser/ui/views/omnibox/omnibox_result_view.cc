@@ -16,6 +16,7 @@
 #include <limits.h>
 
 #include <algorithm>  // NOLINT
+#include <memory>
 
 #include "base/feature_list.h"
 #include "base/i18n/bidi_line_iterator.h"
@@ -285,7 +286,7 @@ void OmniboxResultView::Invalidate() {
   } else {
     const SkColor bg_color = GetColor(state, BACKGROUND);
     SetBackground(
-        base::MakeUnique<BackgroundWith1PxBorder>(bg_color, bg_color));
+        std::make_unique<BackgroundWith1PxBorder>(bg_color, bg_color));
   }
 
   // While the text in the RenderTexts may not have changed, the styling
@@ -301,12 +302,10 @@ void OmniboxResultView::Invalidate() {
 void OmniboxResultView::OnSelected() {
   DCHECK_EQ(SELECTED, GetState());
 
-  // Notify assistive technology when results with answers attached are
-  // selected. The non-answer text is already accessible as a consequence of
-  // updating the text in the omnibox but this alert and GetAccessibleNodeData
-  // below make the answer contents accessible.
-  if (match_.answer)
-    NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
+  // The text is also accessible via text/value change events in the omnibox but
+  // this selection event allows the screen reader to get more details about the
+  // list and the user's position within it.
+  NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
 }
 
 OmniboxResultView::ResultViewState OmniboxResultView::GetState() const {
@@ -372,11 +371,27 @@ void OmniboxResultView::OnMouseExited(const ui::MouseEvent& event) {
 }
 
 void OmniboxResultView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(match_.answer
-                         ? l10n_util::GetStringFUTF16(
-                               IDS_OMNIBOX_ACCESSIBLE_ANSWER, match_.contents,
-                               match_.answer->second_line().AccessibleText())
-                         : match_.contents);
+  // Get the label without the ", n of m" positional text appended.
+  // The positional info is provided via AX_ATTR_POS_IN_SET/SET_SIZE
+  // and providing it via text as well would result in duplicate announcements.
+  node_data->SetName(
+      AutocompleteMatchType::ToAccessibilityLabel(match_, match_.contents));
+
+  node_data->role = ui::AX_ROLE_LIST_BOX_OPTION;
+  node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET, model_index_ + 1);
+  node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, model_->child_count());
+
+  node_data->AddState(ui::AX_STATE_SELECTABLE);
+  switch (GetState()) {
+    case SELECTED:
+      node_data->AddState(ui::AX_STATE_SELECTED);
+      break;
+    case HOVERED:
+      node_data->AddState(ui::AX_STATE_HOVERED);
+      break;
+    default:
+      break;
+  }
 }
 
 gfx::Size OmniboxResultView::CalculatePreferredSize() const {
@@ -455,7 +470,7 @@ void OmniboxResultView::PaintMatch(const AutocompleteMatch& match,
 
   // Regular results.
   if (base::FeatureList::IsEnabled(omnibox::kUIExperimentVerticalLayout)) {
-    // For no description, shift down halfways to draw contents in middle.
+    // For no description, shift down halfway to draw contents in middle.
     if (description_max_width == 0)
       y += GetTextHeight() / 2;
 
@@ -503,8 +518,7 @@ int OmniboxResultView::DrawRenderText(
 
 std::unique_ptr<gfx::RenderText> OmniboxResultView::CreateRenderText(
     const base::string16& text) const {
-  std::unique_ptr<gfx::RenderText> render_text(
-      gfx::RenderText::CreateInstance());
+  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
   render_text->SetDisplayRect(gfx::Rect(gfx::Size(INT_MAX, 0)));
   render_text->SetCursorEnabled(false);
   render_text->SetElideBehavior(gfx::ELIDE_TAIL);

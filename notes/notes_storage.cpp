@@ -20,7 +20,6 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 
-#include "notes/notes_attachment.h"
 #include "notes/notes_codec.h"
 #include "notes/notes_model.h"
 

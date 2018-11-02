@@ -17,6 +17,8 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/rand_util.h"
+#include "base/run_loop.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -182,6 +184,14 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_MEDIA_REMOTING_CAST_TEXT;
     case WebLocalizedString::kMediaRemotingCastToUnknownDeviceText:
       return IDS_MEDIA_REMOTING_CAST_TO_UNKNOWN_DEVICE_TEXT;
+    case WebLocalizedString::kMediaRemotingStopByErrorText:
+      return IDS_MEDIA_REMOTING_STOP_BY_ERROR_TEXT;
+    case WebLocalizedString::kMediaRemotingStopByPlaybackQualityText:
+      return IDS_MEDIA_REMOTING_STOP_BY_PLAYBACK_QUALITY_TEXT;
+    case WebLocalizedString::kMediaRemotingStopNoText:
+      return -1;  // This string name is used only to indicate an empty string.
+    case WebLocalizedString::kMediaRemotingStopText:
+      return IDS_MEDIA_REMOTING_STOP_TEXT;
     case WebLocalizedString::kMultipleFileUploadText:
       return IDS_FORM_FILE_MULTIPLE_UPLOAD;
     case WebLocalizedString::kOtherColorLabel:
@@ -202,8 +212,6 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_MEDIA_OVERFLOW_MENU_ENTER_FULLSCREEN;
     case WebLocalizedString::kOverflowMenuExitFullscreen:
       return IDS_MEDIA_OVERFLOW_MENU_EXIT_FULLSCREEN;
-    case WebLocalizedString::kOverflowMenuStopCast:
-      return IDS_MEDIA_OVERFLOW_MENU_STOP_CAST;
     case WebLocalizedString::kOverflowMenuMute:
       return IDS_MEDIA_OVERFLOW_MENU_MUTE;
     case WebLocalizedString::kOverflowMenuUnmute:
@@ -214,6 +222,8 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_MEDIA_OVERFLOW_MENU_PAUSE;
     case WebLocalizedString::kOverflowMenuDownload:
       return IDS_MEDIA_OVERFLOW_MENU_DOWNLOAD;
+    case WebLocalizedString::kOverflowMenuPictureInPicture:
+      return IDS_MEDIA_OVERFLOW_MENU_PICTURE_IN_PICTURE;
     case WebLocalizedString::kPlaceholderForDayOfMonthField:
       return IDS_FORM_PLACEHOLDER_FOR_DAY_OF_MONTH_FIELD;
     case WebLocalizedString::kPlaceholderForMonthField:
@@ -296,6 +306,16 @@ static int ToMessageID(WebLocalizedString::Name name) {
       return IDS_MEDIA_TRACKS_NO_LABEL;
     case WebLocalizedString::kTextTracksOff:
       return IDS_MEDIA_TRACKS_OFF;
+    case WebLocalizedString::kUnitsKibibytes:
+      return IDS_UNITS_KIBIBYTES;
+    case WebLocalizedString::kUnitsMebibytes:
+      return IDS_UNITS_MEBIBYTES;
+    case WebLocalizedString::kUnitsGibibytes:
+      return IDS_UNITS_GIBIBYTES;
+    case WebLocalizedString::kUnitsTebibytes:
+      return IDS_UNITS_TEBIBYTES;
+    case WebLocalizedString::kUnitsPebibytes:
+      return IDS_UNITS_PEBIBYTES;
     // This "default:" line exists to avoid compile warnings about enum
     // coverage when we add a new symbol to WebLocalizedString.h in WebKit.
     // After a planned WebKit patch is landed, we need to add a case statement
@@ -324,7 +344,7 @@ void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
     blink::scheduler::WebThreadBase* thread) {
   base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
                             base::WaitableEvent::InitialState::NOT_SIGNALED);
-  thread->GetTaskRunner()->PostTask(
+  thread->GetSingleThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&BlinkPlatformImpl::UpdateWebThreadTLS,
                      base::Unretained(this), base::Unretained(thread),
@@ -519,6 +539,36 @@ const DataResource kDataResources[] = {
     {"placeholderIcon", IDR_PLACEHOLDER_ICON, ui::SCALE_FACTOR_100P, false},
 };
 
+class NestedMessageLoopRunnerImpl
+    : public blink::Platform::NestedMessageLoopRunner {
+ public:
+  NestedMessageLoopRunnerImpl() = default;
+
+  ~NestedMessageLoopRunnerImpl() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  }
+
+  void Run() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    base::RunLoop* const previous_run_loop = run_loop_;
+    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
+    run_loop_ = &run_loop;
+    run_loop.Run();
+    run_loop_ = previous_run_loop;
+  }
+
+  void QuitNow() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    DCHECK(run_loop_);
+    run_loop_->Quit();
+  }
+
+ private:
+  base::RunLoop* run_loop_ = nullptr;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+};
+
 }  // namespace
 
 WebData BlinkPlatformImpl::GetDataResource(const char* name) {
@@ -572,9 +622,22 @@ WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
   int message_id = ToMessageID(name);
   if (message_id < 0)
     return WebString();
-  return WebString::FromUTF16(base::ReplaceStringPlaceholders(
-      GetContentClient()->GetLocalizedString(message_id), value.Utf16(),
-      nullptr));
+
+  base::string16 format_string =
+      GetContentClient()->GetLocalizedString(message_id);
+
+  // If the ContentClient returned an empty string, e.g. because it's using the
+  // default implementation of ContentClient::GetLocalizedString, return an
+  // empty string instead of crashing with a failed DCHECK in
+  // base::ReplaceStringPlaceholders below. This is useful for tests that don't
+  // specialize a full ContentClient, since this way they can behave as though
+  // there isn't a defined |message_id| for the |name| instead of crashing
+  // outright.
+  if (format_string.empty())
+    return WebString();
+
+  return WebString::FromUTF16(
+      base::ReplaceStringPlaceholders(format_string, value.Utf16(), nullptr));
 }
 
 WebString BlinkPlatformImpl::QueryLocalizedString(WebLocalizedString::Name name,
@@ -739,6 +802,11 @@ bool BlinkPlatformImpl::IsDomKeyForModifier(int dom_key) {
 scoped_refptr<base::SingleThreadTaskRunner> BlinkPlatformImpl::GetIOTaskRunner()
     const {
   return io_thread_task_runner_;
+}
+
+std::unique_ptr<blink::Platform::NestedMessageLoopRunner>
+BlinkPlatformImpl::CreateNestedMessageLoopRunner() const {
+  return std::make_unique<NestedMessageLoopRunnerImpl>();
 }
 
 }  // namespace content

@@ -39,6 +39,7 @@ TEST(FileTest, Create) {
     File file(file_path, base::File::FLAG_OPEN | base::File::FLAG_READ);
     EXPECT_FALSE(file.IsValid());
     EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, file.error_details());
+    EXPECT_EQ(base::File::FILE_ERROR_NOT_FOUND, base::File::GetLastFileError());
   }
 
   {
@@ -80,6 +81,7 @@ TEST(FileTest, Create) {
     EXPECT_FALSE(file.IsValid());
     EXPECT_FALSE(file.created());
     EXPECT_EQ(base::File::FILE_ERROR_EXISTS, file.error_details());
+    EXPECT_EQ(base::File::FILE_ERROR_EXISTS, base::File::GetLastFileError());
   }
 
   {
@@ -235,6 +237,25 @@ TEST(FileTest, ReadWrite) {
     EXPECT_EQ(0, data_read_2[i]);
   for (int i = kOffsetBeyondEndOfFile; i < file_size; i++)
     EXPECT_EQ(data_to_write[i - kOffsetBeyondEndOfFile], data_read_2[i]);
+}
+
+TEST(FileTest, GetLastFileError) {
+#if defined(OS_WIN)
+  ::SetLastError(ERROR_ACCESS_DENIED);
+#else
+  errno = EACCES;
+#endif
+  EXPECT_EQ(File::FILE_ERROR_ACCESS_DENIED, File::GetLastFileError());
+
+  base::ScopedTempDir temp_dir;
+  EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
+
+  FilePath nonexistent_path(temp_dir.GetPath().AppendASCII("nonexistent"));
+  File file(nonexistent_path, File::FLAG_OPEN | File::FLAG_READ);
+  File::Error last_error = File::GetLastFileError();
+  EXPECT_FALSE(file.IsValid());
+  EXPECT_EQ(File::FILE_ERROR_NOT_FOUND, file.error_details());
+  EXPECT_EQ(File::FILE_ERROR_NOT_FOUND, last_error);
 }
 
 TEST(FileTest, Append) {

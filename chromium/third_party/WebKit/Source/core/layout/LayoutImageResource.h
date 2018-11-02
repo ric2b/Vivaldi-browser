@@ -27,6 +27,7 @@
 #ifndef LayoutImageResource_h
 #define LayoutImageResource_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/style/StyleImage.h"
@@ -37,8 +38,6 @@ class LayoutObject;
 
 class CORE_EXPORT LayoutImageResource
     : public GarbageCollectedFinalized<LayoutImageResource> {
-  WTF_MAKE_NONCOPYABLE(LayoutImageResource);
-
  public:
   virtual ~LayoutImageResource();
 
@@ -54,7 +53,7 @@ class CORE_EXPORT LayoutImageResource
   void ResetAnimation();
   bool MaybeAnimated() const;
 
-  virtual scoped_refptr<Image> GetImage(const IntSize&) const;
+  virtual scoped_refptr<Image> GetImage(const LayoutSize&) const;
   virtual bool ErrorOccurred() const {
     return cached_image_ && cached_image_->ErrorOccurred();
   }
@@ -65,7 +64,7 @@ class CORE_EXPORT LayoutImageResource
 
   virtual bool ImageHasRelativeSize() const;
 
-  virtual LayoutSize ImageSize(float multiplier) const;
+  virtual FloatSize ImageSize(float multiplier) const;
 
   virtual WrappedImagePtr ImagePtr() const { return cached_image_.Get(); }
 
@@ -81,6 +80,9 @@ class CORE_EXPORT LayoutImageResource
 
   LayoutObject* layout_object_;
   Member<ImageResourceContent> cached_image_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(LayoutImageResource);
 };
 
 }  // namespace blink

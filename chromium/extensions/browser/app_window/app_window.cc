@@ -370,24 +370,13 @@ void AppWindow::Init(const GURL& url,
     chrome::SetTabAudioMuted(web_contents(), true,
                              TabMutedReason::MEDIA_CAPTURE,
                              extension_id_);
+    thumbnail_window_ = true;
   }
 
   if (new_params.hidden) {
     // Although the window starts hidden by default, calling Hide() here
     // notifies observers of the window being hidden.
     Hide();
-
-#if defined(OS_MACOSX)
-    //tomas@vivaldi.com: Fixes VB-4330
-    if (vivaldi::IsVivaldiRunning()) {
-      if (new_params.state == ui::SHOW_STATE_FULLSCREEN)
-        Fullscreen();
-      else if (new_params.state == ui::SHOW_STATE_MAXIMIZED)
-        Maximize();
-      else if (new_params.state == ui::SHOW_STATE_MINIMIZED)
-        Minimize();
-    }
-#endif
   } else {
     // Panels are not activated by default.
     Show(window_type_is_panel() || !new_params.focused ? SHOW_INACTIVE
@@ -969,7 +958,7 @@ bool AppWindow::ShouldSuppressDialogs(WebContents* source) {
 content::ColorChooser* AppWindow::OpenColorChooser(
     WebContents* web_contents,
     SkColor initial_color,
-    const std::vector<content::ColorSuggestion>& suggestions) {
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) {
   return app_delegate_->ShowColorChooser(web_contents, initial_color);
 }
 

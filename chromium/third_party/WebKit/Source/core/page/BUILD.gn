@@ -12,8 +12,6 @@ blink_core_sources("page") {
     "ChromeClient.h",
     "ChromeClientImpl.cpp",
     "ChromeClientImpl.h",
-    "ContextMenuClient.cpp",
-    "ContextMenuClient.h",
     "ContextMenuController.cpp",
     "ContextMenuController.h",
     "ContextMenuProvider.h",
@@ -26,8 +24,6 @@ blink_core_sources("page") {
     "DragData.h",
     "DragSession.h",
     "DragState.h",
-    "EditorClient.cpp",
-    "EditorClient.h",
     "EventWithHitTestResults.h",
     "FocusChangedObserver.cpp",
     "FocusChangedObserver.h",
@@ -100,10 +96,5 @@ blink_core_sources("page") {
     "scrolling/TopDocumentRootScrollerController.h",
     "scrolling/ViewportScrollCallback.cpp",
     "scrolling/ViewportScrollCallback.h",
-  ]
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 }

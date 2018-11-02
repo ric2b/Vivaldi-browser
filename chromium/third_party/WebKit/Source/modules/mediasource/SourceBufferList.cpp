@@ -40,7 +40,7 @@ SourceBufferList::SourceBufferList(ExecutionContext* context,
                                    MediaElementEventQueue* async_event_queue)
     : ContextClient(context), async_event_queue_(async_event_queue) {}
 
-SourceBufferList::~SourceBufferList() {}
+SourceBufferList::~SourceBufferList() = default;
 
 void SourceBufferList::Add(SourceBuffer* buffer) {
   list_.push_back(buffer);
@@ -71,7 +71,7 @@ void SourceBufferList::ScheduleEvent(const AtomicString& event_name) {
   Event* event = Event::Create(event_name);
   event->SetTarget(this);
 
-  async_event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
+  async_event_queue_->EnqueueEvent(FROM_HERE, event);
 }
 
 const AtomicString& SourceBufferList::InterfaceName() const {

@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
 <translation id="1326317727527857210">Pentru a accesa filele de pe alte dispozitive, conectează-te la Chrome.</translation>
-<translation id="1685087038067318291">Descoperă paginile web trimise de obiectele din apropiere. Când conexiunea Bluetooth este activată, Chrome poate să preia paginile web asociate obiectelor din jur și le poate trimite anonim la Google pentru a le găsi pe cele mai utile. <ph name="BEGIN_LINK" />Află mai multe<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Notificare privind confidențialitatea Google Chrome</translation>
+<translation id="1863312987075920112">Folosind această aplicație, accepți <ph name="BEGIN_LINK_TOS" />Termenii și condițiile<ph name="END_LINK_TOS" /> și <ph name="BEGIN_LINK_PRIVACY" />Notificarea privind confidențialitatea<ph name="END_LINK_PRIVACY" /> Chrome.</translation>
 <translation id="2147651015520127414">Chrome s-a asigurat că certificatul acestui site a fost emis de <ph name="ISSUER" />.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Toate drepturile rezervate.</translation>
 <translation id="2342981853652716282">Conectează-te la Chrome pentru a accesa marcajele, parolele și altele pe toate dispozitivele tale.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Unele suplimente determină blocarea browserului Chrome. Dezinstalează:</translation>
 <translation id="4615174829807303908">Te deconectezi de la un cont gestionat de <ph name="SIGNOUT_MANAGED_DOMAIN" />. Astfel, se vor șterge datele Chrome de pe acest dispozitiv, dar datele vor rămâne în Contul Google.</translation>
 <translation id="5389212809648216794">Google Chrome nu poate folosi camera foto, deoarece este folosită de o altă aplicație</translation>
-<translation id="5566557026214762153">Dacă folosești aplicația, accepți <ph name="BEGIN_LINK" />Termenii și condițiile<ph name="END_LINK" /> Chrome.</translation>
 <translation id="5639704535586432836">Deschide Setări &gt; Confidențialitate &gt; Cameră foto &gt; Google Chrome și activează camera foto.</translation>
 <translation id="5642200033778930880">Google Chrome nu poate folosi camera foto în modul Vizualizare împărțită</translation>
 <translation id="5703130498371792817">Îți place Chrome? <ph name="BEGIN_LINK" />Evaluează aplicația<ph name="END_LINK" /></translation>

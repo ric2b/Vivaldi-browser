@@ -11,10 +11,9 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -236,7 +235,7 @@ base::TimeDelta GetTimeoutForLoadingIndicator() {
 template <typename SuggestionPtrContainer>
 std::unique_ptr<std::vector<std::string>> GetSuggestionIDVector(
     const SuggestionPtrContainer& suggestions) {
-  auto result = base::MakeUnique<std::vector<std::string>>();
+  auto result = std::make_unique<std::vector<std::string>>();
   for (const auto& suggestion : suggestions) {
     result->push_back(suggestion->id());
   }
@@ -301,8 +300,8 @@ void RemoveIncompleteSuggestions(RemoteSuggestion::PtrVector* suggestions) {
   UMA_HISTOGRAM_BOOLEAN("NewTabPage.Snippets.IncompleteSnippetsAfterFetch",
                         num_suggestions_removed > 0);
   if (num_suggestions_removed > 0) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumIncompleteSnippets",
-                                num_suggestions_removed);
+    base::UmaHistogramSparse("NewTabPage.Snippets.NumIncompleteSnippets",
+                             num_suggestions_removed);
   }
 }
 
@@ -386,7 +385,7 @@ RemoteSuggestionsProviderImpl::RemoteSuggestionsProviderImpl(
       status_service_(std::move(status_service)),
       clear_history_dependent_state_when_initialized_(false),
       clear_cached_suggestions_when_initialized_(false),
-      clock_(base::MakeUnique<base::DefaultClock>()),
+      clock_(base::DefaultClock::GetInstance()),
       prefetched_pages_tracker_(std::move(prefetched_pages_tracker)),
       breaking_news_raw_data_provider_(
           std::move(breaking_news_raw_data_provider)),
@@ -727,14 +726,14 @@ void RemoteSuggestionsProviderImpl::ClearHistory(
   ClearHistoryDependentState();
 }
 
-void RemoteSuggestionsProviderImpl::OnSignInStateChanged() {
+void RemoteSuggestionsProviderImpl::OnSignInStateChanged(bool has_signed_in) {
   // Make sure the status service is registered and we already initialised its
   // start state.
   if (!initialized()) {
     return;
   }
 
-  status_service_->OnSignInStateChanged();
+  status_service_->OnSignInStateChanged(has_signed_in);
 }
 
 void RemoteSuggestionsProviderImpl::GetDismissedSuggestionsForDebugging(
@@ -971,7 +970,7 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
     bool response_includes_article_category = false;
     for (FetchedCategory& fetched_category : *fetched_categories) {
       if (fetched_category.category == articles_category_) {
-        UMA_HISTOGRAM_SPARSE_SLOWLY(
+        base::UmaHistogramSparse(
             "NewTabPage.Snippets.NumArticlesFetched",
             std::min(fetched_category.suggestions.size(),
                      static_cast<size_t>(kMaxNormalFetchSuggestionCount)));
@@ -1041,8 +1040,8 @@ void RemoteSuggestionsProviderImpl::OnFetchFinished(
   auto content_it = category_contents_.find(articles_category_);
   DCHECK(content_it != category_contents_.end());
   const CategoryContent& content = content_it->second;
-  UMA_HISTOGRAM_SPARSE_SLOWLY("NewTabPage.Snippets.NumArticles",
-                              content.suggestions.size());
+  base::UmaHistogramSparse("NewTabPage.Snippets.NumArticles",
+                           content.suggestions.size());
   if (content.suggestions.empty() && !content.dismissed.empty()) {
     UMA_HISTOGRAM_COUNTS("NewTabPage.Snippets.NumArticlesZeroDueToDiscarded",
                          content.dismissed.size());
@@ -1315,7 +1314,7 @@ void RemoteSuggestionsProviderImpl::ClearExpiredDismissedSuggestions() {
 }
 
 void RemoteSuggestionsProviderImpl::ClearOrphanedImages() {
-  auto alive_suggestions = base::MakeUnique<std::set<std::string>>();
+  auto alive_suggestions = std::make_unique<std::set<std::string>>();
   for (const auto& entry : category_contents_) {
     const CategoryContent& content = entry.second;
     for (const auto& suggestion_ptr : content.suggestions) {
@@ -1749,7 +1748,7 @@ void RemoteSuggestionsProviderImpl::StoreCategoriesToPrefs() {
   for (const auto& entry : to_store) {
     const Category& category = entry.first;
     const CategoryContent& content = *entry.second;
-    auto dict = base::MakeUnique<base::DictionaryValue>();
+    auto dict = std::make_unique<base::DictionaryValue>();
     dict->SetInteger(kCategoryContentId, category.id());
     // TODO(tschumann): Persist other properties of the CategoryInfo.
     dict->SetString(kCategoryContentTitle, content.info.title());

@@ -86,7 +86,7 @@ void IdlenessDetector::OnDidLoadResource() {
   if (request_count > 2)
     return;
 
-  double timestamp = MonotonicallyIncreasingTime();
+  double timestamp = CurrentTimeTicksInSeconds();
   // Arriving at =2 updates the quiet_2 base timestamp.
   // Arriving at <2 sets the quiet_2 base timestamp only if
   // it was not already set.
@@ -104,8 +104,7 @@ void IdlenessDetector::OnDidLoadResource() {
   }
 
   if (!network_quiet_timer_.IsActive()) {
-    network_quiet_timer_.StartOneShot(kNetworkQuietWatchdogSeconds,
-                                      BLINK_FROM_HERE);
+    network_quiet_timer_.StartOneShot(kNetworkQuietWatchdogSeconds, FROM_HERE);
   }
 }
 
@@ -172,8 +171,7 @@ void IdlenessDetector::Stop() {
 void IdlenessDetector::NetworkQuietTimerFired(TimerBase*) {
   // TODO(lpy) Reduce the number of timers.
   if (network_0_quiet_ > 0 || network_2_quiet_ > 0) {
-    network_quiet_timer_.StartOneShot(kNetworkQuietWatchdogSeconds,
-                                      BLINK_FROM_HERE);
+    network_quiet_timer_.StartOneShot(kNetworkQuietWatchdogSeconds, FROM_HERE);
   }
 }
 

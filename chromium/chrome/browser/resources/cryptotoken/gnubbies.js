@@ -170,7 +170,7 @@ Gnubbies.prototype.enumerate = function(cb, opt_type) {
     }
 
     console.log(UTIL_fmt('Enumerated ' + devs.length + ' gnubbies'));
-    console.log(devs);
+    console.log(UTIL_fmt(JSON.stringify(devs)));
 
     var presentDevs = {};
     var deviceIds = [];
@@ -237,7 +237,7 @@ Gnubbies.INACTIVITY_TIMEOUT_MARGIN_MILLIS = 30000;
 Gnubbies.SYS_TIMER_ = new WindowTimer();
 
 /**
- * @param {number|undefined} opt_timeoutMillis Timeout in milliseconds
+ * @param {number=} opt_timeoutMillis Timeout in milliseconds
  */
 Gnubbies.prototype.resetInactivityTimer = function(opt_timeoutMillis) {
   var millis = opt_timeoutMillis ?

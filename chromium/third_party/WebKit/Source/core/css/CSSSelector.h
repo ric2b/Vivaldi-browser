@@ -157,7 +157,9 @@ class CORE_EXPORT CSSSelector {
     kPseudoLink,
     kPseudoVisited,
     kPseudoAny,
+    kPseudoMatches,
     kPseudoAnyLink,
+    kPseudoWebkitAnyLink,
     kPseudoAutofill,
     kPseudoHover,
     kPseudoDrag,
@@ -259,10 +261,10 @@ class CORE_EXPORT CSSSelector {
   // Selectors are kept in an array by CSSSelectorList. The next component of
   // the selector is the next item in the array.
   const CSSSelector* TagHistory() const {
-    return is_last_in_tag_history_ ? nullptr
-                                   : const_cast<CSSSelector*>(this + 1);
+    return is_last_in_tag_history_ ? nullptr : this + 1;
   }
 
+  static const AtomicString& UniversalSelectorAtom() { return g_null_atom; }
   const QualifiedName& TagQName() const;
   const AtomicString& Value() const;
   const AtomicString& SerializingValue() const;
@@ -384,7 +386,7 @@ class CORE_EXPORT CSSSelector {
   const CSSSelector* SerializeCompound(StringBuilder&) const;
 
   // Hide.
-  CSSSelector& operator=(const CSSSelector&);
+  CSSSelector& operator=(const CSSSelector&) = delete;
 
   struct RareData : public RefCounted<RareData> {
     static scoped_refptr<RareData> Create(const AtomicString& value) {

@@ -231,13 +231,14 @@ action("generate_strings") {
   ]
   script = "prebuild/create_string_rc.py"
 
-  if (is_chrome_branded || is_vivaldi) {
+  if (is_chrome_branded) {
     grdfile = "//chrome/app/google_chrome_strings.grd"
   }
   if (is_vivaldi) {
-    grdfile = "$root_gen_dir/vivaldi_resources/chrome/app/chromium_strings/chromium_strings.grd"
+    # Need to use this file and dependency to get the correct list of languages
+    grdfile = "$root_gen_dir/vivaldi_resources/chrome/app/google_chrome_strings/google_chrome_strings.grd"
     deps = [
-      "//chrome/app:chromium_strings",
+      "//chrome/app:google_chrome_strings",
     ]
   } else {
     grdfile = "//chrome/app/chromium_strings.grd"

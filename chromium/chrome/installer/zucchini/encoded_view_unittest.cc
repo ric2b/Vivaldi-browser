@@ -5,6 +5,7 @@
 #include "chrome/installer/zucchini/encoded_view.h"
 
 #include <iterator>
+#include <numeric>
 #include <vector>
 
 #include "chrome/installer/zucchini/image_index.h"
@@ -114,9 +115,7 @@ class EncodedViewTest : public testing::Test {
   EncodedViewTest()
       : buffer_(20),
         image_index_(ConstBufferView(buffer_.data(), buffer_.size())) {
-    for (uint8_t i = 0; i < buffer_.size(); ++i) {
-      buffer_[i] = i;
-    }
+    std::iota(buffer_.begin(), buffer_.end(), 0);
     TestDisassembler disasm({2, TypeTag(0), PoolTag(0)},
                             {{1, 0}, {8, 1}, {10, 2}},
                             {4, TypeTag(1), PoolTag(0)}, {{3, 3}},
@@ -139,6 +138,9 @@ class EncodedViewTest : public testing::Test {
 
 TEST_F(EncodedViewTest, Unlabeled) {
   EncodedView encoded_view(image_index_);
+
+  encoded_view.SetLabels(PoolTag(0), {0, 0, 0, 0}, 1);
+  encoded_view.SetLabels(PoolTag(1), {0, 0}, 1);
 
   std::vector<size_t> expected = {
       0,                                     // raw
@@ -169,9 +171,8 @@ TEST_F(EncodedViewTest, Unlabeled) {
 TEST_F(EncodedViewTest, Labeled) {
   EncodedView encoded_view(image_index_);
 
-  OrderedLabelManager label_manager0;
-  label_manager0.InsertOffsets({0, 2});
-  image_index_.LabelTargets(PoolTag(0), label_manager0);
+  encoded_view.SetLabels(PoolTag(0), {0, 2, 1, 2}, 3);
+  encoded_view.SetLabels(PoolTag(1), {0, 0}, 1);
 
   std::vector<size_t> expected = {
       0,                                     // raw

@@ -7,7 +7,6 @@
 #include <ctime>
 
 #include "base/files/file_util.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -63,25 +62,36 @@ void ExtractXMLItems(const std::string& serialized_xml,
 
 }  // namespace
 
-TrafficAnnotationExporter::ReportItem::ReportItem()
-    : unique_id_hash_code(-1), content_hash_code(-1) {}
+TrafficAnnotationExporter::ArchivedAnnotation::ArchivedAnnotation()
+    : type(AnnotationInstance::Type::ANNOTATION_COMPLETE),
+      unique_id_hash_code(-1),
+      second_id_hash_code(-1),
+      content_hash_code(-1) {}
 
-TrafficAnnotationExporter::ReportItem::ReportItem(
-    const TrafficAnnotationExporter::ReportItem& other) = default;
+TrafficAnnotationExporter::ArchivedAnnotation::ArchivedAnnotation(
+    const TrafficAnnotationExporter::ArchivedAnnotation& other) = default;
 
-TrafficAnnotationExporter::ReportItem::~ReportItem() = default;
+TrafficAnnotationExporter::ArchivedAnnotation::~ArchivedAnnotation() = default;
 
 TrafficAnnotationExporter::TrafficAnnotationExporter(
     const base::FilePath& source_path)
     : source_path_(source_path), modified_(false) {
   all_supported_platforms_.push_back("linux");
   all_supported_platforms_.push_back("windows");
+#if defined(OS_LINUX)
+  current_platform_ = "linux";
+#elif defined(OS_WIN)
+  current_platform_ = "windows";
+#else
+  NOTREACHED() << "Other platforms are not supported yet.";
+  current_platform_ = "undefined";
+#endif
 }
 
 TrafficAnnotationExporter::~TrafficAnnotationExporter() = default;
 
 bool TrafficAnnotationExporter::LoadAnnotationsXML() {
-  report_items_.clear();
+  archive_.clear();
   XmlReader reader;
   if (!reader.LoadFile(
           source_path_.Append(kAnnotationsXmlPath).MaybeAsASCII())) {
@@ -97,31 +107,59 @@ bool TrafficAnnotationExporter::LoadAnnotationsXML() {
     if (reader.NodeName() != "item")
       continue;
 
-    ReportItem item;
-    std::string temp;
+    ArchivedAnnotation item;
+    std::string temp_str;
+    int temp_int = 0;
     std::string unique_id;
 
     all_ok &= reader.NodeAttribute("id", &unique_id);
-    all_ok &= reader.NodeAttribute("hash_code", &temp) &&
-              base::StringToInt(temp, &item.unique_id_hash_code);
-    if (all_ok && reader.NodeAttribute("content_hash_code", &temp))
-      all_ok &= base::StringToInt(temp, &item.content_hash_code);
+    all_ok &= reader.NodeAttribute("hash_code", &temp_str) &&
+              base::StringToInt(temp_str, &item.unique_id_hash_code);
+    all_ok &= reader.NodeAttribute("type", &temp_str) &&
+              base::StringToInt(temp_str, &temp_int);
+    item.type = static_cast<AnnotationInstance::Type>(temp_int);
+
+    if (reader.NodeAttribute("second_id", &temp_str))
+      all_ok &= base::StringToInt(temp_str, &item.second_id_hash_code);
+
+    if (all_ok && reader.NodeAttribute("content_hash_code", &temp_str))
+      all_ok &= base::StringToInt(temp_str, &item.content_hash_code);
     else
       item.content_hash_code = -1;
 
     reader.NodeAttribute("deprecated", &item.deprecation_date);
 
-    if (reader.NodeAttribute("os_list", &temp)) {
-      item.os_list = base::SplitString(temp, ",", base::TRIM_WHITESPACE,
+    if (reader.NodeAttribute("os_list", &temp_str)) {
+      item.os_list = base::SplitString(temp_str, ",", base::TRIM_WHITESPACE,
                                        base::SPLIT_WANT_NONEMPTY);
     }
+
+    if (reader.NodeAttribute("semantics_fields", &temp_str)) {
+      std::vector<std::string> temp_list = base::SplitString(
+          temp_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+      for (std::string field : temp_list) {
+        base::StringToInt(field, &temp_int);
+        item.semantics_fields.insert(temp_int);
+      }
+    }
+
+    if (reader.NodeAttribute("policy_fields", &temp_str)) {
+      std::vector<std::string> temp_list = base::SplitString(
+          temp_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+      for (std::string field : temp_list) {
+        base::StringToInt(field, &temp_int);
+        item.policy_fields.insert(temp_int);
+      }
+    }
+
+    all_ok &= reader.NodeAttribute("file_path", &item.file_path);
 
     if (!all_ok) {
       LOG(ERROR) << "Unexpected format in annotations.xml.";
       break;
     }
 
-    report_items_.insert(std::make_pair(unique_id, item));
+    archive_.insert(std::make_pair(unique_id, item));
   }
 
   modified_ = false;
@@ -131,16 +169,7 @@ bool TrafficAnnotationExporter::LoadAnnotationsXML() {
 bool TrafficAnnotationExporter::UpdateAnnotations(
     const std::vector<AnnotationInstance>& annotations,
     const std::map<int, std::string>& reserved_ids) {
-  std::string platform;
-#if defined(OS_LINUX)
-  platform = "linux";
-#elif defined(OS_WIN)
-  platform = "windows";
-#else
-  NOTREACHED() << "Other platforms are not supported yet.";
-#endif
-
-  if (report_items_.empty() && !LoadAnnotationsXML())
+  if (archive_.empty() && !LoadAnnotationsXML())
     return false;
 
   std::set<int> current_platform_hashcodes;
@@ -148,101 +177,158 @@ bool TrafficAnnotationExporter::UpdateAnnotations(
   // Iterate annotations extracted from the code, and add/update them in the
   // reported list, if required.
   for (AnnotationInstance annotation : annotations) {
-    // Compute a hashcode for the annotation. Source field is not used in this
-    // computation as we don't need sensitivity to changes in source location,
-    // i.e. filepath, line number and function.
-    std::string content;
-    annotation.proto.clear_source();
-    google::protobuf::TextFormat::PrintToString(annotation.proto, &content);
-    int content_hash_code = TrafficAnnotationAuditor::ComputeHashValue(content);
+    // Annotations.XML only stores raw annotations.
+    if (annotation.is_merged)
+      continue;
 
-    // If annotation unique id is already in the reported list, just check if
-    // platform is correct and content is not changed.
-    if (base::ContainsKey(report_items_, annotation.proto.unique_id())) {
-      ReportItem* current = &report_items_[annotation.proto.unique_id()];
-      if (!base::ContainsValue(current->os_list, platform)) {
-        current->os_list.push_back(platform);
+    int content_hash_code = annotation.GetContentHashCode();
+    // If annotation unique id is already in the imported annotations list,
+    // check if other fields have changed.
+    if (base::ContainsKey(archive_, annotation.proto.unique_id())) {
+      ArchivedAnnotation* current = &archive_[annotation.proto.unique_id()];
+
+      // Check second id.
+      if (current->second_id_hash_code !=
+          archive_[annotation.proto.unique_id()].second_id_hash_code) {
+        archive_[annotation.proto.unique_id()].second_id_hash_code =
+            current->second_id_hash_code;
         modified_ = true;
       }
+
+      // Check platform.
+      if (!base::ContainsValue(current->os_list, current_platform_)) {
+        current->os_list.push_back(current_platform_);
+        modified_ = true;
+      }
+
+      // Check content (including policy and semnantic fields).
       if (current->content_hash_code != content_hash_code) {
         current->content_hash_code = content_hash_code;
+        modified_ = true;
+      }
+
+      // Check file path.
+      if (current->file_path != annotation.proto.source().file()) {
+        current->file_path = annotation.proto.source().file();
         modified_ = true;
       }
     } else {
       // If annotation is new, add it and assume it is on all platforms. Tests
       // running on other platforms will request updating this if required.
-      ReportItem new_item;
+      ArchivedAnnotation new_item;
+      new_item.type = annotation.type;
       new_item.unique_id_hash_code = annotation.unique_id_hash_code;
+      if (annotation.NeedsTwoIDs())
+        new_item.second_id_hash_code = annotation.second_id_hash_code;
       new_item.content_hash_code = content_hash_code;
       new_item.os_list = all_supported_platforms_;
-      report_items_[annotation.proto.unique_id()] = new_item;
+      if (annotation.type != AnnotationInstance::Type::ANNOTATION_COMPLETE) {
+        annotation.GetSemanticsFieldNumbers(&new_item.semantics_fields);
+        annotation.GetPolicyFieldNumbers(&new_item.policy_fields);
+      }
+      new_item.file_path = annotation.proto.source().file();
+      archive_[annotation.proto.unique_id()] = new_item;
       modified_ = true;
     }
     current_platform_hashcodes.insert(annotation.unique_id_hash_code);
   }
 
   // If a none-reserved annotation is removed from current platform, update it.
-  for (auto& item : report_items_) {
-    if (base::ContainsValue(item.second.os_list, platform) &&
+  for (auto& item : archive_) {
+    if (base::ContainsValue(item.second.os_list, current_platform_) &&
         item.second.content_hash_code != -1 &&
         !base::ContainsKey(current_platform_hashcodes,
                            item.second.unique_id_hash_code)) {
-      base::Erase(item.second.os_list, platform);
+      base::Erase(item.second.os_list, current_platform_);
       modified_ = true;
     }
   }
 
   // If there is a new reserved id, add it.
   for (const auto& item : reserved_ids) {
-    if (!base::ContainsKey(report_items_, item.second)) {
-      ReportItem new_item;
+    if (!base::ContainsKey(archive_, item.second)) {
+      ArchivedAnnotation new_item;
       new_item.unique_id_hash_code = item.first;
       new_item.os_list = all_supported_platforms_;
-      report_items_[item.second] = new_item;
+      archive_[item.second] = new_item;
       modified_ = true;
     }
   }
 
   // If there are annotations that are not used in any OS, set the deprecation
   // flag.
-  for (auto& item : report_items_) {
+  for (auto& item : archive_) {
     if (item.second.os_list.empty() && item.second.deprecation_date.empty()) {
       base::Time::Exploded now;
       base::Time::Now().UTCExplode(&now);
       item.second.deprecation_date = base::StringPrintf(
           "%i-%02i-%02i", now.year, now.month, now.day_of_month);
+      item.second.file_path = "";
+      item.second.semantics_fields.clear();
+      item.second.policy_fields.clear();
       modified_ = true;
     }
   }
 
-  return CheckReportItems();
+  return CheckArchivedAnnotations();
 }
 
-std::string TrafficAnnotationExporter::GenerateSerializedXML() {
+std::string TrafficAnnotationExporter::GenerateSerializedXML() const {
   XmlWriter writer;
   writer.StartWriting();
   writer.StartElement("annotations");
 
-  for (const auto& item : report_items_) {
+  for (const auto& item : archive_) {
     writer.StartElement("item");
     writer.AddAttribute("id", item.first);
     writer.AddAttribute(
         "hash_code", base::StringPrintf("%i", item.second.unique_id_hash_code));
+    writer.AddAttribute("type", base::StringPrintf("%i", item.second.type));
+
+    if (item.second.second_id_hash_code != -1)
+      writer.AddAttribute(
+          "second_id",
+          base::StringPrintf("%i", item.second.second_id_hash_code));
+
     if (!item.second.deprecation_date.empty())
       writer.AddAttribute("deprecated", item.second.deprecation_date);
+
     if (item.second.content_hash_code == -1)
       writer.AddAttribute("reserved", "1");
     else
       writer.AddAttribute(
           "content_hash_code",
           base::StringPrintf("%i", item.second.content_hash_code));
-    std::string os_list;
-    for (const std::string& platform : item.second.os_list)
-      os_list += platform + ",";
-    if (!os_list.empty()) {
-      os_list.pop_back();
-      writer.AddAttribute("os_list", os_list);
+
+    // Write OS list.
+    if (!item.second.os_list.empty()) {
+      std::string text;
+      for (const std::string& platform : item.second.os_list)
+        text += platform + ",";
+      text.pop_back();
+      writer.AddAttribute("os_list", text);
     }
+
+    // Write semantics list (for incomplete annotations).
+    if (!item.second.semantics_fields.empty()) {
+      std::string text;
+      for (int field : item.second.semantics_fields)
+        text += base::StringPrintf("%i,", field);
+      text.pop_back();
+      writer.AddAttribute("semantics_fields", text);
+    }
+
+    // Write policy list (for incomplete annotations).
+    if (!item.second.policy_fields.empty()) {
+      std::string text;
+      for (int field : item.second.policy_fields)
+        text += base::StringPrintf("%i,", field);
+      text.pop_back();
+      writer.AddAttribute("policy_fields", text);
+    }
+
+    writer.AddAttribute("file_path", item.second.file_path);
+
     writer.EndElement();
   }
   writer.EndElement();
@@ -255,7 +341,7 @@ std::string TrafficAnnotationExporter::GenerateSerializedXML() {
   return xml_content;
 }
 
-bool TrafficAnnotationExporter::SaveAnnotationsXML() {
+bool TrafficAnnotationExporter::SaveAnnotationsXML() const {
   std::string xml_content = GenerateSerializedXML();
 
   return base::WriteFile(source_path_.Append(kAnnotationsXmlPath),
@@ -264,21 +350,21 @@ bool TrafficAnnotationExporter::SaveAnnotationsXML() {
 
 bool TrafficAnnotationExporter::GetDeprecatedHashCodes(
     std::set<int>* hash_codes) {
-  if (report_items_.empty() && !LoadAnnotationsXML())
+  if (archive_.empty() && !LoadAnnotationsXML())
     return false;
 
   hash_codes->clear();
-  for (const auto& item : report_items_) {
+  for (const auto& item : archive_) {
     if (!item.second.deprecation_date.empty())
       hash_codes->insert(item.second.unique_id_hash_code);
   }
   return true;
 }
 
-bool TrafficAnnotationExporter::CheckReportItems() {
+bool TrafficAnnotationExporter::CheckArchivedAnnotations() {
   // Check for annotation hash code duplications.
   std::set<int> used_codes;
-  for (auto& item : report_items_) {
+  for (auto& item : archive_) {
     if (base::ContainsKey(used_codes, item.second.unique_id_hash_code)) {
       LOG(ERROR) << "Unique id hash code " << item.second.unique_id_hash_code
                  << " is used more than once.";
@@ -289,7 +375,7 @@ bool TrafficAnnotationExporter::CheckReportItems() {
   }
 
   // Check for coexistence of OS(es) and deprecation date.
-  for (auto& item : report_items_) {
+  for (auto& item : archive_) {
     if (!item.second.deprecation_date.empty() && !item.second.os_list.empty()) {
       LOG(ERROR) << "Annotation " << item.first
                  << " has a deprecation date and at least one active OS.";
@@ -371,4 +457,18 @@ std::string TrafficAnnotationExporter::GetXMLDifferences(
   }
 
   return message;
+}
+
+bool TrafficAnnotationExporter::GetOtherPlatformsAnnotationIDs(
+    std::vector<std::string>* ids) const {
+  if (archive_.empty())
+    return false;
+
+  ids->clear();
+  for (const std::pair<std::string, ArchivedAnnotation>& item : archive_) {
+    if (item.second.deprecation_date.empty() &&
+        !MatchesCurrentPlatform(item.second))
+      ids->push_back(item.first);
+  }
+  return true;
 }

@@ -3,6 +3,7 @@
 <translationbundle lang="ca">
 <translation id="102360288709523007">Ajuda a millorar Chromium enviant estadístiques d'ús i informes d'error a Google.</translation>
 <translation id="1185134272377778587">Quant a Chromium</translation>
+<translation id="1289966288285062467">Avís de privadesa de Chromium</translation>
 <translation id="1472013873724362412">El vostre compte no funciona a Chromium. Contacteu amb l'administrador del domini o utilitzeu un compte de Google estàndard per iniciar la sessió.</translation>
 <translation id="1736662517232558588">Dades de Chromium esborrades</translation>
 <translation id="1838412507805038478">Chromium ha verificat que <ph name="ISSUER" /> ha emès el certificat d'aquest lloc web.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Voleu tancar la sessió de Chromium?</translation>
 <translation id="6424492062988593837">Chrome ara és millor. Hi ha una versió nova disponible.</translation>
 <translation id="6604711459180487467">Comparteix la teva ubicació per gaudir dels avantatges de Chromium.</translation>
+<translation id="6626296268883197964">En fer servir aquesta aplicació, acceptes les <ph name="BEGIN_LINK_TOS" />condicions del servei<ph name="END_LINK_TOS" /> i l'<ph name="BEGIN_LINK_PRIVACY" />avís de privadesa<ph name="END_LINK_PRIVACY" /> de Chromium.</translation>
 <translation id="7099326575020694068">Chromium no pot utilitzar la càmera en mode de visualització dividida</translation>
-<translation id="7144758435978427212">Descobreix les pàgines web enviades pels objectes propers. Quan el Bluetooth està activat, Chromium pot recopilar les pàgines web associades als objectes que t'envolten i enviar-les de manera anònima a Google per trobar les més útils. <ph name="BEGIN_LINK" />Més informació<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Per ajudar-te a estalviar temps, Chromium connecta els teus comptes al web. Pots afegir o suprimir comptes a Configuració.</translation>
 <translation id="7269362888766543920">Alguns complements fan que Chromium es bloquegi. Prova de desinstal·lar-los.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Utilitza Chromium a tot arreu</translation>
 <translation id="7674213385180944843">Obre Configuració &gt; Privacitat &gt; Càmera &gt; Chromium i activa la càmera.</translation>
 <translation id="786327964234957808">Estàs canviant el compte de sincronització de <ph name="USER_EMAIL1" /> a <ph name="USER_EMAIL2" />. <ph name="DOMAIN" /> gestiona les teves dades de Chromium. Se suprimiran les teves dades d'aquest dispositiu, però continuaran estant disponibles a <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">En fer servir aquesta aplicació, acceptes les <ph name="BEGIN_LINK" />Condicions del servei<ph name="END_LINK" /> de Chromium.</translation>
 <translation id="8175055321229419309">Consell: <ph name="BEGIN_LINK" />mou Chromium al Dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Compartiu la vostra ubicació per tal de gaudir dels avantatges de Chromium.</translation>
 <translation id="8353224596138547809">Voleu que Chromium desi la vostra contrasenya per a aquest lloc?</translation>

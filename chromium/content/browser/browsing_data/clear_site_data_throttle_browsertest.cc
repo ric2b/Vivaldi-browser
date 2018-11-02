@@ -84,8 +84,10 @@ class TestBrowsingDataRemoverDelegate : public MockBrowsingDataRemoverDelegate {
         BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB;
 
     if (cookies) {
-      int data_type_mask = BrowsingDataRemover::DATA_TYPE_COOKIES |
-                           BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS;
+      int data_type_mask =
+          BrowsingDataRemover::DATA_TYPE_COOKIES |
+          BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+          BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS;
 
       BrowsingDataFilterBuilderImpl filter_builder(
           BrowsingDataFilterBuilder::WHITELIST);
@@ -251,11 +253,13 @@ class ClearSiteDataThrottleBrowserTest : public ContentBrowserTest {
     GURL js_url = https_server()->GetURL(origin, "/?file=worker.js");
 
     // Register the worker.
+    blink::mojom::ServiceWorkerRegistrationOptions options(
+        scope_url, blink::mojom::ServiceWorkerUpdateViaCache::kImports);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(
             &ServiceWorkerContextWrapper::RegisterServiceWorker,
-            base::Unretained(service_worker_context), scope_url, js_url,
+            base::Unretained(service_worker_context), js_url, options,
             base::Bind(
                 &ClearSiteDataThrottleBrowserTest::AddServiceWorkerCallback,
                 base::Unretained(this))));
@@ -758,15 +762,11 @@ IN_PROC_BROWSER_TEST_F(ClearSiteDataThrottleBrowserTest, Types) {
   } test_cases[] = {
       {"\"cookies\"", true, false, false},
       {"\"storage\"", false, true, false},
-
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      {"\"cache\"", false, false, false},
+      {"\"cache\"", false, false, true},
       {"\"cookies\", \"storage\"", true, true, false},
-
-      // TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-      {"\"cookies\", \"cache\"", true, false, false},
-      {"\"storage\", \"cache\"", false, true, false},
-      {"\"cookies\", \"storage\", \"cache\"", true, true, false},
+      {"\"cookies\", \"cache\"", true, false, true},
+      {"\"storage\", \"cache\"", false, true, true},
+      {"\"cookies\", \"storage\", \"cache\"", true, true, true},
   };
 
   for (const TestCase& test_case : test_cases) {
@@ -853,9 +853,7 @@ IN_PROC_BROWSER_TEST_F(ClearSiteDataThrottleBrowserTest,
 // entries are actually written to the disk. Other tests using CacheTestUtil
 // show that a timeout of around 1s between cache operations is necessary to
 // avoid flakiness.
-// TODO(crbug.com/762417): The "cache" parameter is temporarily disabled.
-IN_PROC_BROWSER_TEST_F(ClearSiteDataThrottleBrowserTest,
-                       DISABLED_CacheIntegrationTest) {
+IN_PROC_BROWSER_TEST_F(ClearSiteDataThrottleBrowserTest, CacheIntegrationTest) {
   const int kTimeoutMs = 1000;
 
   CacheTestUtil util(

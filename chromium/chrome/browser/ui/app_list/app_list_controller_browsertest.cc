@@ -4,10 +4,8 @@
 
 #include <stddef.h>
 
-#include "ash/app_list/model/app_list_model.h"
-#include "ash/app_list/model/search_box_model.h"
-#include "ash/app_list/model/search_result.h"
-#include "ash/app_list/model/search_result_observer.h"
+#include "ash/app_list/model/search/search_model.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/path_service.h"
@@ -55,15 +53,13 @@ IN_PROC_BROWSER_TEST_F(AppListControllerBrowserTest, CreateNewWindow) {
 // Browser Test for AppListController that observes search result changes.
 class AppListControllerSearchResultsBrowserTest
     : public ExtensionBrowserTest,
-      public app_list::SearchResultObserver,
       public ui::ListModelObserver {
  public:
   AppListControllerSearchResultsBrowserTest()
-      : observed_result_(NULL),
-        observed_results_list_(NULL) {}
+      : observed_result_(nullptr), observed_results_list_(nullptr) {}
 
   void WatchResultsLookingForItem(
-      app_list::AppListModel::SearchResults* search_results,
+      app_list::SearchModel::SearchResults* search_results,
       const std::string& extension_name) {
     EXPECT_FALSE(observed_results_list_);
     observed_results_list_ = search_results;
@@ -78,10 +74,7 @@ class AppListControllerSearchResultsBrowserTest
 
  protected:
   void AttemptToLocateItem() {
-    if (observed_result_) {
-      observed_result_->RemoveObserver(this);
-      observed_result_ = NULL;
-    }
+    observed_result_ = nullptr;
 
     for (size_t i = 0; i < observed_results_list_->item_count(); ++i) {
       if (observed_results_list_->GetItemAt(i)->title() != item_to_observe_)
@@ -91,17 +84,7 @@ class AppListControllerSearchResultsBrowserTest
       EXPECT_FALSE(observed_result_);
       observed_result_ = observed_results_list_->GetItemAt(i);
     }
-
-    if (observed_result_)
-      observed_result_->AddObserver(this);
   }
-
-  // Overridden from SearchResultObserver:
-  void OnIconChanged() override {}
-  void OnActionsChanged() override {}
-  void OnIsInstallingChanged() override {}
-  void OnPercentDownloadedChanged() override {}
-  void OnItemInstalled() override {}
 
   // Overridden from ui::ListModelObserver:
   void ListItemsAdded(size_t start, size_t count) override {
@@ -117,7 +100,7 @@ class AppListControllerSearchResultsBrowserTest
 
  private:
   base::string16 item_to_observe_;
-  app_list::AppListModel::SearchResults* observed_results_list_;
+  app_list::SearchModel::SearchResults* observed_results_list_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListControllerSearchResultsBrowserTest);
 };
@@ -139,13 +122,14 @@ IN_PROC_BROWSER_TEST_F(AppListControllerSearchResultsBrowserTest,
   ASSERT_TRUE(service);
   service->ShowForProfile(browser()->profile());
 
-  app_list::AppListModel* model = test::GetAppListModel(service);
+  app_list::SearchModel* model = test::GetSearchModel(service);
   ASSERT_TRUE(model);
   WatchResultsLookingForItem(model->results(), extension->name());
 
   // Ensure a search finds the extension.
   EXPECT_FALSE(observed_result_);
-  model->search_box()->Update(base::ASCIIToUTF16("minimal"), false);
+  model->search_box()->Update(base::ASCIIToUTF16("minimal"),
+                              true /* initiated_by_user */);
   EXPECT_TRUE(observed_result_);
 
   // Ensure the UI is updated. This is via PostTask in views.

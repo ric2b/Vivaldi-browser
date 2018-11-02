@@ -53,6 +53,10 @@ gfx::Size ExternalProtocolDialog::CalculatePreferredSize() const {
   return gfx::Size(kDialogContentWidth, GetHeightForWidth(kDialogContentWidth));
 }
 
+bool ExternalProtocolDialog::ShouldShowCloseButton() const {
+  return false;
+}
+
 base::string16 ExternalProtocolDialog::GetDialogButtonLabel(
     ui::DialogButton button) const {
   return delegate_->GetDialogButtonLabel(button);
@@ -101,9 +105,9 @@ ExternalProtocolDialog::ExternalProtocolDialog(
       creation_time_(base::TimeTicks::Now()) {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   set_margins(
-      provider->GetDialogInsetsForContentType(views::CONTROL, views::CONTROL));
+      provider->GetDialogInsetsForContentType(views::TEXT, views::TEXT));
 
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   DCHECK(delegate_->GetMessageText().empty());
   remember_decision_checkbox_ =

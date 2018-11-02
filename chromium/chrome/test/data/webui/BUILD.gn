@@ -57,7 +57,6 @@ js2gtest("browser_tests_js_webui") {
     "cr_elements/cr_elements_browsertest.js",
     "engagement/site_engagement_browsertest.js",
     "extensions/a11y/extensions_a11y_test.js",
-    "extensions/a11y/extensions_a11y_test_fixture.js",
     "extensions/cr_extensions_browsertest.js",
     "interventions_internals_browsertest.js",
     "load_time_data_browsertest.js",
@@ -117,6 +116,10 @@ js2gtest("browser_tests_js_webui") {
     sources += [
       "settings/easy_unlock_browsertest_chromeos.js",
       "sys_internals/sys_internals_browsertest.js",
+    ]
+  } else {
+    sources += [
+      "signin/signin_browsertest.js",
     ]
   }
 

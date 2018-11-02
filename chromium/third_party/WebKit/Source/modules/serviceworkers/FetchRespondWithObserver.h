@@ -23,14 +23,15 @@ class MODULES_EXPORT FetchRespondWithObserver : public RespondWithObserver {
  public:
   ~FetchRespondWithObserver() override = default;
 
-  static FetchRespondWithObserver* Create(ExecutionContext*,
-                                          int fetch_event_id,
-                                          const KURL& request_url,
-                                          network::mojom::FetchRequestMode,
-                                          WebURLRequest::FetchRedirectMode,
-                                          WebURLRequest::FrameType,
-                                          WebURLRequest::RequestContext,
-                                          WaitUntilObserver*);
+  static FetchRespondWithObserver* Create(
+      ExecutionContext*,
+      int fetch_event_id,
+      const KURL& request_url,
+      network::mojom::FetchRequestMode,
+      network::mojom::FetchRedirectMode,
+      network::mojom::RequestContextFrameType,
+      WebURLRequest::RequestContext,
+      WaitUntilObserver*);
 
   void OnResponseRejected(mojom::ServiceWorkerResponseError) override;
   void OnResponseFulfilled(const ScriptValue&) override;
@@ -43,16 +44,16 @@ class MODULES_EXPORT FetchRespondWithObserver : public RespondWithObserver {
                            int fetch_event_id,
                            const KURL& request_url,
                            network::mojom::FetchRequestMode,
-                           WebURLRequest::FetchRedirectMode,
-                           WebURLRequest::FrameType,
+                           network::mojom::FetchRedirectMode,
+                           network::mojom::RequestContextFrameType,
                            WebURLRequest::RequestContext,
                            WaitUntilObserver*);
 
  private:
   const KURL request_url_;
   const network::mojom::FetchRequestMode request_mode_;
-  const WebURLRequest::FetchRedirectMode redirect_mode_;
-  const WebURLRequest::FrameType frame_type_;
+  const network::mojom::FetchRedirectMode redirect_mode_;
+  const network::mojom::RequestContextFrameType frame_type_;
   const WebURLRequest::RequestContext request_context_;
 };
 

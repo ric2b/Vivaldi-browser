@@ -159,10 +159,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return self;
 }
 
-- (void)dealloc {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
 - (void)stopBrowserStateServiceObservers {
   _tokenServiceObserver.reset();
   _syncObserver.reset();
@@ -312,10 +308,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
     NSString* errorMessage =
         GetSyncErrorDescriptionForBrowserState(_browserState);
     DCHECK(errorMessage);
+    syncItem.image = [UIImage imageNamed:@"settings_error"];
     syncItem.detailText = errorMessage;
   } else if ([self authService]->HasCachedMDMErrorForIdentity(identity)) {
     // MDM error.
     syncItem.shouldDisplayError = YES;
+    syncItem.image = [UIImage imageNamed:@"settings_error"];
     syncItem.detailText =
         l10n_util::GetNSString(IDS_IOS_OPTIONS_ACCOUNTS_SYNC_ERROR);
   } else if (!syncSetupService->IsSyncEnabled()) {

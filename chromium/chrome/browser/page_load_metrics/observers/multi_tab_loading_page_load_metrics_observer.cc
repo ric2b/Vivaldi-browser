@@ -5,6 +5,7 @@
 #include "chrome/browser/page_load_metrics/observers/multi_tab_loading_page_load_metrics_observer.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/page_load_metrics/observers/histogram_suffixes.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "content/public/browser/web_contents.h"
 
@@ -19,30 +20,15 @@
 
 namespace internal {
 
-const char kHistogramMultiTabLoadingFirstContentfulPaint[] =
-    "PageLoad.Clients.MultiTabLoading.PaintTiming."
-    "NavigationToFirstContentfulPaint";
-const char kHistogramMultiTabLoadingForegroundToFirstContentfulPaint[] =
-    "PageLoad.Clients.MultiTabLoading.PaintTiming."
-    "ForegroundToFirstContentfulPaint";
-const char kHistogramMultiTabLoadingFirstMeaningfulPaint[] =
-    "PageLoad.Clients.MultiTabLoading.Experimental.PaintTiming."
-    "NavigationToFirstMeaningfulPaint";
-const char kHistogramMultiTabLoadingForegroundToFirstMeaningfulPaint[] =
-    "PageLoad.Clients.MultiTabLoading.Experimental.PaintTiming."
-    "ForegroundToFirstMeaningfulPaint";
-const char kHistogramMultiTabLoadingDomContentLoaded[] =
-    "PageLoad.Clients.MultiTabLoading.DocumentTiming."
-    "NavigationToDOMContentLoadedEventFired";
-const char kBackgroundHistogramMultiTabLoadingDomContentLoaded[] =
-    "PageLoad.Clients.MultiTabLoading.DocumentTiming."
-    "NavigationToDOMContentLoadedEventFired.Background";
-const char kHistogramMultiTabLoadingLoad[] =
-    "PageLoad.Clients.MultiTabLoading.DocumentTiming."
-    "NavigationToLoadEventFired";
-const char kBackgroundHistogramMultiTabLoadingLoad[] =
-    "PageLoad.Clients.MultiTabLoading.DocumentTiming."
-    "NavigationToLoadEventFired.Background";
+const char kHistogramPrefixMultiTabLoading[] =
+    "PageLoad.Clients.MultiTabLoading.";
+const char kHistogramPrefixMultiTabLoading2OrMore[] =
+    "PageLoad.Clients.MultiTabLoading.2OrMore.";
+const char kHistogramPrefixMultiTabLoading5OrMore[] =
+    "PageLoad.Clients.MultiTabLoading.5OrMore.";
+
+const char kHistogramMultiTabLoadingNumTabsWithInflightLoad[] =
+    "PageLoad.Clients.MultiTabLoading.NumTabsWithInflightLoad";
 
 }  // namespace internal
 
@@ -57,23 +43,56 @@ MultiTabLoadingPageLoadMetricsObserver::OnStart(
     content::NavigationHandle* navigation_handle,
     const GURL& currently_committed_url,
     bool started_in_foreground) {
-  return IsAnyTabLoading(navigation_handle) ? CONTINUE_OBSERVING
+  num_loading_tabs_when_started_ =
+      NumberOfTabsWithInflightLoad(navigation_handle);
+  return CONTINUE_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+MultiTabLoadingPageLoadMetricsObserver::OnCommit(
+    content::NavigationHandle* navigation_handle,
+    ukm::SourceId source_id) {
+  // Report here so that this is logged only for normal page loads.
+  UMA_HISTOGRAM_COUNTS_100(
+      internal::kHistogramMultiTabLoadingNumTabsWithInflightLoad,
+      num_loading_tabs_when_started_);
+  return num_loading_tabs_when_started_ > 0 ? CONTINUE_OBSERVING
                                             : STOP_OBSERVING;
 }
+
+#define RECORD_HISTOGRAMS(suffix, sample)                                      \
+  do {                                                                         \
+    base::TimeDelta sample_value(sample);                                      \
+    PAGE_LOAD_HISTOGRAM(                                                       \
+        std::string(internal::kHistogramPrefixMultiTabLoading).append(suffix), \
+        sample_value);                                                         \
+    if (num_loading_tabs_when_started_ >= 2) {                                 \
+      PAGE_LOAD_HISTOGRAM(                                                     \
+          std::string(internal::kHistogramPrefixMultiTabLoading2OrMore)        \
+              .append(suffix),                                                 \
+          sample_value);                                                       \
+    }                                                                          \
+    if (num_loading_tabs_when_started_ >= 5) {                                 \
+      PAGE_LOAD_HISTOGRAM(                                                     \
+          std::string(internal::kHistogramPrefixMultiTabLoading5OrMore)        \
+              .append(suffix),                                                 \
+          sample_value);                                                       \
+    }                                                                          \
+  } while (false)
 
 void MultiTabLoadingPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (WasStartedInForegroundOptionalEventInForeground(
           timing.paint_timing->first_contentful_paint, info)) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramMultiTabLoadingFirstContentfulPaint,
-                        timing.paint_timing->first_contentful_paint.value());
+    RECORD_HISTOGRAMS(internal::kHistogramFirstContentfulPaintSuffix,
+                      timing.paint_timing->first_contentful_paint.value());
   }
 
   if (WasStartedInBackgroundOptionalEventInForeground(
           timing.paint_timing->first_contentful_paint, info)) {
-    PAGE_LOAD_HISTOGRAM(
-        internal::kHistogramMultiTabLoadingForegroundToFirstContentfulPaint,
+    RECORD_HISTOGRAMS(
+        internal::kHistogramForegroundToFirstContentfulPaintSuffix,
         timing.paint_timing->first_contentful_paint.value() -
             info.first_foreground_time.value());
   }
@@ -85,13 +104,13 @@ void MultiTabLoadingPageLoadMetricsObserver::
         const page_load_metrics::PageLoadExtraInfo& info) {
   if (WasStartedInForegroundOptionalEventInForeground(
           timing.paint_timing->first_meaningful_paint, info)) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramMultiTabLoadingFirstMeaningfulPaint,
-                        timing.paint_timing->first_meaningful_paint.value());
+    RECORD_HISTOGRAMS(internal::kHistogramFirstMeaningfulPaintSuffix,
+                      timing.paint_timing->first_meaningful_paint.value());
   }
   if (WasStartedInBackgroundOptionalEventInForeground(
           timing.paint_timing->first_meaningful_paint, info)) {
-    PAGE_LOAD_HISTOGRAM(
-        internal::kHistogramMultiTabLoadingForegroundToFirstMeaningfulPaint,
+    RECORD_HISTOGRAMS(
+        internal::kHistogramForegroundToFirstMeaningfulPaintSuffix,
         timing.paint_timing->first_meaningful_paint.value() -
             info.first_foreground_time.value());
   }
@@ -102,12 +121,12 @@ void MultiTabLoadingPageLoadMetricsObserver::OnDomContentLoadedEventStart(
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (WasStartedInForegroundOptionalEventInForeground(
           timing.document_timing->dom_content_loaded_event_start, info)) {
-    PAGE_LOAD_HISTOGRAM(
-        internal::kHistogramMultiTabLoadingDomContentLoaded,
+    RECORD_HISTOGRAMS(
+        internal::kHistogramDOMContentLoadedEventFiredSuffix,
         timing.document_timing->dom_content_loaded_event_start.value());
   } else {
-    PAGE_LOAD_HISTOGRAM(
-        internal::kBackgroundHistogramMultiTabLoadingDomContentLoaded,
+    RECORD_HISTOGRAMS(
+        internal::kHistogramDOMContentLoadedEventFiredBackgroundSuffix,
         timing.document_timing->dom_content_loaded_event_start.value());
   }
 }
@@ -117,48 +136,53 @@ void MultiTabLoadingPageLoadMetricsObserver::OnLoadEventStart(
     const page_load_metrics::PageLoadExtraInfo& info) {
   if (WasStartedInForegroundOptionalEventInForeground(
           timing.document_timing->load_event_start, info)) {
-    PAGE_LOAD_HISTOGRAM(internal::kHistogramMultiTabLoadingLoad,
-                        timing.document_timing->load_event_start.value());
+    RECORD_HISTOGRAMS(internal::kHistogramLoadEventFiredSuffix,
+                      timing.document_timing->load_event_start.value());
   } else {
-    PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramMultiTabLoadingLoad,
-                        timing.document_timing->load_event_start.value());
+    RECORD_HISTOGRAMS(internal::kHistogramLoadEventFiredBackgroundSuffix,
+                      timing.document_timing->load_event_start.value());
   }
 }
 
 #if defined(OS_ANDROID)
 
-bool MultiTabLoadingPageLoadMetricsObserver::IsAnyTabLoading(
+int MultiTabLoadingPageLoadMetricsObserver::NumberOfTabsWithInflightLoad(
     content::NavigationHandle* navigation_handle) {
   content::WebContents* this_contents = navigation_handle->GetWebContents();
+  int num_loading = 0;
   for (TabModelList::const_iterator it = TabModelList::begin();
        it != TabModelList::end(); ++it) {
     TabModel* model = *it;
+    // Note: |this_contents| may not appear in |model|.
     for (int i = 0; i < model->GetTabCount(); ++i) {
       content::WebContents* other_contents = model->GetWebContentsAt(i);
       if (other_contents && other_contents != this_contents &&
           other_contents->IsLoading()) {
-        return true;
+        num_loading++;
       }
     }
   }
-  return false;
+  return num_loading;
 }
 
 #else  // defined(OS_ANDROID)
 
-bool MultiTabLoadingPageLoadMetricsObserver::IsAnyTabLoading(
+int MultiTabLoadingPageLoadMetricsObserver::NumberOfTabsWithInflightLoad(
     content::NavigationHandle* navigation_handle) {
   content::WebContents* this_contents = navigation_handle->GetWebContents();
+  int num_loading = 0;
   for (auto* browser : *BrowserList::GetInstance()) {
     TabStripModel* model = browser->tab_strip_model();
+    // Note: |this_contents| may not appear in |model|, e.g. for a new
+    // background tab navigation.
     for (int i = 0; i < model->count(); ++i) {
       content::WebContents* other_contents = model->GetWebContentsAt(i);
       if (other_contents != this_contents && other_contents->IsLoading()) {
-        return true;
+        num_loading++;
       }
     }
   }
-  return false;
+  return num_loading;
 }
 
 #endif  // defined(OS_ANDROID)

@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">Google Chrome – це веб-переглядач, який запускає веб-сторінки та програми з блискавичною швидкістю. Він швидкий, надійний і зручний у користуванні. Вбудований у Google Chrome захист від шкідливих програм і фішингу гарантує ще більшу безпеку під час перегляду веб-сторінок.</translation>
 <translation id="1718131156967340976">Виберіть <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome не вдалося синхронізувати ваші дані через помилку входу.</translation>
-<translation id="1759301979429102118">Дані ваших контактів допоможуть швидше заповнювати форми в Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Отримати довідку щодо користування ОС Chrome</translation>
 <translation id="1795405610103747296">Установіть Chrome на телефоні. Ми надішлемо SMS на ваш телефон: <ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@
 <translation id="2429317896000329049">Google Chrome не вдалося синхронізувати ваші дані, оскільки синхронізація для вашого домену недоступна.</translation>
 <translation id="2446511512801740068">Chrome застарів, оскільки протягом якогось часу його не перезапускали. Оновлення доступне та буде застосоване одразу після перезапуску.</translation>
 <translation id="2485422356828889247">Видалити</translation>
+<translation id="2534507159460261402">Google Pay (скопійовано в Chrome)</translation>
 <translation id="2580411288591421699">Поки Google Chrome працює, неможливо встановити версію, аналогічну поточній. Закрийте Google Chrome і повторіть спробу.</translation>
 <translation id="2586406160782125153">Дані веб-перегляду буде видалено з цього пристрою. Щоб відновити дані пізніше, увійдіть в обліковий запис Chrome як <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Логотип Chrome</translation>
@@ -108,8 +108,6 @@
 <translation id="3889417619312448367">Видалити Google Chrome</translation>
 <translation id="3898493977366060150">Перегляд веб-сторінок із розумними функціями Google</translation>
 <translation id="4028693306634653894">Відкривайте Chrome швидше</translation>
-<translation id="4031074602479304239">Chrome заблокував переспрямування з цієї сторінки</translation>
-<translation id="4042449298237264661">На цей комп’ютер не надходитимуть оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуються.</translation>
 <translation id="4050175100176540509">В останній версії покращено безпеку та додано нові функції.</translation>
 <translation id="4053720452172726777">Налаштування та керування Google Chrome</translation>
 <translation id="4147555960264124640">Ви входите, використовуючи дані облікового запису, яким керує адміністратор. Адміністратор може контролювати ваш профіль Google Chrome. Ваші дані Chrome, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ці дані можна видалити на інформаційній панелі Облікових записів Google, але ви не зможете пов’язати їх з іншим обліковим записом. <ph name="LEARN_MORE" /></translation>
@@ -150,7 +148,6 @@
 <translation id="5170938038195470297">Ваш профіль не можна використати, оскільки його створено в новішій версії Google Chrome. Деякі функції можуть бути недоступними. Укажіть інший каталог профілю чи скористайтеся новішою версією Chrome.</translation>
 <translation id="5193136243808726294">Неможливо відкрити цю сторінку в ОС Google Chrome.</translation>
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Умови використання<ph name="END_TERMS_OF_SERVICE_LINK" /> Google Chrome</translation>
-<translation id="5243785881901838525">Google Payments (скопійовано в Chrome)</translation>
 <translation id="5251420635869119124">Гості можуть анонімно користуватися Chrome.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome перезапуститься через 1 секунду.}one{Google Chrome перезапуститься через # секунду.}few{Google Chrome перезапуститься через # секунди.}many{Google Chrome перезапуститься через # секунд.}other{Google Chrome перезапуститься через # секунди.}}</translation>
 <translation id="532046782124376502">Застереження. Google Chrome не може заборонити розширенням реєструвати історію веб-перегляду. Щоб розширення не працювало в режимі анонімного перегляду, зніміть прапорець біля цієї опції.</translation>
@@ -179,15 +176,12 @@
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Оновити &amp;ОС Chrome</translation>
 <translation id="6235018212288296708">Вхідне правило для Google Chrome дозволяє трафік mDNS.</translation>
-<translation id="6236285698028833233">Оновлення Google Chrome припинилось. Ця версія вашої операційної системи більше не підтримується.</translation>
 <translation id="6291089322031436445">Версія Chrome для розробників додатків</translation>
 <translation id="6291549208091401781">Google Chrome уже встановлено для всіх користувачів на вашому комп’ютері.</translation>
 <translation id="6338556085225130112">Оновлення Google Chrome</translation>
 <translation id="6368958679917195344">ОС Chrome стала можливою завдяки додатковому <ph name="BEGIN_LINK_CROS_OSS" />програмному забезпеченню з відкритим кодом<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6393863479814692971">Chrome потрібні дозволи, щоб використовувати камеру та мікрофон на цьому сайті.</translation>
-<translation id="6400076122676892962">На цей комп’ютер невдовзі перестануть надходити оновлення Google Chrome, оскільки Mac OS X версій 10.6, 10.7 і 10.8 більше не підтримуватиметься.</translation>
 <translation id="6410540444482791104">Ви можете зробити Chrome безпечнішим і простішим у користуванні, автоматично надсилаючи в Google деяку інформацію про систему та вміст сторінок, щоб допомогти виявляти небезпечні додатки й сайти.</translation>
-<translation id="6470176598693778404">На цей комп’ютер не надходитимуть оновлення Google Chrome, оскільки Mac OS X версій 10.6, 10.7 і 10.8 більше не підтримується.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Триває завантаження. Скасувати його та вийти з Google Chrome?}one{Триває # завантаження. Скасувати їх і вийти з Google Chrome?}few{Тривають # завантаження. Скасувати їх і вийти з Google Chrome?}many{Тривають # завантажень. Скасувати їх і вийти з Google Chrome?}other{Тривають # завантаження. Скасувати їх і вийти з Google Chrome?}}</translation>
 <translation id="6566149418543181476">Google Chrome оновлюється (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Ви синхронізуєте дані Chrome через обліковий запис <ph name="PROFILE_EMAIL" />. Щоб оновити параметри синхронізації або використовувати Chrome без облікового запису Google, перейдіть на сторінку <ph name="SETTINGS_LINK" />.</translation>
@@ -208,7 +202,6 @@
 <translation id="7164397146364144019">Ви можете допомогти зробити Chrome безпечнішим і простішим у користуванні, автоматично повідомляючи Google деталі щодо можливого порушення безпеки.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> додано в Chrome.</translation>
 <translation id="7242029209006116544">Ви входите, використовуючи дані облікового запису, яким керує адміністратор. Адміністратор може контролювати ваш профіль Google Chrome. Ваші дані Chrome, як-от програми, закладки, історія, паролі й інші налаштування, буде назавжди пов’язано з обліковим записом <ph name="USER_NAME" />. Ці дані можна видалити на інформаційній панелі Облікових записів Google, але ви не зможете пов’язати їх з іншим обліковим записом. Проте ви можете створити новий профіль, щоб зберігати наявні дані Chrome окремо. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">На цей комп’ютер невдовзі перестануть надходити оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуватимуться.</translation>
 <translation id="7330164299247909639">Не вдалось отримати сертифікат автентифікації. Щоб дізнатися більше, знову ввійдіть в обліковий запис Google Chrome як користувач <ph name="USER_NAME" /> або зв’яжіться з адміністратором. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Нове вікно</translation>
 <translation id="7369650938475876456">Використовуйте надійний пароль, згенерований Chrome</translation>
@@ -221,6 +214,7 @@
 <translation id="7494905215383356681">Ліцензії Chrome із відкритим кодом</translation>
 <translation id="7535429826459677826">Версія Google Chrome для розробників</translation>
 <translation id="7552219221109926349">Вибрати цю мову для ОС Chrome</translation>
+<translation id="7589360514048265910">На цей комп’ютер більше не надходитимуть оновлення Google Chrome, оскільки ОС Mac X 10.9 уже не підтримується.</translation>
 <translation id="7592736734348559088">Google Chrome не вдалося синхронізувати ваші дані, оскільки дані для входу в обліковий запис застаріли.</translation>
 <translation id="7626032353295482388">Вітаємо у Chrome!</translation>
 <translation id="7747138024166251722">Програмі встановлення не вдалося створити тимчасовий каталог. Перевірте наявність вільного простору на диску та дозволу на встановлення програмного забезпечення.</translation>
@@ -236,6 +230,7 @@
 <translation id="7896673875602241923">Хтось раніше входив у Chrome на цьому комп’ютері як <ph name="ACCOUNT_EMAIL_LAST" />. Створіть нового користувача Chrome, щоб зберігати свою інформацію окремо.</translation>
 <translation id="7908168227788431038">Майже оновлено. Перезапустіть Google Chrome, щоб завершити оновлення.</translation>
 <translation id="795025003224538582">Не перезапускати</translation>
+<translation id="7962410387636238736">На цей комп’ютер не надходитимуть оновлення Google Chrome, оскільки Windows XP та Windows Vista більше не підтримуються</translation>
 <translation id="8005540215158006229">Chrome майже готовий.</translation>
 <translation id="8008534537613507642">Перевстановити Chrome</translation>
 <translation id="8030318113982266900">Оновлення пристрою до каналу <ph name="CHANNEL_NAME" />…</translation>
@@ -266,7 +261,6 @@
 <translation id="8796108026289707191">Перезапустіть Google Chrome.</translation>
 <translation id="8823341990149967727">Версія Chrome застаріла</translation>
 <translation id="884296878221830158">Розширення також змінило сторінку, яка відкривається під час запуску Chrome або натискання кнопки "Домашня сторінка".</translation>
-<translation id="8851136666856101339">головний</translation>
 <translation id="8862326446509486874">У вас немає відповідних прав для встановлення на рівні системи. Спробуйте запустити програму встановлення, увійшовши з правами адміністратора.</translation>
 <translation id="8914504000324227558">Перезапустити Chrome</translation>
 <translation id="9026991721384951619">ОС Chrome не вдалося синхронізувати ваші дані, оскільки дані для входу в обліковий запис застаріли.</translation>

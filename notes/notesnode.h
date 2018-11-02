@@ -3,7 +3,9 @@
 #ifndef NOTES_NOTESNODE_H_
 #define NOTES_NOTESNODE_H_
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/strings/string16.h"
@@ -11,8 +13,9 @@
 #include "base/time/time.h"
 #include "content/public/browser/notification_observer.h"
 #include "ui/base/models/tree_node_model.h"
+#include "url/gurl.h"
 
-#include "notes/notes_attachment.h"
+#include "notes/note_attachment.h"
 
 class Profile;
 
@@ -65,10 +68,10 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
 
   const GURL& GetURL() const { return url_; }
 
-  const Notes_attachment& GetAttachment(int index) const {
-    return attachments_[index];
+  const NoteAttachment& GetAttachment(const std::string& checksum) const {
+    return attachments_.at(checksum);
   }
-  const std::vector<Notes_attachment>& GetAttachments() const {
+  const NoteAttachments& GetAttachments() const {
     return attachments_;
   }
   void SetContent(const base::string16& content) { content_ = content; }
@@ -77,14 +80,17 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
     creation_time_ = creation_time;
   }
 
-  void AddAttachment(const Notes_attachment& attachment) {
-    attachments_.push_back(attachment);
+  void AddAttachment(NoteAttachment&& attachment) {
+    attachments_.insert(std::make_pair(
+        attachment.checksum(), std::forward<NoteAttachment>(attachment)));
   }
-  void SetAttachments(const Notes_attachments& attachments) {
-    attachments_ = attachments;
+
+  void DeleteAttachment(const std::string& checksum) {
+    attachments_.erase(checksum);
   }
-  void DeleteAttachment(int index) {
-    attachments_.erase(attachments_.begin() + index);
+
+  void ClearAttachments() {
+    attachments_.clear();
   }
 
   void set_sync_transaction_version(int64_t sync_transaction_version) {
@@ -107,10 +113,8 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   base::string16 content_;
   // Attached URL.
   GURL url_;
-  // Icon data.
-  Notes_attachment note_icon_;
   // List of attached data.
-  std::vector<Notes_attachment> attachments_;
+  NoteAttachments attachments_;
 
   // The unique identifier for this node.
   int64_t id_;

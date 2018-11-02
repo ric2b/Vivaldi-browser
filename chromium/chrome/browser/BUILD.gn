@@ -24,6 +24,7 @@ import("//rlz/features/features.gni")
 import("//sandbox/features.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//ui/base/ui_features.gni")
+import("//build/buildflag_header.gni")
 
 # //build/config/android/rules.gni imports //tools/grit/grit_rule.gni, which
 # produces a conflict for the "grit" template so we have to only include one.
@@ -31,6 +32,10 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 } else {
   import("//tools/grit/grit_rule.gni")
+}
+
+if (enable_vr) {
+  import("//chrome/browser/vr/features.gni")
 }
 
 additional_modules_list_file =
@@ -53,6 +58,13 @@ if (is_win) {
       "/DELAYLOAD:ndfapi.dll",
       "/DELAYLOAD:pdh.dll",  # The task manager is rarely used.
     ]
+  }
+}
+
+if (enable_vr) {
+  buildflag_header("vr_build_features") {
+    header = "vr_features.h"
+    flags = [ "USE_VR_ASSETS_COMPONENT=$use_vr_assets_component" ]
   }
 }
 
@@ -164,10 +176,6 @@ split_static_library("browser") {
     "browsing_data/browsing_data_channel_id_helper.h",
     "browsing_data/browsing_data_cookie_helper.cc",
     "browsing_data/browsing_data_cookie_helper.h",
-    "browsing_data/browsing_data_counter_factory.cc",
-    "browsing_data/browsing_data_counter_factory.h",
-    "browsing_data/browsing_data_counter_utils.cc",
-    "browsing_data/browsing_data_counter_utils.h",
     "browsing_data/browsing_data_database_helper.cc",
     "browsing_data/browsing_data_database_helper.h",
     "browsing_data/browsing_data_file_system_helper.cc",
@@ -190,8 +198,6 @@ split_static_library("browser") {
     "browsing_data/browsing_data_service_worker_helper.h",
     "browsing_data/browsing_data_shared_worker_helper.cc",
     "browsing_data/browsing_data_shared_worker_helper.h",
-    "browsing_data/cache_counter.cc",
-    "browsing_data/cache_counter.h",
     "browsing_data/canonical_cookie_hash.cc",
     "browsing_data/canonical_cookie_hash.h",
     "browsing_data/chrome_browsing_data_remover_delegate.cc",
@@ -200,16 +206,22 @@ split_static_library("browser") {
     "browsing_data/chrome_browsing_data_remover_delegate_factory.h",
     "browsing_data/cookies_tree_model.cc",
     "browsing_data/cookies_tree_model.h",
-    "browsing_data/downloads_counter.cc",
-    "browsing_data/downloads_counter.h",
+    "browsing_data/counters/browsing_data_counter_factory.cc",
+    "browsing_data/counters/browsing_data_counter_factory.h",
+    "browsing_data/counters/browsing_data_counter_utils.cc",
+    "browsing_data/counters/browsing_data_counter_utils.h",
+    "browsing_data/counters/cache_counter.cc",
+    "browsing_data/counters/cache_counter.h",
+    "browsing_data/counters/downloads_counter.cc",
+    "browsing_data/counters/downloads_counter.h",
+    "browsing_data/counters/media_licenses_counter.cc",
+    "browsing_data/counters/media_licenses_counter.h",
+    "browsing_data/counters/site_data_counter.cc",
+    "browsing_data/counters/site_data_counter.h",
+    "browsing_data/counters/site_data_counting_helper.cc",
+    "browsing_data/counters/site_data_counting_helper.h",
     "browsing_data/local_data_container.cc",
     "browsing_data/local_data_container.h",
-    "browsing_data/media_licenses_counter.cc",
-    "browsing_data/media_licenses_counter.h",
-    "browsing_data/site_data_counter.cc",
-    "browsing_data/site_data_counter.h",
-    "browsing_data/site_data_counting_helper.cc",
-    "browsing_data/site_data_counting_helper.h",
     "browsing_data/site_data_size_collector.cc",
     "browsing_data/site_data_size_collector.h",
     "budget_service/budget_database.cc",
@@ -274,6 +286,8 @@ split_static_library("browser") {
     "component_updater/crl_set_component_installer.h",
     "component_updater/file_type_policies_component_installer.cc",
     "component_updater/file_type_policies_component_installer.h",
+    "component_updater/mei_preload_component_installer.cc",
+    "component_updater/mei_preload_component_installer.h",
     "component_updater/optimization_hints_component_installer.cc",
     "component_updater/optimization_hints_component_installer.h",
     "component_updater/origin_trials_component_installer.cc",
@@ -357,6 +371,10 @@ split_static_library("browser") {
     "data_use_measurement/chrome_data_use_recorder.h",
     "data_use_measurement/data_use_web_contents_observer.cc",
     "data_use_measurement/data_use_web_contents_observer.h",
+    "data_use_measurement/page_load_capping/chrome_page_load_capping_features.cc",
+    "data_use_measurement/page_load_capping/chrome_page_load_capping_features.h",
+    "data_use_measurement/page_load_capping/page_load_observer.cc",
+    "data_use_measurement/page_load_capping/page_load_observer.h",
     "defaults.cc",
     "defaults.h",
     "dom_distiller/dom_distiller_service_factory.cc",
@@ -508,7 +526,6 @@ split_static_library("browser") {
     "gpu/gpu_driver_info_manager_android.h",
     "gpu/gpu_mode_manager.cc",
     "gpu/gpu_mode_manager.h",
-    "gpu/gpu_profile_cache.h",
     "gpu/three_d_api_observer.cc",
     "gpu/three_d_api_observer.h",
     "hang_monitor/hang_crash_dump_win.cc",
@@ -622,6 +639,8 @@ split_static_library("browser") {
     "media/media_device_id_salt.h",
     "media/media_engagement_contents_observer.cc",
     "media/media_engagement_contents_observer.h",
+    "media/media_engagement_preloaded_list.cc",
+    "media/media_engagement_preloaded_list.h",
     "media/media_engagement_score.cc",
     "media/media_engagement_score.h",
     "media/media_engagement_service.cc",
@@ -632,8 +651,6 @@ split_static_library("browser") {
     "media/media_engagement_session.h",
     "media/media_storage_id_salt.cc",
     "media/media_storage_id_salt.h",
-    "media/media_url_constants.cc",
-    "media/media_url_constants.h",
     "media/midi_permission_context.cc",
     "media/midi_permission_context.h",
     "media/midi_sysex_permission_context.cc",
@@ -780,6 +797,8 @@ split_static_library("browser") {
     "net/profile_network_context_service.h",
     "net/profile_network_context_service_factory.cc",
     "net/profile_network_context_service_factory.h",
+    "net/proxy_config_monitor.cc",
+    "net/proxy_config_monitor.h",
     "net/proxy_service_factory.cc",
     "net/proxy_service_factory.h",
     "net/quota_policy_channel_id_store.cc",
@@ -809,14 +828,10 @@ split_static_library("browser") {
     "notifications/alert_dispatcher_mac.h",
     "notifications/desktop_notification_profile_util.cc",
     "notifications/desktop_notification_profile_util.h",
-    "notifications/message_center_display_service.cc",
-    "notifications/message_center_display_service.h",
     "notifications/metrics/notification_metrics_logger.cc",
     "notifications/metrics/notification_metrics_logger.h",
     "notifications/metrics/notification_metrics_logger_factory.cc",
     "notifications/metrics/notification_metrics_logger_factory.h",
-    "notifications/native_notification_display_service.cc",
-    "notifications/native_notification_display_service.h",
     "notifications/non_persistent_notification_handler.cc",
     "notifications/non_persistent_notification_handler.h",
     "notifications/notification_channels_provider_android.cc",
@@ -827,6 +842,8 @@ split_static_library("browser") {
     "notifications/notification_display_service.h",
     "notifications/notification_display_service_factory.cc",
     "notifications/notification_display_service_factory.h",
+    "notifications/notification_display_service_impl.cc",
+    "notifications/notification_display_service_impl.h",
     "notifications/notification_handler.cc",
     "notifications/notification_handler.h",
     "notifications/notification_permission_context.cc",
@@ -843,8 +860,6 @@ split_static_library("browser") {
     "notifications/persistent_notification_handler.h",
     "notifications/platform_notification_service_impl.cc",
     "notifications/platform_notification_service_impl.h",
-    "notifications/web_notification_delegate.cc",
-    "notifications/web_notification_delegate.h",
     "ntp_snippets/bookmark_last_visit_updater.cc",
     "ntp_snippets/bookmark_last_visit_updater.h",
     "ntp_snippets/content_suggestions_notifier_service_factory.cc",
@@ -893,6 +908,8 @@ split_static_library("browser") {
     "page_load_metrics/observers/from_gws_page_load_metrics_observer.h",
     "page_load_metrics/observers/google_captcha_observer.cc",
     "page_load_metrics/observers/google_captcha_observer.h",
+    "page_load_metrics/observers/histogram_suffixes.cc",
+    "page_load_metrics/observers/histogram_suffixes.h",
     "page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.cc",
     "page_load_metrics/observers/https_engagement_metrics/https_engagement_page_load_metrics_observer.h",
     "page_load_metrics/observers/https_engagement_metrics/https_engagement_service.cc",
@@ -1026,6 +1043,8 @@ split_static_library("browser") {
     "policy/managed_bookmarks_policy_handler.h",
     "policy/network_prediction_policy_handler.cc",
     "policy/network_prediction_policy_handler.h",
+    "policy/policy_conversions.cc",
+    "policy/policy_conversions.h",
     "policy/policy_helpers.cc",
     "policy/policy_helpers.h",
     "policy/profile_policy_connector.cc",
@@ -1139,6 +1158,7 @@ split_static_library("browser") {
     "process_resource_usage.cc",
     "process_resource_usage.h",
     "process_singleton.h",
+    "process_singleton_mac.mm",
     "process_singleton_win.cc",
     "profiles/avatar_menu_actions.h",
     "profiles/bookmark_model_loaded_observer.cc",
@@ -1309,6 +1329,8 @@ split_static_library("browser") {
     "signin/chrome_signin_helper.h",
     "signin/gaia_cookie_manager_service_factory.cc",
     "signin/gaia_cookie_manager_service_factory.h",
+    "signin/identity_manager_factory.cc",
+    "signin/identity_manager_factory.h",
     "signin/investigator_dependency_provider.cc",
     "signin/investigator_dependency_provider.h",
     "signin/local_auth.cc",
@@ -1333,6 +1355,9 @@ split_static_library("browser") {
     "site_details.h",
     "speech/chrome_speech_recognition_manager_delegate.cc",
     "speech/chrome_speech_recognition_manager_delegate.h",
+    "speech/speech_recognizer.cc",
+    "speech/speech_recognizer.h",
+    "speech/speech_recognizer_delegate.h",
     "speech/tts_android.cc",
     "speech/tts_android.h",
     "speech/tts_chromeos.cc",
@@ -1373,6 +1398,8 @@ split_static_library("browser") {
     "ssl/security_state_tab_helper.h",
     "ssl/ssl_blocking_page.cc",
     "ssl/ssl_blocking_page.h",
+    "ssl/ssl_blocking_page_base.cc",
+    "ssl/ssl_blocking_page_base.h",
     "ssl/ssl_cert_reporter.h",
     "ssl/ssl_client_certificate_selector.h",
     "ssl/ssl_error_assistant.cc",
@@ -1385,6 +1412,8 @@ split_static_library("browser") {
     "ssl/ssl_error_navigation_throttle.h",
     "ssl/ssl_error_tab_helper.cc",
     "ssl/ssl_error_tab_helper.h",
+    "ssl/typed_navigation_timing_throttle.cc",
+    "ssl/typed_navigation_timing_throttle.h",
     "status_icons/status_icon.cc",
     "status_icons/status_icon.h",
     "status_icons/status_icon_menu_model.cc",
@@ -1535,7 +1564,10 @@ split_static_library("browser") {
   libs = []
   ldflags = []
 
-  allow_circular_includes_from = [ "//chrome/browser/ui" ]
+  allow_circular_includes_from = [
+    "//chrome/browser/ui",
+    "//chrome/browser/ui/webui/bluetooth_internals",
+  ]
 
   public_deps = [
     "//base",
@@ -1561,6 +1593,7 @@ split_static_library("browser") {
     "//chrome/app/theme:theme_resources",
     "//chrome/browser/budget_service:budget_proto",
     "//chrome/browser/devtools",
+    "//chrome/browser/media:media_engagement_preload_proto",
     "//chrome/browser/media:mojo_bindings",
     "//chrome/browser/media/router",
     "//chrome/browser/metrics:expired_histograms_array",
@@ -1569,6 +1602,7 @@ split_static_library("browser") {
     "//chrome/browser/safe_browsing",
     "//chrome/browser/ssl:proto",
     "//chrome/browser/ui",
+    "//chrome/browser/ui/webui/bluetooth_internals",
     "//chrome/common/net",
     "//chrome/installer/util:with_no_strings",
     "//components/about_handler",
@@ -1621,6 +1655,7 @@ split_static_library("browser") {
     "//components/infobars/core",
     "//components/invalidation/impl",
     "//components/keyed_service/content",
+    "//components/language/content/browser",
     "//components/language/core/browser",
     "//components/metrics:call_stacks",
     "//components/metrics:component_metrics",
@@ -1649,6 +1684,7 @@ split_static_library("browser") {
     "//components/payments/core",
     "//components/physical_web/eddystone",
     "//components/policy:generated",
+    "//components/policy/content/",
     "//components/policy/core/browser",
     "//components/policy/proto",
     "//components/prefs:prefs",
@@ -1721,7 +1757,7 @@ split_static_library("browser") {
     "//crypto",
     "//crypto:platform",
     "//device/base",
-    "//device/bluetooth:mojo",
+    "//device/geolocation",
     "//device/usb/mojo",
     "//device/usb/public/interfaces",
     "//device/vr/features",
@@ -1733,13 +1769,13 @@ split_static_library("browser") {
     "//media/cast:net",
     "//media/midi",
     "//media/mojo:features",
+    "//media/mojo/common",
     "//media/mojo/interfaces:mirror_service_remoting",
     "//media/mojo/interfaces:remoting",
     "//media/mojo/services",
     "//mojo/common",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
-    "//mojo/public/js",
     "//net:extras",
     "//net:net_browser_services",
     "//ppapi/features",
@@ -1747,8 +1783,9 @@ split_static_library("browser") {
     "//rlz/features",
     "//services/data_decoder/public/cpp",
     "//services/device/public/cpp:device_features",
+    "//services/device/public/interfaces",
     "//services/identity:lib",
-    "//services/metrics",
+    "//services/identity/public/cpp",
     "//services/metrics/public/cpp:ukm_builders",
     "//services/network/public/interfaces",
     "//services/preferences/public/cpp",
@@ -2037,6 +2074,8 @@ split_static_library("browser") {
       "android/omnibox/omnibox_prerender.h",
       "android/oom_intervention/near_oom_monitor.cc",
       "android/oom_intervention/near_oom_monitor.h",
+      "android/oom_intervention/oom_intervention_decider.cc",
+      "android/oom_intervention/oom_intervention_decider.h",
       "android/oom_intervention/oom_intervention_tab_helper.cc",
       "android/oom_intervention/oom_intervention_tab_helper.h",
       "android/partner_browser_customizations.cc",
@@ -2392,8 +2431,6 @@ split_static_library("browser") {
       "first_run/upgrade_util_win.h",
       "font_family_cache.cc",
       "font_family_cache.h",
-      "gpu/gl_string_manager.cc",
-      "gpu/gl_string_manager.h",
       "importer/external_process_importer_client.cc",
       "importer/external_process_importer_client.h",
       "importer/external_process_importer_host.cc",
@@ -2556,15 +2593,29 @@ split_static_library("browser") {
       "repost_form_warning_controller.h",
       "resource_coordinator/background_tab_navigation_throttle.cc",
       "resource_coordinator/background_tab_navigation_throttle.h",
+      "resource_coordinator/discard_metrics_lifecycle_unit_observer.cc",
+      "resource_coordinator/discard_metrics_lifecycle_unit_observer.h",
       "resource_coordinator/discard_metrics_util.cc",
       "resource_coordinator/discard_metrics_util.h",
       "resource_coordinator/discard_reason.h",
       "resource_coordinator/lifecycle_unit.cc",
       "resource_coordinator/lifecycle_unit.h",
+      "resource_coordinator/lifecycle_unit_base.cc",
+      "resource_coordinator/lifecycle_unit_base.h",
+      "resource_coordinator/lifecycle_unit_observer.h",
+      "resource_coordinator/lifecycle_unit_source.h",
+      "resource_coordinator/lifecycle_unit_source_base.cc",
+      "resource_coordinator/lifecycle_unit_source_base.h",
       "resource_coordinator/lifecycle_unit_source_observer.h",
+      "resource_coordinator/tab_activity_watcher.cc",
+      "resource_coordinator/tab_activity_watcher.h",
       "resource_coordinator/tab_lifecycle_observer.h",
       "resource_coordinator/tab_lifecycle_unit.cc",
       "resource_coordinator/tab_lifecycle_unit.h",
+      "resource_coordinator/tab_lifecycle_unit_external.cc",
+      "resource_coordinator/tab_lifecycle_unit_external.h",
+      "resource_coordinator/tab_lifecycle_unit_source.cc",
+      "resource_coordinator/tab_lifecycle_unit_source.h",
       "resource_coordinator/tab_manager.cc",
       "resource_coordinator/tab_manager.h",
       "resource_coordinator/tab_manager_delegate_chromeos.cc",
@@ -2747,6 +2798,8 @@ split_static_library("browser") {
       "download/notification/download_notification_manager.h",
       "feedback/feedback_util_chromeos.cc",
       "feedback/feedback_util_chromeos.h",
+      "mash_service_registry.cc",
+      "mash_service_registry.h",
       "media/chromeos_login_media_access_handler.cc",
       "media/chromeos_login_media_access_handler.h",
       "media/public_session_media_access_handler.cc",
@@ -2798,9 +2851,14 @@ split_static_library("browser") {
     ]
     deps += [
       "//ash",
+      "//ash/public/cpp",
       "//chrome/browser/chromeos",
+      "//components/font_service:lib",
+      "//components/font_service/public/interfaces",
+      "//mash/quick_launch/public/interfaces:constants",
       "//services/ui/public/cpp/input_devices",
       "//services/ui/public/cpp/input_devices:input_device_controller",
+      "//services/ui/public/interfaces",
       "//ui/ozone",
     ]
     public_deps += [
@@ -2834,6 +2892,8 @@ split_static_library("browser") {
       "downgrade/user_data_downgrade.cc",
       "downgrade/user_data_downgrade.h",
       "first_run/upgrade_util.cc",
+      "notifications/mock_itoastnotification.cc",
+      "notifications/mock_itoastnotification.h",
       "notifications/notification_image_retainer.cc",
       "notifications/notification_image_retainer.h",
       "notifications/notification_template_builder.cc",
@@ -2906,7 +2966,6 @@ split_static_library("browser") {
     ]
     libs += [
       "Accelerate.framework",
-      "AddressBook.framework",
       "AudioUnit.framework",
       "DiskArbitration.framework",
       "IOKit.framework",
@@ -3104,6 +3163,8 @@ split_static_library("browser") {
     sources += [
       "payments/chrome_payment_request_delegate.cc",
       "payments/chrome_payment_request_delegate.h",
+      "payments/payment_request_display_manager_factory.cc",
+      "payments/payment_request_display_manager_factory.h",
       "payments/payment_request_factory.cc",
       "payments/payment_request_factory.h",
     ]
@@ -3170,14 +3231,10 @@ split_static_library("browser") {
     deps += [ "//ui/app_list" ]
   }
 
-  if (enable_background) {
+  if (enable_background_mode) {
     sources += [
       "background/background_application_list_model.cc",
       "background/background_application_list_model.h",
-      "background/background_contents_service.cc",
-      "background/background_contents_service.h",
-      "background/background_contents_service_factory.cc",
-      "background/background_contents_service_factory.h",
       "background/background_mode_manager.cc",
       "background/background_mode_manager.h",
       "background/background_mode_manager_aura.cc",
@@ -3191,6 +3248,14 @@ split_static_library("browser") {
     if (!use_aura || is_win || is_chromeos) {
       sources -= [ "background/background_mode_manager_aura.cc" ]
     }
+  }
+  if (enable_background_contents) {
+    sources += [
+      "background/background_contents_service.cc",
+      "background/background_contents_service.h",
+      "background/background_contents_service_factory.cc",
+      "background/background_contents_service_factory.h",
+    ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
@@ -3208,6 +3273,10 @@ split_static_library("browser") {
       "printing/print_view_manager_base.h",
       "printing/print_view_manager_common.cc",
       "printing/print_view_manager_common.h",
+      "printing/printer_manager_dialog.h",
+      "printing/printer_manager_dialog_linux.cc",
+      "printing/printer_manager_dialog_mac.mm",
+      "printing/printer_manager_dialog_win.cc",
       "printing/printer_query.cc",
       "printing/printer_query.h",
       "printing/printing_init.cc",
@@ -3227,6 +3296,9 @@ split_static_library("browser") {
         "printing/pdf_to_emf_converter.cc",
         "printing/pdf_to_emf_converter.h",
       ]
+    }
+    if (is_win || enable_print_preview) {
+      deps += [ "//chrome/services/printing/public/interfaces" ]
     }
     if (enable_print_preview) {
       # Full printing on top of the above.
@@ -3249,10 +3321,6 @@ split_static_library("browser") {
         "printing/print_preview_message_handler.h",
         "printing/print_view_manager.cc",
         "printing/print_view_manager.h",
-        "printing/printer_manager_dialog.h",
-        "printing/printer_manager_dialog_linux.cc",
-        "printing/printer_manager_dialog_mac.mm",
-        "printing/printer_manager_dialog_win.cc",
         "printing/pwg_raster_converter.cc",
         "printing/pwg_raster_converter.h",
       ]
@@ -3339,8 +3407,8 @@ split_static_library("browser") {
       "autocomplete/keyword_extensions_delegate_impl.h",
       "autocomplete/shortcuts_extensions_manager.cc",
       "autocomplete/shortcuts_extensions_manager.h",
-      "browsing_data/hosted_apps_counter.cc",
-      "browsing_data/hosted_apps_counter.h",
+      "browsing_data/counters/hosted_apps_counter.cc",
+      "browsing_data/counters/hosted_apps_counter.h",
       "drive/drive_notification_manager_factory.cc",
       "drive/drive_notification_manager_factory.h",
       "guest_view/app_view/chrome_app_view_guest_delegate.cc",
@@ -3557,6 +3625,13 @@ split_static_library("browser") {
     ]
   }
 
+  if (enable_message_center) {
+    sources += [
+      "notifications/notification_platform_bridge_message_center.cc",
+      "notifications/notification_platform_bridge_message_center.h",
+    ]
+  }
+
   if (enable_library_cdms) {
     sources += [
       "component_updater/widevine_cdm_component_installer.cc",
@@ -3571,6 +3646,9 @@ split_static_library("browser") {
         "media/cdm_storage_id_key.cc",
         "media/cdm_storage_id_key.h",
       ]
+      if (is_chrome_branded) {
+        sources += [ "internal/google_chrome_cdm_storage_id_key.h" ]
+      }
     }
     deps += [ "//media/mojo/interfaces" ]
     if (mojo_media_host == "browser") {
@@ -3662,6 +3740,8 @@ split_static_library("browser") {
         "offline_pages/android/offline_page_model_factory.cc",
         "offline_pages/android/offline_page_origin_utils_android.cc",
         "offline_pages/android/offline_page_utils_android.cc",
+        "offline_pages/android/offline_pages_download_manager_bridge.cc",
+        "offline_pages/android/offline_pages_download_manager_bridge.h",
         "offline_pages/android/prefetch_background_task_android.cc",
         "offline_pages/android/prefetch_background_task_android.h",
         "offline_pages/android/prefetch_background_task_scheduler_android.cc",
@@ -3719,6 +3799,8 @@ split_static_library("browser") {
       "plugins/flash_temporary_permission_tracker.h",
       "plugins/flash_temporary_permission_tracker_factory.cc",
       "plugins/flash_temporary_permission_tracker_factory.h",
+      "plugins/hung_plugin_infobar_delegate.cc",
+      "plugins/hung_plugin_infobar_delegate.h",
       "plugins/plugin_data_remover_helper.cc",
       "plugins/plugin_data_remover_helper.h",
       "plugins/plugin_finder.cc",
@@ -3749,6 +3831,8 @@ split_static_library("browser") {
       "plugins/plugins_field_trial.h",
       "plugins/plugins_resource_service.cc",
       "plugins/plugins_resource_service.h",
+      "plugins/reload_plugin_infobar_delegate.cc",
+      "plugins/reload_plugin_infobar_delegate.h",
       "renderer_host/pepper/chrome_browser_pepper_host_factory.cc",
       "renderer_host/pepper/chrome_browser_pepper_host_factory.h",
       "renderer_host/pepper/device_id_fetcher.cc",
@@ -3859,14 +3943,16 @@ split_static_library("browser") {
 
   if (enable_spellcheck) {
     sources += [
-      "spellchecker/spell_check_host_impl.cc",
-      "spellchecker/spell_check_host_impl.h",
+      "spellchecker/spell_check_host_chrome_impl.cc",
+      "spellchecker/spell_check_host_chrome_impl.h",
       "spellchecker/spellcheck_custom_dictionary.cc",
       "spellchecker/spellcheck_custom_dictionary.h",
       "spellchecker/spellcheck_factory.cc",
       "spellchecker/spellcheck_factory.h",
       "spellchecker/spellcheck_hunspell_dictionary.cc",
       "spellchecker/spellcheck_hunspell_dictionary.h",
+      "spellchecker/spellcheck_language_policy_handler.cc",
+      "spellchecker/spellcheck_language_policy_handler.h",
       "spellchecker/spellcheck_message_filter_platform_mac.cc",
       "spellchecker/spellcheck_service.cc",
       "spellchecker/spellcheck_service.h",
@@ -3998,8 +4084,12 @@ split_static_library("browser") {
     sources += [
       "component_updater/vr_assets_component_installer.cc",
       "component_updater/vr_assets_component_installer.h",
+      "vr_features.h",
     ]
-    deps += [ "//chrome/browser/vr:vr_common" ]
+    deps += [
+      ":vr_build_features",
+      "//chrome/browser/vr:vr_common",
+    ]
   }
 
   if (enable_wayland_server) {
@@ -4015,12 +4105,10 @@ split_static_library("browser") {
 
   if (enable_webrtc) {
     sources += [
-      "media/audio_debug_recordings_handler.h",
+      "media/webrtc/audio_debug_recordings_handler.cc",
+      "media/webrtc/audio_debug_recordings_handler.h",
 
       # TODO(brettw) should webrtc_log_list.cc go here?
-      "media/webrtc/audio_debug_recordings_handler.cc",
-      "media/webrtc/webrtc_event_log_handler.cc",
-      "media/webrtc/webrtc_event_log_handler.h",
       "media/webrtc/webrtc_log_uploader.cc",
       "media/webrtc/webrtc_log_uploader.h",
       "media/webrtc/webrtc_log_util.cc",
@@ -4041,7 +4129,7 @@ split_static_library("browser") {
     ]
   }
 
-  if (!is_chrome_branded) {
+  if (!is_chrome_branded && !is_android) {
     sources += [
       "search/local_files_ntp_source.cc",
       "search/local_files_ntp_source.h",
@@ -4078,28 +4166,6 @@ split_static_library("browser") {
   if (use_udev) {
     deps += [ "//device/udev_linux" ]
   }
-
-  if (enable_mus) {
-    sources += [
-      "mash_service_registry.cc",
-      "mash_service_registry.h",
-    ]
-
-    deps += [
-      "//mash/quick_launch/public/interfaces:constants",
-      "//services/ui/public/interfaces",
-    ]
-
-    if (is_linux && !is_android) {
-      deps += [
-        "//components/font_service:lib",
-        "//components/font_service/public/interfaces",
-      ]
-    }
-    if (is_chromeos) {
-      deps += [ "//ash/public/cpp" ]
-    }
-  }
 }
 
 if (is_android) {
@@ -4118,7 +4184,6 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/DevToolsServer.java",
       "../android/java/src/org/chromium/chrome/browser/IntentHelper.java",
       "../android/java/src/org/chromium/chrome/browser/JavascriptAppModalDialog.java",
-      "../android/java/src/org/chromium/chrome/browser/JavascriptTabModalDialog.java",
       "../android/java/src/org/chromium/chrome/browser/NearOomMonitor.java",
       "../android/java/src/org/chromium/chrome/browser/PasswordUIView.java",
       "../android/java/src/org/chromium/chrome/browser/SSLClientCertificateRequest.java",
@@ -4217,10 +4282,10 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/infobar/SimpleConfirmInfoBarBuilder.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/SurveyInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/TranslateCompactInfoBar.java",
-      "../android/java/src/org/chromium/chrome/browser/infobar/TranslateInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/infobar/UpdatePasswordInfoBar.java",
       "../android/java/src/org/chromium/chrome/browser/instantapps/InstantAppsSettings.java",
       "../android/java/src/org/chromium/chrome/browser/invalidation/InvalidationServiceFactory.java",
+      "../android/java/src/org/chromium/chrome/browser/jsdialog/JavascriptTabModalDialog.java",
       "../android/java/src/org/chromium/chrome/browser/locale/LocaleManager.java",
       "../android/java/src/org/chromium/chrome/browser/locale/SpecialLocaleHandler.java",
       "../android/java/src/org/chromium/chrome/browser/media/cdm/MediaDrmCredentialManager.java",
@@ -4250,6 +4315,7 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/offlinepages/CCTRequestStatus.java",
       "../android/java/src/org/chromium/chrome/browser/offlinepages/CctOfflinePageModelObserver.java",
       "../android/java/src/org/chromium/chrome/browser/offlinepages/OfflinePageBridge.java",
+      "../android/java/src/org/chromium/chrome/browser/offlinepages/OfflinePagesDownloadManagerBridge.java",
       "../android/java/src/org/chromium/chrome/browser/offlinepages/SavePageRequest.java",
       "../android/java/src/org/chromium/chrome/browser/offlinepages/downloads/OfflinePageDownloadBridge.java",
       "../android/java/src/org/chromium/chrome/browser/offlinepages/downloads/OfflinePageNotificationBridge.java",
@@ -4327,7 +4393,6 @@ if (is_android) {
       "../android/java/src/org/chromium/chrome/browser/util/PlatformUtil.java",
       "../android/java/src/org/chromium/chrome/browser/util/UrlUtilities.java",
       "../android/java/src/org/chromium/chrome/browser/webapps/AddToHomescreenManager.java",
-      "../android/java/src/org/chromium/chrome/browser/webapps/ChromeWebApkHost.java",
       "../android/java/src/org/chromium/chrome/browser/webapps/WebApkInstallService.java",
       "../android/java/src/org/chromium/chrome/browser/webapps/WebApkInstaller.java",
       "../android/java/src/org/chromium/chrome/browser/webapps/WebApkUpdateDataFetcher.java",
@@ -4436,10 +4501,11 @@ grit("resources") {
     "//chrome/browser/engagement:mojo_bindings_js",
     "//chrome/browser/media:mojo_bindings_js",
     "//chrome/browser/resources/ssl/ssl_error_assistant:make_ssl_error_assistant_protobuf",
+    "//chrome/browser/ui/webui/bluetooth_internals:mojo_bindings_js",
     "//chrome/browser/ui/webui/interventions_internals:mojo_bindings_js",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings_js",
     "//chrome/browser/ui/webui/usb_internals:mojo_bindings_js",
-    "//device/bluetooth/public/interfaces:experimental_interfaces_js",
+    "//device/bluetooth/public/interfaces:deprecated_experimental_interfaces_js",
     "//device/bluetooth/public/interfaces:interfaces_js",
     "//url/mojo:url_mojom_gurl_js",
     "//url/mojo:url_mojom_origin_js",
@@ -4455,6 +4521,13 @@ grit("resources") {
       "//chrome/browser/resources/md_downloads:build",
       "//chrome/browser/resources/md_history:build",
     ]
+    if (is_chromeos) {
+      deps += [
+        "//chrome/browser/resources/chromeos/bluetooth_pairing_dialog:build",
+        "//chrome/browser/resources/chromeos/internet_config_dialog:build",
+        "//chrome/browser/resources/chromeos/internet_detail_dialog:build",
+      ]
+    }
   }
 
   if (safe_browsing_mode > 0) {

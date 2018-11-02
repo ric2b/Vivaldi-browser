@@ -8,7 +8,7 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/numerics/math_constants.h"
 #include "build/build_config.h"
 #include "device/vr/openvr/openvr_render_loop.h"
@@ -160,29 +160,32 @@ void OpenVRDevice::RequestPresent(
     VRDisplayImpl* display,
     mojom::VRSubmitFrameClientPtr submit_client,
     mojom::VRPresentationProviderRequest request,
+    mojom::VRRequestPresentOptionsPtr present_options,
     mojom::VRDisplayHost::RequestPresentCallback callback) {
   if (!render_loop_->IsRunning())
     render_loop_->Start();
 
   if (!render_loop_->IsRunning()) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(false, nullptr);
     return;
   }
 
-  base::Callback<void(bool)> my_callback =
-      base::Bind(&OpenVRDevice::OnRequestPresentResult,
-                 weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback));
+  auto my_callback =
+      base::BindOnce(&OpenVRDevice::OnRequestPresentResult,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback));
   render_loop_->task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&OpenVRRenderLoop::RequestPresent, render_loop_->GetWeakPtr(),
-                 base::Passed(submit_client.PassInterface()),
-                 base::Passed(&request), base::Passed(&my_callback)));
+      base::BindOnce(&OpenVRRenderLoop::RequestPresent,
+                     render_loop_->GetWeakPtr(), submit_client.PassInterface(),
+                     std::move(request), std::move(present_options),
+                     std::move(my_callback)));
 }
 
 void OpenVRDevice::OnRequestPresentResult(
     mojom::VRDisplayHost::RequestPresentCallback callback,
-    bool result) {
-  std::move(callback).Run(result);
+    bool result,
+    mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+  std::move(callback).Run(result, std::move(transport_options));
 
   if (result) {
     using ViewerMap = std::map<std::string, VrViewerType>;
@@ -200,7 +203,7 @@ void OpenVRDevice::OnRequestPresentResult(
     if (it != viewer_types.end())
       type = it->second;
 
-    UMA_HISTOGRAM_SPARSE_SLOWLY("VRViewerType", static_cast<int>(type));
+    base::UmaHistogramSparse("VRViewerType", static_cast<int>(type));
   }
 }
 

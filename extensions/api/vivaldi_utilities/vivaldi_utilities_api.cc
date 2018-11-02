@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved.
+// Copyright (c) 2015-2018 Vivaldi Technologies AS. All rights reserved.
 //
 
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "app/vivaldi_version_info.h"
 #include "base/guid.h"
 #include "base/files/file_util.h"
@@ -39,6 +40,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/browser/app_window/app_window.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "ui/shell_dialogs/select_file_policy.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -141,6 +143,19 @@ const base::Value* VivaldiUtilitiesAPI::GetSharedData(const std::string& key) {
     return it->second;
   }
   return nullptr;
+}
+
+void VivaldiUtilitiesAPI::CloseAllThumbnailWindows() {
+  // This will close all app windows currently generating thumbnails.
+  AppWindowRegistry::AppWindowList windows =
+      AppWindowRegistry::Get(browser_context_)
+          ->GetAppWindowsForApp(::vivaldi::kVivaldiAppId);
+
+  for (auto* window : windows) {
+    if (window->thumbnail_window()) {
+      window->CloseWindow();
+    }
+  }
 }
 
 void VivaldiUtilitiesAPI::OnPowerStateChange(bool on_battery_power) {

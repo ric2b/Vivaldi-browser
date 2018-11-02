@@ -11,10 +11,14 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/process/process_handle.h"
+#include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_variant.h"
+#include "content/browser/accessibility/accessibility_event_recorder.h"
 #include "content/browser/accessibility/accessibility_tree_formatter.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
@@ -32,6 +36,7 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/accessibility_browser_test_utils.h"
+#include "content/test/content_browser_test_utils_internal.h"
 #include "net/base/escape.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -653,6 +658,35 @@ AccessibilityWinBrowserTest::AccessibleChecker::RoleVariantToString(
     return base::string16(V_BSTR(role.ptr()), SysStringLen(V_BSTR(role.ptr())));
   return base::string16();
 }
+
+// Helper class that listens to native Windows events using
+// AccessibilityEventRecorder, and blocks until the pretty-printed
+// event string matches the given match pattern.
+class NativeWinEventWaiter {
+ public:
+  NativeWinEventWaiter(BrowserAccessibilityManager* manager,
+                       const std::string& match_pattern)
+      : event_recorder_(
+            AccessibilityEventRecorder::Create(manager,
+                                               base::GetCurrentProcId())),
+        match_pattern_(match_pattern) {
+    event_recorder_->ListenToEvents(base::BindRepeating(
+        &NativeWinEventWaiter::OnEvent, base::Unretained(this)));
+  }
+
+  void OnEvent(std::string event_str) {
+    DLOG(INFO) << "Got event " + event_str;
+    if (base::MatchPattern(event_str, match_pattern_))
+      run_loop_.QuitClosure().Run();
+  }
+
+  void Wait() { run_loop_.Run(); }
+
+ private:
+  std::unique_ptr<AccessibilityEventRecorder> event_recorder_;
+  std::string match_pattern_;
+  base::RunLoop run_loop_;
+};
 
 }  // namespace
 
@@ -2061,6 +2095,153 @@ IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestAccNavigateInTables) {
   variant.Reset();
   name.Reset();
   accessible_cell.Reset();
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest, TestScrollTo) {
+  LoadInitialAccessibilityTreeFromHtml(
+      "<!DOCTYPE html><html><body>"
+      "<div style='height: 5000px;'></div>"
+      "<img src='#' alt='Target1'>"
+      "<div style='height: 5000px;'></div>"
+      "<img src='#' alt='Target2'>"
+      "<div style='height: 5000px;'></div>"
+      "</body></html>");
+
+  // Retrieve the IAccessible interface for the document node.
+  Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
+
+  // Get the dimensions of the document.
+  LONG doc_x, doc_y, doc_width, doc_height;
+  base::win::ScopedVariant childid_self(CHILDID_SELF);
+  ASSERT_HRESULT_SUCCEEDED(document->accLocation(&doc_x, &doc_y, &doc_width,
+                                                 &doc_height, childid_self));
+
+  // The document should only have two children, both with a role of GRAPHIC.
+  std::vector<base::win::ScopedVariant> document_children =
+      GetAllAccessibleChildren(document.Get());
+  ASSERT_EQ(2u, document_children.size());
+  Microsoft::WRL::ComPtr<IAccessible2> target;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
+          .Get(),
+      target.GetAddressOf()));
+  LONG target_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(target->role(&target_role));
+  ASSERT_EQ(ROLE_SYSTEM_GRAPHIC, target_role);
+  Microsoft::WRL::ComPtr<IAccessible2> target2;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.Get(), document_children[1].AsInput())
+          .Get(),
+      target2.GetAddressOf()));
+  LONG target2_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(target2->role(&target2_role));
+  ASSERT_EQ(ROLE_SYSTEM_GRAPHIC, target2_role);
+
+  // Call scrollTo on the first target. Ensure it ends up very near the
+  // center of the window.
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ui::kAXModeComplete,
+                                         ui::AX_EVENT_SCROLL_POSITION_CHANGED);
+  ASSERT_HRESULT_SUCCEEDED(target->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
+  waiter.WaitForNotification();
+
+  // Don't assume anything about the font size or the exact centering
+  // behavior, just assert that the object is (roughly) centered by
+  // checking that its top coordinate is between 40% and 60% of the
+  // document's height.
+  LONG x, y, width, height;
+  ASSERT_HRESULT_SUCCEEDED(
+      target->accLocation(&x, &y, &width, &height, childid_self));
+  EXPECT_GT(y + height / 2, doc_y + 0.4 * doc_height);
+  EXPECT_LT(y + height / 2, doc_y + 0.6 * doc_height);
+
+  // Now call scrollTo on the second target. Ensure it ends up very near the
+  // center of the window.
+  AccessibilityNotificationWaiter waiter2(shell()->web_contents(),
+                                          ui::kAXModeComplete,
+                                          ui::AX_EVENT_SCROLL_POSITION_CHANGED);
+  ASSERT_HRESULT_SUCCEEDED(target2->scrollTo(IA2_SCROLL_TYPE_ANYWHERE));
+  waiter2.WaitForNotification();
+
+  // Same as above, make sure it's roughly centered.
+  ASSERT_HRESULT_SUCCEEDED(
+      target2->accLocation(&x, &y, &width, &height, childid_self));
+  EXPECT_GT(y + height / 2, doc_y + 0.4 * doc_height);
+  EXPECT_LT(y + height / 2, doc_y + 0.6 * doc_height);
+}
+
+IN_PROC_BROWSER_TEST_F(AccessibilityWinBrowserTest,
+                       TestPageIsAccessibleAfterCancellingReload) {
+  LoadInitialAccessibilityTreeFromHtml(
+      "data:text/html,"
+      "<script>"
+      "window.onbeforeunload = function () {"
+      "  return '';"
+      "};"
+      "</script>"
+      "<input value='Test'>");
+
+  // When the before unload dialog shows, simulate the user clicking
+  // cancel on that dialog.
+  SetShouldProceedOnBeforeUnload(shell(), true, false);
+
+  // The beforeunload dialog won't be shown unless the page has at
+  // least one user gesture on it.
+  auto* main_frame = shell()->web_contents()->GetMainFrame();
+  main_frame->ExecuteJavaScriptWithUserGestureForTests(L"");
+
+  // Trigger a reload here, which will get cancelled.
+  shell()->web_contents()->GetController().Reload(ReloadType::NORMAL, false);
+
+  // Wait for the dialog to be triggered and then get cancelled.
+  WaitForAppModalDialog(shell());
+
+  // Now set up a listener for native Windows accessibility events.
+  // The bug here was that when a page is being reloaded or navigated
+  // away, we were suppressing accessibility events. This test ensures
+  // that if you cancel a reload, events are no longer suppressed.
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  BrowserAccessibilityManager* manager =
+      web_contents->GetRootBrowserAccessibilityManager();
+  NativeWinEventWaiter win_event_waiter(
+      manager, "EVENT_OBJECT_FOCUS on role=ROLE_SYSTEM_TEXT*");
+
+  // Get the root accessible element and its children.
+  Microsoft::WRL::ComPtr<IAccessible> document(GetRendererAccessible());
+  std::vector<base::win::ScopedVariant> document_children =
+      GetAllAccessibleChildren(document.Get());
+  ASSERT_EQ(1u, document_children.size());
+
+  // Get the only child of the root.
+  Microsoft::WRL::ComPtr<IAccessible2> group;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(document.Get(), document_children[0].AsInput())
+          .Get(),
+      group.GetAddressOf()));
+  LONG group_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(group->role(&group_role));
+  ASSERT_EQ(IA2_ROLE_SECTION, group_role);
+  std::vector<base::win::ScopedVariant> group_children =
+      GetAllAccessibleChildren(group.Get());
+  ASSERT_EQ(2u, group_children.size());
+
+  // Get the second child of that group, the input element.
+  Microsoft::WRL::ComPtr<IAccessible2> input;
+  ASSERT_HRESULT_SUCCEEDED(QueryIAccessible2(
+      GetAccessibleFromVariant(group.Get(), group_children[1].AsInput()).Get(),
+      input.GetAddressOf()));
+  LONG input_role = 0;
+  ASSERT_HRESULT_SUCCEEDED(input->role(&input_role));
+  ASSERT_EQ(ROLE_SYSTEM_TEXT, input_role);
+
+  // Try to focus that input element.
+  base::win::ScopedVariant childid_self(CHILDID_SELF);
+  HRESULT hr = input->accSelect(SELFLAG_TAKEFOCUS, childid_self);
+  ASSERT_EQ(S_OK, hr);
+
+  // Ensure that we get the native focus event on that input element.
+  win_event_waiter.Wait();
 }
 
 }  // namespace content

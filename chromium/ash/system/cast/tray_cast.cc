@@ -78,6 +78,8 @@ const gfx::VectorIcon& SinkIconTypeToIcon(mojom::SinkIconType icon_type) {
       return kSystemMenuCastAudioGroupIcon;
     case mojom::SinkIconType::CAST_AUDIO:
       return kSystemMenuCastAudioIcon;
+    case mojom::SinkIconType::WIRED_DISPLAY:
+      return kSystemMenuCastGenericIcon;
   }
 
   NOTREACHED();
@@ -262,7 +264,7 @@ CastDuplexView::CastDuplexView(
   select_view_->SetEnabled(enabled);
   cast_view_ = new CastCastView();
   cast_view_->UpdateLabel(sinks_routes);
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   ActivateSelectView();
 }

@@ -24,10 +24,8 @@ class CORE_EXPORT InspectorTracingAgent final
  public:
   class Client {
    public:
-    virtual ~Client() {}
+    virtual ~Client() = default;
 
-    virtual void EnableTracing(const String& category_filter) = 0;
-    virtual void DisableTracing() = 0;
     virtual void ShowReloadingBlanket() = 0;
     virtual void HideReloadingBlanket() = 0;
   };
@@ -53,6 +51,7 @@ class CORE_EXPORT InspectorTracingAgent final
              protocol::Maybe<String> options,
              protocol::Maybe<double> buffer_usage_reporting_interval,
              protocol::Maybe<String> transfer_mode,
+             protocol::Maybe<String> transfer_compression,
              protocol::Maybe<protocol::Tracing::TraceConfig>,
              std::unique_ptr<StartCallback>) override;
   void end(std::unique_ptr<EndCallback>) override;

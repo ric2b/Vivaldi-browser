@@ -20,7 +20,6 @@ extern const char kChromeUIScheme[];
 
 // chrome: URLs (including schemes). Should be kept in sync with the
 // URL components below.
-extern const char kChromeUIBookmarksURL[];
 extern const char kChromeUIChromeURLsURL[];
 extern const char kChromeUICreditsURL[];
 extern const char kChromeUIFlagsURL[];
@@ -28,7 +27,6 @@ extern const char kChromeUIHistoryURL[];
 extern const char kChromeUINewTabURL[];
 extern const char kChromeUINTPTilesInternalsURL[];
 extern const char kChromeUIOfflineURL[];
-extern const char kChromeUIPhysicalWebURL[];
 extern const char kChromeUIPopularSitesInternalsURL[];
 extern const char kChromeUISettingsURL[];
 extern const char kChromeUISuggestionsURL[];
@@ -36,7 +34,6 @@ extern const char kChromeUITermsURL[];
 extern const char kChromeUIVersionURL[];
 
 // URL components for Chrome on iOS.
-extern const char kChromeUIBookmarksHost[];
 extern const char kChromeUIBrowserCrashHost[];
 extern const char kChromeUIChromeURLsHost[];
 extern const char kChromeUICrashesHost[];
@@ -53,7 +50,6 @@ extern const char kChromeUINTPTilesInternalsHost[];
 extern const char kChromeUIOfflineHost[];
 extern const char kChromeUIOmahaHost[];
 extern const char kChromeUIPasswordManagerInternalsHost[];
-extern const char kChromeUIPhysicalWebHost[];
 extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUIPolicyHost[];
 extern const char kChromeUISignInInternalsHost[];
@@ -80,9 +76,6 @@ extern const char kPrivacyLearnMoreURL[];
 
 // "Learn more" URL for the "Do not track" setting in the privacy section.
 extern const char kDoNotTrackLearnMoreURL[];
-
-// "Learn more" URL for the Physical Web setting in the privacy section.
-extern const char kPhysicalWebLearnMoreURL[];
 
 // The URL for the "Learn more" page on sync encryption.
 extern const char kSyncEncryptionHelpURL[];

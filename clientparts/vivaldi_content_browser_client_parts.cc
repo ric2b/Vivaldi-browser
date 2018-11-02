@@ -6,7 +6,6 @@
 #include "app/vivaldi_constants.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/search/search_urls.h"
 #include "chrome/grit/platform_locale_settings.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_url_handler.h"

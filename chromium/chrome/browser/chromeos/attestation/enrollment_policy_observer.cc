@@ -35,25 +35,21 @@ namespace {
 const int kRetryDelay = 5;  // Seconds.
 const int kRetryLimit = 100;
 
-// A dbus callback which handles a string result.
-//
-// Parameters
-//   on_success - Called when status=success and result=true.
-//   status - The dbus operation status.
-//   result - The result returned by the dbus operation.
-//   data - The data returned by the dbus operation.
-void DBusStringCallback(
-    const base::Callback<void(const std::string&)> on_success,
-    const base::Closure& on_failure,
+void DBusPrivacyCACallback(
+    const base::RepeatingCallback<void(const std::string&)> on_success,
+    const base::RepeatingCallback<
+        void(chromeos::attestation::AttestationStatus)> on_failure,
     const base::Location& from_here,
-    const chromeos::CryptohomeClient::TpmAttestationDataResult& result) {
-  if (!result.success) {
-    LOG(ERROR) << "Cryptohome DBus method failed: " << from_here.ToString();
-    if (!on_failure.is_null())
-      on_failure.Run();
+    chromeos::attestation::AttestationStatus status,
+    const std::string& data) {
+  if (status == chromeos::attestation::ATTESTATION_SUCCESS) {
+    on_success.Run(data);
     return;
   }
-  on_success.Run(result.data);
+  LOG(ERROR) << "Cryptohome DBus method or server call failed with status: "
+             << status << ": " << from_here.ToString();
+  if (!on_failure.is_null())
+    on_failure.Run(status);
 }
 
 }  // namespace
@@ -63,26 +59,25 @@ namespace attestation {
 
 EnrollmentPolicyObserver::EnrollmentPolicyObserver(
     policy::CloudPolicyClient* policy_client)
-    : cros_settings_(CrosSettings::Get()),
+    : device_settings_service_(DeviceSettingsService::Get()),
       policy_client_(policy_client),
-      cryptohome_client_(NULL),
-      attestation_flow_(NULL),
+      cryptohome_client_(nullptr),
+      attestation_flow_(nullptr),
       num_retries_(0),
+      retry_limit_(kRetryLimit),
       retry_delay_(kRetryDelay),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  attestation_subscription_ = cros_settings_->AddSettingsObserver(
-      kDeviceEnrollmentIdNeeded,
-      base::Bind(&EnrollmentPolicyObserver::EnrollmentSettingChanged,
-                 base::Unretained(this)));
+  device_settings_service_->AddObserver(this);
   Start();
 }
 
 EnrollmentPolicyObserver::EnrollmentPolicyObserver(
     policy::CloudPolicyClient* policy_client,
+    DeviceSettingsService* device_settings_service,
     CryptohomeClient* cryptohome_client,
     AttestationFlow* attestation_flow)
-    : cros_settings_(CrosSettings::Get()),
+    : device_settings_service_(device_settings_service),
       policy_client_(policy_client),
       cryptohome_client_(cryptohome_client),
       attestation_flow_(attestation_flow),
@@ -90,28 +85,27 @@ EnrollmentPolicyObserver::EnrollmentPolicyObserver(
       retry_delay_(kRetryDelay),
       weak_factory_(this) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  attestation_subscription_ = cros_settings_->AddSettingsObserver(
-      kDeviceEnrollmentIdNeeded,
-      base::Bind(&EnrollmentPolicyObserver::EnrollmentSettingChanged,
-                 base::Unretained(this)));
+  device_settings_service_->AddObserver(this);
   Start();
 }
 
 EnrollmentPolicyObserver::~EnrollmentPolicyObserver() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK(DeviceSettingsService::IsInitialized());
+  device_settings_service_->RemoveObserver(this);
 }
 
-void EnrollmentPolicyObserver::EnrollmentSettingChanged() {
+void EnrollmentPolicyObserver::DeviceSettingsUpdated() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   num_retries_ = 0;
   Start();
 }
 
 void EnrollmentPolicyObserver::Start() {
-  // If we identification for enrollment isn't needed, there is nothing to do.
-  bool needed = false;
-  if (!cros_settings_->GetBoolean(kDeviceEnrollmentIdNeeded, &needed) ||
-      !needed)
+  // If identification for enrollment isn't needed, there is nothing to do.
+  const enterprise_management::PolicyData* policy_data =
+      device_settings_service_->policy_data();
+  if (!policy_data || !policy_data->enrollment_id_needed())
     return;
 
   // We expect a registered CloudPolicyClient.
@@ -141,39 +135,47 @@ void EnrollmentPolicyObserver::GetEnrollmentCertificate() {
       PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE,
       EmptyAccountId(),  // Not used.
       std::string(),     // Not used.
-      false,             // Not used.
+      true,              // Get a fresh certificate.
       base::Bind(
-          [](const base::Callback<void(const std::string&)> on_success,
-             const base::Closure& on_failure, const base::Location& from_here,
-             bool success, const std::string& data) {
-            DBusStringCallback(on_success, on_failure, from_here,
-                               CryptohomeClient::TpmAttestationDataResult{
-                                   success, std::move(data)});
+          [](const base::RepeatingCallback<void(const std::string&)> on_success,
+             const base::RepeatingCallback<void(
+                 chromeos::attestation::AttestationStatus)> on_failure,
+             const base::Location& from_here, AttestationStatus status,
+             const std::string& data) {
+            DBusPrivacyCACallback(on_success, on_failure, from_here, status,
+                                  std::move(data));
           },
-          base::Bind(&EnrollmentPolicyObserver::UploadCertificate,
-                     weak_factory_.GetWeakPtr()),
-          base::Bind(&EnrollmentPolicyObserver::Reschedule,
-                     weak_factory_.GetWeakPtr()),
+          base::BindRepeating(&EnrollmentPolicyObserver::UploadCertificate,
+                              weak_factory_.GetWeakPtr()),
+          base::BindRepeating(
+              &EnrollmentPolicyObserver::HandleGetCertificateFailure,
+              weak_factory_.GetWeakPtr()),
           FROM_HERE));
 }
 
 void EnrollmentPolicyObserver::UploadCertificate(
     const std::string& pem_certificate_chain) {
-  policy_client_->UploadCertificate(
+  policy_client_->UploadEnterpriseEnrollmentCertificate(
       pem_certificate_chain,
       base::Bind(&EnrollmentPolicyObserver::OnUploadComplete,
                  weak_factory_.GetWeakPtr()));
 }
 
 void EnrollmentPolicyObserver::OnUploadComplete(bool status) {
-  if (!status)
+  if (!status) {
+    VLOG(1) << "Failed to upload Enterprise Enrollment Certificate"
+            << " to DMServer.";
     return;
+  }
   VLOG(1) << "Enterprise Enrollment Certificate uploaded to DMServer.";
-  cros_settings_->SetBoolean(kDeviceEnrollmentIdNeeded, false);
 }
 
-void EnrollmentPolicyObserver::Reschedule() {
-  if (++num_retries_ < kRetryLimit) {
+void EnrollmentPolicyObserver::HandleGetCertificateFailure(
+    AttestationStatus status) {
+  if (status == ATTESTATION_SERVER_BAD_REQUEST_FAILURE) {
+    // We cannot get an enrollment cert (no EID) so upload an empty one.
+    UploadCertificate("");
+  } else if (++num_retries_ < retry_limit_) {
     content::BrowserThread::PostDelayedTask(
         content::BrowserThread::UI, FROM_HERE,
         base::BindOnce(&EnrollmentPolicyObserver::Start,

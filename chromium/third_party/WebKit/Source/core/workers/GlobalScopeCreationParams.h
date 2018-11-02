@@ -6,7 +6,9 @@
 #define GlobalScopeCreationParams_h
 
 #include <memory>
+#include "base/macros.h"
 #include "bindings/core/v8/V8CacheOptions.h"
+#include "common/net/ip_address_space.mojom-blink.h"
 #include "core/CoreExport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/workers/WorkerClients.h"
@@ -16,10 +18,8 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/PtrUtil.h"
-#include "public/platform/WebAddressSpace.h"
 #include "services/service_manager/public/interfaces/interface_provider.mojom-blink.h"
 
 namespace blink {
@@ -29,20 +29,17 @@ class WorkerClients;
 // GlobalScopeCreationParams contains parameters for initializing
 // WorkerGlobalScope or WorkletGlobalScope.
 struct CORE_EXPORT GlobalScopeCreationParams final {
-  WTF_MAKE_NONCOPYABLE(GlobalScopeCreationParams);
   USING_FAST_MALLOC(GlobalScopeCreationParams);
 
  public:
   GlobalScopeCreationParams(
       const KURL& script_url,
       const String& user_agent,
-      const String& source_code,
-      std::unique_ptr<Vector<char>> cached_meta_data,
       const Vector<CSPHeaderAndType>* content_security_policy_parsed_headers,
       ReferrerPolicy referrer_policy,
       const SecurityOrigin*,
       WorkerClients*,
-      WebAddressSpace,
+      mojom::IPAddressSpace,
       const Vector<String>* origin_trial_tokens,
       std::unique_ptr<WorkerSettings>,
       V8CacheOptions,
@@ -52,8 +49,6 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
 
   KURL script_url;
   String user_agent;
-  String source_code;
-  std::unique_ptr<Vector<char>> cached_meta_data;
 
   // |content_security_policy_parsed_headers| and
   // |content_security_policy_raw_headers| are mutually exclusive.
@@ -79,7 +74,7 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // For Worklets, the origin is used for fetching module scripts. Worklet
   // scripts need to be fetched as sub-resources of the Document, and a module
   // script loader uses Document's SecurityOrigin for security checks.
-  scoped_refptr<SecurityOrigin> starter_origin;
+  scoped_refptr<const SecurityOrigin> starter_origin;
 
   // This object is created and initialized on the thread creating
   // a new worker context, but ownership of it and this
@@ -92,13 +87,15 @@ struct CORE_EXPORT GlobalScopeCreationParams final {
   // supplies no extra 'clients', m_workerClients can be left as empty/null.
   CrossThreadPersistent<WorkerClients> worker_clients;
 
-  WebAddressSpace address_space;
+  mojom::IPAddressSpace address_space;
 
   std::unique_ptr<WorkerSettings> worker_settings;
 
   V8CacheOptions v8_cache_options;
 
   service_manager::mojom::blink::InterfaceProviderPtrInfo interface_provider;
+
+  DISALLOW_COPY_AND_ASSIGN(GlobalScopeCreationParams);
 };
 
 }  // namespace blink

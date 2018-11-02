@@ -9,6 +9,8 @@
 
 #include "ash/ash_constants.h"
 #include "ash/focus_cycler.h"
+#include "ash/login/ui/lock_screen.h"
+#include "ash/login/ui/lock_window.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
@@ -31,6 +33,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/gfx/transform.h"
+#include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_mask.h"
@@ -173,7 +176,7 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
   set_ink_drop_base_color(kShelfInkDropBaseColor);
   set_ink_drop_visible_opacity(kShelfInkDropVisibleOpacity);
 
-  SetLayoutManager(new views::FillLayout);
+  SetLayoutManager(std::make_unique<views::FillLayout>());
   SetBackground(std::unique_ptr<views::Background>(background_));
 
   AddChildView(tray_container_);
@@ -257,6 +260,19 @@ void TrayBackgroundView::SetVisible(bool visible) {
   }
 }
 
+void TrayBackgroundView::Layout() {
+  ActionableView::Layout();
+
+  // The tray itself expands to the right and bottom edge of the screen to make
+  // sure clicking on the edges brings up the popup. However, the focus border
+  // should be only around the container.
+  gfx::Rect paint_bounds(GetBackgroundBounds());
+  paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
+  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
+      kFocusBorderColor, kFocusBorderThickness,
+      GetLocalBounds().InsetsFrom(paint_bounds)));
+}
+
 const char* TrayBackgroundView::GetClassName() const {
   return kViewClassName;
 }
@@ -276,7 +292,7 @@ void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
   if (!delegate || !delegate->ShouldFocusOut(reverse))
     return;
   // Focus shelf widget when shift+tab is used and views-based shelf is shown.
-  if (reverse && ShelfWidget::IsUsingMdLoginShelf()) {
+  if (reverse && ShelfWidget::IsUsingViewsShelf()) {
     shelf->shelf_widget()->set_default_last_focusable_child(reverse);
     Shell::Get()->focus_cycler()->FocusWidget(shelf->shelf_widget());
   } else {
@@ -291,6 +307,17 @@ void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
 void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ActionableView::GetAccessibleNodeData(node_data);
   node_data->SetName(GetAccessibleNameForTray());
+
+  if (LockScreen::IsShown()) {
+    int next_id = views::AXAuraObjCache::GetInstance()->GetID(
+        static_cast<views::Widget*>(LockScreen::Get()->window()));
+    node_data->AddIntAttribute(ui::AX_ATTR_NEXT_FOCUS_ID, next_id);
+  }
+
+  Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
+  ShelfWidget* shelf_widget = shelf->shelf_widget();
+  int previous_id = views::AXAuraObjCache::GetInstance()->GetID(shelf_widget);
+  node_data->AddIntAttribute(ui::AX_ATTR_PREVIOUS_FOCUS_ID, previous_id);
 }
 
 void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
@@ -366,15 +393,6 @@ void TrayBackgroundView::ShowBubble(bool show_by_click) {}
 
 void TrayBackgroundView::UpdateAfterShelfAlignmentChange() {
   tray_container_->UpdateAfterShelfAlignmentChange();
-
-  // The tray itself expands to the right and bottom edge of the screen to make
-  // sure clicking on the edges brings up the popup. However, the focus border
-  // should be only around the container.
-  gfx::Rect paint_bounds(GetBackgroundBounds());
-  paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
-  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
-      kFocusBorderColor, kFocusBorderThickness,
-      GetLocalBounds().InsetsFrom(paint_bounds)));
 }
 
 void TrayBackgroundView::AnchorUpdated() {
@@ -469,10 +487,12 @@ aura::Window* TrayBackgroundView::GetBubbleWindowContainer() {
       kShellWindowId_SettingBubbleContainer);
 
   // Place the bubble in |container|, or in a window clipped to the work area
-  // in maximize mode, to avoid tray bubble and shelf overlap.
+  // in maximize mode, to avoid tray bubble and shelf overlap when dragging the
+  // bubble from the tray.
   if (Shell::Get()
           ->tablet_mode_controller()
-          ->IsTabletModeWindowManagerEnabled()) {
+          ->IsTabletModeWindowManagerEnabled() &&
+      drag_controller()) {
     if (!clipping_window_.get()) {
       clipping_window_ = std::make_unique<aura::Window>(nullptr);
       clipping_window_->Init(ui::LAYER_NOT_DRAWN);

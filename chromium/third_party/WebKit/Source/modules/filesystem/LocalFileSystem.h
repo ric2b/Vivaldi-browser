@@ -75,14 +75,15 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
   static LocalFileSystem* From(ExecutionContext&);
 
   void Trace(blink::Visitor*) override;
+  void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
  private:
   WebFileSystem* GetFileSystem() const;
   void FileSystemNotAvailable(ExecutionContext*, CallbackWrapper*);
 
   void RequestFileSystemAccessInternal(ExecutionContext*,
-                                       WTF::Closure allowed,
-                                       WTF::Closure denied);
+                                       base::OnceClosure allowed,
+                                       base::OnceClosure denied);
   void FileSystemNotAllowedInternal(ExecutionContext*, CallbackWrapper*);
   void FileSystemAllowedInternal(ExecutionContext*,
                                  FileSystemType,

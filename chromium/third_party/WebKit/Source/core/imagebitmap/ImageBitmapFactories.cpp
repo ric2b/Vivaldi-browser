@@ -32,15 +32,16 @@
 
 #include <memory>
 
+#include "base/location.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
@@ -55,7 +56,6 @@
 #include "platform/threading/BackgroundTaskRunner.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
-#include "public/platform/WebTraceLocation.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -264,6 +264,12 @@ void ImageBitmapFactories::Trace(blink::Visitor* visitor) {
   Supplement<WorkerGlobalScope>::Trace(visitor);
 }
 
+void ImageBitmapFactories::TraceWrappers(
+    const ScriptWrappableVisitor* visitor) const {
+  Supplement<LocalDOMWindow>::TraceWrappers(visitor);
+  Supplement<WorkerGlobalScope>::TraceWrappers(visitor);
+}
+
 void ImageBitmapFactories::ImageBitmapLoader::RejectPromise(
     ImageBitmapRejectionReason reason) {
   switch (reason) {
@@ -299,7 +305,7 @@ void ImageBitmapFactories::ImageBitmapLoader::ScheduleAsyncImageBitmapDecoding(
   scoped_refptr<WebTaskRunner> task_runner =
       Platform::Current()->CurrentThread()->GetWebTaskRunner();
   BackgroundTaskRunner::PostOnBackgroundThread(
-      BLINK_FROM_HERE,
+      FROM_HERE,
       CrossThreadBind(
           &ImageBitmapFactories::ImageBitmapLoader::DecodeImageOnDecoderThread,
           WrapCrossThreadPersistent(this), std::move(task_runner),
@@ -329,8 +335,8 @@ void ImageBitmapFactories::ImageBitmapLoader::DecodeImageOnDecoderThread(
   if (decoder) {
     frame = ImageBitmap::GetSkImageFromDecoder(std::move(decoder));
   }
-  task_runner->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *task_runner, FROM_HERE,
       CrossThreadBind(&ImageBitmapFactories::ImageBitmapLoader::
                           ResolvePromiseOnOriginalThread,
                       WrapCrossThreadPersistent(this), std::move(frame)));

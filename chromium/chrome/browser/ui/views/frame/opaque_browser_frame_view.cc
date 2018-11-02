@@ -75,7 +75,7 @@ OpaqueBrowserFrameView::OpaqueBrowserFrameView(
       window_title_(nullptr),
       frame_background_(new views::FrameBackground()) {
   layout_->set_delegate(this);
-  SetLayoutManager(layout_);
+  SetLayoutManager(std::unique_ptr<views::LayoutManager>(layout_));
 
   minimize_button_ = InitWindowCaptionButton(IDR_MINIMIZE,
                                              IDR_MINIMIZE_H,
@@ -139,6 +139,11 @@ void OpaqueBrowserFrameView::OnBrowserViewInitViewsComplete() {
 
 void OpaqueBrowserFrameView::OnMaximizedStateChanged() {
   // The top area height can change depending on the maximized state.
+  MaybeRedrawFrameButtons();
+}
+
+void OpaqueBrowserFrameView::OnFullscreenStateChanged() {
+  // The top area height is 0 when the window is fullscreened.
   MaybeRedrawFrameButtons();
 }
 
@@ -435,6 +440,10 @@ int OpaqueBrowserFrameView::GetTopAreaHeight() const {
                  GetBoundsForTabStrip(browser_view()->tabstrip()).bottom());
   }
   return top_area_height;
+}
+
+bool OpaqueBrowserFrameView::UseCustomFrame() const {
+  return frame()->UseCustomFrame();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

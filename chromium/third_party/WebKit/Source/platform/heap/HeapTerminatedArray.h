@@ -6,6 +6,7 @@
 #define HeapTerminatedArray_h
 
 #include "platform/heap/Heap.h"
+#include "platform/wtf/ConstructTraits.h"
 #include "platform/wtf/TerminatedArray.h"
 #include "platform/wtf/TerminatedArrayBuilder.h"
 #include "platform/wtf/allocator/Partitions.h"
@@ -31,12 +32,15 @@ class HeapTerminatedArray : public TerminatedArray<T> {
   // instances of HeapTerminatedArray and manage their lifetimes.
   struct Allocator final {
     STATIC_ONLY(Allocator);
+    using BackendAllocator = HeapAllocator;
     using PassPtr = HeapTerminatedArray*;
     using Ptr = Member<HeapTerminatedArray>;
 
     static PassPtr Release(Ptr& ptr) { return ptr; }
 
     static PassPtr Create(size_t capacity) {
+      // No ConstructTraits as there are no real elements in the array after
+      // construction.
       return reinterpret_cast<HeapTerminatedArray*>(
           ThreadHeap::Allocate<HeapTerminatedArray>(
               WTF::Partitions::ComputeAllocationSize(capacity, sizeof(T)),
@@ -44,25 +48,22 @@ class HeapTerminatedArray : public TerminatedArray<T> {
     }
 
     static PassPtr Resize(PassPtr ptr, size_t capacity) {
-      return reinterpret_cast<HeapTerminatedArray*>(
+      PassPtr array = reinterpret_cast<HeapTerminatedArray*>(
           ThreadHeap::Reallocate<HeapTerminatedArray>(
               ptr,
               WTF::Partitions::ComputeAllocationSize(capacity, sizeof(T))));
+      WTF::ConstructTraits<T, VectorTraits<T>, HeapAllocator>::
+          NotifyNewElements(reinterpret_cast<T*>(array), array->size());
+      return array;
     }
   };
 
   // Prohibit construction. Allocator makes HeapTerminatedArray instances for
   // HeapTerminatedArrayBuilder by pointer casting.
-  HeapTerminatedArray();
+  HeapTerminatedArray() = delete;
 
   template <typename U, template <typename> class>
   friend class WTF::TerminatedArrayBuilder;
-};
-
-template <typename T>
-class TraceEagerlyTrait<HeapTerminatedArray<T>> {
- public:
-  static const bool value = TraceEagerlyTrait<T>::value;
 };
 
 }  // namespace blink

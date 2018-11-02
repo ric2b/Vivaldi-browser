@@ -14,7 +14,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
-#include "content/browser/devtools/protocol/security_handler.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
@@ -305,28 +304,22 @@ void SSLManager::OnCertError(std::unique_ptr<SSLErrorHandler> handler) {
 }
 
 void SSLManager::DidStartResourceResponse(const GURL& url,
-                                          bool has_certificate,
-                                          net::CertStatus ssl_cert_status,
-                                          ResourceType resource_type) {
-  if (has_certificate && url.SchemeIsCryptographic() &&
-      !net::IsCertStatusError(ssl_cert_status)) {
-    // If the scheme is https: or wss: *and* the security info for the
-    // cert has been set (i.e. the cert id is not 0) and the cert did
-    // not have any errors, revoke any previous decisions that
-    // have occurred. If the cert info has not been set, do nothing since it
-    // isn't known if the connection was actually a valid connection or if it
-    // had a cert error.
-    if (ssl_host_state_delegate_ &&
-        ssl_host_state_delegate_->HasAllowException(url.host())) {
-      // If there's no certificate error, a good certificate has been seen, so
-      // clear out any exceptions that were made by the user for bad
-      // certificates. This intentionally does not apply to cached resources
-      // (see https://crbug.com/634553 for an explanation).
-      UMA_HISTOGRAM_BOOLEAN("interstitial.ssl.good_cert_seen_type_is_frame",
-                            IsResourceTypeFrame(resource_type));
-      ssl_host_state_delegate_->RevokeUserAllowExceptions(url.host());
-    }
+                                          bool has_certificate_errors) {
+  if (!url.SchemeIsCryptographic() || has_certificate_errors)
+    return;
+
+  // If the scheme is https: or wss and the cert did not have any errors, revoke
+  // any previous decisions that have occurred.
+  if (!ssl_host_state_delegate_ ||
+      !ssl_host_state_delegate_->HasAllowException(url.host())) {
+    return;
   }
+
+  // If there's no certificate error, a good certificate has been seen, so
+  // clear out any exceptions that were made by the user for bad
+  // certificates. This intentionally does not apply to cached resources
+  // (see https://crbug.com/634553 for an explanation).
+  ssl_host_state_delegate_->RevokeUserAllowExceptions(url.host());
 }
 
 void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
@@ -342,18 +335,11 @@ void SSLManager::OnCertErrorInternal(std::unique_ptr<SSLErrorHandler> handler,
       base::Bind(&OnAllowCertificate, base::Owned(handler.release()),
                  ssl_host_state_delegate_);
 
-  DevToolsAgentHostImpl* agent_host = static_cast<DevToolsAgentHostImpl*>(
-      DevToolsAgentHost::GetOrCreateFor(web_contents).get());
-  if (agent_host) {
-    for (auto* security_handler :
-         protocol::SecurityHandler::ForAgentHost(agent_host)) {
-      if (security_handler->NotifyCertificateError(
-              cert_error, request_url,
-              base::Bind(&OnAllowCertificateWithRecordDecision, false,
-                         callback))) {
-        return;
-      }
-    }
+  if (DevToolsAgentHostImpl::HandleCertificateError(
+          web_contents, cert_error, request_url,
+          base::BindRepeating(&OnAllowCertificateWithRecordDecision, false,
+                              callback))) {
+    return;
   }
 
   GetContentClient()->browser()->AllowCertificateError(

@@ -202,17 +202,23 @@ void ReadNotificationDatabaseData(
 
 // -----------------------------------------------------------------------------
 
-// Dispatches the notificationclick event on |service_worker|. Must be called on
-// the IO thread, and with the worker running.
+// Dispatches the notificationclick event on |service_worker|.
+// Must be called on the IO thread.
 void DispatchNotificationClickEventOnWorker(
     const scoped_refptr<ServiceWorkerVersion>& service_worker,
     const NotificationDatabaseData& notification_database_data,
     const base::Optional<int>& action_index,
     const base::Optional<base::string16>& reply,
-    const ServiceWorkerVersion::LegacyStatusCallback& callback) {
+    ServiceWorkerVersion::StatusCallback callback,
+    ServiceWorkerStatusCode start_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (start_worker_status != SERVICE_WORKER_OK) {
+    std::move(callback).Run(start_worker_status);
+    return;
+  }
+
   int request_id = service_worker->StartRequest(
-      ServiceWorkerMetrics::EventType::NOTIFICATION_CLICK, callback);
+      ServiceWorkerMetrics::EventType::NOTIFICATION_CLICK, std::move(callback));
 
   int action_index_int = -1 /* no value */;
   if (action_index.has_value())
@@ -232,15 +238,14 @@ void DoDispatchNotificationClickEvent(
     const scoped_refptr<PlatformNotificationContext>& notification_context,
     const ServiceWorkerRegistration* service_worker_registration,
     const NotificationDatabaseData& notification_database_data) {
-  ServiceWorkerVersion::LegacyStatusCallback status_callback = base::Bind(
-      &ServiceWorkerNotificationEventFinished, dispatch_complete_callback);
   service_worker_registration->active_version()->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::NOTIFICATION_CLICK,
       base::BindOnce(
           &DispatchNotificationClickEventOnWorker,
           base::WrapRefCounted(service_worker_registration->active_version()),
-          notification_database_data, action_index, reply, status_callback),
-      status_callback);
+          notification_database_data, action_index, reply,
+          base::BindOnce(&ServiceWorkerNotificationEventFinished,
+                         dispatch_complete_callback)));
 }
 
 // -----------------------------------------------------------------------------
@@ -276,15 +281,21 @@ void DeleteNotificationDataFromDatabase(
                  dispatch_complete_callback));
 }
 
-// Dispatches the notificationclose event on |service_worker|. Must be called on
-// the IO thread, and with the worker running.
+// Dispatches the notificationclose event on |service_worker|.
+// Must be called on the IO thread.
 void DispatchNotificationCloseEventOnWorker(
     const scoped_refptr<ServiceWorkerVersion>& service_worker,
     const NotificationDatabaseData& notification_database_data,
-    const ServiceWorkerVersion::LegacyStatusCallback& callback) {
+    ServiceWorkerVersion::StatusCallback callback,
+    ServiceWorkerStatusCode start_worker_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (start_worker_status != SERVICE_WORKER_OK) {
+    std::move(callback).Run(start_worker_status);
+    return;
+  }
+
   int request_id = service_worker->StartRequest(
-      ServiceWorkerMetrics::EventType::NOTIFICATION_CLOSE, callback);
+      ServiceWorkerMetrics::EventType::NOTIFICATION_CLOSE, std::move(callback));
 
   service_worker->event_dispatcher()->DispatchNotificationCloseEvent(
       notification_database_data.notification_id,
@@ -292,8 +303,7 @@ void DispatchNotificationCloseEventOnWorker(
       service_worker->CreateSimpleEventCallback(request_id));
 }
 
-// Actually dispatches the notification close event on the service worker
-// registration.
+// Dispatches the notification close event on the service worker registration.
 void DoDispatchNotificationCloseEvent(
     const std::string& notification_id,
     bool by_user,
@@ -301,20 +311,21 @@ void DoDispatchNotificationCloseEvent(
     const scoped_refptr<PlatformNotificationContext>& notification_context,
     const ServiceWorkerRegistration* service_worker_registration,
     const NotificationDatabaseData& notification_database_data) {
-  const ServiceWorkerVersion::LegacyStatusCallback dispatch_event_callback =
-      base::Bind(&DeleteNotificationDataFromDatabase, notification_id,
-                 notification_database_data.origin, notification_context,
-                 dispatch_complete_callback);
   if (by_user) {
     service_worker_registration->active_version()->RunAfterStartWorker(
         ServiceWorkerMetrics::EventType::NOTIFICATION_CLOSE,
         base::BindOnce(
             &DispatchNotificationCloseEventOnWorker,
             base::WrapRefCounted(service_worker_registration->active_version()),
-            notification_database_data, dispatch_event_callback),
-        dispatch_event_callback);
+            notification_database_data,
+            base::BindOnce(&DeleteNotificationDataFromDatabase, notification_id,
+                           notification_database_data.origin,
+                           notification_context, dispatch_complete_callback)));
   } else {
-    dispatch_event_callback.Run(ServiceWorkerStatusCode::SERVICE_WORKER_OK);
+    DeleteNotificationDataFromDatabase(
+        notification_id, notification_database_data.origin,
+        notification_context, dispatch_complete_callback,
+        ServiceWorkerStatusCode::SERVICE_WORKER_OK);
   }
 }
 
@@ -405,40 +416,40 @@ void NotificationEventDispatcherImpl::DispatchNotificationCloseEvent(
 void NotificationEventDispatcherImpl::RegisterNonPersistentNotification(
     const std::string& notification_id,
     int renderer_id,
-    int non_persistent_id) {
-  if (non_persistent_ids_.count(notification_id) &&
-      non_persistent_ids_[notification_id] != non_persistent_id) {
-    // Notify close for a previously displayed notification with the same id,
-    // this can happen when replacing a non-persistent notification with the
-    // same tag since from the JS point of view there will be two notification
-    // objects and the old one needs to receive the close event.
+    int request_id) {
+  if (request_ids_.count(notification_id) &&
+      request_ids_[notification_id] != request_id) {
+    // Notify close for a previously displayed notification with the same
+    // request id, this can happen when replacing a non-persistent notification
+    // with the same tag since from the JS point of view there will be two
+    // notification objects and the old one needs to receive the close event.
     // TODO(miguelg) this is probably not the right layer to do this.
     DispatchNonPersistentCloseEvent(notification_id);
   }
   renderer_ids_[notification_id] = renderer_id;
-  non_persistent_ids_[notification_id] = non_persistent_id;
+  request_ids_[notification_id] = request_id;
 }
 
 void NotificationEventDispatcherImpl::DispatchNonPersistentShowEvent(
     const std::string& notification_id) {
   if (!renderer_ids_.count(notification_id))
     return;
-  DCHECK(non_persistent_ids_.count(notification_id));
+  DCHECK(request_ids_.count(notification_id));
 
   RenderProcessHost* sender =
       RenderProcessHost::FromID(renderer_ids_[notification_id]);
   if (!sender)
     return;
 
-  sender->Send(new PlatformNotificationMsg_DidShow(
-      non_persistent_ids_[notification_id]));
+  sender->Send(
+      new PlatformNotificationMsg_DidShow(request_ids_[notification_id]));
 }
 
 void NotificationEventDispatcherImpl::DispatchNonPersistentClickEvent(
     const std::string& notification_id) {
   if (!renderer_ids_.count(notification_id))
     return;
-  DCHECK(non_persistent_ids_.count(notification_id));
+  DCHECK(request_ids_.count(notification_id));
 
   RenderProcessHost* sender =
       RenderProcessHost::FromID(renderer_ids_[notification_id]);
@@ -448,15 +459,15 @@ void NotificationEventDispatcherImpl::DispatchNonPersistentClickEvent(
   // closed.
   if (!sender)
     return;
-  sender->Send(new PlatformNotificationMsg_DidClick(
-      non_persistent_ids_[notification_id]));
+  sender->Send(
+      new PlatformNotificationMsg_DidClick(request_ids_[notification_id]));
 }
 
 void NotificationEventDispatcherImpl::DispatchNonPersistentCloseEvent(
     const std::string& notification_id) {
   if (!renderer_ids_.count(notification_id))
     return;
-  DCHECK(non_persistent_ids_.count(notification_id));
+  DCHECK(request_ids_.count(notification_id));
 
   RenderProcessHost* sender =
       RenderProcessHost::FromID(renderer_ids_[notification_id]);
@@ -467,18 +478,18 @@ void NotificationEventDispatcherImpl::DispatchNonPersistentCloseEvent(
   if (!sender)
     return;
 
-  sender->Send(new PlatformNotificationMsg_DidClose(
-      non_persistent_ids_[notification_id]));
+  sender->Send(
+      new PlatformNotificationMsg_DidClose(request_ids_[notification_id]));
 
   // No interaction will follow anymore once the notification has been closed.
-  non_persistent_ids_.erase(notification_id);
+  request_ids_.erase(notification_id);
   renderer_ids_.erase(notification_id);
 }
 
 void NotificationEventDispatcherImpl::RendererGone(int renderer_id) {
   for (auto iter = renderer_ids_.begin(); iter != renderer_ids_.end();) {
     if (iter->second == renderer_id) {
-      non_persistent_ids_.erase(iter->first);
+      request_ids_.erase(iter->first);
       iter = renderer_ids_.erase(iter);
     } else {
       iter++;

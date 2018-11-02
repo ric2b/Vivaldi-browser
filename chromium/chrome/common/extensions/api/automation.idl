@@ -26,6 +26,7 @@
     focus,
     imageFrameUpdated,
     hide,
+    hitTestResult,
     hover,
     invalidStatusChanged,
     layoutComplete,
@@ -366,6 +367,7 @@
 
   // Callback called for actions with a response.
   callback PerformActionCallback = void(boolean result);
+  callback PerformActionCallbackWithNode = void(AutomationNode node);
 
   dictionary CustomAction {
     long id;
@@ -643,6 +645,12 @@
     // Miscellaneous attributes.
     //
 
+    // Aria auto complete.
+    DOMString? autoComplete;
+
+    // The name of the programmatic backing object.
+    DOMString? className;
+
     // A map containing all HTML attributes and their values
     // <jsexterns>@type {Object<string>}</jsexterns>
     object? htmlAttributes;
@@ -706,8 +714,10 @@
     AutomationNode? lastChild;
     AutomationNode? previousSibling;
     AutomationNode? nextSibling;
-    AutomationNode? nextOnLine;
     AutomationNode? previousOnLine;
+    AutomationNode? nextOnLine;
+    AutomationNode? previousFocus;
+    AutomationNode? nextFocus;
 
     // The index of this node in its parent node's list of children. If this is
     // the root node, this will be undefined.
@@ -733,7 +743,17 @@
 
     // Does a hit test of the given global screen coordinates, and fires
     // eventToFire on the resulting object.
-    static void hitTest(long x, long y, EventType eventToFire);
+    static void hitTest(
+        long x,
+        long y,
+        EventType eventToFire);
+
+    // Does a $(ref:automation.AutomationNode.hitTest), and receives a callback
+    // with the resulting hit node.
+    static void hitTestWithReply(
+        long x,
+        long y,
+        PerformActionCallbackWithNode callback);
 
     // Scrolls this node to make it visible.
     static void makeVisible();

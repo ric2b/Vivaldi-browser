@@ -36,6 +36,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_names.h"
+#include "content/public/browser/notification_service.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_system.h"
@@ -86,12 +87,6 @@ class LoginSigninTest : public InProcessBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kLoginManager);
     command_line->AppendSwitch(switches::kForceLoginManagerInTests);
-  }
-
-  void TearDownOnMainThread() override {
-    // Close the login manager, which otherwise holds a KeepAlive that is not
-    // cleared in time by the end of the test.
-    LoginDisplayHost::default_host()->Finalize(base::OnceClosure());
   }
 
   void SetUpOnMainThread() override {
@@ -215,26 +210,12 @@ IN_PROC_BROWSER_TEST_F(LoginUserTest, UserPassed) {
   TestSystemTrayIsVisible(false);
 }
 
-// Verifies the cursor is not hidden at startup when user is logged in.
-IN_PROC_BROWSER_TEST_F(LoginUserTest, CursorShown) {
-  EXPECT_TRUE(ash::Shell::Get()->cursor_manager()->IsCursorVisible());
-
-  TestSystemTrayIsVisible(false);
-}
-
 // After a guest login, we should get the OTR default profile.
 IN_PROC_BROWSER_TEST_F(LoginGuestTest, GuestIsOTR) {
   Profile* profile = browser()->profile();
   EXPECT_TRUE(profile->IsOffTheRecord());
   // Ensure there's extension service for this profile.
   EXPECT_TRUE(extensions::ExtensionSystem::Get(profile)->extension_service());
-
-  TestSystemTrayIsVisible(true);
-}
-
-// Verifies the cursor is not hidden at startup when running guest session.
-IN_PROC_BROWSER_TEST_F(LoginGuestTest, CursorShown) {
-  EXPECT_TRUE(ash::Shell::Get()->cursor_manager()->IsCursorVisible());
 
   TestSystemTrayIsVisible(true);
 }
@@ -250,9 +231,6 @@ IN_PROC_BROWSER_TEST_F(LoginCursorTest, CursorHidden) {
   // Cursor should be shown after cursor is moved.
   EXPECT_TRUE(ui_test_utils::SendMouseMoveSync(gfx::Point()));
   EXPECT_TRUE(ash::Shell::Get()->cursor_manager()->IsCursorVisible());
-
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
-      FROM_HERE, LoginDisplayHost::default_host());
 
   TestSystemTrayIsVisible(false);
 }

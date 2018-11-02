@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -30,7 +32,7 @@ MediaGalleryPrefInfo MakePrefInfo(MediaGalleryPrefId id) {
   gallery.pref_id = id;
   gallery.device_id = storage_monitor::StorageInfo::MakeDeviceId(
       storage_monitor::StorageInfo::FIXED_MASS_STORAGE,
-      base::Uint64ToString(id));
+      base::NumberToString(id));
   gallery.display_name = base::ASCIIToUTF16("Display Name");
   return gallery;
 }
@@ -54,7 +56,7 @@ class MediaGalleriesInteractiveDialogTest : public DialogBrowserTest {
     manager.WaitForNavigationFinished();
   }
 
-  void ShowDialog(const std::string& name) override {
+  void ShowUi(const std::string& name) override {
     std::vector<base::string16> headers = {base::string16(),
                                            base::ASCIIToUTF16("header2")};
     MediaGalleriesDialogController::Entries attached_permissions = {
@@ -67,7 +69,7 @@ class MediaGalleriesInteractiveDialogTest : public DialogBrowserTest {
     EXPECT_CALL(controller_, GetSectionEntries(0))
         .WillRepeatedly(testing::Return(attached_permissions));
 
-    dialog_ = base::MakeUnique<MediaGalleriesDialogViews>(&controller_);
+    dialog_ = std::make_unique<MediaGalleriesDialogViews>(&controller_);
   }
 
  private:
@@ -78,6 +80,6 @@ class MediaGalleriesInteractiveDialogTest : public DialogBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(MediaGalleriesInteractiveDialogTest,
-                       InvokeDialog_DisplayDialog) {
-  RunDialog();
+                       InvokeUi_DisplayDialog) {
+  ShowAndVerifyUi();
 }

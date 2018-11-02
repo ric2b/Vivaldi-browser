@@ -58,6 +58,8 @@ blink_modules_sources("media_controls") {
     "elements/MediaControlPanelElement.h",
     "elements/MediaControlPanelEnclosureElement.cpp",
     "elements/MediaControlPanelEnclosureElement.h",
+    "elements/MediaControlPictureInPictureButtonElement.cpp",
+    "elements/MediaControlPictureInPictureButtonElement.h",
     "elements/MediaControlPlayButtonElement.cpp",
     "elements/MediaControlPlayButtonElement.h",
     "elements/MediaControlRemainingTimeDisplayElement.cpp",
@@ -80,7 +82,6 @@ blink_modules_sources("media_controls") {
 
   deps = [
     "//device/screen_orientation/public/interfaces:interfaces_blink",
-    "//services/device/public/interfaces:constants_blink",
     "//services/service_manager/public/cpp",
     "//third_party/WebKit/public:media_controls_resources_header",
   ]

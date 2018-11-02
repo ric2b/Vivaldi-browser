@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -175,7 +176,6 @@ AUHALStream::AUHALStream(AudioManagerMac* manager,
   DCHECK(manager_);
   DCHECK(params_.IsValid());
   DCHECK_NE(device, kAudioObjectUnknown);
-  CHECK(!log_callback_.Equals(AudioManager::LogCallback()));
 }
 
 AUHALStream::~AUHALStream() {
@@ -409,10 +409,13 @@ void AUHALStream::ReportAndResetStats() {
                               1, 999999, 100);
 
   auto lost_frames_ms = (total_lost_frames_ * 1000) / params_.sample_rate();
+
   std::string log_message = base::StringPrintf(
       "AU out: Total glitches=%d. Total frames lost=%d (%d ms).",
       glitches_detected_, total_lost_frames_, lost_frames_ms);
-  log_callback_.Run(log_message);
+
+  if (!log_callback_.is_null())
+    log_callback_.Run(log_message);
 
   if (glitches_detected_ != 0) {
     UMA_HISTOGRAM_COUNTS("Media.Audio.Render.LostFramesInMs", lost_frames_ms);
@@ -439,14 +442,6 @@ bool AUHALStream::ConfigureAUHAL() {
   if (!local_audio_unit->is_valid())
     return false;
 
-  // Enable output as appropriate.
-  UInt32 enable_io = 1;
-  OSStatus result = AudioUnitSetProperty(
-      local_audio_unit->audio_unit(), kAudioOutputUnitProperty_EnableIO,
-      kAudioUnitScope_Output, AUElement::OUTPUT, &enable_io, sizeof(enable_io));
-  if (result != noErr)
-    return false;
-
   if (!SetStreamFormat(params_.channels(), params_.sample_rate(),
                        local_audio_unit->audio_unit(), &output_format_)) {
     return false;
@@ -464,7 +459,7 @@ bool AUHALStream::ConfigureAUHAL() {
   AURenderCallbackStruct callback;
   callback.inputProc = InputProc;
   callback.inputProcRefCon = this;
-  result = AudioUnitSetProperty(
+  OSStatus result = AudioUnitSetProperty(
       local_audio_unit->audio_unit(), kAudioUnitProperty_SetRenderCallback,
       kAudioUnitScope_Input, AUElement::OUTPUT, &callback, sizeof(callback));
   if (result != noErr)

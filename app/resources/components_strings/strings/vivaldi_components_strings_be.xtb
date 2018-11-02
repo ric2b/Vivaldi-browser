@@ -1,17 +1,126 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="be">
+<translation id="1110994991967754504">Вылучы правы доступу для <ph name="PERMISSION_NAME" /></translation>
 <translation id="1152921474424827756">Адчыніць <ph name="BEGIN_LINK" /> версію з кэшу <ph name="END_LINK" /> старонкі <ph name="URL" /></translation>
+<translation id="1158211211994409885"><ph name="HOST_NAME" /> нечакана скінуў падлучэнне.</translation>
+<translation id="1161325031994447685">Падлучыцеся да WI-FI яшчэ раз</translation>
 <translation id="1175364870820465910">&amp;Друк...</translation>
+<translation id="129863573139666797"><ph name="BEGIN_LINK" />Паспрабуйце ачысціць cookie файлы<ph name="END_LINK" /></translation>
+<translation id="139305205187523129"><ph name="HOST_NAME" /> не даслаў ні якіх дадзеных.</translation>
 <translation id="1506687042165942984">Паказуе старую захаваную копію гэтай старонкі.</translation>
+<translation id="1640244768702815859">Паспрабуйце <ph name="BEGIN_LINK" /> завітаць на галоўную старонку сайту <ph name="END_LINK" />.</translation>
+<translation id="1645368109819982629">Непадтрымлівальны пратакол</translation>
 <translation id="1710259589646384581">Аперацыйная сістэма</translation>
+<translation id="1728677426644403582">Гэта крыніца старонкі</translation>
+<translation id="1734878702283171397">Паспрабуце пагутарыць з кіраўніком кампутараў.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Спрабаваць запусціць Windows сеткі дзіягносціку<ph name="END_LINK" />.</translation>
+<translation id="1834321415901700177">Гэты сайт змяшчае шкадлівую праграму</translation>
+<translation id="194030505837763158">Перайсці <ph name="LINK" /></translation>
+<translation id="2030481566774242610">Ты маў на ўвазе <ph name="LINK" />?</translation>
+<translation id="2032962459168915086"><ph name="BEGIN_LINK" />Спраўдзіце налады проксі-сэрвэру і брандмаўара<ph name="END_LINK" /></translation>
+<translation id="2065985942032347596">Неабходна аўтарызацыя</translation>
+<translation id="2166378884831602661">Гэты сайт не робіць бяспечнае падлучэнне</translation>
+<translation id="2230458221926704099">Каб паладзіць падлучэнне з дапамогай <ph name="BEGIN_LINK" /> дзіягносцікі <ph name="END_LINK" /></translation>
+<translation id="2292556288342944218">Ваша злучэнне с інтэрнэтам блакавана</translation>
+<translation id="2317259163369394535"><ph name="DOMAIN" /> пытаецца імя карыстальніка і пароль.</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Правесці дзіягносціку сеткі<ph name="END_LINK" /></translation>
+<translation id="255002559098805027"><ph name="HOST_NAME" /> даслаў неправільны запыт.</translation>
+<translation id="2634124572758952069">Не атрымалася знайці IP-адрэс <ph name="HOST_NAME" /> .</translation>
+<translation id="2650446666397867134">Доступ да файлу забаронены</translation>
 <translation id="2705137772291741111">Захаваная копія (кэшаваная) не чытаецца.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" /> правесці дзіагносціку падлучэння <ph name="END_LINK" /></translation>
+<translation id="2784949926578158345">Падлучэнне скінута.</translation>
+<translation id="2909946352844186028">Высветлелась змена сеткі.</translation>
+<translation id="2948083400971632585">Ты можашь адключыць проксі на старонке наладаў.</translation>
 <translation id="3005723025932146533">Паказаць захаваную копію</translation>
+<translation id="3093245981617870298">Вы паза сеткі.</translation>
+<translation id="3109728660330352905">У Вас няма правоў для прагляду гэтай старонкі.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" /> Спрабаваць запусціць дзіягносціку падлучэння <ph name="END_LINK" />.</translation>
+<translation id="3176929007561373547">Спраўдзіце налады proxy-сэрвэру або папрасіце кіраўніка сеткі
+…пераканацца, ці працуе proxy-сэрвэр. Калі Вы упэўнены, то карыстайцеся:
+…<ph name="PLATFORM_TEXT" /></translation>
+<translation id="3226128629678568754">Націсні пераладаваць для адпраўкі дадзеных POST зноў.</translation>
+<translation id="3422472998109090673"><ph name="HOST_NAME" /> недасягальны.</translation>
+<translation id="3447661539832366887">Карыстальнік гэтай прылады вылучыў гульню з дзіназаўрам.</translation>
+<translation id="3586931643579894722">Схаваць</translation>
+<translation id="3630155396527302611">Калі праграма ўваходзіць ў спіс тых, якім дазволен доступ к сетке,
+…выдаліце яе са спісу і дадайце зноў.</translation>
+<translation id="3717027428350673159"><ph name="BEGIN_LINK" />Спраўдзіце адпаведнасць проксі - сэрверу і DNS, налады брандбаўара<ph name="END_LINK" /></translation>
+<translation id="382518646247711829">Калі Вы карвстуецеся proxy-сэрвэрам…</translation>
+<translation id="3973234410852337861"><ph name="HOST_NAME" /> блакаваны</translation>
+<translation id="3987940399970879459">Меней за 1 МіБ</translation>
+<translation id="4075732493274867456">Кліент і сэрвэр не падтрымливают розныя версіі пратаколу SSL або набора шрыфтоў.</translation>
+<translation id="4130226655945681476">Спраўдзіце кабельнае падлучэнне, мадэм і роўтэр</translation>
+<translation id="4203896806696719780"><ph name="BEGIN_LINK" />Спраўдзіце налады брандмаўара і анцівіруса<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Спрабаваць запусцісь дзіягносціку сеткі<ph name="END_LINK" />.</translation>
+<translation id="4250431568374086873">Твае падлучэнне з гэтым сайтам не забаронена ў поўнай меры</translation>
+<translation id="4304224509867189079">Уваход</translation>
+<translation id="4432688616882109544">Сэрвэр <ph name="HOST_NAME" /> не прыняў твой серціфікат, або ён не быў выдадзены.</translation>
+<translation id="4506599922270137252">Зазваніце кіраўніку кампутара</translation>
+<translation id="4522570452068850558">Болей</translation>
+<translation id="4558551763791394412">Паспрабуй вылучыць пашырэнні.</translation>
+<translation id="4611292653554630842">Увайсці</translation>
+<translation id="4708268264240856090">Падлучэнне перапынена</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запусціць Windows сеткі дзіягносціку<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Шлях да выконвальнага файла</translation>
+<translation id="4750917950439032686">Твая інфармацыя (напрыклад, пароль або нумар карткі) забаронена, калі ты пасылаеш яе на сайт.</translation>
+<translation id="4764776831041365478">Старонка на <ph name="URL" /> , можа быць часова недасягальна ці перамешчана па новым адрэсу.</translation>
+<translation id="4913131542719409934">Неабходна аўтарызацыя</translation>
+<translation id="5023310440958281426">Спраўдзіце правілы , усталяваныя кіраўніком</translation>
+<translation id="5070335125961472645"><ph name="BEGIN_LINK" />Спраўдзіце адрэс проксі - сэрвэру<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64-бітны)</translation>
+<translation id="5431657950005405462">Твае файлы не знойдзены</translation>
+<translation id="5452270690849572955">Гэтая <ph name="HOST_NAME" /> старонка не знойдзена на сэрвэры</translation>
+<translation id="5492298309214877701">Гэты сайт у сетке арганизацыі або вывучальнай установы мае той жа URL як знешні WEB-сайт.
+…<ph name="LINE_BREAK" />
+…Паспрабуйце пагутарыць аб гэтым з кіраўніком сеткі.</translation>
+<translation id="5510766032865166053">Можа, ён быў перамешчаны або выдалены.</translation>
+<translation id="5556459405103347317">Пераладаваць</translation>
+<translation id="5610142619324316209">Спраўдка падлучэння</translation>
+<translation id="5617949217645503996"><ph name="HOST_NAME" /> пераадрэсаваў Вас занадта многа разоў.</translation>
+<translation id="5675650730144413517">Старонка не працуе</translation>
+<translation id="5869405914158311789">Не атрымліваецца злучыцца з сайтам</translation>
+<translation id="5990559369517809815">Запыт да сэрвэру заблакаваны пашырэнем.</translation>
+<translation id="6146055958333702838">Спраўдзіце падлучэнне кабелёў і пераладуйце роўтэр, мадэм, або сетку
+…іншыя прылады, якія вы можаце карыстаць.</translation>
+<translation id="614940544461990577">Паспрабуйце зрабіць гэта:</translation>
+<translation id="6165508094623778733">Падрабязней</translation>
+<translation id="6177128806592000436">Твае злучэнне з гэтым сайтам не забаронена</translation>
+<translation id="6203231073485539293">Спраўдзі злучэнне з інтэрнэтам</translation>
 <translation id="6264485186158353794">Назад да бязпечнасці</translation>
+<translation id="6305205051461490394"><ph name="URL" /> недасягальная.</translation>
+<translation id="6321917430147971392">Спраўдзіце налады DNS</translation>
+<translation id="6328639280570009161">Паспрабуйце вылучыць сеткаваю абарону</translation>
+<translation id="6328786501058569169">Гэты сайт з’яўляецца падробкай</translation>
+<translation id="6433595998831338502">Сайт <ph name="HOST_NAME" /> адхіліў запыт на падлучэнне.</translation>
+<translation id="6556239504065605927">Бяспечнае падлучэнне</translation>
+<translation id="6569060085658103619">Старонка пашырэння</translation>
+<translation id="6657585470893396449">Пароль</translation>
+<translation id="6685834062052613830">Выйдзі з уліковага запісу і наладаванне будзе скончына</translation>
+<translation id="6711464428925977395">Штосці здарылася з proxy сэрвэрам, або адрэс некарэктны.</translation>
+<translation id="6757797048963528358">Твой дэвайс у рэжыме сну.</translation>
+<translation id="7079718277001814089">Гэты сайт змяшчае шкадлівае ПЗ</translation>
+<translation id="7090678807593890770">Шукаць у Google па <ph name="LINK" /></translation>
+<translation id="7210863904660874423">Сэрвэр <ph name="HOST_NAME" /> не адпавядае стандартам бяспекі.</translation>
 <translation id="7353601530677266744">Камандны радок</translation>
 <translation id="7419106976560586862">Шлях да профілю</translation>
+<translation id="7518003948725431193">Не знойдзена старонка па адэрсу: <ph name="URL" /></translation>
+<translation id="7549584377607005141">Для карэктнага адлюстравання старонкі патрэбны ўведзеныя раней дадзеныя. Іх мага даслаць паўторна, но ўсі змены на старонке будуць выкананы зноў.</translation>
+<translation id="759889825892636187"><ph name="HOST_NAME" /> зараз не можа апрацаваць запыт.</translation>
+<translation id="7716424297397655342">Гэты сайт не можа заладавацца з кэшу</translation>
+<translation id="7758069387465995638">Магчыма, падлучэнне блакуецца фаерволам ці анцівірусам.</translation>
 <translation id="7951415247503192394">(32-бітны)</translation>
+<translation id="8142868475871995937">Завітаце &lt;strong&gt; vivaldi://policy&lt;/strong&gt; , каб убачыць спіс чорных URL-аў і іншыя правілы.</translation>
+<translation id="8149426793427495338">Твой кампутар заснуў.</translation>
 <translation id="8150722005171944719">Файл па адрасу <ph name="URL" />  не чытальны. Магчыма, ен быў выдален, ці няма права доступа да файла.</translation>
+<translation id="8225771182978767009">Хто наладжваў гэты кампутар, заблакаваў гэты сайт.</translation>
+<translation id="8289355894181816810">Зазаваніце вашаму кіраўніку сеткі , калі Вы не ведаеце, што гэта азначае.</translation>
+<translation id="8332188693563227489">Доступ к <ph name="HOST_NAME" /> забаронены</translation>
+<translation id="8498891568109133222">Хост <ph name="HOST_NAME" /> не адказйвае занадта доўга.</translation>
+<translation id="8503813439785031346">Імя карыстальніка</translation>
+<translation id="8740359287975076522">Не атрымліваецца знайсці &lt;abbr id="dnsDefinition"&gt;DNS-адрэс&lt;/abbr&gt; сайту <ph name="HOST_NAME" /> . Выконваецца дзіягносціка.</translation>
+<translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> патрабуе імя карыстальніка і пароль.</translation>
+<translation id="9183425211371246419"><ph name="HOST_NAME" /> выкарустоўвае не падтрымлівальны пратакол.</translation>
+<translation id="933612690413056017">Няма інтэрнэт падлучэння</translation>
 </translationbundle>

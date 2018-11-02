@@ -3,7 +3,6 @@
 -CaptureScreenshotTest.*
 
 # FrameWatcher::WaitFrames times out http://crbug.com/785013
--CompositedScrollingBrowserTest.*
 -NonBlockingEventBrowserTest.*
 -TouchActionBrowserTest.*
 
@@ -38,6 +37,7 @@
 -SitePerProcessBrowserTest.HiddenOOPIFWillNotGenerateCompositorFramesAfterNavigation
 
 # Further WaitForChildFrameSurfaceReady doesn't work http://crbug.com/787945
+-SitePerProcessBrowserTest.AsynchronousHitTestChildTimeout
 -SitePerProcessBrowserTest.CancelWheelScrollBubblingOnWheelTargetDeletion
 -SitePerProcessBrowserTest.CreateContextMenuTest
 -SitePerProcessBrowserTest.CrossProcessMouseCapture
@@ -47,18 +47,47 @@
 -SitePerProcessBrowserTest.InputEventRouterGesturePreventDefaultTargetMapTest
 -SitePerProcessBrowserTest.InputEventRouterGestureTargetMapTest
 -SitePerProcessBrowserTest.InputEventRouterTouchpadGestureTargetTest
+-SitePerProcessBrowserTest.InputEventRouterWheelCoalesceTest
+-SitePerProcessBrowserTest.HitTestLayerSquashing
+-SitePerProcessBrowserTest.HitTestNestedFrames
+-SitePerProcessBrowserTest.HitTestWatermark
 -SitePerProcessBrowserTest.NavigateCrashedSubframeToSameSite
 -SitePerProcessBrowserTest.NestedSurfaceHitTestTest
+-SitePerProcessBrowserTest.OOPIFDetachDuringAnimation
+-SitePerProcessBrowserTest.OverlapSurfaceHitTestTest
 -SitePerProcessBrowserTest.PopupMenuTest
 -SitePerProcessBrowserTest.RootConsumesScrollDuringOverscrollGesture
 -SitePerProcessBrowserTest.ScrollBubblingFromNestedOOPIFTest
 -SitePerProcessBrowserTest.ScrollBubblingFromOOPIFTest
 -SitePerProcessBrowserTest.ScrollEventToOOPIF
+-SitePerProcessBrowserTest.ScrollLocalSubframeInOOPIF
 -SitePerProcessBrowserTest.SubframeTouchEventRouting
 -SitePerProcessBrowserTest.SurfaceHitTestPointerEventsNone
 -SitePerProcessBrowserTest.SurfaceHitTestTest
 -SitePerProcessBrowserTest.TwoSubframesCreatePopupMenuWidgetsSimultaneously
 -SitePerProcessBrowserTest.ViewBoundsInNestedFrameTest
+-SitePerProcessBrowserTest.PhysicalBackingSizeTest
+-SitePerProcessHitTestBrowserTest.AsynchronousHitTestChildTimeout
+-SitePerProcessHitTestBrowserTest.CancelWheelScrollBubblingOnWheelTargetDeletion
+-SitePerProcessHitTestBrowserTest.CreateContextMenuTest
+-SitePerProcessHitTestBrowserTest.CrossProcessMouseCapture
+-SitePerProcessHitTestBrowserTest.CrossProcessMouseEnterAndLeaveTest
+-SitePerProcessHitTestBrowserTest.CursorUpdateReceivedFromCrossSiteIframe
+-SitePerProcessHitTestBrowserTest.InputEventRouterGesturePreventDefaultTargetMapTest
+-SitePerProcessHitTestBrowserTest.InputEventRouterGestureTargetMapTest
+-SitePerProcessHitTestBrowserTest.InputEventRouterTouchpadGestureTargetTest
+-SitePerProcessHitTestBrowserTest.InputEventRouterWheelCoalesceTest
+-SitePerProcessHitTestBrowserTest.HitTestLayerSquashing
+-SitePerProcessHitTestBrowserTest.HitTestNestedFrames
+-SitePerProcessHitTestBrowserTest.HitTestWatermark
+-SitePerProcessHitTestBrowserTest.NestedSurfaceHitTestTest
+-SitePerProcessHitTestBrowserTest.OverlapSurfaceHitTestTest
+-SitePerProcessHitTestBrowserTest.PopupMenuTest
+-SitePerProcessHitTestBrowserTest.RootConsumesScrollDuringOverscrollGesture
+-SitePerProcessHitTestBrowserTest.ScrollEventToOOPIF
+-SitePerProcessHitTestBrowserTest.SubframeTouchEventRouting
+-SitePerProcessHitTestBrowserTest.SurfaceHitTestPointerEventsNone
+-SitePerProcessHitTestBrowserTest.SurfaceHitTestTest
 
 # Copy Surface timing out http://crbug.com/785257
 -GLAndSoftwareCompositing/CompositingRenderWidgetHostViewBrowserTest.*
@@ -80,3 +109,18 @@
 
 # TODO: investigate flaky failure http://crbug.com/783434
 -GpuProcessHostBrowserTest.Shutdown
+
+# OnGpuSwapBuffersCompletedInternal not called. http://crbug.com/791557
+-MouseLatencyBrowserTest.CoalescedMouseMovesCorrectlyTerminated
+
+# TODO: investigate flaky failure http://crbug.com/790683
+-SitePerProcessBrowserTest.CrossSiteIframeBlockedByXFrameOptionsOrCSP
+
+# TODO: investigate flaky failures http://crbug.com/792739
+-SitePerProcessFeaturePolicyBrowserTest.TestFeaturePolicyReplicationFromRemoteFrames
+-IsolatedOriginTest.ProcessLimit
+-SitePerProcessBrowserTest.RFPHDestruction
+
+# Tests failures related to surface sync. http://crbug.com/793302
+-RenderWidgetInitialSizeTest.InitialSize
+-RenderWidgetTest.OnResize

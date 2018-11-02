@@ -72,6 +72,7 @@ class OmniboxPopupContentsView : public views::View,
   views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
  private:
   class AutocompletePopupWidget;

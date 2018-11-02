@@ -10,12 +10,11 @@
 #include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "chromeos/chromeos_paths.h"
-#include "chromeos/cryptohome/cryptohome_util.h"
+#include "chromeos/cryptohome/tpm_util.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -52,7 +51,7 @@ class InstallAttributesTest : public testing::Test {
     ASSERT_TRUE(PathService::OverrideAndCreateIfNeeded(
         FILE_INSTALL_ATTRIBUTES, GetTempPath(), true, false));
     DBusThreadManager::Initialize();
-    install_attributes_ = base::MakeUnique<InstallAttributes>(
+    install_attributes_ = std::make_unique<InstallAttributes>(
         DBusThreadManager::Get()->GetCryptohomeClient());
   }
 
@@ -193,12 +192,12 @@ TEST_F(InstallAttributesTest, ConsumerDevice) {
   install_attributes_->Init(GetTempPath());
   EXPECT_EQ(policy::DEVICE_MODE_PENDING, install_attributes_->GetMode());
   // Lock the attributes empty.
-  ASSERT_TRUE(cryptohome_util::InstallAttributesFinalize());
+  ASSERT_TRUE(tpm_util::InstallAttributesFinalize());
   base::RunLoop loop;
   install_attributes_->ReadImmutableAttributes(loop.QuitClosure());
   loop.Run();
 
-  ASSERT_FALSE(cryptohome_util::InstallAttributesIsFirstInstall());
+  ASSERT_FALSE(tpm_util::InstallAttributesIsFirstInstall());
   EXPECT_EQ(policy::DEVICE_MODE_CONSUMER, install_attributes_->GetMode());
   EXPECT_EQ(std::string(), install_attributes_->GetDomain());
   EXPECT_EQ(std::string(), install_attributes_->GetRealm());
@@ -216,7 +215,7 @@ TEST_F(InstallAttributesTest, ConsumerKioskDevice) {
                 std::string(),
                 std::string()));
 
-  ASSERT_FALSE(cryptohome_util::InstallAttributesIsFirstInstall());
+  ASSERT_FALSE(tpm_util::InstallAttributesIsFirstInstall());
   EXPECT_EQ(policy::DEVICE_MODE_CONSUMER_KIOSK_AUTOLAUNCH,
             install_attributes_->GetMode());
   EXPECT_EQ(std::string(), install_attributes_->GetDomain());
@@ -229,16 +228,16 @@ TEST_F(InstallAttributesTest, DeviceLockedFromOlderVersion) {
   install_attributes_->Init(GetTempPath());
   EXPECT_EQ(policy::DEVICE_MODE_PENDING, install_attributes_->GetMode());
   // Lock the attributes as if it was done from older Chrome version.
-  ASSERT_TRUE(cryptohome_util::InstallAttributesSet(
+  ASSERT_TRUE(tpm_util::InstallAttributesSet(
       InstallAttributes::kAttrEnterpriseOwned, "true"));
-  ASSERT_TRUE(cryptohome_util::InstallAttributesSet(
+  ASSERT_TRUE(tpm_util::InstallAttributesSet(
       InstallAttributes::kAttrEnterpriseUser, kTestUserDeprecated));
-  ASSERT_TRUE(cryptohome_util::InstallAttributesFinalize());
+  ASSERT_TRUE(tpm_util::InstallAttributesFinalize());
   base::RunLoop loop;
   install_attributes_->ReadImmutableAttributes(loop.QuitClosure());
   loop.Run();
 
-  ASSERT_FALSE(cryptohome_util::InstallAttributesIsFirstInstall());
+  ASSERT_FALSE(tpm_util::InstallAttributesIsFirstInstall());
   EXPECT_EQ(policy::DEVICE_MODE_ENTERPRISE, install_attributes_->GetMode());
   EXPECT_EQ(kTestDomain, install_attributes_->GetDomain());
   EXPECT_EQ(std::string(), install_attributes_->GetRealm());
@@ -285,11 +284,11 @@ TEST_F(InstallAttributesTest, VerifyFakeInstallAttributesCache) {
   EXPECT_EQ(policy::DEVICE_MODE_PENDING, install_attributes_->GetMode());
 
   // Write test values.
-  ASSERT_TRUE(cryptohome_util::InstallAttributesSet(
+  ASSERT_TRUE(tpm_util::InstallAttributesSet(
       InstallAttributes::kAttrEnterpriseOwned, "true"));
-  ASSERT_TRUE(cryptohome_util::InstallAttributesSet(
+  ASSERT_TRUE(tpm_util::InstallAttributesSet(
       InstallAttributes::kAttrEnterpriseUser, kTestUserDeprecated));
-  ASSERT_TRUE(cryptohome_util::InstallAttributesFinalize());
+  ASSERT_TRUE(tpm_util::InstallAttributesFinalize());
 
   // Verify that InstallAttributes correctly decodes the stub cache file.
   install_attributes_->Init(GetTempPath());

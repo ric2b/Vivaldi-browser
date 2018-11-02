@@ -121,6 +121,43 @@ TEST_P(ParameterizedNGOffsetMappingTest, StoredResult) {
   EXPECT_TRUE(IsOffsetMappingStored());
 }
 
+TEST_P(ParameterizedNGOffsetMappingTest, NGInlineFormattingContextOf) {
+  SetBodyInnerHTML(
+      "<div id=container>"
+      "  foo"
+      "  <span id=inline-block style='display:inline-block'>blah</span>"
+      "  <span id=inline-span>bar</span>"
+      "</div>");
+
+  const Element* container = GetElementById("container");
+  const Element* inline_block = GetElementById("inline-block");
+  const Element* inline_span = GetElementById("inline-span");
+  const Node* blah = inline_block->firstChild();
+  const Node* foo = inline_block->previousSibling();
+  const Node* bar = inline_span->firstChild();
+
+  EXPECT_EQ(nullptr,
+            NGInlineFormattingContextOf(Position::BeforeNode(*container)));
+  EXPECT_EQ(nullptr,
+            NGInlineFormattingContextOf(Position::AfterNode(*container)));
+
+  const LayoutObject* container_object = container->GetLayoutObject();
+  EXPECT_EQ(container_object, NGInlineFormattingContextOf(Position(foo, 0)));
+  EXPECT_EQ(container_object, NGInlineFormattingContextOf(Position(bar, 0)));
+  EXPECT_EQ(container_object,
+            NGInlineFormattingContextOf(Position::BeforeNode(*inline_block)));
+  EXPECT_EQ(container_object,
+            NGInlineFormattingContextOf(Position::AfterNode(*inline_block)));
+  EXPECT_EQ(container_object,
+            NGInlineFormattingContextOf(Position::BeforeNode(*inline_span)));
+  EXPECT_EQ(container_object,
+            NGInlineFormattingContextOf(Position::AfterNode(*inline_span)));
+
+  const LayoutObject* inline_block_object = inline_block->GetLayoutObject();
+  EXPECT_EQ(inline_block_object,
+            NGInlineFormattingContextOf(Position(blah, 0)));
+}
+
 TEST_P(ParameterizedNGOffsetMappingTest, OneTextNode) {
   SetupHtml("t", "<div id=t>foo</div>");
   const Node* foo_node = layout_object_->GetNode();
@@ -738,6 +775,131 @@ TEST_P(ParameterizedNGOffsetMappingTest, Table) {
 
   ASSERT_EQ(1u, result.GetRanges().size());
   TEST_RANGE(result.GetRanges(), foo_node, 0u, 3u);
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, GetMappingForInlineBlock) {
+  SetupHtml("t",
+            "<div id=t>foo"
+            "<span style='display: inline-block' id=span> bar </span>"
+            "baz</div>");
+
+  const Element* div = GetElementById("t");
+  const Element* span = GetElementById("span");
+
+  const NGOffsetMapping* div_mapping =
+      NGOffsetMapping::GetFor(Position(div->firstChild(), 0));
+  const NGOffsetMapping* span_mapping =
+      NGOffsetMapping::GetFor(Position(span->firstChild(), 0));
+
+  // NGOffsetMapping::GetFor for Before/AfterAnchor of an inline block should
+  // return the mapping of the containing block, not of the inline block itself.
+
+  const NGOffsetMapping* span_before_mapping =
+      NGOffsetMapping::GetFor(Position::BeforeNode(*span));
+  EXPECT_EQ(div_mapping, span_before_mapping);
+  EXPECT_NE(span_mapping, span_before_mapping);
+
+  const NGOffsetMapping* span_after_mapping =
+      NGOffsetMapping::GetFor(Position::AfterNode(*span));
+  EXPECT_EQ(div_mapping, span_after_mapping);
+  EXPECT_NE(span_mapping, span_after_mapping);
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, NoWrapSpaceAndCollapsibleSpace) {
+  SetupHtml("t",
+            "<div id=t>"
+            "<span style='white-space: nowrap' id=span>foo </span>"
+            " bar"
+            "</div>");
+
+  const Element* span = GetElementById("span");
+  const Node* foo = span->firstChild();
+  const Node* bar = span->nextSibling();
+  const NGOffsetMapping& mapping = GetOffsetMapping();
+
+  // NGInlineItemsBuilder inserts a ZWS to indicate break opportunity.
+  EXPECT_EQ(String(u"foo \u200Bbar"), mapping.GetText());
+
+  // Should't map any character in DOM to the generated ZWS.
+  ASSERT_EQ(3u, mapping.GetUnits().size());
+  TEST_UNIT(mapping.GetUnits()[0], NGOffsetMappingUnitType::kIdentity, foo, 0u,
+            4u, 0u, 4u);
+  TEST_UNIT(mapping.GetUnits()[1], NGOffsetMappingUnitType::kCollapsed, bar, 0u,
+            1u, 5u, 5u);
+  TEST_UNIT(mapping.GetUnits()[2], NGOffsetMappingUnitType::kIdentity, bar, 1u,
+            4u, 5u, 8u);
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, BiDiAroundForcedBreakInPreLine) {
+  SetupHtml("t",
+            "<div id=t style='white-space: pre-line'>"
+            "<bdo dir=rtl id=bdo>foo\nbar</bdo></div>");
+
+  const Node* text = GetElementById("bdo")->firstChild();
+  const NGOffsetMapping& mapping = GetOffsetMapping();
+
+  EXPECT_EQ(String(u"\u202Efoo\u202C"
+                   u"\n"
+                   u"\u202Ebar\u202C"),
+            mapping.GetText());
+
+  // Offset mapping should skip generated BiDi control characters.
+  ASSERT_EQ(3u, mapping.GetUnits().size());
+  TEST_UNIT(mapping.GetUnits()[0], NGOffsetMappingUnitType::kIdentity, text, 0u,
+            3u, 1u, 4u);  // "foo"
+  TEST_UNIT(mapping.GetUnits()[1], NGOffsetMappingUnitType::kIdentity, text, 3u,
+            4u, 5u, 6u);  // "\n"
+  TEST_UNIT(mapping.GetUnits()[2], NGOffsetMappingUnitType::kIdentity, text, 4u,
+            7u, 7u, 10u);  // "bar"
+  TEST_RANGE(mapping.GetRanges(), text, 0u, 3u);
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, BiDiAroundForcedBreakInPreWrap) {
+  SetupHtml("t",
+            "<div id=t style='white-space: pre-wrap'>"
+            "<bdo dir=rtl id=bdo>foo\nbar</bdo></div>");
+
+  const Node* text = GetElementById("bdo")->firstChild();
+  const NGOffsetMapping& mapping = GetOffsetMapping();
+
+  EXPECT_EQ(String(u"\u202Efoo\u202C"
+                   u"\n"
+                   u"\u202Ebar\u202C"),
+            mapping.GetText());
+
+  // Offset mapping should skip generated BiDi control characters.
+  ASSERT_EQ(3u, mapping.GetUnits().size());
+  TEST_UNIT(mapping.GetUnits()[0], NGOffsetMappingUnitType::kIdentity, text, 0u,
+            3u, 1u, 4u);  // "foo"
+  TEST_UNIT(mapping.GetUnits()[1], NGOffsetMappingUnitType::kIdentity, text, 3u,
+            4u, 5u, 6u);  // "\n"
+  TEST_UNIT(mapping.GetUnits()[2], NGOffsetMappingUnitType::kIdentity, text, 4u,
+            7u, 7u, 10u);  // "bar"
+  TEST_RANGE(mapping.GetRanges(), text, 0u, 3u);
+}
+
+TEST_P(ParameterizedNGOffsetMappingTest, BiDiAroundForcedBreakInPre) {
+  SetupHtml("t",
+            "<div id=t style='white-space: pre'>"
+            "<bdo dir=rtl id=bdo>foo\nbar</bdo></div>");
+
+  const Node* text = GetElementById("bdo")->firstChild();
+  const NGOffsetMapping& mapping = GetOffsetMapping();
+
+  EXPECT_EQ(String(u"\u202Efoo\u202C"
+                   u"\n"
+                   u"\u202Ebar\u202C"),
+            mapping.GetText());
+
+  // Offset mapping should skip generated BiDi control characters.
+  ASSERT_EQ(3u, mapping.GetUnits().size());
+  TEST_UNIT(mapping.GetUnits()[0], NGOffsetMappingUnitType::kIdentity, text, 0u,
+            3u, 1u, 4u);  // "foo"
+  TEST_UNIT(mapping.GetUnits()[1], NGOffsetMappingUnitType::kIdentity, text, 3u,
+            4u, 5u, 6u);  // "\n"
+  TEST_UNIT(mapping.GetUnits()[2], NGOffsetMappingUnitType::kIdentity, text, 4u,
+            7u, 7u, 10u);  // "bar"
+  TEST_RANGE(mapping.GetRanges(), text, 0u, 3u);
 }
 
 }  // namespace blink

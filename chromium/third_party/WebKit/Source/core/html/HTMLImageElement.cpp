@@ -35,10 +35,10 @@
 #include "core/dom/SyncReattachContext.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageFallbackHelper.h"
 #include "core/html/HTMLPictureElement.h"
 #include "core/html/HTMLSourceElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/html/forms/FormAssociated.h"
 #include "core/html/forms/HTMLFormElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -50,7 +50,6 @@
 #include "core/layout/AdjustForAbsoluteZoom.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
-#include "core/layout/api/LayoutImageItem.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/media_type_names.h"
@@ -112,7 +111,7 @@ HTMLImageElement* HTMLImageElement::Create(Document& document,
   return new HTMLImageElement(document, created_by_parser);
 }
 
-HTMLImageElement::~HTMLImageElement() {}
+HTMLImageElement::~HTMLImageElement() = default;
 
 void HTMLImageElement::Trace(blink::Visitor* visitor) {
   visitor->Trace(image_loader_);
@@ -235,8 +234,8 @@ void HTMLImageElement::SetBestFitURLAndDPRFromImageCandidate(
     UseCounter::Count(GetDocument(), WebFeature::kSrcsetXDescriptor);
   }
   if (GetLayoutObject() && GetLayoutObject()->IsImage()) {
-    LayoutImageItem(ToLayoutImage(GetLayoutObject()))
-        .SetImageDevicePixelRatio(image_device_pixel_ratio_);
+    ToLayoutImage(GetLayoutObject())
+        ->SetImageDevicePixelRatio(image_device_pixel_ratio_);
 
     if (old_image_device_pixel_ratio != image_device_pixel_ratio_)
       ToLayoutImage(GetLayoutObject())->IntrinsicSizeChanged();
@@ -277,6 +276,7 @@ void HTMLImageElement::ParseAttribute(
     }
   } else if (name == decodingAttr &&
              RuntimeEnabledFeatures::ImageDecodingAttributeEnabled()) {
+    UseCounter::Count(GetDocument(), WebFeature::kImageDecodingAttribute);
     decoding_mode_ = ParseImageDecodingMode(params.new_value);
   } else {
     HTMLElement::ParseAttribute(params);
@@ -789,7 +789,7 @@ void HTMLImageElement::SetLayoutDisposition(
   } else {
     if (layout_disposition_ == LayoutDisposition::kFallbackContent) {
       EventDispatchForbiddenScope::AllowUserAgentEvents allow_events;
-      EnsureUserAgentShadowRoot();
+      EnsureUserAgentShadowRootV1();
     }
     LazyReattachIfAttached();
   }

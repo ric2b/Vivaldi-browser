@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <memory>
 
+#include "base/location.h"
 #include "build/build_config.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
@@ -49,7 +50,6 @@
 #include "platform/wtf/LinkedHashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTraceLocation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -76,11 +76,28 @@ class IntWrapper : public GarbageCollectedFinalized<IntWrapper> {
   IntWrapper(int x) : x_(x) {}
 
  private:
-  IntWrapper();
+  IntWrapper() = delete;
   int x_;
 };
+
+struct IntWrapperHash {
+  static unsigned GetHash(const IntWrapper& key) {
+    return WTF::HashInt(static_cast<uint32_t>(key.Value()));
+  }
+
+  static bool Equal(const IntWrapper& a, const IntWrapper& b) { return a == b; }
+};
+
 static_assert(WTF::IsTraceable<IntWrapper>::value,
               "IsTraceable<> template failed to recognize trace method.");
+static_assert(WTF::IsTraceable<HeapVector<IntWrapper>>::value,
+              "HeapVector<IntWrapper> must be traceable.");
+static_assert(WTF::IsTraceable<HeapDeque<IntWrapper>>::value,
+              "HeapDeque<IntWrapper> must be traceable.");
+static_assert(WTF::IsTraceable<HeapHashSet<IntWrapper, IntWrapperHash>>::value,
+              "HeapHashSet<IntWrapper> must be traceable.");
+static_assert(WTF::IsTraceable<HeapHashMap<int, IntWrapper>>::value,
+              "HeapHashMap<int, IntWrapper> must be traceable.");
 
 class KeyWithCopyingMoveConstructor final {
  public:
@@ -214,6 +231,12 @@ struct PairWithWeakHandling : public StrongWeakPair {
       visitor->Trace(first);
     return false;
   }
+
+  // Incremental marking requires that these objects have a regular tracing
+  // method that is used for eagerly tracing through them in case they are
+  // in-place constructed in a container. In this case, we only care about
+  // strong fields.
+  void Trace(blink::Visitor* visitor) { visitor->Trace(first); }
 };
 
 template <typename T>
@@ -358,7 +381,7 @@ class SimpleObject : public GarbageCollected<SimpleObject> {
   virtual void VirtualMethod() {}
 
  protected:
-  SimpleObject() {}
+  SimpleObject() = default;
   char payload[64];
 };
 
@@ -373,7 +396,7 @@ class HeapTestSuperClass
   void Trace(blink::Visitor* visitor) {}
 
  protected:
-  HeapTestSuperClass() {}
+  HeapTestSuperClass() = default;
 };
 
 int HeapTestSuperClass::destructor_calls_ = 0;
@@ -444,7 +467,7 @@ class OffHeapInt : public RefCounted<OffHeapInt> {
   OffHeapInt(int x) : x_(x) {}
 
  private:
-  OffHeapInt();
+  OffHeapInt() = delete;
   int x_;
 };
 
@@ -458,8 +481,8 @@ class ThreadedTesterBase {
     for (int i = 0; i < kNumberOfThreads; i++) {
       threads.push_back(
           Platform::Current()->CreateThread("blink gc testing thread"));
-      threads.back()->GetWebTaskRunner()->PostTask(
-          BLINK_FROM_HERE,
+      PostCrossThreadTask(
+          *threads.back()->GetWebTaskRunner(), FROM_HERE,
           CrossThreadBind(ThreadFunc, CrossThreadUnretained(tester)));
     }
     while (tester->threads_to_finish_) {
@@ -477,7 +500,7 @@ class ThreadedTesterBase {
 
   ThreadedTesterBase() : gc_count_(0), threads_to_finish_(kNumberOfThreads) {}
 
-  virtual ~ThreadedTesterBase() {}
+  virtual ~ThreadedTesterBase() = default;
 
   inline bool Done() const {
     return gc_count_ >= kNumberOfThreads * kGcPerThread;
@@ -625,7 +648,7 @@ class ThreadPersistentHeapTester : public ThreadedTesterBase {
  protected:
   class Local final : public GarbageCollected<Local> {
    public:
-    Local() {}
+    Local() = default;
 
     void Trace(blink::Visitor* visitor) {}
   };
@@ -742,7 +765,7 @@ class SimpleFinalizedObject
   void Trace(blink::Visitor* visitor) {}
 
  private:
-  SimpleFinalizedObject() {}
+  SimpleFinalizedObject() = default;
 };
 
 int SimpleFinalizedObject::destructor_calls_ = 0;
@@ -1408,6 +1431,7 @@ class TerminatedArrayItem {
 
 }  // namespace blink
 
+WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::TerminatedArrayItem);
 WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(blink::VectorObject);
 WTF_ALLOW_MOVE_INIT_AND_COMPARE_WITH_MEM_FUNCTIONS(
     blink::VectorObjectInheritedTrace);
@@ -1443,7 +1467,7 @@ class DynamicallySizedObject : public GarbageCollected<DynamicallySizedObject> {
   void Trace(blink::Visitor* visitor) {}
 
  private:
-  DynamicallySizedObject() {}
+  DynamicallySizedObject() = default;
 };
 
 class FinalizationAllocator
@@ -1954,13 +1978,13 @@ TEST(HeapTest, LazySweepingLargeObjectPages) {
 class SimpleFinalizedEagerObjectBase
     : public GarbageCollectedFinalized<SimpleFinalizedEagerObjectBase> {
  public:
-  virtual ~SimpleFinalizedEagerObjectBase() {}
+  virtual ~SimpleFinalizedEagerObjectBase() = default;
   void Trace(blink::Visitor* visitor) {}
 
   EAGERLY_FINALIZE();
 
  protected:
-  SimpleFinalizedEagerObjectBase() {}
+  SimpleFinalizedEagerObjectBase() = default;
 };
 
 class SimpleFinalizedEagerObject : public SimpleFinalizedEagerObjectBase {
@@ -1974,7 +1998,7 @@ class SimpleFinalizedEagerObject : public SimpleFinalizedEagerObjectBase {
   static int destructor_calls_;
 
  private:
-  SimpleFinalizedEagerObject() {}
+  SimpleFinalizedEagerObject() = default;
 };
 
 template <typename T>
@@ -1997,7 +2021,7 @@ class SimpleFinalizedObjectInstanceOfTemplate final
   static int destructor_calls_;
 
  private:
-  SimpleFinalizedObjectInstanceOfTemplate() {}
+  SimpleFinalizedObjectInstanceOfTemplate() = default;
 };
 
 int SimpleFinalizedEagerObject::destructor_calls_ = 0;
@@ -3069,7 +3093,7 @@ class NonTrivialObject final {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  NonTrivialObject() {}
+  NonTrivialObject() = default;
   explicit NonTrivialObject(int num) {
     deque_.push_back(IntWrapper::Create(num));
     vector_.push_back(IntWrapper::Create(num));
@@ -4284,7 +4308,7 @@ class InlinedVectorObject {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  InlinedVectorObject() {}
+  InlinedVectorObject() = default;
   ~InlinedVectorObject() { destructor_calls_++; }
   void Trace(blink::Visitor* visitor) {}
 
@@ -4297,7 +4321,7 @@ class InlinedVectorObjectWithVtable {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  InlinedVectorObjectWithVtable() {}
+  InlinedVectorObjectWithVtable() = default;
   virtual ~InlinedVectorObjectWithVtable() { destructor_calls_++; }
   virtual void VirtualMethod() {}
   void Trace(blink::Visitor* visitor) {}
@@ -4605,7 +4629,7 @@ TEST(HeapTest, AllocationDuringPrefinalizer) {
 
 class SimpleClassWithDestructor {
  public:
-  SimpleClassWithDestructor() {}
+  SimpleClassWithDestructor() = default;
   ~SimpleClassWithDestructor() { was_destructed_ = true; }
   static bool was_destructed_;
 };
@@ -4614,7 +4638,7 @@ bool SimpleClassWithDestructor::was_destructed_;
 
 class RefCountedWithDestructor : public RefCounted<RefCountedWithDestructor> {
  public:
-  RefCountedWithDestructor() {}
+  RefCountedWithDestructor() = default;
   ~RefCountedWithDestructor() { was_destructed_ = true; }
   static bool was_destructed_;
 };
@@ -4784,7 +4808,7 @@ class MixinInstanceWithoutTrace
   USING_GARBAGE_COLLECTED_MIXIN(MixinInstanceWithoutTrace);
 
  public:
-  MixinInstanceWithoutTrace() {}
+  MixinInstanceWithoutTrace() = default;
 };
 
 TEST(HeapTest, MixinInstanceWithoutTrace) {
@@ -5073,11 +5097,11 @@ TEST(HeapTest, RegressNullIsStrongified) {
 }
 
 TEST(HeapTest, Bind) {
-  WTF::Closure closure =
+  base::OnceClosure closure =
       WTF::Bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::Trace),
                 WrapPersistent(Bar::Create()), nullptr);
   // OffHeapInt* should not make Persistent.
-  WTF::Closure closure2 =
+  base::OnceClosure closure2 =
       WTF::Bind(&OffHeapInt::VoidFunction, OffHeapInt::Create(1));
   PreciselyCollectGarbage();
   // The closure should have a persistent handle to the Bar.
@@ -5085,7 +5109,7 @@ TEST(HeapTest, Bind) {
 
   UseMixin::trace_count_ = 0;
   Mixin* mixin = UseMixin::Create();
-  WTF::Closure mixin_closure =
+  base::OnceClosure mixin_closure =
       WTF::Bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::Trace),
                 WrapPersistent(mixin), nullptr);
   PreciselyCollectGarbage();
@@ -5444,8 +5468,8 @@ class ThreadedStrongificationTester {
     MutexLocker locker(MainThreadMutex());
     std::unique_ptr<WebThread> worker_thread =
         Platform::Current()->CreateThread("Test Worker Thread");
-    worker_thread->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE, CrossThreadBind(WorkerThreadMain));
+    PostCrossThreadTask(*worker_thread->GetWebTaskRunner(), FROM_HERE,
+                        CrossThreadBind(WorkerThreadMain));
 
     // Wait for the worker thread initialization. The worker
     // allocates a weak collection where both collection and
@@ -5543,8 +5567,8 @@ class MemberSameThreadCheckTester {
     MutexLocker locker(MainThreadMutex());
     std::unique_ptr<WebThread> worker_thread =
         Platform::Current()->CreateThread("Test Worker Thread");
-    worker_thread->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *worker_thread->GetWebTaskRunner(), FROM_HERE,
         CrossThreadBind(&MemberSameThreadCheckTester::WorkerThreadMain,
                         CrossThreadUnretained(this)));
 
@@ -5586,8 +5610,8 @@ class PersistentSameThreadCheckTester {
     MutexLocker locker(MainThreadMutex());
     std::unique_ptr<WebThread> worker_thread =
         Platform::Current()->CreateThread("Test Worker Thread");
-    worker_thread->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *worker_thread->GetWebTaskRunner(), FROM_HERE,
         CrossThreadBind(&PersistentSameThreadCheckTester::WorkerThreadMain,
                         CrossThreadUnretained(this)));
 
@@ -5630,8 +5654,8 @@ class MarkingSameThreadCheckTester {
     std::unique_ptr<WebThread> worker_thread =
         Platform::Current()->CreateThread("Test Worker Thread");
     Persistent<MainThreadObject> main_thread_object = new MainThreadObject();
-    worker_thread->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *worker_thread->GetWebTaskRunner(), FROM_HERE,
         CrossThreadBind(&MarkingSameThreadCheckTester::WorkerThreadMain,
                         CrossThreadUnretained(this),
                         WrapCrossThreadPersistent(main_thread_object.Get())));
@@ -5755,7 +5779,7 @@ class DestructorLockingObject
   void Trace(blink::Visitor* visitor) {}
 
  private:
-  DestructorLockingObject() {}
+  DestructorLockingObject() = default;
 };
 
 int DestructorLockingObject::destructor_calls_ = 0;
@@ -5774,10 +5798,10 @@ class TraceIfNeededTester
     TraceIfNeeded<T>::Trace(visitor, obj_);
   }
   T& Obj() { return obj_; }
-  ~TraceIfNeededTester() {}
+  ~TraceIfNeededTester() = default;
 
  private:
-  TraceIfNeededTester() {}
+  TraceIfNeededTester() = default;
   explicit TraceIfNeededTester(const T& obj) : obj_(obj) {}
   T obj_;
 };
@@ -5915,7 +5939,7 @@ class AllocInSuperConstructorArgumentSuper
     : public GarbageCollectedFinalized<AllocInSuperConstructorArgumentSuper> {
  public:
   AllocInSuperConstructorArgumentSuper(bool value) : value_(value) {}
-  virtual ~AllocInSuperConstructorArgumentSuper() {}
+  virtual ~AllocInSuperConstructorArgumentSuper() = default;
   virtual void Trace(blink::Visitor* visitor) {}
   bool Value() { return value_; }
 
@@ -6429,8 +6453,8 @@ TEST(HeapTest, CrossThreadWeakPersistent) {
   std::unique_ptr<WebThread> worker_thread =
       Platform::Current()->CreateThread("Test Worker Thread");
   DestructorLockingObject* object = nullptr;
-  worker_thread->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *worker_thread->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(WorkerThreadMainForCrossThreadWeakPersistentTest,
                       CrossThreadUnretained(&object)));
   ParkMainThread();
@@ -6652,7 +6676,7 @@ TEST(HeapTest, TestWeakConstObject) {
 class EmptyMixin : public GarbageCollectedMixin {};
 class UseMixinFromLeftmostInherited : public UseMixin, public EmptyMixin {
  public:
-  ~UseMixinFromLeftmostInherited() {}
+  ~UseMixinFromLeftmostInherited() = default;
 };
 
 TEST(HeapTest, IsGarbageCollected) {
@@ -6722,6 +6746,64 @@ TEST(HeapTest, HeapHashMapCallsDestructor) {
   map.clear();
 
   EXPECT_TRUE(string.Impl()->HasOneRef());
+}
+
+class DoublyLinkedListNodeImpl
+    : public GarbageCollectedFinalized<DoublyLinkedListNodeImpl>,
+      public DoublyLinkedListNode<DoublyLinkedListNodeImpl> {
+ public:
+  DoublyLinkedListNodeImpl() = default;
+  static DoublyLinkedListNodeImpl* Create() {
+    return new DoublyLinkedListNodeImpl();
+  }
+
+  static int destructor_calls_;
+  ~DoublyLinkedListNodeImpl() { ++destructor_calls_; }
+
+  void Trace(Visitor* visitor) {
+    visitor->Trace(prev_);
+    visitor->Trace(next_);
+  }
+
+ private:
+  friend class WTF::DoublyLinkedListNode<DoublyLinkedListNodeImpl>;
+  Member<DoublyLinkedListNodeImpl> prev_;
+  Member<DoublyLinkedListNodeImpl> next_;
+};
+
+int DoublyLinkedListNodeImpl::destructor_calls_ = 0;
+
+template <typename T>
+class HeapDoublyLinkedListContainer
+    : public GarbageCollected<HeapDoublyLinkedListContainer<T>> {
+ public:
+  static HeapDoublyLinkedListContainer<T>* Create() {
+    return new HeapDoublyLinkedListContainer<T>();
+  }
+  HeapDoublyLinkedListContainer<T>() = default;
+  HeapDoublyLinkedList<T> list_;
+  void Trace(Visitor* visitor) { visitor->Trace(list_); }
+};
+
+TEST(HeapTest, HeapDoublyLinkedList) {
+  Persistent<HeapDoublyLinkedListContainer<DoublyLinkedListNodeImpl>>
+      container =
+          HeapDoublyLinkedListContainer<DoublyLinkedListNodeImpl>::Create();
+  DoublyLinkedListNodeImpl::destructor_calls_ = 0;
+
+  container->list_.Append(DoublyLinkedListNodeImpl::Create());
+  container->list_.Append(DoublyLinkedListNodeImpl::Create());
+
+  PreciselyCollectGarbage();
+  EXPECT_EQ(DoublyLinkedListNodeImpl::destructor_calls_, 0);
+
+  container->list_.RemoveHead();
+  PreciselyCollectGarbage();
+  EXPECT_EQ(DoublyLinkedListNodeImpl::destructor_calls_, 1);
+
+  container->list_.RemoveHead();
+  PreciselyCollectGarbage();
+  EXPECT_EQ(DoublyLinkedListNodeImpl::destructor_calls_, 2);
 }
 
 }  // namespace blink

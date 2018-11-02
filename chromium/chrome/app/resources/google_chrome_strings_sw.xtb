@@ -35,7 +35,6 @@ Baadhi ya vipengele huenda visipatikane na mabadiliko katika mapendeleo hayatahi
 <translation id="1698376642261615901">Google Chrome ni kivinjari cha wavuti kinachoendesha kurasa za wavuti na programu kwa kasi ya umeme. Ni ya kasi, thabiti, na rahisi kutumia. Vinjari wavuti kwa usalama zaidi kwa kinga dhidi ya programu hasidi na hadaa iliyojengwa ndani ya Google Chrome.</translation>
 <translation id="1718131156967340976">Chagua <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome haikuweza kusawazisha data yako kutokana na hitilafu ya kuingia katika akaunti.</translation>
-<translation id="1759301979429102118">Maelezo kutoka kwa anwani zako yanaweza kukusaidia kujaza fomu kwa haraka zaidi katika Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Pata msaada wa kutumia Chrome OS</translation>
 <translation id="1795405610103747296">Sakinisha Chrome kwenye simu yako. Tutatuma SMS kwenye simu yako: <ph name="PHONE_NUMBER" /></translation>
@@ -63,6 +62,7 @@ Kuingia bila kujali kutaunganisha maelezo ya Chrome kama vile alamisho, historia
 <translation id="2429317896000329049">Google Chrome haikuweza kusawazisha data yako kwa sababu Usawazishaji haupatikani kwa kikoa chako.</translation>
 <translation id="2446511512801740068">Muda wa matumizi wa Chrome umeisha kwa sababu haijafunguliwa upya kwa muda mrefu. Sasisho linapatikana na litaanza kutumika pindi tu utakapofungua upya.</translation>
 <translation id="2485422356828889247">Ondoa</translation>
+<translation id="2534507159460261402">Google Pay (imenakiliwa kwenye Chrome)</translation>
 <translation id="2580411288591421699">Huwezi kusakinisha toleo la Google Chrome ambalo tayari linatumika. Tafadhali funga Google Chrome na ujaribu tena.</translation>
 <translation id="2586406160782125153">Hatua hii itafuta data yako ya kuvinjari kwenye kifaa hiki. Ili urejeshe data yako baadaye, ingia katika Chrome ukitumia <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Nembo ya Chrome</translation>
@@ -112,8 +112,6 @@ Tafadhali angalia barua pepe yako katika <ph name="ACCOUNT_EMAIL" /> upate maagi
 <translation id="3889417619312448367">Ondoa Google Chrome</translation>
 <translation id="3898493977366060150">Kuvinjari kwenye wavuti kwa kutumia programu mahiri za Google</translation>
 <translation id="4028693306634653894">Fikia Google Chrome haraka</translation>
-<translation id="4031074602479304239">Chrome imezuia tovuti hii kukuelekeza kwenye</translation>
-<translation id="4042449298237264661">Kompyuta hii haitapokea tena sasisho za Google Chrome kwa sababu Windows XP na Windows Vista hazitumiki tena.</translation>
 <translation id="4050175100176540509">Maboresho muhimu ya usalama na vipengele vipya vinapatikana katika toleo jipya.</translation>
 <translation id="4053720452172726777">Dhibiti  na ugeuze Google Chrome ikufae</translation>
 <translation id="4147555960264124640">Unaingia katika akaunti ukitumia akaunti inayodhibitiwa na kumpa msimamizi wa akaunti hiyo udhibiti wa wasifu wako kwenye Google Chrome. Data yako ya Chrome, kama vile programu zako, alamisho, historia, manenosiri, na mipangilio mingine itahusishwa na <ph name="USER_NAME" /> daima . Utaweza kufuta data hii kupitia Dashibodi ya Akaunti za Google, lakini hutaweza kuhusisha data hii na akaunti nyingine. <ph name="LEARN_MORE" /></translation>
@@ -156,7 +154,6 @@ Tafadhali angalia barua pepe yako katika <ph name="ACCOUNT_EMAIL" /> upate maagi
 Huenda baadhi ya vipengele visipatikane. Tafadhali bainisha saraka tofauti ya wasifu au tumia toleo jipya la Chrome.</translation>
 <translation id="5193136243808726294">Mfumo wa Uendeshaji wa Google Chrome hauwezi kufungua ukurasa huu.</translation>
 <translation id="5204098752394657250">Sheria na Masharti za <ph name="TERMS_OF_SERVICE_LINK" />Google Chrome<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
-<translation id="5243785881901838525">Google Payments (imenakiliwa kwenye Chrome)</translation>
 <translation id="5251420635869119124">Walioalikwa wanaweza kutumia Chrome bila kuacha chochote nyuma.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome itazimika na kuwaka tena baada ya sekunde 1.}other{Google Chrome itazimika na kuwaka tena baada ya sekunde #.}}</translation>
 <translation id="532046782124376502">Ilani: Google Chrome haiwezi kuzuia viendelezi kurekodi historia yako ya kuvinjari. Ili kuzima kiendelezi hiki katika hali fiche, batilisha chaguo hili.</translation>
@@ -187,15 +184,12 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Sasisha Chrome OS</translation>
 <translation id="6235018212288296708">Sheria ya ndani ya Google Chrome ili kuruhusu trafiki ya mDNS.</translation>
-<translation id="6236285698028833233">Google Chrome imekoma kusasisha na haiwezi kutumiwa tena na toleo hili la mfumo wako wa uendeshaji.</translation>
 <translation id="6291089322031436445">Programu za Chrome Dev</translation>
 <translation id="6291549208091401781">Tayari Google Chrome imesakinishwa kwa watumiaji wote kwenye kompyuta yako.</translation>
 <translation id="6338556085225130112">Inasasisha Google Chrome</translation>
 <translation id="6368958679917195344">Chrome OS imewezeshwa na programu ya ziada ya <ph name="BEGIN_LINK_CROS_OSS" />programu huria<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6393863479814692971">Chrome inahitaji ruhusa ya kufikia kamera yako kwa ajili ya tovuti hii.</translation>
-<translation id="6400076122676892962">Kompyuta hii itaacha kupokea sasisho za Google Chrome hivi karibuni kwa sababu Mac OS X 10.6, 10.7, na 10.8 hazitatumika tena.</translation>
 <translation id="6410540444482791104">Unaweza kusaidia kuifanya Chrome kuwa salama na rahisi zaidi kutumia kwa kutuma kiotomatiki maelezo fulani ya mfumo na maudhui ya ukurasa kwa Google ili kusaidia kugundua programu na tovuti hatari.</translation>
-<translation id="6470176598693778404">Kompyuta hii haitapokea tena sasisho za Google Chrome kwa sababu Mac OS X 10.6, 10.7, na 10.8 hazitumiki tena.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Kipakuliwa kinaendelea kwa sasa. Unataka kughairi kipakuliwa na kuondoka Google Chrome?}other{Vipakuliwa # vinaendelea kwa sasa. Unataka kughairi vipakuliwa na kuondoka Google Chrome?}}</translation>
 <translation id="6566149418543181476">Inasasisha Google Chrome <ph name="PROGRESS_PERCENT" /></translation>
 <translation id="6598387184982954187">Unatumia <ph name="PROFILE_EMAIL" /> kusawazisha vitu vyako kwenye Chrome. Ili usasishe mapendeleo yako ya usawazishaji au utumie Chrome bila akaunti ya Google, tembelea <ph name="SETTINGS_LINK" />.</translation>
@@ -216,7 +210,6 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="7164397146364144019">Unaweza kusaidia kuifanya Chrome kuwa salama na rahisi zaidi kutumia kwa kuripoti maelezo ya uwezekano wa matukio yasiyo salama kwa Google kiotomatiki.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> imeongezwa kwenye Chrome.</translation>
 <translation id="7242029209006116544">Unaingia katika akaunti ykitumia akaunti inayodhibitiwa na kumpa msimamizi wa akaunti hiyo udhibiti wa wasifu wako kwenye Google Chrome. Data yako ya Chrome, kama vile programu zako, alamisho, historia, manenosiri, na mipangilio mingine itahishwa na <ph name="USER_NAME" /> daima. Utaweza kufuta data hii kupitia Dashibodi ya Akaunti za Google, lakini hutaweza kuhusisha data hii na akaunti nyingine. Unaweza kuunda kwa hiari wasifu mpya ili kuweka data yako ya Chrome iliyo kando. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Kompyuta hii itaacha kupokea sasisho za Google Chrome hivi karibuni kwa sababu Windows XP na Windows Vista hazitatumika tena.</translation>
 <translation id="7330164299247909639">Cheti hakijathibitishwa. Tafadhali ingia katika Google Chrome tena ukitumia <ph name="USER_NAME" /> au uwasiliane na msimamizi wako kwa maelezo zaidi. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Dirisha jipya</translation>
 <translation id="7369650938475876456">Tumia nenosiri thabiti lililozalishwa na Chrome</translation>
@@ -229,6 +222,7 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="7494905215383356681">Leseni za programu huria kwenye Chrome</translation>
 <translation id="7535429826459677826">Google Chrome Dev</translation>
 <translation id="7552219221109926349">Onyesha Mfumo wa Uendeshaji wa Chrome katika lugha hii</translation>
+<translation id="7589360514048265910">Kompyuta hii haitapokea tena masasisho ya Google Chrome kwa sababu Mac OS X 10.9 haitumiki tena.</translation>
 <translation id="7592736734348559088">Google Chrome haikuweza kusawazisha data yako kwa sababu maelezo yako ya kuingia katika akaunti yanahitaji kusasishwa.</translation>
 <translation id="7626032353295482388">Karibu kwenye Chrome</translation>
 <translation id="7747138024166251722">Kisakinishi hakikuweza kuunda saraka la muda. Tafadhali chunguza nafasi iliyo wazi kwenye diski na ruhusa ya kusakinisha programu.</translation>
@@ -244,6 +238,7 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="7896673875602241923">Kuna mtu aliingia katika Chrome kwenye kompyuta hii akitumia <ph name="ACCOUNT_EMAIL_LAST" />. Tafadhali ongeza wasifu mwingine wa Chrome ili utenganishe maelezo yako.</translation>
 <translation id="7908168227788431038">Inakaribia kusasishwa! Anzisha Google Chrome upya ili imalize kusasisha.</translation>
 <translation id="795025003224538582">Usianzishe upya</translation>
+<translation id="7962410387636238736">Kompyuta hii haitapokea tena masasisho ya Google Chrome kwa sababu Windows XP na Windows Vista hazitumiki tena</translation>
 <translation id="8005540215158006229">Chrome inakaribia kuwa tayari.</translation>
 <translation id="8008534537613507642">Sakinisha Chrome Upya</translation>
 <translation id="8030318113982266900">Inasasisha kituo chako kwenda kituo cha <ph name="CHANNEL_NAME" />...</translation>
@@ -274,7 +269,6 @@ Google Chrome haiwezi kufufua mipangilio yako.</translation>
 <translation id="8796108026289707191">Unapaswa kuzima na kuwasha Google Chrome sasa.</translation>
 <translation id="8823341990149967727">Toleo hili la Chrome Limepitwa na Wakati</translation>
 <translation id="884296878221830158">Pia inadhibiti ukurasa unaoonyeshwa unapoanzisha Chrome au unapobofya kitufe cha Mwanzo.</translation>
-<translation id="8851136666856101339">kuu</translation>
 <translation id="8862326446509486874">Huna haki zifaazo ili kufanya usakinishaji wa kiwango cha mfumo. Jaribu kutumia kisakinishi kama msimamiaji kompyuta.</translation>
 <translation id="8914504000324227558">Zindua upya Chrome</translation>
 <translation id="9026991721384951619">Mfumo wa Uendeshaji wa Chrome haukuweza kusawazisha data yako kwa sababu maelezo yako ya kuingia katika akaunti yanahitaji kusasishwa.</translation>

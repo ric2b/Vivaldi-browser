@@ -14,7 +14,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
@@ -92,7 +91,7 @@ void PaymentRequestBrowserTestBase::SetUpCommandLine(
 
 void PaymentRequestBrowserTestBase::SetUpOnMainThread() {
   // Setup the https server.
-  https_server_ = base::MakeUnique<net::EmbeddedTestServer>(
+  https_server_ = std::make_unique<net::EmbeddedTestServer>(
       net::EmbeddedTestServer::TYPE_HTTPS);
   host_resolver()->AddRule("a.com", "127.0.0.1");
   host_resolver()->AddRule("b.com", "127.0.0.1");
@@ -228,6 +227,16 @@ void PaymentRequestBrowserTestBase::OnSpecDoneUpdating() {
 void PaymentRequestBrowserTestBase::OnCvcPromptShown() {
   if (event_waiter_)
     event_waiter_->OnEvent(DialogEvent::CVC_PROMPT_SHOWN);
+}
+
+void PaymentRequestBrowserTestBase::OnProcessingSpinnerShown() {
+  if (event_waiter_)
+    event_waiter_->OnEvent(DialogEvent::PROCESSING_SPINNER_SHOWN);
+}
+
+void PaymentRequestBrowserTestBase::OnProcessingSpinnerHidden() {
+  if (event_waiter_)
+    event_waiter_->OnEvent(DialogEvent::PROCESSING_SPINNER_HIDDEN);
 }
 
 void PaymentRequestBrowserTestBase::OnInterfaceRequestFromFrame(
@@ -443,7 +452,7 @@ void PaymentRequestBrowserTestBase::AddCreditCard(
   autofill::PersonalDataManager* personal_data_manager = GetDataManager();
   if (card.record_type() != autofill::CreditCard::LOCAL_CARD) {
     personal_data_manager->AddServerCreditCardForTest(
-        base::MakeUnique<autofill::CreditCard>(card));
+        std::make_unique<autofill::CreditCard>(card));
     return;
   }
   size_t card_count = personal_data_manager->GetCreditCards().size();
@@ -467,7 +476,7 @@ void PaymentRequestBrowserTestBase::CreatePaymentRequestForTest(
       content::WebContents::FromRenderFrameHost(render_frame_host);
   DCHECK(web_contents);
   std::unique_ptr<TestChromePaymentRequestDelegate> delegate =
-      base::MakeUnique<TestChromePaymentRequestDelegate>(
+      std::make_unique<TestChromePaymentRequestDelegate>(
           web_contents, this /* observer */, is_incognito_, is_valid_ssl_,
           is_browser_window_active_);
   delegate_ = delegate.get();
@@ -605,7 +614,8 @@ void PaymentRequestBrowserTestBase::PayWithCreditCardAndWait(
     PaymentRequestDialogView* dialog_view) {
   OpenCVCPromptWithCVC(cvc, dialog_view);
 
-  ResetEventWaiter(DialogEvent::DIALOG_CLOSED);
+  ResetEventWaiterForSequence(
+      {DialogEvent::PROCESSING_SPINNER_SHOWN, DialogEvent::DIALOG_CLOSED});
   ClickOnDialogViewAndWait(DialogViewID::CVC_PROMPT_CONFIRM_BUTTON,
                            dialog_view);
 }
@@ -815,6 +825,12 @@ std::ostream& operator<<(
       break;
     case DialogEvent::ABORT_CALLED:
       out << "ABORT_CALLED";
+      break;
+    case DialogEvent::PROCESSING_SPINNER_SHOWN:
+      out << "PROCESSING_SPINNER_SHOWN";
+      break;
+    case DialogEvent::PROCESSING_SPINNER_HIDDEN:
+      out << "PROCESSING_SPINNER_HIDDEN";
       break;
   }
   return out;

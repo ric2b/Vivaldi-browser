@@ -7,6 +7,7 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "core/CoreInitializer.h"
+#include "core/css/CSSDefaultStyleSheets.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/WebLocalFrameImpl.h"
@@ -28,7 +29,7 @@ BlinkLeakDetector::BlinkLeakDetector(BlinkLeakDetectorClient* client)
       number_of_gc_needed_(0),
       client_(client) {}
 
-BlinkLeakDetector::~BlinkLeakDetector() {}
+BlinkLeakDetector::~BlinkLeakDetector() = default;
 
 void BlinkLeakDetector::PrepareForLeakDetection(WebFrame* frame) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
@@ -61,6 +62,9 @@ void BlinkLeakDetector::PrepareForLeakDetection(WebFrame* frame) {
   // FIXME: HTML5 Notification should be closed because notification affects
   // the result of number of DOM objects.
   V8PerIsolateData::From(isolate)->ClearScriptRegexpContext();
+
+  // Clear lazily loaded style sheets.
+  CSSDefaultStyleSheets::Instance().PrepareForLeakDetection();
 }
 
 void BlinkLeakDetector::CollectGarbage() {
@@ -74,7 +78,7 @@ void BlinkLeakDetector::CollectGarbage() {
   // so previous document is still held by the loader until the next event loop.
   // Complete all pending tasks before proceeding to gc.
   number_of_gc_needed_ = 2;
-  delayed_gc_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+  delayed_gc_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void BlinkLeakDetector::TimerFiredGC(TimerBase*) {
@@ -85,7 +89,7 @@ void BlinkLeakDetector::TimerFiredGC(TimerBase*) {
 
   // Inspect counters on the next event loop.
   if (--number_of_gc_needed_ > 0) {
-    delayed_gc_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    delayed_gc_timer_.StartOneShot(TimeDelta(), FROM_HERE);
   } else if (number_of_gc_needed_ > -1 &&
              DedicatedWorkerMessagingProxy::ProxyCount()) {
     // It is possible that all posted tasks for finalizing in-process proxy
@@ -96,7 +100,7 @@ void BlinkLeakDetector::TimerFiredGC(TimerBase*) {
     // TODO(sof): use proxyCount() to always decide if another GC needs to be
     // scheduled.  Some debug bots running browser unit tests disagree
     // (crbug.com/616714)
-    delayed_gc_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    delayed_gc_timer_.StartOneShot(TimeDelta(), FROM_HERE);
   } else {
     DCHECK(client_);
     client_->OnLeakDetectionComplete();

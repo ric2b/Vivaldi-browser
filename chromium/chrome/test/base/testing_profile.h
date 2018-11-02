@@ -17,8 +17,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/domain_reliability/clear_mode.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "content/public/common/network_service.mojom.h"
 #include "extensions/features/features.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
@@ -321,14 +321,12 @@ class TestingProfile : public Profile {
   bool IsGuestSession() const override;
   void SetExitType(ExitType exit_type) override {}
   ExitType GetLastSessionExitType() override;
-  content::mojom::NetworkContextPtr CreateMainNetworkContext() override;
+  network::mojom::NetworkContextPtr CreateMainNetworkContext() override;
 #if defined(OS_CHROMEOS)
   void ChangeAppLocale(const std::string&, AppLocaleChangedVia) override {}
   void OnLogin() override {}
   void InitChromeOSPreferences() override {}
 #endif  // defined(OS_CHROMEOS)
-
-  PrefProxyConfigTracker* GetProxyConfigTracker() override;
 
   // Schedules a task on the history backend and runs a nested loop until the
   // task is processed.  This has the effect of blocking the caller until the
@@ -406,9 +404,6 @@ class TestingProfile : public Profile {
   scoped_refptr<ExtensionSpecialStoragePolicy>
       extension_special_storage_policy_;
 #endif
-
-  // The proxy prefs tracker.
-  std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_;
 
   // The path to this profile. This will be valid in either of the two above
   // cases.

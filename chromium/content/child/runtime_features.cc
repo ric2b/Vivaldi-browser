@@ -80,6 +80,10 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
 #if !defined(OS_MACOSX)
   WebRuntimeFeatures::EnableNotificationContentImage(true);
 #endif
+
+#if defined(OS_ANDROID)
+  WebRuntimeFeatures::EnableDoubleTapToJumpOnVideo(true);
+#endif
 }
 
 void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
@@ -133,15 +137,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   if (!command_line.HasSwitch(switches::kDisableAcceleratedJpegDecoding))
     WebRuntimeFeatures::EnableDecodeToYUV(true);
-
-  if (command_line.HasSwitch(switches::kEnableDisplayList2dCanvas))
-    WebRuntimeFeatures::EnableDisplayList2dCanvas(true);
-
-  if (command_line.HasSwitch(switches::kDisableDisplayList2dCanvas))
-    WebRuntimeFeatures::EnableDisplayList2dCanvas(false);
-
-  if (command_line.HasSwitch(switches::kForceDisplayList2dCanvas))
-    WebRuntimeFeatures::ForceDisplayList2dCanvas(true);
 
   if (command_line.HasSwitch(switches::kEnableWebGLDraftExtensions))
     WebRuntimeFeatures::EnableWebGLDraftExtensions(true);
@@ -217,8 +212,8 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableWebVR))
     WebRuntimeFeatures::EnableWebVR(true);
 
-  WebRuntimeFeatures::EnableWebVRExperimentalRendering(
-      base::FeatureList::IsEnabled(features::kWebVrExperimentalRendering));
+  WebRuntimeFeatures::EnableWebXR(
+      base::FeatureList::IsEnabled(features::kWebXr));
 
   if (command_line.HasSwitch(switches::kDisablePresentationAPI))
     WebRuntimeFeatures::EnablePresentationAPI(false);
@@ -232,6 +227,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableUserActivationV2(
       base::FeatureList::IsEnabled(features::kUserActivationV2));
+
+  if (base::FeatureList::IsEnabled(features::kScrollAnchorSerialization))
+    WebRuntimeFeatures::EnableScrollAnchorSerialization(true);
 
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV175))
     WebRuntimeFeatures::EnableFeatureFromString("SlimmingPaintV175", true);
@@ -298,11 +296,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
       base::FeatureList::IsEnabled(
           features::kServiceWorkerScriptFullCodeCache));
 
-  WebRuntimeFeatures::EnableOffMainThreadFetch(
-      base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
-
-  WebRuntimeFeatures::EnableMojoBlobs(features::IsMojoBlobsEnabled());
-
   WebRuntimeFeatures::EnableNetworkService(
       base::FeatureList::IsEnabled(features::kNetworkService));
 
@@ -319,18 +312,11 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kCompositorTouchAction))
     WebRuntimeFeatures::EnableCompositorTouchAction(true);
 
-  WebRuntimeFeatures::EnablePreventLayerSquashing(
-      base::FeatureList::IsEnabled(features::kEnablePreventLayerSquashing));
-
   if (base::FeatureList::IsEnabled(features::kGenericSensor)) {
     WebRuntimeFeatures::EnableGenericSensor(true);
     if (base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses))
       WebRuntimeFeatures::EnableGenericSensorExtraClasses(true);
   }
-
-  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo) ||
-      base::FeatureList::IsEnabled(features::kNetworkService))
-    WebRuntimeFeatures::EnableLoadingWithMojo(true);
 
   if (base::FeatureList::IsEnabled(features::kNotificationsWithMojo))
     WebRuntimeFeatures::EnableNotificationsWithMojo(true);
@@ -423,14 +409,20 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (base::FeatureList::IsEnabled(features::kV8ContextSnapshot))
     WebRuntimeFeatures::EnableV8ContextSnapshot(true);
 
+  if (base::FeatureList::IsEnabled(features::kStopInBackground))
+    WebRuntimeFeatures::EnableStopInBackground(true);
+
   if (base::FeatureList::IsEnabled(features::kStopLoadingInBackground))
-    WebRuntimeFeatures::EnableStopLoadingInBackgroundAndroid(true);
+    WebRuntimeFeatures::EnableStopLoadingInBackground(true);
 
   WebRuntimeFeatures::EnablePWAFullCodeCache(
       base::FeatureList::IsEnabled(features::kPWAFullCodeCache));
 
   WebRuntimeFeatures::EnableRequireCSSExtensionForFile(
       base::FeatureList::IsEnabled(features::kRequireCSSExtensionForFile));
+
+  WebRuntimeFeatures::EnablePictureInPicture(
+      base::FeatureList::IsEnabled(media::kPictureInPicture));
 };
 
 }  // namespace content

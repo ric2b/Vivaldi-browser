@@ -60,7 +60,7 @@ static Response ToResponse(ExceptionState& exception_state) {
 InspectorDOMStorageAgent::InspectorDOMStorageAgent(Page* page)
     : page_(page), is_enabled_(false) {}
 
-InspectorDOMStorageAgent::~InspectorDOMStorageAgent() {}
+InspectorDOMStorageAgent::~InspectorDOMStorageAgent() = default;
 
 void InspectorDOMStorageAgent::Trace(blink::Visitor* visitor) {
   visitor->Trace(page_);
@@ -176,7 +176,7 @@ Response InspectorDOMStorageAgent::removeDOMStorageItem(
 }
 
 std::unique_ptr<protocol::DOMStorage::StorageId>
-InspectorDOMStorageAgent::GetStorageId(SecurityOrigin* security_origin,
+InspectorDOMStorageAgent::GetStorageId(const SecurityOrigin* security_origin,
                                        bool is_local_storage) {
   return protocol::DOMStorage::StorageId::create()
       .setSecurityOrigin(security_origin->ToRawString())
@@ -188,13 +188,13 @@ void InspectorDOMStorageAgent::DidDispatchDOMStorageEvent(
     const String& key,
     const String& old_value,
     const String& new_value,
-    StorageType storage_type,
-    SecurityOrigin* security_origin) {
+    StorageArea::StorageType storage_type,
+    const SecurityOrigin* security_origin) {
   if (!GetFrontend())
     return;
 
   std::unique_ptr<protocol::DOMStorage::StorageId> id =
-      GetStorageId(security_origin, storage_type == kLocalStorage);
+      GetStorageId(security_origin, storage_type == StorageArea::kLocalStorage);
 
   if (key.IsNull())
     GetFrontend()->domStorageItemsCleared(std::move(id));

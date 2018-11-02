@@ -5,12 +5,12 @@
 #include "platform/scheduler/child/web_scheduler_impl.h"
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "platform/scheduler/child/web_task_runner_impl.h"
 #include "platform/scheduler/child/worker_scheduler.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 namespace scheduler {
@@ -18,19 +18,16 @@ namespace scheduler {
 WebSchedulerImpl::WebSchedulerImpl(
     ChildScheduler* child_scheduler,
     scoped_refptr<SingleThreadIdleTaskRunner> idle_task_runner,
-    scoped_refptr<TaskQueue> loading_task_runner,
     scoped_refptr<TaskQueue> timer_task_runner,
     scoped_refptr<TaskQueue> v8_task_runner)
     : child_scheduler_(child_scheduler),
       idle_task_runner_(idle_task_runner),
-      loading_web_task_runner_(
-          WebTaskRunnerImpl::Create(loading_task_runner, base::nullopt)),
       timer_web_task_runner_(
           WebTaskRunnerImpl::Create(timer_task_runner, base::nullopt)),
       v8_web_task_runner_(
           WebTaskRunnerImpl::Create(v8_task_runner, base::nullopt)) {}
 
-WebSchedulerImpl::~WebSchedulerImpl() {}
+WebSchedulerImpl::~WebSchedulerImpl() = default;
 
 void WebSchedulerImpl::Shutdown() {
   child_scheduler_->Shutdown();
@@ -44,31 +41,26 @@ bool WebSchedulerImpl::CanExceedIdleDeadlineIfRequired() {
   return child_scheduler_->CanExceedIdleDeadlineIfRequired();
 }
 
-void WebSchedulerImpl::RunIdleTask(
-    std::unique_ptr<blink::WebThread::IdleTask> task,
-    base::TimeTicks deadline) {
-  task->Run((deadline - base::TimeTicks()).InSecondsF());
+void WebSchedulerImpl::RunIdleTask(blink::WebThread::IdleTask task,
+                                   base::TimeTicks deadline) {
+  std::move(task).Run((deadline - base::TimeTicks()).InSecondsF());
 }
 
-void WebSchedulerImpl::PostIdleTask(const blink::WebTraceLocation& location,
-                                    blink::WebThread::IdleTask* task) {
+void WebSchedulerImpl::PostIdleTask(const base::Location& location,
+                                    blink::WebThread::IdleTask task) {
   DCHECK(idle_task_runner_);
   idle_task_runner_->PostIdleTask(
-      location, base::Bind(&WebSchedulerImpl::RunIdleTask,
-                           base::Passed(base::WrapUnique(task))));
+      location,
+      base::BindOnce(&WebSchedulerImpl::RunIdleTask, std::move(task)));
 }
 
 void WebSchedulerImpl::PostNonNestableIdleTask(
-    const blink::WebTraceLocation& location,
-    blink::WebThread::IdleTask* task) {
+    const base::Location& location,
+    blink::WebThread::IdleTask task) {
   DCHECK(idle_task_runner_);
   idle_task_runner_->PostNonNestableIdleTask(
-      location, base::Bind(&WebSchedulerImpl::RunIdleTask,
-                           base::Passed(base::WrapUnique(task))));
-}
-
-blink::WebTaskRunner* WebSchedulerImpl::LoadingTaskRunner() {
-  return loading_web_task_runner_.get();
+      location,
+      base::BindOnce(&WebSchedulerImpl::RunIdleTask, std::move(task)));
 }
 
 blink::WebTaskRunner* WebSchedulerImpl::TimerTaskRunner() {

@@ -132,12 +132,7 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams> {
 
     CertVerifyResult verify_result;
     verify_result.verified_cert = ImportCertFromFile(
-        GetTestCertsDirectory(), "quic_test.example.com.crt");
-    cert_verifier_.AddResultForCertAndHost(verify_result.verified_cert.get(),
-                                           "test.example.com", verify_result,
-                                           OK);
-    verify_result.verified_cert = ImportCertFromFile(
-        GetTestCertsDirectory(), "quic_test_ecc.example.com.crt");
+        GetTestCertsDirectory(), "quic-chain.pem");
     cert_verifier_.AddResultForCertAndHost(verify_result.verified_cert.get(),
                                            "test.example.com", verify_result,
                                            OK);
@@ -181,8 +176,7 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams> {
     server_config_options_.token_binding_params = QuicTagVector{kTB10, kP256};
     server_.reset(new QuicSimpleServer(
         crypto_test_utils::ProofSourceForTesting(), server_config_,
-        server_config_options_, AllSupportedTransportVersions(),
-        &response_cache_));
+        server_config_options_, AllSupportedVersions(), &response_cache_));
     server_->Listen(server_address_);
     server_address_ = server_->server_address();
     server_->StartReading();

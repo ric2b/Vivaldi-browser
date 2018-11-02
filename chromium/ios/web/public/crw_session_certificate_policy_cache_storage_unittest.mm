@@ -4,8 +4,8 @@
 
 #import "ios/web/public/crw_session_certificate_policy_cache_storage.h"
 
-#import "base/mac/scoped_nsobject.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -20,13 +20,9 @@ namespace {
 // Checks for equality between |cert_storage1| and |cert_storage2|.
 bool CertStoragesAreEqual(CRWSessionCertificateStorage* cert_storage1,
                           CRWSessionCertificateStorage* cert_storage2) {
-  std::string cert_string1;
-  bool success1 = net::X509Certificate::GetDEREncoded(
-      cert_storage1.certificate->os_cert_handle(), &cert_string1);
-  std::string cert_string2;
-  bool success2 = net::X509Certificate::GetDEREncoded(
-      cert_storage2.certificate->os_cert_handle(), &cert_string2);
-  return success1 && success2 && cert_string1 == cert_string2 &&
+  return net::x509_util::CryptoBufferEqual(
+             cert_storage1.certificate->cert_buffer(),
+             cert_storage2.certificate->cert_buffer()) &&
          cert_storage1.host == cert_storage2.host &&
          cert_storage1.status == cert_storage2.status;
 }
@@ -53,7 +49,7 @@ class CRWSessionCertificatePolicyCacheStorageTest : public PlatformTest {
     // Set up |cache_storage_|.
     scoped_refptr<net::X509Certificate> cert =
         net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
-    base::scoped_nsobject<NSMutableSet> certs([[NSMutableSet alloc] init]);
+    NSMutableSet* certs = [[NSMutableSet alloc] init];
     [certs addObject:[[CRWSessionCertificateStorage alloc]
                          initWithCertificate:cert
                                         host:"test1.com"
@@ -62,7 +58,7 @@ class CRWSessionCertificatePolicyCacheStorageTest : public PlatformTest {
   }
 
  protected:
-  base::scoped_nsobject<CRWSessionCertificatePolicyCacheStorage> cache_storage_;
+  CRWSessionCertificatePolicyCacheStorage* cache_storage_;
 };
 
 // Tests that unarchiving CRWSessionCertificatePolicyCacheStorage data results
@@ -70,7 +66,7 @@ class CRWSessionCertificatePolicyCacheStorageTest : public PlatformTest {
 TEST_F(CRWSessionCertificatePolicyCacheStorageTest, EncodeDecode) {
   NSData* data = [NSKeyedArchiver archivedDataWithRootObject:cache_storage_];
   id decoded = [NSKeyedUnarchiver unarchiveObjectWithData:data];
-  EXPECT_TRUE(CacheStoragesAreEqual(cache_storage_.get(), decoded));
+  EXPECT_TRUE(CacheStoragesAreEqual(cache_storage_, decoded));
 }
 
 using CRWSessionCertificateStorageTest = PlatformTest;

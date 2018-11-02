@@ -104,6 +104,8 @@ class PLATFORM_EXPORT FloatSize {
                      height_ < other.height_ ? height_ : other.height_);
   }
 
+  void ClampNegativeToZero() { *this = ExpandedTo(FloatSize()); }
+
   float DiagonalLength() const;
   float DiagonalLengthSquared() const {
     return width_ * width_ + height_ * height_;

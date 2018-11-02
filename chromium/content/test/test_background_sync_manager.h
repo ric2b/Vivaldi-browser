@@ -80,9 +80,7 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
 
   // Accessors to internal state
   base::TimeDelta delayed_task_delta() const { return delayed_task_delta_; }
-  blink::mojom::BackgroundSyncEventLastChance last_chance() const {
-    return last_chance_;
-  }
+  bool last_chance() const { return last_chance_; }
   const BackgroundSyncParameters* background_sync_parameters() const {
     return parameters_.get();
   }
@@ -94,21 +92,21 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
       const GURL& origin,
       const std::string& key,
       const std::string& data,
-      const ServiceWorkerStorage::StatusCallback& callback) override;
+      ServiceWorkerStorage::StatusCallback callback) override;
 
   // Override to allow delays to be injected by tests.
   void GetDataFromBackend(
       const std::string& key,
-      const ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback&
-          callback) override;
+      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback)
+      override;
 
   // Override to avoid actual dispatching of the event, just call the provided
   // callback instead.
   void DispatchSyncEvent(
       const std::string& tag,
       scoped_refptr<ServiceWorkerVersion> active_version,
-      blink::mojom::BackgroundSyncEventLastChance last_chance,
-      const ServiceWorkerVersion::LegacyStatusCallback& callback) override;
+      bool last_chance,
+      ServiceWorkerVersion::StatusCallback callback) override;
 
   // Override to just store delayed task, and allow tests to control the clock
   // and when delayed tasks are executed.
@@ -128,20 +126,18 @@ class TestBackgroundSyncManager : public BackgroundSyncManager {
       const GURL& origin,
       const std::string& key,
       const std::string& data,
-      const ServiceWorkerStorage::StatusCallback& callback);
+      ServiceWorkerStorage::StatusCallback callback);
 
   // Callback to resume the GetDataFromBackend operation, after explicit delays
   // injected by tests.
   void GetDataFromBackendContinue(
       const std::string& key,
-      const ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback&
-          callback);
+      ServiceWorkerStorage::GetUserDataForAllRegistrationsCallback callback);
 
   bool corrupt_backend_ = false;
   bool delay_backend_ = false;
   bool has_main_frame_provider_host_ = true;
-  blink::mojom::BackgroundSyncEventLastChance last_chance_ =
-      blink::mojom::BackgroundSyncEventLastChance::IS_NOT_LAST_CHANCE;
+  bool last_chance_ = false;
   base::OnceClosure continuation_;
   DispatchSyncCallback dispatch_sync_callback_;
   base::OnceClosure delayed_task_;

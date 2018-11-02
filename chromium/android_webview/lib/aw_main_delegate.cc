@@ -12,6 +12,7 @@
 #include "android_webview/browser/browser_view_renderer.h"
 #include "android_webview/browser/command_line_helper.h"
 #include "android_webview/browser/deferred_gpu_command_service.h"
+#include "android_webview/browser/tracing/aw_trace_event_args_whitelist.h"
 #include "android_webview/common/aw_descriptors.h"
 #include "android_webview/common/aw_paths.h"
 #include "android_webview/common/aw_switches.h"
@@ -23,7 +24,6 @@
 #include "base/android/build_info.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
-#include "base/debug/crash_logging.h"
 #include "base/i18n/icu_util.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -31,6 +31,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "cc/base/switches.h"
 #include "components/crash/content/app/breakpad_linux.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/safe_browsing/android/safe_browsing_api_handler_bridge.h"
 #include "components/spellcheck/common/spellcheck_features.h"
 #include "content/public/browser/android/browser_media_player_manager_register.h"
@@ -152,8 +153,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   CommandLineHelper::AddDisabledFeature(*cl,
                                         media::kMediaDrmPersistentLicense.name);
 
-  CommandLineHelper::AddEnabledFeature(*cl, features::kLoadingWithMojo.name);
-
   CommandLineHelper::AddDisabledFeature(*cl, features::kMojoInputMessages.name);
 
   android_webview::RegisterPathProvider();
@@ -162,6 +161,11 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
       new safe_browsing::SafeBrowsingApiHandlerBridge());
   safe_browsing::SafeBrowsingApiHandler::SetInstance(
       safe_browsing_api_handler_.get());
+
+  // Used only if the argument filter is enabled in tracing config,
+  // as is the case by default in aw_tracing_controller.cc
+  base::trace_event::TraceLog::GetInstance()->SetArgumentFilterPredicate(
+      base::Bind(&IsTraceEventArgsWhitelisted));
 
   return false;
 }
@@ -212,13 +216,18 @@ void AwMainDelegate::PreSandboxStartup() {
 
   base::android::BuildInfo* android_build_info =
       base::android::BuildInfo::GetInstance();
-  base::debug::SetCrashKeyValue(crash_keys::kAppPackageName,
-                                android_build_info->package_name());
-  base::debug::SetCrashKeyValue(crash_keys::kAppPackageVersionCode,
-                                android_build_info->package_version_code());
-  base::debug::SetCrashKeyValue(
-      crash_keys::kAndroidSdkInt,
-      base::IntToString(android_build_info->sdk_int()));
+
+  static ::crash_reporter::CrashKeyString<64> app_name_key(
+      crash_keys::kAppPackageName);
+  app_name_key.Set(android_build_info->package_name());
+
+  static ::crash_reporter::CrashKeyString<64> app_version_key(
+      crash_keys::kAppPackageVersionCode);
+  app_version_key.Set(android_build_info->package_version_code());
+
+  static ::crash_reporter::CrashKeyString<8> sdk_int_key(
+      crash_keys::kAndroidSdkInt);
+  sdk_int_key.Set(base::IntToString(android_build_info->sdk_int()));
 }
 
 int AwMainDelegate::RunProcess(

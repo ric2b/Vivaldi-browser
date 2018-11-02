@@ -4,12 +4,13 @@
 
 #include "media/gpu/gles2_decoder_helper.h"
 
+#include <memory>
+
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/threading/thread_checker.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/context_group.h"
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gl/gl_context.h"
@@ -18,7 +19,7 @@ namespace media {
 
 class GLES2DecoderHelperImpl : public GLES2DecoderHelper {
  public:
-  explicit GLES2DecoderHelperImpl(gpu::gles2::GLES2Decoder* decoder)
+  explicit GLES2DecoderHelperImpl(gpu::DecoderContext* decoder)
       : decoder_(decoder) {}
 
   bool MakeContextCurrent() override {
@@ -100,14 +101,14 @@ class GLES2DecoderHelperImpl : public GLES2DecoderHelper {
   gpu::Mailbox CreateMailbox(gpu::gles2::TextureRef* texture_ref) override {
     DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     gpu::gles2::ContextGroup* group = decoder_->GetContextGroup();
-    gpu::gles2::MailboxManager* mailbox_manager = group->mailbox_manager();
+    gpu::MailboxManager* mailbox_manager = group->mailbox_manager();
     gpu::Mailbox mailbox = gpu::Mailbox::Generate();
     mailbox_manager->ProduceTexture(mailbox, texture_ref->texture());
     return mailbox;
   }
 
  private:
-  gpu::gles2::GLES2Decoder* decoder_;
+  gpu::DecoderContext* decoder_;
   THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(GLES2DecoderHelperImpl);
@@ -115,10 +116,10 @@ class GLES2DecoderHelperImpl : public GLES2DecoderHelper {
 
 // static
 std::unique_ptr<GLES2DecoderHelper> GLES2DecoderHelper::Create(
-    gpu::gles2::GLES2Decoder* decoder) {
+    gpu::DecoderContext* decoder) {
   if (!decoder)
     return nullptr;
-  return base::MakeUnique<GLES2DecoderHelperImpl>(decoder);
+  return std::make_unique<GLES2DecoderHelperImpl>(decoder);
 }
 
 }  // namespace media

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -56,7 +55,8 @@ class TestPreviewsUIService : public PreviewsUIService {
 class TestPreviewsLogger : public PreviewsLogger {
  public:
   TestPreviewsLogger()
-      : navigation_opt_out_(false),
+      : decision_page_id_(0),
+        navigation_opt_out_(false),
         user_blacklisted_(false),
         blacklist_ignored_(false) {}
 
@@ -64,21 +64,28 @@ class TestPreviewsLogger : public PreviewsLogger {
   void LogPreviewNavigation(const GURL& url,
                             PreviewsType type,
                             bool opt_out,
-                            base::Time time) override {
+                            base::Time time,
+                            uint64_t page_id) override {
     navigation_url_ = url;
     navigation_opt_out_ = opt_out;
     navigation_type_ = type;
     navigation_time_ = base::Time(time);
+    navigation_page_id_ = page_id;
   }
 
-  void LogPreviewDecisionMade(PreviewsEligibilityReason reason,
-                              const GURL& url,
-                              base::Time time,
-                              PreviewsType type) override {
+  void LogPreviewDecisionMade(
+      PreviewsEligibilityReason reason,
+      const GURL& url,
+      base::Time time,
+      PreviewsType type,
+      std::vector<PreviewsEligibilityReason>&& passed_reasons,
+      uint64_t page_id) override {
     decision_reason_ = reason;
     decision_url_ = GURL(url);
     decision_time_ = time;
     decision_type_ = type;
+    decision_passed_reasons_ = std::move(passed_reasons);
+    decision_page_id_ = page_id;
   }
 
   void OnNewBlacklistedHost(const std::string& host, base::Time time) override {
@@ -103,12 +110,18 @@ class TestPreviewsLogger : public PreviewsLogger {
   GURL decision_url() const { return decision_url_; }
   PreviewsType decision_type() const { return decision_type_; }
   base::Time decision_time() const { return decision_time_; }
+  const std::vector<PreviewsEligibilityReason>& decision_passed_reasons()
+      const {
+    return decision_passed_reasons_;
+  }
+  uint64_t decision_page_id() const { return decision_page_id_; }
 
   // Return the passed in LogPreviewNavigation parameters.
   GURL navigation_url() const { return navigation_url_; }
   bool navigation_opt_out() const { return navigation_opt_out_; }
   base::Time navigation_time() const { return navigation_time_; }
   PreviewsType navigation_type() const { return navigation_type_; }
+  uint64_t navigation_page_id() const { return navigation_page_id_; }
 
   // Return the passed in OnBlacklist events.
   std::string host_blacklisted() const { return host_blacklisted_; }
@@ -125,12 +138,15 @@ class TestPreviewsLogger : public PreviewsLogger {
   GURL decision_url_;
   PreviewsType decision_type_;
   base::Time decision_time_;
+  std::vector<PreviewsEligibilityReason> decision_passed_reasons_;
+  uint64_t decision_page_id_;
 
   // Passed in LogPreviewsNavigation parameters.
   GURL navigation_url_;
   bool navigation_opt_out_;
   base::Time navigation_time_;
   PreviewsType navigation_type_;
+  uint64_t navigation_page_id_;
 
   // Passed in OnBlacklist events.
   std::string host_blacklisted_;
@@ -172,14 +188,14 @@ class PreviewsUIServiceTest : public testing::Test {
 
   void SetUp() override {
     std::unique_ptr<TestPreviewsLogger> logger =
-        base::MakeUnique<TestPreviewsLogger>();
+        std::make_unique<TestPreviewsLogger>();
 
     // Use to testing logger data.
     logger_ptr_ = logger.get();
 
-    io_data_ = base::MakeUnique<TestPreviewsIOData>(loop_.task_runner(),
+    io_data_ = std::make_unique<TestPreviewsIOData>(loop_.task_runner(),
                                                     loop_.task_runner());
-    ui_service_ = base::MakeUnique<TestPreviewsUIService>(
+    ui_service_ = std::make_unique<TestPreviewsUIService>(
         io_data(), loop_.task_runner(), nullptr /* previews_opt_out_store */,
         nullptr /* previews_opt_guide */, std::move(logger));
     base::RunLoop().RunUntilIdle();
@@ -208,28 +224,34 @@ TEST_F(PreviewsUIServiceTest, TestInitialization) {
 
 TEST_F(PreviewsUIServiceTest, TestLogPreviewNavigationPassInCorrectParams) {
   const GURL url_a = GURL("http://www.url_a.com/url_a");
-  PreviewsType type_a = PreviewsType::LOFI;
-  bool opt_out_a = true;
-  base::Time time_a = base::Time::Now();
+  const PreviewsType type_a = PreviewsType::LOFI;
+  const bool opt_out_a = true;
+  const base::Time time_a = base::Time::Now();
+  const uint64_t page_id_a = 1234;
 
-  ui_service()->LogPreviewNavigation(url_a, type_a, opt_out_a, time_a);
+  ui_service()->LogPreviewNavigation(url_a, type_a, opt_out_a, time_a,
+                                     page_id_a);
 
   EXPECT_EQ(url_a, logger_ptr_->navigation_url());
   EXPECT_EQ(type_a, logger_ptr_->navigation_type());
   EXPECT_EQ(opt_out_a, logger_ptr_->navigation_opt_out());
   EXPECT_EQ(time_a, logger_ptr_->navigation_time());
+  EXPECT_EQ(page_id_a, logger_ptr_->navigation_page_id());
 
   const GURL url_b = GURL("http://www.url_b.com/url_b");
-  PreviewsType type_b = PreviewsType::OFFLINE;
-  bool opt_out_b = false;
-  base::Time time_b = base::Time::Now();
+  const PreviewsType type_b = PreviewsType::OFFLINE;
+  const bool opt_out_b = false;
+  const base::Time time_b = base::Time::Now();
+  const uint64_t page_id_b = 4321;
 
-  ui_service()->LogPreviewNavigation(url_b, type_b, opt_out_b, time_b);
+  ui_service()->LogPreviewNavigation(url_b, type_b, opt_out_b, time_b,
+                                     page_id_b);
 
   EXPECT_EQ(url_b, logger_ptr_->navigation_url());
   EXPECT_EQ(type_b, logger_ptr_->navigation_type());
   EXPECT_EQ(opt_out_b, logger_ptr_->navigation_opt_out());
   EXPECT_EQ(time_b, logger_ptr_->navigation_time());
+  EXPECT_EQ(page_id_b, logger_ptr_->navigation_page_id());
 }
 
 TEST_F(PreviewsUIServiceTest, TestLogPreviewDecisionMadePassesCorrectParams) {
@@ -238,26 +260,58 @@ TEST_F(PreviewsUIServiceTest, TestLogPreviewDecisionMadePassesCorrectParams) {
   const GURL url_a("http://www.url_a.com/url_a");
   const base::Time time_a = base::Time::Now();
   PreviewsType type_a = PreviewsType::OFFLINE;
+  std::vector<PreviewsEligibilityReason> passed_reasons_a = {
+      PreviewsEligibilityReason::NETWORK_NOT_SLOW,
+      PreviewsEligibilityReason::USER_RECENTLY_OPTED_OUT,
+      PreviewsEligibilityReason::RELOAD_DISALLOWED,
+  };
+  const std::vector<PreviewsEligibilityReason> expected_passed_reasons_a(
+      passed_reasons_a);
+  const uint64_t page_id_a = 1234;
 
-  ui_service()->LogPreviewDecisionMade(reason_a, url_a, time_a, type_a);
+  ui_service()->LogPreviewDecisionMade(reason_a, url_a, time_a, type_a,
+                                       std::move(passed_reasons_a), page_id_a);
 
   EXPECT_EQ(reason_a, logger_ptr_->decision_reason());
   EXPECT_EQ(url_a, logger_ptr_->decision_url());
   EXPECT_EQ(time_a, logger_ptr_->decision_time());
   EXPECT_EQ(type_a, logger_ptr_->decision_type());
+  EXPECT_EQ(expected_passed_reasons_a, logger_ptr_->decision_passed_reasons());
+  EXPECT_EQ(page_id_a, logger_ptr_->decision_page_id());
+
+  auto actual_passed_reasons_a = logger_ptr_->decision_passed_reasons();
+  EXPECT_EQ(3UL, actual_passed_reasons_a.size());
+  for (size_t i = 0; i < actual_passed_reasons_a.size(); i++) {
+    EXPECT_EQ(expected_passed_reasons_a[i], actual_passed_reasons_a[i]);
+  }
 
   PreviewsEligibilityReason reason_b =
       PreviewsEligibilityReason::NETWORK_NOT_SLOW;
   const GURL url_b("http://www.url_b.com/url_b");
   const base::Time time_b = base::Time::Now();
   PreviewsType type_b = PreviewsType::LOFI;
+  std::vector<PreviewsEligibilityReason> passed_reasons_b = {
+      PreviewsEligibilityReason::HOST_NOT_WHITELISTED_BY_SERVER,
+      PreviewsEligibilityReason::NETWORK_QUALITY_UNAVAILABLE,
+  };
+  const std::vector<PreviewsEligibilityReason> expected_passed_reasons_b(
+      passed_reasons_b);
+  const uint64_t page_id_b = 4321;
 
-  ui_service()->LogPreviewDecisionMade(reason_b, url_b, time_b, type_b);
+  ui_service()->LogPreviewDecisionMade(reason_b, url_b, time_b, type_b,
+                                       std::move(passed_reasons_b), page_id_b);
 
   EXPECT_EQ(reason_b, logger_ptr_->decision_reason());
   EXPECT_EQ(url_b, logger_ptr_->decision_url());
   EXPECT_EQ(type_b, logger_ptr_->decision_type());
   EXPECT_EQ(time_b, logger_ptr_->decision_time());
+  EXPECT_EQ(page_id_b, logger_ptr_->decision_page_id());
+
+  auto actual_passed_reasons_b = logger_ptr_->decision_passed_reasons();
+  EXPECT_EQ(2UL, actual_passed_reasons_b.size());
+  for (size_t i = 0; i < actual_passed_reasons_b.size(); i++) {
+    EXPECT_EQ(expected_passed_reasons_b[i], actual_passed_reasons_b[i]);
+  }
 }
 
 TEST_F(PreviewsUIServiceTest, TestOnNewBlacklistedHostPassesCorrectParams) {

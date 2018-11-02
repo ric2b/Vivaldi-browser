@@ -235,8 +235,9 @@ const struct QuicErrorMapping {
     // Stream frame overlaps with buffered data.
     {net::QUIC_OVERLAPPING_STREAM_DATA, "quic.overlapping_stream_data"},
     // Stream frames arrived too discontiguously so that stream sequencer buffer
-    // has too many gaps.
-    {net::QUIC_TOO_MANY_FRAME_GAPS, "quic.too_many_frame_gaps"},
+    // maintains too many intervals.
+    {net::QUIC_TOO_MANY_STREAM_DATA_INTERVALS,
+     "quic.too_many_stream_data_intervals"},
     // Sequencer buffer get into weird state where continuing read/write
     // will lead to crash.
     {net::QUIC_STREAM_SEQUENCER_INVALID_STATE,
@@ -245,6 +246,8 @@ const struct QuicErrorMapping {
     {net::QUIC_TOO_MANY_SESSIONS_ON_SERVER, "quic.too_many_sessions_on_server"},
     // There was an error decompressing data.
     {net::QUIC_DECOMPRESSION_FAILURE, "quic.decompression_failure"},
+    // Receive a RST_STREAM with offset larger than kMaxStreamLength.
+    {net::QUIC_STREAM_LENGTH_OVERFLOW, "quic.stream_length_overflow"},
 
     // No error. Used as bound while iterating.
     {net::QUIC_LAST_ERROR, "quic.last_error"}};

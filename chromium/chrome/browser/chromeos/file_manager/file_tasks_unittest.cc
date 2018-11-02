@@ -28,6 +28,7 @@
 #include "extensions/browser/entry_info.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/extension_builder.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -181,8 +182,8 @@ TEST(FileManagerFileTasksTest, FindDriveAppTasks) {
   foo_app->set_name("Foo");
   foo_app->set_object_type("foo_object_type");
   std::vector<std::unique_ptr<std::string>> foo_mime_types;
-  foo_mime_types.push_back(base::MakeUnique<std::string>("text/plain"));
-  foo_mime_types.push_back(base::MakeUnique<std::string>("text/html"));
+  foo_mime_types.push_back(std::make_unique<std::string>("text/plain"));
+  foo_mime_types.push_back(std::make_unique<std::string>("text/html"));
   foo_app->set_primary_mimetypes(std::move(foo_mime_types));
 
   // Bar.app can only handle "text/plain".
@@ -193,7 +194,7 @@ TEST(FileManagerFileTasksTest, FindDriveAppTasks) {
   bar_app->set_name("Bar");
   bar_app->set_object_type("bar_object_type");
   std::vector<std::unique_ptr<std::string>> bar_mime_types;
-  bar_mime_types.push_back(base::MakeUnique<std::string>("text/plain"));
+  bar_mime_types.push_back(std::make_unique<std::string>("text/plain"));
   bar_app->set_primary_mimetypes(std::move(bar_mime_types));
 
   // Prepare DriveAppRegistry from Foo.app and Bar.app.
@@ -355,6 +356,56 @@ TEST(FileManagerFileTasksTest, ChooseAndSetDefaultTask_FallbackTextApp) {
 
   // The text editor app should be chosen as default, as it's a fallback file
   // browser handler.
+  ChooseAndSetDefaultTask(pref_service, entries, &tasks);
+  EXPECT_TRUE(tasks[0].is_default());
+}
+
+// Test that Audio Player is chosen as default even if nothing is set in the
+// preferences.
+TEST(FileManagerFileTasksTest, ChooseAndSetDefaultTask_FallbackAudioPlayer) {
+  TestingPrefServiceSimple pref_service;
+  RegisterDefaultTaskPreferences(&pref_service);
+
+  // The Audio Player app was found for "sound.wav".
+  TaskDescriptor files_app_task(kAudioPlayerAppId, TASK_TYPE_FILE_HANDLER,
+                                "Audio Player");
+  std::vector<FullTaskDescriptor> tasks;
+  tasks.push_back(FullTaskDescriptor(
+      files_app_task, "Audio Player", Verb::VERB_OPEN_WITH,
+      GURL("chrome://extension-icon/cjbfomnbifhcdnihkgipgfcihmgjfhbf/32/1"),
+      false /* is_default */, false /* is_generic_file_handler */));
+  std::vector<extensions::EntryInfo> entries;
+  entries.push_back(extensions::EntryInfo(
+      base::FilePath::FromUTF8Unsafe("sound.wav"), "audio/wav", false));
+
+  // The Audio Player app should be chosen as default, as it's a fallback file
+  // browser handler.
+  ChooseAndSetDefaultTask(pref_service, entries, &tasks);
+  EXPECT_TRUE(tasks[0].is_default());
+}
+
+// Test that Office Editing is chosen as default even if nothing is set in the
+// preferences.
+TEST(FileManagerFileTasksTest, ChooseAndSetDefaultTask_FallbackOfficeEditing) {
+  TestingPrefServiceSimple pref_service;
+  RegisterDefaultTaskPreferences(&pref_service);
+
+  // The Office Editing app was found for "slides.pptx".
+  TaskDescriptor files_app_task(
+      extension_misc::kQuickOfficeComponentExtensionId, TASK_TYPE_FILE_HANDLER,
+      "Office Editing for Docs, Sheets & Slides");
+  std::vector<FullTaskDescriptor> tasks;
+  tasks.push_back(FullTaskDescriptor(
+      files_app_task, "Office Editing for Docs, Sheets & Slides",
+      Verb::VERB_OPEN_WITH,
+      GURL("chrome://extension-icon/bpmcpldpdmajfigpchkicefoigmkfalc/32/1"),
+      false /* is_default */, false /* is_generic_file_handler */));
+  std::vector<extensions::EntryInfo> entries;
+  entries.push_back(extensions::EntryInfo(
+      base::FilePath::FromUTF8Unsafe("slides.pptx"), "", false));
+
+  // The Office Editing app should be chosen as default, as it's a fallback
+  // file browser handler.
   ChooseAndSetDefaultTask(pref_service, entries, &tasks);
   EXPECT_TRUE(tasks[0].is_default());
 }
@@ -756,7 +807,7 @@ TEST_F(FileManagerFileTasksComplexTest, FindAllTypesOfTasks) {
   baz_app->set_name("Baz");
   baz_app->set_object_type("baz_object_type");
   std::vector<std::unique_ptr<std::string>> baz_mime_types;
-  baz_mime_types.push_back(base::MakeUnique<std::string>("text/plain"));
+  baz_mime_types.push_back(std::make_unique<std::string>("text/plain"));
   baz_app->set_primary_mimetypes(std::move(baz_mime_types));
   // Set up DriveAppRegistry.
   std::vector<std::unique_ptr<google_apis::AppResource>> app_resources;
@@ -806,7 +857,7 @@ TEST_F(FileManagerFileTasksComplexTest, FindAllTypesOfTasks_GoogleDocument) {
   foo_app->set_object_type("foo_object_type");
   std::vector<std::unique_ptr<std::string>> foo_extensions;
   foo_extensions.push_back(
-      base::MakeUnique<std::string>("gdoc"));  // Not ".gdoc"
+      std::make_unique<std::string>("gdoc"));  // Not ".gdoc"
   foo_app->set_primary_file_extensions(std::move(foo_extensions));
 
   // Prepare DriveAppRegistry from Foo.app.

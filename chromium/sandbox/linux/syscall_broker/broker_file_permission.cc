@@ -7,11 +7,12 @@
 #include <fcntl.h>
 #include <stddef.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <string>
 
 #include "base/logging.h"
-#include "sandbox/linux/syscall_broker/broker_common.h"
+#include "sandbox/linux/syscall_broker/broker_command.h"
 
 namespace sandbox {
 namespace syscall_broker {
@@ -83,6 +84,13 @@ bool BrokerFilePermission::CheckAccess(const char* requested_filename,
   if (!ValidatePath(requested_filename))
     return false;
 
+  return CheckAccessInternal(requested_filename, mode, file_to_access);
+}
+
+bool BrokerFilePermission::CheckAccessInternal(
+    const char* requested_filename,
+    int mode,
+    const char** file_to_access) const {
   if (!MatchPath(requested_filename))
     return false;
 
@@ -148,13 +156,9 @@ bool BrokerFilePermission::CheckOpen(const char* requested_filename,
     return false;
   }
 
-  // If O_CREAT is present, ensure O_EXCL
-  if ((flags & O_CREAT) && !(flags & O_EXCL)) {
-    return false;
-  }
-
-  // If this file is to be temporary, ensure it's created.
-  if (temporary_only_ && !(flags & O_CREAT)) {
+  // If this file is to be temporary, ensure it is created, not pre-existing.
+  // See https://crbug.com/415681#c17
+  if (temporary_only_ && (!(flags & O_CREAT) || !(flags & O_EXCL))) {
     return false;
   }
 
@@ -173,7 +177,6 @@ bool BrokerFilePermission::CheckOpen(const char* requested_filename,
 
   const int unknown_flags = ~known_flags;
   const bool has_unknown_flags = creation_and_status_flags & unknown_flags;
-
   if (has_unknown_flags)
     return false;
 
@@ -184,6 +187,38 @@ bool BrokerFilePermission::CheckOpen(const char* requested_filename,
     *unlink_after_open = temporary_only_;
 
   return true;
+}
+
+bool BrokerFilePermission::CheckStat(const char* requested_filename,
+                                     const char** file_to_access) const {
+  if (!ValidatePath(requested_filename))
+    return false;
+
+  // Ability to access implies ability to stat().
+  if (CheckAccessInternal(requested_filename, F_OK, file_to_access))
+    return true;
+
+  // Allow stat() on leading directories if have create permission.
+  if (!allow_create_)
+    return false;
+
+  // NOTE: ValidatePath proved requested_length != 0;
+  size_t requested_length = strlen(requested_filename);
+  CHECK(requested_length);
+
+  // Special case for root: only one slash, otherwise must have a second
+  // slash in the right spot to avoid substring matches.
+  if ((requested_length == 1 && requested_filename[0] == '/') ||
+      (requested_length < path_.length() &&
+       memcmp(path_.c_str(), requested_filename, requested_length) == 0 &&
+       path_.c_str()[requested_length] == '/')) {
+    if (file_to_access)
+      *file_to_access = requested_filename;
+
+    return true;
+  }
+
+  return false;
 }
 
 const char* BrokerFilePermission::GetErrorMessageForTests() {
@@ -221,5 +256,4 @@ BrokerFilePermission::BrokerFilePermission(const std::string& path,
 }
 
 }  // namespace syscall_broker
-
 }  // namespace sandbox

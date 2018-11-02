@@ -47,12 +47,6 @@ bool ResourceDispatcherHostDelegate::HandleExternalProtocol(
   return true;
 }
 
-bool ResourceDispatcherHostDelegate::ShouldForceDownloadResource(
-    const GURL& url,
-    const std::string& mime_type) {
-  return false;
-}
-
 bool ResourceDispatcherHostDelegate::ShouldInterceptResourceAsStream(
     net::URLRequest* request,
     const base::FilePath& plugin_path,
@@ -69,14 +63,13 @@ void ResourceDispatcherHostDelegate::OnStreamCreated(
 void ResourceDispatcherHostDelegate::OnResponseStarted(
     net::URLRequest* request,
     ResourceContext* resource_context,
-    ResourceResponse* response) {}
+    network::ResourceResponse* response) {}
 
 void ResourceDispatcherHostDelegate::OnRequestRedirected(
     const GURL& redirect_url,
     net::URLRequest* request,
     ResourceContext* resource_context,
-    ResourceResponse* response) {
-}
+    network::ResourceResponse* response) {}
 
 void ResourceDispatcherHostDelegate::RequestComplete(
     net::URLRequest* url_request,
@@ -86,7 +79,7 @@ void ResourceDispatcherHostDelegate::RequestComplete(
 void ResourceDispatcherHostDelegate::RequestComplete(
     net::URLRequest* url_request) {}
 
-PreviewsState ResourceDispatcherHostDelegate::DeterminePreviewsState(
+PreviewsState ResourceDispatcherHostDelegate::DetermineEnabledPreviews(
     net::URLRequest* url_request,
     content::ResourceContext* resource_context,
     PreviewsState previews_to_allow) {
@@ -102,11 +95,6 @@ std::unique_ptr<net::ClientCertStore>
 ResourceDispatcherHostDelegate::CreateClientCertStore(
     ResourceContext* resource_context) {
   return std::unique_ptr<net::ClientCertStore>();
-}
-
-bool ResourceDispatcherHostDelegate::AllowRenderingMhtmlOverHttp(
-    net::URLRequest* request) const {
-  return false;
 }
 
 ResourceDispatcherHostDelegate::~ResourceDispatcherHostDelegate() {

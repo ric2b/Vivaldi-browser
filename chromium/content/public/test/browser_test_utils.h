@@ -15,6 +15,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
@@ -30,6 +31,7 @@
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/page_type.h"
 #include "ipc/message_filter.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
 #include "storage/common/fileapi/file_system_types.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
@@ -74,6 +76,7 @@ class NavigationHandle;
 class RenderViewHost;
 class RenderWidgetHost;
 class RenderWidgetHostView;
+class UtilityProcessHost;
 class WebContents;
 
 // Navigate a frame with ID |iframe_id| to |url|, blocking until the navigation
@@ -116,6 +119,12 @@ void PrepContentsForBeforeUnloadTest(WebContents* web_contents);
 // progress, the method will return right away.
 void WaitForResizeComplete(WebContents* web_contents);
 #endif  // defined(USE_AURA) || defined(OS_ANDROID)
+
+// Allows tests to set the last committed origin of |render_frame_host|, to
+// simulate a scenario that might happen with a compromised renderer or might
+// not otherwise be possible.
+void OverrideLastCommittedOrigin(RenderFrameHost* render_frame_host,
+                                 const url::Origin& origin);
 
 // Causes the specified web_contents to crash. Blocks until it is crashed.
 void CrashTab(WebContents* web_contents);
@@ -189,6 +198,8 @@ void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
 #if defined(USE_AURA)
 // Generates a TouchStart at |point|.
 void SimulateTouchPressAt(WebContents* web_contents, const gfx::Point& point);
+
+void SimulateLongPressAt(WebContents* web_contents, const gfx::Point& point);
 #endif
 
 // Taps the screen with modifires at |point|.
@@ -861,7 +872,7 @@ class FrameFocusedObserver {
 // resumed automatically if a Wait method is called for a future event.
 // Note: This class is one time use only! After it successfully tracks a
 // navigation it will ignore all subsequent navigations. Explicitly create
-// mutliple instances of this class if you want to pause multiple navigations.
+// multiple instances of this class if you want to pause multiple navigations.
 class TestNavigationManager : public WebContentsObserver {
  public:
   // Monitors any frame in WebContents.
@@ -885,6 +896,10 @@ class TestNavigationManager : public WebContentsObserver {
   // * Called after |WaitForRequestStart|, it causes the request to be sent.
   // * Called after |WaitForResponse|, it causes the response to be committed.
   void ResumeNavigation();
+
+  // Returns the NavigationHandle associated with the navigation. It is non-null
+  // only in between DidStartNavigation(...) and DidFinishNavigation(...).
+  NavigationHandle* GetNavigationHandle();
 
  protected:
   // Derived classes can override if they want to filter out navigations. This
@@ -1061,6 +1076,23 @@ class ContextMenuFilter : public content::BrowserMessageFilter {
 };
 
 WebContents* GetEmbedderForGuest(content::WebContents* guest);
+
+// Returns true if the network service is enabled and it's running in the
+// browser process.
+bool IsNetworkServiceRunningInProcess();
+
+// Crash the Network Service process. Should only be called when out-of-process
+// Network Service is enabled.
+void SimulateNetworkServiceCrash();
+
+// Load the given |url| with |network_context| and return the |net::Error| code.
+int LoadBasicRequest(network::mojom::NetworkContext* network_context,
+                     const GURL& url,
+                     int process_id = 0,
+                     int render_frame_id = 0);
+
+std::map<std::string, base::WeakPtr<UtilityProcessHost>>*
+GetServiceManagerProcessGroups();
 
 }  // namespace content
 

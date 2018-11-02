@@ -175,7 +175,6 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   bool IsOpenLinkOTREnabled() const;
 
   // Command execution functions.
-  void ExecOpenLinkNewTab();
   void ExecOpenBookmarkApp();
   void ExecProtocolHandler(int event_flags, int handler_index);
   void ExecOpenLinkInProfile(int profile_index);

@@ -50,35 +50,10 @@ int CrashForException_ExportThunk(EXCEPTION_POINTERS* info);
 // not enforced to avoid blocking startup code on synchronizing them.
 void SetUploadConsent_ExportThunk(bool consent);
 
-// NOTE: This function is used by SyzyASAN to annotate crash reports. If you
-// change the name or signature of this function you will break SyzyASAN
-// instrumented releases of Chrome. Please contact syzygy-team@chromium.org
-// before doing so! See also http://crbug.com/567781.
-void SetCrashKeyValue_ExportThunk(const wchar_t* key, const wchar_t* value);
-
-void ClearCrashKeyValue_ExportThunk(const wchar_t* key);
-
-void SetCrashKeyValueEx_ExportThunk(const char* key,
-                                    size_t key_len,
-                                    const char* value,
-                                    size_t value_len);
-
-void ClearCrashKeyValueEx_ExportThunk(const char* key, size_t key_len);
-
 // Injects a thread into a remote process to dump state when there is no crash.
-// |serialized_crash_keys| is a nul terminated string in the address space of
 // |process| that represents serialized crash keys sent from the browser.
-// Keys and values are separated by ':', and key/value pairs are separated by
-// ','. All keys should be previously registered as crash keys.
 // This method is used solely to classify hung input.
-HANDLE InjectDumpForHungInput_ExportThunk(HANDLE process,
-                                          void* serialized_crash_keys);
-
-// Injects a thread into a remote process to dump state when there is no crash.
-// This method provides |reason| which will interpreted as an integer and logged
-// as a crash key.
-HANDLE InjectDumpForHungInputNoCrashKeys_ExportThunk(HANDLE process,
-                                                     int reason);
+HANDLE InjectDumpForHungInput_ExportThunk(HANDLE process);
 
 #if defined(ARCH_CPU_X86_64)
 // V8 support functions.

@@ -5,7 +5,6 @@
 #include "gpu/command_buffer/service/service_transfer_cache.h"
 
 #include "base/sys_info.h"
-#include "cc/paint/raw_memory_transfer_cache_entry.h"
 
 namespace gpu {
 namespace {
@@ -39,31 +38,34 @@ ServiceTransferCache::ServiceTransferCache()
 
 ServiceTransferCache::~ServiceTransferCache() = default;
 
-bool ServiceTransferCache::CreateLockedEntry(TransferCacheEntryId id,
-                                             ServiceDiscardableHandle handle,
-                                             cc::TransferCacheEntryType type,
-                                             GrContext* context,
-                                             uint8_t* data_memory,
-                                             size_t data_size) {
-  auto found = entries_.Peek(id);
+bool ServiceTransferCache::CreateLockedEntry(
+    cc::TransferCacheEntryType entry_type,
+    uint32_t entry_id,
+    ServiceDiscardableHandle handle,
+    GrContext* context,
+    base::span<uint8_t> data) {
+  auto key = std::make_pair(entry_type, entry_id);
+  auto found = entries_.Peek(key);
   if (found != entries_.end()) {
     return false;
   }
 
   std::unique_ptr<cc::ServiceTransferCacheEntry> entry =
-      cc::ServiceTransferCacheEntry::Create(type);
+      cc::ServiceTransferCacheEntry::Create(entry_type);
   if (!entry)
     return false;
 
-  entry->Deserialize(context, data_size, data_memory);
-  total_size_ += entry->Size();
-  entries_.Put(id, CacheEntryInternal(handle, std::move(entry)));
+  entry->Deserialize(context, data);
+  total_size_ += entry->CachedSize();
+  entries_.Put(key, CacheEntryInternal(handle, std::move(entry)));
   EnforceLimits();
   return true;
 }
 
-bool ServiceTransferCache::UnlockEntry(TransferCacheEntryId id) {
-  auto found = entries_.Peek(id);
+bool ServiceTransferCache::UnlockEntry(cc::TransferCacheEntryType entry_type,
+                                       uint32_t entry_id) {
+  auto key = std::make_pair(entry_type, entry_id);
+  auto found = entries_.Peek(key);
   if (found == entries_.end())
     return false;
 
@@ -71,20 +73,24 @@ bool ServiceTransferCache::UnlockEntry(TransferCacheEntryId id) {
   return true;
 }
 
-bool ServiceTransferCache::DeleteEntry(TransferCacheEntryId id) {
-  auto found = entries_.Peek(id);
+bool ServiceTransferCache::DeleteEntry(cc::TransferCacheEntryType entry_type,
+                                       uint32_t entry_id) {
+  auto key = std::make_pair(entry_type, entry_id);
+  auto found = entries_.Peek(key);
   if (found == entries_.end())
     return false;
 
   found->second.handle.ForceDelete();
-  total_size_ -= found->second.entry->Size();
+  total_size_ -= found->second.entry->CachedSize();
   entries_.Erase(found);
   return true;
 }
 
 cc::ServiceTransferCacheEntry* ServiceTransferCache::GetEntry(
-    TransferCacheEntryId id) {
-  auto found = entries_.Get(id);
+    cc::TransferCacheEntryType entry_type,
+    uint32_t entry_id) {
+  auto key = std::make_pair(entry_type, entry_id);
+  auto found = entries_.Get(key);
   if (found == entries_.end())
     return nullptr;
   return found->second.entry.get();
@@ -100,7 +106,7 @@ void ServiceTransferCache::EnforceLimits() {
       continue;
     }
 
-    total_size_ -= it->second.entry->Size();
+    total_size_ -= it->second.entry->CachedSize();
     it = entries_.Erase(it);
   }
 }

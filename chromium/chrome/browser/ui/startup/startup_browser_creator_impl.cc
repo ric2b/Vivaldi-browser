@@ -14,6 +14,7 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/environment.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/obsolete_system/obsolete_system.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
@@ -52,6 +54,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
@@ -64,6 +67,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
+#include "google_apis/google_api_keys.h"
 #include "rlz/features/features.h"
 #include "ui/base/ui_features.h"
 
@@ -93,6 +97,12 @@
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
 #include "browser/startup_vivaldi_browser.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
+#include "chrome/browser/tab_contents/tab_util.h"
+#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "content/browser/frame_host/navigation_entry_impl.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/navigation_entry.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using content::ChildProcessSecurityPolicy;
@@ -193,7 +203,7 @@ LaunchMode GetLaunchMode() {
 // LaunchMode enum for the actual values of the buckets.
 void RecordLaunchModeHistogram(LaunchMode mode) {
   int bucket = (mode == LM_TO_BE_DECIDED) ? GetLaunchMode() : mode;
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Launch.Modes", bucket);
+  base::UmaHistogramSparse("Launch.Modes", bucket);
 }
 
 void UrlsToTabs(const std::vector<GURL>& urls, StartupTabs* tabs) {
@@ -434,14 +444,50 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
     if (!process_startup && !handled_by_chrome)
       continue;
 
+    // NOTE (andre@vivaldi.com) : We need to create the tabs here _without_
+    // navigation to make sure they behave correctly inside our webviews.
+    if (browser->is_vivaldi()) {
+      GURL restore_url = tabs[i].url;
+      WebContents::CreateParams create_params(
+        browser->profile(),
+        tab_util::GetSiteInstanceForNewTab(browser->profile(), restore_url));
+      WebContents* base_web_contents =
+        browser->tab_strip_model()->GetActiveWebContents();
+      if (base_web_contents) {
+        create_params.initial_size =
+          base_web_contents->GetContainerBounds().size();
+      }
+
+      WebContents* web_contents = content::WebContents::Create(create_params);
+      web_contents->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey,
+        base::WrapUnique(new vivaldi::VivaldiStartupTabUserData(first_tab)));
+      content::WebContentsImpl* contentsimpl =
+        static_cast<content::WebContentsImpl*>(web_contents);
+      content::NavigationControllerImpl* controller =
+          &contentsimpl->GetController();
+
+      std::unique_ptr<content::NavigationEntryImpl> entry =
+        content::NavigationEntryImpl::FromNavigationEntry(
+          controller->CreateNavigationEntry(
+            restore_url, content::Referrer(), ui::PAGE_TRANSITION_LINK,
+            true /* is_renderer_initiated */, std::string(),
+            controller->GetBrowserContext()));
+
+      controller->SetPendingEntry(std::move(entry));
+      // Make sure it's discarded as it will be loaded when activated in
+      // TabManager::ActiveTabChanged.
+      browser->tab_strip_model()->AppendWebContents(web_contents, false);
+      g_browser_process->GetTabManager()->SetIsDiscarded(web_contents);
+    } else {
+
     int add_types = first_tab ? TabStripModel::ADD_ACTIVE :
                                 TabStripModel::ADD_NONE;
     add_types |= TabStripModel::ADD_FORCE_INDEX;
     if (tabs[i].is_pinned)
       add_types |= TabStripModel::ADD_PINNED;
 
-    chrome::NavigateParams params(browser, tabs[i].url,
-                                  ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    NavigateParams params(browser, tabs[i].url,
+                          ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
     params.disposition = first_tab ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                    : WindowOpenDisposition::NEW_BACKGROUND_TAB;
     params.tabstrip_add_types = add_types;
@@ -453,18 +499,23 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(Browser* browser,
     }
 #endif  // BUILDFLAG(ENABLE_RLZ)
 
-    chrome::Navigate(&params);
+    Navigate(&params);
 
+    } // is_vivaldi
     first_tab = false;
   }
-  if (!browser->tab_strip_model()->GetActiveWebContents()) {
-    // TODO(sky): this is a work around for 110909. Figure out why it's needed.
-    if (!browser->tab_strip_model()->count())
-      chrome::AddTabAt(browser, GURL(), -1, true);
-    else
-      browser->tab_strip_model()->ActivateTabAt(0, false);
+  // NOTE(andre@vivaldi.com) : We need to do the tab-activation after we know
+  // that everything is set up.
+  if (!browser->is_vivaldi()) {
+    if (!browser->tab_strip_model()->GetActiveWebContents()) {
+      // TODO(sky): this is a work around for 110909. Figure out why it's
+      // needed.
+      if (!browser->tab_strip_model()->count())
+        chrome::AddTabAt(browser, GURL(), -1, true);
+      else
+        browser->tab_strip_model()->ActivateTabAt(0, false);
+    }
   }
-
   // The default behavior is to show the window, as expressed by the default
   // value of StartupBrowserCreated::show_main_browser_window_. If this was set
   // to true ahead of this place, it means another task must have been spawned
@@ -650,10 +701,12 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
   Browser* browser = RestoreOrCreateBrowser(
       tabs, behavior, restore_options, process_startup, is_post_crash_launch);
 
+  if (!vivaldi::IsVivaldiRunning()) {
   // Finally, add info bars.
   AddInfoBarsIfNecessary(
       browser, process_startup ? chrome::startup::IS_PROCESS_STARTUP
                                : chrome::startup::IS_NOT_PROCESS_STARTUP);
+  }
 }
 
 StartupTabs StartupBrowserCreatorImpl::DetermineStartupTabs(
@@ -663,14 +716,11 @@ StartupTabs StartupBrowserCreatorImpl::DetermineStartupTabs(
     bool is_incognito_or_guest,
     bool is_post_crash_launch,
     bool are_startup_urls_managed) {
-  // Vivaldi respects startup options. Even in private mode.
-  if (vivaldi::IsVivaldiRunning()) {
-    is_incognito_or_guest = false;
-  }
   // Only the New Tab Page or command line URLs may be shown in incognito mode.
   // A similar policy exists for crash recovery launches, to prevent getting the
   // user stuck in a crash loop.
-  if (is_incognito_or_guest || is_post_crash_launch) {
+  if ((is_incognito_or_guest && !vivaldi::IsVivaldiRunning()) ||
+      is_post_crash_launch) {
     if (vivaldi::IsVivaldiRunning() && cmd_line_tabs.empty())
       return StartupTabs({StartupTab(GURL(vivaldi::kVivaldiNewTabURL), false)});
     if (cmd_line_tabs.empty())
@@ -736,9 +786,10 @@ StartupTabs StartupBrowserCreatorImpl::DetermineStartupTabs(
   if (onboarding_tabs.empty() && prefs_tabs.empty())
     AppendTabs(provider.GetNewTabPageTabs(command_line_, profile_), &tabs);
 
+  if (!is_incognito_or_guest && !vivaldi::IsVivaldiRunning()) {
   // Maybe add any tabs which the user has previously pinned.
   AppendTabs(provider.GetPinnedTabs(command_line_, profile_), &tabs);
-
+  }
   return tabs;
 }
 
@@ -831,10 +882,16 @@ void StartupBrowserCreatorImpl::AddInfoBarsIfNecessary(
       !command_line_.HasSwitch(switches::kTestType) &&
       !command_line_.HasSwitch(switches::kEnableAutomation)) {
     chrome::ShowBadFlagsPrompt(browser);
-    GoogleApiKeysInfoBarDelegate::Create(InfoBarService::FromWebContents(
-        browser->tab_strip_model()->GetActiveWebContents()));
-    ObsoleteSystemInfoBarDelegate::Create(InfoBarService::FromWebContents(
-        browser->tab_strip_model()->GetActiveWebContents()));
+    InfoBarService* infobar_service = InfoBarService::FromWebContents(
+        browser->tab_strip_model()->GetActiveWebContents());
+    if (!google_apis::HasKeysConfigured())
+      GoogleApiKeysInfoBarDelegate::Create(infobar_service);
+    if (ObsoleteSystem::IsObsoleteNowOrSoon()) {
+      PrefService* local_state = g_browser_process->local_state();
+      if (!local_state ||
+          !local_state->GetBoolean(prefs::kSuppressUnsupportedOSWarning))
+        ObsoleteSystemInfoBarDelegate::Create(infobar_service);
+    }
 
 #if !defined(OS_CHROMEOS)
     if (!command_line_.HasSwitch(switches::kNoDefaultBrowserCheck)) {

@@ -42,6 +42,10 @@ class ManagePasswordsBubbleModel {
                              DisplayReason reason);
   ~ManagePasswordsBubbleModel();
 
+  // The method MAY BE called to record the statistics while the bubble is being
+  // closed. Otherwise, it is called later on when the model is destroyed.
+  void OnBubbleClosing();
+
   // Called by the view code when the "Nope" button in clicked by the user in
   // update bubble.
   void OnNopeUpdateClicked();
@@ -67,8 +71,8 @@ class ManagePasswordsBubbleModel {
   // Called by the view code when the "OK" button is clicked by the user.
   void OnOKClicked();
 
-  // Called by the view code when the manage link is clicked by the user.
-  void OnManageLinkClicked();
+  // Called by the view code when the manage button is clicked by the user.
+  void OnManageClicked();
 
   // Called by the view code when the navigate to passwords.google.com link is
   // clicked by the user.
@@ -116,11 +120,19 @@ class ManagePasswordsBubbleModel {
     return title_brand_link_range_;
   }
 
-#if defined(UNIT_TEST)
-  void set_hide_eye_icon(bool hide) { hide_eye_icon_ = hide; }
-#endif
+  bool are_passwords_revealed_when_bubble_is_opened() const {
+    return are_passwords_revealed_when_bubble_is_opened_;
+  }
 
-  bool hide_eye_icon() const { return hide_eye_icon_; }
+#if defined(UNIT_TEST)
+  void allow_passwords_revealing() {
+    password_revealing_requires_reauth_ = false;
+  }
+
+  bool password_revealing_requires_reauth() const {
+    return password_revealing_requires_reauth_;
+  }
+#endif
 
   bool enable_editing() const { return enable_editing_; }
 
@@ -137,6 +149,13 @@ class ManagePasswordsBubbleModel {
   bool ReplaceToShowPromotionIfNeeded();
 
   void SetClockForTesting(std::unique_ptr<base::Clock> clock);
+
+  // Returns true if passwords revealing is not locked or re-authentication is
+  // not available on the given platform. Otherwise, the method schedules
+  // re-authentication and bubble reopen (the current bubble will be destroyed),
+  // and returns false immediately. New bubble will reveal the passwords if the
+  // re-authentication is successful.
+  bool RevealPasswords();
 
  private:
   enum UserBehaviorOnUpdateBubble {
@@ -172,8 +191,15 @@ class ManagePasswordsBubbleModel {
   // A bridge to ManagePasswordsUIController instance.
   base::WeakPtr<PasswordsModelDelegate> delegate_;
 
-  // True iff the eye icon should be hidden for privacy reasons.
-  bool hide_eye_icon_;
+  // True if the model has already recorded all the necessary statistics when
+  // the bubble is closing.
+  bool interaction_reported_;
+
+  // True iff password revealing should require re-auth for privacy reasons.
+  bool password_revealing_requires_reauth_;
+
+  // True iff bubble should pop up with revealed password value.
+  bool are_passwords_revealed_when_bubble_is_opened_;
 
   // True iff username/password editing should be enabled.
   bool enable_editing_;

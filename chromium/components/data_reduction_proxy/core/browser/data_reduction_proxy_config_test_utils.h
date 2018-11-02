@@ -102,16 +102,44 @@ class TestDataReductionProxyConfig : public DataReductionProxyConfig {
 
   void SetShouldAddDefaultProxyBypassRules(bool add_default_proxy_bypass_rules);
 
+  std::string GetCurrentNetworkID() const override;
+
+  void SetCurrentNetworkID(const std::string& network_id);
+
+  base::Optional<std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+  GetInFlightWarmupProxyDetails() const override;
+
+  void SetInFlightWarmupProxyDetails(
+      base::Optional<
+          std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+          in_flight_warmup_proxy_details);
+
+  bool IsFetchInFlight() const override;
+
+  void SetIsFetchInFlight(bool fetch_in_flight);
+
+  size_t GetWarmupURLFetchAttemptCounts() const override;
+
+  void SetWarmupURLFetchAttemptCounts(
+      base::Optional<size_t> previous_attempt_counts);
+
   using DataReductionProxyConfig::UpdateConfigForTesting;
-  using DataReductionProxyConfig::OnInsecureProxyWarmupURLProbeStatusChange;
+  using DataReductionProxyConfig::HandleWarmupFetcherResponse;
 
  private:
   bool GetIsCaptivePortal() const override;
 
   base::TickClock* tick_clock_;
 
+  base::Optional<size_t> previous_attempt_counts_;
+
   base::Optional<bool> was_data_reduction_proxy_used_;
   base::Optional<int> proxy_index_;
+
+  base::Optional<std::string> current_network_id_;
+
+  base::Optional<std::pair<bool /* is_secure_proxy */, bool /*is_core_proxy */>>
+      in_flight_warmup_proxy_details_;
 
   // Set to true if the captive portal probe for the current network has been
   // blocked.
@@ -120,6 +148,8 @@ class TestDataReductionProxyConfig : public DataReductionProxyConfig {
   // True if the default bypass rules should be added. Should be set to false
   // when fetching resources from an embedded test server running on localhost.
   bool add_default_proxy_bypass_rules_;
+
+  base::Optional<bool> fetch_in_flight_;
 
   DISALLOW_COPY_AND_ASSIGN(TestDataReductionProxyConfig);
 };

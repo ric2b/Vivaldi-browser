@@ -46,8 +46,6 @@ int GetAccessFlags(PageAccessibilityConfiguration page_accessibility) {
       return PROT_READ | PROT_WRITE;
     case PageReadExecute:
       return PROT_READ | PROT_EXEC;
-    case PageReadWriteExecute:
-      return PROT_READ | PROT_WRITE | PROT_EXEC;
     default:
       NOTREACHED();
     // Fall through.
@@ -74,8 +72,6 @@ int GetAccessFlags(PageAccessibilityConfiguration page_accessibility) {
       return PAGE_READWRITE;
     case PageReadExecute:
       return PAGE_EXECUTE_READ;
-    case PageReadWriteExecute:
-      return PAGE_EXECUTE_READWRITE;
     default:
       NOTREACHED();
     // Fall through.
@@ -107,22 +103,12 @@ static void* SystemAllocPages(void* hint,
   DCHECK(commit || page_accessibility == PageInaccessible);
 
   void* ret;
-  // Retry failed allocations once after calling ReleaseReservation().
-  bool have_retried = false;
 #if defined(OS_WIN)
   DWORD access_flag = GetAccessFlags(page_accessibility);
   const DWORD type_flags = commit ? (MEM_RESERVE | MEM_COMMIT) : MEM_RESERVE;
-  while (true) {
-    ret = VirtualAlloc(hint, length, type_flags, access_flag);
-    if (ret)
-      break;
-    if (have_retried) {
-      s_allocPageErrorCode = GetLastError();
-      break;
-    }
-    ReleaseReservation();
-    have_retried = true;
-  }
+  ret = VirtualAlloc(hint, length, type_flags, access_flag);
+  if (ret == nullptr)
+    s_allocPageErrorCode = GetLastError();
 #else
 
 #if defined(OS_MACOSX)
@@ -133,19 +119,30 @@ static void* SystemAllocPages(void* hint,
   int fd = -1;
 #endif
   int access_flag = GetAccessFlags(page_accessibility);
-  while (true) {
-    ret = mmap(hint, length, access_flag, MAP_ANONYMOUS | MAP_PRIVATE, fd, 0);
-    if (ret != MAP_FAILED)
-      break;
-    if (have_retried) {
-      s_allocPageErrorCode = errno;
-      ret = nullptr;
-      break;
-    }
-    ReleaseReservation();
-    have_retried = true;
+  ret = mmap(hint, length, access_flag, MAP_ANONYMOUS | MAP_PRIVATE, fd, 0);
+  if (ret == MAP_FAILED) {
+    s_allocPageErrorCode = errno;
+    ret = nullptr;
   }
 #endif
+  return ret;
+}
+
+static void* AllocPagesIncludingReserved(
+    void* address,
+    size_t length,
+    PageAccessibilityConfiguration page_accessibility,
+    bool commit) {
+  void* ret = SystemAllocPages(address, length, page_accessibility, commit);
+  if (ret == nullptr) {
+    const bool cant_alloc_length = kHintIsAdvisory || address == nullptr;
+    if (cant_alloc_length) {
+      // The system cannot allocate |length| bytes. Release any reserved address
+      // space and try once more.
+      ReleaseReservation();
+      ret = SystemAllocPages(address, length, page_accessibility, commit);
+    }
+  }
   return ret;
 }
 
@@ -166,7 +163,9 @@ static void* TrimMapping(void* base,
   DCHECK(post_slack < base_length);
   void* ret = base;
 
-#if defined(OS_POSIX)  // On POSIX we can resize the allocation run.
+#if defined(OS_POSIX)
+  // On POSIX we can resize the allocation run. Release unneeded memory before
+  // and after the aligned range.
   (void)page_accessibility;
   if (pre_slack) {
     int res = munmap(base, pre_slack);
@@ -177,8 +176,10 @@ static void* TrimMapping(void* base,
     int res = munmap(reinterpret_cast<char*>(ret) + trim_length, post_slack);
     CHECK(!res);
   }
-#else  // On Windows we can't resize the allocation run.
+#else
   if (pre_slack || post_slack) {
+    // On Windows we can't resize the allocation run. Free it and retry at the
+    // aligned address within the freed range.
     ret = reinterpret_cast<char*>(base) + pre_slack;
     FreePages(base, base_length);
     ret = SystemAllocPages(ret, trim_length, page_accessibility, commit);
@@ -207,34 +208,43 @@ void* AllocPages(void* address,
   DCHECK(!(reinterpret_cast<uintptr_t>(address) & align_offset_mask));
 
   // If the client passed null as the address, choose a good one.
-  if (!address) {
+  if (address == nullptr) {
     address = GetRandomPageBase();
     address = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(address) &
                                       align_base_mask);
   }
 
   // First try to force an exact-size, aligned allocation from our random base.
-  for (int count = 0; count < 3; ++count) {
-    void* ret = SystemAllocPages(address, length, page_accessibility, commit);
-    if (kHintIsAdvisory || ret) {
+#if defined(ARCH_CPU_32_BITS)
+  // On 32 bit systems, first try one random aligned address, and then try an
+  // aligned address derived from the value of |ret|.
+  constexpr int kExactSizeTries = 2;
+#else
+  // On 64 bit systems, try 3 random aligned addresses.
+  constexpr int kExactSizeTries = 3;
+#endif
+  for (int i = 0; i < kExactSizeTries; ++i) {
+    void* ret = AllocPagesIncludingReserved(address, length, page_accessibility,
+                                            commit);
+    if (ret != nullptr) {
       // If the alignment is to our liking, we're done.
       if (!(reinterpret_cast<uintptr_t>(ret) & align_offset_mask))
         return ret;
+      // Free the memory and try again.
       FreePages(ret, length);
-#if defined(ARCH_CPU_32_BITS)
-      address = reinterpret_cast<void*>(
-          (reinterpret_cast<uintptr_t>(ret) + align) & align_base_mask);
-#endif
-    } else if (!address) {  // We know we're OOM when an unhinted allocation
-                            // fails.
-      return nullptr;
     } else {
-#if defined(ARCH_CPU_32_BITS)
-      address = reinterpret_cast<char*>(address) + align;
-#endif
+      // |ret| is null; if this try was unhinted, we're OOM.
+      if (kHintIsAdvisory || address == nullptr)
+        return nullptr;
     }
 
-#if !defined(ARCH_CPU_32_BITS)
+#if defined(ARCH_CPU_32_BITS)
+    // For small address spaces, try the first aligned address >= |ret|. Note
+    // |ret| may be null, in which case |address| becomes null.
+    address = reinterpret_cast<void*>(
+        (reinterpret_cast<uintptr_t>(ret) + align_offset_mask) &
+        align_base_mask);
+#else  // defined(ARCH_CPU_64_BITS)
     // Keep trying random addresses on systems that have a large address space.
     address = GetRandomPageBase();
     address = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(address) &
@@ -242,20 +252,21 @@ void* AllocPages(void* address,
 #endif
   }
 
-  // Map a larger allocation so we can force alignment, but continue randomizing
-  // only on 64-bit POSIX.
+  // Make a larger allocation so we can force alignment.
   size_t try_length = length + (align - kPageAllocationGranularity);
   CHECK(try_length >= length);
   void* ret;
 
   do {
-    // Don't continue to burn cycles on mandatory hints (Windows).
+    // Continue randomizing only on POSIX.
     address = kHintIsAdvisory ? GetRandomPageBase() : nullptr;
-    ret = SystemAllocPages(address, try_length, page_accessibility, commit);
+    ret = AllocPagesIncludingReserved(address, try_length, page_accessibility,
+                                      commit);
     // The retries are for Windows, where a race can steal our mapping on
     // resize.
-  } while (ret && (ret = TrimMapping(ret, try_length, length, align,
-                                     page_accessibility, commit)) == nullptr);
+  } while (ret != nullptr &&
+           (ret = TrimMapping(ret, try_length, length, align,
+                              page_accessibility, commit)) == nullptr);
 
   return ret;
 }
@@ -367,29 +378,24 @@ void DiscardSystemPages(void* address, size_t length) {
 }
 
 bool ReserveAddressSpace(size_t size) {
-  // Don't take |s_reserveLock| while allocating, since a failure would invoke
-  // ReleaseReservation and deadlock.
-  void* mem = AllocPages(nullptr, size, kPageAllocationGranularity,
-                         PageInaccessible, false);
-  // We guarantee this alignment when reserving address space.
-  DCHECK(!(reinterpret_cast<uintptr_t>(mem) &
-           kPageAllocationGranularityOffsetMask));
-  if (mem != nullptr) {
-    {
-      subtle::SpinLock::Guard guard(s_reserveLock.Get());
-      if (s_reservation_address == nullptr) {
-        s_reservation_address = mem;
-        s_reservation_size = size;
-        return true;
-      }
+  // To avoid deadlock, call only SystemAllocPages.
+  subtle::SpinLock::Guard guard(s_reserveLock.Get());
+  if (s_reservation_address == nullptr) {
+    void* mem = SystemAllocPages(nullptr, size, PageInaccessible, false);
+    if (mem != nullptr) {
+      // We guarantee this alignment when reserving address space.
+      DCHECK(!(reinterpret_cast<uintptr_t>(mem) &
+               kPageAllocationGranularityOffsetMask));
+      s_reservation_address = mem;
+      s_reservation_size = size;
+      return true;
     }
-    // There was already a reservation.
-    FreePages(mem, size);
   }
   return false;
 }
 
 void ReleaseReservation() {
+  // To avoid deadlock, call only FreePages.
   subtle::SpinLock::Guard guard(s_reserveLock.Get());
   if (s_reservation_address != nullptr) {
     FreePages(s_reservation_address, s_reservation_size);

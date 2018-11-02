@@ -23,16 +23,23 @@ class WebRtcRtpBrowserTest : public WebRtcTestBase {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitch(switches::kUseFakeDeviceForMediaStream);
     command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "RTCRtpSender");
+                                    "RTCRtpSenderReplaceTrack");
     // Required by |CollectGarbage|.
     command_line->AppendSwitchASCII(switches::kJavaScriptFlags, "--expose-gc");
   }
 
  protected:
+  void StartServer() { ASSERT_TRUE(embedded_test_server()->Start()); }
+
+  void OpenTab(content::WebContents** tab) {
+    // TODO(hbos): Just open the tab, don't "AndGetUserMediaInNewTab".
+    *tab = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+  }
+
   void StartServerAndOpenTabs() {
-    ASSERT_TRUE(embedded_test_server()->Start());
-    left_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
-    right_tab_ = OpenTestPageAndGetUserMediaInNewTab(kMainWebrtcTestHtmlPage);
+    StartServer();
+    OpenTab(&left_tab_);
+    OpenTab(&right_tab_);
   }
 
   const TrackEvent* FindTrackEvent(const std::vector<TrackEvent>& track_events,
@@ -78,8 +85,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, GetReceivers) {
   VerifyRtpReceivers(right_tab_, 6);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       DISABLED_AddAndRemoveTracksWithoutStream) {
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, AddAndRemoveTracksWithoutStream) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -275,7 +281,7 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
-                       DISABLED_AddAndRemoveTracksWithIndividualStreams) {
+                       AddAndRemoveTracksWithIndividualStreams) {
   StartServerAndOpenTabs();
 
   SetupPeerconnectionWithoutLocalStream(left_tab_);
@@ -399,4 +405,13 @@ IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, TrackSwitchingStream) {
 IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest, TrackAddedToSecondStream) {
   StartServerAndOpenTabs();
   EXPECT_EQ("ok", ExecuteJavascript("trackAddedToSecondStream()", left_tab_));
+}
+
+IN_PROC_BROWSER_TEST_F(WebRtcRtpBrowserTest,
+                       RTCRtpSenderReplaceTrackSendsNewVideoTrack) {
+  StartServer();
+  OpenTab(&left_tab_);
+  EXPECT_EQ("test-passed",
+            ExecuteJavascript(
+                "testRTCRtpSenderReplaceTrackSendsNewVideoTrack()", left_tab_));
 }

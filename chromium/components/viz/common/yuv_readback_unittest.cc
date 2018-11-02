@@ -30,7 +30,7 @@ int kYUVReadbackSizes[] = {2, 4, 14};
 class YUVReadbackTest : public testing::Test {
  protected:
   void SetUp() override {
-    gpu::gles2::ContextCreationAttribHelper attributes;
+    gpu::ContextCreationAttribs attributes;
     attributes.alpha_size = 8;
     attributes.depth_size = 24;
     attributes.red_size = 8;
@@ -42,15 +42,17 @@ class YUVReadbackTest : public testing::Test {
     attributes.bind_generates_resource = false;
 
     context_ = gpu::GLInProcessContext::CreateWithoutInit();
-    auto result = context_->Initialize(nullptr,                 /* service */
-                                       nullptr,                 /* surface */
-                                       true,                    /* offscreen */
-                                       gpu::kNullSurfaceHandle, /* window */
-                                       nullptr, /* share_context */
-                                       attributes, gpu::SharedMemoryLimits(),
-                                       nullptr, /* gpu_memory_buffer_manager */
-                                       nullptr, /* image_factory */
-                                       base::ThreadTaskRunnerHandle::Get());
+    auto result =
+        context_->Initialize(nullptr,                 /* service */
+                             nullptr,                 /* surface */
+                             true,                    /* offscreen */
+                             gpu::kNullSurfaceHandle, /* window */
+                             nullptr,                 /* share_context */
+                             attributes, gpu::SharedMemoryLimits(),
+                             nullptr, /* gpu_memory_buffer_manager */
+                             nullptr, /* image_factory */
+                             nullptr /* gpu_channel_manager_delegate */,
+                             base::ThreadTaskRunnerHandle::Get());
     DCHECK_EQ(result, gpu::ContextResult::kSuccess);
     gl_ = context_->GetImplementation();
     gpu::ContextSupport* support = context_->GetImplementation();
@@ -355,12 +357,10 @@ class YUVReadbackTest : public testing::Test {
     gpu::Mailbox mailbox;
     gl_->GenMailboxCHROMIUM(mailbox.name);
     EXPECT_FALSE(mailbox.IsZero());
-    gl_->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
-    const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
-    gl_->ShallowFlushCHROMIUM();
+    gl_->ProduceTextureDirectCHROMIUM(src_texture, mailbox.name);
 
     gpu::SyncToken sync_token;
-    gl_->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gl_->GenSyncTokenCHROMIUM(sync_token.GetData());
 
     std::string message = base::StringPrintf(
         "input size: %dx%d "
@@ -374,7 +374,7 @@ class YUVReadbackTest : public testing::Test {
 
     scoped_refptr<media::VideoFrame> output_frame =
         media::VideoFrame::CreateFrame(
-            media::PIXEL_FORMAT_YV12,
+            media::PIXEL_FORMAT_I420,
             // The coded size of the output frame is rounded up to the next
             // 16-byte boundary.  This tests that the readback is being
             // positioned inside the frame's visible region, and not dependent
@@ -385,7 +385,7 @@ class YUVReadbackTest : public testing::Test {
             base::TimeDelta::FromSeconds(0));
     scoped_refptr<media::VideoFrame> truth_frame =
         media::VideoFrame::CreateFrame(
-            media::PIXEL_FORMAT_YV12, gfx::Size(output_xsize, output_ysize),
+            media::PIXEL_FORMAT_I420, gfx::Size(output_xsize, output_ysize),
             gfx::Rect(0, 0, output_xsize, output_ysize),
             gfx::Size(output_xsize, output_ysize),
             base::TimeDelta::FromSeconds(0));

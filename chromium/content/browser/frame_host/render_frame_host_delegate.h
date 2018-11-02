@@ -18,9 +18,11 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
-#include "device/geolocation/public/interfaces/geolocation_context.mojom.h"
+#include "content/public/common/resource_type.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
+#include "net/cert/cert_status_flags.h"
 #include "net/http/http_response_headers.h"
+#include "services/device/public/interfaces/geolocation_context.mojom.h"
 #include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/base/window_open_disposition.h"
 
@@ -245,6 +247,9 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // possibly changing focus in distinct but related inner/outer WebContents.
   virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {}
 
+  // The frame called |window.focus()|.
+  virtual void DidCallFocus() {}
+
   // Searches the WebContents for a focused frame, potentially in an inner
   // WebContents. If this WebContents has no focused frame, returns |nullptr|.
   // If there is no inner WebContents at the focused tree node, returns its
@@ -336,6 +341,14 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Whether the delegate is being destroyed, in which case the RenderFrameHost
   // should not be asked to create a RenderFrame.
   virtual bool IsBeingDestroyed() const;
+
+  // Notifies that the render frame started loading a subresource.
+  virtual void SubresourceResponseStarted(const GURL& url,
+                                          const GURL& referrer,
+                                          const std::string& method,
+                                          ResourceType resource_type,
+                                          const std::string& ip,
+                                          net::CertStatus cert_status) {}
 
  protected:
   virtual ~RenderFrameHostDelegate() {}

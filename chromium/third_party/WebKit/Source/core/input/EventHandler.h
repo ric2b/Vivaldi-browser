@@ -26,6 +26,7 @@
 #ifndef EventHandler_h
 #define EventHandler_h
 
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/UserGestureIndicator.h"
@@ -74,12 +75,9 @@ class TextEvent;
 class WebGestureEvent;
 class WebMouseEvent;
 class WebMouseWheelEvent;
-class WebTouchEvent;
 
 class CORE_EXPORT EventHandler final
     : public GarbageCollectedFinalized<EventHandler> {
-  WTF_MAKE_NONCOPYABLE(EventHandler);
-
  public:
   explicit EventHandler(LocalFrame&);
   void Trace(blink::Visitor*);
@@ -148,7 +146,11 @@ class CORE_EXPORT EventHandler final
       const Vector<WebMouseEvent>& coalesced_events);
   void HandleMouseLeaveEvent(const WebMouseEvent&);
 
-  WebInputEventResult HandlePointerEvent(const WebPointerEvent&);
+  WebInputEventResult HandlePointerEvent(
+      const WebPointerEvent&,
+      const Vector<WebPointerEvent>& coalesced_events);
+
+  WebInputEventResult DispatchBufferedTouchEvents();
 
   WebInputEventResult HandleMousePressEvent(const WebMouseEvent&);
   WebInputEventResult HandleMouseReleaseEvent(const WebMouseEvent&);
@@ -190,12 +192,6 @@ class CORE_EXPORT EventHandler final
   bool BestContextMenuNodeForHitTestResult(const HitTestResult&,
                                            IntPoint& target_point,
                                            Node*& target_node);
-  // FIXME: This doesn't appear to be used outside tests anymore, what path are
-  // we using now and is it tested?
-  bool BestZoomableAreaForTouchPoint(const IntPoint& touch_center,
-                                     const IntSize& touch_radius,
-                                     IntRect& target_area,
-                                     Node*& target_node);
 
   WebInputEventResult SendContextMenuEvent(
       const WebMouseEvent&,
@@ -230,10 +226,6 @@ class CORE_EXPORT EventHandler final
   void DragSourceEndedAt(const WebMouseEvent&, DragOperation);
 
   void CapsLockStateMayHaveChanged();  // Only called by FrameSelection
-
-  WebInputEventResult HandleTouchEvent(
-      const WebTouchEvent&,
-      const Vector<WebTouchEvent>& coalesced_events);
 
   bool UseHandCursor(Node*, bool is_over_link);
 
@@ -327,16 +319,11 @@ class CORE_EXPORT EventHandler final
 
   ScrollableArea* AssociatedScrollableArea(const PaintLayer*) const;
 
-  Node* UpdateMouseEventTargetNode(Node*);
+  Node* EffectiveMouseEventTargetNode(Node*);
 
   // Dispatches ME after corresponding PE provided the PE has not been canceled.
-  // The eventType arg must be a mouse event that can be gated though a
-  // preventDefaulted pointerdown (i.e., one of
-  // {mousedown, mousemove, mouseup}).
-  // TODO(mustaq): Can we avoid the clickCount param, instead use
-  // WebmMouseEvent's count?
-  //     Same applied to dispatchMouseEvent() above.
-  WebInputEventResult UpdatePointerTargetAndDispatchEvents(
+  // The |mouse_event_type| arg must be one of {mousedown, mousemove, mouseup}.
+  WebInputEventResult DispatchMousePointerEvent(
       const AtomicString& mouse_event_type,
       Node* target,
       const String& canvas_region_id,
@@ -436,6 +423,8 @@ class CORE_EXPORT EventHandler final
                            EditableAnchorTextCanStartSelection);
   FRIEND_TEST_ALL_PREFIXES(EventHandlerTest,
                            ReadOnlyInputDoesNotInheritUserSelect);
+
+  DISALLOW_COPY_AND_ASSIGN(EventHandler);
 };
 
 }  // namespace blink

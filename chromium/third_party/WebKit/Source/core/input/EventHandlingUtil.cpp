@@ -7,7 +7,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "public/platform/WebMouseEvent.h"
@@ -21,14 +21,14 @@ HitTestResult HitTestResultInFrame(
     HitTestRequest::HitTestRequestType hit_type) {
   HitTestResult result(HitTestRequest(hit_type), point);
 
-  if (!frame || frame->ContentLayoutItem().IsNull())
+  if (!frame || !frame->ContentLayoutObject())
     return result;
   if (frame->View()) {
     IntRect rect = frame->View()->VisibleContentRect(kIncludeScrollbars);
     if (!rect.Contains(RoundedIntPoint(point)))
       return result;
   }
-  frame->ContentLayoutItem().HitTest(result);
+  frame->ContentLayoutObject()->HitTest(result);
   return result;
 }
 

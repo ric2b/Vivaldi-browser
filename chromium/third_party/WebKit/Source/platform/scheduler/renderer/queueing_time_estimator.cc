@@ -15,6 +15,10 @@ namespace scheduler {
 
 namespace {
 
+#define FRAME_STATUS_PREFIX \
+  "RendererScheduler.ExpectedQueueingTimeByFrameStatus."
+#define TASK_QUEUE_PREFIX "RendererScheduler.ExpectedQueueingTimeByTaskQueue."
+
 // On Windows, when a computer sleeps, we may end up getting extremely long
 // tasks or idling. We'll ignore tasks longer than |kInvalidPeriodThreshold|.
 constexpr base::TimeDelta kInvalidPeriodThreshold =
@@ -104,24 +108,19 @@ const char* QueueingTimeEstimator::Calculator::GetReportingMessageFromQueueType(
     MainThreadTaskQueue::QueueType queue_type) {
   switch (queue_type) {
     case MainThreadTaskQueue::QueueType::kDefault:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType.Default";
+      return TASK_QUEUE_PREFIX "Default";
     case MainThreadTaskQueue::QueueType::kDefaultLoading:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType."
-             "DefaultLoading";
+      return TASK_QUEUE_PREFIX "DefaultLoading";
     case MainThreadTaskQueue::QueueType::kUnthrottled:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType."
-             "Unthrottled";
+      return TASK_QUEUE_PREFIX "Unthrottled";
     case MainThreadTaskQueue::QueueType::kFrameLoading:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType."
-             "FrameLoading";
+      return TASK_QUEUE_PREFIX "FrameLoading";
     case MainThreadTaskQueue::QueueType::kCompositor:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType.Compositor";
+      return TASK_QUEUE_PREFIX "Compositor";
     case MainThreadTaskQueue::QueueType::kFrameThrottleable:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType."
-             "FrameThrottleable";
+      return TASK_QUEUE_PREFIX "FrameThrottleable";
     case MainThreadTaskQueue::QueueType::kFramePausable:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType."
-             "FramePausable";
+      return TASK_QUEUE_PREFIX "FramePausable";
     case MainThreadTaskQueue::QueueType::kControl:
     case MainThreadTaskQueue::QueueType::kDefaultTimer:
     case MainThreadTaskQueue::QueueType::kIdle:
@@ -135,57 +134,49 @@ const char* QueueingTimeEstimator::Calculator::GetReportingMessageFromQueueType(
     // Using default here as well because there are some values less than COUNT
     // that have been removed and do not correspond to any QueueType.
     default:
-      return "RendererScheduler.ExpectedQueueingTimeByTaskQueueType.Other";
+      return TASK_QUEUE_PREFIX "Other";
   }
 }
 
 // static
-const char* QueueingTimeEstimator::Calculator::GetReportingMessageFromFrameType(
-    FrameType frame_type) {
-  switch (frame_type) {
-    case FrameType::kMainFrameVisible:
-    case FrameType::kMainFrameVisibleService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "MainFrameVisible";
-    case FrameType::kMainFrameHidden:
-    case FrameType::kMainFrameHiddenService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "MainFrameHidden";
-    case FrameType::kMainFrameBackground:
-    case FrameType::kMainFrameBackgroundExemptSelf:
-    case FrameType::kMainFrameBackgroundExemptOther:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "MainFrameBackground";
-    case FrameType::kSameOriginVisible:
-    case FrameType::kSameOriginVisibleService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "SameOriginVisible";
-    case FrameType::kSameOriginHidden:
-    case FrameType::kSameOriginHiddenService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "SameOriginHidden";
-    case FrameType::kSameOriginBackground:
-    case FrameType::kSameOriginBackgroundExemptSelf:
-    case FrameType::kSameOriginBackgroundExemptOther:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "SameOriginBackground";
-    case FrameType::kCrossOriginVisible:
-    case FrameType::kCrossOriginVisibleService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "CrossOriginVisible";
-    case FrameType::kCrossOriginHidden:
-    case FrameType::kCrossOriginHiddenService:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "CrossOriginHidden";
-    case FrameType::kCrossOriginBackground:
-    case FrameType::kCrossOriginBackgroundExemptSelf:
-    case FrameType::kCrossOriginBackgroundExemptOther:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType."
-             "CrossOriginBackground";
-    case FrameType::kNone:
-    case FrameType::kDetached:
-      return "RendererScheduler.ExpectedQueueingTimeByFrameType.Other";
-    case FrameType::kCount:
+const char*
+QueueingTimeEstimator::Calculator::GetReportingMessageFromFrameStatus(
+    FrameStatus frame_status) {
+  switch (frame_status) {
+    case FrameStatus::kMainFrameVisible:
+    case FrameStatus::kMainFrameVisibleService:
+      return FRAME_STATUS_PREFIX "MainFrameVisible";
+    case FrameStatus::kMainFrameHidden:
+    case FrameStatus::kMainFrameHiddenService:
+      return FRAME_STATUS_PREFIX "MainFrameHidden";
+    case FrameStatus::kMainFrameBackground:
+    case FrameStatus::kMainFrameBackgroundExemptSelf:
+    case FrameStatus::kMainFrameBackgroundExemptOther:
+      return FRAME_STATUS_PREFIX "MainFrameBackground";
+    case FrameStatus::kSameOriginVisible:
+    case FrameStatus::kSameOriginVisibleService:
+      return FRAME_STATUS_PREFIX "SameOriginVisible";
+    case FrameStatus::kSameOriginHidden:
+    case FrameStatus::kSameOriginHiddenService:
+      return FRAME_STATUS_PREFIX "SameOriginHidden";
+    case FrameStatus::kSameOriginBackground:
+    case FrameStatus::kSameOriginBackgroundExemptSelf:
+    case FrameStatus::kSameOriginBackgroundExemptOther:
+      return FRAME_STATUS_PREFIX "SameOriginBackground";
+    case FrameStatus::kCrossOriginVisible:
+    case FrameStatus::kCrossOriginVisibleService:
+      return FRAME_STATUS_PREFIX "CrossOriginVisible";
+    case FrameStatus::kCrossOriginHidden:
+    case FrameStatus::kCrossOriginHiddenService:
+      return FRAME_STATUS_PREFIX "CrossOriginHidden";
+    case FrameStatus::kCrossOriginBackground:
+    case FrameStatus::kCrossOriginBackgroundExemptSelf:
+    case FrameStatus::kCrossOriginBackgroundExemptOther:
+      return FRAME_STATUS_PREFIX "CrossOriginBackground";
+    case FrameStatus::kNone:
+    case FrameStatus::kDetached:
+      return FRAME_STATUS_PREFIX "Other";
+    case FrameStatus::kCount:
       NOTREACHED();
       return "";
   }
@@ -198,14 +189,16 @@ void QueueingTimeEstimator::Calculator::UpdateStatusFromTaskQueue(
   current_queue_type_ =
       queue ? queue->queue_type() : MainThreadTaskQueue::QueueType::kOther;
   WebFrameScheduler* scheduler = queue ? queue->GetFrameScheduler() : nullptr;
-  current_frame_type_ = scheduler ? GetFrameType(scheduler) : FrameType::kNone;
+  current_frame_status_ =
+      scheduler ? GetFrameStatus(scheduler) : FrameStatus::kNone;
 }
 
 void QueueingTimeEstimator::Calculator::AddQueueingTime(
     base::TimeDelta queueing_time) {
   step_expected_queueing_time_ += queueing_time;
   eqt_by_queue_type_[static_cast<int>(current_queue_type_)] += queueing_time;
-  eqt_by_frame_type_[static_cast<int>(current_frame_type_)] += queueing_time;
+  eqt_by_frame_status_[static_cast<int>(current_frame_status_)] +=
+      queueing_time;
 }
 
 void QueueingTimeEstimator::Calculator::EndStep(
@@ -231,17 +224,17 @@ void QueueingTimeEstimator::Calculator::EndStep(
         static_cast<MainThreadTaskQueue::QueueType>(i))] +=
         eqt_by_queue_type_[i];
   }
-  for (int i = 0; i < static_cast<int>(FrameType::kCount); ++i) {
-    delta_by_message[GetReportingMessageFromFrameType(
-        static_cast<FrameType>(i))] += eqt_by_frame_type_[i];
+  for (int i = 0; i < static_cast<int>(FrameStatus::kCount); ++i) {
+    delta_by_message[GetReportingMessageFromFrameStatus(
+        static_cast<FrameStatus>(i))] += eqt_by_frame_status_[i];
   }
   for (auto it : delta_by_message) {
-    client->OnReportSplitExpectedQueueingTime(it.first,
-                                              it.second / steps_per_window_);
+    client->OnReportFineGrainedExpectedQueueingTime(
+        it.first, it.second / steps_per_window_);
   }
   std::fill(eqt_by_queue_type_.begin(), eqt_by_queue_type_.end(),
             base::TimeDelta());
-  std::fill(eqt_by_frame_type_.begin(), eqt_by_frame_type_.end(),
+  std::fill(eqt_by_frame_status_.begin(), eqt_by_frame_status_.end(),
             base::TimeDelta());
 }
 
@@ -364,14 +357,14 @@ class RecordQueueingTimeClient : public QueueingTimeEstimator::Client {
     queueing_time_ = queueing_time;
   }
 
-  void OnReportSplitExpectedQueueingTime(
+  void OnReportFineGrainedExpectedQueueingTime(
       const char* split_description,
       base::TimeDelta queueing_time) override {}
 
   base::TimeDelta queueing_time() { return queueing_time_; }
 
-  RecordQueueingTimeClient() {}
-  ~RecordQueueingTimeClient() override {}
+  RecordQueueingTimeClient() = default;
+  ~RecordQueueingTimeClient() override = default;
 
  private:
   base::TimeDelta queueing_time_;

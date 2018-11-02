@@ -12,12 +12,13 @@
 #include "content/child/scoped_child_process_reference.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/appcache_info.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/renderer/child_url_loader_factory_getter.h"
+#include "content/public/renderer/content_renderer_client.h"
 #include "content/renderer/appcache/appcache_dispatcher.h"
 #include "content/renderer/appcache/web_application_cache_host_impl.h"
-#include "content/renderer/devtools/devtools_agent.h"
 #include "content/renderer/loader/request_extra_data.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
@@ -25,14 +26,13 @@
 #include "content/renderer/service_worker/service_worker_network_provider.h"
 #include "content/renderer/service_worker/service_worker_provider_context.h"
 #include "content/renderer/service_worker/worker_fetch_context_impl.h"
-#include "content/renderer/shared_worker/shared_worker_devtools_agent.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/common/message_port/message_port_channel.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/InterfaceProvider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/web/WebSharedWorker.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerClient.h"
 #include "url/origin.h"
@@ -132,25 +132,20 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
     mojom::SharedWorkerInfoPtr info,
     bool pause_on_start,
     const base::UnguessableToken& devtools_worker_token,
-    int route_id,
     blink::mojom::WorkerContentSettingsProxyPtr content_settings,
     mojom::SharedWorkerHostPtr host,
     mojom::SharedWorkerRequest request,
     service_manager::mojom::InterfaceProviderPtr interface_provider)
     : binding_(this, std::move(request)),
       host_(std::move(host)),
-      route_id_(route_id),
       name_(info->name),
       url_(info->url) {
-  RenderThreadImpl::current()->AddRoute(route_id_, this);
   impl_ = blink::WebSharedWorker::Create(this);
   if (pause_on_start) {
     // Pause worker context when it starts and wait until either DevTools client
     // is attached or explicit resume notification is received.
     impl_->PauseWorkerContextOnStart();
   }
-  worker_devtools_agent_.reset(
-      new SharedWorkerDevToolsAgent(route_id, impl_));
   impl_->StartWorkerContext(
       url_, blink::WebString::FromUTF8(name_),
       blink::WebString::FromUTF8(info->content_security_policy),
@@ -165,17 +160,7 @@ EmbeddedSharedWorkerStub::EmbeddedSharedWorkerStub(
 }
 
 EmbeddedSharedWorkerStub::~EmbeddedSharedWorkerStub() {
-  RenderThreadImpl::current()->RemoveRoute(route_id_);
   DCHECK(!impl_);
-}
-
-bool EmbeddedSharedWorkerStub::OnMessageReceived(const IPC::Message& message) {
-  // Just a simply pass-through for now until we can rework the DevTools IPC.
-  return worker_devtools_agent_->OnMessageReceived(message);
-}
-
-void EmbeddedSharedWorkerStub::OnChannelError() {
-  Terminate();
 }
 
 void EmbeddedSharedWorkerStub::WorkerReadyForInspection() {
@@ -239,31 +224,16 @@ EmbeddedSharedWorkerStub::CreateServiceWorkerNetworkProvider() {
   // Create a content::ServiceWorkerNetworkProvider for this data source so
   // we can observe its requests.
   std::unique_ptr<ServiceWorkerNetworkProvider> provider(
-      ServiceWorkerNetworkProvider::CreateForSharedWorker(route_id_));
+      ServiceWorkerNetworkProvider::CreateForSharedWorker());
 
   // Blink is responsible for deleting the returned object.
   return std::make_unique<WebServiceWorkerNetworkProviderForSharedWorker>(
       std::move(provider), IsOriginSecure(url_));
 }
 
-void EmbeddedSharedWorkerStub::SendDevToolsMessage(
-    int session_id,
-    int call_id,
-    const blink::WebString& message,
-    const blink::WebString& state) {
-  worker_devtools_agent_->SendDevToolsMessage(
-      session_id, call_id, message, state);
-}
-
-blink::WebDevToolsAgentClient::WebKitClientMessageLoop*
-EmbeddedSharedWorkerStub::CreateDevToolsMessageLoop() {
-  return DevToolsAgent::createMessageLoopWrapper();
-}
-
 std::unique_ptr<blink::WebWorkerFetchContext>
 EmbeddedSharedWorkerStub::CreateWorkerFetchContext(
     blink::WebServiceWorkerNetworkProvider* web_network_provider) {
-  DCHECK(base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
   DCHECK(web_network_provider);
   ServiceWorkerProviderContext* context =
       static_cast<WebServiceWorkerNetworkProviderForSharedWorker*>(
@@ -289,7 +259,9 @@ EmbeddedSharedWorkerStub::CreateWorkerFetchContext(
   DCHECK(url_loader_factory_getter);
   auto worker_fetch_context = std::make_unique<WorkerFetchContextImpl>(
       std::move(request), std::move(container_host_ptr_info),
-      url_loader_factory_getter->GetClonedInfo());
+      url_loader_factory_getter->GetClonedInfo(),
+      GetContentClient()->renderer()->CreateURLLoaderThrottleProvider(
+          URLLoaderThrottleProviderType::kWorker));
 
   // TODO(horo): To get the correct first_party_to_cookies for the shared
   // worker, we need to check the all documents bounded by the shared worker.
@@ -347,6 +319,11 @@ void EmbeddedSharedWorkerStub::Terminate() {
   // After this we wouldn't get any IPC for this stub.
   running_ = false;
   impl_->TerminateWorkerContext();
+}
+
+void EmbeddedSharedWorkerStub::BindDevToolsAgent(
+    blink::mojom::DevToolsAgentAssociatedRequest request) {
+  impl_->BindDevToolsAgent(request.PassHandle());
 }
 
 }  // namespace content

@@ -133,6 +133,11 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   HRESULT InitializeAudioEngine();
   void ReportOpenResult(HRESULT hr) const;
 
+  // Reports stats for format related audio client initilization
+  // (IAudioClient::Initialize) errors, that is if |hr| is an error related to
+  // the format.
+  void MaybeReportFormatRelatedInitError(HRESULT hr) const;
+
   // AudioConverter::InputCallback implementation.
   double ProvideInput(AudioBus* audio_bus, uint32_t frames_delayed) override;
 
@@ -168,8 +173,14 @@ class MEDIA_EXPORT WASAPIAudioInputStream
   // All OnData() callbacks will be called from this thread.
   std::unique_ptr<base::DelegateSimpleThread> capture_thread_;
 
-  // Contains the desired audio format which is set up at construction.
-  WAVEFORMATEX format_;
+  // Contains the desired output audio format which is set up at construction,
+  // that is the audio format this class should output data to the sink in.
+  WAVEFORMATEX output_format_;
+
+  // Contains the audio format we get data from the audio engine in. Set to
+  // |output_format_| at construction and might be changed to a close match
+  // if the audio engine doesn't support the originally set format.
+  WAVEFORMATEX input_format_;
 
   bool opened_ = false;
   bool started_ = false;

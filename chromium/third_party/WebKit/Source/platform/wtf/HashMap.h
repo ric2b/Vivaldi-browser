@@ -21,9 +21,10 @@
 #ifndef WTF_HashMap_h
 #define WTF_HashMap_h
 
+#include <initializer_list>
+#include "platform/wtf/ConstructTraits.h"
 #include "platform/wtf/HashTable.h"
 #include "platform/wtf/allocator/PartitionAllocator.h"
-#include <initializer_list>
 
 namespace WTF {
 
@@ -191,8 +192,8 @@ class HashMap {
 
   static bool IsValidKey(KeyPeekInType);
 
-  template <typename VisitorDispatcher>
-  void Trace(VisitorDispatcher visitor) {
+  template <typename VisitorDispatcher, typename A = Allocator>
+  std::enable_if_t<A::kIsGarbageCollected> Trace(VisitorDispatcher visitor) {
     impl_.Trace(visitor);
   }
 
@@ -244,11 +245,10 @@ class HashMap<KeyArg,
  private:
   friend class HashMap;
 
-  // These are intentionally not implemented.
-  HashMapKeysProxy();
-  HashMapKeysProxy(const HashMapKeysProxy&);
-  HashMapKeysProxy& operator=(const HashMapKeysProxy&);
-  ~HashMapKeysProxy();
+  HashMapKeysProxy() = delete;
+  HashMapKeysProxy(const HashMapKeysProxy&) = delete;
+  HashMapKeysProxy& operator=(const HashMapKeysProxy&) = delete;
+  ~HashMapKeysProxy() = delete;
 };
 
 template <typename KeyArg,
@@ -292,11 +292,10 @@ class HashMap<KeyArg,
  private:
   friend class HashMap;
 
-  // These are intentionally not implemented.
-  HashMapValuesProxy();
-  HashMapValuesProxy(const HashMapValuesProxy&);
-  HashMapValuesProxy& operator=(const HashMapValuesProxy&);
-  ~HashMapValuesProxy();
+  HashMapValuesProxy() = delete;
+  HashMapValuesProxy(const HashMapValuesProxy&) = delete;
+  HashMapValuesProxy& operator=(const HashMapValuesProxy&) = delete;
+  ~HashMapValuesProxy() = delete;
 };
 
 template <typename KeyTraits, typename MappedTraits>
@@ -310,7 +309,7 @@ struct HashMapValueTraits : KeyValuePairHashTraits<KeyTraits, MappedTraits> {
   }
 };
 
-template <typename ValueTraits, typename HashFunctions>
+template <typename ValueTraits, typename HashFunctions, typename Allocator>
 struct HashMapTranslator {
   STATIC_ONLY(HashMapTranslator);
   template <typename T>
@@ -523,12 +522,13 @@ template <typename T,
           typename V,
           typename W,
           typename X,
-          typename Y>
+          typename Allocator>
 template <typename IncomingKeyType, typename IncomingMappedType>
-typename HashMap<T, U, V, W, X, Y>::AddResult
-HashMap<T, U, V, W, X, Y>::InlineAdd(IncomingKeyType&& key,
-                                     IncomingMappedType&& mapped) {
-  return impl_.template insert<HashMapTranslator<ValueTraits, HashFunctions>>(
+typename HashMap<T, U, V, W, X, Allocator>::AddResult
+HashMap<T, U, V, W, X, Allocator>::InlineAdd(IncomingKeyType&& key,
+                                             IncomingMappedType&& mapped) {
+  return impl_.template insert<
+      HashMapTranslator<ValueTraits, HashFunctions, Allocator>>(
       std::forward<IncomingKeyType>(key),
       std::forward<IncomingMappedType>(mapped));
 }

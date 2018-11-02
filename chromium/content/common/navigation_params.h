@@ -21,9 +21,9 @@
 #include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/request_context_type.h"
-#include "content/public/common/resource_request_body.h"
-#include "content/public/common/resource_response.h"
 #include "net/url_request/redirect_info.h"
+#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/cpp/resource_response_info.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
@@ -55,24 +55,25 @@ struct CONTENT_EXPORT SourceLocation {
 // Used by all navigation IPCs.
 struct CONTENT_EXPORT CommonNavigationParams {
   CommonNavigationParams();
-  CommonNavigationParams(const GURL& url,
-                         const Referrer& referrer,
-                         ui::PageTransition transition,
-                         FrameMsg_Navigate_Type::Value navigation_type,
-                         bool allow_download,
-                         bool should_replace_current_entry,
-                         base::TimeTicks ui_timestamp,
-                         FrameMsg_UILoadMetricsReportType::Value report_type,
-                         const GURL& base_url_for_data_url,
-                         const GURL& history_url_for_data_url,
-                         PreviewsState previews_state,
-                         const base::TimeTicks& navigation_start,
-                         std::string method,
-                         const scoped_refptr<ResourceRequestBody>& post_data,
-                         base::Optional<SourceLocation> source_location,
-                         CSPDisposition should_check_main_world_csp,
-                         bool started_from_context_menu,
-                         bool has_user_gesture);
+  CommonNavigationParams(
+      const GURL& url,
+      const Referrer& referrer,
+      ui::PageTransition transition,
+      FrameMsg_Navigate_Type::Value navigation_type,
+      bool allow_download,
+      bool should_replace_current_entry,
+      base::TimeTicks ui_timestamp,
+      FrameMsg_UILoadMetricsReportType::Value report_type,
+      const GURL& base_url_for_data_url,
+      const GURL& history_url_for_data_url,
+      PreviewsState previews_state,
+      const base::TimeTicks& navigation_start,
+      std::string method,
+      const scoped_refptr<network::ResourceRequestBody>& post_data,
+      base::Optional<SourceLocation> source_location,
+      CSPDisposition should_check_main_world_csp,
+      bool started_from_context_menu,
+      bool has_user_gesture);
   CommonNavigationParams(const CommonNavigationParams& other);
   ~CommonNavigationParams();
 
@@ -132,7 +133,7 @@ struct CONTENT_EXPORT CommonNavigationParams {
   std::string method;
 
   // Body of HTTP POST request.
-  scoped_refptr<ResourceRequestBody> post_data;
+  scoped_refptr<network::ResourceRequestBody> post_data;
 
   // PlzNavigate
   // Information about the Javascript source for this navigation. Used for
@@ -156,94 +157,7 @@ struct CONTENT_EXPORT CommonNavigationParams {
   bool has_user_gesture;
 };
 
-// Provided by the renderer ----------------------------------------------------
-//
-// This struct holds parameters sent by the renderer to the browser. It is only
-// used in PlzNavigate (since in the current architecture, the renderer does not
-// inform the browser of navigations until they commit).
-
-// This struct is not used outside of the PlzNavigate project.
-// PlzNavigate: parameters needed to start a navigation on the IO thread,
-// following a renderer-initiated navigation request.
-struct CONTENT_EXPORT BeginNavigationParams {
-  // TODO(clamy): See if it is possible to reuse this in
-  // ResourceMsg_Request_Params.
-  BeginNavigationParams();
-  BeginNavigationParams(
-      std::string headers,
-      int load_flags,
-      bool skip_service_worker,
-      RequestContextType request_context_type,
-      blink::WebMixedContentContextType mixed_content_context_type,
-      bool is_form_submission,
-      const base::Optional<url::Origin>& initiator_origin);
-  BeginNavigationParams(const BeginNavigationParams& other);
-  ~BeginNavigationParams();
-
-  // Additional HTTP request headers.
-  std::string headers;
-
-  // net::URLRequest load flags (net::LOAD_NORMAL) by default).
-  int load_flags;
-
-  // True if the ServiceWorker should be skipped.
-  bool skip_service_worker;
-
-  // Indicates the request context type.
-  RequestContextType request_context_type;
-
-  // The mixed content context type for potential mixed content checks.
-  blink::WebMixedContentContextType mixed_content_context_type;
-
-  // Whether or not the navigation has been initiated by a form submission.
-  bool is_form_submission;
-
-  // See WebSearchableFormData for a description of these.
-  GURL searchable_form_url;
-  std::string searchable_form_encoding;
-
-  // Indicates the initiator of the request. In auxilliary navigations, this is
-  // the origin of the document that triggered the navigation. This parameter
-  // can be null during browser-initiated navigations.
-  base::Optional<url::Origin> initiator_origin;
-
-  // If the transition type is a client side redirect, then this holds the URL
-  // of the page that had the client side redirect.
-  GURL client_side_redirect_url;
-};
-
 // Provided by the browser -----------------------------------------------------
-//
-// These structs are sent by the browser to the renderer to start/commit a
-// navigation depending on whether browser-side navigation is enabled.
-// Parameters used both in the current architecture and PlzNavigate should be
-// put in RequestNavigationParams.  Parameters only used by the current
-// architecture should go in StartNavigationParams.
-
-// Used by FrameMsg_Navigate. Holds the parameters needed by the renderer to
-// start a browser-initiated navigation besides those in CommonNavigationParams.
-// The difference with the RequestNavigationParams below is that they are only
-// used in the current architecture of navigation, and will not be used by
-// PlzNavigate.
-// PlzNavigate: These are not used.
-struct CONTENT_EXPORT StartNavigationParams {
-  StartNavigationParams();
-  StartNavigationParams(const std::string& extra_headers,
-                        int transferred_request_child_id,
-                        int transferred_request_request_id);
-  StartNavigationParams(const StartNavigationParams& other);
-  ~StartNavigationParams();
-
-  // Extra headers (separated by \n) to send during the request.
-  std::string extra_headers;
-
-  // The following two members identify a previous request that has been
-  // created before this navigation is being transferred to a new process.
-  // This serves the purpose of recycling the old request.
-  // Unless this refers to a transferred navigation, these values are -1 and -1.
-  int transferred_request_child_id;
-  int transferred_request_request_id;
-};
 
 // PlzNavigate
 // Timings collected in the browser during navigation for the
@@ -270,7 +184,6 @@ struct CONTENT_EXPORT RequestNavigationParams {
                           int nav_entry_id,
                           bool is_history_navigation_in_new_child,
                           std::map<std::string, bool> subframe_unique_names,
-                          bool has_committed_real_load,
                           bool intended_as_new_entry,
                           int pending_history_list_offset,
                           int current_history_list_offset,
@@ -288,7 +201,7 @@ struct CONTENT_EXPORT RequestNavigationParams {
   std::vector<GURL> redirects;
 
   // The ResourceResponseInfos received during redirects.
-  std::vector<ResourceResponseInfo> redirect_response;
+  std::vector<network::ResourceResponseInfo> redirect_response;
 
   // PlzNavigate
   // The RedirectInfos received during redirects.
@@ -329,12 +242,6 @@ struct CONTENT_EXPORT RequestNavigationParams {
   // TODO(creis): Expand this to a data structure including corresponding
   // same-process PageStates for the whole subtree in https://crbug.com/639842.
   std::map<std::string, bool> subframe_unique_names;
-
-  // Whether the frame being navigated has already committed a real page, which
-  // affects how new navigations are classified in the renderer process.
-  // This currently is only ever set to true in --site-per-process mode.
-  // TODO(creis): Create FrameNavigationEntries by default so this always works.
-  bool has_committed_real_load;
 
   // For browser-initiated navigations, this is true if this is a new entry
   // being navigated to. This is false otherwise. TODO(avi): Remove this when
@@ -394,12 +301,10 @@ struct CONTENT_EXPORT RequestNavigationParams {
 // needs to provide to the renderer.
 struct NavigationParams {
   NavigationParams(const CommonNavigationParams& common_params,
-                   const StartNavigationParams& start_params,
                    const RequestNavigationParams& request_params);
   ~NavigationParams();
 
   CommonNavigationParams common_params;
-  StartNavigationParams start_params;
   RequestNavigationParams request_params;
 };
 

@@ -33,6 +33,8 @@ class VIEWS_EXPORT MenuModelAdapter : public MenuDelegate {
   // (including submenus).
   virtual void BuildMenu(MenuItemView* menu);
 
+  void VivaldiUpdateMenu(MenuItemView* menu, ui::MenuModel* model);
+
   // Convenience for creating and populating a menu. The caller owns the
   // returned MenuItemView.
   MenuItemView* CreateMenu();

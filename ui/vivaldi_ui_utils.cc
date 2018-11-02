@@ -8,14 +8,17 @@
 #include <vector>
 
 #include "app/vivaldi_constants.h"
+#include "base/json/json_reader.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
 #include "chrome/browser/thumbnails/thumbnail_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "content/browser/web_contents/web_contents_impl.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "ui/gfx/codec/jpeg_codec.h"
 #include "ui/gfx/codec/png_codec.h"
@@ -193,6 +196,106 @@ SkBitmap SmartCropAndSize(const SkBitmap& capture,
   }
 #endif
   return result;
+}
+
+bool IsMainVivaldiBrowserWindow(Browser* browser) {
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  std::unique_ptr<base::Value> json =
+      base::JSONReader::Read(browser->ext_data(), options);
+  base::DictionaryValue* dict = NULL;
+  std::string window_type;
+  if (json && json->GetAsDictionary(&dict)) {
+    dict->GetString("windowType", &window_type);
+    // Don't track popup windows (like settings) in the session.
+    // We have "", "popup" and "settings".
+    // TODO(pettern): Popup windows still rely on extData, this
+    // should go away and we should use the type sent to the apis
+    // instead.
+    if (window_type == "popup" || window_type == "settings") {
+      return false;
+    }
+  }
+  if (static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+      VivaldiBrowserWindow::WindowType::NORMAL) {
+    return true;
+  }
+  return false;
+}
+
+
+Browser* FindBrowserForPinnedTabs(Browser* current_browser) {
+  if (current_browser->profile()->IsOffTheRecord()) {
+    // Pinned tabs can never be moved to another browser
+    return nullptr;
+  }
+  for (auto* browser : *BrowserList::GetInstance()) {
+    if (browser == current_browser) {
+      continue;
+    }
+    if (!browser->window()) {
+      continue;
+    }
+    if (browser->type() != current_browser->type()) {
+      continue;
+    }
+    if (browser->is_devtools()) {
+      continue;
+    }
+    if (!IsMainVivaldiBrowserWindow(browser)) {
+      continue;
+    }
+    return browser;
+  }
+  return nullptr;
+}
+
+// Based on TabsMoveFunction::MoveTab() but greatly simplified.
+bool MoveTabToWindow(Browser* source_browser,
+                     Browser* target_browser,
+                     int tab_index,
+                     int* new_index,
+                     int iteration) {
+  DCHECK(source_browser != target_browser);
+
+  // Insert the tabs one after another.
+  *new_index += iteration;
+
+  TabStripModel* source_tab_strip = source_browser->tab_strip_model();
+  content::WebContents* web_contents =
+      source_tab_strip->DetachWebContentsAt(tab_index);
+  if (!web_contents) {
+    return false;
+  }
+  TabStripModel* target_tab_strip = target_browser->tab_strip_model();
+
+  // Clamp move location to the last position.
+  // This is ">" because it can append to a new index position.
+  // -1 means set the move location to the last position.
+  if (*new_index > target_tab_strip->count() || *new_index < 0)
+    *new_index = target_tab_strip->count();
+
+  target_tab_strip->InsertWebContentsAt(
+    *new_index, web_contents, TabStripModel::ADD_PINNED);
+
+  return true;
+}
+
+bool GetTabById(int tab_id, content::WebContents** contents, int* index) {
+  for (auto* target_browser : *BrowserList::GetInstance()) {
+    TabStripModel* target_tab_strip = target_browser->tab_strip_model();
+    for (int i = 0; i < target_tab_strip->count(); ++i) {
+      content::WebContents* target_contents =
+          target_tab_strip->GetWebContentsAt(i);
+      if (SessionTabHelper::IdForTab(target_contents) == tab_id) {
+        if (contents)
+          *contents = target_contents;
+        if (index)
+          *index = i;
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 }  // namespace ui_tools

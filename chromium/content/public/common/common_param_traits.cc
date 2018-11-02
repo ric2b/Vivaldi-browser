@@ -10,106 +10,11 @@
 #include "content/public/common/content_constants.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/referrer.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
-#include "net/http/http_request_headers.h"
 #include "net/http/http_util.h"
 
 namespace IPC {
-
-void ParamTraits<url::Origin>::Write(base::Pickle* m, const url::Origin& p) {
-  WriteParam(m, p.unique());
-  WriteParam(m, p.scheme());
-  WriteParam(m, p.host());
-  WriteParam(m, p.port());
-  WriteParam(m, p.suborigin());
-}
-
-bool ParamTraits<url::Origin>::Read(const base::Pickle* m,
-                                    base::PickleIterator* iter,
-                                    url::Origin* p) {
-  bool unique;
-  std::string scheme;
-  std::string host;
-  uint16_t port;
-  std::string suborigin;
-  if (!ReadParam(m, iter, &unique) || !ReadParam(m, iter, &scheme) ||
-      !ReadParam(m, iter, &host) || !ReadParam(m, iter, &port) ||
-      !ReadParam(m, iter, &suborigin)) {
-    *p = url::Origin();
-    return false;
-  }
-
-  *p = unique ? url::Origin()
-              : url::Origin::UnsafelyCreateOriginWithoutNormalization(
-                    scheme, host, port, suborigin);
-
-  // If a unique origin was created, but the unique flag wasn't set, then
-  // the values provided to 'UnsafelyCreateOriginWithoutNormalization' were
-  // invalid; kill the renderer.
-  if (!unique && p->unique())
-    return false;
-
-  return true;
-}
-
-void ParamTraits<url::Origin>::Log(const url::Origin& p, std::string* l) {
-  l->append(p.Serialize());
-}
-
-void ParamTraits<net::HostPortPair>::Write(base::Pickle* m,
-                                           const param_type& p) {
-  WriteParam(m, p.host());
-  WriteParam(m, p.port());
-}
-
-bool ParamTraits<net::HostPortPair>::Read(const base::Pickle* m,
-                                          base::PickleIterator* iter,
-                                          param_type* r) {
-  std::string host;
-  uint16_t port;
-  if (!ReadParam(m, iter, &host) || !ReadParam(m, iter, &port))
-    return false;
-
-  r->set_host(host);
-  r->set_port(port);
-  return true;
-}
-
-void ParamTraits<net::HostPortPair>::Log(const param_type& p, std::string* l) {
-  l->append(p.ToString());
-}
-
-void ParamTraits<net::HttpRequestHeaders>::Write(base::Pickle* m,
-                                                 const param_type& p) {
-  WriteParam(m, static_cast<int>(p.GetHeaderVector().size()));
-  for (size_t i = 0; i < p.GetHeaderVector().size(); ++i)
-    WriteParam(m, p.GetHeaderVector()[i]);
-}
-
-bool ParamTraits<net::HttpRequestHeaders>::Read(const base::Pickle* m,
-                                                base::PickleIterator* iter,
-                                                param_type* r) {
-  // Sanity check.
-  int size;
-  if (!iter->ReadLength(&size))
-    return false;
-  for (int i = 0; i < size; ++i) {
-    net::HttpRequestHeaders::HeaderKeyValuePair pair;
-    if (!ReadParam(m, iter, &pair) ||
-        !net::HttpUtil::IsValidHeaderName(pair.key) ||
-        !net::HttpUtil::IsValidHeaderValue(pair.value))
-      return false;
-    r->SetHeader(pair.key, pair.value);
-  }
-  return true;
-}
-
-void ParamTraits<net::HttpRequestHeaders>::Log(const param_type& p,
-                                               std::string* l) {
-  l->append(p.ToString());
-}
 
 void ParamTraits<net::IPEndPoint>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.address());

@@ -5,6 +5,8 @@
 source_set("autofill") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "address_normalizer_factory.cc",
+    "address_normalizer_factory.h",
     "form_input_accessory_view.h",
     "form_input_accessory_view.mm",
     "form_input_accessory_view_controller.h",
@@ -57,6 +59,7 @@ source_set("autofill") {
     "//ios/chrome/browser/passwords:passwords_generation_utils",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/image_util",
     "//ios/web",
     "//third_party/libaddressinput",
     "//ui/base",
@@ -128,6 +131,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui/autofill",
     "//ios/chrome/browser/ui/settings:test_support",
     "//ios/chrome/browser/web:test_support",
+    "//ios/chrome/browser/web:web_internal",
     "//ios/chrome/test/base",
     "//ios/web",
     "//ios/web/public/test",

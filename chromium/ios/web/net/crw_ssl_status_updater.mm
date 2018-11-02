@@ -4,7 +4,6 @@
 
 #import "ios/web/net/crw_ssl_status_updater.h"
 
-#import "base/mac/scoped_nsobject.h"
 #import "base/strings/sys_string_conversions.h"
 #include "ios/web/navigation/navigation_manager_util.h"
 #import "ios/web/public/navigation_item.h"
@@ -108,6 +107,7 @@ using web::SecurityStyle;
     if (!item->GetURL().SchemeIsCryptographic()) {
       // HTTP or other non-secure connection.
       item->GetSSL().security_style = web::SECURITY_STYLE_UNAUTHENTICATED;
+      item->GetSSL().content_status = web::SSLStatus::NORMAL_CONTENT;
     } else {
       // HTTPS, no certificate (this use-case has not been observed).
       item->GetSSL().security_style = web::SECURITY_STYLE_UNKNOWN;

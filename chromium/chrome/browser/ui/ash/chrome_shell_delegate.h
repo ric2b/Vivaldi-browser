@@ -16,6 +16,7 @@
 
 namespace chromeos {
 class DisplayConfigurationObserver;
+class DisplayPrefs;
 }
 
 namespace keyboard {
@@ -41,9 +42,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   std::unique_ptr<ash::ScreenshotDelegate> CreateScreenshotDelegate() override;
   std::unique_ptr<ash::WallpaperDelegate> CreateWallpaperDelegate() override;
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
-  base::string16 GetProductName() const override;
   void OpenKeyboardShortcutHelpPage() const override;
-  gfx::Image GetDeprecatedAcceleratorImage() const override;
   ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
 
   // content::NotificationObserver override:
@@ -56,6 +55,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
 
   content::NotificationRegistrar registrar_;
 
+  std::unique_ptr<chromeos::DisplayPrefs> display_prefs_;
   std::unique_ptr<chromeos::DisplayConfigurationObserver>
       display_configuration_observer_;
 

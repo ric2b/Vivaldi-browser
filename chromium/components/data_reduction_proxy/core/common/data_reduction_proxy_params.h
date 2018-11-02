@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
 #include "base/time/time.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_config_values.h"
 #include "url/gurl.h"
@@ -47,12 +46,6 @@ bool IsIncludedInHoldbackFieldTrial();
 // not included in a group.
 std::string HoldbackFieldTrialGroup();
 
-// Returns true if this client is part of the field trial that should display
-// a promotion for the data reduction proxy on Android One devices. This is for
-// testing purposes and should not be called outside of tests.
-bool IsIncludedInAndroidOnePromoFieldTrialForTesting(
-    base::StringPiece build_fingerprint);
-
 // Returns the name of the Lo-Fi field trial.
 // TODO(ryansturm): crbug.com/759052 Cleanup once fully cutover to new blacklist
 const char* GetLoFiFieldTrialName();
@@ -65,32 +58,6 @@ const char* GetLoFiFlagFieldTrialName();
 // Returns true if this client is part of the field trial that should enable
 // server experiments for the data reduction proxy.
 bool IsIncludedInServerExperimentsFieldTrial();
-
-// Returns true if this client has any of the values to enable Lo-Fi mode for
-// the "data-reduction-proxy-lo-fi" command line switch. This includes the
-// "always-on", "cellular-only", and "slow-connections-only" values.
-bool IsLoFiOnViaFlags();
-
-// Returns true if this client has the command line switch to enable Lo-Fi
-// mode always on.
-bool IsLoFiAlwaysOnViaFlags();
-
-// Returns true if this client has the command line switch to enable Lo-Fi
-// mode only on cellular connections.
-bool IsLoFiCellularOnlyViaFlags();
-
-// Returns true if this client has the command line switch to enable Lo-Fi
-// mode only on slow connections.
-bool IsLoFiSlowConnectionsOnlyViaFlags();
-
-// Returns true if this client has the command line switch to disable Lo-Fi
-// mode.
-bool IsLoFiDisabledViaFlags();
-
-// Returns true if this client has the command line switch to enable lite pages.
-// This means a preview should be requested instead of placeholders whenever
-// Lo-Fi mode is on.
-bool AreLitePagesEnabledViaFlags();
 
 // Returns true if this client has the command line switch to enable forced
 // pageload metrics pingbacks on every page load.
@@ -161,7 +128,7 @@ const char* GetServerExperimentsFieldTrialName();
 GURL GetSecureProxyCheckURL();
 
 // Returns true if fetching of the warmup URL is enabled.
-bool FetchWarmupURLEnabled();
+bool FetchWarmupProbeURLEnabled();
 
 // Returns the warmup URL.
 GURL GetWarmupURL();

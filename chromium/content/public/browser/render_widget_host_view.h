@@ -28,7 +28,6 @@ class VideoFrame;
 }
 
 namespace ui {
-class AcceleratedWidgetMac;
 class TextInputClient;
 }
 
@@ -253,14 +252,14 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // when the value has changed.  Views must initially default to false.
   virtual void SetNeedsBeginFrames(bool needs_begin_frames) = 0;
 
+  // Informs the view that its associated render widget also wants to receive
+  // animate_only BeginFrames.
+  virtual void SetWantsAnimateOnlyBeginFrames() = 0;
+
   // This method returns the ScreenInfo used by the view to render.
   virtual void GetScreenInfo(ScreenInfo* screen_info) = 0;
 
 #if defined(OS_MACOSX)
-  // Return the accelerated widget which hosts the CALayers that draw the
-  // content of the view in GetNativeView. This may be null.
-  virtual ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const = 0;
-
   // Set the view's active state (i.e., tint state of controls).
   virtual void SetActive(bool active) = 0;
 

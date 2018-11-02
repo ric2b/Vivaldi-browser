@@ -8,7 +8,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_task_environment.h"
@@ -19,6 +18,7 @@
 #include "chromeos/components/tether/fake_host_scan_cache.h"
 #include "chromeos/components/tether/fake_notification_presenter.h"
 #include "chromeos/components/tether/fake_tether_host_fetcher.h"
+#include "chromeos/components/tether/gms_core_notifications_state_tracker_impl.h"
 #include "chromeos/components/tether/host_scan_device_prioritizer.h"
 #include "chromeos/components/tether/host_scanner.h"
 #include "chromeos/components/tether/master_host_scan_cache.h"
@@ -195,36 +195,39 @@ class HostScannerTest : public NetworkStateTest {
 
     scanned_device_infos_from_current_scan_.clear();
 
-    fake_tether_host_fetcher_ = base::MakeUnique<FakeTetherHostFetcher>(
-        test_devices_, false /* synchronously_reply_with_results */);
-    fake_ble_connection_manager_ = base::MakeUnique<FakeBleConnectionManager>();
+    fake_tether_host_fetcher_ =
+        std::make_unique<FakeTetherHostFetcher>(test_devices_);
+    fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
     fake_host_scan_device_prioritizer_ =
-        base::MakeUnique<FakeHostScanDevicePrioritizer>();
+        std::make_unique<FakeHostScanDevicePrioritizer>();
     mock_tether_host_response_recorder_ =
-        base::MakeUnique<MockTetherHostResponseRecorder>();
+        std::make_unique<MockTetherHostResponseRecorder>();
+    gms_core_notifications_state_tracker_ =
+        std::make_unique<GmsCoreNotificationsStateTrackerImpl>();
     fake_notification_presenter_ =
-        base::MakeUnique<FakeNotificationPresenter>();
+        std::make_unique<FakeNotificationPresenter>();
     device_id_tether_network_guid_map_ =
-        base::MakeUnique<DeviceIdTetherNetworkGuidMap>();
-    fake_host_scan_cache_ = base::MakeUnique<FakeHostScanCache>();
+        std::make_unique<DeviceIdTetherNetworkGuidMap>();
+    fake_host_scan_cache_ = std::make_unique<FakeHostScanCache>();
 
     fake_host_scanner_operation_factory_ =
         base::WrapUnique(new FakeHostScannerOperationFactory(test_devices_));
     HostScannerOperation::Factory::SetInstanceForTesting(
         fake_host_scanner_operation_factory_.get());
 
-    test_clock_ = base::MakeUnique<base::SimpleTestClock>();
+    test_clock_ = std::make_unique<base::SimpleTestClock>();
 
     host_scanner_ = base::WrapUnique(new HostScanner(
         network_state_handler(), fake_tether_host_fetcher_.get(),
         fake_ble_connection_manager_.get(),
         fake_host_scan_device_prioritizer_.get(),
         mock_tether_host_response_recorder_.get(),
+        gms_core_notifications_state_tracker_.get(),
         fake_notification_presenter_.get(),
         device_id_tether_network_guid_map_.get(), fake_host_scan_cache_.get(),
         test_clock_.get()));
 
-    test_observer_ = base::MakeUnique<TestObserver>();
+    test_observer_ = std::make_unique<TestObserver>();
     host_scanner_->AddObserver(test_observer_.get());
   }
 
@@ -380,6 +383,8 @@ class HostScannerTest : public NetworkStateTest {
   std::unique_ptr<HostScanDevicePrioritizer> fake_host_scan_device_prioritizer_;
   std::unique_ptr<MockTetherHostResponseRecorder>
       mock_tether_host_response_recorder_;
+  std::unique_ptr<GmsCoreNotificationsStateTrackerImpl>
+      gms_core_notifications_state_tracker_;
   std::unique_ptr<FakeNotificationPresenter> fake_notification_presenter_;
   // TODO(hansberry): Use a fake for this when a real mapping scheme is created.
   std::unique_ptr<DeviceIdTetherNetworkGuidMap>
@@ -412,8 +417,6 @@ TEST_F(HostScannerTest, TestScan_ConnectingToExistingNetwork) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -451,8 +454,6 @@ TEST_F(HostScannerTest, TestNotificationNotDisplayedMultipleTimes) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -487,8 +488,6 @@ TEST_F(HostScannerTest, TestScan_ResultsFromAllDevices) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -523,8 +522,6 @@ TEST_F(HostScannerTest, TestScan_ResultsFromNoDevices) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -545,8 +542,6 @@ TEST_F(HostScannerTest, TestScan_ResultsFromSomeDevices) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -577,22 +572,12 @@ TEST_F(HostScannerTest, TestScan_MultipleScanCallsDuringOperation) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  // Call StartScan() again before the tether host fetcher has finished. This
-  // should be a no-op.
-  host_scanner_->StartScan();
-  EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  // No devices should have been received yet.
-  EXPECT_EQ(0u, fake_host_scan_cache_->size());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
 
-  // Call StartScan again after the tether host fetcher has finished but before
-  // the final scan result has been received. This should be a no-op.
+  // Call StartScan again before the final scan result has been received. This
+  // should be a no-op.
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
 
@@ -631,8 +616,6 @@ TEST_F(HostScannerTest, TestScan_MultipleCompleteScanSessions) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(1u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -678,8 +661,6 @@ TEST_F(HostScannerTest, TestScan_MultipleCompleteScanSessions) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(2u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());
@@ -720,8 +701,6 @@ TEST_F(HostScannerTest, TestScan_MultipleCompleteScanSessions) {
   EXPECT_FALSE(host_scanner_->IsScanActive());
   host_scanner_->StartScan();
   EXPECT_TRUE(host_scanner_->IsScanActive());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
   ASSERT_EQ(3u,
             fake_host_scanner_operation_factory_->created_operations().size());
   EXPECT_TRUE(host_scanner_->IsScanActive());

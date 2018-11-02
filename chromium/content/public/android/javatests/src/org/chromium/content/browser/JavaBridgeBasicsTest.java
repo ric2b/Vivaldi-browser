@@ -16,6 +16,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.JavaBridgeTestCommon.Controller;
 import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
@@ -147,7 +148,7 @@ public class JavaBridgeBasicsTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getWebContents().addPossiblyUnsafeJavascriptInterface(
+                mActivityTestRule.getJavascriptInjector().addPossiblyUnsafeInterface(
                         new Object(), "testObject", null);
             }
         });
@@ -171,7 +172,7 @@ public class JavaBridgeBasicsTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getWebContents().removeJavascriptInterface("testObject");
+                mActivityTestRule.getJavascriptInjector().removeInterface("testObject");
             }
         });
         // Check that the Java object is being held by the Java bridge, thus it's not
@@ -195,7 +196,7 @@ public class JavaBridgeBasicsTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getWebContents().removeJavascriptInterface("foo");
+                mActivityTestRule.getJavascriptInjector().removeInterface("foo");
                 mActivityTestRule.getWebContents().getNavigationController().reload(true);
             }
         });
@@ -715,6 +716,7 @@ public class JavaBridgeBasicsTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Android-JavaBridge"})
+    @DisabledTest(message = "https://crbug.com/795378")
     public void testReflectPrivateFieldRaisesException() throws Throwable {
         mActivityTestRule.injectObjectAndReload(new Object() {
             public Class<?> myGetClass() {
@@ -951,7 +953,7 @@ public class JavaBridgeBasicsTest {
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
-                mActivityTestRule.getWebContents().setAllowJavascriptInterfacesInspection(false);
+                mActivityTestRule.getJavascriptInjector().setAllowInspection(false);
             }
         });
 

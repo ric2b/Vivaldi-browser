@@ -34,7 +34,6 @@
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/layout/LayoutText.h"
-#include "core/layout/api/LayoutItem.h"
 
 namespace blink {
 
@@ -85,24 +84,24 @@ PositionTemplate<Strategy> StartOfParagraphAlgorithm(
         break;
     }
 
-    const LayoutItem layout_item =
-        LayoutItem(previous_node_iterator->GetLayoutObject());
-    if (layout_item.IsNull()) {
+    const LayoutObject* layout_object =
+        previous_node_iterator->GetLayoutObject();
+    if (!layout_object) {
       previous_node_iterator =
           Strategy::PreviousPostOrder(*previous_node_iterator, start_block);
       continue;
     }
-    const ComputedStyle& style = layout_item.StyleRef();
+    const ComputedStyle& style = layout_object->StyleRef();
     if (style.Visibility() != EVisibility::kVisible) {
       previous_node_iterator =
           Strategy::PreviousPostOrder(*previous_node_iterator, start_block);
       continue;
     }
 
-    if (layout_item.IsBR() || IsEnclosingBlock(previous_node_iterator))
+    if (layout_object->IsBR() || IsEnclosingBlock(previous_node_iterator))
       break;
 
-    if (layout_item.IsText() &&
+    if (layout_object->IsText() &&
         ToLayoutText(previous_node_iterator->GetLayoutObject())
             ->ResolvedTextLength()) {
       SECURITY_DCHECK(previous_node_iterator->IsTextNode());
@@ -347,35 +346,6 @@ bool IsEndOfParagraph(const VisiblePosition& pos,
 bool IsEndOfParagraph(const VisiblePositionInFlatTree& pos) {
   return IsEndOfParagraphAlgorithm<EditingInFlatTreeStrategy>(
       pos, kCannotCrossEditingBoundary);
-}
-
-// TODO(editing-dev): We should move |PreviousParagraphPosition()| to
-// "SelectionModifier.cpp"
-VisiblePosition PreviousParagraphPosition(const VisiblePosition& p,
-                                          LayoutUnit x) {
-  DCHECK(p.IsValid()) << p;
-  VisiblePosition pos = p;
-  do {
-    VisiblePosition n = PreviousLinePosition(pos, x);
-    if (n.IsNull() || n.DeepEquivalent() == pos.DeepEquivalent())
-      break;
-    pos = n;
-  } while (InSameParagraph(p, pos));
-  return pos;
-}
-
-// TODO(editing-dev): We should move |NextParagraphPosition()| to
-// "SelectionModifier.cpp"
-VisiblePosition NextParagraphPosition(const VisiblePosition& p, LayoutUnit x) {
-  DCHECK(p.IsValid()) << p;
-  VisiblePosition pos = p;
-  do {
-    VisiblePosition n = NextLinePosition(pos, x);
-    if (n.IsNull() || n.DeepEquivalent() == pos.DeepEquivalent())
-      break;
-    pos = n;
-  } while (InSameParagraph(p, pos));
-  return pos;
 }
 
 EphemeralRange ExpandToParagraphBoundary(const EphemeralRange& range) {

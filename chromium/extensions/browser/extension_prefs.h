@@ -20,10 +20,10 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/sync/model/string_ordinal.h"
 #include "extensions/browser/blacklist_state.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_scoped_prefs.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/common/constants.h"
-#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/url_pattern_set.h"
@@ -166,11 +166,6 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
 
   // Convenience function to get the ExtensionPrefs for a BrowserContext.
   static ExtensionPrefs* Get(content::BrowserContext* context);
-
-  // Returns all installed extensions from extension preferences provided by
-  // |pref_service|. This is exposed for ProtectedPrefsWatcher because it needs
-  // access to the extension ID list before the ExtensionService is initialized.
-  static ExtensionIdList GetExtensionsFrom(const PrefService* pref_service);
 
   // Add or remove an observer from the ExtensionPrefs.
   void AddObserver(ExtensionPrefsObserver* observer);
@@ -566,6 +561,8 @@ class ExtensionPrefs : public ExtensionScopedPrefs, public KeyedService {
   // When called before the ExtensionService is created, alerts that are
   // normally suppressed in first run will still trigger.
   static void SetRunAlertsInFirstRunForTest();
+
+  void ClearExternalUninstallForTesting(const ExtensionId& id);
 
   // Add extension to the |extension_pref_value_map_|.
   // This was added because of Vivaldi being added via |ComponentLoader|.

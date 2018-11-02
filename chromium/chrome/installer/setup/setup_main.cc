@@ -86,6 +86,7 @@
 
 #include "chrome/installer/util/util_constants.h"
 
+#include "app/vivaldi_version_info.h"
 #include "installer/util/vivaldi_install_dialog.h"
 #include "installer/util/vivaldi_install_util.h"
 #include "installer/util/vivaldi_progress_dialog.h"
@@ -1371,7 +1372,10 @@ InstallStatus InstallProductsHelper(const InstallationState& original_state,
         base::FilePath vivaldi_path =
             installer_state.target_path().Append(installer::kChromeExe);
         base::string16 new_features_url;
-#if defined(OFFICIAL_BUILD) // Show new features tab only for official builds.
+
+// Show new features tab only for official final builds.
+#if defined(OFFICIAL_BUILD) && \
+    (BUILD_VERSION(VIVALDI_RELEASE) == VIVALDI_BUILD_PUBLIC_RELEASE)
         if (installer_state.is_vivaldi_update())
           new_features_url = vivaldi::GetNewFeaturesUrl(*installer_version);
 #endif

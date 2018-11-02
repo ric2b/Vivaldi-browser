@@ -243,7 +243,6 @@
 <translation id="6272643420381259437">Pojavila se pogreška (<ph name="ERROR" />) pri preuzimanju dodatka</translation>
 <translation id="6295158916970320988">Sve web-lokacije</translation>
 <translation id="6308937455967653460">Spremi ve&amp;zu kao...</translation>
-<translation id="6314335155547195432">Generiraj zaporku</translation>
 <translation id="6385543213911723544">Web-lokacije mogu spremiti i čitati podatke kolačića</translation>
 <translation id="6398765197997659313">Izađi iz cijelog zaslona</translation>
 <translation id="6406303162637086258">Simulacija ponovnog pokretanja preglednika</translation>
@@ -294,7 +293,6 @@
 <translation id="7554791636758816595">Nova kartica</translation>
 <translation id="7564847347806291057">Završi proces</translation>
 <translation id="7629827748548208700">Kartica: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Odustani</translation>
 <translation id="7661259717474717992">Dopusti web-lokacijama spremanje i čitanje podataka kolačića</translation>
 <translation id="7663719505383602579">Prijemnik: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7685049629764448582">Memorija JavaScripta</translation>

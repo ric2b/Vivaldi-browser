@@ -285,6 +285,7 @@ class ModelTypeWorkerTest : public ::testing::Test {
     if (worker()) {
       worker()->UpdateCryptographer(
           std::make_unique<Cryptographer>(*cryptographer_));
+      worker()->EncryptionAcceptedMaybeApplyUpdates();
     }
   }
 
@@ -667,7 +668,7 @@ TEST_F(ModelTypeWorkerTest, ReceiveUpdates) {
 
   ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
   UpdateResponseDataList updates_list = processor()->GetNthUpdateResponse(0);
-  ASSERT_EQ(1U, updates_list.size());
+  EXPECT_EQ(1U, updates_list.size());
 
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   UpdateResponseData update = processor()->GetUpdateResponse(kHash1);
@@ -694,7 +695,7 @@ TEST_F(ModelTypeWorkerTest, ReceiveMultiPartUpdates) {
 
   // A partial update response doesn't pass anything to the processor.
   TriggerPartialUpdateFromServer(10, kTag1, kValue1);
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
   // Trigger the completion of the update.
   TriggerUpdateFromServer(10, kTag2, kValue2);
@@ -721,7 +722,7 @@ TEST_F(ModelTypeWorkerTest, EmptyUpdates) {
   server()->SetProgressMarkerToken("token2");
   DeliverRawUpdates(SyncEntityList());
   ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
-  ASSERT_EQ(
+  EXPECT_EQ(
       server()->GetProgress().SerializeAsString(),
       processor()->GetNthUpdateState(0).progress_marker().SerializeAsString());
 }
@@ -730,16 +731,11 @@ TEST_F(ModelTypeWorkerTest, EmptyUpdates) {
 TEST_F(ModelTypeWorkerTest, EncryptedCommit) {
   NormalInitialize();
 
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
-  // Tell the worker about the new encryption key but no ApplyUpdates yet.
+  // Init the Cryptographer, it'll cause the EKN to be pushed.
   AddPendingKey();
   DecryptPendingKey();
-  EXPECT_EQ(0, nudge_handler()->GetNumCommitNudges());
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
-
-  // Now the information is allowed to reach the processor.
-  ApplyUpdates();
   ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(GetLocalCryptographerKeyName(),
             processor()->GetNthUpdateState(0).encryption_key_name());
@@ -763,6 +759,33 @@ TEST_F(ModelTypeWorkerTest, EncryptedCommit) {
   EXPECT_FALSE(tag1_entity.specifics().preference().has_value());
 }
 
+// Test commit of encrypted tombstone.
+TEST_F(ModelTypeWorkerTest, EncryptedDelete) {
+  NormalInitialize();
+
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
+
+  // Init the Cryptographer, it'll cause the EKN to be pushed.
+  AddPendingKey();
+  DecryptPendingKey();
+  ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(GetLocalCryptographerKeyName(),
+            processor()->GetNthUpdateState(0).encryption_key_name());
+
+  // Normal commit request stuff.
+  processor()->SetCommitRequest(GenerateDeleteRequest(kTag1));
+  DoSuccessfulCommit();
+  ASSERT_EQ(1U, server()->GetNumCommitMessages());
+  EXPECT_EQ(1, server()->GetNthCommitMessage(0).commit().entries_size());
+  ASSERT_TRUE(server()->HasCommitEntity(kHash1));
+  const SyncEntity& tag1_entity = server()->GetLastCommittedEntity(kHash1);
+
+  EXPECT_FALSE(tag1_entity.specifics().has_encrypted());
+
+  // The title should be overwritten.
+  EXPECT_EQ(tag1_entity.name(), "encrypted");
+}
+
 // Test that updates are not delivered to the processor when encryption is
 // required but unavailable.
 TEST_F(ModelTypeWorkerTest, EncryptionBlocksUpdates) {
@@ -770,19 +793,18 @@ TEST_F(ModelTypeWorkerTest, EncryptionBlocksUpdates) {
 
   // Update encryption key name, should be blocked.
   AddPendingKey();
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
   // Update progress marker, should be blocked.
   server()->SetProgressMarkerToken("token2");
   DeliverRawUpdates(SyncEntityList());
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
   // Update local cryptographer, verify everything is pushed to processor.
   DecryptPendingKey();
-  ApplyUpdates();
   ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
   UpdateResponseDataList updates_list = processor()->GetNthUpdateResponse(0);
-  ASSERT_EQ(
+  EXPECT_EQ(
       server()->GetProgress().SerializeAsString(),
       processor()->GetNthUpdateState(0).progress_marker().SerializeAsString());
 }
@@ -877,14 +899,10 @@ TEST_F(ModelTypeWorkerTest, InitializeWithPendingCryptographer) {
   NormalInitialize();
 
   // Shouldn't be informed of the EKN, since there's a pending key.
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
-  // Although the cryptographer is ready, it should wait until being told to
-  // update the processor.
+  // Init the cryptographer, it'll push the EKN.
   DecryptPendingKey();
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
-
-  ApplyUpdates();
   ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
   EXPECT_EQ(GetLocalCryptographerKeyName(),
             processor()->GetNthUpdateState(0).encryption_key_name());
@@ -900,7 +918,25 @@ TEST_F(ModelTypeWorkerTest, FirstInitializeWithCryptographer) {
   FirstInitialize();
 
   // Shouldn't be informed of the EKN, since normal activation will drive this.
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
+
+  // Now perform first sync and make sure the EKN makes it.
+  TriggerTypeRootUpdateFromServer();
+  ASSERT_EQ(1U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(GetLocalCryptographerKeyName(),
+            processor()->GetNthUpdateState(0).encryption_key_name());
+}
+
+TEST_F(ModelTypeWorkerTest, CryptographerDuringInitialization) {
+  // Initialize with initial sync done to false.
+  FirstInitialize();
+
+  // Set up the Cryptographer logic after initialization but before first sync.
+  AddPendingKey();
+  DecryptPendingKey();
+
+  // Shouldn't be informed of the EKN, since normal activation will drive this.
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
   // Now perform first sync and make sure the EKN makes it.
   TriggerTypeRootUpdateFromServer();
@@ -924,15 +960,11 @@ TEST_F(ModelTypeWorkerTest, ReceiveUndecryptableEntries) {
 
   // At this point, the cryptographer does not have access to the key, so the
   // updates will be undecryptable. This will block all updates.
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
+  EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
 
-  // The update can be delivered once the cryptographer is ready, but it'll
-  // still wait for the apply call.
+  // The update should know that the cryptographer is ready.
   DecryptPendingKey();
-  ASSERT_EQ(0U, processor()->GetNumUpdateResponses());
-
-  // ApplyUpdates() will cause everything to finally be delivered.
-  ApplyUpdates();
+  EXPECT_EQ(1U, processor()->GetNumUpdateResponses());
   ASSERT_TRUE(processor()->HasUpdateResponse(kHash1));
   UpdateResponseData update = processor()->GetUpdateResponse(kHash1);
   EXPECT_EQ(kTag1, update.entity->specifics.preference().name());
@@ -961,7 +993,7 @@ TEST_F(ModelTypeWorkerTest, RestorePendingEntries) {
 
   // Update will be undecryptable at first.
   EXPECT_EQ(0U, processor()->GetNumUpdateResponses());
-  ASSERT_FALSE(processor()->HasUpdateResponse(kHash1));
+  EXPECT_FALSE(processor()->HasUpdateResponse(kHash1));
 
   // Update the cryptographer so it can decrypt that update.
   AddPendingKey();

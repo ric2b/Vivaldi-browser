@@ -36,7 +36,8 @@ class WebRemoteFrameClient {
                         bool should_replace_current_entry) {}
   virtual void Reload(WebFrameLoadType, ClientRedirectPolicy) {}
 
-  virtual void FrameRectsChanged(const WebRect&) {}
+  virtual void FrameRectsChanged(const WebRect& local_frame_rect,
+                                 const WebRect& screen_space_rect) {}
 
   virtual void UpdateRemoteViewportIntersection(
       const WebRect& viewport_intersection) {}
@@ -61,8 +62,13 @@ class WebRemoteFrameClient {
   // This frame was focused by another frame.
   virtual void FrameFocused() {}
 
+  // Returns string to be used as a frame id in the devtools protocol.
+  // It is derived from the content's devtools_frame_token, is
+  // defined by the browser and passed into Blink upon frame creation.
+  virtual WebString GetDevToolsFrameToken() { return WebString(); }
+
  protected:
-  virtual ~WebRemoteFrameClient() {}
+  virtual ~WebRemoteFrameClient() = default;
 };
 
 }  // namespace blink

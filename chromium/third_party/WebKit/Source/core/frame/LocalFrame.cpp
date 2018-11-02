@@ -49,6 +49,7 @@
 #include "core/editing/serializers/Serialization.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/editing/suggestion/TextSuggestionController.h"
+#include "core/exported/WebPluginContainerImpl.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
@@ -62,10 +63,11 @@
 #include "core/html/PluginDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/inspector/InspectorTraceEvents.h"
 #include "core/layout/HitTestResult.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/TextAutosizer.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/IdlenessDetector.h"
@@ -76,11 +78,8 @@
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
-#include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "core/svg/SVGDocumentExtensions.h"
-#include "core/timing/DOMWindowPerformance.h"
-#include "core/timing/Performance.h"
 #include "platform/Histogram.h"
 #include "platform/WebFrameScheduler.h"
 #include "platform/bindings/ScriptForbiddenScope.h"
@@ -123,6 +122,24 @@ inline float ParentTextZoomFactor(LocalFrame* frame) {
   if (!parent || !parent->IsLocalFrame())
     return 1;
   return ToLocalFrame(parent)->TextZoomFactor();
+}
+
+bool ShouldUseClientLoFiForRequest(
+    const ResourceRequest& request,
+    WebURLRequest::PreviewsState frame_previews_state) {
+  if (request.GetPreviewsState() != WebURLRequest::kPreviewsUnspecified)
+    return request.GetPreviewsState() & WebURLRequest::kClientLoFiOn;
+
+  if (!(frame_previews_state & WebURLRequest::kClientLoFiOn))
+    return false;
+
+  // Even if this frame is using Server Lo-Fi, https:// images won't be
+  // handled by Server Lo-Fi since their requests won't be sent to the Data
+  // Saver proxy, so use Client Lo-Fi instead.
+  if (frame_previews_state & WebURLRequest::kServerLoFiOn)
+    return request.Url().ProtocolIs("https");
+
+  return true;
 }
 
 }  // namespace
@@ -194,7 +211,7 @@ void LocalFrame::CreateView(const IntSize& viewport_size,
     frame_view->SetParentVisible(true);
 
   // FIXME: Not clear what the right thing for OOPI is here.
-  if (!OwnerLayoutItem().IsNull()) {
+  if (OwnerLayoutObject()) {
     HTMLFrameOwnerElement* owner = DeprecatedLocalOwner();
     DCHECK(owner);
     // FIXME: OOPI might lead to us temporarily lying to a frame and telling it
@@ -220,6 +237,7 @@ void LocalFrame::Trace(blink::Visitor* visitor) {
   visitor->Trace(probe_sink_);
   visitor->Trace(performance_monitor_);
   visitor->Trace(idleness_detector_);
+  visitor->Trace(inspector_trace_events_);
   visitor->Trace(loader_);
   visitor->Trace(navigation_scheduler_);
   visitor->Trace(view_);
@@ -266,11 +284,6 @@ void LocalFrame::Reload(FrameLoadType load_type,
   }
 }
 
-void LocalFrame::AddResourceTiming(const ResourceTimingInfo& info) {
-  DCHECK(IsAttached());
-  DOMWindowPerformance::performance(*DomWindow())->AddResourceTiming(info);
-}
-
 void LocalFrame::Detach(FrameDetachType type) {
   // Note that detach() can be re-entered, so it's not possible to
   // DCHECK(isAttached()) here.
@@ -279,6 +292,8 @@ void LocalFrame::Detach(FrameDetachType type) {
   if (IsLocalRoot())
     performance_monitor_->Shutdown();
   idleness_detector_->Shutdown();
+  if (inspector_trace_events_)
+    probe_sink_->removeInspectorTraceEvents(inspector_trace_events_);
 
   PluginScriptForbiddenScope forbid_plugin_destructor_scripting;
   loader_.StopAllLoaders();
@@ -442,15 +457,37 @@ LayoutView* LocalFrame::ContentLayoutObject() const {
   return GetDocument() ? GetDocument()->GetLayoutView() : nullptr;
 }
 
-LayoutViewItem LocalFrame::ContentLayoutItem() const {
-  return LayoutViewItem(ContentLayoutObject());
-}
-
 void LocalFrame::DidChangeVisibilityState() {
   if (GetDocument())
     GetDocument()->DidChangeVisibilityState();
 
   Frame::DidChangeVisibilityState();
+}
+
+void LocalFrame::DidFreeze() {
+  DCHECK(RuntimeEnabledFeatures::PageLifecycleEnabled());
+  if (DomWindow()) {
+    const double freeze_event_start = CurrentTimeTicksInSeconds();
+    DomWindow()->DispatchEvent(Event::Create(EventTypeNames::freeze));
+    const double freeze_event_end = CurrentTimeTicksInSeconds();
+    DEFINE_STATIC_LOCAL(
+        CustomCountHistogram, freeze_histogram,
+        ("DocumentEventTiming.FreezeDuration", 0, 10000000, 50));
+    freeze_histogram.Count((freeze_event_end - freeze_event_start) * 1000000.0);
+  }
+}
+
+void LocalFrame::DidResume() {
+  DCHECK(RuntimeEnabledFeatures::PageLifecycleEnabled());
+  if (DomWindow()) {
+    const double resume_event_start = CurrentTimeTicksInSeconds();
+    DomWindow()->DispatchEvent(Event::Create(EventTypeNames::resume));
+    const double resume_event_end = CurrentTimeTicksInSeconds();
+    DEFINE_STATIC_LOCAL(
+        CustomCountHistogram, resume_histogram,
+        ("DocumentEventTiming.ResumeDuration", 0, 10000000, 50));
+    resume_histogram.Count((resume_event_end - resume_event_start) * 1000000.0);
+  }
 }
 
 void LocalFrame::SetIsInert(bool inert) {
@@ -498,6 +535,9 @@ void LocalFrame::SetPrinting(bool printing,
                                       : Document::kFinishingPrinting);
   View()->AdjustMediaTypeForPrinting(printing);
 
+  if (TextAutosizer* text_autosizer = GetDocument()->GetTextAutosizer())
+    text_autosizer->UpdatePageInfo();
+
   if (ShouldUsePrintingLayout()) {
     View()->ForceLayoutForPagination(page_size, original_page_size,
                                      maximum_shrink_ratio);
@@ -536,10 +576,11 @@ bool LocalFrame::ShouldUsePrintingLayout() const {
 FloatSize LocalFrame::ResizePageRectsKeepingRatio(
     const FloatSize& original_size,
     const FloatSize& expected_size) const {
-  if (ContentLayoutItem().IsNull())
+  auto* layout_object = ContentLayoutObject();
+  if (!layout_object)
     return FloatSize();
 
-  bool is_horizontal = ContentLayoutItem().Style()->IsHorizontalWritingMode();
+  bool is_horizontal = layout_object->StyleRef().IsHorizontalWritingMode();
   float width = original_size.Width();
   float height = original_size.Height();
   if (!is_horizontal)
@@ -671,7 +712,7 @@ Document* LocalFrame::DocumentAtPoint(const LayoutPoint& point_in_root_frame) {
 
   LayoutPoint pt = View()->RootFrameToContents(point_in_root_frame);
 
-  if (ContentLayoutItem().IsNull())
+  if (!ContentLayoutObject())
     return nullptr;
   HitTestResult result = GetEventHandler().HitTestResultAtPoint(
       pt, HitTestRequest::kReadOnly | HitTestRequest::kActive);
@@ -719,14 +760,14 @@ void LocalFrame::RemoveSpellingMarkersUnderWords(const Vector<String>& words) {
 }
 
 String LocalFrame::GetLayerTreeAsTextForTesting(unsigned flags) const {
-  if (ContentLayoutItem().IsNull())
+  if (!ContentLayoutObject())
     return String();
 
   std::unique_ptr<JSONObject> layers;
   if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     layers = View()->CompositedLayersAsJSON(static_cast<LayerTreeFlags>(flags));
   } else {
-    layers = ContentLayoutItem().Compositor()->LayerTreeAsJSON(
+    layers = ContentLayoutObject()->Compositor()->LayerTreeAsJSON(
         static_cast<LayerTreeFlags>(flags));
   }
 
@@ -773,11 +814,12 @@ inline LocalFrame::LocalFrame(LocalFrameClient* client,
       page_zoom_factor_(ParentPageZoomFactor(this)),
       text_zoom_factor_(ParentTextZoomFactor(this)),
       in_view_source_mode_(false),
-      interface_registry_(interface_registry),
-      instrumentation_token_(client->GetInstrumentationToken()) {
+      interface_registry_(interface_registry) {
   if (IsLocalRoot()) {
     probe_sink_ = new CoreProbeSink();
     performance_monitor_ = new PerformanceMonitor(this);
+    inspector_trace_events_ = new InspectorTraceEvents();
+    probe_sink_->addInspectorTraceEvents(inspector_trace_events_);
   } else {
     // Inertness only needs to be updated if this frame might inherit the
     // inert state from a higher-level frame. If this is an OOPIF local root,
@@ -975,7 +1017,7 @@ bool LocalFrame::CanNavigateWithoutFramebusting(const Frame& target_frame,
   }
 
   DCHECK(GetSecurityContext()->GetSecurityOrigin());
-  SecurityOrigin& origin = *GetSecurityContext()->GetSecurityOrigin();
+  const SecurityOrigin& origin = *GetSecurityContext()->GetSecurityOrigin();
 
   // This is the normal case. A document can navigate its decendant frames,
   // or, more generally, a document can navigate a frame if the document is
@@ -1098,7 +1140,8 @@ void LocalFrame::MaybeAllowImagePlaceholder(FetchParameters& params) const {
   }
 
   if (Client() &&
-      Client()->ShouldUseClientLoFiForRequest(params.GetResourceRequest())) {
+      ShouldUseClientLoFiForRequest(params.GetResourceRequest(),
+                                    Client()->GetPreviewsStateForFrame())) {
     params.MutableResourceRequest().SetPreviewsState(
         params.GetResourceRequest().GetPreviewsState() |
         WebURLRequest::kClientLoFiOn);
@@ -1114,10 +1157,7 @@ WebURLLoaderFactory* LocalFrame::GetURLLoaderFactory() {
 
 WebPluginContainerImpl* LocalFrame::GetWebPluginContainer(Node* node) const {
   if (GetDocument() && GetDocument()->IsPluginDocument()) {
-    PluginDocument* plugin_document = ToPluginDocument(GetDocument());
-    if (plugin_document->GetPluginView()) {
-      return plugin_document->GetPluginView()->GetWebPluginContainer();
-    }
+    return ToPluginDocument(GetDocument())->GetPluginView();
   }
   if (!node) {
     DCHECK(GetDocument());
@@ -1164,9 +1204,8 @@ void LocalFrame::ForceSynchronousDocumentInstall(
   GetDocument()->Parser()->Finish();
 
   // Upon loading of the page, log PageVisits in UseCounter.
-  KURL url = GetDocument()->Url();
-  if (Client() && Client()->ShouldTrackUseCounter(url))
-    GetPage()->GetUseCounter().DidCommitLoad(url);
+  if (GetPage())
+    GetPage()->GetUseCounter().DidCommitLoad(this);
 }
 
 }  // namespace blink

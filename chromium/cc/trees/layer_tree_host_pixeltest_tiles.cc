@@ -12,7 +12,7 @@
 #include "cc/test/layer_tree_pixel_test.h"
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 
 #if !defined(OS_ANDROID)
 
@@ -177,13 +177,13 @@ class LayerTreeHostTilesTestPartialInvalidation
   void WillPrepareTilesOnThread(LayerTreeHostImpl* host_impl) override {
     // Issue a GL finish before preparing tiles to ensure resources become
     // available for use in a timely manner. Needed for the one-copy path.
-    viz::ContextProvider* context_provider =
+    viz::RasterContextProvider* context_provider =
         host_impl->layer_tree_frame_sink()->worker_context_provider();
     if (!context_provider)
       return;
 
-    viz::ContextProvider::ScopedContextLock lock(context_provider);
-    lock.ContextGL()->Finish();
+    viz::RasterContextProvider::ScopedRasterContextLock lock(context_provider);
+    lock.RasterInterface()->Finish();
   }
 
  protected:

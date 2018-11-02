@@ -1,6 +1,8 @@
+import("//build/config/chrome_build.gni")
+
 if (is_win) {
   if (is_official_build) {
-    post_process_template("//components/viz/test:test_support") {
+    update_template_instance("//components/viz/test:test_support") {
       cflags = [ "/wd4723" ]  # potential divide by 0.
     }
   }
@@ -13,17 +15,21 @@ if (is_win) {
             "//components:components_unittests",
             "//content/test:content_browsertests",
           ]) {
-    post_process_template(_target) {
+    update_template_instance(_target) {
       pool = "build_toolchain_win_huge_pool"
     }
   }
-  foreach(_target,
-          [
-            "//chrome:chrome_child",
-            "//chrome:main_dll",
+  _targets = [
             "//content/shell:content_shell",
-          ]) {
-    post_process_target(_target) {
+          ]
+  if (is_win) {
+    _targets += ["//chrome:main_dll",]
+    if (is_multi_dll_chrome) {
+      _targets += ["//chrome:chrome_child"]
+    }
+  }
+  foreach(_target, _targets) {
+    update_target(_target) {
       pool = "build_toolchain_win_huge_pool"
     }
   }
@@ -35,7 +41,7 @@ if (is_win) {
             "//content/test:content_browsertests",
             "//content/test:content_unittests",
           ]) {
-    post_process_template(_target) {
+    update_template_instance(_target) {
       configs -= [ "//build/config/win:default_incremental_linking" ]
       configs += [ "//build/config/win:no_incremental_linking" ]
     }
@@ -43,7 +49,7 @@ if (is_win) {
 }
 
 if (is_mac) {
-  post_process_template("//chrome:chrome_framework") {
+  update_template_instance("//chrome:chrome_framework") {
     ldflags += [
       "-Wl,-rpath,@loader_path/../../../../../Frameworks",
     ]
@@ -57,7 +63,7 @@ if (is_mac) {
             "//chrome/test:unit_tests",
             "//components:components_unittests",
           ]) {
-    post_process_template(_target) {
+    update_template_instance(_target) {
       if (!defined(ldflags)) {
         ldflags = []
       }
@@ -65,11 +71,5 @@ if (is_mac) {
         "-Wl,-rpath,@executable_path/../../third_party/sparkle_lib/",
       ]
     }
-  }
-}
-
-if (is_linux) {
-  post_process_target("//chrome:chrome_initial") {
-    configs -= [ "//vivaldi/gn/config:disable_new_dtags" ]
   }
 }

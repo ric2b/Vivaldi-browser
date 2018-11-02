@@ -318,7 +318,8 @@ class DescriberText(Describer):
           unique_paths.add(s.object_path)
 
       if group.IsDelta():
-        unique_part = 'aliases not grouped for diffs'
+        before_unique, after_unique = group.CountUniqueSymbols()
+        unique_part = '{:,} -> {:,} unique'.format(before_unique, after_unique)
       else:
         unique_part = '{:,} unique'.format(group.CountUniqueSymbols())
 
@@ -431,11 +432,11 @@ class DescriberText(Describer):
     return itertools.chain(diff_summary_desc, path_delta_desc, group_desc)
 
   def _DescribeDeltaSizeInfo(self, diff):
-    common_metadata = {k: v for k, v in diff.before_metadata.iteritems()
-                       if diff.after_metadata[k] == v}
-    before_metadata = {k: v for k, v in diff.before_metadata.iteritems()
+    common_metadata = {k: v for k, v in diff.before.metadata.iteritems()
+                       if diff.after.metadata[k] == v}
+    before_metadata = {k: v for k, v in diff.before.metadata.iteritems()
                        if k not in common_metadata}
-    after_metadata = {k: v for k, v in diff.after_metadata.iteritems()
+    after_metadata = {k: v for k, v in diff.after.metadata.iteritems()
                       if k not in common_metadata}
     metadata_desc = itertools.chain(
         ('Common Metadata:',),

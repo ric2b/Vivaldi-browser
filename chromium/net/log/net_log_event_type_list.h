@@ -2005,7 +2005,11 @@ EVENT_TYPE(QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS)
 // ------------------------------------------------------------------------
 // QuicConnectionMigration
 // ------------------------------------------------------------------------
-
+// Records the QUIC connection migration mode.
+//  {
+//     "connection_migration_mode": <The connection migration mode>
+//  }
+EVENT_TYPE(QUIC_CONNECTION_MIGRATION_MODE)
 // Records that QUIC connection migration has been triggered.
 //  {
 //     "trigger": <The reason for the migration attempt>
@@ -2091,6 +2095,12 @@ EVENT_TYPE(QUIC_CONNECTION_MIGRATION_ON_PATH_DEGRADING)
 // Records that a QUIC connection migration attempt due to efforts to
 // migrate back to the default network.
 EVENT_TYPE(QUIC_CONNECTION_MIGRATION_ON_MIGRATE_BACK)
+
+// Records a QUIC connection migration failure after probing.
+EVENT_TYPE(QUIC_CONNECTION_MIGRATION_FAILURE_AFTER_PROBING)
+
+// Records a QUIC connection migration success after probing.
+EVENT_TYPE(QUIC_CONNECTION_MIGRATION_SUCCESS_AFTER_PROBING)
 // ------------------------------------------------------------------------
 // HttpStreamParser
 // ------------------------------------------------------------------------

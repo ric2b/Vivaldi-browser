@@ -6,12 +6,14 @@
 #define GPU_COMMAND_BUFFER_SERVICE_GPU_PREFERENCES_H_
 
 #include <stddef.h>
+#include <vector>
 
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/constants.h"
 #include "gpu/gpu_export.h"
 #include "media/media_features.h"
+#include "ui/gfx/buffer_types.h"
 
 namespace gpu {
 
@@ -44,6 +46,9 @@ struct GPU_EXPORT GpuPreferences {
   // Disables hardware acceleration of video decode, where available.
   bool disable_accelerated_video_decode = false;
 
+  // Disables hardware acceleration of video decode, where available.
+  bool disable_accelerated_video_encode = false;
+
   // Causes the GPU process to display a dialog on launch.
   bool gpu_startup_dialog = false;
 
@@ -53,9 +58,6 @@ struct GPU_EXPORT GpuPreferences {
 
   // Starts the GPU sandbox before creating a GL context.
   bool gpu_sandbox_start_early = false;
-
-  // Disables VA-API accelerated video encode. ChromeOS only.
-  bool disable_vaapi_accelerated_video_encode = false;
 
   // Disables HW encode acceleration for WebRTC.
   bool disable_web_rtc_hw_encoding = false;
@@ -78,6 +80,11 @@ struct GPU_EXPORT GpuPreferences {
   // quality of output. So this flag is disabled by default. Windows only.
   bool enable_media_foundation_vea_on_windows7 = false;
 
+  // Disables the use of a 3D software rasterizer, for example, SwiftShader.
+  bool disable_software_rasterizer = false;
+
+  bool log_gpu_control_list_decisions = false;
+
   // ===================================
   // Settings from //gpu/command_buffer/service/gpu_switches.cc
 
@@ -89,9 +96,6 @@ struct GPU_EXPORT GpuPreferences {
 
   // Disable the GLSL translator.
   bool disable_glsl_translator = false;
-
-  // Disable workarounds for various GPU driver bugs.
-  bool disable_gpu_driver_bug_workarounds = false;
 
   // Turn off user-defined name hashing in shaders.
   bool disable_shader_name_hashing = false;
@@ -150,6 +154,23 @@ struct GPU_EXPORT GpuPreferences {
   // Use the Pass-through command decoder, skipping all validation and state
   // tracking.
   bool use_passthrough_cmd_decoder = false;
+
+  // Disable using a single multiplanar GpuMemoryBuffer to store biplanar
+  // VideoFrames (e.g. NV12), see https://crbug.com/791676.
+  bool disable_biplanar_gpu_memory_buffers_for_video_frames = false;
+
+  // List of texture usage & formats that require use of a platform specific
+  // texture target.
+  std::vector<gfx::BufferUsageAndFormat> texture_target_exception_list;
+
+  // ===================================
+  // Settings from //gpu/config/gpu_switches.h
+
+  // Disables workarounds for various GPU driver bugs.
+  bool disable_gpu_driver_bug_workarounds = false;
+
+  // Ignores GPU blacklist.
+  bool ignore_gpu_blacklist = false;
 };
 
 }  // namespace gpu

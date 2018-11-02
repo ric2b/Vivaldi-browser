@@ -46,7 +46,8 @@ class MockPrefDelegate : public net::HttpServerPropertiesManager::PrefDelegate {
   const base::DictionaryValue* GetServerProperties() const override {
     return &prefs_;
   }
-  void SetServerProperties(const base::DictionaryValue& value) override {
+  void SetServerProperties(const base::DictionaryValue& value,
+                           base::OnceClosure callback) override {
     prefs_.Clear();
     prefs_.MergeDictionary(&value);
     ++num_pref_updates_;
@@ -54,6 +55,7 @@ class MockPrefDelegate : public net::HttpServerPropertiesManager::PrefDelegate {
       prefs_changed_callback_.Run();
     if (!extra_prefs_changed_callback_.is_null())
       extra_prefs_changed_callback_.Run();
+    set_properties_callback_ = std::move(callback);
   }
   void StartListeningForUpdates(const base::Closure& callback) override {
     CHECK(prefs_changed_callback_.is_null());
@@ -80,11 +82,19 @@ class MockPrefDelegate : public net::HttpServerPropertiesManager::PrefDelegate {
     extra_prefs_changed_callback_ = callback;
   }
 
+  // Returns the base::OnceCallback, if any, passed to the last call to
+  // SetServerProperties().
+  base::OnceClosure GetSetPropertiesCallback() {
+    return std::move(set_properties_callback_);
+  }
+
  private:
   base::DictionaryValue prefs_;
   base::Closure prefs_changed_callback_;
   base::Closure extra_prefs_changed_callback_;
   int num_pref_updates_ = 0;
+
+  base::OnceClosure set_properties_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(MockPrefDelegate);
 };
@@ -104,10 +114,11 @@ class HttpServerPropertiesManagerTest : public testing::TestWithParam<int> {
     advertised_versions_ = HttpNetworkSession::Params().quic_supported_versions;
     pref_delegate_ = new MockPrefDelegate;
 
-    net_test_task_runner_clock_ = test_task_runner_->GetMockTickClock();
+    clock_ = test_task_runner_->GetMockTickClock();
+    net_test_task_runner_clock_ = clock_.get();
     http_server_props_manager_ = std::make_unique<HttpServerPropertiesManager>(
         base::WrapUnique(pref_delegate_), /*net_log=*/nullptr,
-        net_test_task_runner_clock_.get());
+        net_test_task_runner_clock_);
 
     EXPECT_FALSE(http_server_props_manager_->IsInitialized());
     pref_delegate_->SetPrefs(base::DictionaryValue());
@@ -140,7 +151,11 @@ class HttpServerPropertiesManagerTest : public testing::TestWithParam<int> {
   // Overrides the main thread's message loop with a mock tick clock.
   base::ScopedMockTimeMessageLoopTaskRunner test_task_runner_;
 
-  std::unique_ptr<base::TickClock> net_test_task_runner_clock_;
+  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
+  // instance.
+  std::unique_ptr<base::TickClock> clock_;
+
+  base::TickClock* net_test_task_runner_clock_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(HttpServerPropertiesManagerTest);
@@ -802,8 +817,14 @@ TEST_P(HttpServerPropertiesManagerTest, Clear) {
 
   // Clear http server data, which should instantly update prefs.
   EXPECT_EQ(0, pref_delegate_->GetAndClearNumPrefUpdates());
-  http_server_props_manager_->Clear();
+  bool callback_invoked_ = false;
+  http_server_props_manager_->Clear(
+      base::BindOnce([](bool* callback_invoked) { *callback_invoked = true; },
+                     &callback_invoked_));
   EXPECT_EQ(1, pref_delegate_->GetAndClearNumPrefUpdates());
+  EXPECT_FALSE(callback_invoked_);
+  std::move(pref_delegate_->GetSetPropertiesCallback()).Run();
+  EXPECT_TRUE(callback_invoked_);
 
   EXPECT_FALSE(http_server_props_manager_->IsAlternativeServiceBroken(
       broken_alternative_service));

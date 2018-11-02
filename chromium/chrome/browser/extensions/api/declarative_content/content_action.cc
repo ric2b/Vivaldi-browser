@@ -349,7 +349,7 @@ void RequestContentScript::InitScript(const HostID& host_id,
        it != script_data.css_file_names.end(); ++it) {
     GURL url = extension->GetResourceURL(*it);
     ExtensionResource resource = extension->GetResource(*it);
-    script_.css_scripts().push_back(base::MakeUnique<UserScript::File>(
+    script_.css_scripts().push_back(std::make_unique<UserScript::File>(
         resource.extension_root(), resource.relative_path(), url));
   }
   for (std::vector<std::string>::const_iterator it =
@@ -357,7 +357,7 @@ void RequestContentScript::InitScript(const HostID& host_id,
        it != script_data.js_file_names.end(); ++it) {
     GURL url = extension->GetResourceURL(*it);
     ExtensionResource resource = extension->GetResource(*it);
-    script_.js_scripts().push_back(base::MakeUnique<UserScript::File>(
+    script_.js_scripts().push_back(std::make_unique<UserScript::File>(
         resource.extension_root(), resource.relative_path(), url));
   }
 }

@@ -270,6 +270,7 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
     DisplayReason display_reason)
     : password_overridden_(false),
       delegate_(std::move(delegate)),
+      interaction_reported_(false),
       metrics_recorder_(delegate_->GetPasswordFormMetricsRecorder()) {
   origin_ = delegate_->GetOrigin();
   state_ = delegate_->GetState();
@@ -291,9 +292,13 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
         interaction_stats.dismissal_count = stats->dismissal_count;
       }
     }
-    hide_eye_icon_ = delegate_->BubbleIsManualFallbackForSaving()
-                         ? pending_password_.form_has_autofilled_value
-                         : display_reason == USER_ACTION;
+    are_passwords_revealed_when_bubble_is_opened_ =
+        delegate_->ArePasswordsRevealedWhenBubbleIsOpened();
+    password_revealing_requires_reauth_ =
+        !are_passwords_revealed_when_bubble_is_opened_ &&
+        (delegate_->BubbleIsManualFallbackForSaving()
+             ? pending_password_.form_has_autofilled_value
+             : display_reason == USER_ACTION);
     enable_editing_ = delegate_->GetCredentialSource() !=
                       password_manager::metrics_util::CredentialSourceType::
                           kCredentialManagementAPI;
@@ -388,9 +393,16 @@ ManagePasswordsBubbleModel::ManagePasswordsBubbleModel(
 }
 
 ManagePasswordsBubbleModel::~ManagePasswordsBubbleModel() {
+  if (!interaction_reported_)
+    OnBubbleClosing();
+}
+
+void ManagePasswordsBubbleModel::OnBubbleClosing() {
   interaction_keeper_->ReportInteractions(this);
   if (delegate_)
     delegate_->OnBubbleHidden();
+  delegate_.reset();
+  interaction_reported_ = true;
 }
 
 void ManagePasswordsBubbleModel::OnNeverForThisSiteClicked() {
@@ -449,7 +461,7 @@ void ManagePasswordsBubbleModel::OnOKClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_OK);
 }
 
-void ManagePasswordsBubbleModel::OnManageLinkClicked() {
+void ManagePasswordsBubbleModel::OnManageClicked() {
   interaction_keeper_->set_dismissal_reason(metrics_util::CLICKED_MANAGE);
   if (delegate_)
     delegate_->NavigateToPasswordManagerSettingsPage();
@@ -558,6 +570,11 @@ bool ManagePasswordsBubbleModel::ReplaceToShowPromotionIfNeeded() {
 void ManagePasswordsBubbleModel::SetClockForTesting(
     std::unique_ptr<base::Clock> clock) {
   interaction_keeper_->SetClockForTesting(std::move(clock));
+}
+
+bool ManagePasswordsBubbleModel::RevealPasswords() {
+  return !password_revealing_requires_reauth_ ||
+         (delegate_ && delegate_->AuthenticateUser());
 }
 
 void ManagePasswordsBubbleModel::UpdatePendingStateTitle() {

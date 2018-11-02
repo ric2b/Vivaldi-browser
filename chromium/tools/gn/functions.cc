@@ -338,8 +338,8 @@ Value RunConfig(const FunctionCallNode* function,
     g_scheduler->Log("Defining config", label.GetUserVisibleName(true));
 
   // Create the new config.
-  std::unique_ptr<Config> config =
-      std::make_unique<Config>(scope->settings(), label);
+  std::unique_ptr<Config> config = std::make_unique<Config>(
+      scope->settings(), label, scope->build_dependency_files());
   config->set_defined_from(function);
   if (!Visibility::FillItemVisibility(config.get(), scope, err))
     return Value();
@@ -633,6 +633,7 @@ Value RunImport(Scope* scope,
   SourceFile import_file =
       input_dir.ResolveRelativeFile(args[0], err,
           scope->settings()->build_settings()->root_path_utf8());
+  scope->AddBuildDependencyFile(import_file);
   if (!err->has_error()) {
     scope->settings()->import_manager().DoImport(import_file, function,
                                                  scope, err);
@@ -910,7 +911,8 @@ Value RunPool(const FunctionCallNode* function,
   }
 
   // Create the new pool.
-  std::unique_ptr<Pool> pool = std::make_unique<Pool>(scope->settings(), label);
+  std::unique_ptr<Pool> pool = std::make_unique<Pool>(
+      scope->settings(), label, scope->build_dependency_files());
   pool->set_depth(depth->int_value());
 
   const Value* is_global = scope->GetValue("global", true);
@@ -1329,12 +1331,8 @@ struct FunctionInfoInitializer {
     INSERT_FUNCTION(WriteFile, false)
 
     // <Vivaldi>
-    INSERT_FUNCTION(PreProcessAction,false)
-    INSERT_FUNCTION(PreProcessTarget,false)
-    INSERT_FUNCTION(PreProcessTemplate,false)
-    INSERT_FUNCTION(PostProcessAction,false)
-    INSERT_FUNCTION(PostProcessTarget,false)
-    INSERT_FUNCTION(PostProcessTemplate,false)
+    INSERT_FUNCTION(UpdateTarget,false)
+    INSERT_FUNCTION(UpdateTemplate,false)
     INSERT_FUNCTION(DeclareOverrides,false)
     INSERT_FUNCTION(SetPathMap,false)
     // </Vivaldi>
@@ -1406,20 +1404,12 @@ Value RunFunction(Scope* scope,
       return Value();
     }
     Scope block_scope(scope);
-    if (function->function().value().as_string() == "copy") {
-      // <Vivaldi>
-      if (!PrePostProcessTheTarget(false, &block_scope, function,
-                                   args.list_value(), block, err))
-        return Value();
-      // </Vivaldi>
-    }
-
     block->Execute(&block_scope, err);
     if (err->has_error())
       return Value();
     if (function->function().value().as_string() == "copy") {
       // <Vivaldi>
-      if (!PrePostProcessTheTarget(true, &block_scope, function,
+      if (!UpdateTheTarget(&block_scope, function,
                                    args.list_value(), block, err))
         return Value();
       // </Vivaldi>

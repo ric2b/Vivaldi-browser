@@ -9,7 +9,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "chrome/browser/vr/renderers/base_quad_renderer.h"
 #include "chrome/browser/vr/renderers/base_renderer.h"
 #include "chrome/browser/vr/renderers/external_textured_quad_renderer.h"
@@ -30,21 +29,24 @@ UiElementRenderer::UiElementRenderer(bool use_gl) {
   Init();
   BaseQuadRenderer::CreateBuffers();
   TexturedQuadRenderer::CreateBuffers();
+  Stars::Renderer::CreateBuffers();
 }
 
 UiElementRenderer::~UiElementRenderer() = default;
 
 void UiElementRenderer::Init() {
   external_textured_quad_renderer_ =
-      base::MakeUnique<ExternalTexturedQuadRenderer>();
-  textured_quad_renderer_ = base::MakeUnique<TexturedQuadRenderer>();
-  gradient_quad_renderer_ = base::MakeUnique<GradientQuadRenderer>();
-  webvr_renderer_ = base::MakeUnique<WebVrRenderer>();
-  reticle_renderer_ = base::MakeUnique<Reticle::Renderer>();
-  laser_renderer_ = base::MakeUnique<Laser::Renderer>();
-  controller_renderer_ = base::MakeUnique<Controller::Renderer>();
-  gradient_grid_renderer_ = base::MakeUnique<Grid::Renderer>();
-  shadow_renderer_ = base::MakeUnique<Shadow::Renderer>();
+      std::make_unique<ExternalTexturedQuadRenderer>();
+  textured_quad_renderer_ = std::make_unique<TexturedQuadRenderer>();
+  gradient_quad_renderer_ = std::make_unique<GradientQuadRenderer>();
+  webvr_renderer_ = std::make_unique<WebVrRenderer>();
+  reticle_renderer_ = std::make_unique<Reticle::Renderer>();
+  laser_renderer_ = std::make_unique<Laser::Renderer>();
+  controller_renderer_ = std::make_unique<Controller::Renderer>();
+  gradient_grid_renderer_ = std::make_unique<Grid::Renderer>();
+  shadow_renderer_ = std::make_unique<Shadow::Renderer>();
+  stars_renderer_ = std::make_unique<Stars::Renderer>();
+  background_renderer_ = std::make_unique<Background::Renderer>();
 }
 
 void UiElementRenderer::DrawTexturedQuad(
@@ -53,7 +55,7 @@ void UiElementRenderer::DrawTexturedQuad(
     const gfx::Transform& model_view_proj_matrix,
     const gfx::RectF& copy_rect,
     float opacity,
-    gfx::SizeF element_size,
+    const gfx::SizeF& element_size,
     float corner_radius) {
   // TODO(vollick): handle drawing this degenerate situation crbug.com/768922
   if (corner_radius * 2.0 > element_size.width() ||
@@ -73,12 +75,11 @@ void UiElementRenderer::DrawGradientQuad(
     const SkColor edge_color,
     const SkColor center_color,
     float opacity,
-    gfx::SizeF element_size,
-    float corner_radius) {
+    const gfx::SizeF& element_size,
+    const CornerRadii& radii) {
   FlushIfNecessary(gradient_quad_renderer_.get());
   gradient_quad_renderer_->Draw(model_view_proj_matrix, edge_color,
-                                center_color, opacity, element_size,
-                                corner_radius);
+                                center_color, opacity, element_size, radii);
 }
 
 void UiElementRenderer::DrawGradientGridQuad(
@@ -135,6 +136,31 @@ void UiElementRenderer::DrawShadow(const gfx::Transform& model_view_proj_matrix,
   FlushIfNecessary(shadow_renderer_.get());
   shadow_renderer_->Draw(model_view_proj_matrix, element_size, x_padding,
                          y_padding, y_offset, color, opacity, corner_radius);
+}
+
+void UiElementRenderer::DrawStars(
+    float t,
+    const gfx::Transform& model_view_proj_matrix) {
+  FlushIfNecessary(stars_renderer_.get());
+  stars_renderer_->Draw(t, model_view_proj_matrix);
+}
+
+void UiElementRenderer::DrawBackground(
+    const gfx::Transform& model_view_proj_matrix,
+    int texture_data_handle,
+    int normal_gradient_texture_data_handle,
+    int incognito_gradient_texture_data_handle,
+    int fullscreen_gradient_texture_data_handle,
+    float normal_factor,
+    float incognito_factor,
+    float fullscreen_factor) {
+  FlushIfNecessary(background_renderer_.get());
+  background_renderer_->Draw(model_view_proj_matrix, texture_data_handle,
+                             normal_gradient_texture_data_handle,
+                             incognito_gradient_texture_data_handle,
+                             fullscreen_gradient_texture_data_handle,
+                             normal_factor, incognito_factor,
+                             fullscreen_factor);
 }
 
 void UiElementRenderer::Flush() {

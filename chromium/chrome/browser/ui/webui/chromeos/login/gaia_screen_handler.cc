@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/feature_list.h"
@@ -25,6 +27,7 @@
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chrome/browser/chromeos/policy/untrusted_authority_certs_cache.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/io_thread.h"
@@ -32,6 +35,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/active_directory_password_change_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/enrollment_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_features.h"
@@ -346,7 +350,7 @@ void GaiaScreenHandler::LoadGaiaWithPartitionAndVersionAndConsent(
   params.SetInteger("screenMode", screen_mode);
 
   if (screen_mode == GAIA_SCREEN_MODE_AD && !authpolicy_login_helper_)
-    authpolicy_login_helper_ = base::MakeUnique<AuthPolicyLoginHelper>();
+    authpolicy_login_helper_ = std::make_unique<AuthPolicyLoginHelper>();
 
   if (screen_mode != GAIA_SCREEN_MODE_OFFLINE) {
     const std::string app_locale = g_browser_process->GetApplicationLocale();
@@ -525,6 +529,9 @@ void GaiaScreenHandler::RegisterMessages() {
               &GaiaScreenHandler::HandleCompleteAdAuthentication);
   AddCallback("cancelAdAuthentication",
               &GaiaScreenHandler::HandleCancelActiveDirectoryAuth);
+
+  // Allow UMA metrics collection from JS.
+  web_ui()->AddMessageHandler(std::make_unique<MetricsHandler>());
 }
 
 void GaiaScreenHandler::OnPortalDetectionCompleted(
@@ -937,6 +944,18 @@ void GaiaScreenHandler::ShowGaiaScreenIfReady() {
     } else if (!owner_im.empty()) {
       gaia_ime_state->ChangeInputMethod(owner_im, false /* show_message */);
     }
+  }
+
+  if (!untrusted_authority_certs_cache_) {
+    // Make additional untrusted authority certificates available for client
+    // certificate discovery in case a SAML flow is used which requires a client
+    // certificate to be present.
+    // When the WebUI is destroyed, |untrusted_authority_certs_cache_| will go
+    // out of scope and the certificates will not be held in memory anymore.
+    untrusted_authority_certs_cache_ =
+        std::make_unique<policy::UntrustedAuthorityCertsCache>(
+            policy::UntrustedAuthorityCertsCache::
+                GetUntrustedAuthoritiesFromDeviceOncPolicy());
   }
 
   LoadAuthExtension(!gaia_silent_load_ /* force */, false /* offline */);

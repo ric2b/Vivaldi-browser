@@ -2,26 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-define("mojo/public/js/lib/pipe_control_message_proxy", [
-  "mojo/public/interfaces/bindings/pipe_control_messages.mojom",
-  "mojo/public/js/codec",
-  "mojo/public/js/interface_types",
-], function(pipeControlMessages, codec, types) {
+(function() {
+  var internal = mojo.internal;
 
   function constructRunOrClosePipeMessage(runOrClosePipeInput) {
     var runOrClosePipeMessageParams = new
-        pipeControlMessages.RunOrClosePipeMessageParams();
+        mojo.pipeControl.RunOrClosePipeMessageParams();
     runOrClosePipeMessageParams.input = runOrClosePipeInput;
 
-    var messageName = pipeControlMessages.kRunOrClosePipeMessageId;
+    var messageName = mojo.pipeControl.kRunOrClosePipeMessageId;
     var payloadSize =
-        pipeControlMessages.RunOrClosePipeMessageParams.encodedSize;
+        mojo.pipeControl.RunOrClosePipeMessageParams.encodedSize;
 
-    var builder = new codec.MessageV0Builder(messageName, payloadSize);
-    builder.encodeStruct(pipeControlMessages.RunOrClosePipeMessageParams,
+    var builder = new internal.MessageV0Builder(messageName, payloadSize);
+    builder.encodeStruct(mojo.pipeControl.RunOrClosePipeMessageParams,
                          runOrClosePipeMessageParams);
     var message = builder.finish();
-    message.setInterfaceId(types.kInvalidInterfaceId);
+    message.setInterfaceId(internal.kInvalidInterfaceId);
     return message;
   }
 
@@ -37,20 +34,17 @@ define("mojo/public/js/lib/pipe_control_message_proxy", [
 
   PipeControlMessageProxy.prototype.constructPeerEndpointClosedMessage =
       function(interfaceId, reason) {
-    var event = new pipeControlMessages.PeerAssociatedEndpointClosedEvent();
+    var event = new mojo.pipeControl.PeerAssociatedEndpointClosedEvent();
     event.id = interfaceId;
     if (reason) {
-      event.disconnect_reason = new pipeControlMessages.DisconnectReason({
-          custom_reason: reason.custom_reason,
+      event.disconnectReason = new mojo.pipeControl.DisconnectReason({
+          customReason: reason.customReason,
           description: reason.description});
     }
-    var runOrClosePipeInput = new pipeControlMessages.RunOrClosePipeInput();
-    runOrClosePipeInput.peer_associated_endpoint_closed_event = event;
+    var runOrClosePipeInput = new mojo.pipeControl.RunOrClosePipeInput();
+    runOrClosePipeInput.peerAssociatedEndpointClosedEvent = event;
     return constructRunOrClosePipeMessage(runOrClosePipeInput);
   };
 
-  var exports = {};
-  exports.PipeControlMessageProxy = PipeControlMessageProxy;
-
-  return exports;
-});
+  internal.PipeControlMessageProxy = PipeControlMessageProxy;
+})();

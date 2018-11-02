@@ -102,6 +102,10 @@ used when committed.
 *   [Code Reviews](code_reviews.md) - Code review requirements and guidelines
 *   [Respectful Code Reviews](cr_respect.md) - A guide for code reviewers
 *   [Respectful Changes](cl_respect.md) - A guide for code authors
+*   [LUCI Migration FAQ](luci_migration_faq.md) - FAQ on Buildbot-to-LUCI
+    builder migration for Chromium
+*   [Tour of Continuous Integration UI](tour_of_luci_ui.md) - A tour of our
+    the user interface for LUCI, our continuous integration system
 *   [Closure Compilation](closure_compilation.md) - The _Closure_ JavaScript
     compiler
 *   [Threading and Tasks in Chrome](threading_and_tasks.md) - How to run tasks
@@ -154,8 +158,7 @@ used when committed.
     Diagnosing and fixing layout test flakiness due to ordering dependencies.
 *   [Running Layout Tests using `content_shell`](testing/layout_tests_in_content_shell.md) -
     Running layout tests by hand.
-*   [Testing Browser Dialogs](testing/test_browser_dialog.md) - Using
-    TestBrowserDialog
+*   [Testing Browser UI](testing/test_browser_ui.md) - Using TestBrowserUi
 *   [Web Platform Tests](testing/web_platform_tests.md) - Shared tests across
     browser vendors
 *   [Using Breakpad with `content_shell`](testing/using_breakpad_with_content_shell.md) -
@@ -254,6 +257,9 @@ used when committed.
     strings using Chrome for iOS.
 *   [Running iOS test suites locally](ios/testing.md)
 
+### Misc Chrome-OS-Specific Docs
+*   [Chrome Logging on Chrome OS](chrome_os_logging.md)
+
 ### Media
 *   [Audio Focus Handling](media/audio_focus.md) - How multiple MediaSession
     audio streams interact
@@ -309,7 +315,7 @@ used when committed.
     directories are determined on all platforms.
 
 ### Probably Obsolete
-*   [Old ChromeOS build instructions](old_chromeos_build_instructions.md)
+*   [Old Chrome OS build instructions](old_chromeos_build_instructions.md)
 *   [TPM Quick Reference](tpm_quick_ref.md) - Trusted Platform Module notes.
 *   [System Hardening Features](system_hardening_features.md) - A list of
     current and planned Chrome OS security features.

@@ -17,6 +17,8 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/protected_memory.h"
+#include "base/memory/protected_memory_cfi.h"
 #include "build/build_config.h"
 #include "crypto/nss_util.h"
 #include "crypto/scoped_nss_types.h"
@@ -37,6 +39,28 @@
 namespace net {
 
 namespace {
+
+using CacheOCSPResponseFunction = SECStatus (*)(CERTCertDBHandle* handle,
+                                                CERTCertificate* cert,
+                                                PRTime time,
+                                                const SECItem* encodedResponse,
+                                                void* pwArg);
+
+static PROTECTED_MEMORY_SECTION base::ProtectedMemory<CacheOCSPResponseFunction>
+    g_cache_ocsp_response;
+
+// The function pointer for CERT_CacheOCSPResponseFromSideChannel is saved to
+// read-only memory after being dynamically resolved as a security mitigation to
+// prevent the pointer from being tampered with. See crbug.com/771365 for
+// details.
+const base::ProtectedMemory<CacheOCSPResponseFunction>&
+ResolveCacheOCSPResponse() {
+  static base::ProtectedMemory<CacheOCSPResponseFunction>::Initializer init(
+      &g_cache_ocsp_response,
+      reinterpret_cast<CacheOCSPResponseFunction>(
+          dlsym(RTLD_DEFAULT, "CERT_CacheOCSPResponseFromSideChannel")));
+  return g_cache_ocsp_response;
+}
 
 typedef std::unique_ptr<
     CERTCertificatePolicies,
@@ -270,8 +294,9 @@ CRLSetResult CheckRevocationWithCRLSet(const CERTCertList* cert_list,
     base::StringPiece der(reinterpret_cast<char*>(cert->derCert.data),
                           cert->derCert.len);
 
-    base::StringPiece spki;
-    if (!asn1::ExtractSPKIFromDERCert(der, &spki)) {
+    base::StringPiece spki, subject;
+    if (!asn1::ExtractSPKIFromDERCert(der, &spki) ||
+        !asn1::ExtractSubjectFromDERCert(der, &subject)) {
       NOTREACHED();
       error = true;
       continue;
@@ -284,6 +309,8 @@ CRLSetResult CheckRevocationWithCRLSet(const CERTCertList* cert_list,
 
     CRLSet::Result result = crl_set->CheckSPKI(spki_hash);
 
+    if (result != CRLSet::REVOKED)
+      result = crl_set->CheckSubject(subject, spki_hash);
     if (result != CRLSet::REVOKED && !issuer_spki_hash.empty())
       result = crl_set->CheckSerial(serial_number, issuer_spki_hash);
 
@@ -754,12 +781,7 @@ ScopedCERTCertList CertificateListToCERTCertListIgnoringErrors(
 
 }  // namespace
 
-CertVerifyProcNSS::CertVerifyProcNSS()
-    : cache_ocsp_response_from_side_channel_(
-          reinterpret_cast<CacheOCSPResponseFromSideChannelFunction>(
-              dlsym(RTLD_DEFAULT, "CERT_CacheOCSPResponseFromSideChannel")))
-{
-}
+CertVerifyProcNSS::CertVerifyProcNSS() = default;
 
 CertVerifyProcNSS::~CertVerifyProcNSS() = default;
 
@@ -768,7 +790,7 @@ bool CertVerifyProcNSS::SupportsAdditionalTrustAnchors() const {
 }
 
 bool CertVerifyProcNSS::SupportsOCSPStapling() const {
-  return cache_ocsp_response_from_side_channel_;
+  return *ResolveCacheOCSPResponse() != nullptr;
 }
 
 int CertVerifyProcNSS::VerifyInternalImpl(
@@ -793,7 +815,7 @@ int CertVerifyProcNSS::VerifyInternalImpl(
   }
   CERTCertificate* cert_handle = input_chain[0].get();
 
-  if (!ocsp_response.empty() && cache_ocsp_response_from_side_channel_) {
+  if (!ocsp_response.empty() && SupportsOCSPStapling()) {
     // Note: NSS uses a thread-safe global hash table, so this call will
     // affect any concurrent verification operations on |cert| or copies of
     // the same certificate. This is an unavoidable limitation of NSS's OCSP
@@ -802,9 +824,9 @@ int CertVerifyProcNSS::VerifyInternalImpl(
     ocsp_response_item.data = reinterpret_cast<unsigned char*>(
         const_cast<char*>(ocsp_response.data()));
     ocsp_response_item.len = ocsp_response.size();
-    cache_ocsp_response_from_side_channel_(CERT_GetDefaultCertDB(), cert_handle,
-                                           PR_Now(), &ocsp_response_item,
-                                           nullptr);
+    UnsanitizedCfiCall(ResolveCacheOCSPResponse())(
+        CERT_GetDefaultCertDB(), cert_handle, PR_Now(), &ocsp_response_item,
+        nullptr);
   }
 
   // Setup a callback to call into CheckChainRevocationWithCRLSet with the

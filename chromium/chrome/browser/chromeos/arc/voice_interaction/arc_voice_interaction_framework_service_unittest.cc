@@ -21,6 +21,7 @@
 #include "chromeos/dbus/fake_cras_audio_client.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_util.h"
+#include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "components/arc/test/fake_voice_interaction_framework_instance.h"
 #include "components/prefs/pref_service.h"
@@ -122,7 +123,7 @@ class ArcVoiceInteractionFrameworkServiceTest : public ash::AshTestBase {
     voice_interaction_controller_client_ =
         std::make_unique<VoiceInteractionControllerClient>();
     connector_factory_ =
-        std::make_unique<service_manager::TestConnectorFactory>(
+        service_manager::TestConnectorFactory::CreateForUniqueService(
             std::move(highlighter_controller_ptr));
     connector_ = connector_factory_->CreateConnector();
     framework_service_ = std::make_unique<ArcVoiceInteractionFrameworkService>(
@@ -135,6 +136,7 @@ class ArcVoiceInteractionFrameworkServiceTest : public ash::AshTestBase {
         std::make_unique<FakeVoiceInteractionFrameworkInstance>();
     arc_bridge_service_->voice_interaction_framework()->SetInstance(
         framework_instance_.get());
+    WaitForInstanceReady(arc_bridge_service_->voice_interaction_framework());
     // Flushing is required for the AttachClient call to get through to the
     // highligther controller.
     FlushHighlighterControllerMojo();
@@ -146,6 +148,8 @@ class ArcVoiceInteractionFrameworkServiceTest : public ash::AshTestBase {
   }
 
   void TearDown() override {
+    arc_bridge_service_->voice_interaction_framework()->CloseInstance(
+        framework_instance_.get());
     voice_interaction_controller_.reset();
     voice_interaction_controller_client_.reset();
     framework_instance_.reset();
@@ -243,7 +247,8 @@ TEST_F(ArcVoiceInteractionFrameworkServiceTest, StartSessionWithoutFlag) {
 
 TEST_F(ArcVoiceInteractionFrameworkServiceTest, StartSessionWithoutInstance) {
   // Reset the framework instance.
-  arc_bridge_service()->voice_interaction_framework()->SetInstance(nullptr);
+  arc_bridge_service()->voice_interaction_framework()->CloseInstance(
+      framework_instance());
 
   framework_service()->StartSessionFromUserInteraction(gfx::Rect());
   // A notification should be sent if the container is not ready yet.
@@ -318,7 +323,8 @@ TEST_F(ArcVoiceInteractionFrameworkServiceTest, HighlighterControllerClient) {
 
   // Clear the framework instance to simulate the container crash.
   // The client should become detached.
-  arc_bridge_service()->voice_interaction_framework()->SetInstance(nullptr);
+  arc_bridge_service()->voice_interaction_framework()->CloseInstance(
+      framework_instance());
   FlushHighlighterControllerMojo();
   EXPECT_FALSE(highlighter_controller()->client_attached());
 
@@ -326,6 +332,7 @@ TEST_F(ArcVoiceInteractionFrameworkServiceTest, HighlighterControllerClient) {
   // The client should become attached again.
   arc_bridge_service()->voice_interaction_framework()->SetInstance(
       framework_instance());
+  WaitForInstanceReady(arc_bridge_service()->voice_interaction_framework());
   FlushHighlighterControllerMojo();
   EXPECT_TRUE(highlighter_controller()->client_attached());
 

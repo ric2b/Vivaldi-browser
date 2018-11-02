@@ -86,7 +86,7 @@
 <translation id="2114326799768592691">Volver a cargar &amp;marco</translation>
 <translation id="2129825002735785149">Actualizar complemento</translation>
 <translation id="2142328300403846845">Abrir enlace como</translation>
-<translation id="2148892889047469596">Enviar pestaña</translation>
+<translation id="2148892889047469596">Emitir pestaña</translation>
 <translation id="2150139952286079145">Buscar destinos</translation>
 <translation id="215753907730220065">Desactivar pantalla completa</translation>
 <translation id="2177950615300672361">Pestaña de incógnito: <ph name="TAB_NAME" /></translation>
@@ -139,7 +139,7 @@
 <translation id="2809586584051668049">y <ph name="NUMBER_ADDITIONAL_DISABLED" /> más</translation>
 <translation id="2812989263793994277">No mostrar ninguna imagen</translation>
 <translation id="2844111009524261443">Ejecutar mediante un clic</translation>
-<translation id="2847759467426165163">Enviar a</translation>
+<translation id="2847759467426165163">Emitir a</translation>
 <translation id="2850541429955027218">Añadir tema</translation>
 <translation id="2861941300086904918">Administrador de seguridad de cliente nativo</translation>
 <translation id="2868746137289129307">Esta extensión está obsoleta e inhabilitada por la política de empresas. Es posible que se habilite automáticamente cuando se disponga de una nueva versión.</translation>
@@ -147,6 +147,7 @@
 <translation id="2890678560483811744">La referencia de página está fuera de los límites admitidos</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no ha podido establecer comunicación con la impresora. Comprueba que la impresora esté conectada e inténtalo de nuevo.</translation>
 <translation id="2904456025988372123">Preguntar cuando un sitio web intente descargar automáticamente archivos tras hacerlo con uno antes</translation>
+<translation id="2911898792135283060">Generar contraseña...</translation>
 <translation id="2913331724188855103">Permitir a los sitios guardar y leer datos de cookies (recomendado)</translation>
 <translation id="2916745397441987255">Buscar extensiones</translation>
 <translation id="2932883381142163287">Notificar uso inadecuado</translation>
@@ -227,7 +228,7 @@
 <translation id="383891835335927981">No se ha ampliado ni reducido ningún sitio web</translation>
 <translation id="385051799172605136">Atrás</translation>
 <translation id="3855441664322950881">Empaquetar extensión</translation>
-<translation id="3862134173397075045">¡Bienvenido a la experiencia de Difusión de Vivaldi!</translation>
+<translation id="3862134173397075045">¡Bienvenido a la experiencia de Emitir en Vivaldi!</translation>
 <translation id="3866249974567520381">Descripción</translation>
 <translation id="3899879303189199559">Sin conexión durante más de un año</translation>
 <translation id="3905761538810670789">Reparar aplicación</translation>
@@ -270,7 +271,7 @@
 <translation id="4321136812570927563">{NUM_DOWNLOAD,plural, =1 {Continuar descarga} other {Continuar descargas}}</translation>
 <translation id="4345587454538109430">Configurar...</translation>
 <translation id="4348766275249686434">Recolectar errores</translation>
-<translation id="4363771538994847871">No se han encontrado destinos a donde enviar contenido. ¿Necesitas ayuda?</translation>
+<translation id="4363771538994847871">No se han encontrado destinos a los que emitir. ¿Necesitas ayuda?</translation>
 <translation id="4384652540891215547">Activar la extensión</translation>
 <translation id="4394049700291259645">Inhabilitar</translation>
 <translation id="4409697491990005945">Márgenes</translation>
@@ -283,7 +284,7 @@
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4552495056028768700">Acceso a página</translation>
 <translation id="4557136421275541763">Advertencia:</translation>
-<translation id="4579581181964204535">No se puede enviar <ph name="HOST_NAME" />.</translation>
+<translation id="4579581181964204535">No se pudo emitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Ir a <ph name="URL" /></translation>
 <translation id="4595560905247879544">Únicamente el administrador (<ph name="CUSTODIAN_NAME" />) puede modificar las aplicaciones y las extensiones.</translation>
 <translation id="4613271546271159013">Una extensión ha cambiado la página que se muestra cuando abres una nueva pestaña.</translation>
@@ -397,7 +398,7 @@
 <translation id="6147020289383635445">Error al obtener la vista previa de la impresión.</translation>
 <translation id="6156863943908443225">Caché de secuencias de comandos</translation>
 <translation id="6165508094623778733">Más información</translation>
-<translation id="6169666352732958425">No se ha podido enviar el escritorio.</translation>
+<translation id="6169666352732958425">No se ha podido emitir el escritorio.</translation>
 <translation id="6171948306033499786">Pausar impresión</translation>
 <translation id="6196640612572343990">Bloquear cookies de terceros</translation>
 <translation id="6196854373336333322">La extensión <ph name="EXTENSION_NAME" /> ahora controla la configuración del proxy, lo que significa que puede cambiar, deshacer o espiar cualquier acción que hagas online. Si no estás seguro de los motivos por los que se ha producido este cambio, probablemente no haya sido intencionado.</translation>
@@ -415,7 +416,6 @@
 <translation id="6295158916970320988">Todos los sitios</translation>
 <translation id="6295855836753816081">Guardando...</translation>
 <translation id="6308937455967653460">Guardar &amp;enlace como...</translation>
-<translation id="6314335155547195432">Crear contraseña</translation>
 <translation id="6326855256003666642">Recuento de Keepalive</translation>
 <translation id="6370021412472292592">No se pudo cargar el manifest.</translation>
 <translation id="6374469231428023295">Intentar de nuevo</translation>
@@ -446,7 +446,7 @@
 <translation id="6807889908376551050">Mostrar todo...</translation>
 <translation id="6812841287760418429">Mantener cambios</translation>
 <translation id="6817174620439930047">Preguntar cuando un sitio web quiera utilizar mensajes exclusivos del sistema para acceder a los dispositivos MIDI (recomendado)</translation>
-<translation id="682123305478866682">Enviar escritorio</translation>
+<translation id="682123305478866682">Emitir escritorio</translation>
 <translation id="6824564591481349393">Copiar &amp;dirección de correo</translation>
 <translation id="6840155290835956714">Preguntar antes de enviar</translation>
 <translation id="6841186874966388268">Errores</translation>
@@ -478,7 +478,7 @@
 <translation id="7270858098575133036">Preguntar cuando un sitio web quiera utilizar mensajes exclusivos del sistema para acceder a los dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acceso denegado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> PPP</translation>
-<translation id="7293919849802650062">¡Te damos la bienvenida a la experiencia Cast en Vivaldi!</translation>
+<translation id="7293919849802650062">¡Te damos la bienvenida a la experiencia de Emitir en Vivaldi!</translation>
 <translation id="7309257895202129721">Mostrar &amp;controles</translation>
 <translation id="7311079019872751559">Complementos con acceso no restringido a la zona de aislamiento</translation>
 <translation id="7339898014177206373">Nueva ventana</translation>
@@ -499,7 +499,6 @@
 <translation id="7564847347806291057">Finalizar proceso</translation>
 <translation id="7576690715254076113">Clasificar</translation>
 <translation id="7629827748548208700">Pestaña: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Cancelar</translation>
 <translation id="7661259717474717992">Permitir a los sitios web guardar y consultar datos de cookies</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada por su adminstrador</translation>
@@ -543,7 +542,7 @@ Guarde su archivo de clave en un lugar seguro, ya que lo necesitará para crear 
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controla qué información pueden utilizar los sitios web y el contenido que pueden mostrarle</translation>
 <translation id="8023801379949507775">Actualizar ahora las extensiones</translation>
-<translation id="8032244173881942855">No se puede enviar la pestaña.</translation>
+<translation id="8032244173881942855">La pestaña no se pudo emitir.</translation>
 <translation id="8071432093239591881">Imprimir como imagen</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> K</translation>
 <translation id="8137559199583651773">Gestionar extensiones</translation>
@@ -587,7 +586,7 @@ Guarde su archivo de clave en un lugar seguro, ya que lo necesitará para crear 
 <translation id="8719653885894320876">No se ha podido descargar <ph name="PLUGIN_NAME" /></translation>
 <translation id="8725066075913043281">Volver a intentarlo</translation>
 <translation id="873545264931343897">Cuando el complemento <ph name="PLUGIN_NAME" /> se haya actualizado, vuelve a cargar la página para activarlo</translation>
-<translation id="8757090071857742562">No se ha podido enviar el escritorio. Compruebe que lo ha confirmado en la ventana donde se le preguntó si empezar a compartir.</translation>
+<translation id="8757090071857742562">No se ha podido emitir el escritorio. Compruebe que ha marcado "aceptar" cuando se le ha pedido permiso para empezar a emitir.</translation>
 <translation id="8770406935328356739">Directorio raíz de extensiones</translation>
 <translation id="8774934320277480003">Margen superior</translation>
 <translation id="8783093612333542422">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; quiere compartir una impresora &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; contigo.</translation>

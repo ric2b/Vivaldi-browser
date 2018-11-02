@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "media/gpu/android/codec_wrapper.h"
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_task_environment.h"
 #include "media/base/android/media_codec_bridge.h"
 #include "media/base/android/mock_media_codec_bridge.h"
 #include "media/base/encryption_scheme.h"
@@ -28,10 +30,10 @@ namespace media {
 class CodecWrapperTest : public testing::Test {
  public:
   CodecWrapperTest() {
-    auto codec = base::MakeUnique<NiceMock<MockMediaCodecBridge>>();
+    auto codec = std::make_unique<NiceMock<MockMediaCodecBridge>>();
     codec_ = codec.get();
     surface_bundle_ = base::MakeRefCounted<AVDASurfaceBundle>();
-    wrapper_ = base::MakeUnique<CodecWrapper>(
+    wrapper_ = std::make_unique<CodecWrapper>(
         CodecSurfacePair(std::move(codec), surface_bundle_),
         output_buffer_release_cb_.Get());
     ON_CALL(*codec_, DequeueOutputBuffer(_, _, _, _, _, _, _))
@@ -55,6 +57,9 @@ class CodecWrapperTest : public testing::Test {
     wrapper_->DequeueOutputBuffer(nullptr, nullptr, &codec_buffer);
     return codec_buffer;
   }
+
+  // So that we can get the thread's task runner.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   NiceMock<MockMediaCodecBridge>* codec_;
   std::unique_ptr<CodecWrapper> wrapper_;

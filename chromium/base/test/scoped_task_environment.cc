@@ -62,7 +62,7 @@ class ScopedTaskEnvironment::TestTaskTracker
   friend class ScopedTaskEnvironment;
 
   // internal::TaskSchedulerImpl::TaskTrackerImpl:
-  void RunOrSkipTask(std::unique_ptr<internal::Task> task,
+  void RunOrSkipTask(internal::Task task,
                      internal::Sequence* sequence,
                      bool can_run_task) override;
 
@@ -209,10 +209,10 @@ void ScopedTaskEnvironment::RunUntilIdle() {
     // the above logic as it'd then be possible for a TaskScheduler task to be
     // running during the DisallowRunTasks() test, causing it to fail, but then
     // post to the main thread and complete before the loop's condition is
-    // verified which could result in GetNumIncompleteUndelayedTasksForTesting()
-    // returning 0 and the loop erroneously exiting with a pending task on the
-    // main thread.
-    if (task_tracker_->GetNumIncompleteUndelayedTasksForTesting() == 0)
+    // verified which could result in HasIncompleteUndelayedTasksForTesting()
+    // returning false and the loop erroneously exiting with a pending task on
+    // the main thread.
+    if (!task_tracker_->HasIncompleteUndelayedTasksForTesting())
       break;
   }
 
@@ -233,7 +233,9 @@ void ScopedTaskEnvironment::FastForwardUntilNoTasksRemain() {
 }
 
 ScopedTaskEnvironment::TestTaskTracker::TestTaskTracker()
-    : can_run_tasks_cv_(&lock_), task_completed_(&lock_) {}
+    : internal::TaskSchedulerImpl::TaskTrackerImpl("ScopedTaskEnvironment"),
+      can_run_tasks_cv_(&lock_),
+      task_completed_(&lock_) {}
 
 void ScopedTaskEnvironment::TestTaskTracker::AllowRunTasks() {
   AutoLock auto_lock(lock_);
@@ -258,7 +260,7 @@ bool ScopedTaskEnvironment::TestTaskTracker::DisallowRunTasks() {
 }
 
 void ScopedTaskEnvironment::TestTaskTracker::RunOrSkipTask(
-    std::unique_ptr<internal::Task> task,
+    internal::Task task,
     internal::Sequence* sequence,
     bool can_run_task) {
   {

@@ -11,6 +11,7 @@ stories as memory ones, only with fewer actions (no memory dumping).
 
 import unittest
 
+from core import path_util
 from core import perf_benchmark
 
 from telemetry import benchmark as benchmark_module
@@ -66,6 +67,9 @@ _DISABLED_TESTS = frozenset({
 
   # crbug.com/725386
   'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:social:twitter', # pylint: disable=line-too-long
+
+  # crbug.com/799734
+  'benchmarks.system_health_smoke_test.SystemHealthBenchmarkSmokeTest.system_health.memory_desktop.browse:media:tumblr', # pylint: disable=line-too-long
 })
 
 
@@ -114,7 +118,11 @@ def _GenerateSmokeTestCase(benchmark_class, story_to_smoke_test):
     if self.id() in _DISABLED_TESTS:
       self.skipTest('Test is explicitly disabled')
 
-    self.assertEqual(0, SinglePageBenchmark().Run(options),
+    single_page_benchmark = SinglePageBenchmark()
+    with open(path_util.GetExpectationsPath()) as fp:
+      single_page_benchmark.AugmentExpectationsWithParser(fp.read())
+
+    self.assertEqual(0, single_page_benchmark.Run(options),
                      msg='Failed: %s' % benchmark_class)
 
   # We attach the test method to SystemHealthBenchmarkSmokeTest dynamically

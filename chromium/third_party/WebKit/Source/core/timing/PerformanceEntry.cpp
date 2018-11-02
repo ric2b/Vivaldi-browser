@@ -51,7 +51,7 @@ PerformanceEntry::PerformanceEntry(const String& name,
       entry_type_enum_(ToEntryTypeEnum(entry_type)),
       index_(index_seq.GetNext()) {}
 
-PerformanceEntry::~PerformanceEntry() {}
+PerformanceEntry::~PerformanceEntry() = default;
 
 String PerformanceEntry::name() const {
   return name_;
@@ -95,12 +95,11 @@ PerformanceEntry::EntryType PerformanceEntry::ToEntryTypeEnum(
 ScriptValue PerformanceEntry::toJSONForBinding(
     ScriptState* script_state) const {
   V8ObjectBuilder result(script_state);
-  BuildJSONValue(script_state, result);
+  BuildJSONValue(result);
   return result.GetScriptValue();
 }
 
-void PerformanceEntry::BuildJSONValue(ScriptState* script_state,
-                                      V8ObjectBuilder& builder) const {
+void PerformanceEntry::BuildJSONValue(V8ObjectBuilder& builder) const {
   builder.AddString("name", name());
   builder.AddString("entryType", entryType());
   builder.AddNumber("startTime", startTime());

@@ -31,9 +31,6 @@ class PrefRegistrySyncable;
 
 namespace translate {
 
-// Feature flag for "Translate UI 2016 Q2" project.
-extern const base::Feature kTranslateUI2016Q2;
-
 // Enables or disables the new improved language settings.
 // These settings support the new UI.
 extern const base::Feature kImprovedLanguageSettings;
@@ -41,9 +38,6 @@ extern const base::Feature kImprovedLanguageSettings;
 // Enables or disables using the most recent target language as the default
 // target language option.
 extern const base::Feature kTranslateRecentTarget;
-
-// The trial (study) name in finch study config.
-extern const char kTranslateUI2016Q2TrialName[];
 
 // The name of the parameter for the number of translations, after which the
 // "Always Translate" checkbox default to checked.
@@ -122,9 +116,9 @@ class TranslatePrefs {
     kNone,
     // Move the language to the very top of the list.
     kTop,
-    // Move the language up by one position.
+    // Move the language up towards the front of the list.
     kUp,
-    // Move the language down by one position.
+    // Move the language down towards the back of the list.
     kDown
   };
 
@@ -165,13 +159,16 @@ class TranslatePrefs {
   void RemoveFromLanguageList(const std::string& language);
 
   // Rearranges the given language inside the language list.
-  // The target position is specified as a RearrangeSpecifier.
+  // The direction of the move is specified as a RearrangeSpecifier.
+  // |offset| is ignored unless the RearrangeSpecifier is kUp or kDown: in
+  // which case it needs to be positive for any change to be made.
   // The param |enabled_languages| is a list of languages that are enabled in
   // the current UI. This is required because the full language list contains
   // some languages that might not be enabled in the current UI and we need to
   // skip those languages while rearranging the list.
   void RearrangeLanguage(const std::string& language,
                          RearrangeSpecifier where,
+                         const int offset,
                          const std::vector<std::string>& enabled_languages);
 
   // Returns the list of TranslateLanguageInfo for all languages that are

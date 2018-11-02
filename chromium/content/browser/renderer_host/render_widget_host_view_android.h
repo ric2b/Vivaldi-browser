@@ -52,7 +52,6 @@ class ContentViewCore;
 class ImeAdapterAndroid;
 class OverscrollControllerAndroid;
 class PopupZoomer;
-class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class SelectionPopupController;
 class SynchronousCompositorHost;
@@ -106,7 +105,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
-  RenderWidgetHost* GetRenderWidgetHost() const override;
   void SetSize(const gfx::Size& size) override;
   void SetBounds(const gfx::Rect& rect) override;
   gfx::Vector2dF GetLastScrollOffset() const override;
@@ -172,33 +170,27 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       override;
   void OnDidNavigateMainFrameToNewPage() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
+  void SetWantsAnimateOnlyBeginFrames() override;
+  RenderWidgetHostImpl* GetRenderWidgetHostImpl() const override;
   viz::FrameSinkId GetFrameSinkId() override;
-  viz::FrameSinkId FrameSinkIdAtPoint(viz::SurfaceHittestDelegate* delegate,
-                                      const gfx::PointF& point,
-                                      gfx::PointF* transformed_point) override;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event,
-                         const ui::LatencyInfo& latency) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
-                              const ui::LatencyInfo& latency) override;
-  void ProcessTouchEvent(const blink::WebTouchEvent& event,
-                         const ui::LatencyInfo& latency) override;
-  void ProcessGestureEvent(const blink::WebGestureEvent& event,
-                           const ui::LatencyInfo& latency) override;
   bool TransformPointToLocalCoordSpace(const gfx::PointF& point,
                                        const viz::SurfaceId& original_surface,
                                        gfx::PointF* transformed_point) override;
+  viz::SurfaceId GetCurrentSurfaceId() const override;
   bool TransformPointToCoordSpaceForView(
       const gfx::PointF& point,
       RenderWidgetHostViewBase* target_view,
       gfx::PointF* transformed_point) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
+  viz::LocalSurfaceId GetLocalSurfaceId() const override;
 
   // ui::ViewClient implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseEvent(const ui::MotionEventAndroid& m) override;
   bool OnMouseWheelEvent(const ui::MotionEventAndroid& event) override;
   bool OnGestureEvent(const ui::GestureEventAndroid& event) override;
+  void OnSizeChanged() override;
   void OnPhysicalBackingSizeChanged() override;
 
   // ui::ViewAndroidObserver implementation:
@@ -248,6 +240,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnBeginFrame(const viz::BeginFrameArgs& args) override;
   const viz::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
   void OnBeginFrameSourcePausedChanged(bool paused) override;
+  bool WantsAnimateOnlyBeginFrames() const override;
 
   // Non-virtual methods
   void SetContentViewCore(ContentViewCore* content_view_core);
@@ -291,7 +284,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ShowContextMenuAtPoint(const gfx::Point& point, ui::MenuSourceType);
   void DismissTextHandles();
   void SetTextHandlesTemporarilyHidden(bool hidden);
-  void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
+  // |x_px| and |y_px| are in physical pixel scale.
+  void OnShowUnhandledTapUIIfNeeded(int x_px, int y_px);
   void OnSelectWordAroundCaretAck(bool did_select,
                                   int start_adjust,
                                   int end_adjust);
@@ -321,9 +315,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                               RenderWidgetHostViewBase* updated_view) override;
 
   ImeAdapterAndroid* ime_adapter_for_testing() { return ime_adapter_android_; }
-
-  // Exposed for tests.
-  viz::SurfaceId SurfaceIdForTesting() const override;
 
   ui::TouchSelectionControllerClient*
   GetSelectionControllerClientManagerForTesting();
@@ -388,6 +379,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                         float mouse_down_y);
 
   WebContentsAccessibilityAndroid* GetWebContentsAccessibilityAndroid() const;
+  RenderViewHostDelegateView* GetRenderViewHostDelegateView() const;
 
   void OnFocusInternal();
   void LostFocusInternal();
@@ -399,6 +391,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   viz::BeginFrameSource* begin_frame_source_;
   viz::BeginFrameArgs last_begin_frame_args_;
   bool begin_frame_paused_ = false;
+  bool wants_animate_only_begin_frames_ = false;
 
   // Indicates whether and for what reason a request for begin frames has been
   // issued. Used to control action dispatch at the next |OnBeginFrame()| call.

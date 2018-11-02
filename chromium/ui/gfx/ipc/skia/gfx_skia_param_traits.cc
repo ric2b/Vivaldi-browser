@@ -7,64 +7,57 @@
 #include <string>
 
 #include "base/pickle.h"
-#include "ipc/ipc_message_utils.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
-#include "ui/gfx/ipc/skia/gfx_skia_param_traits_macros.h"
 #include "ui/gfx/transform.h"
 
-// Generate param traits write methods.
-#include "ipc/param_traits_write_macros.h"
-namespace IPC {
-#undef UI_GFX_IPC_SKIA_GFX_SKIA_PARAM_TRAITS_MACROS_H_
-#include "ui/gfx/ipc/skia/gfx_skia_param_traits_macros.h"
-}  // namespace IPC
+namespace {
 
-// Generate param traits read methods.
-#include "ipc/param_traits_read_macros.h"
-namespace IPC {
-#undef UI_GFX_IPC_SKIA_GFX_SKIA_PARAM_TRAITS_MACROS_H_
-#include "ui/gfx/ipc/skia/gfx_skia_param_traits_macros.h"
-}  // namespace IPC
-
-// Generate param traits log methods.
-#include "ipc/param_traits_log_macros.h"
-namespace IPC {
-#undef UI_GFX_IPC_SKIA_GFX_SKIA_PARAM_TRAITS_MACROS_H_
-#include "ui/gfx/ipc/skia/gfx_skia_param_traits_macros.h"
-}  // namespace IPC
-
-namespace IPC {
-
-void ParamTraits<SkImageInfo>::Write(base::Pickle* m, const SkImageInfo& p) {
-  WriteParam(m, p.colorType());
-  WriteParam(m, p.alphaType());
-  WriteParam(m, p.width());
-  WriteParam(m, p.height());
-}
-
-bool ParamTraits<SkImageInfo>::Read(const base::Pickle* m,
-                                    base::PickleIterator* iter,
-                                    SkImageInfo* r) {
+struct SkBitmap_Data {
+  // The color type for the bitmap (bits per pixel, etc).
   SkColorType color_type;
+
+  // The alpha type for the bitmap (opaque, premul, unpremul).
   SkAlphaType alpha_type;
+
+  // The width of the bitmap in pixels.
   uint32_t width;
+
+  // The height of the bitmap in pixels.
   uint32_t height;
-  if (!ReadParam(m, iter, &color_type) || !ReadParam(m, iter, &alpha_type) ||
-      !ReadParam(m, iter, &width) || !ReadParam(m, iter, &height)) {
-    return false;
+
+  void InitSkBitmapDataForTransfer(const SkBitmap& bitmap) {
+    const SkImageInfo& info = bitmap.info();
+    color_type = info.colorType();
+    alpha_type = info.alphaType();
+    width = info.width();
+    height = info.height();
   }
 
-  *r = SkImageInfo::Make(width, height, color_type, alpha_type);
-  return true;
-}
+  // Returns whether |bitmap| successfully initialized.
+  bool InitSkBitmapFromData(SkBitmap* bitmap,
+                            const char* pixels,
+                            size_t pixels_size) const {
+    if (!bitmap->tryAllocPixels(
+            SkImageInfo::Make(width, height, color_type, alpha_type)))
+      return false;
+    if (pixels_size != bitmap->computeByteSize())
+      return false;
+    memcpy(bitmap->getPixels(), pixels, pixels_size);
+    return true;
+  }
+};
 
-void ParamTraits<SkImageInfo>::Log(const SkImageInfo& p, std::string* l) {
-  l->append("<SkImageInfo>");
-}
+}  // namespace
+
+namespace IPC {
 
 void ParamTraits<SkBitmap>::Write(base::Pickle* m, const SkBitmap& p) {
-  WriteParam(m, p.info());
+  size_t fixed_size = sizeof(SkBitmap_Data);
+  SkBitmap_Data bmp_data;
+  bmp_data.InitSkBitmapDataForTransfer(p);
+  m->WriteData(reinterpret_cast<const char*>(&bmp_data),
+               static_cast<int>(fixed_size));
   size_t pixel_size = p.computeByteSize();
   m->WriteData(reinterpret_cast<const char*>(p.getPixels()),
                static_cast<int>(pixel_size));
@@ -73,28 +66,28 @@ void ParamTraits<SkBitmap>::Write(base::Pickle* m, const SkBitmap& p) {
 bool ParamTraits<SkBitmap>::Read(const base::Pickle* m,
                                  base::PickleIterator* iter,
                                  SkBitmap* r) {
-  SkImageInfo image_info;
-  if (!ReadParam(m, iter, &image_info))
+  const char* fixed_data;
+  int fixed_data_size = 0;
+  if (!iter->ReadData(&fixed_data, &fixed_data_size) ||
+     (fixed_data_size <= 0)) {
     return false;
+  }
+  if (fixed_data_size != sizeof(SkBitmap_Data))
+    return false;  // Message is malformed.
 
-  const char* bitmap_data;
-  int bitmap_data_size = 0;
-  if (!iter->ReadData(&bitmap_data, &bitmap_data_size))
+  const char* variable_data;
+  int variable_data_size = 0;
+  if (!iter->ReadData(&variable_data, &variable_data_size) ||
+     (variable_data_size < 0)) {
     return false;
-  // ReadData() only returns true if bitmap_data_size >= 0.
-
-  if (!r->tryAllocPixels(image_info))
-    return false;
-
-  if (static_cast<size_t>(bitmap_data_size) != r->computeByteSize())
-    return false;
-  memcpy(r->getPixels(), bitmap_data, bitmap_data_size);
-  return true;
+  }
+  const SkBitmap_Data* bmp_data =
+      reinterpret_cast<const SkBitmap_Data*>(fixed_data);
+  return bmp_data->InitSkBitmapFromData(r, variable_data, variable_data_size);
 }
 
 void ParamTraits<SkBitmap>::Log(const SkBitmap& p, std::string* l) {
   l->append("<SkBitmap>");
-  LogParam(p.info(), l);
 }
 
 void ParamTraits<gfx::Transform>::Write(base::Pickle* m, const param_type& p) {

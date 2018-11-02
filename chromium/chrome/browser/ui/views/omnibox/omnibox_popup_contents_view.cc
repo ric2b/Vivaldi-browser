@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_contents_view.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/feature_list.h"
 #include "base/lazy_instance.h"
@@ -18,6 +19,7 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "third_party/skia/include/core/SkDrawLooper.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/theme_provider.h"
 #include "ui/compositor/clip_recorder.h"
 #include "ui/compositor/paint_recorder.h"
@@ -237,16 +239,14 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   if (narrow_popup) {
     SkColor background_color = GetNativeTheme()->GetSystemColor(
         ui::NativeTheme::kColorId_ResultsTableNormalBackground);
-    auto border = base::MakeUnique<views::BubbleBorder>(
+    auto border = std::make_unique<views::BubbleBorder>(
         views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
         background_color);
 
     // Outdent the popup to factor in the shadow size.
-    int border_thickness = border->GetBorderThickness();
-    new_target_bounds.Inset(-border_thickness, -border_thickness,
-                            -border_thickness, -border_thickness);
+    new_target_bounds.Inset(-border->GetInsets());
 
-    SetBackground(base::MakeUnique<views::BubbleBackground>(border.get()));
+    SetBackground(std::make_unique<views::BubbleBackground>(border.get()));
     SetBorder(std::move(border));
   }
 
@@ -449,6 +449,11 @@ size_t OmniboxPopupContentsView::GetIndexForPoint(const gfx::Point& point) {
 
 OmniboxResultView* OmniboxPopupContentsView::result_view_at(size_t i) {
   return static_cast<OmniboxResultView*>(child_at(static_cast<int>(i)));
+}
+
+void OmniboxPopupContentsView::GetAccessibleNodeData(
+    ui::AXNodeData* node_data) {
+  node_data->role = ui::AX_ROLE_LIST_BOX;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

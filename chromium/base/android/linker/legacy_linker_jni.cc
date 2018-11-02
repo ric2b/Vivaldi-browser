@@ -93,7 +93,8 @@ bool GenericLoadLibrary(JNIEnv* env,
   crazy_context_t* context = GetCrazyContext();
 
   if (!IsValidAddress(load_address)) {
-    LOG_ERROR("Invalid address 0x%llx", load_address);
+    LOG_ERROR("Invalid address 0x%llx",
+              static_cast<unsigned long long>(load_address));
     return false;
   }
 
@@ -328,7 +329,8 @@ jboolean CreateSharedRelro(JNIEnv* env,
   LOG_INFO("Called for %s", lib_name.c_str());
 
   if (!IsValidAddress(load_address)) {
-    LOG_ERROR("Invalid address 0x%llx", load_address);
+    LOG_ERROR("Invalid address 0x%llx",
+              static_cast<unsigned long long>(load_address));
     return false;
   }
 
@@ -451,11 +453,6 @@ bool LegacyLinkerJNIInit(JavaVM* vm, JNIEnv* env) {
   LOG_INFO("Retrieving SDK version info");
   if (!InitSDKVersionInfo(env))
     return false;
-
-// Disable debugger support when needed. See https://crbug.com/796938
-#if defined(LEGACY_LINKER_DISABLE_DEBUGGER_SUPPORT)
-  crazy_set_debugger_support(false);
-#endif
 
   // Register native methods.
   jclass linker_class;

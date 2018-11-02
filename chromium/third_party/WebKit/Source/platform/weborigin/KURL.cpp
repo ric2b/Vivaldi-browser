@@ -262,7 +262,7 @@ KURL::KURL(const KURL& other)
     inner_url_ = WTF::WrapUnique(new KURL(other.inner_url_->Copy()));
 }
 
-KURL::~KURL() {}
+KURL::~KURL() = default;
 
 KURL& KURL::operator=(const KURL& other) {
   is_valid_ = other.is_valid_;
@@ -625,16 +625,14 @@ void KURL::SetPath(const String& path) {
   ReplaceComponents(replacements);
 }
 
-String DecodeURLEscapeSequences(const String& string) {
-  return DecodeURLEscapeSequences(string, UTF8Encoding());
-}
-
 String DecodeURLEscapeSequences(const String& string,
-                                const WTF::TextEncoding& encoding) {
+                                DecodeURLResult* optional_result) {
   StringUTF8Adaptor string_utf8(string);
   url::RawCanonOutputT<base::char16> unescaped;
-  url::DecodeURLEscapeSequences(string_utf8.Data(), string_utf8.length(),
-                                &unescaped);
+  DecodeURLResult result = url::DecodeURLEscapeSequences(
+      string_utf8.Data(), string_utf8.length(), &unescaped);
+  if (optional_result)
+    *optional_result = result;
   return StringImpl::Create8BitIfPossible(
       reinterpret_cast<UChar*>(unescaped.data()), unescaped.length());
 }

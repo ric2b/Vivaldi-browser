@@ -46,9 +46,11 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/LinkedHashSet.h"
 #include "platform/wtf/Vector.h"
+#include "public/platform/WebResourceTimingInfo.h"
 
 namespace blink {
 
+class DoubleOrPerformanceMarkOptions;
 class ExceptionState;
 class PerformanceObserver;
 class PerformanceTiming;
@@ -56,7 +58,10 @@ class ResourceResponse;
 class ResourceTimingInfo;
 class SecurityOrigin;
 class UserTiming;
+class ScriptState;
+class ScriptValue;
 class SubTaskAttribution;
+class V8ObjectBuilder;
 
 using PerformanceEntryVector = HeapVector<Member<PerformanceEntry>>;
 
@@ -113,7 +118,21 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
       const String& culprit_frame_name,
       const SubTaskAttribution::EntriesVector& sub_task_attributions);
 
-  void AddResourceTiming(const ResourceTimingInfo&);
+  // Generates and add a performance entry for the given ResourceTimingInfo.
+  // |overridden_initiator_type| allows the initiator type to be overridden to
+  // the frame element name for the main resource.
+  void GenerateAndAddResourceTiming(
+      const ResourceTimingInfo&,
+      const AtomicString& overridden_initiator_type = g_null_atom);
+  // Generates timing info suitable for appending to the performance entries of
+  // a context with |origin|. This should be rarely used; most callsites should
+  // prefer the convenience method |GenerateAndAddResourceTiming()|.
+  static WebResourceTimingInfo GenerateResourceTiming(
+      const SecurityOrigin& destination_origin,
+      const ResourceTimingInfo&,
+      ExecutionContext& context_for_use_counter);
+  void AddResourceTiming(const WebResourceTimingInfo&,
+                         const AtomicString& initiator_type = g_null_atom);
 
   void NotifyNavigationTimingToObservers();
 
@@ -121,7 +140,13 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
   void AddFirstContentfulPaintTiming(double start_time);
 
-  void mark(const String& mark_name, ExceptionState&);
+  void mark(ScriptState*, const String& mark_name, ExceptionState&);
+
+  void mark(ScriptState*,
+            const String& mark_name,
+            DoubleOrPerformanceMarkOptions& start_time_or_mark_options,
+            ExceptionState&);
+
   void clearMarks(const String& mark_name);
 
   void measure(const String& measure_name,
@@ -187,6 +212,8 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
                                    const SecurityOrigin&,
                                    ExecutionContext*);
 
+  ScriptValue toJSONForBinding(ScriptState*) const;
+
   void Trace(blink::Visitor*) override;
   void TraceWrappers(const ScriptWrappableVisitor*) const override;
 
@@ -215,6 +242,8 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   bool HasObserverFor(PerformanceEntry::EntryType) const;
 
   void DeliverObservationsTimerFired(TimerBase*);
+
+  virtual void BuildJSONValue(V8ObjectBuilder&) const;
 
   PerformanceEntryVector frame_timing_buffer_;
   unsigned frame_timing_buffer_size_;

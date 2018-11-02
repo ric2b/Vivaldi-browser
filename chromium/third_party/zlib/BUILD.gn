@@ -2,19 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-import("//testing/libfuzzer/fuzzer_test.gni")
-
 if (current_cpu == "arm" || current_cpu == "arm64") {
   import("//build/config/arm.gni")
 }
 
 config("zlib_config") {
   include_dirs = [ "." ]
-  if (current_cpu == "arm" || current_cpu == "arm64") {
-    if (arm_use_neon) {
-      include_dirs += [ "contrib/optimizations/arm" ]
-    }
-  }
 }
 
 config("zlib_adler32_simd_config") {
@@ -58,18 +51,97 @@ source_set("zlib_adler32_simd") {
     }
   }
 
-  configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [ "//build/config/compiler:no_chromium_code" ]
-
   public_configs = [ ":zlib_adler32_simd_config" ]
 }
 
+config("zlib_inflate_chunk_simd_config") {
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    defines = [ "INFLATE_CHUNK_SIMD_SSE2" ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      defines = [ "INFLATE_CHUNK_SIMD_NEON" ]
+    }
+  }
+}
+
+source_set("zlib_inflate_chunk_simd") {
+  visibility = [ ":*" ]
+
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    include_dirs = [ "." ]
+
+    sources = [
+      "contrib/optimizations/chunkcopy.h",
+      "contrib/optimizations/inffast_chunk.c",
+      "contrib/optimizations/inffast_chunk.h",
+      "contrib/optimizations/inflate.c",
+    ]
+  }
+
+  if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (arm_use_neon) {
+      include_dirs = [ "." ]
+
+      sources = [
+        "contrib/optimizations/chunkcopy.h",
+        "contrib/optimizations/inffast_chunk.c",
+        "contrib/optimizations/inffast_chunk.h",
+        "contrib/optimizations/inflate.c",
+      ]
+
+      # TODO(772870) back off from -O3 while investigating Android
+      # One perf bot PNG decode regression.
+      # if (!is_debug) {
+      #  # Use optimize_speed (-O3) to output the _smallest_ code.
+      #  configs -= [ "//build/config/compiler:default_optimization" ]
+      #  configs += [ "//build/config/compiler:optimize_speed" ]
+      # }
+    }
+  }
+
+  configs -= [ "//build/config/compiler:chromium_code" ]
+  configs += [ "//build/config/compiler:no_chromium_code" ]
+
+  public_configs = [ ":zlib_inflate_chunk_simd_config" ]
+}
+
+config("zlib_crc32_simd_config") {
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    defines = [ "CRC32_SIMD_SSE42_PCLMUL" ]
+  }
+}
+
+source_set("zlib_crc32_simd") {
+  visibility = [ ":*" ]
+
+  if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources = [
+      "crc32_simd.c",
+      "crc32_simd.h",
+    ]
+
+    if (!is_win || is_clang) {
+      cflags = [
+        "-msse4.2",
+        "-mpclmul",
+      ]
+    }
+  }
+
+  public_configs = [ ":zlib_crc32_simd_config" ]
+}
+
 static_library("zlib_x86_simd") {
+  visibility = [ ":*" ]
+
   if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
     sources = [
       "crc_folding.c",
       "fill_window_sse.c",
     ]
+
     if (!is_win || is_clang) {
       cflags = [
         "-msse4.2",
@@ -129,31 +201,25 @@ static_library("zlib") {
     "zutil.h",
   ]
 
-  if (current_cpu == "arm" || current_cpu == "arm64") {
-    if (arm_use_neon) {
-      sources -= [ "inflate.c" ]
-      sources += [
-        "contrib/optimizations/arm/chunkcopy_arm.h",
-        "contrib/optimizations/chunkcopy.h",
-        "contrib/optimizations/inffast_chunky.c",
-        "contrib/optimizations/inffast_chunky.h",
-        "contrib/optimizations/inflate.c",
-      ]
-    }
-  }
-
   defines = []
   deps = []
 
   if (!is_ios && (current_cpu == "x86" || current_cpu == "x64")) {
-    sources += [ "x86.c" ]
+    deps += [ ":zlib_crc32_simd" ]
 
     deps += [ ":zlib_adler32_simd" ]
+    sources += [ "x86.c" ]
+
+    deps += [ ":zlib_inflate_chunk_simd" ]
+    sources -= [ "inflate.c" ]
   }
 
   if (current_cpu == "arm" || current_cpu == "arm64") {
     if (arm_use_neon) {
       deps += [ ":zlib_adler32_simd" ]
+
+      deps += [ ":zlib_inflate_chunk_simd" ]
+      sources -= [ "inflate.c" ]
     }
   }
 
@@ -168,42 +234,6 @@ static_library("zlib") {
   public_configs = [ ":zlib_config" ]
 
   deps += [ ":zlib_x86_simd" ]
-}
-
-fuzzer_test("zlib_uncompress_fuzzer") {
-  sources = [
-    "contrib/tests/fuzzers/uncompress_fuzzer.cc",
-  ]
-  deps = [
-    ":zlib",
-  ]
-}
-
-fuzzer_test("zlib_inflate_fuzzer") {
-  sources = [
-    "contrib/tests/fuzzers/inflate_fuzzer.cc",
-  ]
-  deps = [
-    ":zlib",
-  ]
-}
-
-fuzzer_test("zlib_deflate_set_dictionary_fuzzer") {
-  sources = [
-    "contrib/tests/fuzzers/deflate_set_dictionary_fuzzer.cc",
-  ]
-  deps = [
-    ":zlib",
-  ]
-}
-
-fuzzer_test("zlib_deflate_fuzzer") {
-  sources = [
-    "contrib/tests/fuzzers/deflate_fuzzer.cc",
-  ]
-  deps = [
-    ":zlib",
-  ]
 }
 
 config("minizip_warnings") {

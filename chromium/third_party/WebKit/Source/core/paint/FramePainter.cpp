@@ -43,7 +43,7 @@ void FramePainter::Paint(GraphicsContext& context,
       GetFrameView().Location(), GetFrameView().VisibleContentRect().Size());
   IntPoint content_offset =
       -GetFrameView().Location() + GetFrameView().ScrollOffsetInt();
-  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     auto content_cull_rect = rect;
     content_cull_rect.UpdateForScrollingContents(
@@ -72,9 +72,9 @@ void FramePainter::Paint(GraphicsContext& context,
       const auto* contents_state =
           frame_view_->TotalPropertyTreeStateForContents();
       DCHECK(contents_state);
-      scoped_paint_chunk_properties.emplace(context.GetPaintController(),
-                                            *contents_state,
-                                            *GetFrameView().GetLayoutView());
+      scoped_paint_chunk_properties.emplace(
+          context.GetPaintController(), *contents_state,
+          *GetFrameView().GetLayoutView(), DisplayItem::kUninitializedType);
     }
 
     TransformRecorder transform_recorder(
@@ -104,7 +104,8 @@ void FramePainter::Paint(GraphicsContext& context,
       scoped_paint_chunk_properties.emplace(
           context.GetPaintController(),
           GetFrameView().PreContentClipProperties(),
-          *GetFrameView().GetLayoutView());
+          *GetFrameView().GetLayoutView(),
+          DisplayItem::kScrollOverflowControls);
     }
 
     TransformRecorder transform_recorder(

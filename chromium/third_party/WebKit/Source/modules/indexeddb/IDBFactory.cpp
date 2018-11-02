@@ -35,6 +35,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/UseCounter.h"
 #include "modules/indexeddb/IDBDatabase.h"
 #include "modules/indexeddb/IDBDatabaseCallbacks.h"
 #include "modules/indexeddb/IDBKey.h"
@@ -43,6 +44,7 @@
 #include "platform/Histogram.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/TaskType.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/modules/indexeddb/WebIDBDatabaseCallbacks.h"
 #include "public/platform/modules/indexeddb/WebIDBFactory.h"
@@ -52,7 +54,7 @@ namespace blink {
 static const char kPermissionDeniedErrorMessage[] =
     "The user denied permission to access the database.";
 
-IDBFactory::IDBFactory() {}
+IDBFactory::IDBFactory() = default;
 
 static bool IsContextValid(ExecutionContext* context) {
   DCHECK(context->IsDocument() || context->IsWorkerGlobalScope());
@@ -67,7 +69,7 @@ IDBRequest* IDBFactory::GetDatabaseNames(ScriptState* script_state,
                                          ExceptionState& exception_state) {
   IDB_TRACE("IDBFactory::getDatabaseNamesRequestSetup");
   IDBRequest::AsyncTraceState metrics("IDBFactory::getDatabaseNames");
-  IDBRequest* request = IDBRequest::Create(script_state, IDBAny::CreateNull(),
+  IDBRequest* request = IDBRequest::Create(script_state, IDBRequest::Source(),
                                            nullptr, std::move(metrics));
   // TODO(jsbell): Used only by inspector; remove unneeded checks/exceptions?
   if (!IsContextValid(ExecutionContext::From(script_state)))
@@ -78,6 +80,11 @@ IDBRequest* IDBFactory::GetDatabaseNames(ScriptState* script_state,
     exception_state.ThrowSecurityError(
         "access to the Indexed Database API is denied in this context.");
     return nullptr;
+  }
+
+  if (ExecutionContext::From(script_state)->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(ExecutionContext::From(script_state),
+                      WebFeature::kFileAccessedDatabase);
   }
 
   if (!IndexedDBClient::From(ExecutionContext::From(script_state))
@@ -91,7 +98,9 @@ IDBRequest* IDBFactory::GetDatabaseNames(ScriptState* script_state,
   Platform::Current()->IdbFactory()->GetDatabaseNames(
       request->CreateWebCallbacks().release(),
       WebSecurityOrigin(
-          ExecutionContext::From(script_state)->GetSecurityOrigin()));
+          ExecutionContext::From(script_state)->GetSecurityOrigin()),
+      ExecutionContext::From(script_state)
+          ->GetTaskRunner(TaskType::kInternalIndexedDB));
   return request;
 }
 
@@ -124,6 +133,11 @@ IDBOpenDBRequest* IDBFactory::OpenInternal(ScriptState* script_state,
     return nullptr;
   }
 
+  if (ExecutionContext::From(script_state)->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(ExecutionContext::From(script_state),
+                      WebFeature::kFileAccessedDatabase);
+  }
+
   IDBDatabaseCallbacks* database_callbacks = IDBDatabaseCallbacks::Create();
   int64_t transaction_id = IDBDatabase::NextTransactionId();
   IDBOpenDBRequest* request =
@@ -141,7 +155,9 @@ IDBOpenDBRequest* IDBFactory::OpenInternal(ScriptState* script_state,
       name, version, transaction_id, request->CreateWebCallbacks().release(),
       database_callbacks->CreateWebCallbacks().release(),
       WebSecurityOrigin(
-          ExecutionContext::From(script_state)->GetSecurityOrigin()));
+          ExecutionContext::From(script_state)->GetSecurityOrigin()),
+      ExecutionContext::From(script_state)
+          ->GetTaskRunner(TaskType::kInternalIndexedDB));
   return request;
 }
 
@@ -186,6 +202,11 @@ IDBOpenDBRequest* IDBFactory::DeleteDatabaseInternal(
     return nullptr;
   }
 
+  if (ExecutionContext::From(script_state)->GetSecurityOrigin()->IsLocal()) {
+    UseCounter::Count(ExecutionContext::From(script_state),
+                      WebFeature::kFileAccessedDatabase);
+  }
+
   IDBOpenDBRequest* request = IDBOpenDBRequest::Create(
       script_state, nullptr, 0, IDBDatabaseMetadata::kDefaultVersion,
       std::move(metrics));
@@ -201,7 +222,9 @@ IDBOpenDBRequest* IDBFactory::DeleteDatabaseInternal(
       name, request->CreateWebCallbacks().release(),
       WebSecurityOrigin(
           ExecutionContext::From(script_state)->GetSecurityOrigin()),
-      force_close);
+      force_close,
+      ExecutionContext::From(script_state)
+          ->GetTaskRunner(TaskType::kInternalIndexedDB));
   return request;
 }
 
@@ -209,8 +232,9 @@ short IDBFactory::cmp(ScriptState* script_state,
                       const ScriptValue& first_value,
                       const ScriptValue& second_value,
                       ExceptionState& exception_state) {
-  IDBKey* first = ScriptValue::To<IDBKey*>(script_state->GetIsolate(),
-                                           first_value, exception_state);
+  const std::unique_ptr<IDBKey> first =
+      ScriptValue::To<std::unique_ptr<IDBKey>>(script_state->GetIsolate(),
+                                               first_value, exception_state);
   if (exception_state.HadException())
     return 0;
   DCHECK(first);
@@ -220,8 +244,9 @@ short IDBFactory::cmp(ScriptState* script_state,
     return 0;
   }
 
-  IDBKey* second = ScriptValue::To<IDBKey*>(script_state->GetIsolate(),
-                                            second_value, exception_state);
+  const std::unique_ptr<IDBKey> second =
+      ScriptValue::To<std::unique_ptr<IDBKey>>(script_state->GetIsolate(),
+                                               second_value, exception_state);
   if (exception_state.HadException())
     return 0;
   DCHECK(second);
@@ -231,7 +256,7 @@ short IDBFactory::cmp(ScriptState* script_state,
     return 0;
   }
 
-  return static_cast<short>(first->Compare(second));
+  return static_cast<short>(first->Compare(second.get()));
 }
 
 }  // namespace blink

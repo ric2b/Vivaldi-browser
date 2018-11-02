@@ -30,5 +30,11 @@ chrome.automation.StateType = {
 };
 
 chrome.metricsPrivate = {
-  recordUserAction: function() {}
+  recordUserAction: function() {},
+  recordValue: function() {},
+  MetricTypeType: {HISTOGRAM_LINEAR: 1}
+};
+
+chrome.commandLinePrivate = {
+  hasSwitch: function() {}
 };

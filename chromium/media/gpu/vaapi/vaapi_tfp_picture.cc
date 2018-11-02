@@ -4,8 +4,8 @@
 
 #include "media/gpu/vaapi/vaapi_tfp_picture.h"
 
-#include "media/gpu/va_surface.h"
-#include "media/gpu/vaapi_wrapper.h"
+#include "media/gpu/vaapi/va_surface.h"
+#include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_image_glx.h"
@@ -20,14 +20,16 @@ VaapiTFPPicture::VaapiTFPPicture(
     int32_t picture_buffer_id,
     const gfx::Size& size,
     uint32_t texture_id,
-    uint32_t client_texture_id)
+    uint32_t client_texture_id,
+    uint32_t texture_target)
     : VaapiPicture(vaapi_wrapper,
                    make_context_current_cb,
                    bind_image_cb,
                    picture_buffer_id,
                    size,
                    texture_id,
-                   client_texture_id),
+                   client_texture_id,
+                   texture_target),
       x_display_(gfx::GetXDisplay()),
       x_pixmap_(0) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -36,7 +38,7 @@ VaapiTFPPicture::VaapiTFPPicture(
 VaapiTFPPicture::~VaapiTFPPicture() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (glx_image_.get() && make_context_current_cb_.Run()) {
-    glx_image_->ReleaseTexImage(GL_TEXTURE_2D);
+    glx_image_->ReleaseTexImage(texture_target_);
     DCHECK_EQ(glGetError(), static_cast<GLenum>(GL_NO_ERROR));
   }
 
@@ -59,8 +61,8 @@ bool VaapiTFPPicture::Initialize() {
       return false;
     }
 
-    gl::ScopedTextureBinder texture_binder(GL_TEXTURE_2D, texture_id_);
-    if (!glx_image_->BindTexImage(GL_TEXTURE_2D)) {
+    gl::ScopedTextureBinder texture_binder(texture_target_, texture_id_);
+    if (!glx_image_->BindTexImage(texture_target_)) {
       DLOG(ERROR) << "Failed to bind texture to glx image";
       return false;
     }
@@ -72,7 +74,8 @@ bool VaapiTFPPicture::Initialize() {
 bool VaapiTFPPicture::Allocate(gfx::BufferFormat format) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (format != gfx::BufferFormat::BGRX_8888 &&
-      format != gfx::BufferFormat::BGRA_8888) {
+      format != gfx::BufferFormat::BGRA_8888 &&
+      format != gfx::BufferFormat::RGBX_8888) {
     DLOG(ERROR) << "Unsupported format";
     return false;
   }

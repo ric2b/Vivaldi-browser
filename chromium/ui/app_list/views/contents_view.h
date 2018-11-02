@@ -8,8 +8,10 @@
 #include <map>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "ash/app_list/model/app_list_model.h"
+#include "ash/app_list/model/search/search_model.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/app_list/app_list_export.h"
@@ -140,7 +142,6 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
-  bool OnKeyPressed(const ui::KeyEvent& event) override;
   const char* GetClassName() const override;
 
   // Overridden from PaginationModelObserver:
@@ -155,6 +156,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Starts the fade out animation when the app list is closed.
   void FadeOutOnClose(base::TimeDelta animation_duration);
+
+  // Starts the fade in animation when the app list is opened.
+  void FadeInOnOpen(base::TimeDelta animation_duration);
 
   // Returns selected view in active page.
   views::View* GetSelectedView() const;

@@ -7,6 +7,7 @@
 #include <map>
 #include <utility>
 
+#include "base/strings/string_util.h"
 #include "base/values.h"
 #include "third_party/libxml/chromium/libxml_utils.h"
 
@@ -22,6 +23,23 @@ void ReportError(XmlParser::ParseCallback callback, const std::string& error) {
 }
 
 enum class TextNodeType { kText, kCData };
+
+// Returns false if the current node in |xml_reader| is not text or CData.
+// Otherwise returns true and sets |text| to the text/CData of the current node
+// and |node_type| to kText or kCData.
+bool GetTextFromNode(XmlReader* xml_reader,
+                     std::string* text,
+                     TextNodeType* node_type) {
+  if (xml_reader->GetTextIfTextElement(text)) {
+    *node_type = TextNodeType::kText;
+    return true;
+  }
+  if (xml_reader->GetTextIfCDataElement(text)) {
+    *node_type = TextNodeType::kCData;
+    return true;
+  }
+  return false;
+}
 
 base::Value CreateTextNode(const std::string& text, TextNodeType node_type) {
   base::Value element(base::Value::Type::DICTIONARY);
@@ -101,9 +119,6 @@ void XmlParser::Parse(const std::string& xml, ParseCallback callback) {
   base::Value root_element;
   std::vector<base::Value*> element_stack;
   while (xml_reader.Read()) {
-    if (xml_reader.IsWhiteSpace() || xml_reader.IsComment())
-      continue;
-
     if (xml_reader.IsClosingElement()) {
       if (element_stack.empty()) {
         ReportError(std::move(callback), "Invalid XML: unbalanced elements");
@@ -113,24 +128,29 @@ void XmlParser::Parse(const std::string& xml, ParseCallback callback) {
       continue;
     }
 
-    std::string cdata;
     std::string text;
+    TextNodeType text_node_type = TextNodeType::kText;
     base::Value* current_element =
         element_stack.empty() ? nullptr : element_stack.back();
     bool push_new_node_to_stack = false;
     base::Value new_element;
-    if (xml_reader.GetTextIfTextElement(&text)) {
-      new_element = CreateTextNode(text, TextNodeType::kText);
-    } else if (xml_reader.GetTextIfCDataElement(&text)) {
-      new_element = CreateTextNode(text, TextNodeType::kCData);
-    } else {
-      // Element node.
+    if (GetTextFromNode(&xml_reader, &text, &text_node_type)) {
+      if (!base::IsStringUTF8(text)) {
+        ReportError(std::move(callback), "Invalid XML: invalid UTF8 text.");
+        return;
+      }
+      new_element = CreateTextNode(text, text_node_type);
+    } else if (xml_reader.IsElement()) {
       new_element = CreateNewElement(xml_reader.NodeFullName());
       PopulateNamespaces(&new_element, &xml_reader);
       PopulateAttributes(&new_element, &xml_reader);
       // Self-closing (empty) element have no close tag (or children); don't
       // push them on the element stack.
       push_new_node_to_stack = !xml_reader.IsEmptyElement();
+    } else {
+      // Ignore all other node types (spaces, comments, processing instructions,
+      // DTDs...).
+      continue;
     }
 
     base::Value* new_element_ptr;
@@ -139,6 +159,7 @@ void XmlParser::Parse(const std::string& xml, ParseCallback callback) {
           AddChildToElement(current_element, std::move(new_element));
     } else {
       // First element we are parsing, it becomes the root element.
+      DCHECK(xml_reader.IsElement());
       DCHECK(root_element.is_none());
       root_element = std::move(new_element);
       new_element_ptr = &root_element;

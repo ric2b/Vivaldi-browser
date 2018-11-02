@@ -28,7 +28,6 @@
 #include "content/common/content_switches_internal.h"
 #include "content/common/frame_owner_properties.h"
 #include "content/common/input_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "third_party/WebKit/common/frame_policy.h"
 
 namespace content {
@@ -431,6 +430,10 @@ void FrameTree::UpdateLoadProgress() {
     case ProgressBarCompletion::RESOURCES_BEFORE_DCL:
       if (root_->has_started_loading())
         progress = root_->loading_progress();
+      // Vivaldi addition:
+      loaded_bytes = root_->loaded_bytes();
+      total_elements = root_->total_elements();
+      loaded_elements = root_->loaded_elements();
       break;
     case ProgressBarCompletion::LOAD_EVENT:
       for (FrameTreeNode* node : Nodes()) {

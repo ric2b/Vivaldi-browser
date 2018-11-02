@@ -31,7 +31,6 @@ using testing::AnyNumber;
 using testing::Invoke;
 using testing::Return;
 
-using base::trace_event::GlobalMemoryDumpRequestArgs;
 using base::trace_event::MemoryAllocatorDump;
 using base::trace_event::MemoryDumpArgs;
 using base::trace_event::MemoryDumpLevelOfDetail;
@@ -116,15 +115,20 @@ class MockCoordinator : public Coordinator, public mojom::Coordinator {
   void RegisterClientProcess(mojom::ClientProcessPtr,
                              mojom::ProcessType) override {}
 
-  void RequestGlobalMemoryDump(const GlobalMemoryDumpRequestArgs& args,
-                               const RequestGlobalMemoryDumpCallback&) override;
+  void RequestGlobalMemoryDump(
+      MemoryDumpType dump_type,
+      MemoryDumpLevelOfDetail level_of_detail,
+      const std::vector<std::string>& allocator_dump_names,
+      const RequestGlobalMemoryDumpCallback&) override;
+
+  void RequestGlobalMemoryDumpForPid(
+      base::ProcessId pid,
+      const RequestGlobalMemoryDumpForPidCallback&) override {}
 
   void RequestGlobalMemoryDumpAndAppendToTrace(
-      const GlobalMemoryDumpRequestArgs& args,
+      MemoryDumpType dump_type,
+      MemoryDumpLevelOfDetail level_of_detail,
       const RequestGlobalMemoryDumpAndAppendToTraceCallback&) override;
-
-  void GetVmRegionsForHeapProfiler(
-      const GetVmRegionsForHeapProfilerCallback&) override {}
 
  private:
   mojo::BindingSet<mojom::Coordinator> bindings_;
@@ -240,16 +244,19 @@ class MemoryTracingIntegrationTest : public testing::Test {
 };
 
 void MockCoordinator::RequestGlobalMemoryDump(
-    const GlobalMemoryDumpRequestArgs& args,
+    MemoryDumpType dump_type,
+    MemoryDumpLevelOfDetail level_of_detail,
+    const std::vector<std::string>& allocator_dump_names,
     const RequestGlobalMemoryDumpCallback& callback) {
-  client_->RequestChromeDump(args.dump_type, args.level_of_detail);
+  client_->RequestChromeDump(dump_type, level_of_detail);
   callback.Run(true, mojom::GlobalMemoryDumpPtr());
 }
 
 void MockCoordinator::RequestGlobalMemoryDumpAndAppendToTrace(
-    const GlobalMemoryDumpRequestArgs& args,
+    MemoryDumpType dump_type,
+    MemoryDumpLevelOfDetail level_of_detail,
     const RequestGlobalMemoryDumpAndAppendToTraceCallback& callback) {
-  client_->RequestChromeDump(args.dump_type, args.level_of_detail);
+  client_->RequestChromeDump(dump_type, level_of_detail);
   callback.Run(1, true);
 }
 

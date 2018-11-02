@@ -223,6 +223,12 @@ void CalendarBackend::CreateCalendarEvents(
 void CalendarBackend::CreateCalendarEvent(
     EventRow ev,
     std::shared_ptr<CreateEventResult> result) {
+  if (!db_->DoesCalendarIdExist(ev.calendar_id())) {
+    result->success = false;
+    result->message = "Calendar does not exist.";
+    return;
+  }
+
   EventID id = db_->CreateCalendarEvent(ev);
 
   if (id) {
@@ -390,7 +396,7 @@ void CalendarBackend::CreateCalendar(
   CalendarID id = db_->CreateCalendar(calendar);
 
   if (id) {
-    calendar.set_id(base::Int64ToString(id));
+    calendar.set_id(id);
     result->success = true;
     result->createdRow = calendar;
     NotifyCalendarCreated(calendar);

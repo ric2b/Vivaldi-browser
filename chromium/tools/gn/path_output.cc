@@ -151,8 +151,8 @@ void PathOutput::WritePathStr(std::ostream& out,
                               const base::StringPiece& str) const {
   DCHECK(str.size() > 0 && str[0] == '/');
 
-  if (str.substr(0, current_dir_.value().size()) ==
-      base::StringPiece(current_dir_.value())) {
+  if (str.substr(0, current_dir_.actual_path().size()) ==
+      base::StringPiece(current_dir_.actual_path())) {
     // The current dir is a prefix of the output file, so we can strip the
     // prefix and write out the result.
     EscapeStringToStream(out, str.substr(current_dir_.actual_path().size()),

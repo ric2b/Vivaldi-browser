@@ -18,6 +18,8 @@ extern const char kVivaldiUpdateURL[];
 #if defined(COMPONENT_BUILD)
 extern const char kLaunchUpdater[];
 #endif
+extern const char kTestAlreadyRunningDialog[];
+
 }  // namespace switches
 
 #endif  // BASE_VIVALDI_SWITCHES_H_

@@ -46,39 +46,6 @@
 
       Il valore della norma deve essere specificato in millisecondi.</translation>
 <translation id="1151353063931113432">Consenti immagini su questi siti</translation>
-<translation id="1151545095291359187">Consente di configurare le impostazioni di gestione delle estensioni di <ph name="PRODUCT_NAME" />.
-
-          Questa norma consente di controllare diverse impostazioni, incluse quelle controllate da norme esistenti correlate alle estensioni. Questa norma sostituisce qualsiasi norma precedente se vengono impostate entrambe.
-
-          Questa norma consente di associare un ID estensione o un URL di aggiornamento alla relativa configurazione. Con un ID estensione, la configurazione viene applicata solo all'estensione specificata. È possibile impostare una configurazione predefinita per l'ID speciale <ph name="DEFAULT_SCOPE" />, che verrà applicato a tutte le estensioni per cui non è impostata una configurazione personalizzata in questa norma. Con un URL di aggiornamento, la configurazione verrà applicata a tutte le estensioni con l'esatto URL di aggiornamento indicato nel file manifest dell'estensione, come descritto all'indirizzo <ph name="LINK_TO_EXTENSION_DOC1" />.
-
-          La configurazione relativa a ogni estensione (o per estensioni con lo stesso URL di aggiornamento) è un altro dizionario che può contenere i campi documentati di seguito.
-
-          <ph name="INSTALLATION_MODE" />: corrisponde a una stringa che indica la modalità di installazione dell'estensione. Le stringhe valide sono:
-          * <ph name="ALLOWED" />: consente l'installazione dell'estensione da parte dell'utente. È il comportamento predefinito.
-          * <ph name="BLOCKED" />: consente di bloccare l'installazione dell'estensione.
-          * <ph name="FORCE_INSTALLED" />: l'estensione viene installata automaticamente e non può essere rimossa dall'utente.
-          * <ph name="NORMAL_INSTALLED" />: l'estensione viene installata automaticamente, ma può essere disattivata dall'utente.
-
-          È anche possibile configurare il valore <ph name="INSTALLATION_MODE" /> per più estensioni, incluse l'estensione <ph name="DEFAULT_SCOPE" /> (come impostazione predefinita) e le estensioni con lo stesso URL di aggiornamento. In questo caso è possibile usare solo i valori <ph name="ALLOWED" /> e <ph name="BLOCKED" />.
-
-          Se viene impostata la modalità <ph name="FORCE_INSTALLED" /> o <ph name="NORMAL_INSTALLED" />, è necessario configurare anche un valore <ph name="UPDATE_URL" />. Tieni presente che l'URL di aggiornamento impostato in questa norma viene utilizzato solo per l'installazione iniziale. Per i successivi aggiornamenti dell'estensione verrà utilizzato l'URL di aggiornamento indicato nel file manifest dell'estensione. L'URL di aggiornamento dovrebbe rimandare a un documento XML Manifest di aggiornamento come descritto in precedenza.
-
-          <ph name="BLOCKED_PERMISSIONS" />: corrisponde a un elenco di stringhe che indicano le autorizzazioni API bloccate per l'estensione. I nomi delle autorizzazioni corrispondono alle stringhe di autorizzazione indicate nel file manifest dell'estensione, come descritto all'indirizzo <ph name="LINK_TO_EXTENSION_DOC3" />. Questa impostazione può essere configurata anche per l'estensione <ph name="DEFAULT_SCOPE" />. Se per l'estensione è necessaria un'autorizzazione che è presente nell'elenco di quelle bloccate, non potrà essere caricata. Se contiene un'autorizzazione bloccata come requisito opzionale, verrà trattata normalmente, ma la richiesta di autorizzazioni in conflitto verrà respinta automaticamente in fase di runtime.
-
-          <ph name="ALLOWED_PERMISSIONS" />: simile a <ph name="BLOCKED_PERMISSIONS" /> ma, al contrario, consente esplicitamente alcune autorizzazioni che potrebbero essere bloccate da un elenco globale di autorizzazioni bloccate e che quindi non possono essere configurate per l'estensione <ph name="DEFAULT_SCOPE" />. Questa impostazione non assegna automaticamente le autorizzazioni concesse alle estensioni.
-
-          <ph name="MINIMUM_VERSION_REQUIRED" />: corrisponde a una stringa della versione. Il formato della stringa della versione corrisponde a quello utilizzato nel file manifest dell'estensione, come descritto all'indirizzo <ph name="LINK_TO_EXTENSION_DOC4" />. Un'estensione con una versione precedente rispetto alla versione minima specificata viene disattivata. Ciò vale anche per le estensioni con installazione imposta.
-
-          Le seguenti impostazioni possono essere utilizzate solo per la configurazione <ph name="DEFAULT_SCOPE" /> predefinita:
-
-          <ph name="INSTALL_SOURCES" />: ogni voce presente in questo elenco è uno schema di corrispondenza in stile di estensione (<ph name="LINK_TO_MATCH_PATTERNS" />). Gli utenti potranno installare facilmente elementi da qualsiasi URL corrispondente a una voce nell'elenco. Questi schemi devono consentire sia la posizione del file <ph name="EXTENSION_SUFFIX_WILDCARD" /> sia la pagina da cui viene avviato il download (il referrer).
-
-          <ph name="ALLOWED_TYPES" />: questa impostazione consente di autorizzare i tipi consentiti di estensioni e app che è possibile installare in <ph name="PRODUCT_NAME" />. Il valore è un elenco di stringhe, tra le seguenti: <ph name="VALID_ALLOWED_TYPES" />. Leggi la documentazione relativa alle estensioni di <ph name="PRODUCT_NAME" /> per avere ulteriori informazioni su questi tipi.
-          <ph name="BLOCKED_INSTALL_MESSAGE" />: se un utente prova a installare un'estensione, ma questa viene bloccata da una norma, nel Chrome Web Store viene mostrato un messaggio di errore generico. Questa impostazione ti consente di aggiungere testo al messaggio di errore. In questo modo puoi indirizzare gli utenti al tuo Centro assistenza, spiegare perché una determinata estensione è bloccata o altro ancora. Il messaggio di errore viene troncato se supera i 1000 caratteri.
-          <ph name="RUNTIME_BLOCKED_HOSTS" />: consente di accettare un elenco di host con cui un'estensione non potrà interagire. Sono inclusi l'inserimento di JavaScript, l'alterazione e la visualizzazione di webRequest/webNavigation, la visualizzazione e l'alterazione di cookie. Il formato è simile agli schemi di corrispondenza <ph name="LINK_TO_MATCH_PATTERNS" />, ma potrebbe non essere possibile definire dei percorsi, ad esempio "*://*.example.com". È inoltre supportato l'inserimento efficace di caratteri jolly TLD come "*://example.*".
-          <ph name="RUNTIME_ALLOWED_HOSTS" />: consente di accettare un elenco di host con cui un'estensione può interagire, che siano elencati o meno in <ph name="RUNTIME_BLOCKED_HOSTS" />. Il formato corrisponde a quello di <ph name="RUNTIME_BLOCKED_HOSTS" />.
-          </translation>
 <translation id="1152117524387175066">Consente di indicare lo stato dello switch dev del dispositivo all'avvio. Se la norma viene impostata su False, lo stato dello switch dev non viene indicato.</translation>
 <translation id="1160939557934457296">Disattiva procedendo dalla pagina di avviso Navigazione sicura</translation>
 <translation id="1166377463685560145">Consente di specificare le stampanti non utilizzabili dagli utenti.
@@ -176,6 +143,7 @@ Se la norma non viene impostata, la modalità ad alto contrasto viene disattivat
 
           Per esempi più dettagliati, visita il seguente indirizzo:
           <ph name="PROXY_HELP_URL" />.</translation>
+<translation id="1503487916067509762">Attiva blocco inserimento da software di terze parti</translation>
 <translation id="1504431521196476721">Attestazione da remoto</translation>
 <translation id="1509692106376861764">Questa norma non è più supportata a partire dalla versione 29 di <ph name="PRODUCT_NAME" />.</translation>
 <translation id="1522425503138261032">Consenti ai siti di monitorare la posizione fisica degli utenti</translation>
@@ -280,6 +248,7 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="1969212217917526199">Sostituisce le build di debug dell'host di accesso remoto.
 
           Il valore viene analizzato come un dizionario JSON di associazioni tra nomi e valori di norme.</translation>
+<translation id="1969808853498848952">Esegue sempre i plug-in che richiedono l'autorizzazione (ritirata)</translation>
 <translation id="1988371335297483117">I payload di aggiornamento automatico su <ph name="PRODUCT_OS_NAME" /> possono essere scaricati tramite HTTP anziché tramite HTTPS. Ciò consente la memorizzazione nella cache HTTP trasparente dei download HTTP.
 
       Se questa norma viene impostata su true, <ph name="PRODUCT_OS_NAME" /> tenterà di scaricare payload di aggiornamento automatico tramite HTTP. Se la norma viene impostata su false o non viene impostata, per il download di payload di aggiornamento automatico verrà utilizzato HTTPS.</translation>
@@ -473,6 +442,9 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="2466131534462628618">L'autenticazione tramite captive portal ignora il proxy</translation>
 <translation id="2482676533225429905">Messaggi nativi</translation>
 <translation id="2483146640187052324">Prevedi le azioni di rete su qualsiasi connessione di rete</translation>
+<translation id="2485721741875148980">Se la norma viene impostata su true, l'utente deve accedere a <ph name="PRODUCT_NAME" /> con il proprio profilo prima di utilizzare il browser e il valore predefinito di BrowserGuestModeEnabled viene impostato su false. Tieni presente che i profili non firmati esistenti saranno bloccati e inaccessibili dopo l'attivazione di questa norma. Per ulteriori informazioni, consulta l'articolo del Centro assistenza.
+
+      Se la norma viene impostata su false o non viene configurata, l'utente può utilizzare il browser senza accedere a <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2486371469462493753">Disattiva l'imposizione dei requisiti di Certificate Transparency per gli URL elencati.
 
       Questa norma consente ai certificati per i nomi host negli URL specificati di non essere resi pubblici tramite Certificate Transparency. Consente ai certificati che altimenti sarebbero considerati inattendibili, in quanto non appropriatamente resi pubblici, di continuare a essere utilizzati. Tuttavia, la norma rende più difficile il rilevamento di certificati emessi in modo scorretto per questi host.
@@ -631,6 +603,12 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 Questa norma è facoltativa. Se non viene impostata, non verrà effettuata alcuna sostituzione dei termini di ricerca.
 
 Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearchProviderEnabled".</translation>
+<translation id="306887062252197004">Questa norma consente agli utenti della funzione WebDriver di eseguire l'override delle norme che possono interferire con il relativo funzionamento.
+
+      Al momento questa norma disattiva le norme SitePerProcess e IsolateOrigins.
+
+      Se la norma viene attivata, WebDriver potrà eseguire l'override delle norme non compatibili.
+      Se la norma viene disattivata o non viene configurata, WebDriver non potrà eseguire l'override delle norme non compatibili.</translation>
 <translation id="3069958900488014740">Consente di disattivare l'ottimizzazione WPAD (Web Proxy Auto-Discovery) in <ph name="PRODUCT_NAME" />.
 
       Se questa norma è impostata su false, l'ottimizzazione WPAD viene disattivata, aumentando così i tempi di attesa da parte di <ph name="PRODUCT_NAME" /> dei server WPAD basati su DNS. Se questa norma non è impostata oppure se è attiva, l'ottimizzazione WPAD è abilitata.
@@ -764,6 +742,7 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
 <translation id="3512226956150568738">Se il modello del dispositivo client supportava già ARC prima che fosse necessaria la migrazione a ext4 per eseguire ARC e se la norma ArcEnabled è impostata su true, questa opzione si comporterà come AskUser (valore 3). In tutti gli altri casi (se il modello del dispositivo non supportava ARC in precedenza o se la norma ArcEnabled è impostata su false), questo valore equivale a DisallowArc (valore 0).</translation>
 <translation id="3528000905991875314">Attiva pagine di errore sostitutive</translation>
 <translation id="3547954654003013442">Impostazioni proxy</translation>
+<translation id="3577251398714997599">Impostazione annunci per i siti con annunci invasivi</translation>
 <translation id="3591584750136265240">Configura il comportamento di autenticazione dell'accesso</translation>
 <translation id="3627678165642179114">Attiva o disattiva il servizio web di controllo ortografico</translation>
 <translation id="3646859102161347133">Impostazione tipo di ingrandimento dello schermo</translation>
@@ -776,7 +755,15 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
       Visita il sito https://developers.google.com/safe-browsing per avere ulteriori informazioni sulla funzione Navigazione sicura.</translation>
 <translation id="3709266154059827597">Configura blacklist per l'installazione delle estensioni</translation>
 <translation id="3711895659073496551">Sospensione</translation>
+<translation id="3732106275571017176">Questa impostazione consente agli utenti di passare da un account Google a un altro all'interno dell'area dei contenuti della finestra del browser dopo avere eseguito l'accesso al dispositivo <ph name="PRODUCT_OS_NAME" />.
+
+      Se questa norma viene impostata su false, l'accesso a un altro account dall'area dei contenuti del browser in modalità diversa da quella di navigazione in incognito non sarà consentito.
+
+      Se questa norma non viene impostata o viene impostata su true, verrà usato il comportamento predefinito: sarà possibile accedere a un altro account dall'area dei contenuti del browser, ma non agli account di minori, per i quali tale accesso non sarà consentito dall'area dei contenuti in modalità diversa da quella di navigazione in incognito.
+
+      Qualora l'accesso a un altro account non debba essere consentito tramite la modalità di navigazione in incognito, potresti bloccare tale modalità usando la norma IncognitoModeAvailability.</translation>
 <translation id="3736879847913515635">Attiva la funzione Aggiungi persona in Gestione utenti</translation>
+<translation id="3737544779868348650">Nome host della rete del dispositivo</translation>
 <translation id="3750220015372671395">Blocca la generazione di chiavi su questi siti</translation>
 <translation id="3756011779061588474">Blocca modalità sviluppatore</translation>
 <translation id="3758089716224084329">Consente di specificare il server proxy utilizzato da <ph name="PRODUCT_NAME" /> e impedisce agli utenti di modificare le impostazioni proxy.
@@ -793,6 +780,7 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
       Se queste norme non vengono impostate, gli utenti possono scegliere autonomamente le impostazioni del proxy.</translation>
 <translation id="3758249152301468420">Disabilita Strumenti per sviluppatori</translation>
 <translation id="3765260570442823273">Durata del messaggio di avviso di uscita per inattività</translation>
+<translation id="377044054160169374">Applicazione dell'intervento in caso di esperienza intrusiva</translation>
 <translation id="3780152581321609624">Includi porta non standard in Kerberos SPN</translation>
 <translation id="3780319008680229708">Se il criterio è impostato su true, l'icona Cast della barra degli strumenti sarà sempre visibile nella barra degli strumenti o nel menu extra e gli utenti non potranno rimuoverla.
 
@@ -815,6 +803,7 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
       Se la norma non viene impostata, viene utilizzata la directory di download predefinita e l'utente può modificarla.</translation>
 <translation id="3805659594028420438">Attiva estensione di certificati associati al dominio TLS (obsoleta)</translation>
 <translation id="3808945828600697669">Specifica un elenco dei plug-in disattivati</translation>
+<translation id="3811562426301733860">Consenti annunci su tutti i siti</translation>
 <translation id="3816312845600780067">Attivazione scorciatoia da tastiera bailout per accesso automatico</translation>
 <translation id="3820526221169548563">Attiva la funzione di accessibilità della tastiera sullo schermo.
 
@@ -929,6 +918,11 @@ Se questa norma non viene impostata, viene utilizzato un periodo di tempo predef
 
 Il valore della norma deve essere specificato in millisecondi.</translation>
 <translation id="4105989332710272578">Disattiva l'imposizione di Certificate Transparency per un elenco di URL</translation>
+<translation id="4111405663956464686">Attenzione: la norma Versione TLS massima verrà interamente rimossa da <ph name="PRODUCT_NAME" /> con la versione 72 (orientativamente gennaio 2019).
+
+      Se questa norma non viene configurata, <ph name="PRODUCT_NAME" /> utilizza la versione massima predefinita.
+
+      . In caso contrario, potrebbe essere impostato uno dei seguenti valori: "tls1.2" o "tls1.3". Se questa norma viene impostata, <ph name="PRODUCT_NAME" /> non utilizzerà versioni SSL/TLS successive a quella specificata. I valori non riconosciuti verranno ignorati.</translation>
 <translation id="4121350739760194865">Impedisci la visualizzazione delle promozioni di applicazioni nella pagina Nuova scheda</translation>
 <translation id="4157003184375321727">Indica versione sistema operativo e firmware</translation>
 <translation id="4183229833636799228">Impostazione predefinita per il plug-in <ph name="FLASH_PLUGIN_NAME" /></translation>
@@ -987,6 +981,12 @@ Avviso. Non è consigliabile configurare restrizioni alle versioni, poiché potr
 <translation id="4320376026953250541">Microsoft Windows XP SP2 o versione successiva</translation>
 <translation id="4322842393287974810">Consenti all'app kiosk avviata automaticamente senza ritardo di controllare la versione di <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Aggiungi un pulsante di uscita all'area di notifica</translation>
+<translation id="4346674324214534449">Consente di stabilire se bloccare o meno gli annunci su siti con annunci invasivi.
+
+      Se questa norma viene impostata su 2, gli annunci verranno bloccati sui siti con annunci invasivi.
+      Questo comportamento non verrà però attivato se la norma SafeBrowsingEnabled viene impostata su False.
+      Se questa norma viene impostata su 1, gli annunci non verranno bloccati sui siti con annunci invasivi.
+      Se questa norma non viene impostata, verrà usato il valore 2.</translation>
 <translation id="4347908978527632940">Se la norma viene impostata su true e l'utente è supervisionato, le altre app Android possono chiedere le restrizioni web dell'utente tramite un provider di contenuti.
 
           Se la norma è impostata su false o non è impostata, il provider di contenuti non restituisce informazioni.</translation>
@@ -1038,10 +1038,19 @@ Se questa norma non viene impostata, l'impostazione verrà attivata ma gli utent
 <translation id="4531706050939927436">L'installazione di app Android può essere imposta dalla Console d'amministrazione Google tramite Google Play. Questa norma non viene utilizzata.</translation>
 <translation id="4534500438517478692">Nome della limitazione di Android:</translation>
 <translation id="4541530620466526913">Account del dispositivo</translation>
+<translation id="4544079461524242527">Configura le impostazioni di gestione delle estensioni per <ph name="PRODUCT_NAME" />.
+
+          Questa norma controlla più impostazioni, tra cui quelle controllate da norme correlate alle estensioni già presenti. Questa norma sostituisce tutte le norme precedenti se vengono impostate entrambe.
+
+          Questa norma consente di mappare un ID estensione o un URL di aggiornamento alla relativa configurazione. Con un ID estensione, la configurazione viene applicata solo all'estensione specificata. È possibile impostare una configurazione predefinita per l'ID speciale <ph name="DEFAULT_SCOPE" />, che verrà applicato a tutte le estensioni per cui non è impostata una configurazione personalizzata in questa norma. Con un URL di aggiornamento, la configurazione verrà applicata a tutte le estensioni con l'esatto URL di aggiornamento indicato nel file manifest dell'estensione, come descritto all'indirizzo <ph name="LINK_TO_EXTENSION_DOC1" />.
+
+          Per una descrizione completa delle possibili impostazioni e della struttura di questa norma, visita la pagina https://www.chromium.org/administrators/policy-list-3/extension-settings-full
+          </translation>
 <translation id="4555850956567117258">Attivazione dell'attestazione da remoto per l'utente</translation>
 <translation id="4557134566541205630">URL pagina Nuova scheda provider di ricerca predefinito</translation>
 <translation id="4600786265870346112">Attivazione del puntatore grande</translation>
 <translation id="4604931264910482931">Configura lista nera di messaggi nativi</translation>
+<translation id="4613508646038788144">Se la norma viene impostata su false, i programmi software di terze parti potranno inserire codice eseguibile nei processi di Chrome. Se la norma non viene impostata o viene impostata su true, i programmi software di terze parti non potranno inserire codice eseguibile nei processi di Chrome.</translation>
 <translation id="4617338332148204752">Salta il controllo dei metatag in <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="4625915093043961294">Configura la whitelist per l'installazione delle estensioni</translation>
 <translation id="4632343302005518762">Consenti a <ph name="PRODUCT_FRAME_NAME" /> di gestire i tipi di contenuti elencati</translation>
@@ -1055,6 +1064,12 @@ Se questa norma non viene impostata, l'impostazione verrà attivata ma gli utent
 <translation id="465099050592230505">URL del web store dell'azienda (obsoleta)</translation>
 <translation id="4665897631924472251">Impostazioni di gestione delle estensioni</translation>
 <translation id="4668325077104657568">Impostazione immagini predefinite</translation>
+<translation id="4671708336564240458">Ti consente di determinare se evitare l'apertura di nuove finestre o schede da parte di siti con esperienze intrusive.
+
+      Se questa norma è impostata su True, verrà evitata l'apertura di nuove finestre o schede da parte di siti con esperienze intrusive.
+      Tuttavia, questo comportamento non viene attivato se la norma SafeBrowsingEnabled è impostata su False.
+      Se questa norma è impostata su False, verrà consentita l'apertura di nuove finestre o schede da parte di siti con esperienze intrusive.
+      Se questa norma non viene impostata, verrà usata l'impostazione True.</translation>
 <translation id="467236746355332046">Funzionalità supportate:</translation>
 <translation id="4674167212832291997">Consente di personalizzare l'elenco di pattern URL per i quali il rendering deve sempre essere eseguito da <ph name="PRODUCT_FRAME_NAME" />.
 
@@ -1151,6 +1166,7 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="489803897780524242">Parametro di controllo sostituzione termini di ricerca per fornitore ricerca predefinito</translation>
 <translation id="4899708173828500852">Consenti Navigazione sicura</translation>
 <translation id="4906194810004762807">Frequenza di aggiornamento per norma dispositivo</translation>
+<translation id="4923806312383904642">Consenti a WebDriver di eseguire l'override delle norme non compatibili</translation>
 <translation id="494613465159630803">Cast Receiver</translation>
 <translation id="4962262530309732070">Se questo criterio è impostato su true o non viene configurato, su <ph name="PRODUCT_NAME" /> sarà possibile aggiungere persone con la funzione Aggiungi persona di Gestione utenti.
 
@@ -1183,6 +1199,13 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="5130288486815037971">Attiva o meno i pacchetti di crittografia RC4 in TLS</translation>
 <translation id="5141670636904227950">Impostazione tipo di ingrandimento dello schermo predefinito attivato nella schermata di accesso</translation>
 <translation id="5142301680741828703">Visualizza sempre i seguenti schemi di URL in <ph name="PRODUCT_FRAME_NAME" /></translation>
+<translation id="5147665094011258322">Consente di stabilire il nome host del dispositivo usato nelle richieste DHCP.
+
+      Se per questa norma viene impostata una stringa, tale stringa verrà usata come nome host del dispositivo durante la richiesta DHCP.
+
+      La stringa può contenere variabili ${ASSET_ID}, ${SERIAL_NUM} e ${MAC_ADDR} che verrebbero sostituite con valori sul dispositivo prima di usare la stringa come nome host. La sostituzione finale dovrebbe essere un nome host valido (come da RFC 1035, sezione 3.1).
+
+      Se questa norma non viene impostata o se il valore ottenuto in seguito alla sostituzione non è un nome host valido, non verrà impostato alcun nome host nella richiesta DHCP. </translation>
 <translation id="5148753489738115745">Consente di specificare dei parametri aggiuntivi da utilizzare quando <ph name="PRODUCT_FRAME_NAME" /> avvia <ph name="PRODUCT_NAME" />.
 
 Se questa norma non viene impostata viene utilizzata la riga di comando predefinita.</translation>
@@ -1269,6 +1292,7 @@ Se questa impostazione viene disattivata o non viene impostata, sia gli utenti l
 <translation id="5469484020713359236">Consente di impostare un elenco di pattern URL che specificano i siti autorizzati a impostare cookie. Se questa norma non viene impostata, per tutti i siti verrà utilizzato il valore predefinito globale della norma "DefaultCookiesSetting", se è impostata, oppure verrà utilizzata la configurazione personale dell'utente.</translation>
 <translation id="5469825884154817306">Blocca immagini su questi siti</translation>
 <translation id="5475361623548884387">Attiva la stampa</translation>
+<translation id="547601067149622666">Non consentire gli annunci su siti con annunci invasivi</translation>
 <translation id="5499375345075963939">Questa norma è attiva soltanto in modalità retail.
 
       Quando il valore di questa norma è impostato e non è 0, l'utente Demo correntemente connesso verrà disconnesso automaticamente dopo che sarà trascorso il tempo di inattività della durata specificata.
@@ -1651,6 +1675,7 @@ Se questa norma non viene impostata o se l'elenco è vuoto, sarà possibile acce
       Se questa norma viene disattivata o non viene impostata, saranno utilizzati solo i normali profili locali.
 
       La norma <ph name="SYNC_DISABLED_POLICY_NAME" /> consente di disattivare la sincronizzazione di tutti i dati e sostituisce la norma RoamingProfileSupportEnabled.</translation>
+<translation id="6735701345096330595">Forza attivazione lingue per controllo ortografico</translation>
 <translation id="6757438632136860443">Consente di impostare un elenco di pattern URL che specificano i siti che possono eseguire il plug-in <ph name="FLASH_PLUGIN_NAME" />.
 
           Se questa norma non viene impostata, per tutti i siti verrà utilizzato il valore predefinito globale della norma "DefaultPluginsSetting", se impostata, oppure la configurazione personale dell'utente..</translation>
@@ -1743,7 +1768,6 @@ Se la norma non viene configurata, la lettura vocale viene inizialmente disattiv
 <translation id="706669471845501145">Consenti la visualizzazione di notifiche desktop da parte dei siti</translation>
 <translation id="7072406291414141328">Attiva la limitazione della larghezza di banda</translation>
 <translation id="7079519252486108041">Blocca popup su questi siti</translation>
-<translation id="7091198954851103976">Esegue sempre i plug-in che richiedono l'autorizzazione</translation>
 <translation id="7106631983877564505">Consente di attivare il blocco quando lo stato dei dispositivi <ph name="PRODUCT_OS_NAME" /> diventa inattivo o sospeso.
 
       Se questa impostazione viene attivata, agli utenti verrà chiesto di inserire una password per sbloccare il dispositivo dalla sospensione.
@@ -1855,6 +1879,10 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 
       Se la norma non viene impostata, o viene impostata su false, l'ottimizzazione <ph name="TLS_FALSE_START" /> viene attivata. Se viene impostata su true, l'ottimizzazione <ph name="TLS_FALSE_START" /> viene disattivata.</translation>
 <translation id="7433714841194914373">Abilita Instant</translation>
+<translation id="7443061725198440541">Se questa norma non viene impostata o viene attivata, l'utente può usare il controllo ortografico.
+
+      Se questa norma viene disattivata, l'utente non può usare il controllo ortografico. Se questa norma viene disattivata, viene ignorata anche la norma SpellcheckLanguage.
+      </translation>
 <translation id="7443616896860707393">Richieste di autenticazione di base HTTP tra origini</translation>
 <translation id="7469554574977894907">Attiva suggerimenti di ricerca</translation>
 <translation id="7474249562477552702">Specifica se i certificati SHA-1 firmati emessi dai trust anchor locali sono consentiti</translation>
@@ -1892,6 +1920,7 @@ Se questa norma non viene impostata, verranno utilizzate le dimensioni predefini
 <translation id="7625444193696794922">Consente di specificare il canale di rilascio su cui deve essere bloccato questo dispositivo.</translation>
 <translation id="7632724434767231364">Nome della libreria GSSAPI</translation>
 <translation id="7635471475589566552">Consente di configurare in <ph name="PRODUCT_NAME" /> le impostazioni della lingua e di impedirne la modifica agli utenti. Se attivi questa impostazione, <ph name="PRODUCT_NAME" /> utilizzerà le impostazioni della lingua specificate. Se la lingua configurata non è supportata, verrà utilizzata la lingua "en-US". Se questa impostazione viene disattivata o non viene impostata, <ph name="PRODUCT_NAME" /> utilizzerà la lingua preferita specificata dall'utente (se configurata), quella del sistema o la lingua di fallback "en-US".</translation>
+<translation id="7643883929273267746">Limita gli account visibili in <ph name="PRODUCT_NAME" /></translation>
 <translation id="7651739109954974365">È possibile stabilire se attivare o meno il roaming dei dati per il dispositivo. Se la norma viene impostata su true, il roaming dei dati sarà consentito. Se non viene configurata o viene impostata su false, il roaming dei dati non sarà disponibile.</translation>
 <translation id="7683777542468165012">Aggiornamento dinamico delle norme</translation>
 <translation id="7694807474048279351">Consente di pianificare un riavvio automatico in seguito all'applicazione di un aggiornamento di <ph name="PRODUCT_OS_NAME" />.
@@ -1985,11 +2014,6 @@ Se questa norma non viene impostata, <ph name="PRODUCT_NAME" /> utilizzerà il v
 <translation id="787125417158068494">Se la norma viene impostata su SyncDisabled o non viene configurata, i certificati <ph name="PRODUCT_OS_NAME" /> non saranno disponibili per le app ARC.
 
       Se viene impostata su CopyCaCerts, per le app ARC saranno disponibili tutti i certificati CA installati su ONC con <ph name="WEB_TRUSTED_BIT" />.</translation>
-<translation id="7872535148622213208">
-        Questa norma consente di specificare un elenco di origini (URL) da considerare come contesto sicuro. Lo scopo è consentire alle organizzazioni di configurare un server di gestione temporanea per gli sviluppi web interni.
-        Questa norma corrisponde all'opzione --unsafely-treat-insecure-origin-as-secure.
-        Visita il sito https://www.w3.org/TR/secure-contexts/ per avere ulteriori informazioni sui contesti sicuri.
-        </translation>
 <translation id="7882585827992171421">Questa norma è attiva soltanto in modalità retail.
 
       Consente di stabilire l'ID dell'estensione da utilizzare come screensaver nella schermata di accesso. L'estensione deve far parte dell'AppPack configurato per il dominio tramite la norma DeviceAppPack.</translation>
@@ -2127,9 +2151,6 @@ Se questa norma non viene impostata, le pagine saranno sottoposte a scansione pe
 <translation id="8344454543174932833">Importa Preferiti dal browser predefinito alla prima esecuzione</translation>
 <translation id="8359734107661430198">Attiva l'API ExampleDeprecatedFeature valida fino al 02/09/2008</translation>
 <translation id="8369602308428138533">Ritardo disattivazione schermo in caso di utilizzo di CA</translation>
-<translation id="8370471134641900314">Se la norma viene impostata su true, l'utente deve accedere a <ph name="PRODUCT_NAME" /> con il proprio profilo per utilizzare il browser e il valore predefinito BrowserGuestModeEnabled viene impostato su false.
-
-Se la norma viene impostata su false o non viene configurata, l'utente può utilizzare il browser senza accedere a <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8382184662529825177">Attiva l'utilizzo dell'attestazione remota per la protezione dei contenuti per il dispositivo</translation>
 <translation id="838870586332499308">Attiva roaming dati</translation>
 <translation id="8390049129576938611">Consente di disattivare il visualizzatore di PDF interno di <ph name="PRODUCT_NAME" />. I file PDF vengono gestiti come download che l'utente può aprire con l'applicazione predefinita.
@@ -2140,6 +2161,13 @@ Se la norma viene impostata su false o non viene configurata, l'utente può util
 <translation id="8424255554404582727">Imposta la rotazione predefinita dello schermo, riapplicata a ogni riavvio</translation>
 <translation id="8426231401662877819">Ruota lo schermo in senso orario di 90°</translation>
 <translation id="8451988835943702790">Usa la pagina Nuova scheda come Pagina iniziale</translation>
+<translation id="8460677879226618710">Contiene un elenco di pattern utilizzati per controllare la visibilità degli account in <ph name="PRODUCT_NAME" />.
+
+      L'account sul dispositivo sarà visibile in <ph name="PRODUCT_NAME" /> se il nome coincide con ciascun pattern dell'elenco. In caso contrario l'account sarà filtrato e nascosto.
+
+      Il carattere jolly "*" rappresenta zero o più caratteri arbitrari. Il carattere di escape è "\", quindi per trovare una corrispondenza con il significato letterale dei caratteri "*" o "\", puoi farli precedere da "\".
+
+      Se questa norma non viene impostata, tutti gli account Google sul dispositivo saranno visibili in <ph name="PRODUCT_NAME" />.</translation>
 <translation id="8465065632133292531">Parametri per l'URL istantaneo che utilizza POST</translation>
 <translation id="847472800012384958">Non consentire la visualizzazione di popup nei siti</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2231,6 +2259,20 @@ Se la norma non viene impostata o viene impostata su false, la posizione non vie
       Se questa impostazione non viene configurata, gli utenti potranno decidere se utilizzare o meno questa funzione.</translation>
 <translation id="8870318296973696995">Pagina iniziale</translation>
 <translation id="8882006618241293596">Blocca il plug-in <ph name="FLASH_PLUGIN_NAME" /> su questi siti</translation>
+<translation id="8894962626537183708">
+      Questa norma consente di specificare un elenco di origini (URL) da considerare come contesto sicuro. Lo scopo è consentire alle organizzazioni di configurare un server di gestione temporanea per gli sviluppi web interni, affinché gli sviluppatori possano testare le funzioni che richiedono contesti sicuri senza dover implementare TLS sul server di gestione temporanea.
+      L'impostazione di un elenco di URL in questa norma ha lo stesso effetto dell'impostazione del flag della riga di comando "--unsafely-treat-insecure-origin-as-secure" su un elenco separato da virgole degli stessi URL. Se viene impostata, questa norma sostituisce il flag della riga di comando.
+      Per ulteriori informazioni sui contesti sicuri, visita il sito https://www.w3.org/TR/secure-contexts/
+      </translation>
+<translation id="890403179930035128">Consente di forzare l'attivazione delle lingue per il controllo ortografico. Le lingue non riconosciute dell'elenco verranno ignorate.
+
+      Se questa norma viene attivata, il controllo ortografico verrà attivato per le lingue specificate, oltre che per le lingue per cui l'utente ha attivato il controllo ortografico.
+
+      Se questa norma non viene impostata o viene disattivata, le preferenze dell'utente relative al controllo ortografico rimarranno invariate.
+
+      Se viene disattivata la norma SpellcheckEnabled, questa norma non verrà applicata.
+
+      Le lingue attualmente supportate sono: af, bg, ca, cs, da, de, el, en-AU, en-CA, en-GB, en-US, es, es-419, es-AR, es-ES, es-MX, es-US, et, fa, fo, fr, he, hi, hr, hu, id, it, ko, lt, lv, nb, nl, pl, pt-BR, pt-PT, ro, ru, sh, sk, sl, sq, sr, sv, ta, tg, tr, uk, vi.</translation>
 <translation id="8906768759089290519">Attiva modalità ospite</translation>
 <translation id="8908294717014659003">Consente di stabilire se i siti web possono accedere ai dispositivi di acquisizione dei contenuti multimediali. L'accesso ai dispositivi di acquisizione dei contenuti multimediali può essere consentito per impostazione predefinita oppure l'utente può visualizzare una richiesta ogni volta che un sito web vuole accedere ai dispositivi di acquisizione dei contenuti multimediali.
 
@@ -2309,14 +2351,10 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 <translation id="9150416707757015439">Questa norma è obsoleta. Utilizza IncognitoModeAvailability. Consente di attivare la modalità di navigazione in incognito in <ph name="PRODUCT_NAME" />. Se questa impostazione viene attivata o non viene configurata, gli utenti potranno aprire le pagine web in modalità di navigazione in incognito. Se l'impostazione viene disattivata, gli utenti non potranno aprire le pagine web in modalità di navigazione in incognito. Se questa norma non viene impostata, l'impostazione verrà attivata e gli utenti potranno utilizzare la modalità di navigazione in incognito.</translation>
 <translation id="915194831143859291">Se questa norma viene impostata su false o non viene configurata, <ph name="PRODUCT_OS_NAME" /> consente all'utente di spegnere il dispositivo.
       Se questa norma viene impostata su true, <ph name="PRODUCT_OS_NAME" /> attiva il riavvio quando l'utente spegne il dispositivo. <ph name="PRODUCT_OS_NAME" /> sostituisce tutte le occorrenze dei pulsanti di spegnimento nell'interfaccia utente con pulsanti di riavvio. Se l'utente spegne il dispositivo utilizzando il tasto di accensione, il dispositivo non viene riavviato, anche se la norma è attivata.</translation>
+<translation id="9158929520101169054">Consenti accesso simultaneo nel browser</translation>
 <translation id="9187743794267626640">Disabilita il montaggio di una memoria esterna</translation>
 <translation id="9197740283131855199">Percentuale di regolazione del ritardo di oscuramento dello schermo se l'utente diventa attivo dopo l'oscuramento</translation>
 <translation id="9200828125069750521">Parametri per l'URL dell'immagine che utilizza POST</translation>
-<translation id="9212233969680267790">Attenzione: la norma Versione TLS massima verrà interamente rimossa da <ph name="PRODUCT_NAME" /> con la versione 66 (orientativamente febbraio 2018).
-
-      Se la norma non è configurata, <ph name="PRODUCT_NAME" /> utilizza la versione massima predefinita.
-
-      In caso contrario, potrebbe essere impostato uno dei seguenti valori: "tls1.2" o "tls1.3". In questo caso, <ph name="PRODUCT_NAME" /> non utilizzerà versioni SSL/TLS successive a quella specificata. I valori non riconosciuti verranno ignorati.</translation>
 <translation id="9213347477683611358">Configura l'immagine di sfondo a livello del dispositivo che viene mostrata nella schermata di accesso nel caso in cui nessun utente abbia ancora effettuato l'accesso al dispositivo. Questa norma viene impostata specificando l'URL dal quale il dispositivo Chrome OS può scaricare l'immagine di sfondo e un hash crittografico la cui funzione è quella di verificare l'integrità del download. L'immagine deve essere in formato JPEG e non deve superare le dimensioni di 16 MB. L'URL specificato deve essere accessibile senza bisogno di autenticazione. L'immagine di sfondo viene scaricata e memorizzata nella cache. Verrà scaricata nuovamente ogni volta che l'URL e l'hash vengono modificati.
 
       La norma deve essere specificata sotto forma di stringa in cui l'URL e l'hash vengono espressi in formato JSON, ad esempio,
@@ -2334,4 +2372,5 @@ Il valore della norma deve essere specificato in millisecondi. I valori devono e
 <translation id="930930237275114205">Imposta la directory dei dati utente di <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="934390688529359269">Consente di attivare l'accesso forzato per <ph name="PRODUCT_NAME" /></translation>
 <translation id="944817693306670849">Imposta dimensioni cache su disco</translation>
+<translation id="982497069985795632">Attiva il controllo ortografico</translation>
 </translationbundle>

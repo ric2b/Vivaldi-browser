@@ -60,6 +60,13 @@ const char kEnableDoNotTrack[] = "enable_do_not_track";
 // Prefs for persisting HttpServerProperties.
 const char kHttpServerProperties[] = "net.http_server_properties";
 
+// Caches the folder id of user's position in the bookmark hierarchy navigator.
+const char kIosBookmarkCachedFolderId[] = "ios.bookmark.cached_folder_id";
+
+// Caches the scroll position of Bookmarks.
+const char kIosBookmarkCachedScrollPosition[] =
+    "ios.bookmark.cached_scroll_position";
+
 // Preference that keep information about where to create a new bookmark.
 const char kIosBookmarkFolderDefault[] = "ios.bookmark.default_folder";
 
@@ -80,10 +87,6 @@ const char kIosSettingsPromoAlreadySeen[] = "ios.settings.promo_already_seen";
 // in the settings view.
 const char kIosSettingsSigninPromoDisplayedCount[] =
     "ios.settings.signin_promo_displayed_count";
-
-// Whether the user has enabled the Physical Web feature to surface URLs
-// broadcast by nearby devices.
-const char kIosPhysicalWebEnabled[] = "ios.physical_web_enabled";
 
 // True if the previous session exited cleanly.
 // This can be different from kStabilityExitedCleanly, because the last run of

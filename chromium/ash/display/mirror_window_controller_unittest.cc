@@ -55,9 +55,24 @@ class MirrorOnBootTest : public AshTestBase {
 
 using MirrorWindowControllerTest = AshTestBase;
 
+class MirrorWindowControllerTestDisableMultiMirroring : public AshTestBase {
+ public:
+  MirrorWindowControllerTestDisableMultiMirroring() = default;
+  ~MirrorWindowControllerTestDisableMultiMirroring() override = default;
+
+  void SetUp() override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        ::switches::kDisableMultiMirroring);
+    AshTestBase::SetUp();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MirrorWindowControllerTestDisableMultiMirroring);
+};
+
 // TODO(weidongg/774795) Remove this test when multi mirroring is enabled by
 // default, because cursor compositing will be enabled for software mirroring.
-TEST_F(MirrorWindowControllerTest, MirrorCursorBasic) {
+TEST_F(MirrorWindowControllerTestDisableMultiMirroring, MirrorCursorBasic) {
   // MirrorWindowController is not used in the MUS or MASH configs.
   if (Shell::GetAshConfig() != Config::CLASSIC)
     return;
@@ -66,8 +81,9 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorBasic) {
   aura::test::TestWindowDelegate test_window_delegate;
   test_window_delegate.set_window_component(HTTOP);
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400,400x400");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+  RunAllPendingInMessageLoop();
   aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   std::unique_ptr<aura::Window> window(aura::test::CreateTestWindowWithDelegate(
       &test_window_delegate, 0, gfx::Rect(50, 50, 100, 100), root));
@@ -109,7 +125,7 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorBasic) {
 
 // TODO(weidongg/774795) Remove this test when multi mirroring is enabled by
 // default, because cursor compositing will be enabled for software mirroring.
-TEST_F(MirrorWindowControllerTest, MirrorCursorRotate) {
+TEST_F(MirrorWindowControllerTestDisableMultiMirroring, MirrorCursorRotate) {
   // MirrorWindowController is not used in the MUS or MASH configs.
   if (Shell::GetAshConfig() != Config::CLASSIC)
     return;
@@ -118,8 +134,9 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorRotate) {
   aura::test::TestWindowDelegate test_window_delegate;
   test_window_delegate.set_window_component(HTTOP);
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400,400x400");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+  RunAllPendingInMessageLoop();
   aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   std::unique_ptr<aura::Window> window(aura::test::CreateTestWindowWithDelegate(
       &test_window_delegate, 0, gfx::Rect(50, 50, 100, 100), root));
@@ -169,16 +186,17 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorRotate) {
 // coordinates.
 // TODO(weidongg/774795) Remove this test when multi mirroring is enabled by
 // default, because cursor compositing will be enabled for software mirroring.
-TEST_F(MirrorWindowControllerTest, MirrorCursorLocations) {
+TEST_F(MirrorWindowControllerTestDisableMultiMirroring, MirrorCursorLocations) {
   // MirrorWindowController is not used in the MUS or MASH configs.
   if (Shell::GetAshConfig() != Config::CLASSIC)
     return;
 
   MirrorWindowTestApi test_api;
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
 
   // Test with device scale factor.
   UpdateDisplay("400x600*2,400x600");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+  RunAllPendingInMessageLoop();
 
   aura::Window* root = Shell::Get()->GetPrimaryRootWindow();
   ui::test::EventGenerator generator(root);
@@ -189,7 +207,7 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorLocations) {
             test_api.GetCursorHotPointLocationInRootWindow().ToString());
 
   // Test with ui scale
-  UpdateDisplay("400x600*0.5,400x600");
+  UpdateDisplay("400x600@0.5,400x600");
   generator.MoveMouseToInHost(20, 30);
 
   EXPECT_EQ("4,4", test_api.GetCursorHotPoint().ToString());
@@ -209,7 +227,8 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorLocations) {
 // cursor's display.
 // TODO(weidongg/774795) Remove this test when multi mirroring is enabled by
 // default, because cursor compositing will be enabled for software mirroring.
-TEST_F(MirrorWindowControllerTest, MirrorCursorMoveOnEnter) {
+TEST_F(MirrorWindowControllerTestDisableMultiMirroring,
+       MirrorCursorMoveOnEnter) {
   // MirrorWindowController is not used in the MUS or MASH configs.
   if (Shell::GetAshConfig() != Config::CLASSIC)
     return;
@@ -236,8 +255,9 @@ TEST_F(MirrorWindowControllerTest, MirrorCursorMoveOnEnter) {
   EXPECT_EQ(display::Display::ROTATE_0,
             cursor_test_api.GetCurrentCursorRotation());
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   UpdateDisplay("400x400*2/r,400x400");
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+  RunAllPendingInMessageLoop();
 
   // Entering mirror mode should have centered the cursor on the primary display
   // because the cursor's previous position is out of bounds.
@@ -271,8 +291,6 @@ TEST_F(MirrorWindowControllerTest, DockMode) {
       CreateDisplayInfo(external_id, gfx::Rect(1, 1, 100, 100));
   std::vector<display::ManagedDisplayInfo> display_info_list;
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
-
   // software mirroring.
   display_info_list.push_back(internal_display_info);
   display_info_list.push_back(external_display_info);
@@ -282,15 +300,16 @@ TEST_F(MirrorWindowControllerTest, DockMode) {
           .SetFirstDisplayAsInternalDisplay();
   EXPECT_EQ(internal_id, internal_display_id);
 
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
+  RunAllPendingInMessageLoop();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
-  EXPECT_TRUE(display_manager()->IsInMirrorMode());
+  EXPECT_TRUE(display_manager()->IsInSoftwareMirrorMode());
   EXPECT_EQ(external_id,
             display_manager()->GetMirroringDestinationDisplayIdList()[0]);
 
   // dock mode.
   display_info_list.clear();
   display_info_list.push_back(external_display_info);
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_FALSE(display_manager()->IsInMirrorMode());
@@ -299,7 +318,6 @@ TEST_F(MirrorWindowControllerTest, DockMode) {
   display_info_list.clear();
   display_info_list.push_back(internal_display_info);
   display_info_list.push_back(external_display_info);
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
   display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_TRUE(display_manager()->IsInMirrorMode());

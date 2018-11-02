@@ -4,6 +4,7 @@
 
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
+#include "build/build_config.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/child_process_launcher_helper.h"
 #include "content/browser/child_process_launcher_helper_posix.h"
@@ -11,12 +12,12 @@
 #include "content/browser/zygote_host/zygote_communication_linux.h"
 #include "content/browser/zygote_host/zygote_host_impl_linux.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/zygote_handle_linux.h"
 #include "content/public/common/common_sandbox_support_linux.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
+#include "content/public/common/zygote_handle.h"
 #include "gpu/config/gpu_switches.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
 
@@ -78,8 +79,23 @@ ChildProcessLauncherHelper::LaunchProcessOnLauncherThread(
     // be created lazily here, or in the delegate GetZygote() implementations.
     // Additionally, the delegate could provide a UseGenericZygote() method.
     base::ProcessHandle handle = zygote_handle->ForkRequest(
-        command_line()->argv(), std::move(files_to_register), GetProcessType());
+        command_line()->argv(), files_to_register->GetMapping(),
+        GetProcessType());
     *launch_result = LAUNCH_RESULT_SUCCESS;
+
+#if !defined(OS_OPENBSD)
+    if (handle) {
+      // This is just a starting score for a renderer or extension (the
+      // only types of processes that will be started this way).  It will
+      // get adjusted as time goes on.  (This is the same value as
+      // chrome::kLowestRendererOomScore in chrome/chrome_constants.h, but
+      // that's not something we can include here.)
+      const int kLowestRendererOomScore = 300;
+      ZygoteHostImpl::GetInstance()->AdjustRendererOOMScore(
+          handle, kLowestRendererOomScore);
+    }
+#endif
+
     Process process;
     process.process = base::Process(handle);
     process.zygote = zygote_handle;

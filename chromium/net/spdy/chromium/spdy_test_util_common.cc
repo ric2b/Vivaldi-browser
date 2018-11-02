@@ -22,6 +22,7 @@
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/next_proto.h"
+#include "net/socket/socket_tag.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/spdy/chromium/buffered_spdy_framer.h"
@@ -31,6 +32,7 @@
 #include "net/spdy/core/spdy_alt_svc_wire_format.h"
 #include "net/spdy/core/spdy_framer.h"
 #include "net/test/gtest_util.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -156,7 +158,7 @@ namespace {
 class PriorityGetter : public BufferedSpdyFramerVisitorInterface {
  public:
   PriorityGetter() : priority_(0) {}
-  ~PriorityGetter() override {}
+  ~PriorityGetter() override = default;
 
   SpdyPriority priority() const {
     return priority_;
@@ -238,9 +240,9 @@ base::WeakPtr<SpdyStream> CreateStreamSynchronously(
       (rv == OK) ? stream_request.ReleaseStream() : base::WeakPtr<SpdyStream>();
 }
 
-StreamReleaserCallback::StreamReleaserCallback() {}
+StreamReleaserCallback::StreamReleaserCallback() = default;
 
-StreamReleaserCallback::~StreamReleaserCallback() {}
+StreamReleaserCallback::~StreamReleaserCallback() = default;
 
 CompletionCallback StreamReleaserCallback::MakeCallback(
     SpdyStreamRequest* request) {
@@ -324,7 +326,8 @@ SpdySessionDependencies::SpdySessionDependencies(
       time_func(&base::TimeTicks::Now),
       enable_http2_alternative_service(false),
       net_log(nullptr),
-      http_09_on_non_default_ports_enabled(false) {
+      http_09_on_non_default_ports_enabled(false),
+      disable_idle_sockets_close_on_memory_pressure(false) {
   // Note: The CancelledTransaction test does cleanup by running all
   // tasks in the message loop (RunAllPending).  Unfortunately, that
   // doesn't clean up tasks on the host resolver thread; and
@@ -335,7 +338,7 @@ SpdySessionDependencies::SpdySessionDependencies(
   http2_settings[SETTINGS_INITIAL_WINDOW_SIZE] = kDefaultInitialWindowSize;
 }
 
-SpdySessionDependencies::~SpdySessionDependencies() {}
+SpdySessionDependencies::~SpdySessionDependencies() = default;
 
 // static
 std::unique_ptr<HttpNetworkSession> SpdySessionDependencies::SpdyCreateSession(
@@ -378,6 +381,8 @@ HttpNetworkSession::Params SpdySessionDependencies::CreateSessionParams(
       session_deps->enable_http2_alternative_service;
   params.http_09_on_non_default_ports_enabled =
       session_deps->http_09_on_non_default_ports_enabled;
+  params.disable_idle_sockets_close_on_memory_pressure =
+      session_deps->disable_idle_sockets_close_on_memory_pressure;
   return params;
 }
 
@@ -405,7 +410,7 @@ HttpNetworkSession::Context SpdySessionDependencies::CreateSessionContext(
 
 class AllowAnyCertCTPolicyEnforcer : public CTPolicyEnforcer {
  public:
-  AllowAnyCertCTPolicyEnforcer() {}
+  AllowAnyCertCTPolicyEnforcer() = default;
   ~AllowAnyCertCTPolicyEnforcer() override = default;
 
   ct::CTPolicyCompliance CheckCompliance(
@@ -488,7 +493,7 @@ base::WeakPtr<SpdySession> CreateSpdySessionHelper(
       transport_params, nullptr, nullptr, key.host_port_pair(), ssl_config,
       key.privacy_mode(), 0, /* expect_spdy = */ false);
   int rv = connection->Init(
-      key.host_port_pair().ToString(), ssl_params, MEDIUM,
+      key.host_port_pair().ToString(), ssl_params, MEDIUM, SocketTag(),
       ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
       http_session->GetSSLSocketPool(HttpNetworkSession::NORMAL_SOCKET_POOL),
       net_log);
@@ -529,7 +534,7 @@ class FakeSpdySessionClientSocket : public MockClientSocket {
   explicit FakeSpdySessionClientSocket(int read_result)
       : MockClientSocket(NetLogWithSource()), read_result_(read_result) {}
 
-  ~FakeSpdySessionClientSocket() override {}
+  ~FakeSpdySessionClientSocket() override = default;
 
   int Read(IOBuffer* buf,
            int buf_len,
@@ -539,7 +544,8 @@ class FakeSpdySessionClientSocket : public MockClientSocket {
 
   int Write(IOBuffer* buf,
             int buf_len,
-            const CompletionCallback& callback) override {
+            const CompletionCallback& callback,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override {
     return ERR_IO_PENDING;
   }
 
@@ -627,7 +633,7 @@ SpdyTestUtil::SpdyTestUtil()
       response_spdy_framer_(SpdyFramer::ENABLE_COMPRESSION),
       default_url_(GURL(kDefaultUrl)) {}
 
-SpdyTestUtil::~SpdyTestUtil() {}
+SpdyTestUtil::~SpdyTestUtil() = default;
 
 void SpdyTestUtil::AddUrlToHeaderBlock(SpdyStringPiece url,
                                        SpdyHeaderBlock* headers) const {
@@ -805,10 +811,8 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyPush(
   SpdyHeaderBlock push_promise_header_block;
   push_promise_header_block[kHttp2MethodHeader] = "GET";
   AddUrlToHeaderBlock(url, &push_promise_header_block);
-  SpdyPushPromiseIR push_promise(associated_stream_id, stream_id,
-                                 std::move(push_promise_header_block));
-  SpdySerializedFrame push_promise_frame(
-      response_spdy_framer_.SerializeFrame(push_promise));
+  SpdySerializedFrame push_promise_frame(ConstructSpdyPushPromise(
+      associated_stream_id, stream_id, std::move(push_promise_header_block)));
 
   SpdyHeaderBlock headers_header_block;
   headers_header_block[kHttp2StatusHeader] = "200";
@@ -832,10 +836,8 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyPush(
   SpdyHeaderBlock push_promise_header_block;
   push_promise_header_block[kHttp2MethodHeader] = "GET";
   AddUrlToHeaderBlock(url, &push_promise_header_block);
-  SpdyPushPromiseIR push_promise(associated_stream_id, stream_id,
-                                 std::move(push_promise_header_block));
-  SpdySerializedFrame push_promise_frame(
-      response_spdy_framer_.SerializeFrame(push_promise));
+  SpdySerializedFrame push_promise_frame(ConstructSpdyPushPromise(
+      associated_stream_id, stream_id, std::move(push_promise_header_block)));
 
   SpdyHeaderBlock headers_header_block;
   headers_header_block["hello"] = "bye";
@@ -849,10 +851,10 @@ SpdySerializedFrame SpdyTestUtil::ConstructSpdyPush(
   return CombineFrames({&push_promise_frame, &headers_frame});
 }
 
-SpdySerializedFrame SpdyTestUtil::ConstructInitialSpdyPushFrame(
-    SpdyHeaderBlock headers,
-    int stream_id,
-    int associated_stream_id) {
+SpdySerializedFrame SpdyTestUtil::ConstructSpdyPushPromise(
+    SpdyStreamId associated_stream_id,
+    SpdyStreamId stream_id,
+    SpdyHeaderBlock headers) {
   SpdyPushPromiseIR push_promise(associated_stream_id, stream_id,
                                  std::move(headers));
   return SpdySerializedFrame(

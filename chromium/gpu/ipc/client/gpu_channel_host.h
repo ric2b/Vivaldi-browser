@@ -35,26 +35,23 @@ class ChannelMojo;
 }
 
 namespace gpu {
-class GpuMemoryBufferManager;
-}
-
-namespace gpu {
 struct SyncToken;
 class GpuChannelHost;
+class GpuMemoryBufferManager;
+
 using GpuChannelEstablishedCallback =
-    base::Callback<void(scoped_refptr<GpuChannelHost>)>;
+    base::OnceCallback<void(scoped_refptr<GpuChannelHost>)>;
 
 class GPU_EXPORT GpuChannelEstablishFactory {
  public:
-  virtual ~GpuChannelEstablishFactory() {}
+  virtual ~GpuChannelEstablishFactory() = default;
 
-  virtual void EstablishGpuChannel(
-      const GpuChannelEstablishedCallback& callback) = 0;
-  // If the connection to the host process fails so the channel can not be
-  // established, then |connection_error| is set to true (if it's not null).
-  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync(
-      bool* connection_error) = 0;
+  virtual void EstablishGpuChannel(GpuChannelEstablishedCallback callback) = 0;
+  virtual scoped_refptr<GpuChannelHost> EstablishGpuChannelSync() = 0;
+
+  // FEATURE_FORCE_ACCESS_TO_GPU
   virtual void SetForceAllowAccessToGpu(bool enable) = 0;
+
   virtual GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
 };
 
@@ -66,12 +63,10 @@ class GPU_EXPORT GpuChannelHost
     : public IPC::Sender,
       public base::RefCountedThreadSafe<GpuChannelHost> {
  public:
-  GpuChannelHost(scoped_refptr<base::SingleThreadTaskRunner> io_thread,
-                 int channel_id,
+  GpuChannelHost(int channel_id,
                  const gpu::GPUInfo& gpu_info,
                  const gpu::GpuFeatureInfo& gpu_feature_info,
-                 mojo::ScopedMessagePipeHandle handle,
-                 gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
+                 mojo::ScopedMessagePipeHandle handle);
 
   bool IsLost() const {
     DCHECK(listener_.get());
@@ -121,10 +116,6 @@ class GPU_EXPORT GpuChannelHost
 
   // Remove the message route associated with |route_id|.
   void RemoveRoute(int route_id);
-
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() const {
-    return gpu_memory_buffer_manager_;
-  }
 
   // Returns a handle to the shared memory that can be sent via IPC to the
   // GPU process. The caller is responsible for ensuring it is closed. Returns
@@ -190,9 +181,6 @@ class GPU_EXPORT GpuChannelHost
       scoped_refptr<base::SingleThreadTaskRunner> task_runner;
     };
 
-    // Called on the IO thread.
-    void Connect();
-
     // Threading notes: most fields are only accessed on the IO thread, except
     // for lost_ which is protected by |lock_|.
     base::hash_map<int32_t, RouteInfo> routes_;
@@ -224,8 +212,6 @@ class GPU_EXPORT GpuChannelHost
   // outlives |this|. It is therefore safe to PostTask calls to the IO thread
   // with base::Unretained(listener_).
   std::unique_ptr<Listener, base::OnTaskRunnerDeleter> listener_;
-
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
 
   // Image IDs are allocated in sequence.
   base::AtomicSequenceNumber next_image_id_;

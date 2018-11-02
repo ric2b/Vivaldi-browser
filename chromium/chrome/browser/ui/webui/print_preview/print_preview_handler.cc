@@ -20,7 +20,6 @@
 #include "base/json/json_reader.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/values.h"
@@ -28,6 +27,7 @@
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/bad_message.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/printing/background_printing_manager.h"
 #include "chrome/browser/printing/print_dialog_cloud.h"
 #include "chrome/browser/printing/print_error_dialog.h"
 #include "chrome/browser/printing/print_job_manager.h"
@@ -661,7 +661,7 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   bool is_cloud_printer = false;
   bool print_with_privet = false;
   bool print_with_extension = false;
-
+  bool show_system_dialog = false;
   bool open_pdf_in_preview = false;
 #if defined(OS_MACOSX)
   open_pdf_in_preview = settings->HasKey(printing::kSettingOpenPDFInPreview);
@@ -672,26 +672,40 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
     settings->GetBoolean(printing::kSettingPrintWithPrivet, &print_with_privet);
     settings->GetBoolean(printing::kSettingPrintWithExtension,
                          &print_with_extension);
+    settings->GetBoolean(printing::kSettingShowSystemDialog,
+                         &show_system_dialog);
     is_cloud_printer = settings->HasKey(printing::kSettingCloudPrintId);
   }
 
   int page_count = 0;
-  settings->GetInteger(printing::kSettingPreviewPageCount, &page_count);
+  if (!settings->GetInteger(printing::kSettingPreviewPageCount, &page_count) ||
+      page_count <= 0) {
+    RejectJavascriptCallback(base::Value(callback_id), base::Value(-1));
+    return;
+  }
 
-#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   if (print_with_privet) {
+#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
     UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintWithPrivet", page_count);
     ReportUserActionHistogram(PRINT_WITH_PRIVET);
-  }
 #endif
-  if (print_with_extension) {
+  } else if (print_with_extension) {
     UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintWithExtension",
                          page_count);
     ReportUserActionHistogram(PRINT_WITH_EXTENSION);
-  }
-  if (print_to_pdf) {
+  } else if (print_to_pdf) {
     UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToPDF", page_count);
     ReportUserActionHistogram(PRINT_TO_PDF);
+  } else if (show_system_dialog) {
+    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.SystemDialog", page_count);
+    ReportUserActionHistogram(FALLBACK_TO_ADVANCED_SETTINGS_DIALOG);
+  } else if (!open_pdf_in_preview) {
+    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToPrinter", page_count);
+    ReportUserActionHistogram(PRINT_TO_PRINTER);
+  } else if (is_cloud_printer) {
+    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToCloudPrint",
+                         page_count);
+    ReportUserActionHistogram(PRINT_WITH_CLOUD_PRINT);
   }
 
   scoped_refptr<base::RefCountedBytes> data;
@@ -707,112 +721,50 @@ void PrintPreviewHandler::HandlePrint(const base::ListValue* args) {
   DCHECK(data->size());
   DCHECK(data->front());
 
-  if (print_with_privet || print_with_extension || print_to_pdf) {
-    std::string destination_id;
-    std::string print_ticket;
-    std::string capabilities;
-    int width = 0;
-    int height = 0;
-    if (!print_to_pdf &&
-        (!settings->GetString(printing::kSettingDeviceName, &destination_id) ||
-         !settings->GetString(printing::kSettingTicket, &print_ticket) ||
-         !settings->GetString(printing::kSettingCapabilities, &capabilities) ||
-         !settings->GetInteger(printing::kSettingPageWidth, &width) ||
-         !settings->GetInteger(printing::kSettingPageHeight, &height) ||
-         width <= 0 || height <= 0)) {
-      NOTREACHED();
-      RejectJavascriptCallback(
-          base::Value(callback_id),
-          print_with_privet ? base::Value(-1) : base::Value("FAILED"));
-      return;
-    }
-
-    PrinterType type = PrinterType::kPdfPrinter;
-    if (print_with_extension)
-      type = PrinterType::kExtensionPrinter;
-    else if (print_with_privet)
-      type = PrinterType::kPrivetPrinter;
-    PrinterHandler* handler = GetPrinterHandler(type);
-    handler->StartPrint(
-        destination_id, capabilities, print_preview_ui()->initiator_title(),
-        print_ticket, gfx::Size(width, height), data,
-        base::BindOnce(&PrintPreviewHandler::OnPrintResult,
-                       weak_factory_.GetWeakPtr(), callback_id));
-    return;
-  }
-
   if (is_cloud_printer) {
-    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToCloudPrint",
-                         page_count);
-    ReportUserActionHistogram(PRINT_WITH_CLOUD_PRINT);
-    // Does not send the title like the printer handler types above, because JS
-    // already has the document title from the initial settings.
+    // Does not send the title like the other printer handler types below,
+    // because JS already has the document title from the initial settings.
     SendCloudPrintJob(callback_id, data.get());
     return;
   }
 
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
-  bool system_dialog = false;
-  settings->GetBoolean(printing::kSettingShowSystemDialog, &system_dialog);
-  if (system_dialog) {
-    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.SystemDialog", page_count);
-    ReportUserActionHistogram(FALLBACK_TO_ADVANCED_SETTINGS_DIALOG);
-  } else {
-    UMA_HISTOGRAM_COUNTS("PrintPreview.PageCount.PrintToPrinter", page_count);
-    ReportUserActionHistogram(PRINT_TO_PRINTER);
+  std::string destination_id;
+  std::string print_ticket;
+  std::string capabilities;
+  int width = 0;
+  int height = 0;
+  if ((print_with_privet || print_with_extension) &&
+      (!settings->GetString(printing::kSettingDeviceName, &destination_id) ||
+       !settings->GetString(printing::kSettingTicket, &print_ticket) ||
+       !settings->GetString(printing::kSettingCapabilities, &capabilities) ||
+       !settings->GetInteger(printing::kSettingPageWidth, &width) ||
+       !settings->GetInteger(printing::kSettingPageHeight, &height) ||
+       width <= 0 || height <= 0)) {
+    NOTREACHED();
+    RejectJavascriptCallback(
+        base::Value(callback_id),
+        print_with_privet ? base::Value(-1) : base::Value("FAILED"));
+    return;
   }
 
-  WebContents* initiator = GetInitiator();
-  if (initiator) {
-    // Save initiator IDs. PrintMsg_PrintForPrintPreview below should cause
-    // the renderer to send PrintHostMsg_UpdatePrintSettings and trigger
-    // PrintingMessageFilter::OnUpdatePrintSettings(), which needs this info.
-    auto* main_render_frame = initiator->GetMainFrame();
-    settings->SetInteger(printing::kPreviewInitiatorHostId,
-                         main_render_frame->GetProcess()->GetID());
-    settings->SetInteger(printing::kPreviewInitiatorRoutingId,
-                         main_render_frame->GetRoutingID());
-  }
-
-  // Set ID to know whether printing is for preview.
-  settings->SetInteger(printing::kPreviewUIID,
-                       print_preview_ui()->GetIDForPrintPreviewUI());
-
-  // Save the settings and notify print preview. Print preview will respond
-  // with a "hidePreviewDialog" message, and then the message can be sent to
-  // the renderer in HandleHidePreview().
-  settings_ = std::move(settings);
-  ResolveJavascriptCallback(base::Value(callback_id), base::Value());
-
-#else
-  NOTREACHED();
-#endif   // BUILDFLAG(ENABLE_BASIC_PRINTING)
+  PrinterType type = PrinterType::kLocalPrinter;
+  if (print_with_extension)
+    type = PrinterType::kExtensionPrinter;
+  else if (print_with_privet)
+    type = PrinterType::kPrivetPrinter;
+  else if (print_to_pdf)
+    type = PrinterType::kPdfPrinter;
+  PrinterHandler* handler = GetPrinterHandler(type);
+  handler->StartPrint(
+      destination_id, capabilities, print_preview_ui()->initiator_title(),
+      type == PrinterType::kLocalPrinter ? json_str : print_ticket,
+      gfx::Size(width, height), data,
+      base::BindOnce(&PrintPreviewHandler::OnPrintResult,
+                     weak_factory_.GetWeakPtr(), callback_id));
 }
 
 void PrintPreviewHandler::HandleHidePreview(const base::ListValue* /*args*/) {
   print_preview_ui()->OnHidePreviewDialog();
-#if BUILDFLAG(ENABLE_BASIC_PRINTING)
-  if (settings_) {
-    // Print preview is responding to a resolution of "print" promise. Send the
-    // print message to the renderer.
-    RenderFrameHost* rfh = preview_web_contents()->GetMainFrame();
-    rfh->Send(
-        new PrintMsg_PrintForPrintPreview(rfh->GetRoutingID(), *settings_));
-    settings_.reset();
-
-    // Clear the initiator so that it can open a new print preview dialog, while
-    // the current print preview dialog is still handling its print job.
-    WebContents* initiator = GetInitiator();
-    ClearInitiatorDetails();
-
-    // Since the preview dialog is hidden and not closed, we need to make this
-    // call.
-    if (initiator) {
-      auto* print_view_manager = PrintViewManager::FromWebContents(initiator);
-      print_view_manager->PrintPreviewDone();
-    }
-  }
-#endif
 }
 
 void PrintPreviewHandler::HandleCancelPendingPrintRequest(
@@ -880,7 +832,7 @@ void PrintPreviewHandler::HandleGetAccessToken(const base::ListValue* args) {
   DCHECK(ok);
 
   if (!token_service_)
-    token_service_ = base::MakeUnique<AccessTokenService>(this);
+    token_service_ = std::make_unique<AccessTokenService>(this);
   token_service_->RequestToken(type, callback_id);
 }
 
@@ -1048,10 +1000,10 @@ void PrintPreviewHandler::SendPrinterSetup(
     const std::string& callback_id,
     const std::string& printer_name,
     std::unique_ptr<base::DictionaryValue> destination_info) {
-  auto response = base::MakeUnique<base::DictionaryValue>();
+  auto response = std::make_unique<base::DictionaryValue>();
   bool success = true;
-  auto caps_value = base::MakeUnique<base::Value>();
-  auto caps = base::MakeUnique<base::DictionaryValue>();
+  auto caps_value = std::make_unique<base::Value>();
+  auto caps = std::make_unique<base::DictionaryValue>();
   if (destination_info &&
       destination_info->Remove(printing::kSettingCapabilities, &caps_value) &&
       caps_value->is_dict()) {
@@ -1253,8 +1205,8 @@ PrinterHandler* PrintPreviewHandler::GetPrinterHandler(
   }
   if (printer_type == PrinterType::kLocalPrinter) {
     if (!local_printer_handler_) {
-      local_printer_handler_ =
-          PrinterHandler::CreateForLocalPrinters(Profile::FromWebUI(web_ui()));
+      local_printer_handler_ = PrinterHandler::CreateForLocalPrinters(
+          preview_web_contents(), Profile::FromWebUI(web_ui()));
     }
     return local_printer_handler_.get();
   }
@@ -1298,11 +1250,20 @@ void PrintPreviewHandler::OnGotExtensionPrinterInfo(
 
 void PrintPreviewHandler::OnPrintResult(const std::string& callback_id,
                                         const base::Value& error) {
-  if (error.is_none()) {
+  if (error.is_none())
     ResolveJavascriptCallback(base::Value(callback_id), error);
-    return;
+  else
+    RejectJavascriptCallback(base::Value(callback_id), error);
+  // Remove the preview dialog from the background printing manager if it is
+  // being stored there. Since the PDF has been sent and the callback is
+  // resolved or rejected, it is no longer needed and can be destroyed.
+  printing::BackgroundPrintingManager* background_printing_manager =
+      g_browser_process->background_printing_manager();
+  if (background_printing_manager->HasPrintPreviewDialog(
+          preview_web_contents())) {
+    background_printing_manager->OnPrintRequestCancelled(
+        preview_web_contents());
   }
-  RejectJavascriptCallback(base::Value(callback_id), error);
 }
 
 void PrintPreviewHandler::RegisterForGaiaCookieChanges() {

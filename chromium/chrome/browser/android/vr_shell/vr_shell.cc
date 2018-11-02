@@ -10,7 +10,6 @@
 #include <utility>
 
 #include "base/android/jni_string.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/platform_thread.h"
@@ -29,11 +28,13 @@
 #include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
 #include "chrome/browser/android/vr_shell/vr_web_contents_observer.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/component_updater/vr_assets_component_installer.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/vr/assets.h"
+#include "chrome/browser/vr/assets_loader.h"
 #include "chrome/browser/vr/metrics_helper.h"
+#include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/toolbar_helper.h"
 #include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/browser/vr/web_contents_event_forwarder.h"
@@ -51,12 +52,12 @@
 #include "content/public/common/referrer.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
-#include "device/geolocation/public/interfaces/geolocation_config.mojom.h"
 #include "device/vr/android/gvr/cardboard_gamepad_data_fetcher.h"
 #include "device/vr/android/gvr/gvr_gamepad_data_fetcher.h"
 #include "device/vr/vr_device.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "jni/VrShellImpl_jni.h"
+#include "services/device/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/android/window_android.h"
@@ -75,7 +76,7 @@ using base::android::JavaParamRef;
 namespace vr_shell {
 
 namespace {
-vr_shell::VrShell* g_instance;
+vr_shell::VrShell* g_vr_shell_instance;
 
 constexpr base::TimeDelta poll_media_access_interval_ =
     base::TimeDelta::FromSecondsD(0.2);
@@ -136,7 +137,7 @@ VrShell::VrShell(JNIEnv* env,
       web_vr_autopresentation_expected_(
           ui_initial_state.web_vr_autopresentation_expected),
       window_(window),
-      compositor_(base::MakeUnique<VrCompositor>(window_)),
+      compositor_(std::make_unique<VrCompositor>(window_, this)),
       delegate_provider_(delegate),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
       reprojected_rendering_(reprojected_rendering),
@@ -144,20 +145,18 @@ VrShell::VrShell(JNIEnv* env,
       display_size_pixels_(display_width_pixels, display_height_pixels),
       weak_ptr_factory_(this) {
   DVLOG(1) << __FUNCTION__ << "=" << this;
-  DCHECK(g_instance == nullptr);
-  g_instance = this;
+  DCHECK(g_vr_shell_instance == nullptr);
+  g_vr_shell_instance = this;
   j_vr_shell_.Reset(env, obj);
 
-  // Defer applying commits to the renderer until we know the desired
-  // content resolution and DPR.
-  compositor_->SetDeferCommits(true);
-
-  gl_thread_ = base::MakeUnique<VrGLThread>(
+  gl_thread_ = std::make_unique<VrGLThread>(
       weak_ptr_factory_.GetWeakPtr(), main_thread_task_runner_, gvr_api,
       ui_initial_state, reprojected_rendering_, HasDaydreamSupport(env));
   ui_ = gl_thread_.get();
-  toolbar_ = base::MakeUnique<vr::ToolbarHelper>(ui_, this);
-  autocomplete_controller_ = base::MakeUnique<AutocompleteController>(ui_);
+  toolbar_ = std::make_unique<vr::ToolbarHelper>(ui_, this);
+  autocomplete_controller_ = std::make_unique<AutocompleteController>(
+      base::BindRepeating(&vr::BrowserUiInterface::SetOmniboxSuggestions,
+                          base::Unretained(ui_)));
 
   gl_thread_->Start();
 
@@ -166,7 +165,12 @@ VrShell::VrShell(JNIEnv* env,
     UMA_HISTOGRAM_BOOLEAN("VRAutopresentedWebVR", !ui_initial_state.in_web_vr);
   }
 
-  vr::Assets::GetInstance()->GetMetricsHelper()->OnEnter(vr::Mode::kVr);
+  vr::AssetsLoader::GetInstance()->SetOnComponentReadyCallback(
+      base::BindRepeating(&VrShell::OnAssetsComponentReady,
+                          weak_ptr_factory_.GetWeakPtr()));
+  vr::AssetsLoader::GetInstance()->GetMetricsHelper()->OnEnter(vr::Mode::kVr);
+
+  UpdateVrAssetsComponent(g_browser_process->component_updater());
 }
 
 void VrShell::Destroy(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -207,7 +211,7 @@ void VrShell::SwapContents(
   ContentFrameWasResized(false /* unused */);
   SetUiState();
 
-  vr_web_contents_observer_ = base::MakeUnique<VrWebContentsObserver>(
+  vr_web_contents_observer_ = std::make_unique<VrWebContentsObserver>(
       web_contents_, this, ui_, toolbar_.get());
 
   if (target) {
@@ -217,11 +221,11 @@ void VrShell::SwapContents(
     return;
   }
   web_contents_event_forwarder_ =
-      base::MakeUnique<vr::WebContentsEventForwarder>(
+      std::make_unique<vr::WebContentsEventForwarder>(
           GetNonNativePageWebContents());
   // TODO(billorr): Make VrMetricsHelper tab-aware and able to track multiple
   // tabs. crbug.com/684661
-  metrics_helper_ = base::MakeUnique<VrMetricsHelper>(
+  metrics_helper_ = std::make_unique<VrMetricsHelper>(
       GetNonNativePageWebContents(),
       webvr_mode_ ? vr::Mode::kWebVr : vr::Mode::kVrBrowsingRegular,
       web_vr_autopresentation_expected_);
@@ -273,12 +277,13 @@ VrShell::~VrShell() {
     base::ThreadRestrictions::ScopedAllowIO allow_io;
     gl_thread_.reset();
   }
-  g_instance = nullptr;
+  g_vr_shell_instance = nullptr;
 }
 
 void VrShell::PostToGlThread(const base::Location& from_here,
-                             const base::Closure& task) {
-  gl_thread_->message_loop()->task_runner()->PostTask(from_here, task);
+                             base::OnceClosure task) {
+  gl_thread_->message_loop()->task_runner()->PostTask(from_here,
+                                                      std::move(task));
 }
 
 void VrShell::OnContentPaused(bool paused) {
@@ -424,10 +429,11 @@ void VrShell::SetWebVrMode(JNIEnv* env,
   ui_->SetWebVrMode(enabled, show_toast);
 
   if (!webvr_mode_ && !web_vr_autopresentation_expected_) {
-    vr::Assets::GetInstance()->GetMetricsHelper()->OnEnter(
+    vr::AssetsLoader::GetInstance()->GetMetricsHelper()->OnEnter(
         vr::Mode::kVrBrowsing);
   } else {
-    vr::Assets::GetInstance()->GetMetricsHelper()->OnEnter(vr::Mode::kWebVr);
+    vr::AssetsLoader::GetInstance()->GetMetricsHelper()->OnEnter(
+        vr::Mode::kWebVr);
   }
 }
 
@@ -490,13 +496,14 @@ void VrShell::OnTabRemoved(JNIEnv* env,
 void VrShell::ConnectPresentingService(
     device::mojom::VRSubmitFrameClientPtr submit_client,
     device::mojom::VRPresentationProviderRequest request,
-    device::mojom::VRDisplayInfoPtr display_info) {
+    device::mojom::VRDisplayInfoPtr display_info,
+    device::mojom::VRRequestPresentOptionsPtr present_options) {
   PostToGlThread(
       FROM_HERE,
-      base::Bind(&VrShellGl::ConnectPresentingService,
-                 gl_thread_->GetVrShellGl(),
-                 base::Passed(submit_client.PassInterface()),
-                 base::Passed(&request), base::Passed(&display_info)));
+      base::BindOnce(&VrShellGl::ConnectPresentingService,
+                     gl_thread_->GetVrShellGl(), submit_client.PassInterface(),
+                     std::move(request), std::move(display_info),
+                     std::move(present_options)));
 }
 
 base::android::ScopedJavaGlobalRef<jobject> VrShell::TakeContentSurface(
@@ -542,8 +549,18 @@ void VrShell::ContentSurfaceChanged(jobject surface) {
   compositor_->SurfaceChanged(content_surface_);
 }
 
-void VrShell::GvrDelegateReady(gvr::ViewerType viewer_type) {
+void VrShell::GvrDelegateReady(
+    gvr::ViewerType viewer_type,
+    device::mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
+  frame_transport_options_ = std::move(transport_options);
   delegate_provider_->SetDelegate(this, viewer_type);
+}
+
+device::mojom::VRDisplayFrameTransportOptionsPtr
+VrShell::GetVRDisplayFrameTransportOptions() {
+  // Caller takes ownership. Must return a copy to support having this called
+  // multiple times during the lifetime of this instance.
+  return frame_transport_options_.Clone();
 }
 
 void VrShell::OnPhysicalBackingSizeChanged(
@@ -632,7 +649,7 @@ void VrShell::ContentWasHidden() {
 void VrShell::ContentWasShown() {
   if (GetNonNativePageWebContents()) {
     web_contents_event_forwarder_ =
-        base::MakeUnique<vr::WebContentsEventForwarder>(
+        std::make_unique<vr::WebContentsEventForwarder>(
             GetNonNativePageWebContents());
   }
 }
@@ -762,7 +779,6 @@ void VrShell::OnContentScreenBoundsChanged(const gfx::SizeF& bounds) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_VrShellImpl_setContentCssSize(env, j_vr_shell_, window_size.width(),
                                      window_size.height(), dpr);
-  compositor_->SetDeferCommits(false);
 }
 
 void VrShell::SetVoiceSearchActive(bool active) {
@@ -845,7 +861,7 @@ void VrShell::PollMediaAccessFlag() {
   }
   auto* connector =
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
-  connector->BindInterface("content_browser", &geolocation_config_);
+  connector->BindInterface(device::mojom::kServiceName, &geolocation_config_);
 
   geolocation_config_->IsHighAccuracyLocationBeingCaptured(
       base::Bind(&VrShell::SetHighAccuracyLocation, base::Unretained(this)));
@@ -954,8 +970,23 @@ void VrShell::OnVoiceResults(const base::string16& result) {
 
 void VrShell::OnAssetsLoaded(vr::AssetsLoadStatus status,
                              const base::Version& component_version) {
-  vr::Assets::GetInstance()->GetMetricsHelper()->OnAssetsLoaded(
+  if (status == vr::AssetsLoadStatus::kSuccess) {
+    VLOG(1) << "Successfully loaded VR assets component";
+  } else {
+    VLOG(1) << "Failed to load VR assets component";
+  }
+
+  vr::AssetsLoader::GetInstance()->GetMetricsHelper()->OnAssetsLoaded(
       status, component_version);
+}
+
+void VrShell::OnAssetsComponentReady() {
+  ui_->OnAssetsComponentReady();
+}
+
+void VrShell::DidSwapBuffers() {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  Java_VrShellImpl_didSwapBuffers(env, j_vr_shell_);
 }
 
 // ----------------------------------------------------------------------------
@@ -965,7 +996,7 @@ void VrShell::OnAssetsLoaded(vr::AssetsLoadStatus status,
 jlong JNI_VrShellImpl_Init(JNIEnv* env,
                            const JavaParamRef<jobject>& obj,
                            const JavaParamRef<jobject>& delegate,
-                           jlong window_android,
+                           const JavaParamRef<jobject>& jwindow_android,
                            jboolean for_web_vr,
                            jboolean web_vr_autopresentation_expected,
                            jboolean in_cct,
@@ -987,9 +1018,11 @@ jlong JNI_VrShellImpl_Init(JNIEnv* env,
       has_or_can_request_audio_permission;
   ui_initial_state.skips_redraw_when_not_dirty =
       base::FeatureList::IsEnabled(features::kVrBrowsingExperimentalRendering);
+  ui_initial_state.assets_available =
+      vr::AssetsLoader::GetInstance()->ComponentReady();
 
   return reinterpret_cast<intptr_t>(new VrShell(
-      env, obj, reinterpret_cast<ui::WindowAndroid*>(window_android),
+      env, obj, ui::WindowAndroid::FromJavaWindowAndroid(jwindow_android),
       ui_initial_state,
       VrShellDelegate::GetNativeVrShellDelegate(env, delegate),
       reinterpret_cast<gvr_context*>(gvr_api), reprojected_rendering,

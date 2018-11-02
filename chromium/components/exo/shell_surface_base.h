@@ -110,6 +110,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   void SetSystemModal(bool system_modal);
 
   // Start an interactive move of surface.
+  // TODO(oshima): Move this to ShellSurface.
   void Move();
 
   // Sets the application ID for the window. The application ID identifies the
@@ -145,6 +146,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   void SetCanMinimize(bool can_minimize);
 
+  // Prevents shell surface from being moved.
+  void DisableMovement();
+
   // Sets the main surface for the window.
   static void SetMainSurface(aura::Window* window, Surface* surface);
 
@@ -157,8 +161,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   // Overridden from SurfaceDelegate:
   void OnSurfaceCommit() override;
-  bool IsTouchEnabled(Surface* surface) const override;
+  bool IsInputEnabled(Surface* surface) const override;
   void OnSetFrame(SurfaceFrameType type) override;
+  void OnSetFrameColors(SkColor active_color, SkColor inactive_color) override;
   void OnSetParent(Surface* parent, const gfx::Point& position) override;
 
   // Overridden from SurfaceObserver:
@@ -265,6 +270,7 @@ class ShellSurfaceBase : public SurfaceTreeHost,
 
   // Attempt to start a drag operation. The type of drag operation to start is
   // determined by |component|.
+  // TODO(oshima): Move this to ShellSurface.
   void AttemptToStartDrag(int component);
 
   // Set the parent window of this surface.
@@ -289,6 +295,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   base::string16 title_;
   std::unique_ptr<ui::CompositorLock> configure_compositor_lock_;
   ConfigureCallback configure_callback_;
+  // TODO(oshima): Remove this once the transition to new drag/resize
+  // complete. https://crbug.com/801666.
+  bool client_controlled_move_resize_ = true;
 
  private:
   struct Config;
@@ -322,6 +331,9 @@ class ShellSurfaceBase : public SurfaceTreeHost,
   bool activatable_ = true;
   bool can_minimize_ = true;
   bool frame_enabled_ = false;
+  bool has_frame_colors_ = false;
+  SkColor active_frame_color_ = SK_ColorBLACK;
+  SkColor inactive_frame_color_ = SK_ColorBLACK;
   bool pending_show_widget_ = false;
   std::string application_id_;
   gfx::Rect geometry_;

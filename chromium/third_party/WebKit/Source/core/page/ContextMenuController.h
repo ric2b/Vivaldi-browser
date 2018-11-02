@@ -27,29 +27,28 @@
 #define ContextMenuController_h
 
 #include <memory>
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/layout/HitTestResult.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
+#include "public/platform/WebMenuSourceType.h"
 
 namespace blink {
 
 class ContextMenu;
-class ContextMenuClient;
 class ContextMenuItem;
 class ContextMenuProvider;
 class Document;
 class LocalFrame;
 class MouseEvent;
 class Page;
+struct WebContextMenuData;
 
 class CORE_EXPORT ContextMenuController final
     : public GarbageCollectedFinalized<ContextMenuController> {
-  WTF_MAKE_NONCOPYABLE(ContextMenuController);
-
  public:
-  static ContextMenuController* Create(Page*, ContextMenuClient*);
+  static ContextMenuController* Create(Page*);
   ~ContextMenuController();
   void Trace(blink::Visitor*);
 
@@ -66,20 +65,31 @@ class CORE_EXPORT ContextMenuController final
 
   void ContextMenuItemSelected(const ContextMenuItem*);
 
-  const HitTestResult& GetHitTestResult() { return hit_test_result_; }
+  Node* ContextMenuNodeForFrame(LocalFrame*);
+
+  void SetHitTestResultForTests(const HitTestResult& hit_test_result) {
+    hit_test_result_ = hit_test_result;
+  }
 
  private:
-  ContextMenuController(Page*, ContextMenuClient*);
+  friend class ContextMenuControllerTest;
+
+  explicit ContextMenuController(Page*);
 
   std::unique_ptr<ContextMenu> CreateContextMenu(MouseEvent*);
   std::unique_ptr<ContextMenu> CreateContextMenu(LocalFrame*,
                                                  const LayoutPoint&);
   void ShowContextMenu(MouseEvent*);
 
-  ContextMenuClient* client_;
+  // Returns whether a Context Menu was actually shown.
+  bool ShowContextMenu(const ContextMenu*, WebMenuSourceType);
+  bool ShouldShowContextMenuFromTouch(const WebContextMenuData&);
+
+  Member<Page> page_;
   std::unique_ptr<ContextMenu> context_menu_;
   Member<ContextMenuProvider> menu_provider_;
   HitTestResult hit_test_result_;
+  DISALLOW_COPY_AND_ASSIGN(ContextMenuController);
 };
 
 }  // namespace blink

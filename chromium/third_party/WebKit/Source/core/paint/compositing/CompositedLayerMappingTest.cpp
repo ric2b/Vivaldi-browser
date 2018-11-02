@@ -7,7 +7,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutTestHelper.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "public/platform/WebContentLayer.h"
@@ -198,7 +198,7 @@ TEST_P(CompositedLayerMappingTest, VerticalRightLeftWritingModeDocument) {
       ScrollOffset(-5000, 0), kProgrammaticScroll);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  PaintLayer* paint_layer = GetDocument().GetLayoutViewItem().Layer();
+  PaintLayer* paint_layer = GetDocument().GetLayoutView()->Layer();
   ASSERT_TRUE(paint_layer->GraphicsLayerBacking());
   ASSERT_TRUE(paint_layer->GetCompositedLayerMapping());
   // A scroll by -5000px is equivalent to a scroll by (10000 - 5000 - 800)px =
@@ -587,7 +587,7 @@ TEST_P(CompositedLayerMappingTest, InterestRectChangeOnViewportScroll) {
 
   GetDocument().View()->UpdateAllLifecyclePhases();
   GraphicsLayer* root_scrolling_layer =
-      GetDocument().GetLayoutViewItem().Layer()->GraphicsLayerBacking();
+      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
             PreviousInterestRect(root_scrolling_layer));
 
@@ -649,7 +649,7 @@ TEST_P(CompositedLayerMappingTest, InterestRectChangeOnShrunkenViewport) {
 
   GetDocument().View()->UpdateAllLifecyclePhases();
   GraphicsLayer* root_scrolling_layer =
-      GetDocument().GetLayoutViewItem().Layer()->GraphicsLayerBacking();
+      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
   EXPECT_EQ(IntRect(0, 0, 800, 4600),
             PreviousInterestRect(root_scrolling_layer));
 
@@ -865,12 +865,12 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfScrolledIframe) {
       ScrollOffset(0.0, 7500.0), kProgrammaticScroll);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  ASSERT_TRUE(ChildDocument().View()->GetLayoutViewItem().HasLayer());
+  ASSERT_TRUE(ChildDocument().View()->GetLayoutView()->HasLayer());
   EXPECT_EQ(IntRect(0, 3500, 500, 4500),
             RecomputeInterestRect(ChildDocument()
                                       .View()
-                                      ->GetLayoutViewItem()
-                                      .EnclosingLayer()
+                                      ->GetLayoutView()
+                                      ->EnclosingLayer()
                                       ->GraphicsLayerBacking()));
 }
 
@@ -899,13 +899,13 @@ TEST_P(CompositedLayerMappingTest, InterestRectOfIframeWithContentBoxOffset) {
       ScrollOffset(0.0, 3000.0), kProgrammaticScroll);
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  ASSERT_TRUE(ChildDocument().View()->GetLayoutViewItem().HasLayer());
+  ASSERT_TRUE(ChildDocument().View()->GetLayoutView()->HasLayer());
   // The width is 485 pixels due to the size of the scrollbar.
   EXPECT_EQ(IntRect(0, 0, 500, 7500),
             RecomputeInterestRect(ChildDocument()
                                       .View()
-                                      ->GetLayoutViewItem()
-                                      .EnclosingLayer()
+                                      ->GetLayoutView()
+                                      ->EnclosingLayer()
                                       ->GraphicsLayerBacking()));
 }
 
@@ -1049,8 +1049,9 @@ TEST_P(CompositedLayerMappingTest,
       true);
   SetBodyInnerHTML(R"HTML(
     <div id='container' style='overflow: scroll; width: 300px; height:
-    300px; border-radius: 5px; background: white; will-change: transform;'>
-        <div style='background-color: blue; width: 2000px; height:
+    300px; background: white; will-change: transform;'>
+        <div style='background-color: blue; clip-path: circle(600px at 1000px 1000px);
+        width: 2000px; height:
     2000px;'></div>
     </div>
   )HTML");
@@ -2398,7 +2399,7 @@ TEST_P(CompositedLayerMappingTest, MainFrameLayerBackgroundColor) {
   GetDocument().View()->UpdateAllLifecyclePhases();
   EXPECT_EQ(Color::kWhite, GetDocument().View()->BaseBackgroundColor());
   auto* view_layer =
-      GetDocument().GetLayoutViewItem().Layer()->GraphicsLayerBacking();
+      GetDocument().GetLayoutView()->Layer()->GraphicsLayerBacking();
   EXPECT_EQ(Color::kWhite, view_layer->BackgroundColor());
 
   Color base_background(255, 0, 0);
@@ -2472,6 +2473,49 @@ TEST_P(CompositedLayerMappingTest, ForegroundLayerSizing) {
   ASSERT_TRUE(mapping->ForegroundLayer());
   EXPECT_EQ(FloatPoint(0, 0), mapping->ForegroundLayer()->GetPosition());
   EXPECT_EQ(FloatSize(100, 100), mapping->ForegroundLayer()->Size());
+}
+
+TEST_P(CompositedLayerMappingTest, ScrollLayerSizingSubpixelAccumulation) {
+  // This test verifies that when subpixel accumulation causes snapping it
+  // applies to both the scrolling and scrolling contents layers. Verify that
+  // the mapping doesn't have any vertical scrolling introduced as a result of
+  // the snapping behavior. https://crbug.com/801381.
+  GetDocument().GetFrame()->GetSettings()->SetPreferCompositingToLCDTextEnabled(
+      true);
+
+  // The values below are chosen so that the subpixel accumulation causes the
+  // pixel snapped height to be increased relative to snapping without it.
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        margin: 0;
+      }
+      #scroller {
+        position: relative;
+        top: 0.5625px;
+        width: 200px;
+        height: 200.8125px;
+        overflow: auto;
+      }
+      #space {
+        width: 1000px;
+        height: 200.8125px;
+      }
+    </style>
+    <div id="scroller">
+      <div id="space"></div>
+    </div>
+  )HTML");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+  auto* mapping = ToLayoutBoxModelObject(GetLayoutObjectByElementId("scroller"))
+                      ->Layer()
+                      ->GetCompositedLayerMapping();
+  ASSERT_TRUE(mapping);
+  ASSERT_TRUE(mapping->ScrollingLayer());
+  ASSERT_TRUE(mapping->ScrollingContentsLayer());
+  EXPECT_EQ(mapping->ScrollingLayer()->Size().Height(),
+            mapping->ScrollingContentsLayer()->Size().Height());
 }
 
 }  // namespace blink

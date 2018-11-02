@@ -55,13 +55,19 @@ void ProprietaryMediaGpuChannel::OnNewMediaPipeline(
     int32_t route_id,
     int32_t command_buffer_route_id) {
 
+#if defined(PLATFORM_MEDIA_HWA)
   GpuCommandBufferStub* command_buffer = nullptr;
 
   if (AllowHardwareDecode())
     command_buffer = channel_->LookupCommandBuffer(command_buffer_route_id);
+#endif
 
   std::unique_ptr<media::IPCMediaPipeline> ipc_media_pipeline(
-      new media::IPCMediaPipeline(this, route_id, command_buffer));
+      new media::IPCMediaPipeline(this, route_id
+#if defined(PLATFORM_MEDIA_HWA)
+                                  , command_buffer
+#endif
+                                  ));
 
   if (channel_->scheduler()) {
     SequenceId sequence_id = channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);
@@ -79,6 +85,7 @@ void ProprietaryMediaGpuChannel::OnDestroyMediaPipeline(int32_t route_id) {
   }
 }
 
+#if defined(PLATFORM_MEDIA_HWA)
 bool ProprietaryMediaGpuChannel::AllowHardwareDecode() {
   const GpuPreferences& gpu_prefs =
           channel_->gpu_channel_manager()->gpu_preferences();
@@ -100,5 +107,6 @@ bool ProprietaryMediaGpuChannel::AllowHardwareDecode() {
             << " : Hardware Decode Not Enabled";
   return false;
 }
+#endif
 
 }  // namespace gpu

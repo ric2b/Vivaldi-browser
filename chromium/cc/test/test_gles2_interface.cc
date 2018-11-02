@@ -308,18 +308,12 @@ void TestGLES2Interface::BufferData(GLenum target,
   test_context_->bufferData(target, size, data, usage);
 }
 
-GLuint64 TestGLES2Interface::InsertFenceSyncCHROMIUM() {
-  return test_context_->insertFenceSync();
+void TestGLES2Interface::GenSyncTokenCHROMIUM(GLbyte* sync_token) {
+  test_context_->genSyncToken(sync_token);
 }
 
-void TestGLES2Interface::GenSyncTokenCHROMIUM(GLuint64 fence_sync,
-                                              GLbyte* sync_token) {
-  test_context_->genSyncToken(fence_sync, sync_token);
-}
-
-void TestGLES2Interface::GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
-                                                        GLbyte* sync_token) {
-  test_context_->genSyncToken(fence_sync, sync_token);
+void TestGLES2Interface::GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) {
+  test_context_->genSyncToken(sync_token);
 }
 
 void TestGLES2Interface::VerifySyncTokensCHROMIUM(GLbyte** sync_tokens,
@@ -355,21 +349,14 @@ void TestGLES2Interface::GenMailboxCHROMIUM(GLbyte* mailbox) {
   test_context_->genMailboxCHROMIUM(mailbox);
 }
 
-void TestGLES2Interface::ProduceTextureCHROMIUM(GLenum target,
-                                                const GLbyte* mailbox) {
-  test_context_->produceTextureCHROMIUM(target, mailbox);
-}
-
 void TestGLES2Interface::ProduceTextureDirectCHROMIUM(GLuint texture,
-                                                      GLenum target,
                                                       const GLbyte* mailbox) {
-  test_context_->produceTextureDirectCHROMIUM(texture, target, mailbox);
+  test_context_->produceTextureDirectCHROMIUM(texture, mailbox);
 }
 
 GLuint TestGLES2Interface::CreateAndConsumeTextureCHROMIUM(
-    GLenum target,
     const GLbyte* mailbox) {
-  return test_context_->createAndConsumeTextureCHROMIUM(target, mailbox);
+  return test_context_->createAndConsumeTextureCHROMIUM(mailbox);
 }
 
 void TestGLES2Interface::ResizeCHROMIUM(GLuint width,

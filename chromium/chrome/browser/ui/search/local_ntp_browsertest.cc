@@ -5,98 +5,119 @@
 #include <memory>
 #include <string>
 
+#include "base/bind.h"
 #include "base/command_line.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/i18n/base_i18n_switches.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search/instant_service.h"
+#include "chrome/browser/search/instant_service_factory.h"
+#include "chrome/browser/search/instant_service_observer.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/search/instant_test_utils.h"
 #include "chrome/browser/ui/search/local_ntp_test_utils.h"
-#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/pref_names.h"
+#include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/browser/interstitial_page.h"
+#include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
-#include "testing/gmock/include/gmock/gmock.h"
+#include "content/public/test/test_navigation_throttle_inserter.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "url/gurl.h"
 
-class LocalNTPTest : public InProcessBrowserTest {
+namespace {
+
+// In a non-signed-in, fresh profile with no history, there should be two
+// default TopSites tiles (see history::PrepopulatedPage).
+const int kDefaultMostVisitedItemCount = 2;
+
+class TestMostVisitedObserver : public InstantServiceObserver {
  public:
-  LocalNTPTest() {}
+  explicit TestMostVisitedObserver(InstantService* service)
+      : service_(service), expected_count_(0) {
+    service_->AddObserver(this);
+  }
 
-  // Navigates the active tab to chrome://newtab and waits until the NTP is
-  // fully loaded. Note that simply waiting for a navigation is not enough,
-  // since the MV iframe receives the tiles asynchronously.
-  void NavigateToNTPAndWaitUntilLoaded() {
-    content::WebContents* active_tab =
-        browser()->tab_strip_model()->GetActiveWebContents();
+  ~TestMostVisitedObserver() override { service_->RemoveObserver(this); }
 
-    // Attach a message queue *before* navigating to the NTP, to make sure we
-    // don't miss the 'loaded' message due to some race condition.
-    content::DOMMessageQueue msg_queue(active_tab);
+  void WaitForNumberOfItems(size_t count) {
+    DCHECK(!quit_closure_);
 
-    // Navigate to the NTP.
-    ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-    ASSERT_TRUE(search::IsInstantNTP(active_tab));
-    ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-              active_tab->GetController().GetVisibleEntry()->GetURL());
+    expected_count_ = count;
 
-    // At this point, the MV iframe may or may not have been fully loaded. Once
-    // it loads, it sends a 'loaded' postMessage to the page. Check if the page
-    // has already received that, and if not start listening for it. It's
-    // important that these two things happen in the same JS invocation, since
-    // otherwise we might miss the message.
-    bool mv_tiles_loaded = false;
-    ASSERT_TRUE(instant_test_utils::GetBoolFromJS(active_tab,
-                                                  R"js(
-        (function() {
-          if (tilesAreLoaded) {
-            return true;
-          }
-          window.addEventListener('message', function(event) {
-            if (event.data.cmd == 'loaded') {
-              domAutomationController.send('NavigateToNTPAndWaitUntilLoaded');
-            }
-          });
-          return false;
-        })()
-                                                  )js",
-                                                  &mv_tiles_loaded));
-
-    std::string message;
-    // Get rid of the message that the GetBoolFromJS call produces.
-    ASSERT_TRUE(msg_queue.PopMessage(&message));
-
-    if (mv_tiles_loaded) {
-      // The tiles are already loaded, i.e. we missed the 'loaded' message. All
-      // is well.
+    if (items_.size() == count) {
       return;
     }
 
-    // Not loaded yet. Wait for the "NavigateToNTPAndWaitUntilLoaded" message.
-    ASSERT_TRUE(msg_queue.WaitForMessage(&message));
-    ASSERT_EQ("\"NavigateToNTPAndWaitUntilLoaded\"", message);
-    // There shouldn't be any other messages.
-    ASSERT_FALSE(msg_queue.PopMessage(&message));
+    base::RunLoop run_loop;
+    quit_closure_ = run_loop.QuitClosure();
+    run_loop.Run();
   }
 
  private:
-  void SetUp() override {
+  void ThemeInfoChanged(const ThemeBackgroundInfo&) override {}
+
+  void MostVisitedItemsChanged(
+      const std::vector<InstantMostVisitedItem>& items) override {
+    items_ = items;
+
+    if (quit_closure_ && items_.size() == expected_count_) {
+      std::move(quit_closure_).Run();
+      quit_closure_.Reset();
+    }
+  }
+
+  InstantService* const service_;
+
+  std::vector<InstantMostVisitedItem> items_;
+
+  size_t expected_count_;
+  base::OnceClosure quit_closure_;
+};
+
+class LocalNTPTest : public InProcessBrowserTest {
+ public:
+  LocalNTPTest() {
     feature_list_.InitAndEnableFeature(features::kUseGoogleLocalNtp);
-    InProcessBrowserTest::SetUp();
+  }
+
+ private:
+  void SetUpOnMainThread() override {
+    // Some tests depend on the prepopulated most visited tiles coming from
+    // TopSites, so make sure they are available before running the tests.
+    // (TopSites is loaded asynchronously at startup, so without this, there's
+    // a chance that it hasn't finished and we receive 0 tiles.)
+    InstantService* instant_service =
+        InstantServiceFactory::GetForProfile(browser()->profile());
+    TestMostVisitedObserver mv_observer(instant_service);
+    // Make sure the observer knows about the current items. Typically, this
+    // gets triggered by navigating to an NTP.
+    instant_service->UpdateMostVisitedItemsInfo();
+    mv_observer.WaitForNumberOfItems(kDefaultMostVisitedItemCount);
   }
 
   base::test::ScopedFeatureList feature_list_;
@@ -121,9 +142,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIOnlyAvailableOnNTP) {
 
   // Navigate somewhere else in the same tab.
   content::TestNavigationObserver elsewhere_observer(active_tab);
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), other_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ui_test_utils::NavigateToURL(browser(), other_url);
   elsewhere_observer.Wait();
   ASSERT_TRUE(elsewhere_observer.last_navigation_succeeded());
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
@@ -152,10 +171,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIOnlyAvailableOnNTP) {
   EXPECT_FALSE(result);
 
   // Navigate to a new NTP instance.
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL(chrome::kChromeUINewTabURL),
-      WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   ASSERT_TRUE(search::IsInstantNTP(active_tab));
   // Now the API should be available again.
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
@@ -215,6 +231,100 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIExposesStaticFunctions) {
   }
 }
 
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIEndToEnd) {
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
+
+  TestMostVisitedObserver observer(
+      InstantServiceFactory::GetForProfile(browser()->profile()));
+
+  // Navigating to an NTP should trigger an update of the MV items.
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
+  observer.WaitForNumberOfItems(kDefaultMostVisitedItemCount);
+
+  // Make sure the same number of items is available in JS.
+  int most_visited_count = -1;
+  ASSERT_TRUE(instant_test_utils::GetIntFromJS(
+      active_tab, "window.chrome.embeddedSearch.newTabPage.mostVisited.length",
+      &most_visited_count));
+  ASSERT_EQ(kDefaultMostVisitedItemCount, most_visited_count);
+
+  // Get the ID of one item.
+  int most_visited_rid = -1;
+  ASSERT_TRUE(instant_test_utils::GetIntFromJS(
+      active_tab, "window.chrome.embeddedSearch.newTabPage.mostVisited[0].rid",
+      &most_visited_rid));
+
+  // Delete that item. The deletion should arrive on the native side.
+  ASSERT_TRUE(content::ExecuteScript(
+      active_tab,
+      base::StringPrintf(
+          "window.chrome.embeddedSearch.newTabPage.deleteMostVisitedItem(%d)",
+          most_visited_rid)));
+  observer.WaitForNumberOfItems(kDefaultMostVisitedItemCount - 1);
+}
+
+// Regression test for crbug.com/592273.
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, EmbeddedSearchAPIAfterDownload) {
+  // Set up a temporary directory for downloads, so that we don't leak the
+  // downloaded file.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::ScopedTempDir downloads_dir;
+  ASSERT_TRUE(downloads_dir.CreateUniqueTempDir());
+  browser()->profile()->GetPrefs()->SetFilePath(
+      prefs::kDownloadDefaultDirectory, downloads_dir.GetPath());
+
+  // Set up a test server, so we have some URL to download.
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(test_server.Start());
+  const GURL download_url = test_server.GetURL("/download-test1.lib");
+
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
+
+  TestMostVisitedObserver observer(
+      InstantServiceFactory::GetForProfile(browser()->profile()));
+
+  // Navigating to an NTP should trigger an update of the MV items.
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
+  observer.WaitForNumberOfItems(kDefaultMostVisitedItemCount);
+
+  // Download some file.
+  content::DownloadTestObserverTerminal download_observer(
+      content::BrowserContext::GetDownloadManager(browser()->profile()), 1,
+      content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_ACCEPT);
+  ui_test_utils::NavigateToURL(browser(), download_url);
+  download_observer.WaitForFinished();
+
+  // This should have changed the visible URL, but not the last committed one.
+  ASSERT_EQ(download_url, active_tab->GetVisibleURL());
+  ASSERT_EQ(GURL(chrome::kChromeUINewTabURL),
+            active_tab->GetLastCommittedURL());
+
+  // Make sure the same number of items is available in JS.
+  int most_visited_count = -1;
+  ASSERT_TRUE(instant_test_utils::GetIntFromJS(
+      active_tab, "window.chrome.embeddedSearch.newTabPage.mostVisited.length",
+      &most_visited_count));
+  ASSERT_EQ(kDefaultMostVisitedItemCount, most_visited_count);
+
+  // Get the ID of one item.
+  int most_visited_rid = -1;
+  ASSERT_TRUE(instant_test_utils::GetIntFromJS(
+      active_tab, "window.chrome.embeddedSearch.newTabPage.mostVisited[0].rid",
+      &most_visited_rid));
+
+  // Since the current page is still an NTP, it should be possible to delete MV
+  // items (as well as anything else that the embeddedSearch API allows).
+  ASSERT_TRUE(content::ExecuteScript(
+      active_tab,
+      base::StringPrintf(
+          "window.chrome.embeddedSearch.newTabPage.deleteMostVisitedItem(%d)",
+          most_visited_rid)));
+  observer.WaitForNumberOfItems(kDefaultMostVisitedItemCount - 1);
+}
+
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, NTPRespectsBrowserLanguageSetting) {
   // If the platform cannot load the French locale (GetApplicationLocale() is
   // platform specific, and has been observed to fail on a small number of
@@ -245,7 +355,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, GoogleNTPLoadsWithoutError) {
   base::HistogramTester histograms;
 
   // Navigate to the NTP.
-  NavigateToNTPAndWaitUntilLoaded();
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
 
   bool is_google = false;
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
@@ -297,7 +407,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, NonGoogleNTPLoadsWithoutError) {
   base::HistogramTester histograms;
 
   // Navigate to the NTP.
-  NavigateToNTPAndWaitUntilLoaded();
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
 
   bool is_google = false;
   ASSERT_TRUE(instant_test_utils::GetBoolFromJS(
@@ -347,12 +457,8 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, FrenchGoogleNTPLoadsWithoutError) {
   content::ConsoleObserverDelegate console_observer(active_tab, "*");
   active_tab->SetDelegate(&console_observer);
 
-  // Navigate to the NTP.
-  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
-  ASSERT_TRUE(search::IsInstantNTP(active_tab));
-  ASSERT_EQ(GURL(chrome::kChromeSearchLocalNtpUrl),
-            active_tab->GetController().GetVisibleEntry()->GetURL());
-  // Make sure it's actually in French.
+  // Navigate to the NTP and make sure it's actually in French.
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
   ASSERT_EQ(base::ASCIIToUTF16("Nouvel onglet"), active_tab->GetTitle());
 
   // We shouldn't have gotten any console error messages.
@@ -378,9 +484,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, ShouldNotTrackBlinkUseCounterForNTP) {
   EXPECT_EQ(nullptr,
             base::StatisticsRecorder::FindHistogram(kFeaturesHistogramName));
   // Navigate somewhere else in the same tab.
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), other_url, WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ui_test_utils::NavigateToURL(browser(), other_url);
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
   // Navigate back to NTP.
   content::TestNavigationObserver back_observer(active_tab);
@@ -398,10 +502,7 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, ShouldNotTrackBlinkUseCounterForNTP) {
   fwd_observer.Wait();
   ASSERT_FALSE(search::IsInstantNTP(active_tab));
   // Navigate to a new NTP instance.
-  ui_test_utils::NavigateToURLWithDisposition(
-      browser(), GURL(chrome::kChromeUINewTabURL),
-      WindowOpenDisposition::CURRENT_TAB,
-      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+  ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUINewTabURL));
   ASSERT_TRUE(search::IsInstantNTP(active_tab));
   // There should be 2 counts of PageVisits.
   histogram_tester.ExpectBucketCount(
@@ -432,8 +533,6 @@ IN_PROC_BROWSER_TEST_F(LocalNTPRTLTest, RightToLeft) {
   EXPECT_EQ("rtl", dir);
 }
 
-namespace {
-
 // Returns the RenderFrameHost corresponding to the most visited iframe in the
 // given |tab|. |tab| must correspond to an NTP.
 content::RenderFrameHost* GetMostVisitedIframe(content::WebContents* tab) {
@@ -445,12 +544,10 @@ content::RenderFrameHost* GetMostVisitedIframe(content::WebContents* tab) {
   return nullptr;
 }
 
-}  // namespace
-
 IN_PROC_BROWSER_TEST_F(LocalNTPTest, LoadsIframe) {
   content::WebContents* active_tab =
       local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
-  NavigateToNTPAndWaitUntilLoaded();
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
 
   // Get the iframe and check that the tiles loaded correctly.
   content::RenderFrameHost* iframe = GetMostVisitedIframe(active_tab);
@@ -482,3 +579,100 @@ IN_PROC_BROWSER_TEST_F(LocalNTPTest, LoadsIframe) {
   EXPECT_EQ(total_thumbs, succeeded_imgs);
   EXPECT_EQ(0, failed_imgs);
 }
+
+// A minimal implementation of an interstitial page.
+class TestInterstitialPageDelegate : public content::InterstitialPageDelegate {
+ public:
+  static void Show(content::WebContents* web_contents, const GURL& url) {
+    // The InterstitialPage takes ownership of this object, and will delete it
+    // when it gets destroyed itself.
+    new TestInterstitialPageDelegate(web_contents, url);
+  }
+
+  ~TestInterstitialPageDelegate() override {}
+
+ private:
+  TestInterstitialPageDelegate(content::WebContents* web_contents,
+                               const GURL& url) {
+    // |page| takes ownership of |this|.
+    content::InterstitialPage* page =
+        content::InterstitialPage::Create(web_contents, true, url, this);
+    page->Show();
+  }
+
+  std::string GetHTMLContents() override { return "<html></html>"; }
+
+  DISALLOW_COPY_AND_ASSIGN(TestInterstitialPageDelegate);
+};
+
+// A navigation throttle that will create an interstitial for all pages except
+// chrome-search:// ones (i.e. the local NTP).
+class TestNavigationThrottle : public content::NavigationThrottle {
+ public:
+  explicit TestNavigationThrottle(content::NavigationHandle* handle)
+      : content::NavigationThrottle(handle), weak_ptr_factory_(this) {}
+
+  static std::unique_ptr<NavigationThrottle> Create(
+      content::NavigationHandle* handle) {
+    return std::make_unique<TestNavigationThrottle>(handle);
+  }
+
+ private:
+  ThrottleCheckResult WillStartRequest() override {
+    const GURL& url = navigation_handle()->GetURL();
+    if (url.SchemeIs(chrome::kChromeSearchScheme)) {
+      return NavigationThrottle::PROCEED;
+    }
+
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindRepeating(&TestNavigationThrottle::ShowInterstitial,
+                            weak_ptr_factory_.GetWeakPtr()));
+    return NavigationThrottle::DEFER;
+  }
+
+  const char* GetNameForLogging() override { return "TestNavigationThrottle"; }
+
+  void ShowInterstitial() {
+    TestInterstitialPageDelegate::Show(navigation_handle()->GetWebContents(),
+                                       navigation_handle()->GetURL());
+  }
+
+  base::WeakPtrFactory<TestNavigationThrottle> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestNavigationThrottle);
+};
+
+IN_PROC_BROWSER_TEST_F(LocalNTPTest, InterstitialsAreNotNTPs) {
+  // Set up a test server, so we have some non-NTP URL to navigate to.
+  net::EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  test_server.ServeFilesFromSourceDirectory("chrome/test/data");
+  ASSERT_TRUE(test_server.Start());
+
+  content::WebContents* active_tab =
+      local_ntp_test_utils::OpenNewTab(browser(), GURL("about:blank"));
+
+  content::TestNavigationThrottleInserter throttle_inserter(
+      active_tab, base::BindRepeating(&TestNavigationThrottle::Create));
+
+  local_ntp_test_utils::NavigateToNTPAndWaitUntilLoaded(browser());
+  ASSERT_TRUE(search::IsInstantNTP(active_tab));
+
+  // Navigate to some non-NTP URL, which will result in an interstitial.
+  const GURL blocked_url = test_server.GetURL("/simple.html");
+  ui_test_utils::NavigateToURL(browser(), blocked_url);
+  content::WaitForInterstitialAttach(active_tab);
+  ASSERT_TRUE(active_tab->ShowingInterstitialPage());
+  ASSERT_EQ(blocked_url, active_tab->GetVisibleURL());
+  // The interstitial is not an NTP (even though the committed URL may still
+  // point to an NTP, see crbug.com/448486).
+  EXPECT_FALSE(search::IsInstantNTP(active_tab));
+
+  // Go back to the NTP.
+  chrome::GoBack(browser(), WindowOpenDisposition::CURRENT_TAB);
+  content::WaitForInterstitialDetach(active_tab);
+  // Now the page should be an NTP again.
+  EXPECT_TRUE(search::IsInstantNTP(active_tab));
+}
+
+}  // namespace

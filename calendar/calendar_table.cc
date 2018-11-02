@@ -54,6 +54,19 @@ bool CalendarTable::CreateCalendarTable() {
   return res;
 }
 
+bool CalendarTable::CreateDefaultCalendar() {
+  if (DoesAnyCalendarExist())
+    return false;
+
+  CalendarRow row;
+  row.set_name(base::UTF8ToUTF16("Default"));
+  CalendarID id = CreateCalendar(row);
+  if (id)
+    return true;
+
+  return false;
+}
+
 // static
 std::string CalendarTable::GURLToDatabaseURL(const GURL& gurl) {
   GURL::Replacements replacements;
@@ -104,7 +117,7 @@ bool CalendarTable::GetAllCalendars(CalendarRows* calendars) {
 
 bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
-                                   "UPDATE calendar SET \
+                                                      "UPDATE calendar SET \
         name=?, description=?, url=?, orderindex=?, color=?, hidden=? "
                                                       " WHERE id=?"));
   statement.BindString16(0, calendar.name());
@@ -113,7 +126,7 @@ bool CalendarTable::UpdateCalendarRow(const CalendarRow& calendar) {
   statement.BindInt(3, calendar.orderindex());
   statement.BindString(4, calendar.color());
   statement.BindInt(5, calendar.hidden() ? 1 : 0);
-  statement.BindString(6, calendar.id());
+  statement.BindInt64(6, calendar.id());
 
   return statement.Run();
 }
@@ -142,7 +155,7 @@ bool CalendarTable::GetRowForCalendar(CalendarID calendar_id,
 
 void CalendarTable::FillCalendarRow(sql::Statement& statement,
                                     CalendarRow* calendar) {
-  std::string id = statement.ColumnString(0);
+  CalendarID id = statement.ColumnInt64(0);
   base::string16 name = statement.ColumnString16(1);
   base::string16 description = statement.ColumnString16(2);
   std::string url = statement.ColumnString(3);
@@ -159,6 +172,28 @@ void CalendarTable::FillCalendarRow(sql::Statement& statement,
   calendar->set_orderindex(orderindex);
   calendar->set_color(color);
   calendar->set_hidden(hidden);
+}
+
+bool CalendarTable::DoesCalendarIdExist(CalendarID calendar_id) {
+  sql::Statement statement(
+      GetDB().GetUniqueStatement("select count(*) as count from calendar \
+        WHERE id=?"));
+  statement.BindInt64(0, calendar_id);
+
+  if (!statement.Step())
+    return false;
+
+  return statement.ColumnInt(0) == 1;
+}
+
+bool CalendarTable::DoesAnyCalendarExist() {
+  sql::Statement statement(
+      GetDB().GetUniqueStatement("select count(*) from calendar"));
+
+  if (!statement.Step())
+    return false;
+
+  return statement.ColumnInt(0) > 1;
 }
 
 }  // namespace calendar

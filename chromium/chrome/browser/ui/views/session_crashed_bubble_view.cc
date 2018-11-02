@@ -82,7 +82,7 @@ bool DoesSupportConsentCheck() {
 
 // A helper class that listens to browser removal event.
 class SessionCrashedBubbleView::BrowserRemovalObserver
-    : public chrome::BrowserListObserver {
+    : public BrowserListObserver {
  public:
   explicit BrowserRemovalObserver(Browser* browser) : browser_(browser) {
     DCHECK(browser_);
@@ -91,7 +91,7 @@ class SessionCrashedBubbleView::BrowserRemovalObserver
 
   ~BrowserRemovalObserver() override { BrowserList::RemoveObserver(this); }
 
-  // Overridden from chrome::BrowserListObserver.
+  // Overridden from BrowserListObserver.
   void OnBrowserRemoved(Browser* browser) override {
     if (browser == browser_)
       browser_ = NULL;
@@ -196,7 +196,7 @@ void SessionCrashedBubbleView::OnWidgetDestroying(views::Widget* widget) {
 }
 
 void SessionCrashedBubbleView::Init() {
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   // Description text label.
   views::Label* text_label = new views::Label(
@@ -245,8 +245,8 @@ views::View* SessionCrashedBubbleView::CreateFootnoteView() {
 
   // Create a view to hold the checkbox and the text.
   views::View* uma_view = new views::View();
-  GridLayout* uma_layout = GridLayout::CreateAndInstall(uma_view);
-  uma_view->SetLayoutManager(uma_layout);
+  GridLayout* uma_layout =
+      uma_view->SetLayoutManager(std::make_unique<views::GridLayout>(uma_view));
 
   const int kReportColumnSetId = 0;
   views::ColumnSet* cs = uma_layout->AddColumnSet(kReportColumnSetId);

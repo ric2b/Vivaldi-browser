@@ -30,13 +30,13 @@ int64_t GetPageCountSync(sql::Connection* db) {
 }  // namespace
 
 OfflinePageMetadataStoreTestUtil::OfflinePageMetadataStoreTestUtil(
-    scoped_refptr<base::TestSimpleTaskRunner> task_runner)
+    scoped_refptr<base::TestMockTimeTaskRunner> task_runner)
     : task_runner_(task_runner), store_ptr_(nullptr) {}
 
 OfflinePageMetadataStoreTestUtil::~OfflinePageMetadataStoreTestUtil() {}
 
 void OfflinePageMetadataStoreTestUtil::BuildStore() {
-  if (!temp_directory_.CreateUniqueTempDir()) {
+  if (!temp_directory_.IsValid() && !temp_directory_.CreateUniqueTempDir()) {
     DVLOG(1) << "temp_directory_ not created";
     return;
   }
@@ -54,7 +54,7 @@ void OfflinePageMetadataStoreTestUtil::BuildStoreInMemory() {
 void OfflinePageMetadataStoreTestUtil::DeleteStore() {
   store_.reset();
   store_ptr_ = nullptr;
-  task_runner_->RunUntilIdle();
+  task_runner_->FastForwardUntilNoTasksRemain();
 }
 
 std::unique_ptr<OfflinePageMetadataStoreSQL>
@@ -64,7 +64,7 @@ OfflinePageMetadataStoreTestUtil::ReleaseStore() {
 
 void OfflinePageMetadataStoreTestUtil::InsertItem(const OfflinePageItem& page) {
   AddPageResult result;
-  auto task = base::MakeUnique<AddPageTask>(
+  auto task = std::make_unique<AddPageTask>(
       store(), page,
       base::Bind([](AddPageResult* out_result,
                     AddPageResult cb_result) { *out_result = cb_result; },

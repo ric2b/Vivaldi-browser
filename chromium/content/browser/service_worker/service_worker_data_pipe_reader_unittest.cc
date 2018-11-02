@@ -11,11 +11,12 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/browser/service_worker/service_worker_version.h"
-#include "content/public/common/resource_request_body.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
+#include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -29,23 +30,23 @@ class MockServiceWorkerURLRequestJob : public ServiceWorkerURLRequestJob {
  public:
   explicit MockServiceWorkerURLRequestJob(
       ServiceWorkerURLRequestJob::Delegate* delegate)
-      : ServiceWorkerURLRequestJob(nullptr,
-                                   nullptr,
-                                   "",
-                                   nullptr,
-                                   nullptr,
-                                   network::mojom::FetchRequestMode::kNoCORS,
-                                   network::mojom::FetchCredentialsMode::kOmit,
-                                   FetchRedirectMode::FOLLOW_MODE,
-                                   std::string() /* integrity */,
-                                   false /* keepalive */,
-                                   RESOURCE_TYPE_MAIN_FRAME,
-                                   REQUEST_CONTEXT_TYPE_HYPERLINK,
-                                   REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
-                                   scoped_refptr<ResourceRequestBody>(),
-                                   ServiceWorkerFetchType::FETCH,
-                                   base::Optional<base::TimeDelta>(),
-                                   delegate),
+      : ServiceWorkerURLRequestJob(
+            nullptr,
+            nullptr,
+            "",
+            nullptr,
+            nullptr,
+            network::mojom::FetchRequestMode::kNoCORS,
+            network::mojom::FetchCredentialsMode::kOmit,
+            network::mojom::FetchRedirectMode::kFollow,
+            std::string() /* integrity */,
+            false /* keepalive */,
+            RESOURCE_TYPE_MAIN_FRAME,
+            REQUEST_CONTEXT_TYPE_HYPERLINK,
+            network::mojom::RequestContextFrameType::kTopLevel,
+            scoped_refptr<network::ResourceRequestBody>(),
+            ServiceWorkerFetchType::FETCH,
+            delegate),
         is_response_started_(false) {}
 
   void OnResponseStarted() override { is_response_started_ = true; }
@@ -81,8 +82,8 @@ class ServiceWorkerDataPipeReaderTest
     helper_ = std::make_unique<EmbeddedWorkerTestHelper>(base::FilePath());
     mock_url_request_job_ =
         std::make_unique<MockServiceWorkerURLRequestJob>(this);
-    blink::mojom::ServiceWorkerRegistrationOptions options(
-        GURL("https://example.com/"));
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = GURL("https://example.com/");
     registration_ = new ServiceWorkerRegistration(
         options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(

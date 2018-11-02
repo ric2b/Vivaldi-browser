@@ -9,7 +9,6 @@
 #include "base/logging.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
-#include "ui/accessibility/platform/ax_platform_unique_id.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/rect_f.h"
 
@@ -18,7 +17,10 @@ namespace ui {
 AXSystemCaretWin::AXSystemCaretWin(gfx::AcceleratedWidget event_target)
     : event_target_(event_target) {
   caret_ = static_cast<AXPlatformNodeWin*>(AXPlatformNodeWin::Create(this));
-  data_.id = GetNextAXPlatformNodeUniqueId();
+  // The caret object is not part of the accessibility tree and so doesn't need
+  // a node ID. A globally unique ID is used when firing Win events, retrieved
+  // via |unique_id|.
+  data_.id = -1;
   data_.role = AX_ROLE_CARET;
   // |get_accState| should return 0 which means that the caret is visible.
   data_.state = 0;
@@ -28,18 +30,16 @@ AXSystemCaretWin::AXSystemCaretWin(gfx::AcceleratedWidget event_target)
 
   if (event_target_) {
     ::NotifyWinEvent(EVENT_OBJECT_CREATE, event_target_, OBJID_CARET,
-                     -data_.id);
+                     -caret_->GetUniqueId());
   }
 }
 
 AXSystemCaretWin::~AXSystemCaretWin() {
-  caret_->Destroy();
-  // We shouldn't set |caret_| to nullptr because event clients might try to
-  // retrieve the destroyed object in this stack frame.
   if (event_target_) {
     ::NotifyWinEvent(EVENT_OBJECT_DESTROY, event_target_, OBJID_CARET,
-                     -data_.id);
+                     -caret_->GetUniqueId());
   }
+  caret_->Destroy();
 }
 
 Microsoft::WRL::ComPtr<IAccessible> AXSystemCaretWin::GetCaret() const {
@@ -57,7 +57,7 @@ void AXSystemCaretWin::MoveCaretTo(const gfx::Rect& bounds) {
   data_.location = gfx::RectF(bounds);
   if (event_target_) {
     ::NotifyWinEvent(EVENT_OBJECT_LOCATIONCHANGE, event_target_, OBJID_CARET,
-                     -data_.id);
+                     -caret_->GetUniqueId());
   }
 }
 
@@ -131,6 +131,20 @@ bool AXSystemCaretWin::ShouldIgnoreHoveredStateForTesting() {
 
 bool AXSystemCaretWin::IsOffscreen() const {
   return false;
+}
+
+std::set<int32_t> AXSystemCaretWin::GetReverseRelations(AXIntAttribute attr,
+                                                        int32_t dst_id) {
+  return std::set<int32_t>();
+}
+
+std::set<int32_t> AXSystemCaretWin::GetReverseRelations(AXIntListAttribute attr,
+                                                        int32_t dst_id) {
+  return std::set<int32_t>();
+}
+
+const ui::AXUniqueId& AXSystemCaretWin::GetUniqueId() const {
+  return unique_id_;
 }
 
 }  // namespace ui

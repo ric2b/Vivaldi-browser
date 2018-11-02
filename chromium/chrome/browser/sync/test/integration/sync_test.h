@@ -12,8 +12,10 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/process/process.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/test/integration/configuration_refresher.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/protocol/sync_protocol_error.h"
@@ -280,6 +282,8 @@ class SyncTest : public InProcessBrowserTest {
   // used for UI Signin. Blocks until profile is created.
   static Profile* MakeProfileForUISignin(base::FilePath profile_path);
 
+  base::test::ScopedFeatureList feature_list_;
+
   // GAIA account used by the test case.
   std::string username_;
 
@@ -434,6 +438,9 @@ class SyncTest : public InProcessBrowserTest {
   // Collection of pointers to FakeServerInvalidation objects for each profile.
   std::vector<fake_server::FakeServerInvalidationService*>
       fake_server_invalidation_services_;
+
+  // Triggers a GetUpdates via refresh after a configuration.
+  std::unique_ptr<ConfigurationRefresher> configuration_refresher_;
 
   // Sync profile against which changes to individual profiles are verified. We
   // don't need a corresponding verifier sync client because the contents of the

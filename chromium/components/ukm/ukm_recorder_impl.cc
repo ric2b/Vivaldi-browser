@@ -32,8 +32,7 @@ std::string GetWhitelistEntries() {
 }
 
 bool IsWhitelistedSourceId(SourceId source_id) {
-  return (static_cast<int64_t>(source_id) &
-          static_cast<int64_t>(SourceIdType::NAVIGATION_ID)) != 0;
+  return GetSourceIdType(source_id) == SourceIdType::NAVIGATION_ID;
 }
 
 // Gets the maximum number of Sources we'll keep in memory before discarding any
@@ -202,7 +201,7 @@ void UkmRecorderImpl::StoreRecordingsInReport(Report* report) {
 
 bool UkmRecorderImpl::ShouldRestrictToWhitelistedSourceIds() const {
   return base::GetFieldTrialParamByFeatureAsBool(
-      kUkmFeature, "RestrictToWhitelistedSourceIds", true);
+      kUkmFeature, "RestrictToWhitelistedSourceIds", false);
 }
 
 void UkmRecorderImpl::UpdateSourceURL(SourceId source_id,
@@ -239,10 +238,7 @@ void UkmRecorderImpl::UpdateSourceURL(SourceId source_id,
     RecordDroppedSource(DroppedDataReason::MAX_HIT);
     return;
   }
-  std::unique_ptr<UkmSource> source = base::MakeUnique<UkmSource>();
-  source->set_id(source_id);
-  source->set_url(url);
-  sources_.insert(std::make_pair(source_id, std::move(source)));
+  sources_.emplace(source_id, base::MakeUnique<UkmSource>(source_id, url));
 }
 
 void UkmRecorderImpl::AddEntry(mojom::UkmEntryPtr entry) {

@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/extensions/api/sync_file_system/extension_sync_event_observer.h"
 #include "chrome/browser/extensions/api/sync_file_system/sync_file_system_api_helpers.h"
@@ -67,6 +66,25 @@ std::string ErrorToString(SyncStatusCode code) {
       static_cast<int>(code));
 }
 
+const char* QuotaStatusCodeToString(blink::mojom::QuotaStatusCode status) {
+  switch (status) {
+    case blink::mojom::QuotaStatusCode::kOk:
+      return "OK.";
+    case blink::mojom::QuotaStatusCode::kErrorNotSupported:
+      return "Operation not supported.";
+    case blink::mojom::QuotaStatusCode::kErrorInvalidModification:
+      return "Invalid modification.";
+    case blink::mojom::QuotaStatusCode::kErrorInvalidAccess:
+      return "Invalid access.";
+    case blink::mojom::QuotaStatusCode::kErrorAbort:
+      return "Quota operation aborted.";
+    case blink::mojom::QuotaStatusCode::kUnknown:
+      return "Unknown error.";
+  }
+  NOTREACHED();
+  return "Unknown error.";
+}
+
 }  // namespace
 
 bool SyncFileSystemDeleteFileSystemFunction::RunAsync() {
@@ -105,12 +123,12 @@ void SyncFileSystemDeleteFileSystemFunction::DidDeleteFileSystem(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (error != base::File::FILE_OK) {
     error_ = ErrorToString(sync_file_system::FileErrorToSyncStatusCode(error));
-    SetResult(base::MakeUnique<base::Value>(false));
+    SetResult(std::make_unique<base::Value>(false));
     SendResponse(false);
     return;
   }
 
-  SetResult(base::MakeUnique<base::Value>(true));
+  SetResult(std::make_unique<base::Value>(true));
   SendResponse(true);
 }
 
@@ -323,7 +341,7 @@ bool SyncFileSystemGetUsageAndQuotaFunction::RunAsync() {
 }
 
 void SyncFileSystemGetUsageAndQuotaFunction::DidGetUsageAndQuota(
-    storage::QuotaStatusCode status,
+    blink::mojom::QuotaStatusCode status,
     int64_t usage,
     int64_t quota) {
   // Repost to switch from IO thread to UI thread for SendResponse().
@@ -337,7 +355,7 @@ void SyncFileSystemGetUsageAndQuotaFunction::DidGetUsageAndQuota(
   }
 
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (status != storage::kQuotaStatusOk) {
+  if (status != blink::mojom::QuotaStatusCode::kOk) {
     error_ = QuotaStatusCodeToString(status);
     SendResponse(false);
     return;
@@ -366,7 +384,7 @@ SyncFileSystemSetConflictResolutionPolicyFunction::Run() {
 ExtensionFunction::ResponseAction
 SyncFileSystemGetConflictResolutionPolicyFunction::Run() {
   return RespondNow(
-      OneArgument(base::MakeUnique<base::Value>(api::sync_file_system::ToString(
+      OneArgument(std::make_unique<base::Value>(api::sync_file_system::ToString(
           api::sync_file_system::CONFLICT_RESOLUTION_POLICY_LAST_WRITE_WIN))));
 }
 

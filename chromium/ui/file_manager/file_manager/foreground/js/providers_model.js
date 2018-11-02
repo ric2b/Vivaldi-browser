@@ -6,8 +6,10 @@
 /**
  * An item in the model. Represents a single providing extension.
  *
- * @param {string} extensionId
- * @param {string} extensionName
+ * @param {string} providerId
+ * @param {!IconSet} iconSet
+ * @param {string} largeIconUrl
+ * @param {string} name
  * @param {boolean} configurable
  * @param {boolean} watchable
  * @param {boolean} multipleMounts
@@ -16,19 +18,31 @@
  * @struct
  */
 function ProvidersModelItem(
-    extensionId, extensionName, configurable, watchable, multipleMounts,
-    source) {
+    providerId, iconSet, largeIconUrl, name, configurable, watchable,
+    multipleMounts, source) {
   /**
    * @private {string}
    * @const
    */
-  this.extensionId_ = extensionId;
+  this.providerId_ = providerId;
+
+  /**
+   * @private {!IconSet}
+   * @const
+   */
+  this.iconSet_ = iconSet;
 
   /**
    * @private {string}
    * @const
    */
-  this.extensionName_ = extensionName;
+  this.largeIconUrl_ = largeIconUrl;
+
+  /**
+   * @private {string}
+   * @const
+   */
+  this.name_ = name;
 
   /**
    * @private {boolean}
@@ -59,32 +73,58 @@ ProvidersModelItem.prototype = {
   /**
    * @return {string}
    */
-  get extensionId() { return this.extensionId_; },
+  get providerId() {
+    return this.providerId_;
+  },
+
+  /**
+   * @return {!IconSet}
+   */
+  get iconSet() {
+    return this.iconSet_;
+  },
 
   /**
    * @return {string}
    */
-  get extensionName() { return this.extensionName_; },
-
-  /**
-   * @return {boolean}
-   */
-  get configurable() { return this.configurable_; },
-
-  /**
-   * @return {boolean}
-   */
-  get watchable() { return this.watchable_; },
-
-  /**
-   * @return {boolean}
-   */
-  get multipleMounts() { return this.multipleMounts_; },
+  get largeIconUrl() {
+    return this.largeIconUrl_;
+  },
 
   /**
    * @return {string}
    */
-  get source() { return this.source_; }
+  get name() {
+    return this.name_;
+  },
+
+  /**
+   * @return {boolean}
+   */
+  get configurable() {
+    return this.configurable_;
+  },
+
+  /**
+   * @return {boolean}
+   */
+  get watchable() {
+    return this.watchable_;
+  },
+
+  /**
+   * @return {boolean}
+   */
+  get multipleMounts() {
+    return this.multipleMounts_;
+  },
+
+  /**
+   * @return {string}
+   */
+  get source() {
+    return this.source_;
+  }
 };
 
 /**
@@ -108,57 +148,52 @@ function ProvidersModel(volumeManager) {
  * @return {!Promise<Array<ProvidersModelItem>>}
  */
 ProvidersModel.prototype.getInstalledProviders = function() {
-  return new Promise(
-      function(fulfill, reject) {
-        chrome.fileManagerPrivate.getProvidingExtensions(function(extensions) {
-          if (chrome.runtime.lastError) {
-            reject(chrome.runtime.lastError.message);
-            return;
-          }
-          var results = [];
-          extensions.forEach(function(extension) {
-            results.push(new ProvidersModelItem(
-                extension.extensionId,
-                extension.name,
-                extension.configurable,
-                extension.watchable,
-                extension.multipleMounts,
-                extension.source));
-          });
-          fulfill(results);
-        });
+  return new Promise(function(fulfill, reject) {
+    chrome.fileManagerPrivate.getProviders(function(providers) {
+      if (chrome.runtime.lastError) {
+        reject(chrome.runtime.lastError.message);
+        return;
+      }
+      var results = [];
+      providers.forEach(function(provider) {
+        results.push(new ProvidersModelItem(
+            provider.providerId, provider.iconSet, provider.largeIconUrl,
+            provider.name, provider.configurable, provider.watchable,
+            provider.multipleMounts, provider.source));
       });
+      fulfill(results);
+    });
+  });
 };
 
 /**
  * @return {!Promise<Array<ProvidersModelItem>>}
  */
 ProvidersModel.prototype.getMountableProviders = function() {
-  return this.getInstalledProviders().then(function(extensions) {
+  return this.getInstalledProviders().then(function(providers) {
     var mountedProviders = {};
     for (var i = 0; i < this.volumeManager_.volumeInfoList.length; i++) {
       var volumeInfo = this.volumeManager_.volumeInfoList.item(i);
       if (volumeInfo.volumeType === VolumeManagerCommon.VolumeType.PROVIDED)
-        mountedProviders[volumeInfo.extensionId] = true;
+        mountedProviders[volumeInfo.providerId] = true;
     }
-    return extensions.filter(function(item) {
+    return providers.filter(function(item) {
       // File systems handling files are mounted via file handlers. Device
       // handlers are mounted when a device is inserted. Only network file
       // systems are mounted manually by user via a menu.
       return item.source === 'network' &&
-          (!mountedProviders[item.extensionId] || item.multipleMounts);
+          (!mountedProviders[item.providerId] || item.multipleMounts);
     });
   }.bind(this));
 };
 
 /**
- * @param {string} extensionId
+ * @param {string} providerId
  */
-ProvidersModel.prototype.requestMount = function(extensionId) {
+ProvidersModel.prototype.requestMount = function(providerId) {
   chrome.fileManagerPrivate.addProvidedFileSystem(
-      assert(extensionId),
-      function() {
+      assert(providerId), function() {
         if (chrome.runtime.lastError)
-            console.error(chrome.runtime.lastError.message);
+          console.error(chrome.runtime.lastError.message);
       });
 };

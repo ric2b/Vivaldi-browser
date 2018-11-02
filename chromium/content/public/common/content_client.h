@@ -15,6 +15,7 @@
 #include "content/common/content_export.h"
 #include "ui/base/layout.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 #include "url/url_util.h"
 
 namespace base {
@@ -79,8 +80,14 @@ class CONTENT_EXPORT ContentClient {
   ContentRendererClient* renderer() { return renderer_; }
   ContentUtilityClient* utility() { return utility_; }
 
-  // Sets the currently active URL.  Use GURL() to clear the URL.
-  virtual void SetActiveURL(const GURL& url) {}
+  // Sets the active URL (the URL of a frame that is navigating or processing an
+  // IPC message), and the origin of the main frame (for diagnosing crashes).
+  // Use GURL() or std::string() to clear the URL/origin.
+  //
+  // A string is used for the origin because the source of that value may be a
+  // WebSecurityOrigin or a full URL (if called from the browser process) and a
+  // string is the lowest-common-denominator.
+  virtual void SetActiveURL(const GURL& url, std::string top_origin) {}
 
   // Sets the data on the current gpu.
   virtual void SetGpuInfo(const gpu::GPUInfo& gpu_info) {}
@@ -122,7 +129,7 @@ class CONTENT_EXPORT ContentClient {
     std::vector<std::string> csp_bypassing_schemes;
     // See https://www.w3.org/TR/powerful-features/#is-origin-trustworthy.
     std::vector<std::string> secure_schemes;
-    std::vector<GURL> secure_origins;
+    std::vector<url::Origin> secure_origins;
     // Registers a URL scheme as strictly empty documents, allowing them to
     // commit synchronously.
     std::vector<std::string> empty_document_schemes;
@@ -163,13 +170,6 @@ class CONTENT_EXPORT ContentClient {
   // Returns whether or not V8 script extensions should be allowed for a
   // service worker.
   virtual bool AllowScriptExtensionForServiceWorker(const GURL& script_url);
-
-  // Returns true if the embedder wishes to supplement the site isolation policy
-  // used by the content layer. Returning true enables the infrastructure for
-  // out-of-process iframes, and causes the content layer to consult
-  // ContentBrowserClient::DoesSiteRequireDedicatedProcess() when making process
-  // model decisions.
-  virtual bool IsSupplementarySiteIsolationModeEnabled();
 
   // Returns the origin trial policy, or nullptr if origin trials are not
   // supported by the embedder.

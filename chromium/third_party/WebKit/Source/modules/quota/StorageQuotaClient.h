@@ -37,14 +37,14 @@
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Forward.h"
-#include "public/platform/WebStorageQuotaType.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom-blink.h"
 
 namespace blink {
 
 class ExecutionContext;
 class Page;
-class StorageErrorCallback;
-class StorageQuotaCallback;
+class V8StorageErrorCallback;
+class V8StorageQuotaCallback;
 
 class MODULES_EXPORT StorageQuotaClient
     : public GarbageCollectedFinalized<StorageQuotaClient>,
@@ -58,10 +58,10 @@ class MODULES_EXPORT StorageQuotaClient
   virtual ~StorageQuotaClient();
 
   void RequestQuota(ScriptState*,
-                    WebStorageQuotaType,
+                    mojom::StorageType,
                     unsigned long long new_quota_in_bytes,
-                    StorageQuotaCallback*,
-                    StorageErrorCallback*);
+                    V8StorageQuotaCallback*,
+                    V8StorageErrorCallback*);
 
   static const char* SupplementName();
   static StorageQuotaClient* From(ExecutionContext*);

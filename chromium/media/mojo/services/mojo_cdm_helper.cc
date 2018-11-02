@@ -5,10 +5,10 @@
 #include "media/mojo/services/mojo_cdm_helper.h"
 
 #include "base/stl_util.h"
-#include "media/base/scoped_callback_runner.h"
 #include "media/cdm/cdm_helpers.h"
 #include "media/mojo/services/mojo_cdm_allocator.h"
 #include "media/mojo/services/mojo_cdm_file_io.h"
+#include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "services/service_manager/public/cpp/connect.h"
 
 namespace media {
@@ -37,6 +37,22 @@ cdm::FileIO* MojoCdmHelper::CreateCdmFileIO(cdm::FileIOClient* client) {
   return cdm_file_io;
 }
 
+cdm::CdmProxy* MojoCdmHelper::CreateCdmProxy(cdm::CdmProxyClient* client) {
+  DVLOG(3) << __func__;
+
+  if (cdm_proxy_) {
+    DVLOG(1) << __func__ << ": Only one outstanding CdmProxy allowed.";
+    return nullptr;
+  }
+
+  mojom::CdmProxyPtr cdm_proxy_ptr;
+  service_manager::GetInterface<mojom::CdmProxy>(interface_provider_,
+                                                 &cdm_proxy_ptr);
+  cdm_proxy_ =
+      std::make_unique<MojoCdmProxy>(this, std::move(cdm_proxy_ptr), client);
+  return cdm_proxy_.get();
+}
+
 cdm::Buffer* MojoCdmHelper::CreateCdmBuffer(size_t capacity) {
   return GetAllocator()->CreateCdmBuffer(capacity);
 }
@@ -46,8 +62,8 @@ std::unique_ptr<VideoFrameImpl> MojoCdmHelper::CreateCdmVideoFrame() {
 }
 
 void MojoCdmHelper::QueryStatus(QueryStatusCB callback) {
-  QueryStatusCB scoped_callback =
-      ScopedCallbackRunner(std::move(callback), false, 0, 0);
+  QueryStatusCB scoped_callback = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+      std::move(callback), false, 0, 0);
   ConnectToOutputProtection();
   output_protection_ptr_->QueryStatus(std::move(scoped_callback));
 }
@@ -55,7 +71,7 @@ void MojoCdmHelper::QueryStatus(QueryStatusCB callback) {
 void MojoCdmHelper::EnableProtection(uint32_t desired_protection_mask,
                                      EnableProtectionCB callback) {
   EnableProtectionCB scoped_callback =
-      ScopedCallbackRunner(std::move(callback), false);
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false);
   ConnectToOutputProtection();
   output_protection_ptr_->EnableProtection(desired_protection_mask,
                                            std::move(scoped_callback));
@@ -65,14 +81,15 @@ void MojoCdmHelper::ChallengePlatform(const std::string& service_id,
                                       const std::string& challenge,
                                       ChallengePlatformCB callback) {
   ChallengePlatformCB scoped_callback =
-      ScopedCallbackRunner(std::move(callback), false, "", "", "");
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(std::move(callback), false,
+                                                  "", "", "");
   ConnectToPlatformVerification();
   platform_verification_ptr_->ChallengePlatform(service_id, challenge,
                                                 std::move(scoped_callback));
 }
 
 void MojoCdmHelper::GetStorageId(uint32_t version, StorageIdCB callback) {
-  StorageIdCB scoped_callback = ScopedCallbackRunner(
+  StorageIdCB scoped_callback = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
       std::move(callback), version, std::vector<uint8_t>());
   ConnectToPlatformVerification();
   platform_verification_ptr_->GetStorageId(version, std::move(scoped_callback));
@@ -84,6 +101,17 @@ void MojoCdmHelper::CloseCdmFileIO(MojoCdmFileIO* cdm_file_io) {
                 [cdm_file_io](const std::unique_ptr<MojoCdmFileIO>& ptr) {
                   return ptr.get() == cdm_file_io;
                 });
+}
+
+void MojoCdmHelper::DestroyCdmProxy(MojoCdmProxy* cdm_proxy) {
+  DVLOG(3) << __func__ << ": cdm_proxy = " << cdm_proxy;
+
+  if (cdm_proxy != cdm_proxy_.get()) {
+    DVLOG(3) << __func__ << ": Invalid CdmProxy to destroy.";
+    return;
+  }
+
+  cdm_proxy_.reset();
 }
 
 void MojoCdmHelper::ReportFileReadSize(int file_size_bytes) {
@@ -101,7 +129,7 @@ void MojoCdmHelper::ConnectToCdmStorage() {
 
 CdmAllocator* MojoCdmHelper::GetAllocator() {
   if (!allocator_)
-    allocator_ = base::MakeUnique<MojoCdmAllocator>();
+    allocator_ = std::make_unique<MojoCdmAllocator>();
   return allocator_.get();
 }
 

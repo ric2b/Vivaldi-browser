@@ -48,7 +48,6 @@
 #include "modules/notifications/NotificationData.h"
 #include "modules/notifications/NotificationManager.h"
 #include "modules/notifications/NotificationOptions.h"
-#include "modules/notifications/NotificationPermissionCallback.h"
 #include "modules/notifications/NotificationResourcesLoader.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/instrumentation/resource_coordinator/FrameResourceCoordinator.h"
@@ -118,6 +117,11 @@ Notification* Notification::Create(ExecutionContext* context,
   if (exception_state.HadException())
     return nullptr;
 
+  if (context->IsContextDestroyed()) {
+    exception_state.ThrowTypeError("Illegal invocation.");
+    return nullptr;
+  }
+
   Notification* notification =
       new Notification(context, Type::kNonPersistent, data);
   notification->SchedulePrepareShow();
@@ -154,7 +158,7 @@ Notification::Notification(ExecutionContext* context,
   DCHECK(GetWebNotificationManager());
 }
 
-Notification::~Notification() {}
+Notification::~Notification() = default;
 
 void Notification::SchedulePrepareShow() {
   DCHECK_EQ(state_, State::kLoading);
@@ -187,11 +191,17 @@ void Notification::PrepareShow() {
 void Notification::DidLoadResources(NotificationResourcesLoader* loader) {
   DCHECK_EQ(loader, loader_.Get());
 
-  SecurityOrigin* origin = GetExecutionContext()->GetSecurityOrigin();
+  ExecutionContext* execution_context = GetExecutionContext();
+  const SecurityOrigin* origin = execution_context->GetSecurityOrigin();
   DCHECK(origin);
 
-  GetWebNotificationManager()->Show(WebSecurityOrigin(origin), data_,
-                                    loader->GetResources(), this);
+  if (RuntimeEnabledFeatures::NotificationsWithMojoEnabled()) {
+    NotificationManager::From(execution_context)
+        ->DisplayNonPersistentNotification(data_);
+  } else {
+    GetWebNotificationManager()->Show(WebSecurityOrigin(origin), data_,
+                                      loader->GetResources(), this);
+  }
   loader_.Clear();
 
   state_ = State::kShowing;
@@ -206,17 +216,21 @@ void Notification::close() {
   if (type_ == Type::kNonPersistent) {
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kUserInteraction)
-        ->PostTask(BLINK_FROM_HERE, WTF::Bind(&Notification::DispatchCloseEvent,
-                                              WrapPersistent(this)));
+        ->PostTask(FROM_HERE, WTF::Bind(&Notification::DispatchCloseEvent,
+                                        WrapPersistent(this)));
     state_ = State::kClosing;
 
-    GetWebNotificationManager()->Close(this);
+    if (RuntimeEnabledFeatures::NotificationsWithMojoEnabled()) {
+      // TODO(crbug.com/595685): Implement Close path via Mojo.
+    } else {
+      GetWebNotificationManager()->Close(this);
+    }
     return;
   }
 
   state_ = State::kClosed;
 
-  SecurityOrigin* origin = GetExecutionContext()->GetSecurityOrigin();
+  const SecurityOrigin* origin = GetExecutionContext()->GetSecurityOrigin();
   DCHECK(origin);
 
   GetWebNotificationManager()->ClosePersistent(WebSecurityOrigin(origin),
@@ -398,7 +412,7 @@ String Notification::permission(ExecutionContext* context) {
 
 ScriptPromise Notification::requestPermission(
     ScriptState* script_state,
-    NotificationPermissionCallback* deprecated_callback) {
+    V8NotificationPermissionCallback* deprecated_callback) {
   ExecutionContext* context = ExecutionContext::From(script_state);
   Document* doc = ToDocumentOrNull(context);
 

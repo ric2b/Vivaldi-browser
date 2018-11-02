@@ -147,14 +147,6 @@
     }
 
     /**
-     * @param {number} callId
-     * @param {string} script
-     */
-    evaluateForTestInFrontend(callId, script) {
-      this._dispatchOnInspectorFrontendAPI('evaluateForTestInFrontend', [callId, script]);
-    }
-
-    /**
      * @param {!{r: number, g: number, b: number, a: number}} color
      */
     eyeDropperPickedColor(color) {
@@ -347,6 +339,22 @@
      * @override
      * @return {string}
      */
+    getInactiveSelectionBackgroundColor() {
+      return DevToolsHost.getInactiveSelectionBackgroundColor();
+    }
+
+    /**
+     * @override
+     * @return {string}
+     */
+    getInactiveSelectionForegroundColor() {
+      return DevToolsHost.getInactiveSelectionForegroundColor();
+    }
+
+    /**
+     * @override
+     * @return {string}
+     */
     platform() {
       return DevToolsHost.platform();
     }
@@ -478,6 +486,14 @@
      */
     openInNewTab(url) {
       DevToolsAPI.sendMessageToEmbedder('openInNewTab', [url], null);
+    }
+
+    /**
+     * @override
+     * @param {string} fileSystemPath
+     */
+    showItemInFolder(fileSystemPath) {
+      DevToolsAPI.sendMessageToEmbedder('showItemInFolder', [fileSystemPath], null);
     }
 
     /**
@@ -643,14 +659,6 @@
 
     /**
      * @override
-     * @return {boolean}
-     */
-    isUnderTest() {
-      return DevToolsHost.isUnderTest();
-    }
-
-    /**
-     * @override
      * @param {function()} callback
      */
     reattach(callback) {
@@ -662,6 +670,21 @@
      */
     readyForTest() {
       DevToolsAPI.sendMessageToEmbedder('readyForTest', [], null);
+    }
+
+    /**
+     * @override
+     */
+    connectionReady() {
+      DevToolsAPI.sendMessageToEmbedder('connectionReady', [], null);
+    }
+
+    /**
+     * @override
+     * @param {boolean} value
+     */
+    setOpenNewWindowForPopups(value) {
+      DevToolsAPI.sendMessageToEmbedder('setOpenNewWindowForPopups', [value], null);
     }
 
     /**
@@ -731,6 +754,14 @@
     }
 
     // Backward-compatible methods below this line --------------------------------------------
+
+    /**
+     * Support for legacy front-ends (<M65).
+     * @return {boolean}
+     */
+    isUnderTest() {
+      return false;
+    }
 
     /**
      * Support for legacy front-ends (<M50).

@@ -11,9 +11,7 @@
 
 @protocol NewTabPageBarDelegate
 // Called when new tab page bar item is selected and the selection is changed.
-// If |changePanel| is true, bring the panel into view in the scroll view.
-- (void)newTabBarItemDidChange:(NewTabPageBarItem*)selectedItem
-                   changePanel:(BOOL)changePanel;
+- (void)newTabBarItemDidChange:(NewTabPageBarItem*)selectedItem;
 @end
 
 // The bar in the new tab page that switches between the provided choices.
@@ -32,10 +30,6 @@
 // Safe area set by the NTP view. This is used as the safeAreaInsets of this
 // view as it needs to be used before the safeAreaInsets is set up.
 @property(nonatomic, assign) UIEdgeInsets safeAreaInsetFromNTPView;
-
-// Changes the colors of the buttons and overlay depending on the content offset
-// of the scroll view. Tablet Incognito only.
-- (void)updateColorsForScrollView:(UIScrollView*)scrollView;
 
 // Updates the alpha of the shadow image. When the alpha changes from 0 to 1 or
 // 1 to 0, the alpha change is animated.

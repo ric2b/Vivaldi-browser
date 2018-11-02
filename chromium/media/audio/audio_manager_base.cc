@@ -4,11 +4,12 @@
 
 #include "media/audio/audio_manager_base.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
@@ -124,24 +125,68 @@ AudioManagerBase::~AudioManagerBase() {
 void AudioManagerBase::GetAudioInputDeviceDescriptions(
     AudioDeviceDescriptions* device_descriptions) {
   CHECK(GetTaskRunner()->BelongsToCurrentThread());
-  AudioDeviceNames device_names;
-  GetAudioInputDeviceNames(&device_names);
-
-  for (const media::AudioDeviceName& name : device_names) {
-    device_descriptions->emplace_back(name.device_name, name.unique_id,
-                                      GetGroupIDInput(name.unique_id));
-  }
+  GetAudioDeviceDescriptions(device_descriptions,
+                             &AudioManagerBase::GetAudioInputDeviceNames,
+                             &AudioManagerBase::GetDefaultInputDeviceID,
+                             &AudioManagerBase::GetCommunicationsInputDeviceID,
+                             &AudioManagerBase::GetGroupIDInput);
 }
 
 void AudioManagerBase::GetAudioOutputDeviceDescriptions(
     AudioDeviceDescriptions* device_descriptions) {
   CHECK(GetTaskRunner()->BelongsToCurrentThread());
-  AudioDeviceNames device_names;
-  GetAudioOutputDeviceNames(&device_names);
+  GetAudioDeviceDescriptions(device_descriptions,
+                             &AudioManagerBase::GetAudioOutputDeviceNames,
+                             &AudioManagerBase::GetDefaultOutputDeviceID,
+                             &AudioManagerBase::GetCommunicationsOutputDeviceID,
+                             &AudioManagerBase::GetGroupIDOutput);
+}
 
-  for (const media::AudioDeviceName& name : device_names) {
-    device_descriptions->emplace_back(name.device_name, name.unique_id,
-                                      GetGroupIDOutput(name.unique_id));
+void AudioManagerBase::GetAudioDeviceDescriptions(
+    AudioDeviceDescriptions* device_descriptions,
+    void (AudioManagerBase::*get_device_names)(AudioDeviceNames*),
+    std::string (AudioManagerBase::*get_default_device_id)(),
+    std::string (AudioManagerBase::*get_communications_device_id)(),
+    std::string (AudioManagerBase::*get_group_id)(const std::string&)) {
+  CHECK(GetTaskRunner()->BelongsToCurrentThread());
+  AudioDeviceNames device_names;
+  (this->*get_device_names)(&device_names);
+  std::string real_default_device_id = (this->*get_default_device_id)();
+  std::string real_communications_device_id =
+      (this->*get_communications_device_id)();
+  std::string real_default_name;
+  std::string real_communications_name;
+
+  // Find the names for the real devices that are mapped to the default and
+  // communications devices.
+  for (const auto& name : device_names) {
+    if (name.unique_id == real_default_device_id)
+      real_default_name = name.device_name;
+    if (name.unique_id == real_communications_device_id)
+      real_communications_name = name.device_name;
+  }
+
+  for (auto& name : device_names) {
+    // The |device_name| field as returned by get_device_names() contains a
+    // a generic string such as "Default" or "Communications" for the default
+    // and communications devices. If the names of the real devices mapped to
+    // the default or communications devices were found, append the name of
+    // the real devices to the corresponding entries.
+    // It is possible that the real names were not found if a new device was
+    // plugged in and designated as default/communications device after
+    // get_device_names() returns and before get_default_device_id() or
+    // get_communications_device_id() is called.
+    std::string device_name = std::move(name.device_name);
+    if (AudioDeviceDescription::IsDefaultDevice(name.unique_id) &&
+        !real_default_name.empty()) {
+      device_name += " - " + real_default_name;
+    } else if (AudioDeviceDescription::IsCommunicationsDevice(name.unique_id) &&
+               !real_communications_name.empty()) {
+      device_name += " - " + real_communications_name;
+    }
+    std::string group_id = (this->*get_group_id)(name.unique_id);
+    device_descriptions->emplace_back(
+        std::move(device_name), std::move(name.unique_id), std::move(group_id));
   }
 }
 
@@ -351,7 +396,7 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
   }
 
   std::unique_ptr<DispatcherParams> dispatcher_params =
-      base::MakeUnique<DispatcherParams>(params, output_params,
+      std::make_unique<DispatcherParams>(params, output_params,
                                          output_device_id);
 
   auto it = std::find_if(output_dispatchers_.begin(), output_dispatchers_.end(),
@@ -366,7 +411,7 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
       !output_params.IsBitstreamFormat()) {
     // Using unretained for |debug_recording_manager_| is safe since it
     // outlives the dispatchers (cleared in ShutdownOnAudioThread()).
-    dispatcher = base::MakeUnique<AudioOutputResampler>(
+    dispatcher = std::make_unique<AudioOutputResampler>(
         this, params, output_params, output_device_id, kCloseDelay,
         debug_recording_manager_
             ? base::BindRepeating(
@@ -375,7 +420,7 @@ AudioOutputStream* AudioManagerBase::MakeAudioOutputStreamProxy(
                   FILE_PATH_LITERAL("output"))
             : base::BindRepeating(&GetNullptrAudioDebugRecorder));
   } else {
-    dispatcher = base::MakeUnique<AudioOutputDispatcherImpl>(
+    dispatcher = std::make_unique<AudioOutputDispatcherImpl>(
         this, output_params, output_device_id, kCloseDelay);
   }
 
@@ -456,7 +501,7 @@ AudioParameters AudioManagerBase::GetInputStreamParameters(
 
 std::string AudioManagerBase::GetAssociatedOutputDeviceID(
     const std::string& input_device_id) {
-  return "";
+  return std::string();
 }
 
 std::string AudioManagerBase::GetGroupIDOutput(
@@ -481,8 +526,20 @@ std::string AudioManagerBase::GetGroupIDInput(
   return GetGroupIDOutput(output_device_id);
 }
 
+std::string AudioManagerBase::GetDefaultInputDeviceID() {
+  return std::string();
+}
+
 std::string AudioManagerBase::GetDefaultOutputDeviceID() {
-  return "";
+  return std::string();
+}
+
+std::string AudioManagerBase::GetCommunicationsInputDeviceID() {
+  return std::string();
+}
+
+std::string AudioManagerBase::GetCommunicationsOutputDeviceID() {
+  return std::string();
 }
 
 // static
@@ -533,7 +590,7 @@ void AudioManagerBase::DisableDebugRecording() {
 std::unique_ptr<AudioDebugRecordingManager>
 AudioManagerBase::CreateAudioDebugRecordingManager(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  return base::MakeUnique<AudioDebugRecordingManager>(std::move(task_runner));
+  return std::make_unique<AudioDebugRecordingManager>(std::move(task_runner));
 }
 
 void AudioManagerBase::SetMaxStreamCountForTesting(int max_input,

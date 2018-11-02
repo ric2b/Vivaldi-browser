@@ -82,14 +82,8 @@ net_configs = [
   ":net_internal_config",
   "//build/config:precompiled_headers",
 
-  # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-  "//build/config/compiler:no_size_t_to_int_warning",
   "//build/config/compiler:wexit_time_destructors",
 ]
-
-if (use_glib && use_gconf && !is_chromeos) {
-  net_configs += [ "//build/config/linux/gconf" ]
-}
 
 if (is_linux) {
   net_configs += [ "//build/config/linux:libresolv" ]
@@ -1051,6 +1045,7 @@ component("net") {
       "proxy/multi_threaded_proxy_resolver.h",
       "proxy/network_delegate_error_observer.cc",
       "proxy/network_delegate_error_observer.h",
+      "proxy/pac_js_library.h",
       "proxy/polling_proxy_config_service.cc",
       "proxy/polling_proxy_config_service.h",
       "proxy/proxy_bypass_rules.cc",
@@ -1082,7 +1077,6 @@ component("net") {
       "proxy/proxy_resolver_factory.h",
       "proxy/proxy_resolver_mac.cc",
       "proxy/proxy_resolver_mac.h",
-      "proxy/proxy_resolver_script.h",
       "proxy/proxy_resolver_script_data.cc",
       "proxy/proxy_resolver_script_data.h",
       "proxy/proxy_resolver_winhttp.cc",
@@ -1148,8 +1142,6 @@ component("net") {
       "quic/core/congestion_control/bandwidth_sampler.h",
       "quic/core/congestion_control/bbr_sender.cc",
       "quic/core/congestion_control/bbr_sender.h",
-      "quic/core/congestion_control/cubic.cc",
-      "quic/core/congestion_control/cubic.h",
       "quic/core/congestion_control/cubic_bytes.cc",
       "quic/core/congestion_control/cubic_bytes.h",
       "quic/core/congestion_control/general_loss_algorithm.cc",
@@ -1165,8 +1157,6 @@ component("net") {
       "quic/core/congestion_control/rtt_stats.h",
       "quic/core/congestion_control/send_algorithm_interface.cc",
       "quic/core/congestion_control/send_algorithm_interface.h",
-      "quic/core/congestion_control/tcp_cubic_sender_base.cc",
-      "quic/core/congestion_control/tcp_cubic_sender_base.h",
       "quic/core/congestion_control/tcp_cubic_sender_bytes.cc",
       "quic/core/congestion_control/tcp_cubic_sender_bytes.h",
       "quic/core/congestion_control/windowed_filter.h",
@@ -1436,6 +1426,7 @@ component("net") {
       "quic/http/quic_http_structures.cc",
       "quic/http/quic_http_structures.h",
       "quic/platform/api/quic_aligned.h",
+      "quic/platform/api/quic_arraysize.h",
       "quic/platform/api/quic_bug_tracker.h",
       "quic/platform/api/quic_clock.cc",
       "quic/platform/api/quic_clock.h",
@@ -1459,6 +1450,7 @@ component("net") {
       "quic/platform/api/quic_mutex.h",
       "quic/platform/api/quic_optional.h",
       "quic/platform/api/quic_pcc_sender.h",
+      "quic/platform/api/quic_prefetch.h",
       "quic/platform/api/quic_ptr_util.h",
       "quic/platform/api/quic_reconstruct_object.h",
       "quic/platform/api/quic_reference_counted.h",
@@ -1474,6 +1466,7 @@ component("net") {
       "quic/platform/api/quic_url_utils.cc",
       "quic/platform/api/quic_url_utils.h",
       "quic/platform/impl/quic_aligned_impl.h",
+      "quic/platform/impl/quic_arraysize_impl.h",
       "quic/platform/impl/quic_bug_tracker_impl.h",
       "quic/platform/impl/quic_chromium_clock.cc",
       "quic/platform/impl/quic_chromium_clock.h",
@@ -1499,6 +1492,7 @@ component("net") {
       "quic/platform/impl/quic_mutex_impl.h",
       "quic/platform/impl/quic_optional_impl.h",
       "quic/platform/impl/quic_pcc_sender_impl.h",
+      "quic/platform/impl/quic_prefetch_impl.h",
       "quic/platform/impl/quic_ptr_util_impl.h",
       "quic/platform/impl/quic_reconstruct_object_impl.h",
       "quic/platform/impl/quic_reference_counted_impl.h",
@@ -1833,8 +1827,6 @@ component("net") {
         "reporting/reporting_network_change_observer.h",
         "reporting/reporting_observer.cc",
         "reporting/reporting_observer.h",
-        "reporting/reporting_persister.cc",
-        "reporting/reporting_persister.h",
         "reporting/reporting_policy.cc",
         "reporting/reporting_policy.h",
         "reporting/reporting_report.cc",
@@ -1908,7 +1900,7 @@ component("net") {
     }
 
     if (use_gio) {
-      deps += [ "//build/linux/libgio" ]
+      configs += [ "//build/linux:gio_config" ]
     }
 
     if (!use_nss_certs) {
@@ -2308,10 +2300,7 @@ static_library("http_server") {
     "server/web_socket_encoder.cc",
     "server/web_socket_encoder.h",
   ]
-  configs += [
-    "//build/config/compiler:no_size_t_to_int_warning",
-    "//build/config/compiler:wexit_time_destructors",
-  ]
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
   deps = [
     ":net",
     "//base",
@@ -2326,9 +2315,6 @@ if (!is_ios) {
       "tools/dump_cache/dump_files.cc",
       "tools/dump_cache/dump_files.h",
     ]
-
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
     deps = [
       ":net",
@@ -2407,10 +2393,14 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/client_6.pk8",
     "data/ssl/certificates/client_6_ca.pem",
     "data/ssl/certificates/client_root_ca.pem",
+    "data/ssl/certificates/common_name_only.pem",
     "data/ssl/certificates/crit-codeSigning-chain.pem",
     "data/ssl/certificates/crlset_by_intermediate_serial.raw",
     "data/ssl/certificates/crlset_by_leaf_spki.raw",
+    "data/ssl/certificates/crlset_by_leaf_subject_no_spki.raw",
     "data/ssl/certificates/crlset_by_root_serial.raw",
+    "data/ssl/certificates/crlset_by_root_subject.raw",
+    "data/ssl/certificates/crlset_by_root_subject_no_spki.raw",
     "data/ssl/certificates/cross-signed-leaf.pem",
     "data/ssl/certificates/cross-signed-root-md5.pem",
     "data/ssl/certificates/cross-signed-root-sha256.pem",
@@ -2418,6 +2408,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/ct-test-embedded-with-intermediate-chain.pem",
     "data/ssl/certificates/ct-test-embedded-with-intermediate-preca-chain.pem",
     "data/ssl/certificates/ct-test-embedded-with-preca-chain.pem",
+    "data/ssl/certificates/dec_2017.pem",
     "data/ssl/certificates/diginotar_cyber_ca.pem",
     "data/ssl/certificates/diginotar_pkioverheid.pem",
     "data/ssl/certificates/diginotar_pkioverheid_g2.pem",
@@ -2487,19 +2478,11 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/prime256v1-ecdsa-ee-by-prime256v1-ecdsa-intermediate.pem",
     "data/ssl/certificates/prime256v1-ecdsa-intermediate.pem",
     "data/ssl/certificates/punycodetest.pem",
-    "data/ssl/certificates/quic_chain.crt",
-    "data/ssl/certificates/quic_intermediate.crt",
-    "data/ssl/certificates/quic_intermediate.key",
-    "data/ssl/certificates/quic_root.crt",
-    "data/ssl/certificates/quic_root.key",
-    "data/ssl/certificates/quic_test.example.com.crt",
-    "data/ssl/certificates/quic_test.example.com.key",
-    "data/ssl/certificates/quic_test.example.com.key.pkcs8",
-    "data/ssl/certificates/quic_test.example.com.key.pkcs8.pem",
-    "data/ssl/certificates/quic_test.example.com.key.sct",
-    "data/ssl/certificates/quic_test_ecc.example.com.crt",
-    "data/ssl/certificates/quic_test_ecc.example.com.key",
-    "data/ssl/certificates/quic_test_ecc.example.com.sct",
+    "data/ssl/certificates/quic-chain.pem",
+    "data/ssl/certificates/quic-leaf-cert.key",
+    "data/ssl/certificates/quic-leaf-cert.key.pkcs8.pem",
+    "data/ssl/certificates/quic-leaf-cert.key.sct",
+    "data/ssl/certificates/quic-root.pem",
     "data/ssl/certificates/redundant-server-chain.pem",
     "data/ssl/certificates/redundant-validated-chain-root.pem",
     "data/ssl/certificates/redundant-validated-chain.pem",
@@ -2511,6 +2494,7 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/sha1_2016.pem",
     "data/ssl/certificates/sha1_dec_2015.pem",
     "data/ssl/certificates/sha1_jan_2016.pem",
+    "data/ssl/certificates/sha1_leaf.pem",
     "data/ssl/certificates/spdy_pooling.pem",
     "data/ssl/certificates/start_after_expiry.pem",
     "data/ssl/certificates/subjectAltName_sanity_check.pem",
@@ -2665,12 +2649,7 @@ static_library("test_support") {
     "url_request/url_request_test_util.h",
   ]
 
-  configs += [
-    "//build/config:precompiled_headers",
-
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-  ]
+  configs += [ "//build/config:precompiled_headers" ]
 
   public_deps = [
     ":traffic_annotation",
@@ -2776,7 +2755,6 @@ if (use_v8_in_net) {
     defines = [ "NET_IMPLEMENTATION" ]
 
     configs += [
-      "//build/config/compiler:no_size_t_to_int_warning",
       "//build/config/compiler:wexit_time_destructors",
       "//v8:external_startup_data",
     ]
@@ -2841,8 +2819,6 @@ if (!is_ios && !is_android) {
       "tools/cert_verify_tool/verify_using_path_builder.h",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       ":test_support",
@@ -2862,8 +2838,6 @@ if (!is_ios && !is_android) {
       "tools/crash_cache/crash_cache.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       ":test_support",
@@ -2879,8 +2853,6 @@ if (!is_ios && !is_android) {
       "tools/crl_set_dump/crl_set_dump.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       "//base",
@@ -2895,8 +2867,6 @@ if (!is_ios && !is_android) {
       "tools/dns_fuzz_stub/dns_fuzz_stub.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       "//base",
@@ -2926,8 +2896,6 @@ if (!is_ios && !is_android) {
       "tools/get_server_time/get_server_time.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       "//base",
@@ -2944,8 +2912,6 @@ if (!is_ios && !is_android) {
       "spdy/core/fuzzing/hpack_example_generator.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       "//base",
@@ -2991,8 +2957,6 @@ if (!is_ios && !is_android) {
       "tools/stress_cache/stress_cache.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":net",
       ":test_support",
@@ -3007,8 +2971,6 @@ if (!is_ios && !is_android) {
       "tools/tld_cleanup/tld_cleanup.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       "//base",
       "//base:i18n",
@@ -3290,6 +3252,8 @@ source_set("quic_test_tools") {
 
   if (is_linux) {
     sources += [
+      "tools/quic/test_tools/bad_packet_writer.cc",
+      "tools/quic/test_tools/bad_packet_writer.h",
       "tools/quic/test_tools/limited_mtu_test_writer.cc",
       "tools/quic/test_tools/limited_mtu_test_writer.h",
       "tools/quic/test_tools/mock_epoll_server.cc",
@@ -4036,6 +4000,7 @@ bundle_data("net_unittests_bundle_data") {
     "data/verify_name_match_unittest/names/ascii-UTF8-unmangled.pem",
     "data/verify_name_match_unittest/names/ascii-mixed-rdn_dupetype_sorting_1.pem",
     "data/verify_name_match_unittest/names/ascii-mixed-rdn_dupetype_sorting_2.pem",
+    "data/verify_name_match_unittest/names/custom-custom-normalized.pem",
     "data/verify_name_match_unittest/names/invalid-AttributeTypeAndValue-badAttributeType.pem",
     "data/verify_name_match_unittest/names/invalid-AttributeTypeAndValue-empty.pem",
     "data/verify_name_match_unittest/names/invalid-AttributeTypeAndValue-extradata.pem",
@@ -4887,6 +4852,7 @@ test("net_unittests") {
     "http/http_network_transaction_ssl_unittest.cc",
     "http/http_network_transaction_unittest.cc",
     "http/http_proxy_client_socket_pool_unittest.cc",
+    "http/http_proxy_client_socket_unittest.cc",
     "http/http_proxy_client_socket_wrapper_unittest.cc",
     "http/http_request_headers_unittest.cc",
     "http/http_response_body_drainer_unittest.cc",
@@ -5059,7 +5025,6 @@ test("net_unittests") {
     "quic/core/congestion_control/bandwidth_sampler_test.cc",
     "quic/core/congestion_control/bbr_sender_test.cc",
     "quic/core/congestion_control/cubic_bytes_test.cc",
-    "quic/core/congestion_control/cubic_test.cc",
     "quic/core/congestion_control/general_loss_algorithm_test.cc",
     "quic/core/congestion_control/hybrid_slow_start_test.cc",
     "quic/core/congestion_control/pacing_sender_test.cc",
@@ -5332,12 +5297,7 @@ test("net_unittests") {
   ]
   net_unfiltered_sources = []
 
-  configs += [
-    "//build/config:precompiled_headers",
-
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-  ]
+  configs += [ "//build/config:precompiled_headers" ]
   defines = []
 
   deps = [
@@ -5364,6 +5324,7 @@ test("net_unittests") {
 
   if (enable_reporting) {
     sources += [
+      "network_error_logging/network_error_logging_end_to_end_test.cc",
       "network_error_logging/network_error_logging_service_unittest.cc",
       "reporting/reporting_browsing_data_remover_unittest.cc",
       "reporting/reporting_cache_unittest.cc",
@@ -5372,7 +5333,6 @@ test("net_unittests") {
       "reporting/reporting_garbage_collector_unittest.cc",
       "reporting/reporting_header_parser_unittest.cc",
       "reporting/reporting_network_change_observer_unittest.cc",
-      "reporting/reporting_persister_unittest.cc",
       "reporting/reporting_service_unittest.cc",
       "reporting/reporting_test_util.cc",
       "reporting/reporting_test_util.h",
@@ -5768,8 +5728,6 @@ if (!is_ios && !is_proto_quic) {
       "url_request/url_request_quic_perftest.cc",
     ]
 
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
     deps = [
       ":extras",
       ":net",

@@ -3,6 +3,7 @@
 <translationbundle lang="th">
 <translation id="102360288709523007">ช่วยให้ Chromium ทำงานได้ดีขึ้นโดยส่งสถิติการใช้งานและรายงานข้อขัดข้องให้กับ Google</translation>
 <translation id="1185134272377778587">เกี่ยวกับ Chromium</translation>
+<translation id="1289966288285062467">ประกาศเกี่ยวกับนโยบายความเป็นส่วนตัวของ Chromium</translation>
 <translation id="1472013873724362412">บัญชีของคุณไม่ทำงานใน Chromium โปรดติดต่อผู้ดูแลระบบโดเมนหรือใช้บัญชี Google ปกติเพื่อลงชื่อเข้าใช้</translation>
 <translation id="1736662517232558588">ล้างข้อมูล Chromium แล้ว</translation>
 <translation id="1838412507805038478">Chromium ยืนยันว่า <ph name="ISSUER" /> ได้ออกใบรับรองของเว็บไซต์นี้</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">ต้องการออกจาก Chromium ใช่ไหม</translation>
 <translation id="6424492062988593837">Chromium พัฒนาใหม่! มีรุ่นใหม่ให้ใช้งานแล้ว</translation>
 <translation id="6604711459180487467">รับประสบการณ์ที่ดีขึ้นใน Chromium ตามสถานที่ที่คุณอยู่</translation>
+<translation id="6626296268883197964">การใช้แอปพลิเคชันนี้หมายความว่าคุณยอมรับ<ph name="BEGIN_LINK_TOS" />ข้อกำหนดในการให้บริการ<ph name="END_LINK_TOS" />และ<ph name="BEGIN_LINK_PRIVACY" />ประกาศเกี่ยวกับนโยบายความเป็นส่วนตัว<ph name="END_LINK_PRIVACY" />ของ Chromium</translation>
 <translation id="7099326575020694068">Chromium ไม่สามารถใช้กล้องถ่ายรูปในโหมด Split View</translation>
-<translation id="7144758435978427212">อ่านหน้าเว็บที่ส่งมาจากออบเจ็กต์ที่อยู่ใกล้เคียง เมื่อบลูทูธเปิดอยู่ Chromium สามารถรวบรวมหน้าเว็บที่เชื่อมโยงกับออบเจ็กต์รอบตัวคุณ และส่งหน้าเว็บเหล่านั้นแบบไม่ระบุตัวตนไปยัง Google เพื่อค้นหาหน้าที่มีประโยชน์ต่อคุณมากที่สุด <ph name="BEGIN_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium ช่วยคุณประหยัดเวลาโดยนำบัญชีของคุณไปไว้บนเว็บ คุณสามารถเพิ่มหรือนำบัญชีออกได้ในการตั้งค่า</translation>
 <translation id="7269362888766543920">ส่วนเสริมบางรายการทำให้ Chromium ขัดข้อง โปรดลองถอนการติดตั้งส่วนเสริมนั้น</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">ใช้ Chromium ได้ทุกที่</translation>
 <translation id="7674213385180944843">เปิดการตั้งค่า &gt; ความเป็นส่วนตัว &gt; กล้อง &gt; Chromium แล้วเปิดกล้องถ่ายรูป</translation>
 <translation id="786327964234957808">คุณกำลังเปลี่ยนบัญชีในการซิงค์จาก <ph name="USER_EMAIL1" /> เป็น <ph name="USER_EMAIL2" /> ข้อมูล Chromium ที่มีอยู่ของคุณจัดการโดย <ph name="DOMAIN" /> การเปลี่ยนบัญชีจะลบข้อมูลจากอุปกรณ์นี้ แต่ข้อมูลจะยังคงอยู่ใน <ph name="USER_EMAIL1" /></translation>
-<translation id="8111736072665034317">การใช้แอปพลิเคชันนี้หมายความว่าคุณยอมรับ<ph name="BEGIN_LINK" />ข้อกำหนดในการให้บริการ<ph name="END_LINK" />ของ Chromium</translation>
 <translation id="8175055321229419309">เคล็ดลับ: <ph name="BEGIN_LINK" />ย้าย Chromium ไปไว้ที่ Dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">รับประสบการณ์การใช้งาน Google ที่ดีขึ้นใน Chromium โดยอิงจากตำแหน่งของคุณ</translation>
 <translation id="8353224596138547809">คุณต้องการให้ Chromium บันทึกรหัสผ่านของคุณสำหรับไซต์นี้หรือไม่</translation>

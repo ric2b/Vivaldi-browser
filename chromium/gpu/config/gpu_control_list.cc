@@ -430,6 +430,13 @@ bool GpuControlList::Entry::Contains(OsType target_os_type,
   return true;
 }
 
+bool GpuControlList::Entry::AppliesToTestGroup(
+    uint32_t target_test_group) const {
+  if (conditions.more)
+    return conditions.more->test_group == target_test_group;
+  return target_test_group == 0u;
+}
+
 bool GpuControlList::Conditions::NeedsMoreInfo(const GPUInfo& gpu_info) const {
   // We only check for missing info that might be collected with a gl context.
   // If certain info is missing due to some error, say, we fail to collect
@@ -500,12 +507,18 @@ GpuControlList::GpuControlList(const GpuControlListData& data)
   max_entry_id_ = entries_[entry_count_ - 1].id;
 }
 
-GpuControlList::~GpuControlList() {
-}
+GpuControlList::~GpuControlList() = default;
 
 std::set<int32_t> GpuControlList::MakeDecision(GpuControlList::OsType os,
                                                const std::string& os_version,
                                                const GPUInfo& gpu_info) {
+  return MakeDecision(os, os_version, gpu_info, 0);
+}
+
+std::set<int32_t> GpuControlList::MakeDecision(GpuControlList::OsType os,
+                                               const std::string& os_version,
+                                               const GPUInfo& gpu_info,
+                                               uint32_t target_test_group) {
   active_entries_.clear();
   std::set<int> features;
 
@@ -531,6 +544,8 @@ std::set<int32_t> GpuControlList::MakeDecision(GpuControlList::OsType os,
   for (size_t ii = 0; ii < entry_count_; ++ii) {
     const Entry& entry = entries_[ii];
     DCHECK_NE(0u, entry.id);
+    if (!entry.AppliesToTestGroup(target_test_group))
+      continue;
     if (entry.Contains(os, processed_os_version, gpu_info)) {
       bool needs_more_info_main = entry.NeedsMoreInfo(gpu_info, false);
       bool needs_more_info_exception = entry.NeedsMoreInfo(gpu_info, true);
@@ -590,9 +605,17 @@ std::vector<std::string> GpuControlList::GetDisabledExtensions() {
                                   disabled_extensions.end());
 }
 
-void GpuControlList::GetReasons(base::ListValue* problem_list,
-                                const std::string& tag) const {
-  GetReasons(problem_list, tag, active_entries_);
+std::vector<std::string> GpuControlList::GetDisabledWebGLExtensions() {
+  std::set<std::string> disabled_webgl_extensions;
+  for (auto index : active_entries_) {
+    DCHECK_LT(index, entry_count_);
+    const Entry& entry = entries_[index];
+    for (size_t ii = 0; ii < entry.disabled_webgl_extension_size; ++ii) {
+      disabled_webgl_extensions.insert(entry.disabled_webgl_extensions[ii]);
+    }
+  }
+  return std::vector<std::string>(disabled_webgl_extensions.begin(),
+                                  disabled_webgl_extensions.end());
 }
 
 void GpuControlList::GetReasons(base::ListValue* problem_list,
@@ -652,6 +675,17 @@ GpuControlList::OsType GpuControlList::GetOsType() {
 void GpuControlList::AddSupportedFeature(
     const std::string& feature_name, int feature_id) {
   feature_map_[feature_id] = feature_name;
+}
+
+// static
+bool GpuControlList::AreEntryIndicesValid(
+    const std::vector<uint32_t>& entry_indices,
+    size_t total_entries) {
+  for (auto index : entry_indices) {
+    if (index >= total_entries)
+      return false;
+  }
+  return true;
 }
 
 }  // namespace gpu

@@ -10,7 +10,7 @@
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "gpu/config/gpu_info.h"
-#include "gpu/gpu_export.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
 
 namespace base {
@@ -19,9 +19,9 @@ class CommandLine;
 
 namespace gpu {
 
-class GPU_EXPORT GpuSandboxHelper {
+class GPU_IPC_SERVICE_EXPORT GpuSandboxHelper {
  public:
-  virtual ~GpuSandboxHelper() {}
+  virtual ~GpuSandboxHelper() = default;
 
   virtual void PreSandboxStartup() = 0;
 
@@ -30,7 +30,7 @@ class GPU_EXPORT GpuSandboxHelper {
                                         const GpuPreferences& gpu_prefs) = 0;
 };
 
-class GPU_EXPORT GpuInit {
+class GPU_IPC_SERVICE_EXPORT GpuInit {
  public:
   GpuInit();
   ~GpuInit();
@@ -64,6 +64,8 @@ class GPU_EXPORT GpuInit {
   GpuPreferences gpu_preferences_;
   bool init_successful_ = false;
 
+  bool ShouldEnableSwiftShader(base::CommandLine* command_line);
+  void AdjustInfoToSwiftShader();
   DISALLOW_COPY_AND_ASSIGN(GpuInit);
 };
 

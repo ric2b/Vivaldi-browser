@@ -217,8 +217,12 @@ SyncTest::SyncTest(TestType test_type)
     : test_type_(test_type),
       server_type_(SERVER_TYPE_UNDECIDED),
       num_clients_(-1),
+      configuration_refresher_(std::make_unique<ConfigurationRefresher>()),
       use_verifier_(true),
       create_gaia_account_at_runtime_(false) {
+  // TODO(crbug.com/781368) remove once feature enabled.
+  feature_list_.InitWithFeatures({switches::kSyncUSSTypedURL}, {});
+
   sync_datatype_helper::AssociateWithTest(this);
   switch (test_type_) {
     case SINGLE_CLIENT:
@@ -239,12 +243,6 @@ SyncTest::SyncTest(TestType test_type)
 SyncTest::~SyncTest() {}
 
 void SyncTest::SetUp() {
-  // TODO(crbug.com/781368) remove once feature enabled.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitWithFeatures(
-      {switches::kSyncUSSTypedURL},
-      {});
-
   // Sets |server_type_| if it wasn't specified by the test.
   DecideServerType();
 
@@ -642,6 +640,8 @@ void SyncTest::InitializeInvalidations(int index) {
       invalidation_service->DisableSelfNotifications();
     }
     fake_server_invalidation_services_[index] = invalidation_service;
+    configuration_refresher_->Observe(
+        ProfileSyncServiceFactory::GetForProfile(GetProfile(index)));
   } else {
     invalidation::P2PInvalidationService* p2p_invalidation_service =
         static_cast<invalidation::P2PInvalidationService*>(
@@ -774,10 +774,10 @@ void SyncTest::TearDownOnMainThread() {
     }
   }
 
+  // Delete things that unsubscribe in destructor before their targets are gone.
   invalidation_forwarders_.clear();
   sync_refreshers_.clear();
-  fake_server_invalidation_services_.clear();
-  clients_.clear();
+  configuration_refresher_.reset();
 }
 
 void SyncTest::SetUpOnMainThread() {

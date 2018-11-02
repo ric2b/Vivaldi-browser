@@ -60,7 +60,10 @@ Polymer({
      */
     cameraVideoModeEnabled_: {
       type: Boolean,
-      value: false,
+      value: function() {
+        return loadTimeData.getBoolean('changePictureVideoModeEnabled');
+      },
+      readOnly: true,
     },
   },
 
@@ -180,7 +183,7 @@ Polymer({
         this.browserProxy_.selectProfileImage();
         break;
       case CrPicture.SelectionTypes.OLD:
-        var imageIndex = image.dataset.imageIndex;
+        const imageIndex = image.dataset.imageIndex;
         if (imageIndex !== undefined && imageIndex >= 0 && image.src)
           this.browserProxy_.selectDefaultImage(image.dataset.url);
         else
@@ -225,7 +228,7 @@ Polymer({
    * @private
    */
   onSwitchMode_: function(event) {
-    var videomode = event.detail;
+    const videomode = event.detail;
     announceAccessibleMessage(this.i18n(
         videomode ? 'videoModeAccessibleText' : 'photoModeAccessibleText'));
   },
@@ -287,10 +290,10 @@ Polymer({
    * @private
    */
   getAuthorCredit_: function(selectedItem, defaultImages) {
-    var index = selectedItem ? selectedItem.dataset.imageIndex : undefined;
+    const index = selectedItem ? selectedItem.dataset.imageIndex : undefined;
     if (index === undefined || index < 0 || index >= defaultImages.length)
       return '';
-    var author = defaultImages[index].author;
+    const author = defaultImages[index].author;
     return author ? this.i18n('authorCreditText', author) : '';
   },
 
@@ -302,7 +305,7 @@ Polymer({
    * @private
    */
   getAuthorWebsite_: function(selectedItem, defaultImages) {
-    var index = selectedItem ? selectedItem.dataset.imageIndex : undefined;
+    const index = selectedItem ? selectedItem.dataset.imageIndex : undefined;
     if (index === undefined || index < 0 || index >= defaultImages.length)
       return '';
     return defaultImages[index].website || '';

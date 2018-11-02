@@ -60,7 +60,7 @@ struct WebWindowFeatures;
 // easily reused as part of an implementation of WebViewClient.
 class WebViewClient : protected WebWidgetClient {
  public:
-  ~WebViewClient() override {}
+  ~WebViewClient() override = default;
   // Factory methods -----------------------------------------------------
 
   // Create a new related WebView.  This method must clone its session storage
@@ -81,7 +81,9 @@ class WebViewClient : protected WebWidgetClient {
   }
 
   // Create a new popup WebWidget.
-  virtual WebWidget* CreatePopup(WebPopupType) { return nullptr; }
+  virtual WebWidget* CreatePopup(WebLocalFrame*, WebPopupType) {
+    return nullptr;
+  }
 
   // Returns the session storage namespace id associated with this WebView.
   virtual int64_t GetSessionStorageNamespaceId() { return 0; }
@@ -109,12 +111,6 @@ class WebViewClient : protected WebWidgetClient {
   // Called to get the position of the root window containing the widget
   // in screen coordinates.
   virtual WebRect RootWindowRect() { return WebRect(); }
-
-  // Editing -------------------------------------------------------------
-
-  // These methods allow the client to intercept and overrule editing
-  // operations.
-  virtual void DidChangeContents() {}
 
   // Dialogs -------------------------------------------------------------
 
@@ -175,7 +171,7 @@ class WebViewClient : protected WebWidgetClient {
   virtual void DidAutoResize(const WebSize& new_size) {}
 
   // Called when the View acquires focus.
-  virtual void DidFocus() {}
+  virtual void DidFocus(WebLocalFrame* calling_frame) {}
 
   // Session history -----------------------------------------------------
 

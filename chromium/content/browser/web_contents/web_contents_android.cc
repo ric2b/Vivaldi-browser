@@ -5,6 +5,8 @@
 #include "content/browser/web_contents/web_contents_android.h"
 
 #include <stdint.h>
+#include <string>
+#include <vector>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
@@ -26,7 +28,7 @@
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/browser/web_contents/web_contents_view_android.h"
-#include "content/common/devtools_messages.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
 #include "content/common/view_messages.h"
@@ -558,11 +560,9 @@ void WebContentsAndroid::RequestSmartClipExtract(
   ScopedJavaGlobalRef<jobject> j_callback;
   j_callback.Reset(env, callback);
 
-  RenderFrameHostImpl::SmartClipCallback smart_clip_callback =
-      base::Bind(&SmartClipCallback, j_callback);
-
   web_contents_->GetMainFrame()->RequestSmartClipExtract(
-      smart_clip_callback, gfx::Rect(x, y, width, height));
+      base::BindOnce(&SmartClipCallback, j_callback),
+      gfx::Rect(x, y, width, height));
 }
 
 void WebContentsAndroid::RequestAccessibilitySnapshot(
@@ -695,43 +695,6 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetOrCreateEventForwarder(
     const base::android::JavaParamRef<jobject>& obj) {
   gfx::NativeView native_view = web_contents_->GetView()->GetNativeView();
   return native_view->GetEventForwarder();
-}
-
-void WebContentsAndroid::CreateJavaBridgeDispatcherHost(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    const JavaParamRef<jobject>& retained_javascript_objects) {
-  DCHECK(!java_bridge_dispatcher_host_);
-  java_bridge_dispatcher_host_ = new GinJavaBridgeDispatcherHost(
-      web_contents_, retained_javascript_objects);
-}
-
-void WebContentsAndroid::SetAllowJavascriptInterfacesInspection(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
-    jboolean allow) {
-  DCHECK(java_bridge_dispatcher_host_);
-  java_bridge_dispatcher_host_->SetAllowObjectContentsInspection(allow);
-}
-
-void WebContentsAndroid::AddJavascriptInterface(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& /* obj */,
-    const JavaParamRef<jobject>& object,
-    const JavaParamRef<jstring>& name,
-    const JavaParamRef<jclass>& safe_annotation_clazz) {
-  DCHECK(java_bridge_dispatcher_host_);
-  java_bridge_dispatcher_host_->AddNamedObject(
-      ConvertJavaStringToUTF8(env, name), object, safe_annotation_clazz);
-}
-
-void WebContentsAndroid::RemoveJavascriptInterface(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& /* obj */,
-    const JavaParamRef<jstring>& name) {
-  DCHECK(java_bridge_dispatcher_host_);
-  java_bridge_dispatcher_host_->RemoveNamedObject(
-      ConvertJavaStringToUTF8(env, name));
 }
 
 void WebContentsAndroid::OnFinishGetContentBitmap(

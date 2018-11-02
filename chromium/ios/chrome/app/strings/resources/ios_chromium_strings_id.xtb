@@ -3,6 +3,7 @@
 <translationbundle lang="id">
 <translation id="102360288709523007">Bantu penyempurnaan Chromium dengan mengirimkan statistik penggunaan dan laporan kerusakan ke Google.</translation>
 <translation id="1185134272377778587">Tentang Chromium</translation>
+<translation id="1289966288285062467">Pemberitahuan Privasi Chromium</translation>
 <translation id="1472013873724362412">Akun Anda tidak berfungsi di Chromium. Harap hubungi administrator domain atau gunakan Akun Google biasa untuk masuk.</translation>
 <translation id="1736662517232558588">Data Chromium dihapus</translation>
 <translation id="1838412507805038478">Chromium memverifikasi bahwa <ph name="ISSUER" /> menerbitkan sertifikat situs web ini.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Keluar dari Chromium?</translation>
 <translation id="6424492062988593837">Chromium jadi semakin baik! Versi baru telah tersedia.</translation>
 <translation id="6604711459180487467">Dapatkan pengalaman yang lebih baik di Chromium berdasarkan lokasi Anda.</translation>
+<translation id="6626296268883197964">Dengan menggunakan aplikasi ini, Anda menyetujui <ph name="BEGIN_LINK_TOS" />Persyaratan Layanan<ph name="END_LINK_TOS" /> dan <ph name="BEGIN_LINK_PRIVACY" />Pemberitahuan Privasi<ph name="END_LINK_PRIVACY" /> Chromium.</translation>
 <translation id="7099326575020694068">Chromium tidak dapat menggunakan kamera dalam mode Layar Terpisah</translation>
-<translation id="7144758435978427212">Temukan halaman web yang dikirim oleh objek di sekitar. Saat Bluetooth diaktifkan, Chromium dapat mengumpulkan halaman web yang dikaitkan dengan objek di sekitar Anda dan mengirimkannya secara anonim ke Google untuk menemukan halaman web yang paling bermanfaat. <ph name="BEGIN_LINK" />Pelajari lebih lanjut<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium menghemat waktu Anda dengan membawa akun ke web. Anda dapat menambahkan atau menghapus akun di Setelan.</translation>
 <translation id="7269362888766543920">Beberapa add-on telah menyebabkan Chromium berhenti bekerja. Harap coba uninstal.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Gunakan Chromium di Mana Saja</translation>
 <translation id="7674213385180944843">Buka Setelan &gt; Privasi &gt; Kamera &gt; Chromium, lalu aktifkan kamera.</translation>
 <translation id="786327964234957808">Anda beralih akun sinkronisasi dari <ph name="USER_EMAIL1" /> ke <ph name="USER_EMAIL2" />. Data Chromium Anda yang sudah ada dikelola oleh <ph name="DOMAIN" />. Tindakan ini akan menghapus data dari perangkat, namun data Anda akan tetap tersedia di <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Dengan menggunakan aplikasi ini, Anda menyetujui <ph name="BEGIN_LINK" />Persyaratan Layanan<ph name="END_LINK" /> Chromium.</translation>
 <translation id="8175055321229419309">Tips: <ph name="BEGIN_LINK" />Pindahkan Chromium ke dok<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Dapatkan pengalaman menggunakan Google yang lebih baik di Chromium berdasarkan lokasi Anda.</translation>
 <translation id="8353224596138547809">Ingin Chromium menyimpan sandi untuk situs ini?</translation>

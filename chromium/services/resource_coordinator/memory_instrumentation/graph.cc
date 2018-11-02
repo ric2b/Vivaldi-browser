@@ -14,6 +14,7 @@ namespace {
 using base::trace_event::MemoryAllocatorDumpGuid;
 using Edge = GlobalDumpGraph::Edge;
 using PostOrderIterator = GlobalDumpGraph::PostOrderIterator;
+using PreOrderIterator = GlobalDumpGraph::PreOrderIterator;
 using Process = GlobalDumpGraph::Process;
 using Node = GlobalDumpGraph::Node;
 
@@ -48,6 +49,26 @@ Node* GlobalDumpGraph::CreateNode(Process* process_graph, Node* parent) {
   return &*all_nodes_.begin();
 }
 
+PreOrderIterator GlobalDumpGraph::VisitInDepthFirstPreOrder() {
+  std::vector<Node*> roots;
+  for (auto it = process_dump_graphs_.rbegin();
+       it != process_dump_graphs_.rend(); it++) {
+    roots.push_back(it->second->root());
+  }
+  roots.push_back(shared_memory_graph_->root());
+  return PreOrderIterator(std::move(roots));
+}
+
+PostOrderIterator GlobalDumpGraph::VisitInDepthFirstPostOrder() {
+  std::vector<Node*> roots;
+  for (auto it = process_dump_graphs_.rbegin();
+       it != process_dump_graphs_.rend(); it++) {
+    roots.push_back(it->second->root());
+  }
+  roots.push_back(shared_memory_graph_->root());
+  return PostOrderIterator(std::move(roots));
+}
+
 Process::Process(base::ProcessId pid, GlobalDumpGraph* global_graph)
     : pid_(pid),
       global_graph_(global_graph),
@@ -80,6 +101,9 @@ Node* Process::CreateNode(MemoryAllocatorDumpGuid guid,
   current->set_weak(weak);
   current->set_explicit(true);
 
+  // The final node should also have the associated |guid|.
+  current->set_guid(guid);
+
   // Add to the global guid map as well if it exists.
   if (!guid.empty())
     global_graph_->nodes_by_guid_.emplace(guid, current);
@@ -100,10 +124,6 @@ Node* Process::FindNode(base::StringPiece path) {
       return nullptr;
   }
   return current;
-}
-
-PostOrderIterator Process::VisitInDepthFirstPostOrder() {
-  return PostOrderIterator(root_);
 }
 
 Node::Node(Process* dump_graph, Node* parent)
@@ -171,9 +191,51 @@ Node::Entry::Entry(std::string value)
 Edge::Edge(Node* source, Node* target, int priority)
     : source_(source), target_(target), priority_(priority) {}
 
-PostOrderIterator::PostOrderIterator(Node* root) {
-  to_visit_.push_back(root);
+PreOrderIterator::PreOrderIterator(std::vector<Node*> roots)
+    : to_visit_(std::move(roots)) {}
+PreOrderIterator::PreOrderIterator(PreOrderIterator&& other) = default;
+PreOrderIterator::~PreOrderIterator() {}
+
+// Yields the next node in the DFS post-order traversal.
+Node* PreOrderIterator::next() {
+  while (!to_visit_.empty()) {
+    // Retain a pointer to the node at the top and remove it from stack.
+    Node* node = to_visit_.back();
+    to_visit_.pop_back();
+
+    // If the node has already been visited, don't visit it again.
+    if (visited_.count(node) != 0)
+      continue;
+
+    // If we haven't visited the node which this node owns then wait for that.
+    if (node->owns_edge() && visited_.count(node->owns_edge()->target()) == 0)
+      continue;
+
+    // If we haven't visited the node's parent then wait for that.
+    if (node->parent() && visited_.count(node->parent()) == 0)
+      continue;
+
+    // Visit all children of this node.
+    for (auto it = node->children()->rbegin(); it != node->children()->rend();
+         it++) {
+      to_visit_.push_back(it->second);
+    }
+
+    // Visit all owners of this node.
+    for (auto it = node->owned_by_edges()->rbegin();
+         it != node->owned_by_edges()->rend(); it++) {
+      to_visit_.push_back((*it)->source());
+    }
+
+    // Add this node to the visited set.
+    visited_.insert(node);
+    return node;
+  }
+  return nullptr;
 }
+
+PostOrderIterator::PostOrderIterator(std::vector<Node*> roots)
+    : to_visit_(std::move(roots)) {}
 PostOrderIterator::PostOrderIterator(PostOrderIterator&& other) = default;
 PostOrderIterator::~PostOrderIterator() = default;
 

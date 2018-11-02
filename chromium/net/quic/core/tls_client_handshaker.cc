@@ -46,12 +46,18 @@ TlsClientHandshaker::TlsClientHandshaker(QuicCryptoStream* stream,
     : TlsHandshaker(stream, session, ssl_ctx),
       server_id_(server_id),
       proof_verifier_(proof_verifier),
-      verify_context_(verify_context) {}
+      verify_context_(verify_context),
+      crypto_negotiated_params_(new QuicCryptoNegotiatedParameters) {}
 
 TlsClientHandshaker::~TlsClientHandshaker() {
   if (proof_verify_callback_) {
     proof_verify_callback_->Cancel();
   }
+}
+
+// static
+bssl::UniquePtr<SSL_CTX> TlsClientHandshaker::CreateSslCtx() {
+  return TlsHandshaker::CreateSslCtx();
 }
 
 bool TlsClientHandshaker::CryptoConnect() {
@@ -169,25 +175,41 @@ void TlsClientHandshaker::FinishHandshake() {
   QUIC_LOG(INFO) << "Client: handshake finished";
   state_ = STATE_HANDSHAKE_COMPLETE;
   std::vector<uint8_t> client_secret, server_secret;
-  if (!DeriveSecrets(ssl(), &client_secret, &server_secret)) {
+  if (!DeriveSecrets(&client_secret, &server_secret)) {
     CloseConnection();
     return;
   }
 
-  // TODO(nharper): Use |client_secret| and |server_secret| to set the
-  // appropriate crypters on the connection, and set |encryption_established_|
-  // to true. Whenever encryption keys are set, call
-  // session()->connection()->NeuterUnencryptedPackets().
+  QUIC_LOG(INFO) << "Client: setting crypters";
+  QuicEncrypter* initial_encrypter = CreateEncrypter(client_secret);
+  session()->connection()->SetEncrypter(ENCRYPTION_INITIAL, initial_encrypter);
+  QuicEncrypter* encrypter = CreateEncrypter(client_secret);
+  session()->connection()->SetEncrypter(ENCRYPTION_FORWARD_SECURE, encrypter);
+
+  QuicDecrypter* initial_decrypter = CreateDecrypter(server_secret);
+  session()->connection()->SetDecrypter(ENCRYPTION_INITIAL, initial_decrypter);
+  QuicDecrypter* decrypter = CreateDecrypter(server_secret);
+  session()->connection()->SetAlternativeDecrypter(ENCRYPTION_FORWARD_SECURE,
+                                                   decrypter, true);
+
+  session()->connection()->SetDefaultEncryptionLevel(ENCRYPTION_FORWARD_SECURE);
+
+  session()->NeuterUnencryptedData();
+  encryption_established_ = true;
   handshake_confirmed_ = true;
+}
+
+// static
+TlsClientHandshaker* TlsClientHandshaker::HandshakerFromSsl(SSL* ssl) {
+  return static_cast<TlsClientHandshaker*>(
+      TlsHandshaker::HandshakerFromSsl(ssl));
 }
 
 // static
 enum ssl_verify_result_t TlsClientHandshaker::VerifyCallback(
     SSL* ssl,
     uint8_t* out_alert) {
-  return static_cast<TlsClientHandshaker*>(
-             TlsHandshaker::HandshakerFromSsl(ssl))
-      ->VerifyCert(out_alert);
+  return HandshakerFromSsl(ssl)->VerifyCert(out_alert);
 }
 
 enum ssl_verify_result_t TlsClientHandshaker::VerifyCert(uint8_t* out_alert) {

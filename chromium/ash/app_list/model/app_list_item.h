@@ -8,18 +8,17 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 
 #include "ash/app_list/model/app_list_model_export.h"
+#include "ash/public/interfaces/app_list.mojom.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "components/sync/model/string_ordinal.h"
 #include "ui/gfx/image/image_skia.h"
 
 class FastShowPickler;
-
-namespace ui {
-class MenuModel;
-}
+class ChromeAppListModelUpdater;
 
 namespace app_list {
 
@@ -39,11 +38,11 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   const gfx::ImageSkia& icon() const { return icon_; }
 
   const std::string& GetDisplayName() const {
-    return short_name_.empty() ? name_ : short_name_;
+    return short_name_.empty() ? name() : short_name_;
   }
 
-  const std::string& name() const { return name_; }
-  // Should only be used in tests; otheriwse use GetDisplayName().
+  const std::string& name() const { return metadata_->name; }
+  // Should only be used in tests; otherwise use GetDisplayName().
   const std::string& short_name() const { return short_name_; }
 
   void set_highlighted(bool highlighted) { highlighted_ = highlighted; }
@@ -55,26 +54,28 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   void SetPercentDownloaded(int percent_downloaded);
   int percent_downloaded() const { return percent_downloaded_; }
 
-  bool IsInFolder() const { return !folder_id_.empty(); }
+  bool IsInFolder() const { return !folder_id().empty(); }
 
-  const std::string& id() const { return id_; }
-  const std::string& folder_id() const { return folder_id_; }
-  const syncer::StringOrdinal& position() const { return position_; }
+  const std::string& id() const { return metadata_->id; }
+  const std::string& folder_id() const { return metadata_->folder_id; }
+  const syncer::StringOrdinal& position() const { return metadata_->position; }
+
+  void SetMetadata(ash::mojom::AppListItemMetadataPtr metadata) {
+    metadata_ = std::move(metadata);
+  }
+  const ash::mojom::AppListItemMetadata* GetMetadata() const {
+    return metadata_.get();
+  }
+  ash::mojom::AppListItemMetadataPtr CloneMetadata() const {
+    return metadata_.Clone();
+  }
 
   void AddObserver(AppListItemObserver* observer);
   void RemoveObserver(AppListItemObserver* observer);
 
-  // Activates (opens) the item. Does nothing by default.
-  virtual void Activate(int event_flags);
-
   // Returns a static const char* identifier for the subclass (defaults to "").
   // Pointers can be compared for quick type checking.
   virtual const char* GetItemType() const;
-
-  // Returns the context menu model for this item, or NULL if there is currently
-  // no menu for the item (e.g. during install).
-  // Note the returned menu model is owned by this item.
-  virtual ui::MenuModel* GetContextMenuModel();
 
   // Returns the item matching |id| contained in this item (e.g. if the item is
   // a folder), or NULL if the item was not found or this is not a container.
@@ -83,11 +84,20 @@ class APP_LIST_MODEL_EXPORT AppListItem {
   // Returns the number of child items if it has any (e.g. is a folder) or 0.
   virtual size_t ChildItemCount() const;
 
+  // Returns the number of items that were badged because they are extension
+  // apps that have their Android analogs installed.
+  virtual size_t BadgedItemCount() const;
+
   // Utility functions for sync integration tests.
   virtual bool CompareForTest(const AppListItem* other) const;
   virtual std::string ToDebugString() const;
 
+  bool is_folder() const { return metadata_->is_folder; }
+
  protected:
+  // TODO(hejq): remove this when we have mojo interfaces.
+  friend class ::ChromeAppListModelUpdater;
+
   friend class ::FastShowPickler;
   friend class AppListItemList;
   friend class AppListItemListTest;
@@ -106,21 +116,21 @@ class APP_LIST_MODEL_EXPORT AppListItem {
 
   void set_position(const syncer::StringOrdinal& new_position) {
     DCHECK(new_position.IsValid());
-    position_ = new_position;
+    metadata_->position = new_position;
   }
 
-  void set_folder_id(const std::string& folder_id) { folder_id_ = folder_id; }
+  void set_folder_id(const std::string& folder_id) {
+    metadata_->folder_id = folder_id;
+  }
+
+  void set_is_folder(bool is_folder) { metadata_->is_folder = is_folder; }
 
  private:
   friend class AppListModelTest;
 
-  const std::string id_;
-  std::string folder_id_;  // Id of containing folder; empty if top level item.
-  syncer::StringOrdinal position_;
-  gfx::ImageSkia icon_;
+  ash::mojom::AppListItemMetadataPtr metadata_;
 
-  // The full name of an item. Used for display if |short_name_| is empty.
-  std::string name_;
+  gfx::ImageSkia icon_;
 
   // A shortened name for the item, used for display.
   std::string short_name_;

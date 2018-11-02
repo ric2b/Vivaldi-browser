@@ -4,6 +4,8 @@
 
 #include "components/download/public/test/test_download_service.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/download/public/client.h"
@@ -26,6 +28,7 @@ class TestServiceConfig : public ServiceConfig {
 
   // ServiceConfig implementation.
   uint32_t GetMaxScheduledDownloadsPerClient() const override { return 0; }
+  uint32_t GetMaxConcurrentDownloads() const override { return 0; }
   const base::TimeDelta& GetFileKeepAliveTime() const override {
     return time_delta_;
   }
@@ -39,8 +42,8 @@ class TestServiceConfig : public ServiceConfig {
 }  // namespace
 
 TestDownloadService::TestDownloadService()
-    : service_config_(base::MakeUnique<TestServiceConfig>()),
-      logger_(base::MakeUnique<EmptyLogger>()),
+    : service_config_(std::make_unique<TestServiceConfig>()),
+      logger_(std::make_unique<EmptyLogger>()),
       is_ready_(false),
       fail_at_start_(false),
       file_size_(123456789u),

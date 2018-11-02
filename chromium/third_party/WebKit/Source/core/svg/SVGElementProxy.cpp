@@ -70,15 +70,18 @@ SVGElementProxy::SVGElementProxy(const AtomicString& id)
 SVGElementProxy::SVGElementProxy(const String& url, const AtomicString& id)
     : id_(id), url_(url), is_local_(false) {}
 
-SVGElementProxy::~SVGElementProxy() {}
+SVGElementProxy::~SVGElementProxy() = default;
 
-void SVGElementProxy::AddClient(SVGResourceClient* client) {
+void SVGElementProxy::AddClient(SVGResourceClient* client,
+                                WebTaskRunner* task_runner) {
   // An empty id will never be a valid element reference.
   if (id_.IsEmpty())
     return;
   if (!is_local_) {
-    if (document_)
-      document_->AddClient(client);
+    if (document_) {
+      DCHECK(!client->GetResource());
+      client->SetResource(document_, task_runner);
+    }
     return;
   }
   TreeScope* client_scope = client->GetTreeScope();
@@ -113,8 +116,8 @@ void SVGElementProxy::RemoveClient(SVGResourceClient* client) {
   if (id_.IsEmpty())
     return;
   if (!is_local_) {
-    if (document_)
-      document_->RemoveClient(client);
+    DCHECK_EQ(client->GetResource(), document_);
+    client->ClearResource();
     return;
   }
   auto entry = clients_.find(client);
@@ -140,7 +143,8 @@ void SVGElementProxy::Resolve(Document& document) {
   ResourceLoaderOptions options;
   options.initiator_info.name = FetchInitiatorTypeNames::css;
   FetchParameters params(ResourceRequest(url_), options);
-  document_ = DocumentResource::FetchSVGDocument(params, document.Fetcher());
+  document_ =
+      DocumentResource::FetchSVGDocument(params, document.Fetcher(), nullptr);
   url_ = String();
 }
 

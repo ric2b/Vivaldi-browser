@@ -38,7 +38,7 @@
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/public/scoped_tooltip_disabler.h"
 
-DECLARE_UI_CLASS_PROPERTY_TYPE(views::DesktopWindowTreeHostWin*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(views::DesktopWindowTreeHostWin*);
 
 namespace views {
 
@@ -413,10 +413,12 @@ bool DesktopWindowTreeHostWin::ShouldUseNativeFrame() const {
 }
 
 bool DesktopWindowTreeHostWin::ShouldWindowContentsBeTransparent() const {
-  // If the window has a native frame, we assume it is an Aero Glass window, and
-  // is therefore transparent. Note: This is not equivalent to calling
-  // IsAeroGlassEnabled, because ShouldUseNativeFrame is overridden in a
-  // subclass.
+  // The window contents need to be transparent when the titlebar area is drawn
+  // by the DWM rather than Chrome, so that area can show through.  This
+  // function does not describe the transparency of the whole window appearance,
+  // but merely of the content Chrome draws, so even when the system titlebars
+  // appear opaque (Win 8+), the content above them needs to be transparent, or
+  // they'll be covered by a black (undrawn) region.
   return ShouldUseNativeFrame() && !IsFullscreen();
 }
 
@@ -951,7 +953,8 @@ void DesktopWindowTreeHostWin::HandleWindowSizeUnchanged() {
   if (compositor()) {
     compositor()->SetScaleAndSize(
         compositor()->device_scale_factor(),
-        message_handler_->GetClientAreaBounds().size());
+        message_handler_->GetClientAreaBounds().size(),
+        window()->GetLocalSurfaceId());
   }
 }
 
@@ -959,8 +962,8 @@ void DesktopWindowTreeHostWin::HandleWindowScaleFactorChanged(
     float window_scale_factor) {
   if (compositor()) {
     compositor()->SetScaleAndSize(
-        window_scale_factor,
-        message_handler_->GetClientAreaBounds().size());
+        window_scale_factor, message_handler_->GetClientAreaBounds().size(),
+        window()->GetLocalSurfaceId());
   }
 }
 

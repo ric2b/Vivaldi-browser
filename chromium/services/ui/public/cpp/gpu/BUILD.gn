@@ -14,7 +14,7 @@ source_set("gpu") {
   public_deps = [
     ":internal",
     "//cc",
-    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/common",
     "//gpu/ipc/client",
     "//gpu/ipc/common",
     "//services/ui/public/interfaces",
@@ -43,10 +43,12 @@ source_set("internal") {
     "//cc",
     "//gpu",
     "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/skia_bindings",
     "//mojo/public/cpp/system",
     "//services/service_manager/public/cpp",
     "//services/ui/public/interfaces",
+    "//ui/gl",
   ]
 }

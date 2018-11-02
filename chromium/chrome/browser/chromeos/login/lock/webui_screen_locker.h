@@ -32,7 +32,7 @@ class WebUI;
 namespace chromeos {
 
 class ScreenLocker;
-class WebUILoginDisplay;
+class LoginDisplayWebUI;
 
 namespace login {
 class NetworkStateHelper;
@@ -99,6 +99,7 @@ class WebUIScreenLocker : public WebUILoginView,
   void OnStartKioskEnableScreen() override;
   void OnStartKioskAutolaunchScreen() override;
   void ShowWrongHWIDScreen() override;
+  void ShowUpdateRequiredScreen() override;
   void ResetAutoLoginTimer() override;
   void ResyncUserData() override;
   void SetDisplayEmail(const std::string& email) override;
@@ -153,7 +154,7 @@ class WebUIScreenLocker : public WebUILoginView,
   std::unique_ptr<SignInScreenController> signin_screen_controller_;
 
   // Login UI implementation instance.
-  std::unique_ptr<WebUILoginDisplay> login_display_;
+  std::unique_ptr<LoginDisplayWebUI> login_display_;
 
   // Tracks when the lock window is displayed and ready.
   bool lock_ready_ = false;

@@ -70,6 +70,7 @@ test("components_unittests") {
     "//components/browsing_data/core:unit_tests",
     "//components/bubble:unit_tests",
     "//components/captive_portal:unit_tests",
+    "//components/cbor:unit_tests",
     "//components/client_update_protocol:unit_tests",
     "//components/cloud_devices/common:unit_tests",
     "//components/component_updater:unit_tests",
@@ -166,6 +167,7 @@ test("components_unittests") {
 
   if (is_ios) {
     deps += [
+      "//components/autofill/ios/browser:unit_tests",
       "//components/image_fetcher/ios:unit_tests",
       "//components/signin/ios/browser:unit_tests",
       "//components/translate/ios/browser:unit_tests",
@@ -198,7 +200,7 @@ test("components_unittests") {
       "//components/history/content/browser:unit_tests",
       "//components/invalidation/impl:unit_tests",
       "//components/keyed_service/content:unit_tests",
-      "//components/language:unit_tests",
+      "//components/language/content/browser:unit_tests",
       "//components/link_header_util:unit_tests",
       "//components/navigation_interception:unit_tests",
       "//components/network_hints/renderer:unit_tests",
@@ -400,12 +402,12 @@ if (!is_ios) {
 
     sources = [
       "autofill/content/browser/risk/fingerprint_browsertest.cc",
+      "autofill/content/renderer/form_autofill_util_browsertest.cc",
       "autofill/content/renderer/password_form_conversion_utils_browsertest.cc",
       "dom_distiller/content/browser/distillable_page_utils_browsertest.cc",
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "offline_pages/content/renovations/test/page_renovator_browsertest.cc",
-      "password_manager/content/renderer/credential_manager_client_browsertest.cc",
       "security_state/content/content_utils_browsertest.cc",
       "ukm/content/source_url_recorder_browsertest.cc",
     ]
@@ -433,7 +435,6 @@ if (!is_ios) {
       "//components/offline_pages/content/renovations",
       "//components/offline_pages/core/renovations",
       "//components/password_manager/content/browser",
-      "//components/password_manager/content/renderer",
       "//components/security_state/content",
       "//components/security_state/core",
       "//components/strings",
@@ -445,7 +446,8 @@ if (!is_ios) {
       "//content/test:browsertest_support",
       "//content/test:test_support",
       "//device/bluetooth",
-      "//device/geolocation",
+      "//device/geolocation/public/cpp:test_support",
+      "//device/geolocation/public/interfaces",
       "//ipc:test_support",
       "//net:test_support",
       "//printing/features",
@@ -468,8 +470,15 @@ if (!is_ios) {
       data += [ "$root_out_dir/Content Shell.app/" ]
     }
 
+    if (!is_android) {
+      sources += [ "pdf/renderer/pdf_accessibility_tree_browsertest.cc" ]
+      deps += [ "//components/pdf/renderer" ]
+    }
+
     if (is_android) {
-      sources += [ "test/android/browsertests_apk/components_browser_tests_jni_onload.cc" ]
+      sources += [
+        "test/android/browsertests_apk/components_browser_tests_jni_onload.cc",
+      ]
       sources -= [ "autofill/content/browser/risk/fingerprint_browsertest.cc" ]
       deps += [
         "//content/public/test/android:layouttest_java_support",
@@ -526,7 +535,9 @@ if (!is_ios) {
     ]
 
     if (!is_ios) {
-      sources += [ "discardable_memory/common/discardable_shared_memory_heap_perftest.cc" ]
+      sources += [
+        "discardable_memory/common/discardable_shared_memory_heap_perftest.cc",
+      ]
       deps += [ "//components/discardable_memory/common" ]
     }
   }

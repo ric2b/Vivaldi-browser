@@ -34,6 +34,7 @@
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/Settings.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
@@ -1104,27 +1105,27 @@ int UseCounter::MapCSSPropertyIdToCSSSampleIdForHistogram(
       return 571;
     case CSSPropertyScrollPaddingInlineEnd:
       return 572;
-    case CSSPropertyScrollSnapMargin:
+    case CSSPropertyScrollMargin:
       return 573;
-    case CSSPropertyScrollSnapMarginTop:
+    case CSSPropertyScrollMarginTop:
       return 574;
-    case CSSPropertyScrollSnapMarginRight:
+    case CSSPropertyScrollMarginRight:
       return 575;
-    case CSSPropertyScrollSnapMarginBottom:
+    case CSSPropertyScrollMarginBottom:
       return 576;
-    case CSSPropertyScrollSnapMarginLeft:
+    case CSSPropertyScrollMarginLeft:
       return 577;
-    case CSSPropertyScrollSnapMarginBlock:
+    case CSSPropertyScrollMarginBlock:
       return 578;
-    case CSSPropertyScrollSnapMarginBlockStart:
+    case CSSPropertyScrollMarginBlockStart:
       return 579;
-    case CSSPropertyScrollSnapMarginBlockEnd:
+    case CSSPropertyScrollMarginBlockEnd:
       return 580;
-    case CSSPropertyScrollSnapMarginInline:
+    case CSSPropertyScrollMarginInline:
       return 581;
-    case CSSPropertyScrollSnapMarginInlineStart:
+    case CSSPropertyScrollMarginInlineStart:
       return 582;
-    case CSSPropertyScrollSnapMarginInlineEnd:
+    case CSSPropertyScrollMarginInlineEnd:
       return 583;
     case CSSPropertyScrollSnapStop:
       return 584;
@@ -1180,9 +1181,9 @@ void UseCounter::RecordMeasurement(WebFeature feature,
 
   int feature_id = static_cast<int>(feature);
   if (!features_recorded_.QuickGet(feature_id)) {
-    // Note that HTTPArchive tooling looks specifically for this event - see
-    // https://github.com/HTTPArchive/httparchive/issues/59
     if (context_ != kDisabledContext) {
+      // Note that HTTPArchive tooling looks specifically for this event - see
+      // https://github.com/HTTPArchive/httparchive/issues/59
       TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("blink.feature_usage"),
                    "FeatureFirstUsed", "feature", feature_id);
       FeaturesHistogram().Count(feature_id);
@@ -1212,7 +1213,7 @@ void UseCounter::CountIfFeatureWouldBeBlockedByFeaturePolicy(
     WebFeature blocked_cross_origin,
     WebFeature blocked_same_origin) {
   // Get the origin of the top-level document
-  SecurityOrigin* topOrigin =
+  const SecurityOrigin* topOrigin =
       frame.Tree().Top().GetSecurityContext()->GetSecurityOrigin();
 
   // Check if this frame is same-origin with the top-level
@@ -1240,14 +1241,34 @@ void UseCounter::Trace(blink::Visitor* visitor) {
   visitor->Trace(observers_);
 }
 
-void UseCounter::DidCommitLoad(const KURL& url) {
+void UseCounter::DidCommitLoad(const LocalFrame* frame) {
+  // When frame is detatched (i.e. GetDocument() is null), no feature usage
+  // should be measured.
+  if (!frame->GetDocument()) {
+    context_ = kDisabledContext;
+    return;
+  }
+  const KURL url = frame->GetDocument()->Url();
   // Reset state from previous load.
   // Use the protocol of the document being loaded into the main frame to
   // decide whether this page is interesting from a metrics perspective.
+  // Drop usage tracking on view source and new-tab pages. This matches the
+  // policy of page_load_metrics.
   // Note that SVGImage cases always have an about:blank URL
   if (context_ != kSVGImageContext) {
     if (url.ProtocolIs("chrome-extension"))
       context_ = kExtensionContext;
+    else if (frame->GetDocument()->IsViewSource())
+      context_ = kDisabledContext;
+    else if (!frame->Client() || !frame->Client()->ShouldTrackUseCounter(url))
+      context_ = kDisabledContext;
+    else if (frame->GetDocument()->IsPrefetchOnly())
+      context_ = kDisabledContext;
+    // TODO(lunalu): Service worker and shared worker count feature usage on the
+    // blink side use counter. Once the blink side use counter is removed
+    // (crbug.com/811948), the checker for shadow pages should be removed.
+    else if (frame->GetSettings()->IsShadowPage())
+      context_ = kDisabledContext;
     else if (SchemeRegistry::ShouldTrackUsageMetricsForScheme(url.Protocol()))
       context_ = kDefaultContext;
     else

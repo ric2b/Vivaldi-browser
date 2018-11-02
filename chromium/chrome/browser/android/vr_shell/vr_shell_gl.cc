@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/vr_shell/vr_shell_gl.h"
 
+#include <algorithm>
 #include <chrono>
 #include <limits>
 #include <utility>
@@ -11,7 +12,7 @@
 #include "base/android/jni_android.h"
 #include "base/callback_helpers.h"
 #include "base/containers/queue.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -23,9 +24,9 @@
 #include "chrome/browser/android/vr_shell/vr_metrics_util.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
-#include "chrome/browser/vr/assets.h"
+#include "chrome/browser/vr/assets_loader.h"
 #include "chrome/browser/vr/elements/ui_element.h"
-#include "chrome/browser/vr/fps_meter.h"
+#include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/camera_model.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/pose_util.h"
@@ -52,9 +53,7 @@ namespace vr_shell {
 
 namespace {
 static constexpr float kZNear = 0.1f;
-// This should be kept fairly small with current reticle rendering technique
-// which requires fairly high precision to draw on top of elements correctly.
-static constexpr float kZFar = 100.0f;
+static constexpr float kZFar = 10000.0f;
 
 // GVR buffer indices for use with viewport->SetSourceBufferIndex
 // or frame.BindBuffer. We use one for world content (with reprojection)
@@ -97,50 +96,23 @@ static constexpr base::TimeDelta kWebVRFenceCheckTimeout =
 static constexpr int kWebVrInitialFrameTimeoutSeconds = 5;
 static constexpr int kWebVrSpinnerTimeoutSeconds = 2;
 
+// Heuristic time limit to detect overstuffed GVR buffers for a
+// >60fps capable web app.
+static constexpr base::TimeDelta kWebVrSlowAcquireThreshold =
+    base::TimeDelta::FromMilliseconds(2);
+
+// If running too fast, allow dropping frames occasionally to let GVR catch up.
+// Drop at most one frame in MaxDropRate.
+static constexpr int kWebVrUnstuffMaxDropRate = 11;
+
+// If GVR submit isn't blocking, we don't know how long rendering actually took.
+// Use a decay factor to assume it's a bit less than the current average.
+static constexpr float kWebVrSlowSubmitDecayFactor = 0.95f;
+
 static constexpr int kNumSamplesPerPixelBrowserUi = 2;
 static constexpr int kNumSamplesPerPixelWebVr = 1;
 
 static constexpr float kRedrawSceneAngleDeltaDegrees = 1.0;
-
-static gvr_keyboard_context* keyboard_context;
-
-// TODO(ymalik,crbug.com/780318): This callback is temporary until we have an
-// editable input field.
-void OnKeyboardEvent(void*, int32_t event) {
-  switch (event) {
-    case GVR_KEYBOARD_ERROR_UNKNOWN:
-      LOG(ERROR) << "Unknown GVR keyboard error.";
-      break;
-    case GVR_KEYBOARD_ERROR_SERVICE_NOT_CONNECTED:
-      LOG(ERROR) << "GVR keyboard service not connected.";
-      break;
-    case GVR_KEYBOARD_ERROR_NO_LOCALES_FOUND:
-      LOG(ERROR) << "No GVR keyboard locales found.";
-      break;
-    case GVR_KEYBOARD_ERROR_SDK_LOAD_FAILED:
-      LOG(ERROR) << "GVR keyboard sdk load failed.";
-      break;
-    case GVR_KEYBOARD_SHOWN:
-      DVLOG(1) << "GVR keyboard shown.";
-      break;
-    case GVR_KEYBOARD_HIDDEN:
-      DVLOG(1) << "GVR keyboard hidden.";
-      break;
-    case GVR_KEYBOARD_TEXT_UPDATED: {
-      char* text = gvr_keyboard_get_text(keyboard_context);
-      DVLOG(1) << "GVR keyboard text updated: " << text;
-      free(reinterpret_cast<void*>(text));
-    } break;
-    case GVR_KEYBOARD_TEXT_COMMITTED: {
-      char* text = gvr_keyboard_get_text(keyboard_context);
-      DVLOG(1) << "GVR keyboard text updated: " << text;
-      free(reinterpret_cast<void*>(text));
-      gvr_keyboard_set_text(keyboard_context, "");
-    } break;
-    default:
-      NOTREACHED();
-  }
-}
 
 gfx::Transform PerspectiveMatrixFromView(const gvr::Rectf& fov,
                                          float z_near,
@@ -172,22 +144,6 @@ gfx::Transform PerspectiveMatrixFromView(const gvr::Rectf& fov,
   result.matrix().set(3, 3, 0);
 
   return result;
-}
-
-void TransformToGvrMat(const gfx::Transform& in, gvr::Mat4f* out) {
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      out->m[i][j] = in.matrix().get(i, j);
-    }
-  }
-}
-
-void GvrMatToTransform(const gvr::Mat4f& in, gfx::Transform* out) {
-  for (int i = 0; i < 4; ++i) {
-    for (int j = 0; j < 4; ++j) {
-      out->matrix().set(i, j, in.m[i][j]);
-    }
-  }
 }
 
 gvr::Rectf UVFromGfxRect(gfx::RectF rect) {
@@ -226,18 +182,18 @@ VrShellGl::VrShellGl(GlBrowserInterface* browser_interface,
       task_runner_(base::ThreadTaskRunnerHandle::Get()),
       binding_(this),
       browser_(browser_interface),
-      fps_meter_(new vr::FPSMeter()),
-      webvr_js_time_(new vr::SlidingAverage(kWebVRSlidingAverageSize)),
-      webvr_render_time_(new vr::SlidingAverage(kWebVRSlidingAverageSize)),
+      fps_meter_(),
+      webvr_js_time_(kWebVRSlidingAverageSize),
+      webvr_render_time_(kWebVRSlidingAverageSize),
+      webvr_js_wait_time_(kWebVRSlidingAverageSize),
+      webvr_acquire_time_(kWebVRSlidingAverageSize),
+      webvr_submit_time_(kWebVRSlidingAverageSize),
       weak_ptr_factory_(this) {
   GvrInit(gvr_api);
 }
 
 VrShellGl::~VrShellGl() {
   ClosePresentationBindings();
-  if (keyboard_enabled_) {
-    gvr_keyboard_destroy(&gvr_keyboard_);
-  }
 }
 
 void VrShellGl::Initialize() {
@@ -303,14 +259,32 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
   content_surface_texture_->SetDefaultBufferSize(
       content_tex_physical_size_.width(), content_tex_physical_size_.height());
 
+  webvr_vsync_align_ = base::FeatureList::IsEnabled(features::kWebVrVsyncAlign);
+
+  VrMetricsUtil::XRRenderPath render_path =
+      VrMetricsUtil::XRRenderPath::kClientWait;
+
+  std::string render_path_string = base::GetFieldTrialParamValueByFeature(
+      features::kWebXrRenderPath, features::kWebXrRenderPathParamName);
+  DVLOG(1) << __FUNCTION__ << ": WebXrRenderPath=" << render_path_string;
+  if (render_path_string == features::kWebXrRenderPathParamValueGpuFence) {
+    // TODO(https://crbug.com/760389): force this on for S8 via whitelist?
+    if (gl::GLFence::IsGpuFenceSupported()) {
+      webvr_use_gpu_fence_ = true;
+      render_path = VrMetricsUtil::XRRenderPath::kGpuFence;
+    }
+  }
+  VrMetricsUtil::LogXrRenderPathUsed(render_path);
+
+  // InitializeRenderer calls GvrDelegateReady which triggers actions such as
+  // responding to RequestPresent. All member assignments or other
+  // initialization actions which affect presentation setup, i.e. feature
+  // checks, must happen before this point.
   if (!reinitializing)
     InitializeRenderer();
 
   ui_->OnGlInitialized(content_texture_id,
                        vr::UiElementRenderer::kTextureLocationExternal, true);
-
-  vr::Assets::GetInstance()->LoadWhenComponentReady(base::BindOnce(
-      &VrShellGl::OnAssetsLoaded, weak_ptr_factory_.GetWeakPtr()));
 
   webvr_vsync_align_ = base::FeatureList::IsEnabled(features::kWebVrVsyncAlign);
 
@@ -333,7 +307,7 @@ void VrShellGl::InitializeGl(gfx::AcceleratedWidget window) {
 
 void VrShellGl::CreateContentSurface() {
   content_surface_ =
-      base::MakeUnique<gl::ScopedJavaSurface>(content_surface_texture_.get());
+      std::make_unique<gl::ScopedJavaSurface>(content_surface_texture_.get());
   browser_->ContentSurfaceChanged(content_surface_->j_surface().obj());
 }
 
@@ -360,13 +334,14 @@ void VrShellGl::CreateOrResizeWebVRSurface(const gfx::Size& size) {
   if (mailbox_bridge_) {
     mailbox_bridge_->ResizeSurface(size.width(), size.height());
   } else {
-    mailbox_bridge_ = base::MakeUnique<MailboxToSurfaceBridge>();
+    mailbox_bridge_ = std::make_unique<MailboxToSurfaceBridge>();
     mailbox_bridge_->CreateSurface(webvr_surface_texture_.get());
   }
 }
 
 void VrShellGl::SubmitFrame(int16_t frame_index,
-                            const gpu::MailboxHolder& mailbox) {
+                            const gpu::MailboxHolder& mailbox,
+                            base::TimeDelta time_waited) {
   TRACE_EVENT0("gpu", "VrShellGl::SubmitWebVRFrame");
 
   // submit_client_ could be null when we exit presentation, if there were
@@ -385,6 +360,16 @@ void VrShellGl::SubmitFrame(int16_t frame_index,
 
   webvr_time_js_submit_[frame_index % kPoseRingBufferSize] =
       base::TimeTicks::Now();
+
+  // The JavaScript wait time is supplied externally and not trustworthy. Clamp
+  // to a reasonable range to avoid math errors.
+  if (time_waited < base::TimeDelta())
+    time_waited = base::TimeDelta();
+  if (time_waited > base::TimeDelta::FromSeconds(1))
+    time_waited = base::TimeDelta::FromSeconds(1);
+  webvr_js_wait_time_.AddSample(time_waited);
+  TRACE_COUNTER1("gpu", "WebVR JS wait (ms)",
+                 webvr_js_wait_time_.GetAverage().InMilliseconds());
 
   // Swapping twice on a Surface without calling updateTexImage in
   // between can lose frames, so don't draw+swap if we already have
@@ -418,7 +403,8 @@ void VrShellGl::SubmitFrameWithTextureHandle(
 void VrShellGl::ConnectPresentingService(
     device::mojom::VRSubmitFrameClientPtrInfo submit_client_info,
     device::mojom::VRPresentationProviderRequest request,
-    device::mojom::VRDisplayInfoPtr display_info) {
+    device::mojom::VRDisplayInfoPtr display_info,
+    device::mojom::VRRequestPresentOptionsPtr present_options) {
   ClosePresentationBindings();
   submit_client_.Bind(std::move(submit_client_info));
   binding_.Bind(std::move(request));
@@ -430,10 +416,23 @@ void VrShellGl::ConnectPresentingService(
 
   CreateOrResizeWebVRSurface(webvr_size);
   ScheduleOrCancelWebVrFrameTimeout();
+
+  // TODO(https://crbug.com/795049): Add a metric to track how much the
+  // permitted-but-not-recommended preserveDrawingBuffer=true mode is used by
+  // WebVR 1.1 sites. Having this option set will disable the planned
+  // direct-draw-to-shared-buffer optimization.
+  DVLOG(1) << "preserveDrawingBuffer="
+           << present_options->preserve_drawing_buffer;
 }
 
 void VrShellGl::OnSwapContents(int new_content_id) {
   ui_->OnSwapContents(new_content_id);
+}
+
+void VrShellGl::OnAssetsLoaded(vr::AssetsLoadStatus status,
+                               std::unique_ptr<vr::Assets> assets,
+                               const base::Version& component_version) {
+  ui_->OnAssetsLoaded(status, std::move(assets), component_version);
 }
 
 void VrShellGl::OnContentFrameAvailable() {
@@ -471,20 +470,24 @@ void VrShellGl::ScheduleOrCancelWebVrFrameTimeout() {
   // bad experiences, but we have to be careful to handle things like splash
   // screens correctly. For now just ensure we receive a first frame.
   if (!web_vr_mode_ || webvr_frames_received_ > 0) {
-    webvr_frame_timeout_.Cancel();
-    webvr_spinner_timeout_.Cancel();
+    if (!webvr_frame_timeout_.IsCancelled())
+      webvr_frame_timeout_.Cancel();
+    if (!webvr_spinner_timeout_.IsCancelled())
+      webvr_spinner_timeout_.Cancel();
     return;
   }
-  webvr_spinner_timeout_.Reset(
-      base::Bind(&VrShellGl::OnWebVrTimeoutImminent, base::Unretained(this)));
-  task_runner_->PostDelayedTask(
-      FROM_HERE, webvr_spinner_timeout_.callback(),
-      base::TimeDelta::FromSeconds(kWebVrSpinnerTimeoutSeconds));
-  webvr_frame_timeout_.Reset(
-      base::Bind(&VrShellGl::OnWebVrFrameTimedOut, base::Unretained(this)));
-  task_runner_->PostDelayedTask(
-      FROM_HERE, webvr_frame_timeout_.callback(),
-      base::TimeDelta::FromSeconds(kWebVrInitialFrameTimeoutSeconds));
+  if (ui_->CanSendWebVrVSync() && submit_client_) {
+    webvr_spinner_timeout_.Reset(base::BindRepeating(
+        &VrShellGl::OnWebVrTimeoutImminent, base::Unretained(this)));
+    task_runner_->PostDelayedTask(
+        FROM_HERE, webvr_spinner_timeout_.callback(),
+        base::TimeDelta::FromSeconds(kWebVrSpinnerTimeoutSeconds));
+    webvr_frame_timeout_.Reset(base::BindRepeating(
+        &VrShellGl::OnWebVrFrameTimedOut, base::Unretained(this)));
+    task_runner_->PostDelayedTask(
+        FROM_HERE, webvr_frame_timeout_.callback(),
+        base::TimeDelta::FromSeconds(kWebVrInitialFrameTimeoutSeconds));
+  }
 }
 
 void VrShellGl::OnWebVrFrameTimedOut() {
@@ -509,9 +512,30 @@ void VrShellGl::GvrInit(gvr_context* gvr_api) {
   }
 }
 
+device::mojom::VRDisplayFrameTransportOptionsPtr
+VrShellGl::GetWebVrFrameTransportOptions() {
+  // All member assignments that affect render path selections must be complete
+  // before this function executes. See InitializeRenderer comment in
+  // InitializeGl.
+
+  device::mojom::VRDisplayFrameTransportOptionsPtr transport_options =
+      device::mojom::VRDisplayFrameTransportOptions::New();
+  transport_options->transport_method =
+      device::mojom::VRDisplayFrameTransportMethod::SUBMIT_AS_MAILBOX_HOLDER;
+  // Only set boolean options that we need. Default is false, and we should be
+  // able to safely ignore ones that our implementation doesn't care about.
+  transport_options->wait_for_transfer_notification = true;
+  if (webvr_use_gpu_fence_) {
+    transport_options->wait_for_gpu_fence = true;
+  } else {
+    transport_options->wait_for_render_notification = true;
+  }
+
+  return transport_options;
+}
+
 void VrShellGl::InitializeRenderer() {
   gvr_api_->InitializeGl();
-  CreateKeyboard();
   gfx::Transform head_pose;
   device::GvrDelegate::GetGvrPoseWithNeckModel(gvr_api_.get(), &head_pose);
   webvr_head_pose_.assign(kPoseRingBufferSize, head_pose);
@@ -543,7 +567,7 @@ void VrShellGl::InitializeRenderer() {
       render_size_default.height / kWebVrBrowserUiSizeFactor};
 
   swap_chain_ =
-      base::MakeUnique<gvr::SwapChain>(gvr_api_->CreateSwapChain(specs_));
+      std::make_unique<gvr::SwapChain>(gvr_api_->CreateSwapChain(specs_));
 
   // Allocate a buffer viewport for use in UI drawing. This isn't
   // initialized at this point, it'll be set from other viewport list
@@ -587,7 +611,8 @@ void VrShellGl::InitializeRenderer() {
                                            webvr_right_viewport_.get());
   webvr_right_viewport_->SetSourceBufferIndex(kFramePrimaryBuffer);
 
-  browser_->GvrDelegateReady(gvr_api_->GetViewerType());
+  browser_->GvrDelegateReady(gvr_api_->GetViewerType(),
+                             GetWebVrFrameTransportOptions());
 }
 
 void VrShellGl::UpdateController(const gfx::Transform& head_pose,
@@ -693,18 +718,6 @@ void VrShellGl::HandleControllerAppButtonActivity(
 
   if (controller_->ButtonUpHappened(
           gvr::ControllerButton::GVR_CONTROLLER_BUTTON_APP)) {
-    // TODO(ymalik,crbug.com/780318): We temporarily show and hide the keyboard
-    // when the app button is pressed. This behavior is behind a runtime enabled
-    // feature and should go away as soon as we have editable input fields.
-    show_keyboard_ = keyboard_enabled_ && !show_keyboard_;
-    if (keyboard_enabled_) {
-      if (show_keyboard_) {
-        gvr_keyboard_show(gvr_keyboard_);
-      } else {
-        gvr_keyboard_hide(gvr_keyboard_);
-      }
-    }
-
     // A gesture is a movement of the controller while holding the App button.
     // If the angle of the movement is within a threshold, the action is
     // considered a regular click
@@ -795,7 +808,7 @@ void VrShellGl::UpdateSamples() {
   if (specs_[kFramePrimaryBuffer].GetSamples() != required_samples) {
     specs_[kFramePrimaryBuffer].SetSamples(required_samples);
     swap_chain_ =
-        base::MakeUnique<gvr::SwapChain>(gvr_api_->CreateSwapChain(specs_));
+        std::make_unique<gvr::SwapChain>(gvr_api_->CreateSwapChain(specs_));
   }
 }
 
@@ -882,11 +895,9 @@ void VrShellGl::DrawFrame(int16_t frame_index, base::TimeTicks current_time) {
         gvr_api_.get(), &render_info_primary_.head_pose);
   }
 
-  gfx::Vector3dF forward_vector =
-      vr::GetForwardVector(render_info_primary_.head_pose);
-
   // Update the render position of all UI elements (including desktop).
-  bool scene_changed = ui_->scene()->OnBeginFrame(current_time, forward_vector);
+  bool scene_changed =
+      ui_->scene()->OnBeginFrame(current_time, render_info_primary_.head_pose);
 
   // WebVR handles controller input in OnVsync.
   if (!ShouldDrawWebVr())
@@ -913,7 +924,9 @@ void VrShellGl::DrawFrame(int16_t frame_index, base::TimeTicks current_time) {
     return;
 
   TRACE_EVENT_BEGIN0("gpu", "VrShellGl::AcquireFrame");
+  base::TimeTicks acquire_start = base::TimeTicks::Now();
   acquired_frame_ = swap_chain_->AcquireFrame();
+  webvr_acquire_time_.AddSample(base::TimeTicks::Now() - acquire_start);
   TRACE_EVENT_END0("gpu", "VrShellGl::AcquireFrame");
   if (!acquired_frame_)
     return;
@@ -953,10 +966,6 @@ void VrShellGl::DrawIntoAcquiredFrame(int16_t frame_index,
   // while the splash screen is up ShouldDrawWebVr() will return false.
   if (!ShouldDrawWebVr()) {
     ui_->ui_renderer()->Draw(render_info_primary_);
-
-    // Draw keyboard. TODO(ymalik,crbug.com/780135): Keyboard should be a UI
-    // element and this special rendering logic should move out of here.
-    DrawKeyboard();
   }
 
   content_frame_available_ = false;
@@ -964,7 +973,7 @@ void VrShellGl::DrawIntoAcquiredFrame(int16_t frame_index,
 
   std::vector<const vr::UiElement*> overlay_elements;
   if (ShouldDrawWebVr()) {
-    overlay_elements = ui_->scene()->GetVisibleWebVrOverlayForegroundElements();
+    overlay_elements = ui_->scene()->GetVisibleWebVrOverlayElementsToDraw();
   }
 
   if (!overlay_elements.empty() && ShouldDrawWebVr()) {
@@ -1021,10 +1030,11 @@ void VrShellGl::DrawIntoAcquiredFrame(int16_t frame_index,
     acquired_frame_.Unbind();
   }
 
-  if (ShouldDrawWebVr() && surfaceless_rendering_) {
+  if (ShouldDrawWebVr() && surfaceless_rendering_ && !webvr_use_gpu_fence_) {
     // Continue with submit once a GL fence signals that current drawing
     // operations have completed.
-    std::unique_ptr<gl::GLFenceEGL> fence = base::MakeUnique<gl::GLFenceEGL>();
+    std::unique_ptr<gl::GLFenceEGL> fence = gl::GLFenceEGL::Create();
+    DCHECK(fence);
     webvr_delayed_frame_submit_.Reset(base::Bind(
         &VrShellGl::DrawFrameSubmitWhenReady, base::Unretained(this)));
     task_runner_->PostTask(
@@ -1034,77 +1044,6 @@ void VrShellGl::DrawIntoAcquiredFrame(int16_t frame_index,
   } else {
     // Continue with submit immediately.
     DrawFrameSubmitNow(frame_index, render_info_primary_.head_pose);
-  }
-}
-
-void VrShellGl::CreateKeyboard() {
-  if (gvr_keyboard_)
-    return;
-
-  keyboard_enabled_ =
-      base::FeatureList::IsEnabled(features::kVrBrowserKeyboard);
-  if (!keyboard_enabled_)
-    return;
-
-  gvr_keyboard_ = gvr_keyboard_create(nullptr, OnKeyboardEvent);
-  if (!gvr_keyboard_) {
-    keyboard_enabled_ = false;
-    return;
-  }
-  keyboard_context = gvr_keyboard_;
-
-  gvr_mat4f matrix;
-  gvr_keyboard_get_recommended_world_from_keyboard_matrix(2.0f, &matrix);
-  gvr_keyboard_set_world_from_keyboard_matrix(gvr_keyboard_, &matrix);
-}
-
-void VrShellGl::DrawKeyboard() {
-  if (!keyboard_enabled_)
-    return;
-
-  // Note that according to the keyboard API, these functions must be called
-  // every frame after the keyboard is created to process events, regardless of
-  // keyboard visibility.
-  gvr::ClockTimePoint target_time = gvr::GvrApi::GetTimePointNow();
-  gvr_keyboard_set_frame_time(gvr_keyboard_, &target_time);
-  gvr_keyboard_advance_frame(gvr_keyboard_);
-
-  if (!show_keyboard_)
-    return;
-
-  bool pressed = controller_->ButtonUpHappened(
-      gvr::ControllerButton::GVR_CONTROLLER_BUTTON_CLICK);
-  gvr_keyboard_update_button_state(
-      gvr_keyboard_, gvr::ControllerButton::GVR_CONTROLLER_BUTTON_CLICK,
-      pressed);
-
-  gvr_vec3f start;
-  start.x = controller_model_.laser_origin.x();
-  start.y = controller_model_.laser_origin.y();
-  start.z = controller_model_.laser_origin.z();
-  gvr_vec3f end;
-  end.x = start.x + controller_model_.laser_direction.x();
-  end.y = start.y + controller_model_.laser_direction.y();
-  end.z = start.z + controller_model_.laser_direction.z();
-  gvr_vec3f hit_point;
-  gvr_keyboard_update_controller_ray(gvr_keyboard_, &start, &end, &hit_point);
-  for (auto eye : {GVR_LEFT_EYE, GVR_RIGHT_EYE}) {
-    vr::CameraModel& eye_info = (eye == GVR_LEFT_EYE)
-                                    ? render_info_primary_.left_eye_model
-                                    : render_info_primary_.right_eye_model;
-    gvr::Mat4f view_matrix;
-    TransformToGvrMat(eye_info.view_matrix, &view_matrix);
-    gvr_keyboard_set_eye_from_world_matrix(gvr_keyboard_, eye, &view_matrix);
-
-    gvr::Mat4f proj_matrix;
-    TransformToGvrMat(eye_info.proj_matrix, &proj_matrix);
-    gvr_keyboard_set_projection_matrix(gvr_keyboard_, eye, &proj_matrix);
-
-    gfx::Rect viewport_rect = eye_info.viewport;
-    const gvr::Recti viewport = {viewport_rect.x(), viewport_rect.right(),
-                                 viewport_rect.y(), viewport_rect.bottom()};
-    gvr_keyboard_set_viewport(gvr_keyboard_, eye, &viewport);
-    gvr_keyboard_render(gvr_keyboard_, eye);
   }
 }
 
@@ -1130,14 +1069,51 @@ void VrShellGl::DrawFrameSubmitWhenReady(
   DrawFrameSubmitNow(frame_index, head_pose);
 }
 
+void VrShellGl::AddWebVrRenderTimeEstimate(int16_t frame_index,
+                                           base::TimeTicks submit_start,
+                                           base::TimeTicks submit_done) {
+  base::TimeDelta submit_elapsed = submit_done - submit_start;
+
+  int16_t prev_idx =
+      (frame_index + kPoseRingBufferSize - 1) % kPoseRingBufferSize;
+  base::TimeTicks prev_js_submit = webvr_time_js_submit_[prev_idx];
+  if (webvr_use_gpu_fence_ && !prev_js_submit.is_null()) {
+    // If we don't wait for rendering to complete, estimate render time for the
+    // *previous* frame based on GVR timing.
+    if (submit_elapsed > base::TimeDelta::FromMilliseconds(2)) {
+      // Submit was slow, assume this is the true render time.
+      base::TimeDelta prev_render_delta = submit_done - prev_js_submit;
+      webvr_render_time_.AddSample(prev_render_delta);
+    } else {
+      // Submit didn't block. True completion time could have been anywhere
+      // between the last GVR submit and now. Just decay the average down a
+      // bit. We could try to estimate based on the difference between
+      // submit_start and prev_js_submit, but that tends to be an
+      // underestimate.
+      base::TimeDelta prev_render_delta =
+          webvr_render_time_.GetAverageOrDefault(
+              vsync_helper_.DisplayVSyncInterval()) *
+          kWebVrSlowSubmitDecayFactor;
+      webvr_render_time_.AddSample(prev_render_delta);
+    }
+  }
+}
+
 void VrShellGl::DrawFrameSubmitNow(int16_t frame_index,
                                    const gfx::Transform& head_pose) {
   TRACE_EVENT1("gpu", "VrShellGl::DrawFrameSubmitNow", "frame", frame_index);
 
   gvr::Mat4f mat;
   TransformToGvrMat(head_pose, &mat);
-  acquired_frame_.Submit(*buffer_viewport_list_, mat);
-  CHECK(!acquired_frame_);
+  {
+    TRACE_EVENT0("gpu", "VrShellGl::SubmitToGvr");
+    base::TimeTicks submit_start = base::TimeTicks::Now();
+    acquired_frame_.Submit(*buffer_viewport_list_, mat);
+    base::TimeTicks submit_done = base::TimeTicks::Now();
+    webvr_submit_time_.AddSample(submit_done - submit_start);
+    AddWebVrRenderTimeEstimate(frame_index, submit_start, submit_done);
+    CHECK(!acquired_frame_);
+  }
 
   // No need to swap buffers for surfaceless rendering.
   if (!surfaceless_rendering_) {
@@ -1151,28 +1127,37 @@ void VrShellGl::DrawFrameSubmitNow(int16_t frame_index,
   // off the transfer surface, but that appears to result in overstuffed
   // buffers.
   if (submit_client_) {
-    submit_client_->OnSubmitFrameRendered();
+    if (webvr_use_gpu_fence_) {
+      // Make a GpuFence and pass it to the Renderer for sequencing frames.
+      std::unique_ptr<gl::GLFence> gl_fence = gl::GLFence::CreateForGpuFence();
+      std::unique_ptr<gfx::GpuFence> gpu_fence = gl_fence->GetGpuFence();
+      submit_client_->OnSubmitFrameGpuFence(
+          gfx::CloneHandleForIPC(gpu_fence->GetGpuFenceHandle()));
+    } else {
+      // Renderer is waiting for the previous frame to render, unblock it now.
+      submit_client_->OnSubmitFrameRendered();
+    }
   }
 
   if (ShouldDrawWebVr()) {
-    base::TimeTicks now = base::TimeTicks::Now();
     base::TimeTicks pose_time =
         webvr_time_pose_[frame_index % kPoseRingBufferSize];
     base::TimeTicks js_submit_time =
         webvr_time_js_submit_[frame_index % kPoseRingBufferSize];
-    int64_t pose_to_js_submit_us =
-        (js_submit_time - pose_time).InMicroseconds();
-    webvr_js_time_->AddSample(pose_to_js_submit_us);
-    int64_t js_submit_to_gvr_submit_us =
-        (now - js_submit_time).InMicroseconds();
-    webvr_render_time_->AddSample(js_submit_to_gvr_submit_us);
+    webvr_js_time_.AddSample(js_submit_time - pose_time);
+    if (!webvr_use_gpu_fence_) {
+      // Estimate render time from wallclock time, we waited for the pre-submit
+      // render fence to signal.
+      base::TimeTicks now = base::TimeTicks::Now();
+      webvr_render_time_.AddSample(now - js_submit_time);
+    }
   }
 
   // After saving the timestamp, fps will be available via GetFPS().
   // TODO(vollick): enable rendering of this framerate in a HUD.
-  fps_meter_->AddFrame(base::TimeTicks::Now());
-  DVLOG(1) << "fps: " << fps_meter_->GetFPS();
-  TRACE_COUNTER1("gpu", "WebVR FPS", fps_meter_->GetFPS());
+  fps_meter_.AddFrame(base::TimeTicks::Now());
+  DVLOG(1) << "fps: " << fps_meter_.GetFPS();
+  TRACE_COUNTER1("gpu", "WebVR FPS", fps_meter_.GetFPS());
 }
 
 bool VrShellGl::ShouldDrawWebVr() {
@@ -1209,7 +1194,7 @@ void VrShellGl::OnResume() {
     return;
   vsync_helper_.CancelVSyncRequest();
   OnVSync(base::TimeTicks::Now());
-  if (web_vr_mode_ && submit_client_)
+  if (web_vr_mode_)
     ScheduleOrCancelWebVrFrameTimeout();
 }
 
@@ -1268,7 +1253,7 @@ void VrShellGl::OnVSync(base::TimeTicks frame_time) {
   //
   // See third_party/catapult/tracing/tracing/extras/vsync/vsync_auditor.html
   std::unique_ptr<base::trace_event::TracedValue> args =
-      base::MakeUnique<base::trace_event::TracedValue>();
+      std::make_unique<base::trace_event::TracedValue>();
   args->SetDouble(
       "frame_time_us",
       static_cast<double>((frame_time - base::TimeTicks()).InMicroseconds()));
@@ -1283,9 +1268,16 @@ void VrShellGl::OnVSync(base::TimeTicks frame_time) {
   vsync_helper_.RequestVSync(
       base::Bind(&VrShellGl::OnVSync, base::Unretained(this)));
 
-  if (!callback_.is_null()) {
+  ScheduleOrCancelWebVrFrameTimeout();
+
+  // Process WebVR presenting VSync (VRDisplay rAF).
+  if (!callback_.is_null() && ui_->CanSendWebVrVSync()) {
+    // A callback was stored by GetVSync. Use it now for sending a VSync.
     SendVSync(frame_time, base::ResetAndReturn(&callback_));
   } else {
+    // We don't have a callback yet. Mark that there's a pending VSync
+    // to indicate that the next GetVSync is allowed to call SendVSync
+    // immediately.
     pending_vsync_ = true;
     pending_time_ = frame_time;
   }
@@ -1306,7 +1298,8 @@ void VrShellGl::GetVSync(GetVSyncCallback callback) {
   // In surfaceless (reprojecting) rendering, stay locked
   // to vsync intervals. Otherwise, for legacy Cardboard mode,
   // run requested animation frames now if it missed a vsync.
-  if ((surfaceless_rendering_ && webvr_vsync_align_) || !pending_vsync_) {
+  if ((surfaceless_rendering_ && webvr_vsync_align_) || !pending_vsync_ ||
+      !ui_->CanSendWebVrVSync()) {
     if (!callback_.is_null()) {
       mojo::ReportBadMessage(
           "Requested VSync before waiting for response to previous request.");
@@ -1369,30 +1362,83 @@ void VrShellGl::UpdateLayerBounds(int16_t frame_index,
   }
 }
 
-int64_t VrShellGl::GetPredictedFrameTimeNanos() {
-  int64_t frame_time_micros =
-      vsync_helper_.LastVSyncInterval().InMicroseconds();
+base::TimeDelta VrShellGl::GetPredictedFrameTime() {
+  base::TimeDelta frame_interval = vsync_helper_.DisplayVSyncInterval();
   // If we aim to submit at vsync, that frame will start scanning out
   // one vsync later. Add a half frame to split the difference between
   // left and right eye.
-  int64_t js_micros = webvr_js_time_->GetAverageOrDefault(frame_time_micros);
-  int64_t render_micros =
-      webvr_render_time_->GetAverageOrDefault(frame_time_micros);
-  int64_t overhead_micros = frame_time_micros * 3 / 2;
-  int64_t expected_frame_micros = js_micros + render_micros + overhead_micros;
+  base::TimeDelta js_time = webvr_js_time_.GetAverageOrDefault(frame_interval);
+  base::TimeDelta render_time =
+      webvr_render_time_.GetAverageOrDefault(frame_interval);
+  base::TimeDelta overhead_time = frame_interval * 3 / 2;
+  base::TimeDelta expected_frame_time = js_time + render_time + overhead_time;
   TRACE_COUNTER2("gpu", "WebVR frame time (ms)", "javascript",
-                 js_micros / 1000.0, "rendering", render_micros / 1000.0);
+                 js_time.InMilliseconds(), "rendering",
+                 render_time.InMilliseconds());
+  TRACE_COUNTER2("gpu", "GVR frame time (ms)", "acquire",
+                 webvr_acquire_time_.GetAverage().InMilliseconds(), "submit",
+                 webvr_submit_time_.GetAverage().InMilliseconds());
   TRACE_COUNTER1("gpu", "WebVR pose prediction (ms)",
-                 expected_frame_micros / 1000.0);
-  return expected_frame_micros * 1000;
+                 expected_frame_time.InMilliseconds());
+  return expected_frame_time;
+}
+
+bool VrShellGl::ShouldSkipVSync() {
+  // Disable heuristic for traditional render path where we submit completed
+  // frames.
+  if (!webvr_use_gpu_fence_)
+    return false;
+
+  int16_t prev_idx =
+      (frame_index_ + kPoseRingBufferSize - 1) % kPoseRingBufferSize;
+  base::TimeTicks prev_js_submit = webvr_time_js_submit_[prev_idx];
+  if (prev_js_submit.is_null())
+    return false;
+
+  base::TimeDelta frame_interval = vsync_helper_.DisplayVSyncInterval();
+  base::TimeDelta mean_render_time =
+      webvr_render_time_.GetAverageOrDefault(frame_interval);
+  base::TimeDelta prev_render_time_left =
+      mean_render_time - (base::TimeTicks::Now() - prev_js_submit);
+  base::TimeDelta mean_js_time = webvr_js_time_.GetAverage();
+  base::TimeDelta mean_js_wait = webvr_js_wait_time_.GetAverage();
+  base::TimeDelta mean_gvr_wait = webvr_submit_time_.GetAverage();
+  // We don't want the next frame to arrive too early. Estimated
+  // time-to-new-frame is the net JavaScript time (not counting time spent
+  // waiting) plus the net render time (not counting time blocked in submit).
+  // Ideally we'd want the new frame to be ready one vsync interval after the
+  // current frame finishes rendering, but allow being a half vsync early.
+  if (mean_js_time - mean_js_wait + mean_render_time - mean_gvr_wait <
+      prev_render_time_left + frame_interval / 2) {
+    return true;
+  }
+
+  if (webvr_unstuff_ratelimit_frames_ > 0) {
+    --webvr_unstuff_ratelimit_frames_;
+  } else if (webvr_acquire_time_.GetAverage() >= kWebVrSlowAcquireThreshold &&
+             mean_render_time < frame_interval) {
+    webvr_unstuff_ratelimit_frames_ = kWebVrUnstuffMaxDropRate;
+    return true;
+  }
+  return false;
 }
 
 void VrShellGl::SendVSync(base::TimeTicks time, GetVSyncCallback callback) {
+  DVLOG(2) << __FUNCTION__;
+  // There must not be a stored callback at this point, callers should use
+  // ResetAndReturn to clear it before calling this method.
+  DCHECK(!callback_);
+
+  if (ShouldSkipVSync()) {
+    callback_ = std::move(callback);
+    return;
+  }
+
   uint8_t frame_index = frame_index_++;
 
   TRACE_EVENT1("input", "VrShellGl::SendVSync", "frame", frame_index);
 
-  int64_t prediction_nanos = GetPredictedFrameTimeNanos();
+  int64_t prediction_nanos = GetPredictedFrameTime().InMicroseconds() * 1000;
 
   gfx::Transform head_mat;
   device::mojom::VRPosePtr pose =
@@ -1420,27 +1466,6 @@ void VrShellGl::ClosePresentationBindings() {
              device::mojom::VRPresentationProvider::VSyncStatus::CLOSING);
   }
   binding_.Close();
-}
-
-void VrShellGl::OnAssetsLoaded(bool success,
-                               std::string environment,
-                               const base::Version& component_version) {
-  if (!success) {
-    browser_->OnAssetsLoaded(vr::AssetsLoadStatus::kParseFailure,
-                             component_version);
-    return;
-  }
-  if (environment != "zq7sax8chrtjchxysh7b\n") {
-    browser_->OnAssetsLoaded(vr::AssetsLoadStatus::kInvalidContent,
-                             component_version);
-    return;
-  }
-  browser_->OnAssetsLoaded(vr::AssetsLoadStatus::kSuccess, component_version);
-  if (success && environment == "zq7sax8chrtjchxysh7b\n") {
-    VLOG(1) << "Successfully loaded VR assets component";
-  } else {
-    VLOG(1) << "Failed to load VR assets component";
-  }
 }
 
 }  // namespace vr_shell

@@ -54,7 +54,6 @@ static const double kProgressNotificationInterval = 0.02;
 static const double kProgressNotificationTimeInterval = 0.1;
 
 struct ProgressItem {
-  WTF_MAKE_NONCOPYABLE(ProgressItem);
   USING_FAST_MALLOC(ProgressItem);
 
  public:
@@ -63,6 +62,8 @@ struct ProgressItem {
 
   long long bytes_received;
   long long estimated_length;
+
+  DISALLOW_COPY_AND_ASSIGN(ProgressItem);
 };
 
 ProgressTracker* ProgressTracker::Create(LocalFrame* frame) {
@@ -79,7 +80,7 @@ ProgressTracker::ProgressTracker(LocalFrame* frame)
       elementsLoaded_(0),
       elementsTotal_(0) {}
 
-ProgressTracker::~ProgressTracker() {}
+ProgressTracker::~ProgressTracker() = default;
 
 void ProgressTracker::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);

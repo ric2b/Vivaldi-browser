@@ -22,10 +22,10 @@
 <translation id="1821985195704844674">drevesna mreža</translation>
 <translation id="1822429046913737220">Dopoldne/popoldne</translation>
 <translation id="1832974991323546415">predvajanje v oddaljeni napravi</translation>
-<translation id="1854180393107901205">Ustavi predvajanje</translation>
 <translation id="1921819250265091946">dd</translation>
 <translation id="1930711995431081526">stanje</translation>
 <translation id="1938124657309484470">Vrednost mora biti <ph name="MAXIMUM_DATE_OR_TIME" /> ali prej.</translation>
+<translation id="1993104285338243655">Preklopljeno na zrcaljenje</translation>
 <translation id="2060505056492490888">»<ph name="DOT" />« je na napačnem mestu v »<ph name="INVALIDDOMAIN" />«.</translation>
 <translation id="2148716181193084225">Danes</translation>
 <translation id="2226276347425096477">Skrajšajte to besedilo na <ph name="MAX_CHARACTERS" /> znakov ali manj (trenutno uporabljate <ph name="CURRENT_LENGTH" /> znakov).</translation>
@@ -51,6 +51,7 @@
 <translation id="2940813599313844715">predmet</translation>
 <translation id="2942448076852699108">označena vsebina</translation>
 <translation id="3040011195152428237">povezava</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3075154866155599887">Vnesite veljavno vrednost. Vnos v polje je nepopoln ali vsebuje neveljaven datum.</translation>
 <translation id="3078740164268491126">tabela</translation>
 <translation id="3086746722712840547">opmb</translation>
@@ -63,6 +64,7 @@
 <translation id="3639613635497528239">preostale sekunde filma</translation>
 <translation id="3706100364254443312">preklop</translation>
 <translation id="3732799496749320381">mm</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3785482301506746191">časovni krmilnik za predvajanje filma</translation>
 <translation id="3808586225841795776">izraz</translation>
 <translation id="3822383571486410024">Podaljšajte to besedilo na toliko znakov ali več: <ph name="MIN_CHARACTERS" /> (trenutno uporabljate toliko znakov: <ph name="CURRENT_LENGTH" />).</translation>
@@ -93,6 +95,7 @@
 <translation id="5117590920725113268">Prikaz naslednjega meseca</translation>
 <translation id="512758898067543763">glava vrstice</translation>
 <translation id="5164977714490026579">Vrednost mora biti večja od <ph name="MINIMUM" /> ali enaka.</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Vnesite nekaj in nato <ph name="ATSIGN" />. Naslov »<ph name="INVALIDADDRESS" />« je nepopoln.</translation>
 <translation id="5406322316791861025">številka</translation>
 <translation id="5453733299334684579">element drevesa</translation>
@@ -126,6 +129,7 @@
 <translation id="6643016212128521049">Počisti</translation>
 <translation id="668171684555832681">Drugo ...</translation>
 <translation id="6692633176391053278">kontrolnik</translation>
+<translation id="6709570249143506788">Slaba kakovost predvajanja</translation>
 <translation id="6755330956360078551">opis orodja</translation>
 <translation id="6790428901817661496">Predvajanje</translation>
 <translation id="6820355525329141109">Vtičnika ni bilo mogoče naložiti.</translation>
@@ -141,6 +145,7 @@
 <translation id="727747134524199931">glava stolpca</translation>
 <translation id="7364796246159120393">Izberite datoteko</translation>
 <translation id="739024184232394898">Drugo ...</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="7491962110804786152">tabulatorka</translation>
 <translation id="7514365320538308">Prenos</translation>
 <translation id="7673697353781729403">Ure</translation>
@@ -173,6 +178,8 @@
 <translation id="8785498733064193001">začetek predvajanja</translation>
 <translation id="8845239796550121995">Predvajanje na televizorju</translation>
 <translation id="8851136666856101339">glavn</translation>
+<translation id="8875657656876809964">Napaka pri predvajanju videoposnetka</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> KB</translation>
 <translation id="8987927404178983737">Mesec</translation>
 <translation id="901493112792887934">trenutni čas v sekundah</translation>
 <translation id="9048119486235211610">krmarjenje</translation>
@@ -182,6 +189,7 @@
 <translation id="9132465097189459683">Drugo ...</translation>
 <translation id="9138385573473225930">opozorilo</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />, začne se <ph name="WEEK_START_DATE" /></translation>
+<translation id="916607977885256133">Slika v sliki</translation>
 <translation id="947831847158436616">celica</translation>
 <translation id="966787709310836684">meni</translation>
 </translationbundle>

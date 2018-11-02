@@ -6,7 +6,6 @@
 
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accessibility/accessibility_controller.h"
-#include "ash/accessibility/accessibility_delegate.h"
 #include "ash/accessibility/test_accessibility_controller_client.h"
 #include "ash/ime/ime_controller.h"
 #include "ash/media_controller.h"
@@ -17,7 +16,7 @@
 #include "ash/session/session_controller.h"
 #include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
+#include "ash/shell_test_api.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/test/ash_test_base.h"
@@ -551,7 +550,7 @@ TEST_F(AcceleratorControllerTest, RotateScreen) {
                        ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN);
   display::Display::Rotation new_rotation =
       GetActiveDisplayRotation(display.id());
-  // |new_rotation| is determined by the AcceleratorControllerDelegate.
+  // |new_rotation| is determined by the AcceleratorController.
   EXPECT_NE(initial_rotation, new_rotation);
 }
 
@@ -823,7 +822,8 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
   app_list::test::TestAppListPresenter test_app_list_presenter;
   Shell::Get()->app_list()->SetAppListPresenter(
       test_app_list_presenter.CreateInterfacePtrAndBind());
-  AccessibilityDelegate* delegate = Shell::Get()->accessibility_delegate();
+  AccessibilityController* controller =
+      Shell::Get()->accessibility_controller();
 
   // The press event should not toggle the AppList, the release should instead.
   EXPECT_FALSE(
@@ -839,12 +839,14 @@ TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
   EXPECT_EQ(ui::VKEY_LWIN, GetPreviousAccelerator().key_code());
 
   // When spoken feedback is on, the AppList should not toggle.
-  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
+  controller->SetSpokenFeedbackEnabled(true, A11Y_NOTIFICATION_NONE);
+  EXPECT_TRUE(controller->IsSpokenFeedbackEnabled());
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_FALSE(ProcessInController(
       CreateReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
-  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
+  controller->SetSpokenFeedbackEnabled(false, A11Y_NOTIFICATION_NONE);
+  EXPECT_FALSE(controller->IsSpokenFeedbackEnabled());
   RunAllPendingInMessageLoop();
   EXPECT_EQ(1u, test_app_list_presenter.toggle_count());
 
@@ -1121,7 +1123,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   std::unique_ptr<aura::Window> window(
       CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
   wm::ActivateWindow(window.get());
-  ShellPort::Get()->SimulateModalWindowOpenForTesting(true);
+  ShellTestApi().SimulateModalWindowOpenForTest(true);
   for (const auto& action : all_actions) {
     if (actionsAllowedAtModalWindow.find(action) ==
         actionsAllowedAtModalWindow.end()) {
@@ -1359,11 +1361,7 @@ TEST_F(DeprecatedAcceleratorTester, TestNewAccelerators) {
 using AcceleratorControllerGuestModeTest = NoSessionAshTestBase;
 
 TEST_F(AcceleratorControllerGuestModeTest, IncognitoWindowDisabled) {
-  // Simulate a guest mode login.
-  TestSessionControllerClient* session = GetSessionControllerClient();
-  session->Reset();
-  session->AddUserSession("user1@test.com", user_manager::USER_TYPE_GUEST);
-  session->SetSessionState(session_manager::SessionState::ACTIVE);
+  SimulateGuestLogin();
 
   // New incognito window is disabled.
   EXPECT_FALSE(Shell::Get()->accelerator_controller()->PerformActionIfEnabled(

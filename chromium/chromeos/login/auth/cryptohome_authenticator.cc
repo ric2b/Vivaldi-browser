@@ -17,6 +17,7 @@
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/cryptohome/cryptohome_util.h"
 #include "chromeos/cryptohome/homedir_methods.h"
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/cryptohome_client.h"
@@ -91,7 +92,7 @@ void TriggerResolve(const base::WeakPtr<AuthAttemptState>& attempt,
                     scoped_refptr<CryptohomeAuthenticator> resolver,
                     bool success,
                     cryptohome::MountError return_code) {
-  attempt->RecordCryptohomeStatus(success, return_code);
+  attempt->RecordCryptohomeStatus(return_code);
   resolver->Resolve();
 }
 
@@ -124,17 +125,14 @@ void RecordKeyErrorAndResolve(const base::WeakPtr<AuthAttemptState>& attempt,
                               scoped_refptr<CryptohomeAuthenticator> resolver) {
   chromeos::LoginEventRecorder::Get()->AddLoginTimeMarker("CryptohomeMount-End",
                                                           false);
-  attempt->RecordCryptohomeStatus(false /* success */,
-                                  cryptohome::MOUNT_ERROR_KEY_FAILURE);
+  attempt->RecordCryptohomeStatus(cryptohome::MOUNT_ERROR_KEY_FAILURE);
   resolver->Resolve();
 }
 
 // Callback invoked when cryptohome's MountEx() method has finished.
 void OnMount(const base::WeakPtr<AuthAttemptState>& attempt,
              scoped_refptr<CryptohomeAuthenticator> resolver,
-             bool success,
-             cryptohome::MountError return_code,
-             const std::string& mount_hash) {
+             base::Optional<cryptohome::BaseReply> reply) {
   const bool public_mount = attempt->user_context.GetUserType() ==
                                 user_manager::USER_TYPE_KIOSK_APP ||
                             attempt->user_context.GetUserType() ==
@@ -143,9 +141,9 @@ void OnMount(const base::WeakPtr<AuthAttemptState>& attempt,
   chromeos::LoginEventRecorder::Get()->AddLoginTimeMarker(
       public_mount ? "CryptohomeMountPublic-End" : "CryptohomeMount-End",
       false);
-  attempt->RecordCryptohomeStatus(success, return_code);
-  if (success)
-    attempt->RecordUsernameHash(mount_hash);
+  attempt->RecordCryptohomeStatus(BaseReplyToMountError(reply));
+  if (attempt->cryptohome_code() == cryptohome::MOUNT_ERROR_NONE)
+    attempt->RecordUsernameHash(BaseReplyToMountHash(reply.value()));
   else
     attempt->RecordUsernameHashFailed();
   resolver->Resolve();
@@ -172,7 +170,7 @@ void DoMount(const base::WeakPtr<AuthAttemptState>& attempt,
   if (ephemeral)
     mount.set_require_ephemeral(true);
   if (create_if_nonexistent) {
-    KeyDefinitionToKey(
+    cryptohome::KeyDefinitionToKey(
         cryptohome::KeyDefinition(key->GetSecret(), kCryptohomeGAIAKeyLabel,
                                   cryptohome::PRIV_DEFAULT),
         mount.mutable_create()->add_keys());
@@ -187,7 +185,7 @@ void DoMount(const base::WeakPtr<AuthAttemptState>& attempt,
   // a legacy key with no label while those created by Chrome OS M39 and newer
   // will have a key with the label kCryptohomeGAIAKeyLabel.
   auth_key->set_secret(key->GetSecret());
-  cryptohome::HomedirMethods::GetInstance()->MountEx(
+  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
       cryptohome::Identification(attempt->user_context.GetAccountId()), auth,
       mount, base::Bind(&OnMount, attempt, resolver));
 }
@@ -424,7 +422,7 @@ void MountPublic(const base::WeakPtr<AuthAttemptState>& attempt,
     mount.set_force_dircrypto_if_available(true);
   mount.set_public_mount(true);
   // Set the request to create a new homedir when missing.
-  KeyDefinitionToKey(
+  cryptohome::KeyDefinitionToKey(
       cryptohome::KeyDefinition(std::string(), kCryptohomePublicMountKeyLabel,
                                 cryptohome::PRIV_DEFAULT),
       mount.mutable_create()->add_keys());
@@ -433,7 +431,7 @@ void MountPublic(const base::WeakPtr<AuthAttemptState>& attempt,
   // is left empty. Authentication's key label is also set to an empty string,
   // which is a wildcard allowing any key to match to allow cryptohomes created
   // in a legacy way. (See comments in DoMount.)
-  cryptohome::HomedirMethods::GetInstance()->MountEx(
+  DBusThreadManager::Get()->GetCryptohomeClient()->MountEx(
       cryptohome::Identification(attempt->user_context.GetAccountId()),
       cryptohome::AuthorizationRequest(), mount,
       base::Bind(&OnMount, attempt, resolver));
@@ -924,7 +922,7 @@ CryptohomeAuthenticator::AuthState CryptohomeAuthenticator::ResolveState() {
 
   AuthState state = CONTINUE;
 
-  if (current_state_->cryptohome_outcome() &&
+  if (current_state_->cryptohome_code() == cryptohome::MOUNT_ERROR_NONE &&
       current_state_->username_hash_valid()) {
     state = ResolveCryptohomeSuccessState();
   } else {

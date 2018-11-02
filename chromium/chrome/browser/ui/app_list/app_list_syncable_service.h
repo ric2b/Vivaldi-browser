@@ -15,9 +15,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
-#include "chrome/browser/apps/drive/drive_app_uninstall_sync_service.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
-#include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/model/sync_change.h"
@@ -27,7 +25,8 @@
 #include "components/sync/protocol/app_list_specifics.pb.h"
 
 class ArcAppModelBuilder;
-class DriveAppProvider;
+class ChromeAppListModelUpdater;
+class ChromeAppListItem;
 class ExtensionAppModelBuilder;
 class Profile;
 
@@ -45,13 +44,15 @@ class PrefRegistrySyncable;
 
 namespace app_list {
 
+// TODO(hejq): Remove AppListItem when we have a mojo struct for this.
 class AppListItem;
+// TODO(hejq): Remove these when we get rid of |GetModel| and |GetSearchModel|.
 class AppListModel;
+class SearchModel;
 
 // Keyed Service that owns, stores, and syncs an AppListModel for a profile.
 class AppListSyncableService : public syncer::SyncableService,
-                               public KeyedService,
-                               public DriveAppUninstallSyncService {
+                               public KeyedService {
  public:
   struct SyncItem {
     SyncItem(const std::string& id,
@@ -91,7 +92,7 @@ class AppListSyncableService : public syncer::SyncableService,
 
   // Adds |item| to |sync_items_| and |model_|. If a sync item already exists,
   // updates the existing sync item instead.
-  void AddItem(std::unique_ptr<AppListItem> app_item);
+  void AddItem(std::unique_ptr<ChromeAppListItem> app_item);
 
   // Removes sync item matching |id|.
   void RemoveItem(const std::string& id);
@@ -118,8 +119,16 @@ class AppListSyncableService : public syncer::SyncableService,
   void SetPinPosition(const std::string& app_id,
                       const syncer::StringOrdinal& item_pin_ordinal);
 
+  // Gets the app list model updater.
+  ChromeAppListModelUpdater* GetModelUpdater();
+
   // Gets the app list model.
+  // Note: This will be removed. Use |GetModelUpdater| instead.
   AppListModel* GetModel();
+
+  // Gets the search model.
+  // Note: This will be removed. Use |GetModelUpdater| instead.
+  SearchModel* GetSearchModel();
 
   // Returns true if this service was initialized.
   bool IsInitialized() const;
@@ -133,7 +142,6 @@ class AppListSyncableService : public syncer::SyncableService,
   const std::string& GetOemFolderNameForTest() const {
     return oem_folder_name_;
   }
-  void ResetDriveAppProviderForTest();
 
   const SyncItemMap& sync_items() const { return sync_items_; }
 
@@ -150,15 +158,7 @@ class AppListSyncableService : public syncer::SyncableService,
       const syncer::SyncChangeList& change_list) override;
 
  private:
-  class ModelObserver;
-  class ModelUpdater;
-
-  // KeyedService
-  void Shutdown() override;
-
-  // DriveAppUninstallSyncService
-  void TrackUninstalledDriveApp(const std::string& drive_app_id) override;
-  void UntrackUninstalledDriveApp(const std::string& drive_app_id) override;
+  class ModelUpdaterDelegate;
 
   // Builds the model once ExtensionService is ready.
   void BuildModel();
@@ -210,10 +210,6 @@ class AppListSyncableService : public syncer::SyncableService,
   // Handles an existing sync item.
   void ProcessExistingSyncItem(SyncItem* sync_item);
 
-  // Updates |app_item| from |sync_item| (e.g. updates item positions).
-  void UpdateAppItemFromSyncItem(const SyncItem* sync_item,
-                                 AppListItem* app_item);
-
   // Sends ADD or CHANGED for sync item.
   void SendSyncChange(SyncItem* sync_item,
                       syncer::SyncChange::SyncChangeType sync_change_type);
@@ -229,13 +225,10 @@ class AppListSyncableService : public syncer::SyncableService,
   // Deletes a SyncItem matching |specifics|.
   void DeleteSyncItemSpecifics(const sync_pb::AppListSpecifics& specifics);
 
-  // Creates the OEM folder and sets its name if necessary. Returns the OEM
-  // folder id.
-  std::string FindOrCreateOemFolder();
-
-  // Gets the location for the OEM folder. Called when the folder is first
-  // created.
-  syncer::StringOrdinal GetOemFolderPos();
+  // Gets the preferred location for the OEM folder. It may return an invalid
+  // position and the final OEM folder position will be determined in the
+  // AppListModel.
+  syncer::StringOrdinal GetPreferredOemFolderPos();
 
   // Returns true if an extension matching |id| exists and was installed by
   // an OEM (extension->was_installed_by_oem() is true).
@@ -264,11 +257,14 @@ class AppListSyncableService : public syncer::SyncableService,
   // releases http://crbug.com/722675.
   void MaybeImportLegacyPlayStorePosition(syncer::SyncChangeList* change_list);
 
+  // Remove sync data of Drive apps.
+  // TODO(http://crbug.com/794724): Remove after M65 goes stable.
+  void RemoveDriveAppItems();
+
   Profile* profile_;
   extensions::ExtensionSystem* extension_system_;
-  std::unique_ptr<AppListModel> model_;
-  std::unique_ptr<ModelUpdater> model_updater_;
-  std::unique_ptr<ModelObserver> model_observer_;
+  std::unique_ptr<ChromeAppListModelUpdater> model_updater_;
+  std::unique_ptr<ModelUpdaterDelegate> model_updater_delegate_;
   std::unique_ptr<ExtensionAppModelBuilder> apps_builder_;
   std::unique_ptr<ArcAppModelBuilder> arc_apps_builder_;
   std::unique_ptr<syncer::SyncChangeProcessor> sync_processor_;
@@ -281,9 +277,6 @@ class AppListSyncableService : public syncer::SyncableService,
 
   // List of observers.
   base::ObserverList<Observer> observer_list_;
-
-  // Provides integration with Drive apps.
-  std::unique_ptr<DriveAppProvider> drive_app_provider_;
 
   base::WeakPtrFactory<AppListSyncableService> weak_ptr_factory_;
 

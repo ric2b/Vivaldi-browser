@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> elements</translation>
 <translation id="1491277525950327607">Fes doble toc per canviar la configuració</translation>
 <translation id="152234381334907219">Contrasenyes que no es desen mai</translation>
+<translation id="1532451416480227577">Mostra les adreces i les targetes de crèdit de Google Pay</translation>
 <translation id="1540800554400757039">Adreça 1</translation>
 <translation id="1545749641540134597">Escaneja el codi QR</translation>
 <translation id="1580783302095112590">Correu enviat.</translation>
@@ -96,6 +97,7 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="2718352093833049315">Només amb Wi-Fi</translation>
 <translation id="2747003861858887689">Camp anterior</translation>
 <translation id="2780046210906776326">Cap compte de correu</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Surt del selector de pestanyes</translation>
 <translation id="283291358677939992">Cerca a la pàgina...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -146,7 +148,7 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="3603009562372709545">Copia l'URL de l'enllaç</translation>
 <translation id="3607167657931203000">Dades d'Emplenament automàtic</translation>
 <translation id="3628119975092896051">La llista de lectura està disponible sense connexió. Per afegir-hi una pàgina, toca <ph name="SHARE_OPENING_ICON" />.</translation>
-<translation id="3638472932233958418">Pujada prèvia de pàgines web</translation>
+<translation id="3638472932233958418">Càrrega prèvia de pàgines web</translation>
 <translation id="3691593122358196899">Adreça d'interès afegida a <ph name="FOLDER_TITLE" /></translation>
 <translation id="3771033907050503522">Pestanyes d'incògnit</translation>
 <translation id="3779810277399252432">No hi ha connexió a Internet.</translation>
@@ -179,6 +181,7 @@ Per exemple, pot ser que, per respondre a aquesta sol·licitud, alguns llocs web
 <translation id="4378154925671717803">Telèfon</translation>
 <translation id="441868831736628555">Avís de privadesa</translation>
 <translation id="4460091562821778167">Pregunta'm cada vegada quina aplicació s'utilitza</translation>
+<translation id="4496373720959965247">Afegeix pestanyes i canvia de pàgina</translation>
 <translation id="4508750114462689118">Tanca la promoció d'inici de sessió</translation>
 <translation id="4526249700380860531">Consulta i gestiona les contrasenyes desades a <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Torna a iniciar la sessió.</translation>
@@ -217,12 +220,12 @@ Les vostres dades estan encriptades amb la vostra frase de contrasenya de sincro
 <translation id="5300589172476337783">Mostra</translation>
 <translation id="5317780077021120954">Desa</translation>
 <translation id="5327248766486351172">Nom</translation>
+<translation id="533632423981297619">Tothom que pugui veure el fitxer exportat podrà veure també les teves contrasenyes. No comparteixis aquest fitxer amb ningú.</translation>
 <translation id="5388358297987318779">Obre una imatge</translation>
 <translation id="5409365236829784218">Cap aplicació instal·lada no pot obrir el fitxer.</translation>
 <translation id="5433691172869980887">S'ha copiat el nom d'usuari</translation>
 <translation id="54401264925851789">Informació de seguretat de la pàgina</translation>
 <translation id="5525269841082836315">Crea una frase de contrasenya</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoff us permet començar a navegar per un lloc web en aquest dispositiu i després continuar fàcilment al dispositiu Mac. El lloc web obert actualment apareixerà al Dock de Mac.
 
 Handoff també ha d'estar activat a la secció General de Configuració, i els vostres dispositius han de fer servir el mateix compte d'iCloud.</translation>
@@ -247,7 +250,6 @@ Handoff també ha d'estar activat a la secció General de Configuració, i els v
 <translation id="5911030830365207728">Traductor de Google</translation>
 <translation id="5916664084637901428">Activat</translation>
 <translation id="5948291296578561264">Et permet desar fotos a la biblioteca de fotos.</translation>
-<translation id="5953603475187800576">Mostra les adreces i les targetes de crèdit de Google Payments</translation>
 <translation id="5955891643922670672">Se n'està mostrant la versió sense connexió</translation>
 <translation id="5964480694698977962">Crea una pestanya d'incògnit nova.</translation>
 <translation id="5965679971710331625">Tens la sessió iniciada</translation>
@@ -337,7 +339,6 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="7514365320538308">Baixa</translation>
 <translation id="7537586195939242955">No es pot instal·lar el passi a Passbook en aquest moment.</translation>
 <translation id="7561196759112975576">Sempre</translation>
-<translation id="7588950540487816470">El Web físic</translation>
 <translation id="7603852183842204213">Finestres emergents bloquejades (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">La sincronització no funciona</translation>
 <translation id="7638584964844754484">La frase de contrasenya és incorrecta</translation>
@@ -350,6 +351,7 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="780301667611848630">No, gràcies</translation>
 <translation id="7859704718976024901">Historial de navegació</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Exporta contrasenyes</translation>
 <translation id="7947953824732555851">Acc. i inicia sessió</translation>
 <translation id="7961015016161918242">Mai</translation>
 <translation id="7971521879845308059">Bloqueig de finestres emerg.</translation>
@@ -407,7 +409,6 @@ Les vostres dades es van encriptar el dia <ph name="TIME" /> amb la vostra frase
 <translation id="9083392325882095631">1 element</translation>
 <translation id="9100610230175265781">S'ha d'introduir una frase de contrasenya </translation>
 <translation id="9148126808321036104">Torneu a iniciar la sessió</translation>
-<translation id="91549621916703028">Crea diverses pestanyes per a totes les tasques</translation>
 <translation id="9157836665414082580">Suprimeix quadres de diàleg</translation>
 <translation id="9188680907066685419">Tanqueu la sessió del compte gestionat</translation>
 <translation id="9203116392574189331">Handoff</translation>

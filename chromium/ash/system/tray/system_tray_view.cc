@@ -4,7 +4,7 @@
 
 #include "ash/system/tray/system_tray_view.h"
 
-#include "ash/shell_port.h"
+#include "ash/shell.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "base/metrics/histogram_macros.h"
 #include "ui/views/layout/box_layout.h"
@@ -49,7 +49,7 @@ class BottomAlignedBoxLayout : public views::BoxLayout {
 SystemTrayView::SystemTrayView(SystemTrayType system_tray_type,
                                const std::vector<ash::SystemTrayItem*>& items)
     : items_(items), system_tray_type_(system_tray_type) {
-  SetLayoutManager(new BottomAlignedBoxLayout());
+  SetLayoutManager(std::make_unique<BottomAlignedBoxLayout>());
 }
 
 SystemTrayView::~SystemTrayView() {
@@ -61,7 +61,7 @@ bool SystemTrayView::CreateItemViews(LoginStatus login_status) {
 
   // If a system modal dialog is present, create the same tray as
   // in locked state.
-  if (ShellPort::Get()->IsSystemModalWindowOpen() &&
+  if (Shell::IsSystemModalWindowOpen() &&
       login_status != LoginStatus::NOT_LOGGED_IN) {
     login_status = LoginStatus::LOCKED;
   }

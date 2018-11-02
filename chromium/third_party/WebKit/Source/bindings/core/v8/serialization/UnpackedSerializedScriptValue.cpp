@@ -16,6 +16,7 @@ namespace blink {
 UnpackedSerializedScriptValue::UnpackedSerializedScriptValue(
     scoped_refptr<SerializedScriptValue> value)
     : value_(std::move(value)) {
+  value_->RegisterMemoryAllocatedWithCurrentScriptContext();
   auto& array_buffer_contents = value_->array_buffer_contents_array_;
   if (!array_buffer_contents.IsEmpty()) {
     array_buffers_.Grow(array_buffer_contents.size());
@@ -42,7 +43,7 @@ UnpackedSerializedScriptValue::UnpackedSerializedScriptValue(
   }
 }
 
-UnpackedSerializedScriptValue::~UnpackedSerializedScriptValue() {}
+UnpackedSerializedScriptValue::~UnpackedSerializedScriptValue() = default;
 
 void UnpackedSerializedScriptValue::Trace(blink::Visitor* visitor) {
   visitor->Trace(array_buffers_);

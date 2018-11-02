@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">อุปกรณ์นี้ได้รับการจัดการโดย <ph name="DOMAIN" /></translation>
 <translation id="2050339315714019657">แนวตั้ง</translation>
 <translation id="2067602449040652523">ความสว่างของแป้นพิมพ์</translation>
-<translation id="207439088875642105">นี่เป็นบัญชีสำหรับเด็กที่จัดการโดย <ph name="FIRST_PARENT_EMAIL" /> และ <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">หยุดแคสต์ <ph name="TAB_NAME" /> ไปยัง <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">ที่ชาร์จพลังงานต่ำ</translation>
 <translation id="2144487987174258011">รีสตาร์ทเพื่ออัปเดต Adobe Flash Player</translation>
@@ -93,7 +92,6 @@
 <translation id="3000461861112256445">เสียงแบบโมโน</translation>
 <translation id="3009178788565917040">เอาต์พุต</translation>
 <translation id="3019353588588144572">เวลาที่เหลือกว่าจะชาร์จแบตเตอรี่เต็ม, <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">นี่เป็นบัญชีสำหรับเด็กที่จัดการโดย <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">ด้านล่าง</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (บลูทูธ)</translation>
@@ -114,6 +112,7 @@
 <translation id="3473479545200714844">แว่นขยายหน้าจอ</translation>
 <translation id="3477079411857374384">Control-Shift-Space</translation>
 <translation id="3510164367642747937">ไฮไลต์เคอร์เซอร์เมาส์</translation>
+<translation id="3513798432020909783">บัญชีที่จัดการโดย <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">เปลี่ยนกลับเป็น "<ph name="FROM_LOCALE" />" (จำเป็นต้องรีสตาร์ต)</translation>
 <translation id="3582792037806681688">การลงชื่อเข้าสู่ระบบพร้อมกันหลายบัญชีไม่ได้รับอนุญาตสำหรับผู้ใช้ในเซสชันนี้</translation>
 <translation id="3595596368722241419">แบตเตอรี่เต็ม</translation>
@@ -128,6 +127,7 @@
 <translation id="3784455785234192852">ล็อก</translation>
 <translation id="3798670284305777884">ลำโพง (ภายใน)</translation>
 <translation id="3846575436967432996">ไม่มีข้อมูลเครือข่ายที่สามารถใช้งานได้</translation>
+<translation id="385051799172605136">กลับ</translation>
 <translation id="3891340733213178823">กด Ctrl+Shift+Q 2 ครั้งเพื่อออกจากระบบ</translation>
 <translation id="3893630138897523026">ChromeVox (การตอบสนองด้วยเสียง)</translation>
 <translation id="3899995891769452915">ป้อนข้อมูลด้วยเสียง</translation>
@@ -172,6 +172,7 @@
 <translation id="5430931332414098647">การเชื่อมต่ออินเทอร์เน็ตผ่านมือถือแบบด่วน</translation>
 <translation id="5431825016875453137">OpenVPN/L2TP</translation>
 <translation id="544691375626129091">เพิ่มผู้ใช้ที่มีทั้งหมดลงในเซสชันนี้แล้ว</translation>
+<translation id="5457599981699367932">ท่องเว็บในฐานะผู้มาเยือน</translation>
 <translation id="553675580533261935">กำลังออกจากเซสชัน</translation>
 <translation id="5548285847212963613">ส่วนขยาย "<ph name="EXTENSION_NAME" />" สามารถช่วยในการเชื่อมต่อเครือข่ายนี้</translation>
 <translation id="5571066253365925590">เปิดใช้งานบลูทูธแล้ว</translation>
@@ -182,6 +183,7 @@
 <translation id="5744083938413354016">การแตะลาก</translation>
 <translation id="5777841717266010279">ต้องการหยุดแชร์หน้าจอไหม</translation>
 <translation id="57838592816432529">ปิดเสียง</translation>
+<translation id="5832805196449965646">เพิ่มบุคคล</translation>
 <translation id="5860033963881614850">ปิด</translation>
 <translation id="5895138241574237353">ปิดแล้วเปิดอีกครั้ง</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
@@ -273,6 +275,7 @@
 <translation id="7829386189513694949">สัญญาณแรง</translation>
 <translation id="7904094684485781019">ผู้ดูแลระบบของบัญชีนี้ไม่อนุญาตการลงชื่อเข้าสู่ระบบพร้อมกันหลายบัญชี</translation>
 <translation id="7933084174919150729">Google Assistant ใช้งานได้กับโปรไฟล์หลักเท่านั้น</translation>
+<translation id="79341161159229895">บัญชีที่จัดการโดย <ph name="FIRST_PARENT_EMAIL" /> และ <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">กำลังค้นหาเครือข่ายมือถือ...</translation>
 <translation id="7982789257301363584">เครือข่าย</translation>
 <translation id="7994370417837006925">การลงชื่อเข้าสู่ระบบพร้อมกันหลายบัญชี</translation>
@@ -289,6 +292,7 @@
 <translation id="8261506727792406068">ลบ</translation>
 <translation id="8308637677604853869">เมนูก่อนหน้า</translation>
 <translation id="8351131234907093545">สร้างโน้ต</translation>
+<translation id="8392451568018454956">เมนูตัวเลือกสำหรับ <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">การตั้งค่า</translation>
 <translation id="8433186206711564395">การตั้งค่าเครือข่าย</translation>
 <translation id="8433977262951327081">มีการเปลี่ยนแปลงทางลัดที่ใช้แสดงลูกโป่งเมนูตัวเลือกการป้อนข้อมูลในชั้นวาง โปรดใช้ <ph name="NEW_SHORTCUT" /> แทน <ph name="OLD_SHORTCUT" /></translation>

@@ -1,12 +1,29 @@
 
-post_process_target("//components/sessions:sessions") {
-  sources += [ "//vivaldi/components/sessions/live_tab_context.cc" ]
+update_target("//components/sessions:sessions") {
+  sources += [
+    "//vivaldi/components/sessions/live_tab_context.cc",
+    "//vivaldi/components/sessions/tab_restore_service_client.cc",
+  ]
 }
 
-post_process_target("//content/browser:browser") {
+update_target("//content/browser:browser") {
   sources += [ "//vivaldi/components/loader/resource_controller.cc" ]
 }
 
-post_process_target("//components/bookmarks/browser:browser") {
+update_target("//components/bookmarks/browser:browser") {
   sources += [ "//vivaldi/components/bookmarks/titled_url_node.cc" ]
 }
+
+update_template_instance("//third_party/WebKit/Source/core/page:page") {
+  # Prevent multiple updates in nested templates
+  if (!defined(vivaldi_added)) {
+    sources += [
+      "//vivaldi/components/blink/vivaldi_add_search_context_menu.cc",
+      "//vivaldi/components/blink/vivaldi_add_search_context_menu.h"
+    ]
+  }
+  vivaldi_added = true
+  not_needed(["vivaldi_added"])
+
+}
+

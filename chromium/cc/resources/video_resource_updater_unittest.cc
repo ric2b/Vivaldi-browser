@@ -119,7 +119,7 @@ class VideoResourceUpdaterTest : public testing::Test {
 
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::WrapExternalYuvData(
-            media::PIXEL_FORMAT_YV16,  // format
+            media::PIXEL_FORMAT_I422,  // format
             size,                      // coded_size
             gfx::Rect(size),           // visible_rect
             size,                      // natural_size
@@ -145,7 +145,7 @@ class VideoResourceUpdaterTest : public testing::Test {
 
     scoped_refptr<media::VideoFrame> video_frame =
         media::VideoFrame::WrapExternalYuvData(
-            media::PIXEL_FORMAT_YV16,                 // format
+            media::PIXEL_FORMAT_I422,                 // format
             gfx::Size(kYWidth, kDimension),           // coded_size
             gfx::Rect(2, 0, kDimension, kDimension),  // visible_rect
             gfx::Size(kDimension, kDimension),        // natural_size
@@ -253,7 +253,6 @@ class VideoResourceUpdaterTest : public testing::Test {
 
 const gpu::SyncToken VideoResourceUpdaterTest::kMailboxSyncToken =
     gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
-                   0,
                    gpu::CommandBufferId::FromUnsafeValue(0x123),
                    7);
 
@@ -617,7 +616,7 @@ TEST_F(VideoResourceUpdaterTest, PassReleaseSyncToken) {
                                resource_provider3d_.get(),
                                false /* use_stream_video_draw_quad */);
 
-  const gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  const gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                                   gpu::CommandBufferId::FromUnsafeValue(0x123),
                                   123);
 
@@ -641,11 +640,11 @@ TEST_F(VideoResourceUpdaterTest, GenerateReleaseSyncToken) {
                                resource_provider3d_.get(),
                                false /* use_stream_video_draw_quad */);
 
-  const gpu::SyncToken sync_token1(gpu::CommandBufferNamespace::GPU_IO, 0,
+  const gpu::SyncToken sync_token1(gpu::CommandBufferNamespace::GPU_IO,
                                    gpu::CommandBufferId::FromUnsafeValue(0x123),
                                    123);
 
-  const gpu::SyncToken sync_token2(gpu::CommandBufferNamespace::GPU_IO, 0,
+  const gpu::SyncToken sync_token2(gpu::CommandBufferNamespace::GPU_IO,
                                    gpu::CommandBufferId::FromUnsafeValue(0x234),
                                    234);
 

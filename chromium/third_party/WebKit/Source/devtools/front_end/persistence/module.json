@@ -15,20 +15,11 @@
             "className": "Persistence.WorkspaceSettingsTab"
         },
         {
-            "type": "view",
-            "location": "settings-view",
-            "id": "overrides",
-            "title": "Overrides",
-            "order": 2,
-            "className": "Persistence.OverridesSettingsTab"
-        },
-        {
             "type": "setting",
             "category": "Persistence",
             "title": "Enable Local Overrides",
             "settingName": "persistenceNetworkOverridesEnabled",
             "settingType": "boolean",
-            "storageType": "session",
             "defaultValue": false,
             "tags": "interception, override, network, rewrite, request",
             "options": [
@@ -64,12 +55,10 @@
         "PersistenceUtils.js",
         "FileSystemMapping.js",
         "EditFileSystemView.js",
-        "WorkspaceSettingsTab.js",
-        "OverridesSettingsTab.js"
+        "WorkspaceSettingsTab.js"
     ],
     "resources": [
         "editFileSystemView.css",
-        "workspaceSettingsTab.css",
-        "overridesSettingsTab.css"
+        "workspaceSettingsTab.css"
     ]
 }

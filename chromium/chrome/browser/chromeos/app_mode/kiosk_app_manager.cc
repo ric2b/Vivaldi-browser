@@ -14,7 +14,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/stringprintf.h"
@@ -27,6 +26,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_external_loader.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager_observer.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_external_updater.h"
+#include "chrome/browser/chromeos/extensions/external_cache_impl.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
@@ -60,11 +60,20 @@ namespace chromeos {
 namespace {
 
 // Domain that is used for kiosk-app account IDs.
-const char kKioskAppAccountDomain[] = "kiosk-apps";
+constexpr char kKioskAppAccountDomain[] = "kiosk-apps";
 
 // Preference for the dictionary of user ids for which cryptohomes have to be
 // removed upon browser restart.
-const char kKioskUsersToRemove[] = "kiosk-users-to-remove";
+constexpr char kKioskUsersToRemove[] = "kiosk-users-to-remove";
+
+// Sub directory under DIR_USER_DATA to store cached crx files.
+constexpr char kCrxCacheDir[] = "kiosk/crx";
+
+// Sub directory under DIR_USER_DATA to store unpacked crx file for validating
+// its signature.
+constexpr char kCrxUnpackDir[] = "kiosk_unpack";
+
+KioskAppManager::Overrides* g_test_overrides = nullptr;
 
 std::string GenerateKioskAppAccountId(const std::string& app_id) {
   return app_id + '@' + kKioskAppAccountDomain;
@@ -133,10 +142,41 @@ void CheckOwnerFilePresence(bool *present) {
   *present = util.get() && util->IsPublicKeyPresent();
 }
 
+base::FilePath GetCrxCacheDir() {
+  base::FilePath user_data_dir;
+  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
+  return user_data_dir.AppendASCII(kCrxCacheDir);
+}
+
+base::FilePath GetCrxUnpackDir() {
+  base::FilePath temp_dir;
+  base::GetTempDir(&temp_dir);
+  return temp_dir.AppendASCII(kCrxUnpackDir);
+}
+
 scoped_refptr<base::SequencedTaskRunner> GetBackgroundTaskRunner() {
   return base::CreateSequencedTaskRunnerWithTraits(
       {base::MayBlock(), base::TaskPriority::BACKGROUND,
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+}
+
+std::unique_ptr<ExternalCache> CreateExternalCache(
+    ExternalCacheDelegate* delegate) {
+  if (g_test_overrides)
+    return g_test_overrides->CreateExternalCache(delegate, true);
+
+  auto cache = std::make_unique<ExternalCacheImpl>(
+      GetCrxCacheDir(), g_browser_process->system_request_context(),
+      GetBackgroundTaskRunner(), delegate, true /* always_check_updates */,
+      false /* wait_for_cache_initialization */);
+  cache->set_flush_on_put(true);
+  return cache;
+}
+
+std::unique_ptr<AppSession> CreateAppSession() {
+  if (g_test_overrides)
+    return g_test_overrides->CreateAppSession();
+  return std::make_unique<AppSession>();
 }
 
 base::Version GetPlatformVersion() {
@@ -163,8 +203,6 @@ std::string GetSwitchString(const std::string& flag_name) {
 const char KioskAppManager::kKioskDictionaryName[] = "kiosk";
 const char KioskAppManager::kKeyAutoLoginState[] = "auto_login_state";
 const char KioskAppManager::kIconCacheDir[] = "kiosk/icon";
-const char KioskAppManager::kCrxCacheDir[] = "kiosk/crx";
-const char KioskAppManager::kCrxUnpackDir[] = "kiosk_unpack";
 
 // static
 static base::LazyInstance<KioskAppManager>::DestructorAtExit instance =
@@ -174,11 +212,19 @@ KioskAppManager* KioskAppManager::Get() {
 }
 
 // static
+void KioskAppManager::InitializeForTesting(Overrides* overrides) {
+  DCHECK(!instance.IsCreated());
+  g_test_overrides = overrides;
+}
+
+// static
 void KioskAppManager::Shutdown() {
-  if (instance == nullptr)
+  if (!instance.IsCreated())
     return;
 
   instance.Pointer()->CleanUp();
+
+  g_test_overrides = nullptr;
 }
 
 // static
@@ -267,8 +313,9 @@ void KioskAppManager::InitSession(Profile* profile,
         flags);
   }
 
-  app_session_.reset(new AppSession);
-  app_session_->Init(profile, app_id);
+  app_session_ = CreateAppSession();
+  if (app_session_)
+    app_session_->Init(profile, app_id);
 }
 
 bool KioskAppManager::GetSwitchesForSessionRestore(
@@ -534,7 +581,7 @@ void KioskAppManager::GetApps(Apps* apps) const {
     const KioskAppData& app_data = *apps_[i];
     if (app_data.status() != KioskAppData::STATUS_ERROR) {
       apps->push_back(App(
-          app_data, external_cache_->IsExtensionPending(app_data.app_id()),
+          app_data, external_cache_->ExtensionFetchPending(app_data.app_id()),
           app_data.app_id() == currently_auto_launched_with_zero_delay_app_));
     }
   }
@@ -545,7 +592,7 @@ bool KioskAppManager::GetApp(const std::string& app_id, App* app) const {
   if (!data)
     return false;
 
-  *app = App(*data, external_cache_->IsExtensionPending(app_id),
+  *app = App(*data, external_cache_->ExtensionFetchPending(app_id),
              app_id == currently_auto_launched_with_zero_delay_app_);
   return true;
 }
@@ -606,57 +653,69 @@ void KioskAppManager::RemoveObserver(KioskAppManagerObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-extensions::ExternalLoader* KioskAppManager::CreateExternalLoader() {
-  if (external_loader_created_) {
-    NOTREACHED();
-    return nullptr;
-  }
-  external_loader_created_ = true;
-  KioskAppExternalLoader* loader = new KioskAppExternalLoader();
-  external_loader_ = loader->AsWeakPtr();
+void KioskAppManager::UpdatePrimaryAppLoaderPrefs(const std::string& id) {
+  primary_app_id_ = id;
 
-  return loader;
+  if (primary_app_changed_handler_)
+    primary_app_changed_handler_.Run();
 }
 
-extensions::ExternalLoader*
-KioskAppManager::CreateSecondaryAppExternalLoader() {
-  if (secondary_app_external_loader_created_) {
-    NOTREACHED();
+std::unique_ptr<base::DictionaryValue>
+KioskAppManager::GetPrimaryAppLoaderPrefs() {
+  if (!primary_app_id_.has_value())
     return nullptr;
-  }
-  secondary_app_external_loader_created_ = true;
-  KioskAppExternalLoader* secondary_loader = new KioskAppExternalLoader();
-  secondary_app_external_loader_ = secondary_loader->AsWeakPtr();
 
-  return secondary_loader;
-}
+  const std::string& id = primary_app_id_.value();
+  auto prefs = std::make_unique<base::DictionaryValue>();
 
-void KioskAppManager::InstallFromCache(const std::string& id) {
   const base::DictionaryValue* extension = nullptr;
-  if (external_cache_->cached_extensions()->GetDictionary(id, &extension)) {
-    std::unique_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
-    prefs->Set(id, extension->CreateDeepCopy());
-    external_loader_->SetCurrentAppExtensions(std::move(prefs));
+  if (external_cache_->GetCachedExtensions()->GetDictionary(id, &extension)) {
+    prefs->SetKey(id, extension->Clone());
   } else {
     LOG(ERROR) << "Can't find app in the cached externsions"
                << " id = " << id;
   }
+  return prefs;
 }
 
-void KioskAppManager::InstallSecondaryApps(
+void KioskAppManager::SetPrimaryAppLoaderPrefsChangedHandler(
+    base::RepeatingClosure handler) {
+  CHECK(handler.is_null() || primary_app_changed_handler_.is_null());
+
+  primary_app_changed_handler_ = std::move(handler);
+}
+
+void KioskAppManager::UpdateSecondaryAppsLoaderPrefs(
     const std::vector<std::string>& ids) {
-  std::unique_ptr<base::DictionaryValue> prefs(new base::DictionaryValue);
-  for (const std::string& id : ids) {
-    std::unique_ptr<base::DictionaryValue> extension_entry(
-        new base::DictionaryValue);
-    extension_entry->SetKey(
+  secondary_app_ids_ = ids;
+
+  if (secondary_apps_changed_handler_)
+    secondary_apps_changed_handler_.Run();
+}
+
+std::unique_ptr<base::DictionaryValue>
+KioskAppManager::GetSecondaryAppsLoaderPrefs() {
+  if (!secondary_app_ids_.has_value())
+    return nullptr;
+
+  auto prefs = std::make_unique<base::DictionaryValue>();
+  for (const std::string& id : secondary_app_ids_.value()) {
+    base::Value extension_entry(base::Value::Type::DICTIONARY);
+    extension_entry.SetKey(
         extensions::ExternalProviderImpl::kExternalUpdateUrl,
         base::Value(extension_urls::GetWebstoreUpdateUrl().spec()));
-    extension_entry->SetBoolean(
-        extensions::ExternalProviderImpl::kIsFromWebstore, true);
-    prefs->Set(id, std::move(extension_entry));
+    extension_entry.SetKey(extensions::ExternalProviderImpl::kIsFromWebstore,
+                           base::Value(true));
+    prefs->SetKey(id, std::move(extension_entry));
   }
-  secondary_app_external_loader_->SetCurrentAppExtensions(std::move(prefs));
+  return prefs;
+}
+
+void KioskAppManager::SetSecondaryAppsLoaderPrefsChangedHandler(
+    base::RepeatingClosure handler) {
+  CHECK(handler.is_null() || secondary_apps_changed_handler_.is_null());
+
+  secondary_apps_changed_handler_ = std::move(handler);
 }
 
 void KioskAppManager::UpdateExternalCache() {
@@ -677,8 +736,9 @@ void KioskAppManager::PutValidatedExternalExtension(
     const std::string& app_id,
     const base::FilePath& crx_path,
     const std::string& version,
-    const ExternalCache::PutExternalExtensionCallback& callback) {
-  external_cache_->PutExternalExtension(app_id, crx_path, version, callback);
+    ExternalCache::PutExternalExtensionCallback callback) {
+  external_cache_->PutExternalExtension(app_id, crx_path, version,
+                                        std::move(callback));
 }
 
 bool KioskAppManager::IsPlatformCompliant(
@@ -727,20 +787,9 @@ bool KioskAppManager::IsPlatformCompliantWithApp(
   return IsPlatformCompliant(info->required_platform_version);
 }
 
-KioskAppManager::KioskAppManager()
-    : ownership_established_(false),
-      external_loader_created_(false),
-      secondary_app_external_loader_created_(false) {
-  base::FilePath cache_dir;
-  GetCrxCacheDir(&cache_dir);
-  external_cache_.reset(
-      new ExternalCache(cache_dir,
-                        g_browser_process->system_request_context(),
-                        GetBackgroundTaskRunner(),
-                        this,
-                        true /* always_check_updates */,
-                        false /* wait_for_cache_initialization */));
-  external_cache_->set_flush_on_put(true);
+KioskAppManager::KioskAppManager() {
+  external_cache_ = CreateExternalCache(this);
+
   UpdateAppData();
   local_accounts_subscription_ =
       CrosSettings::Get()->AddSettingsObserver(
@@ -755,12 +804,8 @@ KioskAppManager::KioskAppManager()
 KioskAppManager::~KioskAppManager() {}
 
 void KioskAppManager::MonitorKioskExternalUpdate() {
-  base::FilePath cache_dir;
-  GetCrxCacheDir(&cache_dir);
-  base::FilePath unpack_dir;
-  GetCrxUnpackDir(&unpack_dir);
-  usb_stick_updater_.reset(new KioskExternalUpdater(
-      GetBackgroundTaskRunner(), cache_dir, unpack_dir));
+  usb_stick_updater_ = std::make_unique<KioskExternalUpdater>(
+      GetBackgroundTaskRunner(), GetCrxCacheDir(), GetCrxUnpackDir());
 }
 
 void KioskAppManager::CleanUp() {
@@ -769,6 +814,8 @@ void KioskAppManager::CleanUp() {
   apps_.clear();
   usb_stick_updater_.reset();
   external_cache_.reset();
+  primary_app_id_.reset();
+  secondary_app_ids_.reset();
 }
 
 const KioskAppData* KioskAppManager::GetAppData(
@@ -821,7 +868,7 @@ void KioskAppManager::UpdateAppData() {
       std::string version;
       GetCachedCrx(it->kiosk_app_id, &cached_crx, &version);
 
-      apps_.push_back(base::MakeUnique<KioskAppData>(
+      apps_.push_back(std::make_unique<KioskAppData>(
           this, it->kiosk_app_id, account_id, GURL(it->kiosk_app_update_url),
           cached_crx));
       apps_.back()->Load();
@@ -921,14 +968,17 @@ void KioskAppManager::OnExtensionLoadedInCache(const std::string& id) {
     observer.OnKioskExtensionLoadedInCache(id);
 }
 
-void KioskAppManager::OnExtensionDownloadFailed(
-    const std::string& id,
-    extensions::ExtensionDownloaderDelegate::Error error) {
+void KioskAppManager::OnExtensionDownloadFailed(const std::string& id) {
   KioskAppData* app_data = GetAppDataMutable(id);
   if (!app_data)
     return;
   for (auto& observer : observers_)
     observer.OnKioskExtensionDownloadFailed(id);
+}
+
+std::string KioskAppManager::GetInstalledExtensionVersion(
+    const std::string& id) {
+  return std::string();
 }
 
 KioskAppManager::AutoLoginState KioskAppManager::GetAutoLoginState() const {
@@ -948,18 +998,6 @@ void KioskAppManager::SetAutoLoginState(AutoLoginState state) {
                                    KioskAppManager::kKioskDictionaryName);
   dict_update->SetInteger(kKeyAutoLoginState, state);
   prefs->CommitPendingWrite();
-}
-
-void KioskAppManager::GetCrxCacheDir(base::FilePath* cache_dir) {
-  base::FilePath user_data_dir;
-  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_dir));
-  *cache_dir = user_data_dir.AppendASCII(kCrxCacheDir);
-}
-
-void KioskAppManager::GetCrxUnpackDir(base::FilePath* unpack_dir) {
-  base::FilePath temp_dir;
-  base::GetTempDir(&temp_dir);
-  *unpack_dir = temp_dir.AppendASCII(kCrxUnpackDir);
 }
 
 base::TimeDelta KioskAppManager::GetAutoLaunchDelay() const {

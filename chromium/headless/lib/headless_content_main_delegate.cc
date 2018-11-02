@@ -4,6 +4,7 @@
 
 #include "headless/lib/headless_content_main_delegate.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/base_switches.h"
@@ -103,6 +104,12 @@ bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
       command_line->AppendSwitch(switches::kDisableGpu);
     }
   }
+
+  // Headless uses a software output device which will cause us to fall back to
+  // software compositing anyway, but only after attempting and failing to
+  // initialize GPU compositing. We disable GPU compositing here explicitly to
+  // preempt this attempt.
+  command_line->AppendSwitch(switches::kDisableGpuCompositing);
 
   SetContentClient(&content_client_);
   return false;
@@ -340,7 +347,7 @@ void HeadlessContentMainDelegate::InitializeResourceBundle() {
 content::ContentBrowserClient*
 HeadlessContentMainDelegate::CreateContentBrowserClient() {
   browser_client_ =
-      base::MakeUnique<HeadlessContentBrowserClient>(browser_.get());
+      std::make_unique<HeadlessContentBrowserClient>(browser_.get());
   return browser_client_.get();
 }
 #endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
@@ -348,13 +355,13 @@ HeadlessContentMainDelegate::CreateContentBrowserClient() {
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 content::ContentRendererClient*
 HeadlessContentMainDelegate::CreateContentRendererClient() {
-  renderer_client_ = base::MakeUnique<HeadlessContentRendererClient>();
+  renderer_client_ = std::make_unique<HeadlessContentRendererClient>();
   return renderer_client_.get();
 }
 
 content::ContentUtilityClient*
 HeadlessContentMainDelegate::CreateContentUtilityClient() {
-  utility_client_ = base::MakeUnique<HeadlessContentUtilityClient>(
+  utility_client_ = std::make_unique<HeadlessContentUtilityClient>(
       browser_->options()->user_agent);
   return utility_client_.get();
 }

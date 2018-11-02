@@ -29,7 +29,7 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
   __gCrWeb['findPasswordForms'] = function() {
     var formDataList = [];
     if (hasPasswordField_(window)) {
-      __gCrWeb.getPasswordFormDataList(formDataList, window);
+      getPasswordFormDataList_(formDataList, window);
     }
     return __gCrWeb.stringify(formDataList);
   };
@@ -51,14 +51,7 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
       return true;
     }
 
-    var frames = getSameOriginFrames_(win);
-    for (var i = 0; i < frames.length; i++) {
-      if (hasPasswordField_(frames[i])) {
-        return true;
-      }
-    }
-
-    return false;
+    return getSameOriginFrames_(win).some(hasPasswordField_);
   };
 
   /**
@@ -143,13 +136,44 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
      return null;
    }
 
+   /**
+    * Returns the password form with the given |identifier| as a JSON string
+    * from the frame |win| and all its same-origin subframes.
+    * @param {Window} The window in which to look for forms.
+    * @param {string} identifier The name of the form to extract.
+    * @return {Element} The password form.
+    */
+   var getPasswordFormElement_ = function(win, identifier) {
+     var el = win.__gCrWeb.common.getFormElementFromIdentifier(identifier);
+     if (el)
+       return el;
+     var frames = getSameOriginFrames_(win);
+     for (var i = 0; i < frames.length; ++i) {
+       el = getPasswordFormElement_(frames[i], identifier);
+       if (el)
+         return el;
+     }
+     return null;
+    }
+
+    /**
+     * Returns an array of input elements in a form.
+     * @param {Element} form A form element for which the input elements are
+     *   returned.
+     * @return {Array<InputElement>}
+     */
+    var getFormInputElements_ = function(form) {
+        return __gCrWeb.common.getFormControlElements(form).
+          filter(function(element) { return element.tagName === "INPUT"; });
+    }
+
   /**
-   * Returns the password form with the given |name| as a JSON string.
+   * Returns the password form with the given |identifier| as a JSON string.
    * @param {string} name The name of the form to extract.
    * @return {string} The password form.
    */
-  __gCrWeb['getPasswordForm'] = function(name) {
-    var el = __gCrWeb.common.getFormElementFromIdentifier(name);
+  __gCrWeb['getPasswordFormDataAsString'] = function(identifier) {
+    var el = getPasswordFormElement_(window, identifier);
     if (!el)
       return 'noPasswordsFound';
     var formData = __gCrWeb.getPasswordFormData(el);
@@ -211,7 +235,7 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
       if (formData.action != normalizedFormAction)
         continue;
 
-      var inputs = form.getElementsByTagName('input');
+      var inputs = getFormInputElements_(form);
       var usernameInput =
           findInputByFieldIdentifier_(inputs, formData.fields[0].name);
       if (usernameInput == null || !__gCrWeb.common.isTextField(usernameInput)
@@ -228,7 +252,6 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
       if (usernameInput.readOnly) {
         if (usernameInput.value == username) {
           passwordInput.value = password;
-          __gCrWeb.setAutofilled(passwordInput, true);
           filled = true;
         }
       } else {
@@ -241,8 +264,6 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
         usernameInput.value = username;
         passwordInput.focus();
         passwordInput.value = password;
-        __gCrWeb.setAutofilled(passwordInput, true);
-        __gCrWeb.setAutofilled(usernameInput, true);
         filled = true;
       }
     }
@@ -260,27 +281,6 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
   };
 
   /**
-   * Returns true if the supplied field |inputElement| was autofilled.
-   * @param {Element} inputElement The form field for which we need to
-   *     acquire the autofilled indicator.
-   * @return {boolean} Whether inputElement was autofilled.
-   */
-  __gCrWeb.isAutofilled = function(inputElement) {
-    return inputElement['__gCrWebAutofilled'];
-  };
-
-  /**
-   * Marks the supplied field as autofilled or not depending on the
-   * |value|.
-   * @param {Element} inputElement The form field for which the indicator
-   *    needs to be set.
-   * @param {boolean} value The new value of the indicator.
-   */
-  __gCrWeb.setAutofilled = function(inputElement, value) {
-    inputElement['__gCrWebAutofilled'] = value;
-  };
-
-  /**
    * Finds all forms with passwords in the supplied window or frame and appends
    * JS objects containing the form data to |formDataList|.
    * @param {!Array.<Object>} formDataList A list that this function populates
@@ -288,19 +288,8 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
    * @param {Window} win A window (or frame) in which the function should
    *    look for password forms.
    */
-  __gCrWeb.getPasswordFormDataList = function(formDataList, win) {
-    var doc = null;
-
-    try {
-      // Security violations may generate an exception or null to be returned.
-      doc = win.document;
-    } catch(e) {
-    }
-
-    if (!doc) {
-      return;
-    }
-
+  var getPasswordFormDataList_ = function(formDataList, win) {
+    var doc = win.document;
     var forms = doc.forms;
     for (var i = 0; i < forms.length; i++) {
       var formData = __gCrWeb.getPasswordFormData(forms[i]);
@@ -313,7 +302,7 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
     // Recursively invoke for all iframes.
     var frames = getSameOriginFrames_(win);
     for (var i = 0; i < frames.length; i++) {
-      __gCrWeb.getPasswordFormDataList(formDataList, frames[i]);
+      getPasswordFormDataList_(formDataList, frames[i]);
     }
   };
 
@@ -323,16 +312,12 @@ if (__gCrWeb && !__gCrWeb['fillPasswordForm']) {
    * @return {Object} Object of data from formElement.
    */
   __gCrWeb.getPasswordFormData = function(formElement) {
-    var inputs = formElement.getElementsByTagName('input');
+    var inputs = getFormInputElements_(formElement);
 
     var fields = [];
     var passwords = [];
     var firstPasswordIndex = 0;
     for (var j = 0; j < inputs.length; j++) {
-      // TODO(dplotnikov): figure out a way to identify the activated
-      // submit, which is the button that the user has already hit
-      // before this code is called.
-
       var input = inputs[j];
 
       fields.push({

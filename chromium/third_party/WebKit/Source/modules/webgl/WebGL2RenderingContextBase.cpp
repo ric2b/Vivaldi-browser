@@ -6,9 +6,9 @@
 
 #include <memory>
 #include "bindings/modules/v8/WebGLAny.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/html/media/HTMLVideoElement.h"
 #include "core/imagebitmap/ImageBitmap.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -27,7 +27,6 @@
 #include "modules/webgl/WebGLUniformLocation.h"
 #include "modules/webgl/WebGLVertexArrayObject.h"
 #include "platform/wtf/CheckedNumeric.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 
@@ -38,10 +37,6 @@ namespace blink {
 namespace {
 
 const GLuint64 kMaxClientWaitTimeout = 0u;
-
-GLsync SyncObjectOrZero(const WebGLSync* object) {
-  return object ? object->Object() : nullptr;
-}
 
 // TODO(kainino): Change outByteLength to GLuint and change the associated
 // range checking (and all uses) - overflow becomes possible in cases below
@@ -554,14 +549,13 @@ ScriptValue WebGL2RenderingContextBase::getInternalformatParameter(
 
   switch (pname) {
     case GL_SAMPLES: {
-      std::unique_ptr<GLint[]> values;
       GLint length = -1;
       ContextGL()->GetInternalformativ(target, internalformat,
                                        GL_NUM_SAMPLE_COUNTS, 1, &length);
       if (length <= 0)
         return WebGLAny(script_state, DOMInt32Array::Create(0));
 
-      values = WrapArrayUnique(new GLint[length]);
+      auto values = std::make_unique<GLint[]>(length);
       for (GLint ii = 0; ii < length; ++ii)
         values[ii] = 0;
       ContextGL()->GetInternalformativ(target, internalformat, GL_SAMPLES,
@@ -4167,7 +4161,25 @@ GLenum WebGL2RenderingContextBase::clientWaitSync(WebGLSync* sync,
     return GL_WAIT_FAILED;
   }
 
-  return ContextGL()->ClientWaitSync(SyncObjectOrZero(sync), flags, timeout);
+  // clientWaitSync must poll for updates no more than once per
+  // requestAnimationFrame, so all validation, and the implementation,
+  // must be done inline.
+  if (!(flags == 0 || flags == GL_SYNC_FLUSH_COMMANDS_BIT)) {
+    SynthesizeGLError(GL_INVALID_VALUE, "clientWaitSync", "invalid flags");
+    return GL_WAIT_FAILED;
+  }
+
+  if (sync->IsSignaled()) {
+    return GL_ALREADY_SIGNALED;
+  }
+
+  sync->UpdateCache(ContextGL());
+
+  if (sync->IsSignaled()) {
+    return GL_CONDITION_SATISFIED;
+  }
+
+  return GL_TIMEOUT_EXPIRED;
 }
 
 void WebGL2RenderingContextBase::waitSync(WebGLSync* sync,
@@ -4201,10 +4213,8 @@ ScriptValue WebGL2RenderingContextBase::getSyncParameter(
     case GL_SYNC_STATUS:
     case GL_SYNC_CONDITION:
     case GL_SYNC_FLAGS: {
-      GLint value = 0;
-      GLsizei length = -1;
-      ContextGL()->GetSynciv(SyncObjectOrZero(sync), pname, 1, &length, &value);
-      return WebGLAny(script_state, static_cast<unsigned>(value));
+      sync->UpdateCache(ContextGL());
+      return WebGLAny(script_state, sync->GetCachedResult(pname));
     }
     default:
       SynthesizeGLError(GL_INVALID_ENUM, "getSyncParameter",
@@ -4361,7 +4371,7 @@ WebGLActiveInfo* WebGL2RenderingContextBase::getTransformFeedbackVarying(
   if (max_name_length <= 0) {
     return nullptr;
   }
-  std::unique_ptr<GLchar[]> name = WrapArrayUnique(new GLchar[max_name_length]);
+  auto name = std::make_unique<GLchar[]>(max_name_length);
   GLsizei length = 0;
   GLsizei size = 0;
   GLenum type = 0;
@@ -4706,7 +4716,7 @@ String WebGL2RenderingContextBase::getActiveUniformBlockName(
                       "invalid uniform block index");
     return String();
   }
-  std::unique_ptr<GLchar[]> name = WrapArrayUnique(new GLchar[max_name_length]);
+  auto name = std::make_unique<GLchar[]>(max_name_length);
 
   GLsizei length = 0;
   ContextGL()->GetActiveUniformBlockName(ObjectOrZero(program),

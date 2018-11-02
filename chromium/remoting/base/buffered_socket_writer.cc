@@ -6,10 +6,10 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace remoting {
 
@@ -18,21 +18,24 @@ namespace {
 int WriteNetSocket(net::Socket* socket,
                    const scoped_refptr<net::IOBuffer>& buf,
                    int buf_len,
-                   const net::CompletionCallback& callback) {
-  return socket->Write(buf.get(), buf_len, callback);
+                   const net::CompletionCallback& callback,
+                   const net::NetworkTrafficAnnotationTag& traffic_annotation) {
+  return socket->Write(buf.get(), buf_len, callback, traffic_annotation);
 }
 
 }  // namespace
 
 struct BufferedSocketWriter::PendingPacket {
   PendingPacket(scoped_refptr<net::DrainableIOBuffer> data,
-                const base::Closure& done_task)
+                const base::Closure& done_task,
+                const net::NetworkTrafficAnnotationTag& traffic_annotation)
       : data(data),
-        done_task(done_task) {
-  }
+        done_task(done_task),
+        traffic_annotation(traffic_annotation) {}
 
   scoped_refptr<net::DrainableIOBuffer> data;
   base::Closure done_task;
+  net::NetworkTrafficAnnotationTag traffic_annotation;
 };
 
 // static
@@ -60,7 +63,8 @@ void BufferedSocketWriter::Start(
 
 void BufferedSocketWriter::Write(
     const scoped_refptr<net::IOBufferWithSize>& data,
-    const base::Closure& done_task) {
+    const base::Closure& done_task,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data.get());
 
@@ -68,8 +72,9 @@ void BufferedSocketWriter::Write(
   if (closed_)
     return;
 
-  queue_.push_back(base::MakeUnique<PendingPacket>(
-      new net::DrainableIOBuffer(data.get(), data->size()), done_task));
+  queue_.push_back(std::make_unique<PendingPacket>(
+      new net::DrainableIOBuffer(data.get(), data->size()), done_task,
+      traffic_annotation));
 
   DoWrite();
 }
@@ -83,7 +88,8 @@ void BufferedSocketWriter::DoWrite() {
     int result = write_callback_.Run(
         queue_.front()->data.get(), queue_.front()->data->BytesRemaining(),
         base::Bind(&BufferedSocketWriter::OnWritten,
-                   weak_factory_.GetWeakPtr()));
+                   weak_factory_.GetWeakPtr()),
+        queue_.front()->traffic_annotation);
     HandleWriteResult(result);
   }
 }

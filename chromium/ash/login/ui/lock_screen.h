@@ -19,22 +19,41 @@ class Layer;
 
 namespace ash {
 
+class LockContentsView;
 class LockWindow;
 class LoginDataDispatcher;
 class TrayAction;
 
-class LockScreen : public TrayActionObserver, public SessionObserver {
+class ASH_EXPORT LockScreen : public TrayActionObserver,
+                              public SessionObserver {
  public:
+  // TestApi is used for tests to get internal implementation details.
+  class ASH_EXPORT TestApi {
+   public:
+    explicit TestApi(LockScreen* lock_screen);
+    ~TestApi();
+
+    LockContentsView* contents_view() const;
+
+   private:
+    LockScreen* const lock_screen_;
+  };
+
+  // The UI that this instance is displaying.
+  enum class ScreenType { kLogin, kLock };
+
   // Fetch the global lock screen instance. |Show()| must have been called
   // before this.
   static LockScreen* Get();
 
   // Creates and displays the lock screen. The lock screen communicates with the
   // backend C++ via a mojo API.
-  static void Show();
+  static void Show(ScreenType type);
 
   // Check if the lock screen is currently shown.
   static bool IsShown();
+
+  LockWindow* window() { return window_; }
 
   // Destroys an existing lock screen instance.
   void Destroy();
@@ -49,14 +68,21 @@ class LockScreen : public TrayActionObserver, public SessionObserver {
   void OnLockScreenNoteStateChanged(mojom::TrayActionState state) override;
 
   // SessionObserver:
+  void OnSessionStateChanged(session_manager::SessionState state) override;
   void OnLockStateChanged(bool locked) override;
 
  private:
-  LockScreen();
+  explicit LockScreen(ScreenType type);
   ~LockScreen() override;
+
+  // The type of screen shown. Controls how the screen is dismissed.
+  const ScreenType type_;
 
   // Unowned pointer to the window which hosts the lock screen.
   LockWindow* window_ = nullptr;
+
+  // Unowned pointer to the LockContentsView hosted in lock window.
+  LockContentsView* contents_view_ = nullptr;
 
   // The wallpaper bluriness before entering lock_screen.
   std::unordered_map<ui::Layer*, float> initial_blur_;

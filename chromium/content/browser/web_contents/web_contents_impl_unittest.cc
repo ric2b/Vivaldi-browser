@@ -24,7 +24,6 @@
 #include "content/common/frame_messages.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/media/media_player_delegate_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/download_url_parameters.h"
@@ -374,7 +373,6 @@ TEST_F(WebContentsImplTest, UpdateTitle) {
 
   main_test_rfh()->SendNavigateWithParams(&params);
 
-  EXPECT_TRUE(contents()->IsWaitingForResponse());
   contents()->UpdateTitle(main_test_rfh(),
                           base::ASCIIToUTF16("    Lots O' Whitespace\n"),
                           base::i18n::LEFT_TO_RIGHT);
@@ -558,13 +556,6 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
   pending_rfh->GetRenderViewHost()->set_delete_counter(
       &pending_rvh_delete_count);
 
-  // Navigations should be suspended in pending_rfh until BeforeUnloadACK.
-  if (!IsBrowserSideNavigationEnabled()) {
-    EXPECT_TRUE(pending_rfh->are_navigations_suspended());
-    orig_rfh->SendBeforeUnloadACK(true);
-    EXPECT_FALSE(pending_rfh->are_navigations_suspended());
-  }
-
   // DidNavigate from the pending page.
   contents()->TestDidNavigateWithSequenceNumber(
       pending_rfh, entry_id, true, url2, Referrer(), ui::PAGE_TRANSITION_TYPED,
@@ -596,13 +587,6 @@ TEST_F(WebContentsImplTest, CrossSiteBoundaries) {
     main_test_rfh()->PrepareForCommit();
   TestRenderFrameHost* goback_rfh = contents()->GetPendingMainFrame();
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
-
-  // Navigations should be suspended in goback_rfh until BeforeUnloadACK.
-  if (!IsBrowserSideNavigationEnabled()) {
-    EXPECT_TRUE(goback_rfh->are_navigations_suspended());
-    pending_rfh->SendBeforeUnloadACK(true);
-    EXPECT_FALSE(goback_rfh->are_navigations_suspended());
-  }
 
   // DidNavigate from the back action.
   contents()->TestDidNavigateWithSequenceNumber(
@@ -810,13 +794,6 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
   int pending_rvh_delete_count = 0;
   pending_rfh->GetRenderViewHost()->set_delete_counter(
       &pending_rvh_delete_count);
-
-  // Navigations should be suspended in pending_rvh until BeforeUnloadACK.
-  if (!IsBrowserSideNavigationEnabled()) {
-    EXPECT_TRUE(pending_rfh->are_navigations_suspended());
-    orig_rfh->SendBeforeUnloadACK(true);
-    EXPECT_FALSE(pending_rfh->are_navigations_suspended());
-  }
 
   // DidNavigate from the pending page.
   contents()->TestDidNavigate(pending_rfh, entry_id, true, url2,
@@ -2151,6 +2128,10 @@ TEST_F(WebContentsImplTest, CreateInterstitialForClosingTab) {
   interstitial->Show();
   TestRenderFrameHost* interstitial_rfh =
       static_cast<TestRenderFrameHost*>(interstitial->GetMainFrame());
+
+  // Ensure the InterfaceProvider for the initial empty document is bound.
+  interstitial_rfh->InitializeRenderFrameIfNeeded();
+
   // The interstitial should not show until its navigation has committed.
   EXPECT_FALSE(interstitial->is_showing());
   EXPECT_FALSE(contents()->ShowingInterstitialPage());
@@ -2717,40 +2698,40 @@ TEST_F(WebContentsImplTest, CapturerOverridesPreferredSize) {
 
   // With no capturers, expect the preferred size to be the one propagated into
   // WebContentsImpl via the RenderViewHostDelegate interface.
-  EXPECT_EQ(contents()->GetCapturerCount(), 0);
+  EXPECT_FALSE(contents()->IsBeingCaptured());
   EXPECT_EQ(original_preferred_size, contents()->GetPreferredSize());
 
   // Increment capturer count, but without specifying a capture size.  Expect
   // a "not set" preferred size.
   contents()->IncrementCapturerCount(gfx::Size());
-  EXPECT_EQ(1, contents()->GetCapturerCount());
+  EXPECT_TRUE(contents()->IsBeingCaptured());
   EXPECT_EQ(gfx::Size(), contents()->GetPreferredSize());
 
   // Increment capturer count again, but with an overriding capture size.
   // Expect preferred size to now be overridden to the capture size.
   const gfx::Size capture_size(1280, 720);
   contents()->IncrementCapturerCount(capture_size);
-  EXPECT_EQ(2, contents()->GetCapturerCount());
+  EXPECT_TRUE(contents()->IsBeingCaptured());
   EXPECT_EQ(capture_size, contents()->GetPreferredSize());
 
   // Increment capturer count a third time, but the expect that the preferred
   // size is still the first capture size.
   const gfx::Size another_capture_size(720, 480);
   contents()->IncrementCapturerCount(another_capture_size);
-  EXPECT_EQ(3, contents()->GetCapturerCount());
+  EXPECT_TRUE(contents()->IsBeingCaptured());
   EXPECT_EQ(capture_size, contents()->GetPreferredSize());
 
   // Decrement capturer count twice, but expect the preferred size to still be
   // overridden.
   contents()->DecrementCapturerCount();
   contents()->DecrementCapturerCount();
-  EXPECT_EQ(1, contents()->GetCapturerCount());
+  EXPECT_TRUE(contents()->IsBeingCaptured());
   EXPECT_EQ(capture_size, contents()->GetPreferredSize());
 
   // Decrement capturer count, and since the count has dropped to zero, the
   // original preferred size should be restored.
   contents()->DecrementCapturerCount();
-  EXPECT_EQ(0, contents()->GetCapturerCount());
+  EXPECT_FALSE(contents()->IsBeingCaptured());
   EXPECT_EQ(original_preferred_size, contents()->GetPreferredSize());
 }
 
@@ -3469,30 +3450,6 @@ TEST_F(WebContentsImplTest, ThemeColorChangeDependingOnFirstVisiblePaint) {
 
   EXPECT_EQ(SK_ColorGREEN, contents()->GetThemeColor());
   EXPECT_EQ(SK_ColorGREEN, observer.last_theme_color());
-}
-
-// Test that if a resource is loaded with empty security info, the SSLManager
-// does not mistakenly think it has seen a good certificate and thus forget any
-// user exceptions for that host. See https://crbug.com/516808.
-TEST_F(WebContentsImplTest, LoadResourceWithEmptySecurityInfo) {
-  WebContentsImplTestBrowserClient browser_client;
-  SetBrowserClientForTesting(&browser_client);
-
-  scoped_refptr<net::X509Certificate> cert =
-      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
-  const GURL test_url("https://example.test");
-
-  SSLHostStateDelegate* state_delegate =
-      contents()->controller_.GetBrowserContext()->GetSSLHostStateDelegate();
-  ASSERT_TRUE(state_delegate);
-  state_delegate->AllowCert(test_url.host(), *cert.get(), 1);
-  EXPECT_TRUE(state_delegate->HasAllowException(test_url.host()));
-  contents()->controller_.ssl_manager()->DidStartResourceResponse(
-      test_url, false, 0, RESOURCE_TYPE_MAIN_FRAME);
-
-  EXPECT_TRUE(state_delegate->HasAllowException(test_url.host()));
-
-  DeleteContents();
 }
 
 TEST_F(WebContentsImplTest, ParseDownloadHeaders) {

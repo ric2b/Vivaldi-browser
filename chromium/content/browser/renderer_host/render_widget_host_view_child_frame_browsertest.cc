@@ -23,6 +23,7 @@
 #include "content/test/test_content_browser_client.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace content {
@@ -107,11 +108,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, Screen) {
                            "window.screen.width")
       ->GetAsInteger(&main_frame_screen_width);
   set_expected_screen_width(main_frame_screen_width);
-  EXPECT_FALSE(main_frame_screen_width == 0);
+  EXPECT_NE(main_frame_screen_width, 0);
 
   shell()->web_contents()->ForEachFrame(
-      base::Bind(&RenderWidgetHostViewChildFrameTest::CheckScreenWidth,
-                 base::Unretained(this)));
+      base::BindRepeating(&RenderWidgetHostViewChildFrameTest::CheckScreenWidth,
+                          base::Unretained(this)));
 }
 
 // Test that auto-resize sizes in the top frame are propagated to OOPIF
@@ -153,10 +154,11 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest,
 }
 
 // Tests that while in mus, the child frame receives an updated FrameSinkId
-// representing the frame sink used by the RenderFrameProxy
+// representing the frame sink used by the RenderFrameProxy.
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
-  // Only in mus do we expect a RenderFrameProxy to provide the FrameSinkId.
-  if (!IsUsingMus())
+  // Only when mus hosts viz do we expect a RenderFrameProxy to provide the
+  // FrameSinkId.
+  if (!switches::IsMusHostingViz())
     return;
 
   GURL main_url(embedded_test_server()->GetURL("/site_per_process_main.html"));
@@ -182,8 +184,8 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewChildFrameTest, ChildFrameSinkId) {
   set_expected_frame_sink_id(message_filter->GetOrWaitForId());
 
   shell()->web_contents()->ForEachFrame(
-      base::Bind(&RenderWidgetHostViewChildFrameTest::CheckFrameSinkId,
-                 base::Unretained(this)));
+      base::BindRepeating(&RenderWidgetHostViewChildFrameTest::CheckFrameSinkId,
+                          base::Unretained(this)));
 }
 
 // A class to filter RequireSequence and SatisfySequence messages sent from

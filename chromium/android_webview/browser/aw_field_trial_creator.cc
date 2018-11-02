@@ -4,11 +4,14 @@
 
 #include "android_webview/browser/aw_field_trial_creator.h"
 
+#include <memory>
+
 #include "android_webview/browser/aw_metrics_service_client.h"
 #include "base/base_switches.h"
 #include "base/feature_list.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
+#include "base/time/time.h"
 #include "cc/base/switches.h"
 #include "components/prefs/in_memory_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -16,6 +19,7 @@
 #include "components/prefs/pref_service_factory.h"
 #include "components/variations/entropy_provider.h"
 #include "components/variations/pref_names.h"
+#include "components/variations/service/safe_seed_manager.h"
 
 namespace android_webview {
 namespace {
@@ -46,7 +50,7 @@ bool ReadVariationsSeedDataFromFile(PrefService* local_state) {
 }  // anonymous namespace
 
 AwFieldTrialCreator::AwFieldTrialCreator()
-    : aw_field_trials_(base::MakeUnique<AwFieldTrials>()) {}
+    : aw_field_trials_(std::make_unique<AwFieldTrials>()) {}
 
 AwFieldTrialCreator::~AwFieldTrialCreator() {}
 
@@ -55,9 +59,10 @@ std::unique_ptr<PrefService> AwFieldTrialCreator::CreateLocalState() {
       base::MakeRefCounted<PrefRegistrySimple>();
 
   // Register the variations prefs with default values that must be overridden.
-  pref_registry->RegisterInt64Pref(variations::prefs::kVariationsSeedDate, 0);
-  pref_registry->RegisterInt64Pref(variations::prefs::kVariationsLastFetchTime,
-                                   0);
+  pref_registry->RegisterTimePref(variations::prefs::kVariationsSeedDate,
+                                  base::Time());
+  pref_registry->RegisterTimePref(variations::prefs::kVariationsLastFetchTime,
+                                  base::Time());
   pref_registry->RegisterStringPref(variations::prefs::kVariationsCountry,
                                     std::string());
   pref_registry->RegisterStringPref(
@@ -66,7 +71,9 @@ std::unique_ptr<PrefService> AwFieldTrialCreator::CreateLocalState() {
                                     std::string());
   pref_registry->RegisterListPref(
       variations::prefs::kVariationsPermanentConsistencyCountry,
-      base::MakeUnique<base::ListValue>());
+      std::make_unique<base::ListValue>());
+
+  variations::SafeSeedManager::RegisterPrefs(pref_registry.get());
 
   pref_service_factory_.set_user_prefs(
       base::MakeRefCounted<InMemoryPrefStore>());
@@ -79,7 +86,7 @@ void AwFieldTrialCreator::SetUpFieldTrials() {
   DCHECK(!field_trial_list_);
   // Set the FieldTrialList singleton.
   field_trial_list_ =
-      base::MakeUnique<base::FieldTrialList>(CreateLowEntropyProvider());
+      std::make_unique<base::FieldTrialList>(CreateLowEntropyProvider());
 
   std::unique_ptr<PrefService> local_state = CreateLocalState();
 
@@ -87,9 +94,9 @@ void AwFieldTrialCreator::SetUpFieldTrials() {
     return;
 
   variations::UIStringOverrider ui_string_overrider;
-  client_ = base::MakeUnique<AwVariationsServiceClient>();
+  client_ = std::make_unique<AwVariationsServiceClient>();
   variations_field_trial_creator_ =
-      base::MakeUnique<variations::VariationsFieldTrialCreator>(
+      std::make_unique<variations::VariationsFieldTrialCreator>(
           local_state.get(), client_.get(), ui_string_overrider);
 
   variations_field_trial_creator_->OverrideVariationsPlatform(
@@ -97,15 +104,19 @@ void AwFieldTrialCreator::SetUpFieldTrials() {
 
   // Unused by WebView, but required by
   // VariationsFieldTrialCreator::SetupFieldTrials().
+  // TODO(isherman): We might want a more genuine SafeSeedManager:
+  // https://crbug.com/801771
   std::vector<std::string> variation_ids;
   std::set<std::string> unforceable_field_trials;
+  variations::SafeSeedManager ignored_safe_seed_manager(true,
+                                                        local_state.get());
 
   // Populates the FieldTrialList singleton via the static member functions.
   variations_field_trial_creator_->SetupFieldTrials(
       cc::switches::kEnableGpuBenchmarking, switches::kEnableFeatures,
       switches::kDisableFeatures, unforceable_field_trials,
-      CreateLowEntropyProvider(), base::MakeUnique<base::FeatureList>(),
-      &variation_ids, aw_field_trials_.get());
+      CreateLowEntropyProvider(), std::make_unique<base::FeatureList>(),
+      &variation_ids, aw_field_trials_.get(), &ignored_safe_seed_manager);
 }
 
 }  // namespace android_webview

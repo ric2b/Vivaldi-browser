@@ -4,6 +4,7 @@
 <translation id="1031362278801463162">Carregando visualização</translation>
 <translation id="1049795001945932310">&amp;Configurações de idioma</translation>
 <translation id="1084824384139382525">&amp;Copiar endereço do link</translation>
+<translation id="1128109161498068552">Não permitir que os site usem mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
 <translation id="114140604515785785">Diretório raiz da extensão:</translation>
 <translation id="1163931534039071049">Exibir código &amp;fonte do frame</translation>
 <translation id="1175364870820465910">Im&amp;primir...</translation>
@@ -21,6 +22,7 @@
 <translation id="1627276047960621195">Descritores de Arquivos</translation>
 <translation id="1635033183663317347">Instalada pelo seu tutor legal.</translation>
 <translation id="1682548588986054654">Nova janela privada</translation>
+<translation id="1706625117072057435">Níveis de zoom</translation>
 <translation id="1708713382908678956"><ph name="NAME_PH" /> (ID: <ph name="ID_PH" />)</translation>
 <translation id="1723824996674794290">Nova &amp;janela</translation>
 <translation id="1725149567830788547">&amp;Exibir controles</translation>
@@ -94,6 +96,7 @@
 <translation id="3467267818798281173">&amp;Obter sugestões da Google</translation>
 <translation id="3511307672085573050">&amp;Copiar endereço do link</translation>
 <translation id="3627588569887975815">Abrir link em janela &amp;privada</translation>
+<translation id="3668823961463113931">Manipuladores de protocolos</translation>
 <translation id="3678156199662914018">Extensão: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342"><ph name="APP_NAME" /> deseja transmitir a tela</translation>
 <translation id="370665806235115550">Carregando...</translation>
@@ -165,6 +168,7 @@
 <translation id="5542132724887566711">Perfil</translation>
 <translation id="5575473780076478375">Extensão Privada: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5649053991847567735">Downloads automáticos</translation>
+<translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5689516760719285838">Localização</translation>
 <translation id="5715711091495208045">Agente de Plugin: <ph name="PLUGIN_NAME" /></translation>
 <translation id="5764483294734785780">&amp;Salvar áudio como...</translation>
@@ -176,6 +180,7 @@
 <translation id="59174027418879706">Habilitada</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pico de <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="6040143037577758943">Fechar</translation>
+<translation id="6059925163896151826">Dispositivos USB</translation>
 <translation id="6086846494333236931">Instalada pelo administrador</translation>
 <translation id="6124650939968185064">As extensões a seguir dependem desta extensão:</translation>
 <translation id="6156863943908443225">Cache de script</translation>
@@ -198,6 +203,7 @@
 <translation id="6508261954199872201">Aplicativo: <ph name="APP_NAME" /></translation>
 <translation id="6518014396551869914">&amp;Copiar imagem</translation>
 <translation id="6550675742724504774">Opções</translation>
+<translation id="6612358246767739896">Conteúdo protegido (DRM)</translation>
 <translation id="6639554308659482635">Memória SQLite</translation>
 <translation id="6655190889273724601">Modo de desenvolvedor</translation>
 <translation id="6691936601825168937">&amp;Avançar</translation>
@@ -206,6 +212,7 @@
 <translation id="6787839852456839824">Atalhos de teclado</translation>
 <translation id="6788210894632713004">Extensão descompactada</translation>
 <translation id="6798954102094737107">Plugin: <ph name="PLUGIN_NAME" /></translation>
+<translation id="6817174620439930047">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI (recomendado)</translation>
 <translation id="682123305478866682">Transmitir área de trabalho</translation>
 <translation id="6886871292305414135">Abrir link em nova &amp;guia</translation>
 <translation id="6900284862687837908">Aplicativo de Segundo Plano: <ph name="BACKGROUND_APP_URL" /></translation>
@@ -218,9 +225,11 @@
 <translation id="7144878232160441200">Tentar Novamente</translation>
 <translation id="7175353351958621980">Carregada de:</translation>
 <translation id="7223775956298141902">Nenhuma extensão instalada</translation>
+<translation id="7270858098575133036">Perguntar quando um site desejar usar mensagens exclusivas do sistema para acessar dispositivos MIDI</translation>
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7293919849802650062">Bem-vindo à experiência de transmissão de tela no Vivaldi!</translation>
 <translation id="7309257895202129721">&amp;Exibir controles</translation>
+<translation id="7311079019872751559">Plugins fora do sandbox</translation>
 <translation id="7339898014177206373">Nova janela</translation>
 <translation id="7346909386216857016">Ok</translation>
 <translation id="7385854874724088939">Ocorreu um erro durante a impressão.  Verifique a sua impressora e tente novamente.</translation>
@@ -233,7 +242,6 @@
 <translation id="7554791636758816595">Nova guia</translation>
 <translation id="7564847347806291057">Encerrar Processo</translation>
 <translation id="7629827748548208700">Guia: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Cancelar</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalada pelo Administrador</translation>
 <translation id="7685049629764448582">Memória JavaScript</translation>
@@ -263,6 +271,7 @@ Chave privada:
 
 Mantenha o seu arquivo de chave privada em um local seguro. Você precisará dela para criar novas versões da sua extensão.</translation>
 <translation id="8004582292198964060">Navegador</translation>
+<translation id="8018313076035239964">Controle quais informações os sites podem usar e quais conteúdos eles podem exibir</translation>
 <translation id="8023801379949507775">Verificar Atualizações</translation>
 <translation id="8032244173881942855">Não foi possível transmitir a guia.</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
@@ -294,6 +303,7 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8916476537757519021">Frame Privado: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8938356204940892126">Cancelar</translation>
 <translation id="895944840846194039">Memória JavaScript</translation>
+<translation id="8973557916016709913">Remover zoom</translation>
 <translation id="9027459031423301635">Abrir link em nova &amp;guia</translation>
 <translation id="9170848237812810038">Des&amp;fazer</translation>
 <translation id="9219103736887031265">Imagens</translation>

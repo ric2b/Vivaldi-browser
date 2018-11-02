@@ -19,12 +19,10 @@ bool StructTraits<viz::mojom::RendererSettingsDataView, viz::RendererSettings>::
   out->should_clear_root_render_pass = data.should_clear_root_render_pass();
   out->release_overlay_resources_after_gpu_query =
       data.release_overlay_resources_after_gpu_query();
-  out->gl_composited_overlay_candidate_quad_border =
-      data.gl_composited_overlay_candidate_quad_border();
+  out->tint_gl_composited_content = data.tint_gl_composited_content();
   out->show_overdraw_feedback = data.show_overdraw_feedback();
+  out->enable_draw_occlusion = data.enable_draw_occlusion();
   out->highp_threshold_min = data.highp_threshold_min();
-  out->disallow_non_exact_resource_reuse =
-      data.disallow_non_exact_resource_reuse();
   out->slow_down_compositing_scale_factor =
       data.slow_down_compositing_scale_factor();
   out->use_skia_renderer = data.use_skia_renderer();

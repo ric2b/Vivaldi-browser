@@ -5,19 +5,23 @@
 #include "components/offline_pages/core/model/offline_page_model_taskified.h"
 
 #include <stdint.h>
+#include <memory>
 
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/mock_callback.h"
-#include "base/test/test_simple_task_runner.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
+#include "components/offline_pages/core/model/clear_storage_task.h"
 #include "components/offline_pages/core/model/offline_page_item_generator.h"
-#include "components/offline_pages/core/model/offline_page_test_util.h"
+#include "components/offline_pages/core/model/offline_page_model_utils.h"
+#include "components/offline_pages/core/model/offline_page_test_utils.h"
 #include "components/offline_pages/core/offline_page_item.h"
 #include "components/offline_pages/core/offline_page_metadata_store_sql.h"
 #include "components/offline_pages/core/offline_page_metadata_store_test_util.h"
@@ -42,6 +46,7 @@ using testing::UnorderedElementsAre;
 namespace offline_pages {
 
 using ArchiverResult = OfflinePageArchiver::ArchiverResult;
+using ClearStorageResult = ClearStorageTask::ClearStorageResult;
 
 namespace {
 const GURL kTestUrl("http://example.com");
@@ -76,6 +81,9 @@ class OfflinePageModelTaskifiedTest
   // Runs until all of the tasks that are not delayed are gone from the task
   // queue.
   void PumpLoop() { task_runner_->RunUntilIdle(); }
+  void BuildStore();
+  void BuildModel();
+  void ResetModel();
   void ResetResults();
 
   // OfflinePageModel::Observer implementation.
@@ -112,6 +120,7 @@ class OfflinePageModelTaskifiedTest
   void CheckTaskQueueIdle();
 
   // Getters for private fields.
+  base::TestMockTimeTaskRunner* task_runner() { return task_runner_.get(); }
   OfflinePageModelTaskified* model() { return model_.get(); }
   OfflinePageMetadataStoreSQL* store() { return store_test_util_.store(); }
   OfflinePageMetadataStoreTestUtil* store_test_util() {
@@ -119,11 +128,15 @@ class OfflinePageModelTaskifiedTest
   }
   OfflinePageItemGenerator* page_generator() { return &generator_; }
   TaskQueue* task_queue() { return &model_->task_queue_; }
+  base::HistogramTester* histogram_tester() { return histogram_tester_.get(); }
   const base::FilePath& temporary_dir_path() {
     return temporary_dir_.GetPath();
   }
-  const base::FilePath& persistent_dir_path() {
-    return persistent_dir_.GetPath();
+  const base::FilePath& private_archive_dir_path() {
+    return private_archive_dir_.GetPath();
+  }
+  const base::FilePath& public_archive_dir_path() {
+    return public_archive_dir_.GetPath();
   }
 
   const base::FilePath& last_path_created_by_archiver() {
@@ -135,15 +148,20 @@ class OfflinePageModelTaskifiedTest
   const OfflinePageModel::DeletedPageInfo& last_deleted_page_info() {
     return last_deleted_page_info_;
   }
+  base::Time last_clear_page_time() {
+    return model_->last_clear_cached_pages_time_;
+  }
 
  private:
-  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
   std::unique_ptr<OfflinePageModelTaskified> model_;
   OfflinePageMetadataStoreTestUtil store_test_util_;
   OfflinePageItemGenerator generator_;
+  std::unique_ptr<base::HistogramTester> histogram_tester_;
   base::ScopedTempDir temporary_dir_;
-  base::ScopedTempDir persistent_dir_;
+  base::ScopedTempDir private_archive_dir_;
+  base::ScopedTempDir public_archive_dir_;
 
   base::FilePath last_path_created_by_archiver_;
   bool observer_add_page_called_;
@@ -153,43 +171,64 @@ class OfflinePageModelTaskifiedTest
 };
 
 OfflinePageModelTaskifiedTest::OfflinePageModelTaskifiedTest()
-    : task_runner_(new base::TestSimpleTaskRunner),
+    : task_runner_(new base::TestMockTimeTaskRunner(base::Time::Now(),
+                                                    base::TimeTicks::Now())),
       task_runner_handle_(task_runner_),
       store_test_util_(task_runner_) {}
 
 OfflinePageModelTaskifiedTest::~OfflinePageModelTaskifiedTest() {}
 
 void OfflinePageModelTaskifiedTest::SetUp() {
-  store_test_util()->BuildStoreInMemory();
+  BuildStore();
   ASSERT_TRUE(temporary_dir_.CreateUniqueTempDir());
-  ASSERT_TRUE(persistent_dir_.CreateUniqueTempDir());
-  auto archive_manager = base::MakeUnique<ArchiveManager>(
-      temporary_dir_path(), persistent_dir_path(),
-      base::ThreadTaskRunnerHandle::Get());
-  model_ = base::MakeUnique<OfflinePageModelTaskified>(
-      store_test_util()->ReleaseStore(), std::move(archive_manager),
-      base::ThreadTaskRunnerHandle::Get());
-  model_->AddObserver(this);
-  page_generator()->SetArchiveDirectory(temporary_dir_path());
-  ResetResults();
+  ASSERT_TRUE(private_archive_dir_.CreateUniqueTempDir());
+  ASSERT_TRUE(public_archive_dir_.CreateUniqueTempDir());
+  BuildModel();
   PumpLoop();
   CheckTaskQueueIdle();
-  EXPECT_EQ(0UL, model_->pending_archivers_.size());
+  histogram_tester_ = std::make_unique<base::HistogramTester>();
 }
 
 void OfflinePageModelTaskifiedTest::TearDown() {
+  CheckTaskQueueIdle();
   store_test_util_.DeleteStore();
   if (temporary_dir_.IsValid()) {
     if (!temporary_dir_.Delete())
       DLOG(ERROR) << "temporary_dir_ not created";
   }
-  if (persistent_dir_.IsValid()) {
-    if (!persistent_dir_.Delete())
-      DLOG(ERROR) << "persistent_dir not created";
+  if (private_archive_dir_.IsValid()) {
+    if (!private_archive_dir_.Delete())
+      DLOG(ERROR) << "private_persistent_dir not created";
+  }
+  if (public_archive_dir_.IsValid()) {
+    if (!public_archive_dir_.Delete())
+      DLOG(ERROR) << "public_archive_dir not created";
   }
   EXPECT_EQ(0UL, model_->pending_archivers_.size());
-  CheckTaskQueueIdle();
   model_->RemoveObserver(this);
+  model_.reset();
+  PumpLoop();
+}
+
+void OfflinePageModelTaskifiedTest::BuildStore() {
+  store_test_util()->BuildStore();
+}
+
+void OfflinePageModelTaskifiedTest::BuildModel() {
+  ASSERT_TRUE(store_test_util_.store());
+  auto archive_manager = std::make_unique<ArchiveManager>(
+      temporary_dir_path(), private_archive_dir_path(),
+      public_archive_dir_path(), base::ThreadTaskRunnerHandle::Get());
+  model_ = std::make_unique<OfflinePageModelTaskified>(
+      store_test_util()->ReleaseStore(), std::move(archive_manager),
+      base::ThreadTaskRunnerHandle::Get(), task_runner_->GetMockClock());
+  model_->AddObserver(this);
+  histogram_tester_ = std::make_unique<base::HistogramTester>();
+  ResetResults();
+  EXPECT_EQ(0UL, model_->pending_archivers_.size());
+}
+
+void OfflinePageModelTaskifiedTest::ResetModel() {
   model_.reset();
   PumpLoop();
 }
@@ -265,7 +304,7 @@ void OfflinePageModelTaskifiedTest::InsertPageIntoStore(
 std::unique_ptr<OfflinePageTestArchiver>
 OfflinePageModelTaskifiedTest::BuildArchiver(const GURL& url,
                                              ArchiverResult result) {
-  return base::MakeUnique<OfflinePageTestArchiver>(
+  return std::make_unique<OfflinePageTestArchiver>(
       this, url, result, kTestTitle, kTestFileSize, kTestDigest,
       base::ThreadTaskRunnerHandle::Get());
 }
@@ -281,7 +320,7 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessful) {
       kTestUrl, kTestClientId1, kTestUrl2, kEmptyRequestOrigin,
       std::move(archiver), SavePageResult::SUCCESS);
 
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
   auto saved_page_ptr = store_test_util()->GetPageByOfflineId(offline_id);
   ASSERT_TRUE(saved_page_ptr);
@@ -297,6 +336,24 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessful) {
   EXPECT_EQ(kTestUrl2, saved_page_ptr->original_url);
   EXPECT_EQ("", saved_page_ptr->request_origin);
   EXPECT_EQ(kTestDigest, saved_page_ptr->digest);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(saved_page_ptr->client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      kTestFileSize / 1024, 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithSameOriginalUrl) {
@@ -307,7 +364,7 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithSameOriginalUrl) {
       kTestUrl, kTestClientId1, kTestUrl, kEmptyRequestOrigin,
       std::move(archiver), SavePageResult::SUCCESS);
 
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
   auto saved_page_ptr = store_test_util()->GetPageByOfflineId(offline_id);
   ASSERT_TRUE(saved_page_ptr);
@@ -315,6 +372,24 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithSameOriginalUrl) {
   EXPECT_EQ(kTestUrl, saved_page_ptr->url);
   // The original URL should be empty.
   EXPECT_TRUE(saved_page_ptr->original_url.is_empty());
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(saved_page_ptr->client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      kTestFileSize / 1024, 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithRequestOrigin) {
@@ -323,7 +398,7 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithRequestOrigin) {
       kTestUrl, kTestClientId1, kTestUrl2, kTestRequestOrigin,
       std::move(archiver), SavePageResult::SUCCESS);
 
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
   auto saved_page_ptr = store_test_util()->GetPageByOfflineId(offline_id);
   ASSERT_TRUE(saved_page_ptr);
@@ -338,6 +413,24 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageSuccessfulWithRequestOrigin) {
   EXPECT_EQ(kTestTitle, saved_page_ptr->title);
   EXPECT_EQ(kTestUrl2, saved_page_ptr->original_url);
   EXPECT_EQ(kTestRequestOrigin, saved_page_ptr->request_origin);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(saved_page_ptr->client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      kTestFileSize / 1024, 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverCancelled) {
@@ -345,6 +438,23 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverCancelled) {
   SavePageWithExpectedResult(kTestUrl, kTestClientId1, kTestUrl2,
                              kEmptyRequestOrigin, std::move(archiver),
                              SavePageResult::CANCELLED);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::CANCELLED), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverDeviceFull) {
@@ -352,6 +462,23 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverDeviceFull) {
   SavePageWithExpectedResult(kTestUrl, kTestClientId1, kTestUrl2,
                              kEmptyRequestOrigin, std::move(archiver),
                              SavePageResult::DEVICE_FULL);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::DEVICE_FULL), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest,
@@ -361,6 +488,23 @@ TEST_F(OfflinePageModelTaskifiedTest,
   SavePageWithExpectedResult(kTestUrl, kTestClientId1, kTestUrl2,
                              kEmptyRequestOrigin, std::move(archiver),
                              SavePageResult::CONTENT_UNAVAILABLE);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::CONTENT_UNAVAILABLE), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineCreationFailed) {
@@ -369,6 +513,23 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineCreationFailed) {
   SavePageWithExpectedResult(kTestUrl, kTestClientId1, kTestUrl2,
                              kEmptyRequestOrigin, std::move(archiver),
                              SavePageResult::ARCHIVE_CREATION_FAILED);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::ARCHIVE_CREATION_FAILED), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverReturnedWrongUrl) {
@@ -377,6 +538,23 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverReturnedWrongUrl) {
   SavePageWithExpectedResult(kTestUrl, kTestClientId1, kTestUrl2,
                              kEmptyRequestOrigin, std::move(archiver),
                              SavePageResult::ARCHIVE_CREATION_FAILED);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::ARCHIVE_CREATION_FAILED), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 // This test is disabled since it's lacking the ability of mocking store failure
@@ -389,6 +567,23 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageLocalFileFailed) {
   SavePageWithExpectedResult(
       kFileUrl, kTestClientId1, kTestUrl2, kEmptyRequestOrigin,
       std::unique_ptr<OfflinePageTestArchiver>(), SavePageResult::SKIPPED);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::SKIPPED), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      0);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      0);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverTwoPages) {
@@ -420,9 +615,14 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverTwoPages) {
   SavePageWithCallback(kTestUrl2, kTestClientId2, GURL(), kTestRequestOrigin,
                        std::move(archiver), callback.Get());
 
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
   base::FilePath saved_file_path1 = last_path_created_by_archiver();
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId2.name_space)),
+      1);
 
   ResetResults();
 
@@ -431,7 +631,7 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverTwoPages) {
   PumpLoop();
 
   // Check that offline_id1 refers to the second save page request.
-  EXPECT_EQ(2UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(2UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(2LL, store_test_util()->GetPageCount());
   base::FilePath saved_file_path2 = last_path_created_by_archiver();
 
@@ -450,10 +650,59 @@ TEST_F(OfflinePageModelTaskifiedTest, SavePageOfflineArchiverTwoPages) {
   EXPECT_EQ(kTestClientId1, saved_page_ptr2->client_id);
   EXPECT_EQ(saved_file_path2, saved_page_ptr2->file_path);
   EXPECT_EQ(kTestFileSize, saved_page_ptr2->file_size);
+
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.SavePageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(kTestClientId1.name_space)),
+      2);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::SUCCESS), 2);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageSize"),
+      kTestFileSize / 1024, 2);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageTime"),
+      2);
+}
+
+TEST_F(OfflinePageModelTaskifiedTest, SavePageOnBackground) {
+  auto archiver = BuildArchiver(kTestUrl, ArchiverResult::SUCCESSFULLY_CREATED);
+  OfflinePageTestArchiver* archiver_ptr = archiver.get();
+
+  OfflinePageModel::SavePageParams save_page_params;
+  save_page_params.url = kTestUrl;
+  save_page_params.client_id = kTestClientId1;
+  save_page_params.original_url = kTestUrl2;
+  save_page_params.is_background = true;
+  save_page_params.use_page_problem_detectors = false;
+
+  base::MockCallback<SavePageCallback> callback;
+  EXPECT_CALL(callback, Run(Eq(SavePageResult::SUCCESS), A<int64_t>()));
+  model()->SavePage(save_page_params, std::move(archiver), callback.Get());
+  EXPECT_TRUE(archiver_ptr->create_archive_called());
+  // |remove_popup_overlay| should be turned on on background mode.
+  EXPECT_TRUE(archiver_ptr->create_archive_params().remove_popup_overlay);
+
+  PumpLoop();
+}
+
+TEST_F(OfflinePageModelTaskifiedTest, SavePageWithNullArchiver) {
+  SavePageWithExpectedResult(kTestUrl, kTestClientId1, GURL(),
+                             kEmptyRequestOrigin, nullptr,
+                             SavePageResult::CONTENT_UNAVAILABLE);
+  histogram_tester()->ExpectUniqueSample(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.SavePageResult"),
+      static_cast<int>(SavePageResult::CONTENT_UNAVAILABLE), 1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, AddPage) {
   // Creates a fresh page.
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
   OfflinePageItem page = page_generator()->CreateItemWithTempFile();
 
   base::MockCallback<AddPageCallback> callback;
@@ -480,6 +729,10 @@ TEST_F(OfflinePageModelTaskifiedTest, MarkPageAccessed) {
       store_test_util()->GetPageByOfflineId(page.offline_id);
   ASSERT_TRUE(accessed_page_ptr);
   EXPECT_EQ(1LL, accessed_page_ptr->access_count);
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.AccessPageCount",
+      static_cast<int>(model_utils::ToNamespaceEnum(page.client_id.name_space)),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, GetAllPagesWhenStoreEmpty) {
@@ -519,11 +772,13 @@ TEST_F(OfflinePageModelTaskifiedTest, DISABLED_DeleteMultiplePages) {}
 // should be covered in DeletePagesTaskTest.
 
 TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByOfflineId) {
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
+  page_generator()->SetNamespace(kDefaultNamespace);
   OfflinePageItem page1 = page_generator()->CreateItemWithTempFile();
   OfflinePageItem page2 = page_generator()->CreateItemWithTempFile();
   InsertPageIntoStore(page1);
   InsertPageIntoStore(page2);
-  EXPECT_EQ(2UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(2UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(2LL, store_test_util()->GetPageCount());
 
   base::MockCallback<DeletePageCallback> callback;
@@ -536,12 +791,28 @@ TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByOfflineId) {
   PumpLoop();
   EXPECT_TRUE(observer_delete_page_called());
   EXPECT_EQ(last_deleted_page_info().offline_id, page1.offline_id);
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
-  CheckTaskQueueIdle();
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(page1.client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageResult",
+      static_cast<int>(DeletePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(page1.client_id.name_space,
+                                      "OfflinePages.PageLifetime"),
+      1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(page1.client_id.name_space,
+                                      "OfflinePages.AccessCount"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByUrlPredicate) {
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
   page_generator()->SetNamespace(kDefaultNamespace);
   page_generator()->SetUrl(kTestUrl);
   OfflinePageItem page1 = page_generator()->CreateItemWithTempFile();
@@ -549,7 +820,7 @@ TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByUrlPredicate) {
   OfflinePageItem page2 = page_generator()->CreateItemWithTempFile();
   InsertPageIntoStore(page1);
   InsertPageIntoStore(page2);
-  EXPECT_EQ(2UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(2UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(2LL, store_test_util()->GetPageCount());
 
   base::MockCallback<DeletePageCallback> callback;
@@ -567,9 +838,24 @@ TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByUrlPredicate) {
   PumpLoop();
   EXPECT_TRUE(observer_delete_page_called());
   EXPECT_EQ(last_deleted_page_info().offline_id, page1.offline_id);
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
-  CheckTaskQueueIdle();
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(page1.client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageResult",
+      static_cast<int>(DeletePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(page1.client_id.name_space,
+                                      "OfflinePages.PageLifetime"),
+      1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(page1.client_id.name_space,
+                                      "OfflinePages.AccessCount"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, GetPageByOfflineId) {
@@ -668,6 +954,16 @@ TEST_F(OfflinePageModelTaskifiedTest, GetPagesByUrl_AllUrls) {
   PumpLoop();
 }
 
+TEST_F(OfflinePageModelTaskifiedTest, CanSaveURL) {
+  EXPECT_TRUE(OfflinePageModel::CanSaveURL(GURL("http://foo")));
+  EXPECT_TRUE(OfflinePageModel::CanSaveURL(GURL("https://foo")));
+  EXPECT_FALSE(OfflinePageModel::CanSaveURL(GURL("file:///foo")));
+  EXPECT_FALSE(OfflinePageModel::CanSaveURL(GURL("data:image/png;base64,ab")));
+  EXPECT_FALSE(OfflinePageModel::CanSaveURL(GURL("chrome://version")));
+  EXPECT_FALSE(OfflinePageModel::CanSaveURL(GURL("chrome-native://newtab/")));
+  EXPECT_FALSE(OfflinePageModel::CanSaveURL(GURL("/invalid/url.mhtml")));
+}
+
 TEST_F(OfflinePageModelTaskifiedTest, GetOfflineIdsForClientId) {
   page_generator()->SetNamespace(kTestClientId1.name_space);
   page_generator()->SetId(kTestClientId1.id);
@@ -724,6 +1020,7 @@ TEST_F(OfflinePageModelTaskifiedTest, GetPagesByRequestOrigin) {
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByClientIds) {
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
   page_generator()->SetNamespace(kTestClientId1.name_space);
   page_generator()->SetId(kTestClientId1.id);
   OfflinePageItem page1 = page_generator()->CreateItemWithTempFile();
@@ -731,7 +1028,7 @@ TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByClientIds) {
   OfflinePageItem page2 = page_generator()->CreateItemWithTempFile();
   InsertPageIntoStore(page1);
   InsertPageIntoStore(page2);
-  EXPECT_EQ(2UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(2UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(2LL, store_test_util()->GetPageCount());
 
   base::MockCallback<DeletePageCallback> callback;
@@ -744,9 +1041,24 @@ TEST_F(OfflinePageModelTaskifiedTest, DeletePagesByClientIds) {
   PumpLoop();
   EXPECT_TRUE(observer_delete_page_called());
   EXPECT_EQ(last_deleted_page_info().client_id, page1.client_id);
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
-  CheckTaskQueueIdle();
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageCount",
+      static_cast<int>(
+          model_utils::ToNamespaceEnum(page1.client_id.name_space)),
+      1);
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.DeletePageResult",
+      static_cast<int>(DeletePageResult::SUCCESS), 1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.PageLifetime"),
+      1);
+  histogram_tester()->ExpectTotalCount(
+      model_utils::AddHistogramSuffix(kTestClientId1.name_space,
+                                      "OfflinePages.AccessCount"),
+      1);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, GetPagesByNamespace) {
@@ -839,7 +1151,7 @@ TEST_F(OfflinePageModelTaskifiedTest, MAYBE_CheckPagesSavedInSeparateDirs) {
   base::FilePath persistent_page_path = persistent_page->file_path;
 
   EXPECT_TRUE(temporary_dir_path().IsParent(temporary_page_path));
-  EXPECT_TRUE(persistent_dir_path().IsParent(persistent_page_path));
+  EXPECT_TRUE(private_archive_dir_path().IsParent(persistent_page_path));
   EXPECT_NE(temporary_page_path.DirName(), persistent_page_path.DirName());
 }
 
@@ -883,6 +1195,7 @@ TEST_F(OfflinePageModelTaskifiedTest, ExtraActionTriggeredWhenSaveSuccess) {
   // Add pages that have the same namespace and url directly into store, in
   // order to avoid triggering the removal.
   // The 'default' namespace has a limit of 1 per url.
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
   page_generator()->SetNamespace(kDefaultNamespace);
   page_generator()->SetUrl(kTestUrl);
   OfflinePageItem page1 = page_generator()->CreateItemWithTempFile();
@@ -904,11 +1217,11 @@ TEST_F(OfflinePageModelTaskifiedTest, ExtraActionTriggeredWhenSaveSuccess) {
 
 TEST_F(OfflinePageModelTaskifiedTest, GetArchiveDirectory) {
   base::FilePath temporary_dir =
-      model()->GetArchiveDirectory(kDefaultNamespace);
+      model()->GetInternalArchiveDirectory(kDefaultNamespace);
   EXPECT_EQ(temporary_dir_path(), temporary_dir);
   base::FilePath persistent_dir =
-      model()->GetArchiveDirectory(kDownloadNamespace);
-  EXPECT_EQ(persistent_dir_path(), persistent_dir);
+      model()->GetInternalArchiveDirectory(kDownloadNamespace);
+  EXPECT_EQ(private_archive_dir_path(), persistent_dir);
 }
 
 TEST_F(OfflinePageModelTaskifiedTest, GetAllPages) {
@@ -921,6 +1234,99 @@ TEST_F(OfflinePageModelTaskifiedTest, GetAllPages) {
   EXPECT_CALL(callback, Run(UnorderedElementsAre(page1, page2)));
   model()->GetAllPages(callback.Get());
   PumpLoop();
+}
+
+// This test is affected by https://crbug.com/725685, which only affects windows
+// platform.
+#if defined(OS_WIN)
+#define MAYBE_StartUp_ConsistencyCheckExecuted \
+  DISABLED_StartUp_ConsistencyCheckExecuted
+#else
+#define MAYBE_StartUp_ConsistencyCheckExecuted StartUp_ConsistencyCheckExecuted
+#endif
+TEST_F(OfflinePageModelTaskifiedTest, MAYBE_StartUp_ConsistencyCheckExecuted) {
+  // Rebuild the store so that we can insert pages before the model constructs.
+  ResetModel();
+  BuildStore();
+
+  // Insert temporary pages
+  page_generator()->SetArchiveDirectory(temporary_dir_path());
+  page_generator()->SetNamespace(kDefaultNamespace);
+  // Page missing archive file in temporary directory.
+  OfflinePageItem temp_page1 = page_generator()->CreateItem();
+  // Page missing metadata entry in database since it's not inserted into store.
+  OfflinePageItem temp_page2 = page_generator()->CreateItemWithTempFile();
+  // Page in temporary namespace saved in persistent directory to simulate pages
+  // saved in legacy directory.
+  page_generator()->SetArchiveDirectory(private_archive_dir_path());
+  OfflinePageItem temp_page3 = page_generator()->CreateItemWithTempFile();
+  InsertPageIntoStore(temp_page1);
+  InsertPageIntoStore(temp_page3);
+
+  // Insert persistent pages.
+  page_generator()->SetNamespace(kDownloadNamespace);
+  // Page missing archive file in pesistent directory.
+  OfflinePageItem persistent_page1 = page_generator()->CreateItem();
+  // Page missing metadata entry in database since it's not inserted into store.
+  OfflinePageItem persistent_page2 = page_generator()->CreateItemWithTempFile();
+  // Page in persistent namespace saved in persistent directory to simulate
+  // pages saved in legacy directory.
+  OfflinePageItem persistent_page3 = page_generator()->CreateItemWithTempFile();
+  InsertPageIntoStore(persistent_page1);
+  InsertPageIntoStore(persistent_page3);
+
+  PumpLoop();
+
+  EXPECT_EQ(4LL, store_test_util()->GetPageCount());
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(3UL,
+            test_utils::GetFileCountInDirectory(private_archive_dir_path()));
+
+  // Rebuild the model in order to trigger consistency check.
+  BuildModel();
+  task_runner()->FastForwardBy(
+      OfflinePageModelTaskified::kInitializingTaskDelay);
+
+  EXPECT_EQ(1LL, store_test_util()->GetPageCount());
+  EXPECT_EQ(0UL, test_utils::GetFileCountInDirectory(temporary_dir_path()));
+  EXPECT_EQ(1UL,
+            test_utils::GetFileCountInDirectory(private_archive_dir_path()));
+}
+
+TEST_F(OfflinePageModelTaskifiedTest, ClearStorage) {
+  // Rebuilding store and model in order to set clock before executing the clear
+  // storage during model initialization so that we can check the time.
+  ResetModel();
+  BuildStore();
+  BuildModel();
+
+  PumpLoop();
+  EXPECT_EQ(task_runner()->Now(), last_clear_page_time());
+
+  // Only 5 minutes passed and the last clear page time should not be changed
+  // since the clear page will not be triggered.
+  const base::TimeDelta short_delta = base::TimeDelta::FromMinutes(5);
+  task_runner()->FastForwardBy(short_delta);
+  auto archiver = BuildArchiver(kTestUrl, ArchiverResult::SUCCESSFULLY_CREATED);
+  int64_t offline_id = SavePageWithExpectedResult(
+      kTestUrl, kTestClientId1, kTestUrl2, kEmptyRequestOrigin,
+      std::move(archiver), SavePageResult::SUCCESS);
+  PumpLoop();
+  EXPECT_EQ(task_runner()->Now() - short_delta, last_clear_page_time());
+
+  task_runner()->FastForwardBy(
+      OfflinePageModelTaskified::kClearStorageInterval);
+  archiver = BuildArchiver(kTestUrl, ArchiverResult::SUCCESSFULLY_CREATED);
+  offline_id = SavePageWithExpectedResult(
+      kTestUrl, kTestClientId1, kTestUrl2, kEmptyRequestOrigin,
+      std::move(archiver), SavePageResult::SUCCESS);
+  PumpLoop();
+  EXPECT_EQ(task_runner()->Now(), last_clear_page_time());
+  histogram_tester()->ExpectUniqueSample(
+      "OfflinePages.ClearTemporaryPages.Result",
+      static_cast<int>(ClearStorageResult::UNNECESSARY), 2);
+  histogram_tester()->ExpectTotalCount(
+      "OfflinePages.ClearTemporaryPages.BatchSize", 0);
 }
 
 }  // namespace offline_pages

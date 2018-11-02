@@ -106,11 +106,8 @@ TEST_F(ManagePasswordsBubbleControllerTest, TransitionToSignInPromo) {
 // https://crbug.com/774033
 TEST_F(ManagePasswordsBubbleControllerTest,
        TransitionToSignInPromoAfterEditingPassword) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndEnableFeature(
-      password_manager::features::kEnablePasswordSelection);
   SetUpSavePendingState();
-  GetModelAndCreateIfNull()->set_hide_eye_icon(false);
+  GetModelAndCreateIfNull()->allow_passwords_revealing();
   [controller() showWindow:nil];
   SavePendingPasswordViewController* saveController =
       base::mac::ObjCCastStrict<SavePendingPasswordViewController>(

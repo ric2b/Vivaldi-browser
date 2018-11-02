@@ -69,6 +69,9 @@ TEST_F(CrashKeyStringTest, FormatStackTrace64) {
 }
 #endif
 
+// In certain build configurations, StackTrace will produce an
+// empty result, which will cause the test to fail.
+#if !defined(OFFICIAL_BUILD) && !defined(NO_UNWIND_TABLES)
 TEST_F(CrashKeyStringTest, SetStackTrace) {
   static CrashKeyString<1024> key("test-trace");
 
@@ -78,6 +81,7 @@ TEST_F(CrashKeyStringTest, SetStackTrace) {
 
   EXPECT_TRUE(key.is_set());
 }
+#endif
 
 TEST_F(CrashKeyStringTest, BaseSupport) {
   static base::debug::CrashKeyString* crash_key =
@@ -92,6 +96,24 @@ TEST_F(CrashKeyStringTest, BaseSupport) {
 
   base::debug::SetCrashKeyString(crash_key, std::string(128, 'b'));
   base::debug::SetCrashKeyString(crash_key, std::string(64, 'a'));
+}
+
+TEST_F(CrashKeyStringTest, CArrayInitializer) {
+  static CrashKeyString<8> keys[] = {
+      {"test-1", CrashKeyString<8>::Tag::kArray},
+      {"test-2", CrashKeyString<8>::Tag::kArray},
+      {"test-3", CrashKeyString<8>::Tag::kArray},
+  };
+
+  EXPECT_FALSE(keys[0].is_set());
+  EXPECT_FALSE(keys[1].is_set());
+  EXPECT_FALSE(keys[2].is_set());
+
+  keys[1].Set("test");
+
+  EXPECT_FALSE(keys[0].is_set());
+  EXPECT_TRUE(keys[1].is_set());
+  EXPECT_FALSE(keys[2].is_set());
 }
 
 }  // namespace

@@ -35,6 +35,7 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoader.h"
 #include "platform/wtf/Time.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 
 namespace blink {
 
@@ -75,12 +76,13 @@ static void RecordPackageFormatHistogram(FontPackageFormat format) {
 }
 
 FontResource* FontResource::Fetch(FetchParameters& params,
-                                  ResourceFetcher* fetcher) {
+                                  ResourceFetcher* fetcher,
+                                  FontResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   params.SetRequestContext(WebURLRequest::kRequestContextFont);
   return ToFontResource(
-      fetcher->RequestResource(params, FontResourceFactory()));
+      fetcher->RequestResource(params, FontResourceFactory(), client));
 }
 
 FontResource::FontResource(const ResourceRequest& resource_request,
@@ -89,7 +91,7 @@ FontResource::FontResource(const ResourceRequest& resource_request,
       load_limit_state_(kLoadNotStarted),
       cors_failed_(false) {}
 
-FontResource::~FontResource() {}
+FontResource::~FontResource() = default;
 
 void FontResource::DidAddClient(ResourceClient* c) {
   DCHECK(FontResourceClient::IsExpectedType(c));
@@ -122,13 +124,13 @@ void FontResource::StartLoadLimitTimers(WebTaskRunner* task_runner) {
   DCHECK_EQ(load_limit_state_, kLoadNotStarted);
   load_limit_state_ = kUnderLimit;
 
-  font_load_short_limit_ = task_runner->PostDelayedCancellableTask(
-      BLINK_FROM_HERE,
+  font_load_short_limit_ = PostDelayedCancellableTask(
+      *task_runner, FROM_HERE,
       WTF::Bind(&FontResource::FontLoadShortLimitCallback,
                 WrapWeakPersistent(this)),
       kFontLoadWaitShort);
-  font_load_long_limit_ = task_runner->PostDelayedCancellableTask(
-      BLINK_FROM_HERE,
+  font_load_long_limit_ = PostDelayedCancellableTask(
+      *task_runner, FROM_HERE,
       WTF::Bind(&FontResource::FontLoadLongLimitCallback,
                 WrapWeakPersistent(this)),
       kFontLoadWaitLong);
@@ -214,8 +216,9 @@ void FontResource::NotifyFinished() {
 }
 
 bool FontResource::IsLowPriorityLoadingAllowedForRemoteFont() const {
-  DCHECK(!Url().ProtocolIsData());
   DCHECK(!IsLoaded());
+  if (Url().ProtocolIsData())
+    return false;
   ResourceClientWalker<FontResourceClient> walker(Clients());
   while (FontResourceClient* client = walker.Next()) {
     if (!client->IsLowPriorityLoadingAllowedForRemoteFont()) {

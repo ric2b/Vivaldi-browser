@@ -19,4 +19,6 @@ bool LifecycleUnit::SortKey::operator>(const SortKey& other) const {
   return last_focused_time > other.last_focused_time;
 }
 
+LifecycleUnit::~LifecycleUnit() = default;
+
 }  // namespace resource_coordinator

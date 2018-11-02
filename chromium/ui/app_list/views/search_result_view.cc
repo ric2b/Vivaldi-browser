@@ -5,11 +5,11 @@
 #include "ui/app_list/views/search_result_view.h"
 
 #include <algorithm>
+#include <utility>
 
-#include "ash/app_list/model/search_result.h"
+#include "ash/app_list/model/search/search_result.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/views/search_result_actions_view.h"
 #include "ui/app_list/views/search_result_list_view.h"
@@ -42,7 +42,7 @@ constexpr SkColor kDefaultTextColor =
 // URL color.
 constexpr SkColor kUrlColor = SkColorSetARGBMacro(0xFF, 0x33, 0x67, 0xD6);
 // Row selected color, #000 8%.
-constexpr SkColor kRowSelectedColor =
+constexpr SkColor kRowHighlightedColor =
     SkColorSetARGBMacro(0x14, 0x00, 0x00, 0x00);
 
 int GetIconViewWidth() {
@@ -55,15 +55,12 @@ int GetIconViewWidth() {
 const char SearchResultView::kViewClassName[] = "ui/app_list/SearchResultView";
 
 SearchResultView::SearchResultView(SearchResultListView* list_view)
-    : views::Button(this),
-      list_view_(list_view),
+    : list_view_(list_view),
       icon_(new views::ImageView),
       badge_icon_(new views::ImageView),
       actions_view_(new SearchResultActionsView(this)),
-      progress_bar_(new views::ProgressBar),
-      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()) {
-  if (is_app_list_focus_enabled_)
-    SetFocusBehavior(FocusBehavior::ALWAYS);
+      progress_bar_(new views::ProgressBar) {
+  SetFocusBehavior(FocusBehavior::ALWAYS);
   icon_->set_can_process_events_within_subtree(false);
   badge_icon_->set_can_process_events_within_subtree(false);
 
@@ -136,25 +133,12 @@ base::string16 SearchResultView::ComputeAccessibleName() const {
   return accessible_name;
 }
 
-void SearchResultView::SetSelected(bool selected) {
-  if (selected_ == selected)
-    return;
-  selected_ = selected;
-
-  if (is_app_list_focus_enabled_ && selected_) {
-    ScrollRectToVisible(GetLocalBounds());
-    NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
-  }
-  SchedulePaint();
-}
-
 void SearchResultView::UpdateAccessibleName() {
   SetAccessibleName(ComputeAccessibleName());
 }
 
 void SearchResultView::CreateTitleRenderText() {
-  std::unique_ptr<gfx::RenderText> render_text(
-      gfx::RenderText::CreateInstance());
+  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
   render_text->SetText(result_->title());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(
@@ -183,8 +167,7 @@ void SearchResultView::CreateDetailsRenderText() {
     details_text_.reset();
     return;
   }
-  std::unique_ptr<gfx::RenderText> render_text(
-      gfx::RenderText::CreateInstance());
+  auto render_text = gfx::RenderText::CreateHarfBuzzInstance();
   render_text->SetText(result_->details());
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   render_text->SetFontList(rb.GetFontList(ui::ResourceBundle::BaseFont));
@@ -252,16 +235,6 @@ bool SearchResultView::OnKeyPressed(const ui::KeyEvent& event) {
     return false;
 
   switch (event.key_code()) {
-    case ui::VKEY_TAB: {
-      if (is_app_list_focus_enabled_) {
-        // Let FocusManager handle default focus move.
-        return false;
-      }
-      int new_selected =
-          actions_view_->selected_action() + (event.IsShiftDown() ? -1 : 1);
-      actions_view_->SetSelectedAction(new_selected);
-      return actions_view_->IsValidActionIndex(new_selected);
-    }
     case ui::VKEY_RETURN: {
       int selected = actions_view_->selected_action();
       if (actions_view_->IsValidActionIndex(selected)) {
@@ -309,10 +282,8 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
 
   // Possibly call FillRect a second time (these colours are partially
   // transparent, so the previous FillRect is not redundant).
-  if (is_app_list_focus_enabled_ ? selected()
-                                 : list_view_->IsResultViewSelected(this)) {
-    canvas->FillRect(content_rect, kRowSelectedColor);
-  }
+  if (background_highlighted())
+    canvas->FillRect(content_rect, kRowHighlightedColor);
 
   gfx::Rect border_bottom = gfx::SubtractRects(rect, content_rect);
   canvas->FillRect(border_bottom, kResultBorderColor);
@@ -344,13 +315,13 @@ void SearchResultView::PaintButtonContents(gfx::Canvas* canvas) {
 }
 
 void SearchResultView::OnFocus() {
-  SetSelected(true);
-  Button::OnFocus();
+  ScrollRectToVisible(GetLocalBounds());
+  NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
+  SetBackgroundHighlighted(true);
 }
 
 void SearchResultView::OnBlur() {
-  SetSelected(false);
-  Button::OnBlur();
+  SetBackgroundHighlighted(false);
 }
 
 void SearchResultView::ButtonPressed(views::Button* sender,

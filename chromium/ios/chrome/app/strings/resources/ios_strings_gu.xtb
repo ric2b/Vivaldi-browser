@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> આઇટમ્સ</translation>
 <translation id="1491277525950327607">સેટિંગ ટૉગલ કરવા માટે બે વાર ટૅપ કરો</translation>
 <translation id="152234381334907219">ક્યારેય ન સચવાયેલું</translation>
+<translation id="1532451416480227577">Google Pay માંથી સરનામાં અને ક્રેડિટ કાર્ડ બતાવો</translation>
 <translation id="1540800554400757039">સરનામું 1</translation>
 <translation id="1545749641540134597">QR કોડ સ્કેન કરો</translation>
 <translation id="1580783302095112590">મેઇલ મોકલ્યો છે.</translation>
@@ -96,6 +97,7 @@
 <translation id="2718352093833049315">ફક્ત Wi-Fi પર</translation>
 <translation id="2747003861858887689">પહેલાનું ફીલ્ડ</translation>
 <translation id="2780046210906776326">ઇમેઇલ એકાઉન્ટ્સ નથી</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">ટેબ સ્વિચર છોડી દો</translation>
 <translation id="283291358677939992">પૃષ્ઠમાં શોધો...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@
 <translation id="4378154925671717803">ફોન</translation>
 <translation id="441868831736628555">ગોપનીયતા સૂચના</translation>
 <translation id="4460091562821778167">મને દરેક વખતે પૂછો કે કઈ ઍપનો ઉપયોગ કરવો</translation>
+<translation id="4496373720959965247">ટૅબ ઉમેરો અને પેજ વચ્ચે સ્વિચ કરો</translation>
 <translation id="4508750114462689118">સાઇન-ઇન પ્રોમો બંધ કરો</translation>
 <translation id="4526249700380860531"><ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> પર સાચવેલા પાસવર્ડ્સ જુઓ અને સંચાલિત કરો</translation>
 <translation id="4536418791685807335">ફરીથી સાઇન ઇન કરવાનો પ્રયાસ કરો.</translation>
@@ -217,12 +220,12 @@
 <translation id="5300589172476337783">બતાવો</translation>
 <translation id="5317780077021120954">સાચવો</translation>
 <translation id="5327248766486351172">નામ</translation>
+<translation id="533632423981297619">તમારા પાસવર્ડ જે નિકાસ કરેલી ફાઇલને જોઈ શકે છે તે કોઈ પણ વ્યક્તિને દૃશ્યક્ષમ હશે. ફાઇલને કોઈની પણ સાથે શેર ન કરશો.</translation>
 <translation id="5388358297987318779">છબી ખોલો</translation>
 <translation id="5409365236829784218">ત્યાં એવી કોઈ ઍપ્લિકેશન ઇન્સ્ટોલ કરેલ નથી જે આ ફાઇલ ખોલી શકે.</translation>
 <translation id="5433691172869980887">વપરાશકર્તાનામ કૉપિ કર્યું</translation>
 <translation id="54401264925851789">પૃષ્ઠ સુરક્ષા માહિતી</translation>
 <translation id="5525269841082836315">પાસફ્રેઝ બનાવો</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">હેન્ડઓફ તમને આ ઉપકરણ પર વેબસાઇટ બ્રાઉઝ કરવાનું શરૂ કરવા અને પછી તમારા Mac પર સરળતાથી ચાલુ રાખવા દે છે. વર્તમાનમાં ખુલ્લી છે તે વેબસાઇટ તમારા Mac ના ડૉક પર દેખાશે.
 
 સેટિંગ્સના સામાન્ય વિભાગમાં હેન્ડઓફ સક્ષમ હોવું પણ આવશ્યક છે અને તમારા ઉપકરણો, સમાન iCloud એકાઉન્ટનો ઉપયોગ કરતાં હોવા આવશ્યક છે.</translation>
@@ -247,7 +250,6 @@
 <translation id="5911030830365207728">Google અનુવાદ</translation>
 <translation id="5916664084637901428">ચાલુ</translation>
 <translation id="5948291296578561264">આ તમને તમારી ફોટો લાઇબ્રેરીમાં ફોટો સાચવવા દે છે.</translation>
-<translation id="5953603475187800576">Google Payments માંથી સરનામાં અને ક્રેડિટ કાર્ડ્સ દર્શાવો</translation>
 <translation id="5955891643922670672">ઑફલાઇન સંસ્કરણ જોઈ રહ્યાં છે</translation>
 <translation id="5964480694698977962">નવું છૂપું ટૅબ બનાવો</translation>
 <translation id="5965679971710331625">તમે સાઇન ઇન છો</translation>
@@ -337,7 +339,6 @@
 <translation id="7514365320538308">ડાઉનલોડ કરો</translation>
 <translation id="7537586195939242955">માફ કરશો, તમારો પાસ આ સમયે પાસબુક પર ઇન્સ્ટોલ કરી શકાતો નથી.</translation>
 <translation id="7561196759112975576">હંમેશાં</translation>
-<translation id="7588950540487816470">વાસ્તવિક વેબ</translation>
 <translation id="7603852183842204213">(<ph name="NUMBER_OF_BLOCKED_POPUPS" />) અવરોધિત પૉપ-અપ્સ</translation>
 <translation id="7605594153474022051">સમન્વયન કામ કરતું નથી</translation>
 <translation id="7638584964844754484">ખોટો પાસફ્રેઝ</translation>
@@ -350,6 +351,7 @@
 <translation id="780301667611848630">નહીં, આભાર</translation>
 <translation id="7859704718976024901">બ્રાઉઝિંગ ઇતિહાસ</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">પાસવર્ડની નિકાસ કરો...</translation>
 <translation id="7947953824732555851">સ્વીકારો અને સાઇન ઇન કરો</translation>
 <translation id="7961015016161918242">ક્યારેય નહીં</translation>
 <translation id="7971521879845308059">પૉપ-અપ્સ અવરોધિત કરો</translation>
@@ -407,7 +409,6 @@
 <translation id="9083392325882095631">1 આઇટમ</translation>
 <translation id="9100610230175265781">પાસફ્રેઝ આવશ્યક છે</translation>
 <translation id="9148126808321036104">ફરીથી સાઇન ઇન કરો </translation>
-<translation id="91549621916703028">તમારા બધાં કાર્યો માટે બહુવિધ ટૅબ બનાવો</translation>
 <translation id="9157836665414082580">સંવાદો નાબૂદ કરો</translation>
 <translation id="9188680907066685419">સંચાલિત એકાઉન્ટમાંથી સાઇન આઉટ કરો</translation>
 <translation id="9203116392574189331">હેન્ડઓફ</translation>

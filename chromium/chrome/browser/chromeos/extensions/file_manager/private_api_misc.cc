@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -309,7 +308,7 @@ bool FileManagerPrivateInternalZipSelectionFunction::RunAsync() {
 }
 
 void FileManagerPrivateInternalZipSelectionFunction::OnZipDone(bool success) {
-  SetResult(base::MakeUnique<base::Value>(success));
+  SetResult(std::make_unique<base::Value>(success));
   SendResponse(true);
 }
 
@@ -361,7 +360,7 @@ bool FileManagerPrivateRequestWebStoreAccessTokenFunction::RunAsync() {
                   "CWS OAuth token fetch failed. OAuth2TokenService can't "
                   "be retrieved.");
     }
-    SetResult(base::MakeUnique<base::Value>());
+    SetResult(std::make_unique<base::Value>());
     return false;
   }
 
@@ -390,7 +389,7 @@ void FileManagerPrivateRequestWebStoreAccessTokenFunction::OnAccessTokenFetched(
     DCHECK(access_token == auth_service_->access_token());
     if (logger)
       logger->Log(logging::LOG_INFO, "CWS OAuth token fetch succeeded.");
-    SetResult(base::MakeUnique<base::Value>(access_token));
+    SetResult(std::make_unique<base::Value>(access_token));
     SendResponse(true);
   } else {
     if (logger) {
@@ -398,7 +397,7 @@ void FileManagerPrivateRequestWebStoreAccessTokenFunction::OnAccessTokenFetched(
                   "CWS OAuth token fetch failed. (DriveApiErrorCode: %s)",
                   google_apis::DriveApiErrorCodeToString(code).c_str());
     }
-    SetResult(base::MakeUnique<base::Value>());
+    SetResult(std::make_unique<base::Value>());
     SendResponse(false);
   }
 }
@@ -491,61 +490,66 @@ bool FileManagerPrivateInternalGetMimeTypeFunction::RunAsync() {
 
 void FileManagerPrivateInternalGetMimeTypeFunction::OnGetMimeType(
     const std::string& mimeType) {
-  SetResult(base::MakeUnique<base::Value>(mimeType));
+  SetResult(std::make_unique<base::Value>(mimeType));
   SendResponse(true);
 }
 
 ExtensionFunction::ResponseAction
 FileManagerPrivateIsPiexLoaderEnabledFunction::Run() {
 #if defined(OFFICIAL_BUILD)
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(true)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(true)));
 #else
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(false)));
+  return RespondNow(OneArgument(std::make_unique<base::Value>(false)));
 #endif
 }
 
-FileManagerPrivateGetProvidingExtensionsFunction::
-    FileManagerPrivateGetProvidingExtensionsFunction()
-    : chrome_details_(this) {
-}
+FileManagerPrivateGetProvidersFunction::FileManagerPrivateGetProvidersFunction()
+    : chrome_details_(this) {}
 
 ExtensionFunction::ResponseAction
-FileManagerPrivateGetProvidingExtensionsFunction::Run() {
+FileManagerPrivateGetProvidersFunction::Run() {
+  using chromeos::file_system_provider::Capabilities;
+  using chromeos::file_system_provider::IconSet;
+  using chromeos::file_system_provider::ProviderId;
+  using chromeos::file_system_provider::ProviderInterface;
   using chromeos::file_system_provider::Service;
-  using chromeos::file_system_provider::ProvidingExtensionInfo;
   const Service* const service = Service::Get(chrome_details_.GetProfile());
-  const std::vector<ProvidingExtensionInfo> info_list =
-      service->GetProvidingExtensionInfoList();
 
-  using api::file_manager_private::ProvidingExtension;
-  std::vector<ProvidingExtension> providing_extensions;
-  for (const auto& info : info_list) {
-    ProvidingExtension providing_extension;
-    providing_extension.extension_id = info.extension_id;
-    providing_extension.name = info.name;
-    providing_extension.configurable = info.capabilities.configurable();
-    providing_extension.watchable = info.capabilities.watchable();
-    providing_extension.multiple_mounts = info.capabilities.multiple_mounts();
-    switch (info.capabilities.source()) {
+  using api::file_manager_private::Provider;
+  std::vector<Provider> result;
+  for (const auto& pair : service->GetProviders()) {
+    const ProviderInterface* const provider = pair.second.get();
+    const ProviderId provider_id = provider->GetId();
+
+    Provider result_item;
+    result_item.provider_id = provider->GetId().ToString();
+    const IconSet& icon_set = provider->GetIconSet();
+    file_manager::util::FillIconSet(&result_item.icon_set, icon_set);
+    result_item.name = provider->GetName();
+
+    const Capabilities capabilities = provider->GetCapabilities();
+    result_item.configurable = capabilities.configurable;
+    result_item.watchable = capabilities.watchable;
+    result_item.multiple_mounts = capabilities.multiple_mounts;
+    switch (capabilities.source) {
       case SOURCE_FILE:
-        providing_extension.source =
+        result_item.source =
             api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_FILE;
         break;
       case SOURCE_DEVICE:
-        providing_extension.source =
+        result_item.source =
             api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_DEVICE;
         break;
       case SOURCE_NETWORK:
-        providing_extension.source =
+        result_item.source =
             api::manifest_types::FILE_SYSTEM_PROVIDER_SOURCE_NETWORK;
         break;
     }
-    providing_extensions.push_back(std::move(providing_extension));
+    result.push_back(std::move(result_item));
   }
 
   return RespondNow(ArgumentList(
-      api::file_manager_private::GetProvidingExtensions::Results::Create(
-          providing_extensions)));
+      api::file_manager_private::GetProviders::Results::Create(result)));
 }
 
 FileManagerPrivateAddProvidedFileSystemFunction::
@@ -564,8 +568,7 @@ FileManagerPrivateAddProvidedFileSystemFunction::Run() {
   using chromeos::file_system_provider::ProviderId;
   Service* const service = Service::Get(chrome_details_.GetProfile());
 
-  if (!service->RequestMount(
-          ProviderId::CreateFromExtensionId(params->extension_id)))
+  if (!service->RequestMount(ProviderId::FromString(params->provider_id)))
     return RespondNow(Error("Failed to request a new mount."));
 
   return RespondNow(NoArguments());
@@ -791,12 +794,12 @@ void FileManagerPrivateInternalGetRecentFilesFunction::
             entry_definition_list) {
   DCHECK(entry_definition_list);
 
-  auto entries = base::MakeUnique<base::ListValue>();
+  auto entries = std::make_unique<base::ListValue>();
 
   for (const auto& definition : *entry_definition_list) {
     if (definition.error != base::File::FILE_OK)
       continue;
-    auto entry = base::MakeUnique<base::DictionaryValue>();
+    auto entry = std::make_unique<base::DictionaryValue>();
     entry->SetString("fileSystemName", definition.file_system_name);
     entry->SetString("fileSystemRoot", definition.file_system_root_url);
     entry->SetString("fileFullPath", "/" + definition.full_path.AsUTF8Unsafe());

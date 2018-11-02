@@ -82,7 +82,7 @@ class PreviewsBlackList {
   // |blacklist_delegate| is a single object listening for blacklist events, and
   // it is guaranteed to overlive the life time of |this|.
   PreviewsBlackList(std::unique_ptr<PreviewsOptOutStore> opt_out_store,
-                    std::unique_ptr<base::Clock> clock,
+                    base::Clock* clock,
                     PreviewsBlacklistDelegate* blacklist_delegate);
   virtual ~PreviewsBlackList();
 
@@ -99,10 +99,12 @@ class PreviewsBlackList {
 
   // Synchronously determines if |host_name| should be allowed to show previews.
   // Returns the reason the blacklist disallowed the preview, or
-  // PreviewsEligibilityReason::ALLOWED if the preview is allowed. Virtualized
-  // in testing.
-  virtual PreviewsEligibilityReason IsLoadedAndAllowed(const GURL& url,
-                                                       PreviewsType type) const;
+  // PreviewsEligibilityReason::ALLOWED if the preview is allowed. Record
+  // checked reasons in |passed_reasons|. Virtualized in testing.
+  virtual PreviewsEligibilityReason IsLoadedAndAllowed(
+      const GURL& url,
+      PreviewsType type,
+      std::vector<PreviewsEligibilityReason>* passed_reasons) const;
 
   // Asynchronously deletes all entries in the in-memory black list. Informs
   // the backing store to delete entries between |begin_time| and |end_time|,
@@ -165,7 +167,7 @@ class PreviewsBlackList {
   // completed.
   base::queue<base::Closure> pending_callbacks_;
 
-  std::unique_ptr<base::Clock> clock_;
+  base::Clock* clock_;
 
   // The delegate listening to this blacklist. |blacklist_delegate_| lifetime is
   // guaranteed to overlive |this|.

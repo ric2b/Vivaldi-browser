@@ -133,10 +133,8 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                   const void* data,
                   GLenum usage) override;
 
-  GLuint64 InsertFenceSyncCHROMIUM() override;
-  void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override;
-  void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
-                                      GLbyte* sync_token) override;
+  void GenSyncTokenCHROMIUM(GLbyte* sync_token) override;
+  void GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) override;
   void VerifySyncTokensCHROMIUM(GLbyte** sync_tokens, GLsizei count) override;
   void WaitSyncTokenCHROMIUM(const GLbyte* sync_token) override;
 
@@ -148,12 +146,9 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                              GLsizei count,
                              const GLenum* attachments) override;
   void GenMailboxCHROMIUM(GLbyte* mailbox) override;
-  void ProduceTextureCHROMIUM(GLenum target, const GLbyte* mailbox) override;
   void ProduceTextureDirectCHROMIUM(GLuint texture,
-                                    GLenum target,
                                     const GLbyte* mailbox) override;
-  GLuint CreateAndConsumeTextureCHROMIUM(GLenum target,
-                                         const GLbyte* mailbox) override;
+  GLuint CreateAndConsumeTextureCHROMIUM(const GLbyte* mailbox) override;
 
   void ResizeCHROMIUM(GLuint width,
                       GLuint height,

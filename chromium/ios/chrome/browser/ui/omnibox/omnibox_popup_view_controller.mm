@@ -86,7 +86,6 @@ UIColor* BackgroundColorIncognito() {
 
 - (void)dealloc {
   self.tableView.delegate = nil;
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (UIScrollView*)scrollView {
@@ -151,6 +150,13 @@ UIColor* BackgroundColorIncognito() {
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [self layoutRows];
+}
+
+#pragma mark - Properties accessors
+
+- (void)setIncognito:(BOOL)incognito {
+  DCHECK(!self.viewLoaded);
+  _incognito = incognito;
 }
 
 #pragma mark - AutocompleteResultConsumer

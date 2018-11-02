@@ -10,6 +10,7 @@
 <translation id="1054153489933238809">Բացել օրիգինալ պատկերը նոր ներդիրում</translation>
 <translation id="1056898198331236512">Զգուշացում</translation>
 <translation id="1084824384139382525">Պատճենել հղման հաս&amp;ցեն</translation>
+<translation id="1128109161498068552">Թույլ չտալ որևէ կայքի օգտագործել համակարգային ուղերձներ՝ MIDI սարքերից օգտվելու համար</translation>
 <translation id="114140604515785785">Ընդլայնման արմատային պանակ.</translation>
 <translation id="1163931534039071049">Տեսնել ֆրե&amp;յմի կոդը</translation>
 <translation id="1165039591588034296">Սխալ</translation>
@@ -20,6 +21,7 @@
 <translation id="119944043368869598">Ջնջել բոլորը</translation>
 <translation id="1221825588892235038">Միայն նշված մասը</translation>
 <translation id="1244303850296295656">Ընդլայնման սխալ</translation>
+<translation id="1274977772557788323">Adobe Flash Player-ի պահոցի կարգավորումներ</translation>
 <translation id="1278049586634282054">Հետազոտումներ.</translation>
 <translation id="1297175357211070620">Վերջնակետ</translation>
 <translation id="1303101771013849280">Էջանիշերի HTML ֆայլ</translation>
@@ -378,7 +380,6 @@
 <translation id="6295158916970320988">Բոլոր կայքերը</translation>
 <translation id="6295855836753816081">Պահպանվում է…</translation>
 <translation id="6308937455967653460">Պահպանել հ&amp;ղումը որպես…</translation>
-<translation id="6314335155547195432">Գեներացնել գաղտնաբառ</translation>
 <translation id="6326855256003666642">Keepalive ակտիվությունների հաշվիչ</translation>
 <translation id="6370021412472292592">Չհաջողվեց բեռնել manifest-ը։</translation>
 <translation id="6398765197997659313">Լիաէկրան ռեժիմից դուրս գալ</translation>
@@ -453,7 +454,6 @@
 <translation id="7564847347806291057">Ավարտել պրոցեսը</translation>
 <translation id="7576690715254076113">Խմբավորել</translation>
 <translation id="7629827748548208700">Ներդիր. <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Չեղարկել</translation>
 <translation id="7663719505383602579">Ստացող. <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Տեղակայված է Ձեր ադմինիստրատորի կողմից</translation>
 <translation id="7685049629764448582">JavaScript-ի հիշողություն</translation>

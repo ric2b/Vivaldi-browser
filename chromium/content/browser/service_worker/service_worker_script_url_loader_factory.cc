@@ -11,8 +11,8 @@
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/browser/url_loader_factory_getter.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/public/common/resource_response.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/network/public/cpp/resource_response.h"
 
 namespace content {
 
@@ -30,12 +30,12 @@ ServiceWorkerScriptURLLoaderFactory::~ServiceWorkerScriptURLLoaderFactory() =
     default;
 
 void ServiceWorkerScriptURLLoaderFactory::CreateLoaderAndStart(
-    mojom::URLLoaderRequest request,
+    network::mojom::URLLoaderRequest request,
     int32_t routing_id,
     int32_t request_id,
     uint32_t options,
-    const ResourceRequest& resource_request,
-    mojom::URLLoaderClientPtr client,
+    const network::ResourceRequest& resource_request,
+    network::mojom::URLLoaderClientPtr client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   if (!ShouldHandleScriptRequest(resource_request)) {
     // If the request should not be handled by ServiceWorkerScriptURLLoader,
@@ -57,14 +57,14 @@ void ServiceWorkerScriptURLLoaderFactory::CreateLoaderAndStart(
 }
 
 void ServiceWorkerScriptURLLoaderFactory::Clone(
-    mojom::URLLoaderFactoryRequest request) {
+    network::mojom::URLLoaderFactoryRequest request) {
   // This method is required to support synchronous requests which are not
   // performed during installation.
   NOTREACHED();
 }
 
 bool ServiceWorkerScriptURLLoaderFactory::ShouldHandleScriptRequest(
-    const ResourceRequest& resource_request) {
+    const network::ResourceRequest& resource_request) {
   if (!context_ || !provider_host_)
     return false;
 

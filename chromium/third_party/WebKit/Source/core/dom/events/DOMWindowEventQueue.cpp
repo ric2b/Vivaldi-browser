@@ -74,7 +74,7 @@ DOMWindowEventQueue::DOMWindowEventQueue(ExecutionContext* context)
   pending_event_timer_->PauseIfNeeded();
 }
 
-DOMWindowEventQueue::~DOMWindowEventQueue() {}
+DOMWindowEventQueue::~DOMWindowEventQueue() = default;
 
 void DOMWindowEventQueue::Trace(blink::Visitor* visitor) {
   visitor->Trace(pending_event_timer_);
@@ -82,7 +82,7 @@ void DOMWindowEventQueue::Trace(blink::Visitor* visitor) {
   EventQueue::Trace(visitor);
 }
 
-bool DOMWindowEventQueue::EnqueueEvent(const WebTraceLocation& from_here,
+bool DOMWindowEventQueue::EnqueueEvent(const base::Location& from_here,
                                        Event* event) {
   if (is_closed_)
     return false;

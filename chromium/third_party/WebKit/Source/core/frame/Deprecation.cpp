@@ -297,11 +297,10 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
     case WebFeature::kMetaSetCookie:
       return {"MetaSetCookie", M65,
               String::Format(
-                  "Setting cookies via `<meta http-equiv='Set-Cookie' ...>` is "
-                  "deprecated, and will stop working in %s. Consider switching "
-                  "to `document.cookie = ...`, or to `Set-Cookie` HTTP headers "
+                  "Setting cookies via `<meta http-equiv='Set-Cookie' ...>` no "
+                  "longer works, as of M65. Consider switching to "
+                  " `document.cookie = ...`, or to `Set-Cookie` HTTP headers "
                   "instead. See %s for more details.",
-                  milestoneString(M65),
                   "https://www.chromestatus.com/feature/6170540112871424")};
 
     // Powerful features on insecure origins (https://goo.gl/rStTGz)
@@ -550,6 +549,12 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               String("CSS cannot be loaded from `file:` URLs unless they end "
                      "in a `.css` file extension.")};
 
+    case WebFeature::kCreateObjectURLMediaStream:
+      return {"CreateObjectURLMediaStreamDeprecated", M68,
+              replacedWillBeRemoved("URL.createObjectURL with media streams",
+                                    "HTMLMediaElement.srcObject", M68,
+                                    "5618491470118912")};
+
     case WebFeature::kWebAudioDezipperGainNodeGain:
       return {"WebAudioDezipperGainNodeGain", Unknown,
               DeprecatedWebAudioDezippering("GainNode.gain")};
@@ -617,7 +622,7 @@ Deprecation::Deprecation() : mute_count_(0) {
   css_property_deprecation_bits_.EnsureSize(numCSSPropertyIDs);
 }
 
-Deprecation::~Deprecation() {}
+Deprecation::~Deprecation() = default;
 
 void Deprecation::ClearSuppression() {
   css_property_deprecation_bits_.ClearAll();
@@ -699,7 +704,7 @@ void Deprecation::CountDeprecation(const Document& document,
 void Deprecation::CountDeprecationCrossOriginIframe(const LocalFrame* frame,
                                                     WebFeature feature) {
   // Check to see if the frame can script into the top level document.
-  SecurityOrigin* security_origin =
+  const SecurityOrigin* security_origin =
       frame->GetSecurityContext()->GetSecurityOrigin();
   Frame& top = frame->Tree().Top();
   if (!security_origin->CanAccess(
@@ -785,9 +790,9 @@ void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
   Document* document = frame->GetDocument();
 
   // Construct the deprecation report.
-  DeprecationReport* body =
-      new DeprecationReport(info.id, milestoneDate(info.anticipatedRemoval),
-                            info.message, SourceLocation::Capture());
+  double removalDate = milestoneDate(info.anticipatedRemoval);
+  DeprecationReport* body = new DeprecationReport(
+      info.id, removalDate, info.message, SourceLocation::Capture());
   Report* report = new Report("deprecation", document->Url().GetString(), body);
 
   // Send the deprecation report to any ReportingObservers.
@@ -800,9 +805,10 @@ void Deprecation::GenerateReport(const LocalFrame* frame, WebFeature feature) {
   Platform* platform = Platform::Current();
   platform->GetConnector()->BindInterface(platform->GetBrowserServiceName(),
                                           &service);
-  service->QueueDeprecationReport(document->Url(), info.message,
-                                  body->sourceFile(), body->lineNumber(),
-                                  body->columnNumber());
+  service->QueueDeprecationReport(document->Url(), info.id,
+                                  WTF::Time::FromDoubleT(removalDate),
+                                  info.message, body->sourceFile(),
+                                  body->lineNumber(), body->columnNumber());
 }
 
 // static

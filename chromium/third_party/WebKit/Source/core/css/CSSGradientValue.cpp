@@ -37,7 +37,6 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/TextLinkColors.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/graphics/ColorBlend.h"
 #include "platform/graphics/Gradient.h"
@@ -108,7 +107,7 @@ scoped_refptr<Image> CSSGradientValue::GetImage(
     const ImageResourceObserver& client,
     const Document& document,
     const ComputedStyle& style,
-    const IntSize& size) {
+    const LayoutSize& size) {
   if (size.IsEmpty())
     return nullptr;
 
@@ -116,11 +115,7 @@ scoped_refptr<Image> CSSGradientValue::GetImage(
     if (!Clients().Contains(&client))
       return nullptr;
 
-    // Need to look up our size.  Create a string of width*height to use as a
-    // hash key.
-    Image* result =
-        this->CSSImageGeneratorValue::GetImage(&client, document, style, size);
-    if (result)
+    if (Image* result = CSSImageGeneratorValue::GetImage(&client, size))
       return result;
   }
 
@@ -132,8 +127,7 @@ scoped_refptr<Image> CSSGradientValue::GetImage(
   // TODO: Break dependency on LayoutObject.
   const LayoutObject& layout_object = static_cast<const LayoutObject&>(client);
   CSSToLengthConversionData conversion_data(
-      &style, root_style, LayoutViewItem(layout_object.View()),
-      style.EffectiveZoom());
+      &style, root_style, layout_object.View(), style.EffectiveZoom());
 
   switch (GetClassType()) {
     case kLinearGradientClass:
@@ -153,7 +147,7 @@ scoped_refptr<Image> CSSGradientValue::GetImage(
   }
 
   scoped_refptr<Image> new_image =
-      GradientGeneratedImage::Create(gradient, size);
+      GradientGeneratedImage::Create(gradient, FloatSize(size));
   if (is_cacheable_)
     PutImage(size, new_image);
 
@@ -297,7 +291,7 @@ static Color ResolveStopColor(const CSSValue& stop_color,
                               const Document& document,
                               const ComputedStyle& style) {
   return document.GetTextLinkColors().ColorFromCSSValue(
-      stop_color, style.VisitedDependentColor(CSSPropertyColor));
+      stop_color, style.VisitedDependentColor(GetCSSPropertyColor()));
 }
 
 static Color ResolveStopColor(const CSSValue& stop_color,
@@ -637,11 +631,12 @@ void CSSGradientValue::AddStops(
 
 static float PositionFromValue(const CSSValue* value,
                                const CSSToLengthConversionData& conversion_data,
-                               const IntSize& size,
+                               const LayoutSize& size,
                                bool is_horizontal) {
-  int origin = 0;
+  float origin = 0;
   int sign = 1;
-  int edge_distance = is_horizontal ? size.Width() : size.Height();
+  float edge_distance =
+      is_horizontal ? size.Width().ToFloat() : size.Height().ToFloat();
 
   // In this case the center of the gradient is given relative to an edge in the
   // form of: [ top | bottom | right | left ] [ <percentage> | <length> ].
@@ -702,7 +697,7 @@ static FloatPoint ComputeEndPoint(
     const CSSValue* horizontal,
     const CSSValue* vertical,
     const CSSToLengthConversionData& conversion_data,
-    const IntSize& size) {
+    const LayoutSize& size) {
   FloatPoint result;
 
   if (horizontal)
@@ -810,7 +805,7 @@ String CSSLinearGradientValue::CustomCSSText() const {
 // Compute the endpoints so that a gradient of the given angle covers a box of
 // the given size.
 static void EndPointsFromAngle(float angle_deg,
-                               const IntSize& size,
+                               const LayoutSize& size,
                                FloatPoint& first_point,
                                FloatPoint& second_point,
                                CSSGradientType type) {
@@ -882,7 +877,7 @@ static void EndPointsFromAngle(float angle_deg,
 
 scoped_refptr<Gradient> CSSLinearGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
-    const IntSize& size,
+    const LayoutSize& size,
     const LayoutObject& object) {
   DCHECK(!size.IsEmpty());
 
@@ -1248,7 +1243,7 @@ FloatSize RadiusToCorner(const FloatPoint& point,
 
 scoped_refptr<Gradient> CSSRadialGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
-    const IntSize& size,
+    const LayoutSize& size,
     const LayoutObject& object) {
   DCHECK(!size.IsEmpty());
 
@@ -1424,7 +1419,7 @@ String CSSConicGradientValue::CustomCSSText() const {
 
 scoped_refptr<Gradient> CSSConicGradientValue::CreateGradient(
     const CSSToLengthConversionData& conversion_data,
-    const IntSize& size,
+    const LayoutSize& size,
     const LayoutObject& object) {
   DCHECK(!size.IsEmpty());
 

@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_system_impl.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "base/base_switches.h"
 #include "base/bind.h"
@@ -21,13 +22,14 @@
 #include "chrome/browser/extensions/chrome_app_sorting.h"
 #include "chrome/browser/extensions/chrome_content_verifier_delegate.h"
 #include "chrome/browser/extensions/component_loader.h"
-#include "chrome/browser/extensions/extension_error_reporter.h"
+#include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_garbage_collector.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_sync_service.h"
 #include "chrome/browser/extensions/extension_system_factory.h"
 #include "chrome/browser/extensions/install_verifier.h"
+#include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/navigation_observer.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/shared_user_script_master.h"
@@ -192,10 +194,10 @@ void ExtensionSystemImpl::Shared::Init(bool extensions_enabled) {
   navigation_observer_.reset(new NavigationObserver(profile_));
 
   bool allow_noisy_errors = !command_line->HasSwitch(switches::kNoErrorDialogs);
-  ExtensionErrorReporter::Init(allow_noisy_errors);
+  LoadErrorReporter::Init(allow_noisy_errors);
 
   content_verifier_ = new ContentVerifier(
-      profile_, base::MakeUnique<ChromeContentVerifierDelegate>(profile_));
+      profile_, std::make_unique<ChromeContentVerifierDelegate>(profile_));
 
   service_worker_manager_.reset(new ServiceWorkerManager(profile_));
 
@@ -367,13 +369,18 @@ void ExtensionSystemImpl::Shutdown() {
 
 void ExtensionSystemImpl::InitForRegularProfile(bool extensions_enabled) {
   TRACE_EVENT0("browser,startup", "ExtensionSystemImpl::InitForRegularProfile");
-  DCHECK(!profile_->IsOffTheRecord());
+  cookie_notifier_ = std::make_unique<ExtensionCookieNotifier>(profile_);
+
   if (shared_user_script_master() || extension_service())
     return;  // Already initialized.
 
   // The InfoMap needs to be created before the ProcessManager.
   shared_->info_map();
   shared_->Init(extensions_enabled);
+}
+
+void ExtensionSystemImpl::InitForIncognitoProfile() {
+  cookie_notifier_ = std::make_unique<ExtensionCookieNotifier>(profile_);
 }
 
 ExtensionService* ExtensionSystemImpl::extension_service() {
@@ -432,10 +439,21 @@ std::unique_ptr<ExtensionSet> ExtensionSystemImpl::GetDependentExtensions(
       extension);
 }
 
-void ExtensionSystemImpl::InstallUpdate(const std::string& extension_id,
-                                        const base::FilePath& temp_dir) {
-  NOTREACHED() << "Not yet implemented";
-  base::DeleteFile(temp_dir, true /* recursive */);
+void ExtensionSystemImpl::InstallUpdate(
+    const std::string& extension_id,
+    const std::string& public_key,
+    const base::FilePath& unpacked_dir,
+    InstallUpdateCallback install_update_callback) {
+  DCHECK(!install_update_callback.is_null());
+
+  ExtensionService* service = extension_service();
+  DCHECK(service);
+
+  scoped_refptr<CrxInstaller> installer = CrxInstaller::CreateSilent(service);
+  installer->set_delete_source(true);
+  installer->set_installer_callback(std::move(install_update_callback));
+  installer->UpdateExtensionFromUnpackedCrx(extension_id, public_key,
+                                            unpacked_dir);
 }
 
 void ExtensionSystemImpl::RegisterExtensionWithRequestContexts(

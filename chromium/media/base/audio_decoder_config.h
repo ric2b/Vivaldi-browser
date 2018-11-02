@@ -102,6 +102,7 @@ class MEDIA_EXPORT AudioDecoderConfig {
     should_discard_decoder_delay_ = false;
   }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
   // The sampling rate on decoder input.  Note that |samples_per_second| refers
   // to the output sampling rate.
   // TODO(wdzierzanowski): This should become unnecessary when DNA-35764 is
@@ -113,6 +114,7 @@ class MEDIA_EXPORT AudioDecoderConfig {
   void set_input_samples_per_second(int input_samples_per_second) {
     input_samples_per_second_ = input_samples_per_second;
   }
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
  private:
   AudioCodec codec_;
@@ -121,7 +123,9 @@ class MEDIA_EXPORT AudioDecoderConfig {
   ChannelLayout channel_layout_;
   int channels_;
   int samples_per_second_;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
   int input_samples_per_second_;
+#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   int bytes_per_frame_;
   std::vector<uint8_t> extra_data_;
   EncryptionScheme encryption_scheme_;

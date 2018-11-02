@@ -29,7 +29,6 @@
  */
 /**
  * @implements {UI.Searchable}
- * @unrestricted
  */
 SourceFrame.JSONView = class extends UI.VBox {
   /**
@@ -37,6 +36,7 @@ SourceFrame.JSONView = class extends UI.VBox {
    */
   constructor(parsedJSON) {
     super();
+    this._initialized = false;
     this.registerRequiredCSS('source_frame/jsonView.css');
     this._parsedJSON = parsedJSON;
     this.element.classList.add('json-view');
@@ -54,10 +54,15 @@ SourceFrame.JSONView = class extends UI.VBox {
   }
 
   /**
-   * @param {!SourceFrame.ParsedJSON} parsedJSON
-   * @return {!UI.SearchableView}
+   * @param {string} content
+   * @return {!Promise<?SourceFrame.JSONView>}
    */
-  static createSearchableView(parsedJSON) {
+  static async createView(content) {
+    // We support non-strict JSON parsing by parsing an AST tree which is why we offload it to a worker.
+    var parsedJSON = await SourceFrame.JSONView._parseJSON(content);
+    if (!parsedJSON || typeof parsedJSON.data !== 'object')
+      return null;
+
     var jsonView = new SourceFrame.JSONView(parsedJSON);
     var searchableView = new UI.SearchableView(jsonView);
     searchableView.setPlaceholder(Common.UIString('Find'));
@@ -71,7 +76,7 @@ SourceFrame.JSONView = class extends UI.VBox {
    * @param {?string} text
    * @return {!Promise<?SourceFrame.ParsedJSON>}
    */
-  static parseJSON(text) {
+  static _parseJSON(text) {
     var returnObj = null;
     if (text)
       returnObj = SourceFrame.JSONView._extractJSON(/** @type {string} */ (text));
@@ -148,6 +153,7 @@ SourceFrame.JSONView = class extends UI.VBox {
     var obj = SDK.RemoteObject.fromLocalObject(this._parsedJSON.data);
     var title = this._parsedJSON.prefix + obj.description + this._parsedJSON.suffix;
     this._treeOutline = new ObjectUI.ObjectPropertiesSection(obj, title);
+    this._treeOutline.enableContextMenu();
     this._treeOutline.setEditable(false);
     this._treeOutline.expand();
     this.element.appendChild(this._treeOutline.element);

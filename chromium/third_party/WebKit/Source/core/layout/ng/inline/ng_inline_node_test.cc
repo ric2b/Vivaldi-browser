@@ -149,6 +149,7 @@ TEST_F(NGInlineNodeTest, CollectInlinesText) {
   SetupHtml("t", "<div id=t>Hello <span>inline</span> world.</div>");
   NGInlineNodeForTest node = CreateInlineNode();
   node.CollectInlines();
+  EXPECT_FALSE(node.IsBidiEnabled());
   Vector<NGInlineItem>& items = node.Items();
   TEST_ITEM_TYPE_OFFSET(items[0], kText, 0u, 6u);
   TEST_ITEM_TYPE_OFFSET(items[1], kOpenTag, 6u, 6u);
@@ -163,6 +164,7 @@ TEST_F(NGInlineNodeTest, CollectInlinesBR) {
   NGInlineNodeForTest node = CreateInlineNode();
   node.CollectInlines();
   EXPECT_EQ("Hello\nWorld", node.Text());
+  EXPECT_FALSE(node.IsBidiEnabled());
   Vector<NGInlineItem>& items = node.Items();
   TEST_ITEM_TYPE_OFFSET(items[0], kText, 0u, 5u);
   TEST_ITEM_TYPE_OFFSET(items[1], kControl, 5u, 6u);
@@ -170,7 +172,28 @@ TEST_F(NGInlineNodeTest, CollectInlinesBR) {
   EXPECT_EQ(3u, items.size());
 }
 
-TEST_F(NGInlineNodeTest, CollectInlinesRtlText) {
+TEST_F(NGInlineNodeTest, CollectInlinesUTF16) {
+  SetupHtml("t", u"<div id=t>Hello \u3042</div>");
+  NGInlineNodeForTest node = CreateInlineNode();
+  node.CollectInlines();
+  // |CollectInlines()| sets |IsBidiEnabled()| for any UTF-16 strings.
+  EXPECT_TRUE(node.IsBidiEnabled());
+  // |SegmentText()| analyzes the string and resets |IsBidiEnabled()| if all
+  // characters are LTR.
+  node.SegmentText();
+  EXPECT_FALSE(node.IsBidiEnabled());
+}
+
+TEST_F(NGInlineNodeTest, CollectInlinesRtl) {
+  SetupHtml("t", u"<div id=t>Hello \u05E2</div>");
+  NGInlineNodeForTest node = CreateInlineNode();
+  node.CollectInlines();
+  EXPECT_TRUE(node.IsBidiEnabled());
+  node.SegmentText();
+  EXPECT_TRUE(node.IsBidiEnabled());
+}
+
+TEST_F(NGInlineNodeTest, CollectInlinesRtlWithSpan) {
   SetupHtml("t", u"<div id=t dir=rtl>\u05E2 <span>\u05E2</span> \u05E2</div>");
   NGInlineNodeForTest node = CreateInlineNode();
   node.CollectInlines();
@@ -352,6 +375,43 @@ TEST_F(NGInlineNodeTest, MinMaxSizeElementBoundary) {
   // boundary between "B" and "C" but no break opportunities.
   EXPECT_EQ(20, sizes.min_size);
   EXPECT_EQ(60, sizes.max_size);
+}
+
+TEST_F(NGInlineNodeTest, MinMaxSizeFloats) {
+  LoadAhem();
+  SetupHtml("t", R"HTML(
+    <style>
+      #left { float: left; width: 50px; }
+    </style>
+    <div id=t style="font: 10px Ahem">
+      XXX <div id="left"></div> XXXX
+    </div>
+  )HTML");
+
+  NGInlineNodeForTest node = CreateInlineNode();
+  MinMaxSize sizes = node.ComputeMinMaxSize();
+
+  EXPECT_EQ(50, sizes.min_size);
+  EXPECT_EQ(130, sizes.max_size);
+}
+
+TEST_F(NGInlineNodeTest, MinMaxSizeFloatsClearance) {
+  LoadAhem();
+  SetupHtml("t", R"HTML(
+    <style>
+      #left { float: left; width: 40px; }
+      #right { float: right; clear: left; width: 50px; }
+    </style>
+    <div id=t style="font: 10px Ahem">
+      XXX <div id="left"></div><div id="right"></div><div id="left"></div> XXX
+    </div>
+  )HTML");
+
+  NGInlineNodeForTest node = CreateInlineNode();
+  MinMaxSize sizes = node.ComputeMinMaxSize();
+
+  EXPECT_EQ(50, sizes.min_size);
+  EXPECT_EQ(160, sizes.max_size);
 }
 
 TEST_F(NGInlineNodeTest, InvalidateAddSpan) {

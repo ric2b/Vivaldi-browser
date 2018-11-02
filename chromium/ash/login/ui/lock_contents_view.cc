@@ -26,6 +26,7 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
@@ -34,6 +35,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/views/accessibility/ax_aura_obj_cache.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
@@ -250,25 +252,26 @@ LockContentsView::LockContentsView(
   // focusable.
   SetFocusBehavior(FocusBehavior::ALWAYS);
 
-  SetLayoutManager(new views::FillLayout());
+  SetLayoutManager(std::make_unique<views::FillLayout>());
 
   main_view_ = new NonAccessibleView();
   AddChildView(main_view_);
 
   // The top header view.
   top_header_ = new views::View();
-  auto* top_header_layout = new views::BoxLayout(views::BoxLayout::kHorizontal);
+  auto top_header_layout =
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal);
   top_header_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_END);
-  top_header_->SetLayoutManager(top_header_layout);
+  top_header_->SetLayoutManager(std::move(top_header_layout));
   AddChildView(top_header_);
 
   dev_channel_info_ = new views::View();
-  auto* dev_channel_info_layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(5, 8));
+  auto dev_channel_info_layout = std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(5, 8));
   dev_channel_info_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_END);
-  dev_channel_info_->SetLayoutManager(dev_channel_info_layout);
+  dev_channel_info_->SetLayoutManager(std::move(dev_channel_info_layout));
   dev_channel_info_->SetVisible(false);
   top_header_->AddChildView(dev_channel_info_);
 
@@ -330,6 +333,17 @@ void LockContentsView::AboutToRequestFocusFromTabTraversal(bool reverse) {
   FocusNextWidget(reverse);
 }
 
+void LockContentsView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  Shelf* shelf = Shelf::ForWindow(GetWidget()->GetNativeWindow());
+  ShelfWidget* shelf_widget = shelf->shelf_widget();
+  int next_id = views::AXAuraObjCache::GetInstance()->GetID(shelf_widget);
+  node_data->AddIntAttribute(ui::AX_ATTR_NEXT_FOCUS_ID, next_id);
+
+  int previous_id =
+      views::AXAuraObjCache::GetInstance()->GetID(shelf->GetStatusAreaWidget());
+  node_data->AddIntAttribute(ui::AX_ATTR_PREVIOUS_FOCUS_ID, previous_id);
+}
+
 void LockContentsView::OnUsersChanged(
     const std::vector<mojom::LoginUserInfoPtr>& users) {
   // The debug view will potentially call this method many times. Make sure to
@@ -345,12 +359,14 @@ void LockContentsView::OnUsersChanged(
   for (const mojom::LoginUserInfoPtr& user : users)
     users_.push_back(UserState{user->basic_user_info->account_id});
 
-  main_layout_ = new views::BoxLayout(views::BoxLayout::kHorizontal);
+  auto box_layout =
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal);
+  main_layout_ = box_layout.get();
   main_layout_->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   main_layout_->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
-  main_view_->SetLayoutManager(main_layout_);
+  main_view_->SetLayoutManager(std::move(box_layout));
 
   // Add auth user.
   primary_auth_ = AllocateLoginAuthUserView(users[0], true /*is_primary*/);
@@ -560,10 +576,9 @@ void LockContentsView::CreateMediumDensityLayout(
   // Add additional users.
   auto* row = new NonAccessibleView();
   main_view_->AddChildView(row);
-  auto* layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(),
-                           kMediumDensityVerticalDistanceBetweenUsersDp);
-  row->SetLayoutManager(layout);
+  row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(),
+      kMediumDensityVerticalDistanceBetweenUsersDp));
   for (std::size_t i = 1u; i < users.size(); ++i) {
     auto* view =
         new LoginUserView(LoginDisplayStyle::kSmall, false /*show_dropdown*/,
@@ -614,12 +629,12 @@ void LockContentsView::CreateHighDensityLayout(
 
   // Add user list.
   auto* row = new NonAccessibleView();
-  auto* row_layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(),
-                           kHighDensityVerticalDistanceBetweenUsersDp);
+  auto row_layout = std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(),
+      kHighDensityVerticalDistanceBetweenUsersDp);
   row_layout->set_minimum_cross_axis_size(
       LoginUserView::WidthForLayoutStyle(LoginDisplayStyle::kExtraSmall));
-  row->SetLayoutManager(row_layout);
+  row->SetLayoutManager(std::move(row_layout));
   for (std::size_t i = 1u; i < users.size(); ++i) {
     auto* view = new LoginUserView(
         LoginDisplayStyle::kExtraSmall, false /*show_dropdown*/,

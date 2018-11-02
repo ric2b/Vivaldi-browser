@@ -55,6 +55,11 @@ views::MenuItemView* ToolkitDelegateViews::VivaldiInit(
   return menu_view_;
 }
 
+void ToolkitDelegateViews::VivaldiUpdateMenu(views::MenuItemView* view,
+                                             ui::SimpleMenuModel* menu_model) {
+  menu_adapter_->VivaldiUpdateMenu(view, menu_model);
+}
+
 void ToolkitDelegateViews::Cancel() {
   DCHECK(menu_runner_.get());
   menu_runner_->Cancel();

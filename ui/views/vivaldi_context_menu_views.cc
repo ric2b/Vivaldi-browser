@@ -106,3 +106,10 @@ void VivaldiContextMenuViews::SetSelectedItem(int id) {
     views::MenuController::GetActiveInstance()->VivaldiSelectItem(item);
   }
 }
+
+void VivaldiContextMenuViews::UpdateMenu(ui::SimpleMenuModel* menu_model,
+                                         int id) {
+  views::MenuItemView* view = menu_view_->GetMenuItemByID(id);
+  if (view)
+    toolkit_delegate_->VivaldiUpdateMenu(view, menu_model);
+}

@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 #include <list>
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "crypto/encryptor.h"
@@ -24,12 +24,9 @@
 #include "media/base/limits.h"
 #include "media/base/video_decoder_config.h"
 #include "media/base/video_frame.h"
+#include "media/cdm/cenc_utils.h"
 #include "media/cdm/json_web_key.h"
 #include "media/media_features.h"
-
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
-#include "media/cdm/cenc_utils.h"
-#endif
 
 namespace media {
 
@@ -319,7 +316,6 @@ void AesDecryptor::CreateSessionAndGenerateRequest(
       keys.push_back(init_data);
       break;
     case EmeInitDataType::CENC:
-#if BUILDFLAG(USE_PROPRIETARY_CODECS)
       // |init_data| is a set of 0 or more concatenated 'pssh' boxes.
       if (!GetKeyIdsForCommonSystemId(init_data, &keys)) {
         promise->reject(CdmPromise::Exception::NOT_SUPPORTED_ERROR, 0,
@@ -327,11 +323,6 @@ void AesDecryptor::CreateSessionAndGenerateRequest(
         return;
       }
       break;
-#else
-      promise->reject(CdmPromise::Exception::NOT_SUPPORTED_ERROR, 0,
-                      "Initialization data type CENC is not supported.");
-      return;
-#endif
     case EmeInitDataType::KEYIDS: {
       std::string init_data_string(init_data.begin(), init_data.end());
       std::string error_message;
@@ -760,7 +751,7 @@ CdmKeysInfo AesDecryptor::GenerateKeysInfoList(
     for (const auto& item : key_map_) {
       if (item.second->Contains(session_id)) {
         keys_info.push_back(
-            base::MakeUnique<CdmKeyInformation>(item.first, status, 0));
+            std::make_unique<CdmKeyInformation>(item.first, status, 0));
       }
     }
   }

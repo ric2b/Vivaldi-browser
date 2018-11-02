@@ -104,16 +104,6 @@ AccessibilityDelegate* ShellDelegateMus::CreateAccessibilityDelegate() {
   return new DefaultAccessibilityDelegate;
 }
 
-base::string16 ShellDelegateMus::GetProductName() const {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return base::string16();
-}
-
-gfx::Image ShellDelegateMus::GetDeprecatedAcceleratorImage() const {
-  NOTIMPLEMENTED_LOG_ONCE();
-  return gfx::Image();
-}
-
 ui::InputDeviceControllerClient*
 ShellDelegateMus::GetInputDeviceControllerClient() {
   if (!connector_)

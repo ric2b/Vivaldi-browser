@@ -67,9 +67,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   // Appends extra command line arguments before launching a new process.
   virtual void AppendExtraCommandLineSwitches(base::CommandLine* command_line);
 
-  // Hook for code to run before browser threads created.
-  virtual void PreCreateThreads();
-
   // Creates and returns the CastService instance for the current process.
   // Note: |request_context_getter| might be different than the main request
   // getter accessible via CastBrowserProcess.
@@ -177,6 +174,8 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
+  std::unique_ptr<content::NavigationUIData> GetNavigationUIData(
+      content::NavigationHandle* navigation_handle) override;
 
  protected:
   CastContentBrowserClient();
@@ -195,6 +194,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 
   void SelectClientCertificateOnIOThread(
       GURL requesting_url,
+      const std::string& session_id,
       int render_process_id,
       scoped_refptr<base::SequencedTaskRunner> original_runner,
       const base::Callback<void(scoped_refptr<net::X509Certificate>,

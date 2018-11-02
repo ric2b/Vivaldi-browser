@@ -345,6 +345,29 @@ for (size_t i = 0; i < request->element_size(); ++i) {
 ## C++ Best Practices
 
 
+### Use mojo::WrapCallbackWithDefaultInvokeIfNotRun And mojo::WrapCallbackWithDropHandler Sparingly
+
+Mojo provides several convenience helpers to automatically invoke a callback if
+the callback has not already been invoked in some other way when the callback is
+destroyed, e.g.:
+
+```c++
+  {
+    base::Callback<int> cb = mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+        base::Bind([](int) { ... }), -1);
+  }  // |cb| is automatically invoked with an argument of -1.
+```
+
+Unfortunately, the fact that this callback is guaranteed to always run is hidden
+from the type system and can propagate in surprising ways. Avoid using this
+construction unless there are no better alternatives. Uses of these helpers must
+be well-commented to describe why this behavior is required.
+
+Note that using this from the renderer is often unnecessary. Message pipes are
+often closed as part of a Document shutting down; since many Blink objects
+already inherit `blink::ContextLifecycleObserver`, it is usually more idiomatic
+to use this signal to perform any needed cleanup work.
+
 ### Use StructTraits
 
 Creating a typemap and defining a `StructTraits` specialization moves the
@@ -552,6 +575,33 @@ Message pipes are fairly inexpensive, but they are not free either: it takes 6
 control messages to establish a message pipe. Keep this in mind: if the
 interface is used relatively frequently, connecting once and reusing the
 interface pointer is probably a good idea.
+
+
+## Ensure An Explicit Grant For WebUI Bindings
+
+WebUI renderers sometimes need to call special, powerful IPC endpoints in a
+privileged process. It is important to enforce the constraint that the
+privileged callee previously created and blessed the calling process as a WebUI
+process, and not as a (potentially compromised) web renderer or other
+low-privilege process.
+
+* Use the standard pattern for instantiating `MojoWebUIController`. WebUI
+Mojo interfaces must only be exposed through a `MojoWebUIController` subclass.
+* If there is external functionality that the WebUI needs, make sure to route
+it through the Mojo interfaces implemented by the `MojoWebUIController`, to
+avoid circumventing access checks.
+
+
+## Not-Yet-Shipped Features Should Be Feature-Checked On The Privileged Side
+
+Sometimes, there will be powerful new features that are not yet turned on by
+default, such as behind a flag, Finch trial, or [origin
+trial](https://www.chromium.org/blink/origin-trials). It is not safe to check
+for the feature's availability on the renderer side (or in another low-privilege
+process type). Instead, ensure that the check is done in the process that has
+power to actually enact the feature. Otherwise, a compromised renderer could opt
+itself in to the feature! If the feature might not yet be fully developed and
+safe, vulnerabilities could arise.
 
 
 [security-tips-for-ipc]: https://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc

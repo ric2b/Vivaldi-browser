@@ -91,10 +91,10 @@ void AppCacheFrontendImpl::OnContentBlocked(int host_id,
 
 void AppCacheFrontendImpl::OnSetSubresourceFactory(
     int host_id,
-    mojo::MessagePipeHandle loader_factory_pipe_handle) {
+    network::mojom::URLLoaderFactoryPtr url_loader_factory) {
   WebApplicationCacheHostImpl* host = GetHost(host_id);
   if (host)
-    host->SetSubresourceFactory(loader_factory_pipe_handle);
+    host->SetSubresourceFactory(std::move(url_loader_factory));
 }
 
 // Ensure that enum values never get out of sync with the
@@ -155,5 +155,7 @@ STATIC_ASSERT_ENUM(WebConsoleMessage::kLevelVerbose, APPCACHE_LOG_VERBOSE);
 STATIC_ASSERT_ENUM(WebConsoleMessage::kLevelInfo, APPCACHE_LOG_INFO);
 STATIC_ASSERT_ENUM(WebConsoleMessage::kLevelWarning, APPCACHE_LOG_WARNING);
 STATIC_ASSERT_ENUM(WebConsoleMessage::kLevelError, APPCACHE_LOG_ERROR);
+
+#undef STATIC_ASSERT_ENUM
 
 }  // namespace content

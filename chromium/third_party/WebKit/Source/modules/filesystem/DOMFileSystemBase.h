@@ -33,6 +33,7 @@
 
 #include "core/fileapi/FileError.h"
 #include "modules/ModulesExport.h"
+#include "modules/filesystem/FileSystemCallbacks.h"
 #include "modules/filesystem/FileSystemFlags.h"
 #include "platform/FileSystemType.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -42,19 +43,17 @@
 
 namespace blink {
 class WebFileSystem;
-}
+}  // namespace blink
 
 namespace blink {
 
 class DirectoryReaderBase;
-class EntriesCallback;
+class DirectoryReaderOnDidReadCallback;
 class EntryBase;
-class EntryCallback;
-class ErrorCallbackBase;
+class ExecutionContext;
 class File;
 class FileMetadata;
 class MetadataCallback;
-class ExecutionContext;
 class SecurityOrigin;
 class VoidCallback;
 
@@ -88,7 +87,7 @@ class MODULES_EXPORT DOMFileSystemBase : public ScriptWrappable {
   FileSystemType GetType() const { return type_; }
   KURL RootURL() const { return filesystem_root_url_; }
   WebFileSystem* FileSystem() const;
-  SecurityOrigin* GetSecurityOrigin() const;
+  const SecurityOrigin* GetSecurityOrigin() const;
 
   // The clonable flag is used in the structured clone algorithm to test
   // whether the FileSystem API object is permitted to be cloned. It defaults
@@ -121,13 +120,13 @@ class MODULES_EXPORT DOMFileSystemBase : public ScriptWrappable {
   void Move(const EntryBase* source,
             EntryBase* parent,
             const String& name,
-            EntryCallback*,
+            EntryCallbacks::OnDidGetEntryCallback*,
             ErrorCallbackBase*,
             SynchronousType = kAsynchronous);
   void Copy(const EntryBase* source,
             EntryBase* parent,
             const String& name,
-            EntryCallback*,
+            EntryCallbacks::OnDidGetEntryCallback*,
             ErrorCallbackBase*,
             SynchronousType = kAsynchronous);
   void Remove(const EntryBase*,
@@ -138,22 +137,24 @@ class MODULES_EXPORT DOMFileSystemBase : public ScriptWrappable {
                          VoidCallback*,
                          ErrorCallbackBase*,
                          SynchronousType = kAsynchronous);
-  void GetParent(const EntryBase*, EntryCallback*, ErrorCallbackBase*);
+  void GetParent(const EntryBase*,
+                 EntryCallbacks::OnDidGetEntryCallback*,
+                 ErrorCallbackBase*);
   void GetFile(const EntryBase*,
                const String& path,
                const FileSystemFlags&,
-               EntryCallback*,
+               EntryCallbacks::OnDidGetEntryCallback*,
                ErrorCallbackBase*,
                SynchronousType = kAsynchronous);
   void GetDirectory(const EntryBase*,
                     const String& path,
                     const FileSystemFlags&,
-                    EntryCallback*,
+                    EntryCallbacks::OnDidGetEntryCallback*,
                     ErrorCallbackBase*,
                     SynchronousType = kAsynchronous);
   int ReadDirectory(DirectoryReaderBase*,
                     const String& path,
-                    EntriesCallback*,
+                    DirectoryReaderOnDidReadCallback*,
                     ErrorCallbackBase*,
                     SynchronousType = kAsynchronous);
   bool WaitForAdditionalResult(int callbacks_id);

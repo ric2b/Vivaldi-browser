@@ -15,8 +15,8 @@ const base::Feature kDirectManipulationStylus = {
 // Applies the material design mode to elements throughout Chrome (not just top
 // Chrome).
 const base::Feature kSecondaryUiMd = {"SecondaryUiMd",
-                                      // Disabled for M64 on all platforms.
-                                      // http://crbug.com/775847.
+                                      // Disabled for M65 on all platforms.
+                                      // http://crbug.com/805776.
                                       base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace features

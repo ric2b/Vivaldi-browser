@@ -105,7 +105,8 @@ class LayerTreeHostScrollTestScrollSimple : public LayerTreeHostScrollTest {
     PostSetNeedsCommitToMainThread();
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     if (!layer_tree_host()->SourceFrameNumber()) {
       EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
@@ -473,20 +474,22 @@ class LayerTreeHostScrollTestFractionalScroll : public LayerTreeHostScrollTest {
         break;
       case 1:
         EXPECT_VECTOR_EQ(
-            gfx::ToFlooredVector2d(scroll_amount_),
+            gfx::ToRoundedVector2d(scroll_amount_),
             ScrollTreeForLayer(scroll_layer)
                 ->GetScrollOffsetBaseForTesting(scroll_layer->element_id()));
-        EXPECT_VECTOR_EQ(gfx::Vector2dF(fmod(scroll_amount_.x(), 1.0f), 0.0f),
-                         ScrollDelta(scroll_layer));
+        EXPECT_VECTOR_EQ(
+            scroll_amount_ - gfx::ToRoundedVector2d(scroll_amount_),
+            ScrollDelta(scroll_layer));
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
         EXPECT_VECTOR_EQ(
-            gfx::ToFlooredVector2d(scroll_amount_ + scroll_amount_),
+            gfx::ToRoundedVector2d(scroll_amount_ + scroll_amount_),
             ScrollTreeForLayer(scroll_layer)
                 ->GetScrollOffsetBaseForTesting(scroll_layer->element_id()));
         EXPECT_VECTOR_EQ(
-            gfx::Vector2dF(fmod(2.0f * scroll_amount_.x(), 1.0f), 0.0f),
+            scroll_amount_ + scroll_amount_ -
+                gfx::ToRoundedVector2d(scroll_amount_ + scroll_amount_),
             ScrollDelta(scroll_layer));
         EndTest();
         break;
@@ -646,7 +649,8 @@ class LayerTreeHostScrollTestCaseWithChild : public LayerTreeHostScrollTest {
     num_scrolls_++;
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     EXPECT_VECTOR_EQ(gfx::Vector2d(),
                      expected_no_scroll_layer_->scroll_offset());
 
@@ -849,7 +853,8 @@ class LayerTreeHostScrollTestSimple : public LayerTreeHostScrollTest {
     PostSetNeedsCommitToMainThread();
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     if (!layer_tree_host()->SourceFrameNumber()) {
       EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());
@@ -1117,7 +1122,7 @@ MULTI_THREAD_TEST_F(LayerTreeHostScrollTestImplOnlyScroll);
 class LayerTreeHostScrollTestScrollZeroMaxScrollOffset
     : public LayerTreeHostScrollTest {
  public:
-  LayerTreeHostScrollTestScrollZeroMaxScrollOffset() {}
+  LayerTreeHostScrollTestScrollZeroMaxScrollOffset() = default;
 
   void BeginTest() override {
     outer_viewport_container_layer_id_ =
@@ -1125,7 +1130,8 @@ class LayerTreeHostScrollTestScrollZeroMaxScrollOffset
     PostSetNeedsCommitToMainThread();
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* root = layer_tree_host()->root_layer();
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     switch (layer_tree_host()->SourceFrameNumber()) {
@@ -1190,7 +1196,7 @@ SINGLE_AND_MULTI_THREAD_TEST_F(
 class LayerTreeHostScrollTestScrollNonDrawnLayer
     : public LayerTreeHostScrollTest {
  public:
-  LayerTreeHostScrollTestScrollNonDrawnLayer() {}
+  LayerTreeHostScrollTestScrollNonDrawnLayer() = default;
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -1240,7 +1246,7 @@ SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostScrollTestScrollNonDrawnLayer);
 class LayerTreeHostScrollTestImplScrollUnderMainThreadScrollingParent
     : public LayerTreeHostScrollTest {
  public:
-  LayerTreeHostScrollTestImplScrollUnderMainThreadScrollingParent() {}
+  LayerTreeHostScrollTestImplScrollUnderMainThreadScrollingParent() = default;
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
@@ -1548,7 +1554,8 @@ class LayerTreeHostScrollTestScrollMFBA : public LayerTreeHostScrollTest {
     num_commits_++;
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
     switch (layer_tree_host()->SourceFrameNumber()) {
       case 0:
@@ -1861,7 +1868,7 @@ MULTI_THREAD_TEST_F(LayerTreeHostScrollTestScrollAbortedCommitMFBA);
 
 class MockInputHandlerClient : public InputHandlerClient {
  public:
-  MockInputHandlerClient() {}
+  MockInputHandlerClient() = default;
 
   MOCK_METHOD0(ReconcileElasticOverscrollAndRootScroll, void());
 
@@ -2052,7 +2059,8 @@ class LayerTreeHostScrollTestPropertyTreeUpdate
     PostSetNeedsCommitToMainThread();
   }
 
-  void UpdateLayerTreeHost() override {
+  void UpdateLayerTreeHost(
+      LayerTreeHostClient::VisualStateUpdate requested_update) override {
     Layer* scroll_layer = layer_tree_host()->inner_viewport_scroll_layer();
     if (layer_tree_host()->SourceFrameNumber() == 0) {
       EXPECT_VECTOR_EQ(initial_scroll_, scroll_layer->scroll_offset());

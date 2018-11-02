@@ -110,14 +110,15 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
     HistoryServiceFactory::GetInstance()->SetTestingFactory(
         profile(), &BuildTestHistoryService);
 
-    test_clock_ = new base::SimpleTestClock();
-    test_clock_->SetNow(GetReferenceTime());
-    service_ = base::WrapUnique(
-        new MediaEngagementService(profile(), base::WrapUnique(test_clock_)));
+    test_clock_.SetNow(GetReferenceTime());
+    service_ = base::WrapUnique(StartNewMediaEngagementService());
   }
 
   MediaEngagementService* StartNewMediaEngagementService() {
-    return MediaEngagementService::Get(profile());
+    MediaEngagementService* service =
+        new MediaEngagementService(profile(), &test_clock_);
+    base::RunLoop().RunUntilIdle();
+    return service;
   }
 
   void RecordVisitAndPlaybackAndAdvanceClock(GURL url) {
@@ -133,7 +134,7 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
   }
 
   void AdvanceClock() {
-    test_clock_->SetNow(Now() + base::TimeDelta::FromHours(1));
+    test_clock_.SetNow(Now() + base::TimeDelta::FromHours(1));
   }
 
   void RecordVisit(GURL url) { service_->RecordVisit(url); }
@@ -191,11 +192,11 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
     service_->ClearDataBetweenTime(begin, end);
   }
 
-  base::Time Now() const { return test_clock_->Now(); }
+  base::Time Now() { return test_clock_.Now(); }
 
   base::Time TimeNotSet() const { return base::Time(); }
 
-  void SetNow(base::Time now) { test_clock_->SetNow(now); }
+  void SetNow(base::Time now) { test_clock_.SetNow(now); }
 
   std::vector<media::mojom::MediaEngagementScoreDetailsPtr> GetAllScoreDetails()
       const {
@@ -208,8 +209,17 @@ class MediaEngagementServiceTest : public ChromeRenderViewHostTestHarness {
 
   void SetSchemaVersion(int version) { service_->SetSchemaVersion(version); }
 
+  std::vector<MediaEngagementScore> GetAllStoredScores(
+      const MediaEngagementService* service) const {
+    return service->GetAllStoredScores();
+  }
+
+  std::vector<MediaEngagementScore> GetAllStoredScores() const {
+    return GetAllStoredScores(service_.get());
+  }
+
  private:
-  base::SimpleTestClock* test_clock_ = nullptr;
+  base::SimpleTestClock test_clock_;
 
   std::unique_ptr<MediaEngagementService> service_;
 
@@ -249,19 +259,19 @@ TEST_F(MediaEngagementServiceTest,
   GURL url1("https://www.google.com");
   ExpectScores(url1, 0.0, 0, 0, TimeNotSet());
   RecordVisitAndPlaybackAndAdvanceClock(url1);
-  ExpectScores(url1, 0.0, 1, 1, Now());
+  ExpectScores(url1, 0.05, 1, 1, Now());
 
   RecordVisit(url1);
-  ExpectScores(url1, 0.0, 2, 1, Now());
+  ExpectScores(url1, 0.05, 2, 1, Now());
 
   RecordPlayback(url1);
-  ExpectScores(url1, 0.0, 2, 2, Now());
+  ExpectScores(url1, 0.1, 2, 2, Now());
   base::Time url1_time = Now();
 
   GURL url2("https://www.google.co.uk");
   RecordVisitAndPlaybackAndAdvanceClock(url2);
-  ExpectScores(url2, 0.0, 1, 1, Now());
-  ExpectScores(url1, 0.0, 2, 2, url1_time);
+  ExpectScores(url2, 0.05, 1, 1, Now());
+  ExpectScores(url1, 0.1, 2, 2, url1_time);
 }
 
 TEST_F(MediaEngagementServiceTest, IncognitoEngagementService) {
@@ -276,8 +286,8 @@ TEST_F(MediaEngagementServiceTest, IncognitoEngagementService) {
 
   MediaEngagementService* incognito_service =
       MediaEngagementService::Get(profile()->GetOffTheRecordProfile());
-  ExpectScores(incognito_service, url1, 0.0, 1, 1, url1_time);
-  ExpectScores(incognito_service, url2, 0.0, 1, 1, Now());
+  ExpectScores(incognito_service, url1, 0.05, 1, 1, url1_time);
+  ExpectScores(incognito_service, url2, 0.05, 1, 1, Now());
   ExpectScores(incognito_service, url3, 0.0, 0, 0, TimeNotSet());
 
   incognito_service->RecordVisit(url3);
@@ -285,17 +295,90 @@ TEST_F(MediaEngagementServiceTest, IncognitoEngagementService) {
   ExpectScores(url3, 0.0, 0, 0, TimeNotSet());
 
   incognito_service->RecordVisit(url2);
-  ExpectScores(incognito_service, url2, 0.0, 2, 1, Now());
-  ExpectScores(url2, 0.0, 1, 1, Now());
+  ExpectScores(incognito_service, url2, 0.05, 2, 1, Now());
+  ExpectScores(url2, 0.05, 1, 1, Now());
 
   RecordVisitAndPlaybackAndAdvanceClock(url3);
   ExpectScores(incognito_service, url3, 0.0, 1, 0, TimeNotSet());
-  ExpectScores(url3, 0.0, 1, 1, Now());
+  ExpectScores(url3, 0.05, 1, 1, Now());
 
   ExpectScores(incognito_service, url4, 0.0, 0, 0, TimeNotSet());
   RecordVisitAndPlaybackAndAdvanceClock(url4);
-  ExpectScores(incognito_service, url4, 0.0, 1, 1, Now());
-  ExpectScores(url4, 0.0, 1, 1, Now());
+  ExpectScores(incognito_service, url4, 0.05, 1, 1, Now());
+  ExpectScores(url4, 0.05, 1, 1, Now());
+}
+
+TEST_F(MediaEngagementServiceTest, IncognitoOverrideRegularProfile) {
+  const GURL kUrl1("https://example.org");
+  const GURL kUrl2("https://example.com");
+
+  SetScores(kUrl1, MediaEngagementScore::GetScoreMinVisits(), 1);
+  SetScores(kUrl2, 1, 0);
+
+  ExpectScores(kUrl1, 0.05, MediaEngagementScore::GetScoreMinVisits(), 1,
+               TimeNotSet());
+  ExpectScores(kUrl2, 0.0, 1, 0, TimeNotSet());
+
+  MediaEngagementService* incognito_service =
+      MediaEngagementService::Get(profile()->GetOffTheRecordProfile());
+  ExpectScores(incognito_service, kUrl1, 0.05,
+               MediaEngagementScore::GetScoreMinVisits(), 1, TimeNotSet());
+  ExpectScores(incognito_service, kUrl2, 0.0, 1, 0, TimeNotSet());
+
+  // Scores should be the same in incognito and regular profile.
+  {
+    std::vector<std::pair<GURL, double>> kExpectedResults = {
+        {kUrl2, 0.0}, {kUrl1, 0.05},
+    };
+
+    const auto& scores = GetAllStoredScores();
+    const auto& incognito_scores = GetAllStoredScores(incognito_service);
+
+    EXPECT_EQ(kExpectedResults.size(), scores.size());
+    EXPECT_EQ(kExpectedResults.size(), incognito_scores.size());
+
+    for (size_t i = 0; i < scores.size(); ++i) {
+      EXPECT_EQ(kExpectedResults[i].first, scores[i].origin());
+      EXPECT_EQ(kExpectedResults[i].second, scores[i].actual_score());
+
+      EXPECT_EQ(kExpectedResults[i].first, incognito_scores[i].origin());
+      EXPECT_EQ(kExpectedResults[i].second, incognito_scores[i].actual_score());
+    }
+  }
+
+  incognito_service->RecordVisit(kUrl1);
+  incognito_service->RecordPlayback(kUrl2);
+
+  // Score shouldn't have changed in regular profile.
+  {
+    std::vector<std::pair<GURL, double>> kExpectedResults = {
+        {kUrl2, 0.0}, {kUrl1, 0.05},
+    };
+
+    const auto& scores = GetAllStoredScores();
+    EXPECT_EQ(kExpectedResults.size(), scores.size());
+
+    for (size_t i = 0; i < scores.size(); ++i) {
+      EXPECT_EQ(kExpectedResults[i].first, scores[i].origin());
+      EXPECT_EQ(kExpectedResults[i].second, scores[i].actual_score());
+    }
+  }
+
+  // Incognito scores should have the same number of entries but have new
+  // values.
+  {
+    std::vector<std::pair<GURL, double>> kExpectedResults = {
+        {kUrl2, 0.05}, {kUrl1, 1.0 / 21.0},
+    };
+
+    const auto& scores = GetAllStoredScores(incognito_service);
+    EXPECT_EQ(kExpectedResults.size(), scores.size());
+
+    for (size_t i = 0; i < scores.size(); ++i) {
+      EXPECT_EQ(kExpectedResults[i].first, scores[i].origin());
+      EXPECT_EQ(kExpectedResults[i].second, scores[i].actual_score());
+    }
+  }
 }
 
 TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
@@ -311,10 +394,10 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
   // and we will ensure it has the same score. origin2 will have a score
   // that is zero and will remain zero. origin3 will have a score
   // and will be cleared. origin4 will have a normal score.
-  SetScores(origin1, MediaEngagementScore::GetScoreMinVisits() + 3, 2);
+  SetScores(origin1, MediaEngagementScore::GetScoreMinVisits() + 2, 14);
   SetScores(origin2, 2, 1);
   SetScores(origin3, 2, 1);
-  SetScores(origin4, MediaEngagementScore::GetScoreMinVisits(), 2);
+  SetScores(origin4, MediaEngagementScore::GetScoreMinVisits(), 10);
 
   base::Time today = GetReferenceTime();
   base::Time yesterday = GetReferenceTime() - base::TimeDelta::FromDays(1);
@@ -335,16 +418,16 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
   history->AddPage(origin3a, yesterday_afternoon, history::SOURCE_BROWSED);
 
   // Check that the scores are valid at the beginning.
-  ExpectScores(origin1, 0.25, MediaEngagementScore::GetScoreMinVisits() + 3, 2,
+  ExpectScores(origin1, 7.0 / 11.0,
+               MediaEngagementScore::GetScoreMinVisits() + 2, 14, TimeNotSet());
+  EXPECT_EQ(14.0 / 22.0, GetActualScore(origin1));
+  ExpectScores(origin2, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin2));
+  ExpectScores(origin3, 0.05, 2, 1, TimeNotSet());
+  EXPECT_EQ(1 / 20.0, GetActualScore(origin3));
+  ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
                TimeNotSet());
-  EXPECT_TRUE(GetActualScore(origin1));
-  ExpectScores(origin2, 0.0, 2, 1, TimeNotSet());
-  EXPECT_FALSE(GetActualScore(origin2));
-  ExpectScores(origin3, 0.0, 2, 1, TimeNotSet());
-  EXPECT_FALSE(GetActualScore(origin3));
-  ExpectScores(origin4, 0.4, MediaEngagementScore::GetScoreMinVisits(), 2,
-               TimeNotSet());
-  EXPECT_TRUE(GetActualScore(origin4));
+  EXPECT_EQ(0.5, GetActualScore(origin4));
 
   {
     base::HistogramTester histogram_tester;
@@ -361,22 +444,21 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     // should have a score that is zero but it's visits and playbacks should
     // have decreased. origin3 should have had a decrease in the number of
     // visits. origin4 should have the old score.
-    ExpectScores(origin1, 1.0 / 6.0,
-                 MediaEngagementScore::GetScoreMinVisits() + 1, 1,
+    ExpectScores(origin1, 0.6, MediaEngagementScore::GetScoreMinVisits(), 12,
                  TimeNotSet());
-    EXPECT_TRUE(GetActualScore(origin1));
+    EXPECT_EQ(12.0 / 20.0, GetActualScore(origin1));
     ExpectScores(origin2, 0.0, 1, 0, TimeNotSet());
-    EXPECT_FALSE(GetActualScore(origin2));
+    EXPECT_EQ(0, GetActualScore(origin2));
     ExpectScores(origin3, 0.0, 1, 0, TimeNotSet());
-    ExpectScores(origin4, 0.4, MediaEngagementScore::GetScoreMinVisits(), 2,
+    ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
                  TimeNotSet());
 
     histogram_tester.ExpectTotalCount(
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 3);
     histogram_tester.ExpectBucketCount(
-        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 0, 2);
+        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 5, 2);
     histogram_tester.ExpectBucketCount(
-        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 8, 1);
+        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 4, 1);
   }
 
   {
@@ -396,17 +478,17 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     waiter.Wait();
 
     // origin1's score should have changed but the rest should remain the same.
-    ExpectScores(origin1, 0.0, MediaEngagementScore::GetScoreMinVisits(), 0,
-                 TimeNotSet());
+    ExpectScores(origin1, 0.55, MediaEngagementScore::GetScoreMinVisits() - 1,
+                 11, TimeNotSet());
     ExpectScores(origin2, 0.0, 1, 0, TimeNotSet());
     ExpectScores(origin3, 0.0, 1, 0, TimeNotSet());
-    ExpectScores(origin4, 0.4, MediaEngagementScore::GetScoreMinVisits(), 2,
+    ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
                  TimeNotSet());
 
     histogram_tester.ExpectTotalCount(
         MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 1);
     histogram_tester.ExpectBucketCount(
-        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 17, 1);
+        MediaEngagementService::kHistogramURLsDeletedScoreReductionName, 5, 1);
   }
 
   {
@@ -428,11 +510,11 @@ TEST_F(MediaEngagementServiceTest, CleanupOriginsOnHistoryDeletion) {
     // origin3's score should be removed but the rest should remain the same.
     std::map<GURL, double> scores = GetScoreMapForTesting();
     EXPECT_TRUE(scores.find(origin3) == scores.end());
-    ExpectScores(origin1, 0.0, MediaEngagementScore::GetScoreMinVisits(), 0,
-                 TimeNotSet());
+    ExpectScores(origin1, 0.55, MediaEngagementScore::GetScoreMinVisits() - 1,
+                 11, TimeNotSet());
     ExpectScores(origin2, 0.0, 1, 0, TimeNotSet());
     ExpectScores(origin3, 0.0, 0, 0, TimeNotSet());
-    ExpectScores(origin4, 0.4, MediaEngagementScore::GetScoreMinVisits(), 2,
+    ExpectScores(origin4, 0.5, MediaEngagementScore::GetScoreMinVisits(), 10,
                  TimeNotSet());
 
     histogram_tester.ExpectTotalCount(
@@ -454,7 +536,7 @@ TEST_F(MediaEngagementServiceTest,
 
   ClearDataBetweenTime(today - base::TimeDelta::FromDays(2),
                        today - base::TimeDelta::FromDays(1));
-  ExpectScores(origin, 0.0, 1, 1, today);
+  ExpectScores(origin, 0.05, 1, 1, today);
 }
 
 TEST_F(MediaEngagementServiceTest,
@@ -473,8 +555,8 @@ TEST_F(MediaEngagementServiceTest,
   SetLastMediaPlaybackTime(origin2, two_days_ago);
 
   ClearDataBetweenTime(two_days_ago, yesterday);
-  ExpectScores(origin1, 0.0, 0, 0, TimeNotSet());
-  ExpectScores(origin2, 0.0, 0, 0, TimeNotSet());
+  ExpectScores(origin1, 0, 0, 0, TimeNotSet());
+  ExpectScores(origin2, 0, 0, 0, TimeNotSet());
 }
 
 TEST_F(MediaEngagementServiceTest, CleanupDataOnSiteDataCleanup_NoTimeSet) {
@@ -495,20 +577,24 @@ TEST_F(MediaEngagementServiceTest, LogScoresOnStartupToHistogram) {
   GURL url2("https://www.google.co.uk");
   GURL url3("https://www.example.com");
 
-  SetScores(url1, 6, 5);
-  SetScores(url2, 6, 3);
+  SetScores(url1, 24, 20);
+  SetScores(url2, 24, 12);
   RecordVisitAndPlaybackAndAdvanceClock(url3);
-  ExpectScores(url1, 5.0 / 6.0, 6, 5, TimeNotSet());
-  ExpectScores(url2, 0.5, 6, 3, TimeNotSet());
-  ExpectScores(url3, 0.0, 1, 1, Now());
+
+  ExpectScores(url1, 5.0 / 6.0, 24, 20, TimeNotSet());
+  ExpectScores(url2, 0.5, 24, 12, TimeNotSet());
+  ExpectScores(url3, 0.05, 1, 1, Now());
 
   base::HistogramTester histogram_tester;
-  StartNewMediaEngagementService();
+  std::unique_ptr<MediaEngagementService> new_service =
+      base::WrapUnique<MediaEngagementService>(
+          StartNewMediaEngagementService());
+  new_service->Shutdown();
 
   histogram_tester.ExpectTotalCount(
       MediaEngagementService::kHistogramScoreAtStartupName, 3);
   histogram_tester.ExpectBucketCount(
-      MediaEngagementService::kHistogramScoreAtStartupName, 0, 1);
+      MediaEngagementService::kHistogramScoreAtStartupName, 5, 1);
   histogram_tester.ExpectBucketCount(
       MediaEngagementService::kHistogramScoreAtStartupName, 50, 1);
   histogram_tester.ExpectBucketCount(
@@ -520,8 +606,8 @@ TEST_F(MediaEngagementServiceTest, HasHighEngagement) {
   GURL url2("https://www.google.co.uk");
   GURL url3("https://www.example.com");
 
-  SetScores(url1, 6, 5);
-  SetScores(url2, 6, 3);
+  SetScores(url1, 20, 15);
+  SetScores(url2, 20, 4);
 
   EXPECT_TRUE(HasHighEngagement(url1));
   EXPECT_FALSE(HasHighEngagement(url2));
@@ -533,14 +619,22 @@ TEST_F(MediaEngagementServiceTest, SchemaVersion_Changed) {
   SetScores(url, 1, 2);
 
   SetSchemaVersion(0);
-  MediaEngagementService* service = StartNewMediaEngagementService();
-  ExpectScores(service, url, 0.0, 0, 0, TimeNotSet());
+  std::unique_ptr<MediaEngagementService> new_service =
+      base::WrapUnique<MediaEngagementService>(
+          StartNewMediaEngagementService());
+
+  ExpectScores(new_service.get(), url, 0.0, 0, 0, TimeNotSet());
+  new_service->Shutdown();
 }
 
 TEST_F(MediaEngagementServiceTest, SchemaVersion_Same) {
   GURL url("https://www.google.com");
   SetScores(url, 1, 2);
 
-  MediaEngagementService* service = StartNewMediaEngagementService();
-  ExpectScores(service, url, 0.0, 1, 2, TimeNotSet());
+  std::unique_ptr<MediaEngagementService> new_service =
+      base::WrapUnique<MediaEngagementService>(
+          StartNewMediaEngagementService());
+
+  ExpectScores(new_service.get(), url, 0.1, 1, 2, TimeNotSet());
+  new_service->Shutdown();
 }

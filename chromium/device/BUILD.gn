@@ -64,6 +64,8 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
     "bluetooth/uribeacon/uri_encoder_unittest.cc",
+    "ctap/ctap_request_unittest.cc",
+    "gamepad/abstract_haptic_gamepad_unittest.cc",
     "gamepad/gamepad_provider_unittest.cc",
     "gamepad/gamepad_service_unittest.cc",
     "gamepad/public/interfaces/gamepad_struct_traits_unittest.cc",
@@ -72,6 +74,8 @@ test("device_unittests") {
     "sensors/sensor_manager_chromeos_unittest.cc",
     "test/run_all_unittests.cc",
     "u2f/u2f_apdu_unittest.cc",
+    "u2f/u2f_ble_connection_unittest.cc",
+    "u2f/u2f_ble_device_unittest.cc",
     "u2f/u2f_ble_frames_unittest.cc",
     "u2f/u2f_discovery_unittest.cc",
     "u2f/u2f_message_unittest.cc",
@@ -83,11 +87,13 @@ test("device_unittests") {
   deps = [
     "//base/test:test_support",
     "//base/third_party/dynamic_annotations:dynamic_annotations",
+    "//components/cbor",
     "//device/base/synchronization",
     "//device/bluetooth",
+    "//device/bluetooth:deprecated_experimental_mojo",
     "//device/bluetooth:mocks",
-    "//device/bluetooth:mojo",
     "//device/bluetooth/uribeacon",
+    "//device/ctap",
     "//device/gamepad",
     "//device/gamepad:test_helpers",
     "//device/gamepad/public/cpp:shared_with_blink",
@@ -115,12 +121,11 @@ test("device_unittests") {
   # Linux, requires udev.
   if (!is_linux_without_udev && !is_android) {
     sources += [
-      "u2f/fake_hid_impl_for_testing.cc",
-      "u2f/fake_hid_impl_for_testing.h",
       "u2f/u2f_hid_device_unittest.cc",
       "u2f/u2f_hid_discovery_unittest.cc",
     ]
     deps += [
+      "//device/u2f:test_support",
       "//services/device/public/cpp/hid",
       "//services/device/public/interfaces",
       "//services/service_manager/public/cpp",
@@ -129,12 +134,8 @@ test("device_unittests") {
 
     # Serial is supported in below platforms. See //device/servial/BUILD.gn
     if (is_win || is_linux || is_mac) {
-      sources += [
-        "serial/serial_io_handler_posix_unittest.cc",
-      ]
-      deps += [
-        "//device/serial",
-      ]
+      sources += [ "serial/serial_io_handler_posix_unittest.cc" ]
+      deps += [ "//device/serial" ]
     }
   }
 
@@ -255,6 +256,8 @@ test("device_unittests") {
 
   if (enable_vr && is_android) {
     sources += [
+      "vr/orientation/orientation_device_provider_unittest.cc",
+      "vr/orientation/orientation_device_unittest.cc",
       "vr/vr_device_base_unittest.cc",
       "vr/vr_display_impl_unittest.cc",
     ]
@@ -264,6 +267,8 @@ test("device_unittests") {
       "//device/vr:fakes",
       "//device/vr:java",
       "//device/vr:mojo_bindings",
+      "//services/device/public/cpp/generic_sensor",
+      "//ui/display",
     ]
   }
 }
@@ -284,7 +289,9 @@ source_set("usb_test_gadget") {
 }
 
 if (is_android) {
-  bluetooth_java_sources_needing_jni = [ "bluetooth/test/android/java/src/org/chromium/device/bluetooth/Fakes.java" ]
+  bluetooth_java_sources_needing_jni = [
+    "bluetooth/test/android/java/src/org/chromium/device/bluetooth/Fakes.java",
+  ]
 
   generate_jni("bluetooth_test_jni_headers") {
     sources = bluetooth_java_sources_needing_jni

@@ -5,8 +5,11 @@
 #ifndef EXTENSIONS_RENDERER_BINDINGS_EVENT_EMITTER_H_
 #define EXTENSIONS_RENDERER_BINDINGS_EVENT_EMITTER_H_
 
+#include <map>
 #include <vector>
 
+#include "extensions/common/event_filtering_info.h"
+#include "extensions/renderer/bindings/js_runner.h"
 #include "gin/wrappable.h"
 #include "v8/include/v8.h"
 
@@ -17,7 +20,6 @@ class Arguments;
 namespace extensions {
 class APIEventListeners;
 class ExceptionHandler;
-struct EventFilteringInfo;
 
 // A gin::Wrappable Event object. One is expected to be created per event, per
 // context. Note: this object *does not* clear any events, so it must be
@@ -35,9 +37,13 @@ class EventEmitter final : public gin::Wrappable<EventEmitter> {
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) final;
 
+  // Fires the event to any listeners.
+  // Warning: This can run arbitrary JS code, so the |context| may be
+  // invalidated after this!
   void Fire(v8::Local<v8::Context> context,
             std::vector<v8::Local<v8::Value>>* args,
-            const EventFilteringInfo* filter);
+            const EventFilteringInfo* filter,
+            JSRunner::ResultCallback callback);
 
   // Removes all listeners and marks this object as invalid so that no more
   // are added.
@@ -55,14 +61,18 @@ class EventEmitter final : public gin::Wrappable<EventEmitter> {
   bool HasListeners();
   void Dispatch(gin::Arguments* arguments);
 
-  // Notifies the listeners of an event with the given |args|. If |run_sync| is
-  // true, runs JS synchronously and populates |out_values| with the results of
-  // the listeners.
-  void DispatchImpl(v8::Local<v8::Context> context,
-                    std::vector<v8::Local<v8::Value>>* args,
-                    const EventFilteringInfo* filter,
-                    bool run_sync,
-                    std::vector<v8::Local<v8::Value>>* out_values);
+  // Dispatches an event synchronously to listeners, returning the result.
+  v8::Local<v8::Value> DispatchSync(v8::Local<v8::Context> context,
+                                    std::vector<v8::Local<v8::Value>>* args,
+                                    const EventFilteringInfo* filter);
+
+  // Dispatches an event asynchronously to listeners.
+  void DispatchAsync(v8::Local<v8::Context> context,
+                     std::vector<v8::Local<v8::Value>>* args,
+                     const EventFilteringInfo* filter,
+                     JSRunner::ResultCallback callback);
+  static void DispatchAsyncHelper(
+      const v8::FunctionCallbackInfo<v8::Value>& info);
 
   // Whether or not this object is still valid; false upon context release.
   // When invalid, no listeners can be added or removed.
@@ -74,7 +84,15 @@ class EventEmitter final : public gin::Wrappable<EventEmitter> {
   std::unique_ptr<APIEventListeners> listeners_;
 
   // The associated exception handler; guaranteed to outlive this object.
-  ExceptionHandler* const exception_handler_;
+  ExceptionHandler* const exception_handler_ = nullptr;
+
+  // The next id to use in the pending_filters_ map.
+  int next_filter_id_ = 0;
+  // A constant to indicate an invalid id.
+  static constexpr int kInvalidFilterId = -1;
+  // The map of EventFilteringInfos for events that are pending dispatch (since
+  // JS is suspended).
+  std::map<int, EventFilteringInfo> pending_filters_;
 
   DISALLOW_COPY_AND_ASSIGN(EventEmitter);
 };

@@ -158,12 +158,12 @@ void RecordUMAStatistics(bool overridable,
       break;
     }
     case ssl_errors::ErrorInfo::CERT_AUTHORITY_INVALID: {
-      const std::string& hostname = request_url.HostNoBrackets();
-      if (net::IsLocalhost(hostname))
+      if (net::IsLocalhost(request_url))
         RecordSSLInterstitialCause(overridable, LOCALHOST);
+      const std::string hostname = request_url.HostNoBrackets();
       if (IsHostnameNonUniqueOrDotless(hostname))
         RecordSSLInterstitialCause(overridable, PRIVATE_URL);
-      if (net::X509Certificate::IsSelfSigned(cert.os_cert_handle()))
+      if (net::X509Certificate::IsSelfSigned(cert.cert_buffer()))
         RecordSSLInterstitialCause(overridable, SELF_SIGNED);
       break;
     }

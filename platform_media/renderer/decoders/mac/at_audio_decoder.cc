@@ -126,8 +126,10 @@ std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
   switch (codec) {
     case AudioCodec::kCodecAAC:
       return base::WrapUnique(new ATAACHelper);
+#if defined(PLATFORM_MEDIA_MP3)
     case AudioCodec::kCodecMP3:
       return base::WrapUnique(new ATMP3Helper);
+#endif
     default:
       LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                 << " Unsupported codec : " << GetCodecName(codec);
@@ -317,10 +319,9 @@ bool ATAudioDecoder::InitializeConverter(
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   DCHECK(task_runner_->BelongsToCurrentThread());
 
-  AudioStreamBasicDescription output_format;
-  GetOutputFormat(input_format, &output_format);
+  GetOutputFormat(input_format, &output_format_);
 
-  OSStatus status = AudioConverterNew(&input_format, &output_format,
+  OSStatus status = AudioConverterNew(&input_format, &output_format_,
                                       converter_.InitializeInto());
   if (status != noErr) {
     OSSTATUS_VLOG(1, status) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -372,10 +373,20 @@ bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
   // Pre-allocate a buffer for the maximum expected frame count.  We will let
   // the AudioConverter fill it with decoded audio, through |output_buffers|
   // defined below.
-  scoped_refptr<AudioBuffer> output = AudioBuffer::CreateBuffer(
-      kOutputSampleFormat, config_.channel_layout(),
-      ChannelLayoutToChannelCount(config_.channel_layout()),
-      config_.samples_per_second(), output_frame_count);
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
+
+  ChannelLayout layout = config_.channel_layout();
+  int channels = output_format_.mChannelsPerFrame;
+  if (channels != config_.channels())
+    layout = GuessChannelLayout(channels);
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
+  scoped_refptr<AudioBuffer> output =
+      AudioBuffer::CreateBuffer(kOutputSampleFormat, layout, channels,
+                                output_format_.mSampleRate, output_frame_count);
 
   InputData input_data =
       input->end_of_stream()
@@ -469,6 +480,7 @@ void ATAudioDecoder::ResetTimestampState() {
           << " input_samples_per_second : " << config_.input_samples_per_second()
           << " samples_per_second : " << config_.samples_per_second();
 
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
   discard_helper_.reset(new AudioDiscardHelper(config_.samples_per_second(),
                                                config_.codec_delay(), false));
   discard_helper_->Reset(config_.codec_delay());

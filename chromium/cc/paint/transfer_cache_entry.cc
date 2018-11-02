@@ -4,9 +4,11 @@
 
 #include "cc/paint/transfer_cache_entry.h"
 
+#include <memory>
+
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "cc/paint/image_transfer_cache_entry.h"
+#include "cc/paint/paint_typeface_transfer_cache_entry.h"
 #include "cc/paint/raw_memory_transfer_cache_entry.h"
 
 namespace cc {
@@ -15,9 +17,11 @@ std::unique_ptr<ServiceTransferCacheEntry> ServiceTransferCacheEntry::Create(
     TransferCacheEntryType type) {
   switch (type) {
     case TransferCacheEntryType::kRawMemory:
-      return base::MakeUnique<ServiceRawMemoryTransferCacheEntry>();
+      return std::make_unique<ServiceRawMemoryTransferCacheEntry>();
     case TransferCacheEntryType::kImage:
-      return base::MakeUnique<ServiceImageTransferCacheEntry>();
+      return std::make_unique<ServiceImageTransferCacheEntry>();
+    case TransferCacheEntryType::kPaintTypeface:
+      return std::make_unique<ServicePaintTypefaceTransferCacheEntry>();
   }
 
   NOTREACHED();

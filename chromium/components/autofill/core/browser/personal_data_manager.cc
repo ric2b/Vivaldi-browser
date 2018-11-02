@@ -413,20 +413,14 @@ void PersonalDataManager::OnSyncServiceInitialized(
   // If the sync service is not enabled for autofill address profiles then run
   // address cleanup/startup code here. Otherwise, defer until after sync has
   // started.
-  if (!IsSyncEnabledFor(sync_service, syncer::AUTOFILL_PROFILE)) {
-    ApplyProfileUseDatesFix();  // One-time fix, otherwise NOP.
-    ApplyDedupingRoutine();     // Once per major version, otherwise NOP.
-    DeleteDisusedAddresses();   // Once per major version, otherwise NOP.
-    CreateTestAddresses();      // Once per user profile startup.
-  }
+  if (!IsSyncEnabledFor(sync_service, syncer::AUTOFILL_PROFILE))
+    ApplyAddressFixesAndCleanups();
 
   // Similarly, if the sync service is not enabled for autofill credit cards
   // then run credit card address cleanup/startup code here. Otherwise, defer
   // until after sync has started.
-  if (!IsSyncEnabledFor(sync_service, syncer::AUTOFILL_WALLET_DATA)) {
-    DeleteDisusedCreditCards();  // Once per major version, otherwise NOP.
-    CreateTestCreditCards();     // Once per user profile startup.
-  }
+  if (!IsSyncEnabledFor(sync_service, syncer::AUTOFILL_WALLET_DATA))
+    ApplyCardFixesAndCleanups();
 }
 
 void PersonalDataManager::OnWebDataServiceRequestDone(
@@ -496,19 +490,13 @@ void PersonalDataManager::AutofillMultipleChanged() {
 void PersonalDataManager::SyncStarted(syncer::ModelType model_type) {
   // Run deferred autofill address profile startup code.
   // See: OnSyncServiceInitialized
-  if (model_type == syncer::AUTOFILL_PROFILE) {
-    ApplyProfileUseDatesFix();  // One-time fix, otherwise NOP.
-    ApplyDedupingRoutine();     // Once per major version, otherwise NOP.
-    DeleteDisusedAddresses();   // Once per major version, otherwise NOP.
-    CreateTestAddresses();      // Once per user profile startup.
-  }
+  if (model_type == syncer::AUTOFILL_PROFILE)
+    ApplyAddressFixesAndCleanups();
 
   // Run deferred credit card startup code.
   // See: OnSyncServiceInitialized
-  if (model_type == syncer::AUTOFILL_WALLET_DATA) {
-    DeleteDisusedCreditCards();  // Once per major version, otherwise NOP.
-    CreateTestCreditCards();     // Once per user profile startup.
-  }
+  if (model_type == syncer::AUTOFILL_WALLET_DATA)
+    ApplyCardFixesAndCleanups();
 }
 
 void PersonalDataManager::AddObserver(PersonalDataManagerObserver* observer) {
@@ -993,33 +981,41 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
   // Don't show two suggestions if one is a subset of the other.
   std::vector<AutofillProfile*> unique_matched_profiles;
   std::vector<Suggestion> unique_suggestions;
-  ServerFieldTypeSet types(other_field_types.begin(), other_field_types.end());
-  for (size_t i = 0; i < matched_profiles.size(); ++i) {
-    bool include = true;
-    AutofillProfile* profile_a = matched_profiles[i];
-    for (size_t j = 0; j < matched_profiles.size(); ++j) {
-      AutofillProfile* profile_b = matched_profiles[j];
-      // Check if profile A is a subset of profile B. If not, continue.
-      if (i == j || suggestions[i].value != suggestions[j].value ||
-          !profile_a->IsSubsetOfForFieldSet(*profile_b, app_locale_, types)) {
-        continue;
-      }
+  // If there are many profiles, subset checking will take a long time(easily
+  // seconds). We will only do this if the profiles count is reasonable.
+  if (matched_profiles.size() <= 15) {
+    ServerFieldTypeSet types(other_field_types.begin(),
+                             other_field_types.end());
+    for (size_t i = 0; i < matched_profiles.size(); ++i) {
+      bool include = true;
+      AutofillProfile* profile_a = matched_profiles[i];
+      for (size_t j = 0; j < matched_profiles.size(); ++j) {
+        AutofillProfile* profile_b = matched_profiles[j];
+        // Check if profile A is a subset of profile B. If not, continue.
+        if (i == j || suggestions[i].value != suggestions[j].value ||
+            !profile_a->IsSubsetOfForFieldSet(*profile_b, app_locale_, types)) {
+          continue;
+        }
 
-      // Check if profile B is also a subset of profile A. If so, the
-      // profiles are identical. Include the first one but not the second.
-      if (i < j &&
-          profile_b->IsSubsetOfForFieldSet(*profile_a, app_locale_, types)) {
-        continue;
-      }
+        // Check if profile B is also a subset of profile A. If so, the
+        // profiles are identical. Include the first one but not the second.
+        if (i < j &&
+            profile_b->IsSubsetOfForFieldSet(*profile_a, app_locale_, types)) {
+          continue;
+        }
 
-      // One-way subset. Don't include profile A.
-      include = false;
-      break;
+        // One-way subset. Don't include profile A.
+        include = false;
+        break;
+      }
+      if (include) {
+        unique_matched_profiles.push_back(matched_profiles[i]);
+        unique_suggestions.push_back(suggestions[i]);
+      }
     }
-    if (include) {
-      unique_matched_profiles.push_back(matched_profiles[i]);
-      unique_suggestions.push_back(suggestions[i]);
-    }
+  } else {
+    unique_matched_profiles = matched_profiles;
+    unique_suggestions = suggestions;
   }
 
   // Generate disambiguating labels based on the list of matches.
@@ -1124,9 +1120,9 @@ std::string PersonalDataManager::CountryCodeForCurrentTimezone() const {
 }
 
 void PersonalDataManager::SetPrefService(PrefService* pref_service) {
-  enabled_pref_.reset(new BooleanPrefMember);
-  wallet_enabled_pref_.reset(new BooleanPrefMember);
-  credit_card_enabled_pref_.reset(new BooleanPrefMember);
+  enabled_pref_ = std::make_unique<BooleanPrefMember>();
+  wallet_enabled_pref_ = std::make_unique<BooleanPrefMember>();
+  credit_card_enabled_pref_ = std::make_unique<BooleanPrefMember>();
   pref_service_ = pref_service;
   // |pref_service_| can be nullptr in tests.
   if (pref_service_) {
@@ -1659,6 +1655,20 @@ void PersonalDataManager::ApplyProfileUseDatesFix() {
     SetProfiles(&profiles);
 }
 
+void PersonalDataManager::RemoveOrphanAutofillTableRows() {
+  // Don't run if the fix has already been applied.
+  if (pref_service_->GetBoolean(prefs::kAutofillOrphanRowsRemoved))
+    return;
+
+  if (!database_)
+    return;
+
+  database_->RemoveOrphanAutofillTableRows();
+
+  // Set the pref so that this fix is never run again.
+  pref_service_->SetBoolean(prefs::kAutofillOrphanRowsRemoved, true);
+}
+
 bool PersonalDataManager::ApplyDedupingRoutine() {
   if (!is_autofill_profile_cleanup_pending_)
     return false;
@@ -2004,7 +2014,7 @@ std::string PersonalDataManager::MergeServerAddressesIntoProfiles(
   return guid;
 }
 
-void PersonalDataManager::CreateTestAddresses() {
+void PersonalDataManager::MaybeCreateTestAddresses() {
   if (has_created_test_addresses_)
     return;
 
@@ -2017,7 +2027,7 @@ void PersonalDataManager::CreateTestAddresses() {
   AddProfile(CreateDisusedDeletableTestAddress(app_locale_));
 }
 
-void PersonalDataManager::CreateTestCreditCards() {
+void PersonalDataManager::MaybeCreateTestCreditCards() {
   if (has_created_test_credit_cards_)
     return;
 
@@ -2153,6 +2163,19 @@ bool PersonalDataManager::DeleteDisusedAddresses() {
   AutofillMetrics::LogNumberOfAddressesDeletedForDisuse(num_deleted_addresses);
 
   return true;
+}
+
+void PersonalDataManager::ApplyAddressFixesAndCleanups() {
+  ApplyProfileUseDatesFix();        // One-time fix, otherwise NOP.
+  RemoveOrphanAutofillTableRows();  // One-time fix, otherwise NOP.
+  ApplyDedupingRoutine();           // Once per major version, otherwise NOP.
+  DeleteDisusedAddresses();         // Once per major version, otherwise NOP.
+  MaybeCreateTestAddresses();       // Once per user profile startup.
+}
+
+void PersonalDataManager::ApplyCardFixesAndCleanups() {
+  DeleteDisusedCreditCards();    // Once per major version, otherwise NOP.
+  MaybeCreateTestCreditCards();  // Once per user profile startup.
 }
 
 }  // namespace autofill

@@ -29,7 +29,7 @@
 namespace blink {
 
 class EmbeddedContentView;
-class PluginView;
+class WebPluginContainerImpl;
 
 // LayoutObject for frames via LayoutFrame and LayoutIFrame, and plugins via
 // LayoutEmbeddedObject.
@@ -39,8 +39,6 @@ class CORE_EXPORT LayoutEmbeddedContent : public LayoutReplaced {
   ~LayoutEmbeddedContent() override;
 
   bool RequiresAcceleratedCompositing() const;
-
-  bool NeedsPreferredWidthsRecalculation() const final;
 
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation& location_in_container,
@@ -55,7 +53,7 @@ class CORE_EXPORT LayoutEmbeddedContent : public LayoutReplaced {
   // to LayoutObject::GetFrameView which returns the LocalFrameView associated
   // with the root Document Frame.
   LocalFrameView* ChildFrameView() const;
-  PluginView* Plugin() const;
+  WebPluginContainerImpl* Plugin() const;
   EmbeddedContentView* GetEmbeddedContentView() const;
 
   LayoutRect ReplacedContentRect() const final;

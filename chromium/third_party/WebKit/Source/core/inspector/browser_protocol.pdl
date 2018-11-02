@@ -491,6 +491,48 @@ domain Browser
       # V8 version.
       string jsVersion
 
+  # Chrome histogram bucket.
+  experimental type Bucket extends object
+    properties
+      # Minimum value (inclusive).
+      integer low
+      # Maximum value (exclusive).
+      integer high
+      # Number of samples.
+      integer count
+
+  # Chrome histogram.
+  experimental type Histogram extends object
+    properties
+      # Name.
+      string name
+      # Sum of sample values.
+      integer sum
+      # Total number of samples.
+      integer count
+      # Buckets.
+      array of Bucket buckets
+
+  # Get Chrome histograms.
+  experimental command getHistograms
+    parameters
+      # Requested substring in name. Only histograms which have query as a
+      # substring in their name are extracted. An empty or absent query returns
+      # all histograms.
+      optional string query
+    returns
+      # Histograms.
+      array of Histogram histograms
+
+  # Get a Chrome histogram by name.
+  experimental command getHistogram
+    parameters
+      # Requested histogram name.
+      string name
+    returns
+      # Histogram.
+      Histogram histogram
+
   # Get position and size of the browser window.
   experimental command getWindowBounds
     parameters
@@ -1875,6 +1917,7 @@ domain DOMDebugger
 experimental domain DOMSnapshot
   depends on CSS
   depends on DOM
+  depends on DOMDebugger
   depends on Page
 
   # A Node in the DOM tree.
@@ -1936,6 +1979,8 @@ experimental domain DOMSnapshot
       # event listeners attached via JavaScript as well as anchor tags that naturally navigate when
       # clicked.
       optional boolean isClickable
+      # Details of the node's event listeners, if any.
+      optional array of DOMDebugger.EventListener eventListeners
 
   # Details of post layout rendered text positions. The exact layout should not be regarded as
   # stable and may change between versions.
@@ -1979,11 +2024,13 @@ experimental domain DOMSnapshot
   # Returns a document snapshot, including the full DOM tree of the root node (including iframes,
   # template contents, and imported documents) in a flattened array, as well as layout and
   # white-listed computed style information for the nodes. Shadow DOM in the returned DOM tree is
-  # flattened. 
+  # flattened.
   command getSnapshot
     parameters
       # Whitelist of computed styles to return.
       array of string computedStyleWhitelist
+      # Whether or not to retrieve details of DOM listeners (default false).
+      optional boolean includeEventListeners
     returns
       # The nodes in the DOM tree. The DOMNode at index 0 corresponds to the root document.
       array of DOMNode domNodes
@@ -2272,6 +2319,9 @@ domain Emulation
       # If set this specifies the maximum number of tasks that can be run before virtual is forced
       # forwards to prevent deadlock.
       optional integer maxVirtualTimeTaskStarvationCount
+      # If set the virtual time policy change should be deferred until any frame starts navigating.
+      # Note any previous deferred policy change is superseded.
+      optional boolean waitForNavigation
     returns
       # Absolute timestamp at which virtual time was first enabled (milliseconds since epoch).
       Runtime.Timestamp virtualTimeBase
@@ -2332,6 +2382,10 @@ experimental domain HeadlessExperimental
       # The interval between BeginFrames that is reported to the compositor, in milliseconds.
       # Defaults to a 60 frames/second interval, i.e. about 16.666 milliseconds.
       optional number interval
+      # Whether updates should not be committed and drawn onto the display. False by default. If
+      # true, only side effects of the BeginFrame will be run, such as layout and animations, but
+      # any visual updates may not be visible on the display or in screenshots.
+      optional boolean noDisplayUpdates
       # If set, a screenshot of the frame will be captured and returned in the response. Otherwise,
       # no screenshot will be captured.
       optional ScreenshotParams screenshot
@@ -2507,6 +2561,15 @@ experimental domain IndexedDB
       string securityOrigin
       # Database name.
       string databaseName
+
+  # Delete a range of entries from an object store
+  command deleteObjectStoreEntries
+    parameters
+      string securityOrigin
+      string databaseName
+      string objectStoreName
+      # Range of entry keys to delete
+      KeyRange keyRange
 
   # Disables events from backend.
   command disable
@@ -3197,6 +3260,8 @@ domain Network
       Headers headers
       # HTTP POST request data.
       optional string postData
+      # True when the request has POST data. Note that postData might still be omitted when this flag is true when the data is too long.
+      optional boolean hasPostData
       # The mixed content type of the request.
       optional Security.MixedContentType mixedContentType
       # Priority of the resource request at the time request is sent.
@@ -3560,6 +3625,8 @@ domain Network
       experimental optional integer maxTotalBufferSize
       # Per-resource buffer size in bytes to use when preserving network payloads (XHRs, etc).
       experimental optional integer maxResourceBufferSize
+      # Longest post body size (in bytes) that would be included in requestWillBeSent notification
+      optional integer maxPostDataSize
 
   # Returns all browser cookies. Depending on the backend support, will return detailed cookie
   # information in the `cookies` field.
@@ -3596,6 +3663,15 @@ domain Network
       string body
       # True, if content was sent as base64.
       boolean base64Encoded
+
+  # Returns post data sent with the request. Returns an error when no data was sent with the request.
+  command getRequestPostData
+    parameters
+      # Identifier of the network request to get content for.
+      RequestId requestId
+    returns
+      # Base64-encoded request body.
+      string postData
 
   # Returns content served for the given currently intercepted request.
   experimental command getResponseBodyForInterception
@@ -3759,6 +3835,8 @@ domain Network
       MonotonicTime timestamp
       # Total number of bytes received for this request.
       number encodedDataLength
+      # Set when response was blocked due to being cross-site document response.
+      optional boolean blockedCrossSiteDocument
 
   # Details of an intercepted HTTP request, which must be either allowed, blocked, modified or
   # mocked.
@@ -4491,6 +4569,18 @@ domain Page
       # Whether to silently ignore invalid but successfully parsed page ranges, such as '3-2'.
       # Defaults to false.
       optional boolean ignoreInvalidPageRanges
+      # HTML template for the print header. Should be valid HTML markup with following
+      # classes used to inject printing values into them:
+      # - date - formatted print date
+      # - title - document title
+      # - url - document location
+      # - pageNumber - current page number
+      # - totalPages - total pages in the document
+      #
+      # For example, <span class=title></span> would generate span containing the title.
+      optional string headerTemplate
+      # HTML template for the print footer. Should use the same format as the `headerTemplate`.
+      optional string footerTemplate
     returns
       # Base64-encoded pdf data.
       string data
@@ -4501,6 +4591,7 @@ domain Page
       # If true, browser cache is ignored (as if the user pressed Shift+refresh).
       optional boolean ignoreCache
       # If set, the script will be injected into all frames of the inspected page after reload.
+      # Argument will be ignored if reloading dataURL origin.
       optional string scriptToEvaluateOnLoad
 
   # Deprecated, please use removeScriptToEvaluateOnNewDocument instead.
@@ -4543,12 +4634,6 @@ domain Page
     parameters
       # Whether to block ads.
       boolean enabled
-
-  # Controls whether browser will open a new inspector window for connected pages.
-  experimental command setAutoAttachToCreatedPages
-    parameters
-      # If true, browser will open a new inspector window for every page created from this one.
-      boolean autoAttach
 
   # Overrides the values of device screen dimensions (window.screen.width, window.screen.height,
   # window.innerWidth, window.innerHeight, and "device-width"/"device-height"-related CSS media
@@ -4664,6 +4749,9 @@ domain Page
 
   # Force the page stop all navigations and pending resource fetches.
   command stopLoading
+
+  # Crashes renderer on the IO thread, generates minidumps.
+  experimental command crash
 
   # Stops sending each frame in the `screencastFrame`.
   experimental command stopScreencast
@@ -4863,6 +4951,8 @@ domain Security
     properties
       # Security state representing the severity of the factor being explained.
       SecurityState securityState
+      # Title describing the type of factor.
+      string title
       # Short phrase describing the type of factor.
       string summary
       # Full text explanation of the factor.
@@ -4905,8 +4995,14 @@ domain Security
   # Enables tracking security state changes.
   command enable
 
+  # Enable/disable whether all certificate errors should be ignored.
+  experimental command setIgnoreCertificateErrors
+    parameters
+      # If true, all certificate errors will be ignored.
+      boolean ignore
+
   # Handles a certificate error that fired a certificateError event.
-  command handleCertificateError
+  deprecated command handleCertificateError
     parameters
       # The ID of the event.
       integer eventId
@@ -4915,15 +5011,16 @@ domain Security
 
   # Enable/disable overriding certificate errors. If enabled, all certificate error events need to
   # be handled by the DevTools client and should be answered with handleCertificateError commands.
-  command setOverrideCertificateErrors
+  deprecated command setOverrideCertificateErrors
     parameters
       # If true, certificate errors will be overridden.
       boolean override
 
   # There is a certificate error. If overriding certificate errors is enabled, then it should be
   # handled with the handleCertificateError command. Note: this event does not fire if the
-  # certificate error has been allowed internally.
-  event certificateError
+  # certificate error has been allowed internally. Only one client per target should override
+  # certificate errors at the same time.
+  deprecated event certificateError
     parameters
       # The ID of the event.
       integer eventId
@@ -4982,7 +5079,7 @@ experimental domain ServiceWorker
       ServiceWorkerVersionStatus status
       # The Last-Modified header value of the main script.
       optional number scriptLastModified
-      # The time at which the response headers of the main script were received from the server. 
+      # The time at which the response headers of the main script were received from the server.
       # For cached script it is the last time the cache entry was validated.
       optional number scriptResponseTime
       optional array of Target.TargetID controlledClients
@@ -5432,6 +5529,12 @@ experimental domain Tracing
       # Configuration for memory dump triggers. Used only when "memory-infra" category is enabled.
       optional MemoryDumpConfig memoryDumpConfig
 
+  # Compression type to use for traces returned via streams.
+  type StreamCompression extends string
+    enum
+      none
+      gzip
+
   # Stop trace events collection.
   command end
 
@@ -5469,6 +5572,9 @@ experimental domain Tracing
       optional enum transferMode
         ReportEvents
         ReturnAsStream
+      # Compression format to use. This only applies when using `ReturnAsStream`
+      # transfer mode (defaults to `none`)
+      optional StreamCompression streamCompression
       optional TraceConfig traceConfig
 
   event bufferUsage
@@ -5494,3 +5600,5 @@ experimental domain Tracing
     parameters
       # A handle of the stream that holds resulting trace data.
       optional IO.StreamHandle stream
+      # Compression format of returned stream.
+      optional StreamCompression streamCompression

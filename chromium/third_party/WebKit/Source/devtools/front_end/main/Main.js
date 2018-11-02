@@ -87,53 +87,49 @@ Main.Main = class {
    * Note: this function is called from testSettings in Tests.js.
    */
   _createSettings(prefs) {
-    this._initializeExperiments(prefs);
+    this._initializeExperiments();
     var storagePrefix = '';
     if (Host.isCustomDevtoolsFrontend())
       storagePrefix = '__custom__';
-    else if (!Runtime.queryParam('can_dock') && !!Runtime.queryParam('debugFrontend') && !Host.isUnderTest(prefs))
+    else if (!Runtime.queryParam('can_dock') && !!Runtime.queryParam('debugFrontend') && !Host.isUnderTest())
       storagePrefix = '__bundled__';
-    var clearLocalStorage = window.localStorage ? window.localStorage.clear.bind(window.localStorage) : undefined;
-    var localStorage =
-        new Common.SettingsStorage(window.localStorage || {}, undefined, undefined, clearLocalStorage, storagePrefix);
+
+    var localStorage;
+    if (!Host.isUnderTest() && window.localStorage) {
+      localStorage = new Common.SettingsStorage(
+          window.localStorage, undefined, undefined, () => window.localStorage.clear(), storagePrefix);
+    } else {
+      localStorage = new Common.SettingsStorage({}, undefined, undefined, undefined, storagePrefix);
+    }
     var globalStorage = new Common.SettingsStorage(
         prefs, InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference,
         InspectorFrontendHost.clearPreferences, storagePrefix);
     Common.settings = new Common.Settings(globalStorage, localStorage);
-    if (!Host.isUnderTest(prefs))
+    if (!Host.isUnderTest())
       new Common.VersionController().updateVersion();
   }
 
-  /**
-   * @param {!Object<string, string>} prefs
-   */
-  _initializeExperiments(prefs) {
+  _initializeExperiments() {
     // Keep this sorted alphabetically: both keys and values.
     Runtime.experiments.register('accessibilityInspection', 'Accessibility Inspection');
     Runtime.experiments.register('applyCustomStylesheet', 'Allow custom UI themes');
-    Runtime.experiments.register('autoAttachToCrossProcessSubframes', 'Auto-attach to cross-process subframes', true);
     Runtime.experiments.register('blackboxJSFramesOnTimeline', 'Blackbox JavaScript frames on Timeline', true);
     Runtime.experiments.register('colorContrastRatio', 'Color contrast ratio line in color picker', true);
-    Runtime.experiments.register('continueToLocationMarkers', 'Continue to location markers', true);
     Runtime.experiments.register('emptySourceMapAutoStepping', 'Empty sourcemap auto-stepping');
     Runtime.experiments.register('inputEventsOnTimelineOverview', 'Input events on Timeline overview', true);
     Runtime.experiments.register('logManagement', 'Log management', true);
-    Runtime.experiments.register('networkGroupingRequests', 'Network request groups support', true);
-    Runtime.experiments.register('networkPersistence', 'Override requests with workspace project');
-    Runtime.experiments.register('objectPreviews', 'Object previews', true);
     Runtime.experiments.register('performanceMonitor', 'Performance Monitor', true);
     Runtime.experiments.register('persistence2', 'Persistence 2.0');
     Runtime.experiments.register('sourceDiff', 'Source diff');
-    Runtime.experiments.register('stepIntoAsync', 'Step into async action');
+    Runtime.experiments.register(
+        'stepIntoAsync', 'Introduce separate step action, stepInto becomes powerful enough to go inside async call');
     Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
 
     // Timeline
-    Runtime.experiments.register('timelineColorByProduct', 'Timeline: color by product', true);
     Runtime.experiments.register('timelineEventInitiators', 'Timeline: event initiators');
     Runtime.experiments.register('timelineFlowEvents', 'Timeline: flow events', true);
     Runtime.experiments.register('timelineInvalidationTracking', 'Timeline: invalidation tracking', true);
     Runtime.experiments.register('timelineKeepHistory', 'Timeline: keep recording history');
-    Runtime.experiments.register('timelineMultipleMainViews', 'Timeline: multiple main views');
     Runtime.experiments.register('timelinePaintTimingMarkers', 'Timeline: paint timing markers', true);
     Runtime.experiments.register('timelinePerFrameTrack', 'Timeline: per-frame tracks', true);
     Runtime.experiments.register('timelineShowAllEvents', 'Timeline: show all events', true);
@@ -143,21 +139,18 @@ Main.Main = class {
 
     Runtime.experiments.cleanUpStaleExperiments();
 
-    if (Host.isUnderTest(prefs)) {
-      var testPath = Runtime.queryParam('test') || JSON.parse(prefs['testPath'] || '""');
+    if (Host.isUnderTest()) {
+      var testPath = Runtime.queryParam('test');
       // Enable experiments for testing.
       if (testPath.indexOf('accessibility/') !== -1)
         Runtime.experiments.enableForTest('accessibilityInspection');
       if (testPath.indexOf('console-sidebar/') !== -1)
         Runtime.experiments.enableForTest('logManagement');
-      if (testPath.indexOf('overrides/') !== -1)
-        Runtime.experiments.enableForTest('networkPersistence');
     }
 
     Runtime.experiments.setDefaultExperiments([
-      'continueToLocationMarkers', 'autoAttachToCrossProcessSubframes', 'objectPreviews', 'persistence2',
-      'networkGroupingRequests', 'timelineColorByProduct', 'accessibilityInspection', 'logManagement',
-      'performanceMonitor'
+      'accessibilityInspection', 'colorContrastRatio', 'logManagement', 'performanceMonitor', 'persistence2',
+      'stepIntoAsync', 'timelineKeepHistory'
     ]);
   }
 
@@ -288,8 +281,11 @@ Main.Main = class {
   _initializeTarget() {
     Main.Main.time('Main._initializeTarget');
     SDK.targetManager.connectToMainTarget(webSocketConnectionLost);
+    InspectorFrontendHost.connectionReady();
 
+    // Used for browser tests.
     InspectorFrontendHost.readyForTest();
+
     // Asynchronously run the extensions.
     setTimeout(this._lateInitialization.bind(this), 100);
     Main.Main.timeEnd('Main._initializeTarget');
@@ -895,7 +891,8 @@ Main.TargetCrashedScreen = class extends UI.VBox {
 Main.BackendSettingsSync = class {
   constructor() {
     this._autoAttachSetting = Common.settings.moduleSetting('autoAttachToCreatedPages');
-    this._autoAttachSetting.addChangeListener(this._update, this);
+    this._autoAttachSetting.addChangeListener(this._updateAutoAttach, this);
+    this._updateAutoAttach();
 
     this._adBlockEnabledSetting = Common.settings.moduleSetting('network.adBlockingEnabled');
     this._adBlockEnabledSetting.addChangeListener(this._update, this);
@@ -907,8 +904,11 @@ Main.BackendSettingsSync = class {
    * @param {!SDK.Target} target
    */
   _updateTarget(target) {
-    target.pageAgent().setAutoAttachToCreatedPages(this._autoAttachSetting.get());
     target.pageAgent().setAdBlockingEnabled(this._adBlockEnabledSetting.get());
+  }
+
+  _updateAutoAttach() {
+    InspectorFrontendHost.setOpenNewWindowForPopups(this._autoAttachSetting.get());
   }
 
   _update() {

@@ -437,7 +437,7 @@ static bool IsEditableLeaf(InlineBox* leaf) {
 
 InlineBox* RootInlineBox::ClosestLeafChildForPoint(
     const LayoutPoint& point_in_contents,
-    bool only_editable_leaves) {
+    bool only_editable_leaves) const {
   return ClosestLeafChildForLogicalLeftPosition(
       Block().IsHorizontalWritingMode() ? point_in_contents.X()
                                         : point_in_contents.Y(),
@@ -446,7 +446,7 @@ InlineBox* RootInlineBox::ClosestLeafChildForPoint(
 
 InlineBox* RootInlineBox::ClosestLeafChildForLogicalLeftPosition(
     LayoutUnit left_position,
-    bool only_editable_leaves) {
+    bool only_editable_leaves) const {
   InlineBox* first_leaf = FirstLeafChild();
   InlineBox* last_leaf = LastLeafChild();
 
@@ -617,10 +617,12 @@ void RootInlineBox::AscentAndDescentForBox(
            ->LineHeight()
            .IsNegative() &&
        include_leading)) {
-    used_fonts->push_back(box->GetLineLayoutItem()
-                              .Style(IsFirstLineStyle())
-                              ->GetFont()
-                              .PrimaryFont());
+    const SimpleFontData* primary_font = box->GetLineLayoutItem()
+                                             .Style(IsFirstLineStyle())
+                                             ->GetFont()
+                                             .PrimaryFont();
+    if (primary_font)
+      used_fonts->push_back(primary_font);
     for (size_t i = 0; i < used_fonts->size(); ++i) {
       const FontMetrics& font_metrics = used_fonts->at(i)->GetFontMetrics();
       LayoutUnit used_font_ascent(font_metrics.Ascent(BaselineType()));

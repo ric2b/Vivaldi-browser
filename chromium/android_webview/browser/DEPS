@@ -15,9 +15,11 @@ include_rules = [
   "+components/autofill/core/common",
   "+components/cdm/browser",
   "+components/crash/content/browser",
+  "+components/crash/core",
   "+components/navigation_interception",
   "+components/policy/core/browser",
   "+components/policy/core/common",
+  "+components/policy/content",
   "+components/pref_registry",
   "+components/printing/browser",
   "+components/printing/common",
@@ -64,6 +66,9 @@ include_rules = [
   # AwContentBrowserClient::GetDefaultFavicon
   "!ui/resources/grit/ui_resources.h",
 
+
+  # QuotaStatusCode required by AwQuotaManagerBridge.
+  "+third_party/WebKit/common/quota",
   # POD structure required by the find-in-page IPC messages.
   "+third_party/WebKit/public/web/WebFindOptions.h",
   # Interface required for in-process input event handling.

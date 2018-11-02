@@ -17,16 +17,15 @@
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/quota_task.h"
-#include "storage/common/quota/quota_types.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
+using blink::mojom::StorageType;
 using storage::GetOriginsCallback;
 using storage::QuotaClient;
 using storage::QuotaManager;
-using storage::QuotaStatusCode;
 using storage::SpecialStoragePolicy;
 using storage::StatusCallback;
-using storage::StorageType;
 
 namespace content {
 
@@ -54,7 +53,7 @@ class MockQuotaManager : public QuotaManager {
   // called.  The internal quota value can be updated by calling
   // a helper method MockQuotaManagerProxy::SetQuota().
   void GetUsageAndQuota(const GURL& origin,
-                        storage::StorageType type,
+                        StorageType type,
                         const UsageAndQuotaCallback& callback) override;
 
   // Overrides QuotaManager's implementation with a canned implementation that
@@ -138,7 +137,7 @@ class MockQuotaManager : public QuotaManager {
                            std::set<GURL>* origins,
                            StorageType storage_type);
   void DidDeleteOriginData(const StatusCallback& callback,
-                           QuotaStatusCode status);
+                           blink::mojom::QuotaStatusCode status);
 
   // The list of stored origins that have been added via AddOrigin.
   std::vector<OriginInfo> origins_;

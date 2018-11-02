@@ -31,24 +31,25 @@ Polymer({
 
   ready: function() {
     this.isCombined = false;
-    this.isAccelerated = false;
+    this.isAccelerated = loadTimeData.getBoolean('accelerated_flow_enabled');
 
+    // The accelerated flow can be overridden with a query parameter.
     const FLOWTYPE_KEY = 'flowtype';
     const FLOW_TYPE_MAP = {'regular': false, 'accelerated': true};
     var params = new URLSearchParams(location.search);
     if (params.has(FLOWTYPE_KEY)) {
       if (params.get(FLOWTYPE_KEY) in FLOW_TYPE_MAP) {
         this.isAccelerated = FLOW_TYPE_MAP[params.get(FLOWTYPE_KEY)];
-
-        // Adjust the height since the accelerated flow contains fewer steps.
-        this.customStyle['--expandable-section-height'] = '26.375em';
-        this.updateStyles();
       } else {
         console.log(
             'Found invalid value for the \'flowtype\' parameter: %s',
             params.get(FLOWTYPE_KEY));
       }
     }
+
+    // The accelerated flow contains fewer steps. To account for this, toggle
+    // the 'accelerated' class which reduces the height of the steps section.
+    this.classList.toggle('accelerated', this.isAccelerated);
 
     // Asynchronously check if Chrome is pinned to the taskbar.
     cr.sendWithPromise('getPinnedToTaskbarState')

@@ -4,9 +4,9 @@
 
 #include "chrome/browser/page_load_metrics/observers/use_counter_page_load_metrics_observer.h"
 
+#include <memory>
 #include <vector>
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
@@ -56,7 +56,7 @@ class UseCounterPageLoadMetricsObserverTest
 
  protected:
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
-    tracker->AddObserver(base::MakeUnique<UseCounterPageLoadMetricsObserver>());
+    tracker->AddObserver(std::make_unique<UseCounterPageLoadMetricsObserver>());
   }
 
  private:
@@ -91,4 +91,28 @@ TEST_F(UseCounterPageLoadMetricsObserverTest, CountDuplicatedFeatures) {
   page_load_features_0.features = features_0;
   page_load_features_1.features = features_1;
   HistogramBasicTest(page_load_features_0, page_load_features_1);
+}
+
+TEST_F(UseCounterPageLoadMetricsObserverTest, RecordUkmUsage) {
+  std::vector<WebFeature> features_0(
+      {WebFeature::kFetch, WebFeature::kNavigatorVibrate});
+  std::vector<WebFeature> features_1(
+      {WebFeature::kTouchEventPreventedNoTouchAction});
+  page_load_metrics::mojom::PageLoadFeatures page_load_features_0;
+  page_load_metrics::mojom::PageLoadFeatures page_load_features_1;
+  page_load_features_0.features = features_0;
+  page_load_features_1.features = features_1;
+  HistogramBasicTest(page_load_features_0, page_load_features_1);
+
+  std::vector<const ukm::mojom::UkmEntry*> entries =
+      test_ukm_recorder().GetEntriesByName(internal::kUkmUseCounterEventName);
+  EXPECT_EQ(2ul, entries.size());
+  test_ukm_recorder().ExpectEntrySourceHasUrl(entries[0], GURL(kTestUrl));
+  test_ukm_recorder().ExpectEntryMetric(
+      entries[0], internal::kUkmUseCounterFeature,
+      static_cast<int64_t>(WebFeature::kNavigatorVibrate));
+  test_ukm_recorder().ExpectEntrySourceHasUrl(entries[1], GURL(kTestUrl));
+  test_ukm_recorder().ExpectEntryMetric(
+      entries[1], internal::kUkmUseCounterFeature,
+      static_cast<int64_t>(WebFeature::kTouchEventPreventedNoTouchAction));
 }

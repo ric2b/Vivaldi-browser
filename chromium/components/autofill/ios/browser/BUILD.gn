@@ -9,12 +9,12 @@ source_set("browser") {
   sources = [
     "autofill_agent.h",
     "autofill_agent.mm",
-    "autofill_client_ios.h",
-    "autofill_client_ios.mm",
     "autofill_client_ios_bridge.h",
     "autofill_driver_ios.h",
     "autofill_driver_ios.mm",
     "autofill_driver_ios_bridge.h",
+    "autofill_util.h",
+    "autofill_util.mm",
     "credit_card_util.h",
     "credit_card_util.mm",
     "form_suggestion.h",
@@ -61,7 +61,25 @@ source_set("test_support") {
 js_compile_checked("injected_js") {
   visibility = [ ":browser" ]
   sources = [
-    "resources/autofill_controller.js",
     "resources/suggestion_controller.js",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "autofill_agent_unittests.mm",
+  ]
+  deps = [
+    ":browser",
+    "//base",
+    "//components/autofill/core/browser:test_support",
+    "//components/prefs",
+    "//ios/web/public",
+    "//ios/web/public/test/fakes",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/ocmock",
   ]
 }

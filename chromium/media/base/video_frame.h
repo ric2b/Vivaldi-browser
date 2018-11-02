@@ -79,7 +79,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
 
   // CB to be called on the mailbox backing this frame when the frame is
   // destroyed.
-  typedef base::Callback<void(const gpu::SyncToken&)> ReleaseMailboxCB;
+  typedef base::OnceCallback<void(const gpu::SyncToken&)> ReleaseMailboxCB;
 
   // Interface representing client operations on a SyncToken, i.e. insert one in
   // the GPU Command Buffer and wait for it.
@@ -128,7 +128,7 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   static scoped_refptr<VideoFrame> WrapNativeTextures(
       VideoPixelFormat format,
       const gpu::MailboxHolder (&mailbox_holder)[kMaxPlanes],
-      const ReleaseMailboxCB& mailbox_holders_release_cb,
+      ReleaseMailboxCB mailbox_holders_release_cb,
       const gfx::Size& coded_size,
       const gfx::Rect& visible_rect,
       const gfx::Size& natural_size,
@@ -368,7 +368,10 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   //
   // WARNING: This method is not thread safe; it should only be called if you
   // are still the only owner of this VideoFrame.
-  void SetReleaseMailboxCB(const ReleaseMailboxCB& release_mailbox_cb);
+  void SetReleaseMailboxCB(ReleaseMailboxCB release_mailbox_cb);
+
+  // Tests whether a mailbox release callback is configured.
+  bool HasReleaseMailboxCB() const;
 
   // Adds a callback to be run when the VideoFrame is about to be destroyed.
   // The callback may be run from ANY THREAD, and so it is up to the client to
@@ -408,8 +411,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
   // guaranteed to be unique within a single process.
   int unique_id() const { return unique_id_; }
 
-  // Returns the number of bits per channel for given |format|.
-  int BitsPerChannel(VideoPixelFormat format);
+  // Returns the number of bits per channel.
+  size_t BitDepth() const;
 
  protected:
   friend class base::RefCountedThreadSafe<VideoFrame>;
@@ -458,8 +461,8 @@ class MEDIA_EXPORT VideoFrame : public base::RefCountedThreadSafe<VideoFrame> {
              const gfx::Size& coded_size,
              const gfx::Rect& visible_rect,
              const gfx::Size& natural_size,
-             const gpu::MailboxHolder(&mailbox_holders)[kMaxPlanes],
-             const ReleaseMailboxCB& mailbox_holder_release_cb,
+             const gpu::MailboxHolder (&mailbox_holders)[kMaxPlanes],
+             ReleaseMailboxCB mailbox_holder_release_cb,
              base::TimeDelta timestamp);
 
   static scoped_refptr<VideoFrame> WrapExternalStorage(

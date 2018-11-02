@@ -222,10 +222,10 @@ hooks = [
   {
     'name': 'content_shell_fonts',
     'pattern': '.',
+    'condition': 'checkout_linux',
     'action': [ 'python',
       'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--platform=linux*',
                 '--extract',
                 '--no_auth',
                 '--bucket', 'chromium-fonts',
@@ -290,7 +290,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=190dbfe74c6f5b5913820fa66d9176877924d7c5',
+      '--revision=8164b24ebde9c5649c9a09e88a7fc0b0fcbd1bc5',
       '--overwrite',
       '--copy-dia-binaries',
     ],
@@ -337,6 +337,7 @@ hooks = [
     'action': ['vivaldi/chromium/build/cipd/cipd_wrapper.py',
                '--chromium-root', 'vivaldi/chromium',
                '--ensure-file', 'vivaldi/chromium/build/cipd/android/android.ensure',
+               '--ensure-file', 'vivaldi/chromium/chrome/android/android.ensure',
     ],
   },
   {

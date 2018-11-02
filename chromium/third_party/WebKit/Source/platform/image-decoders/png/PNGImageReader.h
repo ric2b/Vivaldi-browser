@@ -33,6 +33,8 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
+
+#define PNG_SET_OPTION_SUPPORTED
 #include "png.h"
 
 #if !defined(PNG_LIBPNG_VER_MAJOR) || !defined(PNG_LIBPNG_VER_MINOR)
@@ -96,7 +98,7 @@ class PLATFORM_EXPORT PNGImageReader final {
 
   png_bytep InterlaceBuffer() const { return interlace_buffer_.get(); }
   void CreateInterlaceBuffer(int size) {
-    interlace_buffer_ = WrapArrayUnique(new png_byte[size]);
+    interlace_buffer_ = std::make_unique<png_byte[]>(size);
   }
   void ClearInterlaceBuffer() { interlace_buffer_.reset(); }
 

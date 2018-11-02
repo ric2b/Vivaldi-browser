@@ -18,7 +18,7 @@
 #include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/browser_compositor_output_surface.h"
 #include "content/browser/compositor/reflector_texture.h"
-#include "content/browser/compositor/test/no_transport_image_transport_factory.h"
+#include "content/browser/compositor/test/test_image_transport_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer.h"
@@ -118,6 +118,10 @@ class TestOutputSurface : public BrowserCompositorOutputSurface {
   void SetSurfaceSuspendedForRecycle(bool suspended) override {}
 #endif
 
+#if BUILDFLAG(ENABLE_VULKAN)
+  gpu::VulkanSurface* GetVulkanSurface() override { return nullptr; }
+#endif
+
  private:
   std::unique_ptr<ReflectorTexture> reflector_texture_;
 };
@@ -138,7 +142,7 @@ class ReflectorImplTest : public testing::Test {
     ui::InitializeContextFactoryForTests(enable_pixel_output, &context_factory,
                                          &context_factory_private);
     ImageTransportFactory::SetFactory(
-        std::make_unique<NoTransportImageTransportFactory>());
+        std::make_unique<TestImageTransportFactory>());
     task_runner_ = message_loop_->task_runner();
     compositor_task_runner_ = new FakeTaskRunner();
     begin_frame_source_ = std::make_unique<viz::DelayBasedBeginFrameSource>(

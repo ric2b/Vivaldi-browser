@@ -21,17 +21,18 @@
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/suggestions/proto/suggestions.pb.h"
 #include "components/suggestions/suggestions_service.h"
 #include "components/sync/driver/sync_service_observer.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "net/base/backoff_entry.h"
 #include "net/url_request/url_fetcher_delegate.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 #include "url/gurl.h"
 
-class OAuth2TokenService;
-class SigninManagerBase;
+namespace identity {
+class IdentityManager;
+}  // namespace identity
 
 namespace net {
 class URLRequestContextGetter;
@@ -56,8 +57,7 @@ class SuggestionsServiceImpl : public SuggestionsService,
                                public net::URLFetcherDelegate,
                                public syncer::SyncServiceObserver {
  public:
-  SuggestionsServiceImpl(SigninManagerBase* signin_manager,
-                         OAuth2TokenService* token_service,
+  SuggestionsServiceImpl(identity::IdentityManager* identity_manager,
                          syncer::SyncService* sync_service,
                          net::URLRequestContextGetter* url_request_context,
                          std::unique_ptr<SuggestionsStore> suggestions_store,
@@ -176,8 +176,7 @@ class SuggestionsServiceImpl : public SuggestionsService,
 
   base::ThreadChecker thread_checker_;
 
-  SigninManagerBase* signin_manager_;
-  OAuth2TokenService* token_service_;
+  identity::IdentityManager* identity_manager_;
 
   syncer::SyncService* sync_service_;
   ScopedObserver<syncer::SyncService, syncer::SyncServiceObserver>
@@ -205,7 +204,7 @@ class SuggestionsServiceImpl : public SuggestionsService,
 
   // Helper for fetching OAuth2 access tokens. This is non-null iff an access
   // token request is currently in progress.
-  std::unique_ptr<AccessTokenFetcher> token_fetcher_;
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher> token_fetcher_;
 
   // Contains the current suggestions fetch request. Will only have a value
   // while a request is pending, and will be reset by |OnURLFetchComplete| or

@@ -14,6 +14,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -75,6 +76,7 @@ inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestEnumOrDouble&
 template <>
 struct NativeValueTraits<TestEnumOrDouble> : public NativeValueTraitsBase<TestEnumOrDouble> {
   CORE_EXPORT static TestEnumOrDouble NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  CORE_EXPORT static TestEnumOrDouble NullValue() { return TestEnumOrDouble(); }
 };
 
 template <>

@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
+
+#include <math.h>
 #include <stddef.h>
 
 #include <utility>
@@ -12,7 +15,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "content/browser/accessibility/accessibility_tree_formatter_blink.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -94,8 +96,10 @@ std::string AccessibilityTreeFormatterBlink::IntAttrToString(
     case ui::AX_ATTR_HIERARCHICAL_LEVEL:
     case ui::AX_ATTR_IN_PAGE_LINK_TARGET_ID:
     case ui::AX_ATTR_MEMBER_OF_ID:
+    case ui::AX_ATTR_NEXT_FOCUS_ID:
     case ui::AX_ATTR_NEXT_ON_LINE_ID:
     case ui::AX_ATTR_POS_IN_SET:
+    case ui::AX_ATTR_PREVIOUS_FOCUS_ID:
     case ui::AX_ATTR_PREVIOUS_ON_LINE_ID:
     case ui::AX_ATTR_SCROLL_X:
     case ui::AX_ATTR_SCROLL_X_MAX:
@@ -190,7 +194,7 @@ void AccessibilityTreeFormatterBlink::AddProperties(
        attr_index <= ui::AX_FLOAT_ATTRIBUTE_LAST;
        ++attr_index) {
     auto attr = static_cast<ui::AXFloatAttribute>(attr_index);
-    if (node.HasFloatAttribute(attr))
+    if (node.HasFloatAttribute(attr) && isfinite(node.GetFloatAttribute(attr)))
       dict->SetDouble(ui::ToString(attr), node.GetFloatAttribute(attr));
   }
 
@@ -279,12 +283,13 @@ base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
   }
 
   // Offscreen and Focused states are not in the state list.
-  bool value = false;
-  dict.GetBoolean(STATE_OFFSCREEN, &value);
-  if (value)
+  bool offscreen = false;
+  dict.GetBoolean(STATE_OFFSCREEN, &offscreen);
+  if (offscreen)
     WriteAttribute(false, STATE_OFFSCREEN, &line);
-  dict.GetBoolean(STATE_FOCUSED, &value);
-  if (value)
+  bool focused = false;
+  dict.GetBoolean(STATE_FOCUSED, &focused);
+  if (focused)
     WriteAttribute(false, STATE_FOCUSED, &line);
 
   WriteAttribute(false,
@@ -390,11 +395,11 @@ base::string16 AccessibilityTreeFormatterBlink::ProcessTreeForOutput(
     WriteAttribute(false, attr_string, &line);
   }
 
-  std::string string_value;
-  if (dict.GetString("actions", &string_value)) {
-    WriteAttribute(false,
-                   base::StringPrintf("%s=%s", "actions", string_value.c_str()),
-                   &line);
+  std::string actions_value;
+  if (dict.GetString("actions", &actions_value)) {
+    WriteAttribute(
+        false, base::StringPrintf("%s=%s", "actions", actions_value.c_str()),
+        &line);
   }
 
   for (const char* attribute_name : TREE_DATA_ATTRIBUTES) {

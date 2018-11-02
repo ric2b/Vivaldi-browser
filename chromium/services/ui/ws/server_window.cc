@@ -98,15 +98,24 @@ void ServerWindow::CreateRootCompositorFrameSink(
     gfx::AcceleratedWidget widget,
     viz::mojom::CompositorFrameSinkAssociatedRequest sink_request,
     viz::mojom::CompositorFrameSinkClientPtr client,
-    viz::mojom::DisplayPrivateAssociatedRequest display_request) {
+    viz::mojom::DisplayPrivateAssociatedRequest display_request,
+    viz::mojom::DisplayClientPtr display_client) {
   has_created_compositor_frame_sink_ = true;
   // TODO(fsamuel): AcceleratedWidget cannot be transported over IPC for Mac
   // or Android. We should instead use GpuSurfaceTracker here on those
   // platforms.
+
+  auto params = viz::mojom::RootCompositorFrameSinkParams::New();
+  params->frame_sink_id = frame_sink_id_;
+  params->widget = widget;
+  params->renderer_settings = viz::CreateRendererSettings();
+  params->compositor_frame_sink = std::move(sink_request);
+  params->compositor_frame_sink_client = client.PassInterface();
+  params->display_private = std::move(display_request);
+  params->display_client = display_client.PassInterface();
+
   delegate_->GetVizHostProxy()->CreateRootCompositorFrameSink(
-      frame_sink_id_, widget,
-      viz::CreateRendererSettings(viz::BufferToTextureTargetMap()),
-      std::move(sink_request), std::move(client), std::move(display_request));
+      std::move(params));
 }
 
 void ServerWindow::CreateCompositorFrameSink(
@@ -176,6 +185,11 @@ void ServerWindow::Remove(ServerWindow* child) {
 
   for (auto& observer : child->observers_)
     observer.OnWindowHierarchyChanged(child, nullptr, this);
+}
+
+void ServerWindow::RemoveAllChildren() {
+  while (!children_.empty())
+    Remove(children_[0]);
 }
 
 void ServerWindow::Reorder(ServerWindow* relative,

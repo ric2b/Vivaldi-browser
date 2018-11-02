@@ -43,7 +43,7 @@
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutTreeAsText.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "platform/graphics/TouchAction.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -224,8 +224,9 @@ IntRect WindowClipRect(const LocalFrameView& frame_view) {
   LayoutRect clip_rect(
       LayoutPoint(),
       LayoutSize(frame_view.VisibleContentSize(kExcludeScrollbars)));
-  frame_view.GetLayoutViewItem().MapToVisualRectInAncestorSpace(
-      &frame_view.GetLayoutView()->ContainerForPaintInvalidation(), clip_rect);
+  frame_view.GetLayoutView()->MapToVisualRectInAncestorSpace(
+      &frame_view.GetLayoutView()->ContainerForPaintInvalidation(), clip_rect,
+      0, kDefaultVisualRectFlags);
   return EnclosingIntRect(clip_rect);
 }
 

@@ -74,6 +74,7 @@
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/MathExtras.h"
 #include "public/platform/TaskType.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 
 namespace blink {
 
@@ -111,6 +112,7 @@ HTMLInputElement::HTMLInputElement(Document& document, bool created_by_parser)
       should_reveal_password_(false),
       needs_to_update_view_value_(true),
       is_placeholder_visible_(false),
+      has_been_password_field_(false),
       // |m_inputType| is lazily created when constructed by the parser to avoid
       // constructing unnecessarily a text inputType and its shadow subtree,
       // just to destroy them when the |type| attribute gets set by the parser
@@ -126,7 +128,7 @@ HTMLInputElement* HTMLInputElement::Create(Document& document,
       new HTMLInputElement(document, created_by_parser);
   if (!created_by_parser) {
     DCHECK(input_element->input_type_view_->NeedsShadowSubtree());
-    input_element->CreateUserAgentShadowRoot();
+    input_element->CreateUserAgentShadowRootV1();
     input_element->CreateShadowSubtree();
   }
   return input_element;
@@ -150,7 +152,7 @@ HTMLImageLoader& HTMLInputElement::EnsureImageLoader() {
   return *image_loader_;
 }
 
-HTMLInputElement::~HTMLInputElement() {}
+HTMLInputElement::~HTMLInputElement() = default;
 
 const AtomicString& HTMLInputElement::GetName() const {
   return name_.IsNull() ? g_empty_atom : name_;
@@ -313,8 +315,10 @@ void HTMLInputElement::UpdateFocusAppearanceWithOptions(
     // case of RangeSelection. crbug.com/443061.
     GetDocument().EnsurePaintLocationDataValidForNode(this);
     if (!options.preventScroll()) {
-      if (GetLayoutObject())
-        GetLayoutObject()->ScrollRectToVisible(BoundingBox());
+      if (GetLayoutObject()) {
+        GetLayoutObject()->ScrollRectToVisible(BoundingBox(),
+                                               WebScrollIntoViewParams());
+      }
       if (GetDocument().GetFrame())
         GetDocument().GetFrame()->Selection().RevealSelection();
     }
@@ -337,11 +341,6 @@ void HTMLInputElement::EndEditing() {
   frame->GetPage()->GetChromeClient().DidEndEditingOnTextField(*this);
 }
 
-void HTMLInputElement::HandleFocusEvent(Element* old_focused_element,
-                                        WebFocusType type) {
-  input_type_->EnableSecureTextInput();
-}
-
 void HTMLInputElement::DispatchFocusInEvent(
     const AtomicString& event_type,
     Element* old_focused_element,
@@ -354,7 +353,6 @@ void HTMLInputElement::DispatchFocusInEvent(
 }
 
 void HTMLInputElement::HandleBlurEvent() {
-  input_type_->DisableSecureTextInput();
   input_type_view_->HandleBlurEvent();
 }
 
@@ -374,8 +372,10 @@ void HTMLInputElement::InitializeTypeInParsing() {
   String default_value = FastGetAttribute(valueAttr);
   if (input_type_->GetValueMode() == ValueMode::kValue)
     non_attribute_value_ = SanitizeValue(default_value);
+  has_been_password_field_ |= new_type_name == InputTypeNames::password;
+
   if (input_type_view_->NeedsShadowSubtree()) {
-    CreateUserAgentShadowRoot();
+    CreateUserAgentShadowRootV1();
     CreateShadowSubtree();
   }
 
@@ -429,10 +429,12 @@ void HTMLInputElement::UpdateType() {
   bool placeholder_changed =
       input_type_->SupportsPlaceholder() != new_type->SupportsPlaceholder();
 
+  has_been_password_field_ |= new_type_name == InputTypeNames::password;
+
   input_type_ = new_type;
   input_type_view_ = input_type_->CreateView();
   if (input_type_view_->NeedsShadowSubtree()) {
-    EnsureUserAgentShadowRoot();
+    EnsureUserAgentShadowRootV1();
     CreateShadowSubtree();
   }
 
@@ -775,16 +777,16 @@ void HTMLInputElement::ParseAttribute(
   } else if (name == minlengthAttr) {
     SetNeedsValidityCheck();
   } else if (name == sizeAttr) {
-    int old_size = size_;
-    size_ = kDefaultSize;
-    int value_as_integer;
-    if (!value.IsEmpty() && ParseHTMLInteger(value, value_as_integer) &&
-        value_as_integer > 0)
-      size_ = value_as_integer;
-    if (size_ != old_size && GetLayoutObject()) {
-      GetLayoutObject()
-          ->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
-              LayoutInvalidationReason::kAttributeChanged);
+    unsigned size = 0;
+    if (value.IsEmpty() || !ParseHTMLNonNegativeInteger(value, size) ||
+        size == 0 || size > 0x7fffffffu)
+      size = kDefaultSize;
+    if (size_ != size) {
+      size_ = size;
+      if (GetLayoutObject())
+        GetLayoutObject()
+            ->SetNeedsLayoutAndPrefWidthsRecalcAndFullPaintInvalidation(
+                LayoutInvalidationReason::kAttributeChanged);
     }
   } else if (name == altAttr) {
     input_type_view_->AltAttributeChanged();
@@ -943,6 +945,10 @@ bool HTMLInputElement::IsTextField() const {
   return input_type_->IsTextField();
 }
 
+bool HTMLInputElement::HasBeenPasswordField() const {
+  return has_been_password_field_;
+}
+
 void HTMLInputElement::DispatchChangeEventIfNeeded() {
   if (isConnected() && input_type_->ShouldSendChangeEventAfterCheckedChanged())
     DispatchChangeEvent();
@@ -981,10 +987,9 @@ void HTMLInputElement::setChecked(bool now_checked,
   // unchecked to match other browsers. DOM is not a useful standard for this
   // because it says only to fire change events at "lose focus" time, which is
   // definitely wrong in practice for these types of elements.
-  if (event_behavior != kDispatchNoEvent && isConnected() &&
+  if (event_behavior == kDispatchInputAndChangeEvent && isConnected() &&
       input_type_->ShouldSendChangeEventAfterCheckedChanged()) {
-    if (event_behavior == kDispatchInputAndChangeEvent)
-      DispatchInputEvent();
+    DispatchInputEvent();
   }
 
   PseudoStateChanged(CSSSelector::kPseudoChecked);
@@ -1002,7 +1007,7 @@ void HTMLInputElement::setIndeterminate(bool new_value) {
     o->InvalidateIfControlStateChanged(kCheckedControlState);
 }
 
-int HTMLInputElement::size() const {
+unsigned HTMLInputElement::size() const {
   return size_;
 }
 
@@ -1297,8 +1302,8 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
     if (type() == InputTypeNames::search) {
       GetDocument()
           .GetTaskRunner(TaskType::kUserInteraction)
-          ->PostTask(BLINK_FROM_HERE, WTF::Bind(&HTMLInputElement::OnSearch,
-                                                WrapPersistent(this)));
+          ->PostTask(FROM_HERE, WTF::Bind(&HTMLInputElement::OnSearch,
+                                          WrapPersistent(this)));
     }
     // Form submission finishes editing, just as loss of focus does.
     // If there was a change, send the event now.
@@ -1430,16 +1435,13 @@ bool HTMLInputElement::Multiple() const {
   return FastHasAttribute(multipleAttr);
 }
 
-void HTMLInputElement::setSize(unsigned size) {
-  SetUnsignedIntegralAttribute(sizeAttr, size);
-}
-
 void HTMLInputElement::setSize(unsigned size, ExceptionState& exception_state) {
   if (size == 0) {
     exception_state.ThrowDOMException(
         kIndexSizeError, "The value provided is 0, which is an invalid size.");
   } else {
-    setSize(size);
+    SetUnsignedIntegralAttribute(sizeAttr, size ? size : kDefaultSize,
+                                 kDefaultSize);
   }
 }
 
@@ -1599,7 +1601,7 @@ HTMLDataListElement* HTMLInputElement::DataList() const {
 }
 
 bool HTMLInputElement::HasValidDataListOptions() const {
-  HTMLDataListElement* data_list = this->DataList();
+  HTMLDataListElement* data_list = DataList();
   if (!data_list)
     return false;
   HTMLDataListOptionsCollection* options = data_list->options();
@@ -1614,7 +1616,7 @@ bool HTMLInputElement::HasValidDataListOptions() const {
 HeapVector<Member<HTMLOptionElement>>
 HTMLInputElement::FilteredDataListOptions() const {
   HeapVector<Member<HTMLOptionElement>> filtered;
-  HTMLDataListElement* data_list = this->DataList();
+  HTMLDataListElement* data_list = DataList();
   if (!data_list)
     return filtered;
 
@@ -1868,7 +1870,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
   parameters.double_value = input_type_->ValueAsDouble();
   parameters.is_anchor_element_rtl =
       input_type_view_->ComputedTextDirection() == TextDirection::kRtl;
-  if (HTMLDataListElement* data_list = this->DataList()) {
+  if (HTMLDataListElement* data_list = DataList()) {
     HTMLDataListOptionsCollection* options = data_list->options();
     for (unsigned i = 0; HTMLOptionElement* option = options->Item(i); ++i) {
       if (option->value().IsEmpty() || option->IsDisabledFormControl() ||
@@ -1935,6 +1937,14 @@ bool HTMLInputElement::HasFallbackContent() const {
 
 void HTMLInputElement::SetFilesFromPaths(const Vector<String>& paths) {
   return input_type_->SetFilesFromPaths(paths);
+}
+
+void HTMLInputElement::ChildrenChanged(const ChildrenChange& change) {
+  // Some input types only need shadow roots to hide any children that may
+  // have been appended by script. For such types, shadow roots are lazily
+  // created when children are added for the first time.
+  EnsureUserAgentShadowRootV1();
+  ContainerNode::ChildrenChanged(change);
 }
 
 }  // namespace blink

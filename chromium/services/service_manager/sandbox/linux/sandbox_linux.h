@@ -12,16 +12,15 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/posix/global_descriptors.h"
+#include "sandbox/linux/syscall_broker/broker_command.h"
 #include "sandbox/linux/syscall_broker/broker_file_permission.h"
 #include "services/service_manager/sandbox/export.h"
 #include "services/service_manager/sandbox/linux/sandbox_seccomp_bpf_linux.h"
 #include "services/service_manager/sandbox/sandbox_type.h"
+#include "services/service_manager/sandbox/sanitizer_flags.h"
 
-#if defined(ADDRESS_SANITIZER) || defined(MEMORY_SANITIZER) || \
-    defined(THREAD_SANITIZER) || defined(LEAK_SANITIZER) ||    \
-    defined(UNDEFINED_SANITIZER) || defined(SANITIZER_COVERAGE)
+#if BUILDFLAG(USING_SANITIZER)
 #include <sanitizer/common_interface_defs.h>
-#define ANY_OF_AMTLU_SANITIZER 1
 #endif
 
 namespace base {
@@ -107,7 +106,7 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxLinux {
   // is passed to the BPF compiler and the sandbox is engaged. If
   // pre_sandbox_hook() returns true, the sandbox will be engaged
   // afterwards, otherwise the process is terminated.
-  using PreSandboxHook = base::OnceCallback<bool(BPFBasePolicy*, Options)>;
+  using PreSandboxHook = base::OnceCallback<bool(Options)>;
 
   // Get our singleton instance.
   static SandboxLinux* GetInstance();
@@ -188,7 +187,7 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxLinux {
     return proc_fd_;
   }
 
-#if defined(ANY_OF_AMTLU_SANITIZER)
+#if BUILDFLAG(USING_SANITIZER)
   __sanitizer_sandbox_arguments* sanitizer_args() const {
     return sanitizer_args_.get();
   };
@@ -208,7 +207,7 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxLinux {
   // This should never be destroyed, as after the sandbox is started it is
   // vital to the process.
   void StartBrokerProcess(
-      BPFBasePolicy* client_sandbox_policy,
+      const sandbox::syscall_broker::BrokerCommandSet& allowed_command_set,
       std::vector<sandbox::syscall_broker::BrokerFilePermission> permissions,
       PreSandboxHook broker_side_hook,
       const Options& options);
@@ -259,7 +258,7 @@ class SERVICE_MANAGER_SANDBOX_EXPORT SandboxLinux {
   bool yama_is_enforcing_;                 // Accurate if pre_initialized_.
   bool initialize_sandbox_ran_;            // InitializeSandbox() was called.
   std::unique_ptr<sandbox::SetuidSandboxClient> setuid_sandbox_client_;
-#if defined(ANY_OF_AMTLU_SANITIZER)
+#if BUILDFLAG(USING_SANITIZER)
   std::unique_ptr<__sanitizer_sandbox_arguments> sanitizer_args_;
 #endif
   sandbox::syscall_broker::BrokerProcess* broker_process_;  // Leaked as global.

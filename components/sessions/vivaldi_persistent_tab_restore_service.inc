@@ -56,22 +56,3 @@ void VivaldiWindowsScheduleExtCommand(BaseSessionService* base_session_service_,
                                                window.id, window.ext_data));
   }
 }
-
-// gisli@vivaldi.com:  Added previous_active_entries.
-void PersistentTabRestoreService::Delegate::OnGotPreviousSessionActive(
-    std::vector<std::unique_ptr<SessionWindow>> windows,
-    SessionID::id_type ignored_active_window) {
-  // Keep track of many windows we need to restore, ignore popups.
-  previous_active_entries_count_ = 0;
-  for (size_t i = 0; i < windows.size(); ++i) {
-    if (windows[i]->ext_data.find("\"windowType\":\"popup\"") ==
-        std::string::npos) {
-      previous_active_entries_count_++;
-    }
-  }
-  // special case: if all the remaining windows where popups, there must have
-  // been exactly one active window.
-  if (previous_active_entries_count_ == 0 && windows.size() > 0) {
-    previous_active_entries_count_ = 1;
-  }
-}

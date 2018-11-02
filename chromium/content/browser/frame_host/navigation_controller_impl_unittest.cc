@@ -32,7 +32,6 @@
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/frame_owner_properties.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -40,7 +39,6 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_type.h"
-#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_side_navigation_test_utils.h"
 #include "content/public/test/mock_render_process_host.h"
@@ -49,6 +47,7 @@
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
+#include "services/network/public/cpp/resource_request_body.h"
 #include "skia/ext/platform_canvas.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/common/frame_policy.h"
@@ -236,29 +235,14 @@ class NavigationControllerTest
   }
 
   bool HasNavigationRequest() {
-    if (IsBrowserSideNavigationEnabled()) {
-      return contents()->GetFrameTree()->root()->navigation_request() !=
-             nullptr;
-    }
-    return process()->sink().GetFirstMessageMatching(FrameMsg_Navigate::ID)
-        != nullptr;
+    return contents()->GetFrameTree()->root()->navigation_request() != nullptr;
   }
 
   const GURL GetLastNavigationURL() {
-    if (IsBrowserSideNavigationEnabled()) {
-      NavigationRequest* navigation_request =
-          contents()->GetFrameTree()->root()->navigation_request();
-      CHECK(navigation_request);
-      return navigation_request->common_params().url;
-    }
-    const IPC::Message* message =
-        process()->sink().GetFirstMessageMatching(FrameMsg_Navigate::ID);
-    CHECK(message);
-    std::tuple<CommonNavigationParams, StartNavigationParams,
-               RequestNavigationParams>
-        nav_params;
-    FrameMsg_Navigate::Read(message, &nav_params);
-    return std::get<0>(nav_params).url;
+    NavigationRequest* navigation_request =
+        contents()->GetFrameTree()->root()->navigation_request();
+    CHECK(navigation_request);
+    return navigation_request->common_params().url;
   }
 
  protected:
@@ -340,11 +324,11 @@ class LoadCommittedDetailsObserver : public WebContentsObserver {
 
 // PlzNavigate
 // A NavigationControllerTest run with --enable-browser-side-navigation.
+// TODO(clamy): Make those regular NavigationControllerTests.
 class NavigationControllerTestWithBrowserSideNavigation
     : public NavigationControllerTest {
  public:
   void SetUp() override {
-    EnableBrowserSideNavigation();
     NavigationControllerTest::SetUp();
   }
 };
@@ -784,7 +768,7 @@ TEST_F(NavigationControllerTest, LoadURLWithExtraParams_HttpPost) {
   const char* raw_data = "d\n\0a2";
   const int length = 5;
   load_params.post_data =
-      ResourceRequestBody::CreateFromBytes(raw_data, length);
+      network::ResourceRequestBody::CreateFromBytes(raw_data, length);
 
   controller.LoadURLWithParams(load_params);
   NavigationEntryImpl* entry = controller.GetPendingEntry();
@@ -1592,7 +1576,7 @@ TEST_F(NavigationControllerTest, ResetEntryValuesAfterCommit) {
   // Set non-persisted values on the pending entry.
   NavigationEntryImpl* pending_entry = controller.GetPendingEntry();
   pending_entry->SetPostData(
-      ResourceRequestBody::CreateFromBytes(raw_data, length));
+      network::ResourceRequestBody::CreateFromBytes(raw_data, length));
   pending_entry->set_is_renderer_initiated(true);
   pending_entry->set_transferred_global_request_id(transfer_id);
   pending_entry->set_should_replace_entry(true);

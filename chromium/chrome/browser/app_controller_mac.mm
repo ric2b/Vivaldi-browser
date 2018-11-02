@@ -117,7 +117,9 @@
 #include "app/vivaldi_constants.h"
 #include "browser/vivaldi_app_observer.h"
 #include "extensions/api/show_menu/show_menu_api.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #import  "third_party/sparkle_lib/Sparkle.framework/Headers/SUUpdater.h"
+#include "ui/cocoa/vivaldi_bookmark_menu_mac.h"
 
 using apps::AppShimHandler;
 using apps::ExtensionAppShimHandler;
@@ -429,7 +431,8 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   // In |applicationWillFinishLaunching| because FeatureList isn't
   // available at init time.
-  if (base::FeatureList::IsEnabled(features::kMacSystemShareMenu)) {
+  if (!vivaldi::IsVivaldiRunning() &&
+      base::FeatureList::IsEnabled(features::kMacSystemShareMenu)) {
     // Initialize the share menu.
     [self initShareMenu];
   }
@@ -1239,6 +1242,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
       break;
 
       case IDC_VIV_ACTIVATE_TAB:
+      case IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS:
       if (Browser* browser = ActivateBrowser(lastProfile)) {
         // NOTE(espen@vivaldi.com): We call the api directly because
         // chrome::ExecuteCommand does not support a parameter. We avoid
@@ -1812,15 +1816,6 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // See https://crbug.com/497813 for more details.
   NSMenuItem* bookmarkItem = [[NSApp mainMenu] itemWithTag:IDC_BOOKMARKS_MENU];
   BOOL hidden = [bookmarkItem isHidden];
-  // NOTE(espen@vivaldi.com) From ch64 we have to add the toplevel bookmark
-  // menu in our xib file (VivaldiMainMenu.xib) to prevent a crash on startup.
-  // It will however not be made visible until we have support on all
-  // platforms with the desired feature set.
-  if (vivaldi::IsVivaldiRunning()) {
-    hidden = TRUE;
-  }
-
-
   [bookmarkItem setHidden:NO];
   lastProfile_ = profile;
 
@@ -1857,6 +1852,11 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
                      UpdateSharedCommandsForIncognitoAvailability,
                  menuState_.get(),
                  lastProfile_));
+  if (vivaldi::IsVivaldiRunning()) {
+    profilePrefRegistrar_->Add(
+        vivaldiprefs::kBookmarksManagerSorting,
+        base::Bind(&vivaldi::ClearBookmarkMenu));
+  }
 }
 
 - (BOOL)application:(NSApplication*)application

@@ -14,7 +14,8 @@ namespace {
 
 struct GrTextureMailboxReleaseProcData {
   GrTexture* gr_texture_;
-  WeakPtr<blink::WebGraphicsContext3DProviderWrapper> context_provider_wrapper_;
+  base::WeakPtr<blink::WebGraphicsContext3DProviderWrapper>
+      context_provider_wrapper_;
 };
 
 void GrTextureMailboxReleaseProc(void* data) {
@@ -34,7 +35,8 @@ void GrTextureMailboxReleaseProc(void* data) {
 namespace blink {
 
 void GraphicsContext3DUtils::GetMailboxForSkImage(gpu::Mailbox& out_mailbox,
-                                                  const sk_sp<SkImage>& image) {
+                                                  const sk_sp<SkImage>& image,
+                                                  GLenum filter) {
   // This object is owned by context_provider_wrapper_, so that weak ref
   // should never be null.
   DCHECK(context_provider_wrapper_);
@@ -64,7 +66,14 @@ void GraphicsContext3DUtils::GetMailboxForSkImage(gpu::Mailbox& out_mailbox,
   GLuint texture_id =
       skia::GrBackendObjectToGrGLTextureInfo(image->getTextureHandle(true))
           ->fID;
-  gl->ProduceTextureDirectCHROMIUM(texture_id, GL_TEXTURE_2D, out_mailbox.name);
+  gl->BindTexture(GL_TEXTURE_2D, texture_id);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  gl->BindTexture(GL_TEXTURE_2D, 0);
+  gl->ProduceTextureDirectCHROMIUM(texture_id, out_mailbox.name);
+  image->getTexture()->textureParamsModified();
 
   // We changed bound textures in ProduceTextureDirectCHROMIUM, so reset the
   // GrContext.

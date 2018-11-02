@@ -17,7 +17,6 @@
 #include "content/common/frame_replication_state.h"
 #include "content/common/input_messages.h"
 #include "content/common/page_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/common/swapped_out_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/content_switches.h"
@@ -30,16 +29,19 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/render_widget.h"
+#include "content/renderer/resource_timing_info_conversions.h"
 #include "ipc/ipc_message_macros.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "third_party/WebKit/common/frame_policy.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
+#include "third_party/WebKit/public/platform/WebResourceTimingInfo.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "ui/base/ui_base_switches_util.h"
 
 #if defined(USE_AURA)
 #include "content/renderer/mus/mus_embedded_frame.h"
@@ -56,8 +58,8 @@ static base::LazyInstance<RoutingIDProxyMap>::DestructorAtExit
     g_routing_id_proxy_map = LAZY_INSTANCE_INITIALIZER;
 
 // Facilitates lookup of RenderFrameProxy by WebRemoteFrame.
-typedef std::map<blink::WebRemoteFrame*, RenderFrameProxy*> FrameMap;
-base::LazyInstance<FrameMap>::DestructorAtExit g_frame_map =
+typedef std::map<blink::WebRemoteFrame*, RenderFrameProxy*> FrameProxyMap;
+base::LazyInstance<FrameProxyMap>::DestructorAtExit g_frame_proxy_map =
     LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
@@ -71,6 +73,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
 
   std::unique_ptr<RenderFrameProxy> proxy(new RenderFrameProxy(routing_id));
   proxy->unique_name_ = frame_to_replace->unique_name();
+  proxy->devtools_frame_token_ = frame_to_replace->GetDevToolsFrameToken();
 
   // When a RenderFrame is replaced by a RenderProxy, the WebRemoteFrame should
   // always come from WebRemoteFrame::create and a call to WebFrame::swap must
@@ -168,8 +171,8 @@ RenderFrameProxy* RenderFrameProxy::FromWebFrame(
     blink::WebRemoteFrame* web_frame) {
   // TODO(dcheng): Turn this into a DCHECK() if it doesn't crash on canary.
   CHECK(web_frame);
-  FrameMap::iterator iter = g_frame_map.Get().find(web_frame);
-  if (iter != g_frame_map.Get().end()) {
+  FrameProxyMap::iterator iter = g_frame_proxy_map.Get().find(web_frame);
+  if (iter != g_frame_proxy_map.Get().end()) {
     RenderFrameProxy* proxy = iter->second;
     DCHECK_EQ(web_frame, proxy->web_frame());
     return proxy;
@@ -215,8 +218,8 @@ void RenderFrameProxy::Init(blink::WebRemoteFrame* web_frame,
 
   render_widget_->RegisterRenderFrameProxy(this);
 
-  std::pair<FrameMap::iterator, bool> result =
-      g_frame_map.Get().insert(std::make_pair(web_frame_, this));
+  std::pair<FrameProxyMap::iterator, bool> result =
+      g_frame_proxy_map.Get().insert(std::make_pair(web_frame_, this));
   CHECK(result.second) << "Inserted a duplicate item.";
 
   enable_surface_synchronization_ = features::IsSurfaceSynchronizationEnabled();
@@ -257,9 +260,6 @@ void RenderFrameProxy::WillBeginCompositorFrame() {
   }
 }
 
-void RenderFrameProxy::DidCommitCompositorFrame() {
-}
-
 void RenderFrameProxy::OnScreenInfoChanged(const ScreenInfo& screen_info) {
   pending_resize_params_.screen_info = screen_info;
   WasResized();
@@ -267,15 +267,39 @@ void RenderFrameProxy::OnScreenInfoChanged(const ScreenInfo& screen_info) {
 
 void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   DCHECK(web_frame_);
-  web_frame_->SetReplicatedOrigin(state.origin);
+
+  web_frame_->SetReplicatedOrigin(
+      state.origin, state.has_potentially_trustworthy_unique_origin);
+
+#if DCHECK_IS_ON()
+  blink::WebSecurityOrigin security_origin_before_sandbox_flags =
+      web_frame_->GetSecurityOrigin();
+#endif
+
   web_frame_->SetReplicatedSandboxFlags(state.active_sandbox_flags);
+
+#if DCHECK_IS_ON()
+  // If |state.has_potentially_trustworthy_unique_origin| is set,
+  // - |state.origin| should be unique (this is checked in
+  //   blink::SecurityOrigin::SetUniqueOriginIsPotentiallyTrustworthy() in
+  //   SetReplicatedOrigin()), and thus
+  // - The security origin is not updated by SetReplicatedSandboxFlags() and
+  //   thus we don't have to apply |has_potentially_trustworthy_unique_origin|
+  //   flag after SetReplicatedSandboxFlags().
+  if (state.has_potentially_trustworthy_unique_origin)
+    DCHECK(security_origin_before_sandbox_flags ==
+           web_frame_->GetSecurityOrigin());
+#endif
+
   web_frame_->SetReplicatedName(blink::WebString::FromUTF8(state.name));
   web_frame_->SetReplicatedInsecureRequestPolicy(state.insecure_request_policy);
-  web_frame_->SetReplicatedPotentiallyTrustworthyUniqueOrigin(
-      state.has_potentially_trustworthy_unique_origin);
+  web_frame_->SetReplicatedInsecureNavigationsSet(
+      state.insecure_navigations_set);
   web_frame_->SetReplicatedFeaturePolicyHeader(state.feature_policy_header);
   if (state.has_received_user_gesture)
     web_frame_->SetHasReceivedUserGesture();
+  web_frame_->SetHasReceivedUserGestureBeforeNavigation(
+      state.has_received_user_gesture_before_nav);
 
   web_frame_->ResetReplicatedContentSecurityPolicy();
   OnAddContentSecurityPolicies(state.accumulated_csp_headers);
@@ -327,10 +351,10 @@ void RenderFrameProxy::SetChildFrameSurface(
 
   if (!enable_surface_synchronization_) {
     compositing_helper_->SetPrimarySurfaceId(surface_info.id(),
-                                             frame_rect().size());
+                                             local_frame_size());
   }
   compositing_helper_->SetFallbackSurfaceId(surface_info.id(),
-                                            frame_rect().size(), sequence);
+                                            local_frame_size(), sequence);
 }
 
 bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
@@ -354,6 +378,8 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateFramePolicy, OnDidUpdateFramePolicy)
     IPC_MESSAGE_HANDLER(FrameMsg_DidSetActiveSandboxFlags,
                         OnDidSetActiveSandboxFlags)
+    IPC_MESSAGE_HANDLER(FrameMsg_ForwardResourceTimingToParent,
+                        OnForwardResourceTimingToParent)
     IPC_MESSAGE_HANDLER(FrameMsg_DispatchLoad, OnDispatchLoad)
     IPC_MESSAGE_HANDLER(FrameMsg_Collapse, OnCollapse)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateName, OnDidUpdateName)
@@ -363,6 +389,8 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
                         OnResetContentSecurityPolicy)
     IPC_MESSAGE_HANDLER(FrameMsg_EnforceInsecureRequestPolicy,
                         OnEnforceInsecureRequestPolicy)
+    IPC_MESSAGE_HANDLER(FrameMsg_EnforceInsecureNavigationsSet,
+                        OnEnforceInsecureNavigationsSet)
     IPC_MESSAGE_HANDLER(FrameMsg_SetFrameOwnerProperties,
                         OnSetFrameOwnerProperties)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateOrigin, OnDidUpdateOrigin)
@@ -373,6 +401,8 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameMsg_SetHasReceivedUserGesture,
                         OnSetHasReceivedUserGesture)
     IPC_MESSAGE_HANDLER(FrameMsg_ScrollRectToVisible, OnScrollRectToVisible)
+    IPC_MESSAGE_HANDLER(FrameMsg_SetHasReceivedUserGestureBeforeNavigation,
+                        OnSetHasReceivedUserGestureBeforeNavigation)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -410,7 +440,7 @@ void RenderFrameProxy::OnDidStartLoading() {
 
 void RenderFrameProxy::OnViewChanged(const viz::FrameSinkId& frame_sink_id) {
   // In mash the FrameSinkId comes from RendererWindowTreeClient.
-  if (!IsRunningWithMus())
+  if (!switches::IsMusHostingViz())
     frame_sink_id_ = frame_sink_id;
 
   // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
@@ -422,8 +452,14 @@ void RenderFrameProxy::OnDidStopLoading() {
   web_frame_->DidStopLoading();
 }
 
+void RenderFrameProxy::OnForwardResourceTimingToParent(
+    const ResourceTimingInfo& info) {
+  web_frame_->ForwardResourceTimingToParent(
+      ResourceTimingInfoToWebResourceTimingInfo(info));
+}
+
 void RenderFrameProxy::OnDispatchLoad() {
-  web_frame_->DispatchLoadEventOnFrameOwner();
+  web_frame_->DispatchLoadEventForFrameOwner();
 }
 
 void RenderFrameProxy::OnCollapse(bool collapsed) {
@@ -454,6 +490,11 @@ void RenderFrameProxy::OnEnforceInsecureRequestPolicy(
   web_frame_->SetReplicatedInsecureRequestPolicy(policy);
 }
 
+void RenderFrameProxy::OnEnforceInsecureNavigationsSet(
+    const std::vector<uint32_t>& set) {
+  web_frame_->SetReplicatedInsecureNavigationsSet(set);
+}
+
 void RenderFrameProxy::OnSetFrameOwnerProperties(
     const FrameOwnerProperties& properties) {
   web_frame_->SetFrameOwnerProperties(
@@ -463,9 +504,8 @@ void RenderFrameProxy::OnSetFrameOwnerProperties(
 void RenderFrameProxy::OnDidUpdateOrigin(
     const url::Origin& origin,
     bool is_potentially_trustworthy_unique_origin) {
-  web_frame_->SetReplicatedOrigin(origin);
-  web_frame_->SetReplicatedPotentiallyTrustworthyUniqueOrigin(
-      is_potentially_trustworthy_unique_origin);
+  web_frame_->SetReplicatedOrigin(origin,
+                                  is_potentially_trustworthy_unique_origin);
 }
 
 void RenderFrameProxy::OnSetPageFocus(bool is_focused) {
@@ -488,8 +528,8 @@ void RenderFrameProxy::OnSetHasReceivedUserGesture() {
 
 void RenderFrameProxy::OnScrollRectToVisible(
     const gfx::Rect& rect_to_scroll,
-    const blink::WebRemoteScrollProperties& properties) {
-  web_frame_->ScrollRectToVisible(rect_to_scroll, properties);
+    const blink::WebScrollIntoViewParams& params) {
+  web_frame_->ScrollRectToVisible(rect_to_scroll, params);
 }
 
 void RenderFrameProxy::OnResizeDueToAutoResize(uint64_t sequence_number) {
@@ -510,36 +550,45 @@ void RenderFrameProxy::WasResized() {
 
   bool synchronized_params_changed =
       !sent_resize_params_ ||
-      sent_resize_params_->frame_rect.size() !=
-          pending_resize_params_.frame_rect.size() ||
+      sent_resize_params_->local_frame_size !=
+          pending_resize_params_.local_frame_size ||
+      sent_resize_params_->screen_space_rect.size() !=
+          pending_resize_params_.screen_space_rect.size() ||
       sent_resize_params_->screen_info != pending_resize_params_.screen_info ||
       sent_resize_params_->sequence_number !=
           pending_resize_params_.sequence_number;
 
   if (synchronized_params_changed)
-    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
 
   viz::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
-  if (enable_surface_synchronization_)
-    compositing_helper_->SetPrimarySurfaceId(surface_id, frame_rect().size());
+  if (enable_surface_synchronization_) {
+    compositing_helper_->SetPrimarySurfaceId(surface_id, local_frame_size());
+  }
 
   bool rect_changed =
-      !sent_resize_params_ ||
-      sent_resize_params_->frame_rect != pending_resize_params_.frame_rect;
+      !sent_resize_params_ || sent_resize_params_->screen_space_rect !=
+                                  pending_resize_params_.screen_space_rect;
   bool resize_params_changed = synchronized_params_changed || rect_changed;
 
 #if defined(USE_AURA)
-  if (rect_changed && mus_embedded_frame_)
-    mus_embedded_frame_->SetWindowBounds(local_surface_id_, frame_rect());
+  if (rect_changed && mus_embedded_frame_) {
+    mus_embedded_frame_->SetWindowBounds(local_surface_id_,
+                                         gfx::Rect(local_frame_size()));
+  }
 #endif
 
   if (resize_params_changed) {
     // Let the browser know about the updated view rect.
     Send(new FrameHostMsg_UpdateResizeParams(
-        routing_id_, frame_rect(), screen_info(), auto_size_sequence_number(),
-        surface_id));
+        routing_id_, screen_space_rect(), local_frame_size(), screen_info(),
+        auto_size_sequence_number(), surface_id));
     sent_resize_params_ = pending_resize_params_;
   }
+}
+
+void RenderFrameProxy::OnSetHasReceivedUserGestureBeforeNavigation(bool value) {
+  web_frame_->SetHasReceivedUserGestureBeforeNavigation(value);
 }
 
 void RenderFrameProxy::FrameDetached(DetachType type) {
@@ -571,10 +620,10 @@ void RenderFrameProxy::FrameDetached(DetachType type) {
 
   // Remove the entry in the WebFrame->RenderFrameProxy map, as the |web_frame_|
   // is no longer valid.
-  FrameMap::iterator it = g_frame_map.Get().find(web_frame_);
-  CHECK(it != g_frame_map.Get().end());
+  FrameProxyMap::iterator it = g_frame_proxy_map.Get().find(web_frame_);
+  CHECK(it != g_frame_proxy_map.Get().end());
   CHECK_EQ(it->second, this);
-  g_frame_map.Get().erase(it);
+  g_frame_proxy_map.Get().erase(it);
 
   web_frame_ = nullptr;
 
@@ -625,11 +674,20 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = request.HasUserGesture();
   params.triggering_event_info = blink::WebTriggeringEventInfo::kUnknown;
+  params.suggested_filename =
+      request.GetSuggestedFilename().has_value()
+          ? base::Optional<std::string>(request.GetSuggestedFilename()->Utf8())
+          : base::nullopt;
+
   Send(new FrameHostMsg_OpenURL(routing_id_, params));
 }
 
-void RenderFrameProxy::FrameRectsChanged(const blink::WebRect& frame_rect) {
-  pending_resize_params_.frame_rect = gfx::Rect(frame_rect);
+void RenderFrameProxy::FrameRectsChanged(
+    const blink::WebRect& local_frame_rect,
+    const blink::WebRect& screen_space_rect) {
+  pending_resize_params_.screen_space_rect = gfx::Rect(screen_space_rect);
+  pending_resize_params_.local_frame_size =
+      gfx::Size(local_frame_rect.width, local_frame_rect.height);
   pending_resize_params_.screen_info = render_widget_->screen_info();
   WasResized();
 }
@@ -680,6 +738,10 @@ void RenderFrameProxy::FrameFocused() {
   Send(new FrameHostMsg_FrameFocused(routing_id_));
 }
 
+blink::WebString RenderFrameProxy::GetDevToolsFrameToken() {
+  return devtools_frame_token_;
+}
+
 #if defined(USE_AURA)
 void RenderFrameProxy::OnMusEmbeddedFrameSurfaceChanged(
     const viz::SurfaceInfo& surface_info) {
@@ -688,6 +750,8 @@ void RenderFrameProxy::OnMusEmbeddedFrameSurfaceChanged(
 
 void RenderFrameProxy::OnMusEmbeddedFrameSinkIdAllocated(
     const viz::FrameSinkId& frame_sink_id) {
+  // RendererWindowTreeClient should only call this when mus is hosting viz.
+  DCHECK(switches::IsMusHostingViz());
   frame_sink_id_ = frame_sink_id;
   // Resend the FrameRects and allocate a new viz::LocalSurfaceId when the view
   // changes.
@@ -695,4 +759,4 @@ void RenderFrameProxy::OnMusEmbeddedFrameSinkIdAllocated(
 }
 #endif
 
-}  // namespace
+}  // namespace content

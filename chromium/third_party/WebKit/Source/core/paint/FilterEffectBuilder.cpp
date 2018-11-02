@@ -120,36 +120,36 @@ Vector<float> SepiaMatrix(double amount) {
 
 }  // namespace
 
-FilterEffectBuilder::FilterEffectBuilder(const FloatRect& zoomed_reference_box,
+FilterEffectBuilder::FilterEffectBuilder(const FloatRect& reference_box,
                                          float zoom,
                                          const PaintFlags* fill_flags,
                                          const PaintFlags* stroke_flags)
     : FilterEffectBuilder(nullptr,
-                          zoomed_reference_box,
+                          reference_box,
                           zoom,
                           fill_flags,
                           stroke_flags) {}
 
 FilterEffectBuilder::FilterEffectBuilder(Node* target,
-                                         const FloatRect& zoomed_reference_box,
+                                         const FloatRect& reference_box,
                                          float zoom,
                                          const PaintFlags* fill_flags,
                                          const PaintFlags* stroke_flags)
     : target_context_(target),
-      reference_box_(zoomed_reference_box),
+      reference_box_(reference_box),
       zoom_(zoom),
       fill_flags_(fill_flags),
-      stroke_flags_(stroke_flags) {
-  if (zoom_ != 1)
-    reference_box_.Scale(1 / zoom_);
-}
+      stroke_flags_(stroke_flags) {}
 
 FilterEffect* FilterEffectBuilder::BuildFilterEffect(
-    const FilterOperations& operations) const {
+    const FilterOperations& operations,
+    bool input_tainted) const {
   // Create a parent filter for shorthand filters. These have already been
   // scaled by the CSS code for page zoom, so scale is 1.0 here.
   Filter* parent_filter = Filter::Create(1.0f);
   FilterEffect* previous_effect = parent_filter->GetSourceGraphic();
+  if (input_tainted)
+    previous_effect->SetOriginTainted();
   for (FilterOperation* filter_operation : operations.Operations()) {
     FilterEffect* effect = nullptr;
     switch (filter_operation->GetType()) {
@@ -410,6 +410,10 @@ CompositorFilterOperations FilterEffectBuilder::BuildFilterOperations(
         nullptr, current_interpolation_space, kInterpolationSpaceSRGB);
     filters.AppendReferenceFilter(std::move(filter));
   }
+
+  if (!filters.IsEmpty())
+    filters.SetReferenceBox(reference_box_);
+
   return filters;
 }
 

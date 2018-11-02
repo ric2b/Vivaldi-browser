@@ -28,12 +28,12 @@
 
 #include "platform/audio/HRTFDatabaseLoader.h"
 
+#include "base/location.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
 
@@ -97,9 +97,9 @@ void HRTFDatabaseLoader::LoadAsynchronously() {
   // Start the asynchronous database loading process.
   thread_ = Platform::Current()->CreateThread("HRTF database loader");
   // TODO(alexclarke): Should this be posted as a loading task?
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE, CrossThreadBind(&HRTFDatabaseLoader::LoadTask,
-                                       CrossThreadUnretained(this)));
+  PostCrossThreadTask(*thread_->GetWebTaskRunner(), FROM_HERE,
+                      CrossThreadBind(&HRTFDatabaseLoader::LoadTask,
+                                      CrossThreadUnretained(this)));
 }
 
 HRTFDatabase* HRTFDatabaseLoader::Database() {
@@ -127,10 +127,10 @@ void HRTFDatabaseLoader::WaitForLoaderThreadCompletion() {
 
   WaitableEvent sync;
   // TODO(alexclarke): Should this be posted as a loading task?
-  thread_->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE, CrossThreadBind(&HRTFDatabaseLoader::CleanupTask,
-                                       CrossThreadUnretained(this),
-                                       CrossThreadUnretained(&sync)));
+  PostCrossThreadTask(*thread_->GetWebTaskRunner(), FROM_HERE,
+                      CrossThreadBind(&HRTFDatabaseLoader::CleanupTask,
+                                      CrossThreadUnretained(this),
+                                      CrossThreadUnretained(&sync)));
   sync.Wait();
   thread_.reset();
 }

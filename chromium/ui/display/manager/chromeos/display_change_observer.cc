@@ -40,13 +40,10 @@ struct DeviceScaleFactorDPIThreshold {
 
 const DeviceScaleFactorDPIThreshold kThresholdTableForInternal[] = {
     {220.0f, 2.0f},
-    {200.0f, 1.6f},
+    {180.0f, 1.6f},
     {150.0f, 1.25f},
     {0.0f, 1.0f},
 };
-
-// 1 inch in mm.
-const float kInchInMm = 25.4f;
 
 // The minimum pixel width whose monitor can be called as '4K'.
 const int kMinimumWidthFor4K = 3840;
@@ -157,9 +154,9 @@ MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
                             [](const DisplaySnapshot* display_state) {
                               return display_state->display_id();
                             });
-  bool mirrored = display_manager_->layout_store()->GetMirrorMode(list);
-  return mirrored ? MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
-                  : MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
+  return display_manager_->ShouldSetMirrorModeOn(list)
+             ? MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
+             : MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED;
 }
 
 bool DisplayChangeObserver::GetResolutionForDisplayId(int64_t display_id,

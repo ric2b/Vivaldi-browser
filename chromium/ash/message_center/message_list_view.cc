@@ -46,14 +46,17 @@ MessageListView::MessageListView()
       clear_all_started_(false),
       animator_(this),
       weak_ptr_factory_(this) {
-  views::BoxLayout* layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 1);
+  auto layout = std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical,
+                                                   gfx::Insets(), 1);
   layout->SetDefaultFlex(1);
-  SetLayoutManager(layout);
+  SetLayoutManager(std::move(layout));
 
-  SetBackground(
-      views::CreateSolidBackground(MessageCenterView::kBackgroundColor));
-  SetBorder(views::CreateEmptyBorder(gfx::Insets(GetMarginBetweenItems())));
+  if (!switches::IsSidebarEnabled()) {
+    SetBackground(
+        views::CreateSolidBackground(MessageCenterView::kBackgroundColor));
+    SetBorder(views::CreateEmptyBorder(
+        gfx::Insets(message_center::kMarginBetweenItemsInList)));
+  }
   animator_.AddObserver(this);
 }
 

@@ -146,6 +146,7 @@
 <translation id="2890678560483811744">ページ範囲が上限を超えています</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" />はこのプリンターと通信できませんでした。プリンターが接続されていることを確認して、もう一度お試しください。</translation>
 <translation id="2904456025988372123">サイトが最初のファイルに続けて次のファイルを自動的にダウンロードしようとする際に確認する</translation>
+<translation id="2911898792135283060">パスワードを作成...</translation>
 <translation id="2913331724188855103">サイトに Cookie データの保存と読み取りを許可する（推奨）</translation>
 <translation id="2916745397441987255">拡張機能を検索</translation>
 <translation id="2932883381142163287">不正行為を報告</translation>
@@ -413,7 +414,6 @@
 <translation id="6295158916970320988">すべてのサイト</translation>
 <translation id="6295855836753816081">保存中...</translation>
 <translation id="6308937455967653460">名前を付けてリンク先を保存... (&amp;K)</translation>
-<translation id="6314335155547195432">パスワードを生成</translation>
 <translation id="6326855256003666642">キープアライブ (カウント数)</translation>
 <translation id="6370021412472292592">マニフェストを読み込めませんでした。</translation>
 <translation id="6374469231428023295">やり直し</translation>
@@ -497,7 +497,6 @@
 <translation id="7564847347806291057">プロセスを終了</translation>
 <translation id="7576690715254076113">部単位で印刷</translation>
 <translation id="7629827748548208700">タブ: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">キャンセル</translation>
 <translation id="7661259717474717992">サイトに Cookie データの保存と読み取りを許可する</translation>
 <translation id="7663719505383602579">レシーバー: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">管理者によりインストールされています</translation>

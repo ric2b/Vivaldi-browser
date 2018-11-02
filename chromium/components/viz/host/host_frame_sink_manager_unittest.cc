@@ -20,6 +20,7 @@
 #include "components/viz/test/fake_host_frame_sink_client.h"
 #include "components/viz/test/fake_surface_observer.h"
 #include "components/viz/test/mock_compositor_frame_sink_client.h"
+#include "components/viz/test/mock_display_client.h"
 #include "services/viz/privileged/interfaces/compositing/frame_sink_manager.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -45,11 +46,6 @@ SurfaceId MakeSurfaceId(const FrameSinkId& frame_sink_id, uint32_t parent_id) {
       LocalSurfaceId(parent_id, base::UnguessableToken::Deserialize(0, 1u)));
 }
 
-// Makes a SurfaceInfo with a default device_scale_factor and size.
-SurfaceInfo MakeSurfaceInfo(const SurfaceId& surface_id) {
-  return SurfaceInfo(surface_id, 1.f, gfx::Size(1, 1));
-}
-
 // A mock implementation of mojom::FrameSinkManager.
 class MockFrameSinkManagerImpl : public FrameSinkManagerImpl {
  public:
@@ -72,13 +68,8 @@ class MockFrameSinkManagerImpl : public FrameSinkManagerImpl {
   MOCK_METHOD1(MockCreateCompositorFrameSink,
                void(const FrameSinkId& frame_sink_id));
   void CreateRootCompositorFrameSink(
-      const FrameSinkId& frame_sink_id,
-      gpu::SurfaceHandle surface_handle,
-      const RendererSettings& renderer_settings,
-      mojom::CompositorFrameSinkAssociatedRequest request,
-      mojom::CompositorFrameSinkClientPtr client,
-      mojom::DisplayPrivateAssociatedRequest display_private_request) override {
-    MockCreateRootCompositorFrameSink(frame_sink_id);
+      mojom::RootCompositorFrameSinkParamsPtr params) override {
+    MockCreateRootCompositorFrameSink(params->frame_sink_id);
   }
   MOCK_METHOD1(MockCreateRootCompositorFrameSink,
                void(const FrameSinkId& frame_sink_id));
@@ -152,8 +143,8 @@ class HostFrameSinkManagerLocalTest : public HostFrameSinkManagerTestBase {
   // testing::Test:
   void SetUp() override {
     manager_impl_ =
-        base::MakeUnique<testing::NiceMock<MockFrameSinkManagerImpl>>();
-    host_manager_ = base::MakeUnique<HostFrameSinkManager>();
+        std::make_unique<testing::NiceMock<MockFrameSinkManagerImpl>>();
+    host_manager_ = std::make_unique<HostFrameSinkManager>();
 
     manager_impl_->SetLocalClient(host_manager_.get());
     host_manager_->SetLocalManager(manager_impl_.get());
@@ -176,7 +167,7 @@ class HostFrameSinkManagerRemoteTest : public HostFrameSinkManagerTestBase {
     DCHECK(!manager_impl_);
 
     manager_impl_ =
-        base::MakeUnique<testing::NiceMock<MockFrameSinkManagerImpl>>();
+        std::make_unique<testing::NiceMock<MockFrameSinkManagerImpl>>();
 
     mojom::FrameSinkManagerPtr frame_sink_manager;
     mojom::FrameSinkManagerRequest frame_sink_manager_request =
@@ -195,7 +186,7 @@ class HostFrameSinkManagerRemoteTest : public HostFrameSinkManagerTestBase {
 
   // testing::Test:
   void SetUp() override {
-    host_manager_ = base::MakeUnique<HostFrameSinkManager>();
+    host_manager_ = std::make_unique<HostFrameSinkManager>();
     ConnectToGpu();
   }
 
@@ -256,10 +247,11 @@ TEST_F(HostFrameSinkManagerLocalTest, CommunicateFrameToken) {
   auto support =
       CreateCompositorFrameSinkSupport(kParentFrameSink, true /* is_root */);
 
-  CompositorFrame compositor_frame(
-      test::MakeCompositorFrame({child_id1}, std::vector<SurfaceId>(),
-                                std::vector<TransferableResource>()));
-  compositor_frame.metadata.frame_token = frame_token1;
+  CompositorFrame compositor_frame = CompositorFrameBuilder()
+                                         .AddDefaultRenderPass()
+                                         .SetFrameToken(frame_token1)
+                                         .SetActivationDependencies({child_id1})
+                                         .Build();
   support->SubmitCompositorFrame(parent_id1.local_surface_id(),
                                  std::move(compositor_frame));
 
@@ -331,11 +323,10 @@ TEST_F(HostFrameSinkManagerLocalTest, AssignTemporaryReference) {
   host().RegisterFrameSinkHierarchy(kFrameSinkParent1,
                                     surface_id.frame_sink_id());
 
-  // When HostFrameSinkManager gets OnFirstSurfaceActivation() it should assign
+  // When HostFrameSinkManager gets OnSurfaceCreated() it should assign
   // the temporary reference to the registered parent |kFrameSinkParent1|.
   EXPECT_CALL(impl(), AssignTemporaryReference(surface_id, kFrameSinkParent1));
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(surface_id);
 }
 
 // Verify that we drop temporary reference to a surface that doesn't have any
@@ -348,11 +339,10 @@ TEST_F(HostFrameSinkManagerLocalTest, DropTemporaryReference) {
   auto support = CreateCompositorFrameSinkSupport(surface_id.frame_sink_id(),
                                                   false /* is_root */);
 
-  // When HostFrameSinkManager gets OnFirstSurfaceActivation() it should find no
+  // When HostFrameSinkManager gets OnSurfaceCreated() it should find no
   // registered parent and drop the temporary reference.
   EXPECT_CALL(impl(), DropTemporaryReference(surface_id));
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(surface_id);
 }
 
 // Verify that we drop the temporary reference to a new surface if the frame
@@ -381,8 +371,7 @@ TEST_F(HostFrameSinkManagerLocalTest, DropTemporaryReferenceForStaleClient) {
   EXPECT_CALL(impl(),
               AssignTemporaryReference(client_surface_id, kFrameSinkParent1))
       .Times(1);
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(client_surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(client_surface_id);
   testing::Mock::VerifyAndClearExpectations(&impl());
 
   // Invaidating the child should cause the temporary reference to the next
@@ -393,8 +382,7 @@ TEST_F(HostFrameSinkManagerLocalTest, DropTemporaryReferenceForStaleClient) {
   const SurfaceId client_surface_id2 = MakeSurfaceId(kFrameSinkChild1, 2);
   EXPECT_CALL(impl(), DropTemporaryReference(client_surface_id2)).Times(1);
   EXPECT_CALL(impl(), AssignTemporaryReference(client_surface_id2, _)).Times(0);
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(client_surface_id2));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(client_surface_id2);
 
   support_parent.reset();
   host().InvalidateFrameSinkId(kFrameSinkParent1);
@@ -435,8 +423,7 @@ TEST_F(HostFrameSinkManagerLocalTest, HierarchyMultipleParents) {
   // reference.
   const SurfaceId surface_id = MakeSurfaceId(id_child, 1);
   EXPECT_CALL(impl(), AssignTemporaryReference(surface_id, id_parent1));
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(surface_id);
   testing::Mock::VerifyAndClearExpectations(&impl());
 
   // Unregistering hierarchy with multiple parents should also work.
@@ -474,8 +461,7 @@ TEST_F(HostFrameSinkManagerLocalTest,
   EXPECT_CALL(impl(),
               AssignTemporaryReference(client_surface_id, kFrameSinkParent1))
       .Times(1);
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(client_surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(client_surface_id);
   testing::Mock::VerifyAndClearExpectations(&impl());
 
   // Invaidating the parent should cause the next SurfaceId to be dropped
@@ -486,8 +472,7 @@ TEST_F(HostFrameSinkManagerLocalTest,
   const SurfaceId client_surface_id2 = MakeSurfaceId(kFrameSinkChild1, 2);
   EXPECT_CALL(impl(), DropTemporaryReference(client_surface_id2)).Times(1);
   EXPECT_CALL(impl(), AssignTemporaryReference(client_surface_id2, _)).Times(0);
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(client_surface_id2));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(client_surface_id2);
 
   support_child.reset();
   host().InvalidateFrameSinkId(kFrameSinkChild1);
@@ -501,12 +486,11 @@ TEST_F(HostFrameSinkManagerLocalTest, DisplayRootTemporaryReference) {
   auto support = CreateCompositorFrameSinkSupport(surface_id.frame_sink_id(),
                                                   true /* is_root */);
 
-  // When HostFrameSinkManager gets OnFirstSurfaceActivation() it should do
+  // When HostFrameSinkManager gets OnSurfaceCreated() it should do
   // nothing since |kFrameSinkParent1| is a display root.
   EXPECT_CALL(impl(), DropTemporaryReference(surface_id)).Times(0);
   EXPECT_CALL(impl(), AssignTemporaryReference(surface_id, _)).Times(0);
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(surface_id);
 }
 
 // Test the creation and desctruction of HitTestQuery, which is stored in
@@ -518,10 +502,10 @@ TEST_F(HostFrameSinkManagerLocalTest, DisplayHitTestQueryMap) {
   EXPECT_TRUE(FrameSinkDataExists(kFrameSinkChild1));
 
   EXPECT_FALSE(DisplayHitTestQueryExists(kFrameSinkChild1));
-  host().CreateRootCompositorFrameSink(
-      kFrameSinkChild1, 0 /* surface_handle */,
-      RendererSettings() /* renderer_settings */, nullptr /* request */,
-      nullptr /* client */, nullptr /* display_private_request */);
+  auto params = mojom::RootCompositorFrameSinkParams::New();
+  params->frame_sink_id = kFrameSinkChild1;
+  params->widget = 0;
+  host().CreateRootCompositorFrameSink(std::move(params));
   EXPECT_TRUE(DisplayHitTestQueryExists(kFrameSinkChild1));
 
   host().InvalidateFrameSinkId(kFrameSinkChild1);
@@ -594,12 +578,18 @@ TEST_F(HostFrameSinkManagerRemoteTest, DeletedHitTestQuery) {
       compositor_frame_sink_associated_info;
   MockCompositorFrameSinkClient compositor_frame_sink_client;
   mojom::DisplayPrivateAssociatedPtr display_private;
-  host().CreateRootCompositorFrameSink(
-      kFrameSinkChild1, 0 /* surface_handle */,
-      RendererSettings() /* renderer_settings */,
-      MakeRequest(&compositor_frame_sink_associated_info),
-      compositor_frame_sink_client.BindInterfacePtr(),
-      MakeRequest(&display_private));
+  MockDisplayClient display_client;
+
+  auto params = mojom::RootCompositorFrameSinkParams::New();
+  params->frame_sink_id = kFrameSinkChild1;
+  params->widget = 0;
+  params->compositor_frame_sink =
+      MakeRequest(&compositor_frame_sink_associated_info);
+  params->compositor_frame_sink_client =
+      compositor_frame_sink_client.BindInterfacePtr().PassInterface();
+  params->display_private = MakeRequest(&display_private);
+  params->display_client = display_client.BindInterfacePtr().PassInterface();
+  host().CreateRootCompositorFrameSink(std::move(params));
 
   EXPECT_TRUE(DisplayHitTestQueryExists(kFrameSinkChild1));
 
@@ -641,10 +631,9 @@ TEST_F(HostFrameSinkManagerRemoteTest, AssignTemporaryReference) {
   host().RegisterFrameSinkHierarchy(kFrameSinkParent1,
                                     surface_id.frame_sink_id());
 
-  // When HostFrameSinkManager gets OnFirstSurfaceActivation() it should assign
+  // When HostFrameSinkManager gets OnSuraceCreated() it should assign
   // the temporary reference to the registered parent |kFrameSinkParent1|.
-  GetFrameSinkManagerClient()->OnFirstSurfaceActivation(
-      MakeSurfaceInfo(surface_id));
+  GetFrameSinkManagerClient()->OnSurfaceCreated(surface_id);
 
   base::RunLoop run_loop;
   EXPECT_CALL(impl(), AssignTemporaryReference(surface_id, kFrameSinkParent1))

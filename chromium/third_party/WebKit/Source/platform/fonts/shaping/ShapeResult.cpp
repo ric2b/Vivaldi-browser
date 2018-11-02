@@ -37,7 +37,9 @@
 #include <memory>
 #include <utility>
 
+#include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/Font.h"
+#include "platform/fonts/shaping/ShapeResultBuffer.h"
 #include "platform/fonts/shaping/ShapeResultInlineHeaders.h"
 #include "platform/fonts/shaping/ShapeResultSpacing.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -91,11 +93,15 @@ float ShapeResult::RunInfo::XPositionForOffset(
       position += glyph_data_[glyph_index].advance;
       ++glyph_index;
     }
+    // If |glyph_index| is at the end, the glyph for |offset| is missing, along
+    // with all glyphs before it. We can't adjust position to the start
+    // direction.
+    if (glyph_index == num_glyphs)
+      return position;
     // Adjust offset if it's not on the cluster boundary. In RTL, this means
     // that the adjusted position is the left side of the character.
     if (adjust_mid_cluster == kAdjustToEnd &&
-        (glyph_index < num_glyphs ? glyph_data_[glyph_index].character_index
-                                  : num_characters_) < offset) {
+        glyph_data_[glyph_index].character_index < offset) {
       return position;
     }
     // For RTL, we need to return the right side boundary of the character.
@@ -193,15 +199,20 @@ void ShapeResult::RunInfo::SetGlyphAndPositions(unsigned index,
   data.offset = FloatSize(offset_x, offset_y);
 }
 
-ShapeResult::ShapeResult(const Font* font,
+ShapeResult::ShapeResult(const SimpleFontData* font_data,
                          unsigned num_characters,
                          TextDirection direction)
     : width_(0),
-      primary_font_(const_cast<SimpleFontData*>(font->PrimaryFont())),
+      primary_font_(font_data),
       num_characters_(num_characters),
       num_glyphs_(0),
       direction_(static_cast<unsigned>(direction)),
       has_vertical_offsets_(0) {}
+
+ShapeResult::ShapeResult(const Font* font,
+                         unsigned num_characters,
+                         TextDirection direction)
+    : ShapeResult(font->PrimaryFont(), num_characters, direction) {}
 
 ShapeResult::ShapeResult(const ShapeResult& other)
     : width_(other.width_),
@@ -216,7 +227,7 @@ ShapeResult::ShapeResult(const ShapeResult& other)
     runs_.push_back(std::make_unique<RunInfo>(*run));
 }
 
-ShapeResult::~ShapeResult() {}
+ShapeResult::~ShapeResult() = default;
 
 size_t ShapeResult::ByteSize() const {
   size_t self_byte_size = sizeof(this);
@@ -226,7 +237,15 @@ size_t ShapeResult::ByteSize() const {
   return self_byte_size;
 }
 
+CharacterRange ShapeResult::GetCharacterRange(unsigned from,
+                                              unsigned to) const {
+  return ShapeResultBuffer::GetCharacterRange(this, Direction(), Width(), from,
+                                              to);
+}
+
 unsigned ShapeResult::StartIndexForResult() const {
+  if (UNLIKELY(runs_.IsEmpty()))
+    return 0;
   const RunInfo& first_run = *runs_.front();
   if (!Rtl())
     return first_run.start_index_;
@@ -236,6 +255,8 @@ unsigned ShapeResult::StartIndexForResult() const {
 }
 
 unsigned ShapeResult::EndIndexForResult() const {
+  if (UNLIKELY(runs_.IsEmpty()))
+    return NumCharacters();
   const RunInfo& first_run = *runs_.front();
   if (!Rtl())
     return first_run.start_index_ + NumCharacters();
@@ -674,6 +695,17 @@ void ShapeResult::InsertRun(std::unique_ptr<ShapeResult::RunInfo> run) {
     runs_.push_back(std::move(run));
 }
 
+// Insert a |RunInfo| without glyphs. |StartIndexForResult()| needs a run to
+// compute the start character index. When all glyphs are missing, this function
+// synthesize a run without glyphs.
+void ShapeResult::InsertRunForIndex(unsigned start_character_index) {
+  DCHECK(runs_.IsEmpty());
+  runs_.push_back(base::MakeUnique<RunInfo>(
+      primary_font_.get(), !Rtl() ? HB_DIRECTION_LTR : HB_DIRECTION_RTL,
+      CanvasRotationInVertical::kRegular, HB_SCRIPT_UNKNOWN,
+      start_character_index, 0, num_characters_));
+}
+
 ShapeResult::RunInfo* ShapeResult::InsertRunForTesting(
     unsigned start_index,
     unsigned num_characters,
@@ -789,6 +821,14 @@ void ShapeResult::CopyRange(unsigned start_offset,
 
   target->CheckConsistency();
 #endif
+}
+
+scoped_refptr<ShapeResult> ShapeResult::SubRange(unsigned start_offset,
+                                                 unsigned end_offset) const {
+  scoped_refptr<ShapeResult> sub_range =
+      Create(primary_font_.get(), 0, Direction());
+  CopyRange(start_offset, end_offset, sub_range.get());
+  return sub_range;
 }
 
 #if DCHECK_IS_ON()

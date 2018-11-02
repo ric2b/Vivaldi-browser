@@ -44,7 +44,6 @@ class GCMDriver;
 }
 
 namespace policy {
-class BrowserPolicyConnector;
 class PolicyService;
 }
 
@@ -74,10 +73,12 @@ class TestingBrowserProcess : public BrowserProcess {
   ProfileManager* profile_manager() override;
   PrefService* local_state() override;
   variations::VariationsService* variations_service() override;
-  policy::BrowserPolicyConnector* browser_policy_connector() override;
+  policy::ChromeBrowserPolicyConnector* browser_policy_connector() override;
   policy::PolicyService* policy_service() override;
   IconManager* icon_manager() override;
-  GpuProfileCache* gpu_profile_cache() override;
+#if defined(OS_ANDROID)
+  GpuDriverInfoManager* gpu_driver_info_manager() override;
+#endif
   GpuModeManager* gpu_mode_manager() override;
   BackgroundModeManager* background_mode_manager() override;
   void set_background_mode_manager_for_test(
@@ -166,7 +167,8 @@ class TestingBrowserProcess : public BrowserProcess {
   std::string app_locale_;
   bool is_shutting_down_;
 
-  std::unique_ptr<policy::BrowserPolicyConnector> browser_policy_connector_;
+  std::unique_ptr<policy::ChromeBrowserPolicyConnector>
+      browser_policy_connector_;
   bool created_browser_policy_connector_ = false;
   std::unique_ptr<content::NetworkConnectionTracker>
       network_connection_tracker_;

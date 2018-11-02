@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -14,7 +15,6 @@
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
@@ -191,6 +191,15 @@ class ScalerImpl : public GLHelper::ScalerInterface {
     if (output_rect.IsEmpty())
       return;  // No work to do.
     gfx::RectF src_rect = ToSourceRect(output_rect);
+
+    // Ensure conflicting GL capabilities are disabled. The following explicity
+    // disables those known to possibly be enabled in GL compositing code, while
+    // the helper method call will DCHECK a wider set.
+    gl_->Disable(GL_SCISSOR_TEST);
+    gl_->Disable(GL_STENCIL_TEST);
+    gl_->Disable(GL_BLEND);
+    DCheckNoConflictingCapabilitiesAreEnabled();
+
     if (subscaler_) {
       gfx::RectF overscan_rect = src_rect;
       PadForOverscan(&overscan_rect);
@@ -300,6 +309,20 @@ class ScalerImpl : public GLHelper::ScalerInterface {
   }
 
  private:
+  // In DCHECK-enabled builds, this checks that no conflicting GL capability is
+  // currently enabled in the GL context. Any of these might cause problems when
+  // the shader draw operations are executed.
+  void DCheckNoConflictingCapabilitiesAreEnabled() const {
+    DCHECK_NE(gl_->IsEnabled(GL_BLEND), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_CULL_FACE), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_DEPTH_TEST), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_POLYGON_OFFSET_FILL), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_SAMPLE_ALPHA_TO_COVERAGE), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_SAMPLE_COVERAGE), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_SCISSOR_TEST), GL_TRUE);
+    DCHECK_NE(gl_->IsEnabled(GL_STENCIL_TEST), GL_TRUE);
+  }
+
   // Expands the given |sampling_rect| to account for the extra pixels bordering
   // it that will be sampled by the shaders.
   void PadForOverscan(gfx::RectF* sampling_rect) const {
@@ -729,7 +752,7 @@ std::unique_ptr<GLHelper::ScalerInterface> GLHelperScaling::CreateScaler(
 
   std::unique_ptr<ScalerImpl> ret;
   for (unsigned int i = 0; i < scaler_stages.size(); i++) {
-    ret = base::MakeUnique<ScalerImpl>(gl_, this, scaler_stages[i],
+    ret = std::make_unique<ScalerImpl>(gl_, this, scaler_stages[i],
                                        std::move(ret));
   }
   ret->SetChainProperties(scale_from, scale_to, swizzle);
@@ -744,7 +767,7 @@ GLHelperScaling::CreateGrayscalePlanerizer(bool flipped_source,
       SHADER_PLANAR, gfx::Vector2d(4, 1), gfx::Vector2d(1, 1),
       true,          flipped_source,      flip_output,
       swizzle};
-  auto result = base::MakeUnique<ScalerImpl>(gl_, this, stage, nullptr);
+  auto result = std::make_unique<ScalerImpl>(gl_, this, stage, nullptr);
   result->SetColorWeights(0, kRGBtoGrayscaleColorWeights);
   result->SetChainProperties(stage.scale_from, stage.scale_to, swizzle);
   return result;
@@ -763,7 +786,7 @@ GLHelperScaling::CreateI420Planerizer(int plane,
       flipped_source,
       flip_output,
       swizzle};
-  auto result = base::MakeUnique<ScalerImpl>(gl_, this, stage, nullptr);
+  auto result = std::make_unique<ScalerImpl>(gl_, this, stage, nullptr);
   switch (plane) {
     case 0:
       result->SetColorWeights(0, kRGBtoYColorWeights);
@@ -792,7 +815,7 @@ GLHelperScaling::CreateI420MrtPass1Planerizer(bool flipped_source,
                              flipped_source,
                              flip_output,
                              swizzle};
-  auto result = base::MakeUnique<ScalerImpl>(gl_, this, stage, nullptr);
+  auto result = std::make_unique<ScalerImpl>(gl_, this, stage, nullptr);
   result->SetColorWeights(0, kRGBtoYColorWeights);
   result->SetColorWeights(1, kRGBtoUColorWeights);
   result->SetColorWeights(2, kRGBtoVColorWeights);
@@ -809,7 +832,7 @@ GLHelperScaling::CreateI420MrtPass2Planerizer(bool swizzle) {
                              false,
                              false,
                              swizzle};
-  auto result = base::MakeUnique<ScalerImpl>(gl_, this, stage, nullptr);
+  auto result = std::make_unique<ScalerImpl>(gl_, this, stage, nullptr);
   result->SetChainProperties(stage.scale_from, stage.scale_to, swizzle);
   return result;
 }

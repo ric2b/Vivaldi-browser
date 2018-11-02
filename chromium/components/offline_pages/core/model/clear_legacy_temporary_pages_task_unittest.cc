@@ -4,16 +4,18 @@
 
 #include "components/offline_pages/core/model/clear_legacy_temporary_pages_task.h"
 
+#include <memory>
+
 #include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/test/test_simple_task_runner.h"
+#include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/client_policy_controller.h"
 #include "components/offline_pages/core/model/offline_page_item_generator.h"
-#include "components/offline_pages/core/model/offline_page_test_util.h"
+#include "components/offline_pages/core/model/offline_page_test_utils.h"
 #include "components/offline_pages/core/offline_page_metadata_store_test_util.h"
 #include "components/offline_pages/core/test_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -46,7 +48,7 @@ class ClearLegacyTemporaryPagesTaskTest : public testing::Test {
   }
 
  private:
-  scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
 
   OfflinePageMetadataStoreTestUtil store_test_util_;
@@ -58,7 +60,7 @@ class ClearLegacyTemporaryPagesTaskTest : public testing::Test {
 };
 
 ClearLegacyTemporaryPagesTaskTest::ClearLegacyTemporaryPagesTaskTest()
-    : task_runner_(new base::TestSimpleTaskRunner()),
+    : task_runner_(new base::TestMockTimeTaskRunner()),
       task_runner_handle_(task_runner_),
       store_test_util_(task_runner_),
       runner_(task_runner_) {}
@@ -68,7 +70,7 @@ ClearLegacyTemporaryPagesTaskTest::~ClearLegacyTemporaryPagesTaskTest() {}
 void ClearLegacyTemporaryPagesTaskTest::SetUp() {
   store_test_util_.BuildStoreInMemory();
   ASSERT_TRUE(legacy_archives_dir_.CreateUniqueTempDir());
-  policy_controller_ = base::MakeUnique<ClientPolicyController>();
+  policy_controller_ = std::make_unique<ClientPolicyController>();
 }
 
 void ClearLegacyTemporaryPagesTaskTest::TearDown() {
@@ -102,14 +104,14 @@ TEST_F(ClearLegacyTemporaryPagesTaskTest,
   OfflinePageItem page2 = AddPage(kDownloadNamespace, legacy_archives_dir());
 
   EXPECT_EQ(2LL, store_test_util()->GetPageCount());
-  EXPECT_EQ(2UL, test_util::GetFileCountInDirectory(legacy_archives_dir()));
+  EXPECT_EQ(2UL, test_utils::GetFileCountInDirectory(legacy_archives_dir()));
 
-  auto task = base::MakeUnique<ClearLegacyTemporaryPagesTask>(
+  auto task = std::make_unique<ClearLegacyTemporaryPagesTask>(
       store(), policy_controller(), legacy_archives_dir());
   runner()->RunTask(std::move(task));
 
   EXPECT_EQ(1LL, store_test_util()->GetPageCount());
-  EXPECT_EQ(1UL, test_util::GetFileCountInDirectory(legacy_archives_dir()));
+  EXPECT_EQ(1UL, test_utils::GetFileCountInDirectory(legacy_archives_dir()));
   EXPECT_FALSE(store_test_util()->GetPageByOfflineId(page1.offline_id));
 }
 

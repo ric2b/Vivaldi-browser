@@ -86,7 +86,9 @@ TEST_F(ScreenCaptureNotificationUICocoaTest, ShortTitle) {
   target_->OnStarted(
       base::Bind(&ScreenCaptureNotificationUICocoaTest::StopCallback,
                  base::Unretained(this)));
-  EXPECT_EQ(460, NSWidth([[controller() window] frame]));
+  // Window size may not match the target value exactly (460), as we don't set
+  // it directly.
+  EXPECT_NEAR(NSWidth([[controller() window] frame]), 460.0, 5.0);
 }
 
 TEST_F(ScreenCaptureNotificationUICocoaTest, ClickStop) {

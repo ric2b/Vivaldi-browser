@@ -140,7 +140,7 @@ class TestPlugin : public FakeWebPlugin {
   void PrintPage(int page_number, WebCanvas*) override;
 
  private:
-  ~TestPlugin() override {}
+  ~TestPlugin() override = default;
 
   TestPluginWebFrameClient* const test_client_;
 };
@@ -184,7 +184,7 @@ class TestPluginWithEditableText : public FakeWebPlugin {
   }
 
  private:
-  ~TestPluginWithEditableText() override {}
+  ~TestPluginWithEditableText() override = default;
 
   bool cut_called_;
   bool paste_called_;
@@ -247,7 +247,7 @@ WebPluginContainer* GetWebPluginContainer(WebViewImpl* web_view,
 
 WebString ReadClipboard() {
   return Platform::Current()->Clipboard()->ReadPlainText(
-      WebClipboard::Buffer());
+      mojom::ClipboardBuffer::kStandard);
 }
 
 void ClearClipboardBuffer() {
@@ -742,7 +742,7 @@ class EventTestPlugin : public FakeWebPlugin {
   size_t GetCoalescedEventCount() { return coalesced_event_count_; }
 
  private:
-  ~EventTestPlugin() override {}
+  ~EventTestPlugin() override = default;
 
   size_t coalesced_event_count_;
   WebInputEvent::Type last_event_type_;
@@ -1245,7 +1245,7 @@ TEST_F(WebPluginContainerTest, TopmostAfterDetachTest) {
     }
 
    private:
-    ~TopmostPlugin() override {}
+    ~TopmostPlugin() override = default;
   };
 
   RegisterMockedURL("plugin_container.html");
@@ -1298,7 +1298,7 @@ class CompositedPlugin : public FakeWebPlugin {
   }
 
  private:
-  ~CompositedPlugin() override {}
+  ~CompositedPlugin() override = default;
 
   std::unique_ptr<WebLayer> layer_;
 };
@@ -1362,6 +1362,21 @@ TEST_F(WebPluginContainerTest, NeedsWheelEvents) {
   RunPendingTasks();
   EXPECT_TRUE(web_view->GetPage()->GetEventHandlerRegistry().HasEventHandlers(
       EventHandlerRegistry::kWheelEventBlocking));
+}
+
+TEST_F(WebPluginContainerTest, IFramePluginDocumentDisplayNone) {
+  RegisterMockedURL("test.pdf", "application/pdf");
+  RegisterMockedURL("iframe_pdf_display_none.html", "text/html");
+
+  TestPluginWebFrameClient plugin_web_frame_client;
+  FrameTestHelpers::WebViewHelper web_view_helper;
+  WebViewImpl* web_view = web_view_helper.InitializeAndLoad(
+      base_url_ + "iframe_pdf_display_none.html", &plugin_web_frame_client);
+  web_view->UpdateAllLifecyclePhases();
+
+  WebFrame* web_iframe = web_view->MainFrame()->FirstChild();
+  LocalFrame* iframe = ToLocalFrame(WebFrame::ToCoreFrame(*web_iframe));
+  EXPECT_TRUE(iframe->GetWebPluginContainer());
 }
 
 }  // namespace blink

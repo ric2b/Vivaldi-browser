@@ -243,6 +243,8 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       PositionAvoidingSpecialElementBoundary(insertion_position, editing_state);
   if (editing_state->IsAborted())
     return;
+  // InsertTextCommandTest.AnchorElementWithBlockCrash reaches here.
+  ABORT_EDITING_COMMAND_IF(!start_block->parentNode());
   if (list_child == enclosing_anchor) {
     // |positionAvoidingSpecialElementBoundary()| creates new A element and
     // move to another place.
@@ -444,7 +446,8 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
     visible_pos = CreateVisiblePosition(insertion_position);
     // If the insertion point is a break element, there is nothing else
     // we need to do.
-    if (visible_pos.DeepEquivalent().AnchorNode()->GetLayoutObject()->IsBR()) {
+    if (visible_pos.IsNotNull() &&
+        visible_pos.DeepEquivalent().AnchorNode()->GetLayoutObject()->IsBR()) {
       SetEndingSelection(SelectionForUndoStep::From(
           SelectionInDOMTree::Builder()
               .Collapse(insertion_position)
@@ -478,14 +481,15 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       insertion_position = MostBackwardCaretPosition(insertion_position);
   }
 
+  ABORT_EDITING_COMMAND_IF(!IsEditablePosition(insertion_position));
   // Make sure we do not cause a rendered space to become unrendered.
   // FIXME: We need the affinity for pos, but mostForwardCaretPosition does not
   // give it
-  Position leading_whitespace =
-      LeadingWhitespacePosition(insertion_position, TextAffinity::kDefault);
-  // FIXME: leadingWhitespacePosition is returning the position before preserved
-  // newlines for positions after the preserved newline, causing the newline to
-  // be turned into a nbsp.
+  Position leading_whitespace = LeadingCollapsibleWhitespacePosition(
+      insertion_position, TextAffinity::kDefault);
+  // FIXME: leadingCollapsibleWhitespacePosition is returning the position
+  // before preserved newlines for positions after the preserved newline,
+  // causing the newline to be turned into a nbsp.
   if (leading_whitespace.IsNotNull() &&
       leading_whitespace.AnchorNode()->IsTextNode()) {
     Text* text_node = ToText(leading_whitespace.AnchorNode());

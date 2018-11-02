@@ -33,6 +33,7 @@
 #ifndef FrameLoader_h
 #define FrameLoader_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/IconURL.h"
 #include "core/dom/SandboxFlags.h"
@@ -71,7 +72,6 @@ CORE_EXPORT bool IsBackForwardLoadType(FrameLoadType);
 CORE_EXPORT bool IsReloadLoadType(FrameLoadType);
 
 class CORE_EXPORT FrameLoader final {
-  WTF_MAKE_NONCOPYABLE(FrameLoader);
   DISALLOW_NEW();
 
  public:
@@ -221,6 +221,7 @@ class CORE_EXPORT FrameLoader final {
   void Trace(blink::Visitor*);
 
   static void SetReferrerForFrameRequest(FrameLoadRequest&);
+  static void UpgradeInsecureRequest(ResourceRequest&, Document*);
 
   void ClientDroppedNavigation();
 
@@ -260,17 +261,13 @@ class CORE_EXPORT FrameLoader final {
 
   void DetachDocumentLoader(Member<DocumentLoader>&);
 
-  void UpgradeInsecureRequest(ResourceRequest&, Document*) const;
-
   std::unique_ptr<TracedValue> ToTracedValue() const;
   void TakeObjectSnapshot() const;
 
-  DocumentLoader* CreateDocumentLoader(
-      const ResourceRequest&,
-      const FrameLoadRequest&,
-      FrameLoadType,
-      NavigationType,
-      const base::UnguessableToken& devtools_navigation_token);
+  DocumentLoader* CreateDocumentLoader(const ResourceRequest&,
+                                       const FrameLoadRequest&,
+                                       FrameLoadType,
+                                       NavigationType);
 
   LocalFrameClient* Client() const;
 
@@ -299,6 +296,8 @@ class CORE_EXPORT FrameLoader final {
   bool dispatching_did_clear_window_object_in_main_world_;
   bool protect_provisional_loader_;
   bool detached_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameLoader);
 };
 
 }  // namespace blink

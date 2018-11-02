@@ -33,10 +33,12 @@
 /** @const */ var SCREEN_ARC_TERMS_OF_SERVICE = 'arc-tos';
 /** @const */ var SCREEN_WRONG_HWID = 'wrong-hwid';
 /** @const */ var SCREEN_DEVICE_DISABLED = 'device-disabled';
+/** @const */ var SCREEN_UPDATE_REQUIRED = 'update-required';
 /** @const */ var SCREEN_UNRECOVERABLE_CRYPTOHOME_ERROR =
     'unrecoverable-cryptohome-error';
 /** @const */ var SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE =
     'ad-password-change';
+/** @const */ var SCREEN_SYNC_CONSENT = 'sync-consent';
 
 /* Accelerator identifiers. Must be kept in sync with webui_login_view.cc. */
 /** @const */ var ACCELERATOR_CANCEL = 'cancel';
@@ -154,7 +156,9 @@ cr.define('cr.ui.login', function() {
     SCREEN_ARC_TERMS_OF_SERVICE,
     SCREEN_WRONG_HWID,
     SCREEN_CONFIRM_PASSWORD,
-    SCREEN_FATAL_ERROR
+    SCREEN_UPDATE_REQUIRED,
+    SCREEN_FATAL_ERROR,
+    SCREEN_SYNC_CONSENT
   ];
 
   /**
@@ -289,10 +293,14 @@ cr.define('cr.ui.login', function() {
      * The header bar should be hidden when views-based shelf is shown.
      */
     get showingViewsBasedShelf() {
-      return loadTimeData.valueExists('showMdLogin') &&
-          loadTimeData.getString('showMdLogin') == 'on' &&
+      var showingViewsLock = loadTimeData.valueExists('showViewsLock') &&
+          loadTimeData.getString('showViewsLock') == 'on' &&
           (this.displayType_ == DISPLAY_TYPE.LOCK ||
            this.displayType_ == DISPLAY_TYPE.USER_ADDING);
+      var showingViewsLogin = loadTimeData.valueExists('showViewsLogin') &&
+          loadTimeData.getString('showViewsLogin') == 'on' &&
+          (this.displayType_ == DISPLAY_TYPE.LOGIN);
+      return showingViewsLock || showingViewsLogin;
     },
 
     /**
@@ -744,6 +752,8 @@ cr.define('cr.ui.login', function() {
         if (screen.updateLocalizedContent)
           screen.updateLocalizedContent();
       }
+      var isInTabletMode = loadTimeData.getBoolean('isInTabletMode');
+      this.setTabletModeState_(isInTabletMode);
 
       var currentScreenId = this.screens_[this.currentStep_];
       var currentScreen = $(currentScreenId);
@@ -753,6 +763,18 @@ cr.define('cr.ui.login', function() {
       // so that strings are reloaded.
       // Will be reloaded if drowdown is actually shown.
       cr.ui.DropDown.refresh();
+    },
+
+    /**
+     * Updates "device in tablet mode" state when tablet mode is changed.
+     * @param {Boolean} isInTabletMode True when in tablet mode.
+     */
+    setTabletModeState_: function(isInTabletMode) {
+      for (var i = 0, screenId; screenId = this.screens_[i]; ++i) {
+        var screen = $(screenId);
+        if (screen.setTabletModeState)
+          screen.setTabletModeState(isInTabletMode);
+      }
     },
 
     /**
@@ -812,13 +834,11 @@ cr.define('cr.ui.login', function() {
      * @private
      */
     onWindowResize_: function() {
-      var currentScreenId = this.screens_[this.currentStep_];
-      var currentScreen = $(currentScreenId);
-      if (currentScreen)
-        currentScreen.onWindowResize();
-      // The account picker always needs to be notified of window size changes.
-      if (currentScreenId != SCREEN_ACCOUNT_PICKER && $(SCREEN_ACCOUNT_PICKER))
-        $(SCREEN_ACCOUNT_PICKER).onWindowResize();
+      for (var i = 0, screenId; screenId = this.screens_[i]; ++i) {
+        var screen = $(screenId);
+        if (screen.onWindowResize)
+          screen.onWindowResize();
+      }
     },
 
     /*

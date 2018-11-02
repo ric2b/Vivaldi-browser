@@ -4,12 +4,12 @@
 
 #include "chrome/browser/ssl/ssl_blocking_page.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
@@ -48,15 +48,6 @@ const char kEventNameBase[] = "ssl_interstitial_";
 const char kEventNotOverridable[] = "notoverridable_";
 const char kEventOverridable[] = "overridable_";
 
-// Events for UMA. Do not reorder or change!
-enum SSLExpirationAndDecision {
-  EXPIRED_AND_PROCEED,
-  EXPIRED_AND_DO_NOT_PROCEED,
-  NOT_EXPIRED_AND_PROCEED,
-  NOT_EXPIRED_AND_DO_NOT_PROCEED,
-  END_OF_SSL_EXPIRATION_AND_DECISION,
-};
-
 std::string GetSamplingEventName(const bool overridable, const int cert_error) {
   std::string event_name(kEventNameBase);
   if (overridable)
@@ -65,32 +56,6 @@ std::string GetSamplingEventName(const bool overridable, const int cert_error) {
     event_name.append(kEventNotOverridable);
   event_name.append(net::ErrorToString(cert_error));
   return event_name;
-}
-
-void RecordSSLExpirationPageEventState(bool expired_but_previously_allowed,
-                                       bool proceed,
-                                       bool overridable) {
-  SSLExpirationAndDecision event;
-  if (expired_but_previously_allowed && proceed)
-    event = EXPIRED_AND_PROCEED;
-  else if (expired_but_previously_allowed && !proceed)
-    event = EXPIRED_AND_DO_NOT_PROCEED;
-  else if (!expired_but_previously_allowed && proceed)
-    event = NOT_EXPIRED_AND_PROCEED;
-  else
-    event = NOT_EXPIRED_AND_DO_NOT_PROCEED;
-
-  if (overridable) {
-    UMA_HISTOGRAM_ENUMERATION(
-        "interstitial.ssl.expiration_and_decision.overridable",
-        event,
-        END_OF_SSL_EXPIRATION_AND_DECISION);
-  } else {
-    UMA_HISTOGRAM_ENUMERATION(
-        "interstitial.ssl.expiration_and_decision.nonoverridable",
-        event,
-        END_OF_SSL_EXPIRATION_AND_DECISION);
-  }
 }
 
 std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
@@ -106,7 +71,7 @@ std::unique_ptr<ChromeMetricsHelper> CreateMetricsHelper(
     reporting_info.metric_prefix =
         overridable ? "ssl_overridable" : "ssl_nonoverridable";
   }
-  return base::MakeUnique<ChromeMetricsHelper>(
+  return std::make_unique<ChromeMetricsHelper>(
       web_contents, request_url, reporting_info,
       GetSamplingEventName(overridable, cert_error));
 }
@@ -125,6 +90,7 @@ SSLBlockingPage* SSLBlockingPage::Create(
     const GURL& request_url,
     int options_mask,
     const base::Time& time_triggered,
+    const GURL& support_url,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     bool is_superfish,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -135,7 +101,7 @@ SSLBlockingPage* SSLBlockingPage::Create(
   metrics_helper.get()->StartRecordingCaptivePortalMetrics(overridable);
 
   return new SSLBlockingPage(web_contents, cert_error, ssl_info, request_url,
-                             options_mask, time_triggered,
+                             options_mask, time_triggered, support_url,
                              std::move(ssl_cert_reporter), overridable,
                              std::move(metrics_helper), is_superfish, callback);
 }
@@ -152,8 +118,6 @@ SSLBlockingPage::~SSLBlockingPage() {
   if (!callback_.is_null()) {
     // The page is closed without the user having chosen what to do, default to
     // deny.
-    RecordSSLExpirationPageEventState(expired_but_previously_allowed_, false,
-                                      overridable_);
     NotifyDenyCertificate();
   }
 }
@@ -161,7 +125,7 @@ SSLBlockingPage::~SSLBlockingPage() {
 void SSLBlockingPage::PopulateInterstitialStrings(
     base::DictionaryValue* load_time_data) {
   ssl_error_ui_->PopulateStringsForHTML(load_time_data);
-  cert_report_helper_->PopulateExtendedReportingOption(load_time_data);
+  cert_report_helper()->PopulateExtendedReportingOption(load_time_data);
 }
 
 // Note that we always create a navigation entry with SSL errors.
@@ -173,48 +137,47 @@ SSLBlockingPage::SSLBlockingPage(
     const GURL& request_url,
     int options_mask,
     const base::Time& time_triggered,
+    const GURL& support_url,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     bool overridable,
     std::unique_ptr<ChromeMetricsHelper> metrics_helper,
     bool is_superfish,
     const base::Callback<void(content::CertificateRequestResultType)>& callback)
-    : SecurityInterstitialPage(web_contents,
-                               request_url,
-                               base::MakeUnique<SSLErrorControllerClient>(
-                                   web_contents,
-                                   ssl_info,
-                                   request_url,
-                                   std::move(metrics_helper))),
+    : SSLBlockingPageBase(
+          web_contents,
+          is_superfish
+              ? certificate_reporting::ErrorReport::INTERSTITIAL_SUPERFISH
+              : certificate_reporting::ErrorReport::INTERSTITIAL_SSL,
+          ssl_info,
+          request_url,
+          std::move(ssl_cert_reporter),
+          overridable,
+          time_triggered,
+          std::make_unique<SSLErrorControllerClient>(
+              web_contents,
+              ssl_info,
+              request_url,
+              std::move(metrics_helper))),
       callback_(callback),
       ssl_info_(ssl_info),
       overridable_(overridable),
       expired_but_previously_allowed_(
           (options_mask & SSLErrorUI::EXPIRED_BUT_PREVIOUSLY_ALLOWED) != 0),
-      cert_report_helper_(new CertReportHelper(
-          std::move(ssl_cert_reporter),
-          web_contents,
-          request_url,
-          ssl_info,
-          is_superfish
-              ? certificate_reporting::ErrorReport::INTERSTITIAL_SUPERFISH
-              : certificate_reporting::ErrorReport::INTERSTITIAL_SSL,
-          overridable_,
-          time_triggered,
-          controller()->metrics_helper())),
       ssl_error_ui_(
           is_superfish
-              ? base::MakeUnique<security_interstitials::SuperfishErrorUI>(
+              ? std::make_unique<security_interstitials::SuperfishErrorUI>(
                     request_url,
                     cert_error,
                     ssl_info,
                     options_mask,
                     time_triggered,
                     controller())
-              : base::MakeUnique<SSLErrorUI>(request_url,
+              : std::make_unique<SSLErrorUI>(request_url,
                                              cert_error,
                                              ssl_info,
                                              options_mask,
                                              time_triggered,
+                                             support_url,
                                              controller())) {
   // Creating an interstitial without showing (e.g. from chrome://interstitials)
   // it leaks memory, so don't create it here.
@@ -226,7 +189,7 @@ void SSLBlockingPage::OverrideEntry(NavigationEntry* entry) {
 
 void SSLBlockingPage::SetSSLCertReporterForTesting(
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter) {
-  cert_report_helper_->SetSSLCertReporterForTesting(
+  cert_report_helper()->SetSSLCertReporterForTesting(
       std::move(ssl_cert_reporter));
 }
 
@@ -241,25 +204,15 @@ void SSLBlockingPage::CommandReceived(const std::string& command) {
   int cmd = 0;
   bool retval = base::StringToInt(command, &cmd);
   DCHECK(retval);
+
+  // Let the CertReportHelper handle commands first, This allows it to get set
+  // up to send reports, so that the report is populated properly if
+  // SSLErrorUI's command handling triggers a report to be sent.
+  cert_report_helper()->HandleReportingCommands(
+      static_cast<security_interstitials::SecurityInterstitialCommand>(cmd),
+      controller()->GetPrefService());
   ssl_error_ui_->HandleCommand(
       static_cast<security_interstitials::SecurityInterstitialCommand>(cmd));
-
-  // Special handling for the reporting preference being changed.
-  switch (cmd) {
-    case security_interstitials::CMD_DO_REPORT:
-      safe_browsing::SetExtendedReportingPrefAndMetric(
-          controller()->GetPrefService(), true,
-          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
-      break;
-    case security_interstitials::CMD_DONT_REPORT:
-      safe_browsing::SetExtendedReportingPrefAndMetric(
-          controller()->GetPrefService(), false,
-          safe_browsing::SBER_OPTIN_SITE_SECURITY_INTERSTITIAL);
-      break;
-    default:
-      // Other commands can be ignored.
-      break;
-  }
 }
 
 void SSLBlockingPage::OverrideRendererPrefs(
@@ -271,13 +224,7 @@ void SSLBlockingPage::OverrideRendererPrefs(
 }
 
 void SSLBlockingPage::OnProceed() {
-  UpdateMetricsAfterSecurityInterstitial();
-
-  // Finish collecting metrics, if the user opted into it.
-  cert_report_helper_->FinishCertCollection(
-      certificate_reporting::ErrorReport::USER_PROCEEDED);
-  RecordSSLExpirationPageEventState(
-      expired_but_previously_allowed_, true, overridable_);
+  OnInterstitialClosing();
 
   // Accepting the certificate resumes the loading of the page.
   DCHECK(!callback_.is_null());
@@ -286,14 +233,7 @@ void SSLBlockingPage::OnProceed() {
 }
 
 void SSLBlockingPage::OnDontProceed() {
-  UpdateMetricsAfterSecurityInterstitial();
-
-  // Finish collecting metrics, if the user opted into it.
-  cert_report_helper_->FinishCertCollection(
-      certificate_reporting::ErrorReport::USER_DID_NOT_PROCEED);
-  RecordSSLExpirationPageEventState(
-      expired_but_previously_allowed_, false, overridable_);
-
+  OnInterstitialClosing();
   NotifyDenyCertificate();
 }
 

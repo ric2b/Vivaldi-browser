@@ -25,7 +25,6 @@ import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.share.ShareMenuActionHandler;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 
@@ -36,10 +35,7 @@ import java.util.concurrent.ExecutionException;
  * Instrumentation tests for Share intents.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ShareIntentTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
@@ -54,7 +50,7 @@ public class ShareIntentTest {
      * activity and redirects the calls to the methods to the actual activity.
      */
     private static class MockChromeActivity extends ChromeTabbedActivity {
-        private Object mLock = new Object();
+        private final Object mLock = new Object();
         private boolean mCheckCompleted = false;
         private ChromeActivity mActivity = null;
 

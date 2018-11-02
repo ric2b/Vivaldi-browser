@@ -18,12 +18,12 @@ namespace internal {
 ThreadControllerImpl::ThreadControllerImpl(
     base::MessageLoop* message_loop,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    std::unique_ptr<base::TickClock> time_source)
+    base::TickClock* time_source)
     : message_loop_(message_loop),
       task_runner_(task_runner),
       message_loop_task_runner_(message_loop ? message_loop->task_runner()
                                              : nullptr),
-      time_source_(std::move(time_source)),
+      time_source_(time_source),
       weak_factory_(this) {
   immediate_do_work_closure_ = base::BindRepeating(
       &ThreadControllerImpl::DoWork, weak_factory_.GetWeakPtr(),
@@ -33,13 +33,13 @@ ThreadControllerImpl::ThreadControllerImpl(
                                                  Sequence::WorkType::kDelayed);
 }
 
-ThreadControllerImpl::~ThreadControllerImpl() {}
+ThreadControllerImpl::~ThreadControllerImpl() = default;
 
 std::unique_ptr<ThreadControllerImpl> ThreadControllerImpl::Create(
     base::MessageLoop* message_loop,
-    std::unique_ptr<base::TickClock> time_source) {
+    base::TickClock* time_source) {
   return base::WrapUnique(new ThreadControllerImpl(
-      message_loop, message_loop->task_runner(), std::move(time_source)));
+      message_loop, message_loop->task_runner(), time_source));
 }
 
 void ThreadControllerImpl::SetSequence(Sequence* sequence) {
@@ -68,17 +68,12 @@ void ThreadControllerImpl::CancelDelayedWork() {
   cancelable_delayed_do_work_closure_.Cancel();
 }
 
-void ThreadControllerImpl::PostNonNestableTask(const base::Location& from_here,
-                                               base::OnceClosure task) {
-  task_runner_->PostNonNestableTask(from_here, std::move(task));
-}
-
 bool ThreadControllerImpl::RunsTasksInCurrentSequence() {
   return task_runner_->RunsTasksInCurrentSequence();
 }
 
 base::TickClock* ThreadControllerImpl::GetClock() {
-  return time_source_.get();
+  return time_source_;
 }
 
 void ThreadControllerImpl::SetDefaultTaskRunner(
@@ -92,11 +87,6 @@ void ThreadControllerImpl::RestoreDefaultTaskRunner() {
   if (!message_loop_)
     return;
   message_loop_->SetTaskRunner(message_loop_task_runner_);
-}
-
-bool ThreadControllerImpl::IsNested() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return base::RunLoop::IsNestedOnCurrentThread();
 }
 
 void ThreadControllerImpl::DoWork(Sequence::WorkType work_type) {

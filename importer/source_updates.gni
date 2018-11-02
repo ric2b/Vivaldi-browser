@@ -1,16 +1,22 @@
 
 if (!is_android) {
-  post_process_target("//chrome/test:browser_tests") {
+  update_target("//chrome/test:browser_tests") {
     sources += [
       "//vivaldi/importer/viv_importer_browsertest.cpp",
     ]
   }
 }
 
-
-post_process_target("//chrome/common:common") {
+update_target("//chrome/common:common") {
   sources += [
     "//vivaldi/importer/profile_vivaldi_import_process_param_traits.cc",
     "//vivaldi/importer/profile_vivaldi_import_process_param_traits.h",
+  ]
+}
+
+update_target("//chrome/common/importer:importer") {
+  sources += [
+    "//vivaldi/importer/import_config.cc",
+    "//vivaldi/importer/import_config.h",
   ]
 }

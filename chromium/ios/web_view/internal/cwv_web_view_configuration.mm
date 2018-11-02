@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#import "ios/web_view/public/cwv_web_view_configuration.h"
 #import "ios/web_view/internal/cwv_web_view_configuration_internal.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
+#include "base/logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "ios/web_view/internal/app/application_context.h"
 #import "ios/web_view/internal/cwv_preferences_internal.h"
 #import "ios/web_view/internal/cwv_user_content_controller_internal.h"
+#import "ios/web_view/internal/cwv_web_view_internal.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
 #include "ios/web_view/internal/web_view_global_state_util.h"
 
@@ -20,6 +22,12 @@
 @interface CWVWebViewConfiguration () {
   // The BrowserState for this configuration.
   std::unique_ptr<ios_web_view::WebViewBrowserState> _browserState;
+
+  // Holds all CWVWebViews created with this class. Weak references.
+  NSHashTable* _webViews;
+
+  // |YES| if |shutDown| was called.
+  BOOL _wasShutDown;
 }
 
 // Initializes configuration with the specified browser state mode.
@@ -32,28 +40,36 @@
 @synthesize preferences = _preferences;
 @synthesize userContentController = _userContentController;
 
+namespace {
+CWVWebViewConfiguration* gDefaultConfiguration = nil;
+CWVWebViewConfiguration* gIncognitoConfiguration = nil;
+}  // namespace
+
++ (void)shutDown {
+  [gDefaultConfiguration shutDown];
+  [gIncognitoConfiguration shutDown];
+}
+
 + (instancetype)defaultConfiguration {
-  static CWVWebViewConfiguration* defaultConfiguration;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     auto browserState =
-        base::MakeUnique<ios_web_view::WebViewBrowserState>(false);
-    defaultConfiguration = [[CWVWebViewConfiguration alloc]
+        std::make_unique<ios_web_view::WebViewBrowserState>(false);
+    gDefaultConfiguration = [[CWVWebViewConfiguration alloc]
         initWithBrowserState:std::move(browserState)];
   });
-  return defaultConfiguration;
+  return gDefaultConfiguration;
 }
 
 + (instancetype)incognitoConfiguration {
-  static CWVWebViewConfiguration* incognitoConfiguration;
   static dispatch_once_t onceToken;
   dispatch_once(&onceToken, ^{
     auto browserState =
-        base::MakeUnique<ios_web_view::WebViewBrowserState>(true);
-    incognitoConfiguration = [[CWVWebViewConfiguration alloc]
+        std::make_unique<ios_web_view::WebViewBrowserState>(true);
+    gIncognitoConfiguration = [[CWVWebViewConfiguration alloc]
         initWithBrowserState:std::move(browserState)];
   });
-  return incognitoConfiguration;
+  return gIncognitoConfiguration;
 }
 
 + (void)initialize {
@@ -75,8 +91,14 @@
 
     _userContentController =
         [[CWVUserContentController alloc] initWithConfiguration:self];
+
+    _webViews = [NSHashTable weakObjectsHashTable];
   }
   return self;
+}
+
+- (void)dealloc {
+  DCHECK(_wasShutDown);
 }
 
 #pragma mark - Public Methods
@@ -89,6 +111,18 @@
 
 - (ios_web_view::WebViewBrowserState*)browserState {
   return _browserState.get();
+}
+
+- (void)registerWebView:(CWVWebView*)webView {
+  [_webViews addObject:webView];
+}
+
+- (void)shutDown {
+  for (CWVWebView* webView in _webViews) {
+    [webView shutDown];
+  }
+  _browserState.reset();
+  _wasShutDown = YES;
 }
 
 @end

@@ -1907,12 +1907,6 @@ const char kDisabled_HelpShort[] =
     "disabled: Disable the current target.";
 const char kDisabled_Help[] =
     "disabled: Disable the current target.\n";
-
-const char kHugeLink[] = "huge_link";
-const char kHugeLink_HelpShort[] =
-    "huge_link: Linking the current target takes a lot of RAM (50GB+).";
-const char kHugeLink_Help[] =
-    "huge_link: Linking the current target takes a lot of RAM (50GB+).";
 // </Vivaldi>
 
 // -----------------------------------------------------------------------------
@@ -2014,7 +2008,6 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(WriteRuntimeDeps)
     // <Vivaldi>
     INSERT_VARIABLE(Disabled)
-    INSERT_VARIABLE(HugeLink)
     // </Vivaldi>
   }
   return info_map;

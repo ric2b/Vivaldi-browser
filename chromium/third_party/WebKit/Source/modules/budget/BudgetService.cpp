@@ -50,11 +50,11 @@ BudgetService::BudgetService(
   // Set a connection error handler, so that if an embedder doesn't
   // implement a BudgetSerice mojo service, the developer will get a
   // actionable information.
-  service_.set_connection_error_handler(ConvertToBaseCallback(
-      WTF::Bind(&BudgetService::OnConnectionError, WrapWeakPersistent(this))));
+  service_.set_connection_error_handler(
+      WTF::Bind(&BudgetService::OnConnectionError, WrapWeakPersistent(this)));
 }
 
-BudgetService::~BudgetService() {}
+BudgetService::~BudgetService() = default;
 
 ScriptPromise BudgetService::getCost(ScriptState* script_state,
                                      const AtomicString& operation) {
@@ -72,9 +72,9 @@ ScriptPromise BudgetService::getCost(ScriptState* script_state,
   ScriptPromise promise = resolver->Promise();
 
   // Get the cost for the action from the browser BudgetService.
-  service_->GetCost(type, ConvertToBaseCallback(WTF::Bind(
-                              &BudgetService::GotCost, WrapPersistent(this),
-                              WrapPersistent(resolver))));
+  service_->GetCost(type,
+                    WTF::Bind(&BudgetService::GotCost, WrapPersistent(this),
+                              WrapPersistent(resolver)));
   return promise;
 }
 
@@ -95,12 +95,8 @@ ScriptPromise BudgetService::getBudget(ScriptState* script_state) {
   ScriptPromise promise = resolver->Promise();
 
   // Get the budget from the browser BudgetService.
-  scoped_refptr<SecurityOrigin> origin(
-      ExecutionContext::From(script_state)->GetSecurityOrigin());
-  service_->GetBudget(
-      origin, ConvertToBaseCallback(WTF::Bind(&BudgetService::GotBudget,
-                                              WrapPersistent(this),
-                                              WrapPersistent(resolver))));
+  service_->GetBudget(WTF::Bind(&BudgetService::GotBudget, WrapPersistent(this),
+                                WrapPersistent(resolver)));
   return promise;
 }
 
@@ -143,12 +139,9 @@ ScriptPromise BudgetService::reserve(ScriptState* script_state,
   ScriptPromise promise = resolver->Promise();
 
   // Call to the BudgetService to place the reservation.
-  scoped_refptr<SecurityOrigin> origin(
-      ExecutionContext::From(script_state)->GetSecurityOrigin());
-  service_->Reserve(origin, type,
-                    ConvertToBaseCallback(WTF::Bind(
-                        &BudgetService::GotReservation, WrapPersistent(this),
-                        WrapPersistent(resolver))));
+  service_->Reserve(
+      type, WTF::Bind(&BudgetService::GotReservation, WrapPersistent(this),
+                      WrapPersistent(resolver)));
   return promise;
 }
 

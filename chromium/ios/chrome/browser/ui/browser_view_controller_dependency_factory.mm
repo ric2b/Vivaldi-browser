@@ -53,8 +53,8 @@
   DCHECK(infoBarManager);
   SimpleAlertInfoBarDelegate::Create(
       infoBarManager,
-      infobars::InfoBarDelegate::SHOW_PASSKIT_INFOBAR_ERROR_DELEGATE, nullptr,
-      l10n_util::GetStringUTF16(IDS_IOS_GENERIC_PASSKIT_ERROR), true);
+      infobars::InfoBarDelegate::SHOW_PASSKIT_ERROR_INFOBAR_DELEGATE_IOS,
+      nullptr, l10n_util::GetStringUTF16(IDS_IOS_GENERIC_PASSKIT_ERROR), true);
 }
 
 - (ToolbarModelIOS*)newToolbarModelIOSWithDelegate:
@@ -62,11 +62,12 @@
   return new ToolbarModelImplIOS(delegate);
 }
 
-- (id<Toolbar>)
-newToolbarControllerWithDelegate:(id<WebToolbarDelegate>)delegate
-                       urlLoader:(id<UrlLoader>)urlLoader
-                      dispatcher:
-                          (id<ApplicationCommands, BrowserCommands>)dispatcher {
+- (id<Toolbar>)newToolbarControllerWithDelegate:(id<WebToolbarDelegate>)delegate
+                                      urlLoader:(id<UrlLoader>)urlLoader
+                                     dispatcher:
+                                         (id<ApplicationCommands,
+                                             BrowserCommands,
+                                             ToolbarCommands>)dispatcher {
   id<Toolbar> toolbarController;
   if (base::FeatureList::IsEnabled(kCleanToolbar)) {
     ToolbarAdapter* adapter =

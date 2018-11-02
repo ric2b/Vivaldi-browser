@@ -23,6 +23,7 @@
 
 #include "ui/devtools/devtools_connector.h"
 #include "browser/vivaldi_browser_finder.h"
+#include "browser/startup_vivaldi_browser.h"
 
 namespace extensions {
 

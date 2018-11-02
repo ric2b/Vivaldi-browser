@@ -239,7 +239,7 @@ bool ArcNavigationThrottle::FoundPreferredOrVerifiedArcApp(
     // iff there are ARC apps which can actually handle the given URL.
     DVLOG(1) << "There are no app candidates for this URL: " << url;
     ui_displayed_ = false;
-    // TODO(djacobo): Investigate whether or not to track this via UMA.
+    RecordUma(CloseReason::ERROR, Platform::CHROME);
     return cancel_navigation;
   }
 
@@ -261,7 +261,10 @@ bool ArcNavigationThrottle::FoundPreferredOrVerifiedArcApp(
 
     if (!instance) {
       close_reason = CloseReason::ERROR;
-    } else if (!ArcIntentHelperBridge::IsIntentHelperPackage(package_name)) {
+    } else if (ArcIntentHelperBridge::IsIntentHelperPackage(package_name)) {
+      chrome::SetIntentPickerViewVisibility(
+          chrome::FindBrowserWithWebContents(handle->GetWebContents()), true);
+    } else {
       instance->HandleUrl(url.spec(), package_name);
       cancel_navigation = true;
     }
@@ -273,6 +276,7 @@ bool ArcNavigationThrottle::FoundPreferredOrVerifiedArcApp(
         handle->GetWebContents()->GetBrowserContext());
     if (!intent_helper_bridge) {
       LOG(ERROR) << "Cannot get an instance of ArcIntentHelperBridge";
+      RecordUma(CloseReason::ERROR, Platform::CHROME);
       return cancel_navigation;
     }
     std::vector<ArcIntentHelperBridge::ActivityName> activities;
@@ -304,7 +308,7 @@ void ArcNavigationThrottle::AsyncOnAppIconsReceived(
         handler->package_name, handler->activity_name);
     const auto it = icons->find(activity);
 
-    app_info.emplace_back(it != icons->end() ? it->second.icon20 : gfx::Image(),
+    app_info.emplace_back(it != icons->end() ? it->second.icon16 : gfx::Image(),
                           handler->package_name, handler->name);
   }
 

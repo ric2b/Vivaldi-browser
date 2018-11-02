@@ -77,8 +77,6 @@ blink_core_sources("loader") {
     "WorkerFetchContext.h",
     "WorkerThreadableLoader.cpp",
     "WorkerThreadableLoader.h",
-    "WorkletScriptLoader.cpp",
-    "WorkletScriptLoader.h",
     "appcache/ApplicationCache.cpp",
     "appcache/ApplicationCache.h",
     "appcache/ApplicationCacheHost.cpp",
@@ -122,17 +120,10 @@ blink_core_sources("loader") {
     "resource/MultipartImageResourceParser.h",
     "resource/ScriptResource.cpp",
     "resource/ScriptResource.h",
-    "resource/StyleSheetResource.h",
-    "resource/StyleSheetResourceClient.h",
     "resource/TextResource.cpp",
     "resource/TextResource.h",
     "resource/XSLStyleSheetResource.cpp",
     "resource/XSLStyleSheetResource.h",
-  ]
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 
   public_deps = [

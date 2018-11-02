@@ -59,14 +59,14 @@ PaintedScrollbarLayer::PaintedScrollbarLayer(
         MainThreadScrollingReason::kScrollbarScrolling);
 }
 
-PaintedScrollbarLayer::~PaintedScrollbarLayer() {}
+PaintedScrollbarLayer::~PaintedScrollbarLayer() = default;
 
 void PaintedScrollbarLayer::SetScrollElementId(ElementId element_id) {
   if (element_id == scroll_element_id_)
     return;
 
   scroll_element_id_ = element_id;
-  SetNeedsFullTreeSync();
+  SetNeedsCommit();
 }
 
 bool PaintedScrollbarLayer::OpacityCanAnimateOnImplThread() const {

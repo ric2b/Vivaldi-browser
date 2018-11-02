@@ -13,8 +13,8 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -57,6 +57,7 @@
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "url/url_constants.h"
 
 namespace net {
 
@@ -746,7 +747,6 @@ SpdySession::SpdySession(
       transport_security_state_(transport_security_state),
       stream_hi_water_mark_(kFirstStreamId),
       last_accepted_push_stream_id_(0),
-      unclaimed_pushed_streams_(this),
       push_delegate_(push_delegate),
       num_pushed_streams_(0u),
       num_active_pushed_streams_(0u),
@@ -818,20 +818,35 @@ SpdySession::~SpdySession() {
   net_log_.EndEvent(NetLogEventType::HTTP2_SESSION);
 }
 
-int SpdySession::GetPushStream(const GURL& url,
-                               RequestPriority priority,
-                               SpdyStream** stream,
-                               const NetLogWithSource& stream_net_log) {
+int SpdySession::GetPushedStream(const GURL& url,
+                                 SpdyStreamId pushed_stream_id,
+                                 RequestPriority priority,
+                                 SpdyStream** stream,
+                                 const NetLogWithSource& stream_net_log) {
   CHECK(!in_io_loop_);
+  // |pushed_stream_id| must be valid.
+  DCHECK_NE(pushed_stream_id, kNoPushedStreamFound);
+  // |pushed_stream_id| must already have been claimed.
+  DCHECK_NE(pushed_stream_id,
+            pool_->push_promise_index()->FindStream(url, this));
 
   if (availability_state_ == STATE_DRAINING) {
     *stream = nullptr;
     return ERR_CONNECTION_CLOSED;
   }
 
-  *stream = GetActivePushStream(url);
-  if (!*stream)
-    return OK;
+  ActiveStreamMap::iterator active_it = active_streams_.find(pushed_stream_id);
+  if (active_it == active_streams_.end()) {
+    // A previously claimed pushed stream might not be available, for example,
+    // if the server has reset it in the meanwhile.
+    return ERR_SPDY_PUSHED_STREAM_NOT_AVAILABLE;
+  }
+
+  net_log_.AddEvent(
+      NetLogEventType::HTTP2_STREAM_ADOPTED_PUSH_STREAM,
+      base::Bind(&NetLogSpdyAdoptedPushStreamCallback, pushed_stream_id, &url));
+
+  *stream = active_it->second;
 
   DCHECK_LT(streams_pushed_and_claimed_count_, streams_pushed_count_);
   streams_pushed_and_claimed_count_++;
@@ -857,12 +872,11 @@ int SpdySession::GetPushStream(const GURL& url,
 }
 
 void SpdySession::CancelPush(const GURL& url) {
-  UnclaimedPushedStreamContainer::const_iterator unclaimed_it =
-      unclaimed_pushed_streams_.find(url);
-  if (unclaimed_it == unclaimed_pushed_streams_.end())
+  const SpdyStreamId stream_id =
+      pool_->push_promise_index()->FindStream(url, this);
+  if (stream_id == kNoPushedStreamFound)
     return;
 
-  const SpdyStreamId stream_id = unclaimed_it->second;
   DCHECK(active_streams_.find(stream_id) != active_streams_.end());
   ResetStream(stream_id, ERROR_CODE_CANCEL, "Cancelled push stream.");
 }
@@ -912,7 +926,7 @@ void SpdySession::InitializeWithSocket(
                  READ_STATE_DO_READ, OK));
 }
 
-bool SpdySession::VerifyDomainAuthentication(const SpdyString& domain) {
+bool SpdySession::VerifyDomainAuthentication(const SpdyString& domain) const {
   if (availability_state_ == STATE_DRAINING)
     return false;
 
@@ -1254,7 +1268,7 @@ std::unique_ptr<base::Value> SpdySession::GetInfoAsValue() const {
   dict->SetInteger("active_streams", active_streams_.size());
 
   dict->SetInteger("unclaimed_pushed_streams",
-                   unclaimed_pushed_streams_.size());
+                   pool_->push_promise_index()->CountStreamsForSession(this));
 
   dict->SetString(
       "negotiated_protocol",
@@ -1287,15 +1301,6 @@ bool SpdySession::GetLoadTimingInfo(SpdyStreamId stream_id,
                                     LoadTimingInfo* load_timing_info) const {
   return connection_->GetLoadTimingInfo(stream_id != kFirstStreamId,
                                         load_timing_info);
-}
-
-size_t SpdySession::num_unclaimed_pushed_streams() const {
-  return unclaimed_pushed_streams_.size();
-}
-
-size_t SpdySession::count_unclaimed_pushed_streams_for_url(
-    const GURL& url) const {
-  return unclaimed_pushed_streams_.count(url);
 }
 
 int SpdySession::GetPeerAddress(IPEndPoint* address) const {
@@ -1352,6 +1357,48 @@ bool SpdySession::CloseOneIdleConnection() {
   return false;
 }
 
+bool SpdySession::ValidatePushedStream(SpdyStreamId stream_id,
+                                       const GURL& url,
+                                       const HttpRequestInfo& request_info,
+                                       const SpdySessionKey& key) const {
+  // Proxy server and privacy mode must match.
+  if (key.proxy_server() != spdy_session_key_.proxy_server() ||
+      key.privacy_mode() != spdy_session_key_.privacy_mode()) {
+    return false;
+  }
+  // Certificate must match for encrypted schemes only.
+  if (url.SchemeIsCryptographic() &&
+      !VerifyDomainAuthentication(key.host_port_pair().host())) {
+    return false;
+  }
+
+  ActiveStreamMap::const_iterator stream_it = active_streams_.find(stream_id);
+  if (stream_it == active_streams_.end()) {
+    // Only active streams should be in Http2PushPromiseIndex.
+    NOTREACHED();
+    return false;
+  }
+  const SpdyHeaderBlock& request_headers = stream_it->second->request_headers();
+  SpdyHeaderBlock::const_iterator method_it =
+      request_headers.find(kHttp2MethodHeader);
+  if (method_it == request_headers.end()) {
+    // TryCreatePushStream() would have reset the stream if it had no method.
+    NOTREACHED();
+    return false;
+  }
+
+  // Request method must match.
+  if (request_info.method != method_it->second) {
+    return false;
+  }
+
+  return true;
+}
+
+base::WeakPtr<SpdySession> SpdySession::GetWeakPtrToSession() {
+  return GetWeakPtr();
+}
+
 size_t SpdySession::DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
                                     bool* is_session_active) const {
   // TODO(xunjieli): Include |pending_create_stream_queues_| when WeakPtr is
@@ -1366,7 +1413,6 @@ size_t SpdySession::DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
          SpdyEstimateMemoryUsage(spdy_session_key_) +
          SpdyEstimateMemoryUsage(pooled_aliases_) +
          SpdyEstimateMemoryUsage(active_streams_) +
-         SpdyEstimateMemoryUsage(unclaimed_pushed_streams_) +
          SpdyEstimateMemoryUsage(created_streams_) +
          SpdyEstimateMemoryUsage(write_queue_) +
          SpdyEstimateMemoryUsage(in_flight_write_) +
@@ -1374,55 +1420,6 @@ size_t SpdySession::DumpMemoryStats(StreamSocket::SocketMemoryStats* stats,
          SpdyEstimateMemoryUsage(initial_settings_) +
          SpdyEstimateMemoryUsage(stream_send_unstall_queue_) +
          SpdyEstimateMemoryUsage(priority_dependency_state_);
-}
-
-SpdySession::UnclaimedPushedStreamContainer::UnclaimedPushedStreamContainer(
-    SpdySession* spdy_session)
-    : spdy_session_(spdy_session) {}
-SpdySession::UnclaimedPushedStreamContainer::~UnclaimedPushedStreamContainer() {
-}
-
-bool SpdySession::UnclaimedPushedStreamContainer::erase(const GURL& url) {
-  const_iterator it = find(url);
-  if (it == end())
-    return false;
-
-  erase(it);
-  return true;
-}
-
-SpdySession::UnclaimedPushedStreamContainer::iterator
-SpdySession::UnclaimedPushedStreamContainer::erase(const_iterator it) {
-  DCHECK(spdy_session_->pool_);
-  DCHECK(it != end());
-  // Only allow cross-origin push for secure resources.
-  if (it->first.SchemeIsCryptographic()) {
-    spdy_session_->pool_->push_promise_index()->UnregisterUnclaimedPushedStream(
-        it->first, spdy_session_);
-  }
-  return streams_.erase(it);
-}
-
-bool SpdySession::UnclaimedPushedStreamContainer::insert(
-    const GURL& url,
-    SpdyStreamId stream_id) {
-  DCHECK(spdy_session_->pool_);
-  auto result = streams_.insert(std::make_pair(url, stream_id));
-  if (!result.second) {
-    // Only one pushed stream is allowed for each URL.
-    return false;
-  }
-  // Only allow cross-origin push for https resources.
-  if (url.SchemeIsCryptographic()) {
-    spdy_session_->pool_->push_promise_index()->RegisterUnclaimedPushedStream(
-        url, spdy_session_->GetWeakPtr());
-  }
-  return true;
-}
-
-size_t SpdySession::UnclaimedPushedStreamContainer::EstimateMemoryUsage()
-    const {
-  return SpdyEstimateMemoryUsage(streams_);
 }
 
 // {,Try}CreateStream() can be called with |in_io_loop_| set if a stream is
@@ -1627,6 +1624,12 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   }
 
   DCHECK(gurl.is_valid());
+  if (!gurl.SchemeIs(url::kHttpScheme) && !gurl.SchemeIs(url::kHttpsScheme)) {
+    EnqueueResetStreamFrame(stream_id, request_priority,
+                            ERROR_CODE_REFUSED_STREAM,
+                            "Only http and https resources can be pushed.");
+    return;
+  }
 
   // Cross-origin push validation.
   GURL associated_url(associated_it->second->GetUrlFromHeaders());
@@ -1634,15 +1637,15 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
     if (proxy_delegate_ &&
         proxy_delegate_->IsTrustedSpdyProxy(
             ProxyServer(ProxyServer::SCHEME_HTTPS, host_port_pair()))) {
-      // Disallow pushing of HTTPS content by trusted proxy.
-      if (gurl.SchemeIs("https")) {
+      if (!gurl.SchemeIs(url::kHttpScheme)) {
         EnqueueResetStreamFrame(
             stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
-            "Cross origin HTTPS content from trusted proxy.");
+            "Only http scheme allowed for cross origin push by trusted proxy.");
         return;
       }
     } else {
-      if (!gurl.SchemeIs("https") || !associated_url.SchemeIs("https")) {
+      if (!gurl.SchemeIs(url::kHttpsScheme) ||
+          !associated_url.SchemeIs(url::kHttpsScheme)) {
         EnqueueResetStreamFrame(
             stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
             "Both pushed URL and associated URL must have https scheme.");
@@ -1663,8 +1666,7 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   // "Promised requests MUST be cacheable and MUST be safe [...]" (RFC7540
   // Section 8.2).  Only cacheable safe request methods are GET and HEAD.
   SpdyHeaderBlock::const_iterator it = headers.find(kHttp2MethodHeader);
-  if (it == headers.end() ||
-      (it->second.compare("GET") != 0 && it->second.compare("HEAD") != 0)) {
+  if (it == headers.end() || (it->second != "GET" && it->second != "HEAD")) {
     EnqueueResetStreamFrame(stream_id, request_priority,
                             ERROR_CODE_REFUSED_STREAM,
                             "Inadequate request method.");
@@ -1672,7 +1674,8 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   }
 
   // Insertion fails if there already is a pushed stream with the same path.
-  if (!unclaimed_pushed_streams_.insert(gurl, stream_id)) {
+  if (!pool_->push_promise_index()->RegisterUnclaimedPushedStream(
+          gurl, stream_id, this)) {
     EnqueueResetStreamFrame(stream_id, request_priority,
                             ERROR_CODE_REFUSED_STREAM,
                             "Duplicate pushed stream with url: " + gurl.spec());
@@ -1742,7 +1745,8 @@ void SpdySession::CloseActiveStreamIterator(ActiveStreamMap::iterator it,
   // push is hardly used. Write tests for this and fix this. (See
   // http://crbug.com/261712 .)
   if (owned_stream->type() == SPDY_PUSH_STREAM) {
-    if (unclaimed_pushed_streams_.erase(owned_stream->url())) {
+    if (pool_->push_promise_index()->UnregisterUnclaimedPushedStream(
+            owned_stream->url(), owned_stream->stream_id(), this)) {
       bytes_pushed_and_unclaimed_count_ += owned_stream->recv_bytes();
     }
     bytes_pushed_count_ += owned_stream->recv_bytes();
@@ -2417,28 +2421,6 @@ void SpdySession::DeleteStream(std::unique_ptr<SpdyStream> stream, int status) {
   }
 }
 
-SpdyStream* SpdySession::GetActivePushStream(const GURL& url) {
-  UnclaimedPushedStreamContainer::const_iterator unclaimed_it =
-      unclaimed_pushed_streams_.find(url);
-  if (unclaimed_it == unclaimed_pushed_streams_.end())
-    return nullptr;
-
-  const SpdyStreamId stream_id = unclaimed_it->second;
-  unclaimed_pushed_streams_.erase(unclaimed_it);
-
-  ActiveStreamMap::iterator active_it = active_streams_.find(stream_id);
-  if (active_it == active_streams_.end()) {
-    NOTREACHED();
-    return nullptr;
-  }
-
-  SpdyStream* stream = active_it->second;
-  net_log_.AddEvent(
-      NetLogEventType::HTTP2_STREAM_ADOPTED_PUSH_STREAM,
-      base::Bind(&NetLogSpdyAdoptedPushStreamCallback, stream_id, &url));
-  return stream;
-}
-
 void SpdySession::RecordPingRTTHistogram(base::TimeDelta duration) {
   UMA_HISTOGRAM_CUSTOM_TIMES("Net.SpdyPing.RTT", duration,
                              base::TimeDelta::FromMilliseconds(1),
@@ -2493,7 +2475,7 @@ void SpdySession::DcheckDraining() const {
   DcheckGoingAway();
   DCHECK_EQ(availability_state_, STATE_DRAINING);
   DCHECK(active_streams_.empty());
-  DCHECK(unclaimed_pushed_streams_.empty());
+  DCHECK_EQ(0u, pool_->push_promise_index()->CountStreamsForSession(this));
 }
 
 void SpdySession::DoDrainSession(Error err, const SpdyString& description) {
@@ -2532,7 +2514,7 @@ void SpdySession::DoDrainSession(Error err, const SpdyString& description) {
       NetLogEventType::HTTP2_SESSION_CLOSE,
       base::Bind(&NetLogSpdySessionCloseCallback, err, &description));
 
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SpdySession.ClosedOnError", -err);
+  base::UmaHistogramSparse("Net.SpdySession.ClosedOnError", -err);
 
   if (err == OK) {
     // We ought to be going away already, as this is a graceful close.
@@ -2586,21 +2568,17 @@ void SpdySession::CancelPushedStreamIfUnclaimed(SpdyStreamId stream_id) {
   if (active_it == active_streams_.end())
     return;
 
-  // Grab URL for faster lookup in unclaimed_pushed_streams_.
-  const GURL& url = active_it->second->url();
-  UnclaimedPushedStreamContainer::const_iterator unclaimed_it =
-      unclaimed_pushed_streams_.find(url);
   // Make sure to cancel the correct stream.  It is possible that the pushed
   // stream |stream_id| is already claimed, and another stream has been pushed
   // for the same URL.
-  if (unclaimed_it == unclaimed_pushed_streams_.end() ||
-      unclaimed_it->second != stream_id) {
+  const GURL& url = active_it->second->url();
+  if (pool_->push_promise_index()->FindStream(url, this) != stream_id) {
     return;
   }
 
   LogAbandonedActiveStream(active_it, ERR_TIMED_OUT);
   // CloseActiveStreamIterator() will remove the stream from
-  // |unclaimed_pushed_streams_|.
+  // |pool_->push_promise_index()|.
   ResetStreamIterator(active_it, ERROR_CODE_REFUSED_STREAM,
                       "Stream not claimed.");
 }
@@ -2676,9 +2654,13 @@ void SpdySession::OnRstStream(SpdyStreamId stream_id,
     return;
   }
 
+  DCHECK(it->second);
   CHECK_EQ(it->second->stream_id(), stream_id);
 
-  if (error_code == ERROR_CODE_NO_ERROR) {
+  if (it->second->ShouldRetryRSTPushStream()) {
+    CloseActiveStreamIterator(it,
+                              ERR_SPDY_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER);
+  } else if (error_code == ERROR_CODE_NO_ERROR) {
     CloseActiveStreamIterator(it, ERR_SPDY_RST_STREAM_NO_ERROR_RECEIVED);
   } else if (error_code == ERROR_CODE_REFUSED_STREAM) {
     CloseActiveStreamIterator(it, ERR_SPDY_SERVER_REFUSED_STREAM);
@@ -2713,7 +2695,8 @@ void SpdySession::OnGoAway(SpdyStreamId last_accepted_stream_id,
   net_log_.AddEvent(
       NetLogEventType::HTTP2_SESSION_RECV_GOAWAY,
       base::Bind(&NetLogSpdyRecvGoAwayCallback, last_accepted_stream_id,
-                 active_streams_.size(), unclaimed_pushed_streams_.size(),
+                 active_streams_.size(),
+                 pool_->push_promise_index()->CountStreamsForSession(this),
                  error_code, debug_data));
   MakeUnavailable();
   if (error_code == ERROR_CODE_HTTP_1_1_REQUIRED) {
@@ -2976,7 +2959,7 @@ void SpdySession::OnAltSvc(
     if (origin.empty())
       return;
     const GURL gurl(origin);
-    if (!gurl.SchemeIs("https"))
+    if (!gurl.SchemeIs(url::kHttpsScheme))
       return;
     SSLInfo ssl_info;
     if (!GetSSLInfo(&ssl_info))
@@ -2993,7 +2976,7 @@ void SpdySession::OnAltSvc(
     if (it == active_streams_.end())
       return;
     const GURL& gurl(it->second->url());
-    if (!gurl.SchemeIs("https"))
+    if (!gurl.SchemeIs(url::kHttpsScheme))
       return;
     scheme_host_port = url::SchemeHostPort(gurl);
   }

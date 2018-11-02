@@ -21,6 +21,7 @@
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
+#include "components/password_manager/core/browser/password_reuse_defines.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/statistics_table.h"
 #include "components/password_manager/core/browser/stub_credentials_filter.h"
@@ -28,6 +29,7 @@
 #include "components/password_manager/core/browser/stub_password_manager_driver.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "net/cert/cert_status_flags.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -46,7 +48,9 @@ namespace {
 
 class MockStoreResultFilter : public StubCredentialsFilter {
  public:
-  MOCK_CONST_METHOD1(ShouldSave, bool(const autofill::PasswordForm& form));
+  MOCK_CONST_METHOD2(ShouldSave,
+                     bool(const autofill::PasswordForm& form,
+                          const GURL& main_frame_url));
   MOCK_CONST_METHOD1(ReportFormLoginSuccess,
                      void(const PasswordFormManager& form_manager));
 };
@@ -57,11 +61,11 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
     EXPECT_CALL(*this, GetStoreResultFilter())
         .Times(AnyNumber())
         .WillRepeatedly(Return(&filter_));
-    ON_CALL(filter_, ShouldSave(_)).WillByDefault(Return(true));
+    ON_CALL(filter_, ShouldSave(_, _)).WillByDefault(Return(true));
   }
 
   MOCK_CONST_METHOD0(IsSavingAndFillingEnabledForCurrentPage, bool());
-  MOCK_CONST_METHOD0(DidLastPageLoadEncounterSSLErrors, bool());
+  MOCK_CONST_METHOD0(GetMainFrameCertStatus, net::CertStatus());
   MOCK_CONST_METHOD0(GetPasswordStore, PasswordStore*());
   // The code inside EXPECT_CALL for PromptUserToSaveOrUpdatePasswordPtr and
   // ShowManualFallbackForSavingPtr owns the PasswordFormManager* argument.
@@ -96,7 +100,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
   }
 
   void FilterAllResultsForSaving() {
-    EXPECT_CALL(filter_, ShouldSave(_)).WillRepeatedly(Return(false));
+    EXPECT_CALL(filter_, ShouldSave(_, _)).WillRepeatedly(Return(false));
   }
 
  private:
@@ -154,8 +158,7 @@ class PasswordManagerTest : public testing::Test {
         .WillRepeatedly(Return(manager_.get()));
     EXPECT_CALL(driver_, GetPasswordAutofillManager())
         .WillRepeatedly(Return(password_autofill_manager_.get()));
-    EXPECT_CALL(client_, DidLastPageLoadEncounterSSLErrors())
-        .WillRepeatedly(Return(false));
+    EXPECT_CALL(client_, GetMainFrameCertStatus()).WillRepeatedly(Return(0));
 
     ON_CALL(client_, GetMainFrameURL()).WillByDefault(ReturnRef(test_url_));
   }
@@ -757,8 +760,7 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotSaved) {
   // User should not be prompted and password should not be saved.
   EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr(_)).Times(0);
   EXPECT_CALL(*store_, AddLogin(_)).Times(0);
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   EXPECT_CALL(*store_, SaveSyncPasswordHash(form.password_value));
 #endif
   // Prefs are needed for failure logging about sync credentials.
@@ -807,7 +809,7 @@ TEST_F(PasswordManagerTest, ReportFormLoginSuccessAndShouldSaveCalled) {
 
   PasswordForm submitted_form = observed_form;
   submitted_form.preferred = true;
-  EXPECT_CALL(*client_.GetStoreResultFilter(), ShouldSave(submitted_form));
+  EXPECT_CALL(*client_.GetStoreResultFilter(), ShouldSave(submitted_form, _));
   EXPECT_CALL(*store_, UpdateLogin(_));
   observed.clear();
   manager()->OnPasswordFormsParsed(&driver_, observed);
@@ -836,8 +838,7 @@ TEST_F(PasswordManagerTest, SyncCredentialsNotDroppedIfUpToDate) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   EXPECT_CALL(*store_, SaveSyncPasswordHash(form.password_value));
 #endif
   manager()->ProvisionallySavePassword(form, nullptr);
@@ -873,8 +874,7 @@ TEST_F(PasswordManagerTest, SyncCredentialsDroppedWhenObsolete) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   EXPECT_CALL(*store_, SaveSyncPasswordHash(ASCIIToUTF16("n3w passw0rd")));
 #endif
   manager()->ProvisionallySavePassword(updated_form, nullptr);
@@ -1712,10 +1712,10 @@ TEST_F(PasswordManagerTest,
 }
 
 TEST_F(PasswordManagerTest, ForceSavingPasswords) {
-  // Add the enable-password-force-saving feature.
+  // Add the PasswordForceSaving feature.
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
-      features::kEnablePasswordForceSaving);
+      features::kPasswordForceSaving);
   PasswordForm form(MakeSimpleForm());
 
   std::vector<PasswordForm> observed;
@@ -1739,10 +1739,10 @@ TEST_F(PasswordManagerTest, ForceSavingPasswords) {
 
 // Forcing Chrome to save an empty passwords should fail without a crash.
 TEST_F(PasswordManagerTest, ForceSavingPasswords_Empty) {
-  // Add the enable-password-force-saving feature.
+  // Add the PasswordForceSaving feature.
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
-      features::kEnablePasswordForceSaving);
+      features::kPasswordForceSaving);
   PasswordForm empty_password_form;
 
   std::vector<PasswordForm> observed;
@@ -1928,8 +1928,7 @@ TEST_F(PasswordManagerTest, ClearedFieldsSuccessCriteria) {
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
 }
 
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 // Check that no sync password hash is saved when no username is available,
 // because we it's not clear whether the submitted credentials are sync
 // credentials.
@@ -2202,8 +2201,7 @@ TEST_F(PasswordManagerTest, SaveSyncPasswordHashOnChangePasswordPage) {
   EXPECT_CALL(client_, IsSavingAndFillingEnabledForCurrentPage())
       .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, GetPrefs()).WillRepeatedly(Return(nullptr));
-#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
-    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
   EXPECT_CALL(*store_, SaveSyncPasswordHash(form.new_password_value));
 #endif
   client_.FilterAllResultsForSaving();
@@ -2212,6 +2210,62 @@ TEST_F(PasswordManagerTest, SaveSyncPasswordHashOnChangePasswordPage) {
   observed.clear();
   manager()->OnPasswordFormsParsed(&driver_, observed);
   manager()->OnPasswordFormsRendered(&driver_, observed, true);
+}
+
+// If there are no forms to parse, certificate errors should not be reported.
+TEST_F(PasswordManagerTest, CertErrorReported_NoForms) {
+  const std::vector<PasswordForm> observed;
+  EXPECT_CALL(client_, GetMainFrameCertStatus())
+      .WillRepeatedly(Return(net::CERT_STATUS_AUTHORITY_INVALID));
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms()));
+
+  base::HistogramTester histogram_tester;
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  histogram_tester.ExpectTotalCount(
+      "PasswordManager.CertificateErrorsWhileSeeingForms", 0);
+}
+
+TEST_F(PasswordManagerTest, CertErrorReported) {
+  constexpr struct {
+    net::CertStatus cert_status;
+    metrics_util::CertificateError expected_error;
+  } kCases[] = {
+      {0, metrics_util::CertificateError::NONE},
+      {net::CERT_STATUS_SHA1_SIGNATURE_PRESENT,  // not an error
+       metrics_util::CertificateError::NONE},
+      {net::CERT_STATUS_COMMON_NAME_INVALID,
+       metrics_util::CertificateError::COMMON_NAME_INVALID},
+      {net::CERT_STATUS_WEAK_SIGNATURE_ALGORITHM,
+       metrics_util::CertificateError::WEAK_SIGNATURE_ALGORITHM},
+      {net::CERT_STATUS_DATE_INVALID,
+       metrics_util::CertificateError::DATE_INVALID},
+      {net::CERT_STATUS_AUTHORITY_INVALID,
+       metrics_util::CertificateError::AUTHORITY_INVALID},
+      {net::CERT_STATUS_WEAK_KEY, metrics_util::CertificateError::OTHER},
+      {net::CERT_STATUS_DATE_INVALID | net::CERT_STATUS_WEAK_KEY,
+       metrics_util::CertificateError::DATE_INVALID},
+      {net::CERT_STATUS_DATE_INVALID | net::CERT_STATUS_AUTHORITY_INVALID,
+       metrics_util::CertificateError::AUTHORITY_INVALID},
+      {net::CERT_STATUS_DATE_INVALID | net::CERT_STATUS_AUTHORITY_INVALID |
+           net::CERT_STATUS_WEAK_KEY,
+       metrics_util::CertificateError::AUTHORITY_INVALID},
+  };
+
+  const std::vector<PasswordForm> observed = {PasswordForm()};
+
+  for (const auto& test_case : kCases) {
+    SCOPED_TRACE(testing::Message("index of test_case = ")
+                 << (&test_case - kCases));
+    EXPECT_CALL(client_, GetMainFrameCertStatus())
+        .WillRepeatedly(Return(test_case.cert_status));
+    base::HistogramTester histogram_tester;
+    EXPECT_CALL(*store_, GetLogins(_, _));
+    manager()->OnPasswordFormsParsed(&driver_, observed);
+    histogram_tester.ExpectUniqueSample(
+        "PasswordManager.CertificateErrorsWhileSeeingForms",
+        test_case.expected_error, 1);
+  }
 }
 
 }  // namespace password_manager

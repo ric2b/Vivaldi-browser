@@ -10,6 +10,7 @@
 #include <string>
 #include <type_traits>
 
+#include "base/callback.h"
 #include "base/containers/stack_container.h"
 #include "base/debug/alias.h"
 #include "base/logging.h"
@@ -20,6 +21,8 @@
 #include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_export.h"
 #include "cc/paint/paint_flags.h"
+#include "cc/paint/transfer_cache_deserialize_helper.h"
+#include "cc/paint/transfer_cache_serialize_helper.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "third_party/skia/include/core/SkRect.h"
@@ -28,7 +31,6 @@
 
 // PaintOpBuffer is a reimplementation of SkLiteDL.
 // See: third_party/skia/src/core/SkLiteDL.h.
-
 namespace cc {
 
 class CC_PAINT_EXPORT ThreadsafeMatrix : public SkMatrix {
@@ -62,6 +64,7 @@ enum class PaintOpType : uint8_t {
   ClipRect,
   ClipRRect,
   Concat,
+  CustomData,
   DrawColor,
   DrawDRRect,
   DrawImage,
@@ -89,9 +92,19 @@ enum class PaintOpType : uint8_t {
 CC_PAINT_EXPORT std::string PaintOpTypeToString(PaintOpType type);
 
 struct CC_PAINT_EXPORT PlaybackParams {
-  PlaybackParams(ImageProvider* image_provider, const SkMatrix& original_ctm);
+  using CustomDataRasterCallback =
+      base::RepeatingCallback<void(SkCanvas* canvas, uint32_t id)>;
+
+  explicit PlaybackParams(ImageProvider* image_provider);
+  PlaybackParams(
+      ImageProvider* image_provider,
+      const SkMatrix& original_ctm,
+      CustomDataRasterCallback custom_callback = CustomDataRasterCallback());
+  ~PlaybackParams();
+
   ImageProvider* image_provider;
   const SkMatrix original_ctm;
+  CustomDataRasterCallback custom_callback;
 };
 
 class CC_PAINT_EXPORT PaintOp {
@@ -117,18 +130,33 @@ class CC_PAINT_EXPORT PaintOp {
   struct CC_PAINT_EXPORT SerializeOptions {
     SerializeOptions();
     SerializeOptions(ImageProvider* image_provider,
+                     TransferCacheSerializeHelper* transfer_cache,
                      SkCanvas* canvas,
                      const SkMatrix& original_ctm);
 
-    ImageProvider* image_provider = nullptr;
+    // Required.
+    TransferCacheSerializeHelper* transfer_cache = nullptr;
     SkCanvas* canvas = nullptr;
+
+    // Optional.
+    ImageProvider* image_provider = nullptr;
     SkMatrix original_ctm = SkMatrix::I();
     // The flags to use when serializing this op. This can be used to override
     // the flags serialized with the op. Valid only for PaintOpWithFlags.
     const PaintFlags* flags_to_serialize = nullptr;
   };
 
-  struct DeserializeOptions {};
+  struct DeserializeOptions {
+    TransferCacheDeserializeHelper* transfer_cache = nullptr;
+  };
+
+  // Indicates how PaintImages are serialized.
+  enum class SerializedImageType : uint8_t {
+    kNoImage,
+    kImageData,
+    kTransferCacheEntry,
+    kLastType = kTransferCacheEntry
+  };
 
   // Subclasses should provide a static Serialize() method called from here.
   // If the op can be serialized to |memory| in no more than |size| bytes,
@@ -220,9 +248,11 @@ class CC_PAINT_EXPORT PaintOp {
     return left == right;
   }
   static bool AreSkPointsEqual(const SkPoint& left, const SkPoint& right);
+  static bool AreSkPoint3sEqual(const SkPoint3& left, const SkPoint3& right);
   static bool AreSkRectsEqual(const SkRect& left, const SkRect& right);
   static bool AreSkRRectsEqual(const SkRRect& left, const SkRRect& right);
   static bool AreSkMatricesEqual(const SkMatrix& left, const SkMatrix& right);
+  static bool AreSkFlattenablesEqual(SkFlattenable* left, SkFlattenable* right);
 
   static constexpr bool kIsDrawOp = false;
   static constexpr bool kHasPaintFlags = false;
@@ -348,6 +378,21 @@ class CC_PAINT_EXPORT ConcatOp final : public PaintOp {
   HAS_SERIALIZATION_FUNCTIONS();
 
   ThreadsafeMatrix matrix;
+};
+
+class CC_PAINT_EXPORT CustomDataOp final : public PaintOp {
+ public:
+  static constexpr PaintOpType kType = PaintOpType::CustomData;
+  explicit CustomDataOp(uint32_t id) : PaintOp(kType), id(id) {}
+  static void Raster(const CustomDataOp* op,
+                     SkCanvas* canvas,
+                     const PlaybackParams& params);
+  bool IsValid() const { return true; }
+  static bool AreEqual(const PaintOp* left, const PaintOp* right);
+  HAS_SERIALIZATION_FUNCTIONS();
+
+  // Stores user defined id as a placeholder op.
+  uint32_t id;
 };
 
 class CC_PAINT_EXPORT DrawColorOp final : public PaintOp {
@@ -799,9 +844,8 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   void Reset();
 
   // Replays the paint op buffer into the canvas.
-  void Playback(SkCanvas* canvas,
-                ImageProvider* image_provider = nullptr,
-                SkPicture::AbortCallback* callback = nullptr) const;
+  void Playback(SkCanvas* canvas) const;
+  void Playback(SkCanvas* canvas, const PlaybackParams& params) const;
 
   static sk_sp<PaintOpBuffer> MakeFromMemory(
       const volatile void* input,
@@ -844,6 +888,22 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
     DCHECK_EQ(op->type, static_cast<uint32_t>(T::kType));
     op->skip = skip;
     AnalyzeAddedOp(op);
+  }
+
+  template <typename T>
+  void AnalyzeAddedOp(const T* op) {
+    static_assert(!std::is_same<T, PaintOp>::value,
+                  "AnalyzeAddedOp needs a subtype of PaintOp");
+
+    num_slow_paths_ += op->CountSlowPathsFromFlags();
+    num_slow_paths_ += op->CountSlowPaths();
+
+    has_non_aa_paint_ |= op->HasNonAAPaint();
+
+    has_discardable_images_ |= op->HasDiscardableImages();
+    has_discardable_images_ |= op->HasDiscardableImagesFromFlags();
+
+    subrecord_bytes_used_ += op->AdditionalBytesUsed();
   }
 
   class CC_PAINT_EXPORT Iterator {
@@ -1026,32 +1086,17 @@ class CC_PAINT_EXPORT PaintOpBuffer : public SkRefCnt {
   friend class DisplayItemList;
   friend class PaintOpBufferOffsetsTest;
   friend class SolidColorAnalyzer;
-  friend class ScopedImageFlags;
 
   // Replays the paint op buffer into the canvas. If |indices| is specified, it
   // contains indices in an increasing order and only the indices specified in
   // the vector will be replayed.
   void Playback(SkCanvas* canvas,
-                ImageProvider* image_provider,
-                SkPicture::AbortCallback* callback,
+                const PlaybackParams& params,
                 const std::vector<size_t>* indices) const;
 
   void ReallocBuffer(size_t new_size);
   // Returns the allocated op.
   void* AllocatePaintOp(size_t skip);
-
-  template <typename T>
-  void AnalyzeAddedOp(const T* op) {
-    num_slow_paths_ += op->CountSlowPathsFromFlags();
-    num_slow_paths_ += op->CountSlowPaths();
-
-    has_non_aa_paint_ |= op->HasNonAAPaint();
-
-    has_discardable_images_ |= op->HasDiscardableImages();
-    has_discardable_images_ |= op->HasDiscardableImagesFromFlags();
-
-    subrecord_bytes_used_ += op->AdditionalBytesUsed();
-  }
 
   std::unique_ptr<char, base::AlignedFreeDeleter> data_;
   size_t used_ = 0;

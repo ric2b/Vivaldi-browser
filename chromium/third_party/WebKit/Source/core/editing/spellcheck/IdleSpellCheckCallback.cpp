@@ -38,7 +38,7 @@ const double kForcedInvocationDeadlineSeconds = 10;
 
 }  // namespace
 
-IdleSpellCheckCallback::~IdleSpellCheckCallback() {}
+IdleSpellCheckCallback::~IdleSpellCheckCallback() = default;
 
 void IdleSpellCheckCallback::Trace(blink::Visitor* visitor) {
   visitor->Trace(frame_);
@@ -73,13 +73,13 @@ void IdleSpellCheckCallback::Deactivate() {
   state_ = State::kInactive;
   if (cold_mode_timer_.IsActive())
     cold_mode_timer_.Stop();
-  if (idle_callback_handle_ != kInvalidHandle)
-    GetFrame().GetDocument()->CancelIdleCallback(idle_callback_handle_);
+  if (idle_callback_handle_ != kInvalidHandle && IsAvailable())
+    GetDocument().CancelIdleCallback(idle_callback_handle_);
   idle_callback_handle_ = kInvalidHandle;
 }
 
 void IdleSpellCheckCallback::SetNeedsInvocation() {
-  if (!IsSpellCheckingEnabled()) {
+  if (!IsSpellCheckingEnabled() || !IsAvailable()) {
     Deactivate();
     return;
   }
@@ -93,14 +93,13 @@ void IdleSpellCheckCallback::SetNeedsInvocation() {
   }
 
   if (state_ == State::kColdModeRequested) {
-    GetFrame().GetDocument()->CancelIdleCallback(idle_callback_handle_);
+    GetDocument().CancelIdleCallback(idle_callback_handle_);
     idle_callback_handle_ = kInvalidHandle;
   }
 
   IdleRequestOptions options;
   options.setTimeout(kHotModeRequestTimeoutMS);
-  idle_callback_handle_ =
-      GetFrame().GetDocument()->RequestIdleCallback(this, options);
+  idle_callback_handle_ = GetDocument().RequestIdleCallback(this, options);
   state_ = State::kHotModeRequested;
 }
 
@@ -119,7 +118,7 @@ void IdleSpellCheckCallback::SetNeedsColdModeInvocation() {
   int interval_ms = state_ == State::kInColdModeInvocation
                         ? kConsecutiveColdModeTimerIntervalMS
                         : kColdModeTimerIntervalMS;
-  cold_mode_timer_.StartOneShot(interval_ms / 1000.0, BLINK_FROM_HERE);
+  cold_mode_timer_.StartOneShot(interval_ms / 1000.0, FROM_HERE);
   state_ = State::kColdModeTimerStarted;
 }
 
@@ -127,13 +126,13 @@ void IdleSpellCheckCallback::ColdModeTimerFired(TimerBase*) {
   DCHECK(RuntimeEnabledFeatures::IdleTimeColdModeSpellCheckingEnabled());
   DCHECK_EQ(State::kColdModeTimerStarted, state_);
 
-  if (!IsSpellCheckingEnabled()) {
+  if (!IsSpellCheckingEnabled() || !IsAvailable()) {
     Deactivate();
     return;
   }
 
   idle_callback_handle_ =
-      GetFrame().GetDocument()->RequestIdleCallback(this, IdleRequestOptions());
+      GetDocument().RequestIdleCallback(this, IdleRequestOptions());
   state_ = State::kColdModeRequested;
 }
 
@@ -141,7 +140,7 @@ void IdleSpellCheckCallback::HotModeInvocation(IdleDeadline* deadline) {
   TRACE_EVENT0("blink", "IdleSpellCheckCallback::hotModeInvocation");
 
   // TODO(xiaochengh): Figure out if this has any performance impact.
-  GetFrame().GetDocument()->UpdateStyleAndLayout();
+  GetDocument().UpdateStyleAndLayout();
 
   HotModeSpellCheckRequester requester(GetSpellCheckRequester());
 
@@ -160,19 +159,17 @@ void IdleSpellCheckCallback::HotModeInvocation(IdleDeadline* deadline) {
     // The ending selection stored in undo stack can be invalid, disconnected
     // or have been moved to another document, so we should check its validity
     // before using it.
-    if (!step->EndingSelection().IsValidFor(*GetFrame().GetDocument()))
+    if (!step->EndingSelection().IsValidFor(GetDocument()))
       continue;
     requester.CheckSpellingAt(step->EndingSelection().Extent());
   }
 }
 
 void IdleSpellCheckCallback::invoke(IdleDeadline* deadline) {
-  DCHECK(GetFrame().GetDocument());
-  DCHECK(GetFrame().GetDocument()->IsActive());
   DCHECK_NE(idle_callback_handle_, kInvalidHandle);
   idle_callback_handle_ = kInvalidHandle;
 
-  if (!IsSpellCheckingEnabled()) {
+  if (!IsSpellCheckingEnabled() || !IsAvailable()) {
     Deactivate();
     return;
   }
@@ -208,7 +205,7 @@ void IdleSpellCheckCallback::ForceInvocationForTesting() {
     return;
 
   IdleDeadline* deadline = IdleDeadline::Create(
-      kForcedInvocationDeadlineSeconds + MonotonicallyIncreasingTime(),
+      kForcedInvocationDeadlineSeconds + CurrentTimeTicksInSeconds(),
       IdleDeadline::CallbackType::kCalledWhenIdle);
 
   switch (state_) {
@@ -220,7 +217,7 @@ void IdleSpellCheckCallback::ForceInvocationForTesting() {
       break;
     case State::kHotModeRequested:
     case State::kColdModeRequested:
-      GetFrame().GetDocument()->CancelIdleCallback(idle_callback_handle_);
+      GetDocument().CancelIdleCallback(idle_callback_handle_);
       invoke(deadline);
       break;
     case State::kInactive:

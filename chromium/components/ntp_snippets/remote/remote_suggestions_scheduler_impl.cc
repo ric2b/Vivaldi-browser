@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_split.h"
@@ -66,12 +65,12 @@ enum class FetchingInterval {
 // The values of each array specify a default time interval for the intervals
 // defined by the enum FetchingInterval. The default time intervals defined in
 // the arrays can be overridden using different variation parameters.
-const double kDefaultFetchingIntervalHoursRareNtpUser[] = {192.0, 96.0, 48.0,
-                                                           48.0,  10.0, 10.0};
-const double kDefaultFetchingIntervalHoursActiveNtpUser[] = {96.0, 48.0, 24.0,
-                                                             24.0, 10.0, 10.0};
+const double kDefaultFetchingIntervalHoursRareNtpUser[] = {96.0, 96.0, 24.0,
+                                                           24.0, 4.0,  4.0};
+const double kDefaultFetchingIntervalHoursActiveNtpUser[] = {48.0, 48.0, 24.0,
+                                                             24.0, 4.0,  4.0};
 const double kDefaultFetchingIntervalHoursActiveSuggestionsConsumer[] = {
-    48.0, 24.0, 12.0, 12.0, 1.0, 1.0};
+    24.0, 24.0, 12.0, 12.0, 1.0, 1.0};
 
 // For a simple comparison: fetching intervals that emulate the state really
 // rolled out to 100% M58 Stable. Used for evaluation of later changes. DBL_MAX
@@ -444,7 +443,7 @@ RemoteSuggestionsSchedulerImpl::RemoteSuggestionsSchedulerImpl(
     const UserClassifier* user_classifier,
     PrefService* profile_prefs,
     PrefService* local_state_prefs,
-    std::unique_ptr<base::Clock> clock,
+    base::Clock* clock,
     Logger* debug_logger)
     : persistent_scheduler_(persistent_scheduler),
       provider_(nullptr),
@@ -464,12 +463,12 @@ RemoteSuggestionsSchedulerImpl::RemoteSuggestionsSchedulerImpl(
               CONTENT_SUGGESTION_FETCHER_ACTIVE_SUGGESTIONS_CONSUMER),
       time_until_first_shown_trigger_reported_(false),
       time_until_first_startup_trigger_reported_(false),
-      eula_state_(base::MakeUnique<EulaState>(
+      eula_state_(std::make_unique<EulaState>(
           local_state_prefs,
           base::Bind(&RemoteSuggestionsSchedulerImpl::RunQueuedTriggersIfReady,
                      base::Unretained(this)))),
       profile_prefs_(profile_prefs),
-      clock_(std::move(clock)),
+      clock_(clock),
       enabled_triggers_(GetEnabledTriggerTypes()),
       debug_logger_(debug_logger) {
   DCHECK(user_classifier);

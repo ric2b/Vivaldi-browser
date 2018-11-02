@@ -37,7 +37,7 @@ PropertyTree<T>::PropertyTree()
 // but due to a gcc bug the generated destructor will have wrong symbol
 // visibility in component build.
 template <typename T>
-PropertyTree<T>::~PropertyTree() {}
+PropertyTree<T>::~PropertyTree() = default;
 
 template <typename T>
 PropertyTree<T>& PropertyTree<T>::operator=(const PropertyTree<T>&) = default;
@@ -735,7 +735,7 @@ EffectTree::EffectTree() {
   render_surfaces_.push_back(nullptr);
 }
 
-EffectTree::~EffectTree() {}
+EffectTree::~EffectTree() = default;
 
 int EffectTree::Insert(const EffectNode& tree_node, int parent_id) {
   int node_id = PropertyTree<EffectNode>::Insert(tree_node, parent_id);
@@ -1160,7 +1160,7 @@ ScrollTree::ScrollTree()
     : currently_scrolling_node_id_(kInvalidNodeId),
       scroll_offset_map_(ScrollTree::ScrollOffsetMap()) {}
 
-ScrollTree::~ScrollTree() {}
+ScrollTree::~ScrollTree() = default;
 
 ScrollTree& ScrollTree::operator=(const ScrollTree& from) {
   PropertyTree::operator=(from);
@@ -1351,18 +1351,23 @@ const gfx::ScrollOffset ScrollTree::current_scroll_offset(ElementId id) const {
 
 gfx::ScrollOffset ScrollTree::PullDeltaForMainThread(
     SyncedScrollOffset* scroll_offset) {
-  // TODO(miletus): Remove all this temporary flooring machinery when
-  // Blink fully supports fractional scrolls.
+  DCHECK(property_trees()->is_active);
+  // TODO(flackr): We should pass the fractional scroll deltas when Blink fully
+  // supports fractional scrolls.
+  // TODO(flackr): We should ideally round the fractional scrolls in the same
+  // direction as the scroll will be snapped but for common cases this is
+  // equivalent to rounding to the nearest integer offset.
   gfx::ScrollOffset current_offset =
-      scroll_offset->Current(property_trees()->is_active);
-  gfx::ScrollOffset current_delta = property_trees()->is_active
-                                        ? scroll_offset->Delta()
-                                        : scroll_offset->PendingDelta().get();
-  gfx::ScrollOffset floored_delta(floor(current_delta.x()),
-                                  floor(current_delta.y()));
-  gfx::ScrollOffset diff_delta = floored_delta - current_delta;
-  gfx::ScrollOffset tmp_offset = current_offset + diff_delta;
-  scroll_offset->SetCurrent(tmp_offset);
+      scroll_offset->Current(/* is_active_tree */ true);
+  gfx::ScrollOffset rounded_offset =
+      gfx::ScrollOffset(roundf(current_offset.x()), roundf(current_offset.y()));
+  // The calculation of the difference from the rounded active base is to
+  // represent the integer delta that the main thread should know about.
+  gfx::ScrollOffset active_base = scroll_offset->ActiveBase();
+  gfx::ScrollOffset diff_active_base =
+      gfx::ScrollOffset(active_base.x() - roundf(active_base.x()),
+                        active_base.y() - roundf(active_base.y()));
+  scroll_offset->SetCurrent(rounded_offset + diff_active_base);
   gfx::ScrollOffset delta = scroll_offset->PullDeltaForMainThread();
   scroll_offset->SetCurrent(current_offset);
   return delta;
@@ -1587,7 +1592,7 @@ PropertyTreesCachedData::PropertyTreesCachedData()
   animation_scales.clear();
 }
 
-PropertyTreesCachedData::~PropertyTreesCachedData() {}
+PropertyTreesCachedData::~PropertyTreesCachedData() = default;
 
 PropertyTrees::PropertyTrees()
     : needs_rebuild(true),
@@ -1603,7 +1608,7 @@ PropertyTrees::PropertyTrees()
   scroll_tree.SetPropertyTrees(this);
 }
 
-PropertyTrees::~PropertyTrees() {}
+PropertyTrees::~PropertyTrees() = default;
 
 bool PropertyTrees::operator==(const PropertyTrees& other) const {
   return transform_tree == other.transform_tree &&

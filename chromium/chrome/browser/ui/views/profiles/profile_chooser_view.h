@@ -14,6 +14,7 @@
 #include "chrome/browser/profiles/avatar_menu.h"
 #include "chrome/browser/profiles/avatar_menu_observer.h"
 #include "chrome/browser/profiles/profile_metrics.h"
+#include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/views/close_bubble_on_tab_activation_helper.h"
@@ -149,6 +150,10 @@ class ProfileChooserView : public content::WebContentsDelegate,
                            bool reauth_required,
                            int width);
 
+  // Creates the DICE UI view to sign in and turn on sync. It includes an
+  // illustration, a promo and a button.
+  views::View* CreateDiceSigninView();
+
   // Creates a view to confirm account removal for |account_id_to_remove_|.
   views::View* CreateAccountRemovalView();
 
@@ -156,7 +161,15 @@ class ProfileChooserView : public content::WebContentsDelegate,
   void RemoveAccount();
 
   // Creates a header for signin and sync error surfacing for the user menu.
-  views::View* CreateSyncErrorViewIfNeeded();
+  views::View* CreateSyncErrorViewIfNeeded(const AvatarMenu::Item& avatar_item);
+
+  // Creates a view with a red HoverButton, which displays the profile icon
+  // associated with |avatar_item| and the strings associated with
+  // |title_string_id| and |subtitle_string_id|.
+  views::View* CreateDiceSyncErrorView(const AvatarMenu::Item& avatar_item,
+                                       sync_ui_util::AvatarSyncErrorType error,
+                                       int title_string_id,
+                                       int subtitle_string_id);
 
   bool ShouldShowGoIncognito() const;
 
@@ -180,6 +193,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::Link* manage_accounts_link_;
   views::LabelButton* manage_accounts_button_;
   views::LabelButton* signin_current_profile_button_;
+  views::LabelButton* signin_with_gaia_account_button_;
 
   // For material design user menu, the active profile card owns the profile
   // name and photo.
@@ -214,6 +228,14 @@ class ProfileChooserView : public content::WebContentsDelegate,
   const signin_metrics::AccessPoint access_point_;
 
   CloseBubbleOnTabActivationHelper close_bubble_helper_;
+
+  // ID of the GAIA account that should be signed in when
+  // |signin_with_gaia_account_button_| is pressed.
+  std::string signin_with_gaia_account_id_;
+
+  const bool dice_enabled_;
+
+  const int menu_width_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileChooserView);
 };

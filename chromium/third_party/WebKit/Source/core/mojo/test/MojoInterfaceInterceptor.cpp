@@ -41,7 +41,7 @@ MojoInterfaceInterceptor* MojoInterfaceInterceptor::Create(
   return new MojoInterfaceInterceptor(context, interface_name, process_scope);
 }
 
-MojoInterfaceInterceptor::~MojoInterfaceInterceptor() {}
+MojoInterfaceInterceptor::~MojoInterfaceInterceptor() = default;
 
 void MojoInterfaceInterceptor::start(ExceptionState& exception_state) {
   if (started_)
@@ -73,9 +73,8 @@ void MojoInterfaceInterceptor::start(ExceptionState& exception_state) {
     started_ = true;
     test_api.OverrideBinderForTesting(
         browser_service, interface_name,
-        ConvertToBaseCallback(
-            WTF::Bind(&MojoInterfaceInterceptor::OnInterfaceRequest,
-                      WrapWeakPersistent(this))));
+        WTF::BindRepeating(&MojoInterfaceInterceptor::OnInterfaceRequest,
+                           WrapWeakPersistent(this)));
     return;
   }
 
@@ -89,10 +88,10 @@ void MojoInterfaceInterceptor::start(ExceptionState& exception_state) {
   }
 
   started_ = true;
-  test_api.SetBinderForName(interface_name,
-                            ConvertToBaseCallback(WTF::Bind(
-                                &MojoInterfaceInterceptor::OnInterfaceRequest,
-                                WrapWeakPersistent(this))));
+  test_api.SetBinderForName(
+      interface_name,
+      WTF::BindRepeating(&MojoInterfaceInterceptor::OnInterfaceRequest,
+                         WrapWeakPersistent(this)));
 }
 
 void MojoInterfaceInterceptor::stop() {
@@ -166,7 +165,7 @@ void MojoInterfaceInterceptor::OnInterfaceRequest(
   GetExecutionContext()
       ->GetTaskRunner(TaskType::kMicrotask)
       ->PostTask(
-          BLINK_FROM_HERE,
+          FROM_HERE,
           WTF::Bind(&MojoInterfaceInterceptor::DispatchInterfaceRequestEvent,
                     WrapPersistent(this), WTF::Passed(std::move(handle))));
 }

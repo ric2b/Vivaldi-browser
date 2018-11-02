@@ -246,7 +246,7 @@ ScopedFocusNavigation::ScopedFocusNavigation(
     ContainerNode& scoping_root_node,
     const Element* current,
     FocusController::OwnerMap& owner_map)
-    : current_(const_cast<Element*>(current)) {
+    : current_(current) {
   if (HTMLSlotElement* slot = ToHTMLSlotElementOrNull(scoping_root_node)) {
     if (slot->AssignedNodes().IsEmpty()) {
       navigation_ = new FocusNavigation(scoping_root_node, *slot, owner_map);
@@ -1483,30 +1483,29 @@ bool FocusController::AdvanceFocusDirectionally(WebFocusType type) {
   LayoutRect starting_rect;
   if (focused_element) {
     if (!HasOffscreenRect(focused_element)) {
-      container = ScrollableEnclosingBoxOrParentFrameForNodeInDirection(
-          type, focused_element);
       starting_rect = NodeRectInAbsoluteCoordinates(focused_element,
                                                     true /* ignore border */);
     } else if (auto* area = ToHTMLAreaElementOrNull(*focused_element)) {
       if (area->ImageElement()) {
-        container = ScrollableEnclosingBoxOrParentFrameForNodeInDirection(
-            type, area->ImageElement());
+        focused_element = area->ImageElement();
         starting_rect = VirtualRectForAreaElementAndDirection(*area, type);
       }
     }
+    container = ScrollableAreaOrDocumentOf(focused_element);
   }
 
   bool consumed = false;
-  do {
+  while (!consumed && container) {
     consumed =
         AdvanceFocusDirectionallyInContainer(container, starting_rect, type);
-    starting_rect =
-        NodeRectInAbsoluteCoordinates(container, true /* ignore border */);
-    container =
-        ScrollableEnclosingBoxOrParentFrameForNodeInDirection(type, container);
+    if (consumed)
+      break;
+
+    container = ScrollableAreaOrDocumentOf(container);
+
     if (container && container->IsDocumentNode())
       ToDocument(container)->UpdateStyleAndLayoutIgnorePendingStylesheets();
-  } while (!consumed && container);
+  }
 
   return consumed;
 }

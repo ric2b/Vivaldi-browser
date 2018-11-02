@@ -4,11 +4,9 @@
 
 import("//build/toolchain/goma.gni")
 
-import("//build/toolchain/cc_wrapper.gni")
-
 declare_args() {
   # Precompiled header file support is by default available,
   # but for distributed build system uses (like goma) or when
   # doing official builds.
-  enable_precompiled_headers = !is_official_build && !use_goma && !use_cc_wrapper
+  enable_precompiled_headers = !is_official_build && !use_goma
 }

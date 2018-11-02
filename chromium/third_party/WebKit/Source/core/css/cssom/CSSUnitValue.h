@@ -33,7 +33,6 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   double value() const { return value_; }
   void setUnit(const String& new_unit, ExceptionState&);
   String unit() const;
-  String type() const;
 
   // Internal methods.
   CSSPrimitiveValue::UnitType GetInternalUnit() const { return unit_; }
@@ -50,7 +49,9 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   bool ContainsPercent() const final {
     return unit_ == CSSPrimitiveValue::UnitType::kPercentage;
   }
-  const CSSValue* ToCSSValue(SecureContextMode) const final;
+
+  const CSSPrimitiveValue* ToCSSValue() const final;
+  CSSCalcExpressionNode* ToCalcExpressionNode() const final;
 
  private:
   CSSUnitValue(double value, CSSPrimitiveValue::UnitType unit)
@@ -62,12 +63,8 @@ class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   double ConvertAngle(CSSPrimitiveValue::UnitType) const;
 
   // From CSSNumericValue
-  CSSNumericValue* Negate() final {
-    return CSSUnitValue::Create(-value_, unit_);
-  }
-  CSSNumericValue* Invert() final {
-    return CSSUnitValue::Create(1.0 / value_, unit_);
-  }
+  CSSNumericValue* Negate() final;
+  CSSNumericValue* Invert() final;
 
   double value_;
   CSSPrimitiveValue::UnitType unit_;

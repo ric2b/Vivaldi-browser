@@ -37,6 +37,8 @@ void AddInternetStrings(content::WebUIDataSource* html_source) {
     const char* name;
     int id;
   } localized_strings[] = {
+      {"cancel", IDS_CANCEL},
+      {"close", IDS_CLOSE},
       {"networkButtonConnect", IDS_SETTINGS_INTERNET_BUTTON_CONNECT},
       {"networkButtonDisconnect", IDS_SETTINGS_INTERNET_BUTTON_DISCONNECT},
       {"networkIPAddress", IDS_SETTINGS_INTERNET_NETWORK_IP_ADDRESS},
@@ -111,10 +113,15 @@ InternetDetailDialogUI::InternetDetailDialogUI(content::WebUI* web_ui)
   AddInternetStrings(source);
   source->AddLocalizedString("title", IDS_SETTINGS_INTERNET_DETAIL);
   source->SetJsonPath("strings.js");
+#if BUILDFLAG(OPTIMIZE_WEBUI)
+  source->UseGzip();
+  source->SetDefaultResource(IDR_INTERNET_DETAIL_DIALOG_VULCANIZED_HTML);
+  source->AddResourcePath("crisper.js", IDR_INTERNET_DETAIL_DIALOG_CRISPER_JS);
+#else
   source->SetDefaultResource(IDR_INTERNET_DETAIL_DIALOG_HTML);
   source->AddResourcePath("internet_detail_dialog.js",
                           IDR_INTERNET_DETAIL_DIALOG_JS);
-
+#endif
   content::WebUIDataSource::Add(Profile::FromWebUI(web_ui), source);
 }
 

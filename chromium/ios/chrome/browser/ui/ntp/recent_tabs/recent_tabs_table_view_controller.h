@@ -23,10 +23,16 @@ class ChromeBrowserState;
 
 // Key for saving collapsed session state in the UserDefaults.
 extern NSString* const kCollapsedSectionsKey;
+// Accessibility identifier for the main view.
+extern NSString* const kRecentTabsTableViewControllerAccessibilityIdentifier;
 
 @protocol RecentTabsTableViewControllerDelegate<NSObject>
 // Tells the delegate when the table view content scrolled or changed size.
 - (void)recentTabsTableViewContentMoved:(UITableView*)tableView;
+
+// Tells the delegate to refresh the session view.
+- (void)refreshSessionsViewRecentTabsTableViewController:
+    (RecentTabsTableViewController*)controller;
 @end
 
 // Controls the content of a UITableView.

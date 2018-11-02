@@ -4,13 +4,28 @@ source_set("extraparts") {
     "vivaldi_browser_main_extra_parts.h",
   ]
   if (is_linux) {
-    sources += [ "vivaldi_browser_main_extra_parts_linux.cc" ]
+    sources += [
+      "vivaldi_browser_main_extra_parts_linux.h",
+      "vivaldi_browser_main_extra_parts_linux.cc",
+    ]
   }
   if (is_mac) {
-    sources += [ "vivaldi_browser_main_extra_parts_mac.mm" ]
+    sources += [
+      "vivaldi_browser_main_extra_parts_mac.h",
+      "vivaldi_browser_main_extra_parts_mac.mm",
+    ]
   }
   if (is_win) {
-    sources += [ "vivaldi_browser_main_extra_parts_win.cc" ]
+    sources += [
+      "vivaldi_browser_main_extra_parts_win.h",
+      "vivaldi_browser_main_extra_parts_win.cc",
+    ]
+  }
+  if (is_android) {
+    sources += [
+      "vivaldi_browser_main_extra_parts_android.h",
+      "vivaldi_browser_main_extra_parts_android.cc",
+    ]
   }
   deps = [
     "//base:base",

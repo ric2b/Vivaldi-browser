@@ -29,6 +29,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
@@ -77,7 +78,7 @@ class TestItem : public SystemTrayItem {
 
   views::View* CreateDefaultView(LoginStatus status) override {
     views::View* default_view = new views::View;
-    default_view->SetLayoutManager(new views::FillLayout);
+    default_view->SetLayoutManager(std::make_unique<views::FillLayout>());
     default_view->AddChildView(new views::Label(base::UTF8ToUTF16("Default")));
     return default_view;
   }
@@ -250,14 +251,23 @@ TEST_F(WebNotificationTrayTest, ManyPopupNotifications) {
 
 // Verifies if the notification appears on both displays when extended mode.
 TEST_F(WebNotificationTrayTest, PopupShownOnBothDisplays) {
-  // TODO: needs ScreenLayoutObserver, http://crbug.com/696752.
-  if (Shell::GetAshConfig() == Config::MASH)
-    return;
-
   Shell::Get()->screen_layout_observer()->set_show_notifications_for_testing(
       true);
-  UpdateDisplay("400x400,200x200");
-  // UpdateDisplay() creates the display notifications, so popup is visible.
+
+  const int64_t first_display_id =
+      display::Screen::GetScreen()->GetPrimaryDisplay().id();
+  const int64_t second_display_id = first_display_id + 1;
+  display::ManagedDisplayInfo first_display_info =
+      display::CreateDisplayInfo(first_display_id, gfx::Rect(1, 1, 500, 500));
+  display::ManagedDisplayInfo second_display_info =
+      display::CreateDisplayInfo(second_display_id, gfx::Rect(2, 2, 500, 500));
+  std::vector<display::ManagedDisplayInfo> display_info_list;
+  display_info_list.emplace_back(first_display_info);
+  display_info_list.emplace_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+
+  // OnNativeDisplaysChanged() creates the display notifications, so popup is
+  // visible.
   EXPECT_TRUE(GetTray()->IsPopupVisible());
   WebNotificationTray* secondary_tray = GetSecondaryTray();
   ASSERT_TRUE(secondary_tray);
@@ -268,14 +278,26 @@ TEST_F(WebNotificationTrayTest, PopupShownOnBothDisplays) {
   // verifies it doesn't cause crash and popups are still visible. See
   // http://crbug.com/263664
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::MIRRORING);
-  UpdateDisplay("400x400,200x200");
+  // Turn on mirror mode.
+  display_manager()->SetMirrorMode(display::MirrorMode::kNormal, base::nullopt);
   EXPECT_TRUE(GetTray()->IsPopupVisible());
   EXPECT_FALSE(GetSecondaryTray());
 
-  display_manager()->SetMultiDisplayMode(display::DisplayManager::EXTENDED);
-  UpdateDisplay("400x400,200x200");
+  // Disconnect a display to end mirror mode.
+  display_info_list.erase(display_info_list.end() - 1);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
   EXPECT_TRUE(GetTray()->IsPopupVisible());
+  EXPECT_FALSE(GetSecondaryTray());
+
+  // Restore mirror mode.
+  display_info_list.emplace_back(second_display_info);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+  EXPECT_TRUE(GetTray()->IsPopupVisible());
+  EXPECT_FALSE(GetSecondaryTray());
+
+  // Turn off mirror mode.
+  display_manager()->SetMirrorMode(display::MirrorMode::kOff, base::nullopt);
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
   secondary_tray = GetSecondaryTray();
   ASSERT_TRUE(secondary_tray);
   EXPECT_TRUE(secondary_tray->IsPopupVisible());

@@ -5,9 +5,9 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_ITEM_H_
 #define CHROME_BROWSER_UI_APP_LIST_ARC_ARC_APP_ITEM_H_
 
+#include <memory>
 #include <string>
 
-#include "ash/app_list/model/app_list_item.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/app_list/app_context_menu_delegate.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_icon.h"
@@ -24,6 +24,7 @@ class ArcAppItem : public ChromeAppListItem,
   static const char kItemType[];
 
   ArcAppItem(Profile* profile,
+             AppListModelUpdater* model_updater,
              const app_list::AppListSyncableService::SyncItem* sync_item,
              const std::string& id,
              const std::string& name);

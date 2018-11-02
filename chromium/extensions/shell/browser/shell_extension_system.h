@@ -29,6 +29,7 @@ class ValueStoreFactory;
 // app_shell to skip initialization of services it doesn't need.
 class ShellExtensionSystem : public ExtensionSystem {
  public:
+  using InstallUpdateCallback = ExtensionSystem::InstallUpdateCallback;
   explicit ShellExtensionSystem(content::BrowserContext* browser_context);
   ~ShellExtensionSystem() override;
 
@@ -42,8 +43,8 @@ class ShellExtensionSystem : public ExtensionSystem {
   // than other extensions. Use LaunchApp() to actually launch the loaded app.
   const Extension* LoadApp(const base::FilePath& app_dir);
 
-  // Initializes the extension system.
-  void Init();
+  // Finish initialization for the shell extension system.
+  void FinishInitialization();
 
   // Launch the app with id |extension_id|.
   void LaunchApp(const std::string& extension_id);
@@ -53,6 +54,7 @@ class ShellExtensionSystem : public ExtensionSystem {
 
   // ExtensionSystem implementation:
   void InitForRegularProfile(bool extensions_enabled) override;
+  void InitForIncognitoProfile() override;
   ExtensionService* extension_service() override;
   RuntimeData* runtime_data() override;
   ManagementPolicy* management_policy() override;
@@ -75,7 +77,9 @@ class ShellExtensionSystem : public ExtensionSystem {
   std::unique_ptr<ExtensionSet> GetDependentExtensions(
       const Extension* extension) override;
   void InstallUpdate(const std::string& extension_id,
-                     const base::FilePath& temp_dir) override;
+                     const std::string& public_key,
+                     const base::FilePath& temp_dir,
+                     InstallUpdateCallback install_update_callback) override;
 
  private:
   void OnExtensionRegisteredWithRequestContexts(

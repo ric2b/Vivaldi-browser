@@ -13,7 +13,9 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "device/gamepad/gamepad_data_fetcher.h"
+#include "device/gamepad/gamepad_device_linux.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "device/gamepad/udev_gamepad_linux.h"
 
 extern "C" {
 struct udev_device;
@@ -28,9 +30,8 @@ namespace device {
 class DEVICE_GAMEPAD_EXPORT GamepadPlatformDataFetcherLinux
     : public GamepadDataFetcher {
  public:
-  typedef GamepadDataFetcherFactoryImpl<GamepadPlatformDataFetcherLinux,
-                                        GAMEPAD_SOURCE_LINUX_UDEV>
-      Factory;
+  using Factory = GamepadDataFetcherFactoryImpl<GamepadPlatformDataFetcherLinux,
+                                                GAMEPAD_SOURCE_LINUX_UDEV>;
 
   GamepadPlatformDataFetcherLinux();
   ~GamepadPlatformDataFetcherLinux() override;
@@ -40,15 +41,32 @@ class DEVICE_GAMEPAD_EXPORT GamepadPlatformDataFetcherLinux
   // GamepadDataFetcher implementation.
   void GetGamepadData(bool devices_changed_hint) override;
 
+  void PlayEffect(
+      int pad_index,
+      mojom::GamepadHapticEffectType,
+      mojom::GamepadEffectParametersPtr,
+      mojom::GamepadHapticsManager::PlayVibrationEffectOnceCallback) override;
+
+  void ResetVibration(
+      int pad_index,
+      mojom::GamepadHapticsManager::ResetVibrationActuatorCallback) override;
+
  private:
   void OnAddedToProvider() override;
 
   void RefreshDevice(udev_device* dev);
-  void EnumerateDevices();
+  void RefreshJoydevDevice(udev_device* dev, const UdevGamepadLinux& pad_info);
+  void RefreshEvdevDevice(udev_device* dev, const UdevGamepadLinux& pad_info);
+  void RefreshHidrawDevice(udev_device* dev, const UdevGamepadLinux& pad_info);
+  void EnumerateSubsystemDevices(const std::string& subsystem);
   void ReadDeviceData(size_t index);
 
-  // File descriptor for the /dev/input/js* devices. -1 if not in use.
-  int device_fd_[Gamepads::kItemsLengthCap];
+  GamepadDeviceLinux* GetDeviceWithJoydevIndex(int joydev_index);
+  GamepadDeviceLinux* GetOrCreateMatchingDevice(
+      const UdevGamepadLinux& pad_info);
+  void RemoveDevice(GamepadDeviceLinux* device);
+
+  std::unordered_set<std::unique_ptr<GamepadDeviceLinux>> devices_;
 
   std::unique_ptr<device::UdevLinux> udev_;
 

@@ -50,8 +50,6 @@ DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SAVE_PASSWORD,
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_SUBRESOURCE_FILTERING,
                     R.drawable.infobar_chrome)
 DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_WARNING, R.drawable.infobar_warning)
-DECLARE_RESOURCE_ID(IDR_ANDROID_INFOBAR_FRAMEBUST,
-                    R.drawable.infobar_redirect_blocked)
 
 // PageInfoUI images, used in ConnectionInfoPopup
 // Good:
@@ -85,6 +83,7 @@ LINK_RESOURCE_ID(IDR_AUTOFILL_CC_MIR, R.drawable.mir_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_UNIONPAY, R.drawable.unionpay_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_VISA, R.drawable.visa_card)
 LINK_RESOURCE_ID(IDR_AUTOFILL_CC_SCAN_NEW, R.drawable.ic_photo_camera_black)
+LINK_RESOURCE_ID(IDR_AUTOFILL_GOOGLE_PAY, R.drawable.google_pay)
 LINK_RESOURCE_ID(IDR_AUTOFILL_HTTP_WARNING, R.drawable.ic_info_outline_grey)
 LINK_RESOURCE_ID(IDR_AUTOFILL_HTTPS_INVALID_WARNING, R.drawable.ic_warning_red)
 

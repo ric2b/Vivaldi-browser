@@ -35,7 +35,6 @@
 #include "platform/audio/AudioUtilities.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Locker.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/TaskType.h"
 
 namespace blink {
@@ -204,8 +203,8 @@ void MediaElementAudioSourceHandler::Process(size_t number_of_frames) {
         // Print a CORS message, but just once for each change in the current
         // media element source, and only if we have a document to print to.
         maybe_print_cors_message_ = false;
-        task_runner_->PostTask(
-            BLINK_FROM_HERE,
+        PostCrossThreadTask(
+            *task_runner_, FROM_HERE,
             CrossThreadBind(&MediaElementAudioSourceHandler::PrintCORSMessage,
                             WrapRefCounted(this), current_src_string_));
       }

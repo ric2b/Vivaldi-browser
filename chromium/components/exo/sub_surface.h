@@ -51,8 +51,10 @@ class SubSurface : public SurfaceDelegate, public SurfaceObserver {
   // Overridden from SurfaceDelegate:
   void OnSurfaceCommit() override;
   bool IsSurfaceSynchronized() const override;
-  bool IsTouchEnabled(Surface* surface) const override;
+  bool IsInputEnabled(Surface* surface) const override;
   void OnSetFrame(SurfaceFrameType type) override {}
+  void OnSetFrameColors(SkColor active_color, SkColor inactive_color) override {
+  }
   void OnSetParent(Surface* parent, const gfx::Point& position) override {}
 
   // Overridden from SurfaceObserver:

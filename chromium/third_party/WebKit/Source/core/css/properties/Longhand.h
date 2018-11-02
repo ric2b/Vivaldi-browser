@@ -7,6 +7,8 @@
 
 #include "core/css/properties/CSSProperty.h"
 
+#include "platform/graphics/Color.h"
+
 namespace blink {
 
 class CSSValue;
@@ -14,8 +16,6 @@ class StyleResolverState;
 
 class Longhand : public CSSProperty {
  public:
-  constexpr Longhand(CSSPropertyID id) : CSSProperty(id) {}
-
   // Parses and consumes a longhand property value from the token range.
   // Returns nullptr if the input is invalid.
   virtual const CSSValue* ParseSingleValue(CSSParserTokenRange&,
@@ -28,7 +28,15 @@ class Longhand : public CSSProperty {
   virtual void ApplyValue(StyleResolverState&, const CSSValue&) const {
     NOTREACHED();
   }
+  virtual const blink::Color ColorIncludingFallback(bool, const ComputedStyle&)
+      const {
+    NOTREACHED();
+    return Color();
+  }
   bool IsLonghand() const override { return true; }
+
+ protected:
+  constexpr Longhand() : CSSProperty() {}
 };
 
 DEFINE_TYPE_CASTS(Longhand,

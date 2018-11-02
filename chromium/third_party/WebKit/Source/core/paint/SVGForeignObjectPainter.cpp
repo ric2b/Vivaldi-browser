@@ -42,18 +42,31 @@ void SVGForeignObjectPainter::Paint(const PaintInfo& paint_info) {
   paint_info_before_filtering.UpdateCullRect(
       layout_svg_foreign_object_.LocalSVGTransform());
   SVGTransformContext transform_context(
-      paint_info_before_filtering.context, layout_svg_foreign_object_,
+      paint_info_before_filtering, layout_svg_foreign_object_,
       layout_svg_foreign_object_.LocalSVGTransform());
 
   // In theory we should just let BlockPainter::paint() handle the clip, but for
   // now we don't allow normal overflow clip for LayoutSVGBlock, so we have to
   // apply clip manually. See LayoutSVGBlock::allowsOverflowClip() for details.
   Optional<FloatClipRecorder> clip_recorder;
+  Optional<ScopedPaintChunkProperties> scoped_paint_chunk_properties;
   if (SVGLayoutSupport::IsOverflowHidden(&layout_svg_foreign_object_)) {
-    clip_recorder.emplace(paint_info_before_filtering.context,
-                          layout_svg_foreign_object_,
-                          paint_info_before_filtering.phase,
-                          FloatRect(layout_svg_foreign_object_.FrameRect()));
+    if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+      const auto* fragment =
+          paint_info.FragmentToPaint(layout_svg_foreign_object_);
+      if (!fragment)
+        return;
+      const auto* properties = fragment->PaintProperties();
+      DCHECK(properties && properties->OverflowClip());
+      scoped_paint_chunk_properties.emplace(
+          paint_info.context.GetPaintController(), properties->OverflowClip(),
+          layout_svg_foreign_object_, paint_info.DisplayItemTypeForClipping());
+    } else {
+      clip_recorder.emplace(paint_info_before_filtering.context,
+                            layout_svg_foreign_object_,
+                            paint_info_before_filtering.phase,
+                            FloatRect(layout_svg_foreign_object_.FrameRect()));
+    }
   }
 
   SVGPaintContext paint_context(layout_svg_foreign_object_,

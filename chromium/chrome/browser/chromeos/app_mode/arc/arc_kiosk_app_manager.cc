@@ -12,7 +12,6 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -179,6 +178,25 @@ void ArcKioskAppManager::RemoveObserver(ArcKioskAppManagerObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
+void ArcKioskAppManager::AddAutoLaunchAppForTest(
+    const std::string& app_id,
+    const policy::ArcKioskAppBasicInfo& app_info,
+    const AccountId& account_id) {
+  for (auto it = apps_.begin(); it != apps_.end(); ++it) {
+    if ((*it)->app_id() == app_id) {
+      apps_.erase(it);
+      break;
+    }
+  }
+
+  apps_.emplace_back(std::make_unique<ArcKioskAppData>(
+      app_id, app_info.package_name(), app_info.class_name(), app_info.action(),
+      account_id, app_info.display_name()));
+
+  auto_launch_account_id_ = account_id;
+  auto_launched_with_zero_delay_ = true;
+}
+
 void ArcKioskAppManager::UpdateApps() {
   // Do not populate ARC kiosk apps if ARC kiosk apps can't be run on the
   // device.
@@ -235,7 +253,7 @@ void ArcKioskAppManager::UpdateApps() {
       std::string name = app_info.package_name();
       if (!app_info.display_name().empty())
         name = app_info.display_name();
-      apps_.push_back(base::MakeUnique<ArcKioskAppData>(
+      apps_.push_back(std::make_unique<ArcKioskAppData>(
           app_id, app_info.package_name(), app_info.class_name(),
           app_info.action(), account_id, name));
       apps_.back()->LoadFromCache();

@@ -84,7 +84,8 @@ void ImagePainter::PaintAreaElementFocusRing(const PaintInfo& paint_info,
   paint_info.context.DrawFocusRing(
       path, area_element_style.GetOutlineStrokeWidthForFocusRing(),
       area_element_style.OutlineOffset(),
-      layout_image_.ResolveColor(area_element_style, CSSPropertyOutlineColor));
+      layout_image_.ResolveColor(area_element_style,
+                                 GetCSSPropertyOutlineColor()));
   paint_info.context.Restore();
 }
 
@@ -149,8 +150,8 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
   if (pixel_snapped_dest_rect.IsEmpty())
     return;
 
-  scoped_refptr<Image> image =
-      layout_image_.ImageResource()->GetImage(pixel_snapped_dest_rect.Size());
+  scoped_refptr<Image> image = layout_image_.ImageResource()->GetImage(
+      LayoutSize(pixel_snapped_dest_rect.Size()));
   if (!image || image->IsNull())
     return;
 

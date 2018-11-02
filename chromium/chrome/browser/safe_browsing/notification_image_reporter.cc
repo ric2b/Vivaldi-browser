@@ -10,9 +10,8 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/rand_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
@@ -49,8 +48,8 @@ const char kDefaultMimeType[] = "image/png";
 // Passed to ReportSender::Send as an ErrorCallback, so must take a GURL, but it
 // is unused.
 void LogReportResult(const GURL& url, int net_error, int http_response_code) {
-  UMA_HISTOGRAM_SPARSE_SLOWLY("SafeBrowsing.NotificationImageReporter.NetError",
-                              net_error);
+  base::UmaHistogramSparse("SafeBrowsing.NotificationImageReporter.NetError",
+                           net_error);
 }
 
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
@@ -93,7 +92,7 @@ const char NotificationImageReporter::kReportingUploadUrl[] =
 NotificationImageReporter::NotificationImageReporter(
     net::URLRequestContext* request_context)
     : NotificationImageReporter(
-          base::MakeUnique<net::ReportSender>(request_context,
+          std::make_unique<net::ReportSender>(request_context,
                                               kTrafficAnnotation)) {}
 
 NotificationImageReporter::NotificationImageReporter(

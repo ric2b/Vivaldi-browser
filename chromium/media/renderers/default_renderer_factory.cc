@@ -4,11 +4,11 @@
 
 #include "media/renderers/default_renderer_factory.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -23,19 +23,20 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/libaom/av1_features.h"
 
-#if !defined(MEDIA_DISABLE_FFMPEG)
-#include "media/filters/ffmpeg_audio_decoder.h"
-#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
-#include "media/filters/ffmpeg_video_decoder.h"
-#endif
-#endif
-
-#if !defined(MEDIA_DISABLE_LIBVPX)
-#include "media/filters/vpx_video_decoder.h"
-#endif
-
 #if BUILDFLAG(ENABLE_AV1_DECODER)
 #include "media/filters/aom_video_decoder.h"
+#endif
+
+#if BUILDFLAG(ENABLE_FFMPEG)
+#include "media/filters/ffmpeg_audio_decoder.h"
+#endif
+
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+#include "media/filters/ffmpeg_video_decoder.h"
+#endif
+
+#if BUILDFLAG(ENABLE_LIBVPX)
+#include "media/filters/vpx_video_decoder.h"
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -74,18 +75,18 @@ DefaultRendererFactory::CreateAudioDecoders(
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
     audio_decoders.push_back(
-        base::MakeUnique<PassThroughAudioDecoder>(media_task_runner));
+        std::make_unique<PassThroughAudioDecoder>(media_task_runner));
   } else {
 #if defined(OS_MACOSX)
     audio_decoders.push_back(
-        base::MakeUnique<ATAudioDecoder>(media_task_runner));
+        std::make_unique<ATAudioDecoder>(media_task_runner));
 #elif defined(OS_WIN)
     audio_decoders.push_back(
-        base::MakeUnique<WMFAudioDecoder>(media_task_runner));
+        std::make_unique<WMFAudioDecoder>(media_task_runner));
 #endif
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
-#if !defined(MEDIA_DISABLE_FFMPEG)
+#if BUILDFLAG(ENABLE_FFMPEG)
   audio_decoders.push_back(
       std::make_unique<FFmpegAudioDecoder>(media_task_runner, media_log_));
 #endif
@@ -109,6 +110,9 @@ DefaultRendererFactory::CreateVideoDecoders(
     const gfx::ColorSpace& target_color_space,
     GpuVideoAcceleratorFactories* gpu_factories,
     bool use_platform_media_pipeline) {
+  // TODO(crbug.com/789597): Move this (and CreateAudioDecoders) into a decoder
+  // factory, and just call |decoder_factory_| here.
+
   // Create our video decoders and renderer.
   std::vector<std::unique_ptr<VideoDecoder>> video_decoders;
 
@@ -124,7 +128,7 @@ DefaultRendererFactory::CreateVideoDecoders(
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
     video_decoders.push_back(
-        base::MakeUnique<PassThroughVideoDecoder>(media_task_runner));
+        std::make_unique<PassThroughVideoDecoder>(media_task_runner));
   } else {
 #endif
 
@@ -138,10 +142,15 @@ DefaultRendererFactory::CreateVideoDecoders(
                                             &video_decoders);
     }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     if (gpu_factories) {
-    video_decoders.push_back(std::make_unique<GpuVideoDecoder>(
-        gpu_factories, request_overlay_info_cb, target_color_space,
-        media_log_));
+#else
+    // MojoVideoDecoder replaces any VDA for this platform when it's enabled.
+    if (!base::FeatureList::IsEnabled(media::kMojoVideoDecoder)) {
+#endif
+      video_decoders.push_back(std::make_unique<GpuVideoDecoder>(
+          gpu_factories, request_overlay_info_cb, target_color_space,
+          media_log_));
     }
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -150,23 +159,23 @@ DefaultRendererFactory::CreateVideoDecoders(
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_WIN)
-    video_decoders.push_back(base::MakeUnique<WMFVideoDecoder>(media_task_runner));
+    video_decoders.push_back(std::make_unique<WMFVideoDecoder>(media_task_runner));
 #elif defined(OS_MACOSX)
     if (!gpu_factories)
       pipeline_stats::ReportNoGpuProcessForDecoder();
 #endif
 #endif
 
-#if !defined(MEDIA_DISABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_LIBVPX)
   video_decoders.push_back(std::make_unique<OffloadingVpxVideoDecoder>());
 #endif
 
 #if BUILDFLAG(ENABLE_AV1_DECODER)
   if (base::FeatureList::IsEnabled(kAv1Decoder))
-    video_decoders.push_back(base::MakeUnique<AomVideoDecoder>(media_log_));
+    video_decoders.push_back(std::make_unique<AomVideoDecoder>(media_log_));
 #endif
 
-#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   video_decoders.push_back(std::make_unique<FFmpegVideoDecoder>(media_log_));
 #endif
 

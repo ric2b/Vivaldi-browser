@@ -52,6 +52,7 @@
 <translation id="1744108098763830590">صفحه‌ی پس‌زمینه</translation>
 <translation id="176587472219019965">پنجره‌ی &amp;جدید</translation>
 <translation id="1769104665586091481">باز کردن پیوند در &amp;پنجره جدید</translation>
+<translation id="1789575671122666129">پنجره‌های بازشو</translation>
 <translation id="1815083418640426271">جای‌گذاری به‌عنوان متن ساده</translation>
 <translation id="1828901632669367785">چاپ به کمک پیام‌های سیستمی...</translation>
 <translation id="1846308012215045257">برای اجرای <ph name="PLUGIN_NAME" /> کنترل را نگه داشته و کلیک کنید</translation>
@@ -180,6 +181,7 @@
 <translation id="3587482841069643663">همه</translation>
 <translation id="3618849550573277856">جستجو “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">باز کردن پیوند در پنجره حالت &amp;ناشناس</translation>
+<translation id="3668823961463113931">کنترل‌کننده‌ها</translation>
 <translation id="3678156199662914018">برنامهٔ افزودنی: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">درخواست اشتراک‌گذاری صفحه <ph name="APP_NAME" /></translation>
 <translation id="370665806235115550">در حال بارکردن…</translation>
@@ -190,6 +192,7 @@
 <translation id="3763401818161139108">همیشه روی <ph name="ORIGIN" /> اجرا شود</translation>
 <translation id="3797900183766075808">جستجوی <ph name="SEARCH_ENGINE" /> برای «<ph name="SEARCH_TERMS" />»</translation>
 <translation id="3798449238516105146">نسخه</translation>
+<translation id="3800806661949714323">نمایش همه موارد (توصیه می‌شود)</translation>
 <translation id="385051799172605136">بازگشت</translation>
 <translation id="3855441664322950881">فشرده کردن افزونه</translation>
 <translation id="3862134173397075045">به تجربه ارسال محتوا در Vivaldi خوش آمدید!</translation>
@@ -261,6 +264,7 @@
 <translation id="4839303808932127586">ذ&amp;خیره فایل ویدیوی به‌عنوان...</translation>
 <translation id="4850258771229959924">مشاهده در ابزارهای توسعه‌دهنده</translation>
 <translation id="488785315393301722">نمایش جزئیات</translation>
+<translation id="4907306957610201395">دسته‌بندی مجوز</translation>
 <translation id="4911714727432509308">میان‌برهای صفحه‌کلید به هیچ برنامهٔ افزودنی اختصاص داده نشده است.</translation>
 <translation id="4912643508233590958">تعداد خروج از حالت بی‌حرکت</translation>
 <translation id="4918086044614829423">می‌پذیرم</translation>
@@ -361,7 +365,6 @@
 <translation id="6295158916970320988">همه سایت‌ها</translation>
 <translation id="6295855836753816081">در حال ذخیره‌سازی...</translation>
 <translation id="6308937455967653460">ذخیره پی&amp;وند به‌عنوان...</translation>
-<translation id="6314335155547195432">تولید گذرواژه</translation>
 <translation id="6326855256003666642">شمارش استفاده</translation>
 <translation id="6370021412472292592">manifest بارگذاری نمی‌گردد.</translation>
 <translation id="6398765197997659313">خروج از حالت تمام صفحه</translation>
@@ -377,6 +380,7 @@
 <translation id="6518014396551869914">&amp;کپی تصویر</translation>
 <translation id="6550675742724504774">گزینه‌ها</translation>
 <translation id="6596092346130528198">این صفحه زبانه‌ی جدیدی است که منتظرش بودید؟</translation>
+<translation id="6612358246767739896">محتوای محافظت‌شده</translation>
 <translation id="6639554308659482635">‏حافظه SQLite</translation>
 <translation id="6655190889273724601">حالت توسعه دهنده</translation>
 <translation id="6691936601825168937">&amp;ارسال کردن</translation>
@@ -433,7 +437,6 @@
 <translation id="7564847347806291057">پایان دادن به فرایند</translation>
 <translation id="7576690715254076113">چاپ تلفیقی</translation>
 <translation id="7629827748548208700">برگه: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">لغو</translation>
 <translation id="7663719505383602579">گیرنده: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">نصب شده توسط مدیر شما</translation>
 <translation id="7685049629764448582">حافطه جاوا اسکریپت</translation>
@@ -442,6 +445,7 @@
 <translation id="7704305437604973648">کار</translation>
 <translation id="7705600705238488017">آیا می‌خواهید <ph name="BEGIN_LINK" /> به استور کروم از طریق <ph name="END_LINK" /> دسترسی داشته باشد؟</translation>
 <translation id="7710568461918838723">&amp;ارسال محتوا...</translation>
+<translation id="7751260505918304024">نمایش همه</translation>
 <translation id="7760004034676677601">آیا این صفحه راه‌اندازی مورد انتظار شماست؟</translation>
 <translation id="7771452384635174008">صفحه آرایی</translation>
 <translation id="7782102568078991263">‏پیشنهاد دیگری از Google وجود ندارد</translation>

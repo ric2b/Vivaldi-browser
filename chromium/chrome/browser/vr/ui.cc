@@ -7,12 +7,14 @@
 
 #include "chrome/browser/vr/ui.h"
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/vr/content_input_delegate.h"
 #include "chrome/browser/vr/cpu_surface_provider.h"
+#include "chrome/browser/vr/elements/text_input.h"
 #include "chrome/browser/vr/ganesh_surface_provider.h"
+#include "chrome/browser/vr/keyboard_delegate.h"
+#include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/model.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/speech_recognizer.h"
@@ -28,23 +30,29 @@ namespace vr {
 
 Ui::Ui(UiBrowserInterface* browser,
        ContentInputForwarder* content_input_forwarder,
+       vr::KeyboardDelegate* keyboard_delegate,
+       vr::TextInputDelegate* text_input_delegate,
        const UiInitialState& ui_initial_state)
     : Ui(browser,
-         base::MakeUnique<ContentInputDelegate>(content_input_forwarder),
+         std::make_unique<ContentInputDelegate>(content_input_forwarder),
+         keyboard_delegate,
+         text_input_delegate,
          ui_initial_state) {}
 
 Ui::Ui(UiBrowserInterface* browser,
        std::unique_ptr<ContentInputDelegate> content_input_delegate,
+       vr::KeyboardDelegate* keyboard_delegate,
+       vr::TextInputDelegate* text_input_delegate,
        const UiInitialState& ui_initial_state)
     : browser_(browser),
-      scene_(base::MakeUnique<UiScene>()),
-      model_(base::MakeUnique<Model>()),
+      scene_(std::make_unique<UiScene>()),
+      model_(std::make_unique<Model>()),
       content_input_delegate_(std::move(content_input_delegate)),
-      input_manager_(base::MakeUnique<UiInputManager>(scene_.get())),
+      input_manager_(std::make_unique<UiInputManager>(scene_.get())),
       weak_ptr_factory_(this) {
   InitializeModel(ui_initial_state);
-  UiSceneCreator(browser, scene_.get(), content_input_delegate_.get(),
-                 model_.get())
+  UiSceneCreator(browser, scene_.get(), this, content_input_delegate_.get(),
+                 keyboard_delegate, text_input_delegate, model_.get())
       .CreateScene();
 }
 
@@ -55,18 +63,31 @@ base::WeakPtr<BrowserUiInterface> Ui::GetBrowserUiWeakPtr() {
 }
 
 void Ui::SetWebVrMode(bool enabled, bool show_toast) {
-  model_->web_vr_timeout_state =
-      enabled ? kWebVrAwaitingFirstFrame : kWebVrNoTimeoutPending;
-  model_->web_vr_mode = enabled;
-  model_->web_vr_show_toast = show_toast;
-  if (!enabled) {
-    model_->web_vr_show_splash_screen = false;
-    model_->web_vr_started_for_autopresentation = false;
+  model_->web_vr.show_exit_toast = show_toast;
+  if (enabled) {
+    if (!model_->web_vr_autopresentation_enabled()) {
+      // When auto-presenting, we transition into this state when the minimum
+      // splash-screen duration has passed.
+      model_->web_vr.state = kWebVrAwaitingFirstFrame;
+    }
+    // We have this check here so that we don't set the mode to kModeWebVr when
+    // it should be kModeWebVrAutopresented. The latter is set when the UI is
+    // initialized.
+    if (!model_->web_vr_enabled())
+      model_->push_mode(kModeWebVr);
+  } else {
+    model_->web_vr.state = kWebVrNoTimeoutPending;
+    if (model_->web_vr_enabled())
+      model_->pop_mode();
   }
 }
 
 void Ui::SetFullscreen(bool enabled) {
-  model_->fullscreen = enabled;
+  if (enabled) {
+    model_->push_mode(kModeFullscreen);
+  } else {
+    model_->pop_mode(kModeFullscreen);
+  }
 }
 
 void Ui::SetToolbarState(const ToolbarState& state) {
@@ -146,10 +167,21 @@ void Ui::SetExitVrPromptEnabled(bool enabled, UiUnsupportedMode reason) {
   NOTREACHED();
 }
 
+void Ui::OnUiRequestedNavigation() {
+  model_->pop_mode(kModeEditingOmnibox);
+}
+
 void Ui::SetSpeechRecognitionEnabled(bool enabled) {
-  model_->speech.recognizing_speech = enabled;
-  if (enabled)
+  if (enabled) {
+    model_->push_mode(kModeVoiceSearch);
     model_->speech.recognition_result.clear();
+  } else {
+    model_->pop_mode(kModeVoiceSearch);
+    if (model_->omnibox_editing_enabled() &&
+        !model_->speech.recognition_result.empty()) {
+      model_->pop_mode(kModeEditingOmnibox);
+    }
+  }
 }
 
 void Ui::SetRecognitionResult(const base::string16& result) {
@@ -165,29 +197,58 @@ void Ui::SetOmniboxSuggestions(
   model_->omnibox_suggestions = suggestions->suggestions;
 }
 
+void Ui::OnAssetsComponentReady() {
+  model_->can_apply_new_background = true;
+}
+
+bool Ui::CanSendWebVrVSync() {
+  return model_->web_vr_enabled() &&
+         !model_->web_vr.awaiting_min_splash_screen_duration();
+}
+
 bool Ui::ShouldRenderWebVr() {
-  return model_->should_render_web_vr();
+  return model_->web_vr.has_produced_frames();
 }
 
 void Ui::OnGlInitialized(unsigned int content_texture_id,
                          UiElementRenderer::TextureLocation content_location,
                          bool use_ganesh) {
-  ui_element_renderer_ = base::MakeUnique<UiElementRenderer>();
+  ui_element_renderer_ = std::make_unique<UiElementRenderer>();
   ui_renderer_ =
-      base::MakeUnique<UiRenderer>(scene_.get(), ui_element_renderer_.get());
+      std::make_unique<UiRenderer>(scene_.get(), ui_element_renderer_.get());
   if (use_ganesh) {
-    provider_ = base::MakeUnique<GaneshSurfaceProvider>();
+    provider_ = std::make_unique<GaneshSurfaceProvider>();
   } else {
-    provider_ = base::MakeUnique<CpuSurfaceProvider>();
+    provider_ = std::make_unique<CpuSurfaceProvider>();
   }
   scene_->OnGlInitialized(provider_.get());
   model_->content_texture_id = content_texture_id;
   model_->content_location = content_location;
 }
 
+void Ui::RequestFocus(int element_id) {
+  input_manager_->RequestFocus(element_id);
+}
+
+void Ui::RequestUnfocus(int element_id) {
+  input_manager_->RequestUnfocus(element_id);
+}
+
+void Ui::OnInputEdited(const TextInputInfo& info) {
+  input_manager_->OnInputEdited(info);
+}
+
+void Ui::OnInputCommitted(const TextInputInfo& info) {
+  input_manager_->OnInputCommitted(info);
+}
+
+void Ui::OnKeyboardHidden() {
+  input_manager_->OnKeyboardHidden();
+}
+
 void Ui::OnAppButtonClicked() {
   // App button clicks should be a no-op when auto-presenting WebVR.
-  if (model_->web_vr_started_for_autopresentation) {
+  if (model_->web_vr_autopresentation_enabled()) {
     return;
   }
 
@@ -199,6 +260,17 @@ void Ui::OnAppButtonClicked() {
   // App button click exits the WebVR presentation and fullscreen.
   browser_->ExitPresent();
   browser_->ExitFullscreen();
+
+  switch (model_->get_last_opaque_mode()) {
+    case kModeVoiceSearch:
+      browser_->SetVoiceSearchActive(false);
+      break;
+    case kModeEditingOmnibox:
+      model_->pop_mode(kModeEditingOmnibox);
+      break;
+    default:
+      break;
+  }
 }
 
 void Ui::OnAppButtonGesturePerformed(
@@ -217,17 +289,18 @@ void Ui::OnProjMatrixChanged(const gfx::Transform& proj_matrix) {
 }
 
 void Ui::OnWebVrFrameAvailable() {
-  model_->web_vr_timeout_state = kWebVrNoTimeoutPending;
+  if (model_->web_vr_enabled())
+    model_->web_vr.state = kWebVrPresenting;
 }
 
 void Ui::OnWebVrTimeoutImminent() {
-  model_->web_vr_timeout_state = kWebVrTimeoutImminent;
-  // We do not want to simultaneously show the splash screen and the timeout UI.
-  model_->web_vr_show_splash_screen = false;
+  if (model_->web_vr_enabled())
+    model_->web_vr.state = kWebVrTimeoutImminent;
 }
 
 void Ui::OnWebVrTimedOut() {
-  model_->web_vr_timeout_state = kWebVrTimedOut;
+  if (model_->web_vr_enabled())
+    model_->web_vr.state = kWebVrTimedOut;
 }
 
 void Ui::OnSwapContents(int new_content_id) {
@@ -251,12 +324,36 @@ bool Ui::SkipsRedrawWhenNotDirty() const {
   return model_->skips_redraw_when_not_dirty;
 }
 
-void Ui::Dump() {
+void Ui::Dump(bool include_bindings) {
   std::ostringstream os;
   os << std::setprecision(3);
   os << std::endl;
-  scene_->root_element().DumpHierarchy(std::vector<size_t>(), &os);
+  scene_->root_element().DumpHierarchy(std::vector<size_t>(), &os,
+                                       include_bindings);
   LOG(ERROR) << os.str();
+}
+
+void Ui::OnAssetsLoading() {
+  model_->can_apply_new_background = false;
+}
+
+void Ui::OnAssetsLoaded(AssetsLoadStatus status,
+                        std::unique_ptr<Assets> assets,
+                        const base::Version& component_version) {
+  if (status != AssetsLoadStatus::kSuccess) {
+    return;
+  }
+
+  Background* background = static_cast<Background*>(
+      scene_->GetUiElementByName(k2dBrowsingTexturedBackground));
+  DCHECK(background);
+  background->SetBackgroundImage(std::move(assets->background));
+  background->SetGradientImages(std::move(assets->normal_gradient),
+                                std::move(assets->incognito_gradient),
+                                std::move(assets->fullscreen_gradient));
+
+  ColorScheme::UpdateForComponent(component_version);
+  model_->background_loaded = true;
 }
 
 void Ui::ReinitializeForTest(const UiInitialState& ui_initial_state) {
@@ -264,19 +361,28 @@ void Ui::ReinitializeForTest(const UiInitialState& ui_initial_state) {
 }
 
 void Ui::InitializeModel(const UiInitialState& ui_initial_state) {
-  model_->web_vr_started_for_autopresentation =
-      ui_initial_state.web_vr_autopresentation_expected;
-  model_->web_vr_show_splash_screen =
-      ui_initial_state.web_vr_autopresentation_expected;
   model_->experimental_features_enabled =
       base::FeatureList::IsEnabled(features::kVrBrowsingExperimentalFeatures);
   model_->speech.has_or_can_request_audio_permission =
       ui_initial_state.has_or_can_request_audio_permission;
-  model_->web_vr_mode = ui_initial_state.in_web_vr;
+  model_->ui_modes.clear();
+  model_->push_mode(kModeBrowsing);
+  if (ui_initial_state.in_web_vr) {
+    auto mode = kModeWebVr;
+    if (ui_initial_state.web_vr_autopresentation_expected) {
+      mode = kModeWebVrAutopresented;
+      model_->web_vr.state = kWebVrAwaitingMinSplashScreenDuration;
+    } else {
+      model_->web_vr.state = kWebVrAwaitingFirstFrame;
+    }
+    model_->push_mode(mode);
+  }
+
   model_->in_cct = ui_initial_state.in_cct;
   model_->browsing_disabled = ui_initial_state.browsing_disabled;
   model_->skips_redraw_when_not_dirty =
       ui_initial_state.skips_redraw_when_not_dirty;
+  model_->background_available = ui_initial_state.assets_available;
 }
 
 }  // namespace vr

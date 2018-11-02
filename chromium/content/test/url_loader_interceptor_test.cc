@@ -5,11 +5,9 @@
 #include "content/public/test/url_loader_interceptor.h"
 #include "base/command_line.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/bind_test_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/render_process_host.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -45,14 +43,6 @@ class URLLoaderInterceptorTest : public ContentBrowserTest {
   }
 
   GURL GetImageURL() { return embedded_test_server()->GetURL("/blank.jpg"); }
-
-  StoragePartition* GetStoragePartition() {
-    return shell()
-        ->web_contents()
-        ->GetMainFrame()
-        ->GetProcess()
-        ->GetStoragePartition();
-  }
 };
 
 IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, NoInterception) {
@@ -61,7 +51,7 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, NoInterception) {
         NOTREACHED();
         return false;
       }),
-      GetStoragePartition(), false, false);
+      false, false);
   Test();
 }
 
@@ -70,18 +60,17 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, MonitorFrame) {
     return;  // Depends on http://crbug.com/747130.
 
   bool seen = false;
+  GURL url = GetPageURL();
   URLLoaderInterceptor interceptor(
-      base::Bind(
-          [](bool* seen, const GURL& url,
-             URLLoaderInterceptor::RequestParams* params) {
+      base::BindLambdaForTesting(
+          [&](URLLoaderInterceptor::RequestParams* params) {
             EXPECT_EQ(params->url_request.url, url);
             EXPECT_EQ(params->process_id, 0);
-            EXPECT_FALSE(*seen);
-            *seen = true;
+            EXPECT_FALSE(seen);
+            seen = true;
             return false;
-          },
-          &seen, GetPageURL()),
-      GetStoragePartition(), true, false);
+          }),
+      true, false);
   Test();
   EXPECT_TRUE(seen);
 }
@@ -90,18 +79,18 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, InterceptFrame) {
   if (!base::FeatureList::IsEnabled(features::kNetworkService))
     return;  // Depends on http://crbug.com/747130.
 
+  GURL url = GetPageURL();
   URLLoaderInterceptor interceptor(
-      base::Bind(
-          [](const GURL& url, URLLoaderInterceptor::RequestParams* params) {
+      base::BindLambdaForTesting(
+          [&](URLLoaderInterceptor::RequestParams* params) {
             EXPECT_EQ(params->url_request.url, url);
             EXPECT_EQ(params->process_id, 0);
             network::URLLoaderCompletionStatus status;
             status.error_code = net::ERR_FAILED;
             params->client->OnComplete(status);
             return true;
-          },
-          GetPageURL()),
-      GetStoragePartition(), true, false);
+          }),
+      true, false);
   EXPECT_FALSE(NavigateToURL(shell(), GetPageURL()));
 }
 
@@ -110,18 +99,17 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, MonitorSubresource) {
     return;  // Very deprecated non-plznavigate code path not supported.
 
   bool seen = false;
+  GURL url = GetImageURL();
   URLLoaderInterceptor interceptor(
-      base::Bind(
-          [](bool* seen, const GURL& url,
-             URLLoaderInterceptor::RequestParams* params) {
+      base::BindLambdaForTesting(
+          [&](URLLoaderInterceptor::RequestParams* params) {
             EXPECT_EQ(params->url_request.url, url);
             EXPECT_NE(params->process_id, 0);
-            EXPECT_FALSE(*seen);
-            *seen = true;
+            EXPECT_FALSE(seen);
+            seen = true;
             return false;
-          },
-          &seen, GetImageURL()),
-      GetStoragePartition(), false, true);
+          }),
+      false, true);
   Test();
   EXPECT_TRUE(seen);
   EXPECT_TRUE(DidImageLoad());
@@ -131,17 +119,17 @@ IN_PROC_BROWSER_TEST_F(URLLoaderInterceptorTest, InterceptSubresource) {
   if (!IsBrowserSideNavigationEnabled())
     return;  // Very deprecated non-plznavigate code path not supported.
 
+  GURL url = GetImageURL();
   URLLoaderInterceptor interceptor(
-      base::Bind(
-          [](const GURL& url, URLLoaderInterceptor::RequestParams* params) {
+      base::BindLambdaForTesting(
+          [&](URLLoaderInterceptor::RequestParams* params) {
             EXPECT_EQ(params->url_request.url, url);
             network::URLLoaderCompletionStatus status;
             status.error_code = net::ERR_FAILED;
             params->client->OnComplete(status);
             return true;
-          },
-          GetImageURL()),
-      GetStoragePartition(), false, true);
+          }),
+      false, true);
   Test();
   EXPECT_FALSE(DidImageLoad());
 }

@@ -29,18 +29,20 @@
 #include <memory>
 
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "cc/layers/texture_layer_client.h"
 #include "platform/PlatformExport.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/CanvasColorParams.h"
 #include "platform/graphics/CanvasResourceHost.h"
-#include "platform/graphics/ImageBufferSurface.h"
+#include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/paint/PaintRecorder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/Deque.h"
+#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefCounted.h"
-#include "platform/wtf/WeakPtr.h"
 #include "public/platform/WebExternalTextureLayer.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -52,8 +54,8 @@ namespace blink {
 
 class Canvas2DLayerBridgeTest;
 class CanvasResourceProvider;
-class ImageBuffer;
 class SharedContextRateLimiter;
+class StaticBitmapImage;
 
 #if defined(OS_MACOSX)
 // Canvas hibernation is currently disabled on MacOS X due to a bug that causes
@@ -66,8 +68,7 @@ class SharedContextRateLimiter;
 // TODO: Fix background rendering and remove this workaround. crbug.com/600386
 #define CANVAS2D_BACKGROUND_RENDER_SWITCH_TO_CPU 0
 
-class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
-                                            public ImageBufferSurface {
+class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient {
   WTF_MAKE_NONCOPYABLE(Canvas2DLayerBridge);
 
  public:
@@ -89,32 +90,30 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
                                    std::unique_ptr<viz::SingleReleaseCallback>*
                                        out_release_callback) override;
 
-  // ImageBufferSurface implementation
-  void FinalizeFrame() override;
-  void DoPaintInvalidation(const FloatRect& dirty_rect) override;
-  void WillOverwriteCanvas() override;
-  PaintCanvas* Canvas() override;
-  void DisableDeferral(DisableDeferralReason) override;
-  bool IsValid() const override;
-  bool Restore() override;
-  WebLayer* Layer() override;
-  bool IsAccelerated() const override;
-  void SetFilterQuality(SkFilterQuality) override;
-  void SetIsHidden(bool) override;
-  void SetImageBuffer(ImageBuffer*) override;
-  void DidDraw(const FloatRect&) override;
+  void FinalizeFrame();
+  void SetIsHidden(bool);
+  void DidDraw(const FloatRect&);
+  void DoPaintInvalidation(const FloatRect& dirty_rect);
+  WebLayer* Layer();
+  bool Restore();
+  virtual void WillOverwriteCanvas();  // virtual for unit testing
+  void DisableDeferral(DisableDeferralReason);
+  void SetFilterQuality(SkFilterQuality);
+
+  PaintCanvas* Canvas();
+  bool IsValid() const;
+  virtual bool IsAccelerated() const;  // virtual for unit testing
   bool WritePixels(const SkImageInfo&,
                    const void* pixels,
                    size_t row_bytes,
                    int x,
-                   int y) override;
+                   int y);
   void DontUseIdleSchedulingForTesting() {
     dont_use_idle_scheduling_for_testing_ = true;
   }
   void SetCanvasResourceHost(CanvasResourceHost* host) {
     resource_host_ = host;
   }
-  CanvasResourceHost* GetCanvasResourceHost() { return resource_host_; }
 
   void BeginDestruction();
   void Hibernate();
@@ -123,8 +122,10 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
 
   bool HasRecordedDrawCommands() { return have_recorded_draw_commands_; }
 
-  scoped_refptr<StaticBitmapImage> NewImageSnapshot(AccelerationHint,
-                                                    SnapshotReason);
+  scoped_refptr<StaticBitmapImage> NewImageSnapshot(AccelerationHint);
+  bool WasDrawnToAfterSnapshot() const {
+    return snapshot_state_ == kDrawnToAfterSnapshot;
+  }
 
   // The values of the enum entries must not change because they are used for
   // usage metrics histograms. New values can be added to the end.
@@ -149,13 +150,18 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
    public:
     virtual void ReportHibernationEvent(HibernationEvent);
     virtual void DidStartHibernating() {}
-    virtual ~Logger() {}
+    virtual ~Logger() = default;
   };
 
   void SetLoggerForTesting(std::unique_ptr<Logger>);
+  CanvasResourceProvider* GetResourceProvider() const {
+    return resource_provider_.get();
+  }
+  CanvasResourceProvider* GetOrCreateResourceProvider(
+      AccelerationHint = kPreferAcceleration);
+  void ResetResourceProvider();
 
  private:
-  void ResetResourceProvider();
   bool IsHidden() { return is_hidden_; }
   bool CheckResourceProviderValid();
 
@@ -164,8 +170,6 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   void FlushRecording();
   void ReportResourceProviderCreationFailure();
 
-  CanvasResourceProvider* GetOrCreateResourceProvider(
-      AccelerationHint = kPreferAcceleration);
   bool ShouldAccelerate(AccelerationHint) const;
 
   std::unique_ptr<CanvasResourceProvider> resource_provider_;
@@ -174,8 +178,7 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
   std::unique_ptr<WebExternalTextureLayer> layer_;
   std::unique_ptr<SharedContextRateLimiter> rate_limiter_;
   std::unique_ptr<Logger> logger_;
-  WeakPtrFactory<Canvas2DLayerBridge> weak_ptr_factory_;
-  ImageBuffer* image_buffer_;
+  base::WeakPtrFactory<Canvas2DLayerBridge> weak_ptr_factory_;
   int msaa_sample_count_;
   int frames_since_last_commit_ = 0;
   size_t bytes_allocated_;
@@ -196,7 +199,15 @@ class PLATFORM_EXPORT Canvas2DLayerBridge : public cc::TextureLayerClient,
 
   AccelerationMode acceleration_mode_;
   CanvasColorParams color_params_;
+  IntSize size_;
   CheckedNumeric<int> recording_pixel_count_;
+
+  enum SnapshotState {
+    kInitialSnapshotState,
+    kDidAcquireSnapshot,
+    kDrawnToAfterSnapshot,
+  };
+  mutable SnapshotState snapshot_state_;
 
   CanvasResourceHost* resource_host_;
 };

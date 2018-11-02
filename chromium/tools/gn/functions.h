@@ -374,93 +374,37 @@ Value RunWriteFile(Scope* scope,
                    Err* err);
 
 // <Vivaldi>
-extern const char kPreProcessTarget[];
-extern const char kPreProcessTarget_HelpShort[];
-extern const char kPreProcessTarget_Help[];
+extern const char kUpdateTarget[];
+extern const char kUpdateTarget_HelpShort[];
+extern const char kUpdateTarget_Help[];
 
-Value RunPreProcessTarget(Scope* scope,
+Value RunUpdateTarget(Scope* scope,
                 const FunctionCallNode* function,
                 const std::vector<Value>& args,
                 BlockNode* block,
                 Err* err);
 
-extern const char kPostProcessTarget[];
-extern const char kPostProcessTarget_HelpShort[];
-extern const char kPostProcessTarget_Help[];
+extern const char kUpdateTemplate[];
+extern const char kUpdateTemplate_HelpShort[];
+extern const char kUpdateTemplate_Help[];
 
-Value RunPostProcessTarget(Scope* scope,
-                const FunctionCallNode* function,
-                const std::vector<Value>& args,
-                BlockNode* block,
-                Err* err);
+Value RunUpdateTemplate(Scope* scope,
+                         const FunctionCallNode* function,
+                         const std::vector<Value>& args,
+                         BlockNode* block,
+                         Err* err);
 
-extern const char kPreProcessAction[];
-extern const char kPreProcessAction_HelpShort[];
-extern const char kPreProcessAction_Help[];
-
-Value RunPreProcessAction(Scope* scope,
-                const FunctionCallNode* function,
-                const std::vector<Value>& args,
-                BlockNode* block,
-                Err* err);
-
-extern const char kPostProcessAction[];
-extern const char kPostProcessAction_HelpShort[];
-extern const char kPostProcessAction_Help[];
-
-Value RunPostProcessAction(Scope* scope,
-                           const FunctionCallNode* function,
-                           const std::vector<Value>& args,
-                           BlockNode* block,
-                           Err* err);
-
-extern const char kPreProcessTemplate[];
-extern const char kPreProcessTemplate_HelpShort[];
-extern const char kPreProcessTemplate_Help[];
-
-Value RunPreProcessTemplate(Scope* scope,
-                const FunctionCallNode* function,
-                const std::vector<Value>& args,
-                BlockNode* block,
-                Err* err);
-
-extern const char kPostProcessTemplate[];
-extern const char kPostProcessTemplate_HelpShort[];
-extern const char kPostProcessTemplate_Help[];
-
-Value RunPostProcessTemplate(Scope* scope,
-                           const FunctionCallNode* function,
-                           const std::vector<Value>& args,
-                           BlockNode* block,
-                           Err* err);
-
-
-Value RunPrePostProcessTarget(bool post_process,
-                              Scope* scope,
-                              const FunctionCallNode* function,
-                              const std::vector<Value>& args,
-                              BlockNode* block,
-                              Err* err);
-Value RunPrePostProcessTemplate(bool post_process,
-                              Scope* scope,
-                              const FunctionCallNode* function,
-                              const std::vector<Value>& args,
-                              BlockNode* block,
-                              Err* err);
-
-bool PrePostProcessTheTarget(bool post_process,
-                             Scope* scope,
-                             const FunctionCallNode* function,
-                             const std::vector<Value>& args,
-                             BlockNode* block,
-                             Err* err);
-bool PrePostProcessTheTemplate(bool post_process,
-                             Scope* scope,
-                             const FunctionCallNode* function,
-                             const std::vector<Value>& args,
-                             BlockNode* block,
-                             Err* err,
-                             Scope *function_scope);
+bool UpdateTheTarget(Scope* scope,
+                      const FunctionCallNode* function,
+                      const std::vector<Value>& args,
+                      BlockNode* block,
+                      Err* err);
+bool UpdateTheTemplate(Scope* scope,
+                        const FunctionCallNode* function,
+                        const std::vector<Value>& args,
+                        BlockNode* block,
+                        Err* err,
+                        Scope* function_scope);
 
 extern const char kDeclareOverrides[];
 extern const char kDeclareOverrides_HelpShort[];

@@ -10,6 +10,7 @@
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Cookieを消去してみてください<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータが送信されませんでした。</translation>
+<translation id="14171126816530869"><ph name="LOCALITY" /> の <ph name="ORGANIZATION" /> は、<ph name="ISSUER" /> によって確認済みです。</translation>
 <translation id="1506687042165942984">このページの保存されているコピー(古いバージョン)を表示します。</translation>
 <translation id="1559528461873125649">該当するファイルまたはフォルダーがありません</translation>
 <translation id="1620510694547887537">カメラ</translation>
@@ -55,6 +56,7 @@
 <translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />では、悪意のあるユーザーによって、パスワード、メッセージ、クレジットカードなどの情報が盗まれる可能性があります。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されました。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシは、設定ページから無効にすることができます。</translation>
+<translation id="298138621710431427">こちらの解決にご協力ください</translation>
 <translation id="2991571918955627853"><ph name="SITE" />ではHSTSが使用されているため、現在アクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
 <translation id="3005723025932146533">保存済みのコピーを表示</translation>
 <translation id="301521992641321250">自動ブロックされました</translation>
@@ -142,7 +144,7 @@
 <translation id="5617949217645503996"><ph name="HOST_NAME" />でリダイレクトが繰り返し行われました。</translation>
 <translation id="5675650730144413517">このページは動作していません</translation>
 <translation id="5689516760719285838">現在地</translation>
-<translation id="5710435578057952990">このウェブサイトの素性は確認されていません。</translation>
+<translation id="5710435578057952990">このウェブサイトは確認されていません。</translation>
 <translation id="5778550464785688721">MIDI デバイスのフル コントロール</translation>
 <translation id="5785756445106461925">加えて、このページには安全でない他のリソースが含まれています。このリソースは受信中に他のユーザーから見られる可能性があります。また、悪意のあるユーザーによって改変されページの見た目が変わる可能性もあります。</translation>
 <translation id="5799902971440853357"><ph name="SITE" />から送信された暗号化済みの認証情報をVivaldiで処理できないため、現在このウェブサイトにアクセスできません。通常、ネットワークエラーやネットワークへの攻撃は一時的なものです。しばらくするとページにアクセスできるようになります。</translation>
@@ -186,7 +188,7 @@
 <translation id="7260504762447901703">アクセス権を取り消します</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
-<translation id="7445762425076701745">接続しているサーバーについて、十分な検証ができません。接続しているサーバーは、そのネットワーク内でのみ有効な名前を使用しており、外部の認証局がその所有権を検証できません。こうした名前で証明書を発行する認証局もあり、接続先が意図したウェブサイトか、悪意のあるユーザーのサイトかを確認することはできません。</translation>
+<translation id="7445762425076701745">接続しているサーバーについて、十分な検証ができません。接続しているサーバーは、そのネットワーク内でのみ有効な名前を使用しており、外部の認証局がその所有権を検証できません。これらの名義に対して無条件に証明書を発行する認証局もあり、接続先が意図したウェブサイトか、悪意のあるユーザーのサイトかを確認することはできません。</translation>
 <translation id="7455133967321480974">グローバルのデフォルト値（[ブロック]）を使用</translation>
 <translation id="7518003948725431193">次のウェブページアドレスは見つかりませんでした: <ph name="URL" /></translation>
 <translation id="7521387064766892559">Javascript</translation>

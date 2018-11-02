@@ -41,7 +41,7 @@ LayoutVideo::LayoutVideo(HTMLVideoElement* video) : LayoutMedia(video) {
   SetIntrinsicSize(CalculateIntrinsicSize());
 }
 
-LayoutVideo::~LayoutVideo() {}
+LayoutVideo::~LayoutVideo() = default;
 
 LayoutSize LayoutVideo::DefaultSize() {
   return LayoutSize(kDefaultWidth, kDefaultHeight);
@@ -237,12 +237,12 @@ LayoutUnit LayoutVideo::OffsetHeight() const {
 CompositingReasons LayoutVideo::AdditionalCompositingReasons() const {
   HTMLMediaElement* element = ToHTMLMediaElement(GetNode());
   if (element->IsFullscreen() && element->UsesOverlayFullscreenVideo())
-    return kCompositingReasonVideo;
+    return CompositingReason::kVideo;
 
   if (ShouldDisplayVideo() && SupportsAcceleratedRendering())
-    return kCompositingReasonVideo;
+    return CompositingReason::kVideo;
 
-  return kCompositingReasonNone;
+  return CompositingReason::kNone;
 }
 
 }  // namespace blink

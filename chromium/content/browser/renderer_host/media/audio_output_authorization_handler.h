@@ -12,7 +12,6 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "content/browser/media/media_devices_permission_checker.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "media/audio/audio_device_description.h"
 #include "media/base/audio_parameters.h"
@@ -69,7 +68,6 @@ class CONTENT_EXPORT AudioOutputAuthorizationHandler {
   void HashDeviceId(
       AuthorizationCompletedCallback cb,
       const std::string& raw_device_id,
-      const media::AudioParameters& params,
       const std::pair<std::string, url::Origin>& salt_and_origin) const;
 
   void AccessChecked(AuthorizationCompletedCallback cb,

@@ -309,7 +309,8 @@ UpdateNotifierManager::UpdateNotifierManager() {
     global_restart_event_watch_.StartWatching(
         global_restart_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        base::MessageLoop::current()->task_runner());
   }
 
   global_quit_event_.reset(MakeEvent(kGlobalQuitEventName));
@@ -317,7 +318,8 @@ UpdateNotifierManager::UpdateNotifierManager() {
     global_quit_event_watch_.StartWatching(
         global_quit_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        base::MessageLoop::current()->task_runner());
   }
 
   base::FilePath exe_dir;
@@ -333,7 +335,8 @@ UpdateNotifierManager::UpdateNotifierManager() {
     quit_event_watch_.StartWatching(
         quit_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        base::MessageLoop::current()->task_runner());
   }
 
   base::win::ScopedHandle check_for_updates_event_handle;
@@ -347,7 +350,8 @@ UpdateNotifierManager::UpdateNotifierManager() {
     check_for_updates_event_watch_.StartWatching(
         check_for_updates_event_.get(),
         base::Bind(&UpdateNotifierManager::OnEventTriggered,
-                   base::Unretained(this)));
+                   base::Unretained(this)),
+        base::MessageLoop::current()->task_runner());
   }
 }
 
@@ -406,7 +410,8 @@ void UpdateNotifierManager::OnEventTriggered(
     check_for_updates_event_watch_.StartWatching(
         check_for_updates_event_.get(), base::Bind(
             &UpdateNotifierManager::OnEventTriggered,
-            base::Unretained(this)));
+            base::Unretained(this)),
+      base::MessageLoop::current()->task_runner());
     TriggerUpdate(true);
   } else {
     NOTREACHED();

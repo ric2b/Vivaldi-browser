@@ -36,6 +36,7 @@
     expanded_changed,          // Web
     focus,
     hide,                      // Remove: http://crbug.com/392502
+    hit_test_result,
     hover,
     image_frame_updated,       // Web
     invalid_status_changed,    // Implicit
@@ -275,7 +276,7 @@
 
     // Scroll any scrollable containers to make the target object visible
     // on the screen.  Optionally pass a subfocus rect in
-    // AXActionData.target_rect.
+    // AXActionData.target_rect, in node-local coordinates.
     scroll_to_make_visible,
 
     // Scroll the given object to a specified point on the screen in
@@ -340,6 +341,7 @@
     aria_invalid_value,
     auto_complete,
     chrome_channel,  // Automation only.
+    class_name, // views and Android
     container_live_relevant,
     container_live_status,
     description,
@@ -458,7 +460,11 @@
     text_direction,
 
     // Bold, italic, underline, etc.
-    text_style
+    text_style,
+
+    // Focus traversal in views and Android.
+    previous_focus_id,
+    next_focus_id
   };
 
   [cpp_enum_prefix_override="ax_attr"] enum AXFloatAttribute {

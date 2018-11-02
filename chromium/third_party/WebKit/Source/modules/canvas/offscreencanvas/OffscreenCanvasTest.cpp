@@ -5,10 +5,10 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/loader/EmptyClients.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
-#include "core/testing/DummyPageHolder.h"
+#include "core/testing/PageTestBase.h"
 #include "modules/canvas/htmlcanvas/HTMLCanvasElementModule.h"
 #include "modules/canvas/offscreencanvas2d/OffscreenCanvasRenderingContext2D.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
@@ -23,14 +23,12 @@ using ::testing::Mock;
 
 namespace blink {
 
-class OffscreenCanvasTest : public ::testing::Test {
+class OffscreenCanvasTest : public PageTestBase {
  protected:
   OffscreenCanvasTest();
   void SetUp() override;
   void TearDown() override;
 
-  DummyPageHolder& Page() const { return *dummy_page_holder_; }
-  Document& GetDocument() const { return *document_; }
   HTMLCanvasElement& CanvasElement() const { return *canvas_element_; }
   OffscreenCanvas& OSCanvas() const { return *offscreen_canvas_; }
   OffscreenCanvasFrameDispatcher* Dispatcher() const {
@@ -45,8 +43,6 @@ class OffscreenCanvasTest : public ::testing::Test {
   }
 
  private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
-  Persistent<Document> document_;
   Persistent<HTMLCanvasElement> canvas_element_;
   Persistent<OffscreenCanvas> offscreen_canvas_;
   Persistent<OffscreenCanvasRenderingContext2D> context_;
@@ -54,7 +50,7 @@ class OffscreenCanvasTest : public ::testing::Test {
   FakeGLES2Interface gl_;
 };
 
-OffscreenCanvasTest::OffscreenCanvasTest() {}
+OffscreenCanvasTest::OffscreenCanvasTest() = default;
 
 void OffscreenCanvasTest::SetUp() {
   auto factory = [](FakeGLES2Interface* gl, bool* gpu_compositing_disabled)
@@ -64,22 +60,18 @@ void OffscreenCanvasTest::SetUp() {
     return std::make_unique<FakeWebGraphicsContext3DProvider>(gl);
   };
   SharedGpuContext::SetContextProviderFactoryForTesting(
-      WTF::Bind(factory, WTF::Unretained(&gl_)));
+      WTF::BindRepeating(factory, WTF::Unretained(&gl_)));
   Page::PageClients page_clients;
   FillWithEmptyClients(page_clients);
-  dummy_page_holder_ =
-      DummyPageHolder::Create(IntSize(800, 600), &page_clients);
-  document_ = &dummy_page_holder_->GetDocument();
-  document_->documentElement()->SetInnerHTMLFromString(
-      "<body><canvas id='c'></canvas></body>");
-  document_->View()->UpdateAllLifecyclePhases();
-  canvas_element_ = ToHTMLCanvasElement(document_->getElementById("c"));
+  PageTestBase::SetupPageWithClients(&page_clients);
+  SetHtmlInnerHTML("<body><canvas id='c'></canvas></body>");
+  canvas_element_ = ToHTMLCanvasElement(GetElementById("c"));
   DummyExceptionStateForTesting exception_state;
   offscreen_canvas_ = HTMLCanvasElementModule::transferControlToOffscreen(
       *canvas_element_, exception_state);
   CanvasContextCreationAttributes attrs;
   context_ = static_cast<OffscreenCanvasRenderingContext2D*>(
-      offscreen_canvas_->GetCanvasRenderingContext(document_, String("2d"),
+      offscreen_canvas_->GetCanvasRenderingContext(&GetDocument(), String("2d"),
                                                    attrs));
 }
 
@@ -112,14 +104,12 @@ TEST_F(OffscreenCanvasTest, AnimationSuspendedWhilePlaceholderHidden) {
   EXPECT_FALSE(Dispatcher()->IsAnimationSuspended());
 
   // Change visibility to hidden -> animation should be suspended
-  Page().GetPage().SetVisibilityState(mojom::PageVisibilityState::kHidden,
-                                      false);
+  GetPage().SetVisibilityState(mojom::PageVisibilityState::kHidden, false);
   platform()->RunUntilIdle();
   EXPECT_TRUE(Dispatcher()->IsAnimationSuspended());
 
   // Change visibility to visible -> animation should resume
-  Page().GetPage().SetVisibilityState(mojom::PageVisibilityState::kVisible,
-                                      false);
+  GetPage().SetVisibilityState(mojom::PageVisibilityState::kVisible, false);
   platform()->RunUntilIdle();
   EXPECT_FALSE(Dispatcher()->IsAnimationSuspended());
 }

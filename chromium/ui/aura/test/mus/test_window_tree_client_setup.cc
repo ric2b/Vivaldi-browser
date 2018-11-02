@@ -31,6 +31,7 @@ void TestWindowTreeClientSetup::InitForWindowManager(
   CommonInit(window_tree_delegate, window_manager_delegate);
   WindowTreeClientPrivate window_tree_client_private(window_tree_client_.get());
   window_tree_client_private.SetTree(window_tree_.get());
+  window_tree_->set_window_manager(window_tree_client_.get());
   window_tree_client_private.SetWindowManagerClient(
       test_window_manager_client_.get());
 }
@@ -40,6 +41,11 @@ void TestWindowTreeClientSetup::InitWithoutEmbed(
   CommonInit(window_tree_delegate, nullptr);
   WindowTreeClientPrivate(window_tree_client_.get())
       .SetTree(window_tree_.get());
+}
+
+void TestWindowTreeClientSetup::NotifyClientAboutAcceleratedWidgets(
+    display::DisplayManager* display_manager) {
+  window_tree_->NotifyClientAboutAcceleratedWidgets(display_manager);
 }
 
 std::unique_ptr<WindowTreeClient>

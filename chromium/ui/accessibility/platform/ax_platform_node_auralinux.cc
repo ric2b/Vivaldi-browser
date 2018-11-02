@@ -104,19 +104,8 @@ static gint ax_platform_node_auralinux_get_index_in_parent(
   ui::AXPlatformNodeAuraLinux* obj =
     AtkObjectToAXPlatformNodeAuraLinux(atk_object);
 
-  if (!obj || !obj->GetParent())
+  if (!obj)
     return -1;
-
-  AtkObject* obj_parent = obj->GetParent();
-
-  unsigned child_count = atk_object_get_n_accessible_children(obj_parent);
-  for (unsigned index = 0; index < child_count; index++) {
-    AtkObject* child = atk_object_ref_accessible_child(obj_parent, index);
-    bool atk_object_found = child == atk_object;
-    g_object_unref(child);
-    if (atk_object_found)
-      return index;
-  }
 
   return obj->GetIndexInParent();
 }
@@ -781,6 +770,8 @@ void AXPlatformNodeAuraLinux::DestroyAtkObjects() {
     atk_hyperlink_ = nullptr;
   }
   if (atk_object_) {
+    if (atk_object_ == current_focused_)
+      current_focused_ = nullptr;
     ax_platform_node_auralinux_detach(AX_PLATFORM_NODE_AURALINUX(atk_object_));
     g_object_unref(atk_object_);
     atk_object_ = nullptr;
@@ -1082,11 +1073,41 @@ gfx::NativeViewAccessible AXPlatformNodeAuraLinux::GetNativeViewAccessible() {
   return atk_object_;
 }
 
+AtkObject* AXPlatformNodeAuraLinux::current_focused_ = nullptr;
+
+void AXPlatformNodeAuraLinux::OnFocused() {
+  DCHECK(atk_object_);
+
+  if (atk_object_ == current_focused_)
+    return;
+
+  if (current_focused_) {
+    g_signal_emit_by_name(current_focused_, "focus-event", false);
+    atk_object_notify_state_change(ATK_OBJECT(current_focused_),
+                                   ATK_STATE_FOCUSED, false);
+  }
+
+  current_focused_ = atk_object_;
+  g_signal_emit_by_name(atk_object_, "focus-event", true);
+  atk_object_notify_state_change(ATK_OBJECT(atk_object_), ATK_STATE_FOCUSED,
+                                 true);
+}
+
 void AXPlatformNodeAuraLinux::NotifyAccessibilityEvent(ui::AXEvent event_type) {
+  switch (event_type) {
+    case AX_EVENT_FOCUS:
+      OnFocused();
+      break;
+    default:
+      break;
+  }
 }
 
 int AXPlatformNodeAuraLinux::GetIndexInParent() {
-  return 0;
+  if (!GetParent())
+    return -1;
+
+  return delegate_->GetIndexInParent();
 }
 
 void AXPlatformNodeAuraLinux::SetExtentsRelativeToAtkCoordinateType(

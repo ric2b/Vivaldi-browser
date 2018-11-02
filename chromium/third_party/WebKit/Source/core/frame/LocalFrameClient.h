@@ -56,6 +56,7 @@
 #include "public/platform/WebScopedVirtualTimePauser.h"
 #include "public/platform/WebSuddenTerminationDisablerType.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/web/WebGlobalObjectReusePolicy.h"
 #include "public/web/WebTriggeringEventInfo.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
 #include "v8/include/v8.h"
@@ -79,7 +80,7 @@ class HTMLPlugInElement;
 class HistoryItem;
 class KURL;
 class LocalFrame;
-class PluginView;
+class WebPluginContainerImpl;
 class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
@@ -94,21 +95,23 @@ class WebLayerTreeView;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerSource;
-class WebRemotePlaybackClient;
 class WebRTCPeerConnectionHandler;
+class WebRemotePlaybackClient;
+struct WebResourceTimingInfo;
 class WebServiceWorkerProvider;
 class WebSpellCheckPanelHostClient;
-struct WebRemoteScrollProperties;
+struct WebScrollIntoViewParams;
 class WebTextCheckClient;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
-  ~LocalFrameClient() override {}
+  ~LocalFrameClient() override = default;
 
   virtual WebFrame* GetWebFrame() const { return nullptr; }
 
   virtual bool HasWebView() const = 0;  // mainly for assertions
 
+  virtual void WillBeDetached() = 0;
   virtual void DispatchWillSendRequest(ResourceRequest&) = 0;
   virtual void DispatchDidReceiveResponse(const ResourceResponse&) = 0;
   virtual void DispatchDidLoadResourceFromMemoryCache(
@@ -125,7 +128,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
                                                ResourceRequest&) = 0;
   virtual void DispatchDidReceiveTitle(const String&) = 0;
   virtual void DispatchDidChangeIcons(IconType) = 0;
-  virtual void DispatchDidCommitLoad(HistoryItem*, HistoryCommitType) = 0;
+  virtual void DispatchDidCommitLoad(HistoryItem*,
+                                     HistoryCommitType,
+                                     WebGlobalObjectReusePolicy) = 0;
   virtual void DispatchDidFailProvisionalLoad(const ResourceError&,
                                               HistoryCommitType) = 0;
   virtual void DispatchDidFailLoad(const ResourceError&, HistoryCommitType) = 0;
@@ -153,6 +158,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void ProgressEstimateChanged(double progress_estimate) = 0;
   virtual void DidStopLoading() = 0;
 
+  virtual void ForwardResourceTimingToParent(const WebResourceTimingInfo&) = 0;
+
   virtual void DownloadURL(const ResourceRequest&,
                            const String& suggested_name) = 0;
   virtual void LoadErrorPage(int reason) = 0;
@@ -174,14 +181,14 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   // The indicated security origin has run active content (such as a script)
   // from an insecure source.  Note that the insecure content can spread to
   // other frames in the same origin.
-  virtual void DidRunInsecureContent(SecurityOrigin*, const KURL&) = 0;
+  virtual void DidRunInsecureContent(const SecurityOrigin*, const KURL&) = 0;
   virtual void DidDetectXSS(const KURL&, bool did_block_entire_page) = 0;
   virtual void DidDispatchPingLoader(const KURL&) = 0;
 
   // The frame displayed content with certificate errors with given URL.
-  virtual void DidDisplayContentWithCertificateErrors(const KURL&) = 0;
+  virtual void DidDisplayContentWithCertificateErrors() = 0;
   // The frame ran content with certificate errors with the given URL.
-  virtual void DidRunContentWithCertificateErrors(const KURL&) = 0;
+  virtual void DidRunContentWithCertificateErrors() = 0;
 
   // The frame loaded a resource with an otherwise-valid legacy Symantec
   // certificate that is slated for distrust. Prints a console message (possibly
@@ -232,13 +239,13 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   };
   virtual bool CanCreatePluginWithoutRenderer(
       const String& mime_type) const = 0;
-  virtual PluginView* CreatePlugin(HTMLPlugInElement&,
-                                   const KURL&,
-                                   const Vector<String>&,
-                                   const Vector<String>&,
-                                   const String&,
-                                   bool load_manually,
-                                   DetachedPluginPolicy) = 0;
+  virtual WebPluginContainerImpl* CreatePlugin(HTMLPlugInElement&,
+                                               const KURL&,
+                                               const Vector<String>&,
+                                               const Vector<String>&,
+                                               const String&,
+                                               bool load_manually,
+                                               DetachedPluginPolicy) = 0;
 
   virtual std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
@@ -274,8 +281,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void DidChangeName(const String&) {}
 
   virtual void DidEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) {}
-
-  virtual void DidUpdateToUniqueOrigin() {}
+  virtual void DidEnforceInsecureNavigationsSet(const std::vector<unsigned>&) {}
 
   virtual void DidChangeFramePolicy(Frame* child_frame,
                                     SandboxFlags,
@@ -333,14 +339,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void SetEffectiveConnectionTypeForTesting(
       WebEffectiveConnectionType) {}
 
-  // Returns whether or not Client Lo-Fi is enabled for the frame
-  // (and so image requests may be replaced with a placeholder).
-  virtual bool IsClientLoFiActiveForFrame() { return false; }
-
-  // Returns whether or not the requested image should be replaced with a
-  // placeholder as part of the Client Lo-Fi previews feature.
-  virtual bool ShouldUseClientLoFiForRequest(const ResourceRequest&) {
-    return false;
+  // Returns the PreviewsState active for the frame.
+  virtual WebURLRequest::PreviewsState GetPreviewsStateForFrame() const {
+    return WebURLRequest::kPreviewsUnspecified;
   }
 
   // Overwrites the given URL to use an HTML5 embed if possible. An empty URL is
@@ -360,6 +361,8 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void SetHasReceivedUserGesture(bool received_previously) {}
 
+  virtual void SetHasReceivedUserGestureBeforeNavigation(bool value) {}
+
   virtual void AbortClientNavigation() {}
 
   virtual WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const = 0;
@@ -372,16 +375,24 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void DidBlockFramebust(const KURL&) {}
 
-  virtual String GetInstrumentationToken() = 0;
-
   // Called when the corresponding frame should be scrolled in a remote parent
   // frame.
   virtual void ScrollRectToVisibleInParentFrame(
       const WebRect&,
-      const WebRemoteScrollProperties&) {}
+      const WebScrollIntoViewParams&) {}
 
   virtual void SetVirtualTimePauser(
       WebScopedVirtualTimePauser virtual_time_pauser) {}
+
+  virtual String evaluateInInspectorOverlayForTesting(const String& script) = 0;
+
+  virtual bool HandleCurrentKeyboardEvent() { return false; }
+
+  virtual void DidChangeSelection(bool is_selection_empty) {}
+
+  virtual void DidChangeContents() {}
+
+  virtual Frame* FindFrame(const AtomicString& name) const = 0;
 
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

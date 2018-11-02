@@ -15,6 +15,7 @@
   * TODO(crbug.com/647084): Enable checkTypes error for this file.
   * @suppress {checkTypes}
   */
+goog.provide('__crWeb.autofill');
 
 /**
   * @typedef {{
@@ -596,11 +597,13 @@ __gCrWeb.autofill['fillForm'] = function(data, forceFillFieldName) {
     __gCrWeb.autofill.styleInjected = true;
   }
 
-  // Remove Autofill styling when control element is edited.
+  // Remove Autofill styling when control element is edited by the user.
   var controlElementInputListener = function(evt) {
-    evt.target.removeAttribute('chrome-autofilled');
-    evt.target.isAutofilled = false;
-    evt.target.removeEventListener('input', controlElementInputListener);
+    if (evt.isTrusted) {
+      evt.target.removeAttribute('chrome-autofilled');
+      evt.target.isAutofilled = false;
+      evt.target.removeEventListener('input', controlElementInputListener);
+    }
   };
 
   var form = __gCrWeb.common.getFormElementFromIdentifier(data.formName);
@@ -634,14 +637,9 @@ __gCrWeb.autofill['fillForm'] = function(data, forceFillFieldName) {
       continue;
 
     if (__gCrWeb.autofill.isTextInput(element) ||
-        __gCrWeb.autofill.isTextAreaElement(element)) {
+        __gCrWeb.autofill.isTextAreaElement(element) ||
+        __gCrWeb.autofill.isSelectElement(element)) {
       __gCrWeb.common.setInputElementValue(value, element, true);
-    } else if (__gCrWeb.autofill.isSelectElement(element)) {
-      if (element.value !== value) {
-        element.value = value;
-        __gCrWeb.common.createAndDispatchHTMLEvent(element, 'change', true,
-            false);
-      }
     }
     // TODO(bondd): Handle __gCrWeb.autofill.isCheckableElement(element) ==
     // true. |is_checked| is not currently passed in by the caller.
@@ -679,7 +677,15 @@ __gCrWeb.autofill['fillForm'] = function(data, forceFillFieldName) {
  */
 __gCrWeb.autofill['clearAutofilledFields'] = function(formName) {
   var form = __gCrWeb.common.getFormElementFromIdentifier(formName);
-  var controlElements = __gCrWeb.common.getFormControlElements(form);
+  var controlElements = [];
+  if (form) {
+    controlElements = __gCrWeb.common.getFormControlElements(form);
+  } else {
+    var fieldsets = [];
+    controlElements =
+        getUnownedAutofillableFormFieldElements_(document.all, fieldsets);
+  }
+
   for (var i = 0; i < controlElements.length; ++i) {
     var element = controlElements[i];
     if (!element.isAutofilled || element.disabled)
@@ -691,11 +697,8 @@ __gCrWeb.autofill['clearAutofilledFields'] = function(formName) {
     } else if (__gCrWeb.autofill.isSelectElement(element)) {
       // Reset to the first index.
       // TODO(bondd): Store initial values and reset to the correct one here.
-      if (element.selectedIndex != 0) {
-        element.selectedIndex = 0;
-        __gCrWeb.common.createAndDispatchHTMLEvent(element, 'change', true,
-            false);
-      }
+      __gCrWeb.common.setInputElementValue(element.options[0].value,
+          element, true);
     } else if (__gCrWeb.autofill.isCheckableElement(element)) {
       // TODO(bondd): Handle checkable elements. They aren't properly supported
       // by iOS Autofill yet.
@@ -1570,6 +1573,33 @@ __gCrWeb.autofill.isTraversableContainerElement = function(node) {
 
 /**
  * Helper for |InferLabelForElement()| that infers a label, if possible, from
+ * an enclosing label.
+ * e.g. <label>Some Text<span><input ...></span></label>
+ *
+ * It is based on the logic in
+ *    string16 InferLabelFromEnclosingLabel(
+ *        const WebFormControlElement& element)
+ * in chromium/src/components/autofill/content/renderer/form_autofill_util.cc.
+ *
+ * @param {FormControlElement} element An element to examine.
+ * @return {string} The label of element.
+ */
+__gCrWeb.autofill.inferLabelFromEnclosingLabel = function(element) {
+  if (!element) {
+    return '';
+  }
+  var node = element.parentNode;
+  while (node && !__gCrWeb.autofill.hasTagName(node, 'label')) {
+    node = node.parentNode;
+  }
+  if (node) {
+    return __gCrWeb.autofill.findChildText(node);
+  }
+  return '';
+}
+
+/**
+ * Helper for |InferLabelForElement()| that infers a label, if possible, from
  * a surrounding div table,
  * e.g. <div>Some Text<span><input ...></span></div>
  * e.g. <div>Some Text</div><div><input ...></div>
@@ -1755,7 +1785,9 @@ __gCrWeb.autofill.inferLabelForElement = function(element) {
     }
 
     seenTagNames[tagName] = true;
-    if (tagName === "DIV") {
+    if (tagName === "LABEL") {
+      inferredLabel = __gCrWeb.autofill.inferLabelFromEnclosingLabel(element);
+    } else if (tagName === "DIV") {
       inferredLabel = __gCrWeb.autofill.inferLabelFromDivTable(element);
     } else if (tagName === "TD") {
       inferredLabel = __gCrWeb.autofill.inferLabelFromTableColumn(element);
@@ -1850,16 +1882,11 @@ __gCrWeb.autofill.fillFormField = function(data, field) {
 
     __gCrWeb.common.setInputElementValue(sanitizedValue, field, true);
     field.isAutofilled = true;
-  } else if (__gCrWeb.autofill.isSelectElement(field)) {
-    if (field.value !== data['value']) {
-      field.value = data['value'];
-      __gCrWeb.common.createAndDispatchHTMLEvent(field, 'change', true, false);
+    } else if (__gCrWeb.autofill.isSelectElement(field)) {
+      __gCrWeb.common.setInputElementValue(data['value'], field, true);
+    } else if (__gCrWeb.autofill.isCheckableElement(field)) {
+      __gCrWeb.common.setInputElementValue(data['is_checked'], field, true);
     }
-  } else {
-    if (__gCrWeb.autofill.isCheckableElement(field)) {
-      __gCrWeb.common.setInputElementChecked(data['is_checked'], field, true);
-    }
-  }
 };
 
 /**

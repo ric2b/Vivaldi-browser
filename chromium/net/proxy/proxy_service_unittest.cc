@@ -51,7 +51,7 @@ namespace {
 // This polling policy will decide to poll every 1 ms.
 class ImmediatePollPolicy : public ProxyService::PacPollPolicy {
  public:
-  ImmediatePollPolicy() {}
+  ImmediatePollPolicy() = default;
 
   Mode GetNextDelay(int error,
                     base::TimeDelta current_delay,
@@ -68,7 +68,7 @@ class ImmediatePollPolicy : public ProxyService::PacPollPolicy {
 // will never trigger a poll
 class NeverPollPolicy : public ProxyService::PacPollPolicy {
  public:
-  NeverPollPolicy() {}
+  NeverPollPolicy() = default;
 
   Mode GetNextDelay(int error,
                     base::TimeDelta current_delay,
@@ -84,7 +84,7 @@ class NeverPollPolicy : public ProxyService::PacPollPolicy {
 // This polling policy starts a poll immediately after network activity.
 class ImmediateAfterActivityPollPolicy : public ProxyService::PacPollPolicy {
  public:
-  ImmediateAfterActivityPollPolicy() {}
+  ImmediateAfterActivityPollPolicy() = default;
 
   Mode GetNextDelay(int error,
                     base::TimeDelta current_delay,
@@ -214,23 +214,10 @@ class TestResolveProxyDelegate : public ProxyDelegate {
     return proxy_retry_info_;
   }
 
-  void OnTunnelConnectCompleted(const HostPortPair& endpoint,
-                                const HostPortPair& proxy_server,
-                                int net_error) override {}
   void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
-  void OnBeforeTunnelRequest(const HostPortPair& proxy_server,
-                             HttpRequestHeaders* extra_headers) override {}
-  void OnTunnelHeadersReceived(
-      const HostPortPair& origin,
-      const HostPortPair& proxy_server,
-      const HttpResponseHeaders& response_headers) override {}
   bool IsTrustedSpdyProxy(const net::ProxyServer& proxy_server) override {
     return true;
   }
-  void GetAlternativeProxy(
-      const GURL& url,
-      const ProxyServer& resolved_proxy_server,
-      ProxyServer* alternative_proxy_server) const override {}
   void OnAlternativeProxyBroken(
       const ProxyServer& alternative_proxy_server) override {}
 
@@ -253,27 +240,14 @@ class TestProxyFallbackProxyDelegate : public ProxyDelegate {
                       const std::string& method,
                       const ProxyRetryInfoMap& proxy_retry_info,
                       ProxyInfo* result) override {}
-  void OnTunnelConnectCompleted(const HostPortPair& endpoint,
-                                const HostPortPair& proxy_server,
-                                int net_error) override {}
   void OnFallback(const ProxyServer& bad_proxy, int net_error) override {
     proxy_server_ = bad_proxy;
     proxy_fallback_net_error_ = net_error;
     on_proxy_fallback_called_ = true;
   }
-  void OnBeforeTunnelRequest(const HostPortPair& proxy_server,
-                             HttpRequestHeaders* extra_headers) override {}
-  void OnTunnelHeadersReceived(
-      const HostPortPair& origin,
-      const HostPortPair& proxy_server,
-      const HttpResponseHeaders& response_headers) override {}
   bool IsTrustedSpdyProxy(const net::ProxyServer& proxy_server) override {
     return true;
   }
-  void GetAlternativeProxy(
-      const GURL& url,
-      const ProxyServer& resolved_proxy_server,
-      ProxyServer* alternative_proxy_server) const override {}
   void OnAlternativeProxyBroken(
       const ProxyServer& alternative_proxy_server) override {}
 
@@ -525,7 +499,7 @@ TEST_F(ProxyServiceTest, PAC) {
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  ProxyService::PacRequest* request;
+  ProxyService::Request* request;
   BoundTestNetLog log;
 
   int rv = service.ResolveProxy(url, std::string(), &info, callback.callback(),
@@ -1974,7 +1948,7 @@ TEST_F(ProxyServiceTest, CancelInProgressRequest) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(url2, std::string(), &info2, callback2.callback(),
                             &request2, nullptr, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -1989,7 +1963,7 @@ TEST_F(ProxyServiceTest, CancelInProgressRequest) {
   GetPendingJobsForURLs(resolver, url1, url2, url3);
 
   // Cancel the second request
-  service.CancelPacRequest(request2);
+  service.CancelRequest(request2);
 
   JobMap jobs = GetPendingJobsForURLs(resolver, url1, url3);
 
@@ -2035,7 +2009,7 @@ TEST_F(ProxyServiceTest, InitialPACScriptDownload) {
 
   ProxyInfo info1;
   TestCompletionCallback callback1;
-  ProxyService::PacRequest* request1;
+  ProxyService::Request* request1;
   int rv =
       service.ResolveProxy(url1, std::string(), &info1, callback1.callback(),
                            &request1, nullptr, NetLogWithSource());
@@ -2047,14 +2021,14 @@ TEST_F(ProxyServiceTest, InitialPACScriptDownload) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(url2, std::string(), &info2, callback2.callback(),
                             &request2, nullptr, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
 
   ProxyInfo info3;
   TestCompletionCallback callback3;
-  ProxyService::PacRequest* request3;
+  ProxyService::Request* request3;
   rv = service.ResolveProxy(url3, std::string(), &info3, callback3.callback(),
                             &request3, nullptr, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -2204,7 +2178,7 @@ TEST_F(ProxyServiceTest, CancelWhilePACFetching) {
   // Start 3 requests.
   ProxyInfo info1;
   TestCompletionCallback callback1;
-  ProxyService::PacRequest* request1;
+  ProxyService::Request* request1;
   BoundTestNetLog log1;
   int rv = service.ResolveProxy(GURL("http://request1"), std::string(), &info1,
                                 callback1.callback(), &request1, nullptr,
@@ -2217,7 +2191,7 @@ TEST_F(ProxyServiceTest, CancelWhilePACFetching) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(GURL("http://request2"), std::string(), &info2,
                             callback2.callback(), &request2, nullptr,
                             NetLogWithSource());
@@ -2234,8 +2208,8 @@ TEST_F(ProxyServiceTest, CancelWhilePACFetching) {
   EXPECT_TRUE(factory->pending_requests().empty());
 
   // Cancel the first 2 jobs.
-  service.CancelPacRequest(request1);
-  service.CancelPacRequest(request2);
+  service.CancelRequest(request1);
+  service.CancelRequest(request2);
 
   // At this point the ProxyService should be waiting for the
   // ProxyScriptFetcher to invoke its completion callback, notifying it of
@@ -2311,7 +2285,7 @@ TEST_F(ProxyServiceTest, FallbackFromAutodetectToCustomPac) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(url2, std::string(), &info2, callback2.callback(),
                             &request2, nullptr, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -2395,7 +2369,7 @@ TEST_F(ProxyServiceTest, FallbackFromAutodetectToCustomPac2) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(url2, std::string(), &info2, callback2.callback(),
                             &request2, nullptr, NetLogWithSource());
   EXPECT_THAT(rv, IsError(ERR_IO_PENDING));
@@ -2472,7 +2446,7 @@ TEST_F(ProxyServiceTest, FallbackFromAutodetectToCustomToManual) {
 
   ProxyInfo info2;
   TestCompletionCallback callback2;
-  ProxyService::PacRequest* request2;
+  ProxyService::Request* request2;
   rv = service.ResolveProxy(GURL("http://request2"), std::string(), &info2,
                             callback2.callback(), &request2, nullptr,
                             NetLogWithSource());
@@ -3726,7 +3700,7 @@ TEST_F(ProxyServiceTest, OnShutdownWithLiveRequest) {
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  ProxyService::PacRequest* request;
+  ProxyService::Request* request;
   int rv = service.ResolveProxy(GURL("http://request/"), std::string(), &info,
                                 callback.callback(), &request, nullptr,
                                 NetLogWithSource());
@@ -3762,7 +3736,7 @@ TEST_F(ProxyServiceTest, OnShutdownFollowedByRequest) {
 
   ProxyInfo info;
   TestCompletionCallback callback;
-  ProxyService::PacRequest* request;
+  ProxyService::Request* request;
   int rv = service.ResolveProxy(GURL("http://request/"), std::string(), &info,
                                 callback.callback(), &request, nullptr,
                                 NetLogWithSource());

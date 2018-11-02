@@ -11,18 +11,20 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/ui/blocked_content/list_item_position.h"
 #include "chrome/browser/ui/blocked_content/popup_tracker.h"
 #include "chrome/browser/ui/blocked_content/tab_under_navigation_throttle.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
+#include "chrome/test/base/testing_profile.h"
 #include "components/rappor/public/rappor_parameters.h"
 #include "components/rappor/test_rappor_service.h"
 #include "components/ukm/content/source_url_recorder.h"
@@ -36,15 +38,19 @@
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
+#include "base/android/scoped_java_ref.h"
 #include "chrome/browser/ui/android/infobars/infobar_android.h"
-#endif  // defined(OS_ANDROID)
+#else
+#include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
+#endif
 
 class InfoBarAndroid;
 
 constexpr char kTabUnderVisibleTime[] = "Tab.TabUnder.VisibleTime";
 constexpr char kTabUnderVisibleTimeBefore[] = "Tab.TabUnder.VisibleTimeBefore";
 constexpr char kPopupToTabUnder[] = "Tab.TabUnder.PopupToTabUnderTime";
-constexpr char kTabUnderAction[] = "Tab.TabUnderAction";
+constexpr char kTabUnderActionOTR[] = "Tab.TabUnderAction.OTR";
+constexpr char kTabUnderActionNonOTR[] = "Tab.TabUnderAction.NonOTR";
 
 class PopupOpenerTabHelperTest : public ChromeRenderViewHostTestHarness {
  public:
@@ -53,11 +59,15 @@ class PopupOpenerTabHelperTest : public ChromeRenderViewHostTestHarness {
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
-    auto tick_clock = base::MakeUnique<base::SimpleTestTickClock>();
+    auto tick_clock = std::make_unique<base::SimpleTestTickClock>();
     raw_clock_ = tick_clock.get();
     PopupOpenerTabHelper::CreateForWebContents(web_contents(),
                                                std::move(tick_clock));
     InfoBarService::CreateForWebContents(web_contents());
+    TabSpecificContentSettings::CreateForWebContents(web_contents());
+#if !defined(OS_ANDROID)
+    FramebustBlockTabHelper::CreateForWebContents(web_contents());
+#endif
 
     // The tick clock needs to be advanced manually so it isn't set to null,
     // which the code uses to determine if it is set yet.
@@ -322,7 +332,7 @@ class BlockTabUnderTest : public PopupOpenerTabHelperTest {
 
   void SetUp() override {
     PopupOpenerTabHelperTest::SetUp();
-    scoped_feature_list_ = base::MakeUnique<base::test::ScopedFeatureList>();
+    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
     scoped_feature_list_->InitAndEnableFeature(
         TabUnderNavigationThrottle::kBlockTabUnders);
   }
@@ -344,7 +354,10 @@ class BlockTabUnderTest : public PopupOpenerTabHelperTest {
   void ExpectUIShown(bool shown) {
 #if defined(OS_ANDROID)
     EXPECT_EQ(shown, !!GetInfoBar());
-#endif  // defined(OS_ANDROID)
+#else
+    EXPECT_EQ(shown, FramebustBlockTabHelper::FromWebContents(web_contents())
+                         ->HasBlockedUrls());
+#endif
   }
 
   // content::WebContentsDelegate:
@@ -354,7 +367,7 @@ class BlockTabUnderTest : public PopupOpenerTabHelperTest {
   }
 
   void DisableFeature() {
-    scoped_feature_list_ = base::MakeUnique<base::test::ScopedFeatureList>();
+    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
     scoped_feature_list_->InitAndDisableFeature(
         TabUnderNavigationThrottle::kBlockTabUnders);
   }
@@ -365,6 +378,43 @@ class BlockTabUnderTest : public PopupOpenerTabHelperTest {
 
   DISALLOW_COPY_AND_ASSIGN(BlockTabUnderTest);
 };
+
+// Parameterized by a boolean which determines if an incognito profile should be
+// used.
+class BlockTabUnderIncognitoTest : public BlockTabUnderTest,
+                                   public testing::WithParamInterface<bool> {
+ public:
+  BlockTabUnderIncognitoTest() {}
+  ~BlockTabUnderIncognitoTest() override {}
+
+  content::BrowserContext* CreateBrowserContext() override {
+    original_profile_ = ChromeRenderViewHostTestHarness::CreateBrowserContext();
+    incognito_profile_ =
+        static_cast<Profile*>(original_profile_)->GetOffTheRecordProfile();
+    return original_profile_;
+  }
+
+  content::BrowserContext* GetBrowserContext() override {
+    return GetParam() ? incognito_profile_ : original_profile_;
+  }
+
+  const char* GetActionHistogram() const {
+    return GetParam() ? kTabUnderActionOTR : kTabUnderActionNonOTR;
+  }
+
+ private:
+  // Owned by the original profile.
+  content::BrowserContext* incognito_profile_ = nullptr;
+
+  // Owned by the RenderViewHostTestHarness.
+  content::BrowserContext* original_profile_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(BlockTabUnderIncognitoTest);
+};
+
+INSTANTIATE_TEST_CASE_P(,
+                        BlockTabUnderIncognitoTest,
+                        testing::Values(true, false));
 
 TEST_F(BlockTabUnderTest, SimpleTabUnder_IsBlocked) {
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
@@ -489,7 +539,13 @@ TEST_F(BlockTabUnderTest, TabUnderWithSubsequentGesture_IsNotBlocked) {
   // A subsequent navigation should be allowed, even if it is classified as a
   // suspicious redirect.
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://example.test2/")));
+#if defined(OS_ANDROID)
   ExpectUIShown(false);
+#else
+  EXPECT_EQ(1u, FramebustBlockTabHelper::FromWebContents(web_contents())
+                    ->blocked_urls()
+                    .size());
+#endif
 }
 
 TEST_F(BlockTabUnderTest, MultipleRedirectAttempts_AreBlocked) {
@@ -505,11 +561,11 @@ TEST_F(BlockTabUnderTest, MultipleRedirectAttempts_AreBlocked) {
   ExpectUIShown(true);
 }
 
-TEST_F(BlockTabUnderTest,
+TEST_P(BlockTabUnderIncognitoTest,
        MultipleRedirectAttempts_AreBlockedAndLogsActionMetrics) {
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
   histogram_tester()->ExpectUniqueSample(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kStarted), 1);
   SimulatePopup();
 
@@ -519,19 +575,47 @@ TEST_F(BlockTabUnderTest,
   EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
 
   histogram_tester()->ExpectBucketCount(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kStarted), 4);
   histogram_tester()->ExpectBucketCount(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kBlocked), 3);
   histogram_tester()->ExpectBucketCount(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kDidTabUnder), 3);
-  histogram_tester()->ExpectTotalCount(kTabUnderAction, 10);
+  histogram_tester()->ExpectTotalCount(GetActionHistogram(), 10);
+}
+
+TEST_P(BlockTabUnderIncognitoTest, ClickThroughAction) {
+  EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
+  histogram_tester()->ExpectUniqueSample(
+      GetActionHistogram(),
+      static_cast<int>(TabUnderNavigationThrottle::Action::kStarted), 1);
+  SimulatePopup();
+
+  // Populate two blocked URLs in the UI.
+  const GURL blocked_url("https://example.test/");
+  EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
+  EXPECT_FALSE(NavigateAndCommitWithoutGesture(blocked_url));
+#if defined(OS_ANDROID)
+  InfoBarAndroid* infobar = GetInfoBar();
+  base::android::JavaParamRef<jobject> jobj(nullptr);
+  infobar->OnLinkClicked(nullptr /* env */, jobj);
+#else
+  FramebustBlockTabHelper* framebust =
+      FramebustBlockTabHelper::FromWebContents(web_contents());
+  framebust->OnBlockedUrlClicked(1);
+  histogram_tester()->ExpectUniqueSample(
+      "Tab.TabUnder.ClickThroughPosition",
+      static_cast<int>(ListItemPosition::kLastItem), 1);
+#endif
+  histogram_tester()->ExpectBucketCount(
+      GetActionHistogram(),
+      static_cast<int>(TabUnderNavigationThrottle::Action::kClickedThrough), 1);
 }
 
 // kDidTabUnder is not reported multiple times for redirects.
-TEST_F(BlockTabUnderTest, DisableFeature_LogsDidTabUnder) {
+TEST_P(BlockTabUnderIncognitoTest, DisableFeature_LogsDidTabUnder) {
   DisableFeature();
   EXPECT_TRUE(NavigateAndCommitWithoutGesture(GURL("https://first.test/")));
   SimulatePopup();
@@ -545,12 +629,12 @@ TEST_F(BlockTabUnderTest, DisableFeature_LogsDidTabUnder) {
   simulator->Redirect(a_url);
   simulator->Commit();
   histogram_tester()->ExpectBucketCount(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kStarted), 2);
   histogram_tester()->ExpectBucketCount(
-      kTabUnderAction,
+      GetActionHistogram(),
       static_cast<int>(TabUnderNavigationThrottle::Action::kDidTabUnder), 1);
-  histogram_tester()->ExpectTotalCount(kTabUnderAction, 3);
+  histogram_tester()->ExpectTotalCount(GetActionHistogram(), 3);
 }
 
 TEST_F(BlockTabUnderTest, LogsRapporAndUkm) {

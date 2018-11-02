@@ -15,82 +15,7 @@
 
 namespace mojo {
 
-using blink::mojom::FetchRedirectMode;
-using blink::mojom::RequestContextFrameType;
 using blink::mojom::RequestContextType;
-
-FetchRedirectMode
-EnumTraits<FetchRedirectMode, blink::WebURLRequest::FetchRedirectMode>::ToMojom(
-    blink::WebURLRequest::FetchRedirectMode input) {
-  switch (input) {
-    case blink::WebURLRequest::kFetchRedirectModeFollow:
-      return FetchRedirectMode::FOLLOW;
-    case blink::WebURLRequest::kFetchRedirectModeError:
-      return FetchRedirectMode::ERROR_MODE;
-    case blink::WebURLRequest::kFetchRedirectModeManual:
-      return FetchRedirectMode::MANUAL;
-  }
-
-  NOTREACHED();
-  return FetchRedirectMode::ERROR_MODE;
-}
-
-bool EnumTraits<FetchRedirectMode, blink::WebURLRequest::FetchRedirectMode>::
-    FromMojom(FetchRedirectMode input,
-              blink::WebURLRequest::FetchRedirectMode* out) {
-  switch (input) {
-    case FetchRedirectMode::FOLLOW:
-      *out = blink::WebURLRequest::kFetchRedirectModeFollow;
-      return true;
-    case FetchRedirectMode::ERROR_MODE:
-      *out = blink::WebURLRequest::kFetchRedirectModeError;
-      return true;
-    case FetchRedirectMode::MANUAL:
-      *out = blink::WebURLRequest::kFetchRedirectModeManual;
-      return true;
-  }
-
-  return false;
-}
-
-RequestContextFrameType
-EnumTraits<RequestContextFrameType, blink::WebURLRequest::FrameType>::ToMojom(
-    blink::WebURLRequest::FrameType input) {
-  switch (input) {
-    case blink::WebURLRequest::kFrameTypeAuxiliary:
-      return RequestContextFrameType::AUXILIARY;
-    case blink::WebURLRequest::kFrameTypeNested:
-      return RequestContextFrameType::NESTED;
-    case blink::WebURLRequest::kFrameTypeNone:
-      return RequestContextFrameType::NONE;
-    case blink::WebURLRequest::kFrameTypeTopLevel:
-      return RequestContextFrameType::TOP_LEVEL;
-  }
-
-  NOTREACHED();
-  return RequestContextFrameType::NONE;
-}
-
-bool EnumTraits<RequestContextFrameType, blink::WebURLRequest::FrameType>::
-    FromMojom(RequestContextFrameType input,
-              blink::WebURLRequest::FrameType* out) {
-  switch (input) {
-    case RequestContextFrameType::AUXILIARY:
-      *out = blink::WebURLRequest::kFrameTypeAuxiliary;
-      return true;
-    case RequestContextFrameType::NESTED:
-      *out = blink::WebURLRequest::kFrameTypeNested;
-      return true;
-    case RequestContextFrameType::NONE:
-      *out = blink::WebURLRequest::kFrameTypeNone;
-      return true;
-    case RequestContextFrameType::TOP_LEVEL:
-      *out = blink::WebURLRequest::kFrameTypeTopLevel;
-      return true;
-  }
-
-  return false;
-}
 
 RequestContextType
 EnumTraits<RequestContextType, blink::WebURLRequest::RequestContext>::ToMojom(
@@ -367,7 +292,7 @@ bool StructTraits<blink::mojom::FetchAPIRequestDataView,
          blink::WebServiceWorkerRequest* out) {
   network::mojom::FetchRequestMode mode;
   blink::WebURLRequest::RequestContext requestContext;
-  blink::WebURLRequest::FrameType frameType;
+  network::mojom::RequestContextFrameType frameType;
   blink::KURL url;
   WTF::String method;
   WTF::HashMap<WTF::String, WTF::String> headers;
@@ -375,7 +300,7 @@ bool StructTraits<blink::mojom::FetchAPIRequestDataView,
   blink::mojom::blink::BlobPtr blob;
   blink::Referrer referrer;
   network::mojom::FetchCredentialsMode credentialsMode;
-  blink::WebURLRequest::FetchRedirectMode redirectMode;
+  network::mojom::FetchRedirectMode redirectMode;
   WTF::String integrity;
   WTF::String clientId;
 

@@ -44,7 +44,6 @@ struct FaviconURL;
 struct LoadCommittedDetails;
 struct PrunedDetails;
 struct Referrer;
-struct ResourceRequestDetails;
 
 // An observer API implemented by classes which are interested in various page
 // load events from WebContents.  They also get a chance to filter IPC messages.
@@ -82,7 +81,7 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
   //
   // This method, in combination with |FrameDeleted|, is appropriate for
   // observers wishing to track the set of current RenderFrameHosts -- i.e.,
-  // those hosts that would be visited by calling WebContents::ForEachFrame.
+  // those hosts that would be visited by calling WebContents::ForEachFrame().
   virtual void RenderFrameHostChanged(RenderFrameHost* old_host,
                                       RenderFrameHost* new_host) {}
 
@@ -252,10 +251,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener {
       const std::string& mime_type,
       ResourceType resource_type) {}
 
-  // This method is invoked when a response has been received for a resource
+  // This method is invoked when a response has been received for a subresource
   // request.
-  virtual void DidGetResourceResponseStart(
-      const ResourceRequestDetails& details) {}
+  virtual void SubresourceResponseStarted(const GURL& url,
+                                          const GURL& referrer,
+                                          const std::string& method,
+                                          ResourceType resource_type,
+                                          const std::string& ip) {}
 
   // This method is invoked when the extdata has been set (Vivaldi).
   virtual void ExtDataSet(WebContents* contents) {}

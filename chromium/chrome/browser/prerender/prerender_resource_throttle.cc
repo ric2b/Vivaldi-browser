@@ -11,6 +11,7 @@
 #include "chrome/browser/prerender/prerender_final_status.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_util.h"
+#include "chrome/common/prerender_util.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents.h"
@@ -26,9 +27,6 @@ using content::ResourceType;
 namespace prerender {
 
 namespace {
-static const char kFollowOnlyWhenPrerenderShown[] =
-    "follow-only-when-prerender-shown";
-
 PrerenderContents* g_prerender_contents_for_testing;
 
 // Returns true if the response has a "no-store" cache control header.
@@ -85,7 +83,6 @@ void PrerenderResourceThrottle::OverridePrerenderContentsForTesting(
 
 PrerenderResourceThrottle::PrerenderResourceThrottle(net::URLRequest* request)
     : request_(request),
-      load_flags_(net::LOAD_NORMAL),
       prerender_throttle_info_(new PrerenderThrottleInfo()) {
 // Priorities for prerendering requests are lowered, to avoid competing with
 // other page loads, except on Android where this is less likely to be a
@@ -170,7 +167,6 @@ const char* PrerenderResourceThrottle::GetNameForLogging() const {
 
 void PrerenderResourceThrottle::ResumeHandler() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  request_->SetLoadFlags(request_->load_flags() | load_flags_);
   Resume();
 }
 
@@ -201,14 +197,10 @@ void PrerenderResourceThrottle::WillStartRequestOnUI(
     prerender_throttle_info->Set(prerender_contents->prerender_mode(),
                                  prerender_contents->origin(),
                                  prerender_contents->prerender_manager());
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&PrerenderResourceThrottle::SetPrerenderMode, throttle,
-                       prerender_contents->prerender_mode()));
 
     // Abort any prerenders that spawn requests that use unsupported HTTP
     // methods or schemes.
-    if (!prerender_contents->IsValidHttpMethod(method)) {
+    if (!IsValidHttpMethod(prerender_contents->prerender_mode(), method)) {
       // If this is a full prerender, cancel the prerender in response to
       // invalid requests.  For prefetches, cancel invalid requests but keep the
       // prefetch going, unless it's the main frame that's invalid.
@@ -217,7 +209,7 @@ void PrerenderResourceThrottle::WillStartRequestOnUI(
         prerender_contents->Destroy(FINAL_STATUS_INVALID_HTTP_METHOD);
       }
       cancel = true;
-    } else if (!PrerenderManager::DoesSubresourceURLHaveValidScheme(url) &&
+    } else if (!DoesSubresourceURLHaveValidScheme(url) &&
                resource_type != content::RESOURCE_TYPE_MAIN_FRAME) {
       // Destroying the prerender for unsupported scheme only for non-main
       // resource to allow chrome://crash to actually crash in the
@@ -266,12 +258,12 @@ void PrerenderResourceThrottle::WillRedirectRequestOnUI(
   PrerenderContents* prerender_contents =
       PrerenderContentsFromGetter(web_contents_getter);
   if (prerender_contents) {
-    prerender_contents->prerender_manager()->RecordPrefetchResponseReceived(
-        prerender_contents->origin(),
+    RecordPrefetchResponseReceived(
+        PrerenderHistograms::GetHistogramPrefix(prerender_contents->origin()),
         content::IsResourceTypeFrame(resource_type), true /* is_redirect */,
         is_no_store);
     // Abort any prerenders with requests which redirect to invalid schemes.
-    if (!PrerenderManager::DoesURLHaveValidScheme(new_url)) {
+    if (!DoesURLHaveValidScheme(new_url)) {
       prerender_contents->Destroy(FINAL_STATUS_UNSUPPORTED_SCHEME);
       ReportUnsupportedPrerenderScheme(new_url);
       cancel = true;
@@ -313,11 +305,12 @@ void PrerenderResourceThrottle::WillProcessResponseOnUI(
   if (prerender_throttle_info->mode() != PREFETCH_ONLY)
     return;
 
-  prerender_throttle_info->manager()->RecordPrefetchResponseReceived(
-      prerender_throttle_info->origin(), is_main_resource,
-      false /* is_redirect */, is_no_store);
-  prerender_throttle_info->manager()->RecordPrefetchRedirectCount(
-      prerender_throttle_info->origin(), is_main_resource, redirect_count);
+  auto histogram_prefix = PrerenderHistograms::GetHistogramPrefix(
+      prerender_throttle_info->origin());
+  RecordPrefetchResponseReceived(histogram_prefix, is_main_resource,
+                                 false /* is_redirect */, is_no_store);
+  RecordPrefetchRedirectCount(histogram_prefix, is_main_resource,
+                              redirect_count);
 }
 
 // static
@@ -327,11 +320,6 @@ PrerenderContents* PrerenderResourceThrottle::PrerenderContentsFromGetter(
   if (g_prerender_contents_for_testing)
     return g_prerender_contents_for_testing;
   return PrerenderContents::FromWebContents(web_contents_getter.Run());
-}
-
-void PrerenderResourceThrottle::SetPrerenderMode(PrerenderMode mode) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  load_flags_ = (mode == PREFETCH_ONLY) ? net::LOAD_PREFETCH : net::LOAD_NORMAL;
 }
 
 }  // namespace prerender

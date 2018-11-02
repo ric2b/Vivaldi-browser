@@ -45,8 +45,6 @@ namespace ash {
 //
 class ASH_EXPORT LoginPinView : public NonAccessibleView {
  public:
-  // Spacing between each pin button.
-  static const int kButtonSeparatorSizeDp;
   // Size of each button.
   static const int kButtonSizeDp;
 
@@ -79,9 +77,6 @@ class ASH_EXPORT LoginPinView : public NonAccessibleView {
 
   // Called when the password field text changed.
   void OnPasswordTextChanged(bool is_empty);
-
-  // views::View:
-  bool OnKeyPressed(const ui::KeyEvent& event) override;
 
  private:
   class BackspacePinButton;

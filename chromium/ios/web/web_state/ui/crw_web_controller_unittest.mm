@@ -6,6 +6,7 @@
 
 #import <WebKit/WebKit.h>
 
+#include <memory>
 #include <utility>
 
 #include "base/ios/ios_util.h"
@@ -118,6 +119,9 @@ void WaitForZoomRendering(CRWWebController* webController,
 // Test fixture for testing CRWWebController. Stubs out web view.
 class CRWWebControllerTest : public WebTestWithWebController {
  protected:
+  CRWWebControllerTest()
+      : WebTestWithWebController(std::make_unique<TestWebClient>()) {}
+
   void SetUp() override {
     WebTestWithWebController::SetUp();
     mock_web_view_ = CreateMockWebView();
@@ -135,6 +139,11 @@ class CRWWebControllerTest : public WebTestWithWebController {
     EXPECT_OCMOCK_VERIFY(mock_web_view_);
     [web_controller() resetInjectedWebViewContentView];
     WebTestWithWebController::TearDown();
+  }
+
+  TestWebClient* GetWebClient() override {
+    return static_cast<TestWebClient*>(
+        WebTestWithWebController::GetWebClient());
   }
 
   // The value for web view OCMock objects to expect for |-setFrame:|.
@@ -502,19 +511,20 @@ TEST_F(CRWWebControllerInvalidUrlTest, IFrameWithInvalidURL) {
   EXPECT_EQ(url, web_state()->GetLastCommittedURL());
 }
 
-// Real WKWebView is required for CRWWebControllerFormActivityTest.
-typedef WebTestWithWebState CRWWebControllerFormActivityTest;
+// Real WKWebView is required for CRWWebControllerMessageFromIFrame.
+typedef WebTestWithWebState CRWWebControllerMessageFromIFrame;
 
-// Tests that keyup event correctly delivered to WebStateObserver.
-TEST_F(CRWWebControllerFormActivityTest, KeyUpEvent) {
-  TestWebStateObserver observer(web_state());
-  LoadHtml(@"<p></p>");
-  ASSERT_FALSE(observer.form_activity_info());
-  ExecuteJavaScript(@"document.dispatchEvent(new KeyboardEvent('keyup'));");
-  TestFormActivityInfo* info = observer.form_activity_info();
-  ASSERT_TRUE(info);
-  EXPECT_EQ("keyup", info->form_activity.type);
-  EXPECT_FALSE(info->form_activity.input_missing);
+// Tests that invalid message from iframe does not cause a crash.
+TEST_F(CRWWebControllerMessageFromIFrame, InvalidMessage) {
+  static NSString* const kHTMLIFrameSendsInvalidMessage =
+      @"<body><iframe name='f'></iframe></body>";
+
+  LoadHtml(kHTMLIFrameSendsInvalidMessage);
+
+  // Sending unknown command from iframe should not cause a crash.
+  ExecuteJavaScript(
+      @"var bad_message = {'command' : 'unknown.command'};"
+       "frames['f'].__gCrWeb.message.invokeOnHost(bad_message);");
 }
 
 // Real WKWebView is required for CRWWebControllerJSExecutionTest.
@@ -560,6 +570,8 @@ class CRWWebControllerDownloadTest : public CRWWebControllerTest {
     // Wait for decidePolicyForNavigationResponse: callback.
     __block bool callback_called = false;
     [navigation_delegate_ webView:mock_web_view_
+        didStartProvisionalNavigation:nil];
+    [navigation_delegate_ webView:mock_web_view_
         decidePolicyForNavigationResponse:navigation_response
                           decisionHandler:^(WKNavigationResponsePolicy policy) {
                             callback_called = true;
@@ -597,6 +609,9 @@ TEST_F(CRWWebControllerDownloadTest, CreationWithNSURLResponse) {
   EXPECT_EQ(content_length, task->GetTotalBytes());
   EXPECT_EQ("", task->GetContentDisposition());
   EXPECT_EQ(kTestMimeType, task->GetMimeType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      task->GetTransitionType(),
+      ui::PageTransition::PAGE_TRANSITION_CLIENT_REDIRECT));
 }
 
 // Tests that webView:decidePolicyForNavigationResponse:decisionHandler: creates
@@ -622,6 +637,9 @@ TEST_F(CRWWebControllerDownloadTest, CreationWithNSHTTPURLResponse) {
   EXPECT_EQ(-1, task->GetTotalBytes());
   EXPECT_EQ(kContentDisposition, task->GetContentDisposition());
   EXPECT_EQ("", task->GetMimeType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      task->GetTransitionType(),
+      ui::PageTransition::PAGE_TRANSITION_CLIENT_REDIRECT));
 }
 
 // Tests |currentURLWithTrustLevel:| method.
@@ -1021,7 +1039,7 @@ class LoadIfNecessaryTest : public WebTest {
  protected:
   void SetUp() override {
     WebTest::SetUp();
-    web_state_ = base::MakeUnique<WebStateImpl>(
+    web_state_ = std::make_unique<WebStateImpl>(
         WebState::CreateParams(GetBrowserState()), GetTestSessionStorage());
   }
 

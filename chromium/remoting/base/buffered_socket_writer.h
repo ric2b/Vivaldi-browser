@@ -14,6 +14,7 @@
 #include "base/threading/thread_checker.h"
 #include "net/base/completion_callback.h"
 #include "net/base/io_buffer.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 class Socket;
@@ -24,9 +25,11 @@ namespace remoting {
 // BufferedSocketWriter implement write data queue for stream sockets.
 class BufferedSocketWriter {
  public:
-  typedef base::Callback<int(const scoped_refptr<net::IOBuffer>& buf,
-                             int buf_len,
-                             const net::CompletionCallback& callback)>
+  typedef base::Callback<int(
+      const scoped_refptr<net::IOBuffer>& buf,
+      int buf_len,
+      const net::CompletionCallback& callback,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation)>
       WriteCallback;
   typedef base::Callback<void(int)> WriteFailedCallback;
 
@@ -46,7 +49,8 @@ class BufferedSocketWriter {
   // Puts a new data chunk in the buffer. If called before Start() then all data
   // is buffered until Start().
   void Write(const scoped_refptr<net::IOBufferWithSize>& buffer,
-             const base::Closure& done_task);
+             const base::Closure& done_task,
+             const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   // Returns true when there is data waiting to be written.
   bool has_data_pending() { return !queue_.empty(); }

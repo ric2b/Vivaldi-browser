@@ -41,6 +41,8 @@
 #include "core/css/CSSValueList.h"
 #include "core/css/StyleRule.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/parser/AtRuleDescriptorValueSet.h"
+#include "core/css/parser/AtRuleDescriptors.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/Text.h"
@@ -133,7 +135,7 @@ SerializerMarkupAccumulator::SerializerMarkupAccumulator(
       document_(&document),
       nodes_(nodes) {}
 
-SerializerMarkupAccumulator::~SerializerMarkupAccumulator() {}
+SerializerMarkupAccumulator::~SerializerMarkupAccumulator() = default;
 
 void SerializerMarkupAccumulator::AppendCustomAttributes(
     StringBuilder& result,
@@ -406,7 +408,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
   double css_start_time = 0;
   if (!is_serializing_css_) {
     is_serializing_css_ = true;
-    css_start_time = MonotonicallyIncreasingTime();
+    css_start_time = CurrentTimeTicksInSeconds();
   }
 
   // If this CSS is inlined its definition was already serialized with the frame
@@ -449,7 +451,7 @@ void FrameSerializer::SerializeCSSStyleSheet(CSSStyleSheet& style_sheet,
                         ("PageSerialization.SerializationTime.CSSElement", 0,
                          maxSerializationTimeUmaMicroseconds, 50));
     css_histogram.Count(
-        static_cast<int64_t>((MonotonicallyIncreasingTime() - css_start_time) *
+        static_cast<int64_t>((CurrentTimeTicksInSeconds() - css_start_time) *
                              secondsToMicroseconds));
   }
 }
@@ -534,7 +536,7 @@ void FrameSerializer::AddImageToResources(ImageResourceContent* image,
 
   TRACE_EVENT2("page-serialization", "FrameSerializer::addImageToResources",
                "type", "image", "url", url.ElidedString().Utf8().data());
-  double image_start_time = MonotonicallyIncreasingTime();
+  double image_start_time = CurrentTimeTicksInSeconds();
 
   scoped_refptr<const SharedBuffer> data = image->GetImage()->Data();
   AddToResources(image->GetResponse().MimeType(),
@@ -549,9 +551,9 @@ void FrameSerializer::AddImageToResources(ImageResourceContent* image,
     DEFINE_STATIC_LOCAL(CustomCountHistogram, image_histogram,
                         ("PageSerialization.SerializationTime.ImageElement", 0,
                          maxSerializationTimeUmaMicroseconds, 50));
-    image_histogram.Count(static_cast<int64_t>(
-        (MonotonicallyIncreasingTime() - image_start_time) *
-        secondsToMicroseconds));
+    image_histogram.Count(
+        static_cast<int64_t>((CurrentTimeTicksInSeconds() - image_start_time) *
+                             secondsToMicroseconds));
   }
 }
 
@@ -587,6 +589,21 @@ void FrameSerializer::RetrieveResourcesForProperties(
   }
 }
 
+void FrameSerializer::RetrieveResourcesForProperties(
+    const AtRuleDescriptorValueSet* descriptor_value_set,
+    Document& document) {
+  if (!descriptor_value_set)
+    return;
+
+  // Skip invalid (0).
+  for (unsigned i = 1; i < numAtRuleDescriptors; ++i) {
+    AtRuleDescriptorID id = static_cast<AtRuleDescriptorID>(i);
+    const CSSValue* value = descriptor_value_set->GetPropertyCSSValue(id);
+    if (value)
+      RetrieveResourcesForCSSValue(*value, document);
+  }
+}
+
 void FrameSerializer::RetrieveResourcesForCSSValue(const CSSValue& css_value,
                                                    Document& document) {
   if (css_value.IsImageValue()) {
@@ -606,7 +623,7 @@ void FrameSerializer::RetrieveResourcesForCSSValue(const CSSValue& css_value,
       return;
     }
 
-    AddFontToResources(font_face_src_value.Fetch(&document));
+    AddFontToResources(font_face_src_value.Fetch(&document, nullptr));
   } else if (css_value.IsValueList()) {
     const CSSValueList& css_value_list = ToCSSValueList(css_value);
     for (unsigned i = 0; i < css_value_list.length(); i++)

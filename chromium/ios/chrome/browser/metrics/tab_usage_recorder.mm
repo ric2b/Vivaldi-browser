@@ -370,7 +370,7 @@ bool TabUsageRecorder::ShouldIgnoreWebState(web::WebState* web_state) {
   web::NavigationItem* pending_item =
       web_state->GetNavigationManager()->GetPendingItem();
   if (pending_item)
-    return pending_item->GetURL().SchemeIs(kChromeUIScheme);
+    return pending_item->GetVirtualURL().SchemeIs(kChromeUIScheme);
 
   web::NavigationItem* last_committed_item =
       web_state->GetNavigationManager()->GetLastCommittedItem();
@@ -503,7 +503,7 @@ void TabUsageRecorder::WebStateActivatedAt(WebStateList* web_state_list,
                                            web::WebState* old_web_state,
                                            web::WebState* new_web_state,
                                            int active_index,
-                                           bool user_action) {
-  if (user_action)
+                                           int reason) {
+  if (reason & WebStateListObserver::CHANGE_REASON_USER_ACTION)
     RecordTabSwitched(old_web_state, new_web_state);
 }

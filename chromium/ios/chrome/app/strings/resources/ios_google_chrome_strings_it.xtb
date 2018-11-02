@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="it">
 <translation id="1326317727527857210">Accedi a Chrome per trovare le tue schede degli altri dispositivi.</translation>
-<translation id="1685087038067318291">Consente di trovare le pagine web inviate da dispositivi vicini. Quando il Bluetooth è attivo, Chrome può raccogliere le pagine web associate ai dispositivi nelle vicinanze e inviarle in forma anonima a Google per individuare le pagine più utili. <ph name="BEGIN_LINK" />Ulteriori informazioni<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Informativa sulla privacy di Google Chrome</translation>
+<translation id="1863312987075920112">Se usi questa applicazione, accetti i <ph name="BEGIN_LINK_TOS" />Termini di servizio<ph name="END_LINK_TOS" /> e l'<ph name="BEGIN_LINK_PRIVACY" />Informativa sulla privacy<ph name="END_LINK_PRIVACY" /> di Chrome.</translation>
 <translation id="2147651015520127414">Chrome ha verificato che <ph name="ISSUER" /> ha emesso il certificato del sito web.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Tutti i diritti riservati.</translation>
 <translation id="2342981853652716282">Accedi a Chrome per trovare i tuoi preferiti, le password e altre impostazioni su tutti i tuoi dispositivi.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Alcuni componenti aggiuntivi provocano l'arresto anomalo di Chrome. Disinstallali.</translation>
 <translation id="4615174829807303908">Stai per uscire da un account gestito da <ph name="SIGNOUT_MANAGED_DOMAIN" />. I dati di Chrome verranno eliminati da questo dispositivo, ma rimarranno memorizzati nel tuo account Google.</translation>
 <translation id="5389212809648216794">Google Chrome non può utilizzare la videocamera perché è attualmente utilizzata da un'altra applicazione</translation>
-<translation id="5566557026214762153">Se utilizzi questa applicazione, accetti i <ph name="BEGIN_LINK" />Termini di servizio<ph name="END_LINK" /> di Chrome.</translation>
 <translation id="5639704535586432836">Apri impostazioni &gt; Privacy &gt; Fotocamera &gt; Google Chrome e attiva la videocamera.</translation>
 <translation id="5642200033778930880">Google Chrome non può utilizzare la videocamera in modalità Visualizzazione divisa</translation>
 <translation id="5703130498371792817">Ti piace Chrome? <ph name="BEGIN_LINK" />Valuta questa app<ph name="END_LINK" /></translation>

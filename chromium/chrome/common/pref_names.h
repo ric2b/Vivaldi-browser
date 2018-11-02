@@ -20,6 +20,7 @@
 namespace prefs {
 
 // Profile prefs. Please add Local State prefs below instead.
+extern const char kAbusiveExperienceInterventionEnforce[];
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
 extern const char kSafeBrowsingForTrustedSourcesEnabled[];
@@ -220,6 +221,8 @@ extern const char kChromeOSReleaseNotesVersion[];
 extern const char kDisplayPowerState[];
 extern const char kDisplayProperties[];
 extern const char kDisplayTouchAssociations[];
+extern const char kExternalDisplayMirrorInfo[];
+extern const char kDisplayMixedMirrorModeParams[];
 extern const char kSecondaryDisplays[];
 extern const char kDisplayRotationLock[];
 extern const char kNoteTakingAppId[];
@@ -328,7 +331,6 @@ extern const char kPluginsAlwaysOpenPdfExternally[];
 extern const char kPluginsShowDetails[];
 #endif
 extern const char kPluginsAllowOutdated[];
-extern const char kPluginsAlwaysAuthorize[];
 extern const char kRunAllFlashInAllowMode[];
 #if BUILDFLAG(ENABLE_PLUGINS)
 extern const char kPluginsMetadata[];
@@ -343,7 +345,6 @@ extern const char kShowUpdatePromotionInfoBar[];
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const char kUseCustomChromeFrame[];
 #endif
-extern const char kBackShortcutBubbleShownCount[];
 #if BUILDFLAG(ENABLE_PLUGINS)
 extern const char kContentSettingsPluginWhitelist[];
 #endif
@@ -796,7 +797,7 @@ extern const char kRegisteredSupervisedUserWhitelists[];
 
 extern const char kCloudPolicyOverridesMachinePolicy[];
 
-#if BUILDFLAG(ENABLE_BACKGROUND)
+#if BUILDFLAG(ENABLE_BACKGROUND_MODE)
 extern const char kRestartInBackground[];
 #endif
 
@@ -839,7 +840,10 @@ extern const char kSearchGeolocationPreDisclosureMetricsRecorded[];
 extern const char kSearchGeolocationPostDisclosureMetricsRecorded[];
 #endif
 
-extern const char kDSEGeolocationSetting[];
+extern const char kDSEGeolocationSettingDeprecated[];
+
+extern const char kDSEPermissionsSettings[];
+extern const char kDSEWasDisabledByPolicy[];
 
 extern const char kWebShareVisitedTargets[];
 
@@ -903,6 +907,13 @@ extern const char kUnsafelyTreatInsecureOriginAsSecure[];
 
 extern const char kIsolateOrigins[];
 extern const char kSitePerProcess[];
+extern const char kWebDriverOverridesIncompatiblePolicies[];
+
+#if defined(OS_WIN)
+// Preference for controlling whether or not third party blocking is enabled on
+// Windows.
+extern const char kThirdPartyBlockingEnabled[];
+#endif
 
 }  // namespace prefs
 

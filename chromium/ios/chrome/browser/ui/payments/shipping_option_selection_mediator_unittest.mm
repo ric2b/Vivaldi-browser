@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/ui/payments/shipping_option_selection_mediator.h"
 
+#include <memory>
+
 #include "base/mac/foundation_util.h"
 #include "components/payments/core/payment_details.h"
 #include "components/payments/core/payment_shipping_option.h"
@@ -27,22 +29,22 @@ class PaymentRequestShippingOptionSelectionMediatorTest
   // Returns a PaymentDetails instance with two unselected shipping options.
   payments::PaymentDetails CreateDetailsWithUnselectedShippingOptions() {
     payments::PaymentDetails details;
-    details.total = base::MakeUnique<payments::PaymentItem>();
+    details.total = std::make_unique<payments::PaymentItem>();
     details.total->label = "Total Cost";
-    details.total->amount.value = "9.99";
-    details.total->amount.currency = "USD";
+    details.total->amount->value = "9.99";
+    details.total->amount->currency = "USD";
     payments::PaymentShippingOption option1;
     option1.id = "1";
     option1.label = "option 1";
-    option1.amount.value = "0.99";
-    option1.amount.currency = "USD";
+    option1.amount->value = "0.99";
+    option1.amount->currency = "USD";
     option1.selected = false;
     details.shipping_options.push_back(std::move(option1));
     payments::PaymentShippingOption option2;
     option2.id = "2";
     option2.label = "option 2";
-    option2.amount.value = "1.99";
-    option2.amount.currency = "USD";
+    option2.amount->value = "1.99";
+    option2.amount->currency = "USD";
     option2.selected = false;
     details.shipping_options.push_back(std::move(option2));
     return details;

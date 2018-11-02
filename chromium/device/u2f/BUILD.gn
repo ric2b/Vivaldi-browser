@@ -7,14 +7,41 @@ import("//testing/libfuzzer/fuzzer_test.gni")
 
 source_set("u2f") {
   sources = [
+    "attestation_object.cc",
+    "attestation_object.h",
+    "attestation_statement.cc",
+    "attestation_statement.h",
+    "attested_credential_data.cc",
+    "attested_credential_data.h",
+    "authenticator_data.cc",
+    "authenticator_data.h",
+    "ec_public_key.cc",
+    "ec_public_key.h",
+    "fido_attestation_statement.cc",
+    "fido_attestation_statement.h",
+    "public_key.cc",
+    "public_key.h",
+    "register_response_data.cc",
+    "register_response_data.h",
+    "response_data.cc",
+    "response_data.h",
+    "sign_response_data.cc",
+    "sign_response_data.h",
     "u2f_apdu_command.cc",
     "u2f_apdu_command.h",
     "u2f_apdu_response.cc",
     "u2f_apdu_response.h",
+    "u2f_ble_connection.cc",
+    "u2f_ble_connection.h",
+    "u2f_ble_device.cc",
+    "u2f_ble_device.h",
     "u2f_ble_discovery.cc",
     "u2f_ble_discovery.h",
     "u2f_ble_frames.cc",
     "u2f_ble_frames.h",
+    "u2f_ble_transaction.cc",
+    "u2f_ble_transaction.h",
+    "u2f_ble_uuids.cc",
     "u2f_ble_uuids.h",
     "u2f_command_type.h",
     "u2f_device.cc",
@@ -25,6 +52,8 @@ source_set("u2f") {
     "u2f_message.h",
     "u2f_packet.cc",
     "u2f_packet.h",
+    "u2f_parsing_utils.cc",
+    "u2f_parsing_utils.h",
     "u2f_register.cc",
     "u2f_register.h",
     "u2f_request.cc",
@@ -36,6 +65,7 @@ source_set("u2f") {
 
   deps = [
     "//base",
+    "//components/cbor",
     "//crypto",
     "//device/base",
     "//device/bluetooth",
@@ -43,6 +73,7 @@ source_set("u2f") {
     "//services/device/public/interfaces",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
+    "//third_party/boringssl",
   ]
 
   # HID is not supported on Android.
@@ -65,6 +96,8 @@ source_set("mocks") {
   testonly = true
 
   sources = [
+    "mock_u2f_ble_connection.cc",
+    "mock_u2f_ble_connection.h",
     "mock_u2f_device.cc",
     "mock_u2f_device.h",
     "mock_u2f_discovery.cc",
@@ -109,4 +142,51 @@ fuzzer_test("u2f_ble_frames_fuzzer") {
     "//net",
   ]
   libfuzzer_options = [ "max_len=65535" ]
+}
+
+fuzzer_test("sign_response_data_fuzzer") {
+  sources = [
+    "sign_response_data_fuzzer.cc",
+  ]
+  deps = [
+    ":u2f",
+    "//base",
+    "//net",
+  ]
+  seed_corpus = "response_data_fuzzer_corpus/"
+  libfuzzer_options = [ "max_len=65537" ]
+}
+
+fuzzer_test("register_response_data_fuzzer") {
+  sources = [
+    "register_response_data_fuzzer.cc",
+  ]
+  deps = [
+    ":u2f",
+    "//net",
+  ]
+
+  seed_corpus = "response_data_fuzzer_corpus/"
+  libfuzzer_options = [ "max_len=65537" ]
+}
+
+is_linux_without_udev = is_linux && !use_udev
+
+source_set("test_support") {
+  testonly = true
+
+  # Android doesn't compile.
+  # Linux, requires udev.
+  if (!is_linux_without_udev && !is_android) {
+    sources = [
+      "fake_hid_impl_for_testing.cc",
+      "fake_hid_impl_for_testing.h",
+    ]
+    deps = [
+      "//base",
+      "//mojo/public/cpp/bindings",
+      "//services/device/public/interfaces",
+      "//testing/gmock",
+    ]
+  }
 }

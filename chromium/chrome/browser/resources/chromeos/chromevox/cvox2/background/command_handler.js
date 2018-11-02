@@ -12,6 +12,7 @@ goog.require('ChromeVoxState');
 goog.require('CustomAutomationEvent');
 goog.require('Output');
 goog.require('cvox.ChromeVoxBackground');
+goog.require('cvox.ChromeVoxKbHandler');
 
 goog.scope(function() {
 var AutomationEvent = chrome.automation.AutomationEvent;
@@ -19,6 +20,7 @@ var AutomationNode = chrome.automation.AutomationNode;
 var Dir = constants.Dir;
 var EventType = chrome.automation.EventType;
 var RoleType = chrome.automation.RoleType;
+var StateType = chrome.automation.StateType;
 
 /**
  * Handles ChromeVox Next commands.
@@ -39,7 +41,7 @@ CommandHandler.onCommand = function(command) {
       ChromeVoxState.instance.setCurrentRange(null);
   });
 
-  // These commands don't require a current range and work in all modes.
+  // These commands don't require a current range.
   switch (command) {
     case 'speakTimeAndDate':
       chrome.automation.getDesktop(function(d) {
@@ -97,8 +99,11 @@ CommandHandler.onCommand = function(command) {
           Msgs.getMsg('pass_through_key'), cvox.QueueMode.QUEUE);
       return true;
     case 'showKbExplorerPage':
-      var explorerPage = {url: 'chromevox/background/kbexplorer.html'};
-      chrome.tabs.create(explorerPage);
+      var explorerPage = {
+        url: 'chromevox/background/kbexplorer.html',
+        type: 'panel'
+      };
+      chrome.windows.create(explorerPage);
       break;
     case 'decreaseTtsRate':
       CommandHandler.increaseOrDecreaseSpeechProperty_(
@@ -170,7 +175,6 @@ CommandHandler.onCommand = function(command) {
           'description=';
 
       var description = {};
-      description['Mode'] = ChromeVoxState.instance.mode;
       description['Version'] = chrome.app.getDetails().version;
       description['Reproduction Steps'] = '%0a1.%0a2.%0a3.';
       for (var key in description)
@@ -237,11 +241,12 @@ CommandHandler.onCommand = function(command) {
   if (!ChromeVoxState.instance.currentRange_)
     return true;
 
-  // Next/classic compat commands hereafter.
-  if (ChromeVoxState.instance.mode == ChromeVoxMode.CLASSIC)
-    return true;
-
   var current = ChromeVoxState.instance.currentRange_;
+
+  // Allow edit commands first.
+  if (!CommandHandler.onEditCommand_(command))
+    return false;
+
   var dir = Dir.FORWARD;
   var pred = null;
   var predErrorMsg = undefined;
@@ -576,19 +581,6 @@ CommandHandler.onCommand = function(command) {
       var target = ChromeVoxState.instance.currentRange_.start.node.root;
       output.withString(target.docUrl || '').go();
       return false;
-    case 'copy':
-      window.setTimeout(function() {
-        var textarea = document.createElement('textarea');
-        document.body.appendChild(textarea);
-        textarea.focus();
-        document.execCommand('paste');
-        var clipboardContent = textarea.value;
-        textarea.remove();
-        cvox.ChromeVox.tts.speak(
-            Msgs.getMsg('copy', [clipboardContent]), cvox.QueueMode.FLUSH);
-        ChromeVoxState.instance.pageSel_ = null;
-      }, 20);
-      return true;
     case 'toggleSelection':
       if (!ChromeVoxState.instance.pageSel_) {
         ChromeVoxState.instance.pageSel_ = ChromeVoxState.instance.currentRange;
@@ -826,24 +818,6 @@ CommandHandler.onCommand = function(command) {
 };
 
 /**
- * React to mode changes.
- * @param {ChromeVoxMode} newMode
- * @param {ChromeVoxMode?} oldMode
- */
-CommandHandler.onModeChanged = function(newMode, oldMode) {
-  // Previously uninitialized.
-  if (!oldMode)
-    cvox.ChromeVoxKbHandler.commandHandler = CommandHandler.onCommand;
-
-  var hasListener =
-      chrome.commands.onCommand.hasListener(CommandHandler.onCommand);
-  if (newMode == ChromeVoxMode.CLASSIC && hasListener)
-    chrome.commands.onCommand.removeListener(CommandHandler.onCommand);
-  else if (newMode == ChromeVoxMode.CLASSIC && !hasListener)
-    chrome.commands.onCommand.addListener(CommandHandler.onCommand);
-};
-
-/**
  * Increase or decrease a speech property and make an announcement.
  * @param {string} propertyName The name of the property to change.
  * @param {boolean} increase If true, increases the property value by one
@@ -939,10 +913,69 @@ CommandHandler.viewGraphicAsBraille_ = function(current) {
 };
 
 /**
- * Performs global initialization.
+ * Provides a partial mapping from ChromeVox key combinations to
+ * Search-as-a-function key as seen in Chrome OS documentation.
+ * @param {string} command
+ * @return {boolean} True if the command should propagate.
  * @private
  */
-CommandHandler.init_ = function() {
+CommandHandler.onEditCommand_ = function(command) {
+  var current = ChromeVoxState.instance.currentRange;
+  if (cvox.ChromeVox.isStickyModeOn() || !current || !current.start ||
+      !current.start.node || !current.start.node.state[StateType.EDITABLE])
+    return true;
+
+  var isMultiline = AutomationPredicate.multiline(current.start.node);
+  switch (command) {
+    case 'previousCharacter':
+      BackgroundKeyboardHandler.sendKeyPress(36, {shift: true});
+      break;
+    case 'nextCharacter':
+      BackgroundKeyboardHandler.sendKeyPress(35, {shift: true});
+      break;
+    case 'previousWord':
+      BackgroundKeyboardHandler.sendKeyPress(36, {shift: true, ctrl: true});
+      break;
+    case 'nextWord':
+      BackgroundKeyboardHandler.sendKeyPress(35, {shift: true, ctrl: true});
+      break;
+    case 'previousObject':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(36);
+      break;
+    case 'nextObject':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(35);
+      break;
+    case 'previousLine':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(33);
+      break;
+    case 'nextLine':
+      if (!isMultiline)
+        return true;
+      BackgroundKeyboardHandler.sendKeyPress(34);
+      break;
+    case 'jumpToTop':
+      BackgroundKeyboardHandler.sendKeyPress(36, {ctrl: true});
+      break;
+    case 'jumpToBottom':
+      BackgroundKeyboardHandler.sendKeyPress(35, {ctrl: true});
+      break;
+    default:
+      return true;
+  }
+  return false;
+};
+
+/**
+ * Performs global initialization.
+ */
+CommandHandler.init = function() {
+  cvox.ChromeVoxKbHandler.commandHandler = CommandHandler.onCommand;
   var firstRunId = 'jdgcneonijmofocbhmijhacgchbihela';
   chrome.runtime.onMessageExternal.addListener(function(
       request, sender, sendResponse) {
@@ -967,7 +1000,5 @@ CommandHandler.init_ = function() {
     }
   });
 };
-
-CommandHandler.init_();
 
 });  //  goog.scope

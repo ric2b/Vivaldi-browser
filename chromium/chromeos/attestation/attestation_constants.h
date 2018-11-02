@@ -10,6 +10,11 @@
 namespace chromeos {
 namespace attestation {
 
+enum VerifiedAccessType {
+  DEFAULT_VA,  // The default Verified Access server.
+  TEST_VA,     // The test Verified Access server.
+};
+
 // Key types supported by the Chrome OS attestation subsystem.
 enum AttestationKeyType {
   // The key will be associated with the device itself and will be available
@@ -46,6 +51,16 @@ enum AttestationCertificateProfile {
   PROFILE_ENTERPRISE_ENROLLMENT_CERTIFICATE = 7
 };
 
+// Status for operations involving an attestation server.
+enum AttestationStatus {
+  // Call successful
+  ATTESTATION_SUCCESS,
+  // Failure, no specific reason
+  ATTESTATION_UNSPECIFIED_FAILURE,
+  // Failure, sending a bad request to an attestation server
+  ATTESTATION_SERVER_BAD_REQUEST_FAILURE
+};
+
 enum PrivacyCAType {
   DEFAULT_PCA,    // The Google-operated Privacy CA.
   TEST_PCA,       // The test version of the Google-operated Privacy CA.
@@ -54,6 +69,10 @@ enum PrivacyCAType {
 // A key name for the Enterprise Machine Key.  This key should always be stored
 // as a DEVICE_KEY.
 CHROMEOS_EXPORT extern const char kEnterpriseMachineKey[];
+
+// A key name for the Enterprise Enrollmnent Key.  This key should always be
+// stored as a DEVICE_KEY.
+CHROMEOS_EXPORT extern const char kEnterpriseEnrollmentKey[];
 
 // A key name for the Enterprise User Key.  This key should always be stored as
 // a USER_KEY.

@@ -32,13 +32,13 @@
 #endif
 
 namespace content {
-void WarmUpMediaFoundation() {
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+void WarmUpMediaFoundation() {
   media::LoadMFCommonLibraries();
   media::LoadMFAudioDecoderLibraries();
   media::LoadMFVideoDecoderLibraries();
-#endif
 }
+#endif
 
 RendererMainPlatformDelegate::RendererMainPlatformDelegate(
     const MainFunctionParams& parameters)
@@ -62,7 +62,9 @@ void RendererMainPlatformDelegate::PlatformInitialize() {
     // cached and there's no more need to access the registry. If the sandbox
     // is disabled, we don't have to make this dummy call.
     std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     WarmUpMediaFoundation();
+#endif
   }
 
   InitializeDWriteFontProxy();

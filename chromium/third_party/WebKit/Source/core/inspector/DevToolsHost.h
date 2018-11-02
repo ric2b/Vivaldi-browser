@@ -68,8 +68,9 @@ class CORE_EXPORT DevToolsHost final : public ScriptWrappable {
 
   String getSelectionBackgroundColor();
   String getSelectionForegroundColor();
+  String getInactiveSelectionBackgroundColor();
+  String getInactiveSelectionForegroundColor();
 
-  bool isUnderTest();
   bool isHostedMode();
 
   LocalFrame* FrontendFrame() { return frontend_frame_; }
@@ -82,7 +83,7 @@ class CORE_EXPORT DevToolsHost final : public ScriptWrappable {
   DevToolsHost(InspectorFrontendClient*, LocalFrame* frontend_frame);
   void EvaluateScript(const String&);
 
-  InspectorFrontendClient* client_;
+  Member<InspectorFrontendClient> client_;
   Member<LocalFrame> frontend_frame_;
   Member<FrontendMenuProvider> menu_provider_;
 };

@@ -15,11 +15,11 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "gpu/ipc/service/gpu_command_buffer_stub.h"
+#include "gpu/ipc/service/command_buffer_stub.h"
 #include "media/base/video_decoder.h"
-#include "media/gpu/d3d11_h264_accelerator.h"
 #include "media/gpu/gles2_decoder_helper.h"
 #include "media/gpu/media_gpu_export.h"
+#include "media/gpu/windows/d3d11_h264_accelerator.h"
 #include "media/gpu/windows/output_with_release_mailbox_cb.h"
 
 namespace media {
@@ -28,8 +28,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
                                                public D3D11VideoDecoderClient {
  public:
   D3D11VideoDecoderImpl(
-      base::Callback<gpu::GpuCommandBufferStub*()> get_stub_cb,
-      OutputWithReleaseMailboxCB output_cb);
+      base::RepeatingCallback<gpu::CommandBufferStub*()> get_stub_cb);
   ~D3D11VideoDecoderImpl() override;
 
   // VideoDecoder implementation:
@@ -48,24 +47,35 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
 
   // D3D11VideoDecoderClient implementation.
   D3D11PictureBuffer* GetPicture() override;
-  void OutputResult(D3D11PictureBuffer* buffer,
-                    size_t input_buffer_id) override;
-  size_t input_buffer_id() const override;
+  void OutputResult(D3D11PictureBuffer* buffer) override;
 
   // Return a weak ptr, since D3D11VideoDecoder constructs callbacks for us.
   base::WeakPtr<D3D11VideoDecoderImpl> GetWeakPtr();
 
  private:
+  enum class State {
+    // Initializing resources required to create a codec.
+    kInitializing,
+    // Initialization has completed and we're running. This is the only state
+    // in which |codec_| might be non-null. If |codec_| is null, a codec
+    // creation is pending.
+    kRunning,
+    // A fatal error occurred. A terminal state.
+    kError
+  };
+
   void DoDecode();
   void CreatePictureBuffers();
 
-  void OnMailboxReleased(D3D11PictureBuffer* buffer,
+  void OnMailboxReleased(scoped_refptr<D3D11PictureBuffer> buffer,
                          const gpu::SyncToken& sync_token);
 
-  base::Callback<gpu::GpuCommandBufferStub*()> get_stub_cb_;
-  gpu::GpuCommandBufferStub* stub_ = nullptr;
-  // A helper for creating textures. Only valid while |stub_| is valid.
-  std::unique_ptr<GLES2DecoderHelper> decoder_helper_;
+  // Enter the kError state.  This will fail any pending |init_cb_| and / or
+  // pending decode as well.
+  void NotifyError(const char* reason);
+
+  base::RepeatingCallback<gpu::CommandBufferStub*()> get_stub_cb_;
+  gpu::CommandBufferStub* stub_ = nullptr;
 
   Microsoft::WRL::ComPtr<ID3D11Device> device_;
   Microsoft::WRL::ComPtr<ID3D11DeviceContext> device_context_;
@@ -83,9 +93,15 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoderImpl : public VideoDecoder,
   DecodeCB current_decode_cb_;
   base::TimeDelta current_timestamp_;
 
-  std::vector<std::unique_ptr<D3D11PictureBuffer>> picture_buffers_;
+  // During init, these will be set.
+  InitCB init_cb_;
+  OutputCB output_cb_;
 
-  OutputWithReleaseMailboxCB output_cb_;
+  // It would be nice to unique_ptr these, but we give a ref to the VideoFrame
+  // so that the texture is retained until the mailbox is opened.
+  std::vector<scoped_refptr<D3D11PictureBuffer>> picture_buffers_;
+
+  State state_ = State::kInitializing;
 
   base::WeakPtrFactory<D3D11VideoDecoderImpl> weak_factory_;
 

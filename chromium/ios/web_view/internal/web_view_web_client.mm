@@ -4,7 +4,8 @@
 
 #import "ios/web_view/internal/web_view_web_client.h"
 
-#include "base/memory/ptr_util.h"
+#include "base/logging.h"
+#include "base/mac/bundle_locations.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/public/user_agent.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
@@ -18,13 +19,33 @@
 #endif
 
 namespace ios_web_view {
+namespace {
+// Returns an autoreleased string containing the JavaScript loaded from a
+// bundled resource file with the given name (excluding extension).
+NSString* GetPageScript(NSString* script_file_name) {
+  DCHECK(script_file_name);
+  NSString* path =
+      [base::mac::FrameworkBundle() pathForResource:script_file_name
+                                             ofType:@"js"];
+  DCHECK(path) << "Script file not found: "
+               << base::SysNSStringToUTF8(script_file_name) << ".js";
+  NSError* error = nil;
+  NSString* content = [NSString stringWithContentsOfFile:path
+                                                encoding:NSUTF8StringEncoding
+                                                   error:&error];
+  DCHECK(!error) << "Error fetching script: "
+                 << base::SysNSStringToUTF8(error.description);
+  DCHECK(content);
+  return content;
+}
+}  // namespace
 
 WebViewWebClient::WebViewWebClient() = default;
 
 WebViewWebClient::~WebViewWebClient() = default;
 
 std::unique_ptr<web::WebMainParts> WebViewWebClient::CreateWebMainParts() {
-  return base::MakeUnique<WebViewWebMainParts>();
+  return std::make_unique<WebViewWebMainParts>();
 }
 
 std::string WebViewWebClient::GetProduct() const {
@@ -48,10 +69,17 @@ base::RefCountedMemory* WebViewWebClient::GetDataResourceBytes(
       resource_id);
 }
 
-NSString* WebViewWebClient::GetEarlyPageScript(
+NSString* WebViewWebClient::GetDocumentStartScriptForMainFrame(
     web::BrowserState* browser_state) const {
-  return WebViewEarlyPageScriptProvider::FromBrowserState(browser_state)
-      .GetScript();
+  NSMutableArray* scripts = [NSMutableArray array];
+
+  WebViewEarlyPageScriptProvider& provider =
+      WebViewEarlyPageScriptProvider::FromBrowserState(browser_state);
+  [scripts addObject:provider.GetScript()];
+
+  [scripts addObject:GetPageScript(@"web_view_bundle")];
+
+  return [scripts componentsJoinedByString:@";"];
 }
 
 }  // namespace ios_web_view

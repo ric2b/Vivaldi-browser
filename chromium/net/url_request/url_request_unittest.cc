@@ -6472,7 +6472,7 @@ TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
+  ASSERT_TRUE(value->is_dict());
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
   std::string report_hostname;
@@ -6537,7 +6537,7 @@ TEST_F(URLRequestTestHTTP, ProcessPKPReportOnly) {
   std::unique_ptr<base::Value> value(
       base::JSONReader::Read(mock_report_sender.latest_report()));
   ASSERT_TRUE(value);
-  ASSERT_TRUE(value->IsType(base::Value::Type::DICTIONARY));
+  ASSERT_TRUE(value->is_dict());
   base::DictionaryValue* report_dict;
   ASSERT_TRUE(value->GetAsDictionary(&report_dict));
   std::string report_hostname;
@@ -7037,10 +7037,15 @@ class TestReportingService : public ReportingService {
     headers_.push_back({url, header_value});
   }
 
-  void RemoveBrowsingData(
-      int data_type_mask,
-      base::Callback<bool(const GURL&)> origin_filter) override {
+  void RemoveBrowsingData(int data_type_mask,
+                          const base::RepeatingCallback<bool(const GURL&)>&
+                              origin_filter) override {
     NOTIMPLEMENTED();
+  }
+
+  bool RequestIsUpload(const URLRequest& request) override {
+    NOTIMPLEMENTED();
+    return true;
   }
 
  private:
@@ -7060,7 +7065,8 @@ std::unique_ptr<test_server::HttpResponse> SendReportToHeader(
 }  // namespace
 
 TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderNoService) {
-  http_test_server()->RegisterRequestHandler(base::Bind(&SendReportToHeader));
+  http_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&SendReportToHeader));
   ASSERT_TRUE(http_test_server()->Start());
   GURL request_url = http_test_server()->GetURL("/");
 
@@ -7077,7 +7083,8 @@ TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderNoService) {
 }
 
 TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderHTTP) {
-  http_test_server()->RegisterRequestHandler(base::Bind(&SendReportToHeader));
+  http_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&SendReportToHeader));
   ASSERT_TRUE(http_test_server()->Start());
   GURL request_url = http_test_server()->GetURL("/");
 
@@ -7099,7 +7106,8 @@ TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderHTTP) {
 
 TEST_F(URLRequestTestHTTP, ProcessReportToHeaderHTTPS) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.RegisterRequestHandler(base::Bind(&SendReportToHeader));
+  https_test_server.RegisterRequestHandler(
+      base::BindRepeating(&SendReportToHeader));
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/");
 
@@ -7124,7 +7132,8 @@ TEST_F(URLRequestTestHTTP, ProcessReportToHeaderHTTPS) {
 TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderInvalidHttps) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
-  https_test_server.RegisterRequestHandler(base::Bind(&SendReportToHeader));
+  https_test_server.RegisterRequestHandler(
+      base::BindRepeating(&SendReportToHeader));
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/");
 
@@ -7184,6 +7193,11 @@ class TestNetworkErrorLoggingDelegate : public NetworkErrorLoggingDelegate {
     errors_.push_back(details);
   }
 
+  void RemoveBrowsingData(const base::RepeatingCallback<bool(const GURL&)>&
+                              origin_filter) override {
+    NOTREACHED();
+  }
+
  private:
   std::vector<Header> headers_;
   std::vector<ErrorDetails> errors_;
@@ -7199,10 +7213,16 @@ std::unique_ptr<test_server::HttpResponse> SendNelHeader(
   return std::move(http_response);
 }
 
+std::unique_ptr<test_server::HttpResponse> SendEmptyResponse(
+    const test_server::HttpRequest& request) {
+  return base::MakeUnique<test_server::RawHttpResponse>("", "");
+}
+
 }  // namespace
 
 TEST_F(URLRequestTestHTTP, DontProcessNelHeaderNoDelegate) {
-  http_test_server()->RegisterRequestHandler(base::Bind(&SendNelHeader));
+  http_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&SendNelHeader));
   ASSERT_TRUE(http_test_server()->Start());
   GURL request_url = http_test_server()->GetURL("/");
 
@@ -7219,7 +7239,8 @@ TEST_F(URLRequestTestHTTP, DontProcessNelHeaderNoDelegate) {
 }
 
 TEST_F(URLRequestTestHTTP, DontProcessNelHeaderHttp) {
-  http_test_server()->RegisterRequestHandler(base::Bind(&SendNelHeader));
+  http_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&SendNelHeader));
   ASSERT_TRUE(http_test_server()->Start());
   GURL request_url = http_test_server()->GetURL("/");
 
@@ -7241,7 +7262,7 @@ TEST_F(URLRequestTestHTTP, DontProcessNelHeaderHttp) {
 
 TEST_F(URLRequestTestHTTP, ProcessNelHeaderHttps) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_test_server.RegisterRequestHandler(base::Bind(&SendNelHeader));
+  https_test_server.RegisterRequestHandler(base::BindRepeating(&SendNelHeader));
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/");
 
@@ -7266,7 +7287,7 @@ TEST_F(URLRequestTestHTTP, ProcessNelHeaderHttps) {
 TEST_F(URLRequestTestHTTP, DontProcessNelHeaderInvalidHttps) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
-  https_test_server.RegisterRequestHandler(base::Bind(&SendNelHeader));
+  https_test_server.RegisterRequestHandler(base::BindRepeating(&SendNelHeader));
   ASSERT_TRUE(https_test_server.Start());
   GURL request_url = https_test_server.GetURL("/");
 
@@ -7335,7 +7356,7 @@ TEST_F(URLRequestTestHTTP, DISABLED_DontForwardErrorToNelHttp) {
   URLRequestFilter::GetInstance()->ClearHandlers();
 }
 
-TEST_F(URLRequestTestHTTP, ForwardErrorToNelHttps) {
+TEST_F(URLRequestTestHTTP, ForwardErrorToNelHttps_Mock) {
   URLRequestFailedJob::AddUrlHandler();
 
   GURL request_url =
@@ -7360,6 +7381,34 @@ TEST_F(URLRequestTestHTTP, ForwardErrorToNelHttps) {
   EXPECT_EQ(ERR_CONNECTION_REFUSED, nel_delegate.errors()[0].type);
 
   URLRequestFilter::GetInstance()->ClearHandlers();
+}
+
+// Also test with a real server, to exercise interactions with
+// URLRequestHttpJob.
+TEST_F(URLRequestTestHTTP, ForwardErrorToNelHttps_Real) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.RegisterRequestHandler(
+      base::BindRepeating(&SendEmptyResponse));
+  ASSERT_TRUE(https_test_server.Start());
+  GURL request_url = https_test_server.GetURL("/");
+
+  TestNetworkDelegate network_delegate;
+  TestNetworkErrorLoggingDelegate nel_delegate;
+  TestURLRequestContext context(true);
+  context.set_network_delegate(&network_delegate);
+  context.set_network_error_logging_delegate(&nel_delegate);
+  context.Init();
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> request(context.CreateRequest(
+      request_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  request->Start();
+  base::RunLoop().Run();
+
+  ASSERT_EQ(1u, nel_delegate.errors().size());
+  EXPECT_EQ(request_url, nel_delegate.errors()[0].uri);
+  EXPECT_EQ(0, nel_delegate.errors()[0].status_code);
+  EXPECT_EQ(ERR_EMPTY_RESPONSE, nel_delegate.errors()[0].type);
 }
 
 #endif  // BUILDFLAG(ENABLE_REPORTING)
@@ -10489,9 +10538,8 @@ static CertStatus ExpectedCertStatusForFailedOnlineEVRevocationCheck() {
 }
 
 static bool SystemSupportsOCSP() {
-#if defined(OS_ANDROID) || defined(OS_FUCHSIA)
+#if defined(OS_ANDROID)
   // TODO(jnd): http://crbug.com/117478 - EV verification is not yet supported.
-  // TODO(crbug.com/776575): OCSP tests currently fail on Fuchsia.
   return false;
 #else
   return true;
@@ -11189,14 +11237,13 @@ TEST_F(HTTPSAIATest, AIAFetching) {
     EXPECT_EQ(OK, d.request_status());
     EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
     ASSERT_TRUE(r->ssl_info().cert);
-    EXPECT_EQ(2u, r->ssl_info().cert->GetIntermediateCertificates().size());
+    EXPECT_EQ(2u, r->ssl_info().cert->intermediate_buffers().size());
   } else {
     EXPECT_EQ(CERT_STATUS_AUTHORITY_INVALID,
               cert_status & CERT_STATUS_ALL_ERRORS);
   }
   ASSERT_TRUE(r->ssl_info().unverified_cert);
-  EXPECT_EQ(
-      0u, r->ssl_info().unverified_cert->GetIntermediateCertificates().size());
+  EXPECT_EQ(0u, r->ssl_info().unverified_cert->intermediate_buffers().size());
 }
 
 class HTTPSHardFailTest : public HTTPSOCSPTest {
@@ -11378,7 +11425,8 @@ TEST_F(HTTPSEVCRLSetTest, FreshCRLSetCovered) {
       SpawnedTestServer::SSLOptions::CERT_AUTO);
   ssl_options.ocsp_status =
       SpawnedTestServer::SSLOptions::OCSP_INVALID_RESPONSE;
-  ScopedSetCRLSet set_crlset(CRLSet::ForTesting(false, &kOCSPTestCertSPKI, ""));
+  ScopedSetCRLSet set_crlset(
+      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "", "", {}));
 
   CertStatus cert_status;
   DoConnection(ssl_options, &cert_status);
@@ -11484,7 +11532,7 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
   ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
   ssl_options.cert_serial = 10;
   ScopedSetCRLSet set_crlset(
-      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "\x0a"));
+      CRLSet::ForTesting(false, &kOCSPTestCertSPKI, "\x0a", "", {}));
 
   CertStatus cert_status = 0;
   DoConnection(ssl_options, &cert_status);
@@ -11495,6 +11543,55 @@ TEST_F(HTTPSCRLSetTest, CRLSetRevoked) {
   EXPECT_FALSE(cert_status & CERT_STATUS_IS_EV);
   EXPECT_FALSE(
       static_cast<bool>(cert_status & CERT_STATUS_REV_CHECKING_ENABLED));
+}
+
+TEST_F(HTTPSCRLSetTest, CRLSetRevokedBySubject) {
+#if defined(OS_ANDROID)
+  LOG(WARNING) << "Skipping test because system doesn't support CRLSets";
+  return;
+#endif
+
+  SpawnedTestServer::SSLOptions ssl_options(
+      SpawnedTestServer::SSLOptions::CERT_AUTO);
+  ssl_options.ocsp_status = SpawnedTestServer::SSLOptions::OCSP_OK;
+  static const char kCommonName[] = "Test CN";
+  ssl_options.cert_common_name = kCommonName;
+
+  {
+    ScopedSetCRLSet set_crlset(
+        CRLSet::ForTesting(false, nullptr, "", kCommonName, {}));
+
+    CertStatus cert_status = 0;
+    DoConnection(ssl_options, &cert_status);
+
+    // If the certificate is recorded as revoked in the CRLSet, that should be
+    // reflected without online revocation checking.
+    EXPECT_EQ(CERT_STATUS_REVOKED, cert_status & CERT_STATUS_ALL_ERRORS);
+    EXPECT_FALSE(cert_status & CERT_STATUS_IS_EV);
+    EXPECT_FALSE(
+        static_cast<bool>(cert_status & CERT_STATUS_REV_CHECKING_ENABLED));
+  }
+
+  const uint8_t kTestServerSPKISHA256[32] = {
+      0xb3, 0x91, 0xac, 0x73, 0x32, 0x54, 0x7f, 0x7b, 0x8a, 0x62, 0x77,
+      0x73, 0x1d, 0x45, 0x7b, 0x23, 0x46, 0x69, 0xef, 0x6f, 0x05, 0x3d,
+      0x07, 0x22, 0x15, 0x18, 0xd6, 0x10, 0x8b, 0xa1, 0x49, 0x33,
+  };
+  const std::string spki_hash(
+      reinterpret_cast<const char*>(kTestServerSPKISHA256),
+      sizeof(kTestServerSPKISHA256));
+
+  {
+    ScopedSetCRLSet set_crlset(
+        CRLSet::ForTesting(false, nullptr, "", kCommonName, {spki_hash}));
+
+    CertStatus cert_status = 0;
+    DoConnection(ssl_options, &cert_status);
+
+    // When the correct SPKI hash is specified, the connection should succeed
+    // even though the subject is listed in the CRLSet.
+    EXPECT_EQ(0u, cert_status & CERT_STATUS_ALL_ERRORS);
+  }
 }
 #endif  // !defined(OS_IOS)
 

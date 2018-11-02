@@ -71,18 +71,6 @@ void WMHelper::RemoveFocusObserver(
   aura::client::GetFocusClient(GetPrimaryRoot())->RemoveObserver(observer);
 }
 
-void WMHelper::AddCursorObserver(aura::client::CursorClientObserver* observer) {
-  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
-  if (ash::Shell::GetAshConfig() == ash::Config::CLASSIC)
-    ash::Shell::Get()->cursor_manager()->AddObserver(observer);
-}
-
-void WMHelper::RemoveCursorObserver(
-    aura::client::CursorClientObserver* observer) {
-  if (ash::Shell::GetAshConfig() == ash::Config::CLASSIC)
-    ash::Shell::Get()->cursor_manager()->RemoveObserver(observer);
-}
-
 void WMHelper::AddTabletModeObserver(ash::TabletModeObserver* observer) {
   ash::Shell::Get()->tablet_mode_controller()->AddObserver(observer);
 }
@@ -182,20 +170,8 @@ aura::Window* WMHelper::GetFocusedWindow() const {
   return focus_client->GetFocusedWindow();
 }
 
-ui::CursorSize WMHelper::GetCursorSize() const {
-  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
-  if (ash::Shell::GetAshConfig() == ash::Config::MUS)
-    return ui::CursorSize::kNormal;
-  return ash::Shell::Get()->cursor_manager()->GetCursorSize();
-}
-
-const display::Display& WMHelper::GetCursorDisplay() const {
-  // TODO(crbug.com/631103): Mushrome doesn't have a cursor manager yet.
-  if (ash::Shell::GetAshConfig() == ash::Config::MUS) {
-    static const display::Display display;
-    return display;
-  }
-  return ash::Shell::Get()->cursor_manager()->GetDisplay();
+aura::client::CursorClient* WMHelper::GetCursorClient() {
+  return aura::client::GetCursorClient(ash::Shell::GetPrimaryRootWindow());
 }
 
 void WMHelper::AddPreTargetHandler(ui::EventHandler* handler) {

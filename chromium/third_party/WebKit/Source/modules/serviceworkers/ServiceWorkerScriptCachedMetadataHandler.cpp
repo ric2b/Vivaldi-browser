@@ -22,7 +22,7 @@ ServiceWorkerScriptCachedMetadataHandler::
 }
 
 ServiceWorkerScriptCachedMetadataHandler::
-    ~ServiceWorkerScriptCachedMetadataHandler() {}
+    ~ServiceWorkerScriptCachedMetadataHandler() = default;
 
 void ServiceWorkerScriptCachedMetadataHandler::Trace(blink::Visitor* visitor) {
   visitor->Trace(worker_global_scope_);
@@ -62,6 +62,11 @@ ServiceWorkerScriptCachedMetadataHandler::GetCachedMetadata(
 
 String ServiceWorkerScriptCachedMetadataHandler::Encoding() const {
   return g_empty_string;
+}
+
+bool ServiceWorkerScriptCachedMetadataHandler::IsServedFromCacheStorage()
+    const {
+  return false;
 }
 
 }  // namespace blink

@@ -19,6 +19,7 @@
 #include "cc/trees/managed_memory_policy.h"
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/service/display/display_client.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "ipc/ipc_message.h"
 #include "services/viz/public/interfaces/compositing/compositor_frame_sink.mojom.h"
 #include "ui/gfx/transform.h"
@@ -36,7 +37,7 @@ class CompositorFrameSinkSupport;
 class ContextProvider;
 class Display;
 class FrameSinkManagerImpl;
-class LocalSurfaceIdAllocator;
+class ParentLocalSurfaceIdAllocator;
 }  // namespace viz
 
 namespace content {
@@ -69,9 +70,9 @@ class SynchronousLayerTreeFrameSink
  public:
   SynchronousLayerTreeFrameSink(
       scoped_refptr<viz::ContextProvider> context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
+      scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      viz::SharedBitmapManager* shared_bitmap_manager,
       int routing_id,
       uint32_t layer_tree_frame_sink_id,
       std::unique_ptr<viz::BeginFrameSource> begin_frame_source,
@@ -129,11 +130,15 @@ class SynchronousLayerTreeFrameSink
   const int routing_id_;
   const uint32_t layer_tree_frame_sink_id_;
   SynchronousCompositorRegistry* const registry_;         // Not owned.
-  viz::SharedBitmapManager* const shared_bitmap_manager_;  // Not owned.
   IPC::Sender* const sender_;                             // Not owned.
 
   // Not owned.
   SynchronousLayerTreeFrameSinkClient* sync_client_ = nullptr;
+
+  // Used to allocate bitmaps in the software Display.
+  // TODO(crbug.com/692814): The Display never sends its resources out of
+  // process so there is no reason for it to use a SharedBitmapManager.
+  viz::ServerSharedBitmapManager shared_bitmap_manager_;
 
   // Only valid (non-NULL) during a DemandDrawSw() call.
   SkCanvas* current_sw_canvas_ = nullptr;
@@ -153,12 +158,15 @@ class SynchronousLayerTreeFrameSink
         bool will_draw_and_swap,
         const viz::RenderPassList& render_passes) override {}
     void DisplayDidDrawAndSwap() override {}
+    void DisplayDidReceiveCALayerParams(
+        const gfx::CALayerParams& ca_layer_params) override {}
   };
 
   // TODO(danakj): These don't to be stored in unique_ptrs when OutputSurface
   // is owned/destroyed on the compositor thread.
   std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
-  std::unique_ptr<viz::LocalSurfaceIdAllocator> local_surface_id_allocator_;
+  std::unique_ptr<viz::ParentLocalSurfaceIdAllocator>
+      parent_local_surface_id_allocator_;
   viz::LocalSurfaceId child_local_surface_id_;
   viz::LocalSurfaceId root_local_surface_id_;
   gfx::Size child_size_;

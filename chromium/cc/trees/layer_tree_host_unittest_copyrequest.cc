@@ -481,7 +481,8 @@ class LayerTreeHostTestHiddenSurfaceNotAllocatedForSubtreeCopyRequest
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider) override {
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider)
+      override {
     auto frame_sink = LayerTreeHostCopyRequestTest::CreateLayerTreeFrameSink(
         renderer_settings, refresh_rate, std::move(compositor_context_provider),
         std::move(worker_context_provider));
@@ -1052,9 +1053,7 @@ class LayerTreeHostCopyRequestTestProvideTexture
     gpu::Mailbox mailbox;
     gl->GenMailboxCHROMIUM(mailbox.name);
 
-    const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
-    gl->ShallowFlushCHROMIUM();
-    gl->GenSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+    gl->GenSyncTokenCHROMIUM(sync_token_.GetData());
 
     request->SetMailbox(mailbox, sync_token_);
     EXPECT_TRUE(request->has_mailbox());

@@ -307,7 +307,7 @@ bool Database::OpenAndVerifyVersion(bool set_version_in_new_database,
       GetExecutionContext()
           ->GetTaskRunner(TaskType::kDatabaseAccess)
           ->PostTask(
-              BLINK_FROM_HERE,
+              FROM_HERE,
               WTF::Bind(&Database::RunCreationCallback, WrapPersistent(this),
                         WrapPersistentCallbackFunction(creation_callback)));
     }
@@ -462,7 +462,7 @@ class DoneCreatingDatabaseOnExitCaller {
 bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
                                     DatabaseError& error,
                                     String& error_message) {
-  double call_start_time = WTF::MonotonicallyIncreasingTime();
+  double call_start_time = WTF::CurrentTimeTicksInSeconds();
   DoneCreatingDatabaseOnExitCaller on_exit_caller(this);
   DCHECK(error_message.IsEmpty());
   DCHECK_EQ(error,
@@ -475,7 +475,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
   if (!sqlite_database_.Open(filename_)) {
     ReportOpenDatabaseResult(
         1, kInvalidStateError, sqlite_database_.LastError(),
-        WTF::MonotonicallyIncreasingTime() - call_start_time);
+        WTF::CurrentTimeTicksInSeconds() - call_start_time);
     error_message = FormatErrorMessage("unable to open database",
                                        sqlite_database_.LastError(),
                                        sqlite_database_.LastErrorMsg());
@@ -523,7 +523,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
       if (!transaction.InProgress()) {
         ReportOpenDatabaseResult(
             2, kInvalidStateError, sqlite_database_.LastError(),
-            WTF::MonotonicallyIncreasingTime() - call_start_time);
+            WTF::CurrentTimeTicksInSeconds() - call_start_time);
         error_message = FormatErrorMessage(
             "unable to open database, failed to start transaction",
             sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -541,7 +541,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
                 "REPLACE,value TEXT NOT NULL ON CONFLICT FAIL);")) {
           ReportOpenDatabaseResult(
               3, kInvalidStateError, sqlite_database_.LastError(),
-              WTF::MonotonicallyIncreasingTime() - call_start_time);
+              WTF::CurrentTimeTicksInSeconds() - call_start_time);
           error_message = FormatErrorMessage(
               "unable to open database, failed to create 'info' table",
               sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -552,7 +552,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
       } else if (!GetVersionFromDatabase(current_version, false)) {
         ReportOpenDatabaseResult(
             4, kInvalidStateError, sqlite_database_.LastError(),
-            WTF::MonotonicallyIncreasingTime() - call_start_time);
+            WTF::CurrentTimeTicksInSeconds() - call_start_time);
         error_message = FormatErrorMessage(
             "unable to open database, failed to read current version",
             sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -571,7 +571,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
         if (!SetVersionInDatabase(expected_version_, false)) {
           ReportOpenDatabaseResult(
               5, kInvalidStateError, sqlite_database_.LastError(),
-              WTF::MonotonicallyIncreasingTime() - call_start_time);
+              WTF::CurrentTimeTicksInSeconds() - call_start_time);
           error_message = FormatErrorMessage(
               "unable to open database, failed to write current version",
               sqlite_database_.LastError(), sqlite_database_.LastErrorMsg());
@@ -601,7 +601,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
       expected_version_.length() && expected_version_ != current_version) {
     ReportOpenDatabaseResult(
         6, kInvalidStateError, 0,
-        WTF::MonotonicallyIncreasingTime() - call_start_time);
+        WTF::CurrentTimeTicksInSeconds() - call_start_time);
     error_message =
         "unable to open database, version mismatch, '" + expected_version_ +
         "' does not match the currentVersion of '" + current_version + "'";
@@ -627,7 +627,7 @@ bool Database::PerformOpenAndVerify(bool should_set_version_in_new_database,
   }
 
   ReportOpenDatabaseResult(
-      0, -1, 0, WTF::MonotonicallyIncreasingTime() - call_start_time);  // OK
+      0, -1, 0, WTF::CurrentTimeTicksInSeconds() - call_start_time);  // OK
 
   if (GetDatabaseContext()->GetDatabaseThread())
     GetDatabaseContext()->GetDatabaseThread()->RecordDatabaseOpen(this);
@@ -912,7 +912,7 @@ void Database::RunTransaction(SQLTransactionCallback* callback,
       std::unique_ptr<SQLErrorData> error = SQLErrorData::Create(
           SQLError::kUnknownErr, "database has been closed");
       GetDatabaseTaskRunner()->PostTask(
-          BLINK_FROM_HERE,
+          FROM_HERE,
           WTF::Bind(&CallTransactionErrorCallback, WrapPersistent(callback),
                     WTF::Passed(std::move(error))));
     }
@@ -922,9 +922,9 @@ void Database::RunTransaction(SQLTransactionCallback* callback,
 void Database::ScheduleTransactionCallback(SQLTransaction* transaction) {
   // The task is constructed in a database thread, and destructed in the
   // context thread.
-  GetDatabaseTaskRunner()->PostTask(
-      BLINK_FROM_HERE, CrossThreadBind(&SQLTransaction::PerformPendingCallback,
-                                       WrapCrossThreadPersistent(transaction)));
+  PostCrossThreadTask(*GetDatabaseTaskRunner(), FROM_HERE,
+                      CrossThreadBind(&SQLTransaction::PerformPendingCallback,
+                                      WrapCrossThreadPersistent(transaction)));
 }
 
 Vector<String> Database::PerformGetTableNames() {
@@ -974,7 +974,7 @@ Vector<String> Database::TableNames() {
   return result;
 }
 
-SecurityOrigin* Database::GetSecurityOrigin() const {
+const SecurityOrigin* Database::GetSecurityOrigin() const {
   if (!GetExecutionContext())
     return nullptr;
   if (GetExecutionContext()->IsContextThread())

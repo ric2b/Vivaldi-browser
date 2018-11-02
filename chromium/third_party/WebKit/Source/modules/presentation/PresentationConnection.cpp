@@ -73,17 +73,17 @@ const AtomicString& ConnectionStateToString(
 }
 
 const AtomicString& ConnectionCloseReasonToString(
-    WebPresentationConnectionCloseReason reason) {
+    mojom::blink::PresentationConnectionCloseReason reason) {
   DEFINE_STATIC_LOCAL(const AtomicString, error_value, ("error"));
   DEFINE_STATIC_LOCAL(const AtomicString, closed_value, ("closed"));
   DEFINE_STATIC_LOCAL(const AtomicString, went_away_value, ("wentaway"));
 
   switch (reason) {
-    case WebPresentationConnectionCloseReason::kError:
+    case mojom::blink::PresentationConnectionCloseReason::CONNECTION_ERROR:
       return error_value;
-    case WebPresentationConnectionCloseReason::kClosed:
+    case mojom::blink::PresentationConnectionCloseReason::CLOSED:
       return closed_value;
-    case WebPresentationConnectionCloseReason::kWentAway:
+    case mojom::blink::PresentationConnectionCloseReason::WENT_AWAY:
       return went_away_value;
   }
 
@@ -129,7 +129,7 @@ class PresentationConnection::BlobLoader final
     loader_->Start(presentation_connection_->GetExecutionContext(),
                    std::move(blob_data_handle));
   }
-  ~BlobLoader() override {}
+  ~BlobLoader() override = default;
 
   // FileReaderLoaderClient functions.
   void DidStartLoading() override {}
@@ -238,13 +238,16 @@ ControllerPresentationConnection* ControllerPresentationConnection::Take(
   if (!controller)
     return nullptr;
 
-  return Take(controller, presentation_info, request);
+  return Take(controller,
+              mojom::blink::PresentationInfo(presentation_info.url,
+                                             presentation_info.id),
+              request);
 }
 
 // static
 ControllerPresentationConnection* ControllerPresentationConnection::Take(
     PresentationController* controller,
-    const WebPresentationInfo& presentation_info,
+    const mojom::blink::PresentationInfo& presentation_info,
     PresentationRequest* request) {
   DCHECK(controller);
   DCHECK(request);
@@ -259,7 +262,7 @@ ControllerPresentationConnection* ControllerPresentationConnection::Take(
       EventTypeNames::connectionavailable, connection);
   request->GetExecutionContext()
       ->GetTaskRunner(TaskType::kPresentation)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&PresentationConnection::DispatchEventAsync,
                            WrapPersistent(request), WrapPersistent(event)));
 
@@ -528,8 +531,8 @@ void PresentationConnection::setBinaryType(const String& binary_type) {
 void PresentationConnection::SendMessageToTargetConnection(
     mojom::blink::PresentationConnectionMessagePtr message) {
   if (target_connection_) {
-    target_connection_->OnMessage(
-        std::move(message), ConvertToBaseCallback(WTF::Function<void(bool)>()));
+    target_connection_->OnMessage(std::move(message),
+                                  base::OnceCallback<void(bool)>());
   }
 }
 
@@ -599,7 +602,7 @@ bool PresentationConnection::Matches(const String& id, const KURL& url) const {
 }
 
 void PresentationConnection::DidClose(
-    WebPresentationConnectionCloseReason reason,
+    mojom::blink::PresentationConnectionCloseReason reason,
     const String& message) {
   if (state_ == mojom::blink::PresentationConnectionState::CLOSED ||
       state_ == mojom::blink::PresentationConnectionState::TERMINATED) {
@@ -612,7 +615,7 @@ void PresentationConnection::DidClose(
 }
 
 void PresentationConnection::DidClose() {
-  DidClose(WebPresentationConnectionCloseReason::kClosed, "");
+  DidClose(mojom::blink::PresentationConnectionCloseReason::CLOSED, "");
 }
 
 void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
@@ -643,7 +646,7 @@ void PresentationConnection::DidFailLoadingBlob(
 void PresentationConnection::DispatchStateChangeEvent(Event* event) {
   GetExecutionContext()
       ->GetTaskRunner(TaskType::kPresentation)
-      ->PostTask(BLINK_FROM_HERE,
+      ->PostTask(FROM_HERE,
                  WTF::Bind(&PresentationConnection::DispatchEventAsync,
                            WrapPersistent(this), WrapPersistent(event)));
 }

@@ -10,13 +10,13 @@
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "media/base/video_decoder.h"
 #include "media/gpu/android/promotion_hint_aggregator.h"
 #include "media/gpu/media_gpu_export.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace gpu {
-class GpuCommandBufferStub;
-struct SyncToken;
+class CommandBufferStub;
 }  // namespace gpu
 
 namespace media {
@@ -30,13 +30,8 @@ class VideoFrame;
 // safe. Virtual for testing; see VideoFrameFactoryImpl.
 class MEDIA_GPU_EXPORT VideoFrameFactory {
  public:
-  using GetStubCb = base::Callback<gpu::GpuCommandBufferStub*()>;
+  using GetStubCb = base::Callback<gpu::CommandBufferStub*()>;
   using InitCb = base::Callback<void(scoped_refptr<SurfaceTextureGLOwner>)>;
-
-  // These mirror types from MojoVideoDecoderService.
-  using ReleaseMailboxCB = base::OnceCallback<void(const gpu::SyncToken&)>;
-  using OutputWithReleaseMailboxCB =
-      base::Callback<void(ReleaseMailboxCB, const scoped_refptr<VideoFrame>&)>;
 
   VideoFrameFactory() = default;
   virtual ~VideoFrameFactory() = default;
@@ -61,7 +56,7 @@ class MEDIA_GPU_EXPORT VideoFrameFactory {
       base::TimeDelta timestamp,
       gfx::Size natural_size,
       PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb,
-      OutputWithReleaseMailboxCB output_cb) = 0;
+      VideoDecoder::OutputCB output_cb) = 0;
 
   // Runs |closure| on the calling sequence after all previous
   // CreateVideoFrame() calls have completed.

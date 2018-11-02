@@ -270,15 +270,6 @@ bool InstallUtil::IsPerUserInstall() {
 }
 
 // static
-void InstallUtil::ShowInstallerResultMessage(installer::InstallStatus status, int string_resource_id) {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kVivaldi) &&
-      !base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kUninstall)) {
-    base::string16 msg = installer::GetLocalizedString(string_resource_id);
-    MessageBox(NULL, msg.c_str(), NULL, MB_ICONINFORMATION | MB_SETFOREGROUND);
-  }
-}
-
-// static
 bool InstallUtil::IsFirstRunSentinelPresent() {
   // TODO(msw): Consolidate with first_run::internal::IsFirstRunSentinelPresent.
   base::FilePath user_data_dir;
@@ -303,8 +294,8 @@ bool InstallUtil::DeleteRegistryKey(HKEY root_key,
                                     REGSAM wow64_access) {
   VLOG(1) << "Deleting registry key " << key_path;
   RegKey target_key;
-  LONG result = target_key.Open(root_key, key_path.c_str(),
-                                KEY_READ | KEY_WRITE | wow64_access);
+  LONG result =
+      target_key.Open(root_key, key_path.c_str(), DELETE | wow64_access);
 
   if (result == ERROR_FILE_NOT_FOUND)
     return true;

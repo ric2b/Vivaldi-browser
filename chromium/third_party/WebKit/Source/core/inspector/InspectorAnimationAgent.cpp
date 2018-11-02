@@ -107,8 +107,7 @@ BuildObjectForAnimationEffect(KeyframeEffectReadOnly* effect,
     DCHECK(effect->Model()->IsKeyframeEffectModel());
     const KeyframeVector& keyframes = effect->Model()->GetFrames();
     if (keyframes.size() == 3) {
-      DCHECK(!IsNull(keyframes.at(1)->Offset()));
-      delay = keyframes.at(1)->Offset() * duration;
+      delay = keyframes.at(1)->CheckedOffset() * duration;
       duration -= delay;
       easing = keyframes.at(1)->Easing().ToString();
     } else {
@@ -438,37 +437,41 @@ Response InspectorAnimationAgent::resolveAnimation(
       script_state->GetContext(),
       ToV8(animation, script_state->GetContext()->Global(),
            script_state->GetIsolate()),
-      ToV8InspectorStringView(kAnimationObjectGroup));
+      ToV8InspectorStringView(kAnimationObjectGroup),
+      false /* generatePreview */);
   if (!*result)
     return Response::Error("Element not associated with a document.");
   return Response::OK();
 }
 
-static CSSPropertyID g_animation_properties[] = {
-    CSSPropertyAnimationDelay,          CSSPropertyAnimationDirection,
-    CSSPropertyAnimationDuration,       CSSPropertyAnimationFillMode,
-    CSSPropertyAnimationIterationCount, CSSPropertyAnimationName,
-    CSSPropertyAnimationTimingFunction};
-
-static CSSPropertyID g_transition_properties[] = {
-    CSSPropertyTransitionDelay, CSSPropertyTransitionDuration,
-    CSSPropertyTransitionProperty, CSSPropertyTransitionTimingFunction,
-};
-
 String InspectorAnimationAgent::CreateCSSId(blink::Animation& animation) {
+  static const CSSProperty* g_animation_properties[] = {
+      &GetCSSPropertyAnimationDelay(),
+      &GetCSSPropertyAnimationDirection(),
+      &GetCSSPropertyAnimationDuration(),
+      &GetCSSPropertyAnimationFillMode(),
+      &GetCSSPropertyAnimationIterationCount(),
+      &GetCSSPropertyAnimationName(),
+      &GetCSSPropertyAnimationTimingFunction(),
+  };
+  static const CSSProperty* g_transition_properties[] = {
+      &GetCSSPropertyTransitionDelay(), &GetCSSPropertyTransitionDuration(),
+      &GetCSSPropertyTransitionProperty(),
+      &GetCSSPropertyTransitionTimingFunction(),
+  };
   String type =
       id_to_animation_type_.at(String::Number(animation.SequenceNumber()));
   DCHECK_NE(type, AnimationType::WebAnimation);
 
   KeyframeEffectReadOnly* effect = ToKeyframeEffectReadOnly(animation.effect());
-  Vector<CSSPropertyID> css_properties;
+  Vector<const CSSProperty*> css_properties;
   if (type == AnimationType::CSSAnimation) {
-    for (CSSPropertyID property : g_animation_properties)
+    for (const CSSProperty* property : g_animation_properties)
       css_properties.push_back(property);
   } else {
-    for (CSSPropertyID property : g_transition_properties)
+    for (const CSSProperty* property : g_transition_properties)
       css_properties.push_back(property);
-    css_properties.push_back(cssPropertyID(animation.id()));
+    css_properties.push_back(&CSSProperty::Get(cssPropertyID(animation.id())));
   }
 
   Element* element = effect->Target();
@@ -478,14 +481,14 @@ String InspectorAnimationAgent::CreateCSSId(blink::Animation& animation) {
       CreateDigestor(kHashAlgorithmSha1);
   AddStringToDigestor(digestor.get(), type);
   AddStringToDigestor(digestor.get(), animation.id());
-  for (CSSPropertyID property : css_properties) {
+  for (const CSSProperty* property : css_properties) {
     CSSStyleDeclaration* style =
-        css_agent_->FindEffectiveDeclaration(property, styles);
+        css_agent_->FindEffectiveDeclaration(*property, styles);
     // Ignore inline styles.
     if (!style || !style->ParentStyleSheet() || !style->parentRule() ||
         style->parentRule()->type() != CSSRule::kStyleRule)
       continue;
-    AddStringToDigestor(digestor.get(), getPropertyNameString(property));
+    AddStringToDigestor(digestor.get(), property->GetPropertyNameString());
     AddStringToDigestor(digestor.get(),
                         css_agent_->StyleSheetId(style->ParentStyleSheet()));
     AddStringToDigestor(digestor.get(),

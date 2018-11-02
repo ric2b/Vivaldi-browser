@@ -333,8 +333,10 @@ void CloudExternalDataPolicyObserverTest::LogInAsDeviceLocalAccount(
   PolicyServiceImpl::Providers providers;
   providers.push_back(device_local_account_policy_provider_.get());
   TestingProfile::Builder builder;
-  builder.SetPolicyService(
-      std::unique_ptr<PolicyService>(new PolicyServiceImpl(providers)));
+  std::unique_ptr<PolicyServiceImpl> policy_service =
+      std::make_unique<PolicyServiceImpl>();
+  policy_service->SetProviders(providers);
+  builder.SetPolicyService(std::move(policy_service));
   builder.SetPath(chromeos::ProfileHelper::Get()->GetProfilePathByUserIdHash(
       chromeos::ProfileHelper::GetUserIdHashByUserIdForTesting(
           account_id.GetUserEmail())));
@@ -354,7 +356,7 @@ void CloudExternalDataPolicyObserverTest::SetRegularUserAvatarPolicy(
   if (!value.empty()) {
     policy_map.Set(key::kUserAvatarImage, POLICY_LEVEL_MANDATORY,
                    POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::Value>(value),
+                   std::make_unique<base::Value>(value),
                    external_data_manager_.CreateExternalDataFetcher(
                        key::kUserAvatarImage));
   }
@@ -367,8 +369,10 @@ void CloudExternalDataPolicyObserverTest::LogInAsRegularUser() {
   PolicyServiceImpl::Providers providers;
   providers.push_back(&user_policy_provider_);
   TestingProfile::Builder builder;
-  builder.SetPolicyService(
-      std::unique_ptr<PolicyService>(new PolicyServiceImpl(providers)));
+  std::unique_ptr<PolicyServiceImpl> policy_service =
+      std::make_unique<PolicyServiceImpl>();
+  policy_service->SetProviders(providers);
+  builder.SetPolicyService(std::move(policy_service));
   builder.SetPath(chromeos::ProfileHelper::Get()->GetProfilePathByUserIdHash(
       chromeos::ProfileHelper::GetUserIdHashByUserIdForTesting(
           kRegularUserID)));

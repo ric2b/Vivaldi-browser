@@ -8,6 +8,7 @@
 
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -83,9 +84,23 @@ const char* DownloaderToString(CrxDownloader::DownloadMetrics::Downloader d) {
   }
 }
 
+// Returns a formatted string of previousversion and nextversion in an event.
+std::string EventVersions(const Component& component) {
+  std::string event_versions;
+  base::StringAppendF(&event_versions, " previousversion=\"%s\"",
+                      component.previous_version().GetString().c_str());
+  const base::Version& next_version = component.next_version();
+  if (next_version.IsValid()) {
+    base::StringAppendF(&event_versions, " nextversion=\"%s\"",
+                        next_version.GetString().c_str());
+  }
+  return event_versions;
+}
+
 }  // namespace
 
 std::string BuildDownloadCompleteEventElement(
+    const Component& component,
     const CrxDownloader::DownloadMetrics& metrics) {
   using base::StringAppendF;
 
@@ -110,8 +125,9 @@ std::string BuildDownloadCompleteEventElement(
 
   if (metrics.download_time_ms) {
     StringAppendF(&event, " download_time_ms=\"%s\"",
-                  base::Uint64ToString(metrics.download_time_ms).c_str());
+                  base::NumberToString(metrics.download_time_ms).c_str());
   }
+  base::StrAppend(&event, {EventVersions(component)});
   StringAppendF(&event, "/>");
   return event;
 }
@@ -149,6 +165,7 @@ std::string BuildUpdateCompleteEventElement(const Component& component) {
                   component.previous_fp().c_str());
   if (!component.next_fp().empty())
     StringAppendF(&event, " nextfp=\"%s\"", component.next_fp().c_str());
+  base::StrAppend(&event, {EventVersions(component)});
   StringAppendF(&event, "/>");
   return event;
 }
@@ -160,8 +177,10 @@ std::string BuildUninstalledEventElement(const Component& component) {
 
   std::string event;
   StringAppendF(&event, "<event eventtype=\"4\" eventresult=\"1\"");
-  if (component.extra_code1())
+  if (component.extra_code1()) {
     StringAppendF(&event, " extracode1=\"%d\"", component.extra_code1());
+  }
+  base::StrAppend(&event, {EventVersions(component)});
   StringAppendF(&event, "/>");
   return event;
 }
@@ -299,7 +318,10 @@ std::string BuildUpdateCheckRequest(
                         crx_component.version.GetString().c_str());
     if (!brand.empty())
       base::StringAppendF(&app, " brand=\"%s\"", brand.c_str());
-    if (component.on_demand())
+    if (!crx_component.install_source.empty())
+      base::StringAppendF(&app, " installsource=\"%s\"",
+                          crx_component.install_source.c_str());
+    else if (component.on_demand())
       base::StringAppendF(&app, " installsource=\"ondemand\"");
     for (const auto& attr : installer_attributes) {
       base::StringAppendF(&app, " %s=\"%s\"", attr.first.c_str(),
@@ -377,21 +399,10 @@ std::string BuildEventPingRequest(const Configurator& config,
          component.state() == ComponentState::kUpdated ||
          component.state() == ComponentState::kUninstalled);
 
-  // |next_version| is an optional argument for some ping types. This member
-  // is set by the value returned in the update check response. However, some
-  // of the pings are sent as a result of actions where the response did not
-  // include a manifest, neither a version.
   std::string app =
-      base::StringPrintf("<app appid=\"%s\"", component.id().c_str());
-  base::StringAppendF(&app, " version=\"%s\"",
-                      component.previous_version().GetString().c_str());
-  if (component.next_version().IsValid())
-    base::StringAppendF(&app, " nextversion=\"%s\"",
-                        component.next_version().GetString().c_str());
-  base::StringAppendF(&app, ">");
-  base::StringAppendF(&app, "%s",
-                      base::JoinString(component.events(), "").c_str());
-  base::StringAppendF(&app, "</app>");
+      base::StringPrintf("<app appid=\"%s\">", component.id().c_str());
+  base::StrAppend(&app, component.events());
+  app.append("</app>");
 
   // The ping request does not include any updater state.
   return BuildProtocolRequest(

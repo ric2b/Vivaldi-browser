@@ -39,6 +39,8 @@ cc_component("cc") {
     "input/page_scale_animation.h",
     "input/scroll_elasticity_helper.cc",
     "input/scroll_elasticity_helper.h",
+    "input/scroll_snap_data.cc",
+    "input/scroll_snap_data.h",
     "input/scroll_state.cc",
     "input/scroll_state.h",
     "input/scroll_state_data.cc",
@@ -239,6 +241,8 @@ cc_component("cc") {
     "tiles/raster_tile_priority_queue_required.h",
     "tiles/software_image_decode_cache.cc",
     "tiles/software_image_decode_cache.h",
+    "tiles/software_image_decode_cache_utils.cc",
+    "tiles/software_image_decode_cache_utils.h",
     "tiles/tile.cc",
     "tiles/tile.h",
     "tiles/tile_draw_info.cc",
@@ -317,6 +321,8 @@ cc_component("cc") {
     "trees/proxy_impl.h",
     "trees/proxy_main.cc",
     "trees/proxy_main.h",
+    "trees/render_frame_metadata.cc",
+    "trees/render_frame_metadata.h",
     "trees/scoped_abort_remaining_swap_promises.h",
     "trees/scroll_node.cc",
     "trees/scroll_node.h",
@@ -363,6 +369,7 @@ cc_component("cc") {
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/client:raster_interface",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings:skia_bindings",
     "//gpu/vulkan:features",
@@ -476,6 +483,8 @@ cc_static_library("test_support") {
     "test/push_properties_counting_layer_impl.h",
     "test/render_pass_test_utils.cc",
     "test/render_pass_test_utils.h",
+    "test/resource_provider_test_utils.cc",
+    "test/resource_provider_test_utils.h",
     "test/scheduler_test_common.cc",
     "test/scheduler_test_common.h",
     "test/skia_common.cc",
@@ -521,6 +530,8 @@ cc_static_library("test_support") {
     "test/test_ukm_recorder_factory.h",
     "test/test_web_graphics_context_3d.cc",
     "test/test_web_graphics_context_3d.h",
+    "test/transfer_cache_test_helper.cc",
+    "test/transfer_cache_test_helper.h",
   ]
 
   public_deps = [
@@ -540,7 +551,7 @@ cc_static_library("test_support") {
     "//components/viz/test:test_support",
     "//gpu/command_buffer/client:gles2_c_lib",
     "//gpu/command_buffer/client:gles2_implementation",
-    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/common",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings",
     "//media",
@@ -579,6 +590,7 @@ cc_test("cc_unittests") {
     "benchmarks/micro_benchmark_controller_unittest.cc",
     "debug/rendering_stats_unittest.cc",
     "input/browser_controls_offset_manager_unittest.cc",
+    "input/scroll_snap_data_unittest.cc",
     "input/scroll_state_unittest.cc",
     "input/scrollbar_animation_controller_unittest.cc",
     "input/single_scrollbar_animation_controller_thinning_unittest.cc",
@@ -622,7 +634,7 @@ cc_test("cc_unittests") {
     "paint/paint_op_buffer_unittest.cc",
     "paint/paint_op_helper_unittest.cc",
     "paint/paint_shader_unittest.cc",
-    "paint/scoped_image_flags_unittest.cc",
+    "paint/scoped_raster_flags_unittest.cc",
     "paint/solid_color_analyzer_unittest.cc",
     "paint/transfer_cache_unittest.cc",
     "raster/playback_image_provider_unittest.cc",
@@ -630,6 +642,7 @@ cc_test("cc_unittests") {
     "raster/raster_source_unittest.cc",
     "raster/scoped_gpu_raster_unittest.cc",
     "raster/single_thread_task_graph_runner_unittest.cc",
+    "raster/staging_buffer_pool_unittest.cc",
     "raster/synchronous_task_graph_runner_unittest.cc",
     "raster/task_graph_work_queue_unittest.cc",
     "raster/texture_compressor_etc1_unittest.cc",
@@ -652,6 +665,7 @@ cc_test("cc_unittests") {
     "tiles/picture_layer_tiling_set_unittest.cc",
     "tiles/picture_layer_tiling_unittest.cc",
     "tiles/software_image_decode_cache_unittest.cc",
+    "tiles/software_image_decode_cache_unittest_combinations.cc",
     "tiles/tile_manager_unittest.cc",
     "tiles/tile_priority_unittest.cc",
     "trees/damage_tracker_unittest.cc",
@@ -710,6 +724,13 @@ cc_test("cc_unittests") {
     ]
   }
 
+  if (is_win) {
+    # TODO(vmpstr): Some SoftwareImageDecodeCacheTests use virtual inheritance,
+    # which MSVC doesn't like. Suppress "Foo inherits Bar via dominance"
+    # warnings for now.
+    cflags = [ "/wd4250" ]
+  }
+
   # TODO(khushalsagar): Remove once crbug.com/683263 is fixed.
   configs = [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
@@ -727,7 +748,7 @@ cc_test("cc_unittests") {
     "//gpu:test_support",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
-    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/client:raster_interface",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings",
     "//media",
@@ -779,7 +800,8 @@ cc_test("cc_perftests") {
     "//components/viz/test:test_support",
     "//gpu",
     "//gpu:test_support",
-    "//gpu/command_buffer/common:gles2_utils",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/ipc/common:struct_traits",
     "//media",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",

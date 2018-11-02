@@ -34,16 +34,10 @@ base::HistogramBase* FindHistogram(const std::string& name,
 namespace chrome_test_util {
 
 HistogramTester::HistogramTester() {
-  base::StatisticsRecorder::Initialize();  // Safe to call multiple times.
-
   // Record any histogram data that exists when the object is created so it can
   // be subtracted later.
-  base::StatisticsRecorder::Histograms histograms;
-  base::StatisticsRecorder::GetSnapshot(std::string(), &histograms);
-  for (size_t i = 0; i < histograms.size(); ++i) {
-    std::unique_ptr<base::HistogramSamples> samples(
-        histograms[i]->SnapshotSamples());
-    histograms_snapshot_[histograms[i]->histogram_name()] = std::move(samples);
+  for (const auto* const h : base::StatisticsRecorder::GetHistograms()) {
+    histograms_snapshot_[h->histogram_name()] = h->SnapshotSamples();
   }
 }
 
@@ -159,7 +153,7 @@ BOOL HistogramTester::CheckBucketCount(
   if (failure_block) {
     failure_block([NSString
         stringWithFormat:
-            @"Histogram \"%s\" doe not have the "
+            @"Histogram \"%s\" does not have the "
              "right number of samples(%d) in the expected bucket(%d). It has "
              "(%d).",
             name.c_str(), expected_count, sample, actual_count]);
@@ -180,7 +174,7 @@ BOOL HistogramTester::CheckTotalCount(const std::string& name,
   }
   if (failure_block) {
     failure_block(
-        [NSString stringWithFormat:@"Histogram \"%s\" doe not have the "
+        [NSString stringWithFormat:@"Histogram \"%s\" does not have the "
                                     "right total number of samples(%d). It has "
                                     "(%d).",
                                    name.c_str(), expected_count, actual_count]);

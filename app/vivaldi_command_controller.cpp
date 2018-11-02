@@ -86,6 +86,8 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
   command_updater_->UpdateCommandEnabled(IDC_VIV_HISTORY_PANEL, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_IMAGES, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_PANEL, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS,
+                                         true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {

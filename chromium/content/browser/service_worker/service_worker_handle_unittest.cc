@@ -23,12 +23,11 @@
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_test_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_state.mojom.h"
 
 namespace content {
-
-namespace {
+namespace service_worker_handle_unittest {
 
 const int kRenderFrameId = 44;  // A dummy ID for testing.
 
@@ -42,8 +41,6 @@ void VerifyStateChangedMessage(int expected_handle_id,
   EXPECT_EQ(expected_handle_id, std::get<1>(param));
   EXPECT_EQ(expected_state, std::get<2>(param));
 }
-
-}  // namespace
 
 class TestingServiceWorkerDispatcherHost : public ServiceWorkerDispatcherHost {
  public:
@@ -80,9 +77,10 @@ class ServiceWorkerHandleTest : public testing::Test {
     dispatcher_host_->Init(helper_->context_wrapper());
 
     const GURL pattern("http://www.example.com/");
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = pattern;
     registration_ = new ServiceWorkerRegistration(
-        blink::mojom::ServiceWorkerRegistrationOptions(pattern), 1L,
-        helper_->context()->AsWeakPtr());
+        options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(),
         GURL("http://www.example.com/service_worker.js"),
@@ -113,8 +111,6 @@ class ServiceWorkerHandleTest : public testing::Test {
         helper_->mock_render_process_id(), 1 /* provider_id */,
         helper_->context()->AsWeakPtr(), kRenderFrameId, dispatcher_host_.get(),
         &remote_endpoint_);
-    helper_->SimulateAddProcessToPattern(pattern,
-                                         helper_->mock_render_process_id());
   }
 
   void TearDown() override {
@@ -169,4 +165,5 @@ TEST_F(ServiceWorkerHandleTest, OnVersionStateChanged) {
                             message);
 }
 
+}  // namespace service_worker_handle_unittest
 }  // namespace content

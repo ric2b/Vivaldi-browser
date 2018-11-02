@@ -13,7 +13,8 @@ in Chrome:
 
 These are the files and directories that are relevant to VR instrumentation
 testing. Additional information on files in other directories can be found in
-those directories' README.md files.
+those directories' README.md files (if the files as a whole warrant special
+documentation) and the JavaDoc comments in each file.
 
 ### Subdirectories
 
@@ -30,7 +31,7 @@ those directories' README.md files.
 * `//chrome/android/shared_preference_files/test/` - Contains the VrCore settings
   files for running VR instrumentation tests (see the "Building and Running"
   section for more information).
-* `//chrome/test/data/android/webvr_instrumentation/` - Contains the JavaScript
+* `//chrome/test/data/vr/e2e_test_files/` - Contains the JavaScript
   and HTML files for VR instrumentation tests.
 * `//third_party/gvr-android-sdk/test-apks/` - Contains the VrCore and Daydream
   Home APKs for testing. You must have `DOWNLOAD_VR_TEST_APKS` set as an
@@ -145,7 +146,7 @@ for VR Browser testing. Examples include:
 * Waiting on JavaScript test steps and running arbitrary JavaScript code
 
 If you are writing a test that uses WebVR, you will likely also need to add an
-HTML file to `//chrome/test/data/android/webvr_instrumentation/html/` that
+HTML file to `//chrome/test/data/vr/e2e_test_files/html/` that
 handles the JavaScript portion of the test. In general, a WebVR test will have a
 number of steps as functions on the JavaScript side. The Java side of the test
 will load the file and start a JavaScript step, blocking until it finishes. The
@@ -167,7 +168,7 @@ If a test class is annotated with `@RunWith(ParameterizedRunner.class)`, then it
 has support for test parameterization. While parameterization has many potential
 uses, the current use in VR is to allow a test case to be automatically run in
 multiple different activity types. For specifics, see
-`rules/vr_activity_restriction.md`.
+`rules/README.md`.
 
 If a class has test parameterization enabled, you have three options when adding
 a new test:

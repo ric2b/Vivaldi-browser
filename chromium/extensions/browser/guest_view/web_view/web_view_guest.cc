@@ -33,7 +33,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/resource_request_details.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
@@ -69,7 +68,6 @@
 #include "url/url_constants.h"
 
 
-#ifdef VIVALDI_BUILD
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
@@ -92,9 +90,12 @@
 #include "ui/vivaldi_ui_utils.h"
 #include "ui/vivaldi_browser_window.h"
 
+#include "content/browser/frame_host/navigation_controller_impl.h"
+#include "components/prefs/pref_service.h"
+#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
-#endif // VIVALDI_BUILD
 
 using base::UserMetricsAction;
 using content::GlobalRequestID;
@@ -570,12 +571,16 @@ void WebViewGuest::DidAttachToEmbedder() {
                                        this));
     }
   }
+
+  LoadTabContentsIfNecessary();
+
   // Make sure we re-draw the page if needed. This was added because of
   // VB-20658. If the web_contents was already fully loaded when here, we
   // would not get the page painted.
   auto* render_widget_host = content::RenderWidgetHostImpl::From(
       web_contents()->GetRenderViewHost()->GetWidget());
   render_widget_host->ScheduleComposite();
+
 }
 
 void WebViewGuest::DidDropLink(const GURL& url) {
@@ -617,6 +622,7 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
   PushWebViewStateToIOThread();
 
   ApplyAttributes(create_params);
+
 }
 
 void WebViewGuest::ClearDataInternal(base::Time remove_since,
@@ -952,9 +958,7 @@ void WebViewGuest::RendererResponsive(WebContents* source) {
       webview::kEventResponsive, std::move(args)));
 }
 
-void WebViewGuest::RendererUnresponsive(
-    WebContents* source,
-    const content::WebContentsUnresponsiveState& unresponsive_state) {
+void WebViewGuest::RendererUnresponsive(WebContents* source) {
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetInteger(webview::kProcessId,
                    web_contents()->GetMainFrame()->GetProcess()->GetID());

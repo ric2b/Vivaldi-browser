@@ -27,10 +27,11 @@
 
 #include "email_type.h"
 #include "phonenumber_type.h"
+#include "postaladdress_type.h"
 
 namespace contact {
 
-enum class ContactPropertyNameEnum { NONE = 0, EMAIL, PHONENUMBER };
+enum class ContactPropertyNameEnum { NONE = 0, PHONENUMBER, POSTAL_ADDRESS };
 
 // Bit flags determing which fields should be updated in the
 // UpdateContact method
@@ -39,6 +40,9 @@ enum UpdateContactFields {
   NAME = 1 << 1,
   BIRTHDAY = 1 << 2,
   NOTE = 1 << 3,
+  AVATAR_URL = 1 << 4,
+  SEPARATOR = 1 << 5,
+  GENERATED_FROM_SENT_MAIL = 1 << 6,
 };
 
 // Represents a simplified version of a Contact.
@@ -51,6 +55,9 @@ struct Contact {
   base::string16 name;
   base::Time birthday;
   base::string16 note;
+  base::string16 avatar_url;
+  bool separator;
+  bool generated_from_sent_mail;
   int updateFields;
 };
 
@@ -66,6 +73,7 @@ class AddPropertyObject {
   ContactID contact_id;
   base::string16 value;
   std::string type;
+  bool is_default;
 };
 
 class UpdatePropertyObject {
@@ -81,6 +89,7 @@ class UpdatePropertyObject {
   PropertyID property_id;
   base::string16 value;
   std::string type;
+  bool is_default;
 };
 
 class RemovePropertyObject {
@@ -116,18 +125,38 @@ class ContactRow {
   base::string16 note() const { return note_; }
   void set_note(base::string16 note) { note_ = note; }
 
-  EmailRows emails() const { return emails_; }
-  void set_emails(EmailRows emails) { emails_ = emails; }
+  EmailAddressRows emails() const { return emails_; }
+  void set_emails(EmailAddressRows emails) { emails_ = emails; }
 
   PhonenumberRows phones() const { return phones_; }
   void set_phones(PhonenumberRows phones) { phones_ = phones; }
+
+  PostalAddressRows postaladdresses() const { return postaladdresses_; }
+  void set_postaladdresses(PostalAddressRows postaladdresses) {
+    postaladdresses_ = postaladdresses;
+  }
+
+  base::string16 avatar_url() const { return avatar_url_; }
+  void set_avatar_url(base::string16 avatar_url) { avatar_url_ = avatar_url; }
+
+  bool separator() const { return separator_; }
+  void set_separator(bool separator) { separator_ = separator; }
+
+  bool generated_from_sent_mail() const { return generated_from_sent_mail_; }
+  void set_generated_from_sent_mail(bool generated_from_sent_mail) {
+    generated_from_sent_mail_ = generated_from_sent_mail;
+  }
 
   ContactID contact_id_;
   base::string16 name_;
   base::Time birthday_;
   base::string16 note_;
-  EmailRows emails_;
+  EmailAddressRows emails_;
   PhonenumberRows phones_;
+  PostalAddressRows postaladdresses_;
+  base::string16 avatar_url_;
+  bool separator_;
+  bool generated_from_sent_mail_;
 
  protected:
   void Swap(ContactRow* other);
@@ -187,33 +216,14 @@ class ContactQueryResults {
   DISALLOW_COPY_AND_ASSIGN(ContactQueryResults);
 };
 
-struct CreateContactResult {
+struct ContactResults {
  public:
-  CreateContactResult();
+  ContactResults() = default;
   bool success;
-  ContactRow createdRow;
+  ContactRow contact;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(CreateContactResult);
-};
-
-struct UpdateContactResult {
- public:
-  UpdateContactResult();
-  bool success;
-  ContactRow updated_contact_result;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(UpdateContactResult);
-};
-
-struct DeleteContactResult {
- public:
-  DeleteContactResult();
-  bool success;
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(DeleteContactResult);
+  DISALLOW_COPY_AND_ASSIGN(ContactResults);
 };
 
 }  // namespace contact

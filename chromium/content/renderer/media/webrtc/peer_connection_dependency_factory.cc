@@ -54,6 +54,7 @@
 #include "jingle/glue/thread_wrapper.h"
 #include "media/base/media_permission.h"
 #include "media/filters/ffmpeg_glue.h"
+#include "media/media_features.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
 #include "third_party/WebKit/public/platform/WebMediaStream.h"
@@ -123,13 +124,14 @@ PeerConnectionDependencyFactory::~PeerConnectionDependencyFactory() {
 
 std::unique_ptr<blink::WebRTCPeerConnectionHandler>
 PeerConnectionDependencyFactory::CreateRTCPeerConnectionHandler(
-    blink::WebRTCPeerConnectionHandlerClient* client) {
+    blink::WebRTCPeerConnectionHandlerClient* client,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // Save histogram data so we can see how much PeerConnetion is used.
   // The histogram counts the number of calls to the JS API
   // webKitRTCPeerConnection.
   UpdateWebRTCMethodCount(WEBKIT_RTC_PEER_CONNECTION);
 
-  return std::make_unique<RTCPeerConnectionHandler>(client, this);
+  return std::make_unique<RTCPeerConnectionHandler>(client, this, task_runner);
 }
 
 const scoped_refptr<webrtc::PeerConnectionFactoryInterface>&
@@ -155,7 +157,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
 
   DVLOG(1) << "PeerConnectionDependencyFactory::CreatePeerConnectionFactory()";
 
-#if BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
+#if BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   // Building /w |rtc_use_h264|, is the corresponding run-time feature enabled?
   if (base::FeatureList::IsEnabled(kWebRtcH264WithOpenH264FFmpeg)) {
     // |H264DecoderImpl| may be used which depends on FFmpeg, therefore we need
@@ -167,7 +169,7 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
   }
 #else
   webrtc::DisableRtcUseH264();
-#endif  // BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
+#endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 
   base::MessageLoop::current()->AddDestructionObserver(this);
   // To allow sending to the signaling/worker threads.

@@ -28,7 +28,7 @@ namespace extensions {
 
 namespace {
 
-ContentVerifier::TestObserver* g_test_observer = NULL;
+ContentVerifier::TestObserver* g_content_verifier_test_observer = NULL;
 
 // This function converts paths like "//foo/bar", "./foo/bar", and
 // "/foo/bar" to "foo/bar". It also converts path separators to "/".
@@ -67,7 +67,7 @@ bool ContentVerifier::ShouldRepairIfCorrupted(
 
 // static
 void ContentVerifier::SetObserverForTests(TestObserver* observer) {
-  g_test_observer = observer;
+  g_content_verifier_test_observer = observer;
 }
 
 ContentVerifier::ContentVerifier(
@@ -180,9 +180,8 @@ void ContentVerifier::OnExtensionLoaded(
     }
 
     std::unique_ptr<ContentVerifierIOData::ExtensionData> data(
-        new ContentVerifierIOData::ExtensionData(
-            std::move(image_paths),
-            extension->version() ? *extension->version() : base::Version()));
+        new ContentVerifierIOData::ExtensionData(std::move(image_paths),
+                                                 extension->version()));
     content::BrowserThread::PostTask(content::BrowserThread::IO,
                                      FROM_HERE,
                                      base::Bind(&ContentVerifierIOData::AddData,
@@ -220,8 +219,8 @@ void ContentVerifier::OnFetchComplete(
     bool success,
     bool was_force_check,
     const std::set<base::FilePath>& hash_mismatch_unix_paths) {
-  if (g_test_observer)
-    g_test_observer->OnFetchComplete(extension_id, success);
+  if (g_content_verifier_test_observer)
+    g_content_verifier_test_observer->OnFetchComplete(extension_id, success);
 
   if (shutdown_)
     return;

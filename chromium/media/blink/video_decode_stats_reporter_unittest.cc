@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "media/blink/video_decode_stats_reporter.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
@@ -16,6 +18,7 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "ui/gfx/geometry/rect.h"
 
 using ::testing::Invoke;
@@ -38,7 +41,7 @@ VideoDecoderConfig MakeVideoConfig(VideoCodec codec,
                                    gfx::Size natural_size) {
   gfx::Size coded_size = natural_size;
   gfx::Rect visible_rect(coded_size.width(), coded_size.height());
-  return VideoDecoderConfig(codec, profile, PIXEL_FORMAT_YV12, COLOR_SPACE_JPEG,
+  return VideoDecoderConfig(codec, profile, PIXEL_FORMAT_I420, COLOR_SPACE_JPEG,
                             VIDEO_ROTATION_0, coded_size, visible_rect,
                             natural_size, EmptyExtraData(), Unencrypted());
 }
@@ -67,9 +70,6 @@ class RecordInterceptor : public mojom::VideoDecodeStatsRecorder {
   RecordInterceptor() = default;
   ~RecordInterceptor() override = default;
 
-  MOCK_METHOD2(SetPageInfo,
-               void(const url::Origin& top_frame_origin, bool is_top_frame));
-
   MOCK_METHOD3(StartNewRecord,
                void(VideoCodecProfile profile,
                     const gfx::Size& natural_size,
@@ -91,6 +91,7 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
   void SetUp() override {
     // Do this first. Lots of pieces depend on the task runner.
     task_runner_ = new base::TestMockTimeTaskRunner();
+    clock_ = task_runner_->GetMockTickClock();
     message_loop_.SetTaskRunner(task_runner_);
 
     // Make reporter with default configuration. Connects RecordInterceptor as
@@ -168,11 +169,12 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
     mojom::VideoDecodeStatsRecorderPtr recorder_ptr;
     SetupRecordInterceptor(&recorder_ptr, &interceptor_);
 
-    reporter_ = base::MakeUnique<VideoDecodeStatsReporter>(
+    reporter_ = std::make_unique<VideoDecodeStatsReporter>(
         std::move(recorder_ptr),
         base::Bind(&VideoDecodeStatsReporterTest::GetPipelineStatsCB,
                    base::Unretained(this)),
-        MakeDefaultVideoConfig(), task_runner_->GetMockTickClock());
+        MakeDefaultVideoConfig(),
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting(), clock_.get());
   }
 
   // Fast forward the task runner (and associated tick clock) by |milliseconds|.
@@ -337,6 +339,10 @@ class VideoDecodeStatsReporterTest : public ::testing::Test {
   // Task runner that allows for manual advancing of time. Instantiated and
   // used by message_loop_ in Setup().
   scoped_refptr<base::TestMockTimeTaskRunner> task_runner_;
+
+  // TODO(tzik): Remove |clock_| after updating GetMockTickClock to own the
+  // instance.
+  std::unique_ptr<base::TickClock> clock_;
 
   // Points to the interceptor that acts as a VideoDecodeStatsRecorder. The
   // object is owned by VideoDecodeStatsRecorderPtr, which is itself owned by

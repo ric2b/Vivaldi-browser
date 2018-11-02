@@ -13,9 +13,9 @@
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/ozone/platform/wayland/fake_server.h"
-#include "ui/ozone/platform/wayland/mock_platform_window_delegate.h"
 #include "ui/ozone/platform/wayland/wayland_test.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
+#include "ui/ozone/test/mock_platform_window_delegate.h"
 
 using ::testing::Eq;
 using ::testing::Mock;
@@ -69,6 +69,17 @@ class WaylandWindowTest : public WaylandTest {
     return xdg_surface->xdg_toplevel.get();
   }
 
+  void SetWlArrayWithState(uint32_t state, wl_array* states) {
+    uint32_t* s;
+    s = static_cast<uint32_t*>(wl_array_add(states, sizeof *s));
+    *s = state;
+  }
+
+  void InitializeWlArrayWithActivatedState(wl_array* states) {
+    wl_array_init(states);
+    SetWlArrayWithState(XDG_SURFACE_STATE_ACTIVATED, states);
+  }
+
   wl::MockXdgSurface* xdg_surface;
 
   MouseEvent test_mouse_event;
@@ -79,36 +90,79 @@ class WaylandWindowTest : public WaylandTest {
 
 TEST_P(WaylandWindowTest, SetTitle) {
   EXPECT_CALL(*GetXdgSurface(), SetTitle(StrEq("hello")));
-  window.SetTitle(base::ASCIIToUTF16("hello"));
+  window->SetTitle(base::ASCIIToUTF16("hello"));
 }
 
-TEST_P(WaylandWindowTest, Maximize) {
+TEST_P(WaylandWindowTest, MaximizeAndRestore) {
+  uint32_t serial = 12;
+  wl_array states;
+  InitializeWlArrayWithActivatedState(&states);
+
+  SetWlArrayWithState(XDG_SURFACE_STATE_MAXIMIZED, &states);
+
   EXPECT_CALL(*GetXdgSurface(), SetMaximized());
-  window.Maximize();
+  EXPECT_CALL(*GetXdgSurface(), UnsetMaximized());
+  window->Maximize();
+  SendConfigureEvent(0, 0, serial, &states);
+  Sync();
+
+  window->Restore();
 }
 
 TEST_P(WaylandWindowTest, Minimize) {
   EXPECT_CALL(*GetXdgSurface(), SetMinimized());
-  window.Minimize();
+  window->Minimize();
 }
 
-TEST_P(WaylandWindowTest, Restore) {
+TEST_P(WaylandWindowTest, SetFullscreenAndRestore) {
+  wl_array states;
+  InitializeWlArrayWithActivatedState(&states);
+
+  SetWlArrayWithState(XDG_SURFACE_STATE_FULLSCREEN, &states);
+
+  EXPECT_CALL(*GetXdgSurface(), SetFullscreen());
+  EXPECT_CALL(*GetXdgSurface(), UnsetFullscreen());
+  window->ToggleFullscreen();
+  SendConfigureEvent(0, 0, 1, &states);
+  Sync();
+
+  window->Restore();
+}
+
+TEST_P(WaylandWindowTest, SetMaximizedFullscreenAndRestore) {
+  wl_array states;
+  InitializeWlArrayWithActivatedState(&states);
+
+  EXPECT_CALL(*GetXdgSurface(), SetFullscreen());
+  EXPECT_CALL(*GetXdgSurface(), UnsetFullscreen());
+  EXPECT_CALL(*GetXdgSurface(), SetMaximized());
   EXPECT_CALL(*GetXdgSurface(), UnsetMaximized());
-  window.Restore();
+
+  window->Maximize();
+  SetWlArrayWithState(XDG_SURFACE_STATE_MAXIMIZED, &states);
+  SendConfigureEvent(0, 0, 2, &states);
+  Sync();
+
+  window->ToggleFullscreen();
+  SetWlArrayWithState(XDG_SURFACE_STATE_FULLSCREEN, &states);
+  SendConfigureEvent(0, 0, 3, &states);
+  Sync();
+
+  window->Restore();
 }
 
 TEST_P(WaylandWindowTest, CanDispatchMouseEventDefault) {
-  EXPECT_FALSE(window.CanDispatchEvent(&test_mouse_event));
+  EXPECT_FALSE(window->CanDispatchEvent(&test_mouse_event));
 }
 
 TEST_P(WaylandWindowTest, CanDispatchMouseEventFocus) {
-  window.set_pointer_focus(true);
-  EXPECT_TRUE(window.CanDispatchEvent(&test_mouse_event));
+  window->set_pointer_focus(true);
+  EXPECT_TRUE(window->CanDispatchEvent(&test_mouse_event));
 }
 
 TEST_P(WaylandWindowTest, CanDispatchMouseEventUnfocus) {
-  window.set_pointer_focus(false);
-  EXPECT_FALSE(window.CanDispatchEvent(&test_mouse_event));
+  window->set_pointer_focus(false);
+  EXPECT_FALSE(window->CanDispatchEvent(&test_mouse_event));
 }
 
 ACTION_P(CloneEvent, ptr) {
@@ -118,7 +172,7 @@ ACTION_P(CloneEvent, ptr) {
 TEST_P(WaylandWindowTest, DispatchEvent) {
   std::unique_ptr<Event> event;
   EXPECT_CALL(delegate, DispatchEvent(_)).WillOnce(CloneEvent(&event));
-  window.DispatchEvent(&test_mouse_event);
+  window->DispatchEvent(&test_mouse_event);
   ASSERT_TRUE(event);
   ASSERT_TRUE(event->IsMouseEvent());
   auto* mouse_event = event->AsMouseEvent();

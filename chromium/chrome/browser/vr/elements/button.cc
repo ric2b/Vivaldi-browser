@@ -5,7 +5,7 @@
 #include "chrome/browser/vr/elements/button.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
+#include "chrome/browser/vr/elements/invisible_hit_target.h"
 #include "chrome/browser/vr/elements/rect.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "chrome/browser/vr/elements/ui_element_name.h"
@@ -18,50 +18,43 @@ namespace vr {
 
 namespace {
 
-constexpr float kIconScaleFactor = 0.5f;
 constexpr float kHitPlaneScaleFactorHovered = 1.2f;
 constexpr float kDefaultHoverOffsetDMM = 0.048f;
+
 }  // namespace
 
-Button::Button(base::Callback<void()> click_handler,
-               const gfx::VectorIcon& icon)
+Button::Button(base::RepeatingCallback<void()> click_handler)
     : click_handler_(click_handler), hover_offset_(kDefaultHoverOffsetDMM) {
   set_hit_testable(false);
 
-  auto background = base::MakeUnique<Rect>();
-  background->set_type(kTypeButtonBackground);
+  auto background = std::make_unique<Rect>();
+  background->SetType(kTypeButtonBackground);
   background->set_bubble_events(true);
+  background->set_contributes_to_parent_bounds(false);
   background->SetTransitionedProperties({TRANSFORM});
   background->set_hit_testable(false);
   background_ = background.get();
   AddChild(std::move(background));
 
-  auto vector_icon = base::MakeUnique<VectorIcon>(512);
-  vector_icon->set_type(kTypeButtonForeground);
-  vector_icon->SetIcon(icon);
-  vector_icon->set_bubble_events(true);
-  vector_icon->SetTransitionedProperties({TRANSFORM});
-  vector_icon->set_hit_testable(false);
-  foreground_ = vector_icon.get();
-  AddChild(std::move(vector_icon));
-
-  auto hit_plane = base::MakeUnique<InvisibleHitTarget>();
-  hit_plane->set_type(kTypeButtonHitTarget);
+  auto hit_plane = std::make_unique<InvisibleHitTarget>();
+  hit_plane->SetType(kTypeButtonHitTarget);
+  hit_plane->set_focusable(false);
   hit_plane->set_bubble_events(true);
+  hit_plane->set_contributes_to_parent_bounds(false);
   hit_plane_ = hit_plane.get();
-  foreground_->AddChild(std::move(hit_plane));
+  AddChild(std::move(hit_plane));
 
   EventHandlers event_handlers;
   event_handlers.hover_enter =
-      base::Bind(&Button::HandleHoverEnter, base::Unretained(this));
+      base::BindRepeating(&Button::HandleHoverEnter, base::Unretained(this));
   event_handlers.hover_move =
-      base::Bind(&Button::HandleHoverMove, base::Unretained(this));
+      base::BindRepeating(&Button::HandleHoverMove, base::Unretained(this));
   event_handlers.hover_leave =
-      base::Bind(&Button::HandleHoverLeave, base::Unretained(this));
+      base::BindRepeating(&Button::HandleHoverLeave, base::Unretained(this));
   event_handlers.button_down =
-      base::Bind(&Button::HandleButtonDown, base::Unretained(this));
+      base::BindRepeating(&Button::HandleButtonDown, base::Unretained(this));
   event_handlers.button_up =
-      base::Bind(&Button::HandleButtonUp, base::Unretained(this));
+      base::BindRepeating(&Button::HandleButtonUp, base::Unretained(this));
   set_event_handlers(event_handlers);
 }
 
@@ -76,12 +69,12 @@ void Button::SetButtonColors(const ButtonColors& colors) {
 }
 
 void Button::HandleHoverEnter() {
-  hovered_ = true;
+  hovered_ = enabled_;
   OnStateUpdated();
 }
 
 void Button::HandleHoverMove(const gfx::PointF& position) {
-  hovered_ = hit_plane_->LocalHitTest(position);
+  hovered_ = hit_plane_->LocalHitTest(position) && enabled_;
   OnStateUpdated();
 }
 
@@ -91,45 +84,52 @@ void Button::HandleHoverLeave() {
 }
 
 void Button::HandleButtonDown() {
-  down_ = true;
+  down_ = enabled_;
   OnStateUpdated();
 }
 
 void Button::HandleButtonUp() {
   down_ = false;
   OnStateUpdated();
-  if (hovered_ && click_handler_)
+  if (hovered() && click_handler_)
     click_handler_.Run();
 }
 
 void Button::OnStateUpdated() {
   pressed_ = hovered_ ? down_ : false;
+  background_->SetColor(colors_.GetBackgroundColor(hovered_, pressed_));
 
-  if (hovered_) {
+  if (hover_offset_ == 0.0f)
+    return;
+
+  if (hovered()) {
     background_->SetTranslate(0.0, 0.0, hover_offset_);
-    foreground_->SetTranslate(0.0, 0.0, hover_offset_);
     hit_plane_->SetScale(kHitPlaneScaleFactorHovered,
                          kHitPlaneScaleFactorHovered, 1.0f);
   } else {
     background_->SetTranslate(0.0, 0.0, 0.0);
-    foreground_->SetTranslate(0.0, 0.0, 0.0);
     hit_plane_->SetScale(1.0f, 1.0f, 1.0f);
   }
-
-  background_->SetColor(colors_.GetBackgroundColor(hovered_, pressed_));
-  foreground_->SetColor(colors_.GetForegroundColor(disabled_));
 }
 
 void Button::OnSetDrawPhase() {
-  background_->set_draw_phase(draw_phase());
-  foreground_->set_draw_phase(draw_phase());
-  hit_plane_->set_draw_phase(draw_phase());
+  background_->SetDrawPhase(draw_phase());
+  hit_plane_->SetDrawPhase(draw_phase());
 }
 
 void Button::OnSetName() {
   background_->set_owner_name_for_test(name());
-  foreground_->set_owner_name_for_test(name());
   hit_plane_->set_owner_name_for_test(name());
+}
+
+void Button::OnSetSize(const gfx::SizeF& size) {
+  background_->SetSize(size.width(), size.height());
+  hit_plane_->SetSize(size.width(), size.height());
+}
+
+void Button::OnSetCornerRadii(const CornerRadii& radii) {
+  background_->SetCornerRadii(radii);
+  hit_plane_->SetCornerRadii(radii);
 }
 
 void Button::NotifyClientSizeAnimated(const gfx::SizeF& size,
@@ -137,11 +137,7 @@ void Button::NotifyClientSizeAnimated(const gfx::SizeF& size,
                                       cc::Animation* animation) {
   if (target_property_id == BOUNDS) {
     background_->SetSize(size.width(), size.height());
-    background_->set_corner_radius(size.width() * 0.5f);
-    foreground_->SetSize(size.width() * kIconScaleFactor,
-                         size.height() * kIconScaleFactor);
     hit_plane_->SetSize(size.width(), size.height());
-    hit_plane_->set_corner_radius(size.width() * 0.5f);
   }
   UiElement::NotifyClientSizeAnimated(size, target_property_id, animation);
 }

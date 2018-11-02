@@ -34,7 +34,7 @@
 #include "core/frame/WebLocalFrameImpl.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
@@ -77,8 +77,8 @@ class ScrollingCoordinatorTest : public ::testing::Test,
                                                 ->MainFrameImpl()
                                                 ->GetFrame()
                                                 ->View()
-                                                ->GetLayoutViewItem()
-                                                .Compositor()
+                                                ->GetLayoutView()
+                                                ->Compositor()
                                                 ->RootGraphicsLayer());
   }
 
@@ -113,7 +113,7 @@ class ScrollingCoordinatorTest : public ::testing::Test,
     return layer ? layer->PlatformLayer() : nullptr;
   }
 
-  WebViewImpl* GetWebView() const { return helper_.WebView(); }
+  WebViewImpl* GetWebView() const { return helper_.GetWebView(); }
   LocalFrame* GetFrame() const { return helper_.LocalMainFrame()->GetFrame(); }
 
   WebLayerTreeView* GetWebLayerTreeView() const {
@@ -750,10 +750,10 @@ TEST_P(ScrollingCoordinatorTest, iframeScrolling) {
   LocalFrameView* inner_frame_view = layout_embedded_content->ChildFrameView();
   ASSERT_TRUE(inner_frame_view);
 
-  LayoutViewItem inner_layout_view_item = inner_frame_view->GetLayoutViewItem();
-  ASSERT_FALSE(inner_layout_view_item.IsNull());
+  auto* inner_layout_view = inner_frame_view->GetLayoutView();
+  ASSERT_TRUE(inner_layout_view);
 
-  PaintLayerCompositor* inner_compositor = inner_layout_view_item.Compositor();
+  PaintLayerCompositor* inner_compositor = inner_layout_view->Compositor();
   ASSERT_TRUE(inner_compositor->InCompositingMode());
 
   GraphicsLayer* scroll_layer =
@@ -803,10 +803,10 @@ TEST_P(ScrollingCoordinatorTest, rtlIframe) {
   LocalFrameView* inner_frame_view = layout_embedded_content->ChildFrameView();
   ASSERT_TRUE(inner_frame_view);
 
-  LayoutViewItem inner_layout_view_item = inner_frame_view->GetLayoutViewItem();
-  ASSERT_FALSE(inner_layout_view_item.IsNull());
+  auto* inner_layout_view = inner_frame_view->GetLayoutView();
+  ASSERT_TRUE(inner_layout_view);
 
-  PaintLayerCompositor* inner_compositor = inner_layout_view_item.Compositor();
+  PaintLayerCompositor* inner_compositor = inner_layout_view->Compositor();
   ASSERT_TRUE(inner_compositor->InCompositingMode());
 
   GraphicsLayer* scroll_layer =
@@ -982,10 +982,10 @@ TEST_P(ScrollingCoordinatorTest,
   LocalFrameView* inner_frame_view = layout_embedded_content->ChildFrameView();
   ASSERT_TRUE(inner_frame_view);
 
-  LayoutViewItem inner_layout_view_item = inner_frame_view->GetLayoutViewItem();
-  ASSERT_FALSE(inner_layout_view_item.IsNull());
+  auto* inner_layout_view = inner_frame_view->GetLayoutView();
+  ASSERT_TRUE(inner_layout_view);
 
-  PaintLayerCompositor* inner_compositor = inner_layout_view_item.Compositor();
+  PaintLayerCompositor* inner_compositor = inner_layout_view->Compositor();
   ASSERT_TRUE(inner_compositor->InCompositingMode());
 
   GraphicsLayer* scroll_layer =
@@ -1205,11 +1205,6 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest, BackgroundNotOpaqueTest) {
       MainThreadScrollingReason::kBackgroundNotOpaqueInRectAndLCDText);
 }
 
-TEST_P(NonCompositedMainThreadScrollingReasonTest, BorderRadiusTest) {
-  TestNonCompositedReasons("border-radius",
-                           MainThreadScrollingReason::kHasBorderRadius);
-}
-
 TEST_P(NonCompositedMainThreadScrollingReasonTest, ClipTest) {
   TestNonCompositedReasons("clip",
                            MainThreadScrollingReason::kHasClipRelatedProperty);
@@ -1265,9 +1260,8 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest, ClipPathTest) {
 }
 
 TEST_P(NonCompositedMainThreadScrollingReasonTest, LCDTextEnabledTest) {
-  TestNonCompositedReasons("transparent border-radius",
-                           MainThreadScrollingReason::kHasOpacityAndLCDText |
-                               MainThreadScrollingReason::kHasBorderRadius);
+  TestNonCompositedReasons("transparent",
+                           MainThreadScrollingReason::kHasOpacityAndLCDText);
 }
 
 TEST_P(NonCompositedMainThreadScrollingReasonTest, BoxShadowTest) {
@@ -1332,8 +1326,7 @@ TEST_P(NonCompositedMainThreadScrollingReasonTest,
       ToLayoutBoxModelObject(container2->GetLayoutObject())
           ->GetScrollableArea();
   ASSERT_TRUE(scrollable_area2);
-  EXPECT_TRUE(scrollable_area2->GetNonCompositedMainThreadScrollingReasons() &
-              MainThreadScrollingReason::kHasBorderRadius);
+  ASSERT_TRUE(scrollable_area2->UsesCompositedScrolling());
 }
 
 }  // namespace blink

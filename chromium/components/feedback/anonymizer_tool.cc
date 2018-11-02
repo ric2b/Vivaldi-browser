@@ -10,6 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "content/public/browser/browser_thread.h"
 #include "third_party/re2/src/re2/re2.h"
 
 using re2::RE2;
@@ -40,13 +41,20 @@ namespace {
 // (?i) turns on case insensitivy for the remainder of the regex.
 // (?-s) turns off "dot matches newline" for the remainder of the regex.
 // (?:regex) denotes non-capturing parentheses group.
-const char* kCustomPatternsWithContext[] = {
-    "(\\bCell ID: ')([0-9a-fA-F]+)(')",                      // ModemManager
-    "(\\bLocation area code: ')([0-9a-fA-F]+)(')",           // ModemManager
-    "(?i-s)(\\bssid[= ]')(.+)(')",                           // wpa_supplicant
-    "(?-s)(\\bSSID - hexdump\\(len=[0-9]+\\): )(.+)()",      // wpa_supplicant
-    "(?-s)(\\[SSID=)(.+?)(\\])",                             // shill
-    "(?i-s)(serial\\s*number\\s*:\\s*)([0-9a-zA-Z\\-]+)()",  // Serial numbers
+constexpr const char* kCustomPatternsWithContext[] = {
+    // ModemManager
+    "(\\bCell ID: ')([0-9a-fA-F]+)(')",
+    "(\\bLocation area code: ')([0-9a-fA-F]+)(')",
+
+    // wpa_supplicant
+    "(?i-s)(\\bssid[= ]')(.+)(')",
+    "(?-s)(\\bSSID - hexdump\\(len=[0-9]+\\): )(.+)()",
+
+    // shill
+    "(?-s)(\\[SSID=)(.+?)(\\])",
+
+    // Serial numbers
+    "(?i-s)(serial\\s*(?:number)?\\s*[:=]\\s*)([0-9a-zA-Z\\-\"]+)()",
 };
 
 // Helper macro: Non capturing group
@@ -229,11 +237,19 @@ bool FindAndConsumeAndGetSkipped(re2::StringPiece* input,
 AnonymizerTool::AnonymizerTool()
     : custom_patterns_with_context_(arraysize(kCustomPatternsWithContext)),
       custom_patterns_without_context_(
-          arraysize(kCustomPatternsWithoutContext)) {}
+          arraysize(kCustomPatternsWithoutContext)) {
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+}
 
-AnonymizerTool::~AnonymizerTool() {}
+AnonymizerTool::~AnonymizerTool() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
 
 std::string AnonymizerTool::Anonymize(const std::string& input) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!::content::BrowserThread::CurrentlyOn(::content::BrowserThread::UI))
+      << "This is an expensive operation. Do not execute this on the UI "
+         "thread.";
   std::string anonymized = AnonymizeMACAddresses(input);
   anonymized = AnonymizeCustomPatterns(std::move(anonymized));
   return anonymized;
@@ -364,7 +380,7 @@ std::string AnonymizerTool::AnonymizeCustomPatternWithoutContext(
       // with %zu and a size_t in printf, nor does it support %llu.
       replacement_id = base::StringPrintf(
           "<%s: %s>", pattern.alias,
-          base::Uint64ToString(identifier_space->size()).c_str());
+          base::NumberToString(identifier_space->size()).c_str());
       (*identifier_space)[matched_id_as_string] = replacement_id;
     }
 
@@ -373,6 +389,19 @@ std::string AnonymizerTool::AnonymizeCustomPatternWithoutContext(
   }
   text.AppendToString(&result);
   return result;
+}
+
+AnonymizerToolContainer::AnonymizerToolContainer(
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
+    : anonymizer_(new AnonymizerTool), task_runner_(task_runner) {}
+
+AnonymizerToolContainer::~AnonymizerToolContainer() {
+  task_runner_->DeleteSoon(FROM_HERE, std::move(anonymizer_));
+}
+
+AnonymizerTool* AnonymizerToolContainer::Get() {
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
+  return anonymizer_.get();
 }
 
 }  // namespace feedback

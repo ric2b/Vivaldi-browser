@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/sessions/core/session_id.h"
 #include "components/signin/core/browser/signin_manager.h"
@@ -196,14 +195,14 @@ void FillSetUsingSessions(synced_sessions::SyncedSessions const& sessions,
       NOTREACHED();
       break;
   }
-  return base::MakeUnique<TabModelSnapshot>(tm);
+  return std::make_unique<TabModelSnapshot>(tm);
 }
 
 - (std::unique_ptr<const synced_sessions::DistantSession>)distantSessionForTag:
     (std::string const&)tag {
   syncer::SyncService* syncService =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(_browserState);
-  return base::MakeUnique<synced_sessions::DistantSession>(syncService, tag);
+  return std::make_unique<synced_sessions::DistantSession>(syncService, tag);
 }
 
 - (std::string const&)tagOfDistantSessionAtIndex:(int)index {
@@ -211,25 +210,18 @@ void FillSetUsingSessions(synced_sessions::SyncedSessions const& sessions,
 }
 
 - (TabSwitcherSignInPanelsType)signInPanelType {
-  TabSwitcherSignInPanelsType panelType = TabSwitcherSignInPanelsType::NO_PANEL;
-  if (![self isSignedIn]) {
-    panelType = TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_OUT;
+  if (![self isSignedIn] || [_delegate isSigninInProgress])
+    return TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_OUT;
+  if (![self isSyncTabsEnabled])
+    return TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_IN_SYNC_OFF;
+  if (_syncedSessions->GetSessionCount() != 0)
+    return TabSwitcherSignInPanelsType::NO_PANEL;
+  if ([self isFirstSyncCycleCompleted]) {
+    return TabSwitcherSignInPanelsType::
+        PANEL_USER_SIGNED_IN_SYNC_ON_NO_SESSIONS;
   } else {
-    if (![self isSyncTabsEnabled]) {
-      panelType = TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_IN_SYNC_OFF;
-    } else {
-      if (_syncedSessions->GetSessionCount() == 0) {
-        if ([self isFirstSyncCycleCompleted]) {
-          panelType = TabSwitcherSignInPanelsType::
-              PANEL_USER_SIGNED_IN_SYNC_ON_NO_SESSIONS;
-        } else {
-          panelType = TabSwitcherSignInPanelsType::
-              PANEL_USER_SIGNED_IN_SYNC_IN_PROGRESS;
-        }
-      }
-    }
+    return TabSwitcherSignInPanelsType::PANEL_USER_SIGNED_IN_SYNC_IN_PROGRESS;
   }
-  return panelType;
 }
 
 - (void)syncedSessionsChanged {

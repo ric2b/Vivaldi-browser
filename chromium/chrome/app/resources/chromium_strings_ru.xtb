@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">О Chromium</translation>
 <translation id="1298199220304005244">Помощь по использованию Chromium OS</translation>
 <translation id="1396446129537741364">Вводимые пароли будут отображаться в Chromium.</translation>
-<translation id="1403254041219632970">В следующих версиях Chromium будет прекращена поддержка Mac OS X 10.6, 10.7 и 10.8.</translation>
 <translation id="1414495520565016063">Добро пожаловать в Chromium!</translation>
-<translation id="1440917365206527807">Chromium заблокировал попытку перенаправить вас на следующую страницу:</translation>
 <translation id="1444754455097148408">Лицензии Chromium на ПО с открытым исходным кодом</translation>
 <translation id="1502360822835740515">Как сделать Chromium браузером по умолчанию</translation>
 <translation id="151962892725702025">Не удалось синхронизировать данные, поскольку сервис Sync недоступен в вашем домене.</translation>
-<translation id="1559451348202814456">В работе Chromium могут возникать сбои, так как браузер больше не поддерживает Mac OS X 10.6, 10.7 и 10.8.</translation>
 <translation id="1585657529869845941">Если появится кнопка <ph name="BEGIN_BOLD" />Изменить<ph name="END_BOLD" />, нажмите ее.</translation>
 <translation id="1653828314016431939">ОК, перезапустить сейчас</translation>
 <translation id="1668054258064581266">После удаления вашего аккаунта из Chromium может понадобиться перезагрузить открытые вкладки, чтобы изменения вступили в силу.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Перезагрузите Chromium OS, чтобы установить обновление.</translation>
 <translation id="2647554856022461007">Для более качественной работы Chromium может использовать веб-сервисы. При необходимости отключите их. <ph name="BEGIN_LINK" />Подробнее…<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">В процессе установки произошла ошибка в операционной системе. Скачайте Chromium ещё раз.</translation>
-<translation id="2685838254101182273">Chromium больше не обновляется и не поддерживается для этой версии операционной системы.</translation>
 <translation id="2705403826523567092">Войдите в Chrome, чтобы вам было удобнее пользоваться этим браузером на всех устройствах.</translation>
 <translation id="2711502716910134313">Вкладка Chromium</translation>
 <translation id="2718390899429598676">В целях повышения безопасности Chromium шифрует ваши данные.</translation>
@@ -104,7 +100,6 @@
 <translation id="4458285410772214805">Чтобы изменения вступили в силу, выполните вход еще раз.</translation>
 <translation id="4469812139324097969">Для текущей версии Chromium доступно обновление. Оно будет установлено при перезапуске приложения.</translation>
 <translation id="4488554488975128561">Вы можете автоматически отправлять системную информацию и контент страниц в Google, чтобы помочь улучшить распознавание опасных приложений и сайтов. Давайте вместе сделаем Chromium ещё удобнее и безопаснее!</translation>
-<translation id="4549794359424059447">В следующих версиях Chromium будет прекращена поддержка Windows XP и Windows Vista.</translation>
 <translation id="4567424176335768812">Вы вошли с помощью аккаунта <ph name="USER_EMAIL_ADDRESS" />. Ваши закладки, история и другие настройки теперь доступны на всех устройствах, где вы используете этот аккаунт.</translation>
 <translation id="459535195905078186">Приложения Chromium</translation>
 <translation id="4611246891205775468">Для этого сайта Chromium запрашивает разрешение на доступ к микрофону.</translation>
@@ -143,7 +138,6 @@
 <translation id="5902536751647951209">Ошибка сертификата аутентификации. Войдите в Chromium ещё раз или обратитесь за информацией к администратору. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Чтобы завершить обновление, перезапустите устройство.</translation>
 <translation id="5942520288919337908">Расширение <ph name="EXTENSION_NAME" /> добавлено в Chromium.</translation>
-<translation id="59625444380784159">Данные из вашего списка контактов будут отображаться в подсказках, и вы сможете быстрее заполнять формы в Chromium.</translation>
 <translation id="5987687638152509985">Чтобы начать синхронизацию, обновите Chromium</translation>
 <translation id="6055895534982063517">Доступна новая версия Chromium, которая стала еще быстрее.</translation>
 <translation id="6063093106622310249">&amp;Открыть в Chromium</translation>
@@ -157,6 +151,7 @@
 <translation id="6334986366598267305">Теперь с Chromium ещё удобнее работать в аккаунте Google, в том числе на общих компьютерах.</translation>
 <translation id="6373523479360886564">Вы действительно хотите удалить Chromium?</translation>
 <translation id="6394232988457703198">Перезапустите Chromium</translation>
+<translation id="6400072781405947421">В работе Chromium могут возникать сбои, так как браузер больше не поддерживает Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium – браузер, который открывает веб-страницы и приложения за секунды. Он быстр, стабилен в работе и прост в использовании. Встроенная в Chromium защита от мошенничества и вредоносного ПО обеспечивает максимально безопасную работу в Интернете.</translation>
 <translation id="6475912303565314141">Кроме того, расширение изменило стартовую страницу Chromium.</translation>
 <translation id="6485906693002546646">Для синхронизации данных Chromium используется аккаунт <ph name="PROFILE_EMAIL" />. Изменить параметры синхронизации или отключить аккаунт можно в <ph name="SETTINGS_LINK" />.</translation>
@@ -172,13 +167,13 @@
 <translation id="6734291798041940871">Chromium уже установлен для всех пользователей вашего компьютера</translation>
 <translation id="6810143991807788455">Отправьте отчет о текущих настройках Chromium и помогите усовершенствовать работу браузера</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (скопирована в Chromium)</translation>
 <translation id="6893813176749746474">Chromium был обновлен, однако вы не использовали его в течение последних 30 дней.</translation>
 <translation id="6944967875980567883">Модули, загруженные в Chromium</translation>
 <translation id="6964305034639999644">Открыть ссылку в режиме инкогнито браузера Chromium</translation>
 <translation id="6970811910055250180">Обновление операционной системы…</translation>
 <translation id="705851970750939768">Обновить Chromium</translation>
 <translation id="7066436765290594559">Не удалось синхронизировать данные. Обновите кодовую фразу в Sync.</translation>
-<translation id="707471633328071618">Google Payments (скопировано в Chromium)</translation>
 <translation id="7162152143154757523">Chromium предлагает интеллектуальную технологию проверки правописания. Введенный вами текст отправляется на серверы Google, что позволяет использовать механизмы проверки Google Поиска.</translation>
 <translation id="7205698830395646142">Не показывать в Меню Chromium</translation>
 <translation id="7223968959479464213">Диспетчер задач – Chromium</translation>
@@ -236,7 +231,6 @@
 <translation id="872034308864968620">Разрешить Chromium работать в фоновом режиме</translation>
 <translation id="8803635938069941624">Условия использования Chromium OS</translation>
 <translation id="8821041990367117597">Chromium не удалось синхронизировать данные, поскольку ваши учетные сведения устарели.</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">У вас нет прав, необходимых для установки на системном уровне. Запустите программу установки еще раз в качестве администратора.</translation>
 <translation id="8897323336392112261">Кроме того, расширение изменило стартовую страницу Chromium и страницу, отображаемую при нажатии кнопки "Главная страница".</translation>
 <translation id="8907580949721785412">Чтобы просмотреть пароли, введите пароль своего аккаунта Windows.</translation>

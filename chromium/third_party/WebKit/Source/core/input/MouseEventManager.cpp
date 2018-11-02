@@ -19,13 +19,13 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/input/EventHandler.h"
 #include "core/input/EventHandlingUtil.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/DragController.h"
 #include "core/page/DragState.h"
@@ -341,7 +341,7 @@ void MouseEventManager::FakeMouseMoveEventTimerFired(TimerBase* timer) {
                     last_known_mouse_position_.Y()),
       WebFloatPoint(last_known_mouse_global_position_.X(),
                     last_known_mouse_global_position_.Y()),
-      button, 0, modifiers, TimeTicks::Now().InSeconds());
+      button, 0, modifiers, CurrentTimeTicks().InSeconds());
   // TODO(dtapuska): Update m_lastKnowMousePosition to be viewport coordinates.
   fake_mouse_move_event.SetFrameScale(1);
   Vector<WebMouseEvent> coalesced_events;
@@ -441,10 +441,12 @@ WebInputEventResult MouseEventManager::HandleMouseFocus(
     const HitTestResult& hit_test_result,
     InputDeviceCapabilities* source_capabilities) {
   // If clicking on a frame scrollbar, do not mess up with content focus.
-  if (hit_test_result.GetScrollbar() && !frame_->ContentLayoutItem().IsNull()) {
-    if (hit_test_result.GetScrollbar()->GetScrollableArea() ==
-        frame_->ContentLayoutItem().GetScrollableArea())
-      return WebInputEventResult::kNotHandled;
+  if (auto* layout_view = frame_->ContentLayoutObject()) {
+    if (hit_test_result.GetScrollbar() && frame_->ContentLayoutObject()) {
+      if (hit_test_result.GetScrollbar()->GetScrollableArea() ==
+          layout_view->GetScrollableArea())
+        return WebInputEventResult::kNotHandled;
+    }
   }
 
   // The layout needs to be up to date to determine if an element is focusable.
@@ -583,9 +585,13 @@ FloatPoint MouseEventManager::LastKnownMousePositionGlobal() {
 }
 
 void MouseEventManager::SetLastKnownMousePosition(const WebMouseEvent& event) {
-  is_mouse_position_unknown_ = false;
+  is_mouse_position_unknown_ = event.GetType() == WebInputEvent::kMouseLeave;
   last_known_mouse_position_ = event.PositionInRootFrame();
   last_known_mouse_global_position_ = event.PositionInScreen();
+}
+
+void MouseEventManager::SetLastMousePositionAsUnknown() {
+  is_mouse_position_unknown_ = true;
 }
 
 void MouseEventManager::DispatchFakeMouseMoveEventSoon(
@@ -611,7 +617,7 @@ void MouseEventManager::DispatchFakeMouseMoveEventSoon(
               MouseEventManager::FakeMouseMoveReason::kDuringScroll
           ? kFakeMouseMoveIntervalDuringScroll
           : kFakeMouseMoveIntervalPerFrame;
-  fake_mouse_move_event_timer_.StartOneShot(interval, BLINK_FROM_HERE);
+  fake_mouse_move_event_timer_.StartOneShot(interval, FROM_HERE);
 }
 
 void MouseEventManager::DispatchFakeMouseMoveEventSoonInQuad(
@@ -724,7 +730,7 @@ bool MouseEventManager::HandleDragDropIfPossible(
         WebPointerProperties::Button::kLeft, 1,
         modifiers | WebInputEvent::Modifiers::kLeftButtonDown |
             WebInputEvent::Modifiers::kIsCompatibilityEventForTouch,
-        TimeTicks::Now().InSeconds());
+        CurrentTimeTicks().InSeconds());
     mouse_down_ = mouse_down_event;
 
     WebMouseEvent mouse_drag_event(
@@ -732,7 +738,7 @@ bool MouseEventManager::HandleDragDropIfPossible(
         WebPointerProperties::Button::kLeft, 1,
         modifiers | WebInputEvent::Modifiers::kLeftButtonDown |
             WebInputEvent::Modifiers::kIsCompatibilityEventForTouch,
-        TimeTicks::Now().InSeconds());
+        CurrentTimeTicks().InSeconds());
     HitTestRequest request(HitTestRequest::kReadOnly);
     MouseEventWithHitTestResults mev =
         EventHandlingUtil::PerformMouseEventHitTest(frame_, request,
@@ -859,7 +865,7 @@ bool MouseEventManager::HandleDrag(const MouseEventWithHitTestResults& event,
   if (mouse_down_may_start_drag_) {
     HitTestRequest request(HitTestRequest::kReadOnly);
     HitTestResult result(request, mouse_down_pos_);
-    frame_->ContentLayoutItem().HitTest(result);
+    frame_->ContentLayoutObject()->HitTest(result);
     Node* node = result.InnerNode();
     if (node) {
       DragController::SelectionDragPolicy selection_drag_policy =
@@ -913,7 +919,10 @@ bool MouseEventManager::HandleDrag(const MouseEventWithHitTestResults& event,
     // corresponding pointer.
     if (initiator == DragInitiator::kMouse) {
       frame_->GetEventHandler().HandlePointerEvent(
-          WebPointerEvent(WebInputEvent::Type::kPointerCancel, event.Event()));
+          WebPointerEvent::CreatePointerCausesUaActionEvent(
+              WebPointerProperties::PointerType::kMouse,
+              event.Event().TimeStampSeconds()),
+          Vector<WebPointerEvent>());
     }
     // TODO(crbug.com/708278): If the drag starts with touch the touch cancel
     // should trigger the release of pointer capture.
@@ -1107,8 +1116,8 @@ bool MouseEventManager::MousePressed() {
   return mouse_pressed_;
 }
 
-void MouseEventManager::SetMousePressed(bool mouse_pressed) {
-  mouse_pressed_ = mouse_pressed;
+void MouseEventManager::ReleaseMousePress() {
+  mouse_pressed_ = false;
 }
 
 bool MouseEventManager::CapturesDragging() const {

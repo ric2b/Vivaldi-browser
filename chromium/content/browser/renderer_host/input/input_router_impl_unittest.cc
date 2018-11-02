@@ -126,9 +126,8 @@ class MockInputRouterImplClient : public InputRouterImplClient {
     return input_router_client_.FilterInputEvent(input_event, latency_info);
   }
 
-  void IncrementInFlightEventCount(
-      blink::WebInputEvent::Type event_type) override {
-    input_router_client_.IncrementInFlightEventCount(event_type);
+  void IncrementInFlightEventCount() override {
+    input_router_client_.IncrementInFlightEventCount();
   }
 
   void DecrementInFlightEventCount(InputEventAckSource ack_source) override {
@@ -144,6 +143,17 @@ class MockInputRouterImplClient : public InputRouterImplClient {
   }
 
   void DidStopFlinging() override { input_router_client_.DidStopFlinging(); }
+
+  void SetNeedsBeginFrameForFlingProgress() override {
+    input_router_client_.SetNeedsBeginFrameForFlingProgress();
+  }
+
+  void ForwardWheelEventWithLatencyInfo(
+      const blink::WebMouseWheelEvent& wheel_event,
+      const ui::LatencyInfo& latency_info) override {
+    input_router_client_.ForwardWheelEventWithLatencyInfo(wheel_event,
+                                                          latency_info);
+  }
 
   void ForwardGestureEventWithLatencyInfo(
       const blink::WebGestureEvent& gesture_event,
@@ -389,11 +399,11 @@ class InputRouterImplTest : public testing::Test {
   InputRouterImpl* input_router() const { return input_router_.get(); }
 
   bool TouchEventQueueEmpty() const {
-    return input_router()->touch_event_queue_->Empty();
+    return input_router()->touch_event_queue_.Empty();
   }
 
   bool TouchEventTimeoutEnabled() const {
-    return input_router()->touch_event_queue_->IsAckTimeoutEnabled();
+    return input_router()->touch_event_queue_.IsAckTimeoutEnabled();
   }
 
   bool HasPendingEvents() const { return input_router_->HasPendingEvents(); }
@@ -1069,7 +1079,7 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAckInterleaved) {
   EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
-  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+  EXPECT_EQ(WebInputEvent::kGestureTapDown,
             client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
@@ -1084,7 +1094,7 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAckInterleaved) {
   EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(2, client_->in_flight_event_count());
-  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+  EXPECT_EQ(WebInputEvent::kGestureShowPress,
             client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollUpdate,
@@ -1102,7 +1112,7 @@ TEST_F(InputRouterImplTest, GestureTypesIgnoringAckInterleaved) {
   EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(3, client_->in_flight_event_count());
-  EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+  EXPECT_EQ(WebInputEvent::kGestureTapCancel,
             client_->last_in_flight_event_type());
 
   // Now ack each ack-respecting event. Should see in-flight event count
@@ -1168,7 +1178,7 @@ TEST_F(InputRouterImplTest, GestureShowPressIsInOrder) {
   EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
-  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+  EXPECT_EQ(WebInputEvent::kGestureShowPress,
             client_->last_in_flight_event_type());
 
   SimulateGestureEvent(WebInputEvent::kGestureShowPress,
@@ -1176,7 +1186,7 @@ TEST_F(InputRouterImplTest, GestureShowPressIsInOrder) {
   EXPECT_EQ(1U, GetAndResetDispatchedMessages().size());
   EXPECT_EQ(0U, disposition_handler_->GetAndResetAckCount());
   EXPECT_EQ(1, client_->in_flight_event_count());
-  EXPECT_EQ(WebInputEvent::kGesturePinchUpdate,
+  EXPECT_EQ(WebInputEvent::kGestureShowPress,
             client_->last_in_flight_event_type());
 
   // Ack the GesturePinchUpdate to release two GestureShowPress ack.
@@ -2325,9 +2335,19 @@ TEST_F(InputRouterImplScaleGestureEventTest, GestureTwoFingerTap) {
 }
 
 TEST_F(InputRouterImplScaleGestureEventTest, GestureFlingStart) {
+  // Simulate a GSB since touchscreen flings must happen inside scroll.
+  SimulateGestureEvent(SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      10.f, 20.f, blink::kWebGestureDeviceTouchscreen));
+  FlushGestureEvent(WebInputEvent::kGestureScrollBegin);
+
   const gfx::Point orig(10, 20), scaled(20, 40);
   WebGestureEvent event =
       BuildGestureEvent(WebInputEvent::kGestureFlingStart, orig);
+  // Set the source device to touchscreen to make sure that the event gets
+  // dispatched to the renderer. When wheel scroll latching is enabled touchpad
+  // flings are not dispatched to the renderer, instead they are handled on the
+  // browser side.
+  event.source_device = blink::kWebGestureDeviceTouchscreen;
   event.data.fling_start.velocity_x = 30;
   event.data.fling_start.velocity_y = 40;
   SimulateGestureEvent(event);

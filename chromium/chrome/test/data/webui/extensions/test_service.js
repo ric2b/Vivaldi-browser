@@ -22,8 +22,18 @@ cr.define('extensions', function() {
       this.itemStateChangedTarget = new FakeChromeEvent();
       this.profileStateChangedTarget = new FakeChromeEvent();
 
+      /** @private {!chrome.developerPrivate.LoadError} */
+      this.retryLoadUnpackedError_;
+
       /** @type {boolean} */
       this.forceReloadItemError_ = false;
+    }
+
+    /**
+     * @param {!chrome.developerPrivate.LoadError} error
+     */
+    setRetryLoadUnpackedError(error) {
+      this.retryLoadUnpackedError_ = error;
     }
 
     /**
@@ -87,7 +97,9 @@ cr.define('extensions', function() {
     /** @override */
     retryLoadUnpacked(guid) {
       this.methodCalled('retryLoadUnpacked', guid);
-      return Promise.resolve();
+      return (this.retryLoadUnpackedError_ !== undefined) ?
+          Promise.reject(this.retryLoadUnpackedError_) :
+          Promise.resolve();
     }
 
     /** @override */
@@ -98,6 +110,7 @@ cr.define('extensions', function() {
     /** @override */
     updateAllExtensions() {
       this.methodCalled('updateAllExtensions');
+      return Promise.resolve();
     }
   }
 

@@ -25,33 +25,18 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
     *textures = ++gen_textures_count_;
   }
 
-  void ShallowFlushCHROMIUM() override {
-    flushed_fence_sync_ = next_fence_sync_ - 1;
-  }
-
-  void OrderingBarrierCHROMIUM() override {
-    flushed_fence_sync_ = next_fence_sync_ - 1;
-  }
-
-  GLuint64 InsertFenceSyncCHROMIUM() override { return next_fence_sync_++; }
-
-  void GenSyncTokenCHROMIUM(GLuint64 fence_sync, GLbyte* sync_token) override {
+  void GenSyncTokenCHROMIUM(GLbyte* sync_token) override {
     gpu::SyncToken sync_token_data;
-    if (fence_sync <= flushed_fence_sync_) {
-      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0,
-                          gpu::CommandBufferId(), fence_sync);
-      sync_token_data.SetVerifyFlush();
-    }
+    sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO,
+                        gpu::CommandBufferId(), next_fence_sync_++);
+    sync_token_data.SetVerifyFlush();
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   }
 
-  void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
-                                      GLbyte* sync_token) override {
+  void GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) override {
     gpu::SyncToken sync_token_data;
-    if (fence_sync <= flushed_fence_sync_) {
-      sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO, 0,
-                          gpu::CommandBufferId(), fence_sync);
-    }
+    sync_token_data.Set(gpu::CommandBufferNamespace::GPU_IO,
+                        gpu::CommandBufferId(), next_fence_sync_++);
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   }
 
@@ -69,7 +54,6 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
 
  private:
   uint64_t next_fence_sync_ = 1u;
-  uint64_t flushed_fence_sync_ = 0u;
   unsigned mailbox_ = 0u;
   unsigned gen_textures_count_ = 0u;
   unsigned deleted_textures_ = 0u;
@@ -110,29 +94,32 @@ class GpuMemoryBufferVideoFramePoolTest : public ::testing::Test {
     media_task_runner_->RunUntilIdle();
   }
 
-  static scoped_refptr<media::VideoFrame> CreateTestYUVVideoFrame(
-      int dimension) {
+  static scoped_refptr<VideoFrame> CreateTestYUVVideoFrame(
+      int dimension,
+      size_t bit_depth = 8) {
     const int kDimension = 10;
-    static uint8_t y_data[kDimension * kDimension] = {0};
-    static uint8_t u_data[kDimension * kDimension / 2] = {0};
-    static uint8_t v_data[kDimension * kDimension / 2] = {0};
+    // Data buffers are overdimensioned to acommodate up to 16bpc samples.
+    static uint8_t y_data[2 * kDimension * kDimension] = {0};
+    static uint8_t u_data[2 * kDimension * kDimension / 2] = {0};
+    static uint8_t v_data[2 * kDimension * kDimension / 2] = {0};
 
+    const VideoPixelFormat format =
+        (bit_depth > 8) ? PIXEL_FORMAT_YUV420P10 : PIXEL_FORMAT_I420;
     DCHECK_LE(dimension, kDimension);
-    gfx::Size size(dimension, dimension);
+    const gfx::Size size(dimension, dimension);
 
     scoped_refptr<VideoFrame> video_frame =
-        media::VideoFrame::WrapExternalYuvData(
-            media::PIXEL_FORMAT_YV12,  // format
-            size,                      // coded_size
-            gfx::Rect(size),           // visible_rect
-            size,                      // natural_size
-            size.width(),              // y_stride
-            size.width() / 2,          // u_stride
-            size.width() / 2,          // v_stride
-            y_data,                    // y_data
-            u_data,                    // u_data
-            v_data,                    // v_data
-            base::TimeDelta());        // timestamp
+        VideoFrame::WrapExternalYuvData(format,              // format
+                                        size,                // coded_size
+                                        gfx::Rect(size),     // visible_rect
+                                        size,                // natural_size
+                                        size.width(),        // y_stride
+                                        size.width() / 2,    // u_stride
+                                        size.width() / 2,    // v_stride
+                                        y_data,              // y_data
+                                        u_data,              // u_data
+                                        v_data,              // v_data
+                                        base::TimeDelta());  // timestamp
     EXPECT_TRUE(video_frame);
     return video_frame;
   }
@@ -169,6 +156,20 @@ TEST_F(GpuMemoryBufferVideoFramePoolTest, VideoFrameOutputFormatUnknown) {
 
 TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOneHardwareFrame) {
   scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10);
+  scoped_refptr<VideoFrame> frame;
+  gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
+      software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));
+
+  RunUntilIdle();
+
+  EXPECT_NE(software_frame.get(), frame.get());
+  EXPECT_EQ(PIXEL_FORMAT_I420, frame->format());
+  EXPECT_EQ(3u, frame->NumTextures());
+  EXPECT_EQ(3u, gles2_->gen_textures_count());
+}
+
+TEST_F(GpuMemoryBufferVideoFramePoolTest, CreateOne10BppHardwareFrame) {
+  scoped_refptr<VideoFrame> software_frame = CreateTestYUVVideoFrame(10, 10);
   scoped_refptr<VideoFrame> frame;
   gpu_memory_buffer_pool_->MaybeCreateHardwareFrame(
       software_frame, base::Bind(MaybeCreateHardwareFrameCallback, &frame));

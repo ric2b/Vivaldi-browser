@@ -147,6 +147,7 @@
 <translation id="2890678560483811744">Referencia de página fuera de los límites</translation>
 <translation id="2902127500170292085"><ph name="EXTENSION_NAME" /> no pudo comunicarse con esta impresora. Asegúrate de que la impresora esté conectada y vuelve a intentarlo.</translation>
 <translation id="2904456025988372123">Preguntarme cuando un sitio intente descargar archivos automáticamente después del primer archivo</translation>
+<translation id="2911898792135283060">Generar contraseña...</translation>
 <translation id="2913331724188855103">Permitir que todos los sitios web guarden y lean datos de cookies (recomendado)</translation>
 <translation id="2916745397441987255">Buscar extensiones</translation>
 <translation id="2932883381142163287">Informar sobre abusos</translation>
@@ -415,7 +416,6 @@
 <translation id="6295158916970320988">Todos los sitios</translation>
 <translation id="6295855836753816081">Guardando…</translation>
 <translation id="6308937455967653460">Guardar &amp;enlace como...</translation>
-<translation id="6314335155547195432">Generar contraseña</translation>
 <translation id="6326855256003666642">Número de keepalive (para extensiones)</translation>
 <translation id="6370021412472292592">No se pudo cargar el manifiesto.</translation>
 <translation id="6374469231428023295">Intentarlo de nuevo</translation>
@@ -499,7 +499,6 @@
 <translation id="7564847347806291057">Finalizar proceso</translation>
 <translation id="7576690715254076113">Intercalar</translation>
 <translation id="7629827748548208700">Pestaña: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Cancelar</translation>
 <translation id="7661259717474717992">Permitir que los sitios web guarden y lean datos de cookies</translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Instalado por su administrador</translation>

@@ -24,8 +24,8 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_power_manager_client.h"
+#include "services/ui/public/cpp/input_devices/input_device_client_test_api.h"
 #include "ui/events/devices/stylus_state.h"
-#include "ui/events/test/device_data_manager_test_api.h"
 
 namespace ash {
 
@@ -117,7 +117,6 @@ class LockScreenNoteDisplayStateHandlerTest : public AshTestBase {
   void TearDown() override {
     AshTestBase::TearDown();
     power_manager_observer_.reset();
-    chromeos::DBusThreadManager::Shutdown();
   }
 
   bool LaunchTimeoutRunning() {
@@ -199,12 +198,7 @@ class LockScreenNoteDisplayStateHandlerTest : public AshTestBase {
 };
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhenScreenOn) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -225,14 +219,9 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhenScreenOn) {
 }
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhenScreenOff) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   TurnScreenOffForUserInactivity();
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -257,11 +246,6 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhenScreenOff) {
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest,
        EjectWhenScreenOffAndNoteNotAvailable) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   TurnScreenOffForUserInactivity();
 
   Shell::Get()->tray_action()->UpdateLockScreenNoteState(
@@ -270,7 +254,7 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest,
   EXPECT_FALSE(power_manager_client_->backlights_forced_off());
   EXPECT_TRUE(power_manager_observer_->brightness_changes().empty());
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -297,14 +281,9 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest,
 }
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest, TurnScreenOnWhenAppLaunchFails) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   TurnScreenOffForUserInactivity();
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -333,11 +312,6 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, TurnScreenOnWhenAppLaunchFails) {
 // before lock screen note display state handler requests backlights to be
 // forced off (i.e. that backlights are continuosly kept forced off).
 TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhileScreenForcedOff) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   SimulatePowerButtonPress();
 
   ASSERT_TRUE(power_manager_client_->backlights_forced_off());
@@ -345,7 +319,7 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhileScreenForcedOff) {
             power_manager_observer_->brightness_changes());
   power_manager_observer_->ClearBrightnessChanges();
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -367,14 +341,9 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, EjectWhileScreenForcedOff) {
 }
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest, DisplayNotTurnedOffIndefinitely) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   TurnScreenOffForUserInactivity();
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -408,11 +377,6 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, DisplayNotTurnedOffIndefinitely) {
 // display configuration to off is still in progress.
 TEST_F(LockScreenNoteDisplayStateHandlerTest,
        StylusEjectWhileForcingDisplayOff) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   power_manager_client_
       ->set_enqueue_brightness_changes_on_backlights_forced_off(true);
 
@@ -421,7 +385,7 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest,
   EXPECT_TRUE(power_manager_observer_->brightness_changes().empty());
   EXPECT_EQ(1u, power_manager_client_->pending_brightness_changes().size());
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 
@@ -455,11 +419,6 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest,
 }
 
 TEST_F(LockScreenNoteDisplayStateHandlerTest, ScreenA11yAlerts) {
-  // ui::test::DeviceDataManagerTestAPI only works in classic ash.
-  // TODO(tbarzic): Fix this in mus/mash.
-  if (Shell::GetAshConfig() != Config::CLASSIC)
-    return;
-
   TestAccessibilityControllerClient a11y_client;
   AccessibilityController* a11y_controller =
       Shell::Get()->accessibility_controller();
@@ -472,7 +431,7 @@ TEST_F(LockScreenNoteDisplayStateHandlerTest, ScreenA11yAlerts) {
   EXPECT_EQ(mojom::AccessibilityAlert::SCREEN_OFF,
             a11y_client.last_a11y_alert());
 
-  ui::test::DeviceDataManagerTestAPI devices_test_api;
+  ui::InputDeviceClientTestApi devices_test_api;
   devices_test_api.NotifyObserversStylusStateChanged(ui::StylusState::REMOVED);
   base::RunLoop().RunUntilIdle();
 

@@ -18,6 +18,11 @@
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/service_manager/public/cpp/connector.h"
 
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+#include "media/cdm/cdm_paths.h"
+#include "media/cdm/ppapi/clear_key_cdm/clear_key_cdm_proxy.h"
+#endif
+
 #if defined(OS_CHROMEOS)
 #include "components/arc/video_accelerator/gpu_arc_video_decode_accelerator.h"
 #include "components/arc/video_accelerator/gpu_arc_video_encode_accelerator.h"
@@ -93,11 +98,22 @@ void ChromeContentGpuClient::GpuServiceInitialized(
       std::move(browser_interface));
 }
 
+#if BUILDFLAG(ENABLE_LIBRARY_CDMS)
+std::unique_ptr<media::CdmProxy> ChromeContentGpuClient::CreateCdmProxy(
+    const std::string& cdm_guid) {
+  if (cdm_guid == media::kClearKeyCdmGuid)
+    return std::make_unique<media::ClearKeyCdmProxy>();
+
+  // TODO(rkuroiwa): Support creating Widevine specific CDM proxy here.
+  return nullptr;
+}
+#endif
+
 #if defined(OS_CHROMEOS)
 void ChromeContentGpuClient::CreateArcVideoDecodeAccelerator(
     ::arc::mojom::VideoDecodeAcceleratorRequest request) {
   mojo::MakeStrongBinding(
-      std::make_unique<arc::GpuArcVideoDecodeAccelerator>(
+      base::MakeUnique<arc::GpuArcVideoDecodeAccelerator>(
           gpu_preferences_, protected_buffer_manager_.get()),
       std::move(request));
 }

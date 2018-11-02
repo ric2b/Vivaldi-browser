@@ -10,10 +10,13 @@
 #include "base/version.h"
 #include "chrome/browser/android/vr_shell/vr_shell.h"
 #include "chrome/browser/android/vr_shell/vr_shell_gl.h"
+#include "chrome/browser/vr/assets_loader.h"
 #include "chrome/browser/vr/browser_ui_interface.h"
+#include "chrome/browser/vr/model/assets.h"
 #include "chrome/browser/vr/model/omnibox_suggestions.h"
 #include "chrome/browser/vr/model/toolbar_state.h"
 #include "chrome/browser/vr/ui.h"
+#include "chrome/common/chrome_features.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace vr_shell {
@@ -42,8 +45,36 @@ base::WeakPtr<VrShellGl> VrGLThread::GetVrShellGl() {
 }
 
 void VrGLThread::Init() {
-  auto ui = base::MakeUnique<vr::Ui>(this, this, ui_initial_state_);
-  vr_shell_gl_ = base::MakeUnique<VrShellGl>(
+  bool keyboard_enabled =
+      base::FeatureList::IsEnabled(features::kVrBrowserKeyboard) &&
+      !ui_initial_state_.web_vr_autopresentation_expected;
+  if (keyboard_enabled) {
+    keyboard_delegate_ = GvrKeyboardDelegate::Create();
+    text_input_delegate_ = std::make_unique<vr::TextInputDelegate>();
+  }
+  auto* keyboard_delegate =
+      !keyboard_delegate_ ? nullptr : keyboard_delegate_.get();
+  auto ui =
+      std::make_unique<vr::Ui>(this, this, keyboard_delegate,
+                               text_input_delegate_.get(), ui_initial_state_);
+  if (keyboard_enabled) {
+    text_input_delegate_->SetRequestFocusCallback(
+        base::BindRepeating(&vr::Ui::RequestFocus, base::Unretained(ui.get())));
+    text_input_delegate_->SetRequestUnfocusCallback(base::BindRepeating(
+        &vr::Ui::RequestUnfocus, base::Unretained(ui.get())));
+    if (keyboard_delegate) {
+      keyboard_delegate_->SetUiInterface(ui.get());
+      text_input_delegate_->SetUpdateInputCallback(
+          base::BindRepeating(&GvrKeyboardDelegate::UpdateInput,
+                              base::Unretained(keyboard_delegate_.get())));
+    }
+  }
+
+  if (ui_initial_state_.assets_available) {
+    LoadAssets();
+  }
+
+  vr_shell_gl_ = std::make_unique<VrShellGl>(
       this, std::move(ui), gvr_api_, reprojected_rendering_, daydream_support_,
       ui_initial_state_.in_web_vr);
 
@@ -63,11 +94,13 @@ void VrGLThread::ContentSurfaceChanged(jobject surface) {
       base::Bind(&VrShell::ContentSurfaceChanged, weak_vr_shell_, surface));
 }
 
-void VrGLThread::GvrDelegateReady(gvr::ViewerType viewer_type) {
+void VrGLThread::GvrDelegateReady(
+    gvr::ViewerType viewer_type,
+    device::mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
   DCHECK(OnGlThread());
   main_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&VrShell::GvrDelegateReady, weak_vr_shell_, viewer_type));
+      FROM_HERE, base::BindOnce(&VrShell::GvrDelegateReady, weak_vr_shell_,
+                                viewer_type, std::move(transport_options)));
 }
 
 void VrGLThread::UpdateGamepadData(device::GvrGamepadData pad) {
@@ -137,14 +170,6 @@ void VrGLThread::ToggleCardboardGamepad(bool enabled) {
       base::Bind(&VrShell::ToggleCardboardGamepad, weak_vr_shell_, enabled));
 }
 
-void VrGLThread::OnAssetsLoaded(vr::AssetsLoadStatus status,
-                                const base::Version& component_version) {
-  DCHECK(OnGlThread());
-  main_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&VrShell::OnAssetsLoaded, weak_vr_shell_, status,
-                            component_version));
-}
-
 void VrGLThread::OnUnsupportedMode(vr::UiUnsupportedMode mode) {
   DCHECK(OnGlThread());
   main_thread_task_runner_->PostTask(
@@ -184,6 +209,11 @@ void VrGLThread::StopAutocomplete() {
   DCHECK(OnGlThread());
   main_thread_task_runner_->PostTask(
       FROM_HERE, base::Bind(&VrShell::StopAutocomplete, weak_vr_shell_));
+}
+
+void VrGLThread::LoadAssets() {
+  vr::AssetsLoader::GetInstance()->Load(
+      base::BindOnce(&VrGLThread::OnAssetsLoaded, base::Unretained(this)));
 }
 
 void VrGLThread::SetFullscreen(bool enabled) {
@@ -317,12 +347,29 @@ void VrGLThread::SetOmniboxSuggestions(
                             browser_ui_, base::Passed(std::move(suggestions))));
 }
 
+void VrGLThread::OnAssetsComponentReady() {
+  DCHECK(OnMainThread());
+  task_runner()->PostTask(
+      FROM_HERE,
+      base::BindRepeating(&vr::BrowserUiInterface::OnAssetsComponentReady,
+                          browser_ui_));
+}
+
 bool VrGLThread::OnMainThread() const {
   return main_thread_task_runner_->BelongsToCurrentThread();
 }
 
 bool VrGLThread::OnGlThread() const {
   return task_runner()->BelongsToCurrentThread();
+}
+
+void VrGLThread::OnAssetsLoaded(vr::AssetsLoadStatus status,
+                                std::unique_ptr<vr::Assets> assets,
+                                const base::Version& component_version) {
+  vr_shell_gl_->OnAssetsLoaded(status, std::move(assets), component_version);
+  main_thread_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&VrShell::OnAssetsLoaded, weak_vr_shell_,
+                                status, component_version));
 }
 
 }  // namespace vr_shell

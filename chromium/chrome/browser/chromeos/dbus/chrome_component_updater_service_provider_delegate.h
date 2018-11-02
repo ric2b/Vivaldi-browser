@@ -18,9 +18,10 @@ class ChromeComponentUpdaterServiceProviderDelegate
   ~ChromeComponentUpdaterServiceProviderDelegate() override;
 
   // ComponentUpdaterServiceProvider::Delegate:
-  void LoadComponent(
-      const std::string& name,
-      const base::Callback<void(const std::string&)>& load_callback) override;
+  void LoadComponent(const std::string& name,
+                     bool mount,
+                     LoadCallback load_callback) override;
+  bool UnloadComponent(const std::string& name) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeComponentUpdaterServiceProviderDelegate);

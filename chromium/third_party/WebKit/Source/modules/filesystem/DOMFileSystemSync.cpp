@@ -31,18 +31,18 @@
 #include "modules/filesystem/DOMFileSystemSync.h"
 
 #include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileError.h"
 #include "modules/filesystem/DOMFilePath.h"
 #include "modules/filesystem/DirectoryEntrySync.h"
-#include "modules/filesystem/ErrorCallback.h"
 #include "modules/filesystem/FileEntrySync.h"
 #include "modules/filesystem/FileSystemCallbacks.h"
 #include "modules/filesystem/FileWriterBaseCallback.h"
 #include "modules/filesystem/FileWriterSync.h"
 #include "platform/FileMetadata.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFileSystemCallbacks.h"
 
@@ -62,7 +62,7 @@ DOMFileSystemSync::DOMFileSystemSync(ExecutionContext* context,
     : DOMFileSystemBase(context, name, type, root_url),
       root_entry_(DirectoryEntrySync::Create(this, DOMFilePath::kRoot)) {}
 
-DOMFileSystemSync::~DOMFileSystemSync() {}
+DOMFileSystemSync::~DOMFileSystemSync() = default;
 
 void DOMFileSystemSync::ReportError(ErrorCallbackBase* error_callback,
                                     FileError::ErrorCode file_error) {
@@ -96,7 +96,7 @@ class CreateFileHelper final : public AsyncFileSystemCallbacks {
       const String& name,
       const KURL& url,
       FileSystemType type) {
-    return WTF::WrapUnique(static_cast<AsyncFileSystemCallbacks*>(
+    return base::WrapUnique(static_cast<AsyncFileSystemCallbacks*>(
         new CreateFileHelper(result, name, url, type)));
   }
 
@@ -105,7 +105,7 @@ class CreateFileHelper final : public AsyncFileSystemCallbacks {
     result_->code_ = code;
   }
 
-  ~CreateFileHelper() override {}
+  ~CreateFileHelper() override = default;
 
   void DidCreateSnapshotFile(const FileMetadata& metadata,
                              scoped_refptr<BlobDataHandle> snapshot) override {
@@ -164,7 +164,7 @@ class ReceiveFileWriterCallback final : public FileWriterBaseCallback {
   void handleEvent(FileWriterBase*) override {}
 
  private:
-  ReceiveFileWriterCallback() {}
+  ReceiveFileWriterCallback() = default;
 };
 
 class LocalErrorCallback final : public ErrorCallbackBase {

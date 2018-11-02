@@ -180,6 +180,11 @@ PassThroughDecoderImpl<DemuxerStream::AUDIO>::DecoderBufferToOutputBuffer(
   for (int channel = 0; channel < channel_count; ++channel)
     data[channel] = buffer->data() + channel * channel_size;
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " input_samples_per_second : " << config_.input_samples_per_second()
+          << " samples_per_second : " << config_.samples_per_second();
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
   return AudioBuffer::CopyFrom(config_.sample_format(),
                                config_.channel_layout(),
                                channel_count,

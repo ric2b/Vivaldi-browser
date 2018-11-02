@@ -6,12 +6,12 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/demuxer_memory_limit.h"
 #include "media/base/media_switches.h"
@@ -54,7 +54,7 @@ bool IsRangeListSorted(
   for (const auto& range_ptr : ranges) {
     if (prev != kNoDecodeTimestamp() && prev >= range_ptr->GetStartTimestamp())
       return false;
-    prev = range_ptr->GetEndTimestamp();
+    prev = range_ptr->GetBufferedEndTimestamp();
   }
   return true;
 }
@@ -66,7 +66,7 @@ bool IsRangeListSorted(
   for (const auto& range_ptr : ranges) {
     if (prev != kNoTimestamp && prev >= range_ptr->GetStartTimestamp())
       return false;
-    prev = range_ptr->GetEndTimestamp();
+    prev = range_ptr->GetBufferedEndTimestamp();
   }
   return true;
 }
@@ -275,6 +275,25 @@ void SourceBufferStream<RangeClass>::OnStartOfCodedFrameGroupInternal(
              << (range_for_next_append_ == ranges_.end()
                      ? "be in a new range"
                      : "overlap an existing range");
+
+    if (range_for_next_append_ != ranges_.end()) {
+      // If this new coded frame group overlaps an existing range, preserve
+      // continuity from that range to the new group by moving the start time
+      // earlier (but not at or beyond the most recent buffered frame's time
+      // before |coded_frame_group_start_time| in the range, and not beyond the
+      // range's start time. This update helps prevent discontinuity from being
+      // introduced by the ::RemoveInternal processing during the next ::Append
+      // call.
+      DecodeTimestamp adjusted_start_time =
+          RangeFindHighestBufferedTimestampAtOrBefore(
+              range_for_next_append_->get(), coded_frame_group_start_time_);
+      if (adjusted_start_time < coded_frame_group_start_time_) {
+        // Exclude removal of that earlier frame during later Append
+        // processing by adjusting the removal range slightly forward.
+        coded_frame_group_start_time_ =
+            adjusted_start_time + base::TimeDelta::FromMicroseconds(1);
+      }
+    }
   } else if (last_range != ranges_.end()) {
     DCHECK(last_range == range_for_next_append_);
     DVLOG(3) << __func__ << " next appended buffers will continue range unless "
@@ -329,7 +348,12 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
     return false;
   }
 
-  UpdateMaxInterbufferDtsDistance(buffers);
+  if (UpdateMaxInterbufferDtsDistance(buffers)) {
+    // Coalesce |ranges_| using the new fudge room. This helps keep |ranges_|
+    // sorted in complex scenarios.  See https://crbug.com/793247.
+    MergeAllAdjacentRanges();
+  }
+
   SetConfigIds(buffers);
 
   // Save a snapshot of stream state before range modifications are made.
@@ -430,6 +454,16 @@ bool SourceBufferStream<RangeClass>::Append(const BufferQueue& buffers) {
 
   MergeWithAdjacentRangeIfNecessary(range_for_next_append_);
 
+  // Some SAP-Type-2 append sequences, when buffering ByPts, require that we
+  // coalesce |range_for_next_append_| with the range that is *before* it.
+  // Likewise, some overlap buffering sequences, when buffering ByDts, require
+  // similar.
+  if (range_for_next_append_ != ranges_.begin()) {
+    auto prior_range = range_for_next_append_;
+    prior_range--;
+    MergeWithAdjacentRangeIfNecessary(prior_range);
+  }
+
   // Seek to try to fulfill a previous call to Seek().
   if (seek_pending_) {
     DCHECK(!selected_range_);
@@ -506,6 +540,9 @@ void SourceBufferStream<RangeClass>::Remove(base::TimeDelta start,
       Seek(seek_buffer_timestamp_);
     }
   }
+
+  DCHECK(OnlySelectedRangeIsSeeked());
+  DCHECK(IsRangeListSorted(ranges_));
 }
 
 template <typename RangeClass>
@@ -545,9 +582,6 @@ void SourceBufferStream<RangeClass>::UpdateLastAppendStateForRemove(
 
   if (range_for_next_append_ != ranges_.end()) {
     if (last_appended_buffer_timestamp_ != kNoDecodeTimestamp()) {
-      DCHECK(RangeBelongsToRange(range_for_next_append_->get(),
-                                 last_appended_buffer_timestamp_));
-
       // Note start and end of last appended GOP.
       DecodeTimestamp gop_end = highest_timestamp_in_append_sequence_;
       DecodeTimestamp gop_start =
@@ -675,7 +709,6 @@ void SourceBufferStream<RangeClass>::RemoveInternal(
   DVLOG(3) << __func__ << " " << GetStreamTypeName()
            << ": after remove ranges_=" << RangesToString<RangeClass>(ranges_);
 
-  DCHECK(IsRangeListSorted(ranges_));
   DCHECK(OnlySelectedRangeIsSeeked());
 }
 
@@ -763,9 +796,10 @@ bool SourceBufferStream<RangeClass>::OnlySelectedRangeIsSeeked() const {
 }
 
 template <typename RangeClass>
-void SourceBufferStream<RangeClass>::UpdateMaxInterbufferDtsDistance(
+bool SourceBufferStream<RangeClass>::UpdateMaxInterbufferDtsDistance(
     const BufferQueue& buffers) {
   DCHECK(!buffers.empty());
+  base::TimeDelta old_distance = max_interbuffer_distance_;
   DecodeTimestamp prev_timestamp = last_appended_buffer_decode_timestamp_;
   for (BufferQueue::const_iterator itr = buffers.begin();
        itr != buffers.end(); ++itr) {
@@ -786,6 +820,13 @@ void SourceBufferStream<RangeClass>::UpdateMaxInterbufferDtsDistance(
         std::max(max_interbuffer_distance_, interbuffer_distance);
     prev_timestamp = current_timestamp;
   }
+  bool changed_max = max_interbuffer_distance_ != old_distance;
+  DVLOG_IF(2, changed_max) << __func__ << " " << GetStreamTypeName()
+                           << " Changed max interbuffer DTS distance from "
+                           << old_distance.InMicroseconds() << "us to "
+                           << max_interbuffer_distance_.InMicroseconds()
+                           << "us";
+  return changed_max;
 }
 
 template <typename RangeClass>
@@ -1317,9 +1358,40 @@ void SourceBufferStream<RangeClass>::PrepareRangesForNextAppend(
         std::min(coded_frame_group_start_time_, buffers_start_timestamp);
   }
 
-  // Return early if no further overlap removal is needed.
-  if (buffers_start_timestamp >= buffers_end_timestamp)
+  // Return early if no further overlap removal is needed. When buffering by PTS
+  // intervals, first check if |buffers_start_timestamp| is in the middle of the
+  // range; we could be overlap-appending the middle of a previous coded frame
+  // sequence's range with non-keyframes prior to
+  // |highest_timestamp_in_append_sequence_|, so we need to split that range
+  // appropriately here and then return early. If we don't return early here,
+  // overlap removal (including any necessary range splitting) will occur.
+  if (buffers_start_timestamp >= buffers_end_timestamp) {
+    if (!BufferingByPts())
+      return;
+
+    DCHECK(highest_timestamp_in_append_sequence_ != kNoDecodeTimestamp());
+    DCHECK(range_for_next_append_ != ranges_.end());
+    DCHECK(RangeBelongsToRange(range_for_next_append_->get(),
+                               buffers_start_timestamp));
+
+    // Split the range at |buffers_start_timestamp|, if necessary, then return
+    // early.
+    std::unique_ptr<RangeClass> new_range =
+        RangeSplitRange(range_for_next_append_->get(), buffers_start_timestamp);
+    if (!new_range)
+      return;
+
+    range_for_next_append_ =
+        ranges_.insert(++range_for_next_append_, std::move(new_range));
+
+    // Update the selected range if the next buffer position was transferred
+    // to the newly inserted range.
+    if ((*range_for_next_append_)->HasNextBufferPosition())
+      SetSelectedRange(range_for_next_append_->get());
+
+    --range_for_next_append_;
     return;
+  }
 
   // Exclude the start from removal to avoid deleting the highest appended
   // buffer in cases where the first buffer in |new_buffers| has same timestamp
@@ -1401,10 +1473,15 @@ template <typename RangeClass>
 bool SourceBufferStream<RangeClass>::
     IsNextGopAdjacentToEndOfCurrentAppendSequence(
         DecodeTimestamp next_gop_timestamp) const {
+  DecodeTimestamp upper_bound = highest_timestamp_in_append_sequence_ +
+                                ComputeFudgeRoom(GetMaxInterbufferDistance());
+  DVLOG(4) << __func__ << " " << GetStreamTypeName()
+           << " next_gop_timestamp=" << next_gop_timestamp.InMicroseconds()
+           << "us, highest_timestamp_in_append_sequence_="
+           << highest_timestamp_in_append_sequence_.InMicroseconds()
+           << "us, upper_bound=" << upper_bound.InMicroseconds() << "us";
   return highest_timestamp_in_append_sequence_ < next_gop_timestamp &&
-         next_gop_timestamp <=
-             highest_timestamp_in_append_sequence_ +
-                 ComputeFudgeRoom(GetMaxInterbufferDistance());
+         next_gop_timestamp <= upper_bound;
 }
 
 template <typename RangeClass>
@@ -1462,6 +1539,22 @@ void SourceBufferStream<RangeClass>::MergeWithAdjacentRangeIfNecessary(
     range_for_next_append_ = range_with_new_buffers_itr;
 
   DeleteAndRemoveRange(&next_range_itr);
+}
+
+template <typename RangeClass>
+void SourceBufferStream<RangeClass>::MergeAllAdjacentRanges() {
+  DVLOG(1) << __func__ << " " << GetStreamTypeName()
+           << ": Before: ranges_=" << RangesToString<RangeClass>(ranges_);
+
+  typename RangeList::iterator range_itr = ranges_.begin();
+
+  while (range_itr != ranges_.end()) {
+    MergeWithAdjacentRangeIfNecessary(range_itr);
+    range_itr++;
+  }
+
+  DVLOG(1) << __func__ << " " << GetStreamTypeName()
+           << ": After: ranges_=" << RangesToString<RangeClass>(ranges_);
 }
 
 template <typename RangeClass>
@@ -2267,6 +2360,24 @@ bool SourceBufferStream<SourceBufferRangeByPts>::RangeBelongsToRange(
 }
 
 template <>
+DecodeTimestamp SourceBufferStream<SourceBufferRangeByDts>::
+    RangeFindHighestBufferedTimestampAtOrBefore(
+        SourceBufferRangeByDts* range,
+        DecodeTimestamp timestamp) const {
+  return range->FindHighestBufferedTimestampAtOrBefore(timestamp);
+}
+
+template <>
+DecodeTimestamp SourceBufferStream<SourceBufferRangeByPts>::
+    RangeFindHighestBufferedTimestampAtOrBefore(
+        SourceBufferRangeByPts* range,
+        DecodeTimestamp timestamp) const {
+  return DecodeTimestamp::FromPresentationTime(
+      range->FindHighestBufferedTimestampAtOrBefore(
+          timestamp.ToPresentationTime()));
+}
+
+template <>
 void SourceBufferStream<SourceBufferRangeByDts>::RangeSeek(
     SourceBufferRangeByDts* range,
     DecodeTimestamp timestamp) {
@@ -2373,7 +2484,7 @@ std::unique_ptr<SourceBufferRangeByDts>
 SourceBufferStream<SourceBufferRangeByDts>::RangeNew(
     const BufferQueue& new_buffers,
     DecodeTimestamp range_start_time) {
-  return base::MakeUnique<SourceBufferRangeByDts>(
+  return std::make_unique<SourceBufferRangeByDts>(
       TypeToGapPolicy<SourceBufferRangeByDts>(GetType()), new_buffers,
       range_start_time,
       base::BindRepeating(
@@ -2387,7 +2498,7 @@ std::unique_ptr<SourceBufferRangeByPts>
 SourceBufferStream<SourceBufferRangeByPts>::RangeNew(
     const BufferQueue& new_buffers,
     DecodeTimestamp range_start_time) {
-  return base::MakeUnique<SourceBufferRangeByPts>(
+  return std::make_unique<SourceBufferRangeByPts>(
       TypeToGapPolicy<SourceBufferRangeByPts>(GetType()), new_buffers,
       range_start_time.ToPresentationTime(),
       base::BindRepeating(

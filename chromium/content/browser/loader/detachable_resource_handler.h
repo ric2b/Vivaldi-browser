@@ -54,10 +54,10 @@ class CONTENT_EXPORT DetachableResourceHandler : public ResourceHandler {
   // ResourceHandler implementation:
   void OnRequestRedirected(
       const net::RedirectInfo& redirect_info,
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller) override;
   void OnResponseStarted(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller,
       bool open_when_done,
       bool ask_for_target) override;

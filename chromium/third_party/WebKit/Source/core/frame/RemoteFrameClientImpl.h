@@ -18,7 +18,6 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
 
   // FrameClient overrides:
   bool InShadowTree() const override;
-  void WillBeDetached() override;
   void Detached(FrameDetachType) override;
   Frame* Opener() const override;
   void SetOpener(Frame*) override;
@@ -27,6 +26,7 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
   Frame* NextSibling() const override;
   Frame* FirstChild() const override;
   void FrameFocused() const override;
+  String GetDevToolsFrameToken() const override;
 
   // RemoteFrameClient overrides:
   void Navigate(const ResourceRequest&,
@@ -34,9 +34,10 @@ class RemoteFrameClientImpl final : public RemoteFrameClient {
   void Reload(FrameLoadType, ClientRedirectPolicy) override;
   unsigned BackForwardLength() override;
   void ForwardPostMessage(MessageEvent*,
-                          scoped_refptr<SecurityOrigin> target,
+                          scoped_refptr<const SecurityOrigin> target,
                           LocalFrame* source) const override;
-  void FrameRectsChanged(const IntRect& frame_rect) override;
+  void FrameRectsChanged(const IntRect& local_frame_rect,
+                         const IntRect& screen_space_rect) override;
   void UpdateRemoteViewportIntersection(const IntRect&) override;
   void AdvanceFocus(WebFocusType, LocalFrame*) override;
   void VisibilityChanged(bool visible) override;

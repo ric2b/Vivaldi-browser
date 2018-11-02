@@ -21,7 +21,7 @@ void ReleaseTexture(
     bool is_converted_from_skia_texture,
     unsigned texture_id,
     std::unique_ptr<gpu::Mailbox> mailbox,
-    WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider,
     std::unique_ptr<gpu::SyncToken> sync_token) {
   if (!is_converted_from_skia_texture && texture_id && context_provider) {
     context_provider->ContextProvider()->ContextGL()->WaitSyncTokenCHROMIUM(
@@ -37,7 +37,8 @@ MailboxTextureHolder::MailboxTextureHolder(
     const gpu::Mailbox& mailbox,
     const gpu::SyncToken& sync_token,
     unsigned texture_id_to_delete_after_mailbox_consumed,
-    WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper,
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper>&&
+        context_provider_wrapper,
     IntSize mailbox_size)
     : TextureHolder(std::move(context_provider_wrapper)),
       mailbox_(mailbox),
@@ -50,7 +51,8 @@ MailboxTextureHolder::MailboxTextureHolder(
 }
 
 MailboxTextureHolder::MailboxTextureHolder(
-    std::unique_ptr<TextureHolder> texture_holder)
+    std::unique_ptr<TextureHolder> texture_holder,
+    GLenum filter)
     : TextureHolder(texture_holder->ContextProviderWrapper()),
       texture_id_(0),
       is_converted_from_skia_texture_(true),
@@ -63,7 +65,8 @@ MailboxTextureHolder::MailboxTextureHolder(
   if (!ContextProviderWrapper())
     return;
 
-  ContextProviderWrapper()->Utils()->GetMailboxForSkImage(mailbox_, image);
+  ContextProviderWrapper()->Utils()->GetMailboxForSkImage(mailbox_, image,
+                                                          filter);
 
   InitCommon();
 }
@@ -92,13 +95,10 @@ void MailboxTextureHolder::Sync(MailboxSyncMode mode) {
   }
 
   if (!sync_token_.HasData()) {
-    const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
     if (mode == kVerifiedSyncToken) {
-      gl->ShallowFlushCHROMIUM();
-      gl->GenSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+      gl->GenSyncTokenCHROMIUM(sync_token_.GetData());
     } else {
-      gl->OrderingBarrierCHROMIUM();
-      gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token_.GetData());
+      gl->GenUnverifiedSyncTokenCHROMIUM(sync_token_.GetData());
     }
     return;
   }
@@ -139,8 +139,8 @@ MailboxTextureHolder::~MailboxTextureHolder() {
   if (!IsAbandoned()) {
     if (texture_thread_task_runner_ &&
         thread_id_ != Platform::Current()->CurrentThread()->ThreadId()) {
-      texture_thread_task_runner_->PostTask(
-          BLINK_FROM_HERE,
+      PostCrossThreadTask(
+          *texture_thread_task_runner_, FROM_HERE,
           CrossThreadBind(&ReleaseTexture, is_converted_from_skia_texture_,
                           texture_id_, WTF::Passed(std::move(passed_mailbox)),
                           WTF::Passed(ContextProviderWrapper()),

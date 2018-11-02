@@ -19,8 +19,21 @@ class CHROMEOS_EXPORT FakeSmbProviderClient : public SmbProviderClient {
   void Init(dbus::Bus* bus) override;
 
   // SmbProviderClient override.
-  void Mount(const std::string& share_path, MountCallback callback) override;
-  void Unmount(int32_t mount_id, UnmountCallback callback) override;
+  void Mount(const base::FilePath& share_path, MountCallback callback) override;
+  void Unmount(int32_t mount_id, StatusCallback callback) override;
+  void ReadDirectory(int32_t mount_id,
+                     const base::FilePath& directory_path,
+                     ReadDirectoryCallback callback) override;
+  void GetMetadataEntry(int32_t mount_id,
+                        const base::FilePath& entry_path,
+                        GetMetdataEntryCallback callback) override;
+  void OpenFile(int32_t mount_id,
+                const base::FilePath& file_path,
+                bool writeable,
+                OpenFileCallback callback) override;
+  void CloseFile(int32_t mount_id,
+                 int32_t file_id,
+                 StatusCallback callback) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeSmbProviderClient);

@@ -123,9 +123,12 @@ class LineLayoutItem {
 
   Document& GetDocument() const { return layout_object_->GetDocument(); }
 
-  // TODO(dgrogan): This is the only caller: move the logic from LayoutObject
-  // to here.
-  bool PreservesNewline() const { return layout_object_->PreservesNewline(); }
+  bool PreservesNewline() const {
+    if (IsSVGInlineText())
+      return false;
+
+    return Style()->PreserveNewline();
+  }
 
   unsigned length() const { return layout_object_->length(); }
 
@@ -250,7 +253,7 @@ class LineLayoutItem {
 
   // TODO(dgrogan/eae): Needed for Color::current. Can we move this somewhere?
   Color ResolveColor(const ComputedStyle& style_to_use,
-                     CSSPropertyID color_property) {
+                     const CSSProperty& color_property) {
     return layout_object_->ResolveColor(style_to_use, color_property);
   }
 
@@ -294,6 +297,9 @@ class LineLayoutItem {
   }
 
   LayoutRect VisualRect() const { return layout_object_->VisualRect(); }
+  LayoutRect PartialInvalidationRect() const {
+    return layout_object_->PartialInvalidationRect();
+  }
 
   bool IsHashTableDeletedValue() const {
     return layout_object_ == kHashTableDeletedValue;

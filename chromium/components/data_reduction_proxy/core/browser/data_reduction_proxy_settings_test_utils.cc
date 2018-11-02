@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config_test_utils.h"
@@ -62,9 +61,9 @@ void DataReductionProxySettingsTestBase::SetUp() {
                                  prefs::kDailyHttpReceivedContentLength);
   for (int64_t i = 0; i < kNumDaysInHistory; i++) {
     original_update->Insert(
-        0, base::MakeUnique<base::Value>(base::Int64ToString(2 * i)));
+        0, std::make_unique<base::Value>(base::Int64ToString(2 * i)));
     received_update->Insert(
-        0, base::MakeUnique<base::Value>(base::Int64ToString(i)));
+        0, std::make_unique<base::Value>(base::Int64ToString(i)));
   }
   last_update_time_ = base::Time::Now().LocalMidnight();
   pref_service->SetInt64(prefs::kDailyHttpContentLengthLastUpdateDate,
@@ -72,8 +71,7 @@ void DataReductionProxySettingsTestBase::SetUp() {
 }
 
 template <class C>
-void DataReductionProxySettingsTestBase::ResetSettings(
-    std::unique_ptr<base::Clock> clock) {
+void DataReductionProxySettingsTestBase::ResetSettings(base::Clock* clock) {
   MockDataReductionProxySettings<C>* settings =
       new MockDataReductionProxySettings<C>();
   settings->config_ = test_context_->config();
@@ -81,7 +79,7 @@ void DataReductionProxySettingsTestBase::ResetSettings(
   settings->data_reduction_proxy_service_ =
       test_context_->CreateDataReductionProxyService(settings);
   if (clock)
-    settings->clock_ = std::move(clock);
+    settings->clock_ = clock;
   EXPECT_CALL(*settings, GetOriginalProfilePrefs())
       .Times(AnyNumber())
       .WillRepeatedly(Return(test_context_->pref_service()));
@@ -93,7 +91,7 @@ void DataReductionProxySettingsTestBase::ResetSettings(
 
 // Explicitly generate required instantiations.
 template void DataReductionProxySettingsTestBase::ResetSettings<
-    DataReductionProxySettings>(std::unique_ptr<base::Clock> clock);
+    DataReductionProxySettings>(base::Clock* clock);
 
 void DataReductionProxySettingsTestBase::ExpectSetProxyPrefs(
     bool expected_enabled,
@@ -113,7 +111,7 @@ void DataReductionProxySettingsTestBase::CheckOnPrefChange(
   if (managed) {
     test_context_->pref_service()->SetManagedPref(
         test_context_->GetDataReductionProxyEnabledPrefName(),
-        base::MakeUnique<base::Value>(enabled));
+        std::make_unique<base::Value>(enabled));
   } else {
     test_context_->SetDataReductionProxyEnabled(enabled);
   }

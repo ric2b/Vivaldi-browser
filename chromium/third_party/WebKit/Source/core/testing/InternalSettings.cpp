@@ -120,7 +120,7 @@ const char* InternalSettings::SupplementName() {
   return "InternalSettings";
 }
 
-InternalSettings::~InternalSettings() {}
+InternalSettings::~InternalSettings() = default;
 
 InternalSettings::InternalSettings(Page& page)
     : InternalSettingsGenerated(&page),
@@ -166,10 +166,6 @@ void InternalSettings::setExperimentalContentSecurityPolicyFeaturesEnabled(
     bool enabled) {
   RuntimeEnabledFeatures::SetExperimentalContentSecurityPolicyFeaturesEnabled(
       enabled);
-}
-
-void InternalSettings::setOverlayScrollbarsEnabled(bool enabled) {
-  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(enabled);
 }
 
 void InternalSettings::setViewportEnabled(bool enabled,

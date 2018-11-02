@@ -29,7 +29,6 @@
 #include "ios/chrome/browser/chrome_constants.h"
 #include "ios/chrome/browser/crash_loop_detection_util.h"
 #include "ios/chrome/browser/crash_report/breakpad_helper.h"
-#import "ios/chrome/browser/crash_report/crash_report_background_uploader.h"
 #import "ios/chrome/browser/device_sharing/device_sharing_manager.h"
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
 #import "ios/chrome/browser/geolocation/omnibox_geolocation_config.h"
@@ -250,11 +249,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   [MetricsMediator disableReporting];
 
   GetApplicationContext()->OnAppEnterBackground();
-  if (![[CrashReportBackgroundUploader sharedInstance]
-          hasPendingCrashReportsToUploadAtStartup]) {
-    [application setMinimumBackgroundFetchInterval:
-                     UIApplicationBackgroundFetchIntervalNever];
-  }
 }
 
 - (void)applicationWillEnterForeground:(UIApplication*)application
@@ -407,7 +401,15 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   // closing the tabs. Set the BVC to inactive to cancel all the dialogs.
   if ([_browserLauncher browserInitializationStage] >=
       INITIALIZATION_STAGE_FOREGROUND) {
-    [[_browserLauncher browserViewInformation] haltAllTabs];
+    [[_browserLauncher browserViewInformation].mainTabModel haltAllTabs];
+
+    // Application termination flow is only triggered on a shutdown deliberately
+    // triggered by a user. In this case, close all incognito tabs.
+    TabModel* OTRTabModel =
+        [_browserLauncher browserViewInformation].otrTabModel;
+    [OTRTabModel closeAllTabs];
+    [OTRTabModel saveSessionImmediately:YES];
+
     [_browserLauncher browserViewInformation].currentBVC.active = NO;
   }
 
@@ -415,12 +417,6 @@ initWithBrowserLauncher:(id<BrowserLauncher>)browserLauncher
   web::RequestTrackerImpl::BlockUntilTrackersShutdown();
 
   [_startupInformation stopChromeMain];
-
-  if (![[CrashReportBackgroundUploader sharedInstance]
-          hasPendingCrashReportsToUploadAtStartup]) {
-    [application setMinimumBackgroundFetchInterval:
-                     UIApplicationBackgroundFetchIntervalNever];
-  }
 }
 
 - (void)willResignActiveTabModel {

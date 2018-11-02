@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "base/containers/adapters.h"
-#include "base/memory/ptr_util.h"
 #include "base/numerics/ranges.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "chrome/browser/vr/databinding/binding_base.h"
 #include "chrome/browser/vr/elements/draw_phase.h"
+#include "chrome/browser/vr/elements/keyboard.h"
 #include "chrome/browser/vr/elements/reticle.h"
 #include "chrome/browser/vr/elements/ui_element.h"
 #include "ui/gfx/transform.h"
@@ -23,52 +23,13 @@ namespace vr {
 
 namespace {
 
-constexpr float kTolerance = 1e-5f;
-
-// Returns true if two elements are in the same plane.
-bool ArePlanar(const UiElement& e1, const UiElement& e2) {
-  gfx::Vector3dF n1 = e1.GetNormal();
-  gfx::Vector3dF n2 = e2.GetNormal();
-  if (!base::IsApproximatelyEqual(n1.x(), n2.x(), kTolerance) ||
-      !base::IsApproximatelyEqual(n1.y(), n2.y(), kTolerance) ||
-      !base::IsApproximatelyEqual(n1.z(), n2.z(), kTolerance)) {
-    return false;
-  }
-  return base::IsApproximatelyEqual(
-      0.0f, gfx::DotProduct(n1, e1.GetCenter() - e2.GetCenter()), kTolerance);
-}
-
 template <typename P>
 UiScene::Elements GetVisibleElements(UiElement* root,
-                                     UiElement* reticle_element,
                                      P predicate) {
-  Reticle* reticle = static_cast<Reticle*>(reticle_element);
-  UiElement* target = reticle ? reticle->TargetElement() : nullptr;
   UiScene::Elements elements;
-  int reticle_parent_id = 0;
   for (auto& element : *root) {
-    if (element.IsVisible() && predicate(&element)) {
+    if (element.IsVisible() && predicate(&element))
       elements.push_back(&element);
-      if (target && target->id() == element.id()) {
-        reticle_parent_id = element.id();
-        // Draw the reticle after the last child that resides in the same plane
-        // as this element. This way, the reticle can't be partially hidden as
-        // it passes across portions of a composite element. By walking the
-        // element's subtree in reverse pre-order, we start at the last-rendered
-        // child and work backwards, possibly as far as the originally targeted
-        // element.
-        for (auto& child : base::Reversed(element)) {
-          if (predicate(&child) && ArePlanar(element, child)) {
-            reticle_parent_id = child.id();
-            break;
-          }
-        }
-      }
-    }
-    if (reticle_parent_id == element.id()) {
-      elements.push_back(reticle);
-      reticle->set_draw_phase(element.draw_phase());
-    }
   }
   return elements;
 }
@@ -98,9 +59,8 @@ std::unique_ptr<UiElement> UiScene::RemoveUiElement(int element_id) {
 }
 
 bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
-                           const gfx::Vector3dF& look_at) {
+                           const gfx::Transform& head_pose) {
   bool scene_dirty = !initialized_scene_ || is_dirty_;
-  bool needs_redraw = false;
   initialized_scene_ = true;
   is_dirty_ = false;
 
@@ -121,7 +81,7 @@ bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
     // time-related "dirtiness" on the scene graph.
     for (auto& element : *root_element_) {
       element.set_update_phase(UiElement::kDirty);
-      if ((element.DoBeginFrame(current_time, look_at) ||
+      if ((element.DoBeginFrame(current_time, head_pose) ||
            element.updated_bindings_this_frame()) &&
           (element.IsVisible() || element.updated_visiblity_this_frame())) {
         scene_dirty = true;
@@ -142,7 +102,7 @@ bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
     // synchronously in response to input should be prohibited.
     for (auto& element : *root_element_) {
       if (element.PrepareToDraw())
-        needs_redraw = true;
+        scene_dirty = true;
       element.set_update_phase(UiElement::kUpdatedTexturesAndSizes);
     }
   }
@@ -153,7 +113,7 @@ bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
     for (auto& element : *root_element_) {
       element.set_update_phase(UiElement::kUpdatedWorldSpaceTransform);
     }
-    return needs_redraw;
+    return false;
   }
 
   {
@@ -177,7 +137,7 @@ bool UiScene::OnBeginFrame(const base::TimeTicks& current_time,
     root_element_->UpdateWorldSpaceTransformRecursive();
   }
 
-  return scene_dirty || needs_redraw;
+  return scene_dirty;
 }
 
 bool UiScene::UpdateTextures() {
@@ -210,60 +170,17 @@ UiElement* UiScene::GetUiElementByName(UiElementName name) const {
   return nullptr;
 }
 
-UiScene::Elements UiScene::GetVisible2dBrowsingElements() const {
-  return GetVisibleElements(
-      GetUiElementByName(k2dBrowsingRoot), GetUiElementByName(kReticle),
-      [](UiElement* element) {
-        return element->draw_phase() == kPhaseForeground ||
-               element->draw_phase() == kPhaseFloorCeiling ||
-               element->draw_phase() == kPhaseBackground;
-      });
+UiScene::Elements UiScene::GetVisibleElementsToDraw() const {
+  return GetVisibleElements(GetUiElementByName(kRoot), [](UiElement* element) {
+    return element->draw_phase() == kPhaseForeground ||
+           element->draw_phase() == kPhaseBackground;
+  });
 }
 
-UiScene::Elements UiScene::GetVisible2dBrowsingOverlayElements() const {
+UiScene::Elements UiScene::GetVisibleWebVrOverlayElementsToDraw() const {
   return GetVisibleElements(
-      GetUiElementByName(k2dBrowsingRoot), GetUiElementByName(kReticle),
-      [](UiElement* element) {
-        return element->draw_phase() == kPhaseOverlayBackground ||
-               element->draw_phase() == kPhaseOverlayForeground;
-      });
-}
-
-UiScene::Elements UiScene::GetVisibleSplashScreenElements() const {
-  return GetVisibleElements(
-      GetUiElementByName(kSplashScreenRoot), GetUiElementByName(kReticle),
-      [](UiElement* element) {
-        return element->draw_phase() == kPhaseOverlayBackground ||
-               element->draw_phase() == kPhaseOverlayForeground;
-      });
-}
-
-UiScene::Elements UiScene::GetVisibleWebVrOverlayForegroundElements() const {
-  return GetVisibleElements(
-      GetUiElementByName(kWebVrRoot), GetUiElementByName(kReticle),
-      [](UiElement* element) {
+      GetUiElementByName(kWebVrRoot), [](UiElement* element) {
         return element->draw_phase() == kPhaseOverlayForeground;
-      });
-}
-
-UiScene::Elements UiScene::GetVisibleControllerElements() const {
-  return GetVisibleElements(
-      GetUiElementByName(kControllerGroup), nullptr, [](UiElement* element) {
-        if (element->name() == kReticle) {
-          Reticle* reticle = static_cast<Reticle*>(element);
-          // If the reticle has a non-null target element,
-          // it would have been positioned elsewhere.
-          bool need_to_add_reticle = !reticle->TargetElement();
-          if (need_to_add_reticle) {
-            // We must always update the reticle's draw phase when it is
-            // included in a list of elements we vend. The other controller
-            // elements are drawn in the foreground phase, so we will update the
-            // reticle to match here.
-            reticle->set_draw_phase(kPhaseForeground);
-          }
-          return need_to_add_reticle;
-        }
-        return element->draw_phase() == kPhaseForeground;
       });
 }
 
@@ -277,10 +194,9 @@ UiScene::Elements UiScene::GetPotentiallyVisibleElements() const {
 }
 
 UiScene::UiScene() {
-  root_element_ = base::MakeUnique<UiElement>();
-  root_element_->set_name(kRoot);
-  root_element_->set_draw_phase(kPhaseNone);
-  root_element_->SetVisible(true);
+  root_element_ = std::make_unique<UiElement>();
+  root_element_->SetName(kRoot);
+  root_element_->SetDrawPhase(kPhaseNone);
   root_element_->set_hit_testable(false);
 }
 
@@ -289,9 +205,8 @@ UiScene::~UiScene() = default;
 void UiScene::OnGlInitialized(SkiaSurfaceProvider* provider) {
   gl_initialized_ = true;
   provider_ = provider;
-
   for (auto& element : *root_element_)
-    element.Initialize(provider);
+    element.Initialize(provider_);
 }
 
 }  // namespace vr

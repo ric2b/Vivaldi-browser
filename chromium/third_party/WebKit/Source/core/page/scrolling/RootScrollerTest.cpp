@@ -5,6 +5,7 @@
 #include "bindings/core/v8/node_or_string.h"
 #include "core/exported/WebRemoteFrameImpl.h"
 #include "core/frame/BrowserControls.h"
+#include "core/frame/DOMVisualViewport.h"
 #include "core/frame/FrameTestHelpers.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/RootFrameViewport.h"
@@ -13,7 +14,7 @@
 #include "core/geometry/DOMRect.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/RootScrollerController.h"
 #include "core/page/scrolling/TopDocumentRootScrollerController.h"
@@ -21,6 +22,9 @@
 #include "core/paint/PaintLayerScrollableArea.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
+#include "core/testing/sim/SimDisplayItemList.h"
+#include "core/testing/sim/SimRequest.h"
+#include "core/testing/sim/SimTest.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/URLTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -105,9 +109,9 @@ class RootScrollerTest : public ::testing::Test,
     RunPendingTasks();
   }
 
-  WebViewImpl* GetWebView() const { return helper_.WebView(); }
+  WebViewImpl* GetWebView() const { return helper_.GetWebView(); }
 
-  Page& GetPage() const { return *helper_.WebView()->GetPage(); }
+  Page& GetPage() const { return *GetWebView()->GetPage(); }
 
   LocalFrame* MainFrame() const {
     return GetWebView()->MainFrameImpl()->GetFrame();
@@ -785,7 +789,8 @@ TEST_P(RootScrollerTest, RemoteMainFrame) {
   {
     WebRemoteFrameImpl* remote_main_frame = FrameTestHelpers::CreateRemote();
     helper_.LocalMainFrame()->Swap(remote_main_frame);
-    remote_main_frame->SetReplicatedOrigin(SecurityOrigin::CreateUnique());
+    remote_main_frame->SetReplicatedOrigin(
+        WebSecurityOrigin(SecurityOrigin::CreateUnique()), false);
     local_frame = FrameTestHelpers::CreateLocalChild(*remote_main_frame);
 
     FrameTestHelpers::LoadFrame(local_frame,
@@ -1170,6 +1175,74 @@ TEST_P(RootScrollerTest, ImmediateUpdateOfLayoutViewport) {
             &MainFrameView()->GetRootFrameViewport()->LayoutViewport());
 }
 
+class RootScrollerSimTest : public ::testing::WithParamInterface<bool>,
+                            private ScopedRootLayerScrollingForTest,
+                            public SimTest {
+ public:
+  RootScrollerSimTest() : ScopedRootLayerScrollingForTest(GetParam()) {}
+};
+
+INSTANTIATE_TEST_CASE_P(All, RootScrollerSimTest, ::testing::Bool());
+
+// Tests that the root scroller doesn't affect visualViewport pageLeft and
+// pageTop.
+TEST_P(RootScrollerSimTest, RootScrollerDoesntAffectVisualViewport) {
+  WebView().Resize(WebSize(800, 600));
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Start();
+  request.Write(R"HTML(
+          <!DOCTYPE html>
+          <style>
+            body, html {
+              width: 100%;
+              height: 100%;
+              margin: 0px;
+            }
+
+            #spacer {
+              width: 1000px;
+              height: 1000px;
+            }
+
+            #container {
+              width: 100%;
+              height: 100%;
+              overflow: auto;
+            }
+          </style>
+          <div id="container">
+            <div id="spacer"></div>
+          </div>
+      )HTML");
+
+  GetDocument().GetPage()->GetVisualViewport().SetScale(2);
+  GetDocument().GetPage()->GetVisualViewport().SetLocation(
+      FloatPoint(100, 120));
+
+  LocalFrame* frame = ToLocalFrame(GetDocument().GetPage()->MainFrame());
+  EXPECT_EQ(100, frame->DomWindow()->visualViewport()->pageLeft());
+  EXPECT_EQ(120, frame->DomWindow()->visualViewport()->pageTop());
+
+  request.Finish();
+  Compositor().BeginFrame();
+
+  Element* container = GetDocument().getElementById("container");
+  GetDocument().setRootScroller(container);
+
+  Compositor().BeginFrame();
+
+  ASSERT_EQ(container,
+            GetDocument().GetRootScrollerController().EffectiveRootScroller());
+  container->setScrollTop(50);
+  container->setScrollLeft(60);
+
+  ASSERT_EQ(50, container->scrollTop());
+  ASSERT_EQ(60, container->scrollLeft());
+  ASSERT_EQ(100, frame->DomWindow()->visualViewport()->pageLeft());
+  EXPECT_EQ(120, frame->DomWindow()->visualViewport()->pageTop());
+}
+
 class RootScrollerHitTest : public RootScrollerTest {
  public:
   void CheckHitTestAtBottomOfScreen() {
@@ -1214,7 +1287,8 @@ INSTANTIATE_TEST_CASE_P(All, RootScrollerHitTest, ::testing::Bool());
 // Test that hit testing in the area revealed at the bottom of the screen
 // revealed by hiding the URL bar works properly when using a root scroller
 // when the target and scroller are in the same PaintLayer.
-TEST_P(RootScrollerHitTest, HitTestInAreaRevealedByURLBarSameLayer) {
+// TODO(chrishtr): fix this for root scrollers.
+TEST_P(RootScrollerHitTest, DISABLED_HitTestInAreaRevealedByURLBarSameLayer) {
   // Add a target at the bottom of the root scroller that's the size of the url
   // bar. We'll test that hiding the URL bar appropriately adjusts clipping so
   // that we can hit this target.

@@ -127,7 +127,7 @@ TEST_F(MediaRouterDialogControllerTest, ShowDialogForPresentation) {
 }
 
 TEST_F(MediaRouterDialogControllerTest, StartPresentationContext) {
-  auto context = base::MakeUnique<StartPresentationContext>(
+  auto context = std::make_unique<StartPresentationContext>(
       content::PresentationRequest(
           {1, 2}, {GURL("http://example.com"), GURL("http://example2.com")},
           url::Origin::Create(GURL("http://google.com"))),
@@ -137,7 +137,7 @@ TEST_F(MediaRouterDialogControllerTest, StartPresentationContext) {
                      base::Unretained(this)));
 
   MediaRoute route("routeId", MediaSourceForTab(1), "sinkId", "Description",
-                   false, "", false);
+                   false, false);
   auto result = RouteRequestResult::FromSuccess(route, "presentationId");
 
   EXPECT_CALL(*this, RequestSuccess(_, _)).Times(1);

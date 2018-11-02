@@ -16,7 +16,6 @@
 
 using vivaldi::Notes_Model;
 using vivaldi::Notes_Node;
-using vivaldi::Notes_attachment;
 using vivaldi::NotesModelObserver;
 
 namespace extensions {

@@ -101,6 +101,24 @@ declare_args() {
 
   # Strip the debug info of symbols file in lib.unstripped to reduce size.
   strip_debug_info = false
+
+  # Path to an AFDO profile to use while building with clang, if any. Empty
+  # implies none.
+  #
+  # Please note that you need to be very careful about changing your profile at
+  # the moment. See the `BUG(gbiv)` comment later in this file.
+  clang_sample_profile_path = ""
+
+  # Some configurations have default sample profiles. If this is true and
+  # clang_sample_profile_path is empty, we'll fall back to the default.
+  clang_use_default_sample_profile =
+      is_official_build && defined(clang_default_afdo_profile)
+
+  # Whether to assert to the compiler that the AFDO profiles are accurate.
+  # True will cause the compiler to optimize uncovered functions for size
+  # (despite passing -O2 or -O3), which reduces binary size by quite a bit,
+  # potentially at the cost of some performance.
+  clang_sample_profile_is_accurate = true
 }
 
 declare_args() {
@@ -198,6 +216,34 @@ config("compiler") {
     # --------------------------------
     cflags += [ "-fno-strict-aliasing" ]  # See http://crbug.com/32204
 
+    # AFDO on clang. Clang doesn't seem to suffer from the bug that caused GCC's
+    # AFDO to be split into its own config, so this isn't part of that config.
+    #
+    # Since we only profile the browser, skip it if we're building host tools.
+    #
+    # XXX(gbiv): There is currently *no* dependency between the profile we use
+    # and the compilations/links that we do. So, if the profile gets updated,
+    # the user has to manually clean build artifacts. CL:827560 should fix this
+    # by allowing us to specify `inputs` here, but until then, the only "good"
+    # workaround is changing your profile name each time you update the profile.
+    if (is_clang && current_toolchain == default_toolchain) {
+      _sample_path = ""
+      if (clang_sample_profile_path != "") {
+        _sample_path = clang_sample_profile_path
+      } else if (clang_use_default_sample_profile) {
+        assert(defined(clang_default_afdo_profile),
+               "This platform has no default sample profiles")
+        _sample_path = clang_default_afdo_profile
+      }
+
+      if (_sample_path != "") {
+        cflags += [ "-fprofile-sample-use=${_sample_path}" ]
+        if (clang_sample_profile_is_accurate) {
+          cflags += [ "-fprofile-sample-accurate" ]
+        }
+      }
+    }
+
     # Stack protection.
     if (is_mac) {
       # The strong variant of the stack protector significantly increases
@@ -219,16 +265,6 @@ config("compiler") {
         # Not available on aix.
         cflags += [ "-fstack-protector" ]
       }
-    }
-
-    # Linker warnings.
-    if (fatal_linker_warnings && !(is_chromeos && current_cpu == "arm") &&
-        !(is_android && use_order_profiling) && !is_mac && !is_ios &&
-        current_os != "aix") {
-      # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
-      # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
-      # crbug.com/485542
-      ldflags += [ "-Wl,--fatal-warnings" ]
     }
   }
 
@@ -289,10 +325,12 @@ config("compiler") {
       ldflags += [ "-Wl,--build-id=sha1" ]
     }
 
-    defines += [ "_FILE_OFFSET_BITS=64" ]
-
     if (!is_android) {
       defines += [
+        # _FILE_OFFSET_BITS=64 should not be set on Android in order to maintain
+        # the behavior of the Android NDK from earlier versions.
+        # See https://android-developers.googleblog.com/2017/09/introducing-android-native-development.html
+        "_FILE_OFFSET_BITS=64",
         "_LARGEFILE_SOURCE",
         "_LARGEFILE64_SOURCE",
       ]
@@ -357,6 +395,12 @@ config("compiler") {
 
   if (is_posix && use_lld && !is_nacl) {
     ldflags += [ "-fuse-ld=lld" ]
+    if (current_cpu == "arm64") {
+      # Reduce the page size from 65536 in order to reduce binary size slightly
+      # by shrinking the alignment gap between segments. This also causes all
+      # segments to be mapped adjacently, which breakpad relies on.
+      ldflags += [ "-Wl,-z,max-page-size=4096" ]
+    }
   } else if (use_gold) {
     ldflags += [ "-fuse-ld=gold" ]
     if (!is_android) {
@@ -588,6 +632,7 @@ config("compiler") {
 config("compiler_cpu_abi") {
   cflags = []
   ldflags = []
+  defines = []
 
   if (is_posix && !(is_mac || is_ios)) {
     # CPU architecture. We may or may not be doing a cross compile now, so for
@@ -644,18 +689,20 @@ config("compiler_cpu_abi") {
       }
 
       if (mips_arch_variant == "r6") {
+        cflags += [ "-mno-odd-spreg" ]
+        ldflags += [ "-mips32r6" ]
         if (is_clang) {
-          cflags += [ "-march=mips32r6" ]
+          cflags += [
+            "-march=mipsel",
+            "-mcpu=mips32r6",
+          ]
         } else {
           cflags += [
             "-mips32r6",
             "-Wa,-mips32r6",
           ]
           if (is_android) {
-            ldflags += [
-              "-mips32r6",
-              "-Wl,-melf32ltsmip",
-            ]
+            ldflags += [ "-Wl,-melf32ltsmip" ]
           }
         }
         if (mips_use_msa == true) {
@@ -665,18 +712,12 @@ config("compiler_cpu_abi") {
           ]
         }
       } else if (mips_arch_variant == "r2") {
+        ldflags += [ "-mips32r2" ]
         if (is_clang) {
-          if (is_android) {
-            cflags += [
-              "-march=mipsel",
-              "-mcpu=mips32r2",
-            ]
-          } else {
-            cflags += [
-              "-march=mipsel",
-              "-mcpu=mips32r2",
-            ]
-          }
+          cflags += [
+            "-march=mipsel",
+            "-mcpu=mips32r2",
+          ]
         } else {
           cflags += [
             "-mips32r2",
@@ -687,18 +728,12 @@ config("compiler_cpu_abi") {
           }
         }
       } else if (mips_arch_variant == "r1") {
+        ldflags += [ "-mips32" ]
         if (is_clang) {
-          if (is_android) {
-            cflags += [
-              "-march=mipsel",
-              "-mcpu=mips32",
-            ]
-          } else {
-            cflags += [
-              "-march=mipsel",
-              "-mcpu=mips32",
-            ]
-          }
+          cflags += [
+            "-march=mipsel",
+            "-mcpu=mips32",
+          ]
         } else {
           cflags += [
             "-mips32",
@@ -706,6 +741,7 @@ config("compiler_cpu_abi") {
           ]
         }
       } else if (mips_arch_variant == "loongson3") {
+        defines += [ "_MIPS_ARCH_LOONGSON" ]
         cflags += [
           "-march=loongson3a",
           "-mno-branch-likely",
@@ -812,6 +848,7 @@ config("compiler_cpu_abi") {
         ]
         ldflags += [ "-mips64r2" ]
       } else if (mips_arch_variant == "loongson3") {
+        defines += [ "_MIPS_ARCH_LOONGSON" ]
         cflags += [
           "-march=loongson3a",
           "-mno-branch-likely",
@@ -1190,7 +1227,7 @@ config("default_warnings") {
       ]
     }
   } else {
-    if (is_mac && !is_nacl) {
+    if ((is_mac || is_ios) && !is_nacl) {
       # When compiling Objective-C, warns if a method is used whose
       # availability is newer than the deployment target.
       cflags += [ "-Wunguarded-availability" ]
@@ -1364,13 +1401,6 @@ config("chromium_code") {
     if (is_mac || is_ios) {
       cflags_objc = [ "-Wobjc-missing-property-synthesis" ]
       cflags_objcc = [ "-Wobjc-missing-property-synthesis" ]
-    }
-
-    # TODO(crbug.com/761419): Add to default_warnings instead of to
-    # chromium_code once fixed in third_party.
-    if (is_ios) {
-      cflags_objc += [ "-Wunguarded-availability" ]
-      cflags_objcc += [ "-Wunguarded-availability" ]
     }
   }
 
@@ -1566,7 +1596,9 @@ if (is_win) {
 
   if (is_official_build) {
     common_optimize_on_ldflags += [ "/OPT:REF" ]  # Remove unreferenced data.
-    if (!use_lld) {
+
+    # TODO(thakis): Remove is_clang here, https://crbug.com/598772
+    if (!use_lld && !is_clang) {
       common_optimize_on_ldflags += [
         # Set the number of LTCG code-gen threads to eight. The default is four.
         # This gives a 5-10% link speedup.
@@ -2015,5 +2047,21 @@ if (is_ios || is_mac) {
     common_flags = [ "-fobjc-arc" ]
     cflags_objc = common_flags
     cflags_objcc = common_flags
+  }
+}
+
+# Default linker warnings.
+config("default_fatal_linker_warnings") {
+  ldflags = []
+
+  # Linker warnings.
+  if (!is_win && fatal_linker_warnings &&
+      !(is_chromeos && current_cpu == "arm") &&
+      !(is_android && use_order_profiling) && !is_mac && !is_ios &&
+      current_os != "aix") {
+    # TODO(jochen): Enable this on chromeos on arm. http://crbug.com/356580
+    # TODO(lizeb,pasko): Fix link errors when linking with order_profiling=1
+    # crbug.com/485542
+    ldflags += [ "-Wl,--fatal-warnings" ]
   }
 }

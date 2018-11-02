@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/app_list/search/omnibox_provider.h"
 
-#include "ash/app_list/model/search_result.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_provider_client.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
@@ -28,14 +27,12 @@ OmniboxProvider::OmniboxProvider(Profile* profile,
           base::WrapUnique(new ChromeAutocompleteProviderClient(profile)),
           this,
           AutocompleteClassifier::DefaultOmniboxProviders() &
-              ~AutocompleteProvider::TYPE_ZERO_SUGGEST)),
-      is_voice_query_(false) {}
+              ~AutocompleteProvider::TYPE_ZERO_SUGGEST)) {}
 
 OmniboxProvider::~OmniboxProvider() {}
 
-void OmniboxProvider::Start(bool is_voice_query, const base::string16& query) {
+void OmniboxProvider::Start(const base::string16& query) {
   controller_->Stop(false);
-  is_voice_query_ = is_voice_query;
   AutocompleteInput input =
       AutocompleteInput(query, metrics::OmniboxEventProto::INVALID_SPEC,
                         ChromeAutocompleteSchemeClassifier(profile_));
@@ -49,8 +46,8 @@ void OmniboxProvider::PopulateFromACResult(const AutocompleteResult& result) {
     if (!match.destination_url.is_valid())
       continue;
 
-    new_results.emplace_back(base::MakeUnique<OmniboxResult>(
-        profile_, list_controller_, controller_.get(), is_voice_query_, match));
+    new_results.emplace_back(std::make_unique<OmniboxResult>(
+        profile_, list_controller_, controller_.get(), match));
   }
   SwapResults(&new_results);
 }

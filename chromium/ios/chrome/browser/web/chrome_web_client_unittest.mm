@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -95,11 +94,26 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPrint) {
   WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
   web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
 
-  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
-  NSString* script = web_client.Get()->GetEarlyPageScript(browser_state());
+  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
+  NSString* script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"object",
               web::ExecuteJavaScript(web_view, @"typeof __gCrWeb.print"));
+}
+
+// Tests that ChromeWebClient provides autofill controller script for WKWebView.
+TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptAutofillController) {
+  // Chrome scripts rely on __gCrWeb object presence.
+  WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
+  web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
+
+  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
+  NSString* script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
+  web::ExecuteJavaScript(web_view, script);
+  EXPECT_NSEQ(@"object",
+              web::ExecuteJavaScript(web_view, @"typeof __gCrWeb.autofill"));
 }
 
 // Tests that ChromeWebClient provides credential manager script for WKWebView
@@ -109,15 +123,17 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptCredentialManager) {
   WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
   web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
 
-  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
-  NSString* script = web_client.Get()->GetEarlyPageScript(browser_state());
+  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
+  NSString* script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"undefined", web::ExecuteJavaScript(
                                 web_view, @"typeof navigator.credentials"));
 
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(features::kCredentialManager);
-  script = web_client.Get()->GetEarlyPageScript(browser_state());
+  script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"object", web::ExecuteJavaScript(
                              web_view, @"typeof navigator.credentials"));
@@ -130,10 +146,11 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequestEnabled) {
   WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
   web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
 
-  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
+  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndEnableFeature(payments::features::kWebPayments);
-  NSString* script = web_client.Get()->GetEarlyPageScript(browser_state());
+  NSString* script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"function", web::ExecuteJavaScript(
                                web_view, @"typeof window.PaymentRequest"));
@@ -146,10 +163,11 @@ TEST_F(ChromeWebClientTest, WKWebViewEarlyPageScriptPaymentRequestDisabled) {
   WKWebView* web_view = web::BuildWKWebView(CGRectZero, browser_state());
   web::ExecuteJavaScript(web_view, @"__gCrWeb = {};");
 
-  web::ScopedTestingWebClient web_client(base::MakeUnique<ChromeWebClient>());
+  web::ScopedTestingWebClient web_client(std::make_unique<ChromeWebClient>());
   base::test::ScopedFeatureList feature_list;
   feature_list.InitAndDisableFeature(payments::features::kWebPayments);
-  NSString* script = web_client.Get()->GetEarlyPageScript(browser_state());
+  NSString* script =
+      web_client.Get()->GetDocumentStartScriptForMainFrame(browser_state());
   web::ExecuteJavaScript(web_view, script);
   EXPECT_NSEQ(@"undefined", web::ExecuteJavaScript(
                                 web_view, @"typeof window.PaymentRequest"));

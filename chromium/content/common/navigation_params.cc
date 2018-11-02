@@ -53,7 +53,7 @@ CommonNavigationParams::CommonNavigationParams(
     PreviewsState previews_state,
     const base::TimeTicks& navigation_start,
     std::string method,
-    const scoped_refptr<ResourceRequestBody>& post_data,
+    const scoped_refptr<network::ResourceRequestBody>& post_data,
     base::Optional<SourceLocation> source_location,
     CSPDisposition should_check_main_world_csp,
     bool started_from_context_menu,
@@ -89,60 +89,11 @@ CommonNavigationParams::CommonNavigationParams(
 CommonNavigationParams::~CommonNavigationParams() {
 }
 
-BeginNavigationParams::BeginNavigationParams()
-    : load_flags(0),
-      skip_service_worker(false),
-      request_context_type(REQUEST_CONTEXT_TYPE_LOCATION),
-      mixed_content_context_type(blink::WebMixedContentContextType::kBlockable),
-      is_form_submission(false) {}
-
-BeginNavigationParams::BeginNavigationParams(
-    std::string headers,
-    int load_flags,
-    bool skip_service_worker,
-    RequestContextType request_context_type,
-    blink::WebMixedContentContextType mixed_content_context_type,
-    bool is_form_submission,
-    const base::Optional<url::Origin>& initiator_origin)
-    : headers(headers),
-      load_flags(load_flags),
-      skip_service_worker(skip_service_worker),
-      request_context_type(request_context_type),
-      mixed_content_context_type(mixed_content_context_type),
-      is_form_submission(is_form_submission),
-      initiator_origin(initiator_origin) {}
-
-BeginNavigationParams::BeginNavigationParams(
-    const BeginNavigationParams& other) = default;
-
-BeginNavigationParams::~BeginNavigationParams() {}
-
-StartNavigationParams::StartNavigationParams()
-    : transferred_request_child_id(-1),
-      transferred_request_request_id(-1) {
-}
-
-StartNavigationParams::StartNavigationParams(
-    const std::string& extra_headers,
-    int transferred_request_child_id,
-    int transferred_request_request_id)
-    : extra_headers(extra_headers),
-      transferred_request_child_id(transferred_request_child_id),
-      transferred_request_request_id(transferred_request_request_id) {
-}
-
-StartNavigationParams::StartNavigationParams(
-    const StartNavigationParams& other) = default;
-
-StartNavigationParams::~StartNavigationParams() {
-}
-
 RequestNavigationParams::RequestNavigationParams()
     : is_overriding_user_agent(false),
       can_load_local_resources(false),
       nav_entry_id(0),
       is_history_navigation_in_new_child(false),
-      has_committed_real_load(false),
       intended_as_new_entry(false),
       pending_history_list_offset(-1),
       current_history_list_offset(-1),
@@ -163,7 +114,6 @@ RequestNavigationParams::RequestNavigationParams(
     int nav_entry_id,
     bool is_history_navigation_in_new_child,
     std::map<std::string, bool> subframe_unique_names,
-    bool has_committed_real_load,
     bool intended_as_new_entry,
     int pending_history_list_offset,
     int current_history_list_offset,
@@ -179,7 +129,6 @@ RequestNavigationParams::RequestNavigationParams(
       nav_entry_id(nav_entry_id),
       is_history_navigation_in_new_child(is_history_navigation_in_new_child),
       subframe_unique_names(subframe_unique_names),
-      has_committed_real_load(has_committed_real_load),
       intended_as_new_entry(intended_as_new_entry),
       pending_history_list_offset(pending_history_list_offset),
       current_history_list_offset(current_history_list_offset),
@@ -198,10 +147,8 @@ RequestNavigationParams::~RequestNavigationParams() {
 
 NavigationParams::NavigationParams(
     const CommonNavigationParams& common_params,
-    const StartNavigationParams& start_params,
     const RequestNavigationParams& request_params)
     : common_params(common_params),
-      start_params(start_params),
       request_params(request_params) {
 }
 

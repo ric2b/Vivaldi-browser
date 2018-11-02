@@ -28,6 +28,7 @@
 
 #include <memory>
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/ParserContentPolicy.h"
 #include "core/dom/ScriptableDocumentParser.h"
@@ -35,7 +36,6 @@
 #include "core/html/parser/HTMLInputStream.h"
 #include "core/html/parser/HTMLParserOptions.h"
 #include "core/html/parser/HTMLParserReentryPermit.h"
-#include "core/html/parser/HTMLParserScriptRunnerHost.h"
 #include "core/html/parser/HTMLPreloadScanner.h"
 #include "core/html/parser/HTMLSourceTracker.h"
 #include "core/html/parser/HTMLToken.h"
@@ -46,9 +46,9 @@
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/html/parser/XSSAuditor.h"
 #include "core/html/parser/XSSAuditorDelegate.h"
+#include "core/script/HTMLParserScriptRunnerHost.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/wtf/Deque.h"
-#include "platform/wtf/WeakPtr.h"
 #include "platform/wtf/text/TextPosition.h"
 
 namespace blink {
@@ -259,8 +259,8 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   // Using WeakPtr for GarbageCollected is discouraged. But in this case this is
   // ok because HTMLDocumentParser guarantees to revoke all WeakPtrs in the pre
   // finalizer.
-  WeakPtrFactory<HTMLDocumentParser> weak_factory_;
-  WeakPtr<BackgroundHTMLParser> background_parser_;
+  base::WeakPtrFactory<HTMLDocumentParser> weak_factory_;
+  base::WeakPtr<BackgroundHTMLParser> background_parser_;
   Member<HTMLResourcePreloader> preloader_;
   PreloadRequestStream queued_preloads_;
   scoped_refptr<TokenizedChunkQueue> tokenized_chunk_queue_;
@@ -285,8 +285,6 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   bool tried_loading_link_headers_;
   bool added_pending_stylesheet_in_body_;
   bool is_waiting_for_stylesheets_;
-
-  WebScopedVirtualTimePauser virtual_time_pauser_;
 };
 
 }  // namespace blink

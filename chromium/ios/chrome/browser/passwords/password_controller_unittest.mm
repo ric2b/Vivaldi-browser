@@ -11,7 +11,6 @@
 
 #include "base/json/json_reader.h"
 #include "base/mac/bind_objc_block.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -106,7 +105,7 @@ PasswordController* CreatePasswordController(
     web::WebState* web_state,
     password_manager::PasswordStore* store,
     MockPasswordManagerClient** weak_client) {
-  auto client = base::MakeUnique<NiceMock<MockPasswordManagerClient>>(store);
+  auto client = std::make_unique<NiceMock<MockPasswordManagerClient>>(store);
   if (weak_client)
     *weak_client = client.get();
   return [[PasswordController alloc] initWithWebState:web_state
@@ -711,10 +710,6 @@ static NSString* kHtmlWithMultiplePasswordForms =
      "<input id=\"un6'\" type='text' name=\"u6'\">"
      "<input id=\"pw6'\" type='password' name=\"p6'\">"
      "</form>"
-     "<form>"
-     "<input id='un8' type='text'>"
-     "<input id='pw8' type='password'>"
-     "</form>"
      "<iframe name='pf'></iframe>"
      "<script>"
      "  var doc = frames['pf'].document.open();"
@@ -727,7 +722,14 @@ static NSString* kHtmlWithMultiplePasswordForms =
      "  doc.write('<input id=\\'pw8\\' type=\\'text\\' name=\\'p4\\'>');"
      "  doc.write('</form>');"
      "  doc.close();"
-     "</script>";
+     "</script>"
+     "<form>"
+     "<input id='un9' type='text'>"
+     "<input id='pw9' type='password'>"
+     "</form>"
+     "<form id='form10'></form>"
+     "<input id='un10' type='text' form='form10'>"
+     "<input id='pw10' type='password' form='form10'>";
 
 // A script that resets all text fields, including those in iframes.
 static NSString* kClearInputFieldsScript =
@@ -878,12 +880,22 @@ TEST_F(PasswordControllerTest, FillPasswordForm) {
     {
       base_url,
       base_url,
-      "un8",
+      "un9",
       "test_user",
-      "pw8",
+      "pw9",
       "test_password",
       YES,
-      @"un8=test_user;pw8=test_password;"
+      @"un9=test_user;pw9=test_password;"
+    },
+    {
+      base_url,
+      base_url,
+      "un10",
+      "test_user",
+      "pw10",
+      "test_password",
+      YES,
+      @"un10=test_user;pw10=test_password;"
     },
   };
   // clang-format on
@@ -1540,4 +1552,52 @@ TEST_F(PasswordControllerTest, TouchendAsSubmissionIndicator) {
          "document.getElementById('submit_button').dispatchEvent(e);");
     testing::Mock::VerifyAndClearExpectations(&log_manager);
   }
+}
+
+// Tests that a touchend event from a button which contains in a password form
+// works as a submission indicator for this password form.
+TEST_F(PasswordControllerTest, SavingFromSameOriginIframe) {
+  // Use a mock LogManager to detect that OnInPageNavigation has been
+  // called. TODO(crbug.com/598672): this is a hack, we should modularize the
+  // code better to allow proper unit-testing.
+  MockLogManager log_manager;
+  EXPECT_CALL(*weak_client_, GetLogManager())
+      .WillRepeatedly(Return(&log_manager));
+  EXPECT_CALL(log_manager, IsLoggingActive()).WillRepeatedly(Return(true));
+  const char kExpectedMessage[] =
+      "Message: \"PasswordManager::OnInPageNavigation\"\n";
+
+  // The standard pattern is to use a __block variable WaitUntilCondition but
+  // __block variable can't be captured in C++ lambda, so as workaround it's
+  // used normal variable |get_logins_called| and pointer on it is used in a
+  // block.
+  bool expected_message_logged = false;
+  bool* p_expected_message_logged = &expected_message_logged;
+
+  EXPECT_CALL(log_manager, LogSavePasswordProgress(kExpectedMessage))
+      .WillOnce(testing::Invoke(
+          [&expected_message_logged](const std::string& message) {
+            expected_message_logged = true;
+          }));
+
+  EXPECT_CALL(log_manager,
+              LogSavePasswordProgress(testing::Ne(kExpectedMessage)))
+      .Times(testing::AnyNumber());
+
+  LoadHtml(@"<iframe id='frame1'></iframe>");
+  ExecuteJavaScript(
+      @"document.getElementById('frame1').contentDocument.body.innerHTML = "
+       "'<form id=\"form1\">"
+       "<input type=\"text\" name=\"text\" value=\"user1\" id=\"id2\">"
+       "<input type=\"password\" name=\"password\" value=\"pw1\" id=\"id2\">"
+       "<input type=\"submit\" id=\"submit_input\"/>"
+       "</form>'");
+  ExecuteJavaScript(
+      @"document.getElementById('frame1').contentDocument.getElementById('"
+      @"submit_input').click();");
+
+  // Wait until expected message is called.
+  EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForActionTimeout, ^bool() {
+    return *p_expected_message_logged;
+  }));
 }

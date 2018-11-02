@@ -7,7 +7,6 @@
 #include <memory>
 
 #include "base/android/application_status_listener.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
@@ -52,7 +51,7 @@ namespace {
 
 std::unique_ptr<sync_preferences::TestingPrefServiceSyncable>
 RegisteredPrefs() {
-  auto prefs = base::MakeUnique<sync_preferences::TestingPrefServiceSyncable>();
+  auto prefs = std::make_unique<sync_preferences::TestingPrefServiceSyncable>();
   ContentSuggestionsService::RegisterProfilePrefs(prefs->registry());
   UserClassifier::RegisterProfilePrefs(prefs->registry());
   ContentSuggestionsNotifierService::RegisterProfilePrefs(prefs->registry());
@@ -61,19 +60,17 @@ RegisteredPrefs() {
 
 class FakeContentSuggestionsService : public ContentSuggestionsService {
  public:
-  explicit FakeContentSuggestionsService(PrefService* prefs)
+  FakeContentSuggestionsService(PrefService* prefs, base::Clock* clock)
       : ContentSuggestionsService(
             ContentSuggestionsService::ENABLED,
             /*signin_manager=*/nullptr,
             /*history_service=*/nullptr,
             /*large_icon_cache=*/nullptr,
             prefs,
-            base::MakeUnique<FakeCategoryRanker>(),
-            base::MakeUnique<UserClassifier>(
-                nullptr,
-                base::MakeUnique<base::SimpleTestClock>()),
+            std::make_unique<FakeCategoryRanker>(),
+            std::make_unique<UserClassifier>(nullptr, clock),
             /*remote_suggestions_scheduler=*/nullptr,
-            base::MakeUnique<ntp_snippets::Logger>()) {}
+            std::make_unique<ntp_snippets::Logger>()) {}
 };
 
 class FakeArticleProvider : public ContentSuggestionsProvider {
@@ -158,7 +155,7 @@ class ContentSuggestionsNotifierServiceTest : public ::testing::Test {
   ContentSuggestionsNotifierServiceTest()
       : application_state_(APPLICATION_STATE_HAS_PAUSED_ACTIVITIES),
         prefs_(RegisteredPrefs()),
-        suggestions_(prefs_.get()),
+        suggestions_(prefs_.get(), &clock_),
         notifier_(new testing::StrictMock<MockContentSuggestionsNotifier>),
         notifier_ownership_(notifier_),
         provider_(&suggestions_) {
@@ -186,6 +183,7 @@ class ContentSuggestionsNotifierServiceTest : public ::testing::Test {
 
   ApplicationState application_state_;
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> prefs_;
+  base::SimpleTestClock clock_;
   FakeContentSuggestionsService suggestions_;
   testing::StrictMock<MockContentSuggestionsNotifier>* notifier_;
   std::unique_ptr<ContentSuggestionsNotifier> notifier_ownership_;

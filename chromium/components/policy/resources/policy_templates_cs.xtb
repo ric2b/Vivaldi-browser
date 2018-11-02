@@ -46,39 +46,6 @@ Pokud je nastavena na hodnotu true nebo nastavena není, statistiky hlášeny bu
 
       Hodnota zásady se určuje v milisekundách.</translation>
 <translation id="1151353063931113432">Povolit obrázky na těchto stránkách</translation>
-<translation id="1151545095291359187">Konfiguruje nastavení správy rozšíření prohlížeče <ph name="PRODUCT_NAME" />.
-
-          Tato zásada řídí několik nastavení, včetně těch, která jsou nakonfigurována existujícími zásadami pro rozšíření. Pokud je tato zásada nastavena, přepíše všechny starší nastavené zásady.
-
-          Tato zásada mapuje konfiguraci na ID rozšíření nebo adresu URL. Pokud je definováno ID rozšíření, bude konfigurace použita pouze na konkrétní rozšíření. Pro zvláštní ID <ph name="DEFAULT_SCOPE" /> lze nastavit výchozí konfiguraci. Tato konfigurace bude použita na všechna rozšíření, která v této zásadě nemají nastavenou vlastní konfiguraci. Pokud je definována adresa URL pro aktualizaci, bude konfigurace použita na všechna rozšíření, která mají v manifestu uvedenou přesně tuto adresu URL pro aktualizaci (viz <ph name="LINK_TO_EXTENSION_DOC1" />).
-
-          Konfigurace pro jednotlivá rozšíření (nebo rozšíření se stejnou adresou URL pro aktualizaci) představuje další slovník, který může obsahovat níže popsaná pole.
-
-          <ph name="INSTALLATION_MODE" />: mapuje se na řetězec udávající režim instalace rozšíření. Platné řetězce:
-          * <ph name="ALLOWED" />: umožňuje, aby bylo rozšíření nainstalováno uživatelem. Toto chování je výchozí.
-          * <ph name="BLOCKED" />: blokuje instalaci rozšíření.
-          * <ph name="FORCE_INSTALLED" />: rozšíření je instalováno automaticky a uživatel ho nemůže odstranit.
-          * <ph name="NORMAL_INSTALLED" />: rozšíření je instalováno automaticky, ale uživatel ho může deaktivovat.
-
-          Pole <ph name="INSTALLATION_MODE" /> může být nakonfigurováno i pro několik rozšíření najednou, a to včetně rozšíření <ph name="DEFAULT_SCOPE" /> (jako výchozí nastavení) a rozšíření se stejnou adresou URL pro aktualizaci. V tomto případě lze použít pouze hodnoty <ph name="ALLOWED" /> a <ph name="BLOCKED" />.
-
-          Pokud je režim nastaven na hodnotu <ph name="FORCE_INSTALLED" /> nebo <ph name="NORMAL_INSTALLED" />, musí být nakonfigurována i adresa URL <ph name="UPDATE_URL" />. Adresa URL pro aktualizaci nastavená v této zásadě slouží pouze k počáteční instalaci. Další aktualizace rozšíření budou používat adresu URL pro aktualizaci uvedenou v manifestu rozšíření. Adresa URL pro aktualizaci by měla odkazovat na dokument XML manifestu aktualizace (viz výše).
-
-          <ph name="BLOCKED_PERMISSIONS" />: mapuje se na seznam řetězců, které definují blokovaná oprávnění rozhraní API daného rozšíření. Názvy oprávnění jsou stejné jako řetězce oprávnění deklarované v manifestu rozšíření (viz <ph name="LINK_TO_EXTENSION_DOC3" />). Toto nastavení lze nakonfigurovat také pro rozšíření <ph name="DEFAULT_SCOPE" />. Pokud rozšíření vyžaduje oprávnění, které se nachází na seznamu blokovaných položek, nebude se moci načíst. Pokud je blokované oprávnění vyžadováno volitelně, rozšíření bude spuštěno normálním způsobem, ale žádost o konfliktní oprávnění bude za běhu automaticky zamítnuta.
-
-          <ph name="ALLOWED_PERMISSIONS" />: toto pole je podobné jako pole <ph name="BLOCKED_PERMISSIONS" />, ale na rozdíl od něj explicitně povoluje některá oprávnění, která by mohla být blokována seznamem globálně blokovaných oprávnění. Toto pole proto nelze nakonfigurovat pro rozšíření <ph name="DEFAULT_SCOPE" />. Upozorňujeme, že toto nastavení rozšířením automaticky neposkytuje udělená oprávnění.
-
-          <ph name="MINIMUM_VERSION_REQUIRED" />: mapuje se na řetězec verze. Formát řetězce verze je stejný jako ten v manifestu rozšíření (viz <ph name="LINK_TO_EXTENSION_DOC4" />). Rozšíření nižší verze, než je stanovená minimální verze, bude deaktivováno. Toto nastavení se vztahuje i na rozšíření, jejichž instalace byla vynucena.
-
-          Následující nastavení lze použít pouze pro výchozí konfiguraci <ph name="DEFAULT_SCOPE" />:
-
-          <ph name="INSTALL_SOURCES" />: každá položka v tomto seznamu představuje vzor podobný jako u rozšíření (<ph name="LINK_TO_MATCH_PATTERNS" />). Uživatelé budou moci jednoduše instalovat položky z jakékoli adresy, která odpovídá položce v tomto seznamu. V těchto vzorech musí být povoleno umístění souboru <ph name="EXTENSION_SUFFIX_WILDCARD" /> i stránka, ze které bude zahájeno stahování (tj. zdroj odkazu).
-
-          <ph name="ALLOWED_TYPES" />: toto nastavení vytvoří seznam povolených rozšíření nebo aplikací, které lze nainstalovat do prohlížeče <ph name="PRODUCT_NAME" />. Hodnota představuje seznam řetězců. Musí se jednat o řetězce z následujícího výčtu: <ph name="VALID_ALLOWED_TYPES" />. Další informace o těchto typech naleznete v dokumentaci k rozšířením prohlížeče <ph name="PRODUCT_NAME" />.
-          <ph name="BLOCKED_INSTALL_MESSAGE" />: Pokud se uživatel pokusí nainstalovat rozšíření, které je blokováno zásadami, zobrazí Internetový obchod Chrome obecnou chybovou zprávu. Pomocí tohoto nastavení lze k chybové zprávě přidat text. Můžete pomocí něj uživatele nasměrovat na oddělení nápovědy, vysvětlit, proč je konkrétní rozšíření blokováno, nebo poskytnou jiné informace. Pokud tato chybová zpráva bude delší než 1000 znaků, bude oříznuta.
-          <ph name="RUNTIME_BLOCKED_HOSTS" />: Představuje seznam hostitelů, se kterými rozšíření nebude smět interagovat. Týká se to vkládání JavaScriptu, úprav a zobrazování požadavků webRequest a webNavigation a zobrazování a úprav souborů cookie. Formát se podobá vzorům (<ph name="LINK_TO_MATCH_PATTERNS" />), ale není dovoleno zadávat cesty, například „*://*.example.com“. Jsou podporovány také zástupné znaky pro domény nejvyšší úrovně, například „*://example.*“.
-          <ph name="RUNTIME_ALLOWED_HOSTS" />: Představuje seznam hostitelů, se kterými rozšíření může interagovat bez ohledu na to, zda jsou uvedeni v seznamu <ph name="RUNTIME_BLOCKED_HOSTS" />. Formát je stejný jako u seznamu <ph name="RUNTIME_BLOCKED_HOSTS" />.
-          </translation>
 <translation id="1152117524387175066">Hlásí stav přepínače režimu pro vývojáře při spuštění zařízení.
 
       Pokud je tato zásada nastavena na hodnotu false, stav přepínače režimu pro vývojáře se hlásit nebude.</translation>
@@ -175,6 +142,7 @@ Pokud je tato zásada nastavena na hodnotu false nebo ponechána bez nastavení,
 
           Podrobnější příklady naleznete na následující stránce:
           <ph name="PROXY_HELP_URL" /></translation>
+<translation id="1503487916067509762">Aktivuje blokování vkládání softwaru třetích stran</translation>
 <translation id="1504431521196476721">Vzdálené ověření identity</translation>
 <translation id="1509692106376861764">V prohlížečích <ph name="PRODUCT_NAME" /> verze 29 a novějších byla tato zásada zrušena.</translation>
 <translation id="1522425503138261032">Umožňuje webovým stránkám sledovat fyzickou polohu uživatele</translation>
@@ -285,6 +253,7 @@ Pokud je toto nastavení zakázáno nebo není nakonfigurováno, firemní uživa
 <translation id="1969212217917526199">Přepíše zásady u ladicích sestavení hostitele vzdáleného připojení.
 
 Hodnota je analyzována jako slovník JSON s mapováním názvu zásady na hodnoty zásady.</translation>
+<translation id="1969808853498848952">Vždy spustit pluginy, které vyžadují autorizaci (zastaralé)</translation>
 <translation id="1988371335297483117">Datové části automatických aktualizací systému <ph name="PRODUCT_OS_NAME" /> lze namísto protokolu HTTPS stahovat prostřednictvím protokolu HTTP. To umožňuje transparentní ukládání souborů stahovaných pomocí protokolu HTTP do mezipaměti.
 
       Pokud tuto zásadu nastavíte na hodnotu true, systém <ph name="PRODUCT_OS_NAME" /> se bude pokoušet stahovat datové části automatických aktualizací prostřednictvím protokolu HTTP. Pokud tuto zásadu nastavíte na hodnotu false nebo ji nenastavíte, ke stahování datových částí automatických aktualizací se bude používat protokol HTTPS.</translation>
@@ -485,6 +454,9 @@ Z prohlížeče <ph name="PRODUCT_NAME" /> verze 29 a novějších verzí bylo t
 <translation id="2466131534462628618">Ověření captive portálu ignoruje proxy server</translation>
 <translation id="2482676533225429905">Zasílání nativních zpráv</translation>
 <translation id="2483146640187052324">Předvídat síťové akce u všech síťových připojení</translation>
+<translation id="2485721741875148980">Pokud je tato zásada nastavena na hodnotu True, uživatel se do prohlížeče <ph name="PRODUCT_NAME" /> před použitím musí přihlásit pomocí svého profilu. V tomto případě bude výchozí hodnota zásady BrowserGuestModeEnabled nastavena na False. Existující nepodepsané profily budou po aktivaci této zásady uzamknuty a nebudou již přístupné. Další informace najdete v článku centra nápovědy.
+
+      Pokud je tato zásada nastavena na hodnotu False nebo není nakonfigurována, může uživatel prohlížeč <ph name="PRODUCT_NAME" /> používat bez přihlášení.</translation>
 <translation id="2486371469462493753">Deaktivuje vynucování požadavků zásad Certificate Transparency pro uvedené adresy URL.
 
       Tato zásada povolí použití certifikátů pro názvy hostitelů v uvedených adresách URL bez zveřejnění prostřednictvím Certificate Transparency. Bude tak možné používat certifikáty, které by jinak byly považovány za nedůvěryhodné, protože nebyly zveřejněny. Bude však obtížnější odhalit zneužití certifikátů těchto hostitelů.
@@ -655,6 +627,12 @@ Pokud zásadu nenastavíte, bude se považovat za aktivované (viz popis výše)
           Tato zásada je volitelná. Pokud není nastavena, nebudou prováděna žádná nahrazení vyhledávacích dotazů.
 
           Tato zásada je zohledňována pouze v případě, že je aktivována zásada DefaultSearchProviderEnabled.</translation>
+<translation id="306887062252197004">Tato zásada povoluje uživatelům funkce WebDriver přepsat zásady, které by mohly narušovat operace této funkce.
+
+V současné době tato zásada deaktivuje zásady SitePerProcess a IsolateOrigins.
+
+Pokud je tato zásada povolena, funkce WebDriver bude moci přepsat nekompatibilní zásady.
+Pokud je tato zásada zakázána nebo není nakonfigurována, funkce WebDriver nebude moci přepsat nekompatibilní zásady.</translation>
 <translation id="3069958900488014740">Umožňuje vypnout v prohlížeči <ph name="PRODUCT_NAME" /> optimalizaci WPAD (Web Proxy Auto-Discovery).
 
       Je-li tato zásada nastavena na hodnotu false, je optimalizace WPAD zakázána, a <ph name="PRODUCT_NAME" /> proto bude na servery WPAD založené na DNS čekat déle. Pokud tato zásada není nastavena, je optimalizace WPAD povolena.
@@ -796,6 +774,7 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
 <translation id="3512226956150568738">Pokud model zařízení klienta podporoval ARC již předtím, než kvůli spuštění ARC bylo potřeba migrovat na ext4, a zásada ArcEnabled je nastavena na hodnotu true, bude se tato možnost chovat jako AskUser (hodnota 3). Ve všech ostatních případech (model zařízení dříve ARC nepodporoval nebo je zásada ArcEnabled nastavena na hodnotu false) se tato možnost bude chovat jako DisallowArc (hodnota 0).</translation>
 <translation id="3528000905991875314">Aktivovat alternativní chybové stránky</translation>
 <translation id="3547954654003013442">Nastavení proxy serveru</translation>
+<translation id="3577251398714997599">Nastavení reklam pro weby s rušivými reklamami</translation>
 <translation id="3591584750136265240">Konfigurace chování přihlašovacího ověření</translation>
 <translation id="3627678165642179114">Povolit nebo zakázat webovou službu kontroly pravopisu</translation>
 <translation id="3646859102161347133">Nastavení typu lupy</translation>
@@ -808,7 +787,15 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
       Další informace o Bezpečném prohlížení najdete na stránce https://developers.google.com/safe-browsing.</translation>
 <translation id="3709266154059827597">Konfigurace seznamu zakázaných položek instalace rozšíření</translation>
 <translation id="3711895659073496551">Pozastavit</translation>
+<translation id="3732106275571017176">Toto nastavení uživatelům umožňuje přepínat mezi účty Google v obsahové oblasti okna prohlížeče po přihlášení k zařízení <ph name="PRODUCT_OS_NAME" />.
+
+      Je-li tato zásada nastavena na hodnotu false, přihlášení k jinému učtu z obsahové oblasti neanonymního okna prohlížeče nebude povoleno.
+
+      Pokud tato zásada není nastavena nebo je nastavena na hodnotu true, použije se výchozí chování: přihlášení k jinému účtu z obsahové oblasti prohlížeče bude povoleno s výjimkou dětských účtů, u nichž bude v obsahové oblasti neanonymních oken blokováno.
+
+      Pokud nechcete povolovat přihlášení k jinému účtu pomocí anonymního režimu, zvažte zablokování tohoto režimu pomocí zásady IncognitoModeAvailability.</translation>
 <translation id="3736879847913515635">Povolit přidání osoby ve správci uživatelů</translation>
+<translation id="3737544779868348650">Název hostitele používaný pro zařízení v síti</translation>
 <translation id="3750220015372671395">Blokovat generování klíčů na těchto stránkách</translation>
 <translation id="3756011779061588474">Blokovat režim pro vývojáře</translation>
 <translation id="3758089716224084329">Umožňuje zadat proxy server, který bude prohlížeč <ph name="PRODUCT_NAME" /> používat, a brání uživatelům ve změně nastavení proxy serveru.
@@ -825,6 +812,7 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
       Pokud tyto zásady ponecháte nenastavené, uživatelé budou moci zvolit vlastní nastavení proxy serveru.</translation>
 <translation id="3758249152301468420">Deaktivovat nástroje pro vývojáře</translation>
 <translation id="3765260570442823273">Doba zobrazení zprávy s upozorněním na odhlášení z důvodu nečinnosti</translation>
+<translation id="377044054160169374">Vynucování zásahů proti obtěžujícímu chování</translation>
 <translation id="3780152581321609624">Zahrnout do hlavního názvu služby protokolu Kerberos nestandardní port</translation>
 <translation id="3780319008680229708">Je-li tato zásada nastavena na hodnotu true, bude ikona Cast na liště nebo v rozbalovací nabídce vždy zobrazena a uživatelé ji nebudou moci odebrat.
 
@@ -853,6 +841,7 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
       Pokud tato zásada není nastavena, bude se používat výchozí adresář pro stažené soubory a uživatel jej bude moci změnit.</translation>
 <translation id="3805659594028420438">Povolit rozšíření certifikátů TLS vázaných na doménu (zastaralé)</translation>
 <translation id="3808945828600697669">Určit seznam deaktivovaných pluginů</translation>
+<translation id="3811562426301733860">Povolit reklamy na všech webech</translation>
 <translation id="3816312845600780067">Aktivovat nouzovou klávesovou zkratku pro automatické přihlášení</translation>
 <translation id="3820526221169548563">Povolí funkci usnadnění přístupu pomocí softwarové klávesnice. 
 
@@ -970,6 +959,11 @@ Není-li zásada nastavena, bude použita zásada AllowCookies a uživatelé ji
 
           Hodnota zásady se zadává v milisekundách.</translation>
 <translation id="4105989332710272578">Deaktivovat vynucování zásad Certificate Transparency pro seznam adres URL</translation>
+<translation id="4111405663956464686">Upozornění: Přibližně od verze 72 (cca v lednu 2019) bude zásada maximální verze TLS z prohlížeče <ph name="PRODUCT_NAME" /> zcela odstraněna.
+
+      Pokud tato zásada není nakonfigurována, použije <ph name="PRODUCT_NAME" /> výchozí maximální verzi.
+
+      Zásadu lze nastavit na jednu z následujících hodnot: tls1.2 nebo tls1.3. Když je nastavena, nebude <ph name="PRODUCT_NAME" /> používat verze SSL/TLS vyšší, než je zadaná verze. Nerozpoznané hodnoty budou ignorovány.</translation>
 <translation id="4121350739760194865">Zabraňuje zobrazování propagace aplikací na stránce Nová karta</translation>
 <translation id="4157003184375321727">Hlásit verzi operačního systému a firmwaru</translation>
 <translation id="4183229833636799228">Výchozí nastavení pluginu <ph name="FLASH_PLUGIN_NAME" /></translation>
@@ -1027,6 +1021,12 @@ Pokud tuto zásadu nenastavíte, použije se pro všechny webové stránky glob�
 <translation id="4320376026953250541">Microsoft Windows XP SP2 nebo novější</translation>
 <translation id="4322842393287974810">Povolit automaticky spouštěné terminálové aplikaci s nulovým zpožděním ovládat verzi systému <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Přidat na hlavní panel systému tlačítko pro odhlášení</translation>
+<translation id="4346674324214534449">Umožňuje nastavit, zda mají být blokovány reklamy na webech s rušivými reklamami.
+
+      Je-li tato zásada nastavena na hodnotu 2, budou reklamy na webech s rušivými reklamami blokovány.
+      Toto chování se však neprojeví v případě, že je zásada SafeBrowsingEnabled nastavena na hodnotu False.
+      Je-li tato zásada nastavena na hodnotu 1, reklamy na webech s rušivými reklamami blokovány nebudou.
+      Pokud tato zásada není nastavena, použije se hodnota 2.</translation>
 <translation id="4347908978527632940">Pokud je tato zásada nastavena na hodnotu true a jedná se o dozorovaného uživatele, ostatní aplikace pro Android mohou prostřednictvím poskytovatele obsahu zjišťovat, jaká omezení přístupu k webu se na uživatele vztahují.
 
           Pokud je nastavena na hodnotu false nebo nastavena není, poskytovatel obsahu nevrátí žádné informace.</translation>
@@ -1094,10 +1094,19 @@ Samotná zásada je na výše uvedených platformách podporována. Funkce, kter
 <translation id="4531706050939927436">Instalaci aplikací Android lze vynutit z administrátorské konzole pomocí Google Play. Tato zásada se na ně nevztahuje.</translation>
 <translation id="4534500438517478692">Název omezení Android:</translation>
 <translation id="4541530620466526913">Místní účty v zařízení</translation>
+<translation id="4544079461524242527">Konfiguruje nastavení správy rozšíření prohlížeče <ph name="PRODUCT_NAME" />.
+
+          Tato zásada řídí několik nastavení, včetně těch, která jsou nakonfigurována existujícími zásadami pro rozšíření. Pokud je tato zásada nastavena, přepíše všechny starší nastavené zásady.
+
+          Tato zásada mapuje konfiguraci na ID rozšíření nebo adresu URL. Pokud je definováno ID rozšíření, bude konfigurace použita pouze na konkrétní rozšíření. Pro zvláštní ID <ph name="DEFAULT_SCOPE" /> lze nastavit výchozí konfiguraci. Tato konfigurace bude použita na všechna rozšíření, která v této zásadě nemají nastavenou vlastní konfiguraci. Pokud je definována adresa URL pro aktualizaci, bude konfigurace použita na všechna rozšíření, která mají v manifestu uvedenou přesně tuto adresu URL pro aktualizaci (viz <ph name="LINK_TO_EXTENSION_DOC1" />).
+
+          Úplný popis možných nastavení a struktury této zásady najdete na stránce https://www.chromium.org/administrators/policy-list-3/extension-settings-full.
+          </translation>
 <translation id="4555850956567117258">Aktivuje vzdálené ověření identity uživatele</translation>
 <translation id="4557134566541205630">Výchozí adresa URL stránky nové karty poskytovatele vyhledávání</translation>
 <translation id="4600786265870346112">Aktivovat velký kurzor</translation>
 <translation id="4604931264910482931">Konfigurace seznamu zakázaných položek zasílání nativních zpráv</translation>
+<translation id="4613508646038788144">Je-li tato zásada nastavena na hodnotu false, bude software třetích stran moci vkládat spustitelný kód do procesů prohlížeče Chrome. Pokud tato zásada není nastavena nebo je nastavena na hodnotu true, bude mít software třetích stran vkládání spustitelného kódu do procesů prohlížeče Chrome zakázáno.</translation>
 <translation id="4617338332148204752">Přeskočení kontroly metaznaček ve službě <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="4625915093043961294">Konfigurovat seznam povolených pro instalaci rozšíření</translation>
 <translation id="4632343302005518762">Umožnit pluginu <ph name="PRODUCT_FRAME_NAME" /> zpracovávat uvedené typy obsahu</translation>
@@ -1111,6 +1120,12 @@ Samotná zásada je na výše uvedených platformách podporována. Funkce, kter
 <translation id="465099050592230505">Adresa URL podnikového úložiště aplikací (podpora ukončena)</translation>
 <translation id="4665897631924472251">Nastavení správy rozšíření</translation>
 <translation id="4668325077104657568">Výchozí nastavení obrázků</translation>
+<translation id="4671708336564240458">Umožňuje nastavit, zda mají mít weby s obtěžujícím chováním zakázáno otevírat nová okna a karty.
+
+      Je-li tato zásada nastavena na hodnotu True, nebudou weby s obtěžujícím chováním moci otevírat nová okna ani karty.
+      Toto chování se však neprojeví v případě, že je zásada SafeBrowsingEnabled nastavena na hodnotu False.
+      Je-li tato zásada nastavena na hodnotu False, weby s obtěžujícím chováním budou mít otevírání nových oken a karet povoleno.
+      Pokud tato zásada není nastavena, použije se hodnota True.</translation>
 <translation id="467236746355332046">Podporované funkce:</translation>
 <translation id="4674167212832291997">Umožňuje personalizovat seznam vzorů adres URL, které by měl vždy vykreslit plugin <ph name="PRODUCT_FRAME_NAME" />.
 
@@ -1198,6 +1213,7 @@ Je-li tato zásada ponechána nenastavená, žádné aplikace ani rozšíření 
 <translation id="489803897780524242">Parametr nastavující nahrazení vyhledávacích dotazů pro výchozího poskytovatele vyhledávání</translation>
 <translation id="4899708173828500852">Aktivovat Bezpečné prohlížení</translation>
 <translation id="4906194810004762807">Obnovovací frekvence zásad pro zařízení</translation>
+<translation id="4923806312383904642">Povolit funkci WebDriver přepsat nekompatibilní zásady</translation>
 <translation id="494613465159630803">Přijímač Cast</translation>
 <translation id="4962262530309732070">Pokud je tato zásada nastavena na hodnotu true nebo nastavena není, bude <ph name="PRODUCT_NAME" /> povolovat přidávání osob ze správce uživatelů.
 
@@ -1238,6 +1254,13 @@ Je-li tato zásada ponechána nenastavená, žádné aplikace ani rozšíření 
 <translation id="5130288486815037971">Zda jsou v protokolu TLS povoleny šifrovací sady RC4</translation>
 <translation id="5141670636904227950">Nastavení výchozího typu lupy, který je aktivován na přihlašovací obrazovce</translation>
 <translation id="5142301680741828703">Následující vzory adres URL vykreslovat vždy v pluginu <ph name="PRODUCT_FRAME_NAME" /></translation>
+<translation id="5147665094011258322">Určuje název hostitele používaný pro zařízení v požadavcích DHCP.
+
+      Je-li tato zásada nastavena na neprázdný řetězec, použije se daný řetězec pro zařízení jako název hostitele v požadavku DHCP.
+
+      Řetězec může obsahovat proměnné ${ASSET_ID}, ${SERIAL_NUM}, ${MAC_ADDR}, které se v zařízení nahradí hodnotami, čímž vznikne název hostitele. Po nahrazení by měl vzniknout platný název hostitele (odpovídající sekci 3.1 specifikace RFC 1035).
+
+      Pokud tato zásada není nastavena nebo název hostitele po nahrazení nebude platný, v požadavku DHCP žádný název hostitele nastaven nebude. </translation>
 <translation id="5148753489738115745">Umožňuje nastavit dodatečné parametry, které plugin <ph name="PRODUCT_FRAME_NAME" /> při spouštění aplikace <ph name="PRODUCT_NAME" /> použije.
 
           Když tato zásada není nastavena, bude použit výchozí příkazový řádek.</translation>
@@ -1345,6 +1368,7 @@ Pokud zásadu nastavíte, můžete nakonfigurovat, zda má uživatel oprávněn�
          Pokud zásadu nenastavíte, použije se pro všechny webové stránky globální výchozí hodnota buď ze zásady DefaultCookiesSetting (pokud je nastavena), nebo z osobního nastavení uživatele.</translation>
 <translation id="5469825884154817306">Blokovat obrázky na těchto stránkách</translation>
 <translation id="5475361623548884387">Povolit tisk</translation>
+<translation id="547601067149622666">Nepovolovat reklamy na webech s rušivými reklamami</translation>
 <translation id="5499375345075963939">Tato zásada je aktivní pouze v režimu prodeje.
 
       Je-li hodnota zásady nastavena a nerovná se 0, aktuálně přihlášený uživatel ukázky bude automaticky odhlášen po uplynutí zadané délky nečinnosti.
@@ -1749,6 +1773,7 @@ Není-li tato zásada nastavena na konkrétní hodnotu, bude předvídání sít
       Pokud je tato zásada zakázána nebo není nastavena, budou se používat pouze běžné místní profily.
 
       Zásada <ph name="SYNC_DISABLED_POLICY_NAME" /> zakáže veškerou synchronizaci dat a tím zásadu RoamingProfileSupportEnabled přepíše.</translation>
+<translation id="6735701345096330595">Vynutit povolení jazyků kontroly pravopisu</translation>
 <translation id="6757438632136860443">Umožňuje nastavit seznam vzorů adres URL webů, které mají povoleno spouštět plugin <ph name="FLASH_PLUGIN_NAME" />.
 
           Pokud tuto zásadu nenastavíte, použije se pro všechny weby globální výchozí hodnota buď ze zásady DefaultPluginsSetting (pokud je nastavena), nebo z osobní konfigurace uživatele.</translation>
@@ -1851,7 +1876,6 @@ Pokud ji ponecháte nenastavenou, bude hlasová odezva ve výchozím nastavení 
 <translation id="706669471845501145">Povolit webovým stránkám zobrazovat oznámení na ploše</translation>
 <translation id="7072406291414141328">Aktivuje omezení rychlosti připojení</translation>
 <translation id="7079519252486108041">Blokovat vyskakovací okna na těchto webech</translation>
-<translation id="7091198954851103976">Vždy spustit pluginy, které vyžadují autorizaci.</translation>
 <translation id="7106631983877564505">Aktivovat zámek, pokud jsou zařízení se systémem <ph name="PRODUCT_OS_NAME" /> nečinná nebo pozastavená.
 
       Pokud toto nastavení aktivujete, uživatelům se po probuzení zařízení z režimu spánku bude zobrazovat výzva k odemknutí zadáním hesla.
@@ -1965,6 +1989,10 @@ Pokud nezadáte žádné nastavení, ověření protokolu <ph name="HTTP_NEGOTIA
 
 Pokud tato zásada není nastavena nebo je nastavena na hodnotu False, optimalizace <ph name="TLS_FALSE_START" /> bude aktivována. Je-li nastavena na hodnotu True, optimalizace <ph name="TLS_FALSE_START" /> bude zakázána.</translation>
 <translation id="7433714841194914373">Aktivovat Dynamický režim</translation>
+<translation id="7443061725198440541">Pokud tato zásada není nastavena nebo je povolena, má uživatel dovoleno používat kontrolu pravopisu.
+
+      Je-li tato zásada zakázána, uživatel kontrolu pravopisu používat nemůže. Pokud je tato zásada zakázána, bude také ignorována zásada SpellcheckLanguage.
+      </translation>
 <translation id="7443616896860707393">Požadavky typu cross-origin standardu HTTP Basic Auth</translation>
 <translation id="7469554574977894907">Aktivovat návrhy pro vyhledávání</translation>
 <translation id="7474249562477552702">Udává, zda jsou povoleny certifikáty podepsané algoritmem SHA-1 vydané místními kotvami důvěryhodnosti</translation>
@@ -2010,6 +2038,7 @@ Pokud je tato zásada nastavena na hodnotu false, použití protokolu QUIC je za
       Pokud toto nastavení aktivujete, bude aplikace <ph name="PRODUCT_NAME" /> používat zvolený jazyk. Není-li nakonfigurovaný jazyk podporován, použije se místo něho nastavení „en-US“. 
 
       Pokud je toto nastavení deaktivováno nebo není nakonfigurováno, použije aplikace <ph name="PRODUCT_NAME" /> buď preferovaný jazyk nastavený uživatelem (je-li nakonfigurován), jazyk systému, nebo základní nastavení „en-US“.</translation>
+<translation id="7643883929273267746">Omezit účty, které jsou v prohlížeči <ph name="PRODUCT_NAME" /> viditelné</translation>
 <translation id="7651739109954974365">Určuje, zda bude v zařízení povolen datový roaming. Pokud je tato zásada nastavena na hodnotu True, je datový roaming povolen. Pokud tato zásada není nastavena nebo je nastavena na hodnotu False, datový roaming nebude k dispozici.</translation>
 <translation id="7683777542468165012">Dynamická aktualizace zásad</translation>
 <translation id="7694807474048279351">Naplánuje automatický restart po použití aktualizace systému <ph name="PRODUCT_OS_NAME" />.
@@ -2102,11 +2131,6 @@ Tato zásada je určena k internímu použití prohlížečem <ph name="PRODUCT_
 <translation id="787125417158068494">Pokud je tato zásada nastavena na hodnotu SyncDisabled nebo není nakonfigurována, certifikáty systému <ph name="PRODUCT_OS_NAME" /> nejsou k dispozici aplikacím ARC.
 
       Pokud je nastavena na hodnotu CopyCaCerts, všechny certifikáty CA nainstalované prostřednictvím ONC s atributem <ph name="WEB_TRUSTED_BIT" /> jsou k dispozici aplikacím ARC.</translation>
-<translation id="7872535148622213208">
-        Tato zásada udává seznam zdrojů (adres URL), které mají být považovány za bezpečný kontext. Cílem je umožnit organizacím nastavení zkušebního serveru pro vývoj interních webových stránek.
-        Zásada funguje stejně jako příznak --unsafely-treat-insecure-origin-as-secure.
-        Další informace o bezpečných kontextech naleznete na stránce https://www.w3.org/TR/secure-contexts/.
-        </translation>
 <translation id="7882585827992171421">Tato zásada je aktivní pouze v režimu prodeje.
 
       Určuje ID rozšíření, které se použije jako spořič obrazovky na přihlašovací obrazovce. Rozšíření musí být součásti balíčku AppPack, který je pro tuto doménu nakonfigurován v rámci zásady DeviceAppPack.</translation>
@@ -2250,9 +2274,6 @@ Pokud tuto zásadu nenastavíte, použije se zásada BlockKeygen a uživatel ji
 <translation id="8344454543174932833">Importování záložek z výchozího prohlížeče při prvním spuštění</translation>
 <translation id="8359734107661430198">Aktivovat API PříkladZastaraléFunkce do 2. 9. 2008</translation>
 <translation id="8369602308428138533">Prodleva vypnutí obrazovky při napájení ze sítě</translation>
-<translation id="8370471134641900314">Pokud je tato zásada nastavena na hodnotu True, uživatel se do prohlížeče <ph name="PRODUCT_NAME" /> před použitím musí přihlásit pomocí svého profilu. Výchozí hodnota zásady BrowserGuestModeEnabled v tomto případě bude nastavena na False.
-
-      Pokud je tato zásada nastavena na hodnotu False nebo není nakonfigurována, může uživatel prohlížeč <ph name="PRODUCT_NAME" /> používat bez přihlášení.</translation>
 <translation id="8382184662529825177">Povolit použití vzdáleného ověření identity k ochraně obsahu v zařízení</translation>
 <translation id="838870586332499308">Povolit datový roaming</translation>
 <translation id="8390049129576938611">Zakáže v prohlížeči <ph name="PRODUCT_NAME" /> interní prohlížeč souborů PDF. Soubory PDF se budou stahovat a uživatel je bude moci otevřít ve výchozí aplikaci.
@@ -2263,6 +2284,13 @@ Pokud tuto zásadu nenastavíte, použije se zásada BlockKeygen a uživatel ji
 <translation id="8424255554404582727">Nastavit výchozí otočení displeje, které se použije při každém restartu</translation>
 <translation id="8426231401662877819">Otočit obrazovku ve směru hodinových ručiček o 90 stupňů</translation>
 <translation id="8451988835943702790">Jako domovskou použít stránku Nová karta</translation>
+<translation id="8460677879226618710">Obsahuje seznam vzorů, které určují viditelnost účtů v prohlížeči <ph name="PRODUCT_NAME" />.
+
+      Účet v zařízení bude v prohlížeči <ph name="PRODUCT_NAME" /> viditelný, pokud jeho název odpovídá některému vzoru ze seznamu. Jinak bude odfiltrován a skryt.
+
+      Zástupný znak „*“ lze nahradit nulou nebo více libovolnými znaky. Únikový znak je „\“. Pokud tedy chcete hledat skutečné znaky „*“ nebo „\“, musíte před ně vložit znak „\“.
+
+      Pokud tuto zásadu ponecháte nenastavenou, budou v prohlížeči <ph name="PRODUCT_NAME" /> viditelné všechny účty Google v zařízení.</translation>
 <translation id="8465065632133292531">Parametry pro adresu URL dynamického vyhledávání používající metodu POST</translation>
 <translation id="847472800012384958">Nepovolit zobrazení vyskakovacích oken žádným webovým stránkám</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2364,6 +2392,20 @@ Pokud tato zásada není nakonfigurována nebo je hodnota nižší než 1 MB, <p
       Pokud toto nastavení ponecháte nenastavené, uživatelé se budou moci rozhodnout, zda tuto funkci chtějí používat.</translation>
 <translation id="8870318296973696995">Domovská stránka</translation>
 <translation id="8882006618241293596">Blokovat plugin <ph name="FLASH_PLUGIN_NAME" /> na těchto webech</translation>
+<translation id="8894962626537183708">
+      Tato zásada udává seznam zdrojů (adres URL), které mají být považovány za bezpečný kontext. Cílem je umožnit organizacím nastavení zkušebního serveru pro vývoj interních webových stránek, aby vývojáři mohli testovat funkce, které vyžadují zabezpečené kontexty, aniž by na testovacím serveru museli implementovat protokol TLS.
+      Nastavení seznamu adres URL v této zásadě má stejný dopad jako nastavení příznaku příkazového řádku --unsafely-treat-insecure-origin-as-secure na čárkami oddělený seznam adres URL. Je-li nastavena tato zásada, bude jí příznak příkazového řádku přepsán.
+      Další informace o bezpečných kontextech naleznete na stránce https://www.w3.org/TR/secure-contexts/.
+      </translation>
+<translation id="890403179930035128">Vynutí povolení jazyků kontroly pravopisu. Neznámé jazyky v seznamu budou ignorovány.
+
+      Pokud tuto zásadu povolíte, bude kontrola pravopisu kromě jazyků, pro které ji povolil uživatel, povolena také pro zadané jazyky.
+
+      Pokud tuto zásadu nenastavíte nebo ji zakážete, bude platit nastavení kontroly pravopisu zadané uživatelem beze změny.
+
+      Je-li kontrola pravopisu zakázána pomocí zásady SpellcheckEnabled, nebude mít tato zásada žádný účinek.
+
+      V současné době jsou podporovány tyto jazyky: af, bg, ca, cs, da, de, el, en-AU, en-CA, en-GB, en-US, es, es-419, es-AR, es-ES, es-MX, es-US, et, fa, fo, fr, he, hi, hr, hu, id, it, ko, lt, lv, nb, nl, pl, pt-BR, pt-PT, ro, ru, sh, sk, sl, sq, sr, sv, ta, tg, tr, uk, vi.</translation>
 <translation id="8906768759089290519">Aktivovat režim hosta</translation>
 <translation id="8908294717014659003">Umožňuje nastavit, zda webové stránky smějí používat zařízení pro pořizování mediálního obsahu. Přístup k zařízením pro pořizování mediálního obsahu může být povolen ve výchozím nastavení, nebo se uživateli může zobrazit dotaz pokaždé, když nějaké webové stránky budou chtít použít zařízení pro pořízení mediálního obsahu.
 
@@ -2447,14 +2489,10 @@ Pokud je zásada nastavena na hodnotu true, systémové protokoly budou odesíl�
      Pokud zásadu nenastavíte, toto nastavení se aktivuje a uživatelé budou moci používat anonymní režim.</translation>
 <translation id="915194831143859291">Pokud je tato zásada nastavena na hodnotu false nebo není nastavena, systém <ph name="PRODUCT_OS_NAME" /> umožní uživateli vypnout zařízení.
 Pokud je tato zásada nastavena na hodnotu true a uživatel vypne zařízení, spustí systém <ph name="PRODUCT_OS_NAME" /> restart. Systém <ph name="PRODUCT_OS_NAME" /> nahradí všechna tlačítka pro vypnutí v uživatelském rozhraní tlačítky pro restart. Pokud uživatel zařízení vypne pomocí vypínače, zařízení se automaticky restartovat nebude, a to ani v případě, že je tato zásada aktivována.</translation>
+<translation id="9158929520101169054">Povolit v prohlížeči vícenásobné přihlášení</translation>
 <translation id="9187743794267626640">Zakázat připojení externího úložiště</translation>
 <translation id="9197740283131855199">Procento, o které bude prodloužena prodleva ztmavení obrazovky, pokud uživatel po ztmavení provedete nějakou činnost</translation>
 <translation id="9200828125069750521">Parametry pro adresu URL obrázku používající metodu POST</translation>
-<translation id="9212233969680267790">Upozornění: Přibližně od verze 66 (cca v únoru 2018) bude zásada maximální verze TLS z prohlížeče <ph name="PRODUCT_NAME" /> zcela odebrána.
-
-      Pokud tato zásada není nakonfigurována, použije <ph name="PRODUCT_NAME" /> výchozí maximální verzi.
-
-      Zásadu lze nastavit na jednu z následujících hodnot: tls1.2 nebo tls1.3. Když je nastavena, <ph name="PRODUCT_NAME" /> nebude používat verze SSL/TLS vyšší, než je zadaná verze. Nerozpoznané hodnoty budou ignorovány.</translation>
 <translation id="9213347477683611358">Slouží ke konfiguraci obrázku tapety na úrovni zařízení, který se bude zobrazovat na přihlašovací obrazovce, pokud se do zařízení dosud nepřihlásil žádný uživatel. Zásadu nastavíte zadáním adresy URL, ze které může zařízení se systémem Chrome OS obrázek tapety stáhnout, a kryptografické hodnoty hash k ověření integrity staženého obsahu. Obrázek musí být ve formátu JPEG a jeho velikost nesmí překročit 16 MB. Adresa URL musí být přístupná bez ověření. Obrázek tapety se stáhne a uloží do mezipaměti. Při každé změně adresy URL nebo hodnoty hash se obrázek stáhne znovu.
 
       Tuto zásadu je třeba zadat jako řetězec, který udává adresu URL a hodnotu hash ve formátu JSON. Příklad:
@@ -2472,4 +2510,5 @@ Pokud je tato zásada nastavena na hodnotu true a uživatel vypne zařízení, s
 <translation id="930930237275114205">Nastavit adresář uživatelských dat pluginu <ph name="PRODUCT_FRAME_NAME" /> </translation>
 <translation id="934390688529359269">Aktivuje vynucené přihlášení do prohlížeče <ph name="PRODUCT_NAME" /></translation>
 <translation id="944817693306670849">Nastavení velikosti mezipaměti na disku</translation>
+<translation id="982497069985795632">Zapnout kontrolu pravopisu</translation>
 </translationbundle>

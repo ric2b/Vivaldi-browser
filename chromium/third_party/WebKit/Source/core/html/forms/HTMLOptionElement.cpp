@@ -54,11 +54,11 @@ HTMLOptionElement::HTMLOptionElement(Document& document)
 // HTMLOptionElement.h, when including HTMLOptionElement.h,
 // msvc tries to expand the destructor and causes
 // a compile error because of lack of ComputedStyle definition.
-HTMLOptionElement::~HTMLOptionElement() {}
+HTMLOptionElement::~HTMLOptionElement() = default;
 
 HTMLOptionElement* HTMLOptionElement::Create(Document& document) {
   HTMLOptionElement* option = new HTMLOptionElement(document);
-  option->EnsureUserAgentShadowRoot();
+  option->EnsureUserAgentShadowRootV1();
   return option;
 }
 
@@ -70,7 +70,7 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
     bool selected,
     ExceptionState& exception_state) {
   HTMLOptionElement* element = new HTMLOptionElement(document);
-  element->EnsureUserAgentShadowRoot();
+  element->EnsureUserAgentShadowRootV1();
   if (!data.IsEmpty()) {
     element->AppendChild(Text::Create(document, data), exception_state);
     if (exception_state.HadException())
@@ -88,12 +88,10 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
 
 void HTMLOptionElement::AttachLayoutTree(AttachContext& context) {
   AttachContext option_context(context);
-  scoped_refptr<ComputedStyle> resolved_style;
-  if (!context.resolved_style && ParentComputedStyle()) {
+  if (!GetNonAttachedStyle() && ParentComputedStyle()) {
     if (HTMLSelectElement* select = OwnerSelectElement())
       select->UpdateListOnLayoutObject();
-    resolved_style = OriginalStyleForLayoutObject();
-    option_context.resolved_style = resolved_style.get();
+    SetNonAttachedStyle(OriginalStyleForLayoutObject());
   }
   HTMLElement::AttachLayoutTree(option_context);
 }
@@ -114,7 +112,7 @@ bool HTMLOptionElement::MatchesEnabledPseudoClass() const {
 }
 
 String HTMLOptionElement::DisplayLabel() const {
-  Document& document = this->GetDocument();
+  Document& document = GetDocument();
   String text;
 
   // WinIE does not use the label attribute, so as a quirk, we ignore it.

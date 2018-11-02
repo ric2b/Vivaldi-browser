@@ -27,12 +27,13 @@
 
 #include <memory>
 #include <utility>
+
+#include "base/memory/weak_ptr.h"
 #include "base/test/gtest_util.h"
 #include "base/threading/thread.h"
 #include "platform/wtf/LeakAnnotations.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/WTFTestHelper.h"
-#include "platform/wtf/WeakPtr.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace WTF {
@@ -51,16 +52,16 @@ class HasWeakPtrSupport {
  public:
   HasWeakPtrSupport() : weak_ptr_factory_(this) {}
 
-  WTF::WeakPtr<HasWeakPtrSupport> CreateWeakPtr() {
-    return weak_ptr_factory_.CreateWeakPtr();
+  base::WeakPtr<HasWeakPtrSupport> GetWeakPtr() {
+    return weak_ptr_factory_.GetWeakPtr();
   }
 
-  void RevokeAll() { weak_ptr_factory_.RevokeAll(); }
+  void RevokeAll() { weak_ptr_factory_.InvalidateWeakPtrs(); }
 
   void Increment(int* counter) { ++*counter; }
 
  private:
-  WTF::WeakPtrFactory<HasWeakPtrSupport> weak_ptr_factory_;
+  base::WeakPtrFactory<HasWeakPtrSupport> weak_ptr_factory_;
 };
 
 }  // namespace WTF
@@ -71,7 +72,7 @@ namespace {
 class A {
  public:
   explicit A(int i) : i_(i) {}
-  virtual ~A() {}
+  virtual ~A() = default;
 
   int F() { return i_; }
   int AddF(int j) { return i_ + j; }
@@ -137,9 +138,9 @@ class CountGeneration {
 TEST(FunctionalTest, WeakPtr) {
   HasWeakPtrSupport obj;
   int counter = 0;
-  WTF::RepeatingClosure bound =
-      WTF::Bind(&HasWeakPtrSupport::Increment, obj.CreateWeakPtr(),
-                WTF::Unretained(&counter));
+  base::RepeatingClosure bound =
+      WTF::BindRepeating(&HasWeakPtrSupport::Increment, obj.GetWeakPtr(),
+                         WTF::Unretained(&counter));
 
   bound.Run();
   EXPECT_FALSE(bound.IsCancelled());
@@ -151,13 +152,13 @@ TEST(FunctionalTest, WeakPtr) {
   EXPECT_EQ(1, counter);
 }
 
-void MakeClosure(Closure** closure_out) {
-  *closure_out = new Closure(WTF::Bind([] {}));
+void MakeClosure(base::OnceClosure** closure_out) {
+  *closure_out = new base::OnceClosure(WTF::Bind([] {}));
   LEAK_SANITIZER_IGNORE_OBJECT(*closure_out);
 }
 
 TEST(FunctionalTest, ThreadRestriction) {
-  Closure* closure = nullptr;
+  base::OnceClosure* closure = nullptr;
 
   base::Thread thread("testing");
   thread.Start();
@@ -166,7 +167,7 @@ TEST(FunctionalTest, ThreadRestriction) {
   thread.Stop();
 
   ASSERT_TRUE(closure);
-  EXPECT_DCHECK_DEATH(closure->Run());
+  EXPECT_DCHECK_DEATH(std::move(*closure).Run());
   EXPECT_DCHECK_DEATH(delete closure);
 }
 

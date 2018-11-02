@@ -7,22 +7,20 @@
 
 #include <stdint.h>
 
+#include "ash/app_list/model/speech/speech_ui_model.h"
 #include "base/strings/string16.h"
-#include "ui/app_list/speech_ui_model_observer.h"
+#include "chrome/browser/speech/speech_recognizer_delegate.h"
 
 namespace app_list {
 
 class StartPageObserver {
  public:
-  // Invoked when a search query happens from the start page.
-  virtual void OnSpeechResult(const base::string16& query, bool is_final) = 0;
-
   // Invoked when a sound level of speech recognition is changed.
   virtual void OnSpeechSoundLevelChanged(int16_t level) = 0;
 
   // Invoked when the online speech recognition state is changed.
   virtual void OnSpeechRecognitionStateChanged(
-      SpeechRecognitionState new_state) = 0;
+      SpeechRecognizerState new_state) = 0;
 
  protected:
   virtual ~StartPageObserver() {}

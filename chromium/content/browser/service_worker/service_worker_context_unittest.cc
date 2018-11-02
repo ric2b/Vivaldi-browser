@@ -28,8 +28,8 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_event_status.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -181,22 +181,10 @@ class RecordableEmbeddedWorkerInstanceClient
   const std::vector<Message>& events() const { return events_; }
 
  protected:
-  void StartWorker(
-      const EmbeddedWorkerStartParams& params,
-      mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
-      mojom::ControllerServiceWorkerRequest controller_request,
-      mojom::ServiceWorkerInstalledScriptsInfoPtr scripts_info,
-      blink::mojom::ServiceWorkerHostAssociatedPtrInfo service_worker_host,
-      mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host,
-      mojom::ServiceWorkerProviderInfoForStartWorkerPtr provider_info,
-      blink::mojom::WorkerContentSettingsProxyPtr content_settings_proxy)
-      override {
+  void StartWorker(mojom::EmbeddedWorkerStartParamsPtr params) override {
     events_.push_back(Message::StartWorker);
     EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
-        params, std::move(dispatcher_request), std::move(controller_request),
-        std::move(scripts_info), std::move(service_worker_host),
-        std::move(instance_host), std::move(provider_info),
-        std::move(content_settings_proxy));
+        std::move(params));
   }
 
   void StopWorker() override {
@@ -214,6 +202,8 @@ class RecordableEmbeddedWorkerInstanceClient
 TEST_F(ServiceWorkerContextTest, Register) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   RecordableEmbeddedWorkerInstanceClient* client = nullptr;
   client = helper_->CreateAndRegisterMockInstanceClient<
@@ -222,8 +212,7 @@ TEST_F(ServiceWorkerContextTest, Register) {
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &registration_id));
+      script_url, options, MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
   base::RunLoop().RunUntilIdle();
@@ -261,6 +250,8 @@ TEST_F(ServiceWorkerContextTest, Register) {
 TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   helper_.reset();  // Make sure the process lookups stay overridden.
   helper_.reset(new RejectInstallTestHelper);
@@ -273,8 +264,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &registration_id));
+      script_url, options, MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
   base::RunLoop().RunUntilIdle();
@@ -311,6 +301,8 @@ TEST_F(ServiceWorkerContextTest, Register_RejectInstall) {
 TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   helper_.reset();
   helper_.reset(new RejectActivateTestHelper);
@@ -323,8 +315,7 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &registration_id));
+      script_url, options, MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
   base::RunLoop().RunUntilIdle();
@@ -356,12 +347,13 @@ TEST_F(ServiceWorkerContextTest, Register_RejectActivate) {
 // Make sure registrations are cleaned up when they are unregistered.
 TEST_F(ServiceWorkerContextTest, Unregister) {
   GURL pattern("http://www.example.com/");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   bool called = false;
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      GURL("http://www.example.com/service_worker.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(pattern), nullptr,
+      GURL("http://www.example.com/service_worker.js"), options,
       MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
@@ -401,46 +393,58 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
   GURL origin1_p2("http://www.example.com/hello");
   GURL origin2_p1("http://www.example.com:8080/again");
   GURL origin3_p1("http://www.other.com/");
-
-  bool called = false;
   int64_t registration_id1 = blink::mojom::kInvalidServiceWorkerRegistrationId;
   int64_t registration_id2 = blink::mojom::kInvalidServiceWorkerRegistrationId;
   int64_t registration_id3 = blink::mojom::kInvalidServiceWorkerRegistrationId;
   int64_t registration_id4 = blink::mojom::kInvalidServiceWorkerRegistrationId;
-  context()->RegisterServiceWorker(
-      GURL("http://www.example.com/service_worker.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(origin1_p1), nullptr,
-      MakeRegisteredCallback(&called, &registration_id1));
-  ASSERT_FALSE(called);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(called);
 
-  called = false;
-  context()->RegisterServiceWorker(
-      GURL("http://www.example.com/service_worker2.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(origin1_p2), nullptr,
-      MakeRegisteredCallback(&called, &registration_id2));
-  ASSERT_FALSE(called);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(called);
+  {
+    bool called = false;
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = origin1_p1;
+    context()->RegisterServiceWorker(
+        GURL("http://www.example.com/service_worker.js"), options,
+        MakeRegisteredCallback(&called, &registration_id1));
+    ASSERT_FALSE(called);
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(called);
+  }
 
-  called = false;
-  context()->RegisterServiceWorker(
-      GURL("http://www.example.com:8080/service_worker3.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(origin2_p1), nullptr,
-      MakeRegisteredCallback(&called, &registration_id3));
-  ASSERT_FALSE(called);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(called);
+  {
+    bool called = false;
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = origin1_p2;
+    context()->RegisterServiceWorker(
+        GURL("http://www.example.com/service_worker2.js"), options,
+        MakeRegisteredCallback(&called, &registration_id2));
+    ASSERT_FALSE(called);
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(called);
+  }
 
-  called = false;
-  context()->RegisterServiceWorker(
-      GURL("http://www.other.com/service_worker4.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(origin3_p1), nullptr,
-      MakeRegisteredCallback(&called, &registration_id4));
-  ASSERT_FALSE(called);
-  base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(called);
+  {
+    bool called = false;
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = origin2_p1;
+    context()->RegisterServiceWorker(
+        GURL("http://www.example.com:8080/service_worker3.js"), options,
+        MakeRegisteredCallback(&called, &registration_id3));
+    ASSERT_FALSE(called);
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(called);
+  }
+
+  {
+    bool called = false;
+    blink::mojom::ServiceWorkerRegistrationOptions options;
+    options.scope = origin3_p1;
+    context()->RegisterServiceWorker(
+        GURL("http://www.other.com/service_worker4.js"), options,
+        MakeRegisteredCallback(&called, &registration_id4));
+    ASSERT_FALSE(called);
+    base::RunLoop().RunUntilIdle();
+    ASSERT_TRUE(called);
+  }
 
   EXPECT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
             registration_id1);
@@ -451,7 +455,7 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
   EXPECT_NE(blink::mojom::kInvalidServiceWorkerRegistrationId,
             registration_id4);
 
-  called = false;
+  bool called = false;
   context()->DeleteForOrigin(origin1_p1.GetOrigin(),
                              MakeUnregisteredCallback(&called));
 
@@ -515,13 +519,14 @@ TEST_F(ServiceWorkerContextTest, UnregisterMultiple) {
 // Make sure registering a new script shares an existing registration.
 TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   GURL pattern("http://www.example.com/");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   bool called = false;
   int64_t old_registration_id =
       blink::mojom::kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      GURL("http://www.example.com/service_worker.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(pattern), nullptr,
+      GURL("http://www.example.com/service_worker.js"), options,
       MakeRegisteredCallback(&called, &old_registration_id));
 
   ASSERT_FALSE(called);
@@ -534,8 +539,7 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
   int64_t new_registration_id =
       blink::mojom::kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      GURL("http://www.example.com/service_worker_new.js"),
-      blink::mojom::ServiceWorkerRegistrationOptions(pattern), nullptr,
+      GURL("http://www.example.com/service_worker_new.js"), options,
       MakeRegisteredCallback(&called, &new_registration_id));
 
   ASSERT_FALSE(called);
@@ -560,13 +564,15 @@ TEST_F(ServiceWorkerContextTest, RegisterNewScript) {
 TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   bool called = false;
   int64_t old_registration_id =
       blink::mojom::kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &old_registration_id));
+      script_url, options,
+      MakeRegisteredCallback(&called, &old_registration_id));
 
   ASSERT_FALSE(called);
   base::RunLoop().RunUntilIdle();
@@ -578,8 +584,8 @@ TEST_F(ServiceWorkerContextTest, RegisterDuplicateScript) {
   int64_t new_registration_id =
       blink::mojom::kInvalidServiceWorkerRegistrationId;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &new_registration_id));
+      script_url, options,
+      MakeRegisteredCallback(&called, &new_registration_id));
 
   ASSERT_FALSE(called);
   base::RunLoop().RunUntilIdle();
@@ -631,8 +637,8 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
   // Since the provider host is created via
   // CreateProviderHostForServiceWorkerContext, the provider_id is not a fixed
   // number.
-  blink::mojom::ServiceWorkerRegistrationOptions registration_opt(
-      GURL("http://www.example.com/test/"));
+  blink::mojom::ServiceWorkerRegistrationOptions registration_opt;
+  registration_opt.scope = GURL("http://www.example.com/test/");
   scoped_refptr<ServiceWorkerRegistration> registration =
       base::MakeRefCounted<ServiceWorkerRegistration>(
           registration_opt, 1L /* registration_id */,
@@ -641,8 +647,10 @@ TEST_F(ServiceWorkerContextTest, ProviderHostIterator) {
       base::MakeRefCounted<ServiceWorkerVersion>(
           registration.get(), GURL("http://www.example.com/test/script_url"),
           1L /* version_id */, helper_->context()->AsWeakPtr());
-  helper_->SimulateAddProcessToPattern(
-      GURL("http://www.example.com/test/script_url"), kRenderProcessId2);
+  // CreateProviderHostForServiceWorkerContext calls
+  // ServiceWorkerProviderHost::CompleteStartWorkerPreparation, which requires a
+  // dispatcher host.
+  helper_->EnsureDispatcherHostForProcess(kRenderProcessId2);
   remote_endpoints.emplace_back();
   std::unique_ptr<ServiceWorkerProviderHost> host4 =
       CreateProviderHostForServiceWorkerContext(
@@ -713,6 +721,8 @@ class ServiceWorkerContextRecoveryTest
 TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   GURL pattern("http://www.example.com/");
   GURL script_url("http://www.example.com/service_worker.js");
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern;
 
   if (is_storage_on_disk()) {
     // Reinitialize the helper to test on-disk storage.
@@ -725,8 +735,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
   int64_t registration_id = blink::mojom::kInvalidServiceWorkerRegistrationId;
   bool called = false;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &registration_id));
+      script_url, options, MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
   content::RunAllTasksUntilIdle();
@@ -768,8 +777,7 @@ TEST_P(ServiceWorkerContextRecoveryTest, DeleteAndStartOver) {
 
   called = false;
   context()->RegisterServiceWorker(
-      script_url, blink::mojom::ServiceWorkerRegistrationOptions(pattern),
-      nullptr, MakeRegisteredCallback(&called, &registration_id));
+      script_url, options, MakeRegisteredCallback(&called, &registration_id));
 
   ASSERT_FALSE(called);
   content::RunAllTasksUntilIdle();

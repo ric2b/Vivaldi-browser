@@ -47,6 +47,7 @@ DISABLE(FFmpegDemuxerTest, Read_Flac_Mp4)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Media_Track_Info)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Multiple_Tracks)
 DISABLE(FFmpegDemuxerTest, Read_Mp4_Crbug657437)
+DISABLE(FFmpegDemuxerTest, Read_AudioNegativeStartTimeAndOpusDiscardH264Mp4_Sync)
 // USE_SYSTEM_PROPRIETARY_CODECS requires a different test setup, see
 // PlatformMediaPipelineIntegrationTest.
 DISABLE(FFmpeg/AudioDecoderTest, Decode/0)

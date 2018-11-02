@@ -94,7 +94,6 @@ class CONTENT_EXPORT WebMediaPlayerMS
   // Playback controls.
   void Play() override;
   void Pause() override;
-  bool SupportsSave() const override;
   void Seek(double seconds) override;
   void SetRate(double rate) override;
   void SetVolume(double volume) override;
@@ -139,6 +138,7 @@ class CONTENT_EXPORT WebMediaPlayerMS
   blink::WebString GetErrorMessage() const override;
   bool DidLoadingProgress() override;
 
+  bool DidGetOpaqueResponseFromServiceWorker() const override;
   bool HasSingleSecurityOrigin() const override;
   bool DidPassCORSAccessCheck() const override;
 

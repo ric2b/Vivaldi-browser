@@ -66,10 +66,10 @@ FetchParameters::FetchParameters(const ResourceRequest& resource_request,
       origin_restriction_(kUseDefaultOriginRestrictionForType),
       placeholder_image_request_type_(kDisallowPlaceholder) {}
 
-FetchParameters::~FetchParameters() {}
+FetchParameters::~FetchParameters() = default;
 
 void FetchParameters::SetCrossOriginAccessControl(
-    SecurityOrigin* origin,
+    const SecurityOrigin* origin,
     CrossOriginAttributeValue cross_origin) {
   switch (cross_origin) {
     case kCrossOriginAttributeNotSet:
@@ -87,7 +87,7 @@ void FetchParameters::SetCrossOriginAccessControl(
 }
 
 void FetchParameters::SetCrossOriginAccessControl(
-    SecurityOrigin* origin,
+    const SecurityOrigin* origin,
     network::mojom::FetchCredentialsMode credentials_mode) {
   // Currently FetchParametersMode is only used when the request goes to
   // Service Worker.

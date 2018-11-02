@@ -35,7 +35,7 @@ TextPainterBase::TextPainterBase(GraphicsContext& context,
       emphasis_mark_offset_(0),
       ellipsis_offset_(0) {}
 
-TextPainterBase::~TextPainterBase() {}
+TextPainterBase::~TextPainterBase() = default;
 
 void TextPainterBase::SetEmphasisMark(const AtomicString& emphasis_mark,
                                       TextEmphasisPosition position) {
@@ -120,13 +120,14 @@ TextPaintStyle TextPainterBase::TextPaintingStyle(const Document& document,
     text_style.stroke_width = style.TextStrokeWidth();
     text_style.shadow = nullptr;
   } else {
-    text_style.current_color = style.VisitedDependentColor(CSSPropertyColor);
+    text_style.current_color =
+        style.VisitedDependentColor(GetCSSPropertyColor());
     text_style.fill_color =
-        style.VisitedDependentColor(CSSPropertyWebkitTextFillColor);
+        style.VisitedDependentColor(GetCSSPropertyWebkitTextFillColor());
     text_style.stroke_color =
-        style.VisitedDependentColor(CSSPropertyWebkitTextStrokeColor);
+        style.VisitedDependentColor(GetCSSPropertyWebkitTextStrokeColor());
     text_style.emphasis_mark_color =
-        style.VisitedDependentColor(CSSPropertyWebkitTextEmphasisColor);
+        style.VisitedDependentColor(GetCSSPropertyWebkitTextEmphasisColor());
     text_style.stroke_width = style.TextStrokeWidth();
     text_style.shadow = style.TextShadow();
 

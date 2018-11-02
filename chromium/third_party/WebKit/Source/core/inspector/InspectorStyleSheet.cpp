@@ -46,6 +46,7 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/IdentifiersFactory.h"
@@ -730,7 +731,7 @@ InspectorStyle::InspectorStyle(CSSStyleDeclaration* style,
   DCHECK(style_);
 }
 
-InspectorStyle::~InspectorStyle() {}
+InspectorStyle::~InspectorStyle() = default;
 
 std::unique_ptr<protocol::CSS::CSSStyle> InspectorStyle::BuildObjectForStyle() {
   std::unique_ptr<protocol::CSS::CSSStyle> result = StyleWithProperties();
@@ -792,6 +793,9 @@ void InspectorStyle::PopulateAllProperties(
     String value = style_->getPropertyValue(name);
     if (value.IsEmpty())
       continue;
+    bool important = !style_->getPropertyPriority(name).IsEmpty();
+    if (important)
+      value.append(" !important");
     result.push_back(CSSPropertySourceData(
         name, value, !style_->getPropertyPriority(name).IsEmpty(), false, true,
         SourceRange()));
@@ -979,7 +983,7 @@ InspectorStyleSheet::InspectorStyleSheet(
     InnerSetText(text, false);
 }
 
-InspectorStyleSheet::~InspectorStyleSheet() {}
+InspectorStyleSheet::~InspectorStyleSheet() = default;
 
 void InspectorStyleSheet::Trace(blink::Visitor* visitor) {
   visitor->Trace(resource_container_);
@@ -1886,6 +1890,7 @@ InspectorStyleSheetForInlineStyle::InspectorStyleSheetForInlineStyle(
 
 void InspectorStyleSheetForInlineStyle::DidModifyElementAttribute() {
   inspector_style_.Clear();
+  OnStyleSheetTextChanged();
 }
 
 bool InspectorStyleSheetForInlineStyle::SetText(

@@ -6,8 +6,8 @@
 #define CHROME_BROWSER_ANDROID_CONTEXTUALSEARCH_CONTEXTUAL_SEARCH_RANKER_LOGGER_IMPL_H_
 
 #include "base/android/jni_android.h"
-
-class GURL;
+#include "base/memory/weak_ptr.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace content {
 class BrowserContext;
@@ -18,11 +18,6 @@ namespace assist_ranker {
 class BinaryClassifierPredictor;
 class RankerExample;
 }  // namespace assist_ranker
-
-namespace ukm {
-class UkmEntryBuilder;
-class UkmRecorder;
-}  // namespace ukm
 
 // A Java counterpart will be generated for this enum.
 // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.contextualsearch
@@ -68,32 +63,32 @@ class ContextualSearchRankerLoggerImpl {
   // ready to start logging the next set of data.
   void WriteLogAndReset(JNIEnv* env, jobject obj);
 
+  // Returns whether or not AssistRanker query is enabled.
+  bool IsQueryEnabled(JNIEnv* env, jobject obj);
+
  private:
-  // Set the UKM recorder and base-page URL.
-  // TODO(donnd): write a test, using this to inject a test-ukm-recorder.
-  void SetUkmRecorder(ukm::UkmRecorder* ukm_recorder, const GURL& page_url);
+  // Returns whether or not AssistRanker query is enabled.
+  bool IsQueryEnabledInternal();
+
+  // Adds feature to the RankerExample.
+  void LogFeature(const std::string& feature_name, int value);
 
   // Sets up the Ranker Predictor for the given |web_contents|.
-  void SetupRankerPredictor(content::WebContents* web_contents);
+  void SetupRankerPredictor(const content::WebContents& web_contents);
 
-  // Whether querying Ranker for model loading and prediction is enabled.
-  bool IsRankerQueryEnabled();
+  // Logs to UMA when an important feature or outcome is present in the example.
+  void logImportantFeaturePresent(const std::string& feature,
+                                  bool is_outcome) const;
 
-  // Used to log URL-keyed metrics. This pointer will outlive |this|, and may
-  // be nullptr.
-  ukm::UkmRecorder* ukm_recorder_;
-
-  // The UKM source ID being used for this session.
-  int32_t source_id_;
-
-  // The entry builder for the current record, or nullptr if not yet configured.
-  std::unique_ptr<ukm::UkmEntryBuilder> builder_;
+  // The source_id for UKMs for the current page.
+  ukm::SourceId source_id_ = ukm::kInvalidSourceId;
 
   // The Ranker Predictor for whether a tap gesture should be suppressed or not.
-  std::unique_ptr<assist_ranker::BinaryClassifierPredictor> predictor_;
+  base::WeakPtr<assist_ranker::BinaryClassifierPredictor> predictor_;
 
   // The |BrowserContext| currently associated with the above predictor.
-  content::BrowserContext* browser_context_;
+  // The object not owned by ContextualSearchRankerLoggerImpl.
+  content::BrowserContext* browser_context_ = nullptr;
 
   // The current RankerExample or null.
   // Set of features from one example of a Tap to predict a suppression
@@ -101,7 +96,7 @@ class ContextualSearchRankerLoggerImpl {
   std::unique_ptr<assist_ranker::RankerExample> ranker_example_;
 
   // Whether Ranker has predicted the decision yet.
-  bool has_predicted_decision_;
+  bool has_predicted_decision_ = false;
 
   // The linked Java object.
   base::android::ScopedJavaGlobalRef<jobject> java_object_;

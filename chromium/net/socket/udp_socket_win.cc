@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
@@ -29,7 +29,9 @@
 #include "net/log/net_log_source_type.h"
 #include "net/socket/socket_descriptor.h"
 #include "net/socket/socket_options.h"
+#include "net/socket/socket_tag.h"
 #include "net/socket/udp_net_log_parameters.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace {
 
@@ -405,9 +407,11 @@ int UDPSocketWin::RecvFrom(IOBuffer* buf,
   return ERR_IO_PENDING;
 }
 
-int UDPSocketWin::Write(IOBuffer* buf,
-                        int buf_len,
-                        const CompletionCallback& callback) {
+int UDPSocketWin::Write(
+    IOBuffer* buf,
+    int buf_len,
+    const CompletionCallback& callback,
+    const NetworkTrafficAnnotationTag& /* traffic_annotation */) {
   return SendToOrWrite(buf, buf_len, remote_address_.get(), callback);
 }
 
@@ -468,7 +472,7 @@ int UDPSocketWin::InternalConnect(const IPEndPoint& address) {
   // else connect() does the DatagramSocket::DEFAULT_BIND
 
   if (rv < 0) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Net.UdpSocketRandomBindErrorCode", -rv);
+    base::UmaHistogramSparse("Net.UdpSocketRandomBindErrorCode", -rv);
     return rv;
   }
 
@@ -1213,6 +1217,12 @@ void UDPSocketWin::DetachFromThread() {
 void UDPSocketWin::UseNonBlockingIO() {
   DCHECK(!core_);
   use_non_blocking_io_ = true;
+}
+
+void UDPSocketWin::ApplySocketTag(const SocketTag& tag) {
+  // Windows does not support any specific SocketTags so fail if any non-default
+  // tag is applied.
+  CHECK(tag == SocketTag());
 }
 
 }  // namespace net

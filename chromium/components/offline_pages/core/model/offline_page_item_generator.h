@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "components/offline_pages/core/client_namespace_constants.h"
 #include "components/offline_pages/core/offline_page_item.h"
 
 class GURL;
@@ -29,18 +30,20 @@ class OfflinePageItemGenerator {
   void SetRequestOrigin(const std::string& request_origin);
   void SetUrl(const GURL& url);
   void SetOriginalUrl(const GURL& url);
-  void SetFileSize(int64_t);
-  void SetLastAccessTime(const base::Time& time);
+  void SetFileSize(int64_t file_size);
+  void SetLastAccessTime(base::Time time);
+  void SetAccessCount(int access_count);
   void SetArchiveDirectory(const base::FilePath& archive_dir);
 
  private:
-  std::string namespace_;
+  std::string namespace_ = kDefaultNamespace;
   std::string id_;
   std::string request_origin_;
   GURL url_;
   GURL original_url_;
   int64_t file_size_ = 0;
   base::Time last_access_time_;
+  int access_count_ = 0;
   base::FilePath archive_dir_;
 };
 }  // namespace offline_pages

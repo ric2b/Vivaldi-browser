@@ -16,21 +16,11 @@
 
 namespace payments {
 namespace {
-
-PaymentCurrencyAmount ConvertPaymentCurrencyAmount(
-    const mojom::PaymentCurrencyAmountPtr& amount_entry) {
-  PaymentCurrencyAmount amount;
-  amount.currency = amount_entry->currency;
-  amount.value = amount_entry->value;
-  amount.currency_system = amount_entry->currency_system;
-  return amount;
-}
-
 PaymentItem ConvertPaymentItem(const mojom::PaymentItemPtr& item_entry) {
   PaymentItem item;
   item.label = item_entry->label;
   if (item_entry->amount)
-    item.amount = ConvertPaymentCurrencyAmount(item_entry->amount);
+    item.amount = item_entry->amount.Clone();
   item.pending = item_entry->pending;
   return item;
 }
@@ -39,7 +29,7 @@ PaymentDetailsModifier ConvertPaymentDetailsModifier(
     const mojom::PaymentDetailsModifierPtr& modifier_entry) {
   PaymentDetailsModifier modifier;
   if (modifier_entry->total) {
-    modifier.total = base::MakeUnique<PaymentItem>(
+    modifier.total = std::make_unique<PaymentItem>(
         ConvertPaymentItem(modifier_entry->total));
   }
   modifier.additional_display_items.reserve(
@@ -61,7 +51,7 @@ PaymentShippingOption ConvertPaymentShippingOption(
   option.id = option_entry->id;
   option.label = option_entry->label;
   if (option_entry->amount)
-    option.amount = ConvertPaymentCurrencyAmount(option_entry->amount);
+    option.amount = option_entry->amount.Clone();
   option.selected = option_entry->selected;
   return option;
 }
@@ -128,7 +118,7 @@ PaymentDetails ConvertPaymentDetails(
   PaymentDetails details;
   if (details_entry->total) {
     details.total =
-        base::MakeUnique<PaymentItem>(ConvertPaymentItem(details_entry->total));
+        std::make_unique<PaymentItem>(ConvertPaymentItem(details_entry->total));
   }
   details.display_items.reserve(details_entry->display_items.size());
   for (const mojom::PaymentItemPtr& display_item :

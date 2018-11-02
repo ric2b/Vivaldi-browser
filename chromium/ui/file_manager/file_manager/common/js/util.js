@@ -8,6 +8,28 @@
 var util = {};
 
 /**
+ * @param {!IconSet} iconSet Set of icons.
+ * @return {string} CSS value.
+ */
+util.iconSetToCSSBackgroundImageValue = function(iconSet) {
+  var lowDpiPart = null;
+  var highDpiPart = null;
+  if (iconSet.icon16x16Url)
+    lowDpiPart = 'url(' + iconSet.icon16x16Url + ') 1x';
+  if (iconSet.icon32x32Url)
+    highDpiPart = 'url(' + iconSet.icon32x32Url + ') 2x';
+
+  if (lowDpiPart && highDpiPart)
+    return '-webkit-image-set(' + lowDpiPart + ', ' + highDpiPart + ')';
+  else if (lowDpiPart)
+    return '-webkit-image-set(' + lowDpiPart + ')';
+  else if (highDpiPart)
+    return '-webkit-image-set(' + highDpiPart + ')';
+
+  return 'none';
+};
+
+/**
  * @param {string} name File error name.
  * @return {string} Translated file error string.
  */
@@ -1286,5 +1308,75 @@ util.isTouchModeEnabled = function() {
           // Enabled by default.
           resolve(!isDisabled);
         });
+  });
+};
+
+/**
+ * Retrieves all entries inside the given |rootEntry|.
+ * @param {!DirectoryEntry} rootEntry
+ * @param {function(!Array<!Entry>)} entriesCallback Called when some chunk of
+ *     entries are read. This can be called a couple of times until the
+ *     completion.
+ * @param {function()} successCallback Called when the read is completed.
+ * @param {function(DOMError)} errorCallback Called when an error occurs.
+ * @param {function():boolean} shouldStop Callback to check if the read process
+ *     should stop or not. When this callback is called and it returns false,
+ *     the remaining recursive reads will be aborted.
+ */
+util.readEntriesRecursively = function(
+    rootEntry, entriesCallback, successCallback, errorCallback, shouldStop) {
+  var numRunningTasks = 0;
+  var error = null;
+  var maybeRunCallback = function() {
+    if (numRunningTasks === 0) {
+      if (shouldStop())
+        errorCallback(util.createDOMError(util.FileError.ABORT_ERR));
+      else if (error)
+        errorCallback(error);
+      else
+        successCallback();
+    }
+  };
+  var processEntry = function(entry) {
+    var onError = function(fileError) {
+      if (!error)
+        error = fileError;
+      numRunningTasks--;
+      maybeRunCallback();
+    };
+    var onSuccess = function(entries) {
+      if (shouldStop() || error || entries.length === 0) {
+        numRunningTasks--;
+        maybeRunCallback();
+        return;
+      }
+      entriesCallback(entries);
+      for (var i = 0; i < entries.length; i++) {
+        if (entries[i].isDirectory)
+          processEntry(entries[i]);
+      }
+      // Read remaining entries.
+      reader.readEntries(onSuccess, onError);
+    };
+
+    numRunningTasks++;
+    var reader = entry.createReader();
+    reader.readEntries(onSuccess, onError);
+  };
+
+  processEntry(rootEntry);
+};
+
+/**
+ * Executes a functions only when the context is not the incognito one in a
+ * regular session.
+ * @param {function()} callback
+ */
+util.doIfPrimaryContext = function(callback) {
+  chrome.fileManagerPrivate.getProfiles((profiles) => {
+    if ((profiles[0] && profiles[0].profileId == '$guest') ||
+        !chrome.extension.inIncognitoContext) {
+      callback();
+    }
   });
 };

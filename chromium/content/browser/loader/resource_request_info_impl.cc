@@ -15,7 +15,6 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/process_type.h"
 #include "net/url_request/url_request.h"
-#include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 
 namespace content {
 
@@ -80,13 +79,14 @@ void ResourceRequestInfo::AllocateForTesting(
       false,                               // do_not_prompt_for_login
       false,                               // keep_alive
       blink::kWebReferrerPolicyDefault,    // referrer_policy
-      blink::mojom::PageVisibilityState::kVisible,  // visibility_state
-      context,                                      // context
-      false,                                        // report_raw_headers
-      is_async,                                     // is_async
-      previews_state,                               // previews_state
-      nullptr,                                      // body
-      false);  // initiated_in_secure_context
+      false,                               // is_prerendering
+      context,                             // context
+      false,                               // report_raw_headers
+      is_async,                            // is_async
+      previews_state,                      // previews_state
+      nullptr,                             // body
+      false,                               // initiated_in_secure_context
+      base::nullopt);                      // suggested_filename
   info->AssociateWithRequest(request);
   info->set_navigation_ui_data(std::move(navigation_ui_data));
 }
@@ -148,13 +148,14 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
     bool do_not_prompt_for_login,
     bool keepalive,
     blink::WebReferrerPolicy referrer_policy,
-    blink::mojom::PageVisibilityState visibility_state,
+    bool is_prerendering,
     ResourceContext* context,
     bool report_raw_headers,
     bool is_async,
     PreviewsState previews_state,
-    const scoped_refptr<ResourceRequestBody> body,
-    bool initiated_in_secure_context)
+    const scoped_refptr<network::ResourceRequestBody> body,
+    bool initiated_in_secure_context,
+    const base::Optional<std::string>& suggested_filename)
     : detachable_handler_(nullptr),
       requester_info_(std::move(requester_info)),
       route_id_(route_id),
@@ -177,14 +178,16 @@ ResourceRequestInfoImpl::ResourceRequestInfoImpl(
       transition_type_(transition_type),
       memory_cost_(0),
       referrer_policy_(referrer_policy),
-      visibility_state_(visibility_state),
+      is_prerendering_(is_prerendering),
       context_(context),
       report_raw_headers_(report_raw_headers),
       is_async_(is_async),
       canceled_by_devtools_(false),
       previews_state_(previews_state),
       body_(body),
-      initiated_in_secure_context_(initiated_in_secure_context) {}
+      initiated_in_secure_context_(initiated_in_secure_context),
+      suggested_filename_(suggested_filename),
+      blocked_cross_site_document_(false) {}
 
 ResourceRequestInfoImpl::~ResourceRequestInfoImpl() {
 }
@@ -275,9 +278,8 @@ blink::WebReferrerPolicy ResourceRequestInfoImpl::GetReferrerPolicy() const {
   return referrer_policy_;
 }
 
-blink::mojom::PageVisibilityState ResourceRequestInfoImpl::GetVisibilityState()
-    const {
-  return visibility_state_;
+bool ResourceRequestInfoImpl::IsPrerendering() const {
+  return is_prerendering_;
 }
 
 ui::PageTransition ResourceRequestInfoImpl::GetPageTransition() const {
@@ -344,8 +346,8 @@ void ResourceRequestInfoImpl::UpdateForTransfer(
     int render_frame_id,
     int request_id,
     ResourceRequesterInfo* requester_info,
-    mojom::URLLoaderRequest url_loader_request,
-    mojom::URLLoaderClientPtr url_loader_client) {
+    network::mojom::URLLoaderRequest url_loader_request,
+    network::mojom::URLLoaderClientPtr url_loader_client) {
   route_id_ = route_id;
   render_frame_id_ = render_frame_id;
   plugin_child_id_ = ChildProcessHost::kInvalidUniqueID;

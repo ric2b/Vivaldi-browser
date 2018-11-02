@@ -14,10 +14,6 @@
 #include "third_party/gvr-android-sdk/src/libraries/headers/vr/gvr/capi/include/gvr_types.h"
 #include "ui/gfx/transform.h"
 
-namespace base {
-class Version;
-}  // namespace base
-
 namespace vr_shell {
 
 // VrShellGl talks to VrShell through this interface. This could be split up if
@@ -27,13 +23,13 @@ class GlBrowserInterface {
   virtual ~GlBrowserInterface() = default;
 
   virtual void ContentSurfaceChanged(jobject surface) = 0;
-  virtual void GvrDelegateReady(gvr::ViewerType viewer_type) = 0;
+  virtual void GvrDelegateReady(
+      gvr::ViewerType viewer_type,
+      device::mojom::VRDisplayFrameTransportOptionsPtr) = 0;
   virtual void UpdateGamepadData(device::GvrGamepadData) = 0;
   virtual void ForceExitVr() = 0;
   virtual void OnContentPaused(bool enabled) = 0;
   virtual void ToggleCardboardGamepad(bool enabled) = 0;
-  virtual void OnAssetsLoaded(vr::AssetsLoadStatus status,
-                              const base::Version& component_version) = 0;
 };
 
 }  // namespace vr_shell

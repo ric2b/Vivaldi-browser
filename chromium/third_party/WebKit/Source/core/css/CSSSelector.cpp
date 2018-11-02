@@ -116,6 +116,7 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
         // FIXME: PseudoAny should base the specificity on the sub-selectors.
         // See http://lists.w3.org/Archives/Public/www-style/2010Sep/0530.html
         case kPseudoAny:
+        case kPseudoMatches:
         default:
           break;
       }
@@ -131,7 +132,7 @@ inline unsigned CSSSelector::SpecificityForOneSelector() const {
     case kAttributeEnd:
       return 0x000100;
     case kTag:
-      if (TagQName().LocalName() == g_star_atom)
+      if (TagQName().LocalName() == UniversalSelectorAtom())
         return 0;
       return 0x000001;
     case kUnknown:
@@ -149,7 +150,7 @@ unsigned CSSSelector::SpecificityForPage() const {
        component = component->TagHistory()) {
     switch (component->match_) {
       case kTag:
-        s += TagQName().LocalName() == g_star_atom ? 0 : 4;
+        s += TagQName().LocalName() == UniversalSelectorAtom() ? 0 : 4;
         break;
       case kPagePseudoClass:
         switch (component->GetPseudoType()) {
@@ -214,7 +215,9 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoLink:
     case kPseudoVisited:
     case kPseudoAny:
+    case kPseudoMatches:
     case kPseudoAnyLink:
+    case kPseudoWebkitAnyLink:
     case kPseudoAutofill:
     case kPseudoHover:
     case kPseudoDrag:
@@ -303,7 +306,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-internal-video-persistent", CSSSelector::kPseudoVideoPersistent},
     {"-internal-video-persistent-ancestor",
      CSSSelector::kPseudoVideoPersistentAncestor},
-    {"-webkit-any-link", CSSSelector::kPseudoAnyLink},
+    {"-webkit-any-link", CSSSelector::kPseudoWebkitAnyLink},
     {"-webkit-autofill", CSSSelector::kPseudoAutofill},
     {"-webkit-drag", CSSSelector::kPseudoDrag},
     {"-webkit-full-page-media", CSSSelector::kPseudoFullPageMedia},
@@ -318,6 +321,7 @@ const static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"-webkit-scrollbar-track-piece", CSSSelector::kPseudoScrollbarTrackPiece},
     {"active", CSSSelector::kPseudoActive},
     {"after", CSSSelector::kPseudoAfter},
+    {"any-link", CSSSelector::kPseudoAnyLink},
     {"backdrop", CSSSelector::kPseudoBackdrop},
     {"before", CSSSelector::kPseudoBefore},
     {"checked", CSSSelector::kPseudoChecked},
@@ -384,6 +388,7 @@ const static NameToPseudoStruct kPseudoTypeWithArgumentsMap[] = {
     {"host", CSSSelector::kPseudoHost},
     {"host-context", CSSSelector::kPseudoHostContext},
     {"lang", CSSSelector::kPseudoLang},
+    {"matches", CSSSelector::kPseudoMatches},
     {"not", CSSSelector::kPseudoNot},
     {"nth-child", CSSSelector::kPseudoNthChild},
     {"nth-last-child", CSSSelector::kPseudoNthLastChild},
@@ -541,14 +546,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
         pseudo_type_ = kPseudoUnknown;
       break;
     case kPseudoShadow:
-      if (RuntimeEnabledFeatures::
-              ShadowPseudoElementInCSSDynamicProfileEnabled()) {
-        if (match_ != kPseudoElement)
-          pseudo_type_ = kPseudoUnknown;
-      } else {
-        if (match_ != kPseudoElement || context.IsDynamicProfile())
-          pseudo_type_ = kPseudoUnknown;
-      }
+      if (match_ != kPseudoElement || context.IsDynamicProfile())
+        pseudo_type_ = kPseudoUnknown;
       break;
     case kPseudoBlinkInternalElement:
       if (match_ != kPseudoElement || mode != kUASheetMode)
@@ -600,6 +599,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoLastChild:
     case kPseudoLastOfType:
     case kPseudoLink:
+    case kPseudoMatches:
     case kPseudoNoButton:
     case kPseudoNot:
     case kPseudoNthChild:
@@ -625,6 +625,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoValid:
     case kPseudoVertical:
     case kPseudoVisited:
+    case kPseudoWebkitAnyLink:
     case kPseudoWindowInactive:
       if (match_ != kPseudoClass)
         pseudo_type_ = kPseudoUnknown;
@@ -664,26 +665,29 @@ bool CSSSelector::operator==(const CSSSelector& other) const {
 }
 
 static void SerializeIdentifierOrAny(const AtomicString& identifier,
+                                     const AtomicString& any,
                                      StringBuilder& builder) {
-  if (identifier != g_star_atom)
+  if (identifier != any)
     SerializeIdentifier(identifier, builder);
   else
-    builder.Append(identifier);
+    builder.Append(g_star_atom);
 }
 
 static void SerializeNamespacePrefixIfNeeded(const AtomicString& prefix,
+                                             const AtomicString& any,
                                              StringBuilder& builder) {
   if (prefix.IsNull())
     return;
-  SerializeIdentifierOrAny(prefix, builder);
+  SerializeIdentifierOrAny(prefix, any, builder);
   builder.Append('|');
 }
 
 const CSSSelector* CSSSelector::SerializeCompound(
     StringBuilder& builder) const {
   if (match_ == kTag && !tag_is_implicit_) {
-    SerializeNamespacePrefixIfNeeded(TagQName().Prefix(), builder);
-    SerializeIdentifierOrAny(TagQName().LocalName(), builder);
+    SerializeNamespacePrefixIfNeeded(TagQName().Prefix(), g_star_atom, builder);
+    SerializeIdentifierOrAny(TagQName().LocalName(), UniversalSelectorAtom(),
+                             builder);
   }
 
   for (const CSSSelector* simple_selector = this; simple_selector;
@@ -734,6 +738,7 @@ const CSSSelector* CSSSelector::SerializeCompound(
         case kPseudoHost:
         case kPseudoHostContext:
         case kPseudoAny:
+        case kPseudoMatches:
           break;
         default:
           break;
@@ -744,7 +749,7 @@ const CSSSelector* CSSSelector::SerializeCompound(
     } else if (simple_selector->IsAttributeSelector()) {
       builder.Append('[');
       SerializeNamespacePrefixIfNeeded(simple_selector->Attribute().Prefix(),
-                                       builder);
+                                       g_star_atom, builder);
       SerializeIdentifier(simple_selector->Attribute().LocalName(), builder);
       switch (simple_selector->match_) {
         case kAttributeExact:
@@ -996,8 +1001,8 @@ bool CSSSelector::MatchesPseudoElement() const {
 }
 
 template <typename Functor>
-static bool ForEachTagHistory(const Functor& functor,
-                              const CSSSelector& selector) {
+static bool ForAnyInTagHistory(const Functor& functor,
+                               const CSSSelector& selector) {
   for (const CSSSelector* current = &selector; current;
        current = current->TagHistory()) {
     if (functor(*current))
@@ -1005,7 +1010,7 @@ static bool ForEachTagHistory(const Functor& functor,
     if (const CSSSelectorList* selector_list = current->SelectorList()) {
       for (const CSSSelector* sub_selector = selector_list->First();
            sub_selector; sub_selector = CSSSelectorList::Next(*sub_selector)) {
-        if (ForEachTagHistory(functor, *sub_selector))
+        if (ForAnyInTagHistory(functor, *sub_selector))
           return true;
       }
     }
@@ -1015,7 +1020,7 @@ static bool ForEachTagHistory(const Functor& functor,
 }
 
 bool CSSSelector::HasContentPseudo() const {
-  return ForEachTagHistory(
+  return ForAnyInTagHistory(
       [](const CSSSelector& selector) -> bool {
         return selector.RelationIsAffectedByPseudoContent();
       },
@@ -1023,7 +1028,7 @@ bool CSSSelector::HasContentPseudo() const {
 }
 
 bool CSSSelector::HasSlottedPseudo() const {
-  return ForEachTagHistory(
+  return ForAnyInTagHistory(
       [](const CSSSelector& selector) -> bool {
         return selector.GetPseudoType() == CSSSelector::kPseudoSlotted;
       },
@@ -1031,7 +1036,7 @@ bool CSSSelector::HasSlottedPseudo() const {
 }
 
 bool CSSSelector::HasDeepCombinatorOrShadowPseudo() const {
-  return ForEachTagHistory(
+  return ForAnyInTagHistory(
       [](const CSSSelector& selector) -> bool {
         return selector.Relation() == CSSSelector::kShadowDeep ||
                selector.Relation() == CSSSelector::kShadowPiercingDescendant ||
@@ -1041,7 +1046,7 @@ bool CSSSelector::HasDeepCombinatorOrShadowPseudo() const {
 }
 
 bool CSSSelector::NeedsUpdatedDistribution() const {
-  return ForEachTagHistory(
+  return ForAnyInTagHistory(
       [](const CSSSelector& selector) -> bool {
         return selector.RelationIsAffectedByPseudoContent() ||
                selector.GetPseudoType() == CSSSelector::kPseudoSlotted ||

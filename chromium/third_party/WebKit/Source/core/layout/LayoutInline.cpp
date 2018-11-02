@@ -34,6 +34,7 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LineLayoutBoxModel.h"
 #include "core/layout/line/InlineTextBox.h"
+#include "core/layout/ng/inline/ng_inline_fragment_traversal.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/InlinePainter.h"
@@ -45,8 +46,21 @@
 
 namespace blink {
 
+namespace {
+
+// TODO(layout-dev): Once we generate fragment for all inline element, we should
+// use |LayoutObject::EnclosingBlockFlowFragment()|.
+const NGPhysicalBoxFragment* EnclosingBlockFlowFragmentOf(
+    const LayoutInline& node) {
+  if (!RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled())
+    return nullptr;
+  return node.EnclosingBlockFlowFragment();
+}
+
+}  // anonymous namespace
+
 struct SameSizeAsLayoutInline : public LayoutBoxModelObject {
-  ~SameSizeAsLayoutInline() override {}
+  ~SameSizeAsLayoutInline() override = default;
   LayoutObjectChildList children_;
   LineBoxList line_boxes_;
 };
@@ -394,6 +408,7 @@ void LayoutInline::AddChildIgnoringContinuation(LayoutObject* new_child,
 
 LayoutInline* LayoutInline::Clone() const {
   LayoutInline* clone_inline = new LayoutInline(GetNode());
+  DCHECK(!IsAnonymous());
   clone_inline->SetStyle(MutableStyle());
   clone_inline->SetIsInsideFlowThread(IsInsideFlowThread());
   return clone_inline;
@@ -402,6 +417,8 @@ LayoutInline* LayoutInline::Clone() const {
 void LayoutInline::MoveChildrenToIgnoringContinuation(
     LayoutInline* to,
     LayoutObject* start_child) {
+  DCHECK(!IsAnonymous());
+  DCHECK(!to->IsAnonymous());
   LayoutObject* child = start_child;
   while (child) {
     LayoutObject* current_child = child;
@@ -417,6 +434,7 @@ void LayoutInline::SplitInlines(LayoutBlockFlow* from_block,
                                 LayoutObject* before_child,
                                 LayoutBoxModelObject* old_cont) {
   DCHECK(IsDescendantOf(from_block));
+  DCHECK(!IsAnonymous());
 
   // If we're splitting the inline containing the fullscreened element,
   // |beforeChild| may be the layoutObject for the fullscreened element.
@@ -622,6 +640,16 @@ void LayoutInline::AddChildToContinuation(LayoutObject* new_child,
 
 void LayoutInline::Paint(const PaintInfo& paint_info,
                          const LayoutPoint& paint_offset) const {
+  if (RuntimeEnabledFeatures::LayoutNGPaintFragmentsEnabled()) {
+    if (LayoutBlockFlow* block_flow = EnclosingNGBlockFlow()) {
+      if (NGPaintFragment* block_flow_fragment = block_flow->PaintFragment()) {
+        block_flow_fragment->PaintInlineBoxForDescendants(paint_info,
+                                                          paint_offset, this);
+        return;
+      }
+    }
+  }
+
   InlinePainter(*this).Paint(paint_info, paint_offset);
 }
 
@@ -953,6 +981,20 @@ class LinesBoundingBoxGeneratorContext {
 }  // unnamed namespace
 
 LayoutRect LayoutInline::LinesBoundingBox() const {
+  if (const NGPhysicalBoxFragment* box_fragment =
+          EnclosingBlockFlowFragmentOf(*this)) {
+    LayoutRect result;
+    auto children =
+        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    for (const auto& child : children) {
+      NGPhysicalOffset left_top =
+          child.fragment->Offset() + child.offset_to_container_box;
+      result.Unite(LayoutRect(LayoutPoint(left_top.left, left_top.top),
+                              child.fragment->Size().ToLayoutSize()));
+    }
+    return result;
+  }
+
   if (!AlwaysCreateLineBoxes()) {
     DCHECK(!FirstLineBox());
     FloatRect float_result;
@@ -1086,6 +1128,20 @@ LayoutRect LayoutInline::CulledInlineVisualOverflowBoundingBox() const {
 }
 
 LayoutRect LayoutInline::LinesVisualOverflowBoundingBox() const {
+  if (const NGPhysicalBoxFragment* box_fragment =
+          EnclosingBlockFlowFragmentOf(*this)) {
+    NGPhysicalOffsetRect result;
+    auto children =
+        NGInlineFragmentTraversal::SelfFragmentsOf(*box_fragment, this);
+    for (const auto& child : children) {
+      NGPhysicalOffsetRect child_rect =
+          child.fragment->VisualRectWithContents();
+      child_rect.offset += child.offset_to_container_box;
+      result.Unite(child_rect);
+    }
+    return result.ToLayoutRect();
+  }
+
   if (!AlwaysCreateLineBoxes())
     return CulledInlineVisualOverflowBoundingBox();
 
@@ -1545,6 +1601,9 @@ void LayoutInline::AddAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
 
 void LayoutInline::InvalidateDisplayItemClients(
     PaintInvalidationReason invalidation_reason) const {
+  // TODO(yoichio): Cover other PaintInvalidateionReasons.
+  DCHECK(invalidation_reason != PaintInvalidationReason::kSelection ||
+         !EnclosingNGBlockFlow());
   ObjectPaintInvalidator paint_invalidator(*this);
   paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
 

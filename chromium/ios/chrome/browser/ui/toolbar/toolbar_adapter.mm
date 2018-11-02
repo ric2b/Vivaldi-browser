@@ -16,11 +16,11 @@
 @synthesize backgroundView = _backgroundView;
 @synthesize toolbarCoordinator = _toolbarCoordinator;
 @synthesize delegate = _delegate;
-@synthesize toolsPopupController = _toolsPopupController;
 @synthesize URLLoader = _URLLoader;
 
 - (instancetype)initWithDispatcher:
-                    (id<ApplicationCommands, BrowserCommands>)dispatcher
+                    (id<ApplicationCommands, BrowserCommands, ToolbarCommands>)
+                        dispatcher
                       browserState:(ios::ChromeBrowserState*)browserState
                       webStateList:(WebStateList*)webStateList {
   self = [super init];
@@ -56,11 +56,11 @@
 #pragma mark - Abstract WebToolbar
 
 - (void)browserStateDestroyed {
-  return;
+  [self.toolbarCoordinator stop];
 }
 
 - (void)updateToolbarState {
-  [self.toolbarCoordinator updateOmniboxState];
+  [self.toolbarCoordinator updateToolbarState];
 }
 
 - (void)showPrerenderingAnimation {
@@ -72,7 +72,8 @@
 }
 
 - (CGRect)visibleOmniboxFrame {
-  return [self.toolbarCoordinator visibleOmniboxFrame];
+  // No-op. The Clean Toolbar uses named layout guides.
+  return CGRectZero;
 }
 
 - (BOOL)isOmniboxFirstResponder {
@@ -114,11 +115,11 @@
 }
 
 - (void)activateFakeSafeAreaInsets:(UIEdgeInsets)fakeSafeAreaInsets {
-  return;
+  [self.toolbarCoordinator activateFakeSafeAreaInsets:fakeSafeAreaInsets];
 }
 
 - (void)deactivateFakeSafeAreaInsets {
-  return;
+  [self.toolbarCoordinator deactivateFakeSafeAreaInsets];
 }
 
 - (void)setToolsMenuIsVisibleForToolsMenuButton:(BOOL)isVisible {
@@ -127,6 +128,10 @@
 
 - (void)start {
   [self.toolbarCoordinator start];
+}
+
+- (void)stop {
+  [self.toolbarCoordinator stop];
 }
 
 #pragma mark - OmniboxFocuser
@@ -138,6 +143,8 @@
 - (void)cancelOmniboxEdit {
   [self.toolbarCoordinator cancelOmniboxEdit];
 }
+
+#pragma mark - FakeboxFocuser
 
 - (void)focusFakebox {
   [self.toolbarCoordinator focusFakebox];
@@ -174,13 +181,36 @@
 #pragma mark - BubbleViewAnchorPointProvider
 
 - (CGPoint)anchorPointForTabSwitcherButton:(BubbleArrowDirection)direction {
-  return [[self.toolbarCoordinator bubbleAnchorPointProvider]
-      anchorPointForTabSwitcherButton:direction];
+  // No-op. The Clean Toolbar uses named layout guides.
+  return CGPointZero;
 }
 
 - (CGPoint)anchorPointForToolsMenuButton:(BubbleArrowDirection)direction {
-  return [[self.toolbarCoordinator bubbleAnchorPointProvider]
-      anchorPointForToolsMenuButton:direction];
+  // No-op. The Clean Toolbar uses named layout guides.
+  return CGPointZero;
+}
+
+#pragma mark - FullscreenUIElement
+
+// FullscreenUIElements in this adapter are no-ops.  ToolbarCoordinator updates
+// its view controller's UI for fullscreen events.
+
+- (void)updateForFullscreenProgress:(CGFloat)progress {
+}
+
+- (void)updateForFullscreenEnabled:(BOOL)enabled {
+}
+
+- (void)finishFullscreenScrollWithAnimator:
+    (FullscreenScrollEndAnimator*)animator {
+}
+
+- (void)scrollFullscreenToTopWithAnimator:
+    (FullscreenScrollToTopAnimator*)animator {
+}
+
+- (void)showToolbarForForgroundWithAnimator:
+    (FullscreenForegroundAnimator*)animator {
 }
 
 #pragma mark - ToolsMenuPresentationProvider

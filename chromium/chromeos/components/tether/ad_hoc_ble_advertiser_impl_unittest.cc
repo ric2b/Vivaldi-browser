@@ -136,7 +136,7 @@ class AdHocBleAdvertiserImplTest : public testing::Test {
 
   void SetUp() override {
     fake_generator_ =
-        base::MakeUnique<cryptauth::FakeBleAdvertisementGenerator>();
+        std::make_unique<cryptauth::FakeBleAdvertisementGenerator>();
     cryptauth::BleAdvertisementGenerator::SetInstanceForTesting(
         fake_generator_.get());
 
@@ -146,12 +146,12 @@ class AdHocBleAdvertiserImplTest : public testing::Test {
         fake_advertisement_factory_.get());
 
     mock_seed_fetcher_ =
-        base::MakeUnique<cryptauth::MockRemoteBeaconSeedFetcher>();
+        std::make_unique<cryptauth::MockRemoteBeaconSeedFetcher>();
     mock_local_data_provider_ =
-        base::MakeUnique<cryptauth::MockLocalDeviceDataProvider>();
-    fake_ble_synchronizer_ = base::MakeUnique<FakeBleSynchronizer>();
+        std::make_unique<cryptauth::MockLocalDeviceDataProvider>();
+    fake_ble_synchronizer_ = std::make_unique<FakeBleSynchronizer>();
 
-    workaround_ = base::MakeUnique<AdHocBleAdvertiserImpl>(
+    workaround_ = std::make_unique<AdHocBleAdvertiserImpl>(
         mock_local_data_provider_.get(), mock_seed_fetcher_.get(),
         fake_ble_synchronizer_.get());
 
@@ -170,7 +170,7 @@ class AdHocBleAdvertiserImplTest : public testing::Test {
 
   void SetAdvertisement(size_t index) {
     fake_generator_->set_advertisement(
-        base::MakeUnique<cryptauth::DataWithTimestamp>(
+        std::make_unique<cryptauth::DataWithTimestamp>(
             fake_advertisements_[0]));
   }
 
@@ -217,7 +217,7 @@ class AdHocBleAdvertiserImplTest : public testing::Test {
 
 TEST_F(AdHocBleAdvertiserImplTest, CannotGenerateAdvertisement) {
   fake_generator_->set_advertisement(nullptr);
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_EQ(0u, fake_advertisement_factory_->num_created());
   EXPECT_EQ(0u, test_observer_->num_times_shutdown_complete());
   EXPECT_FALSE(workaround_->HasPendingRequests());
@@ -228,7 +228,7 @@ TEST_F(AdHocBleAdvertiserImplTest, AdvertiseAndStop) {
   test_timer_factory_->set_device_id_for_next_timer(
       fake_devices_[0].GetDeviceId());
 
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
@@ -246,12 +246,12 @@ TEST_F(AdHocBleAdvertiserImplTest, TwoRequestsForSameDevice_BeforeTimer) {
   test_timer_factory_->set_device_id_for_next_timer(
       fake_devices_[0].GetDeviceId());
 
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
   // No additional advertisement should be created.
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
@@ -268,7 +268,7 @@ TEST_F(AdHocBleAdvertiserImplTest, TwoRequestsForSameDevice_AfterTimer) {
   test_timer_factory_->set_device_id_for_next_timer(
       fake_devices_[0].GetDeviceId());
 
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
@@ -276,7 +276,7 @@ TEST_F(AdHocBleAdvertiserImplTest, TwoRequestsForSameDevice_AfterTimer) {
   EXPECT_TRUE(workaround_->HasPendingRequests());
 
   // No additional advertisement should be created.
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
@@ -289,14 +289,14 @@ TEST_F(AdHocBleAdvertiserImplTest, TwoRequestsForDifferentDevices) {
   SetAdvertisement(0 /* index */);
   test_timer_factory_->set_device_id_for_next_timer(
       fake_devices_[0].GetDeviceId());
-  workaround_->RequestGattServicesForDevice(fake_devices_[0]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[0].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(1u, fake_advertisement_factory_->num_created());
 
   SetAdvertisement(1 /* index */);
   test_timer_factory_->set_device_id_for_next_timer(
       fake_devices_[1].GetDeviceId());
-  workaround_->RequestGattServicesForDevice(fake_devices_[1]);
+  workaround_->RequestGattServicesForDevice(fake_devices_[1].GetDeviceId());
   EXPECT_TRUE(workaround_->HasPendingRequests());
   EXPECT_EQ(2u, fake_advertisement_factory_->num_created());
 

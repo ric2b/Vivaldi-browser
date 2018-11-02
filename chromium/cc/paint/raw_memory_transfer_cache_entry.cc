@@ -4,28 +4,33 @@
 
 #include "cc/paint/raw_memory_transfer_cache_entry.h"
 
+#include <string.h>
+
 namespace cc {
 
 ClientRawMemoryTransferCacheEntry::ClientRawMemoryTransferCacheEntry(
     std::vector<uint8_t> data)
-    : data_(std::move(data)) {}
+    : id_(s_next_id_.GetNext()), data_(std::move(data)) {}
 ClientRawMemoryTransferCacheEntry::~ClientRawMemoryTransferCacheEntry() =
     default;
 
-TransferCacheEntryType ClientRawMemoryTransferCacheEntry::Type() const {
-  return TransferCacheEntryType::kRawMemory;
-}
+// static
+base::AtomicSequenceNumber ClientRawMemoryTransferCacheEntry::s_next_id_;
 
 size_t ClientRawMemoryTransferCacheEntry::SerializedSize() const {
   return data_.size();
 }
 
-bool ClientRawMemoryTransferCacheEntry::Serialize(size_t size,
-                                                  uint8_t* data) const {
-  if (size != data_.size())
+uint32_t ClientRawMemoryTransferCacheEntry::Id() const {
+  return id_;
+}
+
+bool ClientRawMemoryTransferCacheEntry::Serialize(
+    base::span<uint8_t> data) const {
+  if (data.size() != data_.size())
     return false;
 
-  memcpy(data, data_.data(), size);
+  memcpy(data.data(), data_.data(), data.size());
   return true;
 }
 
@@ -34,19 +39,13 @@ ServiceRawMemoryTransferCacheEntry::ServiceRawMemoryTransferCacheEntry() =
 ServiceRawMemoryTransferCacheEntry::~ServiceRawMemoryTransferCacheEntry() =
     default;
 
-TransferCacheEntryType ServiceRawMemoryTransferCacheEntry::Type() const {
-  return TransferCacheEntryType::kRawMemory;
-}
-
-size_t ServiceRawMemoryTransferCacheEntry::Size() const {
+size_t ServiceRawMemoryTransferCacheEntry::CachedSize() const {
   return data_.size();
 }
 
 bool ServiceRawMemoryTransferCacheEntry::Deserialize(GrContext* context,
-                                                     size_t size,
-                                                     uint8_t* data) {
-  data_.resize(size);
-  memcpy(data_.data(), data, size);
+                                                     base::span<uint8_t> data) {
+  data_ = std::vector<uint8_t>(data.begin(), data.end());
   return true;
 }
 

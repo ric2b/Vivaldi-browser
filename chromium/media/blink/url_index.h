@@ -19,6 +19,7 @@
 #include "media/blink/lru.h"
 #include "media/blink/media_blink_export.h"
 #include "media/blink/multibuffer.h"
+#include "services/network/public/interfaces/fetch_api.mojom.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -38,7 +39,8 @@ class MEDIA_BLINK_EXPORT ResourceMultiBuffer : public MultiBuffer {
 
   // MultiBuffer implementation.
   std::unique_ptr<MultiBuffer::DataProvider> CreateWriter(
-      const BlockId& pos) override;
+      const BlockId& pos,
+      bool is_client_audio_element) override;
   bool RangeSupported() const override;
   void OnEmpty() override;
 
@@ -99,6 +101,8 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Returns our url_index.
   UrlIndex* url_index() const { return url_index_; }
 
+  bool has_opaque_data() const { return has_opaque_data_; }
+
   // Notifies the url index that this is currently used.
   // The url <-> URLData mapping will be eventually be invalidated if
   // this is not called regularly.
@@ -107,7 +111,7 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Call this before we add some data to the multibuffer().
   // If the multibuffer is empty, the data origin is set from
   // |origin| and returns true. If not, it compares |origin|
-  // to the previous origin and returns wheather they match or not.
+  // to the previous origin and returns whether they match or not.
   bool ValidateDataOrigin(const GURL& origin);
 
   // Setters.
@@ -118,6 +122,7 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   void set_range_supported();
   void set_last_modified(base::Time last_modified);
   void set_etag(const std::string& etag);
+  void set_has_opaque_data(bool has_opaque_data);
 
   // A redirect has occured (or we've found a better UrlData for the same
   // resource).
@@ -190,6 +195,10 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Set to false if we have reason to beleive the chrome disk cache
   // will not cache this url.
   bool cacheable_;
+
+  // True if a service worker intercepted a request for this resource
+  // and provided an opaque response.
+  bool has_opaque_data_;
 
   // Last time some media time used this resource.
   // Note that we use base::Time rather than base::TimeTicks because

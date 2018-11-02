@@ -38,19 +38,18 @@
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 
 namespace blink {
 
 ScriptResource* ScriptResource::Fetch(FetchParameters& params,
-                                      ResourceFetcher* fetcher) {
+                                      ResourceFetcher* fetcher,
+                                      ResourceClient* client) {
   DCHECK_EQ(params.GetResourceRequest().GetFrameType(),
-            WebURLRequest::kFrameTypeNone);
+            network::mojom::RequestContextFrameType::kNone);
   params.SetRequestContext(WebURLRequest::kRequestContextScript);
-  ScriptResource* resource = ToScriptResource(
-      fetcher->RequestResource(params, ScriptResourceFactory()));
-  if (resource && !params.IntegrityMetadata().IsEmpty())
-    resource->SetIntegrityMetadata(params.IntegrityMetadata());
-  return resource;
+  return ToScriptResource(
+      fetcher->RequestResource(params, ScriptResourceFactory(), client));
 }
 
 ScriptResource::ScriptResource(
@@ -59,7 +58,7 @@ ScriptResource::ScriptResource(
     const TextResourceDecoderOptions& decoder_options)
     : TextResource(resource_request, kScript, options, decoder_options) {}
 
-ScriptResource::~ScriptResource() {}
+ScriptResource::~ScriptResource() = default;
 
 void ScriptResource::OnMemoryDump(WebMemoryDumpLevelOfDetail level_of_detail,
                                   WebProcessMemoryDump* memory_dump) const {
@@ -89,11 +88,15 @@ void ScriptResource::DestroyDecodedDataForFailedRevalidation() {
   SetDecodedSize(0);
 }
 
-AccessControlStatus ScriptResource::CalculateAccessControlStatus() const {
-  if (GetCORSStatus() == CORSStatus::kServiceWorkerOpaque)
-    return kOpaqueResource;
+AccessControlStatus ScriptResource::CalculateAccessControlStatus(
+    const SecurityOrigin* security_origin) const {
+  if (GetResponse().WasFetchedViaServiceWorker()) {
+    if (GetCORSStatus() == CORSStatus::kServiceWorkerOpaque)
+      return kOpaqueResource;
+    return kSharableCrossOrigin;
+  }
 
-  if (IsSameOriginOrCORSSuccessful())
+  if (security_origin && PassesAccessControlCheck(*security_origin))
     return kSharableCrossOrigin;
 
   return kNotSharableCrossOrigin;

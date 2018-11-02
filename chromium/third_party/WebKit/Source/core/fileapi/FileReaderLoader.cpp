@@ -60,130 +60,6 @@ namespace blink {
 
 namespace {
 
-FileError::ErrorCode HttpStatusCodeToErrorCode(int http_status_code) {
-  switch (http_status_code) {
-    case 403:
-      return FileError::kSecurityErr;
-    case 404:
-      return FileError::kNotFoundErr;
-    default:
-      return FileError::kNotReadableErr;
-  }
-}
-
-class FileReaderLoaderIPC final : public FileReaderLoader,
-                                  public ThreadableLoaderClient {
- public:
-  FileReaderLoaderIPC(ReadType read_type, FileReaderLoaderClient* client)
-      : FileReaderLoader(read_type, client) {}
-  ~FileReaderLoaderIPC() override {
-    if (!url_for_reading_.IsEmpty())
-      BlobRegistry::RevokePublicBlobURL(url_for_reading_);
-  }
-
-  void Start(ExecutionContext*, scoped_refptr<BlobDataHandle>) override;
-
-  // ThreadableLoaderClient
-  void DidReceiveResponse(unsigned long,
-                          const ResourceResponse&,
-                          std::unique_ptr<WebDataConsumerHandle>) override;
-  void DidReceiveData(const char*, unsigned) override;
-  void DidFinishLoading(unsigned long, double) override;
-  void DidFail(const ResourceError&) override;
-
- private:
-  void Cleanup() override {
-    if (loader_) {
-      loader_->Cancel();
-      loader_ = nullptr;
-    }
-
-    FileReaderLoader::Cleanup();
-  }
-
-  KURL url_for_reading_;
-  Persistent<ThreadableLoader> loader_;
-};
-
-void FileReaderLoaderIPC::Start(ExecutionContext* execution_context,
-                                scoped_refptr<BlobDataHandle> blob_data) {
-  DCHECK(execution_context);
-#if DCHECK_IS_ON()
-  DCHECK(!started_loading_) << "FileReaderLoader can only be used once";
-  started_loading_ = true;
-#endif  // DCHECK_IS_ON()
-
-  // The blob is read by routing through the request handling layer given a
-  // temporary public url.
-  url_for_reading_ =
-      BlobURL::CreatePublicURL(execution_context->GetSecurityOrigin());
-  if (url_for_reading_.IsEmpty()) {
-    Failed(FileError::kSecurityErr);
-    return;
-  }
-
-  BlobRegistry::RegisterPublicBlobURL(
-      execution_context->GetMutableSecurityOrigin(), url_for_reading_,
-      std::move(blob_data));
-  // Construct and load the request.
-  ResourceRequest request(url_for_reading_);
-  request.SetExternalRequestStateFromRequestorAddressSpace(
-      execution_context->GetSecurityContext().AddressSpace());
-
-  // FIXME: Should this really be 'internal'? Do we know anything about the
-  // actual request that generated this fetch?
-  request.SetRequestContext(WebURLRequest::kRequestContextInternal);
-  request.SetFetchRequestMode(network::mojom::FetchRequestMode::kSameOrigin);
-
-  request.SetHTTPMethod(HTTPNames::GET);
-
-  ThreadableLoaderOptions options;
-
-  ResourceLoaderOptions resource_loader_options;
-  // Use special initiator to hide the request from the inspector.
-  resource_loader_options.initiator_info.name =
-      FetchInitiatorTypeNames::internal;
-
-  if (!IsSyncLoad()) {
-    DCHECK(!loader_);
-    loader_ = ThreadableLoader::Create(*execution_context, this, options,
-                                       resource_loader_options);
-    loader_->Start(request);
-  } else {
-    ThreadableLoader::LoadResourceSynchronously(
-        *execution_context, request, *this, options, resource_loader_options);
-  }
-}
-
-void FileReaderLoaderIPC::DidReceiveResponse(
-    unsigned long,
-    const ResourceResponse& response,
-    std::unique_ptr<WebDataConsumerHandle> handle) {
-  DCHECK(!handle);
-  if (response.HttpStatusCode() != 200) {
-    Failed(HttpStatusCodeToErrorCode(response.HttpStatusCode()));
-    return;
-  }
-
-  OnStartLoading(response.ExpectedContentLength());
-}
-
-void FileReaderLoaderIPC::DidReceiveData(const char* data,
-                                         unsigned data_length) {
-  OnReceivedData(data, data_length);
-}
-
-void FileReaderLoaderIPC::DidFinishLoading(unsigned long, double) {
-  OnFinishLoading();
-}
-
-void FileReaderLoaderIPC::DidFail(const ResourceError& error) {
-  if (error.IsCancellation())
-    return;
-
-  Failed(FileError::kNotReadableErr);
-}
-
 class FileReaderLoaderMojo : public FileReaderLoader,
                              public mojom::blink::BlobReaderClient {
  public:
@@ -191,8 +67,8 @@ class FileReaderLoaderMojo : public FileReaderLoader,
       : FileReaderLoader(read_type, client),
         handle_watcher_(FROM_HERE,
                         mojo::SimpleWatcher::ArmingPolicy::AUTOMATIC),
-        binding_(this) {}
-  ~FileReaderLoaderMojo() override {}
+        binding_(this), weak_factory_(this) {}
+  ~FileReaderLoaderMojo() override = default;
 
   void Start(ExecutionContext*, scoped_refptr<BlobDataHandle>) override;
 
@@ -217,6 +93,8 @@ class FileReaderLoaderMojo : public FileReaderLoader,
   int64_t expected_content_size_ = -1;
   bool received_all_data_ = false;
   bool received_on_complete_ = false;
+
+  base::WeakPtrFactory<FileReaderLoader> weak_factory_;
 };
 
 void FileReaderLoaderMojo::Start(ExecutionContext*,
@@ -258,7 +136,12 @@ void FileReaderLoaderMojo::Start(ExecutionContext*,
 
 void FileReaderLoaderMojo::OnCalculatedSize(uint64_t total_size,
                                             uint64_t expected_content_size) {
+  auto weak_this = weak_factory_.GetWeakPtr();
   OnStartLoading(expected_content_size);
+  // OnStartLoading calls out to our client, which could delete |this|, so bail
+  // out if that happened.
+  if (!weak_this)
+    return;
   expected_content_size_ = expected_content_size;
   if (expected_content_size_ == 0) {
     received_all_data_ = true;
@@ -270,8 +153,8 @@ void FileReaderLoaderMojo::OnCalculatedSize(uint64_t total_size,
   } else {
     handle_watcher_.Watch(
         consumer_handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-        ConvertToBaseCallback(WTF::Bind(
-            &FileReaderLoaderMojo::OnDataPipeReadable, WTF::Unretained(this))));
+        WTF::BindRepeating(&FileReaderLoaderMojo::OnDataPipeReadable,
+                           WTF::Unretained(this)));
   }
 }
 
@@ -335,9 +218,7 @@ void FileReaderLoaderMojo::OnDataPipeReadable(MojoResult result) {
 std::unique_ptr<FileReaderLoader> FileReaderLoader::Create(
     ReadType read_type,
     FileReaderLoaderClient* client) {
-  if (RuntimeEnabledFeatures::MojoBlobsEnabled())
-    return std::make_unique<FileReaderLoaderMojo>(read_type, client);
-  return std::make_unique<FileReaderLoaderIPC>(read_type, client);
+  return std::make_unique<FileReaderLoaderMojo>(read_type, client);
 }
 
 FileReaderLoader::FileReaderLoader(ReadType read_type,

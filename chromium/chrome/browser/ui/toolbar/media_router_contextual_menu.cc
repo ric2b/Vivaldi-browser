@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/toolbar/media_router_contextual_menu.h"
 
+#include <memory>
 #include <string>
 
 #include "base/logging.h"
@@ -35,7 +36,7 @@
 // static
 std::unique_ptr<MediaRouterContextualMenu>
 MediaRouterContextualMenu::CreateForToolbar(Browser* browser) {
-  return base::MakeUnique<MediaRouterContextualMenu>(
+  return std::make_unique<MediaRouterContextualMenu>(
       browser, true,
       MediaRouterActionController::IsActionShownByPolicy(browser->profile()));
 }
@@ -43,7 +44,7 @@ MediaRouterContextualMenu::CreateForToolbar(Browser* browser) {
 // static
 std::unique_ptr<MediaRouterContextualMenu>
 MediaRouterContextualMenu::CreateForOverflowMenu(Browser* browser) {
-  return base::MakeUnique<MediaRouterContextualMenu>(
+  return std::make_unique<MediaRouterContextualMenu>(
       browser, false,
       MediaRouterActionController::IsActionShownByPolicy(browser->profile()));
 }
@@ -144,7 +145,7 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
   PrefService* pref_service;
   switch (command_id) {
     case IDC_MEDIA_ROUTER_ABOUT:
-      chrome::ShowSingletonTab(browser_, GURL(kAboutPageUrl));
+      ShowSingletonTab(browser_, GURL(kAboutPageUrl));
       break;
     case IDC_MEDIA_ROUTER_ALWAYS_SHOW_TOOLBAR_ACTION:
       SetAlwaysShowActionPref(!GetAlwaysShowActionPref());
@@ -158,16 +159,16 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
       pref_service->SetBoolean(prefs::kMediaRouterCloudServicesPrefSet, true);
       break;
     case IDC_MEDIA_ROUTER_HELP:
-      chrome::ShowSingletonTab(browser_, GURL(kCastHelpCenterPageUrl));
+      ShowSingletonTab(browser_, GURL(kCastHelpCenterPageUrl));
       base::RecordAction(base::UserMetricsAction(
           "MediaRouter_Ui_Navigate_Help"));
       break;
     case IDC_MEDIA_ROUTER_LEARN_MORE:
-      chrome::ShowSingletonTab(browser_, GURL(kCastLearnMorePageUrl));
+      ShowSingletonTab(browser_, GURL(kCastLearnMorePageUrl));
       break;
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
     case IDC_MEDIA_ROUTER_MANAGE_DEVICES:
-      chrome::ShowSingletonTab(browser_, GURL(chrome::kChromeUICastURL));
+      ShowSingletonTab(browser_, GURL(chrome::kChromeUICastURL));
       break;
 #endif
     case IDC_MEDIA_ROUTER_REPORT_ISSUE:
@@ -196,7 +197,7 @@ void MediaRouterContextualMenu::ReportIssue() {
       extensions::kExtensionScheme +
       std::string(url::kStandardSchemeSeparator) +
       request_manager->media_route_provider_extension_id() + "/feedback.html");
-  chrome::ShowSingletonTab(browser_, GURL(feedback_url));
+  ShowSingletonTab(browser_, GURL(feedback_url));
 }
 
 int MediaRouterContextualMenu::GetChangeVisibilityTextId() {

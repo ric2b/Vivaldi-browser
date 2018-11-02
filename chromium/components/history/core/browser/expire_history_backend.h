@@ -149,6 +149,9 @@ class ExpireHistoryBackend {
     std::set<GURL> deleted_favicons;
   };
 
+  // Returns a vector with all visits that eventually redirect to |visits|.
+  VisitVector GetVisitsAndRedirectParents(const VisitVector& visits);
+
   // Deletes the visit-related stuff for all the visits in the given list, and
   // adds the rows for unique URLs affected to the affected_urls list in
   // the dependencies structure.
@@ -225,8 +228,10 @@ class ExpireHistoryBackend {
   // future.
   void DoExpireIteration();
 
-  // Clears all old on-demand favicons from thumbnail database.
-  void ClearOldOnDemandFavicons(base::Time expiration_threshold);
+  // Clears all old on-demand favicons from thumbnail database. Fails silently
+  // (we don't care about favicons so much, so don't want to stop everything if
+  // it fails).
+  void ClearOldOnDemandFaviconsIfPossible(base::Time expiration_threshold);
 
   // Tries to expire the oldest |max_visits| visits from history that are older
   // than |time_threshold|. The return value indicates if we think there might

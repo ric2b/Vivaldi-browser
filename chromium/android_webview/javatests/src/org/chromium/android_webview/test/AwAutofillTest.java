@@ -47,6 +47,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.components.autofill.AutofillProvider;
+import org.chromium.components.autofill.SubmissionSource;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.net.test.util.TestWebServer;
 
@@ -453,9 +454,10 @@ public class AwAutofillTest {
         }
 
         @Override
-        public void commit() {
+        public void commit(int submissionSource) {
             if (DEBUG) Log.i(TAG, "commit");
             mEventQueue.add(AUTOFILL_COMMIT);
+            mSubmissionSource = submissionSource;
             mCallbackHelper.notifyCalled();
         }
 
@@ -498,6 +500,7 @@ public class AwAutofillTest {
     private AwContents mAwContents;
     private ConcurrentLinkedQueue<Integer> mEventQueue = new ConcurrentLinkedQueue<>();
     private TestValues mTestValues = new TestValues();
+    private int mSubmissionSource;
 
     @Before
     public void setUp() throws Exception {
@@ -554,9 +557,6 @@ public class AwAutofillTest {
             int cnt = 0;
             final String url = webServer.setResponse(FILE, data, null);
             loadUrlSync(url);
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
             DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "text1");
             // Note that we currently depend on keyboard app's behavior.
             // TODO(changwan): mock out IME interaction.
@@ -602,9 +602,6 @@ public class AwAutofillTest {
             final String url = webServer.setResponse(FILE, data, null);
             loadUrlSync(url);
             executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
             // Note that we currently call ENTER/EXIT one more time.
             cnt += waitForCallbackAndVerifyTypes(cnt,
@@ -719,10 +716,6 @@ public class AwAutofillTest {
             loadUrlSync(url);
             int cnt = 0;
             executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
-
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
 
             // Note that we currently call ENTER/EXIT one more time.
@@ -765,9 +758,6 @@ public class AwAutofillTest {
             loadUrlSync(url);
             int cnt = 0;
             executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
             // Note that we currently call ENTER/EXIT one more time.
             cnt += waitForCallbackAndVerifyTypes(cnt,
@@ -778,7 +768,7 @@ public class AwAutofillTest {
             assertEquals(1, values.size());
             assertEquals("a", values.get(0).second.getTextValue());
             executeJavaScriptAndWaitForResult("document.getElementById('text1').value='c';");
-            assertEquals(7, getCallbackCount());
+            assertEquals(5, getCallbackCount());
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_B);
             // Check if NotifyVirtualValueChanged() called one more time and value is 'cb', this
             // means javascript change didn't trigger the NotifyVirtualValueChanged().
@@ -812,9 +802,6 @@ public class AwAutofillTest {
             loadUrlSync(url);
             int cnt = 0;
             executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
             // Note that we currently call ENTER/EXIT one more time.
             cnt += waitForCallbackAndVerifyTypes(cnt,
@@ -834,12 +821,13 @@ public class AwAutofillTest {
             // Submit form.
             executeJavaScriptAndWaitForResult("document.getElementById('formid').submit();");
             waitForCallbackAndVerifyTypes(cnt,
-                    new Integer[] {AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT,
-                            AUTOFILL_CANCEL});
+                    new Integer[] {
+                            AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
             ArrayList<Pair<Integer, AutofillValue>> values = getChangedValues();
             assertEquals(2, values.size());
             assertEquals("a", values.get(0).second.getTextValue());
             assertEquals("b", values.get(1).second.getTextValue());
+            assertEquals(SubmissionSource.FORM_SUBMISSION, mSubmissionSource);
         } finally {
             webServer.shutdown();
         }
@@ -852,8 +840,6 @@ public class AwAutofillTest {
         int cnt = 0;
         loadUrlSync(FILE_URL);
         executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-        // Note that we cancel autofill in loading as a precautious measure.
-        cnt += waitForCallbackAndVerifyTypes(cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
         dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
         // Cancel called for the first query.
         // Note that we currently call ENTER/EXIT one more time.
@@ -882,9 +868,6 @@ public class AwAutofillTest {
             final String url = webServer.setResponse(FILE, data, null);
             loadUrlSync(url);
             executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
-            // Note that we cancel autofill in loading as a precautious measure.
-            cnt += waitForCallbackAndVerifyTypes(
-                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_CANCEL});
             dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
             // Note that we currently call ENTER/EXIT one more time.
             cnt += waitForCallbackAndVerifyTypes(cnt,
@@ -978,6 +961,116 @@ public class AwAutofillTest {
             assertEquals("false",
                     executeJavaScriptAndWaitForResult(
                             "document.getElementById('myframe').contentDocument.hasFocus()"));
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    /**
+     * This test is verifying new session starts if frame change.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testTouchingPasswordFieldTriggerQuery() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data =
+                "<html><head></head><body><form action='a.html' name='formname' id='formid'>"
+                + "<input type='password' id='passwordid' name='passwordname'"
+                + "<input type='submit'>"
+                + "</form></body></html>";
+        try {
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+        } finally {
+            webServer.shutdown();
+            DOMUtils.waitForNonZeroNodeBounds(mAwContents.getWebContents(), "passwordid");
+            // Note that we currently depend on keyboard app's behavior.
+            // TODO(changwan): mock out IME interaction.
+            Assert.assertTrue(
+                    DOMUtils.clickNode(mTestContainerView.getContentViewCore(), "passwordid"));
+            cnt += waitForCallbackAndVerifyTypes(
+                    cnt, new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED});
+        }
+    }
+
+    /**
+     * This test is verifying the session is still alive after navigation.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testSessionAliveAfterNavigation() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<input type='text' id='text1' name='username'"
+                + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
+                + "<input type='password' id='passwordid' name='passwordname'>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        final String success = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "</body>"
+                + "</html>";
+        try {
+            webServer.setResponse("/success.html", success, null);
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            executeJavaScriptAndWaitForResult("document.getElementById('text1').select();");
+            dispatchDownAndUpKeyEvents(KeyEvent.KEYCODE_A);
+            // Note that we currently call ENTER/EXIT one more time.
+            cnt += waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {AUTOFILL_CANCEL, AUTOFILL_VIEW_ENTERED, AUTOFILL_VIEW_EXITED,
+                            AUTOFILL_VIEW_ENTERED, AUTOFILL_VALUE_CHANGED});
+            executeJavaScriptAndWaitForResult("window.location.href = 'success.html'; ");
+            waitForCallbackAndVerifyTypes(cnt,
+                    new Integer[] {
+                            AUTOFILL_VALUE_CHANGED, AUTOFILL_VALUE_CHANGED, AUTOFILL_COMMIT});
+            assertEquals(SubmissionSource.PROBABLY_FORM_SUBMITTED, mSubmissionSource);
+        } finally {
+            webServer.shutdown();
+        }
+    }
+
+    /**
+     * This test is verifying there is no callback if there is no form change between two
+     * navigations.
+     */
+    @Test
+    @SmallTest
+    @Feature({"AndroidWebView"})
+    public void testNoSubmissionWithoutFillingForm() throws Throwable {
+        int cnt = 0;
+        TestWebServer webServer = TestWebServer.start();
+        final String data = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "<form action='a.html' name='formname' id='formid'>"
+                + "<input type='text' id='text1' name='username'"
+                + " placeholder='placeholder@placeholder.com' autocomplete='username name'>"
+                + "<input type='password' id='passwordid' name='passwordname'>"
+                + "</form>"
+                + "</body>"
+                + "</html>";
+        final String success = "<!DOCTYPE html>"
+                + "<html>"
+                + "<body>"
+                + "</body>"
+                + "</html>";
+        try {
+            final String successUrl = webServer.setResponse("/success.html", success, null);
+            final String url = webServer.setResponse(FILE, data, null);
+            loadUrlSync(url);
+            executeJavaScriptAndWaitForResult("window.location.href = 'success.html'; ");
+            // There is no callback. AUTOFILL_CANCEL shouldn't be invoked.
+            assertEquals(0, getCallbackCount());
         } finally {
             webServer.shutdown();
         }

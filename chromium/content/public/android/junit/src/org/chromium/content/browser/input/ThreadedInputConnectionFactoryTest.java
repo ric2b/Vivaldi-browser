@@ -13,6 +13,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
@@ -43,9 +44,8 @@ import java.util.concurrent.Callable;
  * Unit tests for {@ThreadedInputConnectionFactory}.
  */
 @RunWith(LocalRobolectricTestRunner.class)
-@Config(manifest = Config.NONE)
+@Config(manifest = Config.NONE, sdk = Build.VERSION_CODES.LOLLIPOP)
 public class ThreadedInputConnectionFactoryTest {
-
     /**
      * A testable version of ThreadedInputConnectionFactory.
      */
@@ -95,7 +95,7 @@ public class ThreadedInputConnectionFactoryTest {
     }
 
     @Mock
-    private ImeAdapter mImeAdapter;
+    private ImeAdapterImpl mImeAdapter;
     @Mock
     private View mContainerView;
     @Mock
@@ -123,7 +123,7 @@ public class ThreadedInputConnectionFactoryTest {
 
         mContext = Mockito.mock(Context.class);
         mContainerView = Mockito.mock(View.class);
-        mImeAdapter = Mockito.mock(ImeAdapter.class);
+        mImeAdapter = Mockito.mock(ImeAdapterImpl.class);
         mInputMethodManager = Mockito.mock(InputMethodManager.class);
 
         mFactory = new TestFactory(new InputMethodManagerWrapper(mContext));

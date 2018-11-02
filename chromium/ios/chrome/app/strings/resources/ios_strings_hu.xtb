@@ -34,6 +34,7 @@
 <translation id="145015347812617860"><ph name="COUNT" /> elem</translation>
 <translation id="1491277525950327607">A beállítás módosításához koppintson duplán</translation>
 <translation id="152234381334907219">Soha nem került mentésre</translation>
+<translation id="1532451416480227577">Címek és hitelkártyák mutatása a Google Payből</translation>
 <translation id="1540800554400757039">Cím 1. sora</translation>
 <translation id="1545749641540134597">QR-kód beolvasása</translation>
 <translation id="1580783302095112590">Levél elküldve.</translation>
@@ -96,6 +97,7 @@ Bizonyos webhelyek például úgy válaszolhatnak a kérésre, hogy olyan hirdet
 <translation id="2718352093833049315">Csak Wi-Fi-n</translation>
 <translation id="2747003861858887689">Előző mező</translation>
 <translation id="2780046210906776326">Nincs e-mail fiók</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Kilépés a lapváltóból</translation>
 <translation id="283291358677939992">Keresés az oldalon...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@ Bizonyos webhelyek például úgy válaszolhatnak a kérésre, hogy olyan hirdet
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Adatvédelmi közlemény</translation>
 <translation id="4460091562821778167">Mindig kérdezzen rá, hogy melyik alkalmazást szeretném használni</translation>
+<translation id="4496373720959965247">Lapok hozzáadása és oldalak közötti váltás</translation>
 <translation id="4508750114462689118">Bejelentkezési promóció bezárása</translation>
 <translation id="4526249700380860531">A mentett jelszavak megtekintése és kezelése a <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /> címen</translation>
 <translation id="4536418791685807335">Próbáljon meg újra bejelentkezni.</translation>
@@ -217,12 +220,12 @@ Adatai az összetett szinkronizálási jelszavával vannak titkosítva. Írja be
 <translation id="5300589172476337783">Megjelenítés</translation>
 <translation id="5317780077021120954">Mentés</translation>
 <translation id="5327248766486351172">Név</translation>
+<translation id="533632423981297619">Jelszavai mindenki számára láthatók lesznek, aki hozzáfér az exportált fájlhoz. Senkivel se ossza meg a fájlt.</translation>
 <translation id="5388358297987318779">Kép megnyitása</translation>
 <translation id="5409365236829784218">A fájl megnyitásához nincs telepítve alkalmazás.</translation>
 <translation id="5433691172869980887">Felhasználónév vágólapra másolva</translation>
 <translation id="54401264925851789">Oldal biztonsági információi</translation>
 <translation id="5525269841082836315">Jelszó létrehozása</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Az Átadás segítségével ha ezen az eszközön kezd böngészni egy webhelyet, könnyedén folytathatja azt Mac típusú számítógépén. A jelenleg megnyitott webhely a Mac dokkján jelenik meg.
 
 Az Átadást engedélyezni kell a Beállítások általános részében is, és az eszközöknek ugyanazt az iCloud-fiókot kell használniuk.</translation>
@@ -247,7 +250,6 @@ Az Átadást engedélyezni kell a Beállítások általános részében is, és 
 <translation id="5911030830365207728">Google Fordító</translation>
 <translation id="5916664084637901428">Be</translation>
 <translation id="5948291296578561264">Segítségével fotókat menthet a fotótárba.</translation>
-<translation id="5953603475187800576">Címek és hitelkártyák mutatása a Google Payments szolgáltatásból</translation>
 <translation id="5955891643922670672">Offline verzió</translation>
 <translation id="5964480694698977962">Új inkognitólap létrehozása.</translation>
 <translation id="5965679971710331625">Sikeresen bejelentkezett</translation>
@@ -337,7 +339,6 @@ Adatainak titkosítása megtörtént összetett szinkronizálási jelszavával a
 <translation id="7514365320538308">Letöltés</translation>
 <translation id="7537586195939242955">Sajnos jelenleg nem lehet létrehozni a kupont a Passbookban.</translation>
 <translation id="7561196759112975576">Mindig</translation>
-<translation id="7588950540487816470">Fizikai web</translation>
 <translation id="7603852183842204213">Pop-up letiltva (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">A szinkronizálás nem működik.</translation>
 <translation id="7638584964844754484">Hibás összetett jelszó</translation>
@@ -350,6 +351,7 @@ Adatainak titkosítása megtörtént összetett szinkronizálási jelszavával a
 <translation id="780301667611848630">Köszönöm, nem</translation>
 <translation id="7859704718976024901">Böngészési előzmények</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Jelszavak exportálása…</translation>
 <translation id="7947953824732555851">Elfogadás és bejelentkezés</translation>
 <translation id="7961015016161918242">Soha</translation>
 <translation id="7971521879845308059">Pop-upok tiltása</translation>
@@ -408,7 +410,6 @@ Adatainak titkosítása megtörtént összetett szinkronizálási jelszavával a
 <translation id="9083392325882095631">1 elem</translation>
 <translation id="9100610230175265781">Összetett jelszó szükséges</translation>
 <translation id="9148126808321036104">Jelentkezzen be újra</translation>
-<translation id="91549621916703028">Több lapot is megnyithat a különböző feladataihoz</translation>
 <translation id="9157836665414082580">Párbeszédablakok elrejtése</translation>
 <translation id="9188680907066685419">Kijelentkezés felügyelt fiókból</translation>
 <translation id="9203116392574189331">Átadás</translation>

@@ -116,11 +116,6 @@ class CC_PAINT_EXPORT PaintImage {
   // GetSupportedDecodeSize(size).
   SkISize GetSupportedDecodeSize(const SkISize& requested_size) const;
 
-  // Returns SkImageInfo that should be used to decode this image to the given
-  // size and color type. The size must be supported.
-  SkImageInfo CreateDecodeImageInfo(const SkISize& size,
-                                    SkColorType color_type) const;
-
   // Decode the image into the given memory for the given SkImageInfo.
   // - Size in |info| must be supported.
   // - The amount of memory allocated must be at least
@@ -166,9 +161,6 @@ class CC_PAINT_EXPORT PaintImage {
   // Returns the total number of frames known to exist in this image.
   size_t FrameCount() const;
 
-  // Returns an SkImage for the frame at |index|.
-  sk_sp<SkImage> GetSkImageForFrame(size_t index) const;
-
   std::string ToString() const;
 
  private:
@@ -186,6 +178,9 @@ class CC_PAINT_EXPORT PaintImage {
                          size_t frame_index) const;
   void CreateSkImage();
   PaintImage MakeSubset(const gfx::Rect& subset) const;
+
+  // Returns an SkImage for the frame at |index|.
+  sk_sp<SkImage> GetSkImageForFrame(size_t index) const;
 
   sk_sp<SkImage> sk_image_;
 

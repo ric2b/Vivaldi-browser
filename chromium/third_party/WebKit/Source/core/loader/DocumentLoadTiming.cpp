@@ -67,7 +67,7 @@ void DocumentLoadTiming::EnsureReferenceTimesSet() {
   if (!reference_wall_time_)
     reference_wall_time_ = CurrentTime();
   if (!reference_monotonic_time_)
-    reference_monotonic_time_ = MonotonicallyIncreasingTime();
+    reference_monotonic_time_ = CurrentTimeTicksInSeconds();
 }
 
 double DocumentLoadTiming::MonotonicTimeToZeroBasedDocumentTime(
@@ -139,7 +139,7 @@ void DocumentLoadTiming::AddRedirect(const KURL& redirecting_url,
 
   // Check if the redirected url is allowed to access the redirecting url's
   // timing information.
-  scoped_refptr<SecurityOrigin> redirected_security_origin =
+  scoped_refptr<const SecurityOrigin> redirected_security_origin =
       SecurityOrigin::Create(redirected_url);
   has_cross_origin_redirect_ |=
       !redirected_security_origin->CanRequest(redirecting_url);
@@ -178,7 +178,7 @@ void DocumentLoadTiming::MarkUnloadEventEnd(double end_time) {
 }
 
 void DocumentLoadTiming::MarkFetchStart() {
-  SetFetchStart(MonotonicallyIncreasingTime());
+  SetFetchStart(CurrentTimeTicksInSeconds());
 }
 
 void DocumentLoadTiming::SetFetchStart(double fetch_start) {
@@ -198,7 +198,7 @@ void DocumentLoadTiming::SetResponseEnd(double response_end) {
 }
 
 void DocumentLoadTiming::MarkLoadEventStart() {
-  load_event_start_ = MonotonicallyIncreasingTime();
+  load_event_start_ = CurrentTimeTicksInSeconds();
   TRACE_EVENT_MARK_WITH_TIMESTAMP1(
       "blink.user_timing", "loadEventStart",
       TraceEvent::ToTraceTimestamp(load_event_start_), "frame", GetFrame());
@@ -206,7 +206,7 @@ void DocumentLoadTiming::MarkLoadEventStart() {
 }
 
 void DocumentLoadTiming::MarkLoadEventEnd() {
-  load_event_end_ = MonotonicallyIncreasingTime();
+  load_event_end_ = CurrentTimeTicksInSeconds();
   TRACE_EVENT_MARK_WITH_TIMESTAMP1(
       "blink.user_timing", "loadEventEnd",
       TraceEvent::ToTraceTimestamp(load_event_end_), "frame", GetFrame());
@@ -214,7 +214,7 @@ void DocumentLoadTiming::MarkLoadEventEnd() {
 }
 
 void DocumentLoadTiming::MarkRedirectEnd() {
-  redirect_end_ = MonotonicallyIncreasingTime();
+  redirect_end_ = CurrentTimeTicksInSeconds();
   TRACE_EVENT_MARK_WITH_TIMESTAMP1("blink.user_timing", "redirectEnd",
                                    TraceEvent::ToTraceTimestamp(redirect_end_),
                                    "frame", GetFrame());

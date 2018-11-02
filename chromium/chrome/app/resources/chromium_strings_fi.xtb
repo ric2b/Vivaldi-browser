@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Tietoja Chromiumista</translation>
 <translation id="1298199220304005244">Hanki apua Chromium-käyttöjärjestelmän käytössä</translation>
 <translation id="1396446129537741364">Chromium yrittää näyttää salasanat.</translation>
-<translation id="1403254041219632970">Chromiumin tulevat versiot eivät enää tue Mac OS X -versioita 10.6, 10.7 tai 10.8.</translation>
 <translation id="1414495520565016063">Olet kirjautunut Chromiumiin!</translation>
-<translation id="1440917365206527807">Chromium esti uudelleenohjauksen:</translation>
 <translation id="1444754455097148408">Chromiumin avoimen lähdekoodin lisenssit</translation>
 <translation id="1502360822835740515">Chromiumin asettaminen oletusselaimeksi</translation>
 <translation id="151962892725702025">Chromium-käyttöjärjestelmä ei voi synkronoida tietoja, koska synkronointi ei ole käytettävissä verkkotunnuksessasi.</translation>
-<translation id="1559451348202814456">Chromium ei välttämättä toimi oikein, koska se ei enää tue Mac OS X -versioita 10.6, 10.7 tai 10.8.</translation>
 <translation id="1585657529869845941">Klikkaa <ph name="BEGIN_BOLD" />Vaihda joka tapauksessa<ph name="END_BOLD" /> ‑painiketta, jos se tulee näkyviin.</translation>
 <translation id="1653828314016431939">OK - Käynnistä uudelleen nyt</translation>
 <translation id="1668054258064581266">Kun olet poistanut tilisi Chromiumista, sinun on ehkä avattava avoinna olleet välilehdet uudelleen, jotta muutos tulee voimaan.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Chromium-käyttöjärjestelmä täytyy käynnistää uudelleen, jotta päivitys voidaan ottaa käyttöön.</translation>
 <translation id="2647554856022461007">Chromium voi käyttää verkkopalveluita selauskokemuksesi parantamiseen. Voit halutessasi poistaa nämä palvelut käytöstä. <ph name="BEGIN_LINK" />Lisätietoja<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Asennuksessa ilmeni käyttöjärjestelmävirhe. Lataa Chromium uudelleen.</translation>
-<translation id="2685838254101182273">Chromium on lakannut päivittymästä, eikä se enää tue käyttöjärjestelmäsi tätä versiota.</translation>
 <translation id="2705403826523567092">Kirjautumalla saat yksilöllisemmän selauskokemuksen, joka synkronoidaan kaikkien laitteidesi välillä.</translation>
 <translation id="2711502716910134313">Chromium-välilehti</translation>
 <translation id="2718390899429598676">Chromium lisää suojausta salaamalla tietosi.</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">Kirjaudu ulos ja kirjaudu uudelleen sisään, jotta muutos tulee voimaan.</translation>
 <translation id="4469812139324097969">Chromium on vanhentunut, koska sitä ei ole käynnistetty uudelleen viime aikoina. Päivitys on saatavilla, ja se otetaan käyttöön uudelleenkäynnistyksen jälkeen.</translation>
 <translation id="4488554488975128561">Voit auttaa meitä kehittämään Chromiumin turvallisuutta ja käytettävyyttä lähettämällä automaattisesti joitain järjestelmän tietoja ja sivun sisältöjä Googlelle. Näin autat havaitsemaan vaarallisia sovelluksia ja sivustoja.</translation>
-<translation id="4549794359424059447">Chromiumin tulevat versiot eivät enää tue Windows XP:tä tai Windows Vistaa.</translation>
 <translation id="4567424176335768812">Olet kirjautunut Chromeen tilillä <ph name="USER_EMAIL_ADDRESS" />. Nyt voit käyttää kirjanmerkkejäsi, historiaa ja muita asetuksia kaikilla laitteilla, joihin olet kirjautunut.</translation>
 <translation id="459535195905078186">Chromium-sovellukset</translation>
 <translation id="4611246891205775468">Chromium tarvitsee oikeuden käyttää mikrofoniasi tällä sivustolla.</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">Todennusvarmenne epäonnistui. Kirjaudu uudelleen Chromiumiin tai ota yhteyttä järjestelmänvalvojaan. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Melkein ajan tasalla. Viimeistele päivitys käynnistämällä laite uudelleen.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> on lisätty Chromiumiin.</translation>
-<translation id="59625444380784159">Yhteystietojesi avulla lomakkeiden täyttäminen Chromiumissa sujuu helpommin.</translation>
 <translation id="5987687638152509985">Aloita synkronointi päivittämällä Chromium.</translation>
 <translation id="6055895534982063517">Chromiumista on saatavilla uusi versio, joka on entistäkin nopeampi.</translation>
 <translation id="6063093106622310249">&amp;Avaa Chromiumissa</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">Nyt voit helpommin käyttää Chromiumia Google-tililläsi ja jaetuilla tietokoneilla.</translation>
 <translation id="6373523479360886564">Haluatko varmasti poistaa Chromiumin asennuksen?</translation>
 <translation id="6394232988457703198">Käynnistä Chromium uudelleen</translation>
+<translation id="6400072781405947421">Chromium ei välttämättä toimi oikein, koska Mac OS X 10.9 ei enää tue sitä.</translation>
 <translation id="6403826409255603130">Chromium on selain, jolla verkkosivut ja sovellukset toimivat salamannopeasti. Se on nopea, vakaa ja helppokäyttöinen. Chromiumin sisäänrakennettu haittaohjelma- ja tietojenkalastelusuojaus tekevät verkkoselauksesta turvallisempaa.</translation>
 <translation id="6475912303565314141">Määrittää myös Chromiumin aloitussivun.</translation>
 <translation id="6485906693002546646">Synkronoit Chromiumin tietosi osoitteella <ph name="PROFILE_EMAIL" />. Voit vaihtaa synkronoinnin asetuksia tai siirtyä käyttämään Chromiumia ilman Google-tiliä käymällä <ph name="SETTINGS_LINK" />.</translation>
@@ -174,13 +169,13 @@ Kaikki ominaisuudet eivät ehkä ole käytettävissä. Määritä jokin muu prof
 <translation id="6734291798041940871">Chromium on jo asennettuna kaikille tietokoneen käyttäjille.</translation>
 <translation id="6810143991807788455">Auta parantamaan Chromiumia ilmoittamalla nykyiset asetukset.</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (kopioitu Chromiumiin)</translation>
 <translation id="6893813176749746474">Chromium on päivitetty, mutta et ole käyttänyt sitä ainakaan 30 päivään.</translation>
 <translation id="6944967875980567883">Chromiumiin ladatut moduulit</translation>
 <translation id="6964305034639999644">Avaa linkki Chromiumin inco&amp;gnito-ikkunassa</translation>
 <translation id="6970811910055250180">Päivitetään laitetta...</translation>
 <translation id="705851970750939768">Päivitä Chromium</translation>
 <translation id="7066436765290594559">Chromium-käyttöjärjestelmä ei voi synkronoida tietoja. Päivitä synkronoinnin tunnuslause.</translation>
-<translation id="707471633328071618">Google Payments (kopioitu Chromiumiin)</translation>
 <translation id="7162152143154757523">Chromium voi tarjota älykkäämmän oikeinkirjoituksen tarkistuspalvelun lähettämällä selaimeen kirjoittamasi tekstin Googlen palvelimille. Näin voit käyttää Google-haun kanssa samaa oikeinkirjoituksen tarkistustekniikkaa.</translation>
 <translation id="7205698830395646142">Piilota Chromium-valikossa</translation>
 <translation id="7223968959479464213">Tehtävänhallinta - Chromium</translation>
@@ -240,7 +235,6 @@ Lähetimme lisäohjeita sähköpostiisi osoitteeseen <ph name="ACCOUNT_EMAIL" />
 <translation id="872034308864968620">Jätä Chromium käyntiin taustalle</translation>
 <translation id="8803635938069941624">Chromium-käyttöjärjestelmän käyttöehdot</translation>
 <translation id="8821041990367117597">Chromium ei voinut synkronoida tietoja, sillä tilin kirjautumistiedot ovat vanhentuneet.</translation>
-<translation id="8851136666856101339">pää</translation>
 <translation id="8862326446509486874">Sinulla ei ole käyttöoikeuksia järjestelmätason asennukseen. Kokeile asennusohjelman suorittamista uudelleen järjestelmänvalvojana.</translation>
 <translation id="8897323336392112261">Määrittää myös Chromiumin aloitussivun ja Etusivu-painikkeella avattavan sivun.</translation>
 <translation id="8907580949721785412">Chromium yrittää näyttää salasanat. Salli tämä kirjoittamalla Windows-salasanasi.</translation>

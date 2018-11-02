@@ -41,7 +41,7 @@ AXTableCell::AXTableCell(LayoutObject* layout_object,
                          AXObjectCacheImpl& ax_object_cache)
     : AXLayoutObject(layout_object, ax_object_cache) {}
 
-AXTableCell::~AXTableCell() {}
+AXTableCell::~AXTableCell() = default;
 
 AXTableCell* AXTableCell::Create(LayoutObject* layout_object,
                                  AXObjectCacheImpl& ax_object_cache) {
@@ -158,6 +158,14 @@ AccessibilityRole AXTableCell::ScanToDecideHeaderRole() {
   if (IsColumnHeaderCell())
     return kColumnHeaderRole;
 
+  // This occurs in an edge case that mixes non-table CSS into a
+  // table, and <th role="gridcell">, see bug 798410.
+  // The odd CSS causes the <th> to not be a LayoutTableCell,
+  // and the ARIA role causes it to fall through to here, because
+  // it is not an ARIA/HTML column/row header.
+  if (!layout_object_ || !layout_object_->IsTableCell())
+    return kCellRole;  // <th role="gridcell">.
+
   // Check the previous cell and the next cell on the same row.
   LayoutTableCell* layout_cell = ToLayoutTableCell(layout_object_);
   AccessibilityRole header_role = kCellRole;
@@ -193,7 +201,7 @@ bool AXTableCell::RowIndexRange(
 
   LayoutTableCell* layout_cell = ToLayoutTableCell(layout_object_);
   row_range.first = layout_cell->RowIndex();
-  row_range.second = layout_cell->RowSpan();
+  row_range.second = layout_cell->ResolvedRowSpan();
 
   // Since our table might have multiple sections, we have to offset our row
   // appropriately.

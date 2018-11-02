@@ -29,18 +29,16 @@
 #ifndef AXRelationCache_h
 #define AXRelationCache_h
 
+#include "base/macros.h"
 #include "modules/ModulesExport.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/WeakPtr.h"
 
 namespace blink {
 
 // This class should only be used from inside the accessibility directory.
 class AXRelationCache {
-  WTF_MAKE_NONCOPYABLE(AXRelationCache);
-
  public:
   explicit AXRelationCache(AXObjectCacheImpl*);
   virtual ~AXRelationCache();
@@ -121,6 +119,8 @@ class AXRelationCache {
   void ChildrenChanged(AXObject*);
   void TextChanged(AXObject*);
   void LabelChanged(Node*);
+
+  DISALLOW_COPY_AND_ASSIGN(AXRelationCache);
 };
 
 }  // namespace blink

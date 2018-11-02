@@ -18,8 +18,8 @@
 #include "ipc/ipc_test_sink.h"
 #include "mojo/public/cpp/bindings/associated_binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -184,7 +184,8 @@ TEST_F(ServiceWorkerDispatcherTest, GetServiceWorker) {
           Adopt(std::move(info->installing)));
   EXPECT_EQ(worker, existing_worker);
   ASSERT_EQ(1UL, ipc_sink()->message_count());
-  EXPECT_EQ(ServiceWorkerHostMsg_DecrementServiceWorkerRefCount::ID,
+  EXPECT_EQ(static_cast<uint32_t>(
+                ServiceWorkerHostMsg_DecrementServiceWorkerRefCount::ID),
             ipc_sink()->GetMessageAt(0)->type());
   ipc_sink()->ClearMessages();
 

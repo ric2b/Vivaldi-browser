@@ -47,64 +47,72 @@ NGLayoutOpportunity FindLayoutOpportunityForFloat(
   // TODO(ikilpatrick): Don't include the block-start margin of a float which
   // has fragmented.
   return exclusion_space.FindLayoutOpportunity(
-      adjusted_origin_point, unpositioned_float.available_size, float_size);
+      adjusted_origin_point, unpositioned_float.available_size.inline_size,
+      float_size);
 }
 
 // Creates an exclusion from the fragment that will be placed in the provided
 // layout opportunity.
-NGExclusion CreateExclusion(const NGFragment& fragment,
-                            const NGBfcOffset& float_margin_bfc_offset,
-                            const NGBoxStrut& margins,
-                            NGExclusion::Type exclusion_type) {
-  NGExclusion exclusion;
-  exclusion.type = exclusion_type;
-  NGBfcRect& rect = exclusion.rect;
-  rect.offset = float_margin_bfc_offset;
-
+scoped_refptr<NGExclusion> CreateExclusion(
+    const NGFragment& fragment,
+    const NGBfcOffset& float_margin_bfc_offset,
+    const NGBoxStrut& margins,
+    EFloat type) {
   // TODO(ikilpatrick): Don't include the block-start margin of a float which
   // has fragmented.
-  rect.size.inline_size = fragment.InlineSize() + margins.InlineSum();
-  rect.size.block_size = fragment.BlockSize() + margins.BlockSum();
-  return exclusion;
+  NGBfcOffset start_offset = float_margin_bfc_offset;
+
+  NGBfcOffset end_offset(
+      /* line_offset */ start_offset.line_offset +
+          (fragment.InlineSize() + margins.InlineSum()).ClampNegativeToZero(),
+      /* block_offset */ start_offset.block_offset +
+          (fragment.BlockSize() + margins.BlockSum()).ClampNegativeToZero());
+
+  return NGExclusion::Create(NGBfcRect(start_offset, end_offset), type);
 }
 
-// TODO(ikilpatrick): origin_block_offset looks wrong for fragmentation here.
-WTF::Optional<LayoutUnit> CalculateFragmentationOffset(
-    const LayoutUnit origin_block_offset,
+scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForFloatFromBuilder(
     const NGUnpositionedFloat& unpositioned_float,
-    const NGConstraintSpace& parent_space) {
+    NGConstraintSpaceBuilder& builder) {
   const ComputedStyle& style = unpositioned_float.node.Style();
-  DCHECK(style.GetWritingMode() == parent_space.GetWritingMode());
-
-  if (parent_space.HasBlockFragmentation()) {
-    return parent_space.FragmentainerSpaceAtBfcStart() - origin_block_offset;
-  }
-
-  return WTF::nullopt;
-}
-
-// Creates a constraint space for an unpositioned float.
-scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForFloat(
-    const NGUnpositionedFloat& unpositioned_float,
-    const NGConstraintSpace& parent_space,
-    WTF::Optional<LayoutUnit> fragmentation_offset = WTF::nullopt) {
-  const ComputedStyle& style = unpositioned_float.node.Style();
-
-  NGConstraintSpaceBuilder builder(parent_space);
-
-  if (fragmentation_offset) {
-    builder.SetFragmentainerSpaceAtBfcStart(fragmentation_offset.value())
-        .SetFragmentationType(parent_space.BlockFragmentationType());
-  } else {
-    builder.SetFragmentationType(NGFragmentationType::kFragmentNone);
-  }
-
   return builder.SetPercentageResolutionSize(unpositioned_float.percentage_size)
       .SetAvailableSize(unpositioned_float.available_size)
       .SetIsNewFormattingContext(true)
       .SetIsShrinkToFit(true)
       .SetTextDirection(style.Direction())
       .ToConstraintSpace(style.GetWritingMode());
+}
+
+// Creates a constraint space for an unpositioned float, with the intent to
+// position it.
+scoped_refptr<NGConstraintSpace> CreateConstraintSpaceForFloat(
+    const NGUnpositionedFloat& unpositioned_float,
+    const NGConstraintSpace& parent_space,
+    LayoutUnit origin_block_offset) {
+  NGConstraintSpaceBuilder builder(parent_space);
+
+  DCHECK_EQ(unpositioned_float.node.Style().GetWritingMode(),
+            parent_space.GetWritingMode());
+  if (parent_space.HasBlockFragmentation()) {
+    LayoutUnit fragmentation_offset =
+        parent_space.FragmentainerSpaceAtBfcStart() - origin_block_offset;
+    builder.SetFragmentainerBlockSize(parent_space.FragmentainerBlockSize());
+    builder.SetFragmentainerSpaceAtBfcStart(fragmentation_offset);
+    builder.SetFragmentationType(parent_space.BlockFragmentationType());
+  } else {
+    builder.SetFragmentationType(NGFragmentationType::kFragmentNone);
+  }
+  return CreateConstraintSpaceForFloatFromBuilder(unpositioned_float, builder);
+}
+
+// Creates a constraint space for an unpositioned float, with the intent to
+// simply calculate its inline size.
+scoped_refptr<NGConstraintSpace>
+CreateConstraintSpaceForFloatForInlineSizeCalculation(
+    const NGUnpositionedFloat& unpositioned_float,
+    const NGConstraintSpace& parent_space) {
+  NGConstraintSpaceBuilder builder(parent_space);
+  return CreateConstraintSpaceForFloatFromBuilder(unpositioned_float, builder);
 }
 
 }  // namespace
@@ -130,7 +138,8 @@ LayoutUnit ComputeInlineSizeForUnpositionedFloat(
   }
 
   const scoped_refptr<NGConstraintSpace> space =
-      CreateConstraintSpaceForFloat(*unpositioned_float, parent_space);
+      CreateConstraintSpaceForFloatForInlineSizeCalculation(*unpositioned_float,
+                                                            parent_space);
 
   // If the float has the same writing mode as the block formatting context we
   // shouldn't perform a full layout just yet. Our position may determine where
@@ -194,12 +203,8 @@ NGPositionedFloat PositionFloat(LayoutUnit origin_block_offset,
 #if DCHECK_IS_ON()
     DCHECK(is_same_writing_mode);
 #endif
-    WTF::Optional<LayoutUnit> fragmentation_offset =
-        CalculateFragmentationOffset(origin_block_offset, *unpositioned_float,
-                                     parent_space);
-
     scoped_refptr<NGConstraintSpace> space = CreateConstraintSpaceForFloat(
-        *unpositioned_float, parent_space, fragmentation_offset);
+        *unpositioned_float, parent_space, origin_block_offset);
     layout_result = unpositioned_float->node.Layout(
         *space, unpositioned_float->token.get());
   }
@@ -209,32 +214,32 @@ NGPositionedFloat PositionFloat(LayoutUnit origin_block_offset,
                             *layout_result->PhysicalFragment());
 
   // TODO(glebl): This should check for infinite opportunity instead.
-  if (opportunity.IsEmpty()) {
+  // TODO(ikilpatrick): Remove.
+  if (opportunity.rect.IsEmpty()) {
     // Because of the implementation specific of the layout opportunity iterator
     // an empty opportunity can mean 2 things:
     // - search for layout opportunities is exhausted.
     // - opportunity has an infinite size. That's because CS is infinite.
-    opportunity = NGLayoutOpportunity(
-        NGBfcOffset(),
-        NGLogicalSize(float_fragment.InlineSize(), float_fragment.BlockSize()));
+    opportunity = NGLayoutOpportunity(NGBfcRect(
+        /* start_offset */ NGBfcOffset(), /* end_offset */ NGBfcOffset(
+            float_fragment.InlineSize(), float_fragment.BlockSize())));
   }
 
   LayoutUnit float_margin_box_inline_size =
       float_fragment.InlineSize() + unpositioned_float->margins.InlineSum();
 
   // Calculate the float's margin box BFC offset.
-  NGBfcOffset float_margin_bfc_offset = opportunity.offset;
+  NGBfcOffset float_margin_bfc_offset = opportunity.rect.start_offset;
   if (unpositioned_float->IsRight()) {
     float_margin_bfc_offset.line_offset +=
-        (opportunity.size.inline_size - float_margin_box_inline_size);
+        (opportunity.rect.InlineSize() - float_margin_box_inline_size);
   }
 
   // Add the float as an exclusion.
-  const NGExclusion exclusion = CreateExclusion(
+  scoped_refptr<NGExclusion> exclusion = CreateExclusion(
       float_fragment, float_margin_bfc_offset, unpositioned_float->margins,
-      unpositioned_float->IsRight() ? NGExclusion::Type::kFloatRight
-                                    : NGExclusion::Type::kFloatLeft);
-  exclusion_space->Add(exclusion);
+      unpositioned_float->IsRight() ? EFloat::kRight : EFloat::kLeft);
+  exclusion_space->Add(std::move(exclusion));
 
   // Adjust the float's bfc_offset to its border-box (instead of margin-box).
   NGBfcOffset float_bfc_offset(

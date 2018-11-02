@@ -23,6 +23,10 @@
 #endif
 
 #if defined(VIVALDI_BUILD)
+#if defined(OS_WIN)
+#include "browser/win/vivaldi_running_dlg.h"
+#include "browser/win/vivaldi_utils.h"
+#endif  // defined(OS_WIN)
 #include "extraparts/vivaldi_main_delegate.h"
 #endif
 
@@ -67,8 +71,15 @@ int ChromeMain(int argc, const char** argv) {
 #endif
 
 #if defined(VIVALDI_BUILD)
+#if defined(OS_WIN)
+  if (vivaldi::IsVivaldiExiting()) {
+    OpenVivaldiRunningDialog();
+  }
+#endif  // defined(OS_WIN)
+
   VivaldiMainDelegate chrome_main_delegate(
       base::TimeTicks::FromInternalValue(exe_entry_point_ticks));
+
 #else
   ChromeMainDelegate chrome_main_delegate(
       base::TimeTicks::FromInternalValue(exe_entry_point_ticks));
@@ -123,17 +134,16 @@ int ChromeMain(int argc, const char** argv) {
   if (command_line->HasSwitch(switches::kMus)) {
     params.create_discardable_memory = true;
     params.env_mode = aura::Env::Mode::MUS;
-    // TODO(786453): Remove when mus no longer needs to host viz.
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kMus, switches::kMusHostVizValue);
   }
-  if (service_manager::ServiceManagerIsRemote() ||
-      command_line->HasSwitch(switches::kMash)) {
+#if defined(OS_CHROMEOS)
+  if (command_line->HasSwitch(switches::kMash)) {
     params.create_discardable_memory = false;
     params.env_mode = aura::Env::Mode::MUS;
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kMus, switches::kMusHostVizValue);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kMus);
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kMusHostingViz);
   }
+#endif  // defined(OS_CHROMEOS)
 #endif  // BUILDFLAG(ENABLE_MUS)
 
   int rv = content::ContentMain(params);

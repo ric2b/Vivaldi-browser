@@ -12,6 +12,7 @@ import logging
 import os
 import unittest
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -29,9 +30,10 @@ _TEST_OUTPUT_DIR = os.path.join(_TEST_DATA_DIR, 'mock_output_directory')
 _TEST_TOOL_PREFIX = os.path.join(
     os.path.abspath(_TEST_DATA_DIR), 'mock_toolchain', '')
 _TEST_MAP_PATH = os.path.join(_TEST_DATA_DIR, 'test.map')
-_TEST_ELF_PATH = os.path.join(_TEST_OUTPUT_DIR, 'elf')
 _TEST_PAK_PATH = os.path.join(_TEST_OUTPUT_DIR, 'en-US.pak')
 _TEST_PAK_INFO_PATH = os.path.join(_TEST_OUTPUT_DIR, 'en-US.pak.info')
+_TEST_ELF_PATH = os.path.join(_TEST_OUTPUT_DIR, 'elf')  # Dynamically created
+_TEST_ELF_FILE_BEGIN = os.path.join(_TEST_OUTPUT_DIR, 'elf.begin')
 
 update_goldens = False
 
@@ -100,6 +102,20 @@ class IntegrationTest(unittest.TestCase):
   maxDiff = None  # Don't trucate diffs in errors.
   cached_size_info = {}
 
+  @classmethod
+  def setUpClass(cls):
+    shutil.copy(_TEST_ELF_FILE_BEGIN, _TEST_ELF_PATH)
+    with open(_TEST_ELF_PATH, 'a') as elf_file:
+      data = '0'
+      # Exactly 128MB of data (2^27), extra bytes will be accounted in overhead.
+      for _ in range(27):
+        data = data + data
+      elf_file.write(data)
+
+  @classmethod
+  def tearDownClass(cls):
+    os.remove(_TEST_ELF_PATH)
+
   def _CloneSizeInfo(self, use_output_directory=True, use_elf=True,
                      use_pak=False):
     assert not use_elf or use_output_directory
@@ -107,11 +123,15 @@ class IntegrationTest(unittest.TestCase):
     if cache_key not in IntegrationTest.cached_size_info:
       elf_path = _TEST_ELF_PATH if use_elf else None
       output_directory = _TEST_OUTPUT_DIR if use_output_directory else None
-      section_sizes, raw_symbols = archive.CreateSectionSizesAndSymbols(
-          _TEST_MAP_PATH, elf_path, _TEST_TOOL_PREFIX, output_directory)
       if use_pak:
-        archive.AddPakSymbolsFromFiles(
-            section_sizes, raw_symbols, [_TEST_PAK_PATH], _TEST_PAK_INFO_PATH)
+        section_sizes, raw_symbols = archive.CreateSectionSizesAndSymbols(
+            map_path=_TEST_MAP_PATH, tool_prefix=_TEST_TOOL_PREFIX,
+            elf_path=elf_path, output_directory=output_directory,
+            pak_files=[_TEST_PAK_PATH], pak_info_file=_TEST_PAK_INFO_PATH)
+      else:
+        section_sizes, raw_symbols = archive.CreateSectionSizesAndSymbols(
+            map_path=_TEST_MAP_PATH, tool_prefix=_TEST_TOOL_PREFIX,
+            elf_path=elf_path, output_directory=output_directory)
       metadata = None
       if use_elf:
         with _AddMocksToPath():
@@ -195,7 +215,10 @@ class IntegrationTest(unittest.TestCase):
           'ExpandRegex("_foo_")',
           'canned_queries.CategorizeGenerated()',
           'canned_queries.CategorizeByChromeComponent()',
+          'canned_queries.LargeFiles()',
           'canned_queries.TemplatesByName()',
+          'canned_queries.StaticInitializers()',
+          'canned_queries.PakByPath()',
           'Print(ReadStringLiterals(elf_path={}))'.format(repr(_TEST_ELF_PATH)),
           'Print(size_info, to_file=%r)' % output_file.name,
       ]

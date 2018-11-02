@@ -56,7 +56,7 @@ void PrintValue(const base::Value* value, int indentLevel) {
       PrintValue(&iter.value(), indentLevel + 1);
       iter.Advance();
     }
-  } else if (value->IsType(base::Value::Type::NONE)) {
+  } else if (value->is_none()) {
     OutputString(indent + "<null>\n");
   }
 }
@@ -272,6 +272,7 @@ bool PrintConfig(const Config* config,
   HANDLER(variables::kCflagsObjCC, DefaultHandler);
   HANDLER(variables::kDefines, DefaultHandler);
   HANDLER(variables::kIncludeDirs, DefaultHandler);
+  HANDLER(variables::kInputs, DefaultHandler);
   HANDLER(variables::kLdflags, DefaultHandler);
   HANDLER(variables::kLibs, DefaultHandler);
   HANDLER(variables::kLibDirs, DefaultHandler);

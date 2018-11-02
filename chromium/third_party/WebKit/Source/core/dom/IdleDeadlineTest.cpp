@@ -15,19 +15,18 @@ namespace {
 
 class MockIdleDeadlineScheduler final : public WebScheduler {
  public:
-  MockIdleDeadlineScheduler() {}
-  ~MockIdleDeadlineScheduler() override {}
+  MockIdleDeadlineScheduler() = default;
+  ~MockIdleDeadlineScheduler() override = default;
 
   // WebScheduler implementation:
-  WebTaskRunner* LoadingTaskRunner() override { return nullptr; }
   WebTaskRunner* TimerTaskRunner() override { return nullptr; }
   WebTaskRunner* V8TaskRunner() override { return nullptr; }
   void Shutdown() override {}
   bool ShouldYieldForHighPriorityWork() override { return true; }
   bool CanExceedIdleDeadlineIfRequired() override { return false; }
-  void PostIdleTask(const WebTraceLocation&, WebThread::IdleTask*) override {}
-  void PostNonNestableIdleTask(const WebTraceLocation&,
-                               WebThread::IdleTask*) override {}
+  void PostIdleTask(const base::Location&, WebThread::IdleTask) override {}
+  void PostNonNestableIdleTask(const base::Location&,
+                               WebThread::IdleTask) override {}
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
       WebViewScheduler::WebViewSchedulerDelegate*) override {
@@ -48,8 +47,8 @@ class MockIdleDeadlineScheduler final : public WebScheduler {
 
 class MockIdleDeadlineThread final : public WebThread {
  public:
-  MockIdleDeadlineThread() {}
-  ~MockIdleDeadlineThread() override {}
+  MockIdleDeadlineThread() = default;
+  ~MockIdleDeadlineThread() override = default;
   bool IsCurrentThread() const override { return true; }
   WebScheduler* Scheduler() const override { return &scheduler_; }
 
@@ -60,8 +59,8 @@ class MockIdleDeadlineThread final : public WebThread {
 
 class MockIdleDeadlinePlatform : public TestingPlatformSupport {
  public:
-  MockIdleDeadlinePlatform() {}
-  ~MockIdleDeadlinePlatform() override {}
+  MockIdleDeadlinePlatform() = default;
+  ~MockIdleDeadlinePlatform() override = default;
   WebThread* CurrentThread() override { return &thread_; }
 
  private:

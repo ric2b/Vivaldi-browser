@@ -4,6 +4,7 @@
 
 import("//components/viz/viz.gni")
 import("//testing/test.gni")
+import("//gpu/vulkan/features.gni")
 
 viz_component("resource_format") {
   output_name = "viz_resource_format"
@@ -61,6 +62,8 @@ viz_component("common") {
     "gpu/context_provider.h",
     "gpu/in_process_context_provider.cc",
     "gpu/in_process_context_provider.h",
+    "gpu/raster_context_provider.cc",
+    "gpu/raster_context_provider.h",
     "gpu/vulkan_context_provider.h",
     "gpu/vulkan_in_process_context_provider.cc",
     "gpu/vulkan_in_process_context_provider.h",
@@ -100,8 +103,6 @@ viz_component("common") {
     "quads/tile_draw_quad.h",
     "quads/yuv_video_draw_quad.cc",
     "quads/yuv_video_draw_quad.h",
-    "resources/buffer_to_texture_target_map.cc",
-    "resources/buffer_to_texture_target_map.h",
     "resources/platform_color.h",
     "resources/release_callback.h",
     "resources/resource.cc",
@@ -123,8 +124,8 @@ viz_component("common") {
     "surfaces/frame_sink_id_allocator.h",
     "surfaces/local_surface_id.cc",
     "surfaces/local_surface_id.h",
-    "surfaces/local_surface_id_allocator.cc",
-    "surfaces/local_surface_id_allocator.h",
+    "surfaces/parent_local_surface_id_allocator.cc",
+    "surfaces/parent_local_surface_id_allocator.h",
     "surfaces/sequence_surface_reference_factory.cc",
     "surfaces/sequence_surface_reference_factory.h",
     "surfaces/stub_surface_reference_factory.cc",
@@ -161,11 +162,18 @@ viz_component("common") {
     "//mojo/public/cpp/bindings",
     "//skia",
     "//third_party/libyuv",
+    "//ui/gfx",
     "//ui/gfx:color_space",
     "//ui/gfx:geometry_skia",
     "//ui/gfx/geometry",
+    "//ui/gl",
     "//ui/latency",
   ]
+
+  if (enable_vulkan) {
+    configs = [ "//third_party/vulkan:vulkan_config" ]
+    deps += [ "//gpu/vulkan" ]
+  }
 
   public_deps = [
     ":resource_format",
@@ -185,7 +193,6 @@ viz_source_set("unit_tests") {
     "gpu/context_cache_controller_unittest.cc",
     "quads/draw_quad_unittest.cc",
     "quads/render_pass_unittest.cc",
-    "resources/buffer_to_texture_target_map_unittest.cc",
     "resources/platform_color_unittest.cc",
     "surfaces/surface_sequence_generator_unittest.cc",
     "yuv_readback_unittest.cc",

@@ -20,20 +20,11 @@
 -PolicyTest.*
 -UserTypeInstantiation/AccessibilityManagerUserTypeTest.*
 -VolumeControllerSoundsTest.*
--WizardControllerKioskFlowTest.*
 -WizardControllerTest.*
 
-# Crashes in net::URLRequestContext::CreateRequest.
--AffiliationCheck/EnterpriseDeviceAttributesTest.*
--AffiliationCheck/UserAffiliationBrowserTest.*
--DefaultProfileExtensionBrowserTest.*
--ExistingUserControllerActiveDirectoryTest.*
--ExistingUserControllerPublicSessionTest.*
--ExistingUserControllerUntrustedTest.*
--PreinstalledSigninExtensionsDeviceCloudPolicyBrowserTest.*
--SigninExtensionsDeviceCloudPolicyBrowserTest.*
--SigninProfileAppsPolicyPerChannelTest.*
--SigninProfileAppsPolicyTest.*
+# Login constructs ash::FocusRingController and KeyboardDrivenOobeKeyHandler,
+# both of which use ash::Shell.
+-WizardControllerKioskFlowTest.*
 
 # Uses ash::Shell::GetRootWindowForNewWindows to choose a display for the app list.
 # More generally, app list needs to move into ash.
@@ -47,19 +38,14 @@
 -ArcAppDeferredLauncherBrowserTest.*
 -ArcAppDeferredLauncherWithParamsBrowserTestInstance/ArcAppDeferredLauncherWithParamsBrowserTest.*
 
-# Times out. Possibly general extensions test problem.
--AppWindowApiTest.*
-
 # AutomationManagerAura::Enable() uses ash to get active window. More generally,
 # chrome a11y code directly accesses ash system UI widgets and views.
 -AutomationApiTest.*
 -AutomationApiTestWithDeviceScaleFactor.*
 -AutomationManagerAuraBrowserTest.*
 
-# profile_destroyer.cc(57) Check failed: hosts.empty() || profile->IsOffTheRecord() || profile->HasOffTheRecordProfile() || content::RenderProcessHost::run_renderer_in_process(). Profile still has 1 hosts
--BluetoothPairingUITest.*
--DemoAppLauncherTest.*
--LoginWebDialogTest.*
+# Uses Shell::GetPrimaryRootWindow to create an EventGenerator
+-LoginWebDialogTest.CloseDialogByAccelerator
 
 # Direct access to ash window frames, tablet mode, overview mode, etc.
 -BrowserNonClientFrameViewAshBackButtonTest.*
@@ -110,9 +96,6 @@
 -SAMLPolicyTest.TransferCookiesAffiliated
 -SmartSessionRestoreTest.*
 
-# Flaky JS test failures: AndroidAppsPageTests SubPage HideOnDisable
--CrSettingsAndroidAppsPageTest.*
-
 # ash::Shell access in test for wallpaper images.
 -CustomizationWallpaperDownloaderBrowserTest.*
 -WallpaperManagerPolicyTest.*
@@ -127,12 +110,8 @@
 # TODO: Very slow (>25 seconds) and occasional timeouts.
 -ExecuteScriptApiTest/DestructiveScriptTest.*
 
-# WindowPortMus check failed in fullscreen test:
-# window_mus_type() == WindowMusType::TOP_LEVEL_IN_WM || window_mus_type() == WindowMusType::EMBED_IN_OWNER.
-# http://crbug.com/786544
--ExtensionInstallUIBrowserTest.*
--ImmersiveModeBrowserViewTest.*
--WebstoreInlineInstallerTest.*
+# Fails: immersive_controller->IsRevealed() returns false.
+# http://crbug.com/791148
 -ZoomBubbleBrowserTest.*
 
 # ozone_platform.cc(61) Check failed: instance_. OzonePlatform is not initialized
@@ -175,8 +154,9 @@
 -KioskTest.*
 -KioskUpdateTest.*
 
-# Window state lookup failures for minimized, active, etc.
--LauncherPlatformAppBrowserTest.*
+# Panel state lookup failures for window active, item running, etc.
+-LauncherPlatformAppBrowserTest.PanelAttentionStatus
+-LauncherPlatformAppBrowserTest.PanelItemClickBehavior
 
 # JS failure: hasAccessToCurrentWindow: FAIL (no message)
 -LockScreenNoteTakingTest.*
@@ -187,10 +167,6 @@
 # Missing magnification manager and ChromeVoxPanel crashes.
 -LoginScreenDefaultPolicyInSessionBrowsertest.*
 -LoginScreenDefaultPolicyLoginScreenBrowsertest.*
-
-# Test shutdown crashes.
--LoginScreenLocalePolicyTest.*
--LoginScreenPolicyTest.*
 
 # Crashes in pre-login phase, probably MagnificationManager not created.
 -MagnificationManagerTest.*
@@ -216,9 +192,11 @@
 # Crash in autofill::SaveCardBubbleViews::ShouldShowCloseButton().
 -SaveCardBubbleControllerImplTest.*
 
-# ash::Shell access in test.
--ShelfAppBrowserTest.*
--ShelfAppBrowserTestNoDefaultBrowser.*
+# WindowSizerAsh does not compute correct show state.
+-ShelfAppBrowserTest.AppWindowRestoreBehaviorTest
+
+# ash::Shell access in test for display configuration.
+-ShelfAppBrowserTest.LaunchAppFromDisplayWithoutFocus*
 
 # ash::Shell access in test.
 -ShutdownPolicyInSessionTest.*
@@ -231,6 +209,7 @@
 
 # ash::Shell access in test for StatusAreaWidget.
 -SupervisedUserCreationTest.*
+
 # Crash. Database is locked.
 -SyncAwareCounterTest.*
 
@@ -272,3 +251,12 @@
 -WebViewTests/WebViewFocusTest.*
 -WebViewTests/WebViewSizeTest.*
 -WebViewTests/WebViewTest.*
+
+# crbug.com/792641 - Disable tests on mash during Wallpaper re-factoring
+-WallPaperPrivateApiTest.*
+
+# Sending invalid FrameSinkIds crbug.com/796999
+-WebviewLoginTest.AllowNewUser
+-EnterpriseEnrollmentTest.TestAuthCodeGetsProperlyReceivedFromGaia
+-PowerPolicyLoginScreenBrowserTest.SetDevicePolicy
+-EnterpriseEnrollmentTest.TestActiveDirectoryEnrollment_Success

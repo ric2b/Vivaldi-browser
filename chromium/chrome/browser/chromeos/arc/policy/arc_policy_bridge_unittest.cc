@@ -15,6 +15,7 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_prefs.h"
+#include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_policy_instance.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_map.h"
@@ -113,11 +114,11 @@ using testing::ReturnRef;
 
 namespace arc {
 
-class ArcPolicyBridgeTest : public testing::Test {
+class ArcPolicyBridgeTestBase {
  public:
-  ArcPolicyBridgeTest() {}
+  ArcPolicyBridgeTestBase() = default;
 
-  void SetUp() override {
+  void DoSetUp(bool is_affiliated) {
     bridge_service_ = std::make_unique<ArcBridgeService>();
     EXPECT_CALL(policy_service_,
                 GetPolicies(policy::PolicyNamespace(
@@ -126,9 +127,6 @@ class ArcPolicyBridgeTest : public testing::Test {
     EXPECT_CALL(policy_service_, AddObserver(policy::POLICY_DOMAIN_CHROME, _))
         .Times(1);
 
-    policy_instance_ = std::make_unique<FakePolicyInstance>();
-    bridge_service_->policy()->SetInstance(policy_instance_.get());
-
     // Setting up user profile for ReportCompliance() tests.
     chromeos::FakeChromeUserManager* const fake_user_manager =
         new chromeos::FakeChromeUserManager();
@@ -136,7 +134,7 @@ class ArcPolicyBridgeTest : public testing::Test {
         base::WrapUnique(fake_user_manager));
     const AccountId account_id(
         AccountId::FromUserEmailGaiaId("user@gmail.com", "1111111111"));
-    fake_user_manager->AddUser(account_id);
+    fake_user_manager->AddUserWithAffiliation(account_id, is_affiliated);
     fake_user_manager->LoginUser(account_id);
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
@@ -148,6 +146,15 @@ class ArcPolicyBridgeTest : public testing::Test {
     policy_bridge_ = std::make_unique<ArcPolicyBridge>(
         profile_, bridge_service_.get(), &policy_service_);
     policy_bridge_->OverrideIsManagedForTesting(true);
+
+    policy_instance_ = std::make_unique<FakePolicyInstance>();
+    bridge_service_->policy()->SetInstance(policy_instance_.get());
+    WaitForInstanceReady(bridge_service_->policy());
+  }
+
+  void DoTearDown() {
+    bridge_service_->policy()->CloseInstance(policy_instance_.get());
+    policy_instance_.reset();
   }
 
  protected:
@@ -175,7 +182,27 @@ class ArcPolicyBridgeTest : public testing::Test {
   policy::PolicyMap policy_map_;
   policy::MockPolicyService policy_service_;
 
-  DISALLOW_COPY_AND_ASSIGN(ArcPolicyBridgeTest);
+  DISALLOW_COPY_AND_ASSIGN(ArcPolicyBridgeTestBase);
+};
+
+class ArcPolicyBridgeTest : public ArcPolicyBridgeTestBase,
+                            public testing::Test {
+ public:
+  void SetUp() override { DoSetUp(true /* affiliated */); }
+
+  void TearDown() override { DoTearDown(); }
+};
+
+class ArcPolicyBridgeAffiliatedTest : public ArcPolicyBridgeTestBase,
+                                      public testing::TestWithParam<bool> {
+ public:
+  ArcPolicyBridgeAffiliatedTest() : is_affiliated_(GetParam()) {}
+  void SetUp() override { DoSetUp(is_affiliated_); }
+
+  void TearDown() override { DoTearDown(); }
+
+ protected:
+  const bool is_affiliated_;
 };
 
 TEST_F(ArcPolicyBridgeTest, UnmanagedTest) {
@@ -430,4 +457,23 @@ TEST_F(ArcPolicyBridgeTest, PolicyInstanceManagedTest) {
   policy_instance()->CallGetPolicies(PolicyStringCallback("{}"));
 }
 
+TEST_P(ArcPolicyBridgeAffiliatedTest, ApkCacheEnabledTest) {
+  const std::string apk_cache_enabled_policy("{\"apkCacheEnabled\":true}");
+  policy_map().Set(policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
+                   policy::POLICY_SCOPE_USER, policy::POLICY_SOURCE_CLOUD,
+                   std::make_unique<base::Value>(apk_cache_enabled_policy),
+                   nullptr);
+  if (is_affiliated_) {
+    policy_bridge()->GetPolicies(
+        PolicyStringCallback(apk_cache_enabled_policy));
+  } else {
+    policy_bridge()->GetPolicies(PolicyStringCallback("{}"));
+  }
+}
+
+// Boolean parameter means if user is affiliated on the device. Affiliated
+// users belong to the domain that owns the device.
+INSTANTIATE_TEST_CASE_P(ArcPolicyBridgeAffiliatedTestInstance,
+                        ArcPolicyBridgeAffiliatedTest,
+                        testing::Bool());
 }  // namespace arc

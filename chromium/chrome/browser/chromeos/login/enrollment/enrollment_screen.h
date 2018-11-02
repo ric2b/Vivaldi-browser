@@ -91,6 +91,8 @@ class EnrollmentScreen
  private:
   friend class MultiLicenseEnrollmentScreenUnitTest;
   friend class ZeroTouchEnrollmentScreenUnitTest;
+  friend class AutomaticReenrollmentScreenUnitTest;
+
   FRIEND_TEST_ALL_PREFIXES(AttestationAuthEnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(ForcedAttestationAuthEnrollmentScreenTest,
                            TestCancel);
@@ -104,15 +106,17 @@ class EnrollmentScreen
   FRIEND_TEST_ALL_PREFIXES(EnterpriseEnrollmentTest,
                            TestActiveDirectoryEnrollment_Success);
   FRIEND_TEST_ALL_PREFIXES(EnterpriseEnrollmentTest,
+                           TestActiveDirectoryEnrollment_DistinguishedName);
+  FRIEND_TEST_ALL_PREFIXES(EnterpriseEnrollmentTest,
                            TestActiveDirectoryEnrollment_UIErrors);
   FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, RequiresNoInput);
   FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, ContinueClickedOnlyOnce);
-  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest, Retries);
+  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest, Retry);
   FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest, TestSuccess);
   FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest,
-                           DoesNotRetryOnTopOfUser);
+                           DoNotRetryOnTopOfUser);
   FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest,
-                           DoesNotRetryAfterSuccess);
+                           DoNotRetryAfterSuccess);
 
   // The authentication mechanisms that this class can use.
   enum Auth {

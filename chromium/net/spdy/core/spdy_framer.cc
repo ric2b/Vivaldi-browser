@@ -4,8 +4,6 @@
 
 #include "net/spdy/core/spdy_framer.h"
 
-#include <string.h>
-
 #include <algorithm>
 #include <cctype>
 #include <ios>
@@ -191,8 +189,8 @@ bool WritePayloadWithContinuation(SpdyFrameBuilder* builder,
   size_t bytes_remaining = 0;
   bytes_remaining = hpack_encoding.size() -
                     std::min(hpack_encoding.size(),
-                             SpdyFramer::kMaxControlFrameSendSize -
-                                 builder->length() - padding_payload_len);
+                             kHttp2MaxControlFrameSendSize - builder->length() -
+                                 padding_payload_len);
   bool ret = builder->WriteBytes(&hpack_encoding[0],
                                  hpack_encoding.size() - bytes_remaining);
   if (padding_payload_len > 0) {
@@ -203,8 +201,8 @@ bool WritePayloadWithContinuation(SpdyFrameBuilder* builder,
   // Tack on CONTINUATION frames for the overflow.
   while (bytes_remaining > 0 && ret) {
     size_t bytes_to_write =
-        std::min(bytes_remaining, SpdyFramer::kMaxControlFrameSendSize -
-                                      kContinuationFrameMinimumSize);
+        std::min(bytes_remaining,
+                 kHttp2MaxControlFrameSendSize - kContinuationFrameMinimumSize);
     // Write CONTINUATION frame prefix.
     if (bytes_remaining == bytes_to_write) {
       flags |= end_flag;
@@ -278,19 +276,13 @@ void SerializeAltSvcBuilderHelper(const SpdyAltSvcIR& altsvc_ir,
 
 }  // namespace
 
-// Even though the length field is 24 bits, we keep this 16 kB
-// limit on control frame size for legacy reasons and to
-// mitigate DOS attacks.
-const size_t SpdyFramer::kMaxControlFrameSendSize =
-    kHttp2DefaultFramePayloadLimit - 1;
-
 SpdyFramer::SpdyFramer(CompressionOption option)
     : debug_visitor_(nullptr), compression_option_(option) {
-  static_assert(kMaxControlFrameSendSize <= kHttp2DefaultFrameSizeLimit,
+  static_assert(kHttp2MaxControlFrameSendSize <= kHttp2DefaultFrameSizeLimit,
                 "Our send limit should be at most our receive limit.");
 }
 
-SpdyFramer::~SpdyFramer() {}
+SpdyFramer::~SpdyFramer() = default;
 
 void SpdyFramer::set_debug_visitor(
     SpdyFramerDebugVisitorInterface* debug_visitor) {
@@ -300,7 +292,7 @@ void SpdyFramer::set_debug_visitor(
 SpdyFramer::SpdyFrameIterator::SpdyFrameIterator(SpdyFramer* framer)
     : framer_(framer), is_first_frame_(true), has_next_frame_(true) {}
 
-SpdyFramer::SpdyFrameIterator::~SpdyFrameIterator() {}
+SpdyFramer::SpdyFrameIterator::~SpdyFrameIterator() = default;
 
 size_t SpdyFramer::SpdyFrameIterator::NextFrame(ZeroCopyOutputBuffer* output) {
   const SpdyFrameIR& frame_ir = GetIR();
@@ -313,7 +305,8 @@ size_t SpdyFramer::SpdyFrameIterator::NextFrame(ZeroCopyOutputBuffer* output) {
   const size_t size_without_block =
       is_first_frame_ ? GetFrameSizeSansBlock() : kContinuationFrameMinimumSize;
   auto encoding = SpdyMakeUnique<SpdyString>();
-  encoder_->Next(kMaxControlFrameSendSize - size_without_block, encoding.get());
+  encoder_->Next(kHttp2MaxControlFrameSendSize - size_without_block,
+                 encoding.get());
   has_next_frame_ = encoder_->HasNext();
 
   if (framer_->debug_visitor_ != nullptr) {
@@ -352,7 +345,7 @@ SpdyFramer::SpdyHeaderFrameIterator::SpdyHeaderFrameIterator(
   SetEncoder(headers_ir_.get());
 }
 
-SpdyFramer::SpdyHeaderFrameIterator::~SpdyHeaderFrameIterator() {}
+SpdyFramer::SpdyHeaderFrameIterator::~SpdyHeaderFrameIterator() = default;
 
 const SpdyFrameIR& SpdyFramer::SpdyHeaderFrameIterator::GetIR() const {
   return *(headers_ir_.get());
@@ -376,7 +369,8 @@ SpdyFramer::SpdyPushPromiseFrameIterator::SpdyPushPromiseFrameIterator(
   SetEncoder(push_promise_ir_.get());
 }
 
-SpdyFramer::SpdyPushPromiseFrameIterator::~SpdyPushPromiseFrameIterator() {}
+SpdyFramer::SpdyPushPromiseFrameIterator::~SpdyPushPromiseFrameIterator() =
+    default;
 
 const SpdyFrameIR& SpdyFramer::SpdyPushPromiseFrameIterator::GetIR() const {
   return *(push_promise_ir_.get());
@@ -398,7 +392,7 @@ SpdyFramer::SpdyControlFrameIterator::SpdyControlFrameIterator(
     std::unique_ptr<const SpdyFrameIR> frame_ir)
     : framer_(framer), frame_ir_(std::move(frame_ir)) {}
 
-SpdyFramer::SpdyControlFrameIterator::~SpdyControlFrameIterator() {}
+SpdyFramer::SpdyControlFrameIterator::~SpdyControlFrameIterator() = default;
 
 size_t SpdyFramer::SpdyControlFrameIterator::NextFrame(
     ZeroCopyOutputBuffer* output) {
@@ -591,7 +585,7 @@ void SpdyFramer::SerializeHeadersBuilderHelper(const SpdyHeadersIR& headers,
 
   GetHpackEncoder()->EncodeHeaderSet(headers.header_block(), hpack_encoding);
   *size = *size + hpack_encoding->size();
-  if (*size > kMaxControlFrameSendSize) {
+  if (*size > kHttp2MaxControlFrameSendSize) {
     *size = *size + GetNumberRequiredContinuationFrames(*size) *
                         kContinuationFrameMinimumSize;
     *flags = *flags & ~HEADERS_FLAG_END_HEADERS;
@@ -610,7 +604,7 @@ void SpdyFramer::SerializeHeadersBuilderHelper(const SpdyHeadersIR& headers,
   // WritePayloadWithContinuation() will serialize CONTINUATION frames as
   // necessary.
   *length_field =
-      std::min(*length_field, kMaxControlFrameSendSize - kFrameHeaderSize);
+      std::min(*length_field, kHttp2MaxControlFrameSendSize - kFrameHeaderSize);
 }
 
 SpdySerializedFrame SpdyFramer::SerializeHeaders(const SpdyHeadersIR& headers) {
@@ -685,7 +679,7 @@ void SpdyFramer::SerializePushPromiseBuilderHelper(
   GetHpackEncoder()->EncodeHeaderSet(push_promise.header_block(),
                                      hpack_encoding);
   *size = *size + hpack_encoding->size();
-  if (*size > kMaxControlFrameSendSize) {
+  if (*size > kHttp2MaxControlFrameSendSize) {
     *size = *size + GetNumberRequiredContinuationFrames(*size) *
                         kContinuationFrameMinimumSize;
     *flags = *flags & ~PUSH_PROMISE_FLAG_END_PUSH_PROMISE;
@@ -701,7 +695,8 @@ SpdySerializedFrame SpdyFramer::SerializePushPromise(
                                     &size);
 
   SpdyFrameBuilder builder(size);
-  size_t length = std::min(size, kMaxControlFrameSendSize) - kFrameHeaderSize;
+  size_t length =
+      std::min(size, kHttp2MaxControlFrameSendSize) - kFrameHeaderSize;
   builder.BeginNewFrame(SpdyFrameType::PUSH_PROMISE, flags,
                         push_promise.stream_id(), length);
   int padding_payload_len = 0;
@@ -790,7 +785,7 @@ class FrameSerializationVisitor : public SpdyFrameVisitor {
  public:
   explicit FrameSerializationVisitor(SpdyFramer* framer)
       : framer_(framer), frame_() {}
-  ~FrameSerializationVisitor() override {}
+  ~FrameSerializationVisitor() override = default;
 
   SpdySerializedFrame ReleaseSerializedFrame() { return std::move(frame_); }
 
@@ -1119,7 +1114,8 @@ bool SpdyFramer::SerializePushPromise(const SpdyPushPromiseIR& push_promise,
 
   bool ok = true;
   SpdyFrameBuilder builder(size, output);
-  size_t length = std::min(size, kMaxControlFrameSendSize) - kFrameHeaderSize;
+  size_t length =
+      std::min(size, kHttp2MaxControlFrameSendSize) - kFrameHeaderSize;
   ok = builder.BeginNewFrame(SpdyFrameType::PUSH_PROMISE, flags,
                              push_promise.stream_id(), length);
 
@@ -1214,7 +1210,7 @@ class FrameSerializationVisitorWithOutput : public SpdyFrameVisitor {
   explicit FrameSerializationVisitorWithOutput(SpdyFramer* framer,
                                                ZeroCopyOutputBuffer* output)
       : framer_(framer), output_(output), result_(false) {}
-  ~FrameSerializationVisitorWithOutput() override {}
+  ~FrameSerializationVisitorWithOutput() override = default;
 
   size_t Result() { return result_; }
 
@@ -1269,15 +1265,6 @@ size_t SpdyFramer::SerializeFrame(const SpdyFrameIR& frame,
   size_t free_bytes_before = output->BytesFree();
   frame.Visit(&visitor);
   return visitor.Result() ? free_bytes_before - output->BytesFree() : 0;
-}
-
-size_t SpdyFramer::GetNumberRequiredContinuationFrames(size_t size) {
-  DCHECK_GT(size, SpdyFramer::kMaxControlFrameSendSize);
-  size_t overflow = size - SpdyFramer::kMaxControlFrameSendSize;
-  int payload_size =
-      SpdyFramer::kMaxControlFrameSendSize - kContinuationFrameMinimumSize;
-  // This is ceiling(overflow/payload_size) using integer arithmetics.
-  return (overflow - 1) / payload_size + 1;
 }
 
 HpackEncoder* SpdyFramer::GetHpackEncoder() {

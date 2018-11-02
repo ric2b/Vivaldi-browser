@@ -83,15 +83,8 @@ class GPU_EXPORT GPUTestConfig {
   // both configs.
   bool OverlapsWith(const GPUTestConfig& config) const;
 
-  // Disable validation of GPU vendor and device ids.
-  void DisableGPUInfoValidation();
-
  protected:
   void ClearGPUVendor();
-
-  // Indicates that the OS has the notion of a numeric GPU vendor and device id
-  // and this data should be validated.
-  bool validate_gpu_info_;
 
  private:
   // operating system.
@@ -112,7 +105,7 @@ class GPU_EXPORT GPUTestConfig {
 
 class GPU_EXPORT GPUTestBotConfig : public GPUTestConfig {
  public:
-  GPUTestBotConfig() { }
+  GPUTestBotConfig() = default;
   ~GPUTestBotConfig() override;
 
   // This should only be called when no gpu_vendor is added.

@@ -25,7 +25,6 @@
 #include "core/html/HTMLViewSourceDocument.h"
 
 #include "core/dom/Text.h"
-#include "core/frame/UseCounter.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLBaseElement.h"
@@ -58,7 +57,6 @@ HTMLViewSourceDocument::HTMLViewSourceDocument(const DocumentInit& initializer,
   // FIXME: Why do view-source pages need to load in quirks mode?
   SetCompatibilityMode(kQuirksMode);
   LockCompatibilityMode();
-  UseCounter::Count(*this, WebFeature::kViewSourceDocument);
 }
 
 DocumentParser* HTMLViewSourceDocument::CreateParser() {
@@ -316,6 +314,9 @@ Element* HTMLViewSourceDocument::AddLink(const AtomicString& url,
   anchor->setAttribute(classAttr, class_value);
   anchor->setAttribute(targetAttr, "_blank");
   anchor->setAttribute(hrefAttr, url);
+  // Disallow JavaScript hrefs. https://crbug.com/808407
+  if (anchor->Url().ProtocolIsJavaScript())
+    anchor->setAttribute(hrefAttr, "about:blank");
   current_->ParserAppendChild(anchor);
   return anchor;
 }

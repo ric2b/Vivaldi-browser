@@ -5,7 +5,7 @@
 /**
  * @fileoverview Test suite for the Material Design bookmarks page.
  */
-var ROOT_PATH = '../../../../../';
+const ROOT_PATH = '../../../../../';
 
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_browser_test_base.js']);
@@ -87,7 +87,14 @@ MaterialBookmarksDNDManagerTest.prototype = {
   ]),
 };
 
-TEST_F('MaterialBookmarksDNDManagerTest', 'All', function() {
+// http://crbug.com/803570 : Flaky on Win 7 (dbg)
+GEN('#if defined(OS_WIN) && !defined(NDEBUG)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+
+TEST_F('MaterialBookmarksDNDManagerTest', 'MAYBE_All', function() {
   mocha.run();
 });
 

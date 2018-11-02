@@ -46,6 +46,7 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebPluginContainer.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(USE_AURA)
@@ -96,6 +97,7 @@ BrowserPlugin::BrowserPlugin(
       ready_(false),
       browser_plugin_instance_id_(browser_plugin::kInstanceIDNone),
       delegate_(delegate),
+      task_runner_(render_frame->GetTaskRunner(blink::TaskType::kUnthrottled)),
       weak_ptr_factory_(this) {
   browser_plugin_instance_id_ =
       BrowserPluginManager::Get()->GetNextInstanceID();
@@ -143,7 +145,7 @@ void BrowserPlugin::OnSetChildFrameSurface(
     int browser_plugin_instance_id,
     const viz::SurfaceInfo& surface_info,
     const viz::SurfaceSequence& sequence) {
-  if (!attached() || IsRunningWithMus())
+  if (!attached() || switches::IsMusHostingViz())
     return;
 
   if (!enable_surface_synchronization_) {
@@ -231,9 +233,6 @@ void BrowserPlugin::Detach() {
       new BrowserPluginHostMsg_Detach(browser_plugin_instance_id_));
 }
 
-void BrowserPlugin::DidCommitCompositorFrame() {
-}
-
 #if defined(USE_AURA)
 void BrowserPlugin::CreateMusWindowAndEmbed(
     const base::UnguessableToken& embed_token) {
@@ -268,7 +267,7 @@ void BrowserPlugin::WasResized() {
       sent_resize_params_->screen_info != pending_resize_params_.screen_info;
 
   if (synchronized_params_changed)
-    local_surface_id_ = local_surface_id_allocator_.GenerateId();
+    local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
 
   if (enable_surface_synchronization_ && frame_sink_id_.is_valid()) {
     compositing_helper_->SetPrimarySurfaceId(
@@ -361,7 +360,7 @@ void BrowserPlugin::OnSetMouseLock(int browser_plugin_instance_id,
 void BrowserPlugin::OnSetMusEmbedToken(
     int instance_id,
     const base::UnguessableToken& embed_token) {
-  DCHECK(IsRunningWithMus());
+  DCHECK(switches::IsMusHostingViz());
   if (!attached_) {
     pending_embed_token_ = embed_token;
   } else {
@@ -394,9 +393,7 @@ gfx::Rect BrowserPlugin::FrameRectInPixels() const {
 }
 
 float BrowserPlugin::GetDeviceScaleFactor() const {
-  return RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
-      ->GetRenderWidget()
-      ->GetOriginalDeviceScaleFactor();
+  return embedding_render_widget_->GetOriginalDeviceScaleFactor();
 }
 
 void BrowserPlugin::UpdateInternalInstanceId() {
@@ -451,22 +448,28 @@ bool BrowserPlugin::Initialize(WebPluginContainer* container) {
 
   // Defer attach call so that if there's any pending browser plugin
   // destruction, then it can progress first.
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&BrowserPlugin::UpdateInternalInstanceId,
                                 weak_ptr_factory_.GetWeakPtr()));
 
   compositing_helper_.reset(ChildFrameCompositingHelper::CreateForBrowserPlugin(
       weak_ptr_factory_.GetWeakPtr()));
 
-  RenderWidget* render_widget =
+  embedding_render_widget_ =
       RenderFrameImpl::FromWebFrame(container_->GetDocument().GetFrame())
           ->GetRenderWidget();
-  pending_resize_params_.screen_info = render_widget->screen_info();
+  pending_resize_params_.screen_info = embedding_render_widget_->screen_info();
+  embedding_render_widget_->RegisterBrowserPlugin(this);
 
   return true;
 }
 
 void BrowserPlugin::Destroy() {
+  if (embedding_render_widget_) {
+    embedding_render_widget_->UnregisterBrowserPlugin(this);
+    embedding_render_widget_ = nullptr;
+  }
+
   if (container_) {
     // The BrowserPlugin's WebPluginContainer is deleted immediately after this
     // call returns, so let's not keep a reference to it around.
@@ -481,7 +484,8 @@ void BrowserPlugin::Destroy() {
       render_frame ? render_frame->GetRenderView() : nullptr);
   if (render_view)
     render_view->mouse_lock_dispatcher()->OnLockTargetDestroyed(this);
-  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+
+  task_runner_->DeleteSoon(FROM_HERE, this);
 }
 
 v8::Local<v8::Object> BrowserPlugin::V8ScriptableObject(v8::Isolate* isolate) {
@@ -531,10 +535,7 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
   // We will use the local root's RenderWidget to convert coordinates to Window.
   // If this local root belongs to an OOPIF, on the browser side we will have to
   // consider the displacement of the child frame in root window.
-  RenderWidget* render_widget =
-      RenderFrameImpl::FromWebFrame(Container()->GetDocument().GetFrame())
-          ->GetRenderWidget();
-  render_widget->ConvertViewportToWindow(&rect_in_css);
+  embedding_render_widget_->ConvertViewportToWindow(&rect_in_css);
   gfx::Rect _frame_rect = rect_in_css;
 
   if (!ready_) {
@@ -544,7 +545,7 @@ void BrowserPlugin::UpdateGeometry(const WebRect& plugin_rect_in_viewport,
   }
 
   pending_resize_params_.frame_rect = _frame_rect;
-  pending_resize_params_.screen_info = render_widget->screen_info();
+  pending_resize_params_.screen_info = embedding_render_widget_->screen_info();
   WasResized();
 }
 
@@ -796,6 +797,8 @@ void BrowserPlugin::OnMusEmbeddedFrameSurfaceChanged(
 
 void BrowserPlugin::OnMusEmbeddedFrameSinkIdAllocated(
     const viz::FrameSinkId& frame_sink_id) {
+  // RendererWindowTreeClient should only call this when mus is hosting viz.
+  DCHECK(switches::IsMusHostingViz());
   OnGuestReady(browser_plugin_instance_id_, frame_sink_id);
 }
 #endif

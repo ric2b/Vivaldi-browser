@@ -56,8 +56,9 @@ class NET_EXPORT_PRIVATE NetworkQualityStore {
   // Returns true if the network quality estimate was successfully read
   // for a network with ID |network_id|, and sets |cached_network_quality| to
   // the estimate read.
-  bool GetById(const nqe::internal::NetworkID& network_id,
-               nqe::internal::CachedNetworkQuality* cached_network_quality);
+  bool GetById(
+      const nqe::internal::NetworkID& network_id,
+      nqe::internal::CachedNetworkQuality* cached_network_quality) const;
 
   // Adds and removes |observer| from the list of cache observers. The
   // observers are notified on the same thread on which it was added. Addition
@@ -67,9 +68,6 @@ class NET_EXPORT_PRIVATE NetworkQualityStore {
   void RemoveNetworkQualitiesCacheObserver(
       NetworkQualitiesCacheObserver* observer);
 
-  // Returns true if network quality for |network_id| can be cached.
-  bool EligibleForCaching(const NetworkID& network_id) const;
-
   // If |disable_offline_check| is set to true, the offline check is disabled
   // when storing the network quality.
   void DisableOfflineCheckForTesting(bool disable_offline_check);
@@ -78,7 +76,7 @@ class NET_EXPORT_PRIVATE NetworkQualityStore {
   // Maximum size of the store that holds network quality estimates.
   // A smaller size may reduce the cache hit rate due to frequent evictions.
   // A larger size may affect performance.
-  static const size_t kMaximumNetworkQualityCacheSize = 10;
+  static const size_t kMaximumNetworkQualityCacheSize = 20;
 
   // Notifies |observer| of the current effective connection type if |observer|
   // is still registered as an observer.
@@ -98,10 +96,6 @@ class NET_EXPORT_PRIVATE NetworkQualityStore {
   // Observer list for changes in the cached network quality.
   base::ObserverList<NetworkQualitiesCacheObserver>
       network_qualities_cache_observer_list_;
-
-  // When set to true, disables the offline check when storing the network
-  // quality.
-  bool disable_offline_check_;
 
   base::ThreadChecker thread_checker_;
 

@@ -63,6 +63,8 @@ using blink::WebURLRequest;
 
 namespace blink {
 
+constexpr uint32_t ResourceFetcher::kKeepaliveInflightBytesQuota;
+
 namespace {
 
 constexpr base::TimeDelta kKeepaliveLoadersTimeout =
@@ -86,7 +88,8 @@ constexpr base::TimeDelta kKeepaliveLoadersTimeout =
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, LinkPrefetch)   \
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, MainResource)   \
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Manifest)       \
-    DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Media)          \
+    DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Audio)          \
+    DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Video)          \
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Mock)           \
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Raw)            \
     DEFINE_SINGLE_RESOURCE_HISTOGRAM(prefix, Script)         \
@@ -129,7 +132,8 @@ ResourceLoadPriority TypeToPriority(Resource::Type type) {
       return ResourceLoadPriority::kMedium;
     case Resource::kImage:
     case Resource::kTextTrack:
-    case Resource::kMedia:
+    case Resource::kAudio:
+    case Resource::kVideo:
     case Resource::kSVGDocument:
       // Also async scripts (set explicitly in loadPriority)
       return ResourceLoadPriority::kLow;
@@ -213,7 +217,8 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
   // well as to ensure that there isn't priority churn if images move in and out
   // of the viewport, or are displayed more than once, both in and out of the
   // viewport.
-  return std::max(priority, resource_request.Priority());
+  return std::max(Context().ModifyPriorityForExperiments(priority),
+                  resource_request.Priority());
 }
 
 static void PopulateTimingInfo(ResourceTimingInfo* info, Resource* resource) {
@@ -259,7 +264,9 @@ WebURLRequest::RequestContext ResourceFetcher::DetermineRequestContext(
       return WebURLRequest::kRequestContextTrack;
     case Resource::kSVGDocument:
       return WebURLRequest::kRequestContextImage;
-    case Resource::kMedia:  // TODO: Split this.
+    case Resource::kAudio:
+      return WebURLRequest::kRequestContextAudio;
+    case Resource::kVideo:
       return WebURLRequest::kRequestContextVideo;
     case Resource::kManifest:
       return WebURLRequest::kRequestContextManifest;
@@ -284,7 +291,7 @@ ResourceFetcher::ResourceFetcher(FetchContext* new_context)
       image_fetched_(false),
       onlyLoadServeCachedResources_(false) {}
 
-ResourceFetcher::~ResourceFetcher() {}
+ResourceFetcher::~ResourceFetcher() = default;
 
 Resource* ResourceFetcher::CachedResource(const KURL& resource_url) const {
   KURL url = MemoryCache::RemoveFragmentIdentifierIfNeeded(resource_url);
@@ -348,14 +355,14 @@ void ResourceFetcher::RequestLoadStarted(unsigned long identifier,
     // Resources loaded from memory cache should be reported the first time
     // they're used.
     scoped_refptr<ResourceTimingInfo> info = ResourceTimingInfo::Create(
-        params.Options().initiator_info.name, MonotonicallyIncreasingTime(),
+        params.Options().initiator_info.name, CurrentTimeTicksInSeconds(),
         resource->GetType() == Resource::kMainResource);
     PopulateTimingInfo(info.get(), resource);
     info->ClearLoadTimings();
     info->SetLoadFinishTime(info->InitialTime());
     scheduled_resource_timing_reports_.push_back(std::move(info));
     if (!resource_timing_report_timer_.IsActive())
-      resource_timing_report_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+      resource_timing_report_timer_.StartOneShot(TimeDelta(), FROM_HERE);
   }
 }
 
@@ -383,7 +390,7 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
   }
 
   Context().DispatchDidFinishLoading(
-      identifier, 0, 0, resource->GetResponse().DecodedBodyLength());
+      identifier, 0, 0, resource->GetResponse().DecodedBodyLength(), false);
 }
 
 static std::unique_ptr<TracedValue> UrlForTraceEvent(const KURL& url) {
@@ -607,7 +614,7 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
   if (blocked_reason != ResourceRequestBlockedReason::kNone)
     return kBlock;
 
-  const scoped_refptr<SecurityOrigin>& origin = options.security_origin;
+  const scoped_refptr<const SecurityOrigin>& origin = options.security_origin;
   if (origin && !origin->IsUnique() &&
       !origin->IsSameSchemeHostPort(Context().GetSecurityOrigin())) {
     // |options.security_origin| may differ from the document's origin if
@@ -657,6 +664,21 @@ ResourceFetcher::PrepareRequestResult ResourceFetcher::PrepareRequest(
 Resource* ResourceFetcher::RequestResource(
     FetchParameters& params,
     const ResourceFactory& factory,
+    ResourceClient* client,
+    const SubstituteData& substitute_data) {
+  // Only async requests get ResourceClient callbacks, so sync requests
+  // shouldn't provide a client.
+  DCHECK(!client ||
+         params.Options().synchronous_policy == kRequestAsynchronously);
+  Resource* resource = RequestResource(params, factory, substitute_data);
+  if (client)
+    client->SetResource(resource, Context().GetLoadingTaskRunner().get());
+  return resource;
+}
+
+Resource* ResourceFetcher::RequestResource(
+    FetchParameters& params,
+    const ResourceFactory& factory,
     const SubstituteData& substitute_data) {
   unsigned long identifier = CreateUniqueIdentifier();
   ResourceRequest& resource_request = params.MutableResourceRequest();
@@ -670,6 +692,9 @@ Resource* ResourceFetcher::RequestResource(
 
   // TODO(crbug.com/123004): Remove once we have enough stats on data URIs that
   // contain fragments ('#' characters).
+  //
+  // TODO(crbug.com/796173): This call happens before commit for iframes that
+  // have data URI sources, which causes UKM to miss the metric recording.
   if (context_) {
     const KURL& url = params.Url();
     if (url.HasFragmentIdentifier() && url.ProtocolIsData()) {
@@ -803,8 +828,6 @@ Resource* ResourceFetcher::RequestResource(
     InsertAsPreloadIfNecessary(resource, params, resource_type);
   scoped_resource_load_tracker.ResourceLoadContinuesBeyondScope();
 
-  DCHECK(!resource->ErrorOccurred() ||
-         params.Options().synchronous_policy == kRequestSynchronously);
   return resource;
 }
 
@@ -887,7 +910,7 @@ void ResourceFetcher::StorePerformanceTimingInitiatorInformation(
   // startTime must be set accordingly.
   double start_time = resource->GetResourceRequest().NavigationStartTime()
                           ? resource->GetResourceRequest().NavigationStartTime()
-                          : MonotonicallyIncreasingTime();
+                          : CurrentTimeTicksInSeconds();
 
   // This buffer is created and populated for providing transferSize
   // and redirect timing opt-in information.
@@ -1256,12 +1279,11 @@ void ResourceFetcher::ClearContext() {
     // The use of WrapPersistent creates a reference cycle intentionally,
     // to keep the ResourceFetcher and ResourceLoaders alive until the requests
     // complete or the timer fires.
-    keepalive_loaders_task_handle_ =
-        Context().GetLoadingTaskRunner()->PostDelayedCancellableTask(
-            BLINK_FROM_HERE,
-            WTF::Bind(&ResourceFetcher::StopFetchingIncludingKeepaliveLoaders,
-                      WrapPersistent(this)),
-            kKeepaliveLoadersTimeout);
+    keepalive_loaders_task_handle_ = PostDelayedCancellableTask(
+        *Context().GetLoadingTaskRunner(), FROM_HERE,
+        WTF::Bind(&ResourceFetcher::StopFetchingIncludingKeepaliveLoaders,
+                  WrapPersistent(this)),
+        kKeepaliveLoadersTimeout);
   }
 }
 
@@ -1315,9 +1337,10 @@ void ResourceFetcher::WarnUnusedPreloads() {
     if (resource && resource->IsLinkPreload() && resource->IsUnusedPreload()) {
       Context().AddWarningConsoleMessage(
           "The resource " + resource->Url().GetString() +
-              " was preloaded using link preload but not used within a few "
-              "seconds from the window's load event. Please make sure it "
-              "wasn't preloaded for nothing.",
+              " was preloaded using link preload but not used within a few " +
+              "seconds from the window's load event. Please make sure it " +
+              "Please make sure it has an appropriate `as` value and it is " +
+              "preloaded intentionally.",
           FetchContext::kJSSource);
     }
   }
@@ -1357,8 +1380,13 @@ void ResourceFetcher::HandleLoadCompletion(Resource* resource) {
 
 void ResourceFetcher::HandleLoaderFinish(Resource* resource,
                                          double finish_time,
-                                         LoaderFinishType type) {
+                                         LoaderFinishType type,
+                                         uint32_t inflight_keepalive_bytes,
+                                         bool blocked_cross_site_document) {
   DCHECK(resource);
+
+  DCHECK_LE(inflight_keepalive_bytes, inflight_keepalive_bytes_);
+  inflight_keepalive_bytes_ -= inflight_keepalive_bytes;
 
   ResourceLoader* loader = resource->Loader();
   if (type == kDidFinishFirstPartInMultipart) {
@@ -1409,7 +1437,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
   resource->VirtualTimePauser().PauseVirtualTime(false);
   Context().DispatchDidFinishLoading(
       resource->Identifier(), finish_time, encoded_data_length,
-      resource->GetResponse().DecodedBodyLength());
+      resource->GetResponse().DecodedBodyLength(), blocked_cross_site_document);
 
   if (type == kDidFinishLoading)
     resource->Finish(finish_time, Context().GetLoadingTaskRunner().get());
@@ -1418,8 +1446,12 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
 }
 
 void ResourceFetcher::HandleLoaderError(Resource* resource,
-                                        const ResourceError& error) {
+                                        const ResourceError& error,
+                                        uint32_t inflight_keepalive_bytes) {
   DCHECK(resource);
+
+  DCHECK_LE(inflight_keepalive_bytes, inflight_keepalive_bytes_);
+  inflight_keepalive_bytes_ -= inflight_keepalive_bytes;
 
   RemoveResourceLoader(resource->Loader());
 
@@ -1488,7 +1520,7 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
     // service worker of the physical origin. This has the effect that, for now,
     // suborigins do not work with service workers. See
     // https://w3c.github.io/webappsec-suborigins/.
-    SecurityOrigin* source_origin = Context().GetSecurityOrigin();
+    const SecurityOrigin* source_origin = Context().GetSecurityOrigin();
     if (source_origin && source_origin->HasSuborigin())
       request.SetServiceWorkerMode(WebURLRequest::ServiceWorkerMode::kNone);
 
@@ -1497,7 +1529,21 @@ bool ResourceFetcher::StartLoad(Resource* resource) {
     // crbug.com/632580
     resource->SetResourceRequest(request);
 
-    loader = ResourceLoader::Create(this, scheduler_, resource);
+    using QuotaType = decltype(inflight_keepalive_bytes_);
+    QuotaType size = 0;
+    if (request.GetKeepalive() && request.HttpBody()) {
+      auto original_size = request.HttpBody()->SizeInBytes();
+      DCHECK_LE(inflight_keepalive_bytes_, kKeepaliveInflightBytesQuota);
+      if (original_size > std::numeric_limits<QuotaType>::max())
+        return false;
+      size = static_cast<QuotaType>(original_size);
+      if (kKeepaliveInflightBytesQuota - inflight_keepalive_bytes_ < size)
+        return false;
+
+      inflight_keepalive_bytes_ += size;
+    }
+
+    loader = ResourceLoader::Create(this, scheduler_, resource, size);
     if (resource->ShouldBlockLoadEvent())
       loaders_.insert(loader);
     else
@@ -1617,7 +1663,8 @@ void ResourceFetcher::LogPreloadStats(ClearPreloadsPolicy policy) {
         fonts++;
         font_misses += miss_count;
         break;
-      case Resource::kMedia:
+      case Resource::kAudio:
+      case Resource::kVideo:
         medias++;
         media_misses += miss_count;
         break;

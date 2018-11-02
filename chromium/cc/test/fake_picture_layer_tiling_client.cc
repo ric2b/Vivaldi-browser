@@ -22,13 +22,13 @@ FakePictureLayerTilingClient::FakePictureLayerTilingClient()
       has_valid_tile_priorities_(true) {}
 
 FakePictureLayerTilingClient::FakePictureLayerTilingClient(
-    ResourceProvider* resource_provider)
+    LayerTreeResourceProvider* resource_provider)
     : resource_pool_(
-          ResourcePool::Create(resource_provider,
-                               base::ThreadTaskRunnerHandle::Get().get(),
-                               viz::ResourceTextureHint::kDefault,
-                               ResourcePool::kDefaultExpirationDelay,
-                               false)),
+          std::make_unique<ResourcePool>(resource_provider,
+                                         base::ThreadTaskRunnerHandle::Get(),
+                                         viz::ResourceTextureHint::kDefault,
+                                         ResourcePool::kDefaultExpirationDelay,
+                                         false)),
       tile_manager_(
           new FakeTileManager(&tile_manager_client_, resource_pool_.get())),
       raster_source_(FakeRasterSource::CreateInfiniteFilled()),
@@ -36,8 +36,7 @@ FakePictureLayerTilingClient::FakePictureLayerTilingClient(
       twin_tiling_(nullptr),
       has_valid_tile_priorities_(true) {}
 
-FakePictureLayerTilingClient::~FakePictureLayerTilingClient() {
-}
+FakePictureLayerTilingClient::~FakePictureLayerTilingClient() = default;
 
 std::unique_ptr<Tile> FakePictureLayerTilingClient::CreateTile(
     const Tile::CreateInfo& info) {

@@ -26,7 +26,7 @@
 #include "core/html/track/LoadableTextTrack.h"
 
 #include "core/dom/ElementTraversal.h"
-#include "core/html/HTMLTrackElement.h"
+#include "core/html/track/HTMLTrackElement.h"
 
 namespace blink {
 
@@ -40,7 +40,7 @@ LoadableTextTrack::LoadableTextTrack(HTMLTrackElement* track)
   DCHECK(track_element_);
 }
 
-LoadableTextTrack::~LoadableTextTrack() {}
+LoadableTextTrack::~LoadableTextTrack() = default;
 
 bool LoadableTextTrack::IsDefault() const {
   return track_element_->FastHasAttribute(HTMLNames::defaultAttr);

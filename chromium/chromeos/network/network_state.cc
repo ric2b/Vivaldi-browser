@@ -207,8 +207,9 @@ bool NetworkState::PropertyChanged(const std::string& key,
 
 bool NetworkState::InitialPropertiesReceived(
     const base::DictionaryValue& properties) {
-  NET_LOG(EVENT) << "InitialPropertiesReceived: " << path() << ": " << name()
-                 << " State: " << connection_state_ << " Visible: " << visible_;
+  NET_LOG(EVENT) << "InitialPropertiesReceived: " << name() << " (" << path()
+                 << ") State: " << connection_state_
+                 << " Visible: " << visible_;
   if (!properties.HasKey(shill::kTypeProperty)) {
     NET_LOG(ERROR) << "NetworkState has no type: "
                    << shill_property_util::GetNetworkIdFromProperties(
@@ -336,9 +337,15 @@ GURL NetworkState::GetWebProxyAutoDiscoveryUrl() const {
 }
 
 bool NetworkState::RequiresActivation() const {
-  return (type() == shill::kTypeCellular &&
-          activation_state() != shill::kActivationStateActivated &&
-          activation_state() != shill::kActivationStateUnknown);
+  return type() == shill::kTypeCellular &&
+         activation_state() != shill::kActivationStateActivated &&
+         activation_state() != shill::kActivationStateUnknown;
+}
+
+bool NetworkState::SecurityRequiresPassphraseOnly() const {
+  return type() == shill::kTypeWifi &&
+         (security_class() == shill::kSecurityPsk ||
+          security_class() == shill::kSecurityWep);
 }
 
 std::string NetworkState::connection_state() const {

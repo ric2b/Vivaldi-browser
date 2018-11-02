@@ -33,12 +33,12 @@ class CORE_EXPORT CSSScale final : public CSSTransformComponent {
 
   // Blink-internal ways of creating CSSScales.
   static CSSScale* Create(CSSNumericValue* x, CSSNumericValue* y) {
-    return new CSSScale(x, y);
+    return new CSSScale(x, y, CSSUnitValue::Create(1), true /* is2D */);
   }
   static CSSScale* Create(CSSNumericValue* x,
                           CSSNumericValue* y,
                           CSSNumericValue* z) {
-    return new CSSScale(x, y, z);
+    return new CSSScale(x, y, z, false /* is2D */);
   }
   static CSSScale* FromCSSValue(const CSSFunctionValue&);
 
@@ -53,7 +53,7 @@ class CORE_EXPORT CSSScale final : public CSSTransformComponent {
   // Internal methods - from CSSTransformComponent.
   TransformComponentType GetType() const final { return kScaleType; }
   const DOMMatrix* AsMatrix(ExceptionState&) const final;
-  const CSSFunctionValue* ToCSSValue(SecureContextMode) const final;
+  const CSSFunctionValue* ToCSSValue() const final;
 
   virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(x_);
@@ -63,19 +63,15 @@ class CORE_EXPORT CSSScale final : public CSSTransformComponent {
   }
 
  private:
-  CSSScale(CSSNumericValue* x, CSSNumericValue* y)
-      : CSSTransformComponent(true /* is2D */),
-        x_(x),
-        y_(y),
-        z_(CSSUnitValue::Create(1)) {}
-  CSSScale(CSSNumericValue* x, CSSNumericValue* y, CSSNumericValue* z)
-      : CSSTransformComponent(false /* is2D */), x_(x), y_(y), z_(z) {}
-
-  static bool isCoordValid(CSSNumericValue*);
+  CSSScale(CSSNumericValue* x,
+           CSSNumericValue* y,
+           CSSNumericValue* z,
+           bool is2D);
 
   Member<CSSNumericValue> x_;
   Member<CSSNumericValue> y_;
   Member<CSSNumericValue> z_;
+
   DISALLOW_COPY_AND_ASSIGN(CSSScale);
 };
 

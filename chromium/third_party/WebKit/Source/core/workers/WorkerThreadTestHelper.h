@@ -7,9 +7,11 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "bindings/core/v8/V8GCController.h"
+#include "common/net/ip_address_space.mojom-blink.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -33,7 +35,6 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
-#include "public/platform/WebAddressSpace.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "v8/include/v8.h"
 
@@ -43,7 +44,6 @@ class MockWorkerThreadLifecycleObserver final
     : public GarbageCollectedFinalized<MockWorkerThreadLifecycleObserver>,
       public WorkerThreadLifecycleObserver {
   USING_GARBAGE_COLLECTED_MIXIN(MockWorkerThreadLifecycleObserver);
-  WTF_MAKE_NONCOPYABLE(MockWorkerThreadLifecycleObserver);
 
  public:
   explicit MockWorkerThreadLifecycleObserver(
@@ -51,6 +51,9 @@ class MockWorkerThreadLifecycleObserver final
       : WorkerThreadLifecycleObserver(context) {}
 
   MOCK_METHOD1(ContextDestroyed, void(WorkerThreadLifecycleContext*));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockWorkerThreadLifecycleObserver);
 };
 
 class FakeWorkerGlobalScope : public WorkerGlobalScope {
@@ -60,9 +63,9 @@ class FakeWorkerGlobalScope : public WorkerGlobalScope {
       WorkerThread* thread)
       : WorkerGlobalScope(std::move(creation_params),
                           thread,
-                          MonotonicallyIncreasingTime()) {}
+                          CurrentTimeTicksInSeconds()) {}
 
-  ~FakeWorkerGlobalScope() override {}
+  ~FakeWorkerGlobalScope() override = default;
 
   // EventTarget
   const AtomicString& InterfaceName() const override {
@@ -80,16 +83,17 @@ class WorkerThreadForTest : public WorkerThread {
         worker_backing_thread_(
             WorkerBackingThread::CreateForTest("Test thread")) {}
 
-  ~WorkerThreadForTest() override {}
+  ~WorkerThreadForTest() override = default;
 
   WorkerBackingThread& GetWorkerBackingThread() override {
     return *worker_backing_thread_;
   }
   void ClearWorkerBackingThread() override { worker_backing_thread_.reset(); }
 
-  void StartWithSourceCode(SecurityOrigin* security_origin,
+  void StartWithSourceCode(const SecurityOrigin* security_origin,
                            const String& source,
                            ParentFrameTaskRunners* parent_frame_task_runners,
+                           const KURL& script_url = KURL("http://fake.url/"),
                            WorkerClients* worker_clients = nullptr) {
     auto headers = std::make_unique<Vector<CSPHeaderAndType>>();
     CSPHeaderAndType header_and_type("contentSecurityPolicy",
@@ -97,25 +101,24 @@ class WorkerThreadForTest : public WorkerThread {
     headers->push_back(header_and_type);
 
     auto creation_params = std::make_unique<GlobalScopeCreationParams>(
-        KURL("http://fake.url/"), "fake user agent", source, nullptr,
-        headers.get(), kReferrerPolicyDefault, security_origin, worker_clients,
-        kWebAddressSpaceLocal, nullptr,
+        script_url, "fake user agent", headers.get(), kReferrerPolicyDefault,
+        security_origin, worker_clients, mojom::IPAddressSpace::kLocal, nullptr,
         std::make_unique<WorkerSettings>(Settings::Create().get()),
         kV8CacheOptionsDefault);
 
     Start(std::move(creation_params),
           WorkerBackingThreadStartupData::CreateDefault(),
-          std::make_unique<GlobalScopeInspectorCreationParams>(
-              WorkerInspectorProxy::PauseOnWorkerStart::kDontPause),
+          WorkerInspectorProxy::PauseOnWorkerStart::kDontPause,
           parent_frame_task_runners);
+    EvaluateClassicScript(script_url, source, nullptr /* cached_meta_data */,
+                          v8_inspector::V8StackTraceId());
   }
 
   void WaitForInit() {
     WaitableEvent completion_event;
     GetWorkerBackingThread().BackingThread().PostTask(
-        BLINK_FROM_HERE,
-        CrossThreadBind(&WaitableEvent::Signal,
-                        CrossThreadUnretained(&completion_event)));
+        FROM_HERE, CrossThreadBind(&WaitableEvent::Signal,
+                                   CrossThreadUnretained(&completion_event)));
     completion_event.Wait();
   }
 
@@ -126,6 +129,10 @@ class WorkerThreadForTest : public WorkerThread {
   }
 
  private:
+  scheduler::ThreadType GetThreadType() const override {
+    return scheduler::ThreadType::kUnspecifiedWorkerThread;
+  }
+
   std::unique_ptr<WorkerBackingThread> worker_backing_thread_;
 };
 

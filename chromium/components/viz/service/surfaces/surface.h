@@ -81,10 +81,10 @@ class VIZ_SERVICE_EXPORT Surface final : public SurfaceDeadlineClient {
           bool needs_sync_tokens);
   ~Surface();
 
-  // Clears the |seen_first_frame_activation_| bit causing a
-  // FirstSurfaceActivation to be triggered on the next CompositorFrame
-  // activation.
-  void ResetSeenFirstFrameActivation();
+  // Clears the pending and active frame data as well as the
+  // |seen_first_frame_activation_| bit causing a FirstSurfaceActivation to be
+  // triggered on the next CompositorFrame activation.
+  void Reset(base::WeakPtr<SurfaceClient> client);
 
   const SurfaceId& surface_id() const { return surface_info_.id(); }
   const SurfaceId& previous_frame_surface_id() const {
@@ -207,6 +207,11 @@ class VIZ_SERVICE_EXPORT Surface final : public SurfaceDeadlineClient {
   void OnDeadline() override;
 
  private:
+  struct SequenceNumbers {
+    uint32_t parent_sequence_number = 0u;
+    uint32_t child_sequence_number = 0u;
+  };
+
   struct FrameData {
     FrameData(CompositorFrame&& frame,
               uint64_t frame_index,
@@ -237,7 +242,7 @@ class VIZ_SERVICE_EXPORT Surface final : public SurfaceDeadlineClient {
   void ActivateFrame(FrameData frame_data);
   void UpdateActivationDependencies(const CompositorFrame& current_frame);
   void ComputeChangeInDependencies(
-      const base::flat_map<FrameSinkId, uint32_t>& new_dependencies);
+      const base::flat_map<FrameSinkId, SequenceNumbers>& new_dependencies);
 
   void UnrefFrameResourcesAndRunCallbacks(base::Optional<FrameData> frame_data);
   void ClearCopyRequests();
@@ -271,7 +276,7 @@ class VIZ_SERVICE_EXPORT Surface final : public SurfaceDeadlineClient {
   // the latest activated SurfaceId associated with the given FrameSinkId
   // passes the local_id in the map, then this surface is no longer interested
   // in observing activations for that FrameSinkId.
-  base::flat_map<FrameSinkId, uint32_t> frame_sink_id_dependencies_;
+  base::flat_map<FrameSinkId, SequenceNumbers> frame_sink_id_dependencies_;
 
   DISALLOW_COPY_AND_ASSIGN(Surface);
 };

@@ -10,7 +10,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
-#include "chrome/browser/notifications/notification_ui_manager.h"
+#include "chrome/browser/notifications/notification_common.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/chrome_pages.h"
@@ -26,8 +27,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/message_center/notification.h"
 #include "ui/message_center/notification_delegate.h"
-#include "ui/message_center/public/cpp/message_center_constants.h"
-#include "ui/message_center/public/cpp/message_center_switches.h"
 
 namespace {
 
@@ -101,20 +100,14 @@ void SyncErrorNotifier::Shutdown() {
 }
 
 void SyncErrorNotifier::OnErrorChanged() {
-  NotificationUIManager* notification_ui_manager =
-      g_browser_process->notification_ui_manager();
-
-  // notification_ui_manager() may return null when shutting down.
-  if (!notification_ui_manager)
-    return;
-
   if (error_controller_->HasError() == notification_displayed_)
     return;
 
+  auto* display_service = NotificationDisplayService::GetForProfile(profile_);
   if (!error_controller_->HasError()) {
     notification_displayed_ = false;
-    g_browser_process->notification_ui_manager()->CancelById(
-        notification_id_, NotificationUIManager::GetProfileID(profile_));
+    display_service->Close(NotificationHandler::Type::TRANSIENT,
+                           notification_id_);
     return;
   }
 
@@ -132,9 +125,6 @@ void SyncErrorNotifier::OnErrorChanged() {
   // Error state just got triggered. There shouldn't be previous notification.
   // Let's display one.
   DCHECK(!notification_displayed_ && error_controller_->HasError());
-  DCHECK(notification_ui_manager->FindById(
-             notification_id_, NotificationUIManager::GetProfileID(profile_)) ==
-         nullptr);
 
   message_center::NotifierId notifier_id(
       message_center::NotifierId::SYSTEM_COMPONENT, kProfileSyncNotificationId);
@@ -144,27 +134,20 @@ void SyncErrorNotifier::OnErrorChanged() {
       multi_user_util::GetAccountIdFromProfile(profile_).GetUserEmail();
 
   // Add a new notification.
-  message_center::Notification notification(
-      message_center::NOTIFICATION_TYPE_SIMPLE, notification_id_,
-      l10n_util::GetStringUTF16(IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE),
-      l10n_util::GetStringUTF16(IDS_SYNC_PASSPHRASE_ERROR_BUBBLE_VIEW_MESSAGE),
-      message_center::IsNewStyleNotificationEnabled()
-          ? gfx::Image()
-          : ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-                IDR_NOTIFICATION_ALERT),
-      l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
-      GURL(notification_id_), notifier_id,
-      message_center::RichNotificationData(),
-      new SyncNotificationDelegate(profile_));
-  if (message_center::IsNewStyleNotificationEnabled()) {
-    notification.set_accent_color(
-        message_center::kSystemNotificationColorWarning);
-    notification.set_small_image(gfx::Image(gfx::CreateVectorIcon(
-        kNotificationWarningIcon, message_center::kSmallImageSizeMD,
-        message_center::kSystemNotificationColorWarning)));
-    notification.set_vector_small_image(kNotificationWarningIcon);
-  }
+  std::unique_ptr<message_center::Notification> notification =
+      message_center::Notification::CreateSystemNotification(
+          message_center::NOTIFICATION_TYPE_SIMPLE, notification_id_,
+          l10n_util::GetStringUTF16(IDS_SYNC_ERROR_BUBBLE_VIEW_TITLE),
+          l10n_util::GetStringUTF16(
+              IDS_SYNC_PASSPHRASE_ERROR_BUBBLE_VIEW_MESSAGE),
+          gfx::Image(),
+          l10n_util::GetStringUTF16(IDS_SIGNIN_ERROR_DISPLAY_SOURCE),
+          GURL(notification_id_), notifier_id,
+          message_center::RichNotificationData(),
+          new SyncNotificationDelegate(profile_), kNotificationWarningIcon,
+          message_center::SystemNotificationWarningLevel::WARNING);
+  notification->set_clickable(true);
 
-  notification_ui_manager->Add(notification, profile_);
+  display_service->Display(NotificationHandler::Type::TRANSIENT, *notification);
   notification_displayed_ = true;
 }

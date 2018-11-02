@@ -92,8 +92,9 @@ bool ShouldUseLibAppIndicator() {
     case base::nix::DESKTOP_ENVIRONMENT_PANTHEON:
     case base::nix::DESKTOP_ENVIRONMENT_UNITY:
       return true;
-    case base::nix::DESKTOP_ENVIRONMENT_KDE3:
+    case base::nix::DESKTOP_ENVIRONMENT_CINNAMON:
     case base::nix::DESKTOP_ENVIRONMENT_GNOME:
+    case base::nix::DESKTOP_ENVIRONMENT_KDE3:
     case base::nix::DESKTOP_ENVIRONMENT_OTHER:
     case base::nix::DESKTOP_ENVIRONMENT_XFCE:
       return false;
@@ -284,11 +285,11 @@ AppIndicatorIcon::WriteKDE4TempImageOnWorkerThread(
   base::FilePath icon_theme_path = temp_dir.AppendASCII("icons");
 
   // On KDE4, an image located in a directory ending with
-  // "icons/hicolor/24x24/apps" can be used as the app indicator image because
-  // "/usr/share/icons/hicolor/24x24/apps" exists.
-  base::FilePath image_dir = icon_theme_path.AppendASCII("hicolor")
-                                 .AppendASCII("24x24")
-                                 .AppendASCII("apps");
+  // "icons/hicolor/22x22/apps" can be used as the app indicator image because
+  // "/usr/share/icons/hicolor/22x22/apps" exists.
+  base::FilePath image_dir =
+      icon_theme_path.AppendASCII("hicolor").AppendASCII("22x22").AppendASCII(
+          "apps");
 
   if (!base::CreateDirectory(image_dir))
     return SetImageFromFileParams();
@@ -306,9 +307,9 @@ AppIndicatorIcon::WriteKDE4TempImageOnWorkerThread(
   std::string icon_name = base::StringPrintf(
       "chrome_app_indicator2_%s", base::MD5DigestToBase16(digest).c_str());
 
-  // If |bitmap| is not 24x24, KDE does some really ugly resizing. Pad |bitmap|
-  // with transparent pixels to make it 24x24.
-  const int kDesiredSize = 24;
+  // If |bitmap| is not 22x22, KDE does some really ugly resizing. Pad |bitmap|
+  // with transparent pixels to make it 22x22.
+  const int kDesiredSize = 22;
   SkBitmap scaled_bitmap;
   scaled_bitmap.allocN32Pixels(kDesiredSize, kDesiredSize);
   scaled_bitmap.eraseARGB(0, 0, 0, 0);

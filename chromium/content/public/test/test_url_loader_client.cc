@@ -14,24 +14,23 @@ TestURLLoaderClient::TestURLLoaderClient() : binding_(this) {}
 TestURLLoaderClient::~TestURLLoaderClient() {}
 
 void TestURLLoaderClient::OnReceiveResponse(
-    const ResourceResponseHead& response_head,
+    const network::ResourceResponseHead& response_head,
     const base::Optional<net::SSLInfo>& ssl_info,
-    mojom::DownloadedTempFilePtr downloaded_file) {
+    network::mojom::DownloadedTempFilePtr downloaded_file) {
   EXPECT_FALSE(has_received_response_);
   EXPECT_FALSE(has_received_cached_metadata_);
   EXPECT_FALSE(has_received_completion_);
   has_received_response_ = true;
   response_head_ = response_head;
   ssl_info_ = ssl_info;
+  downloaded_file_ = std::move(downloaded_file);
   if (quit_closure_for_on_receive_response_)
     quit_closure_for_on_receive_response_.Run();
-  binding_.set_connection_error_handler(base::BindOnce(
-      &TestURLLoaderClient::OnConnectionError, base::Unretained(this)));
 }
 
 void TestURLLoaderClient::OnReceiveRedirect(
     const net::RedirectInfo& redirect_info,
-    const ResourceResponseHead& response_head) {
+    const network::ResourceResponseHead& response_head) {
   EXPECT_FALSE(has_received_cached_metadata_);
   EXPECT_FALSE(response_body_.is_valid());
   EXPECT_FALSE(has_received_response_);
@@ -109,13 +108,20 @@ void TestURLLoaderClient::OnComplete(
     quit_closure_for_on_complete_.Run();
 }
 
+network::mojom::DownloadedTempFilePtr
+TestURLLoaderClient::TakeDownloadedTempFile() {
+  return std::move(downloaded_file_);
+}
+
 void TestURLLoaderClient::ClearHasReceivedRedirect() {
   has_received_redirect_ = false;
 }
 
-mojom::URLLoaderClientPtr TestURLLoaderClient::CreateInterfacePtr() {
-  mojom::URLLoaderClientPtr client_ptr;
+network::mojom::URLLoaderClientPtr TestURLLoaderClient::CreateInterfacePtr() {
+  network::mojom::URLLoaderClientPtr client_ptr;
   binding_.Bind(mojo::MakeRequest(&client_ptr));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &TestURLLoaderClient::OnConnectionError, base::Unretained(this)));
   return client_ptr;
 }
 
@@ -188,6 +194,8 @@ void TestURLLoaderClient::RunUntilConnectionError() {
 }
 
 void TestURLLoaderClient::OnConnectionError() {
+  if (has_received_connection_error_)
+    return;
   has_received_connection_error_ = true;
   if (quit_closure_for_on_connection_error_)
     quit_closure_for_on_connection_error_.Run();

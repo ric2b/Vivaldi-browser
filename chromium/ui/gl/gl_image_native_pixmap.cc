@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "ui/gfx/buffer_format_util.h"
+#include "ui/gl/egl_util.h"
+#include "ui/gl/gl_context.h"
 #include "ui/gl/gl_surface_egl.h"
 
 #define FOURCC(a, b, c, d)                                        \
@@ -123,6 +125,34 @@ EGLint FourCC(gfx::BufferFormat format) {
   return 0;
 }
 
+gfx::BufferFormat GetBufferFormatFromFourCCFormat(int format) {
+  switch (format) {
+    case DRM_FORMAT_R8:
+      return gfx::BufferFormat::R_8;
+    case DRM_FORMAT_GR88:
+      return gfx::BufferFormat::RG_88;
+    case DRM_FORMAT_ABGR8888:
+      return gfx::BufferFormat::RGBA_8888;
+    case DRM_FORMAT_XBGR8888:
+      return gfx::BufferFormat::RGBX_8888;
+    case DRM_FORMAT_ARGB8888:
+      return gfx::BufferFormat::BGRA_8888;
+    case DRM_FORMAT_XRGB8888:
+      return gfx::BufferFormat::BGRX_8888;
+    case DRM_FORMAT_XRGB2101010:
+      return gfx::BufferFormat::BGRX_1010102;
+    case DRM_FORMAT_RGB565:
+      return gfx::BufferFormat::BGR_565;
+    case DRM_FORMAT_NV12:
+      return gfx::BufferFormat::YUV_420_BIPLANAR;
+    case DRM_FORMAT_YVU420:
+      return gfx::BufferFormat::YVU_420;
+    default:
+      NOTREACHED();
+      return gfx::BufferFormat::BGRA_8888;
+  }
+}
+
 }  // namespace
 
 GLImageNativePixmap::GLImageNativePixmap(const gfx::Size& size,
@@ -130,7 +160,9 @@ GLImageNativePixmap::GLImageNativePixmap(const gfx::Size& size,
     : GLImageEGL(size),
       internalformat_(internalformat),
       has_image_flush_external_(
-          gl::GLSurfaceEGL::HasEGLExtension("EGL_EXT_image_flush_external")) {}
+          gl::GLSurfaceEGL::HasEGLExtension("EGL_EXT_image_flush_external")),
+      has_image_dma_buf_export_(
+          gl::GLSurfaceEGL::HasEGLExtension("EGL_MESA_image_dma_buf_export")) {}
 
 GLImageNativePixmap::~GLImageNativePixmap() {}
 
@@ -139,19 +171,19 @@ bool GLImageNativePixmap::Initialize(gfx::NativePixmap* pixmap,
   DCHECK(!pixmap_);
   if (pixmap->GetEGLClientBuffer()) {
     EGLint attrs[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
-    if (!GLImageEGL::Initialize(EGL_NATIVE_PIXMAP_KHR,
+    if (!GLImageEGL::Initialize(EGL_NO_CONTEXT, EGL_NATIVE_PIXMAP_KHR,
                                 pixmap->GetEGLClientBuffer(), attrs)) {
       return false;
     }
   } else if (pixmap->AreDmaBufFdsValid()) {
     if (!ValidFormat(format)) {
-      LOG(ERROR) << "Invalid format: " << static_cast<int>(format);
+      LOG(ERROR) << "Invalid format: " << gfx::BufferFormatToString(format);
       return false;
     }
 
     if (!ValidInternalFormat(internalformat_, format)) {
       LOG(ERROR) << "Invalid internalformat: " << internalformat_
-                 << " for format: " << static_cast<int>(format);
+                 << " for format: " << gfx::BufferFormatToString(format);
       return false;
     }
 
@@ -185,7 +217,8 @@ bool GLImageNativePixmap::Initialize(gfx::NativePixmap* pixmap,
       attrs.push_back(pixmap->GetDmaBufOffset(pixmap_plane));
       attrs.push_back(EGL_DMA_BUF_PLANE0_PITCH_EXT + attrs_plane * 3);
       attrs.push_back(pixmap->GetDmaBufPitch(pixmap_plane));
-      if (has_dma_buf_import_modifier) {
+      if (has_dma_buf_import_modifier &&
+          pixmap->GetDmaBufModifier(0) != gfx::NativePixmapPlane::kNoModifier) {
         uint64_t modifier = pixmap->GetDmaBufModifier(pixmap_plane);
         DCHECK(attrs_plane < arraysize(kLinuxDrmModifiers));
         attrs.push_back(kLinuxDrmModifiers[attrs_plane]);
@@ -196,7 +229,7 @@ bool GLImageNativePixmap::Initialize(gfx::NativePixmap* pixmap,
     }
     attrs.push_back(EGL_NONE);
 
-    if (!GLImageEGL::Initialize(EGL_LINUX_DMA_BUF_EXT,
+    if (!GLImageEGL::Initialize(EGL_NO_CONTEXT, EGL_LINUX_DMA_BUF_EXT,
                                 static_cast<EGLClientBuffer>(nullptr),
                                 &attrs[0])) {
       return false;
@@ -205,6 +238,109 @@ bool GLImageNativePixmap::Initialize(gfx::NativePixmap* pixmap,
 
   pixmap_ = pixmap;
   return true;
+}
+
+bool GLImageNativePixmap::InitializeFromTexture(uint32_t texture_id) {
+  GLContext* current_context = GLContext::GetCurrent();
+  if (!current_context || !current_context->IsCurrent(nullptr)) {
+    LOG(ERROR) << "No gl context bound to the current thread";
+    return false;
+  }
+
+  EGLContext context_handle =
+      reinterpret_cast<EGLContext>(current_context->GetHandle());
+  DCHECK_NE(context_handle, EGL_NO_CONTEXT);
+
+  return GLImageEGL::Initialize(context_handle, EGL_GL_TEXTURE_2D_KHR,
+                                reinterpret_cast<EGLClientBuffer>(texture_id),
+                                nullptr);
+}
+
+gfx::NativePixmapHandle GLImageNativePixmap::ExportHandle() {
+  DCHECK(!pixmap_);
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Must use GLImageEGL::Initialize.
+  if (egl_image_ == EGL_NO_IMAGE_KHR) {
+    LOG(ERROR) << "GLImageEGL is not initialized";
+    return gfx::NativePixmapHandle();
+  }
+
+  if (!has_image_dma_buf_export_) {
+    LOG(ERROR) << "Error no extension EGL_MESA_image_dma_buf_export";
+    return gfx::NativePixmapHandle();
+  }
+
+  int fourcc = 0;
+  int num_planes = 0;
+  EGLuint64KHR modifiers = 0;
+
+  if (!eglExportDMABUFImageQueryMESA(GLSurfaceEGL::GetHardwareDisplay(),
+                                     egl_image_, &fourcc, &num_planes,
+                                     &modifiers)) {
+    LOG(ERROR) << "Error querying EGLImage: " << ui::GetLastEGLErrorString();
+    return gfx::NativePixmapHandle();
+  }
+
+  if (num_planes <= 0 || num_planes > 4) {
+    LOG(ERROR) << "Invalid number of planes: " << num_planes;
+    return gfx::NativePixmapHandle();
+  }
+
+  gfx::BufferFormat format = GetBufferFormatFromFourCCFormat(fourcc);
+  if (num_planes > 0 && static_cast<size_t>(num_planes) !=
+                            gfx::NumberOfPlanesForBufferFormat(format)) {
+    LOG(ERROR) << "Invalid number of planes: " << num_planes
+               << " for format: " << static_cast<int>(format);
+    return gfx::NativePixmapHandle();
+  }
+
+  if (!ValidInternalFormat(internalformat_, format)) {
+    // A driver has returned a format different than what has been requested.
+    // This can happen if RGBX is implemented using RGBA. Otherwise there is
+    // a real mistake from the user and we have to fail.
+    if (internalformat_ == GL_RGB && format != gfx::BufferFormat::RGBA_8888) {
+      LOG(ERROR) << "Invalid internalformat: 0x" << std::hex << internalformat_
+                 << " for format: " << static_cast<int>(format);
+      return gfx::NativePixmapHandle();
+    }
+  }
+
+  std::vector<int> fds(num_planes);
+  std::vector<EGLint> strides(num_planes);
+  std::vector<EGLint> offsets(num_planes);
+
+  // It is specified for eglExportDMABUFImageMESA that the app is responsible
+  // for closing any fds retrieved.
+  if (!eglExportDMABUFImageMESA(GLSurfaceEGL::GetHardwareDisplay(), egl_image_,
+                                &fds[0], &strides[0], &offsets[0])) {
+    LOG(ERROR) << "Error exporting EGLImage: " << ui::GetLastEGLErrorString();
+    return gfx::NativePixmapHandle();
+  }
+
+  gfx::NativePixmapHandle handle;
+
+  for (int i = 0; i < num_planes; ++i) {
+    // Sanity check. In principle all the fds are meant to be valid when
+    // eglExportDMABUFImageMESA succeeds.
+    base::ScopedFD scoped_fd(fds[i]);
+    if (!scoped_fd.is_valid()) {
+      LOG(ERROR) << "Invalid dmabuf";
+      return gfx::NativePixmapHandle();
+    }
+
+    // scoped_fd.release() transfers ownership to the caller so it will not
+    // call close when going out of scope. base::FileDescriptor never closes
+    // the fd when going out of scope. The auto_close flag is just a hint for
+    // the user. When true it means the user has ownership of it so he is
+    // responsible for closing the fd.
+    handle.fds.emplace_back(
+        base::FileDescriptor(scoped_fd.release(), true /* auto_close */));
+    handle.planes.emplace_back(strides[i], offsets[i], 0 /* size opaque */,
+                               modifiers);
+  }
+
+  return handle;
 }
 
 unsigned GLImageNativePixmap::GetInternalFormat() {

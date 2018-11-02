@@ -5,6 +5,7 @@
 
 """Utilities for capturing traces for chromecast devices."""
 
+import base64
 import json
 import logging
 import math
@@ -41,6 +42,11 @@ class TracingBackend(object):
     self._devtools_port = devtools_port
     self._timeout = timeout
     self._buffer_usage_reporting_interval = buffer_usage_reporting_interval
+    self._included_categories = []
+    self._excluded_categories = []
+    self._pending_read_ids = []
+    self._stream_handle = None
+    self._output_file = None
 
   def Connect(self):
     """Connect to cast_shell."""
@@ -61,7 +67,8 @@ class TracingBackend(object):
 
   def StartTracing(self,
                    custom_categories=None,
-                   record_continuously=False):
+                   record_continuously=False,
+                   systrace=True):
     """Begin a tracing session on device.
 
     Args:
@@ -71,39 +78,64 @@ class TracingBackend(object):
     """
     self._tracing_client = TracingClient()
     self._socket.settimeout(self._timeout)
+    self._ParseCustomCategories(custom_categories)
     req = {
-      'method': 'Tracing.start',
-      'params': {
-        'categories': custom_categories,
-        'bufferUsageReportingInterval': self._buffer_usage_reporting_interval,
-        'options': 'record-continuously' if record_continuously else
-                   'record-until-full'
-      }
+        'method': 'Tracing.start',
+        'params': {
+            'transferMode':
+                'ReturnAsStream' if systrace else 'ReportEvents',
+            'streamCompression':
+                'gzip' if systrace else 'none',
+            'traceConfig': {
+                'enableSystrace':
+                    systrace,
+                'recordMode':
+                    'recordContinuously'
+                    if record_continuously else 'recordUntilFull',
+                'includedCategories':
+                    self._included_categories,
+                'excludedCategories':
+                    self._excluded_categories,
+            },
+            'bufferUsageReportingInterval':
+                self._buffer_usage_reporting_interval,
+        }
     }
     self._SendRequest(req)
 
-  def StopTracing(self, output_file):
+  def StopTracing(self, output_path_base):
     """End a tracing session on device.
 
     Args:
-      output_file: Path to the file to store the trace.
+      output_path_base: Path to the file to store the trace. A .gz extension
+        will be appended to this path if the trace is compressed.
+
+    Returns:
+      Final output filename.
     """
     self._socket.settimeout(self._timeout)
     req = {'method': 'Tracing.end'}
     self._SendRequest(req)
-    while self._socket:
-      res = self._ReceiveResponse()
-      has_error = 'error' in res
-      if has_error:
-        logging.error('Tracing error: ' + str(res.get('error')))
-      if has_error or ('method' in res and self._HandleResponse(res)):
-        self._tracing_client = None
-        result = self._tracing_data
-        self._tracing_data = []
+    self._output_path_base = output_path_base
 
-        with open(output_file, 'w') as f:
-          json.dump(result, f)
-        return
+    try:
+      while self._socket:
+        res = self._ReceiveResponse()
+        has_error = 'error' in res
+        if has_error:
+          logging.error('Tracing error: ' + str(res.get('error')))
+        if has_error or self._HandleResponse(res):
+          self._tracing_client = None
+          if not self._stream_handle:
+            # Compression not supported for ReportEvents transport.
+            self._output_path = self._output_path_base
+            with open(self._output_path, 'w') as output_file:
+              json.dump(self._tracing_data, output_file)
+          self._tracing_data = []
+          return self._output_path
+    finally:
+      if self._output_file:
+        self._output_file.close()
 
   def _SendRequest(self, req):
     """Sends request to remote devtools.
@@ -115,6 +147,7 @@ class TracingBackend(object):
     self._next_request_id += 1
     data = json.dumps(req)
     self._socket.send(data)
+    return req['id']
 
   def _ReceiveResponse(self):
     """Get response from remote devtools.
@@ -127,6 +160,20 @@ class TracingBackend(object):
       res = json.loads(data)
       return res
 
+  def _SendReadRequest(self):
+    """Sends a request to read the trace data stream."""
+    req = {
+      'method': 'IO.read',
+      'params': {
+        'handle': self._stream_handle,
+        'size': 32768,
+      }
+    }
+
+    # Send multiple reads to hide request latency.
+    while len(self._pending_read_ids) < 2:
+      self._pending_read_ids.append(self._SendRequest(req))
+
   def _HandleResponse(self, res):
     """Handle response from remote devtools.
 
@@ -135,6 +182,7 @@ class TracingBackend(object):
     """
     method = res.get('method')
     value = res.get('params', {}).get('value')
+    response_id = res.get('id', None)
     if 'Tracing.dataCollected' == method:
       if type(value) in [str, unicode]:
         self._tracing_data.append(value)
@@ -145,7 +193,47 @@ class TracingBackend(object):
     elif 'Tracing.bufferUsage' == method and self._tracing_client:
       self._tracing_client.BufferUsage(value)
     elif 'Tracing.tracingComplete' == method:
-      return True
+      self._stream_handle = res.get('params', {}).get('stream')
+      compression = res.get('params', {}).get('streamCompression')
+      if self._stream_handle:
+        compression_suffix = '.gz' if compression == 'gzip' else ''
+        self._output_path = self._output_path_base
+        if not self._output_path.endswith(compression_suffix):
+          self._output_path += compression_suffix
+        self._output_file = open(self._output_path, 'w')
+        self._SendReadRequest()
+      else:
+        return True
+    elif response_id in self._pending_read_ids:
+      self._pending_read_ids.remove(response_id)
+      data = res.get('result', {}).get('data')
+      eof = res.get('result', {}).get('eof')
+      base64_encoded = res.get('result', {}).get('base64Encoded')
+      if base64_encoded:
+        data = base64.b64decode(data)
+      else:
+        data = data.encode('utf-8')
+      self._output_file.write(data)
+      if eof:
+        return True
+      else:
+        self._SendReadRequest()
+
+  def _ParseCustomCategories(self, custom_categories):
+    """Parse a category filter into trace config format"""
+
+    self._included_categories = []
+    self._excluded_categories = []
+
+    # See TraceConfigCategoryFilter::InitializeFromString in chromium.
+    categories = (token.strip() for token in custom_categories.split(','))
+    for category in categories:
+      if not category:
+        continue
+      if category.startswith('-'):
+        self._excluded_categories.append(category[1:])
+      else:
+        self._included_categories.append(category)
 
 
 class TracingBackendAndroid(object):
@@ -162,7 +250,8 @@ class TracingBackendAndroid(object):
 
   def StartTracing(self,
                    custom_categories=None,
-                   record_continuously=False):
+                   record_continuously=False,
+                   systrace=True):
     """Begin a tracing session on device.
 
     Args:
@@ -199,6 +288,7 @@ class TracingBackendAndroid(object):
         break
 
     self._AdbCommand(['pull', self._file, output_file])
+    return output_file
 
   def _AdbCommand(self, command):
     args = ['adb', '-s', self.device]

@@ -34,6 +34,7 @@ import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer
         .OnEvaluateJavaScriptResultHelper;
 import org.chromium.content.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
 
 import java.util.concurrent.ExecutionException;
@@ -44,8 +45,7 @@ import java.util.concurrent.TimeoutException;
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @RetryOnFailure
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class ModalDialogTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -242,14 +242,18 @@ public class ModalDialogTest {
         }
     }
 
+    private GestureListenerManager getGestureListenerManager() {
+        return GestureListenerManager.fromWebContents(
+                mActivityTestRule.getActivity().getCurrentContentViewCore().getWebContents());
+    }
+
     /**
      * Taps on a view and waits for a callback.
      */
     private void tapViewAndWait() throws InterruptedException, TimeoutException {
         final TapGestureStateListener tapGestureStateListener = new TapGestureStateListener();
         int callCount = tapGestureStateListener.getCallCount();
-        mActivityTestRule.getActivity().getCurrentContentViewCore().addGestureStateListener(
-                tapGestureStateListener);
+        getGestureListenerManager().addListener(tapGestureStateListener);
 
         TouchCommon.singleClickView(mActivityTestRule.getActivity().getActivityTab().getView());
         tapGestureStateListener.waitForTap(callCount);

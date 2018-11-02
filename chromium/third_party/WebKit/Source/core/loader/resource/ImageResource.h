@@ -56,8 +56,6 @@ class CORE_EXPORT ImageResource final
   USING_GARBAGE_COLLECTED_MIXIN(ImageResource);
 
  public:
-  using ClientType = ResourceClient;
-
   // Use ImageResourceContent::Fetch() unless ImageResource is required.
   // TODO(hiroshige): Make Fetch() private.
   static ImageResource* Fetch(FetchParameters&, ResourceFetcher*);
@@ -100,6 +98,13 @@ class CORE_EXPORT ImageResource final
 
   bool ShouldShowPlaceholder() const;
 
+  // If the ImageResource came from a user agent CSS stylesheet then we should
+  // flag it so that it can persist beyond navigation.
+  void FlagAsUserAgentResource();
+
+  void OnMemoryDump(WebMemoryDumpLevelOfDetail,
+                    WebProcessMemoryDump*) const override;
+
   void Trace(blink::Visitor*) override;
 
  private:
@@ -120,7 +125,7 @@ class CORE_EXPORT ImageResource final
   // Only for ImageResourceInfoImpl.
   void DecodeError(bool all_data_received);
   bool IsAccessAllowed(
-      SecurityOrigin*,
+      const SecurityOrigin*,
       ImageResourceInfo::DoesCurrentFrameHaveSingleSecurityOrigin) const;
 
   bool HasClientsOrObservers() const override;
@@ -178,6 +183,8 @@ class CORE_EXPORT ImageResource final
   double last_flush_time_ = 0.;
 
   bool is_during_finish_as_error_ = false;
+
+  bool is_referenced_from_ua_stylesheet_ = false;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);

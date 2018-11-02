@@ -123,7 +123,8 @@ void GuestViewInternalCreateGuestFunction::CreateGuestCallback(
   int content_window_id = MSG_ROUTING_NONE;
   if (guest_web_contents) {
     GuestViewBase* guest = GuestViewBase::FromWebContents(guest_web_contents);
-    // gisli@vivaldi.com:  For Vivaldi we might delete the guest before the contents.
+    // gisli@vivaldi.com:  For Vivaldi we might delete the guest before the
+    // contents.
     if (guest) {
     guest_instance_id = guest->guest_instance_id();
     content_window_id = guest->proxy_routing_id();

@@ -56,8 +56,18 @@ class SESSIONS_EXPORT LiveTabContext {
       bool pin,
       bool from_last_session,
       const PlatformSpecificTabData* tab_platform_data,
-      const std::string& user_agent_override,
-      const std::string& ext_data) = 0;
+      const std::string& user_agent_override);
+  virtual LiveTab* AddRestoredTab(
+    const std::vector<SerializedNavigationEntry>& navigations,
+    int tab_index,
+    int selected_navigation,
+    const std::string& extension_app_id,
+    bool select,
+    bool pin,
+    bool from_last_session,
+    const PlatformSpecificTabData* tab_platform_data,
+    const std::string& user_agent_override,
+    const std::string& ext_data);
 
   // Note: |tab_platform_data| may be null (e.g., if |from_last_session| is
   // true, as this data is not persisted, or if the platform does not provide
@@ -68,8 +78,16 @@ class SESSIONS_EXPORT LiveTabContext {
       bool from_last_session,
       const std::string& extension_app_id,
       const PlatformSpecificTabData* tab_platform_data,
-      const std::string& user_agent_override,
-      const std::string& ext_data) = 0;
+      const std::string& user_agent_override);
+  virtual LiveTab* ReplaceRestoredTab(
+    const std::vector<SerializedNavigationEntry>& navigations,
+    int selected_navigation,
+    bool from_last_session,
+    const std::string& extension_app_id,
+    const PlatformSpecificTabData* tab_platform_data,
+    const std::string& user_agent_override,
+    const std::string& ext_data);
+
   virtual void CloseTab() = 0;
 
  protected:

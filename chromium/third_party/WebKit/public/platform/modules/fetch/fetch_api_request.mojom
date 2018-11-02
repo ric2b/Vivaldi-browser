@@ -5,6 +5,7 @@
 module blink.mojom;
 
 import "services/network/public/interfaces/fetch_api.mojom";
+import "services/network/public/interfaces/request_context_frame_type.mojom";
 import "third_party/WebKit/public/platform/referrer.mojom";
 import "third_party/WebKit/common/blob/blob.mojom";
 import "url/mojo/url.mojom";
@@ -47,14 +48,6 @@ enum RequestContextType {
   XSLT,
 };
 
-// Frame type of the context associated with a request.
-enum RequestContextFrameType {
-  AUXILIARY,
-  NESTED,
-  NONE,
-  TOP_LEVEL,
-};
-
 // https://fetch.spec.whatwg.org/#concept-request-cache-mode
 enum FetchCacheMode {
   // "default": Fetch will inspect the HTTP cache on the way to the network. If
@@ -93,14 +86,6 @@ enum FetchCacheMode {
   kUnspecifiedForceCacheMiss,
 };
 
-// The redirect mode indicating how redirects should be handled.
-// https://fetch.spec.whatwg.org/#concept-request-redirect-mode
-enum FetchRedirectMode {
-  FOLLOW,
-  ERROR_MODE,
-  MANUAL,
-};
-
 // Whether this is a regular fetch, or a foreign fetch request (now removed).
 // TODO(falken): Remove this since it's always FETCH.
 enum ServiceWorkerFetchType {
@@ -111,7 +96,7 @@ struct FetchAPIRequest {
   network.mojom.FetchRequestMode mode;
   bool is_main_resource_load;
   RequestContextType request_context_type;
-  RequestContextFrameType frame_type;
+  network.mojom.RequestContextFrameType frame_type;
   url.mojom.Url url;
   string method;
   map<string, string> headers;
@@ -121,7 +106,7 @@ struct FetchAPIRequest {
   Referrer referrer;
   network.mojom.FetchCredentialsMode credentials_mode;
   FetchCacheMode cache_mode;
-  FetchRedirectMode redirect_mode;
+  network.mojom.FetchRedirectMode redirect_mode;
   string? integrity;
   bool keepalive;
   string? client_id;

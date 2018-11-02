@@ -12,18 +12,17 @@
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8BindingForCore.h"
+#include "bindings/core/v8/V8Response.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "bindings/modules/v8/V8Response.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/fetch/BodyStreamBuffer.h"
+#include "core/fetch/FetchDataLoader.h"
+#include "core/fetch/Request.h"
+#include "core/fetch/Response.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/cachestorage/CacheStorageError.h"
-#include "modules/fetch/BodyStreamBuffer.h"
-#include "modules/fetch/FetchDataLoader.h"
-#include "modules/fetch/GlobalFetch.h"
-#include "modules/fetch/Request.h"
-#include "modules/fetch/Response.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 #include "platform/Histogram.h"
 #include "platform/bindings/ScriptState.h"
@@ -372,7 +371,7 @@ class Cache::BlobHandleCallbackForPut final
     request->PopulateWebServiceWorkerRequest(web_request_);
     response->PopulateWebServiceWorkerResponse(web_response_);
   }
-  ~BlobHandleCallbackForPut() override {}
+  ~BlobHandleCallbackForPut() override = default;
 
   void DidFetchDataLoadedBlobHandle(
       scoped_refptr<BlobDataHandle> handle) override {
@@ -419,7 +418,7 @@ class Cache::CodeCacheHandleCallbackForPut final
     request->PopulateWebServiceWorkerRequest(web_request_);
     response->PopulateWebServiceWorkerResponse(web_response_);
   }
-  ~CodeCacheHandleCallbackForPut() override {}
+  ~CodeCacheHandleCallbackForPut() override = default;
 
   void DidFetchDataLoadedArrayBuffer(DOMArrayBuffer* array_buffer) override {
     WebServiceWorkerCache::BatchOperation batch_operation;

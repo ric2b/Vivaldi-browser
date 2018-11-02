@@ -93,7 +93,7 @@ XMLDocument* DOMImplementation::createDocument(
     doc = XMLDocument::Create(init);
   }
 
-  doc->SetSecurityOrigin(document_->GetSecurityOrigin());
+  doc->SetSecurityOrigin(document_->GetMutableSecurityOrigin());
   doc->SetContextFeatures(document_->GetContextFeatures());
 
   Node* document_element = nullptr;
@@ -216,7 +216,7 @@ Document* DOMImplementation::createHTMLDocument(const String& title) {
     head_element->AppendChild(title_element);
     title_element->AppendChild(d->createTextNode(title), ASSERT_NO_EXCEPTION);
   }
-  d->SetSecurityOrigin(document_->GetSecurityOrigin());
+  d->SetSecurityOrigin(document_->GetMutableSecurityOrigin());
   d->SetContextFeatures(document_->GetContextFeatures());
   return d;
 }
@@ -241,7 +241,8 @@ Document* DOMImplementation::createDocument(const String& type,
     // init.frame()->tree().top()->securityContext() returns nullptr.
     // For that reason, the origin must be retrieved directly from init.url().
     if (init.GetFrame()->IsMainFrame()) {
-      scoped_refptr<SecurityOrigin> origin = SecurityOrigin::Create(init.Url());
+      scoped_refptr<const SecurityOrigin> origin =
+          SecurityOrigin::Create(init.Url());
       plugin_data = init.GetFrame()->GetPage()->GetPluginData(origin.get());
     } else {
       plugin_data =

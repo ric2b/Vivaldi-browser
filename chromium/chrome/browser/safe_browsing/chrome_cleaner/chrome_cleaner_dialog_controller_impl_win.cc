@@ -58,7 +58,7 @@ ChromeCleanerDialogControllerImpl::ChromeCleanerDialogControllerImpl(
     ChromeCleanerController* cleaner_controller)
     : cleaner_controller_(cleaner_controller),
       prompt_delegate_impl_(
-          base::MakeUnique<ChromeCleanerPromptDelegateImpl>()) {
+          std::make_unique<ChromeCleanerPromptDelegateImpl>()) {
   DCHECK(cleaner_controller_);
   DCHECK_EQ(ChromeCleanerController::State::kScanning,
             cleaner_controller_->state());
@@ -92,7 +92,7 @@ void ChromeCleanerDialogControllerImpl::Accept(bool logs_enabled) {
       logs_enabled
           ? ChromeCleanerController::UserResponse::kAcceptedWithLogs
           : ChromeCleanerController::UserResponse::kAcceptedWithoutLogs);
-  chrome_cleaner_util::OpenSettingsPage(
+  chrome_cleaner_util::OpenCleanupPage(
       browser_, WindowOpenDisposition::NEW_FOREGROUND_TAB);
   OnInteractionDone();
 }
@@ -148,7 +148,7 @@ void ChromeCleanerDialogControllerImpl::DetailsButtonClicked(
       "SoftwareReporter.PromptDialog_DetailsButtonClicked"));
 
   cleaner_controller_->SetLogsEnabled(logs_enabled);
-  chrome_cleaner_util::OpenSettingsPage(
+  chrome_cleaner_util::OpenCleanupPage(
       browser_, WindowOpenDisposition::NEW_FOREGROUND_TAB);
   OnInteractionDone();
 }
@@ -184,6 +184,7 @@ void ChromeCleanerDialogControllerImpl::OnScanning() {
 }
 
 void ChromeCleanerDialogControllerImpl::OnInfected(
+    bool is_powered_by_partner,
     const ChromeCleanerScannerResults& reported_results) {
   DCHECK(!dialog_shown_);
 
@@ -201,6 +202,7 @@ void ChromeCleanerDialogControllerImpl::OnInfected(
 }
 
 void ChromeCleanerDialogControllerImpl::OnCleaning(
+    bool is_powered_by_partner,
     const ChromeCleanerScannerResults& reported_results) {
   if (!dialog_shown_)
     OnInteractionDone();

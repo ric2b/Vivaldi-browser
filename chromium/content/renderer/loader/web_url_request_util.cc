@@ -21,6 +21,7 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_util.h"
 #include "services/network/public/interfaces/data_pipe_getter.mojom.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/common/blob/blob.mojom.h"
@@ -105,8 +106,8 @@ class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
   std::string buffer_;
 };
 
-// Vends data pipes to read a Blob. It stays alive by StrongBinding to the Mojo
-// request.
+// Vends data pipes to read a Blob. It stays alive until all Mojo connections
+// close.
 class DataPipeGetter : public network::mojom::DataPipeGetter {
  public:
   DataPipeGetter(blink::mojom::BlobPtr blob,
@@ -161,8 +162,15 @@ class DataPipeGetter : public network::mojom::DataPipeGetter {
 
   void BindInternal(blink::mojom::BlobPtrInfo blob,
                     network::mojom::DataPipeGetterRequest request) {
-    mojo::MakeStrongBinding(base::WrapUnique(this), std::move(request));
+    bindings_.set_connection_error_handler(base::BindRepeating(
+        &DataPipeGetter::OnConnectionError, base::Unretained(this)));
+    bindings_.AddBinding(this, std::move(request));
     blob_.Bind(std::move(blob));
+  }
+
+  void OnConnectionError() {
+    if (bindings_.empty())
+      delete this;
   }
 
   // network::mojom::DataPipeGetter implementation:
@@ -175,8 +183,13 @@ class DataPipeGetter : public network::mojom::DataPipeGetter {
     blob_->ReadAll(std::move(handle), std::move(blob_reader_client_ptr));
   }
 
+  void Clone(network::mojom::DataPipeGetterRequest request) override {
+    bindings_.AddBinding(this, std::move(request));
+  }
+
  private:
   blink::mojom::BlobPtr blob_;
+  mojo::BindingSet<network::mojom::DataPipeGetter> bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(DataPipeGetter);
 };
@@ -283,18 +296,22 @@ ResourceType WebURLRequestContextToResourceType(
 
 ResourceType WebURLRequestToResourceType(const WebURLRequest& request) {
   WebURLRequest::RequestContext request_context = request.GetRequestContext();
-  if (request.GetFrameType() != WebURLRequest::kFrameTypeNone) {
+  if (request.GetFrameType() !=
+      network::mojom::RequestContextFrameType::kNone) {
     DCHECK(request_context == WebURLRequest::kRequestContextForm ||
            request_context == WebURLRequest::kRequestContextFrame ||
            request_context == WebURLRequest::kRequestContextHyperlink ||
            request_context == WebURLRequest::kRequestContextIframe ||
            request_context == WebURLRequest::kRequestContextInternal ||
            request_context == WebURLRequest::kRequestContextLocation);
-    if (request.GetFrameType() == WebURLRequest::kFrameTypeTopLevel ||
-        request.GetFrameType() == WebURLRequest::kFrameTypeAuxiliary) {
+    if (request.GetFrameType() ==
+            network::mojom::RequestContextFrameType::kTopLevel ||
+        request.GetFrameType() ==
+            network::mojom::RequestContextFrameType::kAuxiliary) {
       return RESOURCE_TYPE_MAIN_FRAME;
     }
-    if (request.GetFrameType() == WebURLRequest::kFrameTypeNested)
+    if (request.GetFrameType() ==
+        network::mojom::RequestContextFrameType::kNested)
       return RESOURCE_TYPE_SUB_FRAME;
     NOTREACHED();
     return RESOURCE_TYPE_SUB_RESOURCE;
@@ -319,6 +336,13 @@ std::string GetWebURLRequestHeadersAsString(
 
 int GetLoadFlagsForWebURLRequest(const WebURLRequest& request) {
   int load_flags = net::LOAD_NORMAL;
+
+  // Although EV status is irrelevant to sub-frames and sub-resources, we have
+  // to perform EV certificate verification on all resources because an HTTP
+  // keep-alive connection created to load a sub-frame or a sub-resource could
+  // be reused to load a main frame.
+  load_flags |= net::LOAD_VERIFY_EV_CERT;
+
   GURL url = request.Url();
   switch (request.GetCacheMode()) {
     case FetchCacheMode::kNoStore:
@@ -363,17 +387,17 @@ int GetLoadFlagsForWebURLRequest(const WebURLRequest& request) {
 }
 
 WebHTTPBody GetWebHTTPBodyForRequestBody(
-    const scoped_refptr<ResourceRequestBody>& input) {
+    const network::ResourceRequestBody& input) {
   WebHTTPBody http_body;
   http_body.Initialize();
-  http_body.SetIdentifier(input->identifier());
-  http_body.SetContainsPasswordData(input->contains_sensitive_info());
-  for (const auto& element : *input->elements()) {
+  http_body.SetIdentifier(input.identifier());
+  http_body.SetContainsPasswordData(input.contains_sensitive_info());
+  for (auto& element : *input.elements()) {
     switch (element.type()) {
-      case ResourceRequestBody::Element::TYPE_BYTES:
+      case network::DataElement::TYPE_BYTES:
         http_body.AppendData(WebData(element.bytes(), element.length()));
         break;
-      case ResourceRequestBody::Element::TYPE_FILE:
+      case network::DataElement::TYPE_FILE:
         http_body.AppendFileRange(
             blink::FilePathToWebString(element.path()), element.offset(),
             (element.length() != std::numeric_limits<uint64_t>::max())
@@ -381,16 +405,25 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
                 : -1,
             element.expected_modification_time().ToDoubleT());
         break;
-      case ResourceRequestBody::Element::TYPE_BLOB:
+      case network::DataElement::TYPE_BLOB:
         http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()));
         break;
-      case ResourceRequestBody::Element::TYPE_DATA_PIPE:
-        // TODO(falken): Implement this.
-        NOTIMPLEMENTED() << "data pipe";
+      case network::DataElement::TYPE_DATA_PIPE: {
+        // Append the cloned data pipe to the |http_body|. This might not be
+        // needed for all callsites today but it respects the constness of
+        // |input|, as opposed to moving the data pipe out of |input|.
+        network::mojom::DataPipeGetterPtr cloned_data_pipe_getter;
+        const_cast<network::mojom::DataPipeGetterPtr&>(element.data_pipe())
+            ->Clone(mojo::MakeRequest(&cloned_data_pipe_getter));
+        http_body.AppendDataPipe(
+            cloned_data_pipe_getter.PassInterface().PassHandle());
         break;
-      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
-      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
-      default:
+      }
+      case network::DataElement::TYPE_UNKNOWN:
+      case network::DataElement::TYPE_BYTES_DESCRIPTION:
+      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
+      case network::DataElement::TYPE_FILE_FILESYSTEM:
+      case network::DataElement::TYPE_RAW_FILE:
         NOTREACHED();
         break;
     }
@@ -398,9 +431,9 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
   return http_body;
 }
 
-scoped_refptr<ResourceRequestBody> GetRequestBodyForWebURLRequest(
+scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebURLRequest(
     const WebURLRequest& request) {
-  scoped_refptr<ResourceRequestBody> request_body;
+  scoped_refptr<network::ResourceRequestBody> request_body;
 
   if (request.HttpBody().IsNull()) {
     return request_body;
@@ -418,9 +451,10 @@ void GetBlobRegistry(blink::mojom::BlobRegistryRequest request) {
       mojom::kBrowserServiceName, std::move(request));
 }
 
-scoped_refptr<ResourceRequestBody> GetRequestBodyForWebHTTPBody(
+scoped_refptr<network::ResourceRequestBody> GetRequestBodyForWebHTTPBody(
     const blink::WebHTTPBody& httpBody) {
-  scoped_refptr<ResourceRequestBody> request_body = new ResourceRequestBody();
+  scoped_refptr<network::ResourceRequestBody> request_body =
+      new network::ResourceRequestBody();
   size_t i = 0;
   WebHTTPBody::Element element;
   // TODO(jam): cache this somewhere so we don't request it each time?
@@ -489,8 +523,23 @@ scoped_refptr<ResourceRequestBody> GetRequestBodyForWebHTTPBody(
         }
         break;
       }
-      default:
-        NOTREACHED();
+      case WebHTTPBody::Element::kTypeDataPipe: {
+        // Convert the raw message pipe to network::mojom::DataPipeGetterPtr.
+        network::mojom::DataPipeGetterPtr data_pipe_getter;
+        data_pipe_getter.Bind(network::mojom::DataPipeGetterPtrInfo(
+            std::move(element.data_pipe_getter), 0u));
+
+        // Set the cloned DataPipeGetter to the output |request_body|, while
+        // keeping the original message pipe back in the input |httpBody|. This
+        // way the consumer of the |httpBody| can retrieve the data pipe
+        // multiple times (e.g. during redirects) until the request is finished.
+        network::mojom::DataPipeGetterPtr cloned_getter;
+        data_pipe_getter->Clone(mojo::MakeRequest(&cloned_getter));
+        request_body->AppendDataPipe(std::move(cloned_getter));
+        element.data_pipe_getter =
+            data_pipe_getter.PassInterface().PassHandle();
+        break;
+      }
     }
   }
   request_body->set_identifier(httpBody.Identifier());
@@ -502,34 +551,8 @@ scoped_refptr<ResourceRequestBody> GetRequestBodyForWebHTTPBody(
   static_assert(static_cast<int>(a) == static_cast<int>(b), \
                 "mismatching enums: " #a)
 
-STATIC_ASSERT_ENUM(FetchRedirectMode::FOLLOW_MODE,
-                   WebURLRequest::kFetchRedirectModeFollow);
-STATIC_ASSERT_ENUM(FetchRedirectMode::ERROR_MODE,
-                   WebURLRequest::kFetchRedirectModeError);
-STATIC_ASSERT_ENUM(FetchRedirectMode::MANUAL_MODE,
-                   WebURLRequest::kFetchRedirectModeManual);
-
-FetchRedirectMode GetFetchRedirectModeForWebURLRequest(
-    const WebURLRequest& request) {
-  return static_cast<FetchRedirectMode>(request.GetFetchRedirectMode());
-}
-
 std::string GetFetchIntegrityForWebURLRequest(const WebURLRequest& request) {
   return request.GetFetchIntegrity().Utf8();
-}
-
-STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_AUXILIARY,
-                   WebURLRequest::kFrameTypeAuxiliary);
-STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_NESTED,
-                   WebURLRequest::kFrameTypeNested);
-STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_NONE,
-                   WebURLRequest::kFrameTypeNone);
-STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
-                   WebURLRequest::kFrameTypeTopLevel);
-
-RequestContextFrameType GetRequestContextFrameTypeForWebURLRequest(
-    const WebURLRequest& request) {
-  return static_cast<RequestContextFrameType>(request.GetFrameType());
 }
 
 STATIC_ASSERT_ENUM(REQUEST_CONTEXT_TYPE_UNSPECIFIED,
@@ -628,5 +651,7 @@ ServiceWorkerMode GetServiceWorkerModeForWebURLRequest(
     const WebURLRequest& request) {
   return static_cast<ServiceWorkerMode>(request.GetServiceWorkerMode());
 }
+
+#undef STATIC_ASSERT_ENUM
 
 }  // namespace content

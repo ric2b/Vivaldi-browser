@@ -1,57 +1,62 @@
-post_process_target("//chrome:chrome_child") {
-  if (is_win) {
-    output_name = "vivaldi_child"
+import("//build/config/chrome_build.gni")
+import("//build/config/sanitizers/sanitizers.gni")
+
+if (is_multi_dll_chrome) {
+  update_target("//chrome:chrome_child") {
+    if (is_win) {
+      output_name = "vivaldi_child"
+    }
   }
 }
 
-post_process_target("//chrome:chrome_initial") {
-  if (is_win) {
-    output_name = "initialexe/vivaldi"
-  } else {
-    output_name = "vivaldi"
+if (!is_android && !is_mac) {
+  update_target("//chrome:chrome_initial") {
+    if (is_win) {
+      output_name = "initialexe/vivaldi"
+    } else {
+      output_name = "vivaldi"
+    }
   }
-}
-
-post_process_target("//chrome/chrome_watcher:chrome_watcher") {
-  if (is_win) {
-    output_name = "vivaldi_watcher"
-  }
-}
-
-post_process_target("//chrome_elf:chrome_elf") {
-  output_name = "vivaldi_elf"
-}
-
-post_process_target("//chrome:main_dll") {
-  if (is_win) {
-    output_name = "vivaldi"
-  }
-}
-
-post_process_action("//chrome:reorder_imports") {
-  inputs = []
-  outputs = []
-  inputs = [
-    "$root_out_dir/initialexe/vivaldi.exe",
-  ]
-  outputs = [
-    "$root_out_dir/vivaldi.exe",
-    "$root_out_dir/vivaldi.exe.pdb",
-  ]
-}
-
-post_process_template(
-    "//chrome/app/version_assembly:version_assembly_manifest") {
-  output = "$root_build_dir/$vivaldi_version_full.manifest"
 }
 
 if (is_win) {
+  update_target("//chrome/chrome_watcher:chrome_watcher") {
+    output_name = "vivaldi_watcher"
+  }
+
+  update_target("//chrome:main_dll") {
+    if (is_win) {
+      output_name = "vivaldi"
+    }
+  }
+
+  update_target("//chrome:reorder_imports") {
+    inputs = []
+    outputs = []
+    inputs = [
+      "$root_out_dir/initialexe/vivaldi.exe",
+    ]
+    outputs = [
+      "$root_out_dir/vivaldi.exe",
+      "$root_out_dir/vivaldi.exe.pdb",
+    ]
+  }
+
+  update_target("//chrome_elf:chrome_elf") {
+    output_name = "vivaldi_elf"
+  }
+
+  update_template_instance(
+      "//chrome/app/version_assembly:version_assembly_manifest") {
+    output = "$root_build_dir/$vivaldi_version_full.manifest"
+  }
+
   _platform_suffix = ""
   if (target_cpu == "x64") {
     _platform_suffix = ".x64"
   }
 
-  post_process_action(
+  update_target(
       "//chrome/installer/mini_installer:mini_installer_archive") {
     inputs -= [
       "$root_out_dir/chrome.dll",
@@ -94,25 +99,34 @@ if (is_win) {
     }
   }
 
-  post_process_target("//chrome/installer/mini_installer:mini_installer") {
+  update_target("//chrome/installer/mini_installer:mini_installer") {
     output_name = "Vivaldi.${vivaldi_version_full}${_platform_suffix}"
   }
-  post_process_target(
-      "//chrome/installer/mini_installer:next_version_mini_installer") {
-    disabled = true
-    deps = []
-    inputs = []
-  }
-  post_process_target("//chrome/tools/build/win/syzygy::chrome_dll_syzygy") {
-    dll_name = "vivaldi"
-    binary_name = "vivaldi.dll"
-  }
-  post_process_target(
-      "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy") {
-    dll_name = "vivaldi_child"
-    binary_name = "vivaldi_child.dll"
-  }
 
+  if (!(is_component_build && is_debug && target_cpu == "x86")) {
+    update_target(
+        "//chrome/installer/mini_installer:next_version_mini_installer") {
+      disabled = true
+      deps = []
+      inputs = []
+    }
+  }
+  if (is_multi_dll_chrome && is_syzyasan) {
+    update_target("//chrome/tools/build/win/syzygy::chrome_dll_syzygy") {
+      dll_name = "vivaldi"
+      binary_name = "vivaldi.dll"
+    }
+    update_target(
+        "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy") {
+      dll_name = "vivaldi_child"
+      binary_name = "vivaldi_child.dll"
+    }
+    update_target(
+        "//chrome/tools/build/win/syzygy::chrome_child_dll_syzygy_copy") {
+      source -= ["$root_out_dir/chrome_child.dll"]
+      sources += ["$root_out_dir/vivaldi_child.dll"]
+    }
+  }
 }
 
 # Write compiler path to win_toolchain.json file used by PGO benchmark script
@@ -122,11 +136,20 @@ if (is_win) {
       "{ \"path\":\""+ rebase_path(visual_studio_path) +"\" }")
 }
 
-post_process_template("//chrome/android:chrome_public_apk") {
-  apk_name = "Vivaldi"
+if (is_android) {
+  update_template_instance("//chrome/android:chrome_public_apk") {
+    apk_name = "Vivaldi"
+  }
+
+  update_template_instance("//chrome/android:chrome_public_apk_resources") {
+    resource_dirs = []
+    resource_dirs = [ "//vivaldi/android/java/res_vivaldi/final" ]
+  }
 }
 
-post_process_template("//chrome/android:chrome_public_apk_resources") {
-  resource_dirs = []
-  resource_dirs = [ "//vivaldi/android/java/res_vivaldi/final" ]
+if (!is_android) {
+  update_template_instance("//chrome/app/vector_icons:chrome_vector_icons") {
+    icons -= ["${branding_path_component}/product.icon"]
+    icons += ["//vivaldi/app/resources/vector_icons/product.icon"]
+  }
 }

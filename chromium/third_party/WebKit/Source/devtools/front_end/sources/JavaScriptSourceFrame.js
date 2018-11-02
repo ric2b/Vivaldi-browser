@@ -56,12 +56,10 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
     this.textEditor.element.addEventListener('mousemove', this._onMouseMove.bind(this), false);
     this.textEditor.element.addEventListener('mousedown', this._onMouseDown.bind(this), true);
     this.textEditor.element.addEventListener('focusout', this._onBlur.bind(this), false);
-    if (Runtime.experiments.isEnabled('continueToLocationMarkers')) {
-      this.textEditor.element.addEventListener('wheel', event => {
-        if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
-          event.preventDefault();
-      }, true);
-    }
+    this.textEditor.element.addEventListener('wheel', event => {
+      if (UI.KeyboardShortcut.eventHasCtrlOrMeta(event))
+        event.preventDefault();
+    }, true);
 
     this.textEditor.addEventListener(
         SourceFrame.SourcesTextEditor.Events.GutterClick, this._handleGutterClick.bind(this), this);
@@ -109,13 +107,6 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
       var parsedURL = originURL.asParsedURL();
       if (parsedURL)
         result.push(new UI.ToolbarText(Common.UIString('(source mapped from %s)', parsedURL.displayName)));
-    }
-
-    if (this.uiSourceCode().project().type() === Workspace.projectTypes.Snippets) {
-      result.push(new UI.ToolbarSeparator(true));
-      var runSnippet = UI.Toolbar.createActionButtonForId('debugger.run-snippet');
-      runSnippet.setText(Host.isMac() ? Common.UIString('\u2318+Enter') : Common.UIString('Ctrl+Enter'));
-      result.push(runSnippet);
     }
 
     return result;
@@ -649,12 +640,10 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
     if (this.isShowing()) {
       // We need SourcesTextEditor to be initialized prior to this call. @see crbug.com/506566
       setImmediate(() => {
-        if (this._controlDown) {
-          if (Runtime.experiments.isEnabled('continueToLocationMarkers'))
-            this._showContinueToLocations();
-        } else {
+        if (this._controlDown)
+          this._showContinueToLocations();
+        else
           this._generateValuesInSource();
-        }
       });
     }
   }
@@ -683,8 +672,6 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
   }
 
   _showContinueToLocations() {
-    if (!Runtime.experiments.isEnabled('continueToLocationMarkers'))
-      return;
     this._popoverHelper.hidePopover();
     var executionContext = UI.context.flavor(SDK.ExecutionContext);
     if (!executionContext)
@@ -736,7 +723,12 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
           previousCallLine = lineNumber;
 
         var isAsyncCall = (line[token.startColumn - 1] === '.' && tokenContent === 'then') ||
-            tokenContent === 'setTimeout' || tokenContent === 'setInterval';
+            tokenContent === 'setTimeout' || tokenContent === 'setInterval' || tokenContent === 'postMessage';
+        if (tokenContent === 'new') {
+          token = this.textEditor.tokenAtTextPosition(lineNumber, token.endColumn + 1);
+          tokenContent = line.substring(token.startColumn, token.endColumn);
+          isAsyncCall = tokenContent === 'Worker';
+        }
         var isCurrentPosition = this._executionLocation && lineNumber === this._executionLocation.lineNumber &&
             location.columnNumber === this._executionLocation.columnNumber;
         if (location.type === Protocol.Debugger.BreakLocationType.Call && isAsyncCall) {
@@ -772,6 +764,7 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
     var to = line.length;
 
     var position = line.indexOf('(', column);
+    var argumentsStart = position;
     if (position === -1)
       return null;
     position++;
@@ -796,6 +789,9 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
 
     if (token.type === 'js-keyword' && tokenText === 'function')
       return {from: from, to: to};
+
+    if (token.type === 'js-string')
+      return {from: argumentsStart, to: to};
 
     if (token.type && this._isIdentifier(token.type))
       return {from: from, to: to};
@@ -1243,7 +1239,7 @@ Sources.JavaScriptSourceFrame = class extends Sources.UISourceCodeFrame {
     }
     this._decorationByBreakpoint.set(breakpoint, decoration);
     this._updateBreakpointDecoration(decoration);
-    if (!lineDecorations.length) {
+    if (breakpoint.enabled() && !lineDecorations.length) {
       this._possibleBreakpointsRequested.add(uiLocation.lineNumber);
       this._breakpointManager
           .possibleBreakpoints(

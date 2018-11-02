@@ -89,7 +89,8 @@ static bool MatchesTagName(const Element& element,
   if (tag_q_name == AnyQName())
     return true;
   const AtomicString& local_name = tag_q_name.LocalName();
-  if (local_name != g_star_atom && local_name != element.localName()) {
+  if (local_name != CSSSelector::UniversalSelectorAtom() &&
+      local_name != element.localName()) {
     if (element.IsHTMLElement() || !element.GetDocument().IsHTMLDocument())
       return false;
     // Non-html elements in html documents are normalized to their camel-cased
@@ -320,6 +321,9 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
 
   // Disable :visited matching when we see the first link or try to match
   // anything else than an ancestors.
+  //
+  // FIXME(emilio): This is_sub_selector check is wrong if we allow sub
+  // selectors with combinators somewhere.
   if (!context.is_sub_selector &&
       (context.element->IsLink() || (relation != CSSSelector::kDescendant &&
                                      relation != CSSSelector::kChild)))
@@ -332,8 +336,6 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
 
   switch (relation) {
     case CSSSelector::kShadowDeepAsDescendant:
-      DCHECK(
-          !RuntimeEnabledFeatures::DeepCombinatorInCSSDynamicProfileEnabled());
       Deprecation::CountDeprecation(context.element->GetDocument(),
                                     WebFeature::kCSSDeepCombinator);
     // fall through
@@ -360,6 +362,8 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
           return match;
         if (NextSelectorExceedsScope(next_context))
           return kSelectorFailsCompletely;
+        if (next_context.element->IsLink())
+          next_context.visited_match_type = kVisitedMatchDisabled;
       }
       return kSelectorFailsCompletely;
     case CSSSelector::kChild: {
@@ -414,16 +418,11 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
       return kSelectorFailsAllSiblings;
 
     case CSSSelector::kShadowPseudo: {
-      if (!is_ua_rule_ &&
-          context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
-        if (mode_ == kQueryingRules) {
-          UseCounter::Count(context.element->GetDocument(),
-                            WebFeature::kPseudoShadowInStaticProfile);
-        } else if (RuntimeEnabledFeatures::
-                       ShadowPseudoElementInCSSDynamicProfileEnabled()) {
-          Deprecation::CountDeprecation(context.element->GetDocument(),
-                                        WebFeature::kCSSSelectorPseudoShadow);
-        }
+      DCHECK(mode_ == kQueryingRules ||
+             context.selector->GetPseudoType() != CSSSelector::kPseudoShadow);
+      if (context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
+        UseCounter::Count(context.element->GetDocument(),
+                          WebFeature::kPseudoShadowInStaticProfile);
       }
       // If we're in the same tree-scope as the scoping element, then following
       // a shadow descendant combinator would escape that and thus the scope.
@@ -440,17 +439,11 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
     }
 
     case CSSSelector::kShadowDeep: {
-      if (!is_ua_rule_) {
-        if (mode_ == kQueryingRules) {
-          UseCounter::Count(context.element->GetDocument(),
-                            WebFeature::kDeepCombinatorInStaticProfile);
-        } else {
-          Deprecation::CountDeprecation(context.element->GetDocument(),
-                                        WebFeature::kCSSDeepCombinator);
-        }
-      }
+      DCHECK(mode_ == kQueryingRules);
+      UseCounter::Count(context.element->GetDocument(),
+                        WebFeature::kDeepCombinatorInStaticProfile);
       if (ShadowRoot* root = context.element->ContainingShadowRoot()) {
-        if (root->GetType() == ShadowRootType::kUserAgent)
+        if (root->IsUserAgent())
           return kSelectorFailsCompletely;
       }
 
@@ -613,7 +606,7 @@ static bool AnyAttributeMatches(Element& element,
                                 const CSSSelector& selector) {
   const QualifiedName& selector_attr = selector.Attribute();
   // Should not be possible from the CSS grammar.
-  DCHECK_NE(selector_attr.LocalName(), g_star_atom);
+  DCHECK_NE(selector_attr.LocalName(), CSSSelector::UniversalSelectorAtom());
 
   // Synchronize the attribute in case it is lazy-computed.
   // Currently all lazy properties have a null namespace, so only pass
@@ -885,6 +878,21 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     }
     case CSSSelector::kPseudoTarget:
       return element == element.GetDocument().CssTarget();
+    case CSSSelector::kPseudoMatches: {
+      if (!RuntimeEnabledFeatures::CSSMatchesEnabled())
+        return false;
+      UseCounter::Count(context.element->GetDocument(),
+                        WebFeature::kCSSSelectorPseudoMatches);
+      SelectorCheckingContext sub_context(context);
+      sub_context.is_sub_selector = true;
+      DCHECK(selector.SelectorList());
+      for (sub_context.selector = selector.SelectorList()->First();
+           sub_context.selector; sub_context.selector = CSSSelectorList::Next(
+                                     *sub_context.selector)) {
+        if (Match(sub_context))
+          return true;
+      }
+    } break;
     case CSSSelector::kPseudoAny: {
       SelectorCheckingContext sub_context(context);
       sub_context.is_sub_selector = true;
@@ -900,6 +908,13 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return element.IsFormControlElement() &&
              ToHTMLFormControlElement(element).IsAutofilled();
     case CSSSelector::kPseudoAnyLink:
+      UseCounter::Count(context.element->GetDocument(),
+                        WebFeature::kCSSSelectorPseudoAnyLink);
+      return element.IsLink();
+    case CSSSelector::kPseudoWebkitAnyLink:
+      UseCounter::Count(context.element->GetDocument(),
+                        WebFeature::kCSSSelectorPseudoWebkitAnyLink);
+    // Fall through
     case CSSSelector::kPseudoLink:
       return element.IsLink();
     case CSSSelector::kPseudoVisited:
@@ -1080,7 +1095,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoHostHasAppearance:
       DCHECK(is_ua_rule_);
       if (ShadowRoot* root = element.ContainingShadowRoot()) {
-        if (root->GetType() != ShadowRootType::kUserAgent)
+        if (!root->IsUserAgent())
           return false;
         const ComputedStyle* style = root->host().GetComputedStyle();
         return style && style->HasAppearance();
@@ -1131,20 +1146,20 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     }
     case CSSSelector::kPseudoPlaceholder:
       if (ShadowRoot* root = element.ContainingShadowRoot()) {
-        return root->GetType() == ShadowRootType::kUserAgent &&
+        return root->IsUserAgent() &&
                element.ShadowPseudoId() == "-webkit-input-placeholder";
       }
       return false;
     case CSSSelector::kPseudoWebKitCustomElement: {
       if (ShadowRoot* root = element.ContainingShadowRoot())
-        return root->GetType() == ShadowRootType::kUserAgent &&
+        return root->IsUserAgent() &&
                element.ShadowPseudoId() == selector.Value();
       return false;
     }
     case CSSSelector::kPseudoBlinkInternalElement:
       DCHECK(is_ua_rule_);
       if (ShadowRoot* root = element.ContainingShadowRoot())
-        return root->GetType() == ShadowRootType::kUserAgent &&
+        return root->IsUserAgent() &&
                element.ShadowPseudoId() == selector.Value();
       return false;
     case CSSSelector::kPseudoSlotted: {

@@ -4,10 +4,13 @@
 
 #include "content/browser/renderer_host/media/render_frame_audio_output_stream_factory.h"
 
+#include <memory>
 #include <utility>
 
+#include "base/metrics/histogram_macros.h"
 #include "base/task_runner_util.h"
 #include "content/browser/renderer_host/media/audio_output_authorization_handler.h"
+#include "content/browser/renderer_host/media/audio_output_stream_observer_impl.h"
 #include "content/browser/renderer_host/media/renderer_audio_output_stream_factory_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "media/base/audio_parameters.h"
@@ -67,27 +70,19 @@ RenderFrameAudioOutputStreamFactory::RenderFrameAudioOutputStreamFactory(
 
 RenderFrameAudioOutputStreamFactory::~RenderFrameAudioOutputStreamFactory() {
   DCHECK(thread_checker_.CalledOnValidThread());
+  UMA_HISTOGRAM_EXACT_LINEAR("Media.Audio.OutputStreamsCanceledByBrowser",
+                             stream_providers_.size(), 50);
   // Make sure to close all streams.
   stream_providers_.clear();
 }
 
 void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
     media::mojom::AudioOutputStreamProviderRequest stream_provider_request,
-    int64_t session_id,
+    int32_t session_id,
     const std::string& device_id,
     RequestDeviceAuthorizationCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   const base::TimeTicks auth_start_time = base::TimeTicks::Now();
-
-  if (!base::IsValueInRangeForNumericType<int>(session_id)) {
-    mojo::ReportBadMessage("session_id is not in integer range");
-    // Note: We must call the callback even though we are killing the renderer.
-    // This is mandated by mojo.
-    std::move(callback).Run(
-        media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED,
-        media::AudioParameters::UnavailableDeviceParams(), std::string());
-    return;
-  }
 
   context_->RequestDeviceAuthorization(
       render_frame_id_, session_id, device_id,
@@ -116,6 +111,10 @@ void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
     return;
   }
 
+  int stream_id = next_stream_id_++;
+  std::unique_ptr<media::mojom::AudioOutputStreamObserver> observer =
+      std::make_unique<AudioOutputStreamObserverImpl>(
+          context_->GetRenderProcessId(), render_frame_id_, stream_id);
   // Since |context_| outlives |this| and |this| outlives |stream_providers_|,
   // unretained is safe.
   stream_providers_.insert(
@@ -123,9 +122,11 @@ void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
           std::move(request),
           base::BindOnce(
               &RendererAudioOutputStreamFactoryContext::CreateDelegate,
-              base::Unretained(context_), raw_device_id, render_frame_id_),
+              base::Unretained(context_), raw_device_id, render_frame_id_,
+              stream_id),
           base::BindOnce(&RenderFrameAudioOutputStreamFactory::RemoveStream,
-                         base::Unretained(this))));
+                         base::Unretained(this)),
+          std::move(observer)));
 
   std::move(callback).Run(media::OutputDeviceStatus(status), params,
                           device_id_for_renderer);
@@ -135,11 +136,7 @@ void RenderFrameAudioOutputStreamFactory::RemoveStream(
     media::mojom::AudioOutputStreamProvider* stream_provider) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  base::EraseIf(
-      stream_providers_,
-      [stream_provider](
-          const std::unique_ptr<media::mojom::AudioOutputStreamProvider>&
-              other) { return other.get() == stream_provider; });
+  stream_providers_.erase(stream_provider);
 }
 
 }  // namespace content

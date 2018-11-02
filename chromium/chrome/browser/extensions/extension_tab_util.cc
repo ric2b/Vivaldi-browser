@@ -260,15 +260,14 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
     add_types |= TabStripModel::ADD_INHERIT_OPENER;
   if (pinned)
     add_types |= TabStripModel::ADD_PINNED;
-  chrome::NavigateParams navigate_params(
-      browser, url,
+  NavigateParams navigate_params(browser, url,
       params.transition.get() ? *params.transition : ui::PAGE_TRANSITION_LINK);
   navigate_params.disposition = active
                                     ? WindowOpenDisposition::NEW_FOREGROUND_TAB
                                     : WindowOpenDisposition::NEW_BACKGROUND_TAB;
   navigate_params.tabstrip_index = index;
   navigate_params.tabstrip_add_types = add_types;
-  chrome::Navigate(&navigate_params);
+  Navigate(&navigate_params);
 
   // The tab may have been created in a different window, so make sure we look
   // at the right tab strip.
@@ -291,26 +290,6 @@ base::DictionaryValue* ExtensionTabUtil::OpenTab(
                                            function->extension())
       ->ToValue()
       .release();
-}
-
-Browser* ExtensionTabUtil::GetBrowserFromWindowID(
-    ChromeUIThreadExtensionFunction* function,
-    int window_id,
-    std::string* error) {
-  if (window_id == extension_misc::kCurrentWindowId) {
-    Browser* result = function->GetCurrentBrowser();
-    if (!result || !result->window()) {
-      if (error)
-        *error = keys::kNoCurrentWindowError;
-      return nullptr;
-    }
-    return result;
-  } else {
-    return GetBrowserInProfileWithId(function->GetProfile(),
-                                     window_id,
-                                     function->include_incognito(),
-                                     error);
-  }
 }
 
 Browser* ExtensionTabUtil::GetBrowserFromWindowID(
@@ -421,17 +400,17 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   }
 
   bool is_loading = contents->IsLoading();
-  auto tab_object = base::MakeUnique<api::tabs::Tab>();
-  tab_object->id = base::MakeUnique<int>(GetTabIdForExtensions(contents));
+  auto tab_object = std::make_unique<api::tabs::Tab>();
+  tab_object->id = std::make_unique<int>(GetTabIdForExtensions(contents));
   tab_object->index = tab_index;
   tab_object->window_id = window_id; // GetWindowIdOfTab(contents);
   tab_object->status =
-      base::MakeUnique<std::string>(GetTabStatusText(is_loading));
+      std::make_unique<std::string>(GetTabStatusText(is_loading));
   tab_object->active = tab_strip && tab_index == tab_strip->active_index();
   tab_object->selected = tab_strip && tab_index == tab_strip->active_index();
   tab_object->highlighted = tab_strip && tab_strip->IsTabSelected(tab_index);
   tab_object->pinned = tab_strip && tab_strip->IsTabPinned(tab_index);
-  tab_object->audible = base::MakeUnique<bool>(contents->WasRecentlyAudible());
+  tab_object->audible = std::make_unique<bool>(contents->WasRecentlyAudible());
   tab_object->discarded =
       g_browser_process->GetTabManager()->IsTabDiscarded(contents);
   tab_object->auto_discardable =
@@ -439,22 +418,22 @@ std::unique_ptr<api::tabs::Tab> ExtensionTabUtil::CreateTabObject(
   tab_object->muted_info = CreateMutedInfo(contents);
   tab_object->incognito = contents->GetBrowserContext()->IsOffTheRecord();
   gfx::Size contents_size = contents->GetContainerBounds().size();
-  tab_object->width = base::MakeUnique<int>(contents_size.width());
-  tab_object->height = base::MakeUnique<int>(contents_size.height());
+  tab_object->width = std::make_unique<int>(contents_size.width());
+  tab_object->height = std::make_unique<int>(contents_size.height());
 
-  tab_object->url = base::MakeUnique<std::string>(contents->GetURL().spec());
+  tab_object->url = std::make_unique<std::string>(contents->GetURL().spec());
   tab_object->title =
-      base::MakeUnique<std::string>(base::UTF16ToUTF8(contents->GetTitle()));
+      std::make_unique<std::string>(base::UTF16ToUTF8(contents->GetTitle()));
   NavigationEntry* entry = contents->GetController().GetVisibleEntry();
   if (entry && entry->GetFavicon().valid) {
     tab_object->fav_icon_url =
-        base::MakeUnique<std::string>(entry->GetFavicon().url.spec());
+        std::make_unique<std::string>(entry->GetFavicon().url.spec());
   }
   if (tab_strip) {
     WebContents* opener = tab_strip->GetOpenerOfWebContentsAt(tab_index);
     if (opener) {
       tab_object->opener_tab_id =
-          base::MakeUnique<int>(GetTabIdForExtensions(opener));
+          std::make_unique<int>(GetTabIdForExtensions(opener));
     }
   }
 
@@ -654,7 +633,7 @@ void ExtensionTabUtil::CreateTab(WebContents* web_contents,
     Browser::CreateParams params = Browser::CreateParams(profile, user_gesture);
     browser = new Browser(params);
   }
-  chrome::NavigateParams params(browser, web_contents);
+  NavigateParams params(browser, web_contents);
 
   // The extension_app_id parameter ends up as app_name in the Browser
   // which causes the Browser to return true for is_app().  This affects
@@ -666,11 +645,11 @@ void ExtensionTabUtil::CreateTab(WebContents* web_contents,
 
   params.disposition = disposition;
   params.window_bounds = initial_rect;
-  params.window_action = chrome::NavigateParams::SHOW_WINDOW;
+  params.window_action = NavigateParams::SHOW_WINDOW;
   params.user_gesture = user_gesture;
-  chrome::Navigate(&params);
+  Navigate(&params);
 
-  // Close the browser if chrome::Navigate created a new one.
+  // Close the browser if Navigate created a new one.
   if (browser_created && (browser != params.browser))
     browser->window()->Close();
 }
@@ -742,18 +721,17 @@ bool ExtensionTabUtil::OpenOptionsPage(const Extension* extension,
     url_to_navigate = url_to_navigate.ReplaceComponents(replacements);
   }
 
-  chrome::NavigateParams params(
-      chrome::GetSingletonTabNavigateParams(browser, url_to_navigate));
+  NavigateParams params(
+      GetSingletonTabNavigateParams(browser, url_to_navigate));
   // We need to respect path differences because we don't want opening the
   // options page to close a page that might be open to extension content.
   // However, if the options page opens inside the chrome://extensions page, we
   // can override an existing page.
   // Note: default ref behavior is IGNORE_REF, which is correct.
-  params.path_behavior = open_in_tab
-                             ? chrome::NavigateParams::RESPECT
-                             : chrome::NavigateParams::IGNORE_AND_NAVIGATE;
+  params.path_behavior = open_in_tab ? NavigateParams::RESPECT
+                                     : NavigateParams::IGNORE_AND_NAVIGATE;
   params.url = url_to_navigate;
-  chrome::ShowSingletonTabOverwritingNTP(browser, params);
+  ShowSingletonTabOverwritingNTP(browser, params);
   return true;
 }
 

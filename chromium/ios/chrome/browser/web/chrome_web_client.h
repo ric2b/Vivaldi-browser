@@ -33,11 +33,14 @@ class ChromeWebClient : public web::WebClient {
       int resource_id,
       ui::ScaleFactor scale_factor) const override;
   base::RefCountedMemory* GetDataResourceBytes(int resource_id) const override;
+  std::unique_ptr<base::Value> GetServiceManifestOverlay(
+      base::StringPiece name) override;
   void GetAdditionalWebUISchemes(
       std::vector<std::string>* additional_schemes) override;
   void PostBrowserURLRewriterCreation(
       web::BrowserURLRewriter* rewriter) override;
-  NSString* GetEarlyPageScript(web::BrowserState* browser_state) const override;
+  NSString* GetDocumentStartScriptForMainFrame(
+      web::BrowserState* browser_state) const override;
   void AllowCertificateError(
       web::WebState* web_state,
       int cert_error,

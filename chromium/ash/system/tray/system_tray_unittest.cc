@@ -32,6 +32,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/histogram_tester.h"
+#include "ui/app_list/presenter/app_list.h"
+#include "ui/app_list/presenter/test/test_app_list_presenter.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/test/event_generator.h"
@@ -408,6 +410,39 @@ TEST_F(SystemTrayTest, DISABLED_SwipingOnSystemTrayBubble) {
   system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
   SendGestureEvent(start, delta, false, 0, -1, true);
   EXPECT_TRUE(system_tray->HasSystemBubble());
+}
+
+// Tests that press the search key can toggle the launcher when all the windows
+// are minimized after open the system tray bubble in tablet mode.
+TEST_F(SystemTrayTest, ToggleAppListAfterOpenSystemTrayBubbleInTabletMode) {
+  EXPECT_FALSE(wm::GetActiveWindow());
+  SystemTray* system_tray = GetPrimarySystemTray();
+
+  // Open the system tray bubble in tablet mode.
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  EXPECT_FALSE(system_tray->clipping_window_for_test());
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW, false /* show_by_click */);
+  ASSERT_FALSE(system_tray->drag_controller());
+  EXPECT_FALSE(system_tray->clipping_window_for_test());
+
+  app_list::test::TestAppListPresenter test_app_list_presenter;
+  Shell::Get()->app_list()->SetAppListPresenter(
+      test_app_list_presenter.CreateInterfacePtrAndBind());
+
+  // Convert from tablet mode to clamshell.
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
+  EXPECT_EQ(0u, test_app_list_presenter.toggle_count());
+
+  // Press the search key should toggle the launcher.
+  ui::test::EventGenerator& generator = GetEventGenerator();
+  generator.PressKey(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE);
+  RunAllPendingInMessageLoop();
+  EXPECT_EQ(1u, test_app_list_presenter.toggle_count());
+
+  // Press the search key again should still toggle the launcher.
+  generator.PressKey(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE);
+  RunAllPendingInMessageLoop();
+  EXPECT_EQ(2u, test_app_list_presenter.toggle_count());
 }
 
 // Verifies only the visible default views are recorded in the
@@ -1054,6 +1089,45 @@ TEST_F(SystemTrayTest, AcceleratorController) {
   // Send A key event and confirms that system tray becomes invisible.
   event_generator.PressKey(ui::VKEY_A, ui::EF_NONE);
   event_generator.ReleaseKey(ui::VKEY_A, ui::EF_NONE);
+  EXPECT_FALSE(tray->IsSystemBubbleVisible());
+}
+
+// When system tray has an active child widget, the child widget should consume
+// key event and the tray shouldn't consume key event, i.e. RerouteEventHandler
+// in TrayBubbleView should not reroute key events to the tray in this case.
+TEST_F(SystemTrayTest, ActiveChildWidget) {
+  SystemTray* tray = GetPrimarySystemTray();
+  tray->ShowDefaultView(BUBBLE_CREATE_NEW, true /* show_by_click */);
+
+  // Create a child widget on system tray and focus it.
+  views::Widget* child_widget = views::Widget::CreateWindowWithParent(
+      nullptr, tray->GetBubbleView()->GetWidget()->GetNativeView());
+  std::unique_ptr<KeyEventConsumerView> consumer_view(
+      new KeyEventConsumerView());
+  child_widget->GetContentsView()->AddChildView(consumer_view.get());
+  child_widget->Show();
+  consumer_view->RequestFocus();
+
+  ASSERT_FALSE(tray->GetBubbleView()->GetWidget()->IsActive());
+  ASSERT_TRUE(child_widget->IsActive());
+
+  ui::test::EventGenerator& event_generator = GetEventGenerator();
+
+  // Press ESC key and confirm that child widget consumes it. Also confirm that
+  // the tray does not consume the key event.
+  ASSERT_EQ(0, consumer_view->number_of_consumed_key_events());
+  ASSERT_TRUE(tray->IsSystemBubbleVisible());
+  event_generator.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  event_generator.ReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  EXPECT_EQ(2, consumer_view->number_of_consumed_key_events());
+  EXPECT_TRUE(tray->IsSystemBubbleVisible());
+
+  // Hide child widget and press ESC key. Confirm that the tray consumes it and
+  // the tray is closed even if the tray is not active.
+  child_widget->Hide();
+  ASSERT_FALSE(tray->GetBubbleView()->GetWidget()->IsActive());
+  event_generator.PressKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  event_generator.ReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
   EXPECT_FALSE(tray->IsSystemBubbleVisible());
 }
 

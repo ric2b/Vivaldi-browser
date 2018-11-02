@@ -31,6 +31,10 @@
 
 #include "public/platform/WebCommon.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace blink {
 
 class WebIDBCallbacks;
@@ -40,19 +44,24 @@ class WebString;
 
 class WebIDBFactory {
  public:
-  virtual ~WebIDBFactory() {}
+  virtual ~WebIDBFactory() = default;
 
-  virtual void GetDatabaseNames(WebIDBCallbacks*, const WebSecurityOrigin&) = 0;
+  virtual void GetDatabaseNames(
+      WebIDBCallbacks*,
+      const WebSecurityOrigin&,
+      scoped_refptr<base::SingleThreadTaskRunner>) = 0;
   virtual void Open(const WebString& name,
                     long long version,
                     long long transaction_id,
                     WebIDBCallbacks*,
                     WebIDBDatabaseCallbacks*,
-                    const WebSecurityOrigin&) = 0;
+                    const WebSecurityOrigin&,
+                    scoped_refptr<base::SingleThreadTaskRunner>) = 0;
   virtual void DeleteDatabase(const WebString& name,
                               WebIDBCallbacks*,
                               const WebSecurityOrigin&,
-                              bool force_close) = 0;
+                              bool force_close,
+                              scoped_refptr<base::SingleThreadTaskRunner>) = 0;
 };
 
 }  // namespace blink

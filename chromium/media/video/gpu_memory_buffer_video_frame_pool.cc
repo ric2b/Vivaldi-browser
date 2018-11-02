@@ -53,7 +53,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
         worker_task_runner_(worker_task_runner),
         gpu_factories_(gpu_factories),
         output_format_(GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED),
-        tick_clock_(&default_tick_clock_),
+        tick_clock_(base::DefaultTickClock::GetInstance()),
         in_shutdown_(false) {
     DCHECK(media_task_runner_);
     DCHECK(worker_task_runner_);
@@ -176,8 +176,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
 
   GpuVideoAcceleratorFactories::OutputFormat output_format_;
 
-  // |tick_clock_| is always &|default_tick_clock_| outside of testing.
-  base::DefaultTickClock default_tick_clock_;
+  // |tick_clock_| is always a DefaultTickClock outside of testing.
   base::TickClock* tick_clock_;
 
   bool in_shutdown_;
@@ -304,6 +303,7 @@ int RowsPerCopy(size_t plane, VideoPixelFormat format, int width) {
 void CopyRowsToI420Buffer(int first_row,
                           int rows,
                           int bytes_per_row,
+                          size_t bit_depth,
                           const uint8_t* source,
                           int source_stride,
                           uint8_t* output,
@@ -315,10 +315,19 @@ void CopyRowsToI420Buffer(int first_row,
     DCHECK_NE(dest_stride, 0);
     DCHECK_LE(bytes_per_row, std::abs(dest_stride));
     DCHECK_LE(bytes_per_row, source_stride);
+    DCHECK_GE(bit_depth, 8u);
 
-    libyuv::CopyPlane(source + source_stride * first_row, source_stride,
-                      output + dest_stride * first_row, dest_stride,
-                      bytes_per_row, rows);
+    if (bit_depth == 8) {
+      libyuv::CopyPlane(source + source_stride * first_row, source_stride,
+                        output + dest_stride * first_row, dest_stride,
+                        bytes_per_row, rows);
+    } else {
+      const int scale = 0x10000 >> (bit_depth - 8);
+      libyuv::Convert16To8Plane(
+          reinterpret_cast<const uint16*>(source + source_stride * first_row),
+          source_stride / 2, output + dest_stride * first_row, dest_stride,
+          scale, bytes_per_row, rows);
+    }
   }
   done.Run();
 }
@@ -423,8 +432,10 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
   DCHECK(media_task_runner_->BelongsToCurrentThread());
   // Lazily initialize output_format_ since VideoFrameOutputFormat() has to be
   // called on the media_thread while this object might be instantiated on any.
-  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED)
-    output_format_ = gpu_factories_->VideoFrameOutputFormat();
+  if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED) {
+    output_format_ =
+        gpu_factories_->VideoFrameOutputFormat(video_frame->BitDepth());
+  }
 
   if (output_format_ == GpuVideoAcceleratorFactories::OutputFormat::UNDEFINED) {
     frame_ready_cb.Run(video_frame);
@@ -434,11 +445,14 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     // Supported cases.
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I420:
+    case PIXEL_FORMAT_YUV420P9:
+    case PIXEL_FORMAT_YUV420P10:
+    case PIXEL_FORMAT_YUV420P12:
       break;
     // Unsupported cases.
-    case PIXEL_FORMAT_YV12A:
-    case PIXEL_FORMAT_YV16:
-    case PIXEL_FORMAT_YV24:
+    case PIXEL_FORMAT_I420A:
+    case PIXEL_FORMAT_I422:
+    case PIXEL_FORMAT_I444:
     case PIXEL_FORMAT_NV12:
     case PIXEL_FORMAT_NV21:
     case PIXEL_FORMAT_UYVY:
@@ -449,18 +463,13 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_RGB32:
     case PIXEL_FORMAT_MJPEG:
     case PIXEL_FORMAT_MT21:
-    case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV422P9:
     case PIXEL_FORMAT_YUV444P9:
-    case PIXEL_FORMAT_YUV420P10:
     case PIXEL_FORMAT_YUV422P10:
     case PIXEL_FORMAT_YUV444P10:
-    case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
     case PIXEL_FORMAT_YUV444P12:
-    case PIXEL_FORMAT_Y8:
     case PIXEL_FORMAT_Y16:
-    case PIXEL_FORMAT_I422:
     case PIXEL_FORMAT_UNKNOWN:
       frame_ready_cb.Run(video_frame);
       return;
@@ -596,11 +605,12 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CopyVideoFrameToGpuMemoryBuffers(
           const int bytes_per_row = VideoFrame::RowBytes(
               i, VideoFormat(output_format_), coded_size.width());
           worker_task_runner_->PostTask(
-              FROM_HERE, base::Bind(&CopyRowsToI420Buffer, row, rows_to_copy,
-                                    bytes_per_row, video_frame->visible_data(i),
-                                    video_frame->stride(i),
-                                    static_cast<uint8_t*>(buffer->memory(0)),
-                                    buffer->stride(0), barrier));
+              FROM_HERE,
+              base::Bind(&CopyRowsToI420Buffer, row, rows_to_copy,
+                         bytes_per_row, video_frame->BitDepth(),
+                         video_frame->visible_data(i), video_frame->stride(i),
+                         static_cast<uint8_t*>(buffer->memory(0)),
+                         buffer->stride(0), barrier));
           break;
         }
         case GpuVideoAcceleratorFactories::OutputFormat::NV12_SINGLE_GMB:
@@ -683,11 +693,8 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   // Insert a sync_token, this is needed to make sure that the textures the
   // mailboxes refer to will be used only after all the previous commands posted
   // in the command buffer have been processed.
-  const GLuint64 fence_sync = gles2->InsertFenceSyncCHROMIUM();
-  gles2->OrderingBarrierCHROMIUM();
-
   gpu::SyncToken sync_token;
-  gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+  gles2->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
   for (size_t i = 0; i < NumGpuMemoryBuffers(output_format_); i++)
     mailbox_holders[i].sync_token = sync_token;
 
@@ -828,7 +835,8 @@ GpuMemoryBufferVideoFramePool::PoolImpl::GetOrCreateFrameResources(
     gles2->TexParameteri(texture_target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     gles2->TexParameteri(texture_target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     gles2->GenMailboxCHROMIUM(plane_resource.mailbox.name);
-    gles2->ProduceTextureCHROMIUM(texture_target, plane_resource.mailbox.name);
+    gles2->ProduceTextureDirectCHROMIUM(plane_resource.texture_id,
+                                        plane_resource.mailbox.name);
   }
   return frame_resources;
 }

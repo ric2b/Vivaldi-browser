@@ -9,6 +9,7 @@
 #include "core/CoreExport.h"
 #include "core/loader/BaseFetchContext.h"
 #include "platform/wtf/Forward.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom-blink.h"
 
 namespace blink {
 
@@ -26,8 +27,7 @@ CORE_EXPORT void ProvideWorkerFetchContextToWorker(
     std::unique_ptr<WebWorkerFetchContext>);
 
 // The WorkerFetchContext is a FetchContext for workers (dedicated, shared and
-// service workers) and threaded worklets (animation and audio worklets). This
-// class is used only when off-main-thread-fetch is enabled.
+// service workers) and threaded worklets (animation and audio worklets).
 class WorkerFetchContext final : public BaseFetchContext {
  public:
   static WorkerFetchContext* Create(WorkerOrWorkletGlobalScope&);
@@ -48,7 +48,7 @@ class WorkerFetchContext final : public BaseFetchContext {
   void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
       WebURLRequest::RequestContext,
-      WebURLRequest::FrameType,
+      network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
@@ -59,12 +59,12 @@ class WorkerFetchContext final : public BaseFetchContext {
   String GetOutgoingReferrer() const override;
   const KURL& Url() const override;
   const SecurityOrigin* GetParentSecurityOrigin() const override;
-  Optional<WebAddressSpace> GetAddressSpace() const override;
+  Optional<mojom::IPAddressSpace> GetAddressSpace() const override;
   const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
   void AddConsoleMessage(ConsoleMessage*) const override;
 
   // FetchContext implementation:
-  SecurityOrigin* GetSecurityOrigin() const override;
+  const SecurityOrigin* GetSecurityOrigin() const override;
   std::unique_ptr<WebURLLoader> CreateURLLoader(
       const ResourceRequest&,
       scoped_refptr<WebTaskRunner>) override;
@@ -80,7 +80,7 @@ class WorkerFetchContext final : public BaseFetchContext {
                                const FetchInitiatorInfo&) override;
   void DispatchDidReceiveResponse(unsigned long identifier,
                                   const ResourceResponse&,
-                                  WebURLRequest::FrameType,
+                                  network::mojom::RequestContextFrameType,
                                   WebURLRequest::RequestContext,
                                   Resource*,
                                   ResourceResponseType) override;
@@ -88,14 +88,15 @@ class WorkerFetchContext final : public BaseFetchContext {
                               const char* data,
                               int dataLength) override;
   void DispatchDidReceiveEncodedData(unsigned long identifier,
-                                     int encodedDataLength) override;
+                                     int encoded_data_length) override;
   void DispatchDidFinishLoading(unsigned long identifier,
-                                double finishTime,
-                                int64_t encodedDataLength,
-                                int64_t decodedBodyLength) override;
+                                double finish_time,
+                                int64_t encoded_data_length,
+                                int64_t decoded_body_length,
+                                bool blocked_cross_site_document) override;
   void DispatchDidFail(unsigned long identifier,
                        const ResourceError&,
-                       int64_t encodedDataLength,
+                       int64_t encoded_data_length,
                        bool isInternalRequest) override;
   void AddResourceTiming(const ResourceTimingInfo&) override;
   void PopulateResourceRequest(Resource::Type,

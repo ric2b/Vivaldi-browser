@@ -156,6 +156,7 @@ class CONTENT_EXPORT WebContentsViewAura
 
   // Overridden from OverscrollControllerDelegate:
   gfx::Size GetDisplaySize() const override;
+  void OnOverscrollBehaviorUpdate(cc::OverscrollBehavior) override;
   bool OnOverscrollUpdate(float delta_x, float delta_y) override;
   void OnOverscrollComplete(OverscrollMode overscroll_mode) override;
   void OnOverscrollModeChange(OverscrollMode old_mode,
@@ -200,8 +201,6 @@ class CONTENT_EXPORT WebContentsViewAura
   FRIEND_TEST_ALL_PREFIXES(WebContentsViewAuraTest, EnableDisableOverscroll);
 
   const bool is_mus_browser_plugin_guest_;
-
-  bool enable_surface_synchronization_ = false;
 
   // NOTE: this is null when running in mus and |is_mus_browser_plugin_guest_|.
   std::unique_ptr<aura::Window> window_;

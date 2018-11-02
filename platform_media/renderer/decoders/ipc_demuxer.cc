@@ -23,16 +23,31 @@
 
 namespace {
 
+// http://www.iana.org/assignments/media-types/media-types.xhtml#audio
 static const char* const kIPCMediaPipelineSupportedMimeTypes[] = {
-    "video/mp4",       "video/m4v",   "video/x-m4v", "video/mpeg",
-    "audio/mp4",       "audio/x-m4a", "audio/mp3",   "audio/x-mp3",
-    "audio/mpeg",      "audio/mpeg3", "audio/aac",   "audio/aacp",
-    "audio/3gpp",      "audio/3gpp2", "video/3gpp",  "video/3gpp2",
+    "audio/3gpp",  /* 3gpp - mp4 */
+    "audio/3gpp2", /* 3gpp2 - mp4 */
+    "audio/aac",   /* aac */
+    "audio/aacp",  /* aac */
+    "audio/mp4",   /* mp4 (aac) */
+    "audio/x-m4a", /* mp4 (aac) */
+#if defined(PLATFORM_MEDIA_MP3)
+    "audio/mp3",   /* mp3 */
+    "audio/mpeg",  /* mp3 */
+    "audio/mpeg3", /* mp3 */
+    "audio/x-mp3", /* mp3 */
+#endif // PLATFORM_MEDIA_MP3
+    "video/3gpp",  /**/
+    "video/3gpp2", /**/
+    "video/m4v",   /**/
+    "video/mp4",   /**/
+    "video/mpeg",  /**/
+    "video/x-m4v", /**/
 #if defined(OS_MACOSX)
-    "video/quicktime",
+    "video/quicktime", /**/
 #endif
 #if defined(OS_WIN)
-    "video/mpeg4",
+    "video/mpeg4",     /**/
 #endif
 };
 

@@ -93,7 +93,7 @@ void CalculateWindowStylesFromInitParams(
 
       // See layered window comment below.
       if (is_translucent)
-        *style &= ~(/*WS_THICKFRAME |*/ WS_CAPTION);
+        *style &= ~(WS_THICKFRAME | WS_CAPTION);
       break;
     }
     case Widget::InitParams::TYPE_CONTROL:

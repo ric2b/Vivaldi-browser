@@ -19,7 +19,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -118,11 +117,10 @@
 
 #if defined(OS_LINUX)
 #include <gtk/gtk.h>
-#include <X11/Xlib.h>
-#undef Status  // Xlib.h #defines this, which breaks protobuf headers.
-#include <base/linux_util.h>
+#include "base/linux_util.h"
 #include "remoting/host/audio_capturer_linux.h"
 #include "remoting/host/linux/certificate_watcher.h"
+#include "ui/gfx/x/x11.h"
 #endif  // defined(OS_LINUX)
 
 #if defined(OS_WIN)
@@ -494,7 +492,7 @@ bool HostProcess::InitWithCommandLine(const base::CommandLine* cmd_line) {
   // Mojo keeps the task runner passed to it alive forever, so an
   // AutoThreadTaskRunner should not be passed to it. Otherwise, the process may
   // never shut down cleanly.
-  ipc_support_ = base::MakeUnique<mojo::edk::ScopedIPCSupport>(
+  ipc_support_ = std::make_unique<mojo::edk::ScopedIPCSupport>(
       context_->network_task_runner()->task_runner(),
       mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST);
 
@@ -1514,8 +1512,8 @@ void HostProcess::StartHost() {
   scoped_refptr<protocol::TransportContext> transport_context =
       new protocol::TransportContext(
           signal_strategy_.get(),
-          base::MakeUnique<protocol::ChromiumPortAllocatorFactory>(),
-          base::MakeUnique<ChromiumUrlRequestFactory>(
+          std::make_unique<protocol::ChromiumPortAllocatorFactory>(),
+          std::make_unique<ChromiumUrlRequestFactory>(
               context_->url_request_context_getter()),
           network_settings, protocol::TransportRole::SERVER);
   transport_context->set_ice_config_url(
@@ -1542,10 +1540,10 @@ void HostProcess::StartHost() {
 
   if (security_key_auth_policy_enabled_ && security_key_extension_supported_) {
     host_->AddExtension(
-        base::MakeUnique<SecurityKeyExtension>(context_->file_task_runner()));
+        std::make_unique<SecurityKeyExtension>(context_->file_task_runner()));
   }
 
-  host_->AddExtension(base::MakeUnique<TestEchoExtension>());
+  host_->AddExtension(std::make_unique<TestEchoExtension>());
 
   // TODO(simonmorris): Get the maximum session duration from a policy.
 #if defined(OS_LINUX)

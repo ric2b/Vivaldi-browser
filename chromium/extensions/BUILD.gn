@@ -52,7 +52,6 @@ grit("extensions_renderer_resources") {
   deps = [
     "//extensions/common:mojo_js",
     "//extensions/common/api:mojom_js",
-    "//mojo/public/js:bindings",
     "//services/device/public/interfaces:interfaces_js",
   ]
 }
@@ -259,7 +258,6 @@ source_set("chrome_extensions_browsertests") {
     "browser/api/bluetooth/bluetooth_apitest.cc",
     "browser/api/bluetooth/bluetooth_private_apitest.cc",
     "browser/api/cast_channel/cast_channel_apitest.cc",
-    "browser/api/runtime/runtime_apitest.cc",
     "browser/api/serial/serial_apitest.cc",
     "browser/api/usb/usb_manual_apitest.cc",
     "browser/app_window/app_window_browsertest.cc",

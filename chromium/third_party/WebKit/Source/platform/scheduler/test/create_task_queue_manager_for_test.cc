@@ -5,7 +5,6 @@
 #include "platform/scheduler/test/create_task_queue_manager_for_test.h"
 
 #include "platform/scheduler/base/task_queue_manager.h"
-#include "platform/scheduler/base/test_time_source.h"
 #include "platform/scheduler/base/thread_controller_impl.h"
 
 namespace blink {
@@ -18,6 +17,8 @@ class TaskQueueManagerForTest : public TaskQueueManager {
   explicit TaskQueueManagerForTest(
       std::unique_ptr<internal::ThreadController> thread_controller)
       : TaskQueueManager(std::move(thread_controller)) {}
+
+  using TaskQueueManager::SetRandomSeed;
 };
 
 class ThreadControllerForTest : public internal::ThreadControllerImpl {
@@ -25,10 +26,10 @@ class ThreadControllerForTest : public internal::ThreadControllerImpl {
   ThreadControllerForTest(
       base::MessageLoop* message_loop,
       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-      std::unique_ptr<base::TickClock> time_source)
+      base::TickClock* time_source)
       : ThreadControllerImpl(message_loop,
                              std::move(task_runner),
-                             std::move(time_source)) {}
+                             time_source) {}
 
   void AddNestingObserver(base::RunLoop::NestingObserver* observer) override {
     if (!message_loop_)
@@ -43,32 +44,23 @@ class ThreadControllerForTest : public internal::ThreadControllerImpl {
     ThreadControllerImpl::RemoveNestingObserver(observer);
   }
 
-  bool IsNested() {
-    if (!message_loop_)
-      return false;
-    return ThreadControllerImpl::IsNested();
-  }
-
-  ~ThreadControllerForTest() override {}
+  ~ThreadControllerForTest() override = default;
 };
 
 }  // namespace
 
-std::unique_ptr<TaskQueueManager> CreateTaskQueueManagerWithUnownedClockForTest(
-    base::MessageLoop* message_loop,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    base::SimpleTestTickClock* clock) {
-  return CreateTaskQueueManagerForTest(message_loop, std::move(task_runner),
-                                       std::make_unique<TestTimeSource>(clock));
-}
-
 std::unique_ptr<TaskQueueManager> CreateTaskQueueManagerForTest(
     base::MessageLoop* message_loop,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-    std::unique_ptr<base::TickClock> clock) {
-  return std::make_unique<TaskQueueManagerForTest>(
-      std::make_unique<ThreadControllerForTest>(
-          message_loop, std::move(task_runner), std::move(clock)));
+    base::TickClock* clock,
+    base::Optional<uint64_t> random_seed) {
+  std::unique_ptr<TaskQueueManagerForTest> task_queue_manager =
+      std::make_unique<TaskQueueManagerForTest>(
+          std::make_unique<ThreadControllerForTest>(
+              message_loop, std::move(task_runner), clock));
+  if (random_seed)
+    task_queue_manager->SetRandomSeed(random_seed.value());
+  return task_queue_manager;
 }
 
 }  // namespace scheduler

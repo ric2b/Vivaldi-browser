@@ -15,6 +15,7 @@ import argparse
 import datetime
 import json
 import logging
+import re
 
 from webkitpy.common.net.buildbot import current_build_link
 from webkitpy.common.net.git_cl import GitCL
@@ -25,6 +26,7 @@ from webkitpy.layout_tests.port.base import Port
 from webkitpy.w3c.chromium_exportable_commits import exportable_commits_over_last_n_commits
 from webkitpy.w3c.common import read_credentials, is_testharness_baseline, is_file_exportable
 from webkitpy.w3c.directory_owners_extractor import DirectoryOwnersExtractor
+from webkitpy.w3c.import_notifier import ImportNotifier
 from webkitpy.w3c.local_wpt import LocalWPT
 from webkitpy.w3c.test_copier import TestCopier
 from webkitpy.w3c.wpt_expectations_updater import WPTExpectationsUpdater
@@ -36,7 +38,7 @@ POLL_DELAY_SECONDS = 2 * 60
 TIMEOUT_SECONDS = 210 * 60
 
 # Sheriff calendar URL, used for getting the ecosystem infra sheriff to TBR.
-ROTATIONS_URL = 'http://chromium-build.appspot.com/p/chromium/all_rotations.js'
+ROTATIONS_URL = 'https://build.chromium.org/deprecated/chromium/all_rotations.js'
 
 _log = logging.getLogger(__file__)
 
@@ -58,8 +60,14 @@ class TestImporter(object):
         # Another Git instance with local WPT as CWD, which can only be
         # instantiated after the working directory is created.
         self.wpt_git = None
-        # The WPT revision we are importing.
+        # The WPT revision we are importing and the one imported last time.
         self.wpt_revision = None
+        self.last_wpt_revision = None
+        # A set of rebaselined tests and a dictionary of new test expectations
+        # mapping failing tests to platforms to
+        # wpt_expectations_updater.SimpleTestResult.
+        self.rebaselined_tests = set()
+        self.new_test_expectations = {}
         self.verbose = False
 
     def main(self, argv=None):
@@ -98,6 +106,7 @@ class TestImporter(object):
 
         _log.debug('Noting the revision we are importing.')
         self.wpt_revision = self.wpt_git.latest_git_commit()
+        self.last_wpt_revision = self._get_last_imported_wpt_revision()
         import_commit = 'wpt@%s' % self.wpt_revision
 
         _log.info('Importing %s to Chromium %s', import_commit, chromium_revision)
@@ -156,6 +165,9 @@ class TestImporter(object):
         if not self.run_commit_queue_for_cl():
             return 1
 
+        if not self.send_notifications(local_wpt, options.auto_file_bugs, options.monorail_auth_json):
+            return 1
+
         return 0
 
     def update_expectations_for_cl(self):
@@ -171,21 +183,21 @@ class TestImporter(object):
         """
         _log.info('Triggering try jobs for updating expectations.')
         self.git_cl.trigger_try_jobs(self.blink_try_bots())
-        try_results = self.git_cl.wait_for_try_jobs(
+        cl_status = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS,
             timeout_seconds=TIMEOUT_SECONDS)
 
-        if not try_results:
+        if not cl_status:
             _log.error('No initial try job results, aborting.')
             self.git_cl.run(['set-close'])
             return False
 
-        if try_results.status == 'closed':
+        if cl_status.status == 'closed':
             _log.error('The CL was closed, aborting.')
             return False
 
         _log.info('All jobs finished.')
-        try_results = try_results.try_job_results
+        try_results = cl_status.try_job_results
 
         if try_results and self.git_cl.some_failed(try_results):
             self.fetch_new_expectations_and_baselines()
@@ -200,30 +212,22 @@ class TestImporter(object):
         """Triggers CQ and either commits or aborts; returns True on success."""
         _log.info('Triggering CQ try jobs.')
         self.git_cl.run(['try'])
-        try_results = self.git_cl.wait_for_try_jobs(
+        cl_status = self.git_cl.wait_for_try_jobs(
             poll_delay_seconds=POLL_DELAY_SECONDS,
-            timeout_seconds=TIMEOUT_SECONDS)
+            timeout_seconds=TIMEOUT_SECONDS,
+            cq_only=True)
 
-        if not try_results:
+        if not cl_status:
             self.git_cl.run(['set-close'])
             _log.error('Timed out waiting for CQ; aborting.')
             return False
 
-        if try_results.status == 'closed':
+        if cl_status.status == 'closed':
             _log.error('The CL was closed; aborting.')
             return False
 
         _log.info('All jobs finished.')
-        try_results = self.git_cl.filter_latest(try_results.try_job_results)
-
-        # We only want to check the status of CQ bots. The set of CQ bots is
-        # determined by //infra/config/cq.cfg, but since in import jobs we only
-        # trigger CQ bots and Blink try bots, we just ignore the
-        # Blink try bots to get the set of CQ try bots.
-        # Important: if any CQ bots are added to the builder list
-        # (self.host.builders), then this logic will need to be updated.
-        cq_try_results = {build: status for build, status in try_results.items()
-                          if build.builder_name not in self.blink_try_bots()}
+        cq_try_results = cl_status.try_job_results
 
         if not cq_try_results:
             _log.error('No CQ try results found in try results: %s.', try_results)
@@ -260,6 +264,9 @@ class TestImporter(object):
             '--auto-update', action='store_true',
             help='upload a CL, update expectations, and trigger CQ')
         parser.add_argument(
+            '--auto-file-bugs', action='store_true',
+            help='file new failures automatically to crbug.com')
+        parser.add_argument(
             '--auth-refresh-token-json',
             help='authentication refresh token JSON file used for try jobs, '
                  'generally not necessary on developer machines')
@@ -267,6 +274,11 @@ class TestImporter(object):
             '--credentials-json',
             help='A JSON file with GitHub credentials, '
                  'generally not necessary on developer machines')
+        parser.add_argument(
+            '--monorail-auth-json',
+            help='A JSON file containing the private key of a service account '
+                 'to access Monorail (crbug.com), only needed when '
+                 '--auto-file-bugs is used')
 
         return parser.parse_args(argv)
 
@@ -529,7 +541,7 @@ class TestImporter(object):
         """
         _log.info('Adding test expectations lines to LayoutTests/TestExpectations.')
         expectation_updater = WPTExpectationsUpdater(self.host)
-        expectation_updater.run(args=[])
+        self.rebaselined_tests, self.new_test_expectations = expectation_updater.update_expectations()
 
     def update_all_test_expectations_files(self, deleted_tests, renamed_tests):
         """Updates all test expectations files for tests that have been deleted or renamed.
@@ -596,3 +608,26 @@ class TestImporter(object):
         if not abs_path.startswith(self.finder.layout_tests_dir()):
             return None
         return self.fs.relpath(abs_path, self.finder.layout_tests_dir())
+
+    def _get_last_imported_wpt_revision(self):
+        """Finds the last imported WPT revision."""
+        # TODO(robertma): Only match commit subjects.
+        output = self.chromium_git.most_recent_log_matching('^Import wpt@', self.finder.chromium_base())
+        # No line-start anchor (^) below because of the formatting of output.
+        result = re.search(r'Import wpt@(\w+)', output)
+        if result:
+            return result.group(1)
+        else:
+            _log.error('Cannot find last WPT import.')
+            return None
+
+    def send_notifications(self, local_wpt, auto_file_bugs, monorail_auth_json):
+        issue = self.git_cl.run(['status', '--field=id']).strip()
+        patchset = self.git_cl.run(['status', '--field=patch']).strip()
+        # Construct the notifier here so that any errors won't affect the import.
+        notifier = ImportNotifier(self.host, self.chromium_git, local_wpt)
+        notifier.main(self.last_wpt_revision, self.wpt_revision,
+                      self.rebaselined_tests, self.new_test_expectations,
+                      issue, patchset,
+                      dry_run=not auto_file_bugs, service_account_key_json=monorail_auth_json)
+        return True

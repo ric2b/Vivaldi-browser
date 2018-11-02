@@ -53,6 +53,7 @@
 #include "platform/wtf/Time.h"
 #include "public/platform/TaskType.h"
 #include "public/platform/WebFloatRect.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 #include "public/platform/WebVector.h"
 #include "public/web/WebFindOptions.h"
 #include "public/web/WebFrameClient.h"
@@ -95,7 +96,7 @@ class TextFinder::DeferredScopeStringMatches
         identifier_(identifier),
         search_text_(search_text),
         options_(options) {
-    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), FROM_HERE);
   }
 
   void DoTimeout(TimerBase*) {
@@ -269,7 +270,7 @@ void TextFinder::SetFindEndstateFocusAndSelection() {
       if (element.IsFocusable()) {
         // Found a focusable parent node. Set the active match as the
         // selection and focus to the focusable node.
-        GetFrame()->Selection().SetSelection(
+        GetFrame()->Selection().SetSelectionAndEndTyping(
             SelectionInDOMTree::Builder()
                 .SetBaseAndExtent(active_match_range)
                 .Build());
@@ -301,9 +302,10 @@ void TextFinder::SetFindEndstateFocusAndSelection() {
   // you'll have the last thing you found highlighted) and make sure that
   // we have nothing focused (otherwise you might have text selected but
   // a link focused, which is weird).
-  GetFrame()->Selection().SetSelection(SelectionInDOMTree::Builder()
-                                           .SetBaseAndExtent(active_match_range)
-                                           .Build());
+  GetFrame()->Selection().SetSelectionAndEndTyping(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(active_match_range)
+          .Build());
   GetFrame()->GetDocument()->ClearFocusedElement();
 
   // Finally clear the active match, for two reasons:
@@ -749,8 +751,9 @@ int TextFinder::SelectFindMatch(unsigned index, WebRect* selection_rect) {
         active_match_->FirstNode()->GetLayoutObject()) {
       active_match_->FirstNode()->GetLayoutObject()->ScrollRectToVisible(
           LayoutRect(active_match_bounding_box),
-          ScrollAlignment::kAlignCenterIfNeeded,
-          ScrollAlignment::kAlignCenterIfNeeded, kUserScroll);
+          WebScrollIntoViewParams(ScrollAlignment::kAlignCenterIfNeeded,
+                                  ScrollAlignment::kAlignCenterIfNeeded,
+                                  kUserScroll));
     }
 
     // Zoom to the active match.
@@ -785,7 +788,7 @@ TextFinder::TextFinder(WebLocalFrameImpl& owner_frame)
       last_find_request_completed_with_no_matches_(false),
       find_match_rects_are_valid_(false) {}
 
-TextFinder::~TextFinder() {}
+TextFinder::~TextFinder() = default;
 
 bool TextFinder::SetMarkerActive(Range* range, bool active) {
   if (!range || range->collapsed())

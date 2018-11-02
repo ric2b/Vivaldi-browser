@@ -37,9 +37,11 @@
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/scheduler.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "gpu/ipc/service/gles2_command_buffer_stub.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
+#include "gpu/ipc/service/raster_command_buffer_stub.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/message_filter.h"
 #include "ui/gl/gl_context.h"
@@ -75,7 +77,8 @@ struct GpuChannelMessage {
 // - forwards messages to child message filters
 // - posts control and out of order messages to the main thread
 // - forwards other messages to the scheduler
-class GPU_EXPORT GpuChannelMessageFilter : public IPC::MessageFilter {
+class GPU_IPC_SERVICE_EXPORT GpuChannelMessageFilter
+    : public IPC::MessageFilter {
  public:
   GpuChannelMessageFilter(
       GpuChannel* gpu_channel,
@@ -427,15 +430,15 @@ bool GpuChannel::Send(IPC::Message* message) {
   return channel_->Send(message);
 }
 
-void GpuChannel::OnCommandBufferScheduled(GpuCommandBufferStub* stub) {
+void GpuChannel::OnCommandBufferScheduled(CommandBufferStub* stub) {
   scheduler_->EnableSequence(stub->sequence_id());
 }
 
-void GpuChannel::OnCommandBufferDescheduled(GpuCommandBufferStub* stub) {
+void GpuChannel::OnCommandBufferDescheduled(CommandBufferStub* stub) {
   scheduler_->DisableSequence(stub->sequence_id());
 }
 
-GpuCommandBufferStub* GpuChannel::LookupCommandBuffer(int32_t route_id) {
+CommandBufferStub* GpuChannel::LookupCommandBuffer(int32_t route_id) {
   auto it = stubs_.find(route_id);
   if (it == stubs_.end())
     return nullptr;
@@ -445,10 +448,10 @@ GpuCommandBufferStub* GpuChannel::LookupCommandBuffer(int32_t route_id) {
 
 bool GpuChannel::HasActiveWebGLContext() const {
   for (auto& kv : stubs_) {
-    gles2::ContextType context_type =
-        kv.second->GetFeatureInfo()->context_type();
-    if (context_type == gles2::CONTEXT_TYPE_WEBGL1 ||
-        context_type == gles2::CONTEXT_TYPE_WEBGL2) {
+    ContextType context_type =
+        kv.second->context_group()->feature_info()->context_type();
+    if (context_type == CONTEXT_TYPE_WEBGL1 ||
+        context_type == CONTEXT_TYPE_WEBGL2) {
       return true;
     }
   }
@@ -492,7 +495,7 @@ bool GpuChannel::OnControlMessageReceived(const IPC::Message& msg) {
 
 void GpuChannel::HandleMessage(const IPC::Message& msg) {
   int32_t routing_id = msg.routing_id();
-  GpuCommandBufferStub* stub = LookupCommandBuffer(routing_id);
+  CommandBufferStub* stub = LookupCommandBuffer(routing_id);
 
   DCHECK(!stub || stub->IsScheduled());
 
@@ -547,10 +550,10 @@ void GpuChannel::HandleOutOfOrderMessage(const IPC::Message& msg) {
 }
 
 #if defined(OS_ANDROID)
-const GpuCommandBufferStub* GpuChannel::GetOneStub() const {
+const CommandBufferStub* GpuChannel::GetOneStub() const {
   for (const auto& kv : stubs_) {
-    const GpuCommandBufferStub* stub = kv.second.get();
-    if (stub->decoder() && !stub->decoder()->WasContextLost())
+    const CommandBufferStub* stub = kv.second.get();
+    if (stub->decoder_context() && !stub->decoder_context()->WasContextLost())
       return stub;
   }
   return nullptr;
@@ -580,30 +583,22 @@ void GpuChannel::OnCreateCommandBuffer(
     return;
   }
 
+  int32_t stream_id = init_params.stream_id;
   int32_t share_group_id = init_params.share_group_id;
-  GpuCommandBufferStub* share_group = LookupCommandBuffer(share_group_id);
+  CommandBufferStub* share_group = LookupCommandBuffer(share_group_id);
 
   if (!share_group && share_group_id != MSG_ROUTING_NONE) {
     LOG(ERROR) << "ContextResult::kFatalFailure: invalid share group id";
     return;
   }
 
-  int32_t stream_id = init_params.stream_id;
   if (share_group && stream_id != share_group->stream_id()) {
     LOG(ERROR) << "ContextResult::kFatalFailure: "
                   "stream id does not match share group stream id";
     return;
   }
 
-  SchedulingPriority stream_priority = init_params.stream_priority;
-  if (stream_priority <= SchedulingPriority::kHigh && !is_gpu_host_) {
-    LOG(ERROR)
-        << "ContextResult::kFatalFailure: "
-           "high priority stream not allowed on a non-privileged channel";
-    return;
-  }
-
-  if (share_group && !share_group->decoder()) {
+  if (share_group && !share_group->decoder_context()) {
     // This should catch test errors where we did not Initialize the
     // share_group's CommandBuffer.
     LOG(ERROR) << "ContextResult::kFatalFailure: "
@@ -611,7 +606,7 @@ void GpuChannel::OnCreateCommandBuffer(
     return;
   }
 
-  if (share_group && share_group->decoder()->WasContextLost()) {
+  if (share_group && share_group->decoder_context()->WasContextLost()) {
     // The caller should retry to get a context.
     LOG(ERROR) << "ContextResult::kTransientFailure: "
                   "shared context was already lost";
@@ -624,21 +619,27 @@ void GpuChannel::OnCreateCommandBuffer(
 
   SequenceId sequence_id = stream_sequences_[stream_id];
   if (sequence_id.is_null()) {
-    sequence_id = scheduler_->CreateSequence(stream_priority);
+    sequence_id = scheduler_->CreateSequence(init_params.stream_priority);
     stream_sequences_[stream_id] = sequence_id;
   }
 
-  DVLOG(1) << "Should use raster decoder: "
-           << (gpu_channel_manager_->gpu_preferences().enable_raster_decoder &&
-               init_params.attribs.enable_oop_rasterization);
+  std::unique_ptr<CommandBufferStub> stub;
+  if (gpu_channel_manager_->gpu_preferences().enable_raster_decoder &&
+      init_params.attribs.enable_oop_rasterization &&
+      init_params.attribs.enable_raster_interface &&
+      !init_params.attribs.enable_gles2_interface) {
+    stub = std::make_unique<RasterCommandBufferStub>(
+        this, init_params, command_buffer_id, sequence_id, stream_id, route_id);
+  } else {
+    stub = std::make_unique<GLES2CommandBufferStub>(
+        this, init_params, command_buffer_id, sequence_id, stream_id, route_id);
+  }
 
-  auto stub = std::make_unique<GpuCommandBufferStub>(
-      this, init_params, command_buffer_id, sequence_id, stream_id, route_id);
   auto stub_result =
       stub->Initialize(share_group, init_params, std::move(shared_state_shm));
   if (stub_result != gpu::ContextResult::kSuccess) {
     DLOG(ERROR) << "GpuChannel::CreateCommandBuffer(): failed to initialize "
-                   "GpuCommandBufferStub";
+                   "CommandBufferStub";
     *result = stub_result;
     return;
   }
@@ -649,7 +650,7 @@ void GpuChannel::OnCreateCommandBuffer(
   }
 
   *result = ContextResult::kSuccess;
-  *capabilities = stub->decoder()->GetCapabilities();
+  *capabilities = stub->decoder_context()->GetCapabilities();
   stubs_[route_id] = std::move(stub);
 }
 
@@ -657,7 +658,7 @@ void GpuChannel::OnDestroyCommandBuffer(int32_t route_id) {
   TRACE_EVENT1("gpu", "GpuChannel::OnDestroyCommandBuffer", "route_id",
                route_id);
 
-  std::unique_ptr<GpuCommandBufferStub> stub;
+  std::unique_ptr<CommandBufferStub> stub;
   auto it = stubs_.find(route_id);
   if (it != stubs_.end()) {
     stub = std::move(it->second);

@@ -49,6 +49,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   // BrowserNonClientFrameView:
   void OnBrowserViewInitViewsComplete() override;
   void OnMaximizedStateChanged() override;
+  void OnFullscreenStateChanged() override;
   gfx::Rect GetBoundsForTabStrip(views::View* tabstrip) const override;
   int GetTopInset(bool restored) const override;
   int GetThemeBackgroundXInset() const override;
@@ -101,6 +102,7 @@ class OpaqueBrowserFrameView : public BrowserNonClientFrameView,
   bool IsToolbarVisible() const override;
   gfx::Size GetTabstripPreferredSize() const override;
   int GetTopAreaHeight() const override;
+  bool UseCustomFrame() const override;
 
  protected:
   views::ImageButton* minimize_button() const { return minimize_button_; }

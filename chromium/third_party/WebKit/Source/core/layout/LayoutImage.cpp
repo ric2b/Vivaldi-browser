@@ -57,7 +57,7 @@ LayoutImage* LayoutImage::CreateAnonymous(PseudoElement& pseudo) {
   return image;
 }
 
-LayoutImage::~LayoutImage() {}
+LayoutImage::~LayoutImage() = default;
 
 void LayoutImage::WillBeDestroyed() {
   DCHECK(image_resource_);
@@ -137,7 +137,7 @@ void LayoutImage::InvalidatePaintAndMarkForLayoutIfNeeded(
     CanDeferInvalidation defer) {
   LayoutSize old_intrinsic_size = IntrinsicSize();
   LayoutSize new_intrinsic_size =
-      image_resource_->ImageSize(Style()->EffectiveZoom());
+      RoundedLayoutSize(image_resource_->ImageSize(Style()->EffectiveZoom()));
   UpdateIntrinsicSizeIfNeeded(new_intrinsic_size);
 
   // In the case of generated image content using :before/:after/content, we
@@ -230,12 +230,12 @@ bool LayoutImage::ForegroundIsKnownToBeOpaqueInRect(
     return false;
   EFillBox background_clip = Style()->BackgroundClip();
   // Background paints under borders.
-  if (background_clip == kBorderFillBox && Style()->HasBorder() &&
+  if (background_clip == EFillBox::kBorder && Style()->HasBorder() &&
       !Style()->BorderObscuresBackground())
     return false;
   // Background shows in padding area.
-  if ((background_clip == kBorderFillBox ||
-       background_clip == kPaddingFillBox) &&
+  if ((background_clip == EFillBox::kBorder ||
+       background_clip == EFillBox::kPadding) &&
       Style()->HasPadding())
     return false;
   // Object-position may leave parts of the content box empty, regardless of the
@@ -323,6 +323,15 @@ bool LayoutImage::NeedsPreferredWidthsRecalculation() const {
   if (LayoutReplaced::NeedsPreferredWidthsRecalculation())
     return true;
   return EmbeddedReplacedContent();
+}
+
+bool LayoutImage::GetNestedIntrinsicSizingInfo(
+    IntrinsicSizingInfo& intrinsic_sizing_info) const {
+  if (LayoutReplaced* content_layout_object = EmbeddedReplacedContent()) {
+    content_layout_object->ComputeIntrinsicSizingInfo(intrinsic_sizing_info);
+    return true;
+  }
+  return false;
 }
 
 LayoutReplaced* LayoutImage::EmbeddedReplacedContent() const {

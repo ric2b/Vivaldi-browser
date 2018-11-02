@@ -31,21 +31,24 @@ namespace content {
 std::unique_ptr<HtmlVideoElementCapturerSource>
 HtmlVideoElementCapturerSource::CreateFromWebMediaPlayerImpl(
     blink::WebMediaPlayer* player,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner) {
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   // Save histogram data so we can see how much HTML Video capture is used.
   // The histogram counts the number of calls to the JS API.
   UpdateWebRTCMethodCount(WEBKIT_VIDEO_CAPTURE_STREAM);
 
   return base::WrapUnique(new HtmlVideoElementCapturerSource(
       static_cast<media::WebMediaPlayerImpl*>(player)->AsWeakPtr(),
-      io_task_runner));
+      io_task_runner, task_runner));
 }
 
 HtmlVideoElementCapturerSource::HtmlVideoElementCapturerSource(
     const base::WeakPtr<blink::WebMediaPlayer>& player,
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner)
+    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : web_media_player_(player),
       io_task_runner_(io_task_runner),
+      task_runner_(task_runner),
       capture_frame_rate_(0.0),
       weak_factory_(this) {
   DCHECK(web_media_player_);
@@ -122,6 +125,8 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
     return;
 
   const base::TimeTicks current_time = base::TimeTicks::Now();
+  if (start_capture_time_.is_null())
+    start_capture_time_ = current_time;
   const blink::WebSize resolution = web_media_player_->NaturalSize();
 
   cc::PaintFlags flags;
@@ -144,7 +149,7 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
 
   scoped_refptr<media::VideoFrame> frame = frame_pool_.CreateFrame(
       media::PIXEL_FORMAT_I420, resolution, gfx::Rect(resolution), resolution,
-      base::TimeTicks::Now() - base::TimeTicks());
+      current_time - start_capture_time_);
 
   const uint32 source_pixel_format =
       (kN32_SkColorType == kRGBA_8888_SkColorType) ? libyuv::FOURCC_ABGR
@@ -181,7 +186,7 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
       next_capture_time_ = current_time;
   }
   // Schedule next capture.
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+  task_runner_->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&HtmlVideoElementCapturerSource::sendNewFrame,
                      weak_factory_.GetWeakPtr()),

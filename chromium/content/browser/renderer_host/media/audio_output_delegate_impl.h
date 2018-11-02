@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/common/content_export.h"
 #include "media/audio/audio_output_delegate.h"
+#include "media/mojo/interfaces/audio_output_stream.mojom.h"
 
 namespace content {
 class AudioMirroringManager;
@@ -36,13 +37,14 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
   static std::unique_ptr<AudioOutputDelegate> Create(
       EventHandler* handler,
       media::AudioManager* audio_manager,
-      std::unique_ptr<media::AudioLog> audio_log,
+      media::AudioLog* audio_log,
       AudioMirroringManager* mirroring_manager,
       MediaObserver* media_observer,
       int stream_id,
       int render_frame_id,
       int render_process_id,
       const media::AudioParameters& params,
+      media::mojom::AudioOutputStreamObserverPtr observer,
       const std::string& output_device_id);
 
   AudioOutputDelegateImpl(
@@ -50,13 +52,14 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
       std::unique_ptr<base::CancelableSyncSocket> foreign_socket,
       EventHandler* handler,
       media::AudioManager* audio_manager,
-      std::unique_ptr<media::AudioLog> audio_log,
+      media::AudioLog* audio_log,
       AudioMirroringManager* mirroring_manager,
       MediaObserver* media_observer,
       int stream_id,
       int render_frame_id,
       int render_process_id,
       const media::AudioParameters& params,
+      media::mojom::AudioOutputStreamObserverPtr observer,
       const std::string& output_device_id);
 
   ~AudioOutputDelegateImpl() override;
@@ -75,10 +78,12 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
   void OnError();
   void UpdatePlayingState(bool playing);
   media::AudioOutputController* GetControllerForTesting() const;
+  void PollAudioLevel();
+  bool IsAudible() const;
 
   // This is the event handler which |this| send notifications to.
   EventHandler* subscriber_;
-  std::unique_ptr<media::AudioLog> const audio_log_;
+  media::AudioLog* const audio_log_;
   // |controller_event_handler_| proxies events from controller to |this|.
   // |controller_event_handler_|, |reader_| and |mirroring_manager_| will
   // outlive |this|, see the destructor for details.
@@ -94,6 +99,13 @@ class CONTENT_EXPORT AudioOutputDelegateImpl
   // This flag ensures that we only send OnStreamStateChanged notifications
   // and (de)register with the stream monitor when the state actually changes.
   bool playing_ = false;
+
+  // Calls PollAudioLevel() at regular intervals while |playing_| is true.
+  base::RepeatingTimer poll_timer_;
+  bool is_audible_ = false;
+  // |observer_| is notified about changes in the audible state of the stream.
+  media::mojom::AudioOutputStreamObserverPtr observer_;
+
   base::WeakPtrFactory<AudioOutputDelegateImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(AudioOutputDelegateImpl);

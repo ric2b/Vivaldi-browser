@@ -133,6 +133,9 @@ const char kShowLogoutButtonInTray[] = "show_logout_button_in_tray";
 // a confirmation dialog.
 const char kLogoutDialogDurationMs[] = "logout_dialog_duration_ms";
 
+// A dictionary pref that maps usernames to wallpaper info.
+const char kUserWallpaperInfo[] = "user_wallpaper_info";
+
 // A dictionary pref that maps wallpaper file paths to their prominent colors.
 const char kWallpaperColors[] = "ash.wallpaper.prominent_colors";
 
@@ -143,10 +146,6 @@ const char kUserBluetoothAdapterEnabled[] =
 // Boolean pref indicating system-wide setting for bluetooth adapter power.
 const char kSystemBluetoothAdapterEnabled[] =
     "ash.system.bluetooth.adapter_enabled";
-
-// Boolean pref for whether a dot is shown for each touch event. This is
-// typically used during demos/presentations to show where taps happen.
-const char kTouchHudProjectionEnabled[] = "touch_hud.projection_enabled";
 
 // Boolean prefs for the status of the touchscreen and the touchpad.
 const char kTouchpadEnabled[] = "events.touch_pad.enabled";

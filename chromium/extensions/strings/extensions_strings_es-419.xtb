@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">No se puede desempaquetar la extensión. Para desempaquetar una extensión de manera segura, debe haber una ruta de acceso al directorio de tu perfil que comience con una letra de unidad y que no contenga una unión, un punto de montaje ni un symlink. No existe esa ruta de acceso para tu perfil.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> del proveedor <ph name="VENDOR_ID" /> (número de serie <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">No se pudo cargar la página "<ph name="PAGE" />" del selector.</translation>
 <translation id="388442998277590542">No se pudo cargar la página de opciones '<ph name="OPTIONS_PAGE" />'.</translation>
 <translation id="4115165561519362854">El administrador de esta computadora requiere una versión de <ph name="EXTENSION_NAME" /> no anterior a <ph name="EXTENSION_VERSION" />. No se puede habilitar hasta que se haya actualizado a dicha versión (o versiones posteriores).</translation>
 <translation id="4233778200880751280">No se pudo cargar la página de información "<ph name="ABOUT_PAGE" />".</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">No se puede desempaquetar la extensión. Para desempaquetar una extensión de manera segura, debe haber una ruta de acceso al directorio de tu perfil que no contenga un symlink. No existe esa ruta de acceso para tu perfil.</translation>
 <translation id="641087317769093025">No se pudo descomprimir la extensión.</translation>
 <translation id="6542618148162044354">"<ph name="APP_NAME" />" solicita acceso a uno o más de tus dispositivos:</translation>
-<translation id="6566142449942033617">No se pudo cargar '<ph name="PLUGIN_PATH" />' para el complemento.</translation>
 <translation id="657064425229075395">No se pudo cargar la secuencia de comandos en segundo plano "<ph name="BACKGROUND_SCRIPT" />".</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" /> de <ph name="VENDOR_NAME" /> (número de serie: <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">No se pudo crear un directorio para descomprimir "<ph name="DIRECTORY_PATH" />".</translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">Esta extensión se recargó con demasiada frecuencia.</translation>
 <translation id="7003844668372540529">Producto desconocido <ph name="PRODUCT_ID" /> de <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">El administrador de esta máquina requiere que instales <ph name="EXTENSION_NAME" />. No se puede eliminar ni modificar.</translation>
-<translation id="7581279002575751816">Los complementos NPAPI no son compatibles.</translation>
 <translation id="7972881773422714442">Opciones: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Cámara frontal</translation>
 <translation id="8047248493720652249">Esta extensión no pudo asignar el nombre "<ph name="ATTEMPTED_FILENAME" />" a la descarga porque otra extensión (<ph name="EXTENSION_NAME" />) determinó un nombre de archivo diferente: "<ph name="ACTUAL_FILENAME" />".</translation>

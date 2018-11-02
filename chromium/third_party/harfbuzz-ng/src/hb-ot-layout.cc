@@ -35,8 +35,12 @@
 #include "hb-ot-layout-gsub-table.hh"
 #include "hb-ot-layout-gpos-table.hh"
 #include "hb-ot-layout-jstf-table.hh" // Just so we compile it; unused otherwise.
+#include "hb-ot-name-table.hh" // Just so we compile it; unused otherwise.
 
 #include "hb-ot-map-private.hh"
+
+
+const void * const OT::_hb_NullPool[HB_NULL_POOL_SIZE / sizeof (void *)] = {};
 
 
 hb_ot_layout_t *
@@ -597,6 +601,7 @@ unsigned int
 hb_ot_layout_table_get_lookup_count (hb_face_t    *face,
 				     hb_tag_t      table_tag)
 {
+  if (unlikely (!hb_ot_shaper_face_data_ensure (face))) return 0;
   switch (table_tag)
   {
     case HB_OT_TAG_GSUB:

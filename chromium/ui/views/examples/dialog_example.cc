@@ -37,8 +37,7 @@ class DialogExample::Delegate : public virtual DialogType {
   explicit Delegate(DialogExample* parent) : parent_(parent) {}
 
   void InitDelegate() {
-    LayoutManager* fill_layout = new FillLayout();
-    this->SetLayoutManager(fill_layout);
+    this->SetLayoutManager(std::make_unique<FillLayout>());
     Label* body = new Label(parent_->body_->text());
     body->SetMultiLine(true);
     body->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -133,7 +132,8 @@ void DialogExample::CreateExampleView(View* container) {
   views::LayoutProvider* provider = views::LayoutProvider::Get();
   const int horizontal_spacing =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
-  GridLayout* layout = GridLayout::CreateAndInstall(container);
+  GridLayout* layout = container->SetLayoutManager(
+      std::make_unique<views::GridLayout>(container));
   ColumnSet* column_set = layout->AddColumnSet(kFieldsColumnId);
   column_set->AddColumn(GridLayout::LEADING, GridLayout::FILL, kFixed,
                         GridLayout::USE_PREF, 0, 0);

@@ -31,7 +31,6 @@
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
-#include "chrome/browser/net/proxy_service_factory.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
@@ -53,7 +52,6 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/prefs/json_pref_store.h"
-#include "components/proxy_config/pref_proxy_config_tracker.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_thread.h"
@@ -73,7 +71,6 @@
 
 #if defined(OS_ANDROID)
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/proxy_config/proxy_prefs.h"
 #else  // !defined(OS_ANDROID)
 #include "chrome/browser/ui/zoom/chrome_zoom_level_otr_delegate.h"
 #include "components/zoom/zoom_event_manager.h"
@@ -132,19 +129,8 @@ void NotifyOTRProfileDestroyedOnIOThread(void* original_profile,
 }  // namespace
 #endif
 
-PrefStore* CreateExtensionPrefStore(Profile* profile,
-                                    bool incognito_pref_store) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  return new ExtensionPrefStore(
-      ExtensionPrefValueMapFactory::GetForBrowserContext(profile),
-      incognito_pref_store);
-#else
-  return NULL;
-#endif
-}
-
 OffTheRecordProfileImpl::OffTheRecordProfileImpl(Profile* real_profile)
-    : profile_(real_profile), start_time_(Time::Now()) {
+    : profile_(real_profile), start_time_(base::Time::Now()) {
   // Must happen before we ask for prefs as prefs needs the connection to the
   // service manager, which is set up in Initialize.
   BrowserContext::Initialize(this, profile_->GetPath());
@@ -178,10 +164,11 @@ void OffTheRecordProfileImpl::Init() {
   set_is_guest_profile(
       profile_->GetPath() == ProfileManager::GetGuestProfilePath());
 
+  // Always crash when incognito is not available.
   // Guest profiles may always be OTR. Check IncognitoModePrefs otherwise.
-  DCHECK(profile_->IsGuestSession() ||
-         IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
-             IncognitoModePrefs::DISABLED);
+  CHECK(profile_->IsGuestSession() || profile_->IsSystemProfile() ||
+        IncognitoModePrefs::GetAvailability(profile_->GetPrefs()) !=
+            IncognitoModePrefs::DISABLED);
 
 #if !defined(OS_ANDROID)
   TrackZoomLevelsFromParent();
@@ -197,6 +184,8 @@ void OffTheRecordProfileImpl::Init() {
   extensions::ExtensionIconSource* icon_source =
       new extensions::ExtensionIconSource(profile_);
   content::URLDataSource::Add(this, icon_source);
+
+  extensions::ExtensionSystem::Get(this)->InitForIncognitoProfile();
 
   VivaldiDataSource* data_source = new VivaldiDataSource(profile_);
   content::URLDataSource::Add(this, data_source);
@@ -227,9 +216,6 @@ OffTheRecordProfileImpl::~OffTheRecordProfileImpl() {
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&NotifyOTRProfileDestroyedOnIOThread, profile_, this));
 #endif
-
-  if (pref_proxy_config_tracker_)
-    pref_proxy_config_tracker_->DetachFromPrefService();
 
   // Clears any data the network stack contains that may be related to the
   // OTR session.
@@ -489,7 +475,7 @@ bool OffTheRecordProfileImpl::IsSameProfile(Profile* profile) {
   return (profile == this) || (profile == profile_);
 }
 
-Time OffTheRecordProfileImpl::GetStartTime() const {
+base::Time OffTheRecordProfileImpl::GetStartTime() const {
   return start_time_;
 }
 
@@ -531,12 +517,6 @@ void OffTheRecordProfileImpl::InitChromeOSPreferences() {
   // The preferences are associated with the regular user profile.
 }
 #endif  // defined(OS_CHROMEOS)
-
-PrefProxyConfigTracker* OffTheRecordProfileImpl::GetProxyConfigTracker() {
-  if (!pref_proxy_config_tracker_)
-    pref_proxy_config_tracker_.reset(CreateProxyConfigTracker());
-  return pref_proxy_config_tracker_.get();
-}
 
 chrome_browser_net::Predictor* OffTheRecordProfileImpl::GetNetworkPredictor() {
   // We do not store information about websites visited in OTR profiles which
@@ -615,14 +595,3 @@ void OffTheRecordProfileImpl::UpdateDefaultZoomLevel() {
       ->OnDefaultZoomLevelChanged();
 }
 #endif  // !defined(OS_ANDROID)
-
-PrefProxyConfigTracker* OffTheRecordProfileImpl::CreateProxyConfigTracker() {
-#if defined(OS_CHROMEOS)
-  if (chromeos::ProfileHelper::IsSigninProfile(this)) {
-    return ProxyServiceFactory::CreatePrefProxyConfigTrackerOfLocalState(
-        g_browser_process->local_state());
-  }
-#endif  // defined(OS_CHROMEOS)
-  return ProxyServiceFactory::CreatePrefProxyConfigTrackerOfProfile(
-      GetPrefs(), g_browser_process->local_state());
-}

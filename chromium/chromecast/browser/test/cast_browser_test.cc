@@ -6,7 +6,6 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
@@ -45,7 +44,7 @@ void CastBrowserTest::PreRunTestOnMainThread() {
   base::RunLoop().RunUntilIdle();
 
   metrics::CastMetricsHelper::GetInstance()->SetDummySessionIdForTesting();
-  web_contents_manager_ = base::MakeUnique<CastWebContentsManager>(
+  web_contents_manager_ = std::make_unique<CastWebContentsManager>(
       CastBrowserProcess::GetInstance()->browser_context());
 }
 
@@ -56,7 +55,8 @@ void CastBrowserTest::PostRunTestOnMainThread() {
 content::WebContents* CastBrowserTest::NavigateToURL(const GURL& url) {
   cast_web_view_ = web_contents_manager_->CreateWebView(
       this, nullptr /*site_instance*/, false /*transparent*/,
-      false /*allow_media_access*/, false /*is_headless*/);
+      false /*allow_media_access*/, false /*is_headless*/,
+      false /*enable_touch_input*/);
 
   content::WebContents* web_contents = cast_web_view_->web_contents();
   content::WaitForLoadStop(web_contents);

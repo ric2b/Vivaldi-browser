@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/browser_extension_window_controller.h"
 
-#include "app/vivaldi_apptools.h"
 #include "chrome/browser/extensions/api/tabs/tabs_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/window_controller_list.h"
@@ -15,7 +14,7 @@
 #include "components/sessions/core/session_id.h"
 #include "extensions/common/extension.h"
 
-#include "app/vivaldi_constants.h"
+#include "app/vivaldi_apptools.h"
 
 BrowserExtensionWindowController::BrowserExtensionWindowController(
     Browser* browser)
@@ -42,14 +41,6 @@ std::string BrowserExtensionWindowController::GetWindowTypeText() const {
   if (browser_->is_app())
     return keys::kWindowTypeValueApp;
   return keys::kWindowTypeValueNormal;
-}
-
-std::unique_ptr<base::DictionaryValue>
-BrowserExtensionWindowController::CreateWindowValue() const {
-  std::unique_ptr<base::DictionaryValue> result =
-      extensions::WindowController::CreateWindowValue();
-  result->SetString(vivaldi::kWindowExtDataKey, browser_->ext_data());
-  return result;
 }
 
 std::unique_ptr<base::DictionaryValue>

@@ -9,6 +9,7 @@ cr.define('print_preview', function() {
   class NativeLayerStub extends TestBrowserProxy {
     constructor() {
       super([
+        'dialogClose',
         'getInitialSettings',
         'getPrinters',
         'getPreview',
@@ -59,6 +60,11 @@ cr.define('print_preview', function() {
     }
 
     /** @override */
+    dialogClose(isCancel) {
+      this.methodCalled('dialogClose', isCancel);
+    }
+
+    /** @override */
     getInitialSettings() {
       this.methodCalled('getInitialSettings');
       return Promise.resolve(this.initialSettings_);
@@ -67,28 +73,28 @@ cr.define('print_preview', function() {
     /** @override */
     getPrinters(type) {
       this.methodCalled('getPrinters', type);
-      cr.webUIListenerCallback(
-          'printers-added', type, this.localDestinationInfos_);
+      if (type == print_preview.PrinterType.LOCAL_PRINTER) {
+        cr.webUIListenerCallback(
+            'printers-added', type, this.localDestinationInfos_);
+      }
       return Promise.resolve();
     }
 
     /** @override */
-    getPreview(
-        destination, printTicketStore, documentInfo, generateDraft, requestId) {
+    getPreview(printTicket, pageCount) {
       this.methodCalled('getPreview', {
-        destination: destination,
-        printTicketStore: printTicketStore,
-        documentInfo: documentInfo,
-        generateDraft: generateDraft,
-        requestId: requestId,
+        printTicket: printTicket,
+        pageCount: pageCount
       });
-      if (destination.id == this.badPrinterId_) {
+      const printTicketParsed = JSON.parse(printTicket);
+      if (printTicketParsed.deviceName == this.badPrinterId_) {
         let rejectString = print_preview.PreviewArea.EventType.SETTINGS_INVALID;
         rejectString = rejectString.substring(
             rejectString.lastIndexOf('.') + 1, rejectString.length);
         return Promise.reject(rejectString);
       }
-      const pageRanges = printTicketStore.pageRange.getDocumentPageRanges();
+      const pageRanges = printTicketParsed.pageRange;
+      const requestId = printTicketParsed.requestID;
       if (pageRanges.length == 0) {  // assume full length document, 1 page.
         cr.webUIListenerCallback('page-count-ready', 1, requestId, 100);
         cr.webUIListenerCallback('page-preview-ready', 0, 0, requestId);
@@ -118,24 +124,14 @@ cr.define('print_preview', function() {
     /** @override */
     getPrinterCapabilities(printerId, type) {
       this.methodCalled('getPrinterCapabilities', printerId, type);
+      if (type != print_preview.PrinterType.LOCAL_PRINTER)
+        return Promise.reject();
       return this.localDestinationCapabilities_.get(printerId);
     }
 
     /** @override */
-    print(
-      destination,
-      printTicketStore,
-      documentInfo,
-      opt_isOpenPdfInPreview,
-      opt_showSystemDialog
-    ) {
-      this.methodCalled('print', {
-        destination: destination,
-        printTicketStore: printTicketStore,
-        documentInfo: documentInfo,
-        openPdfInPreview: opt_isOpenPdfInPreview || false,
-        showSystemDialog: opt_showSystemDialog || false,
-      });
+    print(printTicket) {
+      this.methodCalled('print', printTicket);
       return Promise.resolve();
     }
 

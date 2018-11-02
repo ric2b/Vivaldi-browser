@@ -22,6 +22,7 @@
 #include "media/base/audio_decoder.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/audio_discard_helper.h"
+#include "media/base/channel_layout.h"
 #include "media/base/sample_format.h"
 #include "media/base/video_decoder.h"
 #include "media/base/video_decoder_config.h"
@@ -111,6 +112,8 @@ class WMFDecoderImpl {
   MFT_INPUT_STREAM_INFO input_stream_info_;
   Microsoft::WRL::ComPtr<IMFSample> output_sample_;
   uint32_t output_sample_size_;  // in Bytes
+  uint32_t output_samples_per_second_;
+  ChannelLayout output_channel_layout_;
 
   std::deque<scoped_refptr<DecoderBuffer>> queued_input_;
   std::unique_ptr<AudioDiscardHelper> discard_helper_;

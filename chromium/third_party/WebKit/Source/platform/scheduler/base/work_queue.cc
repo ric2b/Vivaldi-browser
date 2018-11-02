@@ -67,6 +67,10 @@ void WorkQueue::Push(TaskQueueImpl::Task task) {
   DCHECK(task.enqueue_order_set());
 #endif
 
+  // Make sure the |enqueue_order()| is monotonically increasing.
+  DCHECK(was_empty ||
+         work_queue_.rbegin()->enqueue_order() < task.enqueue_order());
+
   // Amoritized O(1).
   work_queue_.push_back(std::move(task));
 
@@ -76,6 +80,40 @@ void WorkQueue::Push(TaskQueueImpl::Task task) {
   // If we hit the fence, pretend to WorkQueueSets that we're empty.
   if (work_queue_sets_ && !BlockedByFence())
     work_queue_sets_->OnTaskPushedToEmptyQueue(this);
+}
+
+void WorkQueue::PushNonNestableTaskToFront(TaskQueueImpl::Task task) {
+  DCHECK(task.nestable == base::Nestable::kNonNestable);
+
+  bool was_empty = work_queue_.empty();
+  bool was_blocked = BlockedByFence();
+#ifndef NDEBUG
+  DCHECK(task.enqueue_order_set());
+#endif
+
+  if (!was_empty) {
+    // Make sure the |enqueue_order()| is monotonically increasing.
+    DCHECK_LE(task.enqueue_order(), work_queue_.front().enqueue_order())
+        << task_queue_->GetName() << " : " << work_queue_sets_->GetName()
+        << " : " << name_;
+  }
+
+  // Amoritized O(1).
+  work_queue_.push_front(std::move(task));
+
+  if (!work_queue_sets_)
+    return;
+
+  // Pretend  to WorkQueueSets that nothing has changed if we're blocked.
+  if (BlockedByFence())
+    return;
+
+  // Pushing task to front may unblock the fence.
+  if (was_empty || was_blocked) {
+    work_queue_sets_->OnTaskPushedToEmptyQueue(this);
+  } else {
+    work_queue_sets_->OnFrontTaskChanged(this);
+  }
 }
 
 void WorkQueue::ReloadEmptyImmediateQueue() {
@@ -97,7 +135,7 @@ TaskQueueImpl::Task WorkQueue::TakeTaskFromWorkQueue() {
   // Skip over canceled tasks, except for the last one since we always return
   // something.
   while (work_queue_.size() > 1u) {
-    if (work_queue_.front().task.IsCancelled()) {
+    if (!work_queue_.front().task || work_queue_.front().task.IsCancelled()) {
       work_queue_.pop_front();
     } else {
       break;
@@ -125,11 +163,23 @@ void WorkQueue::AssignSetIndex(size_t work_queue_set_index) {
   work_queue_set_index_ = work_queue_set_index;
 }
 
-bool WorkQueue::InsertFence(EnqueueOrder fence) {
+bool WorkQueue::InsertFenceImpl(EnqueueOrder fence) {
   DCHECK_NE(fence, 0u);
   DCHECK(fence >= fence_ || fence == 1u);
   bool was_blocked_by_fence = BlockedByFence();
   fence_ = fence;
+  return was_blocked_by_fence;
+}
+
+void WorkQueue::InsertFenceSilently(EnqueueOrder fence) {
+  // Ensure that there is no fence present or a new one blocks queue completely.
+  DCHECK(fence_ == 0u || fence == 1u);
+  InsertFenceImpl(fence);
+}
+
+bool WorkQueue::InsertFence(EnqueueOrder fence) {
+  bool was_blocked_by_fence = InsertFenceImpl(fence);
+
   // Moving the fence forward may unblock some tasks.
   if (work_queue_sets_ && !work_queue_.empty() && was_blocked_by_fence &&
       !BlockedByFence()) {

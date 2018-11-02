@@ -26,9 +26,10 @@
 #include "modules/storage/StorageNamespace.h"
 
 #include <memory>
+
+#include "base/memory/ptr_util.h"
 #include "modules/storage/StorageArea.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebStorageArea.h"
@@ -40,25 +41,25 @@ StorageNamespace::StorageNamespace(
     std::unique_ptr<WebStorageNamespace> web_storage_namespace)
     : web_storage_namespace_(std::move(web_storage_namespace)) {}
 
-StorageNamespace::~StorageNamespace() {}
+StorageNamespace::~StorageNamespace() = default;
 
-StorageArea* StorageNamespace::LocalStorageArea(SecurityOrigin* origin) {
+StorageArea* StorageNamespace::LocalStorageArea(const SecurityOrigin* origin) {
   DCHECK(IsMainThread());
   static std::unique_ptr<WebStorageNamespace> local_storage_namespace = nullptr;
   if (!local_storage_namespace)
     local_storage_namespace =
         Platform::Current()->CreateLocalStorageNamespace();
   return StorageArea::Create(
-      WTF::WrapUnique(local_storage_namespace->CreateStorageArea(
+      base::WrapUnique(local_storage_namespace->CreateStorageArea(
           WebSecurityOrigin(origin))),
-      kLocalStorage);
+      StorageArea::kLocalStorage);
 }
 
-StorageArea* StorageNamespace::GetStorageArea(SecurityOrigin* origin) {
+StorageArea* StorageNamespace::GetStorageArea(const SecurityOrigin* origin) {
   return StorageArea::Create(
-      WTF::WrapUnique(
+      base::WrapUnique(
           web_storage_namespace_->CreateStorageArea(WebSecurityOrigin(origin))),
-      kSessionStorage);
+      StorageArea::kSessionStorage);
 }
 
 bool StorageNamespace::IsSameNamespace(

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_picker_views.h"
 
+#include <memory>
 #include <string>
 
 #include "base/strings/utf_string_conversions.h"
@@ -20,8 +21,8 @@ class DesktopMediaPickerViewsBrowserTest : public DialogBrowserTest {
   DesktopMediaPickerViewsBrowserTest() {}
 
   // DialogBrowserTest:
-  void ShowDialog(const std::string& name) override {
-    picker_ = base::MakeUnique<DesktopMediaPickerViews>();
+  void ShowUi(const std::string& name) override {
+    picker_ = std::make_unique<DesktopMediaPickerViews>();
     auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
     gfx::NativeWindow native_window = browser()->window()->GetNativeWindow();
 
@@ -29,7 +30,7 @@ class DesktopMediaPickerViewsBrowserTest : public DialogBrowserTest {
     for (auto type : {content::DesktopMediaID::TYPE_SCREEN,
                       content::DesktopMediaID::TYPE_WINDOW,
                       content::DesktopMediaID::TYPE_WEB_CONTENTS}) {
-      source_lists.push_back(base::MakeUnique<FakeDesktopMediaList>(type));
+      source_lists.push_back(std::make_unique<FakeDesktopMediaList>(type));
     }
 
     picker_->Show(web_contents, native_window, nullptr,
@@ -45,8 +46,7 @@ class DesktopMediaPickerViewsBrowserTest : public DialogBrowserTest {
 };
 
 // Invokes a dialog that allows the user to select what view of their desktop
-// they would like to share. See test_browser_dialog.h.
-IN_PROC_BROWSER_TEST_F(DesktopMediaPickerViewsBrowserTest,
-                       InvokeDialog_default) {
-  RunDialog();
+// they would like to share.
+IN_PROC_BROWSER_TEST_F(DesktopMediaPickerViewsBrowserTest, InvokeUi_default) {
+  ShowAndVerifyUi();
 }

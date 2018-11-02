@@ -12,7 +12,6 @@
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/popup_item_ids.h"
 #import "components/autofill/ios/browser/autofill_agent.h"
-#import "components/autofill/ios/browser/autofill_client_ios.h"
 #include "components/autofill/ios/browser/autofill_driver_ios.h"
 #include "components/autofill/ios/browser/autofill_driver_ios_bridge.h"
 #import "components/autofill/ios/browser/js_autofill_manager.h"
@@ -24,6 +23,7 @@
 #import "ios/web/public/web_state/web_state_observer_bridge.h"
 #include "ios/web_view/internal/app/application_context.h"
 #import "ios/web_view/internal/autofill/cwv_autofill_suggestion_internal.h"
+#import "ios/web_view/internal/autofill/web_view_autofill_client_ios.h"
 #include "ios/web_view/internal/autofill/web_view_personal_data_manager_factory.h"
 #include "ios/web_view/internal/signin/web_view_oauth2_token_service_factory.h"
 #include "ios/web_view/internal/signin/web_view_signin_manager_factory.h"
@@ -48,7 +48,7 @@
   autofill::AutofillManager* _autofillManager;
 
   // Autofill client associated with |webState|.
-  std::unique_ptr<autofill::AutofillClientIOS> _autofillClient;
+  std::unique_ptr<autofill::WebViewAutofillClientIOS> _autofillClient;
 
   // Javascript autofill manager associated with |webState|.
   JsAutofillManager* _JSAutofillManager;
@@ -64,15 +64,17 @@
                JSAutofillManager:(JsAutofillManager*)JSAutofillManager {
   self = [super init];
   if (self) {
+    DCHECK(webState);
     _webState = webState;
 
     ios_web_view::WebViewBrowserState* browserState =
         ios_web_view::WebViewBrowserState::FromBrowserState(
-            webState->GetBrowserState());
+            _webState->GetBrowserState());
     _autofillAgent = autofillAgent;
 
-    _webStateObserverBridge.reset(
-        new web::WebStateObserverBridge(webState, self));
+    _webStateObserverBridge =
+        std::make_unique<web::WebStateObserverBridge>(self);
+    _webState->AddObserver(_webStateObserverBridge.get());
 
     std::unique_ptr<IdentityProvider> identityProvider(
         std::make_unique<ProfileIdentityProvider>(
@@ -81,7 +83,7 @@
             ios_web_view::WebViewOAuth2TokenServiceFactory::GetForBrowserState(
                 browserState),
             base::Closure()));
-    _autofillClient.reset(new autofill::AutofillClientIOS(
+    _autofillClient.reset(new autofill::WebViewAutofillClientIOS(
         browserState->GetPrefs(),
         ios_web_view::WebViewPersonalDataManagerFactory::GetForBrowserState(
             browserState),
@@ -90,15 +92,23 @@
             GetAutofillWebDataForBrowserState(
                 browserState, ServiceAccessType::EXPLICIT_ACCESS)));
     autofill::AutofillDriverIOS::CreateForWebStateAndDelegate(
-        webState, _autofillClient.get(), self,
+        _webState, _autofillClient.get(), self,
         ios_web_view::ApplicationContext::GetInstance()->GetApplicationLocale(),
         autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
-    _autofillManager =
-        autofill::AutofillDriverIOS::FromWebState(webState)->autofill_manager();
+    _autofillManager = autofill::AutofillDriverIOS::FromWebState(_webState)
+                           ->autofill_manager();
 
     _JSAutofillManager = JSAutofillManager;
   }
   return self;
+}
+
+- (void)dealloc {
+  if (_webState) {
+    _webState->RemoveObserver(_webStateObserverBridge.get());
+    _webStateObserverBridge.reset();
+    _webState = nullptr;
+  }
 }
 
 #pragma mark - Public Methods
@@ -153,6 +163,7 @@
                                            fieldType:@""
                                                 type:nil
                                           typedValue:@" "
+                                         isMainFrame:YES
                                             webState:_webState
                                    completionHandler:availableHandler];
 }
@@ -243,6 +254,7 @@
 
 - (void)webState:(web::WebState*)webState
     didRegisterFormActivity:(const web::FormActivityParams&)params {
+  DCHECK_EQ(_webState, webState);
   NSString* nsFormName = base::SysUTF8ToNSString(params.form_name);
   NSString* nsFieldName = base::SysUTF8ToNSString(params.field_name);
   NSString* nsValue = base::SysUTF8ToNSString(params.value);
@@ -279,17 +291,23 @@
 
 - (void)webState:(web::WebState*)webState
     didSubmitDocumentWithFormNamed:(const std::string&)formName
-                     userInitiated:(BOOL)userInitiated {
+                     userInitiated:(BOOL)userInitiated
+                       isMainFrame:(BOOL)isMainFrame {
   if ([_delegate respondsToSelector:@selector
-                 (autofillController:didSubmitFormWithName:userInitiated:)]) {
+                 (autofillController:didSubmitFormWithName:userInitiated
+                                       :isMainFrame:)]) {
     [_delegate autofillController:self
             didSubmitFormWithName:base::SysUTF8ToNSString(formName)
-                    userInitiated:userInitiated];
+                    userInitiated:userInitiated
+                      isMainFrame:isMainFrame];
   }
 }
 
 - (void)webStateDestroyed:(web::WebState*)webState {
+  DCHECK_EQ(_webState, webState);
   [_autofillAgent detachFromWebState];
+  _autofillClient.reset();
+  _webState->RemoveObserver(_webStateObserverBridge.get());
   _webStateObserverBridge.reset();
   _webState = nullptr;
 }

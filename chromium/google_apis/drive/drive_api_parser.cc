@@ -38,7 +38,7 @@ bool CreateTeamDriveResourceFromValue(
 // Converts |url_string| to |result|.  Always returns true to be used
 // for JSONValueConverter::RegisterCustomField method.
 // TODO(mukai): make it return false in case of invalid |url_string|.
-bool GetGURLFromString(const base::StringPiece& url_string, GURL* result) {
+bool GetGURLFromString(base::StringPiece url_string, GURL* result) {
   *result = GURL(url_string);
   return true;
 }
@@ -336,7 +336,7 @@ bool DriveAppIcon::Parse(const base::Value& value) {
 }
 
 // static
-bool DriveAppIcon::GetIconCategory(const base::StringPiece& category,
+bool DriveAppIcon::GetIconCategory(base::StringPiece category,
                                    DriveAppIcon::IconCategory* result) {
   for (size_t i = 0; i < arraysize(kAppIconCategoryMap); i++) {
     if (category == kAppIconCategoryMap[i].category_name) {
@@ -774,7 +774,7 @@ bool ChangeResource::Parse(const base::Value& value) {
 }
 
 // static
-bool ChangeResource::GetType(const base::StringPiece& type_name,
+bool ChangeResource::GetType(base::StringPiece type_name,
                              ChangeResource::ChangeType* result) {
   for (size_t i = 0; i < arraysize(kChangeTypeMap); i++) {
     if (type_name == kChangeTypeMap[i].type_name) {

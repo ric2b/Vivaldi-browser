@@ -16,11 +16,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "build/build_config.h"
-#include "content/common/clipboard.mojom.h"
-#include "content/common/clipboard_format.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/browser_associated_interface.h"
 #include "content/public/browser/browser_message_filter.h"
+#include "third_party/WebKit/common/clipboard/clipboard.mojom.h"
 #include "ui/base/clipboard/clipboard.h"
 
 class GURL;
@@ -38,13 +37,13 @@ namespace content {
 class ChromeBlobStorageContext;
 class ClipboardHostImplTest;
 
-class CONTENT_EXPORT ClipboardHostImpl : public mojom::ClipboardHost {
+class CONTENT_EXPORT ClipboardHostImpl : public blink::mojom::ClipboardHost {
  public:
   ~ClipboardHostImpl() override;
 
   static void Create(
       scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
-      mojom::ClipboardHostRequest request);
+      blink::mojom::ClipboardHostRequest request);
 
  private:
   friend class ClipboardHostImplTest;
@@ -57,35 +56,40 @@ class CONTENT_EXPORT ClipboardHostImpl : public mojom::ClipboardHost {
                                     ReadImageCallback callback);
 
   // content::mojom::ClipboardHost
-  void GetSequenceNumber(ui::ClipboardType type,
+  void GetSequenceNumber(ui::ClipboardType clipboard_type,
                          GetSequenceNumberCallback callback) override;
-  void IsFormatAvailable(content::ClipboardFormat format,
-                         ui::ClipboardType type,
+  void IsFormatAvailable(blink::mojom::ClipboardFormat format,
+                         ui::ClipboardType clipboard_type,
                          IsFormatAvailableCallback callback) override;
-  void ReadAvailableTypes(ui::ClipboardType type,
+  void ReadAvailableTypes(ui::ClipboardType clipboard_type,
                           ReadAvailableTypesCallback callback) override;
-  void ReadText(ui::ClipboardType type, ReadTextCallback callback) override;
-  void ReadHtml(ui::ClipboardType type, ReadHtmlCallback callback) override;
-  void ReadRtf(ui::ClipboardType type, ReadRtfCallback callback) override;
-  void ReadImage(ui::ClipboardType type, ReadImageCallback callback) override;
+  void ReadText(ui::ClipboardType clipboard_type,
+                ReadTextCallback callback) override;
+  void ReadHtml(ui::ClipboardType clipboard_type,
+                ReadHtmlCallback callback) override;
+  void ReadRtf(ui::ClipboardType clipboard_type,
+               ReadRtfCallback callback) override;
+  void ReadImage(ui::ClipboardType clipboard_type,
+                 ReadImageCallback callback) override;
   void ReadCustomData(ui::ClipboardType clipboard_type,
                       const base::string16& type,
                       ReadCustomDataCallback callback) override;
-  void WriteText(ui::ClipboardType type, const base::string16& text) override;
-  void WriteHtml(ui::ClipboardType type,
+  void WriteText(ui::ClipboardType clipboard_type,
+                 const base::string16& text) override;
+  void WriteHtml(ui::ClipboardType clipboard_type,
                  const base::string16& markup,
                  const GURL& url) override;
-  void WriteSmartPasteMarker(ui::ClipboardType type) override;
+  void WriteSmartPasteMarker(ui::ClipboardType clipboard_type) override;
   void WriteCustomData(
-      ui::ClipboardType type,
+      ui::ClipboardType clipboard_type,
       const std::unordered_map<base::string16, base::string16>& data) override;
-  void WriteBookmark(ui::ClipboardType type,
+  void WriteBookmark(ui::ClipboardType clipboard_type,
                      const std::string& url,
                      const base::string16& title) override;
-  void WriteImage(ui::ClipboardType type,
+  void WriteImage(ui::ClipboardType clipboard_type,
                   const gfx::Size& size_in_pixels,
                   mojo::ScopedSharedBufferHandle shared_buffer_handle) override;
-  void CommitWrite(ui::ClipboardType type) override;
+  void CommitWrite(ui::ClipboardType clipboard_type) override;
   void WriteStringToFindPboard(const base::string16& text) override;
 
   ui::Clipboard* clipboard_;  // Not owned

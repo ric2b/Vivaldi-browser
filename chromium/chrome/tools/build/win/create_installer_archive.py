@@ -396,14 +396,16 @@ def PrepareSetupExec(options, current_version, prev_version):
                       options.verbose)
   else:
     SignTarget(os.path.join(options.build_dir, SETUP_EXEC))
-    cmd = ['makecab.exe',
+    # Use makecab.py instead of makecab.exe so that this works when building
+    # on non-Windows hosts too.
+    makecab_py = os.path.join(os.path.dirname(__file__), 'makecab.py')
+    cmd = [sys.executable, makecab_py,
            '/D', 'CompressionType=LZX',
            '/V1',
            '/L', options.output_dir,
            os.path.join(options.build_dir, SETUP_EXEC),]
     RunSystemCommand(cmd, options.verbose)
     setup_file = SETUP_EXEC[:-1] + "_"
-
   return setup_file
 
 

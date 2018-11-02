@@ -15,6 +15,8 @@
 #include "core/css/StyleRuleKeyframe.h"
 #include "core/css/StyleRuleNamespace.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/css/parser/AtRuleDescriptorParser.h"
+#include "core/css/parser/AtRuleDescriptorValueSet.h"
 #include "core/css/parser/CSSAtRuleID.h"
 #include "core/css/parser/CSSLazyParsingState.h"
 #include "core/css/parser/CSSLazyPropertyParserImpl.h"
@@ -76,7 +78,7 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseValue(
   else if (declaration->CssParserMode() == kCSSFontFaceRuleMode)
     rule_type = StyleRule::kFontFace;
   CSSTokenizer tokenizer(string);
-  // TODO(shend): Use streams instead of ranges
+  // TODO(crbug.com/661854): Use streams instead of ranges
   parser.ConsumeDeclarationValue(CSSParserTokenRange(tokenizer.TokenizeToEOF()),
                                  unresolved_property, important, rule_type);
   bool did_parse = false;
@@ -98,7 +100,7 @@ MutableCSSPropertyValueSet::SetResult CSSParserImpl::ParseVariableValue(
     bool is_animation_tainted) {
   CSSParserImpl parser(context);
   CSSTokenizer tokenizer(value);
-  // TODO(shend): Use streams instead of ranges
+  // TODO(crbug.com/661854): Use streams instead of ranges
   const auto tokens = tokenizer.TokenizeToEOF();
   const CSSParserTokenRange range(tokens);
   parser.ConsumeVariableValue(range, property_name, important,
@@ -198,6 +200,8 @@ bool CSSParserImpl::ParseDeclarationList(
   StyleRule::RuleType rule_type = StyleRule::kStyle;
   if (declaration->CssParserMode() == kCSSViewportRuleMode)
     rule_type = StyleRule::kViewport;
+  if (declaration->CssParserMode() == kCSSFontFaceRuleMode)
+    rule_type = StyleRule::kFontFace;
   CSSTokenizer tokenizer(string);
   CSSParserTokenStream stream(tokenizer);
   parser.ConsumeDeclarationList(stream, rule_type);
@@ -323,7 +327,7 @@ CSSSelectorList CSSParserImpl::ParsePageSelector(
 std::unique_ptr<Vector<double>> CSSParserImpl::ParseKeyframeKeyList(
     const String& key_list) {
   CSSTokenizer tokenizer(key_list);
-  // TODO(shend): Use streams instead of ranges
+  // TODO(crbug.com/661854): Use streams instead of ranges
   return ConsumeKeyframeKeyList(CSSParserTokenRange(tokenizer.TokenizeToEOF()));
 }
 
@@ -703,8 +707,12 @@ StyleRuleFontFace* CSSParserImpl::ConsumeFontFaceRule(
     style_sheet_->SetHasFontFaceRule();
 
   ConsumeDeclarationList(stream, StyleRule::kFontFace);
-  return StyleRuleFontFace::Create(
-      CreateCSSPropertyValueSet(parsed_properties_, kCSSFontFaceRuleMode));
+  StyleRuleFontFace* result =
+      StyleRuleFontFace::Create(AtRuleDescriptorValueSet::Create(
+          parsed_properties_, kCSSFontFaceRuleMode,
+          AtRuleDescriptorValueSet::kFontFaceType));
+  parsed_properties_.clear();
+  return result;
 }
 
 StyleRuleKeyframes* CSSParserImpl::ConsumeKeyframesRule(
@@ -861,7 +869,7 @@ void CSSParserImpl::ConsumeDeclarationList(CSSParserTokenStream& stream,
         stream.UncheckedConsume();
         break;
       case kIdentToken: {
-        // TODO(shend): Use streams instead of ranges
+        // TODO(crbug.com/661854): Use streams instead of ranges
         const size_t decl_offset_start = stream.Offset();
         const CSSParserTokenRange decl =
             stream.ConsumeUntilPeekedTypeIs<kSemicolonToken>();
@@ -898,8 +906,7 @@ void CSSParserImpl::ConsumeDeclaration(CSSParserTokenRange range,
                                        const RangeOffset& decl_offset,
                                        StyleRule::RuleType rule_type) {
   DCHECK_EQ(range.Peek().GetType(), kIdentToken);
-  const CSSParserToken& token = range.ConsumeIncludingWhitespace();
-  CSSPropertyID unresolved_property = token.ParseAsUnresolvedCSSPropertyID();
+  const CSSParserToken& lhs = range.ConsumeIncludingWhitespace();
   if (range.Consume().GetType() != kColonToken)
     return;  // Parse error
 
@@ -919,16 +926,28 @@ void CSSParserImpl::ConsumeDeclaration(CSSParserTokenRange range,
     }
   }
 
-  if (important &&
-      (rule_type == StyleRule::kFontFace || rule_type == StyleRule::kKeyframe))
-    return;
-
   size_t properties_count = parsed_properties_.size();
+
+  CSSPropertyID unresolved_property = CSSPropertyInvalid;
+  AtRuleDescriptorID atrule_id = AtRuleDescriptorID::Invalid;
+  if (rule_type == StyleRule::kFontFace) {
+    if (important)  // Invalid
+      return;
+    atrule_id = lhs.ParseAsAtRuleDescriptorID();
+    AtRuleDescriptorParser::ParseAtRule(atrule_id, range, *context_,
+                                        parsed_properties_);
+  } else {
+    unresolved_property = lhs.ParseAsUnresolvedCSSPropertyID();
+  }
+
+  // @rules other than FontFace still handled with legacy code.
+  if (important && rule_type == StyleRule::kKeyframe)
+    return;
 
   if (unresolved_property == CSSPropertyVariable) {
     if (rule_type != StyleRule::kStyle && rule_type != StyleRule::kKeyframe)
       return;
-    AtomicString variable_name = token.Value().ToAtomicString();
+    AtomicString variable_name = lhs.Value().ToAtomicString();
     bool is_animation_tainted = rule_type == StyleRule::kKeyframe;
     ConsumeVariableValue(
         range.MakeSubRange(&range.Peek(), declaration_value_end), variable_name,

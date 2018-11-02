@@ -23,6 +23,12 @@ if (is_android) {
     # The main purpose of this argument is to avoid having to maintain 2
     # repositories to support both public only and internal builds.
     enable_chrome_android_internal = has_chrome_android_internal
+
+    # Android API level for 32 bits platforms
+    android32_ndk_api_level = 16
+
+    # Android API level for 64 bits platforms
+    android64_ndk_api_level = 21
   }
 
   if (enable_chrome_android_internal) {
@@ -32,6 +38,16 @@ if (is_android) {
     declare_args() {
       # Android SDK release. Currently, only "o_mr1" is publicly supported.
       android_sdk_release = default_android_sdk_release
+    }
+
+    # This is the result of profiling Chromium. Blindly applying it to arbitrary
+    # downstream projects and hoping it'll grant a speedup seems fragile. (Not
+    # to mention that it resides in a Chromium-specific directory.)
+    if (build_with_chromium) {
+      # The default AFDO profile used by public builds. Value may differ in
+      # internal builds.
+      clang_default_afdo_profile =
+          rebase_path("//chrome/android/profiles/chrome-profile-3309-text.prof")
     }
   }
 
@@ -43,9 +59,9 @@ if (is_android) {
   }
 
   if (!defined(default_android_ndk_root)) {
-    default_android_ndk_root = "//third_party/android_tools/ndk"
-    default_android_ndk_version = "r12b"
-    default_android_ndk_major_version = 12
+    default_android_ndk_root = "//third_party/android_ndk"
+    default_android_ndk_version = "r16"
+    default_android_ndk_major_version = 16
   } else {
     assert(defined(default_android_ndk_version))
     assert(defined(default_android_ndk_major_version))
@@ -243,23 +259,18 @@ if (is_android) {
 
   # Subdirectories inside android_ndk_root that contain the sysroot for the
   # associated platform.
-  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
-  _android_api_level = 16
   x86_android_sysroot_subdir =
-      "platforms/android-${_android_api_level}/arch-x86"
+      "platforms/android-${android32_ndk_api_level}/arch-x86"
   arm_android_sysroot_subdir =
-      "platforms/android-${_android_api_level}/arch-arm"
+      "platforms/android-${android32_ndk_api_level}/arch-arm"
   mips_android_sysroot_subdir =
-      "platforms/android-${_android_api_level}/arch-mips"
-
-  # If you raise this, reevaluate the snprintf=snprintf in ./BUILD.gn.
-  _android64_api_level = 21
+      "platforms/android-${android32_ndk_api_level}/arch-mips"
   x86_64_android_sysroot_subdir =
-      "platforms/android-${_android64_api_level}/arch-x86_64"
+      "platforms/android-${android64_ndk_api_level}/arch-x86_64"
   arm64_android_sysroot_subdir =
-      "platforms/android-${_android64_api_level}/arch-arm64"
+      "platforms/android-${android64_ndk_api_level}/arch-arm64"
   mips64_android_sysroot_subdir =
-      "platforms/android-${_android64_api_level}/arch-mips64"
+      "platforms/android-${android64_ndk_api_level}/arch-mips64"
 
   # Toolchain root directory for each build. The actual binaries are inside
   # a "bin" directory inside of these.

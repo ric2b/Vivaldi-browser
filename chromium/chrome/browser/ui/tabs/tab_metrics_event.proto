@@ -44,4 +44,73 @@ message TabMetricsEvent {
   }
 
   optional ContentType content_type = 1;
+
+  // URI schemes that can be handled by a protocol handler.
+  enum ProtocolHandlerScheme {
+    option allow_alias = true;  // Allow LAST alias for static assertions.
+
+    // Not one of the below, including custom handlers.
+    PROTOCOL_HANDLER_SCHEME_OTHER = 0;
+
+    // Schemes whitelisted for registerProtocolHandler.
+    PROTOCOL_HANDLER_SCHEME_BITCOIN = 1;
+    PROTOCOL_HANDLER_SCHEME_GEO = 2;
+    PROTOCOL_HANDLER_SCHEME_IM = 3;
+    PROTOCOL_HANDLER_SCHEME_IRC = 4;
+    PROTOCOL_HANDLER_SCHEME_IRCS = 5;
+    PROTOCOL_HANDLER_SCHEME_MAGNET = 6;
+    PROTOCOL_HANDLER_SCHEME_MAILTO = 7;
+    PROTOCOL_HANDLER_SCHEME_MMS = 8;
+    PROTOCOL_HANDLER_SCHEME_NEWS = 9;
+    PROTOCOL_HANDLER_SCHEME_NNTP = 10;
+    PROTOCOL_HANDLER_SCHEME_OPENPGP4FPR = 11;
+    PROTOCOL_HANDLER_SCHEME_SIP = 12;
+    PROTOCOL_HANDLER_SCHEME_SMS = 13;
+    PROTOCOL_HANDLER_SCHEME_SMSTO = 14;
+    PROTOCOL_HANDLER_SCHEME_SSH = 15;
+    PROTOCOL_HANDLER_SCHEME_TEL = 16;
+    PROTOCOL_HANDLER_SCHEME_URN = 17;
+    PROTOCOL_HANDLER_SCHEME_WEBCAL = 18;
+    PROTOCOL_HANDLER_SCHEME_WTAI = 19;
+    PROTOCOL_HANDLER_SCHEME_XMPP = 20;
+
+    PROTOCOL_HANDLER_SCHEME_LAST = 20;
+  }
+
+  repeated ProtocolHandlerScheme enabled_protocol_handlers = 2;
+}
+
+// Defines specialized fields used by the TabManager.WindowMetrics UKM event
+// for describing the window used by a set of tabs.
+message WindowMetricsEvent {
+  // Represents the type of the window.
+  enum Type {
+    // Could not be determined or not available.
+    TYPE_UNKNOWN = 0;
+
+    // A normal browser window with a tab strip.
+    TYPE_TABBED = 1;
+
+    // A pop-up browser window with no tab strip.
+    TYPE_POPUP = 2;
+
+    // An Extension browser window that is not an AppWindow.
+    TYPE_EXTENSION = 3;
+
+    // An AppWindow for a platform app.
+    TYPE_APP = 4;
+  }
+
+  optional Type type = 1;
+
+  // Represents the show state of the window.
+  enum ShowState {
+    SHOW_STATE_UNKNOWN = 0;
+    SHOW_STATE_NORMAL = 1;
+    SHOW_STATE_MINIMIZED = 2;
+    SHOW_STATE_MAXIMIZED = 3;
+    SHOW_STATE_FULLSCREEN = 4;
+  }
+
+  optional ShowState show_state = 2;
 }

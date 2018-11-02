@@ -48,7 +48,7 @@ class VTTScanner;
 
 class VTTParserClient : public GarbageCollectedMixin {
  public:
-  virtual ~VTTParserClient() {}
+  virtual ~VTTParserClient() = default;
 
   virtual void NewCuesParsed() = 0;
   virtual void FileFailedToParse() = 0;
@@ -66,13 +66,14 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
     kId,
     kTimingsAndSettings,
     kCueText,
+    kRegion,
     kBadCue
   };
 
   static VTTParser* Create(VTTParserClient* client, Document& document) {
     return new VTTParser(client, document);
   }
-  ~VTTParser() {}
+  ~VTTParser() = default;
 
   static inline bool IsRecognizedTag(const AtomicString& tag_name) {
     return tag_name == HTMLNames::iTag || tag_name == HTMLNames::bTag ||
@@ -94,9 +95,9 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   static bool CollectTimeStamp(const String&, double& time_stamp);
 
   // Useful functions for parsing percentage settings.
-  static bool ParseFloatPercentageValue(VTTScanner& value_scanner,
-                                        float& percentage);
-  static bool ParseFloatPercentageValuePair(VTTScanner&, char, FloatPoint&);
+  static bool ParsePercentageValue(VTTScanner& value_scanner,
+                                   double& percentage);
+  static bool ParsePercentageValuePair(VTTScanner&, char, DoublePoint&);
 
   // Create the DocumentFragment representation of the WebVTT cue text.
   static DocumentFragment* CreateDocumentFragmentFromCueText(Document&,
@@ -125,12 +126,14 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   ParseState CollectCueText(const String&);
   ParseState RecoverCue(const String&);
   ParseState IgnoreBadCue(const String&);
+  ParseState CollectRegionSettings(const String&);
+  ParseState CollectWebVTTBlock(const String&);
+  ParseState CheckAndRecoverCue(const String& line);
+  bool CheckAndCreateRegion(const String& line);
+  bool CheckAndStoreRegion(const String& line);
 
   void CreateNewCue();
   void ResetCueValues();
-
-  void CollectMetadataHeader(const String&);
-  void CreateNewRegion(const String& header_value);
 
   static bool CollectTimeStamp(VTTScanner& input, double& time_stamp);
 
@@ -140,8 +143,9 @@ class VTTParser final : public GarbageCollectedFinalized<VTTParser> {
   double current_start_time_;
   double current_end_time_;
   StringBuilder current_content_;
+  String previous_line_;
   String current_settings_;
-
+  Member<VTTRegion> current_region_;
   Member<VTTParserClient> client_;
 
   HeapVector<Member<TextTrackCue>> cue_list_;

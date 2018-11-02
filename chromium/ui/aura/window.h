@@ -253,13 +253,22 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
                                   const Window* target,
                                   gfx::Rect* rect);
 
+  // Convert the native |point| in pixels to the target's host's coordiantes if
+  // source and target have different hosts.
+  static void ConvertNativePointToTargetHost(const Window* source,
+                                             const Window* target,
+                                             gfx::PointF* point);
+  static void ConvertNativePointToTargetHost(const Window* source,
+                                             const Window* target,
+                                             gfx::Point* point);
+
   // Moves the cursor to the specified location relative to the window.
   void MoveCursorTo(const gfx::Point& point_in_window);
 
   // Returns the cursor for the specified point, in window coordinates.
   gfx::NativeCursor GetCursor(const gfx::Point& point) const;
 
-  // Returns true if the children of thisshould be restacked by the
+  // Returns true if the children of this should be restacked by the
   // transient window related classes to honor transient window stacking.
   bool ShouldRestackTransientChildren();
 

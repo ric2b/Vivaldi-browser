@@ -95,7 +95,8 @@ void SelectTab(NSString* title) {
         selectElementWithMatcher:grey_allOf(
                                      grey_kindOfClass(
                                          [TabSwitcherLocalSessionCell class]),
-                                     grey_descendant(grey_text(title)), nil)]
+                                     grey_descendant(grey_text(title)),
+                                     grey_sufficientlyVisible(), nil)]
         performAction:grey_tap()];
   } else {
     // On phone, tapping on the title UILabel will select the tab.
@@ -131,6 +132,14 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
 // covered by other tests.  A single programming error may cause multiple tests
 // to fail.
 @implementation TabSwitcherTransitionTestCase
+
+// Rotate the device back to portrait if needed, since some tests attempt to run
+// in landscape.
+- (void)tearDown {
+  [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+                           errorOrNil:nil];
+  [super tearDown];
+}
 
 // Sets up the EmbeddedTestServer as needed for tests.
 - (void)setUpTestServer {
@@ -444,6 +453,38 @@ std::unique_ptr<net::test_server::HttpResponse> HandleQueryTitle(
   // Opening a new tab from the menu will force a change in BVC.
   [ChromeEarlGreyUI openNewIncognitoTab];
   [ChromeEarlGreyUI openNewTab];
+}
+
+// Tests rotating the device while the switcher is not active.  This is a
+// regression test case for https://crbug.com/789975.
+- (void)testRotationsWhileSwitcherIsNotActive {
+  NSString* tab_title = @"NormalTabLongerStringForRotationTest";
+  [self setUpTestServer];
+  [ChromeEarlGrey loadURL:[self makeURLForTitle:tab_title]];
+
+  // Show the tab switcher and return to the BVC, in portrait.
+  [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+                           errorOrNil:nil];
+  ShowTabSwitcher();
+  SelectTab(tab_title);
+  [ChromeEarlGrey
+      waitForWebViewContainingText:base::SysNSStringToUTF8(tab_title)];
+
+  // Show the tab switcher and return to the BVC, in landscape.
+  [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationLandscapeLeft
+                           errorOrNil:nil];
+  ShowTabSwitcher();
+  SelectTab(tab_title);
+  [ChromeEarlGrey
+      waitForWebViewContainingText:base::SysNSStringToUTF8(tab_title)];
+
+  // Show the tab switcher and return to the BVC, in portrait.
+  [EarlGrey rotateDeviceToOrientation:UIDeviceOrientationPortrait
+                           errorOrNil:nil];
+  ShowTabSwitcher();
+  SelectTab(tab_title);
+  [ChromeEarlGrey
+      waitForWebViewContainingText:base::SysNSStringToUTF8(tab_title)];
 }
 
 @end

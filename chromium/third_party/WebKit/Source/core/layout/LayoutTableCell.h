@@ -95,10 +95,18 @@ class CORE_EXPORT LayoutTableCell : public LayoutBlockFlow {
       return 1;
     return ParseColSpanFromDOM();
   }
-  unsigned RowSpan() const {
+  unsigned ParsedRowSpan() const {
     if (!has_row_span_)
       return 1;
     return ParseRowSpanFromDOM();
+  }
+  unsigned ResolvedRowSpan() const {
+    unsigned row_span = ParsedRowSpan();
+    if (!row_span) {
+      DCHECK(!Section()->NeedsCellRecalc());
+      row_span = Section()->NumRows() - RowIndex();
+    }
+    return std::min<unsigned>(row_span, kMaxRowIndex);
   }
 
   // Called from HTMLTableCellElement.
@@ -320,8 +328,8 @@ class CORE_EXPORT LayoutTableCell : public LayoutBlockFlow {
     return other && RowIndex() == other->RowIndex();
   }
   bool EndsAtSameRow(const LayoutTableCell* other) const {
-    return other &&
-           RowIndex() + RowSpan() == other->RowIndex() + other->RowSpan();
+    return other && RowIndex() + ResolvedRowSpan() ==
+                        other->RowIndex() + other->ResolvedRowSpan();
   }
 
   void SetIsSpanningCollapsedRow(bool spanningCollapsedRow) {
@@ -466,7 +474,7 @@ class CORE_EXPORT LayoutTableCell : public LayoutBlockFlow {
   // They are called during UpdateCollapsedBorderValues(). The 'start', 'end',
   // 'before', 'after' directions are all in the table's inline and block
   // directions.
-  inline CSSPropertyID ResolveBorderProperty(const CSSProperty&) const;
+  inline const CSSProperty& ResolveBorderProperty(const CSSProperty&) const;
   CollapsedBorderValue ComputeCollapsedStartBorder() const;
   CollapsedBorderValue ComputeCollapsedEndBorder() const;
   CollapsedBorderValue ComputeCollapsedBeforeBorder() const;

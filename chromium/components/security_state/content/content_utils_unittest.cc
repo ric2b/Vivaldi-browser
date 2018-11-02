@@ -7,14 +7,17 @@
 #include <string>
 #include <vector>
 
+#include "base/atomic_sequence_num.h"
 #include "base/command_line.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "components/security_state/core/security_state.h"
-#include "components/security_state/core/switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/security_style_explanation.h"
 #include "content/public/browser/security_style_explanations.h"
+#include "crypto/rsa_private_key.h"
 #include "net/cert/cert_status_flags.h"
+#include "net/cert/x509_util.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/test/cert_test_util.h"
@@ -173,10 +176,11 @@ TEST(SecurityStateContentUtilsTest, GetSecurityStyleForSafeBrowsing) {
 
 bool FindSecurityStyleExplanation(
     const std::vector<content::SecurityStyleExplanation>& explanations,
+    const std::string& title,
     const std::string& summary,
     content::SecurityStyleExplanation* explanation) {
   for (const auto& entry : explanations) {
-    if (entry.summary == summary) {
+    if (entry.title == title && entry.summary == summary) {
       *explanation = entry;
       return true;
     }
@@ -199,12 +203,22 @@ TEST(SecurityStateContentUtilsTest, ConnectionExplanation) {
                                      &security_info.connection_status);
   security_info.key_exchange_group = 29;  // X25519
 
+  const char* protocol;
+  net::SSLVersionToString(&protocol, net::SSL_CONNECTION_VERSION_TLS1_2);
+
+  std::string connection_title =
+      l10n_util::GetStringUTF8(IDS_SSL_CONNECTION_TITLE);
+
+  std::string tls_1_2_connection_string = l10n_util::GetStringFUTF8(
+      IDS_STRONG_SSL_SUMMARY, base::ASCIIToUTF16(protocol));
+
   {
     content::SecurityStyleExplanations explanations;
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     ASSERT_TRUE(FindSecurityStyleExplanation(
-        explanations.secure_explanations, "Secure connection", &explanation));
+        explanations.secure_explanations, connection_title,
+        tls_1_2_connection_string, &explanation));
     EXPECT_EQ(
         "The connection to this site is encrypted and authenticated using TLS "
         "1.2 (a strong protocol), ECDHE_RSA with X25519 (a strong key "
@@ -220,7 +234,8 @@ TEST(SecurityStateContentUtilsTest, ConnectionExplanation) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     ASSERT_TRUE(FindSecurityStyleExplanation(
-        explanations.secure_explanations, "Secure connection", &explanation));
+        explanations.secure_explanations, connection_title,
+        tls_1_2_connection_string, &explanation));
     EXPECT_EQ(
         "The connection to this site is encrypted and authenticated using TLS "
         "1.2 (a strong protocol), ECDHE_RSA (a strong key exchange), and "
@@ -238,8 +253,14 @@ TEST(SecurityStateContentUtilsTest, ConnectionExplanation) {
     content::SecurityStyleExplanations explanations;
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
+
+    net::SSLVersionToString(&protocol, net::SSL_CONNECTION_VERSION_TLS1_3);
+    std::string tls_1_3_connection_string = l10n_util::GetStringFUTF8(
+        IDS_STRONG_SSL_SUMMARY, base::ASCIIToUTF16(protocol));
+
     ASSERT_TRUE(FindSecurityStyleExplanation(
-        explanations.secure_explanations, "Secure connection", &explanation));
+        explanations.secure_explanations, connection_title,
+        tls_1_3_connection_string, &explanation));
     EXPECT_EQ(
         "The connection to this site is encrypted and authenticated using TLS "
         "1.3 (a strong protocol), X25519 (a strong key exchange), and "
@@ -266,9 +287,10 @@ TEST(SecurityStateContentUtilsTest, ObsoleteConnectionExplanation) {
     content::SecurityStyleExplanations explanations;
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
-    ASSERT_TRUE(FindSecurityStyleExplanation(explanations.info_explanations,
-                                             "Obsolete connection settings",
-                                             &explanation));
+    ASSERT_TRUE(FindSecurityStyleExplanation(
+        explanations.info_explanations,
+        l10n_util::GetStringUTF8(IDS_SSL_CONNECTION_TITLE),
+        l10n_util::GetStringUTF8(IDS_OBSOLETE_SSL_SUMMARY), &explanation));
     EXPECT_EQ(
         "The connection to this site uses TLS 1.2 (a strong protocol), "
         "ECDHE_RSA with X25519 (a strong key exchange), and AES_128_CBC with "
@@ -296,6 +318,7 @@ TEST(SecurityStateContentUtilsTest, SecureContentExplanation) {
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
         explanations.secure_explanations,
+        l10n_util::GetStringUTF8(IDS_RESOURCE_SECURITY_TITLE),
         l10n_util::GetStringUTF8(IDS_SECURE_RESOURCES_SUMMARY), &explanation));
     EXPECT_EQ(l10n_util::GetStringUTF8(IDS_SECURE_RESOURCES_DESCRIPTION),
               explanation.description);
@@ -315,6 +338,9 @@ TEST(SecurityStateContentUtilsTest, MixedContentExplanations) {
                                      &security_info.connection_status);
   security_info.key_exchange_group = 29;  // X25519
 
+  std::string content_title =
+      l10n_util::GetStringUTF8(IDS_RESOURCE_SECURITY_TITLE);
+
   security_info.mixed_content_status =
       security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
   {
@@ -322,13 +348,13 @@ TEST(SecurityStateContentUtilsTest, MixedContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_EQ(l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_DESCRIPTION),
               explanation.description);
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_EQ(l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_DESCRIPTION),
@@ -341,11 +367,11 @@ TEST(SecurityStateContentUtilsTest, MixedContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_FALSE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_SUMMARY),
         &explanation));
   }
@@ -356,11 +382,11 @@ TEST(SecurityStateContentUtilsTest, MixedContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_FALSE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_SUMMARY),
         &explanation));
   }
@@ -371,7 +397,7 @@ TEST(SecurityStateContentUtilsTest, MixedContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_NON_SECURE_FORM_SUMMARY), &explanation));
     EXPECT_EQ(l10n_util::GetStringUTF8(IDS_NON_SECURE_FORM_DESCRIPTION),
               explanation.description);
@@ -391,6 +417,9 @@ TEST(SecurityStateContentUtilsTest, CertErrorContentExplanations) {
                                      &security_info.connection_status);
   security_info.key_exchange_group = 29;  // X25519
 
+  std::string content_title =
+      l10n_util::GetStringUTF8(IDS_RESOURCE_SECURITY_TITLE);
+
   security_info.content_with_cert_errors_status =
       security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
   {
@@ -398,14 +427,14 @@ TEST(SecurityStateContentUtilsTest, CertErrorContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_EQ(
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_DESCRIPTION),
         explanation.description);
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_ACTIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_EQ(
@@ -420,11 +449,11 @@ TEST(SecurityStateContentUtilsTest, CertErrorContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     ASSERT_FALSE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_ACTIVE_CONTENT_SUMMARY),
         &explanation));
   }
@@ -436,11 +465,11 @@ TEST(SecurityStateContentUtilsTest, CertErrorContentExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     ASSERT_FALSE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_ACTIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_EQ(
@@ -462,6 +491,9 @@ TEST(SecurityStateContentUtilsTest, MixedContentAndCertErrorExplanations) {
                                      &security_info.connection_status);
   security_info.key_exchange_group = 29;  // X25519
 
+  std::string content_title =
+      l10n_util::GetStringUTF8(IDS_RESOURCE_SECURITY_TITLE);
+
   security_info.mixed_content_status =
       security_state::CONTENT_STATUS_DISPLAYED_AND_RAN;
   security_info.content_with_cert_errors_status =
@@ -471,19 +503,19 @@ TEST(SecurityStateContentUtilsTest, MixedContentAndCertErrorExplanations) {
     GetSecurityStyle(security_info, &explanations);
     content::SecurityStyleExplanation explanation;
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_MIXED_ACTIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.neutral_explanations,
+        explanations.neutral_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_PASSIVE_CONTENT_SUMMARY),
         &explanation));
     EXPECT_TRUE(FindSecurityStyleExplanation(
-        explanations.insecure_explanations,
+        explanations.insecure_explanations, content_title,
         l10n_util::GetStringUTF8(IDS_CERT_ERROR_ACTIVE_CONTENT_SUMMARY),
         &explanation));
   }
@@ -575,10 +607,82 @@ TEST(SecurityStateContentUtilsTest, SubjectAltNameWarning) {
   EXPECT_EQ(0u, explanations.insecure_explanations.size());
 }
 
+// Tests that malicious safe browsing data in SecurityInfo causes an insecure
+// explanation to be set.
+TEST(SecurityStateContentUtilsTest, SafeBrowsingExplanation) {
+  security_state::SecurityInfo security_info;
+  security_info.cert_status = 0;
+  security_info.scheme_is_cryptographic = true;
+  security_info.malicious_content_status =
+      security_state::MALICIOUS_CONTENT_STATUS_MALWARE;
+  security_info.content_with_cert_errors_status =
+      security_state::CONTENT_STATUS_NONE;
+  content::SecurityStyleExplanations explanations;
+  GetSecurityStyle(security_info, &explanations);
+  EXPECT_EQ(1u, explanations.insecure_explanations.size());
+}
+
+// NSS requires that serial numbers be unique even for the same issuer;
+// as all fake certificates will contain the same issuer name, it's
+// necessary to ensure the serial number is unique, as otherwise
+// NSS will fail to parse.
+base::AtomicSequenceNumber g_serial_number;
+
+scoped_refptr<net::X509Certificate> CreateFakeCert(
+    base::TimeDelta time_until_expiration) {
+  std::unique_ptr<crypto::RSAPrivateKey> unused_key;
+  std::string cert_der;
+  if (!net::x509_util::CreateKeyAndSelfSignedCert(
+          "CN=Error", static_cast<uint32_t>(g_serial_number.GetNext()),
+          base::Time::Now() - base::TimeDelta::FromMinutes(30),
+          base::Time::Now() + time_until_expiration, &unused_key, &cert_der)) {
+    return nullptr;
+  }
+  return net::X509Certificate::CreateFromBytes(cert_der.data(),
+                                               cert_der.size());
+}
+
+// Tests that an info explanation is provided only if the certificate is
+// expiring soon.
+TEST(SecurityStateContentUtilsTest, ExpiringCertificateWarning) {
+  security_state::SecurityInfo security_info;
+  security_info.cert_status = 0;
+  security_info.scheme_is_cryptographic = true;
+  security_info.content_with_cert_errors_status =
+      security_state::CONTENT_STATUS_NONE;
+
+  // Check that an info explanation is provided if the certificate is expiring
+  // in less than 48 hours.
+  content::SecurityStyleExplanations explanations;
+  security_info.certificate = scoped_refptr<net::X509Certificate>(
+      CreateFakeCert(base::TimeDelta::FromHours(30)));
+  ASSERT_TRUE(security_info.certificate);
+  GetSecurityStyle(security_info, &explanations);
+  EXPECT_EQ(1u, explanations.info_explanations.size());
+
+  // Check that no explanation is set if the certificate is expiring in more
+  // than 48 hours.
+  explanations.info_explanations.clear();
+  security_info.certificate = scoped_refptr<net::X509Certificate>(
+      CreateFakeCert(base::TimeDelta::FromHours(72)));
+  ASSERT_TRUE(security_info.certificate);
+  GetSecurityStyle(security_info, &explanations);
+  EXPECT_EQ(0u, explanations.info_explanations.size());
+
+  // Check that no explanation is set if the certificate has already expired.
+  explanations.info_explanations.clear();
+  security_info.certificate = scoped_refptr<net::X509Certificate>(
+      CreateFakeCert(base::TimeDelta::FromHours(-10)));
+  ASSERT_TRUE(security_info.certificate);
+  GetSecurityStyle(security_info, &explanations);
+  EXPECT_EQ(0u, explanations.info_explanations.size());
+}
+
 // Tests that an explanation using the shorter constructor sets the correct
 // default values for other fields.
 TEST(SecurityStateContentUtilsTest, DefaultSecurityStyleExplanation) {
-  content::SecurityStyleExplanation explanation("summary", "description");
+  content::SecurityStyleExplanation explanation("title", "summary",
+                                                "description");
 
   EXPECT_EQ(false, !!explanation.certificate);
   EXPECT_EQ(blink::WebMixedContentContextType::kNotMixedContent,

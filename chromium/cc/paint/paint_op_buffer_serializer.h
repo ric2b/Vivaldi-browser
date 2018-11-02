@@ -11,13 +11,15 @@
 
 namespace cc {
 
+class TransferCacheSerializeHelper;
 class CC_PAINT_EXPORT PaintOpBufferSerializer {
  public:
   using SerializeCallback =
       base::Callback<size_t(const PaintOp*, const PaintOp::SerializeOptions&)>;
 
   PaintOpBufferSerializer(SerializeCallback serialize_cb,
-                          ImageProvider* image_provider);
+                          ImageProvider* image_provider,
+                          TransferCacheSerializeHelper* transfer_cache);
   virtual ~PaintOpBufferSerializer();
 
   struct Preamble {
@@ -26,9 +28,15 @@ class CC_PAINT_EXPORT PaintOpBufferSerializer {
     gfx::Vector2dF post_translation;
     float post_scale = 1.f;
   };
+  // Serialize the buffer with a preamble. This function wraps the buffer in a
+  // save/restore and includes any translations and/or scales as specified by
+  // the preamble.
   void Serialize(const PaintOpBuffer* buffer,
                  const std::vector<size_t>* offsets,
                  const Preamble& preamble);
+  // Serialize the buffer without a preamble. This function serializes the whole
+  // buffer without any extra ops added.
+  void Serialize(const PaintOpBuffer* buffer);
 
   bool valid() const { return valid_; }
 
@@ -54,6 +62,7 @@ class CC_PAINT_EXPORT PaintOpBufferSerializer {
   SerializeCallback serialize_cb_;
   SkNoDrawCanvas canvas_;
   ImageProvider* image_provider_;
+  TransferCacheSerializeHelper* transfer_cache_;
   bool valid_ = true;
 };
 
@@ -62,7 +71,8 @@ class CC_PAINT_EXPORT SimpleBufferSerializer : public PaintOpBufferSerializer {
  public:
   SimpleBufferSerializer(void* memory,
                          size_t size,
-                         ImageProvider* image_provider);
+                         ImageProvider* image_provider,
+                         TransferCacheSerializeHelper* transfer_cache);
   ~SimpleBufferSerializer() override;
 
   size_t written() const { return written_; }

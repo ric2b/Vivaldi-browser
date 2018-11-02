@@ -50,8 +50,7 @@ class FeatureInfoTest
     : public GpuServiceTest,
       public ::testing::WithParamInterface<MockedGLVersionKind> {
  public:
-  FeatureInfoTest() {
-  }
+  FeatureInfoTest() = default;
 
   void SetupInitExpectations(const char* extensions) {
     std::string extensions_str = extensions;
@@ -1678,6 +1677,8 @@ TEST_P(FeatureInfoTest, InitializeEXT_texture_norm16) {
   EXPECT_TRUE(info_->validators()->texture_format.IsValid(GL_RED_EXT));
   EXPECT_TRUE(info_->validators()->texture_internal_format.IsValid(GL_R16_EXT));
   EXPECT_TRUE(info_->validators()->texture_internal_format.IsValid(GL_RED_EXT));
+  EXPECT_TRUE(
+      info_->validators()->texture_internal_format_storage.IsValid(GL_R16_EXT));
 }
 
 TEST_P(FeatureInfoTest, InitializeCHROMIUM_ycbcr_422_imageTrue) {

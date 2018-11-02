@@ -69,9 +69,11 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/fake_speech_recognition_manager.h"
+#include "content/public/test/test_file_error_injector.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
+#include "device/geolocation/public/cpp/scoped_geolocation_overrider.h"
 #include "extensions/browser/api/declarative/rules_registry.h"
 #include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/declarative/test_rules_registry.h"
@@ -514,7 +516,8 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
     // Mock out geolocation for geolocation specific tests.
     if (!strncmp(test_info->name(), "GeolocationAPI",
             strlen("GeolocationAPI"))) {
-      ui_test_utils::OverrideGeolocation(10, 20);
+      geolocation_overrider_ =
+          std::make_unique<device::ScopedGeolocationOverrider>(10, 20);
     }
   }
 
@@ -839,6 +842,7 @@ class WebViewTestBase : public extensions::PlatformAppBrowserTest {
     return !strncmp(test_info->name(), name, strlen(name));
   }
 
+  std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
   std::unique_ptr<content::FakeSpeechRecognitionManager>
       fake_speech_recognition_manager_;
 
@@ -1079,8 +1083,23 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, AudioMutesOnAttach) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, AudioStateJavascriptAPI) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kAutoplayPolicy,
+      switches::autoplay::kNoUserGestureRequiredPolicy);
+
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
   ASSERT_TRUE(RunPlatformAppTest("platform_apps/web_view/audio_state_api"))
+      << message_;
+}
+
+// Test that WebView does not override autoplay policy.
+IN_PROC_BROWSER_TEST_P(WebViewTest, AutoplayPolicy) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      switches::kAutoplayPolicy,
+      switches::autoplay::kDocumentUserActivationRequiredPolicy);
+
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunPlatformAppTest("platform_apps/web_view/autoplay"))
       << message_;
 }
 
@@ -2155,6 +2174,26 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DOMStorageIsolation) {
   EXPECT_STREQ("badval", output.c_str());
 }
 
+// This tests how guestviews should or should not be able to find each other
+// depending on whether they are in the same storage partition or not.
+// This is a regression test for https://crbug.com/794079 (where two guestviews
+// in the same storage partition stopped being able to find each other).
+// This is also a regression test for https://crbug.com/802278 (setting of
+// a guestview as an opener should not leak any memory).
+IN_PROC_BROWSER_TEST_P(WebViewTest, FindabilityIsolation) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+
+  GURL navigate_to_url = embedded_test_server()->GetURL(
+      "/extensions/platform_apps/web_view/findability_isolation/page.html");
+  GURL::Replacements replace_host;
+  replace_host.SetHostStr("localhost");
+  navigate_to_url = navigate_to_url.ReplaceComponents(replace_host);
+
+  ui_test_utils::NavigateToURL(browser(), navigate_to_url);
+  ASSERT_TRUE(
+      RunPlatformAppTest("platform_apps/web_view/findability_isolation"));
+}
+
 // This tests IndexedDB isolation for packaged apps with webview tags. It loads
 // an app with multiple webview tags and each tag creates an IndexedDB record,
 // which the test checks to ensure proper storage isolation is enforced.
@@ -2777,12 +2816,11 @@ namespace {
 const char kDownloadPathPrefix[] = "/download_cookie_isolation_test";
 
 // EmbeddedTestServer request handler for use with DownloadCookieIsolation test.
-// Responds with the next status code in |status_codes| if the 'Cookie' header
-// sent with the request matches the query() part of the URL. Otherwise, fails
-// the request with an HTTP 403. The body of the response is the value of the
-// Cookie header.
+// Responds with the next status code 200 if the 'Cookie' header sent with the
+// request matches the query() part of the URL. Otherwise, fails the request
+// with an HTTP 403. The body of the response is the value of the Cookie
+// header.
 std::unique_ptr<net::test_server::HttpResponse> HandleDownloadRequestWithCookie(
-    base::queue<net::HttpStatusCode>* status_codes,
     const net::test_server::HttpRequest& request) {
   if (!base::StartsWith(request.relative_url, kDownloadPathPrefix,
                         base::CompareCase::SENSITIVE)) {
@@ -2803,14 +2841,11 @@ std::unique_ptr<net::test_server::HttpResponse> HandleDownloadRequestWithCookie(
     return std::move(response);
   }
 
-  DCHECK(!status_codes->empty());
-
   // We have a cookie. Send some content along with the next status code.
   response.reset(new net::test_server::BasicHttpResponse);
-  response->set_code(status_codes->front());
+  response->set_code(net::HTTP_OK);
   response->set_content_type("application/octet-stream");
   response->set_content(cookie_to_expect);
-  status_codes->pop();
   return std::move(response);
 }
 
@@ -2873,17 +2908,8 @@ class DownloadHistoryWaiter : public DownloadHistory::Observer {
 // respective cookie stores. In addition, if those downloads are resumed, they
 // should continue to use their respective cookie stores.
 IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
-  // These are the status codes to be returned by
-  // HandleDownloadRequestWithCookie. The first two requests are going to result
-  // in interrupted downloads. The next two requests are going to succeed.
-  base::queue<net::HttpStatusCode> status_codes;
-  status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
-  status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
-  status_codes.push(net::HTTP_OK);
-  status_codes.push(net::HTTP_OK);
-
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&HandleDownloadRequestWithCookie, &status_codes));
+      base::BindRepeating(&HandleDownloadRequestWithCookie));
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
   LoadAndLaunchPlatformApp("web_view/download_cookie_isolation",
                            "created-webviews");
@@ -2900,6 +2926,15 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
   content::DownloadManager* download_manager =
       content::BrowserContext::GetDownloadManager(
           web_contents->GetBrowserContext());
+
+  scoped_refptr<content::TestFileErrorInjector> error_injector(
+      content::TestFileErrorInjector::Create(download_manager));
+
+  content::TestFileErrorInjector::FileErrorInfo error_info(
+      content::TestFileErrorInjector::FILE_OPERATION_STREAM_COMPLETE, 0,
+      content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED);
+  error_info.stream_offset = 0;
+  error_injector->InjectError(error_info);
 
   std::unique_ptr<content::DownloadTestObserver> interrupted_observer(
       new content::DownloadTestObserverInterrupted(
@@ -2918,10 +2953,11 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
           "startDownload('second', '%s?cookie=second')",
           embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
 
-  // Both downloads should fail due to the HTTP_INTERNAL_SERVER_ERROR that was
-  // injected above to the request handler. This maps to
-  // DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
+  // Both downloads should fail due to the error that was injected above to the
+  // download manager. This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
   interrupted_observer->WaitForFinished();
+
+  error_injector->ClearError();
 
   content::DownloadManager::DownloadVector downloads;
   download_manager->GetAllDownloads(&downloads);
@@ -2961,15 +2997,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
-  // These are the status codes to be returned by
-  // HandleDownloadRequestWithCookie. The first two requests are going to result
-  // in interrupted downloads. The next two requests are going to succeed.
-  base::queue<net::HttpStatusCode> status_codes;
-  status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
-  status_codes.push(net::HTTP_INTERNAL_SERVER_ERROR);
-
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&HandleDownloadRequestWithCookie, &status_codes));
+      base::BindRepeating(&HandleDownloadRequestWithCookie));
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
   LoadAndLaunchPlatformApp("web_view/download_cookie_isolation",
                            "created-webviews");
@@ -2994,6 +3023,15 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
           download_manager, 2,
           content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
 
+  scoped_refptr<content::TestFileErrorInjector> error_injector(
+      content::TestFileErrorInjector::Create(download_manager));
+
+  content::TestFileErrorInjector::FileErrorInfo error_info(
+      content::TestFileErrorInjector::FILE_OPERATION_STREAM_COMPLETE, 0,
+      content::DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED);
+  error_info.stream_offset = 0;
+  error_injector->InjectError(error_info);
+
   EXPECT_TRUE(content::ExecuteScript(
       web_contents,
       base::StringPrintf(
@@ -3007,9 +3045,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
           "startDownload('second', '%s?cookie=second')",
           embedded_test_server()->GetURL(kDownloadPathPrefix).spec().c_str())));
 
-  // Both downloads should fail due to the HTTP_INTERNAL_SERVER_ERROR that was
-  // injected above to the request handler. This maps to
-  // DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
+  // Both downloads should fail due to the error that was injected above to the
+  // download manager. This maps to DOWNLOAD_INTERRUPT_REASON_SERVER_FAILED.
   interrupted_observer->WaitForFinished();
 
   // Wait for both downloads to be stored.
@@ -3021,12 +3058,8 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_DownloadCookieIsolation_CrossSession) {
 }
 
 IN_PROC_BROWSER_TEST_P(WebViewTest, DownloadCookieIsolation_CrossSession) {
-  base::queue<net::HttpStatusCode> status_codes;
-  status_codes.push(net::HTTP_OK);
-  status_codes.push(net::HTTP_OK);
-
   embedded_test_server()->RegisterRequestHandler(
-      base::Bind(&HandleDownloadRequestWithCookie, &status_codes));
+      base::BindRepeating(&HandleDownloadRequestWithCookie));
   ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
 
   content::BrowserContext* browser_context = profile();
@@ -3652,7 +3685,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, LoadWebviewInaccessibleResource) {
 
 // Tests that a webview inside an iframe can load and that it is destroyed when
 // the iframe is detached.
-IN_PROC_BROWSER_TEST_P(WebViewTest, LoadWebviewInsideIframe) {
+// Flakily times out under MSan. crbug.com/793422
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_LoadWebviewInsideIframe DISABLED_LoadWebviewInsideIframe
+#else
+#define MAYBE_LoadWebviewInsideIframe LoadWebviewInsideIframe
+#endif
+IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_LoadWebviewInsideIframe) {
   TestHelper("testLoadWebviewInsideIframe",
              "web_view/load_webview_inside_iframe", NEEDS_TEST_SERVER);
 
@@ -4462,8 +4501,12 @@ IN_PROC_BROWSER_TEST_P(WebViewFocusTest, TouchFocusesEmbedder) {
   guest_rect.Offset(-embedder_origin.x(), -embedder_origin.y());
 
   // Generate and send synthetic touch event.
+  content::InputEventAckWaiter waiter(
+      GetGuestWebContents()->GetRenderWidgetHostView()->GetRenderWidgetHost(),
+      blink::WebInputEvent::kTouchStart);
   content::SimulateTouchPressAt(GetEmbedderWebContents(),
                                 guest_rect.CenterPoint());
+  waiter.Wait();
   EXPECT_TRUE(aura_webview->HasFocus());
 }
 #endif

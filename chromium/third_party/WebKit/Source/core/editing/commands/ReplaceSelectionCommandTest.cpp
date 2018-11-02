@@ -17,7 +17,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html_names.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,7 +33,7 @@ TEST_F(ReplaceSelectionCommandTest, pastingEmptySpan) {
   SetBodyContent("foo");
 
   LocalFrame* frame = GetDocument().GetFrame();
-  frame->Selection().SetSelection(
+  frame->Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(Position(GetDocument().body(), 0))
           .Build());
@@ -58,12 +58,13 @@ TEST_F(ReplaceSelectionCommandTest, pastingEmptySpan) {
 
 // This is a regression test for https://crbug.com/668808
 TEST_F(ReplaceSelectionCommandTest, pasteSpanInText) {
+  GetDocument().SetCompatibilityMode(Document::kQuirksMode);
   GetDocument().setDesignMode("on");
   SetBodyContent("<b>text</b>");
 
   Element* b_element = GetDocument().QuerySelector("b");
   LocalFrame* frame = GetDocument().GetFrame();
-  frame->Selection().SetSelection(
+  frame->Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(Position(b_element->firstChild(), 1))
           .Build());
@@ -84,7 +85,7 @@ TEST_F(ReplaceSelectionCommandTest, pasteSpanInText) {
 TEST_F(ReplaceSelectionCommandTest, styleTagsInPastedHeadIncludedInContent) {
   GetDocument().setDesignMode("on");
   UpdateAllLifecyclePhases();
-  GetDummyPageHolder().GetFrame().Selection().SetSelection(
+  GetDummyPageHolder().GetFrame().Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(Position(GetDocument().body(), 0))
           .Build());
@@ -111,12 +112,12 @@ TEST_F(ReplaceSelectionCommandTest, styleTagsInPastedHeadIncludedInContent) {
 // Helper function to set autosizing multipliers on a document.
 bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
   bool multiplier_set = false;
-  for (LayoutItem layout_item = document->GetLayoutViewItem();
-       !layout_item.IsNull(); layout_item = layout_item.NextInPreOrder()) {
-    if (layout_item.Style()) {
-      layout_item.MutableStyleRef().SetTextAutosizingMultiplier(multiplier);
+  for (LayoutObject* layout_object = document->GetLayoutView(); layout_object;
+       layout_object = layout_object->NextInPreOrder()) {
+    if (layout_object->Style()) {
+      layout_object->MutableStyleRef().SetTextAutosizingMultiplier(multiplier);
 
-      EXPECT_EQ(multiplier, layout_item.Style()->TextAutosizingMultiplier());
+      EXPECT_EQ(multiplier, layout_object->Style()->TextAutosizingMultiplier());
       multiplier_set = true;
     }
   }
@@ -134,7 +135,7 @@ TEST_F(ReplaceSelectionCommandTest, TextAutosizingDoesntInflateText) {
   Element* span = GetDocument().QuerySelector("span");
 
   // Select "bar".
-  GetDocument().GetFrame()->Selection().SetSelection(
+  GetDocument().GetFrame()->Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(Position(span->firstChild(), 4))
           .Extend(Position(span->firstChild(), 7))
@@ -157,7 +158,8 @@ TEST_F(ReplaceSelectionCommandTest, TextAutosizingDoesntInflateText) {
 // This is a regression test for https://crbug.com/781282
 TEST_F(ReplaceSelectionCommandTest, TrailingNonVisibleTextCrash) {
   GetDocument().setDesignMode("on");
-  Selection().SetSelection(SetSelectionTextToBody("<div>^foo|</div>"));
+  Selection().SetSelectionAndEndTyping(
+      SetSelectionTextToBody("<div>^foo|</div>"));
 
   DocumentFragment* fragment = GetDocument().createDocumentFragment();
   fragment->ParseHTML("<div>bar</div> ", GetDocument().QuerySelector("div"));
@@ -168,6 +170,20 @@ TEST_F(ReplaceSelectionCommandTest, TrailingNonVisibleTextCrash) {
   // Crash should not occur on applying ReplaceSelectionCommand
   EXPECT_FALSE(command->Apply());
   EXPECT_EQ("<div>bar</div>|<br>",
+            GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
+}
+
+// This is a regression test for https://crbug.com/796840
+TEST_F(ReplaceSelectionCommandTest, CrashWithNoSelection) {
+  GetDocument().setDesignMode("on");
+  SetBodyContent("<div></div>");
+  ReplaceSelectionCommand::CommandOptions options = 0;
+  ReplaceSelectionCommand* command =
+      ReplaceSelectionCommand::Create(GetDocument(), 0, options);
+
+  // Crash should not occur on applying ReplaceSelectionCommand
+  EXPECT_FALSE(command->Apply());
+  EXPECT_EQ("<div></div>",
             GetSelectionTextFromBody(Selection().GetSelectionInDOMTree()));
 }
 

@@ -23,8 +23,7 @@ CSSStyleValueVector ParseCSSStyleValue(
     ExceptionState& exception_state) {
   const CSSPropertyID property_id = cssPropertyID(property_name);
 
-  // TODO(775804): Handle custom properties
-  if (property_id == CSSPropertyInvalid || property_id == CSSPropertyVariable) {
+  if (property_id == CSSPropertyInvalid) {
     exception_state.ThrowTypeError("Invalid property name");
     return CSSStyleValueVector();
   }
@@ -38,10 +37,9 @@ CSSStyleValueVector ParseCSSStyleValue(
   const auto style_values = StyleValueFactory::FromString(
       property_id, value, CSSParserContext::Create(*execution_context));
   if (style_values.IsEmpty()) {
-    exception_state.ThrowDOMException(
-        kSyntaxError, "The value provided ('" + value +
-                          "') could not be parsed as a '" + property_name +
-                          "'.");
+    exception_state.ThrowTypeError("The value provided ('" + value +
+                                   "') could not be parsed as a '" +
+                                   property_name + "'.");
     return CSSStyleValueVector();
   }
 
@@ -75,12 +73,10 @@ Nullable<CSSStyleValueVector> CSSStyleValue::parseAll(
   return style_value_vector;
 }
 
-String CSSStyleValue::toString(
-    const ExecutionContext* execution_context) const {
-  const CSSValue* result =
-      ToCSSValue(execution_context->GetSecureContextMode());
-  // TODO(meade): Remove this once all the number and length types are
-  // rewritten.
+String CSSStyleValue::toString() const {
+  const CSSValue* result = ToCSSValue();
+  // TODO(crbug.com/782103): Remove this once all CSSStyleValues
+  // support toCSSValue().
   return result ? result->CssText() : "";
 }
 

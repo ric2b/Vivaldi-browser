@@ -255,14 +255,6 @@ BOOL CGFloatEquals(CGFloat a, CGFloat b) {
                    name:kVoiceSearchWillHideNotification
                  object:nil];
     [center addObserver:self
-               selector:@selector(incrementFullScreenLock)
-                   name:kVoiceSearchBarViewButtonSelectedNotification
-                 object:nil];
-    [center addObserver:self
-               selector:@selector(decrementFullScreenLock)
-                   name:kVoiceSearchBarViewButtonDeselectedNotification
-                 object:nil];
-    [center addObserver:self
                selector:@selector(applicationWillEnterForeground:)
                    name:UIApplicationWillEnterForegroundNotification
                  object:nil];
@@ -330,7 +322,6 @@ BOOL CGFloatEquals(CGFloat a, CGFloat b) {
 }
 
 - (void)dealloc {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
   scopedObserver_.reset();
   observerBridge_.reset();
 }
@@ -340,7 +331,7 @@ BOOL CGFloatEquals(CGFloat a, CGFloat b) {
 }
 
 - (CGFloat)headerHeight {
-  return [self.delegate headerHeight];
+  return [self.delegate headerHeightForLegacyFullscreen];
 }
 
 - (CGFloat)topContentInsetCausedByHeader {

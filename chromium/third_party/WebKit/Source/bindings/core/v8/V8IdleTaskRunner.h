@@ -27,29 +27,17 @@
 #define V8IdleTaskRunner_h
 
 #include <memory>
+
+#include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "core/CoreExport.h"
 #include "gin/public/v8_idle_task_runner.h"
 #include "platform/runtime_enabled_features.h"
 #include "platform/scheduler/child/web_scheduler.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
-#include "public/platform/WebTraceLocation.h"
 
 namespace blink {
-
-class V8IdleTaskAdapter : public WebThread::IdleTask {
-  USING_FAST_MALLOC(V8IdleTaskAdapter);
-  WTF_MAKE_NONCOPYABLE(V8IdleTaskAdapter);
-
- public:
-  V8IdleTaskAdapter(v8::IdleTask* task) : task_(WTF::WrapUnique(task)) {}
-  ~V8IdleTaskAdapter() override {}
-  void Run(double delay_seconds) override { task_->Run(delay_seconds); }
-
- private:
-  std::unique_ptr<v8::IdleTask> task_;
-};
 
 class V8IdleTaskRunner : public gin::V8IdleTaskRunner {
   USING_FAST_MALLOC(V8IdleTaskRunner);
@@ -57,10 +45,11 @@ class V8IdleTaskRunner : public gin::V8IdleTaskRunner {
 
  public:
   V8IdleTaskRunner(WebScheduler* scheduler) : scheduler_(scheduler) {}
-  ~V8IdleTaskRunner() override {}
+  ~V8IdleTaskRunner() override = default;
   void PostIdleTask(v8::IdleTask* task) override {
     DCHECK(RuntimeEnabledFeatures::V8IdleTasksEnabled());
-    scheduler_->PostIdleTask(BLINK_FROM_HERE, new V8IdleTaskAdapter(task));
+    scheduler_->PostIdleTask(
+        FROM_HERE, WTF::Bind(&v8::IdleTask::Run, base::WrapUnique(task)));
   }
 
  private:

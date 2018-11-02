@@ -46,6 +46,11 @@ class TestAXNodeWrapper : public AXPlatformNodeDelegate {
   bool AccessibilityPerformAction(const AXActionData& data) override;
   bool ShouldIgnoreHoveredStateForTesting() override;
   bool IsOffscreen() const override;
+  const ui::AXUniqueId& GetUniqueId() const override;
+  std::set<int32_t> GetReverseRelations(AXIntAttribute attr,
+                                        int32_t dst_id) override;
+  std::set<int32_t> GetReverseRelations(AXIntListAttribute attr,
+                                        int32_t dst_id) override;
 
  private:
   TestAXNodeWrapper(AXTree* tree, AXNode* node);
@@ -57,6 +62,7 @@ class TestAXNodeWrapper : public AXPlatformNodeDelegate {
 
   AXTree* tree_;
   AXNode* node_;
+  ui::AXUniqueId unique_id_;
   AXPlatformNode* platform_node_;
 };
 

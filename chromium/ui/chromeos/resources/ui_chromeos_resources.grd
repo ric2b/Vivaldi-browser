@@ -12,7 +12,6 @@
   <release seq="1">
     <structures fallback_to_low_resolution="true">
       <!-- Filesystem notification icons. -->
-      <structure type="chrome_scaled_image" name="IDR_DISK_SPACE_NOTIFICATION_LOW" file="filesystem/notification_disk_space_low.png" />
       <structure type="chrome_scaled_image" name="IDR_DISK_SPACE_NOTIFICATION_CRITICAL" file="filesystem/notification_disk_space_critical.png" />
       <structure type="chrome_scaled_image" name="IDR_STORAGE_MANAGER_BUTTON" file="filesystem/button_storage_manager.png" />
 
@@ -97,9 +96,6 @@
       <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_PAUSE" file="print_notification/pause.png" />
       <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_PLAY" file="print_notification/play.png" />
       <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_HELP" file="print_notification/help.png" />
-      <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_PRINTING" file="print_notification/print_job_printing.png" />
-      <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_DONE" file="print_notification/print_job_done.png" />
-      <structure type="chrome_scaled_image" name="IDR_PRINT_NOTIFICATION_ERROR" file="print_notification/print_job_error.png" />
     </structures>
   </release>
 </grit>

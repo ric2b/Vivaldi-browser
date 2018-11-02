@@ -5,7 +5,6 @@
 #include "components/ntp_snippets/breaking_news/subscription_manager_impl.h"
 
 #include "base/bind.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/stringprintf.h"
 #include "components/ntp_snippets/breaking_news/breaking_news_metrics.h"
@@ -15,10 +14,10 @@
 #include "components/ntp_snippets/pref_names.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/core/browser/access_token_fetcher.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/variations/service/variations_service.h"
 #include "net/base/url_util.h"
+#include "services/identity/public/cpp/primary_account_access_token_fetcher.h"
 
 namespace ntp_snippets {
 
@@ -73,7 +72,7 @@ SubscriptionManagerImpl::SubscriptionManagerImpl(
       pref_service_(pref_service),
       variations_service_(variations_service),
       signin_manager_(signin_manager),
-      signin_observer_(base::MakeUnique<SigninObserver>(
+      signin_observer_(std::make_unique<SigninObserver>(
           signin_manager,
           base::Bind(&SubscriptionManagerImpl::SigninStatusChanged,
                      base::Unretained(this)))),
@@ -133,10 +132,12 @@ void SubscriptionManagerImpl::StartAccessTokenRequest(
   }
 
   OAuth2TokenService::ScopeSet scopes = {kContentSuggestionsApiScope};
-  access_token_fetcher_ = base::MakeUnique<AccessTokenFetcher>(
+  access_token_fetcher_ = std::make_unique<
+      identity::PrimaryAccountAccessTokenFetcher>(
       "ntp_snippets", signin_manager_, access_token_service_, scopes,
       base::BindOnce(&SubscriptionManagerImpl::AccessTokenFetchFinished,
-                     base::Unretained(this), subscription_token));
+                     base::Unretained(this), subscription_token),
+      identity::PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable);
 }
 
 void SubscriptionManagerImpl::AccessTokenFetchFinished(
@@ -145,8 +146,8 @@ void SubscriptionManagerImpl::AccessTokenFetchFinished(
     const std::string& access_token) {
   // Delete the fetcher only after we leave this method (which is called from
   // the fetcher itself).
-  std::unique_ptr<AccessTokenFetcher> access_token_fetcher_deleter(
-      std::move(access_token_fetcher_));
+  std::unique_ptr<identity::PrimaryAccountAccessTokenFetcher>
+      access_token_fetcher_deleter(std::move(access_token_fetcher_));
 
   if (error.state() != GoogleServiceAuthError::NONE) {
     // In case of error, we will retry on next Chrome restart.

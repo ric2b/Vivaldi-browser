@@ -363,6 +363,15 @@ TraceLog::TraceLog()
   SetProcessID(static_cast<int>(GetCurrentProcId()));
 #endif
 
+// Linux renderer processes and Android O processes are not allowed to read
+// "proc/stat" file, crbug.com/788870.
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+  process_creation_time_ = CurrentProcessInfo::CreationTime();
+#else
+  // Use approximate time when creation time is not available.
+  process_creation_time_ = Time::Now();
+#endif
+
   logged_events_.reset(CreateTraceBuffer());
 
   MemoryDumpManager::GetInstance()->RegisterDumpProvider(this, "TraceLog",
@@ -962,12 +971,19 @@ void TraceLog::FlushCurrentThread(int generation, bool discard_events) {
   // This will flush the thread local buffer.
   delete thread_local_event_buffer_.Get();
 
-  AutoLock lock(lock_);
-  if (!CheckGeneration(generation) || !flush_task_runner_ ||
-      !thread_message_loops_.empty())
-    return;
-
-  flush_task_runner_->PostTask(
+  // Scheduler uses TRACE_EVENT macros when posting a task, which can lead
+  // to acquiring a tracing lock. Given that posting a task requires grabbing
+  // a scheduler lock, we need to post this task outside tracing lock to avoid
+  // deadlocks.
+  scoped_refptr<SingleThreadTaskRunner> cached_flush_task_runner;
+  {
+    AutoLock lock(lock_);
+    cached_flush_task_runner = flush_task_runner_;
+    if (!CheckGeneration(generation) || !flush_task_runner_ ||
+        !thread_message_loops_.empty())
+      return;
+  }
+  cached_flush_task_runner->PostTask(
       FROM_HERE, BindOnce(&TraceLog::FinishFlush, Unretained(this), generation,
                           discard_events));
 }
@@ -1476,17 +1492,10 @@ void TraceLog::AddMetadataEventsWhileLocked() {
         current_thread_id, "process_name", "name", process_name_);
   }
 
-// See https://crbug.com/726484 for Fuchsia.
-#if !defined(OS_NACL) && !defined(OS_IOS) && !defined(OS_FUCHSIA)
-  Time process_creation_time = CurrentProcessInfo::CreationTime();
-  if (!process_creation_time.is_null()) {
-    TimeDelta process_uptime = Time::Now() - process_creation_time;
-    InitializeMetadataEvent(
-        AddEventToThreadSharedChunkWhileLocked(nullptr, false),
-        current_thread_id, "process_uptime_seconds", "uptime",
-        process_uptime.InSeconds());
-  }
-#endif  // !defined(OS_NACL) && !defined(OS_IOS) && !defined(OS_FUCHSIA)
+  TimeDelta process_uptime = Time::Now() - process_creation_time_;
+  InitializeMetadataEvent(
+      AddEventToThreadSharedChunkWhileLocked(nullptr, false), current_thread_id,
+      "process_uptime_seconds", "uptime", process_uptime.InSeconds());
 
   if (!process_labels_.empty()) {
     std::vector<base::StringPiece> labels;
@@ -1542,7 +1551,7 @@ TraceEvent* TraceLog::GetEventByHandleInternal(TraceEventHandle handle,
 
   DCHECK(handle.chunk_seq);
   DCHECK(handle.chunk_index <= TraceBufferChunk::kMaxChunkIndex);
-  DCHECK(handle.event_index < TraceBufferChunk::kTraceBufferChunkSize);
+  DCHECK(handle.event_index <= TraceBufferChunk::kTraceBufferChunkSize - 1);
 
   if (thread_local_event_buffer_.Get()) {
     TraceEvent* trace_event =

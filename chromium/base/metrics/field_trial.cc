@@ -199,7 +199,7 @@ void AddFeatureAndFieldTrialFlags(const char* enable_features_switch,
     cmd_line->AppendSwitchASCII(disable_features_switch, disabled_features);
 
   std::string field_trial_states;
-  FieldTrialList::AllStatesToString(&field_trial_states);
+  FieldTrialList::AllStatesToString(&field_trial_states, false);
   if (!field_trial_states.empty()) {
     cmd_line->AppendSwitchASCII(switches::kForceFieldTrials,
                                 field_trial_states);
@@ -229,7 +229,20 @@ bool DeserializeGUIDFromStringPieces(base::StringPiece first,
   *guid = base::UnguessableToken::Deserialize(high, low);
   return true;
 }
-#endif
+
+// Extract a read-only SharedMemoryHandle from an existing |shared_memory|
+// handle. Note that on Android, this also makes the whole region read-only.
+SharedMemoryHandle GetSharedMemoryReadOnlyHandle(SharedMemory* shared_memory) {
+  SharedMemoryHandle result = shared_memory->GetReadOnlyHandle();
+#if defined(OS_ANDROID)
+  // On Android, turn the region read-only. This prevents any future
+  // writable mapping attempts, but the original one in |shm| survives
+  // and is still usable in the current process.
+  result.SetRegionReadOnly();
+#endif  // OS_ANDROID
+  return result;
+}
+#endif  // !OS_NACL
 
 }  // namespace
 
@@ -456,18 +469,9 @@ bool FieldTrial::GetActiveGroup(ActiveGroup* active_group) const {
   return true;
 }
 
-bool FieldTrial::GetState(State* field_trial_state) {
-  if (!enable_field_trial_)
-    return false;
-  FinalizeGroupChoice();
-  field_trial_state->trial_name = &trial_name_;
-  field_trial_state->group_name = &group_name_;
-  field_trial_state->activated = group_reported_;
-  return true;
-}
-
-bool FieldTrial::GetStateWhileLocked(State* field_trial_state) {
-  if (!enable_field_trial_)
+bool FieldTrial::GetStateWhileLocked(State* field_trial_state,
+                                     bool include_expired) {
+  if (!include_expired && !enable_field_trial_)
     return false;
   FinalizeGroupChoiceImpl(true);
   field_trial_state->trial_name = &trial_name_;
@@ -648,14 +652,15 @@ void FieldTrialList::StatesToString(std::string* output) {
 }
 
 // static
-void FieldTrialList::AllStatesToString(std::string* output) {
+void FieldTrialList::AllStatesToString(std::string* output,
+                                       bool include_expired) {
   if (!global_)
     return;
   AutoLock auto_lock(global_->lock_);
 
   for (const auto& registered : global_->registered_) {
     FieldTrial::State trial;
-    if (!registered.second->GetStateWhileLocked(&trial))
+    if (!registered.second->GetStateWhileLocked(&trial, include_expired))
       continue;
     DCHECK_EQ(std::string::npos,
               trial.trial_name->find(kPersistentStringSeparator));
@@ -1314,10 +1319,8 @@ void FieldTrialList::InstantiateFieldTrialAllocatorIfNeeded() {
       global_->field_trial_allocator_.get());
 
 #if !defined(OS_NACL)
-  // Set |readonly_allocator_handle_| so we can pass it to be inherited and
-  // via the command line.
-  global_->readonly_allocator_handle_ =
-      global_->field_trial_allocator_->shared_memory()->GetReadOnlyHandle();
+  global_->readonly_allocator_handle_ = GetSharedMemoryReadOnlyHandle(
+      global_->field_trial_allocator_->shared_memory());
 #endif
 }
 
@@ -1335,7 +1338,7 @@ void FieldTrialList::AddToAllocatorWhileLocked(
     return;
 
   FieldTrial::State trial_state;
-  if (!field_trial->GetStateWhileLocked(&trial_state))
+  if (!field_trial->GetStateWhileLocked(&trial_state, false))
     return;
 
   // Or if we've already added it. We must check after GetState since it can

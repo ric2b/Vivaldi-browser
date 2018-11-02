@@ -8,12 +8,8 @@
 #include "base/compiler_specific.h"
 #include "device/geolocation/geolocation_export.h"
 #include "device/geolocation/geolocation_provider_impl.h"
-#include "device/geolocation/public/interfaces/geolocation_config.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
-
-namespace service_manager {
-struct BindSourceInfo;
-}
+#include "services/device/public/interfaces/geolocation_config.mojom.h"
 
 namespace device {
 
@@ -24,8 +20,7 @@ class DEVICE_GEOLOCATION_EXPORT GeolocationConfig
   GeolocationConfig();
   ~GeolocationConfig() override;
 
-  static void Create(mojom::GeolocationConfigRequest request,
-                     const service_manager::BindSourceInfo& source_info);
+  static void Create(mojom::GeolocationConfigRequest request);
 
   void IsHighAccuracyLocationBeingCaptured(
       IsHighAccuracyLocationBeingCapturedCallback callback) override;

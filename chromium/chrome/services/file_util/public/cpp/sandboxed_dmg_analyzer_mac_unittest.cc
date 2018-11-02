@@ -22,15 +22,16 @@
 #include "services/service_manager/public/cpp/test/test_connector_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace chrome {
 namespace {
 
 class SandboxedDMGAnalyzerTest : public testing::Test {
  public:
   SandboxedDMGAnalyzerTest()
       : browser_thread_bundle_(content::TestBrowserThreadBundle::IO_MAINLOOP),
-        test_connector_factory_(std::make_unique<chrome::FileUtilService>()),
-        connector_(test_connector_factory_.CreateConnector()) {}
+        test_connector_factory_(
+            service_manager::TestConnectorFactory::CreateForUniqueService(
+                std::make_unique<FileUtilService>())),
+        connector_(test_connector_factory_->CreateConnector()) {}
 
   void AnalyzeFile(const base::FilePath& path,
                    safe_browsing::ArchiveAnalyzerResults* results) {
@@ -78,7 +79,7 @@ class SandboxedDMGAnalyzerTest : public testing::Test {
 
   content::TestBrowserThreadBundle browser_thread_bundle_;
   content::InProcessUtilityThreadHelper utility_thread_helper_;
-  service_manager::TestConnectorFactory test_connector_factory_;
+  std::unique_ptr<service_manager::TestConnectorFactory> test_connector_factory_;
   std::unique_ptr<service_manager::Connector> connector_;
 };
 
@@ -190,4 +191,3 @@ TEST_F(SandboxedDMGAnalyzerTest, AnalyzeDmgWithSignature) {
 }
 
 }  // namespace
-}  // namespace chrome

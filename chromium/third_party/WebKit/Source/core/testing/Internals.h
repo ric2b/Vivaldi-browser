@@ -270,12 +270,6 @@ class Internals final : public ScriptWrappable {
                                                long height,
                                                Document*,
                                                ExceptionState&);
-  DOMRectReadOnly* bestZoomableAreaForTouchPoint(long x,
-                                                 long y,
-                                                 long width,
-                                                 long height,
-                                                 Document*,
-                                                 ExceptionState&);
 
   int lastSpellCheckRequestSequence(Document*, ExceptionState&);
   int lastSpellCheckProcessedSequence(Document*, ExceptionState&);
@@ -322,7 +316,6 @@ class Internals final : public ScriptWrappable {
 
   bool hasSpellingMarker(Document*, int from, int length, ExceptionState&);
   bool hasGrammarMarker(Document*, int from, int length, ExceptionState&);
-  void setSpellCheckingEnabled(bool, ExceptionState&);
   void replaceMisspelled(Document*, const String&, ExceptionState&);
 
   bool canHyphenate(const AtomicString& locale);
@@ -496,8 +489,6 @@ class Internals final : public ScriptWrappable {
 
   void setValueForUser(HTMLInputElement*, const String&);
 
-  String textSurroundingNode(Node*, int x, int y, unsigned long max_length);
-
   void setFocused(bool);
   void setInitialFocus(bool);
 
@@ -588,6 +579,9 @@ class Internals final : public ScriptWrappable {
 
   // Intentional crash.
   void crash();
+
+  // Exposed for testing of inspector overlay.
+  String evaluateInInspectorOverlay(const String& script);
 
   // Overrides if the device is low-end (low on memory).
   void setIsLowEndDevice(bool);

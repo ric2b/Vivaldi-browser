@@ -51,6 +51,8 @@ using PointerId = int32_t;
 
 class EVENTS_EXPORT Event {
  public:
+  // Copies an arbitrary event. If you have a typed event (e.g. a MouseEvent)
+  // just use its copy constructor.
   static std::unique_ptr<Event> Clone(const Event& event);
 
   virtual ~Event();
@@ -390,6 +392,8 @@ class EVENTS_EXPORT LocatedEvent : public Event {
  protected:
   friend class LocatedEventTestApi;
 
+  LocatedEvent(const LocatedEvent& copy);
+
   explicit LocatedEvent(const base::NativeEvent& native_event);
 
   // Create a new LocatedEvent which is identical to the provided model.
@@ -410,10 +414,15 @@ class EVENTS_EXPORT LocatedEvent : public Event {
                base::TimeTicks time_stamp,
                int flags);
 
+  // Location of the event relative to the target window and in the target
+  // window's coordinate space. If there is no target this is the same as
+  // |root_location_|.
   gfx::PointF location_;
 
-  // |location_| multiplied by an optional transformation matrix for
-  // rotations, animations and skews.
+  // Location of the event. What coordinate system this is in depends upon the
+  // phase of event dispatch. For client code (meaning EventHanalders) it is
+  // generally in screen coordinates, but early on it may be in pixels and
+  // relative to a display.
   gfx::PointF root_location_;
 };
 
@@ -429,10 +438,10 @@ struct EVENTS_EXPORT PointerDetails {
                  float radius_x,
                  float radius_y,
                  float force,
+                 float twist = 0.0f,
                  float tilt_x = 0.0f,
                  float tilt_y = 0.0f,
-                 float tangential_pressure = 0.0f,
-                 int twist = 0);
+                 float tangential_pressure = 0.0f);
   PointerDetails(EventPointerType pointer_type,
                  const gfx::Vector2d& pointer_offset,
                  PointerId pointer_id = kUnknownPointerId);
@@ -479,7 +488,7 @@ struct EVENTS_EXPORT PointerDetails {
 
   // The clockwise rotation of a pen stylus around its own major axis, in
   // degrees in the range [0,359]. Always 0 if the device does not support it.
-  int twist = 0;
+  float twist = 0;
 
   // An identifier that uniquely identifies a pointer during its lifetime.
   PointerId id = 0;
@@ -496,6 +505,8 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
  public:
   static const PointerId kMousePointerId;
 
+  // NOTE: On some platforms this will allow an event to be constructed from a
+  // void*, see base::NativeEvent.
   explicit MouseEvent(const base::NativeEvent& native_event);
 
   // |pointer_event.IsMousePointerEvent()| must be true.
@@ -538,6 +549,9 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
              const PointerDetails& pointer_details =
                  PointerDetails(EventPointerType::POINTER_TYPE_MOUSE,
                                 kMousePointerId));
+
+  MouseEvent(const MouseEvent& copy);
+  ~MouseEvent() override;
 
   // Conveniences to quickly test what button is down
   bool IsOnlyLeftMouseButton() const {
@@ -597,7 +611,6 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
   // Updates the button that changed.
   void set_changed_button_flags(int flags) { changed_button_flags_ = flags; }
 
-  // Event details common to MouseEvent and TouchEvent.
   const PointerDetails& pointer_details() const { return pointer_details_; }
 
  private:
@@ -636,7 +649,8 @@ class EVENTS_EXPORT MouseWheelEvent : public MouseEvent {
   explicit MouseWheelEvent(const ScrollEvent& scroll_event);
   explicit MouseWheelEvent(const PointerEvent& pointer_event);
   MouseWheelEvent(const MouseEvent& mouse_event, int x_offset, int y_offset);
-  MouseWheelEvent(const MouseWheelEvent& mouse_wheel_event);
+  MouseWheelEvent(const MouseWheelEvent& copy);
+  ~MouseWheelEvent() override;
 
   template <class T>
   MouseWheelEvent(const MouseWheelEvent& model,
@@ -681,7 +695,6 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
   TouchEvent(const TouchEvent& model, T* source, T* target)
       : LocatedEvent(model, source, target),
         unique_event_id_(model.unique_event_id_),
-        rotation_angle_(model.rotation_angle_),
         may_cause_scrolling_(model.may_cause_scrolling_),
         should_remove_native_touch_id_mapping_(false),
         pointer_details_(model.pointer_details_) {}
@@ -699,8 +712,6 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
 
   // A unique identifier for this event.
   uint32_t unique_event_id() const { return unique_event_id_; }
-
-  float rotation_angle() const { return rotation_angle_; }
 
   void set_may_cause_scrolling(bool causes) { may_cause_scrolling_ = causes; }
   bool may_cause_scrolling() const { return may_cause_scrolling_; }
@@ -722,22 +733,14 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
     return !!(result() & ER_DISABLE_SYNC_HANDLING);
   }
 
-  // Event details common to MouseEvent and TouchEvent.
   const PointerDetails& pointer_details() const { return pointer_details_; }
-  void set_pointer_details(const PointerDetails& pointer_details);
+  void SetPointerDetailsForTest(const PointerDetails& pointer_details);
+
+  float ComputeRotationAngle() const;
 
  private:
-  // Adjusts rotation_angle_ to within the acceptable range.
-  void FixRotationAngle();
-
   // A unique identifier for the touch event.
   uint32_t unique_event_id_;
-
-  // TODO(726824): Remove rotation_angle_ from ui::TouchEvent, just use twist
-  // in PointerDetails.
-  // Clockwise angle (in degrees) of the major axis from the X axis. Must be
-  // less than 180 and non-negative.
-  float rotation_angle_;
 
   // Whether the (unhandled) touch event will produce a scroll event (e.g., a
   // touchmove that exceeds the platform slop region, or a touchend that
@@ -1010,6 +1013,9 @@ class EVENTS_EXPORT ScrollEvent : public MouseEvent {
               int finger_count,
               EventMomentumPhase momentum_phase = EventMomentumPhase::NONE);
 
+  ScrollEvent(const ScrollEvent& copy);
+  ~ScrollEvent() override;
+
   // Scale the scroll event's offset value.
   // This is useful in the multi-monitor setup where it needs to be scaled
   // to provide a consistent user experience.
@@ -1056,7 +1062,7 @@ class EVENTS_EXPORT GestureEvent : public LocatedEvent {
       : LocatedEvent(model, source, target),
         details_(model.details_) {
   }
-
+  GestureEvent(const GestureEvent& copy);
   ~GestureEvent() override;
 
   const GestureEventDetails& details() const { return details_; }

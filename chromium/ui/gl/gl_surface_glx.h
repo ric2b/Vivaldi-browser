@@ -14,12 +14,17 @@
 #include "base/macros.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/gfx/vsync_provider.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 
+namespace gfx {
+class VSyncProvider;
+}
+
 namespace gl {
+
+class GLSurfacePresentationHelper;
 
 // Base class for GLX surfaces.
 class GL_EXPORT GLSurfaceGLX : public GLSurface {
@@ -76,6 +81,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   gfx::SwapResult SwapBuffers(const PresentationCallback& callback) override;
   gfx::Size GetSize() override;
   void* GetHandle() override;
+  bool SupportsPresentationCallback() override;
   bool SupportsPostSubBuffer() override;
   void* GetConfig() override;
   GLSurfaceFormat GetFormat() override;
@@ -85,6 +91,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
                                 int width,
                                 int height,
                                 const PresentationCallback& callback) override;
+  bool OnMakeCurrent(GLContext* context) override;
   gfx::VSyncProvider* GetVSyncProvider() override;
 
   VisualID GetVisualID() const { return visual_id_; }
@@ -103,6 +110,7 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   bool CanHandleEvent(XEvent* xevent);
 
   gfx::AcceleratedWidget window() const { return window_; }
+
  private:
   // The handle for the drawable to make current or swap.
   GLXDrawable GetDrawableHandle() const;
@@ -121,6 +129,8 @@ class GL_EXPORT NativeViewGLSurfaceGLX : public GLSurfaceGLX {
   VisualID visual_id_;
 
   std::unique_ptr<gfx::VSyncProvider> vsync_provider_;
+
+  std::unique_ptr<GLSurfacePresentationHelper> presentation_helper_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeViewGLSurfaceGLX);
 };

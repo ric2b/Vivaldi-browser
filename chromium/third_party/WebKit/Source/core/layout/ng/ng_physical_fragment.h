@@ -53,7 +53,6 @@ class CORE_EXPORT NGPhysicalFragment
     kInlineBlock,
     kFloating,
     kOutOfFlowPositioned,
-    kOldLayoutRoot,
     // When adding new values, make sure the bit size of |box_type_| is large
     // enough to store.
 
@@ -75,6 +74,8 @@ class CORE_EXPORT NGPhysicalFragment
 
   // Returns the box type of this fragment.
   NGBoxType BoxType() const { return static_cast<NGBoxType>(box_type_); }
+  // Returns whether the fragment is old layout root.
+  bool IsOldLayoutRoot() const { return is_old_layout_root_; }
   // An inline block is represented as a kFragmentBox.
   // TODO(eae): This isn't true for replaces elements at the moment.
   bool IsInlineBlock() const { return BoxType() == NGBoxType::kInlineBlock; }
@@ -82,14 +83,16 @@ class CORE_EXPORT NGPhysicalFragment
   bool IsOutOfFlowPositioned() const {
     return BoxType() == NGBoxType::kOutOfFlowPositioned;
   }
+  bool IsBlockFlow() const;
+
   // A box fragment that do not exist in LayoutObject tree. Its LayoutObject is
   // co-owned by other fragments.
   bool IsAnonymousBox() const { return BoxType() == NGBoxType::kAnonymousBox; }
   // A block sub-layout starts on this fragment. Inline blocks, floats, out of
-  // flow positioned objects are such examples. This may be false on NG/legacy
+  // flow positioned objects are such examples. This is also true on NG/legacy
   // boundary.
   bool IsBlockLayoutRoot() const {
-    return BoxType() >= NGBoxType::kMinimumBlockLayoutRoot;
+    return BoxType() >= NGBoxType::kMinimumBlockLayoutRoot || IsOldLayoutRoot();
   }
 
   // |Offset()| is reliable only when this fragment was placed by LayoutNG
@@ -118,6 +121,9 @@ class CORE_EXPORT NGPhysicalFragment
   NGBreakToken* BreakToken() const { return break_token_.get(); }
   const ComputedStyle& Style() const;
   Node* GetNode() const;
+
+  // Whether there is a PaintLayer associated with the fragment.
+  bool HasLayer() const;
 
   // GetLayoutObject should only be used when necessary for compatibility
   // with LegacyLayout.
@@ -157,7 +163,7 @@ class CORE_EXPORT NGPhysicalFragment
   };
   typedef int DumpFlags;
 
-  String DumpFragmentTree(DumpFlags) const;
+  String DumpFragmentTree(DumpFlags, unsigned indent = 2) const;
 
 #ifndef NDEBUG
   void ShowFragmentTree() const;
@@ -178,6 +184,7 @@ class CORE_EXPORT NGPhysicalFragment
 
   unsigned type_ : 2;  // NGFragmentType
   unsigned box_type_ : 3;  // NGBoxType
+  unsigned is_old_layout_root_ : 1;
   unsigned is_placed_ : 1;
   unsigned border_edge_ : 4;  // NGBorderEdges::Physical
 
@@ -188,7 +195,9 @@ class CORE_EXPORT NGPhysicalFragment
 
 // Used for return value of traversing fragment tree.
 struct CORE_EXPORT NGPhysicalFragmentWithOffset {
-  const NGPhysicalFragment* fragment = nullptr;
+  DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+
+  scoped_refptr<const NGPhysicalFragment> fragment;
   NGPhysicalOffset offset_to_container_box;
 
   NGPhysicalOffsetRect RectInContainerBox() const;

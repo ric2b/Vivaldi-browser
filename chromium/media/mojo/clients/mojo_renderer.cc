@@ -30,7 +30,7 @@ MojoRenderer::MojoRenderer(
       video_renderer_sink_(video_renderer_sink),
       remote_renderer_info_(remote_renderer.PassInterface()),
       client_binding_(this),
-      media_time_interpolator_(&media_clock_) {
+      media_time_interpolator_(base::DefaultTickClock::GetInstance()) {
   DVLOG(1) << __func__;
 }
 
@@ -185,7 +185,7 @@ void MojoRenderer::StartPlayingFrom(base::TimeDelta time) {
 
   {
     base::AutoLock auto_lock(lock_);
-    media_time_interpolator_.SetBounds(time, time, media_clock_.NowTicks());
+    media_time_interpolator_.SetBounds(time, time, base::TimeTicks::Now());
     media_time_interpolator_.StartInterpolating();
   }
 
@@ -297,6 +297,10 @@ void MojoRenderer::OnVideoConfigChange(const VideoDecoderConfig& config) {
 void MojoRenderer::OnStatisticsUpdate(const PipelineStatistics& stats) {
   DVLOG(3) << __func__;
   DCHECK(task_runner_->BelongsToCurrentThread());
+  if (!client_) {
+    pending_stats_ = stats;
+    return;
+  }
   client_->OnStatisticsUpdate(stats);
 }
 
@@ -364,6 +368,10 @@ void MojoRenderer::OnInitialized(media::RendererClient* client, bool success) {
 
   base::ResetAndReturn(&init_cb_).Run(
       success ? PIPELINE_OK : PIPELINE_ERROR_INITIALIZATION_FAILED);
+
+  if (client_ && pending_stats_.has_value())
+    client_->OnStatisticsUpdate(pending_stats_.value());
+  pending_stats_.reset();
 }
 
 void MojoRenderer::OnFlushed() {

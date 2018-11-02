@@ -10,19 +10,20 @@
 
 #include <algorithm>
 #include <map>
+#include <memory>
 #include <set>
 #include <unordered_map>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "cc/test/render_pass_test_utils.h"
+#include "cc/test/resource_provider_test_utils.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_texture.h"
 #include "cc/test/test_web_graphics_context_3d.h"
-#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "components/viz/common/resources/resource_format_utils.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/shared_bitmap_manager.h"
@@ -99,8 +100,6 @@ static viz::ResourceSettings CreateResourceSettings(
       texture_id_allocation_chunk_size;
   resource_settings.use_gpu_memory_buffer_resources =
       kUseGpuMemoryBufferResources;
-  resource_settings.buffer_to_texture_target_map =
-      viz::DefaultBufferToTextureTargetMapForTesting();
   return resource_settings;
 }
 
@@ -109,10 +108,10 @@ class TextureStateTrackingContext : public TestWebGraphicsContext3D {
   MOCK_METHOD2(bindTexture, void(GLenum target, GLuint texture));
   MOCK_METHOD3(texParameteri, void(GLenum target, GLenum pname, GLint param));
   MOCK_METHOD1(waitSyncToken, void(const GLbyte* sync_token));
-  MOCK_METHOD3(produceTextureDirectCHROMIUM,
-               void(GLuint texture, GLenum target, const GLbyte* mailbox));
-  MOCK_METHOD2(createAndConsumeTextureCHROMIUM,
-               unsigned(GLenum target, const GLbyte* mailbox));
+  MOCK_METHOD2(produceTextureDirectCHROMIUM,
+               void(GLuint texture, const GLbyte* mailbox));
+  MOCK_METHOD1(createAndConsumeTextureCHROMIUM,
+               unsigned(const GLbyte* mailbox));
 
   // Force all textures to be consecutive numbers starting at "1",
   // so we easily can test for them.
@@ -123,12 +122,10 @@ class TextureStateTrackingContext : public TestWebGraphicsContext3D {
 
   void RetireTextureId(GLuint) override {}
 
-  GLuint64 insertFenceSync() override { return next_fence_sync_++; }
-
-  void genSyncToken(GLuint64 fence_sync, GLbyte* sync_token) override {
-    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO, 0,
+  void genSyncToken(GLbyte* sync_token) override {
+    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO,
                                    gpu::CommandBufferId::FromUnsafeValue(0x123),
-                                   fence_sync);
+                                   next_fence_sync_++);
     sync_token_data.SetVerifyFlush();
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   }
@@ -200,16 +197,13 @@ class ResourceProviderContext : public TestWebGraphicsContext3D {
     return base::WrapUnique(new ResourceProviderContext(shared_data));
   }
 
-  GLuint64 insertFenceSync() override {
-    return shared_data_->InsertFenceSync();
-  }
-
-  void genSyncToken(GLuint64 fence_sync, GLbyte* sync_token) override {
-    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO, 0,
+  void genSyncToken(GLbyte* sync_token) override {
+    uint64_t fence_sync = shared_data_->InsertFenceSync();
+    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO,
                                    gpu::CommandBufferId::FromUnsafeValue(0x123),
                                    fence_sync);
     sync_token_data.SetVerifyFlush();
-    // Commit the produceTextureCHROMIUM calls at this point, so that
+    // Commit the ProduceTextureDirectCHROMIUM calls at this point, so that
     // they're associated with the sync point.
     for (const std::unique_ptr<PendingProduceTexture>& pending_texture :
          pending_produce_textures_) {
@@ -302,7 +296,6 @@ class ResourceProviderContext : public TestWebGraphicsContext3D {
   }
 
   void produceTextureDirectCHROMIUM(GLuint texture,
-                                    GLenum target,
                                     const GLbyte* mailbox) override {
     // Delay moving the texture into the mailbox until the next
     // sync token, so that it is not visible to other contexts that
@@ -314,8 +307,7 @@ class ResourceProviderContext : public TestWebGraphicsContext3D {
     pending_produce_textures_.push_back(std::move(pending));
   }
 
-  GLuint createAndConsumeTextureCHROMIUM(GLenum target,
-                                         const GLbyte* mailbox) override {
+  GLuint createAndConsumeTextureCHROMIUM(const GLbyte* mailbox) override {
     GLuint texture_id = createTexture();
     base::AutoLock lock_for_texture_access(namespace_->lock);
     scoped_refptr<TestTexture> texture =
@@ -409,49 +401,45 @@ void GetResourcePixels(DisplayResourceProvider* resource_provider,
   }
 }
 
-class ResourceProviderTest : public testing::TestWithParam<viz::ResourceType> {
+class ResourceProviderTest : public testing::TestWithParam<bool> {
  public:
   explicit ResourceProviderTest(bool child_needs_sync_token)
-      : child_needs_sync_token_(child_needs_sync_token),
+      : use_gpu_(GetParam()),
+        child_needs_sync_token_(child_needs_sync_token),
         shared_data_(ContextSharedData::Create()) {
-    switch (GetParam()) {
-      case viz::ResourceType::kGpuMemoryBuffer:
-      case viz::ResourceType::kTexture: {
-        auto context3d(ResourceProviderContext::Create(shared_data_.get()));
-        context3d_ = context3d.get();
-        context_provider_ = TestContextProvider::Create(std::move(context3d));
-        context_provider_->UnboundTestContext3d()
-            ->set_support_texture_format_bgra8888(true);
-        context_provider_->BindToCurrentThread();
+    if (use_gpu_) {
+      auto context3d(ResourceProviderContext::Create(shared_data_.get()));
+      context3d_ = context3d.get();
+      context_provider_ = TestContextProvider::Create(std::move(context3d));
+      context_provider_->UnboundTestContext3d()
+          ->set_support_texture_format_bgra8888(true);
+      context_provider_->BindToCurrentThread();
 
-        auto child_context_owned =
-            ResourceProviderContext::Create(shared_data_.get());
-        child_context_ = child_context_owned.get();
-        child_context_provider_ =
-            TestContextProvider::Create(std::move(child_context_owned));
-        child_context_provider_->UnboundTestContext3d()
-            ->set_support_texture_format_bgra8888(true);
-        child_context_provider_->BindToCurrentThread();
-        break;
-      }
-      case viz::ResourceType::kBitmap:
-        break;
+      auto child_context_owned =
+          ResourceProviderContext::Create(shared_data_.get());
+      child_context_ = child_context_owned.get();
+      child_context_provider_ =
+          TestContextProvider::Create(std::move(child_context_owned));
+      child_context_provider_->UnboundTestContext3d()
+          ->set_support_texture_format_bgra8888(true);
+      child_context_provider_->BindToCurrentThread();
+      gpu_memory_buffer_manager_ =
+          std::make_unique<viz::TestGpuMemoryBufferManager>();
+      child_gpu_memory_buffer_manager_ =
+          gpu_memory_buffer_manager_->CreateClientGpuMemoryBufferManager();
+    } else {
+      shared_bitmap_manager_ = std::make_unique<TestSharedBitmapManager>();
     }
 
-    shared_bitmap_manager_.reset(new TestSharedBitmapManager);
-    gpu_memory_buffer_manager_ =
-        std::make_unique<viz::TestGpuMemoryBufferManager>();
-    child_gpu_memory_buffer_manager_ =
-        gpu_memory_buffer_manager_->CreateClientGpuMemoryBufferManager();
-
     resource_provider_ = std::make_unique<DisplayResourceProvider>(
-        context_provider_.get(), shared_bitmap_manager_.get(),
-        gpu_memory_buffer_manager_.get(), CreateResourceSettings());
+        context_provider_.get(), shared_bitmap_manager_.get());
 
     MakeChildResourceProvider();
   }
 
   ResourceProviderTest() : ResourceProviderTest(true) {}
+
+  bool use_gpu() const { return use_gpu_; }
 
   void MakeChildResourceProvider() {
     child_resource_provider_ = std::make_unique<LayerTreeResourceProvider>(
@@ -484,14 +472,12 @@ class ResourceProviderTest : public testing::TestWithParam<viz::ResourceType> {
                                      bool* lost_resource,
                                      bool* release_called,
                                      gpu::SyncToken* sync_token) {
-    if (GetParam() == viz::ResourceType::kTexture) {
+    if (use_gpu()) {
       unsigned texture = child_context_->createTexture();
       gpu::Mailbox gpu_mailbox;
       child_context_->genMailboxCHROMIUM(gpu_mailbox.name);
-      child_context_->produceTextureDirectCHROMIUM(texture, GL_TEXTURE_2D,
-                                                   gpu_mailbox.name);
-      child_context_->genSyncToken(child_context_->insertFenceSync(),
-                                   sync_token->GetData());
+      child_context_->produceTextureDirectCHROMIUM(texture, gpu_mailbox.name);
+      child_context_->genSyncToken(sync_token->GetData());
       EXPECT_TRUE(sync_token->HasData());
 
       std::unique_ptr<viz::SharedBitmap> shared_bitmap;
@@ -544,8 +530,9 @@ class ResourceProviderTest : public testing::TestWithParam<viz::ResourceType> {
   }
 
  protected:
-  bool child_needs_sync_token_;
-  std::unique_ptr<ContextSharedData> shared_data_;
+  const bool use_gpu_;
+  const bool child_needs_sync_token_;
+  const std::unique_ptr<ContextSharedData> shared_data_;
   ResourceProviderContext* context3d_ = nullptr;
   ResourceProviderContext* child_context_ = nullptr;
   scoped_refptr<TestContextProvider> context_provider_;
@@ -558,40 +545,53 @@ class ResourceProviderTest : public testing::TestWithParam<viz::ResourceType> {
   std::unique_ptr<TestSharedBitmapManager> shared_bitmap_manager_;
 };
 
-void CheckCreateResource(viz::ResourceType expected_default_type,
-                         DisplayResourceProvider* resource_provider,
-                         ResourceProviderContext* context) {
-  DCHECK_EQ(resource_provider->IsSoftware(),
-            expected_default_type == viz::ResourceType::kBitmap);
+TEST_P(ResourceProviderTest, Basic) {
+  DCHECK_EQ(resource_provider_->IsSoftware(), !use_gpu());
 
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id = resource_provider->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
-  EXPECT_EQ(1, static_cast<int>(resource_provider->num_resources()));
-  if (expected_default_type == viz::ResourceType::kTexture)
-    EXPECT_EQ(0u, context->NumTextures());
+  viz::ResourceId id;
+  if (!use_gpu()) {
+    id =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  } else {
+    id = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  }
+  EXPECT_EQ(1, static_cast<int>(child_resource_provider_->num_resources()));
+  if (use_gpu())
+    EXPECT_EQ(0u, context()->NumTextures());
 
   uint8_t data[4] = {1, 2, 3, 4};
-  resource_provider->CopyToResource(id, data, size);
-  if (expected_default_type == viz::ResourceType::kTexture)
-    EXPECT_EQ(1u, context->NumTextures());
+  child_resource_provider_->CopyToResource(id, data, size);
+  if (use_gpu())
+    EXPECT_EQ(1u, context()->NumTextures());
+
+  // Give the resource to the parent to read its pixels.
+  std::vector<viz::ReturnedResource> returned_to_child;
+  int child_id =
+      resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
+  std::vector<viz::TransferableResource> list;
+  child_resource_provider_->PrepareSendToParent({id}, &list);
+  resource_provider_->ReceiveFromChild(child_id, list);
+  auto id_map = resource_provider_->GetChildToParentMap(child_id);
 
   uint8_t result[4] = {0};
-  GetResourcePixels(resource_provider, context, id, size, format, result);
+  GetResourcePixels(resource_provider_.get(), context(), id_map[id], size,
+                    format, result);
   EXPECT_EQ(0, memcmp(data, result, pixel_size));
 
-  resource_provider->DeleteResource(id);
-  EXPECT_EQ(0, static_cast<int>(resource_provider->num_resources()));
-  if (expected_default_type == viz::ResourceType::kTexture)
-    EXPECT_EQ(0u, context->NumTextures());
-}
+  // Give it back to the child.
+  resource_provider_->DeclareUsedResourcesFromChild(child_id, {});
+  child_resource_provider_->ReceiveReturnsFromParent(returned_to_child);
 
-TEST_P(ResourceProviderTest, Basic) {
-  CheckCreateResource(GetParam(), resource_provider_.get(), context());
+  child_resource_provider_->DeleteResource(id);
+  EXPECT_EQ(0, static_cast<int>(child_resource_provider_->num_resources()));
+  if (use_gpu())
+    EXPECT_EQ(0u, context()->NumTextures());
 }
 
 TEST_P(ResourceProviderTest, SimpleUpload) {
@@ -600,34 +600,55 @@ TEST_P(ResourceProviderTest, SimpleUpload) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(16U, pixel_size);
 
-  viz::ResourceId id = resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1;
+  viz::ResourceId id2;
+  if (use_gpu()) {
+    id1 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+    id2 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+
+  } else {
+    id1 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+    id2 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  }
 
   uint8_t image[16] = {0};
-  resource_provider_->CopyToResource(id, image, size);
-  {
-    uint8_t result[16] = {0};
-    uint8_t expected[16] = {0};
-    GetResourcePixels(resource_provider_.get(), context(), id, size, format,
-                      result);
-    EXPECT_EQ(0, memcmp(expected, result, pixel_size));
-  }
+  child_resource_provider_->CopyToResource(id1, image, size);
 
   for (uint8_t i = 0; i < pixel_size; ++i)
     image[i] = i;
-  resource_provider_->CopyToResource(id, image, size);
+  child_resource_provider_->CopyToResource(id2, image, size);
+
+  // Return the mapped resource id.
+  ResourceProvider::ResourceIdMap resource_map =
+      SendResourceAndGetChildToParentMap({id1, id2}, resource_provider_.get(),
+                                         child_resource_provider_.get());
+  viz::ResourceId mapped_id1 = resource_map[id1];
+  viz::ResourceId mapped_id2 = resource_map[id2];
+
+  {
+    uint8_t result[16] = {0};
+    uint8_t expected[16] = {0};
+    GetResourcePixels(resource_provider_.get(), context(), mapped_id1, size,
+                      format, result);
+    EXPECT_EQ(0, memcmp(expected, result, pixel_size));
+  }
+
   {
     uint8_t result[16] = {0};
     uint8_t expected[16] = {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-    GetResourcePixels(resource_provider_.get(), context(), id, size, format,
-                      result);
+    GetResourcePixels(resource_provider_.get(), context(), mapped_id2, size,
+                      format, result);
     EXPECT_EQ(0, memcmp(expected, result, pixel_size));
   }
 }
 
 TEST_P(ResourceProviderTest, TransferGLResources) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   // Use some non-default format to detect when defaults aren't changed
@@ -637,12 +658,12 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
   ASSERT_EQ(4U, pixel_size);
 
   gfx::ColorSpace color_space1 = gfx::ColorSpace::CreateSRGB();
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, color_space1);
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id1, data1, size);
 
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
+  viz::ResourceId id2 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data2[4] = { 5, 5, 5, 5 };
   child_resource_provider_->CopyToResource(id2, data2, size);
@@ -718,9 +739,9 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
   EXPECT_NE(0u, mapped_id1);
   EXPECT_NE(0u, mapped_id2);
   EXPECT_NE(0u, mapped_id3);
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(mapped_id1));
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(mapped_id2));
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(mapped_id3));
+  EXPECT_FALSE(resource_provider_->InUse(mapped_id1));
+  EXPECT_FALSE(resource_provider_->InUse(mapped_id2));
+  EXPECT_FALSE(resource_provider_->InUse(mapped_id3));
 
   uint8_t result[4] = { 0 };
   GetResourcePixels(
@@ -797,17 +818,18 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
   EXPECT_FALSE(child_resource_provider_->InUseByConsumer(id3));
 
   {
-    child_resource_provider_->WaitSyncToken(id1);
-    ResourceProvider::ScopedWriteLockGL lock(child_resource_provider_.get(),
-                                             id1);
+    // ScopedWriteLockGL will wait for the sync token, which is convenient since
+    // |child_resource_provider_| doesn't expose that.
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(
+        child_resource_provider_.get(), id1);
     ASSERT_NE(0U, lock.GetTexture());
   }
   // Ensure copying to resource doesn't fail.
   child_resource_provider_->CopyToResource(id2, data2, size);
   {
-    child_resource_provider_->WaitSyncToken(id2);
-    ResourceProvider::ScopedWriteLockGL lock(child_resource_provider_.get(),
-                                             id2);
+    // ScopedWriteLockGL will wait for the sync token.
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(
+        child_resource_provider_.get(), id2);
     ASSERT_NE(0U, lock.GetTexture());
   }
   {
@@ -861,18 +883,17 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
 
 #if defined(OS_ANDROID)
 TEST_P(ResourceProviderTest, OverlayPromotionHint) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   GLuint external_texture_id = child_context_->createExternalTexture();
 
   gpu::Mailbox external_mailbox;
   child_context_->genMailboxCHROMIUM(external_mailbox.name);
-  child_context_->produceTextureDirectCHROMIUM(
-      external_texture_id, GL_TEXTURE_EXTERNAL_OES, external_mailbox.name);
+  child_context_->produceTextureDirectCHROMIUM(external_texture_id,
+                                               external_mailbox.name);
   gpu::SyncToken external_sync_token;
-  child_context_->genSyncToken(child_context_->insertFenceSync(),
-                               external_sync_token.GetData());
+  child_context_->genSyncToken(external_sync_token.GetData());
   EXPECT_TRUE(external_sync_token.HasData());
 
   viz::TransferableResource id1_transfer =
@@ -913,11 +934,19 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
       resource_provider_->GetChildToParentMap(child_id);
   viz::ResourceId mapped_id1 = resource_map[list[0].id];
   viz::ResourceId mapped_id2 = resource_map[list[1].id];
+
+  // The promotion hints should not be recorded until after we wait.  This is
+  // because we can't notify them until they're synchronized, and we choose to
+  // ignore unwaited resources rather than send them a "no" hint.  If they end
+  // up in the request set before we wait, then the attempt to notify them wil;
+  // DCHECK when we try to lock them for reading in SendPromotionHints.
+  EXPECT_EQ(0u, resource_provider_->CountPromotionHintRequestsForTesting());
   {
     resource_provider_->WaitSyncToken(mapped_id1);
     DisplayResourceProvider::ScopedReadLockGL lock(resource_provider_.get(),
                                                    mapped_id1);
   }
+  EXPECT_EQ(1u, resource_provider_->CountPromotionHintRequestsForTesting());
 
   EXPECT_EQ(list[0].mailbox_holder.sync_token,
             context3d_->last_waited_sync_token());
@@ -941,8 +970,6 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
   EXPECT_FALSE(resource_provider_->IsBackedBySurfaceTexture(mapped_id2));
   EXPECT_FALSE(resource_provider_->WantsPromotionHintForTesting(mapped_id2));
 
-  EXPECT_EQ(1u, resource_provider_->CountPromotionHintRequestsForTesting());
-
   // ResourceProvider maintains a set of promotion hint requests that should be
   // cleared when resources are deleted.
   resource_provider_->DeclareUsedResourcesFromChild(child_id,
@@ -956,32 +983,35 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
 }
 #endif
 
-class ResourceProviderTestNoSyncToken : public ResourceProviderTest {
- public:
-  ResourceProviderTestNoSyncToken() : ResourceProviderTest(false) {
-    EXPECT_EQ(viz::ResourceType::kTexture, GetParam());
-  }
-};
+TEST_P(ResourceProviderTest, TransferGLResources_NoSyncToken) {
+  if (!use_gpu())
+    return;
 
-TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
+  bool need_sync_tokens = false;
+  auto no_token_resource_provider = std::make_unique<LayerTreeResourceProvider>(
+      child_context_provider_.get(), shared_bitmap_manager_.get(),
+      gpu_memory_buffer_manager_.get(), need_sync_tokens,
+      CreateResourceSettings());
+
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = no_token_resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data1[4] = {1, 2, 3, 4};
-  child_resource_provider_->CopyToResource(id1, data1, size);
+  no_token_resource_provider->CopyToResource(id1, data1, size);
 
-  viz::ResourceId id2 = child_resource_provider_->CreateGpuMemoryBufferResource(
-      size, viz::ResourceTextureHint::kDefault, format,
-      gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gfx::ColorSpace());
+  viz::ResourceId id2 =
+      no_token_resource_provider->CreateGpuMemoryBufferResource(
+          size, viz::ResourceTextureHint::kDefault, format,
+          gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gfx::ColorSpace());
   {
     // Ensure locking the memory buffer doesn't create an unnecessary sync
     // point.
     LayerTreeResourceProvider::ScopedWriteLockGpuMemoryBuffer lock(
-        child_resource_provider_.get(), id2);
+        no_token_resource_provider.get(), id2);
     EXPECT_TRUE(lock.GetGpuMemoryBuffer());
   }
 
@@ -990,13 +1020,12 @@ TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
   // A sync point is specified directly and should be used.
   gpu::Mailbox external_mailbox;
   child_context_->genMailboxCHROMIUM(external_mailbox.name);
-  child_context_->produceTextureDirectCHROMIUM(
-      external_texture_id, GL_TEXTURE_EXTERNAL_OES, external_mailbox.name);
+  child_context_->produceTextureDirectCHROMIUM(external_texture_id,
+                                               external_mailbox.name);
   gpu::SyncToken external_sync_token;
-  child_context_->genSyncToken(child_context_->insertFenceSync(),
-                               external_sync_token.GetData());
+  child_context_->genSyncToken(external_sync_token.GetData());
   EXPECT_TRUE(external_sync_token.HasData());
-  viz::ResourceId id3 = child_resource_provider_->ImportResource(
+  viz::ResourceId id3 = no_token_resource_provider->ImportResource(
       viz::TransferableResource::MakeGL(external_mailbox, GL_LINEAR,
                                         GL_TEXTURE_EXTERNAL_OES,
                                         external_sync_token),
@@ -1013,8 +1042,8 @@ TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
     resource_ids_to_transfer.push_back(id2);
     resource_ids_to_transfer.push_back(id3);
     std::vector<viz::TransferableResource> list;
-    child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
-                                                  &list);
+    no_token_resource_provider->PrepareSendToParent(resource_ids_to_transfer,
+                                                    &list);
     ASSERT_EQ(3u, list.size());
     // Standard resources shouldn't require creating and sending a sync point.
     EXPECT_FALSE(list[0].mailbox_holder.sync_token.HasData());
@@ -1056,20 +1085,16 @@ TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
     EXPECT_FALSE(returned_to_child[0].lost);
     EXPECT_FALSE(returned_to_child[1].lost);
     EXPECT_FALSE(returned_to_child[2].lost);
-    child_resource_provider_->ReceiveReturnsFromParent(returned_to_child);
+    no_token_resource_provider->ReceiveReturnsFromParent(returned_to_child);
     returned_to_child.clear();
   }
 
   resource_provider_->DestroyChild(child_id);
 }
 
-INSTANTIATE_TEST_CASE_P(ResourceProviderTests,
-                        ResourceProviderTestNoSyncToken,
-                        ::testing::Values(viz::ResourceType::kTexture));
-
 // Test that SetBatchReturnResources batching works.
 TEST_P(ResourceProviderTest, SetBatchPreventsReturn) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
@@ -1083,7 +1108,7 @@ TEST_P(ResourceProviderTest, SetBatchPreventsReturn) {
   ResourceProvider::ResourceIdArray resource_ids_to_transfer;
   viz::ResourceId ids[2];
   for (size_t i = 0; i < arraysize(ids); i++) {
-    ids[i] = child_resource_provider_->CreateResource(
+    ids[i] = child_resource_provider_->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
     child_resource_provider_->CopyToResource(ids[i], data1, size);
     resource_ids_to_transfer.push_back(ids[i]);
@@ -1135,12 +1160,12 @@ TEST_P(ResourceProviderTest, SetBatchPreventsReturn) {
 }
 
 TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data1[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data1, size);
@@ -1177,7 +1202,8 @@ TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
   EXPECT_EQ(1u, returned_to_child.size());
   child_resource_provider_->ReceiveReturnsFromParent(returned_to_child);
 
-  child_resource_provider_->WaitSyncToken(id1);
+  // No need to wait for the sync token here -- it will be returned to the
+  // client on delete.
   EXPECT_EQ(1u, child_resource_provider_->num_resources());
   child_resource_provider_->DeleteResource(id1);
   EXPECT_EQ(0u, child_resource_provider_->num_resources());
@@ -1187,7 +1213,7 @@ TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
 
 class TestFence : public viz::ResourceFence {
  public:
-  TestFence() {}
+  TestFence() = default;
 
   // viz::ResourceFence implementation.
   void Set() override {}
@@ -1197,16 +1223,16 @@ class TestFence : public viz::ResourceFence {
   bool passed = false;
 
  private:
-  ~TestFence() override {}
+  ~TestFence() override = default;
 };
 
 TEST_P(ResourceProviderTest, ReadLockFenceStopsReturnToChildOrDelete) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data1[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data1, size);
@@ -1259,18 +1285,18 @@ TEST_P(ResourceProviderTest, ReadLockFenceStopsReturnToChildOrDelete) {
 }
 
 TEST_P(ResourceProviderTest, ReadLockFenceDestroyChild) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data, size);
   child_resource_provider_->EnableReadLockFencesForTesting(id1);
 
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
+  viz::ResourceId id2 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   child_resource_provider_->CopyToResource(id2, data, size);
 
@@ -1326,18 +1352,18 @@ TEST_P(ResourceProviderTest, ReadLockFenceDestroyChild) {
 }
 
 TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
+  viz::ResourceId id1 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data, size);
   child_resource_provider_->EnableReadLockFencesForTesting(id1);
 
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
+  viz::ResourceId id2 = child_resource_provider_->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   child_resource_provider_->CopyToResource(id2, data, size);
 
@@ -1386,7 +1412,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
 }
 
 TEST_P(ResourceProviderTest, TransferSoftwareResources) {
-  if (GetParam() != viz::ResourceType::kBitmap)
+  if (use_gpu())
     return;
 
   gfx::Size size(1, 1);
@@ -1394,13 +1420,13 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1 =
+      child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id1, data1, size);
 
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id2 =
+      child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
   uint8_t data2[4] = { 5, 5, 5, 5 };
   child_resource_provider_->CopyToResource(id2, data2, size);
 
@@ -1436,8 +1462,8 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
   viz::ResourceId mapped_id2 = resource_map[id2];
   EXPECT_NE(0u, mapped_id1);
   EXPECT_NE(0u, mapped_id2);
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(mapped_id1));
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(mapped_id2));
+  EXPECT_FALSE(resource_provider_->InUse(mapped_id1));
+  EXPECT_FALSE(resource_provider_->InUse(mapped_id2));
 
   uint8_t result[4] = { 0 };
   GetResourcePixels(
@@ -1496,7 +1522,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
   EXPECT_FALSE(child_resource_provider_->InUseByConsumer(id2));
 
   {
-    ResourceProvider::ScopedWriteLockSoftware lock(
+    LayerTreeResourceProvider::ScopedWriteLockSoftware lock(
         child_resource_provider_.get(), id1);
     const SkBitmap sk_bitmap = lock.sk_bitmap();
     EXPECT_EQ(sk_bitmap.width(), size.width());
@@ -1504,7 +1530,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
     EXPECT_EQ(0, memcmp(data1, sk_bitmap.getPixels(), pixel_size));
   }
   {
-    ResourceProvider::ScopedWriteLockSoftware lock(
+    LayerTreeResourceProvider::ScopedWriteLockSoftware lock(
         child_resource_provider_.get(), id2);
     const SkBitmap sk_bitmap = lock.sk_bitmap();
     EXPECT_EQ(sk_bitmap.width(), size.width());
@@ -1554,7 +1580,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
 }
 
 TEST_P(ResourceProviderTest, TransferGLToSoftware) {
-  if (GetParam() != viz::ResourceType::kBitmap)
+  if (use_gpu())
     return;
 
   scoped_refptr<TestContextProvider> child_context_provider =
@@ -1572,8 +1598,9 @@ TEST_P(ResourceProviderTest, TransferGLToSoftware) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1 = child_resource_provider->CreateGpuTextureResource(
+      size, viz::ResourceTextureHint::kDefault, viz::RGBA_8888,
+      gfx::ColorSpace());
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider->CopyToResource(id1, data1, size);
 
@@ -1611,7 +1638,7 @@ TEST_P(ResourceProviderTest, TransferGLToSoftware) {
 }
 
 TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
-  if (GetParam() != viz::ResourceType::kBitmap)
+  if (use_gpu())
     return;
 
   gfx::Size size(1, 1);
@@ -1619,8 +1646,8 @@ TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1 =
+      child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id1, data1, size);
 
@@ -1667,13 +1694,22 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1;
+  viz::ResourceId id2;
+  if (use_gpu()) {
+    id1 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+    id2 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  } else {
+    id1 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+    id2 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  }
+
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id1, data1, size);
-
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data2[4] = {5, 5, 5, 5};
   child_resource_provider_->CopyToResource(id2, data2, size);
 
@@ -1690,7 +1726,7 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(2u, list.size());
-    if (GetParam() == viz::ResourceType::kTexture) {
+    if (use_gpu()) {
       EXPECT_TRUE(list[0].mailbox_holder.sync_token.HasData());
       EXPECT_TRUE(list[1].mailbox_holder.sync_token.HasData());
     }
@@ -1724,13 +1760,22 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id1 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id1;
+  viz::ResourceId id2;
+  if (use_gpu()) {
+    id1 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+    id2 = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  } else {
+    id1 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+    id2 =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  }
+
   uint8_t data1[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data1, size);
-
-  viz::ResourceId id2 = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   uint8_t data2[4] = {5, 5, 5, 5};
   child_resource_provider_->CopyToResource(id2, data2, size);
 
@@ -1747,7 +1792,7 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(2u, list.size());
-    if (GetParam() == viz::ResourceType::kTexture) {
+    if (use_gpu()) {
       EXPECT_TRUE(list[0].mailbox_holder.sync_token.HasData());
       EXPECT_TRUE(list[1].mailbox_holder.sync_token.HasData());
     }
@@ -1775,8 +1820,15 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
-  viz::ResourceId id = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  viz::ResourceId id;
+  if (use_gpu()) {
+    id = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  } else {
+    id =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  }
+
   uint8_t data[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id, data, size);
 
@@ -1792,7 +1844,7 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(1u, list.size());
-    if (GetParam() == viz::ResourceType::kTexture)
+    if (use_gpu())
       EXPECT_TRUE(list[0].mailbox_holder.sync_token.HasData());
     EXPECT_TRUE(child_resource_provider_->InUseByConsumer(id));
     resource_provider_->ReceiveFromChild(child_id, list);
@@ -1814,11 +1866,11 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
     resource_provider_->DeclareUsedResourcesFromChild(child_id, no_resources);
 
     ASSERT_EQ(1u, returned_to_child.size());
-    if (GetParam() == viz::ResourceType::kTexture)
+    if (use_gpu())
       EXPECT_TRUE(returned_to_child[0].sync_token.HasData());
     child_resource_provider_->ReceiveReturnsFromParent(returned_to_child);
+    EXPECT_EQ(0u, child_resource_provider_->num_resources());
   }
-  EXPECT_EQ(0u, child_resource_provider_->num_resources());
 }
 
 class ResourceProviderTestTextureFilters : public ResourceProviderTest {
@@ -1845,8 +1897,7 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     parent_context_provider->BindToCurrentThread();
 
     auto parent_resource_provider(std::make_unique<DisplayResourceProvider>(
-        parent_context_provider.get(), shared_bitmap_manager.get(), nullptr,
-        resource_settings));
+        parent_context_provider.get(), shared_bitmap_manager.get()));
 
     gfx::Size size(1, 1);
     viz::ResourceFormat format = viz::RGBA_8888;
@@ -1856,7 +1907,7 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     size_t pixel_size = TextureSizeBytes(size, format);
     ASSERT_EQ(4U, pixel_size);
 
-    viz::ResourceId id = child_resource_provider->CreateResource(
+    viz::ResourceId id = child_resource_provider->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
 
     // The new texture is created with GL_LINEAR.
@@ -1890,8 +1941,7 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     resource_ids_to_transfer.push_back(id);
     std::vector<viz::TransferableResource> list;
 
-    EXPECT_CALL(*child_context,
-                produceTextureDirectCHROMIUM(_, GL_TEXTURE_2D, _));
+    EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _));
 
     child_resource_provider->PrepareSendToParent(resource_ids_to_transfer,
                                                  &list);
@@ -1900,8 +1950,7 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     ASSERT_EQ(1u, list.size());
     EXPECT_EQ(static_cast<unsigned>(child_filter), list[0].filter);
 
-    EXPECT_CALL(*parent_context,
-                createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, _))
+    EXPECT_CALL(*parent_context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(parent_texture_id));
 
     parent_resource_provider->ReceiveFromChild(child_id, list);
@@ -1959,14 +2008,14 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
 };
 
 TEST_P(ResourceProviderTest, TextureFilters_ChildLinearParentNearest) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   ResourceProviderTestTextureFilters::RunTest(GL_LINEAR, GL_NEAREST);
 }
 
 TEST_P(ResourceProviderTest, TransferMailboxResources) {
   // Other mailbox transfers tested elsewhere.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   unsigned texture = context()->createTexture();
   context()->bindTexture(GL_TEXTURE_2D, texture);
@@ -1975,9 +2024,9 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
       GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, &data);
   gpu::Mailbox mailbox;
   context()->genMailboxCHROMIUM(mailbox.name);
-  context()->produceTextureDirectCHROMIUM(texture, GL_TEXTURE_2D, mailbox.name);
+  context()->produceTextureDirectCHROMIUM(texture, mailbox.name);
   gpu::SyncToken sync_token;
-  context()->genSyncToken(context()->insertFenceSync(), sync_token.GetData());
+  context()->genSyncToken(sync_token.GetData());
   EXPECT_TRUE(sync_token.HasData());
 
   // All the logic below assumes that the sync token releases are all positive.
@@ -2011,16 +2060,14 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
 
     context()->waitSyncToken(list[0].mailbox_holder.sync_token.GetConstData());
     unsigned other_texture =
-        context()->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+        context()->createAndConsumeTextureCHROMIUM(mailbox.name);
     uint8_t test_data[4] = { 0 };
     context()->GetPixels(gfx::Size(1, 1), viz::RGBA_8888, test_data);
     EXPECT_EQ(0, memcmp(data, test_data, sizeof(data)));
 
-    context()->produceTextureDirectCHROMIUM(other_texture, GL_TEXTURE_2D,
-                                            mailbox.name);
+    context()->produceTextureDirectCHROMIUM(other_texture, mailbox.name);
     context()->deleteTexture(other_texture);
-    context()->genSyncToken(context()->insertFenceSync(),
-                            list[0].mailbox_holder.sync_token.GetData());
+    context()->genSyncToken(list[0].mailbox_holder.sync_token.GetData());
     EXPECT_TRUE(list[0].mailbox_holder.sync_token.HasData());
 
     // Receive the resource, then delete it, expect the sync points to be
@@ -2067,16 +2114,14 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
 
     context()->waitSyncToken(list[0].mailbox_holder.sync_token.GetConstData());
     unsigned other_texture =
-        context()->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+        context()->createAndConsumeTextureCHROMIUM(mailbox.name);
     uint8_t test_data[4] = { 0 };
     context()->GetPixels(gfx::Size(1, 1), viz::RGBA_8888, test_data);
     EXPECT_EQ(0, memcmp(data, test_data, sizeof(data)));
 
-    context()->produceTextureDirectCHROMIUM(other_texture, GL_TEXTURE_2D,
-                                            mailbox.name);
+    context()->produceTextureDirectCHROMIUM(other_texture, mailbox.name);
     context()->deleteTexture(other_texture);
-    context()->genSyncToken(context()->insertFenceSync(),
-                            list[0].mailbox_holder.sync_token.GetData());
+    context()->genSyncToken(list[0].mailbox_holder.sync_token.GetData());
     EXPECT_TRUE(list[0].mailbox_holder.sync_token.HasData());
 
     // Delete the resource, which shouldn't do anything.
@@ -2095,19 +2140,26 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
   }
 
   context()->waitSyncToken(release_sync_token.GetConstData());
-  texture =
-      context()->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+  texture = context()->createAndConsumeTextureCHROMIUM(mailbox.name);
   context()->deleteTexture(texture);
 }
 
 TEST_P(ResourceProviderTest, LostResourceInParent) {
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
-  viz::ResourceId resource = child_resource_provider_->CreateResource(
-      size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
-  child_resource_provider_->AllocateForTesting(resource);
+
+  viz::ResourceId id;
+  if (use_gpu()) {
+    id = child_resource_provider_->CreateGpuTextureResource(
+        size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
+  } else {
+    id =
+        child_resource_provider_->CreateBitmapResource(size, gfx::ColorSpace());
+  }
+
+  child_resource_provider_->AllocateForTesting(id);
   // Expect a GL resource to be lost.
-  bool should_lose_resource = GetParam() == viz::ResourceType::kTexture;
+  bool should_lose_resource = use_gpu();
 
   std::vector<viz::ReturnedResource> returned_to_child;
   int child_id =
@@ -2115,7 +2167,7 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
   {
     // Transfer the resource to the parent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
-    resource_ids_to_transfer.push_back(resource);
+    resource_ids_to_transfer.push_back(id);
     std::vector<viz::TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
@@ -2123,7 +2175,7 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
 
     resource_provider_->ReceiveFromChild(child_id, list);
     viz::ResourceIdSet resource_ids_to_receive;
-    resource_ids_to_receive.insert(resource);
+    resource_ids_to_receive.insert(id);
     resource_provider_->DeclareUsedResourcesFromChild(child_id,
                                                       resource_ids_to_receive);
   }
@@ -2147,11 +2199,11 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
   }
 
   // A GL resource should be lost.
-  EXPECT_EQ(should_lose_resource, child_resource_provider_->IsLost(resource));
+  EXPECT_EQ(should_lose_resource, child_resource_provider_->IsLost(id));
 
   // Lost resources stay in use in the parent forever.
   EXPECT_EQ(should_lose_resource,
-            child_resource_provider_->InUseByConsumer(resource));
+            child_resource_provider_->InUseByConsumer(id));
 }
 
 
@@ -2195,8 +2247,7 @@ TEST_P(ResourceProviderTest, LostMailboxInParent) {
 
     ASSERT_EQ(1u, returned_to_child.size());
     // Losing an output surface only loses hardware resources.
-    EXPECT_EQ(returned_to_child[0].lost,
-              GetParam() == viz::ResourceType::kTexture);
+    EXPECT_EQ(returned_to_child[0].lost, use_gpu());
     child_resource_provider_->ReceiveReturnsFromParent(returned_to_child);
     returned_to_child.clear();
   }
@@ -2204,7 +2255,7 @@ TEST_P(ResourceProviderTest, LostMailboxInParent) {
   // Delete the resource in the child. Expect the resource to be lost if it's
   // a GL texture.
   child_resource_provider_->RemoveImportedResource(resource);
-  EXPECT_EQ(lost_resource, GetParam() == viz::ResourceType::kTexture);
+  EXPECT_EQ(lost_resource, use_gpu());
 }
 
 TEST_P(ResourceProviderTest, Shutdown) {
@@ -2265,11 +2316,13 @@ TEST_P(ResourceProviderTest, Shutdown) {
 
     // If the resource was exported and returned, then it should come with a
     // sync token.
-    if (GetParam() == viz::ResourceType::kTexture &&
-        (i == kShutdownAfterExportAndReturn ||
-         i == kShutdownAfterExportAndReturnWithLostResource ||
-         i == kShutdownAfterContextLossAfterExportAndReturn)) {
-      EXPECT_LE(sync_token.release_count(), release_sync_token.release_count());
+    if (use_gpu()) {
+      if (i == kShutdownAfterExportAndReturn ||
+          i == kShutdownAfterExportAndReturnWithLostResource ||
+          i == kShutdownAfterContextLossAfterExportAndReturn) {
+        EXPECT_LE(sync_token.release_count(),
+                  release_sync_token.release_count());
+      }
     }
 
     // We always get the ReleaseCallback called.
@@ -2285,54 +2338,73 @@ TEST_P(ResourceProviderTest, Shutdown) {
 
 TEST_P(ResourceProviderTest, ScopedSampler) {
   // Sampling is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
-  auto context_owned(std::make_unique<TextureStateTrackingContext>());
+  auto context_owned = std::make_unique<TextureStateTrackingContext>();
   TextureStateTrackingContext* context = context_owned.get();
   auto context_provider = TestContextProvider::Create(std::move(context_owned));
   context_provider->BindToCurrentThread();
 
+  viz::ResourceSettings resource_settings = CreateResourceSettings();
   auto resource_provider(std::make_unique<DisplayResourceProvider>(
-      context_provider.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), CreateResourceSettings()));
+      context_provider.get(), shared_bitmap_manager_.get()));
+
+  auto child_context_owned = std::make_unique<TextureStateTrackingContext>();
+  TextureStateTrackingContext* child_context = child_context_owned.get();
+
+  auto child_context_provider =
+      TestContextProvider::Create(std::move(child_context_owned));
+  child_context_provider->BindToCurrentThread();
+
+  auto child_resource_provider(std::make_unique<LayerTreeResourceProvider>(
+      child_context_provider.get(), shared_bitmap_manager_.get(),
+      gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
+      resource_settings));
 
   gfx::Size size(1, 1);
   viz::ResourceFormat format = viz::RGBA_8888;
   int texture_id = 1;
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = child_resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
 
   // Check that the texture gets created with the right sampler settings.
-  EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id))
+  EXPECT_CALL(*child_context, bindTexture(GL_TEXTURE_2D, texture_id))
       .Times(2);  // Once to create and once to allocate.
-  EXPECT_CALL(*context,
+  EXPECT_CALL(*child_context,
               texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
-  EXPECT_CALL(*context,
+  EXPECT_CALL(*child_context,
               texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
-  EXPECT_CALL(
-      *context,
-      texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE));
-  EXPECT_CALL(
-      *context,
-      texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE));
+  EXPECT_CALL(*child_context, texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,
+                                            GL_CLAMP_TO_EDGE));
+  EXPECT_CALL(*child_context, texParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,
+                                            GL_CLAMP_TO_EDGE));
 
-  resource_provider->AllocateForTesting(id);
-  Mock::VerifyAndClearExpectations(context);
+  child_resource_provider->AllocateForTesting(id);
+  Mock::VerifyAndClearExpectations(child_context);
 
+  // Return the mapped resource id.
+  ResourceProvider::ResourceIdMap resource_map =
+      SendResourceAndGetChildToParentMap({id}, resource_provider.get(),
+                                         child_resource_provider.get());
+  viz::ResourceId mapped_id = resource_map[id];
+  resource_provider->WaitSyncToken(mapped_id);
+  int parent_texture_id = 3;
   // Creating a sampler with the default filter should not change any texture
   // parameters.
   {
-    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
+        .WillOnce(Return(parent_texture_id));
+    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, parent_texture_id));
     DisplayResourceProvider::ScopedSamplerGL sampler(
-        resource_provider.get(), id, GL_TEXTURE_2D, GL_LINEAR);
+        resource_provider.get(), mapped_id, GL_TEXTURE_2D, GL_LINEAR);
     Mock::VerifyAndClearExpectations(context);
   }
 
   // Using a different filter should be reflected in the texture parameters.
   {
-    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
+    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, parent_texture_id));
     EXPECT_CALL(
         *context,
         texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST));
@@ -2340,26 +2412,26 @@ TEST_P(ResourceProviderTest, ScopedSampler) {
         *context,
         texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST));
     DisplayResourceProvider::ScopedSamplerGL sampler(
-        resource_provider.get(), id, GL_TEXTURE_2D, GL_NEAREST);
+        resource_provider.get(), mapped_id, GL_TEXTURE_2D, GL_NEAREST);
     Mock::VerifyAndClearExpectations(context);
   }
 
   // Test resetting to the default filter.
   {
-    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
+    EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, parent_texture_id));
     EXPECT_CALL(*context,
                 texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR));
     EXPECT_CALL(*context,
                 texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR));
     DisplayResourceProvider::ScopedSamplerGL sampler(
-        resource_provider.get(), id, GL_TEXTURE_2D, GL_LINEAR);
+        resource_provider.get(), mapped_id, GL_TEXTURE_2D, GL_LINEAR);
     Mock::VerifyAndClearExpectations(context);
   }
 }
 
 TEST_P(ResourceProviderTest, ManagedResource) {
   // Sampling is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2377,7 +2449,7 @@ TEST_P(ResourceProviderTest, ManagedResource) {
   int texture_id = 1;
 
   // Check that the texture gets created with the right sampler settings.
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
   EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
   EXPECT_CALL(*context,
@@ -2398,7 +2470,7 @@ TEST_P(ResourceProviderTest, ManagedResource) {
 
 TEST_P(ResourceProviderTest, TextureWrapMode) {
   // Sampling is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2416,7 +2488,7 @@ TEST_P(ResourceProviderTest, TextureWrapMode) {
 
   for (int texture_id = 1; texture_id <= 2; ++texture_id) {
     // Check that the texture gets created with the right sampler settings.
-    viz::ResourceId id = resource_provider->CreateResource(
+    viz::ResourceId id = resource_provider->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
     EXPECT_CALL(*context,
@@ -2436,7 +2508,7 @@ TEST_P(ResourceProviderTest, TextureWrapMode) {
 
 TEST_P(ResourceProviderTest, TextureHint) {
   // Sampling is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2460,7 +2532,7 @@ TEST_P(ResourceProviderTest, TextureHint) {
   };
   for (GLuint texture_id = 1; texture_id <= arraysize(hints); ++texture_id) {
     // Check that the texture gets created with the right sampler settings.
-    viz::ResourceId id = resource_provider->CreateResource(
+    viz::ResourceId id = resource_provider->CreateGpuTextureResource(
         size, hints[texture_id - 1], format, gfx::ColorSpace());
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
     EXPECT_CALL(*context,
@@ -2490,7 +2562,7 @@ TEST_P(ResourceProviderTest, TextureHint) {
 }
 
 TEST_P(ResourceProviderTest, ImportedResource_SharedMemory) {
-  if (GetParam() != viz::ResourceType::kBitmap)
+  if (use_gpu())
     return;
 
   gfx::Size size(64, 64);
@@ -2499,8 +2571,7 @@ TEST_P(ResourceProviderTest, ImportedResource_SharedMemory) {
       CreateAndFillSharedBitmap(shared_bitmap_manager_.get(), size, kBadBeef));
 
   auto resource_provider(std::make_unique<DisplayResourceProvider>(
-      nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
-      CreateResourceSettings()));
+      nullptr, shared_bitmap_manager_.get()));
 
   auto child_resource_provider(std::make_unique<LayerTreeResourceProvider>(
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
@@ -2572,8 +2643,7 @@ class ResourceProviderTestImportedResourceGLFilters
     context_provider->BindToCurrentThread();
 
     auto resource_provider(std::make_unique<DisplayResourceProvider>(
-        context_provider.get(), shared_bitmap_manager,
-        gpu_memory_buffer_manager, CreateResourceSettings()));
+        context_provider.get(), shared_bitmap_manager));
 
     auto child_context_owned(std::make_unique<TextureStateTrackingContext>());
     TextureStateTrackingContext* child_context = child_context_owned.get();
@@ -2587,16 +2657,15 @@ class ResourceProviderTestImportedResourceGLFilters
         CreateResourceSettings()));
 
     unsigned texture_id = 1;
-    gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+    gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                               gpu::CommandBufferId::FromUnsafeValue(0x12),
                               0x34);
-    unsigned target = GL_TEXTURE_2D;
     const GLuint64 current_fence_sync = child_context->GetNextFenceSync();
 
     EXPECT_CALL(*child_context, bindTexture(_, _)).Times(0);
     EXPECT_CALL(*child_context, waitSyncToken(_)).Times(0);
-    EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-    EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+    EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+    EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
     gpu::Mailbox gpu_mailbox;
     memcpy(gpu_mailbox.name, "Hello world", strlen("Hello world") + 1);
@@ -2607,8 +2676,8 @@ class ResourceProviderTestImportedResourceGLFilters
             base::Bind(&ReleaseCallback, &release_sync_token, &lost_resource));
 
     GLuint filter = mailbox_nearest_neighbor ? GL_NEAREST : GL_LINEAR;
-    auto resource = viz::TransferableResource::MakeGL(gpu_mailbox, filter,
-                                                      target, sync_token);
+    auto resource = viz::TransferableResource::MakeGL(
+        gpu_mailbox, filter, GL_TEXTURE_2D, sync_token);
 
     viz::ResourceId resource_id =
         child_resource_provider->ImportResource(resource, std::move(callback));
@@ -2644,11 +2713,11 @@ class ResourceProviderTestImportedResourceGLFilters
       resource_provider->WaitSyncToken(mapped_resource_id);
       Mock::VerifyAndClearExpectations(context);
 
-      EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(target, _))
+      EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
           .WillOnce(Return(texture_id));
-      EXPECT_CALL(*context, bindTexture(target, texture_id));
+      EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id));
 
-      EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
+      EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
 
       // The sampler will reset these if |mailbox_nearest_neighbor| does not
       // match |sampler_filter|.
@@ -2667,12 +2736,10 @@ class ResourceProviderTestImportedResourceGLFilters
       // When done with it, a sync point should be inserted, but no produce is
       // necessary.
       EXPECT_CALL(*child_context, bindTexture(_, _)).Times(0);
-      EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _, _))
-          .Times(0);
+      EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _)).Times(0);
 
       EXPECT_CALL(*child_context, waitSyncToken(_)).Times(0);
-      EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_, _))
-          .Times(0);
+      EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_)).Times(0);
     }
 
     EXPECT_EQ(0u, returned_to_child.size());
@@ -2691,7 +2758,7 @@ class ResourceProviderTestImportedResourceGLFilters
 
 TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_LinearToLinear) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   ResourceProviderTestImportedResourceGLFilters::RunTest(
@@ -2701,7 +2768,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_LinearToLinear) {
 
 TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_NearestToNearest) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   ResourceProviderTestImportedResourceGLFilters::RunTest(
@@ -2711,7 +2778,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_NearestToNearest) {
 
 TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_NearestToLinear) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   ResourceProviderTestImportedResourceGLFilters::RunTest(
@@ -2721,7 +2788,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_NearestToLinear) {
 
 TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_LinearToNearest) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   ResourceProviderTestImportedResourceGLFilters::RunTest(
@@ -2731,7 +2798,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTexture2D_LinearToNearest) {
 
 TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2740,8 +2807,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
   context_provider->BindToCurrentThread();
 
   auto resource_provider(std::make_unique<DisplayResourceProvider>(
-      context_provider.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), CreateResourceSettings()));
+      context_provider.get(), shared_bitmap_manager_.get()));
 
   auto child_context_owned(std::make_unique<TextureStateTrackingContext>());
   TextureStateTrackingContext* child_context = child_context_owned.get();
@@ -2754,23 +2820,22 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                             gpu::CommandBufferId::FromUnsafeValue(0x12), 0x34);
   const GLuint64 current_fence_sync = child_context->GetNextFenceSync();
-  unsigned target = GL_TEXTURE_EXTERNAL_OES;
 
   EXPECT_CALL(*child_context, bindTexture(_, _)).Times(0);
   EXPECT_CALL(*child_context, waitSyncToken(_)).Times(0);
-  EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-  EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*child_context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*child_context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
   gpu::Mailbox gpu_mailbox;
   memcpy(gpu_mailbox.name, "Hello world", strlen("Hello world") + 1);
   std::unique_ptr<viz::SingleReleaseCallback> callback =
       viz::SingleReleaseCallback::Create(base::Bind(&EmptyReleaseCallback));
 
-  auto resource = viz::TransferableResource::MakeGL(gpu_mailbox, GL_LINEAR,
-                                                    target, sync_token);
+  auto resource = viz::TransferableResource::MakeGL(
+      gpu_mailbox, GL_LINEAR, GL_TEXTURE_EXTERNAL_OES, sync_token);
 
   viz::ResourceId resource_id =
       child_resource_provider->ImportResource(resource, std::move(callback));
@@ -2809,10 +2874,10 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
 
     unsigned texture_id = 1;
 
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(target, _))
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(texture_id));
 
-    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
+    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
 
     DisplayResourceProvider::ScopedReadLockGL lock(resource_provider.get(),
                                                    mapped_resource_id);
@@ -2821,10 +2886,10 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
     // When done with it, a sync point should be inserted, but no produce is
     // necessary.
     EXPECT_CALL(*context, bindTexture(_, _)).Times(0);
-    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
+    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
 
     EXPECT_CALL(*context, waitSyncToken(_)).Times(0);
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_)).Times(0);
     Mock::VerifyAndClearExpectations(context);
   }
   EXPECT_EQ(0u, returned_to_child.size());
@@ -2840,7 +2905,7 @@ TEST_P(ResourceProviderTest, ImportedResource_GLTextureExternalOES) {
 
 TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_ResourceFromChild) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2849,18 +2914,16 @@ TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_ResourceFromChild) {
   context_provider->BindToCurrentThread();
 
   auto resource_provider = std::make_unique<DisplayResourceProvider>(
-      context_provider.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), CreateResourceSettings());
+      context_provider.get(), shared_bitmap_manager_.get());
 
-  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                             gpu::CommandBufferId::FromUnsafeValue(0x12), 0x34);
   const GLuint64 current_fence_sync = context->GetNextFenceSync();
-  unsigned target = GL_TEXTURE_2D;
 
   EXPECT_CALL(*context, bindTexture(_, _)).Times(0);
   EXPECT_CALL(*context, waitSyncToken(_)).Times(0);
-  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
   // Receive a resource from the child.
   std::vector<viz::ReturnedResource> returned;
@@ -2877,8 +2940,8 @@ TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_ResourceFromChild) {
   for (int i = 0; i < 100; ++i) {
     gpu::Mailbox gpu_mailbox;
     memcpy(gpu_mailbox.name, "Hello world", strlen("Hello world") + 1);
-    auto resource = viz::TransferableResource::MakeGL(gpu_mailbox, GL_LINEAR,
-                                                      target, sync_token);
+    auto resource = viz::TransferableResource::MakeGL(
+        gpu_mailbox, GL_LINEAR, GL_TEXTURE_2D, sync_token);
     resource.id = i;
     resource_provider->ReceiveFromChild(child, {resource});
     auto& map = resource_provider->GetChildToParentMap(child);
@@ -2898,7 +2961,7 @@ TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_ResourceFromChild) {
 
 TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_WithSyncToken) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2907,17 +2970,16 @@ TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_WithSyncToken) {
   context_provider->BindToCurrentThread();
 
   auto resource_provider = std::make_unique<DisplayResourceProvider>(
-      context_provider.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), CreateResourceSettings());
+      context_provider.get(), shared_bitmap_manager_.get());
 
-  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
+  gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO,
                             gpu::CommandBufferId::FromUnsafeValue(0x12), 0x34);
   const GLuint64 current_fence_sync = context->GetNextFenceSync();
 
   EXPECT_CALL(*context, bindTexture(_, _)).Times(0);
   EXPECT_CALL(*context, waitSyncToken(_)).Times(0);
-  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
   viz::ResourceId id = MakeGpuResourceAndSendToDisplay(
       'a', GL_LINEAR, GL_TEXTURE_2D, sync_token, resource_provider.get());
@@ -2942,7 +3004,7 @@ TEST_P(ResourceProviderTest, WaitSyncTokenIfNeeded_WithSyncToken) {
 TEST_P(ResourceProviderTest,
        ImportedResource_WaitSyncTokenIfNeeded_NoSyncToken) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2951,16 +3013,15 @@ TEST_P(ResourceProviderTest,
   context_provider->BindToCurrentThread();
 
   auto resource_provider = std::make_unique<DisplayResourceProvider>(
-      context_provider.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), CreateResourceSettings());
+      context_provider.get(), shared_bitmap_manager_.get());
 
   gpu::SyncToken sync_token;
   const GLuint64 current_fence_sync = context->GetNextFenceSync();
 
   EXPECT_CALL(*context, bindTexture(_, _)).Times(0);
   EXPECT_CALL(*context, waitSyncToken(_)).Times(0);
-  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
   viz::ResourceId id = MakeGpuResourceAndSendToDisplay(
       'h', GL_LINEAR, GL_TEXTURE_2D, sync_token, resource_provider.get());
@@ -2980,7 +3041,7 @@ TEST_P(ResourceProviderTest,
 
 TEST_P(ResourceProviderTest, ImportedResource_PrepareSendToParent_NoSyncToken) {
   // Mailboxing is only supported for GL textures.
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned(std::make_unique<TextureStateTrackingContext>());
@@ -2995,8 +3056,8 @@ TEST_P(ResourceProviderTest, ImportedResource_PrepareSendToParent_NoSyncToken) {
 
   EXPECT_CALL(*context, bindTexture(_, _)).Times(0);
   EXPECT_CALL(*context, waitSyncToken(_)).Times(0);
-  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _, _)).Times(0);
-  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, produceTextureDirectCHROMIUM(_, _)).Times(0);
+  EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_)).Times(0);
 
   auto resource = viz::TransferableResource::MakeGL(
       gpu::Mailbox::Generate(), GL_LINEAR, GL_TEXTURE_2D, gpu::SyncToken());
@@ -3093,7 +3154,7 @@ class AllocationTrackingContext3D : public TextureStateTrackingContext {
 };
 
 TEST_P(ResourceProviderTest, TextureAllocation) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
@@ -3115,7 +3176,7 @@ TEST_P(ResourceProviderTest, TextureAllocation) {
 
   EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
   // Lazy allocation. Don't allocate when creating the resource.
-  id = resource_provider->CreateResource(
+  id = resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
 
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
@@ -3129,7 +3190,7 @@ TEST_P(ResourceProviderTest, TextureAllocation) {
   EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
 
   // Do allocate when we set the pixels.
-  id = resource_provider->CreateResource(
+  id = resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
 
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
@@ -3147,11 +3208,11 @@ TEST_P(ResourceProviderTest, TextureAllocation) {
 }
 
 TEST_P(ResourceProviderTest, TextureStorageAllocation) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   auto context_owned =
-      base::MakeUnique<StrictMock<AllocationTrackingContext3D>>();
+      std::make_unique<StrictMock<AllocationTrackingContext3D>>();
   auto* context = context_owned.get();
   context->set_support_texture_storage(true);
   context->set_support_texture_usage(true);
@@ -3159,12 +3220,12 @@ TEST_P(ResourceProviderTest, TextureStorageAllocation) {
   auto context_provider = TestContextProvider::Create(std::move(context_owned));
   context_provider->BindToCurrentThread();
 
-  auto resource_provider(std::make_unique<LayerTreeResourceProvider>(
+  auto child_resource_provider(std::make_unique<LayerTreeResourceProvider>(
       context_provider.get(), shared_bitmap_manager_.get(),
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = child_resource_provider->CreateGpuTextureResource(
       gfx::Size(2, 2), viz::ResourceTextureHint::kDefault, viz::RGBA_8888,
       gfx::ColorSpace());
 
@@ -3174,14 +3235,14 @@ TEST_P(ResourceProviderTest, TextureStorageAllocation) {
   EXPECT_CALL(*context, texStorage2DEXT(GL_TEXTURE_2D, 1, GL_RGBA8_OES, 2, 2))
       .Times(1);
   EXPECT_CALL(*context, texParameteri(GL_TEXTURE_2D, _, _)).Times(AnyNumber());
-  resource_provider->AllocateForTesting(id);
+  child_resource_provider->AllocateForTesting(id);
 
   EXPECT_CALL(*context, RetireTextureId(kTextureId));
-  resource_provider->DeleteResource(id);
+  child_resource_provider->DeleteResource(id);
 }
 
 TEST_P(ResourceProviderTest, ScopedWriteLockGpuMemoryBuffer) {
-  if (GetParam() != viz::ResourceType::kGpuMemoryBuffer)
+  if (!use_gpu())
     return;
 
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
@@ -3196,10 +3257,10 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGpuMemoryBuffer) {
   const unsigned kTextureId = 123u;
   const unsigned kImageId = 234u;
 
-  auto resource_provider(std::make_unique<LayerTreeResourceProvider>(
+  auto resource_provider = std::make_unique<LayerTreeResourceProvider>(
       context_provider.get(), shared_bitmap_manager_.get(),
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
-      CreateResourceSettings()));
+      CreateResourceSettings());
 
   viz::ResourceId id = resource_provider->CreateGpuMemoryBufferResource(
       gfx::Size(kWidth, kHeight), viz::ResourceTextureHint::kDefault, format,
@@ -3207,11 +3268,6 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGpuMemoryBuffer) {
 
   InSequence sequence;
 
-  {
-    LayerTreeResourceProvider::ScopedWriteLockGpuMemoryBuffer lock(
-        resource_provider.get(), id);
-    EXPECT_TRUE(lock.GetGpuMemoryBuffer());
-  }
   // Create texture and image upon releasing the lock.
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(kTextureId));
   EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kTextureId));
@@ -3220,17 +3276,24 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGpuMemoryBuffer) {
   EXPECT_CALL(*context, createImageCHROMIUM(_, kWidth, kHeight, GL_RGBA))
       .WillOnce(Return(kImageId));
   EXPECT_CALL(*context, bindTexImage2DCHROMIUM(GL_TEXTURE_2D, kImageId));
-  Mock::VerifyAndClearExpectations(context);
 
   {
     LayerTreeResourceProvider::ScopedWriteLockGpuMemoryBuffer lock(
         resource_provider.get(), id);
     EXPECT_TRUE(lock.GetGpuMemoryBuffer());
   }
+  Mock::VerifyAndClearExpectations(context);
+
   // Upload to GPU again since image is dirty after the write lock.
   EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kTextureId));
   EXPECT_CALL(*context, releaseTexImage2DCHROMIUM(GL_TEXTURE_2D, kImageId));
   EXPECT_CALL(*context, bindTexImage2DCHROMIUM(GL_TEXTURE_2D, kImageId));
+
+  {
+    LayerTreeResourceProvider::ScopedWriteLockGpuMemoryBuffer lock(
+        resource_provider.get(), id);
+    EXPECT_TRUE(lock.GetGpuMemoryBuffer());
+  }
   Mock::VerifyAndClearExpectations(context);
 
   EXPECT_CALL(*context, destroyImageCHROMIUM(kImageId));
@@ -3238,7 +3301,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGpuMemoryBuffer) {
 }
 
 TEST_P(ResourceProviderTest, CompressedTextureETC1Allocate) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
@@ -3255,7 +3318,7 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Allocate) {
       CreateResourceSettings()));
   int texture_id = 123;
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, viz::ETC1, gfx::ColorSpace());
   EXPECT_NE(0u, id);
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
@@ -3267,7 +3330,7 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Allocate) {
 }
 
 TEST_P(ResourceProviderTest, CompressedTextureETC1Upload) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
@@ -3285,7 +3348,7 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Upload) {
   int texture_id = 123;
   uint8_t pixels[8];
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       size, viz::ResourceTextureHint::kDefault, viz::ETC1, gfx::ColorSpace());
   EXPECT_NE(0u, id);
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
@@ -3301,8 +3364,7 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Upload) {
 
 INSTANTIATE_TEST_CASE_P(ResourceProviderTests,
                         ResourceProviderTest,
-                        ::testing::Values(viz::ResourceType::kTexture,
-                                          viz::ResourceType::kBitmap));
+                        ::testing::Values(true, false));
 
 class TextureIdAllocationTrackingContext : public TestWebGraphicsContext3D {
  public:
@@ -3334,7 +3396,7 @@ TEST(ResourceProviderTest, TextureAllocationChunkSize) {
         kDelegatedSyncPointsRequired,
         CreateResourceSettings(kTextureAllocationChunkSize)));
 
-    viz::ResourceId id = resource_provider->CreateResource(
+    viz::ResourceId id = resource_provider->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
     resource_provider->AllocateForTesting(id);
     Mock::VerifyAndClearExpectations(context);
@@ -3350,7 +3412,7 @@ TEST(ResourceProviderTest, TextureAllocationChunkSize) {
         kDelegatedSyncPointsRequired,
         CreateResourceSettings(kTextureAllocationChunkSize)));
 
-    viz::ResourceId id = resource_provider->CreateResource(
+    viz::ResourceId id = resource_provider->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
     resource_provider->AllocateForTesting(id);
     Mock::VerifyAndClearExpectations(context);
@@ -3361,7 +3423,7 @@ TEST(ResourceProviderTest, TextureAllocationChunkSize) {
 }
 
 TEST_P(ResourceProviderTest, GetSyncTokenForResources) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
 
   gfx::Size size(1, 1);
@@ -3372,14 +3434,14 @@ TEST_P(ResourceProviderTest, GetSyncTokenForResources) {
 
   ResourceProvider::ResourceIdArray array;
   for (uint32_t i = 0; i < arraysize(release_counts); ++i) {
-    viz::ResourceId id = child_resource_provider_->CreateResource(
+    viz::ResourceId id = child_resource_provider_->CreateGpuTextureResource(
         size, viz::ResourceTextureHint::kDefault, format, gfx::ColorSpace());
     array.push_back(id);
 
-    ResourceProvider::ScopedWriteLockGL lock(child_resource_provider_.get(),
-                                             id);
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(
+        child_resource_provider_.get(), id);
     gpu::SyncToken token;
-    token.Set(gpu::CommandBufferNamespace::INVALID, 0, gpu::CommandBufferId(),
+    token.Set(gpu::CommandBufferNamespace::INVALID, gpu::CommandBufferId(),
               release_counts[i]);
     lock.set_sync_token(token);
   }
@@ -3390,7 +3452,7 @@ TEST_P(ResourceProviderTest, GetSyncTokenForResources) {
 }
 
 TEST_P(ResourceProviderTest, ScopedWriteLockGL) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
       new StrictMock<AllocationTrackingContext3D>);
@@ -3408,7 +3470,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL) {
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       gfx::Size(kWidth, kHeight), viz::ResourceTextureHint::kDefault, format,
       gfx::ColorSpace());
 
@@ -3423,14 +3485,16 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL) {
     EXPECT_CALL(*context, texImage2D(GL_TEXTURE_2D, 0, GLInternalFormat(format),
                                      kWidth, kHeight, 0, GLDataFormat(format),
                                      GLDataType(format), nullptr));
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(resource_provider.get(),
+                                                      id);
     EXPECT_EQ(lock.GetTexture(), kTextureId);
     Mock::VerifyAndClearExpectations(context);
   }
 
   // Subsequent uses will not allocate.
   {
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(resource_provider.get(),
+                                                      id);
     EXPECT_EQ(lock.GetTexture(), kTextureId);
   }
 
@@ -3439,7 +3503,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL) {
 }
 
 TEST_P(ResourceProviderTest, ScopedWriteLockGL_Overlay) {
-  if (GetParam() != viz::ResourceType::kTexture)
+  if (!use_gpu())
     return;
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
       new StrictMock<AllocationTrackingContext3D>);
@@ -3459,7 +3523,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Overlay) {
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       gfx::Size(kWidth, kHeight), viz::ResourceTextureHint::kOverlay, format,
       gfx::ColorSpace());
 
@@ -3474,14 +3538,16 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Overlay) {
     EXPECT_CALL(*context, texStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGBA8_OES,
                                                     GL_SCANOUT_CHROMIUM, kWidth,
                                                     kHeight));
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(resource_provider.get(),
+                                                      id);
     EXPECT_EQ(lock.GetTexture(), kTextureId);
     Mock::VerifyAndClearExpectations(context);
   }
 
   // Subsequent uses will not allocate.
   {
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockGL lock(resource_provider.get(),
+                                                      id);
     EXPECT_EQ(lock.GetTexture(), kTextureId);
   }
 
@@ -3489,8 +3555,8 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Overlay) {
   resource_provider->DeleteResource(id);
 }
 
-TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox) {
-  if (GetParam() != viz::ResourceType::kTexture)
+TEST_P(ResourceProviderTest, ScopedWriteLockRaster_Mailbox) {
+  if (!use_gpu())
     return;
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
       new StrictMock<AllocationTrackingContext3D>);
@@ -3509,7 +3575,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox) {
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       gfx::Size(kWidth, kHeight), viz::ResourceTextureHint::kDefault, format,
       gfx::ColorSpace());
 
@@ -3522,22 +3588,22 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox) {
     EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(kTextureId));
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kTextureId));
     EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockRaster lock(
+        resource_provider.get(), id);
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context,
-                produceTextureDirectCHROMIUM(kTextureId, GL_TEXTURE_2D, _));
+    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(kTextureId, _));
     lock.CreateMailbox();
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, _))
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(kWorkerTextureId));
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kWorkerTextureId));
     EXPECT_CALL(*context, texImage2D(GL_TEXTURE_2D, 0, GLInternalFormat(format),
                                      kWidth, kHeight, 0, GLDataFormat(format),
                                      GLDataType(format), nullptr));
     EXPECT_EQ(kWorkerTextureId,
-              lock.ConsumeTexture(context_provider->ContextGL()));
+              lock.ConsumeTexture(context_provider->RasterInterface()));
     Mock::VerifyAndClearExpectations(context);
 
     EXPECT_CALL(*context, RetireTextureId(kWorkerTextureId));
@@ -3547,21 +3613,22 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox) {
 
   // Subsequent uses will not create mailbox or allocate.
   {
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockRaster lock(
+        resource_provider.get(), id);
     lock.CreateMailbox();
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, _))
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(kWorkerTextureId));
     EXPECT_EQ(kWorkerTextureId,
-              lock.ConsumeTexture(context_provider->ContextGL()));
+              lock.ConsumeTexture(context_provider->RasterInterface()));
     Mock::VerifyAndClearExpectations(context);
 
     EXPECT_CALL(*context, RetireTextureId(kWorkerTextureId));
     context_provider->ContextGL()->DeleteTextures(1, &kWorkerTextureId);
 
-    sync_token = ResourceProvider::GenerateSyncTokenHelper(
-        context_provider->ContextGL());
+    sync_token = LayerTreeResourceProvider::GenerateSyncTokenHelper(
+        context_provider->RasterInterface());
     lock.set_sync_token(sync_token);
     Mock::VerifyAndClearExpectations(context);
   }
@@ -3572,8 +3639,8 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox) {
   resource_provider->DeleteResource(id);
 }
 
-TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox_Overlay) {
-  if (GetParam() != viz::ResourceType::kTexture)
+TEST_P(ResourceProviderTest, ScopedWriteLockRaster_Mailbox_Overlay) {
+  if (!use_gpu())
     return;
 
   std::unique_ptr<AllocationTrackingContext3D> context_owned(
@@ -3595,7 +3662,7 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox_Overlay) {
       gpu_memory_buffer_manager_.get(), kDelegatedSyncPointsRequired,
       CreateResourceSettings()));
 
-  viz::ResourceId id = resource_provider->CreateResource(
+  viz::ResourceId id = resource_provider->CreateGpuTextureResource(
       gfx::Size(kWidth, kHeight), viz::ResourceTextureHint::kOverlay, format,
       gfx::ColorSpace());
 
@@ -3608,22 +3675,22 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox_Overlay) {
     EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(kTextureId));
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kTextureId));
     EXPECT_CALL(*context, texParameteri(_, _, _)).Times(AnyNumber());
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockRaster lock(
+        resource_provider.get(), id);
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context,
-                produceTextureDirectCHROMIUM(kTextureId, GL_TEXTURE_2D, _));
+    EXPECT_CALL(*context, produceTextureDirectCHROMIUM(kTextureId, _));
     lock.CreateMailbox();
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, _))
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(kWorkerTextureId));
     EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, kWorkerTextureId));
     EXPECT_CALL(*context, texStorage2DImageCHROMIUM(GL_TEXTURE_2D, GL_RGBA8_OES,
                                                     GL_SCANOUT_CHROMIUM, kWidth,
                                                     kHeight));
     EXPECT_EQ(kWorkerTextureId,
-              lock.ConsumeTexture(context_provider->ContextGL()));
+              lock.ConsumeTexture(context_provider->RasterInterface()));
     Mock::VerifyAndClearExpectations(context);
 
     EXPECT_CALL(*context, RetireTextureId(kWorkerTextureId));
@@ -3633,18 +3700,19 @@ TEST_P(ResourceProviderTest, ScopedWriteLockGL_Mailbox_Overlay) {
 
   // Subsequent uses will not create mailbox or allocate.
   {
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider.get(), id);
+    LayerTreeResourceProvider::ScopedWriteLockRaster lock(
+        resource_provider.get(), id);
     lock.CreateMailbox();
     Mock::VerifyAndClearExpectations(context);
 
-    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, _))
+    EXPECT_CALL(*context, createAndConsumeTextureCHROMIUM(_))
         .WillOnce(Return(kWorkerTextureId));
     EXPECT_EQ(kWorkerTextureId,
-              lock.ConsumeTexture(context_provider->ContextGL()));
+              lock.ConsumeTexture(context_provider->RasterInterface()));
     Mock::VerifyAndClearExpectations(context);
 
-    sync_token = ResourceProvider::GenerateSyncTokenHelper(
-        context_provider->ContextGL());
+    sync_token = LayerTreeResourceProvider::GenerateSyncTokenHelper(
+        context_provider->RasterInterface());
     lock.set_sync_token(sync_token);
 
     EXPECT_CALL(*context, RetireTextureId(kWorkerTextureId));

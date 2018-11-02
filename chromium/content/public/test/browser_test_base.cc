@@ -31,15 +31,16 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "content/public/common/network_service_test.mojom.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_launcher.h"
 #include "content/public/test/test_utils.h"
 #include "content/test/content_browser_sanity_checker.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/network/public/interfaces/network_service_test.mojom.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/platform_window_defaults.h"
@@ -243,6 +244,9 @@ void BrowserTestBase::SetUp() {
   // not affect the results.
   command_line->AppendSwitchASCII(switches::kForceColorProfile, "srgb");
 
+  // Disable compositor Ukm in browser tests until crbug.com/761524 is resolved.
+  command_line->AppendSwitch(switches::kDisableCompositorUkmForTests);
+
   test_host_resolver_ = std::make_unique<TestHostResolver>();
 
   ContentBrowserSanityChecker scoped_enable_sanity_checks;
@@ -278,7 +282,7 @@ void BrowserTestBase::SetUp() {
   // process startup code. Pass the currently active trials to the subsequent
   // list via the command line.
   std::string field_trial_states;
-  base::FieldTrialList::AllStatesToString(&field_trial_states);
+  base::FieldTrialList::AllStatesToString(&field_trial_states, false);
   if (!field_trial_states.empty()) {
     // Please use ScopedFeatureList to modify feature and field trials at the
     // same time.
@@ -295,13 +299,20 @@ void BrowserTestBase::SetUp() {
   auto ui_task = std::make_unique<base::Closure>(base::Bind(
       &BrowserTestBase::ProxyRunTestOnMainThreadLoop, base::Unretained(this)));
 
+  auto created_main_parts_closure =
+      std::make_unique<CreatedMainPartsClosure>(base::Bind(
+          &BrowserTestBase::CreatedBrowserMainParts, base::Unretained(this)));
+
 #if defined(OS_ANDROID)
   MainFunctionParams params(*command_line);
   params.ui_task = ui_task.release();
+  params.created_main_parts_closure = created_main_parts_closure.release();
   // TODO(phajdan.jr): Check return code, http://crbug.com/374738 .
   BrowserMain(params);
 #else
   GetContentMainParams()->ui_task = ui_task.release();
+  GetContentMainParams()->created_main_parts_closure =
+      created_main_parts_closure.release();
   EXPECT_EQ(expected_exit_code_, ContentMain(*GetContentMainParams()));
 #endif
   TearDownInProcessBrowserTestFixture();
@@ -350,7 +361,6 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
     if (!disable_io_checks_)
       base::ThreadRestrictions::SetIOAllowed(old_io_allowed_value);
     TearDownOnMainThread();
-    PostRunTestOnMainThread();
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -371,6 +381,8 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
                                    run_loop.QuitClosure(), trace_file)));
     run_loop.Run();
   }
+
+  PostRunTestOnMainThread();
 }
 
 void BrowserTestBase::CreateTestServer(const base::FilePath& test_server_base) {
@@ -421,11 +433,13 @@ void BrowserTestBase::InitializeNetworkProcess() {
     host_resolver()->DisableModifications();
   }
 
-  if (!network_service)
+  // Send the host resolver rules to the network service if it's in use. No need
+  // to do this if it's running in the browser process though.
+  if (!network_service || IsNetworkServiceRunningInProcess())
     return;
 
   net::RuleBasedHostResolverProc::RuleList rules = host_resolver()->GetRules();
-  std::vector<mojom::RulePtr> mojo_rules;
+  std::vector<network::mojom::RulePtr> mojo_rules;
   for (const auto& rule : rules) {
     // For now, this covers all the rules used in content's tests.
     // TODO(jam: expand this when we try to make browser_tests and
@@ -437,7 +451,7 @@ void BrowserTestBase::InitializeNetworkProcess() {
         rule.address_family != net::AddressFamily::ADDRESS_FAMILY_UNSPECIFIED ||
         !!rule.latency_ms || rule.replacement.empty())
       continue;
-    mojom::RulePtr mojo_rule = mojom::Rule::New();
+    network::mojom::RulePtr mojo_rule = network::mojom::Rule::New();
     mojo_rule->host_pattern = rule.host_pattern;
     mojo_rule->replacement = rule.replacement;
     mojo_rules.push_back(std::move(mojo_rule));
@@ -446,7 +460,7 @@ void BrowserTestBase::InitializeNetworkProcess() {
   if (mojo_rules.empty())
     return;
 
-  mojom::NetworkServiceTestPtr network_service_test;
+  network::mojom::NetworkServiceTestPtr network_service_test;
   ServiceManagerConnection::GetForProcess()->GetConnector()->BindInterface(
       mojom::kNetworkServiceName, &network_service_test);
   mojo::SyncCallRestrictions::ScopedAllowSyncCall allow_sync_call;

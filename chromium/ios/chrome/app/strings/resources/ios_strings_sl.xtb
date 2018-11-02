@@ -34,6 +34,7 @@
 <translation id="145015347812617860">Št. elementov: <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Dvakrat se dotaknite, da preklopite nastavitev</translation>
 <translation id="152234381334907219">Nikoli shranjeno</translation>
+<translation id="1532451416480227577">Prikaži naslove in kreditne kartice iz Googla Pay</translation>
 <translation id="1540800554400757039">Naslov 1</translation>
 <translation id="1545749641540134597">Scan QR Code</translation>
 <translation id="1580783302095112590">Pošta je poslana.</translation>
@@ -96,6 +97,7 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="2718352093833049315">Samo v omrežju Wi-Fi</translation>
 <translation id="2747003861858887689">Prejšnje polje</translation>
 <translation id="2780046210906776326">Ni e-poštnih rač.</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Leave Tab Switcher</translation>
 <translation id="283291358677939992">Poišči na strani</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -177,6 +179,7 @@ Nekatera spletna mesta se bodo na primer odzvala na to zahtevo s prikazom oglaso
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Obvestilo o zasebnosti</translation>
 <translation id="4460091562821778167">Vsakič vprašaj, katera aplikacija naj se uporabi</translation>
+<translation id="4496373720959965247">Dodajte zavihke in preklapljate med stranmi</translation>
 <translation id="4508750114462689118">Zapri predstavitev prijave</translation>
 <translation id="4526249700380860531">Ogled in upravljanje shranjenih gesel na <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Try signing in again.</translation>
@@ -215,12 +218,12 @@ Podatki so šifrirani z vašim geslom za sinhronizacijo. Vnesite ga, če želite
 <translation id="5300589172476337783">Pokaži</translation>
 <translation id="5317780077021120954">Shrani</translation>
 <translation id="5327248766486351172">Ime</translation>
+<translation id="533632423981297619">Gesla bodo vidna vsakomur, ki si lahko ogleda izvoženo datoteko. Datoteke ne delite z nikomer.</translation>
 <translation id="5388358297987318779">Odpri sliko</translation>
 <translation id="5409365236829784218">Nameščena ni nobena apl. za odpiranje te datoteke.</translation>
 <translation id="5433691172869980887">Uporabniško ime kopirano</translation>
 <translation id="54401264925851789">Informacije o varnosti strani</translation>
 <translation id="5525269841082836315">Ustvarjanje gesla</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoff lets you start browsing a website on this device and then easily continue on your Mac. The current open website will appear in the Dock of your Mac.
 
 Handoff must also be enabled in the General section of Settings, and your devices must use the same iCloud account.</translation>
@@ -245,7 +248,6 @@ Handoff must also be enabled in the General section of Settings, and your device
 <translation id="5911030830365207728">Google Prevajalnik</translation>
 <translation id="5916664084637901428">Vklopljeno</translation>
 <translation id="5948291296578561264">S tem je mogoče shranjevati fotografije v knjižnico fotografij.</translation>
-<translation id="5953603475187800576">Prikaz naslovov in kreditnih kartic iz Google Payments</translation>
 <translation id="5955891643922670672">Ogled različice brez povezave</translation>
 <translation id="5964480694698977962">Create new incognito tab.</translation>
 <translation id="5965679971710331625">Prijavljeni ste</translation>
@@ -335,7 +337,6 @@ Podatki so bili šifrirani z vašim geslom za sinhronizacijo <ph name="TIME" />.
 <translation id="7514365320538308">Prenos</translation>
 <translation id="7537586195939242955">Elementa trenutno ni mogoče namesiti v Passbook.</translation>
 <translation id="7561196759112975576">Vedno</translation>
-<translation id="7588950540487816470">Fizični splet</translation>
 <translation id="7603852183842204213">Pojavna okna so blokirana (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Sync isn't working</translation>
 <translation id="7638584964844754484">Napačno geslo</translation>
@@ -348,6 +349,7 @@ Podatki so bili šifrirani z vašim geslom za sinhronizacijo <ph name="TIME" />.
 <translation id="780301667611848630">Ne, hvala</translation>
 <translation id="7859704718976024901">Zgodovina brskanja</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Izvozi gesla ...</translation>
 <translation id="7947953824732555851">Sprejem in prijava</translation>
 <translation id="7961015016161918242">Nikoli</translation>
 <translation id="7971521879845308059">Blokiraj pojavna okna</translation>
@@ -405,7 +407,6 @@ Podatki so bili šifrirani z vašim geslom za sinhronizacijo <ph name="TIME" />.
 <translation id="9083392325882095631">1 element</translation>
 <translation id="9100610230175265781">Zahtevano je geslo</translation>
 <translation id="9148126808321036104">Prijavite se znova</translation>
-<translation id="91549621916703028">Ustvarite več zavihkov za vse opravke</translation>
 <translation id="9157836665414082580">Onemogoči pogovorna okna</translation>
 <translation id="9188680907066685419">Odjava iz upravljanega računa</translation>
 <translation id="9203116392574189331">Handoff</translation>

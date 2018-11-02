@@ -64,6 +64,7 @@
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
 #include "public/platform/modules/webmidi/WebMIDIAccessor.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "third_party/WebKit/Source/platform/exported/WebClipboardImpl.h"
 #include "third_party/WebKit/common/origin_trials/trial_policy.h"
 
 namespace blink {
@@ -103,8 +104,8 @@ static void MaxObservedSizeFunction(size_t size_in_mb) {
 
 static void CallOnMainThreadFunction(WTF::MainThreadFunction function,
                                      void* context) {
-  Platform::Current()->MainThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *Platform::Current()->MainThread()->GetWebTaskRunner(), FROM_HERE,
       CrossThreadBind(function, CrossThreadUnretained(context)));
 }
 
@@ -112,7 +113,7 @@ Platform::Platform() : main_thread_(nullptr) {
   WTF::Partitions::Initialize(MaxObservedSizeFunction);
 }
 
-Platform::~Platform() {}
+Platform::~Platform() = default;
 
 void Platform::Initialize(Platform* platform) {
   DCHECK(!g_platform);
@@ -249,7 +250,9 @@ std::unique_ptr<WebGestureCurve> Platform::CreateFlingAnimationCurve(
 }
 
 std::unique_ptr<WebRTCPeerConnectionHandler>
-Platform::CreateRTCPeerConnectionHandler(WebRTCPeerConnectionHandlerClient*) {
+Platform::CreateRTCPeerConnectionHandler(
+    WebRTCPeerConnectionHandlerClient*,
+    scoped_refptr<base::SingleThreadTaskRunner>) {
   return nullptr;
 }
 
@@ -287,6 +290,12 @@ Platform::CreateImageCaptureFrameGrabber() {
 
 std::unique_ptr<WebTrialTokenValidator> Platform::CreateTrialTokenValidator() {
   return nullptr;
+}
+
+// TODO(slangley): Remove this once we can get pepper to use mojo directly.
+WebClipboard* Platform::Clipboard() {
+  DEFINE_STATIC_LOCAL(WebClipboardImpl, clipboard, ());
+  return &clipboard;
 }
 
 }  // namespace blink

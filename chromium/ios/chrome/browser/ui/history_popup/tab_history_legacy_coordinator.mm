@@ -10,11 +10,16 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/history_popup_commands.h"
+#import "ios/chrome/browser/ui/fullscreen/chrome_coordinator+fullscreen_disabling.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_constants.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_positioner.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_presentation.h"
 #import "ios/chrome/browser/ui/history_popup/requirements/tab_history_ui_updater.h"
 #import "ios/chrome/browser/ui/history_popup/tab_history_popup_controller.h"
+#include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/toolbar/public/toolbar_controller_base_feature.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
 
@@ -64,11 +69,16 @@ using base::UserMetricsAction;
   Tab* tab = [self.tabModel currentTab];
   web::NavigationItemList backwardItems =
       [tab navigationManager]->GetBackwardItems();
-  CGPoint origin = [
-      [self.presentationProvider viewForTabHistoryPresentation].window
-      convertPoint:[self.positionProvider
-                       originPointForToolbarButton:ToolbarButtonTypeBack]
-            toView:[self.presentationProvider viewForTabHistoryPresentation]];
+
+  CGPoint origin = CGPointZero;
+  if (base::FeatureList::IsEnabled(kCleanToolbar)) {
+    origin = [self popupOriginForNamedGuide:kBackButtonGuide];
+  } else {
+    origin = [[self.presentationProvider viewForTabHistoryPresentation].window
+        convertPoint:[self.positionProvider
+                         originPointForToolbarButton:ToolbarButtonTypeBack]
+              toView:[self.presentationProvider viewForTabHistoryPresentation]];
+  }
 
   [self.tabHistoryUIUpdater
       updateUIForTabHistoryPresentationFrom:ToolbarButtonTypeBack];
@@ -79,11 +89,16 @@ using base::UserMetricsAction;
   Tab* tab = [self.tabModel currentTab];
   web::NavigationItemList forwardItems =
       [tab navigationManager]->GetForwardItems();
-  CGPoint origin = [
-      [self.presentationProvider viewForTabHistoryPresentation].window
-      convertPoint:[self.positionProvider
-                       originPointForToolbarButton:ToolbarButtonTypeForward]
-            toView:[self.presentationProvider viewForTabHistoryPresentation]];
+
+  CGPoint origin = CGPointZero;
+  if (base::FeatureList::IsEnabled(kCleanToolbar)) {
+    origin = [self popupOriginForNamedGuide:kForwardButtonGuide];
+  } else {
+    origin = [[self.presentationProvider viewForTabHistoryPresentation].window
+        convertPoint:[self.positionProvider
+                         originPointForToolbarButton:ToolbarButtonTypeForward]
+              toView:[self.presentationProvider viewForTabHistoryPresentation]];
+  }
 
   [self.tabHistoryUIUpdater
       updateUIForTabHistoryPresentationFrom:ToolbarButtonTypeForward];
@@ -96,6 +111,19 @@ using base::UserMetricsAction;
 }
 
 #pragma mark - Helper Methods
+
+// Returns the origin point of the popup for the |guideName|.
+- (CGPoint)popupOriginForNamedGuide:(GuideName*)guideName {
+  UILayoutGuide* guide = FindNamedGuide(
+      guideName, [self.presentationProvider viewForTabHistoryPresentation]);
+  DCHECK(guide);
+  CGPoint leadingBottomCorner =
+      CGPointMake(CGRectGetLeadingEdge(guide.layoutFrame),
+                  CGRectGetMaxY(guide.layoutFrame));
+  return [guide.owningView
+      convertPoint:leadingBottomCorner
+            toView:[self.presentationProvider viewForTabHistoryPresentation]];
+}
 
 // Present a Tab History Popup that displays |items|, and its view is presented
 // from |origin|.
@@ -120,6 +148,10 @@ using base::UserMetricsAction;
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kTabHistoryPopupWillShowNotification
                     object:nil];
+
+  // Disable fullscreen while the tab history popup is started.
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
+    [self didStartFullscreenDisablingUI];
 
   // Register to receive notification for when the App is backgrounded so we can
   // dismiss the TabHistoryPopup.
@@ -153,6 +185,10 @@ using base::UserMetricsAction;
   [[NSNotificationCenter defaultCenter]
       postNotificationName:kTabHistoryPopupWillHideNotification
                     object:nil];
+
+  // Reenable fullscreen since the popup is dismissed.
+  if (base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
+    [self didStopFullscreenDisablingUI];
 }
 
 #pragma mark - PopupMenuDelegate

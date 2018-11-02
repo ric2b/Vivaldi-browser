@@ -48,7 +48,6 @@
 <translation id="255937426064304553">美国英语（国际）</translation>
 <translation id="2563185590376525700">青蛙</translation>
 <translation id="2649120831653069427">彩虹鱼</translation>
-<translation id="2656923396825879524">几何图 3</translation>
 <translation id="2735698359135166290">罗马尼亚语标准键盘</translation>
 <translation id="2771816809568414714">奶酪</translation>
 <translation id="2781645665747935084">比利时语</translation>
@@ -85,8 +84,6 @@
 <translation id="3606220979431771195">土耳其语 F</translation>
 <translation id="3619115746895587757">卡布奇诺</translation>
 <translation id="3678559383040232393">马耳他语键盘</translation>
-<translation id="3728399474846997774">几何图 2</translation>
-<translation id="3734201824773416162">几何图 1</translation>
 <translation id="3801082500826908679">法罗语</translation>
 <translation id="3809272675881623365">兔子</translation>
 <translation id="3815016854028376614">注音输入法</translation>
@@ -97,7 +94,6 @@
 <translation id="3858678421048828670">意大利语键盘</translation>
 <translation id="3910699493603749297">高棉语键盘</translation>
 <translation id="391445228316373457">尼泊尔语键盘（注音）</translation>
-<translation id="3947050919258841761">几何图 5</translation>
 <translation id="3958548648197196644">猕猴桃</translation>
 <translation id="4070370845051020638">粤语输入法</translation>
 <translation id="4072248638558688893">泰米尔语键盘（注音）</translation>
@@ -119,6 +115,7 @@
 <translation id="4694604912444486114">猴子</translation>
 <translation id="4711094779914110278">土耳其语</translation>
 <translation id="4725511304875193254">柯基犬</translation>
+<translation id="4737050008115666127">起落场</translation>
 <translation id="4747271164117300400">马其顿语</translation>
 <translation id="4749157430980974800">格鲁吉亚语键盘</translation>
 <translation id="4755240240651974342">芬兰语键盘</translation>
@@ -152,6 +149,7 @@
 <translation id="5465122519792752163">尼泊尔语键盘(InScript)</translation>
 <translation id="5469868506864199649">意大利语</translation>
 <translation id="5500122897333236901">冰岛语</translation>
+<translation id="5508696409934741614">圆点</translation>
 <translation id="5533555070048896610">音译(namaste → नमस्ते)</translation>
 <translation id="5605830556594064952">美国英语(Dvorak)</translation>
 <translation id="5640179856859982418">瑞士键盘</translation>
@@ -212,12 +210,12 @@
 <translation id="7474889694310679759">英语（加拿大）键盘</translation>
 <translation id="751507702149411736">白俄罗斯语</translation>
 <translation id="7547811415869834682">荷兰语</translation>
+<translation id="7603724359189955920">网格</translation>
 <translation id="770015031906360009">希腊语</translation>
 <translation id="7706319470528945664">葡萄牙语键盘</translation>
 <translation id="7774365994322694683">鸟</translation>
 <translation id="7825423931463735974">泰米尔语键盘(Tamil99)</translation>
 <translation id="7853966320808728790">法语 BÉPO</translation>
-<translation id="7872088194351932564">几何图 4</translation>
 <translation id="7896906914454843592">美式扩展键盘</translation>
 <translation id="7898607018410277265">古吉拉特语键盘（新注音）</translation>
 <translation id="7917972308273378936">立陶宛语键盘</translation>
@@ -243,6 +241,7 @@
 <translation id="8432745813735585631">英语（美国）Colemak 键盘</translation>
 <translation id="8437209419043462667">美国英语</translation>
 <translation id="8467473010914675605">韩语输入法</translation>
+<translation id="8477649328507734757">同心圆</translation>
 <translation id="8521441079177373948">英国英语</translation>
 <translation id="8551494947769799688">拉脱维亚语</translation>
 <translation id="8561206103590473338">大象</translation>
@@ -261,4 +260,5 @@
 <translation id="913758436357682283">缅甸语Myansan键盘</translation>
 <translation id="9153744823707037316">行列输入法</translation>
 <translation id="9206487995878691001">仓颉输入法</translation>
+<translation id="9219908252191632183">月球表面</translation>
 </translationbundle>

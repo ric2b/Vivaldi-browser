@@ -4,6 +4,7 @@
 
 #include "core/inspector/InspectorHighlight.h"
 
+#include "base/macros.h"
 #include "core/dom/PseudoElement.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
@@ -25,11 +26,10 @@ namespace {
 
 class PathBuilder {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(PathBuilder);
 
  public:
   PathBuilder() : path_(protocol::ListValue::create()) {}
-  virtual ~PathBuilder() {}
+  virtual ~PathBuilder() = default;
 
   std::unique_ptr<protocol::ListValue> Release() { return std::move(path_); }
 
@@ -54,6 +54,7 @@ class PathBuilder {
                                   size_t length);
 
   std::unique_ptr<protocol::ListValue> path_;
+  DISALLOW_COPY_AND_ASSIGN(PathBuilder);
 };
 
 void PathBuilder::AppendPathCommandAndPoints(const char* command,
@@ -319,7 +320,7 @@ InspectorHighlight::InspectorHighlight(
     element_info_ = BuildElementInfo(ToElement(node));
 }
 
-InspectorHighlight::~InspectorHighlight() {}
+InspectorHighlight::~InspectorHighlight() = default;
 
 void InspectorHighlight::AppendQuad(const FloatQuad& quad,
                                     const Color& fill_color,

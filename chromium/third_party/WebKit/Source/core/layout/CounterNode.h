@@ -23,7 +23,6 @@
 #define CounterNode_h
 
 #include "platform/wtf/Forward.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefCounted.h"
 
 // This implements a counter tree that is used for finding parents in counters()
@@ -77,6 +76,13 @@ class CounterNode : public RefCounted<CounterNode> {
 
   // identifier must match the identifier of this counter.
   void RemoveChild(CounterNode*);
+
+  // Moves all non-reset next siblings of first_node to be children of
+  // new_parent. Used when we insert new reset nodes that requires reparenting
+  // existing nodes.
+  static void MoveNonResetSiblingsToChildOf(CounterNode* first_node,
+                                            CounterNode& new_parent,
+                                            const AtomicString& identifier);
 
  private:
   CounterNode(LayoutObject&, bool is_reset, int value);

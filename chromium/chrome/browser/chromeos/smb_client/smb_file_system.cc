@@ -4,36 +4,189 @@
 
 #include "chrome/browser/chromeos/smb_client/smb_file_system.h"
 
+#include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "chrome/browser/chromeos/file_system_provider/service.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/smb_provider_client.h"
+
 namespace chromeos {
+
+namespace {
+
+// This is a bogus data URI.
+// The Files app will attempt to download a whole image to create a thumbnail
+// any time you visit a folder. A bug (crbug.com/548050) tracks not doing that
+// for NETWORK providers. This work around is to supply an icon but make it
+// bogus so it falls back to the generic icon.
+constexpr char kUnknownImageDataUri[] = "data:image/png;base64,X";
+
+using file_system_provider::ProvidedFileSystemInterface;
+
+bool RequestedIsDirectory(
+    ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  return fields & ProvidedFileSystemInterface::MetadataField::
+                      METADATA_FIELD_IS_DIRECTORY;
+}
+
+bool RequestedName(ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  return fields &
+         ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_NAME;
+}
+
+bool RequestedSize(ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  return fields &
+         ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_SIZE;
+}
+
+bool RequestedModificationTime(
+    ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  return fields & ProvidedFileSystemInterface::MetadataField::
+                      METADATA_FIELD_MODIFICATION_TIME;
+}
+
+bool RequestedThumbnail(ProvidedFileSystemInterface::MetadataFieldMask fields) {
+  return fields &
+         ProvidedFileSystemInterface::MetadataField::METADATA_FIELD_THUMBNAIL;
+}
+
+}  // namespace
+
 namespace smb_client {
+
+namespace {
+
+storage::DirectoryEntry::DirectoryEntryType MapEntryType(bool is_directory) {
+  return is_directory ? storage::DirectoryEntry::DIRECTORY
+                      : storage::DirectoryEntry::FILE;
+}
+
+}  // namespace
 
 using file_system_provider::AbortCallback;
 
 SmbFileSystem::SmbFileSystem(
-    const file_system_provider::ProvidedFileSystemInfo& file_system_info)
-    : file_system_info_(file_system_info), weak_ptr_factory_(this) {}
+    const file_system_provider::ProvidedFileSystemInfo& file_system_info,
+    UnmountCallback unmount_callback)
+    : file_system_info_(file_system_info),
+      unmount_callback_(std::move(unmount_callback)),
+      weak_ptr_factory_(this) {}
 
 SmbFileSystem::~SmbFileSystem() {}
 
+// static
+base::File::Error SmbFileSystem::TranslateError(smbprovider::ErrorType error) {
+  DCHECK_NE(smbprovider::ERROR_NONE, error);
+
+  switch (error) {
+    case smbprovider::ERROR_OK:
+      return base::File::FILE_OK;
+    case smbprovider::ERROR_FAILED:
+      return base::File::FILE_ERROR_FAILED;
+    case smbprovider::ERROR_IN_USE:
+      return base::File::FILE_ERROR_IN_USE;
+    case smbprovider::ERROR_EXISTS:
+      return base::File::FILE_ERROR_EXISTS;
+    case smbprovider::ERROR_NOT_FOUND:
+      return base::File::FILE_ERROR_NOT_FOUND;
+    case smbprovider::ERROR_ACCESS_DENIED:
+      return base::File::FILE_ERROR_ACCESS_DENIED;
+    case smbprovider::ERROR_TOO_MANY_OPENED:
+      return base::File::FILE_ERROR_TOO_MANY_OPENED;
+    case smbprovider::ERROR_NO_MEMORY:
+      return base::File::FILE_ERROR_NO_MEMORY;
+    case smbprovider::ERROR_NO_SPACE:
+      return base::File::FILE_ERROR_NO_SPACE;
+    case smbprovider::ERROR_NOT_A_DIRECTORY:
+      return base::File::FILE_ERROR_NOT_A_DIRECTORY;
+    case smbprovider::ERROR_INVALID_OPERATION:
+      return base::File::FILE_ERROR_INVALID_OPERATION;
+    case smbprovider::ERROR_SECURITY:
+      return base::File::FILE_ERROR_SECURITY;
+    case smbprovider::ERROR_ABORT:
+      return base::File::FILE_ERROR_ABORT;
+    case smbprovider::ERROR_NOT_A_FILE:
+      return base::File::FILE_ERROR_NOT_A_FILE;
+    case smbprovider::ERROR_NOT_EMPTY:
+      return base::File::FILE_ERROR_NOT_EMPTY;
+    case smbprovider::ERROR_INVALID_URL:
+      return base::File::FILE_ERROR_INVALID_URL;
+    case smbprovider::ERROR_IO:
+      return base::File::FILE_ERROR_IO;
+    case smbprovider::ERROR_DBUS_PARSE_FAILED:
+      // DBUS_PARSE_FAILED maps to generic ERROR_FAILED
+      LOG(ERROR) << "DBUS PARSE FAILED";
+      return base::File::FILE_ERROR_FAILED;
+    default:
+      break;
+  }
+
+  NOTREACHED();
+  return base::File::FILE_ERROR_FAILED;
+}
+
+int32_t SmbFileSystem::GetMountId() const {
+  int32_t mount_id;
+  bool result =
+      base::StringToInt(file_system_info_.file_system_id(), &mount_id);
+  DCHECK(result);
+  return mount_id;
+}
+
+SmbProviderClient* SmbFileSystem::GetSmbProviderClient() const {
+  return chromeos::DBusThreadManager::Get()->GetSmbProviderClient();
+}
+
+void SmbFileSystem::Abort() {
+  // TODO(zentaro): To implement Abort() fully will require storing a
+  // request id unique to each method call and also passing it to the daemon.
+  // However none of current operations on the daemon are cancelable, so
+  // until there are operations that can actually be cancelled this will
+  // be a no-op.
+}
+
+AbortCallback SmbFileSystem::CreateAbortCallback() {
+  return base::BindRepeating(&SmbFileSystem::Abort,
+                             weak_ptr_factory_.GetWeakPtr());
+}
+
 AbortCallback SmbFileSystem::RequestUnmount(
     const storage::AsyncFileUtil::StatusCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  GetSmbProviderClient()->Unmount(
+      GetMountId(), base::BindOnce(&SmbFileSystem::HandleRequestUnmountCallback,
+                                   weak_ptr_factory_.GetWeakPtr(), callback));
+  return CreateAbortCallback();
+}
+
+void SmbFileSystem::HandleRequestUnmountCallback(
+    const storage::AsyncFileUtil::StatusCallback& callback,
+    smbprovider::ErrorType error) {
+  if (TranslateError(error) == base::File::FILE_OK) {
+    callback.Run(RunUnmountCallback(
+        file_system_info_.provider_id(), file_system_info_.file_system_id(),
+        file_system_provider::Service::UNMOUNT_REASON_USER));
+  }
+  callback.Run(TranslateError(error));
 }
 
 AbortCallback SmbFileSystem::GetMetadata(
     const base::FilePath& entry_path,
     ProvidedFileSystemInterface::MetadataFieldMask fields,
     const ProvidedFileSystemInterface::GetMetadataCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  GetSmbProviderClient()->GetMetadataEntry(
+      GetMountId(), entry_path,
+      base::BindOnce(&SmbFileSystem::HandleRequestGetMetadataEntryCallback,
+                     weak_ptr_factory_.GetWeakPtr(), fields, callback));
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::GetActions(
     const std::vector<base::FilePath>& entry_paths,
     const GetActionsCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  const std::vector<file_system_provider::Action> actions;
+  // No actions are currently supported.
+  callback.Run(actions, base::File::FILE_OK);
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::ExecuteAction(
@@ -41,28 +194,53 @@ AbortCallback SmbFileSystem::ExecuteAction(
     const std::string& action_id,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::ReadDirectory(
     const base::FilePath& directory_path,
     const storage::AsyncFileUtil::ReadDirectoryCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  GetSmbProviderClient()->ReadDirectory(
+      GetMountId(), directory_path,
+      base::BindOnce(&SmbFileSystem::HandleRequestReadDirectoryCallback,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::OpenFile(const base::FilePath& file_path,
                                       file_system_provider::OpenFileMode mode,
                                       const OpenFileCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  bool writeable =
+      mode == file_system_provider::OPEN_FILE_MODE_WRITE ? true : false;
+  GetSmbProviderClient()->OpenFile(
+      GetMountId(), file_path, writeable,
+      base::BindOnce(&SmbFileSystem::HandleRequestOpenFileCallback,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
+  return CreateAbortCallback();
+}
+
+void SmbFileSystem::HandleRequestOpenFileCallback(
+    const OpenFileCallback& callback,
+    smbprovider::ErrorType error,
+    int32_t file_id) const {
+  callback.Run(file_id, TranslateError(error));
 }
 
 AbortCallback SmbFileSystem::CloseFile(
     int file_handle,
     const storage::AsyncFileUtil::StatusCallback& callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  GetSmbProviderClient()->CloseFile(
+      GetMountId(), file_handle,
+      base::BindOnce(&SmbFileSystem::HandleRequestCloseFileCallback,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
+  return CreateAbortCallback();
+}
+
+// TODO(baileyberro): refactor basic error callbacks out into one function.
+void SmbFileSystem::HandleRequestCloseFileCallback(
+    const storage::AsyncFileUtil::StatusCallback& callback,
+    smbprovider::ErrorType error) const {
+  callback.Run(TranslateError(error));
 }
 
 AbortCallback SmbFileSystem::ReadFile(
@@ -72,7 +250,7 @@ AbortCallback SmbFileSystem::ReadFile(
     int length,
     const ReadChunkReceivedCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::CreateDirectory(
@@ -80,14 +258,14 @@ AbortCallback SmbFileSystem::CreateDirectory(
     bool recursive,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::CreateFile(
     const base::FilePath& file_path,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::DeleteEntry(
@@ -95,7 +273,7 @@ AbortCallback SmbFileSystem::DeleteEntry(
     bool recursive,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::CopyEntry(
@@ -103,7 +281,7 @@ AbortCallback SmbFileSystem::CopyEntry(
     const base::FilePath& target_path,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::MoveEntry(
@@ -111,7 +289,7 @@ AbortCallback SmbFileSystem::MoveEntry(
     const base::FilePath& target_path,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::Truncate(
@@ -119,7 +297,7 @@ AbortCallback SmbFileSystem::Truncate(
     int64_t length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::WriteFile(
@@ -129,7 +307,7 @@ AbortCallback SmbFileSystem::WriteFile(
     int length,
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
-  return AbortCallback();
+  return CreateAbortCallback();
 }
 
 AbortCallback SmbFileSystem::AddWatcher(
@@ -140,8 +318,11 @@ AbortCallback SmbFileSystem::AddWatcher(
     const storage::AsyncFileUtil::StatusCallback& callback,
     const storage::WatcherManager::NotificationCallback&
         notification_callback) {
-  NOTIMPLEMENTED();
-  return AbortCallback();
+  // Watchers are not supported.
+  // This method should not be getting called since watchable is set to false.
+  // crbug.com/796334.
+  callback.Run(base::File::FILE_ERROR_INVALID_OPERATION);
+  return CreateAbortCallback();
 }
 
 void SmbFileSystem::RemoveWatcher(
@@ -149,7 +330,10 @@ void SmbFileSystem::RemoveWatcher(
     const base::FilePath& entry_path,
     bool recursive,
     const storage::AsyncFileUtil::StatusCallback& callback) {
-  NOTIMPLEMENTED();
+  // Watchers are not supported.
+  // This method should not be getting called since watchable is set to false.
+  // http://www.crbug.com/796334.
+  callback.Run(base::File::FILE_ERROR_INVALID_OPERATION);
 }
 
 const file_system_provider::ProvidedFileSystemInfo&
@@ -163,7 +347,9 @@ file_system_provider::RequestManager* SmbFileSystem::GetRequestManager() {
 }
 
 file_system_provider::Watchers* SmbFileSystem::GetWatchers() {
-  NOTIMPLEMENTED();
+  // Watchers are not supported.
+  // This method should not be getting called since watchable is set to false.
+  // http://www.crbug.com/796334.
   return &watchers_;
 }
 
@@ -196,6 +382,59 @@ void SmbFileSystem::SmbFileSystem::Notify(
 void SmbFileSystem::Configure(
     const storage::AsyncFileUtil::StatusCallback& callback) {
   NOTIMPLEMENTED();
+}
+
+void SmbFileSystem::HandleRequestReadDirectoryCallback(
+    const storage::AsyncFileUtil::ReadDirectoryCallback& callback,
+    smbprovider::ErrorType error,
+    const smbprovider::DirectoryEntryList& entries) const {
+  storage::AsyncFileUtil::EntryList entry_list;
+  for (const smbprovider::DirectoryEntry& entry : entries.entries()) {
+    entry_list.emplace_back(entry.name(), MapEntryType(entry.is_directory()));
+  }
+  // TODO(allenvic): Implement has_more (crbug.com/796246).
+  callback.Run(TranslateError(error), entry_list, false /* has_more */);
+}
+
+void SmbFileSystem::HandleRequestGetMetadataEntryCallback(
+    ProvidedFileSystemInterface::MetadataFieldMask fields,
+    const ProvidedFileSystemInterface::GetMetadataCallback& callback,
+    smbprovider::ErrorType error,
+    const smbprovider::DirectoryEntry& entry) const {
+  if (error != smbprovider::ERROR_OK) {
+    callback.Run(std::unique_ptr<file_system_provider::EntryMetadata>(),
+                 TranslateError(error));
+    return;
+  }
+  std::unique_ptr<file_system_provider::EntryMetadata> metadata =
+      std::make_unique<file_system_provider::EntryMetadata>();
+  if (RequestedIsDirectory(fields)) {
+    metadata->is_directory = std::make_unique<bool>(entry.is_directory());
+  }
+  if (RequestedName(fields)) {
+    metadata->name = std::make_unique<std::string>(entry.name());
+  }
+  if (RequestedSize(fields)) {
+    metadata->size = std::make_unique<int64_t>(entry.size());
+  }
+  if (RequestedModificationTime(fields)) {
+    metadata->modification_time = std::make_unique<base::Time>(
+        base::Time::FromTimeT(entry.last_modified_time()));
+  }
+  if (RequestedThumbnail(fields)) {
+    metadata->thumbnail = std::make_unique<std::string>(kUnknownImageDataUri);
+  }
+  // Mime types are not supported.
+  callback.Run(std::move(metadata), base::File::FILE_OK);
+}
+
+base::File::Error SmbFileSystem::RunUnmountCallback(
+    const ProviderId& provider_id,
+    const std::string& file_system_id,
+    file_system_provider::Service::UnmountReason reason) {
+  base::File::Error error =
+      std::move(unmount_callback_).Run(provider_id, file_system_id, reason);
+  return error;
 }
 
 base::WeakPtr<file_system_provider::ProvidedFileSystemInterface>

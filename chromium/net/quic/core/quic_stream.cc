@@ -10,6 +10,7 @@
 #include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_str_cat.h"
 
 using std::string;
 
@@ -52,6 +53,7 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
       fin_buffered_(false),
       fin_sent_(false),
       fin_outstanding_(false),
+      fin_lost_(false),
       fin_received_(false),
       rst_sent_(false),
       rst_received_(false),
@@ -71,9 +73,8 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
       send_buffer_(
           session->connection()->helper()->GetStreamSendBufferAllocator(),
           session->allow_multiple_acks_for_data()),
-      buffered_data_threshold_(GetQuicFlag(FLAGS_quic_buffered_data_threshold)),
-      remove_on_stream_frame_discarded_(
-          FLAGS_quic_reloadable_flag_quic_remove_on_stream_frame_discarded) {
+      buffered_data_threshold_(
+          GetQuicFlag(FLAGS_quic_buffered_data_threshold)) {
   SetFromConfig();
 }
 
@@ -94,6 +95,20 @@ void QuicStream::OnStreamFrame(const QuicStreamFrame& frame) {
 
   DCHECK(!(read_side_closed_ && write_side_closed_));
 
+  bool is_stream_too_long =
+      (frame.offset > kMaxStreamLength) ||
+      (kMaxStreamLength - frame.offset < frame.data_length);
+  if (GetQuicReloadableFlag(quic_stream_too_long) && is_stream_too_long) {
+    // Close connection if stream becomes too long.
+    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_stream_too_long, 4, 5);
+    QUIC_PEER_BUG
+        << "Receive stream frame reaches max stream length. frame offset "
+        << frame.offset << " length " << frame.data_length;
+    CloseConnectionWithDetails(
+        QUIC_STREAM_LENGTH_OVERFLOW,
+        "Peer sends more data than allowed on this stream.");
+    return;
+  }
   if (frame.fin) {
     fin_received_ = true;
     if (fin_sent_) {
@@ -141,6 +156,14 @@ int QuicStream::num_duplicate_frames_received() const {
 
 void QuicStream::OnStreamReset(const QuicRstStreamFrame& frame) {
   rst_received_ = true;
+  if (GetQuicReloadableFlag(quic_stream_too_long) &&
+      frame.byte_offset > kMaxStreamLength) {
+    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_stream_too_long, 5, 5);
+    // Peer are not suppose to write bytes more than maxium allowed.
+    CloseConnectionWithDetails(QUIC_STREAM_LENGTH_OVERFLOW,
+                               "Reset frame stream offset overflow.");
+    return;
+  }
   MaybeIncreaseHighestReceivedOffset(frame.byte_offset);
   if (flow_controller_.FlowControlViolation() ||
       connection_flow_controller_->FlowControlViolation()) {
@@ -221,6 +244,15 @@ void QuicStream::WriteOrBufferData(
   if (data.length() > 0) {
     struct iovec iov(MakeIovec(data));
     QuicStreamOffset offset = send_buffer_.stream_offset();
+    if (GetQuicReloadableFlag(quic_stream_too_long) &&
+        kMaxStreamLength - offset < data.length()) {
+      QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_stream_too_long, 1, 5);
+      QUIC_BUG << "Write too many data via stream " << id_;
+      CloseConnectionWithDetails(
+          QUIC_STREAM_LENGTH_OVERFLOW,
+          QuicStrCat("Write too many data via stream ", id_));
+      return;
+    }
     send_buffer_.SaveStreamData(&iov, 1, 0, data.length());
     OnDataBuffered(offset, data.length(), ack_listener);
   }
@@ -231,9 +263,17 @@ void QuicStream::WriteOrBufferData(
 }
 
 void QuicStream::OnCanWrite() {
+  if (HasPendingRetransmission()) {
+    // Exit early to allow other streams to write pending retransmissions if
+    // any.
+    WritePendingRetransmission();
+    return;
+  }
+
   if (write_side_closed_) {
-    QUIC_DLOG(ERROR) << ENDPOINT << "Stream " << id()
-                     << "attempting to write when the write side is closed";
+    QUIC_DLOG(ERROR)
+        << ENDPOINT << "Stream " << id()
+        << " attempting to write new data when the write side is closed";
     return;
   }
   if (HasBufferedData() || (fin_buffered_ && !fin_sent_)) {
@@ -282,6 +322,16 @@ QuicConsumedData QuicStream::WritevData(const struct iovec* iov,
   QuicConsumedData consumed_data(0, false);
   if (fin_buffered_) {
     QUIC_BUG << "Fin already buffered";
+    return consumed_data;
+  }
+
+  if (GetQuicReloadableFlag(quic_stream_too_long) &&
+      kMaxStreamLength - send_buffer_.stream_offset() < write_length) {
+    QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_stream_too_long, 2, 5);
+    QUIC_BUG << "Write too many data via stream " << id_;
+    CloseConnectionWithDetails(
+        QUIC_STREAM_LENGTH_OVERFLOW,
+        QuicStrCat("Write too many data via stream ", id_));
     return consumed_data;
   }
 
@@ -334,6 +384,16 @@ QuicConsumedData QuicStream::WriteMemSlices(QuicMemSliceSpan span, bool fin) {
       QuicStreamOffset offset = send_buffer_.stream_offset();
       consumed_data.bytes_consumed =
           span.SaveMemSlicesInSendBuffer(&send_buffer_);
+      if (GetQuicReloadableFlag(quic_stream_too_long) &&
+          (offset > send_buffer_.stream_offset() ||
+           kMaxStreamLength < send_buffer_.stream_offset())) {
+        QUIC_FLAG_COUNT_N(quic_reloadable_flag_quic_stream_too_long, 3, 5);
+        QUIC_BUG << "Write too many data via stream " << id_;
+        CloseConnectionWithDetails(
+            QUIC_STREAM_LENGTH_OVERFLOW,
+            QuicStrCat("Write too many data via stream ", id_));
+        return consumed_data;
+      }
       OnDataBuffered(offset, consumed_data.bytes_consumed, nullptr);
     }
   }
@@ -345,6 +405,17 @@ QuicConsumedData QuicStream::WriteMemSlices(QuicMemSliceSpan span, bool fin) {
   }
 
   return consumed_data;
+}
+
+bool QuicStream::HasPendingRetransmission() const {
+  return send_buffer_.HasPendingRetransmission() || fin_lost_;
+}
+
+bool QuicStream::IsStreamFrameOutstanding(QuicStreamOffset offset,
+                                          QuicByteCount data_length,
+                                          bool fin) const {
+  return send_buffer_.IsStreamDataOutstanding(offset, data_length) ||
+         (fin && fin_outstanding_);
 }
 
 QuicConsumedData QuicStream::WritevDataInner(size_t write_length,
@@ -392,6 +463,10 @@ bool QuicStream::HasBufferedData() const {
 
 QuicTransportVersion QuicStream::transport_version() const {
   return session_->connection()->transport_version();
+}
+
+HandshakeProtocol QuicStream::handshake_protocol() const {
+  return session_->connection()->version().handshake_protocol;
 }
 
 void QuicStream::StopReading() {
@@ -511,6 +586,7 @@ void QuicStream::OnStreamFrameAcked(QuicStreamOffset offset,
                               (fin_acked && fin_outstanding_);
   if (fin_acked) {
     fin_outstanding_ = false;
+    fin_lost_ = false;
   }
   if (!IsWaitingForAcks()) {
     session_->OnStreamDoneWaitingForAcks(id_);
@@ -520,48 +596,31 @@ void QuicStream::OnStreamFrameAcked(QuicStreamOffset offset,
   }
 }
 
-void QuicStream::OnStreamFrameRetransmitted(QuicStreamOffset /*offset*/,
-                                            QuicByteCount data_length) {
+void QuicStream::OnStreamFrameRetransmitted(QuicStreamOffset offset,
+                                            QuicByteCount data_length,
+                                            bool fin_retransmitted) {
+  send_buffer_.OnStreamDataRetransmitted(offset, data_length);
+  if (fin_retransmitted) {
+    fin_lost_ = false;
+  }
   if (ack_listener_ != nullptr) {
     ack_listener_->OnPacketRetransmitted(data_length);
   }
 }
 
-void QuicStream::OnStreamFrameDiscarded(QuicStreamOffset offset,
-                                        QuicByteCount data_length,
-                                        bool fin_discarded) {
-  if (remove_on_stream_frame_discarded_) {
-    // TODO(fayang): Remove OnStreamFrameDiscarded from StreamNotifierInterface
-    // when deprecating
-    // quic_reloadable_flag_quic_remove_on_stream_frame_discarded.
-    QUIC_FLAG_COUNT_N(
-        quic_reloadable_flag_quic_remove_on_stream_frame_discarded, 1, 2);
-    return;
+void QuicStream::OnStreamFrameLost(QuicStreamOffset offset,
+                                   QuicByteCount data_length,
+                                   bool fin_lost) {
+  if (data_length > 0) {
+    send_buffer_.OnStreamDataLost(offset, data_length);
   }
-
-  QuicByteCount newly_acked_length = 0;
-  if (!send_buffer_.OnStreamDataAcked(offset, data_length,
-                                      &newly_acked_length)) {
-    CloseConnectionWithDetails(QUIC_INTERNAL_ERROR,
-                               "Trying to discard unsent data.");
-    return;
-  }
-  if (!fin_sent_ && fin_discarded) {
-    CloseConnectionWithDetails(QUIC_INTERNAL_ERROR,
-                               "Trying to discard unsent fin.");
-    return;
-  }
-  if (fin_discarded) {
-    fin_outstanding_ = false;
-  }
-  if (!IsWaitingForAcks()) {
-    session_->OnStreamDoneWaitingForAcks(id_);
+  if (fin_lost && fin_outstanding_) {
+    fin_lost_ = true;
   }
 }
 
 bool QuicStream::IsWaitingForAcks() const {
-  return (!remove_on_stream_frame_discarded_ || !rst_sent_ ||
-          stream_error_ == QUIC_STREAM_NO_ERROR) &&
+  return (!rst_sent_ || stream_error_ == QUIC_STREAM_NO_ERROR) &&
          (send_buffer_.stream_bytes_outstanding() || fin_outstanding_);
 }
 
@@ -569,6 +628,8 @@ bool QuicStream::WriteStreamData(QuicStreamOffset offset,
                                  QuicByteCount data_length,
                                  QuicDataWriter* writer) {
   DCHECK_LT(0u, data_length);
+  QUIC_DVLOG(2) << ENDPOINT << "Write stream " << id_ << " data from offset "
+                << offset << " length " << data_length;
   return send_buffer_.WriteStreamData(offset, data_length, writer);
 }
 
@@ -614,7 +675,7 @@ void QuicStream::WriteBufferedData() {
   QuicConsumedData consumed_data =
       WritevDataInner(write_length, stream_bytes_written(), fin);
 
-  send_buffer_.OnStreamDataConsumed(consumed_data.bytes_consumed);
+  OnStreamDataConsumed(consumed_data.bytes_consumed);
 
   AddBytesSent(consumed_data.bytes_consumed);
   QUIC_DVLOG(1) << ENDPOINT << "stream " << id_ << " sends "
@@ -666,6 +727,49 @@ uint64_t QuicStream::stream_bytes_written() const {
 
 const QuicIntervalSet<QuicStreamOffset>& QuicStream::bytes_acked() const {
   return send_buffer_.bytes_acked();
+}
+
+void QuicStream::OnStreamDataConsumed(size_t bytes_consumed) {
+  send_buffer_.OnStreamDataConsumed(bytes_consumed);
+}
+
+void QuicStream::WritePendingRetransmission() {
+  while (HasPendingRetransmission()) {
+    QuicConsumedData consumed(0, false);
+    if (!send_buffer_.HasPendingRetransmission()) {
+      QUIC_DVLOG(1) << ENDPOINT << "stream " << id_
+                    << " retransmits fin only frame.";
+      consumed =
+          session()->WritevData(this, id_, 0, stream_bytes_written(), FIN);
+      fin_lost_ = !consumed.fin_consumed;
+      if (fin_lost_) {
+        // Connection is write blocked.
+        return;
+      }
+    } else {
+      StreamPendingRetransmission pending =
+          send_buffer_.NextPendingRetransmission();
+      // Determine whether the lost fin can be bundled with the data.
+      const bool can_bundle_fin =
+          fin_lost_ &&
+          (pending.offset + pending.length == stream_bytes_written());
+      consumed =
+          session()->WritevData(this, id_, pending.length, pending.offset,
+                                can_bundle_fin ? FIN : NO_FIN);
+      QUIC_DVLOG(1) << ENDPOINT << "stream " << id_
+                    << " tries to retransmit stream data [" << pending.offset
+                    << ", " << pending.offset + pending.length
+                    << ") and fin: " << can_bundle_fin
+                    << ", consumed: " << consumed;
+      OnStreamFrameRetransmitted(pending.offset, consumed.bytes_consumed,
+                                 consumed.fin_consumed);
+      if (consumed.bytes_consumed < pending.length ||
+          (can_bundle_fin && !consumed.fin_consumed)) {
+        // Connection is write blocked.
+        return;
+      }
+    }
+  }
 }
 
 }  // namespace net

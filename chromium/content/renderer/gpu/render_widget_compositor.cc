@@ -112,7 +112,8 @@ class ReportTimeSwapPromise : public cc::SwapPromise {
   ~ReportTimeSwapPromise() override;
 
   void DidActivate() override {}
-  void WillSwap(viz::CompositorFrameMetadata* metadata) override {}
+  void WillSwap(viz::CompositorFrameMetadata* compositor_frame_metadata,
+                cc::RenderFrameMetadata* render_frame_metadata) override {}
   void DidSwap() override;
   DidNotSwapAction DidNotSwap(DidNotSwapReason reason) override;
 
@@ -327,7 +328,7 @@ std::unique_ptr<cc::LayerTreeHost> RenderWidgetCompositor::CreateLayerTreeHost(
     // shared memory allocations which need to make synchronous calls to the
     // IO thread.
     params.image_worker_task_runner = base::CreateSequencedTaskRunnerWithTraits(
-        {base::WithBaseSyncPrimitives(), base::TaskPriority::BACKGROUND,
+        {base::WithBaseSyncPrimitives(), base::TaskPriority::USER_VISIBLE,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN});
   }
   if (!is_threaded) {
@@ -414,8 +415,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->GetGpuRasterizationMSAASampleCount();
   settings.gpu_rasterization_forced =
       compositor_deps->IsGpuRasterizationForced();
-  settings.async_worker_context_enabled =
-      compositor_deps->IsAsyncWorkerContextEnabled();
 
   settings.can_use_lcd_text = compositor_deps->IsLcdTextEnabled();
   settings.use_distance_field_text =
@@ -426,8 +425,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
       compositor_deps->IsElasticOverscrollEnabled();
   settings.resource_settings.use_gpu_memory_buffer_resources =
       compositor_deps->IsGpuMemoryBufferCompositorResourcesEnabled();
-  settings.resource_settings.buffer_to_texture_target_map =
-      compositor_deps->GetBufferToTextureTargetMap();
   settings.enable_oop_rasterization =
       cmd.HasSwitch(switches::kEnableOOPRasterization);
 
@@ -512,8 +509,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   // TODO(danakj): Only do this on low end devices.
   settings.create_low_res_tiling = true;
 
-  if (base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-    settings.use_half_width_tiles_for_gpu_rasterization = true;
 #else  // defined(OS_ANDROID)
   bool using_synchronous_compositor = false;  // Only for Android WebView.
   // On desktop, we never use the low memory policy unless we are simulating
@@ -583,6 +578,11 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   settings.disallow_non_exact_resource_reuse =
       cmd.HasSwitch(switches::kDisallowNonExactResourceReuse);
+#if defined(OS_ANDROID)
+  // TODO(crbug.com/746931): This feature appears to be causing visual
+  // corruption on certain android devices. Will investigate and re-enable.
+  settings.disallow_non_exact_resource_reuse = true;
+#endif
 
   if (cmd.HasSwitch(cc::switches::kRunAllCompositorStagesBeforeDraw)) {
     settings.wait_for_all_pipeline_stages_before_draw = true;
@@ -1012,7 +1012,7 @@ void RenderWidgetCompositor::LayoutAndPaintAsync(
   layout_and_paint_async_callback_ = callback;
 
   if (CompositeIsSynchronous()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&RenderWidgetCompositor::LayoutAndUpdateLayers,
                        weak_factory_.GetWeakPtr()));
@@ -1073,7 +1073,7 @@ void RenderWidgetCompositor::CompositeAndReadbackAsync(
   // be installed after layout which will happen as a part of the commit, for
   // widgets that delay the creation of their output surface.
   if (CompositeIsSynchronous()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&RenderWidgetCompositor::SynchronouslyComposite,
                        weak_factory_.GetWeakPtr()));
@@ -1154,7 +1154,7 @@ void RenderWidgetCompositor::RequestDecode(
   // in this case we actually need a commit to transfer the decode requests to
   // the impl side. So, force a commit to happen.
   if (CompositeIsSynchronous()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
+    layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
         FROM_HERE,
         base::BindOnce(&RenderWidgetCompositor::SynchronouslyComposite,
                        weak_factory_.GetWeakPtr()));
@@ -1188,8 +1188,9 @@ void RenderWidgetCompositor::BeginMainFrameNotExpectedUntil(
       time);
 }
 
-void RenderWidgetCompositor::UpdateLayerTreeHost() {
-  delegate_->UpdateVisualState();
+void RenderWidgetCompositor::UpdateLayerTreeHost(
+    VisualStateUpdate requested_update) {
+  delegate_->UpdateVisualState(requested_update);
 }
 
 void RenderWidgetCompositor::ApplyViewportDeltas(
@@ -1230,7 +1231,7 @@ void RenderWidgetCompositor::DidFailToInitializeLayerTreeFrameSink() {
     return;
   }
   layer_tree_frame_sink_request_failed_while_invisible_ = false;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
+  layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()->PostTask(
       FROM_HERE,
       base::BindOnce(&RenderWidgetCompositor::RequestNewLayerTreeFrameSink,
                      weak_factory_.GetWeakPtr()));
@@ -1294,7 +1295,8 @@ void RenderWidgetCompositor::SetContentSourceId(uint32_t id) {
 
 void RenderWidgetCompositor::NotifySwapTime(ReportTimeCallback callback) {
   QueueSwapPromise(std::make_unique<ReportTimeSwapPromise>(
-      std::move(callback), base::ThreadTaskRunnerHandle::Get()));
+      std::move(callback),
+      layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner()));
 }
 
 void RenderWidgetCompositor::RequestBeginMainFrameNotExpected(bool new_state) {

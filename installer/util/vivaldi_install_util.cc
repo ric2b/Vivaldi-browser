@@ -1,5 +1,6 @@
 // Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
 
+#include "chrome/installer/util/install_util.h"
 #include "installer/util/vivaldi_install_util.h"
 
 #include <atlbase.h>
@@ -173,3 +174,12 @@ base::string16 GetNewFeaturesUrl(const base::Version& version) {
   return url;
 }
 }  // namespace vivaldi
+
+// static
+void InstallUtil::ShowInstallerResultMessage(installer::InstallStatus status, int string_resource_id) {
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kVivaldi) &&
+    !base::CommandLine::ForCurrentProcess()->HasSwitch(installer::switches::kUninstall)) {
+    base::string16 msg = installer::GetLocalizedString(string_resource_id);
+    MessageBox(NULL, msg.c_str(), NULL, MB_ICONINFORMATION | MB_SETFOREGROUND);
+  }
+}

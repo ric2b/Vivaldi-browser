@@ -74,7 +74,7 @@ std::string StatusToString(BlobStatus status) {
       return "BlobStatus::ERR_OUT_OF_MEMORY: Not enough memory or disk space "
              "available for blob.";
     case BlobStatus::ERR_FILE_WRITE_FAILED:
-      return "BlobStatus::ERR_FILE_WRITE_FAILED: File operation filed";
+      return "BlobStatus::ERR_FILE_WRITE_FAILED: File operation failed";
     case BlobStatus::ERR_SOURCE_DIED_IN_TRANSIT:
       return "BlobStatus::ERR_SOURCE_DIED_IN_TRANSIT: Blob source died before "
              "transporting data to browser.";
@@ -84,6 +84,9 @@ std::string StatusToString(BlobStatus status) {
     case BlobStatus::ERR_REFERENCED_BLOB_BROKEN:
       return "BlobStatus::ERR_REFERENCED_BLOB_BROKEN: Blob contains dependency "
              "blob that is broken.";
+    case BlobStatus::ERR_REFERENCED_FILE_UNAVAILABLE:
+      return "BlobStatus::ERR_REFERENCED_FILE_UNAVAILABLE: Blob contains "
+             "dependency on file that is unavailable.";
     case BlobStatus::DONE:
       return "BlobStatus::DONE: Blob built with no errors.";
     case BlobStatus::PENDING_QUOTA:
@@ -245,10 +248,10 @@ void ViewBlobInternalsJob::GenerateHTMLForBlobData(
     const BlobDataItem& item = *(blob_data.items().at(i)->item());
 
     switch (item.type()) {
-      case DataElement::TYPE_BYTES:
+      case network::DataElement::TYPE_BYTES:
         AddHTMLListItem(kType, "data", out);
         break;
-      case DataElement::TYPE_FILE:
+      case network::DataElement::TYPE_FILE:
         AddHTMLListItem(kType, "file", out);
         AddHTMLListItem(kPath,
                  net::EscapeForHTML(item.path().AsUTF8Unsafe()),
@@ -259,10 +262,10 @@ void ViewBlobInternalsJob::GenerateHTMLForBlobData(
               out);
         }
         break;
-      case DataElement::TYPE_BLOB:
+      case network::DataElement::TYPE_BLOB:
         NOTREACHED();   // Should be flattened in the storage context.
         break;
-      case DataElement::TYPE_FILE_FILESYSTEM:
+      case network::DataElement::TYPE_FILE_FILESYSTEM:
         AddHTMLListItem(kType, "filesystem", out);
         AddHTMLListItem(kURL, item.filesystem_url().spec(), out);
         if (!item.expected_modification_time().is_null()) {
@@ -271,18 +274,18 @@ void ViewBlobInternalsJob::GenerateHTMLForBlobData(
               out);
         }
         break;
-      case DataElement::TYPE_DISK_CACHE_ENTRY:
+      case network::DataElement::TYPE_DISK_CACHE_ENTRY:
         AddHTMLListItem(kType, "disk cache entry", out);
         AddHTMLListItem(kURL, item.disk_cache_entry()->GetKey(), out);
         break;
-      case DataElement::TYPE_BYTES_DESCRIPTION:
+      case network::DataElement::TYPE_BYTES_DESCRIPTION:
         AddHTMLListItem(kType, "pending data", out);
         break;
-      case DataElement::TYPE_DATA_PIPE:
+      case network::DataElement::TYPE_DATA_PIPE:
         AddHTMLListItem(kType, "data pipe", out);
         break;
-      case DataElement::TYPE_RAW_FILE:
-      case DataElement::TYPE_UNKNOWN:
+      case network::DataElement::TYPE_RAW_FILE:
+      case network::DataElement::TYPE_UNKNOWN:
         NOTREACHED();
         break;
     }

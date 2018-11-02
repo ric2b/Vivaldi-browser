@@ -266,7 +266,11 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
   void AddTaskObserver(TaskObserver* task_observer);
   void RemoveTaskObserver(TaskObserver* task_observer);
 
-  // Returns true if the message loop is "idle". Provided for testing.
+  // Returns true if the message loop is idle (ignoring delayed tasks). This is
+  // the same condition which triggers DoWork() to return false: i.e.
+  // out of tasks which can be processed at the current run-level -- there might
+  // be deferred non-nestable tasks remaining if currently in a nested run
+  // level.
   bool IsIdleForTesting();
 
   // Runs the specified PendingTask.
@@ -397,9 +401,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
 
   // Whether task observers are allowed.
   bool allow_task_observers_ = true;
-
-  // An interface back to RunLoop state accessible by this RunLoop::Delegate.
-  RunLoop::Delegate::Client* run_loop_client_ = nullptr;
 
   // Holds data stored through the SequenceLocalStorageSlot API.
   internal::SequenceLocalStorageMap sequence_local_storage_map_;

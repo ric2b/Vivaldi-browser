@@ -364,12 +364,12 @@ ColorChooserView::ColorChooserView(ColorChooserListener* listener,
   DCHECK(listener_);
 
   SetBackground(CreateSolidBackground(SK_ColorLTGRAY));
-  SetLayoutManager(new BoxLayout(BoxLayout::kVertical,
-                                 gfx::Insets(kMarginWidth), kMarginWidth));
+  SetLayoutManager(std::make_unique<BoxLayout>(
+      BoxLayout::kVertical, gfx::Insets(kMarginWidth), kMarginWidth));
 
   View* container = new View();
-  container->SetLayoutManager(
-      new BoxLayout(BoxLayout::kHorizontal, gfx::Insets(), kMarginWidth));
+  container->SetLayoutManager(std::make_unique<BoxLayout>(
+      BoxLayout::kHorizontal, gfx::Insets(), kMarginWidth));
   saturation_value_ = new SaturationValueView(this);
   container->AddChildView(saturation_value_);
   hue_ = new HueView(this);
@@ -377,7 +377,8 @@ ColorChooserView::ColorChooserView(ColorChooserListener* listener,
   AddChildView(container);
 
   View* container2 = new View();
-  GridLayout* layout = GridLayout::CreateAndInstall(container2);
+  GridLayout* layout = container2->SetLayoutManager(
+      std::make_unique<views::GridLayout>(container2));
   ColumnSet* columns = layout->AddColumnSet(0);
   columns->AddColumn(
       GridLayout::LEADING, GridLayout::FILL, 0, GridLayout::USE_PREF, 0, 0);

@@ -10,10 +10,11 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "gpu/command_buffer/common/context_creation_attribs.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gles2_cmd_validation.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
-#include "gpu/gpu_export.h"
+#include "gpu/gpu_gles2_export.h"
 #include "ui/gl/extension_set.h"
 
 namespace base {
@@ -28,7 +29,7 @@ namespace gpu {
 namespace gles2 {
 
 // FeatureInfo records the features that are available for a ContextGroup.
-class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
+class GPU_GLES2_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
  public:
   struct FeatureFlags {
     FeatureFlags();
@@ -122,6 +123,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool nv_fence = false;
     bool chromium_texture_storage_image = false;
     bool ext_window_rectangles = false;
+    bool chromium_gpu_fence = false;
   };
 
   FeatureInfo();

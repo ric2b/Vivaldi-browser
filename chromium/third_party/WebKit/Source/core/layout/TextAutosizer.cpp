@@ -46,8 +46,6 @@
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/geometry/IntRect.h"
@@ -242,7 +240,7 @@ TextAutosizer::TextAutosizer(const Document* document)
       update_page_info_deferred_(false) {
 }
 
-TextAutosizer::~TextAutosizer() {}
+TextAutosizer::~TextAutosizer() = default;
 
 void TextAutosizer::Record(LayoutBlock* block) {
   if (!page_info_.setting_enabled_)
@@ -560,9 +558,9 @@ void TextAutosizer::UpdatePageInfo() {
   if (!page_info_.setting_enabled_ || document_->Printing()) {
     page_info_.page_needs_autosizing_ = false;
   } else {
-    LayoutViewItem layout_view_item = document_->GetLayoutViewItem();
+    auto* layout_view = document_->GetLayoutView();
     bool horizontal_writing_mode =
-        IsHorizontalWritingMode(layout_view_item.Style()->GetWritingMode());
+        IsHorizontalWritingMode(layout_view->StyleRef().GetWritingMode());
 
     // FIXME: With out-of-process iframes, the top frame can be remote and
     // doesn't have sizing information. Just return if this is the case.
@@ -594,8 +592,7 @@ void TextAutosizer::UpdatePageInfo() {
              ->GetViewportDescription()
              .IsSpecifiedByAuthor()) {
       page_info_.device_scale_adjustment_ =
-          document_->GetPage()->GetChromeClient().WindowToViewportScalar(
-              document_->GetSettings()->GetDeviceScaleAdjustment());
+          document_->GetSettings()->GetDeviceScaleAdjustment();
     } else {
       page_info_.device_scale_adjustment_ = 1.0f;
     }
@@ -638,8 +635,7 @@ IntSize TextAutosizer::WindowSize() const {
 }
 
 void TextAutosizer::ResetMultipliers() {
-  LayoutObject* layout_object =
-      LayoutAPIShim::LayoutObjectFrom(document_->GetLayoutViewItem());
+  LayoutObject* layout_object = document_->GetLayoutView();
   while (layout_object) {
     if (const ComputedStyle* style = layout_object->Style()) {
       if (style->TextAutosizingMultiplier() != 1)

@@ -13,6 +13,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/base/math_util.h"
 #include "cc/paint/filter_operations.h"
@@ -193,7 +194,7 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
       }
     }
     render_passes_in_frame[pass->id] = {RenderPassTextureSize(pass.get()),
-                                        RenderPassTextureHint(pass.get())};
+                                        pass->generate_mipmap};
   }
   UpdateRenderPassTextures(render_passes_in_draw_order, render_passes_in_frame);
 }
@@ -285,7 +286,8 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // Attempt to replace some or all of the quads of the root render pass with
   // overlays.
   overlay_processor_->ProcessForOverlays(
-      resource_provider_, render_passes_in_draw_order, render_pass_filters_,
+      resource_provider_, render_passes_in_draw_order,
+      output_surface_->color_matrix(), render_pass_filters_,
       render_pass_background_filters_, &current_frame()->overlay_list,
       &current_frame()->ca_layer_overlay_list,
       &current_frame()->dc_layer_overlay_list,
@@ -471,6 +473,13 @@ void DirectRenderer::DrawRenderPass(const RenderPass* render_pass) {
     return;
   UseRenderPass(render_pass);
 
+  // TODO(crbug.com/582554): This change applies only when Vulkan is enabled and
+  // it will be removed once SkiaRenderer has complete support for Vulkan.
+  if (current_frame()->current_render_pass !=
+          current_frame()->root_render_pass &&
+      !IsRenderPassResourceAllocated(render_pass->id))
+    return;
+
   const gfx::Rect surface_rect_in_draw_space = OutputSurfaceRectInDrawSpace();
   gfx::Rect render_pass_scissor_in_draw_space = surface_rect_in_draw_space;
 
@@ -616,8 +625,13 @@ void DirectRenderer::UseRenderPass(const RenderPass* render_pass) {
   enlarged_size.Enlarge(enlarge_pass_texture_amount_.width(),
                         enlarge_pass_texture_amount_.height());
 
-  AllocateRenderPassResourceIfNeeded(render_pass->id, enlarged_size,
-                                     RenderPassTextureHint(render_pass));
+  AllocateRenderPassResourceIfNeeded(
+      render_pass->id, {enlarged_size, render_pass->generate_mipmap});
+
+  // TODO(crbug.com/582554): This change applies only when Vulkan is enabled and
+  // it will be removed once SkiaRenderer has complete support for Vulkan.
+  if (!IsRenderPassResourceAllocated(render_pass->id))
+    return;
 
   BindFramebufferToTexture(render_pass->id);
   InitializeViewport(current_frame(), render_pass->output_rect,
@@ -643,23 +657,28 @@ gfx::Rect DirectRenderer::ComputeScissorRectForRenderPass(
   return render_pass->damage_rect;
 }
 
-// static
 gfx::Size DirectRenderer::RenderPassTextureSize(const RenderPass* render_pass) {
-  return render_pass->output_rect.size();
-}
-
-// static
-ResourceTextureHint DirectRenderer::RenderPassTextureHint(
-    const RenderPass* render_pass) {
-  ResourceTextureHint hint = ResourceTextureHint::kFramebuffer;
-  if (render_pass->generate_mipmap)
-    hint |= ResourceTextureHint::kMipmap;
-  return hint;
+  // Round the size of the render pass backings to a multiple of 64 pixels. This
+  // reduces memory fragmentation. https://crbug.com/146070. This also allows
+  // backings to be more easily reused during a resize operation.
+  int width = render_pass->output_rect.width();
+  int height = render_pass->output_rect.height();
+  if (!settings_->dont_round_texture_sizes_for_pixel_tests) {
+    int multiple = 64;
+    width = cc::MathUtil::CheckedRoundUp(width, multiple);
+    height = cc::MathUtil::CheckedRoundUp(height, multiple);
+  }
+  return gfx::Size(width, height);
 }
 
 void DirectRenderer::SetCurrentFrameForTesting(const DrawingFrame& frame) {
   current_frame_valid_ = true;
   current_frame_ = frame;
+}
+
+bool DirectRenderer::HasAllocatedResourcesForTesting(
+    const RenderPassId& render_pass_id) const {
+  return IsRenderPassResourceAllocated(render_pass_id);
 }
 
 }  // namespace viz

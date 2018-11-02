@@ -5,11 +5,12 @@
 #ifndef CHROME_BROWSER_VR_DATABINDING_VECTOR_BINDING_H_
 #define CHROME_BROWSER_VR_DATABINDING_VECTOR_BINDING_H_
 
+#include <memory>
+#include <sstream>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "chrome/browser/vr/databinding/binding_base.h"
 #include "chrome/browser/vr/databinding/vector_element_binding.h"
@@ -49,7 +50,7 @@ class VectorBinding : public BindingBase {
       }
       bindings_.resize(current_size);
       for (size_t i = last_size; i < current_size; ++i) {
-        bindings_[i] = base::MakeUnique<ElementBinding>(models_, i);
+        bindings_[i] = std::make_unique<ElementBinding>(models_, i);
         added_callback_.Run(bindings_[i].get());
       }
       last_size_ = current_size;
@@ -59,6 +60,15 @@ class VectorBinding : public BindingBase {
         updated = true;
     }
     return updated;
+  }
+
+  std::string ToString() override {
+    std::ostringstream os;
+    for (size_t i = 0; i < bindings_.size(); ++i) {
+      auto& binding = bindings_[i];
+      os << i << ": " << binding->ToString() << std::endl;
+    }
+    return os.str();
   }
 
  private:

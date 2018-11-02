@@ -51,6 +51,14 @@ extern SkBitmap SmartCropAndSize(const SkBitmap& capture,
                                  int target_width,
                                  int target_height);
 
+extern Browser* FindBrowserForPinnedTabs(Browser* current_browser);
+extern bool MoveTabToWindow(Browser* source_browser,
+                            Browser* target_browser,
+                            int tab_index,
+                            int* new_index,
+                            int iteration);
+extern bool GetTabById(int tab_id, content::WebContents** contents, int* index);
+
 }  // namespace ui_tools
 }  // namespace vivaldi
 

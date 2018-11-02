@@ -4,9 +4,12 @@
 
 package org.chromium.chrome.browser.payments;
 
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DECEMBER;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DELAYED_RESPONSE;
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.HAVE_INSTRUMENTS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.IMMEDIATE_RESPONSE;
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NEXT_YEAR;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.NO_INSTRUMENTS;
 
 import android.content.DialogInterface;
@@ -28,7 +31,6 @@ import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
 import java.util.concurrent.ExecutionException;
@@ -38,10 +40,7 @@ import java.util.concurrent.TimeoutException;
  * A payment integration test to validate the logging of Payment Request metrics.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallback {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule =
@@ -362,7 +361,8 @@ public class PaymentRequestJourneyLoggerTest implements MainActivityStartCallbac
         mPaymentRequestTestRule.clickInPaymentMethodAndWait(
                 R.id.payments_add_option_button, mPaymentRequestTestRule.getReadyToEdit());
         mPaymentRequestTestRule.setSpinnerSelectionsInCardEditorAndWait(
-                new int[] {11, 1, 0}, mPaymentRequestTestRule.getBillingAddressChangeProcessed());
+                new int[] {DECEMBER, NEXT_YEAR, FIRST_BILLING_ADDRESS},
+                mPaymentRequestTestRule.getBillingAddressChangeProcessed());
         mPaymentRequestTestRule.setTextInCardEditorAndWait(
                 new String[] {"4111111111111111", "Jon Doe"},
                 mPaymentRequestTestRule.getEditorTextUpdate());

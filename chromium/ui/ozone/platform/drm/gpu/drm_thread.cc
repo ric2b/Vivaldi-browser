@@ -15,6 +15,7 @@
 #include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/gfx/presentation_feedback.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
@@ -76,7 +77,8 @@ class GbmDeviceGenerator : public DrmDeviceGenerator {
 
 }  // namespace
 
-DrmThread::DrmThread() : base::Thread("DrmThread"), binding_(this) {}
+DrmThread::DrmThread()
+    : base::Thread("DrmThread"), binding_(this), weak_ptr_factory_(this) {}
 
 DrmThread::~DrmThread() {
   Stop();
@@ -188,12 +190,26 @@ void DrmThread::GetScanoutFormats(
 void DrmThread::SchedulePageFlip(gfx::AcceleratedWidget widget,
                                  const std::vector<OverlayPlane>& planes,
                                  SwapCompletionOnceCallback callback) {
+  scoped_refptr<ui::DrmDevice> drm_device =
+      device_manager_->GetDrmDevice(widget);
+
+  drm_device->plane_manager()->RequestPlanesReadyCallback(
+      planes, base::BindOnce(&DrmThread::OnPlanesReadyForPageFlip,
+                             weak_ptr_factory_.GetWeakPtr(), widget, planes,
+                             base::Passed(&callback)));
+}
+
+void DrmThread::OnPlanesReadyForPageFlip(
+    gfx::AcceleratedWidget widget,
+    const std::vector<OverlayPlane>& planes,
+    SwapCompletionOnceCallback callback) {
   DrmWindow* window = screen_manager_->GetWindow(widget);
   if (window) {
     bool result = window->SchedulePageFlip(planes, std::move(callback));
     CHECK(result) << "DrmThread::SchedulePageFlip failed.";
   } else {
-    std::move(callback).Run(gfx::SwapResult::SWAP_ACK);
+    std::move(callback).Run(gfx::SwapResult::SWAP_ACK,
+                            gfx::PresentationFeedback());
   }
 }
 

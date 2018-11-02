@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -19,13 +18,13 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
-#include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/pref_names.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_test_util.h"
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service_mock.h"
+#include "ios/chrome/browser/ui/contextual_search/switches.h"
 #import "ios/chrome/browser/ui/contextual_search/touch_to_search_permissions_mediator+testing.h"
 #include "ios/web/public/test/test_web_thread_bundle.h"
 #include "net/base/network_change_notifier.h"
@@ -61,7 +60,7 @@ std::unique_ptr<KeyedService> CreateSyncSetupService(
   syncer::SyncService* sync_service =
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(
           chrome_browser_state);
-  return base::MakeUnique<SyncSetupServiceMock>(
+  return std::make_unique<SyncSetupServiceMock>(
       sync_service, chrome_browser_state->GetPrefs());
 }
 
@@ -545,11 +544,11 @@ TEST_F(TouchToSearchPermissionsAvailabilityTest, CommandLinePermissions) {
     base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
     if (test.set_disable) {
       base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kDisableContextualSearch);
+          contextual_search::switches::kDisableContextualSearch);
     }
     if (test.set_enable) {
       base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnableContextualSearch);
+          contextual_search::switches::kEnableContextualSearch);
     }
     EXPECT_EQ(
         [TouchToSearchPermissionsMediator isTouchToSearchAvailableOnDevice],

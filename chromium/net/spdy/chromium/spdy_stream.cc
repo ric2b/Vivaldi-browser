@@ -65,7 +65,7 @@ class SpdyStream::HeadersBufferProducer : public SpdyBufferProducer {
     DCHECK(stream_.get());
   }
 
-  ~HeadersBufferProducer() override {}
+  ~HeadersBufferProducer() override = default;
 
   std::unique_ptr<SpdyBuffer> ProduceBuffer() override {
     if (!stream_.get()) {
@@ -453,6 +453,12 @@ void SpdyStream::OnHeadersReceived(const SpdyHeaderBlock& response_headers,
       session_->ResetStream(stream_id_, ERROR_CODE_PROTOCOL_ERROR, error);
       break;
   }
+}
+
+bool SpdyStream::ShouldRetryRSTPushStream() {
+  // Retry if the stream is a pushed stream, has been claimed, but did not yet
+  // receive response headers
+  return (response_headers_.empty() && type_ == SPDY_PUSH_STREAM && delegate_);
 }
 
 void SpdyStream::OnPushPromiseHeadersReceived(SpdyHeaderBlock headers) {

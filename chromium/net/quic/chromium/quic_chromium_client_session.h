@@ -40,6 +40,7 @@
 #include "net/quic/core/quic_spdy_client_session_base.h"
 #include "net/quic/core/quic_time.h"
 #include "net/socket/socket_performance_watcher.h"
+#include "net/spdy/chromium/http2_priority_dependencies.h"
 #include "net/spdy/chromium/multiplexed_session.h"
 #include "net/spdy/chromium/server_push_delegate.h"
 
@@ -69,6 +70,15 @@ enum class MigrationResult {
   FAILURE          // Migration failed for other reasons.
 };
 
+// Mode of connection migration.
+enum class ConnectionMigrationMode {
+  NO_MIGRATION,
+  NO_MIGRATION_ON_PATH_DEGRADING_V1,
+  FULL_MIGRATION_V1,
+  NO_MIGRATION_ON_PATH_DEGRADING_V2,
+  FULL_MIGRATION_V2
+};
+
 // Result of a connectivity probing attempt.
 enum class ProbingResult {
   PENDING,                          // Probing started, pending result.
@@ -95,7 +105,10 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       : public MultiplexedSessionHandle,
         public QuicClientPushPromiseIndex::Delegate {
    public:
-    explicit Handle(const base::WeakPtr<QuicChromiumClientSession>& session);
+    // Constructs a handle to |session| which was created via the alternative
+    // server |destination|.
+    Handle(const base::WeakPtr<QuicChromiumClientSession>& session,
+           const HostPortPair& destination);
     Handle(const Handle& other) = delete;
     ~Handle() override;
 
@@ -169,8 +182,16 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
     // Returns the session's server ID.
     QuicServerId server_id() const { return server_id_; }
 
+    // Returns the alternative server used for this session.
+    HostPortPair destination() const { return destination_; }
+
     // Returns the session's net log.
     const NetLogWithSource& net_log() const { return net_log_; }
+
+    // Returns the session's connection migration mode.
+    ConnectionMigrationMode connection_migration_mode() const {
+      return session_->connection_migration_mode();
+    }
 
     // QuicClientPushPromiseIndex::Delegate implementation
     bool CheckVary(const SpdyHeaderBlock& client_request,
@@ -211,6 +232,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
     // Underlying session which may be destroyed before this handle.
     base::WeakPtr<QuicChromiumClientSession> session_;
+
+    HostPortPair destination_;
 
     // Stream request created by |RequestStream()|.
     std::unique_ptr<StreamRequest> stream_request_;
@@ -318,8 +341,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       bool migrate_session_on_network_change,
       bool migrate_sesion_early_v2,
       bool migrate_session_on_network_change_v2,
+      base::TimeDelta max_time_on_non_default_network,
+      int max_migrations_to_non_default_network_on_path_degrading,
       int yield_after_packets,
       QuicTime::Delta yield_after_duration,
+      bool headers_include_h2_stream_dependency,
       int cert_verify_flags,
       const QuicConfig& config,
       QuicCryptoClientConfig* crypto_config,
@@ -337,6 +363,9 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
 
   void AddHandle(Handle* handle);
   void RemoveHandle(Handle* handle);
+
+  // Returns the session's connection migration mode.
+  ConnectionMigrationMode connection_migration_mode() const;
 
   // Waits for the handshake to be confirmed and invokes |callback| when
   // that happens. If the handshake has already been confirmed, returns OK.
@@ -380,7 +409,16 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
       const QuicSocketAddress& peer_address) override;
 
   // QuicSpdySession methods:
+  size_t WriteHeaders(QuicStreamId id,
+                      SpdyHeaderBlock headers,
+                      bool fin,
+                      SpdyPriority priority,
+                      QuicReferenceCountedPointer<QuicAckListenerInterface>
+                          ack_listener) override;
   void OnHeadersHeadOfLineBlocking(QuicTime::Delta delta) override;
+  void UnregisterStreamPriority(QuicStreamId id) override;
+  void UpdateStreamPriority(QuicStreamId id,
+                            SpdyPriority new_priority) override;
 
   // QuicSession methods:
   void OnStreamFrame(const QuicStreamFrame& frame) override;
@@ -451,7 +489,8 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   const NetLogWithSource& net_log() const { return net_log_; }
 
   // Returns a Handle to this session.
-  std::unique_ptr<QuicChromiumClientSession::Handle> CreateHandle();
+  std::unique_ptr<QuicChromiumClientSession::Handle> CreateHandle(
+      const HostPortPair& destination);
 
   // Returns the number of client hello messages that have been sent on the
   // crypto stream. If the handshake has completed then this is one greater
@@ -652,6 +691,11 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   bool migrate_session_on_network_change_;
   bool migrate_session_early_v2_;
   bool migrate_session_on_network_change_v2_;
+  base::TimeDelta max_time_on_non_default_network_;
+  // Maximum allowed number of migrations to non-default network triggered by
+  // path degrading per default network.
+  int max_migrations_to_non_default_network_on_path_degrading_;
+  int current_migrations_to_non_default_network_on_path_degrading_;
   QuicClock* clock_;  // Unowned.
   int yield_after_packets_;
   QuicTime::Delta yield_after_duration_;
@@ -671,6 +715,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   std::unique_ptr<ct::CTVerifyResult> ct_verify_result_;
   std::string pinning_failure_log_;
   bool pkp_bypassed_;
+  bool is_fatal_cert_error_;
   HandleSet handles_;
   StreamRequestQueue stream_requests_;
   std::vector<CompletionCallback> waiting_for_confirmation_callbacks_;
@@ -708,6 +753,12 @@ class NET_EXPORT_PRIVATE QuicChromiumClientSession
   // sockets_.size(). Then in MigrateSessionOnError, check to see if
   // the current sockets_.size() == the passed in value.
   bool migration_pending_;  // True while migration is underway.
+
+  // If true, client headers will include HTTP/2 stream dependency info derived
+  // from SpdyPriority.
+  bool headers_include_h2_stream_dependency_;
+  Http2PriorityDependencies priority_dependency_state_;
+
   base::WeakPtrFactory<QuicChromiumClientSession> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicChromiumClientSession);

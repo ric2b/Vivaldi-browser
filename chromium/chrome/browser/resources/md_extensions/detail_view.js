@@ -9,7 +9,6 @@ cr.define('extensions', function() {
     is: 'extensions-detail-view',
 
     behaviors: [
-      I18nBehavior,
       CrContainerShadowBehavior,
       extensions.ItemBehavior,
     ],
@@ -29,6 +28,9 @@ cr.define('extensions', function() {
 
       /** Whether the user has enabled the UI's developer mode. */
       inDevMode: Boolean,
+
+      /** Whether "allow in incognito" option should be shown. */
+      incognitoAvailable: Boolean,
     },
 
     observers: [
@@ -111,12 +113,15 @@ cr.define('extensions', function() {
     },
 
     /**
+     * @param {!chrome.developerPrivate.ExtensionState} state
+     * @param {string} onText
+     * @param {string} offText
      * @return {string}
      * @private
      */
-    computeEnabledText_: function() {
+    computeEnabledText_: function(state, onText, offText) {
       // TODO(devlin): Get the full spectrum of these strings from bettes.
-      return this.isEnabled_() ? this.i18n('itemOn') : this.i18n('itemOff');
+      return extensions.isEnabled(state) ? onText : offText;
     },
 
     /**
@@ -146,6 +151,14 @@ cr.define('extensions', function() {
           this.data.errorCollection.isEnabled;
     },
 
+    /**
+     * @return {boolean}
+     * @private
+     */
+    shouldShowIncognitoOption_: function() {
+      return this.data.incognitoAccess.isEnabled && this.incognitoAvailable;
+    },
+
     /** @private */
     onEnableChange_: function() {
       this.delegate.setItemEnabled(
@@ -161,7 +174,7 @@ cr.define('extensions', function() {
     },
 
     /** @private */
-    onOptionsTap_: function() {
+    onExtensionOptionsTap_: function() {
       this.delegate.showItemOptionsPage(this.data);
     },
 
@@ -205,7 +218,7 @@ cr.define('extensions', function() {
     },
 
     /** @private */
-    onDeveloperWebSiteTap_: function() {
+    onExtensionWebSiteTap_: function() {
       this.delegate.openUrl(this.data.manifestHomePageUrl);
     },
 

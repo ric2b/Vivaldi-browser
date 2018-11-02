@@ -24,6 +24,8 @@ class View;
 // when hovered over.
 class HoverButton : public views::LabelButton {
  public:
+  enum Style { STYLE_PROMINENT, STYLE_ERROR };
+
   // Creates a single line hover button with no icon.
   HoverButton(views::ButtonListener* button_listener,
               const base::string16& text);
@@ -54,6 +56,21 @@ class HoverButton : public views::LabelButton {
   // non-empty subtitle.
   void SetSubtitleElideBehavior(gfx::ElideBehavior elide_behavior);
 
+  // Adjusts the background and the text color according to |style|.
+  void SetStyle(Style style);
+
+  // Sets the text style of the title considering the color of the background.
+  // Passing |background_color| makes sure that the text color will not be
+  // changed to a color that is not readable on the specified background.
+  void SetTitleTextStyle(views::style::TextStyle text_style,
+                         SkColor background_color);
+
+  void SetSubtitleColor(SkColor color);
+
+  void set_auto_compute_tooltip(bool auto_compute_tooltip) {
+    auto_compute_tooltip_ = auto_compute_tooltip;
+  }
+
  protected:
   // views::LabelButton:
   KeyClickAction GetKeyClickActionForEvent(const ui::KeyEvent& event) override;
@@ -77,6 +94,10 @@ class HoverButton : public views::LabelButton {
   // The horizontal space the padding and icon take up. Used for calculating the
   // available space for |title_|, if it exists.
   int taken_width_ = 0;
+
+  // Whether this |HoverButton|'s accessible name and tooltip should be computed
+  // from the |title_| and |subtitle_| text.
+  bool auto_compute_tooltip_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(HoverButton);
 };

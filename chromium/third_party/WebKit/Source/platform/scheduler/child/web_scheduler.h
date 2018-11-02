@@ -5,10 +5,10 @@
 #ifndef THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_RENDERER_WEB_SCHEDULER_H_
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_RENDERER_WEB_SCHEDULER_H_
 
+#include "base/location.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebThread.h"
-#include "public/platform/WebTraceLocation.h"
 #include "public/platform/scheduler/renderer/renderer_scheduler.h"
 
 #include <memory>
@@ -24,7 +24,7 @@ class PLATFORM_EXPORT WebScheduler {
  public:
   class PLATFORM_EXPORT InterventionReporter {
    public:
-    virtual ~InterventionReporter() {}
+    virtual ~InterventionReporter() = default;
 
     // The scheduler has performed an intervention, described by |message|,
     // which should be reported to the developer.
@@ -33,7 +33,7 @@ class PLATFORM_EXPORT WebScheduler {
 
   using RendererPauseHandle = scheduler::RendererScheduler::RendererPauseHandle;
 
-  virtual ~WebScheduler() {}
+  virtual ~WebScheduler() = default;
 
   // Called to prevent any more pending tasks from running. Must be called on
   // the associated WebThread.
@@ -58,18 +58,15 @@ class PLATFORM_EXPORT WebScheduler {
   // tasks which may be reordered relative to other task types and may be
   // starved for an arbitrarily long time if no idle time is available.
   // Takes ownership of |IdleTask|. Can be called from any thread.
-  virtual void PostIdleTask(const WebTraceLocation&, WebThread::IdleTask*) = 0;
+  virtual void PostIdleTask(const base::Location&, WebThread::IdleTask) = 0;
 
   // Like postIdleTask but guarantees that the posted task will not run
   // nested within an already-running task. Posting an idle task as
   // non-nestable may not affect when the task gets run, or it could
   // make it run later than it normally would, but it won't make it
   // run earlier than it normally would.
-  virtual void PostNonNestableIdleTask(const WebTraceLocation&,
-                                       WebThread::IdleTask*) = 0;
-
-  // Returns a WebTaskRunner for loading tasks. Can be called from any thread.
-  virtual WebTaskRunner* LoadingTaskRunner() = 0;
+  virtual void PostNonNestableIdleTask(const base::Location&,
+                                       WebThread::IdleTask) = 0;
 
   // Returns a WebTaskRunner for timer tasks. Can be called from any thread.
   virtual WebTaskRunner* TimerTaskRunner() = 0;
@@ -110,14 +107,6 @@ class PLATFORM_EXPORT WebScheduler {
   virtual scheduler::RendererScheduler* GetRendererSchedulerForTest() {
     return nullptr;
   }
-
-#ifdef INSIDE_BLINK
-  // Helpers for posting bound functions as tasks.
-  typedef Function<void(double deadline_seconds)> IdleTask;
-
-  void PostIdleTask(const WebTraceLocation&, IdleTask);
-  void PostNonNestableIdleTask(const WebTraceLocation&, IdleTask);
-#endif
 };
 
 }  // namespace blink

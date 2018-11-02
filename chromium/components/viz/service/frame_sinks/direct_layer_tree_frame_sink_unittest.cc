@@ -14,7 +14,7 @@
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
 #include "components/viz/common/frame_sinks/delay_based_time_source.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "components/viz/service/display/display.h"
 #include "components/viz/service/display/display_scheduler.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support_manager.h"
@@ -33,8 +33,6 @@ static constexpr FrameSinkId kArbitraryFrameSinkId(1, 1);
 class TestDirectLayerTreeFrameSink : public DirectLayerTreeFrameSink {
  public:
   using DirectLayerTreeFrameSink::DirectLayerTreeFrameSink;
-
-  CompositorFrameSinkSupport* support() const { return support_.get(); }
 };
 
 class TestCompositorFrameSinkSupportManager
@@ -50,7 +48,7 @@ class TestCompositorFrameSinkSupportManager
       const FrameSinkId& frame_sink_id,
       bool is_root,
       bool needs_sync_points) override {
-    return CompositorFrameSinkSupport::Create(
+    return std::make_unique<CompositorFrameSinkSupport>(
         client, frame_sink_manager_, frame_sink_id, is_root, needs_sync_points);
   }
 
@@ -80,14 +78,12 @@ class DirectLayerTreeFrameSinkTest : public testing::Test {
         begin_frame_source_.get(), task_runner_.get(), max_frames_pending);
 
     display_ = std::make_unique<Display>(
-        &bitmap_manager_, &gpu_memory_buffer_manager_, RendererSettings(),
-        kArbitraryFrameSinkId, std::move(display_output_surface),
-        std::move(scheduler), task_runner_);
+        &bitmap_manager_, RendererSettings(), kArbitraryFrameSinkId,
+        std::move(display_output_surface), std::move(scheduler), task_runner_);
     layer_tree_frame_sink_ = std::make_unique<TestDirectLayerTreeFrameSink>(
         kArbitraryFrameSinkId, &support_manager_, &frame_sink_manager_,
-        display_.get(), context_provider_, nullptr, &gpu_memory_buffer_manager_,
-        &bitmap_manager_);
-
+        display_.get(), nullptr /* display_client */, context_provider_,
+        nullptr, task_runner_, &gpu_memory_buffer_manager_, &bitmap_manager_);
     layer_tree_frame_sink_->BindToClient(&layer_tree_frame_sink_client_);
     display_->Resize(display_size_);
     display_->SetVisible(true);
@@ -101,13 +97,9 @@ class DirectLayerTreeFrameSinkTest : public testing::Test {
   }
 
   void SwapBuffersWithDamage(const gfx::Rect& damage_rect) {
-    auto render_pass = RenderPass::Create();
-    render_pass->SetNew(1, display_rect_, damage_rect, gfx::Transform());
-
-    CompositorFrame frame = test::MakeEmptyCompositorFrame();
-    frame.metadata.begin_frame_ack = BeginFrameAck(0, 1, true);
-    frame.render_pass_list.push_back(std::move(render_pass));
-
+    auto frame = CompositorFrameBuilder()
+                     .AddRenderPass(display_rect_, damage_rect)
+                     .Build();
     layer_tree_frame_sink_->SubmitCompositorFrame(std::move(frame));
   }
 

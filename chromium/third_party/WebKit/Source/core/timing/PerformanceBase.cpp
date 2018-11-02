@@ -32,6 +32,8 @@
 #include "core/timing/PerformanceBase.h"
 
 #include <algorithm>
+#include "bindings/core/v8/V8ObjectBuilder.h"
+#include "bindings/core/v8/double_or_performance_mark_options.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentTiming.h"
 #include "core/dom/events/Event.h"
@@ -56,7 +58,7 @@ namespace blink {
 
 namespace {
 
-SecurityOrigin* GetSecurityOrigin(ExecutionContext* context) {
+const SecurityOrigin* GetSecurityOrigin(ExecutionContext* context) {
   if (context)
     return context->GetSecurityOrigin();
   return nullptr;
@@ -70,7 +72,7 @@ DOMHighResTimeStamp GetUnixAtZeroMonotonic() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       DOMHighResTimeStamp, unix_at_zero_monotonic,
       {ConvertSecondsToDOMHighResTimeStamp(CurrentTime() -
-                                           MonotonicallyIncreasingTime())});
+                                           CurrentTimeTicksInSeconds())});
   return unix_at_zero_monotonic;
 }
 
@@ -99,7 +101,7 @@ PerformanceBase::PerformanceBase(double time_origin,
           this,
           &PerformanceBase::DeliverObservationsTimerFired) {}
 
-PerformanceBase::~PerformanceBase() {}
+PerformanceBase::~PerformanceBase() = default;
 
 const AtomicString& PerformanceBase::InterfaceName() const {
   return EventTargetNames::Performance;
@@ -267,7 +269,7 @@ bool PerformanceBase::PassesTimingAllowCheck(
     const SecurityOrigin& initiator_security_origin,
     const AtomicString& original_timing_allow_origin,
     ExecutionContext* context) {
-  scoped_refptr<SecurityOrigin> resource_origin =
+  scoped_refptr<const SecurityOrigin> resource_origin =
       SecurityOrigin::Create(response.Url());
   if (resource_origin->IsSameSchemeHostPort(&initiator_security_origin))
     return true;
@@ -318,58 +320,91 @@ bool PerformanceBase::AllowsTimingRedirect(
   return true;
 }
 
-void PerformanceBase::AddResourceTiming(const ResourceTimingInfo& info) {
+void PerformanceBase::GenerateAndAddResourceTiming(
+    const ResourceTimingInfo& info,
+    const AtomicString& initiator_type) {
   if (IsResourceTimingBufferFull() &&
       !HasObserverFor(PerformanceEntry::kResource))
     return;
+
   ExecutionContext* context = GetExecutionContext();
-  SecurityOrigin* security_origin = GetSecurityOrigin(context);
+  const SecurityOrigin* security_origin = GetSecurityOrigin(context);
   if (!security_origin)
     return;
+  AddResourceTiming(
+      GenerateResourceTiming(*security_origin, info, *context),
+      !initiator_type.IsNull() ? initiator_type : info.InitiatorType());
+}
 
+WebResourceTimingInfo PerformanceBase::GenerateResourceTiming(
+    const SecurityOrigin& destination_origin,
+    const ResourceTimingInfo& info,
+    ExecutionContext& context_for_use_counter) {
+  // TODO(dcheng): It would be nicer if the performance entries simply held this
+  // data internally, rather than requiring it be marshalled back and forth.
   const ResourceResponse& final_response = info.FinalResponse();
-  bool allow_timing_details =
-      PassesTimingAllowCheck(final_response, *security_origin,
-                             info.OriginalTimingAllowOrigin(), context);
-  double start_time = info.InitialTime();
+  WebResourceTimingInfo result;
+  result.name = info.InitialURL().GetString();
+  result.start_time = info.InitialTime();
+  result.alpn_negotiated_protocol = final_response.AlpnNegotiatedProtocol();
+  result.connection_info = final_response.ConnectionInfoString();
+  result.timing = final_response.GetResourceLoadTiming();
+  result.finish_time = info.LoadFinishTime();
 
-  PerformanceServerTimingVector serverTiming =
-      PerformanceServerTiming::ParseServerTiming(
-          info, allow_timing_details
-                    ? PerformanceServerTiming::ShouldAllowTimingDetails::Yes
-                    : PerformanceServerTiming::ShouldAllowTimingDetails::No);
-  if (serverTiming.size()) {
-    UseCounter::Count(context, WebFeature::kPerformanceServerTiming);
-  }
-
-  if (info.RedirectChain().IsEmpty()) {
-    PerformanceEntry* entry = PerformanceResourceTiming::Create(
-        info, GetTimeOrigin(), start_time, allow_timing_details, serverTiming);
-    NotifyObserversOfEntry(*entry);
-    if (!IsResourceTimingBufferFull())
-      AddResourceTimingBuffer(*entry);
-    return;
-  }
+  result.allow_timing_details = PassesTimingAllowCheck(
+      final_response, destination_origin, info.OriginalTimingAllowOrigin(),
+      &context_for_use_counter);
 
   const Vector<ResourceResponse>& redirect_chain = info.RedirectChain();
-  bool allow_redirect_details = AllowsTimingRedirect(
-      redirect_chain, final_response, *security_origin, context);
+  if (!redirect_chain.IsEmpty()) {
+    result.allow_redirect_details =
+        AllowsTimingRedirect(redirect_chain, final_response, destination_origin,
+                             &context_for_use_counter);
 
-  if (!allow_redirect_details) {
-    ResourceLoadTiming* final_timing = final_response.GetResourceLoadTiming();
-    DCHECK(final_timing);
-    if (final_timing)
-      start_time = final_timing->RequestTime();
+    result.last_redirect_end_time =
+        redirect_chain.back().GetResourceLoadTiming()->ReceiveHeadersEnd();
+
+    if (!result.allow_redirect_details) {
+      // TODO(https://crbug.com/803913): There was previously a DCHECK that
+      // |final_timing| is non-null. However, it clearly can be null: removing
+      // this check caused https://crbug.com/803811. Figure out how this can
+      // happen so test coverage can be added.
+      if (ResourceLoadTiming* final_timing =
+              final_response.GetResourceLoadTiming()) {
+        result.start_time = final_timing->RequestTime();
+      }
+    }
+  } else {
+    result.allow_redirect_details = false;
+    result.last_redirect_end_time = 0.0;
   }
 
-  ResourceLoadTiming* last_redirect_timing =
-      redirect_chain.back().GetResourceLoadTiming();
-  CHECK(last_redirect_timing);
-  double last_redirect_end_time = last_redirect_timing->ReceiveHeadersEnd();
+  result.transfer_size = info.TransferSize();
+  result.encoded_body_size = final_response.EncodedBodyLength();
+  result.decoded_body_size = final_response.DecodedBodyLength();
+  result.did_reuse_connection = final_response.ConnectionReused();
+  result.allow_negative_values = info.NegativeAllowed();
 
-  PerformanceEntry* entry = PerformanceResourceTiming::Create(
-      info, GetTimeOrigin(), start_time, last_redirect_end_time,
-      allow_timing_details, allow_redirect_details, serverTiming);
+  result.server_timing = PerformanceServerTiming::ParseServerTiming(
+      info, result.allow_timing_details
+                ? PerformanceServerTiming::ShouldAllowTimingDetails::Yes
+                : PerformanceServerTiming::ShouldAllowTimingDetails::No);
+  if (!result.server_timing.empty()) {
+    UseCounter::Count(&context_for_use_counter,
+                      WebFeature::kPerformanceServerTiming);
+  }
+
+  return result;
+}
+
+void PerformanceBase::AddResourceTiming(const WebResourceTimingInfo& info,
+                                        const AtomicString& initiator_type) {
+  if (IsResourceTimingBufferFull() &&
+      !HasObserverFor(PerformanceEntry::kResource))
+    return;
+
+  PerformanceEntry* entry =
+      PerformanceResourceTiming::Create(info, GetTimeOrigin(), initiator_type);
   NotifyObserversOfEntry(*entry);
   if (!IsResourceTimingBufferFull())
     AddResourceTimingBuffer(*entry);
@@ -441,11 +476,45 @@ void PerformanceBase::AddLongTaskTiming(
   NotifyObserversOfEntry(*entry);
 }
 
-void PerformanceBase::mark(const String& mark_name,
+void PerformanceBase::mark(ScriptState* script_state,
+                           const String& mark_name,
                            ExceptionState& exception_state) {
+  DoubleOrPerformanceMarkOptions startOrOptions;
+  this->mark(script_state, mark_name, startOrOptions, exception_state);
+}
+
+void PerformanceBase::mark(
+    ScriptState* script_state,
+    const String& mark_name,
+    DoubleOrPerformanceMarkOptions& start_time_or_mark_options,
+    ExceptionState& exception_state) {
+  if (!RuntimeEnabledFeatures::CustomUserTimingEnabled()) {
+    DCHECK(start_time_or_mark_options.IsNull());
+  }
+
   if (!user_timing_)
     user_timing_ = UserTiming::Create(*this);
-  if (PerformanceEntry* entry = user_timing_->Mark(mark_name, exception_state))
+
+  DOMHighResTimeStamp start = 0.0;
+  if (start_time_or_mark_options.IsDouble()) {
+    start = start_time_or_mark_options.GetAsDouble();
+  } else if (start_time_or_mark_options.IsPerformanceMarkOptions() &&
+             start_time_or_mark_options.GetAsPerformanceMarkOptions()
+                 .hasStartTime()) {
+    start =
+        start_time_or_mark_options.GetAsPerformanceMarkOptions().startTime();
+  } else {
+    start = now();
+  }
+
+  ScriptValue detail = ScriptValue::CreateNull(script_state);
+  if (start_time_or_mark_options.IsPerformanceMarkOptions()) {
+    detail = start_time_or_mark_options.GetAsPerformanceMarkOptions().detail();
+  }
+
+  // Pass in a null ScriptValue if the mark's detail doesn't exist.
+  if (PerformanceEntry* entry = user_timing_->Mark(
+          script_state, mark_name, start, detail, exception_state))
     NotifyObserversOfEntry(*entry);
 }
 
@@ -549,7 +618,7 @@ bool PerformanceBase::HasObserverFor(
 
 void PerformanceBase::ActivateObserver(PerformanceObserver& observer) {
   if (active_observers_.IsEmpty())
-    deliver_observations_timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    deliver_observations_timer_.StartOneShot(TimeDelta(), FROM_HERE);
 
   active_observers_.insert(&observer);
 }
@@ -608,7 +677,18 @@ DOMHighResTimeStamp PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
 }
 
 DOMHighResTimeStamp PerformanceBase::now() const {
-  return MonotonicTimeToDOMHighResTimeStamp(MonotonicallyIncreasingTime());
+  return MonotonicTimeToDOMHighResTimeStamp(CurrentTimeTicksInSeconds());
+}
+
+ScriptValue PerformanceBase::toJSONForBinding(ScriptState* script_state) const {
+  V8ObjectBuilder result(script_state);
+  BuildJSONValue(result);
+  return result.GetScriptValue();
+}
+
+void PerformanceBase::BuildJSONValue(V8ObjectBuilder& builder) const {
+  builder.AddNumber("timeOrigin", timeOrigin());
+  // |memory| is not part of the spec, omitted.
 }
 
 void PerformanceBase::Trace(blink::Visitor* visitor) {

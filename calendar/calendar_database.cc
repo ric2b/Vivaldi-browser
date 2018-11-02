@@ -92,6 +92,8 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   if (!CreateCalendarTable() || !CreateEventTable() || !CreateRecurringTable())
     return sql::INIT_FAILURE;
 
+  CreateDefaultCalendar();
+
   return committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
 }
 

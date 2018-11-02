@@ -4,9 +4,12 @@
 
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_web_state_list_observer.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_model.h"
 #import "ios/chrome/browser/ui/fullscreen/test/fullscreen_model_test_util.h"
+#import "ios/chrome/browser/ui/fullscreen/test/test_fullscreen_controller.h"
+#import "ios/chrome/browser/ui/fullscreen/test/test_fullscreen_mediator.h"
 #import "ios/chrome/browser/web_state_list/fake_web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
@@ -25,13 +28,14 @@ class FullscreenWebStateListObserverTest : public PlatformTest {
  public:
   FullscreenWebStateListObserverTest()
       : PlatformTest(),
+        controller_(&model_),
+        mediator_(&controller_, &model_),
         web_state_list_(&web_state_list_delegate_),
-        observer_(&model_, &web_state_list_) {
-    SetUpFullscreenModelForTesting(&model_, 100.0);
+        observer_(&controller_, &model_, &web_state_list_, &mediator_) {
   }
 
   ~FullscreenWebStateListObserverTest() override {
-    // Stop observing the WebStateList.
+    mediator_.Disconnect();
     observer_.Disconnect();
   }
 
@@ -40,6 +44,8 @@ class FullscreenWebStateListObserverTest : public PlatformTest {
 
  private:
   FullscreenModel model_;
+  TestFullscreenController controller_;
+  TestFullscreenMediator mediator_;
   FakeWebStateListDelegate web_state_list_delegate_;
   WebStateList web_state_list_;
   FullscreenWebStateListObserver observer_;
@@ -49,12 +55,13 @@ TEST_F(FullscreenWebStateListObserverTest, ObserveActiveWebState) {
   // Insert a WebState into the list.  The observer should create a
   // FullscreenWebStateObserver for the newly activated WebState.
   std::unique_ptr<web::TestWebState> inserted_web_state =
-      base::MakeUnique<web::TestWebState>();
+      std::make_unique<web::TestWebState>();
   web::TestWebState* web_state = inserted_web_state.get();
   web_state_list().InsertWebState(0, std::move(inserted_web_state),
                                   WebStateList::INSERT_ACTIVATE,
                                   WebStateOpener());
   // Simulate a scroll to 0.5 progress.
+  SetUpFullscreenModelForTesting(&model(), 100.0);
   SimulateFullscreenUserScrollForProgress(&model(), 0.5);
   EXPECT_EQ(model().progress(), 0.5);
   // Simulate a navigation.  The model should be reset by the observers.

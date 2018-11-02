@@ -5,7 +5,8 @@
 #ifndef COMPONENTS_VIZ_COMMON_RESOURCES_RESOURCE_SETTINGS_H_
 #define COMPONENTS_VIZ_COMMON_RESOURCES_RESOURCE_SETTINGS_H_
 
-#include "components/viz/common/resources/buffer_to_texture_target_map.h"
+#include <stddef.h>
+
 #include "components/viz/common/viz_common_export.h"
 
 namespace viz {
@@ -24,7 +25,6 @@ class VIZ_COMMON_EXPORT ResourceSettings {
   bool high_bit_for_testing = false;
   // TODO(riju): Remove after r16 is used without the flag. crbug.com/759456
   bool use_r16_texture = false;
-  BufferToTextureTargetMap buffer_to_texture_target_map;
 };
 
 }  // namespace viz

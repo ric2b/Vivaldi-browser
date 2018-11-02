@@ -26,6 +26,8 @@
 
 #include "core/paint/compositing/CompositingRequirementsUpdater.h"
 
+#include "base/macros.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/PaintLayerStackingNode.h"
@@ -71,7 +73,6 @@ struct OverlapMapContainers {
 };
 
 class CompositingRequirementsUpdater::OverlapMap {
-  WTF_MAKE_NONCOPYABLE(OverlapMap);
 
  public:
   OverlapMap() {
@@ -138,6 +139,7 @@ class CompositingRequirementsUpdater::OverlapMap {
 
  private:
   Vector<OverlapMapContainers> overlap_stack_;
+  DISALLOW_COPY_AND_ASSIGN(OverlapMap);
 };
 
 class CompositingRequirementsUpdater::RecursionData {
@@ -158,11 +160,11 @@ class CompositingRequirementsUpdater::RecursionData {
 
 static bool RequiresCompositingOrSquashing(CompositingReasons reasons) {
 #if DCHECK_IS_ON()
-  bool fast_answer = reasons != kCompositingReasonNone;
+  bool fast_answer = reasons != CompositingReason::kNone;
   bool slow_answer = RequiresCompositing(reasons) || RequiresSquashing(reasons);
   DCHECK_EQ(slow_answer, fast_answer);
 #endif
-  return reasons != kCompositingReasonNone;
+  return reasons != CompositingReason::kNone;
 }
 
 static CompositingReasons SubtreeReasonsForCompositing(
@@ -170,18 +172,18 @@ static CompositingReasons SubtreeReasonsForCompositing(
     PaintLayer* layer,
     bool has_composited_descendants,
     bool has3d_transformed_descendants) {
-  CompositingReasons subtree_reasons = kCompositingReasonNone;
+  CompositingReasons subtree_reasons = CompositingReason::kNone;
 
   // When a layer has composited descendants, some effects, like 2d transforms,
   // filters, masks etc must be implemented via compositing so that they also
   // apply to those composited descendants.
   if (has_composited_descendants) {
     subtree_reasons |= layer->PotentialCompositingReasonsFromStyle() &
-                       kCompositingReasonComboCompositedDescendants;
+                       CompositingReason::kComboCompositedDescendants;
 
     if (layer->ShouldIsolateCompositedDescendants()) {
       DCHECK(layer->StackingNode()->IsStackingContext());
-      subtree_reasons |= kCompositingReasonIsolateCompositedDescendants;
+      subtree_reasons |= CompositingReason::kIsolateCompositedDescendants;
     }
 
     // FIXME: This should move into
@@ -189,7 +191,7 @@ static CompositingReasons SubtreeReasonsForCompositing(
     // a poor interaction with LayoutTextControlSingleLine, which sets this
     // hasOverflowClip directly.
     if (layer->GetLayoutObject().HasClipRelatedProperty())
-      subtree_reasons |= kCompositingReasonClipsCompositingDescendants;
+      subtree_reasons |= CompositingReason::kClipsCompositingDescendants;
 
     // We ignore LCD text here because we are required to composite
     // scroll-dependant fixed position elements with composited descendants for
@@ -201,7 +203,7 @@ static CompositingReasons SubtreeReasonsForCompositing(
         compositing_reason_finder.RequiresCompositingForScrollDependentPosition(
             layer, ignore_lcd_text)) {
       subtree_reasons |=
-          kCompositingReasonPositionFixedOrStickyWithCompositedDescendants;
+          CompositingReason::kPositionFixedOrStickyWithCompositedDescendants;
     }
   }
 
@@ -210,7 +212,7 @@ static CompositingReasons SubtreeReasonsForCompositing(
   // perspective.
   if (has3d_transformed_descendants) {
     subtree_reasons |= layer->PotentialCompositingReasonsFromStyle() &
-                       kCompositingReasonCombo3DDescendants;
+                       CompositingReason::kCombo3DDescendants;
   }
 
   return subtree_reasons;
@@ -222,7 +224,7 @@ CompositingRequirementsUpdater::CompositingRequirementsUpdater(
     : layout_view_(layout_view),
       compositing_reason_finder_(compositing_reason_finder) {}
 
-CompositingRequirementsUpdater::~CompositingRequirementsUpdater() {}
+CompositingRequirementsUpdater::~CompositingRequirementsUpdater() = default;
 
 void CompositingRequirementsUpdater::Update(
     PaintLayer* root,
@@ -267,7 +269,7 @@ void CompositingRequirementsUpdater::MaybeEnableCompositedScrolling(
     // support it with grayscale AA text.
     layer->GetScrollableArea()->UpdateNeedsCompositedScrolling(true);
     if (layer->NeedsCompositedScrolling())
-      reasons |= kCompositingReasonOverflowScrollingTouch;
+      reasons |= CompositingReason::kOverflowScrollingTouch;
   }
 }
 
@@ -284,8 +286,8 @@ void CompositingRequirementsUpdater::UpdateRecursive(
 
   layer->StackingNode()->UpdateLayerListsIfNeeded();
 
-  CompositingReasons reasons_to_composite = kCompositingReasonNone;
-  CompositingReasons direct_reasons = kCompositingReasonNone;
+  CompositingReasons reasons_to_composite = CompositingReason::kNone;
+  CompositingReasons direct_reasons = CompositingReason::kNone;
 
   // Video is special. It's the only PaintLayer type that can both have
   // PaintLayer children and whose children can't use its backing to render
@@ -293,13 +295,13 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   // own layers to draw on top of the accelerated video.
   if (current_recursion_data.compositing_ancestor_ &&
       current_recursion_data.compositing_ancestor_->GetLayoutObject().IsVideo())
-    direct_reasons |= kCompositingReasonVideoOverlay;
+    direct_reasons |= CompositingReason::kVideoOverlay;
 
   bool has_composited_scrolling_ancestor =
       layer->AncestorScrollingLayer() &&
       (compositing_reason_finder_.DirectReasons(layer->AncestorScrollingLayer(),
                                                 false) &
-       kCompositingReasonOverflowScrollingTouch);
+       CompositingReason::kOverflowScrollingTouch);
 
   bool use_clipped_bounding_rect =
       !has_composited_scrolling_ancestor ||
@@ -326,12 +328,12 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     reasons_to_composite |= direct_reasons;
 
     if (layer->IsRootLayer() && compositor->RootShouldAlwaysComposite())
-      reasons_to_composite |= kCompositingReasonRoot;
+      reasons_to_composite |= CompositingReason::kRoot;
 
     MaybeEnableCompositedScrolling(layer, reasons_to_composite);
   }
 
-  if ((reasons_to_composite & kCompositingReasonOverflowScrollingTouch) &&
+  if ((reasons_to_composite & CompositingReason::kOverflowScrollingTouch) &&
       !layer->IsRootLayer())
     current_recursion_data.has_composited_scrolling_ancestor_ = true;
 
@@ -341,8 +343,8 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   // composited behind us in paint-order.
   CompositingReasons overlap_compositing_reason =
       current_recursion_data.subtree_is_compositing_
-          ? kCompositingReasonAssumedOverlap
-          : kCompositingReasonNone;
+          ? CompositingReason::kAssumedOverlap
+          : CompositingReason::kNone;
 
   // TODO(chrishtr): use |hasCompositedScrollingAncestor| instead.
   if (current_recursion_data.has_composited_scrolling_ancestor_) {
@@ -359,7 +361,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
         continue;
       }
       if (layer->ScrollsWithRespectTo(unclipped_descendant))
-        reasons_to_composite |= kCompositingReasonAssumedOverlap;
+        reasons_to_composite |= CompositingReason::kAssumedOverlap;
     }
 
     // Remove irrelevant unclipped descendants in reverse order so our stored
@@ -369,7 +371,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
           unclipped_descendants_to_remove.size() - i - 1));
     }
 
-    if (reasons_to_composite & kCompositingReasonOutOfFlowClipping) {
+    if (reasons_to_composite & CompositingReason::kOutOfFlowClipping) {
       // TODO(schenney): We only need to promote when the clipParent is not a
       // descendant of the ancestor scroller, which we do not check for here.
       // Hence we might be promoting needlessly.
@@ -386,7 +388,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     bool overlaps =
         overlap_map.OverlapsLayers(abs_bounds, use_clipped_bounding_rect);
     overlap_compositing_reason =
-        overlaps ? kCompositingReasonOverlap : kCompositingReasonNone;
+        overlaps ? CompositingReason::kOverlap : CompositingReason::kNone;
   }
 
   reasons_to_composite |= overlap_compositing_reason;
@@ -400,7 +402,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   bool will_be_composited_or_squashed =
       can_be_composited && RequiresCompositingOrSquashing(reasons_to_composite);
   if (will_be_composited_or_squashed) {
-    // This layer now acts as the ancestor for kids.
+    // This layer now acts as the ancestor for child layers.
     child_recursion_data.compositing_ancestor_ = layer;
 
     // Here we know that all children and the layer's own contents can blindly
@@ -436,7 +438,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
       // a contents layer (since we need to ensure that the -ve z-order child
       // renders underneath our contents).
       if (child_recursion_data.subtree_is_compositing_) {
-        reasons_to_composite |= kCompositingReasonNegativeZIndexChildren;
+        reasons_to_composite |= CompositingReason::kNegativeZIndexChildren;
 
         if (!will_be_composited_or_squashed) {
           // make layer compositing
@@ -496,6 +498,14 @@ void CompositingRequirementsUpdater::UpdateRecursive(
         child_recursion_data.has_unisolated_composited_blending_descendant_;
   }
 
+  // Embedded objects treat the embedded document as a child for the purposes
+  // of composited layer decisions. Look into the embedded document to determine
+  // if it is composited.
+  bool contains_composited_iframe =
+      layer->GetLayoutObject().IsLayoutEmbeddedContent() &&
+      ToLayoutEmbeddedContent(layer->GetLayoutObject())
+          .RequiresAcceleratedCompositing();
+
   // Subsequent layers in the parent's stacking context may also need to
   // composite.
   if (child_recursion_data.subtree_is_compositing_)
@@ -503,7 +513,8 @@ void CompositingRequirementsUpdater::UpdateRecursive(
 
   // Set the flag to say that this SC has compositing children.
   layer->SetHasCompositingDescendant(
-      child_recursion_data.subtree_is_compositing_);
+      child_recursion_data.subtree_is_compositing_ ||
+      contains_composited_iframe);
 
   if (layer->IsRootLayer()) {
     // The root layer needs to be composited if anything else in the tree is
@@ -511,7 +522,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     if (child_recursion_data.subtree_is_compositing_ ||
         RequiresCompositingOrSquashing(reasons_to_composite) ||
         compositor->RootShouldAlwaysComposite()) {
-      reasons_to_composite |= kCompositingReasonRoot;
+      reasons_to_composite |= CompositingReason::kRoot;
       current_recursion_data.subtree_is_compositing_ = true;
       // Try again to enable composited scrolling if root became composited due
       // to subtree_is_compositing_ or overlap.
@@ -522,7 +533,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
       MaybeEnableCompositedScrolling(layer, reasons_to_composite);
     } else {
       compositor->SetCompositingModeEnabled(false);
-      reasons_to_composite = kCompositingReasonNone;
+      reasons_to_composite = CompositingReason::kNone;
     }
   } else {
     // All layers (even ones that aren't being composited) need to get added to
@@ -555,7 +566,7 @@ void CompositingRequirementsUpdater::UpdateRecursive(
 
     if (will_be_composited_or_squashed) {
       reasons_to_composite |= layer->PotentialCompositingReasonsFromStyle() &
-                              kCompositingReasonInlineTransform;
+                              CompositingReason::kInlineTransform;
     }
 
     if (will_be_composited_or_squashed &&
@@ -574,10 +585,10 @@ void CompositingRequirementsUpdater::UpdateRecursive(
     // parent layers. That's because we know for sure the animation is contained
     // inside the clipping rectangle, which is already added to the overlap map.
     bool is_composited_clipping_layer =
-        can_be_composited &&
-        (reasons_to_composite & kCompositingReasonClipsCompositingDescendants);
+        can_be_composited && (reasons_to_composite &
+                              CompositingReason::kClipsCompositingDescendants);
     bool is_composited_with_inline_transform =
-        reasons_to_composite & kCompositingReasonInlineTransform;
+        reasons_to_composite & CompositingReason::kInlineTransform;
     if ((!child_recursion_data.testing_overlap_ &&
          !is_composited_clipping_layer) ||
         layer->GetLayoutObject().Style()->HasCurrentTransformAnimation() ||
@@ -594,15 +605,15 @@ void CompositingRequirementsUpdater::UpdateRecursive(
   // At this point we have finished collecting all reasons to composite this
   // layer.
   layer->SetCompositingReasons(reasons_to_composite);
-  if (reasons_to_composite & kCompositingReasonOverlap)
+  if (reasons_to_composite & CompositingReason::kOverlap)
     compositing_reasons_stats.overlap_layers++;
-  if (reasons_to_composite & kCompositingReasonActiveAnimation)
+  if (reasons_to_composite & CompositingReason::kComboActiveAnimation)
     compositing_reasons_stats.active_animation_layers++;
-  if (reasons_to_composite & kCompositingReasonAssumedOverlap)
+  if (reasons_to_composite & CompositingReason::kAssumedOverlap)
     compositing_reasons_stats.assumed_overlap_layers++;
-  if (!(reasons_to_composite & kCompositingReasonComboAllDirectReasons))
+  if (!(reasons_to_composite & CompositingReason::kComboAllDirectReasons))
     compositing_reasons_stats.indirect_composited_layers++;
-  if (reasons_to_composite != kCompositingReasonNone)
+  if (reasons_to_composite != CompositingReason::kNone)
     compositing_reasons_stats.total_composited_layers++;
 }
 

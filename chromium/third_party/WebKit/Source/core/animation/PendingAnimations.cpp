@@ -50,7 +50,7 @@ void PendingAnimations::Add(Animation* animation) {
 
   bool visible = document->GetPage() && document->GetPage()->IsPageVisible();
   if (!visible && !timer_.IsActive()) {
-    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), FROM_HERE);
   }
 }
 
@@ -134,7 +134,7 @@ bool PendingAnimations::Update(
   }
 
   // If not, go ahead and start any animations that were waiting.
-  NotifyCompositorAnimationStarted(MonotonicallyIncreasingTime());
+  NotifyCompositorAnimationStarted(CurrentTimeTicksInSeconds());
 
   DCHECK_EQ(pending_.size(), deferred.size());
   return false;

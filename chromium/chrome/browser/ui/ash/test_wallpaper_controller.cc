@@ -8,6 +8,10 @@ TestWallpaperController::TestWallpaperController() : binding_(this) {}
 
 TestWallpaperController::~TestWallpaperController() = default;
 
+void TestWallpaperController::ClearCounts() {
+  remove_user_wallpaper_count_ = 0;
+}
+
 ash::mojom::WallpaperControllerPtr
 TestWallpaperController::CreateInterfacePtr() {
   ash::mojom::WallpaperControllerPtr ptr;
@@ -15,8 +19,12 @@ TestWallpaperController::CreateInterfacePtr() {
   return ptr;
 }
 
-void TestWallpaperController::SetClient(
-    ash::mojom::WallpaperControllerClientPtr client) {
+void TestWallpaperController::Init(
+    ash::mojom::WallpaperControllerClientPtr client,
+    const base::FilePath& user_data_path,
+    const base::FilePath& chromeos_wallpapers_path,
+    const base::FilePath& chromeos_custom_wallpapers_path,
+    bool is_device_wallpaper_policy_enforced) {
   was_client_set_ = true;
 }
 
@@ -28,7 +36,7 @@ void TestWallpaperController::SetCustomWallpaper(
     wallpaper::WallpaperType type,
     const SkBitmap& image,
     bool show_wallpaper) {
-  NOTIMPLEMENTED();
+  set_custom_wallpaper_count_++;
 }
 
 void TestWallpaperController::SetOnlineWallpaper(
@@ -42,14 +50,25 @@ void TestWallpaperController::SetOnlineWallpaper(
 
 void TestWallpaperController::SetDefaultWallpaper(
     ash::mojom::WallpaperUserInfoPtr user_info,
+    const std::string& wallpaper_files_id,
     bool show_wallpaper) {
-  NOTIMPLEMENTED();
+  set_default_wallpaper_count_++;
 }
 
 void TestWallpaperController::SetCustomizedDefaultWallpaper(
     const GURL& wallpaper_url,
     const base::FilePath& file_path,
     const base::FilePath& resized_directory) {
+  NOTIMPLEMENTED();
+}
+
+void TestWallpaperController::SetDeviceWallpaperPolicyEnforced(bool enforced) {
+  NOTIMPLEMENTED();
+}
+
+void TestWallpaperController::UpdateCustomWallpaperLayout(
+    ash::mojom::WallpaperUserInfoPtr user_info,
+    wallpaper::WallpaperLayout layout) {
   NOTIMPLEMENTED();
 }
 
@@ -63,8 +82,9 @@ void TestWallpaperController::ShowSigninWallpaper() {
 }
 
 void TestWallpaperController::RemoveUserWallpaper(
-    ash::mojom::WallpaperUserInfoPtr user_info) {
-  NOTIMPLEMENTED();
+    ash::mojom::WallpaperUserInfoPtr user_info,
+    const std::string& wallpaper_files_id) {
+  remove_user_wallpaper_count_++;
 }
 
 void TestWallpaperController::SetWallpaper(

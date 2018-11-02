@@ -4,9 +4,16 @@
 
 onload = function() {
   var getURL = chrome.extension.getURL;
+  var URL_LOAD_REDIRECT = "http://127.0.0.1:PORT/server-redirect";
+  var URL_NOT_FOUND = "http://127.0.0.1:PORT/not-found";
   chrome.tabs.create({"url": "about:blank"}, function(tab) {
     var tabId = tab.id;
     chrome.test.getConfig(function(config) {
+      var fixPort = function(url) {
+        return url.replace(/PORT/g, config.testServer.port);
+      };
+      URL_LOAD_REDIRECT = fixPort(URL_LOAD_REDIRECT);
+      URL_NOT_FOUND = fixPort(URL_NOT_FOUND);
       chrome.test.runTests([
         // Navigates to a page that redirects (on the server side) to a.html.
         function serverRedirect() {
@@ -41,8 +48,25 @@ onload = function() {
                          processId: 0,
                          tabId: 0,
                          timeStamp: 0,
-                         url: getURL('a.html') }}],
-          [ navigationOrder("a-") ]);
+                         url: getURL('a.html') }},
+            { label: "b-onBeforeNavigate",
+              event: "onBeforeNavigate",
+              details: { frameId: 0,
+                         parentFrameId: -1,
+                         processId: -1,
+                         tabId: 0,
+                         timeStamp: 0,
+                         url: URL_LOAD_REDIRECT }},
+            { label: "b-onErrorOccurred",
+              event: "onErrorOccurred",
+              details: { error: "net::ERR_INVALID_RESPONSE",
+                         frameId: 0,
+                         processId: -1,
+                         tabId: 0,
+                         timeStamp: 0,
+                         url: URL_NOT_FOUND }}],
+          [ navigationOrder("a-"),
+            [ "b-onBeforeNavigate", "b-onErrorOccurred"] ]);
           chrome.tabs.update(
               tabId, { url: getURL('a.html?' + config.testServer.port) });
         },

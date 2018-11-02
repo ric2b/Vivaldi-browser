@@ -29,6 +29,7 @@ extern const base::Feature kAllowAutoplayUnmutedInWebappManifestScope;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kAppleScriptExecuteJavaScriptMenuItem;
+extern const base::Feature kShow10_9ObsoleteInfobar;
 extern const base::Feature kViewsProfileChooser;
 extern const base::Feature kViewsTaskManager;
 #endif  // defined(OS_MACOSX)
@@ -73,6 +74,8 @@ extern const base::Feature kCaptureThumbnailDependingOnTransitionType;
 
 extern const base::Feature kCaptureThumbnailOnNavigatingAway;
 
+extern const base::Feature kChangePictureVideoMode;
+
 extern const base::Feature kCheckInstallabilityForBannerOnLoad;
 
 #if defined(OS_ANDROID)
@@ -105,6 +108,10 @@ extern const base::Feature kDoodlesOnLocalNtp;
 extern const base::Feature kDownloadsForeground;
 #endif
 
+#if defined(OS_ANDROID)
+extern const base::Feature kDownloadsLocationChange;
+#endif
+
 extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalAppBanners;
@@ -132,6 +139,12 @@ extern const base::Feature kFullscreenToolbarReveal;
 
 #if defined(OS_WIN)
 extern const base::Feature kGdiTextPrinting;
+#endif
+
+extern const base::Feature kGeoLanguage;
+
+#if defined(OS_ANDROID)
+extern const base::Feature kGrantNotificationsToDSE;
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -169,7 +182,6 @@ extern const base::Feature kMaterialDesignIncognitoNTP;
 
 #if !defined(OS_ANDROID)
 extern const base::Feature kMediaRemoting;
-extern const base::Feature kMediaRouterUIRouteController;
 #endif
 
 extern const base::Feature kModalPermissionPrompts;
@@ -206,8 +218,6 @@ extern const base::Feature kUseNewAcceptLanguageHeader;
 
 extern const base::Feature kPermissionsBlacklist;
 
-extern const base::Feature kPreconnectMore;
-
 #if defined(OS_WIN)
 extern const base::Feature kDisablePostScriptPrinting;
 #endif
@@ -234,8 +244,6 @@ extern const base::Feature kPrintPdfAsImage;
 
 extern const base::Feature kPushMessagingBackgroundMode;
 
-extern const base::Feature kPwaMinimalUi;
-
 #if !defined(OS_ANDROID)
 extern const base::Feature kRemoveUsageOfDeprecatedGaiaSigninEndpoint;
 #endif
@@ -245,6 +253,8 @@ extern const base::Feature kRuntimeMemoryLeakDetector;
 #endif  // defined(OS_CHROMEOS)
 
 extern const base::Feature kSafeSearchUrlReporting;
+
+extern const base::Feature kSecurityKeyAttestationPrompt;
 
 #if defined(OS_MACOSX)
 extern const base::Feature kShowAllDialogsWithViewsToolkit;
@@ -289,6 +299,10 @@ extern const base::Feature kUserActivityEventLogging;
 #if !defined(OS_ANDROID)
 extern const base::Feature kVoiceSearchOnLocalNtp;
 #endif
+
+#if defined(OS_WIN)
+extern const base::Feature kWin10AcceleratedDefaultBrowserFlow;
+#endif  // defined(OS_WIN)
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kOptInImeMenu;

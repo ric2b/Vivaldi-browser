@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/aura/env.h"
@@ -34,6 +35,7 @@
 #include "ui/keyboard/keyboard_layout_manager.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/keyboard/notification_manager.h"
 #include "ui/wm/core/window_animations.h"
 
 #if defined(OS_CHROMEOS)
@@ -259,28 +261,11 @@ void KeyboardController::NotifyContentsBoundsChanging(
     const gfx::Rect& new_bounds) {
   current_keyboard_bounds_ = new_bounds;
   if (ui_->HasContentsWindow() && ui_->GetContentsWindow()->IsVisible()) {
-    for (KeyboardControllerObserver& observer : observer_list_) {
-      observer.OnKeyboardAvailabilityChanging(!new_bounds.IsEmpty());
-      observer.OnKeyboardVisibleBoundsChanging(new_bounds);
+    notification_manager_.SendNotifications(
+        container_behavior_->BoundsObscureUsableRegion(),
+        container_behavior_->BoundsAffectWorkspaceLayout(), keyboard_locked(),
+        new_bounds, observer_list_);
 
-      // TODO(blakeo): reduce redundant successive calls with that have
-      // identical bounds.
-      const gfx::Rect obscured_workspace_region =
-          container_behavior_->BoundsObscureUsableRegion() ? new_bounds
-                                                           : gfx::Rect();
-      observer.OnKeyboardWorkspaceOccludedBoundsChanging(
-          obscured_workspace_region);
-
-      const gfx::Rect workspace_layout_offset_region =
-          container_behavior_->BoundsAffectWorkspaceLayout() ? new_bounds
-                                                             : gfx::Rect();
-      observer.OnKeyboardWorkspaceDisplacingBoundsChanging(
-          workspace_layout_offset_region);
-
-      // TODO(blakeo): remove this when all consumers have migrated to one of
-      // the notifications above.
-      observer.OnKeyboardBoundsChanging(new_bounds);
-    }
     if (keyboard::IsKeyboardOverscrollEnabled())
       ui_->InitInsets(new_bounds);
     else
@@ -490,7 +475,8 @@ void KeyboardController::OnTextInputStateChanged(
   TRACE_EVENT0("vk", "OnTextInputStateChanged");
 
   bool focused =
-      client && (client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE);
+      client && (client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE &&
+                 client->GetTextInputMode() != ui::TEXT_INPUT_MODE_NONE);
   bool should_hide = !focused && container_behavior_->TextBlurHidesKeyboard();
 
   if (should_hide) {
@@ -677,8 +663,8 @@ void KeyboardController::CheckStateTransition(KeyboardControllerState prev,
   const int transition_record =
       (valid_transition ? 1 : -1) *
       (static_cast<int>(prev) * 1000 + static_cast<int>(next));
-  UMA_HISTOGRAM_SPARSE_SLOWLY("VirtualKeyboard.ControllerStateTransition",
-                              transition_record);
+  base::UmaHistogramSparse("VirtualKeyboard.ControllerStateTransition",
+                           transition_record);
   UMA_HISTOGRAM_BOOLEAN("VirtualKeyboard.ControllerStateTransitionIsValid",
                         transition_record > 0);
 
@@ -723,8 +709,17 @@ void KeyboardController::ReportLingeringState() {
 }
 
 const gfx::Rect KeyboardController::GetWorkspaceObscuringBounds() const {
-  if (keyboard_visible() &&
-      container_behavior_->BoundsAffectWorkspaceLayout()) {
+  if (keyboard_visible() && container_behavior_->BoundsObscureUsableRegion())
+    return current_keyboard_bounds_;
+  return gfx::Rect();
+}
+
+const gfx::Rect KeyboardController::GetKeyboardLockScreenOffsetBounds() const {
+  // Overscroll is generally dependent on lock state, however, its behavior
+  // temporarily overridden by a static field in certain lock screen contexts.
+  // Furthermore, floating keyboard should never affect layout.
+  if (keyboard_visible() && !keyboard::IsKeyboardOverscrollEnabled() &&
+      container_behavior_->GetType() != ContainerType::FLOATING) {
     return current_keyboard_bounds_;
   }
   return gfx::Rect();
@@ -741,9 +736,8 @@ bool KeyboardController::IsOverscrollAllowed() const {
   return container_behavior_->IsOverscrollAllowed();
 }
 
-void KeyboardController::HandlePointerEvent(bool isMouseButtonPressed,
-                                            const gfx::Vector2d& kb_offset) {
-  container_behavior_->HandlePointerEvent(isMouseButtonPressed, kb_offset);
+void KeyboardController::HandlePointerEvent(const ui::LocatedEvent& event) {
+  container_behavior_->HandlePointerEvent(event);
 }
 
 void KeyboardController::SetContainerType(const ContainerType type) {

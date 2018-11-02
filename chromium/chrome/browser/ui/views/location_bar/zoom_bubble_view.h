@@ -10,8 +10,10 @@
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/label.h"
@@ -28,7 +30,8 @@ class ImageButton;
 class ZoomBubbleView : public LocationBarBubbleDelegateView,
                        public views::ButtonListener,
                        public ImmersiveModeController::Observer,
-                       public extensions::IconImage::Observer {
+                       public extensions::IconImage::Observer,
+                       public content::WebContentsObserver {
  public:
   // Shows the bubble and automatically closes it after a short time period if
   // |reason| is AUTOMATIC.
@@ -99,6 +102,10 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   // extensions::IconImage::Observer:
   void OnExtensionIconImageChanged(extensions::IconImage* /* image */) override;
 
+  // content::WebContentsObserver:
+  void WasHidden() override;
+  void WebContentsDestroyed() override;
+
   // Sets information about the extension that initiated the zoom change.
   // Calling this method asserts that the extension |extension| did initiate
   // the zoom change.
@@ -142,9 +149,6 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   views::Button* zoom_in_button_;
   views::Button* reset_button_;
 
-  // The WebContents for the page whose zoom has changed.
-  content::WebContents* web_contents_;
-
   // Whether the currently displayed bubble will automatically close.
   bool auto_close_;
 
@@ -157,6 +161,10 @@ class ZoomBubbleView : public LocationBarBubbleDelegateView,
   // |web_contents_|.
   // Not owned.
   ImmersiveModeController* immersive_mode_controller_;
+
+  // The session of the Browser that triggered the bubble. This allows the zoom
+  // icon to be updated even if the WebContents is destroyed.
+  const SessionID session_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ZoomBubbleView);
 };

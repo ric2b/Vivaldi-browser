@@ -397,9 +397,12 @@ class ProfileSyncService : public syncer::SyncServiceBase,
   // Similar to above but with a callback that will be invoked on completion.
   void OnGaiaAccountsInCookieUpdatedWithCallback(
       const std::vector<gaia::ListedAccount>& accounts,
-      const std::vector<gaia::ListedAccount>& signed_out_accounts,
-      const GoogleServiceAuthError& error,
       const base::Closure& callback);
+
+  // Returns true if currently signed in account is not present in the list of
+  // accounts from cookie jar.
+  bool HasCookieJarMismatch(
+      const std::vector<gaia::ListedAccount>& cookie_jar_accounts);
 
   // Get the sync status code.
   SyncStatusSummary QuerySyncStatusSummary();
@@ -571,9 +574,6 @@ class ProfileSyncService : public syncer::SyncServiceBase,
 
   // Some tests rely on injecting calls to the encryption observer.
   syncer::SyncEncryptionHandler::Observer* GetEncryptionObserverForTest() const;
-
-  // Triggers sync cycle with request to update specified |types|.
-  void RefreshTypesForTest(syncer::ModelTypeSet types);
 
   // Calls sync engine to send ClearServerDataMessage to server. This is used
   // to start accounts with a clean slate when performing end to end testing.

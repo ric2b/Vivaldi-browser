@@ -100,7 +100,7 @@ void LogTrustAnchor(const net::HashValueVector& spki_hashes) {
     if (id != 0)
       break;
   }
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Net.Certificate.TrustAnchor.Request", id);
+  base::UmaHistogramSparse("Net.Certificate.TrustAnchor.Request", id);
 }
 
 // Records per-request histograms relating to Certificate Transparency
@@ -593,7 +593,7 @@ void URLRequestHttpJob::AddExtraHeaders() {
     bool advertise_brotli = false;
     if (request()->context()->enable_brotli()) {
       if (request()->url().SchemeIsCryptographic() ||
-          IsLocalhost(request()->url().HostNoBracketsPiece())) {
+          IsLocalhost(request()->url())) {
         advertise_brotli = true;
       }
     }

@@ -8,7 +8,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/ios/block_types.h"
-#import "ios/chrome/browser/chrome_coordinator.h"
+#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 namespace web {
 struct ContextMenuParams;
@@ -32,6 +32,10 @@ struct ContextMenuParams;
 
 // Params are needed for the initialization.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
+    NS_UNAVAILABLE;
+- (instancetype)initWithBaseViewController:(UIViewController*)viewController
+                              browserState:
+                                  (ios::ChromeBrowserState*)browserState
     NS_UNAVAILABLE;
 
 // Adds an item at the end of the menu if |visible| is false.

@@ -13,6 +13,10 @@
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "ui/aura/mus/mus_types.h"
 
+namespace display {
+class DisplayManager;
+}
+
 namespace aura {
 
 enum class WindowTreeChangeType {
@@ -48,6 +52,9 @@ class TestWindowTree : public ui::mojom::WindowTree {
   ~TestWindowTree() override;
 
   void set_client(ui::mojom::WindowTreeClient* client) { client_ = client; }
+  void set_window_manager(ui::mojom::WindowManager* window_manager) {
+    window_manager_ = window_manager;
+  }
 
   uint32_t window_id() const { return window_id_; }
 
@@ -66,6 +73,11 @@ class TestWindowTree : public ui::mojom::WindowTree {
   bool has_change() const { return !changes_.empty(); }
 
   size_t number_of_changes() const { return changes_.size(); }
+
+  // Notifies the client about the accelerated widget when mus is not hosting
+  // viz.
+  void NotifyClientAboutAcceleratedWidgets(
+      display::DisplayManager* display_manager);
 
   // Acks all changes with a value of true.
   void AckAllChanges();
@@ -242,6 +254,7 @@ class TestWindowTree : public ui::mojom::WindowTree {
   std::vector<Change> changes_;
 
   ui::mojom::WindowTreeClient* client_;
+  ui::mojom::WindowManager* window_manager_ = nullptr;
 
   base::Optional<std::unordered_map<std::string, std::vector<uint8_t>>>
       last_new_window_properties_;

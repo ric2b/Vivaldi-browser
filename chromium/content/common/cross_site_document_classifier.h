@@ -5,8 +5,10 @@
 #ifndef CONTENT_COMMON_CROSS_SITE_DOCUMENT_CLASSIFIER_H_
 #define CONTENT_COMMON_CROSS_SITE_DOCUMENT_CLASSIFIER_H_
 
+#include <string>
+
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
+#include "base/strings/string_piece_forward.h"
 #include "content/common/content_export.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -30,11 +32,24 @@ enum CrossSiteDocumentMimeType {
 
 class CONTENT_EXPORT CrossSiteDocumentClassifier {
  public:
+  // Three conclusions are possible from sniffing a byte sequence:
+  //  - No: meaning that the data definitively doesn't match the indicated type.
+  //  - Yes: meaning that the data definitive does match the indicated type.
+  //  - Maybe: meaning that if more bytes are appended to the stream, it's
+  //    possible to get a Yes result. For example, if we are sniffing for a tag
+  //    like "<html", a kMaybe result would occur if the data contains just
+  //    "<ht".
+  enum Result {
+    kNo,
+    kMaybe,
+    kYes,
+  };
+
   // Returns the representative mime type enum value of the mime type of
   // response. For example, this returns the same value for all text/xml mime
   // type families such as application/xml, application/rss+xml.
   static CrossSiteDocumentMimeType GetCanonicalMimeType(
-      const std::string& mime_type);
+      base::StringPiece mime_type);
 
   // Returns whether this scheme is a target of cross-site document
   // policy(XSDP). This returns true only for http://* and https://* urls.
@@ -56,9 +71,15 @@ class CONTENT_EXPORT CrossSiteDocumentClassifier {
                                    const GURL& website_origin,
                                    const std::string& access_control_origin);
 
-  static bool SniffForHTML(base::StringPiece data);
-  static bool SniffForXML(base::StringPiece data);
-  static bool SniffForJSON(base::StringPiece data);
+  static Result SniffForHTML(base::StringPiece data);
+  static Result SniffForXML(base::StringPiece data);
+  static Result SniffForJSON(base::StringPiece data);
+
+  // Sniff for patterns that indicate |data| only ought to be consumed by XHR()
+  // or fetch(). This detects Javascript parser-breaker and particular JS
+  // infinite-loop patterns, which are used conventionally as a defense against
+  // JSON data exfiltration by means of a <script> tag.
+  static Result SniffForFetchOnlyResource(base::StringPiece data);
 
  private:
   CrossSiteDocumentClassifier();  // Not instantiable.

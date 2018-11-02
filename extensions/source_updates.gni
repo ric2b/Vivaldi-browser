@@ -1,13 +1,13 @@
 
 if (!is_android) {
-  post_process_target("//chrome/test:browser_tests") {
+  update_target("//chrome/test:browser_tests") {
     sources += [
       "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
     ]
   }
 }
 
-post_process_target("//extensions/browser:browser_sources") {
+update_target("//extensions/browser:browser_sources") {
   sources +=
       [ "//vivaldi/extensions/api/guest_view/vivaldi_web_view_guest.cpp" ]
   deps += [
@@ -17,7 +17,7 @@ post_process_target("//extensions/browser:browser_sources") {
   ]
 }
 
-post_process_target("//extensions/renderer:renderer") {
+update_target("//extensions/renderer:renderer") {
   sources += [
     "//vivaldi/extensions/vivaldi_script_dispatcher.cpp",
     "//vivaldi/extensions/vivaldi_script_dispatcher.h",
@@ -26,14 +26,14 @@ post_process_target("//extensions/renderer:renderer") {
   deps += [ "//vivaldi/extensions:resources" ]
 }
 
-post_process_template("//chrome/common/extensions/api:api_features") {
+update_template_instance("//chrome/common/extensions/api:api_features") {
   sources += [ "//vivaldi/extensions/api/_api_features.json" ]
 }
 
-post_process_template("//chrome/common/extensions/api:permission_features") {
+update_template_instance("//chrome/common/extensions/api:permission_features") {
   sources += [ "//vivaldi/extensions/api/_permission_features.json" ]
 }
 
-post_process_template("//chrome/common/extensions/api:manifest_features") {
+update_template_instance("//chrome/common/extensions/api:manifest_features") {
   sources += [ "//vivaldi/extensions/api/_manifest_features.json" ]
 }

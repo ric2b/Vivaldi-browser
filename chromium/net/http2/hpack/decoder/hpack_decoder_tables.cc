@@ -5,6 +5,7 @@
 #include "net/http2/hpack/decoder/hpack_decoder_tables.h"
 
 #include "base/logging.h"
+#include "net/http2/hpack/http2_hpack_constants.h"
 
 namespace net {
 namespace {
@@ -33,8 +34,8 @@ const std::vector<HpackStringPair>* GetStaticTable() {
 
 }  // namespace
 
-HpackDecoderTablesDebugListener::HpackDecoderTablesDebugListener() {}
-HpackDecoderTablesDebugListener::~HpackDecoderTablesDebugListener() {}
+HpackDecoderTablesDebugListener::HpackDecoderTablesDebugListener() = default;
+HpackDecoderTablesDebugListener::~HpackDecoderTablesDebugListener() = default;
 
 HpackDecoderStaticTable::HpackDecoderStaticTable(
     const std::vector<HpackStringPair>* table)
@@ -56,7 +57,7 @@ HpackDecoderDynamicTable::HpackDecoderTableEntry::HpackDecoderTableEntry(
 
 HpackDecoderDynamicTable::HpackDecoderDynamicTable()
     : insert_count_(kFirstDynamicTableIndex - 1), debug_listener_(nullptr) {}
-HpackDecoderDynamicTable::~HpackDecoderDynamicTable() {}
+HpackDecoderDynamicTable::~HpackDecoderDynamicTable() = default;
 
 void HpackDecoderDynamicTable::DynamicTableSizeUpdate(size_t size_limit) {
   DVLOG(3) << "HpackDecoderDynamicTable::DynamicTableSizeUpdate " << size_limit;
@@ -133,8 +134,8 @@ void HpackDecoderDynamicTable::RemoveLastEntry() {
   }
 }
 
-HpackDecoderTables::HpackDecoderTables() {}
-HpackDecoderTables::~HpackDecoderTables() {}
+HpackDecoderTables::HpackDecoderTables() = default;
+HpackDecoderTables::~HpackDecoderTables() = default;
 
 void HpackDecoderTables::set_debug_listener(
     HpackDecoderTablesDebugListener* debug_listener) {

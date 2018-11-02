@@ -11,7 +11,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_android.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/common/context_menu_params.h"
-#include "jni/SelectionPopupController_jni.h"
+#include "jni/SelectionPopupControllerImpl_jni.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
 #include "ui/gfx/geometry/point_conversions.h"
 
@@ -24,7 +24,7 @@ using blink::WebContextMenuData;
 
 namespace content {
 
-void JNI_SelectionPopupController_Init(
+void JNI_SelectionPopupControllerImpl_Init(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     const JavaParamRef<jobject>& jweb_contents) {
@@ -50,7 +50,7 @@ ScopedJavaLocalRef<jobject> SelectionPopupController::GetContext() const {
   if (obj.is_null())
     return nullptr;
 
-  return Java_SelectionPopupController_getContext(env, obj);
+  return Java_SelectionPopupControllerImpl_getContext(env, obj);
 }
 
 std::unique_ptr<ui::TouchHandleDrawable>
@@ -99,15 +99,17 @@ void SelectionPopupController::UpdateRenderProcessConnection(
 
 void SelectionPopupController::OnSelectionEvent(
     ui::SelectionEventType event,
-    const gfx::RectF& selection_rect) {
+    const gfx::RectF& selection_rect,
+    const gfx::PointF& bound_middle_point) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_obj_.get(env);
   if (obj.is_null())
     return;
 
-  Java_SelectionPopupController_onSelectionEvent(
+  Java_SelectionPopupControllerImpl_onSelectionEvent(
       env, obj, event, selection_rect.x(), selection_rect.y(),
-      selection_rect.right(), selection_rect.bottom());
+      selection_rect.right(), selection_rect.bottom(), bound_middle_point.x(),
+      bound_middle_point.y());
 }
 
 void SelectionPopupController::OnSelectionChanged(const std::string& text) {
@@ -116,7 +118,7 @@ void SelectionPopupController::OnSelectionChanged(const std::string& text) {
   if (obj.is_null())
     return;
   ScopedJavaLocalRef<jstring> jtext = ConvertUTF8ToJavaString(env, text);
-  Java_SelectionPopupController_onSelectionChanged(env, obj, jtext);
+  Java_SelectionPopupControllerImpl_onSelectionChanged(env, obj, jtext);
 }
 
 bool SelectionPopupController::ShowSelectionMenu(
@@ -156,25 +158,23 @@ bool SelectionPopupController::ShowSelectionMenu(
   const bool should_suggest = params.source_type == ui::MENU_SOURCE_TOUCH ||
                               params.source_type == ui::MENU_SOURCE_LONG_PRESS;
 
-  Java_SelectionPopupController_showSelectionMenu(
+  Java_SelectionPopupControllerImpl_showSelectionMenu(
       env, obj, params.selection_rect.x(), params.selection_rect.y(),
-      params.selection_rect.right(),
-      params.selection_rect.bottom() + handle_height, params.is_editable,
-      is_password_type, jselected_text, params.selection_start_offset,
-      can_select_all, can_edit_richly, should_suggest, params.source_type);
+      params.selection_rect.right(), params.selection_rect.bottom(),
+      handle_height, params.is_editable, is_password_type, jselected_text,
+      params.selection_start_offset, can_select_all, can_edit_richly,
+      should_suggest, params.source_type);
   return true;
 }
 
-void SelectionPopupController::OnShowUnhandledTapUIIfNeeded(int x_dip,
-                                                            int y_dip,
-                                                            float dip_scale) {
+void SelectionPopupController::OnShowUnhandledTapUIIfNeeded(int x_px,
+                                                            int y_px) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_obj_.get(env);
   if (obj.is_null())
     return;
-  Java_SelectionPopupController_onShowUnhandledTapUIIfNeeded(
-      env, obj, static_cast<jint>(x_dip * dip_scale),
-      static_cast<jint>(y_dip * dip_scale));
+  Java_SelectionPopupControllerImpl_onShowUnhandledTapUIIfNeeded(
+      env, obj, static_cast<jint>(x_px), static_cast<jint>(y_px));
 }
 
 void SelectionPopupController::OnSelectWordAroundCaretAck(bool did_select,
@@ -184,7 +184,7 @@ void SelectionPopupController::OnSelectWordAroundCaretAck(bool did_select,
   ScopedJavaLocalRef<jobject> obj = java_obj_.get(env);
   if (obj.is_null())
     return;
-  Java_SelectionPopupController_onSelectWordAroundCaretAck(
+  Java_SelectionPopupControllerImpl_onSelectWordAroundCaretAck(
       env, obj, did_select, start_adjust, end_adjust);
 }
 

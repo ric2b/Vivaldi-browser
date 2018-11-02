@@ -237,16 +237,16 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
 
   // These are the combinations of codec-pixel format supported in principle.
   DCHECK(
-      (config.codec() == kCodecVP8 && config.format() == PIXEL_FORMAT_YV12) ||
-      (config.codec() == kCodecVP8 && config.format() == PIXEL_FORMAT_YV12A) ||
-      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_YV12) ||
-      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_YV12A) ||
-      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_YV24));
+      (config.codec() == kCodecVP8 && config.format() == PIXEL_FORMAT_I420) ||
+      (config.codec() == kCodecVP8 && config.format() == PIXEL_FORMAT_I420A) ||
+      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_I420) ||
+      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_I420A) ||
+      (config.codec() == kCodecVP9 && config.format() == PIXEL_FORMAT_I444));
 
-#if !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   // When FFmpegVideoDecoder is available it handles VP8 that doesn't have
   // alpha, and VpxVideoDecoder will handle VP8 with alpha.
-  if (config.codec() == kCodecVP8 && config.format() != PIXEL_FORMAT_YV12A)
+  if (config.codec() == kCodecVP8 && config.format() != PIXEL_FORMAT_I420A)
     return false;
 #endif
 
@@ -274,7 +274,7 @@ bool VpxVideoDecoder::ConfigureDecoder(const VideoDecoderConfig& config) {
     }
   }
 
-  if (config.format() != PIXEL_FORMAT_YV12A)
+  if (config.format() != PIXEL_FORMAT_I420A)
     return true;
 
   DCHECK(!vpx_codec_alpha_);
@@ -320,7 +320,8 @@ bool VpxVideoDecoder::VpxDecode(const DecoderBuffer* buffer,
   int64_t timestamp = buffer->timestamp().InMicroseconds();
   void* user_priv = reinterpret_cast<void*>(&timestamp);
   {
-    TRACE_EVENT1("media", "vpx_codec_decode", "timestamp", timestamp);
+    TRACE_EVENT2("media", "vpx_codec_decode", "timestamp", timestamp,
+                 "buffer size (B)", buffer->data_size());
     vpx_codec_err_t status =
         vpx_codec_decode(vpx_codec_.get(), buffer->data(), buffer->data_size(),
                          user_priv, 0 /* deadline */);
@@ -505,11 +506,11 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
   VideoPixelFormat codec_format;
   switch (vpx_image->fmt) {
     case VPX_IMG_FMT_I420:
-      codec_format = vpx_image_alpha ? PIXEL_FORMAT_YV12A : PIXEL_FORMAT_YV12;
+      codec_format = vpx_image_alpha ? PIXEL_FORMAT_I420A : PIXEL_FORMAT_I420;
       break;
 
     case VPX_IMG_FMT_I444:
-      codec_format = PIXEL_FORMAT_YV24;
+      codec_format = PIXEL_FORMAT_I444;
       break;
 
     case VPX_IMG_FMT_I42016:
@@ -600,8 +601,8 @@ bool VpxVideoDecoder::CopyVpxImageToVideoFrame(
     return true;
   }
 
-  DCHECK(codec_format == PIXEL_FORMAT_YV12 ||
-         codec_format == PIXEL_FORMAT_YV12A);
+  DCHECK(codec_format == PIXEL_FORMAT_I420 ||
+         codec_format == PIXEL_FORMAT_I420A);
 
   *video_frame = frame_pool_.CreateFrame(codec_format, visible_size,
                                          gfx::Rect(visible_size),

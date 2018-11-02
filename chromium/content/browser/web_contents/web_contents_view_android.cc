@@ -10,6 +10,7 @@
 #include "cc/layers/layer.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_view_core.h"
+#include "content/browser/android/gesture_listener_manager.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -106,7 +107,8 @@ WebContentsViewAndroid::WebContentsViewAndroid(
       content_view_core_(NULL),
       delegate_(delegate),
       view_(this, ui::ViewAndroid::LayoutType::NORMAL),
-      synchronous_compositor_client_(nullptr) {}
+      synchronous_compositor_client_(nullptr),
+      gesture_listener_manager_(nullptr) {}
 
 WebContentsViewAndroid::~WebContentsViewAndroid() {
   if (view_.GetLayer())
@@ -173,6 +175,12 @@ RenderWidgetHostViewAndroid*
 WebContentsViewAndroid::GetRenderWidgetHostViewAndroid() {
   return static_cast<RenderWidgetHostViewAndroid*>(
       web_contents_->GetRenderWidgetHostView());
+}
+
+void WebContentsViewAndroid::SetGestureListenerManager(
+    std::unique_ptr<GestureListenerManager> manager) {
+  DCHECK(!gesture_listener_manager_);
+  gesture_listener_manager_ = std::move(manager);
 }
 
 gfx::NativeWindow WebContentsViewAndroid::GetTopLevelNativeWindow() const {
@@ -339,14 +347,14 @@ void WebContentsViewAndroid::StartDragging(
     RenderWidgetHostImpl* source_rwh) {
   if (drop_data.text.is_null()) {
     // Need to clear drag and drop state in blink.
-    OnDragEnded();
+    OnSystemDragEnded();
     return;
   }
 
   gfx::NativeView native_view = GetNativeView();
   if (!native_view) {
     // Need to clear drag and drop state in blink.
-    OnDragEnded();
+    OnSystemDragEnded();
     return;
   }
 
@@ -369,7 +377,7 @@ void WebContentsViewAndroid::StartDragging(
 
   if (!native_view->StartDragAndDrop(jtext, gfx::ConvertToJavaBitmap(bitmap))) {
     // Need to clear drag and drop state in blink.
-    OnDragEnded();
+    OnSystemDragEnded();
     return;
   }
 
@@ -445,6 +453,9 @@ void WebContentsViewAndroid::OnDragEntered(
 
 void WebContentsViewAndroid::OnDragUpdated(const gfx::PointF& location,
                                            const gfx::PointF& screen_location) {
+  drag_location_ = location;
+  drag_screen_location_ = screen_location;
+
   blink::WebDragOperationsMask allowed_ops =
       static_cast<blink::WebDragOperationsMask>(blink::kWebDragOperationCopy |
                                                 blink::kWebDragOperationMove);
@@ -465,8 +476,17 @@ void WebContentsViewAndroid::OnPerformDrop(DropData* drop_data,
       *drop_data, location, screen_location, 0);
 }
 
-void WebContentsViewAndroid::OnDragEnded() {
+void WebContentsViewAndroid::OnSystemDragEnded() {
   web_contents_->GetRenderViewHost()->GetWidget()->DragSourceSystemDragEnded();
+}
+
+void WebContentsViewAndroid::OnDragEnded() {
+  web_contents_->GetRenderViewHost()->GetWidget()->DragSourceEndedAt(
+      drag_location_, drag_screen_location_, blink::kWebDragOperationNone);
+  OnSystemDragEnded();
+
+  drag_location_ = gfx::PointF();
+  drag_screen_location_ = gfx::PointF();
 }
 
 void WebContentsViewAndroid::GotFocus(
@@ -501,6 +521,14 @@ int WebContentsViewAndroid::GetBottomControlsHeight() const {
 bool WebContentsViewAndroid::DoBrowserControlsShrinkBlinkSize() const {
   auto* delegate = web_contents_->GetDelegate();
   return delegate ? delegate->DoBrowserControlsShrinkBlinkSize() : false;
+}
+
+void WebContentsViewAndroid::GestureEventAck(
+    const blink::WebGestureEvent& event,
+    InputEventAckState ack_result) {
+  if (!gesture_listener_manager_)
+    return;
+  gesture_listener_manager_->GestureEventAck(event, ack_result);
 }
 
 bool WebContentsViewAndroid::OnTouchEvent(const ui::MotionEventAndroid& event) {

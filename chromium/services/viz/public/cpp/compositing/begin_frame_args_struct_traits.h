@@ -40,6 +40,10 @@ struct StructTraits<viz::mojom::BeginFrameArgsDataView, viz::BeginFrameArgs> {
     return args.on_critical_path;
   }
 
+  static bool animate_only(const viz::BeginFrameArgs& args) {
+    return args.animate_only;
+  }
+
   static bool Read(viz::mojom::BeginFrameArgsDataView data,
                    viz::BeginFrameArgs* out);
 };
@@ -52,6 +56,10 @@ struct StructTraits<viz::mojom::BeginFrameAckDataView, viz::BeginFrameAck> {
 
   static uint64_t source_id(const viz::BeginFrameAck& ack) {
     return ack.source_id;
+  }
+
+  static bool has_damage(const viz::BeginFrameAck& ack) {
+    return ack.has_damage;
   }
 
   static bool Read(viz::mojom::BeginFrameAckDataView data,

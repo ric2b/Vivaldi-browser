@@ -256,7 +256,7 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
   }
 
   _updateRowHeight() {
-    this._rowHeight = Math.floor(this._rawRowHeight * window.devicePixelRatio) / window.devicePixelRatio;
+    this._rowHeight = Math.round(this._rawRowHeight * window.devicePixelRatio) / window.devicePixelRatio;
   }
 
   /**
@@ -287,6 +287,8 @@ Network.NetworkWaterfallColumn = class extends UI.VBox {
    * @return {?Network.NetworkNode}
    */
   getNodeFromPoint(x, y) {
+    if (y <= this._headerHeight)
+      return null;
     return this._nodes[Math.floor((this._scrollTop + y - this._headerHeight) / this._rowHeight)];
   }
 

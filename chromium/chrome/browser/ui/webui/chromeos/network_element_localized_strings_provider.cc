@@ -169,6 +169,9 @@ void AddDetailsLocalizedStrings(content::WebUIDataSource* html_source) {
     const char* name;
     int id;
   } localized_strings[] = {
+      {"loading", IDS_SETTINGS_LOADING},
+      {"hidePassword", IDS_SETTINGS_PASSWORD_HIDE},
+      {"showPassword", IDS_SETTINGS_PASSWORD_SHOW},
       {"networkProxy", IDS_SETTINGS_INTERNET_NETWORK_PROXY_PROXY},
       {"networkProxyAddException",
        IDS_SETTINGS_INTERNET_NETWORK_PROXY_ADD_EXCEPTION},
@@ -296,26 +299,29 @@ void AddErrorLocalizedStrings(content::WebUIDataSource* html_source) {
     html_source->AddLocalizedString(entry.name, entry.id);
 
   // Include Shill errors.
-  const char* shill_errors[] = {shill::kErrorOutOfRange,
-                                shill::kErrorPinMissing,
-                                shill::kErrorDhcpFailed,
-                                shill::kErrorConnectFailed,
-                                shill::kErrorBadPassphrase,
-                                shill::kErrorBadWEPKey,
-                                shill::kErrorActivationFailed,
-                                shill::kErrorNeedEvdo,
-                                shill::kErrorNeedHomeNetwork,
-                                shill::kErrorOtaspFailed,
-                                shill::kErrorAaaFailed,
-                                shill::kErrorInternal,
-                                shill::kErrorDNSLookupFailed,
-                                shill::kErrorHTTPGetFailed,
-                                shill::kErrorIpsecPskAuthFailed,
-                                shill::kErrorIpsecCertAuthFailed,
-                                shill::kErrorEapAuthenticationFailed,
-                                shill::kErrorEapLocalTlsFailed,
-                                shill::kErrorEapRemoteTlsFailed,
-                                shill::kErrorPppAuthFailed};
+  const char* shill_errors[] = {
+      shill::kErrorOutOfRange,
+      shill::kErrorPinMissing,
+      shill::kErrorDhcpFailed,
+      shill::kErrorConnectFailed,
+      shill::kErrorBadPassphrase,
+      shill::kErrorBadWEPKey,
+      shill::kErrorActivationFailed,
+      shill::kErrorNeedEvdo,
+      shill::kErrorNeedHomeNetwork,
+      shill::kErrorOtaspFailed,
+      shill::kErrorAaaFailed,
+      shill::kErrorInternal,
+      shill::kErrorDNSLookupFailed,
+      shill::kErrorHTTPGetFailed,
+      shill::kErrorIpsecPskAuthFailed,
+      shill::kErrorIpsecCertAuthFailed,
+      shill::kErrorEapAuthenticationFailed,
+      shill::kErrorEapLocalTlsFailed,
+      shill::kErrorEapRemoteTlsFailed,
+      shill::kErrorPppAuthFailed,
+      shill::kErrorResultInvalidPassphrase,
+  };
   for (const auto* error : shill_errors) {
     html_source->AddString(
         error, base::UTF16ToUTF8(shill_error::GetShillErrorString(error, "")));

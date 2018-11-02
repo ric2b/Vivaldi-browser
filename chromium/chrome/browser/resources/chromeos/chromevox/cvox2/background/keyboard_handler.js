@@ -8,13 +8,13 @@
 
 goog.provide('BackgroundKeyboardHandler');
 
+goog.require('ChromeVoxState');
+goog.require('Output');
 goog.require('cvox.ChromeVoxKbHandler');
+goog.require('cvox.ChromeVoxPrefs');
 
 /** @constructor */
 BackgroundKeyboardHandler = function() {
-  // Classic keymap.
-  cvox.ChromeVoxKbHandler.handlerKeyMap = cvox.KeyMap.fromDefaults();
-
   /** @type {number} @private */
   this.passThroughKeyUpCount_ = 0;
 
@@ -24,7 +24,9 @@ BackgroundKeyboardHandler = function() {
   document.addEventListener('keydown', this.onKeyDown.bind(this), false);
   document.addEventListener('keyup', this.onKeyUp.bind(this), false);
 
-  chrome.accessibilityPrivate.setKeyboardListener(true, false);
+  chrome.accessibilityPrivate.setKeyboardListener(
+      true, cvox.ChromeVox.isStickyPrefOn);
+  window['prefs'].switchToKeyMap('keymap_next');
 };
 
 BackgroundKeyboardHandler.prototype = {
@@ -38,8 +40,7 @@ BackgroundKeyboardHandler.prototype = {
     if (cvox.ChromeVox.passThroughMode)
       return false;
 
-    if (ChromeVoxState.instance.mode != ChromeVoxMode.CLASSIC &&
-        !cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
+    if (!cvox.ChromeVoxKbHandler.basicKeyDownActionsListener(evt)) {
       evt.preventDefault();
       evt.stopPropagation();
       this.eatenKeyDowns_.add(evt.keyCode);
@@ -72,32 +73,22 @@ BackgroundKeyboardHandler.prototype = {
     }
 
     return false;
-  },
-
-  /**
-   * React to mode changes.
-   * @param {ChromeVoxMode} newMode
-   * @param {ChromeVoxMode?} oldMode
-   */
-  onModeChanged: function(newMode, oldMode) {
-    if (newMode == ChromeVoxMode.CLASSIC) {
-      chrome.accessibilityPrivate.setKeyboardListener(false, false);
-    } else {
-      chrome.accessibilityPrivate.setKeyboardListener(
-          true, cvox.ChromeVox.isStickyPrefOn);
-    }
-
-    if (newMode === ChromeVoxMode.NEXT ||
-        newMode === ChromeVoxMode.FORCE_NEXT) {
-      // Switching out of classic, classic compat, or uninitialized
-      // (on startup).
-      window['prefs'].switchToKeyMap('keymap_next');
-    } else if (
-        oldMode && oldMode != ChromeVoxMode.CLASSIC &&
-        oldMode != ChromeVoxMode.CLASSIC_COMPAT) {
-      // Switching out of next. Intentionally do nothing when switching out of
-      // an uninitialized |oldMode|.
-      window['prefs'].switchToKeyMap('keymap_classic');
-    }
   }
+};
+
+/**
+ * @param {number} keyCode
+ * @param {chrome.accessibilityPrivate.SyntheticKeyboardModifiers=} modifiers
+ * @return {boolean}
+ */
+BackgroundKeyboardHandler.sendKeyPress = function(keyCode, modifiers) {
+  var key = {
+    type: chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYDOWN,
+    keyCode: keyCode,
+    modifiers: modifiers
+  };
+  chrome.accessibilityPrivate.sendSyntheticKeyEvent(key);
+  key['type'] = chrome.accessibilityPrivate.SyntheticKeyboardEventType.KEYUP;
+  chrome.accessibilityPrivate.sendSyntheticKeyEvent(key);
+  return true;
 };

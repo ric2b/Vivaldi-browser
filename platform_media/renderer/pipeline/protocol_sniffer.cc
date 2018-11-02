@@ -114,8 +114,10 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
     case container_names::CONTAINER_AAC:
       return "audio/aac";
 
+#if defined(PLATFORM_MEDIA_MP3)
     case container_names::CONTAINER_MP3:
       return "audio/mp3";
+#endif // PLATFORM_MEDIA_MP3
 
     case container_names::CONTAINER_WAV:
       return "audio/wav";
@@ -129,6 +131,7 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
       break;
   }
 
+#if defined(PLATFORM_MEDIA_MP3)
   // Also check for Shoutcast, a popular live streaming protocol.
   if (data_size >= 3 && data[0] == 'I' && data[1] == 'C' && data[2] == 'Y') {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " audio/mp3";
@@ -141,6 +144,7 @@ std::string DetermineContainer(const uint8_t* data, size_t data_size) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__ << " audio/mp3";
     return "audio/mp3";
   }
+#endif // PLATFORM_MEDIA_MP3
 
   return std::string();
 }

@@ -69,6 +69,7 @@ const char kAlsaCheckCloseTimeout[] = "alsa-check-close-timeout";
 const char kAlsaEnableUpsampling[] = "alsa-enable-upsampling";
 
 // Optional flag to set a fixed sample rate for the alsa device.
+// Deprecated: Use --audio-output-sample-rate instead.
 const char kAlsaFixedOutputSampleRate[] = "alsa-fixed-output-sample-rate";
 
 // Name of the simple mixer control element that the ALSA-based media library
@@ -88,6 +89,14 @@ const char kAlsaMuteElementName[] = "alsa-mute-element-name";
 // specified it will default to the same device as kAlsaVolumeDeviceName.
 const char kAlsaMuteDeviceName[] = "alsa-mute-device-name";
 
+// Name of the simple mixer control element that the ALSA-based media library
+// should use to toggle powersave mode on the system.
+const char kAlsaAmpElementName[] = "alsa-amp-element-name";
+
+// Name of the device the amp mixer should be opened on. If this flag is not
+// specified it will default to the same device as kAlsaVolumeDeviceName.
+const char kAlsaAmpDeviceName[] = "alsa-amp-device-name";
+
 // Calibrated max output volume dBa for voice content at 1 meter, if known.
 const char kMaxOutputVolumeDba1m[] = "max-output-volume-dba1m";
 
@@ -95,6 +104,11 @@ const char kMaxOutputVolumeDba1m[] = "max-output-volume-dba1m";
 // specific number of channels to ALSA and generate loopback audio. Default
 // value is 2.
 const char kAudioOutputChannels[] = "audio-output-channels";
+
+// Specify fixed sample rate for audio output stream. If this flag is not
+// specified the StreamMixer will choose sample rate based on the sample rate of
+// the media stream.
+const char kAudioOutputSampleRate[] = "audio-output-sample-rate";
 
 // Some platforms typically have very little 'free' memory, but plenty is
 // available in buffers+cached.  For such platforms, configure this amount
@@ -108,6 +122,9 @@ const char kMemPressureSystemReservedKb[] = "mem-pressure-system-reserved-kb";
 const char kCastInitialScreenWidth[] = "cast-initial-screen-width";
 const char kCastInitialScreenHeight[] = "cast-initial-screen-height";
 const char kGraphicsBufferCount[] = "graphics-buffer-count";
+
+// Overrides the vsync interval used by the GPU process to refresh the display.
+const char kVSyncInterval[] = "vsync-interval";
 
 // When present, desktop cast_shell will create 1080p window (provided display
 // resolution is high enough).  Otherwise, cast_shell defaults to 720p.

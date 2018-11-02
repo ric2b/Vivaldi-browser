@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "content/browser/browser_process_sub_thread.h"
 #include "content/public/browser/browser_main_runner.h"
+#include "media/media_features.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/viz/public/interfaces/compositing/compositing_mode_watcher.mojom.h"
 #include "ui/base/ui_features.h"
@@ -109,6 +110,11 @@ class SwapMetricsDriver;
 class TracingControllerImpl;
 struct MainFunctionParams;
 
+#if BUILDFLAG(ENABLE_WEBRTC)
+class WebRTCInternals;
+class WebRtcEventLogManager;
+#endif
+
 #if defined(OS_ANDROID)
 class ScreenOrientationDelegate;
 #endif
@@ -132,7 +138,9 @@ class CONTENT_EXPORT BrowserMainLoop {
 
   void Init();
 
-  void EarlyInitialization();
+  // Return value is exit status. Anything other than RESULT_CODE_NORMAL_EXIT
+  // is considered an error.
+  int EarlyInitialization();
 
   // Initializes the toolkit. Returns whether the toolkit initialization was
   // successful or not.
@@ -219,6 +227,8 @@ class CONTENT_EXPORT BrowserMainLoop {
     return device_monitor_mac_.get();
   }
 #endif
+
+  BrowserMainParts* parts() { return parts_.get(); }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(BrowserMainLoopTest, CreateThreadsInSingleProcess);
@@ -368,6 +378,11 @@ class CONTENT_EXPORT BrowserMainLoop {
 #endif
 #if defined(USE_OZONE)
   std::unique_ptr<gfx::ClientNativePixmapFactory> client_native_pixmap_factory_;
+#endif
+
+#if BUILDFLAG(ENABLE_WEBRTC)
+  std::unique_ptr<WebRtcEventLogManager> webrtc_event_log_manager_;
+  std::unique_ptr<WebRTCInternals> webrtc_internals_;
 #endif
 
   std::unique_ptr<LoaderDelegateImpl> loader_delegate_;

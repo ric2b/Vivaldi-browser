@@ -243,6 +243,7 @@ class InstallWorkerTest : public testing::Test {
       installer_state->AddProductFromState(*chrome);
     } else {
       BrowserDistribution* dist = BrowserDistribution::GetDistribution();
+      installer_state->AddProduct(base::MakeUnique<Product>(dist));
     }
   }
 

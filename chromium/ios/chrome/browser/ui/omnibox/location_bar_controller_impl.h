@@ -26,13 +26,15 @@ class WebState;
 
 @protocol BrowserCommands;
 @protocol LocationBarDelegate;
+@protocol LocationBarURLLoader;
 @class PageInfoBridge;
 class OmniboxViewIOS;
 @class OmniboxClearButtonBridge;
+@class OmniboxPopupCoordinator;
 @protocol OmniboxPopupPositioner;
 @class LocationBarView;
+class ScopedFullscreenDisabler;
 class ToolbarModel;
-class OmniboxPopupViewIOS;
 
 // Concrete implementation of the LocationBarController interface.
 class LocationBarControllerImpl : public LocationBarController,
@@ -44,8 +46,12 @@ class LocationBarControllerImpl : public LocationBarController,
                             id<BrowserCommands> dispatcher);
   ~LocationBarControllerImpl() override;
 
-  // Creates a popup view and wires it to |edit_view_|.
-  std::unique_ptr<OmniboxPopupViewIOS> CreatePopupView(
+  void SetURLLoader(id<LocationBarURLLoader> URLLoader) {
+    URLLoader_ = URLLoader;
+  };
+
+  // Creates a popup coordinator and wires it to |edit_view_|.
+  OmniboxPopupCoordinator* CreatePopupCoordinator(
       id<OmniboxPopupPositioner> positioner);
 
   // OmniboxEditController implementation
@@ -100,8 +106,15 @@ class LocationBarControllerImpl : public LocationBarController,
   __strong PageInfoBridge* page_info_bridge_;
   LocationBarView* location_bar_view_;
   __weak id<LocationBarDelegate> delegate_;
+  __weak id<LocationBarURLLoader> URLLoader_;
   // Dispatcher to send commands from the location bar.
   __weak id<BrowserCommands> dispatcher_;
+  // The BrowserState passed on construction.
+  ios::ChromeBrowserState* browser_state_;
+  // The disabler that prevents fullscreen calculations to occur while the
+  // location bar is focused.
+  std::unique_ptr<ScopedFullscreenDisabler> fullscreen_disabler_;
+
   bool is_showing_placeholder_while_collapsed_;
 };
 

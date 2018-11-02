@@ -7,6 +7,7 @@
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "net/url_request/redirect_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 
 namespace content {
 
@@ -20,8 +21,9 @@ void TestRequestPeer::OnUploadProgress(uint64_t position, uint64_t size) {
   EXPECT_FALSE(context_->complete);
 }
 
-bool TestRequestPeer::OnReceivedRedirect(const net::RedirectInfo& redirect_info,
-                                         const ResourceResponseInfo& info) {
+bool TestRequestPeer::OnReceivedRedirect(
+    const net::RedirectInfo& redirect_info,
+    const network::ResourceResponseInfo& info) {
   EXPECT_FALSE(context_->cancelled);
   EXPECT_FALSE(context_->complete);
   ++context_->seen_redirects;
@@ -30,13 +32,16 @@ bool TestRequestPeer::OnReceivedRedirect(const net::RedirectInfo& redirect_info,
   return context_->follow_redirects;
 }
 
-void TestRequestPeer::OnReceivedResponse(const ResourceResponseInfo& info) {
+void TestRequestPeer::OnReceivedResponse(
+    const network::ResourceResponseInfo& info) {
   EXPECT_FALSE(context_->cancelled);
   EXPECT_FALSE(context_->received_response);
   EXPECT_FALSE(context_->complete);
   context_->received_response = true;
   if (context_->cancel_on_receive_response) {
-    dispatcher_->Cancel(context_->request_id);
+    dispatcher_->Cancel(
+        context_->request_id,
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting());
     context_->cancelled = true;
   }
 }
@@ -57,7 +62,9 @@ void TestRequestPeer::OnReceivedData(std::unique_ptr<ReceivedData> data) {
   context_->data.append(data->payload(), data->length());
 
   if (context_->cancel_on_receive_data) {
-    dispatcher_->Cancel(context_->request_id);
+    dispatcher_->Cancel(
+        context_->request_id,
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting());
     context_->cancelled = true;
   }
 }

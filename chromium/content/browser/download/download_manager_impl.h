@@ -29,6 +29,8 @@
 #include "content/public/browser/download_manager_delegate.h"
 #include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/ssl_status.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/interfaces/url_loader.mojom.h"
 
 namespace content {
 class DownloadFileFactory;
@@ -60,6 +62,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       const GURL& page_url,
       const std::string& mime_type,
       std::unique_ptr<DownloadRequestHandleInterface> request_handle,
+      const ukm::SourceId ukm_source_id,
       const DownloadItemImplCreated& item_created);
 
   // DownloadManager functions.
@@ -105,7 +108,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       base::Time last_access_time,
       bool transient,
       const std::vector<DownloadItem::ReceivedSlice>& received_slices) override;
-  void PostInitialization() override;
+  void PostInitialization(DownloadInitializationDependency dependency) override;
   bool IsManagerInitialized() const override;
   int InProgressCount() const override;
   int NonMaliciousInProgressCount() const override;
@@ -135,29 +138,19 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
   // DownloadInterruptReason enum for information on possible return values.
   static DownloadInterruptReason BeginDownloadRequest(
       std::unique_ptr<net::URLRequest> url_request,
-      const Referrer& referrer,
       ResourceContext* resource_context,
-      bool is_content_initiated,
-      int render_process_id,
-      int render_view_route_id,
-      int render_frame_route_id,
-      bool do_not_prompt_for_login);
+      DownloadUrlParameters* params);
 
-  // Returns the callback to intercept the navigation response.
-  NavigationURLLoader::NavigationInterceptionCB GetNavigationInterceptionCB(
-      const scoped_refptr<ResourceResponse>& response,
-      mojo::ScopedDataPipeConsumerHandle consumer_handle,
+  // Continue a navigation that ends up to be a download after it reaches the
+  // OnResponseStarted() step. It has to be called on the UI thread.
+  void InterceptNavigation(
+      std::unique_ptr<network::ResourceRequest> resource_request,
+      std::vector<GURL> url_chain,
+      const base::Optional<std::string>& suggested_filename,
+      scoped_refptr<network::ResourceResponse> response,
+      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
       net::CertStatus cert_status,
       int frame_tree_node_id);
-
-  // Checks if a download is allowed, |on_download_allowed_cb| is called if
-  // the download is allowed.
-  void CheckDownloadAllowed(
-      const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
-      const GURL& url,
-      const std::string& request_method,
-      UniqueUrlDownloadHandlerPtr downloader,
-      base::OnceClosure on_download_allowed_cb);
 
  private:
   using DownloadSet = std::set<DownloadItem*>;
@@ -180,6 +173,7 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       const GURL& page_url,
       const std::string& mime_type,
       std::unique_ptr<DownloadRequestHandleInterface> request_handle,
+      const ukm::SourceId ukm_source_id,
       const DownloadItemImplCreated& on_started,
       uint32_t id);
 
@@ -223,10 +217,28 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
       std::unique_ptr<content::DownloadUrlParameters> params,
       uint32_t id);
 
-  // Called when download permission check is complete.
-  void OnDownloadAllowedCheckComplete(UniqueUrlDownloadHandlerPtr downloader,
-                                      base::OnceClosure callback,
-                                      bool allow);
+  void InterceptNavigationOnChecksComplete(
+      ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      std::unique_ptr<network::ResourceRequest> resource_request,
+      std::vector<GURL> url_chain,
+      const base::Optional<std::string>& suggested_filename,
+      scoped_refptr<network::ResourceResponse> response,
+      net::CertStatus cert_status,
+      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints,
+      bool is_download_allowed);
+
+  // Called when a navigation turns to be a download. Create a new
+  // DownloadHandler. It will be used to continue the loading instead of the
+  // regular document loader. Must be called on the IO thread.
+  static void CreateDownloadHandlerForNavigation(
+      base::WeakPtr<DownloadManagerImpl> download_manager,
+      ResourceRequestInfo::WebContentsGetter web_contents_getter,
+      std::unique_ptr<network::ResourceRequest> resource_request,
+      std::vector<GURL> url_chain,
+      const base::Optional<std::string>& suggested_filename,
+      scoped_refptr<network::ResourceResponse> response,
+      net::CertStatus cert_status,
+      network::mojom::URLLoaderClientEndpointsPtr url_loader_client_endpoints);
 
   // Factory for creation of downloads items.
   std::unique_ptr<DownloadItemFactory> item_factory_;
@@ -253,6 +265,10 @@ class CONTENT_EXPORT DownloadManagerImpl : public DownloadManager,
 
   // True if the download manager has been initialized and loaded all the data.
   bool initialized_;
+
+  // Whether the history db and/or in progress cache are initialized.
+  bool history_db_initialized_;
+  bool in_progress_cache_initialized_;
 
   // Observers that want to be notified of changes to the set of downloads.
   base::ObserverList<Observer> observers_;

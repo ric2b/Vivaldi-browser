@@ -31,6 +31,8 @@
 #define InspectorDOMAgent_h
 
 #include <memory>
+#include "base/callback.h"
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/dom/events/EventListenerMap.h"
@@ -54,6 +56,7 @@ class DocumentLoader;
 class Element;
 class ExceptionState;
 class FloatQuad;
+class HTMLFrameOwnerElement;
 class HTMLSlotElement;
 class V0InsertionPoint;
 class InspectedFrames;
@@ -66,11 +69,9 @@ class ShadowRoot;
 
 class CORE_EXPORT InspectorDOMAgent final
     : public InspectorBaseAgent<protocol::DOM::Metainfo> {
-  WTF_MAKE_NONCOPYABLE(InspectorDOMAgent);
-
  public:
   struct CORE_EXPORT DOMListener : public GarbageCollectedMixin {
-    virtual ~DOMListener() {}
+    virtual ~DOMListener() = default;
     virtual void DidAddDocument(Document*) = 0;
     virtual void DidRemoveDocument(Document*) = 0;
     virtual void DidRemoveDOMNode(Node*) = 0;
@@ -226,6 +227,7 @@ class CORE_EXPORT InspectorDOMAgent final
   void DidPerformElementShadowDistribution(Element*);
   void DidPerformSlotDistribution(HTMLSlotElement*);
   void FrameDocumentUpdated(LocalFrame*);
+  void FrameDisconnected(LocalFrame*, HTMLFrameOwnerElement*);
   void PseudoElementCreated(PseudoElement*);
   void PseudoElementDestroyed(PseudoElement*);
 
@@ -254,7 +256,7 @@ class CORE_EXPORT InspectorDOMAgent final
   static void CollectNodes(Node* root,
                            int depth,
                            bool pierce,
-                           const Function<bool(Node*)>&,
+                           base::RepeatingCallback<bool(Node*)>,
                            HeapVector<Member<Node>>* result);
 
   protocol::Response AssertNode(int node_id, Node*&);
@@ -285,7 +287,7 @@ class CORE_EXPORT InspectorDOMAgent final
                                 int depth = 1,
                                 bool traverse_frames = false);
 
-  void InvalidateFrameOwnerElement(LocalFrame*);
+  void InvalidateFrameOwnerElement(HTMLFrameOwnerElement*);
 
   std::unique_ptr<protocol::DOM::Node> BuildObjectForNode(
       Node*,
@@ -335,6 +337,7 @@ class CORE_EXPORT InspectorDOMAgent final
   Member<InspectorHistory> history_;
   Member<DOMEditor> dom_editor_;
   bool suppress_attribute_modified_event_;
+  DISALLOW_COPY_AND_ASSIGN(InspectorDOMAgent);
 };
 
 }  // namespace blink

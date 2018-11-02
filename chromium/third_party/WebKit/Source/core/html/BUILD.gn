@@ -13,6 +13,8 @@ blink_core_sources("html") {
     "CollectionType.h",
     "CrossOriginAttribute.cpp",
     "CrossOriginAttribute.h",
+    "DocumentAllNameCollection.cpp",
+    "DocumentAllNameCollection.h",
     "DocumentNameCollection.cpp",
     "DocumentNameCollection.h",
     "HTMLAllCollection.cpp",
@@ -28,8 +30,6 @@ blink_core_sources("html") {
     "HTMLBaseElement.h",
     "HTMLBodyElement.cpp",
     "HTMLBodyElement.h",
-    "HTMLCanvasElement.cpp",
-    "HTMLCanvasElement.h",
     "HTMLCollection.cpp",
     "HTMLCollection.h",
     "HTMLContentElement.cpp",
@@ -164,8 +164,6 @@ blink_core_sources("html") {
     "HTMLTimeElement.h",
     "HTMLTitleElement.cpp",
     "HTMLTitleElement.h",
-    "HTMLTrackElement.cpp",
-    "HTMLTrackElement.h",
     "HTMLUListElement.cpp",
     "HTMLUListElement.h",
     "HTMLUnknownElement.cpp",
@@ -174,8 +172,6 @@ blink_core_sources("html") {
     "HTMLViewSourceDocument.h",
     "HTMLWBRElement.cpp",
     "HTMLWBRElement.h",
-    "ImageData.cpp",
-    "ImageData.h",
     "ImageDocument.cpp",
     "ImageDocument.h",
     "LinkManifest.cpp",
@@ -197,8 +193,6 @@ blink_core_sources("html") {
     "TableConstants.h",
     "TextDocument.cpp",
     "TextDocument.h",
-    "TextMetrics.cpp",
-    "TextMetrics.h",
     "TimeRanges.cpp",
     "TimeRanges.h",
     "URLRegistry.h",
@@ -217,8 +211,14 @@ blink_core_sources("html") {
     "canvas/CanvasRenderingContextFactory.h",
     "canvas/CanvasRenderingContextHost.cpp",
     "canvas/CanvasRenderingContextHost.h",
+    "canvas/HTMLCanvasElement.cpp",
+    "canvas/HTMLCanvasElement.h",
+    "canvas/ImageData.cpp",
+    "canvas/ImageData.h",
     "canvas/ImageElementBase.cpp",
     "canvas/ImageElementBase.h",
+    "canvas/TextMetrics.cpp",
+    "canvas/TextMetrics.h",
     "custom/CEReactionsScope.cpp",
     "custom/CEReactionsScope.h",
     "custom/CustomElement.cpp",
@@ -511,6 +511,8 @@ blink_core_sources("html") {
     "track/AutomaticTrackSelection.h",
     "track/CueTimeline.cpp",
     "track/CueTimeline.h",
+    "track/HTMLTrackElement.cpp",
+    "track/HTMLTrackElement.h",
     "track/InbandTextTrack.cpp",
     "track/InbandTextTrack.h",
     "track/LoadableTextTrack.cpp",
@@ -553,11 +555,6 @@ blink_core_sources("html") {
   ]
 
   jumbo_excluded_sources = [ "canvas/CanvasRenderingContext.cpp" ]  # https://crbug.com/716395
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
-  ]
 
   deps = [
     "//services/metrics/public/cpp:metrics_cpp",

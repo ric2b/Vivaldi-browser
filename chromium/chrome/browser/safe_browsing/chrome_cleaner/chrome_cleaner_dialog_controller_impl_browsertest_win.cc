@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -98,14 +97,14 @@ class ChromeCleanerPromptUserTest
 IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest,
                        OnInfectedBrowserAvailable) {
   EXPECT_CALL(mock_delegate_, ShowChromeCleanerPrompt(_, _, _)).Times(1);
-  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
+  dialog_controller_->OnInfected(false, ChromeCleanerScannerResults());
 }
 
 IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest,
                        DISABLED_OnInfectedBrowserNotAvailable) {
   browser()->window()->Minimize();
   base::RunLoop().RunUntilIdle();
-  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
+  dialog_controller_->OnInfected(false, ChromeCleanerScannerResults());
 
   base::RunLoop run_loop;
   // We only set the expectation here because we want to make sure that the
@@ -119,12 +118,12 @@ IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest,
 
 IN_PROC_BROWSER_TEST_P(ChromeCleanerPromptUserTest, AllBrowsersClosed) {
   std::unique_ptr<ScopedKeepAlive> keep_alive =
-      base::MakeUnique<ScopedKeepAlive>(KeepAliveOrigin::BROWSER,
+      std::make_unique<ScopedKeepAlive>(KeepAliveOrigin::BROWSER,
                                         KeepAliveRestartOption::DISABLED);
 
   CloseAllBrowsers();
   base::RunLoop().RunUntilIdle();
-  dialog_controller_->OnInfected(ChromeCleanerScannerResults());
+  dialog_controller_->OnInfected(false, ChromeCleanerScannerResults());
 
   base::RunLoop run_loop;
   // We only set the expectation here because we want to make sure that the

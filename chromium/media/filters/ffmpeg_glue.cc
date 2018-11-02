@@ -6,8 +6,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/synchronization/lock.h"
+#include "base/metrics/histogram_functions.h"
 #include "media/base/container_names.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 
@@ -64,40 +63,8 @@ static int64_t AVIOSeekOperation(void* opaque, int64_t offset, int whence) {
   return new_offset;
 }
 
-static int LockManagerOperation(void** lock, enum AVLockOp op) {
-  switch (op) {
-    case AV_LOCK_CREATE:
-      *lock = new base::Lock();
-      return 0;
-
-    case AV_LOCK_OBTAIN:
-      static_cast<base::Lock*>(*lock)->Acquire();
-      return 0;
-
-    case AV_LOCK_RELEASE:
-      static_cast<base::Lock*>(*lock)->Release();
-      return 0;
-
-    case AV_LOCK_DESTROY:
-      delete static_cast<base::Lock*>(*lock);
-      *lock = nullptr;
-      return 0;
-  }
-  return 1;
-}
-
 void FFmpegGlue::InitializeFFmpeg() {
-  static bool initialized = []() {
-    // Register our protocol glue code with FFmpeg.
-    if (av_lockmgr_register(&LockManagerOperation) != 0)
-      return false;
-
-    // Now register the rest of FFmpeg.
-    av_register_all();
-    return true;
-  }();
-
-  CHECK(initialized);
+  av_register_all();
 }
 
 FFmpegGlue::FFmpegGlue(FFmpegURLProtocol* protocol) {
@@ -164,7 +131,7 @@ bool FFmpegGlue::OpenContext() {
       return false;
 
     container_ = container_names::DetermineContainer(buffer.data(), num_read);
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Media.DetectedContainer", container_);
+    base::UmaHistogramSparse("Media.DetectedContainer", container_);
 
     detected_hls_ =
         container_ == container_names::MediaContainerName::CONTAINER_HLS;
@@ -194,7 +161,7 @@ bool FFmpegGlue::OpenContext() {
     container_ = container_names::CONTAINER_AVI;
 
   DCHECK_NE(container_, container_names::CONTAINER_UNKNOWN);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Media.DetectedContainer", container_);
+  base::UmaHistogramSparse("Media.DetectedContainer", container_);
 
   return true;
 }

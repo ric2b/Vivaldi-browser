@@ -370,8 +370,11 @@ class NET_EXPORT_PRIVATE SpdyStream {
   int64_t raw_received_bytes() const { return raw_received_bytes_; }
   int64_t raw_sent_bytes() const { return raw_sent_bytes_; }
   int recv_bytes() const { return recv_bytes_; }
+  bool ShouldRetryRSTPushStream();
 
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const;
+
+  const SpdyHeaderBlock& request_headers() { return request_headers_; }
 
   // Get the URL from the appropriate stream headers, or the empty
   // GURL() if it is unknown.

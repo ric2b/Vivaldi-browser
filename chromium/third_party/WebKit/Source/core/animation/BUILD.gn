@@ -98,9 +98,6 @@ blink_core_sources("animation") {
     "ColorPropertyFunctions.h",
     "CompositorAnimations.cpp",
     "CompositorAnimations.h",
-    "CompositorAnimator.h",
-    "CompositorMutatorImpl.cpp",
-    "CompositorMutatorImpl.h",
     "DocumentAnimation.h",
     "DocumentAnimations.cpp",
     "DocumentAnimations.h",
@@ -244,10 +241,5 @@ blink_core_sources("animation") {
     "css/CSSTimingData.h",
     "css/CSSTransitionData.cpp",
     "css/CSSTransitionData.h",
-  ]
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 }

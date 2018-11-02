@@ -11,19 +11,14 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "ui/app_list/app_list_switches.h"
-#include "ui/app_list/test/app_list_test_model.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace app_list {
 namespace test {
 
 AppListTestViewDelegate::AppListTestViewDelegate()
-    : dismiss_count_(0),
-      stop_speech_recognition_count_(0),
-      open_search_result_count_(0),
-      next_profile_app_count_(0),
-      model_(new AppListTestModel) {
-  model_->SetFoldersEnabled(true);
+    : model_(std::make_unique<AppListTestModel>()),
+      search_model_(std::make_unique<SearchModel>()) {
 }
 
 AppListTestViewDelegate::~AppListTestViewDelegate() {}
@@ -38,14 +33,17 @@ AppListModel* AppListTestViewDelegate::GetModel() {
   return model_.get();
 }
 
+SearchModel* AppListTestViewDelegate::GetSearchModel() {
+  return search_model_.get();
+}
+
 SpeechUIModel* AppListTestViewDelegate::GetSpeechUI() {
   return &speech_ui_;
 }
 
 void AppListTestViewDelegate::OpenSearchResult(SearchResult* result,
-                                               bool auto_launch,
                                                int event_flags) {
-  const AppListModel::SearchResults* results = model_->results();
+  const SearchModel::SearchResults* results = search_model_->results();
   for (size_t i = 0; i < results->item_count(); ++i) {
     if (results->GetItemAt(i) == result) {
       open_search_result_counts_[i]++;
@@ -53,14 +51,6 @@ void AppListTestViewDelegate::OpenSearchResult(SearchResult* result,
     }
   }
   ++open_search_result_count_;
-}
-
-base::TimeDelta AppListTestViewDelegate::GetAutoLaunchTimeout() {
-  return auto_launch_timeout_;
-}
-
-void AppListTestViewDelegate::AutoLaunchCanceled() {
-  auto_launch_timeout_ = base::TimeDelta();
 }
 
 void AppListTestViewDelegate::Dismiss() {
@@ -75,22 +65,38 @@ views::View* AppListTestViewDelegate::CreateStartPageWebView(
     const gfx::Size& size) {
   return NULL;
 }
-std::vector<views::View*> AppListTestViewDelegate::CreateCustomPageWebViews(
-    const gfx::Size& size) {
-  return std::vector<views::View*>();
-}
 
 bool AppListTestViewDelegate::IsSpeechRecognitionEnabled() {
   return false;
 }
 
 void AppListTestViewDelegate::ReplaceTestModel(int item_count) {
-  model_.reset(new AppListTestModel);
+  model_ = std::make_unique<AppListTestModel>();
   model_->PopulateApps(item_count);
+  search_model_ = std::make_unique<SearchModel>();
 }
 
 void AppListTestViewDelegate::SetSearchEngineIsGoogle(bool is_google) {
-  model_->SetSearchEngineIsGoogle(is_google);
+  search_model_->SetSearchEngineIsGoogle(is_google);
+}
+
+void AppListTestViewDelegate::ActivateItem(const std::string& id,
+                                           int event_flags) {
+  app_list::AppListItem* item = model_->FindItem(id);
+  if (!item)
+    return;
+  DCHECK(!item->is_folder());
+  static_cast<AppListTestModel::AppListTestItem*>(item)->Activate(event_flags);
+}
+
+ui::MenuModel* AppListTestViewDelegate::GetContextMenuModel(
+    const std::string& id) {
+  app_list::AppListItem* item = model_->FindItem(id);
+  // TODO(stevenjb/jennyz): Implement this for folder items
+  if (!item || item->is_folder())
+    return nullptr;
+  return static_cast<AppListTestModel::AppListTestItem*>(item)
+      ->GetContextMenuModel();
 }
 
 }  // namespace test

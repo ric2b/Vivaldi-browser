@@ -42,7 +42,6 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/loader/EmptyClients.h"
 #include "core/loader/NavigationScheduler.h"
 #include "core/page/FocusController.h"
@@ -159,10 +158,6 @@ LayoutEmbeddedContent* Frame::OwnerLayoutObject() const {
   return DeprecatedLocalOwner()->GetLayoutEmbeddedContent();
 }
 
-LayoutEmbeddedContentItem Frame::OwnerLayoutItem() const {
-  return LayoutEmbeddedContentItem(OwnerLayoutObject());
-}
-
 Settings* Frame::GetSettings() const {
   if (GetPage())
     return &GetPage()->GetSettings();
@@ -275,7 +270,8 @@ Frame::Frame(FrameClient* client,
       owner_(owner),
       client_(client),
       window_proxy_manager_(window_proxy_manager),
-      is_loading_(false) {
+      is_loading_(false),
+      devtools_frame_token_(client->GetDevToolsFrameToken()) {
   InstanceCounters::IncrementCounter(InstanceCounters::kFrameCounter);
 
   if (owner_)

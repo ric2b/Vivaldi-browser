@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "gpu/command_buffer/service/buffer_manager.h"
+#include "gpu/command_buffer/service/decoder_context.h"
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
@@ -22,7 +23,6 @@
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
 #include "gpu/command_buffer/service/sampler_manager.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
-#include "gpu/command_buffer/service/service_transfer_cache.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
@@ -116,8 +116,7 @@ ContextGroup::ContextGroup(
       passthrough_resources_(new PassthroughResources),
       progress_reporter_(progress_reporter),
       gpu_feature_info_(gpu_feature_info),
-      discardable_manager_(discardable_manager),
-      transfer_cache_(new ServiceTransferCache) {
+      discardable_manager_(discardable_manager) {
   DCHECK(discardable_manager);
   DCHECK(feature_info_);
   DCHECK(mailbox_manager_);
@@ -128,7 +127,7 @@ ContextGroup::ContextGroup(
 }
 
 gpu::ContextResult ContextGroup::Initialize(
-    GLES2Decoder* decoder,
+    DecoderContext* decoder,
     ContextType context_type,
     const DisallowedFeatures& disallowed_features) {
   switch (context_type) {
@@ -529,7 +528,7 @@ gpu::ContextResult ContextGroup::Initialize(
 
 namespace {
 
-bool IsNull(const base::WeakPtr<gles2::GLES2Decoder>& decoder) {
+bool IsNull(const base::WeakPtr<DecoderContext>& decoder) {
   return !decoder;
 }
 
@@ -559,9 +558,9 @@ void ContextGroup::ReportProgress() {
     progress_reporter_->ReportProgress();
 }
 
-void ContextGroup::Destroy(GLES2Decoder* decoder, bool have_context) {
+void ContextGroup::Destroy(DecoderContext* decoder, bool have_context) {
   decoders_.erase(std::remove_if(decoders_.begin(), decoders_.end(),
-                                 WeakPtrEquals<gles2::GLES2Decoder>(decoder)),
+                                 WeakPtrEquals<DecoderContext>(decoder)),
                   decoders_.end());
   // If we still have contexts do nothing.
   if (HaveContexts()) {

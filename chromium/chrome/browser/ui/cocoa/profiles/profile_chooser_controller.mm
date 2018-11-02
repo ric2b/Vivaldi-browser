@@ -134,14 +134,16 @@ void SetWindowSize(NSWindow* window, NSSize size) {
 }
 
 NSString* ElideEmail(const std::string& email, CGFloat width) {
-  const base::string16 elidedEmail = gfx::ElideText(
-      base::UTF8ToUTF16(email), gfx::FontList(), width, gfx::ELIDE_EMAIL);
+  const base::string16 elidedEmail =
+      gfx::ElideText(base::UTF8ToUTF16(email), gfx::FontList(), width,
+                     gfx::ELIDE_EMAIL, gfx::Typesetter::BROWSER);
   return base::SysUTF16ToNSString(elidedEmail);
 }
 
 NSString* ElideMessage(const base::string16& message, CGFloat width) {
-  return base::SysUTF16ToNSString(
-      gfx::ElideText(message, gfx::FontList(), width, gfx::ELIDE_TAIL));
+  return base::SysUTF16ToNSString(gfx::ElideText(message, gfx::FontList(),
+                                                 width, gfx::ELIDE_TAIL,
+                                                 gfx::Typesetter::BROWSER));
 }
 
 // Builds a label with the given |title| anchored at |frame_origin|. Sets the
@@ -320,7 +322,7 @@ void GaiaWebContentsDelegate::HandleKeyboardEvent(
 // Class that listens to changes to the OAuth2Tokens for the active profile,
 // changes to the avatar menu model or browser close notifications.
 class ActiveProfileObserverBridge : public AvatarMenuObserver,
-                                    public chrome::BrowserListObserver,
+                                    public BrowserListObserver,
                                     public OAuth2TokenService::Observer {
  public:
   ActiveProfileObserverBridge(ProfileChooserController* controller,
@@ -389,7 +391,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     }
   }
 
-  // chrome::BrowserListObserver:
+  // BrowserListObserver:
   void OnBrowserClosing(Browser* browser) override {
     if (browser_ == browser) {
       RemoveTokenServiceObserver();
@@ -1436,11 +1438,12 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     // Manually elide the button text so that the contents fit inside the bubble
     // This is needed because the BlueLabelButton cell resets the style on
     // every call to -cellSize, which prevents setting a custom lineBreakMode.
-    NSString* elidedButtonText = base::SysUTF16ToNSString(gfx::ElideText(
-        l10n_util::GetStringFUTF16(
-            IDS_SYNC_START_SYNC_BUTTON_LABEL,
-            l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME)),
-        gfx::FontList(), rect.size.width, gfx::ELIDE_TAIL));
+    NSString* elidedButtonText = base::SysUTF16ToNSString(
+        gfx::ElideText(l10n_util::GetStringFUTF16(
+                           IDS_SYNC_START_SYNC_BUTTON_LABEL,
+                           l10n_util::GetStringUTF16(IDS_SHORT_PRODUCT_NAME)),
+                       gfx::FontList(), rect.size.width, gfx::ELIDE_TAIL,
+                       gfx::Typesetter::BROWSER));
 
     [signinButton setTitle:elidedButtonText];
     [signinButton sizeToFit];
@@ -1561,10 +1564,11 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     // Manually elide the button text so the contents fit inside the bubble.
     // This is needed because the BlueLabelButton cell resets the style on
     // every call to -cellSize, which prevents setting a custom lineBreakMode.
-    NSString* elidedButtonText = base::SysUTF16ToNSString(gfx::ElideText(
-        l10n_util::GetStringFUTF16(
-            IDS_PROFILES_PROFILE_ADD_ACCOUNT_BUTTON, item.name),
-        gfx::FontList(), rect.size.width, gfx::ELIDE_TAIL));
+    NSString* elidedButtonText = base::SysUTF16ToNSString(
+        gfx::ElideText(l10n_util::GetStringFUTF16(
+                           IDS_PROFILES_PROFILE_ADD_ACCOUNT_BUTTON, item.name),
+                       gfx::FontList(), rect.size.width, gfx::ELIDE_TAIL,
+                       gfx::Typesetter::BROWSER));
 
     NSButton* addAccountsButton =
         [self linkButtonWithTitle:elidedButtonText

@@ -15,7 +15,10 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.text.Editable;
 import android.text.TextUtils;
+import android.view.ActionMode;
 import android.view.KeyEvent;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.inputmethod.BaseInputConnection;
 import android.view.inputmethod.InputMethodManager;
 
@@ -44,6 +47,7 @@ import org.chromium.chrome.test.util.OmniboxTestUtils.StubAutocompleteController
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.KeyUtils;
+import org.chromium.content.browser.test.util.TouchCommon;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -59,8 +63,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * framework once it supports Test Rule Parameterization
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @CommandLineParameter({"", "disable-features=" + ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE})
 public class UrlBarTest {
     // 9000+ chars of goodness
@@ -1047,6 +1050,52 @@ public class UrlBarTest {
                         ? clip.getItemAt(0).getText()
                         : null;
                 return text != null ? text.toString() : null;
+            }
+        });
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Omnibox"})
+    @RetryOnFailure
+    public void testLongPress() throws InterruptedException {
+        // This is a more realistic test than HUGE_URL because ita's full of separator characters
+        // which have historically been known to trigger odd behavior with long-pressing.
+        final String longPressUrl = "data:text/plain,hi.hi.hi.hi.hi.hi.hi.hi.hi.hi/hi/hi/hi/hi/hi/";
+        mActivityTestRule.startMainActivityWithURL(longPressUrl);
+
+        class ActionModeCreatedCallback implements ActionMode.Callback {
+            public boolean actionModeCreated;
+
+            @Override
+            public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
+                return false;
+            }
+
+            @Override
+            public boolean onCreateActionMode(ActionMode mode, Menu menu) {
+                actionModeCreated = true;
+                return true;
+            }
+
+            @Override
+            public void onDestroyActionMode(ActionMode mode) {}
+
+            @Override
+            public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+                return false;
+            }
+        }
+        ActionModeCreatedCallback callback = new ActionModeCreatedCallback();
+        getUrlBar().setCustomSelectionActionModeCallback(callback);
+
+        TouchCommon.longPressView(getUrlBar());
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return callback.actionModeCreated && getUrlBar().getSelectionStart() == 0
+                        && getUrlBar().getSelectionEnd() == longPressUrl.length();
             }
         });
     }

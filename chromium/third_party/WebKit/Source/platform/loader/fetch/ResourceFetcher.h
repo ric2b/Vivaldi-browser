@@ -37,12 +37,10 @@
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
-#include "platform/loader/fetch/ResourceLoadScheduler.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/SubstituteData.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/text/StringHash.h"
 
 namespace blink {
@@ -74,6 +72,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   Resource* RequestResource(FetchParameters&,
                             const ResourceFactory&,
+                            ResourceClient*,
                             const SubstituteData& = SubstituteData());
 
   Resource* CachedResource(const KURL&) const;
@@ -131,8 +130,14 @@ class PLATFORM_EXPORT ResourceFetcher
   void RecordResourceTimingOnRedirect(Resource*, const ResourceResponse&, bool);
 
   enum LoaderFinishType { kDidFinishLoading, kDidFinishFirstPartInMultipart };
-  void HandleLoaderFinish(Resource*, double finish_time, LoaderFinishType);
-  void HandleLoaderError(Resource*, const ResourceError&);
+  void HandleLoaderFinish(Resource*,
+                          double finish_time,
+                          LoaderFinishType,
+                          uint32_t inflight_keepalive_bytes,
+                          bool blocked_cross_site_document);
+  void HandleLoaderError(Resource*,
+                         const ResourceError&,
+                         uint32_t inflight_keepalive_bytes);
   bool IsControlledByServiceWorker() const;
 
   String GetCacheIdentifier() const;
@@ -154,6 +159,7 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void RemovePreload(Resource*);
 
+  void LoosenLoadThrottlingPolicy() { scheduler_->LoosenThrottlingPolicy(); }
   void OnNetworkQuiet() { scheduler_->OnNetworkQuiet(); }
 
   // Workaround for https://crbug.com/666214.
@@ -187,6 +193,9 @@ class PLATFORM_EXPORT ResourceFetcher
 
   enum PrepareRequestResult { kAbort, kContinue, kBlock };
 
+  Resource* RequestResource(FetchParameters&,
+                            const ResourceFactory&,
+                            const SubstituteData&);
   PrepareRequestResult PrepareRequest(FetchParameters&,
                                       const ResourceFactory&,
                                       const SubstituteData&,
@@ -289,12 +298,16 @@ class PLATFORM_EXPORT ResourceFetcher
   // Timeout timer for keepalive requests.
   TaskHandle keepalive_loaders_task_handle_;
 
+  uint32_t inflight_keepalive_bytes_ = 0;
+
   // 28 bits left
   bool auto_load_images_ : 1;
   bool images_enabled_ : 1;
   bool allow_stale_resources_ : 1;
   bool image_fetched_ : 1;
   bool onlyLoadServeCachedResources_ : 1;
+
+  static constexpr uint32_t kKeepaliveInflightBytesQuota = 64 * 1024;
 };
 
 class ResourceCacheValidationSuppressor {

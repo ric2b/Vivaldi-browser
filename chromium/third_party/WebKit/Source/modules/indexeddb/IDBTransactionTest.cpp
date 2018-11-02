@@ -50,7 +50,6 @@
 #include "modules/indexeddb/MockWebIDBDatabase.h"
 #include "platform/SharedBuffer.h"
 #include "platform/testing/TestingPlatformSupport.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
 #include "public/platform/WebURLResponse.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -74,7 +73,7 @@ class FakeIDBDatabaseCallbacks final : public IDBDatabaseCallbacks {
   void OnComplete(int64_t transaction_id) override {}
 
  private:
-  FakeIDBDatabaseCallbacks() {}
+  FakeIDBDatabaseCallbacks() = default;
 };
 
 class IDBTransactionTest : public ::testing::Test {
@@ -82,7 +81,7 @@ class IDBTransactionTest : public ::testing::Test {
   void SetUp() override {
     url_loader_mock_factory_ = platform_->GetURLLoaderMockFactory();
     WebURLResponse response;
-    response.SetURL(KURL(NullURL(), "blob:"));
+    response.SetURL(KURL("blob:"));
     url_loader_mock_factory_->RegisterURLProtocol(WebString("blob"), response,
                                                   "");
   }
@@ -131,7 +130,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
   EXPECT_EQ(1u, live_transactions.size());
 
   Persistent<IDBRequest> request =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
 
   DeactivateNewTransactions(scope.GetIsolate());
@@ -164,7 +163,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
   EXPECT_EQ(1U, live_transactions.size());
 
   Persistent<IDBRequest> request =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
@@ -205,7 +204,7 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
   EXPECT_EQ(1U, live_transactions.size());
 
   Persistent<IDBRequest> request =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
@@ -242,10 +241,10 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
   EXPECT_EQ(1U, live_transactions.size());
 
   Persistent<IDBRequest> request1 =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   Persistent<IDBRequest> request2 =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
@@ -286,10 +285,10 @@ TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
   EXPECT_EQ(1U, live_transactions.size());
 
   Persistent<IDBRequest> request1 =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   Persistent<IDBRequest> request2 =
-      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+      IDBRequest::Create(scope.GetScriptState(), store_.Get(),
                          transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 

@@ -577,7 +577,7 @@ Console.ConsoleViewMessage = class {
    * @return {!Element}
    */
   _formatParameterAsObject(obj, includePreview) {
-    var titleElement = createElement('span');
+    var titleElement = createElementWithClass('span', 'console-object');
     if (includePreview && obj.preview) {
       titleElement.classList.add('console-object-preview');
       this._previewFormatter.appendObjectPreview(titleElement, obj.preview, false /* isEntry */);
@@ -808,6 +808,7 @@ Console.ConsoleViewMessage = class {
     }
 
     function isWhitelistedProperty(property) {
+      // Make sure that allowed properties do not interfere with link visibility.
       var prefixes = [
         'background', 'border', 'color', 'font', 'line', 'margin', 'padding', 'text', '-webkit-background',
         '-webkit-border', '-webkit-font', '-webkit-margin', '-webkit-padding', '-webkit-text'
@@ -835,6 +836,11 @@ Console.ConsoleViewMessage = class {
 
     formatters._ = bypassFormatter;
 
+    /**
+     * @param {!Element} a
+     * @param {*} b
+     * @this {!Console.ConsoleViewMessage}
+     */
     function append(a, b) {
       if (b instanceof Node) {
         a.appendChild(b);
@@ -842,10 +848,16 @@ Console.ConsoleViewMessage = class {
         var toAppend = Console.ConsoleViewMessage._linkifyStringAsFragment(String(b));
         if (currentStyle) {
           var wrapper = createElement('span');
+          wrapper.style.setProperty('contain', 'paint');
+          wrapper.style.setProperty('display', 'inline-block');
           wrapper.appendChild(toAppend);
           applyCurrentStyle(wrapper);
-          for (var i = 0; i < wrapper.children.length; ++i)
-            applyCurrentStyle(wrapper.children[i]);
+          for (var child of wrapper.children) {
+            if (child.classList.contains('devtools-link'))
+              this._applyForcedVisibleStyle(child);
+            else
+              applyCurrentStyle(child);
+          }
           toAppend = wrapper;
         }
         a.appendChild(toAppend);
@@ -862,7 +874,26 @@ Console.ConsoleViewMessage = class {
     }
 
     // String.format does treat formattedResult like a Builder, result is an object.
-    return String.format(format, parameters, formatters, formattedResult, append);
+    return String.format(format, parameters, formatters, formattedResult, append.bind(this));
+  }
+
+  /**
+   * @param {!Element} element
+   */
+  _applyForcedVisibleStyle(element) {
+    element.style.setProperty('-webkit-text-stroke', '0', 'important');
+    element.style.setProperty('text-decoration', 'underline', 'important');
+
+    var themedColor = UI.themeSupport.patchColorText('rgb(33%, 33%, 33%)', UI.ThemeSupport.ColorUsage.Foreground);
+    element.style.setProperty('color', themedColor, 'important');
+
+    var backgroundColor = 'hsl(0, 0%, 100%)';
+    if (this._message.level === ConsoleModel.ConsoleMessage.MessageLevel.Error)
+      backgroundColor = 'hsl(0, 100%, 97%)';
+    else if (this._message.level === ConsoleModel.ConsoleMessage.MessageLevel.Warning || this._shouldRenderAsWarning())
+      backgroundColor = 'hsl(50, 100%, 95%)';
+    var themedBackgroundColor = UI.themeSupport.patchColorText(backgroundColor, UI.ThemeSupport.ColorUsage.Background);
+    element.style.setProperty('background-color', themedBackgroundColor, 'important');
   }
 
   /**
@@ -1227,6 +1258,7 @@ Console.ConsoleViewMessage = class {
     if (!this._message.runtimeModel() || !errorPrefixes.some(startsWith))
       return null;
     var debuggerModel = this._message.runtimeModel().debuggerModel();
+    var baseURL = this._message.runtimeModel().target().inspectedURL();
 
     var lines = string.split('\n');
     var links = [];
@@ -1255,15 +1287,12 @@ Console.ConsoleViewMessage = class {
       if (!splitResult)
         return null;
 
-      var parsed = splitResult.url.asParsedURL();
-      var url;
-      if (parsed)
-        url = parsed.url;
-      else if (debuggerModel.scriptsForSourceURL(splitResult.url).length)
-        url = splitResult.url;
-      else if (splitResult.url === '<anonymous>')
+      if (splitResult.url === '<anonymous>')
         continue;
-      else
+      var url = parseOrScriptMatch(splitResult.url);
+      if (!url && Common.ParsedURL.isRelativeURL(splitResult.url))
+        url = parseOrScriptMatch(Common.ParsedURL.completeURL(baseURL, splitResult.url));
+      if (!url)
         return null;
 
       links.push({
@@ -1292,6 +1321,21 @@ Console.ConsoleViewMessage = class {
       formattedResult.appendChild(Console.ConsoleViewMessage._linkifyStringAsFragment(string.substring(start)));
 
     return formattedResult;
+
+    /**
+     * @param {?string} url
+     * @return {?string}
+     */
+    function parseOrScriptMatch(url) {
+      if (!url)
+        return null;
+      var parsedURL = url.asParsedURL();
+      if (parsedURL)
+        return parsedURL.url;
+      if (debuggerModel.scriptsForSourceURL(url).length)
+        return url;
+      return null;
+    }
   }
 
   /**
@@ -1300,6 +1344,8 @@ Console.ConsoleViewMessage = class {
    * @return {!DocumentFragment}
    */
   static _linkifyWithCustomLinkifier(string, linkifier) {
+    if (string.length > Console.ConsoleViewMessage._MaxTokenizableStringLength)
+      return createExpandableFragment(string);
     var container = createDocumentFragment();
     var tokens = this._tokenizeMessageText(string);
     for (var token of tokens) {
@@ -1321,6 +1367,31 @@ Console.ConsoleViewMessage = class {
       }
     }
     return container;
+
+    /**
+     * @param {string} text
+     * @return {!DocumentFragment}
+     */
+    function createExpandableFragment(text) {
+      var fragment = createDocumentFragment();
+      fragment.textContent = text.slice(0, Console.ConsoleViewMessage._LongStringVisibleLength);
+      var hiddenText = text.slice(Console.ConsoleViewMessage._LongStringVisibleLength);
+
+      var expandButton = fragment.createChild('span', 'console-inline-button');
+      expandButton.setAttribute('data-text', ls`Show ${Number.withThousandsSeparator(hiddenText.length)} more`);
+      expandButton.addEventListener('click', () => {
+        if (expandButton.parentElement)
+          expandButton.parentElement.insertBefore(createTextNode(hiddenText), expandButton);
+        expandButton.remove();
+      });
+
+      var copyButton = fragment.createChild('span', 'console-inline-button');
+      copyButton.setAttribute('data-text', ls`Copy`);
+      copyButton.addEventListener('click', () => {
+        InspectorFrontendHost.copyText(text);
+      });
+      return fragment;
+    }
   }
 
   /**
@@ -1339,8 +1410,11 @@ Console.ConsoleViewMessage = class {
    */
   static _tokenizeMessageText(string) {
     if (!Console.ConsoleViewMessage._tokenizerRegexes) {
-      var linkStringRegex =
-          /(?:[a-zA-Z][a-zA-Z0-9+.-]{2,}:\/\/|data:|www\.)[\w$\-_+*'=\|\/\\(){}[\]^%@&#~,:;.!?]{2,}[\w$\-_+*=\|\/\\({^%@&#~]/;
+      var controlCodes = '\\u0000-\\u0020\\u007f-\\u009f';
+      var linkStringRegex = new RegExp(
+          '(?:[a-zA-Z][a-zA-Z0-9+.-]{2,}:\\/\\/|data:|www\\.)[^\\s' + controlCodes + '"]{2,}[^\\s' + controlCodes +
+              '"\')}\\],:;.!?]',
+          'u');
       var pathLineRegex = /(?:\/[\w\.-]*)+\:[\d]+/;
       var timeRegex = /took [\d]+ms/;
       var eventRegex = /'\w+' event/;
@@ -1463,3 +1537,5 @@ Console.ConsoleGroupViewMessage = class extends Console.ConsoleViewMessage {
 Console.ConsoleViewMessage.MaxLengthForLinks = 40;
 
 Console.ConsoleViewMessage._MaxTokenizableStringLength = 10000;
+
+Console.ConsoleViewMessage._LongStringVisibleLength = 5000;

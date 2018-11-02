@@ -64,6 +64,7 @@
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
+#include "chrome/browser/policy/chrome_browser_policy_connector.h"
 #include "chrome/browser/policy/cloud/test_request_interceptor.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/policy/profile_policy_connector_factory.h"
@@ -163,6 +164,7 @@
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/test/mock_bluetooth_adapter.h"
 #include "extensions/browser/api/messaging/messaging_delegate.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_prefs.h"
@@ -172,7 +174,6 @@
 #include "extensions/browser/scoped_ignore_content_verifier_for_test.h"
 #include "extensions/browser/test_extension_registry_observer.h"
 #include "extensions/browser/uninstall_reason.h"
-#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/features/feature_channel.h"
@@ -692,7 +693,7 @@ class PolicyTest : public InProcessBrowserTest {
     PolicyMap policies;
     policies.Set(key::kDisableScreenshots, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(!enabled), nullptr);
+                 std::make_unique<base::Value>(!enabled), nullptr);
     UpdateProviderPolicy(policies);
   }
 
@@ -887,7 +888,7 @@ class LocalePolicyTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kApplicationLocaleValue, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>("fr"), nullptr);
+                 std::make_unique<base::Value>("fr"), nullptr);
     provider_.UpdateChromePolicy(policies);
     // The "en-US" ResourceBundle is always loaded before this step for tests,
     // but in this test we want the browser to load the bundle as it
@@ -927,7 +928,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, BookmarkBarEnabled) {
   PolicyMap policies;
   policies.Set(key::kBookmarkBarEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(prefs->IsManagedPreference(bookmarks::prefs::kShowBookmarkBar));
   EXPECT_TRUE(prefs->GetBoolean(bookmarks::prefs::kShowBookmarkBar));
@@ -939,7 +940,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, BookmarkBarEnabled) {
 
   policies.Set(key::kBookmarkBarEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(prefs->IsManagedPreference(bookmarks::prefs::kShowBookmarkBar));
   EXPECT_FALSE(prefs->GetBoolean(bookmarks::prefs::kShowBookmarkBar));
@@ -976,7 +977,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, PRE_DefaultCookiesSetting) {
   PolicyMap policies;
   policies.Set(key::kDefaultCookiesSetting, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(4), nullptr);
+               std::make_unique<base::Value>(4), nullptr);
   UpdateProviderPolicy(policies);
 }
 
@@ -1019,13 +1020,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   PolicyMap policies;
   policies.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   policies.Set(key::kDefaultSearchProviderKeyword, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kKeyword), nullptr);
+               std::make_unique<base::Value>(kKeyword), nullptr);
   policies.Set(key::kDefaultSearchProviderSearchURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kSearchURL), nullptr);
+               std::make_unique<base::Value>(kSearchURL), nullptr);
   std::unique_ptr<base::ListValue> alternate_urls(new base::ListValue);
   alternate_urls->AppendString(kAlternateURL0);
   alternate_urls->AppendString(kAlternateURL1);
@@ -1034,13 +1035,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
                std::move(alternate_urls), nullptr);
   policies.Set(key::kDefaultSearchProviderImageURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kImageURL), nullptr);
+               std::make_unique<base::Value>(kImageURL), nullptr);
   policies.Set(key::kDefaultSearchProviderImageURLPostParams,
                POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kImageURLPostParams), nullptr);
+               std::make_unique<base::Value>(kImageURLPostParams), nullptr);
   policies.Set(key::kDefaultSearchProviderNewTabURL, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kNewTabURL), nullptr);
+               std::make_unique<base::Value>(kNewTabURL), nullptr);
   UpdateProviderPolicy(policies);
   default_search = service->GetDefaultSearchProvider();
   ASSERT_TRUE(default_search);
@@ -1068,7 +1069,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DefaultSearchProvider) {
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
   policies.Set(key::kDefaultSearchProviderEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   EXPECT_TRUE(service->GetDefaultSearchProvider());
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(service->GetDefaultSearchProvider());
@@ -1082,7 +1083,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SeparateProxyPoliciesMerging) {
   // Add an individual proxy policy value.
   PolicyMap policies;
   policies.Set(key::kProxyServerMode, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(3), nullptr);
+               POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(3), nullptr);
   UpdateProviderPolicy(policies);
 
   // It should be removed and replaced with a dictionary.
@@ -1129,16 +1130,16 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, LegacySafeSearch) {
     ApplySafeSearchPolicy(
         legacy_safe_search == 0
             ? nullptr
-            : base::MakeUnique<base::Value>(legacy_safe_search == 1),
+            : std::make_unique<base::Value>(legacy_safe_search == 1),
         google_safe_search == 0
             ? nullptr
-            : base::MakeUnique<base::Value>(google_safe_search == 1),
+            : std::make_unique<base::Value>(google_safe_search == 1),
         legacy_youtube == 0
             ? nullptr
-            : base::MakeUnique<base::Value>(legacy_youtube == 1),
+            : std::make_unique<base::Value>(legacy_youtube == 1),
         youtube_restrict == 0
             ? nullptr  // subtracting 1 gives 0,1,2, see above
-            : base::MakeUnique<base::Value>(youtube_restrict - 1));
+            : std::make_unique<base::Value>(youtube_restrict - 1));
 
     // The legacy ForceSafeSearch policy should only have an effect if none of
     // the other 3 policies are defined.
@@ -1204,7 +1205,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ForceGoogleSafeSearch) {
     ApplySafeSearchPolicy(nullptr,          // ForceSafeSearch
                           safe_search == 0  // ForceGoogleSafeSearch
                               ? nullptr
-                              : base::MakeUnique<base::Value>(safe_search == 1),
+                              : std::make_unique<base::Value>(safe_search == 1),
                           nullptr,   // ForceYouTubeSafetyMode
                           nullptr);  // ForceYouTubeRestrict
     // Verify that the safe search pref behaves the way we expect.
@@ -1232,7 +1233,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
   // Disable with a policy.
   PolicyMap policies;
   policies.Set(key::kDisable3DAPIs, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(true),
+               POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(true),
                nullptr);
   UpdateProviderPolicy(policies);
   // Crash and reload the tab to get a new renderer.
@@ -1241,7 +1242,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Disable3DAPIs) {
   EXPECT_FALSE(IsWebGLEnabled(contents));
   // Enable with a policy.
   policies.Set(key::kDisable3DAPIs, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
-               POLICY_SOURCE_CLOUD, base::MakeUnique<base::Value>(false),
+               POLICY_SOURCE_CLOUD, std::make_unique<base::Value>(false),
                nullptr);
   UpdateProviderPolicy(policies);
   content::CrashTab(contents);
@@ -1307,7 +1308,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DeveloperToolsDisabled) {
   PolicyMap policies;
   policies.Set(key::kDeveloperToolsDisabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   content::WindowedNotificationObserver close_observer(
       content::NOTIFICATION_WEB_CONTENTS_DESTROYED,
       content::Source<content::WebContents>(
@@ -1394,7 +1395,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DeveloperToolsDisabledExtensionsDevMode) {
   PolicyMap policies;
   policies.Set(key::kDeveloperToolsDisabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
 
   // Expect devcontrols to be hidden now...
@@ -1471,7 +1472,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DownloadDirectory) {
   PolicyMap policies;
   policies.Set(key::kDownloadDirectory, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(forced_dir.GetPath().value()),
+               std::make_unique<base::Value>(forced_dir.GetPath().value()),
                nullptr);
   UpdateProviderPolicy(policies);
   DownloadAndVerifyFile(browser(), forced_dir.GetPath(), file);
@@ -1804,7 +1805,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallForcelist) {
   ASSERT_TRUE(extension);
 
   const std::string old_version_number =
-      service->GetExtensionById(kGoodCrxId, true)->version()->GetString();
+      service->GetExtensionById(kGoodCrxId, true)->version().GetString();
 
   base::FilePath test_path;
   GetTestDataDirectory(&test_path);
@@ -1825,13 +1826,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionInstallForcelist) {
   updater->CheckNow(params);
   update_observer.WaitForExtensionWillBeInstalled();
 
-  const base::Version* new_version =
+  const base::Version& new_version =
       service->GetExtensionById(kGoodCrxId, true)->version();
-  ASSERT_TRUE(new_version->IsValid());
+  ASSERT_TRUE(new_version.IsValid());
   base::Version old_version(old_version_number);
   ASSERT_TRUE(old_version.IsValid());
 
-  EXPECT_EQ(1, new_version->CompareTo(old_version));
+  EXPECT_EQ(1, new_version.CompareTo(old_version));
 
   EXPECT_EQ(0u, interceptor.GetPendingSize());
 
@@ -2071,7 +2072,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequired) {
 
   // The extension should be auto-updated to newer version and re-enabled.
   EXPECT_EQ("1.0.0.1",
-            service->GetInstalledExtension(kGoodCrxId)->version()->GetString());
+            service->GetInstalledExtension(kGoodCrxId)->version().GetString());
   EXPECT_TRUE(registry->enabled_extensions().Contains(kGoodCrxId));
 }
 
@@ -2109,7 +2110,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
   EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
   EXPECT_EQ("1.0.0.0",
-            service->GetInstalledExtension(kGoodCrxId)->version()->GetString());
+            service->GetInstalledExtension(kGoodCrxId)->version().GetString());
 
   // An extension management policy update should trigger an update as well.
   EXPECT_EQ(1u, interceptor.GetPendingSize());
@@ -2129,7 +2130,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ExtensionMinimumVersionRequiredAlt) {
 
   // It should be updated to 1.0.0.1 but remain disabled.
   EXPECT_EQ("1.0.0.1",
-            service->GetInstalledExtension(kGoodCrxId)->version()->GetString());
+            service->GetInstalledExtension(kGoodCrxId)->version().GetString());
   EXPECT_TRUE(registry->disabled_extensions().Contains(kGoodCrxId));
   EXPECT_EQ(extensions::disable_reason::DISABLE_UPDATE_REQUIRED_BY_POLICY,
             extension_prefs->GetDisableReasons(kGoodCrxId));
@@ -2207,7 +2208,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
   PolicyMap policies;
   policies.Set(key::kHomepageLocation, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(chrome::kChromeUICreditsURL),
+               std::make_unique<base::Value>(chrome::kChromeUICreditsURL),
                nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_HOME));
@@ -2216,7 +2217,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HomepageLocation) {
 
   policies.Set(key::kHomepageIsNewTabPage, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_HOME));
   content::WaitForLoadStop(contents);
@@ -2241,7 +2242,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_IncognitoEnabled) {
   PolicyMap policies;
   policies.Set(key::kIncognitoEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(chrome::ExecuteCommand(browser(), IDC_NEW_INCOGNITO_WINDOW));
   EXPECT_EQ(1u, active_browser_list->size());
@@ -2250,7 +2251,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, MAYBE_IncognitoEnabled) {
   // Enable via policy and verify that incognito windows can be opened.
   policies.Set(key::kIncognitoEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(chrome::ExecuteCommand(browser(), IDC_NEW_INCOGNITO_WINDOW));
   EXPECT_EQ(2u, active_browser_list->size());
@@ -2270,7 +2271,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Javascript) {
   PolicyMap policies;
   policies.Set(key::kJavascriptEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   // Reload the page.
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
@@ -2288,7 +2289,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, Javascript) {
   EXPECT_FALSE(IsJavascriptEnabled(contents));
   policies.Set(key::kDefaultJavaScriptSetting, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(CONTENT_SETTING_ALLOW), nullptr);
+               std::make_unique<base::Value>(CONTENT_SETTING_ALLOW), nullptr);
   UpdateProviderPolicy(policies);
   ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL));
   EXPECT_TRUE(IsJavascriptEnabled(contents));
@@ -2304,7 +2305,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NetworkPrediction) {
   PolicyMap policies;
   policies.Set(key::kDnsPrefetchingEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
 
   EXPECT_FALSE(IsNetworkPredictionEnabled(prefs));
@@ -2312,7 +2313,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, NetworkPrediction) {
   // Enabled by new policy, this should override old one.
   policies.Set(key::kNetworkPredictionOptions, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(
+               std::make_unique<base::Value>(
                    chrome_browser_net::NETWORK_PREDICTION_ALWAYS),
                nullptr);
   UpdateProviderPolicy(policies);
@@ -2325,7 +2326,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SavingBrowserHistoryDisabled) {
   PolicyMap policies;
   policies.Set(key::kSavingBrowserHistoryDisabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   GURL url = ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
@@ -2338,7 +2339,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SavingBrowserHistoryDisabled) {
   // Now flip the policy and try again.
   policies.Set(key::kSavingBrowserHistoryDisabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   ui_test_utils::NavigateToURL(browser(), url);
   // Verify that the navigation was saved in the history.
@@ -2362,7 +2363,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DeletingBrowsingHistoryDisabled) {
   PolicyMap policies;
   policies.Set(key::kAllowDeletingBrowserHistory, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(prefs->IsManagedPreference(prefs::kAllowDeletingBrowserHistory));
   EXPECT_TRUE(prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory));
@@ -2374,7 +2375,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DeletingBrowsingHistoryDisabled) {
 
   policies.Set(key::kAllowDeletingBrowserHistory, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(prefs->IsManagedPreference(prefs::kAllowDeletingBrowserHistory));
   EXPECT_FALSE(prefs->GetBoolean(prefs::kAllowDeletingBrowserHistory));
@@ -2512,6 +2513,53 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
   CheckCanOpenURL(browser(), kURLS[4]);
 }
 
+IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistIncognito) {
+  // Checks that URLs can be blacklisted, and that exceptions can be made to
+  // the blacklist.
+
+  Browser* incognito_browser =
+      OpenURLOffTheRecord(browser()->profile(), GURL("about:blank"));
+
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string kURLS[] = {
+      embedded_test_server()->GetURL("aaa.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("bbb.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("sub.bbb.com", "/empty.html").spec(),
+      embedded_test_server()->GetURL("bbb.com", "/policy/blank.html").spec(),
+      embedded_test_server()->GetURL("bbb.com.", "/policy/blank.html").spec(),
+  };
+
+  // Verify that "bbb.com" opens before applying the blacklist.
+  CheckCanOpenURL(incognito_browser, kURLS[1]);
+
+  // Set a blacklist.
+  base::ListValue blacklist;
+  blacklist.AppendString("bbb.com");
+  PolicyMap policies;
+  policies.Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, blacklist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+  // All bbb.com URLs are blocked, and "aaa.com" is still unblocked.
+  CheckCanOpenURL(incognito_browser, kURLS[0]);
+  for (size_t i = 1; i < arraysize(kURLS); ++i)
+    CheckURLIsBlocked(incognito_browser, kURLS[i]);
+
+  // Whitelist some sites of bbb.com.
+  base::ListValue whitelist;
+  whitelist.AppendString("sub.bbb.com");
+  whitelist.AppendString("bbb.com/policy");
+  policies.Set(key::kURLWhitelist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, whitelist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+  CheckURLIsBlocked(incognito_browser, kURLS[1]);
+  CheckCanOpenURL(incognito_browser, kURLS[2]);
+  CheckCanOpenURL(incognito_browser, kURLS[3]);
+  CheckCanOpenURL(incognito_browser, kURLS[4]);
+}
+
 IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistAndWhitelist) {
   // Regression test for http://crbug.com/755256. Blacklisting * and
   // whitelisting an origin should work.
@@ -2572,6 +2620,66 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistSubresources) {
       "window.domAutomationController.send(iframeLoadResult)",
       &blacklisted_iframe_load_result));
   EXPECT_EQ("error", blacklisted_iframe_load_result);
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistClientRedirect) {
+  // Checks that a client side redirect to a blacklisted URL is blocked.
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL redirected_url =
+      embedded_test_server()->GetURL("/policy/blacklist-redirect.html");
+  GURL first_url = embedded_test_server()->GetURL("/client-redirect?" +
+                                                  redirected_url.spec());
+
+  ui_test_utils::NavigateToURL(browser(), first_url);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_EQ(base::ASCIIToUTF16("Redirected!"),
+            browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
+
+  base::ListValue blacklist;
+  blacklist.AppendString(redirected_url.spec().c_str());
+  PolicyMap policies;
+  policies.Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, blacklist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+
+  ui_test_utils::NavigateToURL(browser(), first_url);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_NE(base::ASCIIToUTF16("Redirected!"),
+            browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
+}
+
+IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistServerRedirect) {
+  // Checks that a server side redirect to a blacklisted URL is blocked.
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  GURL redirected_url =
+      embedded_test_server()->GetURL("/policy/blacklist-redirect.html");
+  GURL first_url = embedded_test_server()->GetURL("/server-redirect?" +
+                                                  redirected_url.spec());
+
+  ui_test_utils::NavigateToURL(browser(), first_url);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_EQ(base::ASCIIToUTF16("Redirected!"),
+            browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
+
+  base::ListValue blacklist;
+  blacklist.AppendString(redirected_url.spec().c_str());
+  PolicyMap policies;
+  policies.Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, blacklist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+
+  ui_test_utils::NavigateToURL(browser(), first_url);
+  content::WaitForLoadStop(
+      browser()->tab_strip_model()->GetActiveWebContents());
+  EXPECT_NE(base::ASCIIToUTF16("Redirected!"),
+            browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
 }
 
 #if defined(OS_MACOSX)
@@ -2647,7 +2755,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedBrowser) {
   PolicyMap policies;
   policies.Set(key::kFullscreenAllowed, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
 
   BrowserWindow* browser_window = browser()->window();
@@ -2662,7 +2770,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, FullscreenAllowedApp) {
   PolicyMap policies;
   policies.Set(key::kFullscreenAllowed, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
 
   scoped_refptr<const extensions::Extension> extension =
@@ -2730,7 +2838,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DisableAudioOutput) {
   PolicyMap policies;
   policies.Set(key::kAudioOutputAllowed, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(audio_handler->IsOutputMuted());
   // This should not change the state now and should not trigger output mute
@@ -2742,7 +2850,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, DisableAudioOutput) {
   // Toggle back and observe if the output mute changed event is fired.
   policies.Set(key::kAudioOutputAllowed, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(audio_handler->IsOutputMuted());
   EXPECT_EQ(1, test_observer->output_mute_changed_count());
@@ -2777,7 +2885,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SessionLengthLimit) {
   PolicyMap policies;
   policies.Set(key::kSessionLengthLimit, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kThreeHoursInMs), nullptr);
+               std::make_unique<base::Value>(kThreeHoursInMs), nullptr);
   UpdateProviderPolicy(policies);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer);
@@ -2787,7 +2895,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SessionLengthLimit) {
   EXPECT_CALL(observer, Observe(chrome::NOTIFICATION_APP_TERMINATING, _, _));
   policies.Set(key::kSessionLengthLimit, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kOneHourInMs), nullptr);
+               std::make_unique<base::Value>(kOneHourInMs), nullptr);
   UpdateProviderPolicy(policies);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer);
@@ -2860,10 +2968,10 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   PolicyMap policies;
   policies.Set(key::kWaitForInitialUserActivity, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   policies.Set(key::kSessionLengthLimit, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kThreeHoursInMs), nullptr);
+               std::make_unique<base::Value>(kThreeHoursInMs), nullptr);
   UpdateProviderPolicy(policies);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer);
@@ -2873,7 +2981,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   EXPECT_CALL(observer, Observe(chrome::NOTIFICATION_APP_TERMINATING, _, _));
   policies.Set(key::kSessionLengthLimit, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(kOneHourInMs), nullptr);
+               std::make_unique<base::Value>(kOneHourInMs), nullptr);
   UpdateProviderPolicy(policies);
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(&observer);
@@ -2893,7 +3001,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, LargeCursorEnabled) {
   PolicyMap policies;
   policies.Set(key::kLargeCursorEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(accessibility_manager->IsLargeCursorEnabled());
 
@@ -2917,7 +3025,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SpokenFeedbackEnabled) {
   PolicyMap policies;
   policies.Set(key::kSpokenFeedbackEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(accessibility_manager->IsSpokenFeedbackEnabled());
 
@@ -2941,7 +3049,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, HighContrastEnabled) {
   PolicyMap policies;
   policies.Set(key::kHighContrastEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(accessibility_manager->IsHighContrastEnabled());
 
@@ -2963,7 +3071,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ScreenMagnifierTypeNone) {
   PolicyMap policies;
   policies.Set(key::kScreenMagnifierType, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(0), nullptr);
+               std::make_unique<base::Value>(0), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(magnification_manager->IsMagnifierEnabled());
 
@@ -2984,7 +3092,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, ScreenMagnifierTypeFull) {
   PolicyMap policies;
   policies.Set(key::kScreenMagnifierType, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(ash::MAGNIFIER_FULL), nullptr);
+               std::make_unique<base::Value>(ash::MAGNIFIER_FULL), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(magnification_manager->IsMagnifierEnabled());
 
@@ -3007,7 +3115,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, AccessibilityVirtualKeyboardEnabled) {
   PolicyMap policies;
   policies.Set(key::kVirtualKeyboardEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(accessibility_manager->IsVirtualKeyboardEnabled());
 
@@ -3030,7 +3138,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, VirtualKeyboardEnabled) {
   PolicyMap policies;
   policies.Set(key::kTouchVirtualKeyboardEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(keyboard::IsKeyboardEnabled());
   keyboard::SetTouchKeyboardEnabled(false);
@@ -3040,7 +3148,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, VirtualKeyboardEnabled) {
   // cannot enable the keyboard.
   policies.Set(key::kTouchVirtualKeyboardEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(keyboard::IsKeyboardEnabled());
   keyboard::SetTouchKeyboardEnabled(true);
@@ -3206,13 +3314,13 @@ class PolicyStatisticsCollectorTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kShowHomeButton, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(true), nullptr);
+                 std::make_unique<base::Value>(true), nullptr);
     policies.Set(key::kBookmarkBarEnabled, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(false), nullptr);
+                 std::make_unique<base::Value>(false), nullptr);
     policies.Set(key::kHomepageLocation, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>("http://chromium.org"), nullptr);
+                 std::make_unique<base::Value>("http://chromium.org"), nullptr);
     provider_.UpdateChromePolicy(policies);
   }
 };
@@ -3312,7 +3420,7 @@ class MediaStreamDevicesControllerBrowserTest
                           const char* allow_rule) {
     policies->Set(policy_name, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
                   POLICY_SOURCE_CLOUD,
-                  base::MakeUnique<base::Value>(policy_value_), nullptr);
+                  std::make_unique<base::Value>(policy_value_), nullptr);
 
     if (whitelist_policy) {
       // Add an entry to the whitelist that allows the specified URL regardless
@@ -3533,7 +3641,7 @@ IN_PROC_BROWSER_TEST_F(WebBluetoothPolicyTest, Block) {
   PolicyMap policies;
   policies.Set(key::kDefaultWebBluetoothGuardSetting, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(2), nullptr);
+               std::make_unique<base::Value>(2), nullptr);
   UpdateProviderPolicy(policies);
 
   std::string rejection;
@@ -3578,13 +3686,13 @@ IN_PROC_BROWSER_TEST_F(PolicyTest,
   ASSERT_TRUE(content::WaitForRenderFrameReady(interstitial->GetMainFrame()));
 
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      interstitial, "proceed-link"));
+      interstitial->GetMainFrame(), "proceed-link"));
   EXPECT_NE(base::UTF8ToUTF16("OK"),
             browser()->tab_strip_model()->GetActiveWebContents()->GetTitle());
 
   // Now exempt the URL from being blocked by setting policy.
   std::unique_ptr<base::ListValue> disabled_urls =
-      base::MakeUnique<base::ListValue>();
+      std::make_unique<base::ListValue>();
   disabled_urls->AppendString(https_server_ok.host_port_pair().HostForURL());
 
   PolicyMap policies;
@@ -3684,7 +3792,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SSLErrorOverridingAllowed) {
 
   // The interstitial should display the proceed link.
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      interstitial, "proceed-link"));
+      interstitial->GetMainFrame(), "proceed-link"));
 }
 
 // Test that when SSL error overriding is disallowed by policy, the
@@ -3721,7 +3829,7 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, SSLErrorOverridingDisallowed) {
 
   // The interstitial should not display the proceed link.
   EXPECT_FALSE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      interstitial, "proceed-link"));
+      interstitial->GetMainFrame(), "proceed-link"));
 
   // The interstitial should not proceed, even if the command is sent in
   // some other way (e.g., via the keyboard shortcut).
@@ -3778,7 +3886,7 @@ class MediaRouterPolicyTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kEnableMediaRouter, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(enable), nullptr);
+                 std::make_unique<base::Value>(enable), nullptr);
     provider_.UpdateChromePolicy(policies);
   }
 };
@@ -3802,7 +3910,7 @@ class MediaRouterActionPolicyTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kShowCastIconInToolbar, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(enable), nullptr);
+                 std::make_unique<base::Value>(enable), nullptr);
     provider_.UpdateChromePolicy(policies);
   }
 
@@ -3847,7 +3955,7 @@ class WebRtcUdpPortRangePolicyTest : public PolicyTest {
     if (enable) {
       policies.Set(key::kWebRtcUdpPortRange, POLICY_LEVEL_MANDATORY,
                    POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                   base::MakeUnique<base::Value>(kTestWebRtcUdpPortRange),
+                   std::make_unique<base::Value>(kTestWebRtcUdpPortRange),
                    nullptr);
     }
     provider_.UpdateChromePolicy(policies);
@@ -4040,7 +4148,7 @@ void ComponentUpdaterPolicyTest::BeginTest() {
   const GURL url = urls.front();
 
   interceptor_factory_ =
-      base::MakeUnique<update_client::URLRequestPostInterceptorFactory>(
+      std::make_unique<update_client::URLRequestPostInterceptorFactory>(
           url.scheme(), url.host(),
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 
@@ -4179,7 +4287,7 @@ class PolicyVariationsServiceTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kVariationsRestrictParameter, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>("restricted"), nullptr);
+                 std::make_unique<base::Value>("restricted"), nullptr);
     provider_.UpdateChromePolicy(policies);
   }
 };
@@ -4190,7 +4298,8 @@ IN_PROC_BROWSER_TEST_F(PolicyVariationsServiceTest, VariationsURLIsValid) {
 
   const GURL url =
       g_browser_process->variations_service()->GetVariationsServerURL(
-          g_browser_process->local_state(), std::string());
+          g_browser_process->local_state(), std::string(),
+          variations::VariationsService::HttpOptions::USE_HTTPS);
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   std::string value;
@@ -4264,7 +4373,7 @@ class HardwareAccelerationModePolicyTest : public PolicyTest {
     PolicyMap policies;
     policies.Set(key::kHardwareAccelerationModeEnabled, POLICY_LEVEL_MANDATORY,
                  POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(false), nullptr);
+                 std::make_unique<base::Value>(false), nullptr);
     provider_.UpdateChromePolicy(policies);
   }
 };
@@ -4313,7 +4422,7 @@ class ArcPolicyTest : public PolicyTest {
     PolicyTest::SetUpOnMainThread();
     arc::ArcSessionManager::DisableUIForTesting();
     arc::ArcSessionManager::Get()->SetArcSessionRunnerForTesting(
-        base::MakeUnique<arc::ArcSessionRunner>(
+        std::make_unique<arc::ArcSessionRunner>(
             base::Bind(arc::FakeArcSession::Create)));
 
     browser()->profile()->GetPrefs()->SetBoolean(arc::prefs::kArcSignedIn,
@@ -4382,7 +4491,7 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
   PolicyMap policies;
   policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_FALSE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
   EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
@@ -4390,7 +4499,7 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcBackupRestoreEnabled) {
   // Enable ARC Backup & Restore through the policy.
   policies.Set(key::kArcBackupRestoreEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   EXPECT_TRUE(pref->GetBoolean(arc::prefs::kArcBackupRestoreEnabled));
   EXPECT_TRUE(pref->IsManagedPreference(arc::prefs::kArcBackupRestoreEnabled));
@@ -4512,7 +4621,7 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
   PolicyMap policies;
   policies.Set(key::kBrowserNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(false), nullptr);
+               std::make_unique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
 
   embedded_test_server()->RegisterRequestHandler(base::Bind(
@@ -4538,7 +4647,7 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
   // Now enable the policy and check that a network time query is sent.
   policies.Set(key::kBrowserNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
-               base::MakeUnique<base::Value>(true), nullptr);
+               std::make_unique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
   ui_test_utils::NavigateToURL(browser(), https_server_expired_.GetURL("/"));
   interstitial_page = tab->GetInterstitialPage();
@@ -4614,7 +4723,7 @@ IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
   EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kEnabled,
             GetAppLockScreenStatus(app->id()));
 
-  SetPolicyValue(base::MakeUnique<base::ListValue>());
+  SetPolicyValue(std::make_unique<base::ListValue>());
   EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kNotAllowedByPolicy,
             GetAppLockScreenStatus(app->id()));
 
@@ -4634,7 +4743,7 @@ IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
   EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kSupported,
             GetAppLockScreenStatus(app->id()));
 
-  auto policy = base::MakeUnique<base::ListValue>();
+  auto policy = std::make_unique<base::ListValue>();
   policy->GetList().emplace_back(base::Value(kTestAppId));
   SetPolicyValue(std::move(policy));
 

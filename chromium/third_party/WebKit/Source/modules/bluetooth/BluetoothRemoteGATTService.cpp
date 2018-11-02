@@ -14,7 +14,6 @@
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTCharacteristic.h"
 #include "modules/bluetooth/BluetoothUUID.h"
-#include "platform/wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -148,10 +147,9 @@ ScriptPromise BluetoothRemoteGATTService::GetCharacteristicsImpl(
       device_->GetBluetooth()->Service();
   service->RemoteServiceGetCharacteristics(
       service_->instance_id, quantity, characteristics_uuid,
-      ConvertToBaseCallback(
-          WTF::Bind(&BluetoothRemoteGATTService::GetCharacteristicsCallback,
-                    WrapPersistent(this), service_->instance_id,
-                    characteristics_uuid, quantity, WrapPersistent(resolver))));
+      WTF::Bind(&BluetoothRemoteGATTService::GetCharacteristicsCallback,
+                WrapPersistent(this), service_->instance_id,
+                characteristics_uuid, quantity, WrapPersistent(resolver)));
 
   return promise;
 }

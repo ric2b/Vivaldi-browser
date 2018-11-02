@@ -18,8 +18,8 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
-#include "ui/accessibility/platform/ax_platform_unique_id.h"
 #include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
+#include "ui/accessibility/platform/ax_unique_id.h"
 
 namespace {
 
@@ -62,7 +62,7 @@ BrowserAccessibility* BrowserAccessibility::Create() {
 
 using UniqueIdMap = base::hash_map<int32_t, BrowserAccessibilityAndroid*>;
 // Map from each AXPlatformNode's unique id to its instance.
-base::LazyInstance<UniqueIdMap>::DestructorAtExit g_unique_id_map =
+base::LazyInstance<UniqueIdMap>::Leaky g_unique_id_map =
     LAZY_INSTANCE_INITIALIZER;
 
 // static
@@ -76,14 +76,13 @@ BrowserAccessibilityAndroid* BrowserAccessibilityAndroid::GetFromUniqueId(
   return nullptr;
 }
 
-BrowserAccessibilityAndroid::BrowserAccessibilityAndroid()
-    : unique_id_(ui::GetNextAXPlatformNodeUniqueId()) {
-  g_unique_id_map.Get()[unique_id_] = this;
+BrowserAccessibilityAndroid::BrowserAccessibilityAndroid() {
+  g_unique_id_map.Get()[unique_id()] = this;
 }
 
 BrowserAccessibilityAndroid::~BrowserAccessibilityAndroid() {
-  if (unique_id_)
-    g_unique_id_map.Get().erase(unique_id_);
+  if (unique_id())
+    g_unique_id_map.Get().erase(unique_id());
 }
 
 bool BrowserAccessibilityAndroid::IsNative() const {
@@ -174,9 +173,15 @@ bool BrowserAccessibilityAndroid::IsChecked() const {
 }
 
 bool BrowserAccessibilityAndroid::IsClickable() const {
-  // If it has a custom default action verb, it's definitely clickable.
-  if (HasIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB))
+  // If it has a custom default action verb except for
+  // AX_DEFAULT_ACTION_VERB_CLICK_ANCESTOR, it's definitely clickable.
+  // AX_DEFAULT_ACTION_VERB_CLICK_ANCESTOR is used when an element with a click
+  // listener is present in its ancestry chain.
+  if (HasIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB) &&
+      (GetIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB) !=
+       ui::AX_DEFAULT_ACTION_VERB_CLICK_ANCESTOR)) {
     return true;
+  }
 
   // Otherwise return true if it's focusable, but skip web areas and iframes.
   if (IsIframe() || (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA))
@@ -311,6 +316,14 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
   // If it's not focusable but has a control role, then it's interesting.
   if (ui::IsControl(GetRole()))
     return true;
+
+  // A non focusable child of a control is not interesting
+  const BrowserAccessibility* parent = PlatformGetParent();
+  while (parent != nullptr) {
+    if (ui::IsControl(parent->GetRole()))
+      return false;
+    parent = parent->PlatformGetParent();
+  }
 
   // Otherwise, the interesting nodes are leaf nodes with non-whitespace text.
   return PlatformIsLeaf() &&

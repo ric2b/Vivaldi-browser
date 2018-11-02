@@ -28,6 +28,13 @@ source_set("cdm") {
   sources = [
     "aes_decryptor.cc",
     "aes_decryptor.h",
+
+    # TODO(crbug.com/676224): Move this to |enable_library_cdms| block below
+    # when EnabledIf attribute is supported in mojom.
+    "cdm_proxy.cc",
+    "cdm_proxy.h",
+    "cenc_utils.cc",
+    "cenc_utils.h",
     "default_cdm_factory.cc",
     "default_cdm_factory.h",
     "json_web_key.cc",
@@ -49,17 +56,11 @@ source_set("cdm") {
 
   configs += [ "//media:subcomponent_config" ]
 
-  if (proprietary_codecs) {
-    sources += [
-      "cenc_utils.cc",
-      "cenc_utils.h",
-    ]
-  }
-
   if (enable_library_cdms) {
     deps += [
       ":cdm_api",
       ":cdm_paths",
+      "//components/crash/core/common:crash_key",
     ]
     sources += [
       "cdm_adapter.cc",
@@ -70,14 +71,10 @@ source_set("cdm") {
       "cdm_allocator.h",
       "cdm_auxiliary_helper.cc",
       "cdm_auxiliary_helper.h",
-      "cdm_file_adapter.cc",
-      "cdm_file_adapter.h",
       "cdm_helpers.cc",
       "cdm_helpers.h",
       "cdm_module.cc",
       "cdm_module.h",
-      "cdm_proxy.cc",
-      "cdm_proxy.h",
       "cdm_wrapper.h",
       "output_protection.h",
       "platform_verification.h",
@@ -175,7 +172,7 @@ source_set("unit_tests") {
       "simple_cdm_buffer.cc",
       "simple_cdm_buffer.h",
     ]
-    data_deps += [ "//media/cdm/ppapi:clearkeycdm" ]
+    data_deps += [ "//media/cdm/ppapi/clear_key_cdm" ]
 
     deps += [
       ":cdm_api",

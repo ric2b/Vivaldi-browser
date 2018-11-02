@@ -5,10 +5,11 @@
 #ifndef CONTENT_RENDERER_LOADER_CORS_URL_LOADER_H_
 #define CONTENT_RENDERER_LOADER_CORS_URL_LOADER_H_
 
-#include "content/public/common/url_loader_factory.mojom.h"
+#include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/interfaces/fetch_api.mojom.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -19,34 +20,36 @@ namespace content {
 // well as potential preflight requests to the supplied
 // |network_loader_factory|. It is owned by the CORSURLLoaderFactory that
 // created it.
-class CONTENT_EXPORT CORSURLLoader : public mojom::URLLoader,
-                                     public mojom::URLLoaderClient {
+class CONTENT_EXPORT CORSURLLoader : public network::mojom::URLLoader,
+                                     public network::mojom::URLLoaderClient {
  public:
   // Assumes network_loader_factory outlives this loader.
   CORSURLLoader(
       int32_t routing_id,
       int32_t request_id,
       uint32_t options,
-      const ResourceRequest& resource_request,
-      mojom::URLLoaderClientPtr client,
+      const network::ResourceRequest& resource_request,
+      network::mojom::URLLoaderClientPtr client,
       const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
-      mojom::URLLoaderFactory* network_loader_factory);
+      network::mojom::URLLoaderFactory* network_loader_factory);
 
   ~CORSURLLoader() override;
 
-  // mojom::URLLoader overrides:
+  // network::mojom::URLLoader overrides:
   void FollowRedirect() override;
+  void ProceedWithResponse() override;
   void SetPriority(net::RequestPriority priority,
                    int intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
   void ResumeReadingBodyFromNet() override;
 
-  // mojom::URLLoaderClient overrides:
-  void OnReceiveResponse(const ResourceResponseHead& head,
-                         const base::Optional<net::SSLInfo>& ssl_info,
-                         mojom::DownloadedTempFilePtr downloaded_file) override;
+  // network::mojom::URLLoaderClient overrides:
+  void OnReceiveResponse(
+      const network::ResourceResponseHead& head,
+      const base::Optional<net::SSLInfo>& ssl_info,
+      network::mojom::DownloadedTempFilePtr downloaded_file) override;
   void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
-                         const ResourceResponseHead& head) override;
+                         const network::ResourceResponseHead& head) override;
   void OnDataDownloaded(int64_t data_length, int64_t encoded_length) override;
   void OnUploadProgress(int64_t current_position,
                         int64_t total_size,
@@ -67,14 +70,14 @@ class CONTENT_EXPORT CORSURLLoader : public mojom::URLLoader,
 
   // This raw URLLoaderFactory pointer is shared with the CORSURLLoaderFactory
   // that created and owns this object.
-  mojom::URLLoaderFactory* network_loader_factory_;
+  network::mojom::URLLoaderFactory* network_loader_factory_;
 
   // For the actual request.
-  mojom::URLLoaderPtr network_loader_;
-  mojo::Binding<mojom::URLLoaderClient> network_client_binding_;
+  network::mojom::URLLoaderPtr network_loader_;
+  mojo::Binding<network::mojom::URLLoaderClient> network_client_binding_;
 
   // To be a URLLoader for the client.
-  mojom::URLLoaderClientPtr forwarding_client_;
+  network::mojom::URLLoaderClientPtr forwarding_client_;
 
   // Request initiator's origin.
   url::Origin security_origin_;

@@ -11,7 +11,7 @@
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "net/ssl/ssl_info.h"
-#include "services/network/public/cpp/cors_error_status.h"
+#include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/interfaces/cors.mojom-shared.h"
 
 namespace network {
@@ -55,6 +55,9 @@ struct URLLoaderCompletionStatus {
 
   // Optional SSL certificate info.
   base::Optional<net::SSLInfo> ssl_info;
+
+  // Set when response was blocked due to being cross-site document load.
+  bool blocked_cross_site_document = false;
 };
 
 }  // namespace network

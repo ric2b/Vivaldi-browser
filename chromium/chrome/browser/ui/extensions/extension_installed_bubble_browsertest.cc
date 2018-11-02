@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/auto_reset.h"
 #include "base/optional.h"
 #include "base/test/scoped_feature_list.h"
@@ -37,7 +39,7 @@ class ExtensionInstalledBubbleBrowserTest
       std::unique_ptr<base::DictionaryValue> extra_keys = nullptr);
 
   // DialogBrowserTest:
-  void ShowDialog(const std::string& name) override;
+  void ShowUi(const std::string& name) override;
 
   BubbleController* GetExtensionBubbleControllerFromManager(
       BubbleManager* manager) const {
@@ -75,13 +77,13 @@ ExtensionInstalledBubbleBrowserTest::MakeBubble(
     builder.MergeManifest(std::move(extra_keys));
   scoped_refptr<const extensions::Extension> extension = builder.Build();
   extension_service()->AddExtension(extension.get());
-  auto bubble = base::MakeUnique<ExtensionInstalledBubble>(
+  auto bubble = std::make_unique<ExtensionInstalledBubble>(
       extension.get(), browser(), SkBitmap());
   bubble->Initialize();
   return bubble;
 }
 
-void ExtensionInstalledBubbleBrowserTest::ShowDialog(const std::string& name) {
+void ExtensionInstalledBubbleBrowserTest::ShowUi(const std::string& name) {
   // Default to Manifest::COMPONENT to test all anchoring locations. Without
   // this, a page action is added automatically, which will always be the
   // preferred anchor.
@@ -97,7 +99,7 @@ void ExtensionInstalledBubbleBrowserTest::ShowDialog(const std::string& name) {
   if (name == "SignInPromo" || name == "NoAction")
     location = Manifest::INTERNAL;
 
-  auto extra_keys = base::MakeUnique<base::DictionaryValue>();
+  auto extra_keys = std::make_unique<base::DictionaryValue>();
   if (name == "Omnibox")
     extra_keys->SetString(extensions::manifest_keys::kOmniboxKeyword, "foo");
 
@@ -107,38 +109,36 @@ void ExtensionInstalledBubbleBrowserTest::ShowDialog(const std::string& name) {
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_BrowserAction) {
-  RunDialog();
+                       InvokeUi_BrowserAction) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_PageAction) {
-  RunDialog();
+                       InvokeUi_PageAction) {
+  ShowAndVerifyUi();
 }
 
 // Test anchoring to the app menu.
 IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_InstalledByDefault) {
-  RunDialog();
+                       InvokeUi_InstalledByDefault) {
+  ShowAndVerifyUi();
 }
 
 // Test anchoring to the omnibox.
-IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_Omnibox) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest, InvokeUi_Omnibox) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_SignInPromo) {
-  RunDialog();
+                       InvokeUi_SignInPromo) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,
-                       InvokeDialog_NoAction) {
+IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest, InvokeUi_NoAction) {
   // Sign in to supppress the signin promo.
   SigninManagerFactory::GetForProfile(browser()->profile())
       ->SetAuthenticatedAccountInfo("test", "test@example.com");
-  RunDialog();
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionInstalledBubbleBrowserTest,

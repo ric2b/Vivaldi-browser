@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/views/extensions/bookmark_app_confirmation_view.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/callback_helpers.h"
 #include "base/feature_list.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -42,8 +42,9 @@ BookmarkAppConfirmationView::BookmarkAppConfirmationView(
       title_tf_(nullptr) {
   const ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
   set_margins(layout_provider->GetDialogInsetsForContentType(views::CONTROL,
-                                                             views::CONTROL));
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+                                                             views::TEXT));
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
   constexpr int kColumnSetId = 0;
 
   views::ColumnSet* column_set = layout->AddColumnSet(kColumnSetId);
@@ -62,7 +63,7 @@ BookmarkAppConfirmationView::BookmarkAppConfirmationView(
   views::ImageView* icon_image_view = new views::ImageView();
   gfx::Size image_size(icon_size, icon_size);
   gfx::ImageSkia image(
-      base::MakeUnique<WebAppInfoImageSource>(icon_size, web_app_info_.icons),
+      std::make_unique<WebAppInfoImageSource>(icon_size, web_app_info_.icons),
       image_size);
   icon_image_view->SetImageSize(image_size);
   icon_image_view->SetImage(image);

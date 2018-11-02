@@ -54,7 +54,7 @@ HTMLImportChild::HTMLImportChild(const KURL& url,
   DCHECK(client_);
 }
 
-HTMLImportChild::~HTMLImportChild() {}
+HTMLImportChild::~HTMLImportChild() = default;
 
 void HTMLImportChild::OwnerInserted() {
   if (!loader_->IsDone())
@@ -166,7 +166,7 @@ HTMLLinkElement* HTMLImportChild::Link() const {
 void HTMLImportChild::Normalize() {
   DCHECK(loader_);
 
-  if (!loader_->IsFirstImport(this) && this->Precedes(loader_->FirstImport())) {
+  if (!loader_->IsFirstImport(this) && Precedes(loader_->FirstImport())) {
     HTMLImportChild* old_first = loader_->FirstImport();
     loader_->MoveToFirst(this);
     TakeChildrenFrom(old_first);

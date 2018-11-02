@@ -10,11 +10,16 @@
 #include <memory>
 
 #include "base/atomicops.h"
+#include "base/base_switches.h"
+#include "base/bind.h"
+#include "base/command_line.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/shared_memory_handle.h"
 #include "base/process/kill.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
 #include "base/test/multiprocess_test.h"
@@ -100,12 +105,36 @@ const char MultipleThreadMain::s_test_name_[] =
     "SharedMemoryOpenThreadTest";
 #endif  // !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
 
+enum class Mode {
+  Default,
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  DisableDevShm = 1,
+#endif
+};
+
+class SharedMemoryTest : public ::testing::TestWithParam<Mode> {
+ public:
+  void SetUp() override {
+    switch (GetParam()) {
+      case Mode::Default:
+        break;
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+      case Mode::DisableDevShm:
+        CommandLine* cmdline = CommandLine::ForCurrentProcess();
+        cmdline->AppendSwitch(switches::kDisableDevShmUsage);
+        break;
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
+    }
+  }
+};
+
 }  // namespace
 
 // Android/Mac/Fuchsia doesn't support SharedMemory::Open/Delete/
 // CreateNamedDeprecated(openExisting=true)
 #if !defined(OS_ANDROID) && !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
-TEST(SharedMemoryTest, OpenClose) {
+
+TEST_P(SharedMemoryTest, OpenClose) {
   const uint32_t kDataSize = 1024;
   std::string test_name = "SharedMemoryOpenCloseTest";
 
@@ -153,7 +182,7 @@ TEST(SharedMemoryTest, OpenClose) {
   EXPECT_TRUE(rv);
 }
 
-TEST(SharedMemoryTest, OpenExclusive) {
+TEST_P(SharedMemoryTest, OpenExclusive) {
   const uint32_t kDataSize = 1024;
   const uint32_t kDataSize2 = 2048;
   std::ostringstream test_name_stream;
@@ -221,7 +250,7 @@ TEST(SharedMemoryTest, OpenExclusive) {
 #endif  // !defined(OS_ANDROID) && !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
 
 // Check that memory is still mapped after its closed.
-TEST(SharedMemoryTest, CloseNoUnmap) {
+TEST_P(SharedMemoryTest, CloseNoUnmap) {
   const size_t kDataSize = 4096;
 
   SharedMemory memory;
@@ -246,7 +275,7 @@ TEST(SharedMemoryTest, CloseNoUnmap) {
 #if !defined(OS_MACOSX) && !defined(OS_FUCHSIA)
 // Create a set of N threads to each open a shared memory segment and write to
 // it. Verify that they are always reading/writing consistent data.
-TEST(SharedMemoryTest, MultipleThreads) {
+TEST_P(SharedMemoryTest, MultipleThreads) {
   const int kNumThreads = 5;
 
   MultipleThreadMain::CleanUp();
@@ -287,7 +316,7 @@ TEST(SharedMemoryTest, MultipleThreads) {
 // Allocate private (unique) shared memory with an empty string for a
 // name.  Make sure several of them don't point to the same thing as
 // we might expect if the names are equal.
-TEST(SharedMemoryTest, AnonymousPrivate) {
+TEST_P(SharedMemoryTest, AnonymousPrivate) {
   int i, j;
   int count = 4;
   bool rv;
@@ -328,7 +357,7 @@ TEST(SharedMemoryTest, AnonymousPrivate) {
   }
 }
 
-TEST(SharedMemoryTest, GetReadOnlyHandle) {
+TEST_P(SharedMemoryTest, GetReadOnlyHandle) {
   StringPiece contents = "Hello World";
 
   SharedMemory writable_shmem;
@@ -356,6 +385,11 @@ TEST(SharedMemoryTest, GetReadOnlyHandle) {
                         contents.size()));
   EXPECT_TRUE(readonly_shmem.Unmap());
 
+#if defined(OS_ANDROID)
+  // On Android, mapping a region through a read-only descriptor makes the
+  // region read-only. Any writable mapping attempt should fail.
+  ASSERT_FALSE(writable_shmem.Map(contents.size()));
+#else
   // Make sure the writable instance is still writable.
   ASSERT_TRUE(writable_shmem.Map(contents.size()));
   StringPiece new_contents = "Goodbye";
@@ -363,6 +397,7 @@ TEST(SharedMemoryTest, GetReadOnlyHandle) {
   EXPECT_EQ(new_contents,
             StringPiece(static_cast<const char*>(writable_shmem.memory()),
                         new_contents.size()));
+#endif
 
   // We'd like to check that if we send the read-only segment to another
   // process, then that other process can't reopen it read/write.  (Since that
@@ -430,7 +465,7 @@ TEST(SharedMemoryTest, GetReadOnlyHandle) {
 #endif  // defined(OS_POSIX) || defined(OS_WIN)
 }
 
-TEST(SharedMemoryTest, ShareToSelf) {
+TEST_P(SharedMemoryTest, ShareToSelf) {
   StringPiece contents = "Hello World";
 
   SharedMemory shmem;
@@ -461,7 +496,7 @@ TEST(SharedMemoryTest, ShareToSelf) {
                         contents.size()));
 }
 
-TEST(SharedMemoryTest, ShareWithMultipleInstances) {
+TEST_P(SharedMemoryTest, ShareWithMultipleInstances) {
   static const StringPiece kContents = "Hello World";
 
   SharedMemory shmem;
@@ -505,7 +540,7 @@ TEST(SharedMemoryTest, ShareWithMultipleInstances) {
   ASSERT_EQ(StringPiece(ToLowerASCII(kContents)), readonly_contents);
 }
 
-TEST(SharedMemoryTest, MapAt) {
+TEST_P(SharedMemoryTest, MapAt) {
   ASSERT_TRUE(SysInfo::VMAllocationGranularity() >= sizeof(uint32_t));
   const size_t kCount = SysInfo::VMAllocationGranularity();
   const size_t kDataSize = kCount * sizeof(uint32_t);
@@ -531,7 +566,7 @@ TEST(SharedMemoryTest, MapAt) {
   }
 }
 
-TEST(SharedMemoryTest, MapTwice) {
+TEST_P(SharedMemoryTest, MapTwice) {
   const uint32_t kDataSize = 1024;
   SharedMemory memory;
   bool rv = memory.CreateAndMapAnonymous(kDataSize);
@@ -548,7 +583,7 @@ TEST(SharedMemoryTest, MapTwice) {
 // This test is not applicable for iOS (crbug.com/399384).
 #if !defined(OS_IOS)
 // Create a shared memory object, mmap it, and mprotect it to PROT_EXEC.
-TEST(SharedMemoryTest, AnonymousExecutable) {
+TEST_P(SharedMemoryTest, AnonymousExecutable) {
   const uint32_t kTestSize = 1 << 16;
 
   SharedMemory shared_memory;
@@ -567,6 +602,29 @@ TEST(SharedMemoryTest, AnonymousExecutable) {
                         PROT_READ | PROT_EXEC));
 }
 #endif  // !defined(OS_IOS)
+
+#if defined(OS_ANDROID)
+// This test is restricted to Android since there is no way on other platforms
+// to guarantee that a region can never be mapped with PROT_EXEC. E.g. on
+// Linux, anonymous shared regions come from /dev/shm which can be mounted
+// without 'noexec'. In this case, anything can perform an mprotect() to
+// change the protection mask of a given page.
+TEST(SharedMemoryTest, AnonymousIsNotExecutableByDefault) {
+  const uint32_t kTestSize = 1 << 16;
+
+  SharedMemory shared_memory;
+  SharedMemoryCreateOptions options;
+  options.size = kTestSize;
+
+  EXPECT_TRUE(shared_memory.Create(options));
+  EXPECT_TRUE(shared_memory.Map(shared_memory.requested_size()));
+
+  errno = 0;
+  EXPECT_EQ(-1, mprotect(shared_memory.memory(), shared_memory.requested_size(),
+                         PROT_READ | PROT_EXEC));
+  EXPECT_EQ(EACCES, errno);
+}
+#endif  // OS_ANDROID
 
 // Android supports a different permission model than POSIX for its "ashmem"
 // shared memory implementation. So the tests about file permissions are not
@@ -588,7 +646,7 @@ class ScopedUmaskSetter {
 };
 
 // Create a shared memory object, check its permissions.
-TEST(SharedMemoryTest, FilePermissionsAnonymous) {
+TEST_P(SharedMemoryTest, FilePermissionsAnonymous) {
   const uint32_t kTestSize = 1 << 8;
 
   SharedMemory shared_memory;
@@ -614,7 +672,7 @@ TEST(SharedMemoryTest, FilePermissionsAnonymous) {
 }
 
 // Create a shared memory object, check its permissions.
-TEST(SharedMemoryTest, FilePermissionsNamed) {
+TEST_P(SharedMemoryTest, FilePermissionsNamed) {
   const uint32_t kTestSize = 1 << 8;
 
   SharedMemory shared_memory;
@@ -645,7 +703,7 @@ TEST(SharedMemoryTest, FilePermissionsNamed) {
 // Map() will return addresses which are aligned to the platform page size, this
 // varies from platform to platform though.  Since we'd like to advertise a
 // minimum alignment that callers can count on, test for it here.
-TEST(SharedMemoryTest, MapMinimumAlignment) {
+TEST_P(SharedMemoryTest, MapMinimumAlignment) {
   static const int kDataSize = 8192;
 
   SharedMemory shared_memory;
@@ -656,7 +714,7 @@ TEST(SharedMemoryTest, MapMinimumAlignment) {
 }
 
 #if defined(OS_WIN)
-TEST(SharedMemoryTest, UnsafeImageSection) {
+TEST_P(SharedMemoryTest, UnsafeImageSection) {
   const char kTestSectionName[] = "UnsafeImageSection";
   wchar_t path[MAX_PATH];
   EXPECT_GT(::GetModuleFileName(nullptr, path, arraysize(path)), 0U);
@@ -784,7 +842,7 @@ MULTIPROCESS_TEST_MAIN(SharedMemoryTestMain) {
 #endif  // !defined(OS_IOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX) &&
         // !defined(OS_FUCHSIA)
 
-TEST(SharedMemoryTest, MappedId) {
+TEST_P(SharedMemoryTest, MappedId) {
   const uint32_t kDataSize = 1024;
   SharedMemory memory;
   SharedMemoryCreateOptions options;
@@ -808,5 +866,96 @@ TEST(SharedMemoryTest, MappedId) {
   memory.Unmap();
   EXPECT_TRUE(memory.mapped_id().is_empty());
 }
+
+INSTANTIATE_TEST_CASE_P(Default,
+                        SharedMemoryTest,
+                        ::testing::Values(Mode::Default));
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+INSTANTIATE_TEST_CASE_P(SkipDevShm,
+                        SharedMemoryTest,
+                        ::testing::Values(Mode::DisableDevShm));
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
+
+#if defined(OS_ANDROID)
+TEST(SharedMemoryTest, ReadOnlyRegions) {
+  const uint32_t kDataSize = 1024;
+  SharedMemory memory;
+  SharedMemoryCreateOptions options;
+  options.size = kDataSize;
+  EXPECT_TRUE(memory.Create(options));
+
+  EXPECT_FALSE(memory.handle().IsRegionReadOnly());
+
+  // Check that it is possible to map the region directly from the fd.
+  int region_fd = memory.handle().GetHandle();
+  EXPECT_GE(region_fd, 0);
+  void* address = mmap(nullptr, kDataSize, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       region_fd, 0);
+  bool success = address && address != MAP_FAILED;
+  ASSERT_TRUE(address);
+  ASSERT_NE(address, MAP_FAILED);
+  if (success) {
+    EXPECT_EQ(0, munmap(address, kDataSize));
+  }
+
+  ASSERT_TRUE(memory.handle().SetRegionReadOnly());
+  EXPECT_TRUE(memory.handle().IsRegionReadOnly());
+
+  // Check that it is no longer possible to map the region read/write.
+  errno = 0;
+  address = mmap(nullptr, kDataSize, PROT_READ | PROT_WRITE, MAP_SHARED,
+                 region_fd, 0);
+  success = address && address != MAP_FAILED;
+  ASSERT_FALSE(success);
+  ASSERT_EQ(EPERM, errno);
+  if (success) {
+    EXPECT_EQ(0, munmap(address, kDataSize));
+  }
+}
+
+TEST(SharedMemoryTest, ReadOnlyDescriptors) {
+  const uint32_t kDataSize = 1024;
+  SharedMemory memory;
+  SharedMemoryCreateOptions options;
+  options.size = kDataSize;
+  EXPECT_TRUE(memory.Create(options));
+
+  EXPECT_FALSE(memory.handle().IsRegionReadOnly());
+
+  // Getting a read-only descriptor should not make the region read-only itself.
+  SharedMemoryHandle ro_handle = memory.GetReadOnlyHandle();
+  EXPECT_FALSE(memory.handle().IsRegionReadOnly());
+
+  // Mapping a writable region from a read-only descriptor should not
+  // be possible, it will DCHECK() in debug builds (see test below),
+  // while returning false on release ones.
+  {
+    bool dcheck_fired = false;
+    logging::ScopedLogAssertHandler log_assert(
+        base::BindRepeating([](bool* flag, const char*, int, base::StringPiece,
+                               base::StringPiece) { *flag = true; },
+                            base::Unretained(&dcheck_fired)));
+
+    SharedMemory rw_region(ro_handle.Duplicate(), /* read_only */ false);
+    EXPECT_FALSE(rw_region.Map(kDataSize));
+    EXPECT_EQ(DCHECK_IS_ON() ? true : false, dcheck_fired);
+  }
+
+  // Nor shall it turn the region read-only itself.
+  EXPECT_FALSE(ro_handle.IsRegionReadOnly());
+
+  // Mapping a read-only region from a read-only descriptor should work.
+  SharedMemory ro_region(ro_handle.Duplicate(), /* read_only */ true);
+  EXPECT_TRUE(ro_region.Map(kDataSize));
+
+  // And it should turn the region read-only too.
+  EXPECT_TRUE(ro_handle.IsRegionReadOnly());
+  EXPECT_TRUE(memory.handle().IsRegionReadOnly());
+  EXPECT_FALSE(memory.Map(kDataSize));
+
+  ro_handle.Close();
+}
+
+#endif  // OS_ANDROID
 
 }  // namespace base

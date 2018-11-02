@@ -35,9 +35,7 @@ namespace net {
 
 namespace {
 
-// This must match the certificate used (quic_test.example.com.crt and
-// quic_test.example.com.key.pkcs8).
-const int kTestServerPort = 6121;
+// This must match the certificate used (quic-chain.pem and quic-leaf-cert.key).
 const char kTestServerHost[] = "test.example.com";
 // Used as a simple response from the server.
 const char kHelloPath[] = "/hello.txt";
@@ -53,12 +51,7 @@ class URLRequestQuicTest : public ::testing::Test {
         new HttpNetworkSession::Params);
     CertVerifyResult verify_result;
     verify_result.verified_cert = ImportCertFromFile(
-        GetTestCertsDirectory(), "quic_test.example.com.crt");
-    cert_verifier_.AddResultForCertAndHost(verify_result.verified_cert.get(),
-                                           "test.example.com", verify_result,
-                                           OK);
-    verify_result.verified_cert = ImportCertFromFile(
-        GetTestCertsDirectory(), "quic_test_ecc.example.com.crt");
+        GetTestCertsDirectory(), "quic-chain.pem");
     cert_verifier_.AddResultForCertAndHost(verify_result.verified_cert.get(),
                                            "test.example.com", verify_result,
                                            OK);
@@ -99,7 +92,7 @@ class URLRequestQuicTest : public ::testing::Test {
 
   void ExtractNetLog(NetLogEventType type,
                      TestNetLogEntry::List* entry_list) const {
-    net::TestNetLogEntry::List entries;
+    TestNetLogEntry::List entries;
     net_log_.GetEntries(&entries);
 
     for (const auto& entry : entries) {
@@ -114,6 +107,33 @@ class URLRequestQuicTest : public ::testing::Test {
         ->GetRstErrorCount(error_code);
   }
 
+  static const NetLogSource FindPushUrlSource(
+      const TestNetLogEntry::List& entries,
+      const std::string& push_url) {
+    std::string entry_push_url;
+    for (const auto& entry : entries) {
+      if (entry.phase == NetLogEventPhase::BEGIN &&
+          entry.source.type ==
+              NetLogSourceType::SERVER_PUSH_LOOKUP_TRANSACTION &&
+          entry.GetStringValue("push_url", &entry_push_url) &&
+          entry_push_url == push_url) {
+        return entry.source;
+      }
+    }
+    return NetLogSource();
+  }
+
+  static const TestNetLogEntry* FindEndBySource(
+      const TestNetLogEntry::List& entries,
+      const NetLogSource& source) {
+    for (const auto& entry : entries) {
+      if (entry.phase == NetLogEventPhase::END &&
+          entry.source.type == source.type && entry.source.id == source.id)
+        return &entry;
+    }
+    return nullptr;
+  }
+
  private:
   void StartQuicServer() {
     // Set up in-memory cache.
@@ -126,15 +146,15 @@ class URLRequestQuicTest : public ::testing::Test {
         new net::ProofSourceChromium());
     base::FilePath directory = GetTestCertsDirectory();
     CHECK(proof_source->Initialize(
-        directory.Append(FILE_PATH_LITERAL("quic_test.example.com.crt")),
-        directory.Append(FILE_PATH_LITERAL("quic_test.example.com.key.pkcs8")),
-        directory.Append(FILE_PATH_LITERAL("quic_test.example.com.key.sct"))));
+        directory.Append(FILE_PATH_LITERAL("quic-chain.pem")),
+        directory.Append(FILE_PATH_LITERAL("quic-leaf-cert.key")),
+        base::FilePath()));
     server_.reset(new QuicSimpleServer(
         test::crypto_test_utils::ProofSourceForTesting(), config,
-        net::QuicCryptoServerConfig::ConfigOptions(),
-        AllSupportedTransportVersions(), &response_cache_));
-    int rv = server_->Listen(
-        net::IPEndPoint(net::IPAddress::IPv4AllZeros(), kTestServerPort));
+        net::QuicCryptoServerConfig::ConfigOptions(), AllSupportedVersions(),
+        &response_cache_));
+    int rv =
+        server_->Listen(net::IPEndPoint(net::IPAddress::IPv4AllZeros(), 0));
     EXPECT_GE(rv, 0) << "Quic server fails to start";
 
     std::unique_ptr<MockHostResolver> resolver(new MockHostResolver());
@@ -248,7 +268,7 @@ TEST_F(URLRequestQuicTest, TestGetRequest) {
   EXPECT_EQ(kHelloBodyValue, delegate.data_received());
 }
 
-TEST_F(URLRequestQuicTest, CancelPushIfCached) {
+TEST_F(URLRequestQuicTest, CancelPushIfCached_SomeCached) {
   base::RunLoop run_loop;
   Init();
 
@@ -292,7 +312,7 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached) {
   net::TestNetLogEntry::List entries;
   ExtractNetLog(NetLogEventType::SERVER_PUSH_LOOKUP_TRANSACTION, &entries);
 
-  EXPECT_EQ(4u, entries.size());
+  ASSERT_EQ(4u, entries.size());
 
   std::string value;
   int net_error;
@@ -301,22 +321,30 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached) {
   std::string push_url_2 =
       base::StringPrintf("https://%s%s", kTestServerHost, "/favicon.ico");
 
-  EXPECT_TRUE(entries[0].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_1);
-  EXPECT_TRUE(entries[1].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_2);
+  const NetLogSource source_1 = FindPushUrlSource(entries, push_url_1);
+  EXPECT_TRUE(source_1.IsValid());
+
+  // No net error code for this lookup transaction, the push is found.
+  const TestNetLogEntry* end_entry_1 = FindEndBySource(entries, source_1);
+  EXPECT_FALSE(end_entry_1->params);
+  EXPECT_FALSE(end_entry_1->GetIntegerValue("net_error", &net_error));
+
+  const NetLogSource source_2 = FindPushUrlSource(entries, push_url_2);
+  EXPECT_TRUE(source_2.IsValid());
+  EXPECT_NE(source_1.id, source_2.id);
+
   // Net error code -400 is found for this lookup transaction, the push is not
   // found in the cache.
-  EXPECT_TRUE(entries[2].GetIntegerValue("net_error", &net_error));
+  const TestNetLogEntry* end_entry_2 = FindEndBySource(entries, source_2);
+  EXPECT_TRUE(end_entry_2->params);
+  EXPECT_TRUE(end_entry_2->GetIntegerValue("net_error", &net_error));
   EXPECT_EQ(net_error, -400);
-  // No net error code for this lookup transaction, the push is found.
-  EXPECT_FALSE(entries[3].GetIntegerValue("net_error", &net_error));
 
   // Verify the reset error count received on the server side.
   EXPECT_LE(1u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
 }
 
-TEST_F(URLRequestQuicTest, CancelPushIfCached2) {
+TEST_F(URLRequestQuicTest, CancelPushIfCached_AllCached) {
   base::RunLoop run_loop;
   Init();
 
@@ -357,7 +385,7 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached2) {
   EXPECT_TRUE(request_1->status().is_success());
 
   // Send a request to /index2.html which pushes /kitten-1.jpg and /favicon.ico.
-  // Should cancel push for /kitten-1.jpg.
+  // Should cancel push for both pushed resources, since they're already cached.
   CheckLoadTimingDelegate delegate(true);
   std::string url =
       base::StringPrintf("https://%s%s", kTestServerHost, "/index2.html");
@@ -387,17 +415,22 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached2) {
   std::string push_url_2 =
       base::StringPrintf("https://%s%s", kTestServerHost, "/favicon.ico");
 
-  EXPECT_TRUE(entries[0].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_1);
-
-  EXPECT_TRUE(entries[1].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_2);
+  const NetLogSource source_1 = FindPushUrlSource(entries, push_url_1);
+  EXPECT_TRUE(source_1.IsValid());
 
   // No net error code for this lookup transaction, the push is found.
-  EXPECT_FALSE(entries[2].GetIntegerValue("net_error", &net_error));
+  const TestNetLogEntry* end_entry_1 = FindEndBySource(entries, source_1);
+  EXPECT_FALSE(end_entry_1->params);
+  EXPECT_FALSE(end_entry_1->GetIntegerValue("net_error", &net_error));
+
+  const NetLogSource source_2 = FindPushUrlSource(entries, push_url_2);
+  EXPECT_TRUE(source_1.IsValid());
+  EXPECT_NE(source_1.id, source_2.id);
 
   // No net error code for this lookup transaction, the push is found.
-  EXPECT_FALSE(entries[3].GetIntegerValue("net_error", &net_error));
+  const TestNetLogEntry* end_entry_2 = FindEndBySource(entries, source_2);
+  EXPECT_FALSE(end_entry_2->params);
+  EXPECT_FALSE(end_entry_2->GetIntegerValue("net_error", &net_error));
 
   // Verify the reset error count received on the server side.
   EXPECT_LE(2u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
@@ -437,14 +470,19 @@ TEST_F(URLRequestQuicTest, DoNotCancelPushIfNotFoundInCache) {
   std::string push_url_2 =
       base::StringPrintf("https://%s%s", kTestServerHost, "/favicon.ico");
 
-  EXPECT_TRUE(entries[0].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_1);
-  EXPECT_TRUE(entries[1].GetIntegerValue("net_error", &net_error));
+  const NetLogSource source_1 = FindPushUrlSource(entries, push_url_1);
+  EXPECT_TRUE(source_1.IsValid());
+  const TestNetLogEntry* end_entry_1 = FindEndBySource(entries, source_1);
+  EXPECT_TRUE(end_entry_1->params);
+  EXPECT_TRUE(end_entry_1->GetIntegerValue("net_error", &net_error));
   EXPECT_EQ(net_error, -400);
 
-  EXPECT_TRUE(entries[2].GetStringValue("push_url", &value));
-  EXPECT_EQ(value, push_url_2);
-  EXPECT_TRUE(entries[3].GetIntegerValue("net_error", &net_error));
+  const NetLogSource source_2 = FindPushUrlSource(entries, push_url_2);
+  EXPECT_TRUE(source_2.IsValid());
+  EXPECT_NE(source_1.id, source_2.id);
+  const TestNetLogEntry* end_entry_2 = FindEndBySource(entries, source_2);
+  EXPECT_TRUE(end_entry_2->params);
+  EXPECT_TRUE(end_entry_2->GetIntegerValue("net_error", &net_error));
   EXPECT_EQ(net_error, -400);
 
   // Verify the reset error count received on the server side.

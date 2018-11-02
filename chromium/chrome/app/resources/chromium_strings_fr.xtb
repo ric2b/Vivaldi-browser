@@ -10,13 +10,10 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="1185134272377778587">À propos de Chromium</translation>
 <translation id="1298199220304005244">Obtenir de l'aide sur l'utilisation de Chromium OS</translation>
 <translation id="1396446129537741364">Tentative d'affichage des mots de passe dans Chromium</translation>
-<translation id="1403254041219632970">Les futures versions de Chromium ne seront plus compatibles avec les versions 10.6, 10.7 et 10.8 de Mac OS X.</translation>
 <translation id="1414495520565016063">Vous êtes connecté à Chromium.</translation>
-<translation id="1440917365206527807">Chromium a empêché ce site de vous rediriger vers</translation>
 <translation id="1444754455097148408">Licences Chromium Open Source</translation>
 <translation id="1502360822835740515">Définir Chromium en tant que navigateur par défaut</translation>
 <translation id="151962892725702025">Impossible de synchroniser vos données dans Chromium OS, car la synchronisation n'est pas disponible pour votre domaine.</translation>
-<translation id="1559451348202814456">Chromium risque de ne pas fonctionner correctement, car la compatibilité n'est plus assurée sur les versions 10.6, 10.7 et 10.8 de Mac OS X.</translation>
 <translation id="1585657529869845941">Si le bouton <ph name="BEGIN_BOLD" />Changer quand même<ph name="END_BOLD" /> s'affiche, cliquez dessus</translation>
 <translation id="1653828314016431939">OK – Redémarrer maintenant</translation>
 <translation id="1668054258064581266">Une fois votre compte Chromium supprimé, vous devrez peut-être charger de nouveau les onglets ouverts pour que les modifications prennent effet.</translation>
@@ -49,7 +46,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="2587578672395088481">Redémarrez Chromium OS pour appliquer la mise à jour.</translation>
 <translation id="2647554856022461007">Chromium peut utiliser des services Web pour améliorer votre confort de navigation. Vous pouvez choisir de désactiver ces services. <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Une erreur du système d'exploitation s'est produite pendant l'installation. Veuillez télécharger Chromium à nouveau.</translation>
-<translation id="2685838254101182273">Chromium n'est plus mis à jour et n'est plus compatible avec la version actuelle de votre système d'exploitation.</translation>
 <translation id="2705403826523567092">Connectez-vous pour profiter d'une expérience de navigation personnalisée et synchroniser vos données Chrome sur plusieurs appareils</translation>
 <translation id="2711502716910134313">Onglet Chromium</translation>
 <translation id="2718390899429598676">Pour plus de sécurité, vos données seront chiffrées dans Chromium.</translation>
@@ -107,7 +103,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="4458285410772214805">Pour que cette modification soit prise en compte, veuillez vous déconnecter, puis vous reconnecter.</translation>
 <translation id="4469812139324097969">Chromium n'est plus à jour, car il n'a pas été relancé depuis quelque temps. La mise à jour disponible sera installée dès que vous le relancerez.</translation>
 <translation id="4488554488975128561">Vous pouvez nous aider à rendre Chromium plus sûr et plus facile à utiliser en nous envoyant automatiquement des informations système et du contenu de page. Cela nous aidera à détecter les applications et les sites dangereux.</translation>
-<translation id="4549794359424059447">Les futures versions de Chromium ne seront plus compatibles avec Windows XP et Windows Vista.</translation>
 <translation id="4567424176335768812">Vous êtes connecté avec l'adresse e-mail <ph name="USER_EMAIL_ADDRESS" />. Vous pouvez maintenant accéder à vos favoris, à l'historique et aux autres paramètres sur tous les appareils sur lesquels vous êtes connecté.</translation>
 <translation id="459535195905078186">Applications Chromium</translation>
 <translation id="4611246891205775468">Chromium a besoin de votre autorisation pour accéder à votre micro pour ce site.</translation>
@@ -146,7 +141,6 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="5902536751647951209">Échec du certificat d'authentification. Pour en savoir plus, connectez-vous de nouveau à Chromium ou contactez votre administrateur. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Mise à jour presque terminée. Pour la finaliser, veuillez redémarrer votre appareil.</translation>
 <translation id="5942520288919337908">L'extension "<ph name="EXTENSION_NAME" />" a été ajoutée à Chromium.</translation>
-<translation id="59625444380784159">Les coordonnées de vos contacts peuvent vous aider à remplir les formulaires plus rapidement dans Chromium.</translation>
 <translation id="5987687638152509985">Mettre à jour Chromium pour lancer la synchronisation</translation>
 <translation id="6055895534982063517">Une nouvelle version de Chromium encore plus rapide est disponible.</translation>
 <translation id="6063093106622310249">&amp;Ouvrir dans Chromium</translation>
@@ -160,6 +154,7 @@ Certaines fonctionnalités ne seront peut-être pas disponibles, et les modifica
 <translation id="6334986366598267305">Il est désormais plus facile d'utiliser Chromium avec votre compte Google et sur des ordinateurs partagés.</translation>
 <translation id="6373523479360886564">Voulez-vous vraiment désinstaller Chromium ?</translation>
 <translation id="6394232988457703198">Redémarrez Chromium maintenant</translation>
+<translation id="6400072781405947421">Chromium risque de ne pas fonctionner correctement, car la compatibilité n'est plus assurée sur Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium est un navigateur Web qui exécute les pages Web et les applications à une vitesse fulgurante. Il est rapide, stable et simple d'utilisation. Naviguez sur le Web en toute sécurité tout en bénéficiant de la protection offerte par Chromium contre les logiciels malveillants et de phishing.</translation>
 <translation id="6475912303565314141">Elle contrôle également la page qui s'affiche au démarrage de Chromium.</translation>
 <translation id="6485906693002546646">Vous utilisez le compte <ph name="PROFILE_EMAIL" /> pour synchroniser votre contenu dans Chromium. Pour mettre à jour vos préférences de synchronisation ou pour utiliser Chromium sans compte Google, accédez à la page <ph name="SETTINGS_LINK" />.</translation>
@@ -175,13 +170,13 @@ Certaines fonctionnalités seront peut-être indisponibles. Veuillez spécifier 
 <translation id="6734291798041940871">Chromium est déjà installé pour tous les utilisateurs de votre ordinateur.</translation>
 <translation id="6810143991807788455">Aidez-nous à améliorer Chromium en nous signalant vos paramètres actuels.</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (copiée dans Chromium)</translation>
 <translation id="6893813176749746474">Chromium a été mis à jour, mais vous ne l'avez pas utilisé pendant au moins 30 jours.</translation>
 <translation id="6944967875980567883">Modules chargés dans Chromium</translation>
 <translation id="6964305034639999644">Ouvrir le lien dans la fenêtre de navi&amp;gation privée Chromium</translation>
 <translation id="6970811910055250180">Mise à jour de votre appareil en cours…</translation>
 <translation id="705851970750939768">Mettre à jour Chromium</translation>
 <translation id="7066436765290594559">Impossible de synchroniser vos données dans Chromium OS. Veuillez mettre à jour votre phrase secrète de synchronisation.</translation>
-<translation id="707471633328071618">Google Payments (copiée vers Chromium)</translation>
 <translation id="7162152143154757523">Chromium peut vous proposer une correction orthographique plus intelligente en envoyant ce que vous saisissez dans le navigateur aux serveurs Google, ce qui vous permet d'utiliser la même technologie de correction orthographique que la recherche Google.</translation>
 <translation id="7205698830395646142">Masquer dans le menu Chromium</translation>
 <translation id="7223968959479464213">Gestionnaire de tâches – Chromium</translation>
@@ -241,7 +236,6 @@ Pour obtenir plus d'informations, veuillez consulter votre compte de messagerie 
 <translation id="872034308864968620">Laisser Chromium s'exécuter en arrière-plan</translation>
 <translation id="8803635938069941624">Conditions d'utilisation de Chromium OS</translation>
 <translation id="8821041990367117597">Impossible de synchroniser vos données dans Chromium, car les informations de connexion de votre compte ne sont plus à jour.</translation>
-<translation id="8851136666856101339">principal</translation>
 <translation id="8862326446509486874">Vous ne disposez pas des droits requis pour installer la version système. Relancez l'installation en vous connectant comme administrateur.</translation>
 <translation id="8897323336392112261">Elle contrôle également la page qui s'affiche au démarrage de Chromium ou lorsque vous cliquez sur le bouton Accueil.</translation>
 <translation id="8907580949721785412">Chromium tente d'afficher les mots de passe. Pour autoriser cette action, saisissez votre mot de passe Windows.</translation>

@@ -6,6 +6,7 @@
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_BASE_TASK_QUEUE_H_
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
@@ -39,7 +40,7 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
  public:
   class PLATFORM_EXPORT Observer {
    public:
-    virtual ~Observer() {}
+    virtual ~Observer() = default;
 
     // Notify observer that the time at which this queue wants to run
     // the next task has changed. |next_wakeup| can be in the past
@@ -152,8 +153,8 @@ class PLATFORM_EXPORT TaskQueue : public base::SingleThreadTaskRunner {
   // TaskQueue should be enabled.
   class QueueEnabledVoter {
    public:
-    QueueEnabledVoter() {}
-    virtual ~QueueEnabledVoter() {}
+    QueueEnabledVoter() = default;
+    virtual ~QueueEnabledVoter() = default;
 
     // Votes to enable or disable the associated TaskQueue. The TaskQueue will
     // only be enabled if all the voters agree it should be enabled, or if there

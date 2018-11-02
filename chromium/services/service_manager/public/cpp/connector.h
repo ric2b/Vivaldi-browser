@@ -42,7 +42,7 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Connector {
 
   class TestApi {
    public:
-    using Binder = base::Callback<void(mojo::ScopedMessagePipeHandle)>;
+    using Binder = base::RepeatingCallback<void(mojo::ScopedMessagePipeHandle)>;
     explicit TestApi(Connector* connector) : connector_(connector) {}
     ~TestApi() { connector_->ResetStartServiceCallback(); }
 
@@ -130,6 +130,9 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT Connector {
   // BindInterface() is called, at which point this method must be called again
   // to pass again.
   std::unique_ptr<Connector> Clone();
+
+  // Returns true if this Connector instance is already bound to a thread.
+  bool IsBound() const;
 
   void FilterInterfaces(const std::string& spec,
                         const Identity& source_identity,

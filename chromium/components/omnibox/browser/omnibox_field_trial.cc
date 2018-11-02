@@ -41,6 +41,11 @@ namespace omnibox {
 const base::Feature kOmniboxEntitySuggestions{
     "OmniboxEntitySuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature used to enable entity suggestion images and enhanced presentation
+// showing more context and descriptive text about the entity.
+const base::Feature kOmniboxRichEntitySuggestions{
+    "OmniboxRichEntitySuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Feature used to force on the experiment of transmission of tail suggestions
 // from GWS to this client, currently testing for desktop.
 const base::Feature kOmniboxTailSuggestions{
@@ -83,13 +88,6 @@ const base::Feature kSearchProviderWarmUpOnFocus{
 #endif
 };
 
-// Feature used to enable the transmission of HTTPS URLs as part of the
-// context to the suggest server (assuming SearchProvider is permitted to
-// transmit URLs for context in the first place).
-const base::Feature kSearchProviderContextAllowHttpsUrls{
-    "OmniboixSearchProviderContextAllowHttpsUrls",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Feature used for the Zero Suggest Redirect to Chrome Field Trial.
 const base::Feature kZeroSuggestRedirectToChrome{
     "ZeroSuggestRedirectToChrome", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -112,6 +110,12 @@ const base::Feature kUIExperimentMaxAutocompleteMatches{
 // experiment.
 const base::Feature kUIExperimentElideSuggestionUrlAfterHost{
     "OmniboxUIExperimentElideSuggestionUrlAfterHost",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used to hide the scheme and trivial subdomains from steady state
+// URLs displayed in the Omnibox. Hidden portions are restored during editing.
+const base::Feature kUIExperimentHideSteadyStateUrlSchemeAndSubdomains{
+    "OmniboxUIExperimentHideSteadyStateUrlSchemeAndSubdomains",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature used for hiding the suggestion URL scheme as a UI experiment.

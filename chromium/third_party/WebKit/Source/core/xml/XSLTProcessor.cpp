@@ -56,7 +56,7 @@ static inline void TransformTextStringToXHTMLDocumentString(String& text) {
       "</html>\n";
 }
 
-XSLTProcessor::~XSLTProcessor() {}
+XSLTProcessor::~XSLTProcessor() = default;
 
 Document* XSLTProcessor::CreateDocumentFromSource(
     const String& source_string,
@@ -93,7 +93,7 @@ Document* XSLTProcessor::CreateDocumentFromSource(
 
     if (old_document) {
       DocumentXSLT::From(*result).SetTransformSourceDocument(old_document);
-      result->UpdateSecurityOrigin(old_document->GetSecurityOrigin());
+      result->UpdateSecurityOrigin(old_document->GetMutableSecurityOrigin());
       result->SetCookieURL(old_document->CookieURL());
       result->EnforceSandboxFlags(old_document->GetSandboxFlags());
 

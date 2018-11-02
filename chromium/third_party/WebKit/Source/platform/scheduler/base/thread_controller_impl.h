@@ -10,6 +10,7 @@
 #include "base/cancelable_callback.h"
 #include "base/debug/task_annotator.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
@@ -31,28 +32,25 @@ class PLATFORM_EXPORT ThreadControllerImpl : public ThreadController {
 
   static std::unique_ptr<ThreadControllerImpl> Create(
       base::MessageLoop* message_loop,
-      std::unique_ptr<base::TickClock> time_source);
+      base::TickClock* time_source);
 
   // ThreadController:
   void ScheduleWork() override;
   void ScheduleDelayedWork(base::TimeDelta delay) override;
   void CancelDelayedWork() override;
   void SetSequence(Sequence* sequence) override;
-  void PostNonNestableTask(const base::Location& from_here,
-                           base::OnceClosure task) override;
   bool RunsTasksInCurrentSequence() override;
   base::TickClock* GetClock() override;
   void SetDefaultTaskRunner(
       scoped_refptr<base::SingleThreadTaskRunner>) override;
   void RestoreDefaultTaskRunner() override;
-  bool IsNested() override;
   void AddNestingObserver(base::RunLoop::NestingObserver* observer) override;
   void RemoveNestingObserver(base::RunLoop::NestingObserver* observer) override;
 
  protected:
   ThreadControllerImpl(base::MessageLoop* message_loop,
                        scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                       std::unique_ptr<base::TickClock> time_source);
+                       base::TickClock* time_source);
 
   // TODO(altimin): Make these const. Blocked on removing
   // lazy initialisation support.
@@ -65,7 +63,7 @@ class PLATFORM_EXPORT ThreadControllerImpl : public ThreadController {
   SEQUENCE_CHECKER(sequence_checker_);
 
   scoped_refptr<base::SingleThreadTaskRunner> message_loop_task_runner_;
-  std::unique_ptr<base::TickClock> time_source_;
+  base::TickClock* time_source_;
   base::RepeatingClosure immediate_do_work_closure_;
   base::RepeatingClosure delayed_do_work_closure_;
   base::CancelableClosure cancelable_delayed_do_work_closure_;

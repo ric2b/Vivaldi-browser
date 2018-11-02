@@ -45,16 +45,17 @@ ContentAutofillDriver::ContentAutofillDriver(
   // AutofillManager isn't used if provider is valid, Autofill provider is
   // currently used by Android WebView only.
   if (provider) {
-    autofill_handler_ = base::MakeUnique<AutofillHandlerProxy>(this, provider);
+    autofill_handler_ = std::make_unique<AutofillHandlerProxy>(this, provider);
     GetAutofillAgent()->SetUserGestureRequired(false);
     GetAutofillAgent()->SetSecureContextRequired(true);
     GetAutofillAgent()->SetFocusRequiresScroll(false);
+    GetAutofillAgent()->SetQueryPasswordSuggestion(true);
   } else {
-    autofill_handler_ = base::MakeUnique<AutofillManager>(
+    autofill_handler_ = std::make_unique<AutofillManager>(
         this, client, app_locale, enable_download_manager);
     autofill_manager_ = static_cast<AutofillManager*>(autofill_handler_.get());
     autofill_external_delegate_ =
-        base::MakeUnique<AutofillExternalDelegate>(autofill_manager_, this);
+        std::make_unique<AutofillExternalDelegate>(autofill_manager_, this);
     autofill_manager_->SetExternalDelegate(autofill_external_delegate_.get());
   }
 }
@@ -202,13 +203,11 @@ void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& forms,
   autofill_handler_->OnFormsSeen(forms, timestamp);
 }
 
-void ContentAutofillDriver::WillSubmitForm(const FormData& form,
-                                           base::TimeTicks timestamp) {
-  autofill_handler_->OnWillSubmitForm(form, timestamp);
-}
-
-void ContentAutofillDriver::FormSubmitted(const FormData& form) {
-  autofill_handler_->OnFormSubmitted(form);
+void ContentAutofillDriver::FormSubmitted(const FormData& form,
+                                          bool known_success,
+                                          SubmissionSource source,
+                                          base::TimeTicks timestamp) {
+  autofill_handler_->OnFormSubmitted(form, known_success, source, timestamp);
 }
 
 void ContentAutofillDriver::TextFieldDidChange(const FormData& form,

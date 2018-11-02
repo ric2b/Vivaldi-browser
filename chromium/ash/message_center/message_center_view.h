@@ -14,8 +14,6 @@
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/message_center/message_center_observer.h"
 #include "ui/message_center/notification_list.h"
-#include "ui/message_center/views/message_view_context_menu_controller.h"
-#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/view.h"
 
@@ -43,11 +41,11 @@ class NotifierSettingsView;
 class ASH_EXPORT MessageCenterView
     : public views::View,
       public message_center::MessageCenterObserver,
-      public message_center::MessageViewDelegate,
       public SessionObserver,
       public MessageListView::Observer,
       public gfx::AnimationDelegate,
-      public views::FocusChangeListener {
+      public views::FocusChangeListener,
+      public views::ViewObserver {
  public:
   MessageCenterView(message_center::MessageCenter* message_center,
                     message_center::UiController* ui_controller,
@@ -71,6 +69,10 @@ class ASH_EXPORT MessageCenterView
 
   void SetIsClosing(bool is_closing);
 
+  base::string16 GetButtonBarTitle() const;
+
+  void SetMaxHeight(int max_height) { max_height_ = max_height; }
+
   // Overridden from views::FocusChangeListener
   void OnWillChangeFocus(views::View* before, views::View* now) override {}
   void OnDidChangeFocus(views::View* before, views::View* now) override;
@@ -82,7 +84,7 @@ class ASH_EXPORT MessageCenterView
 
  protected:
   // Potentially sets the reposition target, and then returns whether or not it
-  // was was set.
+  // was set.
   virtual bool SetRepositionTarget();
 
   // Overridden from views::View:
@@ -91,25 +93,12 @@ class ASH_EXPORT MessageCenterView
   int GetHeightForWidth(int width) const override;
   bool OnMouseWheel(const ui::MouseWheelEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // Overridden from MessageCenterObserver:
   void OnNotificationAdded(const std::string& id) override;
   void OnNotificationRemoved(const std::string& id, bool by_user) override;
   void OnNotificationUpdated(const std::string& id) override;
   void OnQuietModeChanged(bool is_quiet_mode) override;
-
-  // Overridden from MessageViewDelegate:
-  void ClickOnNotification(const std::string& notification_id) override;
-  void RemoveNotification(const std::string& notification_id,
-                          bool by_user) override;
-  void ClickOnNotificationButton(const std::string& notification_id,
-                                 int button_index) override;
-  void ClickOnNotificationButtonWithReply(const std::string& notification_id,
-                                          int button_index,
-                                          const base::string16& reply) override;
-  void ClickOnSettingsButton(const std::string& notification_id) override;
-  void UpdateNotificationSize(const std::string& notification_id) override;
 
   // Overridden from SessionObserver:
   void OnLockStateChanged(bool locked) override;
@@ -121,6 +110,9 @@ class ASH_EXPORT MessageCenterView
   void AnimationEnded(const gfx::Animation* animation) override;
   void AnimationProgressed(const gfx::Animation* animation) override;
   void AnimationCanceled(const gfx::Animation* animation) override;
+
+  // Overridden from views::ViewObserver:
+  void OnViewPreferredSizeChanged(views::View* observed_view) override;
 
  private:
   friend class MessageCenterViewTest;
@@ -137,7 +129,6 @@ class ASH_EXPORT MessageCenterView
 
   void AddNotificationAt(const message_center::Notification& notification,
                          int index);
-  base::string16 GetButtonBarTitle() const;
   void Update(bool animate);
   void SetVisibilityMode(Mode mode, bool animate);
   void UpdateButtonBarStatus();
@@ -178,6 +169,9 @@ class ASH_EXPORT MessageCenterView
   views::View* target_view_ = nullptr;
   int target_height_ = 0;
 
+  // Maximum height set for the MessageCenterBubble by SetMaxHeight.
+  int max_height_ = 0;
+
   // True when the widget is closing so that further operations should be
   // ignored.
   bool is_closing_ = false;
@@ -187,8 +181,6 @@ class ASH_EXPORT MessageCenterView
 
   // Current view mode. During animation, it is the target mode.
   Mode mode_ = Mode::NO_NOTIFICATIONS;
-
-  message_center::MessageViewContextMenuController context_menu_controller_;
 
   views::FocusManager* focus_manager_ = nullptr;
 

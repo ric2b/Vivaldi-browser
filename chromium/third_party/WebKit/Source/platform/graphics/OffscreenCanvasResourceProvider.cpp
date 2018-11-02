@@ -25,7 +25,7 @@ OffscreenCanvasResourceProvider::OffscreenCanvasResourceProvider(int width,
                                                                  int height)
     : width_(width), height_(height), next_resource_id_(0u) {}
 
-OffscreenCanvasResourceProvider::~OffscreenCanvasResourceProvider() {}
+OffscreenCanvasResourceProvider::~OffscreenCanvasResourceProvider() = default;
 
 std::unique_ptr<OffscreenCanvasResourceProvider::FrameResource>
 OffscreenCanvasResourceProvider::CreateOrRecycleFrameResource() {
@@ -92,7 +92,7 @@ void OffscreenCanvasResourceProvider::
         scoped_refptr<StaticBitmapImage> image) {
   DCHECK(image->IsTextureBacked());
   DCHECK(image->IsValid());
-  image->EnsureMailbox(kVerifiedSyncToken);
+  image->EnsureMailbox(kVerifiedSyncToken, GL_LINEAR);
   resource.mailbox_holder = gpu::MailboxHolder(
       image->GetMailbox(), image->GetSyncToken(), GL_TEXTURE_2D);
   resource.read_lock_fences_enabled = false;
@@ -105,7 +105,7 @@ void OffscreenCanvasResourceProvider::
   resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
-OffscreenCanvasResourceProvider::FrameResource::~FrameResource() {}
+OffscreenCanvasResourceProvider::FrameResource::~FrameResource() = default;
 
 void OffscreenCanvasResourceProvider::ReclaimResources(
     const WTF::Vector<viz::ReturnedResource>& resources) {

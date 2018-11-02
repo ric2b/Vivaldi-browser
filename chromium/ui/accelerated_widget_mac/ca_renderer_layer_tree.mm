@@ -80,6 +80,25 @@ bool AVSampleBufferDisplayLayerEnqueueCVPixelBuffer(
                        kCFBooleanTrue);
 
   [av_layer enqueueSampleBuffer:sample_buffer];
+
+  if (@available(macOS 10.10, *)) {
+    AVQueuedSampleBufferRenderingStatus status = [av_layer status];
+    switch (status) {
+      case AVQueuedSampleBufferRenderingStatusUnknown:
+        LOG(ERROR)
+            << "AVSampleBufferDisplayLayer has status unknown, but should "
+               "be rendering.";
+        return false;
+      case AVQueuedSampleBufferRenderingStatusFailed:
+        LOG(ERROR) << "AVSampleBufferDisplayLayer has status failed, error: "
+                   << [[[av_layer error] description]
+                          cStringUsingEncoding:NSUTF8StringEncoding];
+        return false;
+      case AVQueuedSampleBufferRenderingStatusRendering:
+        break;
+    }
+  }
+
   return true;
 }
 
@@ -516,7 +535,14 @@ void CARendererLayerTree::TransformLayer::AddContentLayer(
         gl::GLImageIOSurface::FromGLImage(params.image);
     DCHECK(io_surface_image);
     io_surface = io_surface_image->io_surface();
-    cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
+    // Temporary investagtive fix for https://crbug.com/702369. It appears upon
+    // investigation that not using the original CVPixelBufferRef which came
+    // from the VTDecompressionSession prevents or minimizes flashing of
+    // incorrect content. Disable the CVPixelBufferRef path for the moment to
+    // determine if this fixes the bug for users.
+    // TODO(ccameron): If this indeed causes the bug to disappear, then
+    // extirpate the CVPixelBufferRef path.
+    // cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
   }
 
   content_layers.push_back(
@@ -693,12 +719,24 @@ void CARendererLayerTree::ContentLayer::CommitToCA(CALayer* superlayer,
                          update_ca_filter;
   if (use_av_layer) {
     if (update_contents) {
+      bool result = false;
       if (cv_pixel_buffer) {
-        AVSampleBufferDisplayLayerEnqueueCVPixelBuffer(av_layer,
-                                                       cv_pixel_buffer);
+        result = AVSampleBufferDisplayLayerEnqueueCVPixelBuffer(
+            av_layer, cv_pixel_buffer);
+        if (!result) {
+          LOG(ERROR) << "AVSampleBufferDisplayLayerEnqueueCVPixelBuffer failed";
+        }
       } else {
-        AVSampleBufferDisplayLayerEnqueueIOSurface(av_layer, io_surface);
+        result =
+            AVSampleBufferDisplayLayerEnqueueIOSurface(av_layer, io_surface);
+        if (!result) {
+          LOG(ERROR) << "AVSampleBufferDisplayLayerEnqueueIOSurface failed";
+        }
       }
+      // TODO(ccameron): Recreate the AVSampleBufferDisplayLayer on failure.
+      // This is not being done yet, to determine if this happens concurrently
+      // with video flickering.
+      // https://crbug.com/702369
     }
   } else {
     if (update_contents) {

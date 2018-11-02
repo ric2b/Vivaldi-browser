@@ -18,6 +18,8 @@
 #include "chrome/common/importer/importer_type.h"
 #include "url/gurl.h"
 
+#include "importer/import_config.h"
+
 // Types needed for importing data from other browsers and the Google Toolbar.
 namespace importer {
 
@@ -98,15 +100,6 @@ enum VisitSource {
   VISIT_SOURCE_IE_IMPORTED = 2,
   VISIT_SOURCE_SAFARI_IMPORTED = 3,
   VISIT_SOURCE_CHROMIUM_IMPORTED = 4,
-};
-
-struct ImportConfig {
-  ImportConfig();
-  ~ImportConfig();
-
-  // Bitmask of items to be imported (see importer::ImportItem enum).
-  int imported_items;
-  std::vector<base::string16> arguments;
 };
 
 }  // namespace importer

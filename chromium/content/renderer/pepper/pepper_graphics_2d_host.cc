@@ -30,6 +30,8 @@
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
+#include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "ppapi/c/pp_bool.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/c/pp_rect.h"
@@ -227,21 +229,6 @@ bool PepperGraphics2DHost::Init(
   }
   is_always_opaque_ = is_always_opaque;
   scale_ = 1.0f;
-
-  // Gets the texture target for RGBA and BGRA textures if we can make
-  // image-backed textures for direct scanout (for use in overlays).
-  RenderThreadImpl* rti = RenderThreadImpl::current();
-  if (rti && rti->IsGpuMemoryBufferCompositorResourcesEnabled()) {
-    const auto& map = rti->GetBufferToTextureTargetMap();
-    auto target_it = map.find(viz::BufferToTextureTargetKey(
-        gfx::BufferUsage::SCANOUT, gfx::BufferFormat::BGRA_8888));
-    if (target_it != map.end())
-      scanout_texture_target_bgra_ = target_it->second;
-    target_it = map.find(viz::BufferToTextureTargetKey(
-        gfx::BufferUsage::SCANOUT, gfx::BufferFormat::RGBA_8888));
-    if (target_it != map.end())
-      scanout_texture_target_rgba_ = target_it->second;
-  }
 
   return true;
 }
@@ -663,16 +650,24 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
     const bool upload_bgra = bitmap_is_bgra && texture_can_be_bgra;
     const uint32_t format = upload_bgra ? GL_BGRA_EXT : GL_RGBA;
 
+    RenderThreadImpl* rti = RenderThreadImpl::current();
+    bool overlays_supported =
+        rti->IsGpuMemoryBufferCompositorResourcesEnabled() &&
+        main_thread_context_->ContextCapabilities().texture_storage_image;
     bool overlay_candidate = false;
     uint32_t texture_target = GL_TEXTURE_2D;
     uint32_t storage_format = 0;
-    if (main_thread_context_->ContextCapabilities().texture_storage_image) {
-      if (upload_bgra && scanout_texture_target_bgra_) {
-        texture_target = scanout_texture_target_bgra_;
+    if (overlays_supported) {
+      if (upload_bgra) {
+        texture_target = gpu::GetBufferTextureTarget(
+            gfx::BufferUsage::SCANOUT, gfx::BufferFormat::BGRA_8888,
+            main_thread_context_->ContextCapabilities());
         storage_format = GL_BGRA8_EXT;
         overlay_candidate = true;
-      } else if (!upload_bgra && scanout_texture_target_rgba_) {
-        texture_target = scanout_texture_target_rgba_;
+      } else {
+        texture_target = gpu::GetBufferTextureTarget(
+            gfx::BufferUsage::SCANOUT, gfx::BufferFormat::RGBA_8888,
+            main_thread_context_->ContextCapabilities());
         storage_format = GL_RGBA8_OES;
         overlay_candidate = true;
       }
@@ -712,7 +707,7 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
       }
 
       gl->GenMailboxCHROMIUM(gpu_mailbox.name);
-      gl->ProduceTextureCHROMIUM(texture_target, gpu_mailbox.name);
+      gl->ProduceTextureDirectCHROMIUM(texture_id, gpu_mailbox.name);
     }
 
     TextureInfo info;
@@ -740,9 +735,7 @@ bool PepperGraphics2DHost::PrepareTransferableResource(
     swizzled.reset();
 
     gpu::SyncToken sync_token;
-    uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
-    gl->OrderingBarrierCHROMIUM();
-    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
 
     gl->BindTexture(texture_target, 0);
 

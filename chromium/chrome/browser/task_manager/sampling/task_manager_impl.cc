@@ -515,16 +515,20 @@ void TaskManagerImpl::OnVideoMemoryUsageStatsUpdate(
 
 void TaskManagerImpl::OnReceivedMemoryDump(
     bool success,
-    memory_instrumentation::mojom::GlobalMemoryDumpPtr dump) {
+    std::unique_ptr<memory_instrumentation::GlobalMemoryDump> dump) {
   waiting_for_memory_dump_ = false;
-  if (!success)
+  // We can ignore the value of success as it is a coarse grained indicator
+  // of whether the global dump was successful; usually because of a missing
+  // process or OS dumps. There may still be useful information for other
+  // processes in the global dump when success is false.
+  if (!dump)
     return;
-  for (const memory_instrumentation::mojom::ProcessMemoryDumpPtr& pmd :
-       dump->process_dumps) {
-    auto it = task_groups_by_proc_id_.find(pmd->pid);
+  for (const auto& pmd : dump->process_dumps()) {
+    auto it = task_groups_by_proc_id_.find(pmd.pid());
     if (it == task_groups_by_proc_id_.end())
       continue;
-    it->second->set_footprint_bytes(pmd->os_dump->private_footprint_kb * 1024);
+    it->second->set_footprint_bytes(
+        static_cast<uint64_t>(pmd.os_dump().private_footprint_kb) * 1024);
   }
 }
 

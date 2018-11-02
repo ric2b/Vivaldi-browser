@@ -11,7 +11,6 @@
 #include "ash/shell.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/ash_config.h"
-#include "content/public/common/service_names.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/service.h"
 #include "services/service_manager/public/interfaces/interface_provider_spec.mojom.h"
@@ -50,7 +49,7 @@ class EmbeddedAshService : public service_manager::Service {
 
 std::unique_ptr<service_manager::Service> CreateEmbeddedAshService(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
-  return base::MakeUnique<EmbeddedAshService>(task_runner);
+  return std::make_unique<EmbeddedAshService>(task_runner);
 }
 
 bool ShouldOpenAshOnStartup() {

@@ -104,7 +104,7 @@ WebInputEvent& GetEventWithType(WebInputEvent::Type type) {
 
 template <typename MSG_T, typename ARG_T1>
 void ExpectIPCMessageWithArg1(const IPC::Message* msg, const ARG_T1& arg1) {
-  ASSERT_EQ(MSG_T::ID, msg->type());
+  ASSERT_EQ(static_cast<uint32_t>(MSG_T::ID), msg->type());
   typename MSG_T::Schema::Param param;
   ASSERT_TRUE(MSG_T::Read(msg, &param));
   EXPECT_EQ(arg1, std::get<0>(param));
@@ -114,7 +114,7 @@ template <typename MSG_T, typename ARG_T1, typename ARG_T2>
 void ExpectIPCMessageWithArg2(const IPC::Message* msg,
                               const ARG_T1& arg1,
                               const ARG_T2& arg2) {
-  ASSERT_EQ(MSG_T::ID, msg->type());
+  ASSERT_EQ(static_cast<uint32_t>(MSG_T::ID), msg->type());
   typename MSG_T::Schema::Param param;
   ASSERT_TRUE(MSG_T::Read(msg, &param));
   EXPECT_EQ(arg1, std::get<0>(param));
@@ -2288,9 +2288,19 @@ TEST_F(LegacyInputRouterImplScaleGestureEventTest, GestureTwoFingerTap) {
 }
 
 TEST_F(LegacyInputRouterImplScaleGestureEventTest, GestureFlingStart) {
+  // Simulate a GSB since touchscreen flings must happen inside scroll.
+  SimulateGestureEvent(SyntheticWebGestureEventBuilder::BuildScrollBegin(
+      10.f, 20.f, blink::kWebGestureDeviceTouchscreen));
+  process_->sink().ClearMessages();
+
   const gfx::Point orig(10, 20), scaled(20, 40);
   WebGestureEvent event =
       BuildGestureEvent(WebInputEvent::kGestureFlingStart, orig);
+  // Set the source device to touchscreen to make sure that the event gets
+  // dispatched to the renderer. When wheel scroll latching is enabled touchpad
+  // flings are not dispatched to the renderer, instead they are handled on the
+  // browser side.
+  event.source_device = blink::kWebGestureDeviceTouchscreen;
   event.data.fling_start.velocity_x = 30;
   event.data.fling_start.velocity_y = 40;
   SimulateGestureEvent(event);

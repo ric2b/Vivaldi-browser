@@ -204,17 +204,17 @@ TEST_F(MediaEngagementScoreTest, PartiallyEmptyDictionary) {
 // dictionaries.
 TEST_F(MediaEngagementScoreTest, PopulatedDictionary) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetInteger(MediaEngagementScore::kVisitsKey, 10);
-  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 6);
+  dict->SetInteger(MediaEngagementScore::kVisitsKey, 20);
+  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 12);
   dict->SetDouble(MediaEngagementScore::kLastMediaPlaybackTimeKey,
                   test_clock.Now().ToInternalValue());
   dict->SetBoolean(MediaEngagementScore::kHasHighScoreKey, true);
-  dict->SetInteger(MediaEngagementScore::kAudiblePlaybacksKey, 1);
-  dict->SetInteger(MediaEngagementScore::kSignificantPlaybacksKey, 2);
-  dict->SetInteger(MediaEngagementScore::kVisitsWithMediaTagKey, 3);
+  dict->SetInteger(MediaEngagementScore::kAudiblePlaybacksKey, 2);
+  dict->SetInteger(MediaEngagementScore::kSignificantPlaybacksKey, 4);
+  dict->SetInteger(MediaEngagementScore::kVisitsWithMediaTagKey, 6);
 
-  TestScoreInitializesAndUpdates(std::move(dict), 10, 6, test_clock.Now(), true,
-                                 1, 2, 3);
+  TestScoreInitializesAndUpdates(std::move(dict), 20, 12, test_clock.Now(),
+                                 true, 2, 4, 6);
 }
 
 // Test getting and commiting the score works correctly with different
@@ -259,16 +259,16 @@ TEST_F(MediaEngagementScoreTest, ContentSettingsMultiOrigin) {
 TEST_F(MediaEngagementScoreTest, ContentSettings) {
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
-  int example_num_visits = 10;
-  int example_media_playbacks = 6;
-  int example_audible_playbacks = 2;
-  int example_significant_playbacks = 4;
-  int example_visits_with_media_tags = 10;
+  int example_num_visits = 20;
+  int example_media_playbacks = 5;
+  int example_audible_playbacks = 3;
+  int example_significant_playbacks = 5;
+  int example_visits_with_media_tags = 20;
 
   // Store some example data in content settings.
   GURL origin("https://www.google.com");
   std::unique_ptr<base::DictionaryValue> score_dict =
-      base::MakeUnique<base::DictionaryValue>();
+      std::make_unique<base::DictionaryValue>();
   score_dict->SetInteger(MediaEngagementScore::kVisitsKey, example_num_visits);
   score_dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey,
                          example_media_playbacks);
@@ -343,29 +343,28 @@ TEST_F(MediaEngagementScoreTest, EngagementScoreCalculation) {
   EXPECT_EQ(0, score_->actual_score());
   UpdateScore(score_);
 
-  // Check that the score is zero even with 1 visit.
-  EXPECT_EQ(0.0, score_->actual_score());
+  // Check that the score increases when there is one visit.
+  EXPECT_EQ(0.05, score_->actual_score());
 
-  EXPECT_EQ(0, score_->actual_score());
-  SetScore(10, 4);
+  SetScore(20, 8);
   EXPECT_EQ(0.4, score_->actual_score());
 
   UpdateScore(score_);
-  EXPECT_EQ(5.0 / 11.0, score_->actual_score());
+  EXPECT_EQ(9.0 / 21.0, score_->actual_score());
 }
 
 // Test that a score without the high_score bit uses the correct bounds.
 TEST_F(MediaEngagementScoreTest, HighScoreLegacy) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  dict->SetInteger(MediaEngagementScore::kVisitsKey, 10);
-  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 7);
-  TestScoreInitializesAndUpdates(std::move(dict), 10, 7, base::Time(), true, 0,
+  dict->SetInteger(MediaEngagementScore::kVisitsKey, 20);
+  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 6);
+  TestScoreInitializesAndUpdates(std::move(dict), 20, 6, base::Time(), true, 0,
                                  0, 0);
 
   std::unique_ptr<base::DictionaryValue> dict2(new base::DictionaryValue());
-  dict2->SetInteger(MediaEngagementScore::kVisitsKey, 10);
+  dict2->SetInteger(MediaEngagementScore::kVisitsKey, 20);
   dict2->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 4);
-  TestScoreInitializesAndUpdates(std::move(dict2), 10, 4, base::Time(), false,
+  TestScoreInitializesAndUpdates(std::move(dict2), 20, 4, base::Time(), false,
                                  0, 0, 0);
 }
 
@@ -374,12 +373,12 @@ TEST_F(MediaEngagementScoreTest, HighScoreLegacy) {
 TEST_F(MediaEngagementScoreTest, HighScoreUpdated) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetInteger(MediaEngagementScore::kVisitsKey, 10);
-  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 4);
+  dict->SetInteger(MediaEngagementScore::kMediaPlaybacksKey, 1);
   dict->SetDouble(MediaEngagementScore::kLastMediaPlaybackTimeKey,
                   test_clock.Now().ToInternalValue());
   dict->SetBoolean(MediaEngagementScore::kHasHighScoreKey, true);
 
-  TestScoreInitializesAndUpdates(std::move(dict), 10, 4, test_clock.Now(),
+  TestScoreInitializesAndUpdates(std::move(dict), 10, 1, test_clock.Now(),
                                  false, 0, 0, 0);
 }
 
@@ -388,32 +387,32 @@ TEST_F(MediaEngagementScoreTest, HighScoreThreshold) {
   EXPECT_FALSE(score_->high_score());
 
   // Test that a total score of 0.1 is not high.
-  SetScore(10, 1);
+  SetScore(20, 2);
   EXPECT_FALSE(score_->high_score());
 
-  // Test that a total score of 0.6 is not high but above zero.
-  SetScore(10, 6);
+  // Test that a total score of 0.25 is not high but above zero.
+  SetScore(20, 5);
   EXPECT_FALSE(score_->high_score());
 
-  // Test that a total score of 0.8 is high.
-  SetScore(10, 8);
+  // Test that a total score of 0.3 is high.
+  SetScore(20, 6);
   EXPECT_TRUE(score_->high_score());
 
-  // Test that a total score of 0.5 is high because of the lower boundary.
-  SetScore(10, 5);
+  // Test that a total score of 0.25 is high because of the lower boundary.
+  SetScore(20, 5);
   EXPECT_TRUE(score_->high_score());
 
   // Test that a total score of 0.1 is not high.
-  SetScore(10, 1);
+  SetScore(20, 2);
   EXPECT_FALSE(score_->high_score());
 }
 
 TEST_F(MediaEngagementScoreTest, OverrideFieldTrial) {
-  EXPECT_EQ(5, MediaEngagementScore::GetScoreMinVisits());
-  EXPECT_EQ(0.5, MediaEngagementScore::GetHighScoreLowerThreshold());
-  EXPECT_EQ(0.7, MediaEngagementScore::GetHighScoreUpperThreshold());
+  EXPECT_EQ(20, MediaEngagementScore::GetScoreMinVisits());
+  EXPECT_EQ(0.2, MediaEngagementScore::GetHighScoreLowerThreshold());
+  EXPECT_EQ(0.3, MediaEngagementScore::GetHighScoreUpperThreshold());
 
-  SetScore(10, 8);
+  SetScore(20, 16);
   EXPECT_EQ(0.8, score_->actual_score());
   EXPECT_TRUE(score_->high_score());
 
@@ -429,9 +428,9 @@ TEST_F(MediaEngagementScoreTest, OverrideFieldTrial) {
   EXPECT_FALSE(score_->high_score());
   EXPECT_EQ(0.85, MediaEngagementScore::GetHighScoreLowerThreshold());
 
-  // Raise the minimum visits, the score will now be zero as it does not meet
-  // the threshold requirements.
-  OverrideFieldTrial(15, 0.85, 0.9);
-  EXPECT_EQ(0.0, score_->actual_score());
-  EXPECT_EQ(15, MediaEngagementScore::GetScoreMinVisits());
+  // Raise the minimum visits, the score will now be relative to this new
+  // visits requirements.
+  OverrideFieldTrial(25, 0.85, 0.9);
+  EXPECT_EQ(0.64, score_->actual_score());
+  EXPECT_EQ(25, MediaEngagementScore::GetScoreMinVisits());
 }

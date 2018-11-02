@@ -98,6 +98,7 @@ def _GetVersion(version_format, values, overrides=None):
     result = result.replace('@%s@' % key, value)
   return result
 
+
 def _AddVersionKeys(
     plist, version_format_for_key, version=None, overrides=None, vivaldi_build=None):
   """Adds the product version number into the plist. Returns True on success and

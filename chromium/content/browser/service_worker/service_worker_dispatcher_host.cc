@@ -23,7 +23,6 @@
 #include "content/browser/service_worker/service_worker_navigation_handle_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
-#include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
@@ -34,10 +33,10 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/origin_util.h"
 #include "ipc/ipc_message_macros.h"
+#include "third_party/WebKit/common/service_worker/service_worker_error_type.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
 #include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_error_type.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
 #include "third_party/WebKit/public/platform/web_feature.mojom.h"
 #include "url/gurl.h"
 
@@ -51,6 +50,39 @@ namespace {
 const uint32_t kServiceWorkerFilteredMessageClasses[] = {
     ServiceWorkerMsgStart, EmbeddedWorkerMsgStart,
 };
+
+void SetMessageEventSource(
+    mojom::ExtendableMessageEventPtr* event,
+    blink::mojom::ServiceWorkerClientInfoPtr source_info) {
+  (*event)->source_info_for_client = std::move(source_info);
+
+  // Hide the client url if the client has a unique origin.
+  if ((*event)->source_origin.unique())
+    (*event)->source_info_for_client->url = GURL();
+}
+
+void SetMessageEventSource(
+    mojom::ExtendableMessageEventPtr* event,
+    blink::mojom::ServiceWorkerObjectInfoPtr source_info) {
+  (*event)->source_info_for_service_worker = std::move(source_info);
+
+  // Hide the client url if the client has a unique origin.
+  if ((*event)->source_origin.unique())
+    (*event)->source_info_for_service_worker->url = GURL();
+}
+
+bool IsValidSourceInfo(
+    const blink::mojom::ServiceWorkerClientInfoPtr& source_info) {
+  return !source_info->client_uuid.empty();
+}
+
+bool IsValidSourceInfo(
+    const blink::mojom::ServiceWorkerObjectInfoPtr& source_info) {
+  return source_info->handle_id !=
+             blink::mojom::kInvalidServiceWorkerHandleId &&
+         source_info->version_id !=
+             blink::mojom::kInvalidServiceWorkerVersionId;
+}
 
 }  // namespace
 
@@ -220,7 +252,7 @@ void ServiceWorkerDispatcherHost::OnPostMessageToWorker(
   DispatchExtendableMessageEvent(
       base::WrapRefCounted(handle->version()), message, source_origin,
       sent_message_ports, sender_provider_host,
-      base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+      base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
 }
 
 void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
@@ -229,17 +261,18 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
     const url::Origin& source_origin,
     const std::vector<MessagePortChannel>& sent_message_ports,
     ServiceWorkerProviderHost* sender_provider_host,
-    const StatusCallback& callback) {
+    StatusCallback callback) {
   switch (sender_provider_host->provider_type()) {
     case blink::mojom::ServiceWorkerProviderType::kForWindow:
     case blink::mojom::ServiceWorkerProviderType::kForSharedWorker:
       service_worker_client_utils::GetClient(
           sender_provider_host,
-          base::Bind(&ServiceWorkerDispatcherHost::
-                         DispatchExtendableMessageEventInternal<
-                             ServiceWorkerClientInfo>,
-                     this, worker, message, source_origin, sent_message_ports,
-                     base::nullopt, callback));
+          base::BindOnce(&ServiceWorkerDispatcherHost::
+                             DispatchExtendableMessageEventInternal<
+                                 blink::mojom::ServiceWorkerClientInfoPtr>,
+                         this, worker, message, source_origin,
+                         sent_message_ports, base::nullopt,
+                         std::move(callback)));
       break;
     case blink::mojom::ServiceWorkerProviderType::kForServiceWorker: {
       // Clamp timeout to the sending worker's remaining timeout, to prevent
@@ -254,10 +287,10 @@ void ServiceWorkerDispatcherHost::DispatchExtendableMessageEvent(
           FROM_HERE,
           base::BindOnce(&ServiceWorkerDispatcherHost::
                              DispatchExtendableMessageEventInternal<
-                                 blink::mojom::ServiceWorkerObjectInfo>,
+                                 blink::mojom::ServiceWorkerObjectInfoPtr>,
                          this, worker, message, source_origin,
                          sent_message_ports, base::make_optional(timeout),
-                         callback, *worker_info));
+                         std::move(callback), std::move(worker_info)));
       break;
     }
     case blink::mojom::ServiceWorkerProviderType::kUnknown:
@@ -326,115 +359,88 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
   }
 }
 
-template <typename SourceInfo>
+template <typename SourceInfoPtr>
 void ServiceWorkerDispatcherHost::DispatchExtendableMessageEventInternal(
     scoped_refptr<ServiceWorkerVersion> worker,
     const base::string16& message,
     const url::Origin& source_origin,
     const std::vector<MessagePortChannel>& sent_message_ports,
     const base::Optional<base::TimeDelta>& timeout,
-    const StatusCallback& callback,
-    const SourceInfo& source_info) {
+    StatusCallback callback,
+    SourceInfoPtr source_info) {
   if (!IsValidSourceInfo(source_info)) {
-    DidFailToDispatchExtendableMessageEvent<SourceInfo>(
-        sent_message_ports, source_info, callback, SERVICE_WORKER_ERROR_FAILED);
+    std::move(callback).Run(SERVICE_WORKER_ERROR_FAILED);
     return;
   }
 
   // If not enough time is left to actually process the event don't even
   // bother starting the worker and sending the event.
   if (timeout && *timeout < base::TimeDelta::FromMilliseconds(100)) {
-    DidFailToDispatchExtendableMessageEvent<SourceInfo>(
-        sent_message_ports, source_info, callback,
-        SERVICE_WORKER_ERROR_TIMEOUT);
+    ReleaseSourceInfo(std::move(source_info));
+    std::move(callback).Run(SERVICE_WORKER_ERROR_TIMEOUT);
     return;
   }
 
   worker->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::MESSAGE,
-      base::BindOnce(&ServiceWorkerDispatcherHost::
-                         DispatchExtendableMessageEventAfterStartWorker,
-                     this, worker, message, source_origin, sent_message_ports,
-                     ExtendableMessageEventSource(source_info), timeout,
-                     callback),
       base::BindOnce(
-          &ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent<
-              SourceInfo>,
-          this, sent_message_ports, source_info, callback));
+          &ServiceWorkerDispatcherHost::
+              DispatchExtendableMessageEventAfterStartWorker<SourceInfoPtr>,
+          this, worker, message, source_origin, sent_message_ports,
+          std::move(source_info), timeout, std::move(callback)));
 }
 
+template <typename SourceInfoPtr>
 void ServiceWorkerDispatcherHost::
     DispatchExtendableMessageEventAfterStartWorker(
         scoped_refptr<ServiceWorkerVersion> worker,
         const base::string16& message,
         const url::Origin& source_origin,
         const std::vector<MessagePortChannel>& sent_message_ports,
-        const ExtendableMessageEventSource& source,
+        SourceInfoPtr source_info,
         const base::Optional<base::TimeDelta>& timeout,
-        const StatusCallback& callback) {
+        StatusCallback callback,
+        ServiceWorkerStatusCode start_worker_status) {
+  DCHECK(IsValidSourceInfo(source_info));
+  if (start_worker_status != SERVICE_WORKER_OK) {
+    ReleaseSourceInfo(std::move(source_info));
+    std::move(callback).Run(start_worker_status);
+    return;
+  }
+
   int request_id;
   if (timeout) {
     request_id = worker->StartRequestWithCustomTimeout(
-        ServiceWorkerMetrics::EventType::MESSAGE, callback, *timeout,
+        ServiceWorkerMetrics::EventType::MESSAGE, std::move(callback), *timeout,
         ServiceWorkerVersion::CONTINUE_ON_TIMEOUT);
   } else {
     request_id = worker->StartRequest(ServiceWorkerMetrics::EventType::MESSAGE,
-                                      callback);
+                                      std::move(callback));
   }
 
   mojom::ExtendableMessageEventPtr event = mojom::ExtendableMessageEvent::New();
   event->message = message;
   event->source_origin = source_origin;
   event->message_ports = MessagePortChannel::ReleaseHandles(sent_message_ports);
-  event->source = source;
-
-  // Hide the client url if the client has a unique origin.
-  if (source_origin.unique()) {
-    if (event->source.client_info.IsValid())
-      event->source.client_info.url = GURL();
-    else
-      event->source.service_worker_info.url = GURL();
-  }
+  SetMessageEventSource(&event, std::move(source_info));
 
   worker->event_dispatcher()->DispatchExtendableMessageEvent(
       std::move(event), worker->CreateSimpleEventCallback(request_id));
 }
 
-template <typename SourceInfo>
-void ServiceWorkerDispatcherHost::DidFailToDispatchExtendableMessageEvent(
-    const std::vector<MessagePortChannel>& sent_message_ports,
-    const SourceInfo& source_info,
-    const StatusCallback& callback,
-    ServiceWorkerStatusCode status) {
-  if (IsValidSourceInfo(source_info))
-    ReleaseSourceInfo(source_info);
-  callback.Run(status);
-}
-
-bool ServiceWorkerDispatcherHost::IsValidSourceInfo(
-    const ServiceWorkerClientInfo& source_info) {
-  return source_info.IsValid();
-}
-
-bool ServiceWorkerDispatcherHost::IsValidSourceInfo(
-    const blink::mojom::ServiceWorkerObjectInfo& source_info) {
-  return source_info.handle_id != blink::mojom::kInvalidServiceWorkerHandleId &&
-         source_info.version_id != blink::mojom::kInvalidServiceWorkerVersionId;
-}
-
 void ServiceWorkerDispatcherHost::ReleaseSourceInfo(
-    const ServiceWorkerClientInfo& source_info) {
+    blink::mojom::ServiceWorkerClientInfoPtr source_info) {
   // ServiceWorkerClientInfo is just a snapshot of the client. There is no need
   // to do anything for it.
 }
 
 void ServiceWorkerDispatcherHost::ReleaseSourceInfo(
-    const blink::mojom::ServiceWorkerObjectInfo& source_info) {
-  ServiceWorkerHandle* handle = handles_.Lookup(source_info.handle_id);
+    blink::mojom::ServiceWorkerObjectInfoPtr source_info) {
+  ServiceWorkerHandle* handle = handles_.Lookup(source_info->handle_id);
   DCHECK(handle);
   handle->DecrementRefCount();
   if (handle->HasNoRefCount())
-    handles_.Remove(source_info.handle_id);
+    handles_.Remove(source_info->handle_id);
 }
 
 void ServiceWorkerDispatcherHost::OnCountFeature(int64_t version_id,

@@ -11,6 +11,8 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/test/test_discardable_memory_allocator.h"
+#include "cc/paint/paint_flags.h"
+#include "cc/paint/skia_paint_canvas.h"
 #include "components/printing/service/pdf_compositor_service.h"
 #include "components/printing/service/public/interfaces/pdf_compositor.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -21,6 +23,8 @@
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkStream.h"
+#include "third_party/skia/src/utils/SkMultiPictureDocument.h"
 
 namespace printing {
 
@@ -55,8 +59,10 @@ class PdfServiceTestClient : public service_manager::test::ServiceTestClient,
   }
 
   // service_manager::mojom::ServiceFactory
-  void CreateService(service_manager::mojom::ServiceRequest request,
-                     const std::string& name) override {
+  void CreateService(
+      service_manager::mojom::ServiceRequest request,
+      const std::string& name,
+      service_manager::mojom::PIDReceiverPtr pid_receiver) override {
     if (!name.compare(mojom::kServiceName)) {
       service_context_ = std::make_unique<service_manager::ServiceContext>(
           std::make_unique<PdfCompositorTestService>("pdf_compositor_unittest"),
@@ -117,32 +123,38 @@ class PdfCompositorServiceTest : public service_manager::test::ServiceTest {
     return std::make_unique<PdfServiceTestClient>(this);
   }
 
-  base::SharedMemoryHandle LoadFileInSharedMemory() {
-    base::FilePath path;
-    PathService::Get(base::DIR_SOURCE_ROOT, &path);
-    base::FilePath test_file =
-        path.AppendASCII("components/test/data/printing/google.mskp");
-    std::string content;
-    base::SharedMemoryHandle invalid_handle;
-    if (!base::ReadFileToString(test_file, &content))
-      return invalid_handle;
-    size_t len = content.size();
+  base::SharedMemoryHandle CreateMSKPInSharedMemory() {
+    SkDynamicMemoryWStream stream;
+    sk_sp<SkDocument> doc = SkMakeMultiPictureDocument(&stream);
+    cc::SkiaPaintCanvas canvas(doc->beginPage(800, 600));
+    SkRect rect = SkRect::MakeXYWH(10, 10, 250, 250);
+    cc::PaintFlags flags;
+    flags.setAntiAlias(false);
+    flags.setColor(SK_ColorRED);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    canvas.drawRect(rect, flags);
+    doc->endPage();
+    doc->close();
+
+    size_t len = stream.bytesWritten();
     base::SharedMemoryCreateOptions options;
     options.size = len;
     options.share_read_only = true;
+
     base::SharedMemory shared_memory;
     if (shared_memory.Create(options) && shared_memory.Map(len)) {
-      memcpy(shared_memory.memory(), content.data(), len);
-      return base::SharedMemory::DuplicateHandle(shared_memory.handle());
+      stream.copyTo(shared_memory.memory());
+      return shared_memory.GetReadOnlyHandle();
     }
-    return invalid_handle;
+    return base::SharedMemoryHandle();
   }
 
   void CallCompositorWithSuccess(mojom::PdfCompositorPtr ptr) {
-    auto handle = LoadFileInSharedMemory();
+    auto handle = CreateMSKPInSharedMemory();
     ASSERT_TRUE(handle.IsValid());
-    mojo::ScopedSharedBufferHandle buffer_handle =
-        mojo::WrapSharedMemoryHandle(handle, handle.GetSize(), true);
+    mojo::ScopedSharedBufferHandle buffer_handle = mojo::WrapSharedMemoryHandle(
+        handle, handle.GetSize(),
+        mojo::UnwrappedSharedMemoryHandleProtection::kReadOnly);
     ASSERT_TRUE(buffer_handle->is_valid());
     EXPECT_CALL(*this, CallbackOnSuccess(testing::_)).Times(1);
     ptr->CompositePdf(std::move(buffer_handle),

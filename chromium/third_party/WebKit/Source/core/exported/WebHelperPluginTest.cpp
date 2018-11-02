@@ -19,7 +19,7 @@ class FakePlaceholderWebPlugin : public FakeWebPlugin {
  public:
   explicit FakePlaceholderWebPlugin(const WebPluginParams& params)
       : FakeWebPlugin(params) {}
-  ~FakePlaceholderWebPlugin() override {}
+  ~FakePlaceholderWebPlugin() override = default;
 
   bool IsPlaceholder() override { return true; }
 };
@@ -27,7 +27,7 @@ class FakePlaceholderWebPlugin : public FakeWebPlugin {
 class WebHelperPluginFrameClient : public FrameTestHelpers::TestWebFrameClient {
  public:
   WebHelperPluginFrameClient() : create_placeholder_(false) {}
-  ~WebHelperPluginFrameClient() override {}
+  ~WebHelperPluginFrameClient() override = default;
 
   WebPlugin* CreatePlugin(const WebPluginParams& params) override {
     return create_placeholder_ ? new FakePlaceholderWebPlugin(params)
@@ -61,7 +61,7 @@ class WebHelperPluginTest : public ::testing::Test {
 
 TEST_F(WebHelperPluginTest, CreateAndDestroyAfterWebViewDestruction) {
   plugin_.reset(WebHelperPlugin::Create(
-      "hello", helper_.WebView()->MainFrame()->ToWebLocalFrame()));
+      "hello", helper_.GetWebView()->MainFrame()->ToWebLocalFrame()));
   EXPECT_TRUE(plugin_);
   EXPECT_TRUE(plugin_->GetPlugin());
 
@@ -70,7 +70,7 @@ TEST_F(WebHelperPluginTest, CreateAndDestroyAfterWebViewDestruction) {
 
 TEST_F(WebHelperPluginTest, CreateAndDestroyBeforeWebViewDestruction) {
   plugin_.reset(WebHelperPlugin::Create(
-      "hello", helper_.WebView()->MainFrame()->ToWebLocalFrame()));
+      "hello", helper_.GetWebView()->MainFrame()->ToWebLocalFrame()));
   EXPECT_TRUE(plugin_);
   EXPECT_TRUE(plugin_->GetPlugin());
 
@@ -81,7 +81,7 @@ TEST_F(WebHelperPluginTest, CreateFailsWithPlaceholder) {
   frame_client_.SetCreatePlaceholder(true);
 
   plugin_.reset(WebHelperPlugin::Create(
-      "hello", helper_.WebView()->MainFrame()->ToWebLocalFrame()));
+      "hello", helper_.GetWebView()->MainFrame()->ToWebLocalFrame()));
   EXPECT_EQ(nullptr, plugin_.get());
 }
 

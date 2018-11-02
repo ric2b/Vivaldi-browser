@@ -22,10 +22,10 @@
 <translation id="1821985195704844674">farács</translation>
 <translation id="1822429046913737220">de./du.</translation>
 <translation id="1832974991323546415">lejátszás távoli eszközön</translation>
-<translation id="1854180393107901205">Küldés leállítása</translation>
 <translation id="1921819250265091946">nn</translation>
 <translation id="1930711995431081526">állapot</translation>
 <translation id="1938124657309484470">Az érték <ph name="MAXIMUM_DATE_OR_TIME" /> vagy azt megelőző kell, hogy legyen.</translation>
+<translation id="1993104285338243655">Átváltott tükrözésre</translation>
 <translation id="2060505056492490888">A „<ph name="DOT" />” rossz helyen van a(z) „<ph name="INVALIDDOMAIN" />” címben.</translation>
 <translation id="2148716181193084225">Ma</translation>
 <translation id="2226276347425096477">Kérjük, rövidítse le a szöveget legfeljebb <ph name="MAX_CHARACTERS" /> karakterre (jelenleg <ph name="CURRENT_LENGTH" /> karaktert használ).</translation>
@@ -51,6 +51,7 @@
 <translation id="2940813599313844715">objektum</translation>
 <translation id="2942448076852699108">kijelölt tartalom</translation>
 <translation id="3040011195152428237">link</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> MB</translation>
 <translation id="3075154866155599887">Kérjük, adjon meg érvényes értéket. A mező hiányos, vagy érvénytelen dátum van megadva.</translation>
 <translation id="3078740164268491126">táblázat</translation>
 <translation id="3086746722712840547">jegyzet</translation>
@@ -63,6 +64,7 @@
 <translation id="3639613635497528239">a filmből hátralévő másodpercek</translation>
 <translation id="3706100364254443312">váltás</translation>
 <translation id="3732799496749320381">hh</translation>
+<translation id="3757388668994797779"><ph name="QUANTITY" /> GB</translation>
 <translation id="3785482301506746191">filmidővezérlő</translation>
 <translation id="3808586225841795776">kifejezés</translation>
 <translation id="3822383571486410024">Kérjük, <ph name="MIN_CHARACTERS" /> karakter hosszú vagy annál hosszabb szöveget adjon meg (jelenleg <ph name="CURRENT_LENGTH" /> karaktert használ).</translation>
@@ -93,6 +95,7 @@
 <translation id="5117590920725113268">A következő hónap megjelenítése</translation>
 <translation id="512758898067543763">sorfejléc</translation>
 <translation id="5164977714490026579">Az érték legyen nagyobb vagy egyenlő, mint <ph name="MINIMUM" />.</translation>
+<translation id="520299402983819650"><ph name="QUANTITY" /> PB</translation>
 <translation id="5307600278924710095">Kérjük, adja meg a „<ph name="ATSIGN" />” előtti részt is. A „<ph name="INVALIDADDRESS" />” cím nem teljes.</translation>
 <translation id="5406322316791861025">alak</translation>
 <translation id="5453733299334684579">faelem</translation>
@@ -126,6 +129,7 @@
 <translation id="6643016212128521049">Törlés</translation>
 <translation id="668171684555832681">Egyéb...</translation>
 <translation id="6692633176391053278">léptető</translation>
+<translation id="6709570249143506788">Gyenge lejátszási minőség</translation>
 <translation id="6755330956360078551">elemleírás</translation>
 <translation id="6790428901817661496">Játék</translation>
 <translation id="6820355525329141109">Nem sikerült betölteni a beépülő modult.</translation>
@@ -141,6 +145,7 @@
 <translation id="727747134524199931">oszlopfejléc</translation>
 <translation id="7364796246159120393">Fájl kiválasztása</translation>
 <translation id="739024184232394898">Más...</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> TB</translation>
 <translation id="7491962110804786152">tab</translation>
 <translation id="7514365320538308">Letöltés</translation>
 <translation id="7673697353781729403">Óra</translation>
@@ -173,6 +178,8 @@
 <translation id="8785498733064193001">lejátszás indítása</translation>
 <translation id="8845239796550121995">Átküldés a tévére folyamatban</translation>
 <translation id="8851136666856101339">fő</translation>
+<translation id="8875657656876809964">Videólejátszási hiba</translation>
+<translation id="8901569739625249689"><ph name="QUANTITY" /> kB</translation>
 <translation id="8987927404178983737">hónap</translation>
 <translation id="901493112792887934">jelenlegi idő másodpercben</translation>
 <translation id="9048119486235211610">navigáció</translation>
@@ -182,6 +189,7 @@
 <translation id="9132465097189459683">Más...</translation>
 <translation id="9138385573473225930">értesítés</translation>
 <translation id="9155987714137265666"><ph name="WEEK" />. hét (<ph name="WEEK_START_DATE" />-i dátummal kezdődik)</translation>
+<translation id="916607977885256133">Kép a képben</translation>
 <translation id="947831847158436616">cella</translation>
 <translation id="966787709310836684">menü</translation>
 </translationbundle>

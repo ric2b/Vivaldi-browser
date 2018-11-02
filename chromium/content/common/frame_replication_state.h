@@ -30,8 +30,10 @@ struct CONTENT_EXPORT FrameReplicationState {
                         const std::string& name,
                         const std::string& unique_name,
                         blink::WebInsecureRequestPolicy insecure_request_policy,
+                        const std::vector<uint32_t>& insecure_navigations_set,
                         bool has_potentially_trustworthy_unique_origin,
-                        bool has_received_user_gesture);
+                        bool has_received_user_gesture,
+                        bool has_received_user_gesture_before_nav);
   FrameReplicationState(const FrameReplicationState& other);
   ~FrameReplicationState();
 
@@ -115,12 +117,22 @@ struct CONTENT_EXPORT FrameReplicationState {
   // different processes.
   blink::WebInsecureRequestPolicy insecure_request_policy;
 
+  // The upgrade insecure navigations set that a frame's current document is
+  // enforcing. Updates are immediately sent to all frame proxies when frames
+  // live in different processes. Elements in the set are hashes of hosts to be
+  // upgraded.
+  std::vector<uint32_t> insecure_navigations_set;
+
   // True if a frame's origin is unique and should be considered potentially
   // trustworthy.
   bool has_potentially_trustworthy_unique_origin;
 
   // Whether the frame has ever received a user gesture anywhere.
   bool has_received_user_gesture;
+
+  // Whether the frame has received a user gesture in a previous navigation so
+  // long as a the frame has staying on the same eTLD+1.
+  bool has_received_user_gesture_before_nav;
 };
 
 }  // namespace content

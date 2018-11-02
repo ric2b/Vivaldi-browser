@@ -86,6 +86,7 @@ HttpNetworkTransaction::HttpNetworkTransaction(RequestPriority priority,
       request_(NULL),
       priority_(priority),
       headers_valid_(false),
+      can_send_early_data_(false),
       request_headers_(),
       read_buf_len_(0),
       total_received_bytes_(0),
@@ -131,6 +132,10 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
   if (request_->load_flags & LOAD_DISABLE_CERT_REVOCATION_CHECKING) {
     server_ssl_config_.rev_checking_enabled = false;
     proxy_ssl_config_.rev_checking_enabled = false;
+  }
+
+  if (request_info->method != "POST") {
+    can_send_early_data_ = true;
   }
 
   if (request_->load_flags & LOAD_PREFETCH)
@@ -858,12 +863,10 @@ int HttpNetworkTransaction::DoCreateStream() {
     DCHECK(!enable_alternative_services_);
   if (ForWebSocketHandshake()) {
     stream_request_ =
-        session_->http_stream_factory_for_websocket()
-            ->RequestWebSocketHandshakeStream(
-                *request_, priority_, server_ssl_config_, proxy_ssl_config_,
-                this, websocket_handshake_stream_base_create_helper_,
-                enable_ip_based_pooling_, enable_alternative_services_,
-                net_log_);
+        session_->http_stream_factory()->RequestWebSocketHandshakeStream(
+            *request_, priority_, server_ssl_config_, proxy_ssl_config_, this,
+            websocket_handshake_stream_base_create_helper_,
+            enable_ip_based_pooling_, enable_alternative_services_, net_log_);
   } else {
     stream_request_ = session_->http_stream_factory()->RequestStream(
         *request_, priority_, server_ssl_config_, proxy_ssl_config_, this,
@@ -910,7 +913,8 @@ int HttpNetworkTransaction::DoInitStream() {
 
   stream_->GetRemoteEndpoint(&remote_endpoint_);
 
-  return stream_->InitializeStream(request_, priority_, net_log_, io_callback_);
+  return stream_->InitializeStream(request_, can_send_early_data_, priority_,
+                                   net_log_, io_callback_);
 }
 
 int HttpNetworkTransaction::DoInitStreamComplete(int result) {
@@ -1048,7 +1052,7 @@ int HttpNetworkTransaction::BuildRequestHeaders(
     } else {
       request_headers_.SetHeader(
           HttpRequestHeaders::kContentLength,
-          base::Uint64ToString(request_->upload_data_stream->size()));
+          base::NumberToString(request_->upload_data_stream->size()));
     }
   } else if (request_->method == "POST" || request_->method == "PUT") {
     // An empty POST/PUT request still needs a content length.  As for HEAD,
@@ -1562,6 +1566,8 @@ int HttpNetworkTransaction::HandleIOError(int error) {
       break;
     case ERR_SPDY_PING_FAILED:
     case ERR_SPDY_SERVER_REFUSED_STREAM:
+    case ERR_SPDY_PUSHED_STREAM_NOT_AVAILABLE:
+    case ERR_SPDY_CLAIMED_PUSHED_STREAM_RESET_BY_SERVER:
     case ERR_QUIC_HANDSHAKE_FAILED:
       if (HasExceededMaxRetries())
         break;

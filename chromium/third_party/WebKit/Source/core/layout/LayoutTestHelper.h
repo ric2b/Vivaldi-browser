@@ -13,8 +13,7 @@
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
-#include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/PageTestBase.h"
 #include "platform/testing/UseMockScrollbarSettings.h"
@@ -41,7 +40,7 @@ class SingleChildLocalFrameClient final : public EmptyLocalFrameClient {
   void DidDetachChild() { child_ = nullptr; }
 
  private:
-  explicit SingleChildLocalFrameClient() {}
+  explicit SingleChildLocalFrameClient() = default;
 
   Member<LocalFrame> child_;
 };
@@ -83,13 +82,13 @@ class RenderingTest : public PageTestBase, public UseMockScrollbarSettings {
   void TearDown() override;
 
   LayoutView& GetLayoutView() const {
-    return *ToLayoutView(LayoutAPIShim::LayoutObjectFrom(
-        GetDocument().View()->GetLayoutViewItem()));
+    return *GetDocument().View()->GetLayoutView();
   }
 
-  Document& ChildDocument() {
-    return *ToLocalFrame(GetFrame().Tree().FirstChild())->GetDocument();
+  LocalFrame& ChildFrame() {
+    return *ToLocalFrame(GetFrame().Tree().FirstChild());
   }
+  Document& ChildDocument() { return *ChildFrame().GetDocument(); }
 
   void SetChildFrameHTML(const String&);
 

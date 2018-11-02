@@ -45,7 +45,7 @@
 #include "jni/WebsitePreferenceBridge_jni.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "storage/common/quota/quota_status_code.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
 
@@ -79,6 +79,27 @@ HostContentSettingsMap* GetHostContentSettingsMap(bool is_incognito) {
       GetActiveUserProfile(is_incognito));
 }
 
+// Reset the give permission for the DSE if the permission and origin are
+// controlled by the DSE.
+bool MaybeResetDSEPermission(ContentSettingsType type,
+                             const GURL& origin,
+                             const GURL& embedder,
+                             bool is_incognito,
+                             ContentSetting setting) {
+  SearchPermissionsService* search_helper =
+      SearchPermissionsService::Factory::GetForBrowserContext(
+          GetActiveUserProfile(is_incognito));
+  bool same_embedder = embedder.is_empty() || embedder == origin;
+  if (same_embedder && search_helper &&
+      search_helper->IsPermissionControlledByDSE(type,
+                                                 url::Origin::Create(origin)) &&
+      setting == CONTENT_SETTING_DEFAULT) {
+    search_helper->ResetDSEPermission(type);
+    return true;
+  }
+  return false;
+}
+
 ScopedJavaLocalRef<jstring>
 JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(
     JNIEnv* env,
@@ -87,8 +108,6 @@ JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(
   // Settings list. In order to group sites with the same origin, remove any
   // standard port from the end of the URL if it's present (i.e. remove :443
   // for HTTPS sites and :80 for HTTP sites).
-  // TODO(sashab,lgarron): Find out which settings are being saved with the
-  // port and omit it if it's the standard port.
   // TODO(mvanouwerkerk): Remove all this logic and take two passes through
   // HostContentSettingsMap: once to get all the 'interesting' hosts, and once
   // (on SingleWebsitePreferences) to find permission patterns which match
@@ -185,26 +204,6 @@ void JNI_WebsitePreferenceBridge_GetOrigins(
           jembedder);
     }
   }
-
-  // Add the DSE origin if it allows geolocation.
-  if (content_type == CONTENT_SETTINGS_TYPE_GEOLOCATION) {
-    SearchPermissionsService* search_helper =
-        SearchPermissionsService::Factory::GetForBrowserContext(
-            GetActiveUserProfile(false /* is_incognito */));
-    if (search_helper) {
-      const url::Origin& dse_origin = search_helper->GetDSEOriginIfEnabled();
-      if (!dse_origin.unique()) {
-        std::string dse_origin_string = dse_origin.Serialize();
-        if (!base::ContainsValue(seen_origins, dse_origin_string)) {
-          seen_origins.push_back(dse_origin_string);
-          insertionFunc(env, list,
-                        JNI_WebsitePreferenceBridge_ConvertOriginToJavaString(
-                            env, dse_origin_string),
-                        jembedder);
-        }
-      }
-    }
-  }
 }
 
 ContentSetting JNI_WebsitePreferenceBridge_GetSettingForOrigin(
@@ -245,6 +244,11 @@ void JNI_WebsitePreferenceBridge_SetSettingForOrigin(
   if (setting != CONTENT_SETTING_BLOCK) {
     PermissionDecisionAutoBlocker::GetForProfile(profile)->RemoveEmbargoByUrl(
         origin_url, content_type);
+  }
+
+  if (MaybeResetDSEPermission(content_type, origin_url, embedder_url,
+                              is_incognito, setting)) {
+    return;
   }
 
   PermissionUtil::ScopedRevocationReporter scoped_revocation_reporter(
@@ -390,6 +394,11 @@ static void JNI_WebsitePreferenceBridge_SetNotificationSettingForOrigin(
   if (setting != CONTENT_SETTING_BLOCK) {
     PermissionDecisionAutoBlocker::GetForProfile(profile)->RemoveEmbargoByUrl(
         url, CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+  }
+
+  if (MaybeResetDSEPermission(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, url, url,
+                              is_incognito, setting)) {
+    return;
   }
 
   switch (setting) {
@@ -662,15 +671,15 @@ void OnStorageInfoReady(const ScopedJavaGlobalRef<jobject>& java_callback,
       continue;
     ScopedJavaLocalRef<jstring> host = ConvertUTF8ToJavaString(env, i->host);
 
-    Java_WebsitePreferenceBridge_insertStorageInfoIntoList(env, list, host,
-                                                           i->type, i->usage);
+    Java_WebsitePreferenceBridge_insertStorageInfoIntoList(
+        env, list, host, static_cast<jint>(i->type), i->usage);
   }
 
   base::android::RunCallbackAndroid(java_callback, list);
 }
 
 void OnStorageInfoCleared(const ScopedJavaGlobalRef<jobject>& java_callback,
-                          storage::QuotaStatusCode code) {
+                          blink::mojom::QuotaStatusCode code) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   Java_StorageInfoClearedCallback_onStorageInfoCleared(
@@ -791,7 +800,7 @@ static void JNI_WebsitePreferenceBridge_ClearStorageData(
 
   auto storage_info_fetcher = base::MakeRefCounted<StorageInfoFetcher>(profile);
   storage_info_fetcher->ClearStorage(
-      host, static_cast<storage::StorageType>(type),
+      host, static_cast<blink::mojom::StorageType>(type),
       base::Bind(&OnStorageInfoCleared,
                  ScopedJavaGlobalRef<jobject>(java_callback)));
 }
@@ -818,36 +827,19 @@ static void JNI_WebsitePreferenceBridge_ClearBannerData(
       CONTENT_SETTINGS_TYPE_APP_BANNER, std::string(), nullptr);
 }
 
-static jboolean JNI_WebsitePreferenceBridge_ShouldUseDSEGeolocationSetting(
+static jboolean JNI_WebsitePreferenceBridge_IsPermissionControlledByDSE(
     JNIEnv* env,
     const JavaParamRef<jclass>& clazz,
+    int content_settings_type,
     const JavaParamRef<jstring>& jorigin,
     jboolean is_incognito) {
   SearchPermissionsService* search_helper =
       SearchPermissionsService::Factory::GetForBrowserContext(
           GetActiveUserProfile(is_incognito));
   return search_helper &&
-         search_helper->UseDSEGeolocationSetting(
+         search_helper->IsPermissionControlledByDSE(
+             static_cast<ContentSettingsType>(content_settings_type),
              url::Origin::Create(GURL(ConvertJavaStringToUTF8(env, jorigin))));
-}
-
-static jboolean JNI_WebsitePreferenceBridge_GetDSEGeolocationSetting(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz) {
-  SearchPermissionsService* search_helper =
-      SearchPermissionsService::Factory::GetForBrowserContext(
-          GetActiveUserProfile(false /* is_incognito */));
-  return search_helper->GetDSEGeolocationSetting();
-}
-
-static void JNI_WebsitePreferenceBridge_SetDSEGeolocationSetting(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& clazz,
-    jboolean setting) {
-  SearchPermissionsService* search_helper =
-      SearchPermissionsService::Factory::GetForBrowserContext(
-          GetActiveUserProfile(false /* is_incognito */));
-  return search_helper->SetDSEGeolocationSetting(setting);
 }
 
 static jboolean JNI_WebsitePreferenceBridge_GetAdBlockingActivated(
@@ -857,4 +849,13 @@ static jboolean JNI_WebsitePreferenceBridge_GetAdBlockingActivated(
   GURL url(ConvertJavaStringToUTF8(env, jorigin));
   return !!GetHostContentSettingsMap(false)->GetWebsiteSetting(
       url, GURL(), CONTENT_SETTINGS_TYPE_ADS_DATA, std::string(), nullptr);
+}
+
+// On Android O+ notification channels are not stored in the Chrome profile and
+// so are persisted across tests. This function resets them.
+static void JNI_WebsitePreferenceBridge_ResetNotificationsSettingsForTest(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz) {
+  GetHostContentSettingsMap(/*is_incognito=*/false)
+      ->ClearSettingsForOneType(CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
 }

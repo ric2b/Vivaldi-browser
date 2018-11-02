@@ -10,9 +10,7 @@
 
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/synchronization/lock.h"
 #include "ios/web/history_state_util.h"
@@ -29,19 +27,6 @@
 
 namespace {
 
-struct EqualNSStrings {
-  bool operator()(const base::scoped_nsobject<NSString>& s1,
-                  const base::scoped_nsobject<NSString>& s2) const {
-    // Use a ternary due to the BOOL vs bool type difference.
-    return [s1 isEqualToString:s2] ? true : false;
-  }
-};
-
-struct HashNSString {
-  size_t operator()(const base::scoped_nsobject<NSString>& s) const {
-    return [s hash];
-  }
-};
 
 // A map of all RequestTrackerImpls for tabs that are:
 // * Currently open
@@ -50,9 +35,7 @@ struct HashNSString {
 // always access it from the main thread, the provider is accessing it from the
 // WebThread, a thread created by the UIWebView/CFURL. For this reason access to
 // this variable must always gated by |g_trackers_lock|.
-typedef base::hash_map<base::scoped_nsobject<NSString>,
-                       web::RequestTrackerImpl*,
-                       HashNSString, EqualNSStrings> TrackerMap;
+typedef base::hash_map<std::string, web::RequestTrackerImpl*> TrackerMap;
 
 TrackerMap* g_trackers = NULL;
 base::Lock* g_trackers_lock = NULL;
@@ -90,7 +73,7 @@ static void RegisterTracker(web::RequestTrackerImpl* tracker, NSString* key) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   pthread_once(&g_once_control, &InitializeGlobals);
   {
-    base::scoped_nsobject<NSString> scoped_key([key copy]);
+    std::string scoped_key = base::SysNSStringToUTF8(key);
     base::AutoLock scoped_lock(*g_trackers_lock);
     DCHECK(!g_trackers->count(scoped_key));
     (*g_trackers)[scoped_key] = tracker;
@@ -213,7 +196,7 @@ RequestTrackerImpl::CreateTrackerForRequestGroupID(
 
 void RequestTrackerImpl::StartPageLoad(const GURL& url, id user_info) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  base::scoped_nsobject<id> scoped_user_info(user_info);
+  id scoped_user_info = user_info;
   web::WebThread::PostTask(
       web::WebThread::IO, FROM_HERE,
       base::Bind(&RequestTrackerImpl::TrimToURL, this, url, scoped_user_info));
@@ -251,7 +234,7 @@ void RequestTrackerImpl::Close() {
                                base::RetainedRef(this)));
 
   // The user_info is no longer needed.
-  user_info_.reset();
+  user_info_ = nil;
 }
 
 // static
@@ -311,8 +294,7 @@ RequestTrackerImpl* RequestTrackerImpl::GetTrackerForRequestGroupID(
   pthread_once(&g_once_control, &InitializeGlobals);
   {
     base::AutoLock scoped_lock(*g_trackers_lock);
-    map_it = g_trackers->find(
-        base::scoped_nsobject<NSString>([request_group_id copy]));
+    map_it = g_trackers->find(base::SysNSStringToUTF8(request_group_id));
     if (map_it != g_trackers->end())
       tracker = map_it->second;
   }
@@ -338,7 +320,7 @@ void RequestTrackerImpl::StartRequest(net::URLRequest* request) {
   }
   const GURL& url = request->original_url();
   auto counts =
-      base::MakeUnique<TrackerCounts>(GURLByRemovingRefFromGURL(url), request);
+      std::make_unique<TrackerCounts>(GURLByRemovingRefFromGURL(url), request);
   counts_by_request_[request] = counts.get();
   counts_.push_back(std::move(counts));
   if (page_url_.SchemeIsCryptographic() && !url.SchemeIsCryptographic())
@@ -525,7 +507,7 @@ void RequestTrackerImpl::Destruct() {
   pthread_once(&g_once_control, &InitializeGlobals);
   {
     base::AutoLock scoped_lock(*g_trackers_lock);
-    g_trackers->erase(request_group_id_);
+    g_trackers->erase(base::SysNSStringToUTF8(request_group_id_));
   }
   InvalidateWeakPtrs();
   // Delete on the UI thread.
@@ -856,7 +838,7 @@ void RequestTrackerImpl::TrimToURL(const GURL& full_url, id user_info) {
 
   has_mixed_content_ = new_url_has_mixed_content;
   page_url_ = url;
-  user_info_.reset(user_info);
+  user_info_ = user_info;
   estimate_start_index_ = 0;
   is_loading_ = true;
   previous_estimate_ = 0.0f;
@@ -898,7 +880,7 @@ NSString* RequestTrackerImpl::UnsafeDescription() {
     [urls addObject:tracker_count->Description()];
 
   return [NSString stringWithFormat:@"RequestGroupID %@\n%@\n%@",
-                                    request_group_id_.get(),
+                                    request_group_id_,
                                     net::NSURLWithGURL(page_url_),
                                     [urls componentsJoinedByString:@"\n"]];
 }

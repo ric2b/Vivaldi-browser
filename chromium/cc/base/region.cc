@@ -13,21 +13,17 @@
 
 namespace cc {
 
-Region::Region() {
-}
+Region::Region() = default;
 
 Region::Region(const SkRegion& region) : skregion_(region) {}
 
-Region::Region(const Region& region)
-    : skregion_(region.skregion_) {
-}
+Region::Region(const Region& region) = default;
 
 Region::Region(const gfx::Rect& rect)
     : skregion_(gfx::RectToSkIRect(rect)) {
 }
 
-Region::~Region() {
-}
+Region::~Region() = default;
 
 const Region& Region::operator=(const gfx::Rect& rect) {
   skregion_ = SkRegion(gfx::RectToSkIRect(rect));
@@ -124,18 +120,17 @@ std::string Region::ToString() const {
     return gfx::Rect().ToString();
 
   std::string result;
-  for (Iterator it(*this); it.has_rect(); it.next()) {
+  for (gfx::Rect rect : *this) {
     if (!result.empty())
       result += " | ";
-    result += it.rect().ToString();
+    result += rect.ToString();
   }
   return result;
 }
 
 std::unique_ptr<base::Value> Region::AsValue() const {
   std::unique_ptr<base::ListValue> result(new base::ListValue());
-  for (Iterator it(*this); it.has_rect(); it.next()) {
-    gfx::Rect rect(it.rect());
+  for (gfx::Rect rect : *this) {
     result->AppendInteger(rect.x());
     result->AppendInteger(rect.y());
     result->AppendInteger(rect.width());
@@ -145,8 +140,7 @@ std::unique_ptr<base::Value> Region::AsValue() const {
 }
 
 void Region::AsValueInto(base::trace_event::TracedValue* result) const {
-  for (Iterator it(*this); it.has_rect(); it.next()) {
-    gfx::Rect rect(it.rect());
+  for (gfx::Rect rect : *this) {
     result->AppendInteger(rect.x());
     result->AppendInteger(rect.y());
     result->AppendInteger(rect.width());
@@ -154,14 +148,12 @@ void Region::AsValueInto(base::trace_event::TracedValue* result) const {
   }
 }
 
-Region::Iterator::Iterator() {
+Region::Iterator Region::begin() const {
+  return Region::Iterator(*this);
 }
 
 Region::Iterator::Iterator(const Region& region)
     : it_(region.skregion_) {
-}
-
-Region::Iterator::~Iterator() {
 }
 
 }  // namespace cc

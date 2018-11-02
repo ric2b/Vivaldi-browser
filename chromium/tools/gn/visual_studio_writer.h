@@ -76,13 +76,11 @@ class VisualStudioWriter {
                     const std::string& path,
                     const std::string& guid,
                     const std::string& label_dir_path,
-                    const std::string& config_name,
                     const std::string& config_platform);
     ~SolutionProject() override;
 
     // Absolute label dir path.
     std::string label_dir_path;
-    std::string config_name;
     // Configuration platform. May be different than solution config platform.
     std::string config_platform;
   };
@@ -139,9 +137,6 @@ class VisualStudioWriter {
 
   // Visual Studio version string.
   const char* version_string_;
-
-  // Solution configuration name
-  std::string config_name_;
 
   // Platform for solution configuration (Win32, x64). Some projects may be
   // configured for different platform.

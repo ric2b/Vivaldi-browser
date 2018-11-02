@@ -22,7 +22,6 @@ path_util.AddTelemetryToPath()
 
 from telemetry import benchmark as benchmark_module
 from telemetry import decorators
-from telemetry.story import expectations
 
 from py_utils import discover
 
@@ -30,8 +29,7 @@ from core.sharding_map_generator import load_benchmark_sharding_map
 
 
 _UNSCHEDULED_TELEMETRY_BENCHMARKS = set([
-  'experimental.startup.android.coldish',
-  'wasm'
+  'experimental.startup.android.coldish'
   ])
 
 
@@ -177,9 +175,13 @@ def get_waterfall_config():
        'perf_tests': [
          ('tracing_perftests', 'build73-b1--device2'),
          ('gpu_perftests', 'build73-b1--device2'),
-         ('angle_perftests', 'build73-b1--device4'),
          #  ('cc_perftests', 'build73-b1--device2'),  # crbug.com/721757
-        ]
+         ('media_perftests', 'build74-b1--device7'),
+       ],
+       'perf_tests_with_args': [
+         ('angle_perftests', 'build73-b1--device4', ['--shard-timeout=180'],
+           'angle_perftests'),
+       ]
       }
     ])
   waterfall = add_tester(
@@ -370,7 +372,8 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('load_library_perf_tests', 'build145-m1'),
-         ('performance_browser_tests', 'build145-m1'),
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build145-m1'),
          ('media_perftests', 'build146-m1')]
       }
     ])
@@ -406,8 +409,9 @@ def get_waterfall_config():
            'build140-m1', 'build141-m1', 'build142-m1'
           ],
        'perf_tests': [
-         ('load_library_perf_tests', 'build140-m1'),
-         ('performance_browser_tests', 'build140-m1')]
+         ('load_library_perf_tests', 'build140-m1')]
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build140-m1')]
       }
     ])
   waterfall = add_tester(
@@ -426,7 +430,8 @@ def get_waterfall_config():
          # crbug.com/785291
          # ('angle_perftests', 'build103-m1'),
          ('load_library_perf_tests', 'build103-m1'),
-         ('performance_browser_tests', 'build103-m1'),
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build103-m1'),
          ('media_perftests', 'build104-m1')]
       }
     ])
@@ -444,8 +449,9 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('angle_perftests', 'build166-m1'),
-         ('load_library_perf_tests', 'build166-m1'),
-         ('performance_browser_tests', 'build166-m1')]
+         ('load_library_perf_tests', 'build166-m1')]
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build166-m1')]
       }
     ])
   waterfall = add_tester(
@@ -522,7 +528,8 @@ def get_waterfall_config():
            'build30-b4' # replacing build8-b1. crbug.com/724998
           ],
        'perf_tests': [
-         ('performance_browser_tests', 'build30-b4')
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build30-b4')
        ]
       }
     ])
@@ -539,7 +546,8 @@ def get_waterfall_config():
            'build130-b1', 'build131-b1', 'build132-b1'
           ],
        'perf_tests': [
-         ('performance_browser_tests', 'build132-b1')
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build132-b1')
        ]
       }
     ])
@@ -556,7 +564,8 @@ def get_waterfall_config():
            'build125-b1', 'build126-b1', 'build127-b1'
           ],
        'perf_tests': [
-         ('performance_browser_tests', 'build126-b1')
+         # crbug.com/803455
+         # ('performance_browser_tests', 'build126-b1')
        ]
       }
     ])
@@ -842,7 +851,7 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
 BENCHMARK_SWARMING_TIMEOUTS = {
     'loading.desktop': 14400, # 4 hours (crbug.com/753798)
     'loading.mobile': 16200, # 4.5 hours
-    'system_health.memory_mobile': 10800, # 3 hours
+    'system_health.memory_mobile': 14400, # 4 hours (crbug.com/775242)
     'system_health.memory_desktop': 10800, # 3 hours
 }
 
@@ -1046,17 +1055,11 @@ def get_all_benchmarks_metadata(metadata):
   benchmark_list = current_benchmarks()
 
   for benchmark in benchmark_list:
-    exp = benchmark().GetExpectations()
-    disabled = 'all' in decorators.GetDisabledAttributes(benchmark) or any(
-        any(isinstance(condition, expectations.ALL.__class__)
-            for condition in conditions)
-        for (conditions, _) in exp.disabled_platforms)
-
     emails = decorators.GetEmails(benchmark)
     if emails:
       emails = ', '.join(emails)
     metadata[benchmark.Name()] = BenchmarkMetadata(
-        emails, decorators.GetComponent(benchmark), disabled)
+        emails, decorators.GetComponent(benchmark), False)
   return metadata
 
 

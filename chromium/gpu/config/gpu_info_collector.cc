@@ -12,7 +12,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -26,6 +26,10 @@
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/init/gl_factory.h"
+
+#if defined(OS_ANDROID)
+#include "ui/gl/gl_surface_egl.h"
+#endif  // OS_ANDROID
 
 #if defined(USE_X11)
 #include "ui/gl/gl_visual_picker_glx.h"
@@ -45,8 +49,10 @@ scoped_refptr<gl::GLSurface> InitializeGLSurface() {
 }
 
 scoped_refptr<gl::GLContext> InitializeGLContext(gl::GLSurface* surface) {
+  gl::GLContextAttribs attribs;
+  attribs.client_major_es_version = 2;
   scoped_refptr<gl::GLContext> context(
-      gl::init::CreateGLContext(nullptr, surface, gl::GLContextAttribs()));
+      gl::init::CreateGLContext(nullptr, surface, attribs));
   if (!context.get()) {
     LOG(ERROR) << "gl::init::CreateGLContext failed";
     return NULL;
@@ -126,20 +132,6 @@ CollectInfoResult CollectGraphicsInfoGL(GPUInfo* gpu_info) {
   gpu_info->gl_version = GetGLString(GL_VERSION);
   std::string glsl_version_string = GetGLString(GL_SHADING_LANGUAGE_VERSION);
 
-  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kGpuTestingGLVendor)) {
-    gpu_info->gl_vendor =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVendor);
-  }
-  if (command_line->HasSwitch(switches::kGpuTestingGLRenderer)) {
-    gpu_info->gl_renderer =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLRenderer);
-  }
-  if (command_line->HasSwitch(switches::kGpuTestingGLVersion)) {
-    gpu_info->gl_version =
-        command_line->GetSwitchValueASCII(switches::kGpuTestingGLVersion);
-  }
-
   gpu_info->gl_extensions = gl::GetGLExtensionsFromCurrentContext();
   gl::ExtensionSet extension_set =
       gl::MakeExtensionSet(gpu_info->gl_extensions);
@@ -157,8 +149,15 @@ CollectInfoResult CollectGraphicsInfoGL(GPUInfo* gpu_info) {
     glGetIntegerv(GL_MAX_SAMPLES, &max_samples);
   }
   gpu_info->max_msaa_samples = base::IntToString(max_samples);
-  UMA_HISTOGRAM_SPARSE_SLOWLY("GPU.MaxMSAASampleCount", max_samples);
+  base::UmaHistogramSparse("GPU.MaxMSAASampleCount", max_samples);
 
+#if defined(OS_ANDROID)
+  gpu_info->can_support_threaded_texture_mailbox =
+      gl::GLSurfaceEGL::HasEGLExtension("EGL_KHR_fence_sync") &&
+      gl::GLSurfaceEGL::HasEGLExtension("EGL_KHR_image_base") &&
+      gl::GLSurfaceEGL::HasEGLExtension("EGL_KHR_gl_texture_2D_image") &&
+      gl::HasExtension(extension_set, "GL_OES_EGL_image");
+#else
   gl::GLWindowSystemBindingInfo window_system_binding_info;
   if (gl::init::GetGLWindowSystemBindingInfo(&window_system_binding_info)) {
     gpu_info->gl_ws_vendor = window_system_binding_info.vendor;
@@ -166,6 +165,7 @@ CollectInfoResult CollectGraphicsInfoGL(GPUInfo* gpu_info) {
     gpu_info->gl_ws_extensions = window_system_binding_info.extensions;
     gpu_info->direct_rendering = window_system_binding_info.direct_rendering;
   }
+#endif  // OS_ANDROID
 
   bool supports_robustness =
       gl::HasExtension(extension_set, "GL_EXT_robustness") ||
@@ -218,6 +218,7 @@ void MergeGPUInfoGL(GPUInfo* basic_gpu_info,
   basic_gpu_info->gl_ws_extensions = context_gpu_info.gl_ws_extensions;
   basic_gpu_info->gl_reset_notification_strategy =
       context_gpu_info.gl_reset_notification_strategy;
+  basic_gpu_info->software_rendering = context_gpu_info.software_rendering;
 
   if (!context_gpu_info.driver_vendor.empty())
     basic_gpu_info->driver_vendor = context_gpu_info.driver_vendor;
@@ -229,6 +230,7 @@ void MergeGPUInfoGL(GPUInfo* basic_gpu_info,
   basic_gpu_info->in_process_gpu = context_gpu_info.in_process_gpu;
   basic_gpu_info->passthrough_cmd_decoder =
       context_gpu_info.passthrough_cmd_decoder;
+  basic_gpu_info->direct_composition = context_gpu_info.direct_composition;
   basic_gpu_info->supports_overlays = context_gpu_info.supports_overlays;
   basic_gpu_info->context_info_state = context_gpu_info.context_info_state;
   basic_gpu_info->initialization_time = context_gpu_info.initialization_time;
@@ -262,8 +264,11 @@ void IdentifyActiveGPU(GPUInfo* gpu_info) {
                                  kATIID};
 
   DCHECK(gpu_info);
-  if (gpu_info->secondary_gpus.size() == 0)
+  if (gpu_info->secondary_gpus.size() == 0) {
+    // If there is only a single GPU, that GPU is active.
+    gpu_info->gpu.active = true;
     return;
+  }
 
   uint32_t active_vendor_id = 0;
   if (!gpu_info->gl_vendor.empty()) {

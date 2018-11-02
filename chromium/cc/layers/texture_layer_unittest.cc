@@ -38,6 +38,7 @@
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/single_thread_proxy.h"
 #include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/returned_resource.h"
 #include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/test/test_layer_tree_frame_sink.h"
@@ -61,7 +62,7 @@ gpu::Mailbox MailboxFromChar(char value) {
 }
 
 gpu::SyncToken SyncTokenFromUInt(uint32_t value) {
-  return gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO, 0,
+  return gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO,
                         gpu::CommandBufferId::FromUnsafeValue(0x123), value);
 }
 
@@ -111,11 +112,9 @@ struct CommonResourceObjects {
       : mailbox_name1_(MailboxFromChar('1')),
         mailbox_name2_(MailboxFromChar('2')),
         sync_token1_(gpu::CommandBufferNamespace::GPU_IO,
-                     123,
                      gpu::CommandBufferId::FromUnsafeValue(0x234),
                      1),
         sync_token2_(gpu::CommandBufferNamespace::GPU_IO,
-                     123,
                      gpu::CommandBufferId::FromUnsafeValue(0x234),
                      2) {
     release_callback1_ =
@@ -218,7 +217,7 @@ class TestMailboxHolder : public TextureLayer::TransferableResourceHolder {
   using TextureLayer::TransferableResourceHolder::Create;
 
  protected:
-  ~TestMailboxHolder() override {}
+  ~TestMailboxHolder() override = default;
 };
 
 class TextureLayerWithResourceTest : public TextureLayerTest {
@@ -493,7 +492,8 @@ class TextureLayerImplWithMailboxThreadedCallback : public LayerTreeTest {
       const viz::RendererSettings& renderer_settings,
       double refresh_rate,
       scoped_refptr<viz::ContextProvider> compositor_context_provider,
-      scoped_refptr<viz::ContextProvider> worker_context_provider) override {
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider)
+      override {
     constexpr bool disable_display_vsync = false;
     bool synchronous_composite =
         !HasImplThread() &&

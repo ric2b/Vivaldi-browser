@@ -5,6 +5,7 @@
 #include "chrome/browser/extensions/extension_storage_monitor.h"
 
 #include <map>
+#include <memory>
 #include <utility>
 
 #include "base/metrics/histogram_macros.h"
@@ -15,6 +16,8 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_storage_monitor_factory.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/notifications/notification_display_service.h"
+#include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
 #include "chrome/grit/generated_resources.h"
@@ -34,8 +37,9 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "storage/browser/quota/storage_observer.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/message_center/message_center.h"
+#include "ui/message_center/notification.h"
 #include "ui/message_center/notifier_id.h"
 #include "ui/message_center/views/constants.h"
 
@@ -121,12 +125,12 @@ class SingleExtensionStorageObserver : public storage::StorageObserver {
         should_uma_(should_uma) {
     // We always observe persistent storage usage.
     storage::StorageObserver::MonitorParams params(
-        storage::kStorageTypePersistent, origin, rate, false);
+        blink::mojom::StorageType::kPersistent, origin, rate, false);
     quota_manager_->AddStorageObserver(this, params);
     if (should_uma) {
       // And if this is for uma, we also observe temporary storage usage.
-      MonitorParams temporary_params(storage::kStorageTypeTemporary, origin,
-                                     rate, false);
+      MonitorParams temporary_params(blink::mojom::StorageType::kTemporary,
+                                     origin, rate, false);
       quota_manager_->AddStorageObserver(this, temporary_params);
     }
   }
@@ -188,7 +192,7 @@ class ExtensionStorageMonitorIOHelper
     DCHECK(!FindObserver(extension_id));
 
     storage_observers_[extension_id] =
-        base::MakeUnique<SingleExtensionStorageObserver>(
+        std::make_unique<SingleExtensionStorageObserver>(
             this, extension_id, std::move(quota_manager), site_url.GetOrigin(),
             next_threshold, rate, should_uma);
   }
@@ -244,7 +248,7 @@ class ExtensionStorageMonitorIOHelper
 
 void SingleExtensionStorageObserver::OnStorageEvent(const Event& event) {
   if (should_uma_) {
-    if (event.filter.storage_type == storage::kStorageTypePersistent) {
+    if (event.filter.storage_type == blink::mojom::StorageType::kPersistent) {
       UMA_HISTOGRAM_MEMORY_KB(
           "Extensions.HostedAppUnlimitedStoragePersistentStorageUsage",
           event.usage);
@@ -272,26 +276,24 @@ void SingleExtensionStorageObserver::OnStorageEvent(const Event& event) {
 // ExtensionStorageMonitor
 
 // static
-ExtensionStorageMonitor* ExtensionStorageMonitor::Get(
-    content::BrowserContext* context) {
-  return ExtensionStorageMonitorFactory::GetForBrowserContext(context);
+ExtensionStorageMonitor* ExtensionStorageMonitor::Get(Profile* profile) {
+  return ExtensionStorageMonitorFactory::GetForBrowserContext(profile);
 }
 
-ExtensionStorageMonitor::ExtensionStorageMonitor(
-    content::BrowserContext* context)
+ExtensionStorageMonitor::ExtensionStorageMonitor(Profile* profile)
     : enable_for_all_extensions_(false),
       initial_extension_threshold_(kExtensionInitialThreshold),
       observer_rate_(kStorageEventRate),
-      context_(context),
-      extension_prefs_(ExtensionPrefs::Get(context)),
+      profile_(profile),
+      extension_prefs_(ExtensionPrefs::Get(profile)),
       extension_registry_observer_(this),
       weak_ptr_factory_(this) {
   DCHECK(extension_prefs_);
 
   registrar_.Add(this, chrome::NOTIFICATION_PROFILE_DESTROYED,
-                 content::Source<content::BrowserContext>(context_));
+                 content::Source<Profile>(profile_));
 
-  extension_registry_observer_.Add(ExtensionRegistry::Get(context_));
+  extension_registry_observer_.Add(ExtensionRegistry::Get(profile_));
 }
 
 ExtensionStorageMonitor::~ExtensionStorageMonitor() {}
@@ -370,7 +372,7 @@ void ExtensionStorageMonitor::OnExtensionUninstallDialogClosed(
 std::string ExtensionStorageMonitor::GetNotificationId(
     const std::string& extension_id) {
   std::vector<std::string> placeholders;
-  placeholders.push_back(context_->GetPath().BaseName().MaybeAsASCII());
+  placeholders.push_back(profile_->GetPath().BaseName().MaybeAsASCII());
   placeholders.push_back(extension_id);
 
   return base::ReplaceStringPlaceholders(
@@ -383,7 +385,7 @@ void ExtensionStorageMonitor::OnStorageThresholdExceeded(
     int64_t current_usage) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  const Extension* extension = GetExtensionById(context_, extension_id);
+  const Extension* extension = GetExtensionById(profile_, extension_id);
   if (!extension)
     return;
 
@@ -393,25 +395,23 @@ void ExtensionStorageMonitor::OnStorageThresholdExceeded(
   const int kIconSize = message_center::kNotificationIconSize;
   ExtensionResource resource =  IconsInfo::GetIconResource(
       extension, kIconSize, ExtensionIconSet::MATCH_BIGGER);
-  ImageLoader::Get(context_)->LoadImageAsync(
+  ImageLoader::Get(profile_)->LoadImageAsync(
       extension, resource, gfx::Size(kIconSize, kIconSize),
       base::Bind(&ExtensionStorageMonitor::OnImageLoaded,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 extension_id,
-                 current_usage));
+                 weak_ptr_factory_.GetWeakPtr(), extension_id, current_usage));
 }
 
 void ExtensionStorageMonitor::OnImageLoaded(const std::string& extension_id,
                                             int64_t current_usage,
                                             const gfx::Image& image) {
-  const Extension* extension = GetExtensionById(context_, extension_id);
+  const Extension* extension = GetExtensionById(profile_, extension_id);
   if (!extension)
     return;
 
   // Remove any existing notifications to force a new notification to pop up.
   std::string notification_id(GetNotificationId(extension_id));
-  message_center::MessageCenter::Get()->RemoveNotification(
-      notification_id, false);
+  NotificationDisplayService::GetForProfile(profile_)->Close(
+      NotificationHandler::Type::TRANSIENT, notification_id);
 
   message_center::RichNotificationData notification_data;
   notification_data.buttons.push_back(message_center::ButtonInfo(
@@ -430,8 +430,7 @@ void ExtensionStorageMonitor::OnImageLoaded(const std::string& extension_id,
                             : gfx::Image(util::GetDefaultExtensionIcon());
   }
 
-  std::unique_ptr<message_center::Notification> notification;
-  notification.reset(new message_center::Notification(
+  message_center::Notification notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, notification_id,
       l10n_util::GetStringUTF16(IDS_EXTENSION_STORAGE_MONITOR_TITLE),
       l10n_util::GetStringFUTF16(
@@ -442,19 +441,23 @@ void ExtensionStorageMonitor::OnImageLoaded(const std::string& extension_id,
       message_center::NotifierId(message_center::NotifierId::SYSTEM_COMPONENT,
                                  kSystemNotifierId),
       notification_data,
-      new message_center::HandleNotificationButtonClickDelegate(
+      new message_center::HandleNotificationClickDelegate(
           base::Bind(&ExtensionStorageMonitor::OnNotificationButtonClick,
-                     weak_ptr_factory_.GetWeakPtr(), extension_id))));
-  notification->SetSystemPriority();
-  message_center::MessageCenter::Get()->AddNotification(
-      std::move(notification));
+                     weak_ptr_factory_.GetWeakPtr(), extension_id)));
+  notification.SetSystemPriority();
+  NotificationDisplayService::GetForProfile(profile_)->Display(
+      NotificationHandler::Type::TRANSIENT, notification);
 
   notified_extension_ids_.insert(extension_id);
 }
 
 void ExtensionStorageMonitor::OnNotificationButtonClick(
-    const std::string& extension_id, int button_index) {
-  switch (button_index) {
+    const std::string& extension_id,
+    base::Optional<int> button_index) {
+  if (!button_index)
+    return;
+
+  switch (*button_index) {
     case BUTTON_DISABLE_NOTIFICATION: {
       DisableStorageMonitoring(extension_id);
       break;
@@ -471,15 +474,15 @@ void ExtensionStorageMonitor::OnNotificationButtonClick(
 void ExtensionStorageMonitor::DisableStorageMonitoring(
     const std::string& extension_id) {
   scoped_refptr<const Extension> extension =
-      ExtensionRegistry::Get(context_)->enabled_extensions().GetByID(
+      ExtensionRegistry::Get(profile_)->enabled_extensions().GetByID(
           extension_id);
   if (!extension.get() || !ShouldGatherMetricsFor(extension.get()))
     StopMonitoringStorage(extension_id);
 
   SetStorageNotificationEnabled(extension_id, false);
 
-  message_center::MessageCenter::Get()->RemoveNotification(
-      GetNotificationId(extension_id), false);
+  NotificationDisplayService::GetForProfile(profile_)->Close(
+      NotificationHandler::Type::TRANSIENT, GetNotificationId(extension_id));
 }
 
 void ExtensionStorageMonitor::StartMonitoringStorage(
@@ -501,9 +504,9 @@ void ExtensionStorageMonitor::StartMonitoringStorage(
         weak_ptr_factory_.GetWeakPtr());
   }
 
-  GURL site_url = util::GetSiteForExtensionId(extension->id(), context_);
+  GURL site_url = util::GetSiteForExtensionId(extension->id(), profile_);
   content::StoragePartition* storage_partition =
-      content::BrowserContext::GetStoragePartitionForSite(context_, site_url);
+      content::BrowserContext::GetStoragePartitionForSite(profile_, site_url);
   DCHECK(storage_partition);
   scoped_refptr<storage::QuotaManager> quota_manager(
       storage_partition->GetQuotaManager());
@@ -539,8 +542,6 @@ void ExtensionStorageMonitor::StopMonitoringStorage(
 void ExtensionStorageMonitor::StopMonitoringAll() {
   extension_registry_observer_.RemoveAll();
 
-  RemoveAllNotifications();
-
   io_helper_ = nullptr;
   weak_ptr_factory_.InvalidateWeakPtrs();
 }
@@ -553,31 +554,18 @@ void ExtensionStorageMonitor::RemoveNotificationForExtension(
     return;
 
   notified_extension_ids_.erase(ext_id);
-  message_center::MessageCenter::Get()->RemoveNotification(
-      GetNotificationId(extension_id), false);
-}
-
-void ExtensionStorageMonitor::RemoveAllNotifications() {
-  if (notified_extension_ids_.empty())
-    return;
-
-  message_center::MessageCenter* center = message_center::MessageCenter::Get();
-  DCHECK(center);
-  for (std::set<std::string>::iterator it = notified_extension_ids_.begin();
-       it != notified_extension_ids_.end(); ++it) {
-    center->RemoveNotification(GetNotificationId(*it), false);
-  }
-  notified_extension_ids_.clear();
+  NotificationDisplayService::GetForProfile(profile_)->Close(
+      NotificationHandler::Type::TRANSIENT, GetNotificationId(extension_id));
 }
 
 void ExtensionStorageMonitor::ShowUninstallPrompt(
     const std::string& extension_id) {
-  const Extension* extension = GetExtensionById(context_, extension_id);
+  const Extension* extension = GetExtensionById(profile_, extension_id);
   if (!extension)
     return;
 
-  uninstall_dialog_.reset(ExtensionUninstallDialog::Create(
-      Profile::FromBrowserContext(context_), NULL, this));
+  uninstall_dialog_.reset(
+      ExtensionUninstallDialog::Create(profile_, nullptr, this));
 
   uninstall_extension_id_ = extension->id();
   uninstall_dialog_->ConfirmUninstall(
@@ -602,7 +590,7 @@ void ExtensionStorageMonitor::SetNextStorageThreshold(
   extension_prefs_->UpdateExtensionPref(
       extension_id, kPrefNextStorageThreshold,
       next_threshold > 0
-          ? base::MakeUnique<base::Value>(base::Int64ToString(next_threshold))
+          ? std::make_unique<base::Value>(base::Int64ToString(next_threshold))
           : nullptr);
 }
 
@@ -638,7 +626,7 @@ void ExtensionStorageMonitor::SetStorageNotificationEnabled(
     bool enable_notifications) {
   extension_prefs_->UpdateExtensionPref(
       extension_id, kPrefDisableStorageNotifications,
-      enable_notifications ? nullptr : base::MakeUnique<base::Value>(true));
+      enable_notifications ? nullptr : std::make_unique<base::Value>(true));
 }
 
 }  // namespace extensions

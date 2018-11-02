@@ -11,17 +11,19 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "content/browser/appcache/appcache_service_impl.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 
+using blink::mojom::StorageType;
 using storage::QuotaClient;
 
 namespace {
-storage::QuotaStatusCode NetErrorCodeToQuotaStatus(int code) {
+blink::mojom::QuotaStatusCode NetErrorCodeToQuotaStatus(int code) {
   if (code == net::OK)
-    return storage::kQuotaStatusOk;
+    return blink::mojom::QuotaStatusCode::kOk;
   else if (code == net::ERR_ABORTED)
-    return storage::kQuotaErrorAbort;
+    return blink::mojom::QuotaStatusCode::kErrorAbort;
   else
-    return storage::kQuotaStatusUnknown;
+    return blink::mojom::QuotaStatusCode::kUnknown;
 }
 
 void RunFront(content::AppCacheQuotaClient::RequestQueue* queue) {
@@ -62,7 +64,7 @@ void AppCacheQuotaClient::OnQuotaManagerDestroyed() {
 }
 
 void AppCacheQuotaClient::GetOriginUsage(const GURL& origin,
-                                         storage::StorageType type,
+                                         StorageType type,
                                          const GetUsageCallback& callback) {
   DCHECK(!callback.is_null());
   DCHECK(!quota_manager_is_destroyed_);
@@ -79,7 +81,7 @@ void AppCacheQuotaClient::GetOriginUsage(const GURL& origin,
     return;
   }
 
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     callback.Run(0);
     return;
   }
@@ -94,13 +96,13 @@ void AppCacheQuotaClient::GetOriginUsage(const GURL& origin,
 }
 
 void AppCacheQuotaClient::GetOriginsForType(
-    storage::StorageType type,
+    StorageType type,
     const GetOriginsCallback& callback) {
   GetOriginsHelper(type, std::string(), callback);
 }
 
 void AppCacheQuotaClient::GetOriginsForHost(
-    storage::StorageType type,
+    StorageType type,
     const std::string& host,
     const GetOriginsCallback& callback) {
   DCHECK(!callback.is_null());
@@ -112,12 +114,12 @@ void AppCacheQuotaClient::GetOriginsForHost(
 }
 
 void AppCacheQuotaClient::DeleteOriginData(const GURL& origin,
-                                           storage::StorageType type,
+                                           StorageType type,
                                            const DeletionCallback& callback) {
   DCHECK(!quota_manager_is_destroyed_);
 
   if (!service_) {
-    callback.Run(storage::kQuotaErrorAbort);
+    callback.Run(blink::mojom::QuotaStatusCode::kErrorAbort);
     return;
   }
 
@@ -129,7 +131,7 @@ void AppCacheQuotaClient::DeleteOriginData(const GURL& origin,
   }
 
   current_delete_request_callback_ = callback;
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     DidDeleteAppCachesForOrigin(net::OK);
     return;
   }
@@ -138,8 +140,8 @@ void AppCacheQuotaClient::DeleteOriginData(const GURL& origin,
       origin, GetServiceDeleteCallback()->callback());
 }
 
-bool AppCacheQuotaClient::DoesSupport(storage::StorageType type) const {
-  return type == storage::kStorageTypeTemporary;
+bool AppCacheQuotaClient::DoesSupport(StorageType type) const {
+  return type == StorageType::kTemporary;
 }
 
 void AppCacheQuotaClient::DidDeleteAppCachesForOrigin(int rv) {
@@ -157,7 +159,7 @@ void AppCacheQuotaClient::DidDeleteAppCachesForOrigin(int rv) {
   RunFront(&pending_serial_requests_);
 }
 
-void AppCacheQuotaClient::GetOriginsHelper(storage::StorageType type,
+void AppCacheQuotaClient::GetOriginsHelper(StorageType type,
                                            const std::string& opt_host,
                                            const GetOriginsCallback& callback) {
   DCHECK(!callback.is_null());
@@ -175,7 +177,7 @@ void AppCacheQuotaClient::GetOriginsHelper(storage::StorageType type,
     return;
   }
 
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     callback.Run(std::set<GURL>());
     return;
   }
@@ -239,7 +241,8 @@ void AppCacheQuotaClient::NotifyAppCacheDestroyed() {
     RunFront(&pending_serial_requests_);
 
   if (!current_delete_request_callback_.is_null()) {
-    current_delete_request_callback_.Run(storage::kQuotaErrorAbort);
+    current_delete_request_callback_.Run(
+        blink::mojom::QuotaStatusCode::kErrorAbort);
     current_delete_request_callback_.Reset();
     GetServiceDeleteCallback()->Cancel();
   }

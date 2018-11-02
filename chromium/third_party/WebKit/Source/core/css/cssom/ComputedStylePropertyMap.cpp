@@ -4,10 +4,12 @@
 
 #include "core/css/cssom/ComputedStylePropertyMap.h"
 
+#include "core/css/CSSCustomPropertyDeclaration.h"
+#include "core/css/CSSVariableData.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
-#include "core/css/cssom/StyleValueFactory.h"
 #include "core/dom/Document.h"
 #include "core/dom/PseudoElement.h"
+#include "core/style/ComputedStyle.h"
 
 namespace blink {
 
@@ -51,8 +53,9 @@ const CSSValue* ComputedStylePropertyMap::GetProperty(
   const ComputedStyle* style = UpdateStyle();
   if (!style)
     return nullptr;
-  return ComputedStyleCSSValueMapping::Get(CSSProperty::Get(property_id),
-                                           *style, nullptr /* layout_object */);
+  return CSSProperty::Get(property_id)
+      .CSSValueFromComputedStyle(*style, nullptr /* layout_object */,
+                                 StyledNode(), false);
 }
 
 const CSSValue* ComputedStylePropertyMap::GetCustomProperty(
@@ -64,13 +67,31 @@ const CSSValue* ComputedStylePropertyMap::GetCustomProperty(
       property_name, *style, node_->GetDocument().GetPropertyRegistry());
 }
 
-Vector<String> ComputedStylePropertyMap::getProperties() {
-  Vector<String> result;
+void ComputedStylePropertyMap::ForEachProperty(
+    const IterationCallback& callback) {
+  const ComputedStyle* style = UpdateStyle();
+  if (!style)
+    return;
+
   for (const CSSProperty* property :
        CSSComputedStyleDeclaration::ComputableProperties()) {
-    result.push_back(getPropertyNameString(property->PropertyID()));
+    DCHECK(property);
+    DCHECK(!property->IDEquals(CSSPropertyVariable));
+    const CSSValue* value = property->CSSValueFromComputedStyle(
+        *style, nullptr /* layout_object */, StyledNode(), false);
+    if (value)
+      callback(property->GetPropertyName(), *value);
   }
-  return result;
+
+  const auto& variables = ComputedStyleCSSValueMapping::GetVariables(*style);
+  if (variables) {
+    for (const auto& name_value : *variables) {
+      if (name_value.value) {
+        callback(name_value.key, *CSSCustomPropertyDeclaration::Create(
+                                     name_value.key, name_value.value));
+      }
+    }
+  }
 }
 
 }  // namespace blink

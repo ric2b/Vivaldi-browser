@@ -69,6 +69,7 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/base/hit_test.h"
+#include "ui/base/ui_base_switches_util.h"
 #include "ui/compositor/layer.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -531,8 +532,9 @@ void WebContentsViewAura::InstallCreateHookForTests(
 
 WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
                                          WebContentsViewDelegate* delegate)
-    : is_mus_browser_plugin_guest_(
-          web_contents->GetBrowserPluginGuest() != nullptr && IsUsingMus()),
+    : is_mus_browser_plugin_guest_(web_contents->GetBrowserPluginGuest() !=
+                                       nullptr &&
+                                   (switches::IsMusHostingViz())),
       web_contents_(web_contents),
       delegate_(delegate),
       current_drag_op_(blink::kWebDragOperationNone),
@@ -545,7 +547,6 @@ WebContentsViewAura::WebContentsViewAura(WebContentsImpl* web_contents,
       completed_overscroll_gesture_(OVERSCROLL_NONE),
       navigation_overlay_(nullptr),
       init_rwhv_with_null_parent_for_testing_(false) {
-  enable_surface_synchronization_ = features::IsSurfaceSynchronizationEnabled();
 }
 
 void WebContentsViewAura::SetDelegateForTesting(
@@ -914,7 +915,6 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForWidget(
           ? g_create_render_widget_host_view(render_widget_host,
                                              is_guest_view_hack)
           : new RenderWidgetHostViewAura(render_widget_host, is_guest_view_hack,
-                                         enable_surface_synchronization_,
                                          is_mus_browser_plugin_guest_);
   view->InitAsChild(GetRenderWidgetHostViewParent());
 
@@ -945,7 +945,6 @@ RenderWidgetHostViewBase* WebContentsViewAura::CreateViewForPopupWidget(
   // |is_mus_browser_plugin_guest| is always false for them.
   const bool is_mus_browser_plugin_guest = false;
   return new RenderWidgetHostViewAura(render_widget_host, false,
-                                      enable_surface_synchronization_,
                                       is_mus_browser_plugin_guest);
 }
 
@@ -1122,6 +1121,12 @@ gfx::Size WebContentsViewAura::GetDisplaySize() const {
   return display::Screen::GetScreen()
       ->GetDisplayNearestView(rwhv->GetNativeView())
       .size();
+}
+
+void WebContentsViewAura::OnOverscrollBehaviorUpdate(
+    cc::OverscrollBehavior overscroll_behavior) {
+  navigation_overlay_->relay_delegate()->OnOverscrollBehaviorUpdate(
+      overscroll_behavior);
 }
 
 bool WebContentsViewAura::OnOverscrollUpdate(float delta_x, float delta_y) {
@@ -1414,7 +1419,11 @@ void WebContentsViewAura::OnWindowVisibilityChanged(aura::Window* window,
   if (vivaldi::IsVivaldiRunning() && BrowserPluginGuest::IsGuest(web_contents_))
     return;
 
-  web_contents_->UpdateWebContentsVisibility(visible);
+  // |visible| indicates whether |window| (which points to |window_| or one of
+  // its ancestors) is visible within its parent. What we really need is
+  // |window_->IsVisible()|, which indicates whether |window_| and all its
+  // ancestors are visible.
+  web_contents_->UpdateWebContentsVisibility(window_->IsVisible());
 }
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)

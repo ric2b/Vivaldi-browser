@@ -7,10 +7,8 @@
 #include <memory>
 
 #include "core/dom/Document.h"
-#include "core/testing/DummyPageHolder.h"
-#include "modules/webaudio/AudioWorkletThread.h"
+#include "core/testing/PageTestBase.h"
 #include "platform/testing/TestingPlatformSupport.h"
-#include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebAudioDevice.h"
 #include "public/platform/WebAudioLatencyHint.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -84,7 +82,7 @@ class AudioContextTestPlatform : public TestingPlatformSupport {
 
 }  // anonymous namespace
 
-class AudioContextTest : public ::testing::Test {
+class AudioContextTest : public PageTestBase {
  protected:
   AudioContextTest() :
       platform_(new ScopedTestingPlatformSupport<AudioContextTestPlatform>) {}
@@ -93,15 +91,9 @@ class AudioContextTest : public ::testing::Test {
     platform_.reset();
   }
 
-  void SetUp() override {
-    AudioWorkletThread::CreateSharedBackingThreadForTest();
-    dummy_page_holder_ = DummyPageHolder::Create();
-  }
-
-  Document& GetDocument() { return dummy_page_holder_->GetDocument(); }
+  void SetUp() override { PageTestBase::SetUp(IntSize()); }
 
  private:
-  std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   std::unique_ptr<ScopedTestingPlatformSupport<AudioContextTestPlatform>>
       platform_;
 };

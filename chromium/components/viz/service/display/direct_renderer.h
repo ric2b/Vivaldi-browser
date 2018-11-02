@@ -61,18 +61,10 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                  const gfx::Size& device_viewport_size);
 
   // Public interface implemented by subclasses.
-  virtual bool HasAllocatedResourcesForTesting(
-      const RenderPassId render_pass_id) const = 0;
   virtual void SwapBuffers(std::vector<ui::LatencyInfo> latency_info) = 0;
   virtual void SwapBuffersComplete() {}
   virtual void DidReceiveTextureInUseResponses(
       const gpu::TextureInUseResponses& responses) {}
-
-  // Allow tests to enlarge the texture size of non-root render passes to
-  // verify cases where the texture doesn't match the render pass size.
-  void SetEnlargePassTextureAmountForTesting(const gfx::Size& amount) {
-    enlarge_pass_texture_amount_ = amount;
-  }
 
   // Public for tests that poke at internals.
   struct VIZ_SERVICE_EXPORT DrawingFrame {
@@ -95,6 +87,15 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     DCLayerOverlayList dc_layer_overlay_list;
   };
 
+  void SetCurrentFrameForTesting(const DrawingFrame& frame);
+  bool HasAllocatedResourcesForTesting(
+      const RenderPassId& render_pass_id) const;
+  // Allow tests to enlarge the texture size of non-root render passes to
+  // verify cases where the texture doesn't match the render pass size.
+  void SetEnlargePassTextureAmountForTesting(const gfx::Size& amount) {
+    enlarge_pass_texture_amount_ = amount;
+  }
+
  protected:
   friend class BspWalkActionDrawPolygon;
 
@@ -106,7 +107,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 
   struct RenderPassRequirements {
     gfx::Size size;
-    ResourceTextureHint hint;
+    bool mipmap = false;
   };
 
   static gfx::RectF QuadVertexRect();
@@ -130,9 +131,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
                       const gfx::Rect& render_pass_scissor);
   void SetScissorTestRectInDrawSpace(const gfx::Rect& draw_space_rect);
 
-  static gfx::Size RenderPassTextureSize(const RenderPass* render_pass);
-  static ResourceTextureHint RenderPassTextureHint(
-      const RenderPass* render_pass);
+  gfx::Size RenderPassTextureSize(const RenderPass* render_pass);
 
   void FlushPolygons(
       base::circular_deque<std::unique_ptr<DrawPolygon>>* poly_list,
@@ -158,19 +157,17 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
 
   // Private interface implemented by subclasses for use by DirectRenderer.
   virtual bool CanPartialSwap() = 0;
-  virtual ResourceFormat BackbufferFormat() const = 0;
   virtual void UpdateRenderPassTextures(
       const RenderPassList& render_passes_in_draw_order,
       const base::flat_map<RenderPassId, RenderPassRequirements>&
           render_passes_in_frame) = 0;
   virtual void AllocateRenderPassResourceIfNeeded(
-      const RenderPassId render_pass_id,
-      const gfx::Size& enlarged_size,
-      ResourceTextureHint texturehint) = 0;
+      const RenderPassId& render_pass_id,
+      const RenderPassRequirements& requirements) = 0;
   virtual bool IsRenderPassResourceAllocated(
-      const RenderPassId render_pass_id) const = 0;
-  virtual const gfx::Size& GetRenderPassTextureSize(
-      const RenderPassId render_pass_id) = 0;
+      const RenderPassId& render_pass_id) const = 0;
+  virtual gfx::Size GetRenderPassTextureSize(
+      const RenderPassId& render_pass_id) = 0;
   virtual void BindFramebufferToOutputSurface() = 0;
   virtual void BindFramebufferToTexture(const RenderPassId render_pass_id) = 0;
   virtual void SetScissorTestRect(const gfx::Rect& scissor_rect) = 0;
@@ -254,8 +251,6 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     DCHECK(current_frame_valid_);
     return &current_frame_;
   }
-
-  void SetCurrentFrameForTesting(const DrawingFrame& frame);
 
  private:
   bool initialized_ = false;

@@ -51,6 +51,28 @@ class AnnotationInstance : public InstanceBase {
                             int start_line,
                             int end_line) override;
 
+  // Returns the proto field numbers of TrafficSemantics fields that are
+  // included in this annotation.
+  void GetSemanticsFieldNumbers(std::set<int>* field_numbers) const;
+
+  // Returns the proto field numbers of TrafficPolicy fields that are included
+  // in this annotation.
+  // For the cookies_allowed field, if the value is YES,
+  // kCookiesAllowedFieldNumber is added to the set and if it is NO,
+  // -kCookiesAllowedFieldNumber is added.
+  void GetPolicyFieldNumbers(std::set<int>* field_numbers) const;
+
+  // Loads annotation based on the data from archive in annotations.xml.
+  static AnnotationInstance LoadFromArchive(
+      AnnotationInstance::Type type,
+      const std::string& unique_id,
+      int unique_id_hash_code,
+      int second_id_hash_code,
+      int content_hash_code,
+      const std::set<int>& semantics_fields,
+      const std::set<int>& policy_fields,
+      const std::string& file_path);
+
   // Checks if an annotation has all required fields.
   AuditorResult IsComplete() const;
 
@@ -62,6 +84,20 @@ class AnnotationInstance : public InstanceBase {
   // be of partial type and the |other| either COMPLETING or BRANCHED_COMPLETING
   // type.
   bool IsCompletableWith(const AnnotationInstance& other) const;
+
+  // Tells if annotation requires two ids. All annotations have the unique id,
+  // but partial annotations also require the completing id, and branched
+  // completing annotations require the group id.
+  bool NeedsTwoIDs() const {
+    return type == Type::ANNOTATION_PARTIAL ||
+           type == Type::ANNOTATION_BRANCHED_COMPLETING;
+  }
+
+  // If annotation is loaded from archive, returns |archive_content_hash_code|.
+  // Otherwise computes a hashcode for the annotation content. Source field is
+  // not used in this computation as we don't need sensitivity to changes in
+  // source location, i.e. filepath, line number and function.
+  int GetContentHashCode() const;
 
   // Combines |*this| partial annotation with a completing/branched_completing
   // annotation and returns the combined complete annotation.
@@ -75,14 +111,22 @@ class AnnotationInstance : public InstanceBase {
   // Type of the annotation.
   Type type;
 
-  // Extra id of the annotation (if available).
-  std::string extra_id;
+  // Extra id of the annotation (if available). This can be the completing id
+  // for partial annotations, or group id for branched completing annotations.
+  std::string second_id;
 
   // Hash codes of unique id and extra id (if available).
   int unique_id_hash_code;
-  int extra_id_hash_code;
+  int second_id_hash_code;
 
-  std::string comments;
+  // The hash code of annotation content for archived annotations.
+  int archive_content_hash_code;
+
+  // Flag stating if annotation is loaded from annotations.xml.
+  bool is_loaded_from_archive;
+
+  // This annotation is generated from merging two other incomplete annotations.
+  bool is_merged;
 };
 
 // Holds an instance of calling a function that might have a network traffic

@@ -36,7 +36,7 @@ scoped_refptr<ComputedStyle> GetUncachedSelectionStyle(Node* node) {
   // we calculate ::selection style on the shadow host for elements inside the
   // UA shadow.
   if (ShadowRoot* root = node->ContainingShadowRoot()) {
-    if (root->GetType() == ShadowRootType::kUserAgent) {
+    if (root->IsUserAgent()) {
       if (Element* shadow_host = node->OwnerShadowHost()) {
         return shadow_host->GetUncachedPseudoStyle(
             PseudoStyleRequest(kPseudoIdSelection));
@@ -58,7 +58,7 @@ scoped_refptr<ComputedStyle> GetUncachedSelectionStyle(Node* node) {
 Color SelectionColor(const Document& document,
                      const ComputedStyle& style,
                      Node* node,
-                     CSSPropertyID color_property,
+                     const CSSProperty& color_property,
                      const GlobalPaintFlags global_paint_flags) {
   // If the element is unselectable, or we are only painting the selection,
   // don't override the foreground color with the selection foreground color.
@@ -95,7 +95,7 @@ Color SelectionPaintingUtils::SelectionBackgroundColor(
 
   if (scoped_refptr<ComputedStyle> pseudo_style =
           GetUncachedSelectionStyle(node)) {
-    return pseudo_style->VisitedDependentColor(CSSPropertyBackgroundColor)
+    return pseudo_style->VisitedDependentColor(GetCSSPropertyBackgroundColor())
         .BlendWithWhite();
   }
 
@@ -109,7 +109,8 @@ Color SelectionPaintingUtils::SelectionForegroundColor(
     const ComputedStyle& style,
     Node* node,
     const GlobalPaintFlags global_paint_flags) {
-  return SelectionColor(document, style, node, CSSPropertyWebkitTextFillColor,
+  return SelectionColor(document, style, node,
+                        GetCSSPropertyWebkitTextFillColor(),
                         global_paint_flags);
 }
 
@@ -119,7 +120,8 @@ Color SelectionPaintingUtils::SelectionEmphasisMarkColor(
     Node* node,
     const GlobalPaintFlags global_paint_flags) {
   return SelectionColor(document, style, node,
-                        CSSPropertyWebkitTextEmphasisColor, global_paint_flags);
+                        GetCSSPropertyWebkitTextEmphasisColor(),
+                        global_paint_flags);
 }
 
 TextPaintStyle SelectionPaintingUtils::SelectionPaintingStyle(
@@ -146,7 +148,7 @@ TextPaintStyle SelectionPaintingUtils::SelectionPaintingStyle(
       selection_style.stroke_color =
           uses_text_as_clip ? Color::kBlack
                             : pseudo_style->VisitedDependentColor(
-                                  CSSPropertyWebkitTextStrokeColor);
+                                  GetCSSPropertyWebkitTextStrokeColor());
       selection_style.stroke_width = pseudo_style->TextStrokeWidth();
       selection_style.shadow =
           uses_text_as_clip ? nullptr : pseudo_style->TextShadow();

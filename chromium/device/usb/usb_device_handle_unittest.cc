@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,7 +18,6 @@
 #include "device/test/test_device_client.h"
 #include "device/test/usb_test_gadget.h"
 #include "device/usb/usb_device.h"
-#include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace device {
@@ -100,7 +100,7 @@ class TestCompletionCallback {
 
  private:
   void SetResult(UsbTransferStatus status,
-                 scoped_refptr<net::IOBuffer> buffer,
+                 scoped_refptr<base::RefCountedBytes> buffer,
                  size_t transferred) {
     status_ = status;
     transferred_ = transferred;
@@ -115,7 +115,7 @@ class TestCompletionCallback {
 void ExpectTimeoutAndClose(scoped_refptr<UsbDeviceHandle> handle,
                            const base::Closure& quit_closure,
                            UsbTransferStatus status,
-                           scoped_refptr<net::IOBuffer> buffer,
+                           scoped_refptr<base::RefCountedBytes> buffer,
                            size_t transferred) {
   EXPECT_EQ(UsbTransferStatus::TIMEOUT, status);
   handle->Close();
@@ -151,22 +151,20 @@ TEST_F(UsbDeviceHandleTest, InterruptTransfer) {
   EXPECT_FALSE(handle->FindInterfaceByEndpoint(0x82));
   EXPECT_FALSE(handle->FindInterfaceByEndpoint(0x02));
 
-  scoped_refptr<net::IOBufferWithSize> in_buffer(new net::IOBufferWithSize(64));
+  auto in_buffer = base::MakeRefCounted<base::RefCountedBytes>(64);
   TestCompletionCallback in_completion;
-  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x81, in_buffer.get(),
-                          in_buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x81, in_buffer,
                           5000,  // 5 second timeout
                           in_completion.GetCallback());
 
-  scoped_refptr<net::IOBufferWithSize> out_buffer(
-      new net::IOBufferWithSize(in_buffer->size()));
+  auto out_buffer =
+      base::MakeRefCounted<base::RefCountedBytes>(in_buffer->size());
   TestCompletionCallback out_completion;
-  for (int i = 0; i < out_buffer->size(); ++i) {
+  for (size_t i = 0; i < out_buffer->size(); ++i) {
     out_buffer->data()[i] = i;
   }
 
-  handle->GenericTransfer(UsbTransferDirection::OUTBOUND, 0x01,
-                          out_buffer.get(), out_buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::OUTBOUND, 0x01, out_buffer,
                           5000,  // 5 second timeout
                           out_completion.GetCallback());
   out_completion.WaitForResult();
@@ -179,7 +177,7 @@ TEST_F(UsbDeviceHandleTest, InterruptTransfer) {
   EXPECT_EQ(static_cast<size_t>(in_buffer->size()),
             in_completion.transferred());
   for (size_t i = 0; i < in_completion.transferred(); ++i) {
-    EXPECT_EQ(out_buffer->data()[i], in_buffer->data()[i])
+    EXPECT_EQ(out_buffer->front()[i], in_buffer->front()[i])
         << "Mismatch at index " << i << ".";
   }
 
@@ -219,23 +217,20 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
   EXPECT_TRUE(interface);
   EXPECT_EQ(1, interface->interface_number);
 
-  scoped_refptr<net::IOBufferWithSize> in_buffer(
-      new net::IOBufferWithSize(512));
+  auto in_buffer = base::MakeRefCounted<base::RefCountedBytes>(512);
   TestCompletionCallback in_completion;
-  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, in_buffer.get(),
-                          in_buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, in_buffer,
                           5000,  // 5 second timeout
                           in_completion.GetCallback());
 
-  scoped_refptr<net::IOBufferWithSize> out_buffer(
-      new net::IOBufferWithSize(in_buffer->size()));
+  auto out_buffer =
+      base::MakeRefCounted<base::RefCountedBytes>(in_buffer->size());
   TestCompletionCallback out_completion;
-  for (int i = 0; i < out_buffer->size(); ++i) {
+  for (size_t i = 0; i < out_buffer->size(); ++i) {
     out_buffer->data()[i] = i;
   }
 
-  handle->GenericTransfer(UsbTransferDirection::OUTBOUND, 0x02,
-                          out_buffer.get(), out_buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::OUTBOUND, 0x02, out_buffer,
                           5000,  // 5 second timeout
                           out_completion.GetCallback());
   out_completion.WaitForResult();
@@ -248,7 +243,7 @@ TEST_F(UsbDeviceHandleTest, BulkTransfer) {
   EXPECT_EQ(static_cast<size_t>(in_buffer->size()),
             in_completion.transferred());
   for (size_t i = 0; i < in_completion.transferred(); ++i) {
-    EXPECT_EQ(out_buffer->data()[i], in_buffer->data()[i])
+    EXPECT_EQ(out_buffer->front()[i], in_buffer->front()[i])
         << "Mismatch at index " << i << ".";
   }
 
@@ -272,19 +267,19 @@ TEST_F(UsbDeviceHandleTest, ControlTransfer) {
   scoped_refptr<UsbDeviceHandle> handle = open_device.WaitForResult();
   ASSERT_TRUE(handle.get());
 
-  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(255));
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(255);
   TestCompletionCallback completion;
-  handle->ControlTransfer(
-      UsbTransferDirection::INBOUND, UsbControlTransferType::STANDARD,
-      UsbControlTransferRecipient::DEVICE, 0x06, 0x0301, 0x0409, buffer,
-      buffer->size(), 0, completion.GetCallback());
+  handle->ControlTransfer(UsbTransferDirection::INBOUND,
+                          UsbControlTransferType::STANDARD,
+                          UsbControlTransferRecipient::DEVICE, 0x06, 0x0301,
+                          0x0409, buffer, 0, completion.GetCallback());
   completion.WaitForResult();
   ASSERT_EQ(UsbTransferStatus::COMPLETED, completion.status());
   const char expected_str[] = "\x18\x03G\0o\0o\0g\0l\0e\0 \0I\0n\0c\0.\0";
   EXPECT_EQ(sizeof(expected_str) - 1, completion.transferred());
   for (size_t i = 0; i < completion.transferred(); ++i) {
-    EXPECT_EQ(expected_str[i], buffer->data()[i]) << "Mismatch at index " << i
-                                                  << ".";
+    EXPECT_EQ(expected_str[i], buffer->front()[i])
+        << "Mismatch at index " << i << ".";
   }
 
   handle->Close();
@@ -339,10 +334,9 @@ TEST_F(UsbDeviceHandleTest, CancelOnClose) {
   handle->ClaimInterface(1, claim_interface.GetCallback());
   ASSERT_TRUE(claim_interface.WaitForResult());
 
-  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(512);
   TestCompletionCallback completion;
-  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer.get(),
-                          buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer,
                           5000,  // 5 second timeout
                           completion.GetCallback());
 
@@ -370,10 +364,9 @@ TEST_F(UsbDeviceHandleTest, ErrorOnDisconnect) {
   handle->ClaimInterface(1, claim_interface.GetCallback());
   ASSERT_TRUE(claim_interface.WaitForResult());
 
-  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(512);
   TestCompletionCallback completion;
-  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer.get(),
-                          buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer,
                           5000,  // 5 second timeout
                           completion.GetCallback());
 
@@ -408,10 +401,9 @@ TEST_F(UsbDeviceHandleTest, Timeout) {
   handle->ClaimInterface(1, claim_interface.GetCallback());
   ASSERT_TRUE(claim_interface.WaitForResult());
 
-  scoped_refptr<net::IOBufferWithSize> buffer(new net::IOBufferWithSize(512));
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(512);
   TestCompletionCallback completion;
-  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer.get(),
-                          buffer->size(),
+  handle->GenericTransfer(UsbTransferDirection::INBOUND, 0x82, buffer,
                           10,  // 10 millisecond timeout
                           completion.GetCallback());
 
@@ -440,9 +432,9 @@ TEST_F(UsbDeviceHandleTest, CloseReentrancy) {
   ASSERT_TRUE(claim_interface.WaitForResult());
 
   base::RunLoop run_loop;
-  auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(512);
+  auto buffer = base::MakeRefCounted<base::RefCountedBytes>(512);
   handle->GenericTransfer(
-      UsbTransferDirection::INBOUND, 0x82, buffer.get(), buffer->size(),
+      UsbTransferDirection::INBOUND, 0x82, buffer,
       10,  // 10 millisecond timeout
       base::Bind(&ExpectTimeoutAndClose, handle, run_loop.QuitClosure()));
   // Drop handle so that the completion callback holds the last reference.

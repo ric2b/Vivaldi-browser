@@ -399,6 +399,11 @@ class AppWindow : public content::WebContentsDelegate,
     app_window_contents_ = std::move(contents);
   }
 
+  // Vivaldi specific extensions.
+  bool thumbnail_window() const { return thumbnail_window_; }
+  void CloseWindow() { CloseContents(nullptr); }
+
+
  protected:
   ~AppWindow() override;
 
@@ -412,7 +417,8 @@ class AppWindow : public content::WebContentsDelegate,
   content::ColorChooser* OpenColorChooser(
       content::WebContents* web_contents,
       SkColor color,
-      const std::vector<content::ColorSuggestion>& suggestions) override;
+      const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions)
+      override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   bool IsPopupOrPanel(const content::WebContents* source) const override;
@@ -593,6 +599,9 @@ class AppWindow : public content::WebContentsDelegate,
   // If the mouse has entered the app-window. Used for ContentsMouseEvent
   // leaving and entering.
   bool mouse_has_entered_ = false;
+
+  // Vivaldi: Whether |thumbnail_window| was set in the CreateParams.
+  bool thumbnail_window_ = false;
 
   // PlzNavigate: this is called when the first navigation is ready to commit or
   // when the window is closed.

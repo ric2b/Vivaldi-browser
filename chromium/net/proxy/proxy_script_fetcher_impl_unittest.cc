@@ -140,8 +140,8 @@ GURL GetTestFileUrl(const std::string& relpath) {
 
 class BasicNetworkDelegate : public NetworkDelegateImpl {
  public:
-  BasicNetworkDelegate() {}
-  ~BasicNetworkDelegate() override {}
+  BasicNetworkDelegate() = default;
+  ~BasicNetworkDelegate() override = default;
 
  private:
   int OnBeforeURLRequest(URLRequest* request,
@@ -551,15 +551,15 @@ TEST_F(ProxyScriptFetcherImplTest, OnShutdown) {
   int result = pac_fetcher.Fetch(test_server_.GetURL("/hung"), &text,
                                  callback.callback());
   EXPECT_THAT(result, IsError(ERR_IO_PENDING));
-  EXPECT_EQ(1u, context_.url_requests().size());
+  EXPECT_EQ(1u, context_.url_requests()->size());
 
   pac_fetcher.OnShutdown();
-  EXPECT_EQ(0u, context_.url_requests().size());
+  EXPECT_EQ(0u, context_.url_requests()->size());
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONTEXT_SHUT_DOWN));
 
   // Make sure there's no asynchronous completion notification.
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(0u, context_.url_requests().size());
+  EXPECT_EQ(0u, context_.url_requests()->size());
   EXPECT_FALSE(callback.have_result());
 
   result = pac_fetcher.Fetch(test_server_.GetURL("/hung"), &text,
@@ -578,7 +578,7 @@ TEST_F(ProxyScriptFetcherImplTest, OnShutdownWithNoLiveRequest) {
   int result = pac_fetcher.Fetch(test_server_.GetURL("/hung"), &text,
                                  callback.callback());
   EXPECT_THAT(result, IsError(ERR_CONTEXT_SHUT_DOWN));
-  EXPECT_EQ(0u, context_.url_requests().size());
+  EXPECT_EQ(0u, context_.url_requests()->size());
 }
 
 }  // namespace

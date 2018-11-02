@@ -180,7 +180,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
   if (current_hit_test.InnerNode()) {
     LocalFrame& main_frame = frame_->LocalFrameRoot();
     if (main_frame.View())
-      main_frame.View()->UpdateLifecycleToCompositingCleanPlusScrolling();
+      main_frame.View()->UpdateLifecycleToPrePaintClean();
     adjusted_point = frame_view->RootFrameToContents(
         FlooredIntPoint(gesture_event.PositionInRootFrame()));
     current_hit_test = EventHandlingUtil::HitTestResultInFrame(
@@ -413,7 +413,7 @@ WebInputEventResult GestureManager::SendContextMenuEventForGesture(
 }
 
 WebInputEventResult GestureManager::HandleGestureShowPress() {
-  last_show_press_timestamp_ = TimeTicks::Now();
+  last_show_press_timestamp_ = CurrentTimeTicks();
 
   LocalFrameView* view = frame_->View();
   if (!view)

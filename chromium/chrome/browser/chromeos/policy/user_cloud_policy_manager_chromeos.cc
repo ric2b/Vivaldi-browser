@@ -10,11 +10,9 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/debug/crash_logging.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/sequenced_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -27,8 +25,8 @@
 #include "chrome/browser/chromeos/policy/wildcard_login_checker.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/common/crash_keys.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/common/cloud/cloud_external_data_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
@@ -136,8 +134,10 @@ void UserCloudPolicyManagerChromeOS::Connect(
   // TODO(emaxx): Remove the crash key after the crashes tracked at
   // https://crbug.com/685996 are fixed.
   if (core()->client()) {
-    base::debug::SetCrashKeyToStackTrace(
-        crash_keys::kUserCloudPolicyManagerConnectTrace, connect_callstack_);
+    static crash_reporter::CrashKeyString<1024> connect_callstack_key(
+        "user-cloud-policy-manager-connect-trace");
+    crash_reporter::SetCrashKeyStringToStackTrace(&connect_callstack_key,
+                                                  connect_callstack_);
   } else {
     connect_callstack_ = base::debug::StackTrace();
   }
@@ -149,7 +149,7 @@ void UserCloudPolicyManagerChromeOS::Connect(
   // from the Profile because Connect() is called before the profile is
   // fully initialized (required so we can perform the initial policy load).
   std::unique_ptr<CloudPolicyClient> cloud_policy_client =
-      base::MakeUnique<CloudPolicyClient>(
+      std::make_unique<CloudPolicyClient>(
           std::string() /* machine_id */, std::string() /* machine_model */,
           device_management_service, system_request_context,
           nullptr /* signing_service */);
@@ -308,8 +308,8 @@ void UserCloudPolicyManagerChromeOS::OnClientError(
     CloudPolicyClient* cloud_policy_client) {
   DCHECK_EQ(client(), cloud_policy_client);
   if (waiting_for_initial_policy_fetch_) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY(kUMAInitialFetchClientError,
-                                cloud_policy_client->status());
+    base::UmaHistogramSparse(kUMAInitialFetchClientError,
+                             cloud_policy_client->status());
   }
   switch (client()->status()) {
     case DM_STATUS_SUCCESS:
@@ -420,8 +420,8 @@ void UserCloudPolicyManagerChromeOS::OnOAuth2PolicyTokenFetched(
     if (error.state() == GoogleServiceAuthError::CONNECTION_FAILED) {
       // Network errors are negative in the code, but the histogram data type
       // expects the corresponding positive value.
-      UMA_HISTOGRAM_SPARSE_SLOWLY(kUMAInitialFetchOAuth2NetworkError,
-                                  -error.network_error());
+      base::UmaHistogramSparse(kUMAInitialFetchOAuth2NetworkError,
+                               -error.network_error());
     }
     // Failed to get a token, stop waiting if policy is not required for this
     // user.

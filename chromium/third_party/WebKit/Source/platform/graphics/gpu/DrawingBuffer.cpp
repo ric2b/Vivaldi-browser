@@ -45,7 +45,6 @@
 #include "gpu/config/gpu_feature_info.h"
 #include "platform/graphics/AcceleratedStaticBitmapImage.h"
 #include "platform/graphics/GraphicsLayer.h"
-#include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedStaticBitmapImage.h"
 #include "platform/graphics/WebGraphicsContext3DProviderWrapper.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
@@ -220,6 +219,11 @@ WebGraphicsContext3DProvider* DrawingBuffer::ContextProvider() {
   return context_provider_->ContextProvider();
 }
 
+base::WeakPtr<WebGraphicsContext3DProviderWrapper>
+DrawingBuffer::ContextProviderWeakPtr() {
+  return context_provider_->GetWeakPtr();
+}
+
 void DrawingBuffer::SetIsHidden(bool hidden) {
   if (is_hidden_ == hidden)
     return;
@@ -339,8 +343,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceSoftware(
   auto func = WTF::Bind(&DrawingBuffer::MailboxReleasedSoftware,
                         scoped_refptr<DrawingBuffer>(this),
                         WTF::Passed(std::move(bitmap)), size_);
-  *out_release_callback = viz::SingleReleaseCallback::Create(
-      ConvertToBaseCallback(std::move(func)));
+  *out_release_callback = viz::SingleReleaseCallback::Create(std::move(func));
 
   if (preserve_drawing_buffer_ == kDiscard) {
     SetBufferClearNeeded(true);
@@ -401,19 +404,16 @@ bool DrawingBuffer::FinishPrepareTransferableResourceGpu(
   // produceSyncToken with that point.
   {
     gl_->ProduceTextureDirectCHROMIUM(color_buffer_for_mailbox->texture_id,
-                                      texture_target_,
                                       color_buffer_for_mailbox->mailbox.name);
-    const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
     // It's critical to order the execution of this context's work relative
     // to other contexts, in particular the compositor. Previously this
     // used to be a Flush, and there was a bug that we didn't flush before
-    // InsertFenceSyncCHROMIUM, above. On some platforms this caused
+    // synchronizing with the composition, and on some platforms this caused
     // incorrect rendering with complex WebGL content that wasn't always
     // properly flushed to the driver. There is now a basic assumption that
     // there are implicit flushes between contexts at the lowest level.
-    gl_->OrderingBarrierCHROMIUM();
     gl_->GenUnverifiedSyncTokenCHROMIUM(
-        fence_sync, color_buffer_for_mailbox->produce_sync_token.GetData());
+        color_buffer_for_mailbox->produce_sync_token.GetData());
 #if defined(OS_MACOSX)
     // Needed for GPU back-pressure on macOS. Used to be in the middle
     // of the commands above; try to move it to the bottom to allow
@@ -436,8 +436,7 @@ bool DrawingBuffer::FinishPrepareTransferableResourceGpu(
     auto func =
         WTF::Bind(&DrawingBuffer::MailboxReleasedGpu,
                   scoped_refptr<DrawingBuffer>(this), color_buffer_for_mailbox);
-    *out_release_callback = viz::SingleReleaseCallback::Create(
-        ConvertToBaseCallback(std::move(func)));
+    *out_release_callback = viz::SingleReleaseCallback::Create(std::move(func));
   }
 
   // Point |m_frontColorBuffer| to the buffer that we are now presenting.
@@ -529,7 +528,8 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // could just use the actual texture id and avoid needing to produce/consume a
   // mailbox.
   GLuint texture_id = gl_->CreateAndConsumeTextureCHROMIUM(
-      GL_TEXTURE_2D, transferable_resource.mailbox_holder.mailbox.name);
+      transferable_resource.mailbox_holder.mailbox.name);
+
   // Return the mailbox but report that the resource is lost to prevent trying
   // to use the backing for future frames. We keep it alive with our own
   // reference to the backing via our |textureId|.
@@ -551,7 +551,7 @@ scoped_refptr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // in DrawingBuffer.
   return AcceleratedStaticBitmapImage::CreateFromWebGLContextImage(
       sk_image_mailbox, sk_image_sync_token, texture_id,
-      context_provider_->CreateWeakPtr(), size_);
+      context_provider_->GetWeakPtr(), size_);
 }
 
 scoped_refptr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateOrRecycleColorBuffer() {
@@ -684,7 +684,13 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
       (webgl_version_ > kWebGL1 ||
        extensions_util_->SupportsExtension("GL_EXT_texture_storage")) &&
       anti_aliasing_mode_ == kScreenSpaceAntialiasing;
-  sample_count_ = std::min(8, max_sample_count);
+  // Performance regreses by 30% in WebGL apps for AMD Stoney
+  // if sample count is 8x
+  if (ContextProvider()->GetGpuFeatureInfo().IsWorkaroundEnabled(
+          gpu::MAX_MSAA_SAMPLE_COUNT_4))
+    sample_count_ = std::min(4, max_sample_count);
+  else
+    sample_count_ = std::min(8, max_sample_count);
 
   texture_target_ = GL_TEXTURE_2D;
 #if defined(OS_MACOSX)
@@ -781,7 +787,6 @@ bool DrawingBuffer::CopyToPlatformTexture(gpu::gles2::GLES2Interface* dst_gl,
 
   // Contexts may be in a different share group. We must transfer the texture
   // through a mailbox first.
-  GLenum src_texture_target = texture_target_;
   gpu::Mailbox mailbox;
   gpu::SyncToken produce_sync_token;
   if (src_buffer == kFrontBuffer && front_color_buffer_) {
@@ -789,19 +794,18 @@ bool DrawingBuffer::CopyToPlatformTexture(gpu::gles2::GLES2Interface* dst_gl,
     produce_sync_token = front_color_buffer_->produce_sync_token;
   } else {
     src_gl->GenMailboxCHROMIUM(mailbox.name);
-    GLuint texture_id = 0;
     if (premultiplied_alpha_false_texture_) {
-      texture_id = premultiplied_alpha_false_texture_;
-      src_texture_target = GL_TEXTURE_2D;
+      // If this texture exists, then it holds the rendering results at this
+      // point, rather than back_color_buffer_. back_color_buffer_ receives the
+      // contents of this texture later, premultiplying alpha into the color
+      // channels.
+      src_gl->ProduceTextureDirectCHROMIUM(premultiplied_alpha_false_texture_,
+                                           mailbox.name);
     } else {
-      texture_id = back_color_buffer_->texture_id;
+      src_gl->ProduceTextureDirectCHROMIUM(back_color_buffer_->texture_id,
+                                           mailbox.name);
     }
-    src_gl->ProduceTextureDirectCHROMIUM(texture_id,
-                                         src_texture_target, mailbox.name);
-    const GLuint64 fence_sync = src_gl->InsertFenceSyncCHROMIUM();
-    src_gl->OrderingBarrierCHROMIUM();
-    src_gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync,
-                                           produce_sync_token.GetData());
+    src_gl->GenUnverifiedSyncTokenCHROMIUM(produce_sync_token.GetData());
   }
 
   if (!produce_sync_token.HasData()) {
@@ -810,8 +814,7 @@ bool DrawingBuffer::CopyToPlatformTexture(gpu::gles2::GLES2Interface* dst_gl,
   }
 
   dst_gl->WaitSyncTokenCHROMIUM(produce_sync_token.GetConstData());
-  GLuint src_texture =
-      dst_gl->CreateAndConsumeTextureCHROMIUM(src_texture_target, mailbox.name);
+  GLuint src_texture = dst_gl->CreateAndConsumeTextureCHROMIUM(mailbox.name);
 
   GLboolean unpack_premultiply_alpha_needed = GL_FALSE;
   GLboolean unpack_unpremultiply_alpha_needed = GL_FALSE;
@@ -829,11 +832,8 @@ bool DrawingBuffer::CopyToPlatformTexture(gpu::gles2::GLES2Interface* dst_gl,
 
   dst_gl->DeleteTextures(1, &src_texture);
 
-  const GLuint64 fence_sync = dst_gl->InsertFenceSyncCHROMIUM();
-
-  dst_gl->OrderingBarrierCHROMIUM();
   gpu::SyncToken sync_token;
-  dst_gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+  dst_gl->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
   src_gl->WaitSyncTokenCHROMIUM(sync_token.GetData());
 
   return true;
@@ -873,6 +873,8 @@ void DrawingBuffer::BeginDestruction() {
   ClearPlatformLayer();
   recycled_color_buffer_queue_.clear();
 
+  // If the drawing buffer is being destroyed due to a real context loss these
+  // calls will be ineffective, but won't be harmful.
   if (multisample_fbo_)
     gl_->DeleteFramebuffers(1, &multisample_fbo_);
 
@@ -1179,26 +1181,28 @@ void DrawingBuffer::Bind(GLenum target) {
   gl_->BindFramebuffer(target, WantExplicitResolve() ? multisample_fbo_ : fbo_);
 }
 
-bool DrawingBuffer::PaintRenderingResultsToImageData(
-    int& width,
-    int& height,
-    SourceDrawingBuffer source_buffer,
-    WTF::ArrayBufferContents& contents) {
+scoped_refptr<Uint8Array> DrawingBuffer::PaintRenderingResultsToDataArray(
+    SourceDrawingBuffer source_buffer) {
   ScopedStateRestorer scoped_state_restorer(this);
 
-  DCHECK(!premultiplied_alpha_);
-  width = Size().Width();
-  height = Size().Height();
+  int width = Size().Width();
+  int height = Size().Height();
 
   CheckedNumeric<int> data_size = 4;
   data_size *= width;
   data_size *= height;
   if (!data_size.IsValid())
-    return false;
+    return nullptr;
 
-  WTF::ArrayBufferContents pixels(width * height, 4,
-                                  WTF::ArrayBufferContents::kNotShared,
-                                  WTF::ArrayBufferContents::kDontInitialize);
+  unsigned byte_length = width * height * 4;
+  scoped_refptr<ArrayBuffer> dst_buffer =
+      ArrayBuffer::CreateOrNull(byte_length, 1);
+  if (!dst_buffer)
+    return nullptr;
+  scoped_refptr<Uint8Array> data_array =
+      Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
+  if (!data_array)
+    return nullptr;
 
   GLuint fbo = 0;
   state_restorer_->SetFramebufferBindingDirty();
@@ -1212,9 +1216,10 @@ bool DrawingBuffer::PaintRenderingResultsToImageData(
     gl_->BindFramebuffer(GL_FRAMEBUFFER, fbo_);
   }
 
-  ReadBackFramebuffer(static_cast<unsigned char*>(pixels.Data()), width, height,
-                      kReadbackRGBA, WebGLImageConversion::kAlphaDoNothing);
-  FlipVertically(static_cast<uint8_t*>(pixels.Data()), width, height);
+  ReadBackFramebuffer(static_cast<unsigned char*>(data_array->Data()), width,
+                      height, kReadbackRGBA,
+                      WebGLImageConversion::kAlphaDoNothing);
+  FlipVertically(static_cast<uint8_t*>(data_array->Data()), width, height);
 
   if (fbo) {
     gl_->FramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
@@ -1222,8 +1227,7 @@ bool DrawingBuffer::PaintRenderingResultsToImageData(
     gl_->DeleteFramebuffers(1, &fbo);
   }
 
-  pixels.Transfer(contents);
-  return true;
+  return data_array;
 }
 
 void DrawingBuffer::ReadBackFramebuffer(unsigned char* pixels,

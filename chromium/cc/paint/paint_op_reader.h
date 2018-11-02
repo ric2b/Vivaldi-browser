@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "cc/paint/paint_export.h"
+#include "cc/paint/paint_filter.h"
 #include "cc/paint/paint_op_writer.h"
+#include "cc/paint/transfer_cache_deserialize_helper.h"
 
 namespace cc {
 
@@ -16,12 +18,18 @@ class PaintShader;
 
 // PaintOpReader takes garbage |memory| and clobbers it with successive
 // read functions.
+class TransferCacheDeserializeHelper;
 class CC_PAINT_EXPORT PaintOpReader {
  public:
-  PaintOpReader(const volatile void* memory, size_t size)
+  PaintOpReader(const volatile void* memory,
+                size_t size,
+                TransferCacheDeserializeHelper* transfer_cache,
+                bool enable_security_constraints = false)
       : memory_(static_cast<const volatile char*>(memory) +
                 PaintOpWriter::HeaderBytes()),
-        remaining_bytes_(size - PaintOpWriter::HeaderBytes()) {
+        remaining_bytes_(size - PaintOpWriter::HeaderBytes()),
+        transfer_cache_(transfer_cache),
+        enable_security_constraints_(enable_security_constraints) {
     if (size < PaintOpWriter::HeaderBytes())
       valid_ = false;
   }
@@ -33,6 +41,7 @@ class CC_PAINT_EXPORT PaintOpReader {
                                       uint32_t* skip);
 
   bool valid() const { return valid_; }
+  size_t remaining_bytes() const { return remaining_bytes_; }
 
   void ReadData(size_t bytes, void* data);
   void ReadArray(size_t count, SkPoint* array);
@@ -52,9 +61,11 @@ class CC_PAINT_EXPORT PaintOpReader {
   void Read(PaintImage* image);
   void Read(sk_sp<SkData>* data);
   void Read(scoped_refptr<PaintTextBlob>* blob);
+  void Read(sk_sp<PaintFilter>* filter);
   void Read(sk_sp<PaintShader>* shader);
   void Read(SkMatrix* matrix);
   void Read(SkColorType* color_type);
+  void Read(SkImageInfo* info);
 
   void Read(SkClipOp* op) {
     uint8_t value = 0u;
@@ -71,6 +82,15 @@ class CC_PAINT_EXPORT PaintOpReader {
     Read(&value);
     *constraint = static_cast<PaintCanvas::SrcRectConstraint>(value);
   }
+  void Read(SkFilterQuality* quality) {
+    uint8_t value = 0u;
+    Read(&value);
+    if (value > static_cast<uint8_t>(kLast_SkFilterQuality)) {
+      SetInvalid();
+      return;
+    }
+    *quality = static_cast<SkFilterQuality>(value);
+  }
   void Read(bool* data) {
     uint8_t value = 0u;
     Read(&value);
@@ -82,6 +102,9 @@ class CC_PAINT_EXPORT PaintOpReader {
   // would exceed the available budfer.
   const volatile void* ExtractReadableMemory(size_t bytes);
 
+  // Aligns the memory to the given alignment.
+  void AlignMemory(size_t alignment);
+
  private:
   template <typename T>
   void ReadSimple(T* val);
@@ -89,19 +112,91 @@ class CC_PAINT_EXPORT PaintOpReader {
   template <typename T>
   void ReadFlattenable(sk_sp<T>* val);
 
-  void Read(std::vector<PaintTypeface>* typefaces);
-  void Read(const std::vector<PaintTypeface>& typefaces,
-            sk_sp<SkTextBlob>* blob);
-
   void SetInvalid();
 
-  // Attempts to align the memory to the given alignment. Returns false if there
-  // is unsufficient bytes remaining to do this padding.
-  bool AlignMemory(size_t alignment);
+  // The main entry point is Read(sk_sp<PaintFilter>* filter) which calls one of
+  // the following functions depending on read type.
+  void ReadColorFilterPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadBlurPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadDropShadowPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadMagnifierPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadComposePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadAlphaThresholdPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadXfermodePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadArithmeticPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadMatrixConvolutionPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadDisplacementMapEffectPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadImagePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadRecordPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadMergePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadMorphologyPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadOffsetPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadTilePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadTurbulencePaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadPaintFlagsPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadMatrixPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadLightingDistantPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadLightingPointPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+  void ReadLightingSpotPaintFilter(
+      sk_sp<PaintFilter>* filter,
+      const base::Optional<PaintFilter::CropRect>& crop_rect);
+
+  void Read(sk_sp<PaintRecord>* record);
+  void Read(SkRegion* region);
 
   const volatile char* memory_ = nullptr;
   size_t remaining_bytes_ = 0u;
   bool valid_ = true;
+  TransferCacheDeserializeHelper* transfer_cache_;
+
+  // Indicates that the data was serialized with the following constraints:
+  // 1) PaintRecords and SkDrawLoopers are ignored.
+  // 2) Images are decoded and only the bitmap is serialized.
+  // If set to true, the above constraints are validated during deserialization
+  // and the data types specified above are ignored.
+  const bool enable_security_constraints_;
 };
 
 }  // namespace cc

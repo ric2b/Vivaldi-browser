@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
 #include "third_party/WebKit/common/common_export.h"
 
@@ -38,6 +39,15 @@ struct BLINK_COMMON_EXPORT CloneableMessage {
 
   // Blob handles for any blobs being sent in this message.
   std::vector<mojo::StructPtr<mojom::SerializedBlob>> blobs;
+
+  // Stack trace captured by sender.
+  // For more details see v8_inspector::V8StackTraceId.
+  uint64_t stack_trace_id = 0;
+  int64_t stack_trace_debugger_id_first = 0;
+  int64_t stack_trace_debugger_id_second = 0;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CloneableMessage);
 };
 
 }  // namespace blink

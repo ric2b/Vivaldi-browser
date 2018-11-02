@@ -19,7 +19,7 @@
  * Different dialogs in add printer flow.
  * @enum {string}
  */
-var AddPrinterDialogs = {
+const AddPrinterDialogs = {
   DISCOVERY: 'add-printer-discovery-dialog',
   MANUALLY: 'add-printer-manually-dialog',
   CONFIGURING: 'add-printer-configuring-dialog',
@@ -29,9 +29,9 @@ var AddPrinterDialogs = {
 /**
  * The maximum height of the discovered printers list when the searching spinner
  * is not showing.
- * @const {number}
+ * @type {number}
  */
-var kPrinterListFullHeight = 350;
+const kPrinterListFullHeight = 350;
 
 /**
  * Return a reset CupsPrinterInfo object.
@@ -197,6 +197,52 @@ Polymer({
    */
   onProtocolChange_: function(event) {
     this.set('newPrinter.printerProtocol', event.target.value);
+  },
+
+  /**
+   * This function uses regular expressions to determine whether the provided
+   * printer address is valid. Address can be either an ipv4/6 address or a
+   * hostname followed by an optional port.
+   * NOTE: The regular expression for hostnames will allow hostnames that are
+   * over 255 characters.
+   * @param {String} name
+   * @param {String} address
+   * @return {boolean} Whether the add printer button is enabled.
+   * @private
+   */
+  canAddPrinter_: function(name, address) {
+    if (!name || !address)
+      return false;
+
+    const hostnamePrefix = '([a-z\\d]|[a-z\\d][a-z\\d\\-]{0,61}[a-z\\d])';
+
+    // Matches an arbitrary number of 'prefix patterns' which are separated by a
+    // dot.
+    const hostnameSuffix = `(\\.${hostnamePrefix})*`;
+
+    // Matches an optional port at the end of the address.
+    const portNumber = '(:\\d+)?';
+
+    const ipv6Full = '(([a-f\\d]){1,4}(:(:)?([a-f\\d]){1,4}){1,7})';
+
+    // Special cases for addresses using a shorthand notation.
+    const ipv6Prefix = '(::([a-f\\d]){1,4})';
+    const ipv6Suffix = '(([a-f\\d]){1,4}::)';
+    const ipv6Combined = `(${ipv6Full}|${ipv6Prefix}|${ipv6Suffix})`;
+    const ipv6WithPort = `(\\[${ipv6Combined}\\]${portNumber})`;
+
+    // Matches valid hostnames and ipv4 addresses.
+    const hostnameRegex =
+        new RegExp(`^${hostnamePrefix}${hostnameSuffix}${portNumber}$`, 'i');
+
+    // Matches valid ipv6 addresses.
+    const ipv6AddressRegex =
+        new RegExp(`^(${ipv6Combined}|${ipv6WithPort})$`, 'i');
+
+    const invalidIpv6Regex = new RegExp('.*::.*::.*');
+
+    return hostnameRegex.test(address) ||
+        (ipv6AddressRegex.test(address) && !invalidIpv6Regex.test(address));
   },
 });
 
@@ -488,7 +534,7 @@ Polymer({
 
     this.set(domIfBooleanName, true);
     this.async(function() {
-      var dialog = this.$$(toDialog);
+      const dialog = this.$$(toDialog);
       dialog.addEventListener('close', () => {
         this.set(domIfBooleanName, false);
       });

@@ -190,8 +190,7 @@ class CalcParser {
     const CSSParserToken& token = range.Peek();
     if (token.FunctionId() == CSSValueCalc ||
         token.FunctionId() == CSSValueWebkitCalc) {
-      calc_value_ =
-          CSSCalcValue::CreateSimplified(ConsumeFunction(range_), value_range);
+      calc_value_ = CSSCalcValue::Create(ConsumeFunction(range_), value_range);
     }
   }
 
@@ -550,9 +549,7 @@ static int ClampRGBComponent(const CSSPrimitiveValue& value) {
   return clampTo<int>(result, 0, 255);
 }
 
-static bool ParseRGBParameters(CSSParserTokenRange& range,
-                               RGBA32& result,
-                               bool parse_alpha) {
+static bool ParseRGBParameters(CSSParserTokenRange& range, RGBA32& result) {
   DCHECK(range.Peek().FunctionId() == CSSValueRgb ||
          range.Peek().FunctionId() == CSSValueRgba);
   CSSParserTokenRange args = ConsumeFunction(range);
@@ -564,21 +561,37 @@ static bool ParseRGBParameters(CSSParserTokenRange& range,
   const bool is_percent = color_parameter->IsPercentage();
   int color_array[3];
   color_array[0] = ClampRGBComponent(*color_parameter);
+  bool requires_commas = false;
   for (int i = 1; i < 3; i++) {
-    if (!ConsumeCommaIncludingWhitespace(args))
+    if (ConsumeCommaIncludingWhitespace(args)) {
+      if (i != 1 && !requires_commas)
+        return false;
+      requires_commas = true;
+    } else if (requires_commas || args.AtEnd() ||
+               (&args.Peek() - 1)->GetType() != kWhitespaceToken) {
       return false;
+    }
     color_parameter = is_percent ? ConsumePercent(args, kValueRangeAll)
                                  : ConsumeInteger(args);
     if (!color_parameter)
       return false;
     color_array[i] = ClampRGBComponent(*color_parameter);
   }
-  if (parse_alpha) {
-    if (!ConsumeCommaIncludingWhitespace(args))
-      return false;
+
+  bool comma_consumed = ConsumeCommaIncludingWhitespace(args);
+  bool slash_consumed = ConsumeSlashIncludingWhitespace(args);
+  if ((comma_consumed && !requires_commas) ||
+      (slash_consumed && requires_commas))
+    return false;
+  if (comma_consumed || slash_consumed) {
     double alpha;
-    if (!ConsumeNumberRaw(args, alpha))
-      return false;
+    if (!ConsumeNumberRaw(args, alpha)) {
+      CSSPrimitiveValue* alpha_percent = ConsumePercent(args, kValueRangeAll);
+      if (!alpha_percent)
+        return false;
+      else
+        alpha = alpha_percent->GetDoubleValue() / 100.0f;
+    }
     // W3 standard stipulates a 2.55 alpha value multiplication factor.
     int alpha_component =
         static_cast<int>(lroundf(clampTo<double>(alpha, 0.0, 1.0) * 255.0f));
@@ -590,20 +603,32 @@ static bool ParseRGBParameters(CSSParserTokenRange& range,
   return args.AtEnd();
 }
 
-static bool ParseHSLParameters(CSSParserTokenRange& range,
-                               RGBA32& result,
-                               bool parse_alpha) {
+static bool ParseHSLParameters(CSSParserTokenRange& range, RGBA32& result) {
   DCHECK(range.Peek().FunctionId() == CSSValueHsl ||
          range.Peek().FunctionId() == CSSValueHsla);
   CSSParserTokenRange args = ConsumeFunction(range);
-  CSSPrimitiveValue* hsl_value = ConsumeNumber(args, kValueRangeAll);
-  if (!hsl_value)
-    return false;
-  double color_array[3];
-  color_array[0] = (((hsl_value->GetIntValue() % 360) + 360) % 360) / 360.0;
-  for (int i = 1; i < 3; i++) {
-    if (!ConsumeCommaIncludingWhitespace(args))
+  CSSPrimitiveValue* hsl_value = ConsumeAngle(args, nullptr, WTF::nullopt);
+  double angle_value;
+  if (!hsl_value) {
+    hsl_value = ConsumeNumber(args, kValueRangeAll);
+    if (!hsl_value)
       return false;
+    angle_value = hsl_value->GetDoubleValue();
+  } else {
+    angle_value = hsl_value->ComputeDegrees();
+  }
+  double color_array[3];
+  color_array[0] = fmod(fmod(angle_value, 360.0) + 360.0, 360.0) / 60.0;
+  bool requires_commas = false;
+  for (int i = 1; i < 3; i++) {
+    if (ConsumeCommaIncludingWhitespace(args)) {
+      if (i != 1 && !requires_commas)
+        return false;
+      requires_commas = true;
+    } else if (requires_commas || args.AtEnd() ||
+               (&args.Peek() - 1)->GetType() != kWhitespaceToken) {
+      return false;
+    }
     hsl_value = ConsumePercent(args, kValueRangeAll);
     if (!hsl_value)
       return false;
@@ -611,12 +636,21 @@ static bool ParseHSLParameters(CSSParserTokenRange& range,
     color_array[i] = clampTo<double>(double_value, 0.0, 100.0) /
                      100.0;  // Needs to be value between 0 and 1.0.
   }
+
   double alpha = 1.0;
-  if (parse_alpha) {
-    if (!ConsumeCommaIncludingWhitespace(args))
-      return false;
-    if (!ConsumeNumberRaw(args, alpha))
-      return false;
+  bool comma_consumed = ConsumeCommaIncludingWhitespace(args);
+  bool slash_consumed = ConsumeSlashIncludingWhitespace(args);
+  if ((comma_consumed && !requires_commas) ||
+      (slash_consumed && requires_commas))
+    return false;
+  if (comma_consumed || slash_consumed) {
+    if (!ConsumeNumberRaw(args, alpha)) {
+      CSSPrimitiveValue* alpha_percent = ConsumePercent(args, kValueRangeAll);
+      if (!alpha_percent)
+        return false;
+      else
+        alpha = alpha_percent->GetDoubleValue() / 100.0f;
+    }
     alpha = clampTo<double>(alpha, 0.0, 1.0);
   }
   result =
@@ -665,9 +699,8 @@ static bool ParseColorFunction(CSSParserTokenRange& range, RGBA32& result) {
     return false;
   CSSParserTokenRange color_range = range;
   if ((function_id <= CSSValueRgba &&
-       !ParseRGBParameters(color_range, result, function_id == CSSValueRgba)) ||
-      (function_id >= CSSValueHsl &&
-       !ParseHSLParameters(color_range, result, function_id == CSSValueHsla)))
+       !ParseRGBParameters(color_range, result)) ||
+      (function_id >= CSSValueHsl && !ParseHSLParameters(color_range, result)))
     return false;
   range = color_range;
   return true;
@@ -1642,7 +1675,10 @@ void CountKeywordOnlyPropertyUsage(CSSPropertyID property,
       }
       break;
     }
-
+    case CSSPropertyDisplay:
+      if (value_id == CSSValueContents)
+        context.Count(WebFeature::kCSSValueDisplayContents);
+      break;
     default:
       break;
   }

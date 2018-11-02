@@ -183,7 +183,7 @@ WebPreferences::WebPreferences()
       save_previous_document_resources(SavePreviousDocumentResources::NEVER),
       serve_resources_only_from_cache(false),
       cookie_enabled(true),
-      pepper_accelerated_video_decode_enabled(false),
+      accelerated_video_decode_enabled(false),
       animation_policy(IMAGE_ANIMATION_POLICY_ALLOWED),
       user_gesture_required_for_presentation(true),
       text_track_margin_percentage(0.0f),
@@ -234,10 +234,11 @@ WebPreferences::WebPreferences()
       media_controls_enabled(true),
       do_not_update_selection_on_mutating_selection_range(false),
 #if defined(OS_ANDROID)
-      autoplay_policy(AutoplayPolicy::kUserGestureRequired) {
+      autoplay_policy(AutoplayPolicy::kUserGestureRequired),
 #else
-      autoplay_policy(AutoplayPolicy::kNoUserGestureRequired) {
-#endif  // defined(OS_ANDROID)
+      autoplay_policy(AutoplayPolicy::kNoUserGestureRequired),
+#endif
+      low_priority_iframes_threshold(net::EFFECTIVE_CONNECTION_TYPE_UNKNOWN) {
   standard_font_family_map[kCommonScript] =
       base::ASCIIToUTF16("Times New Roman");
   fixed_font_family_map[kCommonScript] = base::ASCIIToUTF16("Courier New");

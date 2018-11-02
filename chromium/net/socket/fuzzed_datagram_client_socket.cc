@@ -15,6 +15,7 @@
 #include "net/base/io_buffer.h"
 #include "net/base/ip_address.h"
 #include "net/base/net_errors.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
@@ -63,6 +64,8 @@ NetworkChangeNotifier::NetworkHandle
 FuzzedDatagramClientSocket::GetBoundNetwork() const {
   return NetworkChangeNotifier::kInvalidNetworkHandle;
 }
+
+void FuzzedDatagramClientSocket::ApplySocketTag(const SocketTag& tag) {}
 
 void FuzzedDatagramClientSocket::Close() {
   connected_ = false;
@@ -130,9 +133,11 @@ int FuzzedDatagramClientSocket::Read(IOBuffer* buf,
   return ERR_IO_PENDING;
 }
 
-int FuzzedDatagramClientSocket::Write(IOBuffer* buf,
-                                      int buf_len,
-                                      const CompletionCallback& callback) {
+int FuzzedDatagramClientSocket::Write(
+    IOBuffer* buf,
+    int buf_len,
+    const CompletionCallback& callback,
+    const NetworkTrafficAnnotationTag& /* traffic_annotation */) {
   CHECK(!callback.is_null());
   CHECK(!write_pending_);
 

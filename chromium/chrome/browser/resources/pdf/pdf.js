@@ -105,6 +105,13 @@ function PDFViewer(browserApi) {
   this.isPrintPreviewLoaded_ = false;
   this.isUserInitiatedEvent_ = true;
 
+  /**
+   * @type {PDFMetrics}
+   */
+  this.metrics =
+      (chrome.metricsPrivate ? new PDFMetricsImpl() : new PDFMetricsDummy());
+  this.metrics.onDocumentOpened();
+
   // Parse open pdf parameters.
   this.paramsParser_ =
       new OpenPDFParamsParser(this.getNamedDestination_.bind(this));
@@ -217,12 +224,23 @@ function PDFViewer(browserApi) {
     this.toolbar_.docTitle = getFilenameFromURL(this.originalUrl_);
   }
 
+  this.coordsTransformer_ =
+      new PDFCoordsTransformer(this.plugin_.postMessage.bind(this.plugin_));
+
   document.body.addEventListener('change-page', e => {
     this.viewport_.goToPage(e.detail.page);
+    if (e.detail.origin == 'bookmark')
+      this.metrics.onFollowBookmark();
+    else if (e.detail.origin == 'pageselector')
+      this.metrics.onPageSelectorNavigation();
   });
 
-  document.body.addEventListener('change-page-and-y', e => {
-    this.viewport_.goToPageAndY(e.detail.page, e.detail.y);
+  document.body.addEventListener('change-page-and-xy', e => {
+    // The coordinates received in |e| are in page coordinates and need to be
+    // transformed to screen coordinates.
+    this.coordsTransformer_.request(
+        this.goToPageAndXY_.bind(this, e.detail.origin, e.detail.page), {},
+        e.detail.page, e.detail.x, e.detail.y);
   });
 
   document.body.addEventListener('navigate', e => {
@@ -230,6 +248,11 @@ function PDFViewer(browserApi) {
         Navigator.WindowOpenDisposition.NEW_BACKGROUND_TAB :
         Navigator.WindowOpenDisposition.CURRENT_TAB;
     this.navigator_.navigate(e.detail.uri, disposition);
+  });
+
+  document.body.addEventListener('dropdown-opened', e => {
+    if (e.detail == 'bookmarks')
+      this.metrics.onOpenBookmarksPanel();
   });
 
   this.toolbarManager_ =
@@ -427,6 +450,7 @@ PDFViewer.prototype = {
    * Rotate the plugin clockwise.
    */
   rotateClockwise_: function() {
+    this.metrics.onRotation();
     this.plugin_.postMessage({type: 'rotateClockwise'});
   },
 
@@ -435,6 +459,7 @@ PDFViewer.prototype = {
    * Rotate the plugin counter-clockwise.
    */
   rotateCounterClockwise_: function() {
+    this.metrics.onRotation();
     this.plugin_.postMessage({type: 'rotateCounterclockwise'});
   },
 
@@ -444,15 +469,18 @@ PDFViewer.prototype = {
    * @param {CustomEvent} e Event received with the new FittingType as detail.
    */
   fitToChanged_: function(e) {
-    if (e.detail == FittingType.FIT_TO_PAGE) {
+    if (e.detail.fittingType == FittingType.FIT_TO_PAGE) {
       this.viewport_.fitToPage();
       this.toolbarManager_.forceHideTopToolbar();
-    } else if (e.detail == FittingType.FIT_TO_WIDTH) {
+    } else if (e.detail.fittingType == FittingType.FIT_TO_WIDTH) {
       this.viewport_.fitToWidth();
-    } else if (e.detail == FittingType.FIT_TO_HEIGHT) {
+    } else if (e.detail.fittingType == FittingType.FIT_TO_HEIGHT) {
       this.viewport_.fitToHeight();
       this.toolbarManager_.forceHideTopToolbar();
     }
+
+    if (e.detail.userInitiated)
+      this.metrics.onFitTo(e.detail.fittingType);
   },
 
   /**
@@ -503,19 +531,15 @@ PDFViewer.prototype = {
    * @param {Object} params The open params passed in the URL.
    */
   handleURLParams_: function(params) {
-    if (params.page != undefined)
-      this.viewport_.goToPage(params.page);
-
-    if (params.position) {
-      // Make sure we don't cancel effect of page parameter.
-      this.viewport_.position = {
-        x: this.viewport_.position.x + params.position.x,
-        y: this.viewport_.position.y + params.position.y
-      };
-    }
-
     if (params.zoom)
       this.viewport_.setZoom(params.zoom);
+
+    if (params.position) {
+      this.viewport_.goToPageAndXY(
+          params.page ? params.page : 0, params.position.x, params.position.y);
+    } else if (params.page) {
+      this.viewport_.goToPage(params.page);
+    }
 
     if (params.view) {
       this.isUserInitiatedEvent_ = false;
@@ -531,6 +555,21 @@ PDFViewer.prototype = {
       }
       this.isUserInitiatedEvent_ = true;
     }
+  },
+
+  /**
+   * @private
+   * Moves the viewport to a point in a page. Called back after a
+   * 'transformPagePointReply' is returned from the plugin.
+   * @param {string} origin Identifier for the caller for logging purposes.
+   * @param {number} page The index of the page to go to. zero-based.
+   * @param {Object} message Message received from the plugin containing the
+   *     x and y to navigate to in screen coordinates.
+   */
+  goToPageAndXY_: function(origin, page, message) {
+    this.viewport_.goToPageAndXY(page, message.x, message.y);
+    if (origin == 'bookmark')
+      this.metrics.onFollowBookmark();
   },
 
   /**
@@ -695,6 +734,9 @@ PDFViewer.prototype = {
         break;
       case 'formFocusChange':
         this.isFormFieldFocused_ = message.data.focused;
+        break;
+      case 'transformPagePointReply':
+        this.coordsTransformer_.onReplyReceived(message);
         break;
     }
   },

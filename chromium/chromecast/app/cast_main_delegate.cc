@@ -18,6 +18,7 @@
 #include "base/path_service.h"
 #include "base/posix/global_descriptors.h"
 #include "build/build_config.h"
+#include "chromecast/chromecast_features.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/browser/cast_content_browser_client.h"
 #include "chromecast/common/cast_resource_delegate.h"
@@ -34,6 +35,7 @@
 #include "base/android/apk_assets.h"
 #include "chromecast/app/android/cast_crash_reporter_client_android.h"
 #include "chromecast/app/android/crash_handler.h"
+#include "ui/base/resource/resource_bundle_android.h"
 #elif defined(OS_LINUX)
 #include "chromecast/app/linux/cast_crash_reporter_client.h"
 #endif  // defined(OS_LINUX)
@@ -77,8 +79,12 @@ bool CastMainDelegate::BasicStartupComplete(int* exit_code) {
   }
 #endif  // defined(OS_ANDROID)
   logging::InitLogging(settings);
-  // Time, process, and thread ID are available through logcat.
+#if BUILDFLAG(IS_CAST_DESKTOP_BUILD)
+  logging::SetLogItems(true, true, true, false);
+#else
+  // Timestamp available through logcat -v time.
   logging::SetLogItems(true, true, false, false);
+#endif  // BUILDFLAG(IS_CAST_DESKTOP_BUILD)
 
 #if defined(OS_ANDROID)
   // Only delete the old crash dumps if the current process is the browser
@@ -203,6 +209,8 @@ void CastMainDelegate::InitializeResourceBundle() {
     DCHECK_GE(pak_fd, 0);
     global_descriptors->Set(kAndroidPakDescriptor, pak_fd, pak_region);
   }
+
+  ui::SetLocalePaksStoredInApk(true);
 #endif  // defined(OS_ANDROID)
 
   resource_delegate_.reset(new CastResourceDelegate());

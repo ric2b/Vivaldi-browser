@@ -414,6 +414,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
         }
       }
       break;
+
     case IDC_VIV_CONTENT_CONTEXT_ADDSEARCHENGINE: {
       base::string16 keyword(TemplateURL::GenerateKeyword(params.page_url));
       WebViewGuest* vivGuestView =
@@ -425,6 +426,7 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
 
       vivGuestView->CreateSearch(*args);
     } break;
+
     case IDC_VIV_COPY_TO_NOTE:
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "copyToNote",

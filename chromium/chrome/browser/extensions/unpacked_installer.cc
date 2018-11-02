@@ -8,15 +8,14 @@
 #include "base/callback.h"
 #include "base/files/file_util.h"
 #include "base/json/json_file_value_serializer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
-#include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/permissions_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/crx_file/id_util.h"
@@ -183,7 +182,7 @@ void UnpackedInstaller::StartInstallChecks() {
           ReportExtensionLoadError(kImportNotSharedModule);
           return;
         } else if (imported_module && (version_required.IsValid() &&
-                                       imported_module->version()->CompareTo(
+                                       imported_module->version().CompareTo(
                                            version_required) < 0)) {
           ReportExtensionLoadError(kImportMinVersionNewer);
           return;
@@ -192,10 +191,10 @@ void UnpackedInstaller::StartInstallChecks() {
     }
   }
 
-  policy_check_ = base::MakeUnique<PolicyCheck>(profile_, extension_);
-  requirements_check_ = base::MakeUnique<RequirementsChecker>(extension_);
+  policy_check_ = std::make_unique<PolicyCheck>(profile_, extension_);
+  requirements_check_ = std::make_unique<RequirementsChecker>(extension_);
 
-  check_group_ = base::MakeUnique<PreloadCheckGroup>();
+  check_group_ = std::make_unique<PreloadCheckGroup>();
   check_group_->set_stop_on_first_error(true);
 
   check_group_->AddCheck(policy_check_.get());
@@ -357,11 +356,8 @@ void UnpackedInstaller::ReportExtensionLoadError(const std::string &error) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (service_weak_.get()) {
-    ExtensionErrorReporter::GetInstance()->ReportLoadError(
-        extension_path_,
-        error,
-        service_weak_->profile(),
-        be_noisy_on_failure_);
+    LoadErrorReporter::GetInstance()->ReportLoadError(
+        extension_path_, error, service_weak_->profile(), be_noisy_on_failure_);
   }
 
   if (!callback_.is_null()) {

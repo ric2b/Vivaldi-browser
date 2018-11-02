@@ -53,7 +53,6 @@ video::-webkit-media-controls-panel {
 
   min-width: 48px;
   flex: 1;
-  padding-bottom: 12px;
 
   font-size: 12px;
   font-weight: normal;  /* Make sure that we don't inherit non-defaults. */
@@ -212,7 +211,7 @@ video::-webkit-media-controls-overlay-play-button {
   -webkit-appearance: -internal-media-control;
   display: flex;
   justify-content: center;
-  align-items: flex-end;
+  align-items: center;
   flex: 1;
   min-height: 0;
   width: 100%;
@@ -220,6 +219,7 @@ video::-webkit-media-controls-overlay-play-button {
   overflow: hidden;
   background: transparent;
   margin-bottom: -40px;
+  position: relative;
 }
 
 input[pseudo="-webkit-media-controls-overlay-play-button" i]::-internal-media-controls-overlay-play-button-internal {
@@ -258,9 +258,20 @@ video::-webkit-media-controls-timeline {
   -webkit-appearance: -internal-media-control;
 
   height: 2px;
-  padding: 0;
-  margin: 5px 16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  margin: 0;
   background: transparent;
+}
+
+audio::-webkit-media-controls-timeline {
+  padding-top: 26px;
+  padding-bottom: 26px;
+}
+
+video::-webkit-media-controls-timeline {
+  padding-top: 5px;
+  padding-bottom: 17px;
 }
 
 input[pseudo="-webkit-media-controls-timeline" i]::-internal-media-controls-segmented-track {
@@ -292,6 +303,8 @@ input[pseudo="-webkit-media-controls-timeline" i]::-internal-track-segment-backg
   position: absolute;
   width: 100%;
   top: 0;
+  height: 2px;
+  overflow: hidden;
 }
 
 input[pseudo="-webkit-media-controls-timeline" i]::-internal-track-segment-highlight-before,
@@ -394,8 +407,8 @@ video::-internal-media-controls-overflow-menu-list-item {
 }
 
 label[pseudo="-internal-media-controls-overflow-menu-list-item"] input {
-  margin-left: -22px;
-  margin-right: 2px;
+  margin-left: -9px;
+  margin-right: 6px;
 }
 
 audio::-internal-media-controls-text-track-list-header:hover,
@@ -537,4 +550,13 @@ audio::-internal-media-controls-loading-panel {
 .state-loading-metadata input[pseudo="-webkit-media-controls-timeline" i],
 .state-loading-metadata input[pseudo="-webkit-media-controls-overlay-play-button" i]::-internal-media-controls-overlay-play-button-internal {
   opacity: 0;
+}
+
+/**
+ * Scrubbing
+ */
+
+.state-scrubbing div[pseudo="-internal-media-controls-button-panel" i],
+.state-scrubbing input[pseudo="-webkit-media-controls-overlay-play-button" i] {
+  display: none;
 }

@@ -4,8 +4,9 @@
 
 #include "chrome/browser/ui/webui/print_preview/pdf_printer_handler.h"
 
+#include <windows.h>  // Must be in front of other Windows header files.
+
 #include <commdlg.h>
-#include <windows.h>
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
@@ -127,7 +128,7 @@ class PdfPrinterHandlerWinTest : public BrowserWithTestWindowTest {
     AddTab(browser(), GURL("chrome://print"));
 
     // Create the PDF printer
-    pdf_printer_ = base::MakeUnique<FakePdfPrinterHandler>(
+    pdf_printer_ = std::make_unique<FakePdfPrinterHandler>(
         profile(), browser()->tab_strip_model()->GetWebContentsAt(0), nullptr);
   }
 

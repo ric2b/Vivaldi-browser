@@ -91,7 +91,14 @@ class MockHostResolverBase
   int ResolveFromCache(const RequestInfo& info,
                        AddressList* addresses,
                        const NetLogWithSource& net_log) override;
+  int ResolveStaleFromCache(const RequestInfo& info,
+                            AddressList* addresses,
+                            HostCache::EntryStaleness* stale_info,
+                            const NetLogWithSource& source_net_log) override;
   HostCache* GetHostCache() override;
+  bool HasCached(base::StringPiece hostname,
+                 HostCache::Entry::Source* source_out,
+                 HostCache::EntryStaleness* stale_out) const override;
 
   // Detach cancelled request.
   void DetachRequest(size_t id);
@@ -129,8 +136,10 @@ class MockHostResolverBase
 
   // Resolve as IP or from |cache_| return cached error or
   // DNS_CACHE_MISS if failed.
-  int ResolveFromIPLiteralOrCache(const RequestInfo& info,
-                                  AddressList* addresses);
+  int ResolveFromIPLiteralOrCache(
+      const RequestInfo& info,
+      AddressList* addresses,
+      HostCache::EntryStaleness* stale_info = nullptr);
   // Resolve via |proc_|.
   int ResolveProc(const RequestInfo& info, AddressList* addresses);
   // Resolve request stored in |requests_|. Pass rv to callback.
@@ -286,6 +295,13 @@ class HangingHostResolver : public HostResolver {
   int ResolveFromCache(const RequestInfo& info,
                        AddressList* addresses,
                        const NetLogWithSource& net_log) override;
+  int ResolveStaleFromCache(const RequestInfo& info,
+                            AddressList* addresses,
+                            HostCache::EntryStaleness* stale_info,
+                            const NetLogWithSource& source_net_log) override;
+  bool HasCached(base::StringPiece hostname,
+                 HostCache::Entry::Source* source_out,
+                 HostCache::EntryStaleness* stale_out) const override;
 };
 
 // This class sets the default HostResolverProc for a particular scope.  The

@@ -20,7 +20,7 @@
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 
 namespace viz {
-class ContextProvider;
+class RasterContextProvider;
 }
 
 namespace cc {
@@ -100,9 +100,10 @@ class CC_EXPORT GpuImageDecodeCache
       public base::trace_event::MemoryDumpProvider,
       public base::MemoryCoordinatorClient {
  public:
-  enum class DecodeTaskType { PART_OF_UPLOAD_TASK, STAND_ALONE_DECODE_TASK };
+  enum class DecodeTaskType { kPartOfUploadTask, kStandAloneDecodeTask };
 
-  explicit GpuImageDecodeCache(viz::ContextProvider* context,
+  explicit GpuImageDecodeCache(viz::RasterContextProvider* context,
+                               bool use_transfer_cache,
                                SkColorType color_type,
                                size_t max_working_set_bytes);
   ~GpuImageDecodeCache() override;
@@ -156,9 +157,10 @@ class CC_EXPORT GpuImageDecodeCache
   void SetImageDecodingFailedForTesting(const DrawImage& image);
   bool DiscardableIsLockedForTesting(const DrawImage& image);
   bool IsInInUseCacheForTesting(const DrawImage& image) const;
+  sk_sp<SkImage> GetSWImageDecodeForTesting(const DrawImage& image);
 
  private:
-  enum class DecodedDataMode { GPU, CPU };
+  enum class DecodedDataMode { kGpu, kCpu, kTransferCache };
 
   // Stores stats tracked by both DecodedImageData and UploadedImageData.
   struct ImageDataBase {
@@ -203,9 +205,17 @@ class CC_EXPORT GpuImageDecodeCache
     void Unlock();
 
     void SetLockedData(std::unique_ptr<base::DiscardableMemory> data,
+                       sk_sp<SkImage> image,
                        bool out_of_raster);
     void ResetData();
     base::DiscardableMemory* data() const { return data_.get(); }
+    sk_sp<SkImage> image() const {
+      DCHECK(is_locked());
+      return image_;
+    }
+
+    // Test-only functions.
+    sk_sp<SkImage> ImageForTesting() const { return image_; }
 
     bool decode_failure = false;
     // Similar to |task|, but only is generated if there is no associated upload
@@ -216,6 +226,7 @@ class CC_EXPORT GpuImageDecodeCache
     void ReportUsageStats() const;
 
     std::unique_ptr<base::DiscardableMemory> data_;
+    sk_sp<SkImage> image_;
   };
 
   // Stores the GPU-side image and supporting fields.
@@ -224,32 +235,65 @@ class CC_EXPORT GpuImageDecodeCache
     ~UploadedImageData();
 
     void SetImage(sk_sp<SkImage> image);
-    void ResetImage();
-    const sk_sp<SkImage>& image() const { return image_; }
-    GrGLuint gl_id() const { return gl_id_; }
+    void SetTransferCacheId(uint32_t id);
+    void Reset();
+
+    // If in image mode.
+    const sk_sp<SkImage>& image() const {
+      DCHECK(mode_ == Mode::kSkImage || mode_ == Mode::kNone);
+      return image_;
+    }
+    GrGLuint gl_id() const {
+      DCHECK(mode_ == Mode::kSkImage || mode_ == Mode::kNone);
+      return gl_id_;
+    }
+
+    // If in transfer cache mode.
+    base::Optional<uint32_t> transfer_cache_id() const {
+      DCHECK(mode_ == Mode::kTransferCache || mode_ == Mode::kNone);
+      return transfer_cache_id_;
+    }
 
     // True if the image is counting against our working set limits.
     bool budgeted = false;
 
    private:
+    // Used for internal DCHECKs only.
+    enum class Mode {
+      kNone,
+      kSkImage,
+      kTransferCache,
+    };
+
     void ReportUsageStats() const;
 
+    Mode mode_ = Mode::kNone;
+
+    // Used if |mode_| == kSkImage.
     // May be null if image not yet uploaded / prepared.
     sk_sp<SkImage> image_;
     GrGLuint gl_id_ = 0;
+
+    // Used if |mode_| == kTransferCache.
+    base::Optional<uint32_t> transfer_cache_id_;
   };
 
   struct ImageData : public base::RefCountedThreadSafe<ImageData> {
     ImageData(DecodedDataMode mode,
               size_t size,
               const gfx::ColorSpace& target_color_space,
-              const SkImage::DeferredTextureImageUsageParams& upload_params);
+              SkFilterQuality quality,
+              int mip_level);
+
+    bool IsGpuOrTransferCache() const;
+    bool HasUploadedData() const;
 
     const DecodedDataMode mode;
     const size_t size;
     gfx::ColorSpace target_color_space;
+    SkFilterQuality quality;
+    int mip_level;
     bool is_at_raster = false;
-    SkImage::DeferredTextureImageUsageParams upload_params;
 
     // If true, this image is no longer in our |persistent_cache_| and will be
     // deleted as soon as its ref count reaches zero.
@@ -371,9 +415,12 @@ class CC_EXPORT GpuImageDecodeCache
   // These including deleting, unlocking, and locking textures.
   void RunPendingContextThreadOperations();
 
+  bool SupportsColorSpaces() const;
+
   const SkColorType color_type_;
-  viz::ContextProvider* context_;
-  sk_sp<GrContextThreadSafeProxy> context_threadsafe_proxy_;
+  const bool use_transfer_cache_ = false;
+  viz::RasterContextProvider* context_;
+  int max_texture_size_ = 0;
 
   // All members below this point must only be accessed while holding |lock_|.
   // The exception are const members like |normal_max_cache_bytes_| that can
@@ -403,6 +450,9 @@ class CC_EXPORT GpuImageDecodeCache
   std::vector<SkImage*> images_pending_complete_lock_;
   std::vector<SkImage*> images_pending_unlock_;
   std::vector<sk_sp<SkImage>> images_pending_deletion_;
+
+  std::vector<uint32_t> ids_pending_unlock_;
+  std::vector<uint32_t> ids_pending_deletion_;
 
   // Records the maximum number of items in the cache over the lifetime of the
   // cache. This is updated anytime we are requested to reduce cache usage.

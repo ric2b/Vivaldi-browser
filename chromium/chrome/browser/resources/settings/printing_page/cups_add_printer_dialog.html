@@ -4,7 +4,7 @@
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-input/paper-input.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner-lite.html">
 <link rel="import" href="../i18n_setup.html">
 <link rel="import" href="cups_add_printer_dialog_util.html">
 <link rel="import" href="cups_printer_shared_css.html">
@@ -26,7 +26,7 @@
         top: 80%;
       }
 
-      #searchSpinner paper-spinner {
+      #searchSpinner paper-spinner-lite {
         --paper-spinner-stroke-width: 2px;
         -webkit-margin-end: 3px;
         -webkit-margin-start: 20px;
@@ -44,7 +44,7 @@
            $i18n{noPrinterNearbyMessage}
         </div>
         <div id="searchSpinner" hidden="[[!discovering_]]">
-          <paper-spinner active="[[discovering_]]"></paper-spinner>
+          <paper-spinner-lite active="[[discovering_]]"></paper-spinner-lite>
           <span>$i18n{searchingNearbyPrinters}</span>
         </div>
       </div>
@@ -58,7 +58,7 @@
         <div>  <!-- Right group -->
           <paper-button class="cancel-button secondary-button"
               on-tap="onCancelTap_">
-            $i18n{cancelButtonText}
+            $i18n{cancel}
           </paper-button>
           <paper-button class="action-button" id="addPrinterButton"
               disabled="[[!canAddPrinter_(selectedPrinter)]]"
@@ -82,7 +82,7 @@
         margin-top: 18px;
       }
 
-      .search-printer-box paper-spinner {
+      .search-printer-box paper-spinner-lite {
         --paper-spinner-stroke-width: 2px;
         -webkit-margin-end: 3px;
         -webkit-margin-start: 20px;
@@ -160,7 +160,7 @@
           </div>
         </div>
         <div class="search-printer-box" id="searchInProgress" hidden>
-          <paper-spinner active></paper-spinner>
+          <paper-spinner-lite active></paper-spinner-lite>
           <span class="spinner-comment">$i18n{searchingPrinter}</span>
         </div>
         <div class="search-printer-box printer-not-found"
@@ -181,11 +181,12 @@
         <div>  <!-- Right group -->
           <paper-button class="cancel-button secondary-button"
               on-tap="onCancelTap_">
-            $i18n{cancelButtonText}
+            $i18n{cancel}
           </paper-button>
-          <paper-button class="action-button"
+          <paper-button id="addPrinterButton" class="action-button"
               on-tap="addPressed_"
-              disabled="[[!newPrinter.printerName]]">
+              disabled="[[!canAddPrinter_(newPrinter.printerName,
+                                          newPrinter.printerAddress)]]">
             $i18n{addPrinterButtonText}
           </paper-button>
         </div>
@@ -248,7 +249,7 @@
       <div slot="dialog-buttons">
         <paper-button class="cancel-button secondary-button"
             on-tap="onCancelTap_">
-          $i18n{cancelButtonText}
+          $i18n{cancel}
         </paper-button>
         <paper-button class="action-button" id="addPrinterButton"
             disabled="[[!canAddPrinter_(activePrinter.ppdManufacturer,
@@ -273,13 +274,13 @@
     <add-printer-dialog>
       <div slot="dialog-title">[[dialogTitle]]</div>
       <div slot="dialog-body">
-        <paper-spinner active></paper-spinner>
+        <paper-spinner-lite active></paper-spinner-lite>
         <div id="configuringMessage">$i18n{printerConfiguringMessage}</div>
       </div>
       <div slot="dialog-buttons">
         <paper-button class="cancel-button secondary-button"
             on-tap="onCancelConfiguringTap_">
-          $i18n{cancelButtonText}
+          $i18n{cancel}
         </paper-button>
       </div>
     </add-printer-dialog>

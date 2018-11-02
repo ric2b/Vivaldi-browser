@@ -25,7 +25,7 @@ VideoFrameCompositor::VideoFrameCompositor(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     std::unique_ptr<blink::WebVideoFrameSubmitter> submitter)
     : task_runner_(task_runner),
-      tick_clock_(new base::DefaultTickClock()),
+      tick_clock_(base::DefaultTickClock::GetInstance()),
       background_rendering_enabled_(true),
       background_rendering_timer_(
           FROM_HERE,
@@ -232,9 +232,9 @@ void VideoFrameCompositor::UpdateCurrentFrameIfStale() {
 }
 
 void VideoFrameCompositor::SetOnNewProcessedFrameCallback(
-    const OnNewProcessedFrameCB& cb) {
+    OnNewProcessedFrameCB cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  new_processed_frame_cb_ = cb;
+  new_processed_frame_cb_ = std::move(cb);
 }
 
 bool VideoFrameCompositor::ProcessNewFrame(
@@ -254,7 +254,7 @@ bool VideoFrameCompositor::ProcessNewFrame(
   SetCurrentFrame(frame);
 
   if (!new_processed_frame_cb_.is_null())
-    base::ResetAndReturn(&new_processed_frame_cb_).Run(base::TimeTicks::Now());
+    std::move(new_processed_frame_cb_).Run(base::TimeTicks::Now());
 
   return true;
 }

@@ -30,6 +30,7 @@
 namespace safe_browsing {
 namespace {
 
+using ::chrome_cleaner::ChromePromptValue;
 using ::chrome_cleaner::mojom::ChromePrompt;
 using ::chrome_cleaner::mojom::PromptAcceptance;
 using ::content::BrowserThread;
@@ -56,17 +57,24 @@ enum class ReporterEngine {
 //       enabled
 // - reporter_engine (ReporterEngine): the type of Cleaner engine specified in
 //       the SwReporterInvocation.
+// - cleaner_logs_enabled (bool): if logs can be collected in the cleaner
+//       process running in scanning mode.
+// - chrome_prompt (ChromePromptValue): indicates if this is a user-initiated
+//       run or if the user was prompted.
 class ChromeCleanerRunnerSimpleTest
     : public testing::TestWithParam<
           std::tuple<ChromeCleanerRunner::ChromeMetricsStatus,
-                     ReporterEngine>>,
+                     ReporterEngine,
+                     bool,
+                     ChromePromptValue>>,
       public ChromeCleanerRunnerTestDelegate {
  public:
   ChromeCleanerRunnerSimpleTest()
       : command_line_(base::CommandLine::NO_PROGRAM) {}
 
   void SetUp() override {
-    std::tie(metrics_status_, reporter_engine_) = GetParam();
+    std::tie(metrics_status_, reporter_engine_, cleaner_logs_enabled_,
+             chrome_prompt_) = GetParam();
 
     SetChromeCleanerRunnerTestDelegateForTesting(this);
   }
@@ -87,6 +95,10 @@ class ChromeCleanerRunnerSimpleTest
             chrome_cleaner::kEngineSwitch, "2");
         break;
     }
+
+    reporter_invocation.set_cleaner_logs_upload_enabled(cleaner_logs_enabled_);
+
+    reporter_invocation.set_chrome_prompt(chrome_prompt_);
 
     ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
         base::FilePath(FILE_PATH_LITERAL("cleaner.exe")), reporter_invocation,
@@ -132,6 +144,8 @@ class ChromeCleanerRunnerSimpleTest
   // Test fixture parameters.
   ChromeCleanerRunner::ChromeMetricsStatus metrics_status_;
   ReporterEngine reporter_engine_;
+  bool cleaner_logs_enabled_ = false;
+  ChromePromptValue chrome_prompt_ = ChromePromptValue::kUnspecified;
 
   // Set by LaunchTestProcess.
   base::CommandLine command_line_;
@@ -172,6 +186,12 @@ TEST_P(ChromeCleanerRunnerSimpleTest, LaunchParams) {
   EXPECT_EQ(
       metrics_status_ == ChromeMetricsStatus::kEnabled,
       command_line_.HasSwitch(chrome_cleaner::kEnableCrashReportingSwitch));
+  EXPECT_EQ(
+      cleaner_logs_enabled_,
+      command_line_.HasSwitch(chrome_cleaner::kWithScanningModeLogsSwitch));
+  EXPECT_EQ(
+      command_line_.GetSwitchValueASCII(chrome_cleaner::kChromePromptSwitch),
+      base::IntToString(static_cast<int>(chrome_prompt_)));
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -181,7 +201,10 @@ INSTANTIATE_TEST_CASE_P(
                    ChromeCleanerRunner::ChromeMetricsStatus::kDisabled),
             Values(ReporterEngine::kUnspecified,
                    ReporterEngine::kOldEngine,
-                   ReporterEngine::kNewEngine)));
+                   ReporterEngine::kNewEngine),
+            Bool(),
+            Values(ChromePromptValue::kPrompted,
+                   ChromePromptValue::kUserInitiated)));
 
 // Enum to be used as parameter for the ChromeCleanerRunnerTest fixture below.
 enum class UwsFoundState {

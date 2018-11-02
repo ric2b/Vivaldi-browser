@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
@@ -44,7 +43,7 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
                                                 bool emphasize,
                                                 DialogViewID currency_label_id,
                                                 DialogViewID amount_label_id) {
-  std::unique_ptr<views::View> row = base::MakeUnique<views::View>();
+  std::unique_ptr<views::View> row = std::make_unique<views::View>();
 
   // The vertical spacing for these rows is slightly different than the spacing
   // spacing for clickable rows, so don't use kPaymentRequestRowVerticalInsets.
@@ -57,7 +56,8 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
           ui::NativeTheme::kColorId_SeparatorColor),
       row_insets));
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(row.get());
+  views::GridLayout* layout =
+      row->SetLayoutManager(std::make_unique<views::GridLayout>(row.get()));
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
   // The first column has resize_percent = 1 so that it stretches all the way
@@ -78,9 +78,9 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
     currency_text = CreateMediumLabel(currency);
     amount_text = CreateMediumLabel(amount);
   } else {
-    label_text = base::MakeUnique<views::Label>(label);
+    label_text = std::make_unique<views::Label>(label);
     currency_text = CreateHintLabel(currency);
-    amount_text = base::MakeUnique<views::Label>(amount);
+    amount_text = std::make_unique<views::Label>(amount);
   }
   // Strings from the website may not match the locale of the device, so align
   // them according to the language of the text. This will result, for example,
@@ -93,9 +93,9 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
   amount_text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   amount_text->SetAllowCharacterBreak(true);
 
-  std::unique_ptr<views::View> amount_wrapper = base::MakeUnique<views::View>();
-  views::GridLayout* wrapper_layout =
-      views::GridLayout::CreateAndInstall(amount_wrapper.get());
+  std::unique_ptr<views::View> amount_wrapper = std::make_unique<views::View>();
+  views::GridLayout* wrapper_layout = amount_wrapper->SetLayoutManager(
+      std::make_unique<views::GridLayout>(amount_wrapper.get()));
   views::ColumnSet* wrapper_columns = wrapper_layout->AddColumnSet(0);
   wrapper_columns->AddColumn(views::GridLayout::LEADING,
                              views::GridLayout::CENTER, 0,
@@ -156,11 +156,11 @@ base::string16 OrderSummaryViewController::GetSheetTitle() {
 }
 
 void OrderSummaryViewController::FillContentView(views::View* content_view) {
-  views::BoxLayout* layout = new views::BoxLayout(views::BoxLayout::kVertical);
+  auto layout = std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
-  content_view->SetLayoutManager(layout);
+  content_view->SetLayoutManager(std::move(layout));
 
   bool is_mixed_currency = spec()->IsMixedCurrency();
   // Set the ID for the first few line items labels, for testing.

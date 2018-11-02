@@ -6,7 +6,7 @@ module content.mojom;
 
 import "mojo/common/time.mojom";
 import "third_party/WebKit/common/blob/blob.mojom";
-import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom";
+import "third_party/WebKit/common/service_worker/service_worker_stream_handle.mojom";
 
 [Native]
 struct ServiceWorkerResponse;
@@ -35,7 +35,7 @@ interface ServiceWorkerFetchResponseCallback {
   OnResponseStream(ServiceWorkerResponse response,
                    blink.mojom.ServiceWorkerStreamHandle body_as_stream,
                    mojo.common.mojom.Time dispatch_event_time);
-  // Provides no response to the request. The browser will fall back to the
+  // Provides no response to the request. The callee should fall back to the
   // network.
   OnFallback(mojo.common.mojom.Time dispatch_event_time);
 };

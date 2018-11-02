@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">‏Google Chrome یک مرورگر وب است که برنامه‌های کاربردی و صفحات وب را در یک چشم به هم زدن اجرا و باز می‌کند. استفاده از آن سریع و آسان است و همیشه در دسترس است. با برنامه‌های حفاظت در برابر فیشینگ و بدافزار تعبیه شده در Google Chrome، وب را با امنیت بیشتر مرور کنید.</translation>
 <translation id="1718131156967340976">‏انتخاب <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">‏به دلیل وجود خطا در ورود به سیستم، Google Chrome قادر به همگام‌سازی داده‌های شما نبود.</translation>
-<translation id="1759301979429102118">‏جزئیات مخاطبین شما می‌تواند به شما کمک کند فرم‌ها را سریع‌تر در Chrome تکمیل کنید.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">‏دریافت راهنمایی برای استفاده از سیستم عامل Chrome </translation>
 <translation id="1795405610103747296">‏Chrome را در تلفنتان نصب کنید. پیامکی به تلفنتان ارسال خواهیم کرد: <ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@
 <translation id="2429317896000329049">‏Google Chrome قادر به همگام‌سازی داده‌های شما نبود زیرا همگام‌سازی برای دامنه شما قابل دسترسی نیست.</translation>
 <translation id="2446511512801740068">‏Chrome قدیمی است چون برای مدتی راه‌اندازی مجدد نشده است. یک نسخه به‌روز دردسترس است و به‌محض راه‌اندازی مجدد اعمال خواهد شد.</translation>
 <translation id="2485422356828889247">حذف نصب</translation>
+<translation id="2534507159460261402">‏Google Pay (در Chrome کپی شد)</translation>
 <translation id="2580411288591421699">‏نمی‌توان همان نسخه Google Chrome را که اکنون در حال اجراست نصب کرد. لطفاً Google Chrome را ببندید و دوباره سعی کنید.</translation>
 <translation id="2586406160782125153">‏این کار داده‌های محصول مرورتان را برای همیشه از این دستگاه حذف می‌کند. برای بازیابی داده‌هایتان در فرصتی دیگر، با <ph name="USER_EMAIL" /> وارد سیستم Chrome شوید.</translation>
 <translation id="2588322182880276190">‏نشان‌واره Chrome</translation>
@@ -108,8 +108,6 @@
 <translation id="3889417619312448367">‏حذف نصب Google Chrome</translation>
 <translation id="3898493977366060150">‏مرور وب با هوشمندی‌های Google</translation>
 <translation id="4028693306634653894">‏دسترسی سریع‌تر به Chrome</translation>
-<translation id="4031074602479304239">‏Chrome مانع هدایت شما توسط این سایت به اینجا شده است</translation>
-<translation id="4042449298237264661">‏این رایانه دیگر به‌روزرسانی‌های Google Chrome را دریافت نمی‌کند زیرا Windows XP و Windows Vista دیگر پشتیبانی نمی‌شوند.</translation>
 <translation id="4050175100176540509">بهبودهای امنیتی مهم و ویژگی‌های جدید در جدیدترین نسخه در دسترس است.</translation>
 <translation id="4053720452172726777">‏‫سفارشی کردن و کنترل Google Chrome</translation>
 <translation id="4147555960264124640">‏شما با حساب مدیریت‌شده وارد سیستم می‌شوید و به سرپرست آن اجازه کنترل بر نمایه Google Chrome خود را می‌دهید. داده‌های Chrome شما شامل برنامه‌ها، نشانک‌ها، سابقه، گذرواژه‌ها و سایر تنظیمات برای همیشه به <ph name="USER_NAME" /> مرتبط خواهد شد. می‌توانید این داده‌ها را از طریق داشبورد حساب‌های Google حذف کنید اما نمی‌توانید این داده‌ها را به حساب دیگری مرتبط سازید. <ph name="LEARN_MORE" /></translation>
@@ -151,7 +149,6 @@
 <translation id="5170938038195470297">‏نمایهٔ شما نمی‌تواند استفاده شود زیرا مربوط به یک نسخه جدیدتر از Google Chrome است. بعضی از ویژگی‌ها ممکن است موجود نباشند. لطفاً یک مسیر دیگر برای نمایه تعیین کنید یا از نسخه جدیدتر Chrome استفاده کنید.</translation>
 <translation id="5193136243808726294">‏Google Chrome OS نمی‌‎تواند این صفحه را باز کند.</translation>
 <translation id="5204098752394657250">‏Google Chrome <ph name="TERMS_OF_SERVICE_LINK" />شرایط خدمات<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
-<translation id="5243785881901838525">‏Google Payments (در Chrome کپی شد)</translation>
 <translation id="5251420635869119124">‏مهمان‌‌ها می‌توانند از Chrome استفاده کنند بدون اینکه اثری از خود به جا بگذارند.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{‏Google Chrome بعد از ۱ ثانیه راه‌اندازی مجدد می‌شود.}one{‏Google Chrome بعد از # ثانیه راه‌اندازی مجدد می‌شود.}other{‏Google Chrome بعد از # ثانیه راه‌اندازی مجدد می‌شود.}}</translation>
 <translation id="532046782124376502">‏اخطار: Google Chrome نمی تواند مانع از ثبت سابقه مرور شما توسط افزونه‌ها شود. برای غیرفعال کردن این افزونه در حالت ناشناس، این گزینه را لغو انتخاب کنید.</translation>
@@ -180,15 +177,12 @@
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">‏به‌روزرسانی سیستم عامل Ch&amp;rome</translation>
 <translation id="6235018212288296708">‏قانون ورودی برای Google Chrome به منظور اجازه به ترافیک mDNS.</translation>
-<translation id="6236285698028833233">‏Google Chrome به‌روزرسانی را متوقف کرده است و دیگر از این نسخه سیستم عامل پشتیبانی نمی‌کند.</translation>
 <translation id="6291089322031436445">‏برنامه‌های Chrome نسخه Dev</translation>
 <translation id="6291549208091401781">‏Google Chrome از قبل برای همه کاربران این رایانه نصب شده است.</translation>
 <translation id="6338556085225130112">‏به‌روزرسانی Google Chrome</translation>
 <translation id="6368958679917195344">‏Chrome OS با یک <ph name="BEGIN_LINK_CROS_OSS" />نرم‌افزار منبع آزاد<ph name="END_LINK_CROS_OSS" /> دیگر امکان‌پذیر است.</translation>
 <translation id="6393863479814692971">‏Chrome برای این سایت به مجوز دسترسی به دوربین و میکروفون نیاز دارد.</translation>
-<translation id="6400076122676892962">‏دریافت به‌روزرسانی‌های Google Chrome به زودی در این رایانه متوقف خواهد شد زیرا Mac OS X نسخه ۱۰٫۶،‏ ۱۰٫۷ و ۱۰٫۸ دیگر پشتیبانی نمی‌شود.</translation>
 <translation id="6410540444482791104">‏می‌توانید با ارسال خودکار برخی از اطلاعات سیستم و محتوای صفحه به Google‏، Chrome را ایمن‌تر و آسان‌تر کنید. Google از این اطلاعات برای شناسایی برنامه‌ها و سایت‌های خطرناک استفاده می‌کند.</translation>
-<translation id="6470176598693778404">‏این رایانه دیگر به‌روزرسانی‌های Google Chrome را دریافت نمی‌کند زیرا Mac OS X نسخه ۱۰٫۶،‏ ۱۰٫۷ و ۱۰٫۸ دیگر پشتیبانی نمی‌شود.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{‏در حال حاضر یک بارگیری در حال انجام است. آیا می‌خواهید بارگیری را لغو کنید و از Google Chrome خارج شوید؟}one{‏در حال حاضر # بارگیری در حال انجام است. آیا می‌خواهید بارگیری را لغو کنید و از Google Chrome خارج شوید؟}other{‏در حال حاضر # بارگیری در حال انجام است. آیا می‌خواهید بارگیری‌ها را لغو کنید و از Google Chrome خارج شوید؟}}</translation>
 <translation id="6566149418543181476">‏درحال به‌روزرسانی Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">‏شما از <ph name="PROFILE_EMAIL" /> برای همگام‌سازی موارد Chrome خودتان استفاده می‌کنید. برای به‌روزرسانی تنظیمات ترجیحی همگام‌سازی‌تان یا استفاده از Chrome بدون حساب Google، به <ph name="SETTINGS_LINK" /> مراجعه کنید.</translation>
@@ -209,7 +203,6 @@
 <translation id="7164397146364144019">‏می‌توانید با گزارش خودکار جزئیات حوادث امنیتی احتمالی به Google به ایمن‌تر شدن Chrome و استفاده آسان‌تر از آن کمک کنید.</translation>
 <translation id="7185038942300673794">‏<ph name="EXTENSION_NAME" /> به Chrome اضافه شد.</translation>
 <translation id="7242029209006116544">‏شما با حساب مدیریت‌شده وارد سیستم می‌شوید و به سرپرست آن اجازه کنترل بر نمایه Google Chrome خود را می‌دهید. داده‌های Chrome شما شامل برنامه‌ها، نشانک‌ها، سابقه، گذرواژه‌ها و سایر تنظیمات برای همیشه به <ph name="USER_NAME" /> مرتبط خواهد شد. می‌توانید این داده‌ها را از طریق داشبورد حساب‌های Google حذف کنید اما نمی‌توانید این داده‌ها را به حساب دیگری مرتبط سازید. در صورت تمایل برای ذخیره داده‌های Chrome موجود به صورت جداگانه می‌توانید نمایه جدیدی ایجاد کنید. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">‏دریافت به‌روزرسانی‌های Google Chrome به‌زودی در این رایانه متوقف می‌شود، زیرا Windows XP و Windows Vista دیگر پشتیبانی نمی‌شوند.</translation>
 <translation id="7330164299247909639">‏گواهینامه احراز هویت تأیید نشد. لطفاً به‌عنوان <ph name="USER_NAME" /> دوباره به سیستم Google Chrome وارد شوید یا برای دریافت اطلاعات بیشتر با سرپرستتان تماس بگیرید. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">پنجرهٔ جدید</translation>
 <translation id="7369650938475876456">‏استفاده از گذرواژه قوی ایجادشده توسط Chrome</translation>
@@ -222,6 +215,7 @@
 <translation id="7494905215383356681">‏مجوزهای منبع باز Chrome</translation>
 <translation id="7535429826459677826">‏Google Chrome نسخه Dev</translation>
 <translation id="7552219221109926349">‏سیستم عامل Chrome به این زبان نشان داده می‌شود</translation>
+<translation id="7589360514048265910">‏این رایانه دیگر به‌روزرسانی‌های Google Chrome را دریافت نمی‌کند، زیرا Mac OS X نسخه ۱۰.۹ دیگر پشتیبانی نمی‌شود.</translation>
 <translation id="7592736734348559088">‏Google Chrome قادر به همگام‌سازی داده‌های شما نبود زیرا جزئیات ورود به حساب شما به‌روز نیست.</translation>
 <translation id="7626032353295482388">‏به Chrome خوش آمدید</translation>
 <translation id="7747138024166251722">نصب‌کننده نتوانست دایرکتوری موقت ایجاد کند. لطفاً فضای خالی دیسک و اجازه نصب نرم‌افزار را بررسی کنید.</translation>
@@ -237,6 +231,7 @@
 <translation id="7896673875602241923">‏شخصی قبلاً به‌عنوان <ph name="ACCOUNT_EMAIL_LAST" /> به سیستم Chrome در این رایانه وارد شده است. برای اینکه اطلاعاتتان جدا حفظ شود، لطفاً کاربر Chrome جدیدی ایجاد کنید.</translation>
 <translation id="7908168227788431038">‏تقریباً به‌روز شده است! برای تمام کردن به‌روزرسانی، Google Chrome را راه‌اندازی مجدد کنید.</translation>
 <translation id="795025003224538582">راه‌اندازی مجدد نشود</translation>
+<translation id="7962410387636238736">‏این رایانه دیگر به‌روزرسانی‌های Google Chrome را دریافت نمی‌کند زیرا Windows XP و Windows Vista دیگر پشتیبانی نمی‌شوند</translation>
 <translation id="8005540215158006229">‏Chrome تقریباً آماده است.</translation>
 <translation id="8008534537613507642">‏نصب مجدد Chrome</translation>
 <translation id="8030318113982266900">درحال به روزرسانی دستگاه شما به کانال <ph name="CHANNEL_NAME" />...</translation>
@@ -267,7 +262,6 @@
 <translation id="8796108026289707191">‏هم‌اکنون باید Google Chrome را راه‌اندازی مجدد کنید.</translation>
 <translation id="8823341990149967727">‏نسخه Chrome قدیمی است</translation>
 <translation id="884296878221830158">‏این برنامه همچنین صفحه‌ای را که هنگام راه‌اندازی Chrome یا کلیک کردن روی دکمه صفحه اصلی نشان داده می‌شود، کنترل می‌کند.</translation>
-<translation id="8851136666856101339">اصلی</translation>
 <translation id="8862326446509486874">شما حقوق لازم برای نصب در سطح سیستم را ندارید. دوباره به‌عنوان سرپرست نصب‌کننده را اجرا کنید.</translation>
 <translation id="8914504000324227558">‏راه‌اندازی مجدد Chrome</translation>
 <translation id="9026991721384951619">‏سیستم‌عامل Chrome قادر به همگام‌سازی داده‌هایتان نبود زیرا جزئیات ورود به سیستم حساب شما به‌روز نیست.</translation>

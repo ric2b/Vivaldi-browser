@@ -40,9 +40,9 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     ConstructorCallWith=Document
 ] interface Document : Node {
     [SameObject] readonly attribute DOMImplementation implementation;
-    [ImplementedAs=urlForBinding] readonly attribute DOMString URL;
+    [ImplementedAs=urlForBinding] readonly attribute USVString URL;
     // FIXME: documentURI should not be nullable.
-    [ImplementedAs=urlForBinding] readonly attribute DOMString? documentURI;
+    [ImplementedAs=urlForBinding] readonly attribute USVString? documentURI;
     [MeasureAs=DocumentOrigin] readonly attribute DOMString origin;
     [RuntimeEnabled=Suborigins] readonly attribute DOMString suborigin;
     readonly attribute DOMString compatMode;
@@ -94,8 +94,8 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     // resource metadata management
 
     [PutForwards=href, Unforgeable] readonly attribute Location? location;
-    [RaisesException=Setter] attribute DOMString domain;
-    readonly attribute DOMString referrer;
+    [RaisesException=Setter] attribute USVString domain;
+    readonly attribute USVString referrer;
     [RaisesException, RuntimeCallStatsCounter=DocumentCookie] attribute DOMString cookie;
     readonly attribute DOMString lastModified;
     readonly attribute DocumentReadyState readyState;
@@ -158,8 +158,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [MeasureAs=DocumentCaptureEvents] void captureEvents();
     [MeasureAs=DocumentReleaseEvents] void releaseEvents();
 
-    // FIXME: all should not be [Replaceable].
-    [Replaceable, MeasureAs=DocumentAll] readonly attribute HTMLAllCollection all;
+    [SameObject, MeasureAs=DocumentAll] readonly attribute HTMLAllCollection all;
 
     // CSS Object Model (CSSOM)
     // https://drafts.csswg.org/cssom/#extensions-to-the-document-interface

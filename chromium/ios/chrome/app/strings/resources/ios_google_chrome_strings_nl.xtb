@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="nl">
 <translation id="1326317727527857210">Log in bij Chrome om de tabbladen van je andere apparaten te bekijken.</translation>
-<translation id="1685087038067318291">Ontdek webpagina's die worden verzonden door objecten in de buurt. Wanneer Bluetooth is ingeschakeld, kan Chrome webpagina's verzamelen die zijn gekoppeld aan objecten om je heen en ze anoniem verzenden naar Google om de nuttigste pagina's te vinden. <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Privacybeleid voor Google Chrome</translation>
+<translation id="1863312987075920112">Als je deze app gebruikt, ga je akkoord met de <ph name="BEGIN_LINK_TOS" />Servicevoorwaarden<ph name="END_LINK_TOS" /> en het <ph name="BEGIN_LINK_PRIVACY" />Privacybeleid<ph name="END_LINK_PRIVACY" /> van Chrome.</translation>
 <translation id="2147651015520127414">Chrome heeft geverifieerd dat <ph name="ISSUER" /> het certificaat voor deze website heeft verstrekt.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Alle rechten voorbehouden.</translation>
 <translation id="2342981853652716282">Log in bij Chrome om je bladwijzers, wachtwoorden en meer op al je apparaten op te halen.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Sommige add-ons kunnen ervoor zorgen dat Chrome crasht. Verwijder de volgende add-ons:</translation>
 <translation id="4615174829807303908">Je logt uit van een account dat wordt beheerd door <ph name="SIGNOUT_MANAGED_DOMAIN" />. Hierdoor worden je Chrome-gegevens verwijderd van dit apparaat. Je gegevens blijven echter opgeslagen in je Google-account.</translation>
 <translation id="5389212809648216794">Google Chrome kan je camera niet gebruiken omdat deze wordt gebruikt door een andere app</translation>
-<translation id="5566557026214762153">Door deze app te gebruiken, accepteer je <ph name="BEGIN_LINK" />Servicevoorwaarden<ph name="END_LINK" /> van Chrome.</translation>
 <translation id="5639704535586432836">Open Instellingen &gt; Privacy &gt; Camera &gt; Google Chrome en zet de camera aan.</translation>
 <translation id="5642200033778930880">Google Chrome kan je camera niet gebruiken in de modus 'Gesplitste weergave'</translation>
 <translation id="5703130498371792817">Ben je fan van Chrome? <ph name="BEGIN_LINK" />Beoordeel deze app<ph name="END_LINK" /></translation>

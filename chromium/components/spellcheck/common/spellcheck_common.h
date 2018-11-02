@@ -24,7 +24,8 @@ static const int kMaxSuggestions = 5;
 static const size_t MAX_SYNCABLE_DICTIONARY_WORDS = 1300;
 
 // Maximum number of bytes in a word that can be added to the custom spellcheck
-// dictionary.
+// dictionary. When changing this value, also change the corresponding value in
+// /src/chrome/browser/resources/settings/languages_page/edit_dictionary_page.js
 static const size_t MAX_CUSTOM_DICTIONARY_WORD_BYTES = 99;
 
 base::FilePath GetVersionedFileName(const std::string& input_language,
@@ -41,7 +42,7 @@ base::FilePath GetVersionedFileName(const std::string& input_language,
 std::string GetCorrespondingSpellCheckLanguage(const std::string& language);
 
 // Get SpellChecker supported languages.
-void SpellCheckLanguages(std::vector<std::string>* languages);
+std::vector<std::string> SpellCheckLanguages();
 
 // Gets the ISO codes for the language and country of this |locale|. The
 // |locale| is an ISO locale ID that may not include a country ID, e.g., "fr" or

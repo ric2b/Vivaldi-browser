@@ -7,6 +7,7 @@
       'target_name': 'code_section',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(EXTERNS_GYP):developer_private',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -17,7 +18,6 @@
         '<(DEPTH)/ui/webui/resources/cr_elements/compiled_resources2.gyp:cr_container_shadow_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(EXTERNS_GYP):developer_private',
         'item',
@@ -226,7 +226,6 @@
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
-        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(EXTERNS_GYP):developer_private',
         'shortcut_util',
       ],
@@ -253,8 +252,10 @@
     {
       'target_name': 'toolbar',
       'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-a11y-announcer/compiled_resources2.gyp:iron-a11y-announcer-extracted',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:cr',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
         '<(EXTERNS_GYP):metrics_private',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],

@@ -16,7 +16,9 @@
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#if defined(PLATFORM_MEDIA_HWA)
 #include "gpu/ipc/service/gpu_command_buffer_stub.h"
+#endif
 #include "ipc/ipc_listener.h"
 
 #include <map>
@@ -35,7 +37,9 @@ class DataBuffer;
 
 namespace media {
 
+#if defined(PLATFORM_MEDIA_HWA)
 class GpuCommandBufferStub;
+#endif
 class IPCDataSourceImpl;
 class PlatformMediaPipeline;
 
@@ -47,8 +51,11 @@ class PlatformMediaPipeline;
 class IPCMediaPipeline : public IPC::Listener {
  public:
   IPCMediaPipeline(IPC::Sender* channel,
-                   int32_t routing_id,
-                   gpu::GpuCommandBufferStub* command_buffer);
+                   int32_t routing_id
+#if defined(PLATFORM_MEDIA_HWA)
+                   , gpu::GpuCommandBufferStub* command_buffer
+#endif
+                   );
   ~IPCMediaPipeline() override;
 
   // IPC::Listener implementation.
@@ -134,9 +141,11 @@ class IPCMediaPipeline : public IPC::Listener {
   base::ThreadChecker thread_checker_;
 
   PlatformVideoConfig video_config_;
+#if defined(PLATFORM_MEDIA_HWA)
   gpu::GpuCommandBufferStub* command_buffer_;
   // Maps texture ID used in renderer process to one used in GPU process.
   std::map<uint32_t, uint32_t> known_picture_buffers_;
+#endif
 
   // A buffer for decoded media data, shared with the render process.  Filled in
   // the GPU process, consumed in the renderer process.

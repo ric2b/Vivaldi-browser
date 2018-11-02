@@ -17,6 +17,7 @@
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBValue.h"
 
 using blink::WebBlobInfo;
+using blink::WebData;
 using blink::WebIDBCallbacks;
 using blink::WebIDBDatabase;
 using blink::WebIDBMetadata;
@@ -65,56 +66,58 @@ void ConvertDatabaseMetadata(const content::IndexedDBDatabaseMetadata& metadata,
     ConvertObjectStoreMetadata(iter.second, &output->object_stores[i++]);
 }
 
-void ConvertReturnValue(const indexed_db::mojom::ReturnValuePtr& value,
-                        WebIDBValue* web_value) {
-  IndexedDBCallbacksImpl::ConvertValue(value->value, web_value);
-  web_value->primary_key = WebIDBKeyBuilder::Build(value->primary_key);
-  web_value->key_path = WebIDBKeyPathBuilder::Build(value->key_path);
+WebIDBValue ConvertReturnValue(const indexed_db::mojom::ReturnValuePtr& value) {
+  if (!value)
+    return WebIDBValue(WebData(), WebVector<WebBlobInfo>());
+
+  WebIDBValue web_value = IndexedDBCallbacksImpl::ConvertValue(value->value);
+  web_value.SetInjectedPrimaryKey(WebIDBKeyBuilder::Build(value->primary_key),
+                                  WebIDBKeyPathBuilder::Build(value->key_path));
+  return web_value;
 }
 
 }  // namespace
 
 // static
-void IndexedDBCallbacksImpl::ConvertValue(
-    const indexed_db::mojom::ValuePtr& value,
-    WebIDBValue* web_value) {
-  if (value->bits.empty())
-    return;
+WebIDBValue IndexedDBCallbacksImpl::ConvertValue(
+    const indexed_db::mojom::ValuePtr& value) {
+  if (!value || value->bits.empty())
+    return WebIDBValue(WebData(), WebVector<WebBlobInfo>());
 
-  blink::WebVector<WebBlobInfo> local_blob_info(
-      value->blob_or_file_info.size());
+  WebVector<WebBlobInfo> local_blob_info;
+  local_blob_info.reserve(value->blob_or_file_info.size());
   for (size_t i = 0; i < value->blob_or_file_info.size(); ++i) {
     const auto& info = value->blob_or_file_info[i];
     if (info->file) {
-      local_blob_info[i] =
-          WebBlobInfo(WebString::FromUTF8(info->uuid),
-                      blink::FilePathToWebString(info->file->path),
-                      WebString::FromUTF16(info->file->name),
-                      WebString::FromUTF16(info->mime_type),
-                      info->file->last_modified.ToDoubleT(), info->size,
-                      info->blob.PassHandle());
+      local_blob_info.emplace_back(WebString::FromUTF8(info->uuid),
+                                   blink::FilePathToWebString(info->file->path),
+                                   WebString::FromUTF16(info->file->name),
+                                   WebString::FromUTF16(info->mime_type),
+                                   info->file->last_modified.ToDoubleT(),
+                                   info->size, info->blob.PassHandle());
     } else {
-      local_blob_info[i] = WebBlobInfo(WebString::FromUTF8(info->uuid),
-                                       WebString::FromUTF16(info->mime_type),
-                                       info->size, info->blob.PassHandle());
+      local_blob_info.emplace_back(WebString::FromUTF8(info->uuid),
+                                   WebString::FromUTF16(info->mime_type),
+                                   info->size, info->blob.PassHandle());
     }
   }
 
-  web_value->data.Assign(&*value->bits.begin(), value->bits.size());
-  web_value->web_blob_info.Swap(local_blob_info);
+  return WebIDBValue(WebData(&*value->bits.begin(), value->bits.size()),
+                     std::move(local_blob_info));
 }
-
 
 IndexedDBCallbacksImpl::IndexedDBCallbacksImpl(
     std::unique_ptr<WebIDBCallbacks> callbacks,
     int64_t transaction_id,
     const base::WeakPtr<WebIDBCursorImpl>& cursor,
-    scoped_refptr<base::SingleThreadTaskRunner> io_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
     : internal_state_(new InternalState(std::move(callbacks),
                                         transaction_id,
                                         cursor,
-                                        std::move(io_runner))),
-      callback_runner_(base::ThreadTaskRunnerHandle::Get()) {}
+                                        std::move(io_runner),
+                                        callback_runner)),
+      callback_runner_(std::move(callback_runner)) {}
 
 IndexedDBCallbacksImpl::~IndexedDBCallbacksImpl() {
   callback_runner_->DeleteSoon(FROM_HERE, internal_state_);
@@ -234,11 +237,13 @@ IndexedDBCallbacksImpl::InternalState::InternalState(
     std::unique_ptr<blink::WebIDBCallbacks> callbacks,
     int64_t transaction_id,
     const base::WeakPtr<WebIDBCursorImpl>& cursor,
-    scoped_refptr<base::SingleThreadTaskRunner> io_runner)
+    scoped_refptr<base::SingleThreadTaskRunner> io_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> callback_runner)
     : callbacks_(std::move(callbacks)),
       transaction_id_(transaction_id),
       cursor_(cursor),
-      io_runner_(std::move(io_runner)) {
+      io_runner_(std::move(io_runner)),
+      callback_runner_(std::move(callback_runner)) {
   IndexedDBDispatcher::ThreadSpecificInstance()->RegisterMojoOwnedCallbacks(
       this);
 }
@@ -277,8 +282,8 @@ void IndexedDBCallbacksImpl::InternalState::UpgradeNeeded(
     blink::WebIDBDataLoss data_loss,
     const std::string& data_loss_message,
     const content::IndexedDBDatabaseMetadata& metadata) {
-  WebIDBDatabase* database =
-      new WebIDBDatabaseImpl(std::move(database_info), io_runner_);
+  WebIDBDatabase* database = new WebIDBDatabaseImpl(
+      std::move(database_info), io_runner_, callback_runner_);
   WebIDBMetadata web_metadata;
   ConvertDatabaseMetadata(metadata, &web_metadata);
   callbacks_->OnUpgradeNeeded(old_version, database, web_metadata, data_loss,
@@ -290,8 +295,10 @@ void IndexedDBCallbacksImpl::InternalState::SuccessDatabase(
     DatabaseAssociatedPtrInfo database_info,
     const content::IndexedDBDatabaseMetadata& metadata) {
   WebIDBDatabase* database = nullptr;
-  if (database_info.is_valid())
-    database = new WebIDBDatabaseImpl(std::move(database_info), io_runner_);
+  if (database_info.is_valid()) {
+    database = new WebIDBDatabaseImpl(std::move(database_info), io_runner_,
+                                      callback_runner_);
+  }
 
   WebIDBMetadata web_metadata;
   ConvertDatabaseMetadata(metadata, &web_metadata);
@@ -304,14 +311,11 @@ void IndexedDBCallbacksImpl::InternalState::SuccessCursor(
     const IndexedDBKey& key,
     const IndexedDBKey& primary_key,
     indexed_db::mojom::ValuePtr value) {
-  WebIDBValue web_value;
-  if (value)
-    IndexedDBCallbacksImpl::ConvertValue(value, &web_value);
-
-  WebIDBCursorImpl* cursor =
-      new WebIDBCursorImpl(std::move(cursor_info), transaction_id_, io_runner_);
+  WebIDBCursorImpl* cursor = new WebIDBCursorImpl(
+      std::move(cursor_info), transaction_id_, io_runner_, callback_runner_);
   callbacks_->OnSuccess(cursor, WebIDBKeyBuilder::Build(key),
-                        WebIDBKeyBuilder::Build(primary_key), web_value);
+                        WebIDBKeyBuilder::Build(primary_key),
+                        ConvertValue(value));
   callbacks_.reset();
 }
 
@@ -323,10 +327,7 @@ void IndexedDBCallbacksImpl::InternalState::SuccessKey(
 
 void IndexedDBCallbacksImpl::InternalState::SuccessValue(
     indexed_db::mojom::ReturnValuePtr value) {
-  WebIDBValue web_value;
-  if (value)
-    ConvertReturnValue(value, &web_value);
-  callbacks_->OnSuccess(web_value);
+  callbacks_->OnSuccess(ConvertReturnValue(value));
   callbacks_.reset();
 }
 
@@ -334,11 +335,9 @@ void IndexedDBCallbacksImpl::InternalState::SuccessCursorContinue(
     const IndexedDBKey& key,
     const IndexedDBKey& primary_key,
     indexed_db::mojom::ValuePtr value) {
-  WebIDBValue web_value;
-  if (value)
-    ConvertValue(value, &web_value);
   callbacks_->OnSuccess(WebIDBKeyBuilder::Build(key),
-                        WebIDBKeyBuilder::Build(primary_key), web_value);
+                        WebIDBKeyBuilder::Build(primary_key),
+                        ConvertValue(value));
   callbacks_.reset();
 }
 
@@ -346,12 +345,13 @@ void IndexedDBCallbacksImpl::InternalState::SuccessCursorPrefetch(
     const std::vector<IndexedDBKey>& keys,
     const std::vector<IndexedDBKey>& primary_keys,
     std::vector<indexed_db::mojom::ValuePtr> values) {
-  std::vector<WebIDBValue> web_values(values.size());
-  for (size_t i = 0; i < values.size(); ++i)
-    ConvertValue(values[i], &web_values[i]);
+  std::vector<WebIDBValue> web_values;
+  web_values.reserve(values.size());
+  for (const indexed_db::mojom::ValuePtr& value : values)
+    web_values.emplace_back(ConvertValue(value));
 
   if (cursor_) {
-    cursor_->SetPrefetchData(keys, primary_keys, web_values);
+    cursor_->SetPrefetchData(keys, primary_keys, std::move(web_values));
     cursor_->CachedContinue(callbacks_.get());
   }
   callbacks_.reset();
@@ -359,10 +359,11 @@ void IndexedDBCallbacksImpl::InternalState::SuccessCursorPrefetch(
 
 void IndexedDBCallbacksImpl::InternalState::SuccessArray(
     std::vector<indexed_db::mojom::ReturnValuePtr> values) {
-  blink::WebVector<WebIDBValue> web_values(values.size());
-  for (size_t i = 0; i < values.size(); ++i)
-    ConvertReturnValue(values[i], &web_values[i]);
-  callbacks_->OnSuccess(web_values);
+  WebVector<WebIDBValue> web_values;
+  web_values.reserve(values.size());
+  for (const indexed_db::mojom::ReturnValuePtr& value : values)
+    web_values.emplace_back(ConvertReturnValue(value));
+  callbacks_->OnSuccess(std::move(web_values));
   callbacks_.reset();
 }
 

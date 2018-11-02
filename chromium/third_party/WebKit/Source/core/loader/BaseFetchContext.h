@@ -5,6 +5,7 @@
 #ifndef BaseFetchContext_h
 #define BaseFetchContext_h
 
+#include "common/net/ip_address_space.mojom-blink.h"
 #include "core/CoreExport.h"
 #include "core/frame/WebFeatureForward.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -13,7 +14,6 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "platform/wtf/Optional.h"
-#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
@@ -73,7 +73,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual bool IsSVGImageChromeClient() const = 0;
   virtual bool ShouldBlockFetchByMixedContentCheck(
       WebURLRequest::RequestContext,
-      WebURLRequest::FrameType,
+      network::mojom::RequestContextFrameType,
       ResourceRequest::RedirectStatus,
       const KURL&,
       SecurityViolationReportingPolicy) const = 0;
@@ -83,7 +83,7 @@ class CORE_EXPORT BaseFetchContext : public FetchContext {
   virtual String GetOutgoingReferrer() const = 0;
   virtual const KURL& Url() const = 0;
   virtual const SecurityOrigin* GetParentSecurityOrigin() const = 0;
-  virtual Optional<WebAddressSpace> GetAddressSpace() const = 0;
+  virtual Optional<mojom::IPAddressSpace> GetAddressSpace() const = 0;
   virtual const ContentSecurityPolicy* GetContentSecurityPolicy() const = 0;
 
   virtual void AddConsoleMessage(ConsoleMessage*) const = 0;

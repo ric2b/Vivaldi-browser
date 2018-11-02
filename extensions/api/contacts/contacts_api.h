@@ -127,6 +127,27 @@ class ContactsGetAllFunction : public ContactFunctionWithCallback {
   DISALLOW_COPY_AND_ASSIGN(ContactsGetAllFunction);
 };
 
+class ContactsGetAllEmailAddressesFunction
+    : public ContactFunctionWithCallback {
+  DECLARE_EXTENSION_FUNCTION("contacts.getAllEmailAddresses",
+                             CONTACTS_GETALL_EMAILADDRESSES)
+ public:
+  ContactsGetAllEmailAddressesFunction() = default;
+
+ protected:
+  ~ContactsGetAllEmailAddressesFunction() override;
+
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the contact function to provide results.
+  void GetAllEmailAddressesComplete(
+      std::shared_ptr<contact::EmailAddressRows> results);
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContactsGetAllEmailAddressesFunction);
+};
+
 class ContactsCreateFunction : public ContactAsyncFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("contacts.create", CONTACTS_CREATE)
@@ -138,7 +159,7 @@ class ContactsCreateFunction : public ContactAsyncFunction {
   ResponseAction Run() override;
 
   // Callback for the contact function to provide results.
-  void CreateComplete(std::shared_ptr<contact::CreateContactResult> results);
+  void CreateComplete(std::shared_ptr<contact::ContactResults> results);
 
  private:
   // The task tracker for the ContactService callbacks.
@@ -157,8 +178,7 @@ class ContactsUpdateFunction : public ContactAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateContactComplete(
-      std::shared_ptr<contact::UpdateContactResult> results);
+  void UpdateContactComplete(std::shared_ptr<contact::ContactResults> results);
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -177,8 +197,7 @@ class ContactsDeleteFunction : public ContactAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void DeleteContactComplete(
-      std::shared_ptr<contact::DeleteContactResult> results);
+  void DeleteContactComplete(std::shared_ptr<contact::ContactResults> results);
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -198,8 +217,7 @@ class ContactsAddPropertyItemFunction : public ContactAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void AddPropertyComplete(
-      std::shared_ptr<contact::UpdateContactResult> results);
+  void AddPropertyComplete(std::shared_ptr<contact::ContactResults> results);
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -219,8 +237,7 @@ class ContactsUpdatePropertyItemFunction : public ContactAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdatePropertyComplete(
-      std::shared_ptr<contact::UpdateContactResult> results);
+  void UpdatePropertyComplete(std::shared_ptr<contact::ContactResults> results);
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
@@ -240,14 +257,54 @@ class ContactsRemovePropertyItemFunction : public ContactAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void RemovePropertyComplete(
-      std::shared_ptr<contact::UpdateContactResult> results);
+  void RemovePropertyComplete(std::shared_ptr<contact::ContactResults> results);
 
   // The task tracker for the ContactService callbacks.
   base::CancelableTaskTracker task_tracker_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContactsRemovePropertyItemFunction);
+};
+
+class ContactsAddEmailAddressFunction : public ContactAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contacts.addEmailAddress", CONTACTS_ADD_EMAIL)
+  ContactsAddEmailAddressFunction() = default;
+
+ protected:
+  ~ContactsAddEmailAddressFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void AddEmailAddressComplete(
+      std::shared_ptr<contact::ContactResults> results);
+
+  // The task tracker for the ContactService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContactsAddEmailAddressFunction);
+};
+
+class ContactsUpdateEmailAddressFunction : public ContactAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("contacts.updateEmailAddress",
+                             CONTACTS_UPDATE_EMAIL)
+  ContactsUpdateEmailAddressFunction() = default;
+
+ protected:
+  ~ContactsUpdateEmailAddressFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void UpdateEmailAddressComplete(
+      std::shared_ptr<contact::ContactResults> results);
+
+  // The task tracker for the ContactService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ContactsUpdateEmailAddressFunction);
 };
 
 }  // namespace extensions

@@ -28,6 +28,7 @@
 #include "chrome/browser/shell_integration.h"
 #include "chrome/browser/signin/signin_promo.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -55,9 +56,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_system.h"
-#include "mash/public/interfaces/launchable.mojom.h"
 #include "printing/features/features.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(OS_MACOSX)
@@ -70,15 +69,9 @@
 #endif
 
 #if defined(OS_CHROMEOS)
-#include "ash/accelerators/accelerator_commands_classic.h"  // mash-ok
-#include "ash/public/cpp/window_properties.h"
-#include "ash/public/interfaces/window_pin_type.mojom.h"
-#include "chrome/browser/ui/ash/ash_util.h"
+#include "ash/public/cpp/window_pin_type.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser_commands_chromeos.h"
-#include "ui/aura/window.h"
-#include "ui/base/base_window.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_types.h"
 #endif
@@ -316,18 +309,10 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
   // declaration order in browser.h!
   switch (id) {
     // Navigation commands
-    case IDC_BACKSPACE_BACK:
-      window()->MaybeShowNewBackShortcutBubble(false);
-      break;
     case IDC_BACK:
-      window()->HideNewBackShortcutBubble();
       GoBack(browser_, disposition);
       break;
-    case IDC_BACKSPACE_FORWARD:
-      window()->MaybeShowNewBackShortcutBubble(true);
-      break;
     case IDC_FORWARD:
-      window()->HideNewBackShortcutBubble();
       GoForward(browser_, disposition);
       break;
     case IDC_RELOAD:
@@ -673,20 +658,6 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_DISTILL_PAGE:
       DistillCurrentPage(browser_);
       break;
-#if defined(OS_CHROMEOS)
-    case IDC_TOUCH_HUD_PROJECTION_TOGGLE:
-      if (ash_util::IsRunningInMash()) {
-        service_manager::Connector* connector =
-            content::ServiceManagerConnection::GetForProcess()->GetConnector();
-        mash::mojom::LaunchablePtr launchable;
-        connector->BindInterface("touch_hud", &launchable);
-        launchable->Launch(mash::mojom::kWindow,
-                           mash::mojom::LaunchMode::DEFAULT);
-      } else {
-        ash::accelerators::ToggleTouchHudProjection();
-      }
-      break;
-#endif
     case IDC_ROUTE_MEDIA:
       RouteMedia(browser_);
       break;
@@ -708,6 +679,11 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ShowSiteSettings(
           browser_,
           browser_->tab_strip_model()->GetActiveWebContents()->GetVisibleURL());
+      break;
+    case IDC_APP_INFO:
+      ShowAppInfoInNativeDialog(
+          browser_->tab_strip_model()->GetActiveWebContents(), profile(),
+          browser_->hosted_app_controller()->GetExtension(), base::Closure());
       break;
 
     default:
@@ -897,7 +873,6 @@ void BrowserCommandController::InitCommandState() {
                                         !guest_session);
 #if defined(OS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TAKE_SCREENSHOT, true);
-  command_updater_.UpdateCommandEnabled(IDC_TOUCH_HUD_PROJECTION_TOGGLE, true);
 #else
   // Chrome OS uses the system tray menu to handle multi-profiles.
   if (normal_window && (guest_session || !profile()->IsOffTheRecord())) {
@@ -922,6 +897,8 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_CHROME,
                                         is_experimental_hosted_app);
   command_updater_.UpdateCommandEnabled(IDC_SITE_SETTINGS,
+                                        is_experimental_hosted_app);
+  command_updater_.UpdateCommandEnabled(IDC_APP_INFO,
                                         is_experimental_hosted_app);
 
   // Window management commands
@@ -1020,11 +997,7 @@ void BrowserCommandController::UpdateCommandsForTabState() {
     return;
 
   // Navigation commands
-  command_updater_.UpdateCommandEnabled(IDC_BACKSPACE_BACK,
-                                        CanGoBack(browser_));
   command_updater_.UpdateCommandEnabled(IDC_BACK, CanGoBack(browser_));
-  command_updater_.UpdateCommandEnabled(IDC_BACKSPACE_FORWARD,
-                                        CanGoForward(browser_));
   command_updater_.UpdateCommandEnabled(IDC_FORWARD, CanGoForward(browser_));
   command_updater_.UpdateCommandEnabled(IDC_RELOAD, CanReload(browser_));
   command_updater_.UpdateCommandEnabled(IDC_RELOAD_BYPASSING_CACHE,
@@ -1241,10 +1214,7 @@ void BrowserCommandController::UpdateCommandsForLockedFullscreenMode() {
   // concerns).
   ui::Clipboard::GetForCurrentThread()->Clear(ui::CLIPBOARD_TYPE_COPY_PASTE);
 
-  aura::Window* aura_window = browser_->window()->GetNativeWindow();
-  ash::mojom::WindowPinType type =
-      aura_window->GetProperty(ash::kWindowPinTypeKey);
-  bool is_locked_fullscreen = type == ash::mojom::WindowPinType::TRUSTED_PINNED;
+  bool is_locked_fullscreen = ash::IsWindowTrustedPinned(browser_->window());
   // Sanity check to make sure this function is called only on state change.
   DCHECK_NE(is_locked_fullscreen, is_locked_fullscreen_);
   if (is_locked_fullscreen == is_locked_fullscreen_)

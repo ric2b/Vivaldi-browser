@@ -8,6 +8,7 @@
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
+#include "chromeos/chromeos_switches.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -111,7 +112,6 @@ void SigninPartitionManager::StartSigninSession(
   GURL guest_site = GetGuestSiteURL(storage_partition_domain_,
                                     current_storage_partition_name_);
 
-  // Prepare the StoragePartition
   current_storage_partition_ =
       content::BrowserContext::GetStoragePartitionForSite(browser_context_,
                                                           guest_site, true);
@@ -168,6 +168,11 @@ content::StoragePartition*
 SigninPartitionManager::GetCurrentStoragePartition() {
   DCHECK(IsInSigninSession());
   return current_storage_partition_;
+}
+
+bool SigninPartitionManager::IsCurrentSigninStoragePartition(
+    const content::StoragePartition* storage_partition) const {
+  return IsInSigninSession() && storage_partition == current_storage_partition_;
 }
 
 SigninPartitionManager::Factory::Factory()

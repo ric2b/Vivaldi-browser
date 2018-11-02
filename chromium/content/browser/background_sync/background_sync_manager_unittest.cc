@@ -43,8 +43,8 @@
 #include "net/base/network_change_notifier.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
 
 namespace content {
 
@@ -136,18 +136,18 @@ class BackgroundSyncManagerTest : public testing::Test {
   void RegisterServiceWorkers() {
     bool called_1 = false;
     bool called_2 = false;
+    blink::mojom::ServiceWorkerRegistrationOptions options1;
+    options1.scope = GURL(kPattern1);
+    blink::mojom::ServiceWorkerRegistrationOptions options2;
+    options2.scope = GURL(kPattern2);
     helper_->context()->RegisterServiceWorker(
-        GURL(kScript1),
-        blink::mojom::ServiceWorkerRegistrationOptions(GURL(kPattern1)),
-        nullptr,
+        GURL(kScript1), options1,
         base::AdaptCallbackForRepeating(
             base::BindOnce(&RegisterServiceWorkerCallback, &called_1,
                            &sw_registration_id_1_)));
 
     helper_->context()->RegisterServiceWorker(
-        GURL(kScript2),
-        blink::mojom::ServiceWorkerRegistrationOptions(GURL(kPattern2)),
-        nullptr,
+        GURL(kScript2), options2,
         base::AdaptCallbackForRepeating(
             base::BindOnce(&RegisterServiceWorkerCallback, &called_2,
                            &sw_registration_id_2_)));
@@ -1339,8 +1339,7 @@ TEST_F(BackgroundSyncManagerTest, LastChance) {
   InitFailedSyncEventTest();
 
   EXPECT_TRUE(Register(sync_options_1_));
-  EXPECT_EQ(blink::mojom::BackgroundSyncEventLastChance::IS_NOT_LAST_CHANCE,
-            test_background_sync_manager_->last_chance());
+  EXPECT_FALSE(test_background_sync_manager_->last_chance());
   EXPECT_TRUE(GetRegistration(sync_options_1_));
 
   // Run it again.
@@ -1348,8 +1347,7 @@ TEST_F(BackgroundSyncManagerTest, LastChance) {
   test_background_sync_manager_->RunDelayedTask();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetRegistration(sync_options_1_));
-  EXPECT_EQ(blink::mojom::BackgroundSyncEventLastChance::IS_LAST_CHANCE,
-            test_background_sync_manager_->last_chance());
+  EXPECT_TRUE(test_background_sync_manager_->last_chance());
 }
 
 }  // namespace content

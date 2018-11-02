@@ -9,7 +9,6 @@
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/frame_messages.h"
-#include "content/public/common/screen_info.h"
 #include "content/public/renderer/browser_plugin_delegate.h"
 #include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/render_thread_impl.h"
@@ -57,14 +56,6 @@ void BrowserPluginManager::UpdateFocusState() {
   }
 }
 
-void BrowserPluginManager::ScreenInfoChanged(const ScreenInfo& screen_info) {
-  base::IDMap<BrowserPlugin*>::iterator iter(&instances_);
-  while (!iter.IsAtEnd()) {
-    iter.GetCurrentValue()->ScreenInfoChanged(screen_info);
-    iter.Advance();
-  }
-}
-
 void BrowserPluginManager::Attach(int browser_plugin_instance_id) {
   BrowserPlugin* plugin = GetBrowserPlugin(browser_plugin_instance_id);
   if (plugin)
@@ -81,18 +72,6 @@ BrowserPlugin* BrowserPluginManager::CreateBrowserPlugin(
     RenderFrame* render_frame,
     const base::WeakPtr<BrowserPluginDelegate>& delegate) {
   return new BrowserPlugin(render_frame, delegate);
-}
-
-void BrowserPluginManager::DidCommitCompositorFrame(
-    int render_frame_routing_id) {
-  base::IDMap<BrowserPlugin*>::iterator iter(&instances_);
-  while (!iter.IsAtEnd()) {
-    if (iter.GetCurrentValue()->render_frame_routing_id() ==
-        render_frame_routing_id) {
-      iter.GetCurrentValue()->DidCommitCompositorFrame();
-    }
-    iter.Advance();
-  }
 }
 
 bool BrowserPluginManager::OnControlMessageReceived(

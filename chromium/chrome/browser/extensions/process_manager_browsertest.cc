@@ -18,10 +18,10 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_dir.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/common/extensions/extension_process_policy.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -35,6 +35,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/test/browser_test_utils.h"
+#include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
@@ -143,7 +144,7 @@ class NavigationCompletedObserver : public content::WebContentsObserver {
       : content::WebContentsObserver(web_contents),
         message_loop_runner_(new content::MessageLoopRunner) {
     web_contents->ForEachFrame(
-        base::Bind(&AddFrameToSet, base::Unretained(&frames_)));
+        base::BindRepeating(&AddFrameToSet, base::Unretained(&frames_)));
   }
 
   void Wait() {
@@ -153,8 +154,9 @@ class NavigationCompletedObserver : public content::WebContentsObserver {
 
   void RenderFrameDeleted(content::RenderFrameHost* rfh) override {
     if (frames_.erase(rfh) != 0 && message_loop_runner_->loop_running() &&
-        AreAllFramesInTab())
+        AreAllFramesInTab()) {
       message_loop_runner_->Quit();
+    }
   }
 
  private:
@@ -163,9 +165,9 @@ class NavigationCompletedObserver : public content::WebContentsObserver {
   bool AreAllFramesInTab() {
     std::set<content::RenderFrameHost*> current_frames;
     web_contents()->ForEachFrame(
-        base::Bind(&AddFrameToSet, base::Unretained(&current_frames)));
+        base::BindRepeating(&AddFrameToSet, base::Unretained(&current_frames)));
     for (content::RenderFrameHost* frame : frames_) {
-      if (current_frames.find(frame) == current_frames.end())
+      if (!base::ContainsKey(current_frames, frame))
         return false;
     }
     return true;
@@ -843,6 +845,106 @@ IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
 
   // Navigate second subframe to each nested URL from the main frame (i.e.,
   // from non-extension process).  These should be canceled.
+  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+    EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame2", nested_urls[i]));
+    content::RenderFrameHost* second_frame = ChildFrameAt(main_frame, 1);
+
+    EXPECT_NE(nested_urls[i], second_frame->GetLastCommittedURL());
+    EXPECT_FALSE(extension_origin.IsSameOriginWith(
+        second_frame->GetLastCommittedOrigin()));
+    EXPECT_NE("foo", GetTextContent(second_frame));
+    EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+    EXPECT_EQ(1u, pm->GetAllFrames().size());
+
+    EXPECT_TRUE(
+        content::NavigateIframeToURL(tab, "frame2", GURL(url::kAboutBlankURL)));
+  }
+
+  // Check that the URLs still can be downloaded via an HTML anchor tag with
+  // the download attribute (i.e., <a download>) (which starts out as a
+  // top-level navigation).
+  PermissionRequestManager* permission_request_manager =
+      PermissionRequestManager::FromWebContents(popup);
+  permission_request_manager->set_auto_response_for_test(
+      PermissionRequestManager::ACCEPT_ALL);
+  for (size_t i = 0; i < arraysize(nested_urls); i++) {
+    content::DownloadTestObserverTerminal observer(
+        content::BrowserContext::GetDownloadManager(profile()), 1,
+        content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL);
+    std::string script = base::StringPrintf(
+        R"(var anchor = document.createElement('a');
+           anchor.href = '%s';
+           anchor.download = '';
+           anchor.click();)",
+        nested_urls[i].spec().c_str());
+    EXPECT_TRUE(ExecuteScript(popup, script));
+    observer.WaitForFinished();
+    EXPECT_EQ(
+        1u, observer.NumDownloadsSeenInState(content::DownloadItem::COMPLETE));
+
+    // This is a top-level navigation that should have resulted in a download.
+    // Ensure that the popup stayed at its original location.
+    EXPECT_NE(nested_urls[i], popup->GetLastCommittedURL());
+    EXPECT_FALSE(extension_origin.IsSameOriginWith(
+        popup->GetMainFrame()->GetLastCommittedOrigin()));
+    EXPECT_NE("foo", GetTextContent(popup->GetMainFrame()));
+
+    EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+    EXPECT_EQ(1u, pm->GetAllFrames().size());
+  }
+}
+
+// Test that navigations to blob: and filesystem: URLs with extension origins
+// are disallowed in subframes when initiated from non-extension processes, even
+// when the main frame lies about its origin.  See https://crbug.com/836858.
+IN_PROC_BROWSER_TEST_F(ProcessManagerBrowserTest,
+                       NestedURLNavigationsToExtensionBlockedInSubframe) {
+  // Disabling web security is necessary to test the browser enforcement;
+  // without it, the loads in this test would be blocked by
+  // SecurityOrigin::canDisplay() as invalid local resource loads.
+  PrefService* prefs = browser()->profile()->GetPrefs();
+  prefs->SetBoolean(prefs::kWebKitWebSecurityEnabled, false);
+
+  // Create a simple extension without a background page.
+  const Extension* extension = CreateExtension("Extension", false);
+  embedded_test_server()->ServeFilesFromDirectory(extension->path());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Navigate main tab to a web page with two web iframes.  There should be no
+  // extension frames yet.
+  NavigateToURL(embedded_test_server()->GetURL("/two_iframes.html"));
+  ProcessManager* pm = ProcessManager::Get(profile());
+  EXPECT_EQ(0u, pm->GetAllFrames().size());
+  EXPECT_EQ(0u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  // Navigate first subframe to an extension URL. This will go into a new
+  // extension process.
+  const GURL extension_url(extension->url().Resolve("empty.html"));
+  EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame1", extension_url));
+  EXPECT_EQ(1u, pm->GetRenderFrameHostsForExtension(extension->id()).size());
+  EXPECT_EQ(1u, pm->GetAllFrames().size());
+
+  content::RenderFrameHost* main_frame = tab->GetMainFrame();
+  content::RenderFrameHost* extension_frame = ChildFrameAt(main_frame, 0);
+
+  // Create valid blob and filesystem URLs in the extension's origin.
+  url::Origin extension_origin(extension_frame->GetLastCommittedOrigin());
+  GURL blob_url(CreateBlobURL(extension_frame, "foo"));
+  EXPECT_EQ(extension_origin, url::Origin::Create(blob_url));
+  GURL filesystem_url(CreateFileSystemURL(extension_frame, "foo"));
+  EXPECT_EQ(extension_origin, url::Origin::Create(filesystem_url));
+
+  // Suppose that the main frame's origin incorrectly claims it is an extension,
+  // even though it is not in an extension process. This used to bypass the
+  // checks in ExtensionNavigationThrottle.
+  OverrideLastCommittedOrigin(main_frame, extension_origin);
+
+  // Navigate second subframe to each nested URL from the main frame (i.e.,
+  // from non-extension process).  These should be canceled.
+  GURL nested_urls[] = {blob_url, filesystem_url};
   for (size_t i = 0; i < arraysize(nested_urls); i++) {
     EXPECT_TRUE(content::NavigateIframeToURL(tab, "frame2", nested_urls[i]));
     content::RenderFrameHost* second_frame = ChildFrameAt(main_frame, 1);

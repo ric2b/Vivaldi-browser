@@ -98,3 +98,29 @@ wheel: <
   name: "infra/python/wheels/boto-py2_py3"
   version: "version:2.48.0"
 >
+
+# Used by:
+#   testing/buildbot/generate_buildbot_json_coveragetest.py
+wheel: <
+  name: "infra/python/wheels/coverage/${vpython_platform}"
+  version: "version:4.3.4"
+>
+
+# Used by:
+#   chrome/browser/policy/test/policy_testserver.py
+wheel: <
+  name: "infra/python/wheels/protobuf-py2_py3"
+  version: "version:3.2.0"
+>
+wheel: <
+  name: "infra/python/wheels/six-py2_py3"
+  version: "version:1.10.0"
+>
+wheel: <
+  name: "infra/python/wheels/pyftpdlib-py2_py3"
+  version: "version:0.7.0"
+>
+wheel: <
+  name: "infra/python/wheels/simplejson/${vpython_platform}"
+  version: "version:3.13.2"
+>

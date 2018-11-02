@@ -39,6 +39,7 @@
 #include "content/public/browser/plugin_service.h"
 #include "content/public/common/cdm_info.h"
 #include "content/public/common/pepper_plugin_info.h"
+#include "media/base/video_codecs.h"
 #include "media/cdm/supported_cdm_versions.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
@@ -88,9 +89,8 @@ const char kWidevineCdmArch[] =
 // All values are strings.
 // All values that are lists are delimited by commas. No trailing commas.
 // For example, "1,2,4".
-const char kCdmValueDelimiter = ',';
-static_assert(kCdmValueDelimiter == kCdmSupportedCodecsValueDelimiter,
-              "cdm delimiters must match");
+const char kCdmValueDelimiter[] = ",";
+
 // The following entries are required.
 //  Interface versions are lists of integers (e.g. "1" or "1,2,4").
 //  These are checked in this file before registering the CDM.
@@ -103,11 +103,18 @@ const char kCdmInterfaceVersionsName[] = "x-cdm-interface-versions";
 //    Matches supported Host_* version(s).
 const char kCdmHostVersionsName[] = "x-cdm-host-versions";
 //  The codecs list is a list of simple codec names (e.g. "vp8,vorbis").
-//  The list is passed to other parts of Chrome.
 const char kCdmCodecsListName[] = "x-cdm-codecs";
 //  Whether persistent license is supported by the CDM: "true" or "false".
 const char kCdmPersistentLicenseSupportName[] =
     "x-cdm-persistent-license-support";
+
+// The following strings are used to specify supported codecs in the
+// parameter |kCdmCodecsListName|.
+const char kCdmSupportedCodecVp8[] = "vp8";
+const char kCdmSupportedCodecVp9[] = "vp9.0";
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+const char kCdmSupportedCodecAvc1[] = "avc1";
+#endif
 
 // TODO(xhwang): Move this to a common place if needed.
 const base::FilePath::CharType kSignatureFileExtension[] =
@@ -126,7 +133,7 @@ base::FilePath GetPlatformDirectory(const base::FilePath& base_path) {
 bool MakeWidevineCdmPluginInfo(const base::Version& version,
                                const base::FilePath& cdm_install_dir,
                                const std::string& codecs,
-                               bool is_persistent_license_supported,
+                               bool supports_persistent_license,
                                content::PepperPluginInfo* plugin_info) {
   if (!version.IsValid() ||
       version.components().size() !=
@@ -150,18 +157,6 @@ bool MakeWidevineCdmPluginInfo(const base::Version& version,
       kWidevineCdmPluginExtension,
       kWidevineCdmPluginMimeTypeDescription);
 
-  // Put codec support string in additional param.
-  widevine_cdm_mime_type.additional_params.emplace_back(
-      base::ASCIIToUTF16(kCdmSupportedCodecsParamName),
-      base::ASCIIToUTF16(codecs));
-
-  // Put persistent license support string in additional param.
-  widevine_cdm_mime_type.additional_params.emplace_back(
-      base::ASCIIToUTF16(kCdmPersistentLicenseSupportedParamName),
-      base::ASCIIToUTF16(is_persistent_license_supported
-                             ? kCdmFeatureSupported
-                             : kCdmFeatureNotSupported));
-
   plugin_info->mime_types.push_back(widevine_cdm_mime_type);
   plugin_info->permissions = kWidevineCdmPluginPermissions;
 
@@ -181,9 +176,9 @@ bool CheckForCompatibleVersion(const base::DictionaryValue& manifest,
   DVLOG_IF(1, versions_string.empty())
       << "Widevine CDM component manifest has empty " << version_name;
 
-  for (const base::StringPiece& ver_str : base::SplitStringPiece(
-           versions_string, std::string(1, kCdmValueDelimiter),
-           base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+  for (const base::StringPiece& ver_str :
+       base::SplitStringPiece(versions_string, kCdmValueDelimiter,
+                              base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     int version = 0;
     if (base::StringToInt(ver_str, &version))
       if (version_check_func(version))
@@ -223,6 +218,26 @@ std::string GetCodecs(const base::DictionaryValue& manifest) {
   return codecs;
 }
 
+std::vector<media::VideoCodec> ConvertCodecsString(const std::string& codecs) {
+  std::vector<media::VideoCodec> supported_video_codecs;
+  const std::vector<base::StringPiece> supported_codecs =
+      base::SplitStringPiece(codecs, kCdmValueDelimiter, base::TRIM_WHITESPACE,
+                             base::SPLIT_WANT_NONEMPTY);
+
+  for (const auto& codec : supported_codecs) {
+    if (codec == kCdmSupportedCodecVp8)
+      supported_video_codecs.push_back(media::VideoCodec::kCodecVP8);
+    else if (codec == kCdmSupportedCodecVp9)
+      supported_video_codecs.push_back(media::VideoCodec::kCodecVP9);
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+    else if (codec == kCdmSupportedCodecAvc1)
+      supported_video_codecs.push_back(media::VideoCodec::kCodecH264);
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
+  }
+
+  return supported_video_codecs;
+}
+
 bool GetPersistentLicenseSupport(const base::DictionaryValue& manifest) {
   std::string supported;
   const base::Value* value = manifest.FindKey(kCdmPersistentLicenseSupportName);
@@ -235,12 +250,11 @@ void RegisterWidevineCdmWithChrome(
     std::unique_ptr<base::DictionaryValue> manifest) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const std::string codecs = GetCodecs(*manifest);
-  bool is_persistent_license_supported = GetPersistentLicenseSupport(*manifest);
+  bool supports_persistent_license = GetPersistentLicenseSupport(*manifest);
 
   content::PepperPluginInfo plugin_info;
   if (!MakeWidevineCdmPluginInfo(cdm_version, cdm_install_dir, codecs,
-                                 is_persistent_license_supported,
-                                 &plugin_info)) {
+                                 supports_persistent_license, &plugin_info)) {
     return;
   }
 
@@ -255,16 +269,16 @@ void RegisterWidevineCdmWithChrome(
   PluginService::GetInstance()->PurgePluginListCache(NULL, false);
 
   // Also register Widevine with the CdmRegistry.
-  // TODO(xhwang): Add |is_persistent_license_supported| to CdmInfo.
   const base::FilePath cdm_path =
       GetPlatformDirectory(cdm_install_dir)
           .AppendASCII(base::GetNativeLibraryName(kWidevineCdmLibraryName));
-  const std::vector<std::string> supported_codecs = base::SplitString(
-      codecs, std::string(1, kCdmSupportedCodecsValueDelimiter),
-      base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  std::vector<media::VideoCodec> supported_video_codecs =
+      ConvertCodecsString(codecs);
+
   CdmRegistry::GetInstance()->RegisterCdm(content::CdmInfo(
       kWidevineCdmDisplayName, kWidevineCdmGuid, cdm_version, cdm_path,
-      kWidevineCdmFileSystemId, supported_codecs, kWidevineKeySystem, false));
+      kWidevineCdmFileSystemId, supported_video_codecs,
+      supports_persistent_license, kWidevineKeySystem, false));
 }
 
 }  // namespace

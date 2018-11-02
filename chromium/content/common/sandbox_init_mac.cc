@@ -9,6 +9,11 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "content/public/common/content_switches.h"
+#include "gpu/config/gpu_feature_info.h"
+#include "gpu/config/gpu_info.h"
+#include "gpu/config/gpu_switches.h"
+#include "gpu/config/gpu_util.h"
+#include "gpu/ipc/common/gpu_preferences_util.h"
 #include "media/gpu/vt_video_decode_accelerator_mac.h"
 #include "sandbox/mac/seatbelt.h"
 #include "services/service_manager/sandbox/mac/sandbox_mac.h"
@@ -27,43 +32,62 @@ namespace {
 
 // Helper method to make a closure from a closure.
 base::OnceClosure MaybeWrapWithGPUSandboxHook(
-        service_manager::SandboxType sandbox_type,
-        base::OnceClosure original) {
-    if (sandbox_type == service_manager::SANDBOX_TYPE_GPU) {
-        return base::Bind(
-                    [](base::OnceClosure arg) {
-            // Preload either the desktop GL or the osmesa so, depending on the
-            // --use-gl flag.
-            gl::init::InitializeGLOneOff();
+    service_manager::SandboxType sandbox_type,
+    base::OnceClosure original) {
+  if (sandbox_type == service_manager::SANDBOX_TYPE_GPU) {
+    return base::Bind([](base::OnceClosure arg) {
+        // We need to gather GPUInfo and compute GpuFeatureInfo here, so we can
+        // decide if initializing core profile or compatibility profile GL,
+        // depending on gpu driver bug workarounds.
+        gpu::GPUInfo gpu_info;
+        auto* command_line = base::CommandLine::ForCurrentProcess();
+        // TODO(zmo): Collect basic GPUInfo instead.
+        gpu::GetGpuInfoFromCommandLine(*command_line, &gpu_info);
+        gpu::CacheGPUInfo(gpu_info);
+        gpu::GpuPreferences gpu_preferences;
+        if (command_line->HasSwitch(switches::kGpuPreferences)) {
+          std::string value =
+              command_line->GetSwitchValueASCII(switches::kGpuPreferences);
+          bool success =
+              gpu::SwitchValueToGpuPreferences(value, &gpu_preferences);
+          CHECK(success);
+        }
+        gpu::GpuFeatureInfo gpu_feature_info = gpu::ComputeGpuFeatureInfo(
+            gpu_info, gpu_preferences.ignore_gpu_blacklist,
+            gpu_preferences.disable_gpu_driver_bug_workarounds,
+            gpu_preferences.log_gpu_control_list_decisions, command_line);
+        gpu::CacheGpuFeatureInfo(gpu_feature_info);
+        // Preload either the desktop GL or the osmesa so, depending on the
+        // --use-gl flag.
+        gl::init::InitializeGLOneOff();
 
-            // Preload VideoToolbox.
-            media::InitializeVideoToolbox();
+        // Preload VideoToolbox.
+        media::InitializeVideoToolbox();
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-            media::InitializeAudioToolbox();
-            media::InitializeAVFMediaReader();
+        media::InitializeAudioToolbox();
+        media::InitializeAVFMediaReader();
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
-            // Invoke original hook.
-            if (!arg.is_null())
-                std::move(arg).Run();
-        },
-        base::Passed(std::move(original)));
+        // Invoke original hook.
+        if (!arg.is_null())
+          std::move(arg).Run();
+      },
+      base::Passed(std::move(original)));
     } else if (sandbox_type == service_manager::SANDBOX_TYPE_RENDERER) {
-        return base::Bind(
-                    [](base::OnceClosure arg) {
+      return base::Bind([](base::OnceClosure arg) {
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-            media::InitializeAudioToolbox();
+        media::InitializeAudioToolbox();
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
-            // Invoke original hook.
-            if (!arg.is_null())
-                std::move(arg).Run();
-        },
-        base::Passed(std::move(original)));
+        // Invoke original hook.
+        if (!arg.is_null())
+            std::move(arg).Run();
+      },
+      base::Passed(std::move(original)));
     } else {
-        return original;
+      return original;
     }
 }
 

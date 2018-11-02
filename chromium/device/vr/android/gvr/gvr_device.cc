@@ -125,7 +125,9 @@ std::unique_ptr<GvrDevice> GvrDevice::Create() {
 }
 
 GvrDevice::GvrDevice() : weak_ptr_factory_(this) {
-  GetGvrDelegateProvider();
+  GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
+  if (!delegate_provider || delegate_provider->ShouldDisableGvrDevice())
+    return;
   JNIEnv* env = base::android::AttachCurrentThread();
   non_presenting_context_.Reset(
       Java_NonPresentingGvrContext_create(env, reinterpret_cast<jlong>(this)));
@@ -148,10 +150,11 @@ void GvrDevice::RequestPresent(
     VRDisplayImpl* display,
     mojom::VRSubmitFrameClientPtr submit_client,
     mojom::VRPresentationProviderRequest request,
+    mojom::VRRequestPresentOptionsPtr present_options,
     mojom::VRDisplayHost::RequestPresentCallback callback) {
   GvrDelegateProvider* delegate_provider = GetGvrDelegateProvider();
   if (!delegate_provider) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(false, nullptr);
     return;
   }
 
@@ -159,6 +162,7 @@ void GvrDevice::RequestPresent(
   // pauses Chrome.
   delegate_provider->RequestWebVRPresent(
       std::move(submit_client), std::move(request), GetVRDisplayInfo(),
+      std::move(present_options),
       base::Bind(&GvrDevice::OnRequestPresentResult,
                  weak_ptr_factory_.GetWeakPtr(), base::Passed(&callback),
                  base::Unretained(display)));
@@ -167,10 +171,11 @@ void GvrDevice::RequestPresent(
 void GvrDevice::OnRequestPresentResult(
     mojom::VRDisplayHost::RequestPresentCallback callback,
     VRDisplayImpl* display,
-    bool result) {
+    bool result,
+    mojom::VRDisplayFrameTransportOptionsPtr transport_options) {
   if (result)
     SetPresentingDisplay(display);
-  std::move(callback).Run(result);
+  std::move(callback).Run(result, std::move(transport_options));
 }
 
 void GvrDevice::ExitPresent() {

@@ -127,11 +127,8 @@ int32_t Graphics3D::DoSwapBuffers(const gpu::SyncToken& sync_token,
       new PpapiHostMsg_PPBGraphics3D_TakeFrontBuffer(API_ID_PPB_GRAPHICS_3D,
                                                      host_resource()));
 
-  const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
-  gl->ShallowFlushCHROMIUM();
-
   gpu::SyncToken new_sync_token;
-  gl->GenSyncTokenCHROMIUM(fence_sync, new_sync_token.GetData());
+  gl->GenSyncTokenCHROMIUM(new_sync_token.GetData());
 
   IPC::Message* msg = new PpapiHostMsg_PPBGraphics3D_SwapBuffers(
       API_ID_PPB_GRAPHICS_3D, host_resource(), new_sync_token, size);
@@ -171,37 +168,62 @@ PP_Resource PPB_Graphics3D_Proxy::CreateProxyResource(
     share_gles2 = share_graphics->gles2_impl();
   }
 
-  gpu::gles2::ContextCreationAttribHelper attrib_helper;
-  std::vector<int32_t> attribs;
+  gpu::ContextCreationAttribs attrib_helper;
   if (attrib_list) {
     for (const int32_t* attr = attrib_list; attr[0] != PP_GRAPHICS3DATTRIB_NONE;
          attr += 2) {
-      switch (attr[0]) {
+      int32_t key = attr[0];
+      int32_t value = attr[1];
+      switch (key) {
+        case PP_GRAPHICS3DATTRIB_ALPHA_SIZE:
+          attrib_helper.alpha_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_BLUE_SIZE:
+          attrib_helper.blue_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_GREEN_SIZE:
+          attrib_helper.green_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_RED_SIZE:
+          attrib_helper.red_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_DEPTH_SIZE:
+          attrib_helper.depth_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_STENCIL_SIZE:
+          attrib_helper.stencil_size = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_SAMPLES:
+          attrib_helper.samples = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_SAMPLE_BUFFERS:
+          attrib_helper.sample_buffers = value;
+          break;
+        case PP_GRAPHICS3DATTRIB_SWAP_BEHAVIOR:
+          attrib_helper.buffer_preserved =
+              value == PP_GRAPHICS3DATTRIB_BUFFER_PRESERVED;
+          break;
         case PP_GRAPHICS3DATTRIB_WIDTH:
-          attrib_helper.offscreen_framebuffer_size.set_width(attr[1]);
+          attrib_helper.offscreen_framebuffer_size.set_width(value);
           break;
         case PP_GRAPHICS3DATTRIB_HEIGHT:
-          attrib_helper.offscreen_framebuffer_size.set_height(attr[1]);
+          attrib_helper.offscreen_framebuffer_size.set_height(value);
           break;
         case PP_GRAPHICS3DATTRIB_GPU_PREFERENCE:
           attrib_helper.gpu_preference =
-              (attr[1] == PP_GRAPHICS3DATTRIB_GPU_PREFERENCE_LOW_POWER)
+              (value == PP_GRAPHICS3DATTRIB_GPU_PREFERENCE_LOW_POWER)
                   ? gl::PreferIntegratedGpu
                   : gl::PreferDiscreteGpu;
           break;
         case PP_GRAPHICS3DATTRIB_SINGLE_BUFFER:
-          attrib_helper.single_buffer = !!attr[1];
+          attrib_helper.single_buffer = !!value;
           break;
         default:
-          attribs.push_back(attr[0]);
-          attribs.push_back(attr[1]);
-          break;
+          DLOG(ERROR) << "Invalid context creation attribute: " << attr[0];
+          return 0;
       }
     }
-    attribs.push_back(PP_GRAPHICS3DATTRIB_NONE);
   }
-  if (!attrib_helper.Parse(attribs))
-    return 0;
 
   HostResource result;
   gpu::Capabilities capabilities;
@@ -261,7 +283,7 @@ bool PPB_Graphics3D_Proxy::OnMessageReceived(const IPC::Message& msg) {
 void PPB_Graphics3D_Proxy::OnMsgCreate(
     PP_Instance instance,
     HostResource share_context,
-    const gpu::gles2::ContextCreationAttribHelper& attrib_helper,
+    const gpu::ContextCreationAttribs& attrib_helper,
     HostResource* result,
     gpu::Capabilities* capabilities,
     SerializedHandle* shared_state,

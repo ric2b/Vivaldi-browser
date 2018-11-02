@@ -30,13 +30,13 @@ class CONTENT_EXPORT LayeredResourceHandler : public ResourceHandler {
   void SetDelegate(Delegate* delegate) override;
   void OnRequestRedirected(
       const net::RedirectInfo& redirect_info,
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller) override;
   void OnResponseStarted(
-    ResourceResponse* response,
-    std::unique_ptr<ResourceController> controller) override;
+      network::ResourceResponse* response,
+      std::unique_ptr<ResourceController> controller) override;
   void OnResponseStarted(
-      ResourceResponse* response,
+      network::ResourceResponse* response,
       std::unique_ptr<ResourceController> controller,
       bool open_when_done,
       bool ask_for_target) override;

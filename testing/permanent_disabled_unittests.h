@@ -59,7 +59,18 @@ DISABLE(HistoryApiTest, Delete)
 
 // We are using a different geolocation API URL and key
 DISABLE(GeolocationBrowserTest, UrlWithApiKey)
+DISABLE(GeolocationBrowserTestWithoutOverrider, UrlWithApiKey)
 DISABLE(GeolocationNetworkProviderTest, EmptyApiKey)
 
 // We have changed values
 DISABLE(TopSitesImplTest, SetForcedTopSites)
+
+// Disabled because we disabled Feature safe_browsing::kCanShowScoutOptIn
+// in order to prevent users accidentally submitting info to Google
+DISABLE(TriggerManagerTest, AdSamplerTrigger)
+DISABLE(TriggerManagerTest, StartAndFinishCollectingThreatDetails)
+DISABLE(TriggerManagerTest, UserOptsInToSBER_DataCollected_ReportSent)
+DISABLE(TriggerManagerTest, NoCollectionWhenOutOfQuota)
+DISABLE(NotificationImageReporterTest, ImageDownscaling)
+DISABLE(NotificationImageReporterTest, MaxReportsPerDay)
+DISABLE(NotificationImageReporterTest, ReportSuccess)

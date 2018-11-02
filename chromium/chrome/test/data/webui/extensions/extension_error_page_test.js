@@ -94,7 +94,7 @@ cr.define('extension_error_page_tests', function() {
       var testIsVisible = extension_test_util.isVisible.bind(null, errorPage);
       expectTrue(testIsVisible('#close-button'));
       expectTrue(testIsVisible('#heading'));
-      expectTrue(testIsVisible('#errors-list'));
+      expectTrue(testIsVisible('#errorsList'));
 
       var errorElements = errorPage.querySelectorAll('* /deep/ .error-item');
       expectEquals(1, errorElements.length);
@@ -160,11 +160,8 @@ cr.define('extension_error_page_tests', function() {
             renderProcessId: 111,
             renderViewId: 222,
             canInspect: true,
-            stackTrace: [{
-              url: 'url',
-              lineNumber: 123,
-              columnNumber: 321
-            }],
+            contextUrl: 'http://test.com',
+            stackTrace: [{url: 'url', lineNumber: 123, columnNumber: 321}],
           },
           runtimeErrorBase);
       // Add a new runtime error to the end.
@@ -210,6 +207,13 @@ cr.define('extension_error_page_tests', function() {
         lineNumber: 123,
         columnNumber: 321,
       });
+
+      expectEquals(
+          'Unknown',
+          ironCollapses[0].querySelector('.context-url').textContent.trim());
+      expectEquals(
+          nextRuntimeError.contextUrl,
+          ironCollapses[1].querySelector('.context-url').textContent.trim());
     });
   });
 

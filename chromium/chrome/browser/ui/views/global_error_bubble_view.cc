@@ -24,6 +24,7 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/blue_button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/grid_layout.h"
@@ -116,7 +117,8 @@ void GlobalErrorBubbleView::Init() {
     message_labels.push_back(message_label);
   }
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // First row, message labels.
   views::ColumnSet* cs = layout->AddColumnSet(0);
@@ -169,9 +171,18 @@ int GlobalErrorBubbleView::GetDialogButtons() const {
   if (!error_)
     return ui::DIALOG_BUTTON_NONE;
   return ui::DIALOG_BUTTON_OK |
-         (error_->GetBubbleViewCancelButtonLabel().empty()
+         (error_->ShouldUseExtraView() ||
+                  error_->GetBubbleViewCancelButtonLabel().empty()
               ? 0
               : ui::DIALOG_BUTTON_CANCEL);
+}
+
+views::View* GlobalErrorBubbleView::CreateExtraView() {
+  if (!error_ || error_->GetBubbleViewCancelButtonLabel().empty() ||
+      !error_->ShouldUseExtraView())
+    return nullptr;
+  return views::MdTextButton::CreateSecondaryUiButton(
+      this, error_->GetBubbleViewCancelButtonLabel());
 }
 
 bool GlobalErrorBubbleView::Cancel() {
@@ -193,4 +204,10 @@ bool GlobalErrorBubbleView::Close() {
 
 void GlobalErrorBubbleView::CloseBubbleView() {
   GetWidget()->Close();
+}
+
+void GlobalErrorBubbleView::ButtonPressed(views::Button* sender,
+                                          const ui::Event& event) {
+  if (error_)
+    error_->BubbleViewCancelButtonPressed(browser_);
 }

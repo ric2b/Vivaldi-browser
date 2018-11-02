@@ -12,8 +12,10 @@
 #include "chrome/browser/vr/model/permissions_model.h"
 #include "chrome/browser/vr/model/reticle_model.h"
 #include "chrome/browser/vr/model/speech_recognition_model.h"
+#include "chrome/browser/vr/model/text_input_info.h"
 #include "chrome/browser/vr/model/toolbar_state.h"
-#include "chrome/browser/vr/model/web_vr_timeout_state.h"
+#include "chrome/browser/vr/model/ui_mode.h"
+#include "chrome/browser/vr/model/web_vr_model.h"
 #include "chrome/browser/vr/ui_element_renderer.h"
 #include "ui/gfx/transform.h"
 
@@ -27,38 +29,44 @@ struct Model {
   bool browsing_disabled = false;
   bool loading = false;
   float load_progress = 0.0f;
-  bool fullscreen = false;
   bool incognito = false;
   bool in_cct = false;
   bool can_navigate_back = false;
   ToolbarState toolbar_state;
   std::vector<OmniboxSuggestion> omnibox_suggestions;
-  bool omnibox_input_active = false;
   SpeechRecognitionModel speech;
   const ColorScheme& color_scheme() const;
   gfx::Transform projection_matrix;
   unsigned int content_texture_id = 0;
   UiElementRenderer::TextureLocation content_location =
       UiElementRenderer::kTextureLocationLocal;
+  bool update_ready_snackbar_enabled = false;
+  bool background_available = false;
+  bool can_apply_new_background = false;
+  bool background_loaded = false;
 
   // WebVR state.
-  bool web_vr_mode = false;
-  bool web_vr_show_toast = false;
-  bool web_vr_show_splash_screen = false;
-  // Indicates that we're waiting for the first WebVR frame to show up before we
-  // hide the splash screen. This is used in the case of WebVR auto-
-  // presentation.
-  bool web_vr_started_for_autopresentation = false;
-  bool should_render_web_vr() const {
-    return web_vr_mode && !web_vr_show_splash_screen;
-  }
-  bool browsing_mode() const {
-    return !web_vr_mode && !web_vr_show_splash_screen;
-  }
-  bool web_vr_has_produced_frames() const {
-    return web_vr_mode && web_vr_timeout_state == kWebVrNoTimeoutPending;
-  }
-  WebVrTimeoutState web_vr_timeout_state = kWebVrNoTimeoutPending;
+  WebVrModel web_vr;
+
+  std::vector<UiMode> ui_modes;
+  void push_mode(UiMode mode);
+  void pop_mode();
+  void pop_mode(UiMode mode);
+  void toggle_mode(UiMode mode);
+  UiMode get_last_opaque_mode() const;
+  bool has_mode_in_stack(UiMode mode) const;
+  bool browsing_enabled() const;
+  bool default_browsing_enabled() const;
+  bool voice_search_enabled() const;
+  bool omnibox_editing_enabled() const;
+  bool fullscreen_enabled() const;
+  bool web_vr_enabled() const;
+  bool web_vr_autopresentation_enabled() const;
+  bool reposition_window_enabled() const;
+
+  // Focused text state.
+  bool editing_input = false;
+  TextInputInfo omnibox_text_field_info;
 
   // Controller state.
   ControllerModel controller;

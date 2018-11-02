@@ -17,12 +17,12 @@
 #endif
 
 #if BUILDFLAG(USE_VAAPI)
-#include "media/gpu/vaapi_jpeg_decode_accelerator.h"
+#include "media/gpu/vaapi/vaapi_jpeg_decode_accelerator.h"
 #endif
 
 #if defined(USE_V4L2_JDA)
-#include "media/gpu/v4l2_device.h"
-#include "media/gpu/v4l2_jpeg_decode_accelerator.h"
+#include "media/gpu/v4l2/v4l2_device.h"
+#include "media/gpu/v4l2/v4l2_jpeg_decode_accelerator.h"
 #endif
 
 namespace media {
@@ -45,14 +45,14 @@ std::unique_ptr<JpegDecodeAccelerator> CreateV4L2JDA(
 #if BUILDFLAG(USE_VAAPI)
 std::unique_ptr<JpegDecodeAccelerator> CreateVaapiJDA(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
-  return base::MakeUnique<VaapiJpegDecodeAccelerator>(
+  return std::make_unique<VaapiJpegDecodeAccelerator>(
       std::move(io_task_runner));
 }
 #endif
 
 std::unique_ptr<JpegDecodeAccelerator> CreateFakeJDA(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
-  return base::MakeUnique<FakeJpegDecodeAccelerator>(std::move(io_task_runner));
+  return std::make_unique<FakeJpegDecodeAccelerator>(std::move(io_task_runner));
 }
 
 }  // namespace

@@ -32,6 +32,7 @@
 
 #include <limits>
 
+#include "base/macros.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "platform/runtime_enabled_features.h"
@@ -53,12 +54,11 @@ static void GetHeapSize(HeapInfo& info) {
 }
 
 class HeapSizeCache {
-  WTF_MAKE_NONCOPYABLE(HeapSizeCache);
   USING_FAST_MALLOC(HeapSizeCache);
 
  public:
   HeapSizeCache()
-      : last_update_time_(MonotonicallyIncreasingTime() -
+      : last_update_time_(CurrentTimeTicksInSeconds() -
                           kTwentyMinutesInSeconds) {}
 
   void GetCachedHeapSize(HeapInfo& info) {
@@ -77,7 +77,7 @@ class HeapSizeCache {
     // We rate-limit queries to once every twenty minutes to make it more
     // difficult for attackers to compare memory usage before and after some
     // event.
-    double now = MonotonicallyIncreasingTime();
+    double now = CurrentTimeTicksInSeconds();
     if (now - last_update_time_ >= kTwentyMinutesInSeconds) {
       Update();
       last_update_time_ = now;
@@ -94,6 +94,7 @@ class HeapSizeCache {
   double last_update_time_;
 
   HeapInfo info_;
+  DISALLOW_COPY_AND_ASSIGN(HeapSizeCache);
 };
 
 // We quantize the sizes to make it more difficult for an attacker to see

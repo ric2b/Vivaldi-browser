@@ -44,7 +44,7 @@ class HTMLFormControlElement;
 class BLINK_EXPORT WebFormControlElement : public WebElement {
  public:
   WebFormControlElement() : WebElement() {}
-  WebFormControlElement(const WebFormControlElement& e) : WebElement(e) {}
+  WebFormControlElement(const WebFormControlElement& e) = default;
 
   WebFormControlElement& operator=(const WebFormControlElement& e) {
     WebElement::Assign(e);
@@ -56,6 +56,10 @@ class BLINK_EXPORT WebFormControlElement : public WebElement {
   bool IsReadOnly() const;
   WebString FormControlName() const;
   WebString FormControlType() const;
+
+  // Same as FormControlType() but returns the type "password" for text fields
+  // that have been a password in the past.
+  WebString FormControlTypeForAutofill() const;
 
   bool IsAutofilled() const;
   void SetAutofilled(bool);

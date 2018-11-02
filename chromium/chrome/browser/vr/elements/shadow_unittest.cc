@@ -4,7 +4,8 @@
 
 #include "chrome/browser/vr/elements/shadow.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "chrome/browser/vr/elements/rect.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
@@ -15,23 +16,23 @@ namespace vr {
 
 TEST(Shadow, ShadowPaddingGrows) {
   UiScene scene;
-  auto rect = base::MakeUnique<Rect>();
+  auto rect = std::make_unique<Rect>();
   auto* rect_ptr = rect.get();
   rect->SetSize(2.0, 2.0);
 
-  auto shadow = base::MakeUnique<Shadow>();
+  auto shadow = std::make_unique<Shadow>();
   auto* shadow_ptr = shadow.get();
   shadow->AddChild(std::move(rect));
   scene.AddUiElement(kRoot, std::move(shadow));
 
-  scene.OnBeginFrame(MsToTicks(0), kForwardVector);
+  scene.OnBeginFrame(MsToTicks(0), kStartHeadPose);
   float old_x_padding = shadow_ptr->x_padding();
   float old_y_padding = shadow_ptr->y_padding();
   EXPECT_LE(0.0f, old_x_padding);
   EXPECT_LE(0.0f, old_y_padding);
 
   rect_ptr->SetTranslate(0, 0, 0.15);
-  scene.OnBeginFrame(MsToTicks(0), kForwardVector);
+  scene.OnBeginFrame(MsToTicks(0), kStartHeadPose);
   float new_x_padding = shadow_ptr->x_padding();
   float new_y_padding = shadow_ptr->y_padding();
   EXPECT_LE(old_x_padding, new_x_padding);

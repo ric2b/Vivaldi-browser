@@ -154,8 +154,7 @@ PrintSettings::PrintSettings() {
 
 PrintSettings::PrintSettings(const PrintSettings& other) = default;
 
-PrintSettings::~PrintSettings() {
-}
+PrintSettings::~PrintSettings() = default;
 
 void PrintSettings::Clear() {
   ranges_.clear();
@@ -172,8 +171,7 @@ void PrintSettings::Clear() {
   device_name_.clear();
   requested_media_ = RequestedMedia();
   page_setup_device_units_.Clear();
-  dpi_[0] = 0;
-  dpi_[1] = 0;
+  dpi_ = gfx::Size();
   scale_factor_ = 1.0f;
   rasterize_pdf_ = false;
   landscape_ = false;

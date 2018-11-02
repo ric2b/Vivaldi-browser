@@ -6,9 +6,10 @@
 #define CHROME_BROWSER_NET_PROFILE_NETWORK_CONTEXT_SERVICE_H_
 
 #include "base/macros.h"
+#include "chrome/browser/net/proxy_config_monitor.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_member.h"
-#include "content/public/common/network_service.mojom.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
 
 class Profile;
 
@@ -27,7 +28,7 @@ class ProfileNetworkContextService : public KeyedService {
   // service if enabled. Otherwise creates one that will use the IOThread's
   // NetworkService. This may be called either before or after
   // SetUpProfileIODataMainContext.
-  content::mojom::NetworkContextPtr CreateMainNetworkContext();
+  network::mojom::NetworkContextPtr CreateMainNetworkContext();
 
   // Initializes |*network_context_params| to set up the ProfileIOData's
   // main URLRequestContext and |*network_context_request| to be one end of a
@@ -48,26 +49,35 @@ class ProfileNetworkContextService : public KeyedService {
   // storage (so as not to conflict with the network service vended context),
   // and will only be used for legacy requests that use it directly.
   void SetUpProfileIODataMainContext(
-      content::mojom::NetworkContextRequest* network_context_request,
-      content::mojom::NetworkContextParamsPtr* network_context_params);
+      network::mojom::NetworkContextRequest* network_context_request,
+      network::mojom::NetworkContextParamsPtr* network_context_params);
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+
+  // Flushes all pending proxy configuration changes.
+  void FlushProxyConfigMonitorForTesting();
 
  private:
   // Checks |quic_allowed_|, and disables QUIC if needed.
   void DisableQuicIfNotAllowed();
 
+  // Creates parameters for the NetworkContext. May only be called once, since
+  // it initializes some class members.
+  network::mojom::NetworkContextParamsPtr CreateMainNetworkContextParams();
+
   Profile* const profile_;
+
+  ProxyConfigMonitor proxy_config_monitor_;
 
   // This is a NetworkContext interface that uses ProfileIOData's
   // NetworkContext. If the network service is disabled, ownership is passed to
   // StoragePartition when CreateMainNetworkContext is called.  Otherwise,
   // retains ownership, though nothing uses it after construction.
-  content::mojom::NetworkContextPtr profile_io_data_main_network_context_;
+  network::mojom::NetworkContextPtr profile_io_data_main_network_context_;
 
   // Request corresponding to |profile_io_data_main_network_context_|. Ownership
   // is passed to ProfileIOData when SetUpProfileIODataMainContext() is called.
-  content::mojom::NetworkContextRequest profile_io_data_context_request_;
+  network::mojom::NetworkContextRequest profile_io_data_context_request_;
 
   BooleanPrefMember quic_allowed_;
 

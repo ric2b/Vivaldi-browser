@@ -64,9 +64,8 @@
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/FocusController.h"
@@ -429,8 +428,8 @@ void WebPluginContainerImpl::DispatchProgressEvent(const WebString& type,
 void WebPluginContainerImpl::EnqueueMessageEvent(
     const WebDOMMessageEvent& event) {
   static_cast<Event*>(event)->SetTarget(element_);
-  element_->GetExecutionContext()->GetEventQueue()->EnqueueEvent(
-      BLINK_FROM_HERE, event);
+  element_->GetExecutionContext()->GetEventQueue()->EnqueueEvent(FROM_HERE,
+                                                                 event);
 }
 
 void WebPluginContainerImpl::Invalidate() {
@@ -749,7 +748,6 @@ void WebPluginContainerImpl::Dispose() {
 void WebPluginContainerImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
   ContextClient::Trace(visitor);
-  PluginView::Trace(visitor);
 }
 
 void WebPluginContainerImpl::HandleMouseEvent(MouseEvent* event) {
@@ -759,8 +757,8 @@ void WebPluginContainerImpl::HandleMouseEvent(MouseEvent* event) {
 
   // TODO(dtapuska): Move WebMouseEventBuilder into the anonymous namespace
   // in this class.
-  WebMouseEventBuilder transformed_event(
-      &parent, LayoutItem(element_->GetLayoutObject()), *event);
+  WebMouseEventBuilder transformed_event(&parent, element_->GetLayoutObject(),
+                                         *event);
   if (transformed_event.GetType() == WebInputEvent::kUndefined)
     return;
 
@@ -993,8 +991,8 @@ void WebPluginContainerImpl::HandleGestureEvent(GestureEvent* event) {
 }
 
 void WebPluginContainerImpl::SynthesizeMouseEventIfPossible(TouchEvent* event) {
-  WebMouseEventBuilder web_event(
-      &ParentFrameView(), LayoutItem(element_->GetLayoutObject()), *event);
+  WebMouseEventBuilder web_event(&ParentFrameView(),
+                                 element_->GetLayoutObject(), *event);
   if (web_event.GetType() == WebInputEvent::kUndefined)
     return;
 
@@ -1044,9 +1042,9 @@ void WebPluginContainerImpl::ComputeClipRectsForPlugin(
   LayoutRect layout_window_rect =
       LayoutRect(element_->GetDocument()
                      .View()
-                     ->GetLayoutViewItem()
-                     .LocalToAbsoluteQuad(FloatQuad(FloatRect(frame_rect_)),
-                                          kTraverseDocumentBoundaries)
+                     ->GetLayoutView()
+                     ->LocalToAbsoluteQuad(FloatQuad(FloatRect(frame_rect_)),
+                                           kTraverseDocumentBoundaries)
                      .BoundingBox());
   // Finally, adjust for scrolling of the root frame, which the above does not
   // take into account.
@@ -1080,10 +1078,7 @@ void WebPluginContainerImpl::CalculateGeometry(IntRect& window_rect,
   // document().layoutView() can be null when we receive messages from the
   // plugins while we are destroying a frame.
   // FIXME: Can we just check m_element->document().isActive() ?
-  if (!element_->GetLayoutObject()
-           ->GetDocument()
-           .GetLayoutViewItem()
-           .IsNull()) {
+  if (element_->GetLayoutObject()->GetDocument().GetLayoutView()) {
     // Take our element and get the clip rect from the enclosing layer and
     // frame view.
     ComputeClipRectsForPlugin(element_, window_rect, clip_rect,

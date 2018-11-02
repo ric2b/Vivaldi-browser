@@ -61,6 +61,10 @@ const char kAshEnableKeyboardShortcutViewer[] =
 const char kAshEnableMagnifierKeyScroller[] =
     "ash-enable-magnifier-key-scroller";
 
+// Enables the new overview ui.
+// TODO(sammiequon): Remove this once the feature is launched. crbug.com/782330.
+const char kAshEnableNewOverviewUi[] = "ash-enable-new-overview-ui";
+
 // Enable the Night Light feature.
 const char kAshEnableNightLight[] = "ash-enable-night-light";
 
@@ -71,9 +75,6 @@ const char kAshEnablePaletteOnAllDisplays[] =
 // Enables the sidebar.
 const char kAshSidebarEnabled[] = "enable-ash-sidebar";
 const char kAshSidebarDisabled[] = "disable-ash-sidebar";
-
-// Enables the split view on tablet mode.
-const char kAshEnableTabletSplitView[] = "enable-tablet-splitview";
 
 // Enables the observation of accelerometer events to enter tablet
 // mode.  The flag is "enable-touchview" not "enable-tabletmode" as this
@@ -89,6 +90,9 @@ const char kAshEnableMirroredScreen[] = "ash-enable-mirrored-screen";
 // Enables display scale tray settings. This uses force-device-scale-factor flag
 // to modify the dsf of the device to any non discrete value.
 const char kAshEnableScaleSettingsTray[] = "ash-enable-scale-settings-tray";
+
+// Enables the split view on tablet mode.
+const char kAshEnableTabletSplitView[] = "enable-tablet-splitview";
 
 // Specifies the estimated time (in milliseconds) from VSYNC event until when
 // visible light can be noticed by the user.
@@ -142,6 +146,14 @@ const char kForceClamshellPowerButton[] = "force-clamshell-power-button";
 // Whether this device has an internal stylus.
 const char kHasInternalStylus[] = "has-internal-stylus";
 
+// If true, a long press of the power button in tablet mode will show the power
+// button menu.
+const char kShowPowerButtonMenu[] = "show-power-button-menu";
+
+// Draws a circle at each touch point, similar to the Android OS developer
+// option "Show taps".
+const char kShowTaps[] = "show-taps";
+
 // If true, the views login screen will be shown. This will become the default
 // in the future.
 const char kShowViewsLogin[] = "show-views-login";
@@ -181,8 +193,8 @@ bool IsUsingViewsLogin() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kShowViewsLogin);
 }
 
-bool IsUsingWebUiLock() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(kShowWebUiLock);
+bool IsUsingViewsLock() {
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(kShowWebUiLock);
 }
 
 }  // namespace switches

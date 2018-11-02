@@ -285,7 +285,6 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
       if (desc_idx >= samp_descr.audio_entries.size())
         desc_idx = 0;
       const AudioSampleEntry& entry = samp_descr.audio_entries[desc_idx];
-      const AAC& aac = entry.esds.aac;
 
       // For encrypted audio streams entry.format is FOURCC_ENCA and actual
       // format is in entry.sinf.format.format.
@@ -308,7 +307,9 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
       AudioCodec codec = kUnknownAudioCodec;
       ChannelLayout channel_layout = CHANNEL_LAYOUT_NONE;
       int sample_per_second = 0;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
       int input_samples_per_second = 0;
+#endif
       std::vector<uint8_t> extra_data;
 
       if (audio_format == FOURCC_FLAC) {
@@ -325,6 +326,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         channel_layout = GuessChannelLayout(entry.channelcount);
         sample_per_second = entry.samplerate;
         extra_data = entry.dfla.stream_info;
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
       } else {
         uint8_t audio_type = entry.esds.object_type;
 #if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
@@ -347,13 +349,17 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
         // Check if it is MPEG4 AAC defined in ISO 14496 Part 3 or
         // supported MPEG2 AAC varients.
         if (ESDescriptor::IsAAC(audio_type)) {
+          const AAC& aac = entry.esds.aac;
           codec = kCodecAAC;
           channel_layout = aac.GetChannelLayout(has_sbr_);
           sample_per_second = aac.GetOutputSamplesPerSecond(has_sbr_);
 #if defined(OS_ANDROID)
           extra_data = aac.codec_specific_data();
 #elif defined(USE_SYSTEM_PROPRIETARY_CODECS)
+          // FEATURE_EXTRA_DATA
           extra_data = entry.esds.data;
+          // FEATURE_INPUT_SAMPLES_PER_SECOND
+          input_samples_per_second = aac.GetSamplesPerSecond();
 #endif
 #if BUILDFLAG(ENABLE_AC3_EAC3_AUDIO_DEMUXING)
         } else if (audio_type == kAC3) {
@@ -371,6 +377,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
               << static_cast<int>(audio_type) << " in esds.";
           return false;
         }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
       }
 
       SampleFormat sample_format;
@@ -415,7 +422,9 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
                                      << audio_config.AsHumanReadableString();
         return false;
       }
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_INPUT_SAMPLES_PER_SECOND
       audio_config.set_input_samples_per_second(input_samples_per_second);
+#endif
       has_audio_ = true;
       audio_track_ids_.insert(audio_track_id);
       const char* track_kind = (audio_track_ids_.size() == 1 ? "main" : "");
@@ -473,7 +482,7 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           return false;
       }
       video_config.Initialize(entry.video_codec, entry.video_codec_profile,
-                              PIXEL_FORMAT_YV12, COLOR_SPACE_HD_REC709,
+                              PIXEL_FORMAT_I420, COLOR_SPACE_HD_REC709,
                               VIDEO_ROTATION_0, coded_size, visible_rect,
                               natural_size,
                               // No decoder-specific buffer needed for AVC;
@@ -600,6 +609,7 @@ void MP4StreamParser::OnEncryptedMediaInitData(
   encrypted_media_init_data_cb_.Run(EmeInitDataType::CENC, init_data);
 }
 
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
 bool MP4StreamParser::PrepareAACBuffer(
     const AAC& aac_config,
     std::vector<uint8_t>* frame_buf,
@@ -617,6 +627,7 @@ bool MP4StreamParser::PrepareAACBuffer(
   }
   return true;
 }
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 
 ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   DCHECK_EQ(state_, kEmittingSamples);
@@ -736,11 +747,17 @@ ParseResult MP4StreamParser::EnqueueSample(BufferQueueMap* buffers) {
   }
 
   if (audio) {
-    if (ESDescriptor::IsAAC(runs_->audio_description().esds.object_type) &&
-        !PrepareAACBuffer(runs_->audio_description().esds.aac,
-                          &frame_buf, &subsamples)) {
-      MEDIA_LOG(ERROR, media_log_) << "Failed to prepare AAC sample for decode";
+    if (ESDescriptor::IsAAC(runs_->audio_description().esds.object_type)) {
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
+      if (!PrepareAACBuffer(runs_->audio_description().esds.aac, &frame_buf,
+                            &subsamples)) {
+        MEDIA_LOG(ERROR, media_log_)
+            << "Failed to prepare AAC sample for decode";
+        return ParseResult::kError;
+      }
+#else
       return ParseResult::kError;
+#endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
     }
   }
 

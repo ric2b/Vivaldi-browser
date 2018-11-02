@@ -93,7 +93,7 @@ const Extension* ShellExtensionSystem::LoadApp(const base::FilePath& app_dir) {
   return LoadExtension(app_dir);
 }
 
-void ShellExtensionSystem::Init() {
+void ShellExtensionSystem::FinishInitialization() {
   // Inform the rest of the extensions system to start.
   ready_.Signal();
   content::NotificationService::current()->Notify(
@@ -123,6 +123,10 @@ void ShellExtensionSystem::InitForRegularProfile(bool extensions_enabled) {
       new RuntimeData(ExtensionRegistry::Get(browser_context_)));
   quota_service_.reset(new QuotaService);
   app_sorting_.reset(new NullAppSorting);
+}
+
+void ShellExtensionSystem::InitForIncognitoProfile() {
+  NOTREACHED();
 }
 
 ExtensionService* ShellExtensionSystem::extension_service() {
@@ -198,8 +202,11 @@ std::unique_ptr<ExtensionSet> ShellExtensionSystem::GetDependentExtensions(
   return std::make_unique<ExtensionSet>();
 }
 
-void ShellExtensionSystem::InstallUpdate(const std::string& extension_id,
-                                         const base::FilePath& temp_dir) {
+void ShellExtensionSystem::InstallUpdate(
+    const std::string& extension_id,
+    const std::string& public_key,
+    const base::FilePath& temp_dir,
+    InstallUpdateCallback install_update_callback) {
   NOTREACHED();
   base::DeleteFile(temp_dir, true /* recursive */);
 }

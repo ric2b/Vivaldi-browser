@@ -14,6 +14,7 @@
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
 #include "base/sequence_checker.h"
 #include "base/synchronization/lock.h"
@@ -137,6 +138,7 @@ class BlinkTestController : public WebContentsObserver,
       int sender_process_host_id,
       const base::DictionaryValue& changed_layout_test_runtime_flags);
   void OnTestFinishedInSecondaryRenderer();
+  void OnInspectSecondaryWindow();
 
   // Makes sure that the potentially new renderer associated with |frame| is 1)
   // initialized for the test, 2) kept up to date wrt test flags and 3)
@@ -209,11 +211,7 @@ class BlinkTestController : public WebContentsObserver,
   void OnOverridePreferences(const WebPreferences& prefs);
   void OnSetPopupBlockingEnabled(bool block_popups);
   void OnTestFinished();
-  void OnClearDevToolsLocalStorage();
-  void OnShowDevTools(const std::string& settings,
-                      const std::string& frontend_url);
-  void OnEvaluateInDevTools(int call_id, const std::string& script);
-  void OnCloseDevTools();
+  void OnNavigateSecondaryWindow(const GURL& url);
   void OnGoToOffset(int offset);
   void OnReload();
   void OnLoadURLForFrame(const GURL& url, const std::string& frame_name);
@@ -307,6 +305,8 @@ class BlinkTestController : public WebContentsObserver,
 #endif
 
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<BlinkTestController> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BlinkTestController);
 };

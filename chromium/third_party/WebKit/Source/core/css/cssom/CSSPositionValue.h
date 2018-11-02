@@ -24,6 +24,11 @@ class CORE_EXPORT CSSPositionValue final : public CSSStyleValue {
                                   CSSNumericValue* y,
                                   ExceptionState&);
 
+  // Blink-internal constructor
+  static CSSPositionValue* Create(CSSNumericValue* x, CSSNumericValue* y);
+
+  static CSSPositionValue* FromCSSValue(const CSSValue&);
+
   // Getters and setters defined in the IDL.
   CSSNumericValue* x() { return x_.Get(); }
   CSSNumericValue* y() { return y_.Get(); }
@@ -33,13 +38,16 @@ class CORE_EXPORT CSSPositionValue final : public CSSStyleValue {
   // Internal methods - from CSSStyleValue.
   StyleValueType GetType() const final { return kPositionType; }
 
-  const CSSValue* ToCSSValue(SecureContextMode) const final;
+  const CSSValue* ToCSSValue() const final;
 
   virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(x_);
     visitor->Trace(y_);
     CSSStyleValue::Trace(visitor);
   }
+
+ private:
+  static bool IsValidCoordinate(CSSNumericValue* coord);
 
  protected:
   CSSPositionValue(CSSNumericValue* x, CSSNumericValue* y) : x_(x), y_(y) {}

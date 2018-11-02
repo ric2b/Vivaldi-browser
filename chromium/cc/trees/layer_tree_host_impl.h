@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -73,6 +74,7 @@ class PendingTreeDurationHistogramTimer;
 class PendingTreeRasterDurationHistogramTimer;
 class RasterTilePriorityQueue;
 class RasterBufferProvider;
+class RenderFrameMetadata;
 class RenderingStatsInstrumentation;
 class ResourcePool;
 class ScrollElasticityHelper;
@@ -138,6 +140,14 @@ class LayerTreeHostImplClient {
 
   virtual void RequestBeginMainFrameNotExpected(bool new_state) = 0;
 
+  // Called when a presentation time is requested. |source_frames| identifies
+  // the frames that correspond to the request.
+  virtual void DidPresentCompositorFrameOnImplThread(
+      const std::vector<int>& source_frames,
+      base::TimeTicks time,
+      base::TimeDelta refresh,
+      uint32_t flags) = 0;
+
  protected:
   virtual ~LayerTreeHostImplClient() {}
 };
@@ -184,7 +194,7 @@ class CC_EXPORT LayerTreeHostImpl
   void RequestUpdateForSynchronousInputHandler() override;
   void SetSynchronousInputHandlerRootScrollOffset(
       const gfx::ScrollOffset& root_offset) override;
-  void ScrollEnd(ScrollState* scroll_state) override;
+  void ScrollEnd(ScrollState* scroll_state, bool should_snap = false) override;
   InputHandler::ScrollStatus FlingScrollBegin() override;
 
   void MouseDown() override;
@@ -239,6 +249,7 @@ class CC_EXPORT LayerTreeHostImpl
     void AsValueInto(base::trace_event::TracedValue* value) const;
 
     std::vector<viz::SurfaceId> activation_dependencies;
+    base::Optional<uint32_t> deadline_in_frames;
     std::vector<gfx::Rect> occluding_screen_space_rects;
     std::vector<gfx::Rect> non_occluding_screen_space_rects;
     viz::RenderPassList render_passes;
@@ -563,7 +574,8 @@ class CC_EXPORT LayerTreeHostImpl
 
   void ScheduleMicroBenchmark(std::unique_ptr<MicroBenchmarkImpl> benchmark);
 
-  viz::CompositorFrameMetadata MakeCompositorFrameMetadata() const;
+  viz::CompositorFrameMetadata MakeCompositorFrameMetadata();
+  RenderFrameMetadata MakeRenderFrameMetadata();
 
   // Viewport rectangle and clip in device space.  These rects are used to
   // prioritize raster and determine what is submitted in a CompositorFrame.
@@ -752,6 +764,12 @@ class CC_EXPORT LayerTreeHostImpl
                                    const gfx::Vector2dF& scroll_delta,
                                    base::TimeDelta delayed_by);
 
+  void ScrollEndImpl(ScrollState* scroll_state);
+
+  // Creates an animation curve and returns true if we need to update the
+  // scroll position to a snap point. Otherwise returns false.
+  bool SnapAtScrollEnd();
+
   void SetContextVisibility(bool is_visible);
   void ImageDecodeFinished(int request_id, bool decode_succeeded);
 
@@ -845,6 +863,11 @@ class CC_EXPORT LayerTreeHostImpl
   DecodedImageTracker decoded_image_tracker_;
 
   gfx::Vector2dF accumulated_root_overscroll_;
+
+  // True iff some of the delta has been consumed for the current scroll
+  // sequence on the specific axis.
+  bool did_scroll_x_for_scroll_gesture_;
+  bool did_scroll_y_for_scroll_gesture_;
 
   bool pinch_gesture_active_;
   bool pinch_gesture_end_should_clear_scrolling_node_;
@@ -942,6 +965,17 @@ class CC_EXPORT LayerTreeHostImpl
   base::Optional<ImageAnimationController> image_animation_controller_;
 
   std::unique_ptr<UkmManager> ukm_manager_;
+
+  // Maps from presentation_token set on CF to the source frame that requested
+  // it. Presentation tokens are requested if the active tree has
+  // request_presentation_time() set.
+  base::flat_map<uint32_t, int> presentation_token_to_frame_;
+
+  // If non-zero identifies the presentation-token added to the last CF. Reset
+  // to zero when no more presentation tokens are in flight.
+  uint32_t last_presentation_token_ = 0u;
+
+  viz::LocalSurfaceId last_draw_local_surface_id_;
 
   DISALLOW_COPY_AND_ASSIGN(LayerTreeHostImpl);
 };

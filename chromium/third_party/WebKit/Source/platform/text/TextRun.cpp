@@ -34,9 +34,7 @@ struct ExpectedTextRunSize {
   DISALLOW_NEW();
   const void* pointer;
   int integers[2];
-  float float1;
-  float float2;
-  float float3;
+  float floats[2];
   uint32_t bitfields : 10;
   TabSize tab_size;
 };
@@ -70,7 +68,7 @@ std::unique_ptr<UChar[]> TextRun::NormalizedUTF16(
     source = Characters16();
   }
 
-  UChar* buffer = new UChar[len_ + 1];
+  auto buffer = std::make_unique<UChar[]>(len_ + 1);
   *result_length = 0;
 
   bool error = false;
@@ -99,7 +97,7 @@ std::unique_ptr<UChar[]> TextRun::NormalizedUTF16(
   }
 
   DCHECK(*result_length <= len_);
-  return WrapArrayUnique(buffer);
+  return buffer;
 }
 
 unsigned TextRun::IndexOfSubRun(const TextRun& sub_run) const {

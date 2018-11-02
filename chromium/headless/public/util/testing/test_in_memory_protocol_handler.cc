@@ -4,7 +4,8 @@
 
 #include "headless/public/util/testing/test_in_memory_protocol_handler.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "headless/public/util/expedited_dispatcher.h"
 #include "headless/public/util/generic_url_request_job.h"
 #include "headless/public/util/url_fetcher.h"
@@ -21,10 +22,20 @@ class TestInMemoryProtocolHandler::MockURLFetcher : public URLFetcher {
   void StartFetch(const Request* request,
                   ResultListener* result_listener) override {
     GURL url = request->GetURLRequest()->url();
-    DCHECK_EQ("GET", request->GetURLRequest()->method());
+    const std::string& method = request->GetURLRequest()->method();
+    if (method == "POST" || method == "PUT") {
+      request->GetPostData();
+    } else if (method == "GET") {
+      // Do nothing.
+    } else {
+      DCHECK(false) << "Method " << method << " is not supported. Probably.";
+    }
 
     std::string devtools_frame_id = request->GetDevToolsFrameId();
-    DCHECK_NE(devtools_frame_id, "") << " For url " << url;
+    // Note |devtools_frame_id| can sometimes be empty if called during context
+    // shutdown. This isn't a big deal because code should avoid performing net
+    // operations during shutdown.
+    protocol_handler_->methods_requested_.push_back(method);
     protocol_handler_->RegisterUrl(url.spec(), devtools_frame_id);
 
     if (protocol_handler_->request_deferrer()) {
@@ -113,7 +124,7 @@ net::URLRequestJob* TestInMemoryProtocolHandler::MaybeCreateJob(
     net::NetworkDelegate* network_delegate) const {
   return new GenericURLRequestJob(
       request, network_delegate, dispatcher_.get(),
-      base::MakeUnique<MockURLFetcher>(
+      std::make_unique<MockURLFetcher>(
           const_cast<TestInMemoryProtocolHandler*>(this)),
       test_delegate_.get(), headless_browser_context_);
 }

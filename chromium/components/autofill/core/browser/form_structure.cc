@@ -32,6 +32,9 @@
 #include "components/autofill/core/browser/rationalization_util.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_regex_constants.h"
+#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
@@ -505,9 +508,6 @@ void FormStructure::ParseQueryResponse(
           current_field->overall_type_prediction());
       query_response_has_no_server_data &= field_type == NO_SERVER_DATA;
 
-      // UNKNOWN_TYPE is reserved for use by the client.
-      DCHECK_NE(field_type, UNKNOWN_TYPE);
-
       ServerFieldType heuristic_type = field->heuristic_type();
       if (heuristic_type != UNKNOWN_TYPE)
         heuristics_detected_fillable_field = true;
@@ -597,7 +597,7 @@ bool FormStructure::IsAutofillFieldMetadataEnabled() {
 }
 
 std::string FormStructure::FormSignatureAsStr() const {
-  return base::Uint64ToString(form_signature());
+  return base::NumberToString(form_signature());
 }
 
 bool FormStructure::IsAutofillable() const {
@@ -645,10 +645,11 @@ bool FormStructure::ShouldBeParsed() const {
     return false;
   }
 
-  // Rule out http(s)://*/search?...
-  //  e.g. http://www.google.com/search?q=...
-  //       http://search.yahoo.com/search?p=...
-  if (target_url_.path_piece() == "/search") {
+  // Rule out search forms.
+  static const base::string16 kUrlSearchActionPattern =
+      base::UTF8ToUTF16(kUrlSearchActionRe);
+  if (MatchesPattern(base::UTF8ToUTF16(target_url_.path_piece()),
+                     kUrlSearchActionPattern)) {
     return false;
   }
 
@@ -662,7 +663,9 @@ bool FormStructure::ShouldBeParsed() const {
 
 bool FormStructure::ShouldRunHeuristics() const {
   return active_field_count() >= MinRequiredFieldsForHeuristics() &&
-         (is_form_tag_ || is_formless_checkout_);
+         (is_form_tag_ || is_formless_checkout_ ||
+          !base::FeatureList::IsEnabled(
+              features::kAutofillRestrictUnownedFieldsToFormlessCheckout));
 }
 
 bool FormStructure::ShouldBeQueried() const {
@@ -1271,8 +1274,11 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
             field->form_classifier_outcome());
       }
 
-      if (field->username_vote_type())
+      if (field->username_vote_type()) {
         added_field->set_username_vote_type(field->username_vote_type());
+      } else {
+        DCHECK(field_type != autofill::USERNAME);
+      }
 
       added_field->set_signature(field->GetFieldSignature());
 
@@ -1326,6 +1332,12 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
 
     for (const auto& field : fields_) {
       const ServerFieldType current_type = field->Type().GetStorableType();
+      // All credit card fields belong to the same section that's different
+      // from address sections.
+      if (AutofillType(current_type).group() == CREDIT_CARD) {
+        field->set_section("credit-card");
+        continue;
+      }
 
       bool already_saw_current_type = seen_types.count(current_type) > 0;
 

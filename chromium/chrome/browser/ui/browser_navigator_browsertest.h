@@ -26,8 +26,8 @@ class WebContents;
 class BrowserNavigatorTest : public InProcessBrowserTest,
                              public content::NotificationObserver {
  protected:
-  chrome::NavigateParams MakeNavigateParams() const;
-  chrome::NavigateParams MakeNavigateParams(Browser* browser) const;
+  NavigateParams MakeNavigateParams() const;
+  NavigateParams MakeNavigateParams(Browser* browser) const;
 
   Browser* CreateEmptyBrowserForType(Browser::Type type, Profile* profile);
   Browser* CreateEmptyBrowserForApp(Profile* profile);
@@ -47,6 +47,10 @@ class BrowserNavigatorTest : public InProcessBrowserTest,
                                                 const std::string& post_data,
                                                 bool is_browser_initiated,
                                                 base::string16* title);
+
+  Browser* NavigateHelper(const GURL& url,
+                          Browser* browser,
+                          WindowOpenDisposition disposition);
 
   size_t created_tab_contents_count_;
 };

@@ -221,6 +221,7 @@ class CreateEventResult {
  public:
   CreateEventResult();
   bool success;
+  std::string message;
   EventRow createdRow;
 
  private:

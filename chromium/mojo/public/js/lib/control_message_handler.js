@@ -2,110 +2,104 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-define("mojo/public/js/lib/control_message_handler", [
-  "mojo/public/interfaces/bindings/interface_control_messages.mojom",
-  "mojo/public/js/codec",
-  "mojo/public/js/validator",
-], function(controlMessages, codec, validator) {
-
-  var Validator = validator.Validator;
+(function() {
+  var internal = mojo.internal;
 
   function validateControlRequestWithResponse(message) {
-    var messageValidator = new Validator(message);
+    var messageValidator = new internal.Validator(message);
     var error = messageValidator.validateMessageIsRequestExpectingResponse();
-    if (error !== validator.validationError.NONE) {
+    if (error !== internal.validationError.NONE) {
       throw error;
     }
 
-    if (message.getName() != controlMessages.kRunMessageId) {
+    if (message.getName() != mojo.interfaceControl.kRunMessageId) {
       throw new Error("Control message name is not kRunMessageId");
     }
 
     // Validate payload.
-    error = controlMessages.RunMessageParams.validate(messageValidator,
+    error = mojo.interfaceControl.RunMessageParams.validate(messageValidator,
         message.getHeaderNumBytes());
-    if (error != validator.validationError.NONE) {
+    if (error != internal.validationError.NONE) {
       throw error;
     }
   }
 
   function validateControlRequestWithoutResponse(message) {
-    var messageValidator = new Validator(message);
+    var messageValidator = new internal.Validator(message);
     var error = messageValidator.validateMessageIsRequestWithoutResponse();
-    if (error != validator.validationError.NONE) {
+    if (error != internal.validationError.NONE) {
       throw error;
     }
 
-    if (message.getName() != controlMessages.kRunOrClosePipeMessageId) {
+    if (message.getName() != mojo.interfaceControl.kRunOrClosePipeMessageId) {
       throw new Error("Control message name is not kRunOrClosePipeMessageId");
     }
 
     // Validate payload.
-    error = controlMessages.RunOrClosePipeMessageParams.validate(
+    error = mojo.interfaceControl.RunOrClosePipeMessageParams.validate(
         messageValidator, message.getHeaderNumBytes());
-    if (error != validator.validationError.NONE) {
+    if (error != internal.validationError.NONE) {
       throw error;
     }
   }
 
-  function runOrClosePipe(message, interface_version) {
-    var reader = new codec.MessageReader(message);
+  function runOrClosePipe(message, interfaceVersion) {
+    var reader = new internal.MessageReader(message);
     var runOrClosePipeMessageParams = reader.decodeStruct(
-        controlMessages.RunOrClosePipeMessageParams);
-    return interface_version >=
-        runOrClosePipeMessageParams.input.require_version.version;
+        mojo.interfaceControl.RunOrClosePipeMessageParams);
+    return interfaceVersion >=
+        runOrClosePipeMessageParams.input.requireVersion.version;
   }
 
-  function run(message, responder, interface_version) {
-    var reader = new codec.MessageReader(message);
+  function run(message, responder, interfaceVersion) {
+    var reader = new internal.MessageReader(message);
     var runMessageParams =
-        reader.decodeStruct(controlMessages.RunMessageParams);
+        reader.decodeStruct(mojo.interfaceControl.RunMessageParams);
     var runOutput = null;
 
-    if (runMessageParams.input.query_version) {
-      runOutput = new controlMessages.RunOutput();
-      runOutput.query_version_result = new
-          controlMessages.QueryVersionResult({'version': interface_version});
+    if (runMessageParams.input.queryVersion) {
+      runOutput = new mojo.interfaceControl.RunOutput();
+      runOutput.queryVersionResult = new
+          mojo.interfaceControl.QueryVersionResult(
+              {'version': interfaceVersion});
     }
 
     var runResponseMessageParams = new
-        controlMessages.RunResponseMessageParams();
+        mojo.interfaceControl.RunResponseMessageParams();
     runResponseMessageParams.output = runOutput;
 
-    var messageName = controlMessages.kRunMessageId;
-    var payloadSize = controlMessages.RunResponseMessageParams.encodedSize;
+    var messageName = mojo.interfaceControl.kRunMessageId;
+    var payloadSize =
+        mojo.interfaceControl.RunResponseMessageParams.encodedSize;
     var requestID = reader.requestID;
-    var builder = new codec.MessageV1Builder(messageName,
-        payloadSize, codec.kMessageIsResponse, requestID);
-    builder.encodeStruct(controlMessages.RunResponseMessageParams,
+    var builder = new internal.MessageV1Builder(messageName,
+        payloadSize, internal.kMessageIsResponse, requestID);
+    builder.encodeStruct(mojo.interfaceControl.RunResponseMessageParams,
                          runResponseMessageParams);
     responder.accept(builder.finish());
     return true;
   }
 
-  function isControlMessage(message) {
-    return message.getName() == controlMessages.kRunMessageId ||
-           message.getName() == controlMessages.kRunOrClosePipeMessageId;
+  function isInterfaceControlMessage(message) {
+    return message.getName() == mojo.interfaceControl.kRunMessageId ||
+           message.getName() == mojo.interfaceControl.kRunOrClosePipeMessageId;
   }
 
-  function ControlMessageHandler(interface_version) {
-    this.interface_version_ = interface_version;
+  function ControlMessageHandler(interfaceVersion) {
+    this.interfaceVersion_ = interfaceVersion;
   }
 
   ControlMessageHandler.prototype.accept = function(message) {
     validateControlRequestWithoutResponse(message);
-    return runOrClosePipe(message, this.interface_version_);
+    return runOrClosePipe(message, this.interfaceVersion_);
   };
 
   ControlMessageHandler.prototype.acceptWithResponder = function(message,
       responder) {
     validateControlRequestWithResponse(message);
-    return run(message, responder, this.interface_version_);
+    return run(message, responder, this.interfaceVersion_);
   };
 
-  var exports = {};
-  exports.ControlMessageHandler = ControlMessageHandler;
-  exports.isControlMessage = isControlMessage;
-
-  return exports;
-});
+  internal.ControlMessageHandler = ControlMessageHandler;
+  internal.isInterfaceControlMessage = isInterfaceControlMessage;
+})();

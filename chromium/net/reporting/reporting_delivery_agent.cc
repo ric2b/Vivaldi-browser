@@ -81,7 +81,7 @@ class ReportingDeliveryAgentImpl : public ReportingDeliveryAgent,
              const std::vector<const ReportingReport*>& reports)
         : endpoint(endpoint), reports(reports) {}
 
-    ~Delivery() {}
+    ~Delivery() = default;
 
     const GURL endpoint;
     const std::vector<const ReportingReport*> reports;
@@ -97,8 +97,8 @@ class ReportingDeliveryAgentImpl : public ReportingDeliveryAgent,
 
   void StartTimer() {
     timer_->Start(FROM_HERE, policy().delivery_interval,
-                  base::Bind(&ReportingDeliveryAgentImpl::OnTimerFired,
-                             base::Unretained(this)));
+                  base::BindRepeating(&ReportingDeliveryAgentImpl::OnTimerFired,
+                                      base::Unretained(this)));
   }
 
   void OnTimerFired() {
@@ -160,9 +160,9 @@ class ReportingDeliveryAgentImpl : public ReportingDeliveryAgent,
 
       uploader()->StartUpload(
           endpoint, json,
-          base::Bind(&ReportingDeliveryAgentImpl::OnUploadComplete,
-                     weak_factory_.GetWeakPtr(),
-                     std::make_unique<Delivery>(endpoint, reports)));
+          base::BindOnce(&ReportingDeliveryAgentImpl::OnUploadComplete,
+                         weak_factory_.GetWeakPtr(),
+                         std::make_unique<Delivery>(endpoint, reports)));
     }
   }
 
@@ -219,6 +219,6 @@ std::unique_ptr<ReportingDeliveryAgent> ReportingDeliveryAgent::Create(
   return std::make_unique<ReportingDeliveryAgentImpl>(context);
 }
 
-ReportingDeliveryAgent::~ReportingDeliveryAgent() {}
+ReportingDeliveryAgent::~ReportingDeliveryAgent() = default;
 
 }  // namespace net

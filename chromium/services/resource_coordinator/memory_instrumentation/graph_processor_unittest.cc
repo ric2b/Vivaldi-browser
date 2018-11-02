@@ -45,21 +45,21 @@ class GraphProcessorTest : public testing::Test {
 
   void AssignTracingOverhead(base::StringPiece allocator,
                              GlobalDumpGraph* global_graph,
-                             GlobalDumpGraph::Process* process) {
+                             Process* process) {
     GraphProcessor::AssignTracingOverhead(allocator, global_graph, process);
   }
 
   GlobalDumpGraph::Node::Entry AggregateNumericWithNameForNode(
-      GlobalDumpGraph::Node* node,
+      Node* node,
       base::StringPiece name) {
     return GraphProcessor::AggregateNumericWithNameForNode(node, name);
   }
 
-  void AggregateNumericsRecursively(GlobalDumpGraph::Node* node) {
+  void AggregateNumericsRecursively(Node* node) {
     GraphProcessor::AggregateNumericsRecursively(node);
   }
 
-  void PropagateNumericsAndDiagnosticsRecursively(GlobalDumpGraph::Node* node) {
+  void PropagateNumericsAndDiagnosticsRecursively(Node* node) {
     GraphProcessor::PropagateNumericsAndDiagnosticsRecursively(node);
   }
 
@@ -68,12 +68,24 @@ class GraphProcessorTest : public testing::Test {
     return GraphProcessor::AggregateSizeForDescendantNode(root, descendant);
   }
 
-  void CalculateSizeForNode(GlobalDumpGraph::Node* node) {
+  void CalculateSizeForNode(Node* node) {
     GraphProcessor::CalculateSizeForNode(node);
   }
 
   void CalculateDumpSubSizes(Node* node) {
     GraphProcessor::CalculateDumpSubSizes(node);
+  }
+
+  void CalculateDumpOwnershipCoefficient(Node* node) {
+    GraphProcessor::CalculateDumpOwnershipCoefficient(node);
+  }
+
+  void CalculateDumpCumulativeOwnershipCoefficient(Node* node) {
+    GraphProcessor::CalculateDumpCumulativeOwnershipCoefficient(node);
+  }
+
+  void CalculateDumpEffectiveSize(Node* node) {
+    GraphProcessor::CalculateDumpEffectiveSize(node);
   }
 
  protected:
@@ -603,6 +615,114 @@ TEST_F(GraphProcessorTest, CalculateDumpSubSizes) {
   CalculateDumpSubSizes(process_2->root());
   ASSERT_EQ(process_2->root()->not_owned_sub_size(), 1ul);
   ASSERT_EQ(process_2->root()->not_owning_sub_size(), 5ul);
+}
+
+TEST_F(GraphProcessorTest, CalculateDumpOwnershipCoefficient) {
+  Process* process = graph.CreateGraphForProcess(1);
+
+  Node* owned = process->CreateNode(kEmptyGuid, "owned", false);
+  Node* owner_1 = process->CreateNode(kEmptyGuid, "owner1", false);
+  Node* owner_2 = process->CreateNode(kEmptyGuid, "owner2", false);
+  Node* owner_3 = process->CreateNode(kEmptyGuid, "owner3", false);
+  Node* owner_4 = process->CreateNode(kEmptyGuid, "owner4", false);
+
+  graph.AddNodeOwnershipEdge(owner_1, owned, 2);
+  graph.AddNodeOwnershipEdge(owner_2, owned, 2);
+  graph.AddNodeOwnershipEdge(owner_3, owned, 1);
+  graph.AddNodeOwnershipEdge(owner_4, owned, 0);
+
+  // Ensure the owned node has a size otherwise calculations will not happen.
+  owned->AddEntry("size", Node::Entry::kBytes, 10);
+
+  // Setup the owned/owning sub sizes.
+  owned->add_not_owned_sub_size(10);
+  owner_1->add_not_owning_sub_size(6);
+  owner_2->add_not_owning_sub_size(7);
+  owner_3->add_not_owning_sub_size(5);
+  owner_4->add_not_owning_sub_size(8);
+
+  // Perform the computation.
+  CalculateDumpOwnershipCoefficient(owned);
+
+  // Ensure that the coefficients are correct.
+  ASSERT_DOUBLE_EQ(owned->owned_coefficient(), 2.0 / 10.0);
+  ASSERT_DOUBLE_EQ(owner_1->owning_coefficient(), 3.0 / 6.0);
+  ASSERT_DOUBLE_EQ(owner_2->owning_coefficient(), 4.0 / 7.0);
+  ASSERT_DOUBLE_EQ(owner_3->owning_coefficient(), 0.0 / 5.0);
+  ASSERT_DOUBLE_EQ(owner_4->owning_coefficient(), 1.0 / 8.0);
+}
+
+TEST_F(GraphProcessorTest, CalculateDumpCumulativeOwnershipCoefficient) {
+  Process* process = graph.CreateGraphForProcess(1);
+
+  Node* c1 = process->CreateNode(kEmptyGuid, "c1", false);
+  Node* c1_c1 = process->CreateNode(kEmptyGuid, "c1/c1", false);
+  Node* c1_c2 = process->CreateNode(kEmptyGuid, "c1/c2", false);
+  Node* owned = process->CreateNode(kEmptyGuid, "owned", false);
+
+  graph.AddNodeOwnershipEdge(c1_c2, owned, 2);
+
+  // Ensure all nodes have sizes otherwise calculations will not happen.
+  c1_c1->AddEntry("size", Node::Entry::kBytes, 10);
+  c1_c2->AddEntry("size", Node::Entry::kBytes, 10);
+  owned->AddEntry("size", Node::Entry::kBytes, 10);
+
+  // Setup the owned/owning cummulative coefficients.
+  c1->set_cumulative_owning_coefficient(0.123);
+  c1->set_cumulative_owned_coefficient(0.456);
+  owned->set_cumulative_owning_coefficient(0.789);
+  owned->set_cumulative_owned_coefficient(0.987);
+
+  // Set owning and owned for the children.
+  c1_c1->set_owning_coefficient(0.654);
+  c1_c1->set_owned_coefficient(0.321);
+  c1_c2->set_owning_coefficient(0.135);
+  c1_c2->set_owned_coefficient(0.246);
+
+  // Perform the computation and check our answers.
+  CalculateDumpCumulativeOwnershipCoefficient(c1_c1);
+  ASSERT_DOUBLE_EQ(c1_c1->cumulative_owning_coefficient(), 0.123);
+  ASSERT_DOUBLE_EQ(c1_c1->cumulative_owned_coefficient(), 0.456 * 0.321);
+
+  CalculateDumpCumulativeOwnershipCoefficient(c1_c2);
+  ASSERT_DOUBLE_EQ(c1_c2->cumulative_owning_coefficient(), 0.135 * 0.789);
+  ASSERT_DOUBLE_EQ(c1_c2->cumulative_owned_coefficient(), 0.456 * 0.246);
+}
+
+TEST_F(GraphProcessorTest, CalculateDumpEffectiveSize) {
+  Process* process = graph.CreateGraphForProcess(1);
+
+  Node* c1 = process->CreateNode(kEmptyGuid, "c1", false);
+  Node* c1_c1 = process->CreateNode(kEmptyGuid, "c1/c1", false);
+  Node* c1_c2 = process->CreateNode(kEmptyGuid, "c1/c2", false);
+
+  // Ensure all nodes have sizes otherwise calculations will not happen.
+  c1->AddEntry("size", Node::Entry::kBytes, 200);
+  c1_c1->AddEntry("size", Node::Entry::kBytes, 32);
+  c1_c2->AddEntry("size", Node::Entry::kBytes, 20);
+
+  // Setup the owned/owning cummulative coefficients.
+  c1_c1->set_cumulative_owning_coefficient(0.123);
+  c1_c1->set_cumulative_owned_coefficient(0.456);
+  c1_c2->set_cumulative_owning_coefficient(0.789);
+  c1_c2->set_cumulative_owned_coefficient(0.987);
+
+  // Perform the computation and check our answers.
+  CalculateDumpEffectiveSize(c1_c1);
+  const Node::Entry& entry_c1_c1 =
+      c1_c1->entries()->find("effective_size")->second;
+  uint64_t expected_c1_c1 = static_cast<int>(0.123 * 0.456 * 32);
+  ASSERT_EQ(entry_c1_c1.value_uint64, expected_c1_c1);
+
+  CalculateDumpEffectiveSize(c1_c2);
+  const Node::Entry& entry_c1_c2 =
+      c1_c2->entries()->find("effective_size")->second;
+  uint64_t expected_c1_c2 = static_cast<int>(0.789 * 0.987 * 20);
+  ASSERT_EQ(entry_c1_c2.value_uint64, expected_c1_c2);
+
+  CalculateDumpEffectiveSize(c1);
+  const Node::Entry& entry_c1 = c1->entries()->find("effective_size")->second;
+  ASSERT_EQ(entry_c1.value_uint64, expected_c1_c1 + expected_c1_c2);
 }
 
 }  // namespace memory_instrumentation

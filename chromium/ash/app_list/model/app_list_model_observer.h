@@ -5,6 +5,8 @@
 #ifndef ASH_APP_LIST_MODEL_APP_LIST_MODEL_OBSERVER_H_
 #define ASH_APP_LIST_MODEL_APP_LIST_MODEL_OBSERVER_H_
 
+#include <string>
+
 #include "ash/app_list/model/app_list_model.h"
 #include "ash/app_list/model/app_list_model_export.h"
 
@@ -17,10 +19,6 @@ class APP_LIST_MODEL_EXPORT AppListModelObserver {
   // Triggered after AppListModel's status has changed.
   virtual void OnAppListModelStatusChanged() {}
 
-  // Triggered after AppListModel's state has changed.
-  virtual void OnAppListModelStateChanged(AppListModel::State old_state,
-                                          AppListModel::State new_state) {}
-
   // Triggered after |item| has been added to the model.
   virtual void OnAppListItemAdded(AppListItem* item) {}
 
@@ -28,7 +26,7 @@ class APP_LIST_MODEL_EXPORT AppListModelObserver {
   virtual void OnAppListItemWillBeDeleted(AppListItem* item) {}
 
   // Triggered just after an item is deleted from the model.
-  virtual void OnAppListItemDeleted() {}
+  virtual void OnAppListItemDeleted(const std::string& id) {}
 
   // Triggered after |item| has moved, changed folders, or changed properties.
   virtual void OnAppListItemUpdated(AppListItem* item) {}

@@ -3,12 +3,13 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
-#include "ash/app_list/model/app_list_item.h"
-#include "ash/app_list/model/app_list_model.h"
 #include "base/files/scoped_temp_dir.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/app_list/app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/app_list_test_util.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_item.h"
+#include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
@@ -20,7 +21,7 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
 
-using namespace crx_file::id_util;
+using crx_file::id_util::GenerateId;
 
 namespace {
 
@@ -47,7 +48,7 @@ std::string CreateNextAppId(const std::string& app_id) {
   size_t index = next_app_id.length() - 1;
   while (index > 0 && next_app_id[index] == 'p')
     next_app_id[index--] = 'a';
-  DCHECK(next_app_id[index] != 'p');
+  DCHECK_NE(next_app_id[index], 'p');
   next_app_id[index]++;
   DCHECK(crx_file::id_util::IdIsValid(next_app_id));
   return next_app_id;
@@ -176,14 +177,21 @@ class AppListSyncableServiceTest : public AppListTestBase {
     extensions::ExtensionSystem* extension_system =
         extensions::ExtensionSystem::Get(profile_.get());
     DCHECK(extension_system);
-    app_list_syncable_service_.reset(
-        new app_list::AppListSyncableService(profile_.get(), extension_system));
+    app_list_syncable_service_ =
+        std::make_unique<app_list::AppListSyncableService>(profile_.get(),
+                                                           extension_system);
+    model_updater_test_api_ =
+        std::make_unique<AppListModelUpdater::TestApi>(model_updater());
   }
 
   void TearDown() override { app_list_syncable_service_.reset(); }
 
-  app_list::AppListModel* model() {
-    return app_list_syncable_service_->GetModel();
+  ChromeAppListModelUpdater* model_updater() {
+    return app_list_syncable_service_->GetModelUpdater();
+  }
+
+  AppListModelUpdater::TestApi* model_updater_test_api() {
+    return model_updater_test_api_.get();
   }
 
   const app_list::AppListSyncableService::SyncItem* GetSyncItem(
@@ -198,6 +206,7 @@ class AppListSyncableServiceTest : public AppListTestBase {
 
  private:
   base::ScopedTempDir temp_dir_;
+  std::unique_ptr<AppListModelUpdater::TestApi> model_updater_test_api_;
   std::unique_ptr<app_list::AppListSyncableService> app_list_syncable_service_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListSyncableServiceTest);
@@ -219,13 +228,15 @@ TEST_F(AppListSyncableServiceTest, OEMFolderForConflictingPos) {
               extensions ::Extension::WAS_INSTALLED_BY_DEFAULT);
   service_->AddExtension(some_app.get());
 
-  app_list::AppListItem* web_store_item = model()->FindItem(web_store_app_id);
+  ChromeAppListItem* web_store_item =
+      model_updater()->FindItem(web_store_app_id);
   ASSERT_TRUE(web_store_item);
-  app_list::AppListItem* some_app_item = model()->FindItem(some_app_id);
+  ChromeAppListItem* some_app_item = model_updater()->FindItem(some_app_id);
   ASSERT_TRUE(some_app_item);
 
   // Simulate position conflict.
-  model()->SetItemPosition(web_store_item, some_app_item->position());
+  model_updater_test_api()->SetItemPosition(web_store_item->id(),
+                                            some_app_item->position());
 
   // Install an OEM app. It must be placed by default after web store app but in
   // case of app of the same position should be shifted next.
@@ -236,22 +247,20 @@ TEST_F(AppListSyncableServiceTest, OEMFolderForConflictingPos) {
 
   size_t web_store_app_index;
   size_t some_app_index;
-  size_t oem_app_index;
-  size_t oem_folder_index;
-  EXPECT_TRUE(model()->top_level_item_list()->FindItemIndex(
-      web_store_app_id, &web_store_app_index));
-  EXPECT_TRUE(model()->top_level_item_list()->FindItemIndex(some_app_id,
-                                                            &some_app_index));
+  EXPECT_TRUE(model_updater()->FindItemIndexForTest(web_store_app_id,
+                                                    &web_store_app_index));
+  EXPECT_TRUE(
+      model_updater()->FindItemIndexForTest(some_app_id, &some_app_index));
   // OEM item is not top level element.
-  EXPECT_FALSE(model()->top_level_item_list()->FindItemIndex(oem_app_id,
-                                                             &oem_app_index));
+  ChromeAppListItem* oem_app_item = model_updater()->FindItem(oem_app_id);
+  EXPECT_NE(nullptr, oem_app_item);
+  EXPECT_EQ(oem_app_item->folder_id(),
+            app_list::AppListSyncableService::kOemFolderId);
   // But OEM folder is.
-  EXPECT_TRUE(model()->top_level_item_list()->FindItemIndex(
-      app_list::AppListSyncableService::kOemFolderId, &oem_folder_index));
-
-  // Ensure right item sequence.
-  EXPECT_EQ(some_app_index, web_store_app_index + 1);
-  EXPECT_EQ(oem_folder_index, web_store_app_index + 2);
+  ChromeAppListItem* oem_folder =
+      model_updater()->FindItem(app_list::AppListSyncableService::kOemFolderId);
+  EXPECT_NE(nullptr, oem_folder);
+  EXPECT_EQ(oem_folder->folder_id(), "");
 }
 
 TEST_F(AppListSyncableServiceTest, InitialMerge) {
@@ -268,8 +277,8 @@ TEST_F(AppListSyncableServiceTest, InitialMerge) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
-      base::MakeUnique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId1));
@@ -292,8 +301,8 @@ TEST_F(AppListSyncableServiceTest, InitialMerge_BadData) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
-      base::MakeUnique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
   content::RunAllTasksUntilIdle();
 
   // Invalid item_ordinal and item_pin_ordinal.
@@ -347,8 +356,8 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
-      base::MakeUnique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId1));
@@ -392,8 +401,8 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate_BadData) {
 
   app_list_syncable_service()->MergeDataAndStartSyncing(
       syncer::APP_LIST, sync_list,
-      base::MakeUnique<syncer::FakeSyncChangeProcessor>(),
-      base::MakeUnique<syncer::SyncErrorFactoryMock>());
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId));
@@ -412,4 +421,22 @@ TEST_F(AppListSyncableServiceTest, InitialMergeAndUpdate_BadData) {
   content::RunAllTasksUntilIdle();
 
   ASSERT_TRUE(GetSyncItem(kItemId));
+}
+
+TEST_F(AppListSyncableServiceTest, InitialMerge_NoDriveAppData) {
+  // Note that Drive app item id must start with "drive-app-" prefix as defined
+  // in kDriveAppSyncIdPrefix in AppListSyncableService.
+  constexpr char kDriveAppItemId[] = "drive-app-fake-drive-app";
+
+  syncer::SyncDataList sync_list;
+  sync_list.push_back(CreateAppRemoteData(
+      kDriveAppItemId, "Fake Drive App", kParentId(), "ordinal", "pinordinal"));
+
+  app_list_syncable_service()->MergeDataAndStartSyncing(
+      syncer::APP_LIST, sync_list,
+      std::make_unique<syncer::FakeSyncChangeProcessor>(),
+      std::make_unique<syncer::SyncErrorFactoryMock>());
+  content::RunAllTasksUntilIdle();
+
+  ASSERT_FALSE(GetSyncItem(kDriveAppItemId));
 }

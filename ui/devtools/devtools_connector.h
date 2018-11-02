@@ -46,6 +46,8 @@ class UIBindingsDelegate : public DevToolsUIBindings::Delegate {
   void RenderProcessGone(bool crashed) override;
   void SetEyeDropperActive(bool active) override;
   void ShowCertificateViewer(const std::string& cert_chain) override;
+  void ConnectionReady() override;
+  void SetOpenNewWindowForPopups(bool value) override;
 
  private:
   // Notify JS side to update bounds.
@@ -145,7 +147,7 @@ class DevtoolsConnectorItem
   content::ColorChooser* OpenColorChooser(
     content::WebContents* web_contents,
     SkColor color,
-    const std::vector<content::ColorSuggestion>& suggestions) override;
+    const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions) override;
   void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,

@@ -25,8 +25,10 @@
 class BackgroundModeManager;
 class DownloadRequestLimiter;
 class DownloadStatusUpdater;
+#if defined(OS_ANDROID)
+class GpuDriverInfoManager;
+#endif
 class GpuModeManager;
-class GpuProfileCache;
 class IconManager;
 class IntranetRedirectDetector;
 class IOThread;
@@ -104,7 +106,7 @@ class PhysicalWebDataSource;
 }
 
 namespace policy {
-class BrowserPolicyConnector;
+class ChromeBrowserPolicyConnector;
 class PolicyService;
 }
 
@@ -201,7 +203,7 @@ class BrowserProcess {
   virtual WatchDogThread* watchdog_thread() = 0;
 
   // Starts and manages the policy system.
-  virtual policy::BrowserPolicyConnector* browser_policy_connector() = 0;
+  virtual policy::ChromeBrowserPolicyConnector* browser_policy_connector() = 0;
 
   // This is the main interface for chromium components to retrieve policy
   // information from the policy system.
@@ -211,7 +213,9 @@ class BrowserProcess {
 
   virtual GpuModeManager* gpu_mode_manager() = 0;
 
-  virtual GpuProfileCache* gpu_profile_cache() = 0;
+#if defined(OS_ANDROID)
+  virtual GpuDriverInfoManager* gpu_driver_info_manager() = 0;
+#endif
 
   // Create and bind remote debugging server to a given |ip| and |port|.
   // Passing empty |ip| results in binding to localhost:

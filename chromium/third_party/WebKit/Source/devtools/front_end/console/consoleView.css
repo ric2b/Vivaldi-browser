@@ -324,7 +324,9 @@
     flex-shrink: 0;
 }
 
-.console-message-text .object-value-string {
+.console-message-text .object-value-string,
+.console-message-text .object-value-regexp,
+.console-message-text .object-value-symbol {
     white-space: pre-wrap;
     word-break: break-all;
 }
@@ -385,6 +387,13 @@
     vertical-align: baseline;
     color: inherit;
     display: inline-block;
+    overflow-wrap: break-word;
+    max-width: 100%;
+}
+
+.console-object {
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 .console-message-stack-trace-toggle {
@@ -406,4 +415,29 @@
 
 .console-message-expand-icon {
     margin-bottom: -2px;
+}
+
+.console-inline-button {
+    background-color: #dedede;
+    padding: 2px 4px;
+    margin: 0 2px;
+    color: #333;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: sans-serif;
+    white-space: nowrap;
+    display: inline-block;
+}
+
+.console-inline-button::after {
+    content: attr(data-text);
+}
+
+.console-inline-button:hover {
+    background-color: #d5d5d5;
+}
+
+.console-searchable-view {
+    max-height: 100%;
 }

@@ -7,32 +7,13 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
-#include "core/dom/Modulator.h"
-#include "core/dom/ScriptModuleResolver.h"
 #include "core/probe/CoreProbes.h"
+#include "core/script/Modulator.h"
+#include "core/script/ScriptModuleResolver.h"
 
 namespace blink {
 
-const char* ScriptModuleStateToString(ScriptModuleState state) {
-  switch (state) {
-    case ScriptModuleState::kUninstantiated:
-      return "uninstantiated";
-    case ScriptModuleState::kInstantiating:
-      return "instantinating";
-    case ScriptModuleState::kInstantiated:
-      return "instantiated";
-    case ScriptModuleState::kEvaluating:
-      return "evaluating";
-    case ScriptModuleState::kEvaluated:
-      return "evaluated";
-    case ScriptModuleState::kErrored:
-      return "errored";
-  }
-  NOTREACHED();
-  return "";
-}
-
-ScriptModule::ScriptModule() {}
+ScriptModule::ScriptModule() = default;
 
 ScriptModule::ScriptModule(v8::Isolate* isolate, v8::Local<v8::Module> module)
     : module_(SharedPersistent<v8::Module>::Create(module, isolate)),
@@ -40,11 +21,12 @@ ScriptModule::ScriptModule(v8::Isolate* isolate, v8::Local<v8::Module> module)
   DCHECK(!module_->IsEmpty());
 }
 
-ScriptModule::~ScriptModule() {}
+ScriptModule::~ScriptModule() = default;
 
 ScriptModule ScriptModule::Compile(v8::Isolate* isolate,
                                    const String& source,
-                                   const String& file_name,
+                                   const KURL& source_url,
+                                   const KURL& base_url,
                                    const ScriptFetchOptions& options,
                                    AccessControlStatus access_control_status,
                                    const TextPosition& text_position,
@@ -52,9 +34,9 @@ ScriptModule ScriptModule::Compile(v8::Isolate* isolate,
   v8::TryCatch try_catch(isolate);
   v8::Local<v8::Module> module;
 
-  if (!V8ScriptRunner::CompileModule(
-           isolate, source, file_name, access_control_status, text_position,
-           ReferrerScriptInfo::FromScriptFetchOptions(options))
+  if (!V8ScriptRunner::CompileModule(isolate, source, source_url,
+                                     access_control_status, text_position,
+                                     ReferrerScriptInfo(base_url, options))
            .ToLocal(&module)) {
     DCHECK(try_catch.HasCaught());
     exception_state.RethrowV8Exception(try_catch.Exception());
@@ -96,8 +78,8 @@ ScriptValue ScriptModule::Evaluate(ScriptState* script_state) const {
   // TODO(kouhei): We currently don't have a code-path which use return value of
   // EvaluateModule. Stop ignoring result once we have such path.
   v8::Local<v8::Value> result;
-  if (!V8ScriptRunner::EvaluateModule(module_->NewLocal(isolate),
-                                      script_state->GetContext(), isolate)
+  if (!V8ScriptRunner::EvaluateModule(isolate, module_->NewLocal(isolate),
+                                      script_state->GetContext())
            .ToLocal(&result)) {
     DCHECK(try_catch.HasCaught());
     return ScriptValue(script_state, try_catch.Exception());
@@ -146,25 +128,9 @@ Vector<TextPosition> ScriptModule::ModuleRequestPositions(
   return ret;
 }
 
-ScriptModuleState ScriptModule::Status(ScriptState* script_state) {
-  DCHECK(!IsNull());
-
-  v8::Local<v8::Module> module = module_->NewLocal(script_state->GetIsolate());
-  return module->GetStatus();
-}
-
-v8::Local<v8::Value> ScriptModule::ErrorCompletion(ScriptState* script_state) {
-  DCHECK(!IsNull());
-  DCHECK_EQ(ScriptModuleState::kErrored, Status(script_state));
-
-  v8::Local<v8::Module> module = module_->NewLocal(script_state->GetIsolate());
-  return module->GetException();
-}
-
 v8::Local<v8::Value> ScriptModule::V8Namespace(v8::Isolate* isolate) {
   DCHECK(!IsNull());
   v8::Local<v8::Module> module = module_->NewLocal(isolate);
-  DCHECK_EQ(ScriptModuleState::kEvaluated, module->GetStatus());
   return module->GetModuleNamespace();
 }
 

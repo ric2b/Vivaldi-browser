@@ -152,10 +152,6 @@ void SurfaceTreeHost::GetHitTestMask(gfx::Path* mask) const {
     root_surface_->GetHitTestMask(mask);
 }
 
-gfx::NativeCursor SurfaceTreeHost::GetCursor(const gfx::Point& point) const {
-  return root_surface_ ? root_surface_->GetCursor() : ui::CursorType::kNull;
-}
-
 void SurfaceTreeHost::DidReceiveCompositorFrameAck() {
   active_frame_callbacks_.splice(active_frame_callbacks_.end(),
                                  frame_callbacks_);
@@ -217,7 +213,7 @@ bool SurfaceTreeHost::IsSurfaceSynchronized() const {
   return false;
 }
 
-bool SurfaceTreeHost::IsTouchEnabled(Surface*) const {
+bool SurfaceTreeHost::IsInputEnabled(Surface*) const {
   return true;
 }
 

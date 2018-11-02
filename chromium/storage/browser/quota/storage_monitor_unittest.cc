@@ -20,19 +20,15 @@
 #include "storage/browser/test/mock_storage_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+using blink::mojom::QuotaStatusCode;
+using blink::mojom::StorageType;
 using storage::HostStorageObservers;
-using storage::kQuotaErrorNotSupported;
-using storage::kQuotaStatusOk;
-using storage::kStorageTypePersistent;
-using storage::kStorageTypeTemporary;
 using storage::QuotaClient;
 using storage::QuotaManager;
-using storage::QuotaStatusCode;
 using storage::SpecialStoragePolicy;
 using storage::StorageMonitor;
 using storage::StorageObserver;
 using storage::StorageObserverList;
-using storage::StorageType;
 using storage::StorageTypeObservers;
 
 namespace content {
@@ -73,7 +69,7 @@ class UsageMockQuotaManager : public QuotaManager {
                      storage::GetQuotaSettingsFunc()),
         callback_usage_(0),
         callback_quota_(0),
-        callback_status_(kQuotaStatusOk),
+        callback_status_(QuotaStatusCode::kOk),
         initialized_(false) {}
 
   void SetCallbackParams(int64_t usage, int64_t quota, QuotaStatusCode status) {
@@ -189,10 +185,9 @@ typedef StorageMonitorTestBase StorageObserverListTest;
 
 // Test dispatching events to one observer.
 TEST_F(StorageObserverListTest, DispatchEventToSingleObserver) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   MockObserver mock_observer;
   StorageObserverList observer_list;
   observer_list.AddObserver(&mock_observer, params);
@@ -242,7 +237,7 @@ TEST_F(StorageObserverListTest, DispatchEventToMultipleObservers) {
   MockObserver mock_observer1;
   MockObserver mock_observer2;
   StorageObserverList observer_list;
-  StorageObserver::Filter filter(kStorageTypePersistent,
+  StorageObserver::Filter filter(StorageType::kPersistent,
                                  GURL(kDefaultOrigin));
   observer_list.AddObserver(
       &mock_observer1,
@@ -294,10 +289,9 @@ TEST_F(StorageObserverListTest, DispatchEventToMultipleObservers) {
 // Ensure that the |origin| field in events match the origin specified by the
 // observer on registration.
 TEST_F(StorageObserverListTest, ReplaceEventOrigin) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   MockObserver mock_observer;
   StorageObserverList observer_list;
   observer_list.AddObserver(&mock_observer, params);
@@ -316,13 +310,12 @@ typedef StorageTestWithManagerBase HostStorageObserversTest;
 
 // Verify that HostStorageObservers is initialized after the first usage change.
 TEST_F(HostStorageObserversTest, InitializeOnUsageChange) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   const int64_t kUsage = 324554;
   const int64_t kQuota = 234354354;
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
 
   MockObserver mock_observer;
   HostStorageObservers host_observers(quota_manager_.get());
@@ -350,15 +343,14 @@ TEST_F(HostStorageObserversTest, InitializeOnUsageChange) {
 TEST_F(HostStorageObserversTest, InitializeOnObserver) {
   const int64_t kUsage = 74387;
   const int64_t kQuota = 92834743;
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
   HostStorageObservers host_observers(quota_manager_.get());
 
   // |host_observers| should not be initialized after the first observer is
   // added because it did not elect to receive the initial state.
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   MockObserver mock_observer1;
   host_observers.AddObserver(&mock_observer1, params);
   EXPECT_FALSE(host_observers.is_initialized());
@@ -402,13 +394,12 @@ TEST_F(HostStorageObserversTest, InitializeOnObserver) {
 
 // Verify that negative usage and quota is changed to zero.
 TEST_F(HostStorageObserversTest, NegativeUsageAndQuota) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   const int64_t kUsage = -324554;
   const int64_t kQuota = -234354354;
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
 
   MockObserver mock_observer;
   HostStorageObservers host_observers(quota_manager_.get());
@@ -421,10 +412,9 @@ TEST_F(HostStorageObserversTest, NegativeUsageAndQuota) {
 
 // Verify that HostStorageObservers can recover from a bad initialization.
 TEST_F(HostStorageObserversTest, RecoverFromBadUsageInit) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   MockObserver mock_observer;
   HostStorageObservers host_observers(quota_manager_.get());
   host_observers.AddObserver(&mock_observer, params);
@@ -432,7 +422,8 @@ TEST_F(HostStorageObserversTest, RecoverFromBadUsageInit) {
   // Set up the quota manager to return an error status.
   const int64_t kUsage = 6656;
   const int64_t kQuota = 99585556;
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaErrorNotSupported);
+  quota_manager_->SetCallbackParams(kUsage, kQuota,
+                                    QuotaStatusCode::kErrorNotSupported);
 
   // Verify that |host_observers| is not initialized and an event has not been
   // dispatched.
@@ -443,7 +434,7 @@ TEST_F(HostStorageObserversTest, RecoverFromBadUsageInit) {
   EXPECT_EQ(0, GetRequiredUpdatesCount(host_observers));
 
   // Now ensure that quota manager returns a good status.
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
   host_observers.NotifyUsageChange(params.filter, 9048543);
   StorageObserver::Event expected_event(params.filter, kUsage, kQuota);
   EXPECT_EQ(1, mock_observer.EventCount());
@@ -454,10 +445,9 @@ TEST_F(HostStorageObserversTest, RecoverFromBadUsageInit) {
 // Verify that HostStorageObservers handle initialization of the cached usage
 // and quota correctly.
 TEST_F(HostStorageObserversTest, AsyncInitialization) {
-  StorageObserver::MonitorParams params(kStorageTypePersistent,
+  StorageObserver::MonitorParams params(StorageType::kPersistent,
                                         GURL(kDefaultOrigin),
-                                        base::TimeDelta::FromHours(1),
-                                        false);
+                                        base::TimeDelta::FromHours(1), false);
   MockObserver mock_observer;
   HostStorageObservers host_observers(quota_manager_.get());
   host_observers.AddObserver(&mock_observer, params);
@@ -482,7 +472,7 @@ TEST_F(HostStorageObserversTest, AsyncInitialization) {
   EXPECT_EQ(0, GetRequiredUpdatesCount(host_observers));
 
   // Simulate an asynchronous callback from QuotaManager.
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
   quota_manager_->InvokeCallback();
   StorageObserver::Event expected_event(params.filter, kUsage + kDelta, kQuota);
   EXPECT_EQ(1, mock_observer.EventCount());
@@ -500,14 +490,12 @@ typedef StorageTestWithManagerBase StorageTypeObserversTest;
 TEST_F(StorageTypeObserversTest, AddRemoveObservers) {
   StorageTypeObservers type_observers(quota_manager_.get());
 
-  StorageObserver::MonitorParams params1(kStorageTypePersistent,
+  StorageObserver::MonitorParams params1(StorageType::kPersistent,
                                          GURL(kDefaultOrigin),
-                                         base::TimeDelta::FromHours(1),
-                                         false);
-  StorageObserver::MonitorParams params2(kStorageTypePersistent,
+                                         base::TimeDelta::FromHours(1), false);
+  StorageObserver::MonitorParams params2(StorageType::kPersistent,
                                          GURL(kAlternativeOrigin),
-                                         base::TimeDelta::FromHours(1),
-                                         false);
+                                         base::TimeDelta::FromHours(1), false);
   std::string host1 = net::GetHostOrSpecFromURL(params1.filter.origin);
   std::string host2 = net::GetHostOrSpecFromURL(params2.filter.origin);
 
@@ -548,15 +536,14 @@ class StorageMonitorTest : public StorageTestWithManagerBase {
  public:
   StorageMonitorTest()
       : storage_monitor_(NULL),
-        params1_(kStorageTypeTemporary,
+        params1_(StorageType::kTemporary,
                  GURL(kDefaultOrigin),
                  base::TimeDelta::FromHours(1),
                  false),
-        params2_(kStorageTypePersistent,
+        params2_(StorageType::kPersistent,
                  GURL(kDefaultOrigin),
                  base::TimeDelta::FromHours(1),
-                 false) {
-  }
+                 false) {}
 
  protected:
   void SetUp() override {
@@ -581,17 +568,19 @@ class StorageMonitorTest : public StorageTestWithManagerBase {
   }
 
   void CheckObserverCount(int expected_temporary, int expected_persistent) {
-    ASSERT_TRUE(storage_monitor_->GetStorageTypeObservers(
-                    kStorageTypeTemporary));
-    ASSERT_TRUE(storage_monitor_->GetStorageTypeObservers(
-                    kStorageTypeTemporary)->GetHostObservers(host_));
-    EXPECT_EQ(expected_temporary, GetObserverCount(kStorageTypeTemporary));
+    ASSERT_TRUE(
+        storage_monitor_->GetStorageTypeObservers(StorageType::kTemporary));
+    ASSERT_TRUE(
+        storage_monitor_->GetStorageTypeObservers(StorageType::kTemporary)
+            ->GetHostObservers(host_));
+    EXPECT_EQ(expected_temporary, GetObserverCount(StorageType::kTemporary));
 
-    ASSERT_TRUE(storage_monitor_->GetStorageTypeObservers(
-                    kStorageTypePersistent));
-    ASSERT_TRUE(storage_monitor_->GetStorageTypeObservers(
-                    kStorageTypePersistent)->GetHostObservers(host_));
-    EXPECT_EQ(expected_persistent, GetObserverCount(kStorageTypePersistent));
+    ASSERT_TRUE(
+        storage_monitor_->GetStorageTypeObservers(StorageType::kPersistent));
+    ASSERT_TRUE(
+        storage_monitor_->GetStorageTypeObservers(StorageType::kPersistent)
+            ->GetHostObservers(host_));
+    EXPECT_EQ(expected_persistent, GetObserverCount(StorageType::kPersistent));
   }
 
   StorageMonitor* storage_monitor_;
@@ -614,7 +603,7 @@ TEST_F(StorageMonitorTest, EventDispatch) {
   // Verify dispatch of events.
   const int64_t kUsage = 5325;
   const int64_t kQuota = 903845;
-  quota_manager_->SetCallbackParams(kUsage, kQuota, kQuotaStatusOk);
+  quota_manager_->SetCallbackParams(kUsage, kQuota, QuotaStatusCode::kOk);
   storage_monitor_->NotifyUsageChange(params1_.filter, 9048543);
 
   StorageObserver::Event expected_event(params1_.filter, kUsage, kQuota);
@@ -667,7 +656,7 @@ class StorageMonitorIntegrationTest : public testing::Test {
 // This test simulates a usage change in a quota client and verifies that a
 // storage observer will receive a storage event.
 TEST_F(StorageMonitorIntegrationTest, NotifyUsageEvent) {
-  const StorageType kTestStorageType = kStorageTypePersistent;
+  const StorageType kTestStorageType = StorageType::kPersistent;
   const int64_t kTestUsage = 234743;
 
   // Register the observer.

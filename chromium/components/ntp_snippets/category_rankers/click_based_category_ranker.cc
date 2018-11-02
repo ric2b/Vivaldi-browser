@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -143,10 +142,9 @@ std::string GetOptionalCategoryAsString(
 
 }  // namespace
 
-ClickBasedCategoryRanker::ClickBasedCategoryRanker(
-    PrefService* pref_service,
-    std::unique_ptr<base::Clock> clock)
-    : pref_service_(pref_service), clock_(std::move(clock)) {
+ClickBasedCategoryRanker::ClickBasedCategoryRanker(PrefService* pref_service,
+                                                   base::Clock* clock)
+    : pref_service_(pref_service), clock_(clock) {
   if (!ReadOrderFromPrefs(&ordered_categories_)) {
     // TODO(crbug.com/676273): Handle adding new hardcoded KnownCategories to
     // existing order from prefs. Currently such new category is completely
@@ -507,7 +505,7 @@ void ClickBasedCategoryRanker::StoreOrderToPrefs(
     const std::vector<RankedCategory>& ordered_categories) {
   base::ListValue list;
   for (const RankedCategory& category : ordered_categories) {
-    auto dictionary = base::MakeUnique<base::DictionaryValue>();
+    auto dictionary = std::make_unique<base::DictionaryValue>();
     dictionary->SetInteger(kCategoryIdKey, category.category.id());
     dictionary->SetInteger(kClicksKey, category.clicks);
     dictionary->SetString(

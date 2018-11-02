@@ -21,6 +21,7 @@ interface Gpu {
                             gpu.mojom.GpuInfo gpu_info,
                             gpu.mojom.GpuFeatureInfo gpu_feature_info);
 
+  // FEATURE_FORCE_ACCESS_TO_GPU
   SetForceAllowAccessToGpu(bool enable);
 
   // Creates a new JpegDecodeAccelerator and binds it to |jda|.

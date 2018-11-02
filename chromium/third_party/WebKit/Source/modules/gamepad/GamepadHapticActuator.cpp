@@ -22,8 +22,6 @@ const char kGamepadHapticsResultPreempted[] = "preempted";
 const char kGamepadHapticsResultInvalidParameter[] = "invalid-parameter";
 const char kGamepadHapticsResultNotSupported[] = "not-supported";
 
-const double kMaxEffectDurationMillis = 5000.0;  // 5 seconds
-
 GamepadHapticEffectType EffectTypeFromString(const String& type) {
   if (type == kGamepadHapticEffectTypeDualRumble)
     return GamepadHapticEffectType::GamepadHapticEffectTypeDualRumble;
@@ -96,15 +94,15 @@ ScriptPromise GamepadHapticActuator::playEffect(
 
   // Limit the total effect duration.
   double effect_duration = params.duration() + params.startDelay();
-  if (effect_duration > kMaxEffectDurationMillis) {
+  if (effect_duration >
+      device::GamepadHapticActuator::kMaxEffectDurationMillis) {
     ScriptPromise promise = resolver->Promise();
     resolver->Resolve(kGamepadHapticsResultInvalidParameter);
     return promise;
   }
 
-  auto callback = ConvertToBaseCallback(
-      WTF::Bind(&GamepadHapticActuator::OnPlayEffectCompleted,
-                WrapPersistent(this), WrapPersistent(resolver)));
+  auto callback = WTF::Bind(&GamepadHapticActuator::OnPlayEffectCompleted,
+                            WrapPersistent(this), WrapPersistent(resolver));
 
   GamepadDispatcher::Instance().PlayVibrationEffectOnce(
       pad_index_, EffectTypeFromString(type),
@@ -129,9 +127,8 @@ void GamepadHapticActuator::OnPlayEffectCompleted(
 ScriptPromise GamepadHapticActuator::reset(ScriptState* script_state) {
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
 
-  auto callback = ConvertToBaseCallback(
-      WTF::Bind(&GamepadHapticActuator::OnResetCompleted, WrapPersistent(this),
-                WrapPersistent(resolver)));
+  auto callback = WTF::Bind(&GamepadHapticActuator::OnResetCompleted,
+                            WrapPersistent(this), WrapPersistent(resolver));
 
   GamepadDispatcher::Instance().ResetVibrationActuator(pad_index_,
                                                        std::move(callback));

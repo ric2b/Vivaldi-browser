@@ -44,7 +44,7 @@ def REGEXPPATCH(s):
   return s % GOOGLE_SERVICES_REGEX
 
 GOOGLE_REGEX = [
-  REGEXPPATCH(r"\bGoogle Chrome\b(?! (OS|%s))"),
+  REGEXPPATCH(r"\bGoogle.Chrome\b(?! (OS|%s))"),
   REGEXPPATCH(r"((?<!OK )|(<!|Ok,? ))\bGoogle\b(?! Chrome\b)(?! (%s))"),
   REGEXPPATCH(r"(?<!\bGoogle )\bChrome\b(?! (OS|%s))"),
   REGEXPPATCH(r"\bChromium\b(?! (OS|%s))"),

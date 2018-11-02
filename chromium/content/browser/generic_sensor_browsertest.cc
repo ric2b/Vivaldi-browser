@@ -20,7 +20,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_javascript_dialog_manager.h"
 #include "device/base/synchronization/one_writer_seqlock.h"
-#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "net/dns/mock_host_resolver.h"
@@ -43,6 +43,15 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
     shared_buffer_handle_ = mojo::SharedBufferHandle::Create(
         sizeof(device::SensorReadingSharedBuffer) *
         static_cast<uint64_t>(device::mojom::SensorType::LAST));
+
+    if (!shared_buffer_handle_.is_valid())
+      return;
+
+    // Create read/write mapping now, to ensure it is kept writable
+    // after the region is sealed read-only on Android.
+    shared_buffer_mapping_ = shared_buffer_handle_->MapAtOffset(
+        device::mojom::SensorInitParams::kReadBufferSizeForTests,
+        GetBufferOffset());
   }
 
   ~FakeAmbientLightSensor() override = default;
@@ -98,13 +107,8 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
   }
 
   void SensorReadingChanged() {
-    if (!shared_buffer_handle_.is_valid())
+    if (!shared_buffer_mapping_.get())
       return;
-
-    mojo::ScopedSharedBufferMapping shared_buffer =
-        shared_buffer_handle_->MapAtOffset(
-            device::mojom::SensorInitParams::kReadBufferSizeForTests,
-            GetBufferOffset());
 
     device::SensorReading reading;
     reading.als.timestamp =
@@ -112,7 +116,8 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
     reading.als.value = 50;
 
     device::SensorReadingSharedBuffer* buffer =
-        static_cast<device::SensorReadingSharedBuffer*>(shared_buffer.get());
+        static_cast<device::SensorReadingSharedBuffer*>(
+            shared_buffer_mapping_.get());
     auto& seqlock = buffer->seqlock.value();
     seqlock.WriteBegin();
     buffer->reading = reading;
@@ -124,6 +129,7 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
 
  private:
   mojo::ScopedSharedBufferHandle shared_buffer_handle_;
+  mojo::ScopedSharedBufferMapping shared_buffer_mapping_;
   device::mojom::SensorClientPtr client_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeAmbientLightSensor);
@@ -131,33 +137,27 @@ class FakeAmbientLightSensor : public device::mojom::Sensor {
 
 class FakeSensorProvider : public device::mojom::SensorProvider {
  public:
-  FakeSensorProvider() : binding_(this) {}
+  FakeSensorProvider() = default;
   ~FakeSensorProvider() override = default;
-
-  void Bind(const std::string& interface_name,
-            mojo::ScopedMessagePipeHandle handle,
-            const service_manager::BindSourceInfo& source_info) {
-    DCHECK(!binding_.is_bound());
-    binding_.Bind(device::mojom::SensorProviderRequest(std::move(handle)));
-  }
 
   // device::mojom::sensorProvider implementation.
   void GetSensor(device::mojom::SensorType type,
-                 device::mojom::SensorRequest sensor_request,
                  GetSensorCallback callback) override {
     switch (type) {
       case device::mojom::SensorType::AMBIENT_LIGHT: {
         auto sensor = std::make_unique<FakeAmbientLightSensor>();
 
         auto init_params = device::mojom::SensorInitParams::New();
+        init_params->client_request = sensor->GetClient();
         init_params->memory = sensor->GetSharedBufferHandle();
         init_params->buffer_offset = sensor->GetBufferOffset();
         init_params->default_configuration = sensor->GetDefaultConfiguration();
         init_params->maximum_frequency = sensor->GetMaximumSupportedFrequency();
         init_params->minimum_frequency = sensor->GetMinimumSupportedFrequency();
 
-        std::move(callback).Run(std::move(init_params), sensor->GetClient());
-        mojo::MakeStrongBinding(std::move(sensor), std::move(sensor_request));
+        mojo::MakeStrongBinding(std::move(sensor),
+                                mojo::MakeRequest(&init_params->sensor));
+        std::move(callback).Run(std::move(init_params));
         break;
       }
       default:
@@ -166,8 +166,6 @@ class FakeSensorProvider : public device::mojom::SensorProvider {
   }
 
  private:
-  mojo::Binding<device::mojom::SensorProvider> binding_;
-
   DISALLOW_COPY_AND_ASSIGN(FakeSensorProvider);
 };
 
@@ -194,7 +192,6 @@ class GenericSensorBrowserTest : public ContentBrowserTest {
         "content/test/data/generic_sensor");
     https_embedded_test_server_->StartAcceptingConnections();
 
-    fake_sensor_provider_ = std::make_unique<FakeSensorProvider>();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&GenericSensorBrowserTest::SetBinderOnIOThread,
@@ -215,10 +212,30 @@ class GenericSensorBrowserTest : public ContentBrowserTest {
     // it.
     service_manager::ServiceContext::SetGlobalBinderForTesting(
         device::mojom::kServiceName, device::mojom::SensorProvider::Name_,
-        base::Bind(&FakeSensorProvider::Bind,
-                   base::Unretained(fake_sensor_provider_.get())));
+        base::BindRepeating(
+            &GenericSensorBrowserTest::BindSensorProviderRequest,
+            base::Unretained(this)));
 
     io_loop_finished_event_.Signal();
+  }
+
+  void BindSensorProviderRequest(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle handle,
+      const service_manager::BindSourceInfo& source_info) {
+    if (!sensor_provider_available_)
+      return;
+
+    if (!fake_sensor_provider_)
+      fake_sensor_provider_ = std::make_unique<FakeSensorProvider>();
+
+    sensor_provider_bindings_.AddBinding(
+        fake_sensor_provider_.get(),
+        device::mojom::SensorProviderRequest(std::move(handle)));
+  }
+
+  void set_sensor_provider_available(bool sensor_provider_available) {
+    sensor_provider_available_ = sensor_provider_available;
   }
 
  protected:
@@ -227,12 +244,20 @@ class GenericSensorBrowserTest : public ContentBrowserTest {
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
   base::WaitableEvent io_loop_finished_event_;
+  bool sensor_provider_available_ = true;
   std::unique_ptr<FakeSensorProvider> fake_sensor_provider_;
+  mojo::BindingSet<device::mojom::SensorProvider> sensor_provider_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(GenericSensorBrowserTest);
 };
 
-IN_PROC_BROWSER_TEST_F(GenericSensorBrowserTest, AmbientLightSensorTest) {
+// Flakily crashes on Linux ASAN/TSAN bots.  https://crbug.com/789515
+#if defined(OS_LINUX)
+#define MAYBE_AmbientLightSensorTest DISABLED_AmbientLightSensorTest
+#else
+#define MAYBE_AmbientLightSensorTest AmbientLightSensorTest
+#endif
+IN_PROC_BROWSER_TEST_F(GenericSensorBrowserTest, MAYBE_AmbientLightSensorTest) {
   // The test page will create an AmbientLightSensor object in Javascript,
   // expects to get events with fake values then navigates to #pass.
   GURL test_url =
@@ -262,6 +287,16 @@ IN_PROC_BROWSER_TEST_F(GenericSensorBrowserTest,
       ChildFrameAt(shell()->web_contents()->GetMainFrame(), 0);
   ASSERT_TRUE(iframe);
   EXPECT_EQ("pass", iframe->GetLastCommittedURL().ref());
+}
+
+IN_PROC_BROWSER_TEST_F(GenericSensorBrowserTest, SensorProviderUnavailable) {
+  // The test page will create an AmbientLightSensor object in Javascript,
+  // expects to get a sensor error then navigates to #pass.
+  set_sensor_provider_available(false);
+  GURL test_url = GetTestUrl("generic_sensor",
+                             "ambient_light_sensor_unavailable_test.html");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 2);
+  EXPECT_EQ("pass", shell()->web_contents()->GetLastCommittedURL().ref());
 }
 
 }  //  namespace

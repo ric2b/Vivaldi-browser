@@ -9,13 +9,10 @@
 <translation id="1185134272377778587">Om Chromium</translation>
 <translation id="1298199220304005244">Få hjælp til at bruge Chromium OS</translation>
 <translation id="1396446129537741364">Chromium forsøger at vise adgangskoder.</translation>
-<translation id="1403254041219632970">Fremtidige versioner af Chromium vil ikke længere understøtte Mac OS X 10.6, 10.7 eller 10.8.</translation>
 <translation id="1414495520565016063">Du er logget ind på Chromium.</translation>
-<translation id="1440917365206527807">Chromium forhindrede dette website i at sende dig videre til</translation>
 <translation id="1444754455097148408">Chromium open source-licenser</translation>
 <translation id="1502360822835740515">Gør Chromium til din standardbrowser</translation>
 <translation id="151962892725702025">Chromium OS kunne ikke synkronisere dine data, fordi synkronisering ikke er tilgængeligt på dit domæne.</translation>
-<translation id="1559451348202814456">Chromium fungerer muligvis ikke korrekt på grund af manglende understøttelse i Mac OS X 10.6, 10.7 og 10.8.</translation>
 <translation id="1585657529869845941">Klik på <ph name="BEGIN_BOLD" />Skift alligevel<ph name="END_BOLD" />, hvis denne mulighed vises</translation>
 <translation id="1653828314016431939">OK, genstart nu</translation>
 <translation id="1668054258064581266">Når du har fjernet din konto fra Chromium, skal du muligvis genindlæse dine åbne faner, før ændringen træder i kraft.</translation>
@@ -48,7 +45,6 @@
 <translation id="2587578672395088481">Chromium OS skal genstartes, før opdateringen kan anvendes.</translation>
 <translation id="2647554856022461007">Chromium bruger muligvis webtjenester for at forbedre din browseroplevelse. Du kan vælge at deaktivere disse tjenester. <ph name="BEGIN_LINK" />Få flere oplysninger<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">Der opstod en fejl i operativsystemet under installationen. Download Chromium igen.</translation>
-<translation id="2685838254101182273">Chromium er holdt op med at opdatere og understøtter ikke længere denne version af dit operativsystem.</translation>
 <translation id="2705403826523567092">Log ind for at få en tilpasset browseroplevelse, der er synkroniseret på alle dine enheder</translation>
 <translation id="2711502716910134313">Fanen Chromium</translation>
 <translation id="2718390899429598676">Som et ekstra sikkerhedsniveau krypterer Chromium dine data.</translation>
@@ -106,7 +102,6 @@
 <translation id="4458285410772214805">Du skal logge ud og logge ind igen, for at denne ændring kan træde i kraft.</translation>
 <translation id="4469812139324097969">Chromium er forældet, da den ikke er blevet genstartet i et stykke tid. Der er en tilgængelig opdatering, som anvendes, så snart du genstarter.</translation>
 <translation id="4488554488975128561">Du kan gøre Chromium mere sikker og lettere at bruge ved automatisk at sende nogle systemoplysninger og sideindhold til Google som en hjælp til at registrere skadelige apps og websites.</translation>
-<translation id="4549794359424059447">Fremtidige versioner af Chromium vil ikke længere understøtte Windows XP eller Windows Vista.</translation>
 <translation id="4567424176335768812">Du er logget ind som <ph name="USER_EMAIL_ADDRESS" />. Nu kan du få adgang til dine bogmærker, din historik og andre indstillinger på alle de enheder, hvor du er logget ind.</translation>
 <translation id="459535195905078186">Chromium-apps</translation>
 <translation id="4611246891205775468">Chromium skal have tilladelse til at bruge din mikrofon på dette website.</translation>
@@ -145,7 +140,6 @@
 <translation id="5902536751647951209">Godkendelsescertifikatet slog fejl. Log ind på Chromium igen, eller kontakt din administrator for at få flere oplysninger. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">Næsten opdateret. Genstart din enhed for at afslutte opdateringen.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" /> er føjet til Chromium.</translation>
-<translation id="59625444380784159">Oplysninger om dine kontaktpersoner kan hjælpe dig med at udfylde formularer hurtigere i Chromium.</translation>
 <translation id="5987687638152509985">Opdater Chromium for at starte synkronisering</translation>
 <translation id="6055895534982063517">Der findes en ny version af Chromium, som er hurtigere end nogensinde før.</translation>
 <translation id="6063093106622310249">Åbn i Chr&amp;omium</translation>
@@ -159,6 +153,7 @@
 <translation id="6334986366598267305">Det er nu blevet nemmere at bruge Chromium med din Google-konto og på delte computere.</translation>
 <translation id="6373523479360886564">Er du sikker på, at du vil afinstallere Chromium?</translation>
 <translation id="6394232988457703198">Du bør genstarte Chromium nu.</translation>
+<translation id="6400072781405947421">Chromium fungerer muligvis ikke korrekt, da det ikke længere understøttes af Mac OS X 10.9.</translation>
 <translation id="6403826409255603130">Chromium er en webbrowser, der kører websider og applikationer med lynets hast. Den er hurtig, stabil og brugervenlig. Beskyttelse mod malware og phishing er indbygget i Chromium, så du kan søge mere sikkert på internettet.</translation>
 <translation id="6475912303565314141">Den styrer også, hvilken side der vises, når du åbner Chromium.</translation>
 <translation id="6485906693002546646">Du bruger <ph name="PROFILE_EMAIL" /> til at synkronisere dine Chromium-ting med. Gå til <ph name="SETTINGS_LINK" />, hvis du vil opdatere dine synkroniseringspræference eller bruge Chromium uden en Google-konto.</translation>
@@ -174,13 +169,13 @@ Visse funktioner kan være utilgængelige. Angiv en anden profilmappe, eller bru
 <translation id="6734291798041940871">Chromium er allerede installeret for alle brugere på computeren.</translation>
 <translation id="6810143991807788455">Hjælp med at gøre Chromium bedre ved at rapportere de aktuelle indstillinger</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay (kopieret til Chromium)</translation>
 <translation id="6893813176749746474">Chromium er blevet opdateret, men du har ikke brugt den i 30 dage.</translation>
 <translation id="6944967875980567883">Moduler indlæst i Chromium</translation>
 <translation id="6964305034639999644">Åbn linket i et Chromium-inko&amp;gnitovindue</translation>
 <translation id="6970811910055250180">Opdaterer din enhed...</translation>
 <translation id="705851970750939768">Opdater Chromium</translation>
 <translation id="7066436765290594559">Chromium OS kunne ikke synkronisere dine data. Opdater din adgangssætning til synkronisering.</translation>
-<translation id="707471633328071618">Google Payments (kopieret til Chromium)</translation>
 <translation id="7162152143154757523">Chromium kan anvende smartere stavekontrol ved at sende dine indtastninger i browseren til Googles servere, så du kan bruge den samme teknologi til stavekontrol, som der anvendes i Google-søgninger.</translation>
 <translation id="7205698830395646142">Skjul i Chromium-menuen</translation>
 <translation id="7223968959479464213">Jobliste – Chromium</translation>
@@ -240,7 +235,6 @@ Gå til din e-mail på <ph name="ACCOUNT_EMAIL" /> for at få yderligere vejledn
 <translation id="872034308864968620">Lad Chromium køre i baggrunden</translation>
 <translation id="8803635938069941624">Vilkår for Chromium OS</translation>
 <translation id="8821041990367117597">Chromium kunne ikke synkronisere dine data, fordi loginoplysningerne for din konto er forældede.</translation>
-<translation id="8851136666856101339">hovd</translation>
 <translation id="8862326446509486874">Du har ikke de nødvendige rettigheder til en installation på systemniveau. Prøv at køre installationsprogrammet igen som administrator.</translation>
 <translation id="8897323336392112261">Den styrer også, hvilken side der vises, når du åbner Chromium eller klikker på knappen Startside.</translation>
 <translation id="8907580949721785412">Chromium forsøger at vise adgangskoder. Indtast din Windows-adgangskode for at tillade dette.</translation>

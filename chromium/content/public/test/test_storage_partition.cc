@@ -22,13 +22,18 @@ TestStoragePartition::GetMediaURLRequestContext() {
   return media_url_request_context_getter_;
 }
 
-mojom::NetworkContext* TestStoragePartition::GetNetworkContext() {
+network::mojom::NetworkContext* TestStoragePartition::GetNetworkContext() {
   return network_context_;
 }
 
-mojom::URLLoaderFactory*
+network::mojom::URLLoaderFactory*
 TestStoragePartition::GetURLLoaderFactoryForBrowserProcess() {
   return url_loader_factory_for_browser_process_;
+}
+
+network::mojom::CookieManager*
+TestStoragePartition::GetCookieManagerForBrowserProcess() {
+  return cookie_manager_for_browser_process_;
 }
 
 storage::QuotaManager* TestStoragePartition::GetQuotaManager() {
@@ -59,6 +64,10 @@ ServiceWorkerContext* TestStoragePartition::GetServiceWorkerContext() {
   return service_worker_context_;
 }
 
+SharedWorkerService* TestStoragePartition::GetSharedWorkerService() {
+  return shared_worker_service_;
+}
+
 CacheStorageContext* TestStoragePartition::GetCacheStorageContext() {
   return cache_storage_context_;
 }
@@ -85,8 +94,7 @@ ZoomLevelDelegate* TestStoragePartition::GetZoomLevelDelegate() {
 void TestStoragePartition::ClearDataForOrigin(
     uint32_t remove_mask,
     uint32_t quota_storage_remove_mask,
-    const GURL& storage_origin,
-    net::URLRequestContextGetter* rq_context) {}
+    const GURL& storage_origin) {}
 
 void TestStoragePartition::ClearData(
     uint32_t remove_mask,
@@ -116,7 +124,6 @@ void TestStoragePartition::Flush() {}
 
 void TestStoragePartition::ClearBluetoothAllowedDevicesMapForTesting() {}
 
-void TestStoragePartition::SetNetworkFactoryForTesting(
-    mojom::URLLoaderFactory* test_factory) {}
+void TestStoragePartition::FlushNetworkInterfaceForTesting() {}
 
 }  // namespace content

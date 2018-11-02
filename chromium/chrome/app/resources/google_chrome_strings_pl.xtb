@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">Google Chrome jest przeglądarką internetową, w której witryny internetowe i aplikacje są szybkie jak błyskawica. Jest szybka, stabilna i łatwa w obsłudze. Dzięki wbudowanej ochronie przed złośliwym oprogramowaniem i wyłudzaniem informacji przeglądanie internetu przy użyciu przeglądarki Google Chrome jest bezpieczniejsze.</translation>
 <translation id="1718131156967340976">Wybierz <ph name="SMALL_PRODUCT_LOGO" /> <ph name="BEGIN_BOLD" />Google Chrome<ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">Google Chrome nie może zsynchronizować danych z powodu błędu podczas logowania.</translation>
-<translation id="1759301979429102118">Informacje z Twoich kontaktów pomogą Ci szybciej wypełniać formularze w Chrome.</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">Skorzystaj z pomocy dotyczącej używania systemu operacyjnego Chrome</translation>
 <translation id="1795405610103747296">Zainstaluj Chrome na telefonie. Wyślemy SMS-a na Twój telefon: <ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@ Jeśli jednak zalogujesz się teraz, informacje Chrome, takie jak zakładki, his
 <translation id="2429317896000329049">Google Chrome nie może zsynchronizować danych, ponieważ synchronizacja jest niedostępna w Twojej domenie.</translation>
 <translation id="2446511512801740068">Chrome jest nieaktualny, ponieważ od pewnego czasu nie był uruchamiany. Dostępna jest aktualizacja, która zostanie zastosowana natychmiast po ponownym uruchomieniu.</translation>
 <translation id="2485422356828889247">Odinstaluj</translation>
+<translation id="2534507159460261402">Google Pay (skopiowana do Chrome)</translation>
 <translation id="2580411288591421699">Nie można zainstalować tej samej wersji przeglądarki Google Chrome co obecnie uruchomiona. Zamknij przeglądarkę Google Chrome i spróbuj ponownie.</translation>
 <translation id="2586406160782125153">Spowoduje to usunięcie danych przeglądania z tego urządzenia. Aby później odzyskać dane, zaloguj się w Chrome jako <ph name="USER_EMAIL" />.</translation>
 <translation id="2588322182880276190">Logo Chrome</translation>
@@ -108,8 +108,6 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="3889417619312448367">Odinstaluj Google Chrome</translation>
 <translation id="3898493977366060150">Przeglądanie stron internetowych za pomocą inteligentnych rozwiązań Google</translation>
 <translation id="4028693306634653894">Szybciej uruchamiaj Chrome</translation>
-<translation id="4031074602479304239">Chrome uniemożliwił tej stronie przekierowanie Cię na stronę</translation>
-<translation id="4042449298237264661">Google Chrome nie będzie już aktualizować się na tym komputerze, bo Windows XP i Windows Vista nie są już obsługiwane.</translation>
 <translation id="4050175100176540509">W najnowszej wersji zostały wprowadzone ważne poprawki bezpieczeństwa i nowe funkcje.</translation>
 <translation id="4053720452172726777">Dostosowywanie i kontrolowanie Google Chrome</translation>
 <translation id="4147555960264124640">Logujesz się na zarządzane konto i przekazujesz jego administratorowi kontrolę nad swoim profilem Google Chrome. Twoje dane Chrome, takie jak aplikacje, zakładki, historia, hasła i inne ustawienia, zostaną trwale powiązane z użytkownikiem <ph name="USER_NAME" />. Będzie można je usunąć w Panelu kont Google, ale nie będzie można ich powiązać z innym kontem. <ph name="LEARN_MORE" /></translation>
@@ -151,7 +149,6 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="5170938038195470297">Nie można użyć Twojego profilu, ponieważ został utworzony w nowszej wersji Google Chrome. Niektóre funkcje mogą być niedostępne. Podaj inny katalog z profilem lub użyj nowszej wersji Chrome.</translation>
 <translation id="5193136243808726294">System operacyjny Google Chrome nie może otworzyć tej strony.</translation>
 <translation id="5204098752394657250"><ph name="TERMS_OF_SERVICE_LINK" />Warunki korzystania z usługi<ph name="END_TERMS_OF_SERVICE_LINK" /> Google Chrome</translation>
-<translation id="5243785881901838525">Google Payments (skopiowana do Chrome)</translation>
 <translation id="5251420635869119124">Goście mogą korzystać z Chrome, nie pozostawiając żadnych danych.</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome uruchomi się ponownie za sekundę.}few{Google Chrome uruchomi się ponownie za # sekundy.}many{Google Chrome uruchomi się ponownie za # sekund.}other{Google Chrome uruchomi się ponownie za # sekundy.}}</translation>
 <translation id="532046782124376502">Ostrzeżenie: Google Chrome nie może uniemożliwić rozszerzeniom zapisywania historii przeglądania. Aby wyłączyć to rozszerzenie w trybie incognito, odznacz tę opcję.</translation>
@@ -180,15 +177,12 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">Aktualizuj system operacyjny &amp;Chrome</translation>
 <translation id="6235018212288296708">Reguła dla ruchu przychodzącego w Google Chrome zezwalająca na ruch mDNS.</translation>
-<translation id="6236285698028833233">Google Chrome nie jest już aktualizowany ani nie obsługuje tej wersji systemu operacyjnego.</translation>
 <translation id="6291089322031436445">Aplikacje do Chrome w wersji deweloperskiej</translation>
 <translation id="6291549208091401781">Google Chrome jest już zainstalowany dla wszystkich użytkowników tego komputera.</translation>
 <translation id="6338556085225130112">Aktualizuję Google Chrome</translation>
 <translation id="6368958679917195344">Opracowanie systemu operacyjnego Chrome było możliwe dzięki dodatkowemu <ph name="BEGIN_LINK_CROS_OSS" />oprogramowaniu typu open source<ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6393863479814692971">Chrome potrzebuje uprawnień dostępu do aparatu i mikrofonu na tej stronie.</translation>
-<translation id="6400076122676892962">Google Chrome wkrótce przestanie aktualizować się na tym komputerze, bo nie będzie już zgodny z macOS X 10.6, 10.7 ani 10.8.</translation>
 <translation id="6410540444482791104">Możesz przyczynić się do zwiększenia bezpieczeństwa i komfortu korzystania z Chrome, automatycznie wysyłając do Google pewne informacje o systemie i część zawartości stron, by pomóc w wykrywaniu niebezpiecznych aplikacji i witryn.</translation>
-<translation id="6470176598693778404">Google Chrome nie będzie już aktualizować się na tym komputerze, bo macOS X 10.6, 10.7 i 10.8 nie są już obsługiwane.</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{Trwa pobieranie pliku. Czy chcesz je anulować i wyjść z Google Chrome?}few{Trwa pobieranie # plików. Czy chcesz je anulować i wyjść z Google Chrome?}many{Trwa pobieranie # plików. Czy chcesz je anulować i wyjść z Google Chrome?}other{Trwa pobieranie # pliku. Czy chcesz je anulować i wyjść z Google Chrome?}}</translation>
 <translation id="6566149418543181476">Aktualizuję Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">Używasz adresu <ph name="PROFILE_EMAIL" /> do synchronizowania danych w Chrome. Aby zaktualizować ustawienia synchronizacji lub używać Chrome bez konta Google, wejdź na stronę <ph name="SETTINGS_LINK" />.</translation>
@@ -209,7 +203,6 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="7164397146364144019">Możesz pomóc zwiększyć bezpieczeństwo i komfort korzystania z Chrome, automatycznie przesyłając do Google szczegółowe informacje o możliwych zagrożeniach.</translation>
 <translation id="7185038942300673794">Rozszerzenie <ph name="EXTENSION_NAME" /> zostało dodane do Chrome.</translation>
 <translation id="7242029209006116544">Logujesz się na zarządzane konto i przekazujesz jego administratorowi kontrolę nad swoim profilem Google Chrome. Twoje dane Chrome, takie jak aplikacje, zakładki, historia, hasła i inne ustawienia, zostaną trwale powiązane z użytkownikiem <ph name="USER_NAME" />. Będzie można je usunąć w Panelu kont Google, ale nie będzie można ich powiązać z innym kontem. Możesz też utworzyć nowy profil, by przechowywać swoje dotychczasowe dane Chrome osobno. <ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Google Chrome wkrótce przestanie aktualizować się na tym komputerze, bo nie będzie już zgodny z Windows XP ani Windows Vista.</translation>
 <translation id="7330164299247909639">Błąd certyfikatu uwierzytelniania. Jeszcze raz zaloguj się w Google Chrome jako <ph name="USER_NAME" /> lub skontaktuj się z administratorem, by uzyskać więcej informacji. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">Nowe okno</translation>
 <translation id="7369650938475876456">Użyj silnego hasła wygenerowanego przez Chrome</translation>
@@ -222,6 +215,7 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="7494905215383356681">Licencje oprogramowania typu open source w Chrome</translation>
 <translation id="7535429826459677826">Wersja deweloperska Google Chrome</translation>
 <translation id="7552219221109926349">Wyświetlaj system operacyjny Chrome w tym języku</translation>
+<translation id="7589360514048265910">Google Chrome nie będzie już aktualizować się na tym komputerze, bo system Mac OS X 10.9 nie jest już obsługiwany.</translation>
 <translation id="7592736734348559088">Google Chrome nie może zsynchronizować danych, ponieważ dane logowania na Twoje konto są nieaktualne.</translation>
 <translation id="7626032353295482388">Witamy w Chrome</translation>
 <translation id="7747138024166251722">Instalator nie mógł utworzyć katalogu tymczasowego. Sprawdź, czy na dysku jest dość wolnego miejsca oraz sprawdź, czy posiadasz uprawnienia do instalowania programów.</translation>
@@ -237,6 +231,7 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="7896673875602241923">Ktoś zalogował się wcześniej w Chrome na tym komputerze jako <ph name="ACCOUNT_EMAIL_LAST" />. Utwórz nowego użytkownika Chrome, by Twoje informacje były przechowywane oddzielnie.</translation>
 <translation id="7908168227788431038">Już prawie gotowe. Uruchom ponownie Google Chrome, by zakończyć aktualizację.</translation>
 <translation id="795025003224538582">Nie uruchamiaj ponownie</translation>
+<translation id="7962410387636238736">Google Chrome nie będzie już aktualizować się na tym komputerze, ponieważ systemy Windows XP i Windows Vista nie są już obsługiwane.</translation>
 <translation id="8005540215158006229">Chrome jest już prawie gotowy.</translation>
 <translation id="8008534537613507642">Ponownie zainstaluj Chrome</translation>
 <translation id="8030318113982266900">Aktualizuję Twoje urządzenie do kanału: <ph name="CHANNEL_NAME" />...</translation>
@@ -267,7 +262,6 @@ Więcej instrukcji znajdziesz w e-mailu wysłanym na adres <ph name="ACCOUNT_EM
 <translation id="8796108026289707191">Należy teraz ponownie uruchomić Google Chrome.</translation>
 <translation id="8823341990149967727">Chrome jest nieaktualny</translation>
 <translation id="884296878221830158">Kontroluje także to, jaka strona wyświetla się po uruchomieniu Chrome lub kliknięciu przycisku strony startowej.</translation>
-<translation id="8851136666856101339">główny</translation>
 <translation id="8862326446509486874">Nie masz odpowiednich uprawnień do przeprowadzenia instalacji na poziomie systemowym. Uruchom ponownie program instalacyjny jako administrator.</translation>
 <translation id="8914504000324227558">Uruchom Chrome ponownie</translation>
 <translation id="9026991721384951619">Google Chrome nie może zsynchronizować danych, ponieważ dane logowania na Twoje konto są nieaktualne.</translation>

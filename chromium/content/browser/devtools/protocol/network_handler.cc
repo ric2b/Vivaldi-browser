@@ -39,9 +39,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/resource_devtools_info.h"
-#include "content/public/common/resource_request.h"
-#include "content/public/common/resource_response.h"
 #include "net/base/net_errors.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/cookies/canonical_cookie.h"
@@ -50,6 +47,9 @@
 #include "net/http/http_util.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/network/public/cpp/http_raw_request_response_info.h"
+#include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/cpp/resource_response.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 
 namespace content {
@@ -636,7 +636,7 @@ std::unique_ptr<Object> getHeaders(const base::StringPairs& pairs) {
   return Object::fromValue(headers_dict.get(), nullptr);
 }
 
-String getProtocol(const GURL& url, const ResourceResponseHead& head) {
+String getProtocol(const GURL& url, const network::ResourceResponseHead& head) {
   std::string protocol = head.alpn_negotiated_protocol;
   if (protocol.empty() || protocol == "unknown") {
     if (head.was_fetched_via_spdy) {
@@ -699,6 +699,7 @@ NetworkHandler::NetworkHandler(const std::string& host_id)
       enabled_(false),
       host_id_(host_id),
       bypass_service_worker_(false),
+      cache_disabled_(false),
       weak_factory_(this) {
   static bool have_configured_service_worker_context = false;
   if (have_configured_service_worker_context)
@@ -730,7 +731,8 @@ void NetworkHandler::SetRenderer(RenderProcessHost* process_host,
 }
 
 Response NetworkHandler::Enable(Maybe<int> max_total_size,
-                                Maybe<int> max_resource_size) {
+                                Maybe<int> max_resource_size,
+                                Maybe<int> max_post_data_size) {
   enabled_ = true;
   return Response::FallThrough();
 }
@@ -741,6 +743,11 @@ Response NetworkHandler::Disable() {
   interception_handle_.reset();
   SetNetworkConditions(nullptr);
   extra_headers_.clear();
+  return Response::FallThrough();
+}
+
+Response NetworkHandler::SetCacheDisabled(bool cache_disabled) {
+  cache_disabled_ = cache_disabled;
   return Response::FallThrough();
 }
 
@@ -953,11 +960,11 @@ Response NetworkHandler::EmulateNetworkConditions(
     double download_throughput,
     double upload_throughput,
     Maybe<protocol::Network::ConnectionType>) {
-  mojom::NetworkConditionsPtr network_conditions;
+  network::mojom::NetworkConditionsPtr network_conditions;
   bool throttling_enabled = offline || latency > 0 || download_throughput > 0 ||
                             upload_throughput > 0;
   if (throttling_enabled) {
-    network_conditions = mojom::NetworkConditions::New();
+    network_conditions = network::mojom::NetworkConditions::New();
     network_conditions->offline = offline;
     network_conditions->latency = base::TimeDelta::FromMilliseconds(latency);
     network_conditions->download_throughput = download_throughput;
@@ -973,12 +980,10 @@ Response NetworkHandler::SetBypassServiceWorker(bool bypass) {
 }
 
 void NetworkHandler::NavigationPreloadRequestSent(
-    int worker_version_id,
     const std::string& request_id,
-    const ResourceRequest& request) {
+    const network::ResourceRequest& request) {
   if (!enabled_)
     return;
-  const std::string version_id(base::IntToString(worker_version_id));
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   for (net::HttpRequestHeaders::Iterator it(request.headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
@@ -1002,13 +1007,11 @@ void NetworkHandler::NavigationPreloadRequestSent(
 }
 
 void NetworkHandler::NavigationPreloadResponseReceived(
-    int worker_version_id,
     const std::string& request_id,
     const GURL& url,
-    const ResourceResponseHead& head) {
+    const network::ResourceResponseHead& head) {
   if (!enabled_)
     return;
-  const std::string version_id(base::IntToString(worker_version_id));
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   size_t iterator = 0;
   std::string name;
@@ -1031,23 +1034,25 @@ void NetworkHandler::NavigationPreloadResponseReceived(
                             head.response_time <
                                 head.load_timing.request_start_time)
           .Build());
-  if (head.devtools_info) {
-    if (head.devtools_info->http_status_code) {
-      response->SetStatus(head.devtools_info->http_status_code);
-      response->SetStatusText(head.devtools_info->http_status_text);
+  if (head.raw_request_response_info) {
+    if (head.raw_request_response_info->http_status_code) {
+      response->SetStatus(head.raw_request_response_info->http_status_code);
+      response->SetStatusText(head.raw_request_response_info->http_status_text);
     }
-    if (head.devtools_info->request_headers.size()) {
+    if (head.raw_request_response_info->request_headers.size()) {
       response->SetRequestHeaders(
-          getHeaders(head.devtools_info->request_headers));
+          getHeaders(head.raw_request_response_info->request_headers));
     }
-    if (!head.devtools_info->request_headers_text.empty()) {
+    if (!head.raw_request_response_info->request_headers_text.empty()) {
       response->SetRequestHeadersText(
-          head.devtools_info->request_headers_text);
+          head.raw_request_response_info->request_headers_text);
     }
-    if (head.devtools_info->response_headers.size())
-      response->SetHeaders(getHeaders(head.devtools_info->response_headers));
-    if (!head.devtools_info->response_headers_text.empty())
-      response->SetHeadersText(head.devtools_info->response_headers_text);
+    if (head.raw_request_response_info->response_headers.size())
+      response->SetHeaders(
+          getHeaders(head.raw_request_response_info->response_headers));
+    if (!head.raw_request_response_info->response_headers_text.empty())
+      response->SetHeadersText(
+          head.raw_request_response_info->response_headers_text);
   }
   response->SetProtocol(getProtocol(url, head));
   response->SetRemoteIPAddress(head.socket_address.HostForURL());
@@ -1092,7 +1097,7 @@ void NetworkHandler::NavigationFailed(NavigationRequest* navigation_request) {
 
   std::unique_ptr<DictionaryValue> headers_dict(DictionaryValue::create());
   net::HttpRequestHeaders headers;
-  headers.AddHeadersFromString(navigation_request->begin_params().headers);
+  headers.AddHeadersFromString(navigation_request->begin_params()->headers);
   for (net::HttpRequestHeaders::Iterator it(headers); it.GetNext();)
     headers_dict->setString(it.name(), it.value());
   frontend_->RequestWillBeSent(
@@ -1316,16 +1321,16 @@ bool NetworkHandler::ShouldCancelNavigation(
   return interceptor && interceptor->ShouldCancelNavigation(global_request_id);
 }
 
-void NetworkHandler::AppendDevToolsHeaders(net::HttpRequestHeaders* headers) {
+void NetworkHandler::WillSendNavigationRequest(net::HttpRequestHeaders* headers,
+                                               bool* skip_service_worker,
+                                               bool* disable_cache) {
   headers->SetHeader(kDevToolsEmulateNetworkConditionsClientId, host_id_);
   if (!user_agent_.empty())
     headers->SetHeader(net::HttpRequestHeaders::kUserAgent, user_agent_);
   for (auto& entry : extra_headers_)
     headers->SetHeader(entry.first, entry.second);
-}
-
-bool NetworkHandler::ShouldBypassServiceWorker() const {
-  return bypass_service_worker_;
+  *skip_service_worker |= bypass_service_worker_;
+  *disable_cache |= cache_disabled_;
 }
 
 namespace {
@@ -1390,11 +1395,11 @@ void NetworkHandler::RequestIntercepted(
 }
 
 void NetworkHandler::SetNetworkConditions(
-    mojom::NetworkConditionsPtr conditions) {
+    network::mojom::NetworkConditionsPtr conditions) {
   if (!process_)
     return;
   StoragePartition* partition = process_->GetStoragePartition();
-  mojom::NetworkContext* context = partition->GetNetworkContext();
+  network::mojom::NetworkContext* context = partition->GetNetworkContext();
   context->SetNetworkConditions(host_id_, std::move(conditions));
 }
 

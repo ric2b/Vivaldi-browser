@@ -61,16 +61,6 @@ void InputDeviceClient::RemoveObserver(ui::InputDeviceEventObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void InputDeviceClient::SetKeyboardDevicesForTesting(
-    const std::vector<InputDevice>& devices) {
-  OnKeyboardDeviceConfigurationChanged(devices);
-}
-
-void InputDeviceClient::SetTouchscreenDevicesForTesting(
-    const std::vector<TouchscreenDevice>& devices) {
-  OnTouchscreenDeviceConfigurationChanged(devices, false);
-}
-
 InputDeviceClient::InputDeviceClient(bool is_input_device_manager)
     : binding_(this), is_input_device_manager_(is_input_device_manager) {
   if (is_input_device_manager_)
@@ -86,8 +76,7 @@ mojom::InputDeviceObserverMojoPtr InputDeviceClient::GetIntefacePtr() {
 void InputDeviceClient::OnKeyboardDeviceConfigurationChanged(
     const std::vector<ui::InputDevice>& devices) {
   keyboard_devices_ = devices;
-  for (auto& observer : observers_)
-    observer.OnKeyboardDeviceConfigurationChanged();
+  NotifyObserversKeyboardDeviceConfigurationChanged();
 }
 
 void InputDeviceClient::OnTouchscreenDeviceConfigurationChanged(
@@ -103,8 +92,7 @@ void InputDeviceClient::OnTouchscreenDeviceConfigurationChanged(
       observer.OnTouchDeviceAssociationChanged();
   } else {
     are_touchscreen_target_displays_valid_ = false;
-    for (auto& observer : observers_)
-      observer.OnTouchscreenDeviceConfigurationChanged();
+    NotifyObserversTouchscreenDeviceConfigurationChanged();
   }
 }
 
@@ -137,8 +125,7 @@ void InputDeviceClient::OnDeviceListsComplete(
     touchscreen_devices_ = touchscreen_devices;
     are_touchscreen_target_displays_valid_ =
         are_touchscreen_target_displays_valid;
-    for (auto& observer : observers_)
-      observer.OnTouchscreenDeviceConfigurationChanged();
+    NotifyObserversTouchscreenDeviceConfigurationChanged();
   }
   if (!mouse_devices.empty())
     OnMouseDeviceConfigurationChanged(mouse_devices);
@@ -147,14 +134,28 @@ void InputDeviceClient::OnDeviceListsComplete(
 
   if (!device_lists_complete_) {
     device_lists_complete_ = true;
-    for (auto& observer : observers_)
-      observer.OnDeviceListsComplete();
+    NotifyObserversDeviceListsComplete();
   }
 }
 
 void InputDeviceClient::OnStylusStateChanged(StylusState state) {
   for (auto& observer : observers_)
     observer.OnStylusStateChanged(state);
+}
+
+void InputDeviceClient::NotifyObserversDeviceListsComplete() {
+  for (auto& observer : observers_)
+    observer.OnDeviceListsComplete();
+}
+
+void InputDeviceClient::NotifyObserversKeyboardDeviceConfigurationChanged() {
+  for (auto& observer : observers_)
+    observer.OnKeyboardDeviceConfigurationChanged();
+}
+
+void InputDeviceClient::NotifyObserversTouchscreenDeviceConfigurationChanged() {
+  for (auto& observer : observers_)
+    observer.OnTouchscreenDeviceConfigurationChanged();
 }
 
 }  // namespace ui

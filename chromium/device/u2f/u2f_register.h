@@ -7,28 +7,38 @@
 
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
+
+#include "base/optional.h"
 #include "device/u2f/u2f_request.h"
 
 namespace device {
 
+class RegisterResponseData;
 class U2fDiscovery;
 
 class U2fRegister : public U2fRequest {
  public:
-  U2fRegister(const std::vector<std::vector<uint8_t>>& registered_keys,
+  using RegisterResponseCallback = base::OnceCallback<void(
+      U2fReturnCode status_code,
+      base::Optional<RegisterResponseData> response_data)>;
+
+  U2fRegister(std::string relying_party_id,
+              std::vector<U2fDiscovery*> discoveries,
+              const std::vector<std::vector<uint8_t>>& registered_keys,
               const std::vector<uint8_t>& challenge_hash,
               const std::vector<uint8_t>& app_param,
-              std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
-              const ResponseCallback& cb);
+              RegisterResponseCallback completion_callback);
   ~U2fRegister() override;
 
   static std::unique_ptr<U2fRequest> TryRegistration(
+      std::string relying_party_id,
+      std::vector<U2fDiscovery*> discoveries,
       const std::vector<std::vector<uint8_t>>& registered_keys,
       const std::vector<uint8_t>& challenge_hash,
       const std::vector<uint8_t>& app_param,
-      std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
-      const ResponseCallback& cb);
+      RegisterResponseCallback completion_callback);
 
  private:
   void TryDevice() override;
@@ -50,9 +60,11 @@ class U2fRegister : public U2fRequest {
   // registration for all key handles provided in |registered_keys_|.
   bool CheckedForDuplicateRegistration();
 
+  const std::vector<std::vector<uint8_t>> registered_keys_;
   std::vector<uint8_t> challenge_hash_;
   std::vector<uint8_t> app_param_;
-  const std::vector<std::vector<uint8_t>> registered_keys_;
+  RegisterResponseCallback completion_callback_;
+
   // List of authenticators that did not create any of the key handles in the
   // exclude list.
   std::set<std::string> checked_device_id_list_;

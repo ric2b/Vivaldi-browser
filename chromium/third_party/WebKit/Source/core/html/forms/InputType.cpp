@@ -139,7 +139,7 @@ const AtomicString& InputType::NormalizeTypeName(
   return it == FactoryMap()->end() ? InputTypeNames::text : it->key;
 }
 
-InputType::~InputType() {}
+InputType::~InputType() = default;
 
 void InputType::Trace(blink::Visitor* visitor) {
   visitor->Trace(element_);
@@ -460,10 +460,6 @@ bool InputType::IsKeyboardFocusable() const {
 bool InputType::ShouldShowFocusRingOnMouseFocus() const {
   return false;
 }
-
-void InputType::EnableSecureTextInput() {}
-
-void InputType::DisableSecureTextInput() {}
 
 void InputType::CountUsage() {}
 

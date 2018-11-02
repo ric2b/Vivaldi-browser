@@ -162,6 +162,8 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents,
   if (net::GetValueForKeyInQuery(web_contents->GetURL(), "type", &type_param)) {
     if (type_param == "hpkp_failure") {
       cert_error = net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+    } else if (type_param == "ct_failure") {
+      cert_error = net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED;
     }
   }
   net::SSLInfo ssl_info;
@@ -174,7 +176,7 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents,
     options_mask |= security_interstitials::SSLErrorUI::STRICT_ENFORCEMENT;
   return SSLBlockingPage::Create(
       web_contents, cert_error, ssl_info, request_url, options_mask,
-      time_triggered_, nullptr, is_superfish,
+      time_triggered_, GURL(), nullptr, is_superfish,
       base::Callback<void(content::CertificateRequestResultType)>());
 }
 

@@ -38,8 +38,8 @@ void AudioWorkletObjectProxy::DidEvaluateModuleScript(bool success) {
   if (processor_info_list->size() == 0)
     return;
 
-  GetParentFrameTaskRunners()->Get(TaskType::kUnthrottled)->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *GetParentFrameTaskRunners()->Get(TaskType::kUnthrottled), FROM_HERE,
       CrossThreadBind(
           &AudioWorkletMessagingProxy::SynchronizeWorkletProcessorInfoList,
           GetAudioWorkletMessagingProxyWeakPtr(),

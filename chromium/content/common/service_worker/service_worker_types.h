@@ -14,19 +14,18 @@
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
-#include "content/common/service_worker/service_worker_client_info.h"
 #include "content/public/common/referrer.h"
-#include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/service_worker_modes.h"
 #include "services/network/public/interfaces/fetch_api.mojom.h"
+#include "services/network/public/interfaces/request_context_frame_type.mojom.h"
 #include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/common/service_worker/service_worker_client.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_state.mojom.h"
 #include "third_party/WebKit/public/platform/modules/cache_storage/cache_storage.mojom.h"
 #include "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_state.mojom.h"
 #include "url/gurl.h"
 
 // This file is to have common definitions that are to be shared by
@@ -90,7 +89,8 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
       network::mojom::FetchRequestMode::kNoCORS;
   bool is_main_resource_load = false;
   RequestContextType request_context_type = REQUEST_CONTEXT_TYPE_UNSPECIFIED;
-  RequestContextFrameType frame_type = REQUEST_CONTEXT_FRAME_TYPE_NONE;
+  network::mojom::RequestContextFrameType frame_type =
+      network::mojom::RequestContextFrameType::kNone;
   GURL url;
   std::string method;
   ServiceWorkerHeaderMap headers;
@@ -102,7 +102,8 @@ struct CONTENT_EXPORT ServiceWorkerFetchRequest {
       network::mojom::FetchCredentialsMode::kOmit;
   blink::mojom::FetchCacheMode cache_mode =
       blink::mojom::FetchCacheMode::kDefault;
-  FetchRedirectMode redirect_mode = FetchRedirectMode::FOLLOW_MODE;
+  network::mojom::FetchRedirectMode redirect_mode =
+      network::mojom::FetchRedirectMode::kFollow;
   std::string integrity;
   bool keepalive = false;
   std::string client_id;
@@ -180,24 +181,6 @@ class ChangedVersionAttributesMask {
 
  private:
   int changed_;
-};
-
-struct ServiceWorkerClientQueryOptions {
-  ServiceWorkerClientQueryOptions();
-  blink::mojom::ServiceWorkerClientType client_type;
-  bool include_uncontrolled;
-};
-
-struct ExtendableMessageEventSource {
-  ExtendableMessageEventSource();
-  explicit ExtendableMessageEventSource(
-      const ServiceWorkerClientInfo& client_info);
-  explicit ExtendableMessageEventSource(
-      const blink::mojom::ServiceWorkerObjectInfo& service_worker_info);
-
-  // Exactly one of these infos should be valid.
-  ServiceWorkerClientInfo client_info;
-  blink::mojom::ServiceWorkerObjectInfo service_worker_info;
 };
 
 }  // namespace content

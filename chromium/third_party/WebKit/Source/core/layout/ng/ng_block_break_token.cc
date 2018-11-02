@@ -4,20 +4,42 @@
 
 #include "core/layout/ng/ng_block_break_token.h"
 
+#include "platform/wtf/text/StringBuilder.h"
+
 namespace blink {
 
 NGBlockBreakToken::NGBlockBreakToken(
     NGLayoutInputNode node,
     LayoutUnit used_block_size,
-    Vector<scoped_refptr<NGBreakToken>>& child_break_tokens)
+    Vector<scoped_refptr<NGBreakToken>>& child_break_tokens,
+    bool has_last_resort_break)
     : NGBreakToken(kBlockBreakToken, kUnfinished, node),
-      used_block_size_(used_block_size) {
+      used_block_size_(used_block_size),
+      has_last_resort_break_(has_last_resort_break) {
   child_break_tokens_.swap(child_break_tokens);
 }
 
 NGBlockBreakToken::NGBlockBreakToken(NGLayoutInputNode node,
-                                     LayoutUnit used_block_size)
+                                     LayoutUnit used_block_size,
+                                     bool has_last_resort_break)
     : NGBreakToken(kBlockBreakToken, kFinished, node),
-      used_block_size_(used_block_size) {}
+      used_block_size_(used_block_size),
+      has_last_resort_break_(has_last_resort_break) {}
+
+NGBlockBreakToken::NGBlockBreakToken(NGLayoutInputNode node)
+    : NGBreakToken(kBlockBreakToken, kUnfinished, node) {}
+
+#ifndef NDEBUG
+
+String NGBlockBreakToken::ToString() const {
+  StringBuilder string_builder;
+  string_builder.Append(NGBreakToken::ToString());
+  string_builder.Append(" used:");
+  string_builder.Append(used_block_size_.ToString());
+  string_builder.Append("px");
+  return string_builder.ToString();
+}
+
+#endif  // NDEBUG
 
 }  // namespace blink

@@ -65,6 +65,7 @@ class Modulator;
 class Navigator;
 class PostMessageTimer;
 class Screen;
+class ScriptPromise;
 class ScriptState;
 class ScrollToOptions;
 class SecurityOrigin;
@@ -217,6 +218,9 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
       Element*,
       const String& pseudo_elt = String()) const;
 
+  // Acessibility Object Model
+  ScriptPromise getComputedAccessibleNode(ScriptState*, Element*);
+
   // WebKit extension
   CSSRuleList* getMatchedCSSRules(Element*, const String& pseudo_elt) const;
 
@@ -267,6 +271,14 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   Element* frameElement() const;
 
+  DOMWindow* open(ExecutionContext*,
+                  LocalDOMWindow* current_window,
+                  LocalDOMWindow* entered_window,
+                  const String& url,
+                  const AtomicString& target,
+                  const String& features,
+                  ExceptionState&);
+
   DOMWindow* open(const String& url_string,
                   const AtomicString& frame_name,
                   const String& window_features_string,
@@ -281,7 +293,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void PostMessageTimerFired(PostMessageTimer*);
   void RemovePostMessageTimer(PostMessageTimer*);
   void DispatchMessageEventWithOriginCheck(
-      SecurityOrigin* intended_target_origin,
+      const SecurityOrigin* intended_target_origin,
       Event*,
       std::unique_ptr<SourceLocation>);
 
@@ -323,7 +335,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   // Protected DOMWindow overrides.
   void SchedulePostMessage(MessageEvent*,
-                           scoped_refptr<SecurityOrigin> target,
+                           scoped_refptr<const SecurityOrigin> target,
                            Document* source) override;
 
  private:

@@ -64,11 +64,6 @@ void DataUseWebContentsObserver::RenderFrameDeleted(
   service_->RenderFrameDeleted(render_frame_host);
 }
 
-void DataUseWebContentsObserver::DidStartNavigation(
-    content::NavigationHandle* navigation_handle) {
-  service_->DidStartNavigation(navigation_handle);
-}
-
 void DataUseWebContentsObserver::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
   service_->ReadyToCommitNavigation(navigation_handle);
@@ -91,6 +86,12 @@ void DataUseWebContentsObserver::RenderFrameHostChanged(
 void DataUseWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   service_->DidFinishNavigation(navigation_handle);
+}
+
+void DataUseWebContentsObserver::DidFinishLoad(
+    content::RenderFrameHost* render_frame_host,
+    const GURL& validated_url) {
+  service_->DidFinishLoad(render_frame_host, validated_url);
 }
 
 }  // namespace data_use_measurement

@@ -704,7 +704,7 @@ template <typename T, size_t inlineCapacity = 0>
 class PersistentHeapDeque
     : public PersistentHeapCollectionBase<HeapDeque<T, inlineCapacity>> {
  public:
-  PersistentHeapDeque() {}
+  PersistentHeapDeque() = default;
 
   template <size_t otherCapacity>
   PersistentHeapDeque(const HeapDeque<T, otherCapacity>& other)
@@ -714,6 +714,17 @@ class PersistentHeapDeque
 template <typename T>
 Persistent<T> WrapPersistent(T* value) {
   return Persistent<T>(value);
+}
+
+template <typename T,
+          typename = std::enable_if_t<WTF::IsGarbageCollectedType<T>::value>>
+Persistent<T> WrapPersistentIfNeeded(T* value) {
+  return Persistent<T>(value);
+}
+
+template <typename T>
+T& WrapPersistentIfNeeded(T& value) {
+  return value;
 }
 
 template <typename T>

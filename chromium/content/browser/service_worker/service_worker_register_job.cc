@@ -25,7 +25,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "net/base/net_errors.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_object.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_object.mojom.h"
 
 namespace content {
 
@@ -74,12 +74,9 @@ ServiceWorkerRegisterJob::~ServiceWorkerRegisterJob() {
 }
 
 void ServiceWorkerRegisterJob::AddCallback(
-    const RegistrationCallback& callback,
-    ServiceWorkerProviderHost* provider_host) {
+    const RegistrationCallback& callback) {
   if (!is_promise_resolved_) {
     callbacks_.push_back(callback);
-    if (provider_host)
-      provider_host->AddScopedProcessReferenceToPattern(pattern_);
     return;
   }
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -100,22 +97,23 @@ void ServiceWorkerRegisterJob::StartImpl() {
   SetPhase(START);
   ServiceWorkerStorage::FindRegistrationCallback next_step;
   if (job_type_ == REGISTRATION_JOB) {
-    next_step = base::Bind(
-        &ServiceWorkerRegisterJob::ContinueWithRegistration,
-        weak_factory_.GetWeakPtr());
+    next_step =
+        base::BindOnce(&ServiceWorkerRegisterJob::ContinueWithRegistration,
+                       weak_factory_.GetWeakPtr());
   } else {
-    next_step = base::Bind(
-        &ServiceWorkerRegisterJob::ContinueWithUpdate,
-        weak_factory_.GetWeakPtr());
+    next_step = base::BindOnce(&ServiceWorkerRegisterJob::ContinueWithUpdate,
+                               weak_factory_.GetWeakPtr());
   }
 
   scoped_refptr<ServiceWorkerRegistration> registration =
       context_->storage()->GetUninstallingRegistration(pattern_);
   if (registration.get())
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(next_step, SERVICE_WORKER_OK, registration));
+        FROM_HERE,
+        base::BindOnce(std::move(next_step), SERVICE_WORKER_OK, registration));
   else
-    context_->storage()->FindRegistrationForPattern(pattern_, next_step);
+    context_->storage()->FindRegistrationForPattern(pattern_,
+                                                    std::move(next_step));
 }
 
 void ServiceWorkerRegisterJob::Abort() {
@@ -287,9 +285,10 @@ void ServiceWorkerRegisterJob::RegisterAndContinue() {
     return;
   }
 
-  set_registration(new ServiceWorkerRegistration(
-      blink::mojom::ServiceWorkerRegistrationOptions(pattern_), registration_id,
-      context_));
+  blink::mojom::ServiceWorkerRegistrationOptions options;
+  options.scope = pattern_;
+  set_registration(
+      new ServiceWorkerRegistration(options, registration_id, context_));
   AddRegistrationToMatchingProviderHosts(registration());
   UpdateAndContinue();
 }
@@ -358,8 +357,8 @@ void ServiceWorkerRegisterJob::UpdateAndContinue() {
   }
   new_version()->StartWorker(
       ServiceWorkerMetrics::EventType::INSTALL,
-      base::Bind(&ServiceWorkerRegisterJob::OnStartWorkerFinished,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerRegisterJob::OnStartWorkerFinished,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ServiceWorkerRegisterJob::OnStartWorkerFinished(
@@ -411,8 +410,6 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
   new_version()->RunAfterStartWorker(
       ServiceWorkerMetrics::EventType::INSTALL,
       base::BindOnce(&ServiceWorkerRegisterJob::DispatchInstallEvent,
-                     weak_factory_.GetWeakPtr()),
-      base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFailed,
                      weak_factory_.GetWeakPtr()));
 
   // A subsequent registration job may terminate our installing worker. It can
@@ -422,15 +419,21 @@ void ServiceWorkerRegisterJob::InstallAndContinue() {
     Complete(SERVICE_WORKER_ERROR_INSTALL_WORKER_FAILED);
 }
 
-void ServiceWorkerRegisterJob::DispatchInstallEvent() {
+void ServiceWorkerRegisterJob::DispatchInstallEvent(
+    ServiceWorkerStatusCode start_worker_status) {
+  if (start_worker_status != SERVICE_WORKER_OK) {
+    OnInstallFailed(start_worker_status);
+    return;
+  }
+
   DCHECK_EQ(ServiceWorkerVersion::INSTALLING, new_version()->status())
       << new_version()->status();
   DCHECK_EQ(EmbeddedWorkerStatus::RUNNING, new_version()->running_status())
       << "Worker stopped too soon after it was started.";
   int request_id = new_version()->StartRequest(
       ServiceWorkerMetrics::EventType::INSTALL,
-      base::Bind(&ServiceWorkerRegisterJob::OnInstallFailed,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFailed,
+                     weak_factory_.GetWeakPtr()));
 
   new_version()->event_dispatcher()->DispatchInstallEvent(
       base::BindOnce(&ServiceWorkerRegisterJob::OnInstallFinished,
@@ -460,21 +463,17 @@ void ServiceWorkerRegisterJob::OnInstallFinished(
           ? ServiceWorkerVersion::FetchHandlerExistence::EXISTS
           : ServiceWorkerVersion::FetchHandlerExistence::DOES_NOT_EXIST);
   context_->storage()->StoreRegistration(
-      registration(),
-      new_version(),
-      base::Bind(&ServiceWorkerRegisterJob::OnStoreRegistrationComplete,
-                 weak_factory_.GetWeakPtr()));
+      registration(), new_version(),
+      base::BindOnce(&ServiceWorkerRegisterJob::OnStoreRegistrationComplete,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void ServiceWorkerRegisterJob::OnInstallFailed(ServiceWorkerStatusCode status) {
   ServiceWorkerMetrics::RecordInstallEventStatus(status);
-
-  if (status != SERVICE_WORKER_OK) {
-    Complete(status, std::string("ServiceWorker failed to install: ") +
-                         ServiceWorkerStatusToString(status));
-  } else {
-    NOTREACHED() << "OnInstallFailed should not handle SERVICE_WORKER_OK";
-  }
+  DCHECK_NE(status, SERVICE_WORKER_OK)
+      << "OnInstallFailed should not handle SERVICE_WORKER_OK";
+  Complete(status, std::string("ServiceWorker failed to install: ") +
+                       ServiceWorkerStatusToString(status));
 }
 
 void ServiceWorkerRegisterJob::OnStoreRegistrationComplete(
@@ -549,9 +548,8 @@ void ServiceWorkerRegisterJob::CompleteInternal(
           !registration()->active_version()) {
         registration()->NotifyRegistrationFailed();
         context_->storage()->DeleteRegistration(
-            registration()->id(),
-            registration()->pattern().GetOrigin(),
-            base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+            registration()->id(), registration()->pattern().GetOrigin(),
+            base::BindOnce(&ServiceWorkerUtils::NoOpStatusCallback));
       }
     }
     if (!is_promise_resolved_)

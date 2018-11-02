@@ -5,6 +5,7 @@
 #include "net/quic/core/crypto/crypto_utils.h"
 
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/platform/api/quic_arraysize.h"
 #include "net/quic/platform/api/quic_test.h"
 #include "net/quic/platform/api/quic_text_utils.h"
 #include "net/quic/test_tools/quic_test_utils.h"
@@ -16,6 +17,25 @@ namespace test {
 namespace {
 
 class CryptoUtilsTest : public QuicTest {};
+
+TEST_F(CryptoUtilsTest, TestHkdfExpandLabel) {
+  // This test vector is from
+  // https://github.com/quicwg/base-drafts/wiki/Test-Vector-for-the-Clear-Text-AEAD-key-derivation
+  const std::vector<uint8_t> secret = {
+      0x8f, 0x01, 0x00, 0x67, 0x9c, 0x96, 0x5a, 0xc5, 0x9f, 0x28, 0x3a,
+      0x02, 0x52, 0x2a, 0x6e, 0x43, 0xcf, 0xae, 0xf6, 0x3c, 0x45, 0x48,
+      0xb0, 0xa6, 0x8f, 0x91, 0x91, 0x40, 0xee, 0x7d, 0x9a, 0x48};
+  const string label = "QUIC client cleartext Secret";
+  std::vector<uint8_t> out =
+      CryptoUtils::HkdfExpandLabel(EVP_sha256(), secret, label, 32);
+
+  std::vector<uint8_t> expected_out = {
+      0x31, 0xba, 0x96, 0x68, 0x73, 0xf7, 0xf4, 0x53, 0xe6, 0xc8, 0xa1,
+      0xbf, 0x78, 0xed, 0x70, 0x13, 0xfa, 0xd8, 0x3f, 0xfc, 0xee, 0xfc,
+      0x95, 0x68, 0x81, 0xcd, 0x24, 0x1c, 0x0a, 0xe3, 0xa7, 0xa6};
+
+  EXPECT_EQ(out, expected_out);
+}
 
 TEST_F(CryptoUtilsTest, TestExportKeyingMaterial) {
   const struct TestVector {
@@ -48,7 +68,7 @@ TEST_F(CryptoUtilsTest, TestExportKeyingMaterial) {
        "c9a46ed0757bd1812f1f21b4d41e62125fec8364a21db7"},
   };
 
-  for (size_t i = 0; i < arraysize(test_vector); i++) {
+  for (size_t i = 0; i < QUIC_ARRAYSIZE(test_vector); i++) {
     // Decode the test vector.
     string subkey_secret =
         QuicTextUtils::HexDecode(test_vector[i].subkey_secret);

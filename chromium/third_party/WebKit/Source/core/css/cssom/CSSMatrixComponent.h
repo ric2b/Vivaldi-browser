@@ -26,10 +26,7 @@ class CORE_EXPORT CSSMatrixComponent final : public CSSTransformComponent {
                                     const CSSMatrixComponentOptions&);
 
   // Blink-internal ways of creating CSSMatrixComponents.
-  static CSSMatrixComponent* FromCSSValue(const CSSFunctionValue& value) {
-    // TODO(meade): Implement.
-    return nullptr;
-  }
+  static CSSMatrixComponent* FromCSSValue(const CSSFunctionValue&);
 
   // Getters and setters for attributes defined in the IDL.
   DOMMatrix* matrix() { return matrix_.Get(); }
@@ -38,7 +35,7 @@ class CORE_EXPORT CSSMatrixComponent final : public CSSTransformComponent {
   // Internal methods - from CSSTransformComponent.
   TransformComponentType GetType() const final { return kMatrixType; }
   const DOMMatrix* AsMatrix(ExceptionState&) const final;
-  const CSSFunctionValue* ToCSSValue(SecureContextMode) const final;
+  const CSSFunctionValue* ToCSSValue() const final;
 
   virtual void Trace(blink::Visitor* visitor) {
     visitor->Trace(matrix_);

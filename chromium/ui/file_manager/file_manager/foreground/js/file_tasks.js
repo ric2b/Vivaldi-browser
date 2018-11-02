@@ -182,10 +182,10 @@ FileTasks.create = function(
       if (!FileTasks.zipArchiverUnpackerEnabledPromise_) {
         FileTasks.zipArchiverUnpackerEnabledPromise_ =
             new Promise(function(resolve, reject) {
-              // Disabled by default.
+              // Enabled by default.
               chrome.commandLinePrivate.hasSwitch(
-                  'enable-zip-archiver-unpacker', function(enabled) {
-                    resolve(enabled);
+                  'disable-zip-archiver-unpacker', function(disabled) {
+                    resolve(!disabled);
                   });
             });
       }
@@ -314,6 +314,16 @@ FileTasks.EXTENSIONS_TO_SKIP_SUGGEST_APPS_ = Object.freeze([
 ]);
 
 /**
+ * Task IDs of the zip file handlers to be recorded.
+ * The indexes of the IDs must match with the values of
+ * FileManagerZipHandlerType in enums.xml, and should not change.
+ */
+FileTasks.UMA_ZIP_HANDLER_TASK_IDS_ = Object.freeze([
+  FileTasks.ZIP_UNPACKER_TASK_ID, FileTasks.ZIP_ARCHIVER_UNZIP_TASK_ID,
+  FileTasks.ZIP_ARCHIVER_ZIP_TASK_ID
+]);
+
+/**
  * Records trial of opening file grouped by extensions.
  *
  * @param {Array<!Entry>} entries The entries to be opened.
@@ -342,6 +352,13 @@ FileTasks.recordViewingRootTypeUMA_ = function(rootType) {
   if (rootType !== null) {
     metrics.recordEnum(
         'ViewingRootType', rootType, VolumeManagerCommon.RootTypesForUMA);
+  }
+};
+
+FileTasks.recordZipHandlerUMA_ = function(taskId) {
+  if (FileTasks.UMA_ZIP_HANDLER_TASK_IDS_.indexOf(taskId) != -1) {
+    metrics.recordEnum(
+        'ZipFileTask', taskId, FileTasks.UMA_ZIP_HANDLER_TASK_IDS_);
   }
 };
 
@@ -640,6 +657,7 @@ FileTasks.prototype.executeInternal_ = function(taskId) {
     if (FileTasks.isInternalTask_(taskId)) {
       this.executeInternalTask_(taskId);
     } else {
+      FileTasks.recordZipHandlerUMA_(taskId);
       chrome.fileManagerPrivate.executeTask(taskId,
           this.entries_,
           function(result) {

@@ -113,7 +113,8 @@ void InvertBubbleView::Init() {
   close_->SetFontList(original_font_list);
   close_->set_listener(this);
 
-  views::GridLayout* layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
   for (int i = 0; i < 4; i++) {
@@ -172,8 +173,6 @@ void InvertBubbleView::OpenLink(const std::string& url, int event_flags) {
 
 }  // namespace
 
-namespace chrome {
-
 void MaybeShowInvertBubbleView(BrowserView* browser_view) {
   Browser* browser = browser_view->browser();
   PrefService* pref_service = browser->profile()->GetPrefs();
@@ -189,5 +188,3 @@ void ShowInvertBubbleView(Browser* browser, views::View* anchor) {
   InvertBubbleView* delegate = new InvertBubbleView(browser, anchor);
   views::BubbleDialogDelegateView::CreateBubble(delegate)->Show();
 }
-
-}  // namespace chrome

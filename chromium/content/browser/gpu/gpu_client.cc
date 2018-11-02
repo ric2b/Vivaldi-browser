@@ -135,6 +135,7 @@ void GpuClient::EstablishGpuChannel(
                  weak_factory_.GetWeakPtr()));
 }
 
+// FEATURE_FORCE_ACCESS_TO_GPU
 void GpuClient::SetForceAllowAccessToGpu(bool enable) {
   GpuProcessHost::SetForceAllowAccessToGpu(enable);
 }

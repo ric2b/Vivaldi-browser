@@ -5,17 +5,18 @@
 #include "ui/app_list/views/app_list_main_view.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_model.h"
-#include "ash/app_list/model/search_box_model.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/string_util.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
@@ -45,11 +46,12 @@ AppListMainView::AppListMainView(AppListViewDelegate* delegate,
                                  AppListView* app_list_view)
     : delegate_(delegate),
       model_(delegate->GetModel()),
+      search_model_(delegate->GetSearchModel()),
       search_box_view_(nullptr),
       contents_view_(nullptr),
       app_list_view_(app_list_view) {
-  SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(), 0));
   model_->AddObserver(this);
 }
 
@@ -104,6 +106,7 @@ void AppListMainView::ModelChanged() {
   model_->RemoveObserver(this);
   model_ = delegate_->GetModel();
   model_->AddObserver(this);
+  search_model_ = delegate_->GetSearchModel();
   search_box_view_->ModelChanged();
   delete contents_view_;
   contents_view_ = nullptr;
@@ -141,7 +144,8 @@ void AppListMainView::ActivateApp(AppListItem* item, int event_flags) {
     UMA_HISTOGRAM_ENUMERATION(kAppListFolderOpenedHistogram, kOldFolders,
                               kMaxFolderOpened);
   } else {
-    item->Activate(event_flags);
+    base::RecordAction(base::UserMetricsAction("AppList_ClickOnApp"));
+    delegate_->ActivateItem(item->id(), event_flags);
     UMA_HISTOGRAM_BOOLEAN(features::IsFullscreenAppListEnabled()
                               ? kAppListAppLaunchedFullscreen
                               : kAppListAppLaunched,
@@ -163,21 +167,17 @@ void AppListMainView::OnResultInstalled(SearchResult* result) {
 }
 
 void AppListMainView::QueryChanged(SearchBoxView* sender) {
+  base::string16 raw_query = search_model_->search_box()->text();
   base::string16 query;
-  base::TrimWhitespace(model_->search_box()->text(), base::TRIM_ALL, &query);
+  base::TrimWhitespace(raw_query, base::TRIM_ALL, &query);
   bool should_show_search = !query.empty();
   contents_view_->ShowSearchResults(should_show_search);
 
-  delegate_->StartSearch();
+  delegate_->StartSearch(raw_query);
 }
 
 void AppListMainView::BackButtonPressed() {
   contents_view_->Back();
-}
-
-void AppListMainView::SetSearchResultSelection(bool select) {
-  if (contents_view_->GetActiveState() == AppListModel::STATE_SEARCH_RESULTS)
-    contents_view_->search_results_page_view()->SetSelection(select);
 }
 
 }  // namespace app_list

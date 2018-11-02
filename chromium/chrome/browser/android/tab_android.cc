@@ -8,7 +8,6 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/trace_event/trace_event.h"
@@ -46,7 +45,6 @@
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
-#include "chrome/common/render_messages.h"
 #include "chrome/common/url_constants.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -71,8 +69,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
-#include "content/public/common/browser_controls_state.h"
-#include "content/public/common/resource_request_body.h"
+#include "content/public/common/resource_request_body_android.h"
 #include "jni/Tab_jni.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/escape.h"
@@ -256,7 +253,7 @@ void TabAndroid::SetSyncId(int sync_id) {
   Java_Tab_setSyncId(env, weak_java_tab_.get(env), sync_id);
 }
 
-void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
+void TabAndroid::HandlePopupNavigation(NavigateParams* params) {
   DCHECK(params->source_contents == web_contents());
   DCHECK(params->target_contents == NULL ||
          params->target_contents == web_contents());
@@ -275,8 +272,10 @@ void TabAndroid::HandlePopupNavigation(chrome::NavigateParams* params) {
     ScopedJavaLocalRef<jstring> jheaders(
         ConvertUTF8ToJavaString(env, params->extra_headers));
     ScopedJavaLocalRef<jobject> jpost_data;
-    if (params->uses_post && params->post_data)
-      jpost_data = params->post_data->ToJavaObject(env);
+    if (params->uses_post && params->post_data) {
+      jpost_data = content::ConvertResourceRequestBodyToJavaObject(
+          env, params->post_data);
+    }
     Java_Tab_openNewTab(
         env, jobj, jurl, jheaders, jpost_data, static_cast<int>(disposition),
         params->created_with_opener, params->is_renderer_initiated);
@@ -396,7 +395,7 @@ void TabAndroid::InitWebContents(
       SetViewAndroid(web_contents()->GetNativeView());
   CoreTabHelper::FromWebContents(web_contents())->set_delegate(this);
   web_contents_delegate_ =
-      base::MakeUnique<android::TabWebContentsDelegateAndroid>(
+      std::make_unique<android::TabWebContentsDelegateAndroid>(
           env, jweb_contents_delegate);
   web_contents_delegate_->LoadProgressChanged(web_contents(), 0);
   web_contents()->SetDelegate(web_contents_delegate_.get());
@@ -433,7 +432,7 @@ void TabAndroid::UpdateDelegates(
   ContextMenuHelper::FromWebContents(web_contents())->SetPopulator(
       jcontext_menu_populator);
   web_contents_delegate_ =
-      base::MakeUnique<android::TabWebContentsDelegateAndroid>(
+      std::make_unique<android::TabWebContentsDelegateAndroid>(
           env, jweb_contents_delegate);
   web_contents()->SetDelegate(web_contents_delegate_.get());
 }
@@ -541,7 +540,7 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
   if (prerender_manager) {
     bool prefetched_page_loaded = HasPrerenderedUrl(gurl);
     // Getting the load status before MaybeUsePrerenderedPage() b/c it resets.
-    chrome::NavigateParams params(web_contents());
+    NavigateParams params(web_contents());
     if (prerender_manager->MaybeUsePrerenderedPage(gurl, &params)) {
       return prefetched_page_loaded ?
           FULL_PRERENDERED_PAGE_LOAD : PARTIAL_PRERENDERED_PAGE_LOAD;
@@ -570,7 +569,7 @@ TabAndroid::TabLoadStatus TabAndroid::LoadUrl(
       load_params.load_type =
           content::NavigationController::LOAD_TYPE_HTTP_POST;
       load_params.post_data =
-          content::ResourceRequestBody::FromJavaObject(env, j_post_data);
+          content::ExtractResourceRequestBodyFromJavaObject(env, j_post_data);
     }
     load_params.transition_type =
         ui::PageTransitionFromInt(page_transition);
@@ -720,19 +719,22 @@ void TabAndroid::UpdateBrowserControlsState(JNIEnv* env,
       static_cast<content::BrowserControlsState>(constraints);
   content::BrowserControlsState current_state =
       static_cast<content::BrowserControlsState>(current);
-  content::RenderViewHost* sender = web_contents()->GetRenderViewHost();
-  sender->Send(new ChromeViewMsg_UpdateBrowserControlsState(
-      sender->GetRoutingID(), constraints_state, current_state, animate));
+
+  chrome::mojom::ChromeRenderFrameAssociatedPtr renderer;
+  web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
+      &renderer);
+  renderer->UpdateBrowserControlsState(constraints_state, current_state,
+                                       animate);
 
   if (web_contents()->ShowingInterstitialPage()) {
-    content::RenderViewHost* interstitial_view_host =
-        web_contents()
-            ->GetInterstitialPage()
-            ->GetMainFrame()
-            ->GetRenderViewHost();
-    interstitial_view_host->Send(new ChromeViewMsg_UpdateBrowserControlsState(
-        interstitial_view_host->GetRoutingID(), constraints_state,
-        current_state, animate));
+    chrome::mojom::ChromeRenderFrameAssociatedPtr interstitial_renderer;
+    web_contents()
+        ->GetInterstitialPage()
+        ->GetMainFrame()
+        ->GetRemoteAssociatedInterfaces()
+        ->GetInterface(&interstitial_renderer);
+    interstitial_renderer->UpdateBrowserControlsState(constraints_state,
+                                                      current_state, animate);
   }
 }
 
@@ -834,7 +836,7 @@ void TabAndroid::SetInterceptNavigationDelegate(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   InterceptNavigationDelegate::Associate(
       web_contents(),
-      base::MakeUnique<ChromeInterceptNavigationDelegate>(env, delegate));
+      std::make_unique<ChromeInterceptNavigationDelegate>(env, delegate));
 }
 
 void TabAndroid::SetWebappManifestScope(JNIEnv* env,
@@ -936,7 +938,7 @@ void TabAndroid::CreateInProductHelpService(
   if (media_in_product_help_)
     return;
 
-  media_in_product_help_ = base::MakeUnique<MediaDownloadInProductHelp>(
+  media_in_product_help_ = std::make_unique<MediaDownloadInProductHelp>(
       render_frame_host, this, std::move(request));
 }
 

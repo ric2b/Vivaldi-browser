@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">Nie można rozpakować rozszerzenia. Aby bezpiecznie rozpakować rozszerzenie, musi istnieć ścieżka do katalogu profilu, która zaczyna się literą dysku i nie zawiera punktu połączenia, punktu instalacji (montowania) ani dowiązania symbolicznego. W przypadku Twojego profilu taka ścieżka nie istnieje.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (numer seryjny <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> wyprodukowany przez <ph name="VENDOR_ID" /> (numer seryjny <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">Nie można wczytać strony programu uruchamiającego „<ph name="PAGE" />”.</translation>
 <translation id="388442998277590542">Nie można wczytać strony opcji „<ph name="OPTIONS_PAGE" />”.</translation>
 <translation id="4115165561519362854">Administrator tego urządzenia wymaga, by rozszerzenie <ph name="EXTENSION_NAME" /> było w wersji co najmniej <ph name="EXTENSION_VERSION" />. Jeśli rozszerzenie nie zostanie zaktualizowane do tej wersji (lub nowszej), nie zostanie włączone.</translation>
 <translation id="4233778200880751280">Nie udało się załadować strony z informacjami: „<ph name="ABOUT_PAGE" />”.</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">Nie można rozpakować rozszerzenia. Aby bezpiecznie rozpakować rozszerzenie, musi istnieć ścieżka do katalogu profilu, która nie zawiera dowiązania symbolicznego. W przypadku Twojego profilu taka ścieżka nie istnieje.</translation>
 <translation id="641087317769093025">Nie można rozpakować rozszerzenia</translation>
 <translation id="6542618148162044354"><ph name="APP_NAME" /> żąda dostępu do co najmniej jednego Twojego urządzenia:</translation>
-<translation id="6566142449942033617">Nie można wczytać ścieżki „<ph name="PLUGIN_PATH" />” dla wtyczki.</translation>
 <translation id="657064425229075395">Nie udało się wczytać skryptu działającego w tle „<ph name="BACKGROUND_SCRIPT" />”.</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" /> firmy <ph name="VENDOR_NAME" /> (numer seryjny <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">Nie można utworzyć katalogu do rozpakowania: „<ph name="DIRECTORY_PATH" />”</translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">To rozszerzenie zbyt często ładowało się ponownie.</translation>
 <translation id="7003844668372540529">Nieznany produkt <ph name="PRODUCT_ID" /> firmy <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Administrator tego komputera wymaga zainstalowanego rozszerzenia <ph name="EXTENSION_NAME" />. Nie można go usunąć ani modyfikować.</translation>
-<translation id="7581279002575751816">Wtyczki NPAPI nie są obsługiwane.</translation>
 <translation id="7972881773422714442">Opcje: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Przedni</translation>
 <translation id="8047248493720652249">Rozszerzenie nie może odczytać nazwy pobieranego pliku „<ph name="ATTEMPTED_FILENAME" />”, ponieważ inne rozszerzenie (<ph name="EXTENSION_NAME" />) odczytało odmienną jego nazwę „<ph name="ACTUAL_FILENAME" />”.</translation>

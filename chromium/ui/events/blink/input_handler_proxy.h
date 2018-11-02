@@ -13,7 +13,7 @@
 #include "third_party/WebKit/public/platform/WebGestureCurve.h"
 #include "third_party/WebKit/public/platform/WebGestureCurveTarget.h"
 #include "third_party/WebKit/public/platform/WebGestureEvent.h"
-#include "third_party/WebKit/public/web/WebActiveWheelFlingParameters.h"
+#include "third_party/WebKit/public/web/WebActiveFlingParameters.h"
 #include "ui/events/blink/blink_features.h"
 #include "ui/events/blink/input_scroll_elasticity_controller.h"
 #include "ui/events/blink/synchronous_input_handler_proxy.h"
@@ -55,7 +55,8 @@ class InputHandlerProxy : public cc::InputHandlerClient,
  public:
   InputHandlerProxy(cc::InputHandler* input_handler,
                     InputHandlerProxyClient* client,
-                    bool touchpad_and_wheel_scroll_latching_enabled);
+                    bool touchpad_and_wheel_scroll_latching_enabled,
+                    bool async_wheel_events_enabled);
   ~InputHandlerProxy() override;
 
   InputScrollElasticityController* scroll_elasticity_controller() {
@@ -135,9 +136,6 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   // Helper functions for handling more complicated input events.
   EventDisposition HandleMouseWheel(
       const blink::WebMouseWheelEvent& event);
-  EventDisposition FlingScrollByMouseWheel(
-      const blink::WebMouseWheelEvent& event,
-      cc::EventListenerProperties listener_properties);
   EventDisposition HandleGestureScrollBegin(
       const blink::WebGestureEvent& event);
   EventDisposition HandleGestureScrollUpdate(
@@ -149,9 +147,6 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   EventDisposition HandleTouchStart(const blink::WebTouchEvent& event);
   EventDisposition HandleTouchMove(const blink::WebTouchEvent& event);
   EventDisposition HandleTouchEnd(const blink::WebTouchEvent& event);
-
-  // Returns true if we scrolled by the increment.
-  bool TouchpadFlingScroll(const blink::WebFloatSize& increment);
 
   // Returns true if we actually had an active fling to cancel, also notifying
   // the client that the fling has ended. Note that if a boosted fling is active
@@ -198,7 +193,7 @@ class InputHandlerProxy : public cc::InputHandlerClient,
   std::unique_ptr<blink::WebGestureCurve> fling_curve_;
   // Parameters for the active fling animation, stored in case we need to
   // transfer it out later.
-  blink::WebActiveWheelFlingParameters fling_parameters_;
+  blink::WebActiveFlingParameters fling_parameters_;
 
   InputHandlerProxyClient* client_;
   cc::InputHandler* input_handler_;
@@ -239,6 +234,7 @@ class InputHandlerProxy : public cc::InputHandlerClient,
 
   bool smooth_scroll_enabled_;
   const bool touchpad_and_wheel_scroll_latching_enabled_;
+  const bool async_wheel_events_enabled_;
 
   // The merged result of the last touch event with previous touch events.
   // This value will get returned for subsequent TouchMove events to allow
@@ -259,6 +255,7 @@ class InputHandlerProxy : public cc::InputHandlerClient,
 
   std::unique_ptr<CompositorThreadEventQueue> compositor_event_queue_;
   bool has_ongoing_compositor_scroll_fling_pinch_;
+  bool is_first_gesture_scroll_update_;
 
   std::unique_ptr<base::TickClock> tick_clock_;
 

@@ -21,7 +21,7 @@ class Size;
 }
 
 namespace printing {
-class PWGRasterConverter;
+class PwgRasterConverter;
 }
 
 namespace cloud_print {
@@ -61,7 +61,7 @@ class PrivetHTTPClient {
       PrivetURLFetcher::Delegate* delegate) = 0;
 
   virtual void RefreshPrivetToken(
-      const PrivetURLFetcher::TokenCallback& token_callback) = 0;
+      PrivetURLFetcher::TokenCallback token_callback) = 0;
 };
 
 class PrivetDataReadOperation {
@@ -156,27 +156,26 @@ class PrivetLocalPrintOperation {
 
   virtual void Start() = 0;
 
-
   // Required print data. MUST be called before calling |Start()|.
   virtual void SetData(const scoped_refptr<base::RefCountedBytes>& data) = 0;
 
   // Optional attributes for /submitdoc. Call before calling |Start()|
   // |ticket| should be in CJT format.
   virtual void SetTicket(const std::string& ticket) = 0;
+
   // |capabilities| should be in CDD format.
   virtual void SetCapabilities(const std::string& capabilities) = 0;
+
   // Username and jobname are for display only.
   virtual void SetUsername(const std::string& username) = 0;
   virtual void SetJobname(const std::string& jobname) = 0;
-  // If |offline| is true, we will indicate to the printer not to post the job
-  // to Google Cloud Print.
-  virtual void SetOffline(bool offline) = 0;
+
   // Document page size.
   virtual void SetPageSize(const gfx::Size& page_size) = 0;
 
   // For testing, inject an alternative PWG raster converter.
-  virtual void SetPWGRasterConverterForTesting(
-      std::unique_ptr<printing::PWGRasterConverter> pwg_raster_converter) = 0;
+  virtual void SetPwgRasterConverterForTesting(
+      std::unique_ptr<printing::PwgRasterConverter> pwg_raster_converter) = 0;
 
   virtual PrivetHTTPClient* GetHTTPClient() = 0;
 };

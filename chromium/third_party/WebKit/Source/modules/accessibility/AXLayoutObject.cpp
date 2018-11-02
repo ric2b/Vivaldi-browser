@@ -49,10 +49,10 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
-#include "core/html/ImageData.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
+#include "core/html/canvas/ImageData.h"
 #include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLLabelElement.h"
 #include "core/html/forms/HTMLOptionElement.h"
@@ -75,8 +75,6 @@
 #include "core/layout/LayoutTextControl.h"
 #include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/page/Page.h"
@@ -92,6 +90,7 @@
 #include "modules/accessibility/AXSpinButton.h"
 #include "modules/accessibility/AXTable.h"
 #include "platform/geometry/TransformState.h"
+#include "platform/graphics/ImageDataBuffer.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/text/TextDirection.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -714,7 +713,11 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (IsGenericFocusableElement() && node->hasChildren())
     return false;
 
+  // Positioned elements and scrollable containers are important for
+  // determining bounding boxes.
   if (IsScrollableContainer())
+    return false;
+  if (layout_object_->IsPositioned())
     return false;
 
   // Ignore layout objects that are block flows with inline children. These
@@ -882,7 +885,7 @@ RGBA32 AXLayoutObject::ComputeBackgroundColor() const {
       continue;
 
     Color current_color =
-        style->VisitedDependentColor(CSSPropertyBackgroundColor);
+        style->VisitedDependentColor(GetCSSPropertyBackgroundColor());
     blended_color = current_color.Blend(blended_color);
     // Continue blending until we get no transparency.
     if (!blended_color.HasAlpha())
@@ -912,7 +915,7 @@ RGBA32 AXLayoutObject::GetColor() const {
   if (!style)
     return AXNodeObject::GetColor();
 
-  Color color = style->VisitedDependentColor(CSSPropertyColor);
+  Color color = style->VisitedDependentColor(GetCSSPropertyColor());
   return color.Rgb();
 }
 
@@ -1431,8 +1434,14 @@ const AtomicString& AXLayoutObject::LiveRegionRelevant() const {
 //
 
 AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
-  if (!layout_object_ || !layout_object_->HasLayer())
+  if (!layout_object_ || !layout_object_->HasLayer() ||
+      !layout_object_->IsBox())
     return nullptr;
+
+  auto* frame_view = DocumentFrameView();
+  if (!frame_view)
+    return nullptr;
+  frame_view->UpdateLifecycleToPrePaintClean();
 
   PaintLayer* layer = ToLayoutBox(layout_object_)->Layer();
 
@@ -2073,7 +2082,7 @@ bool AXLayoutObject::OnNativeSetSelectionAction(const AXRange& selection) {
   if (anchor_visible_position.IsNull() || focus_visible_position.IsNull())
     return false;
 
-  frame->Selection().SetSelection(
+  frame->Selection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .Collapse(anchor_visible_position.ToPositionWithAffinity())
           .Extend(focus_visible_position.DeepEquivalent())
@@ -2120,7 +2129,7 @@ void AXLayoutObject::HandleActiveDescendantChanged() {
     return;
 
   AXObject* focused_object = AXObjectCache().FocusedObject();
-  if (focused_object == this && SupportsActiveDescendant()) {
+  if (focused_object == this && SupportsARIAActiveDescendant()) {
     AXObjectCache().PostNotification(
         GetLayoutObject(), AXObjectCacheImpl::kAXActiveDescendantChanged);
   }

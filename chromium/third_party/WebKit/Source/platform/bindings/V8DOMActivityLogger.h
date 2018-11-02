@@ -45,7 +45,7 @@ class PLATFORM_EXPORT V8DOMActivityLogger {
   USING_FAST_MALLOC(V8DOMActivityLogger);
 
  public:
-  virtual ~V8DOMActivityLogger() {}
+  virtual ~V8DOMActivityLogger() = default;
 
   virtual void LogGetter(const String& api_name) {}
   virtual void LogSetter(const String& api_name,
@@ -56,6 +56,8 @@ class PLATFORM_EXPORT V8DOMActivityLogger {
   virtual void LogEvent(const String& event_name,
                         int argc,
                         const String* argv) {}
+
+  void LogMethod(const char* api_name, v8::FunctionCallbackInfo<v8::Value>);
 
   // Associates a logger with the world identified by worldId (worlId may be 0
   // identifying the main world) and extension ID. Extension ID is used to

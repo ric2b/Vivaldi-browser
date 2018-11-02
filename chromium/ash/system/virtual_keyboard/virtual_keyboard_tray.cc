@@ -95,12 +95,10 @@ void VirtualKeyboardTray::OnKeyboardEnabledStateChanged(bool new_enabled) {
   }
 }
 
-void VirtualKeyboardTray::OnKeyboardBoundsChanging(
-    const gfx::Rect& new_bounds) {
-  SetIsActive(!new_bounds.IsEmpty());
+void VirtualKeyboardTray::OnKeyboardAvailabilityChanging(
+    const bool is_available) {
+  SetIsActive(is_available);
 }
-
-void VirtualKeyboardTray::OnKeyboardClosed() {}
 
 void VirtualKeyboardTray::OnKeyboardControllerCreated() {
   ObserveKeyboardController();

@@ -10,9 +10,8 @@
 
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/clock.h"
 #include "base/values.h"
@@ -21,9 +20,6 @@
 #include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/remote/request_params.h"
 #include "components/ntp_snippets/user_classifier.h"
-#include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
-#include "components/signin/core/browser/signin_manager_base.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_associated_data.h"
@@ -109,7 +105,7 @@ std::string ISO639FromPosixLocale(const std::string& locale) {
 
 void AppendLanguageInfoToList(base::ListValue* list,
                               const UrlLanguageHistogram::LanguageInfo& info) {
-  auto lang = base::MakeUnique<base::DictionaryValue>();
+  auto lang = std::make_unique<base::DictionaryValue>();
   lang->SetString("language", info.language_code);
   lang->SetDouble("frequency", info.frequency);
   list->Append(std::move(lang));
@@ -167,9 +163,8 @@ void JsonRequest::OnURLFetchComplete(const net::URLFetcher* source) {
   DCHECK_EQ(url_fetcher_.get(), source);
   const URLRequestStatus& status = url_fetcher_->GetStatus();
   int response = url_fetcher_->GetResponseCode();
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
-      "NewTabPage.Snippets.FetchHttpResponseOrErrorCode",
-      status.is_success() ? response : status.error());
+  base::UmaHistogramSparse("NewTabPage.Snippets.FetchHttpResponseOrErrorCode",
+                           status.is_success() ? response : status.error());
 
   if (!status.is_success()) {
     std::move(request_completed_callback_)
@@ -224,7 +219,7 @@ std::unique_ptr<JsonRequest> JsonRequest::Builder::Build() const {
   DCHECK(!url_.is_empty());
   DCHECK(url_request_context_getter_);
   DCHECK(clock_);
-  auto request = base::MakeUnique<JsonRequest>(params_.exclusive_category,
+  auto request = std::make_unique<JsonRequest>(params_.exclusive_category,
                                                clock_, parse_json_callback_);
   std::string body = BuildBody();
   std::string headers = BuildHeaders();
@@ -295,18 +290,15 @@ std::string JsonRequest::Builder::BuildHeaders() const {
     headers.SetHeader("Authorization", auth_header_);
   }
   // Add X-Client-Data header with experiment IDs from field trials.
-  // Note: It's OK to pass |is_signed_in| false if it's unknown, as it does
-  // not affect transmission of experiments coming from the variations server.
-  bool is_signed_in = false;
-  variations::AppendVariationHeaders(url_,
-                                     false,  // incognito
-                                     false,  // uma_enabled
-                                     is_signed_in, &headers);
+  // Note: It's OK to pass SignedIn::kNo if it's unknown, as it does not affect
+  // transmission of experiments coming from the variations server.
+  variations::AppendVariationHeaders(url_, variations::InIncognito::kNo,
+                                     variations::SignedIn::kNo, &headers);
   return headers.ToString();
 }
 
 std::string JsonRequest::Builder::BuildBody() const {
-  auto request = base::MakeUnique<base::DictionaryValue>();
+  auto request = std::make_unique<base::DictionaryValue>();
   std::string user_locale = PosixLocaleFromBCP47Language(params_.language_code);
   if (!user_locale.empty()) {
     request->SetString("uiLanguage", user_locale);
@@ -316,7 +308,7 @@ std::string JsonRequest::Builder::BuildBody() const {
                                      ? "USER_ACTION"
                                      : "BACKGROUND_PREFETCH");
 
-  auto excluded = base::MakeUnique<base::ListValue>();
+  auto excluded = std::make_unique<base::ListValue>();
   for (const auto& id : params_.excluded_ids) {
     excluded->AppendString(id);
   }
@@ -330,7 +322,7 @@ std::string JsonRequest::Builder::BuildBody() const {
   language::UrlLanguageHistogram::LanguageInfo other_top_language;
   PrepareLanguages(&ui_language, &other_top_language);
   if (ui_language.frequency != 0 || other_top_language.frequency != 0) {
-    auto language_list = base::MakeUnique<base::ListValue>();
+    auto language_list = std::make_unique<base::ListValue>();
     if (ui_language.frequency > 0) {
       AppendLanguageInfoToList(language_list.get(), ui_language);
     }

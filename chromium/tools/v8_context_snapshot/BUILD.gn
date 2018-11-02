@@ -34,6 +34,9 @@ group("v8_context_snapshot") {
     public_deps = [
       ":generate_v8_context_snapshot",
     ]
+    data = [
+      "$root_out_dir/v8_context_snapshot.bin",
+    ]
   }
 }
 
@@ -89,6 +92,7 @@ if (use_v8_context_snapshot) {
     deps = [
       "//gin:gin",
       "//mojo/edk/system:system",
+      "//services/service_manager/public/cpp",
       "//third_party/WebKit/public:blink",
       "//v8",
     ]

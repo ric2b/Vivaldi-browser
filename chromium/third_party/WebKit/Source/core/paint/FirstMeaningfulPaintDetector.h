@@ -5,11 +5,11 @@
 #ifndef FirstMeaningfulPaintDetector_h
 #define FirstMeaningfulPaintDetector_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/paint/PaintEvent.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Noncopyable.h"
 #include "public/platform/WebLayerTreeView.h"
 
 namespace blink {
@@ -23,7 +23,6 @@ class PaintTiming;
 // See https://goo.gl/vpaxv6 and http://goo.gl/TEiMi4 for more details.
 class CORE_EXPORT FirstMeaningfulPaintDetector
     : public GarbageCollectedFinalized<FirstMeaningfulPaintDetector> {
-  WTF_MAKE_NONCOPYABLE(FirstMeaningfulPaintDetector);
 
  public:
   // Used by FrameView to keep track of the number of layout objects created
@@ -41,7 +40,7 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   static FirstMeaningfulPaintDetector& From(Document&);
 
   FirstMeaningfulPaintDetector(PaintTiming*, Document&);
-  virtual ~FirstMeaningfulPaintDetector() {}
+  virtual ~FirstMeaningfulPaintDetector() = default;
 
   void MarkNextPaintAsMeaningfulIfNeeded(const LayoutObjectCounter&,
                                          int contents_height_before_layout,
@@ -100,6 +99,7 @@ class CORE_EXPORT FirstMeaningfulPaintDetector
   DeferFirstMeaningfulPaint defer_first_meaningful_paint_ = kDoNotDefer;
   TaskRunnerTimer<FirstMeaningfulPaintDetector> network0_quiet_timer_;
   TaskRunnerTimer<FirstMeaningfulPaintDetector> network2_quiet_timer_;
+  DISALLOW_COPY_AND_ASSIGN(FirstMeaningfulPaintDetector);
 };
 
 }  // namespace blink

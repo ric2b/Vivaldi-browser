@@ -15,9 +15,6 @@
 #include "net/base/url_util.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 
-using storage::kQuotaErrorInvalidModification;
-using storage::kQuotaStatusOk;
-
 namespace content {
 
 using std::make_pair;
@@ -126,7 +123,7 @@ void MockStorageClient::DeleteOriginData(
                  weak_factory_.GetWeakPtr(), origin, type, callback));
 }
 
-bool MockStorageClient::DoesSupport(storage::StorageType type) const {
+bool MockStorageClient::DoesSupport(StorageType type) const {
   return true;
 }
 
@@ -172,7 +169,7 @@ void MockStorageClient::RunDeleteOriginData(
   ErrorOriginSet::iterator itr_error =
       error_origins_.find(make_pair(origin_url, type));
   if (itr_error != error_origins_.end()) {
-    callback.Run(kQuotaErrorInvalidModification);
+    callback.Run(blink::mojom::QuotaStatusCode::kErrorInvalidModification);
     return;
   }
 
@@ -185,7 +182,7 @@ void MockStorageClient::RunDeleteOriginData(
     origin_data_.erase(itr);
   }
 
-  callback.Run(kQuotaStatusOk);
+  callback.Run(blink::mojom::QuotaStatusCode::kOk);
 }
 
 }  // namespace content

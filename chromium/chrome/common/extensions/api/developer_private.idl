@@ -67,7 +67,6 @@ namespace developerPrivate {
     EXTENSION_DIALOG,
     EXTENSION_GUEST,
     EXTENSION_POPUP,
-    LAUNCHER_PAGE,
     PANEL,
     TAB_CONTENTS
   };
@@ -503,9 +502,8 @@ namespace developerPrivate {
 
   interface Functions {
     // Runs auto update for extensions and apps immediately.
-    // |callback| : Called with the boolean result, true if autoUpdate is
-    // successful.
-    static void autoUpdate(optional BooleanCallback callback);
+    // |callback| : Called after update check completes.
+    static void autoUpdate(optional VoidCallback callback);
 
     // Returns information of all the extensions and apps installed.
     // |options| : Options to restrict the items returned.

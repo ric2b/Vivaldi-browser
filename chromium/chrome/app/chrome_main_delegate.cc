@@ -15,7 +15,6 @@
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
-#include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "base/process/memory.h"
 #include "base/process/process_handle.h"
@@ -50,6 +49,7 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/crash/content/app/crash_reporter_client.h"
 #include "components/crash/core/common/crash_key.h"
+#include "components/crash/core/common/crash_keys.h"
 #include "components/nacl/common/features.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_client.h"
@@ -163,7 +163,9 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_version_info.h"
-#include "browser/win/vivaldi_standalone.h"
+#if defined(OS_WIN)
+#include "browser/win/vivaldi_utils.h"
+#endif
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 #include "chrome/child/pdf_child_init.h"
@@ -360,7 +362,7 @@ bool HandleVersionSwitches(const base::CommandLine& command_line) {
   return false;
 }
 
-#if !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Show the man page if --help or -h is on the command line.
 void HandleHelpSwitches(const base::CommandLine& command_line) {
   if (command_line.HasSwitch(switches::kHelp) ||
@@ -370,7 +372,7 @@ void HandleHelpSwitches(const base::CommandLine& command_line) {
     PLOG(FATAL) << "execlp failed";
   }
 }
-#endif
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 #if !defined(OS_MACOSX) && !defined(OS_ANDROID)
 void SIGTERMProfilingShutdown(int signal) {
@@ -518,7 +520,8 @@ void RecordMainStartupMetrics(base::TimeTicks exe_entry_point_ticks) {
 // from the Java side until it has initialized the JNI. See
 // ChromeMainDelegateAndroid.
 #if !defined(OS_ANDROID)
-  startup_metric_utils::RecordMainEntryPointTime(base::Time::Now());
+  startup_metric_utils::RecordMainEntryPointTime(base::Time::Now(),
+                                                 base::TimeTicks::Now());
 #endif
 }
 #endif  // !defined(CHROME_MULTIPLE_DLL_CHILD)
@@ -588,7 +591,7 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
     *exit_code = 0;
     return true;  // Got a --version switch; exit with a success error code.
   }
-#if !defined(OS_MACOSX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
   // This will directly exit if the user asked for help.
   HandleHelpSwitches(command_line);
 #endif
@@ -661,16 +664,13 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
         base::DIR_HOME, homedir, true, false);
   }
 
-  // If we are recovering from a crash on ChromeOS, then we will do some
-  // recovery using the diagnostics module, and then continue on. We fake up a
-  // command line to tell it that we want it to recover, and to preserve the
-  // original command line.
-  if (command_line.HasSwitch(chromeos::switches::kLoginUser) ||
+  // If we are recovering from a crash on a ChromeOS device, then we will do
+  // some recovery using the diagnostics module, and then continue on. We fake
+  // up a command line to tell it that we want it to recover, and to preserve
+  // the original command line. Note: logging at this point is to /var/log/ui.
+  if ((base::SysInfo::IsRunningOnChromeOS() &&
+       command_line.HasSwitch(chromeos::switches::kLoginUser)) ||
       command_line.HasSwitch(switches::kDiagnosticsRecovery)) {
-    // The statistics subsystem needs get initialized soon enough for the
-    // statistics to be collected.  It's safe to call this more than once.
-    base::StatisticsRecorder::Initialize();
-
     base::CommandLine interim_command_line(command_line.GetProgram());
     const char* const kSwitchNames[] = {switches::kUserDataDir, };
     interim_command_line.CopySwitchesFrom(

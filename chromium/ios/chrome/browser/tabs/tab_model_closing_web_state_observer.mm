@@ -9,10 +9,8 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/ios/ios_live_tab.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
-#import "ios/chrome/browser/tabs/legacy_tab_helper.h"
-#import "ios/chrome/browser/tabs/tab.h"
+#import "ios/chrome/browser/snapshots/snapshot_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_model.h"
-#import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
@@ -50,8 +48,7 @@
     didReplaceWebState:(web::WebState*)oldWebState
           withWebState:(web::WebState*)newWebState
                atIndex:(int)atIndex {
-  Tab* oldTab = LegacyTabHelper::GetTabForWebState(oldWebState);
-  [oldTab removeSnapshot];
+  SnapshotTabHelper::FromWebState(oldWebState)->RemoveSnapshot();
 }
 
 - (void)webStateList:(WebStateList*)webStateList
@@ -70,8 +67,7 @@
     [_tabModel saveSessionImmediately:NO];
   }
   if (userAction) {
-    Tab* tab = LegacyTabHelper::GetTabForWebState(webState);
-    [tab removeSnapshot];
+    SnapshotTabHelper::FromWebState(webState)->RemoveSnapshot();
   }
 }
 
@@ -91,7 +87,7 @@
       return;
 
     const base::StringPiece host = item->GetVirtualURL().host_piece();
-    if (host == kChromeUINewTabHost || host == kChromeUIBookmarksHost)
+    if (host == kChromeUINewTabHost)
       return;
   }
 

@@ -6,8 +6,10 @@
 
 #include <algorithm>
 
+#include "base/hash.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_piece.h"
+#include "media/base/limits.h"
 #include "media/base/watch_time_keys.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -15,73 +17,200 @@
 
 namespace media {
 
-static void RecordWatchTimeInternal(base::StringPiece key,
-                                    base::TimeDelta value,
-                                    bool is_mtbr = false) {
-  base::UmaHistogramCustomTimes(
-      key.as_string(), value,
-      // There are a maximum of 5 underflow events possible in a given 7s
-      // watch time period, so the minimum value is 1.4s.
-      is_mtbr ? base::TimeDelta::FromSecondsD(1.4)
-              : base::TimeDelta::FromSeconds(7),
-      base::TimeDelta::FromHours(10), 50);
+// The minimum amount of media playback which can elapse before we'll report
+// watch time metrics for a playback.
+constexpr base::TimeDelta kMinimumElapsedWatchTime =
+    base::TimeDelta::FromSeconds(limits::kMinimumElapsedWatchTimeSecs);
+
+// List of known AudioDecoder implementations; recorded to UKM, always add new
+// values to the end and do not reorder or delete values from this list.
+enum class AudioDecoderName : int {
+  kUnknown = 0,     // Decoder name string is not recognized or n/a.
+  kFFmpeg = 1,      // FFmpegAudioDecoder
+  kMojo = 2,        // MojoAudioDecoder
+  kDecrypting = 3,  // DecryptingAudioDecoder
+};
+
+// List of known VideoDecoder implementations; recorded to UKM, always add new
+// values to the end and do not reorder or delete values from this list.
+enum class VideoDecoderName : int {
+  kUnknown = 0,     // Decoder name string is not recognized or n/a.
+  kGpu = 1,         // GpuVideoDecoder
+  kFFmpeg = 2,      // FFmpegVideoDecoder
+  kVpx = 3,         // VpxVideoDecoder
+  kAom = 4,         // AomVideoDecoder
+  kMojo = 5,        // MojoVideoDecoder
+  kDecrypting = 6,  // DecryptingVideoDecoder
+};
+
+static AudioDecoderName ConvertAudioDecoderNameToEnum(const std::string& name) {
+  // See the unittest DISABLED_PrintExpectedDecoderNameHashes() for how these
+  // values are computed.
+  switch (base::PersistentHash(name)) {
+    case 0xd39e0c2d:
+      return AudioDecoderName::kFFmpeg;
+    case 0xdaceafdb:
+      return AudioDecoderName::kMojo;
+    case 0xd39a2eda:
+      return AudioDecoderName::kDecrypting;
+    default:
+      DLOG_IF(WARNING, !name.empty())
+          << "Unknown decoder name encountered; metrics need updating: "
+          << name;
+  }
+  return AudioDecoderName::kUnknown;
+}
+
+static VideoDecoderName ConvertVideoDecoderNameToEnum(const std::string& name) {
+  // See the unittest DISABLED_PrintExpectedDecoderNameHashes() for how these
+  // values are computed.
+  switch (base::PersistentHash(name)) {
+    case 0xacdee563:
+      return VideoDecoderName::kFFmpeg;
+    case 0x943f016f:
+      return VideoDecoderName::kMojo;
+    case 0xf66241b8:
+      return VideoDecoderName::kGpu;
+    case 0xb3802adb:
+      return VideoDecoderName::kVpx;
+    case 0xcff23b85:
+      return VideoDecoderName::kAom;
+    case 0xb52d52f5:
+      return VideoDecoderName::kDecrypting;
+    default:
+      DLOG_IF(WARNING, !name.empty())
+          << "Unknown decoder name encountered; metrics need updating: "
+          << name;
+  }
+  return VideoDecoderName::kUnknown;
+}
+
+static bool ShouldReportToUma(WatchTimeKey key) {
+  switch (key) {
+    // These keys are not currently reported to UMA, but are used for UKM metric
+    // calculations. To report them in the future just add the keys to report to
+    // the lower list and add histograms.xml entries for them.
+    case WatchTimeKey::kVideoAll:
+    case WatchTimeKey::kVideoMse:
+    case WatchTimeKey::kVideoEme:
+    case WatchTimeKey::kVideoSrc:
+    case WatchTimeKey::kVideoBattery:
+    case WatchTimeKey::kVideoAc:
+    case WatchTimeKey::kVideoDisplayFullscreen:
+    case WatchTimeKey::kVideoDisplayInline:
+    case WatchTimeKey::kVideoDisplayPictureInPicture:
+    case WatchTimeKey::kVideoEmbeddedExperience:
+    case WatchTimeKey::kVideoNativeControlsOn:
+    case WatchTimeKey::kVideoNativeControlsOff:
+    case WatchTimeKey::kVideoBackgroundAll:
+    case WatchTimeKey::kVideoBackgroundMse:
+    case WatchTimeKey::kVideoBackgroundEme:
+    case WatchTimeKey::kVideoBackgroundSrc:
+    case WatchTimeKey::kVideoBackgroundBattery:
+    case WatchTimeKey::kVideoBackgroundAc:
+    case WatchTimeKey::kVideoBackgroundEmbeddedExperience:
+      return false;
+
+    case WatchTimeKey::kAudioAll:
+    case WatchTimeKey::kAudioMse:
+    case WatchTimeKey::kAudioEme:
+    case WatchTimeKey::kAudioSrc:
+    case WatchTimeKey::kAudioBattery:
+    case WatchTimeKey::kAudioAc:
+    case WatchTimeKey::kAudioEmbeddedExperience:
+    case WatchTimeKey::kAudioNativeControlsOn:
+    case WatchTimeKey::kAudioNativeControlsOff:
+    case WatchTimeKey::kAudioBackgroundAll:
+    case WatchTimeKey::kAudioBackgroundMse:
+    case WatchTimeKey::kAudioBackgroundEme:
+    case WatchTimeKey::kAudioBackgroundSrc:
+    case WatchTimeKey::kAudioBackgroundBattery:
+    case WatchTimeKey::kAudioBackgroundAc:
+    case WatchTimeKey::kAudioBackgroundEmbeddedExperience:
+    case WatchTimeKey::kAudioVideoAll:
+    case WatchTimeKey::kAudioVideoMse:
+    case WatchTimeKey::kAudioVideoEme:
+    case WatchTimeKey::kAudioVideoSrc:
+    case WatchTimeKey::kAudioVideoBattery:
+    case WatchTimeKey::kAudioVideoAc:
+    case WatchTimeKey::kAudioVideoDisplayFullscreen:
+    case WatchTimeKey::kAudioVideoDisplayInline:
+    case WatchTimeKey::kAudioVideoDisplayPictureInPicture:
+    case WatchTimeKey::kAudioVideoEmbeddedExperience:
+    case WatchTimeKey::kAudioVideoNativeControlsOn:
+    case WatchTimeKey::kAudioVideoNativeControlsOff:
+    case WatchTimeKey::kAudioVideoBackgroundAll:
+    case WatchTimeKey::kAudioVideoBackgroundMse:
+    case WatchTimeKey::kAudioVideoBackgroundEme:
+    case WatchTimeKey::kAudioVideoBackgroundSrc:
+    case WatchTimeKey::kAudioVideoBackgroundBattery:
+    case WatchTimeKey::kAudioVideoBackgroundAc:
+    case WatchTimeKey::kAudioVideoBackgroundEmbeddedExperience:
+      return true;
+  }
+
+  NOTREACHED();
+  return false;
+}
+
+static void RecordWatchTimeInternal(
+    base::StringPiece key,
+    base::TimeDelta value,
+    base::TimeDelta minimum = kMinimumElapsedWatchTime) {
+  DCHECK(!key.empty());
+  base::UmaHistogramCustomTimes(key.as_string(), value, minimum,
+                                base::TimeDelta::FromHours(10), 50);
 }
 
 static void RecordMeanTimeBetweenRebuffers(base::StringPiece key,
                                            base::TimeDelta value) {
-  RecordWatchTimeInternal(key, value, true);
+  DCHECK(!key.empty());
+
+  // There are a maximum of 5 underflow events possible in a given 7s watch time
+  // period, so the minimum value is 1.4s.
+  RecordWatchTimeInternal(key, value, base::TimeDelta::FromSecondsD(1.4));
+}
+
+static void RecordDiscardedWatchTime(base::StringPiece key,
+                                     base::TimeDelta value) {
+  DCHECK(!key.empty());
+  base::UmaHistogramCustomTimes(key.as_string(), value, base::TimeDelta(),
+                                kMinimumElapsedWatchTime, 50);
 }
 
 static void RecordRebuffersCount(base::StringPiece key, int underflow_count) {
+  DCHECK(!key.empty());
   base::UmaHistogramCounts100(key.as_string(), underflow_count);
 }
 
-class WatchTimeRecorderProvider : public mojom::WatchTimeRecorderProvider {
- public:
-  WatchTimeRecorderProvider() = default;
-  ~WatchTimeRecorderProvider() override = default;
-
- private:
-  // mojom::WatchTimeRecorderProvider implementation:
-  void AcquireWatchTimeRecorder(
-      mojom::PlaybackPropertiesPtr properties,
-      mojom::WatchTimeRecorderRequest request) override {
-    mojo::MakeStrongBinding(
-        base::MakeUnique<WatchTimeRecorder>(std::move(properties)),
-        std::move(request));
-  }
-
-  DISALLOW_COPY_AND_ASSIGN(WatchTimeRecorderProvider);
-};
-
-WatchTimeRecorder::WatchTimeRecorder(mojom::PlaybackPropertiesPtr properties)
+WatchTimeRecorder::WatchTimeRecorder(mojom::PlaybackPropertiesPtr properties,
+                                     const url::Origin& untrusted_top_origin,
+                                     bool is_top_frame,
+                                     uint64_t player_id)
     : properties_(std::move(properties)),
-      rebuffer_keys_(
+      untrusted_top_origin_(untrusted_top_origin),
+      is_top_frame_(is_top_frame),
+      player_id_(player_id),
+      extended_metrics_keys_(
           {{WatchTimeKey::kAudioSrc, kMeanTimeBetweenRebuffersAudioSrc,
-            kRebuffersCountAudioSrc},
+            kRebuffersCountAudioSrc, kDiscardedWatchTimeAudioSrc},
            {WatchTimeKey::kAudioMse, kMeanTimeBetweenRebuffersAudioMse,
-            kRebuffersCountAudioMse},
+            kRebuffersCountAudioMse, kDiscardedWatchTimeAudioMse},
            {WatchTimeKey::kAudioEme, kMeanTimeBetweenRebuffersAudioEme,
-            kRebuffersCountAudioEme},
+            kRebuffersCountAudioEme, kDiscardedWatchTimeAudioEme},
            {WatchTimeKey::kAudioVideoSrc,
             kMeanTimeBetweenRebuffersAudioVideoSrc,
-            kRebuffersCountAudioVideoSrc},
+            kRebuffersCountAudioVideoSrc, kDiscardedWatchTimeAudioVideoSrc},
            {WatchTimeKey::kAudioVideoMse,
             kMeanTimeBetweenRebuffersAudioVideoMse,
-            kRebuffersCountAudioVideoMse},
+            kRebuffersCountAudioVideoMse, kDiscardedWatchTimeAudioVideoMse},
            {WatchTimeKey::kAudioVideoEme,
             kMeanTimeBetweenRebuffersAudioVideoEme,
-            kRebuffersCountAudioVideoEme}}) {}
+            kRebuffersCountAudioVideoEme, kDiscardedWatchTimeAudioVideoEme}}) {}
 
 WatchTimeRecorder::~WatchTimeRecorder() {
   FinalizeWatchTime({});
-}
-
-// static
-void WatchTimeRecorder::CreateWatchTimeRecorderProvider(
-    mojom::WatchTimeRecorderProviderRequest request) {
-  mojo::MakeStrongBinding(base::MakeUnique<WatchTimeRecorderProvider>(),
-                          std::move(request));
+  RecordUkmPlaybackData();
 }
 
 void WatchTimeRecorder::RecordWatchTime(WatchTimeKey key,
@@ -104,39 +233,54 @@ void WatchTimeRecorder::FinalizeWatchTime(
       continue;
     }
 
-    const base::StringPiece metric_name = WatchTimeKeyToString(kv.first);
-    RecordWatchTimeInternal(metric_name, kv.second);
+    // Report only certain keys to UMA and only if they have at met the minimum
+    // watch time requirement. Otherwise, for SRC/MSE/EME keys, log them to the
+    // discard metric.
+    if (ShouldReportToUma(kv.first)) {
+      if (kv.second >= kMinimumElapsedWatchTime) {
+        RecordWatchTimeInternal(WatchTimeKeyToString(kv.first), kv.second);
+      } else if (kv.second > base::TimeDelta()) {
+        auto it = std::find_if(extended_metrics_keys_.begin(),
+                               extended_metrics_keys_.end(),
+                               [kv](const ExtendedMetricsKeyMap& map) {
+                                 return map.watch_time_key == kv.first;
+                               });
+        if (it != extended_metrics_keys_.end())
+          RecordDiscardedWatchTime(it->discard_key, kv.second);
+      }
+    }
 
     // At finalize, update the aggregate entry.
     aggregate_watch_time_info_[kv.first] += kv.second;
   }
 
-  // If we're not finalizing everyting, we're done after removing keys.
+  // If we're not finalizing everything, we're done after removing keys.
   if (!should_finalize_everything) {
     for (auto key : keys_to_finalize)
       watch_time_info_.erase(key);
     return;
   }
 
-  // This must be done before |underflow_count_| is cleared. Will only be
-  // recorded if a Media.WatchTime.*.All entry exists.
-  RecordUkmPlaybackData();
-
   // Check for watch times entries that have corresponding MTBR entries and
-  // report the MTBR value using watch_time / |underflow_count|.
-  for (auto& mapping : rebuffer_keys_) {
-    auto it = watch_time_info_.find(mapping.watch_time_key);
-    if (it == watch_time_info_.end())
-      continue;
+  // report the MTBR value using watch_time / |underflow_count|. Do this only
+  // for foreground reporters since we only have UMA keys for foreground.
+  if (!properties_->is_background) {
+    for (auto& mapping : extended_metrics_keys_) {
+      auto it = watch_time_info_.find(mapping.watch_time_key);
+      if (it == watch_time_info_.end() || it->second < kMinimumElapsedWatchTime)
+        continue;
 
-    if (underflow_count_) {
-      RecordMeanTimeBetweenRebuffers(mapping.mtbr_key,
-                                     it->second / underflow_count_);
+      if (underflow_count_) {
+        RecordMeanTimeBetweenRebuffers(mapping.mtbr_key,
+                                       it->second / underflow_count_);
+      }
+
+      RecordRebuffersCount(mapping.smooth_rate_key, underflow_count_);
     }
-
-    RecordRebuffersCount(mapping.smooth_rate_key, underflow_count_);
   }
 
+  // Ensure values are cleared in case the reporter is reused.
+  total_underflow_count_ += underflow_count_;
   underflow_count_ = 0;
   watch_time_info_.clear();
 }
@@ -145,8 +289,23 @@ void WatchTimeRecorder::OnError(PipelineStatus status) {
   pipeline_status_ = status;
 }
 
+void WatchTimeRecorder::SetAudioDecoderName(const std::string& name) {
+  DCHECK(audio_decoder_name_.empty());
+  audio_decoder_name_ = name;
+}
+
+void WatchTimeRecorder::SetVideoDecoderName(const std::string& name) {
+  DCHECK(video_decoder_name_.empty());
+  video_decoder_name_ = name;
+}
+
 void WatchTimeRecorder::UpdateUnderflowCount(int32_t count) {
   underflow_count_ = count;
+}
+
+// static
+bool WatchTimeRecorder::ShouldReportUmaForTesting(WatchTimeKey key) {
+  return ShouldReportToUma(key);
 }
 
 void WatchTimeRecorder::RecordUkmPlaybackData() {
@@ -157,61 +316,63 @@ void WatchTimeRecorder::RecordUkmPlaybackData() {
   if (!ukm_recorder)
     return;
 
-  // Ensure we have an "All" watch time entry or skip reporting.
-  if (!std::any_of(aggregate_watch_time_info_.begin(),
-                   aggregate_watch_time_info_.end(),
-                   [](const std::pair<WatchTimeKey, base::TimeDelta>& kv) {
-                     return kv.first == WatchTimeKey::kAudioAll ||
-                            kv.first == WatchTimeKey::kAudioVideoAll ||
-                            kv.first == WatchTimeKey::kAudioVideoBackgroundAll;
-                   })) {
-    return;
-  }
-
   const int32_t source_id = ukm_recorder->GetNewSourceID();
 
   // TODO(crbug.com/787209): Stop getting origin from the renderer.
-  ukm_recorder->UpdateSourceURL(source_id,
-                                properties_->untrusted_top_origin.GetURL());
+  ukm_recorder->UpdateSourceURL(source_id, untrusted_top_origin_.GetURL());
   ukm::builders::Media_BasicPlayback builder(source_id);
 
-  builder.SetIsTopFrame(properties_->is_top_frame);
+  builder.SetIsTopFrame(is_top_frame_);
+  builder.SetIsBackground(properties_->is_background);
+  builder.SetPlayerID(player_id_);
 
   bool recorded_all_metric = false;
   for (auto& kv : aggregate_watch_time_info_) {
     if (kv.first == WatchTimeKey::kAudioAll ||
+        kv.first == WatchTimeKey::kAudioBackgroundAll ||
         kv.first == WatchTimeKey::kAudioVideoAll ||
-        kv.first == WatchTimeKey::kAudioVideoBackgroundAll) {
-      // Only one of these keys should be present in a given finalize.
+        kv.first == WatchTimeKey::kAudioVideoBackgroundAll ||
+        kv.first == WatchTimeKey::kVideoAll ||
+        kv.first == WatchTimeKey::kVideoBackgroundAll) {
+      // Only one of these keys should be present.
       DCHECK(!recorded_all_metric);
       recorded_all_metric = true;
 
       builder.SetWatchTime(kv.second.InMilliseconds());
-      if (underflow_count_) {
+      if (total_underflow_count_) {
         builder.SetMeanTimeBetweenRebuffers(
-            (kv.second / underflow_count_).InMilliseconds());
+            (kv.second / total_underflow_count_).InMilliseconds());
       }
-      builder.SetIsBackground(kv.first ==
-                              WatchTimeKey::kAudioVideoBackgroundAll);
     } else if (kv.first == WatchTimeKey::kAudioAc ||
+               kv.first == WatchTimeKey::kAudioBackgroundAc ||
                kv.first == WatchTimeKey::kAudioVideoAc ||
-               kv.first == WatchTimeKey::kAudioVideoBackgroundAc) {
+               kv.first == WatchTimeKey::kAudioVideoBackgroundAc ||
+               kv.first == WatchTimeKey::kVideoAc ||
+               kv.first == WatchTimeKey::kVideoBackgroundAc) {
       builder.SetWatchTime_AC(kv.second.InMilliseconds());
     } else if (kv.first == WatchTimeKey::kAudioBattery ||
+               kv.first == WatchTimeKey::kAudioBackgroundBattery ||
                kv.first == WatchTimeKey::kAudioVideoBattery ||
-               kv.first == WatchTimeKey::kAudioVideoBackgroundBattery) {
+               kv.first == WatchTimeKey::kAudioVideoBackgroundBattery ||
+               kv.first == WatchTimeKey::kVideoBattery ||
+               kv.first == WatchTimeKey::kVideoBackgroundBattery) {
       builder.SetWatchTime_Battery(kv.second.InMilliseconds());
     } else if (kv.first == WatchTimeKey::kAudioNativeControlsOn ||
-               kv.first == WatchTimeKey::kAudioVideoNativeControlsOn) {
+               kv.first == WatchTimeKey::kAudioVideoNativeControlsOn ||
+               kv.first == WatchTimeKey::kVideoNativeControlsOn) {
       builder.SetWatchTime_NativeControlsOn(kv.second.InMilliseconds());
     } else if (kv.first == WatchTimeKey::kAudioNativeControlsOff ||
-               kv.first == WatchTimeKey::kAudioVideoNativeControlsOff) {
+               kv.first == WatchTimeKey::kAudioVideoNativeControlsOff ||
+               kv.first == WatchTimeKey::kVideoNativeControlsOff) {
       builder.SetWatchTime_NativeControlsOff(kv.second.InMilliseconds());
-    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayFullscreen) {
+    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayFullscreen ||
+               kv.first == WatchTimeKey::kVideoDisplayFullscreen) {
       builder.SetWatchTime_DisplayFullscreen(kv.second.InMilliseconds());
-    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayInline) {
+    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayInline ||
+               kv.first == WatchTimeKey::kVideoDisplayInline) {
       builder.SetWatchTime_DisplayInline(kv.second.InMilliseconds());
-    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayPictureInPicture) {
+    } else if (kv.first == WatchTimeKey::kAudioVideoDisplayPictureInPicture ||
+               kv.first == WatchTimeKey::kVideoDisplayPictureInPicture) {
       builder.SetWatchTime_DisplayPictureInPicture(kv.second.InMilliseconds());
     }
   }
@@ -222,27 +383,46 @@ void WatchTimeRecorder::RecordUkmPlaybackData() {
   builder.SetHasAudio(properties_->has_audio);
   builder.SetHasVideo(properties_->has_video);
 
+  // We convert decoder names to a hash and then translate that hash to a zero
+  // valued enum to avoid burdening the rest of the decoder code base. This was
+  // the simplest and most effective solution for the following reasons:
+  //
+  // - We can't report hashes to UKM since the privacy team worries they may
+  //   end up as hashes of user data.
+  // - Given that decoders are defined and implemented all over the code base
+  //   it's unwieldly to have a single location which defines all decoder names.
+  // - Due to the above, no single media/ location has access to all names.
+  //
+  builder.SetAudioDecoderName(
+      static_cast<int64_t>(ConvertAudioDecoderNameToEnum(audio_decoder_name_)));
+  builder.SetVideoDecoderName(
+      static_cast<int64_t>(ConvertVideoDecoderNameToEnum(video_decoder_name_)));
+
   builder.SetIsEME(properties_->is_eme);
   builder.SetIsMSE(properties_->is_mse);
   builder.SetLastPipelineStatus(pipeline_status_);
-  builder.SetRebuffersCount(underflow_count_);
+  builder.SetRebuffersCount(total_underflow_count_);
   builder.SetVideoNaturalWidth(properties_->natural_size.width());
   builder.SetVideoNaturalHeight(properties_->natural_size.height());
   builder.Record(ukm_recorder);
   aggregate_watch_time_info_.clear();
 }
 
-WatchTimeRecorder::RebufferMapping::RebufferMapping(const RebufferMapping& copy)
-    : RebufferMapping(copy.watch_time_key,
-                      copy.mtbr_key,
-                      copy.smooth_rate_key) {}
+WatchTimeRecorder::ExtendedMetricsKeyMap::ExtendedMetricsKeyMap(
+    const ExtendedMetricsKeyMap& copy)
+    : ExtendedMetricsKeyMap(copy.watch_time_key,
+                            copy.mtbr_key,
+                            copy.smooth_rate_key,
+                            copy.discard_key) {}
 
-WatchTimeRecorder::RebufferMapping::RebufferMapping(
+WatchTimeRecorder::ExtendedMetricsKeyMap::ExtendedMetricsKeyMap(
     WatchTimeKey watch_time_key,
     base::StringPiece mtbr_key,
-    base::StringPiece smooth_rate_key)
+    base::StringPiece smooth_rate_key,
+    base::StringPiece discard_key)
     : watch_time_key(watch_time_key),
       mtbr_key(mtbr_key),
-      smooth_rate_key(smooth_rate_key) {}
+      smooth_rate_key(smooth_rate_key),
+      discard_key(discard_key) {}
 
 }  // namespace media

@@ -72,33 +72,39 @@ bool StructTraits<media_router::mojom::MediaSinkDataView,
     return false;
   }
 
-  out->set_sink_id(id);
+  out->sink().set_sink_id(id);
 
   std::string name;
   if (!data.ReadName(&name))
     return false;
 
-  out->set_name(name);
+  out->sink().set_name(name);
 
   base::Optional<std::string> description;
   if (!data.ReadDescription(&description))
     return false;
 
   if (description)
-    out->set_description(*description);
+    out->sink().set_description(*description);
 
   base::Optional<std::string> domain;
   if (!data.ReadDomain(&domain))
     return false;
 
   if (domain)
-    out->set_domain(*domain);
+    out->sink().set_domain(*domain);
 
   media_router::SinkIconType icon_type;
   if (!data.ReadIconType(&icon_type))
     return false;
 
-  out->set_icon_type(icon_type);
+  out->sink().set_icon_type(icon_type);
+
+  media_router::MediaRouteProviderId provider_id;
+  if (!data.ReadProviderId(&provider_id))
+    return false;
+
+  out->sink().set_provider_id(provider_id);
 
   if (!data.ReadExtraData(out))
     return false;
@@ -203,13 +209,6 @@ bool StructTraits<media_router::mojom::MediaRouteDataView,
 
   out->set_description(description);
 
-  base::Optional<std::string> custom_controller_path;
-  if (!data.ReadCustomControllerPath(&custom_controller_path))
-    return false;
-
-  if (custom_controller_path)
-    out->set_custom_controller_path(*custom_controller_path);
-
   media_router::RouteControllerType controller_type;
   if (!data.ReadControllerType(&controller_type))
     return false;
@@ -217,8 +216,6 @@ bool StructTraits<media_router::mojom::MediaRouteDataView,
   out->set_controller_type(controller_type);
 
   out->set_local(data.is_local());
-  out->set_supports_media_route_controller(
-      data.supports_media_route_controller());
   out->set_for_display(data.for_display());
   out->set_incognito(data.is_incognito());
   out->set_local_presentation(data.is_local_presentation());

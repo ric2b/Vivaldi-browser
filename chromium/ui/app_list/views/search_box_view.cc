@@ -8,23 +8,23 @@
 #include <memory>
 #include <vector>
 
-#include "ash/app_list/model/search_box_model.h"
+#include "ash/app_list/model/search/search_box_model.h"
+#include "ash/app_list/model/speech/speech_ui_model.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "components/wallpaper/wallpaper_color_profile.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/app_list/app_list_constants.h"
-#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_util.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/resources/grit/app_list_resources.h"
-#include "ui/app_list/speech_ui_model.h"
 #include "ui/app_list/vector_icons/vector_icons.h"
 #include "ui/app_list/views/app_list_view.h"
 #include "ui/app_list/views/contents_view.h"
 #include "ui/app_list/views/search_box_view_delegate.h"
+#include "ui/app_list/views/search_result_base_view.h"
 #include "ui/app_list/views/search_result_page_view.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -122,22 +122,10 @@ class SearchBoxBackground : public views::Background {
 class SearchBoxImageButton : public views::ImageButton {
  public:
   explicit SearchBoxImageButton(views::ButtonListener* listener)
-      : ImageButton(listener), selected_(false) {
-    if (features::IsAppListFocusEnabled())
-      SetFocusBehavior(FocusBehavior::ALWAYS);
+      : ImageButton(listener) {
+    SetFocusBehavior(FocusBehavior::ALWAYS);
   }
   ~SearchBoxImageButton() override {}
-
-  bool selected() { return selected_; }
-  void SetSelected(bool selected) {
-    if (selected_ == selected)
-      return;
-
-    selected_ = selected;
-    SchedulePaint();
-    if (selected)
-      NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
-  }
 
   bool OnKeyPressed(const ui::KeyEvent& event) override {
     // Disable space key to press the button. The keyboard events received
@@ -153,14 +141,12 @@ class SearchBoxImageButton : public views::ImageButton {
  private:
   // views::View overrides:
   void OnPaintBackground(gfx::Canvas* canvas) override {
-    if (state() == STATE_PRESSED || selected_) {
+    if (state() == STATE_PRESSED) {
       canvas->FillRect(gfx::Rect(size()), kSelectedColor);
     }
   }
 
   const char* GetClassName() const override { return "SearchBoxImageButton"; }
-
-  bool selected_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxImageButton);
 };
@@ -171,8 +157,7 @@ class SearchBoxImageButton : public views::ImageButton {
 class SearchBoxTextfield : public views::Textfield {
  public:
   explicit SearchBoxTextfield(SearchBoxView* search_box_view)
-      : search_box_view_(search_box_view),
-        is_app_list_focus_enabled_(features::IsAppListFocusEnabled()) {}
+      : search_box_view_(search_box_view) {}
   ~SearchBoxTextfield() override = default;
 
   // Overridden from views::View:
@@ -190,25 +175,19 @@ class SearchBoxTextfield : public views::Textfield {
   }
 
   void OnFocus() override {
-    if (is_app_list_focus_enabled_)
-      search_box_view_->SetSelected(true);
+    search_box_view_->SetSelected(true);
     Textfield::OnFocus();
   }
 
   void OnBlur() override {
-    if (is_app_list_focus_enabled_) {
-      search_box_view_->SetSelected(false);
-      // Clear selection and set the caret to the end of the text.
-      ClearSelection();
-    }
+    search_box_view_->SetSelected(false);
+    // Clear selection and set the caret to the end of the text.
+    ClearSelection();
     Textfield::OnBlur();
   }
 
  private:
   SearchBoxView* const search_box_view_;
-
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchBoxTextfield);
 };
@@ -220,13 +199,11 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
       view_delegate_(view_delegate),
       content_container_(new views::View),
       search_box_(new SearchBoxTextfield(this)),
-      app_list_view_(app_list_view),
-      is_app_list_focus_enabled_(features::IsAppListFocusEnabled()),
-      focused_view_(FOCUS_NONE) {
+      app_list_view_(app_list_view) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
-  SetLayoutManager(new views::FillLayout);
+  SetLayoutManager(std::make_unique<views::FillLayout>());
   SetPreferredSize(gfx::Size(kPreferredWidth, kSearchBoxPreferredHeight));
   UpdateSearchBoxBorder();
   AddChildView(content_container_);
@@ -234,11 +211,12 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
   content_container_->SetBackground(
       std::make_unique<SearchBoxBackground>(background_color_));
 
-  box_layout_ = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, gfx::Insets(0, kPadding),
-      kInnerPadding - views::LayoutProvider::Get()->GetDistanceMetric(
-                          views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING));
-  content_container_->SetLayoutManager(box_layout_);
+  box_layout_ =
+      content_container_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::kHorizontal, gfx::Insets(0, kPadding),
+          kInnerPadding -
+              views::LayoutProvider::Get()->GetDistanceMetric(
+                  views::DISTANCE_TEXTFIELD_HORIZONTAL_TEXT_PADDING)));
   box_layout_->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
   box_layout_->set_minimum_cross_axis_size(kSearchBoxPreferredHeight);
@@ -291,18 +269,18 @@ SearchBoxView::SearchBoxView(SearchBoxViewDelegate* delegate,
 
 SearchBoxView::~SearchBoxView() {
   view_delegate_->GetSpeechUI()->RemoveObserver(this);
-  model_->search_box()->RemoveObserver(this);
+  search_model_->search_box()->RemoveObserver(this);
   view_delegate_->RemoveObserver(this);
 }
 
 void SearchBoxView::ModelChanged() {
-  if (model_)
-    model_->search_box()->RemoveObserver(this);
+  if (search_model_)
+    search_model_->search_box()->RemoveObserver(this);
 
-  model_ = view_delegate_->GetModel();
-  DCHECK(model_);
+  search_model_ = view_delegate_->GetSearchModel();
+  DCHECK(search_model_);
   UpdateSearchIcon();
-  model_->search_box()->AddObserver(this);
+  search_model_->search_box()->AddObserver(this);
 
   SpeechRecognitionButtonPropChanged();
   HintTextChanged();
@@ -316,10 +294,9 @@ bool SearchBoxView::HasSearch() const {
 void SearchBoxView::ClearSearch() {
   search_box_->SetText(base::string16());
   UpdateCloseButtonVisisbility();
-  view_delegate_->AutoLaunchCanceled();
   // Updates model and fires query changed manually because SetText() above
   // does not generate ContentsChanged() notification.
-  UpdateModel();
+  UpdateModel(false);
   NotifyQueryChanged();
   app_list_view_->SetStateFromSearchBoxView(search_box_->text().empty());
 }
@@ -337,129 +314,6 @@ views::ImageButton* SearchBoxView::back_button() {
 
 views::ImageButton* SearchBoxView::close_button() {
   return static_cast<views::ImageButton*>(close_button_);
-}
-
-bool SearchBoxView::MoveArrowFocus(const ui::KeyEvent& event) {
-  DCHECK(IsArrowKey(event));
-
-  // Special case when focus is on |search_box_| and query exists has already
-  // been handled before. Here, left and right arrow should work in the same way
-  // as shift+tab and tab.
-  if (event.key_code() == ui::VKEY_LEFT)
-    return MoveTabFocus(true);
-  if (event.key_code() == ui::VKEY_RIGHT)
-    return MoveTabFocus(false);
-  if (back_button_)
-    back_button_->SetSelected(false);
-  if (close_button_)
-    close_button_->SetSelected(false);
-  const bool move_up = event.key_code() == ui::VKEY_UP;
-
-  switch (focused_view_) {
-    case FOCUS_NONE:
-      focused_view_ = move_up ? FOCUS_NONE : FOCUS_SEARCH_BOX;
-      break;
-    case FOCUS_BACK_BUTTON:
-    case FOCUS_SEARCH_BOX:
-    case FOCUS_CLOSE_BUTTON:
-      focused_view_ = move_up ? FOCUS_NONE : FOCUS_CONTENTS_VIEW;
-      break;
-    case FOCUS_CONTENTS_VIEW:
-      focused_view_ = move_up ? FOCUS_SEARCH_BOX : FOCUS_CONTENTS_VIEW;
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  SetSelected(focused_view_ == FOCUS_SEARCH_BOX);
-  return (focused_view_ < FOCUS_CONTENTS_VIEW);
-}
-
-// Returns true if set internally, i.e. if focused_view_ != CONTENTS_VIEW.
-// Note: because we always want to be able to type in the edit box, this is only
-// a faux-focus so that buttons can respond to the ENTER key.
-bool SearchBoxView::MoveTabFocus(bool move_backwards) {
-  if (back_button_)
-    back_button_->SetSelected(false);
-  if (speech_button_)
-    speech_button_->SetSelected(false);
-  if (close_button_)
-    close_button_->SetSelected(false);
-
-  switch (focused_view_) {
-    case FOCUS_NONE:
-      focused_view_ = move_backwards ? FOCUS_NONE
-                                     : (back_button_ && back_button_->visible()
-                                            ? FOCUS_BACK_BUTTON
-                                            : FOCUS_SEARCH_BOX);
-      break;
-    // TODO(weidongg): Remove handling of back button when fullscreen app list
-    // folder is supported.
-    case FOCUS_BACK_BUTTON:
-      focused_view_ = move_backwards ? FOCUS_NONE : FOCUS_SEARCH_BOX;
-      break;
-    case FOCUS_SEARCH_BOX:
-      if (move_backwards) {
-        focused_view_ = back_button_ && back_button_->visible()
-                            ? FOCUS_BACK_BUTTON
-                            : FOCUS_NONE;
-      } else {
-        focused_view_ = close_button_ && close_button_->visible()
-                            ? FOCUS_CLOSE_BUTTON
-                            : FOCUS_CONTENTS_VIEW;
-      }
-      break;
-    case FOCUS_CLOSE_BUTTON:
-      focused_view_ = move_backwards ? FOCUS_SEARCH_BOX : FOCUS_CONTENTS_VIEW;
-      break;
-    case FOCUS_CONTENTS_VIEW:
-      focused_view_ =
-          move_backwards
-              ? (close_button_ && close_button_->visible() ? FOCUS_CLOSE_BUTTON
-                                                           : FOCUS_SEARCH_BOX)
-              : FOCUS_CONTENTS_VIEW;
-      break;
-    default:
-      NOTREACHED();
-  }
-
-  switch (focused_view_) {
-    case FOCUS_BACK_BUTTON:
-      if (back_button_)
-        back_button_->SetSelected(true);
-      break;
-    case FOCUS_MIC_BUTTON:
-      if (speech_button_)
-        speech_button_->SetSelected(true);
-      break;
-    case FOCUS_CLOSE_BUTTON:
-      if (close_button_)
-        close_button_->SetSelected(true);
-      break;
-    default:
-      break;
-  }
-
-  SetSelected(focused_view_ == FOCUS_SEARCH_BOX);
-
-  return (focused_view_ < FOCUS_CONTENTS_VIEW);
-}
-
-void SearchBoxView::ResetTabFocus(bool on_contents) {
-  if (is_app_list_focus_enabled_) {
-    // TODO(weidongg/766807) Remove this function when the flag is enabled by
-    // default.
-    return;
-  }
-
-  if (back_button_)
-    back_button_->SetSelected(false);
-  if (speech_button_)
-    speech_button_->SetSelected(false);
-  if (close_button_)
-    close_button_->SetSelected(false);
-  SetSelected(false);
-  focused_view_ = on_contents ? FOCUS_CONTENTS_VIEW : FOCUS_NONE;
 }
 
 void SearchBoxView::SetBackButtonLabel(bool folder) {
@@ -494,7 +348,7 @@ void SearchBoxView::SetSearchBoxActive(bool active) {
                                                  : search_box_color_);
   search_box_->SetCursorEnabled(active);
 
-  if (active && is_app_list_focus_enabled_)
+  if (active)
     search_box_->RequestFocus();
 
   search_box_right_space_->SetVisible(!active);
@@ -502,8 +356,6 @@ void SearchBoxView::SetSearchBoxActive(bool active) {
   UpdateSearchBoxBorder();
   UpdateKeyboardVisibility();
 
-  if (focused_view_ != FOCUS_CONTENTS_VIEW)
-    ResetTabFocus(false);
   content_container_->Layout();
   SchedulePaint();
 }
@@ -699,12 +551,6 @@ void SearchBoxView::UpdateOpacity() {
       should_restore_opacity ? 1.0f : opacity);
 }
 
-bool SearchBoxView::IsArrowKey(const ui::KeyEvent& event) {
-  return event.key_code() == ui::VKEY_UP || event.key_code() == ui::VKEY_DOWN ||
-         event.key_code() == ui::VKEY_LEFT ||
-         event.key_code() == ui::VKEY_RIGHT;
-}
-
 views::View* SearchBoxView::GetSelectedViewInContentsView() const {
   if (!contents_view_)
     return nullptr;
@@ -718,24 +564,19 @@ void SearchBoxView::SetSelected(bool selected) {
   if (selected) {
     // Set the ChromeVox focus to the search box.
     search_box_->NotifyAccessibilityEvent(ui::AX_EVENT_SELECTION, true);
-    if (!is_app_list_focus_enabled_ && !search_box_->text().empty()) {
-      // If query is not empty (including a string of spaces), we need to select
-      // the entire text range. When app list focus flag is enabled, query is
-      // automatically selected all when search box is focused.
-      search_box_->SelectAll(false);
-    }
   }
   UpdateSearchBoxBorder();
   Layout();
   SchedulePaint();
 }
 
-void SearchBoxView::UpdateModel() {
+void SearchBoxView::UpdateModel(bool initiated_by_user) {
   // Temporarily remove from observer to ignore notifications caused by us.
-  model_->search_box()->RemoveObserver(this);
-  model_->search_box()->Update(search_box_->text(), false);
-  model_->search_box()->SetSelectionModel(search_box_->GetSelectionModel());
-  model_->search_box()->AddObserver(this);
+  search_model_->search_box()->RemoveObserver(this);
+  search_model_->search_box()->Update(search_box_->text(), initiated_by_user);
+  search_model_->search_box()->SetSelectionModel(
+      search_box_->GetSelectionModel());
+  search_model_->search_box()->AddObserver(this);
 }
 
 void SearchBoxView::NotifyQueryChanged() {
@@ -745,108 +586,42 @@ void SearchBoxView::NotifyQueryChanged() {
 
 void SearchBoxView::ContentsChanged(views::Textfield* sender,
                                     const base::string16& new_contents) {
-  if (is_app_list_focus_enabled_) {
-    // Set search box focused when query changes.
-    search_box_->RequestFocus();
-  }
-  UpdateModel();
-  view_delegate_->AutoLaunchCanceled();
+  // Set search box focused when query changes.
+  search_box_->RequestFocus();
+  UpdateModel(true);
   NotifyQueryChanged();
   SetSearchBoxActive(true);
   UpdateCloseButtonVisisbility();
   const bool is_trimmed_query_empty = IsSearchBoxTrimmedQueryEmpty();
   // If the query is only whitespace, don't transition the AppListView state.
   app_list_view_->SetStateFromSearchBoxView(is_trimmed_query_empty);
-  // Opened search box is shown when |is_trimmed_query_empty| is false and vice
-  // versa. Set the focus to the search results page when opened search box is
-  // shown. Otherwise, set the focus to search box.
-  ResetTabFocus(!is_trimmed_query_empty);
 }
 
 bool SearchBoxView::HandleKeyEvent(views::Textfield* sender,
                                    const ui::KeyEvent& key_event) {
-  if (is_app_list_focus_enabled_) {
-    if (key_event.type() == ui::ET_KEY_PRESSED &&
-        key_event.key_code() == ui::VKEY_RETURN) {
-      if (!IsSearchBoxTrimmedQueryEmpty()) {
-        // Hitting Enter when focus is on search box opens the first result.
-        ui::KeyEvent event(key_event);
-        views::View* first_result_view =
-            static_cast<ContentsView*>(contents_view_)
-                ->search_results_page_view()
-                ->first_result_view();
-        if (first_result_view)
-          first_result_view->OnKeyEvent(&event);
-        return true;
-      }
-
-      if (!is_search_box_active()) {
-        SetSearchBoxActive(true);
-        return true;
-      }
-      return false;
+  if (key_event.type() == ui::ET_KEY_PRESSED &&
+      key_event.key_code() == ui::VKEY_RETURN) {
+    if (!IsSearchBoxTrimmedQueryEmpty()) {
+      // Hitting Enter when focus is on search box opens the first result.
+      ui::KeyEvent event(key_event);
+      views::View* first_result_view =
+          static_cast<ContentsView*>(contents_view_)
+              ->search_results_page_view()
+              ->first_result_view();
+      if (first_result_view)
+        first_result_view->OnKeyEvent(&event);
+      return true;
     }
 
-    if (CanProcessLeftRightKeyTraversal(key_event))
-      return ProcessLeftRightKeyTraversalForTextfield(search_box_, key_event);
+    if (!is_search_box_active()) {
+      SetSearchBoxActive(true);
+      return true;
+    }
     return false;
   }
-  // TODO(weidongg/766807) Remove everything below when the flag is enabled by
-  // default.
-  if (key_event.type() == ui::ET_KEY_PRESSED) {
-    if (key_event.key_code() == ui::VKEY_TAB &&
-        focused_view_ != FOCUS_CONTENTS_VIEW &&
-        MoveTabFocus(key_event.IsShiftDown()))
-      return true;
 
-    if ((key_event.key_code() == ui::VKEY_LEFT ||
-         key_event.key_code() == ui::VKEY_RIGHT) &&
-        focused_view_ == FOCUS_SEARCH_BOX && !search_box_->text().empty()) {
-      // When focus is on |search_box_| and query is not empty, then left and
-      // arrow key should move cursor in |search_box_|. In this situation only
-      // tab key could move the focus outside |search_box_|.
-      return false;
-    }
-
-    if (IsArrowKey(key_event) && focused_view_ != FOCUS_CONTENTS_VIEW &&
-        MoveArrowFocus(key_event))
-      return true;
-
-    if (focused_view_ == FOCUS_BACK_BUTTON && back_button_ &&
-        back_button_->OnKeyPressed(key_event))
-      return true;
-
-    if (focused_view_ == FOCUS_MIC_BUTTON && speech_button_ &&
-        speech_button_->OnKeyPressed(key_event))
-      return true;
-
-    if (focused_view_ == FOCUS_CLOSE_BUTTON && close_button_ &&
-        close_button_->OnKeyPressed(key_event))
-      return true;
-
-    const bool handled = contents_view_ && contents_view_->visible() &&
-                         contents_view_->OnKeyPressed(key_event);
-
-    return handled;
-  }
-
-  if (key_event.type() == ui::ET_KEY_RELEASED) {
-    if (focused_view_ == FOCUS_BACK_BUTTON && back_button_ &&
-        back_button_->OnKeyReleased(key_event))
-      return true;
-
-    if (focused_view_ == FOCUS_MIC_BUTTON && speech_button_ &&
-        speech_button_->OnKeyReleased(key_event))
-      return true;
-
-    if (focused_view_ == FOCUS_CLOSE_BUTTON && close_button_ &&
-        close_button_->OnKeyReleased(key_event))
-      return true;
-
-    return contents_view_ && contents_view_->visible() &&
-           contents_view_->OnKeyReleased(key_event);
-  }
-
+  if (CanProcessLeftRightKeyTraversal(key_event))
+    return ProcessLeftRightKeyTraversalForTextfield(search_box_, key_event);
   return false;
 }
 
@@ -867,7 +642,7 @@ bool SearchBoxView::HandleGestureEvent(views::Textfield* sender,
 
 void SearchBoxView::SpeechRecognitionButtonPropChanged() {
   const SearchBoxModel::SpeechButtonProperty* speech_button_prop =
-      model_->search_box()->speech_button();
+      search_model_->search_box()->speech_button();
   if (speech_button_prop) {
     if (!speech_button_) {
       speech_button_ = new SearchBoxImageButton(this);
@@ -893,17 +668,18 @@ void SearchBoxView::SpeechRecognitionButtonPropChanged() {
 }
 
 void SearchBoxView::HintTextChanged() {
-  const app_list::SearchBoxModel* search_box = model_->search_box();
+  const app_list::SearchBoxModel* search_box = search_model_->search_box();
   search_box_->set_placeholder_text(search_box->hint_text());
   search_box_->SetAccessibleName(search_box->accessible_name());
 }
 
 void SearchBoxView::SelectionModelChanged() {
-  search_box_->SelectSelectionModel(model_->search_box()->selection_model());
+  search_box_->SelectSelectionModel(
+      search_model_->search_box()->selection_model());
 }
 
 void SearchBoxView::Update() {
-  search_box_->SetText(model_->search_box()->text());
+  search_box_->SetText(search_model_->search_box()->text());
   UpdateCloseButtonVisisbility();
   NotifyQueryChanged();
 }
@@ -944,7 +720,7 @@ void SearchBoxView::OnSpeechRecognitionStateChanged(
 void SearchBoxView::UpdateSearchIcon() {
   const gfx::VectorIcon& google_icon =
       is_search_box_active() ? kIcGoogleColorIcon : kIcGoogleBlackIcon;
-  const gfx::VectorIcon& icon = model_->search_engine_is_google()
+  const gfx::VectorIcon& icon = search_model_->search_engine_is_google()
                                     ? google_icon
                                     : kIcSearchEngineNotGoogleIcon;
   search_icon_->SetImage(

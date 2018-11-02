@@ -113,6 +113,14 @@ const int64_t kMaximumIdleTimeoutSecs = 60 * 10;  // 10 minutes.
 // The default timeout for a connection until the crypto handshake succeeds.
 const int64_t kMaxTimeForCryptoHandshakeSecs = 10;  // 10 secs.
 
+// The default maximum time QUIC session could be on non-default network before
+// migrate back to default network.
+const int64_t kMaxTimeOnNonDefaultNetworkSecs = 128;
+
+// The default maximum number of migrations to non default network on path
+// degrading per network.
+const int64_t kMaxMigrationsToNonDefaultNetworkOnPathDegrading = 5;
+
 // Default limit on the number of undecryptable packets the connection buffers
 // before the CHLO/SHLO arrive.
 const size_t kDefaultMaxUndecryptablePackets = 10;
@@ -194,6 +202,9 @@ const QuicPacketNumber kMaxRandomInitialPacketNumber = 0x7fffffff;
 
 // Used to represent an invalid or no control frame id.
 const QuicControlFrameId kInvalidControlFrameId = 0;
+
+// The max length a stream can have.
+const QuicByteCount kMaxStreamLength = (UINT64_C(1) << 62) - 1;
 
 }  // namespace net
 

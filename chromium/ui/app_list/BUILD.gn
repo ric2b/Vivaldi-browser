@@ -32,15 +32,8 @@ component("app_list") {
     "search/history_data_store.cc",
     "search/history_data_store.h",
     "search/history_types.h",
-    "search/mixer.cc",
-    "search/mixer.h",
-    "search_controller.cc",
-    "search_controller.h",
     "search_provider.cc",
     "search_provider.h",
-    "speech_ui_model.cc",
-    "speech_ui_model.h",
-    "speech_ui_model_observer.h",
     "views/app_list_drag_and_drop_host.h",
     "views/app_list_folder_view.cc",
     "views/app_list_folder_view.h",
@@ -85,6 +78,8 @@ component("app_list") {
     "views/search_result_actions_view_delegate.h",
     "views/search_result_answer_card_view.cc",
     "views/search_result_answer_card_view.h",
+    "views/search_result_base_view.cc",
+    "views/search_result_base_view.h",
     "views/search_result_container_view.cc",
     "views/search_result_container_view.h",
     "views/search_result_list_view.cc",
@@ -101,8 +96,6 @@ component("app_list") {
     "views/speech_view.h",
     "views/suggestions_container_view.cc",
     "views/suggestions_container_view.h",
-    "views/tile_item_view.cc",
-    "views/tile_item_view.h",
     "views/top_icon_animation_view.cc",
     "views/top_icon_animation_view.h",
   ]
@@ -143,6 +136,9 @@ component("app_list") {
   # TODO(hejq): Remove this once app_list is migrated. http://crbug.com/733662
   public_deps = [
     "//ash/app_list/model:app_list_model",
+    "//ash/app_list/model:search_model",
+    "//ash/app_list/model:speech_ui_model",
+    "//ash/public/cpp:cpp",
   ]
 }
 
@@ -161,6 +157,7 @@ static_library("test_support") {
   deps = [
     ":app_list",
     "//base",
+    "//ui/base:base",
     "//ui/events",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -201,7 +198,6 @@ test("app_list_unittests") {
     "folder_image_unittest.cc",
     "pagination_model_unittest.cc",
     "search/history_data_store_unittest.cc",
-    "search/mixer_unittest.cc",
     "search/term_break_iterator_unittest.cc",
     "search/tokenized_string_char_iterator_unittest.cc",
     "search/tokenized_string_match_unittest.cc",

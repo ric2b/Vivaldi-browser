@@ -12,10 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "components/signin/core/browser/account_tracker_service.h"
-#include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
-#include "components/signin/core/browser/fake_signin_manager.h"
-#include "components/signin/core/browser/test_signin_client.h"
+#include "base/values.h"
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
@@ -33,10 +30,12 @@ namespace {
 class TestingWebHistoryService : public WebHistoryService {
  public:
   explicit TestingWebHistoryService(
-      ProfileOAuth2TokenService* token_service,
-      SigninManagerBase* signin_manager,
       const scoped_refptr<net::URLRequestContextGetter>& request_context)
-      : WebHistoryService(token_service, signin_manager, request_context),
+      // NOTE: Simply pass null object for IdentityManager. WebHistoryService's
+      // only usage of this object is to fetch access tokens via RequestImpl,
+      // and TestWebHistoryService deliberately replaces this flow with
+      // TestRequest.
+      : WebHistoryService(nullptr, request_context),
         expected_url_(GURL()),
         expected_audio_history_value_(false),
         current_expected_post_data_("") {}
@@ -216,13 +215,9 @@ std::string TestingWebHistoryService::GetExpectedAudioHistoryValue() {
 class WebHistoryServiceTest : public testing::Test {
  public:
   WebHistoryServiceTest()
-      : signin_client_(nullptr),
-        signin_manager_(&signin_client_, &account_tracker_),
-        url_request_context_(new net::TestURLRequestContextGetter(
+      : url_request_context_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get())),
-        web_history_service_(&token_service_,
-                             &signin_manager_,
-                             url_request_context_) {}
+        web_history_service_(url_request_context_) {}
 
   ~WebHistoryServiceTest() override {}
 
@@ -239,10 +234,6 @@ class WebHistoryServiceTest : public testing::Test {
 
  private:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
-  FakeProfileOAuth2TokenService token_service_;
-  AccountTrackerService account_tracker_;
-  TestSigninClient signin_client_;
-  FakeSigninManagerBase signin_manager_;
   scoped_refptr<net::URLRequestContextGetter> url_request_context_;
   TestingWebHistoryService web_history_service_;
 

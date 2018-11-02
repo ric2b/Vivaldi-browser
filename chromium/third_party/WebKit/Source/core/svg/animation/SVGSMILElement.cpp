@@ -50,7 +50,7 @@ class RepeatEvent final : public Event {
     return new RepeatEvent(type, false, false, repeat);
   }
 
-  ~RepeatEvent() override {}
+  ~RepeatEvent() override = default;
 
   int Repeat() const { return repeat_; }
 
@@ -181,8 +181,8 @@ void SVGSMILElement::Condition::ConnectEventBase(
   } else {
     target = SVGURIReference::ObserveTarget(
         base_id_observer_, timed_element.GetTreeScope(), base_id_,
-        WTF::Bind(&SVGSMILElement::BuildPendingResource,
-                  WrapWeakPersistent(&timed_element)));
+        WTF::BindRepeating(&SVGSMILElement::BuildPendingResource,
+                           WrapWeakPersistent(&timed_element)));
   }
   if (!target || !target->IsSVGElement())
     return;
@@ -229,7 +229,7 @@ SVGSMILElement::SVGSMILElement(const QualifiedName& tag_name, Document& doc)
   ResolveFirstInterval();
 }
 
-SVGSMILElement::~SVGSMILElement() {}
+SVGSMILElement::~SVGSMILElement() = default;
 
 void SVGSMILElement::ClearResourceAndEventBaseReferences() {
   SVGURIReference::UnobserveTarget(target_id_observer_);
@@ -1248,9 +1248,8 @@ void SVGSMILElement::ScheduleRepeatEvents(unsigned count) {
 void SVGSMILElement::ScheduleEvent(const AtomicString& event_type) {
   GetDocument()
       .GetTaskRunner(TaskType::kDOMManipulation)
-      ->PostTask(BLINK_FROM_HERE,
-                 WTF::Bind(&SVGSMILElement::DispatchPendingEvent,
-                           WrapPersistent(this), event_type));
+      ->PostTask(FROM_HERE, WTF::Bind(&SVGSMILElement::DispatchPendingEvent,
+                                      WrapPersistent(this), event_type));
 }
 
 void SVGSMILElement::DispatchPendingEvent(const AtomicString& event_type) {

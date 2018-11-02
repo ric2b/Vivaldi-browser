@@ -177,20 +177,17 @@ mojom::WindowStateType LockWindowState::GetMaximizedOrCenteredWindowType(
 
 gfx::Rect LockWindowState::GetWindowBounds(aura::Window* window) {
   if (exclude_shelf_)
-    return ScreenUtil::GetDisplayWorkAreaBoundsInParentForLockScreen(window);
+    return screen_util::GetDisplayWorkAreaBoundsInParentForLockScreen(window);
 
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
-  gfx::Rect keyboard_bounds;
-
-  if (keyboard_controller && !keyboard::IsKeyboardOverscrollEnabled() &&
-      keyboard_controller->keyboard_visible()) {
-    keyboard_bounds = keyboard_controller->current_keyboard_bounds();
-  }
-
-  gfx::Rect bounds = ScreenUtil::GetDisplayBoundsWithShelf(window);
+  const int keyboard_height =
+      keyboard_controller
+          ? keyboard_controller->GetKeyboardLockScreenOffsetBounds().height()
+          : 0;
+  gfx::Rect bounds = screen_util::GetDisplayBoundsWithShelf(window);
   bounds.Inset(0, Shelf::ForWindow(window)->GetAccessibilityPanelHeight(), 0,
-               keyboard_bounds.height());
+               keyboard_height);
   return bounds;
 }
 

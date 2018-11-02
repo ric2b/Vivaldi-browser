@@ -7,9 +7,9 @@
 #include <memory>
 
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/test/scoped_task_environment.h"
 #include "content/child/child_process.h"
 #include "content/renderer/media/media_stream_audio_source.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
@@ -17,6 +17,7 @@
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 
 namespace content {
@@ -25,8 +26,9 @@ class WebRtcMediaStreamTrackAdapterMapTest : public ::testing::Test {
  public:
   void SetUp() override {
     dependency_factory_.reset(new MockPeerConnectionDependencyFactory());
-    main_thread_ = base::ThreadTaskRunnerHandle::Get();
-    map_ = new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get());
+    main_thread_ = blink::scheduler::GetSingleThreadTaskRunnerForTesting();
+    map_ = new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get(),
+                                                main_thread_);
   }
 
   void TearDown() override { blink::WebHeap::CollectAllGarbageForTesting(); }
@@ -92,9 +94,9 @@ class WebRtcMediaStreamTrackAdapterMapTest : public ::testing::Test {
   }
 
  protected:
-  // Message loop and child processes is needed for task queues and threading to
-  // work, as is necessary to create tracks and adapters.
-  base::MessageLoop message_loop_;
+  // The ScopedTaskEnvironment prevents the ChildProcess from leaking a
+  // TaskScheduler.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   ChildProcess child_process_;
 
   std::unique_ptr<MockPeerConnectionDependencyFactory> dependency_factory_;

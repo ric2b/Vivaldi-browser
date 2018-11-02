@@ -23,8 +23,11 @@ void ChromeBrowserMainExtraPartsProfiling::ServiceManagerConnectionStarted(
   (void)connection;  // Unused variable.
 #else
   profiling::ProfilingProcessHost::Mode mode =
-      profiling::ProfilingProcessHost::GetCurrentMode();
-  if (mode != profiling::ProfilingProcessHost::Mode::kNone)
-    profiling::ProfilingProcessHost::Start(connection, mode);
+      profiling::ProfilingProcessHost::GetModeForStartup();
+  if (mode != profiling::ProfilingProcessHost::Mode::kNone) {
+    profiling::ProfilingProcessHost::Start(
+        connection, mode,
+        profiling::ProfilingProcessHost::GetStackModeForStartup());
+  }
 #endif
 }

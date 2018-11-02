@@ -71,7 +71,7 @@ class CORE_EXPORT FilterOperations {
 
   bool HasReferenceFilter() const;
 
-  void AddClient(SVGResourceClient*) const;
+  void AddClient(SVGResourceClient*, WebTaskRunner*) const;
   void RemoveClient(SVGResourceClient*) const;
 
   void Trace(blink::Visitor*);
@@ -97,7 +97,7 @@ class FilterOperationsWrapper
   void Trace(blink::Visitor* visitor) { visitor->Trace(operations_); }
 
  private:
-  FilterOperationsWrapper() {}
+  FilterOperationsWrapper() = default;
 
   explicit FilterOperationsWrapper(const FilterOperations& operations)
       : operations_(operations) {}

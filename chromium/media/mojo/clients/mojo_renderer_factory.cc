@@ -4,14 +4,15 @@
 
 #include "media/mojo/clients/mojo_renderer_factory.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "base/single_thread_task_runner.h"
 #include "media/mojo/clients/mojo_renderer.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "media/renderers/video_overlay_factory.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/service_manager/public/cpp/connect.h"
-#include "services/service_manager/public/interfaces/interface_provider.mojom.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace media {
 
@@ -26,7 +27,7 @@ MojoRendererFactory::MojoRendererFactory(
 
 MojoRendererFactory::MojoRendererFactory(
     const GetGpuFactoriesCB& get_gpu_factories_cb,
-    service_manager::mojom::InterfaceProvider* interface_provider)
+    service_manager::InterfaceProvider* interface_provider)
     : get_gpu_factories_cb_(get_gpu_factories_cb),
       interface_provider_(interface_provider) {
   DCHECK(interface_provider_);
@@ -49,7 +50,7 @@ std::unique_ptr<Renderer> MojoRendererFactory::CreateRenderer(
   // when we do not need to create video overlays.
   if (!get_gpu_factories_cb_.is_null()) {
     overlay_factory =
-        base::MakeUnique<VideoOverlayFactory>(get_gpu_factories_cb_.Run());
+        std::make_unique<VideoOverlayFactory>(get_gpu_factories_cb_.Run());
   }
 
   return std::unique_ptr<Renderer>(
@@ -64,8 +65,7 @@ mojom::RendererPtr MojoRendererFactory::GetRendererPtr() {
     interface_factory_->CreateRenderer(std::string(),
                                        mojo::MakeRequest(&renderer_ptr));
   } else if (interface_provider_) {
-    service_manager::GetInterface<mojom::Renderer>(interface_provider_,
-                                                   &renderer_ptr);
+    interface_provider_->GetInterface(&renderer_ptr);
   } else {
     NOTREACHED();
   }

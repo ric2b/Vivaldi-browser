@@ -307,10 +307,6 @@ extern const char kWriteRuntimeDeps_Help[];
 extern const char kDisabled[];
 extern const char kDisabled_HelpShort[];
 extern const char kDisabled_Help[];
-
-extern const char kHugeLink[];
-extern const char kHugeLink_HelpShort[];
-extern const char kHugeLink_Help[];
 // </Vivaldi>
 
 // -----------------------------------------------------------------------------

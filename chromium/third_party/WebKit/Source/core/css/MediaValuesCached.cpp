@@ -8,7 +8,6 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "platform/graphics/ColorSpaceGamut.h"
 
 namespace blink {
@@ -41,7 +40,7 @@ MediaValuesCached::MediaValuesCachedData::MediaValuesCachedData(
   DCHECK(!frame || frame->View());
   if (frame && frame->View()) {
     DCHECK(frame->GetDocument());
-    DCHECK(!frame->GetDocument()->GetLayoutViewItem().IsNull());
+    DCHECK(frame->GetDocument()->GetLayoutView());
 
     // In case that frame is missing (e.g. for images that their document does
     // not have a frame)

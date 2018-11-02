@@ -11,13 +11,14 @@
 #include "build/build_config.h"
 #include "content/network/network_context.h"
 #include "content/network/network_service_impl.h"
-#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_url_loader_client.h"
 #include "net/base/mock_network_change_notifier.h"
+#include "net/proxy/proxy_config.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/interfaces/network_change_manager.mojom.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
 #include "services/service_manager/public/cpp/service_context.h"
 #include "services/service_manager/public/cpp/service_test.h"
 #include "services/service_manager/public/interfaces/service_factory.mojom.h"
@@ -26,6 +27,15 @@
 namespace content {
 
 namespace {
+
+network::mojom::NetworkContextParamsPtr CreateContextParams() {
+  network::mojom::NetworkContextParamsPtr params =
+      network::mojom::NetworkContextParams::New();
+  // Use a fixed proxy config, to avoid dependencies on local network
+  // configuration.
+  params->initial_proxy_config = net::ProxyConfig::CreateDirect();
+  return params;
+}
 
 class NetworkServiceTest : public testing::Test {
  public:
@@ -47,12 +57,9 @@ class NetworkServiceTest : public testing::Test {
 // Test shutdown in the case a NetworkContext is destroyed before the
 // NetworkService.
 TEST_F(NetworkServiceTest, CreateAndDestroyContext) {
-  mojom::NetworkContextPtr network_context;
-  mojom::NetworkContextParamsPtr context_params =
-      mojom::NetworkContextParams::New();
-
+  network::mojom::NetworkContextPtr network_context;
   service()->CreateNetworkContext(mojo::MakeRequest(&network_context),
-                                  std::move(context_params));
+                                  CreateContextParams());
   network_context.reset();
   // Make sure the NetworkContext is destroyed.
   base::RunLoop().RunUntilIdle();
@@ -62,12 +69,9 @@ TEST_F(NetworkServiceTest, CreateAndDestroyContext) {
 // NetworkService is destroyed. The service should destroy the NetworkContext
 // itself.
 TEST_F(NetworkServiceTest, DestroyingServiceDestroysContext) {
-  mojom::NetworkContextPtr network_context;
-  mojom::NetworkContextParamsPtr context_params =
-      mojom::NetworkContextParams::New();
-
+  network::mojom::NetworkContextPtr network_context;
   service()->CreateNetworkContext(mojo::MakeRequest(&network_context),
-                                  std::move(context_params));
+                                  CreateContextParams());
   base::RunLoop run_loop;
   network_context.set_connection_error_handler(run_loop.QuitClosure());
   DestroyService();
@@ -96,8 +100,10 @@ class ServiceTestClient : public service_manager::test::ServiceTestClient,
     registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
-  void CreateService(service_manager::mojom::ServiceRequest request,
-                     const std::string& name) override {
+  void CreateService(
+      service_manager::mojom::ServiceRequest request,
+      const std::string& name,
+      service_manager::mojom::PIDReceiverPtr pid_receiver) override {
     if (name == mojom::kNetworkServiceName) {
       service_context_.reset(new service_manager::ServiceContext(
           NetworkServiceImpl::CreateForTesting(), std::move(request)));
@@ -128,7 +134,7 @@ class NetworkServiceTestWithService
   ~NetworkServiceTestWithService() override {}
 
   void LoadURL(const GURL& url) {
-    ResourceRequest request;
+    network::ResourceRequest request;
     request.url = url;
     request.method = "GET";
     request.request_initiator = url::Origin();
@@ -136,23 +142,24 @@ class NetworkServiceTestWithService
     client_->RunUntilComplete();
   }
 
-  void StartLoadingURL(const ResourceRequest& request, uint32_t process_id) {
+  void StartLoadingURL(const network::ResourceRequest& request,
+                       uint32_t process_id) {
     client_.reset(new TestURLLoaderClient());
-    mojom::URLLoaderFactoryPtr loader_factory;
+    network::mojom::URLLoaderFactoryPtr loader_factory;
     network_context_->CreateURLLoaderFactory(mojo::MakeRequest(&loader_factory),
                                              process_id);
 
     loader_factory->CreateLoaderAndStart(
-        mojo::MakeRequest(&loader_), 1, 1, mojom::kURLLoadOptionNone, request,
-        client_->CreateInterfacePtr(),
+        mojo::MakeRequest(&loader_), 1, 1, network::mojom::kURLLoadOptionNone,
+        request, client_->CreateInterfacePtr(),
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   }
 
   net::EmbeddedTestServer* test_server() { return &test_server_; }
   TestURLLoaderClient* client() { return client_.get(); }
-  mojom::URLLoader* loader() { return loader_.get(); }
-  mojom::NetworkService* service() { return network_service_.get(); }
-  mojom::NetworkContext* context() { return network_context_.get(); }
+  network::mojom::URLLoader* loader() { return loader_.get(); }
+  network::mojom::NetworkService* service() { return network_service_.get(); }
+  network::mojom::NetworkContext* context() { return network_context_.get(); }
 
  private:
   std::unique_ptr<service_manager::Service> CreateService() override {
@@ -165,17 +172,17 @@ class NetworkServiceTestWithService
     ASSERT_TRUE(test_server_.Start());
     service_manager::test::ServiceTest::SetUp();
     connector()->BindInterface(mojom::kNetworkServiceName, &network_service_);
-    mojom::NetworkContextParamsPtr context_params =
-        mojom::NetworkContextParams::New();
+    network::mojom::NetworkContextParamsPtr context_params =
+        network::mojom::NetworkContextParams::New();
     network_service_->CreateNetworkContext(mojo::MakeRequest(&network_context_),
                                            std::move(context_params));
   }
 
   net::EmbeddedTestServer test_server_;
   std::unique_ptr<TestURLLoaderClient> client_;
-  mojom::NetworkServicePtr network_service_;
-  mojom::NetworkContextPtr network_context_;
-  mojom::URLLoaderPtr loader_;
+  network::mojom::NetworkServicePtr network_service_;
+  network::mojom::NetworkContextPtr network_context_;
+  network::mojom::URLLoaderPtr loader_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkServiceTestWithService);
 };
@@ -189,21 +196,21 @@ TEST_F(NetworkServiceTestWithService, Basic) {
 
 // Verifies that raw headers are only reported if requested.
 TEST_F(NetworkServiceTestWithService, RawRequestHeadersAbsent) {
-  ResourceRequest request;
+  network::ResourceRequest request;
   request.url = test_server()->GetURL("/server-redirect?/echo");
   request.method = "GET";
   request.request_initiator = url::Origin();
   StartLoadingURL(request, 0);
   client()->RunUntilRedirectReceived();
   EXPECT_TRUE(client()->has_received_redirect());
-  EXPECT_TRUE(!client()->response_head().devtools_info);
+  EXPECT_TRUE(!client()->response_head().raw_request_response_info);
   loader()->FollowRedirect();
   client()->RunUntilComplete();
-  EXPECT_TRUE(!client()->response_head().devtools_info);
+  EXPECT_TRUE(!client()->response_head().raw_request_response_info);
 }
 
 TEST_F(NetworkServiceTestWithService, RawRequestHeadersPresent) {
-  ResourceRequest request;
+  network::ResourceRequest request;
   request.url = test_server()->GetURL("/server-redirect?/echo");
   request.method = "GET";
   request.report_raw_headers = true;
@@ -212,33 +219,33 @@ TEST_F(NetworkServiceTestWithService, RawRequestHeadersPresent) {
   client()->RunUntilRedirectReceived();
   EXPECT_TRUE(client()->has_received_redirect());
   {
-    scoped_refptr<ResourceDevToolsInfo> devtools_info =
-        client()->response_head().devtools_info;
-    ASSERT_TRUE(devtools_info);
-    EXPECT_EQ(301, devtools_info->http_status_code);
-    EXPECT_EQ("Moved Permanently", devtools_info->http_status_text);
-    EXPECT_TRUE(base::StartsWith(devtools_info->request_headers_text,
+    scoped_refptr<network::HttpRawRequestResponseInfo> request_response_info =
+        client()->response_head().raw_request_response_info;
+    ASSERT_TRUE(request_response_info);
+    EXPECT_EQ(301, request_response_info->http_status_code);
+    EXPECT_EQ("Moved Permanently", request_response_info->http_status_text);
+    EXPECT_TRUE(base::StartsWith(request_response_info->request_headers_text,
                                  "GET /server-redirect?/echo HTTP/1.1\r\n",
                                  base::CompareCase::SENSITIVE));
-    EXPECT_GE(devtools_info->request_headers.size(), 1lu);
-    EXPECT_GE(devtools_info->response_headers.size(), 1lu);
-    EXPECT_TRUE(base::StartsWith(devtools_info->response_headers_text,
+    EXPECT_GE(request_response_info->request_headers.size(), 1lu);
+    EXPECT_GE(request_response_info->response_headers.size(), 1lu);
+    EXPECT_TRUE(base::StartsWith(request_response_info->response_headers_text,
                                  "HTTP/1.1 301 Moved Permanently\r",
                                  base::CompareCase::SENSITIVE));
   }
   loader()->FollowRedirect();
   client()->RunUntilComplete();
   {
-    scoped_refptr<ResourceDevToolsInfo> devtools_info =
-        client()->response_head().devtools_info;
-    EXPECT_EQ(200, devtools_info->http_status_code);
-    EXPECT_EQ("OK", devtools_info->http_status_text);
-    EXPECT_TRUE(base::StartsWith(devtools_info->request_headers_text,
+    scoped_refptr<network::HttpRawRequestResponseInfo> request_response_info =
+        client()->response_head().raw_request_response_info;
+    EXPECT_EQ(200, request_response_info->http_status_code);
+    EXPECT_EQ("OK", request_response_info->http_status_text);
+    EXPECT_TRUE(base::StartsWith(request_response_info->request_headers_text,
                                  "GET /echo HTTP/1.1\r\n",
                                  base::CompareCase::SENSITIVE));
-    EXPECT_GE(devtools_info->request_headers.size(), 1lu);
-    EXPECT_GE(devtools_info->response_headers.size(), 1lu);
-    EXPECT_TRUE(base::StartsWith(devtools_info->response_headers_text,
+    EXPECT_GE(request_response_info->request_headers.size(), 1lu);
+    EXPECT_GE(request_response_info->response_headers.size(), 1lu);
+    EXPECT_TRUE(base::StartsWith(request_response_info->response_headers_text,
                                  "HTTP/1.1 200 OK\r",
                                  base::CompareCase::SENSITIVE));
   }
@@ -246,7 +253,7 @@ TEST_F(NetworkServiceTestWithService, RawRequestHeadersPresent) {
 
 TEST_F(NetworkServiceTestWithService, RawRequestAccessControl) {
   const uint32_t process_id = 42;
-  ResourceRequest request;
+  network::ResourceRequest request;
   request.url = test_server()->GetURL("/nocache.html");
   request.method = "GET";
   request.report_raw_headers = true;
@@ -254,31 +261,31 @@ TEST_F(NetworkServiceTestWithService, RawRequestAccessControl) {
 
   StartLoadingURL(request, process_id);
   client()->RunUntilComplete();
-  EXPECT_FALSE(client()->response_head().devtools_info);
+  EXPECT_FALSE(client()->response_head().raw_request_response_info);
   service()->SetRawHeadersAccess(process_id, true);
   StartLoadingURL(request, process_id);
   client()->RunUntilComplete();
   {
-    scoped_refptr<ResourceDevToolsInfo> devtools_info =
-        client()->response_head().devtools_info;
-    ASSERT_TRUE(devtools_info);
-    EXPECT_EQ(200, devtools_info->http_status_code);
-    EXPECT_EQ("OK", devtools_info->http_status_text);
+    scoped_refptr<network::HttpRawRequestResponseInfo> request_response_info =
+        client()->response_head().raw_request_response_info;
+    ASSERT_TRUE(request_response_info);
+    EXPECT_EQ(200, request_response_info->http_status_code);
+    EXPECT_EQ("OK", request_response_info->http_status_text);
   }
 
   service()->SetRawHeadersAccess(process_id, false);
   StartLoadingURL(request, process_id);
   client()->RunUntilComplete();
-  EXPECT_FALSE(client()->response_head().devtools_info.get());
+  EXPECT_FALSE(client()->response_head().raw_request_response_info.get());
 }
 
 TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
-  mojom::NetworkConditionsPtr network_conditions =
-      mojom::NetworkConditions::New();
+  network::mojom::NetworkConditionsPtr network_conditions =
+      network::mojom::NetworkConditions::New();
   network_conditions->offline = true;
   context()->SetNetworkConditions("42", std::move(network_conditions));
 
-  ResourceRequest request;
+  network::ResourceRequest request;
   request.url = test_server()->GetURL("/nocache.html");
   request.method = "GET";
 
@@ -293,14 +300,14 @@ TEST_F(NetworkServiceTestWithService, SetNetworkConditions) {
   EXPECT_EQ(net::ERR_INTERNET_DISCONNECTED,
             client()->completion_status().error_code);
 
-  network_conditions = mojom::NetworkConditions::New();
+  network_conditions = network::mojom::NetworkConditions::New();
   network_conditions->offline = false;
   context()->SetNetworkConditions("42", std::move(network_conditions));
   StartLoadingURL(request, 0);
   client()->RunUntilComplete();
   EXPECT_EQ(net::OK, client()->completion_status().error_code);
 
-  network_conditions = mojom::NetworkConditions::New();
+  network_conditions = network::mojom::NetworkConditions::New();
   network_conditions->offline = true;
   context()->SetNetworkConditions("42", std::move(network_conditions));
 
@@ -320,7 +327,7 @@ class TestNetworkChangeManagerClient
     : public network::mojom::NetworkChangeManagerClient {
  public:
   explicit TestNetworkChangeManagerClient(
-      mojom::NetworkService* network_service)
+      network::mojom::NetworkService* network_service)
       : connection_type_(network::mojom::ConnectionType::CONNECTION_UNKNOWN),
         binding_(this) {
     network::mojom::NetworkChangeManagerPtr manager_ptr;
@@ -408,7 +415,7 @@ class NetworkServiceNetworkChangeTest
                     base::test::ScopedTaskEnvironment::MainThreadType::IO) {}
   ~NetworkServiceNetworkChangeTest() override {}
 
-  mojom::NetworkService* service() { return network_service_.get(); }
+  network::mojom::NetworkService* service() { return network_service_.get(); }
 
  private:
   // A ServiceTestClient that broadcasts a network change notification in the
@@ -421,8 +428,10 @@ class NetworkServiceNetworkChangeTest
     ~ServiceTestClientWithNetworkChange() override {}
 
    protected:
-    void CreateService(service_manager::mojom::ServiceRequest request,
-                       const std::string& name) override {
+    void CreateService(
+        service_manager::mojom::ServiceRequest request,
+        const std::string& name,
+        service_manager::mojom::PIDReceiverPtr pid_receiver) override {
       if (name == mojom::kNetworkServiceName) {
         service_context_.reset(new service_manager::ServiceContext(
             NetworkServiceImpl::CreateForTesting(), std::move(request)));
@@ -442,7 +451,7 @@ class NetworkServiceNetworkChangeTest
     connector()->BindInterface(mojom::kNetworkServiceName, &network_service_);
   }
 
-  mojom::NetworkServicePtr network_service_;
+  network::mojom::NetworkServicePtr network_service_;
 #if defined(OS_ANDROID)
   // On Android, NetworkChangeNotifier setup is more involved and needs
   // to be split between UI thread and network thread. Use a mock

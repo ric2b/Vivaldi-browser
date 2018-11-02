@@ -10,7 +10,8 @@
           "content::mojom::ChildHistogramFetcher",
           "content::mojom::ChildHistogramFetcherFactory",
           "IPC::mojom::ChannelBootstrap",
-          "printing::mojom::PDFToPWGRasterConverter",
+          "printing::mojom::PdfToEmfConverterFactory",
+          "printing::mojom::PdfToPwgRasterConverter",
           "service_manager::mojom::ServiceFactory"
         ],
         "service_manager:service_factory": [
@@ -20,6 +21,8 @@
       "requires": {
         "*": [ "app" ],
         "content_browser": [
+          "dwrite_font_proxy",
+          "field_trials",
           "font_cache"
         ],
         "device": [

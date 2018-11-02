@@ -75,7 +75,7 @@ class TextureManagerTest : public GpuServiceTest {
     feature_info_ = new FeatureInfo(gpu_driver_bug_workaround);
   }
 
-  ~TextureManagerTest() override {}
+  ~TextureManagerTest() override = default;
 
  protected:
   void SetUp() override {
@@ -145,7 +145,7 @@ const GLint TextureManagerTest::kMax3dLevels;
 
 class GLStreamTextureImageStub : public GLStreamTextureImage {
  public:
-  GLStreamTextureImageStub() {}
+  GLStreamTextureImageStub() = default;
 
   // Overridden from GLImage:
   gfx::Size GetSize() override { return gfx::Size(); }
@@ -181,7 +181,7 @@ class GLStreamTextureImageStub : public GLStreamTextureImage {
                            int display_height) override {}
 
  protected:
-  ~GLStreamTextureImageStub() override {}
+  ~GLStreamTextureImageStub() override = default;
 };
 
 TEST_F(TextureManagerTest, Basic) {
@@ -2203,7 +2203,7 @@ class CountingMemoryTracker : public MemoryTracker {
   uint64_t ShareGroupTracingGUID() const override { return 0; }
 
  private:
-  ~CountingMemoryTracker() override {}
+  ~CountingMemoryTracker() override = default;
 
   size_t current_size_;
   DISALLOW_COPY_AND_ASSIGN(CountingMemoryTracker);
@@ -2215,7 +2215,7 @@ class SharedTextureTest : public GpuServiceTest {
 
   SharedTextureTest() : feature_info_(new FeatureInfo()) {}
 
-  ~SharedTextureTest() override {}
+  ~SharedTextureTest() override = default;
 
   void SetUp() override {
     GpuServiceTest::SetUp();
@@ -2500,8 +2500,8 @@ TEST_F(SharedTextureTest, Images) {
 
 class TextureFormatTypeValidationTest : public TextureManagerTest {
  public:
-  TextureFormatTypeValidationTest() {}
-  ~TextureFormatTypeValidationTest() override {}
+  TextureFormatTypeValidationTest() = default;
+  ~TextureFormatTypeValidationTest() override = default;
 
  protected:
   void ExpectValid(
@@ -2758,6 +2758,20 @@ TEST_F(TextureFormatTypeValidationTest, ES3Basic) {
               GL_DEPTH32F_STENCIL8);
 
   ExpectInvalid(true, GL_RGB_INTEGER, GL_INT, GL_RGBA8);
+}
+
+TEST_F(TextureFormatTypeValidationTest, ES2WithTextureNorm16) {
+  SetupFeatureInfo("GL_EXT_texture_norm16", "OpenGL ES 2.0",
+                   CONTEXT_TYPE_OPENGLES2);
+
+  ExpectValid(true, GL_RED, GL_UNSIGNED_SHORT, GL_RED);
+}
+
+TEST_F(TextureFormatTypeValidationTest, ES3WithTextureNorm16) {
+  SetupFeatureInfo("GL_EXT_texture_norm16", "OpenGL ES 3.0",
+                   CONTEXT_TYPE_OPENGLES3);
+
+  ExpectValid(true, GL_RED, GL_UNSIGNED_SHORT, GL_R16_EXT);
 }
 
 }  // namespace gles2

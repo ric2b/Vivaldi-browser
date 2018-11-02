@@ -48,6 +48,7 @@ class LayerTreeResourceProvider;
 class LayerTreeSettings;
 class MemoryHistory;
 class PictureLayerImpl;
+class RenderFrameMetadata;
 class TaskRunnerProvider;
 class TileManager;
 class UIResourceRequest;
@@ -141,6 +142,7 @@ class CC_EXPORT LayerTreeImpl {
   void UpdateImageDecodingHints(
       base::flat_map<PaintImage::Id, PaintImage::DecodingMode>
           decoding_mode_map);
+  bool IsActivelyScrolling() const;
 
   // Tree specific methods exposed to layer-impl tree.
   // ---------------------------------------------------------------------------
@@ -442,7 +444,9 @@ class CC_EXPORT LayerTreeImpl {
       std::vector<std::unique_ptr<SwapPromise>> new_swap_promises);
   void AppendSwapPromises(
       std::vector<std::unique_ptr<SwapPromise>> new_swap_promises);
-  void FinishSwapPromises(viz::CompositorFrameMetadata* metadata);
+  void FinishSwapPromises(
+      viz::CompositorFrameMetadata* compositor_frame_metadata,
+      RenderFrameMetadata* render_frame_metadata);
   void ClearSwapPromises();
   void BreakSwapPromises(SwapPromise::DidNotSwapReason reason);
 
@@ -551,6 +555,11 @@ class CC_EXPORT LayerTreeImpl {
       const PaintImageIdFlatSet& images_to_invalidate);
 
   LayerTreeLifecycle& lifecycle() { return lifecycle_; }
+
+  bool request_presentation_time() const { return request_presentation_time_; }
+  void set_request_presentation_time(bool value) {
+    request_presentation_time_ = value;
+  }
 
  protected:
   float ClampPageScaleFactorToLimits(float page_scale_factor) const;
@@ -674,7 +683,10 @@ class CC_EXPORT LayerTreeImpl {
   // lifecycle states. See: |LayerTreeLifecycle|.
   LayerTreeLifecycle lifecycle_;
 
- private:
+  // If true LayerTreeHostImpl requests a presentation token for the current
+  // frame.
+  bool request_presentation_time_ = false;
+
   DISALLOW_COPY_AND_ASSIGN(LayerTreeImpl);
 };
 

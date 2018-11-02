@@ -34,8 +34,8 @@ namespace {
 
 class MockVideoFrameProvider : public cc::VideoFrameProvider {
  public:
-  MockVideoFrameProvider() {}
-  ~MockVideoFrameProvider() {}
+  MockVideoFrameProvider() = default;
+  ~MockVideoFrameProvider() = default;
 
   MOCK_METHOD1(SetVideoFrameProviderClient, void(Client*));
   MOCK_METHOD2(UpdateCurrentFrame, bool(base::TimeTicks, base::TimeTicks));
@@ -52,9 +52,10 @@ class MockCompositorFrameSink : public viz::mojom::blink::CompositorFrameSink {
   MockCompositorFrameSink(
       viz::mojom::blink::CompositorFrameSinkRequest* request)
       : binding_(this, std::move(*request)) {}
-  ~MockCompositorFrameSink() {}
+  ~MockCompositorFrameSink() = default;
 
   MOCK_METHOD1(SetNeedsBeginFrame, void(bool));
+  MOCK_METHOD0(SetWantsAnimateOnlyBeginFrames, void());
 
   void SubmitCompositorFrame(
       const viz::LocalSurfaceId& id,

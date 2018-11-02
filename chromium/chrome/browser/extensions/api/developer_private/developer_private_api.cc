@@ -5,13 +5,13 @@
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 
 #include <stddef.h>
+#include <memory>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/lazy_instance.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -61,6 +61,7 @@
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/content_verifier.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/error_map.h"
 #include "extensions/browser/extension_error.h"
 #include "extensions/browser/extension_prefs.h"
@@ -71,7 +72,6 @@
 #include "extensions/browser/notification_types.h"
 #include "extensions/browser/path_util.h"
 #include "extensions/browser/warning_service.h"
-#include "extensions/common/disable_reason.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/install_warning.h"
@@ -86,7 +86,6 @@
 #include "storage/browser/fileapi/file_system_operation_runner.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/base/text/bytes_formatting.h"
 
 #include "app/vivaldi_apptools.h"
 #include "browser/vivaldi_browser_finder.h"
@@ -599,9 +598,17 @@ ExtensionFunction::ResponseAction DeveloperPrivateAutoUpdateFunction::Run() {
     ExtensionUpdater::CheckParams params;
     params.fetch_priority = ManifestFetchData::FetchPriority::FOREGROUND;
     params.install_immediately = true;
+    // TODO(crbug.com/714018): Replace base::BindRepeating with base::BindOnce.
+    params.callback =
+        base::BindRepeating(&DeveloperPrivateAutoUpdateFunction::OnComplete,
+                            this /* ref counted */);
     updater->CheckNow(params);
   }
-  return RespondNow(NoArguments());
+  return RespondLater();
+}
+
+void DeveloperPrivateAutoUpdateFunction::OnComplete() {
+  Respond(NoArguments());
 }
 
 DeveloperPrivateGetExtensionsInfoFunction::
@@ -688,11 +695,8 @@ DeveloperPrivateGetExtensionSizeFunction::Run() {
   if (!extension)
     return RespondNow(Error(kNoSuchExtensionError));
 
-  // TODO(dpapad): Share this logic with
-  // chrome/browser/ui/views/apps/app_info_dialog/app_info_summary_panel.cc.
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&base::ComputeDirectorySize, extension->path()),
+  extensions::path_util::CalculateAndFormatExtensionDirectorySize(
+      extension->path(), IDS_APPLICATION_INFO_SIZE_SMALL_LABEL,
       base::BindOnce(
           &DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated,
           this /* refcounted */));
@@ -701,17 +705,8 @@ DeveloperPrivateGetExtensionSizeFunction::Run() {
 }
 
 void DeveloperPrivateGetExtensionSizeFunction::OnSizeCalculated(
-    int64_t size_in_bytes) {
-  base::string16 response;
-
-  const int one_mebibyte_in_bytes = 1024 * 1024;
-  if (size_in_bytes < one_mebibyte_in_bytes) {
-    response = l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_SIZE_SMALL_LABEL);
-  } else {
-    response =
-        ui::FormatBytesWithUnits(size_in_bytes, ui::DATA_UNITS_MEBIBYTE, true);
-  }
-  Respond(OneArgument(std::make_unique<base::Value>(response)));
+    const base::string16& size) {
+  Respond(OneArgument(std::make_unique<base::Value>(size)));
 }
 
 DeveloperPrivateGetItemsInfoFunction::DeveloperPrivateGetItemsInfoFunction() {}
@@ -748,7 +743,7 @@ DeveloperPrivateGetProfileConfigurationFunction::
 ExtensionFunction::ResponseAction
 DeveloperPrivateGetProfileConfigurationFunction::Run() {
   std::unique_ptr<developer::ProfileInfo> info =
-      CreateProfileInfo(GetProfile());
+      CreateProfileInfo(Profile::FromBrowserContext(browser_context()));
 
   // If this is called from the chrome://extensions page, we use this as a
   // heuristic that it's a good time to verify installs. We do this on startup,
@@ -771,9 +766,10 @@ DeveloperPrivateUpdateProfileConfigurationFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
 
   const developer::ProfileConfigurationUpdate& update = params->update;
-  PrefService* prefs = GetProfile()->GetPrefs();
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  PrefService* prefs = profile->GetPrefs();
   if (update.in_developer_mode) {
-    if (GetProfile()->IsSupervised())
+    if (profile->IsSupervised())
       return RespondNow(Error(kCannotUpdateSupervisedProfileSettingsError));
     prefs->SetBoolean(prefs::kExtensionsUIDeveloperMode,
                       *update.in_developer_mode);
@@ -882,7 +878,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateReloadFunction::Run() {
   // Balanced in ClearObservers(), which is called from the first observer
   // method to be called with the appropriate extension (or shutdown).
   AddRef();
-  error_reporter_observer_.Add(ExtensionErrorReporter::GetInstance());
+  error_reporter_observer_.Add(LoadErrorReporter::GetInstance());
   registry_observer_.Add(ExtensionRegistry::Get(browser_context()));
 
   return RespondLater();
@@ -988,6 +984,21 @@ ExtensionFunction::ResponseAction DeveloperPrivateLoadUnpackedFunction::Run() {
   content::WebContents* web_contents = GetSenderWebContents();
   if (!web_contents)
     return RespondNow(Error(kCouldNotFindWebContentsError));
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  if (profile->IsSupervised()) {
+    return RespondNow(
+        Error("Supervised users cannot load unpacked extensions."));
+  }
+  PrefService* prefs = profile->GetPrefs();
+  if (!prefs->GetBoolean(prefs::kExtensionsUIDeveloperMode)) {
+    return RespondNow(
+        Error("Must be in developer mode to load unpacked extensions."));
+  }
+  if (ExtensionManagementFactory::GetForBrowserContext(browser_context())
+          ->BlacklistedByDefault()) {
+    return RespondNow(Error("Extension installation is blocked by policy."));
+  }
 
   fail_quietly_ = params->options &&
                   params->options->fail_quietly &&
@@ -1207,7 +1218,7 @@ ExtensionFunction::ResponseAction DeveloperPrivatePackDirectoryFunction::Run() {
   AddRef();  // Balanced in OnPackSuccess / OnPackFailure.
 
   pack_job_ =
-      base::MakeUnique<PackExtensionJob>(this, root_directory, key_file, flags);
+      std::make_unique<PackExtensionJob>(this, root_directory, key_file, flags);
   pack_job_->Start();
   return RespondLater();
 }
@@ -1231,7 +1242,7 @@ bool DeveloperPrivateLoadDirectoryFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(args_->GetString(2, &directory_url_str));
 
   context_ = content::BrowserContext::GetStoragePartition(
-                 GetProfile(), render_frame_host()->GetSiteInstance())
+                 browser_context(), render_frame_host()->GetSiteInstance())
                  ->GetFileSystemContext();
 
   // Directory url is non empty only for syncfilesystem.
@@ -1298,7 +1309,7 @@ bool DeveloperPrivateLoadDirectoryFunction::LoadByFileSystemAPI(
   project_name = directory_url_str.substr(pos + 1);
   project_base_url_ = directory_url_str.substr(0, pos + 1);
 
-  base::FilePath project_path(GetProfile()->GetPath());
+  base::FilePath project_path(browser_context()->GetPath());
   project_path = project_path.AppendASCII(kUnpackedAppsFolder);
   project_path = project_path.Append(
       base::FilePath::FromUTF8Unsafe(project_name));
@@ -1315,12 +1326,12 @@ bool DeveloperPrivateLoadDirectoryFunction::LoadByFileSystemAPI(
 }
 
 void DeveloperPrivateLoadDirectoryFunction::Load() {
-  ExtensionService* service = GetExtensionService(GetProfile());
+  ExtensionService* service = GetExtensionService(browser_context());
   UnpackedInstaller::Create(service)->Load(project_base_path_);
 
   // TODO(grv) : The unpacked installer should fire an event when complete
   // and return the extension_id.
-  SetResult(base::MakeUnique<base::Value>("-1"));
+  SetResult(std::make_unique<base::Value>("-1"));
   SendResponse(true);
 }
 
@@ -1493,7 +1504,7 @@ ExtensionFunction::ResponseAction DeveloperPrivateChoosePathFunction::Run() {
 
 void DeveloperPrivateChoosePathFunction::FileSelected(
     const base::FilePath& path) {
-  Respond(OneArgument(base::MakeUnique<base::Value>(path.LossyDisplayName())));
+  Respond(OneArgument(std::make_unique<base::Value>(path.LossyDisplayName())));
   Release();
 }
 
@@ -1508,7 +1519,7 @@ DeveloperPrivateChoosePathFunction::~DeveloperPrivateChoosePathFunction() {}
 
 ExtensionFunction::ResponseAction
 DeveloperPrivateIsProfileManagedFunction::Run() {
-  return RespondNow(OneArgument(base::MakeUnique<base::Value>(
+  return RespondNow(OneArgument(std::make_unique<base::Value>(
       Profile::FromBrowserContext(browser_context())->IsSupervised())));
 }
 
@@ -1607,7 +1618,7 @@ DeveloperPrivateOpenDevToolsFunction::Run() {
     if (!extension)
       return RespondNow(Error(kNoSuchExtensionError));
 
-    Profile* profile = GetProfile();
+    Profile* profile = Profile::FromBrowserContext(browser_context());
     if (properties.incognito && *properties.incognito)
       profile = profile->GetOffTheRecordProfile();
 
@@ -1670,7 +1681,7 @@ DeveloperPrivateDeleteExtensionErrorsFunction::Run() {
   const developer::DeleteExtensionErrorsProperties& properties =
       params->properties;
 
-  ErrorConsole* error_console = ErrorConsole::Get(GetProfile());
+  ErrorConsole* error_console = ErrorConsole::Get(browser_context());
   int type = -1;
   if (properties.type != developer::ERROR_TYPE_NONE) {
     type = properties.type == developer::ERROR_TYPE_MANIFEST ?
@@ -1777,8 +1788,9 @@ ExtensionFunction::ResponseAction DeveloperPrivateShowPathFunction::Run() {
 
   // We explicitly show manifest.json in order to work around an issue in OSX
   // where opening the directory doesn't focus the Finder.
-  platform_util::ShowItemInFolder(GetProfile(),
-                                  extension->path().Append(kManifestFilename));
+  platform_util::ShowItemInFolder(
+      Profile::FromBrowserContext(browser_context()),
+      extension->path().Append(kManifestFilename));
   return RespondNow(NoArguments());
 }
 
@@ -1790,8 +1802,8 @@ DeveloperPrivateSetShortcutHandlingSuspendedFunction::Run() {
   std::unique_ptr<developer::SetShortcutHandlingSuspended::Params> params(
       developer::SetShortcutHandlingSuspended::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params);
-  ExtensionCommandsGlobalRegistry::Get(GetProfile())->
-      SetShortcutHandlingSuspended(params->is_suspended);
+  ExtensionCommandsGlobalRegistry::Get(browser_context())
+      ->SetShortcutHandlingSuspended(params->is_suspended);
   return RespondNow(NoArguments());
 }
 
@@ -1805,7 +1817,7 @@ DeveloperPrivateUpdateExtensionCommandFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params);
   const developer::ExtensionCommandUpdate& update = params->update;
 
-  CommandService* command_service = CommandService::Get(GetProfile());
+  CommandService* command_service = CommandService::Get(browser_context());
 
   if (update.scope != developer::COMMAND_SCOPE_NONE) {
     command_service->SetScope(update.extension_id, update.command_name,

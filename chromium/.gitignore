@@ -68,6 +68,7 @@ vs-chromium-project.txt
 /c
 /cdm
 /ceee/internal/
+/chrome/android/profiles/chrome-profile-*.prof
 /chrome/angle_unittests_run.xml
 /chrome/build/chrome.x64.orderfile
 /chrome/build/chrome.x86.orderfile
@@ -89,6 +90,7 @@ vs-chromium-project.txt
 /chrome/browser/extensions/default_extensions/chromeos
 /chrome/browser/google/linkdoctor_internal
 /chrome/browser/internal
+/chrome/browser/media/engagement_internal
 /chrome/browser/performance_monitor/performance_monitor.xml
 /chrome/browser/protector/internal
 /chrome/browser/resources/chromeos/quickoffice
@@ -96,6 +98,7 @@ vs-chromium-project.txt
 /chrome/browser/resources/media_router_internal/
 /chrome/browser/resources/settings_internal/
 /chrome/browser/resources/software_rendering_list
+/chrome/browser/resources/vr/assets/*.png
 /chrome/browser/spellchecker/internal
 /chrome/browser_tests_run.xml
 /chrome/chrome_run.xml
@@ -186,7 +189,9 @@ vs-chromium-project.txt
 /ios/third_party/material_roboto_font_loader_ios/src
 /ios/third_party/material_sprited_animation_view_ios/src
 /ios/third_party/material_text_accessibility_ios/src
+/ios/third_party/motion_animator_objc/src
 /ios/third_party/motion_interchange_objc/src
+/ios/third_party/motion_transitioning_objc/src
 /ios/third_party/ochamcrest/src
 /ios_internal
 /libassistant

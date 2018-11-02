@@ -61,6 +61,7 @@ class Setup {
   // Returns the file used to store the build arguments. Note that the path
   // might not exist.
   SourceFile GetBuildArgFile() const;
+  SourceFile GetBuildDefineArgFile() const;
 
   // Sets whether the build arguments should be filled during setup from the
   // command line/build argument file. This will be true by default. The use
@@ -85,9 +86,12 @@ class Setup {
   Builder& builder() { return builder_; }
   LoaderImpl* loader() { return loader_.get(); }
 
+  const SourceFile& GetDotFile() const { return dotfile_input_file_->name(); }
+
   // Name of the file in the root build directory that contains the build
   // arguements.
   static const char kBuildArgFileName[];
+  static const char kBuildDefineArgFileName[];
 
  private:
   // Performs the two sets of operations to run the generation before and after
@@ -100,15 +104,16 @@ class Setup {
 
   // Fills the build arguments from the command line or from the build arg file.
   bool FillArgsFromCommandLine(const std::string& args);
-  bool FillArgsFromFile(SourceFile *arg_file=NULL,
-                        const std::string *global_args=NULL);
+  bool FillArgsFromFile(base::FilePath* arg_file = NULL,
+                        std::unique_ptr<InputFile>* input_file = NULL);
 
   // Given an already-loaded args_input_file_, parses and saves the resulting
   // arguments. Backend for the different FillArgs variants.
-  bool FillArgsFromArgsInputFile();
+  bool FillArgsFromArgsInputFile(std::unique_ptr<InputFile>* input_file = NULL);
 
   // Writes the build arguments to the build arg file.
-  bool SaveArgsToFile();
+  bool SaveArgsToFile(base::FilePath* arg_file = NULL,
+                      const std::string* special_contents = NULL);
 
   // Fills the root directory into the settings. Returns true on success.
   bool FillSourceDir(const base::CommandLine& cmdline);
@@ -163,6 +168,8 @@ class Setup {
   // this around for the entire run so that Values can blame to the command
   // line when we issue errors about them.
   std::unique_ptr<InputFile> args_input_file_;
+  std::unique_ptr<InputFile> define_args_input_file_;
+  std::unique_ptr<InputFile> user_args_input_file_;
   std::vector<Token> args_tokens_;
   std::unique_ptr<ParseNode> args_root_;
 

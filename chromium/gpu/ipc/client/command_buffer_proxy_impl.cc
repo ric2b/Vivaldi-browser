@@ -31,12 +31,9 @@
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/gpu_fence.h"
 #include "ui/gl/gl_bindings.h"
-#include "ui/gl/gl_switches.h"
-
-#if defined(OS_MACOSX)
-#include "gpu/ipc/client/gpu_process_hosted_ca_layer_tree_params.h"
-#endif
+#include "ui/gl/gl_switches_util.h"
 
 namespace gpu {
 
@@ -55,9 +52,11 @@ int GetChannelID(gpu::CommandBufferId command_buffer_id) {
 
 CommandBufferProxyImpl::CommandBufferProxyImpl(
     scoped_refptr<GpuChannelHost> channel,
+    GpuMemoryBufferManager* gpu_memory_buffer_manager,
     int32_t stream_id,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner)
     : channel_(std::move(channel)),
+      gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
       channel_id_(channel_->channel_id()),
       route_id_(channel_->GenerateRouteID()),
       stream_id_(stream_id),
@@ -77,7 +76,7 @@ ContextResult CommandBufferProxyImpl::Initialize(
     gpu::SurfaceHandle surface_handle,
     CommandBufferProxyImpl* share_group,
     gpu::SchedulingPriority stream_priority,
-    const gpu::gles2::ContextCreationAttribHelper& attribs,
+    const gpu::ContextCreationAttribs& attribs,
     const GURL& active_url) {
   DCHECK(!share_group || (stream_id_ == share_group->stream_id_));
   TRACE_EVENT1("gpu", "GpuChannelHost::CreateViewCommandBuffer",
@@ -159,6 +158,8 @@ bool CommandBufferProxyImpl::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_UpdateVSyncParameters,
                         OnUpdateVSyncParameters);
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_BufferPresented, OnBufferPresented);
+    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_GetGpuFenceHandleComplete,
+                        OnGetGpuFenceHandleComplete);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -459,8 +460,6 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
 
   int32_t new_id = channel_->ReserveImageId();
 
-  gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager =
-      channel_->gpu_memory_buffer_manager();
   gfx::GpuMemoryBuffer* gpu_memory_buffer =
       reinterpret_cast<gfx::GpuMemoryBuffer*>(buffer);
   DCHECK(gpu_memory_buffer);
@@ -498,15 +497,15 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
   Send(new GpuCommandBufferMsg_CreateImage(route_id_, params));
 
   if (image_fence_sync) {
-    gpu::SyncToken sync_token(GetNamespaceID(), 0, GetCommandBufferID(),
+    gpu::SyncToken sync_token(GetNamespaceID(), GetCommandBufferID(),
                               image_fence_sync);
 
     // Force a synchronous IPC to validate sync token.
     EnsureWorkVisible();
     sync_token.SetVerifyFlush();
 
-    gpu_memory_buffer_manager->SetDestructionSyncToken(gpu_memory_buffer,
-                                                       sync_token);
+    gpu_memory_buffer_manager_->SetDestructionSyncToken(gpu_memory_buffer,
+                                                        sync_token);
   }
 
   return new_id;
@@ -565,27 +564,6 @@ void CommandBufferProxyImpl::FlushPendingWork() {
 uint64_t CommandBufferProxyImpl::GenerateFenceSyncRelease() {
   CheckLock();
   return next_fence_sync_release_++;
-}
-
-bool CommandBufferProxyImpl::IsFenceSyncRelease(uint64_t release) {
-  CheckLock();
-  return release && release < next_fence_sync_release_;
-}
-
-bool CommandBufferProxyImpl::IsFenceSyncFlushed(uint64_t release) {
-  CheckLock();
-  return release && release <= flushed_fence_sync_release_;
-}
-
-bool CommandBufferProxyImpl::IsFenceSyncFlushReceived(uint64_t release) {
-  CheckLock();
-  if (release > verified_fence_sync_release_) {
-    // Don't send messages once disconnected.
-    if (!disconnected_)
-      channel_->VerifyFlush(last_flush_id_);
-    verified_fence_sync_release_ = flushed_fence_sync_release_;
-  }
-  return release && release <= verified_fence_sync_release_;
 }
 
 // This can be called from any thread without holding |lock_|. Use a thread-safe
@@ -653,6 +631,55 @@ void CommandBufferProxyImpl::SignalQuery(uint32_t query,
   uint32_t signal_id = next_signal_id_++;
   Send(new GpuCommandBufferMsg_SignalQuery(route_id_, query, signal_id));
   signal_tasks_.insert(std::make_pair(signal_id, callback));
+}
+
+void CommandBufferProxyImpl::CreateGpuFence(uint32_t gpu_fence_id,
+                                            ClientGpuFence source) {
+  CheckLock();
+  base::AutoLock lock(last_state_lock_);
+  if (last_state_.error != gpu::error::kNoError) {
+    DLOG(ERROR) << "got error=" << last_state_.error;
+    return;
+  }
+
+  gfx::GpuFence* gpu_fence = gfx::GpuFence::FromClientGpuFence(source);
+  gfx::GpuFenceHandle handle =
+      gfx::CloneHandleForIPC(gpu_fence->GetGpuFenceHandle());
+  Send(new GpuCommandBufferMsg_CreateGpuFenceFromHandle(route_id_, gpu_fence_id,
+                                                        handle));
+}
+
+void CommandBufferProxyImpl::GetGpuFence(
+    uint32_t gpu_fence_id,
+    base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) {
+  CheckLock();
+  base::AutoLock lock(last_state_lock_);
+  if (last_state_.error != gpu::error::kNoError) {
+    DLOG(ERROR) << "got error=" << last_state_.error;
+    return;
+  }
+
+  Send(new GpuCommandBufferMsg_GetGpuFenceHandle(route_id_, gpu_fence_id));
+  get_gpu_fence_tasks_.emplace(gpu_fence_id, std::move(callback));
+}
+
+void CommandBufferProxyImpl::OnGetGpuFenceHandleComplete(
+    uint32_t gpu_fence_id,
+    const gfx::GpuFenceHandle& handle) {
+  // Always consume the provided handle to avoid leaks on error.
+  auto gpu_fence = base::MakeUnique<gfx::GpuFence>(handle);
+
+  GetGpuFenceTaskMap::iterator it = get_gpu_fence_tasks_.find(gpu_fence_id);
+  if (it == get_gpu_fence_tasks_.end()) {
+    DLOG(ERROR) << "GPU process sent invalid GetGpuFenceHandle response.";
+    base::AutoLock lock(last_state_lock_);
+    OnGpuAsyncMessageError(gpu::error::kInvalidGpuMessage,
+                           gpu::error::kLostContext);
+    return;
+  }
+  auto callback = std::move(it->second);
+  get_gpu_fence_tasks_.erase(it);
+  std::move(callback).Run(std::move(gpu_fence));
 }
 
 void CommandBufferProxyImpl::TakeFrontBuffer(const gpu::Mailbox& mailbox) {
@@ -724,16 +751,18 @@ CommandBufferProxyImpl::AllocateAndMapSharedMemory(size_t size) {
 
   base::SharedMemoryHandle platform_handle;
   size_t shared_memory_size;
-  bool readonly;
+  mojo::UnwrappedSharedMemoryHandleProtection protection;
   MojoResult result = mojo::UnwrapSharedMemoryHandle(
-      std::move(handle), &platform_handle, &shared_memory_size, &readonly);
+      std::move(handle), &platform_handle, &shared_memory_size, &protection);
   if (result != MOJO_RESULT_OK) {
     DLOG(ERROR) << "AllocateAndMapSharedMemory: Unwrap failed";
     return nullptr;
   }
   DCHECK_EQ(shared_memory_size, size);
 
-  auto shm = std::make_unique<base::SharedMemory>(platform_handle, readonly);
+  bool read_only =
+      protection == mojo::UnwrappedSharedMemoryHandleProtection::kReadOnly;
+  auto shm = std::make_unique<base::SharedMemory>(platform_handle, read_only);
   if (!shm->Map(size)) {
     DLOG(ERROR) << "AllocateAndMapSharedMemory: Map failed";
     return nullptr;
@@ -791,31 +820,14 @@ gpu::CommandBufferSharedState* CommandBufferProxyImpl::shared_state() const {
 }
 
 void CommandBufferProxyImpl::OnSwapBuffersCompleted(
-    const GpuCommandBufferMsg_SwapBuffersCompleted_Params& params) {
-#if defined(OS_MACOSX)
-  gpu::GpuProcessHostedCALayerTreeParamsMac params_mac;
-  params_mac.ca_context_id = params.ca_context_id;
-  params_mac.fullscreen_low_power_ca_context_valid =
-      params.fullscreen_low_power_ca_context_valid;
-  params_mac.fullscreen_low_power_ca_context_id =
-      params.fullscreen_low_power_ca_context_id;
-  params_mac.io_surface.reset(IOSurfaceLookupFromMachPort(params.io_surface));
-  params_mac.pixel_size = params.pixel_size;
-  params_mac.scale_factor = params.scale_factor;
-  params_mac.responses = std::move(params.in_use_responses);
-  gpu::GpuProcessHostedCALayerTreeParamsMac* mac_frame_ptr = &params_mac;
-#else
-  gpu::GpuProcessHostedCALayerTreeParamsMac* mac_frame_ptr = nullptr;
-#endif
-
+    const SwapBuffersCompleteParams& params) {
   if (!swap_buffers_completion_callback_.is_null())
-    swap_buffers_completion_callback_.Run(params.response, mac_frame_ptr);
+    swap_buffers_completion_callback_.Run(params);
 }
 
 void CommandBufferProxyImpl::OnUpdateVSyncParameters(base::TimeTicks timebase,
                                                      base::TimeDelta interval) {
-  DCHECK(!base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnablePresentationCallback));
+  DCHECK(!gl::IsPresentationCallbackEnabled());
   if (!update_vsync_parameters_completion_callback_.is_null())
     update_vsync_parameters_completion_callback_.Run(timebase, interval);
 }
@@ -823,8 +835,7 @@ void CommandBufferProxyImpl::OnUpdateVSyncParameters(base::TimeTicks timebase,
 void CommandBufferProxyImpl::OnBufferPresented(
     uint64_t swap_id,
     const gfx::PresentationFeedback& feedback) {
-  DCHECK(base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnablePresentationCallback));
+  DCHECK(gl::IsPresentationCallbackEnabled());
   if (presentation_callback_)
     presentation_callback_.Run(swap_id, feedback);
 

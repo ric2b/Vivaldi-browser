@@ -34,6 +34,7 @@ ChromeVoxE2ETest.prototype = {
   testGenCppIncludes: function() {
     GEN_BLOCK(function() { /*!
 #include "ash/accessibility/accessibility_delegate.h"
+#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"

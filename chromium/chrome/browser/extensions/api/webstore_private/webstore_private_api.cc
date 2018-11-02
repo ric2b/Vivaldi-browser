@@ -10,7 +10,6 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -218,18 +217,19 @@ WebstorePrivateBeginInstallWithManifest3Function::Run() {
   ActiveInstallData install_data(details().id);
   scoped_active_install_.reset(new ScopedActiveInstall(tracker, install_data));
 
-  net::URLRequestContextGetter* context_getter = nullptr;
+  network::mojom::URLLoaderFactory* loader_factory = nullptr;
   if (!icon_url.is_empty()) {
-    context_getter = content::BrowserContext::GetDefaultStoragePartition(
-        browser_context())->GetURLRequestContext();
+    loader_factory =
+        content::BrowserContext::GetDefaultStoragePartition(browser_context())
+            ->GetURLLoaderFactoryForBrowserProcess();
   }
 
   scoped_refptr<WebstoreInstallHelper> helper = new WebstoreInstallHelper(
-      this, details().id, details().manifest, icon_url, context_getter);
+      this, details().id, details().manifest, icon_url);
 
   // The helper will call us back via OnWebstoreParseSuccess or
   // OnWebstoreParseFailure.
-  helper->Start();
+  helper->Start(loader_factory);
 
   // Matched with a Release in OnWebstoreParseSuccess/OnWebstoreParseFailure.
   AddRef();
@@ -654,7 +654,7 @@ WebstorePrivateIsPendingCustodianApprovalFunction::Run() {
 
 ExtensionFunction::ResponseValue
 WebstorePrivateIsPendingCustodianApprovalFunction::BuildResponse(bool result) {
-  return OneArgument(base::MakeUnique<base::Value>(result));
+  return OneArgument(std::make_unique<base::Value>(result));
 }
 
 }  // namespace extensions

@@ -5,7 +5,11 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 
 #include "base/strings/stringprintf.h"
+#include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/protocol/inspector_handler.h"
 #include "content/browser/devtools/protocol/network_handler.h"
+#include "content/browser/devtools/protocol/protocol.h"
+#include "content/browser/devtools/protocol/schema_handler.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_version.h"
@@ -16,26 +20,12 @@ namespace content {
 
 namespace {
 
-void StatusNoOp(ServiceWorkerStatusCode status) {}
-
 void TerminateServiceWorkerOnIO(
     base::WeakPtr<ServiceWorkerContextCore> context_weak,
     int64_t version_id) {
   if (ServiceWorkerContextCore* context = context_weak.get()) {
     if (ServiceWorkerVersion* version = context->GetLiveVersion(version_id))
       version->StopWorker(base::BindOnce(&base::DoNothing));
-  }
-}
-
-void UnregisterServiceWorkerOnIO(
-    base::WeakPtr<ServiceWorkerContextCore> context_weak,
-    int64_t version_id) {
-  if (ServiceWorkerContextCore* context = context_weak.get()) {
-    if (ServiceWorkerVersion* version = context->GetLiveVersion(version_id)) {
-      version->StopWorker(base::BindOnce(&base::DoNothing));
-      context->UnregisterServiceWorker(version->scope(),
-                                       base::Bind(&StatusNoOp));
-    }
   }
 }
 
@@ -52,15 +42,33 @@ void SetDevToolsAttachedOnIO(
 }  // namespace
 
 ServiceWorkerDevToolsAgentHost::ServiceWorkerDevToolsAgentHost(
-    WorkerId worker_id,
-    const ServiceWorkerIdentifier& service_worker,
-    bool is_installed_version)
-    : WorkerDevToolsAgentHost(service_worker.devtools_worker_token(),
-                              worker_id),
-      service_worker_(new ServiceWorkerIdentifier(service_worker)),
+    int worker_process_id,
+    int worker_route_id,
+    const ServiceWorkerContextCore* context,
+    base::WeakPtr<ServiceWorkerContextCore> context_weak,
+    int64_t version_id,
+    const GURL& url,
+    const GURL& scope,
+    bool is_installed_version,
+    const base::UnguessableToken& devtools_worker_token)
+    : DevToolsAgentHostImpl(devtools_worker_token.ToString()),
+      state_(WORKER_NOT_READY),
+      devtools_worker_token_(devtools_worker_token),
+      worker_process_id_(worker_process_id),
+      worker_route_id_(worker_route_id),
+      context_(context),
+      context_weak_(context_weak),
+      version_id_(version_id),
+      url_(url),
+      scope_(scope),
       version_installed_time_(is_installed_version ? base::Time::Now()
                                                    : base::Time()) {
   NotifyCreated();
+}
+
+BrowserContext* ServiceWorkerDevToolsAgentHost::GetBrowserContext() {
+  RenderProcessHost* rph = RenderProcessHost::FromID(worker_process_id_);
+  return rph ? rph->GetBrowserContext() : nullptr;
 }
 
 std::string ServiceWorkerDevToolsAgentHost::GetType() {
@@ -68,15 +76,11 @@ std::string ServiceWorkerDevToolsAgentHost::GetType() {
 }
 
 std::string ServiceWorkerDevToolsAgentHost::GetTitle() {
-  if (RenderProcessHost* host = RenderProcessHost::FromID(worker_id().first)) {
-    return base::StringPrintf("Worker pid:%" CrPRIdPid,
-                              base::GetProcId(host->GetHandle()));
-  }
-  return "";
+  return "Service Worker " + url_.spec();
 }
 
 GURL ServiceWorkerDevToolsAgentHost::GetURL() {
-  return service_worker_->url();
+  return url_;
 }
 
 bool ServiceWorkerDevToolsAgentHost::Activate() {
@@ -87,25 +91,10 @@ void ServiceWorkerDevToolsAgentHost::Reload() {
 }
 
 bool ServiceWorkerDevToolsAgentHost::Close() {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&TerminateServiceWorkerOnIO,
-                                         service_worker_->context_weak(),
-                                         service_worker_->version_id()));
-  return true;
-}
-
-void ServiceWorkerDevToolsAgentHost::UnregisterWorker() {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::BindOnce(&UnregisterServiceWorkerOnIO,
-                                         service_worker_->context_weak(),
-                                         service_worker_->version_id()));
-}
-
-void ServiceWorkerDevToolsAgentHost::OnAttachedStateChanged(bool attached) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&SetDevToolsAttachedOnIO, service_worker_->context_weak(),
-                     service_worker_->version_id(), attached));
+      base::BindOnce(&TerminateServiceWorkerOnIO, context_weak_, version_id_));
+  return true;
 }
 
 void ServiceWorkerDevToolsAgentHost::WorkerVersionInstalled() {
@@ -116,48 +105,104 @@ void ServiceWorkerDevToolsAgentHost::WorkerVersionDoomed() {
   version_doomed_time_ = base::Time::Now();
 }
 
-void ServiceWorkerDevToolsAgentHost::NavigationPreloadRequestSent(
-    const std::string& request_id,
-    const ResourceRequest& request) {
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(this)) {
-    network->NavigationPreloadRequestSent(worker_id().first, request_id,
-                                          request);
-  }
-}
-
-void ServiceWorkerDevToolsAgentHost::NavigationPreloadResponseReceived(
-    const std::string& request_id,
-    const GURL& url,
-    const ResourceResponseHead& head) {
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(this)) {
-    network->NavigationPreloadResponseReceived(worker_id().first, request_id,
-                                               url, head);
-  }
-}
-
-void ServiceWorkerDevToolsAgentHost::NavigationPreloadCompleted(
-    const std::string& request_id,
-    const network::URLLoaderCompletionStatus& status) {
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(this))
-    network->NavigationPreloadCompleted(request_id, status);
-}
-
-int64_t ServiceWorkerDevToolsAgentHost::service_worker_version_id() const {
-  return service_worker_->version_id();
-}
-
-GURL ServiceWorkerDevToolsAgentHost::scope() const {
-  return service_worker_->scope();
-}
-
 bool ServiceWorkerDevToolsAgentHost::Matches(
-    const ServiceWorkerIdentifier& other) {
-  return service_worker_->Matches(other);
+    const ServiceWorkerContextCore* context,
+    int64_t version_id) {
+  return context_ == context && version_id_ == version_id;
 }
 
 ServiceWorkerDevToolsAgentHost::~ServiceWorkerDevToolsAgentHost() {
-  ServiceWorkerDevToolsManager::GetInstance()->RemoveInspectedWorkerData(
-      worker_id());
+  ServiceWorkerDevToolsManager::GetInstance()->AgentHostDestroyed(this);
+}
+
+void ServiceWorkerDevToolsAgentHost::AttachSession(DevToolsSession* session) {
+  if (state_ == WORKER_READY) {
+    if (sessions().size() == 1) {
+      BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                              base::BindOnce(&SetDevToolsAttachedOnIO,
+                                             context_weak_, version_id_, true));
+    }
+    // RenderProcessHost should not be null here, but even if it _is_ null,
+    // session does not depend on the process to do messaging.
+    session->SetRenderer(RenderProcessHost::FromID(worker_process_id_),
+                         nullptr);
+    session->AttachToAgent(agent_ptr_);
+  }
+  session->SetFallThroughForNotFound(true);
+  session->AddHandler(base::WrapUnique(new protocol::InspectorHandler()));
+  session->AddHandler(base::WrapUnique(new protocol::NetworkHandler(GetId())));
+  session->AddHandler(base::WrapUnique(new protocol::SchemaHandler()));
+}
+
+void ServiceWorkerDevToolsAgentHost::DetachSession(DevToolsSession* session) {
+  // Destroying session automatically detaches in renderer.
+  if (state_ == WORKER_READY && sessions().empty()) {
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&SetDevToolsAttachedOnIO,
+                                           context_weak_, version_id_, false));
+  }
+}
+
+bool ServiceWorkerDevToolsAgentHost::DispatchProtocolMessage(
+    DevToolsSession* session,
+    const std::string& message) {
+  int call_id = 0;
+  std::string method;
+  if (session->Dispatch(message, &call_id, &method) !=
+      protocol::Response::kFallThrough) {
+    return true;
+  }
+
+  session->DispatchProtocolMessageToAgent(call_id, method, message);
+  session->waiting_messages()[call_id] = {method, message};
+  return true;
+}
+
+void ServiceWorkerDevToolsAgentHost::WorkerReadyForInspection(
+    blink::mojom::DevToolsAgentAssociatedPtrInfo devtools_agent_ptr_info) {
+  DCHECK_EQ(WORKER_NOT_READY, state_);
+  state_ = WORKER_READY;
+  agent_ptr_.Bind(std::move(devtools_agent_ptr_info));
+  if (!sessions().empty()) {
+    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                            base::BindOnce(&SetDevToolsAttachedOnIO,
+                                           context_weak_, version_id_, true));
+  }
+
+  // RenderProcessHost should not be null here, but even if it _is_ null,
+  // session does not depend on the process to do messaging.
+  RenderProcessHost* host = RenderProcessHost::FromID(worker_process_id_);
+  for (DevToolsSession* session : sessions()) {
+    session->SetRenderer(host, nullptr);
+    session->ReattachToAgent(agent_ptr_);
+    for (const auto& pair : session->waiting_messages()) {
+      int call_id = pair.first;
+      const DevToolsSession::Message& message = pair.second;
+      session->DispatchProtocolMessageToAgent(call_id, message.method,
+                                              message.message);
+    }
+  }
+}
+
+void ServiceWorkerDevToolsAgentHost::WorkerRestarted(int worker_process_id,
+                                                     int worker_route_id) {
+  DCHECK_EQ(WORKER_TERMINATED, state_);
+  state_ = WORKER_NOT_READY;
+  worker_process_id_ = worker_process_id;
+  worker_route_id_ = worker_route_id;
+  RenderProcessHost* host = RenderProcessHost::FromID(worker_process_id_);
+  for (DevToolsSession* session : sessions())
+    session->SetRenderer(host, nullptr);
+}
+
+void ServiceWorkerDevToolsAgentHost::WorkerDestroyed() {
+  DCHECK_NE(WORKER_TERMINATED, state_);
+  state_ = WORKER_TERMINATED;
+  agent_ptr_.reset();
+  for (auto* inspector : protocol::InspectorHandler::ForAgentHost(this))
+    inspector->TargetCrashed();
+  for (DevToolsSession* session : sessions())
+    session->SetRenderer(nullptr, nullptr);
 }
 
 }  // namespace content

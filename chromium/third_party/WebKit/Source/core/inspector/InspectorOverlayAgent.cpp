@@ -53,7 +53,7 @@
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorOverlayHost.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/loader/EmptyClients.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/ChromeClient.h"
@@ -98,7 +98,7 @@ Node* HoveredNodeForPoint(LocalFrame* frame,
   HitTestRequest request(hit_type);
   HitTestResult result(request,
                        frame->View()->RootFrameToContents(point_in_root_frame));
-  frame->ContentLayoutItem().HitTest(result);
+  frame->ContentLayoutObject()->HitTest(result);
   Node* node = result.InnerPossiblyPseudoNode();
   while (node && node->getNodeType() == Node::kTextNode)
     node = node->parentNode();
@@ -122,11 +122,9 @@ Node* HoveredNodeForEvent(LocalFrame* frame,
 }
 
 Node* HoveredNodeForEvent(LocalFrame* frame,
-                          const WebTouchEvent& event,
+                          const WebPointerEvent& event,
                           bool ignore_pointer_events_none) {
-  if (!event.touches_length)
-    return nullptr;
-  WebTouchPoint transformed_point = event.TouchPointInRootFrame(0);
+  WebPointerEvent transformed_point = event.WebPointerEventInRootFrame();
   return HoveredNodeForPoint(
       frame, RoundedIntPoint(transformed_point.PositionInWidget()),
       ignore_pointer_events_none);
@@ -533,6 +531,12 @@ void InspectorOverlayAgent::UpdateAllLifecyclePhases() {
   OverlayMainFrame()->View()->UpdateAllLifecyclePhases();
 }
 
+void InspectorOverlayAgent::DispatchBufferedTouchEvents() {
+  if (IsEmpty())
+    return;
+  OverlayMainFrame()->GetEventHandler().DispatchBufferedTouchEvents();
+}
+
 bool InspectorOverlayAgent::HandleInputEvent(const WebInputEvent& input_event) {
   bool handled = false;
 
@@ -582,15 +586,15 @@ bool InspectorOverlayAgent::HandleInputEvent(const WebInputEvent& input_event) {
     }
   }
 
-  if (WebInputEvent::IsTouchEventType(input_event.GetType())) {
-    WebTouchEvent transformed_event =
-        TransformWebTouchEvent(frame_impl_->GetFrameView(),
-                               static_cast<const WebTouchEvent&>(input_event));
-    handled = HandleTouchEvent(transformed_event);
+  if (WebInputEvent::IsPointerEventType(input_event.GetType())) {
+    WebPointerEvent transformed_event = TransformWebPointerEvent(
+        frame_impl_->GetFrameView(),
+        static_cast<const WebPointerEvent&>(input_event));
+    handled = HandlePointerEvent(transformed_event);
     if (handled)
       return true;
-    OverlayMainFrame()->GetEventHandler().HandleTouchEvent(
-        transformed_event, Vector<WebTouchEvent>());
+    OverlayMainFrame()->GetEventHandler().HandlePointerEvent(
+        transformed_event, Vector<WebPointerEvent>());
   }
   if (WebInputEvent::IsKeyboardEventType(input_event.GetType())) {
     OverlayMainFrame()->GetEventHandler().KeyEvent(
@@ -839,7 +843,6 @@ Page* InspectorOverlayAgent::OverlayPage() {
   overlay_settings.SetScriptEnabled(true);
   overlay_settings.SetPluginsEnabled(false);
   overlay_settings.SetLoadsImagesAutomatically(true);
-  overlay_settings.SetForceDisplayList2dCanvasEnabled(true);
   // FIXME: http://crbug.com/363843. Inspector should probably create its
   // own graphics layers and attach them to the tree rather than going
   // through some non-composited paint function.
@@ -949,7 +952,7 @@ String InspectorOverlayAgent::EvaluateInOverlayForTest(const String& script) {
           ->GetScriptController()
           .ExecuteScriptInMainWorldAndReturnValue(
               ScriptSourceCode(script, ScriptSourceLocationType::kInspector),
-              ScriptFetchOptions(),
+              KURL(), ScriptFetchOptions(),
               ScriptController::kExecuteScriptWhenScriptsDisabled);
   return ToCoreStringWithUndefinedOrNullCheck(string);
 }
@@ -989,7 +992,7 @@ void InspectorOverlayAgent::OverlaySteppedOver() {
 void InspectorOverlayAgent::PageLayoutInvalidated(bool resized) {
   if (resized && draw_view_size_) {
     resize_timer_active_ = true;
-    timer_.StartOneShot(TimeDelta::FromSeconds(1), BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta::FromSeconds(1), FROM_HERE);
   }
   ScheduleUpdate();
 }
@@ -1014,7 +1017,7 @@ bool InspectorOverlayAgent::HandleMouseMove(const WebMouseEvent& event) {
   }
 
   LocalFrame* frame = frame_impl_->GetFrame();
-  if (!frame || !frame->View() || frame->ContentLayoutItem().IsNull())
+  if (!frame || !frame->View() || !frame->ContentLayoutObject())
     return false;
   Node* node = HoveredNodeForEvent(
       frame, event, event.GetModifiers() & WebInputEvent::kShiftKey);
@@ -1130,7 +1133,7 @@ bool InspectorOverlayAgent::HandleGestureEvent(const WebGestureEvent& event) {
   return false;
 }
 
-bool InspectorOverlayAgent::HandleTouchEvent(const WebTouchEvent& event) {
+bool InspectorOverlayAgent::HandlePointerEvent(const WebPointerEvent& event) {
   if (!ShouldSearchForNode())
     return false;
   Node* node = HoveredNodeForEvent(frame_impl_->GetFrame(), event, false);

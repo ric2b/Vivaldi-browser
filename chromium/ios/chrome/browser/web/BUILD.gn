@@ -17,24 +17,20 @@ source_set("web") {
     "mailto_handler_gmail.mm",
     "mailto_handler_inbox.h",
     "mailto_handler_inbox.mm",
+    "mailto_handler_manager.h",
+    "mailto_handler_manager.mm",
     "mailto_handler_system_mail.h",
     "mailto_handler_system_mail.mm",
-    "mailto_url_rewriter.h",
-    "mailto_url_rewriter.mm",
     "navigation_manager_util.h",
     "navigation_manager_util.mm",
     "network_activity_indicator_tab_helper.h",
     "network_activity_indicator_tab_helper.mm",
-    "nullable_mailto_url_rewriter.h",
-    "nullable_mailto_url_rewriter.mm",
     "page_placeholder_tab_helper.h",
     "page_placeholder_tab_helper.mm",
     "repost_form_tab_helper.h",
     "repost_form_tab_helper.mm",
     "sad_tab_tab_helper.h",
     "sad_tab_tab_helper.mm",
-    "tab_id_tab_helper.h",
-    "tab_id_tab_helper.mm",
   ]
   deps = [
     ":tab_helper_delegates",
@@ -42,19 +38,37 @@ source_set("web") {
     "//components/strings",
     "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/snapshots",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands:commands",
+    "//ios/chrome/browser/ui/fullscreen",
+    "//ios/chrome/browser/ui/fullscreen:new_fullscreen",
     "//ios/chrome/browser/ui/util:util",
     "//ios/web",
     "//ui/base",
     "//url",
   ]
+  public_deps = [
+    ":tab_id_tab_helper",
+  ]
+}
+
+source_set("tab_id_tab_helper") {
+  sources = [
+    "tab_id_tab_helper.h",
+    "tab_id_tab_helper.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/web/public",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
 }
 
 source_set("tab_helper_delegates") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "page_placeholder_tab_helper_delegate.h",
     "repost_form_tab_helper_delegate.h",
     "sad_tab_tab_helper_delegate.h",
   ]
@@ -67,11 +81,11 @@ source_set("unit_tests") {
     "load_timing_tab_helper_unittest.mm",
     "mailto_handler_gmail_unittest.mm",
     "mailto_handler_inbox_unittest.mm",
+    "mailto_handler_manager_unittest.mm",
     "mailto_handler_system_mail_unittest.mm",
     "mailto_handler_unittest.mm",
     "navigation_manager_util_unittest.mm",
     "network_activity_indicator_tab_helper_unittest.mm",
-    "nullable_mailto_url_rewriter_unittest.mm",
     "page_placeholder_tab_helper_unittest.mm",
     "repost_form_tab_helper_unittest.mm",
     "sad_tab_tab_helper_unittest.mm",
@@ -84,7 +98,9 @@ source_set("unit_tests") {
     "//base:base",
     "//base/test:test_support",
     "//ios/chrome/browser/browser_state:test_support",
+    "//ios/chrome/browser/snapshots",
     "//ios/chrome/test:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/web",
     "//ios/web/public/test",
     "//ios/web/public/test/fakes",
@@ -99,6 +115,7 @@ source_set("unit_tests") {
 js_compile_bundle("chrome_bundle") {
   closure_entry_point = "__crWeb.chromeBundle"
   sources = [
+    "//components/autofill/ios/browser/resources/autofill_controller.js",
     "resources/chrome_bundle.js",
     "resources/print.js",
   ]
@@ -109,7 +126,7 @@ js_compile_bundle("chrome_bundle") {
   ]
 }
 
-js_compile_unchecked("payment_request") {
+js_compile_checked("payment_request") {
   sources = [
     "resources/payment_request.js",
   ]
@@ -132,8 +149,10 @@ source_set("web_internal") {
     "error_page_content.mm",
     "error_page_generator.h",
     "error_page_generator.mm",
-    "external_app_launcher.h",
-    "external_app_launcher.mm",
+    "external_app_launcher_tab_helper.h",
+    "external_app_launcher_tab_helper.mm",
+    "external_app_launcher_util.h",
+    "external_app_launcher_util.mm",
     "external_app_launching_state.h",
     "external_app_launching_state.mm",
     "external_apps_launch_policy_decider.h",
@@ -156,6 +175,7 @@ source_set("web_internal") {
     "//components/strings",
     "//components/task_scheduler_util/browser",
     "//components/version_info",
+    "//ios/chrome/app/resources:ios_resources",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser:browser_impl",
@@ -215,7 +235,7 @@ source_set("unit_tests_internal") {
     "blocked_popup_tab_helper_unittest.mm",
     "chrome_web_client_unittest.mm",
     "error_page_generator_unittest.mm",
-    "external_app_launcher_unittest.mm",
+    "external_app_launcher_util_unittest.mm",
     "external_app_launching_state_unittest.mm",
     "external_apps_launch_policy_decider_unittest.mm",
   ]
@@ -265,16 +285,15 @@ source_set("eg_tests") {
   deps = [
     "//base",
     "//base/test:test_support",
-    "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/strings",
     "//components/version_info:version_info",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
-    "//ios/chrome/browser/content_settings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/test:test_support",
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing:ios_test_support",

@@ -10,14 +10,12 @@ from page_sets.login_helpers import google_login
 class TopPages(page_module.Page):
 
   def __init__(self, url, page_set, shared_page_state_class,
-               name='', credentials=None):
+               name=''):
     if name == '':
       name = url
     super(TopPages, self).__init__(
         url=url, page_set=page_set, name=name,
-        credentials_path='data/credentials.json',
         shared_page_state_class=shared_page_state_class)
-    self.credentials = credentials
 
 
 class GoogleWebSearchPage(TopPages):
@@ -48,8 +46,7 @@ class GoogleImageSearchPage(TopPages):
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(GoogleImageSearchPage, self).RunNavigateSteps(action_runner)
 
 
@@ -65,8 +62,7 @@ class GmailPage(TopPages):
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(GmailPage, self).RunNavigateSteps(action_runner)
     action_runner.WaitForJavaScriptCondition(
         'window.gmonkey !== undefined &&'
@@ -85,8 +81,7 @@ class GoogleCalendarPage(TopPages):
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(GoogleCalendarPage, self).RunNavigateSteps(action_runner)
     action_runner.Wait(2)
     action_runner.WaitForElement('div[class~="navForward"]')
@@ -110,12 +105,11 @@ class GoogleDocPage(TopPages):
         # pylint: disable=line-too-long
         url='https://docs.google.com/document/d/1X-IKNjtEnx-WW5JIKRLsyhz5sbsat3mfTpAPUSX3_s4/view',
         page_set=page_set,
-        name='Docs  (1 open document tab)',
+        name='Docs_(1_open_document_tab)',
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(GoogleDocPage, self).RunNavigateSteps(action_runner)
     action_runner.Wait(2)
     action_runner.WaitForJavaScriptCondition(
@@ -134,8 +128,7 @@ class GooglePlusPage(TopPages):
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(GooglePlusPage, self).RunNavigateSteps(action_runner)
     action_runner.WaitForElement(text='Home')
 
@@ -152,8 +145,7 @@ class YoutubePage(TopPages):
         shared_page_state_class=shared_page_state_class)
 
   def RunNavigateSteps(self, action_runner):
-    google_login.LoginGoogleAccount(action_runner, 'googletest',
-                                    self.credentials_path)
+    google_login.LoginGoogleAccount(action_runner, 'googletest')
     super(YoutubePage, self).RunNavigateSteps(action_runner)
     action_runner.Wait(2)
 
@@ -233,7 +225,7 @@ class WikipediaPage(TopPages):
                shared_page_state_class=shared_page_state.SharedPageState):
     super(WikipediaPage, self).__init__(
         url='http://en.wikipedia.org/wiki/Wikipedia', page_set=page_set,
-        name='Wikipedia (1 tab)',
+        name='Wikipedia_(1_tab)',
         shared_page_state_class=shared_page_state_class)
 
 

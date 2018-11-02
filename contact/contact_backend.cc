@@ -135,9 +135,17 @@ void ContactBackend::GetAllContacts(
   }
 }
 
-void ContactBackend::CreateContact(
-    ContactRow row,
-    std::shared_ptr<CreateContactResult> result) {
+void ContactBackend::GetAllEmailAddresses(
+    std::shared_ptr<EmailAddressRows> results) {
+  EmailAddressRows rows;
+  db_->GetAllEmailAddresses(&rows);
+  for (size_t i = 0; i < rows.size(); i++) {
+    results->push_back(rows[i]);
+  }
+}
+
+void ContactBackend::CreateContact(ContactRow row,
+                                   std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
@@ -148,17 +156,16 @@ void ContactBackend::CreateContact(
   if (id) {
     row.set_contact_id(id);
     result->success = true;
-    result->createdRow = row;
+    result->contact = row;
     NotifyContactCreated(row);
   } else {
     result->success = false;
   }
 }
 
-void ContactBackend::UpdateContact(
-    ContactID contact_id,
-    const Contact& contact,
-    std::shared_ptr<UpdateContactResult> result) {
+void ContactBackend::UpdateContact(ContactID contact_id,
+                                   const Contact& contact,
+                                   std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
@@ -178,12 +185,25 @@ void ContactBackend::UpdateContact(
       contact_row.set_note(contact.note);
     }
 
+    if (contact.updateFields & contact::AVATAR_URL) {
+      contact_row.set_avatar_url(contact.avatar_url);
+    }
+
+    if (contact.updateFields & contact::SEPARATOR) {
+      contact_row.set_separator(contact.separator);
+    }
+
+    if (contact.updateFields & contact::GENERATED_FROM_SENT_MAIL) {
+      contact_row.set_generated_from_sent_mail(
+          contact.generated_from_sent_mail);
+    }
+
     result->success = db_->UpdateContactRow(contact_row);
 
     if (result->success) {
       ContactRow changed_row;
       if (db_->GetRowForContact(contact_id, &changed_row)) {
-        result->updated_contact_result = changed_row;
+        result->contact = changed_row;
         NotifyContactModified(changed_row);
       }
     }
@@ -195,52 +215,49 @@ void ContactBackend::UpdateContact(
 }
 
 void ContactBackend::AddProperty(AddPropertyObject row,
-                                 std::shared_ptr<UpdateContactResult> result) {
+                                 std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
   }
 
-  if (row.property_name == ContactPropertyNameEnum::EMAIL) {
-    AddEmail(row, result);
-  } else if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
+  if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
     AddPhoneNumber(row, result);
+  } else if (row.property_name == ContactPropertyNameEnum::POSTAL_ADDRESS) {
+    AddPostalAddress(row, result);
   }
 }
 
-void ContactBackend::UpdateProperty(
-    UpdatePropertyObject row,
-    std::shared_ptr<UpdateContactResult> result) {
+void ContactBackend::UpdateProperty(UpdatePropertyObject row,
+                                    std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
   }
 
-  if (row.property_name == ContactPropertyNameEnum::EMAIL) {
-    UpdateEmail(row, result);
-  } else if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
+  if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
     UpdatePhonenumber(row, result);
+  } else if (row.property_name == ContactPropertyNameEnum::POSTAL_ADDRESS) {
+    UpdatePostalAddress(row, result);
   }
 }
 
-void ContactBackend::RemoveProperty(
-    RemovePropertyObject row,
-    std::shared_ptr<UpdateContactResult> result) {
+void ContactBackend::RemoveProperty(RemovePropertyObject row,
+                                    std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
   }
 
-  if (row.property_name == ContactPropertyNameEnum::EMAIL) {
-    DeleteEmail(row, result);
-  } else if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
+  if (row.property_name == ContactPropertyNameEnum::PHONENUMBER) {
     DeletePhonenumber(row, result);
+  } else if (row.property_name == ContactPropertyNameEnum::POSTAL_ADDRESS) {
+    DeletePostalAddress(row, result);
   }
 }
 
-void ContactBackend::DeleteContact(
-    ContactID contact_id,
-    std::shared_ptr<DeleteContactResult> result) {
+void ContactBackend::DeleteContact(ContactID contact_id,
+                                   std::shared_ptr<ContactResults> result) {
   if (!db_) {
     result->success = false;
     return;
@@ -255,34 +272,35 @@ void ContactBackend::DeleteContact(
   }
 }
 
-void ContactBackend::AddEmail(AddPropertyObject row,
-                              std::shared_ptr<UpdateContactResult> result) {
-  EmailID id = db_->AddEmail(row);
+void ContactBackend::AddEmailAddress(EmailAddressRow row,
+                                     std::shared_ptr<ContactResults> result) {
+  EmailAddressID id = db_->AddEmailAddress(row);
   if (id) {
     ContactRow contact_row;
-    db_->GetRowForContact(row.contact_id, &contact_row);
-    FillUpdatedContact(row.contact_id, contact_row);
+    db_->GetRowForContact(row.contact_id(), &contact_row);
+    FillUpdatedContact(row.contact_id(), contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;
   }
 }
 
-void ContactBackend::UpdateEmail(UpdatePropertyObject row,
-                                 std::shared_ptr<UpdateContactResult> result) {
-  if (!db_->DoesEmailIdExist(row.property_id, row.contact_id)) {
+void ContactBackend::UpdateEmailAddress(
+    EmailAddressRow row,
+    std::shared_ptr<ContactResults> result) {
+  if (!db_->DoesEmailAddressIdExist(row.email_address_id(), row.contact_id())) {
     result->success = false;
     return;
   }
 
-  if (db_->UpdateEmail(row)) {
+  if (db_->UpdateEmailAddress(row)) {
     ContactRow contact_row;
-    db_->GetRowForContact(row.contact_id, &contact_row);
-    FillUpdatedContact(row.contact_id, contact_row);
+    db_->GetRowForContact(row.contact_id(), &contact_row);
+    FillUpdatedContact(row.contact_id(), contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;
@@ -290,23 +308,22 @@ void ContactBackend::UpdateEmail(UpdatePropertyObject row,
 }
 
 void ContactBackend::DeleteEmail(RemovePropertyObject row,
-                                 std::shared_ptr<UpdateContactResult> result) {
+                                 std::shared_ptr<ContactResults> result) {
   bool deleteResult = db_->DeleteEmail(row.property_id, row.contact_id);
   if (deleteResult) {
     ContactRow contact_row;
     db_->GetRowForContact(row.contact_id, &contact_row);
     FillUpdatedContact(row.contact_id, contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;
   }
 }
 
-void ContactBackend::UpdatePhonenumber(
-    UpdatePropertyObject row,
-    std::shared_ptr<UpdateContactResult> result) {
+void ContactBackend::UpdatePhonenumber(UpdatePropertyObject row,
+                                       std::shared_ptr<ContactResults> result) {
   if (!db_->DoesPhonumberIdExist(row.property_id, row.contact_id)) {
     result->success = false;
     return;
@@ -317,16 +334,15 @@ void ContactBackend::UpdatePhonenumber(
     db_->GetRowForContact(row.contact_id, &contact_row);
     FillUpdatedContact(row.contact_id, contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;
   }
 }
 
-void ContactBackend::DeletePhonenumber(
-    RemovePropertyObject row,
-    std::shared_ptr<UpdateContactResult> result) {
+void ContactBackend::DeletePhonenumber(RemovePropertyObject row,
+                                       std::shared_ptr<ContactResults> result) {
   bool deleteResult = db_->DeletePhoneNumber(row.property_id, row.contact_id);
 
   if (deleteResult) {
@@ -334,7 +350,44 @@ void ContactBackend::DeletePhonenumber(
     db_->GetRowForContact(row.contact_id, &contact_row);
     FillUpdatedContact(row.contact_id, contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
+    NotifyContactModified(contact_row);
+  } else {
+    result->success = false;
+  }
+}
+
+void ContactBackend::UpdatePostalAddress(
+    UpdatePropertyObject row,
+    std::shared_ptr<ContactResults> result) {
+  if (!db_->DoesPostalAddressIdExist(row.property_id, row.contact_id)) {
+    result->success = false;
+    return;
+  }
+
+  if (db_->UpdatePostalAddress(row)) {
+    ContactRow contact_row;
+    db_->GetRowForContact(row.contact_id, &contact_row);
+    FillUpdatedContact(row.contact_id, contact_row);
+    result->success = true;
+    result->contact = contact_row;
+    NotifyContactModified(contact_row);
+  } else {
+    result->success = false;
+  }
+}
+
+void ContactBackend::DeletePostalAddress(
+    RemovePropertyObject row,
+    std::shared_ptr<ContactResults> result) {
+  bool deleteResult = db_->DeletePostalAddress(row.property_id, row.contact_id);
+
+  if (deleteResult) {
+    ContactRow contact_row;
+    db_->GetRowForContact(row.contact_id, &contact_row);
+    FillUpdatedContact(row.contact_id, contact_row);
+    result->success = true;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;
@@ -342,26 +395,45 @@ void ContactBackend::DeletePhonenumber(
 }
 
 void ContactBackend::FillUpdatedContact(ContactID id, ContactRow& updated_row) {
-  EmailRows emails;
+  EmailAddressRows emails;
   db_->GetEmailsForContact(id, &emails);
   updated_row.set_emails(emails);
 
   PhonenumberRows phone_numbers;
   db_->GetPhonenumbersForContact(id, &phone_numbers);
   updated_row.set_phones(phone_numbers);
+
+  PostalAddressRows postal_addresses;
+  db_->GetPostalAddressesForContact(id, &postal_addresses);
+  updated_row.set_postaladdresses(postal_addresses);
 }
 
-void ContactBackend::AddPhoneNumber(
-    AddPropertyObject row,
-    std::shared_ptr<UpdateContactResult> result) {
-  EmailID id = db_->AddPhoneNumber(row);
+void ContactBackend::AddPhoneNumber(AddPropertyObject row,
+                                    std::shared_ptr<ContactResults> result) {
+  PhonenumberID id = db_->AddPhoneNumber(row);
 
   if (id) {
     ContactRow contact_row;
     db_->GetRowForContact(row.contact_id, &contact_row);
     FillUpdatedContact(row.contact_id, contact_row);
     result->success = true;
-    result->updated_contact_result = contact_row;
+    result->contact = contact_row;
+    NotifyContactModified(contact_row);
+  } else {
+    result->success = false;
+  }
+}
+
+void ContactBackend::AddPostalAddress(AddPropertyObject row,
+                                      std::shared_ptr<ContactResults> result) {
+  PostalAddressID id = db_->AddPostalAddress(row);
+
+  if (id) {
+    ContactRow contact_row;
+    db_->GetRowForContact(row.contact_id, &contact_row);
+    FillUpdatedContact(row.contact_id, contact_row);
+    result->success = true;
+    result->contact = contact_row;
     NotifyContactModified(contact_row);
   } else {
     result->success = false;

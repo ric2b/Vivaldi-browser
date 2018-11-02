@@ -21,6 +21,7 @@
 #include "content/public/common/media_stream_request.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom.h"
+#include "third_party/WebKit/common/color_chooser/color_chooser.mojom.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebSecurityStyle.h"
@@ -48,7 +49,6 @@ class SessionStorageNamespace;
 class SiteInstance;
 class WebContents;
 class WebContentsImpl;
-struct ColorSuggestion;
 struct ContextMenuParams;
 struct DropData;
 struct FileChooserParams;
@@ -73,7 +73,6 @@ class WebGestureEvent;
 namespace content {
 
 struct OpenURLParams;
-struct WebContentsUnresponsiveState;
 
 enum class KeyboardEventProcessingResult;
 
@@ -357,9 +356,7 @@ class CONTENT_EXPORT WebContentsDelegate {
                                   WebContents* new_contents) {}
 
   // Notification that the tab is hung.
-  virtual void RendererUnresponsive(
-      WebContents* source,
-      const WebContentsUnresponsiveState& unresponsive_state) {}
+  virtual void RendererUnresponsive(WebContents* source) {}
 
   // Notification that the tab is no longer hung.
   virtual void RendererResponsive(WebContents* source) {}
@@ -379,7 +376,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   virtual ColorChooser* OpenColorChooser(
       WebContents* web_contents,
       SkColor color,
-      const std::vector<ColorSuggestion>& suggestions);
+      const std::vector<blink::mojom::ColorSuggestionPtr>& suggestions);
 
   // Called when a file selection is to be done.
   virtual void RunFileChooser(RenderFrameHost* render_frame_host,

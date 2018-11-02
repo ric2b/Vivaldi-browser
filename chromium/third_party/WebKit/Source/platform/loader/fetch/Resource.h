@@ -89,7 +89,8 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
     kLinkPrefetch,
     kTextTrack,
     kImportResource,
-    kMedia,  // Audio or video file requested by a HTML5 media element
+    kAudio,
+    kVideo,
     kManifest,
     kMock  // Only for testing
   };
@@ -133,7 +134,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
 
   virtual void SetRevalidatingRequest(const ResourceRequest&);
 
-  void SetFetcherSecurityOrigin(SecurityOrigin* origin) {
+  void SetFetcherSecurityOrigin(const SecurityOrigin* origin) {
     fetcher_security_origin_ = origin;
   }
 
@@ -149,7 +150,10 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
     return ResourcePriority();
   }
 
-  void AddClient(ResourceClient*);
+  // If this Resource is already finished when AddClient is called, the
+  // ResourceClient will be notified asynchronously by a task scheduled
+  // on the given WebTaskRunner. Otherwise, the given WebTaskRunner is unused.
+  void AddClient(ResourceClient*, WebTaskRunner*);
   void RemoveClient(ResourceClient*);
   // Once called, this resource will not be canceled until load finishes
   // even if associated with no client.
@@ -204,6 +208,8 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   virtual void Finish(double finish_time, WebTaskRunner*);
   void FinishForTest() { Finish(0.0, nullptr); }
 
+  bool PassesAccessControlCheck(const SecurityOrigin&) const;
+
   virtual scoped_refptr<const SharedBuffer> ResourceBuffer() const {
     return data_;
   }
@@ -254,11 +260,8 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool HasCacheControlNoStoreHeader() const;
   bool MustReloadDueToVaryHeader(const ResourceRequest& new_request) const;
 
-  void SetIntegrityMetadata(const IntegrityMetadataSet& metadata) {
-    integrity_metadata_ = metadata;
-  }
   const IntegrityMetadataSet& IntegrityMetadata() const {
-    return integrity_metadata_;
+    return options_.integrity_metadata;
   }
   ResourceIntegrityDisposition IntegrityDisposition() const {
     return integrity_disposition_;
@@ -442,7 +445,7 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   CORSStatus cors_status_;
 
   Member<CachedMetadataHandlerImpl> cache_handler_;
-  scoped_refptr<SecurityOrigin> fetcher_security_origin_;
+  scoped_refptr<const SecurityOrigin> fetcher_security_origin_;
 
   Optional<ResourceError> error_;
 
@@ -473,7 +476,6 @@ class PLATFORM_EXPORT Resource : public GarbageCollectedFinalized<Resource>,
   bool detachable_ = false;
 
   ResourceIntegrityDisposition integrity_disposition_;
-  IntegrityMetadataSet integrity_metadata_;
   SubresourceIntegrity::ReportInfo integrity_report_info_;
 
   // Ordered list of all redirects followed while fetching this resource.

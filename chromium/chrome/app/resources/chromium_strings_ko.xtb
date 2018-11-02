@@ -11,13 +11,10 @@
 <translation id="1185134272377778587">Chromium 정보</translation>
 <translation id="1298199220304005244">Chromium OS 사용에 대한 도움말</translation>
 <translation id="1396446129537741364">Chromium이 비밀번호를 표시하려고 합니다.</translation>
-<translation id="1403254041219632970">Chromium 향후 버전에서는 더 이상 Mac OS X 10.6, 10.7, 10.8을 지원하지 않습니다.</translation>
 <translation id="1414495520565016063">Chromium에 로그인했습니다.</translation>
-<translation id="1440917365206527807">Chromium에서 이 사이트가 사용자를 다음 주소로 리디렉션하지 못하도록 차단했습니다.</translation>
 <translation id="1444754455097148408">Chromium 오픈소스 라이선스</translation>
 <translation id="1502360822835740515">Chromium을 기본 브라우저로 사용</translation>
 <translation id="151962892725702025">내 도메인에서 동기화를 사용할 수 없으므로 Chromium OS에서 데이터를 동기화하지 못했습니다.</translation>
-<translation id="1559451348202814456">더 이상 Mac OS X 10.6, 10.7, 10.8에서 Chromium을 지원하지 않으므로 Chromium이 올바르게 작동하지 않을 수 있습니다.</translation>
 <translation id="1585657529869845941"><ph name="BEGIN_BOLD" />전환하기<ph name="END_BOLD" /> 버튼이 표시되면 클릭하세요</translation>
 <translation id="1653828314016431939">확인 - 지금 다시 시작</translation>
 <translation id="1668054258064581266">Chromium에서 계정을 삭제한 후 열려 있는 탭을 새로고침해야 적용됩니다.</translation>
@@ -50,7 +47,6 @@
 <translation id="2587578672395088481">업데이트를 적용하려면 Chromium OS를 다시 시작해야 합니다.</translation>
 <translation id="2647554856022461007">Chromium에서 사용자에게 더 나은 인터넷 사용 환경을 제공하기 위해 웹 서비스를 사용할 수 있습니다. 원하는 경우 서비스를 사용 중지하실 수 있습니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="2648074677641340862">설치 중 운영체제 오류가 발생했습니다. Chromium을 다시 다운로드하세요.</translation>
-<translation id="2685838254101182273">Chromium에서 업데이트를 중단했으며 이 버전의 운영체제를 더 이상 지원하지 않습니다.</translation>
 <translation id="2705403826523567092">모든 기기에서 동기화된 나만의 맞춤 인터넷 사용 환경을 확인하려면 로그인하세요</translation>
 <translation id="2711502716910134313">Chromium 탭</translation>
 <translation id="2718390899429598676">보안 강화를 위해 Chromium에서 사용자 데이터를 암호화합니다.</translation>
@@ -108,7 +104,6 @@
 <translation id="4458285410772214805">변경사항을 적용하려면 로그아웃했다가 다시 로그인하세요.</translation>
 <translation id="4469812139324097969">한동안 사용하지 않아 Chromium의 버전이 오래되었습니다. 업데이트를 사용할 수 있으며 다시 시작하면 바로 업데이트됩니다.</translation>
 <translation id="4488554488975128561">위험한 앱과 사이트를 감지할 수 있도록 일부 시스템 정보와 페이지 콘텐츠를 Google로 자동 전송함으로써 Chromium을 더 안전하고 편리하게 사용할 수 있습니다.</translation>
-<translation id="4549794359424059447">Chromium 향후 버전에서는 더 이상 Windows XP 또는 Windows Vista를 지원하지 않습니다.</translation>
 <translation id="4567424176335768812"><ph name="USER_EMAIL_ADDRESS" />(으)로 로그인되어 있습니다. 이제 로그인한 모든 기기에서 북마크, 방문 기록 및 기타 설정에 액세스할 수 있습니다.</translation>
 <translation id="459535195905078186">Chromium 앱</translation>
 <translation id="4611246891205775468">Chromium이 이 사이트에서 마이크에 액세스하려면 권한이 필요합니다.</translation>
@@ -147,7 +142,6 @@
 <translation id="5902536751647951209">인증서가 실패했습니다. Chromium에 다시 로그인하거나 관리자에게 문의하여 자세히 알아보세요. <ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="5906655207909574370">업데이트가 거의 완료되었습니다. 업데이트를 완료하려면 기기를 다시 시작하세요.</translation>
 <translation id="5942520288919337908"><ph name="EXTENSION_NAME" />이(가) Chromium에 추가되었습니다.</translation>
-<translation id="59625444380784159">연락처 세부정보를 사용하면 Chromium에서 양식을 더욱 신속하게 작성할 수 있습니다.</translation>
 <translation id="5987687638152509985">동기화를 시작하려면 Chromium을 업데이트하세요.</translation>
 <translation id="6055895534982063517">이전보다 더 빨라진 Chromium 새 버전을 사용할 수 있습니다.</translation>
 <translation id="6063093106622310249">&amp;Chromium에서 열기</translation>
@@ -161,6 +155,7 @@
 <translation id="6334986366598267305">이제 Google 계정으로 공유 컴퓨터에서 Chromium을 손쉽게 사용할 수 있습니다.</translation>
 <translation id="6373523479360886564">Chromium을 제거하시겠습니까?</translation>
 <translation id="6394232988457703198">지금 Chromium을 다시 시작해야 합니다.</translation>
+<translation id="6400072781405947421">Mac OS X 10.9에서 더 이상 Chromium을 지원하지 않으므로 Chromium이 올바르게 작동하지 않을 수 있습니다.</translation>
 <translation id="6403826409255603130">Chromium은 빠른 속도로 웹페이지와 애플리케이션을 실행하는 웹 브라우저입니다. 빠르고 안정적이며 사용하기에 편리합니다. Chromium에 내장된 멀웨어 및 악성 코드 방지 기능을 사용하여 더욱 안전하게 웹을 검색하세요.</translation>
 <translation id="6475912303565314141">또한 Chromium을 시작할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="6485906693002546646">Chromium 콘텐츠를 동기화하기 위해 <ph name="PROFILE_EMAIL" />을(를) 사용 중입니다. 동기화 환경설정을 업데이트하거나 Google 계정 없이 Chromium을 사용하려면 <ph name="SETTINGS_LINK" />(으)로 이동하세요.</translation>
@@ -176,13 +171,13 @@
 <translation id="6734291798041940871">모든 사용자가 사용할 수 있도록 컴퓨터에 Chromium이 이미 설치되어 있습니다.</translation>
 <translation id="6810143991807788455">현재 설정을 보고하여 Chromium 개선에 참여</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
+<translation id="6863361426438995919">Google Pay(Chromium에 복사됨)</translation>
 <translation id="6893813176749746474">Chromium이 업데이트되었지만, 최소 30일 동안 사용하지 않았습니다.</translation>
 <translation id="6944967875980567883">Chromium에 로드된 모듈</translation>
 <translation id="6964305034639999644">Chromium 시크릿 창에서 링크 열기(&amp;G)</translation>
 <translation id="6970811910055250180">기기를 업데이트하는 중...</translation>
 <translation id="705851970750939768">Chromium 업데이트</translation>
 <translation id="7066436765290594559">Chromium OS에서 데이터를 동기화하지 못했습니다. 동기화 암호를 업데이트하세요.</translation>
-<translation id="707471633328071618">Google Payments(Chromium에 복사됨)</translation>
 <translation id="7162152143154757523">Chromium에서 제공하는 더욱 지능적인 맞춤법 검사 기능은 사용자가 브라우저에 입력한 내용을 Google 서버에 보내는 방식을 사용하므로 사용자가 Google 검색에서 사용하는 것과 동일한 맞춤법 검사 기술을 사용할 수 있습니다.</translation>
 <translation id="7205698830395646142">Chromium 메뉴에서 숨기기</translation>
 <translation id="7223968959479464213">작업 관리자 - Chromium</translation>
@@ -242,7 +237,6 @@ Chromium에서 설정을 복구할 수 없습니다.</translation>
 <translation id="872034308864968620">백그라운드에서 Chromium을 실행</translation>
 <translation id="8803635938069941624">Chromium OS 용어</translation>
 <translation id="8821041990367117597">계정의 로그인 세부정보가 오래되어 Chromium에서 데이터를 동기화하지 못했습니다.</translation>
-<translation id="8851136666856101339">main</translation>
 <translation id="8862326446509486874">시스템 수준의 설치 권한이 없습니다. 관리자 권한으로 설치 프로그램을 다시 실행해 보세요.</translation>
 <translation id="8897323336392112261">또한 Chromium을 시작하거나 홈 버튼을 클릭할 때 표시되는 페이지를 설정합니다.</translation>
 <translation id="8907580949721785412">Chromium에서 비밀번호를 표시하려고 합니다. 허용하려면 Windows 비밀번호를 입력하세요.</translation>

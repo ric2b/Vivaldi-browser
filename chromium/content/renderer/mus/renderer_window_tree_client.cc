@@ -17,6 +17,7 @@
 #include "content/renderer/mus/mus_embedded_frame.h"
 #include "content/renderer/mus/mus_embedded_frame_delegate.h"
 #include "content/renderer/render_frame_proxy.h"
+#include "ui/base/ui_base_switches_util.h"
 
 namespace content {
 
@@ -215,6 +216,11 @@ void RendererWindowTreeClient::OnCaptureChanged(ui::Id new_capture_window_id,
 void RendererWindowTreeClient::OnFrameSinkIdAllocated(
     ui::Id window_id,
     const viz::FrameSinkId& frame_sink_id) {
+  // When mus is not hosting viz FrameSinkIds come from the browser, so we
+  // ignore them here.
+  if (!switches::IsMusHostingViz())
+    return;
+
   for (MusEmbeddedFrame* embedded_frame : embedded_frames_) {
     if (embedded_frame->window_id_ == window_id) {
       embedded_frame->delegate_->OnMusEmbeddedFrameSinkIdAllocated(
@@ -291,6 +297,7 @@ void RendererWindowTreeClient::OnWindowInputEvent(
     uint32_t event_id,
     ui::Id window_id,
     int64_t display_id,
+    ui::Id display_root_window_id,
     const gfx::PointF& event_location_in_screen_pixel_layout,
     std::unique_ptr<ui::Event> event,
     bool matches_pointer_watcher) {
@@ -312,6 +319,7 @@ void RendererWindowTreeClient::OnWindowCursorChanged(ui::Id window_id,
 void RendererWindowTreeClient::OnWindowSurfaceChanged(
     ui::Id window_id,
     const viz::SurfaceInfo& surface_info) {
+  DCHECK(switches::IsMusHostingViz());
   for (MusEmbeddedFrame* embedded_frame : embedded_frames_) {
     if (embedded_frame->window_id_ == window_id) {
       embedded_frame->delegate_->OnMusEmbeddedFrameSurfaceChanged(surface_info);

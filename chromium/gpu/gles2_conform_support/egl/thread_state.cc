@@ -82,7 +82,12 @@ egl::ThreadState* ThreadState::Get() {
       if (!command_line->HasSwitch(switches::kDisableGpuDriverBugWorkarounds)) {
         gpu::GPUInfo gpu_info;
         gpu::CollectBasicGraphicsInfo(&gpu_info);
-        gpu_feature_info = gpu::ComputeGpuFeatureInfo(gpu_info, command_line);
+        gpu_feature_info = gpu::ComputeGpuFeatureInfo(
+            gpu_info,
+            false,  // ignore_gpu_blacklist
+            false,  // disable_gpu_driver_bug_workarounds
+            false,  // log_gpu_control_list_decisions
+            command_line);
         Context::SetPlatformGpuFeatureInfo(gpu_feature_info);
       }
 
@@ -151,7 +156,7 @@ void ThreadState::ReleaseThread() {
 
 ThreadState::ThreadState() : error_code_(EGL_SUCCESS) {}
 
-ThreadState::~ThreadState() {}
+ThreadState::~ThreadState() = default;
 
 EGLint ThreadState::ConsumeErrorCode() {
   EGLint current_error_code = error_code_;

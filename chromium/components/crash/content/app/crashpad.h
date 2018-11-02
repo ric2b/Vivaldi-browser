@@ -120,13 +120,6 @@ void GetReportsImpl(std::vector<Report>* reports);
 // The implementation function for RequestSingleCrashUpload.
 void RequestSingleCrashUploadImpl(const std::string& local_id);
 
-// Sets a crash key value.
-void SetCrashKeyValue(const base::StringPiece& key,
-                      const base::StringPiece& value);
-
-// Clears a crash key value.
-void ClearCrashKey(const base::StringPiece& key);
-
 namespace internal {
 
 #if defined(OS_WIN)
@@ -135,10 +128,9 @@ namespace internal {
 void GetPlatformCrashpadAnnotations(
     std::map<std::string, std::string>* annotations);
 
-// The thread functions that implement the InjectDumpForHungInput and
-// InjectDumpForHungInputNoCrashKeys in the target process.
-DWORD WINAPI DumpProcessForHungInputThread(void* crash_keys_str);
-DWORD WINAPI DumpProcessForHungInputNoCrashKeysThread(void* reason);
+// The thread functions that implement the InjectDumpForHungInput in the
+// target process.
+DWORD WINAPI DumpProcessForHungInputThread(void* param);
 
 #if defined(ARCH_CPU_X86_64)
 // V8 support functions.

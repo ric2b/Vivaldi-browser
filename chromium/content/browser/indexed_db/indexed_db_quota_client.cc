@@ -13,19 +13,21 @@
 #include "content/public/browser/browser_thread.h"
 #include "net/base/url_util.h"
 #include "storage/browser/database/database_util.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/origin.h"
 
+using blink::mojom::StorageType;
 using storage::QuotaClient;
 using storage::DatabaseUtil;
 
 namespace content {
 namespace {
 
-storage::QuotaStatusCode DeleteOriginDataOnIndexedDBThread(
+blink::mojom::QuotaStatusCode DeleteOriginDataOnIndexedDBThread(
     IndexedDBContextImpl* context,
     const GURL& origin) {
   context->DeleteForOrigin(origin);
-  return storage::kQuotaStatusOk;
+  return blink::mojom::QuotaStatusCode::kOk;
 }
 
 int64_t GetOriginUsageOnIndexedDBThread(IndexedDBContextImpl* context,
@@ -73,13 +75,13 @@ QuotaClient::ID IndexedDBQuotaClient::id() const { return kIndexedDatabase; }
 void IndexedDBQuotaClient::OnQuotaManagerDestroyed() { delete this; }
 
 void IndexedDBQuotaClient::GetOriginUsage(const GURL& origin_url,
-                                          storage::StorageType type,
+                                          StorageType type,
                                           const GetUsageCallback& callback) {
   DCHECK(!callback.is_null());
   DCHECK(indexed_db_context_.get());
 
   // IndexedDB is in the temp namespace for now.
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     callback.Run(0);
     return;
   }
@@ -92,13 +94,13 @@ void IndexedDBQuotaClient::GetOriginUsage(const GURL& origin_url,
 }
 
 void IndexedDBQuotaClient::GetOriginsForType(
-    storage::StorageType type,
+    StorageType type,
     const GetOriginsCallback& callback) {
   DCHECK(!callback.is_null());
   DCHECK(indexed_db_context_.get());
 
   // All databases are in the temp namespace for now.
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     callback.Run(std::set<GURL>());
     return;
   }
@@ -113,14 +115,14 @@ void IndexedDBQuotaClient::GetOriginsForType(
 }
 
 void IndexedDBQuotaClient::GetOriginsForHost(
-    storage::StorageType type,
+    StorageType type,
     const std::string& host,
     const GetOriginsCallback& callback) {
   DCHECK(!callback.is_null());
   DCHECK(indexed_db_context_.get());
 
   // All databases are in the temp namespace for now.
-  if (type != storage::kStorageTypeTemporary) {
+  if (type != StorageType::kTemporary) {
     callback.Run(std::set<GURL>());
     return;
   }
@@ -135,10 +137,10 @@ void IndexedDBQuotaClient::GetOriginsForHost(
 }
 
 void IndexedDBQuotaClient::DeleteOriginData(const GURL& origin,
-                                            storage::StorageType type,
+                                            StorageType type,
                                             const DeletionCallback& callback) {
-  if (type != storage::kStorageTypeTemporary) {
-    callback.Run(storage::kQuotaStatusOk);
+  if (type != StorageType::kTemporary) {
+    callback.Run(blink::mojom::QuotaStatusCode::kOk);
     return;
   }
 
@@ -149,8 +151,8 @@ void IndexedDBQuotaClient::DeleteOriginData(const GURL& origin,
       callback);
 }
 
-bool IndexedDBQuotaClient::DoesSupport(storage::StorageType type) const {
-  return type == storage::kStorageTypeTemporary;
+bool IndexedDBQuotaClient::DoesSupport(StorageType type) const {
+  return type == StorageType::kTemporary;
 }
 
 }  // namespace content

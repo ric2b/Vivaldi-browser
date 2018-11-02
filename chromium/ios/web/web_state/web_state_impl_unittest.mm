@@ -14,8 +14,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
-#include "base/memory/ptr_util.h"
 #import "base/test/ios/wait_util.h"
+#include "ios/web/navigation/placeholder_navigation_util.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/load_committed_details.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -184,7 +184,7 @@ class WebStateImplTest : public web::WebTest {
  protected:
   WebStateImplTest() : web::WebTest() {
     web::WebState::CreateParams params(GetBrowserState());
-    web_state_ = base::MakeUnique<web::WebStateImpl>(params);
+    web_state_ = std::make_unique<web::WebStateImpl>(params);
   }
 
   std::unique_ptr<WebStateImpl> web_state_;
@@ -326,12 +326,14 @@ TEST_F(WebStateImplTest, ObserverTest) {
   // Test that DocumentSubmitted() is called.
   ASSERT_FALSE(observer->submit_document_info());
   const std::string kTestFormName("form-name");
-  BOOL user_initiated = true;
-  web_state_->OnDocumentSubmitted(kTestFormName, user_initiated);
+  bool user_initiated = true;
+  bool is_main_frame = false;
+  web_state_->OnDocumentSubmitted(kTestFormName, user_initiated, is_main_frame);
   ASSERT_TRUE(observer->submit_document_info());
   EXPECT_EQ(web_state_.get(), observer->submit_document_info()->web_state);
   EXPECT_EQ(kTestFormName, observer->submit_document_info()->form_name);
   EXPECT_EQ(user_initiated, observer->submit_document_info()->user_initiated);
+  EXPECT_EQ(is_main_frame, observer->submit_document_info()->is_main_frame);
 
   // Test that FormActivityRegistered() is called.
   ASSERT_FALSE(observer->form_activity_info());
@@ -342,6 +344,7 @@ TEST_F(WebStateImplTest, ObserverTest) {
   params.type = "type";
   params.value = "value";
   params.input_missing = true;
+  params.is_main_frame = false;
   web_state_->OnFormActivityRegistered(params);
   ASSERT_TRUE(observer->form_activity_info());
   EXPECT_EQ(web_state_.get(), observer->form_activity_info()->web_state);
@@ -354,6 +357,7 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_EQ(params.type, observer->form_activity_info()->form_activity.type);
   EXPECT_EQ(params.value, observer->form_activity_info()->form_activity.value);
   EXPECT_TRUE(observer->form_activity_info()->form_activity.input_missing);
+  EXPECT_FALSE(observer->form_activity_info()->form_activity.is_main_frame);
 
   // Test that FaviconUrlUpdated() is called.
   ASSERT_FALSE(observer->update_favicon_url_candidates_info());
@@ -458,7 +462,7 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_TRUE(observer->load_page_info()->success);
 
   // Test that OnTitleChanged() is called.
-  observer = base::MakeUnique<TestWebStateObserver>(web_state_.get());
+  observer = std::make_unique<TestWebStateObserver>(web_state_.get());
   ASSERT_FALSE(observer->title_was_set_info());
   web_state_->OnTitleChanged();
   ASSERT_TRUE(observer->title_was_set_info());
@@ -470,6 +474,28 @@ TEST_F(WebStateImplTest, ObserverTest) {
   EXPECT_TRUE(observer->web_state_destroyed_info());
 
   EXPECT_EQ(nullptr, observer->web_state());
+}
+
+// Tests that placeholder navigations are not visible to WebStateObservers.
+TEST_F(WebStateImplTest, PlaceholderNavigationNotExposedToObservers) {
+  TestWebStateObserver observer(web_state_.get());
+  FakeNavigationContext context;
+  context.SetUrl(placeholder_navigation_util::CreatePlaceholderUrlForUrl(
+      GURL("chrome://newtab")));
+
+  // Test that OnPageLoaded() is not called.
+  web_state_->OnPageLoaded(context.GetUrl(), true /* load_success */);
+  EXPECT_FALSE(observer.load_page_info());
+  web_state_->OnPageLoaded(context.GetUrl(), false /* load_success */);
+  EXPECT_FALSE(observer.load_page_info());
+
+  // Test that OnNavigationStarted() is not called.
+  web_state_->OnNavigationStarted(&context);
+  EXPECT_FALSE(observer.did_start_navigation_info());
+
+  // Test that OnNavigationFinished() is not called.
+  web_state_->OnNavigationFinished(&context);
+  EXPECT_FALSE(observer.did_finish_navigation_info());
 }
 
 // Tests that WebStateDelegate methods appropriately called.
@@ -801,7 +827,7 @@ TEST_F(WebStateImplTest, FaviconUpdateForSameDocumentNavigations) {
   EXPECT_FALSE(observer->update_favicon_url_candidates_info());
 
   // Callback is called when icons were fetched.
-  observer = base::MakeUnique<TestWebStateObserver>(web_state_.get());
+  observer = std::make_unique<TestWebStateObserver>(web_state_.get());
   web::FaviconURL favicon_url(GURL("https://chromium.test/"),
                               web::FaviconURL::IconType::kTouchIcon,
                               {gfx::Size(5, 6)});

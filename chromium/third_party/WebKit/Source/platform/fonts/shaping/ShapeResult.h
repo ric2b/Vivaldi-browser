@@ -47,6 +47,7 @@ struct hb_buffer_t;
 
 namespace blink {
 
+struct CharacterRange;
 class Font;
 template <typename TextContainerType>
 class PLATFORM_EXPORT ShapeResultSpacing;
@@ -78,6 +79,7 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
   // even when the result is in vertical flow.
   const FloatRect& Bounds() const { return glyph_bounding_box_; }
   unsigned NumCharacters() const { return num_characters_; }
+  CharacterRange GetCharacterRange(unsigned from, unsigned to) const;
   // The character start/end index of a range shape result.
   unsigned StartIndexForResult() const;
   unsigned EndIndexForResult() const;
@@ -122,6 +124,8 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
                                          const TextRun&) const;
 
   void CopyRange(unsigned start, unsigned end, ShapeResult*) const;
+  scoped_refptr<ShapeResult> SubRange(unsigned start_offset,
+                                      unsigned end_offset) const;
 
   String ToString() const;
   void ToString(StringBuilder*) const;
@@ -136,10 +140,16 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
 #endif
 
  protected:
-
+  ShapeResult(const SimpleFontData*, unsigned num_characters, TextDirection);
   ShapeResult(const Font*, unsigned num_characters, TextDirection);
   ShapeResult(const ShapeResult&);
 
+  static scoped_refptr<ShapeResult> Create(const SimpleFontData* font_data,
+                                           unsigned num_characters,
+                                           TextDirection direction) {
+    return base::AdoptRef(
+        new ShapeResult(font_data, num_characters, direction));
+  }
   static scoped_refptr<ShapeResult> Create(const ShapeResult& other) {
     return base::AdoptRef(new ShapeResult(other));
   }
@@ -158,12 +168,13 @@ class PLATFORM_EXPORT ShapeResult : public RefCounted<ShapeResult> {
                  unsigned num_glyphs,
                  hb_buffer_t*);
   void InsertRun(std::unique_ptr<ShapeResult::RunInfo>);
+  void InsertRunForIndex(unsigned start_character_index);
   void ReorderRtlRuns(unsigned run_size_before);
 
   float width_;
   FloatRect glyph_bounding_box_;
   Vector<std::unique_ptr<RunInfo>> runs_;
-  scoped_refptr<SimpleFontData> primary_font_;
+  scoped_refptr<const SimpleFontData> primary_font_;
 
   unsigned num_characters_;
   unsigned num_glyphs_ : 30;

@@ -5,16 +5,12 @@
 #ifndef IOS_CHROME_BROWSER_UI_PAGE_INFO_PAGE_INFO_LEGACY_COORDINATOR_H_
 #define IOS_CHROME_BROWSER_UI_PAGE_INFO_PAGE_INFO_LEGACY_COORDINATOR_H_
 
-#import "ios/chrome/browser/chrome_coordinator.h"
+#import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
 @class CommandDispatcher;
 @protocol PageInfoPresentation;
 @class TabModel;
 @protocol UrlLoader;
-
-namespace ios {
-class ChromeBrowserState;
-}  // namespace ios
 
 // Notification sent when the page info is shown.
 extern NSString* const kPageInfoWillShowNotification;
@@ -26,9 +22,6 @@ extern NSString* const kPageInfoWillHideNotification;
 // as the target for PageInfoCommmands. These commands can then trigger the
 // showing/hiding of the Page Info UI.
 @interface PageInfoLegacyCoordinator : ChromeCoordinator
-
-// The browser state to be used to display Page Info.
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
 
 // The dispatcher for this coordinator. When |dispatcher| is set, the
 // coordinator will register itself as the target for PageInfoCommands.

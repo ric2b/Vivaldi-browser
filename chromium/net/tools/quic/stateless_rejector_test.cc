@@ -10,6 +10,7 @@
 #include "net/quic/core/crypto/crypto_handshake_message.h"
 #include "net/quic/core/crypto/proof_source.h"
 #include "net/quic/core/quic_utils.h"
+#include "net/quic/core/tls_server_handshaker.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
 #include "net/quic/platform/api/quic_ptr_util.h"
@@ -80,7 +81,8 @@ class StatelessRejectorTest : public QuicTestWithParam<TestParams> {
       : proof_source_(crypto_test_utils::ProofSourceForTesting()),
         config_(QuicCryptoServerConfig::TESTING,
                 QuicRandom::GetInstance(),
-                crypto_test_utils::ProofSourceForTesting()),
+                crypto_test_utils::ProofSourceForTesting(),
+                TlsServerHandshaker::CreateSslCtx()),
         config_peer_(&config_),
         compressed_certs_cache_(
             QuicCompressedCertsCache::kQuicCompressedCertsCacheSize),
@@ -94,10 +96,12 @@ class StatelessRejectorTest : public QuicTestWithParam<TestParams> {
             kDefaultMaxPacketSize,
             QuicSocketAddress(QuicIpAddress::Loopback4(), 12345),
             QuicSocketAddress(QuicIpAddress::Loopback4(), 443))) {
-    FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support =
-        GetParam().flags == ENABLED || GetParam().flags == CHEAP_DISABLED;
-    FLAGS_quic_reloadable_flag_quic_use_cheap_stateless_rejects =
-        GetParam().flags == ENABLED || GetParam().flags == STATELESS_DISABLED;
+    SetQuicReloadableFlag(
+        enable_quic_stateless_reject_support,
+        GetParam().flags == ENABLED || GetParam().flags == CHEAP_DISABLED);
+    SetQuicReloadableFlag(
+        quic_use_cheap_stateless_rejects,
+        GetParam().flags == ENABLED || GetParam().flags == STATELESS_DISABLED);
 
     // Add a new primary config.
     std::unique_ptr<CryptoHandshakeMessage> msg(config_.AddDefaultConfig(

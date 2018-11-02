@@ -38,6 +38,7 @@ class ExtensionAppItem : public ChromeAppListItem,
   static const char kItemType[];
 
   ExtensionAppItem(Profile* profile,
+                   AppListModelUpdater* model_updater,
                    const app_list::AppListSyncableService::SyncItem* sync_item,
                    const std::string& extension_id,
                    const std::string& extension_name,
@@ -77,6 +78,7 @@ class ExtensionAppItem : public ChromeAppListItem,
   void Activate(int event_flags) override;
   ui::MenuModel* GetContextMenuModel() override;
   const char* GetItemType() const override;
+  size_t BadgedItemCount() const override;
 
   // Overridden from app_list::AppContextMenuDelegate:
   void ExecuteLaunchCommand(int event_flags) override;

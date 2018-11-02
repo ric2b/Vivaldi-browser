@@ -9,7 +9,6 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/string16.h"
 #include "components/omnibox/browser/omnibox_popup_view.h"
 #import "ios/chrome/browser/ui/omnibox/omnibox_popup_mediator.h"
@@ -17,26 +16,18 @@
 #import "ios/chrome/browser/ui/omnibox/omnibox_popup_view_controller.h"
 
 class OmniboxEditModel;
-@class OmniboxPopupViewController;
+@class OmniboxPopupMediator;
 class OmniboxPopupModel;
 class OmniboxPopupViewSuggestionsDelegate;
-@protocol OmniboxPopupPositioner;
 struct AutocompleteMatch;
-@class OmniboxPopupPresenter;
-
-namespace ios {
-class ChromeBrowserState;
-}  // namespace ios
 
 // iOS implementation of AutocompletePopupView.
 class OmniboxPopupViewIOS : public OmniboxPopupView,
                             public OmniboxPopupMediatorDelegate,
                             public OmniboxPopupProvider {
  public:
-  OmniboxPopupViewIOS(ios::ChromeBrowserState* browser_state,
-                      OmniboxEditModel* edit_model,
-                      OmniboxPopupViewSuggestionsDelegate* delegate,
-                      id<OmniboxPopupPositioner> positioner);
+  OmniboxPopupViewIOS(OmniboxEditModel* edit_model,
+                      OmniboxPopupViewSuggestionsDelegate* delegate);
   ~OmniboxPopupViewIOS() override;
 
   // Popup model used for this.
@@ -65,13 +56,12 @@ class OmniboxPopupViewIOS : public OmniboxPopupView,
   void OnMatchSelectedForDeletion(const AutocompleteMatch& match) override;
   void OnScroll() override;
 
+  void SetMediator(OmniboxPopupMediator* mediator) { mediator_ = mediator; }
+
  private:
   std::unique_ptr<OmniboxPopupModel> model_;
   OmniboxPopupViewSuggestionsDelegate* delegate_;  // weak
-  base::scoped_nsobject<OmniboxPopupMediator> mediator_;
-  base::scoped_nsobject<OmniboxPopupPresenter> presenter_;
-  base::scoped_nsobject<OmniboxPopupViewController> popup_controller_;
-  bool is_open_;
+  OmniboxPopupMediator* mediator_;
 };
 
 #endif  // IOS_CHROME_BROWSER_UI_OMNIBOX_OMNIBOX_POPUP_VIEW_IOS_H_

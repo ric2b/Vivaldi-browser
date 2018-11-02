@@ -7,7 +7,9 @@
 
 #include <limits>
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #include "base/files/file_path.h"
+#endif
 #include "base/time/time.h"
 #include "media/base/demuxer.h"
 #include "media/base/pipeline_status.h"
@@ -78,7 +80,9 @@ class MockMediaSource {
     expect_append_success_ = expectation;
   }
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   const base::FilePath file_path() { return file_path_; }
+#endif
 
   void InitSegmentReceived(std::unique_ptr<MediaTracks> tracks);
   MOCK_METHOD1(InitSegmentReceivedMock, void(std::unique_ptr<MediaTracks>&));
@@ -90,7 +94,9 @@ class MockMediaSource {
   scoped_refptr<DecoderBuffer> file_data_;
   size_t current_position_;
   size_t initial_append_size_;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   base::FilePath file_path_;
+#endif
   std::string mimetype_;
   ChunkDemuxer* chunk_demuxer_;
   std::unique_ptr<Demuxer> owned_chunk_demuxer_;

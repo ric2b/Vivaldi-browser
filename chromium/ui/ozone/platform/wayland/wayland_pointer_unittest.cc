@@ -9,9 +9,9 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
 #include "ui/ozone/platform/wayland/fake_server.h"
-#include "ui/ozone/platform/wayland/mock_platform_window_delegate.h"
 #include "ui/ozone/platform/wayland/wayland_test.h"
 #include "ui/ozone/platform/wayland/wayland_window.h"
+#include "ui/ozone/test/mock_platform_window_delegate.h"
 
 using ::testing::SaveArg;
 using ::testing::_;
@@ -43,7 +43,7 @@ class WaylandPointerTest : public WaylandTest {
 
 TEST_P(WaylandPointerTest, Leave) {
   MockPlatformWindowDelegate other_delegate;
-  WaylandWindow other_window(&other_delegate, &connection,
+  WaylandWindow other_window(&other_delegate, connection.get(),
                              gfx::Rect(0, 0, 10, 10));
   gfx::AcceleratedWidget other_widget = gfx::kNullAcceleratedWidget;
   EXPECT_CALL(other_delegate, OnAcceleratedWidgetAvailable(_, _))

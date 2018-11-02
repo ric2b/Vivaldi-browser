@@ -14,7 +14,6 @@ namespace web {
 
 void FakeNavigationManagerDelegate::ClearTransientContent() {}
 void FakeNavigationManagerDelegate::RecordPageStateInNavigationItem() {}
-void FakeNavigationManagerDelegate::WillLoadCurrentItemWithUrl(const GURL&) {}
 void FakeNavigationManagerDelegate::OnGoToIndexSameDocumentNavigation(
     NavigationInitiationType type) {}
 void FakeNavigationManagerDelegate::WillChangeUserAgentType() {}
@@ -33,6 +32,7 @@ id<CRWWebViewNavigationProxy>
 FakeNavigationManagerDelegate::GetWebViewNavigationProxy() const {
   return test_web_view_;
 }
+void FakeNavigationManagerDelegate::RemoveWebView() {}
 
 void FakeNavigationManagerDelegate::SetWebViewNavigationProxy(id web_view) {
   test_web_view_ = web_view;

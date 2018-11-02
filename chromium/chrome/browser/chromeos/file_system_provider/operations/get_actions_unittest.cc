@@ -13,8 +13,8 @@
 #include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/file_system_provider/icon_set.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/get_metadata.h"
 #include "chrome/browser/chromeos/file_system_provider/operations/test_util.h"
 #include "chrome/common/extensions/api/file_system_provider.h"
@@ -59,7 +59,7 @@ class CallbackLogger {
   virtual ~CallbackLogger() {}
 
   void OnGetActions(const Actions& actions, base::File::Error result) {
-    events_.push_back(base::MakeUnique<Event>(actions, result));
+    events_.push_back(std::make_unique<Event>(actions, result));
   }
 
   const std::vector<std::unique_ptr<Event>>& events() const { return events_; }
@@ -101,7 +101,7 @@ class FileSystemProviderOperationsGetActionsTest : public testing::Test {
     file_system_info_ = ProvidedFileSystemInfo(
         kExtensionId, MountOptions(kFileSystemId, "" /* display_name */),
         base::FilePath(), false /* configurable */, true /* watchable */,
-        extensions::SOURCE_FILE);
+        extensions::SOURCE_FILE, IconSet());
     entry_paths_.clear();
     entry_paths_.push_back(base::FilePath(kDirectoryPath));
     entry_paths_.push_back(base::FilePath(kFilePath));

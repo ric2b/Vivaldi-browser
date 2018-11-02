@@ -15,6 +15,7 @@
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/ref_counted_memory.h"
+#include "base/process/process_handle.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -26,6 +27,7 @@
 #include "content/browser/devtools/protocol/devtools_download_manager_helper.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/frame_host/navigation_request.h"
+#include "content/browser/manifest/manifest_manager_host.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -45,6 +47,7 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/result_codes.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -286,13 +289,24 @@ Response PageHandler::Disable() {
   return Response::FallThrough();
 }
 
+Response PageHandler::Crash() {
+  WebContentsImpl* web_contents = GetWebContents();
+  if (!web_contents)
+    return Response::Error("Not attached to a page");
+  if (web_contents->IsCrashed())
+    return Response::Error("The target has already crashed");
+  if (web_contents->GetMainFrame()->frame_tree_node()->navigation_request())
+    return Response::Error("Page has pending navigations, not killing");
+  return Response::FallThrough();
+}
+
 Response PageHandler::Reload(Maybe<bool> bypassCache,
                              Maybe<std::string> script_to_evaluate_on_load) {
   WebContentsImpl* web_contents = GetWebContents();
   if (!web_contents)
     return Response::InternalError();
-
   if (web_contents->IsCrashed() ||
+      web_contents->GetURL().scheme() == url::kDataScheme ||
       (web_contents->GetController().GetVisibleEntry() &&
        web_contents->GetController().GetVisibleEntry()->IsViewSourceMode())) {
     web_contents->GetController().Reload(bypassCache.fromMaybe(false)
@@ -354,18 +368,17 @@ void PageHandler::Navigate(const std::string& url,
       gurl,
       Referrer(GURL(referrer.fromMaybe("")), blink::kWebReferrerPolicyDefault),
       type, std::string());
-  if (IsBrowserSideNavigationEnabled()) {
-    if (navigate_callback_) {
-      std::string frame_id =
-          web_contents->GetMainFrame()->GetDevToolsFrameToken().ToString();
-      std::string error_string = net::ErrorToString(net::ERR_ABORTED);
-      navigate_callback_->sendSuccess(frame_id, Maybe<std::string>(),
-                                      Maybe<std::string>(error_string));
-    }
-    navigate_callback_ = std::move(callback);
-    return;
+  std::string frame_id =
+      web_contents->GetMainFrame()->GetDevToolsFrameToken().ToString();
+  if (navigate_callback_) {
+    std::string error_string = net::ErrorToString(net::ERR_ABORTED);
+    navigate_callback_->sendSuccess(frame_id, Maybe<std::string>(),
+                                    Maybe<std::string>(error_string));
   }
-  callback->fallThrough();
+  if (web_contents->GetMainFrame()->frame_tree_node()->navigation_request())
+    navigate_callback_ = std::move(callback);
+  else
+    callback->sendSuccess(frame_id, Maybe<std::string>(), Maybe<std::string>());
 }
 
 void PageHandler::NavigationReset(NavigationRequest* navigation_request) {
@@ -593,6 +606,8 @@ void PageHandler::PrintToPDF(Maybe<bool> landscape,
                              Maybe<double> margin_right,
                              Maybe<String> page_ranges,
                              Maybe<bool> ignore_invalid_page_ranges,
+                             Maybe<String> header_template,
+                             Maybe<String> footer_template,
                              std::unique_ptr<PrintToPDFCallback> callback) {
   callback->sendFailure(Response::Error("PrintToPDF is not implemented"));
   return;
@@ -729,6 +744,18 @@ Response PageHandler::SetDownloadBehavior(const std::string& behavior,
   }
 
   return Response::OK();
+}
+
+void PageHandler::GetAppManifest(
+    std::unique_ptr<GetAppManifestCallback> callback) {
+  WebContentsImpl* web_contents = GetWebContents();
+  if (!web_contents || !web_contents->GetManifestManagerHost()) {
+    callback->sendFailure(Response::Error("Cannot retrieve manifest"));
+    return;
+  }
+  web_contents->GetManifestManagerHost()->RequestManifestDebugInfo(
+      base::BindOnce(&PageHandler::GotManifest, weak_factory_.GetWeakPtr(),
+                     std::move(callback)));
 }
 
 WebContentsImpl* PageHandler::GetWebContents() {
@@ -894,6 +921,30 @@ void PageHandler::ScreenshotCaptured(
   } else {
     callback->sendSuccess(EncodeImage(image, format, quality));
   }
+}
+
+void PageHandler::GotManifest(std::unique_ptr<GetAppManifestCallback> callback,
+                              const GURL& manifest_url,
+                              blink::mojom::ManifestDebugInfoPtr debug_info) {
+  std::unique_ptr<Array<Page::AppManifestError>> errors =
+      Array<Page::AppManifestError>::create();
+  bool failed = true;
+  if (debug_info) {
+    failed = false;
+    for (const auto& error : debug_info->errors) {
+      errors->addItem(Page::AppManifestError::Create()
+                          .SetMessage(error->message)
+                          .SetCritical(error->critical)
+                          .SetLine(error->line)
+                          .SetColumn(error->column)
+                          .Build());
+      if (error->critical)
+        failed = true;
+    }
+  }
+  callback->sendSuccess(
+      manifest_url.possibly_invalid_spec(), std::move(errors),
+      failed ? Maybe<std::string>() : debug_info->raw_manifest);
 }
 
 Response PageHandler::StopLoading() {

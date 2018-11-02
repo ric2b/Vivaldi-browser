@@ -6,6 +6,7 @@
 
 #include "base/message_loop/message_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 
@@ -16,6 +17,8 @@ namespace {
 constexpr TaskService::InstanceId kInvalidInstanceId = -1;
 
 }  // namespace
+
+constexpr TaskService::RunnerId TaskService::kDefaultRunnerId;
 
 TaskService::TaskService()
     : no_tasks_in_flight_cv_(&tasks_in_flight_lock_),
@@ -65,6 +68,8 @@ bool TaskService::UnbindInstance() {
   // But invoked tasks might be still running here. To ensure no task runs on
   // quitting this method, wait for all tasks to complete.
   base::AutoLock tasks_in_flight_auto_lock(tasks_in_flight_lock_);
+  // TODO(https://crbug.com/796830): Remove sync operations on the I/O thread.
+  base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope allow_wait;
   while (tasks_in_flight_ > 0)
     no_tasks_in_flight_cv_.Wait();
 
@@ -87,14 +92,7 @@ bool TaskService::IsOnTaskRunner(RunnerId runner_id) {
 }
 
 void TaskService::PostStaticTask(RunnerId runner_id, base::OnceClosure task) {
-  {
-    // Disallow to post a task when no instance is bound, so that new threads
-    // can not be created after the thread finalization in the destructor.
-    base::AutoLock lock(lock_);
-    if (bound_instance_id_ == kInvalidInstanceId)
-      return;
-  }
-  scoped_refptr<base::SingleThreadTaskRunner> runner;
+  DCHECK_NE(kDefaultRunnerId, runner_id);
   GetTaskRunner(runner_id)->PostTask(FROM_HERE, std::move(task));
 }
 
@@ -139,7 +137,7 @@ scoped_refptr<base::SingleThreadTaskRunner> TaskService::GetTaskRunner(
 
   size_t thread = runner_id - 1;
   if (!threads_[thread]) {
-    threads_[thread] = base::MakeUnique<base::Thread>(
+    threads_[thread] = std::make_unique<base::Thread>(
         base::StringPrintf("MidiService_TaskService_Thread(%zu)", runner_id));
     base::Thread::Options options;
 #if defined(OS_WIN)

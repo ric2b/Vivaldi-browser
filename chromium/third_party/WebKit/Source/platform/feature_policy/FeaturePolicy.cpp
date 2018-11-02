@@ -21,7 +21,7 @@ namespace {
 // TODO(loonybear): Deprecate the methods in this namesapce when deprecating old
 // allow syntax.
 bool IsValidOldAllowSyntax(const String& policy,
-                           scoped_refptr<SecurityOrigin> src_origin) {
+                           scoped_refptr<const SecurityOrigin> src_origin) {
   // Old syntax enable all features on src_origin, If src_origin does not exist
   // (example, http header does not have a src_origin), then the syntax cannot
   // be valid.
@@ -85,7 +85,7 @@ ParsedFeaturePolicy ParseOldAllowSyntax(const String& policy,
 
 ParsedFeaturePolicy ParseFeaturePolicyHeader(
     const String& policy,
-    scoped_refptr<SecurityOrigin> origin,
+    scoped_refptr<const SecurityOrigin> origin,
     Vector<String>* messages) {
   return ParseFeaturePolicy(policy, origin, nullptr, messages,
                             GetDefaultFeatureNameMap());
@@ -93,8 +93,8 @@ ParsedFeaturePolicy ParseFeaturePolicyHeader(
 
 ParsedFeaturePolicy ParseFeaturePolicyAttribute(
     const String& policy,
-    scoped_refptr<SecurityOrigin> self_origin,
-    scoped_refptr<SecurityOrigin> src_origin,
+    scoped_refptr<const SecurityOrigin> self_origin,
+    scoped_refptr<const SecurityOrigin> src_origin,
     Vector<String>* messages,
     bool* old_syntax) {
   return ParseFeaturePolicy(policy, self_origin, src_origin, messages,
@@ -103,8 +103,8 @@ ParsedFeaturePolicy ParseFeaturePolicyAttribute(
 
 ParsedFeaturePolicy ParseFeaturePolicy(
     const String& policy,
-    scoped_refptr<SecurityOrigin> self_origin,
-    scoped_refptr<SecurityOrigin> src_origin,
+    scoped_refptr<const SecurityOrigin> self_origin,
+    scoped_refptr<const SecurityOrigin> src_origin,
     Vector<String>* messages,
     const FeatureNameMap& feature_names,
     bool* old_syntax) {
@@ -203,8 +203,12 @@ bool IsSupportedInFeaturePolicy(FeaturePolicyFeature feature) {
     case FeaturePolicyFeature::kPayment:
     case FeaturePolicyFeature::kUsb:
     case FeaturePolicyFeature::kWebVr:
-      return true;
+    case FeaturePolicyFeature::kAccelerometer:
+    case FeaturePolicyFeature::kAmbientLightSensor:
+    case FeaturePolicyFeature::kGyroscope:
+    case FeaturePolicyFeature::kMagnetometer:
     case FeaturePolicyFeature::kSyncXHR:
+      return true;
     case FeaturePolicyFeature::kVibrate:
       return RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled();
     default:
@@ -228,7 +232,15 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
     default_feature_name_map.Set("geolocation",
                                  FeaturePolicyFeature::kGeolocation);
     default_feature_name_map.Set("midi", FeaturePolicyFeature::kMidiFeature);
+    default_feature_name_map.Set("sync-xhr", FeaturePolicyFeature::kSyncXHR);
     default_feature_name_map.Set("vr", FeaturePolicyFeature::kWebVr);
+    default_feature_name_map.Set("accelerometer",
+                                 FeaturePolicyFeature::kAccelerometer);
+    default_feature_name_map.Set("ambient-light-sensor",
+                                 FeaturePolicyFeature::kAmbientLightSensor);
+    default_feature_name_map.Set("gyroscope", FeaturePolicyFeature::kGyroscope);
+    default_feature_name_map.Set("magnetometer",
+                                 FeaturePolicyFeature::kMagnetometer);
     if (RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled()) {
       default_feature_name_map.Set("vibrate", FeaturePolicyFeature::kVibrate);
       default_feature_name_map.Set("cookie",
@@ -239,7 +251,6 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
                                    FeaturePolicyFeature::kDocumentWrite);
       default_feature_name_map.Set("sync-script",
                                    FeaturePolicyFeature::kSyncScript);
-      default_feature_name_map.Set("sync-xhr", FeaturePolicyFeature::kSyncXHR);
     }
     if (RuntimeEnabledFeatures::FeaturePolicyAutoplayFeatureEnabled()) {
       default_feature_name_map.Set("autoplay", FeaturePolicyFeature::kAutoplay);

@@ -101,6 +101,7 @@ class CORE_EXPORT ContentSecurityPolicy
     kMediaSrc,
     kObjectSrc,
     kPluginTypes,
+    kPrefetchSrc,
     kReportTo,
     kReportURI,
     kRequireSRIFor,
@@ -201,6 +202,12 @@ class CORE_EXPORT ContentSecurityPolicy
           SecurityViolationReportingPolicy::kReport) const;
 
   bool AllowObjectFromSource(
+      const KURL&,
+      RedirectStatus = RedirectStatus::kNoRedirect,
+      SecurityViolationReportingPolicy =
+          SecurityViolationReportingPolicy::kReport,
+      CheckHeaderType = CheckHeaderType::kCheckAll) const;
+  bool AllowPrefetchFromSource(
       const KURL&,
       RedirectStatus = RedirectStatus::kNoRedirect,
       SecurityViolationReportingPolicy =
@@ -325,6 +332,7 @@ class CORE_EXPORT ContentSecurityPolicy
   void SetOverrideURLForSelf(const KURL&);
 
   bool IsActive() const;
+  bool IsActiveForConnections() const;
 
   // If a frame is passed in, the message will be logged to its active
   // document's console.  Otherwise, the message will be logged to this object's
@@ -418,7 +426,7 @@ class CORE_EXPORT ContentSecurityPolicy
   // experimental EmbeddingCSP feature
   // Please, see https://w3c.github.io/webappsec-csp/embedded/#origin-allowed.
   static bool ShouldEnforceEmbeddersPolicy(const ResourceResponse&,
-                                           SecurityOrigin*);
+                                           const SecurityOrigin*);
 
   static const char* GetDirectiveName(const DirectiveType&);
   static DirectiveType GetDirectiveType(const String& name);

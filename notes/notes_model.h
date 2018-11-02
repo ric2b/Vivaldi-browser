@@ -124,8 +124,6 @@ class Notes_Model : public KeyedService {
 
   void DoneLoading(std::unique_ptr<NotesLoadDetails> details);
 
-  void StartUpdatingNode(const Notes_Node* node);
-
   void SetURL(const Notes_Node* node, const GURL& url);
   void SetTitle(const Notes_Node* node, const base::string16& title);
 
@@ -135,7 +133,8 @@ class Notes_Model : public KeyedService {
 
   void SetContent(const Notes_Node* node, const base::string16& content);
 
-  void FinishedUpdatingNode(const Notes_Node* node);
+  void ClearAttachments(const Notes_Node* node);
+  void AddAttachment(const Notes_Node* node, NoteAttachment&& attachment);
 
   // Returns, by reference in |notes|, the set of notes urls and their titles
   // and content. This returns the unique set of URLs. For example, if two notes

@@ -18,7 +18,7 @@
 #include "ui/display/display_layout.h"
 #include "ui/display/manager/display_manager.h"
 
-DECLARE_UI_CLASS_PROPERTY_TYPE(ash::ScreenRotationAnimator*);
+DEFINE_UI_CLASS_PROPERTY_TYPE(ash::ScreenRotationAnimator*);
 
 namespace {
 
@@ -203,7 +203,9 @@ void DisplayConfigurationController::SetDisplayLayoutImpl(
 }
 
 void DisplayConfigurationController::SetMirrorModeImpl(bool mirror) {
-  display_manager_->SetMirrorMode(mirror);
+  display_manager_->SetMirrorMode(
+      mirror ? display::MirrorMode::kNormal : display::MirrorMode::kOff,
+      base::nullopt);
   if (display_animator_)
     display_animator_->StartFadeInAnimation();
 }

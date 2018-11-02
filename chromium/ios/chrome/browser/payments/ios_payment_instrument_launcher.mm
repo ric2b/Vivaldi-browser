@@ -5,12 +5,12 @@
 #import "ios/chrome/browser/payments/ios_payment_instrument_launcher.h"
 
 #include <map>
+#include <memory>
 
 #include "base/base64.h"
 #include "base/ios/ios_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -71,7 +71,7 @@ bool IOSPaymentInstrumentLauncher::LaunchIOSPaymentInstrument(
   delegate_ = delegate;
 
   std::unique_ptr<base::DictionaryValue> params_to_payment_app =
-      base::MakeUnique<base::DictionaryValue>();
+      std::make_unique<base::DictionaryValue>();
 
   // TODO(crbug.com/748556): Filter the following list to only show method names
   // that we know the payment app supports. For now, sending all the requested
@@ -80,7 +80,7 @@ bool IOSPaymentInstrumentLauncher::LaunchIOSPaymentInstrument(
   // information, but this is not ideal nor is this consistent with Android
   // implementation.
   std::unique_ptr<base::ListValue> method_names =
-      base::MakeUnique<base::ListValue>();
+      std::make_unique<base::ListValue>();
   for (auto const& it : payment_request->stringified_method_data())
     method_names->GetList().emplace_back(it.first);
   params_to_payment_app->SetList(kMethodNames, std::move(method_names));
@@ -103,8 +103,9 @@ bool IOSPaymentInstrumentLauncher::LaunchIOSPaymentInstrument(
 
   DCHECK(payment_request->web_payment_request().details.total);
   params_to_payment_app->SetDictionary(
-      kTotal, payment_request->web_payment_request()
-                  .details.total->amount.ToDictionaryValue());
+      kTotal,
+      PaymentCurrencyAmountToDictionaryValue(
+          *(payment_request->web_payment_request().details.total->amount)));
 
   params_to_payment_app->SetList(
       kModifiers,
@@ -195,7 +196,7 @@ IOSPaymentInstrumentLauncher::SerializeMethodData(
     const std::map<std::string, std::set<std::string>>&
         stringified_method_data) {
   std::unique_ptr<base::DictionaryValue> method_data =
-      base::MakeUnique<base::DictionaryValue>();
+      std::make_unique<base::DictionaryValue>();
 
   for (auto const& map_it : stringified_method_data) {
     base::ListValue data_list;
@@ -216,7 +217,7 @@ std::unique_ptr<base::ListValue>
 IOSPaymentInstrumentLauncher::SerializeCertificateChain(
     web::NavigationItem* item) {
   std::unique_ptr<base::ListValue> cert_chain_list =
-      base::MakeUnique<base::ListValue>();
+      std::make_unique<base::ListValue>();
 
   if (!item)
     return cert_chain_list;
@@ -224,11 +225,13 @@ IOSPaymentInstrumentLauncher::SerializeCertificateChain(
   scoped_refptr<net::X509Certificate> cert = item->GetSSL().certificate;
   std::vector<base::StringPiece> cert_chain;
 
-  cert_chain.reserve(1 + cert->GetIntermediateCertificates().size());
+  cert_chain.reserve(1 + cert->intermediate_buffers().size());
   cert_chain.push_back(
-      net::x509_util::CryptoBufferAsStringPiece(cert->os_cert_handle()));
-  for (auto* handle : cert->GetIntermediateCertificates())
-    cert_chain.push_back(net::x509_util::CryptoBufferAsStringPiece(handle));
+      net::x509_util::CryptoBufferAsStringPiece(cert->cert_buffer()));
+  for (const auto& handle : cert->intermediate_buffers()) {
+    cert_chain.push_back(
+        net::x509_util::CryptoBufferAsStringPiece(handle.get()));
+  }
 
   std::unique_ptr<base::ListValue> byte_array;
   for (const auto& cert_string : cert_chain) {
@@ -248,7 +251,7 @@ IOSPaymentInstrumentLauncher::SerializeCertificateChain(
 std::unique_ptr<base::ListValue>
 IOSPaymentInstrumentLauncher::SerializeModifiers(PaymentDetails details) {
   std::unique_ptr<base::ListValue> modifiers =
-      base::MakeUnique<base::ListValue>();
+      std::make_unique<base::ListValue>();
   size_t numModifiers = details.modifiers.size();
   for (size_t i = 0; i < numModifiers; ++i) {
     std::unique_ptr<base::DictionaryValue> modifier =

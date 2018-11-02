@@ -10,6 +10,7 @@
 #include "base/base_switches.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
@@ -122,7 +123,7 @@ class EncryptedMediaSupportedTypesTest : public InProcessBrowserTest {
     video_common_codecs_.push_back("vp09.00.10.08");
 
     // Extended codecs are used, so make sure generic ones fail. These will be
-    // tested against all initDataTypes as they should always fail to be
+    // tested against all init data types as they should always fail to be
     // supported.
     invalid_codecs_.push_back("avc1");
     invalid_codecs_.push_back("avc1.");
@@ -185,17 +186,45 @@ class EncryptedMediaSupportedTypesTest : public InProcessBrowserTest {
   }
 
   // Create a valid JavaScript string for the content type. Format is
-  // |mimeType|; codecs="|codec|", where codecs= is omitted if there
+  // |mime_type|; codecs="|codec|", where codecs= is omitted if there
   // is no codec.
-  static std::string MakeQuotedContentType(std::string mimeType,
-                                           std::string codec) {
-    std::string contentType(mimeType);
-    if (!codec.empty()) {
-      contentType.append("; codecs=\"");
-      contentType.append(codec);
-      contentType.append("\"");
+  static std::string MakeContentType(const std::string& mime_type,
+                                     const std::string& codec) {
+    std::string content_type(mime_type);
+    if (!codec.empty())
+      content_type += base::StringPrintf("; codecs=\"%s\"", codec.c_str());
+    return content_type;
+  }
+
+  // Format: {contentType: |content_type|, robustness: |robustness|}, or
+  // {contentType: |content_type|} if |robustness| is null.
+  static std::string MakeMediaCapability(const std::string& content_type,
+                                         const char* robustness) {
+    if (!robustness)
+      return base::StringPrintf("{contentType: '%s'}", content_type.c_str());
+
+    return base::StringPrintf("{contentType: '%s', robustness: '%s'}",
+                              content_type.c_str(), robustness);
+  }
+
+  static std::string MakeMediaCapabilities(const std::string& mime_type,
+                                           const CodecVector& codecs,
+                                           const char* robustness) {
+    std::string capabilities("[");
+    if (codecs.empty()) {
+      capabilities += MakeMediaCapability(
+          MakeContentType(mime_type, std::string()), robustness);
+    } else {
+      for (auto codec : codecs) {
+        capabilities +=
+            MakeMediaCapability(MakeContentType(mime_type, codec), robustness) +
+            ",";
+      }
+      // Remove trailing comma.
+      capabilities.erase(capabilities.length() - 1);
     }
-    return "'" + contentType + "'";
+    capabilities += ("]");
+    return capabilities;
   }
 
   static std::string ExecuteCommand(content::WebContents* contents,
@@ -226,58 +255,59 @@ class EncryptedMediaSupportedTypesTest : public InProcessBrowserTest {
     return "";
   }
 
-  // TODO(xhwang): Update this function to use C++ style.
   std::string IsSupportedByKeySystem(
-      const std::string& keySystem,
-      const std::string& mimeType,
+      const std::string& key_system,
+      const std::string& mime_type,
       const CodecVector& codecs,
-      SessionType sessionType = SessionType::kTemporary) {
-    // Choose the appropriate initDataType for the subtype.
-    size_t pos = mimeType.find('/');
+      SessionType session_type = SessionType::kTemporary,
+      const char* robustness = nullptr) {
+    // Choose the appropriate init data type for the sub type.
+    size_t pos = mime_type.find('/');
     DCHECK(pos > 0);
-    std::string subType(mimeType.substr(pos + 1));
-    std::string initDataType;
-    if (subType == "mp4") {
-      initDataType = "cenc";
+    std::string sub_type(mime_type.substr(pos + 1));
+    std::string init_data_type;
+    if (sub_type == "mp4") {
+      init_data_type = "cenc";
     } else {
-      DCHECK(subType == "webm");
-      initDataType = "webm";
+      DCHECK(sub_type == "webm");
+      init_data_type = "webm";
     }
 
-    bool isAudio = mimeType.compare(0, 5, "audio") == 0;
-    DCHECK(isAudio || mimeType.compare(0, 5, "video") == 0);
+    bool is_audio = mime_type.compare(0, 5, "audio") == 0;
+    DCHECK(is_audio || mime_type.compare(0, 5, "video") == 0);
+    auto capabilities = MakeMediaCapabilities(mime_type, codecs, robustness);
+    auto audio_capabilities = is_audio ? capabilities : "null";
+    auto video_capabilities = !is_audio ? capabilities : "null";
+    auto session_type_string = GetSessionTypeString(session_type);
 
-    // Create the contentType string based on |codecs|.
-    std::string contentTypeList("[");
-    if (codecs.empty()) {
-      contentTypeList.append(MakeQuotedContentType(mimeType, std::string()));
-    } else {
-      for (auto codec : codecs) {
-        contentTypeList.append(MakeQuotedContentType(mimeType, codec));
-        contentTypeList.append(",");
-      }
-      // Remove trailing comma.
-      contentTypeList.erase(contentTypeList.length() - 1);
-    }
-    contentTypeList.append("]");
-
-    std::string sessionTypeString = GetSessionTypeString(sessionType);
-
-    std::string command("checkKeySystemWithMediaMimeType('");
-    command.append(keySystem);
-    command.append("','");
-    command.append(initDataType);
-    command.append("',");
-    command.append(isAudio ? contentTypeList : "null");
-    command.append(",");
-    command.append(!isAudio ? contentTypeList : "null");
-    command.append(",'");
-    command.append(sessionTypeString);
-    command.append("')");
+    std::string command = base::StringPrintf(
+        "checkKeySystemWithMediaMimeType('%s', '%s', %s, %s, '%s')",
+        key_system.c_str(), init_data_type.c_str(), audio_capabilities.c_str(),
+        video_capabilities.c_str(), session_type_string.c_str());
     DVLOG(1) << "command: " << command;
 
     return ExecuteCommand(browser()->tab_strip_model()->GetActiveWebContents(),
                           command);
+  }
+
+  std::string IsSessionTypeSupported(const std::string& key_system,
+                                     SessionType session_type) {
+    return IsSupportedByKeySystem(key_system, kVideoWebMMimeType,
+                                  video_webm_codecs(), session_type);
+  }
+
+  std::string IsAudioRobustnessSupported(const std::string& key_system,
+                                         const char* robustness) {
+    return IsSupportedByKeySystem(key_system, kAudioWebMMimeType,
+                                  audio_webm_codecs(), SessionType::kTemporary,
+                                  robustness);
+  }
+
+  std::string IsVideoRobustnessSupported(const std::string& key_system,
+                                         const char* robustness) {
+    return IsSupportedByKeySystem(key_system, kVideoWebMMimeType,
+                                  video_webm_codecs(), SessionType::kTemporary,
+                                  robustness);
   }
 
  private:
@@ -311,13 +341,7 @@ class EncryptedMediaSupportedTypesExternalClearKeyTest
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
-    // TODO(crbug.com/764143): Replace RegisterPepperCdm() with
-    // RegisterExternalClearKey() after we migrate key system support query to
-    // use CdmRegistry.
-    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
-                      media::kClearKeyCdmAdapterFileName,
-                      media::kClearKeyCdmDisplayName,
-                      media::kClearKeyCdmPepperMimeType);
+    RegisterClearKeyCdm(command_line);
   }
 
  private:
@@ -329,18 +353,15 @@ class EncryptedMediaSupportedTypesExternalClearKeyTest
 
 // By default, the External Clear Key (ECK) key system is not supported even if
 // present. This test case tests this behavior by not enabling
-// kExternalClearKeyForTesting.
-// Even registering the Pepper CDM where applicable does not enable the CDM.
+// kExternalClearKeyForTesting. Even registering the Clear Key CDM does not
+// enable the ECK key system support.
 class EncryptedMediaSupportedTypesExternalClearKeyNotEnabledTest
     : public EncryptedMediaSupportedTypesTest {
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
-                      media::kClearKeyCdmAdapterFileName,
-                      media::kClearKeyCdmDisplayName,
-                      media::kClearKeyCdmPepperMimeType);
+    RegisterClearKeyCdm(command_line);
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
   }
 };
@@ -361,45 +382,28 @@ class EncryptedMediaSupportedTypesWidevineTest
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
 // Registers ClearKey CDM with the wrong path (filename).
-class EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest
+class EncryptedMediaSupportedTypesClearKeyCdmRegisteredWithWrongPathTest
     : public EncryptedMediaSupportedTypesTest {
  protected:
-  EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest() {
+  EncryptedMediaSupportedTypesClearKeyCdmRegisteredWithWrongPathTest() {
     scoped_feature_list_.InitAndEnableFeature(
         media::kExternalClearKeyForTesting);
   }
 
-  ~EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest()
+  ~EncryptedMediaSupportedTypesClearKeyCdmRegisteredWithWrongPathTest()
       override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
-    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
-                      "clearkeycdmadapterwrongname.dll",
-                      media::kClearKeyCdmDisplayName,
-                      media::kClearKeyCdmPepperMimeType, false);
+    RegisterClearKeyCdm(command_line, true /* use_wrong_cdm_path */);
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(
-      EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest);
+      EncryptedMediaSupportedTypesClearKeyCdmRegisteredWithWrongPathTest);
 };
-
-// Registers Widevine CDM with the wrong path (filename).
-class EncryptedMediaSupportedTypesWidevineCDMRegisteredWithWrongPathTest
-    : public EncryptedMediaSupportedTypesTest {
- protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
-    RegisterPepperCdm(command_line, "WidevineCdm",
-                      "widevinecdmadapterwrongname.dll",
-                      "Widevine Content Decryption Module",
-                      "application/x-ppapi-widevine-cdm", false);
-  }
-};
-
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesClearKeyTest, Basic) {
@@ -509,7 +513,7 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesClearKeyTest, Video_MP4) {
 
   // High 10-bit Profile is supported when using ClearKey if
   // it is supported for clear content on this platform.
-#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   EXPECT_PROPRIETARY(IsSupportedByKeySystem(kClearKey, kVideoMP4MimeType,
                                             video_mp4_hi10p_codecs()));
 #else
@@ -550,14 +554,26 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesClearKeyTest, Audio_MP4) {
 
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesClearKeyTest, SessionType) {
   // Temporary session always supported.
-  EXPECT_SUCCESS(IsSupportedByKeySystem(kClearKey, kVideoWebMMimeType,
-                                        video_webm_codecs(),
-                                        SessionType::kTemporary));
+  EXPECT_SUCCESS(IsSessionTypeSupported(kClearKey, SessionType::kTemporary));
 
   // Persistent license session not supported by Clear Key key system.
-  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(kClearKey, kVideoWebMMimeType,
-                                            video_webm_codecs(),
-                                            SessionType::kPersistentLicense));
+  EXPECT_UNSUPPORTED(
+      IsSessionTypeSupported(kClearKey, SessionType::kPersistentLicense));
+}
+
+IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesClearKeyTest, Robustness) {
+  // External Clear Key doesn't require a robustness string.
+  EXPECT_SUCCESS(IsVideoRobustnessSupported(kClearKey, nullptr));
+  EXPECT_SUCCESS(IsVideoRobustnessSupported(kClearKey, ""));
+  EXPECT_SUCCESS(IsAudioRobustnessSupported(kClearKey, nullptr));
+  EXPECT_SUCCESS(IsAudioRobustnessSupported(kClearKey, ""));
+
+  // Non-empty robustness string will be rejected, including valid Widevine
+  // robustness strings.
+  EXPECT_UNSUPPORTED(IsVideoRobustnessSupported(kClearKey, "Invalid String"));
+  EXPECT_UNSUPPORTED(IsVideoRobustnessSupported(kClearKey, "SW_SECURE_CRYPTO"));
+  EXPECT_UNSUPPORTED(IsAudioRobustnessSupported(kClearKey, "Invalid String"));
+  EXPECT_UNSUPPORTED(IsAudioRobustnessSupported(kClearKey, "SW_SECURE_CRYPTO"));
 }
 
 //
@@ -712,14 +728,32 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesExternalClearKeyTest,
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesExternalClearKeyTest,
                        SessionType) {
   // Temporary session always supported.
-  EXPECT_SUCCESS(IsSupportedByKeySystem(kExternalClearKey, kVideoWebMMimeType,
-                                        video_webm_codecs(),
-                                        SessionType::kTemporary));
+  EXPECT_SUCCESS(
+      IsSessionTypeSupported(kExternalClearKey, SessionType::kTemporary));
 
   // Persistent license session always supported by External Clear Key.
-  EXPECT_SUCCESS(IsSupportedByKeySystem(kExternalClearKey, kVideoWebMMimeType,
-                                        video_webm_codecs(),
+  EXPECT_SUCCESS(IsSessionTypeSupported(kExternalClearKey,
                                         SessionType::kPersistentLicense));
+}
+
+IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesExternalClearKeyTest,
+                       Robustness) {
+  // External Clear Key doesn't require a robustness string.
+  EXPECT_SUCCESS(IsVideoRobustnessSupported(kExternalClearKey, nullptr));
+  EXPECT_SUCCESS(IsVideoRobustnessSupported(kExternalClearKey, ""));
+  EXPECT_SUCCESS(IsAudioRobustnessSupported(kExternalClearKey, nullptr));
+  EXPECT_SUCCESS(IsAudioRobustnessSupported(kExternalClearKey, ""));
+
+  // Non-empty robustness string will be rejected, including valid Widevine
+  // robustness strings.
+  EXPECT_UNSUPPORTED(
+      IsVideoRobustnessSupported(kExternalClearKey, "Invalid String"));
+  EXPECT_UNSUPPORTED(
+      IsVideoRobustnessSupported(kExternalClearKey, "SW_SECURE_CRYPTO"));
+  EXPECT_UNSUPPORTED(
+      IsAudioRobustnessSupported(kExternalClearKey, "Invalid String"));
+  EXPECT_UNSUPPORTED(
+      IsAudioRobustnessSupported(kExternalClearKey, "SW_SECURE_CRYPTO"));
 }
 
 // External Clear Key is disabled by default.
@@ -747,6 +781,35 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, Basic) {
       IsSupportedByKeySystem(kWidevine, kVideoMP4MimeType, video_mp4_codecs()));
   EXPECT_WV_PROPRIETARY(
       IsSupportedByKeySystem(kWidevine, kAudioMP4MimeType, audio_mp4_codecs()));
+}
+
+IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest,
+                       InvalidKeySystems) {
+  // Case sensitive.
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
+      "com.widevine.WideVine", kVideoWebMMimeType, video_webm_codecs()));
+
+  // TLDs are not allowed.
+  EXPECT_UNSUPPORTED(
+      IsSupportedByKeySystem("com.", kVideoWebMMimeType, video_webm_codecs()));
+  EXPECT_UNSUPPORTED(
+      IsSupportedByKeySystem("com", kVideoWebMMimeType, video_webm_codecs()));
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem("com.widevine.", kVideoWebMMimeType,
+                                            video_webm_codecs()));
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem("com.widevine", kVideoWebMMimeType,
+                                            video_webm_codecs()));
+
+  // Incomplete.
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
+      "com.widevine.alp", kVideoWebMMimeType, video_webm_codecs()));
+
+  // Extra character.
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
+      "com.widevine.alphab", kVideoWebMMimeType, video_webm_codecs()));
+
+  // There are no child key systems for Widevine.
+  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
+      "com.widevine.alpha.child", kVideoWebMMimeType, video_webm_codecs()));
 }
 
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, NoCodecs) {
@@ -847,14 +910,11 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, Audio_MP4) {
 
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, SessionType) {
   // Temporary session always supported.
-  EXPECT_WV_SUCCESS(IsSupportedByKeySystem(kWidevine, kVideoWebMMimeType,
-                                           video_webm_codecs(),
-                                           SessionType::kTemporary));
+  EXPECT_WV_SUCCESS(IsSessionTypeSupported(kWidevine, SessionType::kTemporary));
 
   // Persistent license session support varies by platform.
   auto result =
-      IsSupportedByKeySystem(kWidevine, kVideoWebMMimeType, video_webm_codecs(),
-                             SessionType::kPersistentLicense);
+      IsSessionTypeSupported(kWidevine, SessionType::kPersistentLicense);
 
 #if defined(OS_CHROMEOS) || defined(OS_WIN) || defined(OS_MACOSX)
   // Persistent license session supported by Widevine key system on Windows and
@@ -867,55 +927,71 @@ IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, SessionType) {
 #endif
 }
 
+IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesWidevineTest, Robustness) {
+  // Robustness is recommended but not required.
+  EXPECT_WV_SUCCESS(IsVideoRobustnessSupported(kWidevine, nullptr));
+  EXPECT_WV_SUCCESS(IsVideoRobustnessSupported(kWidevine, ""));
+
+  EXPECT_UNSUPPORTED(IsVideoRobustnessSupported(kWidevine, "Invalid String"));
+  EXPECT_WV_SUCCESS(IsVideoRobustnessSupported(kWidevine, "SW_SECURE_DECODE"));
+  EXPECT_WV_SUCCESS(IsVideoRobustnessSupported(kWidevine, "SW_SECURE_CRYPTO"));
+
+#if defined(OS_CHROMEOS)
+  // "HW_SECURE_ALL" supported on ChromeOS when the protected media identifier
+  // permission is allowed. See kUnsafelyAllowProtectedMediaIdentifierForDomain
+  // used above.
+  EXPECT_WV_SUCCESS(IsVideoRobustnessSupported(kWidevine, "HW_SECURE_ALL"));
+#else
+  EXPECT_UNSUPPORTED(IsVideoRobustnessSupported(kWidevine, "HW_SECURE_ALL"));
+#endif
+
+  // Robustness is recommended but not required.
+  EXPECT_WV_SUCCESS(IsAudioRobustnessSupported(kWidevine, nullptr));
+  EXPECT_WV_SUCCESS(IsAudioRobustnessSupported(kWidevine, ""));
+
+  EXPECT_UNSUPPORTED(IsAudioRobustnessSupported(kWidevine, "Invalid String"));
+  EXPECT_WV_SUCCESS(IsAudioRobustnessSupported(kWidevine, "SW_SECURE_CRYPTO"));
+
+#if defined(OS_CHROMEOS)
+  // "SW_SECURE_DECODE" and "HW_SECURE_ALL" supported on ChromeOS when the
+  // protected media identifier permission is allowed. See
+  // kUnsafelyAllowProtectedMediaIdentifierForDomain used above.
+  EXPECT_WV_SUCCESS(IsAudioRobustnessSupported(kWidevine, "SW_SECURE_DECODE"));
+  EXPECT_WV_SUCCESS(IsAudioRobustnessSupported(kWidevine, "HW_SECURE_ALL"));
+#else
+  EXPECT_UNSUPPORTED(IsAudioRobustnessSupported(kWidevine, "SW_SECURE_DECODE"));
+  EXPECT_UNSUPPORTED(IsAudioRobustnessSupported(kWidevine, "HW_SECURE_ALL"));
+#endif
+}
+
 //
 // Misc failure test cases.
 //
 
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-// Since this test fixture does not register the CDMs on the command line, the
-// check for the CDMs in chrome_key_systems.cc should fail, and they should not
-// be registered with KeySystems.
 IN_PROC_BROWSER_TEST_F(EncryptedMediaSupportedTypesTest,
-                       PepperCDMsNotRegistered) {
+                       ClearKeyCdmNotRegistered) {
+  // External Clear Key will not be supported because Clear Key CDM is not
+  // registered on the command line.
   EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
       kExternalClearKey, kVideoWebMMimeType, video_webm_codecs()));
 
-// This will fail in all builds unless widevine is available.
-#if 0 && !defined(WIDEVINE_CDM_AVAILABLE)
-  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(kWidevine, kVideoWebMMimeType,
-                                            video_webm_codecs()));
-#endif
-
-  // Clear Key should still be registered.
+  // Clear Key should always be supported.
   EXPECT_SUCCESS(IsSupportedByKeySystem(kClearKey, kVideoWebMMimeType,
                                         video_webm_codecs()));
 }
 
-// Since this test fixture does not register the CDMs on the command line, the
-// check for the CDMs in chrome_key_systems.cc should fail, and they should not
-// be registered with KeySystems.
 IN_PROC_BROWSER_TEST_F(
-    EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest,
-    PepperCDMsRegisteredButAdapterNotPresent) {
+    EncryptedMediaSupportedTypesClearKeyCdmRegisteredWithWrongPathTest,
+    Basic) {
+  // External Clear Key will not be supported because Clear Key CDM is
+  // registered with the wrong path.
   EXPECT_UNSUPPORTED(IsSupportedByKeySystem(
       kExternalClearKey, kVideoWebMMimeType, video_webm_codecs()));
 
-  // Clear Key should still be registered.
+  // Clear Key should always be supported.
   EXPECT_SUCCESS(IsSupportedByKeySystem(kClearKey, kVideoWebMMimeType,
                                         video_webm_codecs()));
 }
 
-// This will fail in all builds unless Widevine is available.
-#if !defined(WIDEVINE_CDM_AVAILABLE)
-IN_PROC_BROWSER_TEST_F(
-    EncryptedMediaSupportedTypesWidevineCDMRegisteredWithWrongPathTest,
-    PepperCDMsRegisteredButAdapterNotPresent) {
-  EXPECT_UNSUPPORTED(IsSupportedByKeySystem(kWidevine, kVideoWebMMimeType,
-                                            video_webm_codecs()));
-
-  // Clear Key should still be registered.
-  EXPECT_SUCCESS(IsSupportedByKeySystem(kClearKey, kVideoWebMMimeType,
-                                        video_webm_codecs()));
-}
-#endif  // !defined(WIDEVINE_CDM_AVAILABLE)
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)

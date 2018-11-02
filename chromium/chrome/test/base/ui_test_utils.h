@@ -40,9 +40,7 @@ namespace base {
 class FilePath;
 }
 
-namespace chrome {
 struct NavigateParams;
-}
 
 namespace content {
 class WebContents;
@@ -78,7 +76,7 @@ bool GetCurrentTabTitle(const Browser* browser, base::string16* title);
 // Performs the provided navigation process, blocking until the navigation
 // finishes. May change the params in some cases (i.e. if the navigation
 // opens a new browser window). Uses chrome::Navigate.
-void NavigateToURL(chrome::NavigateParams* params);
+void NavigateToURL(NavigateParams* params);
 
 // Navigates the selected tab of |browser| to |url|, blocking until the
 // navigation finishes. Simulates a POST and uses chrome::Navigate.
@@ -293,7 +291,7 @@ class HistoryEnumerator {
 // To use create and call WaitForActivation().
 // TODO(warx): check if code base exists the requirement for deactivation sync,
 // this class can be modified to support that.
-class BrowserActivationWaiter : public chrome::BrowserListObserver {
+class BrowserActivationWaiter : public BrowserListObserver {
  public:
   explicit BrowserActivationWaiter(const Browser* browser);
   ~BrowserActivationWaiter() override;
@@ -304,7 +302,7 @@ class BrowserActivationWaiter : public chrome::BrowserListObserver {
   void WaitForActivation();
 
  private:
-  // chrome::BrowserListObserver override:
+  // BrowserListObserver override:
   void OnBrowserSetLastActive(Browser* browser) override;
 
   const Browser* const browser_;

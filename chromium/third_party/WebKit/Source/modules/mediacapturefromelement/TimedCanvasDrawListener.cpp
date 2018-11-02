@@ -21,7 +21,7 @@ TimedCanvasDrawListener::TimedCanvasDrawListener(
                            this,
                            &TimedCanvasDrawListener::RequestFrameTimerFired) {}
 
-TimedCanvasDrawListener::~TimedCanvasDrawListener() {}
+TimedCanvasDrawListener::~TimedCanvasDrawListener() = default;
 
 // static
 TimedCanvasDrawListener* TimedCanvasDrawListener::Create(
@@ -31,13 +31,13 @@ TimedCanvasDrawListener* TimedCanvasDrawListener::Create(
   TimedCanvasDrawListener* listener =
       new TimedCanvasDrawListener(std::move(handler), frame_rate, context);
   listener->request_frame_timer_.StartRepeating(listener->frame_interval_,
-                                                BLINK_FROM_HERE);
+                                                FROM_HERE);
   return listener;
 }
 
 void TimedCanvasDrawListener::SendNewFrame(
     sk_sp<SkImage> image,
-    WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider) {
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider) {
   frame_capture_requested_ = false;
   CanvasDrawListener::SendNewFrame(image, context_provider);
 }

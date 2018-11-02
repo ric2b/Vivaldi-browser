@@ -32,17 +32,18 @@
 #include "core/exported/LocalFrameClientImpl.h"
 
 #include <memory>
+#include <utility>
 
 #include "bindings/core/v8/ScriptController.h"
 #include "core/CoreInitializer.h"
 #include "core/dom/Document.h"
 #include "core/dom/UserGestureIndicator.h"
+#include "core/events/CurrentInputEvent.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/UIEventWithKeyState.h"
 #include "core/exported/SharedWorkerRepositoryClientImpl.h"
 #include "core/exported/WebDevToolsAgentImpl.h"
-#include "core/exported/WebDevToolsFrontendImpl.h"
 #include "core/exported/WebDocumentLoaderImpl.h"
 #include "core/exported/WebPluginContainerImpl.h"
 #include "core/exported/WebViewImpl.h"
@@ -80,6 +81,7 @@
 #include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebMediaPlayerSource.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
@@ -149,7 +151,7 @@ LocalFrameClientImpl* LocalFrameClientImpl::Create(WebLocalFrameImpl* frame) {
   return new LocalFrameClientImpl(frame);
 }
 
-LocalFrameClientImpl::~LocalFrameClientImpl() {}
+LocalFrameClientImpl::~LocalFrameClientImpl() = default;
 
 void LocalFrameClientImpl::Trace(blink::Visitor* visitor) {
   visitor->Trace(web_frame_);
@@ -175,13 +177,6 @@ void LocalFrameClientImpl::DispatchDidClearWindowObjectInMainWorld() {
                                                                     *settings);
     }
   }
-  // FIXME: when extensions go out of process, this whole concept stops working.
-  WebDevToolsFrontendImpl* dev_tools_frontend =
-      web_frame_->Top()->IsWebLocalFrame()
-          ? ToWebLocalFrameImpl(web_frame_->Top())->DevToolsFrontend()
-          : nullptr;
-  if (dev_tools_frontend)
-    dev_tools_frontend->DidClearWindowObject(web_frame_);
 }
 
 void LocalFrameClientImpl::DocumentElementAvailable() {
@@ -441,7 +436,8 @@ void LocalFrameClientImpl::DispatchDidChangeIcons(IconType type) {
 
 void LocalFrameClientImpl::DispatchDidCommitLoad(
     HistoryItem* item,
-    HistoryCommitType commit_type) {
+    HistoryCommitType commit_type,
+    WebGlobalObjectReusePolicy global_object_reuse_policy) {
   if (!web_frame_->Parent()) {
     web_frame_->ViewImpl()->DidCommitLoad(commit_type == kStandardCommit,
                                           false);
@@ -449,7 +445,8 @@ void LocalFrameClientImpl::DispatchDidCommitLoad(
 
   if (web_frame_->Client()) {
     web_frame_->Client()->DidCommitProvisionalLoad(
-        WebHistoryItem(item), static_cast<WebHistoryCommitType>(commit_type));
+        WebHistoryItem(item), static_cast<WebHistoryCommitType>(commit_type),
+        global_object_reuse_policy);
   }
   if (WebDevToolsAgentImpl* dev_tools = DevToolsAgent())
     dev_tools->DidCommitLoadForLocalFrame(web_frame_->GetFrame());
@@ -483,7 +480,7 @@ void LocalFrameClientImpl::DispatchDidChangeThemeColor() {
 }
 
 static bool AllowCreatingBackgroundTabs() {
-  const WebInputEvent* input_event = WebViewImpl::CurrentInputEvent();
+  const WebInputEvent* input_event = CurrentInputEvent::Get();
   if (!input_event || (input_event->GetType() != WebInputEvent::kMouseUp &&
                        (input_event->GetType() != WebInputEvent::kRawKeyDown &&
                         input_event->GetType() != WebInputEvent::kKeyDown) &&
@@ -583,12 +580,6 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
           ? WebFrameClient::NavigationPolicyInfo::ArchiveStatus::Present
           : WebFrameClient::NavigationPolicyInfo::ArchiveStatus::Absent;
 
-  // Caching could be disabled for requests initiated by DevTools.
-  // TODO(ananta)
-  // We should extract the network cache state into a global component which
-  // can be queried here and wherever necessary.
-  navigation_info.is_cache_disabled =
-      DevToolsAgent() ? DevToolsAgent()->CacheDisabled() : false;
   if (form)
     navigation_info.form = WebFormElement(form);
 
@@ -639,6 +630,11 @@ void LocalFrameClientImpl::DidStopLoading() {
     web_frame_->Client()->DidStopLoading();
 }
 
+void LocalFrameClientImpl::ForwardResourceTimingToParent(
+    const WebResourceTimingInfo& info) {
+  web_frame_->Client()->ForwardResourceTimingToParent(info);
+}
+
 void LocalFrameClientImpl::DownloadURL(const ResourceRequest& request,
                                        const String& suggested_name) {
   if (!web_frame_->Client())
@@ -682,7 +678,7 @@ void LocalFrameClientImpl::DidContainInsecureFormAction() {
     web_frame_->Client()->DidContainInsecureFormAction();
 }
 
-void LocalFrameClientImpl::DidRunInsecureContent(SecurityOrigin* origin,
+void LocalFrameClientImpl::DidRunInsecureContent(const SecurityOrigin* origin,
                                                  const KURL& insecure_url) {
   if (web_frame_->Client()) {
     web_frame_->Client()->DidRunInsecureContent(WebSecurityOrigin(origin),
@@ -701,15 +697,14 @@ void LocalFrameClientImpl::DidDispatchPingLoader(const KURL& url) {
     web_frame_->Client()->DidDispatchPingLoader(url);
 }
 
-void LocalFrameClientImpl::DidDisplayContentWithCertificateErrors(
-    const KURL& url) {
+void LocalFrameClientImpl::DidDisplayContentWithCertificateErrors() {
   if (web_frame_->Client())
-    web_frame_->Client()->DidDisplayContentWithCertificateErrors(url);
+    web_frame_->Client()->DidDisplayContentWithCertificateErrors();
 }
 
-void LocalFrameClientImpl::DidRunContentWithCertificateErrors(const KURL& url) {
+void LocalFrameClientImpl::DidRunContentWithCertificateErrors() {
   if (web_frame_->Client())
-    web_frame_->Client()->DidRunContentWithCertificateErrors(url);
+    web_frame_->Client()->DidRunContentWithCertificateErrors();
 }
 
 void LocalFrameClientImpl::ReportLegacySymantecCert(const KURL& url,
@@ -847,7 +842,7 @@ bool LocalFrameClientImpl::CanCreatePluginWithoutRenderer(
   return web_frame_->Client()->CanCreatePluginWithoutRenderer(mime_type);
 }
 
-PluginView* LocalFrameClientImpl::CreatePlugin(
+WebPluginContainerImpl* LocalFrameClientImpl::CreatePlugin(
     HTMLPlugInElement& element,
     const KURL& url,
     const Vector<String>& param_names,
@@ -927,12 +922,11 @@ void LocalFrameClientImpl::DidEnforceInsecureRequestPolicy(
   web_frame_->Client()->DidEnforceInsecureRequestPolicy(policy);
 }
 
-void LocalFrameClientImpl::DidUpdateToUniqueOrigin() {
+void LocalFrameClientImpl::DidEnforceInsecureNavigationsSet(
+    const std::vector<unsigned>& set) {
   if (!web_frame_->Client())
     return;
-  DCHECK(web_frame_->GetSecurityOrigin().IsUnique());
-  web_frame_->Client()->DidUpdateToUniqueOrigin(
-      web_frame_->GetSecurityOrigin().IsPotentiallyTrustworthy());
+  web_frame_->Client()->DidEnforceInsecureNavigationsSet(set);
 }
 
 void LocalFrameClientImpl::DidChangeFramePolicy(
@@ -1054,19 +1048,11 @@ void LocalFrameClientImpl::SetEffectiveConnectionTypeForTesting(
     return web_frame_->Client()->SetEffectiveConnectionTypeForTesting(type);
 }
 
-bool LocalFrameClientImpl::IsClientLoFiActiveForFrame() {
+WebURLRequest::PreviewsState LocalFrameClientImpl::GetPreviewsStateForFrame()
+    const {
   if (web_frame_->Client())
-    return web_frame_->Client()->IsClientLoFiActiveForFrame();
-  return false;
-}
-
-bool LocalFrameClientImpl::ShouldUseClientLoFiForRequest(
-    const ResourceRequest& request) {
-  if (web_frame_->Client()) {
-    return web_frame_->Client()->ShouldUseClientLoFiForRequest(
-        WrappedResourceRequest(request));
-  }
-  return false;
+    return web_frame_->Client()->GetPreviewsStateForFrame();
+  return WebURLRequest::kPreviewsUnspecified;
 }
 
 WebDevToolsAgentImpl* LocalFrameClientImpl::DevToolsAgent() {
@@ -1091,6 +1077,11 @@ void LocalFrameClientImpl::SetHasReceivedUserGesture(bool received_previously) {
   // event in a child frame.
   if (WebAutofillClient* autofill_client = web_frame_->AutofillClient())
     autofill_client->UserGestureObserved();
+}
+
+void LocalFrameClientImpl::SetHasReceivedUserGestureBeforeNavigation(
+    bool value) {
+  web_frame_->Client()->SetHasReceivedUserGestureBeforeNavigation(value);
 }
 
 void LocalFrameClientImpl::AbortClientNavigation() {
@@ -1130,20 +1121,48 @@ void LocalFrameClientImpl::DidBlockFramebust(const KURL& url) {
   web_frame_->Client()->DidBlockFramebust(url);
 }
 
-String LocalFrameClientImpl::GetInstrumentationToken() {
-  return web_frame_->Client()->GetInstrumentationToken();
+String LocalFrameClientImpl::GetDevToolsFrameToken() const {
+  return web_frame_->Client()->GetDevToolsFrameToken();
 }
 
 void LocalFrameClientImpl::ScrollRectToVisibleInParentFrame(
     const WebRect& rect_to_scroll,
-    const WebRemoteScrollProperties& properties) {
+    const WebScrollIntoViewParams& params) {
   web_frame_->Client()->ScrollRectToVisibleInParentFrame(rect_to_scroll,
-                                                         properties);
+                                                         params);
 }
 
 void LocalFrameClientImpl::SetVirtualTimePauser(
     WebScopedVirtualTimePauser virtual_time_pauser) {
   virtual_time_pauser_ = std::move(virtual_time_pauser);
+}
+
+String LocalFrameClientImpl::evaluateInInspectorOverlayForTesting(
+    const String& script) {
+  if (WebDevToolsAgentImpl* devtools = DevToolsAgent())
+    return devtools->EvaluateInOverlayForTesting(script);
+  return g_empty_string;
+}
+
+bool LocalFrameClientImpl::HandleCurrentKeyboardEvent() {
+  if (web_frame_->Client())
+    return web_frame_->Client()->HandleCurrentKeyboardEvent();
+  return false;
+}
+
+void LocalFrameClientImpl::DidChangeSelection(bool is_selection_empty) {
+  if (web_frame_->Client())
+    web_frame_->Client()->DidChangeSelection(is_selection_empty);
+}
+
+void LocalFrameClientImpl::DidChangeContents() {
+  if (web_frame_->Client())
+    web_frame_->Client()->DidChangeContents();
+}
+
+Frame* LocalFrameClientImpl::FindFrame(const AtomicString& name) const {
+  DCHECK(web_frame_->Client());
+  return ToCoreFrame(web_frame_->Client()->FindFrame(name));
 }
 
 // VB-6063:

@@ -9,7 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
@@ -63,7 +62,7 @@ std::unique_ptr<std::vector<std::string>> GetValueList(
 std::unique_ptr<std::string> GetStringFromProfile(
     const autofill::AutofillProfile& profile,
     const autofill::ServerFieldType& type) {
-  return base::MakeUnique<std::string>(
+  return std::make_unique<std::string>(
       base::UTF16ToUTF8(profile.GetRawInfo(type)));
 }
 
@@ -146,8 +145,6 @@ autofill_private::CreditCardEntry CreditCardToCreditCardEntry(
       credit_card.GetRawInfo(autofill::CREDIT_CARD_EXP_MONTH))));
   card.expiration_year.reset(new std::string(base::UTF16ToUTF8(
       credit_card.GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR))));
-  card.billing_address_id.reset(
-      new std::string(credit_card.billing_address_id()));
 
   // Create address metadata and add it to |address|.
   std::unique_ptr<autofill_private::AutofillMetadata> metadata(

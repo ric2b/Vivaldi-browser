@@ -6,11 +6,14 @@
     {
       'target_name': 'select_to_speak',
       'dependencies': [
+        '../chromevox/cvox2/background/constants',
+        '../chromevox/cvox2/background/automation_util',
 	'externs',
 	'paragraph_utils',
 	'<(EXTERNS_GYP):accessibility_private',
 	'<(EXTERNS_GYP):automation',
 	'<(EXTERNS_GYP):chrome_extensions',
+	'<(EXTERNS_GYP):command_line_private',
 	'<(EXTERNS_GYP):metrics_private',
        ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -39,6 +42,44 @@
 	'<(EXTERNS_GYP):chrome_extensions',
        ],
        'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': '../chromevox/cvox2/background/automation_util',
+      'dependencies': [
+	'../chromevox/cvox2/background/automation_predicate',
+	'../chromevox/cvox2/background/tree_walker',
+	'../chromevox/cvox2/background/constants',
+	'<(EXTERNS_GYP):automation',
+	'<(EXTERNS_GYP):chrome_extensions',
+      ],
+      'includes':  ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': '../chromevox/cvox2/background/tree_walker',
+      'dependencies': [
+	'../chromevox/cvox2/background/automation_predicate',
+	'../chromevox/cvox2/background/constants',
+	'<(EXTERNS_GYP):automation',
+	'<(EXTERNS_GYP):chrome_extensions',
+      ],
+      'includes':  ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': '../chromevox/cvox2/background/automation_predicate',
+      'dependencies': [
+	'../chromevox/cvox2/background/constants',
+	'<(EXTERNS_GYP):automation',
+	'<(EXTERNS_GYP):chrome_extensions',
+      ],
+      'includes':  ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': '../chromevox/cvox2/background/constants',
+      'includes':  ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'closure_shim',
+      'includes':  ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
   ],
 }

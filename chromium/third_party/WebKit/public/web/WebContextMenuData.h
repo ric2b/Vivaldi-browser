@@ -128,12 +128,12 @@ struct WebContextMenuData {
   // Whether spell checking is enabled.
   bool is_spell_checking_enabled;
 
-  // Kind of input field. Can be empty.
-  WebString vivaldiInputType;
-
   // The absolute keyword search URL including the %s search tag when the
   // "Add as search engine..." option is clicked (left empty if not used).
   WebURL vivaldi_keyword_url;
+
+  // Kind of input field. Can be empty.
+  WebString vivaldiInputType;
 
   // Suggested filename for saving file.
   WebString suggested_filename;

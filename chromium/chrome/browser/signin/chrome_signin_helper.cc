@@ -5,6 +5,7 @@
 #include "chrome/browser/signin/chrome_signin_helper.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -49,7 +50,6 @@
 #include "chrome/browser/android/signin/account_management_screen_helper.h"
 #else
 #include "chrome/browser/ui/browser_commands.h"
-#include "chrome/browser/ui/browser_finder.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
 #endif  // defined(OS_ANDROID)
 
@@ -119,7 +119,8 @@ class DiceURLRequestUserData : public base::SupportsUserData::Data {
     if (!IsDicePrepareMigrationEnabled())
       return;
 
-    if (ShouldBlockReconcilorForRequest(request)) {
+    if (ShouldBlockReconcilorForRequest(request) &&
+        !request->GetUserData(kDiceURLRequestUserDataKey)) {
       const content::ResourceRequestInfo* info =
           content::ResourceRequestInfo::ForRequest(request);
       request->SetUserData(kDiceURLRequestUserDataKey,
@@ -190,7 +191,6 @@ void ProcessMirrorHeaderUIThread(
     const content::ResourceRequestInfo::WebContentsGetter&
         web_contents_getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(IsAccountConsistencyMirrorEnabled());
 
   GAIAServiceType service_type = manage_accounts_params.service_type;
   DCHECK_NE(GAIA_SERVICE_TYPE_NONE, service_type);
@@ -201,6 +201,9 @@ void ProcessMirrorHeaderUIThread(
 
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  DCHECK(AccountConsistencyModeManager::IsMirrorEnabledForProfile(profile))
+      << "Gaia should not send the X-Chrome-Manage-Accounts header "
+      << "when Mirror is disabled.";
   AccountReconcilor* account_reconcilor =
       AccountReconcilorFactory::GetForProfile(profile);
   account_reconcilor->OnReceivedManageAccountsResponse(service_type);
@@ -223,6 +226,16 @@ void ProcessMirrorHeaderUIThread(
     }
     signin_metrics::LogAccountReconcilorStateOnGaiaResponse(
         account_reconcilor->GetState());
+
+#if defined(OS_CHROMEOS)
+    // Chrome OS does not have an account picker right now. To fix
+    // https://crbug.com/807568, this is a no-op here. This is OK because in the
+    // limited cases that Mirror is available on Chrome OS, 1:1 account
+    // consistency is enforced and adding/removing accounts is not allowed,
+    // GAIA_SERVICE_TYPE_INCOGNITO may be allowed though.
+    return;
+#endif
+
     browser->window()->ShowAvatarBubbleFromAvatarButton(
         bubble_mode, manage_accounts_params,
         signin_metrics::AccessPoint::ACCESS_POINT_CONTENT_AREA, false);
@@ -258,7 +271,9 @@ void CreateDiceTurnOnSyncHelper(Profile* profile,
                          : chrome::FindBrowserWithProfile(profile);
   // DiceTurnSyncOnHelper is suicidal (it will kill itself once it finishes
   // enabling sync).
-  new DiceTurnSyncOnHelper(profile, browser, access_point, reason, account_id);
+  new DiceTurnSyncOnHelper(
+      profile, browser, access_point, reason, account_id,
+      DiceTurnSyncOnHelper::SigninAbortedMode::REMOVE_ACCOUNT);
 }
 
 // Shows UI for signin errors.
@@ -341,12 +356,6 @@ void ProcessMirrorResponseHeaderIfExists(net::URLRequest* request,
   if (is_off_the_record) {
     NOTREACHED() << "Gaia should not send the X-Chrome-Manage-Accounts header "
                  << "in incognito.";
-    return;
-  }
-
-  if (!IsAccountConsistencyMirrorEnabled()) {
-    NOTREACHED() << "Gaia should not send the X-Chrome-Manage-Accounts header "
-                 << "when Mirror is disabled.";
     return;
   }
 

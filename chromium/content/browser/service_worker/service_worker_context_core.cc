@@ -40,7 +40,7 @@
 #include "net/http/http_response_info.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "third_party/WebKit/common/service_worker/service_worker_provider_type.mojom.h"
-#include "third_party/WebKit/public/platform/modules/serviceworker/service_worker_registration.mojom.h"
+#include "third_party/WebKit/common/service_worker/service_worker_registration.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -461,12 +461,11 @@ ServiceWorkerProviderHost* ServiceWorkerContextCore::GetProviderHostByClientID(
 void ServiceWorkerContextCore::RegisterServiceWorker(
     const GURL& script_url,
     const blink::mojom::ServiceWorkerRegistrationOptions& options,
-    ServiceWorkerProviderHost* provider_host,
     const RegistrationCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   was_service_worker_registered_ = true;
   job_coordinator_->Register(
-      script_url, options, provider_host,
+      script_url, options,
       base::Bind(&ServiceWorkerContextCore::RegistrationComplete, AsWeakPtr(),
                  options.scope, callback));
 }
@@ -482,11 +481,10 @@ void ServiceWorkerContextCore::UpdateServiceWorker(
     ServiceWorkerRegistration* registration,
     bool force_bypass_cache,
     bool skip_script_comparison,
-    ServiceWorkerProviderHost* provider_host,
     const UpdateCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   job_coordinator_->Update(registration, force_bypass_cache,
-                           skip_script_comparison, provider_host,
+                           skip_script_comparison,
                            base::Bind(&ServiceWorkerContextCore::UpdateComplete,
                                       AsWeakPtr(), callback));
 }
@@ -726,30 +724,6 @@ void ServiceWorkerContextCore::DeleteAndStartOver(
     const StatusCallback& callback) {
   job_coordinator_->AbortAll();
   storage_->DeleteAndStartOver(callback);
-}
-
-std::unique_ptr<ServiceWorkerProviderHost>
-ServiceWorkerContextCore::TransferProviderHostOut(int process_id,
-                                                  int provider_id) {
-  ProviderMap* map = GetProviderMapForProcess(process_id);
-  ServiceWorkerProviderHost* transferee = map->Lookup(provider_id);
-  std::unique_ptr<ServiceWorkerProviderHost> provisional_host =
-      transferee->PrepareForCrossSiteTransfer();
-  return map->Replace(provider_id, std::move(provisional_host));
-}
-
-void ServiceWorkerContextCore::TransferProviderHostIn(
-    int new_process_id,
-    int new_provider_id,
-    std::unique_ptr<ServiceWorkerProviderHost> transferee) {
-  ProviderMap* map = GetProviderMapForProcess(new_process_id);
-  ServiceWorkerProviderHost* provisional_host = map->Lookup(new_provider_id);
-  if (!provisional_host)
-    return;
-
-  DCHECK(provisional_host->document_url().is_empty());
-  transferee->CompleteCrossSiteTransfer(provisional_host);
-  map->Replace(new_provider_id, std::move(transferee));
 }
 
 void ServiceWorkerContextCore::ClearAllServiceWorkersForTest(

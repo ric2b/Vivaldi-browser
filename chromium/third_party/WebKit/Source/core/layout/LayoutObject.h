@@ -27,6 +27,7 @@
 #ifndef LayoutObject_h
 #define LayoutObject_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
 #include "core/dom/DocumentLifecycle.h"
@@ -36,7 +37,6 @@
 #include "core/html_names.h"
 #include "core/layout/LayoutObjectChildList.h"
 #include "core/layout/MapCoordinatesFlags.h"
-#include "core/layout/ScrollAlignment.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/layout/api/HitTestAction.h"
 #include "core/layout/api/SelectionState.h"
@@ -44,7 +44,6 @@
 #include "core/paint/FragmentData.h"
 #include "core/paint/LayerHitTestRects.h"
 #include "core/paint/PaintPhase.h"
-#include "core/paint/RarePaintData.h"
 #include "core/paint/compositing/CompositingState.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/StyleDifference.h"
@@ -79,6 +78,7 @@ class PseudoStyleRequest;
 
 struct PaintInfo;
 struct PaintInvalidatorContext;
+struct WebScrollIntoViewParams;
 
 enum VisualRectFlags { kDefaultVisualRectFlags = 0, kEdgeInclusive = 1 };
 
@@ -207,7 +207,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   FRIEND_TEST_ALL_PREFIXES(LayoutObjectTest,
                            LocationInBackingAndSelectionVisualRect);
   friend class VisualRectMappingTest;
-  WTF_MAKE_NONCOPYABLE(LayoutObject);
 
  public:
   // Anonymous objects should pass the document as their node, and they will
@@ -293,13 +292,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // Scrolling is a LayoutBox concept, however some code just cares about
   // recursively scrolling our enclosing ScrollableArea(s).
-  bool ScrollRectToVisible(
-      const LayoutRect&,
-      const ScrollAlignment& align_x = ScrollAlignment::kAlignCenterIfNeeded,
-      const ScrollAlignment& align_y = ScrollAlignment::kAlignCenterIfNeeded,
-      ScrollType = kProgrammaticScroll,
-      bool make_visible_in_visual_viewport = true,
-      ScrollBehavior = kScrollBehaviorAuto);
+  bool ScrollRectToVisible(const LayoutRect&, const WebScrollIntoViewParams&);
 
   // Convenience function for getting to the nearest enclosing box of a
   // LayoutObject.
@@ -422,12 +415,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Sets the parent of this object but doesn't add it as a child of the parent.
   void SetDangerousOneWayParent(LayoutObject*);
 
-  UniqueObjectId UniqueId() const {
-    DCHECK(fragment_.GetRarePaintData());
-    return fragment_.GetRarePaintData()
-               ? fragment_.GetRarePaintData()->UniqueId()
-               : 0;
-  }
+  UniqueObjectId UniqueId() const { return fragment_.UniqueId(); }
 
  private:
   //////////////////////////////////////////
@@ -741,12 +729,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return LocalSVGTransform();
   }
 
-  // Returns the reference box for clip path layout. Note the actual bounding
-  // box of the clip path can be bigger or smaller than the reference.
-  FloatRect LocalReferenceBoxForClipPath() const;
-  // Returns the bounding box of the clip path in local coordinates.
-  Optional<FloatRect> LocalClipPathBoundingBox() const;
-
   // SVG uses FloatPoint precise hit testing, and passes the point in parent
   // coordinates instead of in paint invalidation container coordinates.
   // Eventually the rest of the layout tree will move to a similar model.
@@ -893,8 +875,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   bool HasShapeOutside() const { return Style() && Style()->ShapeOutside(); }
-
-  inline bool PreservesNewline() const;
 
   // The pseudo element style can be cached or uncached.  Use the cached method
   // if the pseudo element doesn't respect any pseudo classes (and therefore
@@ -1393,11 +1373,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   inline const ComputedStyle& StyleRef(bool first_line) const;
 
   static inline Color ResolveColor(const ComputedStyle& style_to_use,
-                                   CSSPropertyID color_property) {
+                                   const CSSProperty& color_property) {
     return style_to_use.VisitedDependentColor(color_property);
   }
 
-  inline Color ResolveColor(CSSPropertyID color_property) const {
+  inline Color ResolveColor(const CSSProperty& color_property) const {
     return Style()->VisitedDependentColor(color_property);
   }
 
@@ -1490,10 +1470,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   SelectionState GetSelectionState() const {
     return bitfields_.GetSelectionState();
   }
-  virtual void SetSelectionState(SelectionState state) {
+  void SetSelectionState(SelectionState state) {
     bitfields_.SetSelectionState(state);
   }
-  inline void SetSelectionStateIfNeeded(SelectionState);
   bool CanUpdateSelectionOnRootLineBoxes() const;
 
   // A single rectangle that encompasses all of the selected objects within this
@@ -1753,6 +1732,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Returns the bounding box of the visual rects of all fragments.
   LayoutRect FragmentsVisualRectBoundingBox() const;
 
+  void SetNeedsOverflowRecalcAfterStyleChange();
+
   // Painters can use const methods only, except for these explicitly declared
   // methods.
   class CORE_EXPORT MutableForPainting {
@@ -1789,10 +1770,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     }
 
     void SetSelectionVisualRect(const LayoutRect& r) {
-      if (layout_object_.fragment_.GetRarePaintData() || !r.IsEmpty()) {
-        layout_object_.fragment_.EnsureRarePaintData().SetSelectionVisualRect(
-            r);
-      }
+      layout_object_.fragment_.SetSelectionVisualRect(r);
     }
 
     void SetPreviousBackgroundObscured(bool b) {
@@ -1928,14 +1906,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
 
   LayoutRect SelectionVisualRect() const {
-    return fragment_.GetRarePaintData()
-               ? fragment_.GetRarePaintData()->SelectionVisualRect()
-               : LayoutRect();
+    return fragment_.SelectionVisualRect();
   }
   LayoutRect PartialInvalidationRect() const {
-    return fragment_.GetRarePaintData()
-               ? fragment_.GetRarePaintData()->PartialInvalidationRect()
-               : LayoutRect();
+    return fragment_.PartialInvalidationRect();
   }
 
   void InvalidateIfControlStateChanged(ControlState);
@@ -2073,8 +2047,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
                                        const LayoutPoint& layer_offset) const {}
 
   void SetPartialInvalidationRect(const LayoutRect& rect) {
-    if (fragment_.GetRarePaintData() || !rect.IsEmpty())
-      fragment_.EnsureRarePaintData().SetPartialInvalidationRect(rect);
+    fragment_.SetPartialInvalidationRect(rect);
   }
 
 #if DCHECK_IS_ON()
@@ -2083,8 +2056,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
            ShouldCheckForPaintInvalidation() || ShouldInvalidateSelection() ||
            NeedsPaintOffsetAndVisualRectUpdate() ||
            (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled() &&
-            fragment_.GetRarePaintData() &&
-            !fragment_.GetRarePaintData()->PartialInvalidationRect().IsEmpty());
+            !fragment_.PartialInvalidationRect().IsEmpty());
   }
 #endif
 
@@ -2153,15 +2125,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void CheckCounterChanges(const ComputedStyle* old_style,
                            const ComputedStyle* new_style);
 
-  void SetNeedsOverflowRecalcAfterStyleChange();
-
   // Walk up the parent chain and find the first scrolling block to disable
   // scroll anchoring on.
   void SetScrollAnchorDisablingStyleChangedOnAncestor();
 
-  // FIXME: This should be 'markContaingBoxChainForOverflowRecalc when we make
-  // LayoutBox recomputeOverflow-capable. crbug.com/437012 and crbug.com/434700.
-  inline void MarkAncestorsForOverflowRecalcIfNeeded();
+  inline void MarkContainerChainForOverflowRecalcIfNeeded();
 
   inline void MarkAncestorsForPaintInvalidation();
   inline void SetNeedsPaintOffsetAndVisualRectUpdate();
@@ -2615,13 +2583,13 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   static bool affects_parent_block_;
 
   FragmentData fragment_;
+  DISALLOW_COPY_AND_ASSIGN(LayoutObject);
 };
 
 // FIXME: remove this once the layout object lifecycle ASSERTS are no longer
 // hit.
 class DeprecatedDisableModifyLayoutTreeStructureAsserts {
   STACK_ALLOCATED();
-  WTF_MAKE_NONCOPYABLE(DeprecatedDisableModifyLayoutTreeStructureAsserts);
 
  public:
   DeprecatedDisableModifyLayoutTreeStructureAsserts();
@@ -2630,6 +2598,7 @@ class DeprecatedDisableModifyLayoutTreeStructureAsserts {
 
  private:
   AutoReset<bool> disabler_;
+  DISALLOW_COPY_AND_ASSIGN(DeprecatedDisableModifyLayoutTreeStructureAsserts);
 };
 
 // Allow equality comparisons of LayoutObjects by reference or pointer,
@@ -2737,20 +2706,6 @@ inline void LayoutObject::SetNeedsPositionedMovementLayout() {
 #endif
   if (!already_needed_layout)
     MarkContainerChainForLayout();
-}
-
-inline bool LayoutObject::PreservesNewline() const {
-  if (IsSVGInlineText())
-    return false;
-
-  return Style()->PreserveNewline();
-}
-
-inline void LayoutObject::SetSelectionStateIfNeeded(SelectionState state) {
-  if (GetSelectionState() == state)
-    return;
-
-  SetSelectionState(state);
 }
 
 inline void LayoutObject::SetHasBoxDecorationBackground(bool b) {

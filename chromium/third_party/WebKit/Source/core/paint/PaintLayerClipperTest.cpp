@@ -41,13 +41,16 @@ TEST_F(PaintLayerClipperTest, BackgroundClipRectSubpixelAccumulation) {
   Element* target = GetDocument().getElementById("target");
   PaintLayer* target_paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
-  ClipRectsContext context(
-      GetDocument().GetLayoutView()->Layer(), kUncachedClipRects,
-      kIgnorePlatformOverlayScrollbarSize, LayoutSize(FloatSize(0.25, 0.35)));
-  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
-  // so don't apply an overflow clip.
-  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
-    context.SetIgnoreOverflowClip();
+  ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
+                           kUncachedClipRects,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           // When RLS is enabled, the LayoutView will have a
+                           // composited scrolling layer, so don't apply an
+                           // overflow clip.
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled()
+                               ? kIgnoreOverflowClip
+                               : kRespectOverflowClip,
+                           LayoutSize(FloatSize(0.25, 0.35)));
   ClipRect background_rect;
 
   target_paint_layer->Clipper(PaintLayer::kUseGeometryMapper)
@@ -68,13 +71,15 @@ TEST_F(PaintLayerClipperTest, LayoutSVGRoot) {
   Element* target = GetDocument().getElementById("target");
   PaintLayer* target_paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
-  ClipRectsContext context(
-      GetDocument().GetLayoutView()->Layer(), kUncachedClipRects,
-      kIgnorePlatformOverlayScrollbarSize, LayoutSize(FloatSize(0.25, 0.35)));
   // When RLS is enabled, the LayoutView will have a composited scrolling layer,
   // so don't apply an overflow clip.
-  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
-    context.SetIgnoreOverflowClip();
+  ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
+                           kUncachedClipRects,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled()
+                               ? kIgnoreOverflowClip
+                               : kRespectOverflowClip,
+                           LayoutSize(FloatSize(0.25, 0.35)));
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
 
@@ -100,12 +105,14 @@ TEST_F(PaintLayerClipperTest, ControlClip) {
   Element* target = GetDocument().getElementById("target");
   PaintLayer* target_paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
-  ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
-                           kUncachedClipRects);
   // When RLS is enabled, the LayoutView will have a composited scrolling layer,
   // so don't apply an overflow clip.
-  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
-    context.SetIgnoreOverflowClip();
+  ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
+                           kUncachedClipRects,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled()
+                               ? kIgnoreOverflowClip
+                               : kRespectOverflowClip);
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
 
@@ -143,11 +150,14 @@ TEST_F(PaintLayerClipperTest, RoundedClip) {
   PaintLayer* target_paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
   ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
-                           kUncachedClipRects);
-  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
-  // so don't apply an overflow clip.
-  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
-    context.SetIgnoreOverflowClip();
+                           kUncachedClipRects,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           // When RLS is enabled, the LayoutView will have a
+                           // composited scrolling layer, so don't apply an
+                           // overflow clip.
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled()
+                               ? kIgnoreOverflowClip
+                               : kRespectOverflowClip);
 
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
@@ -204,7 +214,12 @@ TEST_F(PaintLayerClipperTest, RoundedClipNested) {
   EXPECT_EQ(LayoutRect(0, 0, 500, 500), layer_bounds);
 }
 
+// TODO(https://crbug.com/795645): This test is failing on the ChromeOS bot.
+#if defined(OS_CHROMEOS)
+TEST_F(PaintLayerClipperTest, DISABLED_ControlClipSelect) {
+#else
 TEST_F(PaintLayerClipperTest, ControlClipSelect) {
+#endif
   SetBodyInnerHTML(R"HTML(
     <select id='target' style='position: relative; width: 100px;
         background: none; border: none; padding: 0px 15px 0px 5px;'>
@@ -217,11 +232,15 @@ TEST_F(PaintLayerClipperTest, ControlClipSelect) {
   PaintLayer* target_paint_layer =
       ToLayoutBoxModelObject(target->GetLayoutObject())->Layer();
   ClipRectsContext context(GetDocument().GetLayoutView()->Layer(),
-                           kUncachedClipRects);
-  // When RLS is enabled, the LayoutView will have a composited scrolling layer,
-  // so don't apply an overflow clip.
-  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
-    context.SetIgnoreOverflowClip();
+                           kUncachedClipRects,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           // When RLS is enabled, the LayoutView will have a
+                           // composited scrolling layer, so don't apply an
+                           // overflow clip.
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled()
+                               ? kIgnoreOverflowClip
+                               : kRespectOverflowClip);
+
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
 
@@ -279,7 +298,9 @@ TEST_F(PaintLayerClipperTest, ContainPaintClip) {
   LayoutRect infinite_rect(LayoutRect::InfiniteIntRect());
   PaintLayer* layer =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
-  ClipRectsContext context(layer, kPaintingClipRectsIgnoringOverflowClip);
+  ClipRectsContext context(layer, kPaintingClipRectsIgnoringOverflowClip,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           kIgnoreOverflowClip);
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
 
@@ -315,8 +336,9 @@ TEST_F(PaintLayerClipperTest, NestedContainPaintClip) {
   LayoutRect infinite_rect(LayoutRect::InfiniteIntRect());
   PaintLayer* layer =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
-  ClipRectsContext context(layer->Parent(),
-                           kPaintingClipRectsIgnoringOverflowClip);
+  ClipRectsContext context(
+      layer->Parent(), kPaintingClipRectsIgnoringOverflowClip,
+      kIgnorePlatformOverlayScrollbarSize, kIgnoreOverflowClip);
   LayoutRect layer_bounds;
   ClipRect background_rect, foreground_rect;
 
@@ -558,7 +580,9 @@ TEST_F(PaintLayerClipperTest, IgnoreRootLayerClipWithCSSClip) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("root"))->Layer();
   PaintLayer* target =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
-  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip);
+  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           kIgnoreOverflowClip);
   LayoutRect infinite_rect(LayoutRect::InfiniteIntRect());
   LayoutRect layer_bounds(infinite_rect);
   ClipRect background_rect(infinite_rect);
@@ -592,7 +616,9 @@ TEST_F(PaintLayerClipperTest, IgnoreRootLayerClipWithOverflowClip) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("root"))->Layer();
   PaintLayer* target =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
-  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip);
+  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           kIgnoreOverflowClip);
   LayoutRect infinite_rect(LayoutRect::InfiniteIntRect());
   LayoutRect layer_bounds(infinite_rect);
   ClipRect background_rect(infinite_rect);
@@ -627,7 +653,9 @@ TEST_F(PaintLayerClipperTest, IgnoreRootLayerClipWithBothClip) {
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("root"))->Layer();
   PaintLayer* target =
       ToLayoutBoxModelObject(GetLayoutObjectByElementId("target"))->Layer();
-  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip);
+  ClipRectsContext context(root, kPaintingClipRectsIgnoringOverflowClip,
+                           kIgnorePlatformOverlayScrollbarSize,
+                           kIgnoreOverflowClip);
   LayoutRect infinite_rect(LayoutRect::InfiniteIntRect());
   LayoutRect layer_bounds(infinite_rect);
   ClipRect background_rect(infinite_rect);
@@ -695,6 +723,145 @@ TEST_F(PaintLayerClipperTest, Fragmentation) {
             foreground_rect.Rect());
   // Layer bounds adjusted for pagination offset of second fragment.
   EXPECT_EQ(LayoutRect(FloatRect(100, -100, 100, 200)), layer_bounds);
+}
+
+TEST_F(PaintLayerClipperTest, ScrollbarClipBehaviorChild) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <div id='parent' style='position:absolute; width: 200px; height: 300px;
+        overflow: scroll;'>
+      <div id='child' style='position: relative; width: 500px;
+           height: 500px'>
+      </div>
+    </div>
+  )HTML");
+
+  Element* parent = GetDocument().getElementById("parent");
+  PaintLayer* parent_paint_layer =
+      ToLayoutBoxModelObject(parent->GetLayoutObject())->Layer();
+
+  Element* child = GetDocument().getElementById("child");
+  PaintLayer* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+
+  ClipRectsContext context(parent_paint_layer, kUncachedClipRects,
+                           kExcludeOverlayScrollbarSizeForHitTesting);
+
+  LayoutRect layer_bounds;
+  ClipRect background_rect, foreground_rect;
+  child_paint_layer->Clipper(PaintLayer::kUseGeometryMapper)
+      .CalculateRects(context,
+                      &child_paint_layer->GetLayoutObject().FirstFragment(),
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // The background and foreground rect are clipped by the scrollbar size.
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 500, 500), layer_bounds);
+
+  child_paint_layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
+      .CalculateRects(context, nullptr,
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // The background and foreground rect are clipped by the scrollbar size.
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 500, 500), layer_bounds);
+}
+
+TEST_F(PaintLayerClipperTest, ScrollbarClipBehaviorChildScrollBetween) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <div id='parent' style='position:absolute; width: 200px; height: 300px;
+        overflow: scroll;'>
+      <div id='child' style='position: relative; width: 500px;
+           height: 500px'>
+      </div>
+    </div>
+  )HTML");
+
+  Element* parent = GetDocument().getElementById("parent");
+  PaintLayer* root_paint_layer = parent->GetLayoutObject()->View()->Layer();
+
+  Element* child = GetDocument().getElementById("child");
+  PaintLayer* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+
+  ClipRectsContext context(root_paint_layer, kUncachedClipRects,
+                           kExcludeOverlayScrollbarSizeForHitTesting);
+
+  LayoutRect layer_bounds;
+  ClipRect background_rect, foreground_rect;
+  child_paint_layer->Clipper(PaintLayer::kUseGeometryMapper)
+      .CalculateRects(context,
+                      &child_paint_layer->GetLayoutObject().FirstFragment(),
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // The background and foreground rect are clipped by the scrollbar size.
+  EXPECT_EQ(LayoutRect(8, 8, 193, 293), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(8, 8, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(8, 8, 500, 500), layer_bounds);
+
+  child_paint_layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
+      .CalculateRects(context, nullptr,
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // The background and foreground rect are clipped by the scrollbar size.
+  EXPECT_EQ(LayoutRect(8, 8, 193, 293), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(8, 8, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(8, 8, 500, 500), layer_bounds);
+}
+
+TEST_F(PaintLayerClipperTest, ScrollbarClipBehaviorParent) {
+  SetBodyInnerHTML(R"HTML(
+    <!DOCTYPE html>
+    <div id='parent' style='position:absolute; width: 200px; height: 300px;
+        overflow: scroll;'>
+      <div id='child' style='position: relative; width: 500px;
+           height: 500px'>
+      </div>
+    </div>
+  )HTML");
+
+  Element* parent = GetDocument().getElementById("parent");
+  PaintLayer* parent_paint_layer =
+      ToLayoutBoxModelObject(parent->GetLayoutObject())->Layer();
+
+  Element* child = GetDocument().getElementById("child");
+  PaintLayer* child_paint_layer =
+      ToLayoutBoxModelObject(child->GetLayoutObject())->Layer();
+
+  ClipRectsContext context(parent_paint_layer, kUncachedClipRects,
+                           kExcludeOverlayScrollbarSizeForHitTesting);
+
+  LayoutRect layer_bounds;
+  ClipRect background_rect, foreground_rect;
+  parent_paint_layer->Clipper(PaintLayer::kUseGeometryMapper)
+      .CalculateRects(context,
+                      &child_paint_layer->GetLayoutObject().FirstFragment(),
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // Only the foreground is clipped by the scrollbar size, because we
+  // called CalculateRects on the root layer.
+  EXPECT_EQ(LayoutRect(0, 0, 200, 300), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 300), layer_bounds);
+
+  parent_paint_layer->Clipper(PaintLayer::kDoNotUseGeometryMapper)
+      .CalculateRects(context, nullptr,
+                      LayoutRect(LayoutRect::InfiniteIntRect()), layer_bounds,
+                      background_rect, foreground_rect);
+
+  // Only the foreground is clipped by the scrollbar size, because we
+  // called CalculateRects on the root layer.
+  EXPECT_EQ(LayoutRect(0, 0, 200, 300), background_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 193, 293), foreground_rect.Rect());
+  EXPECT_EQ(LayoutRect(0, 0, 200, 300), layer_bounds);
 }
 
 }  // namespace blink

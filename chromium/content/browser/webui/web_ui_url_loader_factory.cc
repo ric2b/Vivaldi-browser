@@ -29,9 +29,9 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
+#include "services/network/public/interfaces/network_service.mojom.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "ui/base/template_expressions.h"
 
@@ -44,8 +44,9 @@ base::LazyInstance<std::map<GlobalFrameRoutingId,
                             std::unique_ptr<WebUIURLLoaderFactory>>>::Leaky
     g_web_ui_url_loader_factories = LAZY_INSTANCE_INITIALIZER;
 
-void CallOnError(mojom::URLLoaderClientPtrInfo client_info, int error_code) {
-  mojom::URLLoaderClientPtr client;
+void CallOnError(network::mojom::URLLoaderClientPtrInfo client_info,
+                 int error_code) {
+  network::mojom::URLLoaderClientPtr client;
   client.Bind(std::move(client_info));
 
   network::URLLoaderCompletionStatus status;
@@ -53,23 +54,27 @@ void CallOnError(mojom::URLLoaderClientPtrInfo client_info, int error_code) {
   client->OnComplete(status);
 }
 
-void ReadData(scoped_refptr<ResourceResponse> headers,
+void ReadData(scoped_refptr<network::ResourceResponse> headers,
               const ui::TemplateReplacements* replacements,
               bool gzipped,
               scoped_refptr<URLDataSourceImpl> data_source,
-              mojom::URLLoaderClientPtrInfo client_info,
+              network::mojom::URLLoaderClientPtrInfo client_info,
               scoped_refptr<base::RefCountedMemory> bytes) {
   if (!bytes) {
     CallOnError(std::move(client_info), net::ERR_FAILED);
     return;
   }
 
-  mojom::URLLoaderClientPtr client;
+  network::mojom::URLLoaderClientPtr client;
   client.Bind(std::move(client_info));
   client->OnReceiveResponse(headers->head, base::nullopt, nullptr);
 
   base::StringPiece input(reinterpret_cast<const char*>(bytes->front()),
                           bytes->size());
+
+  // Treats empty gzipped data as unzipped.
+  if (!bytes->size())
+    gzipped = false;
 
   if (replacements) {
     std::string temp_string;
@@ -118,11 +123,11 @@ void ReadData(scoped_refptr<ResourceResponse> headers,
   client->OnComplete(status);
 }
 
-void DataAvailable(scoped_refptr<ResourceResponse> headers,
+void DataAvailable(scoped_refptr<network::ResourceResponse> headers,
                    const ui::TemplateReplacements* replacements,
                    bool gzipped,
                    scoped_refptr<URLDataSourceImpl> source,
-                   mojom::URLLoaderClientPtrInfo client_info,
+                   network::mojom::URLLoaderClientPtrInfo client_info,
                    scoped_refptr<base::RefCountedMemory> bytes) {
   // Since the bytes are from the memory mapped resource file, copying the
   // data can lead to disk access. Needs to be posted to a SequencedTaskRunner
@@ -135,9 +140,9 @@ void DataAvailable(scoped_refptr<ResourceResponse> headers,
                                 source, std::move(client_info), bytes));
 }
 
-void StartURLLoader(const ResourceRequest& request,
+void StartURLLoader(const network::ResourceRequest& request,
                     int frame_tree_node_id,
-                    mojom::URLLoaderClientPtrInfo client_info,
+                    network::mojom::URLLoaderClientPtrInfo client_info,
                     ResourceContext* resource_context) {
   // NOTE: this duplicates code in URLDataManagerBackend::StartRequest.
   if (!URLDataManagerBackend::CheckURLIsValid(request.url)) {
@@ -168,7 +173,8 @@ void StartURLLoader(const ResourceRequest& request,
   scoped_refptr<net::HttpResponseHeaders> headers =
       URLDataManagerBackend::GetHeaders(source, path, origin_header);
 
-  scoped_refptr<ResourceResponse> resource_response(new ResourceResponse);
+  scoped_refptr<network::ResourceResponse> resource_response(
+      new network::ResourceResponse);
   resource_response->head.headers = headers;
   resource_response->head.mime_type = source->source()->GetMimeType(path);
   // TODO: fill all the time related field i.e. request_time response_time
@@ -207,7 +213,7 @@ void StartURLLoader(const ResourceRequest& request,
                                 wc_getter, data_available_callback));
 }
 
-class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
+class WebUIURLLoaderFactory : public network::mojom::URLLoaderFactory,
                               public WebContentsObserver {
  public:
   WebUIURLLoaderFactory(RenderFrameHost* rfh, const std::string& scheme)
@@ -217,19 +223,19 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
 
   ~WebUIURLLoaderFactory() override {}
 
-  mojom::URLLoaderFactoryPtr CreateBinding() {
-    mojom::URLLoaderFactoryPtr factory;
+  network::mojom::URLLoaderFactoryPtr CreateBinding() {
+    network::mojom::URLLoaderFactoryPtr factory;
     loader_factory_bindings_.AddBinding(this, mojo::MakeRequest(&factory));
     return factory;
   }
 
-  // mojom::URLLoaderFactory implementation:
-  void CreateLoaderAndStart(mojom::URLLoaderRequest loader,
+  // network::mojom::URLLoaderFactory implementation:
+  void CreateLoaderAndStart(network::mojom::URLLoaderRequest loader,
                             int32_t routing_id,
                             int32_t request_id,
                             uint32_t options,
-                            const ResourceRequest& request,
-                            mojom::URLLoaderClientPtr client,
+                            const network::ResourceRequest& request,
+                            network::mojom::URLLoaderClientPtr client,
                             const net::MutableNetworkTrafficAnnotationTag&
                                 traffic_annotation) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -280,7 +286,7 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
             GetStoragePartition()->browser_context()->GetResourceContext()));
   }
 
-  void Clone(mojom::URLLoaderFactoryRequest request) override {
+  void Clone(network::mojom::URLLoaderFactoryRequest request) override {
     loader_factory_bindings_.AddBinding(this, std::move(request));
   }
 
@@ -303,14 +309,14 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
 
   RenderFrameHost* render_frame_host_;
   std::string scheme_;
-  mojo::BindingSet<mojom::URLLoaderFactory> loader_factory_bindings_;
+  mojo::BindingSet<network::mojom::URLLoaderFactory> loader_factory_bindings_;
 
   DISALLOW_COPY_AND_ASSIGN(WebUIURLLoaderFactory);
 };
 
 }  // namespace
 
-mojom::URLLoaderFactoryPtr CreateWebUIURLLoader(
+network::mojom::URLLoaderFactoryPtr CreateWebUIURLLoader(
     RenderFrameHost* render_frame_host,
     const std::string& scheme) {
   GlobalFrameRoutingId routing_id(render_frame_host->GetRoutingID(),

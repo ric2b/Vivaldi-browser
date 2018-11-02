@@ -52,10 +52,12 @@
 #include "core/page/Page.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/accessibility/AXSparseAttributeSetter.h"
+#include "platform/scroll/ScrollAlignment.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 
 using blink::WebLocalizedString;
 
@@ -689,7 +691,7 @@ bool AXObject::IsClickable() const {
   }
 }
 
-bool AXObject::AccessibilityIsIgnored() {
+bool AXObject::AccessibilityIsIgnored() const {
   Node* node = GetNode();
   if (!node) {
     AXObject* parent = this->ParentObject();
@@ -738,6 +740,13 @@ void AXObject::UpdateCachedAttributeValuesIfNeeded() const {
                                     : nullptr);
   cached_ancestor_exposes_active_descendant_ =
       ComputeAncestorExposesActiveDescendant();
+
+  // TODO(dmazzoni): remove this const_cast.
+  if (cached_is_ignored_ != LastKnownIsIgnoredValue()) {
+    const_cast<AXObject*>(this)->ChildrenChanged();
+    last_known_is_ignored_value_ =
+        cached_is_ignored_ ? kIgnoreObject : kIncludeObject;
+  }
 }
 
 bool AXObject::AccessibilityIsIgnoredByDefault(
@@ -971,7 +980,7 @@ const AXObject* AXObject::DisabledAncestor() const {
   return nullptr;
 }
 
-bool AXObject::LastKnownIsIgnoredValue() {
+bool AXObject::LastKnownIsIgnoredValue() const {
   if (last_known_is_ignored_value_ == kDefaultBehavior) {
     last_known_is_ignored_value_ =
         AccessibilityIsIgnored() ? kIgnoreObject : kIncludeObject;
@@ -1063,7 +1072,7 @@ bool AXObject::ComputeAncestorExposesActiveDescendant() const {
   if (!parent)
     return false;
 
-  if (parent->SupportsActiveDescendant() &&
+  if (parent->SupportsARIAActiveDescendant() &&
       parent->GetAOMPropertyOrARIAAttribute(
           AOMRelationProperty::kActiveDescendant)) {
     return true;
@@ -1095,8 +1104,9 @@ bool AXObject::IsSubWidget(AccessibilityRole role) {
   return false;
 }
 
-bool AXObject::SupportsSetSizeAndPosInSet() const {
+bool AXObject::SupportsARIASetSizeAndPosInSet() const {
   switch (RoleValue()) {
+    case kArticleRole:
     case kListBoxOptionRole:
     case kListItemRole:
     case kMenuItemRole:
@@ -1369,7 +1379,7 @@ void AXObject::TokenVectorFromAttribute(Vector<String>& tokens,
   if (attribute_value.IsEmpty())
     return;
 
-  attribute_value.SimplifyWhiteSpace();
+  attribute_value = attribute_value.SimplifyWhiteSpace();
   attribute_value.Split(' ', tokens);
 }
 
@@ -1469,7 +1479,7 @@ bool AXObject::AriaCheckedIsPresent() const {
   return HasAOMPropertyOrARIAAttribute(AOMStringProperty::kChecked, result);
 }
 
-bool AXObject::SupportsActiveDescendant() const {
+bool AXObject::SupportsARIAActiveDescendant() const {
   // According to the ARIA Spec, all ARIA composite widgets, ARIA text boxes,
   // ARIA groups and ARIA application should be able to expose an active descendant.
   // Implicitly, <input> and <textarea> elements should also have this ability.
@@ -1491,6 +1501,72 @@ bool AXObject::SupportsActiveDescendant() const {
     case kTreeRole:
     case kTreeGridRole:
     case kApplicationRole:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool AXObject::SupportsARIAExpanded() const {
+  switch (AriaRoleAttribute()) {
+    case kAlertDialogRole:
+    case kAlertRole:
+    case kArticleRole:
+    case kBannerRole:
+    case kButtonRole:
+    case kCellRole:
+    case kColumnHeaderRole:
+    case kComboBoxGroupingRole:
+    case kComboBoxMenuButtonRole:
+    case kComplementaryRole:
+    case kContentInfoRole:
+    case kDefinitionRole:
+    case kDialogRole:
+    case kDirectoryRole:
+    case kDisclosureTriangleRole:
+    case kDocumentRole:
+    case kFeedRole:
+    case kFigureRole:
+    case kFormRole:
+    case kGridRole:
+    case kGroupRole:
+    case kHeadingRole:
+    case kImageRole:
+    case kListRole:
+    case kListBoxRole:
+    case kListBoxOptionRole:
+    case kListItemRole:
+    case kLinkRole:
+    case kLogRole:
+    case kMainRole:
+    case kMarqueeRole:
+    case kMathRole:
+    case kMenuRole:
+    case kMenuBarRole:
+    case kMenuButtonRole:
+    case kMenuItemRole:
+    case kMenuItemCheckBoxRole:
+    case kMenuItemRadioRole:
+    case kNavigationRole:
+    case kNoteRole:
+    case kProgressIndicatorRole:
+    case kRadioGroupRole:
+    case kRegionRole:
+    case kRowRole:
+    case kRowHeaderRole:
+    case kSearchRole:
+    case kStatusRole:
+    case kTabRole:
+    case kTableRole:
+    case kTabPanelRole:
+    case kTermRole:
+    case kTextFieldWithComboBoxRole:
+    case kTimerRole:
+    case kToolbarRole:
+    case kUserInterfaceTooltipRole:
+    case kTreeRole:
+    case kTreeGridRole:
+    case kTreeItemRole:
       return true;
     default:
       return false;
@@ -1545,7 +1621,7 @@ AXRestriction AXObject::Restriction() const {
 
   // Check aria-readonly if supported by current role.
   bool is_read_only;
-  if (CanSupportAriaReadOnly() &&
+  if (SupportsARIAReadOnly() &&
       HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kReadOnly,
                                     is_read_only)) {
     // ARIA overrides other readonly state markup.
@@ -1936,16 +2012,32 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   // layer.
   AXObject* container = ParentObjectUnignored();
   LayoutObject* container_layout_object = nullptr;
-  while (container) {
-    container_layout_object = container->GetLayoutObject();
-    if (container_layout_object && container_layout_object->IsBox() &&
-        layout_object->IsDescendantOf(container_layout_object)) {
-      if (container->IsScrollableContainer() ||
-          container_layout_object->HasLayer())
-        break;
-    }
+  if (layout_object->IsFixedPositioned()) {
+    // If it's a fixed position element, the container should simply be the
+    // root web area.
+    container = AXObjectCache().GetOrCreate(GetDocument());
+  } else {
+    while (container) {
+      container_layout_object = container->GetLayoutObject();
+      if (container_layout_object && container_layout_object->IsBox() &&
+          layout_object->IsDescendantOf(container_layout_object)) {
+        if (container->IsScrollableContainer() ||
+            container_layout_object->HasLayer()) {
+          if (layout_object->IsAbsolutePositioned()) {
+            // If it's absolutely positioned, the container must be the
+            // nearest positioned container, or the root.
+            if (container->IsWebArea())
+              break;
+            if (container_layout_object->IsPositioned())
+              break;
+          } else {
+            break;
+          }
+        }
+      }
 
-    container = container->ParentObjectUnignored();
+      container = container->ParentObjectUnignored();
+    }
   }
 
   if (!container)
@@ -1965,7 +2057,17 @@ void AXObject::GetRelativeBounds(AXObject** out_container,
   // If the container has a scroll offset, subtract that out because we want our
   // bounds to be relative to the *unscrolled* position of the container object.
   ScrollableArea* scrollable_area = container->GetScrollableAreaIfScrollable();
-  if (scrollable_area && !container->IsWebArea()) {
+
+  // Without RLS, LayoutView (i.e. "WebArea") is scrolled by the FrameView and
+  // those scrolls aren't accounted for at all in the layout tree. The
+  // scrollable_area returned above returns the FrameView in that case though
+  // so we avoid making the adjustment below. Once RLS ships, the LayoutView
+  // scroll will be accounted for by the layout tree so this condition can be
+  // removed.
+  bool is_self_scrolling = !container->IsWebArea() ||
+                           RuntimeEnabledFeatures::RootLayerScrollingEnabled();
+
+  if (scrollable_area && is_self_scrolling) {
     ScrollOffset scroll_offset = scrollable_area->GetScrollOffset();
     out_bounds_in_container.Move(scroll_offset);
   }
@@ -2135,9 +2237,10 @@ bool AXObject::OnNativeScrollToMakeVisibleAction() const {
     return false;
   LayoutRect target_rect(layout_object->AbsoluteBoundingBoxRect());
   layout_object->ScrollRectToVisible(
-      target_rect, ScrollAlignment::kAlignCenterIfNeeded,
-      ScrollAlignment::kAlignCenterIfNeeded, kProgrammaticScroll, false,
-      kScrollBehaviorAuto);
+      target_rect,
+      WebScrollIntoViewParams(ScrollAlignment::kAlignCenterIfNeeded,
+                              ScrollAlignment::kAlignCenterIfNeeded,
+                              kProgrammaticScroll, false, kScrollBehaviorAuto));
   AXObjectCache().PostNotification(
       AXObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
       AXObjectCacheImpl::kAXLocationChanged);
@@ -2160,9 +2263,10 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
   // is the default behavior of element.scrollIntoView.
   ScrollAlignment scroll_alignment = {
       kScrollAlignmentNoScroll, kScrollAlignmentCenter, kScrollAlignmentCenter};
-  layout_object->ScrollRectToVisible(target_rect, scroll_alignment,
-                                     scroll_alignment, kProgrammaticScroll,
-                                     false, kScrollBehaviorAuto);
+  layout_object->ScrollRectToVisible(
+      target_rect,
+      WebScrollIntoViewParams(scroll_alignment, scroll_alignment,
+                              kProgrammaticScroll, false, kScrollBehaviorAuto));
   AXObjectCache().PostNotification(
       AXObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
       AXObjectCacheImpl::kAXLocationChanged);
@@ -2178,9 +2282,10 @@ bool AXObject::OnNativeScrollToGlobalPointAction(
   LayoutRect target_rect(layout_object->AbsoluteBoundingBoxRect());
   target_rect.MoveBy(-global_point);
   layout_object->ScrollRectToVisible(
-      target_rect, ScrollAlignment::kAlignLeftAlways,
-      ScrollAlignment::kAlignTopAlways, kProgrammaticScroll, false,
-      kScrollBehaviorAuto);
+      target_rect,
+      WebScrollIntoViewParams(ScrollAlignment::kAlignLeftAlways,
+                              ScrollAlignment::kAlignTopAlways,
+                              kProgrammaticScroll, false, kScrollBehaviorAuto));
   AXObjectCache().PostNotification(
       AXObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
       AXObjectCacheImpl::kAXLocationChanged);
@@ -2451,7 +2556,7 @@ bool AXObject::NameFromContents(bool recursive) const {
   return result;
 }
 
-bool AXObject::CanSupportAriaReadOnly() const {
+bool AXObject::SupportsARIAReadOnly() const {
   switch (RoleValue()) {
     case kCellRole:
     case kCheckBoxRole:

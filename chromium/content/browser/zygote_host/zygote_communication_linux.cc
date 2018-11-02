@@ -11,24 +11,17 @@
 #include "base/command_line.h"
 #include "base/i18n/unicodestring.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/pickle.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/posix/unix_domain_socket.h"
-#include "content/browser/zygote_host/zygote_host_impl_linux.h"
 #include "content/common/zygote_commands_linux.h"
-#include "content/public/browser/content_browser_client.h"
-#include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
-#include "media/base/media_switches.h"
 #include "services/service_manager/embedder/switches.h"
 #include "services/service_manager/sandbox/switches.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
-#include "ui/display/display_switches.h"
-#include "ui/gfx/switches.h"
 
 #include "base/vivaldi_switches.h"
 
@@ -82,7 +75,7 @@ ssize_t ZygoteCommunication::ReadReply(void* buf, size_t buf_len) {
       return -1;
     }
     have_read_sandbox_status_word_ = true;
-    UMA_HISTOGRAM_SPARSE_SLOWLY("Linux.SandboxStatus", sandbox_status_);
+    base::UmaHistogramSparse("Linux.SandboxStatus", sandbox_status_);
   }
 
   return HANDLE_EINTR(read(control_fd_.get(), buf, buf_len));
@@ -90,7 +83,7 @@ ssize_t ZygoteCommunication::ReadReply(void* buf, size_t buf_len) {
 
 pid_t ZygoteCommunication::ForkRequest(
     const std::vector<std::string>& argv,
-    std::unique_ptr<PosixFileDescriptorInfo> mapping,
+    const base::FileHandleMappingVector& mapping,
     const std::string& process_type) {
   DCHECK(init_);
 
@@ -116,7 +109,7 @@ pid_t ZygoteCommunication::ForkRequest(
 
   // Fork requests contain one file descriptor for the PID oracle, and one
   // more for each file descriptor mapping for the child process.
-  const size_t num_fds_to_send = 1 + mapping->GetMappingSize();
+  const size_t num_fds_to_send = 1 + mapping.size();
   pickle.WriteInt(num_fds_to_send);
 
   std::vector<int> fds;
@@ -127,9 +120,9 @@ pid_t ZygoteCommunication::ForkRequest(
   fds.push_back(peer_sock.get());
 
   // The rest come from mapping.
-  for (size_t i = 0; i < mapping->GetMappingSize(); ++i) {
-    pickle.WriteUInt32(mapping->GetIDAt(i));
-    fds.push_back(mapping->GetFDAt(i));
+  for (const auto& item : mapping) {
+    fds.push_back(item.first);
+    pickle.WriteUInt32(item.second);
   }
 
   // Sanity check that we've populated |fds| correctly.
@@ -140,7 +133,6 @@ pid_t ZygoteCommunication::ForkRequest(
     base::AutoLock lock(control_lock_);
     if (!SendMessage(pickle, &fds))
       return base::kNullProcessHandle;
-    mapping.reset();
     peer_sock.reset();
 
     {
@@ -204,17 +196,6 @@ pid_t ZygoteCommunication::ForkRequest(
       return base::kNullProcessHandle;
   }
 
-#if !defined(OS_OPENBSD)
-  // This is just a starting score for a renderer or extension (the
-  // only types of processes that will be started this way).  It will
-  // get adjusted as time goes on.  (This is the same value as
-  // chrome::kLowestRendererOomScore in chrome/chrome_constants.h, but
-  // that's not something we can include here.)
-  const int kLowestRendererOomScore = 300;
-  ZygoteHostImpl::GetInstance()->AdjustRendererOOMScore(
-      pid, kLowestRendererOomScore);
-#endif
-
   ZygoteChildBorn(pid);
   return pid;
 }
@@ -243,13 +224,14 @@ void ZygoteCommunication::ZygoteChildDied(pid_t process) {
   DCHECK_EQ(1U, num_erased);
 }
 
-void ZygoteCommunication::Init() {
+void ZygoteCommunication::Init(
+    base::OnceCallback<pid_t(base::CommandLine*, base::ScopedFD*)> launcher) {
   CHECK(!init_);
 
   base::FilePath chrome_path;
   CHECK(PathService::Get(base::FILE_EXE, &chrome_path));
-  base::CommandLine cmd_line(chrome_path);
 
+  base::CommandLine cmd_line(chrome_path);
   cmd_line.AppendSwitchASCII(switches::kProcessType, switches::kZygoteProcess);
 
   const base::CommandLine& browser_command_line =
@@ -258,32 +240,19 @@ void ZygoteCommunication::Init() {
     cmd_line.PrependWrapper(
         browser_command_line.GetSwitchValueNative(switches::kZygoteCmdPrefix));
   }
-  // Append any switches from the browser process that need to be forwarded on
+  // Append any switches from the service manager that need to be forwarded on
   // to the zygote/renderers.
-  // Should this list be obtained from browser_render_process_host.cc?
   static const char* const kForwardSwitches[] = {
       service_manager::switches::kAllowSandboxDebugging,
       service_manager::switches::kDisableInProcessStackTraces,
       service_manager::switches::kDisableSeccompFilterSandbox,
-      switches::kAndroidFontsPath, switches::kClearKeyCdmPathForTesting,
-      switches::kEnableHeapProfiling,
-      switches::kEnableLogging,  // Support, e.g., --enable-logging=stderr.
-      // Need to tell the zygote that it is headless so that we don't try to use
-      // the wrong type of main delegate.
-      switches::kHeadless,
-      // Zygote process needs to know what resources to have loaded when it
-      // becomes a renderer process.
-      switches::kForceDeviceScaleFactor, switches::kLoggingLevel,
-      switches::kNoSandbox, switches::kPpapiInProcess,
-      switches::kRegisterPepperPlugins, switches::kV, switches::kVModule,
+      service_manager::switches::kNoSandbox,
       switches::kDisableVivaldi,
   };
   cmd_line.CopySwitchesFrom(browser_command_line, kForwardSwitches,
                             arraysize(kForwardSwitches));
 
-  GetContentClient()->browser()->AppendExtraCommandLineSwitches(&cmd_line, -1);
-
-  pid_ = ZygoteHostImpl::GetInstance()->LaunchZygote(&cmd_line, &control_fd_);
+  pid_ = std::move(launcher).Run(&cmd_line, &control_fd_);
 
   base::Pickle pickle;
   pickle.WriteInt(kZygoteCommandGetSandboxStatus);
@@ -350,7 +319,7 @@ int ZygoteCommunication::GetSandboxStatus() {
     return 0;
   }
   have_read_sandbox_status_word_ = true;
-  UMA_HISTOGRAM_SPARSE_SLOWLY("Linux.SandboxStatus", sandbox_status_);
+  base::UmaHistogramSparse("Linux.SandboxStatus", sandbox_status_);
   return sandbox_status_;
 }
 

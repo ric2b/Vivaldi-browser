@@ -102,7 +102,7 @@ ANDROID_SDK_ROOT = os.path.join(DIR_SOURCE_ROOT,
 ANDROID_SDK_TOOLS = os.path.join(ANDROID_SDK_ROOT,
                                  'build-tools', ANDROID_SDK_BUILD_TOOLS_VERSION)
 ANDROID_NDK_ROOT = os.path.join(DIR_SOURCE_ROOT,
-                                'third_party', 'android_tools', 'ndk')
+                                'third_party', 'android_ndk')
 
 PROGUARD_ROOT = os.path.join(DIR_SOURCE_ROOT, 'third_party', 'proguard')
 
@@ -114,6 +114,15 @@ UPSTREAM_FLAKINESS_SERVER = 'test-results.appspot.com'
 
 # TODO(jbudorick): Remove once unused.
 DEVICE_LOCAL_PROPERTIES_PATH = '/data/local.prop'
+
+# Configure ubsan to print stack traces in the format understood by "stack" so
+# that they will be symbolized, and disable signal handlers because they
+# interfere with the breakpad and sandbox tests.
+# This value is duplicated in
+# base/android/java/src/org/chromium/base/library_loader/LibraryLoader.java
+UBSAN_OPTIONS = (
+    'print_stacktrace=1 stack_trace_format=\'#%n pc %o %m\' '
+    'handle_segv=0 handle_sigbus=0 handle_sigfpe=0')
 
 # TODO(jbudorick): Rework this into testing/buildbot/
 PYTHON_UNIT_TEST_SUITES = {

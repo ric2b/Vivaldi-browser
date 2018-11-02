@@ -4,7 +4,9 @@
 
 #include "core/loader/resource/FontResource.h"
 
+#include "core/css/CSSFontFaceSrcValue.h"
 #include "core/loader/resource/MockFontResourceClient.h"
+#include "core/testing/DummyPageHolder.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/MemoryCache.h"
@@ -15,6 +17,7 @@
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/testing/MockFetchContext.h"
 #include "platform/loader/testing/MockResourceClient.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLLoaderMockFactory.h"
@@ -36,8 +39,7 @@ class FontResourceTest : public ::testing::Test {
 TEST_F(FontResourceTest,
        ResourceFetcherRevalidateDeferedResourceFromTwoInitiators) {
   KURL url("http://127.0.0.1:8000/font.woff");
-  ResourceResponse response;
-  response.SetURL(url);
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   response.SetHTTPHeaderField(HTTPNames::ETag, "1234567890");
   Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
@@ -50,7 +52,7 @@ TEST_F(FontResourceTest,
   // Fetch to cache a resource.
   ResourceRequest request1(url);
   FetchParameters fetch_params1(request1);
-  Resource* resource1 = FontResource::Fetch(fetch_params1, fetcher);
+  Resource* resource1 = FontResource::Fetch(fetch_params1, fetcher, nullptr);
   ASSERT_TRUE(resource1);
   fetcher->StartLoad(resource1);
   Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
@@ -64,7 +66,7 @@ TEST_F(FontResourceTest,
   ResourceRequest request2(url);
   request2.SetCacheMode(mojom::FetchCacheMode::kValidateCache);
   FetchParameters fetch_params2(request2);
-  Resource* resource2 = FontResource::Fetch(fetch_params2, fetcher);
+  Resource* resource2 = FontResource::Fetch(fetch_params2, fetcher, nullptr);
   ASSERT_TRUE(resource2);
   EXPECT_EQ(resource1, resource2);
   EXPECT_TRUE(resource2->IsCacheValidator());
@@ -74,7 +76,7 @@ TEST_F(FontResourceTest,
   ResourceRequest request3(url);
   request3.SetCacheMode(mojom::FetchCacheMode::kValidateCache);
   FetchParameters fetch_params3(request3);
-  Resource* resource3 = FontResource::Fetch(fetch_params3, fetcher);
+  Resource* resource3 = FontResource::Fetch(fetch_params3, fetcher, nullptr);
   ASSERT_TRUE(resource3);
   EXPECT_EQ(resource2, resource3);
   EXPECT_TRUE(resource3->IsCacheValidator());
@@ -95,24 +97,33 @@ TEST_F(FontResourceTest,
 // Tests if cache-aware font loading works correctly.
 TEST_F(FontResourceTest, CacheAwareFontLoading) {
   KURL url("http://127.0.0.1:8000/font.woff");
-  ResourceResponse response;
-  response.SetURL(url);
+  ResourceResponse response(url);
   response.SetHTTPStatusCode(200);
   Platform::Current()->GetURLLoaderMockFactory()->RegisterURL(
       url, WrappedResourceResponse(response), "");
 
-  auto* context =
-      MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
+  RuntimeEnabledFeatures::Backup features_backup;
+  RuntimeEnabledFeatures::SetWebFontsCacheAwareTimeoutAdaptationEnabled(true);
 
-  ResourceFetcher* fetcher = ResourceFetcher::Create(context);
+  std::unique_ptr<DummyPageHolder> dummy_page_holder =
+      DummyPageHolder::Create(IntSize(800, 600));
+  Document& document = dummy_page_holder->GetDocument();
+  ResourceFetcher* fetcher = document.Fetcher();
+  CSSFontFaceSrcValue* src_value = CSSFontFaceSrcValue::Create(
+      url.GetString(), url.GetString(),
+      Referrer(document.Url(), document.GetReferrerPolicy()),
+      kDoNotCheckContentSecurityPolicy);
 
-  FetchParameters fetch_params{ResourceRequest(url)};
-  fetch_params.SetCacheAwareLoadingEnabled(kIsCacheAwareLoadingEnabled);
-  FontResource* resource = FontResource::Fetch(fetch_params, fetcher);
+  // Route font requests in this test through CSSFontFaceSrcValue::Fetch
+  // instead of calling FontResource::Fetch directly. CSSFontFaceSrcValue
+  // requests a FontResource only once, and skips calling FontResource::Fetch
+  // on future CSSFontFaceSrcValue::Fetch calls. This tests wants to ensure
+  // correct behavior in the case where we reuse a FontResource without it being
+  // a "cache hit" in ResourceFetcher's view.
+  Persistent<MockFontResourceClient> client = new MockFontResourceClient;
+  FontResource* resource = src_value->Fetch(&document, client);
   ASSERT_TRUE(resource);
 
-  Persistent<MockFontResourceClient> client =
-      new MockFontResourceClient(resource);
   fetcher->StartLoad(resource);
   EXPECT_TRUE(resource->Loader()->IsCacheAwareLoadingActivated());
   resource->load_limit_state_ = FontResource::kUnderLimit;
@@ -131,8 +142,9 @@ TEST_F(FontResourceTest, CacheAwareFontLoading) {
   EXPECT_FALSE(client->FontLoadLongLimitExceededCalled());
 
   // Add client now, FontLoadShortLimitExceeded() should be called.
-  Persistent<MockFontResourceClient> client2 =
-      new MockFontResourceClient(resource);
+  Persistent<MockFontResourceClient> client2 = new MockFontResourceClient;
+  FontResource* resource2 = src_value->Fetch(&document, client2);
+  EXPECT_EQ(resource, resource2);
   EXPECT_TRUE(client2->FontLoadShortLimitExceededCalled());
   EXPECT_FALSE(client2->FontLoadLongLimitExceededCalled());
 
@@ -141,13 +153,16 @@ TEST_F(FontResourceTest, CacheAwareFontLoading) {
   EXPECT_TRUE(client->FontLoadLongLimitExceededCalled());
 
   // Add client now, both callbacks should be called.
-  Persistent<MockFontResourceClient> client3 =
-      new MockFontResourceClient(resource);
+  Persistent<MockFontResourceClient> client3 = new MockFontResourceClient;
+  FontResource* resource3 = src_value->Fetch(&document, client3);
+  EXPECT_EQ(resource, resource3);
   EXPECT_TRUE(client3->FontLoadShortLimitExceededCalled());
   EXPECT_TRUE(client3->FontLoadLongLimitExceededCalled());
 
   Platform::Current()->GetURLLoaderMockFactory()->ServeAsynchronousRequests();
   GetMemoryCache()->Remove(resource);
+
+  features_backup.Restore();
 }
 
 }  // namespace blink

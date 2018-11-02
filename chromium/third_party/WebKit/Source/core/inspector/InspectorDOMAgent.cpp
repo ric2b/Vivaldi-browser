@@ -71,7 +71,7 @@
 #include "core/inspector/V8InspectorString.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutInline.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/page/FrameTree.h"
@@ -79,7 +79,6 @@
 #include "core/xml/DocumentXPathEvaluator.h"
 #include "core/xml/XPathResult.h"
 #include "platform/graphics/Color.h"
-#include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
@@ -125,7 +124,7 @@ void InspectorRevalidateDOMTask::ScheduleStyleAttrRevalidationFor(
     Element* element) {
   style_attr_invalidated_elements_.insert(element);
   if (!timer_.IsActive())
-    timer_.StartOneShot(TimeDelta(), BLINK_FROM_HERE);
+    timer_.StartOneShot(TimeDelta(), FROM_HERE);
 }
 
 void InspectorRevalidateDOMTask::OnTimer(TimerBase*) {
@@ -237,7 +236,7 @@ InspectorDOMAgent::InspectorDOMAgent(
       last_node_id_(1),
       suppress_attribute_modified_event_(false) {}
 
-InspectorDOMAgent::~InspectorDOMAgent() {}
+InspectorDOMAgent::~InspectorDOMAgent() = default;
 
 void InspectorDOMAgent::Restore() {
   if (!Enabled())
@@ -300,11 +299,12 @@ void InspectorDOMAgent::Unbind(Node* node, NodeToIdMap* nodes_map) {
   id_to_node_.erase(id);
   id_to_nodes_map_.erase(id);
 
+  if (node->IsDocumentNode() && dom_listener_)
+    dom_listener_->DidRemoveDocument(ToDocument(node));
+
   if (node->IsFrameOwnerElement()) {
     Document* content_document =
         ToHTMLFrameOwnerElement(node)->contentDocument();
-    if (dom_listener_)
-      dom_listener_->DidRemoveDocument(content_document);
     if (content_document)
       Unbind(content_document, nodes_map);
   }
@@ -395,8 +395,7 @@ ShadowRoot* InspectorDOMAgent::UserAgentShadowRoot(Node* node) {
   DCHECK(candidate);
   ShadowRoot* shadow_root = ToShadowRoot(candidate);
 
-  return shadow_root->GetType() == ShadowRootType::kUserAgent ? shadow_root
-                                                              : nullptr;
+  return shadow_root->IsUserAgent() ? shadow_root : nullptr;
 }
 
 Response InspectorDOMAgent::AssertEditableNode(int node_id, Node*& node) {
@@ -930,8 +929,7 @@ static Node* NextNodeWithShadowDOMInMind(const Node& current,
     ElementShadow* element_shadow = element.Shadow();
     if (element_shadow) {
       ShadowRoot& shadow_root = element_shadow->YoungestShadowRoot();
-      if (shadow_root.GetType() != ShadowRootType::kUserAgent ||
-          include_user_agent_shadow_dom)
+      if (!shadow_root.IsUserAgent() || include_user_agent_shadow_dom)
         return &shadow_root;
     }
   }
@@ -1313,7 +1311,7 @@ Response InspectorDOMAgent::getNodeForLocation(
   HitTestRequest request(HitTestRequest::kMove | HitTestRequest::kReadOnly |
                          HitTestRequest::kAllowChildFrameContent);
   HitTestResult result(request, IntPoint(x, y));
-  document_->GetFrame()->ContentLayoutItem().HitTest(result);
+  document_->GetFrame()->ContentLayoutObject()->HitTest(result);
   if (!include_user_agent_shadow_dom)
     result.SetToShadowHostIfInRestrictedShadowRoot();
   Node* node = result.InnerPossiblyPseudoNode();
@@ -1388,7 +1386,7 @@ String InspectorDOMAgent::DocumentBaseURLString(Document* document) {
 static protocol::DOM::ShadowRootType GetShadowRootType(
     ShadowRoot* shadow_root) {
   switch (shadow_root->GetType()) {
-    case ShadowRootType::kUserAgent:
+    case ShadowRootType::kUserAgentV1:
       return protocol::DOM::ShadowRootTypeEnum::UserAgent;
     case ShadowRootType::V0:
     case ShadowRootType::kOpen:
@@ -1448,12 +1446,10 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
 
     if (node->IsFrameOwnerElement()) {
       HTMLFrameOwnerElement* frame_owner = ToHTMLFrameOwnerElement(node);
-      if (LocalFrame* frame =
-              frame_owner->ContentFrame() &&
-                      frame_owner->ContentFrame()->IsLocalFrame()
-                  ? ToLocalFrame(frame_owner->ContentFrame())
-                  : nullptr)
-        value->setFrameId(IdentifiersFactory::FrameId(frame));
+      if (frame_owner->ContentFrame()) {
+        value->setFrameId(
+            IdentifiersFactory::FrameId(frame_owner->ContentFrame()));
+      }
       if (Document* doc = frame_owner->contentDocument()) {
         value->setContentDocument(BuildObjectForNode(
             doc, pierce ? depth : 0, pierce, nodes_map, flatten_result));
@@ -1740,7 +1736,7 @@ void InspectorDOMAgent::CollectNodes(
     Node* node,
     int depth,
     bool pierce,
-    const WTF::RepeatingFunction<bool(Node*)>& filter,
+    base::RepeatingCallback<bool(Node*)> filter,
     HeapVector<Member<Node>>* result) {
   if (filter && filter.Run(node))
     result->push_back(node);
@@ -1790,8 +1786,8 @@ void InspectorDOMAgent::DomContentLoadedEventFired(LocalFrame* frame) {
     GetFrontend()->documentUpdated();
 }
 
-void InspectorDOMAgent::InvalidateFrameOwnerElement(LocalFrame* frame) {
-  HTMLFrameOwnerElement* frame_owner = frame->GetDocument()->LocalOwner();
+void InspectorDOMAgent::InvalidateFrameOwnerElement(
+    HTMLFrameOwnerElement* frame_owner) {
   if (!frame_owner)
     return;
 
@@ -1819,7 +1815,8 @@ void InspectorDOMAgent::DidCommitLoad(LocalFrame*, DocumentLoader* loader) {
 
   LocalFrame* inspected_frame = inspected_frames_->Root();
   if (loader->GetFrame() != inspected_frame) {
-    InvalidateFrameOwnerElement(loader->GetFrame());
+    InvalidateFrameOwnerElement(
+        loader->GetFrame()->GetDocument()->LocalOwner());
     return;
   }
 
@@ -2024,6 +2021,15 @@ void InspectorDOMAgent::FrameDocumentUpdated(LocalFrame* frame) {
   // Only update the main frame document, nested frame document updates are not
   // required (will be handled by invalidateFrameOwnerElement()).
   SetDocument(document);
+}
+
+void InspectorDOMAgent::FrameDisconnected(LocalFrame* frame,
+                                          HTMLFrameOwnerElement* frame_owner) {
+  // frame_owner does not point to frame at this point, so Unbind it explicitly.
+  Unbind(frame->GetDocument(), document_node_to_id_map_.Get());
+  // Revalidating owner will serialize empty frame owner - that's what we are
+  // looking for when disconnecting.
+  InvalidateFrameOwnerElement(frame_owner);
 }
 
 void InspectorDOMAgent::PseudoElementCreated(PseudoElement* pseudo_element) {

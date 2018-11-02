@@ -15,7 +15,6 @@
 #include "platform/scheduler/renderer/budget_pool.h"
 #include "platform/scheduler/renderer/renderer_scheduler_impl.h"
 #include "platform/scheduler/renderer/web_frame_scheduler_impl.h"
-#include "platform/scheduler/util/tracing_helper.h"
 
 namespace blink {
 namespace scheduler {
@@ -191,10 +190,13 @@ bool WebViewSchedulerImpl::VirtualTimeAllowedToAdvance() const {
 
 void WebViewSchedulerImpl::GrantVirtualTimeBudget(
     base::TimeDelta budget,
-    WTF::Closure budget_exhausted_callback) {
+    base::OnceClosure budget_exhausted_callback) {
   renderer_scheduler_->VirtualTimeControlTaskQueue()->PostDelayedTask(
-      FROM_HERE, ConvertToBaseCallback(std::move(budget_exhausted_callback)),
-      budget);
+      FROM_HERE, std::move(budget_exhausted_callback), budget);
+  // This can shift time forwards if there's a pending MaybeAdvanceVirtualTime,
+  // so it's important this is called second.
+  renderer_scheduler_->GetVirtualTimeDomain()->SetVirtualTimeFence(
+      renderer_scheduler_->GetVirtualTimeDomain()->Now() + budget);
 }
 
 void WebViewSchedulerImpl::AddVirtualTimeObserver(
@@ -241,6 +243,7 @@ void WebViewSchedulerImpl::OnConnectionUpdated() {
 }
 
 void WebViewSchedulerImpl::OnTraceLogEnabled() {
+  tracing_controller_.OnTraceLogEnabled();
   for (WebFrameSchedulerImpl* frame_scheduler : frame_schedulers_) {
     frame_scheduler->OnTraceLogEnabled();
   }

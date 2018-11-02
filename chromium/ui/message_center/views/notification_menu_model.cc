@@ -19,22 +19,15 @@ namespace {
 
 // Menu constants
 const int kTogglePermissionCommand = 0;
-const int kShowSettingsCommand = 1;
 
 }  // namespace
 
 NotificationMenuModel::NotificationMenuModel(const Notification& notification)
-    : ui::SimpleMenuModel(this), notification_(notification) {
+    : ui::SimpleMenuModel(this), notification_id_(notification.id()) {
   DCHECK(!notification.display_source().empty());
   AddItem(kTogglePermissionCommand,
           l10n_util::GetStringFUTF16(IDS_MESSAGE_CENTER_NOTIFIER_DISABLE,
                                      notification.display_source()));
-
-#if defined(OS_CHROMEOS)
-  // Add settings menu item.
-  AddItem(kShowSettingsCommand,
-          l10n_util::GetStringUTF16(IDS_MESSAGE_CENTER_SETTINGS));
-#endif
 }
 
 NotificationMenuModel::~NotificationMenuModel() {}
@@ -51,19 +44,8 @@ bool NotificationMenuModel::IsCommandIdEnabled(int command_id) const {
 }
 
 void NotificationMenuModel::ExecuteCommand(int command_id, int event_flags) {
-  switch (command_id) {
-    case kTogglePermissionCommand:
-      notification_.delegate()->DisableNotification();
-      // TODO(estade): this will not close other open notifications from the
-      // same site.
-      MessageCenter::Get()->RemoveNotification(notification_.id(), false);
-      break;
-    case kShowSettingsCommand:
-      MessageCenter::Get()->ClickOnSettingsButton(notification_.id());
-      break;
-    default:
-      NOTREACHED();
-  }
+  DCHECK_EQ(command_id, kTogglePermissionCommand);
+  MessageCenter::Get()->DisableNotification(notification_id_);
 }
 
 }  // namespace message_center

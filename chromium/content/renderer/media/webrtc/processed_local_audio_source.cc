@@ -26,16 +26,21 @@ namespace content {
 
 namespace {
 // Used as an identifier for ProcessedLocalAudioSource::From().
-void* const kClassIdentifier = const_cast<void**>(&kClassIdentifier);
+void* const kProcessedLocalAudioSourceIdentifier =
+    const_cast<void**>(&kProcessedLocalAudioSourceIdentifier);
 }  // namespace
 
 ProcessedLocalAudioSource::ProcessedLocalAudioSource(
     int consumer_render_frame_id,
     const MediaStreamDevice& device,
+    bool hotword_enabled,
+    bool disable_local_echo,
     const AudioProcessingProperties& audio_processing_properties,
     const ConstraintsCallback& started_callback,
     PeerConnectionDependencyFactory* factory)
-    : MediaStreamAudioSource(true /* is_local_source */),
+    : MediaStreamAudioSource(true /* is_local_source */,
+                             hotword_enabled,
+                             disable_local_echo),
       consumer_render_frame_id_(consumer_render_frame_id),
       pc_factory_(factory),
       audio_processing_properties_(audio_processing_properties),
@@ -55,13 +60,14 @@ ProcessedLocalAudioSource::~ProcessedLocalAudioSource() {
 // static
 ProcessedLocalAudioSource* ProcessedLocalAudioSource::From(
     MediaStreamAudioSource* source) {
-  if (source && source->GetClassIdentifier() == kClassIdentifier)
+  if (source &&
+      source->GetClassIdentifier() == kProcessedLocalAudioSourceIdentifier)
     return static_cast<ProcessedLocalAudioSource*>(source);
   return nullptr;
 }
 
 void* ProcessedLocalAudioSource::GetClassIdentifier() const {
-  return kClassIdentifier;
+  return kProcessedLocalAudioSourceIdentifier;
 }
 
 bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
@@ -85,12 +91,10 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
   WebRtcLogMessage(base::StringPrintf(
       "ProcessedLocalAudioSource::EnsureSourceIsStarted. render_frame_id=%d"
       ", channel_layout=%d, sample_rate=%d, buffer_size=%d"
-      ", session_id=%d, paired_output_sample_rate=%d"
-      ", paired_output_frames_per_buffer=%d, effects=%d. ",
+      ", session_id=%d, effects=%d. ",
       consumer_render_frame_id_, device().input.channel_layout(),
       device().input.sample_rate(), device().input.frames_per_buffer(),
-      device().session_id, device().matched_output.sample_rate(),
-      device().matched_output.frames_per_buffer(), device().input.effects()));
+      device().session_id, device().input.effects()));
 
   MediaStreamDevice modified_device(device());
   bool device_is_modified = false;
@@ -282,6 +286,9 @@ void ProcessedLocalAudioSource::Capture(const media::AudioBus* audio_bus,
   // of the audio, instead of just snapshotting TimeTicks::Now(), for proper
   // audio/video sync.  http://crbug.com/335335
   const base::TimeTicks reference_clock_snapshot = base::TimeTicks::Now();
+  TRACE_EVENT2("audio", "ProcessedLocalAudioSource::Capture", "now (ms)",
+               (reference_clock_snapshot - base::TimeTicks()).InMillisecondsF(),
+               "delay (ms)", audio_delay_milliseconds);
 
   // Map internal volume range of [0.0, 1.0] into [0, 255] used by AGC.
   // The volume can be higher than 255 on Linux, and it will be cropped to

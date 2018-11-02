@@ -17,7 +17,6 @@
 #include "content/browser/renderer_host/input/input_disposition_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
 #include "content/browser/renderer_host/input/passthrough_touch_event_queue.h"
-#include "content/browser/renderer_host/input/touch_event_queue.h"
 #include "content/browser/renderer_host/input/touchpad_tap_suppression_controller.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/edit_command.h"
@@ -65,7 +64,7 @@ LegacyInputRouterImpl::LegacyInputRouterImpl(
       wheel_scroll_latching_enabled_(base::FeatureList::IsEnabled(
           features::kTouchpadAndWheelScrollLatching)),
       wheel_event_queue_(this, wheel_scroll_latching_enabled_),
-      gesture_event_queue_(this, this, config.gesture_config),
+      gesture_event_queue_(this, this, this, config.gesture_config),
       device_scale_factor_(1.f) {
   touch_event_queue_.reset(
       new PassthroughTouchEventQueue(this, config.touch_config));
@@ -208,6 +207,14 @@ void LegacyInputRouterImpl::BindHost(
   NOTREACHED();
 }
 
+void LegacyInputRouterImpl::ProgressFling(base::TimeTicks current_time) {
+  gesture_event_queue_.ProgressFling(current_time);
+}
+
+void LegacyInputRouterImpl::StopFling() {
+  gesture_event_queue_.StopFling();
+}
+
 bool LegacyInputRouterImpl::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(LegacyInputRouterImpl, message)
@@ -273,6 +280,16 @@ void LegacyInputRouterImpl::ForwardGestureEventWithLatencyInfo(
     const blink::WebGestureEvent& event,
     const ui::LatencyInfo& latency_info) {
   client_->ForwardGestureEventWithLatencyInfo(event, latency_info);
+}
+
+void LegacyInputRouterImpl::SendGeneratedWheelEvent(
+    const MouseWheelEventWithLatencyInfo& wheel_event) {
+  client_->ForwardWheelEventWithLatencyInfo(wheel_event.event,
+                                            wheel_event.latency);
+}
+
+void LegacyInputRouterImpl::SetNeedsBeginFrameForFlingProgress() {
+  client_->SetNeedsBeginFrameForFlingProgress();
 }
 
 void LegacyInputRouterImpl::SendMouseWheelEventImmediately(
@@ -409,7 +426,7 @@ bool LegacyInputRouterImpl::OfferToRenderer(
     // renderer. Consequently, such event types should not affect event time
     // or in-flight event count metrics.
     if (dispatch_type == InputEventDispatchType::DISPATCH_TYPE_BLOCKING)
-      client_->IncrementInFlightEventCount(input_event.GetType());
+      client_->IncrementInFlightEventCount();
     return true;
   }
   return false;
@@ -471,10 +488,13 @@ void LegacyInputRouterImpl::OnHasTouchEventHandlers(bool has_handlers) {
 }
 
 void LegacyInputRouterImpl::OnSetTouchAction(cc::TouchAction touch_action) {
-  // Synthetic touchstart events should get filtered out in RenderWidget.
-  DCHECK(touch_event_queue_->IsPendingAckTouchStart());
   TRACE_EVENT1("input", "LegacyInputRouterImpl::OnSetTouchAction", "action",
                touch_action);
+
+  // It is possible we get a touch action for a touch start that is no longer
+  // in the queue. eg. Events that have fired the Touch ACK timeout.
+  if (!touch_event_queue_->IsPendingAckTouchStart())
+    return;
 
   touch_action_filter_.OnSetTouchAction(touch_action);
 

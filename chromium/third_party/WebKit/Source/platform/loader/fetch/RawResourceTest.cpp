@@ -48,8 +48,8 @@ namespace blink {
 
 class RawResourceTest : public ::testing::Test {
  public:
-  RawResourceTest() {}
-  ~RawResourceTest() override {}
+  RawResourceTest() = default;
+  ~RawResourceTest() override = default;
 
  protected:
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
@@ -78,7 +78,7 @@ class DummyClient final : public GarbageCollectedFinalized<DummyClient>,
 
  public:
   DummyClient() : called_(false), number_of_redirects_received_(0) {}
-  ~DummyClient() override {}
+  ~DummyClient() override = default;
 
   // ResourceClient implementation.
   void NotifyFinished(Resource* resource) override { called_ = true; }
@@ -119,20 +119,19 @@ class AddingClient final : public GarbageCollectedFinalized<AddingClient>,
   AddingClient(DummyClient* client, Resource* resource)
       : dummy_client_(client), resource_(resource) {}
 
-  ~AddingClient() override {}
+  ~AddingClient() override = default;
 
   // ResourceClient implementation.
   void NotifyFinished(Resource* resource) override {
     // First schedule an asynchronous task to remove the client.
     // We do not expect a client to be called if the client is removed before
     // a callback invocation task queued inside addClient() is scheduled.
-    Platform::Current()
-        ->CurrentThread()
-        ->Scheduler()
-        ->LoadingTaskRunner()
-        ->PostTask(BLINK_FROM_HERE, WTF::Bind(&AddingClient::RemoveClient,
-                                              WrapPersistent(this)));
-    resource->AddClient(dummy_client_);
+    Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
+        FROM_HERE,
+        WTF::Bind(&AddingClient::RemoveClient, WrapPersistent(this)));
+    resource->AddClient(
+        dummy_client_,
+        Platform::Current()->CurrentThread()->GetWebTaskRunner());
   }
   String DebugName() const override { return "AddingClient"; }
 
@@ -151,18 +150,15 @@ class AddingClient final : public GarbageCollectedFinalized<AddingClient>,
 
 TEST_F(RawResourceTest, AddClientDuringCallback) {
   Resource* raw = RawResource::CreateForTest("data:text/html,", Resource::kRaw);
-
-  // Create a non-null response.
-  ResourceResponse response = raw->GetResponse();
-  response.SetURL(KURL("http://600.613/"));
-  raw->SetResponse(response);
+  raw->SetResponse(ResourceResponse(KURL("http://600.613/")));
   raw->FinishForTest();
   EXPECT_FALSE(raw->GetResponse().IsNull());
 
   Persistent<DummyClient> dummy_client = new DummyClient();
   Persistent<AddingClient> adding_client =
       new AddingClient(dummy_client.Get(), raw);
-  raw->AddClient(adding_client);
+  raw->AddClient(adding_client,
+                 Platform::Current()->CurrentThread()->GetWebTaskRunner());
   platform_->RunUntilIdle();
   raw->RemoveClient(adding_client);
   EXPECT_FALSE(dummy_client->Called());
@@ -177,7 +173,7 @@ class RemovingClient : public GarbageCollectedFinalized<RemovingClient>,
  public:
   explicit RemovingClient(DummyClient* client) : dummy_client_(client) {}
 
-  ~RemovingClient() override {}
+  ~RemovingClient() override = default;
 
   // ResourceClient implementation.
   void NotifyFinished(Resource* resource) override {
@@ -196,19 +192,17 @@ class RemovingClient : public GarbageCollectedFinalized<RemovingClient>,
 
 TEST_F(RawResourceTest, RemoveClientDuringCallback) {
   Resource* raw = RawResource::CreateForTest("data:text/html,", Resource::kRaw);
-
-  // Create a non-null response.
-  ResourceResponse response = raw->GetResponse();
-  response.SetURL(KURL("http://600.613/"));
-  raw->SetResponse(response);
+  raw->SetResponse(ResourceResponse(KURL("http://600.613/")));
   raw->FinishForTest();
   EXPECT_FALSE(raw->GetResponse().IsNull());
 
   Persistent<DummyClient> dummy_client = new DummyClient();
   Persistent<RemovingClient> removing_client =
       new RemovingClient(dummy_client.Get());
-  raw->AddClient(dummy_client);
-  raw->AddClient(removing_client);
+  raw->AddClient(dummy_client,
+                 Platform::Current()->CurrentThread()->GetWebTaskRunner());
+  raw->AddClient(removing_client,
+                 Platform::Current()->CurrentThread()->GetWebTaskRunner());
   platform_->RunUntilIdle();
   EXPECT_FALSE(raw->IsAlive());
 }

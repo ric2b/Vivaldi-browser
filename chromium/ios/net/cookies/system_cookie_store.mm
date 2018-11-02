@@ -4,7 +4,8 @@
 
 #import "ios/net/cookies/system_cookie_store.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #import "ios/net/cookies/cookie_creation_time_manager.h"
 #include "ios/net/ios_net_features.h"
 
@@ -17,7 +18,7 @@ namespace net {
 SystemCookieStore::~SystemCookieStore() = default;
 
 SystemCookieStore::SystemCookieStore()
-    : creation_time_manager_(base::MakeUnique<CookieCreationTimeManager>()),
+    : creation_time_manager_(std::make_unique<CookieCreationTimeManager>()),
       weak_factory_(this) {}
 
 void SystemCookieStore::SetCookieAsync(NSHTTPCookie* cookie,
@@ -36,6 +37,7 @@ base::WeakPtr<SystemCookieStore> SystemCookieStore::GetWeakPtr() {
 
 // protected static
 NSInteger SystemCookieStore::CompareCookies(id a, id b, void* context) {
+  DCHECK(context);
   NSHTTPCookie* cookie_a = static_cast<NSHTTPCookie*>(a);
   NSHTTPCookie* cookie_b = static_cast<NSHTTPCookie*>(b);
   // Compare path lengths first.

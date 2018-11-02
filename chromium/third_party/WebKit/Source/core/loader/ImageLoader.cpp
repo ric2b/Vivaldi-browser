@@ -133,14 +133,14 @@ class ImageLoader::Task {
     script_state_ = nullptr;
   }
 
-  WeakPtr<Task> CreateWeakPtr() { return weak_factory_.CreateWeakPtr(); }
+  base::WeakPtr<Task> GetWeakPtr() { return weak_factory_.GetWeakPtr(); }
 
  private:
   WeakPersistent<ImageLoader> loader_;
   BypassMainWorldBehavior should_bypass_main_world_csp_;
   UpdateFromElementBehavior update_behavior_;
   scoped_refptr<ScriptState> script_state_;
-  WeakPtrFactory<Task> weak_factory_;
+  base::WeakPtrFactory<Task> weak_factory_;
   ReferrerPolicy referrer_policy_;
   KURL request_url_;
 };
@@ -153,7 +153,7 @@ ImageLoader::ImageLoader(Element* element)
   RESOURCE_LOADING_DVLOG(1) << "new ImageLoader " << this;
 }
 
-ImageLoader::~ImageLoader() {}
+ImageLoader::~ImageLoader() = default;
 
 void ImageLoader::Dispose() {
   RESOURCE_LOADING_DVLOG(1)
@@ -318,16 +318,12 @@ inline void ImageLoader::DispatchErrorEvent() {
   // In such cases we cancel the previous event (by overwriting
   // |pending_error_event_|) and then re-schedule a new error event here.
   // crbug.com/722500
-  pending_error_event_ =
-      GetElement()
-          ->GetDocument()
-          .GetTaskRunner(TaskType::kDOMManipulation)
-          ->PostCancellableTask(
-              BLINK_FROM_HERE,
-              WTF::Bind(&ImageLoader::DispatchPendingErrorEvent,
-                        WrapPersistent(this),
-                        WTF::Passed(IncrementLoadEventDelayCount::Create(
-                            GetElement()->GetDocument()))));
+  pending_error_event_ = PostCancellableTask(
+      *GetElement()->GetDocument().GetTaskRunner(TaskType::kDOMManipulation),
+      FROM_HERE,
+      WTF::Bind(&ImageLoader::DispatchPendingErrorEvent, WrapPersistent(this),
+                WTF::Passed(IncrementLoadEventDelayCount::Create(
+                    GetElement()->GetDocument()))));
 }
 
 inline void ImageLoader::CrossSiteOrCSPViolationOccurred(
@@ -344,7 +340,7 @@ inline void ImageLoader::EnqueueImageLoadingMicroTask(
     ReferrerPolicy referrer_policy) {
   std::unique_ptr<Task> task =
       Task::Create(this, update_behavior, referrer_policy);
-  pending_task_ = task->CreateWeakPtr();
+  pending_task_ = task->GetWeakPtr();
   Microtask::EnqueueMicrotask(
       WTF::Bind(&Task::Run, WTF::Passed(std::move(task))));
   delay_until_do_update_from_element_ =
@@ -406,6 +402,25 @@ void ImageLoader::DoUpdateFromElement(BypassMainWorldBehavior bypass_behavior,
         !GetElement()->FastGetAttribute(HTMLNames::srcsetAttr).IsNull())
       resource_request.SetRequestContext(
           WebURLRequest::kRequestContextImageSet);
+
+    if (document.PageDismissalEventBeingDispatched() !=
+        Document::kNoDismissal) {
+      resource_request.SetHTTPHeaderField(HTTPNames::Cache_Control,
+                                          "max-age=0");
+      resource_request.SetKeepalive(true);
+      resource_request.SetRequestContext(WebURLRequest::kRequestContextPing);
+    }
+
+    // Plug-ins should not load via service workers as plug-ins may have their
+    // own origin checking logic that may get confused if service workers
+    // respond with resources from another origin.
+    // https://w3c.github.io/ServiceWorker/#implementer-concerns
+    if (GetElement()->IsHTMLElement() &&
+        ToHTMLElement(GetElement())->IsPluginElement()) {
+      resource_request.SetServiceWorkerMode(
+          WebURLRequest::ServiceWorkerMode::kNone);
+    }
+
     FetchParameters params(resource_request, resource_loader_options);
 
 #if !defined(OFFICIAL_BUILD)
@@ -671,16 +686,12 @@ void ImageLoader::ImageNotifyFinished(ImageResourceContent* resource) {
   }
 
   CHECK(!pending_load_event_.IsActive());
-  pending_load_event_ =
-      GetElement()
-          ->GetDocument()
-          .GetTaskRunner(TaskType::kDOMManipulation)
-          ->PostCancellableTask(
-              BLINK_FROM_HERE,
-              WTF::Bind(&ImageLoader::DispatchPendingLoadEvent,
-                        WrapPersistent(this),
-                        WTF::Passed(IncrementLoadEventDelayCount::Create(
-                            GetElement()->GetDocument()))));
+  pending_load_event_ = PostCancellableTask(
+      *GetElement()->GetDocument().GetTaskRunner(TaskType::kDOMManipulation),
+      FROM_HERE,
+      WTF::Bind(&ImageLoader::DispatchPendingLoadEvent, WrapPersistent(this),
+                WTF::Passed(IncrementLoadEventDelayCount::Create(
+                    GetElement()->GetDocument()))));
 }
 
 LayoutImageResource* ImageLoader::GetLayoutImageResource() {
@@ -773,6 +784,8 @@ ScriptPromise ImageLoader::Decode(ScriptState* script_state,
                                       "The source image cannot be decoded.");
     return ScriptPromise();
   }
+
+  UseCounter::Count(GetElement()->GetDocument(), WebFeature::kImageDecodeAPI);
 
   auto* request =
       new DecodeRequest(this, ScriptPromiseResolver::Create(script_state));

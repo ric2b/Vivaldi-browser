@@ -46,39 +46,6 @@
 
       应以毫秒为单位指定此政策的值。</translation>
 <translation id="1151353063931113432">在这些网站上允许图片</translation>
-<translation id="1151545095291359187">为 <ph name="PRODUCT_NAME" /> 配置扩展程序管理设置。
-
-          此政策可控制多项设置，其中包括由任何现有的扩展程序相关政策控制的设置。此政策将会替换所有旧版政策（如果同时设置了这两种政策的话）。
-
-          此政策可将某个扩展程序 ID 或某个更新网址映射至其配置。对于扩展程序 ID，配置将只会应用于所指定的扩展程序。您可为特殊 ID“<ph name="DEFAULT_SCOPE" />”设置默认配置，该配置将会应用于未在此政策中设置自定义配置的所有扩展程序。对于更新网址，配置则会应用于具有在此扩展程序的清单中注明的确切更新网址的所有扩展程序（如 <ph name="LINK_TO_EXTENSION_DOC1" /> 中所述）。
-
-          每个扩展程序（或具有相同更新网址的扩展程序）的配置都是一个单独的字典条目，其中可以包含下述字段。
-
-          <ph name="INSTALLATION_MODE" />：会映射至一个字符串，该字符串用于指明相应扩展程序的安装模式。有效字符串为：
-          * <ph name="ALLOWED" />：允许用户安装相应扩展程序。这是默认行为。
-          * <ph name="BLOCKED" />：禁止安装相应扩展程序。
-          * <ph name="FORCE_INSTALLED" />：自动安装相应扩展程序，且用户无法将其卸载。
-          * <ph name="NORMAL_INSTALLED" />：自动安装相应扩展程序，但用户可将其停用。
-
-          您也可同时为多个扩展程序配置“<ph name="INSTALLATION_MODE" />”，其中包括“<ph name="DEFAULT_SCOPE" />”扩展程序（以作为默认设置）和具有相同更新网址的扩展程序。在这种情况下，只能使用“<ph name="ALLOWED" />”和“<ph name="BLOCKED" />”这两个值。
-
-          如果此模式设为“<ph name="FORCE_INSTALLED" />”或“<ph name="NORMAL_INSTALLED" />”，那么您还必须配置“<ph name="UPDATE_URL" />”。请注意，此政策中设置的更新网址仅会用于初次安装，相应扩展程序的后续更新将会使用其清单中指定的更新网址。更新网址应指向更新清单 XML 文档（如上所述）。
-
-          <ph name="BLOCKED_PERMISSIONS" />：会映射至一系列字符串，这些字符串用于指明相应扩展程序的已被屏蔽的 API 权限。权限名称与扩展程序清单中声明的权限字符串相同（如 <ph name="LINK_TO_EXTENSION_DOC3" /> 中所述）。您也可为“<ph name="DEFAULT_SCOPE" />”扩展程序配置此设置。如果相应扩展程序请求获得屏蔽名单中的某项权限，它将无法进行加载。如果相应扩展程序包含某项已被屏蔽的权限，而这项权限只是作为可选请求，系统将会按照正常方式予以处理，但如果相应扩展程序请求获得冲突的权限，在运行时将会被系统自动拒绝。
-
-          <ph name="ALLOWED_PERMISSIONS" />：与“<ph name="BLOCKED_PERMISSIONS" />”类似，但该设置会明确允许某些可能已被全局屏蔽权限列表屏蔽的权限，因此您无法为“<ph name="DEFAULT_SCOPE" />”扩展程序配置此设置。请注意，此设置不会自动向扩展程序授予所允许的权限。
-
-          <ph name="MINIMUM_VERSION_REQUIRED" />：会映射至一个版本字符串。版本字符串的格式与扩展程序清单中使用的格式相同（如 <ph name="LINK_TO_EXTENSION_DOC4" /> 中所述）。系统将会停用版本低于所指定的最低版本的扩展程序。此设置也适用于强制安装的扩展程序。
-
-          以下设置仅适用于默认的“<ph name="DEFAULT_SCOPE" />”配置：
-
-          <ph name="INSTALL_SOURCES" />：此列表中的每一项都是一种扩展程序样式的匹配模式（请访问 <ph name="LINK_TO_MATCH_PATTERNS" />）。用户将能够从任何与此列表中的扩展程序匹配的网址上轻松地安装扩展程序。<ph name="EXTENSION_SUFFIX_WILDCARD" /> 文件的位置和下载所始于的网页（即引荐来源网址）都必须由这些模式授权。
-
-          <ph name="ALLOWED_TYPES" />：通过此设置，您可将允许在 <ph name="PRODUCT_NAME" /> 中安装的扩展程序/应用的类型列入白名单。此设置的值是一系列字符串，其中每个字符串都应是以下类型之一：<ph name="VALID_ALLOWED_TYPES" />。要详细了解这些类型，请参阅 <ph name="PRODUCT_NAME" /> 扩展程序文档。
-          <ph name="BLOCKED_INSTALL_MESSAGE" />：如果用户尝试安装的扩展程序已被相关政策屏蔽，Chrome 网上应用店就会显示一条常规的错误消息。此设置可让您向这类错误消息附加文本，以便将用户引导至您的支持部门、解释相应扩展程序为何会被屏蔽，或用于其他用途。如果此类错误消息的长度超过 1000 个字符，则会被截断。
-          <ph name="RUNTIME_BLOCKED_HOSTS" />：此设置的值是一系列主机名称，用于指明相应扩展程序将被禁止与哪些主机交互（包括注入 JavaScript、更改和查看 webRequests / webNavigation，以及查看和更改 Cookie）。格式与匹配模式（请访问 <ph name="LINK_TO_MATCH_PATTERNS" />）类似，但无法指定任何路径（例如“*://*.example.com”）。也支持有效的顶级域名 (TLD) 通配符（例如“*://example.*”）。
-          <ph name="RUNTIME_ALLOWED_HOSTS" />：此设置的值是一系列主机名称，用于指明相应扩展程序可与哪些主机交互，无论它们是否已列在“<ph name="RUNTIME_BLOCKED_HOSTS" />”中。格式与“<ph name="RUNTIME_BLOCKED_HOSTS" />”相同。
-          </translation>
 <translation id="1152117524387175066">报告设备启动时的dev开关状态。
 
       如果此政策设为False，则不报告dev开关的状态。</translation>
@@ -174,6 +141,7 @@
           如果您选择了任何其他代理政策设置模式，请勿设置此政策。
 
           要查看更多详细示例，请访问以下网址：<ph name="PROXY_HELP_URL" />。</translation>
+<translation id="1503487916067509762">禁止第三方软件插入可执行代码</translation>
 <translation id="1504431521196476721">远程认证</translation>
 <translation id="1509692106376861764">此政策从 <ph name="PRODUCT_NAME" /> 版本 29 起开始弃用。</translation>
 <translation id="1522425503138261032">允许网站跟踪用户的地理位置</translation>
@@ -278,6 +246,7 @@
 <translation id="1969212217917526199">覆盖与远程访问主机的调试版本号相关的政策。
 
           此政策的值会被解析为“政策名称-政策值”对应关系的 JSON 字典条目。</translation>
+<translation id="1969808853498848952">始终运行需要获得授权的插件（已弃用）</translation>
 <translation id="1988371335297483117"><ph name="PRODUCT_OS_NAME" />上的自动更新有效负荷可通过HTTP而非HTTPS下载。这样，系统将可以对HTTP下载内容进行透明HTTP缓存。
 
       如果此政策设为true，<ph name="PRODUCT_OS_NAME" />将尝试通过HTTP下载自动更新有效负荷。如果此政策设为false或未设置，系统将使用HTTPS下载自动更新有效负荷。</translation>
@@ -471,6 +440,9 @@
 <translation id="2466131534462628618">进行强制门户身份验证时忽略代理服务器</translation>
 <translation id="2482676533225429905">本地消息传递</translation>
 <translation id="2483146640187052324">采用任何网络连接时，均预测网络操作</translation>
+<translation id="2485721741875148980">如果此政策设为 true，用户必须先使用其个人资料登录<ph name="PRODUCT_NAME" />，然后才能使用该浏览器。此外，BrowserGuestModeEnabled 的默认值会设为 false。请注意，启用此政策后，现有的未登录个人资料将会处于锁定且不可访问的状态。有关详情，请参阅帮助中心文章。
+
+      如果此政策设为 false 或未配置，用户无需登录<ph name="PRODUCT_NAME" />即可使用该浏览器。</translation>
 <translation id="2486371469462493753">不强制规定列出的网址必须满足证书透明度要求。
 
       如果此政策处于启用状态，指定网址中的主机名的证书可以不通过证书透明度政策进行披露。这样一来，原本不受信任的证书（因为相应证书并未适当地公开披露）将可以继续使用，但会导致更难以检测到针对这些主机误颁发的证书。
@@ -629,6 +601,12 @@
           此为可选政策。如果未设置此政策，系统将不会替换搜索字词。
 
           此政策只在启用了“DefaultSearchProviderEnabled”政策的前提下才会生效。</translation>
+<translation id="306887062252197004">此政策允许 WebDriver 功能的用户替换那些可能会干扰该功能运行的政策。
+
+      目前，此政策可停用 SitePerProcess 和 IsolateOrigins 政策。
+
+      如果此政策已启用，WebDriver 将能够替换与之冲突的政策。
+      如果此政策已停用或未配置，WebDriver 将无法替换与之冲突的政策。</translation>
 <translation id="3069958900488014740">允许停用 <ph name="PRODUCT_NAME" /> 中的 WPAD（网络代理自动发现）优化设置。
 
       如果此政策设置为 false，那么 WPAD 优化将处于停用状态，这会延长 <ph name="PRODUCT_NAME" /> 等待基于 DNS 的 WPAD 服务器响应的时间。如果未设置或已启用此政策，那么 WPAD 优化设置将处于启用状态。
@@ -761,6 +739,7 @@
 <translation id="3512226956150568738">如果客户端设备型号在需要迁移到 ext4 才能运行 ARC 之前就已支持 ARC，且 ArcEnabled 政策已设为 true，该选项的行为便会和 AskUser（值 3）的行为一样。在所有其他情形（如果相应的设备型号之前不支持 ARC，或者如果 ArcEnabled 政策被设为 false）下，此值将会等同于 DisallowArc（值 0）。</translation>
 <translation id="3528000905991875314">启用备用的错误页面</translation>
 <translation id="3547954654003013442">代理设置</translation>
+<translation id="3577251398714997599">针对含侵扰性广告的网站的广告设置</translation>
 <translation id="3591584750136265240">配置登录身份验证行为</translation>
 <translation id="3627678165642179114">启用或停用拼写检查网络服务</translation>
 <translation id="3646859102161347133">设置放大镜类型</translation>
@@ -773,7 +752,15 @@
       要详细了解安全浏览功能，请访问 https://developers.google.com/safe-browsing。</translation>
 <translation id="3709266154059827597">配置扩展程序安装黑名单</translation>
 <translation id="3711895659073496551">暂停</translation>
+<translation id="3732106275571017176">启用此设置后，用户只需登录其 <ph name="PRODUCT_OS_NAME" />设备便可在浏览器窗口的内容区域中切换 Google 帐号。
+
+      如果此政策设为 false，用户将无法从非无痕模式下的浏览器内容区域中登录另一帐号。
+
+      如果此政策设为 true 或未设置，系统便会使用默认行为：用户将能够从浏览器内容区域中登录另一帐号（未成年人帐号除外，因为系统会阻止从非无痕模式下的浏览器内容区域中登录未成年人帐号）。
+
+      如果不应允许通过无痕模式登录另一帐号，请考虑使用 IncognitoModeAvailability 政策屏蔽该模式。</translation>
 <translation id="3736879847913515635">允许通过用户管理器添加用户</translation>
+<translation id="3737544779868348650">设备网络主机名</translation>
 <translation id="3750220015372671395">禁止在这些网站上使用密钥生成功能</translation>
 <translation id="3756011779061588474">禁止开发者模式</translation>
 <translation id="3758089716224084329">可让您指定 <ph name="PRODUCT_NAME" /> 使用的代理服务器，并禁止用户更改代理设置。
@@ -789,6 +776,7 @@
       如果您未设置这些政策，用户将可以自行选择代理设置。</translation>
 <translation id="3758249152301468420">停用开发者工具</translation>
 <translation id="3765260570442823273">待机退出警告讯息的持续时间</translation>
+<translation id="377044054160169374">针对误导性体验的强制干预政策</translation>
 <translation id="3780152581321609624">在 Kerberos SPN 中加入非标准端口</translation>
 <translation id="3780319008680229708">如果此政策设为 true，Cast 工具栏图标将始终显示在工具栏或菜单中，用户无法将其移除。
 
@@ -811,6 +799,7 @@
       如果此政策未设置，系统将使用默认的下载目录，并且用户可以更改此目录。</translation>
 <translation id="3805659594028420438">启用TLS网域绑定证书扩展程序（已弃用）</translation>
 <translation id="3808945828600697669">指定已停用插件的列表</translation>
+<translation id="3811562426301733860">允许所有网站展示广告</translation>
 <translation id="3816312845600780067">启用停止自动登录的键盘快捷键</translation>
 <translation id="3820526221169548563">启用屏幕键盘辅助功能。
 
@@ -924,6 +913,11 @@
 
           指定的政策值应以毫秒为单位。</translation>
 <translation id="4105989332710272578">对于指定的一系列网址，不强制要求必须符合证书透明度政策</translation>
+<translation id="4111405663956464686">警告：大概从 72 版（将于 2019 年 1 月左右推出）开始，<ph name="PRODUCT_NAME" /> 中将会彻底移除用于指定最高 TLS 版本的政策。
+
+      如果您不配置此政策，<ph name="PRODUCT_NAME" /> 便会使用默认的最高版本。
+
+      如果您想配置此政策，则可将其设为“tls1.2”或“tls1.3”。如果您设置了此政策，<ph name="PRODUCT_NAME" /> 将不会使用任何高于指定版本的 SSL/TLS 版本。无法识别的值会被忽略。</translation>
 <translation id="4121350739760194865">阻止在新标签页上显示应用宣传信息</translation>
 <translation id="4157003184375321727">报告操作系统和固件版本</translation>
 <translation id="4183229833636799228">默认 <ph name="FLASH_PLUGIN_NAME" /> 设置</translation>
@@ -982,6 +976,12 @@
 <translation id="4320376026953250541">Microsoft Windows XP SP2 或更高版本</translation>
 <translation id="4322842393287974810">允许自动启动零延迟的自助服务终端应用控制 <ph name="PRODUCT_OS_NAME" />版本</translation>
 <translation id="4325690621216251241">向系统任务栏添加退出按钮</translation>
+<translation id="4346674324214534449">可让您设置是否应禁止含侵扰性广告的网站展示广告。
+
+      如果此政策设为 2，系统将禁止含侵扰性广告的网站展示广告。
+      不过，如果 SafeBrowsingEnabled 政策设为 False，此行为便不会触发。
+      如果此政策设为 1，系统将不会禁止含侵扰性广告的网站展示广告。
+      如果未设置此政策，系统的行为则会与将此政策设为 2 时一样。</translation>
 <translation id="4347908978527632940">如果设为 true 且该用户是受监管用户，则其他 Android 应用可以通过内容提供方查询该用户的网络限制。
 
           如果设为 false 或未设置，则内容提供方不会返回任何信息。</translation>
@@ -1039,10 +1039,19 @@
 <translation id="4531706050939927436">您可以通过 Google Play 从 Google 管理控制台中强制安装 Android 应用。这些应用不会使用此政策。</translation>
 <translation id="4534500438517478692">Android 限制名称：</translation>
 <translation id="4541530620466526913">设备本地帐号</translation>
+<translation id="4544079461524242527">为 <ph name="PRODUCT_NAME" /> 配置扩展程序管理设置。
+
+          此政策可控制多项设置，其中包括由任何现有的扩展程序相关政策控制的设置。此政策将会替换所有旧版政策（如果同时设置了这两种政策的话）。
+
+          此政策可将某个扩展程序 ID 或某个更新网址映射至其配置。对于扩展程序 ID，配置将只会应用于所指定的扩展程序。您可为特殊 ID“<ph name="DEFAULT_SCOPE" />”设置默认配置，该配置将会应用于未在此政策中设置自定义配置的所有扩展程序。对于更新网址，配置则会应用于具有在此扩展程序的清单中注明的确切更新网址的所有扩展程序（如 <ph name="LINK_TO_EXTENSION_DOC1" /> 中所述）。
+
+          若想全面了解此政策的可能设置和结构，请访问 https://www.chromium.org/administrators/policy-list-3/extension-settings-full
+          </translation>
 <translation id="4555850956567117258">为该用户启用远程认证</translation>
 <translation id="4557134566541205630">默认搜索服务提供商新标签页网址</translation>
 <translation id="4600786265870346112">启用大号光标</translation>
 <translation id="4604931264910482931">配置本地消息传递主机黑名单</translation>
+<translation id="4613508646038788144">如果此政策设为 false，系统便会允许第三方软件将可执行代码插入到 Chrome 进程中。如果此政策设为 true 或未设置，系统则会阻止第三方软件将可执行代码插入到 Chrome 进程中。</translation>
 <translation id="4617338332148204752">跳过“<ph name="PRODUCT_FRAME_NAME" />”中的元标记检查</translation>
 <translation id="4625915093043961294">配置扩展程序安装白名单</translation>
 <translation id="4632343302005518762">允许 <ph name="PRODUCT_FRAME_NAME" />处理列出的内容类型</translation>
@@ -1056,6 +1065,12 @@
 <translation id="465099050592230505">企业网上应用店网址（已弃用）</translation>
 <translation id="4665897631924472251">扩展程序管理设置</translation>
 <translation id="4668325077104657568">默认图片设置</translation>
+<translation id="4671708336564240458">可让您设置是否应阻止所有提供误导性体验的网站打开新的窗口或标签页。
+
+      如果此政策设为 True，系统将会阻止所有提供误导性体验的网站打开新的窗口或标签页。
+      不过，如果 SafeBrowsingEnabled 政策设为 False，此行为便不会触发。
+      如果此政策设为 False，系统就会允许所有提供误导性体验的网站打开新的窗口或标签页。
+      如果未设置此政策，系统的行为则会与将此政策设为 True 时一样。</translation>
 <translation id="467236746355332046">支持的功能：</translation>
 <translation id="4674167212832291997">以列表形式自定义应始终由 <ph name="PRODUCT_FRAME_NAME" />呈现的网址格式。
 
@@ -1143,6 +1158,7 @@
 <translation id="489803897780524242">此参数可控制是否为默认搜索服务提供商替换搜索字词</translation>
 <translation id="4899708173828500852">启用安全浏览</translation>
 <translation id="4906194810004762807">设备策略的更新频率</translation>
+<translation id="4923806312383904642">允许 WebDriver 替换与之冲突的政策</translation>
 <translation id="494613465159630803">Cast 接收器</translation>
 <translation id="4962262530309732070">如果此政策设为 true 或未配置，<ph name="PRODUCT_NAME" /> 会允许通过用户管理器添加用户。
 
@@ -1175,6 +1191,13 @@
 <translation id="5130288486815037971">是否在 TLS 中启用 RC4 加密套件</translation>
 <translation id="5141670636904227950">设置登录屏幕上启用的默认放大镜类型</translation>
 <translation id="5142301680741828703">总是通过“<ph name="PRODUCT_FRAME_NAME" />”呈现以下网址格式</translation>
+<translation id="5147665094011258322">确定在 DHCP 请求中使用的设备主机名。
+
+      如果此政策设为非空字符串，该字符串将用作 DHCP 请求中的设备主机名。
+
+      该字符串可以包含变量 ${ASSET_ID}、${SERIAL_NUM}、${MAC_ADDR}。系统会先将这些变量替换为设备上的相应值，然后再将该字符串用作主机名。替换后的字符串应为有效的主机名（符合 RFC 1035 第 3.1 节中的规定）。
+
+      如果此政策未设置，或替换后的值不是有效的主机名，系统将不会在 DHCP 请求中设置主机名。 </translation>
 <translation id="5148753489738115745">可让您指定在 <ph name="PRODUCT_FRAME_NAME" />启动 <ph name="PRODUCT_NAME" />时所使用的其他参数。
 
           如果未设置此政策，系统将会使用默认命令行。</translation>
@@ -1261,6 +1284,7 @@
 <translation id="5469484020713359236">可让您设置网址格式的列表，这些网址格式用于指定允许设置 Cookie 的网站。在未设置此政策的情况下，如果设置了“DefaultCookiesSetting”政策，那么将对该政策中的所有网站使用全局默认值，否则将对用户个人配置中的所有网站使用全局默认值。</translation>
 <translation id="5469825884154817306">在这些网站上阻止图片</translation>
 <translation id="5475361623548884387">启用打印功能</translation>
+<translation id="547601067149622666">不允许含侵扰性广告的网站展示广告</translation>
 <translation id="5499375345075963939">此策略仅在零售模式下有效。
 
       当该策略值已设置，且不为零，那么当不活动期达到指定的时间期间后，当前登录的演示用户就会自动退出。
@@ -1647,6 +1671,7 @@
       如果此政策已停用或未设置，则系统只会使用常规的本地个人资料。
 
       <ph name="SYNC_DISABLED_POLICY_NAME" /> 政策会停用所有数据同步，并会替换 RoamingProfileSupportEnabled。</translation>
+<translation id="6735701345096330595">强制检查语言拼写</translation>
 <translation id="6757438632136860443">可让您设置一系列网址格式，以用于指定允许哪些网站运行 <ph name="FLASH_PLUGIN_NAME" /> 插件。
 
           如果未设置此政策，系统将会对所有网站使用“DefaultPluginsSetting”政策中的全局默认值（倘若已设置“DefaultPluginsSetting”政策），或使用用户个人配置中的全局默认值（倘若未设置“DefaultPluginsSetting”政策）。</translation>
@@ -1737,7 +1762,6 @@
 <translation id="706669471845501145">允许网站显示桌面通知</translation>
 <translation id="7072406291414141328">启用调节网络带宽的功能</translation>
 <translation id="7079519252486108041">在这些网站上阻止弹出式窗口</translation>
-<translation id="7091198954851103976">始终运行需要授权的插件</translation>
 <translation id="7106631983877564505"><ph name="PRODUCT_OS_NAME" />设备进入待机或暂停状态时，启用锁定功能。
 
       如果您启用了此设置，用户需要提供密码，才能将处于睡眠状态的设备解锁。
@@ -1849,6 +1873,10 @@
 
       如果此政策未设置或设为 false，系统将启用 <ph name="TLS_FALSE_START" />。如果此政策设为 true，系统将停用 <ph name="TLS_FALSE_START" />。</translation>
 <translation id="7433714841194914373">启用“即搜即得”</translation>
+<translation id="7443061725198440541">如果此政策未设置或已启用，用户将能够使用拼写检查。
+
+      如果此政策已停用，用户将无法使用拼写检查。停用此政策后，系统也会忽略 SpellcheckLanguage 政策。
+      </translation>
 <translation id="7443616896860707393">跨域 HTTP 基本身份验证提示</translation>
 <translation id="7469554574977894907">启用搜索建议</translation>
 <translation id="7474249562477552702">是否允许使用本地信任锚颁发的 SHA-1 签名证书</translation>
@@ -1888,6 +1916,7 @@
 <translation id="7625444193696794922">指定该设备应锁定到的发布渠道。</translation>
 <translation id="7632724434767231364">GSSAPI 库名称</translation>
 <translation id="7635471475589566552">在 <ph name="PRODUCT_NAME" />中配置应用的语言区域，并禁止用户更改语言区域。如果您启用了此设置，<ph name="PRODUCT_NAME" />就会使用指定的语言区域。如果配置的语言区域不受支持，就会改用“en-US”。如果已停用或未配置此设置，<ph name="PRODUCT_NAME" />就会使用由用户指定的首选语言区域（如果已配置）、系统语言区域或备用语言区域“en-US”。</translation>
+<translation id="7643883929273267746">限制可在<ph name="PRODUCT_NAME" />中显示的帐号</translation>
 <translation id="7651739109954974365">确定是否应为设备启用数据漫游。如果将此政策设置为 true，数据漫游就可以使用。如果未配置此政策或将其设置为 false，数据漫游就无法使用。</translation>
 <translation id="7683777542468165012">动态政策刷新</translation>
 <translation id="7694807474048279351">安排在应用 <ph name="PRODUCT_OS_NAME" />更新后自动重启。
@@ -1980,11 +2009,6 @@
 <translation id="787125417158068494">如果设置为 SyncDisabled 或未配置，ARC 应用便无法使用 <ph name="PRODUCT_OS_NAME" /> 证书。
 
       如果设置为 CopyCaCerts，ARC 应用便可使用所有已安装 ONC 且带有 <ph name="WEB_TRUSTED_BIT" /> 的 CA 证书。</translation>
-<translation id="7872535148622213208">
-        此政策会指定一系列将被视为安全上下文的来源（网址），意在允许相关组织设置临时服务器以用于开发内部网络。
-        这与 --unsafely-treat-insecure-origin-as-secure 标记相同。
-        有关安全上下文的详情，请访问 https://www.w3.org/TR/secure-contexts/
-        </translation>
 <translation id="7882585827992171421">此策略仅在零售模式下有效。
 
       确定在登录屏幕上用作屏幕保护程序的扩展程序的 ID。该扩展程序必须属于通过 DeviceAppPack 策略为此域配置的 AppPack。</translation>
@@ -2124,9 +2148,6 @@
 <translation id="8344454543174932833">首次运行时，从默认浏览器导入书签</translation>
 <translation id="8359734107661430198">从 2008 年 9 月 2 日开始启用 ExampleDeprecatedFeature API</translation>
 <translation id="8369602308428138533">使用交流电源供电时的屏幕关闭延迟时间</translation>
-<translation id="8370471134641900314">如果此政策设为 true，用户必须先使用其个人资料登录 <ph name="PRODUCT_NAME" />，然后才能使用该浏览器。另外，BrowserGuestModeEnabled 的默认值将会设为 false。
-
-      如果此政策设为 false 或未配置，用户无需登录 <ph name="PRODUCT_NAME" /> 即可使用该浏览器。</translation>
 <translation id="8382184662529825177">允许为设备使用远程认证来保护内容</translation>
 <translation id="838870586332499308">启用数据漫游</translation>
 <translation id="8390049129576938611">在 <ph name="PRODUCT_NAME" /> 中停用内部 PDF 查看器。改为将此 PDF 查看器视为下载项，并允许用户使用此默认应用打开 PDF 文件。
@@ -2137,6 +2158,13 @@
 <translation id="8424255554404582727">设置显示屏默认旋转角度，每次重新启动后都重新应用设置的角度</translation>
 <translation id="8426231401662877819">将屏幕顺时针旋转 90 度</translation>
 <translation id="8451988835943702790">使用“新标签页”作为主页</translation>
+<translation id="8460677879226618710">包含一系列模式，用于控制在<ph name="PRODUCT_NAME" />中可显示哪些帐号。
+
+      如果相应设备上的帐号名称与该列表中的任一模式匹配，此帐号即会在<ph name="PRODUCT_NAME" />中显示。否则，系统便会滤除并隐藏此帐号。
+
+      您可使用通配符“*”来匹配零个或更多个任意字符。转义字符为“\”，因此若想匹配实际的“*”或“\”字符，您可在这些字符前面加上“\”。
+
+      如果未设置此政策，相应设备上的所有 Google 帐号都会在<ph name="PRODUCT_NAME" />中显示。</translation>
 <translation id="8465065632133292531">在使用 POST 的即搜即得网址中所需的参数</translation>
 <translation id="847472800012384958">不允许任何网站显示弹出式窗口</translation>
 <translation id="8477885780684655676">TLS 1.0</translation>
@@ -2228,6 +2256,20 @@
       如果您未指定此设置，用户则可自行决定是否要使用该功能。</translation>
 <translation id="8870318296973696995">主页</translation>
 <translation id="8882006618241293596">禁止这些网站运行 <ph name="FLASH_PLUGIN_NAME" /> 插件</translation>
+<translation id="8894962626537183708">
+      此政策会指定一系列将被视为安全上下文的来源（网址），意在允许相关组织设置临时服务器以用于开发内部网络，以便他们的开发者能够测试需要安全上下文但无需在临时服务器上部署 TLS 的功能。
+      在此政策中设置一系列网址与将“--unsafely-treat-insecure-origin-as-secure”命令行标记设为同一系列的网址（以英文逗号分隔）具有同样的效果。如果此政策已设置，则会替换上述命令行标记。
+      有关安全上下文的详情，请访问 https://www.w3.org/TR/secure-contexts/
+      </translation>
+<translation id="890403179930035128">强制检查语言拼写。未在下方列表中列出的语言将被忽略。
+
+      如果您启用了此政策，那么除了已由用户启用拼写检查的语言之外，系统还将为您所指定的语言启用拼写检查。
+
+      如果您停用了或未设置此政策，则不会更改用户的拼写检查偏好设置。
+
+      如果停用了 SpellcheckEnabled 政策，此政策将不会产生任何效果。
+
+      目前支持的语言包括：af、bg、ca、cs、da、de、el、en-AU、en-CA、en-GB、en-US、es、es-419、es-AR、es-ES、es-MX、es-US、et、fa、fo、fr、he、hi、hr、hu、id、it、ko、lt、lv、nb、nl、pl、pt-BR、pt-PT、ro、ru、sh、sk、sl、sq、sr、sv、ta、tg、tr、uk、vi。</translation>
 <translation id="8906768759089290519">启用访客模式</translation>
 <translation id="8908294717014659003">允许您设置是否允许网站访问媒体捕获设备。系统默认为允许访问媒体捕获设备，否则，每次有网站要访问媒体捕获设备时都要征询用户同意。
 
@@ -2304,14 +2346,10 @@
 <translation id="9150416707757015439">此政策已弃用，请改用 IncognitoModeAvailability。在 <ph name="PRODUCT_NAME" />中启用隐身模式。如果已启用或未配置此设置，用户就可以在隐身模式下打开网页。如果停用此设置，用户就无法在隐身模式下打开网页。如果未设置此政策，将会启用此设置，用户便能使用隐身模式。</translation>
 <translation id="915194831143859291">如果此政策设为 false 或未配置，<ph name="PRODUCT_OS_NAME" />将允许用户关闭设备。
       如果此政策设为 true，<ph name="PRODUCT_OS_NAME" />会在用户关闭设备时触发重新启动操作。<ph name="PRODUCT_OS_NAME" />会将界面中的所有关机按钮替换为重新启动按钮。如果用户通过电源按钮关闭设备，设备将不会自动重新启动，即使启用了此政策也是如此。</translation>
+<translation id="9158929520101169054">允许在同一浏览器中登录多个帐号</translation>
 <translation id="9187743794267626640">禁止装载外部存储设备</translation>
 <translation id="9197740283131855199">系统在屏幕变暗后察觉到用户活动时，屏幕变暗延迟时间的调整幅度（百分比）</translation>
 <translation id="9200828125069750521">在使用 POST 的图片网址中所需的参数</translation>
-<translation id="9212233969680267790">警告：大致从 66 版（2018 年 2 月左右推出）开始，<ph name="PRODUCT_NAME" /> 中将完全移除最高 TLS 版本政策。
-
-      如果此政策未配置，<ph name="PRODUCT_NAME" /> 将使用默认最高版本。
-
-      如果进行设置，则可以将此政策设为“tls1.2”或“tls1.3”。如果您设置了此政策，<ph name="PRODUCT_NAME" /> 将不会使用高于指定版本的 SSL/TLS 版本。系统将会忽略无法识别的值。</translation>
 <translation id="9213347477683611358">配置在无任何用户登录设备的情况下显示在登录屏幕上的设备级壁纸图片。要设置此政策，请指定可供 Chrome 操作系统设备下载相应壁纸图片的网址，并指定用于验证下载内容是否完整的加密哈希值。图片必须是 JPEG 格式，且大小不得超过 16MB。网址必须可供直接访问，而无需进行任何身份验证。系统会下载并缓存相应的壁纸图片。网址或哈希值只要有任何变化，系统即会重新下载壁纸图片。
 
       指定此政策时，请使用 JSON 格式的字符串来表示网址和哈希值，例如：
@@ -2329,4 +2367,5 @@
 <translation id="930930237275114205">设置 <ph name="PRODUCT_FRAME_NAME" />用户数据目录</translation>
 <translation id="934390688529359269">为 <ph name="PRODUCT_NAME" /> 启用强制登录功能</translation>
 <translation id="944817693306670849">设置磁盘缓存大小</translation>
+<translation id="982497069985795632">启用拼写检查</translation>
 </translationbundle>

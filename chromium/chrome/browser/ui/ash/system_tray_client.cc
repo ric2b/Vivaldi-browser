@@ -14,9 +14,8 @@
 #include "base/metrics/user_metrics.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
-#include "chrome/browser/chromeos/accessibility/accessibility_util.h"
+#include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/help_app_launcher.h"
-#include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/options/network_config_view.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/webui/chromeos/bluetooth_pairing_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/internet_config_dialog.h"
+#include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
 #include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/url_constants.h"
 #include "chromeos/chromeos_switches.h"
@@ -69,7 +69,7 @@ using views::Widget;
 
 namespace {
 
-SystemTrayClient* g_instance = nullptr;
+SystemTrayClient* g_system_tray_client_instance = nullptr;
 
 void ShowSettingsSubPageForActiveUser(const std::string& sub_page) {
   chrome::ShowSettingsSubPageForProfile(ProfileManager::GetActiveUserProfile(),
@@ -138,14 +138,14 @@ SystemTrayClient::SystemTrayClient() : binding_(this) {
     policy_manager->core()->store()->AddObserver(this);
   UpdateEnterpriseDisplayDomain();
 
-  DCHECK(!g_instance);
-  g_instance = this;
+  DCHECK(!g_system_tray_client_instance);
+  g_system_tray_client_instance = this;
   UpgradeDetector::GetInstance()->AddObserver(this);
 }
 
 SystemTrayClient::~SystemTrayClient() {
-  DCHECK_EQ(this, g_instance);
-  g_instance = nullptr;
+  DCHECK_EQ(this, g_system_tray_client_instance);
+  g_system_tray_client_instance = nullptr;
 
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
@@ -160,7 +160,7 @@ SystemTrayClient::~SystemTrayClient() {
 
 // static
 SystemTrayClient* SystemTrayClient::Get() {
-  return g_instance;
+  return g_system_tray_client_instance;
 }
 
 // static
@@ -284,7 +284,7 @@ void SystemTrayClient::ShowHelp() {
 void SystemTrayClient::ShowAccessibilityHelp() {
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
-  chromeos::accessibility::ShowAccessibilityHelp(displayer.browser());
+  chromeos::AccessibilityManager::ShowAccessibilityHelp(displayer.browser());
 }
 
 void SystemTrayClient::ShowAccessibilitySettings() {
@@ -295,8 +295,7 @@ void SystemTrayClient::ShowAccessibilitySettings() {
 void SystemTrayClient::ShowPaletteHelp() {
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
-  chrome::ShowSingletonTab(displayer.browser(),
-                           GURL(chrome::kChromePaletteHelpURL));
+  ShowSingletonTab(displayer.browser(), GURL(chrome::kChromePaletteHelpURL));
 }
 
 void SystemTrayClient::ShowPaletteSettings() {
@@ -322,8 +321,7 @@ void SystemTrayClient::ShowEnterpriseInfo() {
   // Otherwise show enterprise help in a browser tab.
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
-  chrome::ShowSingletonTab(displayer.browser(),
-                           GURL(chrome::kLearnMoreEnterpriseURL));
+  ShowSingletonTab(displayer.browser(), GURL(chrome::kLearnMoreEnterpriseURL));
 }
 
 void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
@@ -343,13 +341,10 @@ void SystemTrayClient::ShowNetworkConfigure(const std::string& network_id) {
     return;
   }
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kNetworkSettingsConfig)) {
-    chromeos::InternetConfigDialog::ShowDialogForNetworkState(network_state);
-
-  } else {
+  if (chromeos::switches::IsNetworkSettingsConfigEnabled())
+    chromeos::InternetConfigDialog::ShowDialogForNetworkId(network_id);
+  else
     chromeos::NetworkConfigView::ShowForNetworkId(network_id);
-  }
 }
 
 void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
@@ -362,8 +357,7 @@ void SystemTrayClient::ShowNetworkCreate(const std::string& type) {
     ShowNetworkSettingsHelper(network_id, false /* show_configure */);
     return;
   }
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kNetworkSettingsConfig)) {
+  if (chromeos::switches::IsNetworkSettingsConfigEnabled()) {
     // TODO(stevenjb): Pass ONC type to ShowNetworkCreate once NetworkConfigView
     // is deprecated.
     std::string onc_type =
@@ -405,8 +399,7 @@ void SystemTrayClient::ShowNetworkSettingsHelper(const std::string& network_id,
   if (session_manager->IsInSecondaryLoginScreen())
     return;
   if (!session_manager->IsSessionStarted()) {
-    chromeos::LoginDisplayHost::default_host()->OpenInternetDetailDialog(
-        network_id);
+    chromeos::InternetDetailDialog::ShowDialog(network_id);
     return;
   }
 

@@ -29,6 +29,7 @@
 
 #include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
+#include "common/net/ip_address_space.mojom-blink.h"
 #include "core/CoreExport.h"
 #include "core/dom/SandboxFlags.h"
 #include "platform/heap/Handle.h"
@@ -36,7 +37,6 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/StringHash.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebURLRequest.h"
 #include "third_party/WebKit/common/feature_policy/feature_policy.h"
@@ -53,10 +53,12 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   virtual void Trace(blink::Visitor*);
 
   using InsecureNavigationsSet = HashSet<unsigned, WTF::AlreadyHashed>;
+  static std::vector<unsigned> SerializeInsecureNavigationSet(
+      const InsecureNavigationsSet&);
 
-  // TODO(hiroshige): Make GetSecurityOrigin() return |const SecurityOrigin*|.
-  // crbug.com/779730
-  SecurityOrigin* GetSecurityOrigin() const { return security_origin_.get(); }
+  const SecurityOrigin* GetSecurityOrigin() const {
+    return security_origin_.get();
+  }
   SecurityOrigin* GetMutableSecurityOrigin() { return security_origin_.get(); }
 
   ContentSecurityPolicy* GetContentSecurityPolicy() const {
@@ -73,13 +75,18 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   bool IsSandboxed(SandboxFlags mask) const { return sandbox_flags_ & mask; }
   virtual void EnforceSandboxFlags(SandboxFlags mask);
 
-  void SetAddressSpace(WebAddressSpace space) { address_space_ = space; }
-  WebAddressSpace AddressSpace() const { return address_space_; }
+  void SetAddressSpace(mojom::IPAddressSpace space) { address_space_ = space; }
+  mojom::IPAddressSpace AddressSpace() const { return address_space_; }
   String addressSpaceForBindings() const;
 
   void SetRequireTrustedTypes() { require_safe_types_ = true; }
   bool RequireTrustedTypes() const { return require_safe_types_; }
 
+  void SetInsecureNavigationsSet(const std::vector<unsigned>& set) {
+    insecure_navigations_to_upgrade_.clear();
+    for (unsigned hash : set)
+      insecure_navigations_to_upgrade_.insert(hash);
+  }
   void AddInsecureNavigationUpgrade(unsigned hashed_host) {
     insecure_navigations_to_upgrade_.insert(hashed_host);
   }
@@ -102,7 +109,10 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
                                const FeaturePolicy* parent_feature_policy);
   void UpdateFeaturePolicyOrigin();
 
-  void ApplySandboxFlags(SandboxFlags mask);
+  // Apply the sandbox flag, and also maybe update the security origin
+  // to the newly created unique one with |is_potentially_trustworthy|.
+  void ApplySandboxFlags(SandboxFlags mask,
+                         bool is_potentially_trustworthy = false);
 
  protected:
   SecurityContext();
@@ -117,7 +127,7 @@ class CORE_EXPORT SecurityContext : public GarbageCollectedMixin {
   Member<ContentSecurityPolicy> content_security_policy_;
   std::unique_ptr<FeaturePolicy> feature_policy_;
 
-  WebAddressSpace address_space_;
+  mojom::IPAddressSpace address_space_;
   WebInsecureRequestPolicy insecure_request_policy_;
   InsecureNavigationsSet insecure_navigations_to_upgrade_;
   bool require_safe_types_;

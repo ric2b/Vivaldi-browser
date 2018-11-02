@@ -11,8 +11,7 @@
 #include "base/bind_helpers.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
@@ -123,6 +122,15 @@ ChromeCleanerRunner::ChromeCleanerRunner(
       chrome_cleaner::kEngineSwitch,
       reporter_engine.empty() ? "1" : reporter_engine);
 
+  if (reporter_invocation.cleaner_logs_upload_enabled()) {
+    cleaner_command_line_.AppendSwitch(
+        chrome_cleaner::kWithScanningModeLogsSwitch);
+  }
+
+  cleaner_command_line_.AppendSwitchASCII(
+      chrome_cleaner::kChromePromptSwitch,
+      base::IntToString(static_cast<int>(reporter_invocation.chrome_prompt())));
+
   // If metrics is enabled, we can enable crash reporting in the Chrome Cleaner
   // process.
   if (metrics_status == ChromeMetricsStatus::kEnabled) {
@@ -182,7 +190,7 @@ ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
         LaunchStatus::kLaunchSucceededFailedToWaitForCompletion);
   }
 
-  UMA_HISTOGRAM_SPARSE_SLOWLY(
+  base::UmaHistogramSparse(
       "SoftwareReporter.Cleaner.ExitCodeFromConnectedProcess", exit_code);
   return ProcessStatus(LaunchStatus::kSuccess, exit_code);
 }
@@ -194,7 +202,7 @@ void ChromeCleanerRunner::CreateChromePromptImpl(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!chrome_prompt_impl_);
 
-  // Cannot use base::MakeUnique() since it does not support creating
+  // Cannot use std::make_unique() since it does not support creating
   // std::unique_ptrs with custom deleters.
   chrome_prompt_impl_.reset(new ChromePromptImpl(
       std::move(chrome_prompt_request),

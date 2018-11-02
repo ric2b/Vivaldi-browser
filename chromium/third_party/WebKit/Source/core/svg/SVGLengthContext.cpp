@@ -28,7 +28,6 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutObject.h"
-#include "core/layout/api/LayoutViewItem.h"
 #include "core/style/ComputedStyle.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/LengthFunctions.h"
@@ -195,6 +194,19 @@ FloatPoint SVGLengthContext::ResolvePoint(const SVGElement* context,
   // be resolved in user space and then be considered in objectBoundingBox
   // space.
   return FloatPoint(x.ValueAsPercentage(), y.ValueAsPercentage());
+}
+
+FloatPoint SVGLengthContext::ResolveLengthPair(
+    const Length& x_length,
+    const Length& y_length,
+    const ComputedStyle& style) const {
+  FloatSize viewport_size;
+  if (x_length.IsPercentOrCalc() || y_length.IsPercentOrCalc())
+    DetermineViewport(viewport_size);
+
+  float zoom = style.EffectiveZoom();
+  return FloatPoint(ValueForLength(x_length, zoom, viewport_size.Width()),
+                    ValueForLength(y_length, zoom, viewport_size.Height()));
 }
 
 float SVGLengthContext::ResolveLength(const SVGElement* context,
@@ -466,7 +478,7 @@ float SVGLengthContext::ResolveValue(const CSSPrimitiveValue& primitive_value,
     return 0;
 
   CSSToLengthConversionData conversion_data = CSSToLengthConversionData(
-      style, root_style, context_->GetDocument().GetLayoutViewItem(), 1.0f);
+      style, root_style, context_->GetDocument().GetLayoutView(), 1.0f);
   Length length = primitive_value.ConvertToLength(conversion_data);
   return ValueForLength(length, 1.0f, mode);
 }

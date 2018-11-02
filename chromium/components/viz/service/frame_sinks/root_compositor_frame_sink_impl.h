@@ -20,6 +20,7 @@
 namespace viz {
 
 class Display;
+class ExternalBeginFrameControllerImpl;
 class FrameSinkManagerImpl;
 class SyntheticBeginFrameSource;
 
@@ -35,9 +36,12 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
       const FrameSinkId& frame_sink_id,
       std::unique_ptr<Display> display,
       std::unique_ptr<SyntheticBeginFrameSource> begin_frame_source,
+      std::unique_ptr<ExternalBeginFrameControllerImpl>
+          external_begin_frame_controller,
       mojom::CompositorFrameSinkAssociatedRequest request,
       mojom::CompositorFrameSinkClientPtr client,
-      mojom::DisplayPrivateAssociatedRequest display_private_request);
+      mojom::DisplayPrivateAssociatedRequest display_private_request,
+      mojom::DisplayClientPtr display_client);
 
   ~RootCompositorFrameSinkImpl() override;
 
@@ -45,6 +49,7 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
 
   // mojom::DisplayPrivate:
   void SetDisplayVisible(bool visible) override;
+  void SetDisplayColorMatrix(const gfx::Transform& color_matrix) override;
   void SetDisplayColorSpace(const gfx::ColorSpace& blending_color_space,
                             const gfx::ColorSpace& device_color_space) override;
   void SetOutputIsSecure(bool secure) override;
@@ -52,6 +57,7 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
 
   // mojom::CompositorFrameSink:
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
+  void SetWantsAnimateOnlyBeginFrames() override;
   void SubmitCompositorFrame(const LocalSurfaceId& local_surface_id,
                              CompositorFrame frame,
                              mojom::HitTestRegionListPtr hit_test_region_list,
@@ -73,12 +79,18 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   void DisplayWillDrawAndSwap(bool will_draw_and_swap,
                               const RenderPassList& render_passes) override;
   void DisplayDidDrawAndSwap() override;
+  void DisplayDidReceiveCALayerParams(
+      const gfx::CALayerParams& ca_layer_params) override;
 
   void OnClientConnectionLost();
+
+  BeginFrameSource* begin_frame_source();
 
   mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client_;
   mojo::AssociatedBinding<mojom::CompositorFrameSink>
       compositor_frame_sink_binding_;
+  // |display_client_| may be nullptr on platforms that do not use it.
+  mojom::DisplayClientPtr display_client_;
   mojo::AssociatedBinding<mojom::DisplayPrivate> display_private_binding_;
 
   // Must be destroyed before |compositor_frame_sink_client_|. This must never
@@ -88,6 +100,9 @@ class RootCompositorFrameSinkImpl : public mojom::CompositorFrameSink,
   // RootCompositorFrameSinkImpl holds a Display and its BeginFrameSource if
   // it was created with a non-null gpu::SurfaceHandle.
   std::unique_ptr<SyntheticBeginFrameSource> synthetic_begin_frame_source_;
+  // If non-null, |synthetic_begin_frame_source_| will not exist.
+  std::unique_ptr<ExternalBeginFrameControllerImpl>
+      external_begin_frame_controller_;
   std::unique_ptr<Display> display_;
 
   HitTestAggregator hit_test_aggregator_;

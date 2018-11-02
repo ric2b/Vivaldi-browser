@@ -23,6 +23,7 @@
 #include "chrome/common/extensions/api/url_handlers/url_handlers_parser.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -38,33 +39,10 @@ using content::BrowserThread;
 
 namespace extensions {
 
-namespace {
+using ProcessNavigationResult =
+    BookmarkAppNavigationThrottle::ProcessNavigationResult;
 
-enum class ProcessNavigationResult {
-  kProceedStartedFromContextMenu,
-  kProceedTransitionTyped,
-  kProceedTransitionAutoBookmark,
-  kProceedTransitionAutoSubframe,
-  kProceedTransitionManualSubframe,
-  kProceedTransitionGenerated,
-  kProceedTransitionAutoToplevel,
-  kProceedTransitionReload,
-  kProceedTransitionKeyword,
-  kProceedTransitionKeywordGenerated,
-  kProceedTransitionForwardBack,
-  kProceedTransitionFromAddressBar,
-  kOpenInChromeProceedOutOfScopeLaunch,
-  kProceedInAppSameScope,
-  kProceedInBrowserFormSubmission,
-  kProceedInBrowserSameScope,
-  kCancelPrerenderContents,
-  kDeferOpenAppCloseEmptyWebContents,
-  kCancelOpenedApp,
-  kDeferOpenNewTabInAppOutOfScope,
-  // Add ProcessNavigation results immediately above this line. Also
-  // update the enum list in tools/metrics/enums.xml accordingly.
-  kCount,
-};
+namespace {
 
 // Non-app site navigations: The majority of navigations will be in-browser to
 // sites for which there is no app installed. These navigations offer no insight
@@ -349,6 +327,19 @@ BookmarkAppNavigationThrottle::ProcessNavigation(bool is_redirect) {
       return content::NavigationThrottle::CANCEL_AND_IGNORE;
     }
 
+    content::NavigationEntry* last_entry = navigation_handle()
+                                               ->GetWebContents()
+                                               ->GetController()
+                                               .GetLastCommittedEntry();
+    // We are about to open a new app window context. Record the time since the
+    // last navigation in this context. (If it is very small, this context
+    // probably redirected immediately, which is a bad user experience.)
+    if (last_entry && !last_entry->GetTimestamp().is_null()) {
+      UMA_HISTOGRAM_MEDIUM_TIMES(
+          "Extensions.BookmarkApp.TimeBetweenOpenAppAndLastNavigation",
+          base::Time::Now() - last_entry->GetTimestamp());
+    }
+
     content::NavigationThrottle::ThrottleCheckResult result =
         OpenInAppWindowAndCloseTabIfNecessary(target_app);
 
@@ -464,6 +455,7 @@ void BookmarkAppNavigationThrottle::OpenInNewTab() {
 
 scoped_refptr<const Extension>
 BookmarkAppNavigationThrottle::GetAppForWindow() {
+  SCOPED_UMA_HISTOGRAM_TIMER("Extensions.BookmarkApp.GetAppForWindowDuration");
   content::WebContents* source = navigation_handle()->GetWebContents();
   content::BrowserContext* context = source->GetBrowserContext();
   Browser* browser = chrome::FindBrowserWithWebContents(source);
@@ -487,12 +479,15 @@ BookmarkAppNavigationThrottle::GetAppForWindow() {
 }
 
 scoped_refptr<const Extension> BookmarkAppNavigationThrottle::GetTargetApp() {
+  SCOPED_UMA_HISTOGRAM_TIMER("Extensions.BookmarkApp.GetTargetAppDuration");
   return GetAppForURL(navigation_handle()->GetURL(),
                       navigation_handle()->GetWebContents());
 }
 
 scoped_refptr<const Extension>
 BookmarkAppNavigationThrottle::GetAppForCurrentURL() {
+  SCOPED_UMA_HISTOGRAM_TIMER(
+      "Extensions.BookmarkApp.GetAppForCurrentURLDuration");
   return GetAppForURL(navigation_handle()
                           ->GetWebContents()
                           ->GetMainFrame()

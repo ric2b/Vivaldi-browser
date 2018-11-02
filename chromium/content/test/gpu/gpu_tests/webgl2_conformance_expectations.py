@@ -32,6 +32,7 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'mac', 'linux'])
     self.Skip('WebglExtension_WEBGL_compressed_texture_s3tc_srgb',
         ['win', 'mac', 'linux'])
+    self.Skip('WebglExtension_EXT_disjoint_timer_query_webgl2', bug=808744)
 
     # ========================
     # Conformance expectations
@@ -80,6 +81,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
 
     # Need to implement new lifetime/deletion semantics.
     self.Fail('conformance2/vertex_arrays/vertex-array-object.html', bug=739604)
+
+    # The following actually passes on gl_passthrough and also Mac Intel with
+    # command buffer.
+    self.Fail('deqp/functional/gles3/shadertexturefunction/' +
+        'texturelodoffset.html',
+        bug=794335)
 
     # Windows only.
     self.Fail('conformance2/buffers/uniform-buffers.html',
@@ -166,15 +173,32 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         ['win', 'nvidia', 'opengl'], bug=709874)
     self.Flaky('conformance2/rendering/attrib-type-match.html',
         ['win', 'nvidia', 'opengl'], bug=782254)
+    self.Flaky('conformance2/textures/canvas_sub_rectangle/' +
+        'tex-2d-r11f_g11f_b10f-rgb-float.html',
+        ['win', 'nvidia', 'opengl'], bug=795030)
     self.Fail('conformance2/textures/canvas_sub_rectangle/' +
-        'tex-2d-rg16f-rg-half_float.html',
-        ['win', 'nvidia', 'opengl'], bug=784849)
+        'tex-2d-r16f-red-float.html',
+        ['win', 'nvidia', 'opengl'], bug=786716)
     self.Fail('conformance2/textures/canvas_sub_rectangle/' +
         'tex-2d-r8-red-unsigned_byte.html',
         ['win', 'nvidia', 'opengl'], bug=784849)
     self.Fail('conformance2/textures/canvas_sub_rectangle/' +
-        'tex-2d-r16f-red-float.html',
-        ['win', 'nvidia', 'opengl'], bug=786716)
+        'tex-2d-rg16f-rg-half_float.html',
+        ['win', 'nvidia', 'opengl'], bug=784849)
+    self.Flaky('conformance2/textures/canvas_sub_rectangle/' +
+        'tex-2d-rg32f-rg-float.html',
+        ['win', 'nvidia', 'opengl'], bug=795030)
+    self.Flaky('conformance2/textures/webgl_canvas/' +
+        'tex-3d-rgba32f-rgba-float.html',
+        ['win', 'nvidia', 'opengl'], bug=795030)
+    self.Fail('conformance2/rendering/instanced-rendering-bug.html',
+        ['win', 'nvidia', 'opengl'], bug=791289)
+    self.Fail('conformance2/rendering/canvas-resizing-with-pbo-bound.html',
+        ['win', 'nvidia', 'opengl'], bug=794613)
+    self.Flaky('deqp/functional/gles3/shadercommonfunction.html',
+        ['win', 'nvidia', 'opengl'], bug=795030)
+    self.Flaky('deqp/functional/gles3/shaderpackingfunction.html',
+        ['win', 'nvidia', 'opengl'], bug=795030)
 
     # Win / AMD
     self.Fail('conformance2/rendering/blitframebuffer-stencil-only.html',
@@ -190,23 +214,17 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Flaky('deqp/functional/gles3/multisample.html',
         ['win', ('amd', 0x6613)], bug=687374)
 
-    self.Skip('conformance2/textures/misc/copy-texture-image.html',
-        ['win', 'intel', 'd3d11'], bug=617449)
+    # Win / Intel
+    self.Fail('conformance/rendering/rendering-stencil-large-viewport.html',
+        ['win', 'intel', 'd3d11'], bug=782317)
+
     # Seems to cause the harness to fail immediately afterward
     self.Skip('conformance2/textures/video/tex-2d-rgba16f-rgba-half_float.html',
         ['win', 'intel', 'd3d11'], bug=648337)
     self.Flaky('deqp/functional/gles3/lifetime.html',
         ['win', 'intel', 'd3d11'], bug=620379)
-    self.Skip('deqp/functional/gles3/texturespecification/' +
-        'teximage3d_depth_pbo.html',
-        ['win', 'intel', 'd3d11'], bug=617449)
     self.Flaky('deqp/functional/gles3/textureformat/unsized_3d.html',
         ['win', 'intel', 'd3d11'], bug=614418)
-
-    # These tests seem to crash flakily. It's best to leave them as skip
-    # until we can run them without GPU hangs and crashes.
-    self.Skip('deqp/functional/gles3/textureshadow/2d_array_*.html',
-        ['win', 'intel', 'd3d11'], bug=666392)
 
     # It's unfortunate that these suppressions need to be so broad, but it
     # looks like the D3D11 device can be lost spontaneously on this
@@ -327,6 +345,12 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('conformance/textures/image_bitmap_from_video/' +
         'tex-2d-rgb-rgb-unsigned_short_5_6_5.html',
         ['linux', 'passthrough', 'opengl', 'nvidia'], bug=766918)
+    self.Fail('deqp/functional/gles3/shaderoperator/common_functions.html',
+        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=793055)
+    self.Fail('deqp/functional/gles3/shadercommonfunction.html',
+        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=793055)
+    self.Fail('deqp/functional/gles3/shaderpackingfunction.html',
+        ['linux', 'passthrough', 'opengl', 'nvidia'], bug=794341)
 
     # Regressions in 10.12.4.
     self.Fail('conformance2/textures/misc/tex-base-level-bug.html',
@@ -526,6 +550,9 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     self.Fail('deqp/functional/gles3/framebufferblit/conversion_33.html',
         ['mac', ('nvidia', 0xfe9)], bug=654187)
 
+    self.Fail('conformance2/uniforms/draw-with-uniform-blocks.html',
+        ['mac', ('nvidia', 0xfe9)], bug=795052)
+
     # When this fails on this configuration, it fails multiple times in a row.
     self.Fail('deqp/functional/gles3/shaderoperator/common_functions.html',
         ['mac', 'nvidia'], bug=756537)
@@ -696,6 +723,9 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
         'multisampled-depth-renderbuffer-initialization.html',
         ['mac', 'intel'], bug=731877)
 
+    self.Fail('conformance/rendering/rendering-stencil-large-viewport.html',
+        ['mac', 'intel'], bug=782317)
+
     # Linux only.
     self.Flaky('conformance/textures/video/' +
                'tex-2d-rgba-rgba-unsigned_byte.html',
@@ -841,8 +871,6 @@ class WebGL2ConformanceExpectations(WebGLConformanceExpectations):
     # Linux Intel
     self.Fail('conformance2/extensions/ext-color-buffer-float.html',
         ['linux', 'intel'], bug=640389)
-    self.Fail('WebglExtension_EXT_disjoint_timer_query_webgl2',
-        ['linux', 'intel'], bug=687210)
 
     # See https://bugs.freedesktop.org/show_bug.cgi?id=94477
     self.Skip('conformance/glsl/bugs/temp-expressions-should-not-crash.html',

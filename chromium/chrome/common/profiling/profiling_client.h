@@ -28,7 +28,8 @@ class ProfilingClient : public mojom::ProfilingClient {
   ~ProfilingClient() override;
 
   // mojom::ProfilingClient overrides:
-  void StartProfiling(mojo::ScopedHandle memlog_sender_pipe) override;
+  void StartProfiling(mojo::ScopedHandle memlog_sender_pipe,
+                      mojom::StackMode stack_mode) override;
   void FlushMemlogPipe(uint32_t barrier_id) override;
 
   void OnServiceManagerConnected(content::ServiceManagerConnection* connection);
@@ -37,6 +38,8 @@ class ProfilingClient : public mojom::ProfilingClient {
  private:
   // The most recent client request is bound and kept alive.
   mojo::Binding<mojom::ProfilingClient> binding_;
+
+  bool started_profiling_;
 
   std::unique_ptr<MemlogSenderPipe> memlog_sender_pipe_;
 };

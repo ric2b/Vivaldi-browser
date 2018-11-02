@@ -16,6 +16,8 @@
 
 namespace app_list {
 
+class SearchResultBaseView;
+
 // The search results page for the app list.
 class APP_LIST_EXPORT SearchResultPageView
     : public AppListPage,
@@ -24,12 +26,8 @@ class APP_LIST_EXPORT SearchResultPageView
   SearchResultPageView();
   ~SearchResultPageView() override;
 
-  int selected_index() const { return selected_index_; }
-  bool HasSelection() const { return selected_index_ > -1; }
-  void SetSelection(bool select);  // Set or unset result selection.
-
   void AddSearchResultContainerView(
-      AppListModel::SearchResults* result_model,
+      SearchModel::SearchResults* result_model,
       SearchResultContainerView* result_container);
 
   const std::vector<SearchResultContainerView*>& result_container_views() {
@@ -46,27 +44,18 @@ class APP_LIST_EXPORT SearchResultPageView
   void OnAnimationUpdated(double progress,
                           AppListModel::State from_state,
                           AppListModel::State to_state) override;
-  void OnHidden() override;
   gfx::Rect GetSearchBoxBounds() const override;
-  views::View* GetSelectedView() const override;
-
-  void ClearSelectedIndex();
 
   // Overridden from SearchResultContainerView::Delegate :
   void OnSearchResultContainerResultsChanged() override;
 
   views::View* contents_view() { return contents_view_; }
 
-  views::View* first_result_view() const { return first_result_view_; }
+  SearchResultBaseView* first_result_view() const { return first_result_view_; }
 
  private:
   // Separator between SearchResultContainerView.
   class HorizontalSeparator;
-
-  // |directional_movement| is true if the navigation was caused by directional
-  // controls (eg, arrow keys), as opposed to linear controls (eg, Tab).
-  void SetSelectedIndex(int index, bool directional_movement);
-  bool IsValidSelectionIndex(int index);
 
   // Sort the result container views.
   void ReorderSearchResultContainers();
@@ -77,17 +66,11 @@ class APP_LIST_EXPORT SearchResultPageView
 
   std::vector<HorizontalSeparator*> separators_;
 
-  // -1 indicates no selection.
-  int selected_index_;
-
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
-
   // View containing SearchCardView instances. Owned by view hierarchy.
   views::View* const contents_view_;
 
   // The first search result's view or nullptr if there's no search result.
-  views::View* first_result_view_ = nullptr;
+  SearchResultBaseView* first_result_view_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageView);
 };

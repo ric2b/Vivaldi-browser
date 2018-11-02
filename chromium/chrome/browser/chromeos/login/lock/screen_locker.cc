@@ -26,6 +26,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/views_screen_locker.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
@@ -35,6 +36,7 @@
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
@@ -54,6 +56,7 @@
 #include "chromeos/login/auth/authpolicy_login_helper.h"
 #include "chromeos/login/auth/extended_authenticator.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
+#include "components/password_manager/core/browser/hash_password_manager.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_manager/user_manager.h"
@@ -201,20 +204,20 @@ void ScreenLocker::Init() {
 
   authenticator_ = UserSessionManager::GetInstance()->CreateAuthenticator(this);
   extended_authenticator_ = ExtendedAuthenticator::Create(this);
-  if (ash::switches::IsUsingWebUiLock()) {
+  if (!ash::switches::IsUsingViewsLock()) {
     web_ui_.reset(new WebUIScreenLocker(this));
     delegate_ = web_ui_.get();
     web_ui_->LockScreen();
 
     // Ownership of |icon_image_source| is passed.
-    screenlock_icon_provider_ = base::MakeUnique<ScreenlockIconProvider>();
+    screenlock_icon_provider_ = std::make_unique<ScreenlockIconProvider>();
     ScreenlockIconSource* screenlock_icon_source =
         new ScreenlockIconSource(screenlock_icon_provider_->AsWeakPtr());
     content::URLDataSource::Add(web_ui_->web_contents()->GetBrowserContext(),
                                 screenlock_icon_source);
   } else {
     // Create delegate that calls into the views-based lock screen via mojo.
-    views_screen_locker_ = base::MakeUnique<ViewsScreenLocker>(this);
+    views_screen_locker_ = std::make_unique<ViewsScreenLocker>(this);
     delegate_ = views_screen_locker_.get();
 
     // Create and display lock screen.
@@ -327,6 +330,7 @@ void ScreenLocker::OnPasswordAuthSuccess(const UserContext& user_context) {
           user_context.GetAccountId());
   if (quick_unlock_storage)
     quick_unlock_storage->MarkStrongAuth();
+  SaveSyncPasswordHash(user_context);
 }
 
 void ScreenLocker::UnlockOnLoginSuccess() {
@@ -434,7 +438,7 @@ void ScreenLocker::OnStartLockCallback(bool locked) {
   delegate_->OnAshLockAnimationFinished();
 
   AccessibilityManager::Get()->PlayEarcon(
-      chromeos::SOUND_LOCK, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_LOCK, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 }
 
 void ScreenLocker::ClearErrors() {
@@ -560,12 +564,24 @@ void ScreenLocker::ScheduleDeletion() {
   VLOG(1) << "Deleting ScreenLocker " << screen_locker_;
 
   AccessibilityManager::Get()->PlayEarcon(
-      SOUND_UNLOCK, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
+      SOUND_UNLOCK, PlaySoundOption::ONLY_IF_SPOKEN_FEEDBACK_ENABLED);
 
   delete screen_locker_;
   screen_locker_ = nullptr;
 }
 
+void ScreenLocker::SaveSyncPasswordHash(const UserContext& user_context) {
+  if (!user_context.GetSyncPasswordData().has_value())
+    return;
+
+  const user_manager::User* user =
+      user_manager::UserManager::Get()->FindUser(user_context.GetAccountId());
+  if (!user || !user->is_active())
+    return;
+  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(user);
+  if (profile)
+    login::SaveSyncPasswordDataToProfile(user_context, profile);
+}
 ////////////////////////////////////////////////////////////////////////////////
 // ScreenLocker, private:
 

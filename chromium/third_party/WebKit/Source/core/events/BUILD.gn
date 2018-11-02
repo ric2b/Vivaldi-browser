@@ -20,6 +20,8 @@ blink_core_sources("events") {
     "ClipboardEvent.h",
     "CompositionEvent.cpp",
     "CompositionEvent.h",
+    "CurrentInputEvent.cpp",
+    "CurrentInputEvent.h",
     "DragEvent.cpp",
     "DragEvent.h",
     "ErrorEvent.cpp",
@@ -82,10 +84,5 @@ blink_core_sources("events") {
     "WebInputEventConversion.h",
     "WheelEvent.cpp",
     "WheelEvent.h",
-  ]
-
-  configs += [
-    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 }

@@ -4,45 +4,23 @@
 
 #include "storage/browser/blob/blob_registry_impl.h"
 
+#include <memory>
+
 #include "base/barrier_closure.h"
 #include "base/callback_helpers.h"
+#include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "storage/browser/blob/blob_data_builder.h"
 #include "storage/browser/blob/blob_impl.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/blob/blob_transport_strategy.h"
+#include "storage/browser/blob/blob_url_store_impl.h"
 
 namespace storage {
 
 namespace {
 
 using MemoryStrategy = BlobMemoryController::Strategy;
-
-class BlobURLHandleImpl final : public blink::mojom::BlobURLHandle {
- public:
-  static blink::mojom::BlobURLHandlePtr Create(
-      base::WeakPtr<BlobStorageContext> context,
-      const GURL& url) {
-    blink::mojom::BlobURLHandlePtr ptr;
-    mojo::MakeStrongBinding(
-        base::WrapUnique(new BlobURLHandleImpl(std::move(context), url)),
-        mojo::MakeRequest(&ptr));
-    return ptr;
-  }
-
-  ~BlobURLHandleImpl() override {
-    if (context_)
-      context_->RevokePublicBlobURL(url_);
-  }
-
- private:
-  BlobURLHandleImpl(base::WeakPtr<BlobStorageContext> context, const GURL& url)
-      : context_(std::move(context)), url_(url) {}
-
-  base::WeakPtr<BlobStorageContext> context_;
-  const GURL url_;
-  DISALLOW_COPY_AND_ASSIGN(BlobURLHandleImpl);
-};
 
 }  // namespace
 
@@ -513,13 +491,9 @@ void BlobRegistryImpl::Register(
   for (const auto& element : elements) {
     if (element->is_file()) {
       if (!delegate->CanReadFile(element->get_file()->path)) {
-        // TODO(mek) Using ERR_FILE_WRITE_FAILED matches the IPC based
-        // implementation, but this is really a very different error than what
-        // FILE_WRITE_FAILED is used for elsewhere, so this should probably be a
-        // dfferent error status. http://crbug.com/740730
-        std::unique_ptr<BlobDataHandle> handle =
-            context_->AddBrokenBlob(uuid, content_type, content_disposition,
-                                    BlobStatus::ERR_FILE_WRITE_FAILED);
+        std::unique_ptr<BlobDataHandle> handle = context_->AddBrokenBlob(
+            uuid, content_type, content_disposition,
+            BlobStatus::ERR_REFERENCED_FILE_UNAVAILABLE);
         BlobImpl::Create(std::move(handle), std::move(blob));
         std::move(callback).Run();
         return;
@@ -530,13 +504,9 @@ void BlobRegistryImpl::Register(
       if (!filesystem_url.is_valid() ||
           !file_system_context_->GetFileSystemBackend(filesystem_url.type()) ||
           !delegate->CanReadFileSystemFile(filesystem_url)) {
-        // TODO(mek) Using ERR_FILE_WRITE_FAILED matches the IPC based
-        // implementation, but this is really a very different error than what
-        // FILE_WRITE_FAILED is used for elsewhere, so this should probably be a
-        // dfferent error status. http://crbug.com/740730
-        std::unique_ptr<BlobDataHandle> handle =
-            context_->AddBrokenBlob(uuid, content_type, content_disposition,
-                                    BlobStatus::ERR_FILE_WRITE_FAILED);
+        std::unique_ptr<BlobDataHandle> handle = context_->AddBrokenBlob(
+            uuid, content_type, content_disposition,
+            BlobStatus::ERR_REFERENCED_FILE_UNAVAILABLE);
         BlobImpl::Create(std::move(handle), std::move(blob));
         std::move(callback).Run();
         return;
@@ -544,7 +514,7 @@ void BlobRegistryImpl::Register(
     }
   }
 
-  blobs_under_construction_[uuid] = base::MakeUnique<BlobUnderConstruction>(
+  blobs_under_construction_[uuid] = std::make_unique<BlobUnderConstruction>(
       this, uuid, content_type, content_disposition, std::move(elements),
       bindings_.GetBadMessageCallback());
 
@@ -579,32 +549,17 @@ void BlobRegistryImpl::GetBlobFromUUID(blink::mojom::BlobRequest blob,
   std::move(callback).Run();
 }
 
-void BlobRegistryImpl::RegisterURL(blink::mojom::BlobPtr blob,
-                                   const GURL& url,
-                                   RegisterURLCallback callback) {
+void BlobRegistryImpl::URLStoreForOrigin(
+    const url::Origin& origin,
+    blink::mojom::BlobURLStoreAssociatedRequest request) {
+  // TODO(mek): Pass origin on to BlobURLStoreImpl so it can use it to generate
+  // Blob URLs, and verify at this point that the renderer can create URLs for
+  // that origin.
   Delegate* delegate = bindings_.dispatch_context().get();
   DCHECK(delegate);
-  if (!url.SchemeIsBlob() || !delegate->CanCommitURL(url)) {
-    bindings_.ReportBadMessage(
-        "Invalid Blob URL passed to BlobRegistry::RegisterURL");
-    return;
-  }
-
-  blink::mojom::Blob* blob_ptr = blob.get();
-  blob_ptr->GetInternalUUID(base::BindOnce(
-      &BlobRegistryImpl::RegisterURLWithUUID, weak_ptr_factory_.GetWeakPtr(),
-      url, std::move(blob), std::move(callback)));
-}
-
-void BlobRegistryImpl::RegisterURLWithUUID(const GURL& url,
-                                           blink::mojom::BlobPtr blob,
-                                           RegisterURLCallback callback,
-                                           const std::string& uuid) {
-  // |blob| is unused, but is passed here to be kept alive until
-  // RegisterBlobURL increments the refcount of it via the uuid.
-  if (context_)
-    context_->RegisterPublicBlobURL(url, uuid);
-  std::move(callback).Run(BlobURLHandleImpl::Create(context_, url));
+  mojo::MakeStrongAssociatedBinding(
+      std::make_unique<BlobURLStoreImpl>(context_, delegate),
+      std::move(request));
 }
 
 }  // namespace storage

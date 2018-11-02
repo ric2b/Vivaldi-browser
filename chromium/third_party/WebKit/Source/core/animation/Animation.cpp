@@ -339,12 +339,12 @@ bool Animation::PreCommit(
         // to that function for more details.
         //
         // In the CompositingRequirementsUpdater::UpdateRecursive, the
-        // (direct_reasons & kCompositingReasonActiveAnimation) can be non-zero
-        // which indicates that there is a compositor animation. However, the
-        // PaintLayerCompositor::CanBeComposited could still return false
-        // because the LocalFrameView is not visible. And in that case, the code
-        // path will get here because there is a compositor animation but it
-        // won't be composited. We have to account for this case.
+        // (direct_reasons & CompositingReason::kComboActiveAnimation) can be
+        // non-zero which indicates that there is a compositor animation.
+        // However, the PaintLayerCompositor::CanBeComposited could still return
+        // false because the LocalFrameView is not visible. And in that case,
+        // the code path will get here because there is a compositor animation
+        // but it won't be composited. We have to account for this case.
         if (failure_code.can_composite &&
             TimelineInternal()->GetDocument()->View()->IsVisible()) {
           is_non_composited_compositable_ = true;
@@ -1260,7 +1260,7 @@ void Animation::ResolvePromiseMaybeAsync(AnimationPromise* promise) {
   if (ScriptForbiddenScope::IsScriptForbidden()) {
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kDOMManipulation)
-        ->PostTask(BLINK_FROM_HERE,
+        ->PostTask(FROM_HERE,
                    WTF::Bind(&AnimationPromise::Resolve<Animation*>,
                              WrapPersistent(promise), WrapPersistent(this)));
   } else {
@@ -1277,7 +1277,7 @@ void Animation::RejectAndResetPromiseMaybeAsync(AnimationPromise* promise) {
   if (ScriptForbiddenScope::IsScriptForbidden()) {
     GetExecutionContext()
         ->GetTaskRunner(TaskType::kDOMManipulation)
-        ->PostTask(BLINK_FROM_HERE,
+        ->PostTask(FROM_HERE,
                    WTF::Bind(&Animation::RejectAndResetPromise,
                              WrapPersistent(this), WrapPersistent(promise)));
   } else {

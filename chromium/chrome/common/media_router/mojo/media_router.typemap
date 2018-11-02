@@ -7,14 +7,18 @@ public_headers = [
   "//chrome/common/media_router/discovery/media_sink_internal.h",
   "//chrome/common/media_router/issue.h",
   "//chrome/common/media_router/media_route.h",
+  "//chrome/common/media_router/media_route_provider_helper.h",
   "//chrome/common/media_router/media_sink.h",
   "//chrome/common/media_router/media_source.h",
   "//chrome/common/media_router/route_request_result.h",
   "//content/public/common/presentation_connection_message.h",
   "//content/public/common/presentation_info.h",
 ]
-deps = [
+public_deps = [
+  "//chrome/common/media_router:router",
   "//content/public/common",
+]
+deps = [
   "//net",
   "//third_party/icu",  # For issue.h
   "//url",
@@ -29,6 +33,7 @@ type_mappings = [
   "media_router.mojom.Issue.ActionType=media_router::IssueInfo::Action",
   "media_router.mojom.Issue.Severity=media_router::IssueInfo::Severity",
   "media_router.mojom.MediaRoute=media_router::MediaRoute",
+  "media_router.mojom.MediaRouteProvider.Id=media_router::MediaRouteProviderId",
   "media_router.mojom.MediaRouter.PresentationConnectionCloseReason=content::PresentationConnectionCloseReason",
   "media_router.mojom.MediaRouter.PresentationConnectionState=content::PresentationConnectionState",
   "media_router.mojom.MediaSink=media_router::MediaSinkInternal",

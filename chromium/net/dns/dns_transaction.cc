@@ -43,10 +43,38 @@
 #include "net/log/net_log_with_source.h"
 #include "net/socket/datagram_client_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace net {
 
 namespace {
+
+constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
+    net::DefineNetworkTrafficAnnotation("dns_transaction", R"(
+        semantics {
+          sender: "DNS Transaction"
+          description:
+            "DNS Transaction implements a stub DNS resolver as defined in RFC "
+            "1034."
+          trigger:
+            "Any network request that may require DNS resolution, including "
+            "navigations, connecting to a proxy server, detecting proxy "
+            "settings, getting proxy config, certificate checking, and more."
+          data:
+            "Domain name that needs resolution."
+          destination: OTHER
+          destination_other:
+            "The connection is made to a DNS server based on user's network "
+            "settings."
+        }
+        policy {
+          cookies_allowed: NO
+          setting:
+            "This feature cannot be disabled. Without DNS Transactions Chrome "
+            "cannot resolve host names."
+          policy_exception_justification:
+            "Essential for Chrome's navigation."
+        })");
 
 // Count labels in the fully-qualified name in DNS format.
 int CountLabels(const std::string& name) {
@@ -69,6 +97,26 @@ std::unique_ptr<base::Value> NetLogStartCallback(
   dict->SetString("hostname", *hostname);
   dict->SetInteger("query_type", qtype);
   return std::move(dict);
+}
+
+// Values are used in UMA histograms. Do not change existing values.
+enum MalformedResponseResult {
+  MALFORMED_OK = 0,
+  MALFORMED_MALFORMED = 1,
+  MALFORMED_FAILED = 2,
+  MALFORMED_MAX
+};
+
+void RecordMalformedResponseHistogram(int net_error) {
+  MalformedResponseResult error_type;
+  if (net_error == OK)
+    error_type = MALFORMED_OK;
+  else if (net_error == ERR_DNS_MALFORMED_RESPONSE)
+    error_type = MALFORMED_MALFORMED;
+  else
+    error_type = MALFORMED_FAILED;
+  UMA_HISTOGRAM_ENUMERATION("Net.DNS.ResultAfterMalformedResponse", error_type,
+                            MALFORMED_MAX);
 }
 
 // ----------------------------------------------------------------------------
@@ -205,10 +253,15 @@ class DnsUDPAttempt : public DnsAttempt {
     } while (rv != ERR_IO_PENDING && next_state_ != STATE_NONE);
 
     set_result(rv);
-    // If we received a malformed response, and are now waiting for another one,
-    // indicate to the transaction that the server might be misbehaving.
-    if (rv == ERR_IO_PENDING && received_malformed_response_)
-      return ERR_DNS_MALFORMED_RESPONSE;
+    if (received_malformed_response_) {
+      // If we received a malformed response, and are now waiting for another
+      // one, indicate to the transaction that the server might be misbehaving.
+      if (rv == ERR_IO_PENDING)
+        return ERR_DNS_MALFORMED_RESPONSE;
+
+      // This is a new response after the original malformed one.
+      RecordMalformedResponseHistogram(rv);
+    }
     if (rv == OK) {
       DCHECK_EQ(STATE_NONE, next_state_);
       UMA_HISTOGRAM_LONG_TIMES_100("AsyncDNS.UDPAttemptSuccess",
@@ -222,10 +275,10 @@ class DnsUDPAttempt : public DnsAttempt {
 
   int DoSendQuery() {
     next_state_ = STATE_SEND_QUERY_COMPLETE;
-    return socket()->Write(query_->io_buffer(),
-                           query_->io_buffer()->size(),
-                           base::Bind(&DnsUDPAttempt::OnIOComplete,
-                                      base::Unretained(this)));
+    return socket()->Write(
+        query_->io_buffer(), query_->io_buffer()->size(),
+        base::Bind(&DnsUDPAttempt::OnIOComplete, base::Unretained(this)),
+        kTrafficAnnotation);
   }
 
   int DoSendQueryComplete(int rv) {
@@ -263,6 +316,7 @@ class DnsUDPAttempt : public DnsAttempt {
       // Our solution is to make another attempt, in case the query truly
       // failed, but keep this attempt alive, in case it was a false alarm.
       received_malformed_response_ = true;
+      RecordMalformedResponseHistogram(ERR_DNS_MALFORMED_RESPONSE);
       next_state_ = STATE_READ_RESPONSE;
       return OK;
     }
@@ -417,9 +471,9 @@ class DnsTCPAttempt : public DnsAttempt {
     if (buffer_->BytesRemaining() > 0) {
       next_state_ = STATE_SEND_LENGTH;
       return socket_->Write(
-          buffer_.get(),
-          buffer_->BytesRemaining(),
-          base::Bind(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)));
+          buffer_.get(), buffer_->BytesRemaining(),
+          base::Bind(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)),
+          kTrafficAnnotation);
     }
     buffer_ = new DrainableIOBuffer(query_->io_buffer(),
                                     query_->io_buffer()->size());
@@ -436,9 +490,9 @@ class DnsTCPAttempt : public DnsAttempt {
     if (buffer_->BytesRemaining() > 0) {
       next_state_ = STATE_SEND_QUERY;
       return socket_->Write(
-          buffer_.get(),
-          buffer_->BytesRemaining(),
-          base::Bind(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)));
+          buffer_.get(), buffer_->BytesRemaining(),
+          base::Bind(&DnsTCPAttempt::OnIOComplete, base::Unretained(this)),
+          kTrafficAnnotation);
     }
     buffer_ =
         new DrainableIOBuffer(length_buffer_.get(), length_buffer_->size());

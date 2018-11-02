@@ -62,47 +62,21 @@ content::WebUIDataSource* CreateFlagsUIHTMLSource() {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIFlagsHost);
 
-  source->AddLocalizedString(flags_ui::kFlagsSearchPlaceholder,
-                             IDS_FLAGS_UI_SEARCH_PLACEHOLDER);
-  source->AddLocalizedString(flags_ui::kFlagsTitle, IDS_FLAGS_UI_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsWarningHeader,
-                             IDS_FLAGS_UI_WARNING_HEADER);
-  source->AddLocalizedString(flags_ui::kFlagsBlurb, IDS_FLAGS_UI_WARNING_TEXT);
-  source->AddLocalizedString(flags_ui::kChannelPromoBeta,
-                             IDS_FLAGS_UI_PROMOTE_BETA_CHANNEL);
-  source->AddLocalizedString(flags_ui::kChannelPromoDev,
-                             IDS_FLAGS_UI_PROMOTE_DEV_CHANNEL);
-  source->AddLocalizedString(flags_ui::kFlagsSupportedTitle,
-                             IDS_FLAGS_UI_SUPPORTED_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsUnsupportedTitle,
-                             IDS_FLAGS_UI_UNSUPPORTED_TITLE);
-  source->AddLocalizedString(flags_ui::kFlagsNotSupported,
-                             IDS_FLAGS_UI_NOT_AVAILABLE);
   source->AddLocalizedString(flags_ui::kFlagsRestartNotice,
                              IDS_FLAGS_UI_RELAUNCH_NOTICE);
-  source->AddLocalizedString(flags_ui::kFlagsRestartButton,
-                             IDS_FLAGS_UI_RELAUNCH_BUTTON);
-  source->AddLocalizedString(flags_ui::kResetAllButton,
-                             IDS_FLAGS_UI_RESET_ALL_BUTTON);
-  source->AddLocalizedString(flags_ui::kFlagsNoMatches,
-                             IDS_FLAGS_UI_NO_MATCHES);
-  source->AddLocalizedString(flags_ui::kDisable, IDS_FLAGS_UI_DISABLE);
-  source->AddLocalizedString(flags_ui::kEnable, IDS_FLAGS_UI_ENABLE);
   source->AddString(flags_ui::kVersion, version_info::GetVersionNumber());
 
 #if defined(OS_CHROMEOS)
   if (!user_manager::UserManager::Get()->IsCurrentUserOwner() &&
       base::SysInfo::IsRunningOnChromeOS()) {
-    // Set the strings to show which user can actually change the flags.
+    // Set the string to show which user can actually change the flags.
     std::string owner;
     chromeos::CrosSettings::Get()->GetString(chromeos::kDeviceOwner, &owner);
-    source->AddString(flags_ui::kOwnerWarning,
-                      l10n_util::GetStringFUTF16(IDS_FLAGS_UI_SYSTEM_OWNER_ONLY,
-                                                 base::UTF8ToUTF16(owner)));
+    source->AddString(flags_ui::kOwnerEmail, base::UTF8ToUTF16(owner));
   } else {
     // The warning will be only shown on ChromeOS, when the current user is not
     // the owner.
-    source->AddString(flags_ui::kOwnerWarning, base::string16());
+    source->AddString(flags_ui::kOwnerEmail, base::string16());
   }
 #endif
 
@@ -206,7 +180,7 @@ void FlagsDOMHandler::HandleRequestExperimentalFeatures(
   results.SetBoolean(flags_ui::kShowOwnerWarning,
                      access_ == flags_ui::kGeneralAccessFlagsOnly);
 
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+#if !defined(VIVALDI_BUILD) && (defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS))
   version_info::Channel channel = chrome::GetChannel();
   results.SetBoolean(flags_ui::kShowBetaChannelPromotion,
                      channel == version_info::Channel::STABLE);
@@ -317,7 +291,7 @@ FlagsUI::FlagsUI(content::WebUI* web_ui)
       weak_factory_(this) {
   Profile* profile = Profile::FromWebUI(web_ui);
 
-  auto handler_owner = base::MakeUnique<FlagsDOMHandler>();
+  auto handler_owner = std::make_unique<FlagsDOMHandler>();
   FlagsDOMHandler* handler = handler_owner.get();
   web_ui->AddMessageHandler(std::move(handler_owner));
 

@@ -29,6 +29,7 @@
 #include <deque>
 #include <memory>
 
+#include "base/macros.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptFunction.h"
@@ -40,6 +41,7 @@
 #include "core/animation/DocumentTimeline.h"
 #include "core/css/SelectRuleFeatureSet.h"
 #include "core/css/StyleEngine.h"
+#include "core/css/properties/CSSUnresolvedProperty.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/Document.h"
@@ -61,7 +63,6 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/PlainTextRange.h"
 #include "core/editing/SelectionTemplate.h"
-#include "core/editing/SurroundingText.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/markers/DocumentMarker.h"
@@ -105,8 +106,7 @@
 #include "core/layout/LayoutMenuList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTreeAsText.h"
-#include "core/layout/api/LayoutMenuListItem.h"
-#include "core/layout/api/LayoutViewItem.h"
+#include "core/layout/LayoutView.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/HistoryItem.h"
@@ -175,7 +175,6 @@ namespace blink {
 namespace {
 
 class UseCounterObserverImpl final : public UseCounter::Observer {
-  WTF_MAKE_NONCOPYABLE(UseCounterObserverImpl);
 
  public:
   UseCounterObserverImpl(ScriptPromiseResolver* resolver, WebFeature feature)
@@ -196,6 +195,7 @@ class UseCounterObserverImpl final : public UseCounter::Observer {
  private:
   Member<ScriptPromiseResolver> resolver_;
   WebFeature feature_;
+  DISALLOW_COPY_AND_ASSIGN(UseCounterObserverImpl);
 };
 
 }  // namespace
@@ -265,12 +265,6 @@ void Internals::ResetToConsistentState(Page* page) {
       ->LayoutViewportScrollableArea()
       ->SetScrollOffset(ScrollOffset(), kProgrammaticScroll);
   OverrideUserPreferredLanguagesForTesting(Vector<AtomicString>());
-  if (!page->DeprecatedLocalMainFrame()
-           ->GetSpellChecker()
-           .IsSpellCheckingEnabled())
-    page->DeprecatedLocalMainFrame()
-        ->GetSpellChecker()
-        .ToggleSpellCheckingEnabled();
   if (page->DeprecatedLocalMainFrame()->GetEditor().IsOverwriteModeEnabled())
     page->DeprecatedLocalMainFrame()->GetEditor().ToggleOverwriteModeEnabled();
 
@@ -360,7 +354,7 @@ unsigned Internals::hitTestCount(Document* doc,
     return 0;
   }
 
-  return doc->GetLayoutViewItem().HitTestCount();
+  return doc->GetLayoutView()->HitTestCount();
 }
 
 unsigned Internals::hitTestCacheHits(Document* doc,
@@ -371,7 +365,7 @@ unsigned Internals::hitTestCacheHits(Document* doc,
     return 0;
   }
 
-  return doc->GetLayoutViewItem().HitTestCacheHits();
+  return doc->GetLayoutView()->HitTestCacheHits();
 }
 
 Element* Internals::elementFromPoint(Document* doc,
@@ -386,7 +380,7 @@ Element* Internals::elementFromPoint(Document* doc,
     return nullptr;
   }
 
-  if (doc->GetLayoutViewItem().IsNull())
+  if (!doc->GetLayoutView())
     return nullptr;
 
   HitTestRequest::HitTestRequestType hit_type =
@@ -409,10 +403,10 @@ void Internals::clearHitTestCache(Document* doc,
     return;
   }
 
-  if (doc->GetLayoutViewItem().IsNull())
+  if (!doc->GetLayoutView())
     return;
 
-  doc->GetLayoutViewItem().ClearHitTestCache();
+  doc->GetLayoutView()->ClearHitTestCache();
 }
 
 Element* Internals::innerEditorElement(Element* container,
@@ -741,7 +735,7 @@ CSSStyleDeclaration* Internals::computedStyleIncludingVisitedInfo(
 
 ShadowRoot* Internals::createUserAgentShadowRoot(Element* host) {
   DCHECK(host);
-  return &host->EnsureUserAgentShadowRoot();
+  return &host->EnsureUserAgentShadowRootV1();
 }
 
 void Internals::setBrowserControlsState(float top_height,
@@ -798,7 +792,7 @@ String Internals::shadowRootType(const Node* root,
   }
 
   switch (ToShadowRoot(root)->GetType()) {
-    case ShadowRootType::kUserAgent:
+    case ShadowRootType::kUserAgentV1:
       return String("UserAgentShadowRoot");
     case ShadowRootType::V0:
       return String("V0ShadowRoot");
@@ -899,7 +893,8 @@ DOMWindow* Internals::pagePopupWindow() const {
         ToLocalDOMWindow(page->GetChromeClient().PagePopupWindowForTesting());
     if (popup) {
       // We need to make the popup same origin so layout tests can access it.
-      popup->document()->UpdateSecurityOrigin(document_->GetSecurityOrigin());
+      popup->document()->UpdateSecurityOrigin(
+          document_->GetMutableSecurityOrigin());
     }
     return popup;
   }
@@ -1624,36 +1619,6 @@ Node* Internals::touchNodeAdjustedToBestContextMenuNode(
   return target_node;
 }
 
-DOMRectReadOnly* Internals::bestZoomableAreaForTouchPoint(
-    long x,
-    long y,
-    long width,
-    long height,
-    Document* document,
-    ExceptionState& exception_state) {
-  DCHECK(document);
-  if (!document->GetFrame()) {
-    exception_state.ThrowDOMException(kInvalidAccessError,
-                                      "The document provided is invalid.");
-    return nullptr;
-  }
-
-  document->UpdateStyleAndLayout();
-
-  IntSize radius(width / 2, height / 2);
-  IntPoint point(x + radius.Width(), y + radius.Height());
-
-  Node* target_node = nullptr;
-  IntRect zoomable_area;
-  bool found_node =
-      document->GetFrame()->GetEventHandler().BestZoomableAreaForTouchPoint(
-          point, radius, zoomable_area, target_node);
-  if (found_node)
-    return DOMRectReadOnly::FromIntRect(zoomable_area);
-
-  return nullptr;
-}
-
 int Internals::lastSpellCheckRequestSequence(Document* document,
                                              ExceptionState& exception_state) {
   SpellCheckRequester* requester = GetSpellCheckRequester(document);
@@ -2022,9 +1987,8 @@ LayerRectList* Internals::touchEventTargetLayerRects(
     }
   }
 
-  LayoutViewItem view = document->GetLayoutViewItem();
-  if (!view.IsNull()) {
-    if (PaintLayerCompositor* compositor = view.Compositor()) {
+  if (auto* view = document->GetLayoutView()) {
+    if (PaintLayerCompositor* compositor = view->Compositor()) {
       if (GraphicsLayer* root_layer = compositor->RootGraphicsLayer()) {
         LayerRectList* rects = LayerRectList::Create();
         AccumulateLayerRectList(compositor, root_layer, rects);
@@ -2098,9 +2062,9 @@ StaticNodeList* Internals::nodesFromRect(
 
   LocalFrame* frame = document->GetFrame();
   LocalFrameView* frame_view = document->View();
-  LayoutViewItem layout_view_item = document->GetLayoutViewItem();
+  auto* layout_view = document->GetLayoutView();
 
-  if (layout_view_item.IsNull())
+  if (!layout_view)
     return nullptr;
 
   float zoom_factor = frame->PageZoomFactor();
@@ -2129,7 +2093,7 @@ StaticNodeList* Internals::nodesFromRect(
   HeapVector<Member<Node>> matches;
   HitTestResult result(request, point, top_padding, right_padding,
                        bottom_padding, left_padding);
-  layout_view_item.HitTest(result);
+  layout_view->HitTest(result);
   CopyToVector(result.ListBasedTestResult(), matches);
 
   return StaticNodeList::Adopt(matches);
@@ -2149,19 +2113,6 @@ bool Internals::hasSpellingMarker(Document* document,
   document->UpdateStyleAndLayoutIgnorePendingStylesheets();
   return document->GetFrame()->GetSpellChecker().SelectionStartHasMarkerFor(
       DocumentMarker::kSpelling, from, length);
-}
-
-void Internals::setSpellCheckingEnabled(bool enabled,
-                                        ExceptionState& exception_state) {
-  if (!GetFrame()) {
-    exception_state.ThrowDOMException(
-        kInvalidAccessError,
-        "No frame can be obtained from the provided document.");
-    return;
-  }
-
-  if (enabled != GetFrame()->GetSpellChecker().IsSpellCheckingEnabled())
-    GetFrame()->GetSpellChecker().ToggleSpellCheckingEnabled();
 }
 
 void Internals::replaceMisspelled(Document* document,
@@ -2700,9 +2651,9 @@ void Internals::forceFullRepaint(Document* document,
     return;
   }
 
-  LayoutViewItem layout_view_item = document->GetLayoutViewItem();
-  if (!layout_view_item.IsNull())
-    layout_view_item.InvalidatePaintForViewAndCompositedLayers();
+  auto* layout_view = document->GetLayoutView();
+  if (layout_view)
+    layout_view->InvalidatePaintForViewAndCompositedLayers();
 }
 
 DOMRectList* Internals::draggableRegions(Document* document,
@@ -2878,12 +2829,11 @@ bool Internals::fakeMouseMovePending() const {
 
 DOMArrayBuffer* Internals::serializeObject(
     scoped_refptr<SerializedScriptValue> value) const {
-  StringView view = value->GetWireData();
-  DCHECK(view.Is8Bit());
+  base::span<const uint8_t> span = value->GetWireData();
   DOMArrayBuffer* buffer =
-      DOMArrayBuffer::CreateUninitializedOrNull(view.length(), sizeof(LChar));
+      DOMArrayBuffer::CreateUninitializedOrNull(span.length(), sizeof(uint8_t));
   if (buffer)
-    memcpy(buffer->Data(), view.Characters8(), view.length());
+    memcpy(buffer->Data(), span.data(), span.length());
   return buffer;
 }
 
@@ -3007,9 +2957,8 @@ String Internals::selectMenuListText(HTMLSelectElement* select) {
   if (!layout_object || !layout_object->IsMenuList())
     return String();
 
-  LayoutMenuListItem menu_list_item =
-      LayoutMenuListItem(ToLayoutMenuList(layout_object));
-  return menu_list_item.GetText();
+  LayoutMenuList* menu_list = ToLayoutMenuList(layout_object);
+  return menu_list->GetText();
 }
 
 bool Internals::isSelectPopupVisible(Node* node) {
@@ -3074,7 +3023,7 @@ bool Internals::loseSharedGraphicsContext3D() {
 void Internals::forceCompositingUpdate(Document* document,
                                        ExceptionState& exception_state) {
   DCHECK(document);
-  if (document->GetLayoutViewItem().IsNull()) {
+  if (!document->GetLayoutView()) {
     exception_state.ThrowDOMException(kInvalidAccessError,
                                       "The document provided is invalid.");
     return;
@@ -3208,31 +3157,6 @@ void Internals::Trace(blink::Visitor* visitor) {
 void Internals::setValueForUser(HTMLInputElement* element,
                                 const String& value) {
   element->SetValueForUser(value);
-}
-
-String Internals::textSurroundingNode(Node* node,
-                                      int x,
-                                      int y,
-                                      unsigned long max_length) {
-  if (!node)
-    return String();
-
-  // VisiblePosition and SurroundingText must be created with clean layout.
-  node->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-  DocumentLifecycle::DisallowTransitionScope disallow_transition(
-      node->GetDocument().Lifecycle());
-
-  if (!node->GetLayoutObject())
-    return String();
-  blink::WebPoint point(x, y);
-  SurroundingText surrounding_text(
-      EphemeralRange(
-          CreateVisiblePosition(node->GetLayoutObject()->PositionForPoint(
-                                    static_cast<IntPoint>(point)))
-              .DeepEquivalent()
-              .ParentAnchoredEquivalent()),
-      max_length);
-  return surrounding_text.Content();
 }
 
 void Internals::setFocused(bool focused) {
@@ -3435,8 +3359,9 @@ Vector<String> Internals::getCSSPropertyLonghands() const {
   Vector<String> result;
   for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
     CSSPropertyID property = static_cast<CSSPropertyID>(id);
-    if (CSSProperty::Get(property).IsLonghand()) {
-      result.push_back(getPropertyNameString(property));
+    const CSSProperty& property_class = CSSProperty::Get(property);
+    if (property_class.IsLonghand()) {
+      result.push_back(property_class.GetPropertyNameString());
     }
   }
   return result;
@@ -3446,8 +3371,9 @@ Vector<String> Internals::getCSSPropertyShorthands() const {
   Vector<String> result;
   for (int id = firstCSSProperty; id <= lastCSSProperty; ++id) {
     CSSPropertyID property = static_cast<CSSPropertyID>(id);
-    if (CSSProperty::Get(property).IsShorthand()) {
-      result.push_back(getPropertyNameString(property));
+    const CSSProperty& property_class = CSSProperty::Get(property);
+    if (property_class.IsShorthand()) {
+      result.push_back(property_class.GetPropertyNameString());
     }
   }
   return result;
@@ -3457,7 +3383,8 @@ Vector<String> Internals::getCSSPropertyAliases() const {
   Vector<String> result;
   for (CSSPropertyID alias : kCSSPropertyAliasList) {
     DCHECK(isPropertyAlias(alias));
-    result.push_back(getPropertyNameString(alias));
+    result.push_back(CSSUnresolvedProperty::GetAliasProperty(alias)
+                         ->GetPropertyNameString());
   }
   return result;
 }
@@ -3558,6 +3485,13 @@ DOMRect* Internals::visualRect(Node* node) {
 
 void Internals::crash() {
   CHECK(false) << "Intentional crash";
+}
+
+String Internals::evaluateInInspectorOverlay(const String& script) {
+  LocalFrame* frame = GetFrame();
+  if (frame && frame->Client())
+    return frame->Client()->evaluateInInspectorOverlayForTesting(script);
+  return g_empty_string;
 }
 
 void Internals::setIsLowEndDevice(bool is_low_end_device) {

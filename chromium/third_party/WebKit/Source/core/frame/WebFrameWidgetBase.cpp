@@ -26,7 +26,6 @@
 #include "platform/wtf/Assertions.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebGestureCurve.h"
-#include "public/web/WebActiveWheelFlingParameters.h"
 #include "public/web/WebLocalFrame.h"
 #include "public/web/WebWidgetClient.h"
 
@@ -59,7 +58,7 @@ WebFrameWidgetBase::WebFrameWidgetBase()
     : fling_modifier_(0),
       fling_source_device_(kWebGestureDeviceUninitialized) {}
 
-WebFrameWidgetBase::~WebFrameWidgetBase() {}
+WebFrameWidgetBase::~WebFrameWidgetBase() = default;
 
 WebDragOperation WebFrameWidgetBase::DragTargetDragEnter(
     const WebDragData& web_drag_data,
@@ -171,7 +170,7 @@ void WebFrameWidgetBase::DragSourceEndedAt(
   WebMouseEvent fake_mouse_move(
       WebInputEvent::kMouseMove, point_in_root_frame, screen_point,
       WebPointerProperties::Button::kLeft, 0, WebInputEvent::kNoModifiers,
-      TimeTicks::Now().InSeconds());
+      CurrentTimeTicks().InSeconds());
   fake_mouse_move.SetFrameScale(1);
   ToCoreFrame(LocalRoot())
       ->GetEventHandler()
@@ -271,13 +270,13 @@ void WebFrameWidgetBase::DidLosePointerLock() {
   GetPage()->GetPointerLockController().DidLosePointerLock();
 }
 
-void WebFrameWidgetBase::RequestDecode(const PaintImage& image,
-                                       WTF::Function<void(bool)> callback) {
+void WebFrameWidgetBase::RequestDecode(
+    const PaintImage& image,
+    base::OnceCallback<void(bool)> callback) {
   // If we have a LayerTreeView, propagate the request, otherwise fail it since
   // otherwise it would remain in a unresolved and unrejected state.
   if (WebLayerTreeView* layer_tree_view = GetLayerTreeView()) {
-    layer_tree_view->RequestDecode(image,
-                                   ConvertToBaseCallback(std::move(callback)));
+    layer_tree_view->RequestDecode(image, std::move(callback));
   } else {
     std::move(callback).Run(false);
   }
@@ -387,7 +386,7 @@ bool WebFrameWidgetBase::ScrollBy(const WebFloatSize& delta,
         RuntimeEnabledFeatures::TouchpadAndWheelScrollLatchingEnabled();
     WebMouseWheelEvent synthetic_wheel(WebInputEvent::kMouseWheel,
                                        fling_modifier_,
-                                       WTF::MonotonicallyIncreasingTime());
+                                       WTF::CurrentTimeTicksInSeconds());
     const float kTickDivisor = WheelEvent::kTickMultiplier;
 
     synthetic_wheel.delta_x = delta.width;
@@ -503,26 +502,6 @@ WebInputEventResult WebFrameWidgetBase::HandleGestureFlingEvent(
   return event_result;
 }
 
-void WebFrameWidgetBase::TransferActiveWheelFlingAnimation(
-    const WebActiveWheelFlingParameters& parameters) {
-  TRACE_EVENT0("blink",
-               "WebFrameWidgetBase::TransferActiveWheelFlingAnimation");
-  DCHECK(!gesture_animation_);
-  position_on_fling_start_ = parameters.point;
-  global_position_on_fling_start_ = parameters.global_point;
-  fling_modifier_ = parameters.modifiers;
-  std::unique_ptr<WebGestureCurve> curve =
-      Platform::Current()->CreateFlingAnimationCurve(
-          parameters.source_device, WebFloatPoint(parameters.delta),
-          parameters.cumulative_scroll);
-  DCHECK(curve);
-  gesture_animation_ = WebActiveGestureAnimation::CreateWithTimeOffset(
-      std::move(curve), this, parameters.start_time);
-  DCHECK_NE(parameters.source_device, kWebGestureDeviceUninitialized);
-  fling_source_device_ = parameters.source_device;
-  ScheduleAnimation();
-}
-
 WebLocalFrame* WebFrameWidgetBase::FocusedWebLocalFrameInWidget() const {
   return WebLocalFrameImpl::FromFrame(FocusedLocalFrameInWidget());
 }
@@ -531,7 +510,7 @@ WebGestureEvent WebFrameWidgetBase::CreateGestureScrollEventFromFling(
     WebInputEvent::Type type,
     WebGestureDevice source_device) const {
   WebGestureEvent gesture_event(type, fling_modifier_,
-                                WTF::MonotonicallyIncreasingTime());
+                                WTF::CurrentTimeTicksInSeconds());
   gesture_event.source_device = source_device;
   gesture_event.x = position_on_fling_start_.x;
   gesture_event.y = position_on_fling_start_.y;

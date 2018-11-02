@@ -4,11 +4,11 @@
 
 #include "chrome/browser/ui/views/passwords/manage_passwords_bubble_view.h"
 
+#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/passwords/manage_password_auto_sign_in_view.h"
 #include "chrome/browser/ui/views/passwords/manage_passwords_icon_views.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
@@ -26,11 +27,17 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/content_features.h"
-#include "net/url_request/test_url_fetcher_factory.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_request.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/base/ui_features.h"
+#include "ui/views/window/dialog_client_view.h"
 
+using net::test_server::BasicHttpResponse;
+using net::test_server::HttpRequest;
+using net::test_server::HttpResponse;
 using testing::Eq;
 using testing::Field;
 using testing::_;
@@ -39,27 +46,18 @@ namespace {
 
 const char kDisplayDispositionMetric[] = "PasswordBubble.DisplayDisposition";
 
-// A helper class that will create FakeURLFetcher and record the requested URLs.
-class TestURLFetcherCallback {
- public:
-  std::unique_ptr<net::FakeURLFetcher> CreateURLFetcher(
-      const GURL& url,
-      net::URLFetcherDelegate* d,
-      const std::string& response_data,
-      net::HttpStatusCode response_code,
-      net::URLRequestStatus::Status status) {
-    OnRequestDone(url);
-    return std::unique_ptr<net::FakeURLFetcher>(
-        new net::FakeURLFetcher(url, d, response_data, response_code, status));
-  }
-
-  MOCK_METHOD1(OnRequestDone, void(const GURL&));
-};
-
 bool IsBubbleShowing() {
   return ManagePasswordsBubbleView::manage_password_bubble() &&
       ManagePasswordsBubbleView::manage_password_bubble()->
           GetWidget()->IsVisible();
+}
+
+const views::DialogClientView* GetDialogClientView(
+    const LocationBarBubbleDelegateView* bubble) {
+  const views::DialogClientView* view =
+      bubble->GetWidget()->client_view()->AsDialogClientView();
+  DCHECK(view);
+  return view;
 }
 
 }  // namespace
@@ -81,6 +79,17 @@ class ManagePasswordsBubbleViewTest : public ManagePasswordsTest {
     ManagePasswordsTest::SetUp();
   }
 
+  MOCK_METHOD0(OnIconRequestDone, void());
+
+  // Called on the server background thread.
+  std::unique_ptr<HttpResponse> HandleRequest(const HttpRequest& request) {
+    std::unique_ptr<BasicHttpResponse> response(new BasicHttpResponse);
+    if (request.relative_url == "/icon.png") {
+      OnIconRequestDone();
+    }
+    return std::move(response);
+  }
+
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 
@@ -93,7 +102,8 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
   SetupPendingPassword();
   EXPECT_TRUE(IsBubbleShowing());
   const ManagePasswordsBubbleView* bubble =
-      ManagePasswordsBubbleView::manage_password_bubble();
+      static_cast<const ManagePasswordsBubbleView*>(
+          ManagePasswordsBubbleView::manage_password_bubble());
   EXPECT_TRUE(bubble->initially_focused_view());
   EXPECT_FALSE(bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseCurrentBubble();
@@ -108,7 +118,8 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, BasicOpenAndClose) {
       browser()->tab_strip_model()->GetActiveWebContents())
       ->ShowManagePasswordsBubble(true /* user_action */);
   EXPECT_TRUE(IsBubbleShowing());
-  bubble = ManagePasswordsBubbleView::manage_password_bubble();
+  bubble = static_cast<const ManagePasswordsBubbleView*>(
+      ManagePasswordsBubbleView::manage_password_bubble());
   EXPECT_TRUE(bubble->initially_focused_view());
   EXPECT_EQ(bubble->initially_focused_view(),
             bubble->GetFocusManager()->GetFocusedView());
@@ -125,10 +136,10 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, CommandControlsBubble) {
   EXPECT_FALSE(IsBubbleShowing());
   ExecuteManagePasswordsCommand();
   EXPECT_TRUE(IsBubbleShowing());
-  const ManagePasswordsBubbleView* bubble =
+  const LocationBarBubbleDelegateView* bubble =
       ManagePasswordsBubbleView::manage_password_bubble();
-  EXPECT_TRUE(bubble->initially_focused_view());
-  EXPECT_EQ(bubble->initially_focused_view(),
+  EXPECT_TRUE(GetDialogClientView(bubble)->ok_button());
+  EXPECT_EQ(GetDialogClientView(bubble)->ok_button(),
             bubble->GetFocusManager()->GetFocusedView());
   ManagePasswordsBubbleView::CloseCurrentBubble();
   EXPECT_FALSE(IsBubbleShowing());
@@ -324,12 +335,14 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, TwoTabsWithBubbleClose) {
   // events directly to the button, since that's buried in private classes.
   // Instead, simulate the action in ManagePasswordsBubbleView::PendingView::
   // ButtonPressed(), and simulate the OS event queue by posting a task.
-  auto press_button = [](ManagePasswordsBubbleView* bubble, bool* ran) {
+  auto press_button = [](ManagePasswordsBubbleDelegateViewBase* bubble,
+                         bool* ran) {
     bubble->model()->OnNeverForThisSiteClicked();
     *ran = true;
   };
-  ManagePasswordsBubbleView* bubble =
-      ManagePasswordsBubbleView::manage_password_bubble();
+
+  ManagePasswordsBubbleDelegateViewBase* bubble =
+      ManagePasswordsBubbleDelegateViewBase::manage_password_bubble();
   bool ran_event_task = false;
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(press_button, bubble, &ran_event_task));
@@ -349,24 +362,21 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, TwoTabsWithBubbleClose) {
 }
 
 IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSignin) {
+  // Set up the test server to handle the form icon request.
+  embedded_test_server()->RegisterRequestHandler(base::BindRepeating(
+      &ManagePasswordsBubbleViewTest::HandleRequest, base::Unretained(this)));
+  ASSERT_TRUE(embedded_test_server()->InitializeAndListen());
   test_form()->origin = GURL("https://example.com");
   test_form()->display_name = base::ASCIIToUTF16("Peter");
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
-  GURL icon_url("https://google.com/icon.png");
-  test_form()->icon_url = icon_url;
+  test_form()->icon_url = embedded_test_server()->GetURL("/icon.png");
   std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials;
   local_credentials.push_back(
-      base::MakeUnique<autofill::PasswordForm>(*test_form()));
+      std::make_unique<autofill::PasswordForm>(*test_form()));
 
   // Prepare to capture the network request.
-  TestURLFetcherCallback url_callback;
-  net::FakeURLFetcherFactory factory(
-      NULL,
-      base::Bind(&TestURLFetcherCallback::CreateURLFetcher,
-                 base::Unretained(&url_callback)));
-  factory.SetFakeResponse(icon_url, std::string(), net::HTTP_OK,
-                          net::URLRequestStatus::FAILED);
-  EXPECT_CALL(url_callback, OnRequestDone(icon_url));
+  EXPECT_CALL(*this, OnIconRequestDone());
+  embedded_test_server()->StartAcceptingConnections();
 
   SetupAutoSignin(std::move(local_credentials));
   EXPECT_TRUE(IsBubbleShowing());
@@ -387,13 +397,13 @@ IN_PROC_BROWSER_TEST_F(ManagePasswordsBubbleViewTest, AutoSigninNoFocus) {
   test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
   std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials;
   local_credentials.push_back(
-      base::MakeUnique<autofill::PasswordForm>(*test_form()));
+      std::make_unique<autofill::PasswordForm>(*test_form()));
 
   // Open another window with focus.
   Browser* focused_window = CreateBrowser(browser()->profile());
   ASSERT_TRUE(ui_test_utils::BringBrowserWindowToFront(focused_window));
 
-  ManagePasswordsBubbleView::set_auto_signin_toast_timeout(0);
+  ManagePasswordAutoSignInView::set_auto_signin_toast_timeout(0);
   SetupAutoSignin(std::move(local_credentials));
   EXPECT_TRUE(IsBubbleShowing());
 

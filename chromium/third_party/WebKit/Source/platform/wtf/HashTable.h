@@ -23,14 +23,16 @@
 #ifndef WTF_HashTable_h
 #define WTF_HashTable_h
 
+#include <memory>
+
 #include "platform/wtf/Alignment.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/ConditionalDestructor.h"
+#include "platform/wtf/ConstructTraits.h"
 #include "platform/wtf/HashTraits.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/allocator/PartitionAllocator.h"
-#include <memory>
 
 #if !defined(DUMP_HASHTABLE_STATS)
 #define DUMP_HASHTABLE_STATS 0
@@ -333,7 +335,7 @@ class HashTableConstIterator final {
   }
 
  public:
-  HashTableConstIterator() {}
+  HashTableConstIterator() = default;
 
   GetType Get() const {
     CheckModifications();
@@ -461,7 +463,7 @@ class HashTableIterator final {
       : iterator_(pos, end, container, tag) {}
 
  public:
-  HashTableIterator() {}
+  HashTableIterator() = default;
 
   // default copy, assignment and destructor are OK
 
@@ -521,27 +523,32 @@ std::ostream& operator<<(std::ostream& stream,
 
 using std::swap;
 
-template <typename T, typename Allocator, bool enterGCForbiddenScope>
+template <typename T,
+          typename Allocator,
+          typename Traits,
+          bool enterGCForbiddenScope>
 struct Mover {
   STATIC_ONLY(Mover);
   static void Move(T&& from, T& to) {
     to.~T();
-    new (NotNull, &to) T(std::move(from));
+    ConstructTraits<T, Traits, Allocator>::ConstructAndNotifyElement(
+        &to, std::move(from));
   }
 };
 
-template <typename T, typename Allocator>
-struct Mover<T, Allocator, true> {
+template <typename T, typename Allocator, typename Traits>
+struct Mover<T, Allocator, Traits, true> {
   STATIC_ONLY(Mover);
   static void Move(T&& from, T& to) {
     to.~T();
     Allocator::EnterGCForbiddenScope();
-    new (NotNull, &to) T(std::move(from));
+    ConstructTraits<T, Traits, Allocator>::ConstructAndNotifyElement(
+        &to, std::move(from));
     Allocator::LeaveGCForbiddenScope();
   }
 };
 
-template <typename HashFunctions>
+template <typename HashFunctions, typename Traits, typename Allocator>
 class IdentityHashTranslator {
   STATIC_ONLY(IdentityHashTranslator);
 
@@ -680,7 +687,8 @@ class HashTable final
   typedef Value ValueType;
   typedef Extractor ExtractorType;
   typedef KeyTraits KeyTraitsType;
-  typedef IdentityHashTranslator<HashFunctions> IdentityTranslatorType;
+  typedef IdentityHashTranslator<HashFunctions, Traits, Allocator>
+      IdentityTranslatorType;
   typedef HashTableAddResult<HashTable, ValueType> AddResult;
 
   HashTable();
@@ -784,8 +792,8 @@ class HashTable final
   template <typename HashTranslator, typename T>
   const ValueType* Lookup(const T&) const;
 
-  template <typename VisitorDispatcher>
-  void Trace(VisitorDispatcher);
+  template <typename VisitorDispatcher, typename A = Allocator>
+  std::enable_if_t<A::kIsGarbageCollected> Trace(VisitorDispatcher);
 
 #if DCHECK_IS_ON()
   void EnterAccessForbiddenScope() {
@@ -1191,16 +1199,17 @@ struct HashTableBucketInitializer;
 template <>
 struct HashTableBucketInitializer<false> {
   STATIC_ONLY(HashTableBucketInitializer);
-  template <typename Traits, typename Value>
+  template <typename Traits, typename Allocator, typename Value>
   static void Initialize(Value& bucket) {
-    new (NotNull, &bucket) Value(Traits::EmptyValue());
+    ConstructTraits<Value, Traits, Allocator>::ConstructAndNotifyElement(
+        &bucket, Traits::EmptyValue());
   }
 };
 
 template <>
 struct HashTableBucketInitializer<true> {
   STATIC_ONLY(HashTableBucketInitializer);
-  template <typename Traits, typename Value>
+  template <typename Traits, typename Allocator, typename Value>
   static void Initialize(Value& bucket) {
     // This initializes the bucket without copying the empty value.  That
     // makes it possible to use this with types that don't support copying.
@@ -1221,7 +1230,7 @@ inline void
 HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
     InitializeBucket(ValueType& bucket) {
   HashTableBucketInitializer<Traits::kEmptyValueIsZero>::template Initialize<
-      Traits>(bucket);
+      Traits, Allocator>(bucket);
 }
 
 template <typename Key,
@@ -1295,6 +1304,9 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
   HashTranslator::Translate(*entry, std::forward<T>(key),
                             std::forward<Extra>(extra));
   DCHECK(!IsEmptyOrDeletedBucket(*entry));
+  // Translate constructs an element so we need to notify using the trait. Avoid
+  // doing that in the translator so that they can be easily customized.
+  ConstructTraits<ValueType, Traits, Allocator>::NotifyNewElements(entry, 1);
 
   ++key_count_;
 
@@ -1361,6 +1373,9 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
   HashTranslator::Translate(*entry, std::forward<T>(key),
                             std::forward<Extra>(extra), h);
   DCHECK(!IsEmptyOrDeletedBucket(*entry));
+  // Translate constructs an element so we need to notify using the trait. Avoid
+  // doing that in the translator so that they can be easily customized.
+  ConstructTraits<ValueType, Traits, Allocator>::NotifyNewElements(entry, 1);
 
   ++key_count_;
   if (ShouldExpand())
@@ -1391,7 +1406,7 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
   ++stats_->numReinserts;
 #endif
   Value* new_entry = LookupForWriting(Extractor::Extract(entry)).first;
-  Mover<ValueType, Allocator,
+  Mover<ValueType, Allocator, Traits,
         Traits::template NeedsToForbidGCOnMove<>::value>::Move(std::move(entry),
                                                                *new_entry);
 
@@ -1675,7 +1690,7 @@ HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
         InitializeBucket(temporary_table[i]);
       }
     } else {
-      Mover<ValueType, Allocator,
+      Mover<ValueType, Allocator, Traits,
             Traits::template NeedsToForbidGCOnMove<>::value>::
           Move(std::move(table_[i]), temporary_table[i]);
       table_[i].~ValueType();
@@ -1908,6 +1923,15 @@ void HashTable<Key,
 #if DUMP_HASHTABLE_STATS_PER_TABLE
   HashTableStatsPtr<Allocator>::swap(stats_, other.stats_);
 #endif
+
+  if (table_) {
+    ConstructTraits<ValueType, Traits, Allocator>::NotifyNewElements(
+        table_, table_size_);
+  }
+  if (other.table_) {
+    ConstructTraits<ValueType, Traits, Allocator>::NotifyNewElements(
+        other.table_, other.table_size_);
+  }
 }
 
 template <typename Key,
@@ -2065,14 +2089,10 @@ template <typename Key,
           typename Traits,
           typename KeyTraits,
           typename Allocator>
-template <typename VisitorDispatcher>
-void HashTable<Key,
-               Value,
-               Extractor,
-               HashFunctions,
-               Traits,
-               KeyTraits,
-               Allocator>::Trace(VisitorDispatcher visitor) {
+template <typename VisitorDispatcher, typename A>
+std::enable_if_t<A::kIsGarbageCollected>
+HashTable<Key, Value, Extractor, HashFunctions, Traits, KeyTraits, Allocator>::
+    Trace(VisitorDispatcher visitor) {
 #if DUMP_HASHTABLE_STATS_PER_TABLE
 // XXX: this will simply crash.
 // Allocator::MarkNoTracing(visitor, stats_);
@@ -2157,7 +2177,7 @@ void HashTable<Key,
 template <typename HashTableType, typename Traits>
 struct HashTableConstIteratorAdapter {
   STACK_ALLOCATED();
-  HashTableConstIteratorAdapter() {}
+  HashTableConstIteratorAdapter() = default;
   HashTableConstIteratorAdapter(
       const typename HashTableType::const_iterator& impl)
       : impl_(impl) {}
@@ -2195,7 +2215,7 @@ struct HashTableIteratorAdapter {
   typedef typename Traits::IteratorGetType GetType;
   typedef typename HashTableType::ValueTraits::IteratorGetType SourceGetType;
 
-  HashTableIteratorAdapter() {}
+  HashTableIteratorAdapter() = default;
   HashTableIteratorAdapter(const typename HashTableType::iterator& impl)
       : impl_(impl) {}
 

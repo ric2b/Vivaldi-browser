@@ -17,24 +17,25 @@
 
 namespace viz {
 
-// static
-std::unique_ptr<CompositorFrameSinkSupport> CompositorFrameSinkSupport::Create(
+CompositorFrameSinkSupport::CompositorFrameSinkSupport(
     mojom::CompositorFrameSinkClient* client,
     FrameSinkManagerImpl* frame_sink_manager,
     const FrameSinkId& frame_sink_id,
     bool is_root,
-    bool needs_sync_tokens) {
-  std::unique_ptr<CompositorFrameSinkSupport> support =
-      base::WrapUnique(new CompositorFrameSinkSupport(
-          client, frame_sink_id, is_root, needs_sync_tokens));
-  support->Init(frame_sink_manager);
-  return support;
+    bool needs_sync_tokens)
+    : client_(client),
+      frame_sink_manager_(frame_sink_manager),
+      surface_manager_(frame_sink_manager->surface_manager()),
+      frame_sink_id_(frame_sink_id),
+      surface_resource_holder_(this),
+      is_root_(is_root),
+      needs_sync_tokens_(needs_sync_tokens),
+      weak_factory_(this) {
+  // This may result in SetBeginFrameSource() being called.
+  frame_sink_manager_->RegisterCompositorFrameSinkSupport(frame_sink_id_, this);
 }
 
 CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
-  // No video capture clients should remain at this point.
-  DCHECK(capture_clients_.empty());
-
   if (!destruction_callback_.is_null())
     std::move(destruction_callback_).Run();
 
@@ -51,7 +52,10 @@ CompositorFrameSinkSupport::~CompositorFrameSinkSupport() {
   }
 
   EvictCurrentSurface();
-  frame_sink_manager_->UnregisterFrameSinkManagerClient(frame_sink_id_);
+  frame_sink_manager_->UnregisterCompositorFrameSinkSupport(frame_sink_id_);
+
+  // No video capture clients should remain at this point.
+  DCHECK(capture_clients_.empty());
 }
 
 void CompositorFrameSinkSupport::SetAggregatedDamageCallback(
@@ -60,8 +64,18 @@ void CompositorFrameSinkSupport::SetAggregatedDamageCallback(
 }
 
 void CompositorFrameSinkSupport::SetDestructionCallback(
-    base::OnceCallback<void()> callback) {
+    base::OnceClosure callback) {
   destruction_callback_ = std::move(callback);
+}
+
+void CompositorFrameSinkSupport::SetBeginFrameSource(
+    BeginFrameSource* begin_frame_source) {
+  if (begin_frame_source_ && added_frame_observer_) {
+    begin_frame_source_->RemoveObserver(this);
+    added_frame_observer_ = false;
+  }
+  begin_frame_source_ = begin_frame_source;
+  UpdateNeedsBeginFramesInternal();
 }
 
 void CompositorFrameSinkSupport::OnSurfaceActivated(Surface* surface) {
@@ -103,16 +117,6 @@ void CompositorFrameSinkSupport::ReceiveFromChild(
   surface_resource_holder_.ReceiveFromChild(resources);
 }
 
-void CompositorFrameSinkSupport::SetBeginFrameSource(
-    BeginFrameSource* begin_frame_source) {
-  if (begin_frame_source_ && added_frame_observer_) {
-    begin_frame_source_->RemoveObserver(this);
-    added_frame_observer_ = false;
-  }
-  begin_frame_source_ = begin_frame_source;
-  UpdateNeedsBeginFramesInternal();
-}
-
 void CompositorFrameSinkSupport::EvictCurrentSurface() {
   if (!current_surface_id_.is_valid())
     return;
@@ -136,17 +140,26 @@ void CompositorFrameSinkSupport::SetNeedsBeginFrame(bool needs_begin_frame) {
   UpdateNeedsBeginFramesInternal();
 }
 
+void CompositorFrameSinkSupport::SetWantsAnimateOnlyBeginFrames() {
+  wants_animate_only_begin_frames_ = true;
+}
+
+bool CompositorFrameSinkSupport::WantsAnimateOnlyBeginFrames() const {
+  return wants_animate_only_begin_frames_;
+}
+
 void CompositorFrameSinkSupport::DidNotProduceFrame(const BeginFrameAck& ack) {
   TRACE_EVENT2("viz", "CompositorFrameSinkSupport::DidNotProduceFrame",
                "ack.source_id", ack.source_id, "ack.sequence_number",
                ack.sequence_number);
   DCHECK_GE(ack.sequence_number, BeginFrameArgs::kStartingFrameNumber);
 
-  // |has_damage| is not transmitted, but false by default.
-  DCHECK(!ack.has_damage);
+  // Override the has_damage flag (ignoring invalid data from clients).
+  BeginFrameAck modified_ack(ack);
+  modified_ack.has_damage = false;
 
   if (current_surface_id_.is_valid())
-    surface_manager_->SurfaceModified(current_surface_id_, ack);
+    surface_manager_->SurfaceModified(current_surface_id_, modified_ack);
 
   if (begin_frame_source_)
     begin_frame_source_->DidFinishFrame(this);
@@ -173,7 +186,7 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
   uint64_t frame_index = ++last_frame_index_;
   ++ack_pending_count_;
 
-  // |has_damage| is not transmitted.
+  // Override the has_damage flag (ignoring invalid data from clients).
   frame.metadata.begin_frame_ack.has_damage = true;
   BeginFrameAck ack = frame.metadata.begin_frame_ack;
   DCHECK_LE(BeginFrameArgs::kStartingFrameNumber, ack.sequence_number);
@@ -202,14 +215,32 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
 
     // LocalSurfaceIds should be monotonically increasing. This ID is used
     // to determine the freshness of a surface at aggregation time.
+    const LocalSurfaceId& current_local_surface_id =
+        current_surface_id_.local_surface_id();
+    // Neither sequence numbers of the LocalSurfaceId can decrease and at least
+    // one must increase.
     bool monotonically_increasing_id =
-        local_surface_id.parent_id() >
-        current_surface_id_.local_surface_id().parent_id();
+        (local_surface_id.parent_sequence_number() >=
+             current_local_surface_id.parent_sequence_number() &&
+         local_surface_id.child_sequence_number() >=
+             current_local_surface_id.child_sequence_number()) &&
+        (local_surface_id.parent_sequence_number() >
+             current_local_surface_id.parent_sequence_number() ||
+         local_surface_id.child_sequence_number() >
+             current_local_surface_id.child_sequence_number());
+
+    if (!monotonically_increasing_id) {
+      // NOTE(andre@vivaldi.com) : We can end up here when moving WebContents
+      // between windows. |current_local_surface_id| will be higher or equal
+      // than the new. The surface-info is updated after this.
+      monotonically_increasing_id =
+          current_local_surface_id.parent_sequence_number() >=
+          local_surface_id.parent_sequence_number();
+    }
 
     if (!surface_info.is_valid() || !monotonically_increasing_id) {
       TRACE_EVENT_INSTANT0("viz", "Surface Invariants Violation",
                            TRACE_EVENT_SCOPE_THREAD);
-      EvictCurrentSurface();
       std::vector<ReturnedResource> resources =
           TransferableResource::ReturnResources(frame.resource_list);
       ReturnResources(resources);
@@ -218,7 +249,7 @@ bool CompositorFrameSinkSupport::SubmitCompositorFrame(
         DidPresentCompositorFrame(frame.metadata.presentation_token,
                                   base::TimeTicks(), base::TimeDelta(), 0);
       }
-      return true;
+      return false;
     }
 
     current_surface = CreateSurface(surface_info);
@@ -328,25 +359,6 @@ void CompositorFrameSinkSupport::DidPresentCompositorFrame(
       client_->DidDiscardCompositorFrame(presentation_token);
     }
   }
-}
-
-CompositorFrameSinkSupport::CompositorFrameSinkSupport(
-    mojom::CompositorFrameSinkClient* client,
-    const FrameSinkId& frame_sink_id,
-    bool is_root,
-    bool needs_sync_tokens)
-    : client_(client),
-      frame_sink_id_(frame_sink_id),
-      surface_resource_holder_(this),
-      is_root_(is_root),
-      needs_sync_tokens_(needs_sync_tokens),
-      weak_factory_(this) {}
-
-void CompositorFrameSinkSupport::Init(
-    FrameSinkManagerImpl* frame_sink_manager) {
-  frame_sink_manager_ = frame_sink_manager;
-  surface_manager_ = frame_sink_manager->surface_manager();
-  frame_sink_manager_->RegisterFrameSinkManagerClient(frame_sink_id_, this);
 }
 
 void CompositorFrameSinkSupport::OnBeginFrame(const BeginFrameArgs& args) {

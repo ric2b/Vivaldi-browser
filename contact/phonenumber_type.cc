@@ -4,7 +4,7 @@
 //
 // Copyright (c) 2012 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.EmailRow
+// found in the LICENSE file.
 
 #include "contact/phonenumber_type.h"
 
@@ -23,6 +23,7 @@ void PhonenumberRow::Swap(PhonenumberRow* other) {
   std::swap(contact_id_, other->contact_id_);
   std::swap(type_, other->type_);
   std::swap(phonenumber_, other->phonenumber_);
+  std::swap(is_default_, other->is_default_);
 }
 
 PhonenumberRow::PhonenumberRow(const PhonenumberRow& other) = default;

@@ -48,26 +48,53 @@ config("compiler") {
     "-Wl,--exclude-libs=libvpx_assembly_arm.a",
   ]
 
+  # $compile_api_level corresponds to the API level used for the sysroot path
+  # calculation in //build/config/android/config.gni
   if (current_cpu == "arm") {
     abi_target = "arm-linux-androideabi"
+    compile_api_level = android32_ndk_api_level
   } else if (current_cpu == "x86") {
-    abi_target = "i686-linux-androideabi"
+    abi_target = "i686-linux-android"
+    compile_api_level = android32_ndk_api_level
   } else if (current_cpu == "arm64") {
     abi_target = "aarch64-linux-android"
+    compile_api_level = android64_ndk_api_level
   } else if (current_cpu == "x64") {
     # Place holder for x64 support, not tested.
     # TODO: Enable clang support for Android x64. http://crbug.com/539781
-    abi_target = "x86_64-linux-androideabi"
+    abi_target = "x86_64-linux-android"
+    compile_api_level = android64_ndk_api_level
   } else if (current_cpu == "mipsel") {
     abi_target = "mipsel-linux-android"
+    compile_api_level = android32_ndk_api_level
   } else if (current_cpu == "mips64el") {
     # Place holder for mips64 support, not tested.
-    abi_target = "mips64el-linux-androideabi"
+    abi_target = "mips64el-linux-android"
+    compile_api_level = android64_ndk_api_level
   } else {
     assert(false, "Architecture not supported")
   }
-  cflags += [ "--target=$abi_target" ]
+  cflags += [
+    "--target=$abi_target",
+    "-isystem" +
+        rebase_path("$android_ndk_root/sysroot/usr/include/$abi_target",
+                    root_build_dir),
+    "-D__ANDROID_API__=$compile_api_level",
+
+    # Temporary workaround for third party dependencies requiring this to be
+    # defined.
+    # TODO(crbug.com/771171): Remove this once the third party deps have been
+    # fixed to be compatible with newer NDK versions
+    "-D__NDK_FPABI__=",
+  ]
   ldflags += [ "--target=$abi_target" ]
+
+  # TODO(crbug.com/771171): Remove this define once code that uses it has been
+  # updated to no longer need it. This is leftover from older Android NDK
+  # versions.
+  if (compile_api_level < 20) {
+    cflags += [ "-DHAVE_PTHREAD_COND_TIMEDWAIT_MONOTONIC=1" ]
+  }
 
   # Assign any flags set for the C compiler to asmflags so that they are sent
   # to the assembler.
@@ -143,28 +170,6 @@ config("runtime_library") {
     libs += [ "atomic" ]
   }
 
-  # Work around incompatibilities between bionic and clang headers.
-  # TODO(thakis): Check if we still need this.
-  defines += [
-    "__compiler_offsetof=__builtin_offsetof",
-    "nan=__builtin_nan",
-  ]
-
-  if (current_cpu == "x64" || current_cpu == "arm64" ||
-      current_cpu == "mips64el") {
-    # 64-bit targets build with NDK 21, 32-bit targets with NDK 16
-    # (see ./config.gni).  When using clang, NDK 21 defines snprintf to
-    # something for a kind of for of _FORTIFY_SOURCE support, see
-    # third_party/android_tools/ndk/platforms/android-21/arch-x86_64/usr/include/stdio.h
-    # Making snprintf a macro breaks base/strings/string_utils.h which
-    # defines base::snprintf().  So define snprintf to itself to force the
-    # NDK to not redefine it.  This disables _chk for snprintf, but since
-    # 32-bit versions use NDK 16 which doesn't have any fortify support, that
-    # seems ok.  b/32067310 tracks better fortify support with clang.
-    # TODO(thakis): Remove this once b/32067310 is fixed.
-    defines += [ "snprintf=snprintf" ]
-  }
-
   # TODO(jdduke) Re-enable on mips after resolving linking
   # issues with libc++ (crbug.com/456380).
   if (current_cpu != "mipsel" && current_cpu != "mips64el") {
@@ -211,7 +216,11 @@ config("default_cygprofile_instrumentation") {
 
 config("cygprofile_instrumentation") {
   defines = [ "CYGPROFILE_INSTRUMENTATION=1" ]
-  cflags = [ "-finstrument-functions-after-inlining" ]
+  if (use_lightweight_order_profiling) {
+    cflags = [ "-finstrument-function-entry-bare" ]
+  } else {
+    cflags = [ "-finstrument-functions-after-inlining" ]
+  }
 }
 
 config("no_cygprofile_instrumentation") {

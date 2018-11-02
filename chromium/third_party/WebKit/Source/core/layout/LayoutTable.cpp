@@ -81,7 +81,7 @@ LayoutTable::LayoutTable(Element* element)
   effective_column_positions_.Fill(0, 1);
 }
 
-LayoutTable::~LayoutTable() {}
+LayoutTable::~LayoutTable() = default;
 
 void LayoutTable::StyleDidChange(StyleDifference diff,
                                  const ComputedStyle* old_style) {
@@ -215,7 +215,8 @@ void LayoutTable::AddChild(LayoutObject* child, LayoutObject* before_child) {
   while (last_box && last_box->Parent()->IsAnonymous() &&
          !last_box->IsTableSection() && NeedsTableSection(last_box))
     last_box = last_box->Parent();
-  if (last_box && last_box->IsAnonymous() && !IsAfterContent(last_box)) {
+  if (last_box && last_box->IsAnonymous() && last_box->IsTablePart() &&
+      !IsAfterContent(last_box)) {
     if (before_child == last_box)
       before_child = last_box->SlowFirstChild();
     last_box->AddChild(child, before_child);
@@ -272,6 +273,14 @@ bool LayoutTable::IsLogicalWidthAuto() const {
 
 void LayoutTable::UpdateLogicalWidth() {
   RecalcSectionsIfNeeded();
+
+  if (IsFlexItemIncludingDeprecated() || IsGridItem()) {
+    // TODO(jfernandez): Investigate whether the grid layout algorithm provides
+    // all the logic needed and that we're not skipping anything essential due
+    // to the early return here.
+    LayoutBlock::UpdateLogicalWidth();
+    return;
+  }
 
   if (IsOutOfFlowPositioned()) {
     LogicalExtentComputedValues computed_values;
@@ -557,6 +566,8 @@ void LayoutTable::SimplifiedNormalFlowLayout() {
 }
 
 bool LayoutTable::RecalcOverflowAfterStyleChange() {
+  RecalcSelfOverflowAfterStyleChange();
+
   if (!ChildNeedsOverflowRecalcAfterStyleChange())
     return false;
   ClearChildNeedsOverflowRecalcAfterStyleChange();
@@ -1370,7 +1381,7 @@ LayoutTableCell* LayoutTable::CellBelow(const LayoutTableCell& cell) const {
   RecalcSectionsIfNeeded();
 
   // Find the section and row to look in
-  unsigned r = cell.RowIndex() + cell.RowSpan() - 1;
+  unsigned r = cell.RowIndex() + cell.ResolvedRowSpan() - 1;
   LayoutTableSection* section = nullptr;
   unsigned r_below = 0;
   if (r < cell.Section()->NumRows() - 1) {

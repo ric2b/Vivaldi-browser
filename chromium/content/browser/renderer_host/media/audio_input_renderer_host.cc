@@ -138,6 +138,13 @@ void AudioInputRendererHost::OnCreateStream(
     const AudioInputHostMsg_CreateStream_Config& config) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
+  if (config.params.IsBitstreamFormat()) {
+    // Bitstream formats are only supported for output.
+    bad_message::ReceivedBadMessage(this,
+                                    bad_message::AIRH_UNEXPECTED_BITSTREAM);
+    return;
+  }
+
 #if defined(OS_CHROMEOS)
   if (config.params.channel_layout() ==
       media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
@@ -171,13 +178,12 @@ void AudioInputRendererHost::DoCreateStream(
 
   std::unique_ptr<media::AudioInputDelegate> delegate =
       AudioInputDelegateImpl::Create(
-          this, audio_manager_, audio_mirroring_manager_, user_input_monitor_,
-          media_stream_manager_->audio_input_device_manager(),
-          MediaInternals::GetInstance()->CreateAudioLog(
-              media::AudioLogFactory::AUDIO_INPUT_CONTROLLER),
-          std::move(keyboard_mic_registration),
-          config.shared_memory_count, stream_id, session_id, render_process_id_,
-          render_frame_id, config.automatic_gain_control, config.params);
+          audio_manager_, audio_mirroring_manager_, user_input_monitor_,
+          render_process_id_, render_frame_id,
+          media_stream_manager_->audio_input_device_manager(), audio_log_.get(),
+          std::move(keyboard_mic_registration), config.shared_memory_count,
+          stream_id, session_id, config.automatic_gain_control, config.params,
+          this);
 
   if (!delegate) {
     // Error was logged by AudioInputDelegateImpl::Create.

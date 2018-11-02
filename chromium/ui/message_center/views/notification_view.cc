@@ -28,7 +28,6 @@
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/bounded_label.h"
 #include "ui/message_center/views/constants.h"
-#include "ui/message_center/views/message_view_delegate.h"
 #include "ui/message_center/views/notification_button.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/padded_button.h"
@@ -85,26 +84,26 @@ std::unique_ptr<views::Border> MakeSeparatorBorder(int top,
   return views::CreateSolidSidedBorder(top, left, 0, 0, color);
 }
 
-// ItemView ////////////////////////////////////////////////////////////////////
+// NotificationItemView ////////////////////////////////////////////////////////
 
-// ItemViews are responsible for drawing each list notification item's title and
-// message next to each other within a single column.
-class ItemView : public views::View {
+// NotificationItemViews are responsible for drawing each list notification
+// item's title and message next to each other within a single column.
+class NotificationItemView : public views::View {
  public:
-  explicit ItemView(const NotificationItem& item);
-  ~ItemView() override;
+  explicit NotificationItemView(const NotificationItem& item);
+  ~NotificationItemView() override;
 
   // Overridden from views::View:
   void SetVisible(bool visible) override;
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(ItemView);
+  DISALLOW_COPY_AND_ASSIGN(NotificationItemView);
 };
 
-ItemView::ItemView(const NotificationItem& item) {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                        gfx::Insets(),
-                                        kItemTitleToMessagePadding));
+NotificationItemView::NotificationItemView(const NotificationItem& item) {
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kHorizontal, gfx::Insets(),
+      kItemTitleToMessagePadding));
 
   views::Label* title = new views::Label(item.title);
   title->set_collapse_when_hidden(true);
@@ -124,10 +123,9 @@ ItemView::ItemView(const NotificationItem& item) {
   SchedulePaint();
 }
 
-ItemView::~ItemView() {
-}
+NotificationItemView::~NotificationItemView() {}
 
-void ItemView::SetVisible(bool visible) {
+void NotificationItemView::SetVisible(bool visible) {
   views::View::SetVisible(visible);
   for (int i = 0; i < child_count(); ++i)
     child_at(i)->SetVisible(visible);
@@ -177,16 +175,14 @@ void NotificationView::CreateOrUpdateViews(const Notification& notification) {
   CreateOrUpdateActionButtonViews(notification);
 }
 
-NotificationView::NotificationView(MessageViewDelegate* delegate,
-                                   const Notification& notification)
-    : MessageView(delegate, notification),
-      clickable_(notification.clickable()) {
+NotificationView::NotificationView(const Notification& notification)
+    : MessageView(notification), clickable_(notification.clickable()) {
   // Create the top_view_, which collects into a vertical box all content
   // at the top of the notification (to the right of the icon) except for the
   // close button.
   top_view_ = new views::View();
   top_view_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical));
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
   top_view_->SetBorder(
       MakeEmptyBorder(kTextTopPadding - 8, 0, kTextBottomPadding - 5, 0));
   AddChildView(top_view_);
@@ -194,7 +190,7 @@ NotificationView::NotificationView(MessageViewDelegate* delegate,
   // below the notification icon.
   bottom_view_ = new views::View();
   bottom_view_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical));
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
   AddChildView(bottom_view_);
 
   control_buttons_view_ = new NotificationControlButtonsView(this);
@@ -368,7 +364,7 @@ void NotificationView::ButtonPressed(views::Button* sender,
   // See if the button pressed was an action button.
   for (size_t i = 0; i < action_buttons_.size(); ++i) {
     if (sender == action_buttons_[i]) {
-      delegate()->ClickOnNotificationButton(id, i);
+      MessageCenter::Get()->ClickOnNotificationButton(id, i);
       return;
     }
   }
@@ -525,7 +521,7 @@ void NotificationView::CreateOrUpdateListItemViews(
 
   DCHECK(top_view_);
   for (size_t i = 0; i < items.size() && i < kNotificationMaximumItems; ++i) {
-    ItemView* item_view = new ItemView(items[i]);
+    NotificationItemView* item_view = new NotificationItemView(items[i]);
     item_view->SetBorder(MakeTextBorder(padding, i ? 0 : 4, 0));
     item_views_.push_back(item_view);
     top_view_->AddChildView(item_view);
@@ -572,7 +568,7 @@ void NotificationView::CreateOrUpdateImageView(
     DCHECK_EQ(this, bottom_view_->parent());
 
     image_container_ = new views::View();
-    image_container_->SetLayoutManager(new views::FillLayout());
+    image_container_->SetLayoutManager(std::make_unique<views::FillLayout>());
     image_container_->SetBackground(
         views::CreateSolidBackground(kImageBackgroundColor));
 

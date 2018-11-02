@@ -26,8 +26,7 @@ void SimpleDataProducer::SaveStreamData(QuicStreamId id,
   }
   if (!QuicContainsKey(send_buffer_map_, id)) {
     send_buffer_map_[id] = QuicMakeUnique<QuicStreamSendBuffer>(
-        &allocator_,
-        FLAGS_quic_reloadable_flag_quic_allow_multiple_acks_for_data2);
+        &allocator_, GetQuicReloadableFlag(quic_allow_multiple_acks_for_data2));
   }
   send_buffer_map_[id]->SaveStreamData(iov, iov_count, iov_offset, data_length);
 }
@@ -37,21 +36,6 @@ bool SimpleDataProducer::WriteStreamData(QuicStreamId id,
                                          QuicByteCount data_length,
                                          QuicDataWriter* writer) {
   return send_buffer_map_[id]->WriteStreamData(offset, data_length, writer);
-}
-
-void SimpleDataProducer::OnStreamFrameAcked(
-    const QuicStreamFrame& frame,
-    QuicTime::Delta /*ack_delay_time*/) {
-  OnStreamFrameDiscarded(frame);
-}
-
-void SimpleDataProducer::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
-  if (!QuicContainsKey(send_buffer_map_, frame.stream_id)) {
-    return;
-  }
-  QuicByteCount newly_acked_length = 0;
-  send_buffer_map_[frame.stream_id]->OnStreamDataAcked(
-      frame.offset, frame.data_length, &newly_acked_length);
 }
 
 }  // namespace test

@@ -9,7 +9,6 @@
 #include <utility>
 
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -197,7 +196,7 @@ JobScheduler::JobScheduler(
     queue_[i].reset(new JobQueue(kMaxJobCount[i], NUM_CONTEXT_TYPES,
                                  kMaxBatchCount, kMaxBatchSize));
 
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
 }
 
 JobScheduler::~JobScheduler() {
@@ -208,7 +207,7 @@ JobScheduler::~JobScheduler() {
     num_queued_jobs += queue_[i]->GetNumberOfJobs();
   DCHECK_EQ(num_queued_jobs, job_map_.size());
 
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
+  net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
 std::vector<JobInfo> JobScheduler::GetJobInfoList() {
@@ -757,7 +756,7 @@ void JobScheduler::AddPermission(
 }
 
 JobScheduler::JobEntry* JobScheduler::CreateNewJob(JobType type) {
-  auto job = base::MakeUnique<JobEntry>(type);
+  auto job = std::make_unique<JobEntry>(type);
   JobEntry* job_raw = job.get();
   int32_t job_key = job_map_.Add(std::move(job));
   job_raw->job_info.job_id = job_key;
@@ -1145,13 +1144,20 @@ void JobScheduler::UpdateProgress(JobID job_id,
   NotifyJobUpdated(job_entry->job_info);
 }
 
-void JobScheduler::OnConnectionTypeChanged(
+void JobScheduler::OnNetworkChanged(
     net::NetworkChangeNotifier::ConnectionType type) {
+  // When connection type switches from one connection to another,
+  // CONNECTION_NONE signal comes right before the changed connection signal.
+  // Ignore such signals to avoid aborting jobs.
+  if (type == net::NetworkChangeNotifier::CONNECTION_NONE &&
+      !net::NetworkChangeNotifier::IsOffline())
+    return;
+
   DCHECK(thread_checker_.CalledOnValidThread());
 
   // Resume the job loop.
-  // Note that we don't need to check the network connection status as it will
-  // be checked in GetCurrentAcceptedPriority().
+  // The network connection status will be checked
+  // in GetCurrentAcceptedPriority().
   for (int i = METADATA_QUEUE; i < NUM_QUEUES; ++i)
     DoJobLoop(static_cast<QueueType>(i));
 }

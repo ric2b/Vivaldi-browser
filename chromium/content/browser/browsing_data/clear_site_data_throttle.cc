@@ -21,12 +21,12 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
-#include "content/public/common/resource_response_info.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/load_flags.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/http/http_response_headers.h"
 #include "net/url_request/redirect_info.h"
+#include "services/network/public/cpp/resource_response_info.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -149,7 +149,8 @@ class UIThreadSiteDataClearer : public BrowsingDataRemover::Observer {
       remover_->RemoveWithFilterAndReply(
           base::Time(), base::Time::Max(),
           BrowsingDataRemover::DATA_TYPE_COOKIES |
-              BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS,
+              BrowsingDataRemover::DATA_TYPE_CHANNEL_IDS |
+              BrowsingDataRemover::DATA_TYPE_AVOID_CLOSING_CONNECTIONS,
           BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
               BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB,
           std::move(domain_filter_builder), this);
@@ -393,7 +394,7 @@ bool ClearSiteDataThrottle::HandleHeader() {
   const ServiceWorkerResponseInfo* response_info =
       ServiceWorkerResponseInfo::ForRequest(request_);
   if (response_info) {
-    ResourceResponseInfo extra_response_info;
+    network::ResourceResponseInfo extra_response_info;
     response_info->GetExtraResponseInfo(&extra_response_info);
 
     if (extra_response_info.was_fetched_via_service_worker) {
@@ -473,10 +474,7 @@ bool ClearSiteDataThrottle::ParseHeader(const std::string& header,
     } else if (input_types[i] == kDatatypeStorage) {
       data_type = clear_storage;
     } else if (input_types[i] == kDatatypeCache) {
-      delegate->AddMessage(
-          current_url, "The \"cache\" datatype is temporarily not supported.",
-          CONSOLE_MESSAGE_LEVEL_ERROR);
-      continue;
+      data_type = clear_cache;
     } else {
       delegate->AddMessage(
           current_url,
@@ -503,10 +501,15 @@ bool ClearSiteDataThrottle::ParseHeader(const std::string& header,
   }
 
   // Pretty-print which types are to be cleared.
-  delegate->AddMessage(
-      current_url,
-      base::StringPrintf(kConsoleMessageCleared, output_types.c_str()),
-      CONSOLE_MESSAGE_LEVEL_INFO);
+  // TODO(crbug.com/798760): Remove the disclaimer about cookies.
+  std::string console_output =
+      base::StringPrintf(kConsoleMessageCleared, output_types.c_str());
+  if (*clear_cookies) {
+    console_output +=
+        " Clearing channel IDs and HTTP authentication cache is currently not"
+        " supported, as it breaks active network connections.";
+  }
+  delegate->AddMessage(current_url, console_output, CONSOLE_MESSAGE_LEVEL_INFO);
 
   return true;
 }

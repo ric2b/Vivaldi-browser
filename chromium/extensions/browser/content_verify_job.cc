@@ -19,7 +19,7 @@ namespace extensions {
 namespace {
 
 ContentVerifyJob::TestDelegate* g_test_delegate = NULL;
-ContentVerifyJob::TestObserver* g_test_observer = NULL;
+ContentVerifyJob::TestObserver* g_content_verify_job_test_observer = NULL;
 
 class ScopedElapsedTimer {
  public:
@@ -49,11 +49,7 @@ ContentVerifyJob::ContentVerifyJob(ContentHashReader* hash_reader,
       current_hash_byte_count_(0),
       hash_reader_(hash_reader),
       failure_callback_(std::move(failure_callback)),
-      failed_(false) {
-  // It's ok for this object to be constructed on a different thread from where
-  // it's used.
-  thread_checker_.DetachFromThread();
-}
+      failed_(false) {}
 
 ContentVerifyJob::~ContentVerifyJob() {
   UMA_HISTOGRAM_COUNTS("ExtensionContentVerifyJob.TimeSpentUS",
@@ -61,10 +57,10 @@ ContentVerifyJob::~ContentVerifyJob() {
 }
 
 void ContentVerifyJob::Start() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  if (g_test_observer)
-    g_test_observer->JobStarted(hash_reader_->extension_id(),
-                                hash_reader_->relative_path());
+  base::AutoLock auto_lock(lock_);
+  if (g_content_verify_job_test_observer)
+    g_content_verify_job_test_observer->JobStarted(
+        hash_reader_->extension_id(), hash_reader_->relative_path());
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
       base::Bind(&ContentHashReader::Init, hash_reader_),
@@ -73,7 +69,7 @@ void ContentVerifyJob::Start() {
 
 void ContentVerifyJob::BytesRead(int count, const char* data) {
   ScopedElapsedTimer timer(&time_spent_);
-  DCHECK(thread_checker_.CalledOnValidThread());
+  base::AutoLock auto_lock(lock_);
   if (failed_)
     return;
   if (g_test_delegate) {
@@ -120,7 +116,7 @@ void ContentVerifyJob::BytesRead(int count, const char* data) {
 
 void ContentVerifyJob::DoneReading() {
   ScopedElapsedTimer timer(&time_spent_);
-  DCHECK(thread_checker_.CalledOnValidThread());
+  base::AutoLock auto_lock(lock_);
   if (failed_)
     return;
   if (g_test_delegate) {
@@ -134,9 +130,9 @@ void ContentVerifyJob::DoneReading() {
   if (hashes_ready_) {
     if (!FinishBlock()) {
       DispatchFailureCallback(HASH_MISMATCH);
-    } else if (g_test_observer) {
-      g_test_observer->JobFinished(hash_reader_->extension_id(),
-                                   hash_reader_->relative_path(), NONE);
+    } else if (g_content_verify_job_test_observer) {
+      g_content_verify_job_test_observer->JobFinished(
+          hash_reader_->extension_id(), hash_reader_->relative_path(), NONE);
     }
   }
 }
@@ -175,17 +171,16 @@ void ContentVerifyJob::OnHashesReady(bool success) {
     // TODO(lazyboy): Make ContentHashReader::Init return an enum instead of
     // bool. This should make the following checks on |hash_reader_| easier
     // to digest and will avoid future bugs from creeping up.
-    if (!hash_reader_->have_verified_contents() ||
-        !hash_reader_->have_computed_hashes()) {
+    if (!hash_reader_->has_content_hashes()) {
       DispatchFailureCallback(MISSING_ALL_HASHES);
       return;
     }
 
     if (hash_reader_->file_missing_from_verified_contents()) {
       // Ignore verification of non-existent resources.
-      if (g_test_observer) {
-        g_test_observer->JobFinished(hash_reader_->extension_id(),
-                                     hash_reader_->relative_path(), NONE);
+      if (g_content_verify_job_test_observer) {
+        g_content_verify_job_test_observer->JobFinished(
+            hash_reader_->extension_id(), hash_reader_->relative_path(), NONE);
       }
       return;
     }
@@ -203,9 +198,9 @@ void ContentVerifyJob::OnHashesReady(bool success) {
     ScopedElapsedTimer timer(&time_spent_);
     if (!FinishBlock()) {
       DispatchFailureCallback(HASH_MISMATCH);
-    } else if (g_test_observer) {
-      g_test_observer->JobFinished(hash_reader_->extension_id(),
-                                   hash_reader_->relative_path(), NONE);
+    } else if (g_content_verify_job_test_observer) {
+      g_content_verify_job_test_observer->JobFinished(
+          hash_reader_->extension_id(), hash_reader_->relative_path(), NONE);
     }
   }
 }
@@ -220,7 +215,7 @@ void ContentVerifyJob::SetDelegateForTests(TestDelegate* delegate) {
 
 // static
 void ContentVerifyJob::SetObserverForTests(TestObserver* observer) {
-  g_test_observer = observer;
+  g_content_verify_job_test_observer = observer;
 }
 
 void ContentVerifyJob::DispatchFailureCallback(FailureReason reason) {
@@ -232,9 +227,9 @@ void ContentVerifyJob::DispatchFailureCallback(FailureReason reason) {
             << " reason:" << reason;
     std::move(failure_callback_).Run(reason);
   }
-  if (g_test_observer) {
-    g_test_observer->JobFinished(hash_reader_->extension_id(),
-                                 hash_reader_->relative_path(), reason);
+  if (g_content_verify_job_test_observer) {
+    g_content_verify_job_test_observer->JobFinished(
+        hash_reader_->extension_id(), hash_reader_->relative_path(), reason);
   }
 }
 

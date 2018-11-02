@@ -10,6 +10,8 @@
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_split.h"
+#include "base/task_runner_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/time/default_tick_clock.h"
 #include "extensions/browser/api/api_resource_manager.h"
 #include "extensions/browser/api/extensions_api_client.h"
@@ -25,10 +27,17 @@ using ReadLogSourceParams = api::feedback_private::ReadLogSourceParams;
 using ReadLogSourceResult = api::feedback_private::ReadLogSourceResult;
 using SystemLogsResponse = system_logs::SystemLogsResponse;
 
+// Default value of |g_max_num_burst_accesses|.
+constexpr int kDefaultMaxNumBurstAccesses = 10;
+
 // The minimum time between consecutive reads of a log source by a particular
 // extension.
 constexpr base::TimeDelta kDefaultRateLimitingTimeout =
     base::TimeDelta::FromMilliseconds(1000);
+
+// The maximum number of accesses on a single log source that can be allowed
+// before the next recharge increment. See access_rate_limiter.h for more info.
+int g_max_num_burst_accesses = kDefaultMaxNumBurstAccesses;
 
 // If this is null, then |kDefaultRateLimitingTimeoutMs| is used as the timeout.
 const base::TimeDelta* g_rate_limiting_timeout = nullptr;
@@ -52,14 +61,37 @@ void GetLogLinesFromSystemLogsResponse(const SystemLogsResponse& response,
   }
 }
 
+// Anonymizes the strings in |result|.
+void AnonymizeResults(
+    scoped_refptr<feedback::AnonymizerToolContainer> anonymizer_container,
+    ReadLogSourceResult* result) {
+  feedback::AnonymizerTool* anonymizer = anonymizer_container->Get();
+  for (std::string& line : result->log_lines)
+    line = anonymizer->Anonymize(line);
+}
+
 }  // namespace
 
 LogSourceAccessManager::LogSourceAccessManager(content::BrowserContext* context)
     : context_(context),
       tick_clock_(std::make_unique<base::DefaultTickClock>()),
+      task_runner_for_anonymizer_(base::CreateSequencedTaskRunnerWithTraits(
+          // User visible as the feedback_api is used by the Chrome (OS)
+          // feedback extension while the user may be looking at a spinner.
+          {base::TaskPriority::USER_VISIBLE,
+           base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})),
+      anonymizer_container_(
+          base::MakeRefCounted<feedback::AnonymizerToolContainer>(
+              task_runner_for_anonymizer_)),
       weak_factory_(this) {}
 
 LogSourceAccessManager::~LogSourceAccessManager() {}
+
+// static
+void LogSourceAccessManager::SetMaxNumBurstAccessesForTesting(
+    int num_accesses) {
+  g_max_num_burst_accesses = num_accesses;
+}
 
 // static
 void LogSourceAccessManager::SetRateLimitingTimeoutForTesting(
@@ -67,10 +99,9 @@ void LogSourceAccessManager::SetRateLimitingTimeoutForTesting(
   g_rate_limiting_timeout = timeout;
 }
 
-bool LogSourceAccessManager::FetchFromSource(
-    const ReadLogSourceParams& params,
-    const std::string& extension_id,
-    const ReadLogSourceCallback& callback) {
+bool LogSourceAccessManager::FetchFromSource(const ReadLogSourceParams& params,
+                                             const std::string& extension_id,
+                                             ReadLogSourceCallback callback) {
   int requested_resource_id =
       params.reader_id ? *params.reader_id : kInvalidResourceId;
   ApiResourceManager<LogSourceResource>* resource_manager =
@@ -94,7 +125,8 @@ bool LogSourceAccessManager::FetchFromSource(
   // perspective, there is no new data. There is no need for the caller to keep
   // track of the time since last access.
   if (!UpdateSourceAccessTime(resource_id)) {
-    callback.Run({});
+    std::move(callback).Run(
+        std::make_unique<api::feedback_private::ReadLogSourceResult>());
     return true;
   }
 
@@ -104,9 +136,10 @@ bool LogSourceAccessManager::FetchFromSource(
   // later access indicates that the source should be closed afterwards.
   const bool delete_resource_when_done = !params.incremental;
 
-  resource->GetLogSource()->Fetch(base::Bind(
-      &LogSourceAccessManager::OnFetchComplete, weak_factory_.GetWeakPtr(),
-      extension_id, resource_id, delete_resource_when_done, callback));
+  resource->GetLogSource()->Fetch(
+      base::BindOnce(&LogSourceAccessManager::OnFetchComplete,
+                     weak_factory_.GetWeakPtr(), extension_id, resource_id,
+                     delete_resource_when_done, std::move(callback)));
   return true;
 }
 
@@ -114,20 +147,30 @@ void LogSourceAccessManager::OnFetchComplete(
     const std::string& extension_id,
     ResourceId resource_id,
     bool delete_resource,
-    const ReadLogSourceCallback& callback,
+    ReadLogSourceCallback callback,
     std::unique_ptr<SystemLogsResponse> response) {
-  ReadLogSourceResult result;
-  // Always return invalid resource ID if there is a cleanup.
-  result.reader_id = delete_resource ? kInvalidResourceId : resource_id;
+  auto result = std::make_unique<ReadLogSourceResult>();
 
-  GetLogLinesFromSystemLogsResponse(*response, &result.log_lines);
+  // Always return invalid resource ID if there is a cleanup.
+  result->reader_id = delete_resource ? kInvalidResourceId : resource_id;
+
+  GetLogLinesFromSystemLogsResponse(*response, &result->log_lines);
+
+  // Retrieve result pointer before the PostTaskAndReply to fix issues with
+  // an undefined execution order of arguments in a function call
+  // (std::move(result) being executed before result.get()).
+  ReadLogSourceResult* result_ptr = result.get();
+  task_runner_for_anonymizer_->PostTaskAndReply(
+      FROM_HERE,
+      base::BindOnce(AnonymizeResults, anonymizer_container_,
+                     base::Unretained(result_ptr)),
+      base::BindOnce(std::move(callback), std::move(result)));
+
   if (delete_resource) {
     // This should also remove the entry from |sources_|.
     ApiResourceManager<LogSourceResource>::Get(context_)->Remove(extension_id,
                                                                  resource_id);
   }
-
-  callback.Run(result);
 }
 
 void LogSourceAccessManager::RemoveHandle(ResourceId id) {
@@ -198,7 +241,8 @@ bool LogSourceAccessManager::UpdateSourceAccessTime(ResourceId id) {
   const SourceAndExtension& key = *iter->second;
   if (rate_limiters_.find(key) == rate_limiters_.end()) {
     rate_limiters_.emplace(
-        key, std::make_unique<AccessRateLimiter>(1, GetMinTimeBetweenReads(),
+        key, std::make_unique<AccessRateLimiter>(g_max_num_burst_accesses,
+                                                 GetMinTimeBetweenReads(),
                                                  tick_clock_.get()));
   }
   return rate_limiters_[key]->AttemptAccess();

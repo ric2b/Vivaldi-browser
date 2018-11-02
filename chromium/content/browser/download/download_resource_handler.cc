@@ -17,6 +17,7 @@
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/download/download_request_handle.h"
 #include "content/browser/download/download_task_runner.h"
+#include "content/browser/download/download_ukm_helper.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/loader/resource_controller.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -25,15 +26,15 @@
 #include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
-#include "content/public/common/resource_response.h"
+#include "services/network/public/cpp/resource_response.h"
 
 namespace content {
 
 struct DownloadResourceHandler::DownloadTabInfo {
   GURL tab_url;
   GURL tab_referrer_url;
+  ukm::SourceId ukm_source_id;
 };
 
 namespace {
@@ -77,6 +78,7 @@ static void StartOnUIThread(
 
   info->tab_url = tab_info->tab_url;
   info->tab_referrer_url = tab_info->tab_referrer_url;
+  info->ukm_source_id = tab_info->ukm_source_id;
   info->site_url = frame_host->GetSiteInstance()->GetSiteURL();
 
   download_manager->StartDownload(
@@ -96,6 +98,10 @@ void InitializeDownloadTabInfoOnUIThread(
     if (entry) {
       tab_info->tab_url = entry->GetURL();
       tab_info->tab_referrer_url = entry->GetReferrer().url;
+
+      tab_info->ukm_source_id = ukm::UkmRecorder::GetNewSourceID();
+      DownloadUkmHelper::UpdateSourceURL(ukm::UkmRecorder::Get(),
+                                         tab_info->ukm_source_id, web_contents);
     }
   }
 }
@@ -105,10 +111,11 @@ void DeleteOnUIThread(
 
 }  // namespace
 
-DownloadResourceHandler::DownloadResourceHandler(net::URLRequest* request)
+DownloadResourceHandler::DownloadResourceHandler(net::URLRequest* request,
+                                                 DownloadSource download_source)
     : ResourceHandler(request),
       tab_info_(new DownloadTabInfo()),
-      core_(request, this, false) {
+      core_(request, this, false, download_source) {
   // Do UI thread initialization for tab_info_ asap after
   // DownloadResourceHandler creation since the tab could be navigated
   // before StartOnUIThread gets called.  This is safe because deletion
@@ -137,13 +144,23 @@ std::unique_ptr<ResourceHandler> DownloadResourceHandler::Create(
     net::URLRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   std::unique_ptr<ResourceHandler> handler(
-      new DownloadResourceHandler(request));
+      new DownloadResourceHandler(request, DownloadSource::NAVIGATION));
+  return handler;
+}
+
+// static
+std::unique_ptr<ResourceHandler> DownloadResourceHandler::CreateForNewRequest(
+    net::URLRequest* request,
+    DownloadSource download_source) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  std::unique_ptr<ResourceHandler> handler(
+      new DownloadResourceHandler(request, download_source));
   return handler;
 }
 
 void DownloadResourceHandler::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller) {
   if (core_.OnRequestRedirected()) {
     controller->Resume();
@@ -154,7 +171,7 @@ void DownloadResourceHandler::OnRequestRedirected(
 
 // Send the download creation information to the download thread.
 void DownloadResourceHandler::OnResponseStarted(
-    ResourceResponse* response,
+    network::ResourceResponse* response,
     std::unique_ptr<ResourceController> controller,
     bool open_when_done,
     bool ask_for_target) {

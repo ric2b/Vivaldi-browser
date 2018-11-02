@@ -19,6 +19,10 @@ struct RedirectInfo;
 class SSLInfo;
 }
 
+namespace network {
+struct ResourceResponse;
+}
+
 namespace content {
 
 class AppCacheNavigationHandle;
@@ -27,7 +31,6 @@ class NavigationData;
 class ServiceWorkerNavigationHandle;
 class StreamHandle;
 struct GlobalRequestID;
-struct ResourceResponse;
 
 class NavigationURLLoaderImpl : public NavigationURLLoader {
  public:
@@ -44,32 +47,32 @@ class NavigationURLLoaderImpl : public NavigationURLLoader {
   // NavigationURLLoader implementation.
   void FollowRedirect() override;
   void ProceedWithResponse() override;
-  void InterceptNavigation(NavigationInterceptionCB callback) override;
 
  private:
   friend class NavigationURLLoaderImplCore;
 
   // Notifies the delegate of a redirect.
-  void NotifyRequestRedirected(const net::RedirectInfo& redirect_info,
-                               const scoped_refptr<ResourceResponse>& response);
+  void NotifyRequestRedirected(
+      const net::RedirectInfo& redirect_info,
+      const scoped_refptr<network::ResourceResponse>& response);
 
   // Notifies the delegate that the response has started.
-  void NotifyResponseStarted(const scoped_refptr<ResourceResponse>& response,
-                             std::unique_ptr<StreamHandle> body,
-                             const net::SSLInfo& ssl_info,
-                             std::unique_ptr<NavigationData> navigation_data,
-                             const GlobalRequestID& request_id,
-                             bool is_download,
-                             bool is_stream);
+  void NotifyResponseStarted(
+      const scoped_refptr<network::ResourceResponse>& response,
+      std::unique_ptr<StreamHandle> body,
+      const net::SSLInfo& ssl_info,
+      std::unique_ptr<NavigationData> navigation_data,
+      const GlobalRequestID& request_id,
+      bool is_download,
+      bool is_stream);
 
   // Notifies the delegate the the request has failed. If |net_error| is a
   // certificate error, the caller must pass valid values for |ssl_info| and
   // |fatal_cert_error|. If |net_error| is not a certificate error, |ssl_info|
-  // and |fatal_cert_error| are ignored.
+  // is ignored.
   void NotifyRequestFailed(bool in_cache,
                            int net_error,
-                           base::Optional<net::SSLInfo> ssl_info,
-                           bool should_ssl_errors_be_fatal);
+                           base::Optional<net::SSLInfo> ssl_info);
 
   // Notifies the delegate the begin navigation request was handled and a
   // potential first network request is about to be made.

@@ -29,13 +29,13 @@
 #include "components/viz/common/gpu/context_provider.h"
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/test/test_gpu_memory_buffer_manager.h"
+#include "gpu/command_buffer/client/raster_implementation_gles.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "gpu/config/gpu_feature_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/skia/include/gpu/GrContext.h"
-#include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 
 namespace cc {
 namespace {
@@ -70,21 +70,34 @@ class PerfGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
     if (pname == GL_QUERY_RESULT_AVAILABLE_EXT)
       *params = 1;
   }
-  void GenUnverifiedSyncTokenCHROMIUM(GLuint64 fence_sync,
-                                      GLbyte* sync_token) override {
+  void GenUnverifiedSyncTokenCHROMIUM(GLbyte* sync_token) override {
     // Copy the data over after setting the data to ensure alignment.
-    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO, 0,
-                                   gpu::CommandBufferId(), fence_sync);
+    gpu::SyncToken sync_token_data(gpu::CommandBufferNamespace::GPU_IO,
+                                   gpu::CommandBufferId(), 0);
     memcpy(sync_token, &sync_token_data, sizeof(sync_token_data));
   }
 };
 
-class PerfContextProvider : public viz::ContextProvider {
+class PerfContextProvider
+    : public base::RefCountedThreadSafe<PerfContextProvider>,
+      public viz::ContextProvider,
+      public viz::RasterContextProvider {
  public:
   PerfContextProvider()
       : context_gl_(new PerfGLES2Interface),
         cache_controller_(&support_, nullptr) {
     capabilities_.sync_query = true;
+
+    raster_context_ = std::make_unique<gpu::raster::RasterImplementationGLES>(
+        context_gl_.get(), &support_, capabilities_);
+  }
+
+  // viz::ContextProvider implementation.
+  void AddRef() const override {
+    base::RefCountedThreadSafe<PerfContextProvider>::AddRef();
+  }
+  void Release() const override {
+    base::RefCountedThreadSafe<PerfContextProvider>::Release();
   }
 
   gpu::ContextResult BindToCurrentThread() override {
@@ -97,34 +110,35 @@ class PerfContextProvider : public viz::ContextProvider {
     return gpu_feature_info_;
   }
   gpu::gles2::GLES2Interface* ContextGL() override { return context_gl_.get(); }
+  gpu::raster::RasterInterface* RasterInterface() override {
+    return raster_context_.get();
+  }
   gpu::ContextSupport* ContextSupport() override { return &support_; }
   class GrContext* GrContext() override {
-    if (gr_context_)
-      return gr_context_.get();
-
-    sk_sp<const GrGLInterface> null_interface(GrGLCreateNullInterface());
-    gr_context_ = sk_sp<class GrContext>(GrContext::Create(
-        kOpenGL_GrBackend,
-        reinterpret_cast<GrBackendContext>(null_interface.get())));
-    cache_controller_.SetGrContext(gr_context_.get());
-    return gr_context_.get();
+    if (!test_context_provider_) {
+      test_context_provider_ = TestContextProvider::Create();
+    }
+    return test_context_provider_->GrContext();
   }
   viz::ContextCacheController* CacheController() override {
     return &cache_controller_;
   }
   void InvalidateGrContext(uint32_t state) override {
-    if (gr_context_)
-      gr_context_.get()->resetContext(state);
+    test_context_provider_->GrContext()->resetContext(state);
   }
   base::Lock* GetLock() override { return &context_lock_; }
   void AddObserver(viz::ContextLostObserver* obs) override {}
   void RemoveObserver(viz::ContextLostObserver* obs) override {}
 
  private:
-  ~PerfContextProvider() override {}
+  friend class base::RefCountedThreadSafe<PerfContextProvider>;
+
+  ~PerfContextProvider() override = default;
 
   std::unique_ptr<PerfGLES2Interface> context_gl_;
-  sk_sp<class GrContext> gr_context_;
+  std::unique_ptr<gpu::raster::RasterInterface> raster_context_;
+
+  scoped_refptr<TestContextProvider> test_context_provider_;
   TestContextSupport support_;
   viz::ContextCacheController cache_controller_;
   base::Lock context_lock_;
@@ -162,12 +176,12 @@ class PerfTileTask : public TileTask {
   }
 
  protected:
-  ~PerfTileTask() override {}
+  ~PerfTileTask() override = default;
 };
 
 class PerfImageDecodeTaskImpl : public PerfTileTask {
  public:
-  PerfImageDecodeTaskImpl() {}
+  PerfImageDecodeTaskImpl() = default;
 
   // Overridden from Task:
   void RunOnWorkerThread() override {}
@@ -176,7 +190,7 @@ class PerfImageDecodeTaskImpl : public PerfTileTask {
   void OnTaskCompleted() override {}
 
  protected:
-  ~PerfImageDecodeTaskImpl() override {}
+  ~PerfImageDecodeTaskImpl() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PerfImageDecodeTaskImpl);
@@ -185,31 +199,37 @@ class PerfImageDecodeTaskImpl : public PerfTileTask {
 class PerfRasterBufferProviderHelper {
  public:
   virtual std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
-      const Resource* resource,
+      const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
       uint64_t previous_content_id) = 0;
 };
 
 class PerfRasterTaskImpl : public PerfTileTask {
  public:
-  PerfRasterTaskImpl(std::unique_ptr<ScopedResource> resource,
+  PerfRasterTaskImpl(ResourcePool* pool,
+                     ResourcePool::InUsePoolResource in_use_resource,
                      std::unique_ptr<RasterBuffer> raster_buffer,
                      TileTask::Vector* dependencies)
       : PerfTileTask(dependencies),
-        resource_(std::move(resource)),
+        pool_(pool),
+        resource_(std::move(in_use_resource)),
         raster_buffer_(std::move(raster_buffer)) {}
 
   // Overridden from Task:
   void RunOnWorkerThread() override {}
 
   // Overridden from TileTask:
-  void OnTaskCompleted() override { raster_buffer_ = nullptr; }
+  void OnTaskCompleted() override {
+    raster_buffer_ = nullptr;
+    pool_->ReleaseResource(std::move(resource_));
+  }
 
  protected:
-  ~PerfRasterTaskImpl() override {}
+  ~PerfRasterTaskImpl() override = default;
 
  private:
-  std::unique_ptr<ScopedResource> resource_;
+  ResourcePool* const pool_;
+  ResourcePool::InUsePoolResource resource_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(PerfRasterTaskImpl);
@@ -244,18 +264,18 @@ class RasterBufferProviderPerfTestBase {
     const gfx::Size size(1, 1);
 
     for (unsigned i = 0; i < num_raster_tasks; ++i) {
-      auto resource =
-          std::make_unique<ScopedResource>(resource_provider_.get());
-      resource->Allocate(size, viz::ResourceTextureHint::kDefault,
-                         viz::RGBA_8888, gfx::ColorSpace());
+      ResourcePool::InUsePoolResource in_use_resource =
+          resource_pool_->AcquireResource(size, viz::RGBA_8888,
+                                          gfx::ColorSpace());
 
       // No tile ids are given to support partial updates.
       std::unique_ptr<RasterBuffer> raster_buffer;
       if (helper)
-        raster_buffer = helper->AcquireBufferForRaster(resource.get(), 0, 0);
+        raster_buffer = helper->AcquireBufferForRaster(in_use_resource, 0, 0);
       TileTask::Vector dependencies = image_decode_tasks;
       raster_tasks->push_back(new PerfRasterTaskImpl(
-          std::move(resource), std::move(raster_buffer), &dependencies));
+          resource_pool_.get(), std::move(in_use_resource),
+          std::move(raster_buffer), &dependencies));
     }
   }
 
@@ -309,9 +329,10 @@ class RasterBufferProviderPerfTestBase {
 
  protected:
   scoped_refptr<viz::ContextProvider> compositor_context_provider_;
-  scoped_refptr<viz::ContextProvider> worker_context_provider_;
+  scoped_refptr<viz::RasterContextProvider> worker_context_provider_;
   std::unique_ptr<LayerTreeResourceProvider> resource_provider_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
+  std::unique_ptr<ResourcePool> resource_pool_;
   std::unique_ptr<SynchronousTaskGraphRunner> task_graph_runner_;
   LapTimer timer_;
 };
@@ -328,6 +349,10 @@ class RasterBufferProviderPerfTest
         Create3dResourceProvider();
         raster_buffer_provider_ = ZeroCopyRasterBufferProvider::Create(
             resource_provider_.get(), viz::PlatformColor::BestTextureFormat());
+        resource_pool_ = std::make_unique<ResourcePool>(
+            resource_provider_.get(), task_runner_,
+            gfx::BufferUsage::GPU_READ_CPU_READ_WRITE,
+            ResourcePool::kDefaultExpirationDelay, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
         Create3dResourceProvider();
@@ -336,19 +361,30 @@ class RasterBufferProviderPerfTest
             worker_context_provider_.get(), resource_provider_.get(),
             std::numeric_limits<int>::max(), false,
             std::numeric_limits<int>::max(),
-            viz::PlatformColor::BestTextureFormat(), false);
+            viz::PlatformColor::BestTextureFormat());
+        resource_pool_ = std::make_unique<ResourcePool>(
+            resource_provider_.get(), task_runner_,
+            viz::ResourceTextureHint::kDefault,
+            ResourcePool::kDefaultExpirationDelay, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_GPU:
         Create3dResourceProvider();
         raster_buffer_provider_ = std::make_unique<GpuRasterBufferProvider>(
             compositor_context_provider_.get(), worker_context_provider_.get(),
             resource_provider_.get(), false, 0,
-            viz::PlatformColor::BestTextureFormat(), false, false);
+            viz::PlatformColor::BestTextureFormat(), false);
+        resource_pool_ = std::make_unique<ResourcePool>(
+            resource_provider_.get(), task_runner_,
+            viz::ResourceTextureHint::kFramebuffer,
+            ResourcePool::kDefaultExpirationDelay, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareResourceProvider();
         raster_buffer_provider_ =
             BitmapRasterBufferProvider::Create(resource_provider_.get());
+        resource_pool_ = std::make_unique<ResourcePool>(
+            resource_provider_.get(), task_runner_,
+            ResourcePool::kDefaultExpirationDelay, false);
         break;
     }
 
@@ -365,7 +401,7 @@ class RasterBufferProviderPerfTest
 
   // Overridden from PerfRasterBufferProviderHelper:
   std::unique_ptr<RasterBuffer> AcquireBufferForRaster(
-      const Resource* resource,
+      const ResourcePool::InUsePoolResource& resource,
       uint64_t resource_content_id,
       uint64_t previous_content_id) override {
     return raster_buffer_provider_->AcquireBufferForRaster(

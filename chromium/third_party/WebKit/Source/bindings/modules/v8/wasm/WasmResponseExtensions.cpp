@@ -8,11 +8,12 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/modules/v8/V8Response.h"
+#include "bindings/core/v8/V8Response.h"
 #include "core/dom/ExecutionContext.h"
-#include "modules/fetch/BodyStreamBuffer.h"
-#include "modules/fetch/FetchDataLoader.h"
+#include "core/fetch/BodyStreamBuffer.h"
+#include "core/fetch/FetchDataLoader.h"
 #include "platform/bindings/ScriptState.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -94,8 +95,17 @@ class FetchDataLoaderAsWasmModule final : public FetchDataLoader,
   // TODO(mtrofin): replace with spec-ed error types, once spec clarifies
   // what they are.
   void AbortCompilation() {
-    builder_.Abort(V8ThrowException::CreateTypeError(
-        script_state_->GetIsolate(), "Could not download wasm module"));
+    ScriptState::Scope scope(script_state_.get());
+    if (!ScriptForbiddenScope::IsScriptForbidden()) {
+      builder_.Abort(V8ThrowException::CreateTypeError(
+          script_state_->GetIsolate(), "Could not download wasm module"));
+    } else {
+      // We are not allowed to execute a script, which indicates that we should
+      // not reject the promise of the streaming compilation. By passing no
+      // abort reason, we indicate the V8 side that the promise should not get
+      // rejected.
+      builder_.Abort(v8::Local<v8::Value>());
+    }
   }
   Member<BytesConsumer> consumer_;
   Member<FetchDataLoader::Client> client_;
@@ -113,7 +123,7 @@ class WasmDataLoaderClient final
   USING_GARBAGE_COLLECTED_MIXIN(WasmDataLoaderClient);
 
  public:
-  explicit WasmDataLoaderClient() {}
+  explicit WasmDataLoaderClient() = default;
   void DidFetchDataLoadedCustomFormat() override {}
   void DidFetchDataLoadFailed() override { NOTREACHED(); }
 };
@@ -135,64 +145,59 @@ void CompileFromResponseCallback(
     return;
   }
 
-  if (args.Length() < 1 || !args[0]->IsObject() ||
-      !V8Response::hasInstance(args[0], args.GetIsolate())) {
-    V8SetReturnValue(
-        args,
-        ScriptPromise::Reject(
-            script_state, V8ThrowException::CreateTypeError(
-                              script_state->GetIsolate(),
-                              "An argument must be provided, which must be a "
-                              "Response or Promise<Response> object"))
-            .V8Value());
+  Response* response =
+      V8Response::ToImplWithTypeCheck(args.GetIsolate(), args[0]);
+  if (!response) {
+    exception_state.ThrowTypeError(
+        "An argument must be provided, which must be a "
+        "Response or Promise<Response> object");
     return;
   }
 
-  Response* response = V8Response::ToImpl(v8::Local<v8::Object>::Cast(args[0]));
   if (response->MimeType() != "application/wasm") {
-    V8SetReturnValue(
-        args,
-        ScriptPromise::Reject(
-            script_state,
-            V8ThrowException::CreateTypeError(
-                script_state->GetIsolate(),
-                "Incorrect response MIME type. Expected 'application/wasm'."))
-            .V8Value());
+    exception_state.ThrowTypeError(
+        "Incorrect response MIME type. Expected 'application/wasm'.");
     return;
   }
-  v8::Local<v8::Value> promise;
-  if (response->IsBodyLocked() || response->bodyUsed()) {
-    promise = ScriptPromise::Reject(script_state,
-                                    V8ThrowException::CreateTypeError(
-                                        script_state->GetIsolate(),
-                                        "Cannot compile WebAssembly.Module "
-                                        "from an already read Response"))
-                  .V8Value();
-  } else {
-    if (response->BodyBuffer()) {
-      FetchDataLoaderAsWasmModule* loader =
-          new FetchDataLoaderAsWasmModule(script_state);
 
-      promise = loader->GetPromise();
-      response->BodyBuffer()->StartLoading(loader, new WasmDataLoaderClient());
-    } else {
-      promise = ScriptPromise::Reject(script_state,
-                                      V8ThrowException::CreateTypeError(
-                                          script_state->GetIsolate(),
-                                          "Response object has a null body."))
-                    .V8Value();
-    }
+  if (response->IsBodyLocked() || response->bodyUsed()) {
+    exception_state.ThrowTypeError(
+        "Cannot compile WebAssembly.Module from an already read Response");
+    return;
   }
+
+  if (!response->BodyBuffer()) {
+    exception_state.ThrowTypeError("Response object has a null body.");
+    return;
+  }
+
+  FetchDataLoaderAsWasmModule* loader =
+      new FetchDataLoaderAsWasmModule(script_state);
+  v8::Local<v8::Value> promise = loader->GetPromise();
+  response->BodyBuffer()->StartLoading(loader, new WasmDataLoaderClient());
+
   V8SetReturnValue(args, promise);
 }
 
 // See https://crbug.com/708238 for tracking avoiding the hand-generated code.
 void WasmCompileStreamingImpl(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  v8::Isolate* isolate = args.GetIsolate();
   ScriptState* script_state = ScriptState::ForCurrentRealm(args);
+  V8PerIsolateData* per_isolate_data =
+      V8PerIsolateData::From(script_state->GetIsolate());
 
-  v8::Local<v8::Function> compile_callback =
-      v8::Function::New(isolate, CompileFromResponseCallback);
+  // An unique key of the v8::FunctionTemplate cache in V8PerIsolateData.
+  // Everyone uses address of something as a key, so the address of |unique_key|
+  // is guaranteed to be unique for the function template cache.
+  static const int unique_key = 0;
+  v8::Local<v8::FunctionTemplate> function_template =
+      per_isolate_data->FindOrCreateOperationTemplate(
+          script_state->World(), &unique_key, CompileFromResponseCallback,
+          v8::Local<v8::Value>(), v8::Local<v8::Signature>(), 1);
+  v8::Local<v8::Function> compile_callback;
+  if (!function_template->GetFunction(script_state->GetContext())
+           .ToLocal(&compile_callback)) {
+    return;  // Throw an exception.
+  }
 
   // treat either case of parameter as
   // Promise.resolve(parameter)
@@ -203,7 +208,6 @@ void WasmCompileStreamingImpl(const v8::FunctionCallbackInfo<v8::Value>& args) {
   V8SetReturnValue(args, ScriptPromise::Cast(script_state, args[0])
                              .Then(compile_callback)
                              .V8Value());
-
 }
 
 }  // namespace

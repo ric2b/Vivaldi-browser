@@ -5,6 +5,7 @@
 #include "chrome/browser/ssl/ssl_error_handler.h"
 
 #include <stdint.h>
+#include <memory>
 #include <unordered_set>
 #include <utility>
 
@@ -101,10 +102,9 @@ bool IsSuperfish(const scoped_refptr<net::X509Certificate>& cert) {
       {0xB6, 0xFE, 0x91, 0x51, 0x40, 0x2B, 0xAD, 0x1C, 0x06, 0xD7, 0xE6,
        0x6D, 0xB6, 0x7A, 0x26, 0xAA, 0x73, 0x56, 0xF2, 0xE6, 0xC6, 0x44,
        0xDB, 0xCF, 0x9F, 0x98, 0x96, 0x8F, 0xF6, 0x32, 0xE1, 0xB7}};
-  for (const net::X509Certificate::OSCertHandle& intermediate :
-       cert->GetIntermediateCertificates()) {
+  for (const auto& intermediate : cert->intermediate_buffers()) {
     net::SHA256HashValue hash =
-        net::X509Certificate::CalculateFingerprint256(intermediate);
+        net::X509Certificate::CalculateFingerprint256(intermediate.get());
     if (hash == kSuperfishFingerprint) {
       return true;
     }
@@ -205,6 +205,11 @@ class ConfigSingleton {
   const std::string MatchKnownMITMSoftware(
       const scoped_refptr<net::X509Certificate> cert);
 
+  // Returns a DynamicInterstitialInfo that matches with |ssl_info|. If is no
+  // match, return null.
+  base::Optional<DynamicInterstitialInfo> MatchDynamicInterstitial(
+      const net::SSLInfo& ssl_info);
+
   // Testing methods:
   void ResetForTesting();
   void SetInterstitialDelayForTesting(const base::TimeDelta& delay);
@@ -261,7 +266,7 @@ ConfigSingleton::ConfigSingleton()
           base::TimeDelta::FromMilliseconds(kInterstitialDelayInMilliseconds)),
       is_enterprise_managed_for_testing_(ENTERPRISE_MANAGED_STATUS_NOT_SET),
       os_captive_portal_status_for_testing_(OS_CAPTIVE_PORTAL_STATUS_NOT_SET),
-      ssl_error_assistant_(base::MakeUnique<SSLErrorAssistant>()) {}
+      ssl_error_assistant_(std::make_unique<SSLErrorAssistant>()) {}
 
 base::TimeDelta ConfigSingleton::interstitial_delay() const {
   return interstitial_delay_;
@@ -380,6 +385,11 @@ const std::string ConfigSingleton::MatchKnownMITMSoftware(
   return ssl_error_assistant_->MatchKnownMITMSoftware(cert);
 }
 
+base::Optional<DynamicInterstitialInfo>
+ConfigSingleton::MatchDynamicInterstitial(const net::SSLInfo& ssl_info) {
+  return ssl_error_assistant_->MatchDynamicInterstitial(ssl_info);
+}
+
 class SSLErrorHandlerDelegateImpl : public SSLErrorHandler::Delegate {
  public:
   SSLErrorHandlerDelegateImpl(
@@ -420,7 +430,7 @@ class SSLErrorHandlerDelegateImpl : public SSLErrorHandler::Delegate {
   void ShowCaptivePortalInterstitial(const GURL& landing_url) override;
   void ShowMITMSoftwareInterstitial(const std::string& mitm_software_name,
                                     bool is_enterprise_managed) override;
-  void ShowSSLInterstitial() override;
+  void ShowSSLInterstitial(const GURL& support_url) override;
   void ShowBadClockInterstitial(const base::Time& now,
                                 ssl_errors::ClockState clock_state) override;
 
@@ -516,12 +526,12 @@ void SSLErrorHandlerDelegateImpl::ShowMITMSoftwareInterstitial(
       decision_callback_));
 }
 
-void SSLErrorHandlerDelegateImpl::ShowSSLInterstitial() {
+void SSLErrorHandlerDelegateImpl::ShowSSLInterstitial(const GURL& support_url) {
   // Show SSL blocking page. The interstitial owns the blocking page.
   OnBlockingPageReady(SSLBlockingPage::Create(
       web_contents_, cert_error_, ssl_info_, request_url_, options_mask_,
-      base::Time::NowFromSystemTime(), std::move(ssl_cert_reporter_),
-      is_superfish_, decision_callback_));
+      base::Time::NowFromSystemTime(), support_url,
+      std::move(ssl_cert_reporter_), is_superfish_, decision_callback_));
 }
 
 void SSLErrorHandlerDelegateImpl::ShowBadClockInterstitial(
@@ -580,7 +590,6 @@ void SSLErrorHandler::HandleSSLError(
     int cert_error,
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
-    bool should_ssl_errors_be_fatal,
     bool expired_previous_decision,
     std::unique_ptr<SSLCertReporter> ssl_cert_reporter,
     const base::Callback<void(content::CertificateRequestResultType)>&
@@ -600,7 +609,7 @@ void SSLErrorHandler::HandleSSLError(
   bool is_superfish =
       base::FeatureList::IsEnabled(kSuperfishInterstitial) && is_superfish_cert;
   int options_mask = CalculateOptionsMask(
-      cert_error, hard_override_disabled, should_ssl_errors_be_fatal,
+      cert_error, hard_override_disabled, ssl_info.is_fatal_cert_error,
       is_superfish, expired_previous_decision);
 
   SSLErrorHandler* error_handler = new SSLErrorHandler(
@@ -707,6 +716,13 @@ void SSLErrorHandler::StartHandlingError() {
   if (ssl_errors::ErrorInfo::NetErrorToErrorType(cert_error_) ==
       ssl_errors::ErrorInfo::CERT_DATE_INVALID) {
     HandleCertDateInvalidError();
+    return;
+  }
+
+  base::Optional<DynamicInterstitialInfo> dynamic_interstitial =
+      g_config.Pointer()->MatchDynamicInterstitial(ssl_info_);
+  if (dynamic_interstitial) {
+    ShowDynamicInterstitial(dynamic_interstitial.value());
     return;
   }
 
@@ -843,7 +859,7 @@ void SSLErrorHandler::ShowSSLInterstitial() {
   RecordUMA(delegate_->IsErrorOverridable()
                 ? SHOW_SSL_INTERSTITIAL_OVERRIDABLE
                 : SHOW_SSL_INTERSTITIAL_NONOVERRIDABLE);
-  delegate_->ShowSSLInterstitial();
+  delegate_->ShowSSLInterstitial(GURL());
   // Once an interstitial is displayed, no need to keep the handler around.
   // This is the equivalent of "delete this".
   web_contents_->RemoveUserData(UserDataKey());
@@ -857,6 +873,26 @@ void SSLErrorHandler::ShowBadClockInterstitial(
   // Once an interstitial is displayed, no need to keep the handler around.
   // This is the equivalent of "delete this".
   web_contents_->RemoveUserData(UserDataKey());
+}
+
+void SSLErrorHandler::ShowDynamicInterstitial(
+    const DynamicInterstitialInfo dynamic_interstitial) {
+  switch (dynamic_interstitial.interstitial_type) {
+    case chrome_browser_ssl::DynamicInterstitial::INTERSTITIAL_PAGE_NONE:
+      NOTREACHED();
+    case chrome_browser_ssl::DynamicInterstitial::INTERSTITIAL_PAGE_SSL:
+      delegate_->ShowSSLInterstitial(dynamic_interstitial.support_url);
+      return;
+    case chrome_browser_ssl::DynamicInterstitial::
+        INTERSTITIAL_PAGE_CAPTIVE_PORTAL:
+      delegate_->ShowCaptivePortalInterstitial(GURL());
+      return;
+    case chrome_browser_ssl::DynamicInterstitial::
+        INTERSTITIAL_PAGE_MITM_SOFTWARE:
+      // TODO(spqchan): Implement support for MitM dynamic interstitials.
+      NOTREACHED();
+      return;
+  }
 }
 
 void SSLErrorHandler::CommonNameMismatchHandlerCallback(

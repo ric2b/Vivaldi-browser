@@ -142,7 +142,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   gfx::Size CalculatePreferredSize() const override;
   void Layout() override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
-  bool OnKeyReleased(const ui::KeyEvent& event) override;
   void ViewHierarchyChanged(
       const ViewHierarchyChangedDetails& details) override;
   bool GetDropFormats(
@@ -150,6 +149,7 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
       std::set<ui::Clipboard::FormatType>* format_types) override;
   bool CanDrop(const OSExchangeData& data) override;
   int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  const char* GetClassName() const override;
 
   // Updates the visibility of app list items according to |app_list_state| and
   // |is_in_drag|.
@@ -428,8 +428,12 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
   void DeleteItemViewAtIndex(int index);
 
   // Returns true if |point| lies within the bounds of this grid view plus a
-  // buffer area surrounding it.
+  // buffer area surrounding it that can trigger drop target change.
   bool IsPointWithinDragBuffer(const gfx::Point& point) const;
+
+  // Returns true if |point| lies within the bounds of this grid view plus a
+  // buffer area surrounding it that can trigger page flip.
+  bool IsPointWithinPageFlipBuffer(const gfx::Point& point) const;
 
   // Overridden from views::ButtonListener:
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
@@ -639,9 +643,6 @@ class APP_LIST_EXPORT AppsGridView : public views::View,
 
   // True if the fullscreen app list feature is enabled.
   const bool is_fullscreen_app_list_enabled_;
-
-  // Whether the app list focus is enabled.
-  const bool is_app_list_focus_enabled_;
 
   // Delay in milliseconds of when |page_flip_timer_| should fire after user
   // drags an item near the edges.

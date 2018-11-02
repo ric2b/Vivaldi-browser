@@ -10,10 +10,10 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/socket/next_proto.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace chromecast {
 
@@ -75,7 +75,7 @@ class SocketBuffer {
 
 FakeStreamSocket::FakeStreamSocket(const net::IPEndPoint& local_address)
     : local_address_(local_address),
-      buffer_(base::MakeUnique<SocketBuffer>()),
+      buffer_(std::make_unique<SocketBuffer>()),
       peer_(nullptr) {}
 
 FakeStreamSocket::~FakeStreamSocket() {
@@ -96,9 +96,11 @@ int FakeStreamSocket::Read(net::IOBuffer* buf,
   return buffer_->Read(buf->data(), buf_len, callback);
 }
 
-int FakeStreamSocket::Write(net::IOBuffer* buf,
-                            int buf_len,
-                            const net::CompletionCallback& /* callback */) {
+int FakeStreamSocket::Write(
+    net::IOBuffer* buf,
+    int buf_len,
+    const net::CompletionCallback& /* callback */,
+    const net::NetworkTrafficAnnotationTag& /*traffic_annotation*/) {
   DCHECK(buf);
   if (!peer_) {
     return net::ERR_SOCKET_NOT_CONNECTED;
@@ -179,5 +181,7 @@ void FakeStreamSocket::AddConnectionAttempts(
 int64_t FakeStreamSocket::GetTotalReceivedBytes() const {
   return 0;
 }
+
+void FakeStreamSocket::ApplySocketTag(const net::SocketTag& tag) {}
 
 }  // namespace chromecast

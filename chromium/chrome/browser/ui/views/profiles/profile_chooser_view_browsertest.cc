@@ -129,11 +129,12 @@ class ProfileChooserViewExtensionsTest
   ProfileChooserViewExtensionsTest() {}
   ~ProfileChooserViewExtensionsTest() override {}
 
-  // SupportsTestDialog:
-  void ShowDialog(const std::string& name) override {
+  // SupportsTestUi:
+  void ShowUi(const std::string& name) override {
     constexpr char kSignedIn[] = "SignedIn";
     constexpr char kMultiProfile[] = "MultiProfile";
     constexpr char kGuest[] = "Guest";
+    constexpr char kDiceGuest[] = "DiceGuest";
     constexpr char kManageAccountLink[] = "ManageAccountLink";
     constexpr char kSupervisedOwner[] = "SupervisedOwner";
     constexpr char kSupervisedUser[] = "SupervisedUser";
@@ -151,7 +152,7 @@ class ProfileChooserViewExtensionsTest
       CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
       CreateTestingProfile(profile_manager->GenerateNextProfileDirectoryPath());
     }
-    if (name == kGuest) {
+    if (name == kGuest || name == kDiceGuest) {
       content::WindowedNotificationObserver browser_creation_observer(
           chrome::NOTIFICATION_BROWSER_WINDOW_READY,
           content::NotificationService::AllSources());
@@ -389,7 +390,8 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
   // Create a different profile and then lock it.
   Profile* signed_in = CreateTestingProfile("signed_in");
   SetupProfilesForLock(signed_in);
-  extensions::ExtensionSystem::Get(signed_in)->InitForRegularProfile(true);
+  extensions::ExtensionSystem::Get(signed_in)->InitForRegularProfile(
+      true /* extensions_enabled */);
   Browser* browser_to_lock = CreateBrowser(signed_in);
   EXPECT_EQ(2U, BrowserList::GetInstance()->size());
 
@@ -472,43 +474,51 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
 }
 
 // Shows a non-signed in profile with no others.
-IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeDialog_default) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeUi_default) {
+  ShowAndVerifyUi();
 }
 
 // Shows a signed in profile with no others.
-IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       InvokeDialog_SignedIn) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeUi_SignedIn) {
+  ShowAndVerifyUi();
 }
 
 // Shows the |ProfileChooserView| with three different profiles.
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       InvokeDialog_MultiProfile) {
-  RunDialog();
+                       InvokeUi_MultiProfile) {
+  ShowAndVerifyUi();
 }
 
 // Shows the |ProfileChooserView| during a Guest browsing session.
-IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeDialog_Guest) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, InvokeUi_Guest) {
+  ShowAndVerifyUi();
+}
+
+// TODO: Flaking test crbug.com/802374
+// Shows the |ProfileChooserView| during a Guest browsing session when the DICE
+// flag is enabled.
+IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
+                       DISABLED_InvokeUi_DiceGuest) {
+  signin::ScopedAccountConsistencyDice scoped_dice;
+  ShowAndVerifyUi();
 }
 
 // Shows the manage account link, which appears when account consistency is
 // enabled for signed-in accounts.
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       InvokeDialog_ManageAccountLink) {
-  RunDialog();
+                       InvokeUi_ManageAccountLink) {
+  ShowAndVerifyUi();
 }
 
 // Shows the |ProfileChooserView| from a signed-in account that has a supervised
 // user profile attached.
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       InvokeDialog_SupervisedOwner) {
-  RunDialog();
+                       InvokeUi_SupervisedOwner) {
+  ShowAndVerifyUi();
 }
 
 // Shows the |ProfileChooserView| when a supervised user is the active profile.
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest,
-                       InvokeDialog_SupervisedUser) {
-  RunDialog();
+                       InvokeUi_SupervisedUser) {
+  ShowAndVerifyUi();
 }

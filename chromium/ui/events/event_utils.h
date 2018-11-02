@@ -126,9 +126,6 @@ EVENTS_EXPORT int GetTouchId(const base::NativeEvent& native_event);
 EVENTS_EXPORT void ClearTouchIdIfReleased(
     const base::NativeEvent& native_event);
 
-// Gets the angle of the major axis away from the X axis. Default is 0.0.
-EVENTS_EXPORT float GetTouchAngle(const base::NativeEvent& native_event);
-
 // Gets the fling velocity from a native event. is_cancel is set to true if
 // this was a tap down, intended to stop an ongoing fling.
 EVENTS_EXPORT bool GetFlingData(const base::NativeEvent& native_event,
@@ -179,14 +176,6 @@ EVENTS_EXPORT void UpdateX11EventForChangedButtonFlags(MouseEvent* event);
 
 // Registers a custom event type.
 EVENTS_EXPORT int RegisterCustomEventType();
-
-// Updates the location of |located_event| from |current_window_origin| to be in
-// |target_window_origin|'s coordinate system so that it can be dispatched to a
-// window based on |target_window_origin|.
-EVENTS_EXPORT void ConvertEventLocationToTargetWindowLocation(
-    const gfx::Point& target_window_origin,
-    const gfx::Point& current_window_origin,
-    ui::LocatedEvent* located_event);
 
 }  // namespace ui
 

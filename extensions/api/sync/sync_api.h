@@ -40,11 +40,11 @@ class SyncEventRouter : public ::vivaldi::VivaldiSyncManagerObserver {
 
   void OnAccessTokenRequested() override;
   void OnEncryptionPasswordRequested() override;
-  void OnLoginDone() override;
-  void OnSyncEngineInitFailed() override;
+  void OnEngineStarted() override;
+  void OnEngineInitFailed() override;
   void OnBeginSyncing() override;
   void OnEndSyncing() override;
-  void OnLogoutDone() override;
+  void OnEngineStopped() override;
   void OnDeletingSyncManager() override;
 
  private:
@@ -88,17 +88,17 @@ class SyncAPI : public BrowserContextKeyedAPI, public EventRouter::Observer {
   std::unique_ptr<SyncEventRouter> sync_event_router_;
 };
 
-class SyncLoginCompleteFunction : public ChromeAsyncExtensionFunction {
+class SyncStartFunction : public ChromeAsyncExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("sync.loginComplete", SYNC_LOGIN_COMPLETE)
-  SyncLoginCompleteFunction() = default;
+  DECLARE_EXTENSION_FUNCTION("sync.start", SYNC_START)
+  SyncStartFunction() = default;
 
  private:
-  ~SyncLoginCompleteFunction() override = default;
+  ~SyncStartFunction() override = default;
   // ExtensionFunction:
   bool RunAsync() override;
 
-  DISALLOW_COPY_AND_ASSIGN(SyncLoginCompleteFunction);
+  DISALLOW_COPY_AND_ASSIGN(SyncStartFunction);
 };
 
 class SyncRefreshTokenFunction : public ChromeAsyncExtensionFunction {

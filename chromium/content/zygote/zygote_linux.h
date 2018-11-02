@@ -34,8 +34,7 @@ class Zygote {
  public:
   Zygote(int sandbox_flags,
          std::vector<std::unique_ptr<ZygoteForkDelegate>> helpers,
-         const std::vector<base::ProcessHandle>& extra_children,
-         const std::vector<int>& extra_fds);
+         const base::GlobalDescriptors::Descriptor& ipc_backchannel);
   ~Zygote();
 
   bool ProcessRequests();
@@ -140,19 +139,12 @@ class Zygote {
   // Count of how many fork delegates for which we've invoked InitialUMA().
   size_t initial_uma_index_;
 
-  // This vector contains the PIDs of any child processes which have been
-  // created prior to the construction of the Zygote object, and must be reaped
-  // before the Zygote exits. The Zygote will perform a blocking wait on these
-  // children, so they must be guaranteed to be exiting by the time the Zygote
-  // exits.
-  std::vector<base::ProcessHandle> extra_children_;
-
-  // This vector contains the FDs that must be closed before reaping the extra
-  // children.
-  std::vector<int> extra_fds_;
-
   // The vector contains the child processes that need to be reaped.
   std::vector<ZygoteProcessInfo> to_reap_;
+
+  // Sandbox IPC channel for renderers to invoke services from the browser. See
+  // https://chromium.googlesource.com/chromium/src/+/master/docs/linux_sandbox_ipc.md
+  base::GlobalDescriptors::Descriptor ipc_backchannel_;
 };
 
 }  // namespace content

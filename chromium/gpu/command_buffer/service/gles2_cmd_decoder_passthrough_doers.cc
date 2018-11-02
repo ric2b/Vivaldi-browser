@@ -5,6 +5,8 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "gpu/command_buffer/service/decoder_client.h"
+#include "gpu/command_buffer/service/gpu_fence_manager.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gl/dc_renderer_layer_params.h"
@@ -325,6 +327,8 @@ error::Error GLES2DecoderPassthroughImpl::DoActiveTexture(GLenum texture) {
   }
 
   active_texture_unit_ = static_cast<size_t>(texture) - GL_TEXTURE0;
+  DCHECK(active_texture_unit_ < kMaxTextureUnits);
+
   return error::kNoError;
 }
 
@@ -460,28 +464,27 @@ error::Error GLES2DecoderPassthroughImpl::DoBindTexture(GLenum target,
   }
 
   // Track the currently bound textures
-  DCHECK(bound_textures_.find(target) != bound_textures_.end());
-  DCHECK(bound_textures_[target].size() > active_texture_unit_);
+  DCHECK(GLenumToTextureTarget(target) != TextureTarget::kUnkown);
   scoped_refptr<TexturePassthrough> texture_passthrough = nullptr;
 
   if (service_id != 0) {
     // Create a new texture object to track this texture
-    auto texture_object_iter = resources_->texture_object_map.find(texture);
-    if (texture_object_iter == resources_->texture_object_map.end()) {
+    if (!resources_->texture_object_map.GetServiceID(texture,
+                                                     &texture_passthrough)) {
       texture_passthrough = new TexturePassthrough(service_id, target);
-      resources_->texture_object_map.insert(
-          std::make_pair(texture, texture_passthrough));
+      resources_->texture_object_map.SetIDMapping(texture, texture_passthrough);
     } else {
-      texture_passthrough = texture_object_iter->second.get();
       // Shouldn't be possible to get here if this texture has a different
       // target than the one it was just bound to
-      DCHECK(texture_object_iter->second->target() == target);
+      DCHECK(texture_passthrough->target() == target);
     }
   }
 
-  bound_textures_[target][active_texture_unit_].client_id = texture;
-  bound_textures_[target][active_texture_unit_].texture =
-      std::move(texture_passthrough);
+  BoundTexture* bound_texture =
+      &bound_textures_[static_cast<size_t>(GLenumToTextureTarget(target))]
+                      [active_texture_unit_];
+  bound_texture->client_id = texture;
+  bound_texture->texture = std::move(texture_passthrough);
 
   return error::kNoError;
 }
@@ -946,15 +949,15 @@ error::Error GLES2DecoderPassthroughImpl::DoDeleteTextures(
   std::vector<GLuint> non_mailbox_client_ids;
   for (GLsizei ii = 0; ii < n; ++ii) {
     GLuint client_id = textures[ii];
-    auto texture_object_iter = resources_->texture_object_map.find(client_id);
-    if (texture_object_iter == resources_->texture_object_map.end()) {
+    scoped_refptr<TexturePassthrough> texture = nullptr;
+    if (!resources_->texture_object_map.GetServiceID(client_id, &texture) ||
+        texture == nullptr) {
       // Delete with DeleteHelper
       non_mailbox_client_ids.push_back(client_id);
     } else {
       // Deleted when unreferenced
-      scoped_refptr<TexturePassthrough> texture = texture_object_iter->second;
       resources_->texture_id_map.RemoveClientID(client_id);
-      resources_->texture_object_map.erase(client_id);
+      resources_->texture_object_map.RemoveClientID(client_id);
       UpdateTextureBinding(texture->target(), client_id, nullptr);
     }
   }
@@ -3942,42 +3945,14 @@ error::Error GLES2DecoderPassthroughImpl::DoVertexAttribDivisorANGLE(
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoProduceTextureCHROMIUM(
-    GLenum target,
-    const volatile GLbyte* mailbox) {
-  auto bound_textures_iter = bound_textures_.find(target);
-  if (bound_textures_iter == bound_textures_.end()) {
-    InsertError(GL_INVALID_OPERATION, "Invalid texture target.");
-    return error::kNoError;
-  }
-
-  const BoundTexture& bound_texture =
-      bound_textures_iter->second[active_texture_unit_];
-  if (bound_texture.texture == nullptr) {
-    InsertError(GL_INVALID_OPERATION, "Unknown texture for target.");
-    return error::kNoError;
-  }
-
-  const Mailbox& mb = Mailbox::FromVolatile(
-      *reinterpret_cast<const volatile Mailbox*>(mailbox));
-  mailbox_manager_->ProduceTexture(mb, bound_texture.texture.get());
-  return error::kNoError;
-}
-
 error::Error GLES2DecoderPassthroughImpl::DoProduceTextureDirectCHROMIUM(
     GLuint texture_client_id,
-    GLenum target,
     const volatile GLbyte* mailbox) {
-  auto texture_object_iter =
-      resources_->texture_object_map.find(texture_client_id);
-  if (texture_object_iter == resources_->texture_object_map.end()) {
-    InsertError(GL_INVALID_OPERATION, "Unknown texture for target.");
-    return error::kNoError;
-  }
-
-  scoped_refptr<TexturePassthrough> texture = texture_object_iter->second;
-  if (texture->target() != target) {
-    InsertError(GL_INVALID_OPERATION, "Texture target does not match.");
+  scoped_refptr<TexturePassthrough> texture = nullptr;
+  if (!resources_->texture_object_map.GetServiceID(texture_client_id,
+                                                   &texture) ||
+      texture == nullptr) {
+    InsertError(GL_INVALID_OPERATION, "Unknown texture.");
     return error::kNoError;
   }
 
@@ -3988,7 +3963,6 @@ error::Error GLES2DecoderPassthroughImpl::DoProduceTextureDirectCHROMIUM(
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoCreateAndConsumeTextureINTERNAL(
-    GLenum target,
     GLuint texture_client_id,
     const volatile GLbyte* mailbox) {
   if (!texture_client_id ||
@@ -4005,21 +3979,12 @@ error::Error GLES2DecoderPassthroughImpl::DoCreateAndConsumeTextureINTERNAL(
     return error::kNoError;
   }
 
-  if (texture->target() != target) {
-    InsertError(GL_INVALID_OPERATION, "Texture target does not match.");
-    return error::kNoError;
-  }
-
   // Update id mappings
   resources_->texture_id_map.RemoveClientID(texture_client_id);
   resources_->texture_id_map.SetIDMapping(texture_client_id,
                                           texture->service_id());
-  resources_->texture_object_map.erase(texture_client_id);
-  resources_->texture_object_map.insert(
-      std::make_pair(texture_client_id, texture));
-
-  // Bind the service id that now represents this texture
-  UpdateTextureBinding(target, texture_client_id, texture.get());
+  resources_->texture_object_map.RemoveClientID(texture_client_id);
+  resources_->texture_object_map.SetIDMapping(texture_client_id, texture);
 
   return error::kNoError;
 }
@@ -4056,7 +4021,8 @@ error::Error GLES2DecoderPassthroughImpl::DoReleaseTexImage2DCHROMIUM(
   }
 
   const BoundTexture& bound_texture =
-      bound_textures_[GL_TEXTURE_2D][active_texture_unit_];
+      bound_textures_[static_cast<size_t>(TextureTarget::k2D)]
+                     [active_texture_unit_];
   if (bound_texture.texture == nullptr) {
     InsertError(GL_INVALID_OPERATION, "No texture bound");
     return error::kNoError;
@@ -4084,6 +4050,7 @@ error::Error GLES2DecoderPassthroughImpl::DoTraceBeginCHROMIUM(
     InsertError(GL_INVALID_OPERATION, "Failed to create begin trace");
     return error::kNoError;
   }
+  debug_marker_manager_.PushGroup(trace_name);
   return error::kNoError;
 }
 
@@ -4092,6 +4059,7 @@ error::Error GLES2DecoderPassthroughImpl::DoTraceEndCHROMIUM() {
     InsertError(GL_INVALID_OPERATION, "No trace to end");
     return error::kNoError;
   }
+  debug_marker_manager_.PopGroup();
   return error::kNoError;
 }
 
@@ -4143,7 +4111,7 @@ error::Error GLES2DecoderPassthroughImpl::DoWaitSyncTokenCHROMIUM(
     CommandBufferNamespace namespace_id,
     CommandBufferId command_buffer_id,
     GLuint64 release_count) {
-  SyncToken sync_token(namespace_id, 0, command_buffer_id, release_count);
+  SyncToken sync_token(namespace_id, command_buffer_id, release_count);
   return client_->OnWaitSyncToken(sync_token) ? error::kDeferCommandUntilLater
                                               : error::kNoError;
 }
@@ -4269,15 +4237,12 @@ error::Error GLES2DecoderPassthroughImpl::DoScheduleDCLayerCHROMIUM(
   for (int i = 0; i < num_textures; ++i) {
     GLuint contents_texture_client_id = contents_texture_ids[i];
     if (contents_texture_client_id != 0) {
-      auto texture_iter =
-          resources_->texture_object_map.find(contents_texture_client_id);
-      if (texture_iter == resources_->texture_object_map.end()) {
+      scoped_refptr<TexturePassthrough> passthrough_texture = nullptr;
+      if (!resources_->texture_object_map.GetServiceID(
+              contents_texture_client_id, &passthrough_texture)) {
         InsertError(GL_INVALID_VALUE, "unknown texture.");
         return error::kNoError;
       }
-
-      scoped_refptr<TexturePassthrough> passthrough_texture =
-          texture_iter->second;
       DCHECK(passthrough_texture != nullptr);
       DCHECK(passthrough_texture->target() == GL_TEXTURE_2D);
 
@@ -4678,19 +4643,41 @@ error::Error GLES2DecoderPassthroughImpl::DoBeginRasterCHROMIUM(
   return error::kNoError;
 }
 
+error::Error GLES2DecoderPassthroughImpl::DoRasterCHROMIUM(GLsizeiptr size,
+                                                           const void* list) {
+  // TODO(enne): Add CHROMIUM_raster_transport extension support to the
+  // passthrough command buffer.
+  NOTIMPLEMENTED();
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderPassthroughImpl::DoEndRasterCHROMIUM() {
   NOTIMPLEMENTED();
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoUnlockTransferCacheEntryCHROMIUM(
-    GLuint64 handle_id) {
+error::Error GLES2DecoderPassthroughImpl::DoCreateTransferCacheEntryINTERNAL(
+    GLuint entry_type,
+    GLuint entry_id,
+    GLuint handle_shm_id,
+    GLuint handle_shm_offset,
+    GLuint data_shm_id,
+    GLuint data_shm_offset,
+    GLuint data_size) {
   NOTIMPLEMENTED();
   return error::kNoError;
 }
 
-error::Error GLES2DecoderPassthroughImpl::DoDeleteTransferCacheEntryCHROMIUM(
-    GLuint64 handle_id) {
+error::Error GLES2DecoderPassthroughImpl::DoUnlockTransferCacheEntryINTERNAL(
+    GLuint entry_type,
+    GLuint entry_id) {
+  NOTIMPLEMENTED();
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoDeleteTransferCacheEntryINTERNAL(
+    GLuint entry_type,
+    GLuint entry_id) {
   NOTIMPLEMENTED();
   return error::kNoError;
 }
@@ -4701,6 +4688,33 @@ error::Error GLES2DecoderPassthroughImpl::DoWindowRectanglesEXT(
     const volatile GLint* box) {
   std::vector<GLint> box_copy(box, box + (n * 4));
   api()->glWindowRectanglesEXTFn(mode, n, box_copy.data());
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoCreateGpuFenceINTERNAL(
+    GLuint gpu_fence_id) {
+  if (!feature_info_->feature_flags().chromium_gpu_fence)
+    return error::kUnknownCommand;
+  if (!GetGpuFenceManager()->CreateGpuFence(gpu_fence_id))
+    return error::kInvalidArguments;
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoWaitGpuFenceCHROMIUM(
+    GLuint gpu_fence_id) {
+  if (!feature_info_->feature_flags().chromium_gpu_fence)
+    return error::kUnknownCommand;
+  if (!GetGpuFenceManager()->GpuFenceServerWait(gpu_fence_id))
+    return error::kInvalidArguments;
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderPassthroughImpl::DoDestroyGpuFenceCHROMIUM(
+    GLuint gpu_fence_id) {
+  if (!feature_info_->feature_flags().chromium_gpu_fence)
+    return error::kUnknownCommand;
+  if (!GetGpuFenceManager()->RemoveGpuFence(gpu_fence_id))
+    return error::kInvalidArguments;
   return error::kNoError;
 }
 

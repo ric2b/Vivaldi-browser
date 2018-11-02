@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
 <translation id="1326317727527857210">Inicia sesión en Chrome para ver las pestañas de tus otros dispositivos.</translation>
-<translation id="1685087038067318291">Descubre páginas web enviadas por los objetos cercanos. Si el Bluetooth está activado, Chrome puede recopilar páginas web asociadas a los objetos que te rodean y enviarlas de forma anónima a Google para seleccionar las que te puedan resultar más útiles. <ph name="BEGIN_LINK" />Más información<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Aviso de privacidad de Google Chrome</translation>
+<translation id="1863312987075920112">Al usar esta aplicación, aceptas las <ph name="BEGIN_LINK_TOS" />condiciones de servicio<ph name="END_LINK_TOS" /> y el <ph name="BEGIN_LINK_PRIVACY" />aviso de privacidad<ph name="END_LINK_PRIVACY" /> de Chrome.</translation>
 <translation id="2147651015520127414">Chrome ha verificado que <ph name="ISSUER" /> emitió el certificado de este sitio web.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Todos los derechos reservados.</translation>
 <translation id="2342981853652716282">Inicia sesión en Chrome para sincronizar los marcadores, las contraseñas y mucho más en todos tus dispositivos.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Algunos complementos hacen que Chrome falle. Desinstálalos.</translation>
 <translation id="4615174829807303908">Estás cerrando sesión en una cuenta gestionada por <ph name="SIGNOUT_MANAGED_DOMAIN" />. Se van a eliminar tus datos de Chrome de este dispositivo, pero van a permanecer en tu cuenta de Google.</translation>
 <translation id="5389212809648216794">Google Chrome no puede utilizar la cámara porque la está usando otra aplicación</translation>
-<translation id="5566557026214762153">Al usar esta aplicación, aceptas las <ph name="BEGIN_LINK" />Condiciones de Servicio<ph name="END_LINK" /> de Chrome.</translation>
 <translation id="5639704535586432836">Abre Ajustes &gt; Privacidad &gt; Cámara &gt; Google Chrome y activa la cámara.</translation>
 <translation id="5642200033778930880">Google Chrome no puede usar la cámara en el modo Vista dividida</translation>
 <translation id="5703130498371792817">¿Te gusta Chrome? <ph name="BEGIN_LINK" />Valora esta aplicación<ph name="END_LINK" /></translation>

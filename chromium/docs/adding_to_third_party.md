@@ -74,7 +74,7 @@ license is not included in about:credits page.
 
 If the code is applicable and will be compiled on all supported Chromium
 platforms (Windows, Mac, Linux, Chrome OS, iOS, Android), check it in to
-[src/third_party](http://src.chromium.org/viewvc/chrome/trunk/src/third_party/). 
+[src/third_party](http://src.chromium.org/viewvc/chrome/trunk/src/third_party/).
 
 If the code is only applicable to certain platforms, check it in to
 [src/third_party](http://src.chromium.org/viewvc/chrome/trunk/src/third_party/)
@@ -95,6 +95,7 @@ have a wrong path in DEPS and want to change the path of the existing library in
 DEPS, please ask the infrastructure team before committing the change.
 
 ### Checking in large files
+
 _Accessible to Googlers only. Non-Googlers can email one of the people in
 third_party/OWNERS for help._
 
@@ -117,26 +118,27 @@ All third party additions and substantive changes like re-licensing need the
 following sign-offs. Some of these are accessible to Googlers only. Non-Googlers
 can email one of the people in third_party/OWNERS for help.
 
-* Chrome Eng Review. Googlers should see go/chrome-eng-review (please include information about the additional checkout size, build times, and binary sizes. Please also make sure that the motivation for your project is clear, e.g., a design doc has been circulated).
-* open-source-third-party-reviews@google.com (ping the list with relevant
-  details and a link to the CL).
-* security@chromium.org (ping the list with relevant details and a link to the
-  CL).
+* Get Chrome Eng Review approval. Googlers should see
+  go/chrome-eng-review. Please include information about the additional
+  checkout size, build times, and binary sizes. Please also make sure that the
+  motivation for your project is clear, e.g., a design doc has been circulated.
+* Get security@chromium.org approval. Email the list with relevant details and
+  a link to the CL. Third party code is a hot spot for security vulnerabilities.
+  When adding a new package that could potentially carry security risk, make
+  sure to highlight risk to security@chromium.org. You may be asked to add
+  a README.security or, in dangerous cases, README.SECURITY.URGENTLY file.
+* Add chromium-third-party@google.com as a reviewer on your change. This
+  will trigger an automatic round-robin assignment of the review to an
+  appropriate reviewer. This list does not receive or deliver email, so only
+  use it as a reviewer, not for other communication.
 
-Please send separate emails to the three lists.
-
-Third party code is a hot spot for security vulnerabilities. When adding a new
-package that could potentially carry security risk, make sure to highlight risk
-to security@chromium.org. You may be asked to add a README.security or, in
-dangerous cases, README.SECURITY.URGENTLY file. When you update your code, be
-mindful of security-related mailing lists for the project and relevant CVE to
-update your package.
+Please send separate emails to the eng review and security lists.
 
 Subsequent changes don't require third-party-owners approval; you can modify the
-code as much as you want.
+code as much as you want. When you update code, be mindful of security-related
+mailing lists for the project and relevant CVE to update your package.
 
-## Ask the infrastructure team to add a git mirror for the dependency (or
-configure the git repo, if using googlesource.com)
+## Ask the infrastructure team to add a git mirror for the dependency
 
 Before committing the DEPS, you need to ask the infra team to create a git
 mirror for your dependency. [Create a

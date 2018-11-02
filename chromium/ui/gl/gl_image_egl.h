@@ -18,8 +18,6 @@ class GL_EXPORT GLImageEGL : public GLImage {
  public:
   explicit GLImageEGL(const gfx::Size& size);
 
-  bool Initialize(EGLenum target, EGLClientBuffer buffer, const EGLint* attrs);
-
   // Overridden from GLImage:
   gfx::Size GetSize() override;
   bool BindTexImage(unsigned target) override;
@@ -27,6 +25,20 @@ class GL_EXPORT GLImageEGL : public GLImage {
 
  protected:
   ~GLImageEGL() override;
+
+  // Same semantic as specified for eglCreateImageKHR. There two main usages:
+  // 1- When using the |target| EGL_GL_TEXTURE_2D_KHR it is required to pass
+  // a valid |context|. This allows to create an EGLImage from a GL texture.
+  // Then this EGLImage can be converted to an external resource to be shared
+  // with other client APIs.
+  // 2- When using the |target| EGL_NATIVE_PIXMAP_KHR or EGL_LINUX_DMA_BUF_EXT
+  // it is required to pass EGL_NO_CONTEXT. This allows to create an EGLImage
+  // from an external resource. Then this EGLImage can be converted to a GL
+  // texture.
+  bool Initialize(EGLContext context,
+                  EGLenum target,
+                  EGLClientBuffer buffer,
+                  const EGLint* attrs);
 
   EGLImageKHR egl_image_;
   const gfx::Size size_;

@@ -40,7 +40,6 @@
 #include "modules/indexeddb/IDBTracing.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8PerIsolateData.h"
-#include "platform/wtf/PtrUtil.h"
 
 #include <memory>
 
@@ -549,7 +548,7 @@ void IDBTransaction::EnqueueEvent(Event* event) {
 
   EventQueue* event_queue = GetExecutionContext()->GetEventQueue();
   event->SetTarget(this);
-  event_queue->EnqueueEvent(BLINK_FROM_HERE, event);
+  event_queue->EnqueueEvent(FROM_HERE, event);
 }
 
 void IDBTransaction::AbortOutstandingRequests() {

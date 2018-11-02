@@ -83,9 +83,8 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
       continue;
     String type_string = ToCoreStringWithNullCheck(type.As<v8::String>());
     if (type_string == "separator") {
-      ContextMenuItem item(ContextMenuItem(
+      menu.AppendItem(ContextMenuItem(
           kSeparatorType, kContextMenuItemCustomTagNoAction, String()));
-      menu.AppendItem(item);
     } else if (type_string == "subMenu" && sub_items->IsArray()) {
       ContextMenu sub_menu;
       v8::Local<v8::Array> sub_items_array =
@@ -94,9 +93,9 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
         return false;
       TOSTRING_DEFAULT(V8StringResource<kTreatNullAsNullString>, label_string,
                        label, false);
-      ContextMenuItem item(kSubmenuType, kContextMenuItemCustomTagNoAction,
-                           label_string, &sub_menu);
-      menu.AppendItem(item);
+      menu.AppendItem(ContextMenuItem(kSubmenuType,
+                                      kContextMenuItemCustomTagNoAction,
+                                      label_string, &sub_menu));
     } else {
       int32_t int32_id;
       if (!id->Int32Value(context).To(&int32_id))
@@ -135,7 +134,7 @@ void V8DevToolsHost::showContextMenuAtPointMethodCustom(
   if (exception_state.HadException())
     return;
 
-  v8::Local<v8::Value> array = v8::Local<v8::Value>::Cast(info[2]);
+  v8::Local<v8::Value> array = info[2];
   if (!array->IsArray())
     return;
   ContextMenu menu;
@@ -144,13 +143,8 @@ void V8DevToolsHost::showContextMenuAtPointMethodCustom(
     return;
 
   Document* document = nullptr;
-  if (info.Length() >= 4 && v8::Local<v8::Value>::Cast(info[3])->IsObject()) {
-    v8::Local<v8::Object> document_wrapper =
-        v8::Local<v8::Object>::Cast(info[3]);
-    if (!V8HTMLDocument::wrapperTypeInfo.Equals(
-            ToWrapperTypeInfo(document_wrapper)))
-      return;
-    document = V8HTMLDocument::ToImpl(document_wrapper);
+  if (info.Length() >= 4 && info[3]->IsObject()) {
+    document = V8HTMLDocument::ToImplWithTypeCheck(isolate, info[3]);
   } else {
     v8::Local<v8::Object> window_wrapper =
         V8Window::findInstanceInPrototypeChain(

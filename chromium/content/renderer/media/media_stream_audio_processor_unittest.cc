@@ -28,6 +28,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebMediaConstraints.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/webrtc/api/mediastreaminterface.h"
 #include "third_party/webrtc/rtc_base/refcountedobject.h"
 
@@ -247,7 +248,7 @@ TEST_F(MediaStreamAudioProcessorTest, MAYBE_WithAudioProcessing) {
 TEST_F(MediaStreamAudioProcessorTest, TurnOffDefaultConstraints) {
   AudioProcessingProperties properties;
   // Turn off the default constraints and pass it to MediaStreamAudioProcessor.
-  properties.DisableDefaultPropertiesForTesting();
+  properties.DisableDefaultProperties();
   scoped_refptr<WebRtcAudioDeviceImpl> webrtc_audio_device(
       new rtc::RefCountedObject<WebRtcAudioDeviceImpl>());
   scoped_refptr<MediaStreamAudioProcessor> audio_processor(
@@ -309,8 +310,9 @@ TEST_F(MediaStreamAudioProcessorTest, MAYBE_TestAllSampleRates) {
 // filter will be created.
 TEST_F(MediaStreamAudioProcessorTest, GetAecDumpMessageFilter) {
   scoped_refptr<AecDumpMessageFilter> aec_dump_message_filter_(
-      new AecDumpMessageFilter(base::ThreadTaskRunnerHandle::Get(),
-                               base::ThreadTaskRunnerHandle::Get()));
+      new AecDumpMessageFilter(
+          blink::scheduler::GetSingleThreadTaskRunnerForTesting(),
+          blink::scheduler::GetSingleThreadTaskRunnerForTesting()));
 
   scoped_refptr<WebRtcAudioDeviceImpl> webrtc_audio_device(
       new rtc::RefCountedObject<WebRtcAudioDeviceImpl>());
@@ -365,7 +367,7 @@ TEST_F(MediaStreamAudioProcessorTest, TestStereoAudio) {
       new rtc::RefCountedObject<WebRtcAudioDeviceImpl>());
   AudioProcessingProperties properties;
   // Turn off the audio processing and turn on the stereo channels mirroring.
-  properties.DisableDefaultPropertiesForTesting();
+  properties.DisableDefaultProperties();
   properties.goog_audio_mirroring = true;
   scoped_refptr<MediaStreamAudioProcessor> audio_processor(
       new rtc::RefCountedObject<MediaStreamAudioProcessor>(

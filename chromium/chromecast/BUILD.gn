@@ -34,6 +34,9 @@ group("all") {
   if (!is_android) {
     deps += [ ":cast_shell" ]
   }
+  if (is_linux) {
+    deps += [ "//chromecast/tracing" ]
+  }
   if (chromecast_branding != "public") {
     deps += [ "//chromecast/internal:all" ]
   }
@@ -372,6 +375,7 @@ if (is_android) {
     test_type = "junit"
     tests = [
       "//base:base_junit_tests",
+      "//chromecast/base:cast_base_junit_tests",
       "//chromecast/browser/android:cast_shell_junit_tests",
       "//content/public/android:content_junit_tests",
       "//net/android:net_junit_tests",
@@ -490,6 +494,18 @@ repack("cast_shell_pak") {
     "//ui/strings",
   ]
 
+  if (enable_chromecast_extensions) {
+    sources += [
+      "$root_gen_dir/extensions/extensions_renderer_resources.pak",
+      "$root_gen_dir/extensions/extensions_resources.pak",
+      "$root_gen_dir/extensions/shell/app_shell_resources.pak",
+    ]
+    deps += [
+      "//extensions:extensions_resources",
+      "//extensions/shell:resources",
+    ]
+  }
+
   if (chromecast_branding != "public") {
     sources += [ "$root_gen_dir/chromecast/internal/cast_shell_internal.pak" ]
 
@@ -514,7 +530,9 @@ foreach(locale, cast_locales) {
     ]
 
     if (chromecast_branding != "public") {
-      sources += [ "$root_gen_dir/chromecast/internal/webui/app_strings_${locale}.pak" ]
+      sources += [
+        "$root_gen_dir/chromecast/internal/webui/app_strings_${locale}.pak",
+      ]
       deps += [ "//chromecast/internal/webui:chromecast_app_strings" ]
 
       if (enable_chromecast_webui) {
@@ -540,9 +558,11 @@ buildflag_header("chromecast_features") {
     "ENABLE_VOLUME_TABLES_ACCESS=$enable_volume_tables_access",
     "IS_ANDROID_THINGS=$is_android_things",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
+    "IS_CAST_DESKTOP_BUILD=$is_cast_desktop_build",
     "IS_CAST_USING_CMA_BACKEND=$is_cast_using_cma_backend",
     "SUPPORTS_MULTIZONE=$supports_multizone",
     "ENABLE_HEADLESS_MUSIC_MODE=$enable_headless_music_mode",
+    "ENABLE_CHROMECAST_EXTENSIONS=$enable_chromecast_extensions",
   ]
 }
 
@@ -552,6 +572,7 @@ if (is_android) {
     output = "$root_gen_dir/chromecast/android/${target_name}.h"
     exception_files = jni_exception_files
   }
+
   android_assets("cast_shell_apk_assets") {
     assert(v8_use_external_startup_data)
 
@@ -560,10 +581,28 @@ if (is_android) {
     ]
 
     deps = [
+      ":cast_shell_apk_locale_assets",
       ":cast_shell_pak",
       "//third_party/icu:icu_assets",
       "//v8:v8_external_startup_data_assets",
     ]
+    disable_compression = true
+  }
+
+  android_assets("cast_shell_apk_locale_assets") {
+    renaming_sources = []
+    renaming_destinations = []
+
+    foreach(locale, cast_locales) {
+      renaming_sources += [ "$root_out_dir/chromecast_locales/${locale}.pak" ]
+      renaming_destinations += [ "stored-locales/${locale}.pak" ]
+    }
+
+    deps = [
+      ":chromecast_locales_pak",
+    ]
+
+    treat_as_locale_paks = true
     disable_compression = true
   }
 

@@ -34,13 +34,27 @@
 
 namespace blink {
 
+// static
+std::vector<unsigned> SecurityContext::SerializeInsecureNavigationSet(
+    const InsecureNavigationsSet& set) {
+  // The set is serialized as a sorted array. Sorting it makes it easy to know
+  // if two serialized sets are equal.
+  std::vector<unsigned> serialized;
+  serialized.reserve(set.size());
+  for (unsigned host : set)
+    serialized.push_back(host);
+  std::sort(serialized.begin(), serialized.end());
+
+  return serialized;
+}
+
 SecurityContext::SecurityContext()
     : sandbox_flags_(kSandboxNone),
-      address_space_(kWebAddressSpacePublic),
+      address_space_(mojom::IPAddressSpace::kPublic),
       insecure_request_policy_(kLeaveInsecureRequestsAlone),
       require_safe_types_(false) {}
 
-SecurityContext::~SecurityContext() {}
+SecurityContext::~SecurityContext() = default;
 
 void SecurityContext::Trace(blink::Visitor* visitor) {
   visitor->Trace(content_security_policy_);
@@ -61,25 +75,30 @@ void SecurityContext::EnforceSandboxFlags(SandboxFlags mask) {
   ApplySandboxFlags(mask);
 }
 
-void SecurityContext::ApplySandboxFlags(SandboxFlags mask) {
+void SecurityContext::ApplySandboxFlags(SandboxFlags mask,
+                                        bool is_potentially_trustworthy) {
   sandbox_flags_ |= mask;
 
   if (IsSandboxed(kSandboxOrigin) && GetSecurityOrigin() &&
       !GetSecurityOrigin()->IsUnique()) {
-    SetSecurityOrigin(SecurityOrigin::CreateUnique());
+    scoped_refptr<SecurityOrigin> security_origin =
+        SecurityOrigin::CreateUnique();
+    security_origin->SetUniqueOriginIsPotentiallyTrustworthy(
+        is_potentially_trustworthy);
+    SetSecurityOrigin(std::move(security_origin));
     DidUpdateSecurityOrigin();
   }
 }
 
 String SecurityContext::addressSpaceForBindings() const {
   switch (address_space_) {
-    case kWebAddressSpacePublic:
+    case mojom::IPAddressSpace::kPublic:
       return "public";
 
-    case kWebAddressSpacePrivate:
+    case mojom::IPAddressSpace::kPrivate:
       return "private";
 
-    case kWebAddressSpaceLocal:
+    case mojom::IPAddressSpace::kLocal:
       return "local";
   }
   NOTREACHED();

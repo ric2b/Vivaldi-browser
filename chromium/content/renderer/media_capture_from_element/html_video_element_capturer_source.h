@@ -40,11 +40,13 @@ class CONTENT_EXPORT HtmlVideoElementCapturerSource final
   static std::unique_ptr<HtmlVideoElementCapturerSource>
   CreateFromWebMediaPlayerImpl(
       blink::WebMediaPlayer* player,
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
 
   HtmlVideoElementCapturerSource(
       const base::WeakPtr<blink::WebMediaPlayer>& player,
-      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner);
+      const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
   ~HtmlVideoElementCapturerSource() override;
 
   // media::VideoCapturerSource Implementation.
@@ -65,11 +67,15 @@ class CONTENT_EXPORT HtmlVideoElementCapturerSource final
 
   const base::WeakPtr<blink::WebMediaPlayer> web_media_player_;
   const scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
+  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // These three configuration items are passed on StartCapture();
   RunningCallback running_callback_;
   VideoCaptureDeliverFrameCB new_frame_callback_;
   double capture_frame_rate_;
+
+  // TimeTicks on which the first captured VideoFrame is produced.
+  base::TimeTicks start_capture_time_;
 
   // Target time for the next frame.
   base::TimeTicks next_capture_time_;

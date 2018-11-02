@@ -16,7 +16,6 @@
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
@@ -239,9 +238,8 @@ int main(int argc, char** argv) {
   // Running transport on the main thread.
   scoped_refptr<media::cast::CastEnvironment> cast_environment(
       new media::cast::CastEnvironment(
-          base::WrapUnique<base::TickClock>(new base::DefaultTickClock()),
-          io_message_loop.task_runner(), audio_thread.task_runner(),
-          video_thread.task_runner()));
+          base::DefaultTickClock::GetInstance(), io_message_loop.task_runner(),
+          audio_thread.task_runner(), video_thread.task_runner()));
 
   // SendProcess initialization.
   std::unique_ptr<media::cast::FakeMediaSource> fake_media_source(
@@ -266,8 +264,8 @@ int main(int argc, char** argv) {
   std::unique_ptr<media::cast::CastTransport> transport_sender =
       media::cast::CastTransport::Create(
           cast_environment->Clock(), base::TimeDelta::FromSeconds(1),
-          base::MakeUnique<TransportClient>(cast_environment->logger()),
-          base::MakeUnique<media::cast::UdpTransport>(
+          std::make_unique<TransportClient>(cast_environment->logger()),
+          std::make_unique<media::cast::UdpTransport>(
               nullptr, io_message_loop.task_runner(), net::IPEndPoint(),
               remote_endpoint, base::Bind(&UpdateCastTransportStatus)),
           io_message_loop.task_runner());

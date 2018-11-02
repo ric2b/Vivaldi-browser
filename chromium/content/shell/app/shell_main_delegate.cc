@@ -180,6 +180,7 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
       return true;
     }
 #endif
+    command_line.AppendSwitch(switches::kDisableResizeLock);
     command_line.AppendSwitch(cc::switches::kEnableGpuBenchmarking);
     command_line.AppendSwitch(switches::kEnableLogging);
     command_line.AppendSwitch(switches::kAllowFileAccessFromFiles);
@@ -196,7 +197,12 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
         switches::kTouchEventFeatureDetectionEnabled);
     if (!command_line.HasSwitch(switches::kForceDeviceScaleFactor))
       command_line.AppendSwitchASCII(switches::kForceDeviceScaleFactor, "1.0");
-    command_line.AppendSwitch(switches::kIgnoreAutoplayRestrictionsForTests);
+
+    if (!command_line.HasSwitch(switches::kAutoplayPolicy)) {
+      command_line.AppendSwitchASCII(
+          switches::kAutoplayPolicy,
+          switches::autoplay::kNoUserGestureRequiredPolicy);
+    }
 
     if (!command_line.HasSwitch(switches::kStableReleaseMode)) {
       command_line.AppendSwitch(
@@ -206,10 +212,6 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
     if (!command_line.HasSwitch(switches::kEnableThreadedCompositing)) {
       command_line.AppendSwitch(switches::kDisableThreadedCompositing);
       command_line.AppendSwitch(cc::switches::kDisableThreadedAnimation);
-    }
-
-    if (!command_line.HasSwitch(switches::kEnableDisplayList2dCanvas)) {
-      command_line.AppendSwitch(switches::kDisableDisplayList2dCanvas);
     }
 
     command_line.AppendSwitch(switches::kEnableInbandTextTracks);

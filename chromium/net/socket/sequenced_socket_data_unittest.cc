@@ -12,6 +12,7 @@
 #include "net/base/test_completion_callback.h"
 #include "net/log/net_log_with_source.h"
 #include "net/socket/client_socket_handle.h"
+#include "net/socket/socket_tag.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/transport_client_socket_pool.h"
 #include "net/test/gtest_util.h"
@@ -267,7 +268,7 @@ void SequencedSocketDataTest::Initialize(MockRead* reads,
 
   EXPECT_EQ(OK,
             connection_.Init(
-                endpoint_.ToString(), tcp_params_, LOWEST,
+                endpoint_.ToString(), tcp_params_, LOWEST, SocketTag(),
                 ClientSocketPool::RespectLimits::ENABLED, CompletionCallback(),
                 reinterpret_cast<TransportClientSocketPool*>(&socket_pool_),
                 NetLogWithSource()));
@@ -671,8 +672,8 @@ TEST_F(SequencedSocketDataTest, SingleSyncWriteTooSmall) {
 
   static const char* kExpectedFailures[] = {
       "Expected: (data.length()) >= (expected_data.length())",
-      "To be equal to: actual_data",
-      "To be equal to: sock_->Write(buf.get(), len, failing_callback_)"};
+      "Value of: actual_data == expected_data\n  Actual: false\nExpected: true",
+      "Expected equality of these values:\n  rv"};
   ASSERT_EQ(arraysize(kExpectedFailures),
             static_cast<size_t>(gtest_failures.size()));
 

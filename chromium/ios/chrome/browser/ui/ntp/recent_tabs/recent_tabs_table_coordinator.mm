@@ -71,7 +71,7 @@
 
 - (instancetype)initWithController:(RecentTabsTableViewController*)controller
                       browserState:(ios::ChromeBrowserState*)browserState {
-  self = [super initWithBaseViewController:nil];
+  self = [super initWithBaseViewController:nil browserState:browserState];
   if (self) {
     DCHECK(controller);
     DCHECK(browserState);
@@ -168,12 +168,12 @@
 - (void)initObservers {
   if (!_syncedSessionsObserver) {
     _syncedSessionsObserver =
-        base::MakeUnique<synced_sessions::SyncedSessionsObserverBridge>(
+        std::make_unique<synced_sessions::SyncedSessionsObserverBridge>(
             self, _browserState);
   }
   if (!_closedTabsObserver) {
     _closedTabsObserver =
-        base::MakeUnique<recent_tabs::ClosedTabsObserverBridge>(self);
+        std::make_unique<recent_tabs::ClosedTabsObserverBridge>(self);
     sessions::TabRestoreService* restoreService =
         IOSChromeTabRestoreServiceFactory::GetForBrowserState(_browserState);
     if (restoreService)
@@ -249,6 +249,11 @@
 
 - (void)recentTabsTableViewContentMoved:(UITableView*)tableView {
   [self.delegate updateNtpBarShadowForPanelController:self];
+}
+
+- (void)refreshSessionsViewRecentTabsTableViewController:
+    (RecentTabsTableViewController*)controller {
+  [self refreshSessionsView];
 }
 
 @end

@@ -8,6 +8,24 @@
     "description": "Use the <code>vivaldi.showMenu</code> API to show a popup-menu.",
     "types": [
       {
+        "id": "ContainerType",
+        "type": "string",
+        "description": "Defines content of a container",
+        "enum": [ "bookmarks", "history" ]
+      },
+      {
+        "id": "SortOrder",
+        "type": "string",
+        "description": "Defines how to sort container items.",
+        "enum": [ "ascending", "descending" ]
+      },
+      {
+        "id": "SortField",
+        "type": "string",
+        "description": "Defines what element to use as sort key",
+        "enum": [ "title", "url", "nickname", "description", "dateadded" ]
+      },
+      {
         "id": "MenuItem",
         "type": "object",
         "description": "One menu item.",
@@ -71,10 +89,51 @@
             "optional": true,
             "description": "Parameter to command. Sent back unaltered."
           },
+          "index": {
+            "type": "integer",
+            "optional": true,
+            "description": "Index in menu list. Can only be used insert into an existing list"
+          },
+          "containerType": {
+            "$ref": "ContainerType",
+            "optional": true,
+            "description": "What data to place in the container"
+          },
+          "containerId": {
+            "type": "integer",
+            "optional": true,
+            "description": "An id that tells what folder to expand"
+          },
+          "containerOffset": {
+            "type": "integer",
+            "optional": true,
+            "description": "Offset into folder specified by containerId"
+          },
+          "containerGroupFolders": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Place folders at end of list in sorted mode. Folders in subfolders will always be grouped."
+          },
+          "containerSortField": {
+            "$ref": "SortField",
+            "optional": true,
+            "description": "Sort key for items in container"
+          },
+          "containerSortOrder": {
+            "$ref": "SortOrder",
+            "optional": true,
+            "description": "Sortorder"
+          },
+          "containerIcons": {
+            "type": "array",
+            "items": { "type": "string" },
+            "optional": true,
+            "description": "Icons in PNG format encoded as base64. For containers that need many"
+          },
           "icon": {
             "type": "string",
             "optional": true,
-            "description": "Icon in PNG format encoded as base64"
+            "description": "Icon in PNG format encoded as base64."
           }
         }
       },
@@ -184,6 +243,30 @@
             "name": "url",
             "type": "string",
             "description": "Url in menu item"
+          }
+        ]
+      },
+      {
+        "name": "onBookmarkActivated",
+        "type": "function",
+        "description": "Fired when a bookmark menu item is activated",
+        "parameters": [
+          {
+            "$ref": "Response",
+            "name": "response",
+            "description": "Identifier and event state"
+          }
+        ]
+      },
+      {
+        "name": "onAddBookmark",
+        "type": "function",
+        "description": "Fired when the current page shall be bookmarked",
+        "parameters": [
+          {
+            "name": "id",
+            "type": "integer",
+            "description": "Folder id where bookmark shall be added"
           }
         ]
       }

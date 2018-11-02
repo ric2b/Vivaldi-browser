@@ -5,6 +5,7 @@
 #include "core/inspector/ThreadDebugger.h"
 
 #include <memory>
+#include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8Blob.h"
@@ -36,7 +37,7 @@ ThreadDebugger::ThreadDebugger(v8::Isolate* isolate)
       v8_inspector_(v8_inspector::V8Inspector::create(isolate, this)),
       v8_tracing_cpu_profiler_(v8::TracingCpuProfiler::Create(isolate)) {}
 
-ThreadDebugger::~ThreadDebugger() {}
+ThreadDebugger::~ThreadDebugger() = default;
 
 // static
 ThreadDebugger* ThreadDebugger::From(v8::Isolate* isolate) {
@@ -79,7 +80,7 @@ void ThreadDebugger::IdleFinished(v8::Isolate* isolate) {
     debugger->GetV8Inspector()->idleFinished();
 }
 
-void ThreadDebugger::AsyncTaskScheduled(const String& operation_name,
+void ThreadDebugger::AsyncTaskScheduled(const StringView& operation_name,
                                         void* task,
                                         bool recurring) {
   DCHECK_EQ(reinterpret_cast<intptr_t>(task) % 2, 0);
@@ -107,7 +108,7 @@ void ThreadDebugger::AsyncTaskFinished(void* task) {
 }
 
 v8_inspector::V8StackTraceId ThreadDebugger::StoreCurrentStackTrace(
-    const String& description) {
+    const StringView& description) {
   return v8_inspector_->storeCurrentStackTrace(
       ToV8InspectorStringView(description));
 }
@@ -277,10 +278,10 @@ void ThreadDebugger::installAdditionalCommandLineAPI(
   v8::Local<v8::Value> function_value;
   bool success =
       V8ScriptRunner::CompileAndRunInternalScript(
-          ScriptState::From(context),
-
-          V8String(isolate_, "(function(e) { console.log(e.type, e); })"),
-          isolate_)
+          isolate_, ScriptState::From(context),
+          ScriptSourceCode("(function(e) { console.log(e.type, e); })",
+                           ScriptSourceLocationType::kInternal, nullptr, KURL(),
+                           TextPosition()))
           .ToLocal(&function_value) &&
       function_value->IsFunction();
   DCHECK(success);
@@ -486,7 +487,7 @@ void ThreadDebugger::startRepeatingTimer(
       new Timer<ThreadDebugger>(this, &ThreadDebugger::OnTimer));
   Timer<ThreadDebugger>* timer_ptr = timer.get();
   timers_.push_back(std::move(timer));
-  timer_ptr->StartRepeating(TimeDelta::FromSecondsD(interval), BLINK_FROM_HERE);
+  timer_ptr->StartRepeating(TimeDelta::FromSecondsD(interval), FROM_HERE);
 }
 
 void ThreadDebugger::cancelTimer(void* data) {

@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "chromecast/browser/cast_web_contents_manager.h"
 #include "content/public/browser/web_contents.h"
@@ -43,7 +42,7 @@ CastServiceSimple::CastServiceSimple(content::BrowserContext* browser_context,
     : CastService(browser_context, pref_service),
       window_manager_(window_manager),
       web_contents_manager_(
-          base::MakeUnique<CastWebContentsManager>(browser_context)) {
+          std::make_unique<CastWebContentsManager>(browser_context)) {
   DCHECK(window_manager_);
 }
 
@@ -64,7 +63,8 @@ void CastServiceSimple::StartInternal() {
 
   cast_web_view_ = web_contents_manager_->CreateWebView(
       this, /*site_instance*/ nullptr, /*transparent*/ false,
-      false /*allow_media_access*/, /*is_headless*/ false);
+      false /*allow_media_access*/, /*is_headless*/ false,
+      /*enable_touch_input*/ false);
   cast_web_view_->LoadUrl(startup_url_);
   cast_web_view_->Show(window_manager_);
 }

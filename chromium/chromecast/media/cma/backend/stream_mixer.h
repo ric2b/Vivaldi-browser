@@ -264,7 +264,7 @@ class StreamMixer {
   bool TryWriteFrames();
   void WriteMixedPcm(int frames);
   void UpdateRenderingDelay(int newly_pushed_frames);
-  void ResizeBuffersIfNecessary(int chunk_size);
+  void ResizeBuffersIfNecessary(int num_frames);
 
   // Sets active channel in multichannel group.
   void UpdatePlayoutChannel();
@@ -281,6 +281,7 @@ class StreamMixer {
   int requested_output_samples_per_second_ = 0;
   int output_samples_per_second_ = 0;
   int low_sample_rate_cutoff_ = 0;
+  int fixed_sample_rate_ = 0;
 
   State state_;
 

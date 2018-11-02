@@ -19,10 +19,12 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestInputMethodManagerWrapper;
+import org.chromium.content_public.browser.ImeAdapter;
 
 /**
  * Tests for IME (input method editor) on Android WebView.
@@ -64,10 +66,9 @@ public class AwImeTest {
             mTestContainerView.getAwContents().addJavascriptInterface(
                     mTestJavascriptInterface, "test");
             // Let's not test against real input method.
-            mInputMethodManagerWrapper = new TestInputMethodManagerWrapper(
-                    mTestContainerView.getContentViewCore());
-            mTestContainerView.getContentViewCore().getImeAdapterForTest()
-                    .setInputMethodManagerWrapperForTest(mInputMethodManagerWrapper);
+            ImeAdapter imeAdapter = ImeAdapter.fromWebContents(mTestContainerView.getWebContents());
+            imeAdapter.setInputMethodManagerWrapperForTest(
+                    TestInputMethodManagerWrapper.create(imeAdapter));
         });
     }
 
@@ -113,8 +114,7 @@ public class AwImeTest {
     }
 
     private InputConnection getInputConnection() {
-        return mTestContainerView.getContentViewCore()
-                .getImeAdapterForTest()
+        return ImeAdapter.fromWebContents(mTestContainerView.getWebContents())
                 .getInputConnectionForTest();
     }
 
@@ -146,12 +146,22 @@ public class AwImeTest {
      * keydown event.
      */
     // https://crbug.com/787651
+    // Flaky! - https://crbug.com/795423
     @Test
-    @SmallTest
+    // @SmallTest
+    @DisabledTest
     public void testImeDpadMovesFocusOutOfWebView() throws Throwable {
         loadContentEditableBody();
+        focusOnEditTextAndShowKeyboard();
         focusOnWebViewAndEnableEditing();
         waitForNonNullInputConnection();
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return mActivityTestRule.getActivity().getCurrentFocus() == mTestContainerView;
+            }
+        });
 
         ThreadUtils.runOnUiThreadBlocking((Runnable) () -> {
             getInputConnection().sendKeyEvent(
@@ -174,8 +184,16 @@ public class AwImeTest {
     @SmallTest
     public void testDpadDispatchKeyEventMovesFocusOutOfWebView() throws Throwable {
         loadContentEditableBody();
+        focusOnEditTextAndShowKeyboard();
         focusOnWebViewAndEnableEditing();
         waitForNonNullInputConnection();
+
+        CriteriaHelper.pollUiThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return mActivityTestRule.getActivity().getCurrentFocus() == mTestContainerView;
+            }
+        });
 
         ThreadUtils.runOnUiThreadBlocking(() -> {
             mTestContainerView.dispatchKeyEvent(

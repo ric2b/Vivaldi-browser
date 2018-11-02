@@ -6,8 +6,9 @@
 
 #include <type_traits>
 #include "bindings/core/v8/NativeValueTraitsImpl.h"
+#include "bindings/core/v8/V8Element.h"
 #include "bindings/core/v8/V8InternalDictionary.h"
-#include "bindings/core/v8/dictionary_sequence_or_dictionary.h"
+#include "bindings/core/v8/string_or_string_sequence.h"
 #include "core/dom/Element.h"
 #include "platform/heap/Handle.h"
 
@@ -113,10 +114,9 @@ static_assert(std::is_same<IDLSequence<Element>::ImplType,
 static_assert(std::is_same<IDLSequence<InternalDictionary>::ImplType,
                            HeapVector<InternalDictionary>>::value,
               "IDLSequence<dictionary type> produces a HeapVector");
-static_assert(
-    std::is_same<IDLSequence<DictionarySequenceOrDictionary>::ImplType,
-                 HeapVector<DictionarySequenceOrDictionary>>::value,
-    "IDLSequence<union type> produces a HeapVector");
+static_assert(std::is_same<IDLSequence<StringOrStringSequence>::ImplType,
+                           HeapVector<StringOrStringSequence>>::value,
+              "IDLSequence<union type> produces a HeapVector");
 
 static_assert(std::is_base_of<IDLBase, IDLRecord<IDLString, IDLShort>>::value,
               "IDLRecord inherits from IDLBase");
@@ -135,10 +135,22 @@ static_assert(
     "IDLRecord<IDLUSVString, dictionary type> produces a HeapVector with no "
     "Member<>");
 static_assert(
-    std::is_same<
-        IDLRecord<IDLString, DictionarySequenceOrDictionary>::ImplType,
-        HeapVector<std::pair<String, DictionarySequenceOrDictionary>>>::value,
+    std::is_same<IDLRecord<IDLString, StringOrStringSequence>::ImplType,
+                 HeapVector<std::pair<String, StringOrStringSequence>>>::value,
     "IDLRecord<IDLString, union type> produces a HeapVector with no Member<>");
+
+static_assert(std::is_base_of<IDLBase, IDLNullable<IDLDouble>>::value,
+              "IDLNullable should have IDLBase as a base class");
+static_assert(std::is_same<IDLNullable<IDLDouble>::ResultType,
+                           WTF::Optional<double>>::value,
+              "double? corresponds to Optional<double>");
+static_assert(std::is_same<IDLNullable<Element>::ResultType, Element*>::value,
+              "Element? doesn't require an Optional<> wrapper");
+static_assert(std::is_same<IDLNullable<IDLString>::ResultType, String>::value,
+              "DOMString? doesn't require an Optional<> wrapper");
+static_assert(std::is_same<IDLNullable<StringOrStringSequence>::ResultType,
+                           StringOrStringSequence>::value,
+              "(union type)? doesn't require an Optional<> wrapper");
 
 }  // namespace
 

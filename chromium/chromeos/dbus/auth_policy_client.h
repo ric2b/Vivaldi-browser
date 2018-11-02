@@ -32,7 +32,9 @@ class CHROMEOS_EXPORT AuthPolicyClient : public DBusClient {
   using GetUserKerberosFilesCallback =
       base::OnceCallback<void(authpolicy::ErrorType error,
                               const authpolicy::KerberosFiles& kerberos_files)>;
-  using JoinCallback = base::OnceCallback<void(authpolicy::ErrorType error)>;
+  using JoinCallback =
+      base::OnceCallback<void(authpolicy::ErrorType error,
+                              const std::string& machine_domain)>;
   using RefreshPolicyCallback =
       base::OnceCallback<void(authpolicy::ErrorType error)>;
 
@@ -58,9 +60,9 @@ class CHROMEOS_EXPORT AuthPolicyClient : public DBusClient {
       AuthCallback callback) = 0;
 
   // Calls GetUserStatus. If Active Directory server is online it fetches
-  // ActiveDirectoryUserStatus for the user specified by |object_guid|.
+  // ActiveDirectoryUserStatus for the user specified by |request|.
   // |callback| is called after getting (or failing to get) D-Bus response.
-  virtual void GetUserStatus(const std::string& object_guid,
+  virtual void GetUserStatus(const authpolicy::GetUserStatusRequest& request,
                              GetUserStatusCallback callback) = 0;
 
   // Calls GetUserKerberosFiles. If authpolicyd has Kerberos files for the user

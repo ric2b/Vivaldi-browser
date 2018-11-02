@@ -16,6 +16,7 @@
 #include "net/socket/socket_performance_watcher.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/socket/stream_socket.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -42,7 +43,10 @@ class TestUDPClientSocket : public DatagramClientSocket {
     NOTIMPLEMENTED();
     return OK;
   }
-  int Write(IOBuffer*, int, const CompletionCallback&) override {
+  int Write(IOBuffer*,
+            int,
+            const CompletionCallback&,
+            const NetworkTrafficAnnotationTag& traffic_annotation) override {
     NOTIMPLEMENTED();
     return OK;
   }
@@ -74,6 +78,7 @@ class TestUDPClientSocket : public DatagramClientSocket {
   NetworkChangeNotifier::NetworkHandle GetBoundNetwork() const override {
     return NetworkChangeNotifier::kInvalidNetworkHandle;
   }
+  void ApplySocketTag(const SocketTag& tag) override {}
 
   int Connect(const IPEndPoint& remote) override {
     if (connected_)

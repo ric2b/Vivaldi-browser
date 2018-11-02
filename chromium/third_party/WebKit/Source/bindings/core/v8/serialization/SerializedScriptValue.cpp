@@ -45,8 +45,8 @@
 #include "bindings/core/v8/serialization/Transferables.h"
 #include "bindings/core/v8/serialization/UnpackedSerializedScriptValue.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/MessagePort.h"
 #include "core/imagebitmap/ImageBitmap.h"
+#include "core/messaging/MessagePort.h"
 #include "core/typed_arrays/DOMArrayBuffer.h"
 #include "core/typed_arrays/DOMSharedArrayBuffer.h"
 #include "platform/SharedBuffer.h"
@@ -58,7 +58,6 @@
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/ByteOrder.h"
 #include "platform/wtf/CheckedNumeric.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/dtoa/utils.h"
 #include "platform/wtf/text/StringBuffer.h"
@@ -298,19 +297,6 @@ String SerializedScriptValue::ToWireString() const {
   return wire_string;
 }
 
-void SerializedScriptValue::ToWireBytes(Vector<char>& result) const {
-  DCHECK(result.IsEmpty());
-
-  size_t result_size = (data_buffer_size_ + 1) & ~1;
-  result.resize(result_size);
-  memcpy(result.data(), data_buffer_.get(), data_buffer_size_);
-
-  if (result_size > data_buffer_size_) {
-    DCHECK_EQ(result_size, data_buffer_size_ + 1);
-    result[data_buffer_size_] = 0;
-  }
-}
-
 SerializedScriptValue::ImageBitmapContentsArray
 SerializedScriptValue::TransferImageBitmapContents(
     v8::Isolate* isolate,
@@ -417,15 +403,16 @@ bool SerializedScriptValue::ExtractTransferables(
   if (value.IsEmpty() || value->IsUndefined())
     return true;
 
-  Vector<v8::Local<v8::Value>> transferable_array =
-      NativeValueTraits<IDLSequence<v8::Local<v8::Value>>>::NativeValue(
-          isolate, value, exception_state);
+  Vector<ScriptValue> transferable_array =
+      NativeValueTraits<IDLSequence<ScriptValue>>::NativeValue(isolate, value,
+                                                               exception_state);
   if (exception_state.HadException())
     return false;
 
   // Validate the passed array of transferables.
   uint32_t i = 0;
-  for (const auto& transferable_object : transferable_array) {
+  for (const auto& script_value : transferable_array) {
+    v8::Local<v8::Value> transferable_object = script_value.V8Value();
     // Validation of non-null objects, per HTML5 spec 10.3.3.
     if (IsUndefinedOrNull(transferable_object)) {
       exception_state.ThrowTypeError(

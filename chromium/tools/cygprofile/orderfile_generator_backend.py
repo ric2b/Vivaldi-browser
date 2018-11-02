@@ -14,10 +14,10 @@ Example usage:
     --target-arch=arm
 """
 
+import argparse
 import hashlib
 import json
 import logging
-import optparse
 import os
 import re
 import shutil
@@ -27,8 +27,10 @@ import tempfile
 import time
 
 import cygprofile_utils
+import patch_orderfile
 import process_profiles
 import profile_android_startup
+import symbol_extractor
 
 
 _SRC_PATH = os.path.join(os.path.dirname(os.path.realpath(__file__)),
@@ -423,8 +425,6 @@ class OrderfileGenerator(object):
   _CYGLOG_TO_ORDERFILE_SCRIPT = os.path.join(
       constants.DIR_SOURCE_ROOT, 'tools', 'cygprofile',
       'cyglog_to_orderfile.py')
-  _PATCH_ORDERFILE_SCRIPT = os.path.join(
-      constants.DIR_SOURCE_ROOT, 'tools', 'cygprofile', 'patch_orderfile.py')
   _CHECK_ORDERFILE_SCRIPT = os.path.join(
       constants.DIR_SOURCE_ROOT, 'tools', 'cygprofile', 'check_orderfile.py')
   _BUILD_ROOT = os.path.abspath(os.path.dirname(os.path.dirname(
@@ -434,8 +434,6 @@ class OrderfileGenerator(object):
       _CLANK_REPO, 'orderfiles', 'unpatched_orderfile.%s')
   _MERGED_CYGLOG_FILENAME = os.path.join(
       constants.GetOutDirectory(), 'merged_cyglog')
-  _TEMP_ORDERFILE_FILENAME = os.path.join(
-      constants.GetOutDirectory(), 'tmp_orderfile')
 
   _PATH_TO_ORDERFILE = os.path.join(_CLANK_REPO, 'orderfiles',
                                     'orderfile.%s.out')
@@ -460,8 +458,22 @@ class OrderfileGenerator(object):
         self._BUILD_ROOT, self._options.arch + '_uninstrumented_out')
 
     if options.profile:
+      output_directory = os.path.join(self._instrumented_out_dir, 'Release')
+      host_cyglog_dir = os.path.join(output_directory, 'cyglog_data')
+      # Only override the defaults when using lightweight instrumentation,
+      # as the regular profiling code is likely too slow for these.
+      urls = [profile_android_startup.AndroidProfileTool.TEST_URL]
+      use_wpr = True
+      simulate_user = False
+      if options.simulate_user and not options.lightweight_instrumentation:
+        logging.error(
+            '--simulate-user required --lightweight-instrumentation, ignoring.')
+      if options.lightweight_instrumentation:
+        urls = options.urls
+        use_wpr = not options.no_wpr
+        simulate_user = options.simulate_user
       self._profiler = profile_android_startup.AndroidProfileTool(
-          os.path.join(self._instrumented_out_dir, 'Release'))
+          output_directory, host_cyglog_dir, use_wpr, urls, simulate_user)
 
     self._output_data = {}
     self._step_recorder = StepRecorder(options.buildbot)
@@ -472,6 +484,7 @@ class OrderfileGenerator(object):
                                                       options.branch,
                                                       options.netrc)
     assert os.path.isdir(constants.DIR_SOURCE_ROOT), 'No src directory found'
+    symbol_extractor.SetArchitecture(options.arch)
 
   def _RunCygprofileUnitTests(self):
     """Builds, deploys and runs cygprofile_unittests."""
@@ -567,25 +580,9 @@ class OrderfileGenerator(object):
   def _PatchOrderfile(self):
     """Patches the orderfile using clean version of libchrome.so."""
     self._step_recorder.BeginStep('Patch Orderfile')
-    try:
-      tmp_out = open(self._TEMP_ORDERFILE_FILENAME, 'w')
-      self._step_recorder.RunCommand([self._PATCH_ORDERFILE_SCRIPT,
-                                      self._GetUnpatchedOrderfileFilename(),
-                                      self._compiler.lib_chrome_so,
-                                      '--target-arch=' + self._options.arch],
-                                     constants.DIR_SOURCE_ROOT, stdout=tmp_out)
-      tmp_out.close()
-
-      self._RemoveBlanks(self._TEMP_ORDERFILE_FILENAME,
-                         self._GetPathToOrderfile())
-    except CommandError:
-      self._SaveForDebugging(self._GetUnpatchedOrderfileFilename())
-      self._SaveForDebuggingWithOverwrite(self._compiler.lib_chrome_so)
-      raise
-    finally:
-      tmp_out.close()
-      if os.path.isfile(self._TEMP_ORDERFILE_FILENAME):
-        os.unlink(self._TEMP_ORDERFILE_FILENAME)
+    patch_orderfile.GeneratePatchedOrderfile(
+        self._GetUnpatchedOrderfileFilename(), self._compiler.lib_chrome_so,
+        self._GetPathToOrderfile())
 
   def _VerifySymbolOrder(self):
     self._step_recorder.BeginStep('Verify Symbol Order')
@@ -742,47 +739,50 @@ class OrderfileGenerator(object):
     return self._output_data
 
 
-def CreateOptionParser():
-  parser = optparse.OptionParser()
-  parser.add_option(
-      '--lightweight-instrumentation', action='store_true', default=False,
-      help='Use the lightweight instrumentation path')
-  parser.add_option(
+def CreateArgumentParser():
+  """Creates and returns the argument parser."""
+  parser = argparse.ArgumentParser()
+  parser.add_argument(
+      '--regular-instrumentation', action='store_false',
+      dest='lightweight_instrumentation',
+      help='Use the regular instrumentation path')
+  parser.add_argument(
       '--buildbot', action='store_true',
       help='If true, the script expects to be run on a buildbot')
-  parser.add_option(
+  parser.add_argument(
       '--verify', action='store_true',
       help='If true, the script only verifies the current orderfile')
-  parser.add_option('--target-arch', action='store', dest='arch',
-                    default=cygprofile_utils.DetectArchitecture(),
-                    choices=['arm', 'arm64', 'x86', 'x86_64', 'x64', 'mips'],
-                    help='The target architecture for which to build')
-  parser.add_option('--output-json', action='store', dest='json_file',
-                    help='Location to save stats in json format')
-  parser.add_option(
+  parser.add_argument('--target-arch', action='store', dest='arch',
+                      default=cygprofile_utils.DetectArchitecture(),
+                      choices=['arm', 'arm64', 'x86', 'x86_64', 'x64', 'mips'],
+                      help='The target architecture for which to build')
+  parser.add_argument('--output-json', action='store', dest='json_file',
+                      help='Location to save stats in json format')
+  parser.add_argument(
       '--skip-profile', action='store_false', dest='profile', default=True,
       help='Don\'t generate a profile on the device. Only patch from the '
       'existing profile.')
-  parser.add_option(
+  parser.add_argument(
       '--skip-patch', action='store_false', dest='patch', default=True,
       help='Only generate the raw (unpatched) orderfile, don\'t patch it.')
-  parser.add_option(
+  parser.add_argument(
       '--netrc', action='store',
       help='A custom .netrc file to use for git checkin. Only used on bots.')
-  parser.add_option(
+  parser.add_argument(
       '--branch', action='store', default='master',
       help='When running on buildbot with a netrc, the branch orderfile '
       'hashes get checked into.')
   # Note: -j50 was causing issues on the bot.
-  parser.add_option(
+  parser.add_argument(
       '-j', '--jobs', action='store', default=20,
       help='Number of jobs to use for compilation.')
-  parser.add_option(
+  parser.add_argument(
       '-l', '--max-load', action='store', default=4, help='Max cpu load.')
-  parser.add_option('--goma-dir', help='GOMA directory.')
-  parser.add_option(
+  parser.add_argument('--goma-dir', help='GOMA directory.')
+  parser.add_argument(
       '--use-goma', action='store_true', help='Enable GOMA.', default=False)
-  parser.add_option('--adb-path', help='Path to the adb binary.')
+  parser.add_argument('--adb-path', help='Path to the adb binary.')
+  profile_android_startup.AddProfileCollectionArguments(parser)
   return parser
 
 
@@ -815,11 +815,11 @@ def CreateOrderfile(options, orderfile_updater_class):
   return False
 
 
-def main(argv):
-  parser = CreateOptionParser()
-  options, _ = parser.parse_args(argv)
+def main():
+  parser = CreateArgumentParser()
+  options = parser.parse_args()
   return 0 if CreateOrderfile(options, OrderfileUpdater) else 1
 
 
 if __name__ == '__main__':
-  sys.exit(main(sys.argv))
+  sys.exit(main())

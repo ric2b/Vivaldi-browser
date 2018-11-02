@@ -18,9 +18,10 @@
 #include "storage/browser/fileapi/file_system_usage_cache.h"
 #include "storage/browser/fileapi/sandbox_file_system_backend.h"
 #include "storage/common/fileapi/file_system_util.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
-using storage::StorageType;
+using blink::mojom::StorageType;
 
 namespace storage {
 
@@ -58,19 +59,19 @@ void DidGetOrigins(const storage::QuotaClient::GetOriginsCallback& callback,
   callback.Run(*origins_ptr);
 }
 
-storage::QuotaStatusCode DeleteOriginOnFileTaskRunner(
+blink::mojom::QuotaStatusCode DeleteOriginOnFileTaskRunner(
     FileSystemContext* context,
     const GURL& origin,
     FileSystemType type) {
   FileSystemBackend* provider = context->GetFileSystemBackend(type);
   if (!provider || !provider->GetQuotaUtil())
-    return storage::kQuotaErrorNotSupported;
+    return blink::mojom::QuotaStatusCode::kErrorNotSupported;
   base::File::Error result =
       provider->GetQuotaUtil()->DeleteOriginDataOnFileTaskRunner(
           context, context->quota_manager_proxy(), origin, type);
   if (result == base::File::FILE_OK)
-    return storage::kQuotaStatusOk;
-  return storage::kQuotaErrorInvalidModification;
+    return blink::mojom::QuotaStatusCode::kOk;
+  return blink::mojom::QuotaStatusCode::kErrorInvalidModification;
 }
 
 }  // namespace
@@ -177,8 +178,7 @@ void FileSystemQuotaClient::DeleteOriginData(
       callback);
 }
 
-bool FileSystemQuotaClient::DoesSupport(
-    storage::StorageType storage_type) const {
+bool FileSystemQuotaClient::DoesSupport(StorageType storage_type) const {
   FileSystemType type = QuotaStorageTypeToFileSystemType(storage_type);
   DCHECK(type != kFileSystemTypeUnknown);
   return file_system_context_->IsSandboxFileSystem(type);

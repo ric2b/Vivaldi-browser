@@ -10,6 +10,8 @@
 #include "services/data_decoder/xml_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#include "base/files/file_util.h"
+
 namespace data_decoder {
 
 namespace {
@@ -35,7 +37,8 @@ void TestParseXml(const std::string& xml, const std::string& json) {
   parser.Parse(xml, base::Bind(&TestParseXmlCallback, &actual_value, &error));
   if (json.empty()) {
     EXPECT_TRUE(error);
-    EXPECT_FALSE(actual_value);
+    EXPECT_FALSE(actual_value)
+        << "Unexpected success, value: " << *actual_value;
     return;
   }
 
@@ -61,6 +64,33 @@ TEST_F(XmlParserTest, ParseBadXml) {
                                        "<hello>bad tag</goodbye>"};
   for (auto& xml : invalid_xml_strings)
     TestParseXml(xml, "");
+}
+
+TEST_F(XmlParserTest, IgnoreComments) {
+  TestParseXml("<!-- This is the best XML document IN THE WORLD! --><a></a>",
+               R"( {"type": "element", "tag": "a"} )");
+}
+
+TEST_F(XmlParserTest, IgnoreProcessingCommands) {
+  TestParseXml(R"(<?xml-stylesheet href="mystyle.css" type="text/css"?>
+                  <a></a>)",
+               R"( {"type": "element", "tag": "a"} )");
+  TestParseXml("<a/><?hello?>", R"( {"type": "element", "tag": "a"} )");
+}
+
+TEST_F(XmlParserTest, IgnoreDocumentTypes) {
+  TestParseXml(
+      R"(<?xml version="1.0" encoding="utf-8"?>
+         <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+             "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+         <html xmlns="http://www.w3.org/1999/xhtml">Some HTML</html>
+      )",
+      R"( {"type": "element",
+           "namespaces": {"": "http://www.w3.org/1999/xhtml"},
+           "tag": "html",
+           "children":[{"type": "text", "text": "Some HTML"}]
+          }
+      )");
 }
 
 TEST_F(XmlParserTest, ParseSelfClosingTag) {
@@ -93,11 +123,22 @@ TEST_F(XmlParserTest, ParseEmptyTag) {
                                 {"type": "element", "tag": "b"}]} )");
 }
 
+TEST_F(XmlParserTest, ParseBadTag) {
+  // Parse a tag with an invalid character.
+  TestParseXml("<hello\xD8\x00>bonjour</hello\xD8\x00>", "");
+  TestParseXml("<hello\xc0\x8a>bonjour</hello\xc0\x8a>", "");
+}
+
 TEST_F(XmlParserTest, ParseTextElement) {
   TestParseXml("<hello>bonjour</hello>",
                R"( {"type": "element",
                     "tag": "hello",
                     "children": [{"type": "text", "text": "bonjour"}]} )");
+}
+
+TEST_F(XmlParserTest, ParseBadTextElement) {
+  TestParseXml("<hello>\xed\xa0\x80\xed\xbf\xbf></hello>", "");
+  TestParseXml("<hello>\xc0\x8a</hello>", "");
 }
 
 TEST_F(XmlParserTest, ParseCDataElement) {
@@ -119,6 +160,9 @@ TEST_F(XmlParserTest, ParseBadCDataElement) {
   TestParseXml("<hello><![CDATA[This is CData.] ]></hello>", "");
   // Space before closing >.
   TestParseXml("<hello><![CDATA[This is CData.]] ></hello>", "");
+  // Invalid UTF-8.
+  TestParseXml("<a><![CDATA[\xc0\x8a]]><d>", "");
+  TestParseXml("<hello><![CDATA[\xed\xa0\x80\xed\xbf\xbf]]></hello>", "");
 }
 
 TEST_F(XmlParserTest, ParseTextWithEntities) {
@@ -127,6 +171,8 @@ TEST_F(XmlParserTest, ParseTextWithEntities) {
                     "tag": "hello",
                     "children": [{"type": "text",
                                   "text": "\"bonjour& ' <hello>"}]} )");
+  // Parse invalid UTF8 entities.
+  TestParseXml("<hello>&#xD800;</hello>", "");
   // Entities in CDATA are not evaluated.
   TestParseXml("<hello><![CDATA[&quot;bonjour&amp; &apos;]]></hello>",
                R"( {"type": "element",
@@ -293,6 +339,13 @@ TEST_F(XmlParserTest, ParseAttributes) {
                }
            ]}
         )");
+}
+
+TEST_F(XmlParserTest, ParseBadAttributes) {
+  // Key with invalid UTF8.
+  TestParseXml("<a b\xc0\x8a='c'/>", "");
+  // Value with invalid UTF8.
+  TestParseXml("<a b='c\xc0\x8a'/>", "");
 }
 
 TEST_F(XmlParserTest, MultipleNamespacesDefined) {

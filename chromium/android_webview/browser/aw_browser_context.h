@@ -32,8 +32,11 @@ class SSLHostStateDelegate;
 class WebContents;
 }
 
+namespace net {
+class NetLog;
+}
+
 namespace policy {
-class URLBlacklistManager;
 class BrowserPolicyConnectorBase;
 }
 
@@ -76,7 +79,7 @@ class AwBrowserContext : public content::BrowserContext,
       content::WebContents* web_contents);
 
   // Maps to BrowserMainParts::PreMainMessageLoopRun.
-  void PreMainMessageLoopRun();
+  void PreMainMessageLoopRun(net::NetLog* net_log);
 
   // These methods map to Add methods in visitedlink::VisitedLinkMaster.
   void AddVisitedURLs(const std::vector<GURL>& urls);
@@ -85,7 +88,6 @@ class AwBrowserContext : public content::BrowserContext,
   AwFormDatabaseService* GetFormDatabaseService();
   AwURLRequestContextGetter* GetAwURLRequestContext();
 
-  policy::URLBlacklistManager* GetURLBlacklistManager();
   web_restrictions::WebRestrictionsClient* GetWebRestrictionProvider();
 
   // content::BrowserContext implementation.
@@ -139,8 +141,6 @@ class AwBrowserContext : public content::BrowserContext,
 
   std::unique_ptr<PrefService> user_pref_service_;
   std::unique_ptr<policy::BrowserPolicyConnectorBase> browser_policy_connector_;
-  std::unique_ptr<policy::URLBlacklistManager> blacklist_manager_;
-
   std::unique_ptr<AwSSLHostStateDelegate> ssl_host_state_delegate_;
   std::unique_ptr<content::PermissionManager> permission_manager_;
   std::unique_ptr<web_restrictions::WebRestrictionsClient>

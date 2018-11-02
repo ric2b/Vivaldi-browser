@@ -14,6 +14,7 @@
 #include "bindings/core/v8/Dictionary.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/NativeValueTraits.h"
+#include "bindings/core/v8/Nullable.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -77,6 +78,7 @@ inline void V8SetReturnValue(const CallbackInfo& callbackInfo, TestInterfaceGarb
 template <>
 struct NativeValueTraits<TestInterfaceGarbageCollectedOrString> : public NativeValueTraitsBase<TestInterfaceGarbageCollectedOrString> {
   CORE_EXPORT static TestInterfaceGarbageCollectedOrString NativeValue(v8::Isolate*, v8::Local<v8::Value>, ExceptionState&);
+  CORE_EXPORT static TestInterfaceGarbageCollectedOrString NullValue() { return TestInterfaceGarbageCollectedOrString(); }
 };
 
 template <>

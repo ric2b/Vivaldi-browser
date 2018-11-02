@@ -12,7 +12,6 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_split.h"
 #include "base/test/scoped_task_environment.h"
@@ -57,7 +56,7 @@ class SingleLogFileLogSourceTest : public ::testing::Test {
   // Initializes the unit under test, |source_| to read a file from the dummy
   // system log directory.
   void InitializeSource(SingleLogFileLogSource::SupportedSource source_type) {
-    source_ = base::MakeUnique<SingleLogFileLogSource>(source_type);
+    source_ = std::make_unique<SingleLogFileLogSource>(source_type);
     source_->log_file_dir_path_ = log_dir_.GetPath();
     log_file_path_ = source_->log_file_dir_path_.Append(source_->source_name());
     ASSERT_TRUE(base::PathExists(log_file_path_)) << log_file_path_.value();
@@ -268,32 +267,6 @@ TEST_F(SingleLogFileLogSourceTest, IncompleteLines) {
 
   EXPECT_EQ(5, num_callback_calls());
   EXPECT_EQ("Goodbye world\n", latest_response());
-}
-
-TEST_F(SingleLogFileLogSourceTest, Anonymize) {
-  InitializeSource(SingleLogFileLogSource::SupportedSource::kUiLatest);
-
-  EXPECT_TRUE(AppendToFile(base::FilePath("ui/ui.LATEST"),
-                           "My MAC address is: 11:22:33:44:55:66\n"));
-  FetchFromSource();
-
-  EXPECT_EQ(1, num_callback_calls());
-  EXPECT_EQ("My MAC address is: 11:22:33:00:00:01\n", latest_response());
-
-  // Suppose the write operation is not atomic, and the MAC address is written
-  // across two separate writes.
-  EXPECT_TRUE(AppendToFile(base::FilePath("ui/ui.LATEST"),
-                           "Your MAC address is: AB:88:C"));
-  FetchFromSource();
-
-  EXPECT_EQ(2, num_callback_calls());
-  EXPECT_EQ("", latest_response());
-
-  EXPECT_TRUE(AppendToFile(base::FilePath("ui/ui.LATEST"), "D:99:EF:77\n"));
-  FetchFromSource();
-
-  EXPECT_EQ(3, num_callback_calls());
-  EXPECT_EQ("Your MAC address is: ab:88:cd:00:00:02\n", latest_response());
 }
 
 TEST_F(SingleLogFileLogSourceTest, HandleLogFileRotation) {

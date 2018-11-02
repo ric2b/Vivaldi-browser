@@ -17,10 +17,12 @@
 #include "ash/shelf/shelf_observer.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/system/status_area_widget.h"
 #include "base/logging.h"
 #include "ui/app_list/presenter/app_list.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/keyboard/keyboard_controller_observer.h"
 
 namespace ash {
 
@@ -229,7 +231,7 @@ void Shelf::LaunchShelfItem(int item_index) {
   // Iterating until we have hit the index we are interested in which
   // is true once indexes_left becomes negative.
   for (int i = 0; i < item_count && indexes_left >= 0; i++) {
-    if (items[i].type != TYPE_APP_LIST) {
+    if (items[i].type != TYPE_APP_LIST && items[i].type != TYPE_BACK_BUTTON) {
       found_index = i;
       indexes_left--;
     }
@@ -288,8 +290,24 @@ StatusAreaWidget* Shelf::GetStatusAreaWidget() const {
   return shelf_widget_->status_area_widget();
 }
 
+TrayBackgroundView* Shelf::GetSystemTrayAnchor() const {
+  return GetStatusAreaWidget()->GetSystemTrayAnchor();
+}
+
 void Shelf::SetVirtualKeyboardBoundsForTesting(const gfx::Rect& bounds) {
-  shelf_layout_manager_->OnKeyboardBoundsChanging(bounds);
+  keyboard::KeyboardStateDescriptor state;
+  state.is_available = !bounds.IsEmpty();
+  state.is_locked = false;
+  state.visual_bounds = bounds;
+  state.occluded_bounds = bounds;
+  state.displaced_bounds = gfx::Rect();
+  shelf_layout_manager_->OnKeyboardAvailabilityChanging(state.is_available);
+  shelf_layout_manager_->OnKeyboardVisibleBoundsChanging(state.visual_bounds);
+  shelf_layout_manager_->OnKeyboardWorkspaceOccludedBoundsChanging(
+      state.occluded_bounds);
+  shelf_layout_manager_->OnKeyboardWorkspaceDisplacingBoundsChanging(
+      state.displaced_bounds);
+  shelf_layout_manager_->OnKeyboardAppearanceChanging(state);
 }
 
 ShelfLockingManager* Shelf::GetShelfLockingManagerForTesting() {

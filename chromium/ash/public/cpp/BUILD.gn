@@ -8,6 +8,14 @@ import("//mojo/public/tools/bindings/mojom.gni")
 component("cpp") {
   sources = [
     "accessibility_types.h",
+    "app_list/term_break_iterator.cc",
+    "app_list/term_break_iterator.h",
+    "app_list/tokenized_string.cc",
+    "app_list/tokenized_string.h",
+    "app_list/tokenized_string_char_iterator.cc",
+    "app_list/tokenized_string_char_iterator.h",
+    "app_list/tokenized_string_match.cc",
+    "app_list/tokenized_string_match.h",
     "app_types.h",
     "ash_pref_names.cc",
     "ash_pref_names.h",
@@ -28,6 +36,7 @@ component("cpp") {
     "immersive/immersive_handler_factory.h",
     "immersive/immersive_revealed_lock.cc",
     "immersive/immersive_revealed_lock.h",
+    "login_constants.h",
     "mus_property_mirror_ash.cc",
     "mus_property_mirror_ash.h",
     "remote_shelf_item_delegate.cc",

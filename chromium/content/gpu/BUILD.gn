@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/jumbo.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
 import("//media/media_options.gni")
@@ -23,9 +24,9 @@ group("gpu") {
 }
 
 if (is_component_build) {
-  link_target_type = "source_set"
+  link_target_type = "jumbo_source_set"
 } else {
-  link_target_type = "static_library"
+  link_target_type = "jumbo_static_library"
 }
 
 target(link_target_type, "gpu_sources") {
@@ -65,6 +66,7 @@ target(link_target_type, "gpu_sources") {
     "//gpu/ipc/common:gpu_preferences_util",
     "//gpu/ipc/service",
     "//ipc",
+    "//media:media_features",
     "//media/gpu",
     "//media/mojo:features",
 
@@ -101,15 +103,14 @@ target(link_target_type, "gpu_sources") {
       "//third_party/wtl:wtl_includes",
     ]
     libs = [ "setupapi.lib" ]
-    deps += [
-      "//sandbox",
-      "//third_party/angle:libEGL",
-      "//third_party/angle:libGLESv2",
-    ]
+    deps += [ "//sandbox" ]
   }
 
   if (use_x11) {
-    deps += [ "//ui/events/platform/x11" ]
+    deps += [
+      "//ui/events/platform/x11",
+      "//ui/gfx/x",
+    ]
   }
 
   if (use_ozone) {

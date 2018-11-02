@@ -5,23 +5,41 @@
 #include "ui/ozone/platform/wayland/wayland_test.h"
 
 #include "base/run_loop.h"
+#include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
+
+#if BUILDFLAG(USE_XKBCOMMON)
+#include "ui/ozone/platform/wayland/mock_wayland_xkb_keyboard_layout_engine.h"
+#else
+#include "ui/events/ozone/layout/stub/stub_keyboard_layout_engine.h"
+#endif
 
 using ::testing::SaveArg;
 using ::testing::_;
 
 namespace ui {
 
-WaylandTest::WaylandTest()
-    : window(&delegate, &connection, gfx::Rect(0, 0, 800, 600)) {}
+WaylandTest::WaylandTest() {
+#if BUILDFLAG(USE_XKBCOMMON)
+  KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
+      std::make_unique<WaylandXkbKeyboardLayoutEngineImpl>(
+          xkb_evdev_code_converter_));
+#else
+  KeyboardLayoutEngineManager::SetKeyboardLayoutEngine(
+      std::make_unique<StubKeyboardLayoutEngine>());
+#endif
+  connection.reset(new WaylandConnection);
+  window = std::make_unique<WaylandWindow>(&delegate, connection.get(),
+                                           gfx::Rect(0, 0, 800, 600));
+}
 
 WaylandTest::~WaylandTest() {}
 
 void WaylandTest::SetUp() {
   ASSERT_TRUE(server.Start(GetParam()));
-  ASSERT_TRUE(connection.Initialize());
+  ASSERT_TRUE(connection->Initialize());
   EXPECT_CALL(delegate, OnAcceleratedWidgetAvailable(_, _))
       .WillOnce(SaveArg<0>(&widget));
-  ASSERT_TRUE(window.Initialize());
+  ASSERT_TRUE(window->Initialize());
   ASSERT_NE(widget, gfx::kNullAcceleratedWidget);
 
   // Wait for the client to flush all pending requests from initialization.

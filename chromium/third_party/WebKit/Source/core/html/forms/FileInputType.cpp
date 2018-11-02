@@ -26,6 +26,7 @@
 #include "core/css/StyleChangeReason.h"
 #include "core/dom/ShadowRoot.h"
 #include "core/dom/events/Event.h"
+#include "core/events/KeyboardEvent.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileList.h"
 #include "core/frame/UseCounter.h"
@@ -149,9 +150,10 @@ void FileInputType::HandleDOMActivateEvent(Event* event) {
   if (!Frame::HasTransientUserActivation(GetElement().GetDocument().GetFrame()))
     return;
 
-  if (ChromeClient* chrome_client = this->GetChromeClient()) {
+  if (ChromeClient* chrome_client = GetChromeClient()) {
     WebFileChooserParams params;
     HTMLInputElement& input = GetElement();
+    Document& document = input.GetDocument();
     bool is_directory = input.FastHasAttribute(webkitdirectoryAttr);
     params.directory = is_directory;
     params.need_local_path = is_directory;
@@ -160,10 +162,14 @@ void FileInputType::HandleDOMActivateEvent(Event* event) {
     params.selected_files = file_list_->PathsForUserVisibleFiles();
     params.use_media_capture = RuntimeEnabledFeatures::MediaCaptureEnabled() &&
                                input.FastHasAttribute(captureAttr);
-    params.requestor = input.GetDocument().Url();
+    params.requestor = document.Url();
 
-    chrome_client->OpenFileChooser(input.GetDocument().GetFrame(),
-                                   NewFileChooser(params));
+    UseCounter::Count(
+        document, document.IsSecureContext()
+                      ? WebFeature::kInputTypeFileSecureOriginOpenChooser
+                      : WebFeature::kInputTypeFileInsecureOriginOpenChooser);
+
+    chrome_client->OpenFileChooser(document.GetFrame(), NewFileChooser(params));
   }
   event->SetDefaultHandled();
 }
@@ -343,7 +349,7 @@ void FileInputType::FilesChosen(const Vector<FileChooserFileInfo>& files) {
 }
 
 void FileInputType::SetFilesFromDirectory(const String& path) {
-  if (ChromeClient* chrome_client = this->GetChromeClient()) {
+  if (ChromeClient* chrome_client = GetChromeClient()) {
     Vector<String> files;
     files.push_back(path);
     WebFileChooserParams params;
@@ -418,6 +424,32 @@ void FileInputType::CopyNonAttributeProperties(const HTMLInputElement& source) {
   const FileList* source_list = source.files();
   for (unsigned i = 0; i < source_list->length(); ++i)
     file_list_->Append(source_list->item(i)->Clone());
+}
+
+void FileInputType::HandleKeypressEvent(KeyboardEvent* event) {
+  if (GetElement().FastHasAttribute(webkitdirectoryAttr)) {
+    // Override to invoke the action on Enter key up (not press) to avoid
+    // repeats committing the file chooser.
+    const String& key = event->key();
+    if (key == "Enter") {
+      event->SetDefaultHandled();
+      return;
+    }
+  }
+  KeyboardClickableInputTypeView::HandleKeypressEvent(event);
+}
+
+void FileInputType::HandleKeyupEvent(KeyboardEvent* event) {
+  if (GetElement().FastHasAttribute(webkitdirectoryAttr)) {
+    // Override to invoke the action on Enter key up (not press) to avoid
+    // repeats committing the file chooser.
+    if (event->key() == "Enter") {
+      GetElement().DispatchSimulatedClick(event);
+      event->SetDefaultHandled();
+      return;
+    }
+  }
+  KeyboardClickableInputTypeView::HandleKeyupEvent(event);
 }
 
 }  // namespace blink

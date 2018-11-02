@@ -20,6 +20,7 @@
 #include "net/base/net_errors.h"
 #include "net/base/sockaddr_storage.h"
 #include "net/base/trace_constants.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 #if defined(OS_FUCHSIA)
 #include <poll.h>
@@ -346,9 +347,11 @@ int SocketPosix::ReadIfReady(IOBuffer* buf,
   return ERR_IO_PENDING;
 }
 
-int SocketPosix::Write(IOBuffer* buf,
-                       int buf_len,
-                       const CompletionCallback& callback) {
+int SocketPosix::Write(
+    IOBuffer* buf,
+    int buf_len,
+    const CompletionCallback& callback,
+    const NetworkTrafficAnnotationTag& /* traffic_annotation */) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_NE(kInvalidSocket, socket_fd_);
   DCHECK(!waiting_connect_);

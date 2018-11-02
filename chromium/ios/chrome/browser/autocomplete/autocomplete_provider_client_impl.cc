@@ -114,7 +114,7 @@ AutocompleteProviderClientImpl::GetKeywordExtensionsDelegate(
 
 physical_web::PhysicalWebDataSource*
 AutocompleteProviderClientImpl::GetPhysicalWebDataSource() {
-  return GetApplicationContext()->GetPhysicalWebDataSource();
+  return nullptr;
 }
 
 std::string AutocompleteProviderClientImpl::GetAcceptLanguages() const {
@@ -142,6 +142,10 @@ std::vector<base::string16>
 AutocompleteProviderClientImpl::GetBuiltinsToProvideAsUserTypes() {
   return {base::ASCIIToUTF16(kChromeUIChromeURLsURL),
           base::ASCIIToUTF16(kChromeUIVersionURL)};
+}
+
+base::Time AutocompleteProviderClientImpl::GetCurrentVisitTimestamp() const {
+  return base::Time();
 }
 
 bool AutocompleteProviderClientImpl::IsOffTheRecord() const {

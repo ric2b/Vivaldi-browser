@@ -230,7 +230,6 @@ def method_context(interface, method, is_visible=True):
         'on_instance': v8_utilities.on_instance(interface, method),
         'on_interface': v8_utilities.on_interface(interface, method),
         'on_prototype': v8_utilities.on_prototype(interface, method),
-        'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(method),  # [OriginTrialEnabled]
         'origin_trial_feature_name': v8_utilities.origin_trial_feature_name(method),  # [OriginTrialEnabled]
         'property_attributes': property_attributes(interface, method),
         'returns_promise': method.returns_promise,
@@ -328,7 +327,11 @@ def cpp_value(interface, method, number_of_arguments):
     if ('PartialInterfaceImplementedAs' in method.extended_attributes and
             not method.is_static):
         cpp_arguments.append('*impl')
-    cpp_arguments.extend(argument.name for argument in arguments)
+    for argument in arguments:
+        if argument.idl_type.base_type == 'SerializedScriptValue':
+            cpp_arguments.append('std::move(%s)' % argument.name)
+        else:
+            cpp_arguments.append(argument.name)
 
     if ('RaisesException' in method.extended_attributes or
           (method.is_constructor and
@@ -373,18 +376,11 @@ def v8_set_return_value(interface_name, method, cpp_value, for_main_world=False)
 
 def v8_value_to_local_cpp_variadic_value(method, argument, index, return_promise):
     assert argument.is_variadic
-    idl_type = argument.idl_type
-    this_cpp_type = idl_type.cpp_type
-
-    if idl_type.is_dictionary or idl_type.is_union_type:
-        vector_type = 'HeapVector'
-    else:
-        vector_type = 'Vector'
+    idl_type = v8_types.native_value_traits_type_name(argument.idl_type, True)
 
     return {
-        'assign_expression': 'ToImplArguments<%s<%s>>(info, %s, exceptionState)' % (vector_type, this_cpp_type, index),
+        'assign_expression': 'ToImplArguments<%s>(info, %s, exceptionState)' % (idl_type, index),
         'check_expression': 'exceptionState.HadException()',
-        'cpp_type': this_cpp_type,
         'cpp_name': argument.name,
         'declare_variable': False,
     }

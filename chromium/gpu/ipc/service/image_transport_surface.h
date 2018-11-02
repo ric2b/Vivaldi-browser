@@ -11,8 +11,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "gpu/gpu_export.h"
 #include "gpu/ipc/common/surface_handle.h"
+#include "gpu/ipc/service/gpu_ipc_service_export.h"
 #include "ui/gl/gl_surface.h"
 
 namespace gpu {
@@ -23,10 +23,10 @@ class ImageTransportSurfaceDelegate;
 // the results to the browser process to display. This file provides a simple
 // framework for making the offscreen path seem more like the onscreen path.
 
-class ImageTransportSurface {
+class GPU_IPC_SERVICE_EXPORT ImageTransportSurface {
  public:
 #if defined(OS_MACOSX)
-  GPU_EXPORT static void SetAllowOSMesaForTesting(bool allow);
+  static void SetAllowOSMesaForTesting(bool allow);
 #endif
 
   // Creates the appropriate native surface depending on the GL implementation.

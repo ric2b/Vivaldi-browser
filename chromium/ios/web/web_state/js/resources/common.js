@@ -230,36 +230,41 @@ __gCrWeb['common'] = __gCrWeb.common;
            element.type === 'number';
   };
 
-  /**
-   * Sets the checked value of an input and dispatches an change event if
-   * |shouldSendChangeEvent|.
-   *
-   * This is a simplified version of the implementation of
-   *
-   *     void setChecked(bool nowChecked, TextFieldEventBehavior eventBehavior)
-   *
-   * in chromium/src/third_party/WebKit/Source/WebKit/chromium/src/
-   * WebInputElement.cpp, which calls
-   *     void HTMLInputElement::setChecked(
-   *         bool nowChecked, TextFieldEventBehavior eventBehavior)
-   * in chromium/src/third_party/WebKit/Source/core/html/HTMLInputElement.cpp.
-   *
-   * @param {boolean} nowChecked The new checked value of the input element.
-   * @param {Element} input The input element of which the value is set.
-   * @param {boolean} shouldSendChangeEvent Whether a change event should be
-   *     dispatched.
-   */
-  __gCrWeb.common.setInputElementChecked = function(
-      nowChecked, input, shouldSendChangeEvent) {
-    var checkedChanged = input.checked !== nowChecked;
-    input.checked = nowChecked;
-    if (checkedChanged) {
-      __gCrWeb.common.createAndDispatchHTMLEvent(input, 'change', true, false);
+ /**
+  * Sets the value of a data-bound input using AngularJS.
+  *
+  * The method first set the value using the val() method. Then, if input is
+  * bound to a model value, it sets the model value.
+  * Documentation of relevant modules of AngularJS can be found at
+  * https://docs.angularjs.org/guide/databinding
+  * https://docs.angularjs.org/api/auto/service/$injector
+  * https://docs.angularjs.org/api/ng/service/$parse
+  *
+  * @param {string} value The value the input element will be set.
+  * @param {Element} input The input element of which the value is set.
+  **/
+  function setInputElementAngularValue_(value, input) {
+    if (!input || !window['angular']) {
+      return;
     }
-  };
+    var angular_element = window['angular'].element &&
+        window['angular'].element(input);
+    if (!angular_element) {
+      return;
+    }
+    angular_element.val(value);
+    var angular_model = angular_element.data && angular_element.data('ngModel');
+    if (!angular_model) {
+      return;
+    }
+    angular_element.injector().invoke(['$parse', function(parse) {
+      var setter = parse(angular_model);
+      setter.assign(angular_element.scope(), value);
+    }])
+  }
 
   /**
-   * Sets the value of an input and dispatches an change event if
+   * Sets the value of an input and dispatches a change event if
    * |shouldSendChangeEvent|.
    *
    * It is based on the logic in
@@ -269,6 +274,8 @@ __gCrWeb['common'] = __gCrWeb.common;
    * in chromium/src/third_party/WebKit/Source/WebKit/chromium/src/
    * WebInputElement.cpp, which calls
    *    void setValue(const String& value, TextFieldEventBehavior eventBehavior)
+   * or
+   *    void setChecked(bool nowChecked, TextFieldEventBehavior eventBehavior)
    * in chromium/src/third_party/WebKit/Source/core/html/HTMLInputElement.cpp.
    *
    * @param {string} value The value the input element will be set.
@@ -278,16 +285,33 @@ __gCrWeb['common'] = __gCrWeb.common;
    */
   __gCrWeb.common.setInputElementValue = function(
       value, input, shouldSendChangeEvent) {
-    // In HTMLInputElement.cpp there is a check on canSetValue(value), which
-    // returns false only for file input. As file input is not relevant for
-    // autofill and this method is only used for autofill for now, there is no
-    // such check in this implementation.
-    var sanitizedValue = __gCrWeb.common.sanitizeValueForInputElement(
-        value, input);
-    var valueChanged = sanitizedValue !== input.value;
-    input.value = sanitizedValue;
-    if (valueChanged) {
-      __gCrWeb.common.createAndDispatchHTMLEvent(input, 'change', true, false);
+    if (!input) {
+      return;
+    }
+    var changed = false;
+    if (input.type === 'checkbox' || input.type === 'radio') {
+      changed = input.checked !== value;
+      input.checked = value;
+    } else if (input.type === 'select-one') {
+      changed = input.value !== value;
+      input.value = value;
+    } else {
+      // In HTMLInputElement.cpp there is a check on canSetValue(value), which
+      // returns false only for file input. As file input is not relevant for
+      // autofill and this method is only used for autofill for now, there is no
+      // such check in this implementation.
+      var sanitizedValue = __gCrWeb.common.sanitizeValueForInputElement(
+          value, input);
+      changed = sanitizedValue !== input.value;
+      input.value = sanitizedValue;
+    }
+    if (window['angular']) {
+      // The page uses the AngularJS framework. Update the angular value before
+      // sending events.
+      setInputElementAngularValue_(value, input);
+    }
+    if (changed && shouldSendChangeEvent) {
+      __gCrWeb.common.notifyElementValueChanged(input);
     }
   };
 
@@ -548,7 +572,8 @@ __gCrWeb['common'] = __gCrWeb.common;
     if (!form)
       return '';
     var name = form.getAttribute('name');
-    if (name && name.length != 0 && document.forms.namedItem(name) === form) {
+    if (name && name.length != 0 &&
+        form.ownerDocument.forms.namedItem(name) === form) {
       return name;
     }
     name = form.getAttribute('id');
@@ -597,6 +622,20 @@ __gCrWeb['common'] = __gCrWeb.common;
     return null;
   };
 
+ /**
+  * Creates and sends notification that element has changed.
+  *
+  * Most handlers react to 'change' or 'input' event, so sent both.
+  *
+  * @param {Element} element The element that changed.
+  */
+  __gCrWeb.common.notifyElementValueChanged = function(element) {
+    __gCrWeb.common.createAndDispatchHTMLEvent(element, 'keydown', true, false);
+    __gCrWeb.common.createAndDispatchHTMLEvent(element, 'change', true, false);
+    __gCrWeb.common.createAndDispatchHTMLEvent(element, 'input', true, false);
+    __gCrWeb.common.createAndDispatchHTMLEvent(element, 'keyup', true, false);
+  };
+
   /**
    * Creates and dispatches an HTML event.
    *
@@ -612,6 +651,12 @@ __gCrWeb['common'] = __gCrWeb.common;
     var changeEvent =
         /** @type {!Event} */(element.ownerDocument.createEvent('HTMLEvents'));
     changeEvent.initEvent(type, bubbles, cancelable);
+    // Some frameworks will use the data field to update their cache value.
+    changeEvent.data = element.value;
+
+    // Adding a |simulated| flag on the event will force the React framework to
+    // update the backend store.
+    changeEvent.simulated = true;
 
     // A timer is used to avoid reentering JavaScript evaluation.
     window.setTimeout(function() {
@@ -649,72 +694,6 @@ __gCrWeb['common'] = __gCrWeb.common;
       }
     }
     return favicons;
-  };
-
-  /**
-   * Checks whether an <object> node is plugin content (as <object> can also be
-   * used to embed images).
-   * @param {HTMLElement} node The <object> node to check.
-   * @return {boolean} Whether the node appears to be a plugin.
-   * @private
-   */
-  var objectNodeIsPlugin_ = function(node) {
-    return node.hasAttribute('classid') ||
-           (node.hasAttribute('type') && node.type.indexOf('image/') != 0);
-  };
-
-  /**
-   * Checks whether plugin a node has fallback content.
-   * @param {HTMLElement} node The node to check.
-   * @return {boolean} Whether the node has fallback.
-   * @private
-   */
-  var pluginHasFallbackContent_ = function(node) {
-    return node.textContent.trim().length > 0 ||
-           node.getElementsByTagName('img').length > 0;
-  };
-
-  /**
-   * Returns a list of plugin elements in the document that have no fallback
-   * content. For nested plugins, only the innermost plugin element is returned.
-   * @return {!Array<!HTMLElement>} A list of plugin elements.
-   * @private
-   */
-  var findPluginNodesWithoutFallback_ = function() {
-    var i, pluginNodes = [];
-    var objects = document.getElementsByTagName('object');
-    var objectCount = objects.length;
-    for (i = 0; i < objectCount; i++) {
-      var object = /** @type {!HTMLElement} */(objects[i]);
-      if (objectNodeIsPlugin_(object) &&
-          !pluginHasFallbackContent_(object)) {
-        pluginNodes.push(object);
-      }
-    }
-    var applets = document.getElementsByTagName('applet');
-    var appletsCount = applets.length;
-    for (i = 0; i < appletsCount; i++) {
-      var applet = /** @type {!HTMLElement} */(applets[i]);
-      if (!pluginHasFallbackContent_(applet)) {
-        pluginNodes.push(applet);
-      }
-    }
-    return pluginNodes;
-  };
-
-  /**
-   * Finds and stores any plugins that don't have placeholders.
-   * Returns true if any plugins without placeholders are found.
-   */
-  __gCrWeb.common.updatePluginPlaceholders = function() {
-    var plugins = findPluginNodesWithoutFallback_();
-    if (plugins.length > 0) {
-      // Store the list of plugins in a known place for the replacement script
-      // to use, then trigger it.
-      __gCrWeb['placeholderTargetPlugins'] = plugins;
-      return true;
-    }
-    return false;
   };
 
   /**

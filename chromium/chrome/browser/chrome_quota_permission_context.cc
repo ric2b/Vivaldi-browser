@@ -22,7 +22,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/web_contents.h"
-#include "storage/common/quota/quota_types.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
@@ -101,8 +101,8 @@ base::string16 QuotaPermissionRequest::GetMessageText() const {
   // If the site requested larger quota than this threshold, show a different
   // message to the user.
   return l10n_util::GetStringFUTF16(
-      (is_large_quota_request_ ? IDS_REQUEST_LARGE_QUOTA_INFOBAR_QUESTION
-                               : IDS_REQUEST_QUOTA_INFOBAR_QUESTION),
+      (is_large_quota_request_ ? IDS_REQUEST_LARGE_QUOTA_INFOBAR_TEXT
+                               : IDS_REQUEST_QUOTA_INFOBAR_TEXT),
       url_formatter::FormatUrlForSecurityDisplay(origin_url_));
 }
 #endif
@@ -158,7 +158,7 @@ void ChromeQuotaPermissionContext::RequestQuotaPermission(
     const content::StorageQuotaParams& params,
     int render_process_id,
     const PermissionCallback& callback) {
-  if (params.storage_type != storage::kStorageTypePersistent) {
+  if (params.storage_type != blink::mojom::StorageType::kPersistent) {
     // For now we only support requesting quota with this interface
     // for Persistent storage type.
     callback.Run(QUOTA_PERMISSION_RESPONSE_DISALLOW);

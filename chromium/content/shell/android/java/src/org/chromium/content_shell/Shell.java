@@ -4,6 +4,7 @@
 
 package org.chromium.content_shell;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.drawable.ClipDrawable;
@@ -36,6 +37,7 @@ import org.chromium.content.browser.ContentViewRenderView;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
+import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -142,6 +144,7 @@ public class Shell extends LinearLayout {
     }
 
     @Override
+    @SuppressLint("WrongViewCast") // TODO(crbug.com/799070): File bug.
     protected void onFinishInflate() {
         super.onFinishInflate();
 
@@ -301,8 +304,9 @@ public class Shell extends LinearLayout {
         ContentView cv = ContentView.createContentView(context, mContentViewCore);
         mViewAndroidDelegate = new ShellViewAndroidDelegate(cv);
         mContentViewCore.initialize(mViewAndroidDelegate, cv, webContents, mWindow);
-        mContentViewCore.setActionModeCallback(defaultActionCallback());
         mWebContents = mContentViewCore.getWebContents();
+        SelectionPopupController controller = SelectionPopupController.fromWebContents(webContents);
+        controller.setActionModeCallback(defaultActionCallback());
         mNavigationController = mWebContents.getNavigationController();
         if (getParent() != null) mContentViewCore.onShow();
         if (mWebContents.getVisibleUrl() != null) {
@@ -322,7 +326,8 @@ public class Shell extends LinearLayout {
      */
     private ActionMode.Callback defaultActionCallback() {
         final ActionModeCallbackHelper helper =
-                mContentViewCore.getActionModeCallbackHelper();
+                SelectionPopupController.fromWebContents(mWebContents)
+                        .getActionModeCallbackHelper();
 
         return new ActionMode.Callback() {
             @Override
@@ -375,6 +380,11 @@ public class Shell extends LinearLayout {
         if (mOverlayModeChangedCallbackForTesting != null) {
             mOverlayModeChangedCallbackForTesting.onResult(useOverlayMode);
         }
+    }
+
+    @CalledByNative
+    public void sizeTo(int width, int height) {
+        mWebContents.setSize(width, height);
     }
 
     public void setOverayModeChangedCallbackForTesting(Callback<Boolean> callback) {

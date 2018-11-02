@@ -33,10 +33,6 @@ class WebFrameTestClient : public blink::WebFrameClient {
   ~WebFrameTestClient() override;
 
   // WebFrameClient overrides needed by WebFrameTestProxy.
-  blink::WebColorChooser* CreateColorChooser(
-      blink::WebColorChooserClient* client,
-      const blink::WebColor& initial_color,
-      const blink::WebVector<blink::WebColorSuggestion>& suggestions) override;
   void RunModalAlertDialog(const blink::WebString& message) override;
   bool RunModalConfirmDialog(const blink::WebString& message) override;
   bool RunModalPromptDialog(const blink::WebString& message,
@@ -47,6 +43,7 @@ class WebFrameTestClient : public blink::WebFrameClient {
   void PostAccessibilityEvent(const blink::WebAXObject& object,
                               blink::WebAXEvent event) override;
   void DidChangeSelection(bool is_selection_empty) override;
+  void DidChangeContents() override;
   blink::WebPlugin* CreatePlugin(const blink::WebPluginParams& params) override;
   void ShowContextMenu(
       const blink::WebContextMenuData& context_menu_data) override;
@@ -62,9 +59,9 @@ class WebFrameTestClient : public blink::WebFrameClient {
   void DidReceiveServerRedirectForProvisionalLoad() override;
   void DidFailProvisionalLoad(const blink::WebURLError& error,
                               blink::WebHistoryCommitType commit_type) override;
-  void DidCommitProvisionalLoad(
-      const blink::WebHistoryItem& history_item,
-      blink::WebHistoryCommitType history_type) override;
+  void DidCommitProvisionalLoad(const blink::WebHistoryItem& history_item,
+                                blink::WebHistoryCommitType history_type,
+                                blink::WebGlobalObjectReusePolicy) override;
   void DidReceiveTitle(const blink::WebString& title,
                        blink::WebTextDirection direction) override;
   void DidChangeIcon(blink::WebIconURL::Type icon_type) override;

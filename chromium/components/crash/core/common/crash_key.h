@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "build/build_config.h"
+#include "components/crash/core/common/crash_export.h"
 
 // The crash key interface exposed by this file is the same as the Crashpad
 // Annotation interface. Because not all platforms use Crashpad yet, a
@@ -36,16 +37,30 @@ class CrashKeyBreakpadTest;
 // The crash key name must be a constant string expression, and the value
 // should be unique and identifying. The maximum size for the value is
 // specified as the template argument, and values greater than this are
-// truncated. Crash keys should be declared with static storage duration.
+// truncated. When specifying a value size, space should be left for the
+// `NUL` byte. Crash keys should be declared with static storage duration.
 //
-// Example:
+// Examples:
+// \code
+//    // This crash key is only set in one function:
+//    void DidNavigate(const GURL& gurl) {
+//      static crash_reporter::CrashKeyString<256> url_key("url");
+//      url_key.Set(gurl.ToString());
+//    }
+//
+//    // This crash key can be set/cleared across different functions:
 //    namespace {
-//    crash_reporter::CrashKeyString<256> g_active_url("current-page-url");
+//    crash_reporter::CrashKeyString<32> g_operation_id("operation-req-id");
 //    }
 //
-//    void DidNaviagate(GURL new_url) {
-//      g_active_url.Set(new_url.ToString());
+//    void OnStartingOperation(const std::string& request_id) {
+//      g_operation_id.Set(request_id);
 //    }
+//
+//    void OnEndingOperation() {
+//      g_operation_id.Clear()
+//    }
+// \endcode
 #if defined(USE_CRASHPAD_ANNOTATION)
 
 template <crashpad::Annotation::ValueSizeType MaxLength>
@@ -61,7 +76,7 @@ constexpr size_t kCrashKeyStorageValueSize = 128;
 // Base implementation of a CrashKeyString for non-Crashpad clients. A separate
 // base class is used to avoid inlining complex logic into the public template
 // API.
-class CrashKeyStringImpl {
+class CRASH_KEY_EXPORT CrashKeyStringImpl {
  public:
   constexpr explicit CrashKeyStringImpl(const char name[],
                                         size_t* index_array,
@@ -124,8 +139,13 @@ class CrashKeyString : public internal::CrashKeyStringImpl {
   constexpr static size_t chunk_count =
       (MaxLength / internal::kCrashKeyStorageValueSize) + 1;
 
+  // A constructor tag that can be used to initialize a C array of crash keys.
+  enum class Tag { kArray };
+
   constexpr explicit CrashKeyString(const char name[])
       : internal::CrashKeyStringImpl(name, indexes_.data, chunk_count) {}
+
+  constexpr CrashKeyString(const char name[], Tag tag) : CrashKeyString(name) {}
 
  private:
   // Indexes into the TransitionalCrashKeyStorage for when a value is set.
@@ -178,8 +198,9 @@ namespace internal {
 // Formats a stack trace into a string whose length will not exceed
 // |max_length|. This function ensures no addresses are truncated when
 // being formatted.
-std::string FormatStackTrace(const base::debug::StackTrace& trace,
-                             size_t max_length);
+CRASH_KEY_EXPORT std::string FormatStackTrace(
+    const base::debug::StackTrace& trace,
+    size_t max_length);
 }  // namespace internal
 
 // Formats a base::debug::StackTrace as a string of space-separated hexadecimal
@@ -194,7 +215,17 @@ void SetCrashKeyStringToStackTrace(CrashKeyString<Size>* key,
 }
 
 // Initializes the crash key subsystem if it is required.
-void InitializeCrashKeys();
+CRASH_KEY_EXPORT void InitializeCrashKeys();
+
+#if defined(UNIT_TEST) || defined(CRASH_CORE_COMMON_IMPLEMENTATION)
+// Returns a value for the crash key named |key_name|. For Crashpad-based
+// clients, this returns the first instance found of the name.
+CRASH_KEY_EXPORT std::string GetCrashKeyValue(const std::string& key_name);
+
+// Resets crash key state and, depending on the platform, de-initializes
+// the system.
+CRASH_KEY_EXPORT void ResetCrashKeysForTesting();
+#endif
 
 }  // namespace crash_reporter
 

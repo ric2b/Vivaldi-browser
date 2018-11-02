@@ -35,11 +35,10 @@ class CORE_EXPORT ImageElementBase : public CanvasImageSource,
 
   scoped_refptr<Image> GetSourceImageForCanvas(SourceImageStatus*,
                                                AccelerationHint,
-                                               SnapshotReason,
                                                const FloatSize&) override;
 
   bool WouldTaintOrigin(
-      SecurityOrigin* destination_security_origin) const override;
+      const SecurityOrigin* destination_security_origin) const override;
 
   FloatSize ElementSize(const FloatSize& default_object_size) const override;
   FloatSize DefaultDestinationSize(

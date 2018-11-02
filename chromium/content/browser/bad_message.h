@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_BAD_MESSAGE_H_
 #define CONTENT_BROWSER_BAD_MESSAGE_H_
 
+#include "base/debug/crash_logging.h"
 #include "content/common/content_export.h"
 
 namespace content {
@@ -211,6 +212,15 @@ enum BadMessageReason {
   WEBUI_BAD_SCHEME_ACCESS = 185,
   CSDH_UNEXPECTED_OPERATION = 186,
   RMF_BAD_URL_CACHEABLE_METADATA = 187,
+  RFH_INTERFACE_PROVIDER_MISSING = 188,
+  RFH_INTERFACE_PROVIDER_SUPERFLUOUS = 189,
+  AIRH_UNEXPECTED_BITSTREAM = 190,
+  ARH_UNEXPECTED_BITSTREAM = 191,
+  RDH_NULL_CLIENT = 192,
+  RVH_WEB_UI_BINDINGS_MISMATCH = 193,
+  WCI_NEW_WIDGET_PROCESS_MISMATCH = 194,
+  AUTH_INVALID_EFFECTIVE_DOMAIN = 195,
+  AUTH_INVALID_RELYING_PARTY = 196,
 
   // Please add new elements here. The naming convention is abbreviated class
   // name (e.g. RenderFrameHost becomes RFH) plus a unique description of the
@@ -232,6 +242,17 @@ CONTENT_EXPORT void ReceivedBadMessage(int render_process_id,
 // renderer or other child process. Logs the event, records a histogram metric
 // for the |reason|, and terminates the process for |filter|.
 void ReceivedBadMessage(BrowserMessageFilter* filter, BadMessageReason reason);
+
+// Returns a crash key named "mojo-message-error" for storing Mojo error
+// messages.
+base::debug::CrashKeyString* GetMojoErrorCrashKey();
+
+// Site isolation. These keys help debug renderer kills such as
+// https://crbug.com/773140.
+// Returns a key named "killed_process_origin_lock".
+base::debug::CrashKeyString* GetKilledProcessOriginLockKey();
+// Retuns a key named "requested_site_url".
+base::debug::CrashKeyString* GetRequestedSiteURLKey();
 
 }  // namespace bad_message
 }  // namespace content

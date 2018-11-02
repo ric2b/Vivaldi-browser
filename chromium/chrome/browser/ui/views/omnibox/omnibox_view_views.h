@@ -31,7 +31,7 @@
 class CommandUpdater;
 class LocationBarView;
 class OmniboxClient;
-class OmniboxPopupView;
+class OmniboxPopupContentsView;
 
 namespace content {
 class WebContents;
@@ -112,6 +112,7 @@ class OmniboxViewViews : public OmniboxView,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, FriendlyAccessibleLabel);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsTest, OnBlur);
 
@@ -134,6 +135,8 @@ class OmniboxViewViews : public OmniboxView,
 
   // Updates |security_level_| based on the toolbar model's current value.
   void UpdateSecurityLevel();
+
+  void ClearAccessibilityLabel();
 
   // OmniboxView:
   void SetWindowTextAndCaretPos(const base::string16& text,
@@ -222,7 +225,7 @@ class OmniboxViewViews : public OmniboxView,
   // different presentation (smaller font size). This is used for popups.
   bool popup_window_mode_;
 
-  std::unique_ptr<OmniboxPopupView> popup_view_;
+  std::unique_ptr<OmniboxPopupContentsView> popup_view_;
 
   security_state::SecurityLevel security_level_;
 
@@ -272,6 +275,17 @@ class OmniboxViewViews : public OmniboxView,
     COMPOSITING_COMMIT,   // Compositing was committed after OnPaint().
     COMPOSITING_STARTED,  // Compositing was started.
   } latency_histogram_state_;
+
+  // The currently selected match, if any, with additional labelling text
+  // such as the document title and the type of search, for example:
+  // "Google https://google.com location from bookmark", or
+  // "cats are liquid search suggestion".
+  base::string16 friendly_suggestion_text_;
+
+  // The number of added labelling characters before editable text begins.
+  // For example,  "Google https://google.com location from history",
+  // this is set to 7 (the length of "Google ").
+  int friendly_suggestion_text_prefix_length_;
 
   ScopedObserver<ui::Compositor, ui::CompositorObserver> scoped_observer_;
 

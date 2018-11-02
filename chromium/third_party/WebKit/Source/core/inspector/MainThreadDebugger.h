@@ -32,6 +32,7 @@
 #define MainThreadDebugger_h
 
 #include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorTaskRunner.h"
 #include "core/inspector/ThreadDebugger.h"
@@ -48,14 +49,12 @@ class SecurityOrigin;
 class SourceLocation;
 
 class CORE_EXPORT MainThreadDebugger final : public ThreadDebugger {
-  WTF_MAKE_NONCOPYABLE(MainThreadDebugger);
-
  public:
   class ClientMessageLoop {
     USING_FAST_MALLOC(ClientMessageLoop);
 
    public:
-    virtual ~ClientMessageLoop() {}
+    virtual ~ClientMessageLoop() = default;
     virtual void Run(LocalFrame*) = 0;
     virtual void QuitNow() = 0;
     virtual void RunIfWaitingForDebugger(LocalFrame*) = 0;
@@ -77,7 +76,7 @@ class CORE_EXPORT MainThreadDebugger final : public ThreadDebugger {
   // performance.
   int ContextGroupId(LocalFrame*);
   void DidClearContextsForFrame(LocalFrame*);
-  void ContextCreated(ScriptState*, LocalFrame*, SecurityOrigin*);
+  void ContextCreated(ScriptState*, LocalFrame*, const SecurityOrigin*);
   void ContextWillBeDestroyed(ScriptState*);
   void ExceptionThrown(ExecutionContext*, ErrorEvent*);
 
@@ -122,6 +121,7 @@ class CORE_EXPORT MainThreadDebugger final : public ThreadDebugger {
   std::unique_ptr<InspectorTaskRunner> task_runner_;
   bool paused_;
   static MainThreadDebugger* instance_;
+  DISALLOW_COPY_AND_ASSIGN(MainThreadDebugger);
 };
 
 }  // namespace blink

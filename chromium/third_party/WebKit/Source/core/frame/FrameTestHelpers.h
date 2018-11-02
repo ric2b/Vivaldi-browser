@@ -35,6 +35,8 @@
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
+
+#include "base/macros.h"
 #include "core/exported/WebViewImpl.h"
 #include "core/frame/Settings.h"
 #include "platform/WebTaskRunner.h"
@@ -161,7 +163,7 @@ WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame& parent,
 
 class TestWebWidgetClient : public WebWidgetClient {
  public:
-  ~TestWebWidgetClient() override {}
+  ~TestWebWidgetClient() override = default;
 
   // WebWidgetClient:
   bool AllowsBrokenNullLayerTreeView() const override { return true; }
@@ -175,7 +177,7 @@ class TestWebViewWidgetClient : public TestWebWidgetClient {
  public:
   explicit TestWebViewWidgetClient(TestWebViewClient& test_web_view_client)
       : test_web_view_client_(test_web_view_client) {}
-  ~TestWebViewWidgetClient() override {}
+  ~TestWebViewWidgetClient() override = default;
 
   // TestWebViewWidgetClient:
   WebLayerTreeView* InitializeLayerTreeView() override;
@@ -188,7 +190,7 @@ class TestWebViewWidgetClient : public TestWebWidgetClient {
 
 class TestWebViewClient : public WebViewClient {
  public:
-  ~TestWebViewClient() override {}
+  ~TestWebViewClient() override = default;
 
   WebLayerTreeViewImplForTesting* GetLayerTreeViewForTesting();
 
@@ -210,8 +212,6 @@ class TestWebViewClient : public WebViewClient {
 // Convenience class for handling the lifetime of a WebView and its associated
 // mainframe in tests.
 class WebViewHelper {
-  WTF_MAKE_NONCOPYABLE(WebViewHelper);
-
  public:
   WebViewHelper();
   ~WebViewHelper();
@@ -262,7 +262,7 @@ class WebViewHelper {
 
   void Reset();
 
-  WebViewImpl* WebView() const { return web_view_; }
+  WebViewImpl* GetWebView() const { return web_view_; }
 
   WebLocalFrameImpl* LocalMainFrame() const;
   WebRemoteFrameImpl* RemoteMainFrame() const;
@@ -270,13 +270,15 @@ class WebViewHelper {
   void SetViewportSize(const WebSize&);
 
  private:
-  void InitializeWebView(TestWebViewClient*);
+  void InitializeWebView(TestWebViewClient*, class WebView* opener);
 
   WebViewImpl* web_view_;
   UseMockScrollbarSettings mock_scrollbar_settings_;
   // Non-null if the WebViewHelper owns the TestWebViewClient.
   std::unique_ptr<TestWebViewClient> owned_test_web_view_client_;
   TestWebViewClient* test_web_view_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(WebViewHelper);
 };
 
 // Minimal implementation of WebFrameClient needed for unit tests that load
@@ -285,7 +287,7 @@ class WebViewHelper {
 class TestWebFrameClient : public WebFrameClient {
  public:
   TestWebFrameClient();
-  ~TestWebFrameClient() override {}
+  ~TestWebFrameClient() override = default;
 
   static bool IsLoading() { return loads_in_progress_ > 0; }
 
@@ -341,7 +343,7 @@ class TestWebFrameClient : public WebFrameClient {
 class TestWebRemoteFrameClient : public WebRemoteFrameClient {
  public:
   TestWebRemoteFrameClient();
-  ~TestWebRemoteFrameClient() override {}
+  ~TestWebRemoteFrameClient() override = default;
 
   WebRemoteFrame* Frame() const { return frame_; }
   // Pass ownership of the TestWebFrameClient to |self_owned| here if the

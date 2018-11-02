@@ -24,8 +24,7 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
  * Test for the Site Engagement Service Java binding.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class SiteEngagementServiceTest {
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
@@ -41,7 +40,7 @@ public class SiteEngagementServiceTest {
         mActivityTestRule.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                final String url = "https://www.google.com";
+                final String url = "https://www.example.com";
                 SiteEngagementService service = SiteEngagementService.getForProfile(
                         mActivityTestRule.getActivity().getActivityTab().getProfile());
 
@@ -65,7 +64,7 @@ public class SiteEngagementServiceTest {
         mActivityTestRule.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                final String url = "https://www.google.com";
+                final String url = "https://www.example.com";
                 Profile profile = mActivityTestRule.getActivity().getActivityTab().getProfile();
 
                 Assert.assertEquals(

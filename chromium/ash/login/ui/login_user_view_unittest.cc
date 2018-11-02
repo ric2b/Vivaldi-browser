@@ -40,10 +40,11 @@ class LoginUserViewUnittest : public LoginTestBase {
 
     container_ = new views::View();
     container_->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kVertical));
+        std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
 
     auto* root = new views::View();
-    root->SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal));
+    root->SetLayoutManager(
+        std::make_unique<views::BoxLayout>(views::BoxLayout::kHorizontal));
     root->AddChildView(container_);
     SetWidget(CreateWidgetWithContent(root));
   }
@@ -159,10 +160,10 @@ TEST_F(LoginUserViewUnittest, FocusHoverOpaqueInteractions) {
   EXPECT_FALSE(two_test.is_opaque());
 
   // Only the focused element is opaque.
-  one->RequestFocus();
+  one_test.tap_button()->RequestFocus();
   EXPECT_TRUE(one_test.is_opaque());
   EXPECT_FALSE(two_test.is_opaque());
-  two->RequestFocus();
+  two_test.tap_button()->RequestFocus();
   EXPECT_FALSE(one_test.is_opaque());
   EXPECT_TRUE(two_test.is_opaque());
 
@@ -182,7 +183,7 @@ TEST_F(LoginUserViewUnittest, FocusHoverOpaqueInteractions) {
   EXPECT_TRUE(two_test.is_opaque());
 
   // Losing focus (after a mouse hover) makes the element transparent.
-  one->RequestFocus();
+  one_test.tap_button()->RequestFocus();
   EXPECT_TRUE(one_test.is_opaque());
   EXPECT_FALSE(two_test.is_opaque());
 }
@@ -206,21 +207,21 @@ TEST_F(LoginUserViewUnittest, ForcedOpaque) {
   EXPECT_FALSE(two_test.is_opaque());
 
   // Forced opaque stays opaque when gaining or losing focus.
-  one->RequestFocus();
+  one_test.tap_button()->RequestFocus();
   EXPECT_TRUE(one_test.is_opaque());
   EXPECT_FALSE(two_test.is_opaque());
-  two->RequestFocus();
+  two_test.tap_button()->RequestFocus();
   EXPECT_TRUE(one_test.is_opaque());
   EXPECT_TRUE(two_test.is_opaque());
 
   // An element can become transparent when losing forced opaque.
-  EXPECT_TRUE(two->HasFocus());
+  EXPECT_TRUE(two_test.tap_button()->HasFocus());
   one->SetForceOpaque(false);
   EXPECT_FALSE(one_test.is_opaque());
   EXPECT_TRUE(two_test.is_opaque());
 
   // An element can stay opaque when losing forced opaque.
-  EXPECT_TRUE(two->HasFocus());
+  EXPECT_TRUE(two_test.tap_button()->HasFocus());
   two->SetForceOpaque(true);
   EXPECT_FALSE(one_test.is_opaque());
   EXPECT_TRUE(two_test.is_opaque());

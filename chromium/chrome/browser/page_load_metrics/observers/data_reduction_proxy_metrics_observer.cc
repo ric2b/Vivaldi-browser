@@ -13,6 +13,7 @@
 #include "chrome/browser/loader/chrome_navigation_data.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/net/spdyproxy/data_reduction_proxy_chrome_settings_factory.h"
+#include "chrome/browser/page_load_metrics/observers/histogram_suffixes.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "chrome/browser/previews/previews_infobar_delegate.h"
@@ -25,7 +26,10 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/child_process_host.h"
 #include "url/gurl.h"
 
 namespace data_reduction_proxy {
@@ -72,25 +76,6 @@ const char kHistogramDataReductionProxyPrefix[] =
     "PageLoad.Clients.DataReductionProxy.";
 const char kHistogramDataReductionProxyLoFiOnPrefix[] =
     "PageLoad.Clients.DataReductionProxy.LoFiOn.";
-const char kHistogramDOMContentLoadedEventFiredSuffix[] =
-    "DocumentTiming.NavigationToDOMContentLoadedEventFired";
-const char kHistogramFirstLayoutSuffix[] =
-    "DocumentTiming.NavigationToFirstLayout";
-const char kHistogramLoadEventFiredSuffix[] =
-    "DocumentTiming.NavigationToLoadEventFired";
-const char kHistogramFirstContentfulPaintSuffix[] =
-    "PaintTiming.NavigationToFirstContentfulPaint";
-const char kHistogramFirstMeaningfulPaintSuffix[] =
-    "Experimental.PaintTiming.NavigationToFirstMeaningfulPaint";
-const char kHistogramFirstImagePaintSuffix[] =
-    "PaintTiming.NavigationToFirstImagePaint";
-const char kHistogramFirstPaintSuffix[] = "PaintTiming.NavigationToFirstPaint";
-const char kHistogramFirstTextPaintSuffix[] =
-    "PaintTiming.NavigationToFirstTextPaint";
-const char kHistogramParseStartSuffix[] = "ParseTiming.NavigationToParseStart";
-const char kHistogramParseBlockedOnScriptLoadSuffix[] =
-    "ParseTiming.ParseBlockedOnScriptLoad";
-const char kHistogramParseDurationSuffix[] = "ParseTiming.ParseDuration";
 
 const char kResourcesPercentProxied[] =
     "Experimental.CompletedResources.Network.PercentProxied";
@@ -120,7 +105,11 @@ DataReductionProxyMetricsObserver::DataReductionProxyMetricsObserver()
       num_network_resources_(0),
       original_network_bytes_(0),
       network_bytes_proxied_(0),
-      network_bytes_(0) {}
+      network_bytes_(0),
+      process_id_(base::kNullProcessId),
+      renderer_memory_usage_kb_(0),
+      render_process_host_id_(content::ChildProcessHost::kInvalidUniqueID),
+      weak_ptr_factory_(this) {}
 
 DataReductionProxyMetricsObserver::~DataReductionProxyMetricsObserver() {}
 
@@ -153,6 +142,15 @@ DataReductionProxyMetricsObserver::OnCommit(
   if (!data || !data->used_data_reduction_proxy())
     return STOP_OBSERVING;
   data_ = data->DeepCopy();
+  process_id_ = base::GetProcId(navigation_handle->GetWebContents()
+                                    ->GetMainFrame()
+                                    ->GetProcess()
+                                    ->GetHandle());
+  render_process_host_id_ = navigation_handle->GetWebContents()
+                                ->GetMainFrame()
+                                ->GetProcess()
+                                ->GetID();
+
   // DataReductionProxy page loads should only occur on HTTP navigations.
   DCHECK(!navigation_handle->GetURL().SchemeIsCryptographic());
   DCHECK_EQ(data_->request_url(), navigation_handle->GetURL());
@@ -325,12 +323,21 @@ void DataReductionProxyMetricsObserver::SendPingback(
     parse_stop = timing.parse_timing->parse_stop;
   }
 
+  // If a crash happens, report the host |render_process_host_id_| to the
+  // pingback client. Otherwise report kInvalidUniqueID.
+  int host_id = content::ChildProcessHost::kInvalidUniqueID;
+  if (info.page_end_reason ==
+      page_load_metrics::PageEndReason::END_RENDER_PROCESS_GONE) {
+    host_id = render_process_host_id_;
+  }
+
   DataReductionProxyPageLoadTiming data_reduction_proxy_timing(
       timing.navigation_start, response_start, load_event_start,
       first_image_paint, first_contentful_paint,
       experimental_first_meaningful_paint,
       parse_blocked_on_script_load_duration, parse_stop, network_bytes_,
-      original_network_bytes_, app_background_occurred, opted_out_);
+      original_network_bytes_, app_background_occurred, opted_out_,
+      renderer_memory_usage_kb_, host_id);
   GetPingbackClient()->SendPingback(*data_, data_reduction_proxy_timing);
 }
 
@@ -340,7 +347,7 @@ void DataReductionProxyMetricsObserver::OnDomContentLoadedEventStart(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.document_timing->dom_content_loaded_event_start,
-      internal::kHistogramDOMContentLoadedEventFiredSuffix);
+      ::internal::kHistogramDOMContentLoadedEventFiredSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnLoadEventStart(
@@ -349,7 +356,13 @@ void DataReductionProxyMetricsObserver::OnLoadEventStart(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.document_timing->load_event_start,
-      internal::kHistogramLoadEventFiredSuffix);
+      ::internal::kHistogramLoadEventFiredSuffix);
+  if (process_id_ != base::kNullProcessId) {
+    auto callback = base::BindRepeating(
+        &DataReductionProxyMetricsObserver::ProcessMemoryDump,
+        weak_ptr_factory_.GetWeakPtr());
+    RequestProcessDump(process_id_, callback);
+  }
 }
 
 void DataReductionProxyMetricsObserver::OnFirstLayout(
@@ -358,16 +371,16 @@ void DataReductionProxyMetricsObserver::OnFirstLayout(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.document_timing->first_layout,
-      internal::kHistogramFirstLayoutSuffix);
+      ::internal::kHistogramFirstLayoutSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnFirstPaintInPage(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(info, data_,
-                                          timing.paint_timing->first_paint,
-                                          internal::kHistogramFirstPaintSuffix);
+  RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
+      info, data_, timing.paint_timing->first_paint,
+      ::internal::kHistogramFirstPaintSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnFirstTextPaintInPage(
@@ -376,7 +389,7 @@ void DataReductionProxyMetricsObserver::OnFirstTextPaintInPage(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.paint_timing->first_text_paint,
-      internal::kHistogramFirstTextPaintSuffix);
+      ::internal::kHistogramFirstTextPaintSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnFirstImagePaintInPage(
@@ -385,7 +398,7 @@ void DataReductionProxyMetricsObserver::OnFirstImagePaintInPage(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.paint_timing->first_image_paint,
-      internal::kHistogramFirstImagePaintSuffix);
+      ::internal::kHistogramFirstImagePaintSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnFirstContentfulPaintInPage(
@@ -394,7 +407,7 @@ void DataReductionProxyMetricsObserver::OnFirstContentfulPaintInPage(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.paint_timing->first_contentful_paint,
-      internal::kHistogramFirstContentfulPaintSuffix);
+      ::internal::kHistogramFirstContentfulPaintSuffix);
 }
 
 void DataReductionProxyMetricsObserver::
@@ -404,16 +417,16 @@ void DataReductionProxyMetricsObserver::
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
       info, data_, timing.paint_timing->first_meaningful_paint,
-      internal::kHistogramFirstMeaningfulPaintSuffix);
+      ::internal::kHistogramFirstMeaningfulPaintSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnParseStart(
     const page_load_metrics::mojom::PageLoadTiming& timing,
     const page_load_metrics::PageLoadExtraInfo& info) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(info, data_,
-                                          timing.parse_timing->parse_start,
-                                          internal::kHistogramParseStartSuffix);
+  RECORD_FOREGROUND_HISTOGRAMS_FOR_SUFFIX(
+      info, data_, timing.parse_timing->parse_start,
+      ::internal::kHistogramParseStartSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnParseStop(
@@ -427,10 +440,10 @@ void DataReductionProxyMetricsObserver::OnParseStop(
   base::TimeDelta parse_duration = timing.parse_timing->parse_stop.value() -
                                    timing.parse_timing->parse_start.value();
   RECORD_HISTOGRAMS_FOR_SUFFIX(data_, parse_duration,
-                               internal::kHistogramParseDurationSuffix);
+                               ::internal::kHistogramParseDurationSuffix);
   RECORD_HISTOGRAMS_FOR_SUFFIX(
       data_, timing.parse_timing->parse_blocked_on_script_load_duration.value(),
-      internal::kHistogramParseBlockedOnScriptLoadSuffix);
+      ::internal::kHistogramParseBlockedOnScriptLoadSuffix);
 }
 
 void DataReductionProxyMetricsObserver::OnLoadedResource(
@@ -469,6 +482,35 @@ void DataReductionProxyMetricsObserver::OnEventOccurred(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (event_key == PreviewsInfoBarDelegate::OptOutEventKey())
     opted_out_ = true;
+}
+
+void DataReductionProxyMetricsObserver::ProcessMemoryDump(
+    bool success,
+    std::unique_ptr<memory_instrumentation::GlobalMemoryDump> memory_dump) {
+  if (!success || !memory_dump)
+    return;
+  // There should only be one process in the dump.
+  DCHECK_EQ(1, std::distance(memory_dump->process_dumps().begin(),
+                             memory_dump->process_dumps().end()));
+
+  auto process_dump_it = memory_dump->process_dumps().begin();
+  if (process_dump_it == memory_dump->process_dumps().end())
+    return;
+
+  // We want to catch this in debug but not crash in release.
+  DCHECK_EQ(process_id_, process_dump_it->pid());
+  if (process_dump_it->pid() != process_id_)
+    return;
+  renderer_memory_usage_kb_ =
+      static_cast<int64_t>(process_dump_it->os_dump().private_footprint_kb);
+}
+
+void DataReductionProxyMetricsObserver::RequestProcessDump(
+    base::ProcessId pid,
+    memory_instrumentation::MemoryInstrumentation::RequestGlobalDumpCallback
+        callback) {
+  memory_instrumentation::MemoryInstrumentation::GetInstance()
+      ->RequestGlobalDumpForPid(pid, callback);
 }
 
 }  // namespace data_reduction_proxy

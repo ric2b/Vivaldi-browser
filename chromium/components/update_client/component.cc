@@ -13,7 +13,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -169,10 +168,14 @@ void StartInstallOnBlockingTaskRunner(
 
 Component::Component(const UpdateContext& update_context, const std::string& id)
     : id_(id),
-      state_(base::MakeUnique<StateNew>(this)),
+      state_(std::make_unique<StateNew>(this)),
       update_context_(update_context) {}
 
 Component::~Component() {}
+
+scoped_refptr<Configurator> Component::config() const {
+  return update_context_.config;
+}
 
 void Component::Handle(CallbackHandleComplete callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -249,7 +252,7 @@ void Component::Uninstall(const base::Version& version, int reason) {
   next_version_ = base::Version("0");
   extra_code1_ = reason;
 
-  state_ = base::MakeUnique<StateUninstalled>(this);
+  state_ = std::make_unique<StateUninstalled>(this);
 }
 
 void Component::UpdateCheckComplete() {
@@ -324,7 +327,7 @@ void Component::StateNew::DoHandle() {
 
   auto& component = State::component();
 
-  TransitionState(base::MakeUnique<StateChecking>(&component));
+  TransitionState(std::make_unique<StateChecking>(&component));
 }
 
 Component::StateChecking::StateChecking(Component* component)
@@ -357,20 +360,20 @@ void Component::StateChecking::UpdateCheckComplete() {
   auto& component = State::component();
   if (!component.update_check_error_) {
     if (component.status_ == "ok") {
-      TransitionState(base::MakeUnique<StateCanUpdate>(&component));
+      TransitionState(std::make_unique<StateCanUpdate>(&component));
       return;
     }
 
     if (component.status_ == "noupdate") {
       if (component.action_run_.empty())
-        TransitionState(base::MakeUnique<StateUpToDate>(&component));
+        TransitionState(std::make_unique<StateUpToDate>(&component));
       else
-        TransitionState(base::MakeUnique<StateRun>(&component));
+        TransitionState(std::make_unique<StateRun>(&component));
       return;
     }
   }
 
-  TransitionState(base::MakeUnique<StateUpdateError>(&component));
+  TransitionState(std::make_unique<StateUpdateError>(&component));
 }
 
 Component::StateUpdateError::StateUpdateError(Component* component)
@@ -413,7 +416,7 @@ void Component::StateCanUpdate::DoHandle() {
     component.error_category_ = static_cast<int>(ErrorCategory::kServiceError);
     component.error_code_ = static_cast<int>(ServiceError::UPDATE_DISABLED);
     component.extra_code1_ = 0;
-    TransitionState(base::MakeUnique<StateUpdateError>(&component));
+    TransitionState(std::make_unique<StateUpdateError>(&component));
     return;
   }
 
@@ -421,9 +424,9 @@ void Component::StateCanUpdate::DoHandle() {
   component.update_begin_ = base::TimeTicks::Now();
 
   if (CanTryDiffUpdate())
-    TransitionState(base::MakeUnique<StateDownloadingDiff>(&component));
+    TransitionState(std::make_unique<StateDownloadingDiff>(&component));
   else
-    TransitionState(base::MakeUnique<StateDownloading>(&component));
+    TransitionState(std::make_unique<StateDownloading>(&component));
 }
 
 // Returns true if a differential update is available, it has not failed yet,
@@ -498,7 +501,8 @@ void Component::StateDownloadingDiff::DownloadComplete(
   auto& component = Component::State::component();
 
   for (const auto& metrics : crx_downloader_->download_metrics())
-    component.AppendEvent(BuildDownloadCompleteEventElement(metrics));
+    component.AppendEvent(
+        BuildDownloadCompleteEventElement(component, metrics));
 
   crx_downloader_.reset();
 
@@ -508,13 +512,13 @@ void Component::StateDownloadingDiff::DownloadComplete(
         static_cast<int>(ErrorCategory::kNetworkError);
     component.diff_error_code_ = download_result.error;
 
-    TransitionState(base::MakeUnique<StateDownloading>(&component));
+    TransitionState(std::make_unique<StateDownloading>(&component));
     return;
   }
 
   component.crx_path_ = download_result.response;
 
-  TransitionState(base::MakeUnique<StateUpdatingDiff>(&component));
+  TransitionState(std::make_unique<StateUpdatingDiff>(&component));
 }
 
 Component::StateDownloading::StateDownloading(Component* component)
@@ -565,7 +569,8 @@ void Component::StateDownloading::DownloadComplete(
   auto& component = Component::State::component();
 
   for (const auto& metrics : crx_downloader_->download_metrics())
-    component.AppendEvent(BuildDownloadCompleteEventElement(metrics));
+    component.AppendEvent(
+        BuildDownloadCompleteEventElement(component, metrics));
 
   crx_downloader_.reset();
 
@@ -574,13 +579,13 @@ void Component::StateDownloading::DownloadComplete(
     component.error_category_ = static_cast<int>(ErrorCategory::kNetworkError);
     component.error_code_ = download_result.error;
 
-    TransitionState(base::MakeUnique<StateUpdateError>(&component));
+    TransitionState(std::make_unique<StateUpdateError>(&component));
     return;
   }
 
   component.crx_path_ = download_result.response;
 
-  TransitionState(base::MakeUnique<StateUpdating>(&component));
+  TransitionState(std::make_unique<StateUpdating>(&component));
 }
 
 Component::StateUpdatingDiff::StateUpdatingDiff(Component* component)
@@ -627,7 +632,7 @@ void Component::StateUpdatingDiff::InstallComplete(int error_category,
   component.diff_extra_code1_ = extra_code1;
 
   if (component.diff_error_code_ != 0) {
-    TransitionState(base::MakeUnique<StateDownloading>(&component));
+    TransitionState(std::make_unique<StateDownloading>(&component));
     return;
   }
 
@@ -642,9 +647,9 @@ void Component::StateUpdatingDiff::InstallComplete(int error_category,
   DCHECK_EQ(0, component.extra_code1_);
 
   if (component.action_run_.empty())
-    TransitionState(base::MakeUnique<StateUpdated>(&component));
+    TransitionState(std::make_unique<StateUpdated>(&component));
   else
-    TransitionState(base::MakeUnique<StateRun>(&component));
+    TransitionState(std::make_unique<StateRun>(&component));
 }
 
 Component::StateUpdating::StateUpdating(Component* component)
@@ -690,7 +695,7 @@ void Component::StateUpdating::InstallComplete(int error_category,
   component.extra_code1_ = extra_code1;
 
   if (component.error_code_ != 0) {
-    TransitionState(base::MakeUnique<StateUpdateError>(&component));
+    TransitionState(std::make_unique<StateUpdateError>(&component));
     return;
   }
 
@@ -700,9 +705,9 @@ void Component::StateUpdating::InstallComplete(int error_category,
   DCHECK_EQ(0, component.extra_code1_);
 
   if (component.action_run_.empty())
-    TransitionState(base::MakeUnique<StateUpdated>(&component));
+    TransitionState(std::make_unique<StateUpdated>(&component));
   else
-    TransitionState(base::MakeUnique<StateRun>(&component));
+    TransitionState(std::make_unique<StateRun>(&component));
 }
 
 Component::StateUpdated::StateUpdated(Component* component)
@@ -756,9 +761,7 @@ void Component::StateRun::DoHandle() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   const auto& component = State::component();
-  action_runner_ = base::MakeUnique<ActionRunner>(
-      component, component.update_context_.config->GetRunActionKeyHash());
-
+  action_runner_ = std::make_unique<ActionRunner>(component);
   action_runner_->Run(
       base::BindOnce(&StateRun::ActionRunComplete, base::Unretained(this)));
 }
@@ -774,11 +777,11 @@ void Component::StateRun::ActionRunComplete(bool succeeded,
       BuildActionRunEventElement(succeeded, error_code, extra_code1));
   switch (component.previous_state_) {
     case ComponentState::kChecking:
-      TransitionState(base::MakeUnique<StateUpToDate>(&component));
+      TransitionState(std::make_unique<StateUpToDate>(&component));
       return;
     case ComponentState::kUpdating:
     case ComponentState::kUpdatingDiff:
-      TransitionState(base::MakeUnique<StateUpdated>(&component));
+      TransitionState(std::make_unique<StateUpdated>(&component));
       return;
     default:
       break;

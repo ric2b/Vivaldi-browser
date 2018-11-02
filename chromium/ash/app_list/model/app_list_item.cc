@@ -10,7 +10,11 @@
 namespace app_list {
 
 AppListItem::AppListItem(const std::string& id)
-    : id_(id),
+    : metadata_(ash::mojom::AppListItemMetadata::New(id,
+                                                     std::string(),
+                                                     std::string(),
+                                                     syncer::StringOrdinal(),
+                                                     false)),
       highlighted_(false),
       is_installing_(false),
       percent_downloaded_(-1) {}
@@ -53,15 +57,9 @@ void AppListItem::RemoveObserver(AppListItemObserver* observer) {
   observers_.RemoveObserver(observer);
 }
 
-void AppListItem::Activate(int event_flags) {}
-
 const char* AppListItem::GetItemType() const {
   static const char* app_type = "";
   return app_type;
-}
-
-ui::MenuModel* AppListItem::GetContextMenuModel() {
-  return NULL;
 }
 
 AppListItem* AppListItem::FindChildItem(const std::string& id) {
@@ -72,24 +70,28 @@ size_t AppListItem::ChildItemCount() const {
   return 0;
 }
 
+size_t AppListItem::BadgedItemCount() const {
+  return 0;
+}
+
 bool AppListItem::CompareForTest(const AppListItem* other) const {
-  return id_ == other->id_ && folder_id_ == other->folder_id_ &&
-         name_ == other->name_ && short_name_ == other->short_name_ &&
+  return id() == other->id() && folder_id() == other->folder_id() &&
+         name() == other->name() && short_name_ == other->short_name_ &&
          GetItemType() == other->GetItemType() &&
-         position_.Equals(other->position_);
+         position().Equals(other->position());
 }
 
 std::string AppListItem::ToDebugString() const {
-  return id_.substr(0, 8) + " '" + name_ + "'" + " [" +
-         position_.ToDebugString() + "]";
+  return id().substr(0, 8) + " '" + name() + "'" + " [" +
+         position().ToDebugString() + "]";
 }
 
 // Protected methods
 
 void AppListItem::SetName(const std::string& name) {
-  if (name_ == name && (short_name_.empty() || short_name_ == name))
+  if (metadata_->name == name && (short_name_.empty() || short_name_ == name))
     return;
-  name_ = name;
+  metadata_->name = name;
   short_name_.clear();
   for (auto& observer : observers_)
     observer.ItemNameChanged();
@@ -97,9 +99,9 @@ void AppListItem::SetName(const std::string& name) {
 
 void AppListItem::SetNameAndShortName(const std::string& name,
                                       const std::string& short_name) {
-  if (name_ == name && short_name_ == short_name)
+  if (metadata_->name == name && short_name_ == short_name)
     return;
-  name_ = name;
+  metadata_->name = name;
   short_name_ = short_name;
   for (auto& observer : observers_)
     observer.ItemNameChanged();

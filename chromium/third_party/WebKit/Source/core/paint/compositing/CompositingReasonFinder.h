@@ -5,11 +5,11 @@
 #ifndef CompositingReasonFinder_h
 #define CompositingReasonFinder_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/paint/compositing/CompositingTriggers.h"
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/Noncopyable.h"
 
 namespace blink {
 
@@ -20,7 +20,6 @@ class LayoutView;
 
 class CORE_EXPORT CompositingReasonFinder {
   DISALLOW_NEW();
-  WTF_MAKE_NONCOPYABLE(CompositingReasonFinder);
 
  public:
   explicit CompositingReasonFinder(LayoutView&);
@@ -36,12 +35,12 @@ class CORE_EXPORT CompositingReasonFinder {
   void UpdateTriggers();
 
   bool RequiresCompositingForScrollableFrame() const;
-  static bool RequiresCompositingForAnimation(const ComputedStyle&);
+  static CompositingReasons CompositingReasonsForAnimation(
+      const ComputedStyle&);
   static bool RequiresCompositingForOpacityAnimation(const ComputedStyle&);
   static bool RequiresCompositingForFilterAnimation(const ComputedStyle&);
   static bool RequiresCompositingForBackdropFilterAnimation(
       const ComputedStyle&);
-  static bool RequiresCompositingForEffectAnimation(const ComputedStyle&);
   static bool RequiresCompositingForTransformAnimation(const ComputedStyle&);
   static bool RequiresCompositingForTransform(const LayoutObject&);
 
@@ -57,6 +56,7 @@ class CORE_EXPORT CompositingReasonFinder {
       bool ignore_lcd_text) const;
   LayoutView& layout_view_;
   CompositingTriggerFlags compositing_triggers_;
+  DISALLOW_COPY_AND_ASSIGN(CompositingReasonFinder);
 };
 
 }  // namespace blink

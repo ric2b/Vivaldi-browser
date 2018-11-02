@@ -74,9 +74,9 @@
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBodyElement.h"
-#include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/html/HTMLImageElement.h"
+#include "core/html/canvas/HTMLCanvasElement.h"
 #include "core/html/forms/HTMLInputElement.h"
 #include "core/html/forms/HTMLTextAreaElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -89,15 +89,16 @@
 #include "core/loader/EmptyClients.h"
 #include "core/loader/resource/ImageResourceContent.h"
 #include "core/page/DragData.h"
-#include "core/page/EditorClient.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/svg/SVGImageElement.h"
 #include "platform/KillRing.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/scroll/ScrollAlignment.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/CharacterNames.h"
+#include "public/platform/WebScrollIntoViewParams.h"
 
 namespace blink {
 
@@ -149,25 +150,6 @@ bool IsInPasswordFieldWithUnrevealedPassword(const Position& position) {
   return false;
 }
 
-EphemeralRange ComputeRangeForTranspose(LocalFrame& frame) {
-  const VisibleSelection& selection =
-      frame.Selection().ComputeVisibleSelectionInDOMTree();
-  if (!selection.IsCaret())
-    return EphemeralRange();
-
-  // Make a selection that goes back one character and forward two characters.
-  const VisiblePosition& caret = selection.VisibleStart();
-  const VisiblePosition& next =
-      IsEndOfParagraph(caret) ? caret : NextPositionOf(caret);
-  const VisiblePosition& previous = PreviousPositionOf(next);
-  if (next.DeepEquivalent() == previous.DeepEquivalent())
-    return EphemeralRange();
-  const VisiblePosition& previous_of_previous = PreviousPositionOf(previous);
-  if (!InSameParagraph(next, previous_of_previous))
-    return EphemeralRange();
-  return MakeRange(previous_of_previous, next);
-}
-
 }  // anonymous namespace
 
 Editor::RevealSelectionScope::RevealSelectionScope(Editor* editor)
@@ -217,17 +199,6 @@ EditingBehavior Editor::Behavior() const {
   return EditingBehavior(GetFrame().GetSettings()->GetEditingBehaviorType());
 }
 
-static EditorClient& GetEmptyEditorClient() {
-  DEFINE_STATIC_LOCAL(EmptyEditorClient, client, ());
-  return client;
-}
-
-EditorClient& Editor::Client() const {
-  if (Page* page = GetFrame().GetPage())
-    return page->GetEditorClient();
-  return GetEmptyEditorClient();
-}
-
 static bool IsCaretAtStartOfWrappedLine(const FrameSelection& selection) {
   if (!selection.ComputeVisibleSelectionInDOMTree().IsCaret())
     return false;
@@ -235,8 +206,21 @@ static bool IsCaretAtStartOfWrappedLine(const FrameSelection& selection) {
     return false;
   const Position& position =
       selection.ComputeVisibleSelectionInDOMTree().Start();
-  return !InSameLine(PositionWithAffinity(position, TextAffinity::kUpstream),
-                     PositionWithAffinity(position, TextAffinity::kDownstream));
+  if (InSameLine(PositionWithAffinity(position, TextAffinity::kUpstream),
+                 PositionWithAffinity(position, TextAffinity::kDownstream)))
+    return false;
+
+  // Only when the previous character is a space to avoid undesired side
+  // effects. There are cases where a new line is desired even if the previous
+  // character is not a space, but typing another space will do.
+  Position prev =
+      PreviousPositionOf(position, PositionMoveType::kGraphemeCluster);
+  const Node* prev_node = prev.ComputeContainerNode();
+  if (!prev_node || !prev_node->IsTextNode())
+    return false;
+  int prev_offset = prev.ComputeOffsetInContainerNode();
+  UChar prev_char = ToText(prev_node)->data()[prev_offset];
+  return prev_char == kSpaceCharacter;
 }
 
 bool Editor::HandleTextEvent(TextEvent* event) {
@@ -250,7 +234,7 @@ bool Editor::HandleTextEvent(TextEvent* event) {
   if (event->IsIncrementalInsertion())
     return false;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   frame_->GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -309,7 +293,7 @@ bool Editor::CanEditRichly() const {
 // because we allow elements that are not normally selectable to implement
 // copy/paste (like divs, or a document body).
 
-bool Editor::CanDHTMLCut() {
+bool Editor::CanDHTMLCut(EditorCommandSource source) {
   // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -317,18 +301,20 @@ bool Editor::CanDHTMLCut() {
                                 .Selection()
                                 .ComputeVisibleSelectionInDOMTree()
                                 .Start()) &&
-         !DispatchCPPEvent(EventTypeNames::beforecut, kDataTransferNumb);
+         !DispatchClipboardEvent(EventTypeNames::beforecut, kDataTransferNumb,
+                                 source);
 }
 
-bool Editor::CanDHTMLCopy() {
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+bool Editor::CanDHTMLCopy(EditorCommandSource source) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   return !IsInPasswordField(GetFrame()
                                 .Selection()
                                 .ComputeVisibleSelectionInDOMTree()
                                 .Start()) &&
-         !DispatchCPPEvent(EventTypeNames::beforecopy, kDataTransferNumb);
+         !DispatchClipboardEvent(EventTypeNames::beforecopy, kDataTransferNumb,
+                                 source);
 }
 
 bool Editor::CanCut() const {
@@ -466,8 +452,10 @@ void Editor::DeleteSelectionWithSmartDelete(
       ->Apply();
 }
 
-void Editor::PasteAsPlainText(const String& pasting_text, bool smart_replace) {
-  Element* target = FindEventTargetFromSelection();
+void Editor::PasteAsPlainText(const String& pasting_text,
+                              bool smart_replace,
+                              EditorCommandSource source) {
+  Element* target = FindEventTargetForClipboardEvent(source);
   if (!target)
     return;
   target->DispatchEvent(TextEvent::CreateForPlainTextPaste(
@@ -476,47 +464,53 @@ void Editor::PasteAsPlainText(const String& pasting_text, bool smart_replace) {
 
 void Editor::PasteAsFragment(DocumentFragment* pasting_fragment,
                              bool smart_replace,
-                             bool match_style) {
-  Element* target = FindEventTargetFromSelection();
+                             bool match_style,
+                             EditorCommandSource source) {
+  Element* target = FindEventTargetForClipboardEvent(source);
   if (!target)
     return;
   target->DispatchEvent(TextEvent::CreateForFragmentPaste(
       GetFrame().DomWindow(), pasting_fragment, smart_replace, match_style));
 }
 
-bool Editor::TryDHTMLCopy() {
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+bool Editor::DispatchCopyEvent(EditorCommandSource source) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (IsInPasswordField(
           GetFrameSelection().ComputeVisibleSelectionInDOMTree().Start()))
-    return false;
+    return true;
 
-  return !DispatchCPPEvent(EventTypeNames::copy, kDataTransferWritable);
+  return DispatchClipboardEvent(EventTypeNames::copy, kDataTransferWritable,
+                                source);
 }
 
-bool Editor::TryDHTMLCut() {
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+bool Editor::DispatchCutEvent(EditorCommandSource source) {
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (IsInPasswordField(
           GetFrameSelection().ComputeVisibleSelectionInDOMTree().Start()))
-    return false;
+    return true;
 
-  return !DispatchCPPEvent(EventTypeNames::cut, kDataTransferWritable);
+  return DispatchClipboardEvent(EventTypeNames::cut, kDataTransferWritable,
+                                source);
 }
 
-bool Editor::TryDHTMLPaste(PasteMode paste_mode) {
-  return !DispatchCPPEvent(EventTypeNames::paste, kDataTransferReadable,
-                           paste_mode);
+bool Editor::DispatchPasteEvent(PasteMode paste_mode,
+                                EditorCommandSource source) {
+  return DispatchClipboardEvent(EventTypeNames::paste, kDataTransferReadable,
+                                source, paste_mode);
 }
 
-void Editor::PasteAsPlainTextWithPasteboard(Pasteboard* pasteboard) {
+void Editor::PasteAsPlainTextWithPasteboard(Pasteboard* pasteboard,
+                                            EditorCommandSource source) {
   String text = pasteboard->PlainText();
-  PasteAsPlainText(text, CanSmartReplaceWithPasteboard(pasteboard));
+  PasteAsPlainText(text, CanSmartReplaceWithPasteboard(pasteboard), source);
 }
 
-void Editor::PasteWithPasteboard(Pasteboard* pasteboard) {
+void Editor::PasteWithPasteboard(Pasteboard* pasteboard,
+                                 EditorCommandSource source) {
   DocumentFragment* fragment = nullptr;
   bool chose_plain_text = false;
 
@@ -538,9 +532,9 @@ void Editor::PasteWithPasteboard(Pasteboard* pasteboard) {
     if (!text.IsEmpty()) {
       chose_plain_text = true;
 
-      // TODO(editing-dev): Use of updateStyleAndLayoutIgnorePendingStylesheets
+      // TODO(editing-dev): Use of UpdateStyleAndLayoutIgnorePendingStylesheets
       // needs to be audited.  See http://crbug.com/590369 for more details.
-      // |selectedRange| requires clean layout for visible selection
+      // |SelectedRange| requires clean layout for visible selection
       // normalization.
       GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
@@ -548,9 +542,10 @@ void Editor::PasteWithPasteboard(Pasteboard* pasteboard) {
     }
   }
 
-  if (fragment)
+  if (fragment) {
     PasteAsFragment(fragment, CanSmartReplaceWithPasteboard(pasteboard),
-                    chose_plain_text);
+                    chose_plain_text, source);
+  }
 }
 
 void Editor::WriteSelectionToPasteboard() {
@@ -572,8 +567,7 @@ static scoped_refptr<Image> ImageFromNode(const Node& node) {
 
   if (layout_object->IsCanvas()) {
     return ToHTMLCanvasElement(const_cast<Node&>(node))
-        .CopiedImage(kFrontBuffer, kPreferNoAcceleration,
-                     kSnapshotReasonCopyToClipboard);
+        .CopiedImage(kFrontBuffer, kPreferNoAcceleration);
   }
 
   if (layout_object->IsImage()) {
@@ -618,12 +612,11 @@ static void WriteImageNodeToPasteboard(Pasteboard* pasteboard,
   pasteboard->WriteImage(image.get(), url, title);
 }
 
-// Returns whether caller should continue with "the default processing", which
-// is the same as the event handler NOT setting the return value to false
-bool Editor::DispatchCPPEvent(const AtomicString& event_type,
-                              DataTransferAccessPolicy policy,
-                              PasteMode paste_mode) {
-  Element* target = FindEventTargetFromSelection();
+bool Editor::DispatchClipboardEvent(const AtomicString& event_type,
+                                    DataTransferAccessPolicy policy,
+                                    EditorCommandSource source,
+                                    PasteMode paste_mode) {
+  Element* target = FindEventTargetForClipboardEvent(source);
   if (!target)
     return true;
 
@@ -640,7 +633,7 @@ bool Editor::DispatchCPPEvent(const AtomicString& event_type,
     Pasteboard::GeneralPasteboard()->WriteDataObject(
         data_transfer->GetDataObject());
 
-  // invalidate clipboard here for security
+  // Invalidate clipboard here for security.
   data_transfer->SetAccessPolicy(kDataTransferNumb);
 
   return !no_default_processing;
@@ -790,7 +783,7 @@ void Editor::RespondToChangedContents(const Position& position) {
   }
 
   GetSpellChecker().RespondToChangedContents();
-  Client().RespondToChangedContents();
+  frame_->Client()->DidChangeContents();
 }
 
 void Editor::RemoveFormattingAndStyle() {
@@ -804,16 +797,29 @@ void Editor::RegisterCommandGroup(CompositeEditCommand* command_group_wrapper) {
 }
 
 Element* Editor::FindEventTargetFrom(const VisibleSelection& selection) const {
-  Element* target = AssociatedElementOf(selection.Start());
+  Element* const target = AssociatedElementOf(selection.Start());
   if (!target)
-    target = GetFrame().GetDocument()->body();
-
+    return GetFrame().GetDocument()->body();
+  if (target->IsInUserAgentShadowRoot())
+    return target->OwnerShadowHost();
   return target;
 }
 
 Element* Editor::FindEventTargetFromSelection() const {
   return FindEventTargetFrom(
       GetFrameSelection().ComputeVisibleSelectionInDOMTreeDeprecated());
+}
+
+Element* Editor::FindEventTargetForClipboardEvent(
+    EditorCommandSource source) const {
+  // https://www.w3.org/TR/clipboard-apis/#fire-a-clipboard-event says:
+  //  "Set target to be the element that contains the start of the selection in
+  //   document order, or the body element if there is no selection or cursor."
+  // We treat hidden selections as "no selection or cursor".
+  if (source == kCommandFromMenuOrKeyBinding && GetFrameSelection().IsHidden())
+    return GetFrameSelection().GetDocument().body();
+
+  return FindEventTargetFromSelection();
 }
 
 void Editor::ApplyStyle(CSSPropertyValueSet* style,
@@ -947,7 +953,10 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
 
   // Don't clear the typing style with this selection change. We do those things
   // elsewhere if necessary.
-  ChangeSelectionAfterCommand(new_selection, SetSelectionOptions());
+  ChangeSelectionAfterCommand(
+      new_selection, SetSelectionOptions::Builder()
+                         .SetIsDirectional(cmd->SelectionIsDirectional())
+                         .Build());
 
   if (!cmd->PreservesTypingStyle())
     ClearTypingStyle();
@@ -963,6 +972,8 @@ void Editor::AppliedEditing(CompositeEditCommand* cmd) {
       undo_stack_->RegisterUndoStep(last_edit_command_->EnsureUndoStep());
     last_edit_command_->EnsureUndoStep()->SetEndingSelection(
         cmd->EnsureUndoStep()->EndingSelection());
+    last_edit_command_->GetUndoStep()->SetSelectionIsDirectional(
+        cmd->GetUndoStep()->SelectionIsDirectional());
     last_edit_command_->AppendCommandToUndoStep(cmd);
   } else {
     // Only register a new undo command if the command passed in is
@@ -986,11 +997,12 @@ void Editor::UnappliedEditing(UndoStep* cmd) {
 
   const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
       cmd->StartingSelection(), GetFrame().GetDocument());
-  ChangeSelectionAfterCommand(new_selection,
-                              SetSelectionOptions::Builder()
-                                  .SetShouldCloseTyping(true)
-                                  .SetShouldClearTypingStyle(true)
-                                  .Build());
+  ChangeSelectionAfterCommand(
+      new_selection, SetSelectionOptions::Builder()
+                         .SetShouldCloseTyping(true)
+                         .SetShouldClearTypingStyle(true)
+                         .SetIsDirectional(cmd->SelectionIsDirectional())
+                         .Build());
 
   last_edit_command_ = nullptr;
   undo_stack_->RegisterRedoStep(cmd);
@@ -1009,11 +1021,12 @@ void Editor::ReappliedEditing(UndoStep* cmd) {
 
   const SelectionInDOMTree& new_selection = CorrectedSelectionAfterCommand(
       cmd->EndingSelection(), GetFrame().GetDocument());
-  ChangeSelectionAfterCommand(new_selection,
-                              SetSelectionOptions::Builder()
-                                  .SetShouldCloseTyping(true)
-                                  .SetShouldClearTypingStyle(true)
-                                  .Build());
+  ChangeSelectionAfterCommand(
+      new_selection, SetSelectionOptions::Builder()
+                         .SetShouldCloseTyping(true)
+                         .SetShouldClearTypingStyle(true)
+                         .SetIsDirectional(cmd->SelectionIsDirectional())
+                         .Build());
 
   last_edit_command_ = nullptr;
   undo_stack_->RegisterUndoStep(cmd);
@@ -1037,7 +1050,7 @@ Editor::Editor(LocalFrame& frame)
       default_paragraph_separator_(kEditorParagraphSeparatorIsDiv),
       overwrite_mode_enabled_(false) {}
 
-Editor::~Editor() {}
+Editor::~Editor() = default;
 
 void Editor::Clear() {
   should_style_with_css_ = false;
@@ -1126,15 +1139,15 @@ bool Editor::InsertParagraphSeparator() {
 }
 
 void Editor::Cut(EditorCommandSource source) {
-  if (TryDHTMLCut())
-    return;  // DHTML did the whole operation
+  if (!DispatchCutEvent(source))
+    return;
   if (!CanCut())
     return;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |tryDHTMLCut| dispatches cut event, which may make layout dirty, but we
-  // need clean layout to obtain the selected content.
+  // A 'cut' event handler might have dirtied the layout so we need to update
+  // before we obtain the selection.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   if (source == kCommandFromMenuOrKeyBinding &&
@@ -1156,10 +1169,10 @@ void Editor::Cut(EditorCommandSource source) {
     }
 
     if (source == kCommandFromMenuOrKeyBinding) {
-      if (DispatchBeforeInputDataTransfer(FindEventTargetFromSelection(),
-                                          InputEvent::InputType::kDeleteByCut,
-                                          nullptr) !=
-          DispatchEventResult::kNotCanceled)
+      if (DispatchBeforeInputDataTransfer(
+              FindEventTargetForClipboardEvent(source),
+              InputEvent::InputType::kDeleteByCut,
+              nullptr) != DispatchEventResult::kNotCanceled)
         return;
       // 'beforeinput' event handler may destroy target frame.
       if (frame_->GetDocument()->GetFrame() != frame_)
@@ -1171,16 +1184,16 @@ void Editor::Cut(EditorCommandSource source) {
   }
 }
 
-void Editor::Copy(EditorCommandSource) {
-  if (TryDHTMLCopy())
-    return;  // DHTML did the whole operation
+void Editor::Copy(EditorCommandSource source) {
+  if (!DispatchCopyEvent(source))
+    return;
   if (!CanCopy())
     return;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |tryDHTMLCopy| dispatches copy event, which may make layout dirty, but
-  // we need clean layout to obtain the selected content.
+  // A 'copy' event handler might have dirtied the layout so we need to update
+  // before we obtain the selection.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   if (EnclosingTextControl(
@@ -1202,15 +1215,15 @@ void Editor::Copy(EditorCommandSource) {
 
 void Editor::Paste(EditorCommandSource source) {
   DCHECK(GetFrame().GetDocument());
-  if (TryDHTMLPaste(kAllMimeTypes))
-    return;  // DHTML did the whole operation
+  if (!DispatchPasteEvent(kAllMimeTypes, source))
+    return;
   if (!CanPaste())
     return;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |tryDHTMLPaste| dispatches copy event, which may make layout dirty, but
-  // we need clean layout to obtain the selected content.
+  // A 'paste' event handler might have dirtied the layout so we need to update
+  // before we obtain the selection.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   if (source == kCommandFromMenuOrKeyBinding &&
@@ -1227,10 +1240,10 @@ void Editor::Paste(EditorCommandSource source) {
         DataTransfer::Create(DataTransfer::kCopyAndPaste, kDataTransferReadable,
                              DataObject::CreateFromPasteboard(paste_mode));
 
-    if (DispatchBeforeInputDataTransfer(FindEventTargetFromSelection(),
-                                        InputEvent::InputType::kInsertFromPaste,
-                                        data_transfer) !=
-        DispatchEventResult::kNotCanceled)
+    if (DispatchBeforeInputDataTransfer(
+            FindEventTargetForClipboardEvent(source),
+            InputEvent::InputType::kInsertFromPaste,
+            data_transfer) != DispatchEventResult::kNotCanceled)
       return;
     // 'beforeinput' event handler may destroy target frame.
     if (frame_->GetDocument()->GetFrame() != frame_)
@@ -1238,37 +1251,37 @@ void Editor::Paste(EditorCommandSource source) {
   }
 
   if (paste_mode == kAllMimeTypes)
-    PasteWithPasteboard(Pasteboard::GeneralPasteboard());
+    PasteWithPasteboard(Pasteboard::GeneralPasteboard(), source);
   else
-    PasteAsPlainTextWithPasteboard(Pasteboard::GeneralPasteboard());
+    PasteAsPlainTextWithPasteboard(Pasteboard::GeneralPasteboard(), source);
 }
 
 void Editor::PasteAsPlainText(EditorCommandSource source) {
-  if (TryDHTMLPaste(kPlainTextOnly))
+  if (!DispatchPasteEvent(kPlainTextOnly, source))
     return;
   if (!CanPaste())
     return;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |tryDHTMLPaste| dispatches copy event, which may make layout dirty, but
-  // we need clean layout to obtain the selected content.
+  // A 'paste' event handler might have dirtied the layout so we need to update
+  // before we obtain the selection.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   if (source == kCommandFromMenuOrKeyBinding &&
       !GetFrameSelection().SelectionHasFocus())
     return;
 
-  PasteAsPlainTextWithPasteboard(Pasteboard::GeneralPasteboard());
+  PasteAsPlainTextWithPasteboard(Pasteboard::GeneralPasteboard(), source);
 }
 
 void Editor::PerformDelete() {
   if (!CanDelete())
     return;
 
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
+  // TODO(editing-dev): The use of UpdateStyleAndLayoutIgnorePendingStylesheets
   // needs to be audited.  See http://crbug.com/590369 for more details.
-  // |selectedRange| requires clean layout for visible selection normalization.
+  // |SelectedRange| requires clean layout for visible selection normalization.
   GetFrame().GetDocument()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   AddToKillRing(SelectedRange());
@@ -1407,68 +1420,6 @@ void Editor::RevealSelectionAfterEditingOperation(
   GetFrameSelection().RevealSelection(alignment, kDoNotRevealExtent);
 }
 
-// TODO(yosin): We should move |Transpose()| into |ExecuteTranspose()| in
-// "EditorCommand.cpp"
-void Transpose(LocalFrame& frame) {
-  Editor& editor = frame.GetEditor();
-  if (!editor.CanEdit())
-    return;
-
-  Document* const document = frame.GetDocument();
-
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited. see http://crbug.com/590369 for more details.
-  document->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  const EphemeralRange& range = ComputeRangeForTranspose(frame);
-  if (range.IsNull())
-    return;
-
-  // Transpose the two characters.
-  const String& text = PlainText(range);
-  if (text.length() != 2)
-    return;
-  const String& transposed = text.Right(1) + text.Left(1);
-
-  if (DispatchBeforeInputInsertText(
-          EventTargetNodeForDocument(document), transposed,
-          InputEvent::InputType::kInsertTranspose,
-          new StaticRangeVector(1, StaticRange::Create(range))) !=
-      DispatchEventResult::kNotCanceled)
-    return;
-
-  // 'beforeinput' event handler may destroy document->
-  if (frame.GetDocument() != document)
-    return;
-
-  // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
-  // needs to be audited. see http://crbug.com/590369 for more details.
-  document->UpdateStyleAndLayoutIgnorePendingStylesheets();
-
-  // 'beforeinput' event handler may change selection, we need to re-calculate
-  // range.
-  const EphemeralRange& new_range = ComputeRangeForTranspose(frame);
-  if (new_range.IsNull())
-    return;
-
-  const String& new_text = PlainText(new_range);
-  if (new_text.length() != 2)
-    return;
-  const String& new_transposed = new_text.Right(1) + new_text.Left(1);
-
-  const SelectionInDOMTree& new_selection =
-      SelectionInDOMTree::Builder().SetBaseAndExtent(new_range).Build();
-
-  // Select the two characters.
-  if (CreateVisibleSelection(new_selection) !=
-      frame.Selection().ComputeVisibleSelectionInDOMTree())
-    frame.Selection().SetSelection(new_selection);
-
-  // Insert the transposed characters.
-  editor.ReplaceSelectionWithText(new_transposed, false, false,
-                                  InputEvent::InputType::kInsertTranspose);
-}
-
 void Editor::AddToKillRing(const EphemeralRange& range) {
   if (should_start_new_kill_ring_sequence_)
     GetKillRing().StartNewSequence();
@@ -1488,13 +1439,15 @@ void Editor::ChangeSelectionAfterCommand(
   // See <rdar://problem/5729315> Some shouldChangeSelectedDOMRange contain
   // Ranges for selections that are no longer valid
   bool selection_did_not_change_dom_position =
-      new_selection == GetFrameSelection().GetSelectionInDOMTree();
+      new_selection == GetFrameSelection().GetSelectionInDOMTree() &&
+      options.IsDirectional() == GetFrameSelection().IsDirectional();
   const bool handle_visible =
       GetFrameSelection().IsHandleVisible() && new_selection.IsRange();
-  GetFrameSelection().SetSelection(new_selection,
-                                   SetSelectionOptions::Builder(options)
-                                       .SetShouldShowHandle(handle_visible)
-                                       .Build());
+  GetFrameSelection().SetSelection(
+      new_selection, SetSelectionOptions::Builder(options)
+                         .SetShouldShowHandle(handle_visible)
+                         .SetIsDirectional(options.IsDirectional())
+                         .Build());
 
   // Some editing operations change the selection visually without affecting its
   // position within the DOM. For example when you press return in the following
@@ -1503,12 +1456,12 @@ void Editor::ChangeSelectionAfterCommand(
   // WebCore inserts <div><br></div> *before* the current block, which correctly
   // moves the paragraph down but which doesn't change the caret's DOM position
   // (["hello", 0]). In these situations the above FrameSelection::setSelection
-  // call does not call EditorClient::respondToChangedSelection(), which, on the
+  // call does not call LocalFrameClient::DidChangeSelection(), which, on the
   // Mac, sends selection change notifications and starts a new kill ring
   // sequence, but we want to do these things (matches AppKit).
   if (selection_did_not_change_dom_position) {
-    Client().RespondToChangedSelection(
-        frame_, GetFrameSelection().GetSelectionInDOMTree().Type());
+    frame_->Client()->DidChangeSelection(
+        GetFrameSelection().GetSelectionInDOMTree().Type() != kRangeSelection);
   }
 }
 
@@ -1596,7 +1549,7 @@ bool Editor::FindString(const String& target, FindOptions options) {
   if (!result_range)
     return false;
 
-  GetFrameSelection().SetSelection(
+  GetFrameSelection().SetSelectionAndEndTyping(
       SelectionInDOMTree::Builder()
           .SetBaseAndExtent(EphemeralRange(result_range))
           .Build());
@@ -1615,8 +1568,9 @@ Range* Editor::FindStringAndScrollToVisible(const String& target,
   Node* first_node = next_match->FirstNode();
   first_node->GetLayoutObject()->ScrollRectToVisible(
       LayoutRect(next_match->BoundingBox()),
-      ScrollAlignment::kAlignCenterIfNeeded,
-      ScrollAlignment::kAlignCenterIfNeeded, kUserScroll);
+      WebScrollIntoViewParams(ScrollAlignment::kAlignCenterIfNeeded,
+                              ScrollAlignment::kAlignCenterIfNeeded,
+                              kUserScroll));
   first_node->GetDocument().SetSequentialFocusNavigationStartingPoint(
       first_node);
 
@@ -1755,8 +1709,8 @@ void Editor::SetMarkedTextMatchesAreHighlighted(bool flag) {
 
 void Editor::RespondToChangedSelection() {
   GetSpellChecker().RespondToChangedSelection();
-  Client().RespondToChangedSelection(
-      frame_, GetFrameSelection().GetSelectionInDOMTree().Type());
+  frame_->Client()->DidChangeSelection(
+      GetFrameSelection().GetSelectionInDOMTree().Type() != kRangeSelection);
   SetStartNewKillRingSequence(true);
 }
 
@@ -1770,6 +1724,7 @@ FrameSelection& Editor::GetFrameSelection() const {
 
 void Editor::SetMark() {
   mark_ = GetFrameSelection().ComputeVisibleSelectionInDOMTree();
+  mark_is_directional_ = GetFrameSelection().IsDirectional();
 }
 
 void Editor::ToggleOverwriteModeEnabled() {

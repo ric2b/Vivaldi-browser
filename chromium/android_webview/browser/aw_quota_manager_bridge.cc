@@ -16,7 +16,7 @@
 #include "content/public/common/content_client.h"
 #include "jni/AwQuotaManagerBridge_jni.h"
 #include "storage/browser/quota/quota_manager.h"
-#include "storage/common/quota/quota_types.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 #include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
@@ -47,10 +47,10 @@ class GetOriginsTask : public base::RefCountedThreadSafe<GetOriginsTask> {
   ~GetOriginsTask();
 
   void OnOriginsObtained(const std::set<GURL>& origins,
-                         storage::StorageType type);
+                         blink::mojom::StorageType type);
 
   void OnUsageAndQuotaObtained(const GURL& origin,
-                               storage::QuotaStatusCode status_code,
+                               blink::mojom::QuotaStatusCode status_code,
                                int64_t usage,
                                int64_t quota);
 
@@ -84,13 +84,13 @@ void GetOriginsTask::Run() {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&QuotaManager::GetOriginsModifiedSince, quota_manager_,
-                 storage::kStorageTypeTemporary,
+                 blink::mojom::StorageType::kTemporary,
                  base::Time() /* Since beginning of time. */,
                  base::Bind(&GetOriginsTask::OnOriginsObtained, this)));
 }
 
 void GetOriginsTask::OnOriginsObtained(const std::set<GURL>& origins,
-                                       storage::StorageType type) {
+                                       blink::mojom::StorageType type) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   num_callbacks_to_wait_ = origins.size();
   num_callbacks_received_ = 0u;
@@ -107,11 +107,11 @@ void GetOriginsTask::OnOriginsObtained(const std::set<GURL>& origins,
 
 void GetOriginsTask::OnUsageAndQuotaObtained(
     const GURL& origin,
-    storage::QuotaStatusCode status_code,
+    blink::mojom::QuotaStatusCode status_code,
     int64_t usage,
     int64_t quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (status_code == storage::kQuotaStatusOk) {
+  if (status_code == blink::mojom::QuotaStatusCode::kOk) {
     origin_.push_back(origin.spec());
     usage_.push_back(usage);
     quota_.push_back(quota);
@@ -233,8 +233,7 @@ void AwQuotaManagerBridge::DeleteOriginOnUiThread(
           StoragePartition::REMOVE_DATA_MASK_FILE_SYSTEMS |
           StoragePartition::REMOVE_DATA_MASK_INDEXEDDB |
           StoragePartition::REMOVE_DATA_MASK_WEBSQL,
-      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY, GURL(origin),
-      storage_partition->GetURLRequestContext());
+      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_TEMPORARY, GURL(origin));
 }
 
 void AwQuotaManagerBridge::GetOrigins(JNIEnv* env,
@@ -275,11 +274,11 @@ namespace {
 
 void OnUsageAndQuotaObtained(
     const AwQuotaManagerBridge::QuotaUsageCallback& ui_callback,
-    storage::QuotaStatusCode status_code,
+    blink::mojom::QuotaStatusCode status_code,
     int64_t usage,
     int64_t quota) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (status_code != storage::kQuotaStatusOk) {
+  if (status_code != blink::mojom::QuotaStatusCode::kOk) {
     usage = 0;
     quota = 0;
   }
@@ -314,7 +313,7 @@ void AwQuotaManagerBridge::GetUsageAndQuotaForOriginOnUiThread(
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::Bind(&QuotaManager::GetUsageAndQuota, GetQuotaManager(),
-                 GURL(origin), storage::kStorageTypeTemporary,
+                 GURL(origin), blink::mojom::StorageType::kTemporary,
                  base::Bind(&OnUsageAndQuotaObtained, ui_callback)));
 }
 

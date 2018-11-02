@@ -71,7 +71,8 @@ class ServerWindow : public viz::HostFrameSinkClient {
       gfx::AcceleratedWidget widget,
       viz::mojom::CompositorFrameSinkAssociatedRequest sink_request,
       viz::mojom::CompositorFrameSinkClientPtr client,
-      viz::mojom::DisplayPrivateAssociatedRequest display_request);
+      viz::mojom::DisplayPrivateAssociatedRequest display_request,
+      viz::mojom::DisplayClientPtr display_client);
 
   void CreateCompositorFrameSink(
       viz::mojom::CompositorFrameSinkRequest request,
@@ -86,8 +87,15 @@ class ServerWindow : public viz::HostFrameSinkClient {
     return current_local_surface_id_;
   }
 
+  // Add the child to this window.
   void Add(ServerWindow* child);
+
+  // Removes the child window, but does not delete it.
   void Remove(ServerWindow* child);
+
+  // Removes all child windows from this window, but does not delete them.
+  void RemoveAllChildren();
+
   void Reorder(ServerWindow* relative, mojom::OrderDirection diretion);
   void StackChildAtBottom(ServerWindow* child);
   void StackChildAtTop(ServerWindow* child);

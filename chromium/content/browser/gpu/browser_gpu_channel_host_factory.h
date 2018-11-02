@@ -41,11 +41,12 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   // The factory will return a null GpuChannelHost in the callback during
   // shutdown.
   void EstablishGpuChannel(
-      const gpu::GpuChannelEstablishedCallback& callback) override;
-  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync(
-      bool* connection_error) override;
-  void SetForceAllowAccessToGpu(bool) override {}
+      gpu::GpuChannelEstablishedCallback callback) override;
+  scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
+
+  // FEATURE_FORCE_ACCESS_TO_GPU
+  void SetForceAllowAccessToGpu(bool) override {}
 
  private:
   struct CreateRequest;
@@ -65,7 +66,6 @@ class CONTENT_EXPORT BrowserGpuChannelHostFactory
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
   std::unique_ptr<BrowserGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   scoped_refptr<EstablishRequest> pending_request_;
-  std::vector<gpu::GpuChannelEstablishedCallback> established_callbacks_;
 
   base::OneShotTimer timeout_;
 

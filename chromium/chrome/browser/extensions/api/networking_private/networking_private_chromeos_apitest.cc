@@ -155,10 +155,6 @@ class UIDelegateStub : public NetworkingPrivateDelegate::UIDelegate {
   void ShowAccountDetails(const std::string& guid) const override {
     ++s_show_account_details_called_;
   }
-  bool HandleConnectFailed(const std::string& guid,
-                           const std::string error) const override {
-    return false;
-  }
 };
 
 // static
@@ -281,7 +277,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
     device_test_->SetDeviceProperty(kCellularDevicePath, shill::kMinProperty,
                                     base::Value("test_min"));
     device_test_->SetDeviceProperty(kCellularDevicePath,
-                                    shill::kModelIDProperty,
+                                    shill::kModelIdProperty,
                                     base::Value("test_model_id"));
     device_test_->SetSimLocked(kCellularDevicePath, false);
 
@@ -490,7 +486,7 @@ class NetworkingPrivateChromeOSApiTest : public ExtensionApiTest {
 
   std::unique_ptr<ChromeNetworkingCastPrivateDelegate>
   CreateNetworkingCastPrivateDelegate() {
-    return base::MakeUnique<TestNetworkingCastPrivateDelegate>();
+    return std::make_unique<TestNetworkingCastPrivateDelegate>();
   }
 
   bool SetupCertificates() {

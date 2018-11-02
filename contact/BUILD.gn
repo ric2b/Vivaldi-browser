@@ -31,6 +31,10 @@ source_set("contact") {
     "phonenumber_table.h",
     "phonenumber_type.cc",
     "phonenumber_type.h",
+    "postaladdress_table.h",
+    "postaladdress_table.cc",
+    "postaladdress_type.cc",
+    "postaladdress_type.h",
   ]
   deps = [
     "//base:base",

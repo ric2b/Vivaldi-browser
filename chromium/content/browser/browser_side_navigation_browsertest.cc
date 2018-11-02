@@ -11,9 +11,9 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
+#include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/site_isolation_policy.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/web_contents.h"
@@ -23,6 +23,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/controllable_http_response.h"
 #include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/shell/browser/shell.h"
@@ -38,17 +39,23 @@
 
 namespace content {
 
-class BrowserSideNavigationBrowserTest : public ContentBrowserTest {
- public:
-  BrowserSideNavigationBrowserTest() {}
-
+// Test with BrowserSideNavigation enabled (aka PlzNavigate).
+// If you don't need a custom embedded test server, please use the next class
+// below (BrowserSideNavigationBrowserTest), it will automatically start the
+// default server.
+// TODO(clamy): Rename those NavigationBrowserTests.
+class BrowserSideNavigationBaseBrowserTest : public ContentBrowserTest {
  protected:
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitch(switches::kEnableBrowserSideNavigation);
-  }
-
   void SetUpOnMainThread() override {
     host_resolver()->AddRule("*", "127.0.0.1");
+  }
+};
+
+class BrowserSideNavigationBrowserTest
+    : public BrowserSideNavigationBaseBrowserTest {
+ protected:
+  void SetUpOnMainThread() override {
+    BrowserSideNavigationBaseBrowserTest::SetUpOnMainThread();
     ASSERT_TRUE(embedded_test_server()->Start());
   }
 };
@@ -202,8 +209,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest, FailedNavigation) {
   // Now navigate to an unreachable url.
   {
     TestNavigationObserver observer(shell()->web_contents());
-    GURL error_url(
-        net::URLRequestFailedJob::GetMockHttpUrl(net::ERR_CONNECTION_RESET));
+    GURL error_url(embedded_test_server()->GetURL("/close-socket"));
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
@@ -341,8 +347,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
 
   // Revoke the access to the file and submit the form. The renderer process
   // should be terminated.
-  RenderProcessHostWatcher process_exit_observer(
-      rfh->GetProcess(), RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+  RenderProcessHostKillWaiter process_kill_waiter(rfh->GetProcess());
   ChildProcessSecurityPolicyImpl* security_policy =
       ChildProcessSecurityPolicyImpl::GetInstance();
   security_policy->RevokeAllPermissionsForFile(rfh->GetProcess()->GetID(),
@@ -359,7 +364,7 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
       "document.getElementById('file-form').submit();",
       &result));
   EXPECT_TRUE(result);
-  process_exit_observer.Wait();
+  EXPECT_EQ(bad_message::RFH_ILLEGAL_UPLOAD_PARAMS, process_kill_waiter.Wait());
 }
 
 // Test case to verify that redirects to data: URLs are properly disallowed,
@@ -447,26 +452,33 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserDisableWebSecurityTest,
   // Setup a BeginNavigate IPC with non-empty base_url_for_data_url.
   CommonNavigationParams common_params(
       data_url, Referrer(), ui::PAGE_TRANSITION_LINK,
-      FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT, true, false,
-      base::TimeTicks(), FrameMsg_UILoadMetricsReportType::NO_REPORT,
-      file_url,  // base_url_for_data_url
-      GURL(), PREVIEWS_UNSPECIFIED, base::TimeTicks::Now(), "GET", nullptr,
-      base::Optional<SourceLocation>(), CSPDisposition::CHECK,
-      false /* started_from_context_menu */, false /* has_user_gesture */);
-  BeginNavigationParams begin_params(
-      std::string(), net::LOAD_NORMAL, false, REQUEST_CONTEXT_TYPE_LOCATION,
-      blink::WebMixedContentContextType::kBlockable, false,
-      url::Origin::Create(data_url));
-  FrameHostMsg_BeginNavigation msg(rfh->GetRoutingID(), common_params,
-                                   begin_params);
+      FrameMsg_Navigate_Type::DIFFERENT_DOCUMENT, true /* allow_download */,
+      false /* should_replace_current_entry */,
+      base::TimeTicks() /* ui_timestamp */,
+      FrameMsg_UILoadMetricsReportType::NO_REPORT,
+      file_url, /* base_url_for_data_url */
+      GURL() /* history_url_for_data_url */, PREVIEWS_UNSPECIFIED,
+      base::TimeTicks::Now() /* navigation_start */, "GET",
+      nullptr /* post_data */, base::Optional<SourceLocation>(),
+      CSPDisposition::CHECK, false /* started_from_context_menu */,
+      false /* has_user_gesture */);
+  mojom::BeginNavigationParamsPtr begin_params =
+      mojom::BeginNavigationParams::New(
+          std::string() /* headers */, net::LOAD_NORMAL,
+          false /* skip_service_worker */, REQUEST_CONTEXT_TYPE_LOCATION,
+          blink::WebMixedContentContextType::kBlockable,
+          false /* is_form_submission */, GURL() /* searchable_form_url */,
+          std::string() /* searchable_form_encoding */,
+          url::Origin::Create(data_url), GURL() /* client_side_redirect_url */,
+          base::nullopt /* suggested_filename */);
 
   // Receiving the invalid IPC message should lead to renderer process
   // termination.
-  RenderProcessHostWatcher process_exit_observer(
-      rfh->GetProcess(), RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  IPC::IpcSecurityTestUtil::PwnMessageReceived(rfh->GetProcess()->GetChannel(),
-                                               msg);
-  process_exit_observer.Wait();
+  RenderProcessHostKillWaiter process_kill_waiter(rfh->GetProcess());
+  rfh->frame_host_binding_for_testing().impl()->BeginNavigation(
+      common_params, std::move(begin_params));
+  EXPECT_EQ(bad_message::RFH_BASE_URL_FOR_DATA_URL_SPECIFIED,
+            process_kill_waiter.Wait());
 
   EXPECT_FALSE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
       rfh->GetProcess()->GetID(), file_path));
@@ -505,6 +517,335 @@ IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest, BackFollowedByReload) {
   // The reload should have cancelled the back navigation, and the last
   // committed URL should still be the second URL.
   EXPECT_EQ(url2, shell()->web_contents()->GetLastCommittedURL());
+}
+
+// Navigation are started in the browser process. After the headers are
+// received, the URLLoaderClient is transfered from the browser process to the
+// renderer process. This test ensures that when the the URLLoader is deleted
+// (in the browser process), the URLLoaderClient (in the renderer process) stops
+// properly.
+IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBaseBrowserTest,
+                       CancelRequestAfterReadyToCommit) {
+  // This test cancels the request using the ResourceDispatchHost. With the
+  // NetworkService, it is not used so the request is not canceled.
+  // TODO(arthursonzogni): Find a way to cancel a request from the browser
+  // with the NetworkService.
+  if (base::FeatureList::IsEnabled(features::kNetworkService))
+    return;
+
+  ControllableHttpResponse response(embedded_test_server(), "/main_document");
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // 1) Load a new document. Commit the navigation but do not send the full
+  //    response's body.
+  GURL url(embedded_test_server()->GetURL("/main_document"));
+  TestNavigationManager navigation_manager(shell()->web_contents(), url);
+  shell()->LoadURL(url);
+
+  // Let the navigation start.
+  EXPECT_TRUE(navigation_manager.WaitForRequestStart());
+  navigation_manager.ResumeNavigation();
+
+  // The server sends the first part of the response and waits.
+  response.WaitForRequest();
+  response.Send(
+      "HTTP/1.1 200 OK\r\n"
+      "Content-Type: text/html; charset=utf-8\r\n"
+      "\r\n"
+      "<html><body> ... ");
+
+  EXPECT_TRUE(navigation_manager.WaitForResponse());
+  GlobalRequestID global_id =
+      navigation_manager.GetNavigationHandle()->GetGlobalRequestID();
+  navigation_manager.ResumeNavigation();
+
+  // The navigation commits successfully. The renderer is waiting for the
+  // response's body.
+  navigation_manager.WaitForNavigationFinished();
+
+  // 2) The ResourceDispatcherHost cancels the request.
+  auto cancel_request = [](GlobalRequestID global_id) {
+    ResourceDispatcherHostImpl* rdh =
+        static_cast<ResourceDispatcherHostImpl*>(ResourceDispatcherHost::Get());
+    rdh->CancelRequest(global_id.child_id, global_id.request_id);
+  };
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::BindOnce(cancel_request, global_id));
+
+  // 3) Check that the load stops properly.
+  EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+}
+
+// TODO(arthursonzogni): Remove these tests once NavigationMojoResponse has
+// launched.
+class NavigationMojoResponseBrowserTest : public ContentBrowserTest {
+ public:
+  NavigationMojoResponseBrowserTest() {}
+
+ protected:
+  void SetUp() override {
+    base::test::ScopedFeatureList().InitAndEnableFeature(
+        features::kNavigationMojoResponse);
+    ContentBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+};
+
+// Ensure that browser initiated basic navigations work with browser side
+// navigation.
+// TODO(arthursonzogni): Remove this test once NavigationMojoResponse has
+// launched.
+IN_PROC_BROWSER_TEST_F(NavigationMojoResponseBrowserTest,
+                       BrowserInitiatedNavigations) {
+  // Perform a navigation with no live renderer.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/title1.html"));
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  RenderFrameHost* initial_rfh =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetFrameTree()
+          ->root()
+          ->current_frame_host();
+
+  // Perform a same site navigation.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/title2.html"));
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // The RenderFrameHost should not have changed.
+  EXPECT_EQ(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
+                             ->GetFrameTree()
+                             ->root()
+                             ->current_frame_host());
+
+  // Perform a cross-site navigation.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url = embedded_test_server()->GetURL("foo.com", "/title3.html");
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // The RenderFrameHost should have changed.
+  EXPECT_NE(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
+                             ->GetFrameTree()
+                             ->root()
+                             ->current_frame_host());
+}
+
+// Ensure that renderer initiated same-site navigations work with browser side
+// navigation.
+// TODO(arthursonzogni): Remove this test once NavigationMojoResponse has
+// launched.
+IN_PROC_BROWSER_TEST_F(NavigationMojoResponseBrowserTest,
+                       RendererInitiatedSameSiteNavigation) {
+  // Perform a navigation with no live renderer.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/simple_links.html"));
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  RenderFrameHost* initial_rfh =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetFrameTree()
+          ->root()
+          ->current_frame_host();
+
+  // Simulate clicking on a same-site link.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/title2.html"));
+    bool success = false;
+    EXPECT_TRUE(ExecuteScriptAndExtractBool(
+        shell(), "window.domAutomationController.send(clickSameSiteLink());",
+        &success));
+    EXPECT_TRUE(success);
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // The RenderFrameHost should not have changed.
+  EXPECT_EQ(initial_rfh, static_cast<WebContentsImpl*>(shell()->web_contents())
+                             ->GetFrameTree()
+                             ->root()
+                             ->current_frame_host());
+}
+
+// Ensure that renderer initiated cross-site navigations work with browser side
+// navigation.
+// TODO(arthursonzogni): Remove this test once NavigationMojoResponse has
+// launched.
+IN_PROC_BROWSER_TEST_F(NavigationMojoResponseBrowserTest,
+                       RendererInitiatedCrossSiteNavigation) {
+  // Perform a navigation with no live renderer.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/simple_links.html"));
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  RenderFrameHost* initial_rfh =
+      static_cast<WebContentsImpl*>(shell()->web_contents())
+          ->GetFrameTree()
+          ->root()
+          ->current_frame_host();
+
+  // Simulate clicking on a cross-site link.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    const char kReplacePortNumber[] =
+        "window.domAutomationController.send(setPortNumber(%d));";
+    uint16_t port_number = embedded_test_server()->port();
+    GURL url = embedded_test_server()->GetURL("foo.com", "/title2.html");
+    bool success = false;
+    EXPECT_TRUE(ExecuteScriptAndExtractBool(
+        shell(), base::StringPrintf(kReplacePortNumber, port_number),
+        &success));
+    success = false;
+    EXPECT_TRUE(ExecuteScriptAndExtractBool(
+        shell(), "window.domAutomationController.send(clickCrossSiteLink());",
+        &success));
+    EXPECT_TRUE(success);
+    EXPECT_TRUE(WaitForLoadStop(shell()->web_contents()));
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // The RenderFrameHost should not have changed unless site-per-process is
+  // enabled.
+  if (AreAllSitesIsolatedForTesting()) {
+    EXPECT_NE(initial_rfh,
+              static_cast<WebContentsImpl*>(shell()->web_contents())
+                  ->GetFrameTree()
+                  ->root()
+                  ->current_frame_host());
+  } else {
+    EXPECT_EQ(initial_rfh,
+              static_cast<WebContentsImpl*>(shell()->web_contents())
+                  ->GetFrameTree()
+                  ->root()
+                  ->current_frame_host());
+  }
+}
+
+// Ensure that browser side navigation handles navigation failures.
+// TODO(arthursonzogni): Remove this test once NavigationMojoResponse has
+// launched.
+IN_PROC_BROWSER_TEST_F(NavigationMojoResponseBrowserTest, FailedNavigation) {
+  // Perform a navigation with no live renderer.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL url(embedded_test_server()->GetURL("/title1.html"));
+    NavigateToURL(shell(), url);
+    EXPECT_EQ(url, observer.last_navigation_url());
+    EXPECT_TRUE(observer.last_navigation_succeeded());
+  }
+
+  // Now navigate to an unreachable url.
+  {
+    TestNavigationObserver observer(shell()->web_contents());
+    GURL error_url(embedded_test_server()->GetURL("/close-socket"));
+    BrowserThread::PostTask(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(&net::URLRequestFailedJob::AddUrlHandler));
+    NavigateToURL(shell(), error_url);
+    EXPECT_EQ(error_url, observer.last_navigation_url());
+    NavigationEntry* entry =
+        shell()->web_contents()->GetController().GetLastCommittedEntry();
+    EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
+  }
+}
+
+// Data URLs can have a reference fragment like any other URLs. This test makes
+// sure it is taken into account.
+IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
+                       DataURLWithReferenceFragment) {
+  GURL url("data:text/html,body#foo");
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  std::string body;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      shell(),
+      "window.domAutomationController.send(document.body.textContent);",
+      &body));
+  // TODO(arthursonzogni): This is wrong. The correct value for |body| is
+  // "body", not "body#foo". See https://crbug.com/123004.
+  EXPECT_EQ("body#foo", body);
+
+  std::string reference_fragment;
+  EXPECT_TRUE(ExecuteScriptAndExtractString(
+      shell(), "window.domAutomationController.send(location.hash);",
+      &reference_fragment));
+  EXPECT_EQ("#foo", reference_fragment);
+}
+
+// Regression test for https://crbug.com/796561.
+// 1) Start on a document with history.length == 1.
+// 2) Create an iframe and call history.pushState at the same time.
+// 3) history.back() must work.
+IN_PROC_BROWSER_TEST_F(BrowserSideNavigationBrowserTest,
+                       IframeAndPushStateSimultaneously) {
+  GURL main_url = embedded_test_server()->GetURL("/simple_page.html");
+  GURL iframe_url = embedded_test_server()->GetURL("/hello.html");
+
+  // 1) Start on a new document such that history.length == 1.
+  {
+    EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+    int history_length;
+    EXPECT_TRUE(ExecuteScriptAndExtractInt(
+        shell(), "window.domAutomationController.send(history.length)",
+        &history_length));
+    EXPECT_EQ(1, history_length);
+  }
+
+  // 2) Create an iframe and call history.pushState at the same time.
+  {
+    TestNavigationManager iframe_navigation(shell()->web_contents(),
+                                            iframe_url);
+    ExecuteScriptAsync(shell(),
+                       "let iframe = document.createElement('iframe');"
+                       "iframe.src = '/hello.html';"
+                       "document.body.appendChild(iframe);");
+    EXPECT_TRUE(iframe_navigation.WaitForRequestStart());
+
+    // The iframe navigation is paused. In the meantime, a pushState navigation
+    // begins and ends.
+    TestNavigationManager push_state_navigation(shell()->web_contents(),
+                                                main_url);
+    ExecuteScriptAsync(shell(), "window.history.pushState({}, null);");
+    push_state_navigation.WaitForNavigationFinished();
+
+    // The iframe navigation is resumed.
+    iframe_navigation.WaitForNavigationFinished();
+  }
+
+  // 3) history.back() must work.
+  {
+    TestNavigationObserver navigation_observer(shell()->web_contents());
+    EXPECT_TRUE(ExecuteScript(shell()->web_contents(), "history.back();"));
+    navigation_observer.Wait();
+  }
 }
 
 }  // namespace content

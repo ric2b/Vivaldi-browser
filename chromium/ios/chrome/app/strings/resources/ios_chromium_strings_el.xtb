@@ -3,6 +3,7 @@
 <translationbundle lang="el">
 <translation id="102360288709523007">Συμβάλετε στη βελτίωση του Chromium, στέλνοντας στην Google στατιστικά στοιχεία χρήσης και αναφορές σφαλμάτων.</translation>
 <translation id="1185134272377778587">Σχετικά με το Chromium</translation>
+<translation id="1289966288285062467">Σημείωση Απορρήτου του Chromium</translation>
 <translation id="1472013873724362412">Ο λογαριασμός σας δεν λειτουργεί στο Chromium. Επικοινωνήστε με το διαχειριστή του τομέα ή χρησιμοποιήστε έναν κανονικό Λογαριασμό Google για να συνδεθείτε.</translation>
 <translation id="1736662517232558588">Διαγρ. δεδ. Chromium</translation>
 <translation id="1838412507805038478">Το Chromium επαλήθευσε ότι το πιστοποιητικό αυτού του ιστότοπου εκδόθηκε από τον/τη(ν) <ph name="ISSUER" />.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Θέλετε να αποσυνδεθείτε από το Chromium;</translation>
 <translation id="6424492062988593837">Το Chromium μόλις βελτιώθηκε! Μια νέα έκδοση είναι διαθέσιμη.</translation>
 <translation id="6604711459180487467">Απολαύστε μια καλύτερη εμπειρία στο Chromium βάσει της τοποθεσίας σας.</translation>
+<translation id="6626296268883197964">Χρησιμοποιώντας αυτήν την εφαρμογή, συμφωνείτε με τους <ph name="BEGIN_LINK_TOS" />Όρους Παροχής Υπηρεσιών<ph name="END_LINK_TOS" /> και τη <ph name="BEGIN_LINK_PRIVACY" />Σημείωση απορρήτου<ph name="END_LINK_PRIVACY" /> του Chromium.</translation>
 <translation id="7099326575020694068">Το Chromium δεν μπορεί να χρησιμοποιήσει την κάμερά σας στη λειτουργία προβολής διαχωρισμού οθόνης</translation>
-<translation id="7144758435978427212">Ανακαλύψτε ιστοσελίδες που στέλνουν κοντινά αντικείμενα. Όταν είναι ενεργό το Bluetooth, το Chromium μπορεί να συγκεντρώνει ιστοσελίδες που σχετίζονται με αντικείμενα που βρίσκονται γύρω σας και να τις στέλνει ανώνυμα σε μια υπηρεσία της Google, για να εντοπίσει αυτές που είναι πιο χρήσιμες για εσάς. <ph name="BEGIN_LINK" />Μάθετε περισσότερα<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Το Chromium σάς βοηθά να εξοικονομήσετε χρόνο, μεταφέροντας τους λογαριασμούς σας στον ιστό. Μπορείτε να προσθέσετε ή να καταργήσετε λογαριασμούς στις Ρυθμίσεις.</translation>
 <translation id="7269362888766543920">Ορισμένα πρόσθετα προκαλούν σφάλματα στο Chromium. Δοκιμάστε να τα απεγκαταστήσετε.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Χρησιμοποιήστε το Chromium παντού</translation>
 <translation id="7674213385180944843">Ανοίξτε το μενού Ρυθμίσεις &gt; Απόρρητο &gt; Κάμερα &gt; Chromium και ενεργοποιήστε την κάμερα.</translation>
 <translation id="786327964234957808">Πραγματοποιείτε εναλλαγή στους λογαριασμούς συγχρονισμού από <ph name="USER_EMAIL1" /> σε <ph name="USER_EMAIL2" />. Η διαχείριση των υπαρχόντων δεδομένων του Chromium γίνεται από <ph name="DOMAIN" />. Αυτό θα διαγράψει τα δεδομένα σας από αυτήν τη συσκευή, αλλά τα δεδομένα θα διατηρηθούν στη διεύθυνση <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Με τη χρήση, αποδέχεστε τους <ph name="BEGIN_LINK" />Όρους Παροχής Υπηρεσιών<ph name="END_LINK" /> του Chromium.</translation>
 <translation id="8175055321229419309">Συμβουλή: <ph name="BEGIN_LINK" />Μετακινήστε το Chromium στο dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Απολαύστε μια καλύτερη εμπειρία Google στο Chromium βάσει της τοποθεσίας σας.</translation>
 <translation id="8353224596138547809">Θέλετε το Chromium να αποθηκεύσει τον κωδικό πρόσβασής σας για αυτόν τον ιστότοπο;</translation>

@@ -112,6 +112,11 @@ static uint16_t GetConvertedCSSPropertyID(const AtomicString&) {
   return static_cast<uint16_t>(CSSPropertyVariable);
 }
 
+static uint16_t GetConvertedCSSPropertyID(AtRuleDescriptorID descriptor_id) {
+  return static_cast<uint16_t>(
+      AtRuleDescriptorIDAsCSSPropertyID(descriptor_id));
+}
+
 static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
                             const CSSValue&,
                             uint16_t id,
@@ -136,6 +141,14 @@ static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
              custom_property_name;
 }
 
+static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
+                            const CSSValue& css_value,
+                            uint16_t id,
+                            AtRuleDescriptorID descriptor_id) {
+  return IsPropertyMatch(metadata, css_value, id,
+                         AtRuleDescriptorIDAsCSSPropertyID(descriptor_id));
+}
+
 template <typename T>
 int ImmutableCSSPropertyValueSet::FindPropertyIndex(T property) const {
   uint16_t id = GetConvertedCSSPropertyID(property);
@@ -150,6 +163,8 @@ template CORE_EXPORT int ImmutableCSSPropertyValueSet::FindPropertyIndex(
     CSSPropertyID) const;
 template CORE_EXPORT int ImmutableCSSPropertyValueSet::FindPropertyIndex(
     AtomicString) const;
+template CORE_EXPORT int ImmutableCSSPropertyValueSet::FindPropertyIndex(
+    AtRuleDescriptorID) const;
 
 void ImmutableCSSPropertyValueSet::TraceAfterDispatch(blink::Visitor* visitor) {
   const Member<const CSSValue>* values = ValueArray();
@@ -166,8 +181,9 @@ MutableCSSPropertyValueSet::MutableCSSPropertyValueSet(
   } else {
     property_vector_.ReserveInitialCapacity(other.PropertyCount());
     for (unsigned i = 0; i < other.PropertyCount(); ++i) {
+      PropertyReference property = other.PropertyAt(i);
       property_vector_.UncheckedAppend(
-          other.PropertyAt(i).ToCSSPropertyValue());
+          CSSPropertyValue(property.PropertyMetadata(), property.Value()));
     }
   }
 }
@@ -183,6 +199,13 @@ static String SerializeShorthand(const CSSPropertyValueSet&,
   return "";
 }
 
+static String SerializeShorthand(const CSSPropertyValueSet& property_set,
+                                 AtRuleDescriptorID atrule_id) {
+  return StylePropertySerializer(property_set)
+      .GetPropertyValue(AtRuleDescriptorIDAsCSSPropertyID(atrule_id));
+  ;
+}
+
 template <typename T>
 String CSSPropertyValueSet::GetPropertyValue(T property) const {
   const CSSValue* value = GetPropertyCSSValue(property);
@@ -192,6 +215,9 @@ String CSSPropertyValueSet::GetPropertyValue(T property) const {
 }
 template CORE_EXPORT String
     CSSPropertyValueSet::GetPropertyValue<CSSPropertyID>(CSSPropertyID) const;
+template CORE_EXPORT String
+    CSSPropertyValueSet::GetPropertyValue<AtRuleDescriptorID>(
+        AtRuleDescriptorID) const;
 template CORE_EXPORT String
     CSSPropertyValueSet::GetPropertyValue<AtomicString>(AtomicString) const;
 
@@ -204,6 +230,8 @@ const CSSValue* CSSPropertyValueSet::GetPropertyCSSValue(T property) const {
 }
 template CORE_EXPORT const CSSValue* CSSPropertyValueSet::GetPropertyCSSValue<
     CSSPropertyID>(CSSPropertyID) const;
+template CORE_EXPORT const CSSValue* CSSPropertyValueSet::GetPropertyCSSValue<
+    AtRuleDescriptorID>(AtRuleDescriptorID) const;
 template CORE_EXPORT const CSSValue*
     CSSPropertyValueSet::GetPropertyCSSValue<AtomicString>(AtomicString) const;
 
@@ -447,10 +475,13 @@ void MutableCSSPropertyValueSet::MergeAndOverrideOnConflict(
     PropertyReference to_merge = other->PropertyAt(n);
     // TODO(leviw): This probably doesn't work correctly with Custom Properties
     CSSPropertyValue* old = FindCSSPropertyWithID(to_merge.Id());
-    if (old)
-      SetProperty(to_merge.ToCSSPropertyValue(), old);
-    else
-      property_vector_.push_back(to_merge.ToCSSPropertyValue());
+    if (old) {
+      SetProperty(
+          CSSPropertyValue(to_merge.PropertyMetadata(), to_merge.Value()), old);
+    } else {
+      property_vector_.push_back(
+          CSSPropertyValue(to_merge.PropertyMetadata(), to_merge.Value()));
+    }
   }
 }
 

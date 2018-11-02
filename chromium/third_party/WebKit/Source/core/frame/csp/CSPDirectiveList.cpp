@@ -530,31 +530,33 @@ bool CSPDirectiveList::CheckSourceAndReportViolation(
   DCHECK_NE(ContentSecurityPolicy::DirectiveType::kChildSrc, effective_type);
   DCHECK_NE(ContentSecurityPolicy::DirectiveType::kDefaultSrc, effective_type);
 
-  String prefix;
+  String prefix = "Refused to ";
   if (ContentSecurityPolicy::DirectiveType::kBaseURI == effective_type)
-    prefix = "Refused to set the document's base URI to '";
+    prefix = prefix + "set the document's base URI to '";
   else if (ContentSecurityPolicy::DirectiveType::kWorkerSrc == effective_type)
-    prefix = "Refused to create a worker from '";
+    prefix = prefix + "create a worker from '";
   else if (ContentSecurityPolicy::DirectiveType::kConnectSrc == effective_type)
-    prefix = "Refused to connect to '";
+    prefix = prefix + "connect to '";
   else if (ContentSecurityPolicy::DirectiveType::kFontSrc == effective_type)
-    prefix = "Refused to load the font '";
+    prefix = prefix + "load the font '";
   else if (ContentSecurityPolicy::DirectiveType::kFormAction == effective_type)
-    prefix = "Refused to send form data to '";
+    prefix = prefix + "send form data to '";
   else if (ContentSecurityPolicy::DirectiveType::kFrameSrc == effective_type)
-    prefix = "Refused to frame '";
+    prefix = prefix + "frame '";
   else if (ContentSecurityPolicy::DirectiveType::kImgSrc == effective_type)
-    prefix = "Refused to load the image '";
+    prefix = prefix + "load the image '";
   else if (ContentSecurityPolicy::DirectiveType::kMediaSrc == effective_type)
-    prefix = "Refused to load media from '";
+    prefix = prefix + "load media from '";
   else if (ContentSecurityPolicy::DirectiveType::kManifestSrc == effective_type)
-    prefix = "Refused to load manifest from '";
+    prefix = prefix + "load manifest from '";
   else if (ContentSecurityPolicy::DirectiveType::kObjectSrc == effective_type)
-    prefix = "Refused to load plugin data from '";
+    prefix = prefix + "load plugin data from '";
+  else if (ContentSecurityPolicy::DirectiveType::kPrefetchSrc == effective_type)
+    prefix = prefix + "prefetch content from '";
   else if (ContentSecurityPolicy::DirectiveType::kScriptSrc == effective_type)
-    prefix = "Refused to load the script '";
+    prefix = prefix + "load the script '";
   else if (ContentSecurityPolicy::DirectiveType::kStyleSrc == effective_type)
-    prefix = "Refused to load the stylesheet '";
+    prefix = prefix + "load the stylesheet '";
 
   String suffix = String();
   if (CheckDynamic(directive))
@@ -764,6 +766,19 @@ bool CSPDirectiveList::AllowObjectFromSource(
                    ContentSecurityPolicy::DirectiveType::kObjectSrc,
                    redirect_status)
              : CheckSource(OperativeDirective(object_src_.Get()), url,
+                           redirect_status);
+}
+
+bool CSPDirectiveList::AllowPrefetchFromSource(
+    const KURL& url,
+    ResourceRequest::RedirectStatus redirect_status,
+    SecurityViolationReportingPolicy reporting_policy) const {
+  return reporting_policy == SecurityViolationReportingPolicy::kReport
+             ? CheckSourceAndReportViolation(
+                   OperativeDirective(prefetch_src_.Get()), url,
+                   ContentSecurityPolicy::DirectiveType::kPrefetchSrc,
+                   redirect_status)
+             : CheckSource(OperativeDirective(prefetch_src_.Get()), url,
                            redirect_status);
 }
 
@@ -1369,17 +1384,20 @@ void CSPDirectiveList::AddDirective(const String& name, const String& value) {
   } else if (type ==
              ContentSecurityPolicy::DirectiveType::kTreatAsPublicAddress) {
     TreatAsPublicAddress(name, value);
-  } else if (type == ContentSecurityPolicy::DirectiveType::kRequireSRIFor &&
-             policy_->ExperimentalFeaturesEnabled()) {
-    ParseRequireSRIFor(name, value);
-  } else if (type == ContentSecurityPolicy::DirectiveType::kReportTo &&
-             policy_->ExperimentalFeaturesEnabled()) {
-    ParseReportTo(name, value);
-  } else if (type ==
-                 ContentSecurityPolicy::DirectiveType::kRequireTrustedTypes &&
-             policy_->ExperimentalFeaturesEnabled() &&
-             RuntimeEnabledFeatures::TrustedDOMTypesEnabled()) {
-    RequireTrustedTypes(name, value);
+  } else if (policy_->ExperimentalFeaturesEnabled()) {
+    if (type == ContentSecurityPolicy::DirectiveType::kRequireSRIFor) {
+      ParseRequireSRIFor(name, value);
+    } else if (type == ContentSecurityPolicy::DirectiveType::kReportTo) {
+      ParseReportTo(name, value);
+    } else if (type ==
+                   ContentSecurityPolicy::DirectiveType::kRequireTrustedTypes &&
+               RuntimeEnabledFeatures::TrustedDOMTypesEnabled()) {
+      RequireTrustedTypes(name, value);
+    } else if (type == ContentSecurityPolicy::DirectiveType::kPrefetchSrc) {
+      SetCSPDirective<SourceListDirective>(name, value, prefetch_src_);
+    } else {
+      policy_->ReportUnsupportedDirective(name);
+    }
   } else {
     policy_->ReportUnsupportedDirective(name);
   }
@@ -1545,6 +1563,7 @@ void CSPDirectiveList::Trace(blink::Visitor* visitor) {
   visitor->Trace(media_src_);
   visitor->Trace(manifest_src_);
   visitor->Trace(object_src_);
+  visitor->Trace(prefetch_src_);
   visitor->Trace(script_src_);
   visitor->Trace(style_src_);
   visitor->Trace(worker_src_);

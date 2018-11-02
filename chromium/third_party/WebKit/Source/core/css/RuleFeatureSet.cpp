@@ -42,6 +42,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/Node.h"
 #include "core/inspector/InspectorTraceEvents.h"
+#include "platform/runtime_enabled_features.h"
 #include "platform/wtf/BitVector.h"
 
 namespace blink {
@@ -90,6 +91,8 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoLink:
     case CSSSelector::kPseudoVisited:
     case CSSSelector::kPseudoAny:
+    case CSSSelector::kPseudoMatches:
+    case CSSSelector::kPseudoWebkitAnyLink:
     case CSSSelector::kPseudoAnyLink:
     case CSSSelector::kPseudoAutofill:
     case CSSSelector::kPseudoHover:
@@ -180,6 +183,8 @@ bool SupportsInvalidationWithSelectorList(CSSSelector::PseudoType pseudo) {
          pseudo == CSSSelector::kPseudoCue ||
          pseudo == CSSSelector::kPseudoHost ||
          pseudo == CSSSelector::kPseudoHostContext ||
+         ((pseudo == CSSSelector::kPseudoMatches) &&
+          RuntimeEnabledFeatures::CSSMatchesEnabled()) ||
          pseudo == CSSSelector::kPseudoNot ||
          pseudo == CSSSelector::kPseudoSlotted;
 }
@@ -223,7 +228,7 @@ InvalidationSet& RuleFeatureSet::StoredInvalidationSet(
     // Note that we also construct a DescendantInvalidationSet instead of using
     // the SelfInvalidationSet() when we create a SiblingInvalidationSet. We may
     // be able to let SiblingInvalidationSets reference the singleton set for
-    // descendants as well. TODO(rune@opera.com)
+    // descendants as well. TODO(futhark@chromium.org)
     invalidation_set = DescendantInvalidationSet::Create();
     invalidation_set->SetInvalidatesSelf();
   }
@@ -383,7 +388,7 @@ void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSimpleSelector(
     const CSSSelector& selector,
     InvalidationSetFeatures& features) {
   if (selector.Match() == CSSSelector::kTag &&
-      selector.TagQName().LocalName() != g_star_atom) {
+      selector.TagQName().LocalName() != CSSSelector::UniversalSelectorAtom()) {
     features.tag_names.push_back(selector.TagQName().LocalName());
     return;
   }
@@ -436,6 +441,7 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoOnlyChild:
       case CSSSelector::kPseudoLink:
       case CSSSelector::kPseudoVisited:
+      case CSSSelector::kPseudoWebkitAnyLink:
       case CSSSelector::kPseudoAnyLink:
       case CSSSelector::kPseudoAutofill:
       case CSSSelector::kPseudoHover:

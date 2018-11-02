@@ -361,6 +361,18 @@ void WindowTreeClient::SetImeVisibility(WindowMus* window,
   tree_->SetImeVisibility(window->server_id(), visible, std::move(state));
 }
 
+void WindowTreeClient::SetHitTestMask(
+    WindowMus* window,
+    const base::Optional<gfx::Rect>& mask_rect) {
+  base::Optional<gfx::Rect> out_rect = base::nullopt;
+  if (mask_rect) {
+    out_rect = gfx::ConvertRectToPixel(window->GetDeviceScaleFactor(),
+                                       mask_rect.value());
+  }
+
+  tree_->SetHitTestMask(window->server_id(), out_rect);
+}
+
 void WindowTreeClient::Embed(
     Window* window,
     ui::mojom::WindowTreeClientPtr client,
@@ -591,6 +603,11 @@ std::unique_ptr<WindowTreeHostMus> WindowTreeClient::CreateWindowTreeHost(
   init_params.window_port = std::move(window_port);
   init_params.window_tree_client = this;
   init_params.display_id = display_id;
+  if (window_manager_delegate_ &&
+      (window_mus_type == WindowMusType::EMBED ||
+       window_mus_type == WindowMusType::DISPLAY_AUTOMATICALLY_CREATED)) {
+    init_params.uses_real_accelerated_widget = !::switches::IsMusHostingViz();
+  }
   std::unique_ptr<WindowTreeHostMus> window_tree_host =
       std::make_unique<WindowTreeHostMus>(std::move(init_params));
   window_tree_host->InitHost();
@@ -869,7 +886,8 @@ void WindowTreeClient::OnWindowMusCreated(WindowMus* window) {
       window_manager_client_->SetDisplayRoot(
           display, display_init_params->viewport_metrics.Clone(),
           display_init_params->is_primary_display, window->server_id(),
-          display_init_params->mirrors,
+          switches::IsMusHostingViz() ? display_init_params->mirrors
+                                      : std::vector<display::Display>(),
           base::Bind(&OnAckMustSucceed, FROM_HERE));
     }
   }
@@ -1460,6 +1478,7 @@ void WindowTreeClient::OnWindowInputEvent(
     uint32_t event_id,
     Id window_id,
     int64_t display_id,
+    Id display_root_window_id,
     const gfx::PointF& event_location_in_screen_pixel_layout,
     std::unique_ptr<ui::Event> event,
     bool matches_pointer_watcher) {
@@ -1528,7 +1547,20 @@ void WindowTreeClient::OnWindowInputEvent(
     event_to_dispatch = mapped_event_with_native.get();
   }
 #endif
-  DispatchEventToTarget(event_to_dispatch, window);
+
+  WindowMus* display_root_window = GetWindowByServerId(display_root_window_id);
+  if (display_root_window && window && event->IsLocatedEvent() &&
+      display::Screen::GetScreen()->GetPrimaryDisplay().id() ==
+          display::kUnifiedDisplayId) {
+    // Dispatch to the root window of the display supplying the event. This
+    // allows Ash to determine the event position in the unified desktop mode,
+    // where each physical display mirrors part of a single virtual display.
+    // This paralells the behavior of unified desktop mode in classic Ash mode.
+    DispatchEventToTarget(event_to_dispatch, display_root_window);
+  } else {
+    DispatchEventToTarget(event_to_dispatch, window);
+  }
+
   ack_handler.set_handled(event_to_dispatch->handled());
 }
 
@@ -2195,6 +2227,13 @@ void WindowTreeClient::SwapDisplayRoots(WindowTreeHostMus* window_tree_host1,
   DCHECK_NE(display_id1, display_id2);
   window_tree_host1->set_display_id(display_id2);
   window_tree_host2->set_display_id(display_id1);
+
+  // Swap the accelerated widgets so each host paints to the correct display.
+  gfx::AcceleratedWidget widget1 = window_tree_host1->GetAcceleratedWidget();
+  gfx::AcceleratedWidget widget2 = window_tree_host2->GetAcceleratedWidget();
+  window_tree_host1->OverrideAcceleratedWidget(widget2);
+  window_tree_host2->OverrideAcceleratedWidget(widget1);
+
   if (window_manager_client_) {
     window_manager_client_->SwapDisplayRoots(
         display_id1, display_id2, base::Bind(&OnAckMustSucceed, FROM_HERE));
@@ -2232,20 +2271,6 @@ void WindowTreeClient::OnWindowTreeHostClientAreaWillChange(
       window->server_id(),
       gfx::ConvertInsetsToPixel(device_scale_factor, client_area),
       additional_client_areas_in_pixel);
-}
-
-void WindowTreeClient::OnWindowTreeHostHitTestMaskWillChange(
-    WindowTreeHostMus* window_tree_host,
-    const base::Optional<gfx::Rect>& mask_rect) {
-  WindowMus* window = WindowMus::Get(window_tree_host->window());
-
-  base::Optional<gfx::Rect> out_rect = base::nullopt;
-  if (mask_rect) {
-    out_rect = gfx::ConvertRectToPixel(window->GetDeviceScaleFactor(),
-                                       mask_rect.value());
-  }
-
-  tree_->SetHitTestMask(window->server_id(), out_rect);
 }
 
 void WindowTreeClient::OnWindowTreeHostSetOpacity(

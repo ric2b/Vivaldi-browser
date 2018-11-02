@@ -19,8 +19,12 @@
 #include "cc/raster/raster_source.h"
 #include "cc/raster/scoped_gpu_raster.h"
 #include "cc/resources/resource.h"
+#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/gpu/raster_context_provider.h"
+#include "components/viz/common/resources/resource_format_utils.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
+#include "gpu/command_buffer/client/raster_interface.h"
 #include "third_party/skia/include/core/SkMultiPictureDraw.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -38,30 +42,49 @@ static void RasterizeSourceOOP(
     const gfx::Rect& playback_rect,
     const gfx::AxisTransform2d& transform,
     const RasterSource::PlaybackSettings& playback_settings,
-    viz::ContextProvider* context_provider,
-    ResourceProvider::ScopedWriteLockGL* resource_lock,
+    viz::RasterContextProvider* context_provider,
+    LayerTreeResourceProvider::ScopedWriteLockRaster* resource_lock,
     bool use_distance_field_text,
     int msaa_sample_count) {
-  gpu::gles2::GLES2Interface* gl = context_provider->ContextGL();
-  GLuint texture_id = resource_lock->ConsumeTexture(gl);
+  gpu::raster::RasterInterface* ri = context_provider->RasterInterface();
+  GLuint texture_id = resource_lock->ConsumeTexture(ri);
 
-  gl->BeginRasterCHROMIUM(texture_id, raster_source->background_color(),
+  ri->BeginRasterCHROMIUM(texture_id, raster_source->background_color(),
                           msaa_sample_count, playback_settings.use_lcd_text,
                           use_distance_field_text,
                           resource_lock->PixelConfig());
   // TODO(enne): need to pass color space into this function as well.
   float recording_to_raster_scale =
       transform.scale() / raster_source->recording_scale_factor();
-  gl->RasterCHROMIUM(raster_source->GetDisplayItemList().get(),
-                     raster_full_rect.x(), raster_full_rect.y(),
-                     playback_rect.x(), playback_rect.y(),
-                     playback_rect.width(), playback_rect.height(),
-                     transform.translation().x(), transform.translation().y(),
-                     recording_to_raster_scale);
-  gl->EndRasterCHROMIUM();
+  ri->RasterCHROMIUM(raster_source->GetDisplayItemList().get(),
+                     playback_settings.image_provider,
+                     raster_full_rect.OffsetFromOrigin(), playback_rect,
+                     transform.translation(), recording_to_raster_scale);
+  ri->EndRasterCHROMIUM();
 
-  gl->DeleteTextures(1, &texture_id);
+  ri->DeleteTextures(1, &texture_id);
 }
+
+// The following class is needed to correctly reset GL state when rendering to
+// SkCanvases with a GrContext on a RasterInterface enabled context.
+class ScopedGrContextAccess {
+ public:
+  explicit ScopedGrContextAccess(viz::RasterContextProvider* context_provider)
+      : context_provider_(context_provider) {
+    gpu::raster::RasterInterface* ri = context_provider_->RasterInterface();
+    ri->BeginGpuRaster();
+
+    class GrContext* gr_context = context_provider_->GrContext();
+    gr_context->resetContext();
+  }
+  ~ScopedGrContextAccess() {
+    gpu::raster::RasterInterface* ri = context_provider_->RasterInterface();
+    ri->EndGpuRaster();
+  }
+
+ private:
+  viz::RasterContextProvider* context_provider_;
+};
 
 static void RasterizeSource(
     const RasterSource* raster_source,
@@ -71,17 +94,17 @@ static void RasterizeSource(
     const gfx::Rect& playback_rect,
     const gfx::AxisTransform2d& transform,
     const RasterSource::PlaybackSettings& playback_settings,
-    viz::ContextProvider* context_provider,
-    ResourceProvider::ScopedWriteLockGL* resource_lock,
+    viz::RasterContextProvider* context_provider,
+    LayerTreeResourceProvider::ScopedWriteLockRaster* resource_lock,
     bool use_distance_field_text,
     int msaa_sample_count) {
-  ScopedGpuRaster gpu_raster(context_provider);
+  ScopedGrContextAccess gr_context_access(context_provider);
 
-  gpu::gles2::GLES2Interface* gl = context_provider->ContextGL();
-  GLuint texture_id = resource_lock->ConsumeTexture(gl);
+  gpu::raster::RasterInterface* ri = context_provider->RasterInterface();
+  GLuint texture_id = resource_lock->ConsumeTexture(ri);
 
   {
-    ResourceProvider::ScopedSkSurface scoped_surface(
+    LayerTreeResourceProvider::ScopedSkSurface scoped_surface(
         context_provider->GrContext(), texture_id, resource_lock->target(),
         resource_lock->size(), resource_lock->format(), use_distance_field_text,
         playback_settings.use_lcd_text, msaa_sample_count);
@@ -106,7 +129,7 @@ static void RasterizeSource(
         playback_rect, transform, playback_settings);
   }
 
-  gl->DeleteTextures(1, &texture_id);
+  ri->DeleteTextures(1, &texture_id);
 }
 
 }  // namespace
@@ -143,12 +166,11 @@ void GpuRasterBufferProvider::RasterBufferImpl::Playback(
 
 GpuRasterBufferProvider::GpuRasterBufferProvider(
     viz::ContextProvider* compositor_context_provider,
-    viz::ContextProvider* worker_context_provider,
+    viz::RasterContextProvider* worker_context_provider,
     LayerTreeResourceProvider* resource_provider,
     bool use_distance_field_text,
     int gpu_rasterization_msaa_sample_count,
     viz::ResourceFormat preferred_tile_format,
-    bool async_worker_context_enabled,
     bool enable_oop_rasterization)
     : compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
@@ -156,7 +178,6 @@ GpuRasterBufferProvider::GpuRasterBufferProvider(
       use_distance_field_text_(use_distance_field_text),
       msaa_sample_count_(gpu_rasterization_msaa_sample_count),
       preferred_tile_format_(preferred_tile_format),
-      async_worker_context_enabled_(async_worker_context_enabled),
       enable_oop_rasterization_(enable_oop_rasterization) {
   DCHECK(compositor_context_provider);
   DCHECK(worker_context_provider);
@@ -167,32 +188,29 @@ GpuRasterBufferProvider::~GpuRasterBufferProvider() {
 }
 
 std::unique_ptr<RasterBuffer> GpuRasterBufferProvider::AcquireBufferForRaster(
-    const Resource* resource,
+    const ResourcePool::InUsePoolResource& resource,
     uint64_t resource_content_id,
     uint64_t previous_content_id) {
   bool resource_has_previous_content =
       resource_content_id && resource_content_id == previous_content_id;
-  return std::make_unique<RasterBufferImpl>(
-      this, resource_provider_, resource->id(), resource_has_previous_content);
+  return std::make_unique<RasterBufferImpl>(this, resource_provider_,
+                                            resource.gpu_backing_resource_id(),
+                                            resource_has_previous_content);
 }
 
 void GpuRasterBufferProvider::OrderingBarrier() {
   TRACE_EVENT0("cc", "GpuRasterBufferProvider::OrderingBarrier");
 
   gpu::gles2::GLES2Interface* gl = compositor_context_provider_->ContextGL();
-  if (async_worker_context_enabled_) {
-    gpu::SyncToken sync_token = ResourceProvider::GenerateSyncTokenHelper(gl);
-    for (RasterBufferImpl* buffer : pending_raster_buffers_)
-      buffer->set_sync_token(sync_token);
-  } else {
-    gl->OrderingBarrierCHROMIUM();
-  }
+  gpu::SyncToken sync_token =
+      LayerTreeResourceProvider::GenerateSyncTokenHelper(gl);
+  for (RasterBufferImpl* buffer : pending_raster_buffers_)
+    buffer->set_sync_token(sync_token);
   pending_raster_buffers_.clear();
 }
 
 void GpuRasterBufferProvider::Flush() {
-  if (async_worker_context_enabled_)
-    compositor_context_provider_->ContextSupport()->FlushPendingWork();
+  compositor_context_provider_->ContextSupport()->FlushPendingWork();
 }
 
 viz::ResourceFormat GpuRasterBufferProvider::GetResourceFormat(
@@ -221,12 +239,9 @@ bool GpuRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
 }
 
 bool GpuRasterBufferProvider::IsResourceReadyToDraw(
-    viz::ResourceId resource_id) const {
-  if (!async_worker_context_enabled_)
-    return true;
-
-  gpu::SyncToken sync_token =
-      resource_provider_->GetSyncTokenForResources({resource_id});
+    const ResourcePool::InUsePoolResource& resource) const {
+  gpu::SyncToken sync_token = resource_provider_->GetSyncTokenForResources(
+      {resource.gpu_backing_resource_id()});
   if (!sync_token.HasData())
     return true;
 
@@ -236,12 +251,13 @@ bool GpuRasterBufferProvider::IsResourceReadyToDraw(
 }
 
 uint64_t GpuRasterBufferProvider::SetReadyToDrawCallback(
-    const ResourceProvider::ResourceIdArray& resource_ids,
+    const std::vector<const ResourcePool::InUsePoolResource*>& resources,
     const base::Closure& callback,
     uint64_t pending_callback_id) const {
-  if (!async_worker_context_enabled_)
-    return 0;
-
+  std::vector<viz::ResourceId> resource_ids;
+  resource_ids.reserve(resources.size());
+  for (auto* resource : resources)
+    resource_ids.push_back(resource->gpu_backing_resource_id());
   gpu::SyncToken sync_token =
       resource_provider_->GetSyncTokenForResources(resource_ids);
   uint64_t callback_id = sync_token.release_count();
@@ -265,7 +281,7 @@ void GpuRasterBufferProvider::Shutdown() {
 }
 
 void GpuRasterBufferProvider::PlaybackOnWorkerThread(
-    ResourceProvider::ScopedWriteLockGL* resource_lock,
+    LayerTreeResourceProvider::ScopedWriteLockRaster* resource_lock,
     const gpu::SyncToken& sync_token,
     bool resource_has_previous_content,
     const RasterSource* raster_source,
@@ -274,13 +290,13 @@ void GpuRasterBufferProvider::PlaybackOnWorkerThread(
     uint64_t new_content_id,
     const gfx::AxisTransform2d& transform,
     const RasterSource::PlaybackSettings& playback_settings) {
-  viz::ContextProvider::ScopedContextLock scoped_context(
+  viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
       worker_context_provider_);
-  gpu::gles2::GLES2Interface* gl = scoped_context.ContextGL();
-  DCHECK(gl);
+  gpu::raster::RasterInterface* ri = scoped_context.RasterInterface();
+  DCHECK(ri);
 
   // Synchronize with compositor. Nop if sync token is empty.
-  gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
+  ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
 
   gfx::Rect playback_rect = raster_full_rect;
   if (resource_has_previous_content) {
@@ -318,12 +334,8 @@ void GpuRasterBufferProvider::PlaybackOnWorkerThread(
   }
 
   // Generate sync token for cross context synchronization.
-  resource_lock->set_sync_token(ResourceProvider::GenerateSyncTokenHelper(gl));
-
-  // Mark resource as synchronized when worker and compositor are in same stream
-  // to prevent extra wait sync token calls.
-  if (!async_worker_context_enabled_)
-    resource_lock->set_synchronized();
+  resource_lock->set_sync_token(
+      LayerTreeResourceProvider::GenerateSyncTokenHelper(ri));
 }
 
 }  // namespace cc

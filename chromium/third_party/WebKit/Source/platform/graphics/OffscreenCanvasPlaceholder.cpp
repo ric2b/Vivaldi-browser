@@ -21,7 +21,7 @@ PlaceholderIdMap& placeholderRegistry() {
 }
 
 void releaseFrameToDispatcher(
-    WeakPtr<blink::OffscreenCanvasFrameDispatcher> dispatcher,
+    base::WeakPtr<blink::OffscreenCanvasFrameDispatcher> dispatcher,
     scoped_refptr<blink::Image> oldImage,
     unsigned resourceId) {
   oldImage = nullptr;  // Needed to unref'ed on the right thread
@@ -31,7 +31,7 @@ void releaseFrameToDispatcher(
 }
 
 void SetSuspendAnimation(
-    WeakPtr<blink::OffscreenCanvasFrameDispatcher> dispatcher,
+    base::WeakPtr<blink::OffscreenCanvasFrameDispatcher> dispatcher,
     bool suspend) {
   if (dispatcher) {
     dispatcher->SetSuspendAnimation(suspend);
@@ -71,7 +71,7 @@ void OffscreenCanvasPlaceholder::UnregisterPlaceholder() {
 
 void OffscreenCanvasPlaceholder::SetPlaceholderFrame(
     scoped_refptr<StaticBitmapImage> new_frame,
-    WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
+    base::WeakPtr<OffscreenCanvasFrameDispatcher> dispatcher,
     scoped_refptr<WebTaskRunner> task_runner,
     unsigned resource_id) {
   DCHECK(IsPlaceholderRegistered());
@@ -97,8 +97,8 @@ void OffscreenCanvasPlaceholder::ReleasePlaceholderFrame() {
   DCHECK(IsPlaceholderRegistered());
   if (placeholder_frame_) {
     placeholder_frame_->Transfer();
-    frame_dispatcher_task_runner_->PostTask(
-        BLINK_FROM_HERE,
+    PostCrossThreadTask(
+        *frame_dispatcher_task_runner_, FROM_HERE,
         CrossThreadBind(releaseFrameToDispatcher, std::move(frame_dispatcher_),
                         std::move(placeholder_frame_),
                         placeholder_frame_resource_id_));
@@ -145,8 +145,8 @@ bool OffscreenCanvasPlaceholder::PostSetSuspendAnimationToOffscreenCanvasThread(
     bool suspend) {
   if (!frame_dispatcher_task_runner_)
     return false;
-  frame_dispatcher_task_runner_->PostTask(
-      BLINK_FROM_HERE,
+  PostCrossThreadTask(
+      *frame_dispatcher_task_runner_, FROM_HERE,
       CrossThreadBind(SetSuspendAnimation, frame_dispatcher_, suspend));
   return true;
 }

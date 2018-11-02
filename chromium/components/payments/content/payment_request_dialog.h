@@ -7,6 +7,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "components/autofill/core/browser/payments/full_card_request.h"
+#include "components/payments/content/payment_request_display_manager.h"
 
 namespace content {
 class WebContents;
@@ -25,6 +26,12 @@ class PaymentRequestDialog {
 
   virtual void ShowErrorMessage() = 0;
 
+  // Shows a "Processing..." spinner.
+  virtual void ShowProcessingSpinner() = 0;
+
+  // Whether a "Processing..." spinner is showing.
+  virtual bool IsInteractive() const = 0;
+
   // Shows the CVC unmask sheet and starts a FullCardRequest with the info
   // entered by the user.
   virtual void ShowCvcUnmaskPrompt(
@@ -32,6 +39,12 @@ class PaymentRequestDialog {
       base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
           result_delegate,
       content::WebContents* web_contents) = 0;
+
+  // Display |url| in a new screen and run |callback| after navigation is
+  // completed, passing true/false to indicate success/failure.
+  virtual void ShowPaymentHandlerScreen(
+      const GURL& url,
+      PaymentHandlerOpenWindowCallback callback) = 0;
 };
 
 }  // namespace payments

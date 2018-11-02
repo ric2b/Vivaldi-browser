@@ -47,22 +47,20 @@ struct StructTraits<viz::mojom::RendererSettingsDataView,
     return input.release_overlay_resources_after_gpu_query;
   }
 
-  static bool gl_composited_overlay_candidate_quad_border(
-      const viz::RendererSettings& input) {
-    return input.gl_composited_overlay_candidate_quad_border;
+  static bool tint_gl_composited_content(const viz::RendererSettings& input) {
+    return input.tint_gl_composited_content;
   }
 
   static bool show_overdraw_feedback(const viz::RendererSettings& input) {
     return input.show_overdraw_feedback;
   }
 
-  static int highp_threshold_min(const viz::RendererSettings& input) {
-    return input.highp_threshold_min;
+  static bool enable_draw_occlusion(const viz::RendererSettings& input) {
+    return input.enable_draw_occlusion;
   }
 
-  static bool disallow_non_exact_resource_reuse(
-      const viz::RendererSettings& input) {
-    return input.disallow_non_exact_resource_reuse;
+  static int highp_threshold_min(const viz::RendererSettings& input) {
+    return input.highp_threshold_min;
   }
 
   static int slow_down_compositing_scale_factor(

@@ -4,6 +4,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/histogram_tester.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -17,6 +18,8 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/content_setting_bubble_contents.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
@@ -27,20 +30,24 @@
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
+using ImageType = ContentSettingImageModel::ImageType;
+
 class ContentSettingBubbleDialogTest : public DialogBrowserTest {
  public:
   ContentSettingBubbleDialogTest() {}
 
-  void ShowDialogBubble(ContentSettingsType content_type);
+  void ShowDialogBubble(ContentSettingsType content_type,
+                        ContentSettingImageModel::ImageType image_type);
 
-  void ShowDialog(const std::string& name) override;
+  void ShowUi(const std::string& name) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ContentSettingBubbleDialogTest);
 };
 
 void ContentSettingBubbleDialogTest::ShowDialogBubble(
-    ContentSettingsType content_type) {
+    ContentSettingsType content_type,
+    ContentSettingImageModel::ImageType image_type) {
   content::WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   TabSpecificContentSettings* content_settings =
@@ -92,101 +99,112 @@ void ContentSettingBubbleDialogTest::ShowDialogBubble(
   browser()->window()->UpdateToolbar(web_contents);
   LocationBarTesting* location_bar_testing =
       browser()->window()->GetLocationBar()->GetLocationBarForTesting();
+
+  base::HistogramTester histograms;
+
   EXPECT_TRUE(location_bar_testing->TestContentSettingImagePressed(
       ContentSettingImageModel::GetContentSettingImageModelIndexForTesting(
-          content_type)));
+          image_type)));
+
+  histograms.ExpectBucketCount("ContentSettings.ImagePressed",
+                               static_cast<int>(image_type), 1);
 }
 
-void ContentSettingBubbleDialogTest::ShowDialog(const std::string& name) {
+void ContentSettingBubbleDialogTest::ShowUi(const std::string& name) {
   constexpr struct {
     const char* name;
     ContentSettingsType content_type;
+    ContentSettingImageModel::ImageType image_type;
   } content_settings_values[] = {
-      {"cookies", CONTENT_SETTINGS_TYPE_COOKIES},
-      {"images", CONTENT_SETTINGS_TYPE_IMAGES},
-      {"javascript", CONTENT_SETTINGS_TYPE_JAVASCRIPT},
-      {"plugins", CONTENT_SETTINGS_TYPE_PLUGINS},
-      {"popups", CONTENT_SETTINGS_TYPE_POPUPS},
-      {"geolocation", CONTENT_SETTINGS_TYPE_GEOLOCATION},
-      {"ppapi_broker", CONTENT_SETTINGS_TYPE_PPAPI_BROKER},
-      {"mixed_script", CONTENT_SETTINGS_TYPE_MIXEDSCRIPT},
-      {"mediastream_mic", CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC},
-      {"mediastream_camera", CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA},
-      {"protocol_handlers", CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS},
-      {"automatic_downloads", CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS},
-      {"midi_sysex", CONTENT_SETTINGS_TYPE_MIDI_SYSEX},
-      {"ads", CONTENT_SETTINGS_TYPE_ADS}};
+      {"cookies", CONTENT_SETTINGS_TYPE_COOKIES, ImageType::COOKIES},
+      {"images", CONTENT_SETTINGS_TYPE_IMAGES, ImageType::IMAGES},
+      {"javascript", CONTENT_SETTINGS_TYPE_JAVASCRIPT, ImageType::JAVASCRIPT},
+      {"plugins", CONTENT_SETTINGS_TYPE_PLUGINS, ImageType::PLUGINS},
+      {"popups", CONTENT_SETTINGS_TYPE_POPUPS, ImageType::POPUPS},
+      {"geolocation", CONTENT_SETTINGS_TYPE_GEOLOCATION,
+       ImageType::GEOLOCATION},
+      {"ppapi_broker", CONTENT_SETTINGS_TYPE_PPAPI_BROKER,
+       ImageType::PPAPI_BROKER},
+      {"mixed_script", CONTENT_SETTINGS_TYPE_MIXEDSCRIPT,
+       ImageType::MIXEDSCRIPT},
+      {"mediastream_mic", CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+       ImageType::MEDIASTREAM},
+      {"mediastream_camera", CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+       ImageType::MEDIASTREAM},
+      {"protocol_handlers", CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS,
+       ImageType::PROTOCOL_HANDLERS},
+      {"automatic_downloads", CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+       ImageType::AUTOMATIC_DOWNLOADS},
+      {"midi_sysex", CONTENT_SETTINGS_TYPE_MIDI_SYSEX, ImageType::MIDI_SYSEX},
+      {"ads", CONTENT_SETTINGS_TYPE_ADS, ImageType::ADS},
+  };
   for (auto content_settings : content_settings_values) {
     if (name == content_settings.name) {
-      ShowDialogBubble(content_settings.content_type);
+      ShowDialogBubble(content_settings.content_type,
+                       content_settings.image_type);
       return;
     }
   }
   ADD_FAILURE() << "Unknown dialog type";
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeDialog_cookies) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_cookies) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeDialog_images) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_images) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_javascript) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_javascript) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeDialog_plugins) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_plugins) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeDialog_popups) {
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_popups) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  RunDialog();
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_geolocation) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_ppapi_broker) {
+  ShowAndVerifyUi();
+}
+
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_mixed_script) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_geolocation) {
-  RunDialog();
+                       InvokeUi_mediastream_mic) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_ppapi_broker) {
-  RunDialog();
+                       InvokeUi_mediastream_camera) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_mixed_script) {
-  RunDialog();
+                       InvokeUi_protocol_handlers) {
+  ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_mediastream_mic) {
-  RunDialog();
+                       InvokeUi_automatic_downloads) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_mediastream_camera) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_midi_sysex) {
+  ShowAndVerifyUi();
 }
 
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_protocol_handlers) {
-  RunDialog();
-}
-
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_automatic_downloads) {
-  RunDialog();
-}
-
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest,
-                       InvokeDialog_midi_sysex) {
-  RunDialog();
-}
-
-IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeDialog_ads) {
-  RunDialog();
+IN_PROC_BROWSER_TEST_F(ContentSettingBubbleDialogTest, InvokeUi_ads) {
+  ShowAndVerifyUi();
 }

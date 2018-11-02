@@ -27,7 +27,7 @@ namespace {
 // (ii)  Connection type of the network as reported by network
 //       change notifier (an enum).
 // (iii) Effective connection type of the network (an enum).
-constexpr size_t kMaxCacheSize = 10u;
+constexpr size_t kMaxCacheSize = 20u;
 
 // Parses |value| into a map of NetworkIDs and CachedNetworkQualities,
 // and returns the map.

@@ -9,10 +9,7 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/app_sync_ui_state_observer.h"
 
-namespace app_list {
-class AppListModel;
-}
-
+class AppListModelUpdater;
 class AppSyncUIState;
 class Profile;
 
@@ -20,7 +17,7 @@ class Profile;
 // of the given profile changes.
 class AppSyncUIStateWatcher : public AppSyncUIStateObserver {
  public:
-  AppSyncUIStateWatcher(Profile* profile, app_list::AppListModel* model);
+  AppSyncUIStateWatcher(Profile* profile, AppListModelUpdater* model_updater);
   ~AppSyncUIStateWatcher() override;
 
  private:
@@ -28,7 +25,8 @@ class AppSyncUIStateWatcher : public AppSyncUIStateObserver {
   void OnAppSyncUIStatusChanged() override;
 
   AppSyncUIState* app_sync_ui_state_;
-  app_list::AppListModel* model_;  // Owned by AppListView
+  // Owned by AppListSyncableService
+  AppListModelUpdater* model_updater_;
 
   DISALLOW_COPY_AND_ASSIGN(AppSyncUIStateWatcher);
 };

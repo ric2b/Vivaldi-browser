@@ -55,7 +55,6 @@ source_set("importer") {
     "//components/autofill/core/common",
     "//components/favicon_base",
     "//content/public/common",
-    "//third_party/libxml",
     "//ui/base",
     "//url",
   ]

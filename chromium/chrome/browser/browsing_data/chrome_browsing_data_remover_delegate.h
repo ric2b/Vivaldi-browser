@@ -94,9 +94,10 @@ class ChromeBrowsingDataRemoverDelegate
 
     // Datatypes that can be deleted partially per URL / origin / domain,
     // whichever makes sense.
-    FILTERABLE_DATA_TYPES = DATA_TYPE_SITE_DATA |
-                            content::BrowsingDataRemover::DATA_TYPE_CACHE |
-                            content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
+    FILTERABLE_DATA_TYPES =
+        DATA_TYPE_SITE_DATA |
+        content::BrowsingDataRemover::DATA_TYPE_CACHE |
+        content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS,
 
     // Includes all the available remove options. Meant to be used by clients
     // that wish to wipe as much data as possible from a Profile, to make it
@@ -188,7 +189,7 @@ class ChromeBrowsingDataRemoverDelegate
       int remove_mask,
       const content::BrowsingDataFilterBuilder& filter_builder,
       int origin_type_mask,
-      const base::Closure& callback) override;
+      base::OnceClosure callback) override;
 
 #if defined(OS_ANDROID)
   void OverrideWebappRegistryForTesting(
@@ -246,7 +247,7 @@ class ChromeBrowsingDataRemoverDelegate
   base::Time delete_end_;
 
   // Completion callback to call when all data are deleted.
-  base::Closure callback_;
+  base::OnceClosure callback_;
 
   // A callback to NotifyIfDone() used by SubTasks instances.
   const base::Closure sub_task_forward_callback_;
@@ -281,6 +282,7 @@ class ChromeBrowsingDataRemoverDelegate
 #endif
   SubTask clear_auto_sign_in_;
   SubTask clear_reporting_cache_;
+  SubTask clear_network_error_logging_;
   SubTask clear_video_perf_history_;
   // Counts the number of plugin data tasks. Should be the number of LSO cookies
   // to be deleted, or 1 while we're fetching LSO cookies or deleting in bulk.

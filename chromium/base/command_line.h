@@ -204,7 +204,7 @@ class BASE_EXPORT CommandLine {
   void AppendArguments(const CommandLine& other, bool include_program);
 
   // Insert a command before the current command.
-  // Common for debuggers, like "valgrind" or "gdb --args".
+  // Common for debuggers, like "gdb --args".
   void PrependWrapper(const StringType& wrapper);
 
 #if defined(OS_WIN)
@@ -215,7 +215,7 @@ class BASE_EXPORT CommandLine {
 
  private:
   // Disallow default constructor; a program name must be explicitly specified.
-  CommandLine();
+  CommandLine() = delete;
   // Allow the copy constructor. A common pattern is to copy of the current
   // process's command line and then add some flags to it. For example:
   //   CommandLine cl(*CommandLine::ForCurrentProcess());

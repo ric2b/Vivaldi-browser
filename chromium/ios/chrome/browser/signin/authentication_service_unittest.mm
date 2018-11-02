@@ -4,7 +4,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
@@ -27,6 +26,7 @@
 #include "ios/chrome/browser/prefs/browser_prefs.h"
 #include "ios/chrome/browser/signin/account_tracker_service_factory.h"
 #import "ios/chrome/browser/signin/authentication_service.h"
+#import "ios/chrome/browser/signin/authentication_service_delegate_fake.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #include "ios/chrome/browser/signin/fake_oauth2_token_service_builder.h"
 #include "ios/chrome/browser/signin/fake_signin_manager_builder.h"
@@ -97,7 +97,7 @@ std::unique_ptr<KeyedService> BuildMockSyncSetupService(
     web::BrowserState* context) {
   ios::ChromeBrowserState* browser_state =
       ios::ChromeBrowserState::FromBrowserState(context);
-  return base::MakeUnique<SyncSetupServiceMock>(
+  return std::make_unique<SyncSetupServiceMock>(
       IOSChromeProfileSyncServiceFactory::GetForBrowserState(browser_state),
       browser_state->GetPrefs());
 }
@@ -109,7 +109,7 @@ class AuthenticationServiceTest : public PlatformTest,
  protected:
   AuthenticationServiceTest()
       : scoped_browser_state_manager_(
-            base::MakeUnique<TestChromeBrowserStateManager>(base::FilePath())),
+            std::make_unique<TestChromeBrowserStateManager>(base::FilePath())),
         refresh_token_available_count_(0) {}
 
   void SetUp() override {
@@ -178,11 +178,17 @@ class AuthenticationServiceTest : public PlatformTest,
     if (authentication_service_.get()) {
       authentication_service_->Shutdown();
     }
-    authentication_service_ = base::MakeUnique<AuthenticationService>(
-        browser_state_.get(),
+    authentication_service_ = std::make_unique<AuthenticationService>(
+        browser_state_->GetPrefs(),
         OAuth2TokenServiceFactory::GetForBrowserState(browser_state_.get()),
-        SyncSetupServiceFactory::GetForBrowserState(browser_state_.get()));
-    authentication_service_->Initialize();
+        SyncSetupServiceFactory::GetForBrowserState(browser_state_.get()),
+        ios::AccountTrackerServiceFactory::GetForBrowserState(
+            browser_state_.get()),
+        ios::SigninManagerFactory::GetForBrowserState(browser_state_.get()),
+        IOSChromeProfileSyncServiceFactory::GetForBrowserState(
+            browser_state_.get()));
+    authentication_service_->Initialize(
+        std::make_unique<AuthenticationServiceDelegateFake>());
   }
 
   void StoreAccountsInPrefs() {
@@ -220,8 +226,8 @@ class AuthenticationServiceTest : public PlatformTest,
 
   void SetCachedMDMInfo(ChromeIdentity* identity, NSDictionary* user_info) {
     authentication_service_
-        ->cached_mdm_infos_[base::SysNSStringToUTF8([identity gaiaID])]
-        .reset(user_info);
+        ->cached_mdm_infos_[base::SysNSStringToUTF8([identity gaiaID])] =
+        user_info;
   }
 
   bool HasCachedMDMInfo(ChromeIdentity* identity) {

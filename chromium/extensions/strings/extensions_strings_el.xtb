@@ -20,7 +20,6 @@
 <translation id="3369521687965833290">Δεν είναι δυνατή η αποσυσκευασία επέκτασης.  Για την ασφαλή αποσυσκευασία μιας επέκτασης, πρέπει να υπάρχει στον κατάλογο προφίλ σας μια διαδρομή που να ξεκινάει με ένα γράμμα μονάδας δίσκου και να μην περιέχει κάποιο σύνδεσμο, σημείο μονταρίσματος ή symlink (συντόμευση).  Δεν υπάρχει τέτοια διαδρομή για το προφίλ σας.</translation>
 <translation id="3393440416772303020"><ph name="PRODUCT_NAME" /> (σειριακός ρυθμός <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="3466070586188012397"><ph name="PRODUCT_NAME" /> από τον προμηθευτή <ph name="VENDOR_ID" /> (σειριακός ρυθμός <ph name="SERIAL_NUMBER" />)</translation>
-<translation id="3624204664103857160">Δεν ήταν δυνατή η φόρτωση της σελίδας εφαρμογής εκκίνησης '<ph name="PAGE" />'.</translation>
 <translation id="388442998277590542">Δεν ήταν δυνατή η φόρτωση της σελίδας επιλογών "<ph name="OPTIONS_PAGE" />".</translation>
 <translation id="4115165561519362854">Ο διαχειριστής αυτού του μηχανήματος απαιτεί από το <ph name="EXTENSION_NAME" /> να διαθέτει τουλάχιστον την έκδοση <ph name="EXTENSION_VERSION" />. Δεν μπορεί να ενεργοποιηθεί έως ότου ενημερωθεί σε αυτήν την έκδοση (ή σε μεταγενέστερη).</translation>
 <translation id="4233778200880751280">Δεν ήταν δυνατή η φόρτωση της σελίδας πληροφοριών "<ph name="ABOUT_PAGE" />".</translation>
@@ -37,7 +36,6 @@
 <translation id="6143635259298204954">Δεν είναι δυνατή η αποσυσκευασία της επέκτασης.  Για την ασφαλή αποσυσκευασία μιας επέκτασης πρέπει να υπάρχει στον κατάλογο προφίλ σας μια διαδρομή που δεν περιέχει κάποιο symlink.  Στο προφίλ σας δεν υπάρχει κάποια τέτοια διαδρομή.</translation>
 <translation id="641087317769093025">Δεν ήταν δυνατή η αποσυμπίεση της επέκτασης</translation>
 <translation id="6542618148162044354">Η εφαρμογή "<ph name="APP_NAME" />" ζητά πρόσβαση σε μία ή περισσότερες συσκευές σας:</translation>
-<translation id="6566142449942033617">Δεν ήταν δυνατή η φόρτωση του "<ph name="PLUGIN_PATH" />" για την προσθήκη.</translation>
 <translation id="657064425229075395">Δεν ήταν δυνατή η φόρτωση του σεναρίου παρασκηνίου '<ph name="BACKGROUND_SCRIPT" />'.</translation>
 <translation id="6580950983454333167"><ph name="PRODUCT_NAME" /> από <ph name="VENDOR_NAME" /> (σειριακός αριθμός <ph name="SERIAL_NUMBER" />)</translation>
 <translation id="6731255991101203740">Δεν ήταν δυνατή η δημιουργία καταλόγου για την αποσυμπίεση: "<ph name="DIRECTORY_PATH" />"</translation>
@@ -45,7 +43,6 @@
 <translation id="6840444547062817500">Αυτή η επέκταση επαναφορτώνεται πολύ συχνά.</translation>
 <translation id="7003844668372540529">Άγνωστο προϊόν <ph name="PRODUCT_ID" /> από <ph name="VENDOR_NAME" /></translation>
 <translation id="7217838517480956708">Ο διαχειριστής αυτού του υπολογιστή απαιτεί την εγκατάσταση της επέκτασης <ph name="EXTENSION_NAME" />. Δεν είναι δυνατή η κατάργηση ή η τροποποίησή της.</translation>
-<translation id="7581279002575751816">Οι προσθήκες NPAPI δεν υποστηρίζονται.</translation>
 <translation id="7972881773422714442">Επιλογές: <ph name="EXTENSIONOPTIONS_TAG_NAME" /></translation>
 <translation id="8035920974645200807">Μπροστινή κάμερα</translation>
 <translation id="8047248493720652249">Η επέκταση δεν κατόρθωσε να ονομάσει τη λήψη "<ph name="ATTEMPTED_FILENAME" />" επειδή μια άλλη επέκταση (<ph name="EXTENSION_NAME" />) καθόρισε ένα διαφορετικό όνομα "<ph name="ACTUAL_FILENAME" />".</translation>

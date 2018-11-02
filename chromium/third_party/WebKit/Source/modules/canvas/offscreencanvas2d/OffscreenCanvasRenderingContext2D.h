@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class CanvasResourceProvider;
 class Font;
 class TextMetrics;
 
@@ -25,8 +26,8 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
  public:
   class Factory : public CanvasRenderingContextFactory {
    public:
-    Factory() {}
-    ~Factory() override {}
+    Factory() = default;
+    ~Factory() override = default;
 
     CanvasRenderingContext* Create(
         CanvasRenderingContextHost* host,
@@ -60,9 +61,7 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   void ClearRect(double x, double y, double width, double height) override {
     BaseRenderingContext2D::clearRect(x, y, width, height);
   }
-  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint,
-                                            SnapshotReason) const final;
-  ImageData* ToImageData(SnapshotReason) override;
+  scoped_refptr<StaticBitmapImage> GetImage(AccelerationHint) const final;
   void Reset() override;
   void RestoreCanvasMatrixClipStack(PaintCanvas* c) const override {
     RestoreMatrixClipStack(c);
@@ -88,8 +87,9 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
   int Width() const final;
   int Height() const final;
 
-  bool HasImageBuffer() const final;
-  ImageBuffer* GetImageBuffer() const final;
+  bool HasCanvas2DBuffer() const final;
+  bool CanCreateCanvas2DBuffer() const final;
+  CanvasResourceProvider* GetCanvasResourceProvider() const;
 
   bool ParseColorOrCurrentColor(Color&, const String& color_string) const final;
 
@@ -123,8 +123,16 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     CanvasRenderingContext::NeedsFinalizeFrame();
   }
 
+  CanvasColorParams ColorParams() const override;
+  bool WritePixels(const SkImageInfo& orig_info,
+                   const void* pixels,
+                   size_t row_bytes,
+                   int x,
+                   int y) override;
+
  private:
   bool IsPaintable() const final;
+  bool IsCanvas2DBufferValid() const override;
 
   void DrawTextInternal(const String&,
                         double,
@@ -135,7 +143,6 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
 
   scoped_refptr<StaticBitmapImage> TransferToStaticBitmapImage();
 
-  CanvasColorSpace ColorSpace() const override;
   String ColorSpaceAsString() const override;
   CanvasPixelFormat PixelFormat() const override;
   SkIRect dirty_rect_for_commit_;

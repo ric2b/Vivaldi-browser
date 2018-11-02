@@ -18,7 +18,7 @@ namespace media {
 
 // This class is a simple mock around AudioManager, used exclusively for tests,
 // which avoids to use the actual (system and platform dependent) AudioManager.
-// Some bots does not have input devices, thus using the actual AudioManager
+// Some bots do not have input devices, thus using the actual AudioManager
 // would causing failures on classes which expect that.
 class MockAudioManager : public AudioManager {
  public:
@@ -99,6 +99,10 @@ class MockAudioManager : public AudioManager {
       const std::string& device_id) override;
   std::string GetAssociatedOutputDeviceID(
       const std::string& input_device_id) override;
+  std::string GetDefaultInputDeviceID() override;
+  std::string GetDefaultOutputDeviceID() override;
+  std::string GetCommunicationsInputDeviceID() override;
+  std::string GetCommunicationsOutputDeviceID() override;
 
  private:
   AudioParameters input_params_;

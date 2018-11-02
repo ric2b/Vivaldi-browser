@@ -42,11 +42,16 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  DECLARE_NODE_FACTORY(HTMLSlotElement);
+  static HTMLSlotElement* Create(Document&);
+  static HTMLSlotElement* CreateUserAgentDefaultSlot(Document&);
+  static HTMLSlotElement* CreateUserAgentCustomAssignSlot(Document&);
 
   const HeapVector<Member<Node>>& AssignedNodes() const;
   const HeapVector<Member<Node>>& GetDistributedNodes();
-  const HeapVector<Member<Node>> assignedNodesForBinding(
+  const HeapVector<Member<Node>> AssignedNodesForBinding(
+      const AssignedNodesOptions&);
+  const HeapVector<Member<Element>> AssignedElements();
+  const HeapVector<Member<Element>> AssignedElementsForBinding(
       const AssignedNodesOptions&);
 
   Node* FirstAssignedNode() const {
@@ -117,6 +122,10 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   static AtomicString NormalizeSlotName(const AtomicString&);
 
+  // For User-Agent Shadow DOM
+  static const AtomicString& UserAgentCustomAssignSlotName();
+  static const AtomicString& UserAgentDefaultSlotName();
+
   virtual void Trace(blink::Visitor*);
 
  private:
@@ -125,6 +134,7 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   InsertionNotificationRequest InsertedInto(ContainerNode*) final;
   void RemovedFrom(ContainerNode*) final;
   void WillRecalcStyle(StyleRecalcChange) final;
+  void DidRecalcStyle(StyleRecalcChange) final;
 
   void EnqueueSlotChangeEvent();
 

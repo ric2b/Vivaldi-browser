@@ -17,6 +17,11 @@ namespace prefs {
 // *************** PROFILE PREFS ***************
 // These are attached to the user profile
 
+// A bool pref that indicates whether interventions for abusive experiences
+// should be enforced.
+const char kAbusiveExperienceInterventionEnforce[] =
+    "abusive_experience_intervention_enforce";
+
 // A bool pref that keeps whether the child status for this profile was already
 // successfully checked via ChildAccountService.
 const char kChildAccountStatusKnown[] = "child_account_status_known";
@@ -595,6 +600,12 @@ const char kDisplayPowerState[] = "settings.display.power_state";
 const char kDisplayProperties[] = "settings.display.properties";
 // A dictionary pref that stores the touch associations for the device.
 const char kDisplayTouchAssociations[] = "settings.display.touch_associations";
+// A list pref that stores the mirror info for each external display.
+const char kExternalDisplayMirrorInfo[] =
+    "settings.display.external_display_mirror_info";
+// A dictionary pref that stores the mixed mirror mode parameters.
+const char kDisplayMixedMirrorModeParams[] =
+    "settings.display.mixed_mirror_mode_param";
 
 // A dictionary pref that specifies per-display layout/offset information.
 // Its key is the ID of the display and its value is a dictionary for the
@@ -997,10 +1008,6 @@ const char kPluginsShowDetails[] = "plugins.show_details";
 // Boolean that indicates whether outdated plugins are allowed or not.
 const char kPluginsAllowOutdated[] = "plugins.allow_outdated";
 
-// Boolean that indicates whether plugins that require authorization should
-// be always allowed or not.
-const char kPluginsAlwaysAuthorize[] = "plugins.always_authorize";
-
 // Boolean that indicates whether all Flash content (including cross-origin and
 // small content) is allowed to run when it is explicitly allowed via content
 // settings.
@@ -1041,9 +1048,6 @@ const char kShowUpdatePromotionInfoBar[] =
 // true, we draw a custom chrome frame (thicker title bar and blue border).
 const char kUseCustomChromeFrame[] = "browser.custom_chrome_frame";
 #endif
-
-const char kBackShortcutBubbleShownCount[] =
-    "browser.back_shortcut_bubble_shown_count";
 
 #if BUILDFLAG(ENABLE_PLUGINS)
 // Which plugins have been whitelisted manually by the user.
@@ -2342,8 +2346,17 @@ const char kSearchGeolocationPostDisclosureMetricsRecorded[] =
 #endif
 
 // A dictionary which stores whether location access is enabled for the current
-// default search engine.
-const char kDSEGeolocationSetting[] = "dse_geolocation_setting";
+// default search engine. Deprecated for kDSEPermissionsSetting.
+const char kDSEGeolocationSettingDeprecated[] = "dse_geolocation_setting";
+
+// A dictionary which stores the geolocation and notifications content settings
+// for the default search engine before it became the default search engine so
+// that they can be restored if the DSE is ever changed.
+const char kDSEPermissionsSettings[] = "dse_permissions_settings";
+
+// A boolean indicating whether the DSE was previously disabled by enterprise
+// policy.
+const char kDSEWasDisabledByPolicy[] = "dse_was_disabled_by_policy";
 
 // A dictionary of manifest URLs of Web Share Targets to a dictionary containing
 // attributes of its share_target field found in its manifest. Each key in the
@@ -2533,5 +2546,16 @@ const char kIsolateOrigins[] = "site_isolation.isolate_origins";
 
 // Boolean that specifies opting into --site-per-process (full Site Isolation).
 const char kSitePerProcess[] = "site_isolation.site_per_process";
+
+// Boolean that specifies if the web driver flag is allowed to override policies
+// which prevent it from operating normally. (e.g. SitePerProcess.)
+const char kWebDriverOverridesIncompatiblePolicies[] =
+    "webdriver.override_incompatible_policy";
+
+#if defined(OS_WIN)
+// A boolean value, controlling whether third party software is allowed to
+// inject into Chrome's processes.
+const char kThirdPartyBlockingEnabled[] = "third_party_blocking_enabled";
+#endif
 
 }  // namespace prefs

@@ -19,13 +19,17 @@ class FakeCSSStyleImageValue : public CSSStyleImageValue {
         cache_pending_(cache_pending),
         size_(size) {}
 
-  bool IsCachePending() const override { return cache_pending_; }
-  IntSize ImageSize() const override { return size_; }
+  bool IsCachePending() const final { return cache_pending_; }
+  IntSize ImageSize() const final { return size_; }
 
-  const CSSValue* ToCSSValue(SecureContextMode) const override {
-    return nullptr;
+  ResourceStatus Status() const final {
+    if (IsCachePending())
+      return ResourceStatus::kNotStarted;
+    return ResourceStatus::kCached;
   }
-  StyleValueType GetType() const override { return kUnknownType; }
+
+  const CSSValue* ToCSSValue() const final { return nullptr; }
+  StyleValueType GetType() const final { return kUnknownType; }
 
  private:
   bool cache_pending_;

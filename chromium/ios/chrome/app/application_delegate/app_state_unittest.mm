@@ -6,9 +6,10 @@
 
 #import <QuartzCore/QuartzCore.h>
 
+#include <memory>
+
 #include "base/ios/block_types.h"
 #include "base/mac/scoped_block.h"
-#include "base/memory/ptr_util.h"
 #include "base/synchronization/lock.h"
 #import "ios/chrome/app/application_delegate/app_navigation.h"
 #import "ios/chrome/app/application_delegate/app_state_testing.h"
@@ -94,8 +95,8 @@ class FakeChromeBrowserProvider : public ios::TestChromeBrowserProvider {
  public:
   FakeChromeBrowserProvider()
       : app_distribution_provider_(
-            base::MakeUnique<FakeAppDistributionProvider>()),
-        user_feedback_provider_(base::MakeUnique<FakeUserFeedbackProvider>()) {}
+            std::make_unique<FakeAppDistributionProvider>()),
+        user_feedback_provider_(std::make_unique<FakeUserFeedbackProvider>()) {}
   ~FakeChromeBrowserProvider() override {}
 
   AppDistributionProvider* GetAppDistributionProvider() const override {
@@ -512,7 +513,7 @@ TEST_F(AppStateNoFixtureTest, willResignActive) {
 TEST_F(AppStateWithThreadTest, willTerminate) {
   // Setup.
   IOSChromeScopedTestingChromeBrowserProvider provider_(
-      base::MakeUnique<FakeChromeBrowserProvider>());
+      std::make_unique<FakeChromeBrowserProvider>());
 
   id browserViewController = OCMClassMock([BrowserViewController class]);
   OCMExpect([browserViewController setActive:NO]);
@@ -523,10 +524,14 @@ TEST_F(AppStateWithThreadTest, willTerminate) {
   id window = [OCMockObject mockForClass:[UIWindow class]];
   id browserViewInformation =
       [OCMockObject mockForProtocol:@protocol(BrowserViewInformation)];
+  id mainTabModel = [OCMockObject mockForClass:[TabModel class]];
+  id OTRTabModel = [OCMockObject mockForClass:[TabModel class]];
   [[[browserLauncher stub] andReturnValue:@(INITIALIZATION_STAGE_FOREGROUND)]
       browserInitializationStage];
   [[[browserLauncher stub] andReturn:browserViewInformation]
       browserViewInformation];
+  [[[browserViewInformation stub] andReturn:mainTabModel] mainTabModel];
+  [[[browserViewInformation stub] andReturn:OTRTabModel] otrTabModel];
   [[[browserViewInformation stub] andReturn:browserViewController] currentBVC];
 
   id settingsNavigationController =
@@ -538,7 +543,11 @@ TEST_F(AppStateWithThreadTest, willTerminate) {
   [[appNavigation expect] closeSettingsAnimated:NO completion:nil];
 
   [[browserViewInformation expect] cleanDeviceSharingManager];
-  [[browserViewInformation expect] haltAllTabs];
+
+  [[mainTabModel expect] haltAllTabs];
+
+  [[OTRTabModel expect] closeAllTabs];
+  [[OTRTabModel expect] saveSessionImmediately:YES];
 
   id startupInformation =
       [OCMockObject mockForProtocol:@protocol(StartupInformation)];
@@ -551,14 +560,14 @@ TEST_F(AppStateWithThreadTest, willTerminate) {
   [appState setWindow:window];
 
   id application = [OCMockObject mockForClass:[UIApplication class]];
-  [[application expect] setMinimumBackgroundFetchInterval:
-                            UIApplicationBackgroundFetchIntervalNever];
 
   // Action.
   [appState applicationWillTerminate:application
                applicationNavigation:appNavigation];
 
   // Test.
+  EXPECT_OCMOCK_VERIFY(OTRTabModel);
+  EXPECT_OCMOCK_VERIFY(mainTabModel);
   EXPECT_OCMOCK_VERIFY(browserViewController);
   EXPECT_OCMOCK_VERIFY(startupInformation);
   EXPECT_OCMOCK_VERIFY(appNavigation);
@@ -726,7 +735,7 @@ TEST_F(AppStateTest, resumeSessionShouldOpenNTPNoTabSwitcher) {
 TEST_F(AppStateTest, applicationWillEnterForeground) {
   // Setup.
   IOSChromeScopedTestingChromeBrowserProvider provider_(
-      base::MakeUnique<FakeChromeBrowserProvider>());
+      std::make_unique<FakeChromeBrowserProvider>());
   id application = [OCMockObject mockForClass:[UIApplication class]];
   id metricsMediator = [OCMockObject mockForClass:[MetricsMediator class]];
   id memoryHelper = [OCMockObject mockForClass:[MemoryWarningHelper class]];

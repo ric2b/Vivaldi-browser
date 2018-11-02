@@ -124,7 +124,7 @@ void RegisterPrefsFromDefinition(const base::DictionaryValue* definition,
   default_value = definition->FindKey(GetPlatformDefaultKey());
   if (!default_value)
     default_value = definition->FindKey(kDefaultKeyName);
-  if (!default_value) {
+  if (!default_value || default_value->is_none()) {
     computed_default = GetComputedDefault(current_path);
     if (computed_default->is_none())
       return;
@@ -398,7 +398,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(vivaldiprefs::kAutoUpdateEnabled, true);
 
   registry->RegisterListPref(vivaldiprefs::kVivaldiExperiments);
-
 #if !defined(OS_ANDROID)
   registry->RegisterInt64Pref(vivaldiprefs::kVivaldiLastTopSitesVacuumDate, 0);
 #endif

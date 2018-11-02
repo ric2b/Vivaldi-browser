@@ -41,8 +41,9 @@
 #include "content/shell/grit/shell_resources.h"
 #include "media/mojo/features.h"
 #include "net/ssl/client_cert_identity.h"
+#include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_getter.h"
-#include "services/test/echo/echo_service.h"
+#include "services/test/echo/public/interfaces/echo.mojom.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
@@ -77,7 +78,6 @@ namespace content {
 namespace {
 
 ShellContentBrowserClient* g_browser_client;
-bool g_swap_processes_for_redirect = false;
 
 #if defined(OS_LINUX)
 breakpad::CrashHandlerHostLinux* CreateCrashHandlerHost(
@@ -131,10 +131,6 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
 
 ShellContentBrowserClient* ShellContentBrowserClient::Get() {
   return g_browser_client;
-}
-
-void ShellContentBrowserClient::SetSwapProcessesForRedirect(bool swap) {
-  g_swap_processes_for_redirect = swap;
 }
 
 ShellContentBrowserClient::ShellContentBrowserClient()
@@ -194,7 +190,7 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
     if (url.scheme() == kProtocolList[i])
       return true;
   }
-  return false;
+  return net::URLRequest::IsHandledProtocol(url.scheme());
 }
 
 void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
@@ -220,16 +216,12 @@ void ShellContentBrowserClient::RegisterInProcessServices(
     services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
   }
 #endif
-  {
-    service_manager::EmbeddedServiceInfo info;
-    info.factory = base::Bind(&echo::CreateEchoService);
-    services->insert(std::make_pair(echo::mojom::kServiceName, info));
-  }
 }
 
 void ShellContentBrowserClient::RegisterOutOfProcessServices(
     OutOfProcessServiceMap* services) {
   (*services)[kTestServiceUrl] = base::UTF8ToUTF16("Test Service");
+  (*services)[echo::mojom::kServiceName] = base::UTF8ToUTF16("Echo Service");
 }
 
 bool ShellContentBrowserClient::ShouldTerminateOnServiceQuit(
@@ -339,13 +331,6 @@ SpeechRecognitionManagerDelegate*
 
 net::NetLog* ShellContentBrowserClient::GetNetLog() {
   return shell_browser_main_parts_->net_log();
-}
-
-bool ShellContentBrowserClient::ShouldSwapProcessesForRedirect(
-    BrowserContext* browser_context,
-    const GURL& current_url,
-    const GURL& new_url) {
-  return g_swap_processes_for_redirect;
 }
 
 DevToolsManagerDelegate*

@@ -31,6 +31,7 @@
 
 #include <v8-inspector.h>
 #include <memory>
+#include "base/macros.h"
 #include "base/memory/scoped_refptr.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
@@ -58,12 +59,11 @@ class PageOverlay;
 class WebGestureEvent;
 class WebMouseEvent;
 class WebLocalFrameImpl;
-class WebTouchEvent;
+class WebPointerEvent;
 
 class CORE_EXPORT InspectorOverlayAgent final
     : public InspectorBaseAgent<protocol::Overlay::Metainfo>,
       public InspectorOverlayHost::Listener {
-  WTF_MAKE_NONCOPYABLE(InspectorOverlayAgent);
   USING_GARBAGE_COLLECTED_MIXIN(InspectorOverlayAgent);
 
  public:
@@ -118,6 +118,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   void Dispose() override;
 
   void Inspect(Node*);
+  void DispatchBufferedTouchEvents();
   bool HandleInputEvent(const WebInputEvent&);
   void PageLayoutInvalidated(bool resized);
   void ShowReloadingBlanket();
@@ -167,7 +168,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   bool HandleMouseDown(const WebMouseEvent&);
   bool HandleMouseUp(const WebMouseEvent&);
   bool HandleGestureEvent(const WebGestureEvent&);
-  bool HandleTouchEvent(const WebTouchEvent&);
+  bool HandlePointerEvent(const WebPointerEvent&);
   bool HandleMouseMove(const WebMouseEvent&);
 
   protocol::Response CompositingEnabled();
@@ -223,6 +224,7 @@ class CORE_EXPORT InspectorOverlayAgent final
   bool screenshot_mode_ = false;
   IntPoint screenshot_anchor_;
   IntPoint screenshot_position_;
+  DISALLOW_COPY_AND_ASSIGN(InspectorOverlayAgent);
 };
 
 }  // namespace blink

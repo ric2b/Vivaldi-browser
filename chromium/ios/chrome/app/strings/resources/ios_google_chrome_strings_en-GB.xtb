@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="en-GB">
 <translation id="1326317727527857210">To get your tabs from your other devices, sign in to Chrome.</translation>
-<translation id="1685087038067318291">Discover web pages sent by nearby objects. When Bluetooth is turned on, Chrome can gather web pages associated with objects around you and send them anonymously to Google to find the most useful ones. <ph name="BEGIN_LINK" />Find out more<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chrome Privacy Notice</translation>
+<translation id="1863312987075920112">By using this application, you agree to Chrome’s <ph name="BEGIN_LINK_TOS" />Terms of Service<ph name="END_LINK_TOS" /> and <ph name="BEGIN_LINK_PRIVACY" />Privacy Notice<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="2147651015520127414">Chrome verified that <ph name="ISSUER" /> issued this website's certificate.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. All rights reserved.</translation>
 <translation id="2342981853652716282">Sign in to Chrome to get your bookmarks, passwords and more on all your devices.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Some add-ons cause Chrome to crash. Please uninstall:</translation>
 <translation id="4615174829807303908">You are signing out of an account managed by <ph name="SIGNOUT_MANAGED_DOMAIN" />. This will delete your Chrome data from this device, but your data will remain in your Google account.</translation>
 <translation id="5389212809648216794">Google Chrome can't use your camera because it's in use by another application</translation>
-<translation id="5566557026214762153">By using this application, you agree to Chrome’s <ph name="BEGIN_LINK" />Terms of Service<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Open Settings &gt; Privacy &gt; Camera &gt; Google Chrome and turn on the camera.</translation>
 <translation id="5642200033778930880">Google Chrome can't use your camera in Split View mode</translation>
 <translation id="5703130498371792817">Enjoying Chrome? <ph name="BEGIN_LINK" />Rate this app<ph name="END_LINK" /></translation>

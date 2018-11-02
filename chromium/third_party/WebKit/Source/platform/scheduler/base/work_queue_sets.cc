@@ -13,7 +13,7 @@ namespace internal {
 WorkQueueSets::WorkQueueSets(size_t num_sets, const char* name)
     : work_queue_heaps_(num_sets), name_(name) {}
 
-WorkQueueSets::~WorkQueueSets() {}
+WorkQueueSets::~WorkQueueSets() = default;
 
 void WorkQueueSets::AddQueue(WorkQueue* work_queue, size_t set_index) {
   DCHECK(!work_queue->work_queue_sets());
@@ -53,6 +53,15 @@ void WorkQueueSets::ChangeSetIndex(WorkQueue* work_queue, size_t set_index) {
   work_queue_heaps_[set_index].insert({enqueue_order, work_queue});
 }
 
+void WorkQueueSets::OnFrontTaskChanged(WorkQueue* work_queue) {
+  EnqueueOrder enqueue_order;
+  bool has_enqueue_order = work_queue->GetFrontTaskEnqueueOrder(&enqueue_order);
+  DCHECK(has_enqueue_order);
+  size_t set = work_queue->work_queue_set_index();
+  work_queue_heaps_[set].ChangeKey(work_queue->heap_handle(),
+                                   {enqueue_order, work_queue});
+}
+
 void WorkQueueSets::OnTaskPushedToEmptyQueue(WorkQueue* work_queue) {
   // NOTE if this function changes, we need to keep |WorkQueueSets::AddQueue| in
   // sync.
@@ -73,10 +82,10 @@ void WorkQueueSets::OnPopQueue(WorkQueue* work_queue) {
   size_t set_index = work_queue->work_queue_set_index();
   DCHECK_EQ(this, work_queue->work_queue_sets());
   DCHECK_LT(set_index, work_queue_heaps_.size());
-  DCHECK(work_queue->heap_handle().IsValid());
   DCHECK(!work_queue_heaps_[set_index].empty()) << " set_index = " << set_index;
   DCHECK_EQ(work_queue_heaps_[set_index].Min().value, work_queue)
       << " set_index = " << set_index;
+  DCHECK(work_queue->heap_handle().IsValid());
   EnqueueOrder enqueue_order;
   if (work_queue->GetFrontTaskEnqueueOrder(&enqueue_order)) {
     // O(log n)
@@ -105,6 +114,8 @@ bool WorkQueueSets::GetOldestQueueInSet(size_t set_index,
   if (work_queue_heaps_[set_index].empty())
     return false;
   *out_work_queue = work_queue_heaps_[set_index].Min().value;
+  DCHECK_EQ(set_index, (*out_work_queue)->work_queue_set_index());
+  DCHECK((*out_work_queue)->heap_handle().IsValid());
   return true;
 }
 

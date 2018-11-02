@@ -47,13 +47,12 @@ class AudioSystemCallbackExpectations {
       const base::Location& location,
       base::OnceClosure on_cb_received,
       const base::Optional<AudioParameters>& expected_input,
-      const base::Optional<AudioParameters>& expected_associated_output,
-      const std::string& expected_associated_device_id);
+      const base::Optional<std::string>& expected_associated_device_id);
 
   AudioSystem::OnDeviceIdCallback GetDeviceIdCallback(
       const base::Location& location,
       base::OnceClosure on_cb_received,
-      const std::string& expected_id);
+      const base::Optional<std::string>& expected_id);
 
  private:
   // Methods to verify correctness of received data.
@@ -77,16 +76,14 @@ class AudioSystemCallbackExpectations {
       const std::string& from_here,
       base::OnceClosure on_cb_received,
       const base::Optional<AudioParameters>& expected_input,
-      const base::Optional<AudioParameters>& expected_associated_output,
-      const std::string& expected_associated_device_id,
+      const base::Optional<std::string>& expected_associated_device_id,
       const base::Optional<AudioParameters>& input,
-      const base::Optional<AudioParameters>& associated_output,
-      const std::string& associated_device_id);
+      const base::Optional<std::string>& associated_device_id);
 
   void OnDeviceId(const std::string& from_here,
                   base::OnceClosure on_cb_received,
-                  const std::string& expected_id,
-                  const std::string& result_id);
+                  const base::Optional<std::string>& expected_id,
+                  const base::Optional<std::string>& result_id);
 
   THREAD_CHECKER(thread_checker_);
   DISALLOW_COPY_AND_ASSIGN(AudioSystemCallbackExpectations);
@@ -325,7 +322,7 @@ TYPED_TEST_P(AudioSystemTestTemplate, GetInputDeviceInfoNoAssociation) {
       "non-default-device-id",
       this->expectations_.GetInputDeviceInfoCallback(
           FROM_HERE, wait_loop.QuitClosure(), this->input_params_,
-          base::Optional<AudioParameters>(), std::string()));
+          base::Optional<std::string>()));
   wait_loop.Run();
 }
 
@@ -338,10 +335,9 @@ TYPED_TEST_P(AudioSystemTestTemplate, GetInputDeviceInfoWithAssociation) {
 
   base::RunLoop wait_loop;
   this->audio_system()->GetInputDeviceInfo(
-      "non-default-device-id",
-      this->expectations_.GetInputDeviceInfoCallback(
-          FROM_HERE, wait_loop.QuitClosure(), this->input_params_,
-          this->output_params_, associated_id));
+      "non-default-device-id", this->expectations_.GetInputDeviceInfoCallback(
+                                   FROM_HERE, wait_loop.QuitClosure(),
+                                   this->input_params_, associated_id));
   wait_loop.Run();
 }
 

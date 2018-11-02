@@ -42,6 +42,18 @@
 #include "chromecast/crash/cast_crash_keys.h"
 #endif  // !defined(OS_FUCHSIA)
 
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+#include "chromecast/common/cast_extensions_client.h"
+#include "chromecast/renderer/cast_extensions_renderer_client.h"
+#include "content/public/common/content_constants.h"
+#include "extensions/common/common_manifest_handlers.h"  // nogncheck
+#include "extensions/common/extension_urls.h"            // nogncheck
+#include "extensions/renderer/dispatcher.h"              // nogncheck
+#include "extensions/renderer/extension_frame_helper.h"  // nogncheck
+#include "extensions/renderer/guest_view/extensions_guest_view_container.h"  // nogncheck
+#include "extensions/renderer/guest_view/extensions_guest_view_container_dispatcher.h"  // nogncheck
+#endif
+
 namespace chromecast {
 namespace shell {
 
@@ -104,13 +116,28 @@ void CastContentRendererClient::RenderThreadStarted() {
   std::string last_launched_app =
       command_line->GetSwitchValueNative(switches::kLastLaunchedApp);
   if (!last_launched_app.empty())
-    base::debug::SetCrashKeyValue(crash_keys::kLastApp, last_launched_app);
+    crash_keys::last_app.Set(last_launched_app);
 
   std::string previous_app =
       command_line->GetSwitchValueNative(switches::kPreviousApp);
   if (!previous_app.empty())
-    base::debug::SetCrashKeyValue(crash_keys::kPreviousApp, previous_app);
+    crash_keys::previous_app.Set(previous_app);
 #endif  // !defined(OS_FUCHSIA)
+
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  extensions_client_ = std::make_unique<extensions::CastExtensionsClient>();
+  extensions::ExtensionsClient::Set(extensions_client_.get());
+
+  extensions_renderer_client_ =
+      std::make_unique<extensions::CastExtensionsRendererClient>();
+  extensions::ExtensionsRendererClient::Set(extensions_renderer_client_.get());
+
+  thread->AddObserver(extensions_renderer_client_->GetDispatcher());
+
+  guest_view_container_dispatcher_ =
+      std::make_unique<extensions::ExtensionsGuestViewContainerDispatcher>();
+  thread->AddObserver(guest_view_container_dispatcher_.get());
+#endif
 }
 
 void CastContentRendererClient::RenderViewCreated(
@@ -124,6 +151,47 @@ void CastContentRendererClient::RenderViewCreated(
     // application running.
     webview->GetSettings()->SetOfflineWebApplicationCacheEnabled(false);
   }
+}
+
+void CastContentRendererClient::RenderFrameCreated(
+    content::RenderFrame* render_frame) {
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  extensions::Dispatcher* dispatcher =
+      extensions_renderer_client_->GetDispatcher();
+  // ExtensionFrameHelper destroys itself when the RenderFrame is destroyed.
+  new extensions::ExtensionFrameHelper(render_frame, dispatcher);
+
+  dispatcher->OnRenderFrameCreated(render_frame);
+#endif
+}
+
+content::BrowserPluginDelegate*
+CastContentRendererClient::CreateBrowserPluginDelegate(
+    content::RenderFrame* render_frame,
+    const std::string& mime_type,
+    const GURL& original_url) {
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  if (mime_type == content::kBrowserPluginMimeType) {
+    return new extensions::ExtensionsGuestViewContainer(render_frame);
+  }
+#endif
+  return nullptr;
+}
+
+void CastContentRendererClient::RunScriptsAtDocumentStart(
+    content::RenderFrame* render_frame) {
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  extensions_renderer_client_->GetDispatcher()->RunScriptsAtDocumentStart(
+      render_frame);
+#endif
+}
+
+void CastContentRendererClient::RunScriptsAtDocumentEnd(
+    content::RenderFrame* render_frame) {
+#if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
+  extensions_renderer_client_->GetDispatcher()->RunScriptsAtDocumentEnd(
+      render_frame);
+#endif
 }
 
 void CastContentRendererClient::AddSupportedKeySystems(

@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="th">
 <translation id="1326317727527857210">ลงชื่อเข้าใช้ Chrome เพื่อรับแท็บจากอุปกรณ์เครื่องอื่นๆ ของคุณ</translation>
-<translation id="1685087038067318291">อ่านหน้าเว็บที่ส่งมาจากออบเจ็กต์ใกล้เคียง เมื่อบลูทูธเปิดอยู่ Chrome สามารถรวบรวมหน้าเว็บที่เชื่อมโยงกับออบเจ็กต์รอบตัวคุณ และส่งหน้าเว็บเหล่านั้นแบบไม่ระบุตัวตนไปยัง Google เพื่อค้นหาหน้าที่มีประโยชน์ต่อคุณมากที่สุด <ph name="BEGIN_LINK" />เรียนรู้เพิ่มเติม<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">ประกาศเกี่ยวกับนโยบายความเป็นส่วนตัวของ Google Chrome</translation>
+<translation id="1863312987075920112">การใช้แอปพลิเคชันนี้หมายความว่าคุณยอมรับ<ph name="BEGIN_LINK_TOS" />ข้อกำหนดในการให้บริการ<ph name="END_LINK_TOS" />และ<ph name="BEGIN_LINK_PRIVACY" />ประกาศเกี่ยวกับนโยบายความเป็นส่วนตัว<ph name="END_LINK_PRIVACY" />ของ Chrome</translation>
 <translation id="2147651015520127414">Chrome ยืนยันว่า <ph name="ISSUER" /> ได้ออกใบรับรองของเว็บไซต์นี้</translation>
 <translation id="2334084861041072223">ลิขสิทธิ์ <ph name="YEAR" /> Google Inc. สงวนลิขสิทธิ์</translation>
 <translation id="2342981853652716282">ลงชื่อเข้าใช้ Chrome เพื่อรับบุ๊กมาร์ก รหัสผ่าน และข้อมูลอื่นๆ ในอุปกรณ์ทุกเครื่องของคุณ</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">ส่วนเสริมบางรายการทำให้ Chrome ขัดข้อง โปรดถอนการติดตั้ง</translation>
 <translation id="4615174829807303908">คุณกำลังออกจากระบบบัญชีที่จัดการโดย <ph name="SIGNOUT_MANAGED_DOMAIN" /> การออกจากระบบจะลบข้อมูล Chrome ของคุณออกจากอุปกรณ์เครื่องนี้ แต่ข้อมูลจะยังคงอยู่ในบัญชี Google</translation>
 <translation id="5389212809648216794">Google Chrome ไม่สามารถใช้กล้องถ่ายรูปเนื่องจากแอปพลิเคชันอื่นใช้งานอยู่</translation>
-<translation id="5566557026214762153">การใช้แอปพลิเคชันนี้ หมายถึงคุณยอมรับ<ph name="BEGIN_LINK" />ข้อกำหนดในการให้บริการ<ph name="END_LINK" />ของ Chrome</translation>
 <translation id="5639704535586432836">เปิดการตั้งค่า &gt; ความเป็นส่วนตัว &gt; กล้อง &gt; Google Chrome เพื่อเปิดกล้องถ่ายรูป</translation>
 <translation id="5642200033778930880">Google Chrome ไม่สามารถใช้กล้องถ่ายรูปในโหมด Split View</translation>
 <translation id="5703130498371792817">หากคุณชอบ Chrome โปรด<ph name="BEGIN_LINK" />ให้คะแนนแอปนี้<ph name="END_LINK" /></translation>

@@ -136,7 +136,7 @@
     Prova a contattare l'amministratore di sistema.</translation>
 <translation id="5510766032865166053">Potrebbe essere stato spostato o eliminato.</translation>
 <translation id="5556459405103347317">Ricarica</translation>
-<translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {1 in uso} altri {# in uso}})</translation>
+<translation id="5571347317547569613">({NUM_COOKIES, plural, =1 {1 in uso} other {# in uso}})</translation>
 <translation id="5610142619324316209">Controllare la connessione</translation>
 <translation id="5617949217645503996"><ph name="HOST_NAME" /> ti ha reindirizzato troppe volte.</translation>
 <translation id="5675650730144413517">La pagina non funziona</translation>
@@ -148,7 +148,7 @@
 <translation id="5810442152076338065">La connessione a <ph name="DOMAIN" /> è crittografato tramite un pacchetto di crittografia obsoleto.</translation>
 <translation id="5838278095973806738">Non dovresti inserire dati sensibili in questo sito (ad esempio password o carte di credito) perché potrebbero essere rubati da utenti malintenzionati.</translation>
 <translation id="5869405914158311789">Impossibile raggiungere il sito</translation>
-<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in uso} altri {# in uso}}</translation>
+<translation id="5920262536204764679">{NUM_COOKIES, plural, =1 {1 in uso} other {# in uso}}</translation>
 <translation id="5990559369517809815">Le richieste al server sono state bloccate da un'estensione.</translation>
 <translation id="6051221802930200923">Al momento non puoi visitare <ph name="SITE" /> perché il sito web utilizza il blocco dei certificati. Errori di rete e attacchi sono in genere temporanei, quindi questa pagina probabilmente funzionerà più tardi.</translation>
 <translation id="6080696365213338172">Hai avuto accesso al contenuto utilizzando un certificato fornito dall'amministratore. I dati che fornisci a <ph name="DOMAIN" /> possono essere intercettati dal tuo amministratore.</translation>

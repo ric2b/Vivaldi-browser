@@ -7,7 +7,6 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/media/router/discovery/dial/device_description_fetcher.h"
 #include "chrome/browser/media/router/discovery/dial/dial_device_data.h"
@@ -44,7 +43,7 @@ class DeviceDescriptionFetcherTest : public testing::Test {
   }
 
   net::TestURLFetcher* StartRequest() {
-    fetcher_ = base::MakeUnique<DeviceDescriptionFetcher>(
+    fetcher_ = std::make_unique<DeviceDescriptionFetcher>(
         url_, profile_.GetRequestContext(), std::move(success_cb_),
         std::move(error_cb_));
     fetcher_->Start();
@@ -85,6 +84,19 @@ TEST_F(DeviceDescriptionFetcherTest, FetchSuccessful) {
   scoped_refptr<net::HttpResponseHeaders> headers =
       new net::HttpResponseHeaders("");
   headers->AddHeader("Application-URL: http://127.0.0.1/apps");
+  test_fetcher->set_response_headers(headers);
+  test_fetcher->SetResponseString("<xml>description</xml>");
+  test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);
+}
+
+TEST_F(DeviceDescriptionFetcherTest, FetchSuccessfulAppUrlWithTrailingSlash) {
+  ExpectSuccess(GURL("http://127.0.0.1/apps"), "<xml>description</xml>");
+  net::TestURLFetcher* test_fetcher = StartRequest();
+
+  test_fetcher->set_response_code(net::HTTP_OK);
+  scoped_refptr<net::HttpResponseHeaders> headers =
+      new net::HttpResponseHeaders("");
+  headers->AddHeader("Application-URL: http://127.0.0.1/apps/");
   test_fetcher->set_response_headers(headers);
   test_fetcher->SetResponseString("<xml>description</xml>");
   test_fetcher->delegate()->OnURLFetchComplete(test_fetcher);

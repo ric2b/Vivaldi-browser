@@ -35,7 +35,7 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html_names.h"
 #include "core/layout/LayoutEmbeddedContent.h"
-#include "core/layout/api/LayoutEmbeddedItem.h"
+#include "core/layout/LayoutEmbeddedObject.h"
 
 namespace blink {
 
@@ -51,7 +51,7 @@ inline HTMLEmbedElement::HTMLEmbedElement(Document& document,
 HTMLEmbedElement* HTMLEmbedElement::Create(Document& document,
                                            bool created_by_parser) {
   HTMLEmbedElement* element = new HTMLEmbedElement(document, created_by_parser);
-  element->EnsureUserAgentShadowRoot();
+  element->EnsureUserAgentShadowRootV1();
   return element;
 }
 
@@ -134,7 +134,7 @@ void HTMLEmbedElement::ParseAttribute(
 
 void HTMLEmbedElement::ParametersForPlugin(Vector<String>& param_names,
                                            Vector<String>& param_values) {
-  AttributeCollection attributes = this->Attributes();
+  AttributeCollection attributes = Attributes();
   for (const Attribute& attribute : attributes) {
     param_names.push_back(attribute.LocalName().GetString());
     param_values.push_back(attribute.Value().GetString());
@@ -144,7 +144,7 @@ void HTMLEmbedElement::ParametersForPlugin(Vector<String>& param_names,
 // FIXME: This should be unified with HTMLObjectElement::updatePlugin and
 // moved down into HTMLPluginElement.cpp
 void HTMLEmbedElement::UpdatePluginInternal() {
-  DCHECK(!GetLayoutEmbeddedItem().ShowsUnavailablePluginIndicator());
+  DCHECK(!GetLayoutEmbeddedObject()->ShowsUnavailablePluginIndicator());
   DCHECK(NeedsPluginUpdate());
   SetNeedsPluginUpdate(false);
 
@@ -198,10 +198,8 @@ bool HTMLEmbedElement::LayoutObjectIsNeeded(const ComputedStyle& style) {
   //   fallback content.
   ContainerNode* p = parentNode();
   if (auto* object = ToHTMLObjectElementOrNull(p)) {
-    DCHECK(p->GetLayoutObject());
     if (!object->WillUseFallbackContentAtLayout() &&
         !object->UseFallbackContent()) {
-      DCHECK(!p->GetLayoutObject()->IsEmbeddedObject());
       return false;
     }
   }

@@ -526,6 +526,15 @@ Components.Linkifier = class {
   }
 
   /**
+   * @param {!Element} link
+   * @return {?Workspace.UILocation}
+   */
+  static uiLocation(link) {
+    var info = Components.Linkifier._linkInfo(link);
+    return info ? info.uiLocation : null;
+  }
+
+  /**
    * @param {?Element} link
    * @return {!Array<{title: string, handler: function()}>}
    */
@@ -542,7 +551,8 @@ Components.Linkifier = class {
       url = uiLocation.uiSourceCode.contentURL();
     } else if (info.url) {
       url = info.url;
-      var uiSourceCode = Workspace.workspace.uiSourceCodeForURL(url);
+      var uiSourceCode = Workspace.workspace.uiSourceCodeForURL(url) ||
+          Workspace.workspace.uiSourceCodeForURL(Common.ParsedURL.urlWithoutHash(url));
       uiLocation = uiSourceCode ? uiSourceCode.uiLocation(info.lineNumber || 0, info.columnNumber || 0) : null;
     }
     var resource = url ? Bindings.resourceForURL(url) : null;

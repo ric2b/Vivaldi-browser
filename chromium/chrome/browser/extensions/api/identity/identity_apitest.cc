@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -143,7 +144,7 @@ class AsyncExtensionBrowserTest : public ExtensionBrowserTest {
   // Provide wrappers of AsynchronousFunctionRunner for convenience.
   void RunFunctionAsync(UIThreadExtensionFunction* function,
                         const std::string& args) {
-    async_function_runner_ = base::MakeUnique<AsyncFunctionRunner>();
+    async_function_runner_ = std::make_unique<AsyncFunctionRunner>();
     async_function_runner_->RunFunctionAsync(function, args,
                                              browser()->profile());
   }
@@ -299,7 +300,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
 
   void set_mint_token_result(TestOAuth2MintTokenFlow::ResultType result_type) {
     set_mint_token_flow(
-        base::MakeUnique<TestOAuth2MintTokenFlow>(result_type, this));
+        std::make_unique<TestOAuth2MintTokenFlow>(result_type, this));
   }
 
   void set_scope_ui_failure(GaiaWebAuthFlow::Failure failure) {
@@ -820,13 +821,6 @@ class GetAuthTokenFunctionTest
       return;
     base::ResetAndReturn(&on_access_token_requested_).Run();
   }
-  void OnFetchAccessTokenComplete(const std::string& account_id,
-                                  const std::string& consumer_id,
-                                  const OAuth2TokenService::ScopeSet& scopes,
-                                  GoogleServiceAuthError error,
-                                  base::Time expiration_time) override {}
-  void OnTokenRemoved(const std::string& account_id,
-                      const OAuth2TokenService::ScopeSet& scopes) override {}
 
   std::string extension_id_;
   std::set<std::string> oauth_scopes_;
@@ -1443,7 +1437,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveShutdown) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(extension.get());
 
-  func->set_mint_token_flow(base::MakeUnique<TestHangOAuth2MintTokenFlow>());
+  func->set_mint_token_flow(std::make_unique<TestHangOAuth2MintTokenFlow>());
   RunFunctionAsync(func.get(), "[{\"interactive\": false}]");
 
   // After the request is canceled, the function will complete.
@@ -1959,8 +1953,8 @@ class GetAuthTokenFunctionPublicSessionTest : public GetAuthTokenFunctionTest {
 
     // Set up fake install attributes to make the device appeared as
     // enterprise-managed.
-     std::unique_ptr<chromeos::StubInstallAttributes> attributes
-         = base::MakeUnique<chromeos::StubInstallAttributes>();
+     std::unique_ptr<chromeos::StubInstallAttributes> attributes =
+         std::make_unique<chromeos::StubInstallAttributes>();
      attributes->SetCloudManaged("example.com", "fake-id");
      policy::BrowserPolicyConnectorChromeOS::SetInstallAttributesForTesting(
          attributes.release());
@@ -2244,7 +2238,7 @@ class OnSignInChangedEventTest : public IdentityTestWithSignin {
   // chrome.identity.onSignInEventChanged() API.
   void AddExpectedEvent(std::unique_ptr<base::ListValue> args) {
     expected_events_.insert(
-        base::MakeUnique<Event>(events::IDENTITY_ON_SIGN_IN_CHANGED,
+        std::make_unique<Event>(events::IDENTITY_ON_SIGN_IN_CHANGED,
                                 api::identity::OnSignInChanged::kEventName,
                                 std::move(args), browser()->profile()));
   }

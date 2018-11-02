@@ -167,7 +167,7 @@ AXPlatformNode* TestAXNodeWrapper::GetFromNodeID(int32_t id) {
 }
 
 int TestAXNodeWrapper::GetIndexInParent() const {
-  return -1;
+  return node_ ? node_->index_in_parent() : -1;
 }
 
 gfx::AcceleratedWidget
@@ -201,12 +201,13 @@ void TestAXNodeWrapper::ReplaceIntAttribute(int32_t node_id,
 bool TestAXNodeWrapper::AccessibilityPerformAction(
     const ui::AXActionData& data) {
   if (data.action == ui::AX_ACTION_SCROLL_TO_POINT) {
-    g_offset = gfx::Vector2d(data.target_point.x(), data.target_point.x());
+    g_offset = gfx::Vector2d(data.target_point.x(), data.target_point.y());
     return true;
   }
 
   if (data.action == ui::AX_ACTION_SCROLL_TO_MAKE_VISIBLE) {
-    g_offset = gfx::Vector2d(data.target_rect.x(), data.target_rect.x());
+    auto offset = node_->data().location.OffsetFromOrigin();
+    g_offset = gfx::Vector2d(-offset.x(), -offset.y());
     return true;
   }
 
@@ -227,6 +228,21 @@ bool TestAXNodeWrapper::ShouldIgnoreHoveredStateForTesting() {
 
 bool TestAXNodeWrapper::IsOffscreen() const {
   return false;
+}
+
+std::set<int32_t> TestAXNodeWrapper::GetReverseRelations(AXIntAttribute attr,
+                                                         int32_t dst_id) {
+  return tree_->GetReverseRelations(attr, dst_id);
+}
+
+std::set<int32_t> TestAXNodeWrapper::GetReverseRelations(
+    AXIntListAttribute attr,
+    int32_t dst_id) {
+  return tree_->GetReverseRelations(attr, dst_id);
+}
+
+const ui::AXUniqueId& TestAXNodeWrapper::GetUniqueId() const {
+  return unique_id_;
 }
 
 TestAXNodeWrapper::TestAXNodeWrapper(AXTree* tree, AXNode* node)

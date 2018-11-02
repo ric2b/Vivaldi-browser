@@ -4,9 +4,10 @@
 
 #include "cc/paint/paint_image.h"
 
+#include <memory>
+
 #include "base/atomic_sequence_num.h"
 #include "base/hash.h"
-#include "base/memory/ptr_util.h"
 #include "cc/paint/paint_image_generator.h"
 #include "cc/paint/paint_record.h"
 #include "cc/paint/skia_paint_image_generator.h"
@@ -14,8 +15,8 @@
 
 namespace cc {
 namespace {
-base::AtomicSequenceNumber s_next_id_;
-base::AtomicSequenceNumber s_next_content_id_;
+base::AtomicSequenceNumber g_next_id_;
+base::AtomicSequenceNumber g_next_content_id_;
 }  // namespace
 
 const PaintImage::Id PaintImage::kNonLazyStableId = -1;
@@ -72,12 +73,12 @@ PaintImage::DecodingMode PaintImage::GetConservative(DecodingMode one,
 
 // static
 PaintImage::Id PaintImage::GetNextId() {
-  return s_next_id_.GetNext();
+  return g_next_id_.GetNext();
 }
 
 // static
 PaintImage::ContentId PaintImage::GetNextContentId() {
-  return s_next_content_id_.GetNext();
+  return g_next_content_id_.GetNext();
 }
 
 const sk_sp<SkImage>& PaintImage::GetSkImage() const {
@@ -120,7 +121,7 @@ void PaintImage::CreateSkImage() {
         nullptr, nullptr, SkImage::BitDepth::kU8, SkColorSpace::MakeSRGB());
   } else if (paint_image_generator_) {
     cached_sk_image_ =
-        SkImage::MakeFromGenerator(base::MakeUnique<SkiaPaintImageGenerator>(
+        SkImage::MakeFromGenerator(std::make_unique<SkiaPaintImageGenerator>(
             paint_image_generator_, frame_index_));
   }
 
@@ -142,19 +143,16 @@ SkISize PaintImage::GetSupportedDecodeSize(
   return SkISize::Make(width(), height());
 }
 
-SkImageInfo PaintImage::CreateDecodeImageInfo(const SkISize& size,
-                                              SkColorType color_type) const {
-  DCHECK(GetSupportedDecodeSize(size) == size);
-  return SkImageInfo::Make(size.width(), size.height(), color_type,
-                           kPremul_SkAlphaType);
-}
-
 bool PaintImage::Decode(void* memory,
                         SkImageInfo* info,
                         sk_sp<SkColorSpace> color_space,
                         size_t frame_index) const {
   // We only support decode to supported decode size.
   DCHECK(info->dimensions() == GetSupportedDecodeSize(info->dimensions()));
+
+  // We don't support SkImageInfo's with color spaces on them. Color spaces
+  // should always be passed via the |color_space| arg.
+  DCHECK(!info->colorSpace());
 
   // TODO(vmpstr): If we're using a subset_rect_ then the info specifies the
   // requested size relative to the subset. However, the generator isn't aware
@@ -274,7 +272,7 @@ sk_sp<SkImage> PaintImage::GetSkImageForFrame(size_t index) const {
     return GetSkImage();
 
   sk_sp<SkImage> image = SkImage::MakeFromGenerator(
-      base::MakeUnique<SkiaPaintImageGenerator>(paint_image_generator_, index));
+      std::make_unique<SkiaPaintImageGenerator>(paint_image_generator_, index));
   if (!subset_rect_.IsEmpty())
     image = image->makeSubset(gfx::RectToSkIRect(subset_rect_));
   return image;

@@ -51,11 +51,14 @@ class AppCacheRequestHandlerTest;
 class AppCacheStorageImplTest;
 class AppCacheSubresourceURLFactory;
 class AppCacheTest;
-class AppCacheUpdateJobTest;
 
-typedef base::OnceCallback<void(AppCacheStatus, void*)> GetStatusCallback;
-typedef base::OnceCallback<void(bool, void*)> StartUpdateCallback;
-typedef base::OnceCallback<void(bool, void*)> SwapCacheCallback;
+namespace appcache_update_job_unittest {
+class AppCacheUpdateJobTest;
+}
+
+typedef base::OnceCallback<void(AppCacheStatus)> GetStatusCallback;
+typedef base::OnceCallback<void(bool)> StartUpdateCallback;
+typedef base::OnceCallback<void(bool)> SwapCacheCallback;
 
 // Server-side representation of an application cache host.
 class CONTENT_EXPORT AppCacheHost
@@ -91,10 +94,9 @@ class CONTENT_EXPORT AppCacheHost
   bool SelectCacheForSharedWorker(int64_t appcache_id);
   bool MarkAsForeignEntry(const GURL& document_url,
                           int64_t cache_document_was_loaded_from);
-  void GetStatusWithCallback(GetStatusCallback callback, void* callback_param);
-  void StartUpdateWithCallback(StartUpdateCallback callback,
-                               void* callback_param);
-  void SwapCacheWithCallback(SwapCacheCallback callback, void* callback_param);
+  void GetStatusWithCallback(GetStatusCallback callback);
+  void StartUpdateWithCallback(StartUpdateCallback callback);
+  void SwapCacheWithCallback(SwapCacheCallback callback);
 
   // Called prior to the main resource load. When the system contains multiple
   // candidates for a main resource load, the appcache preferred by the host
@@ -209,7 +211,7 @@ class CONTENT_EXPORT AppCacheHost
   friend class content::AppCacheHostTest;
   friend class content::AppCacheStorageImplTest;
   friend class content::AppCacheRequestHandlerTest;
-  friend class content::AppCacheUpdateJobTest;
+  friend class content::appcache_update_job_unittest::AppCacheUpdateJobTest;
 
   AppCacheStatus GetStatus();
   void LoadSelectedCache(int64_t cache_id);
@@ -326,7 +328,6 @@ class CONTENT_EXPORT AppCacheHost
   GetStatusCallback pending_get_status_callback_;
   StartUpdateCallback pending_start_update_callback_;
   SwapCacheCallback pending_swap_cache_callback_;
-  void* pending_callback_param_;
 
   // True if an intercept or fallback namespace resource was
   // delivered as the main resource.

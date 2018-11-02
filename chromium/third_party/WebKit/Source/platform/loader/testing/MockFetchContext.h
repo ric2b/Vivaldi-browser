@@ -36,16 +36,16 @@ class MockFetchContext : public FetchContext {
     return new MockFetchContext(load_policy);
   }
 
-  ~MockFetchContext() override {}
+  ~MockFetchContext() override = default;
 
   void SetLoadComplete(bool complete) { complete_ = complete; }
   long long GetTransferSize() const { return transfer_size_; }
 
-  SecurityOrigin* GetSecurityOrigin() const override {
+  const SecurityOrigin* GetSecurityOrigin() const override {
     return security_origin_.get();
   }
 
-  void SetSecurityOrigin(scoped_refptr<SecurityOrigin> security_origin) {
+  void SetSecurityOrigin(scoped_refptr<const SecurityOrigin> security_origin) {
     security_origin_ = security_origin;
   }
 
@@ -96,12 +96,17 @@ class MockFetchContext : public FetchContext {
     return url_loader_factory_->CreateURLLoader(wrapped, task_runner);
   }
 
-  WebFrameScheduler* GetFrameScheduler() override {
+  ResourceLoadScheduler::ThrottlingPolicy InitialLoadThrottlingPolicy()
+      const override {
+    return ResourceLoadScheduler::ThrottlingPolicy::kTight;
+  }
+
+  WebFrameScheduler* GetFrameScheduler() const override {
     return frame_scheduler_.get();
   }
 
   scoped_refptr<WebTaskRunner> GetLoadingTaskRunner() override {
-    return frame_scheduler_->GetTaskRunner(TaskType::kUnspecedLoading);
+    return frame_scheduler_->GetTaskRunner(TaskType::kInternalTest);
   }
 
  private:
@@ -127,7 +132,7 @@ class MockFetchContext : public FetchContext {
 
   enum LoadPolicy load_policy_;
   scoped_refptr<WebTaskRunner> runner_;
-  scoped_refptr<SecurityOrigin> security_origin_;
+  scoped_refptr<const SecurityOrigin> security_origin_;
   std::unique_ptr<WebFrameScheduler> frame_scheduler_;
   std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
   bool complete_;

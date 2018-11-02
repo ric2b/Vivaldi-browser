@@ -108,6 +108,26 @@ base::string16 GetUpgradeDialogMenuItemName() {
   }
 }
 
+// Returns the appropriate menu label for the IDC_CREATE_HOSTED_APP command.
+base::string16 GetCreateHostedAppMenuItemName(Browser* browser) {
+  bool installable_app = false;
+
+  if (browser->tab_strip_model() &&
+      browser->tab_strip_model()->GetActiveWebContents()) {
+    const banners::AppBannerManager::Installable installable =
+        banners::AppBannerManager::GetInstallable(
+            browser->tab_strip_model()->GetActiveWebContents());
+    if (installable ==
+        banners::AppBannerManager::Installable::INSTALLABLE_YES) {
+      installable_app = true;
+    }
+  }
+
+  return l10n_util::GetStringUTF16(installable_app
+                                       ? IDS_INSTALL_TO_OS_LAUNCH_SURFACE
+                                       : IDS_ADD_TO_OS_LAUNCH_SURFACE);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -250,6 +270,7 @@ bool AppMenuModel::IsItemForCommandIdDynamic(int command_id) const {
 #elif defined(OS_WIN)
          command_id == IDC_PIN_TO_START_SCREEN ||
 #endif
+         command_id == IDC_CREATE_HOSTED_APP ||
          command_id == IDC_UPGRADE_DIALOG;
 }
 
@@ -272,6 +293,8 @@ base::string16 AppMenuModel::GetLabelForCommandId(int command_id) const {
       return l10n_util::GetStringUTF16(string_id);
     }
 #endif
+    case IDC_CREATE_HOSTED_APP:
+      return GetCreateHostedAppMenuItemName(browser_);
     case IDC_UPGRADE_DIALOG:
       return GetUpgradeDialogMenuItemName();
     default:
@@ -572,17 +595,38 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
         UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.Exit", delta);
       LogMenuAction(MENU_ACTION_EXIT);
       break;
+
+    // Hosted App menu.
+    case IDC_COPY_URL:
+      if (!uma_action_recorded_)
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.CopyUrl", delta);
+      LogMenuAction(MENU_ACTION_COPY_URL);
+      break;
+    case IDC_OPEN_IN_CHROME:
+      if (!uma_action_recorded_) {
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.OpenInChrome",
+                                   delta);
+      }
+      LogMenuAction(MENU_ACTION_OPEN_IN_CHROME);
+      break;
+    case IDC_SITE_SETTINGS:
+      if (!uma_action_recorded_) {
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.SiteSettings",
+                                   delta);
+      }
+      LogMenuAction(MENU_ACTION_SITE_SETTINGS);
+      break;
+    case IDC_APP_INFO:
+      if (!uma_action_recorded_)
+        UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction.AppInfo", delta);
+      LogMenuAction(MENU_ACTION_APP_INFO);
+      break;
   }
 
   if (!uma_action_recorded_) {
     UMA_HISTOGRAM_MEDIUM_TIMES("WrenchMenu.TimeToAction", delta);
     uma_action_recorded_ = true;
   }
-}
-
-void AppMenuModel::LogMenuAction(AppMenuAction action_id) {
-  UMA_HISTOGRAM_ENUMERATION("WrenchMenu.MenuAction", action_id,
-                            LIMIT_MENU_ACTION);
 }
 
 bool AppMenuModel::IsCommandIdChecked(int command_id) const {
@@ -664,6 +708,11 @@ void AppMenuModel::Observe(int type,
   UpdateZoomControls();
 }
 
+void AppMenuModel::LogMenuAction(AppMenuAction action_id) {
+  UMA_HISTOGRAM_ENUMERATION("WrenchMenu.MenuAction", action_id,
+                            LIMIT_MENU_ACTION);
+}
+
 // Note: When adding new menu items please place under an appropriate section.
 // Menu is organised as follows:
 // - Extension toolbar overflow.
@@ -696,7 +745,7 @@ void AppMenuModel::Build() {
 
   if (!browser_->profile()->IsOffTheRecord()) {
     recent_tabs_sub_menu_model_ =
-        base::MakeUnique<RecentTabsSubMenuModel>(provider_, browser_);
+        std::make_unique<RecentTabsSubMenuModel>(provider_, browser_);
     AddSubMenuWithStringId(IDC_RECENT_TABS_MENU, IDS_HISTORY_MENU,
                            recent_tabs_sub_menu_model_.get());
   }
@@ -716,7 +765,7 @@ void AppMenuModel::Build() {
   AddItemWithStringId(IDC_FIND, IDS_FIND);
   if (extensions::util::IsNewBookmarkAppsEnabled() &&
       banners::AppBannerManager::IsExperimentalAppBannersEnabled()) {
-    AddItemWithStringId(IDC_CREATE_HOSTED_APP, IDS_ADD_TO_OS_LAUNCH_SURFACE);
+    AddItem(IDC_CREATE_HOSTED_APP, GetCreateHostedAppMenuItemName(browser_));
   }
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(

@@ -15,11 +15,11 @@ using RunnerMethodType =
 template <>
 struct CallbackCancellationTraits<
     RunnerMethodType,
-    std::tuple<WTF::WeakPtr<blink::TaskHandle::Runner>, blink::TaskHandle>> {
+    std::tuple<base::WeakPtr<blink::TaskHandle::Runner>, blink::TaskHandle>> {
   static constexpr bool is_cancellable = true;
 
   static bool IsCancelled(RunnerMethodType,
-                          const WTF::WeakPtr<blink::TaskHandle::Runner>&,
+                          const base::WeakPtr<blink::TaskHandle::Runner>&,
                           const blink::TaskHandle& handle) {
     return !handle.IsActive();
   }
@@ -39,16 +39,16 @@ void RunCrossThreadClosure(CrossThreadClosure task) {
 
 class TaskHandle::Runner : public WTF::ThreadSafeRefCounted<Runner> {
  public:
-  explicit Runner(WTF::Closure task)
+  explicit Runner(base::OnceClosure task)
       : task_(std::move(task)), weak_ptr_factory_(this) {}
 
-  WTF::WeakPtr<Runner> AsWeakPtr() { return weak_ptr_factory_.CreateWeakPtr(); }
+  base::WeakPtr<Runner> AsWeakPtr() { return weak_ptr_factory_.GetWeakPtr(); }
 
   bool IsActive() const { return task_ && !task_.IsCancelled(); }
 
   void Cancel() {
-    WTF::Closure task = std::move(task_);
-    weak_ptr_factory_.RevokeAll();
+    base::OnceClosure task = std::move(task_);
+    weak_ptr_factory_.InvalidateWeakPtrs();
   }
 
   ~Runner() { Cancel(); }
@@ -63,21 +63,21 @@ class TaskHandle::Runner : public WTF::ThreadSafeRefCounted<Runner> {
   //   };
   //
   //   foo.m_handle = taskRunner->postCancellableTask(
-  //       BLINK_FROM_HERE, WTF::bind(&Foo::bar, wrapPersistent(foo)));
+  //       FROM_HERE, WTF::bind(&Foo::bar, wrapPersistent(foo)));
   //
   // There is a circular reference in the example above as:
   //   foo -> m_handle -> m_runner -> m_task -> Persistent<Foo> in WTF::bind.
   // The TaskHandle parameter on run() is needed to break the circle by clearing
-  // |m_task| when the wrapped WTF::Closure is deleted.
+  // |m_task| when the wrapped base::OnceClosure is deleted.
   void Run(const TaskHandle&) {
-    WTF::Closure task = std::move(task_);
-    weak_ptr_factory_.RevokeAll();
+    base::OnceClosure task = std::move(task_);
+    weak_ptr_factory_.InvalidateWeakPtrs();
     std::move(task).Run();
   }
 
  private:
-  WTF::Closure task_;
-  WTF::WeakPtrFactory<Runner> weak_ptr_factory_;
+  base::OnceClosure task_;
+  base::WeakPtrFactory<Runner> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Runner);
 };
@@ -112,62 +112,58 @@ TaskHandle::TaskHandle(scoped_refptr<Runner> runner)
   DCHECK(runner_);
 }
 
-// Use a custom function for base::Bind instead of convertToBaseCallback to
-// avoid copying the closure later in the call chain. Copying the bound state
-// can lead to data races with ref counted objects like StringImpl. See
-// crbug.com/679915 for more details.
-void WebTaskRunner::PostTask(const WebTraceLocation& location,
-                             CrossThreadClosure task) {
-  PostDelayedTask(location,
-                  base::BindOnce(&RunCrossThreadClosure, std::move(task)),
-                  base::TimeDelta());
-}
-
-void WebTaskRunner::PostDelayedTask(const WebTraceLocation& location,
-                                    CrossThreadClosure task,
-                                    TimeDelta delay) {
-  PostDelayedTask(
-      location, base::BindOnce(&RunCrossThreadClosure, std::move(task)), delay);
-}
-
-void WebTaskRunner::PostTask(const WebTraceLocation& location,
-                             WTF::Closure task) {
-  DCHECK(RunsTasksInCurrentSequence());
-  PostDelayedTask(location, ConvertToBaseCallback(std::move(task)),
-                  base::TimeDelta());
-}
-
-void WebTaskRunner::PostDelayedTask(const WebTraceLocation& location,
-                                    WTF::Closure task,
-                                    TimeDelta delay) {
-  DCHECK(RunsTasksInCurrentSequence());
-  PostDelayedTask(location, ConvertToBaseCallback(std::move(task)), delay);
-}
-
-TaskHandle WebTaskRunner::PostCancellableTask(const WebTraceLocation& location,
-                                              WTF::Closure task) {
-  DCHECK(RunsTasksInCurrentSequence());
-  scoped_refptr<TaskHandle::Runner> runner =
-      base::AdoptRef(new TaskHandle::Runner(std::move(task)));
-  PostTask(location, WTF::Bind(&TaskHandle::Runner::Run, runner->AsWeakPtr(),
-                               TaskHandle(runner)));
-  return TaskHandle(runner);
-}
-
-TaskHandle WebTaskRunner::PostDelayedCancellableTask(
-    const WebTraceLocation& location,
-    WTF::Closure task,
-    TimeDelta delay) {
-  DCHECK(RunsTasksInCurrentSequence());
-  scoped_refptr<TaskHandle::Runner> runner =
-      base::AdoptRef(new TaskHandle::Runner(std::move(task)));
-  PostDelayedTask(location,
-                  WTF::Bind(&TaskHandle::Runner::Run, runner->AsWeakPtr(),
-                            TaskHandle(runner)),
-                  delay);
-  return TaskHandle(runner);
+void WebTaskRunner::PostTask(const base::Location& location,
+                             base::OnceClosure task) {
+  PostDelayedTask(location, std::move(task), base::TimeDelta());
 }
 
 WebTaskRunner::~WebTaskRunner() = default;
+
+// Use a custom function for base::Bind instead of WTF::Bind to
+// avoid copying the closure later in the call chain. Copying the bound state
+// can lead to data races with ref counted objects like StringImpl. See
+// crbug.com/679915 for more details.
+void PostCrossThreadTask(WebTaskRunner& task_runner,
+                         const base::Location& location,
+                         CrossThreadClosure task) {
+  task_runner.PostDelayedTask(
+      location, base::BindOnce(&RunCrossThreadClosure, std::move(task)),
+      base::TimeDelta());
+}
+
+void PostDelayedCrossThreadTask(WebTaskRunner& task_runner,
+                                const base::Location& location,
+                                CrossThreadClosure task,
+                                TimeDelta delay) {
+  task_runner.PostDelayedTask(
+      location, base::BindOnce(&RunCrossThreadClosure, std::move(task)), delay);
+}
+
+TaskHandle PostCancellableTask(WebTaskRunner& task_runner,
+                               const base::Location& location,
+                               base::OnceClosure task) {
+  DCHECK(task_runner.RunsTasksInCurrentSequence());
+  scoped_refptr<TaskHandle::Runner> runner =
+      base::AdoptRef(new TaskHandle::Runner(std::move(task)));
+  task_runner.PostTask(location,
+                       WTF::Bind(&TaskHandle::Runner::Run, runner->AsWeakPtr(),
+                                 TaskHandle(runner)));
+  return TaskHandle(runner);
+}
+
+TaskHandle PostDelayedCancellableTask(WebTaskRunner& task_runner,
+                                      const base::Location& location,
+                                      base::OnceClosure task,
+                                      TimeDelta delay) {
+  DCHECK(task_runner.RunsTasksInCurrentSequence());
+  scoped_refptr<TaskHandle::Runner> runner =
+      base::AdoptRef(new TaskHandle::Runner(std::move(task)));
+  task_runner.PostDelayedTask(
+      location,
+      WTF::Bind(&TaskHandle::Runner::Run, runner->AsWeakPtr(),
+                TaskHandle(runner)),
+      delay);
+  return TaskHandle(runner);
+}
 
 }  // namespace blink

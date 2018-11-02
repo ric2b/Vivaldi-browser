@@ -24,7 +24,7 @@ extern "C" {
 #ifndef MCGEN_DISABLE_PROVIDER_CODE_GENERATION
 #if  !defined(McGenDebug)
 #define McGenDebug(a,b)
-#endif
+#endif 
 
 
 #if !defined(MCGEN_TRACE_CONTEXT_DEF)

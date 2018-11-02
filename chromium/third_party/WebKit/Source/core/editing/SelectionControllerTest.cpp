@@ -47,9 +47,9 @@ void SelectionControllerTest::SetNonDirectionalSelectionIfNeeded(
       .GetEventHandler()
       .GetSelectionController()
       .SetNonDirectionalSelectionIfNeeded(
-          new_selection, granularity,
-          SelectionController::kDoNotAdjustEndpoints,
-          HandleVisibility::kNotVisible);
+          new_selection,
+          SetSelectionOptions::Builder().SetGranularity(granularity).Build(),
+          SelectionController::kDoNotAdjustEndpoints);
 }
 
 TEST_F(SelectionControllerTest, setNonDirectionalSelectionIfNeeded) {
@@ -178,6 +178,28 @@ TEST_F(SelectionControllerTest,
 
   // Verify no selection was set.
   EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsNone());
+}
+
+// For http://crbug.com/700368
+TEST_F(SelectionControllerTest, AdjustSelectionWithTrailingWhitespace) {
+  SetBodyContent(
+      "<input type=checkbox>"
+      "<div style='user-select:none'>abc</div>");
+  Element* const input = GetDocument().QuerySelector("input");
+
+  const VisibleSelectionInFlatTree& selection =
+      CreateVisibleSelectionWithGranularity(
+          SelectionInFlatTree::Builder()
+              .Collapse(PositionInFlatTree::BeforeNode(*input))
+              .Extend(PositionInFlatTree::AfterNode(*input))
+              .Build(),
+          TextGranularity::kWord);
+  const SelectionInFlatTree& result =
+      AdjustSelectionWithTrailingWhitespace(selection.AsSelection());
+
+  EXPECT_EQ(PositionInFlatTree::BeforeNode(*input),
+            result.ComputeStartPosition());
+  EXPECT_EQ(PositionInFlatTree::AfterNode(*input), result.ComputeEndPosition());
 }
 
 }  // namespace blink

@@ -13,21 +13,9 @@ SourceFrame.PreviewFactory = class {
     if (!content)
       return new UI.EmptyWidget(Common.UIString('Nothing to preview'));
 
-    var parsedXML = SourceFrame.XMLView.parseXML(content, mimeType);
-    if (parsedXML)
-      return SourceFrame.XMLView.createSearchableView(parsedXML);
-
-    // We support non-strict JSON parsing by parsing an AST tree which is why we offload it to a worker.
-    var parsedJSON = await SourceFrame.JSONView.parseJSON(content);
-    if (parsedJSON && typeof parsedJSON.data === 'object')
-      return SourceFrame.JSONView.createSearchableView(/** @type {!SourceFrame.ParsedJSON} */ (parsedJSON));
-
-    var resourceType = provider.contentType() || Common.resourceTypes.Other;
-
-    if (resourceType.isTextType()) {
-      var highlighterType = mimeType.replace(/;.*/, '');  // remove charset
-      return SourceFrame.ResourceSourceFrame.createSearchableView(provider, highlighterType);
-    }
+    var resourceType = Common.ResourceType.fromMimeType(mimeType);
+    if (resourceType === Common.resourceTypes.Other)
+      resourceType = provider.contentType();
 
     switch (resourceType) {
       case Common.resourceTypes.Image:
@@ -35,6 +23,20 @@ SourceFrame.PreviewFactory = class {
       case Common.resourceTypes.Font:
         return new SourceFrame.FontView(mimeType, provider);
     }
+
+    var parsedXML = SourceFrame.XMLView.parseXML(content, mimeType);
+    if (parsedXML)
+      return SourceFrame.XMLView.createSearchableView(parsedXML);
+
+    var jsonView = await SourceFrame.JSONView.createView(content);
+    if (jsonView)
+      return jsonView;
+
+    if (resourceType.isTextType()) {
+      var highlighterType = mimeType.replace(/;.*/, '');  // remove charset
+      return SourceFrame.ResourceSourceFrame.createSearchableView(provider, highlighterType);
+    }
+
     return null;
   }
 };

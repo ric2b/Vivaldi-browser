@@ -39,8 +39,6 @@
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
 #include "platform/graphics/CanvasColorParams.h"
-#include "platform/graphics/ImageBuffer.h"
-#include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/gpu/DrawingBufferTestHelpers.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/TestingPlatformSupport.h"
@@ -372,8 +370,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly) {
   EXPECT_EQ(gpu::SyncToken(), gl_->MostRecentlyWaitedSyncToken());
 
   gpu::SyncToken wait_sync_token;
-  gl_->GenSyncTokenCHROMIUM(gl_->InsertFenceSyncCHROMIUM(),
-                            wait_sync_token.GetData());
+  gl_->GenSyncTokenCHROMIUM(wait_sync_token.GetData());
   release_callback->Run(wait_sync_token, false /* lostResource */);
   // m_drawingBuffer will wait for the sync point when recycling.
   EXPECT_EQ(gpu::SyncToken(), gl_->MostRecentlyWaitedSyncToken());
@@ -386,8 +383,7 @@ TEST_F(DrawingBufferTest, verifyInsertAndWaitSyncTokenCorrectly) {
   EXPECT_EQ(wait_sync_token, gl_->MostRecentlyWaitedSyncToken());
 
   drawing_buffer_->BeginDestruction();
-  gl_->GenSyncTokenCHROMIUM(gl_->InsertFenceSyncCHROMIUM(),
-                            wait_sync_token.GetData());
+  gl_->GenSyncTokenCHROMIUM(wait_sync_token.GetData());
   release_callback->Run(wait_sync_token, false /* lostResource */);
   // m_drawingBuffer waits for the sync point because the destruction is in
   // progress.
@@ -724,8 +720,7 @@ TEST_F(DrawingBufferTest, VerifySetIsHiddenProperlyAffectsMailboxes) {
                                                            &release_callback));
 
   gpu::SyncToken wait_sync_token;
-  gl_->GenSyncTokenCHROMIUM(gl_->InsertFenceSyncCHROMIUM(),
-                            wait_sync_token.GetData());
+  gl_->GenSyncTokenCHROMIUM(wait_sync_token.GetData());
   drawing_buffer_->SetIsHidden(true);
   release_callback->Run(wait_sync_token, false /* lostResource */);
   // m_drawingBuffer deletes resource immediately when hidden.

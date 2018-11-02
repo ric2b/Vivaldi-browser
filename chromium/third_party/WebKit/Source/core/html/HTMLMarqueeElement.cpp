@@ -41,8 +41,8 @@
 #include "core/dom/ShadowRoot.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
-#include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLDivElement.h"
+#include "core/html/HTMLSlotElement.h"
 #include "core/html/HTMLStyleElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html_names.h"
@@ -56,7 +56,7 @@ inline HTMLMarqueeElement::HTMLMarqueeElement(Document& document)
 
 HTMLMarqueeElement* HTMLMarqueeElement::Create(Document& document) {
   HTMLMarqueeElement* marquee_element = new HTMLMarqueeElement(document);
-  marquee_element->EnsureUserAgentShadowRoot();
+  marquee_element->EnsureUserAgentShadowRootV1();
   return marquee_element;
 }
 
@@ -73,7 +73,8 @@ void HTMLMarqueeElement::DidAddUserAgentShadowRoot(ShadowRoot& shadow_root) {
   Element* mover = HTMLDivElement::Create(GetDocument());
   shadow_root.AppendChild(mover);
 
-  mover->AppendChild(HTMLContentElement::Create(GetDocument()));
+  mover->AppendChild(
+      HTMLSlotElement::CreateUserAgentDefaultSlot(GetDocument()));
   mover_ = mover;
 }
 
@@ -279,8 +280,8 @@ void HTMLMarqueeElement::ContinueAnimation() {
   }
 
   AnimationParameters parameters = GetAnimationParameters();
-  int scroll_delay = this->scrollDelay();
-  int scroll_amount = this->scrollAmount();
+  int scroll_delay = scrollDelay();
+  int scroll_amount = scrollAmount();
 
   if (scroll_delay < kMinimumScrollDelayMS &&
       !FastHasAttribute(HTMLNames::truespeedAttr))

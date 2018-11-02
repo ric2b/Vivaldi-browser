@@ -273,11 +273,11 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_AUTOFILL_STATE" desc="Title of the field of a profile address representing the state/county/district/oblast of the address. [Length: 15em] [iOS only]">
         State / County
       </message>
-      <message name="IDS_IOS_AUTOFILL_USE_WALLET_DATA" desc="The text for the checkbox that controls the Autofill/Wallet integration feature. [Length: 50em] [iOS only]">
-        Show addresses and credit cards from Google Payments
+      <message name="IDS_IOS_AUTOFILL_USE_WALLET_DATA" desc="The text for the checkbox that controls the Autofill/Google Pay integration feature. 'Google Pay' should not be translated as it is the product name. [Length: 50em] [iOS only]">
+        Show addresses and credit cards from Google Pay
       </message>
-      <message name="IDS_IOS_AUTOFILL_WALLET_SERVER_NAME" desc="The name of the data source for non-local card and address info. Title case. [Length: 15em] [iOS only]">
-        Google Payments
+      <message name="IDS_IOS_AUTOFILL_WALLET_SERVER_NAME" desc="The name of the data source for non-local card and address info. Title case. 'Google Pay' should not be translated as it is the product name. [Length: 15em] [iOS only]">
+        Google Pay
       </message>
       <message name="IDS_IOS_AUTOFILL_ZIP" desc="Title of the field of a profile address representing the postal code of the address. [Length: 15em] [iOS only]">
         Zip Code
@@ -708,8 +708,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_NEW_TAB_INCOGNITO" desc="Title for the Incognito panel of the new tab page.">
         Incognito
       </message>
-      <message name="IDS_IOS_NEW_TAB_IPH_PROMOTION_TEXT" desc="Text for the New Tab Tip in-product help promotion, explaining that new tabs can be opened. [iOS only]" meaning="The user has never created a new tab, and a bubble is displayed pointing to the tab switcher to inform users how to create tabs.">
-        Create multiple tabs for all your tasks
+      <message name="IDS_IOS_NEW_TAB_IPH_PROMOTION_TEXT" desc="Text for the New Tab Tip in-product help promotion, explaining that new tabs can be added and switched between. [iOS only]" meaning="The user has never created a new tab, and a bubble is displayed pointing to the tab switcher to inform users how to create tabs and switch between them.">
+        Add tabs and switch between pages
       </message>
       <message name="IDS_IOS_NEW_TAB_LEARN_MORE_ABOUT_SUGGESTED_CONTENT" desc="Text in the footer of the New Tab Page. Part of the text is a link to a help center page where the user can learn more about suggested content.">
         <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph> about suggested content
@@ -807,9 +807,6 @@ For example, some websites may respond to this request by showing you ads that a
         Handoff lets you start browsing a website on this device and then easily continue on your Mac. The current open website will appear in the Dock of your Mac.
 
 Handoff must also be enabled in the General section of Settings, and your devices must use the same iCloud account.
-      </message>
-      <message name="IDS_IOS_OPTIONS_ENABLE_PHYSICAL_WEB" desc="Title for the option to enable scanning for nearby devices broadcasting URLs. [Length: 20em] [iOS only]">
-        Physical Web
       </message>
       <message name="IDS_IOS_OPTIONS_GENERAL_TAB_LABEL" desc="The title of the Basics section of the Settings page. [iOS only]" meaning="The title of the Basics section of the Settings page.">
         Basics
@@ -1068,6 +1065,15 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_SAVE_PASSWORDS" desc="Title for the view in Settings for managing saved passwords. [Length: 15em] [iOS only]">
         Save Passwords
+      </message>
+      <message name="IDS_IOS_EXPORT_PASSWORDS" desc="Button that the user can press to export passwords. [Length: 22em] [iOS only]">
+        Export Passwords...
+      </message>
+      <message name="IDS_IOS_EXPORT_PASSWORDS_ALERT_MESSAGE" desc="The message of the alert displayed as a warning to the user who tapped on the button to export passwords. [iOS only]">
+        Your passwords will be visible to anyone who can see the exported file. Do not share this file with anyone.
+      </message>
+      <message name="IDS_IOS_EXPORT_PASSWORDS_CANCEL_BUTTON" desc="Label of a confirmation dialog button which allows the user to cancel passwords export. [Length: 22em] [iOS only]">
+        Cancel
       </message>
       <message name="IDS_IOS_SAVE_PASSWORDS_MANAGE_ACCOUNT" desc="Header text with link for the view in Settings for managing saved passwords. [Length: unlimited] [iOS only]">
         View and manage saved passwords at <ph name="BEGIN_LINK">BEGIN_LINK</ph>passwords.google.com<ph name="END_LINK">END_LINK</ph>

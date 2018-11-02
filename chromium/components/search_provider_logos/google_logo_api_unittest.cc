@@ -116,7 +116,9 @@ TEST(GoogleNewLogoApiTest, RequiresHttpsForContainedUrls) {
   "ddljson": {
     "doodle_type": "INTERACTIVE",
     "target_url": "http://www.doodle.com/target",
-    "fullpage_interactive_url": "http://www.doodle.com/interactive"
+    "fullpage_interactive_url": "http://www.doodle.com/interactive",
+    "iframe_width_px": 500,
+    "iframe_height_px": 200
   }
 })json";
 
@@ -139,7 +141,9 @@ TEST(GoogleNewLogoApiTest, AcceptsHttpForContainedUrlsIfBaseInsecure) {
   "ddljson": {
     "doodle_type": "INTERACTIVE",
     "target_url": "http://www.doodle.com/target",
-    "fullpage_interactive_url": "http://www.doodle.com/interactive"
+    "fullpage_interactive_url": "http://www.doodle.com/interactive",
+    "iframe_width_px": 500,
+    "iframe_height_px": 200
   }
 })json";
 
@@ -205,6 +209,32 @@ TEST(GoogleNewLogoApiTest, ParsesAnimatedImage) {
   EXPECT_EQ(LogoType::ANIMATED, logo->metadata.type);
 }
 
+TEST(GoogleNewLogoApiTest, ParsesLoggingUrls) {
+  const GURL base_url("https://base.doo/");
+  const std::string json = R"json()]}'
+{
+  "ddljson": {
+    "doodle_type": "ANIMATED",
+    "target_url": "/target",
+    "large_image": {
+      "is_animated_gif": true,
+      "url": "https://www.doodle.com/image.gif"
+    },
+    "log_url": "/log?a=b",
+    "cta_log_url": "/ctalog?c=d"
+  }
+})json";
+
+  bool failed = false;
+  std::unique_ptr<EncodedLogo> logo = ParseDoodleLogoResponse(
+      base_url, std::make_unique<std::string>(json), base::Time(), &failed);
+
+  ASSERT_FALSE(failed);
+  ASSERT_TRUE(logo);
+  EXPECT_EQ(GURL("https://base.doo/log?a=b"), logo->metadata.log_url);
+  EXPECT_EQ(GURL("https://base.doo/ctalog?c=d"), logo->metadata.cta_log_url);
+}
+
 TEST(GoogleNewLogoApiTest, ParsesInteractiveDoodle) {
   const GURL base_url("https://base.doo/");
   const std::string json = R"json()]}'
@@ -212,7 +242,9 @@ TEST(GoogleNewLogoApiTest, ParsesInteractiveDoodle) {
   "ddljson": {
     "doodle_type": "INTERACTIVE",
     "fullpage_interactive_url": "/fullpage",
-    "target_url": "/target"
+    "target_url": "/target",
+    "iframe_width_px": 500,
+    "iframe_height_px": 200
   }
 })json";
 
@@ -224,6 +256,61 @@ TEST(GoogleNewLogoApiTest, ParsesInteractiveDoodle) {
   ASSERT_TRUE(logo);
   EXPECT_EQ(GURL("https://base.doo/fullpage"), logo->metadata.full_page_url);
   EXPECT_EQ(LogoType::INTERACTIVE, logo->metadata.type);
+  EXPECT_EQ(500, logo->metadata.iframe_width_px);
+  EXPECT_EQ(200, logo->metadata.iframe_height_px);
+}
+
+TEST(GoogleNewLogoApiTest, ParsesInteractiveDoodleWithNewWindowAsSimple) {
+  const GURL base_url("https://base.doo/");
+  // Note: The base64 encoding of "abc" is "YWJj".
+  const std::string json = R"json()]}'
+    {
+      "ddljson": {
+        "doodle_type": "INTERACTIVE",
+        "target_url": "/search?q=interactive",
+        "fullpage_interactive_url": "/play",
+        "launch_interactive_behavior": "NEW_WINDOW",
+        "data_uri": "data:image/png;base64,YWJj",
+        "iframe_width_px": 500,
+        "iframe_height_px": 200
+      }
+    })json";
+
+  bool failed = false;
+  std::unique_ptr<EncodedLogo> logo = ParseDoodleLogoResponse(
+      base_url, std::make_unique<std::string>(json), base::Time(), &failed);
+
+  ASSERT_FALSE(failed);
+  ASSERT_TRUE(logo);
+  EXPECT_EQ(LogoType::SIMPLE, logo->metadata.type);
+  EXPECT_EQ(GURL("https://base.doo/play"), logo->metadata.on_click_url);
+  EXPECT_EQ(GURL("https://base.doo/play"), logo->metadata.full_page_url);
+  EXPECT_EQ(0, logo->metadata.iframe_width_px);
+  EXPECT_EQ(0, logo->metadata.iframe_height_px);
+  EXPECT_EQ("abc", logo->encoded_image->data());
+}
+
+TEST(GoogleNewLogoApiTest, DefaultsInteractiveIframeSize) {
+  const GURL base_url("https://base.doo/");
+  const std::string json = R"json()]}'
+    {
+      "ddljson": {
+        "doodle_type": "INTERACTIVE",
+        "target_url": "/search?q=interactive",
+        "fullpage_interactive_url": "/play"
+      }
+    })json";
+
+  bool failed = false;
+  std::unique_ptr<EncodedLogo> logo = ParseDoodleLogoResponse(
+      base_url, std::make_unique<std::string>(json), base::Time(), &failed);
+
+  ASSERT_FALSE(failed);
+  ASSERT_TRUE(logo);
+  EXPECT_EQ(LogoType::INTERACTIVE, logo->metadata.type);
+  EXPECT_EQ(GURL("https://base.doo/play"), logo->metadata.full_page_url);
+  EXPECT_EQ(500, logo->metadata.iframe_width_px);
+  EXPECT_EQ(200, logo->metadata.iframe_height_px);
 }
 
 TEST(GoogleNewLogoApiTest, ParsesCapturedApiResult) {

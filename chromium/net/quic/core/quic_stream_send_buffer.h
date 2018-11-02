@@ -42,6 +42,19 @@ struct BufferedSlice {
   QuicByteCount outstanding_data_length;
 };
 
+struct StreamPendingRetransmission {
+  StreamPendingRetransmission(QuicStreamOffset offset, QuicByteCount length)
+      : offset(offset), length(length) {}
+
+  // Starting offset of this pending retransmission.
+  QuicStreamOffset offset;
+  // Length of this pending retransmission.
+  QuicByteCount length;
+
+  QUIC_EXPORT_PRIVATE bool operator==(
+      const StreamPendingRetransmission& other) const;
+};
+
 // QuicStreamSendBuffer contains a list of QuicStreamDataSlices. New data slices
 // are added to the tail of the list. Data slices are removed from the head of
 // the list when they get fully acked. Stream data can be retrieved and acked
@@ -78,6 +91,24 @@ class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
                          QuicByteCount data_length,
                          QuicByteCount* newly_acked_length);
 
+  // Called when data [offset, offset + data_length) is considered as lost.
+  void OnStreamDataLost(QuicStreamOffset offset, QuicByteCount data_length);
+
+  // Called when data [offset, offset + length) was retransmitted.
+  void OnStreamDataRetransmitted(QuicStreamOffset offset,
+                                 QuicByteCount data_length);
+
+  // Returns true if there is pending retransmissions.
+  bool HasPendingRetransmission() const;
+
+  // Returns next pending retransmissions.
+  StreamPendingRetransmission NextPendingRetransmission() const;
+
+  // Returns true if data [offset, offset + data_length) is outstanding and
+  // waiting to be acked. Returns false otherwise.
+  bool IsStreamDataOutstanding(QuicStreamOffset offset,
+                               QuicByteCount data_length) const;
+
   // Number of data slices in send buffer.
   size_t size() const;
 
@@ -97,6 +128,15 @@ class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
   friend class test::QuicStreamSendBufferPeer;
   friend class test::QuicStreamPeer;
 
+  // Another version of WriteStreamData() to be able to start writing from
+  // write_index_ points to instead of searching through the slices to find the
+  // place to write.
+  // TODO(danzh): inline this method into WriteStreamData() after
+  // quic_reloadable_flag_quic_use_write_index is deprecated.
+  bool WriteStreamDataWithIndex(QuicStreamOffset offset,
+                                QuicByteCount data_length,
+                                QuicDataWriter* writer);
+
   QuicDeque<BufferedSlice> buffered_slices_;
 
   // Offset of next inserted byte.
@@ -115,6 +155,17 @@ class QUIC_EXPORT_PRIVATE QuicStreamSendBuffer {
 
   // Latch value for quic_reloadable_flag_quic_allow_multiple_acks_for_data2.
   const bool allow_multiple_acks_for_data_;
+
+  // Data considered as lost and needs to be retransmitted.
+  QuicIntervalSet<QuicStreamOffset> pending_retransmissions_;
+
+  // Index of slice which contains data waiting to be written for the first
+  // time. -1 if send buffer is empty or all data has been written.
+  int32_t write_index_;
+
+  // True if quic_reloadable_flag_quic_stream_send_buffer_write_index and
+  // allow_multiple_acks_for_data_ are both true.
+  const bool use_write_index_;
 };
 
 }  // namespace net

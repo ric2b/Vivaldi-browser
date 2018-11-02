@@ -6,12 +6,14 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameView.h"
+#include "core/layout/LayoutBlockFlow.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/paint/FindPaintOffsetAndVisualRectNeedingUpdate.h"
 #include "core/paint/PaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
 #include "core/paint/compositing/CompositedLayerMapping.h"
+#include "core/paint/ng/ng_paint_fragment.h"
 #include "platform/PlatformChromeClient.h"
 #include "platform/graphics/GraphicsLayer.h"
 
@@ -137,6 +139,20 @@ void ObjectPaintInvalidator::
       });
 }
 
+static void InvalidateDisplayItemClients(const LayoutObject& layout_object,
+                                         PaintInvalidationReason reason) {
+  if (LayoutBlockFlow* block_flow = layout_object.EnclosingNGBlockFlow()) {
+    ObjectPaintInvalidator paint_invalidator(layout_object);
+    Vector<NGPaintFragment*> paint_fragments =
+        block_flow->GetPaintFragments(layout_object);
+    for (const auto& paint_fragment : paint_fragments)
+      paint_invalidator.InvalidateDisplayItemClient(*paint_fragment, reason);
+    return;
+  }
+
+  layout_object.InvalidateDisplayItemClients(reason);
+}
+
 DISABLE_CFI_PERF
 void ObjectPaintInvalidator::InvalidatePaintOfPreviousVisualRect(
     const LayoutBoxModelObject& paint_invalidation_container,
@@ -157,6 +173,7 @@ void ObjectPaintInvalidator::InvalidatePaintOfPreviousVisualRect(
     LayoutRect invalidation_rect = object_.FragmentsVisualRectBoundingBox();
     InvalidatePaintUsingContainer(paint_invalidation_container,
                                   invalidation_rect, reason);
+    // TODO(yoichio) Use InvalidateDisplayItemClients(object_, reason);
     object_.InvalidateDisplayItemClients(reason);
   }
 
@@ -215,6 +232,13 @@ void ObjectPaintInvalidator::InvalidateDisplayItemClient(
   // PaintInvalidatinState::enclosingSelfPaintingLayer()) to reduce the cost.
   DCHECK(!object_.PaintingLayer() || object_.PaintingLayer()->NeedsRepaint());
 
+  if (&client == &object_) {
+    TRACE_EVENT_INSTANT1(
+        TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
+        "PaintInvalidationTracking", TRACE_EVENT_SCOPE_THREAD, "data",
+        InspectorPaintInvalidationTrackingEvent::Data(object_));
+  }
+
   client.SetDisplayItemsUncached(reason);
 
   if (LocalFrameView* frame_view = object_.GetFrameView())
@@ -255,7 +279,7 @@ static void InvalidatePaintRectangleOnWindow(
       !RuntimeEnabledFeatures::PrintBrowserEnabled())
     return;
 
-  DCHECK(frame_view->GetFrame().OwnerLayoutItem().IsNull());
+  DCHECK(!frame_view->GetFrame().OwnerLayoutObject());
 
   IntRect paint_rect = dirty_rect;
   paint_rect.Intersect(frame_view->VisibleContentRect());
@@ -324,13 +348,6 @@ void ObjectPaintInvalidator::InvalidatePaintUsingContainer(
 
   CHECK(object_.IsRooted());
 
-  // FIXME: Unify "devtools.timeline.invalidationTracking" and
-  // "blink.invalidation". crbug.com/413527.
-  TRACE_EVENT_INSTANT1(
-      TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),
-      "PaintInvalidationTracking", TRACE_EVENT_SCOPE_THREAD, "data",
-      InspectorPaintInvalidationTrackingEvent::Data(
-          &object_, paint_invalidation_container));
   TRACE_EVENT2(
       TRACE_DISABLED_BY_DEFAULT("blink.invalidation"),
       "LayoutObject::invalidatePaintUsingContainer()", "object",
@@ -412,7 +429,7 @@ void ObjectPaintInvalidatorWithContext::InvalidatePaintRectangleWithContext(
   // on the same backing, skip the invalidation.
   if (ParentFullyInvalidatedOnSameBacking() &&
       (context_.parent_context->old_visual_rect.Contains(rect) ||
-       object_.Parent()->FragmentsVisualRectBoundingBox().Contains(rect))) {
+       object_.Parent()->FirstFragment().VisualRect().Contains(rect))) {
     if (!object_.GetFrameView()->IsTrackingPaintInvalidations())
       return;
     // If we are tracking paint invalidations (e.g. when running a text-based-
@@ -536,16 +553,20 @@ void ObjectPaintInvalidatorWithContext::InvalidateSelection(
 
   object_.GetMutableForPainting().SetSelectionVisualRect(new_selection_rect);
 
-  if (!full_invalidation) {
-    // TODO(crbug.com/732612): Implement partial raster invalidation for
-    // selection.
-    if (!RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
-      FullyInvalidatePaint(PaintInvalidationReason::kSelection,
-                           old_selection_rect, new_selection_rect);
-    }
-    context_.painting_layer->SetNeedsRepaint();
-    object_.InvalidateDisplayItemClients(PaintInvalidationReason::kSelection);
+  if (full_invalidation)
+    return;
+
+  if (RuntimeEnabledFeatures::SlimmingPaintV175Enabled()) {
+    // PaintController will handle raster invalidation of the partial rect.
+    object_.GetMutableForPainting().SetPartialInvalidationRect(
+        UnionRect(object_.PartialInvalidationRect(),
+                  UnionRect(new_selection_rect, old_selection_rect)));
+  } else {
+    FullyInvalidatePaint(PaintInvalidationReason::kSelection,
+                         old_selection_rect, new_selection_rect);
   }
+  context_.painting_layer->SetNeedsRepaint();
+  InvalidateDisplayItemClients(object_, PaintInvalidationReason::kSelection);
 }
 
 DISABLE_CFI_PERF
@@ -558,11 +579,6 @@ void ObjectPaintInvalidatorWithContext::InvalidatePartialRect(
   if (rect.IsEmpty())
     return;
 
-  if (reason == PaintInvalidationReason::kNone) {
-    context_.painting_layer->SetNeedsRepaint();
-    object_.InvalidateDisplayItemClients(PaintInvalidationReason::kRectangle);
-  }
-
   context_.MapLocalRectToVisualRectInBacking(object_, rect);
   if (rect.IsEmpty())
     return;
@@ -574,6 +590,10 @@ void ObjectPaintInvalidatorWithContext::InvalidatePartialRect(
     InvalidatePaintRectangleWithContext(rect,
                                         PaintInvalidationReason::kRectangle);
   }
+
+  context_.painting_layer->SetNeedsRepaint();
+  // TODO(yoichio) Use InvalidateDisplayItemClients(object_, reason);
+  object_.InvalidateDisplayItemClients(PaintInvalidationReason::kRectangle);
 }
 
 DISABLE_CFI_PERF
@@ -583,12 +603,14 @@ ObjectPaintInvalidatorWithContext::InvalidatePaintWithComputedReason(
   DCHECK(!(context_.subtree_flags &
            PaintInvalidatorContext::kSubtreeNoInvalidation));
 
+  // This is before InvalidateSelection before the latter will accumulate
+  // selection visual rects to the partial rect mapped in the former.
+  InvalidatePartialRect(reason);
+
   // We need to invalidate the selection before checking for whether we are
   // doing a full invalidation.  This is because we need to update the previous
   // selection rect regardless.
   InvalidateSelection(reason);
-
-  InvalidatePartialRect(reason);
 
   switch (reason) {
     case PaintInvalidationReason::kNone:
@@ -628,6 +650,7 @@ ObjectPaintInvalidatorWithContext::InvalidatePaintWithComputedReason(
   }
 
   context_.painting_layer->SetNeedsRepaint();
+  // TODO(yoichio) Use InvalidateDisplayItemClients(object_, reason);
   object_.InvalidateDisplayItemClients(reason);
   return reason;
 }

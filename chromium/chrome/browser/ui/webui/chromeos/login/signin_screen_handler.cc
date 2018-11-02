@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/login/ui/login_constants.h"
+#include "ash/public/cpp/login_constants.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/shutdown.mojom.h"
 #include "ash/public/interfaces/tray_action.mojom.h"
@@ -53,13 +53,14 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_webui.h"
+#include "chrome/browser/chromeos/login/ui/login_display_webui.h"
 #include "chrome/browser/chromeos/login/ui/login_feedback.h"
-#include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_local_account.h"
+#include "chrome/browser/chromeos/policy/minimum_version_policy_handler.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/system_clock.h"
@@ -69,6 +70,7 @@
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/tablet_mode_client.h"
+#include "chrome/browser/ui/webui/chromeos/internet_detail_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
@@ -158,6 +160,12 @@ class CallOnReturn {
 
   DISALLOW_COPY_AND_ASSIGN(CallOnReturn);
 };
+
+policy::MinimumVersionPolicyHandler* GetMinimumVersionPolicyHandler() {
+  return g_browser_process->platform_part()
+      ->browser_policy_connector_chromeos()
+      ->GetMinimumVersionPolicyHandler();
+}
 
 }  // namespace
 
@@ -349,8 +357,8 @@ void SigninScreenHandler::DeclareLocalizedValues(
   builder->Add("launchAppButton", IDS_LAUNCH_APP_BUTTON);
   builder->Add("restart", IDS_ASH_SHELF_RESTART_BUTTON);
   builder->Add("shutDown", IDS_ASH_SHELF_SHUTDOWN_BUTTON);
-  builder->Add("addUser", IDS_ADD_USER_BUTTON);
-  builder->Add("browseAsGuest", IDS_BROWSE_AS_GUEST_BUTTON);
+  builder->Add("addUser", IDS_ASH_ADD_USER_BUTTON);
+  builder->Add("browseAsGuest", IDS_ASH_BROWSE_AS_GUEST_BUTTON);
   builder->Add("moreOptions", IDS_MORE_OPTIONS_BUTTON);
   builder->Add("addSupervisedUser",
                IDS_CREATE_LEGACY_SUPERVISED_USER_MENU_LABEL);
@@ -1318,6 +1326,12 @@ void SigninScreenHandler::HandleAccountPickerReady() {
     return;
   }
 
+  if (delegate_ && !oobe_ui_ && GetMinimumVersionPolicyHandler() &&
+      !GetMinimumVersionPolicyHandler()->RequirementsAreSatisfied()) {
+    delegate_->ShowUpdateRequiredScreen();
+    return;
+  }
+
   PrefService* prefs = g_browser_process->local_state();
   if (prefs->GetBoolean(prefs::kFactoryResetRequested)) {
     if (core_oobe_view_)
@@ -1359,7 +1373,8 @@ void SigninScreenHandler::HandleSignOutUser() {
 }
 
 void SigninScreenHandler::HandleOpenInternetDetailDialog() {
-  LoginDisplayHost::default_host()->OpenInternetDetailDialog("");
+  // Empty string opens the internet detail dialog for the default network.
+  InternetDetailDialog::ShowDialog("");
 }
 
 void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
@@ -1451,7 +1466,7 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
   if (!test_focus_pod_callback_.is_null())
     test_focus_pod_callback_.Run();
 
-  focused_pod_account_id_ = base::MakeUnique<AccountId>(account_id);
+  focused_pod_account_id_ = std::make_unique<AccountId>(account_id);
 
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(account_id);

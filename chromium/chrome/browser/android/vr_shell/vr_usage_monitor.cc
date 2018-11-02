@@ -5,12 +5,13 @@
 #include "chrome/browser/android/vr_shell/vr_usage_monitor.h"
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/rappor/public/rappor_utils.h"
+#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 namespace vr_shell {
 
@@ -126,6 +127,20 @@ void SendRapporEnteredVideoMode(const GURL& origin, vr::Mode mode) {
       break;
   }
 }
+
+int GetRoundedDurationInSeconds(base::Time start, base::Time end) {
+  base::TimeDelta duration = end - start;
+  if (duration.InHours() > 2) {
+    return duration.InHours() * 3600;
+  } else if (duration.InMinutes() > 10) {
+    return (duration.InMinutes() / 10) * 10 * 60;
+  } else if (duration.InSeconds() > 60) {
+    return duration.InMinutes() * 60;
+  } else {
+    return duration.InSeconds();
+  }
+}
+
 }  // namespace
 
 template <SessionEventName SessionType>
@@ -221,9 +236,9 @@ void VrMetricsHelper::RecordVoiceSearchStarted() {
   num_voice_search_started_++;
 }
 
-void VrMetricsHelper::SetVrMode(vr::Mode mode) {
+void VrMetricsHelper::SetVrMode(vr::Mode new_mode) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK_NE(mode, mode_);
+  DCHECK_NE(new_mode, mode_);
 
   base::Time switch_time = base::Time::Now();
 
@@ -236,42 +251,42 @@ void VrMetricsHelper::SetVrMode(vr::Mode mode) {
   }
 
   // start the new modes
-  if (mode != vr::Mode::kNoVr) {
-    switch (mode) {
+  if (new_mode != vr::Mode::kNoVr) {
+    switch (new_mode) {
       case vr::Mode::kWebVr:
         if (started_with_autopresentation_) {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_WEBVR_DLA>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_WEBVR_DLA>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         } else {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_WEBVR>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_WEBVR>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         }
         mode_video_timer_ =
-            base::MakeUnique<SessionTimerImpl<MODE_WEBVR_WITH_VIDEO>>(
+            std::make_unique<SessionTimerImpl<MODE_WEBVR_WITH_VIDEO>>(
                 kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         break;
       case vr::Mode::kVrBrowsingRegular:
         if (started_with_autopresentation_) {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_BROWSER_DLA>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_BROWSER_DLA>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         } else {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_BROWSER>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_BROWSER>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         }
         mode_video_timer_ =
-            base::MakeUnique<SessionTimerImpl<MODE_BROWSER_WITH_VIDEO>>(
+            std::make_unique<SessionTimerImpl<MODE_BROWSER_WITH_VIDEO>>(
                 kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         break;
       case vr::Mode::kVrBrowsingFullscreen:
         if (started_with_autopresentation_) {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_FULLSCREEN_DLA>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_FULLSCREEN_DLA>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         } else {
-          mode_timer_ = base::MakeUnique<SessionTimerImpl<MODE_FULLSCREEN>>(
+          mode_timer_ = std::make_unique<SessionTimerImpl<MODE_FULLSCREEN>>(
               kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         }
         mode_video_timer_ =
-            base::MakeUnique<SessionTimerImpl<MODE_FULLSCREEN_WITH_VIDEO>>(
+            std::make_unique<SessionTimerImpl<MODE_FULLSCREEN_WITH_VIDEO>>(
                 kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
         break;
       default:
@@ -281,14 +296,14 @@ void VrMetricsHelper::SetVrMode(vr::Mode mode) {
     mode_timer_->StartSession(switch_time);
     if (num_videos_playing_ > 0) {
       mode_video_timer_->StartSession(switch_time);
-      SendRapporEnteredVideoMode(origin_, mode);
+      SendRapporEnteredVideoMode(origin_, new_mode);
     }
 
-    SendRapporEnteredMode(origin_, mode);
+    SendRapporEnteredMode(origin_, new_mode);
   }
 
   // stop the old session
-  if (mode_ != vr::Mode::kNoVr && mode == vr::Mode::kNoVr) {
+  if (mode_ != vr::Mode::kNoVr && new_mode == vr::Mode::kNoVr) {
     if (num_videos_playing_ > 0)
       session_video_timer_->StopSession(false, switch_time);
 
@@ -300,10 +315,25 @@ void VrMetricsHelper::SetVrMode(vr::Mode mode) {
                              num_session_navigation_);
     UMA_HISTOGRAM_COUNTS_100("VR.Session.VoiceSearch.StartedCount",
                              num_voice_search_started_);
+
+    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+    DCHECK(ukm_recorder);
+    DCHECK(!time_on_page_start_.is_null());
+    DCHECK(time_on_page_start_ <= base::Time::Now());
+
+    // It's possible if the user started a navigation that is incomplete at this
+    // point that this will double log the value. However, in that case the
+    // value should be the same, so whichever lands in the UKM will be fine.
+    // TODO(offenwanger): Add a check to ensure that the value is only submitted
+    // once.
+    ukm::builders::XR_PageSession(last_source_id_)
+        .SetTimeOnPage(
+            GetRoundedDurationInSeconds(time_on_page_start_, base::Time::Now()))
+        .Record(ukm_recorder);
   }
 
   // start the new session
-  if (mode_ == vr::Mode::kNoVr && mode != vr::Mode::kNoVr) {
+  if (mode_ == vr::Mode::kNoVr && new_mode != vr::Mode::kNoVr) {
     // we are entering a vr mode from non-vr mode - start the vr session
     session_timer_->StartSession(switch_time);
     num_session_video_playback_ = 0;
@@ -314,9 +344,25 @@ void VrMetricsHelper::SetVrMode(vr::Mode mode) {
       session_video_timer_->StartSession(switch_time);
       num_session_video_playback_ = num_videos_playing_;
     }
+
+    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+    DCHECK(ukm_recorder);
+
+    last_source_id_ = ukm::GetSourceIdForWebContentsDocument(web_contents());
+    time_on_page_start_ = base::Time::Now();
   }
 
-  mode_ = mode;
+  if (new_mode == vr::Mode::kVrBrowsingFullscreen && mode_ != vr::Mode::kNoVr) {
+    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+    DCHECK(ukm_recorder);
+
+    ukm::builders::XR_PageSession(
+        ukm::GetSourceIdForWebContentsDocument(web_contents()))
+        .SetEnteredFullscreen(1)
+        .Record(ukm_recorder);
+  }
+
+  mode_ = new_mode;
 }
 
 VrMetricsHelper::VrMetricsHelper(content::WebContents* contents,
@@ -330,17 +376,19 @@ VrMetricsHelper::VrMetricsHelper(content::WebContents* contents,
   num_videos_playing_ = contents->GetCurrentlyPlayingVideoCount();
   is_fullscreen_ = contents->IsFullscreen();
   origin_ = contents->GetLastCommittedURL();
+  last_source_id_ = ukm::GetSourceIdForWebContentsDocument(contents);
+  time_on_page_start_ = base::Time::Now();
 
   Observe(contents);
   if (started_with_autopresentation) {
-    session_timer_ = base::MakeUnique<SessionTimerImpl<SESSION_VR_DLA>>(
+    session_timer_ = std::make_unique<SessionTimerImpl<SESSION_VR_DLA>>(
         kMaximumVideoSessionGap, kMinimumVideoSessionDuration);
   } else {
-    session_timer_ = base::MakeUnique<SessionTimerImpl<SESSION_VR>>(
+    session_timer_ = std::make_unique<SessionTimerImpl<SESSION_VR>>(
         kMaximumHeadsetSessionGap, kMinimumHeadsetSessionDuration);
   }
   session_video_timer_ =
-      base::MakeUnique<SessionTimerImpl<SESSION_VR_WITH_VIDEO>>(
+      std::make_unique<SessionTimerImpl<SESSION_VR_WITH_VIDEO>>(
           kMaximumVideoSessionGap, kMinimumVideoSessionDuration);
 
   UpdateMode();
@@ -392,18 +440,37 @@ void VrMetricsHelper::MediaStoppedPlaying(
   }
 }
 
+void VrMetricsHelper::DidStartNavigation(content::NavigationHandle* handle) {
+  if (handle && handle->IsInMainFrame() && !handle->IsSameDocument()) {
+    ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+    DCHECK(ukm_recorder);
+    ukm::builders::XR_PageSession(last_source_id_)
+        .SetTimeOnPage(
+            GetRoundedDurationInSeconds(time_on_page_start_, base::Time::Now()))
+        .Record(ukm_recorder);
+  }
+}
+
 void VrMetricsHelper::DidFinishNavigation(content::NavigationHandle* handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  // Counting the number of pages viewed is difficult - some websites load
+  // new content dynamically without a navigation.  Others redirect several
+  // times for a single navigation.
+  // We look at the number of committed navigations in the main frame, which
+  // will slightly overestimate pages viewed instead of trying to filter or
+  // look at page loads, since those will underestimate on some pages, and
+  // overestimate on others.
   if (handle && handle->HasCommitted() && handle->IsInMainFrame()) {
     origin_ = handle->GetURL();
-    // Counting the number of pages viewed is difficult - some websites load
-    // new content dynamically without a navigation.  Others redirect several
-    // times for a single navigation.
-    // We look at the number of committed navigations in the main frame, which
-    // will slightly overestimate pages viewed instead of trying to filter or
-    // look at page loads, since those will underestimate on some pages, and
-    // overestimate on others.
+
+    // Get the ukm::SourceId from the handle so that we don't wind up with a
+    // wrong ukm::SourceId from this WebContentObserver perhaps executing after
+    // another which changes the SourceId.
+    last_source_id_ = ukm::ConvertToSourceId(handle->GetNavigationId(),
+                                             ukm::SourceIdType::NAVIGATION_ID);
+    time_on_page_start_ = base::Time::Now();
+
     num_session_navigation_++;
   }
 }

@@ -146,6 +146,7 @@
 <translation id="2890678560483811744">Превелика референца за странице</translation>
 <translation id="2902127500170292085">Комуникација проширења <ph name="EXTENSION_NAME" /> са овим штампачем није успела. Проверите да ли је штампач прикључен и покушајте поново.</translation>
 <translation id="2904456025988372123">Питај када сајт покуша да аутоматски преузима датотеке после прве датотеке</translation>
+<translation id="2911898792135283060">Генериши лозинку...</translation>
 <translation id="2913331724188855103">Дозволи сајтовима да чувају и читају податке колачића (препоручено)</translation>
 <translation id="2916745397441987255">Претражи проширења</translation>
 <translation id="2932883381142163287">Пријави злоупотребу</translation>
@@ -413,7 +414,6 @@
 <translation id="6295158916970320988">Сви сајтови</translation>
 <translation id="6295855836753816081">Чување…</translation>
 <translation id="6308937455967653460">Сачувај везу као...</translation>
-<translation id="6314335155547195432">Генериши лозинку</translation>
 <translation id="6326855256003666642">Број задржавања активности</translation>
 <translation id="6370021412472292592">Учитавање манифеста није могуће.</translation>
 <translation id="6374469231428023295">Покушај поново</translation>
@@ -497,7 +497,6 @@
 <translation id="7564847347806291057">Заврши процес</translation>
 <translation id="7576690715254076113">Упари</translation>
 <translation id="7629827748548208700">Картица: <ph name="TAB_NAME" /></translation>
-<translation id="7658239707568436148">Откажи</translation>
 <translation id="7661259717474717992">Дозволи сајтовима да чувају и читају податке колачића</translation>
 <translation id="7663719505383602579">Пријемник: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7684212569183643648">Инсталирано од стране администратора</translation>

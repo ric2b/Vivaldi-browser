@@ -28,7 +28,7 @@ SRC_DIR = \
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(THIS_DIR))))
 
 
-def ParseFlags(args = None):
+def ParseFlags():
   """Parses flags off sys.argv and returns the parsed flags."""
   # Can't use optparse / argparse because of /fo flag :-/
   includes = []
@@ -37,7 +37,7 @@ def ParseFlags(args = None):
   input = None
   show_includes = False
   # Parse.
-  for flag in (args or sys.argv[1:]):
+  for flag in sys.argv[1:]:
     if flag == '-h' or flag == '--help':
       print(__doc__)
       sys.exit(0)
@@ -104,7 +104,7 @@ def ReadInput(input):
   return rc_file_data, is_utf8
 
 
-def Preprocess(rc_file_data, flags, env=None):
+def Preprocess(rc_file_data, flags):
   """Runs the input file through the preprocessor."""
   clang = os.path.join(SRC_DIR, 'third_party', 'llvm-build',
                        'Release+Asserts', 'bin', 'clang-cl')
@@ -123,7 +123,7 @@ def Preprocess(rc_file_data, flags, env=None):
   if flags.show_includes:
     clang_cmd.append('/showIncludes')
   clang_cmd += flags.includes + flags.defines
-  p = subprocess.Popen(clang_cmd, stdin=subprocess.PIPE, env=env)
+  p = subprocess.Popen(clang_cmd, stdin=subprocess.PIPE)
   p.communicate(input=rc_file_data)
   if p.returncode != 0:
     sys.exit(p.returncode)
@@ -147,7 +147,7 @@ def Preprocess(rc_file_data, flags, env=None):
   return preprocessed_output
 
 
-def RunRc(preprocessed_output, is_utf8, flags, env=None):
+def RunRc(preprocessed_output, is_utf8, flags):
   if sys.platform.startswith('linux'):
     rc = os.path.join(THIS_DIR, 'linux64', 'rc')
   elif sys.platform == 'darwin':
@@ -172,22 +172,22 @@ def RunRc(preprocessed_output, is_utf8, flags, env=None):
   # addition to the pwd, so -I flags need to be passed both to both
   # the preprocessor and rc.
   rc_cmd += flags.includes
-  p = subprocess.Popen(rc_cmd, stdin=subprocess.PIPE, env=env)
+  p = subprocess.Popen(rc_cmd, stdin=subprocess.PIPE)
   p.communicate(input=preprocessed_output)
   return p.returncode
 
 
-def main(args=None, env=None):
+def main():
   # This driver has to do these things:
   # 1. Parse flags.
   # 2. Convert the input from UTF-16LE to UTF-8 if needed.
   # 3. Pass the input through a preprocessor (and clean up the preprocessor's
   #    output in minor ways).
   # 4. Call rc for the heavy lifting.
-  flags = ParseFlags(args)
+  flags = ParseFlags()
   rc_file_data, is_utf8 = ReadInput(flags.input)
-  preprocessed_output = Preprocess(rc_file_data, flags, env=env)
-  return RunRc(preprocessed_output, is_utf8, flags, env=env)
+  preprocessed_output = Preprocess(rc_file_data, flags)
+  return RunRc(preprocessed_output, is_utf8, flags)
 
 
 if __name__ == '__main__':

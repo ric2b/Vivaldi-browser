@@ -42,34 +42,6 @@ using webrtc::NoiseSuppression;
 
 const int kAudioProcessingNumberOfChannels = 1;
 
-#if ENABLE_AUDIO_REPETITION_DETECTOR
-// Minimum duration of any detectable audio repetition.
-const int kMinLengthMs = 1;
-
-// The following variables defines the look back time of audio repetitions that
-// will be logged. The complexity of the detector is proportional to the number
-// of look back times we keep track.
-const int kMinLookbackTimeMs = 10;
-const int kMaxLookbackTimeMs = 200;
-const int kLookbackTimeStepMs = 10;
-
-// Maximum frames of any input chunk of audio. Used by
-// |MediaStreamAudioProcessor::audio_repetition_detector_|. Input longer than
-// |kMaxFrames| won't cause any problem, and will only affect computational
-// efficiency.
-const size_t kMaxFrames = 480;  // 10 ms * 48 kHz
-
-// Send UMA report on an audio repetition being detected. |look_back_ms|
-// provides the look back time of the detected repetition. This function is
-// called back by |MediaStreamAudioProcessor::audio_repetition_detector_|.
-void ReportRepetition(int look_back_ms) {
-  UMA_HISTOGRAM_CUSTOM_COUNTS(
-      "Media.AudioCapturerRepetition", look_back_ms,
-      kMinLookbackTimeMs, kMaxLookbackTimeMs,
-      (kMaxLookbackTimeMs - kMinLookbackTimeMs) / kLookbackTimeStepMs + 1);
-}
-#endif  // ENABLE_AUDIO_REPETITION_DETECTOR
-
 AudioProcessing::ChannelLayout MapLayout(media::ChannelLayout media_layout) {
   switch (media_layout) {
     case media::CHANNEL_LAYOUT_MONO:
@@ -205,8 +177,6 @@ class MediaStreamAudioFifo {
            new MediaStreamAudioBus(destination_channels, destination_frames)),
        data_available_(false) {
     DCHECK_GE(source_channels, destination_channels);
-    DCHECK_GE(sample_rate_, 8000);
-    DCHECK_LE(sample_rate_, 48000);
 
     if (source_channels > destination_channels) {
       audio_source_intermediate_ =
@@ -333,18 +303,6 @@ MediaStreamAudioProcessor::MediaStreamAudioProcessor(
 
   if (aec_dump_message_filter_.get())
     aec_dump_message_filter_->AddDelegate(this);
-
-  // Create and configure |audio_repetition_detector_|.
-#if ENABLE_AUDIO_REPETITION_DETECTOR
-  std::vector<int> look_back_times;
-  for (int time = kMaxLookbackTimeMs; time >= kMinLookbackTimeMs;
-       time -= kLookbackTimeStepMs) {
-    look_back_times.push_back(time);
-  }
-  audio_repetition_detector_.reset(
-      new AudioRepetitionDetector(kMinLengthMs, kMaxFrames, look_back_times,
-                                  base::Bind(&ReportRepetition)));
-#endif  // ENABLE_AUDIO_REPETITION_DETECTOR
 }
 
 MediaStreamAudioProcessor::~MediaStreamAudioProcessor() {
@@ -373,7 +331,8 @@ void MediaStreamAudioProcessor::PushCaptureData(
     const media::AudioBus& audio_source,
     base::TimeDelta capture_delay) {
   DCHECK(capture_thread_checker_.CalledOnValidThread());
-
+  TRACE_EVENT1("audio", "MediaStreamAudioProcessor::PushCaptureData",
+               "delay (ms)", capture_delay.InMillisecondsF());
   capture_fifo_->Push(audio_source, capture_delay);
 }
 
@@ -393,15 +352,6 @@ bool MediaStreamAudioProcessor::ProcessAndConsumeData(
   MediaStreamAudioBus* process_bus;
   if (!capture_fifo_->Consume(&process_bus, capture_delay))
     return false;
-
-  // Detect bit-exact repetition of audio present in the captured audio.
-  // We detect only one channel.
-#if ENABLE_AUDIO_REPETITION_DETECTOR
-  audio_repetition_detector_->Detect(process_bus->bus()->channel(0),
-                                     process_bus->bus()->frames(),
-                                     1,  // number of channels
-                                     input_format_.sample_rate());
-#endif  // ENABLE_AUDIO_REPETITION_DETECTOR
 
   // Use the process bus directly if audio processing is disabled.
   MediaStreamAudioBus* output_bus = process_bus;
@@ -564,7 +514,8 @@ void MediaStreamAudioProcessor::OnPlayoutData(media::AudioBus* audio_bus,
   DCHECK(!audio_processing_->echo_control_mobile()->is_enabled());
 #endif
 
-  TRACE_EVENT0("audio", "MediaStreamAudioProcessor::OnPlayoutData");
+  TRACE_EVENT1("audio", "MediaStreamAudioProcessor::OnPlayoutData",
+               "delay (ms)", audio_delay_milliseconds);
   DCHECK_LT(audio_delay_milliseconds,
             std::numeric_limits<base::subtle::Atomic32>::max());
   base::subtle::Release_Store(&render_delay_ms_, audio_delay_milliseconds);
@@ -679,7 +630,7 @@ void MediaStreamAudioProcessor::InitializeAudioProcessingModule(
   }
 
   // Create and configure the webrtc::AudioProcessing.
-  audio_processing_.reset(webrtc::AudioProcessing::Create(config));
+  audio_processing_.reset(webrtc::AudioProcessingBuilder().Create(config));
 
   // Enable the audio processing components.
   webrtc::AudioProcessing::Config apm_config;
@@ -844,13 +795,16 @@ int MediaStreamAudioProcessor::ProcessData(const float* const* process_ptrs,
   DCHECK(audio_processing_);
   DCHECK(capture_thread_checker_.CalledOnValidThread());
 
-  TRACE_EVENT0("audio", "MediaStreamAudioProcessor::ProcessData");
-
   base::subtle::Atomic32 render_delay_ms =
       base::subtle::Acquire_Load(&render_delay_ms_);
   int64_t capture_delay_ms = capture_delay.InMilliseconds();
   DCHECK_LT(capture_delay_ms,
             std::numeric_limits<base::subtle::Atomic32>::max());
+
+  TRACE_EVENT2("audio", "MediaStreamAudioProcessor::ProcessData",
+               "capture_delay_ms", capture_delay_ms, "render_delay_ms",
+               render_delay_ms);
+
   int total_delay_ms =  capture_delay_ms + render_delay_ms;
   if (total_delay_ms > 300) {
     LOG(WARNING) << "Large audio delay, capture delay: " << capture_delay_ms

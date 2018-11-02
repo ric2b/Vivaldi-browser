@@ -28,6 +28,7 @@
  */
 
 #include "hb-private.hh"
+#include "hb-debug.hh"
 
 #include "hb-ft.h"
 
@@ -36,12 +37,6 @@
 #include FT_ADVANCES_H
 #include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
-
-
-
-#ifndef HB_DEBUG_FT
-#define HB_DEBUG_FT (HB_DEBUG+0)
-#endif
 
 
 /* TODO:
@@ -752,6 +747,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
     FT_Set_Transform (ft_face, &matrix, nullptr);
   }
 
+#ifdef HAVE_FT_SET_VAR_BLEND_COORDINATES
   unsigned int num_coords;
   const int *coords = hb_font_get_var_coords_normalized (font, &num_coords);
   if (num_coords)
@@ -765,6 +761,7 @@ hb_ft_font_set_funcs (hb_font_t *font)
       free (ft_coords);
     }
   }
+#endif
 
   ft_face->generic.data = blob;
   ft_face->generic.finalizer = (FT_Generic_Finalizer) _release_blob;

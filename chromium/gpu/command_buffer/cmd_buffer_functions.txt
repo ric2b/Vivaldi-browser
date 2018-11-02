@@ -286,10 +286,9 @@ GL_APICALL void         GL_APIENTRY glDrawArraysInstancedANGLE (GLenumDrawMode m
 GL_APICALL void         GL_APIENTRY glDrawElementsInstancedANGLE (GLenumDrawMode mode, GLsizei count, GLenumIndexType type, const void* indices, GLsizei primcount);
 GL_APICALL void         GL_APIENTRY glVertexAttribDivisorANGLE (GLuint index, GLuint divisor);
 GL_APICALL void         GL_APIENTRY glGenMailboxCHROMIUM (GLbyte* mailbox);
-GL_APICALL void         GL_APIENTRY glProduceTextureCHROMIUM (GLenumTextureBindTarget target, const GLbyte* mailbox);
-GL_APICALL void         GL_APIENTRY glProduceTextureDirectCHROMIUM (GLidBindTexture texture, GLenumTextureBindTarget target, const GLbyte* mailbox);
-GL_APICALL GLuint       GL_APIENTRY glCreateAndConsumeTextureCHROMIUM (GLenumTextureBindTarget target, const GLbyte* mailbox);
-GL_APICALL void         GL_APIENTRY glCreateAndConsumeTextureINTERNAL (GLenumTextureBindTarget target, GLuint texture, const GLbyte* mailbox);
+GL_APICALL void         GL_APIENTRY glProduceTextureDirectCHROMIUM (GLidBindTexture texture, const GLbyte* mailbox);
+GL_APICALL GLuint       GL_APIENTRY glCreateAndConsumeTextureCHROMIUM (const GLbyte* mailbox);
+GL_APICALL void         GL_APIENTRY glCreateAndConsumeTextureINTERNAL (GLuint texture, const GLbyte* mailbox);
 GL_APICALL void         GL_APIENTRY glBindUniformLocationCHROMIUM (GLidProgram program, GLint location, const char* name);
 GL_APICALL void         GL_APIENTRY glBindTexImage2DCHROMIUM (GLenumTextureBindTarget target, GLint imageId);
 GL_APICALL void         GL_APIENTRY glBindTexImage2DWithInternalformatCHROMIUM (GLenumTextureBindTarget target, GLenumTextureInternalFormat internalformat, GLint imageId);
@@ -299,8 +298,8 @@ GL_APICALL void         GL_APIENTRY glTraceEndCHROMIUM (void);
 GL_APICALL void         GL_APIENTRY glDiscardFramebufferEXT (GLenumFramebufferTarget target, GLsizei count, const GLenum* attachments);
 GL_APICALL void         GL_APIENTRY glLoseContextCHROMIUM (GLenumResetStatus current, GLenumResetStatus other);
 GL_APICALL GLuint64     GL_APIENTRY glInsertFenceSyncCHROMIUM (void);
-GL_APICALL void         GL_APIENTRY glGenSyncTokenCHROMIUM (GLuint64 fence_sync, GLbyte* sync_token);
-GL_APICALL void         GL_APIENTRY glGenUnverifiedSyncTokenCHROMIUM (GLuint64 fence_sync, GLbyte* sync_token);
+GL_APICALL void         GL_APIENTRY glGenSyncTokenCHROMIUM (GLbyte* sync_token);
+GL_APICALL void         GL_APIENTRY glGenUnverifiedSyncTokenCHROMIUM (GLbyte* sync_token);
 GL_APICALL void         GL_APIENTRY glVerifySyncTokensCHROMIUM (GLbyte** sync_tokens, GLsizei count);
 GL_APICALL void         GL_APIENTRY glWaitSyncTokenCHROMIUM (const GLbyte* sync_token);
 GL_APICALL void         GL_APIENTRY glDrawBuffersEXT (GLsizei count, const GLenum* bufs);
@@ -379,11 +378,13 @@ GL_APICALL bool         GL_APIENTRY glLockDiscardableTextureCHROMIUM (GLuint tex
 
 // Extension CHROMIUM_raster_transport
 GL_APICALL void         GL_APIENTRY glBeginRasterCHROMIUM (GLuint texture_id, GLuint sk_color, GLuint msaa_sample_count, GLboolean can_use_lcd_text, GLboolean use_distance_field_text, GLint pixel_config);
-GL_APICALL void         GL_APIENTRY glRasterCHROMIUM (const cc::DisplayItemList* list, GLint translate_x, GLint translate_y, GLint clip_x, GLint clip_y, GLint clip_w, GLint clip_h, GLfloat post_translate_x, GLfloat post_translate_y, GLfloat post_scale);
+GL_APICALL void         GL_APIENTRY glRasterCHROMIUM (GLsizeiptr size, const void* list);
+GL_APICALL void*        GL_APIENTRY glMapRasterCHROMIUM (GLsizeiptr size);
+GL_APICALL void         GL_APIENTRY glUnmapRasterCHROMIUM (GLsizeiptr written_size);
 GL_APICALL void         GL_APIENTRY glEndRasterCHROMIUM (void);
-GL_APICALL void         GL_APIENTRY glCreateTransferCacheEntryCHROMIUM (GLuint64 handle_id, GLuint handle_shm_id, GLuint handle_shm_offset, const cc::ClientTransferCacheEntry& entry);
-GL_APICALL void         GL_APIENTRY glDeleteTransferCacheEntryCHROMIUM (GLuint64 handle_id);
-GL_APICALL void         GL_APIENTRY glUnlockTransferCacheEntryCHROMIUM (GLuint64 handle_id);
+GL_APICALL void         GL_APIENTRY glCreateTransferCacheEntryINTERNAL (GLuint entry_type, GLuint entry_id, GLuint handle_shm_id, GLuint handle_shm_offset, GLuint data_shm_id, GLuint data_shm_offset, GLuint data_size);
+GL_APICALL void         GL_APIENTRY glDeleteTransferCacheEntryINTERNAL (GLuint entry_type, GLuint entry_id);
+GL_APICALL void         GL_APIENTRY glUnlockTransferCacheEntryINTERNAL (GLuint entry_type, GLuint entry_id);
 
 // Extension CHROMIUM_texture_storage_image
 GL_APICALL void         GL_APIENTRY glTexStorage2DImageCHROMIUM (GLenumTextureBindTarget target, GLenumTextureInternalFormatStorage internalFormat, GLenumClientBufferUsage bufferUsage, GLsizei width, GLsizei height);
@@ -393,3 +394,10 @@ GL_APICALL void         GL_APIENTRY glSetColorSpaceMetadataCHROMIUM (GLuint text
 
 // Extension EXT_window_rectangles
 GL_APICALL void         GL_APIENTRY glWindowRectanglesEXT (GLenumWindowRectanglesMode mode, GLsizeiNotNegative count, const GLint* box);
+
+// Extension CHROMIUM_gpu_fence
+GL_APICALL GLuint       GL_APIENTRY glCreateGpuFenceCHROMIUM (void);
+GL_APICALL void         GL_APIENTRY glCreateGpuFenceINTERNAL (GLuint gpu_fence_id);
+GL_APICALL GLuint       GL_APIENTRY glCreateClientGpuFenceCHROMIUM (ClientGpuFence source);
+GL_APICALL void         GL_APIENTRY glWaitGpuFenceCHROMIUM (GLuint gpu_fence_id);
+GL_APICALL void         GL_APIENTRY glDestroyGpuFenceCHROMIUM (GLuint gpu_fence_id);

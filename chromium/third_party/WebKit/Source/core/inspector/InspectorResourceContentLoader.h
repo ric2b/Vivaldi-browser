@@ -5,12 +5,12 @@
 #ifndef InspectorResourceContentLoader_h
 #define InspectorResourceContentLoader_h
 
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/Vector.h"
 
 namespace blink {
@@ -21,8 +21,6 @@ class Resource;
 
 class CORE_EXPORT InspectorResourceContentLoader final
     : public GarbageCollectedFinalized<InspectorResourceContentLoader> {
-  WTF_MAKE_NONCOPYABLE(InspectorResourceContentLoader);
-
  public:
   static InspectorResourceContentLoader* Create(LocalFrame* inspected_frame) {
     return new InspectorResourceContentLoader(inspected_frame);
@@ -32,7 +30,7 @@ class CORE_EXPORT InspectorResourceContentLoader final
   void Trace(blink::Visitor*);
 
   int CreateClientId();
-  void EnsureResourcesContentLoaded(int client_id, WTF::Closure callback);
+  void EnsureResourcesContentLoaded(int client_id, base::OnceClosure callback);
   void Cancel(int client_id);
   void DidCommitLoadForLocalFrame(LocalFrame*);
 
@@ -48,7 +46,7 @@ class CORE_EXPORT InspectorResourceContentLoader final
   void Stop();
   bool HasFinished();
 
-  using Callbacks = Vector<WTF::Closure>;
+  using Callbacks = Vector<base::OnceClosure>;
   HashMap<int, Callbacks> callbacks_;
   bool all_requests_started_;
   bool started_;
@@ -58,6 +56,7 @@ class CORE_EXPORT InspectorResourceContentLoader final
   int last_client_id_;
 
   friend class ResourceClient;
+  DISALLOW_COPY_AND_ASSIGN(InspectorResourceContentLoader);
 };
 
 }  // namespace blink

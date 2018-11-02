@@ -3,6 +3,7 @@
 <translationbundle lang="ko">
 <translation id="102360288709523007">사용 통계와 비정상 종료 보고서를 Google로 전송하면 Chromium 개선에 도움이 됩니다.</translation>
 <translation id="1185134272377778587">Chromium 정보</translation>
+<translation id="1289966288285062467">Chromium 개인정보처리방침</translation>
 <translation id="1472013873724362412">계정이 Chromium에서 작동하지 않습니다. 도메인 관리자에게 문의하거나 일반 Google 계정을 사용하여 로그인하세요.</translation>
 <translation id="1736662517232558588">Chromium 데이터 삭제 완료</translation>
 <translation id="1838412507805038478">Chromium이 <ph name="ISSUER" />에서 이 웹사이트의 인증서를 발행했음을 확인했습니다.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Chromium에서 로그아웃</translation>
 <translation id="6424492062988593837">한층 개선된 Chromium의 최신 버전이 출시되었습니다.</translation>
 <translation id="6604711459180487467">위치 정보를 기반으로 Chromium에서 더 나은 서비스를 이용할 수 있습니다.</translation>
+<translation id="6626296268883197964">이 애플리케이션을 사용하면 Chromium의 <ph name="BEGIN_LINK_TOS" />서비스 약관<ph name="END_LINK_TOS" /> 및 <ph name="BEGIN_LINK_PRIVACY" />개인정보처리방침<ph name="END_LINK_PRIVACY" />에 동의하는 것으로 간주됩니다.</translation>
 <translation id="7099326575020694068">Chromium에서는 분할 모드에서 카메라를 사용할 수 없습니다.</translation>
-<translation id="7144758435978427212">근처 사물에서 전송한 웹페이지를 탐색하세요. 블루투스를 사용 설정하면 Chromium은 근처 사물과 관련된 웹페이지를 수집한 후 익명으로 Google로 전달하여 사용자에게 가장 유용한 웹페이지를 찾습니다. <ph name="BEGIN_LINK" />자세히 알아보기<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Chromium에서는 계정 로그인 정보가 자동으로 채워지기 때문에 시간을 절약할 수 있습니다. 설정에서 계정을 추가하거나 삭제할 수 있습니다.</translation>
 <translation id="7269362888766543920">일부 부가기능으로 인해 Chromium이 비정상 종료됩니다. 해당 부가기능을 제거하세요.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">어디서나 Chromium 사용</translation>
 <translation id="7674213385180944843">설정 &gt; 개인정보 보호 &gt; 카메라 &gt; Chromium을 열고 카메라를 사용 설정하세요.</translation>
 <translation id="786327964234957808">동기화 계정을 <ph name="USER_EMAIL1" />에서 <ph name="USER_EMAIL2" />(으)로 전환합니다. 기존 Chromium 데이터는 <ph name="DOMAIN" />에서 관리됩니다. 이 기기에서는 데이터가 삭제되지만 <ph name="USER_EMAIL1" />에 계속해서 데이터가 보관됩니다.</translation>
-<translation id="8111736072665034317">이 애플리케이션을 사용하면 Chromium의 <ph name="BEGIN_LINK" />서비스 약관<ph name="END_LINK" />에 동의하게 됩니다.</translation>
 <translation id="8175055321229419309">도움말: <ph name="BEGIN_LINK" />Chromium을 내 Dock에 추가하세요.<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">위치 정보를 기반으로 Chromium에서 더 좋은 Google 서비스를 제공할 수 있습니다.</translation>
 <translation id="8353224596138547809">Chromium이 이 사이트에서 비밀번호를 저장하도록 하시겠습니까?</translation>

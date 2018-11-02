@@ -4,13 +4,50 @@
 
 #include "components/payments/content/service_worker_payment_instrument.h"
 
+#include <memory>
+
+#include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/payments/core/payment_request_delegate.h"
 #include "content/public/browser/stored_payment_app.h"
 #include "content/public/test/test_browser_context.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
+namespace {
+
+class MockPaymentRequestDelegate : public PaymentRequestDelegate {
+ public:
+  MockPaymentRequestDelegate() {}
+  ~MockPaymentRequestDelegate() override {}
+  MOCK_METHOD1(ShowDialog, void(PaymentRequest* request));
+  MOCK_METHOD0(CloseDialog, void());
+  MOCK_METHOD0(ShowErrorMessage, void());
+  MOCK_METHOD0(ShowProcessingSpinner, void());
+  MOCK_CONST_METHOD0(IsBrowserWindowActive, bool());
+  MOCK_METHOD0(GetPersonalDataManager, autofill::PersonalDataManager*());
+  MOCK_CONST_METHOD0(GetApplicationLocale, const std::string&());
+  MOCK_CONST_METHOD0(IsIncognito, bool());
+  MOCK_METHOD0(IsSslCertificateValid, bool());
+  MOCK_CONST_METHOD0(GetLastCommittedURL, const GURL&());
+  MOCK_METHOD2(
+      DoFullCardRequest,
+      void(const autofill::CreditCard& credit_card,
+           base::WeakPtr<autofill::payments::FullCardRequest::ResultDelegate>
+               result_delegate));
+  MOCK_METHOD0(GetAddressNormalizer, autofill::AddressNormalizer*());
+  MOCK_METHOD0(GetRegionDataLoader, autofill::RegionDataLoader*());
+  MOCK_METHOD0(GetUkmRecorder, ukm::UkmRecorder*());
+  MOCK_CONST_METHOD0(GetAuthenticatedEmail, std::string());
+  MOCK_METHOD0(GetPrefService, PrefService*());
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockPaymentRequestDelegate);
+};
+
+}  // namespace
 
 class ServiceWorkerPaymentInstrumentTest : public testing::Test,
                                            public PaymentRequestSpec::Observer {
@@ -75,7 +112,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     entry_2->supported_methods.push_back("https://bobpay.com");
     method_data.push_back(std::move(entry_2));
 
-    spec_ = base::MakeUnique<PaymentRequestSpec>(
+    spec_ = std::make_unique<PaymentRequestSpec>(
         mojom::PaymentOptions::New(), std::move(details),
         std::move(method_data), this, "en-US");
   }
@@ -105,7 +142,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
     instrument_ = std::make_unique<ServiceWorkerPaymentInstrument>(
         &browser_context_, GURL("https://testmerchant.com"),
         GURL("https://testmerchant.com/bobpay"), spec_.get(),
-        std::move(stored_app));
+        std::move(stored_app), &delegate_);
   }
 
   ServiceWorkerPaymentInstrument* GetInstrument() { return instrument_.get(); }
@@ -119,6 +156,7 @@ class ServiceWorkerPaymentInstrumentTest : public testing::Test,
   }
 
  private:
+  MockPaymentRequestDelegate delegate_;
   content::TestBrowserContext browser_context_;
 
   std::unique_ptr<PaymentRequestSpec> spec_;

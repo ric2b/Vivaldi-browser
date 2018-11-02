@@ -5,7 +5,7 @@
 #include "core/inspector/InspectorAuditsAgent.h"
 
 #include "core/inspector/InspectorNetworkAgent.h"
-#include "platform/graphics/ImageBuffer.h"
+#include "platform/graphics/ImageDataBuffer.h"
 #include "platform/wtf/text/Base64.h"
 #include "public/platform/WebData.h"
 #include "public/platform/WebImage.h"
@@ -67,7 +67,7 @@ void InspectorAuditsAgent::Trace(blink::Visitor* visitor) {
 InspectorAuditsAgent::InspectorAuditsAgent(InspectorNetworkAgent* network_agent)
     : network_agent_(network_agent) {}
 
-InspectorAuditsAgent::~InspectorAuditsAgent() {}
+InspectorAuditsAgent::~InspectorAuditsAgent() = default;
 
 protocol::Response InspectorAuditsAgent::getEncodedResponse(
     const String& request_id,

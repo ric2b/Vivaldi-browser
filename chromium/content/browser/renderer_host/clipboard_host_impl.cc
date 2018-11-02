@@ -4,6 +4,7 @@
 
 #include "content/browser/renderer_host/clipboard_host_impl.h"
 
+#include <limits>
 #include <utility>
 
 #include "base/bind.h"
@@ -56,7 +57,7 @@ ClipboardHostImpl::ClipboardHostImpl(
 
 void ClipboardHostImpl::Create(
     scoped_refptr<ChromeBlobStorageContext> blob_storage_context,
-    mojom::ClipboardHostRequest request) {
+    blink::mojom::ClipboardHostRequest request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   mojo::MakeStrongBinding(
       base::WrapUnique<ClipboardHostImpl>(
@@ -68,46 +69,46 @@ ClipboardHostImpl::~ClipboardHostImpl() {
   clipboard_writer_->Reset();
 }
 
-void ClipboardHostImpl::GetSequenceNumber(ui::ClipboardType type,
+void ClipboardHostImpl::GetSequenceNumber(ui::ClipboardType clipboard_type,
                                           GetSequenceNumberCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::move(callback).Run(clipboard_->GetSequenceNumber(type));
+  std::move(callback).Run(clipboard_->GetSequenceNumber(clipboard_type));
 }
 
 void ClipboardHostImpl::ReadAvailableTypes(
-    ui::ClipboardType type,
+    ui::ClipboardType clipboard_type,
     ReadAvailableTypesCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::vector<base::string16> types;
   bool contains_filenames;
-  clipboard_->ReadAvailableTypes(type, &types, &contains_filenames);
+  clipboard_->ReadAvailableTypes(clipboard_type, &types, &contains_filenames);
   std::move(callback).Run(types, contains_filenames);
 }
 
-void ClipboardHostImpl::IsFormatAvailable(content::ClipboardFormat format,
-                                          ui::ClipboardType type,
+void ClipboardHostImpl::IsFormatAvailable(blink::mojom::ClipboardFormat format,
+                                          ui::ClipboardType clipboard_type,
                                           IsFormatAvailableCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   bool result = false;
   switch (format) {
-    case CLIPBOARD_FORMAT_PLAINTEXT:
+    case blink::mojom::ClipboardFormat::kPlaintext:
       result = clipboard_->IsFormatAvailable(
-                   ui::Clipboard::GetPlainTextWFormatType(), type) ||
+                   ui::Clipboard::GetPlainTextWFormatType(), clipboard_type) ||
                clipboard_->IsFormatAvailable(
-                   ui::Clipboard::GetPlainTextFormatType(), type);
+                   ui::Clipboard::GetPlainTextFormatType(), clipboard_type);
       break;
-    case CLIPBOARD_FORMAT_HTML:
+    case blink::mojom::ClipboardFormat::kHtml:
       result = clipboard_->IsFormatAvailable(ui::Clipboard::GetHtmlFormatType(),
-                                             type);
+                                             clipboard_type);
       break;
-    case CLIPBOARD_FORMAT_SMART_PASTE:
+    case blink::mojom::ClipboardFormat::kSmartPaste:
       result = clipboard_->IsFormatAvailable(
-          ui::Clipboard::GetWebKitSmartPasteFormatType(), type);
+          ui::Clipboard::GetWebKitSmartPasteFormatType(), clipboard_type);
       break;
-    case CLIPBOARD_FORMAT_BOOKMARK:
+    case blink::mojom::ClipboardFormat::kBookmark:
 #if defined(OS_WIN) || defined(OS_MACOSX)
       result = clipboard_->IsFormatAvailable(ui::Clipboard::GetUrlWFormatType(),
-                                             type);
+                                             clipboard_type);
 #else
       result = false;
 #endif
@@ -116,47 +117,51 @@ void ClipboardHostImpl::IsFormatAvailable(content::ClipboardFormat format,
   std::move(callback).Run(result);
 }
 
-void ClipboardHostImpl::ReadText(ui::ClipboardType type,
+void ClipboardHostImpl::ReadText(ui::ClipboardType clipboard_type,
                                  ReadTextCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   base::string16 result;
   if (clipboard_->IsFormatAvailable(ui::Clipboard::GetPlainTextWFormatType(),
-                                    type)) {
-    clipboard_->ReadText(type, &result);
+                                    clipboard_type)) {
+    clipboard_->ReadText(clipboard_type, &result);
   } else if (clipboard_->IsFormatAvailable(
-                 ui::Clipboard::GetPlainTextFormatType(), type)) {
+                 ui::Clipboard::GetPlainTextFormatType(), clipboard_type)) {
     std::string ascii;
-    clipboard_->ReadAsciiText(type, &ascii);
+    clipboard_->ReadAsciiText(clipboard_type, &ascii);
     result = base::ASCIIToUTF16(ascii);
   }
   std::move(callback).Run(result);
 }
 
-void ClipboardHostImpl::ReadHtml(ui::ClipboardType type,
+void ClipboardHostImpl::ReadHtml(ui::ClipboardType clipboard_type,
                                  ReadHtmlCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   base::string16 markup;
   std::string src_url_str;
   uint32_t fragment_start = 0;
   uint32_t fragment_end = 0;
-  clipboard_->ReadHTML(type, &markup, &src_url_str, &fragment_start,
+  clipboard_->ReadHTML(clipboard_type, &markup, &src_url_str, &fragment_start,
                        &fragment_end);
   std::move(callback).Run(std::move(markup), GURL(src_url_str), fragment_start,
                           fragment_end);
 }
 
-void ClipboardHostImpl::ReadRtf(ui::ClipboardType type,
+void ClipboardHostImpl::ReadRtf(ui::ClipboardType clipboard_type,
                                 ReadRtfCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   std::string result;
-  clipboard_->ReadRTF(type, &result);
+  clipboard_->ReadRTF(clipboard_type, &result);
   std::move(callback).Run(result);
 }
 
-void ClipboardHostImpl::ReadImage(ui::ClipboardType type,
+void ClipboardHostImpl::ReadImage(ui::ClipboardType clipboard_type,
                                   ReadImageCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SkBitmap bitmap = clipboard_->ReadImage(type);
+
+  SkBitmap bitmap = clipboard_->ReadImage(clipboard_type);
 
   base::PostTaskWithTraits(
       FROM_HERE,
@@ -172,7 +177,7 @@ void ClipboardHostImpl::ReadAndEncodeImage(const SkBitmap& bitmap,
     std::vector<uint8_t> png_data;
     if (gfx::PNGCodec::FastEncodeBGRASkBitmap(bitmap, false, &png_data)) {
       BrowserThread::PostTask(
-          BrowserThread::UI, FROM_HERE,
+          BrowserThread::IO, FROM_HERE,
           base::BindOnce(&ClipboardHostImpl::OnReadAndEncodeImageFinished,
                          base::Unretained(this), std::move(png_data),
                          std::move(callback)));
@@ -191,60 +196,70 @@ void ClipboardHostImpl::ReadAndEncodeImage(const SkBitmap& bitmap,
 void ClipboardHostImpl::OnReadAndEncodeImageFinished(
     std::vector<uint8_t> png_data,
     ReadImageCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // |blob_storage_context_| must be accessed only on the IO thread.
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  std::string blob_uuid;
+  std::string mime_type;
+  int64_t size = -1;
   if (png_data.size() < std::numeric_limits<uint32_t>::max()) {
     std::unique_ptr<content::BlobHandle> blob_handle =
         blob_storage_context_->CreateMemoryBackedBlob(
             reinterpret_cast<char*>(png_data.data()), png_data.size(), "");
     if (blob_handle) {
-      std::move(callback).Run(blob_handle->GetUUID(),
-                              ui::Clipboard::kMimeTypePNG,
-                              static_cast<int64_t>(png_data.size()));
+      blob_uuid = blob_handle->GetUUID();
+      mime_type = ui::Clipboard::kMimeTypePNG;
+      size = static_cast<int64_t>(png_data.size());
       // Give the renderer a minute to pick up a reference to the blob before
       // giving up.
       // TODO(dmurph): There should be a better way of transferring ownership of
       // a blob from the browser to the renderer, rather than relying on this
       // timeout to clean up eventually. See https://crbug.com/604800.
-      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE,
+      BrowserThread::PostDelayedTask(
+          BrowserThread::IO, FROM_HERE,
           base::BindOnce(&CleanupReadImageBlob, base::Passed(&blob_handle)),
           base::TimeDelta::FromMinutes(1));
-      return;
     }
   }
-  std::move(callback).Run(std::string(), std::string(), -1);
+  BrowserThread::PostTask(
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(
+          [](ReadImageCallback callback, const std::string& blob_uuid,
+             const std::string& mime_type, int64_t size) {
+            std::move(callback).Run(blob_uuid, mime_type, size);
+          },
+          std::move(callback), blob_uuid, mime_type, size));
 }
 
 void ClipboardHostImpl::ReadCustomData(ui::ClipboardType clipboard_type,
                                        const base::string16& type,
                                        ReadCustomDataCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   base::string16 result;
   clipboard_->ReadCustomData(clipboard_type, type, &result);
   std::move(callback).Run(result);
 }
 
-void ClipboardHostImpl::WriteText(ui::ClipboardType clipboard_type,
+void ClipboardHostImpl::WriteText(ui::ClipboardType,
                                   const base::string16& text) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   clipboard_writer_->WriteText(text);
 }
 
-void ClipboardHostImpl::WriteHtml(ui::ClipboardType clipboard_type,
+void ClipboardHostImpl::WriteHtml(ui::ClipboardType,
                                   const base::string16& markup,
                                   const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   clipboard_writer_->WriteHTML(markup, url.spec());
 }
 
-void ClipboardHostImpl::WriteSmartPasteMarker(
-    ui::ClipboardType clipboard_type) {
+void ClipboardHostImpl::WriteSmartPasteMarker(ui::ClipboardType) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   clipboard_writer_->WriteWebSmartPaste();
 }
 
 void ClipboardHostImpl::WriteCustomData(
-    ui::ClipboardType type,
+    ui::ClipboardType,
     const std::unordered_map<base::string16, base::string16>& data) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::Pickle pickle;
@@ -253,7 +268,7 @@ void ClipboardHostImpl::WriteCustomData(
       pickle, ui::Clipboard::GetWebCustomDataFormatType());
 }
 
-void ClipboardHostImpl::WriteBookmark(ui::ClipboardType clipboard_type,
+void ClipboardHostImpl::WriteBookmark(ui::ClipboardType,
                                       const std::string& url,
                                       const base::string16& title) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -261,7 +276,7 @@ void ClipboardHostImpl::WriteBookmark(ui::ClipboardType clipboard_type,
 }
 
 void ClipboardHostImpl::WriteImage(
-    ui::ClipboardType type,
+    ui::ClipboardType,
     const gfx::Size& size,
     mojo::ScopedSharedBufferHandle shared_buffer_handle) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -289,7 +304,7 @@ void ClipboardHostImpl::WriteImage(
   clipboard_writer_->WriteImage(bitmap);
 }
 
-void ClipboardHostImpl::CommitWrite(ui::ClipboardType clipboard_type) {
+void ClipboardHostImpl::CommitWrite(ui::ClipboardType) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   clipboard_writer_.reset(
       new ui::ScopedClipboardWriter(ui::CLIPBOARD_TYPE_COPY_PASTE));
@@ -300,4 +315,5 @@ void ClipboardHostImpl::WriteStringToFindPboard(const base::string16& text) {
   mojo::ReportBadMessage("Unexpected call to WriteStringToFindPboard.");
 }
 #endif
+
 }  // namespace content

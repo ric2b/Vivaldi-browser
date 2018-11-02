@@ -3,6 +3,7 @@
 <translationbundle lang="sv">
 <translation id="102360288709523007">Hjälp till att förbättra Chrome genom att skicka användningsstatistik och felrapporter till Google.</translation>
 <translation id="1185134272377778587">Om Chromium</translation>
+<translation id="1289966288285062467">Sekretessmeddelande för Chromium</translation>
 <translation id="1472013873724362412">Kontot fungerar inte på Chromium. Kontakta domänadministratören eller logga in med ett vanligt Google-konto.</translation>
 <translation id="1736662517232558588">Chromium-data har rensats</translation>
 <translation id="1838412507805038478">Chromium har verifierat att <ph name="ISSUER" /> har utfärdat webbplatsens certifikat.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Vill du logga ut från Chromium?</translation>
 <translation id="6424492062988593837">Chrome har blivit ännu bättre! En ny version finns tillgänglig.</translation>
 <translation id="6604711459180487467">Ange din plats och få en bättre upplevelse när du använder Chromium.</translation>
+<translation id="6626296268883197964">Genom att använda det här programmet godkänner du Chromiums <ph name="BEGIN_LINK_TOS" />användarvillkor<ph name="END_LINK_TOS" /> och <ph name="BEGIN_LINK_PRIVACY" />sekretessmeddelande<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="7099326575020694068">Chromium kan inte använda kameran i delad vy</translation>
-<translation id="7144758435978427212">Upptäck webbsidor som skickats av enheter i närheten. När Bluetooth är aktiverat kan Chromium samla webbsidor som är kopplade till enheter i din omgivning, skicka dem anonymt till Google och sedan välja ut dem som är mest användbara för dig. <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">Med Chromium sparar du tid genom att dina konton blir tillgängliga på nätet. Du kan lägga till och ta bort konton i inställningarna.</translation>
 <translation id="7269362888766543920">Några tillägg har fått Chromium att krascha. Testa att avinstallera dem.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">Använd Chromium överallt</translation>
 <translation id="7674213385180944843">Öppna Inställningar &gt; Sekretess &gt; Kamera &gt; Chromium och aktivera kameran.</translation>
 <translation id="786327964234957808">Du håller på att byta synkroniseringskonto från <ph name="USER_EMAIL1" /> till <ph name="USER_EMAIL2" />. Befintlig data i Chromium hanteras av <ph name="DOMAIN" />. Åtgärden raderar din data från den här enheten men den finns kvar på <ph name="USER_EMAIL1" />.</translation>
-<translation id="8111736072665034317">Genom att använda det här programmet godkänner du Chromiums <ph name="BEGIN_LINK" />användarvillkor<ph name="END_LINK" />.</translation>
 <translation id="8175055321229419309">Tips! <ph name="BEGIN_LINK" />Flytta Chromium till Dock<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">Ange din plats och få en bättre upplevelse av Google när du använder Chromium.</translation>
 <translation id="8353224596138547809">Vill du att Chromium sparar lösenordet för den här webbplatsen?</translation>

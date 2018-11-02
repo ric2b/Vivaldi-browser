@@ -6,7 +6,11 @@
 #define THIRD_PARTY_WEBKIT_SOURCE_PLATFORM_SCHEDULER_UTIL_TRACING_HELPER_H_
 
 #include <string>
+#include <unordered_set>
+
+#include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "platform/PlatformExport.h"
 
@@ -32,30 +36,71 @@ PLATFORM_EXPORT bool AreVerboseSnapshotsEnabled();
 
 PLATFORM_EXPORT std::string PointerToString(const void* pointer);
 
+PLATFORM_EXPORT double TimeDeltaToMilliseconds(const base::TimeDelta& value);
+
+class TraceableVariable;
+
+// Unfortunately, using |base::trace_event::TraceLog::EnabledStateObserver|
+// wouldn't be helpful in our case because removing one takes linear time
+// and tracers may be created and disposed frequently.
+class PLATFORM_EXPORT TraceableVariableController {
+ public:
+  TraceableVariableController();
+  ~TraceableVariableController();
+
+  // Not thread safe.
+  void RegisterTraceableVariable(TraceableVariable* traceable_variable);
+  void DeregisterTraceableVariable(TraceableVariable* traceable_variable);
+
+  void OnTraceLogEnabled();
+
+ private:
+  std::unordered_set<TraceableVariable*> traceable_variables_;
+};
+
+class TraceableVariable {
+ public:
+  TraceableVariable(TraceableVariableController* controller)
+      : controller_(controller) {
+    controller_->RegisterTraceableVariable(this);
+  }
+
+  virtual ~TraceableVariable() {
+    controller_->DeregisterTraceableVariable(this);
+  }
+
+  virtual void OnTraceLogEnabled() = 0;
+
+ private:
+  TraceableVariableController* const controller_;  // Not owned.
+};
+
 // TRACE_EVENT macros define static variable to cache a pointer to the state
 // of category. Hence, we need distinct version for each category in order to
 // prevent unintended leak of state.
 
 template <typename T, const char* category>
-class TraceableState {
+class TraceableState : public TraceableVariable {
  public:
   using ConverterFuncPtr = const char* (*)(T);
 
   TraceableState(T initial_state,
                  const char* name,
                  const void* object,
+                 TraceableVariableController* controller,
                  ConverterFuncPtr converter)
-      : name_(name),
+      : TraceableVariable(controller),
+        name_(name),
         object_(object),
         converter_(converter),
         state_(initial_state),
-        started_(false) {
+        slice_is_open_(false) {
     internal::ValidateTracingCategory(category);
     Trace();
   }
 
-  ~TraceableState() {
-    if (started_)
+  ~TraceableState() override {
+    if (slice_is_open_)
       TRACE_EVENT_ASYNC_END0(category, name_, object_);
   }
 
@@ -71,12 +116,15 @@ class TraceableState {
   operator T() const {
     return state_;
   }
+  const T& get() const {
+    return state_;
+  }
 
-  void OnTraceLogEnabled() {
+  void OnTraceLogEnabled() final {
     Trace();
   }
 
- private:
+ protected:
   void Assign(T new_state) {
     if (state_ != new_state) {
       state_ = new_state;
@@ -84,19 +132,33 @@ class TraceableState {
     }
   }
 
-  void Trace() {
-    if (started_)
-      TRACE_EVENT_ASYNC_END0(category, name_, object_);
+  void (*mock_trace_for_test_)(const char*) = nullptr;
 
-    started_ = is_enabled();
-    if (started_) {
-      // Trace viewer logic relies on subslice starting at the exact same time
-      // as the async event.
-      base::TimeTicks now = base::TimeTicks::Now();
-      TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP0(category, name_, object_, now);
-      TRACE_EVENT_ASYNC_STEP_INTO_WITH_TIMESTAMP0(category, name_, object_,
-                                                  converter_(state_), now);
+ private:
+  void Trace() {
+    if (UNLIKELY(mock_trace_for_test_)) {
+      mock_trace_for_test_(converter_(state_));
+      return;
     }
+
+    if (slice_is_open_) {
+      TRACE_EVENT_ASYNC_END0(category, name_, object_);
+      slice_is_open_ = false;
+    }
+    if (!is_enabled())
+      return;
+    // Converter returns nullptr to indicate the absence of state.
+    const char* state_str = converter_(state_);
+    if (!state_str)
+      return;
+
+    // Trace viewer logic relies on subslice starting at the exact same time
+    // as the async event.
+    base::TimeTicks now = base::TimeTicks::Now();
+    TRACE_EVENT_ASYNC_BEGIN_WITH_TIMESTAMP0(category, name_, object_, now);
+    TRACE_EVENT_ASYNC_STEP_INTO_WITH_TIMESTAMP0(category, name_, object_,
+                                                state_str, now);
+    slice_is_open_ = true;
   }
 
   bool is_enabled() const {
@@ -110,25 +172,40 @@ class TraceableState {
   const ConverterFuncPtr converter_;
 
   T state_;
-  // We have to track |started_| state to avoid race condition since SetState
-  // might be called before OnTraceLogEnabled notification.
-  bool started_;
+  // We have to track whether slice is open to avoid confusion since assignment,
+  // "absent" state and OnTraceLogEnabled can happen anytime.
+  bool slice_is_open_;
 
   DISALLOW_COPY(TraceableState);
 };
 
 template <typename T, const char* category>
-class TraceableCounter {
+class TraceableCounter : public TraceableVariable {
  public:
   using ConverterFuncPtr = double (*)(const T&);
 
   TraceableCounter(T initial_value,
                    const char* name,
                    const void* object,
+                   TraceableVariableController* controller,
                    ConverterFuncPtr converter)
-      : name_(name),
+      : TraceableVariable(controller),
+        name_(name),
         object_(object),
         converter_(converter),
+        value_(initial_value) {
+    internal::ValidateTracingCategory(category);
+    Trace();
+  }
+
+  TraceableCounter(T initial_value,
+                   const char* name,
+                   const void* object,
+                   TraceableVariableController* controller)
+      : TraceableVariable(controller),
+        name_(name),
+        object_(object),
+        converter_([](const T& value) { return static_cast<double>(value); }),
         value_(initial_value) {
     internal::ValidateTracingCategory(category);
     Trace();
@@ -145,14 +222,32 @@ class TraceableCounter {
     return *this;
   }
 
-  const T& get() const {
+  TraceableCounter& operator +=(const T& value) {
+    value_ += value;
+    Trace();
+    return *this;
+  }
+  TraceableCounter& operator -=(const T& value) {
+    value_ -= value;
+    Trace();
+    return *this;
+  }
+
+  const T& value() const {
     return value_;
+  }
+  const T* operator ->() const {
+    return &value_;
   }
   operator T() const {
     return value_;
   }
 
-  void Trace() {
+  void OnTraceLogEnabled() final {
+    Trace();
+  }
+
+  void Trace() const {
     TRACE_COUNTER_ID1(category, name_, object_, converter_(value_));
   }
 
@@ -164,6 +259,62 @@ class TraceableCounter {
   T value_;
   DISALLOW_COPY(TraceableCounter);
 };
+
+// Add operators when it's needed.
+
+template <typename T, const char* category>
+constexpr T operator -(const TraceableCounter<T, category>& counter) {
+  return -counter.value();
+}
+
+template <typename T, const char* category>
+constexpr T operator /(const TraceableCounter<T, category>& lhs, const T& rhs) {
+  return lhs.value() / rhs;
+}
+
+template <typename T, const char* category>
+constexpr bool operator >(
+    const TraceableCounter<T, category>& lhs, const T& rhs) {
+  return lhs.value() > rhs;
+}
+
+template <typename T, const char* category>
+constexpr bool operator <(
+    const TraceableCounter<T, category>& lhs, const T& rhs) {
+  return lhs.value() < rhs;
+}
+
+template <typename T, const char* category>
+constexpr bool operator !=(
+    const TraceableCounter<T, category>& lhs, const T& rhs) {
+  return lhs.value() != rhs;
+}
+
+template <typename T, const char* category>
+constexpr T operator ++(TraceableCounter<T, category>& counter) {
+  counter = counter.value() + 1;
+  return counter.value();
+}
+
+template <typename T, const char* category>
+constexpr T operator --(TraceableCounter<T, category>& counter) {
+  counter = counter.value() - 1;
+  return counter.value();
+}
+
+template <typename T, const char* category>
+constexpr T operator ++(TraceableCounter<T, category>& counter, int) {
+  T value = counter.value();
+  counter = value + 1;
+  return value;
+}
+
+template <typename T, const char* category>
+constexpr T operator --(TraceableCounter<T, category>& counter, int) {
+  T value = counter.value();
+  counter = value - 1;
+  return value;
+}
 
 }  // namespace scheduler
 }  // namespace blink

@@ -60,6 +60,12 @@ viz_component("service") {
     "display/overlay_strategy_underlay_cast.h",
     "display/program_binding.cc",
     "display/program_binding.h",
+    "display/renderer_utils.cc",
+    "display/renderer_utils.h",
+    "display/scoped_gpu_memory_buffer_texture.cc",
+    "display/scoped_gpu_memory_buffer_texture.h",
+    "display/scoped_render_pass_texture.cc",
+    "display/scoped_render_pass_texture.h",
     "display/shader.cc",
     "display/shader.h",
     "display/skia_renderer.cc",
@@ -79,9 +85,13 @@ viz_component("service") {
     "display_embedder/compositing_mode_reporter_impl.cc",
     "display_embedder/compositing_mode_reporter_impl.h",
     "display_embedder/compositor_overlay_candidate_validator.h",
-    "display_embedder/display_output_surface.cc",
-    "display_embedder/display_output_surface.h",
     "display_embedder/display_provider.h",
+    "display_embedder/external_begin_frame_controller_impl.cc",
+    "display_embedder/external_begin_frame_controller_impl.h",
+    "display_embedder/gl_output_surface.cc",
+    "display_embedder/gl_output_surface.h",
+    "display_embedder/gl_output_surface_buffer_queue.cc",
+    "display_embedder/gl_output_surface_buffer_queue.h",
     "display_embedder/gpu_display_provider.cc",
     "display_embedder/gpu_display_provider.h",
     "display_embedder/in_process_gpu_memory_buffer_manager.cc",
@@ -90,6 +100,8 @@ viz_component("service") {
     "display_embedder/server_shared_bitmap_manager.h",
     "display_embedder/shared_bitmap_allocation_notifier_impl.cc",
     "display_embedder/shared_bitmap_allocation_notifier_impl.h",
+    "display_embedder/software_output_surface.cc",
+    "display_embedder/software_output_surface.h",
     "frame_sinks/compositor_frame_sink_impl.cc",
     "frame_sinks/compositor_frame_sink_impl.h",
     "frame_sinks/compositor_frame_sink_support.cc",
@@ -97,7 +109,6 @@ viz_component("service") {
     "frame_sinks/compositor_frame_sink_support_manager.h",
     "frame_sinks/direct_layer_tree_frame_sink.cc",
     "frame_sinks/direct_layer_tree_frame_sink.h",
-    "frame_sinks/frame_sink_manager_client.h",
     "frame_sinks/frame_sink_manager_impl.cc",
     "frame_sinks/frame_sink_manager_impl.h",
     "frame_sinks/primary_begin_frame_source.cc",
@@ -113,7 +124,6 @@ viz_component("service") {
     "frame_sinks/video_capture/frame_sink_video_capturer_impl.cc",
     "frame_sinks/video_capture/frame_sink_video_capturer_impl.h",
     "frame_sinks/video_capture/frame_sink_video_capturer_manager.h",
-    "frame_sinks/video_capture/frame_sink_video_consumer.h",
     "frame_sinks/video_capture/in_flight_frame_delivery.cc",
     "frame_sinks/video_capture/in_flight_frame_delivery.h",
     "frame_sinks/video_capture/interprocess_frame_pool.cc",
@@ -153,7 +163,9 @@ viz_component("service") {
 
   deps = [
     "//cc/paint",
+    "//components/crash/core/common:crash_key",
     "//components/viz/common",
+    "//gpu/ipc:gl_in_process_context",
 
     # Note that dependency on //gpu/ipc/client is for GpuMemoryBufferImpl. This
     # dependency should not be in public_deps.
@@ -175,7 +187,6 @@ viz_component("service") {
     "//cc",
     "//cc/debug",
     "//gpu/command_buffer/client:gles2_interface",
-    "//gpu/ipc:command_buffer",
     "//services/viz/privileged/interfaces/compositing",
     "//services/viz/public/interfaces",
     "//ui/gfx",
@@ -198,10 +209,12 @@ viz_component("service") {
 
   if (is_mac) {
     sources += [
+      "display_embedder/compositor_overlay_candidate_validator_mac.cc",
       "display_embedder/compositor_overlay_candidate_validator_mac.h",
-      "display_embedder/compositor_overlay_candidate_validator_mac.mm",
+      "display_embedder/gl_output_surface_mac.cc",
+      "display_embedder/gl_output_surface_mac.h",
+      "display_embedder/software_output_device_mac.cc",
       "display_embedder/software_output_device_mac.h",
-      "display_embedder/software_output_device_mac.mm",
     ]
 
     deps += [ "//ui/accelerated_widget_mac" ]
@@ -219,8 +232,8 @@ viz_component("service") {
     sources += [
       "display_embedder/compositor_overlay_candidate_validator_ozone.cc",
       "display_embedder/compositor_overlay_candidate_validator_ozone.h",
-      "display_embedder/display_output_surface_ozone.cc",
-      "display_embedder/display_output_surface_ozone.h",
+      "display_embedder/gl_output_surface_ozone.cc",
+      "display_embedder/gl_output_surface_ozone.h",
       "display_embedder/software_output_device_ozone.cc",
       "display_embedder/software_output_device_ozone.h",
     ]
@@ -238,11 +251,6 @@ viz_component("service") {
   }
 
   if (enable_vulkan) {
-    sources += [
-      "display/vulkan_renderer.cc",
-      "display/vulkan_renderer.h",
-    ]
-
     deps += [ "//gpu/vulkan" ]
   }
 }
@@ -304,6 +312,7 @@ viz_source_set("unit_tests") {
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/ipc:gl_in_process_context",
+    "//gpu/ipc/service",
     "//media",
     "//media/capture:capture_lib",
     "//services/ui/public/interfaces",
@@ -314,6 +323,7 @@ viz_source_set("unit_tests") {
     "//third_party/libyuv",
     "//ui/display/types",
     "//ui/gfx:test_support",
+    "//ui/gl",
   ]
 
   if (use_ozone) {

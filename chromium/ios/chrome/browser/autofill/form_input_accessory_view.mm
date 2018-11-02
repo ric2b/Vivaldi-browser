@@ -9,7 +9,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_delegate.h"
-#import "ios/chrome/browser/ui/image_util.h"
+#import "ios/chrome/browser/ui/image_util/image_util.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
@@ -98,7 +98,7 @@ const CGFloat kNavigationAreaSeparatorWidth = 1;
     [[self class] addBackgroundImageInView:self
                              withImageName:@"autofill_keyboard_background"];
 
-    UILayoutGuide* layoutGuide = SafeAreaLayoutGuideForView(self);
+    id<LayoutGuideProvider> layoutGuide = SafeAreaLayoutGuideForView(self);
     [NSLayoutConstraint activateConstraints:@[
       [customViewContainer.topAnchor
           constraintEqualToAnchor:layoutGuide.topAnchor],

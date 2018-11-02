@@ -23,9 +23,12 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
 #include "components/omnibox/browser/test_scheme_classifier.h"
+#include "ui/accessibility/ax_action_data.h"
+#include "ui/accessibility/ax_node_data.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/base/ui_base_switches.h"
@@ -429,7 +432,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest,
 
   // Execute a command and check if it deactivate touch editing. Paste & Go is
   // chosen since it is specific to Omnibox and its execution wouldn't be
-  // delgated to the base Textfield class.
+  // delegated to the base Textfield class.
   omnibox_view_views->ExecuteCommand(IDS_PASTE_AND_GO, ui::EF_NONE);
   EXPECT_FALSE(textfield_test_api.touch_selection_controller());
 }
@@ -457,4 +460,92 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, TextElideStatus) {
   chrome::FocusLocationBar(browser());
   EXPECT_EQ(omnibox_view_views->GetRenderText()->elide_behavior(),
             gfx::NO_ELIDE);
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FragmentUnescapedForDisplay) {
+  OmniboxView* view = nullptr;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &view));
+  ui_test_utils::NavigateToURL(browser(),
+                               GURL("https://www.google.com/#%E2%98%83"));
+
+  EXPECT_EQ(view->GetText(),
+            base::UTF8ToUTF16("https://www.google.com/#\u2603"));
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FriendlyAccessibleLabel) {
+  OmniboxView* omnibox_view = nullptr;
+  ASSERT_NO_FATAL_FAILURE(GetOmniboxViewForBrowser(browser(), &omnibox_view));
+  base::string16 match_url = base::ASCIIToUTF16("https://google.com");
+  AutocompleteMatch match(nullptr, 500, false,
+                          AutocompleteMatchType::HISTORY_TITLE);
+  match.contents = match_url;
+  match.contents_class.push_back(
+      ACMatchClassification(0, ACMatchClassification::URL));
+  match.destination_url = GURL(match_url);
+  match.description = base::ASCIIToUTF16("Google");
+  match.allowed_to_be_default_match = true;
+
+  // Populate suggestions for the omnibox popup.
+  AutocompleteController* autocomplete_controller =
+      omnibox_view->model()->popup_model()->autocomplete_controller();
+  AutocompleteResult& results = autocomplete_controller->result_;
+  ACMatches matches;
+  matches.push_back(match);
+  AutocompleteInput input(base::ASCIIToUTF16("g"),
+                          metrics::OmniboxEventProto::OTHER,
+                          TestSchemeClassifier());
+  results.AppendMatches(input, matches);
+  results.SortAndCull(
+      input, TemplateURLServiceFactory::GetForProfile(browser()->profile()));
+
+  // The omnibox popup should open with suggestions displayed.
+  chrome::FocusLocationBar(browser());
+  omnibox_view->model()->popup_model()->OnResultChanged();
+  EXPECT_TRUE(omnibox_view->model()->popup_model()->IsOpen());
+  OmniboxViewViews* omnibox_view_views =
+      static_cast<OmniboxViewViews*>(omnibox_view);
+
+  // Ensure that the friendly accessibility label is updated.
+  omnibox_view_views->OnTemporaryTextMaybeChanged(match_url, match, false,
+                                                  false);
+  omnibox_view->SelectAll(true);
+
+  // Test friendly label.
+  const int kFriendlyPrefixLength = match.description.size() + 1;
+  ui::AXNodeData node_data;
+  omnibox_view_views->GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(base::ASCIIToUTF16(
+                "Google https://google.com location from history, 1 of 1"),
+            node_data.GetString16Attribute(ui::AX_ATTR_VALUE));
+  // Selection offsets are moved over by length the inserted descriptive text
+  // prefix ("Google") + 1 for the space.
+  EXPECT_EQ(kFriendlyPrefixLength,
+            node_data.GetIntAttribute(ui::AX_ATTR_TEXT_SEL_END));
+  EXPECT_EQ(kFriendlyPrefixLength + static_cast<int>(match_url.size()),
+            node_data.GetIntAttribute(ui::AX_ATTR_TEXT_SEL_START));
+  EXPECT_EQ("both", node_data.GetStringAttribute(ui::AX_ATTR_AUTO_COMPLETE));
+  EXPECT_EQ(ui::AX_ROLE_TEXT_FIELD, node_data.role);
+
+  // Select second character -- even though the friendly "Google " prefix is
+  // part of the exposed accessible text, setting the selection within select
+  // the intended part of the editable text.
+  ui::AXActionData set_selection_action_data;
+  set_selection_action_data.action = ui::AX_ACTION_SET_SELECTION;
+  set_selection_action_data.anchor_node_id = node_data.id;
+  set_selection_action_data.focus_offset = kFriendlyPrefixLength + 1;
+  set_selection_action_data.anchor_offset = kFriendlyPrefixLength + 3;
+  omnibox_view_views->HandleAccessibleAction(set_selection_action_data);
+
+  // Type "x" to replace the selected "tt" with that character.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_X, false,
+                                              false, false, false));
+  // Second character should be an "x" now.
+  EXPECT_EQ(base::ASCIIToUTF16("hxps://google.com"),
+            omnibox_view_views->GetText());
+
+  // When editing starts, the accessible value becomes the same as the raw
+  // edited text.
+  omnibox_view_views->GetAccessibleNodeData(&node_data);
+  EXPECT_EQ(base::ASCIIToUTF16("hxps://google.com"),
+            node_data.GetString16Attribute(ui::AX_ATTR_VALUE));
 }

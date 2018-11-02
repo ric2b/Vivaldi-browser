@@ -61,6 +61,10 @@ void ContactRow::Swap(ContactRow* other) {
   std::swap(note_, other->note_);
   std::swap(emails_, other->emails_);
   std::swap(phones_, other->phones_);
+  std::swap(postaladdresses_, other->postaladdresses_);
+  std::swap(avatar_url_, other->avatar_url_);
+  std::swap(separator_, other->separator_);
+  std::swap(generated_from_sent_mail_, other->generated_from_sent_mail_);
 }
 
 ContactRow::ContactRow(const ContactRow& other) = default;
@@ -89,11 +93,5 @@ void ContactQueryResults::AppendContactBySwapping(ContactResult* result) {
 }
 
 ContactResult::~ContactResult() {}
-
-CreateContactResult::CreateContactResult() {}
-
-UpdateContactResult::UpdateContactResult() {}
-
-DeleteContactResult::DeleteContactResult() {}
 
 }  // namespace contact

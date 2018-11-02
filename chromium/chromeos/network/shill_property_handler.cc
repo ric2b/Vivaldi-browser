@@ -229,12 +229,23 @@ void ShillPropertyHandler::SetWakeOnLanEnabled(bool enabled) {
                  network_handler::ErrorCallback()));
 }
 
+void ShillPropertyHandler::SetHostname(const std::string& hostname) {
+  base::Value value(hostname);
+  shill_manager_->SetProperty(
+      shill::kHostNameProperty, value, base::BindRepeating(&base::DoNothing),
+      base::BindRepeating(&network_handler::ShillErrorCallbackFunction,
+                          "SetHostname Failed", "Manager",
+                          network_handler::ErrorCallback()));
+}
+
 void ShillPropertyHandler::SetNetworkThrottlingStatus(
     bool throttling_enabled,
     uint32_t upload_rate_kbits,
     uint32_t download_rate_kbits) {
   shill_manager_->SetNetworkThrottlingStatus(
-      throttling_enabled, upload_rate_kbits, download_rate_kbits,
+      ShillManagerClient::NetworkThrottlingStatus{
+          throttling_enabled, upload_rate_kbits, download_rate_kbits,
+      },
       base::Bind(&base::DoNothing),
       base::Bind(&network_handler::ShillErrorCallbackFunction,
                  "SetNetworkThrottlingStatus failed", "Manager",
@@ -474,16 +485,14 @@ void ShillPropertyHandler::GetPropertiesCallback(
     const std::string& path,
     DBusMethodCallStatus call_status,
     const base::DictionaryValue& properties) {
-  NET_LOG(DEBUG) << "GetPropertiesCallback: "
-                 << ManagedState::TypeToString(type) << " For: " << path;
   pending_updates_[type].erase(path);
   if (call_status != DBUS_METHOD_CALL_SUCCESS) {
     // The shill service no longer exists.  This can happen when a network
     // has been removed.
-    NET_LOG(DEBUG) << "Failed to get properties for: " << path << ": "
-                   << call_status;
     return;
   }
+  NET_LOG(DEBUG) << "GetProperties received for "
+                 << ManagedState::TypeToString(type) << ": " << path;
   listener_->UpdateManagedStateProperties(type, path, properties);
 
   if (type == ManagedState::MANAGED_TYPE_NETWORK) {

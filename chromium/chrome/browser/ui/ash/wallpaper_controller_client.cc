@@ -5,7 +5,13 @@
 #include "chrome/browser/ui/ash/wallpaper_controller_client.h"
 
 #include "ash/public/interfaces/constants.mojom.h"
+#include "base/path_service.h"
+#include "base/sha1.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
+#include "chrome/common/chrome_paths.h"
+#include "chromeos/cryptohome/system_salt_getter.h"
+#include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/wallpaper/wallpaper_files_id.h"
 #include "content/public/common/service_manager_connection.h"
@@ -13,12 +19,19 @@
 
 namespace {
 
-WallpaperControllerClient* g_instance = nullptr;
+// Known user keys.
+const char kWallpaperFilesId[] = "wallpaper-files-id";
+
+WallpaperControllerClient* g_wallpaper_controller_client_instance = nullptr;
 
 // Creates a mojom::WallpaperUserInfo for the account id. Returns nullptr if
 // user manager cannot find the user.
 ash::mojom::WallpaperUserInfoPtr AccountIdToWallpaperUserInfo(
     const AccountId& account_id) {
+  if (!account_id.is_valid()) {
+    // |account_id| may be invalid in tests.
+    return nullptr;
+  }
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(account_id);
   if (!user)
@@ -36,16 +49,52 @@ ash::mojom::WallpaperUserInfoPtr AccountIdToWallpaperUserInfo(
   return wallpaper_user_info;
 }
 
+// This has once been copied from
+// brillo::cryptohome::home::SanitizeUserName(username) to be used for
+// wallpaper identification purpose only.
+//
+// Historic note: We need some way to identify users wallpaper files in
+// the device filesystem. Historically User::username_hash() was used for this
+// purpose, but it has two caveats:
+// 1. username_hash() is defined only after user has logged in.
+// 2. If cryptohome identifier changes, username_hash() will also change,
+//    and we may lose user => wallpaper files mapping at that point.
+// So this function gives WallpaperManager independent hashing method to break
+// this dependency.
+wallpaper::WallpaperFilesId HashWallpaperFilesIdStr(
+    const std::string& files_id_unhashed) {
+  chromeos::SystemSaltGetter* salt_getter = chromeos::SystemSaltGetter::Get();
+  DCHECK(salt_getter);
+
+  // System salt must be defined at this point.
+  const chromeos::SystemSaltGetter::RawSalt* salt = salt_getter->GetRawSalt();
+  if (!salt)
+    LOG(FATAL) << "WallpaperManager HashWallpaperFilesIdStr(): no salt!";
+
+  unsigned char binmd[base::kSHA1Length];
+  std::string lowercase(files_id_unhashed);
+  std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(),
+                 ::tolower);
+  std::vector<uint8_t> data = *salt;
+  std::copy(files_id_unhashed.begin(), files_id_unhashed.end(),
+            std::back_inserter(data));
+  base::SHA1HashBytes(data.data(), data.size(), binmd);
+  std::string result = base::HexEncode(binmd, sizeof(binmd));
+  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+  return wallpaper::WallpaperFilesId::FromString(result);
+}
+
 }  // namespace
 
-WallpaperControllerClient::WallpaperControllerClient() : binding_(this) {
-  DCHECK(!g_instance);
-  g_instance = this;
+WallpaperControllerClient::WallpaperControllerClient()
+    : policy_handler_(this), binding_(this) {
+  DCHECK(!g_wallpaper_controller_client_instance);
+  g_wallpaper_controller_client_instance = this;
 }
 
 WallpaperControllerClient::~WallpaperControllerClient() {
-  DCHECK_EQ(this, g_instance);
-  g_instance = nullptr;
+  DCHECK_EQ(this, g_wallpaper_controller_client_instance);
+  g_wallpaper_controller_client_instance = nullptr;
 }
 
 void WallpaperControllerClient::Init() {
@@ -63,7 +112,34 @@ void WallpaperControllerClient::InitForTesting(
 
 // static
 WallpaperControllerClient* WallpaperControllerClient::Get() {
-  return g_instance;
+  return g_wallpaper_controller_client_instance;
+}
+
+bool WallpaperControllerClient::CanGetWallpaperFilesId() const {
+  return chromeos::SystemSaltGetter::IsInitialized() &&
+         chromeos::SystemSaltGetter::Get()->GetRawSalt();
+}
+
+wallpaper::WallpaperFilesId WallpaperControllerClient::GetFilesId(
+    const AccountId& account_id) const {
+  // System salt might not be ready in tests. Thus we don't have a valid
+  // wallpaper files id here.
+  if (!CanGetWallpaperFilesId())
+    return wallpaper::WallpaperFilesId();
+
+  std::string stored_value;
+  if (user_manager::known_user::GetStringPref(account_id, kWallpaperFilesId,
+                                              &stored_value)) {
+    return wallpaper::WallpaperFilesId::FromString(stored_value);
+  }
+
+  // Migrated.
+  const std::string& old_id = account_id.GetUserEmail();
+  const wallpaper::WallpaperFilesId wallpaper_files_id =
+      HashWallpaperFilesIdStr(old_id);
+  user_manager::known_user::SetStringPref(account_id, kWallpaperFilesId,
+                                          wallpaper_files_id.id());
+  return wallpaper_files_id;
 }
 
 void WallpaperControllerClient::SetCustomWallpaper(
@@ -103,8 +179,8 @@ void WallpaperControllerClient::SetDefaultWallpaper(const AccountId& account_id,
       AccountIdToWallpaperUserInfo(account_id);
   if (!user_info)
     return;
-  wallpaper_controller_->SetDefaultWallpaper(std::move(user_info),
-                                             show_wallpaper);
+  wallpaper_controller_->SetDefaultWallpaper(
+      std::move(user_info), GetFilesId(account_id).id(), show_wallpaper);
 }
 
 void WallpaperControllerClient::SetCustomizedDefaultWallpaper(
@@ -113,6 +189,17 @@ void WallpaperControllerClient::SetCustomizedDefaultWallpaper(
     const base::FilePath& resized_directory) {
   wallpaper_controller_->SetCustomizedDefaultWallpaper(wallpaper_url, file_path,
                                                        resized_directory);
+}
+
+void WallpaperControllerClient::UpdateCustomWallpaperLayout(
+    const AccountId& account_id,
+    wallpaper::WallpaperLayout layout) {
+  ash::mojom::WallpaperUserInfoPtr user_info =
+      AccountIdToWallpaperUserInfo(account_id);
+  if (!user_info)
+    return;
+  wallpaper_controller_->UpdateCustomWallpaperLayout(std::move(user_info),
+                                                     layout);
 }
 
 void WallpaperControllerClient::ShowUserWallpaper(const AccountId& account_id) {
@@ -133,13 +220,22 @@ void WallpaperControllerClient::RemoveUserWallpaper(
       AccountIdToWallpaperUserInfo(account_id);
   if (!user_info)
     return;
-  wallpaper_controller_->RemoveUserWallpaper(std::move(user_info));
+  wallpaper_controller_->RemoveUserWallpaper(std::move(user_info),
+                                             GetFilesId(account_id).id());
 }
 
 void WallpaperControllerClient::OpenWallpaperPicker() {
   // TODO(crbug.com/776464): Inline the implementation after WallpaperManager
   // is removed.
   chromeos::WallpaperManager::Get()->OpenWallpaperPicker();
+}
+
+void WallpaperControllerClient::OnDeviceWallpaperChanged() {
+  wallpaper_controller_->SetDeviceWallpaperPolicyEnforced(true /*enforced=*/);
+}
+
+void WallpaperControllerClient::OnDeviceWallpaperPolicyCleared() {
+  wallpaper_controller_->SetDeviceWallpaperPolicyEnforced(false /*enforced=*/);
 }
 
 void WallpaperControllerClient::FlushForTesting() {
@@ -149,5 +245,30 @@ void WallpaperControllerClient::FlushForTesting() {
 void WallpaperControllerClient::BindAndSetClient() {
   ash::mojom::WallpaperControllerClientPtr client;
   binding_.Bind(mojo::MakeRequest(&client));
-  wallpaper_controller_->SetClient(std::move(client));
+
+  // Get the paths of wallpaper directories.
+  base::FilePath user_data_path;
+  CHECK(PathService::Get(chrome::DIR_USER_DATA, &user_data_path));
+  base::FilePath chromeos_wallpapers_path;
+  CHECK(PathService::Get(chrome::DIR_CHROMEOS_WALLPAPERS,
+                         &chromeos_wallpapers_path));
+  base::FilePath chromeos_custom_wallpapers_path;
+  CHECK(PathService::Get(chrome::DIR_CHROMEOS_CUSTOM_WALLPAPERS,
+                         &chromeos_custom_wallpapers_path));
+
+  // Set the static variables in WallpaperController to make it work under MASH.
+  // The reason we do this is so that the static utility functions in
+  // WallpaperController in ash continue to work under MASH.
+  // TODO(wzang|xdai): Create a WallpaperPaths class under //ash/public/cpp and
+  // move all the unititly functions there. See https://crbug.com/795159.
+  ash::WallpaperController::dir_user_data_path_ = user_data_path;
+  ash::WallpaperController::dir_chrome_os_wallpapers_path_ =
+      chromeos_wallpapers_path;
+  ash::WallpaperController::dir_chrome_os_custom_wallpapers_path_ =
+      chromeos_custom_wallpapers_path;
+
+  wallpaper_controller_->Init(
+      std::move(client), user_data_path, chromeos_wallpapers_path,
+      chromeos_custom_wallpapers_path,
+      policy_handler_.IsDeviceWallpaperPolicyEnforced());
 }

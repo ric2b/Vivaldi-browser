@@ -31,7 +31,6 @@
 <translation id="1698376642261615901">Google Chrome 瀏覽器開啟網頁和執行應用程式的速度奇快無比！除了執行速度迅速、穩定且容易使用之外，內建防護機制還可讓你安心瀏覽網頁，無需擔心受到網路釣魚與惡意軟體的威脅。</translation>
 <translation id="1718131156967340976">選取 [<ph name="SMALL_PRODUCT_LOGO" /> Google Chrome]<ph name="BEGIN_BOLD" /><ph name="END_BOLD" /></translation>
 <translation id="174539241580958092">登入時發生錯誤，因此 Google Chrome 無法同步處理你的資料。</translation>
-<translation id="1759301979429102118">利用你的通訊錄詳細資料，快速在 Chrome 中填寫表單。</translation>
 <translation id="1759842336958782510">Chrome</translation>
 <translation id="1773601347087397504">前往 Chrome 作業系統說明頁面</translation>
 <translation id="1795405610103747296">在手機上安裝 Chrome。我們會傳送簡訊到你的手機：<ph name="PHONE_NUMBER" /></translation>
@@ -59,6 +58,7 @@
 <translation id="2429317896000329049">你的網域無法使用「同步功能」，因此 Google Chrome 無法同步處理你的資料。</translation>
 <translation id="2446511512801740068">Chrome 已有一段時間未重新啟動，現用版本因此過舊。重新啟動後，即會套用可用的更新。</translation>
 <translation id="2485422356828889247">解除安裝</translation>
+<translation id="2534507159460261402">Google Pay (已複製到 Chrome)</translation>
 <translation id="2580411288591421699">你無法安裝這個版本的 Google Chrome，因為相同的版本目前正在執行中。請關閉 Google Chrome 然後再試一次。</translation>
 <translation id="2586406160782125153">登出後，系統會將你的瀏覽資料從這個裝置上刪除。日後如要重新取得你的資料，請以 <ph name="USER_EMAIL" /> 身分登入 Chrome。</translation>
 <translation id="2588322182880276190">Chrome 標誌</translation>
@@ -108,8 +108,6 @@
 <translation id="3889417619312448367">解除安裝 Google Chrome</translation>
 <translation id="3898493977366060150">採用 Google 技術的網路瀏覽體驗</translation>
 <translation id="4028693306634653894">更快存取 Chrome</translation>
-<translation id="4031074602479304239">Chrome 已禁止這個網站將你導向至</translation>
-<translation id="4042449298237264661">Google Chrome 已停止支援 Windows XP 和 Windows Vista，因此這部電腦不會再收到 Google Chrome 更新。</translation>
 <translation id="4050175100176540509">最新版本包含重要的安全性改善與新功能。</translation>
 <translation id="4053720452172726777">自訂及管理 Google Chrome</translation>
 <translation id="4147555960264124640">你已登入管理化環境下的帳戶，並將管理控制權授予你的 Chrome 設定檔。你的 Chrome 資料 (例如應用程式、書籤、紀錄、密碼和其他設定) 均將永久與 <ph name="USER_NAME" /> 建立關聯。你可以透過 Google 帳戶資訊主頁刪除這些資料，但你無法將這些資料與其他帳戶建立關聯。<ph name="LEARN_MORE" /></translation>
@@ -150,7 +148,6 @@
 <translation id="5170938038195470297">由於你的設定檔是來自較新版本的 Google Chrome，所以系統無法使用該檔案。這表示你可能無法使用部分功能。請指定另一個設定檔目錄，或使用較新版本的 Google Chrome。</translation>
 <translation id="5193136243808726294">Google Chrome 作業系統無法開啟這個網頁。</translation>
 <translation id="5204098752394657250">Google Chrome <ph name="TERMS_OF_SERVICE_LINK" />服務條款<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
-<translation id="5243785881901838525">Google Payments (已複製到 Chrome)</translation>
 <translation id="5251420635869119124">以訪客身分使用 Chrome 不會留下任何紀錄。</translation>
 <translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome 將於 1 秒後重新啟動。}other{Google Chrome 將於 # 秒後重新啟動。}}</translation>
 <translation id="532046782124376502">警告：Google Chrome 無法禁止擴充功能記錄你的瀏覽活動。如要在無痕模式中停用這個擴充功能，請取消選取這個選項。</translation>
@@ -181,15 +178,12 @@ Google Chrome 無法復原你的設定。</translation>
 <translation id="6169866489629082767"><ph name="PAGE_TITLE" /> - Google Chrome</translation>
 <translation id="61852838583753520">更新 Chrome 作業系統(&amp;C)</translation>
 <translation id="6235018212288296708">允許 mDNS 流量的 Google Chrome 輸入規則。</translation>
-<translation id="6236285698028833233">Google Chrome 已停止更新，無法繼續支援這個作業系統版本。</translation>
 <translation id="6291089322031436445">Chrome 開發人員版應用程式</translation>
 <translation id="6291549208091401781">電腦上的所有使用者都已經安裝 Google Chrome 了。</translation>
 <translation id="6338556085225130112">正在更新 Google Chrome</translation>
 <translation id="6368958679917195344">Chrome 作業系統藉助了其他<ph name="BEGIN_LINK_CROS_OSS" />開放原始碼軟體<ph name="END_LINK_CROS_OSS" />的相關技術才得以問世。</translation>
 <translation id="6393863479814692971">Chrome 需要相關權限，才能讓這個網站使用你的攝影機和麥克風。</translation>
-<translation id="6400076122676892962">Google Chrome 將停止支援 Mac OS X 10.6、10.7 和 10.8，因此這部電腦很快就不會再收到 Google Chrome 更新。</translation>
 <translation id="6410540444482791104">你可以選擇自動傳送部分系統資訊和網頁內容給 Google，協助我們偵測危險的應用程式和網站，讓 Chrome 變得更安全、更好用。</translation>
-<translation id="6470176598693778404">Google Chrome 已停止支援 Mac OS X 10.6、10.7 和 10.8，因此這部電腦不會再收到 Google Chrome 更新。</translation>
 <translation id="6477562832195530369">{NUM_DOWNLOAD,plural, =1{目前正在執行一項下載作業。您要取消下載並結束 Google Chrome 嗎？}other{目前正在執行 # 項下載作業。您要取消下載並結束 Google Chrome 嗎？}}</translation>
 <translation id="6566149418543181476">正在更新 Google Chrome (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6598387184982954187">你正使用 <ph name="PROFILE_EMAIL" /> 帳戶同步處理你的 Chrome 資料。如要更新你的偏好設定，或是在未登入 Google 帳戶的情況下使用 Chrome，請前往 [<ph name="SETTINGS_LINK" />]。</translation>
@@ -210,7 +204,6 @@ Google Chrome 無法復原你的設定。</translation>
 <translation id="7164397146364144019">你可以自動將疑似安全性事件的詳細資料傳送給 Google，協助我們讓 Chrome 變得更安全、更好用。</translation>
 <translation id="7185038942300673794">已將 <ph name="EXTENSION_NAME" /> 加到 Chrome。</translation>
 <translation id="7242029209006116544">你已登入管理化環境下的帳戶，並將管理控制權授予你的 Chrome 設定檔。你的 Chrome 資料 (例如應用程式、書籤、紀錄、密碼和其他設定) 均將永久與 <ph name="USER_NAME" /> 建立關聯。你可以透過 Google 帳戶資訊主頁刪除這些資料，但你無法將這些資料與其他帳戶建立關聯。如要另行保留現有的 Chromium 資料，你可以選擇建立新的設定檔。<ph name="LEARN_MORE" /></translation>
-<translation id="729375352412857283">Google Chrome 將停止支援 Windows XP 和 Windows Vista，因此這部電腦很快就不會再收到 Google Chrome 更新。</translation>
 <translation id="7330164299247909639">驗證憑證無效，請以<ph name="USER_NAME" />身分重新登入 Google Chrome 或向你的管理員洽詢詳情。<ph name="ADDITIONAL_EXPLANATION" /></translation>
 <translation id="7339898014177206373">新視窗</translation>
 <translation id="7369650938475876456">使用 Chrome 產生的高強度密碼</translation>
@@ -223,6 +216,7 @@ Google Chrome 無法復原你的設定。</translation>
 <translation id="7494905215383356681">Chrome 開放原始碼授權</translation>
 <translation id="7535429826459677826">Google Chrome 開發人員版</translation>
 <translation id="7552219221109926349">將 Chrome 作業系統的介面文字設為這種語言</translation>
+<translation id="7589360514048265910">我們已不支援 Mac OS X 10.9，因此這部電腦不會再收到 Google Chrome 更新。</translation>
 <translation id="7592736734348559088">你的帳戶登入詳細資料尚未更新，因此 Google Chrome 無法同步處理你的資料。</translation>
 <translation id="7626032353295482388">歡迎使用 Chrome</translation>
 <translation id="7747138024166251722">安裝程式無法建立暫時目錄，請檢查可用磁碟空間與權限，以順利安裝軟體。</translation>
@@ -238,6 +232,7 @@ Google Chrome 無法復原你的設定。</translation>
 <translation id="7896673875602241923">先前已有其他使用者使用 <ph name="ACCOUNT_EMAIL_LAST" /> 在這部電腦上登入 Chrome。請建立新的 Chrome 使用者，以便另行保存你的資訊。</translation>
 <translation id="7908168227788431038">即將更新為最新版本！重新啟動 Google Chrome 即可完成更新程序。</translation>
 <translation id="795025003224538582">不要重新啟動</translation>
+<translation id="7962410387636238736">Google Chrome 已停止支援 Windows XP 和 Windows Vista，因此這部電腦不會再收到 Google Chrome 更新</translation>
 <translation id="8005540215158006229">Chrome 即將準備就緒。</translation>
 <translation id="8008534537613507642">重新安裝 Chrome</translation>
 <translation id="8030318113982266900">正在將裝置更新至「<ph name="CHANNEL_NAME" />」...</translation>
@@ -268,7 +263,6 @@ Google Chrome 無法復原你的設定。</translation>
 <translation id="8796108026289707191">建議您立即重新啟動 Google Chrome。</translation>
 <translation id="8823341990149967727">Chrome 版本過舊</translation>
 <translation id="884296878221830158">這個擴充功能也會控管 Chrome 啟動時或你點選 [首頁] 按鈕時所顯示的網頁。</translation>
-<translation id="8851136666856101339">主要元素</translation>
 <translation id="8862326446509486874">你沒有在系統層級進行安裝的權限，請以管理員的身分執行安裝檔。</translation>
 <translation id="8914504000324227558">重新啟動 Chrome</translation>
 <translation id="9026991721384951619">你的帳戶登入詳細資料尚未更新，因此 Chrome 作業系統無法同步處理你的資料。</translation>

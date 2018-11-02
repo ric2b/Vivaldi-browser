@@ -24,6 +24,7 @@
 #include "ui/display/display_layout.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/manager/display_manager_export.h"
+#include "ui/display/manager/display_manager_utilities.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/mojo/dev_display_controller.mojom.h"
 #include "ui/display/types/display_constants.h"
@@ -41,8 +42,6 @@ class Rect;
 }
 
 namespace display {
-using DisplayInfoList = std::vector<ManagedDisplayInfo>;
-
 class DisplayLayoutStore;
 class DisplayObserver;
 class Screen;
@@ -92,10 +91,16 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   //    spans multiple physical displays via software mirroring. The primary
   //    physical display has a shelf and status tray, and user windows may
   //    render spanning across multiple displays.
+  //
+  // WARNING: These values are persisted to logs. Entries should not be
+  //          renumbered and numeric values should never be reused.
   enum MultiDisplayMode {
     EXTENDED = 0,
-    MIRRORING,
-    UNIFIED,
+    MIRRORING = 1,
+    UNIFIED = 2,
+
+    // Always keep this the last item.
+    MULTI_DISPLAY_MODE_LAST = UNIFIED,
   };
 
   explicit DisplayManager(std::unique_ptr<Screen> screen);
@@ -216,7 +221,8 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
                                float ui_scale,
                                const gfx::Insets* overscan_insets,
                                const gfx::Size& resolution_in_pixels,
-                               float device_scale_factor);
+                               float device_scale_factor,
+                               float display_zoom_factor);
 
   // Register stored rotation properties for the internal display.
   void RegisterDisplayRotationProperties(bool rotation_lock,
@@ -321,6 +327,33 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
     return software_mirroring_display_list_;
   }
 
+  // Used in test to prevent previous mirror modes affecting current mode.
+  void set_disable_restoring_mirror_mode_for_test(bool disabled) {
+    disable_restoring_mirror_mode_for_test_ = disabled;
+  }
+
+  const std::set<int64_t>& external_display_mirror_info() const {
+    return external_display_mirror_info_;
+  }
+
+  void set_external_display_mirror_info(
+      const std::set<int64_t>& external_display_mirror_info) {
+    external_display_mirror_info_ = external_display_mirror_info;
+  }
+
+  const base::Optional<MixedMirrorModeParams>& mixed_mirror_mode_params()
+      const {
+    return mixed_mirror_mode_params_;
+  }
+
+  // Set mixed mirror mode parameters. The parameters will be used to restore
+  // mixed mirror mode in the next display configuration. (Use SetMirrorMode()
+  // to immediately switch to mixed mirror mode.)
+  void set_mixed_mirror_mode_params(
+      const base::Optional<MixedMirrorModeParams> mixed_params) {
+    mixed_mirror_mode_params_ = mixed_params;
+  }
+
   // Remove mirroring source and destination displays, so that they will be
   // updated when UpdateDisplaysWith() is called.
   void ClearMirroringSourceAndDestination();
@@ -358,7 +391,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   const ManagedDisplayInfo& GetDisplayInfo(int64_t display_id) const;
 
   // Returns the human-readable name for the display |id|.
-  std::string GetDisplayNameForId(int64_t id);
+  std::string GetDisplayNameForId(int64_t id) const;
 
   // Returns the display id that is capable of UI scaling. On device, this
   // returns internal display's ID if its device scale factor is 2, or invalid
@@ -366,8 +399,18 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // the first display ID.
   int64_t GetDisplayIdForUIScaling() const;
 
-  // Change the mirror mode.
-  void SetMirrorMode(bool mirrored);
+  // Returns true if mirror mode should be set on for the specified displays.
+  bool ShouldSetMirrorModeOn(const DisplayIdList& id_list);
+
+  // Change the mirror mode. |mixed_params| will be ignored if mirror mode is
+  // off or normal. When mirror mode is off, display mode will be set to default
+  // mode (either extended mode or unified desktop mode). When mirror mode is
+  // normal, the default source display will be mirrored to all other displays.
+  // When mirror mode is mixed, the specified source display will be mirrored to
+  // the specified destination displays and all other connected displays will be
+  // extended.
+  void SetMirrorMode(MirrorMode mode,
+                     const base::Optional<MixedMirrorModeParams>& mixed_params);
 
   // Used to emulate display change when run in a desktop environment instead
   // of on a device.
@@ -378,6 +421,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 #if defined(OS_CHROMEOS)
   void SetSoftwareMirroring(bool enabled) override;
   bool SoftwareMirroringEnabled() const override;
+  bool IsSoftwareMirroringEnforced() const override;
   void SetTouchCalibrationData(
       int64_t display_id,
       const TouchCalibrationData::CalibrationPointPairQuad& point_pair_quad,
@@ -386,7 +430,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   void ClearTouchCalibrationData(
       int64_t display_id,
       base::Optional<TouchDeviceIdentifier> touch_device_identifier);
+  void UpdateZoomFactor(int64_t display_id, float zoom_factor);
 #endif
+  // Returns the zoom foactor for the display identified by |display_id|.
+  float GetZoomFactorForDisplay(int64_t display_id) const;
 
   // Sets/gets default multi display mode.
   void SetDefaultMultiDisplayModeForCurrentDisplays(MultiDisplayMode mode);
@@ -502,6 +549,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
                           Displays* display_list,
                           std::vector<int64_t>* updated_ids);
 
+  // Update the info used to restore mirror mode.
+  void UpdateInfoForRestoringMirrorMode();
+
   Delegate* delegate_ = nullptr;  // not owned.
 
   // When set to true, DisplayManager will use DisplayConfigurator to configure
@@ -546,6 +596,9 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Selected display modes for displays. Key is the displays' ID.
   std::map<int64_t, ManagedDisplayMode> display_modes_;
 
+  // Zoom level for each display.
+  std::map<int64_t, float> display_zoom_factors_;
+
   // When set to true, the host window's resize event updates the display's
   // size. This is set to true when running on desktop environment (for
   // debugging) so that resizing the host window will update the display
@@ -574,6 +627,12 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // destination and store their ids in this list.
   DisplayIdList hardware_mirroring_display_id_list_;
 
+  // Stores external displays that were in mirror mode before.
+  std::set<int64_t> external_display_mirror_info_;
+
+  // True if mirror mode should not be restored. Only used in test.
+  bool disable_restoring_mirror_mode_for_test_ = false;
+
   // Cached mirror mode for metrics changed notification.
   bool mirror_mode_for_metrics_ = false;
 
@@ -592,6 +651,11 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   base::ObserverList<DisplayObserver> observers_;
 
   display::mojom::DevDisplayControllerPtr dev_display_controller_;
+
+  // Not empty if mixed mirror mode should be turned on (the specified source
+  // display is mirrored to the specified destination displays). Empty if mixed
+  // mirror mode is disabled.
+  base::Optional<MixedMirrorModeParams> mixed_mirror_mode_params_;
 
   // This is incremented whenever a BeginEndNotifier is created and decremented
   // when destroyed. BeginEndNotifier uses this to track when it should call

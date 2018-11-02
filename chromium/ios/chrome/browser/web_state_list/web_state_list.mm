@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/logging.h"
-#include "base/memory/ptr_util.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_delegate.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_observer.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_order_controller.h"
@@ -97,7 +96,7 @@ bool WebStateList::WebStateWrapper::WasOpenedBy(const web::WebState* opener,
 
 WebStateList::WebStateList(WebStateListDelegate* delegate)
     : delegate_(delegate),
-      order_controller_(base::MakeUnique<WebStateListOrderController>(this)) {
+      order_controller_(std::make_unique<WebStateListOrderController>(this)) {
   DCHECK(delegate_);
 }
 
@@ -170,7 +169,7 @@ int WebStateList::InsertWebState(int index,
   web::WebState* web_state_ptr = web_state.get();
   web_state_wrappers_.insert(
       web_state_wrappers_.begin() + index,
-      base::MakeUnique<WebStateWrapper>(std::move(web_state)));
+      std::make_unique<WebStateWrapper>(std::move(web_state)));
 
   if (active_index_ >= index)
     ++active_index_;
@@ -227,9 +226,15 @@ std::unique_ptr<web::WebState> WebStateList::ReplaceWebStateAt(
   std::unique_ptr<web::WebState> old_web_state =
       web_state_wrappers_[index]->ReplaceWebState(std::move(web_state));
 
-  for (auto& observer : observers_)
+  for (auto& observer : observers_) {
     observer.WebStateReplacedAt(this, old_web_state.get(), web_state_ptr,
                                 index);
+  }
+
+  // When the active WebState is replaced, notify the observers as nearly
+  // all of them needs to treat a replacement as the selection changed.
+  NotifyIfActiveWebStateChanged(old_web_state.get(),
+                                WebStateListObserver::CHANGE_REASON_REPLACED);
 
   delegate_->WebStateDetached(old_web_state.get());
   return old_web_state;
@@ -260,8 +265,10 @@ std::unique_ptr<web::WebState> WebStateList::DetachWebStateAt(int index) {
   for (auto& observer : observers_)
     observer.WebStateDetachedAt(this, web_state, index);
 
-  if (active_web_state_was_closed)
-    NotifyIfActiveWebStateChanged(web_state, false);
+  if (active_web_state_was_closed) {
+    NotifyIfActiveWebStateChanged(web_state,
+                                  WebStateListObserver::CHANGE_REASON_NONE);
+  }
 
   delegate_->WebStateDetached(web_state);
   return detached_web_state;
@@ -288,7 +295,8 @@ void WebStateList::ActivateWebStateAt(int index) {
   DCHECK(ContainsIndex(index));
   web::WebState* old_web_state = GetActiveWebState();
   active_index_ = index;
-  NotifyIfActiveWebStateChanged(old_web_state, true);
+  NotifyIfActiveWebStateChanged(
+      old_web_state, WebStateListObserver::CHANGE_REASON_USER_ACTION);
 }
 
 void WebStateList::AddObserver(WebStateListObserver* observer) {
@@ -308,14 +316,14 @@ void WebStateList::ClearOpenersReferencing(int index) {
 }
 
 void WebStateList::NotifyIfActiveWebStateChanged(web::WebState* old_web_state,
-                                                 bool user_action) {
+                                                 int reason) {
   web::WebState* new_web_state = GetActiveWebState();
   if (old_web_state == new_web_state)
     return;
 
   for (auto& observer : observers_) {
     observer.WebStateActivatedAt(this, old_web_state, new_web_state,
-                                 active_index_, user_action);
+                                 active_index_, reason);
   }
 }
 

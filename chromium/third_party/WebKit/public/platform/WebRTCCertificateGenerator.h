@@ -38,6 +38,10 @@
 
 #include <memory>
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace blink {
 
 using WebRTCCertificateCallback =
@@ -47,18 +51,20 @@ using WebRTCCertificateCallback =
 // asynchronously.
 class WebRTCCertificateGenerator {
  public:
-  virtual ~WebRTCCertificateGenerator() {}
+  virtual ~WebRTCCertificateGenerator() = default;
 
   // Start generating a certificate asynchronously. |observer| is invoked on the
   // same thread that called generateCertificate when the operation is
   // completed.
   virtual void GenerateCertificate(
       const WebRTCKeyParams&,
-      std::unique_ptr<WebRTCCertificateCallback> observer) = 0;
+      std::unique_ptr<WebRTCCertificateCallback> observer,
+      scoped_refptr<base::SingleThreadTaskRunner>) = 0;
   virtual void GenerateCertificateWithExpiration(
       const WebRTCKeyParams&,
       uint64_t expires_ms,
-      std::unique_ptr<WebRTCCertificateCallback> observer) = 0;
+      std::unique_ptr<WebRTCCertificateCallback> observer,
+      scoped_refptr<base::SingleThreadTaskRunner>) = 0;
 
   // Determines if the parameters are supported by |GenerateCertificate|.
   // For example, if the number of bits of some parameter is too small or too

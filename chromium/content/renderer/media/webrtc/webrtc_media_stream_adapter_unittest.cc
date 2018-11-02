@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -29,6 +30,7 @@
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamTrack.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/platform/scheduler/test/renderer_scheduler_test_support.h"
 #include "third_party/WebKit/public/web/WebHeap.h"
 
 using ::testing::_;
@@ -39,8 +41,9 @@ class WebRtcMediaStreamAdapterTest : public ::testing::Test {
  public:
   void SetUp() override {
     dependency_factory_.reset(new MockPeerConnectionDependencyFactory());
-    track_adapter_map_ =
-        new WebRtcMediaStreamTrackAdapterMap(dependency_factory_.get());
+    track_adapter_map_ = new WebRtcMediaStreamTrackAdapterMap(
+        dependency_factory_.get(),
+        blink::scheduler::GetSingleThreadTaskRunnerForTesting());
   }
 
   void TearDown() override {
@@ -76,6 +79,7 @@ class LocalWebRtcMediaStreamAdapterTest : public WebRtcMediaStreamAdapterTest {
                           media::AudioParameters::kAudioCDSampleRate,
                           media::CHANNEL_LAYOUT_STEREO,
                           media::AudioParameters::kAudioCDSampleRate / 50),
+        false /* hotword_enabled */, false /* disable_local_echo */,
         AudioProcessingProperties(),
         base::Bind(&LocalWebRtcMediaStreamAdapterTest::OnAudioSourceStarted),
         dependency_factory_.get());
@@ -139,7 +143,8 @@ class RemoteWebRtcMediaStreamAdapterTest : public WebRtcMediaStreamAdapterTest {
             &RemoteWebRtcMediaStreamAdapterTest::
                 CreateRemoteStreamAdapterOnSignalingThread,
             base::Unretained(this),
-            base::Unretained(base::ThreadTaskRunnerHandle::Get().get()),
+            base::Unretained(
+                blink::scheduler::GetSingleThreadTaskRunnerForTesting().get()),
             base::Unretained(webrtc_stream), base::Unretained(&adapter)));
     RunMessageLoopsUntilIdle();
     DCHECK(adapter);

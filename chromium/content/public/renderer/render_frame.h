@@ -18,11 +18,13 @@
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "ppapi/features/features.h"
+#include "services/network/public/interfaces/url_loader_factory.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/common/page/page_visibility_state.mojom.h"
 #include "third_party/WebKit/public/platform/TaskType.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
+#include "ui/accessibility/ax_modes.h"
 
 namespace blink {
 class AssociatedInterfaceProvider;
@@ -46,14 +48,7 @@ namespace url {
 class Origin;
 }
 
-namespace v8 {
-template <typename T> class Local;
-class Context;
-class Isolate;
-}
-
 namespace content {
-class ChildURLLoaderFactoryGetter;
 class ContextMenuClient;
 class PluginInstanceThrottler;
 class RenderAccessibility;
@@ -232,16 +227,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
                                size_t offset,
                                const gfx::Range& range) = 0;
 
-  // Ensures that builtin mojo bindings modules are available in |context|.
-  virtual void EnsureMojoBuiltinsAreAvailable(
-      v8::Isolate* isolate,
-      v8::Local<v8::Context> context) = 0;
-
   // Adds |message| to the DevTools console.
   virtual void AddMessageToConsole(ConsoleMessageLevel level,
                                    const std::string& message) = 0;
-  // Forcefully detaches all connected DevTools clients.
-  virtual void DetachDevToolsForTest() = 0;
 
   // Sets the PreviewsState of this frame, a bitmask of potentially several
   // Previews optimizations.
@@ -270,9 +258,12 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // BindingsPolicy for details.
   virtual int GetEnabledBindings() const = 0;
 
-  // Returns a default ChildURLLoaderFactoryGetter for the RenderFrame.
-  // Used to obtain a right mojom::URLLoaderFactory.
-  virtual ChildURLLoaderFactoryGetter* GetDefaultURLLoaderFactoryGetter() = 0;
+  // Set the accessibility mode to force creation of RenderAccessibility.
+  virtual void SetAccessibilityModeForTest(ui::AXMode new_mode) = 0;
+
+  // Returns the URLLoaderFactory for the given GURL
+  virtual network::mojom::URLLoaderFactory* GetURLLoaderFactory(
+      const GURL& request_url) = 0;
 
  protected:
   ~RenderFrame() override {}

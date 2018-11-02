@@ -32,7 +32,6 @@
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/dom/Node.h"
 #include "core/dom/TemplateContentDocumentFragment.h"
 #include "core/dom/Text.h"
@@ -60,6 +59,7 @@
 #include "core/html_element_factory.h"
 #include "core/html_names.h"
 #include "core/loader/FrameLoader.h"
+#include "core/script/IgnoreDestructiveWriteCountIncrementer.h"
 #include "core/svg/SVGScriptElement.h"
 #include "platform/bindings/Microtask.h"
 #include "platform/bindings/V8PerIsolateData.h"
@@ -326,6 +326,14 @@ void HTMLConstructionSite::ExecuteQueuedTasks() {
   const size_t size = task_queue_.size();
   if (!size)
     return;
+
+  // Fast path for when |size| is 1, which is the common case
+  if (size == 1) {
+    HTMLConstructionSiteTask task = task_queue_.front();
+    task_queue_.pop_back();
+    ExecuteTask(task);
+    return;
+  }
 
   // Copy the task queue into a local variable in case executeTask re-enters the
   // parser.

@@ -4,6 +4,8 @@
 
 #include "chromeos/components/tether/disconnect_tethering_request_sender_impl.h"
 
+#include <memory>
+
 #include "chromeos/components/tether/disconnect_tethering_operation.h"
 #include "chromeos/components/tether/disconnect_tethering_request_sender.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
@@ -92,22 +94,22 @@ class DisconnectTetheringRequestSenderTest : public testing::Test {
   ~DisconnectTetheringRequestSenderTest() override = default;
 
   void SetUp() override {
-    fake_ble_connection_manager_ = base::MakeUnique<FakeBleConnectionManager>();
-    fake_tether_host_fetcher_ = base::MakeUnique<FakeTetherHostFetcher>(
-        test_devices_, true /* synchronously_reply_with_results */);
+    fake_ble_connection_manager_ = std::make_unique<FakeBleConnectionManager>();
+    fake_tether_host_fetcher_ =
+        std::make_unique<FakeTetherHostFetcher>(test_devices_);
 
     fake_operation_factory_ =
-        base::MakeUnique<FakeDisconnectTetheringOperationFactory>();
+        std::make_unique<FakeDisconnectTetheringOperationFactory>();
     DisconnectTetheringOperation::Factory::SetInstanceForTesting(
         fake_operation_factory_.get());
 
     disconnect_tethering_request_sender_ =
-        base::MakeUnique<DisconnectTetheringRequestSenderImpl>(
+        std::make_unique<DisconnectTetheringRequestSenderImpl>(
             fake_ble_connection_manager_.get(),
             fake_tether_host_fetcher_.get());
 
     fake_disconnect_tethering_request_sender_observer_ =
-        base::MakeUnique<FakeDisconnectTetheringRequestSenderObserver>();
+        std::make_unique<FakeDisconnectTetheringRequestSenderObserver>();
     disconnect_tethering_request_sender_->AddObserver(
         fake_disconnect_tethering_request_sender_observer_.get());
   }
@@ -206,7 +208,7 @@ TEST_F(DisconnectTetheringRequestSenderTest, SendRequest_Success) {
 TEST_F(DisconnectTetheringRequestSenderTest, SendRequest_CannotFetchHost) {
   // Remove hosts from |fake_tether_host_fetcher_|; this will cause the fetcher
   // to return a null RemoteDevice.
-  fake_tether_host_fetcher_->SetTetherHosts(
+  fake_tether_host_fetcher_->set_tether_hosts(
       std::vector<cryptauth::RemoteDevice>());
 
   disconnect_tethering_request_sender_->SendDisconnectRequestToDevice(
@@ -298,23 +300,6 @@ TEST_F(DisconnectTetheringRequestSenderTest,
   EXPECT_FALSE(disconnect_tethering_request_sender_->HasPendingRequests());
   EXPECT_EQ(3u, fake_disconnect_tethering_request_sender_observer_
                     ->num_no_more_pending_requests_events());
-}
-
-TEST_F(DisconnectTetheringRequestSenderTest,
-       HasPendingRequests_FetchTetherHost) {
-  fake_tether_host_fetcher_->set_synchronously_reply_with_results(false);
-  disconnect_tethering_request_sender_->SendDisconnectRequestToDevice(
-      test_devices_[0].GetDeviceId());
-  EXPECT_TRUE(fake_operation_factory_->created_operations().empty());
-  EXPECT_TRUE(disconnect_tethering_request_sender_->HasPendingRequests());
-
-  fake_tether_host_fetcher_->InvokePendingCallbacks();
-  EXPECT_TRUE(disconnect_tethering_request_sender_->HasPendingRequests());
-
-  ASSERT_EQ(1u, fake_operation_factory_->created_operations().size());
-  fake_operation_factory_->created_operations()[0]->NotifyFinished(
-      true /* success */);
-  EXPECT_FALSE(disconnect_tethering_request_sender_->HasPendingRequests());
 }
 
 }  // namespace tether

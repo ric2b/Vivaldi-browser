@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+
 #include "base/files/file_path.h"
-#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/search/search.h"
@@ -19,6 +20,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -49,14 +51,16 @@ class NewTabPageInterceptorTest : public InProcessBrowserTest {
     data.SetURL(base_url + "url?bar={searchTerms}");
     data.new_tab_url = base_url + new_tab_path;
     TemplateURL* template_url =
-        template_url_service->Add(base::MakeUnique<TemplateURL>(data));
+        template_url_service->Add(std::make_unique<TemplateURL>(data));
     template_url_service->SetUserSelectedDefaultSearchProvider(template_url);
   }
 };
 
 IN_PROC_BROWSER_TEST_F(NewTabPageInterceptorTest, NoInterception) {
-  GURL new_tab_url =
-      net::URLRequestMockHTTPJob::GetMockHttpsUrl("instant_extended.html");
+  net::EmbeddedTestServer https_test_server(
+      net::EmbeddedTestServer::TYPE_HTTPS);
+  ASSERT_TRUE(https_test_server.Start());
+  GURL new_tab_url = https_test_server.GetURL("/instant_extended.html");
   ChangeDefaultSearchProvider("instant_extended.html");
 
   ui_test_utils::NavigateToURL(browser(), new_tab_url);

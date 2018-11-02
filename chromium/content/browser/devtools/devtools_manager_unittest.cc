@@ -15,8 +15,6 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/browser/devtools/shared_worker_devtools_manager.h"
-#include "content/browser/shared_worker/shared_worker_instance.h"
-#include "content/browser/shared_worker/worker_storage_partition.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
@@ -87,9 +85,7 @@ class TestWebContentsDelegate : public WebContentsDelegate {
   TestWebContentsDelegate() : renderer_unresponsive_received_(false) {}
 
   // Notification that the contents is hung.
-  void RendererUnresponsive(
-      WebContents* source,
-      const WebContentsUnresponsiveState& unresponsive_state) override {
+  void RendererUnresponsive(WebContents* source) override {
     renderer_unresponsive_received_ = true;
   }
 
@@ -146,7 +142,7 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
 
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10), blink::WebInputEvent::kUndefined);
+      TimeDelta::FromMilliseconds(10));
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -158,7 +154,7 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   client_host.Close();
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10), blink::WebInputEvent::kUndefined);
+      TimeDelta::FromMilliseconds(10));
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -167,36 +163,6 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   EXPECT_TRUE(delegate.renderer_unresponsive_received());
 
   contents()->SetDelegate(nullptr);
-}
-
-TEST_F(DevToolsManagerTest, ReattachOnCancelPendingNavigation) {
-  // This test triggers incorrect notifications with PlzNavigate.
-  if (IsBrowserSideNavigationEnabled())
-    return;
-  // Navigate to URL.  First URL should use first RenderViewHost.
-  const GURL url("http://www.google.com");
-  NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(), url);
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-
-  TestDevToolsClientHost client_host;
-  client_host.InspectAgentHost(
-      DevToolsAgentHost::GetOrCreateFor(web_contents()).get());
-
-  // Navigate to new site which should get a new RenderViewHost.
-  const GURL url2("http://www.yahoo.com");
-  auto navigation =
-      NavigationSimulator::CreateBrowserInitiated(url2, web_contents());
-  navigation->ReadyToCommit();
-  EXPECT_TRUE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(client_host.agent_host(),
-            DevToolsAgentHost::GetOrCreateFor(web_contents()).get());
-
-  // Interrupt pending navigation and navigate back to the original site.
-  NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(), url);
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(client_host.agent_host(),
-            DevToolsAgentHost::GetOrCreateFor(web_contents()).get());
-  client_host.Close();
 }
 
 class TestExternalAgentDelegate: public DevToolsExternalAgentProxyDelegate {

@@ -273,6 +273,7 @@ class CONTENT_EXPORT DownloadItemImpl
   void SetLastAccessTime(base::Time last_access_time) override;
   void SetDisplayName(const base::FilePath& name) override;
   std::string DebugString(bool verbose) const override;
+  void SimulateErrorForTesting(DownloadInterruptReason reason) override;
 
   // All remaining public interfaces virtual to allow for DownloadItemImpl
   // mocks.
@@ -313,6 +314,8 @@ class CONTENT_EXPORT DownloadItemImpl
   // Called by SavePackage to display progress when the DownloadItem
   // should be considered complete.
   virtual void MarkAsComplete();
+
+  DownloadSource download_source() const { return download_source_; }
 
   // DownloadDestinationObserver
   void DestinationUpdate(
@@ -750,6 +753,9 @@ class CONTENT_EXPORT DownloadItemImpl
   // Whether the download should fetch the response body for non successful HTTP
   // response.
   bool fetch_error_body_ = false;
+
+  // Source of the download, used in metrics.
+  DownloadSource download_source_ = DownloadSource::UNKNOWN;
 
   base::WeakPtrFactory<DownloadItemImpl> weak_ptr_factory_;
 

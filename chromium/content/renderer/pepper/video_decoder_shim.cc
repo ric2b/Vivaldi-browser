@@ -31,6 +31,7 @@
 #include "media/base/video_decoder.h"
 #include "media/filters/ffmpeg_video_decoder.h"
 #include "media/filters/vpx_video_decoder.h"
+#include "media/media_features.h"
 #include "media/video/picture.h"
 #include "media/video/video_decode_accelerator.h"
 #include "ppapi/c/pp_errors.h"
@@ -47,12 +48,12 @@ static const uint32_t kGrInvalidateState =
 namespace {
 
 bool IsCodecSupported(media::VideoCodec codec) {
-#if !defined(MEDIA_DISABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_LIBVPX)
   if (codec == media::kCodecVP9)
     return true;
 #endif
 
-#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   return media::FFmpegVideoDecoder::IsCodecSupported(codec);
 #else
   return false;
@@ -410,17 +411,16 @@ void VideoDecoderShim::YUVConverter::Convert(
     }
 
     switch (frame->format()) {
-      case media::PIXEL_FORMAT_YV12:  // 420
-      case media::PIXEL_FORMAT_YV12A:
+      case media::PIXEL_FORMAT_I420A:
       case media::PIXEL_FORMAT_I420:
         uv_height_divisor_ = 2;
         uv_width_divisor_ = 2;
         break;
-      case media::PIXEL_FORMAT_YV16:  // 422
+      case media::PIXEL_FORMAT_I422:
         uv_width_divisor_ = 2;
         uv_height_divisor_ = 1;
         break;
-      case media::PIXEL_FORMAT_YV24:  // 444
+      case media::PIXEL_FORMAT_I444:
         uv_width_divisor_ = 1;
         uv_height_divisor_ = 1;
         break;
@@ -465,7 +465,7 @@ void VideoDecoderShim::YUVConverter::Convert(
                     format_, GL_UNSIGNED_BYTE,
                     frame->data(media::VideoFrame::kYPlane));
 
-    if (video_format_ == media::PIXEL_FORMAT_YV12A) {
+    if (video_format_ == media::PIXEL_FORMAT_I420A) {
       DCHECK_EQ(frame->stride(media::VideoFrame::kYPlane),
                 frame->stride(media::VideoFrame::kAPlane));
       gl_->ActiveTexture(GL_TEXTURE3);
@@ -505,7 +505,7 @@ void VideoDecoderShim::YUVConverter::Convert(
                        GL_UNSIGNED_BYTE,
                        frame->data(media::VideoFrame::kYPlane));
 
-    if (video_format_ == media::PIXEL_FORMAT_YV12A) {
+    if (video_format_ == media::PIXEL_FORMAT_I420A) {
       DCHECK_EQ(frame->stride(media::VideoFrame::kYPlane),
                 frame->stride(media::VideoFrame::kAPlane));
       gl_->ActiveTexture(GL_TEXTURE3);
@@ -681,8 +681,7 @@ VideoDecoderShim::DecoderImpl::DecoderImpl(
     const base::WeakPtr<VideoDecoderShim>& proxy)
     : shim_(proxy),
       main_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 VideoDecoderShim::DecoderImpl::~DecoderImpl() {
   DCHECK(pending_decodes_.empty());
@@ -691,24 +690,20 @@ VideoDecoderShim::DecoderImpl::~DecoderImpl() {
 void VideoDecoderShim::DecoderImpl::Initialize(
     media::VideoDecoderConfig config) {
   DCHECK(!decoder_);
-#if !defined(MEDIA_DISABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_LIBVPX) || BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
+#if BUILDFLAG(ENABLE_LIBVPX)
   if (config.codec() == media::kCodecVP9) {
     decoder_.reset(new media::VpxVideoDecoder());
   } else
-#endif
-
-#if !defined(MEDIA_DISABLE_FFMPEG) && !defined(DISABLE_FFMPEG_VIDEO_DECODERS)
+#endif  // BUILDFLAG(ENABLE_LIBVPX)
+#if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   {
     std::unique_ptr<media::FFmpegVideoDecoder> ffmpeg_video_decoder(
         new media::FFmpegVideoDecoder(&media_log_));
     ffmpeg_video_decoder->set_decode_nalus(true);
     decoder_ = std::move(ffmpeg_video_decoder);
   }
-#elif defined(MEDIA_DISABLE_LIBVPX)
-  OnInitDone(false);
-  return;
-#endif
-
+#endif  //  BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   // VpxVideoDecoder and FFmpegVideoDecoder support only one pending Decode()
   // request.
   DCHECK_EQ(decoder_->GetMaxDecodeRequests(), 1);
@@ -719,6 +714,9 @@ void VideoDecoderShim::DecoderImpl::Initialize(
                  weak_ptr_factory_.GetWeakPtr()),
       base::Bind(&VideoDecoderShim::DecoderImpl::OnOutputComplete,
                  weak_ptr_factory_.GetWeakPtr()));
+#else
+  OnInitDone(false);
+#endif  // BUILDFLAG(ENABLE_LIBVPX) || BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
 }
 
 void VideoDecoderShim::DecoderImpl::Decode(
@@ -895,7 +893,7 @@ bool VideoDecoderShim::Initialize(const Config& vda_config, Client* client) {
     return false;
 
   media::VideoDecoderConfig video_decoder_config(
-      codec, vda_config.profile, media::PIXEL_FORMAT_YV12,
+      codec, vda_config.profile, media::PIXEL_FORMAT_I420,
       media::COLOR_SPACE_UNSPECIFIED, media::VIDEO_ROTATION_0,
       gfx::Size(32, 24),  // Small sizes that won't fail.
       gfx::Rect(32, 24), gfx::Size(32, 24),
@@ -946,7 +944,7 @@ void VideoDecoderShim::AssignPictureBuffers(
   for (uint32_t i = 0; i < num_textures; i++) {
     DCHECK_EQ(1u, buffers[i].client_texture_ids().size());
     local_texture_ids[i] = gles2->CreateAndConsumeTextureCHROMIUM(
-        GL_TEXTURE_2D, pending_texture_mailboxes_[i].name);
+        pending_texture_mailboxes_[i].name);
     // Map the plugin texture id to the local texture id.
     uint32_t plugin_texture_id = buffers[i].client_texture_ids()[0];
     texture_id_map_[plugin_texture_id] = local_texture_ids[i];

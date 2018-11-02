@@ -53,7 +53,7 @@ ExecutionContext::ExecutionContext()
       window_interaction_tokens_(0),
       referrer_policy_(kReferrerPolicyDefault) {}
 
-ExecutionContext::~ExecutionContext() {}
+ExecutionContext::~ExecutionContext() = default;
 
 // static
 ExecutionContext* ExecutionContext::From(const ScriptState* script_state) {
@@ -170,7 +170,7 @@ PublicURLManager& ExecutionContext::GetPublicURLManager() {
   return *public_url_manager_;
 }
 
-SecurityOrigin* ExecutionContext::GetSecurityOrigin() {
+const SecurityOrigin* ExecutionContext::GetSecurityOrigin() {
   return GetSecurityContext().GetSecurityOrigin();
 }
 

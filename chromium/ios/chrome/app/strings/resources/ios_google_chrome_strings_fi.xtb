@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
 <translation id="1326317727527857210">Käytä välilehtiä muilta laitteiltasi kirjautumalla Chromeen.</translation>
-<translation id="1685087038067318291">Katsele lähistöllä olevien esineiden lähettämiä verkkosivuja. Kun Bluetooth on käytössä, Chrome voi kerätä ympärillä oleviin esineisiin liittyviä verkkosivuja, lähettää ne nimettömästi Googlelle tarkistettaviksi ja näyttää käyttäjälle hyödyllisimmät sivut. <ph name="BEGIN_LINK" />Lisätietoja<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">Google Chromen tietosuojailmoitus</translation>
+<translation id="1863312987075920112">Käyttämällä tätä sovellusta hyväksyt Chromen <ph name="BEGIN_LINK_TOS" />käyttöehdot<ph name="END_LINK_TOS" /> ja <ph name="BEGIN_LINK_PRIVACY" />tietosuojailmoituksen<ph name="END_LINK_PRIVACY" />.</translation>
 <translation id="2147651015520127414">Chrome vahvisti, että <ph name="ISSUER" /> on myöntänyt tämän sivuston varmenteen.</translation>
 <translation id="2334084861041072223">Copyright <ph name="YEAR" /> Google Inc. Kaikki oikeudet pidätetään.</translation>
 <translation id="2342981853652716282">Kirjaudu sisään Chromeen, jotta voit käyttää kirjanmerkkejäsi, salasanojasi ja muita asetuksiasi kaikilla laitteillasi.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">Jokin laajennus kaataa Chromen. Kokeile poistaa seuraavat:</translation>
 <translation id="4615174829807303908">Olet kirjautumassa ulos verkkotunnuksen <ph name="SIGNOUT_MANAGED_DOMAIN" /> hallinnoimalta tililtä. Chrome-tietosi poistetaan tältä laitteelta, mutta tietosi säilyvät Google-tililläsi.</translation>
 <translation id="5389212809648216794">Google Chrome ei voi käyttää kameraa, koska se on toisen sovelluksen käytössä.</translation>
-<translation id="5566557026214762153">Käyttämällä tätä sovellusta sitoudut noudattamaan Chromen <ph name="BEGIN_LINK" />käyttöehtoja<ph name="END_LINK" />.</translation>
 <translation id="5639704535586432836">Avaa Asetukset &gt; Tietosuoja &gt; Kamera &gt; Google Chrome ja ota kamera käyttöön.</translation>
 <translation id="5642200033778930880">Google Chrome ei voi käyttää kameraa jaetussa näkymässä.</translation>
 <translation id="5703130498371792817">Pidätkö Chromesta? <ph name="BEGIN_LINK" />Arvostele tämä sovellus<ph name="END_LINK" /></translation>

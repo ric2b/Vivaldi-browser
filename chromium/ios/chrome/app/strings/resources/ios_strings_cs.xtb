@@ -34,6 +34,7 @@
 <translation id="145015347812617860">Počet položek: <ph name="COUNT" /></translation>
 <translation id="1491277525950327607">Nastavení můžete přepnout dvojitým klepnutím</translation>
 <translation id="152234381334907219">Neuloženo</translation>
+<translation id="1532451416480227577">Zobrazit adresy a karty ze služby Google Pay</translation>
 <translation id="1540800554400757039">První řádek adresy</translation>
 <translation id="1545749641540134597">Naskenovat QR kód</translation>
 <translation id="1580783302095112590">E-mail byl odeslán.</translation>
@@ -96,6 +97,7 @@ Některé webové stránky na tento požadavek mohou reagovat například tím, 
 <translation id="2718352093833049315">Pouze v sítích Wi-Fi</translation>
 <translation id="2747003861858887689">Předchozí pole</translation>
 <translation id="2780046210906776326">Žádné e-mailové účty</translation>
+<translation id="2781692009645368755">Google Pay</translation>
 <translation id="2800683595868705743">Opustit přepínač karet</translation>
 <translation id="283291358677939992">Hledat na stránce...</translation>
 <translation id="2834956026595107950"><ph name="TITLE" />, <ph name="STATE" />, <ph name="URL" /></translation>
@@ -179,6 +181,7 @@ Některé webové stránky na tento požadavek mohou reagovat například tím, 
 <translation id="4378154925671717803">Telefon</translation>
 <translation id="441868831736628555">Oznámení o ochraně soukromí</translation>
 <translation id="4460091562821778167">Pokaždé se zeptat, kterou aplikaci chci použít</translation>
+<translation id="4496373720959965247">Přidejte karty a přepínejte mezi stránkami</translation>
 <translation id="4508750114462689118">Zavřít propagační zprávu ohledně přihlášení</translation>
 <translation id="4526249700380860531">Uložená hesla můžete zobrazit a upravit na adrese <ph name="BEGIN_LINK" />passwords.google.com<ph name="END_LINK" /></translation>
 <translation id="4536418791685807335">Zkuste se přihlásit znovu.</translation>
@@ -217,12 +220,12 @@ Vaše data jsou šifrována pomocí heslové fráze pro synchronizaci. Chcete-li
 <translation id="5300589172476337783">Zobrazit</translation>
 <translation id="5317780077021120954">Uložit</translation>
 <translation id="5327248766486351172">Název</translation>
+<translation id="533632423981297619">Vaše hesla uvidí každý, kdo může zobrazit exportovaný soubor. Tento soubor s nikým nesdílejte.</translation>
 <translation id="5388358297987318779">Otevřít obrázek</translation>
 <translation id="5409365236829784218">Nemáte nainstalovanou žádnou aplikaci, která by tento soubor uměla otevřít.</translation>
 <translation id="5433691172869980887">Uživatelské jméno bylo zkopírováno</translation>
 <translation id="54401264925851789">Informace o zabezpečení stránky</translation>
 <translation id="5525269841082836315">Vytvořit heslovou frázi</translation>
-<translation id="5531274207066050939">Google Payments</translation>
 <translation id="5548760955356983418">Handoff umožňuje začít web procházet v tomto zařízení a poté snadno pokračovat na počítači Mac. Akutální otevřený web se zobrazí v doku vašeho počítače Mac.
 
 Funkce Handoff musí být povolena také v Nastavení v sekci Obecné a zařízení musejí používat stejný účet iCloud.</translation>
@@ -247,7 +250,6 @@ Funkce Handoff musí být povolena také v Nastavení v sekci Obecné a zaříze
 <translation id="5911030830365207728">Překladač Google</translation>
 <translation id="5916664084637901428">Zapnuto</translation>
 <translation id="5948291296578561264">Toto umožňuje ukládat fotky do vaší knihovny fotek.</translation>
-<translation id="5953603475187800576">Zobrazit adresy a platební karty ze služby Google Payments</translation>
 <translation id="5955891643922670672">Zobrazuje se offline verze</translation>
 <translation id="5964480694698977962">Vytvořit novou anonymní kartu</translation>
 <translation id="5965679971710331625">Jste přihlášeni</translation>
@@ -337,7 +339,6 @@ Vaše data byla <ph name="TIME" /> zašifrována pomocí heslové fráze pro syn
 <translation id="7514365320538308">Stáhnout</translation>
 <translation id="7537586195939242955">Pass v této chvíli do aplikace Passbook nelze nainstalovat.</translation>
 <translation id="7561196759112975576">Vždy</translation>
-<translation id="7588950540487816470">Fyzický web</translation>
 <translation id="7603852183842204213">Blokována vyskakovací okna (<ph name="NUMBER_OF_BLOCKED_POPUPS" />)</translation>
 <translation id="7605594153474022051">Synchronizace nefunguje</translation>
 <translation id="7638584964844754484">Nesprávná heslová fráze</translation>
@@ -350,6 +351,7 @@ Vaše data byla <ph name="TIME" /> zašifrována pomocí heslové fráze pro syn
 <translation id="780301667611848630">Ne, děkuji</translation>
 <translation id="7859704718976024901">Historie procházení</translation>
 <translation id="7938254975914653459">FaceTime</translation>
+<translation id="7939128259257418052">Exportovat hesla...</translation>
 <translation id="7947953824732555851">Přijmout a přihlásit</translation>
 <translation id="7961015016161918242">Nikdy</translation>
 <translation id="7971521879845308059">Blokování oken</translation>
@@ -407,7 +409,6 @@ Vaše data byla <ph name="TIME" /> zašifrována pomocí heslové fráze pro syn
 <translation id="9083392325882095631">1 položka</translation>
 <translation id="9100610230175265781">Je vyžadována heslová fráze</translation>
 <translation id="9148126808321036104">Znovu přihlásit</translation>
-<translation id="91549621916703028">Otevřete si několik karet pro všechny činnosti</translation>
 <translation id="9157836665414082580">Potlačit dialogová okna</translation>
 <translation id="9188680907066685419">Odhlásit se ze spravovaného účtu</translation>
 <translation id="9203116392574189331">Handoff</translation>

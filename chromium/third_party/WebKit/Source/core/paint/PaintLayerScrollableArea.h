@@ -45,6 +45,7 @@
 #define PaintLayerScrollableArea_h
 
 #include <memory>
+#include "base/macros.h"
 #include "core/CoreExport.h"
 #include "core/layout/ScrollAnchor.h"
 #include "core/page/scrolling/StickyPositionScrollingConstraints.h"
@@ -52,6 +53,7 @@
 #include "core/paint/PaintLayerFragment.h"
 #include "core/paint/ScrollbarManager.h"
 #include "platform/heap/Handle.h"
+#include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -68,13 +70,13 @@ class StickyPositionScrollingConstraints;
 class SubtreeLayoutScope;
 
 struct CORE_EXPORT PaintLayerScrollableAreaRareData {
-  WTF_MAKE_NONCOPYABLE(PaintLayerScrollableAreaRareData);
   USING_FAST_MALLOC(PaintLayerScrollableAreaRareData);
 
  public:
   PaintLayerScrollableAreaRareData();
 
   StickyConstraintsMap sticky_constraints_map_;
+  DISALLOW_COPY_AND_ASSIGN(PaintLayerScrollableAreaRareData);
 };
 
 // PaintLayerScrollableArea represents the scrollable area of a LayoutBox.
@@ -381,11 +383,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // Returns the new offset, after scrolling, of the given rect in absolute
   // coordinates, clipped by the parent's client rect.
   LayoutRect ScrollIntoView(const LayoutRect&,
-                            const ScrollAlignment& align_x,
-                            const ScrollAlignment& align_y,
-                            bool is_smooth,
-                            ScrollType = kProgrammaticScroll,
-                            bool is_for_scroll_sequence = false) override;
+                            const WebScrollIntoViewParams&) override;
 
   // Returns true if scrollable area is in the FrameView's collection of
   // scrollable areas. This can only happen if we're scrollable, visible to hit
@@ -410,8 +408,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   IntRect ResizerCornerRect(const IntRect&, ResizerHitTestType) const;
 
-  // TODO(ymalik): Remove box() and update callers to use layoutBox() instead.
-  LayoutBox& Box() const;
   PaintLayer* Layer() const override;
 
   LayoutScrollbarPart* Resizer() const override { return resizer_; }
@@ -431,7 +427,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   ScrollAnchor* GetScrollAnchor() override { return &scroll_anchor_; }
   bool IsPaintLayerScrollableArea() const override { return true; }
 
-  LayoutBox* GetLayoutBox() const override { return &Box(); }
+  LayoutBox* GetLayoutBox() const override;
 
   FloatQuad LocalToVisibleContentQuad(const FloatQuad&,
                                       const LayoutObject*,

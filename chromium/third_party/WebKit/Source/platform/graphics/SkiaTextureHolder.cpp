@@ -17,7 +17,8 @@ namespace blink {
 
 SkiaTextureHolder::SkiaTextureHolder(
     sk_sp<SkImage> image,
-    WeakPtr<WebGraphicsContext3DProviderWrapper>&& context_provider_wrapper)
+    base::WeakPtr<WebGraphicsContext3DProviderWrapper>&&
+        context_provider_wrapper)
     : TextureHolder(std::move(context_provider_wrapper)),
       image_(std::move(image)) {}
 
@@ -43,7 +44,7 @@ SkiaTextureHolder::SkiaTextureHolder(
 
   shared_gl->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
   GLuint shared_context_texture_id =
-      shared_gl->CreateAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+      shared_gl->CreateAndConsumeTextureCHROMIUM(mailbox.name);
   GrGLTextureInfo texture_info;
   texture_info.fTarget = GL_TEXTURE_2D;
   texture_info.fID = shared_context_texture_id;

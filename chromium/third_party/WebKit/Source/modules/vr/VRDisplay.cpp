@@ -4,7 +4,6 @@
 
 #include "modules/vr/VRDisplay.h"
 
-#include "build/build_config.h"
 #include "core/css/CSSPropertyValueSet.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/FrameRequestCallbackCollection.h"
@@ -20,7 +19,6 @@
 #include "core/loader/DocumentLoader.h"
 #include "core/paint/compositing/PaintLayerCompositor.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
-#include "gpu/command_buffer/common/mailbox_holder.h"
 #include "modules/EventTargetModules.h"
 #include "modules/vr/NavigatorVR.h"
 #include "modules/vr/VRController.h"
@@ -31,14 +29,13 @@
 #include "modules/vr/VRPose.h"
 #include "modules/vr/VRStageParameters.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 #include "platform/Histogram.h"
-#include "platform/graphics/GpuMemoryBufferImageCopy.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 #include "public/platform/TaskType.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 #include <array>
 #include "core/dom/ExecutionContext.h"
@@ -46,6 +43,12 @@
 namespace blink {
 
 namespace {
+
+// Threshold for rejecting stored magic window poses as being too old.
+// If it's exceeded, defer magic window rAF callback execution until
+// a fresh pose is received.
+constexpr WTF::TimeDelta kMagicWindowPoseAgeThreshold =
+    WTF::TimeDelta::FromMilliseconds(250);
 
 VREye StringToVREye(const String& which_eye) {
   if (which_eye == "left")
@@ -60,13 +63,13 @@ class VRDisplayFrameRequestCallback
  public:
   explicit VRDisplayFrameRequestCallback(VRDisplay* vr_display)
       : vr_display_(vr_display) {}
-  ~VRDisplayFrameRequestCallback() override {}
+  ~VRDisplayFrameRequestCallback() override = default;
   void Invoke(double high_res_time_ms) override {
     if (Id() != vr_display_->PendingMagicWindowVSyncId())
       return;
     double monotonic_time;
     if (!vr_display_->GetDocument() || !vr_display_->GetDocument()->Loader()) {
-      monotonic_time = WTF::MonotonicallyIncreasingTime();
+      monotonic_time = WTF::CurrentTimeTicksInSeconds();
     } else {
       // Convert document-zero time back to monotonic time.
       double reference_monotonic_time = vr_display_->GetDocument()
@@ -97,16 +100,13 @@ VRDisplay::VRDisplay(
     : PausableObject(navigator_vr->GetDocument()),
       navigator_vr_(navigator_vr),
       capabilities_(new VRDisplayCapabilities()),
-      eye_parameters_left_(new VREyeParameters()),
-      eye_parameters_right_(new VREyeParameters()),
       magic_window_provider_(std::move(magic_window_provider)),
       display_(std::move(display)),
-      submit_frame_client_binding_(this),
       display_client_binding_(this, std::move(request)) {
   PauseIfNeeded();  // Initialize SuspendabaleObject.
 }
 
-VRDisplay::~VRDisplay() {}
+VRDisplay::~VRDisplay() = default;
 
 void VRDisplay::Pause() {}
 
@@ -129,15 +129,24 @@ void VRDisplay::Update(const device::mojom::blink::VRDisplayInfoPtr& display) {
   capabilities_->SetCanPresent(display->capabilities->canPresent);
   capabilities_->SetMaxLayers(display->capabilities->canPresent ? 1 : 0);
 
-  // Ignore non presenting delegate
-  bool is_valid = display->leftEye->renderWidth > 0;
+  // Clear eye parameters to prevent them from getting stale.
+  eye_parameters_left_.Clear();
+  eye_parameters_right_.Clear();
+
+  bool is_valid = false;
+  if (capabilities_->canPresent()) {
+    DCHECK_GT(display->leftEye->renderWidth, 0u);
+    is_valid = true;
+
+    eye_parameters_left_ = new VREyeParameters(display->leftEye);
+    eye_parameters_right_ = new VREyeParameters(display->rightEye);
+  }
+
   bool need_on_present_change = false;
   if (is_presenting_ && is_valid && !is_valid_device_for_presenting_) {
     need_on_present_change = true;
   }
   is_valid_device_for_presenting_ = is_valid;
-  eye_parameters_left_->Update(display->leftEye);
-  eye_parameters_right_->Update(display->rightEye);
 
   if (!display->stageParameters.is_null()) {
     if (!stage_parameters_)
@@ -153,6 +162,15 @@ void VRDisplay::Update(const device::mojom::blink::VRDisplayInfoPtr& display) {
 }
 
 bool VRDisplay::getFrameData(VRFrameData* frame_data) {
+  if (!did_log_getFrameData_ && GetDocument() &&
+      GetDocument()->IsInMainFrame()) {
+    did_log_getFrameData_ = true;
+
+    ukm::builders::XR_WebXR(GetDocument()->UkmSourceID())
+        .SetDidRequestPose(1)
+        .Record(GetDocument()->UkmRecorder());
+  }
+
   if (!FocusedOrPresenting() || !frame_pose_ || display_blurred_)
     return false;
 
@@ -178,6 +196,9 @@ bool VRDisplay::getFrameData(VRFrameData* frame_data) {
 }
 
 VREyeParameters* VRDisplay::getEyeParameters(const String& which_eye) {
+  if (!capabilities_->canPresent())
+    return nullptr;
+
   switch (StringToVREye(which_eye)) {
     case kVREyeLeft:
       return eye_parameters_left_;
@@ -206,8 +227,10 @@ void VRDisplay::RequestVSync() {
   if (!is_presenting_) {
     if (pending_magic_window_vsync_)
       return;
-    magic_window_provider_->GetPose(ConvertToBaseCallback(
-        WTF::Bind(&VRDisplay::OnMagicWindowPose, WrapWeakPersistent(this))));
+    magic_window_vsync_waiting_for_pose_.Reset();
+    magic_window_pose_request_time_ = WTF::CurrentTimeTicks();
+    magic_window_provider_->GetPose(
+        WTF::Bind(&VRDisplay::OnMagicWindowPose, WrapWeakPersistent(this)));
     pending_magic_window_vsync_ = true;
     pending_magic_window_vsync_id_ =
         doc->RequestAnimationFrame(new VRDisplayFrameRequestCallback(this));
@@ -243,8 +266,8 @@ void VRDisplay::RequestVSync() {
 
   pending_magic_window_vsync_ = false;
   pending_presenting_vsync_ = true;
-  vr_presentation_provider_->GetVSync(ConvertToBaseCallback(
-      WTF::Bind(&VRDisplay::OnPresentingVSync, WrapWeakPersistent(this))));
+  vr_presentation_provider_->GetVSync(
+      WTF::Bind(&VRDisplay::OnPresentingVSync, WrapWeakPersistent(this)));
 
   DVLOG(2) << __FUNCTION__
            << " done: pending_presenting_vsync_=" << pending_presenting_vsync_;
@@ -313,6 +336,14 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
   if (!execution_context->IsSecureContext()) {
     UseCounter::Count(execution_context,
                       WebFeature::kVRRequestPresentInsecureOrigin);
+  }
+
+  if (!did_log_requestPresent_ && GetDocument() &&
+      GetDocument()->IsInMainFrame()) {
+    did_log_requestPresent_ = true;
+    ukm::builders::XR_WebXR(GetDocument()->UkmSourceID())
+        .SetDidRequestPresentation(1)
+        .Record(GetDocument()->UkmRecorder());
   }
 
   ReportPresentationResult(PresentationResult::kRequested);
@@ -446,18 +477,21 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
     }
 
     pending_present_resolvers_.push_back(resolver);
-    device::mojom::blink::VRSubmitFrameClientPtr submit_frame_client;
-    submit_frame_client_binding_.Close();
-    submit_frame_client_binding_.Bind(mojo::MakeRequest(&submit_frame_client));
+
+    frame_transport_ = new XRFrameTransport();
+    // Set up RequestPresentOptions based on canvas properties.
+    device::mojom::blink::VRRequestPresentOptionsPtr options =
+        device::mojom::blink::VRRequestPresentOptions::New();
+    options->preserve_drawing_buffer =
+        rendering_context_->CreationAttributes().preserveDrawingBuffer();
+
     display_->RequestPresent(
-        std::move(submit_frame_client),
-        mojo::MakeRequest(&vr_presentation_provider_),
-        ConvertToBaseCallback(
-            WTF::Bind(&VRDisplay::OnPresentComplete, WrapPersistent(this))));
+        frame_transport_->GetSubmitFrameClient(),
+        mojo::MakeRequest(&vr_presentation_provider_), std::move(options),
+        WTF::Bind(&VRDisplay::OnPresentComplete, WrapPersistent(this)));
     vr_presentation_provider_.set_connection_error_handler(
-        ConvertToBaseCallback(
-            WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
-                      WrapWeakPersistent(this))));
+        WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
+                  WrapWeakPersistent(this)));
     pending_present_request_ = true;
   } else {
     UpdateLayerBounds();
@@ -468,7 +502,10 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
   return promise;
 }
 
-void VRDisplay::OnPresentComplete(bool success) {
+void VRDisplay::OnPresentComplete(
+    bool success,
+    device::mojom::blink::VRDisplayFrameTransportOptionsPtr transport_options) {
+  frame_transport_->SetTransportOptions(std::move(transport_options));
   pending_present_request_ = false;
   if (success) {
     this->BeginPresent();
@@ -514,31 +551,36 @@ ScriptPromise VRDisplay::exitPresent(ScriptState* script_state) {
 
 void VRDisplay::BeginPresent() {
   Document* doc = this->GetDocument();
-  if (capabilities_->hasExternalDisplay()) {
-    // Presenting with external displays has to make a copy of the image
-    // since the canvas may still be visible at the same time.
-    present_image_needs_copy_ = true;
-  } else {
-    if (layer_.source().IsHTMLCanvasElement()) {
-      // TODO(klausw,crbug.com/698923): suppress compositor updates
-      // since they aren't needed, they do a fair amount of extra
-      // work.
-    } else {
-      DCHECK(layer_.source().IsOffscreenCanvas());
-      // TODO(junov, crbug.com/695497): Implement OffscreenCanvas presentation
-      ForceExitPresent();
-      DOMException* exception = DOMException::Create(
-          kInvalidStateError, "OffscreenCanvas presentation not implemented.");
-      while (!pending_present_resolvers_.IsEmpty()) {
-        ScriptPromiseResolver* resolver =
-            pending_present_resolvers_.TakeFirst();
-        resolver->Reject(exception);
-      }
-      ReportPresentationResult(
-          PresentationResult::kPresentationNotSupportedByDisplay);
-      return;
-    }
+
+  DOMException* exception = nullptr;
+  if (!frame_transport_) {
+    exception = DOMException::Create(
+        kInvalidStateError, "VRDisplay presentation path not configured.");
   }
+
+  if (layer_.source().IsOffscreenCanvas()) {
+    // TODO(junov, crbug.com/695497): Implement OffscreenCanvas presentation
+    exception = DOMException::Create(
+        kInvalidStateError, "OffscreenCanvas presentation not implemented.");
+  } else {
+    // A canvas must be either Offscreen or plain HTMLCanvas.
+    DCHECK(layer_.source().IsHTMLCanvasElement());
+  }
+
+  if (exception) {
+    ForceExitPresent();
+    while (!pending_present_resolvers_.IsEmpty()) {
+      ScriptPromiseResolver* resolver = pending_present_resolvers_.TakeFirst();
+      resolver->Reject(exception);
+    }
+    ReportPresentationResult(
+        PresentationResult::kPresentationNotSupportedByDisplay);
+    return;
+  }
+
+  // Presenting with external displays has to make a copy of the image
+  // since the canvas may still be visible at the same time.
+  present_image_needs_copy_ = capabilities_->hasExternalDisplay();
 
   if (doc) {
     Platform::Current()->RecordRapporURL("VR.WebVR.PresentSuccess",
@@ -567,10 +609,10 @@ void VRDisplay::BeginPresent() {
   // Run window.rAF once manually so that applications get a chance to
   // schedule a VRDisplay.rAF in case they do so only while presenting.
   if (!pending_vrdisplay_raf_ && !capabilities_->hasExternalDisplay()) {
-    double timestamp = WTF::MonotonicallyIncreasingTime();
+    double timestamp = WTF::CurrentTimeTicksInSeconds();
     Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-        BLINK_FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledWindowAnimations,
-                                   WrapWeakPersistent(this), timestamp));
+        FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledWindowAnimations,
+                             WrapWeakPersistent(this), timestamp));
   }
 }
 
@@ -610,6 +652,30 @@ HeapVector<VRLayerInit> VRDisplay::getLayers() {
   }
 
   return layers;
+}
+
+scoped_refptr<Image> VRDisplay::GetFrameImage() {
+  TRACE_EVENT_BEGIN0("gpu", "VRDisplay:GetStaticBitmapImage");
+  scoped_refptr<Image> image_ref = rendering_context_->GetStaticBitmapImage();
+  TRACE_EVENT_END0("gpu", "VRDisplay::GetStaticBitmapImage");
+
+  // Hardware-accelerated rendering should always be texture backed,
+  // as implemented by AcceleratedStaticBitmapImage. Ensure this is
+  // the case, don't attempt to render if using an unexpected drawing
+  // path.
+  if (!image_ref.get() || !image_ref->IsTextureBacked()) {
+    TRACE_EVENT0("gpu", "VRDisplay::GetImage_SlowFallback");
+    // We get a non-texture-backed image when running layout tests
+    // on desktop builds. Add a slow fallback so that these continue
+    // working.
+    image_ref = rendering_context_->GetImage(kPreferAcceleration);
+    if (!image_ref.get() || !image_ref->IsTextureBacked()) {
+      NOTREACHED()
+          << "WebXR requires hardware-accelerated rendering to texture";
+      return nullptr;
+    }
+  }
+  return image_ref;
 }
 
 void VRDisplay::submitFrame() {
@@ -666,116 +732,18 @@ void VRDisplay::submitFrame() {
     UpdateLayerBounds();
   }
 
-  // There's two types of synchronization needed for submitting frames:
-  //
-  // - Before submitting, need to wait for the previous frame to be
-  //   pulled off the transfer surface to avoid lost frames. This
-  //   is currently a compile-time option, normally we always want
-  //   to defer this wait to increase parallelism.
-  //
-  // - After submitting, need to wait for the mailbox to be consumed,
-  //   and the image object must remain alive during this time.
-  //   We keep a reference to the image so that we can defer this
-  //   wait. Here, we wait for the previous transfer to complete.
-  {
-    TRACE_EVENT0("gpu", "VRDisplay::waitForPreviousTransferToFinish");
-    while (pending_submit_frame_) {
-      if (!submit_frame_client_binding_.WaitForIncomingMethodCall()) {
-        DLOG(ERROR) << "Failed to receive SubmitFrame response";
-        break;
-      }
-    }
-  }
+  frame_transport_->FramePreImage(context_gl_);
 
-  TRACE_EVENT_BEGIN0("gpu", "VRDisplay::GetStaticBitmapImage");
-  scoped_refptr<Image> image_ref = rendering_context_->GetStaticBitmapImage();
-  TRACE_EVENT_END0("gpu", "VRDisplay::GetStaticBitmapImage");
+  scoped_refptr<Image> image_ref = GetFrameImage();
+  if (!image_ref)
+    return;
 
-  // Hardware-accelerated rendering should always be texture backed,
-  // as implemented by AcceleratedStaticBitmapImage. Ensure this is
-  // the case, don't attempt to render if using an unexpected drawing
-  // path.
-  if (!image_ref.get() || !image_ref->IsTextureBacked()) {
-    TRACE_EVENT0("gpu", "VRDisplay::GetImage_SlowFallback");
-    // We get a non-texture-backed image when running layout tests
-    // on desktop builds. Add a slow fallback so that these continue
-    // working.
-    image_ref = rendering_context_->GetImage(kPreferAcceleration,
-                                             kSnapshotReasonCreateImageBitmap);
-    if (!image_ref.get() || !image_ref->IsTextureBacked()) {
-      NOTREACHED()
-          << "WebVR requires hardware-accelerated rendering to texture";
-      return;
-    }
-  }
+  DrawingBuffer::Client* drawing_buffer_client =
+      static_cast<DrawingBuffer::Client*>(rendering_context_.Get());
 
-  if (present_image_needs_copy_) {
-#if defined(OS_WIN)
-    TRACE_EVENT0("gpu", "VRDisplay::CopyImage");
-    if (!frame_copier_ || !last_transfer_succeeded_) {
-      frame_copier_ = std::make_unique<GpuMemoryBufferImageCopy>(context_gl_);
-    }
-    auto gpu_memory_buffer = frame_copier_->CopyImage(image_ref.get());
-    DrawingBuffer::Client* client =
-        static_cast<DrawingBuffer::Client*>(rendering_context_.Get());
-    client->DrawingBufferClientRestoreTexture2DBinding();
-    client->DrawingBufferClientRestoreFramebufferBinding();
-    client->DrawingBufferClientRestoreRenderbufferBinding();
-
-    // We decompose the cloned handle, and use it to create a mojo::ScopedHandle
-    // which will own cleanup of the handle, and will be passed over IPC.
-    gfx::GpuMemoryBufferHandle gpu_handle =
-        CloneHandleForIPC(gpu_memory_buffer->GetHandle());
-    vr_presentation_provider_->SubmitFrameWithTextureHandle(
-        vr_frame_id_, mojo::WrapPlatformFile(gpu_handle.handle.GetHandle()));
-#else
-    NOTIMPLEMENTED();
-#endif
-  } else {
-    // The AcceleratedStaticBitmapImage must be kept alive until the
-    // mailbox is used via createAndConsumeTextureCHROMIUM, the mailbox
-    // itself does not keep it alive. We must keep a reference to the
-    // image until the mailbox was consumed.
-    StaticBitmapImage* static_image =
-        static_cast<StaticBitmapImage*>(image_ref.get());
-    TRACE_EVENT_BEGIN0("gpu", "VRDisplay::EnsureMailbox");
-    static_image->EnsureMailbox(kVerifiedSyncToken);
-    TRACE_EVENT_END0("gpu", "VRDisplay::EnsureMailbox");
-
-    // Save a reference to the image to keep it alive until next frame,
-    // where we'll wait for the transfer to finish before overwriting
-    // it.
-    previous_image_ = std::move(image_ref);
-
-    // Wait for the previous render to finish, to avoid losing frames in the
-    // Android Surface / GLConsumer pair. TODO(klausw): make this tunable?
-    // Other devices may have different preferences. Do this step as late
-    // as possible before SubmitFrame to ensure we can do as much work as
-    // possible in parallel with the previous frame's rendering.
-    {
-      TRACE_EVENT0("gpu", "waitForPreviousRenderToFinish");
-      while (pending_previous_frame_render_) {
-        if (!submit_frame_client_binding_.WaitForIncomingMethodCall()) {
-          DLOG(ERROR) << "Failed to receive SubmitFrame response";
-          break;
-        }
-      }
-    }
-
-    pending_previous_frame_render_ = true;
-    pending_submit_frame_ = true;
-
-    // Create mailbox and sync token for transfer.
-    TRACE_EVENT_BEGIN0("gpu", "VRDisplay::GetMailbox");
-    auto mailbox = static_image->GetMailbox();
-    TRACE_EVENT_END0("gpu", "VRDisplay::GetMailbox");
-    auto sync_token = static_image->GetSyncToken();
-
-    TRACE_EVENT_BEGIN0("gpu", "VRDisplay::SubmitFrame");
-    vr_presentation_provider_->SubmitFrame(
-        vr_frame_id_, gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D));
-    TRACE_EVENT_END0("gpu", "VRDisplay::SubmitFrame");
-  }
+  frame_transport_->FrameSubmit(vr_presentation_provider_.get(), context_gl_,
+                                drawing_buffer_client, std::move(image_ref),
+                                vr_frame_id_, present_image_needs_copy_);
 
   did_submit_this_frame_ = true;
   // Reset our frame id, since anything we'd want to do (resizing/etc) can
@@ -790,23 +758,13 @@ void VRDisplay::submitFrame() {
   rendering_context_->MarkCompositedAndClearBackbufferIfNeeded();
 }
 
-void VRDisplay::OnSubmitFrameTransferred(bool success) {
-  DVLOG(3) << __FUNCTION__;
-  pending_submit_frame_ = false;
-  last_transfer_succeeded_ = success;
-}
-
-void VRDisplay::OnSubmitFrameRendered() {
-  DVLOG(3) << __FUNCTION__;
-  pending_previous_frame_render_ = false;
-}
-
 Document* VRDisplay::GetDocument() {
   return navigator_vr_->GetDocument();
 }
 
 void VRDisplay::OnPresentChange() {
-  frame_copier_ = nullptr;
+  if (frame_transport_)
+    frame_transport_->PresentChange();
 
   DVLOG(1) << __FUNCTION__ << ": is_presenting_=" << is_presenting_;
   if (is_presenting_ && !is_valid_device_for_presenting_) {
@@ -857,10 +815,9 @@ void VRDisplay::StopPresenting() {
         UserMetricsAction("VR.WebVR.StopPresenting"));
   }
 
+  frame_transport_ = nullptr;
   rendering_context_ = nullptr;
   context_gl_ = nullptr;
-  pending_submit_frame_ = false;
-  pending_previous_frame_render_ = false;
   did_submit_this_frame_ = false;
   RequestVSync();
 }
@@ -982,9 +939,8 @@ void VRDisplay::OnPresentingVSync(
   // but queueing it for immediate execution since it doesn't match
   // the interface being waited on.
   Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
-                WrapWeakPersistent(this), time_delta.InSecondsF()));
+      FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
+                           WrapWeakPersistent(this), time_delta.InSecondsF()));
 }
 
 void VRDisplay::OnMagicWindowVSync(double timestamp) {
@@ -994,14 +950,35 @@ void VRDisplay::OnMagicWindowVSync(double timestamp) {
   if (is_presenting_)
     return;
   vr_frame_id_ = -1;
-  ProcessScheduledAnimations(timestamp);
+  WTF::TimeDelta pose_age =
+      WTF::CurrentTimeTicks() - magic_window_pose_received_time_;
+  if (pose_age >= kMagicWindowPoseAgeThreshold &&
+      magic_window_pose_request_time_ > magic_window_pose_received_time_) {
+    // The VSync got triggered before ever receiving a pose, or the pose is
+    // stale. Defer the animation until a pose arrives to avoid passing null
+    // poses to the application, but only do this if we have an outstanding
+    // unresolved GetPose request. For example, the pose might be stale after
+    // exiting VR Browser magic window mode due to a longish transition, but we
+    // need to use it anyway if it's from the current frame's GetPose.
+    magic_window_vsync_waiting_for_pose_ =
+        WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
+                  WrapWeakPersistent(this), timestamp);
+  } else {
+    ProcessScheduledAnimations(timestamp);
+  }
 }
 
 void VRDisplay::OnMagicWindowPose(device::mojom::blink::VRPosePtr pose) {
+  magic_window_pose_received_time_ = WTF::CurrentTimeTicks();
   if (!in_animation_frame_) {
     frame_pose_ = std::move(pose);
   } else {
     pending_pose_ = std::move(pose);
+  }
+  if (magic_window_vsync_waiting_for_pose_) {
+    // We have a vsync waiting for a pose, run it now.
+    std::move(magic_window_vsync_waiting_for_pose_).Run();
+    magic_window_vsync_waiting_for_pose_.Reset();
   }
 }
 
@@ -1046,8 +1023,11 @@ void VRDisplay::ContextDestroyed(ExecutionContext* context) {
 
 bool VRDisplay::HasPendingActivity() const {
   // Prevent V8 from garbage collecting the wrapper object if there are
-  // event listeners attached to it.
-  return GetExecutionContext() && HasEventListeners();
+  // event listeners and/or callbacks attached to it.
+  return GetExecutionContext() &&
+         (HasEventListeners() ||
+          (scripted_animation_controller_ &&
+           scripted_animation_controller_->HasCallback()));
 }
 
 void VRDisplay::FocusChanged() {
@@ -1074,6 +1054,7 @@ void VRDisplay::Trace(blink::Visitor* visitor) {
   visitor->Trace(eye_parameters_right_);
   visitor->Trace(layer_);
   visitor->Trace(rendering_context_);
+  visitor->Trace(frame_transport_);
   visitor->Trace(scripted_animation_controller_);
   visitor->Trace(pending_present_resolvers_);
   EventTargetWithInlineData::Trace(visitor);

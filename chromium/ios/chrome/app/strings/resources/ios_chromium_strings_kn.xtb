@@ -3,6 +3,7 @@
 <translationbundle lang="kn">
 <translation id="102360288709523007">Google ಗೆ ಬಳಕೆಯ ಅಂಕಿಅಂಶಗಳು ಮತ್ತು ಕ್ರ್ಯಾಶ್ ವರದಿಗಳನ್ನು ಕಳುಹಿಸುವ ಮೂಲಕ Chromium ಉತ್ತಮಗೊಳಿಸಲು ಸಹಾಯ ಮಾಡಿ.</translation>
 <translation id="1185134272377778587">Chromium ಕುರಿತು</translation>
+<translation id="1289966288285062467">Chromium ಗೌಪ್ಯತಾ ಸೂಚನೆ</translation>
 <translation id="1472013873724362412">ನಿಮ್ಮ ಖಾತೆಯು Chromium ನಲ್ಲಿ ಕಾರ್ಯನಿರ್ವಹಿಸುವುದಿಲ್ಲ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಡೊಮೇನ್ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ ಅಥವಾ ಸೈನ್ ಇನ್ ಮಾಡಲು ನಿಯಮಿತ Google ಖಾತೆಯನ್ನು ಬಳಸಿ.</translation>
 <translation id="1736662517232558588">Chromium ಡೇಟಾ ತೆರವುಗೊಳಿಸಲಾಗಿದೆ</translation>
 <translation id="1838412507805038478">ಈ ವೆಬ್‌ಸೈಟ್‌ನ ಪ್ರಮಾಣಪತ್ರವನ್ನು <ph name="ISSUER" /> ನೀಡಿದೆ ಎಂಬುದಾಗಿ Chromium ಪರಿಶೀಲಿಸಿದೆ.</translation>
@@ -32,8 +33,8 @@
 <translation id="6268381023930128611">Chromium ನಿಂದ ಸೈನ್‌ ಔಟ್‌ ಮಾಡುವುದೇ?</translation>
 <translation id="6424492062988593837">Chrome ಈಗ ತಾನೇ ಉತ್ತಮಗೊಂಡಿದೆ! ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ.</translation>
 <translation id="6604711459180487467">ನಿಮ್ಮ ಸ್ಥಾನವನ್ನು ಆಧರಿಸಿ Chromium ನಲ್ಲಿ ಉತ್ತಮ ಅನುಭವವನ್ನು ಪಡೆದುಕೊಳ್ಳಿ.</translation>
+<translation id="6626296268883197964">ಈ ಅಪ್ಲಿಕೇಶನ್‌ ಬಳಸುವ ಮೂಲಕ, ನೀವು Chromium ನ <ph name="BEGIN_LINK_TOS" />ಸೇವಾ ನಿಯಮಗಳು<ph name="END_LINK_TOS" /> ಮತ್ತು <ph name="BEGIN_LINK_PRIVACY" />ಗೌಪ್ಯತಾ ಸೂಚನೆ <ph name="END_LINK_PRIVACY" /> ಗೆ ಸಮ್ಮತಿಸುತ್ತೀರಿ.</translation>
 <translation id="7099326575020694068">ವಿಭಜಿತ ವೀಕ್ಷಣೆ ಮೋಡ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಕ್ಯಾಮರಾವನ್ನು Chromium ಗೆ ಬಳಸಲು ಸಾಧ್ಯವಿಲ್ಲ</translation>
-<translation id="7144758435978427212">ಹತ್ತಿರ ವಸ್ತುಗಳು ಕಳುಹಿಸಿದ ವೆಬ್ ಪುಟಗಳನ್ನು ಶೋಧಿಸಿ. ಬ್ಲೂಟೂತ್ ಅನ್ನು ಆನ್ ಮಾಡಿದಾಗ, ನಿಮ್ಮ ಸುತ್ತಲಿನ ವಸ್ತುಗಳೊಂದಿಗೆ ಸಂಬಂಧಿಸಿದ ವೆಬ್ ಪುಟಗಳನ್ನು Chromium ಪಡೆಯಬಹುದು ಮತ್ತು ನಿಮಗೆ ಹೆಚ್ಚು ಉಪಯೋಗಕರವಾದುದನ್ನು ಹುಡುಕಲು ಅವುಗಳನ್ನು ಅನಾಮಧೇಯವಾಗಿ Google ಸೇವೆಗೆ ಕಳುಹಿಸಬಹುದು. <ph name="BEGIN_LINK" />ಇನ್ನಷ್ಟು ತಿಳಿಯಿರಿ<ph name="END_LINK" /></translation>
 <translation id="7208566199746267865">ನಿಮ್ಮ ಖಾತೆಗಳನ್ನು ವೆಬ್‌ಗೆ ತರುವ ಮೂಲಕ Chromium ನಿಮ್ಮ ಸಮಯವನ್ನು ಉಳಿಸುತ್ತದೆ. ನೀವು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಖಾತೆಗಳನ್ನು ಸೇರಿಸಬಹುದು ಅಥವಾ ತೆಗೆದುಹಾಕಬಹುದು.</translation>
 <translation id="7269362888766543920">ಕೆಲವು ಆಡ್-ಆನ್‌ಗಳು Chromium ಕ್ರ್ಯಾಶ್ ಆಗಲು ಕಾರಣವಾಗುತ್ತವೆ. ಅವುಗಳನ್ನು ಅಸ್ಥಾಪಿಸಲು ಪ್ರಯತ್ನಿಸಿ.</translation>
 <translation id="7337881442233988129">Chromium</translation>
@@ -41,7 +42,6 @@
 <translation id="7400689562045506105">ಎಲ್ಲೆಡೆ Chromium ಬಳಸಿ</translation>
 <translation id="7674213385180944843">ಸೆಟ್ಟಿಂಗ್‌ಗಳು &gt; ಗೌಪ್ಯತೆ &gt; ಕ್ಯಾಮರಾ &gt; Chromium ತೆರೆಯಿರಿ ಮತ್ತು ಕ್ಯಾಮರಾ ಆನ್ ಮಾಡಿ.</translation>
 <translation id="786327964234957808"><ph name="USER_EMAIL1" /> ರಿಂದ <ph name="USER_EMAIL2" /> ಗೆ ನೀವು ಸಿಂಕ್ ಖಾತೆಗಳನ್ನು ಬದಲಾಯಿಸುತ್ತಿರುವಿರಿ. ನಿಮ್ಮ ಅಸ್ತಿತ್ವದಲ್ಲಿರುವ Chromium ಡೇಟಾವನ್ನು <ph name="DOMAIN" /> ರಿಂದ ನಿರ್ವಹಿಸಲಾಗುತ್ತಿದೆ. ಈ ಸಾಧನದಲ್ಲಿರುವ ನಿಮ್ಮ ಡೇಟಾವನ್ನು ಇದು ಅಳಿಸಿಹಾಕುತ್ತದೆ, ಆದರೆ ನಿಮ್ಮ ಡೇಟಾ <ph name="USER_EMAIL1" /> ರಲ್ಲಿಯೇ ಇರುತ್ತದೆ.</translation>
-<translation id="8111736072665034317">ಈ ಅಪ್ಲಿಕೇಶನ್‍ ಬಳಸುವ ಮೂಲಕ, ನೀವು Chromium ನ <ph name="BEGIN_LINK" />ಸೇವಾ ನಿಯಮಗಳು<ph name="END_LINK" /> ಗೆ ಸಮ್ಮತಿಸುತ್ತೀರಿ.</translation>
 <translation id="8175055321229419309">ಸುಳಿವು: <ph name="BEGIN_LINK" />Chromium ಅನ್ನು ನಿಮ್ಮ ಡಾಕ್‌ಗೆ ಸರಿಸಿ<ph name="END_LINK" /></translation>
 <translation id="8252885722420466166">ನಿಮ್ಮ ಸ್ಥಳವನ್ನು ಆಧರಿಸಿ Chromium ನಲ್ಲಿ ಉತ್ತಮ Google ಅನುಭವವನ್ನು ಪಡೆಯಿರಿ.</translation>
 <translation id="8353224596138547809">ಈ ಸೈಟ್‌ಗಾಗಿ Chromium ನಿಮ್ಮ ಪಾಸ್‌ವರ್ಡ್ ಅನ್ನು ಉಳಿಸಬೇಕೆಂದು ಬಯಸುತ್ತೀರಾ?</translation>

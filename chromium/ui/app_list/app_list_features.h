@@ -29,18 +29,14 @@ APP_LIST_EXPORT extern const base::Feature kEnableBackgroundBlur;
 // Enables the Play Store app search.
 APP_LIST_EXPORT extern const base::Feature kEnablePlayStoreAppSearch;
 
-// Enables the app list focus. In this mode, many views become focusable. Focus
-// transition are handled by FocusManager and accessibility focus transition can
-// be triggered properly on search+arrow key as standard.
-// TODO(weidongg/766807) Remove this flag when the related changes become
-// stable.
-APP_LIST_EXPORT extern const base::Feature kEnableAppListFocus;
+// Enables touchable context menus for app items in the shelf and app list.
+APP_LIST_EXPORT extern const base::Feature kEnableTouchableAppContextMenu;
 
 bool APP_LIST_EXPORT IsAnswerCardEnabled();
 bool APP_LIST_EXPORT IsBackgroundBlurEnabled();
 bool APP_LIST_EXPORT IsFullscreenAppListEnabled();
 bool APP_LIST_EXPORT IsPlayStoreAppSearchEnabled();
-bool APP_LIST_EXPORT IsAppListFocusEnabled();
+bool APP_LIST_EXPORT IsTouchableAppContextMenuEnabled();
 std::string APP_LIST_EXPORT AnswerServerUrl();
 std::string APP_LIST_EXPORT AnswerServerQuerySuffix();
 

@@ -40,9 +40,11 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
+#include "third_party/WebKit/common/quota/quota_types.mojom.h"
 
 using base::LazyInstance;
 using blink::mojom::CacheStorageError;
+using blink::mojom::StorageType;
 using crypto::SymmetricKey;
 
 namespace content {
@@ -475,10 +477,13 @@ class CacheStorage::SimpleCacheLoader : public CacheStorage::CacheLoader {
     base::FileEnumerator file_enum(cache_base_dir, false /* recursive */,
                                    base::FileEnumerator::DIRECTORIES);
     std::vector<base::FilePath> dirs_to_delete;
-    base::FilePath cache_path;
-    while (!(cache_path = file_enum.Next()).empty()) {
-      if (!base::ContainsKey(*cache_dirs, cache_path.BaseName().AsUTF8Unsafe()))
-        dirs_to_delete.push_back(cache_path);
+    {
+      base::FilePath cache_path;
+      while (!(cache_path = file_enum.Next()).empty()) {
+        if (!base::ContainsKey(*cache_dirs,
+                               cache_path.BaseName().AsUTF8Unsafe()))
+          dirs_to_delete.push_back(cache_path);
+      }
     }
 
     for (const base::FilePath& cache_path : dirs_to_delete)
@@ -604,7 +609,7 @@ void CacheStorage::OpenCache(const std::string& cache_name,
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(base::BindOnce(
       &CacheStorage::OpenCacheImpl, weak_factory_.GetWeakPtr(), cache_name,
@@ -620,7 +625,7 @@ void CacheStorage::HasCache(const std::string& cache_name,
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(base::BindOnce(
       &CacheStorage::HasCacheImpl, weak_factory_.GetWeakPtr(), cache_name,
@@ -636,7 +641,7 @@ void CacheStorage::DoomCache(const std::string& cache_name,
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(base::BindOnce(
       &CacheStorage::DoomCacheImpl, weak_factory_.GetWeakPtr(), cache_name,
@@ -651,7 +656,7 @@ void CacheStorage::EnumerateCaches(IndexCallback callback) {
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(base::BindOnce(
       &CacheStorage::EnumerateCachesImpl, weak_factory_.GetWeakPtr(),
@@ -670,7 +675,7 @@ void CacheStorage::MatchCache(
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(
       base::BindOnce(&CacheStorage::MatchCacheImpl, weak_factory_.GetWeakPtr(),
@@ -689,7 +694,7 @@ void CacheStorage::MatchAllCaches(
 
   quota_manager_proxy_->NotifyStorageAccessed(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary);
+      StorageType::kTemporary);
 
   scheduler_->ScheduleOperation(base::BindOnce(
       &CacheStorage::MatchAllCachesImpl, weak_factory_.GetWeakPtr(),
@@ -962,7 +967,7 @@ void CacheStorage::DeleteCacheDidGetSize(CacheStorageCache* doomed_cache,
                                          int64_t cache_size) {
   quota_manager_proxy_->NotifyStorageModified(
       storage::QuotaClient::kServiceWorkerCache, origin_,
-      storage::kStorageTypeTemporary, -1 * cache_size);
+      StorageType::kTemporary, -1 * cache_size);
 
   cache_loader_->CleanUpDeletedCache(doomed_cache);
   auto doomed_caches_iter = doomed_caches_.find(doomed_cache);

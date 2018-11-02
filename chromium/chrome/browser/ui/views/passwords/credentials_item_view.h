@@ -18,8 +18,10 @@ namespace gfx {
 class ImageSkia;
 }
 
-namespace net {
-class URLRequestContextGetter;
+namespace network {
+namespace mojom {
+class URLLoaderFactory;
+}
 }
 
 namespace views {
@@ -37,7 +39,7 @@ class CredentialsItemView : public AccountAvatarFetcherDelegate,
                       const base::string16& lower_text,
                       SkColor hover_color,
                       const autofill::PasswordForm* form,
-                      net::URLRequestContextGetter* request_context);
+                      network::mojom::URLLoaderFactory* loader_factory);
   ~CredentialsItemView() override;
 
   const autofill::PasswordForm* form() const { return form_; }

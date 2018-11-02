@@ -98,6 +98,7 @@ class LocalDeviceEnvironment(environment.Environment):
     self._logcat_output_dir = args.logcat_output_dir
     self._logcat_output_file = args.logcat_output_file
     self._max_tries = 1 + args.num_retries
+    self._recover_devices = args.recover_devices
     self._skip_clear_data = args.skip_clear_data
     self._tool_name = args.tool
     self._trace_output = None
@@ -188,6 +189,10 @@ class LocalDeviceEnvironment(environment.Environment):
     return parallelizer.SyncParallelizer(self.devices)
 
   @property
+  def recover_devices(self):
+    return self._recover_devices
+
+  @property
   def skip_clear_data(self):
     return self._skip_clear_data
 
@@ -201,7 +206,9 @@ class LocalDeviceEnvironment(environment.Environment):
 
   #override
   def TearDown(self):
-    if self.trace_output:
+    if self.trace_output and self._trace_all:
+      instrumentation_tracing.stop_instrumenting()
+    elif self.trace_output:
       self.DisableTracing()
 
     if not self._devices:

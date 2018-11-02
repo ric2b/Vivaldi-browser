@@ -295,7 +295,7 @@ ExtensionSyncData ExtensionSyncService::CreateSyncData(
   if (it != pending_updates_.end()) {
     const base::Version& version = it->second.version;
     // If we have a pending version, it should be newer than the installed one.
-    DCHECK_EQ(-1, extension.version()->CompareTo(version));
+    DCHECK_EQ(-1, extension.version().CompareTo(version));
     result.set_version(version);
     // If we'll re-enable the extension once it's updated, also send that back
     // to sync.
@@ -349,9 +349,19 @@ void ExtensionSyncService::ApplySyncData(
 
   // Handle uninstalls first.
   if (extension_sync_data.uninstalled()) {
-    if (!ExtensionService::UninstallExtensionHelper(
-            extension_service(), id, extensions::UNINSTALL_REASON_SYNC)) {
-      LOG(WARNING) << "Could not uninstall extension " << id << " for sync";
+    base::string16 error;
+    bool uninstalled = true;
+    if (!extension) {
+      error = base::ASCIIToUTF16("Unknown extension");
+      uninstalled = false;
+    } else {
+      uninstalled = extension_service()->UninstallExtension(
+          id, extensions::UNINSTALL_REASON_SYNC, &error);
+    }
+
+    if (!uninstalled) {
+      LOG(WARNING) << "Failed to uninstall extension with id '" << id
+                   << "' from sync: " << error;
     }
     return;
   }
@@ -373,7 +383,7 @@ void ExtensionSyncService::ApplySyncData(
     INSTALLED_NEWER,
   } state = NOT_INSTALLED;
   if (extension) {
-    switch (extension->version()->CompareTo(extension_sync_data.version())) {
+    switch (extension->version().CompareTo(extension_sync_data.version())) {
       case -1: state = INSTALLED_OUTDATED; break;
       case 0: state = INSTALLED_MATCHING; break;
       case 1: state = INSTALLED_NEWER; break;
@@ -448,7 +458,7 @@ void ExtensionSyncService::ApplySyncData(
       if (!has_all_permissions && (state == INSTALLED_NEWER) &&
           extensions::util::IsExtensionSupervised(extension, profile_)) {
         SupervisedUserServiceFactory::GetForProfile(profile_)
-            ->AddExtensionUpdateRequest(id, *extension->version());
+            ->AddExtensionUpdateRequest(id, extension->version());
       }
 #endif
     } else {
@@ -603,7 +613,7 @@ void ExtensionSyncService::OnExtensionInstalled(
   // Clear pending version if the installed one has caught up.
   auto it = pending_updates_.find(extension->id());
   if (it != pending_updates_.end()) {
-    int compare_result = extension->version()->CompareTo(it->second.version);
+    int compare_result = extension->version().CompareTo(it->second.version);
     if (compare_result == 0 && it->second.grant_permissions_and_reenable) {
       // The call to SyncExtensionChangeIfNeeded below will take care of syncing
       // changes to this extension, so we don't want to trigger sync activity

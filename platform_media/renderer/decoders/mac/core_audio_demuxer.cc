@@ -24,14 +24,16 @@
 namespace {
 
 static const char* kSupportedMimeTypes[] = {
-    "audio/aac",
-    "audio/aacp",
     "audio/3gpp",
     "audio/3gpp2",
-    "audio/mp3",
+    "audio/aac",
+    "audio/aacp",
     "audio/mp4",
+#if defined(PLATFORM_MEDIA_MP3)
+    "audio/mp3",
     "audio/mpeg",
     "audio/mpeg3"
+#endif // PLATFORM_MEDIA_MP3
 };
 
 }  // namespace

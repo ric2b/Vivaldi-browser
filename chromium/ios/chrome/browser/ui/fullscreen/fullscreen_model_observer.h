@@ -23,8 +23,14 @@ class FullscreenModelObserver {
   // Invoked when |model| is enabled or disabled.
   virtual void FullscreenModelEnabledStateChanged(FullscreenModel* model) {}
 
+  // Invoked when a scroll event being tracked by |model| has started.
+  virtual void FullscreenModelScrollEventStarted(FullscreenModel* model) {}
+
   // Invoked when a scroll event being tracked by |model| has ended.
   virtual void FullscreenModelScrollEventEnded(FullscreenModel* model) {}
+
+  // Invoked when the model is reset.
+  virtual void FullscreenModelWasReset(FullscreenModel* model) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FullscreenModelObserver);

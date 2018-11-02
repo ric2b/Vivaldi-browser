@@ -207,11 +207,12 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
   // insets.
   SetBorder(views::CreateEmptyBorder(content_insets.top(), 0,
                                      content_insets.bottom(), 0));
-  views::GridLayout* dialog_layout = views::GridLayout::CreateAndInstall(this);
+  views::GridLayout* dialog_layout =
+      SetLayoutManager(std::make_unique<views::GridLayout>(this));
 
   // Use GridLayout inside the prompt bar because StyledLabel requires it.
-  views::GridLayout* prompt_layout =
-      views::GridLayout::CreateAndInstall(prompt_bar);
+  views::GridLayout* prompt_layout = prompt_bar->SetLayoutManager(
+      std::make_unique<views::GridLayout>(prompt_bar));
   prompt_bar->SetBorder(
       views::CreateEmptyBorder(ChromeLayoutProvider::Get()->GetInsetsMetric(
           views::INSETS_DIALOG_SUBSECTION)));
@@ -255,13 +256,12 @@ void ProfileSigninConfirmationDialogViews::StyledLabelLinkClicked(
     views::StyledLabel* label,
     const gfx::Range& range,
     int event_flags) {
-  chrome::NavigateParams params(
-      browser_,
-      GURL("https://support.google.com/chromebook/answer/1331549"),
+  NavigateParams params(
+      browser_, GURL("https://support.google.com/chromebook/answer/1331549"),
       ui::PAGE_TRANSITION_LINK);
   params.disposition = WindowOpenDisposition::NEW_POPUP;
-  params.window_action = chrome::NavigateParams::SHOW_WINDOW;
-  chrome::Navigate(&params);
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  Navigate(&params);
 }
 
 void ProfileSigninConfirmationDialogViews::ButtonPressed(

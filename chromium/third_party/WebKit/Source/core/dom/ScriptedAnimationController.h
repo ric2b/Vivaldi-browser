@@ -30,7 +30,6 @@
 #include "core/dom/FrameRequestCallbackCollection.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/StringImpl.h"
@@ -59,13 +58,15 @@ class CORE_EXPORT ScriptedAnimationController
   typedef int CallbackId;
   CallbackId RegisterCallback(FrameRequestCallbackCollection::FrameCallback*);
   void CancelCallback(CallbackId);
+  // Returns true if any callback is currently registered.
+  bool HasCallback() const;
 
   // Animation frame events are used for resize events, scroll events, etc.
   void EnqueueEvent(Event*);
   void EnqueuePerFrameEvent(Event*);
 
   // Animation frame tasks are used for Fullscreen.
-  void EnqueueTask(WTF::Closure);
+  void EnqueueTask(base::OnceClosure);
 
   // Used for the MediaQueryList change event.
   void EnqueueMediaQueryChangeListeners(
@@ -96,7 +97,7 @@ class CORE_EXPORT ScriptedAnimationController
   Member<Document> document_;
   FrameRequestCallbackCollection callback_collection_;
   int suspend_count_;
-  Vector<WTF::Closure> task_queue_;
+  Vector<base::OnceClosure> task_queue_;
   HeapVector<Member<Event>> event_queue_;
   HeapListHashSet<std::pair<Member<const EventTarget>, const StringImpl*>>
       per_frame_events_;

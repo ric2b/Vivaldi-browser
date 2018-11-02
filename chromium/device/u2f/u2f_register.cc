@@ -7,34 +7,39 @@
 #include <utility>
 
 #include "base/stl_util.h"
+#include "device/u2f/register_response_data.h"
 #include "device/u2f/u2f_discovery.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace device {
 
 U2fRegister::U2fRegister(
+    std::string relying_party_id,
+    std::vector<U2fDiscovery*> discoveries,
     const std::vector<std::vector<uint8_t>>& registered_keys,
     const std::vector<uint8_t>& challenge_hash,
     const std::vector<uint8_t>& app_param,
-    std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
-    const ResponseCallback& cb)
-    : U2fRequest(std::move(discoveries), cb),
+    RegisterResponseCallback completion_callback)
+    : U2fRequest(std::move(relying_party_id), std::move(discoveries)),
+      registered_keys_(registered_keys),
       challenge_hash_(challenge_hash),
       app_param_(app_param),
-      registered_keys_(registered_keys),
+      completion_callback_(std::move(completion_callback)),
       weak_factory_(this) {}
 
 U2fRegister::~U2fRegister() = default;
 
 // static
 std::unique_ptr<U2fRequest> U2fRegister::TryRegistration(
+    std::string relying_party_id,
+    std::vector<U2fDiscovery*> discoveries,
     const std::vector<std::vector<uint8_t>>& registered_keys,
     const std::vector<uint8_t>& challenge_hash,
     const std::vector<uint8_t>& app_param,
-    std::vector<std::unique_ptr<U2fDiscovery>> discoveries,
-    const ResponseCallback& cb) {
+    RegisterResponseCallback completion_callback) {
   std::unique_ptr<U2fRequest> request = std::make_unique<U2fRegister>(
-      registered_keys, challenge_hash, app_param, std::move(discoveries), cb);
+      std::move(relying_party_id), std::move(discoveries), registered_keys,
+      challenge_hash, app_param, std::move(completion_callback));
   request->Start();
   return request;
 }
@@ -115,12 +120,25 @@ void U2fRegister::OnTryDevice(bool is_duplicate_registration,
                               U2fReturnCode return_code,
                               const std::vector<uint8_t>& response_data) {
   switch (return_code) {
-    case U2fReturnCode::SUCCESS:
+    case U2fReturnCode::SUCCESS: {
       state_ = State::COMPLETE;
-      if (is_duplicate_registration)
-        return_code = U2fReturnCode::CONDITIONS_NOT_SATISFIED;
-      cb_.Run(return_code, response_data, std::vector<uint8_t>());
+      if (is_duplicate_registration) {
+        std::move(completion_callback_)
+            .Run(U2fReturnCode::CONDITIONS_NOT_SATISFIED, base::nullopt);
+        break;
+      }
+      auto response = RegisterResponseData::CreateFromU2fRegisterResponse(
+          relying_party_id_, std::move(response_data));
+      if (!response) {
+        // The response data was corrupted / didn't parse properly.
+        std::move(completion_callback_)
+            .Run(U2fReturnCode::FAILURE, base::nullopt);
+        break;
+      }
+      std::move(completion_callback_)
+          .Run(U2fReturnCode::SUCCESS, std::move(response));
       break;
+    }
     case U2fReturnCode::CONDITIONS_NOT_SATISFIED:
       // Waiting for user touch, move on and try this device later.
       state_ = State::IDLE;

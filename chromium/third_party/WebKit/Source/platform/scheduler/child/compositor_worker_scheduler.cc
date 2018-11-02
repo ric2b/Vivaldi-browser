@@ -23,11 +23,9 @@ CompositorWorkerScheduler::CompositorWorkerScheduler(
     : WorkerScheduler(
           std::make_unique<WorkerSchedulerHelper>(std::move(task_queue_manager),
                                                   this)),
-      thread_(thread),
-      compositor_thread_task_duration_reporter_(
-          "RendererScheduler.TaskDurationPerThreadType") {}
+      thread_(thread) {}
 
-CompositorWorkerScheduler::~CompositorWorkerScheduler() {}
+CompositorWorkerScheduler::~CompositorWorkerScheduler() = default;
 
 scoped_refptr<WorkerTaskQueue> CompositorWorkerScheduler::DefaultTaskQueue() {
   return helper_->DefaultWorkerTaskQueue();
@@ -39,9 +37,10 @@ void CompositorWorkerScheduler::OnTaskCompleted(
     WorkerTaskQueue* worker_task_queue,
     const TaskQueue::Task& task,
     base::TimeTicks start,
-    base::TimeTicks end) {
-  compositor_thread_task_duration_reporter_.RecordTask(
-      ThreadType::kCompositorThread, end - start);
+    base::TimeTicks end,
+    base::Optional<base::TimeDelta> thread_time) {
+  compositor_metrics_helper_.RecordTaskMetrics(worker_task_queue, task, start,
+                                               end, thread_time);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -98,6 +97,8 @@ void CompositorWorkerScheduler::DidProcessIdleTask() {}
 base::TimeTicks CompositorWorkerScheduler::NowTicks() {
   return base::TimeTicks::Now();
 }
+
+void CompositorWorkerScheduler::SetThreadType(ThreadType thread_type) {}
 
 }  // namespace scheduler
 }  // namespace blink

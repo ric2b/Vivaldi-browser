@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-#include "chrome/browser/media/router/mock_media_router.h"
+#include "chrome/browser/media/router/test/mock_media_router.h"
 #include "chrome/browser/ui/toolbar/component_action_delegate.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
 #include "chrome/browser/ui/toolbar/media_router_action_controller.h"
@@ -57,23 +57,20 @@ class MediaRouterActionControllerUnitTest : public MediaRouterWebUITest {
   void SetUp() override {
     MediaRouterWebUITest::SetUp();
 
-    router_ = base::MakeUnique<media_router::MockMediaRouter>();
+    router_ = std::make_unique<media_router::MockMediaRouter>();
     component_action_delegate_ =
-        base::MakeUnique<FakeComponentActionDelegate>();
-    controller_ = base::MakeUnique<MediaRouterActionController>(
+        std::make_unique<FakeComponentActionDelegate>();
+    controller_ = std::make_unique<MediaRouterActionController>(
         profile(), router_.get(), component_action_delegate_.get());
 
     SetAlwaysShowActionPref(false);
 
-    local_display_route_list_.push_back(
-        media_router::MediaRoute("routeId1", source1_, "sinkId1", "description",
-                                 true, std::string(), true));
-    non_local_display_route_list_.push_back(
-        media_router::MediaRoute("routeId2", source1_, "sinkId2", "description",
-                                 false, std::string(), true));
-    non_local_display_route_list_.push_back(
-        media_router::MediaRoute("routeId3", source2_, "sinkId3", "description",
-                                 true, std::string(), false));
+    local_display_route_list_.push_back(media_router::MediaRoute(
+        "routeId1", source1_, "sinkId1", "description", true, true));
+    non_local_display_route_list_.push_back(media_router::MediaRoute(
+        "routeId2", source1_, "sinkId2", "description", false, true));
+    non_local_display_route_list_.push_back(media_router::MediaRoute(
+        "routeId3", source2_, "sinkId3", "description", true, false));
   }
 
   void TearDown() override {

@@ -11,7 +11,6 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/singleton.h"
 #include "base/values.h"
@@ -28,6 +27,7 @@
 #include "extensions/browser/extension_registry_observer.h"
 #include "extensions/common/extension.h"
 #include "net/cert/x509_certificate.h"
+#include "net/cert/x509_util.h"
 #include "net/ssl/ssl_private_key.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 
@@ -135,12 +135,8 @@ bool DefaultDelegate::DispatchSignRequestToExtension(
       return false;
   }
   request.digest.assign(digest.begin(), digest.end());
-  std::string cert_der;
-  if (!net::X509Certificate::GetDEREncoded(certificate->os_cert_handle(),
-                                           &cert_der)) {
-    LOG(ERROR) << "Could not DER encode the certificate.";
-    return false;  // Behave as if the extension wasn't registered anymore.
-  }
+  base::StringPiece cert_der =
+      net::x509_util::CryptoBufferAsStringPiece(certificate->cert_buffer());
   request.certificate.assign(cert_der.begin(), cert_der.end());
 
   std::unique_ptr<base::ListValue> internal_args(new base::ListValue);
@@ -149,7 +145,7 @@ bool DefaultDelegate::DispatchSignRequestToExtension(
 
   event_router_->DispatchEventToExtension(
       extension_id,
-      base::MakeUnique<extensions::Event>(
+      std::make_unique<extensions::Event>(
           extensions::events::CERTIFICATEPROVIDER_ON_SIGN_DIGEST_REQUESTED,
           event_name, std::move(internal_args)));
   return true;
@@ -199,7 +195,7 @@ bool CertificateProviderServiceFactory::ServiceIsNULLWhileTesting() const {
 KeyedService* CertificateProviderServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
   CertificateProviderService* const service = new CertificateProviderService();
-  service->SetDelegate(base::MakeUnique<DefaultDelegate>(
+  service->SetDelegate(std::make_unique<DefaultDelegate>(
       service,
       extensions::ExtensionRegistryFactory::GetForBrowserContext(context),
       extensions::EventRouterFactory::GetForBrowserContext(context)));

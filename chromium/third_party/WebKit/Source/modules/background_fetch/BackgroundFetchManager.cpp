@@ -5,10 +5,11 @@
 #include "modules/background_fetch/BackgroundFetchManager.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/modules/v8/request_or_usv_string.h"
+#include "bindings/core/v8/request_or_usv_string.h"
 #include "bindings/modules/v8/request_or_usv_string_or_request_or_usv_string_sequence.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/fetch/Request.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -16,7 +17,6 @@
 #include "modules/background_fetch/BackgroundFetchBridge.h"
 #include "modules/background_fetch/BackgroundFetchOptions.h"
 #include "modules/background_fetch/BackgroundFetchRegistration.h"
-#include "modules/fetch/Request.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
@@ -134,17 +134,17 @@ bool ShouldBlockCORSPreflight(ExecutionContext* execution_context,
   }
 
   if (RuntimeEnabledFeatures::CorsRFC1918Enabled()) {
-    WebAddressSpace requestor_space =
+    mojom::IPAddressSpace requestor_space =
         execution_context->GetSecurityContext().AddressSpace();
 
     // TODO(mkwst): This only checks explicit IP addresses. We'll have to move
     // all this up to //net and //content in order to have any real impact on
     // gateway attacks. That turns out to be a TON of work (crbug.com/378566).
-    WebAddressSpace target_space = kWebAddressSpacePublic;
+    mojom::IPAddressSpace target_space = mojom::IPAddressSpace::kPublic;
     if (NetworkUtils::IsReservedIPAddress(request_url.Host()))
-      target_space = kWebAddressSpacePrivate;
+      target_space = mojom::IPAddressSpace::kPrivate;
     if (SecurityOrigin::Create(request_url)->IsLocalhost())
-      target_space = kWebAddressSpaceLocal;
+      target_space = mojom::IPAddressSpace::kLocal;
 
     bool is_external_request = requestor_space > target_space;
     if (is_external_request)

@@ -12,7 +12,9 @@
 #include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/trace_event/trace_event.h"
+#if defined(PLATFORM_MEDIA_HWA)
 #include "gpu/ipc/service/gpu_command_buffer_stub.h"
+#endif
 #include "platform_media/gpu/pipeline/platform_media_pipeline_create.h"
 #include "platform_media/gpu/data_source/ipc_data_source_impl.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
@@ -60,12 +62,17 @@ bool MakeDecoderContextCurrent(
 }  // namespace
 
 IPCMediaPipeline::IPCMediaPipeline(IPC::Sender* channel,
-                                   int32_t routing_id,
-                                   gpu::GpuCommandBufferStub* command_buffer)
+                                   int32_t routing_id
+#if defined(PLATFORM_MEDIA_HWA)
+                                   , gpu::GpuCommandBufferStub* command_buffer
+#endif
+                                   )
     : state_(CONSTRUCTED),
       channel_(channel),
       routing_id_(routing_id),
+#if defined(PLATFORM_MEDIA_HWA)
       command_buffer_(command_buffer),
+#endif
       weak_ptr_factory_(this) {
   DCHECK(channel_);
 

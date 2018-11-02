@@ -11,15 +11,14 @@
 
 namespace flag_descriptions {
 
+const char kAdaptiveToolbarName[] = "Adaptive Toolbar";
+const char kAdaptiveToolbarDescription[] =
+    "When enabled, the adaptive toolbar will be used.";
+
 const char kBookmarkNewEditPageName[] = "Bookmark New Edit Page";
 const char kBookmarkNewEditPageDescription[] =
     "When enabled, the new bookmark edit page and folder picker will be used "
     "in the new bookmark UI.";
-
-const char kBookmarkNewGenerationName[] = "Bookmark New Generation";
-const char kBookmarkNewGenerationDescription[] =
-    "When enabled, change to the new bookmark UI which will support bookmark "
-    "reordering, have reduced favicon size and improved navigation experience.";
 
 const char kBrowserTaskScheduler[] = "Task Scheduler";
 const char kBrowserTaskSchedulerDescription[] =
@@ -34,6 +33,11 @@ const char kCleanToolbarName[] = "Clean Toolbar";
 const char kCleanToolbarDescription[] =
     "When enabled, the Clean Toolbar will be used instead of "
     "WebToolbarController.";
+
+const char kClippingTextfieldName[] = "Clipping Textfield";
+const char kClippingTextfieldDescription[] =
+    "When enabled, the new URL clipping implementation compatible with iOS 11 "
+    "is used.";
 
 const char kContextualSearch[] = "Contextual Search";
 const char kContextualSearchDescription[] =
@@ -59,7 +63,12 @@ const char kInProductHelpDemoModeDescription[] =
 
 const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
 const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
-const char kMarkHttpAsDangerous[] = "Always mark HTTP as actively dangerous";
+
+const char kMemexTabSwitcherName[] = "Enable the Memex prototype Tab Switcher.";
+const char kMemexTabSwitcherDescription[] =
+    "When enabled, the TabSwitcher button will navigate to the chrome memex "
+    "prototype site instead of triggering the native Tab Switcher. The native "
+    "TabSwitcher is accessible by long pressing the button";
 
 const char kNewFullscreenName[] = "Enable the new FullscreenController.";
 const char kNewFullscreenDescription[] =
@@ -94,12 +103,6 @@ const char kPhysicalWebDescription[] =
     "When enabled, the omnibox will include suggestions for web pages "
     "broadcast by devices near you.";
 
-const char kPropertyAnimationsToolbarName[] =
-    "UIViewPropertyAnimator Animated Toolbar";
-const char kPropertyAnimationsToolbarDescription[] =
-    "When enabled, Toolbar animations will be done using "
-    "UIViewPropertyAnimator";
-
 const char kSafeAreaCompatibleToolbarName[] = "Safe Area Compatible Toolbar";
 const char kSafeAreaCompatibleToolbarDescription[] =
     "When enabled, the toolbar resizes itself when the safe area changes.";
@@ -123,6 +126,11 @@ const char kNewFileDownloadDescription[] =
     "When enabled, uses new Download Manager UI and ios/web Download API as "
     "backend.";
 
+const char kShowAutofillTypePredictionsName[] = "Show Autofill predictions";
+const char kShowAutofillTypePredictionsDescription[] =
+    "Annotates web forms with Autofill field type predictions as placeholder "
+    "text.";
+
 const char kTabSwitcherPresentsBVCName[] = "TabSwitcher Presents BVC";
 const char kTabSwitcherPresentsBVCDescription[] =
     "When enabled, the tab switcher will present the BVC, so that when the "
@@ -141,6 +149,10 @@ const char kWebPaymentsNativeAppsName[] = "Web Payments Native Apps";
 const char kWebPaymentsNativeAppsDescription[] =
     "Enable third party iOS native apps as payments methods within Payment "
     "Request.";
+
+const char kWKHTTPSystemCookieStoreName[] = "Use WKHTTPSystemCookieStore.";
+const char kWKHTTPSystemCookieStoreDescription[] =
+    "Use WKHTTPCookieStore backed store for main context URL requests.";
 
 // Please insert your name/description above in alphabetical order.
 

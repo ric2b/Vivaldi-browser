@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/clock.h"
@@ -14,6 +15,10 @@
 #include "base/values.h"
 #include "chromeos/components/tether/active_host.h"
 #include "chromeos/network/network_state_handler_observer.h"
+
+namespace base {
+class TaskRunner;
+}  // namespace base
 
 namespace chromeos {
 
@@ -50,12 +55,15 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
   // NetworkStateHandlerObserver:
   void DeviceListChanged() override;
   void NetworkPropertiesUpdated(const NetworkState* network) override;
+  void DevicePropertiesUpdated(const DeviceState* device) override;
 
  private:
   friend class WifiHotspotConnectorTest;
 
   static const int64_t kConnectionTimeoutSeconds = 20;
 
+  void UpdateWaitingForWifi();
+  void InitiateConnectionToCurrentNetwork();
   void CompleteActiveConnectionAttempt(bool success);
   void CreateWifiConfiguration();
   base::DictionaryValue CreateWifiPropertyDictionary(
@@ -63,8 +71,9 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
       const std::string& password);
   void OnConnectionTimeout();
 
-  void SetTimerForTest(std::unique_ptr<base::Timer> timer);
-  void SetClockForTest(std::unique_ptr<base::Clock> clock_for_test);
+  void SetTestDoubles(std::unique_ptr<base::Timer> test_timer,
+                      std::unique_ptr<base::Clock> test_clock,
+                      scoped_refptr<base::TaskRunner> test_task_runner);
 
   NetworkStateHandler* network_state_handler_;
   NetworkConnect* network_connect_;
@@ -79,6 +88,7 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
   bool is_waiting_for_wifi_to_enable_ = false;
   bool has_initiated_connection_to_current_network_ = false;
   base::Time connection_attempt_start_time_;
+  scoped_refptr<base::TaskRunner> task_runner_;
 
   base::WeakPtrFactory<WifiHotspotConnector> weak_ptr_factory_;
 

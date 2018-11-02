@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_writer.h"
 #include "base/metrics/histogram.h"
@@ -18,12 +19,15 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/renderer/chrome_render_thread_observer.h"
+#include "chrome/renderer/ssl/ssl_certificate_error_page_controller.h"
 #include "components/error_page/common/error.h"
 #include "components/error_page/common/error_page_params.h"
 #include "components/error_page/common/localized_error.h"
 #include "components/error_page/common/net_error_info.h"
 #include "components/grit/components_resources.h"
+#include "components/security_interstitials/core/common/interfaces/interstitial_commands.mojom.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/child_url_loader_factory_getter.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -34,6 +38,7 @@
 #include "content/public/renderer/resource_fetcher.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_message_macros.h"
+#include "net/base/net_errors.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/WebKit/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/WebKit/common/associated_interfaces/associated_interface_registry.h"
@@ -116,7 +121,8 @@ const net::NetworkTrafficAnnotationTag& GetNetworkTrafficAnnotationTag() {
 NetErrorHelper::NetErrorHelper(RenderFrame* render_frame)
     : RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<NetErrorHelper>(render_frame),
-      weak_controller_delegate_factory_(this) {
+      weak_controller_delegate_factory_(this),
+      weak_ssl_error_controller_delegate_factory_(this) {
   RenderThread::Get()->AddObserver(this);
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool auto_reload_enabled =
@@ -149,6 +155,71 @@ void NetErrorHelper::TrackClick(int tracking_id) {
   core_->TrackClick(tracking_id);
 }
 
+void NetErrorHelper::SendCommand(
+    security_interstitials::SecurityInterstitialCommand command) {
+  security_interstitials::mojom::InterstitialCommandsAssociatedPtr interface;
+  render_frame()->GetRemoteAssociatedInterfaces()->GetInterface(&interface);
+  switch (command) {
+    case security_interstitials::CMD_DONT_PROCEED: {
+      interface->DontProceed();
+      break;
+    }
+    case security_interstitials::CMD_PROCEED: {
+      interface->Proceed();
+      break;
+    }
+    case security_interstitials::CMD_SHOW_MORE_SECTION: {
+      interface->ShowMoreSection();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_HELP_CENTER: {
+      interface->OpenHelpCenter();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_DIAGNOSTIC: {
+      interface->OpenDiagnostic();
+      break;
+    }
+    case security_interstitials::CMD_RELOAD: {
+      interface->Reload();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_DATE_SETTINGS: {
+      interface->OpenDateSettings();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_LOGIN: {
+      interface->OpenLogin();
+      break;
+    }
+    case security_interstitials::CMD_DO_REPORT: {
+      interface->DoReport();
+      break;
+    }
+    case security_interstitials::CMD_DONT_REPORT: {
+      interface->DontReport();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_REPORTING_PRIVACY: {
+      interface->OpenReportingPrivacy();
+      break;
+    }
+    case security_interstitials::CMD_OPEN_WHITEPAPER: {
+      interface->OpenWhitepaper();
+      break;
+    }
+    case security_interstitials::CMD_REPORT_PHISHING_ERROR: {
+      interface->ReportPhishingError();
+      break;
+    }
+    default: {
+      // Other values in the enum are only used by tests so this
+      // method should not be called with them.
+      NOTREACHED();
+    }
+  }
+}
+
 void NetErrorHelper::DidStartProvisionalLoad(
     blink::WebDocumentLoader* document_loader) {
   core_->OnStartLoad(GetFrameType(render_frame()),
@@ -167,6 +238,7 @@ void NetErrorHelper::DidCommitProvisionalLoad(
   // error page, the controller has not yet been attached, so this won't affect
   // it.
   weak_controller_delegate_factory_.InvalidateWeakPtrs();
+  weak_ssl_error_controller_delegate_factory_.InvalidateWeakPtrs();
 
   core_->OnCommitLoad(GetFrameType(render_frame()),
                       render_frame()->GetWebFrame()->GetDocument().Url());
@@ -196,12 +268,12 @@ void NetErrorHelper::NetworkStateChanged(bool enabled) {
   core_->NetworkStateChanged(enabled);
 }
 
-void NetErrorHelper::GetErrorHTML(const error_page::Error& error,
-                                  bool is_failed_post,
-                                  bool is_ignoring_cache,
-                                  std::string* error_html) {
-  core_->GetErrorHTML(GetFrameType(render_frame()), error, is_failed_post,
-                      is_ignoring_cache, error_html);
+void NetErrorHelper::PrepareErrorPage(const error_page::Error& error,
+                                      bool is_failed_post,
+                                      bool is_ignoring_cache,
+                                      std::string* error_html) {
+  core_->PrepareErrorPage(GetFrameType(render_frame()), error, is_failed_post,
+                          is_ignoring_cache, error_html);
 }
 
 bool NetErrorHelper::ShouldSuppressErrorPage(const GURL& url) {
@@ -259,7 +331,13 @@ void NetErrorHelper::LoadErrorPage(const std::string& html,
       html, GURL(kUnreachableWebDataURL), failed_url, true);
 }
 
-void NetErrorHelper::EnablePageHelperFunctions() {
+void NetErrorHelper::EnablePageHelperFunctions(net::Error net_error) {
+  if (net::IsCertificateError(net_error)) {
+    SSLCertificateErrorPageController::Install(
+        render_frame(),
+        weak_ssl_error_controller_delegate_factory_.GetWeakPtr());
+    return;
+  }
   NetErrorPageController::Install(
       render_frame(), weak_controller_delegate_factory_.GetWeakPtr());
 }
@@ -303,9 +381,7 @@ void NetErrorHelper::FetchNavigationCorrections(
   correction_fetcher_->Start(
       render_frame()->GetWebFrame(),
       blink::WebURLRequest::kRequestContextInternal,
-      render_frame()
-          ->GetDefaultURLLoaderFactoryGetter()
-          ->GetNetworkLoaderFactory(),
+      render_frame()->GetURLLoaderFactory(navigation_correction_url),
       GetNetworkTrafficAnnotationTag(),
       base::BindOnce(&NetErrorHelper::OnNavigationCorrectionsFetched,
                      base::Unretained(this)));
@@ -330,9 +406,7 @@ void NetErrorHelper::SendTrackingRequest(
   tracking_fetcher_->Start(
       render_frame()->GetWebFrame(),
       blink::WebURLRequest::kRequestContextInternal,
-      render_frame()
-          ->GetDefaultURLLoaderFactoryGetter()
-          ->GetNetworkLoaderFactory(),
+      render_frame()->GetURLLoaderFactory(tracking_url),
       GetNetworkTrafficAnnotationTag(),
       base::BindOnce(&NetErrorHelper::OnTrackingRequestComplete,
                      base::Unretained(this)));
@@ -351,6 +425,7 @@ void NetErrorHelper::LoadPageFromCache(const GURL& page_url) {
 
   blink::WebURLRequest request(page_url);
   request.SetCacheMode(blink::mojom::FetchCacheMode::kOnlyIfCached);
+  request.SetRequestorOrigin(blink::WebSecurityOrigin::Create(page_url));
   web_frame->LoadRequest(request);
 }
 

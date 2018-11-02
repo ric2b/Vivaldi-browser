@@ -4,7 +4,8 @@
 
 #include "chrome/browser/vr/elements/rect.h"
 
-#include "base/memory/ptr_util.h"
+#include <memory>
+
 #include "chrome/browser/vr/target_property.h"
 #include "chrome/browser/vr/test/animation_utils.h"
 #include "chrome/browser/vr/test/constants.h"
@@ -15,7 +16,7 @@
 namespace vr {
 
 TEST(Rect, SetColorCorrectly) {
-  auto rect = base::MakeUnique<Rect>();
+  auto rect = std::make_unique<Rect>();
 
   EXPECT_NE(SK_ColorCYAN, rect->edge_color());
   EXPECT_NE(SK_ColorCYAN, rect->center_color());
@@ -33,7 +34,7 @@ TEST(Rect, SetColorCorrectly) {
 
 TEST(Rect, AnimateColorCorrectly) {
   UiScene scene;
-  auto element = base::MakeUnique<Rect>();
+  auto element = std::make_unique<Rect>();
   Rect* rect = element.get();
   scene.AddUiElement(kRoot, std::move(element));
 
@@ -43,11 +44,11 @@ TEST(Rect, AnimateColorCorrectly) {
   rect->SetTransitionedProperties({BACKGROUND_COLOR, FOREGROUND_COLOR});
   rect->SetColor(SK_ColorBLACK);
 
-  scene.OnBeginFrame(MsToTicks(1), kForwardVector);
+  scene.OnBeginFrame(MsToTicks(1), kStartHeadPose);
   EXPECT_EQ(SK_ColorRED, rect->edge_color());
   EXPECT_EQ(SK_ColorBLUE, rect->center_color());
 
-  scene.OnBeginFrame(MsToTicks(5000), kForwardVector);
+  scene.OnBeginFrame(MsToTicks(5000), kStartHeadPose);
   EXPECT_EQ(SK_ColorBLACK, rect->edge_color());
   EXPECT_EQ(SK_ColorBLACK, rect->center_color());
 }

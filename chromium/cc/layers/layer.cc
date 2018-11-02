@@ -68,7 +68,7 @@ Layer::Inputs::Inputs(int layer_id)
       client(nullptr),
       overscroll_behavior(OverscrollBehavior::kOverscrollBehaviorTypeAuto) {}
 
-Layer::Inputs::~Inputs() {}
+Layer::Inputs::~Inputs() = default;
 
 scoped_refptr<Layer> Layer::Create() {
   return base::WrapRefCounted(new Layer());
@@ -318,6 +318,25 @@ void Layer::SetOverscrollBehavior(const OverscrollBehavior& behavior) {
     auto& scroll_tree = layer_tree_host_->property_trees()->scroll_tree;
     if (auto* scroll_node = scroll_tree.Node(scroll_tree_index_))
       scroll_node->overscroll_behavior = behavior;
+    else
+      SetPropertyTreesNeedRebuild();
+  }
+
+  SetNeedsCommit();
+}
+
+void Layer::SetSnapContainerData(base::Optional<SnapContainerData> data) {
+  DCHECK(IsPropertyChangeAllowed());
+  if (snap_container_data() == data)
+    return;
+  inputs_.snap_container_data = std::move(data);
+  if (!layer_tree_host_)
+    return;
+
+  if (scrollable()) {
+    auto& scroll_tree = layer_tree_host_->property_trees()->scroll_tree;
+    if (auto* scroll_node = scroll_tree.Node(scroll_tree_index_))
+      scroll_node->snap_container_data = inputs_.snap_container_data;
     else
       SetPropertyTreesNeedRebuild();
   }

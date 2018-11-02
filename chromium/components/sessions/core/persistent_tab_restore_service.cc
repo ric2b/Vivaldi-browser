@@ -15,7 +15,6 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/stl_util.h"
 #include "base/task/cancelable_task_tracker.h"
@@ -323,7 +322,7 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
 
   // Create the Window entry.
   std::unique_ptr<sessions::TabRestoreService::Window> window =
-      base::MakeUnique<sessions::TabRestoreService::Window>();
+      std::make_unique<sessions::TabRestoreService::Window>();
   window->selected_tab_index = fields.selected_tab_index;
   window->timestamp = base::Time::FromInternalValue(fields.timestamp);
   *window_id = static_cast<SessionID::id_type>(fields.window_id);
@@ -441,10 +440,6 @@ class PersistentTabRestoreService::Delegate
   void OnGotPreviousSession(std::vector<std::unique_ptr<SessionWindow>> windows,
                             SessionID::id_type ignored_active_window);
 
-  void OnGotPreviousSessionActive(
-                            std::vector<std::unique_ptr<SessionWindow>> windows,
-                            SessionID::id_type ignored_active_window);
-
   // Converts a SessionWindow into a Window, returning true on success. We use 0
   // as the timestamp here since we do not know when the window/tab was closed.
   static bool ConvertSessionWindowToWindow(SessionWindow* session_window,
@@ -454,11 +449,6 @@ class PersistentTabRestoreService::Delegate
   // loading the entries in |staging_entries_| are added to entries and
   // observers are notified.
   void LoadStateChanged();
-
-  // gisli@vivaldi.com:  Added previous_active_entries count.
-  int previous_active_entries_count() {
-    return previous_active_entries_count_;
-  }
 
  private:
   // The associated client.
@@ -481,9 +471,6 @@ class PersistentTabRestoreService::Delegate
   // results from both us and the session restore service have finished loading
   // LoadStateChanged is invoked, which adds these entries to entries_.
   std::vector<std::unique_ptr<Entry>> staging_entries_;
-
-  // gisli@vivaldi.com:  Added previouos active entries for restore.
-  int previous_active_entries_count_;
 
   // Used when loading previous tabs/session and open tabs/session.
   base::CancelableTaskTracker cancelable_task_tracker_;
@@ -612,15 +599,6 @@ void PersistentTabRestoreService::Delegate::LoadTabsFromLastSession() {
   base_session_service_->ScheduleGetLastSessionCommands(
       base::Bind(&Delegate::OnGotLastSessionCommands, base::Unretained(this)),
       &cancelable_task_tracker_);
-
-  if(vivaldi::IsVivaldiRunning() && client_->HasLastSession()) {
-    // gisli@vivaldi.com:  Add this call to get the number of active tabs
-    // at last session close.
-    client_->GetLastSession(
-          base::Bind(&Delegate::OnGotPreviousSessionActive,
-                     base::Unretained(this)),
-          &cancelable_task_tracker_);
-  }
 }
 
 void PersistentTabRestoreService::Delegate::DeleteLastSession() {
@@ -636,7 +614,7 @@ void PersistentTabRestoreService::Delegate::CreateEntriesFromWindows(
     std::vector<std::unique_ptr<sessions::SessionWindow>>* windows,
     std::vector<std::unique_ptr<Entry>>* entries) {
   for (const auto& session_window : *windows) {
-    std::unique_ptr<Window> window = base::MakeUnique<Window>();
+    std::unique_ptr<Window> window = std::make_unique<Window>();
     if (ConvertSessionWindowToWindow(session_window.get(), window.get()))
       entries->push_back(std::move(window));
   }
@@ -919,13 +897,13 @@ void PersistentTabRestoreService::Delegate::CreateEntriesFromCommands(
             NOTREACHED();
             return;
           }
-          current_window->tabs.push_back(base::MakeUnique<Tab>());
+          current_window->tabs.push_back(std::make_unique<Tab>());
           current_tab = current_window->tabs.back().get();
           if (--pending_window_tabs == 0)
             current_window = nullptr;
         } else {
           RemoveEntryByID(payload.id, &entries);
-          entries.push_back(base::MakeUnique<Tab>());
+          entries.push_back(std::make_unique<Tab>());
           current_tab = static_cast<Tab*>(entries.back().get());
           current_tab->timestamp =
               base::Time::FromInternalValue(payload.timestamp);
@@ -1055,7 +1033,7 @@ bool PersistentTabRestoreService::Delegate::ConvertSessionWindowToWindow(
   for (size_t i = 0; i < session_window->tabs.size(); ++i) {
     window->ext_data = session_window->ext_data;
     if (!session_window->tabs[i]->navigations.empty()) {
-      window->tabs.push_back(base::MakeUnique<Tab>());
+      window->tabs.push_back(std::make_unique<Tab>());
       Tab& tab = *window->tabs.back();
       tab.pinned = session_window->tabs[i]->pinned;
       tab.navigations.swap(session_window->tabs[i]->navigations);

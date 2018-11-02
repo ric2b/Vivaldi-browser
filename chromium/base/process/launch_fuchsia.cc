@@ -151,16 +151,24 @@ Process LaunchProcess(const std::vector<std::string>& argv,
     launchpad_add_handle(lp, id_and_handle.handle, id_and_handle.id);
   }
 
-  zx_handle_t proc;
+  zx_handle_t process_handle;
   const char* errmsg;
-  zx_status_t status = launchpad_go(lp, &proc, &errmsg);
+  zx_status_t status = launchpad_go(lp, &process_handle, &errmsg);
   if (status != ZX_OK) {
     LOG(ERROR) << "launchpad_go failed: " << errmsg
                << ", status=" << zx_status_get_string(status);
     return Process();
   }
 
-  return Process(proc);
+  Process process(process_handle);
+  if (options.wait) {
+    status = zx_object_wait_one(process.Handle(), ZX_TASK_TERMINATED,
+                                ZX_TIME_INFINITE, nullptr);
+    DCHECK(status == ZX_OK)
+        << "zx_object_wait_one: " << zx_status_get_string(status);
+  }
+
+  return process;
 }
 
 bool GetAppOutput(const CommandLine& cl, std::string* output) {
@@ -191,6 +199,10 @@ bool GetAppOutputWithExitCode(const CommandLine& cl,
   // launched and the exit code was waited upon successfully, but not
   // necessarily that the exit code was EXIT_SUCCESS.
   return GetAppOutputInternal(cl, false, output, exit_code);
+}
+
+void RaiseProcessToHighPriority() {
+  // Fuchsia doesn't provide an API to change process priority.
 }
 
 }  // namespace base

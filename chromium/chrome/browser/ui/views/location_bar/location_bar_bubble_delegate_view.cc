@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/location_bar/location_bar_bubble_delegate_view.h"
 
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -73,18 +74,20 @@ LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 }
 
-LocationBarBubbleDelegateView::LocationBarBubbleDelegateView(
-    views::View* anchor_view,
-    content::WebContents* web_contents)
-    : LocationBarBubbleDelegateView(anchor_view, gfx::Point(), web_contents) {}
-
 LocationBarBubbleDelegateView::~LocationBarBubbleDelegateView() {}
 
 void LocationBarBubbleDelegateView::ShowForReason(DisplayReason reason) {
   if (reason == USER_GESTURE) {
+#if defined(OS_MACOSX)
     // In the USER_GESTURE case, the icon will be in an active state so the
-    // bubble doesn't need an arrow.
-    SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
+    // bubble doesn't need an arrow (except on non-MD MacViews).
+    const bool hide_arrow =
+        ui::MaterialDesignController::IsSecondaryUiMaterial();
+#else
+    const bool hide_arrow = true;
+#endif
+    if (hide_arrow)
+      SetArrowPaintType(views::BubbleBorder::PAINT_TRANSPARENT);
     GetWidget()->Show();
   } else {
     GetWidget()->ShowInactive();
@@ -100,10 +103,6 @@ void LocationBarBubbleDelegateView::Observe(
   CloseBubble();
 }
 
-void LocationBarBubbleDelegateView::CloseBubble() {
-  GetWidget()->Close();
-}
-
 void LocationBarBubbleDelegateView::AdjustForFullscreen(
     const gfx::Rect& screen_bounds) {
   if (GetAnchorView())
@@ -115,4 +114,8 @@ void LocationBarBubbleDelegateView::AdjustForFullscreen(
                         ? (screen_bounds.x() + horizontal_offset)
                         : (screen_bounds.right() - horizontal_offset);
   SetAnchorRect(gfx::Rect(x_pos, screen_bounds.y(), 0, 0));
+}
+
+void LocationBarBubbleDelegateView::CloseBubble() {
+  GetWidget()->Close();
 }

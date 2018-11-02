@@ -12,8 +12,7 @@ namespace gpu {
 GpuBlacklist::GpuBlacklist(const GpuControlListData& data)
     : GpuControlList(data) {}
 
-GpuBlacklist::~GpuBlacklist() {
-}
+GpuBlacklist::~GpuBlacklist() = default;
 
 // static
 std::unique_ptr<GpuBlacklist> GpuBlacklist::Create() {
@@ -43,6 +42,13 @@ std::unique_ptr<GpuBlacklist> GpuBlacklist::Create(
   list->AddSupportedFeature("accelerated_webgl2",
                             GPU_FEATURE_TYPE_ACCELERATED_WEBGL2);
   return list;
+}
+
+// static
+bool GpuBlacklist::AreEntryIndicesValid(
+    const std::vector<uint32_t>& entry_indices) {
+  return GpuControlList::AreEntryIndicesValid(entry_indices,
+                                              kSoftwareRenderingListEntryCount);
 }
 
 }  // namespace gpu

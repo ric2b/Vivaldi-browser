@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "content/public/common/network_service_test.mojom.h"
+#include "services/network/public/interfaces/network_service_test.mojom.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
@@ -30,7 +30,7 @@ class NetworkServiceTestHelper {
   class NetworkServiceTestImpl;
 
   void BindNetworkServiceTestRequest(
-      content::mojom::NetworkServiceTestRequest request);
+      network::mojom::NetworkServiceTestRequest request);
 
   std::unique_ptr<NetworkServiceTestImpl> network_service_test_impl_;
 

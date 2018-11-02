@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
@@ -86,7 +87,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   // HttpServerProperties methods:
   // -----------------------------
 
-  void Clear() override;
+  void Clear(base::OnceClosure callback) override;
   bool SupportsRequestPriority(const url::SchemeHostPort& server) override;
   bool GetSupportsSpdy(const url::SchemeHostPort& server) override;
   void SetSupportsSpdy(const url::SchemeHostPort& server,
@@ -175,8 +176,6 @@ class NET_EXPORT HttpServerPropertiesImpl
   // in |quic_server_info_map_|. If |canonical_server_info_map_| doesn't
   // have an entry associated with |server|, the method will add one.
   void UpdateCanonicalServerInfoMap(const QuicServerId& server);
-
-  base::DefaultTickClock default_clock_;
 
   SpdyServersMap spdy_servers_map_;
   Http11ServerHostPortSet http11_servers_;

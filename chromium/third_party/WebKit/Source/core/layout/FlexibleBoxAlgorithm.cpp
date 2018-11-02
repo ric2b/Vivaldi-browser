@@ -311,7 +311,7 @@ void FlexLine::ComputeLineItemsPosition(LayoutUnit main_axis_offset,
     flex_item.UpdateAutoMarginsInMainAxis(auto_margin_offset);
 
     LayoutUnit child_cross_axis_margin_box_extent;
-    if (flex_item.Alignment() == kItemPositionBaseline &&
+    if (flex_item.Alignment() == ItemPosition::kBaseline &&
         !flex_item.HasAutoMarginsInCrossAxis()) {
       LayoutUnit ascent = flex_item.MarginBoxAscent();
       LayoutUnit descent =
@@ -434,7 +434,7 @@ FlexLayoutAlgorithm::ContentAlignmentNormalBehavior() {
   // flex-start (ignoring the specified fallback alignment, if any).
   // https://drafts.csswg.org/css-align/#distribution-flex
   static const StyleContentAlignmentData kNormalBehavior = {
-      kContentPositionNormal, kContentDistributionStretch};
+      ContentPosition::kNormal, ContentDistributionType::kStretch};
   return kNormalBehavior;
 }
 
@@ -485,9 +485,9 @@ StyleContentAlignmentData FlexLayoutAlgorithm::ResolvedJustifyContent(
   OverflowAlignment overflow = style.JustifyContentOverflowAlignment();
   // For flex, justify-content: stretch behaves as flex-start:
   // https://drafts.csswg.org/css-align/#distribution-flex
-  if (distribution == kContentDistributionStretch) {
-    position = kContentPositionFlexStart;
-    distribution = kContentDistributionDefault;
+  if (distribution == ContentDistributionType::kStretch) {
+    position = ContentPosition::kFlexStart;
+    distribution = ContentDistributionType::kDefault;
   }
   return StyleContentAlignmentData(position, distribution, overflow);
 }
@@ -506,20 +506,20 @@ ItemPosition FlexLayoutAlgorithm::AlignmentForChild(
     const ComputedStyle& flexbox_style,
     const ComputedStyle& child_style) {
   ItemPosition align =
-      child_style.ResolvedAlignSelf(kItemPositionStretch, &flexbox_style)
+      child_style.ResolvedAlignSelf(ItemPosition::kStretch, &flexbox_style)
           .GetPosition();
-  DCHECK_NE(align, kItemPositionAuto);
-  DCHECK_NE(align, kItemPositionNormal);
+  DCHECK_NE(align, ItemPosition::kAuto);
+  DCHECK_NE(align, ItemPosition::kNormal);
 
-  if (align == kItemPositionBaseline &&
+  if (align == ItemPosition::kBaseline &&
       IsHorizontalFlow(flexbox_style) != child_style.IsHorizontalWritingMode())
-    align = kItemPositionFlexStart;
+    align = ItemPosition::kFlexStart;
 
   if (flexbox_style.FlexWrap() == EFlexWrap::kWrapReverse) {
-    if (align == kItemPositionFlexStart)
-      align = kItemPositionFlexEnd;
-    else if (align == kItemPositionFlexEnd)
-      align = kItemPositionFlexStart;
+    if (align == ItemPosition::kFlexStart)
+      align = ItemPosition::kFlexEnd;
+    else if (align == ItemPosition::kFlexEnd)
+      align = ItemPosition::kFlexStart;
   }
 
   return align;
@@ -529,17 +529,17 @@ LayoutUnit FlexLayoutAlgorithm::InitialContentPositionOffset(
     LayoutUnit available_free_space,
     const StyleContentAlignmentData& data,
     unsigned number_of_items) {
-  if (data.GetPosition() == kContentPositionFlexEnd)
+  if (data.GetPosition() == ContentPosition::kFlexEnd)
     return available_free_space;
-  if (data.GetPosition() == kContentPositionCenter)
+  if (data.GetPosition() == ContentPosition::kCenter)
     return available_free_space / 2;
-  if (data.Distribution() == kContentDistributionSpaceAround) {
+  if (data.Distribution() == ContentDistributionType::kSpaceAround) {
     if (available_free_space > 0 && number_of_items)
       return available_free_space / (2 * number_of_items);
 
     return available_free_space / 2;
   }
-  if (data.Distribution() == kContentDistributionSpaceEvenly) {
+  if (data.Distribution() == ContentDistributionType::kSpaceEvenly) {
     if (available_free_space > 0 && number_of_items)
       return available_free_space / (number_of_items + 1);
     // Fallback to 'center'
@@ -553,12 +553,12 @@ LayoutUnit FlexLayoutAlgorithm::ContentDistributionSpaceBetweenChildren(
     const StyleContentAlignmentData& data,
     unsigned number_of_items) {
   if (available_free_space > 0 && number_of_items > 1) {
-    if (data.Distribution() == kContentDistributionSpaceBetween)
+    if (data.Distribution() == ContentDistributionType::kSpaceBetween)
       return available_free_space / (number_of_items - 1);
-    if (data.Distribution() == kContentDistributionSpaceAround ||
-        data.Distribution() == kContentDistributionStretch)
+    if (data.Distribution() == ContentDistributionType::kSpaceAround ||
+        data.Distribution() == ContentDistributionType::kStretch)
       return available_free_space / number_of_items;
-    if (data.Distribution() == kContentDistributionSpaceEvenly)
+    if (data.Distribution() == ContentDistributionType::kSpaceEvenly)
       return available_free_space / (number_of_items + 1);
   }
   return LayoutUnit();

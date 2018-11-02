@@ -69,9 +69,6 @@ void Connector::QueryService(const Identity& identity,
 void Connector::BindInterface(const Identity& target,
                               const std::string& interface_name,
                               mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!BindConnectorIfNecessary())
-    return;
-
   auto service_overrides_iter = local_binder_overrides_.find(target.name());
   if (service_overrides_iter != local_binder_overrides_.end()) {
     auto override_iter = service_overrides_iter->second.find(interface_name);
@@ -81,18 +78,24 @@ void Connector::BindInterface(const Identity& target,
     }
   }
 
+  if (!BindConnectorIfNecessary())
+    return;
+
   connector_->BindInterface(target, interface_name, std::move(interface_pipe),
                             base::Bind(&Connector::RunStartServiceCallback,
                                        weak_factory_.GetWeakPtr()));
 }
 
 std::unique_ptr<Connector> Connector::Clone() {
-  if (!BindConnectorIfNecessary())
-    return nullptr;
+  mojom::ConnectorPtrInfo connector;
+  auto request = mojo::MakeRequest(&connector);
+  if (BindConnectorIfNecessary())
+    connector_->Clone(std::move(request));
+  return std::make_unique<Connector>(std::move(connector));
+}
 
-  mojom::ConnectorPtr connector;
-  connector_->Clone(mojo::MakeRequest(&connector));
-  return std::make_unique<Connector>(connector.PassInterface());
+bool Connector::IsBound() const {
+  return connector_.is_bound();
 }
 
 void Connector::FilterInterfaces(const std::string& spec,

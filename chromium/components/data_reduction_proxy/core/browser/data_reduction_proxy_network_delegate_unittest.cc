@@ -15,7 +15,6 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/numerics/safe_conversions.h"
@@ -369,6 +368,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
     proxy_service_ =
         net::ProxyService::CreateFixedFromPacResult(proxy_server.ToPacString());
     context_->set_proxy_service(proxy_service_.get());
+    context_->set_network_quality_estimator(&test_network_quality_estimator_);
 
     mock_socket_factory_.reset(new net::MockClientSocketFactory());
 
@@ -396,7 +396,6 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
     test_context_->io_data()->set_lofi_ui_service(std::move(lofi_ui_service));
 
     context_->set_enable_brotli(enable_brotli_globally);
-    context_->set_network_quality_estimator(&test_network_quality_estimator_);
     context_->Init();
 
     test_context_->DisableWarmupURLFetch();
@@ -470,7 +469,7 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
     }
 
     EXPECT_FALSE(socket_);
-    socket_ = base::MakeUnique<net::StaticSocketDataProvider>(
+    socket_ = std::make_unique<net::StaticSocketDataProvider>(
         reads_list->data(), reads_list->size(), writes_list->data(),
         writes_list->size());
     mock_socket_factory_->AddSocketDataProvider(socket_.get());
@@ -747,10 +746,10 @@ class DataReductionProxyNetworkDelegateTest : public testing::Test {
 
     std::unique_ptr<net::StaticSocketDataProvider> socket;
     if (!redirect_once) {
-      socket = base::MakeUnique<net::StaticSocketDataProvider>(
+      socket = std::make_unique<net::StaticSocketDataProvider>(
           reads, arraysize(reads), writes, arraysize(writes));
     } else {
-      socket = base::MakeUnique<net::StaticSocketDataProvider>(
+      socket = std::make_unique<net::StaticSocketDataProvider>(
           redirect_reads, arraysize(redirect_reads), redirect_writes,
           arraysize(redirect_writes));
     }
@@ -923,45 +922,12 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       features::kDataReductionProxyDecidesTransform);
 
   // Enable Lo-Fi.
-  const struct {
-    bool lofi_switch_enabled;
-    bool auto_lofi_enabled;
-    bool is_data_reduction_proxy;
-  } tests[] = {
-      {
-          // Lo-Fi enabled through switch and not using a Data Reduction Proxy.
-          true, false, false,
-      },
-      {
-          // Lo-Fi enabled through switch and using a Data Reduction Proxy.
-          true, false, true,
-      },
-      {
-          // Lo-Fi enabled through field trial and not using a Data Reduction
-          // Proxy.
-          false, true, false,
-      },
-      {
-          // Lo-Fi enabled through field trial and using a Data Reduction Proxy.
-          false, true, true,
-      },
-  };
+  bool is_data_reduction_proxy_enabled[] = {false, true};
 
-  for (size_t i = 0; i < arraysize(tests); ++i) {
-    if (tests[i].lofi_switch_enabled) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kDataReductionProxyLoFi,
-          switches::kDataReductionProxyLoFiValueAlwaysOn);
-    }
-    base::FieldTrialList field_trial_list(nullptr);
-    if (tests[i].auto_lofi_enabled) {
-      base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
-                                             "Enabled");
-    }
-
+  for (size_t i = 0; i < arraysize(is_data_reduction_proxy_enabled); ++i) {
     net::ProxyInfo data_reduction_proxy_info;
     std::string proxy;
-    if (tests[i].is_data_reduction_proxy) {
+    if (is_data_reduction_proxy_enabled[i]) {
       data_reduction_proxy_info.UseProxyServer(
           params()->proxies_for_http().front().proxy_server());
     } else {
@@ -981,16 +947,16 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       std::unique_ptr<net::URLRequest> fake_request = context()->CreateRequest(
           GURL(kTestURL), net::IDLE, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
       fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
-      lofi_decider()->SetIsUsingLoFi(config()->ShouldEnableLoFi(
+      lofi_decider()->SetIsUsingLoFi(config()->ShouldAcceptServerPreview(
           *fake_request.get(), test_previews_decider));
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
 
-      VerifyHeaders(tests[i].is_data_reduction_proxy, true, headers);
+      VerifyHeaders(is_data_reduction_proxy_enabled[i], true, headers);
       VerifyDataReductionProxyData(
-          *fake_request, tests[i].is_data_reduction_proxy,
-          config()->ShouldEnableLoFi(*fake_request.get(),
-                                     test_previews_decider));
+          *fake_request, is_data_reduction_proxy_enabled[i],
+          config()->ShouldAcceptServerPreview(*fake_request.get(),
+                                              test_previews_decider));
     }
 
     {
@@ -1003,9 +969,9 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       lofi_decider()->SetIsUsingLoFi(false);
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
-      VerifyHeaders(tests[i].is_data_reduction_proxy, false, headers);
+      VerifyHeaders(is_data_reduction_proxy_enabled[i], false, headers);
       VerifyDataReductionProxyData(*fake_request,
-                                   tests[i].is_data_reduction_proxy, false);
+                                   is_data_reduction_proxy_enabled[i], false);
     }
 
     {
@@ -1019,9 +985,9 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       lofi_decider()->SetIsUsingLoFi(true);
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
-      VerifyHeaders(tests[i].is_data_reduction_proxy, true, headers);
+      VerifyHeaders(is_data_reduction_proxy_enabled[i], true, headers);
       VerifyDataReductionProxyData(*fake_request,
-                                   tests[i].is_data_reduction_proxy, true);
+                                   is_data_reduction_proxy_enabled[i], true);
     }
 
     {
@@ -1036,9 +1002,9 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       lofi_decider()->SetIsUsingLoFi(false);
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
-      VerifyHeaders(tests[i].is_data_reduction_proxy, false, headers);
+      VerifyHeaders(is_data_reduction_proxy_enabled[i], false, headers);
       VerifyDataReductionProxyData(*fake_request,
-                                   tests[i].is_data_reduction_proxy, false);
+                                   is_data_reduction_proxy_enabled[i], false);
     }
 
     {
@@ -1051,9 +1017,9 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       lofi_decider()->SetIsUsingLoFi(false);
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
-      VerifyHeaders(tests[i].is_data_reduction_proxy, false, headers);
+      VerifyHeaders(is_data_reduction_proxy_enabled[i], false, headers);
       VerifyDataReductionProxyData(*fake_request,
-                                   tests[i].is_data_reduction_proxy, false);
+                                   is_data_reduction_proxy_enabled[i], false);
     }
 
     {
@@ -1064,14 +1030,14 @@ TEST_F(DataReductionProxyNetworkDelegateTest, LoFiTransitions) {
       std::unique_ptr<net::URLRequest> fake_request = context()->CreateRequest(
           GURL(kTestURL), net::IDLE, &delegate, TRAFFIC_ANNOTATION_FOR_TESTS);
       fake_request->SetLoadFlags(net::LOAD_MAIN_FRAME_DEPRECATED);
-      lofi_decider()->SetIsUsingLoFi(config()->ShouldEnableLoFi(
+      lofi_decider()->SetIsUsingLoFi(config()->ShouldAcceptServerPreview(
           *fake_request.get(), test_previews_decider));
       NotifyNetworkDelegate(fake_request.get(), data_reduction_proxy_info,
                             proxy_retry_info, &headers);
       VerifyDataReductionProxyData(
-          *fake_request, tests[i].is_data_reduction_proxy,
-          config()->ShouldEnableLoFi(*fake_request.get(),
-                                     test_previews_decider));
+          *fake_request, is_data_reduction_proxy_enabled[i],
+          config()->ShouldAcceptServerPreview(*fake_request.get(),
+                                              test_previews_decider));
     }
   }
 }
@@ -1361,8 +1327,8 @@ TEST_F(DataReductionProxyNetworkDelegateTest, NetHistograms) {
 
     // Needed as a parameter, but functionality is not tested.
     TestPreviewsDecider test_previews_decider;
-    lofi_decider()->SetIsUsingLoFi(
-        config()->ShouldEnableLoFi(*fake_request.get(), test_previews_decider));
+    lofi_decider()->SetIsUsingLoFi(config()->ShouldAcceptServerPreview(
+        *fake_request.get(), test_previews_decider));
 
     fake_request = (FetchURLRequest(GURL(kTestURL), nullptr, response_headers,
                                     kResponseContentLength, 0));

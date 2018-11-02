@@ -53,6 +53,7 @@
 #include "crypto/rsa_private_key.h"
 #include "crypto/sha2.h"
 #include "third_party/zlib/google/zip.h"
+#include "url/gurl.h"
 
 #if defined(OS_POSIX)
 #include <fcntl.h>
@@ -64,6 +65,8 @@
 
 namespace {
 
+// TODO(eseckler): Remove --ignore-certificate-errors for newer Chrome versions
+// that support the Security DevTools domain on the browser target.
 const char* const kCommonSwitches[] = {
     "disable-popup-blocking", "enable-automation", "ignore-certificate-errors",
     "metrics-recording-only",
@@ -630,7 +633,8 @@ Status GetExtensionBackgroundPage(const base::DictionaryValue* manifest,
   manifest->GetString("background_page", &bg_page_name);
   if (bg_page_name.empty() || !persistent)
     return Status(kOk);
-  *bg_page = "chrome-extension://" + id + "/" + bg_page_name;
+  GURL baseUrl("chrome-extension://" + id + "/");
+  *bg_page = baseUrl.Resolve(bg_page_name).spec();
   return Status(kOk);
 }
 

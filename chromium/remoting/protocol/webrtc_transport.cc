@@ -210,7 +210,14 @@ class WebrtcTransport::PeerConnectionWrapper
     peer_connection_ = peer_connection_factory_->CreatePeerConnection(
         rtc_config, &constraints, std::move(port_allocator), nullptr, this);
   }
+
+// TODO(sakal): Remove this ifdef after migration to virtual PeerConnection
+// observer is complete.
+#ifdef VIRTUAL_PEERCONNECTION_OBSERVER_DESTRUCTOR
+  ~PeerConnectionWrapper() override {
+#else
   virtual ~PeerConnectionWrapper() {
+#endif
     // PeerConnection creates threads internally, which are stopped when the
     // connection is closed. Thread.Stop() is a blocking operation.
     // See crbug.com/660081.
@@ -332,7 +339,7 @@ std::unique_ptr<MessagePipe> WebrtcTransport::CreateOutgoingChannel(
     const std::string& name) {
   webrtc::DataChannelInit config;
   config.reliable = true;
-  return base::MakeUnique<WebrtcDataStreamAdapter>(
+  return std::make_unique<WebrtcDataStreamAdapter>(
       peer_connection()->CreateDataChannel(name, &config));
 }
 
@@ -596,7 +603,7 @@ void WebrtcTransport::OnDataChannel(
   DCHECK(thread_checker_.CalledOnValidThread());
   event_handler_->OnWebrtcTransportIncomingDataChannel(
       data_channel->label(),
-      base::MakeUnique<WebrtcDataStreamAdapter>(data_channel));
+      std::make_unique<WebrtcDataStreamAdapter>(data_channel));
 }
 
 void WebrtcTransport::OnRenegotiationNeeded() {

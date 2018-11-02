@@ -9,9 +9,15 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "cc/paint/transfer_cache_entry.h"
 #include "ui/gfx/overlay_transform.h"
 
+namespace cc {
+class ClientTransferCacheEntry;
+}
+
 namespace gfx {
+class GpuFence;
 class Rect;
 class RectF;
 }
@@ -37,6 +43,12 @@ class ContextSupport {
   // Runs |callback| when a query created via glCreateQueryEXT() has cleared
   // passed the glEndQueryEXT() point.
   virtual void SignalQuery(uint32_t query, base::OnceClosure callback) = 0;
+
+  // Fetches a GpuFenceHandle for a GpuFence that was previously created by
+  // glInsertGpuFenceCHROMIUM on this context.
+  virtual void GetGpuFence(
+      uint32_t gpu_fence_id,
+      base::OnceCallback<void(std::unique_ptr<gfx::GpuFence>)> callback) = 0;
 
   // Indicates whether the context should aggressively free allocated resources.
   // If set to true, the context will purge all temporary resources when
@@ -79,9 +91,28 @@ class ContextSupport {
   virtual void CompleteLockDiscardableTexureOnContextThread(
       uint32_t texture_id) = 0;
 
+  // Checks if a discardable handle is deleted. For use in tracing code.
+  virtual bool ThreadsafeDiscardableTextureIsDeletedForTracing(
+      uint32_t texture_id) = 0;
+
+  // Access to transfer cache functionality for OOP raster. Only
+  // ThreadsafeLockTransferCacheEntry can be accessed without holding the
+  // context lock.
+  virtual void CreateTransferCacheEntry(
+      const cc::ClientTransferCacheEntry& entry) = 0;
+  virtual bool ThreadsafeLockTransferCacheEntry(cc::TransferCacheEntryType type,
+                                                uint32_t id) = 0;
+  virtual void UnlockTransferCacheEntries(
+      const std::vector<std::pair<cc::TransferCacheEntryType, uint32_t>>&
+          entries) = 0;
+  virtual void DeleteTransferCacheEntry(cc::TransferCacheEntryType type,
+                                        uint32_t id) = 0;
+
+  virtual unsigned int GetTransferBufferFreeSize() const = 0;
+
  protected:
-  ContextSupport() {}
-  virtual ~ContextSupport() {}
+  ContextSupport() = default;
+  virtual ~ContextSupport() = default;
 };
 
 }

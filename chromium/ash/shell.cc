@@ -25,6 +25,7 @@
 #include "ash/display/display_color_manager_chromeos.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_error_observer_chromeos.h"
+#include "ash/display/display_shutdown_observer.h"
 #include "ash/display/event_transformation_handler.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/display/projecting_observer_chromeos.h"
@@ -32,7 +33,6 @@
 #include "ash/display/screen_ash.h"
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/display/screen_position_controller.h"
-#include "ash/display/shutdown_observer_chromeos.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/first_run/first_run_helper_impl.h"
@@ -50,6 +50,7 @@
 #include "ash/magnifier/partial_magnification_controller.h"
 #include "ash/media_controller.h"
 #include "ash/message_center/message_center_controller.h"
+#include "ash/metrics/time_to_first_present_recorder.h"
 #include "ash/new_window_controller.h"
 #include "ash/note_taking_controller.h"
 #include "ash/public/cpp/ash_switches.h"
@@ -140,11 +141,11 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/trace_event/trace_event.h"
 #include "chromeos/chromeos_switches.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/system/devicemode.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/viz/host/host_frame_sink_manager.h"
+#include "mash/public/interfaces/launchable.mojom.h"
 #include "services/preferences/public/cpp/pref_service_factory.h"
 #include "services/preferences/public/interfaces/preferences.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -225,8 +226,6 @@ Shell* Shell::instance_ = nullptr;
 aura::WindowTreeClient* Shell::window_tree_client_ = nullptr;
 // static
 aura::WindowManagerClient* Shell::window_manager_client_ = nullptr;
-// static
-bool Shell::initially_hide_cursor_ = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Shell, public:
@@ -321,6 +320,40 @@ aura::Window* Shell::GetContainer(aura::Window* root_window, int container_id) {
 const aura::Window* Shell::GetContainer(const aura::Window* root_window,
                                         int container_id) {
   return root_window->GetChildById(container_id);
+}
+
+// static
+int Shell::GetOpenSystemModalWindowContainerId() {
+  // The test boolean is not static to avoid leaking state between tests.
+  if (Get()->simulate_modal_window_open_for_test_)
+    return kShellWindowId_SystemModalContainer;
+
+  // Traverse all system modal containers, and find its direct child window
+  // with "SystemModal" setting, and visible.
+  // Note: LockSystemModalContainer is more restrictive, so make it preferable
+  // to SystemModalCotainer.
+  constexpr int modal_window_ids[] = {kShellWindowId_LockSystemModalContainer,
+                                      kShellWindowId_SystemModalContainer};
+  for (aura::Window* root : Shell::GetAllRootWindows()) {
+    for (int modal_window_id : modal_window_ids) {
+      aura::Window* system_modal = root->GetChildById(modal_window_id);
+      if (!system_modal)
+        continue;
+      for (const aura::Window* child : system_modal->children()) {
+        if (child->GetProperty(aura::client::kModalKey) ==
+                ui::MODAL_TYPE_SYSTEM &&
+            child->layer()->GetTargetVisibility()) {
+          return modal_window_id;
+        }
+      }
+    }
+  }
+  return -1;
+}
+
+// static
+bool Shell::IsSystemModalWindowOpen() {
+  return GetOpenSystemModalWindowContainerId() >= 0;
 }
 
 // static
@@ -605,7 +638,6 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate,
       tray_bluetooth_helper_(std::make_unique<TrayBluetoothHelper>()),
       display_configurator_(new display::DisplayConfigurator()),
       native_cursor_manager_(nullptr),
-      simulate_modal_window_open_for_testing_(false),
       weak_factory_(this) {
   // TODO(sky): better refactor cash/mash dependencies. Perhaps put all cash
   // state on ShellPortClassic. http://crbug.com/671246.
@@ -765,6 +797,10 @@ Shell::~Shell() {
   // Removes itself as an observer of |pref_service_|.
   shelf_controller_.reset();
 
+  // NightLightController depends on the PrefService as well as the window tree
+  // host manager, and must be destructed before them. crbug.com/724231.
+  night_light_controller_ = nullptr;
+
   shell_port_->Shutdown();
   window_tree_host_manager_->Shutdown();
 
@@ -780,21 +816,16 @@ Shell::~Shell() {
   screen_position_controller_.reset();
 
   display_color_manager_.reset();
+  projecting_observer_.reset();
+
   if (display_change_observer_)
     display_configurator_->RemoveObserver(display_change_observer_.get());
   if (display_error_observer_)
     display_configurator_->RemoveObserver(display_error_observer_.get());
-  if (projecting_observer_) {
-    display_configurator_->RemoveObserver(projecting_observer_.get());
-    RemoveShellObserver(projecting_observer_.get());
-  }
   display_change_observer_.reset();
-  shutdown_observer_.reset();
+  display_shutdown_observer_.reset();
 
   PowerStatus::Shutdown();
-
-  // Ensure that DBusThreadManager outlives this Shell.
-  DCHECK(chromeos::DBusThreadManager::IsInitialized());
 
   // Needs to happen right before |instance_| is reset.
   shell_port_.reset();
@@ -806,9 +837,7 @@ Shell::~Shell() {
   // TouchDevicesController depends on the PrefService and must be destructed
   // before it.
   touch_devices_controller_ = nullptr;
-  // NightLightController depeneds on the PrefService and must be destructed
-  // before it. crbug.com/724231.
-  night_light_controller_ = nullptr;
+
   local_state_.reset();
   shell_delegate_.reset();
 
@@ -877,65 +906,19 @@ void Shell::Init(ui::ContextFactory* context_factory,
         base::WrapUnique(native_cursor_manager_));
   }
 
+  // TODO(stevenjb): ChromeShellDelegate::PreInit currently handles
+  // DisplayPreference initialization, required for InitializeDisplayManager.
+  // Before we can move that code into ash/display where it belongs, we need to
+  // wait for |lcoal_state_| to be set in OnLocalStatePrefServiceInitialized
+  // before initializing DisplayPreferences (and therefore DisplayManager).
+  // http://crbug.com/678949.
   shell_delegate_->PreInit();
-  bool display_initialized = display_manager_->InitFromCommandLine();
-  if (!display_initialized && config != Config::CLASSIC) {
-    // Run display configuration off device in mus mode.
-    display_manager_->set_configure_displays(true);
-    display_configurator_->set_configure_display(true);
-  }
-  display_configuration_controller_ =
-      std::make_unique<DisplayConfigurationController>(
-          display_manager_.get(), window_tree_host_manager_.get());
-  display_configurator_->Init(shell_port_->CreateNativeDisplayDelegate(),
-                              false);
 
-  // The DBusThreadManager must outlive this Shell. See the DCHECK in ~Shell.
-  chromeos::DBusThreadManager* dbus_thread_manager =
-      chromeos::DBusThreadManager::Get();
-  projecting_observer_.reset(
-      new ProjectingObserver(dbus_thread_manager->GetPowerManagerClient()));
-  display_configurator_->AddObserver(projecting_observer_.get());
-  AddShellObserver(projecting_observer_.get());
-
-  if (!display_initialized) {
-    if (config != Config::CLASSIC && !chromeos::IsRunningAsSystemCompositor()) {
-      display::mojom::DevDisplayControllerPtr controller;
-      shell_delegate_->GetShellConnector()->BindInterface(
-          ui::mojom::kServiceName, &controller);
-      display_manager_->SetDevDisplayController(std::move(controller));
-    }
-
-    if (config != Config::CLASSIC || chromeos::IsRunningAsSystemCompositor()) {
-      display_change_observer_ =
-          std::make_unique<display::DisplayChangeObserver>(
-              display_configurator_.get(), display_manager_.get());
-
-      shutdown_observer_ =
-          std::make_unique<ShutdownObserver>(display_configurator_.get());
-
-      // Register |display_change_observer_| first so that the rest of
-      // observer gets invoked after the root windows are configured.
-      display_configurator_->AddObserver(display_change_observer_.get());
-      display_error_observer_.reset(new DisplayErrorObserver());
-      display_configurator_->AddObserver(display_error_observer_.get());
-      display_configurator_->set_state_controller(
-          display_change_observer_.get());
-      display_configurator_->set_mirroring_controller(display_manager_.get());
-      display_configurator_->ForceInitialConfigure();
-      display_initialized = true;
-    }
-  }
-
-  display_color_manager_ =
-      std::make_unique<DisplayColorManager>(display_configurator_.get());
-
-  if (!display_initialized)
-    display_manager_->InitDefaultDisplay();
+  InitializeDisplayManager();
 
   if (config == Config::CLASSIC) {
-    display_manager_->RefreshFontParams();
-
+    // This will initialize aura::Env which requires |display_manager_| to
+    // be initialized first.
     aura::Env::GetInstance()->set_context_factory(context_factory);
     aura::Env::GetInstance()->set_context_factory_private(
         context_factory_private);
@@ -963,6 +946,9 @@ void Shell::Init(ui::ContextFactory* context_factory,
   window_tree_host_manager_->Start();
   AshWindowTreeHostInitParams ash_init_params;
   window_tree_host_manager_->CreatePrimaryHost(ash_init_params);
+
+  time_to_first_present_recorder_ =
+      std::make_unique<TimeToFirstPresentRecorder>(GetPrimaryRootWindow());
 
   root_window_for_new_windows_ = GetPrimaryRootWindow();
 
@@ -1111,14 +1097,8 @@ void Shell::Init(ui::ContextFactory* context_factory,
   if (config != Config::MASH)
     virtual_keyboard_controller_.reset(new VirtualKeyboardController);
 
-  // Initialize the wallpaper after the RootWindowController has been created,
-  // otherwise the widget will not paint when restoring after a browser crash.
-  // Also, initialize after display initialization to ensure correct sizing.
-  wallpaper_delegate_->InitializeWallpaper();
-
   if (cursor_manager_) {
-    if (initially_hide_cursor_)
-      cursor_manager_->HideCursor();
+    cursor_manager_->HideCursor();  // Hide the mouse cursor on startup.
     cursor_manager_->SetCursor(ui::CursorType::kPointer);
   }
 
@@ -1143,10 +1123,77 @@ void Shell::Init(ui::ContextFactory* context_factory,
 
   message_center_controller_ = std::make_unique<MessageCenterController>();
 
+  // Mash implements the show taps feature with a separate mojo app.
+  // GetShellConnector() is null in unit tests.
+  if (config == Config::MASH && shell_delegate_->GetShellConnector() &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kShowTaps)) {
+    mash::mojom::LaunchablePtr launchable;
+    shell_delegate_->GetShellConnector()->BindInterface("touch_hud",
+                                                        &launchable);
+    launchable->Launch(mash::mojom::kWindow, mash::mojom::LaunchMode::DEFAULT);
+  }
+
   for (auto& observer : shell_observers_)
     observer.OnShellInitialized();
 
   user_metrics_recorder_->OnShellInitialized();
+}
+
+void Shell::InitializeDisplayManager() {
+  const Config config = shell_port_->GetAshConfig();
+  bool display_initialized = display_manager_->InitFromCommandLine();
+
+  if (!display_initialized && config != Config::CLASSIC) {
+    // Run display configuration off device in mus mode.
+    display_manager_->set_configure_displays(true);
+    display_configurator_->set_configure_display(true);
+  }
+  display_configuration_controller_ =
+      std::make_unique<DisplayConfigurationController>(
+          display_manager_.get(), window_tree_host_manager_.get());
+  display_configurator_->Init(shell_port_->CreateNativeDisplayDelegate(),
+                              false);
+
+  projecting_observer_ =
+      std::make_unique<ProjectingObserver>(display_configurator_.get());
+
+  if (!display_initialized) {
+    if (config != Config::CLASSIC && !chromeos::IsRunningAsSystemCompositor()) {
+      display::mojom::DevDisplayControllerPtr controller;
+      shell_delegate_->GetShellConnector()->BindInterface(
+          ui::mojom::kServiceName, &controller);
+      display_manager_->SetDevDisplayController(std::move(controller));
+    }
+
+    if (config != Config::CLASSIC || chromeos::IsRunningAsSystemCompositor()) {
+      display_change_observer_ =
+          std::make_unique<display::DisplayChangeObserver>(
+              display_configurator_.get(), display_manager_.get());
+
+      display_shutdown_observer_ = std::make_unique<DisplayShutdownObserver>(
+          display_configurator_.get());
+
+      // Register |display_change_observer_| first so that the rest of
+      // observer gets invoked after the root windows are configured.
+      display_configurator_->AddObserver(display_change_observer_.get());
+      display_error_observer_.reset(new DisplayErrorObserver());
+      display_configurator_->AddObserver(display_error_observer_.get());
+      display_configurator_->set_state_controller(
+          display_change_observer_.get());
+      display_configurator_->set_mirroring_controller(display_manager_.get());
+      display_configurator_->ForceInitialConfigure();
+      display_initialized = true;
+    }
+  }
+
+  display_color_manager_ =
+      std::make_unique<DisplayColorManager>(display_configurator_.get());
+
+  if (!display_initialized)
+    display_manager_->InitDefaultDisplay();
+
+  if (config == Config::CLASSIC)
+    display_manager_->RefreshFontParams();
 }
 
 void Shell::InitRootWindow(aura::Window* root_window) {
@@ -1226,23 +1273,37 @@ void Shell::OnWindowActivated(
 }
 
 void Shell::OnSessionStateChanged(session_manager::SessionState state) {
-  // Initialize the shelf when a session becomes active. It's safe to do this
-  // multiple times (e.g. initial login vs. multiprofile add session).
+  // Initialize the |shelf_window_watcher_| when a session becomes active.
+  // Shelf itself is initialized in RootWindowController.
   if (state == session_manager::SessionState::ACTIVE) {
-    InitializeShelf();
+    if (!shelf_window_watcher_)
+      shelf_window_watcher_ =
+          std::make_unique<ShelfWindowWatcher>(shelf_model());
   }
-  // Recreates keyboard on user profile change, to refresh keyboard
-  // extensions with the new profile and the extensions call proper IME.
-  // |LOGGED_IN_NOT_ACTIVE| is needed so that the virtual keyboard works on
-  // supervised user creation. crbug.com/712873
-  // |ACTIVE| is also needed for guest user workflow.
+
   // NOTE: keyboard::IsKeyboardEnabled() is false in mash, but may not be in
   // unit tests. crbug.com/646565.
-  if ((state == session_manager::SessionState::LOGGED_IN_NOT_ACTIVE ||
-       state == session_manager::SessionState::ACTIVE) &&
-      keyboard::IsKeyboardEnabled()) {
-    // Recreate the keyboard after initial login and after multiprofile login.
-    CreateKeyboard();
+  if (keyboard::IsKeyboardEnabled()) {
+    switch (state) {
+      case session_manager::SessionState::OOBE:
+      case session_manager::SessionState::LOGIN_PRIMARY:
+        // Ensure that the keyboard controller is activated for the primary
+        // window.
+        GetPrimaryRootWindowController()->ActivateKeyboard(
+            keyboard::KeyboardController::GetInstance());
+        break;
+      case session_manager::SessionState::LOGGED_IN_NOT_ACTIVE:
+      case session_manager::SessionState::ACTIVE:
+        // Recreate the keyboard on user profile change, to refresh keyboard
+        // extensions with the new profile and ensure the extensions call the
+        // proper IME. |LOGGED_IN_NOT_ACTIVE| is needed so that the virtual
+        // keyboard works on supervised user creation, http://crbug.com/712873.
+        // |ACTIVE| is also needed for guest user workflow.
+        CreateKeyboard();
+        break;
+      default:
+        break;
+    }
   }
 
   shell_port_->UpdateSystemModalAndBlockingContainers();
@@ -1262,18 +1323,6 @@ void Shell::OnLockStateChanged(bool locked) {
       DCHECK(container->children().empty());
   }
 #endif
-}
-
-void Shell::InitializeShelf() {
-  // Must occur after SessionController creation and user login.
-  DCHECK(session_controller());
-  DCHECK_GT(session_controller()->NumberOfLoggedInUsers(), 0);
-
-  if (!shelf_window_watcher_)
-    shelf_window_watcher_ = std::make_unique<ShelfWindowWatcher>(shelf_model());
-
-  for (RootWindowController* root : GetAllRootWindowControllers())
-    root->InitializeShelf();
 }
 
 void Shell::OnLocalStatePrefServiceInitialized(

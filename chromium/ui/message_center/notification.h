@@ -190,11 +190,6 @@ class MESSAGE_CENTER_EXPORT RichNotificationData {
   // SystemNotificationWarningLevel should be used.
   SkColor accent_color = SK_ColorTRANSPARENT;
 
-  // Shows |image| as the right icon when notification is collapsed,
-  // and hides the icon when the notification is expanded.
-  // This is only effective when new style notification is enabled.
-  bool use_image_as_icon = false;
-
   // Controls whether a settings button should appear on the notification. See
   // enum definition. TODO(estade): turn this into a boolean. See
   // crbug.com/780342
@@ -436,11 +431,6 @@ class MESSAGE_CENTER_EXPORT Notification {
     optional_fields_.accent_color = accent_color;
   }
 
-  bool use_image_as_icon() const { return optional_fields_.use_image_as_icon; }
-  void set_use_image_as_icon(bool use_image_as_icon) {
-    optional_fields_.use_image_as_icon = use_image_as_icon;
-  }
-
   bool should_show_settings_button() const {
     return optional_fields_.settings_button_handler !=
            SettingsButtonHandler::NONE;
@@ -469,7 +459,6 @@ class MESSAGE_CENTER_EXPORT Notification {
   void SetSystemPriority();
 
   // Delegate actions.
-  void Display() const { delegate()->Display(); }
   void Click() const { delegate()->Click(); }
   void ButtonClick(int index) const { delegate()->ButtonClick(index); }
   void Close(bool by_user) const { delegate()->Close(by_user); }

@@ -17,6 +17,23 @@ static const char* g_ui_element_type_strings[] = {
     "kTypeButtonForeground",
     "kTypeButtonHitTarget",
     "kTypeScaledDepthAdjuster",
+    "kTypeOmniboxSuggestionBackground",
+    "kTypeOmniboxSuggestionLayout",
+    "kTypeOmniboxSuggestionTextLayout",
+    "kTypeOmniboxSuggestionIconField",
+    "kTypeOmniboxSuggestionIcon",
+    "kTypeOmniboxSuggestionContentText",
+    "kTypeOmniboxSuggestionDescriptionText",
+    "kTypeOmniboxSuggestionSpacer",
+    "kTypeTextInputHint",
+    "kTypeTextInputText",
+    "kTypeTextInputCursor",
+    "kTypeToastBackground",
+    "kTypeToastContainer",
+    "kTypeToastIcon",
+    "kTypeToastText",
+    "kTypeSnackbarButton",
+    "kTypeSnackbarDescription",
 };
 
 static_assert(

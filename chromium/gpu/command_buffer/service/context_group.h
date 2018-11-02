@@ -22,23 +22,22 @@
 #include "gpu/command_buffer/service/gpu_preferences.h"
 #include "gpu/command_buffer/service/shader_translator_cache.h"
 #include "gpu/config/gpu_feature_info.h"
-#include "gpu/gpu_export.h"
+#include "gpu/gpu_gles2_export.h"
 
 namespace gpu {
 
 class ImageFactory;
 struct GpuPreferences;
+class MailboxManager;
 class TransferBufferManager;
 class ServiceDiscardableManager;
-class ServiceTransferCache;
+class DecoderContext;
 
 namespace gles2 {
 
 class ProgramCache;
 class BufferManager;
-class GLES2Decoder;
 class ImageManager;
-class MailboxManager;
 class RenderbufferManager;
 class PathManager;
 class ProgramManager;
@@ -54,9 +53,9 @@ DisallowedFeatures AdjustDisallowedFeatures(
     ContextType context_type,
     const DisallowedFeatures& disallowed_features);
 
-// A Context Group helps manage multiple GLES2Decoders that share
+// A Context Group helps manage multiple DecoderContexts that share
 // resources.
-class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
+class GPU_GLES2_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
  public:
   ContextGroup(const GpuPreferences& gpu_preferences,
                bool supports_passthrough_command_decoders,
@@ -72,15 +71,15 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
                const GpuFeatureInfo& gpu_feature_info,
                ServiceDiscardableManager* discardable_manager);
 
-  // This should only be called by GLES2Decoder. This must be paired with a
+  // This should only be called by a DecoderContext. This must be paired with a
   // call to destroy if it succeeds.
-  gpu::ContextResult Initialize(GLES2Decoder* decoder,
+  gpu::ContextResult Initialize(DecoderContext* decoder,
                                 ContextType context_type,
                                 const DisallowedFeatures& disallowed_features);
 
   // Destroys all the resources when called for the last context in the group.
-  // It should only be called by GLES2Decoder.
-  void Destroy(GLES2Decoder* decoder, bool have_context);
+  // It should only be called by DecoderContext.
+  void Destroy(DecoderContext* decoder, bool have_context);
 
   MailboxManager* mailbox_manager() const { return mailbox_manager_; }
 
@@ -204,8 +203,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
     return discardable_manager_;
   }
 
-  ServiceTransferCache* transfer_cache() const { return transfer_cache_.get(); }
-
   uint32_t GetMemRepresented() const;
 
   // Loses all the context associated with this group.
@@ -306,7 +303,7 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
 
   gpu::ImageFactory* image_factory_;
 
-  std::vector<base::WeakPtr<gles2::GLES2Decoder>> decoders_;
+  std::vector<base::WeakPtr<DecoderContext>> decoders_;
 
   // Mappings from client side IDs to service side IDs.
   base::hash_map<GLuint, GLsync> syncs_id_map_;
@@ -322,14 +319,6 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   GpuFeatureInfo gpu_feature_info_;
 
   ServiceDiscardableManager* discardable_manager_;
-
-  // ServiceTransferCache uses Ids based on transfer buffer shm_id+offset, which
-  // are guaranteed to be unique within the scope of the TransferBufferManager
-  // which generates them. Because of this, |transfer_cache_| must have the same
-  // scope as |transfer_buffer_manager_|. In the future, we could add a channel
-  // Id to allow a single ServiceTransferCache to be shared among multiple
-  // ContextGroups.
-  std::unique_ptr<ServiceTransferCache> transfer_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(ContextGroup);
 };

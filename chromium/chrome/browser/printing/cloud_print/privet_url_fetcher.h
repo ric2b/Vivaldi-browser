@@ -38,7 +38,7 @@ class PrivetURLFetcher : public net::URLFetcherDelegate {
     UNKNOWN_ERROR,
   };
 
-  typedef base::Callback<void(const std::string& /*token*/)> TokenCallback;
+  using TokenCallback = base::OnceCallback<void(const std::string& /*token*/)>;
 
   class Delegate {
    public:
@@ -46,20 +46,18 @@ class PrivetURLFetcher : public net::URLFetcherDelegate {
 
     // If you do not implement this method for PrivetV1 callers, you will always
     // get a TOKEN_ERROR error when your token is invalid.
-    virtual void OnNeedPrivetToken(
-        PrivetURLFetcher* fetcher,
-        const TokenCallback& callback);
+    virtual void OnNeedPrivetToken(TokenCallback callback);
 
-    virtual void OnError(PrivetURLFetcher* fetcher, ErrorType error) = 0;
-    virtual void OnParsedJson(PrivetURLFetcher* fetcher,
+    // |response_code| is only needed for RESPONSE_CODE_ERROR.
+    virtual void OnError(int response_code, ErrorType error) = 0;
+    virtual void OnParsedJson(int response_code,
                               const base::DictionaryValue& value,
                               bool has_error) = 0;
 
-    // If this method is returns true, the data will not be parsed as JSON, and
-    // |OnParsedJson| will not be called. Otherwise, |OnParsedJson| will be
-    // called.
-    virtual bool OnRawData(PrivetURLFetcher* fetcher,
-                           bool response_is_file,
+    // If this method returns true, the data will not be parsed as JSON, and
+    // OnParsedJson() will not be called. Otherwise, OnParsedJson() will be
+    // called. This only happens in tests.
+    virtual bool OnRawData(bool response_is_file,
                            const std::string& data_string,
                            const base::FilePath& data_file);
   };
@@ -79,19 +77,19 @@ class PrivetURLFetcher : public net::URLFetcherDelegate {
   static void SetTokenForHost(const std::string& host,
                               const std::string& token);
 
-  static void ResetTokenMapForTests();
+  static void ResetTokenMapForTest();
 
-  void SetMaxRetries(int max_retries);
+  void SetMaxRetriesForTest(int max_retries);
 
   void DoNotRetryOnTransientError();
 
   void SendEmptyPrivetToken();
 
-  // Set the contents of the Range header. |OnRawData| must return true if this
+  // Set the contents of the Range header. OnRawData() must return true if this
   // is called.
   void SetByteRange(int start, int end);
 
-  // Save the response to a file. |OnRawData| must return true if this is
+  // Save the response to a file. OnRawData() must return true if this is
   // called.
   void SaveResponseToFile();
 
@@ -126,21 +124,21 @@ class PrivetURLFetcher : public net::URLFetcherDelegate {
   scoped_refptr<base::SequencedTaskRunner> GetFileTaskRunner();
 
   const GURL url_;
-  net::URLFetcher::RequestType request_type_;
+  const net::URLFetcher::RequestType request_type_;
   scoped_refptr<net::URLRequestContextGetter> context_getter_;
   const net::NetworkTrafficAnnotationTag traffic_annotation_;
-  Delegate* delegate_;
+  Delegate* const delegate_;
 
   int max_retries_;
-  bool do_not_retry_on_transient_error_;
-  bool send_empty_privet_token_;
-  bool has_byte_range_;
-  bool make_response_file_;
+  bool do_not_retry_on_transient_error_ = false;
+  bool send_empty_privet_token_ = false;
+  bool has_byte_range_ = false;
+  bool make_response_file_ = false;
 
-  int byte_range_start_;
-  int byte_range_end_;
+  int byte_range_start_ = 0;
+  int byte_range_end_ = 0;
 
-  int tries_;
+  int tries_ = 0;
   std::string upload_data_;
   std::string upload_content_type_;
   base::FilePath upload_file_path_;

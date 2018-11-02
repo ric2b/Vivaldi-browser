@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.payments;
 
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.FIRST_BILLING_ADDRESS;
+
 import android.content.DialogInterface;
 import android.support.test.filters.MediumTest;
 
@@ -20,7 +22,6 @@ import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
-import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
 import java.util.concurrent.ExecutionException;
@@ -30,16 +31,11 @@ import java.util.concurrent.TimeoutException;
  * A test for paying with an incomplete server card.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({
-        ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
-})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class PaymentRequestIncompleteServerCardTest implements MainActivityStartCallback {
     @Rule
     public PaymentRequestTestRule mPaymentRequestTestRule =
             new PaymentRequestTestRule("payment_request_no_shipping_test.html", this);
-
-    private static final int FIRST_BILLING_ADDRESS = 0;
 
     @Override
     public void onMainActivityStarted()

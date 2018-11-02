@@ -103,7 +103,7 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual IntRect PageRect() = 0;
 
-  virtual void Focus() = 0;
+  virtual void Focus(LocalFrame*) = 0;
 
   virtual bool CanTakeFocus(WebFocusType) = 0;
   virtual void TakeFocus(WebFocusType) = 0;
@@ -348,14 +348,14 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual void RequestDecode(LocalFrame*,
                              const PaintImage& image,
-                             WTF::Function<void(bool)> callback) {
+                             base::OnceCallback<void(bool)> callback) {
     std::move(callback).Run(false);
   }
 
   void Trace(blink::Visitor*);
 
  protected:
-  ~ChromeClient() override {}
+  ~ChromeClient() override = default;
 
   virtual void ShowMouseOverURL(const HitTestResult&) = 0;
   virtual void SetWindowRect(const IntRect&, LocalFrame&) = 0;

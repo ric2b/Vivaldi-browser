@@ -15,6 +15,7 @@
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
@@ -283,33 +284,6 @@ void ExtensionService::OnExternalProviderUpdateComplete(
   external_install_manager_->UpdateExternalExtensionAlert();
 }
 
-// static
-// This function is used to uninstall an extension via sync.  The LOG statements
-// within this function are used to inform the user if the uninstall cannot be
-// done.
-bool ExtensionService::UninstallExtensionHelper(
-    ExtensionService* extensions_service,
-    const std::string& extension_id,
-    extensions::UninstallReason reason) {
-  // We can't call UninstallExtension with an invalid extension ID.
-  if (!extensions_service->GetInstalledExtension(extension_id)) {
-    LOG(WARNING) << "Attempted uninstallation of non-existent extension with "
-                 << "id: " << extension_id;
-    return false;
-  }
-
-  // The following call to UninstallExtension will not allow an uninstall of a
-  // policy-controlled extension.
-  base::string16 error;
-  if (!extensions_service->UninstallExtension(extension_id, reason, &error)) {
-    LOG(WARNING) << "Cannot uninstall extension with id " << extension_id
-                 << ": " << error;
-    return false;
-  }
-
-  return true;
-}
-
 ExtensionService::ExtensionService(Profile* profile,
                                    const base::CommandLine* command_line,
                                    const base::FilePath& install_directory,
@@ -493,7 +467,7 @@ void ExtensionService::EnableZipUnpackerExtension() {
   const std::string& id = extension_misc::kZIPUnpackerExtensionId;
   const Extension* extension = registry_->disabled_extensions().GetByID(id);
   if (extension && CanEnableExtension(extension)) {
-    UMA_HISTOGRAM_SPARSE_SLOWLY(
+    base::UmaHistogramSparse(
         "ExtensionService.ZipUnpackerDisabledReason",
         extension_prefs_->GetDisableReasons(extension->id()));
     EnableExtension(id);
@@ -590,7 +564,7 @@ bool ExtensionService::UpdateExtension(const extensions::CRXFileInfo& file,
 
     return false;
   }
-
+  // Either |pending_extension_info| or |extension| or both must not be null.
   scoped_refptr<CrxInstaller> installer(CrxInstaller::CreateSilent(this));
   installer->set_expected_id(id);
   installer->set_expected_hash(file.expected_hash);
@@ -615,39 +589,25 @@ bool ExtensionService::UpdateExtension(const extensions::CRXFileInfo& file,
     creation_flags = pending_extension_info->creation_flags();
     if (pending_extension_info->mark_acknowledged())
       external_install_manager_->AcknowledgeExternalExtension(id);
-  } else if (extension) {
+    // If the extension was installed from or has migrated to the webstore, or
+    // its auto-update URL is from the webstore, treat it as a webstore install.
+    // Note that we ignore some older extensions with blank auto-update URLs
+    // because we are mostly concerned with restrictions on NaCl extensions,
+    // which are newer.
+    if (!extension && extension_urls::IsWebstoreUpdateUrl(
+                          pending_extension_info->update_url()))
+      creation_flags |= Extension::FROM_WEBSTORE;
+  } else {
+    // |extension| must not be null.
     installer->set_install_source(extension->location());
   }
-  // If the extension was installed from or has migrated to the webstore, or
-  // its auto-update URL is from the webstore, treat it as a webstore install.
-  // Note that we ignore some older extensions with blank auto-update URLs
-  // because we are mostly concerned with restrictions on NaCl extensions,
-  // which are newer.
-  if ((extension && extension->from_webstore()) ||
-      (extension && extensions::ManifestURL::UpdatesFromGallery(extension)) ||
-      (!extension && extension_urls::IsWebstoreUpdateUrl(
-           pending_extension_info->update_url()))) {
-    creation_flags |= Extension::FROM_WEBSTORE;
-  }
 
-  // Bookmark apps being updated is kind of a contradiction, but that's because
-  // we mark the default apps as bookmark apps, and they're hosted in the web
-  // store, thus they can get updated. See http://crbug.com/101605 for more
-  // details.
-  if (extension && extension->from_bookmark())
-    creation_flags |= Extension::FROM_BOOKMARK;
-
-  if (extension && extension->was_installed_by_default())
-    creation_flags |= Extension::WAS_INSTALLED_BY_DEFAULT;
-
-  if (extension && extension->was_installed_by_oem())
-    creation_flags |= Extension::WAS_INSTALLED_BY_OEM;
-
-  if (extension)
+  if (extension) {
+    installer->InitializeCreationFlagsForUpdate(extension, creation_flags);
     installer->set_do_not_sync(extension_prefs_->DoNotSync(id));
-
-  installer->set_creation_flags(creation_flags);
-
+  } else {
+    installer->set_creation_flags(creation_flags);
+  }
   installer->set_delete_source(file_ownership_passed);
   installer->set_install_cause(extension_misc::INSTALL_CAUSE_UPDATE);
   installer->InstallCrxFile(file);
@@ -744,8 +704,9 @@ void ExtensionService::ReloadExtensionImpl(
 
   transient_current_extension = nullptr;
 
-  if (delayed_installs_.Contains(extension_id)) {
-    FinishDelayedInstallation(extension_id);
+  if (delayed_installs_.Contains(extension_id) &&
+      FinishDelayedInstallationIfReady(extension_id,
+                                       true /*install_immediately*/)) {
     return;
   }
 
@@ -1204,8 +1165,7 @@ void ExtensionService::CheckForUpdatesSoon() {
 // (and also, on Windows, in the registry) and this code will periodically
 // check that location for a .crx file, which it will then install locally if
 // a new version is available.
-// Errors are reported through ExtensionErrorReporter. Success is not
-// reported.
+// Errors are reported through LoadErrorReporter. Success is not reported.
 void ExtensionService::CheckForExternalUpdates() {
   if (external_updates_disabled_for_test_)
     return;
@@ -1329,13 +1289,10 @@ void ExtensionService::AddExtension(const Extension* extension) {
     // Track down the cases when this can happen, and remove this
     // DumpWithoutCrashing() (possibly replacing it with a CHECK).
     NOTREACHED();
-    char extension_id_copy[33];
-    base::strlcpy(extension_id_copy, extension->id().c_str(),
-                  arraysize(extension_id_copy));
+    DEBUG_ALIAS_FOR_CSTR(extension_id_copy, extension->id().c_str(), 33);
     Manifest::Location location = extension->location();
     int creation_flags = extension->creation_flags();
     Manifest::Type type = extension->manifest()->type();
-    base::debug::Alias(extension_id_copy);
     base::debug::Alias(&location);
     base::debug::Alias(&creation_flags);
     base::debug::Alias(&type);
@@ -1358,8 +1315,7 @@ void ExtensionService::AddExtension(const Extension* extension) {
   const Extension* old = GetInstalledExtension(extension->id());
   if (old) {
     is_extension_loaded = true;
-    int version_compare_result =
-        extension->version()->CompareTo(*(old->version()));
+    int version_compare_result = extension->version().CompareTo(old->version());
     is_extension_upgrade = version_compare_result > 0;
     // Other than for unpacked extensions, CrxInstaller should have guaranteed
     // that we aren't downgrading.
@@ -1427,10 +1383,11 @@ void ExtensionService::AddComponentExtension(const Extension* extension) {
   const base::Version old_version(old_version_string);
 
   VLOG(1) << "AddComponentExtension " << extension->name();
-  if (!old_version.IsValid() || old_version != *extension->version()) {
+  if (!old_version.IsValid() || old_version != extension->version()) {
     VLOG(1) << "Component extension " << extension->name() << " ("
-        << extension->id() << ") installing/upgrading from '"
-        << old_version_string << "' to " << extension->version()->GetString();
+            << extension->id() << ") installing/upgrading from '"
+            << old_version_string << "' to "
+            << extension->version().GetString();
 
     // TODO(crbug.com/696822): If needed, add support for Declarative Net
     // Request to component extensions and pass the ruleset checksum here.
@@ -1571,11 +1528,11 @@ void ExtensionService::CheckPermissionsIncrease(const Extension* extension,
     // to a permissions increase, send a request to the custodian.
     if (extensions::util::IsExtensionSupervised(extension, profile_) &&
         !ExtensionSyncService::Get(profile_)->HasPendingReenable(
-            extension->id(), *extension->version())) {
+            extension->id(), extension->version())) {
       SupervisedUserService* supervised_user_service =
           SupervisedUserServiceFactory::GetForProfile(profile_);
       supervised_user_service->AddExtensionUpdateRequest(extension->id(),
-                                                         *extension->version());
+                                                         extension->version());
     }
 #endif
   }
@@ -1787,45 +1744,42 @@ void ExtensionService::AddNewOrUpdatedExtension(
   FinishInstallation(extension);
 }
 
-void ExtensionService::MaybeFinishDelayedInstallation(
-    const std::string& extension_id) {
+bool ExtensionService::FinishDelayedInstallationIfReady(
+    const std::string& extension_id,
+    bool install_immediately) {
   // Check if the extension already got installed.
   const Extension* extension = delayed_installs_.GetByID(extension_id);
   if (!extension)
-    return;
+    return false;
 
   extensions::ExtensionPrefs::DelayReason reason;
-  const extensions::InstallGate::Action action = ShouldDelayExtensionInstall(
-      extension, false /* install_immediately*/, &reason);
+  const extensions::InstallGate::Action action =
+      ShouldDelayExtensionInstall(extension, install_immediately, &reason);
   switch (action) {
     case extensions::InstallGate::INSTALL:
       break;
     case extensions::InstallGate::DELAY:
       // Bail out and continue to delay the install.
-      return;
+      return false;
     case extensions::InstallGate::ABORT:
       delayed_installs_.Remove(extension_id);
       // Make sure no version of the extension is actually installed, (i.e.,
       // that this delayed install was not an update).
       CHECK(!extension_prefs_->GetInstalledExtensionInfo(extension_id).get());
       extension_prefs_->DeleteExtensionPrefs(extension_id);
-      return;
+      return false;
   }
 
-  FinishDelayedInstallation(extension_id);
-}
-
-void ExtensionService::FinishDelayedInstallation(
-    const std::string& extension_id) {
-  scoped_refptr<const Extension> extension(
-      GetPendingExtensionUpdate(extension_id));
-  CHECK(extension.get());
+  scoped_refptr<const Extension> delayed_install =
+      GetPendingExtensionUpdate(extension_id);
+  CHECK(delayed_install.get());
   delayed_installs_.Remove(extension_id);
 
   if (!extension_prefs_->FinishDelayedInstallInfo(extension_id))
     NOTREACHED();
 
-  FinishInstallation(extension.get());
+  FinishInstallation(delayed_install.get());
+  return true;
 }
 
 void ExtensionService::FinishInstallation(
@@ -1915,7 +1869,7 @@ bool ExtensionService::OnExternalExtensionFileFound(
          Manifest::IsExternalLocation(existing->location()));
 
     if (!is_default_apps_migration) {
-      switch (existing->version()->CompareTo(info.version)) {
+      switch (existing->version().CompareTo(info.version)) {
         case -1:  // existing version is older, we should upgrade
           break;
         case 0:  // existing version is same, do nothing
@@ -2047,8 +2001,9 @@ void ExtensionService::Observe(int type,
             base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
                 FROM_HERE,
                 base::BindOnce(
-                    &ExtensionService::MaybeFinishDelayedInstallation,
-                    AsWeakPtr(), *it),
+                    base::IgnoreResult(
+                        &ExtensionService::FinishDelayedInstallationIfReady),
+                    AsWeakPtr(), *it, false /*install_immediately*/),
                 base::TimeDelta::FromSeconds(kUpdateIdleDelay));
           }
         }
@@ -2157,7 +2112,8 @@ void ExtensionService::MaybeFinishDelayedInstallations() {
     to_be_installed.push_back(extension->id());
   }
   for (const auto& extension_id : to_be_installed) {
-    MaybeFinishDelayedInstallation(extension_id);
+    FinishDelayedInstallationIfReady(extension_id,
+                                     false /*install_immediately*/);
   }
 }
 

@@ -6,7 +6,6 @@
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/display/screen_orientation_controller_test_api.h"
-#include "ash/public/cpp/ash_switches.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/system/overview/overview_button_tray.h"
@@ -20,13 +19,14 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "base/command_line.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
+#include "ui/aura/test/test_windows.h"
 #include "ui/display/test/display_manager_test_api.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 
@@ -37,8 +37,6 @@ class SplitViewControllerTest : public AshTestBase {
 
   // test::AshTestBase:
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kAshEnableTabletSplitView);
     AshTestBase::SetUp();
     Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   }
@@ -52,7 +50,7 @@ class SplitViewControllerTest : public AshTestBase {
   aura::Window* CreateNonSnappableWindow(const gfx::Rect& bounds) {
     aura::Window* window = CreateWindow(bounds);
     window->SetProperty(aura::client::kResizeBehaviorKey,
-                        ui::mojom::kResizeBehaviorCanResize);
+                        ui::mojom::kResizeBehaviorNone);
     return window;
   }
 
@@ -471,7 +469,7 @@ TEST_F(SplitViewControllerTest, SplitDividerWindowBounds) {
   gfx::Rect divider_bounds =
       split_view_divider()->GetDividerBoundsInScreen(false /* is_dragging */);
   const int screen_width =
-      ScreenUtil::GetDisplayWorkAreaBoundsInParent(window1.get()).width();
+      screen_util::GetDisplayWorkAreaBoundsInParent(window1.get()).width();
   EXPECT_NEAR(window1_width, window2_width, 1);
   EXPECT_EQ(screen_width,
             window1_width + divider_bounds.width() + window2_width);
@@ -631,20 +629,39 @@ TEST_F(SplitViewControllerTest, LongPressExitsSplitView) {
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
   wm::ActivateWindow(window2.get());
   wm::ActivateWindow(window1.get());
-  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
+
+  // Snap |window1| to the left.
   ToggleOverview();
+  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
   ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
 
-  // Verify that by long pressing on the overview button tray with one snapped
-  // window, split view mode gets exited and we are not in overview mode.
+  // Verify that by long pressing on the overview button tray with left snapped
+  // window, split view mode gets exited and the left window (|window1|) is the
+  // current active window.
   LongPressOnOverivewButtonTray();
   EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
   EXPECT_FALSE(Shell::Get()->window_selector_controller()->IsSelecting());
+  EXPECT_EQ(window1.get(), wm::GetActiveWindow());
 
-  // Snap two windows.
+  // Snap |window1| to the right.
+  ToggleOverview();
+  split_view_controller()->SnapWindow(window1.get(),
+                                      SplitViewController::RIGHT);
+  ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
+
+  // Verify that by long pressing on the overview button tray with right snapped
+  // window, split view mode gets exited and the right window (|window1|) is the
+  // current active window.
+  LongPressOnOverivewButtonTray();
+  EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_FALSE(Shell::Get()->window_selector_controller()->IsSelecting());
+  EXPECT_EQ(window1.get(), wm::GetActiveWindow());
+
+  // Snap two windows and activate the left window, |window1|.
   split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
   split_view_controller()->SnapWindow(window2.get(),
                                       SplitViewController::RIGHT);
+  wm::ActivateWindow(window1.get());
   ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
 
   // Verify that by long pressing on the overview button tray with two snapped
@@ -652,6 +669,49 @@ TEST_F(SplitViewControllerTest, LongPressExitsSplitView) {
   LongPressOnOverivewButtonTray();
   EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
   EXPECT_EQ(window1.get(), wm::GetActiveWindow());
+
+  // Snap two windows and activate the right window, |window2|.
+  split_view_controller()->SnapWindow(window1.get(), SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(window2.get(),
+                                      SplitViewController::RIGHT);
+  wm::ActivateWindow(window2.get());
+  ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
+
+  // Verify that by long pressing on the overview button tray with two snapped
+  // windows, split view mode gets exited, and the activated window in splitview
+  // is the current active window.
+  LongPressOnOverivewButtonTray();
+  EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_EQ(window2.get(), wm::GetActiveWindow());
+}
+
+TEST_F(SplitViewControllerTest, LongPressExitsSplitViewWithTransientChild) {
+  const gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> left_window(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> right_window(CreateWindow(bounds));
+  wm::ActivateWindow(left_window.get());
+  wm::ActivateWindow(right_window.get());
+
+  ToggleOverview();
+  split_view_controller()->SnapWindow(left_window.get(),
+                                      SplitViewController::LEFT);
+  split_view_controller()->SnapWindow(right_window.get(),
+                                      SplitViewController::RIGHT);
+  ASSERT_TRUE(split_view_controller()->IsSplitViewModeActive());
+
+  // Add a transient child to |right_window|, and activate it.
+  aura::Window* transient_child =
+      aura::test::CreateTestWindowWithId(0, right_window.get());
+  ::wm::AddTransientChild(right_window.get(), transient_child);
+  wm::ActivateWindow(transient_child);
+
+  // Verify that by long pressing on the overview button tray, split view mode
+  // gets exited and the window which contained |transient_child| is the
+  // current active window.
+  LongPressOnOverivewButtonTray();
+  EXPECT_FALSE(split_view_controller()->IsSplitViewModeActive());
+  EXPECT_FALSE(Shell::Get()->window_selector_controller()->IsSelecting());
+  EXPECT_EQ(right_window.get(), wm::GetActiveWindow());
 }
 
 // Verify that split view mode get activated when long pressing on the overview

@@ -9,7 +9,7 @@
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/video_resource_updater.h"
 #include "cc/scheduler/video_frame_controller.h"
-#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/parent_local_surface_id_allocator.h"
 #include "media/base/video_frame.h"
 #include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
@@ -24,11 +24,11 @@ VideoFrameSubmitter::VideoFrameSubmitter(
       resource_provider_(std::move(resource_provider)),
       is_rendering_(false),
       weak_ptr_factory_(this) {
-  current_local_surface_id_ = local_surface_id_allocator_.GenerateId();
+  current_local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
   DETACH_FROM_THREAD(media_thread_checker_);
 }
 
-VideoFrameSubmitter::~VideoFrameSubmitter() {}
+VideoFrameSubmitter::~VideoFrameSubmitter() = default;
 
 void VideoFrameSubmitter::StopUsingProvider() {
   DCHECK_CALLED_ON_VALID_THREAD(media_thread_checker_);
@@ -130,6 +130,11 @@ void VideoFrameSubmitter::SubmitFrame(
   resource_provider_->PrepareSendToParent(resources,
                                           &compositor_frame.resource_list);
   compositor_frame.render_pass_list.push_back(std::move(render_pass));
+
+  if (compositor_frame.size_in_pixels() != current_size_in_pixels_) {
+    current_local_surface_id_ = parent_local_surface_id_allocator_.GenerateId();
+    current_size_in_pixels_ = compositor_frame.size_in_pixels();
+  }
 
   // TODO(lethalantidote): Address third/fourth arg in SubmitCompositorFrame.
   compositor_frame_sink_->SubmitCompositorFrame(

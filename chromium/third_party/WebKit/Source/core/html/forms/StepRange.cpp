@@ -38,14 +38,7 @@ StepRange::StepRange()
       has_step_(false),
       has_range_limitations_(false) {}
 
-StepRange::StepRange(const StepRange& step_range)
-    : maximum_(step_range.maximum_),
-      minimum_(step_range.minimum_),
-      step_(step_range.step_),
-      step_base_(step_range.step_base_),
-      step_description_(step_range.step_description_),
-      has_step_(step_range.has_step_),
-      has_range_limitations_(step_range.has_range_limitations_) {}
+StepRange::StepRange(const StepRange& step_range) = default;
 
 StepRange::StepRange(const Decimal& step_base,
                      const Decimal& minimum,
@@ -180,7 +173,7 @@ bool StepRange::StepMismatch(const Decimal& value_for_check) const {
 
 Decimal StepRange::StepSnappedMaximum() const {
   Decimal base = StepBase();
-  Decimal step = this->Step();
+  Decimal step = Step();
   if (base - step == base || !(base / step).IsFinite())
     return Decimal::Nan();
   Decimal aligned_maximum = base + ((Maximum() - base) / step).Floor() * step;

@@ -50,7 +50,7 @@ PWAConfirmationView::~PWAConfirmationView() {}
 
 gfx::Size PWAConfirmationView::CalculatePreferredSize() const {
   int bubble_width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-      DISTANCE_MODAL_DIALOG_WIDTH_CONTAINING_MULTILINE_TEXT);
+      DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH);
 
   gfx::Size size = views::DialogDelegateView::CalculatePreferredSize();
   size.SetToMin(gfx::Size(bubble_width - margins().width(), size.height()));
@@ -62,7 +62,8 @@ ui::ModalType PWAConfirmationView::GetModalType() const {
 }
 
 base::string16 PWAConfirmationView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(IDS_ADD_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE);
+  return l10n_util::GetStringUTF16(
+      IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE);
 }
 
 bool PWAConfirmationView::ShouldShowCloseButton() const {
@@ -139,14 +140,15 @@ void PWAConfirmationView::InitializeView() {
 
   int icon_label_spacing = layout_provider->GetDistanceMetric(
       views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                        gfx::Insets(), icon_label_spacing));
+  SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::kHorizontal, gfx::Insets(), icon_label_spacing));
 
   AddChildView(CreateIconView(web_app_info_.icons).release());
 
   views::View* labels = new views::View();
   AddChildView(labels);
-  labels->SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
+  labels->SetLayoutManager(
+      std::make_unique<views::BoxLayout>(views::BoxLayout::kVertical));
 
   labels->AddChildView(CreateNameLabel(web_app_info_.title).release());
   labels->AddChildView(

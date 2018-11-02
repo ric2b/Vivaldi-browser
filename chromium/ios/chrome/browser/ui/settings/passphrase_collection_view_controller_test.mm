@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/browser_sync/profile_sync_service_mock.h"
@@ -53,7 +52,7 @@ PassphraseCollectionViewControllerTest::CreateNiceProfileSyncServiceMock(
   browser_sync::ProfileSyncService::InitParams init_params =
       CreateProfileSyncServiceParamsForTest(
           nullptr, ios::ChromeBrowserState::FromBrowserState(context));
-  return base::MakeUnique<NiceMock<browser_sync::ProfileSyncServiceMock>>(
+  return std::make_unique<NiceMock<browser_sync::ProfileSyncServiceMock>>(
       &init_params);
 }
 
@@ -104,10 +103,10 @@ void PassphraseCollectionViewControllerTest::SetUp() {
 
 void PassphraseCollectionViewControllerTest::SetUpNavigationController(
     UIViewController* test_controller) {
-  dummy_controller_.reset([[UIViewController alloc] init]);
-  nav_controller_.reset([[SettingsNavigationController alloc]
+  dummy_controller_ = [[UIViewController alloc] init];
+  nav_controller_ = [[SettingsNavigationController alloc]
       initWithRootViewController:dummy_controller_
                     browserState:chrome_browser_state_.get()
-                        delegate:nil]);
+                        delegate:nil];
   [nav_controller_ pushViewController:test_controller animated:NO];
 }

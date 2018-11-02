@@ -15,6 +15,9 @@ struct BeginFrameArgs;
 
 class SurfaceObserver {
  public:
+  // Called when a Surface with a new SurfaceId is created.
+  virtual void OnSurfaceCreated(const SurfaceId& surface_id) = 0;
+
   // Called when a CompositorFrame with a new SurfaceId activates for the first
   // time.
   virtual void OnFirstSurfaceActivation(const SurfaceInfo& surface_info) = 0;
@@ -41,12 +44,6 @@ class SurfaceObserver {
   // and, thus, is expected to produce damage soon.
   virtual void OnSurfaceDamageExpected(const SurfaceId& surface_id,
                                        const BeginFrameArgs& args) = 0;
-
-  // Called when |surface_id| or one of its descendents is determined to be
-  // damaged at aggregation time.
-  // TODO(crbug.com/776098): This is only used in tests. We can probably remove
-  // it.
-  virtual void OnSurfaceSubtreeDamaged(const SurfaceId& surface_id) = 0;
 
   // Called whenever |surface| will be drawn in the next display frame.
   virtual void OnSurfaceWillBeDrawn(Surface* surface) {}

@@ -4,12 +4,15 @@
 
 #include "content/renderer/media/gpu/rtc_video_encoder_factory.h"
 
+#include <memory>
+
 #include "base/command_line.h"
+#include "build/build_config.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/feature_h264_with_openh264_ffmpeg.h"
 #include "content/renderer/media/gpu/rtc_video_encoder.h"
-#include "media/gpu/ipc/client/gpu_video_encode_accelerator_host.h"
+#include "media/media_features.h"
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "third_party/webrtc/common_video/h264/profile_level_id.h"
 
@@ -35,16 +38,24 @@ base::Optional<cricket::VideoCodec> VEAToWebRTCCodec(
     // checked by kWebRtcH264WithOpenH264FFmpeg flag. This check should be
     // removed when SW implementation is fully enabled.
     bool webrtc_h264_sw_enabled = false;
-#if BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
+#if BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
     webrtc_h264_sw_enabled =
         base::FeatureList::IsEnabled(kWebRtcH264WithOpenH264FFmpeg);
-#endif  // BUILDFLAG(RTC_USE_H264) && !defined(MEDIA_DISABLE_FFMPEG)
+#endif  // BUILDFLAG(RTC_USE_H264) && BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
     if (webrtc_h264_sw_enabled ||
         base::FeatureList::IsEnabled(features::kWebRtcHWH264Encoding)) {
       webrtc::H264::Profile h264_profile;
       switch (profile.profile) {
         case media::H264PROFILE_BASELINE:
+#if defined(OS_ANDROID)
+          // Force HW H264 on Android to be CBP for most compatibility, since:
+          // - Only HW H264 is available on Android at present.
+          // - MediaCodec only advise BP, which works same as CBP in most cases.
+          // - Some peers only expect CBP in negotiation.
+          h264_profile = webrtc::H264::kProfileConstrainedBaseline;
+#else
           h264_profile = webrtc::H264::kProfileBaseline;
+#endif
           break;
         case media::H264PROFILE_MAIN:
           h264_profile = webrtc::H264::kProfileMain;

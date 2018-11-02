@@ -212,8 +212,9 @@ TEST_F(AutofillFieldFillerTest, Type_CreditCardOverrideHtml_ServerPredicitons) {
   EXPECT_EQ(NAME_FULL, field.Type().GetStorableType());
 }
 
-// Tests that a server prediction of *_CITY_AND_NUMBER override html
-// "autocomplete=tel" prediction, which is always *_WHOLE_NUMBER
+// Tests that if both autocomplete attibutes and server agree it's a phone
+// field, always use server predicted type. If they disagree with autocomplete
+// says it's a phone field, always use autocomplete attribute.
 TEST_F(AutofillFieldFillerTest,
        Type_ServerPredictionOfCityAndNumber_OverrideHtml) {
   AutofillField field;
@@ -223,11 +224,22 @@ TEST_F(AutofillFieldFillerTest,
   field.set_overall_server_type(PHONE_HOME_CITY_AND_NUMBER);
   EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
 
-  // Other phone number prediction does not override.
+  // Overrides to another number format.
   field.set_overall_server_type(PHONE_HOME_NUMBER);
+  EXPECT_EQ(PHONE_HOME_NUMBER, field.Type().GetStorableType());
+
+  // Overrides autocomplete=tel-national too.
+  field.SetHtmlType(HTML_TYPE_TEL_NATIONAL, HTML_MODE_NONE);
+  field.set_overall_server_type(PHONE_HOME_WHOLE_NUMBER);
   EXPECT_EQ(PHONE_HOME_WHOLE_NUMBER, field.Type().GetStorableType());
 
-  // If html type not specified, we use server prediction.
+  // If autocomplete=tel-national but server says it's not a phone field,
+  // do not override.
+  field.SetHtmlType(HTML_TYPE_TEL_NATIONAL, HTML_MODE_NONE);
+  field.set_overall_server_type(CREDIT_CARD_EXP_DATE_2_DIGIT_YEAR);
+  EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
+
+  // If html type not specified, we still use server prediction.
   field.SetHtmlType(HTML_TYPE_UNSPECIFIED, HTML_MODE_NONE);
   field.set_overall_server_type(PHONE_HOME_CITY_AND_NUMBER);
   EXPECT_EQ(PHONE_HOME_CITY_AND_NUMBER, field.Type().GetStorableType());
@@ -806,6 +818,25 @@ INSTANTIATE_TEST_CASE_P(
             {"string:1", "string:2", "string:3", "string:4", "string:5",
              "string:6", "string:7", "string:8", "string:9", "string:10",
              "string:11", "string:12"},
+            NotNumericMonthsContentsNoPlaceholder()},
+        // Unexpected values that can be matched with the content.
+        FillWithExpirationMonthTestCase{
+            {"object:1", "object:2", "object:3", "object:4", "object:5",
+             "object:6", "object:7", "object:8", "object:9", "object:10",
+             "object:11", "object:12"},
+            NotNumericMonthsContentsNoPlaceholder()},
+        // Another example where unexpected values can be matched with the
+        // content.
+        FillWithExpirationMonthTestCase{
+            {"object:a", "object:b", "object:c", "object:d", "object:e",
+             "object:f", "object:g", "object:h", "object:i", "object:j",
+             "object:k", "object:l"},
+            NotNumericMonthsContentsNoPlaceholder()},
+        // Another example where unexpected values can be matched with the
+        // content.
+        FillWithExpirationMonthTestCase{
+            {"Farvardin", "Ordibehesht", "Khordad", "Tir", "Mordad",
+             "Shahrivar", "Mehr", "Aban", "Azar", "Dey", "Bahman", "Esfand"},
             NotNumericMonthsContentsNoPlaceholder()},
         // Values start at 0 and the first content is a placeholder.
         FillWithExpirationMonthTestCase{

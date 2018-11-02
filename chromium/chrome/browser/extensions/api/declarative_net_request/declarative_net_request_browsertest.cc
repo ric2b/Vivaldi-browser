@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #include <stddef.h>
+
 #include <algorithm>
+#include <memory>
 
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
@@ -12,13 +14,20 @@
 #include "base/path_service.h"
 #include "base/test/histogram_tester.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/values.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/extensions/load_error_reporter.h"
+#include "chrome/browser/net/profile_network_context_service.h"
+#include "chrome/browser/net/profile_network_context_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
+#include "components/proxy_config/proxy_config_dictionary.h"
+#include "components/proxy_config/proxy_config_pref_names.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"
@@ -26,6 +35,7 @@
 #include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
 #include "extensions/browser/api/declarative_net_request/test_utils.h"
+#include "extensions/browser/api/web_request/web_request_info.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
@@ -70,9 +80,9 @@ class URLRequestMonitor : public RulesetManager::TestObserver {
 
  private:
   // RulesetManager::TestObserver implementation.
-  void OnShouldBlockRequest(const net::URLRequest& request,
+  void OnShouldBlockRequest(const WebRequestInfo& request,
                             bool is_incognito_context) override {
-    if (request.url() == url_)
+    if (request.url == url_)
       GetAndResetRequestSeen(true);
   }
 
@@ -172,7 +182,7 @@ class DeclarativeNetRequestBrowserTest
     content::RunAllTasksUntilIdle();
 
     // Ensure no load errors were reported.
-    EXPECT_TRUE(ExtensionErrorReporter::GetInstance()->GetErrors()->empty());
+    EXPECT_TRUE(LoadErrorReporter::GetInstance()->GetErrors()->empty());
 
     tester.ExpectTotalCount(kIndexRulesTimeHistogram, 1);
     tester.ExpectTotalCount(kIndexAndPersistRulesTimeHistogram, 1);
@@ -896,149 +906,6 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
   }
 }
 
-// Tests the "resourceTypes" and "excludedResourceTypes" fields of a declarative
-// rule condition.
-IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
-                       BlockRequests_ResourceTypes) {
-  // TODO(crbug.com/696822): Add tests for "object", "ping", "other", "font".
-  enum ResourceTypeMask {
-    kNone = 0,
-    kSubframe = 1 << 0,
-    kStylesheet = 1 << 1,
-    kScript = 1 << 2,
-    kImage = 1 << 3,
-    kXHR = 1 << 4,
-    kMedia = 1 << 5,
-    kWebSocket = 1 << 6,
-    kAll = (1 << 7) - 1
-  };
-
-  struct {
-    std::string domain;
-    size_t id;
-    std::vector<std::string> resource_types;
-    std::vector<std::string> excluded_resource_types;
-  } rules_data[] = {
-      {"block_subframe.com", 1, {"sub_frame"}, {}},
-      {"block_stylesheet.com", 2, {"stylesheet"}, {}},
-      {"block_script.com", 3, {"script"}, {}},
-      {"block_image.com", 4, {"image"}, {}},
-      {"block_xhr.com", 5, {"xmlhttprequest"}, {}},
-      {"block_media.com", 6, {"media"}, {}},
-      {"block_websocket.com", 7, {"websocket"}, {}},
-      {"block_image_and_stylesheet.com", 8, {"image", "stylesheet"}, {}},
-      {"block_subframe_and_xhr.com", 11, {"sub_frame", "xmlhttprequest"}, {}},
-      // With renderer side navigation, the main frame origin serves as the
-      // initiator for main frame page loads. Hence to ensure that the main
-      // frame page load is not blocked, also exclude the "other" resource type,
-      // which is used for main frame requests currently.
-      // TODO(crbug.com/696822): Change "other" to "main_frame" once it is
-      // implemented.
-      {"block_all.com", 9, {}, {"other"}},
-      {"block_all_but_xhr_and_script.com",
-       10,
-       {},
-       {"xmlhttprequest", "script", "other"}},
-  };
-
-  std::vector<TestRule> rules;
-  for (const auto& rule_data : rules_data) {
-    TestRule rule = CreateGenericRule();
-
-    // The "resourceTypes" property (i.e. |rule.condition->resource_types|)
-    // should not be an empty list. It should either be omitted or be a non-
-    // empty list.
-    if (rule_data.resource_types.empty())
-      rule.condition->resource_types = base::nullopt;
-    else
-      rule.condition->resource_types = rule_data.resource_types;
-
-    rule.condition->excluded_resource_types = rule_data.excluded_resource_types;
-    rule.id = rule_data.id;
-    rule.condition->domains = std::vector<std::string>({rule_data.domain});
-    // Don't specify the urlFilter, which should behaves the same as "*".
-    rule.condition->url_filter = base::nullopt;
-    rules.push_back(rule);
-  }
-  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(rules));
-
-  struct {
-    std::string hostname;
-    int blocked_mask;
-  } test_cases[] = {
-      {"block_subframe.com", kSubframe},
-      {"block_stylesheet.com", kStylesheet},
-      {"block_script.com", kScript},
-      {"block_image.com", kImage},
-      {"block_xhr.com", kXHR},
-      {"block_media.com", kMedia},
-      {"block_websocket.com", kWebSocket},
-      {"block_image_and_stylesheet.com", kImage | kStylesheet},
-      {"block_subframe_and_xhr.com", kSubframe | kXHR},
-      {"block_all.com", kAll},
-      {"block_all_but_xhr_and_script.com", kAll & ~kXHR & ~kScript},
-      {"block_none.com", kNone}};
-
-  // Start a web socket test server to test the websocket resource type.
-  net::SpawnedTestServer websocket_test_server(
-      net::SpawnedTestServer::TYPE_WS, net::GetWebSocketTestDataDirectory());
-  ASSERT_TRUE(websocket_test_server.Start());
-
-  // The |websocket_url| will echo the message we send to it.
-  GURL websocket_url = websocket_test_server.GetURL("echo-with-no-extension");
-
-  auto execute_script = [](content::RenderFrameHost* frame,
-                           const std::string& script) {
-    bool subresource_loaded = false;
-    EXPECT_TRUE(content::ExecuteScriptAndExtractBool(frame, script,
-                                                     &subresource_loaded));
-    return subresource_loaded;
-  };
-
-  for (const auto& test_case : test_cases) {
-    GURL url = embedded_test_server()->GetURL(test_case.hostname,
-                                              "/subresources.html");
-    SCOPED_TRACE(base::StringPrintf("Testing %s", url.spec().c_str()));
-
-    ui_test_utils::NavigateToURL(browser(), url);
-    ASSERT_EQ(content::PAGE_TYPE_NORMAL, GetPageType());
-
-    content::RenderFrameHost* frame = GetMainFrame();
-
-    // sub-frame.
-    EXPECT_EQ(
-        !(test_case.blocked_mask & kSubframe),
-        execute_script(frame,
-                       "domAutomationController.send(!!window.frameLoaded);"));
-
-    // stylesheet
-    EXPECT_EQ(!(test_case.blocked_mask & kStylesheet),
-              execute_script(frame, "testStylesheet();"));
-
-    // script
-    EXPECT_EQ(!(test_case.blocked_mask & kScript),
-              execute_script(frame, "testScript();"));
-
-    // image
-    EXPECT_EQ(!(test_case.blocked_mask & kImage),
-              execute_script(frame, "testImage();"));
-
-    // xhr
-    EXPECT_EQ(!(test_case.blocked_mask & kXHR),
-              execute_script(frame, "testXHR();"));
-
-    // media
-    EXPECT_EQ(!(test_case.blocked_mask & kMedia),
-              execute_script(frame, "testMedia();"));
-
-    // websocket
-    EXPECT_EQ(!(test_case.blocked_mask & kWebSocket),
-              execute_script(frame,
-                             base::StringPrintf("testWebSocket('%s');",
-                                                websocket_url.spec().c_str())));
-  }
-}
-
 // Ensure extensions can't intercept chrome:// urls.
 IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, ChromeURLS) {
   // Have the extension block all chrome:// urls.
@@ -1152,8 +1019,208 @@ IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest, RendererCacheCleared) {
   content::RunAllTasksUntilIdle();
 }
 
+// Tests that proxy requests aren't intercepted. See https://crbug.com/794674.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestBrowserTest,
+                       PacRequestsBypassRules) {
+  // Load the extension.
+  std::vector<TestRule> rules;
+  TestRule rule = CreateGenericRule();
+  rule.condition->url_filter = std::string("*pac");
+  rule.id = 1;
+  rules.push_back(rule);
+  ASSERT_NO_FATAL_FAILURE(LoadExtensionWithRules(rules));
+
+  // Configure a PAC script. Need to do this after the extension is loaded, so
+  // that the PAC isn't already loaded by the time the extension starts
+  // affecting requests.
+  PrefService* pref_service = browser()->profile()->GetPrefs();
+  pref_service->Set(proxy_config::prefs::kProxy,
+                    *ProxyConfigDictionary::CreatePacScript(
+                        embedded_test_server()->GetURL("/self.pac").spec(),
+                        true /* pac_mandatory */));
+  // Flush the proxy configuration change over the Mojo pipe to avoid any races.
+  ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
+      ->FlushProxyConfigMonitorForTesting();
+
+  // Verify that the extension can't intercept the network request.
+  ui_test_utils::NavigateToURL(browser(), embedded_test_server()->GetURL(
+                                              "/pages_with_script/page.html"));
+  EXPECT_TRUE(WasFrameWithScriptLoaded(GetMainFrame()));
+  EXPECT_EQ(content::PAGE_TYPE_NORMAL, GetPageType());
+}
+
+// Fixture to test the "resourceTypes" and "excludedResourceTypes" fields of a
+// declarative rule condition.
+class DeclarativeNetRequestResourceTypeBrowserTest
+    : public DeclarativeNetRequestBrowserTest {
+ public:
+  DeclarativeNetRequestResourceTypeBrowserTest() {}
+
+ protected:
+  // TODO(crbug.com/696822): Add tests for "object", "ping", "other", "font".
+  enum ResourceTypeMask {
+    kNone = 0,
+    kSubframe = 1 << 0,
+    kStylesheet = 1 << 1,
+    kScript = 1 << 2,
+    kImage = 1 << 3,
+    kXHR = 1 << 4,
+    kMedia = 1 << 5,
+    kWebSocket = 1 << 6,
+    kAll = (1 << 7) - 1
+  };
+
+  struct TestCase {
+    std::string hostname;
+    int blocked_mask;
+  };
+
+  void RunTests(const std::vector<TestCase>& test_cases) {
+    // Start a web socket test server to test the websocket resource type.
+    net::SpawnedTestServer websocket_test_server(
+        net::SpawnedTestServer::TYPE_WS, net::GetWebSocketTestDataDirectory());
+    ASSERT_TRUE(websocket_test_server.Start());
+
+    // The |websocket_url| will echo the message we send to it.
+    GURL websocket_url = websocket_test_server.GetURL("echo-with-no-extension");
+
+    auto execute_script = [](content::RenderFrameHost* frame,
+                             const std::string& script) {
+      bool subresource_loaded = false;
+      EXPECT_TRUE(content::ExecuteScriptAndExtractBool(frame, script,
+                                                       &subresource_loaded));
+      return subresource_loaded;
+    };
+
+    for (const auto& test_case : test_cases) {
+      GURL url = embedded_test_server()->GetURL(test_case.hostname,
+                                                "/subresources.html");
+      SCOPED_TRACE(base::StringPrintf("Testing %s", url.spec().c_str()));
+
+      ui_test_utils::NavigateToURL(browser(), url);
+      ASSERT_EQ(content::PAGE_TYPE_NORMAL, GetPageType());
+
+      content::RenderFrameHost* frame = GetMainFrame();
+
+      // sub-frame.
+      EXPECT_EQ(
+          !(test_case.blocked_mask & kSubframe),
+          execute_script(
+              frame, "domAutomationController.send(!!window.frameLoaded);"));
+
+      // stylesheet
+      EXPECT_EQ(!(test_case.blocked_mask & kStylesheet),
+                execute_script(frame, "testStylesheet();"));
+
+      // script
+      EXPECT_EQ(!(test_case.blocked_mask & kScript),
+                execute_script(frame, "testScript();"));
+
+      // image
+      EXPECT_EQ(!(test_case.blocked_mask & kImage),
+                execute_script(frame, "testImage();"));
+
+      // xhr
+      EXPECT_EQ(!(test_case.blocked_mask & kXHR),
+                execute_script(frame, "testXHR();"));
+
+      // media
+      EXPECT_EQ(!(test_case.blocked_mask & kMedia),
+                execute_script(frame, "testMedia();"));
+
+      // websocket
+      EXPECT_EQ(!(test_case.blocked_mask & kWebSocket),
+                execute_script(
+                    frame, base::StringPrintf("testWebSocket('%s');",
+                                              websocket_url.spec().c_str())));
+    }
+  }
+
+  // Loads an extension to test blocking different resource types.
+  void LoadExtension() {
+    struct {
+      std::string domain;
+      size_t id;
+      std::vector<std::string> resource_types;
+      std::vector<std::string> excluded_resource_types;
+    } rules_data[] = {
+        {"block_subframe.com", 1, {"sub_frame"}, {}},
+        {"block_stylesheet.com", 2, {"stylesheet"}, {}},
+        {"block_script.com", 3, {"script"}, {}},
+        {"block_image.com", 4, {"image"}, {}},
+        {"block_xhr.com", 5, {"xmlhttprequest"}, {}},
+        {"block_media.com", 6, {"media"}, {}},
+        {"block_websocket.com", 7, {"websocket"}, {}},
+        {"block_image_and_stylesheet.com", 8, {"image", "stylesheet"}, {}},
+        {"block_subframe_and_xhr.com", 11, {"sub_frame", "xmlhttprequest"}, {}},
+        // With renderer side navigation, the main frame origin serves as the
+        // initiator for main frame page loads. Hence to ensure that the main
+        // frame page load is not blocked, also exclude the "other" resource
+        // type, which is used for main frame requests currently.
+        // TODO(crbug.com/696822): Change "other" to "main_frame" once it is
+        // implemented.
+        {"block_all.com", 9, {}, {"other"}},
+        {"block_all_but_xhr_and_script.com",
+         10,
+         {},
+         {"xmlhttprequest", "script", "other"}},
+    };
+
+    std::vector<TestRule> rules;
+    for (const auto& rule_data : rules_data) {
+      TestRule rule = CreateGenericRule();
+
+      // The "resourceTypes" property (i.e. |rule.condition->resource_types|)
+      // should not be an empty list. It should either be omitted or be a non-
+      // empty list.
+      if (rule_data.resource_types.empty())
+        rule.condition->resource_types = base::nullopt;
+      else
+        rule.condition->resource_types = rule_data.resource_types;
+
+      rule.condition->excluded_resource_types =
+          rule_data.excluded_resource_types;
+      rule.id = rule_data.id;
+      rule.condition->domains = std::vector<std::string>({rule_data.domain});
+      // Don't specify the urlFilter, which should behaves the same as "*".
+      rule.condition->url_filter = base::nullopt;
+      rules.push_back(rule);
+    }
+    LoadExtensionWithRules(rules);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DeclarativeNetRequestResourceTypeBrowserTest);
+};
+
+// These are split into two tests to prevent a timeout. See crbug.com/787957.
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestResourceTypeBrowserTest, Test1) {
+  ASSERT_NO_FATAL_FAILURE(LoadExtension());
+  RunTests({{"block_subframe.com", kSubframe},
+            {"block_stylesheet.com", kStylesheet},
+            {"block_script.com", kScript},
+            {"block_image.com", kImage},
+            {"block_xhr.com", kXHR},
+            {"block_media.com", kMedia}});
+}
+
+IN_PROC_BROWSER_TEST_P(DeclarativeNetRequestResourceTypeBrowserTest, Test2) {
+  ASSERT_NO_FATAL_FAILURE(LoadExtension());
+  RunTests({{"block_websocket.com", kWebSocket},
+            {"block_image_and_stylesheet.com", kImage | kStylesheet},
+            {"block_subframe_and_xhr.com", kSubframe | kXHR},
+            {"block_all.com", kAll},
+            {"block_all_but_xhr_and_script.com", kAll & ~kXHR & ~kScript},
+            {"block_none.com", kNone}});
+}
+
 INSTANTIATE_TEST_CASE_P(,
                         DeclarativeNetRequestBrowserTest,
+                        ::testing::Values(ExtensionLoadType::PACKED,
+                                          ExtensionLoadType::UNPACKED));
+
+INSTANTIATE_TEST_CASE_P(,
+                        DeclarativeNetRequestResourceTypeBrowserTest,
                         ::testing::Values(ExtensionLoadType::PACKED,
                                           ExtensionLoadType::UNPACKED));
 

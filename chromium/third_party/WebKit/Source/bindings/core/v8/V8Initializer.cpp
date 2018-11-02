@@ -47,11 +47,11 @@
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/Modulator.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/MainThreadDebugger.h"
+#include "core/script/Modulator.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/bindings/DOMWrapperWorld.h"
@@ -66,7 +66,6 @@
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/AddressSanitizer.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
 #include "platform/wtf/typed_arrays/ArrayBufferContents.h"
 #include "public/platform/Platform.h"
@@ -354,10 +353,10 @@ static bool CodeGenerationCheckCallbackInMainThread(
     v8::Local<v8::String> source) {
   if (ExecutionContext* execution_context = ToExecutionContext(context)) {
     DCHECK(execution_context->IsDocument() ||
-           execution_context->IsPaintWorkletGlobalScope());
+           execution_context->IsMainThreadWorkletGlobalScope());
     if (ContentSecurityPolicy* policy =
             execution_context->GetContentSecurityPolicy()) {
-      v8::String::Value source_str(source);
+      v8::String::Value source_str(context->GetIsolate(), source);
       UChar snippet[ContentSecurityPolicy::kMaxSampleLength + 1];
       size_t len = std::min((sizeof(snippet) / sizeof(UChar)) - 1,
                             static_cast<size_t>(source_str.length()));
@@ -377,7 +376,7 @@ static bool WasmCodeGenerationCheckCallbackInMainThread(
   if (ExecutionContext* execution_context = ToExecutionContext(context)) {
     if (ContentSecurityPolicy* policy =
             ToDocument(execution_context)->GetContentSecurityPolicy()) {
-      v8::String::Value source_str(source);
+      v8::String::Value source_str(context->GetIsolate(), source);
       UChar snippet[ContentSecurityPolicy::kMaxSampleLength + 1];
       size_t len = std::min((sizeof(snippet) / sizeof(UChar)) - 1,
                             static_cast<size_t>(source_str.length()));
@@ -474,17 +473,19 @@ static v8::MaybeLocal<v8::Promise> HostImportModuleDynamically(
   }
 
   String specifier = ToCoreStringWithNullCheck(v8_specifier);
-  v8::Local<v8::Value> v8_referrer_url = v8_referrer->GetResourceName();
-  KURL referrer_url;
-  if (v8_referrer_url->IsString()) {
-    String referrer_url_str =
-        ToCoreString(v8::Local<v8::String>::Cast(v8_referrer_url));
-    referrer_url = KURL(NullURL(), referrer_url_str);
+  v8::Local<v8::Value> v8_referrer_resource_url =
+      v8_referrer->GetResourceName();
+  KURL referrer_resource_url;
+  if (v8_referrer_resource_url->IsString()) {
+    String referrer_resource_url_str =
+        ToCoreString(v8::Local<v8::String>::Cast(v8_referrer_resource_url));
+    if (!referrer_resource_url_str.IsEmpty())
+      referrer_resource_url = KURL(NullURL(), referrer_resource_url_str);
   }
   ReferrerScriptInfo referrer_info =
       ReferrerScriptInfo::FromV8HostDefinedOptions(
           context, v8_referrer->GetHostDefinedOptions());
-  modulator->ResolveDynamically(specifier, referrer_url, referrer_info,
+  modulator->ResolveDynamically(specifier, referrer_resource_url, referrer_info,
                                 resolver);
   return v8::Local<v8::Promise>::Cast(promise.V8Value());
 }
@@ -642,8 +643,9 @@ void V8Initializer::InitializeMainThread(const intptr_t* reference_table) {
 #endif  // USE_V8_CONTEXT_SNAPSHOT
 
   v8::Isolate* isolate = V8PerIsolateData::Initialize(
-      scheduler ? scheduler->V8TaskRunner()
-                : Platform::Current()->CurrentThread()->GetWebTaskRunner(),
+      scheduler
+          ? scheduler->V8TaskRunner()
+          : Platform::Current()->CurrentThread()->GetSingleThreadTaskRunner(),
       v8_context_snapshot_mode);
 
   InitializeV8Common(isolate);

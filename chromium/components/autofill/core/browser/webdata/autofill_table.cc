@@ -1578,6 +1578,12 @@ bool AutofillTable::RemoveAutofillDataModifiedBetween(
   if (!s_profiles_get.Succeeded())
     return false;
 
+  // Remove the profile pieces.
+  for (const std::string& guid : *profile_guids) {
+    if (!RemoveAutofillProfilePieces(guid, db_))
+      return false;
+  }
+
   // Remove Autofill profiles in the time range.
   sql::Statement s_profiles(db_->GetUniqueStatement(
       "DELETE FROM autofill_profiles "
@@ -1846,6 +1852,31 @@ bool AutofillTable::ClearModelTypeState(syncer::ModelType model_type) {
       "DELETE FROM autofill_model_type_state WHERE id=1"));
 
   return s.Run();
+}
+
+bool AutofillTable::RemoveOrphanAutofillTableRows() {
+  // Get all the orphan guids.
+  std::set<std::string> orphan_guids;
+  sql::Statement s_orphan_profile_pieces_get(db_->GetUniqueStatement(
+      "SELECT guid FROM (SELECT guid FROM autofill_profile_names UNION SELECT "
+      "guid FROM autofill_profile_emails UNION SELECT guid FROM "
+      "autofill_profile_phones) WHERE guid NOT IN (SELECT guid FROM "
+      "autofill_profiles)"));
+
+  // Put the orphan guids in a set.
+  while (s_orphan_profile_pieces_get.Step())
+    orphan_guids.insert(s_orphan_profile_pieces_get.ColumnString(0));
+
+  if (!s_orphan_profile_pieces_get.Succeeded())
+    return false;
+
+  // Remove the profile pieces for the orphan guids.
+  for (const std::string& guid : orphan_guids) {
+    if (!RemoveAutofillProfilePieces(guid, db_))
+      return false;
+  }
+
+  return true;
 }
 
 bool AutofillTable::InitMainTable() {

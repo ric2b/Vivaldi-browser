@@ -361,18 +361,18 @@ static bool HasEditableLevel(const Node& node, EditableLevel editable_level) {
   // would fire in the middle of Document::setFocusedNode().
 
   for (const Node& ancestor : NodeTraversal::InclusiveAncestorsOf(node)) {
-    if ((ancestor.IsHTMLElement() || ancestor.IsDocumentNode()) &&
-        ancestor.GetLayoutObject()) {
-      switch (ancestor.GetLayoutObject()->Style()->UserModify()) {
-        case EUserModify::kReadOnly:
-          return false;
-        case EUserModify::kReadWrite:
-          return true;
-        case EUserModify::kReadWritePlaintextOnly:
-          return editable_level != kRichlyEditable;
-      }
-      NOTREACHED();
-      return false;
+    if (!(ancestor.IsHTMLElement() || ancestor.IsDocumentNode()))
+      continue;
+    const ComputedStyle* style = ancestor.GetComputedStyle();
+    if (!style)
+      continue;
+    switch (style->UserModify()) {
+      case EUserModify::kReadOnly:
+        return false;
+      case EUserModify::kReadWrite:
+        return true;
+      case EUserModify::kReadWritePlaintextOnly:
+        return editable_level != kRichlyEditable;
     }
   }
 
@@ -1669,9 +1669,9 @@ static Position PreviousCharacterPosition(const Position& position,
 }
 
 // This assumes that it starts in editable content.
-Position LeadingWhitespacePosition(const Position& position,
-                                   TextAffinity affinity,
-                                   WhitespacePositionOption option) {
+Position LeadingCollapsibleWhitespacePosition(const Position& position,
+                                              TextAffinity affinity,
+                                              WhitespacePositionOption option) {
   DCHECK(!NeedsLayoutTreeUpdate(position));
   DCHECK(IsEditablePosition(position)) << position;
   if (position.IsNull())
@@ -2038,27 +2038,6 @@ bool IsBlockFlowElement(const Node& node) {
          layout_object->IsLayoutBlockFlow();
 }
 
-Position AdjustedSelectionStartForStyleComputation(const Position& position) {
-  // This function is used by range style computations to avoid bugs like:
-  // <rdar://problem/4017641> REGRESSION (Mail): you can only bold/unbold a
-  // selection starting from end of line once
-  // It is important to skip certain irrelevant content at the start of the
-  // selection, so we do not wind up with a spurious "mixed" style.
-
-  VisiblePosition visible_position = CreateVisiblePosition(position);
-  if (visible_position.IsNull())
-    return Position();
-
-  // if the selection starts just before a paragraph break, skip over it
-  if (IsEndOfParagraph(visible_position))
-    return MostForwardCaretPosition(
-        NextPositionOf(visible_position).DeepEquivalent());
-
-  // otherwise, make sure to be at the start of the first selected node,
-  // instead of possibly at the end of the last node before the selection
-  return MostForwardCaretPosition(visible_position.DeepEquivalent());
-}
-
 bool IsInPasswordField(const Position& position) {
   TextControlElement* text_control = EnclosingTextControl(position);
   return IsHTMLInputElement(text_control) &&
@@ -2197,6 +2176,41 @@ InputEvent::InputType DeletionInputTypeFromTextGranularity(
     default:
       return InputType::kNone;
   }
+}
+
+// |IsEmptyNonEditableNodeInEditable()| is introduced for fixing
+// http://crbug.com/428986.
+static bool IsEmptyNonEditableNodeInEditable(const Node& node) {
+  // Editability is defined the DOM tree rather than the flat tree. For example:
+  // DOM:
+  //   <host>
+  //     <span>unedittable</span>
+  //     <shadowroot><div ce><content /></div></shadowroot>
+  //   </host>
+  //
+  // Flat Tree:
+  //   <host><div ce><span1>unedittable</span></div></host>
+  // e.g. editing/shadow/breaking-editing-boundaries.html
+  return !NodeTraversal::HasChildren(node) && !HasEditableStyle(node) &&
+         node.parentNode() && HasEditableStyle(*node.parentNode());
+}
+
+// TODO(yosin): We should not use |IsEmptyNonEditableNodeInEditable()| in
+// |EditingIgnoresContent()| since |IsEmptyNonEditableNodeInEditable()|
+// requires clean layout tree.
+bool EditingIgnoresContent(const Node& node) {
+  return !node.CanContainRangeEndPoint() ||
+         IsEmptyNonEditableNodeInEditable(node);
+}
+
+ContainerNode* RootEditableElementOrTreeScopeRootNodeOf(
+    const Position& position) {
+  Element* const selection_root = RootEditableElementOf(position);
+  if (selection_root)
+    return selection_root;
+
+  Node* const node = position.ComputeContainerNode();
+  return node ? &node->GetTreeScope().RootNode() : nullptr;
 }
 
 }  // namespace blink

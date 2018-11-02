@@ -221,32 +221,6 @@ VisibleSelectionTemplate<Strategy>::ToNormalizedEphemeralRange() const {
   return NormalizeRange(EphemeralRangeTemplate<Strategy>(Start(), End()));
 }
 
-// TODO(editing-dev): We should move |AdjustSelectionWithTrailingWhitespace()|
-// to "SelectionController.cpp" as file local function.
-SelectionInFlatTree AdjustSelectionWithTrailingWhitespace(
-    const SelectionInFlatTree& selection) {
-  if (selection.IsNone())
-    return selection;
-  if (!selection.IsRange())
-    return selection;
-  const bool base_is_first =
-      selection.Base() == selection.ComputeStartPosition();
-  const PositionInFlatTree& end =
-      base_is_first ? selection.Extent() : selection.Base();
-  DCHECK_EQ(end, selection.ComputeEndPosition());
-  const PositionInFlatTree& new_end = SkipWhitespace(end);
-  if (end == new_end)
-    return selection;
-  if (base_is_first) {
-    return SelectionInFlatTree::Builder(selection)
-        .SetBaseAndExtent(selection.Base(), new_end)
-        .Build();
-  }
-  return SelectionInFlatTree::Builder(selection)
-      .SetBaseAndExtent(new_end, selection.Extent())
-      .Build();
-}
-
 template <typename Strategy>
 static SelectionTemplate<Strategy> CanonicalizeSelection(
     const SelectionTemplate<Strategy>& selection) {
@@ -312,8 +286,16 @@ static SelectionTemplate<Strategy> ComputeVisibleSelection(
   const SelectionType selection_type =
       ComputeSelectionType(editing_adjusted_range.StartPosition(),
                            editing_adjusted_range.EndPosition());
-  DCHECK_NE(selection_type, kNoSelection);
+  if (selection_type == kCaretSelection) {
+    return typename SelectionTemplate<Strategy>::Builder()
+        .Collapse(PositionWithAffinityTemplate<Strategy>(
+            editing_adjusted_range.StartPosition(),
+            passed_selection.Affinity()))
+        .SetIsDirectional(passed_selection.IsDirectional())
+        .Build();
+  }
 
+  DCHECK_EQ(selection_type, kRangeSelection);
   // "Constrain" the selection to be the smallest equivalent range of
   // nodes. This is a somewhat arbitrary choice, but experience shows that
   // it is useful to make to make the selection "canonical" (if only for
@@ -323,20 +305,9 @@ static SelectionTemplate<Strategy> ComputeVisibleSelection(
   // TODO(yosin) Canonicalizing is good, but haven't we already done it
   // (when we set these two positions to |VisiblePosition|
   // |DeepEquivalent()|s above)?
-  const EphemeralRangeTemplate<Strategy> range =
-      selection_type == kRangeSelection
-          ? EphemeralRangeTemplate<Strategy>(
-                MostForwardCaretPosition(
-                    editing_adjusted_range.StartPosition()),
-                MostBackwardCaretPosition(editing_adjusted_range.EndPosition()))
-          : editing_adjusted_range;
-  if (selection_type == kCaretSelection) {
-    return typename SelectionTemplate<Strategy>::Builder()
-        .Collapse(PositionWithAffinityTemplate<Strategy>(
-            range.StartPosition(), passed_selection.Affinity()))
-        .SetIsDirectional(passed_selection.IsDirectional())
-        .Build();
-  }
+  const EphemeralRangeTemplate<Strategy> range(
+      MostForwardCaretPosition(editing_adjusted_range.StartPosition()),
+      MostBackwardCaretPosition(editing_adjusted_range.EndPosition()));
   if (canonicalized_selection.IsBaseFirst()) {
     return typename SelectionTemplate<Strategy>::Builder()
         .SetIsDirectional(passed_selection.IsDirectional())

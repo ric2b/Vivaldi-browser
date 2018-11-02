@@ -17,7 +17,6 @@
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -44,13 +43,17 @@
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/external_search_commands.h"
 #import "ios/chrome/browser/ui/commands/start_voice_search_command.h"
-#import "ios/chrome/browser/ui/image_util.h"
+#import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
+#import "ios/chrome/browser/ui/image_util/image_util.h"
+#import "ios/chrome/browser/ui/location_bar/location_bar_url_loader.h"
+#include "ios/chrome/browser/ui/location_bar/location_bar_view.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_delegate.h"
-#include "ios/chrome/browser/ui/omnibox/location_bar_view.h"
+#import "ios/chrome/browser/ui/omnibox/omnibox_popup_presenter.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_popup_view_ios.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
+#import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_coordinator.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
@@ -70,6 +73,7 @@
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/browser/ui/url_loader.h"
 #import "ios/chrome/browser/ui/util/constraints_ui_util.h"
+#import "ios/chrome/browser/ui/util/named_guide.h"
 #import "ios/chrome/browser/ui/voice/text_to_speech_player.h"
 #import "ios/chrome/browser/ui/voice/voice_search_notification_names.h"
 #import "ios/chrome/common/material_timing.h"
@@ -104,6 +108,7 @@ using ios::material::TimingFunction;
 
 @interface WebToolbarController ()<DropAndNavigateDelegate,
                                    LocationBarDelegate,
+                                   LocationBarURLLoader,
                                    OmniboxPopupPositioner,
                                    ToolbarViewDelegate> {
   // Top-level view for web content.
@@ -123,7 +128,7 @@ using ios::material::TimingFunction;
   UIView* _clippingView;
 
   std::unique_ptr<LocationBarControllerImpl> _locationBar;
-  std::unique_ptr<OmniboxPopupViewIOS> _popupView;
+  OmniboxPopupCoordinator* _omniboxPopupCoordinator;
   BOOL _initialLayoutComplete;
   // If |YES|, toolbar is incognito.
   BOOL _incognito;
@@ -222,11 +227,12 @@ using ios::material::TimingFunction;
 @synthesize animatingStop = _animatingStop;
 @synthesize animatingPrerender = _animatingPrerender;
 
-- (instancetype)initWithDelegate:(id<WebToolbarDelegate>)delegate
-                       urlLoader:(id<UrlLoader>)urlLoader
-                    browserState:(ios::ChromeBrowserState*)browserState
-                      dispatcher:
-                          (id<ApplicationCommands, BrowserCommands>)dispatcher {
+- (instancetype)
+initWithDelegate:(id<WebToolbarDelegate>)delegate
+       urlLoader:(id<UrlLoader>)urlLoader
+    browserState:(ios::ChromeBrowserState*)browserState
+      dispatcher:(id<ApplicationCommands, BrowserCommands, ToolbarCommands>)
+                     dispatcher {
   DCHECK(delegate);
   DCHECK(urlLoader);
   DCHECK(browserState);
@@ -264,6 +270,9 @@ using ios::material::TimingFunction;
   _keyboardDelegate = [[ToolbarAssistiveKeyboardDelegateImpl alloc] init];
   _keyboardDelegate.dispatcher = dispatcher;
   _keyboardDelegate.omniboxTextField = _locationBarView.textField;
+  [_locationBarView
+      setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                      forAxis:UILayoutConstraintAxisHorizontal];
 
   // Disable default drop interactions on the omnibox.
   // TODO(crbug.com/739903): Handle drop events once Chrome iOS is built with
@@ -299,6 +308,7 @@ using ios::material::TimingFunction;
       _browserState->IsOffTheRecord() ? INCOGNITO : NORMAL;
   ToolbarButtonFactory* factory =
       [[ToolbarButtonFactory alloc] initWithStyle:incognitoStyle];
+  factory.dispatcher = self.dispatcher;
   _buttonUpdater = [[ToolbarButtonUpdater alloc] init];
   _buttonUpdater.factory = factory;
 
@@ -496,9 +506,11 @@ using ios::material::TimingFunction;
   [_webToolbar setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                                    UIViewAutoresizingFlexibleTopMargin];
   [_webToolbar setFrame:[self specificControlsArea]];
-  _locationBar = base::MakeUnique<LocationBarControllerImpl>(
+  _locationBar = std::make_unique<LocationBarControllerImpl>(
       _locationBarView, _browserState, self, self.dispatcher);
-  _popupView = _locationBar->CreatePopupView(self);
+  _omniboxPopupCoordinator = _locationBar->CreatePopupCoordinator(self);
+  _locationBar->SetURLLoader(self);
+  [_omniboxPopupCoordinator start];
 
   // Create the determinate progress bar (phone only).
   if (idiom == IPHONE_IDIOM) {
@@ -537,7 +549,8 @@ using ios::material::TimingFunction;
 
   [self startObservingTTSNotifications];
 
-  [self.view setDelegate:self];
+  if (!base::FeatureList::IsEnabled(fullscreen::features::kNewFullscreen))
+    [self.view setDelegate:self];
 
   if (idiom == IPHONE_IDIOM) {
     [[self stackButton] addTarget:dispatcher
@@ -558,15 +571,22 @@ using ios::material::TimingFunction;
   return self;
 }
 
-- (void)dealloc {
-  [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
 - (UIViewController*)viewController {
   return self;
 }
 
 - (void)start {
+}
+
+- (void)stop {
+}
+
+- (void)didMoveToParentViewController:(UIViewController*)parent {
+  UILayoutGuide* omniboxPopupGuide = FindNamedGuide(kOmniboxGuide, self.view);
+  // The layout guide should be positioned with the same constraints as the
+  // location bar, but it doesn't work due to conflict between autolayout and
+  // autoresizing mask. Position it on the view instead.
+  AddSameConstraints(self.view, omniboxPopupGuide);
 }
 
 #pragma mark -
@@ -603,7 +623,7 @@ using ios::material::TimingFunction;
 - (void)browserStateDestroyed {
   // The location bar has a browser state reference, so must be destroyed at
   // this point. The popup has to be destroyed before the location bar.
-  _popupView.reset();
+  [_omniboxPopupCoordinator stop];
   _locationBar.reset();
   _browserState = nullptr;
 }
@@ -713,15 +733,13 @@ using ios::material::TimingFunction;
 }
 
 - (void)currentPageLoadStarted {
-  [self startProgressBar];
+  [self updateToolbarState];
 }
 
 - (CGRect)visibleOmniboxFrame {
   CGRect frame = _omniboxBackground.frame;
-  frame = [self.view.superview convertRect:frame
-                                  fromView:[_omniboxBackground superview]];
-  // Account for the omnibox background image transparent sides.
-  return CGRectInset(frame, -kBackgroundImageVisibleRectOffset, 0);
+  return [self.view.superview convertRect:frame
+                                 fromView:[_omniboxBackground superview]];
 }
 
 - (BOOL)isOmniboxFirstResponder {
@@ -896,7 +914,7 @@ using ios::material::TimingFunction;
 }
 
 #pragma mark -
-#pragma mark LocationBarDelegate methods.
+#pragma mark LocationBarURLLoader methods.
 
 - (void)loadGURLFromLocationBar:(const GURL&)url
                      transition:(ui::PageTransition)transition {
@@ -927,30 +945,17 @@ using ios::material::TimingFunction;
   [self cancelOmniboxEdit];
 }
 
+#pragma mark -
+#pragma mark LocationBarDelegate methods.
+
 - (void)locationBarHasBecomeFirstResponder {
   [self.delegate locationBarDidBecomeFirstResponder];
-  if (@available(iOS 10, *)) {
-    if (base::FeatureList::IsEnabled(kPropertyAnimationsToolbar)) {
-      [self expandOmnibox];
-    } else {
-      [self animateMaterialOmnibox];
-    }
-  } else {
-    [self animateMaterialOmnibox];
-  }
+  [self animateMaterialOmnibox];
 }
 
 - (void)locationBarHasResignedFirstResponder {
   [self.delegate locationBarDidResignFirstResponder];
-  if (@available(iOS 10, *)) {
-    if (base::FeatureList::IsEnabled(kPropertyAnimationsToolbar)) {
-      [self contractOmnibox];
-    } else {
-      [self animateMaterialOmnibox];
-    }
-  } else {
-    [self animateMaterialOmnibox];
-  }
+  [self animateMaterialOmnibox];
 }
 
 - (void)locationBarBeganEdit {
@@ -978,6 +983,9 @@ using ios::material::TimingFunction;
   _locationBar->HideKeyboardAndEndEditing();
   [self updateToolbarState];
 }
+
+#pragma mark -
+#pragma mark FakeboxFocuser methods.
 
 - (void)focusFakebox {
   if (IsIPadIdiom()) {
@@ -1018,38 +1026,6 @@ using ios::material::TimingFunction;
 
 - (UIView*)popupAnchorView {
   return self.view;
-}
-
-- (CGRect)popupFrame:(CGFloat)height {
-  UIView* parent = [[self popupAnchorView] superview];
-  CGRect frame = [parent bounds];
-
-  // Set tablet popup width to the same width and origin of omnibox.
-  if (IsIPadIdiom()) {
-    // For iPad, the omnibox visually extends to include the voice search button
-    // on the right. Start with the field's frame in |parent|'s coordinate
-    // system.
-    CGRect fieldFrame = [parent convertRect:[_locationBarView bounds]
-                                   fromView:_locationBarView];
-
-    // Now create a new frame that's below the field, stretching the full width
-    // of |parent|, minus an inset on each side.
-    CGFloat maxY = CGRectGetMaxY(fieldFrame);
-
-    // The popup extends to the full width of the screen.
-    frame.origin.x = 0;
-    frame.size.width = self.view.frame.size.width;
-
-    frame.origin.y = maxY + kiPadOmniboxPopupVerticalOffset;
-    frame.size.height = height;
-  } else {
-    // For iPhone place the popup just below the toolbar.
-    CGRect fieldFrame =
-        [parent convertRect:[_webToolbar bounds] fromView:_webToolbar];
-    frame.origin.y = CGRectGetMaxY(fieldFrame);
-    frame.size.height = CGRectGetMaxY([parent bounds]) - frame.origin.y;
-  }
-  return frame;
 }
 
 #pragma mark -
@@ -1499,184 +1475,6 @@ using ios::material::TimingFunction;
 
 #pragma mark Omnibox Animation.
 
-- (void)expandOmnibox API_AVAILABLE(ios(10.0)) {
-  if (IsIPadIdiom())
-    return [self layoutOmnibox];
-
-  // Return if PropertyAnimator is already running.
-  if (self.omniboxExpanderAnimator.isRunning)
-    return;
-
-  CGRect newOmniboxFrame = [self newOmniboxFrame];
-  // Determine the starting and ending bounds and position for |_omniBox|.
-  // Increasing the height of _omniBox results in the text inside it jumping
-  // vertically during the animation, so the height change will not be animated.
-  LayoutRect toLayout =
-      LayoutRectForRectInBoundingRect(newOmniboxFrame, [_webToolbar bounds]);
-  CGRect omniboxRect = LayoutRectGetRect(kOmniboxFrame[IPHONE_IDIOM]);
-
-  toLayout.size = CGSizeMake([_webToolbar bounds].size.width -
-                                 self.cancelButton.frame.size.width -
-                                 kCancelButtonLeadingMargin,
-                             omniboxRect.size.height);
-  toLayout.position.leading = 0;
-  if (_incognito) {
-    // Adjust the width and leading of the omnibox to account for the
-    // incognito icon.
-    // TODO(crbug.com/525943): Refactor so this value isn't calculated here, and
-    // instead is calculated in -newOmniboxFrame?
-    // (include in (crbug/525943) refactor).
-    LayoutRect incognitioIconLayout = LayoutRectForRectInBoundingRect(
-        [_incognitoIcon frame], [_webToolbar frame]);
-    CGFloat trailingEdge = LayoutRectGetTrailingEdge(incognitioIconLayout);
-    toLayout.size.width -= trailingEdge;
-    toLayout.position.leading = trailingEdge;
-  }
-
-  CGRect toBounds = LayoutRectGetBoundsRect(toLayout);
-
-  // Grow the background to cover the whole toolbar.
-  CGRect backgroundToBounds = [_clippingView bounds];
-  // Increase the bounds of the background so that the border extends past the
-  // toolbar and is clipped.
-  backgroundToBounds = CGRectInset(backgroundToBounds, -2, -2);
-
-  if (_incognito)
-    _incognitoIcon.frame = CGRectMake(
-        _incognitoIcon.frame.origin.x + kPositionAnimationLeadingOffset,
-        _incognitoIcon.frame.origin.y, _incognitoIcon.frame.size.width,
-        _incognitoIcon.frame.size.height);
-
-  // Create animator and add animations.
-  self.omniboxExpanderAnimator = [[UIViewPropertyAnimator alloc]
-      initWithDuration:ios::material::kDuration1
-                 curve:UIViewAnimationCurveEaseInOut
-            animations:^{
-              CGFloat omniboxLeadingPadding = 10;
-
-              // Incognito.
-              if (_incognito) {
-                _incognitoIcon.alpha = 1;
-                _incognitoIcon.frame =
-                    CGRectMake(_incognitoIcon.frame.origin.x -
-                                   kPositionAnimationLeadingOffset,
-                               _incognitoIcon.frame.origin.y,
-                               _incognitoIcon.frame.size.width,
-                               _incognitoIcon.frame.size.height);
-                omniboxLeadingPadding =
-                    omniboxLeadingPadding + _incognitoIcon.frame.size.width;
-              }
-
-              // Omnibox and OmniboxBackground.
-              _locationBarView.frame =
-                  CGRectMake(newOmniboxFrame.origin.x + omniboxLeadingPadding,
-                             _locationBarView.frame.origin.y,
-                             toBounds.size.width - 10, toBounds.size.height);
-              _omniboxBackground.frame = CGRectMake(
-                  self.view.bounds.origin.x, self.view.bounds.origin.y,
-                  backgroundToBounds.size.width,
-                  backgroundToBounds.size.height);
-            }];
-
-  // Perfom cancel button animation on completion.
-  [_cancelButton setHidden:NO];
-  __weak UIButton* weakCancelButton = _cancelButton;
-  _cancelButton.alpha = 0;
-  [self.omniboxExpanderAnimator addCompletion:^(
-                                    UIViewAnimatingPosition finalPosition) {
-    CGRect finalCancelButtonFrame = weakCancelButton.frame;
-    weakCancelButton.frame = CGRectLayoutOffset(
-        weakCancelButton.frame, kPositionAnimationLeadingOffset);
-    // Create and start the cancel button animation.
-    [UIViewPropertyAnimator
-        runningPropertyAnimatorWithDuration:0.2
-                                      delay:0.1
-                                    options:UIViewAnimationOptionCurveEaseOut
-                                 animations:^{
-                                   weakCancelButton.alpha = 1.0;
-                                   weakCancelButton.frame =
-                                       finalCancelButtonFrame;
-                                 }
-                                 completion:nil];
-  }];
-
-  // Add standard Toolbar buttons animations.
-  [self configureFadeOutAnimation];
-
-  // Add navigation buttons animations.
-  [self configureFadeOutNavigationControlsAnimation];
-
-  // Set the _omnibox animator.
-  [_locationBarView addExpandOmniboxAnimations:self.omniboxExpanderAnimator];
-
-  [self.omniboxExpanderAnimator startAnimation];
-}
-
-- (void)contractOmnibox API_AVAILABLE(ios(10.0)) {
-  if (IsIPadIdiom())
-    return [self layoutOmnibox];
-
-  // Return if PropertyAnimator is already running.
-  if (self.omniboxContractorAnimator.isRunning)
-    return;
-
-  CGRect newOmniboxFrame = [self newOmniboxFrame];
-
-  __weak UIButton* weakCancelButton = _cancelButton;
-  self.omniboxContractorAnimator = [[UIViewPropertyAnimator alloc]
-      initWithDuration:ios::material::kDuration1
-                 curve:UIViewAnimationCurveEaseInOut
-            animations:^{
-
-              if (_incognito) {
-                _incognitoIcon.alpha = 0;
-                _incognitoIcon.frame =
-                    CGRectMake(_incognitoIcon.frame.origin.x +
-                                   kPositionAnimationLeadingOffset,
-                               _incognitoIcon.frame.origin.y,
-                               _incognitoIcon.frame.size.width,
-                               _incognitoIcon.frame.size.height);
-              }
-
-              // Cancel Button.
-              weakCancelButton.alpha = 0;
-              weakCancelButton.frame =
-                  CGRectMake(weakCancelButton.frame.origin.x +
-                                 kPositionAnimationLeadingOffset,
-                             weakCancelButton.frame.origin.y,
-                             weakCancelButton.frame.size.width,
-                             weakCancelButton.frame.size.height);
-
-              // Omnibox and OmniboxBackground bounds.
-              _locationBarView.frame = CGRectMake(
-                  newOmniboxFrame.origin.x, _locationBarView.frame.origin.y,
-                  newOmniboxFrame.size.width - 10, newOmniboxFrame.size.height);
-              _omniboxBackground.frame = CGRectMake(
-                  newOmniboxFrame.origin.x,
-                  newOmniboxFrame.origin.y + StatusBarHeight(),
-                  newOmniboxFrame.size.width - 10, newOmniboxFrame.size.height);
-
-            }];
-
-  // Hide cancel button on completion.
-  [self.omniboxContractorAnimator
-      addCompletion:^(UIViewAnimatingPosition finalPosition) {
-        weakCancelButton.hidden = YES;
-      }];
-
-  // Add standard Toolbar buttons animations.
-  [self configureFadeInAnimation];
-
-  // Add navigation buttons animations.
-  [self configureFadeInNavigationControlsAnimation];
-
-  // Set the _omnibox animator.
-  [_locationBarView
-      addContractOmniboxAnimations:self.omniboxContractorAnimator];
-
-  [self.omniboxContractorAnimator startAnimation];
-}
-
 - (void)animateMaterialOmnibox {
   // The iPad omnibox does not animate.
   if (IsIPadIdiom())
@@ -1978,31 +1776,6 @@ using ios::material::TimingFunction;
   }
 }
 
-- (void)configureFadeInNavigationControlsAnimation API_AVAILABLE(ios(10.0)) {
-  CGRect finalBackButtonFrame = _backButton.frame;
-  CGRect shifted =
-      CGRectLayoutOffset(_backButton.frame, kPositionAnimationLeadingOffset);
-  _backButton.frame = shifted;
-  __weak UIButton* weakBackButton = _backButton;
-  [self.omniboxContractorAnimator addAnimations:^{
-    weakBackButton.alpha = 1.0;
-    weakBackButton.frame = finalBackButtonFrame;
-  }
-                                    delayFactor:ios::material::kDuration1];
-
-  if ([_forwardButton isEnabled]) {
-    CGRect finalForwardButtonFrame = _forwardButton.frame;
-    _forwardButton.frame = CGRectLayoutOffset(_forwardButton.frame,
-                                              kPositionAnimationLeadingOffset);
-    __weak UIButton* weakForwardButton = _forwardButton;
-    [self.omniboxContractorAnimator addAnimations:^{
-      weakForwardButton.alpha = 1.0;
-      weakForwardButton.frame = finalForwardButtonFrame;
-    }
-                                      delayFactor:ios::material::kDuration3];
-  }
-}
-
 - (void)fadeOutNavigationControls {
   [CATransaction begin];
   [CATransaction setAnimationDuration:ios::material::kDuration2];
@@ -2043,35 +1816,6 @@ using ios::material::TimingFunction;
   [[_forwardButton layer] addAnimation:shiftForwardButton
                                 forKey:@"shiftButton"];
   [CATransaction commit];
-}
-
-- (void)configureFadeOutNavigationControlsAnimation API_AVAILABLE(ios(10.0)) {
-  // Animate the navigation buttons 10 pixels to the left and opacity to 0;
-  CGRect originalBackFrame = _backButton.frame;
-  __weak UIButton* weakBackButton = _backButton;
-  [self.omniboxExpanderAnimator addAnimations:^{
-    weakBackButton.alpha = 0.0;
-    weakBackButton.frame = CGRectLayoutOffset(weakBackButton.frame,
-                                              kPositionAnimationLeadingOffset);
-  }];
-  [self.omniboxExpanderAnimator
-      addCompletion:^(UIViewAnimatingPosition finalPosition) {
-        weakBackButton.frame = originalBackFrame;
-      }];
-
-  if ([_forwardButton isEnabled]) {
-    CGRect originalForwardFrame = _forwardButton.frame;
-    __weak UIButton* weakForwardButton = _forwardButton;
-    [self.omniboxExpanderAnimator addAnimations:^{
-      weakForwardButton.alpha = 0.0;
-      weakForwardButton.frame = CGRectLayoutOffset(
-          weakForwardButton.frame, kPositionAnimationLeadingOffset);
-    }];
-    [self.omniboxExpanderAnimator
-        addCompletion:^(UIViewAnimatingPosition finalPosition) {
-          weakForwardButton.frame = originalForwardFrame;
-        }];
-  }
 }
 
 #pragma mark Omnibox Cancel Button.
@@ -2184,8 +1928,9 @@ using ios::material::TimingFunction;
 
 - (void)viewSafeAreaInsetsDidChange {
   [super viewSafeAreaInsetsDidChange];
-  if (!IsIPadIdiom()) {
-    if (IsSafeAreaCompatibleToolbarEnabled()) {
+  if (IsSafeAreaCompatibleToolbarEnabled()) {
+    [self adjustToolbarHeight];
+    if (!IsIPadIdiom()) {
       // The clipping view's height is supposed to match the toolbar's height.
       // The clipping view can't match the toolbar's height with autoresizing
       // masks because the clipping view is not a direct child of the toolbar.
@@ -2195,14 +1940,6 @@ using ios::material::TimingFunction;
       [self layoutClippingView];
     }
   }
-}
-
-- (void)viewDidLayoutSubviews {
-  [super viewDidLayoutSubviews];
-
-  // The popup positions itself as a static frame below the web toolbar.  This
-  // will no longer be necessary post omnibox popup boxing.
-  _popupView->UpdatePopupAppearance();
 }
 
 @end

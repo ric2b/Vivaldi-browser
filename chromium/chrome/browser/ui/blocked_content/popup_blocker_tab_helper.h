@@ -19,9 +19,7 @@
 #include "content/public/browser/web_contents_user_data.h"
 #include "ui/base/window_open_disposition.h"
 
-namespace chrome {
 struct NavigateParams;
-}
 
 namespace content {
 struct OpenURLParams;
@@ -37,18 +35,6 @@ class PopupBlockerTabHelper
  public:
   // Mapping from popup IDs to blocked popup requests.
   typedef std::map<int32_t, GURL> PopupIdMap;
-
-  // This class backs a histogram. Make sure you update enums.xml if you make
-  // any changes.
-  enum class PopupPosition : int {
-    kOnlyPopup,
-    kFirstPopup,
-    kMiddlePopup,
-    kLastPopup,
-
-    // Any new values should go before this one.
-    kLast,
-  };
 
   // This enum is backed by a histogram. Make sure enums.xml is updated if this
   // is updated.
@@ -95,7 +81,7 @@ class PopupBlockerTabHelper
   static bool MaybeBlockPopup(
       content::WebContents* web_contents,
       const base::Optional<GURL>& opener_url,
-      const chrome::NavigateParams& params,
+      const NavigateParams& params,
       const content::OpenURLParams* open_url_params,
       const blink::mojom::WindowFeatures& window_features);
 
@@ -119,13 +105,11 @@ class PopupBlockerTabHelper
 
   explicit PopupBlockerTabHelper(content::WebContents* web_contents);
 
-  void AddBlockedPopup(const chrome::NavigateParams& params,
+  void AddBlockedPopup(const NavigateParams& params,
                        const blink::mojom::WindowFeatures& window_features);
 
   // Called when the blocked popup notification is shown or hidden.
   void PopupNotificationVisibilityChanged(bool visible);
-
-  PopupPosition GetPopupPosition(int32_t id) const;
 
   static void LogAction(Action action);
 

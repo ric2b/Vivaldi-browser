@@ -5,11 +5,11 @@
 #ifndef IOS_CHROME_BROWSER_WEB_PAGE_PLACEHOLDER_TAB_HELPER_H_
 #define IOS_CHROME_BROWSER_WEB_PAGE_PLACEHOLDER_TAB_HELPER_H_
 
+#import <UIKit/UIKit.h>
+
 #include "base/macros.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #import "ios/web/public/web_state/web_state_user_data.h"
-
-@protocol PagePlaceholderTabHelperDelegate;
 
 // Displays placeholder to cover what WebState is actually displaying. Can be
 // used to display the cached image of the web page during the Tab restoration.
@@ -19,25 +19,28 @@ class PagePlaceholderTabHelper
  public:
   ~PagePlaceholderTabHelper() override;
 
-  // Creates TabHelper. |delegate| is not retained by TabHelper and must not be
-  // null.
-  static void CreateForWebState(web::WebState* web_state,
-                                id<PagePlaceholderTabHelperDelegate> delegate);
-
   // Displays placeholder between DidStartNavigation and PageLoaded
   // WebStateObserver callbacks. If navigation takes too long, then placeholder
   // will be removed before navigation is finished.
   void AddPlaceholderForNextNavigation();
 
+  // Cancels displaying placeholder during the next navigation. If placeholder
+  // is displayed, then it is removed.
+  void CancelPlaceholderForNextNavigation();
+
+  // true if placeholder is currently being displayed.
+  bool displaying_placeholder() const { return displaying_placeholder_; }
+
   // true if placeholder will be displayed between DidStartNavigation and
   // PageLoaded WebStateObserver callbacks.
-  bool will_add_placeholder_for_next_navigation() {
+  bool will_add_placeholder_for_next_navigation() const {
     return add_placeholder_for_next_navigation_;
   }
 
  private:
-  PagePlaceholderTabHelper(web::WebState* web_state,
-                           id<PagePlaceholderTabHelperDelegate> delegate);
+  friend class web::WebStateUserData<PagePlaceholderTabHelper>;
+
+  explicit PagePlaceholderTabHelper(web::WebState* web_state);
 
   // web::WebStateObserver overrides:
   void DidStartNavigation(web::WebState* web_state,
@@ -50,13 +53,16 @@ class PagePlaceholderTabHelper
   void AddPlaceholder();
   void RemovePlaceholder();
 
-  // Delegate which displays and removes the placeholder to cover WebState's
-  // view.
-  __weak id<PagePlaceholderTabHelperDelegate> delegate_ = nil;
+  // WebState this tab helper is attached to.
+  web::WebState* web_state_ = nullptr;
+
+  // View used to display the placeholder.
+  UIImageView* placeholder_view_ = nil;
 
   // true if placeholder is currently being displayed.
   bool displaying_placeholder_ = false;
 
+  // true if placeholder must be displayed during the next navigation.
   bool add_placeholder_for_next_navigation_ = false;
 
   base::WeakPtrFactory<PagePlaceholderTabHelper> weak_factory_;

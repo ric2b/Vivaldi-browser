@@ -25,8 +25,7 @@ DecoderFramebufferState::DecoderFramebufferState()
       bound_draw_framebuffer(NULL) {
 }
 
-DecoderFramebufferState::~DecoderFramebufferState() {
-}
+DecoderFramebufferState::~DecoderFramebufferState() = default;
 
 class RenderbufferAttachment
     : public Framebuffer::Attachment {
@@ -52,6 +51,11 @@ class RenderbufferAttachment
   GLsizei samples() const override { return renderbuffer_->samples(); }
 
   GLuint object_name() const override { return renderbuffer_->client_id(); }
+
+  GLint level() const override {
+    NOTREACHED();
+    return -1;
+  }
 
   bool cleared() const override { return renderbuffer_->cleared(); }
 
@@ -125,7 +129,7 @@ class RenderbufferAttachment
   bool EmulatingRGB() const override { return false; }
 
  protected:
-  ~RenderbufferAttachment() override {}
+  ~RenderbufferAttachment() override = default;
 
  private:
   scoped_refptr<Renderbuffer> renderbuffer_;
@@ -184,7 +188,7 @@ class TextureAttachment
 
   GLenum target() const { return target_; }
 
-  GLint level() const { return level_; }
+  GLint level() const override { return level_; }
 
   GLuint object_name() const override { return texture_ref_->client_id(); }
 
@@ -303,7 +307,7 @@ class TextureAttachment
   }
 
  protected:
-  ~TextureAttachment() override {}
+  ~TextureAttachment() override = default;
 
  private:
   scoped_refptr<TextureRef> texture_ref_;
@@ -652,14 +656,8 @@ GLenum Framebuffer::GetReadBufferInternalFormat() const {
 }
 
 GLenum Framebuffer::GetReadBufferTextureType() const {
-  if (read_buffer_ == GL_NONE)
-    return 0;
-  AttachmentMap::const_iterator it = attachments_.find(read_buffer_);
-  if (it == attachments_.end()) {
-    return 0;
-  }
-  const Attachment* attachment = it->second.get();
-  return attachment->texture_type();
+  const Attachment* attachment = GetReadBufferAttachment();
+  return attachment ? attachment->texture_type() : 0;
 }
 
 GLsizei Framebuffer::GetSamples() const {

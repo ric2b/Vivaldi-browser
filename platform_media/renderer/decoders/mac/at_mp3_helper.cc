@@ -6,7 +6,7 @@
 // This file is an original work developed by Opera Software ASA.
 
 #include "platform_media/renderer/decoders/mac/at_mp3_helper.h"
-
+#if defined(PLATFORM_MEDIA_MP3)
 #include <CoreAudio/CoreAudio.h>
 
 #include "media/base/audio_decoder_config.h"
@@ -33,7 +33,9 @@ bool ATMP3Helper::Initialize(const AudioDecoderConfig& config,
           << " samples_per_second : " << config.samples_per_second();
 
   AudioStreamBasicDescription format = {0};
-  format.mSampleRate = config.input_samples_per_second();
+
+  // FEATURE_INPUT_SAMPLES_PER_SECOND
+  format.mSampleRate = config.samples_per_second();
   format.mFormatID = kAudioFormatMPEGLayer3;
   format.mChannelsPerFrame =
       ChannelLayoutToChannelCount(config.channel_layout());
@@ -55,3 +57,4 @@ bool ATMP3Helper::ProcessBuffer(const scoped_refptr<DecoderBuffer>& buffer) {
 }
 
 }  // namespace media
+#endif

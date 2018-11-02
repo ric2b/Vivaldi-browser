@@ -118,29 +118,6 @@ static IntCallback IntCallbackAdapter(const base::Closure& f) {
 // Are cookies allowed for file:// URLs by default?
 const bool kDefaultFileSchemeAllowed = false;
 
-void ImportLegacyCookieStore(const FilePath& cookie_store_path) {
-  // We use the old cookie store to create the new cookie store only if the
-  // new cookie store does not exist.
-  if (base::PathExists(cookie_store_path))
-    return;
-
-  // WebViewClassic gets the database path from Context and appends a
-  // hardcoded name. See:
-  // https://android.googlesource.com/platform/frameworks/base/+/bf6f6f9d/core/java/android/webkit/JniUtil.java
-  // https://android.googlesource.com/platform/external/webkit/+/7151e/
-  //     Source/WebKit/android/WebCoreSupport/WebCookieJar.cpp
-  FilePath old_cookie_store_path;
-  base::android::GetDatabaseDirectory(&old_cookie_store_path);
-  old_cookie_store_path = old_cookie_store_path.Append(
-      FILE_PATH_LITERAL("webviewCookiesChromium.db"));
-  if (base::PathExists(old_cookie_store_path) &&
-      !base::Move(old_cookie_store_path, cookie_store_path)) {
-    LOG(WARNING) << "Failed to move old cookie store path from "
-                 << old_cookie_store_path.AsUTF8Unsafe() << " to "
-                 << cookie_store_path.AsUTF8Unsafe();
-  }
-}
-
 void GetUserDataDir(FilePath* user_data_dir) {
   if (!PathService::Get(base::DIR_ANDROID_APP_DATA, user_data_dir)) {
     NOTREACHED() << "Failed to get app data directory for Android WebView";
@@ -315,12 +292,8 @@ net::CookieStore* CookieManager::GetCookieStore() {
     FilePath cookie_store_path =
         user_data_dir.Append(FILE_PATH_LITERAL("Cookies"));
 
-    cookie_store_backend_thread_.task_runner()->PostTask(
-        FROM_HERE, base::Bind(ImportLegacyCookieStore, cookie_store_path));
-
-    content::CookieStoreConfig cookie_config(
-        cookie_store_path, content::CookieStoreConfig::RESTORED_SESSION_COOKIES,
-        nullptr);
+    content::CookieStoreConfig cookie_config(cookie_store_path, true, true,
+                                             nullptr);
     cookie_config.client_task_runner = cookie_store_task_runner_;
     cookie_config.background_task_runner =
         cookie_store_backend_thread_.task_runner();

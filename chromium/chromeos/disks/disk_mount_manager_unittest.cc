@@ -6,6 +6,9 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/run_loop.h"
@@ -172,11 +175,12 @@ const TestMountPointInfo kTestMountPoints[] = {
 
 // Represents which function in |DiskMountManager::Observer| was invoked.
 enum ObserverEventType {
-  DEVICE_EVENT,  // OnDeviceEvent()
-  DISK_EVENT,    // OnDiskEvent()
-  FORMAT_EVENT,  // OnFormatEvent()
-  MOUNT_EVENT,   // OnMountEvent()
-  RENAME_EVENT   // OnRenameEvent()
+  DEVICE_EVENT,               // OnDeviceEvent()
+  AUTO_MOUNTABLE_DISK_EVENT,  // OnAutoMountableDiskEvent()
+  BOOT_DEVICE_DISK_EVENT,     // OnBootDeviceDiskEvent()
+  FORMAT_EVENT,               // OnFormatEvent()
+  MOUNT_EVENT,                // OnMountEvent()
+  RENAME_EVENT                // OnRenameEvent()
 };
 
 // Represents every event notified to |DiskMountManager::Observer|.
@@ -208,30 +212,56 @@ struct DeviceEvent : public ObserverEvent {
   }
 };
 
-// Represents an invocation of |DiskMountManager::Observer::OnDiskEvent()|.
-struct DiskEvent : public ObserverEvent {
+// Represents an invocation of
+// DiskMountManager::Observer::OnAutoMountableDiskEvent().
+struct AutoMountableDiskEvent : public ObserverEvent {
   DiskMountManager::DiskEvent event;
   std::unique_ptr<DiskMountManager::Disk> disk;
 
-  DiskEvent(DiskMountManager::DiskEvent event,
-            const DiskMountManager::Disk& disk)
-      : event(event),
-        disk(std::unique_ptr<DiskMountManager::Disk>(
-            new DiskMountManager::Disk(disk))) {}
+  AutoMountableDiskEvent(DiskMountManager::DiskEvent event,
+                         const DiskMountManager::Disk& disk)
+      : event(event), disk(std::make_unique<DiskMountManager::Disk>(disk)) {}
 
-  DiskEvent(DiskEvent&& other)
+  AutoMountableDiskEvent(AutoMountableDiskEvent&& other)
       : event(other.event), disk(std::move(other.disk)) {}
 
-  ObserverEventType type() const override { return DISK_EVENT; }
+  ObserverEventType type() const override { return AUTO_MOUNTABLE_DISK_EVENT; }
 
-  bool operator==(const DiskEvent& other) const {
+  bool operator==(const AutoMountableDiskEvent& other) const {
     return event == other.event && disk == other.disk;
   }
 
   std::string DebugString() const {
-    return StringPrintf("OnDiskEvent(event=%d, device_path=%s, mount_path=%s",
-                        event, disk->device_path().c_str(),
-                        disk->mount_path().c_str());
+    return StringPrintf(
+        "OnAutoMountableDiskEvent(event=%d, device_path=%s, mount_path=%s",
+        event, disk->device_path().c_str(), disk->mount_path().c_str());
+  }
+};
+
+// Represents an invocation of
+// DiskMountManager::Observer::OnBootDeviceDiskEvent().
+// TODO(agawronska): Add tests for disks events.
+struct BootDeviceDiskEvent : public ObserverEvent {
+  DiskMountManager::DiskEvent event;
+  std::unique_ptr<DiskMountManager::Disk> disk;
+
+  BootDeviceDiskEvent(DiskMountManager::DiskEvent event,
+                      const DiskMountManager::Disk& disk)
+      : event(event), disk(std::make_unique<DiskMountManager::Disk>(disk)) {}
+
+  BootDeviceDiskEvent(BootDeviceDiskEvent&& other)
+      : event(other.event), disk(std::move(other.disk)) {}
+
+  ObserverEventType type() const override { return BOOT_DEVICE_DISK_EVENT; }
+
+  bool operator==(const BootDeviceDiskEvent& other) const {
+    return event == other.event && disk == other.disk;
+  }
+
+  std::string DebugString() const {
+    return StringPrintf(
+        "OnBootDeviceDiskEvent(event=%d, device_path=%s, mount_path=%s", event,
+        disk->device_path().c_str(), disk->mount_path().c_str());
   }
 };
 
@@ -334,11 +364,18 @@ class MockDiskMountManagerObserver : public DiskMountManager::Observer {
     events_.push_back(std::make_unique<DeviceEvent>(event, device_path));
   }
 
-  void OnDiskEvent(DiskMountManager::DiskEvent event,
-                   const DiskMountManager::Disk* disk) override {
+  void OnBootDeviceDiskEvent(DiskMountManager::DiskEvent event,
+                             const DiskMountManager::Disk& disk) override {
     // Take a snapshot (copy) of the Disk object at the time of invocation for
     // later verification.
-    events_.push_back(std::make_unique<DiskEvent>(event, *disk));
+    events_.push_back(std::make_unique<BootDeviceDiskEvent>(event, disk));
+  }
+
+  void OnAutoMountableDiskEvent(DiskMountManager::DiskEvent event,
+                                const DiskMountManager::Disk& disk) override {
+    // Take a snapshot (copy) of the Disk object at the time of invocation for
+    // later verification.
+    events_.push_back(std::make_unique<AutoMountableDiskEvent>(event, disk));
   }
 
   void OnFormatEvent(DiskMountManager::FormatEvent event,
@@ -375,11 +412,20 @@ class MockDiskMountManagerObserver : public DiskMountManager::Observer {
     return static_cast<const DeviceEvent&>(*events_[index]);
   }
 
-  // Verifies if the |index|th invocation is OnDiskEvent() and returns details.
-  const DiskEvent& GetDiskEvent(size_t index) {
+  // Verifies if the |index|th invocation is OnAutoMountableDiskEvent() and
+  // returns details.
+  const AutoMountableDiskEvent& GetAutoMountableDiskEvent(size_t index) {
     DCHECK_GT(events_.size(), index);
-    DCHECK_EQ(DISK_EVENT, events_[index]->type());
-    return static_cast<const DiskEvent&>(*events_[index]);
+    DCHECK_EQ(AUTO_MOUNTABLE_DISK_EVENT, events_[index]->type());
+    return static_cast<const AutoMountableDiskEvent&>(*events_[index]);
+  }
+
+  // Verifies if the |index|th invocation is OnBootDeviceDiskEvent() and returns
+  // details.
+  const BootDeviceDiskEvent& GetBootDeviceDiskEvent(size_t index) {
+    DCHECK_GT(events_.size(), index);
+    DCHECK_EQ(BOOT_DEVICE_DISK_EVENT, events_[index]->type());
+    return static_cast<const BootDeviceDiskEvent&>(*events_[index]);
   }
 
   // Verifies if the |index|th invocation is OnFormatEvent() and returns
@@ -750,8 +796,8 @@ TEST_F(DiskMountManagerTest, Format_FormatFails) {
   // Send failing FORMAT_COMPLETED signal.
   // The failure is marked by ! in fromt of the path (but this should change
   // soon).
-  fake_cros_disks_client_->SendFormatCompletedEvent(
-      chromeos::FORMAT_ERROR_UNKNOWN, kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyFormatCompleted(chromeos::FORMAT_ERROR_UNKNOWN,
+                                                 kDevice1SourcePath);
 
   // The observer should get notified that the device was unmounted and that
   // formatting has started.
@@ -797,8 +843,8 @@ TEST_F(DiskMountManagerTest, Format_FormatSuccess) {
   EXPECT_FALSE(HasMountPoint(kDevice1MountPath));
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendFormatCompletedEvent(chromeos::FORMAT_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyFormatCompleted(chromeos::FORMAT_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // The observer should receive UNMOUNTING, FORMAT_STARTED and FORMAT_COMPLETED
   // events (all of them without an error set).
@@ -843,11 +889,11 @@ TEST_F(DiskMountManagerTest, Format_ConsecutiveFormatCalls) {
   EXPECT_FALSE(HasMountPoint(kDevice1MountPath));
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendFormatCompletedEvent(chromeos::FORMAT_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyFormatCompleted(chromeos::FORMAT_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // Simulate the device remounting.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kDevice1SourcePath,
       chromeos::MOUNT_TYPE_DEVICE, kDevice1MountPath);
 
@@ -870,8 +916,8 @@ TEST_F(DiskMountManagerTest, Format_ConsecutiveFormatCalls) {
   EXPECT_EQ("vfat", fake_cros_disks_client_->last_format_filesystem());
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendFormatCompletedEvent(chromeos::FORMAT_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyFormatCompleted(chromeos::FORMAT_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // The observer should receive UNMOUNTING, FORMAT_STARTED and FORMAT_COMPLETED
   // events (all of them without an error set) twice (once for each formatting
@@ -914,10 +960,10 @@ TEST_F(DiskMountManagerTest, MountPath_RecordAccessMode) {
                      chromeos::MOUNT_TYPE_DEVICE,
                      chromeos::MOUNT_ACCESS_MODE_READ_ONLY);
   // Simulate cros_disks reporting mount completed.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kSourcePath1, chromeos::MOUNT_TYPE_DEVICE,
       kMountPath1);
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kSourcePath2, chromeos::MOUNT_TYPE_DEVICE,
       kMountPath2);
 
@@ -956,7 +1002,7 @@ TEST_F(DiskMountManagerTest, MountPath_ReadOnlyDevice) {
                      chromeos::MOUNT_TYPE_DEVICE,
                      chromeos::MOUNT_ACCESS_MODE_READ_WRITE);
   // Simulate cros_disks reporting mount completed.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kReadOnlyDeviceSourcePath,
       chromeos::MOUNT_TYPE_DEVICE, kReadOnlyDeviceMountPath);
 
@@ -979,7 +1025,7 @@ TEST_F(DiskMountManagerTest, RemountRemovableDrives) {
   manager->RemountAllRemovableDrives(chromeos::MOUNT_ACCESS_MODE_READ_ONLY);
 
   // Simulate cros_disks reporting mount completed.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kDevice1SourcePath,
       chromeos::MOUNT_TYPE_DEVICE, kDevice1MountPath);
 
@@ -997,7 +1043,7 @@ TEST_F(DiskMountManagerTest, RemountRemovableDrives) {
   manager->RemountAllRemovableDrives(chromeos::MOUNT_ACCESS_MODE_READ_WRITE);
 
   // Simulate cros_disks reporting mount completed.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kDevice1SourcePath,
       chromeos::MOUNT_TYPE_DEVICE, kDevice1MountPath);
   // Event handlers of observers should be called.
@@ -1203,8 +1249,8 @@ TEST_F(DiskMountManagerTest, Rename_RenameFails) {
   // Send failing RENAME_COMPLETED signal.
   // The failure is marked by ! in fromt of the path (but this should change
   // soon).
-  fake_cros_disks_client_->SendRenameCompletedEvent(
-      chromeos::RENAME_ERROR_UNKNOWN, kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyRenameCompleted(chromeos::RENAME_ERROR_UNKNOWN,
+                                                 kDevice1SourcePath);
 
   // The observer should get notified that the device was unmounted and that
   // renaming has started.
@@ -1250,8 +1296,8 @@ TEST_F(DiskMountManagerTest, Rename_RenameSuccess) {
   EXPECT_FALSE(HasMountPoint(kDevice1MountPath));
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendRenameCompletedEvent(chromeos::RENAME_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyRenameCompleted(chromeos::RENAME_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // The observer should receive UNMOUNTING, RENAME_STARTED and RENAME_COMPLETED
   // events (all of them without an error set).
@@ -1299,11 +1345,11 @@ TEST_F(DiskMountManagerTest, Rename_ConsecutiveRenameCalls) {
   EXPECT_FALSE(HasMountPoint(kDevice1MountPath));
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendRenameCompletedEvent(chromeos::RENAME_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyRenameCompleted(chromeos::RENAME_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // Simulate the device remounting.
-  fake_cros_disks_client_->SendMountCompletedEvent(
+  fake_cros_disks_client_->NotifyMountCompleted(
       chromeos::MOUNT_ERROR_NONE, kDevice1SourcePath,
       chromeos::MOUNT_TYPE_DEVICE, kDevice1MountPath);
 
@@ -1331,8 +1377,8 @@ TEST_F(DiskMountManagerTest, Rename_ConsecutiveRenameCalls) {
             disks.find(kDevice1SourcePath)->second->base_mount_path());
 
   // Simulate cros_disks reporting success.
-  fake_cros_disks_client_->SendRenameCompletedEvent(chromeos::RENAME_ERROR_NONE,
-                                                    kDevice1SourcePath);
+  fake_cros_disks_client_->NotifyRenameCompleted(chromeos::RENAME_ERROR_NONE,
+                                                 kDevice1SourcePath);
 
   // The observer should receive UNMOUNTING, RENAME_STARTED and RENAME_COMPLETED
   // events (all of them without an error set) twice (once for each renaming

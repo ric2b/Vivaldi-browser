@@ -4,13 +4,13 @@
 
 #include "chrome/services/media_gallery_util/media_parser.h"
 
-#if !defined(MEDIA_DISABLE_FFMPEG)
-#include "media/filters/media_file_checker.h"
-#endif
 #include "chrome/services/media_gallery_util/ipc_data_source.h"
 #include "chrome/services/media_gallery_util/media_metadata_parser.h"
+#include "media/media_features.h"
 
-namespace chrome {
+#if BUILDFLAG(ENABLE_FFMPEG)
+#include "media/filters/media_file_checker.h"
+#endif
 
 namespace {
 
@@ -34,10 +34,10 @@ void MediaParser::ParseMediaMetadata(
     const std::string& mime_type,
     int64_t total_size,
     bool get_attached_images,
-    mojom::MediaDataSourcePtr media_data_source,
+    chrome::mojom::MediaDataSourcePtr media_data_source,
     ParseMediaMetadataCallback callback) {
-  auto source = std::make_unique<chrome::IPCDataSource>(
-      std::move(media_data_source), total_size);
+  auto source =
+      std::make_unique<IPCDataSource>(std::move(media_data_source), total_size);
   MediaMetadataParser* parser = new MediaMetadataParser(
       std::move(source), mime_type, get_attached_images);
   parser->Start(base::Bind(&ParseMediaMetadataDone, base::Passed(&callback),
@@ -47,12 +47,10 @@ void MediaParser::ParseMediaMetadata(
 void MediaParser::CheckMediaFile(base::TimeDelta decode_time,
                                  base::File file,
                                  CheckMediaFileCallback callback) {
-#if !defined(MEDIA_DISABLE_FFMPEG)
+#if BUILDFLAG(ENABLE_FFMPEG)
   media::MediaFileChecker checker(std::move(file));
   std::move(callback).Run(checker.Start(decode_time));
 #else
   std::move(callback).Run(false);
 #endif
 }
-
-}  // namespace chrome

@@ -12,4 +12,7 @@ namespace variations {
 const char kDefaultServerUrl[] =
     SYNC_URL("/chrome-variations/seed");
 
+const char kDefaultInsecureServerUrl[] =
+    "http://clientservices.googleapis.com/chrome-variations/seed";
+
 }  // namespace variations

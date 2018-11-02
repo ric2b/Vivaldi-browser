@@ -46,13 +46,29 @@ class OfflinePageMetadataStoreSQL;
 // executing various tasks, including database operation or other process that
 // needs to run on a background thread.
 class OfflinePageModelTaskified : public OfflinePageModel,
-                                  public KeyedService,
                                   public TaskQueue::Delegate {
  public:
+  // Initial delay after which a list of items for upgrade will be generated.
+  // TODO(fgorski): We need to measure the cost of opening and closing the DB,
+  // before we split |kInitializingTaskDelay| and
+  // |kInitialUpgradeSelectionDelay| further apart, than 20 seconds.
+  static constexpr base::TimeDelta kInitialUpgradeSelectionDelay =
+      base::TimeDelta::FromSeconds(45);
+
+  // Initial delay of other tasks triggered at the startup.
+  static constexpr base::TimeDelta kInitializingTaskDelay =
+      base::TimeDelta::FromSeconds(30);
+
+  // The time that the storage cleanup will be triggered again since the last
+  // one.
+  static constexpr base::TimeDelta kClearStorageInterval =
+      base::TimeDelta::FromMinutes(30);
+
   OfflinePageModelTaskified(
       std::unique_ptr<OfflinePageMetadataStoreSQL> store,
       std::unique_ptr<ArchiveManager> archive_manager,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner,
+      std::unique_ptr<base::Clock> clock);
   ~OfflinePageModelTaskified() override;
 
   // TaskQueue::Delegate implementation.
@@ -104,8 +120,9 @@ class OfflinePageModelTaskified : public OfflinePageModel,
       const ClientId& client_id,
       const MultipleOfflineIdCallback& callback) override;
 
-  const base::FilePath& GetArchiveDirectory(
+  const base::FilePath& GetInternalArchiveDirectory(
       const std::string& name_space) const override;
+  bool IsArchiveInInternalDir(const base::FilePath& file_path) const override;
 
   ClientPolicyController* GetPolicyController() override;
 
@@ -113,20 +130,30 @@ class OfflinePageModelTaskified : public OfflinePageModel,
 
   // Methods for testing only:
   OfflinePageMetadataStoreSQL* GetStoreForTesting() { return store_.get(); }
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock) {
+    clock_ = std::move(clock);
+  }
+  void SetSkipClearingOriginalUrlForTesting() {
+    skip_clearing_original_url_for_testing_ = true;
+  }
 
  private:
+  // TODO(romax): https://crbug.com/791115, remove the friend class usage.
   friend class OfflinePageModelTaskifiedTest;
 
   // Callbacks for saving pages.
   void InformSavePageDone(const SavePageCallback& calback,
                           SavePageResult result,
-                          const OfflinePageItem& page);
+                          const ClientId& client_id,
+                          int64_t offline_id);
   void OnAddPageForSavePageDone(const SavePageCallback& callback,
                                 const OfflinePageItem& page_attempted,
                                 AddPageResult add_page_result,
                                 int64_t offline_id);
-  void OnCreateArchiveDone(const SavePageCallback& callback,
-                           OfflinePageItem proposed_page,
+  void OnCreateArchiveDone(const SavePageParams& save_page_params,
+                           int64_t offline_id,
+                           const base::Time& start_time,
+                           const SavePageCallback& callback,
                            OfflinePageArchiver* archiver,
                            OfflinePageArchiver::ArchiverResult archiver_result,
                            const GURL& saved_url,
@@ -141,23 +168,35 @@ class OfflinePageModelTaskified : public OfflinePageModel,
                      AddPageResult result);
 
   // Callbacks for deleting pages.
-  void InformDeletePageDone(const DeletePageCallback& callback,
-                            DeletePageResult result);
   void OnDeleteDone(
       const DeletePageCallback& callback,
       DeletePageResult result,
       const std::vector<OfflinePageModel::DeletedPageInfo>& infos);
 
-  // Callbacks for clearing temporary pages.
+  // Methods for clearing temporary pages.
+  void PostClearLegacyTemporaryPagesTask();
+  void ClearLegacyTemporaryPages();
   void PostClearCachedPagesTask(bool is_initializing);
   void ClearCachedPages();
   void OnClearCachedPagesDone(base::Time start_time,
                               size_t deleted_page_count,
                               ClearStorageTask::ClearStorageResult result);
 
+  // Methods for consistency check.
+  void PostCheckMetadataConsistencyTask(bool is_initializing);
+  void CheckTemporaryPagesConsistency();
+  void CheckPersistentPagesConsistency();
+
+  // Method for upgrade to public storage.
+  void PostSelectItemsMarkedForUpgrade();
+  void SelectItemsMarkedForUpgrade();
+  void OnSelectItemsMarkedForUpgradeDone(
+      const MultipleOfflinePageItemResult& pages_for_upgrade);
+
   // Other utility methods.
   void RemovePagesMatchingUrlAndNamespace(const OfflinePageItem& page);
   void CreateArchivesDirectoryIfNeeded();
+  base::Time GetCurrentTime();
 
   // Persistent store for offline page metadata.
   std::unique_ptr<OfflinePageMetadataStoreSQL> store_;
@@ -177,15 +216,23 @@ class OfflinePageModelTaskified : public OfflinePageModel,
   // destructed after the |task_queue_|.
   std::vector<std::unique_ptr<OfflinePageArchiver>> pending_archivers_;
 
-  // The task queue used for executing various tasks.
-  TaskQueue task_queue_;
+  // Clock for testing only.
+  std::unique_ptr<base::Clock> clock_;
 
   // Logger to facilitate recording of events.
   OfflinePageModelEventLogger offline_event_logger_;
 
+  // The task queue used for executing various tasks.
+  TaskQueue task_queue_;
+
   // Time of when the most recent cached pages clearing happened. The value will
   // not persist across Chrome restarts.
   base::Time last_clear_cached_pages_time_;
+
+  // For testing only.
+  // This value will be affecting the CreateArchiveTasks that are created by the
+  // model to skip saving original_urls.
+  bool skip_clearing_original_url_for_testing_;
 
   base::WeakPtrFactory<OfflinePageModelTaskified> weak_ptr_factory_;
 
@@ -194,4 +241,4 @@ class OfflinePageModelTaskified : public OfflinePageModel,
 
 }  // namespace offline_pages
 
-#endif  // COMPONENTS_OFFLINE_PAGES_CORE_MODEL_OFFLINE_PAGE_MODEL_IMPL_TASKIFIED_H_
+#endif  // COMPONENTS_OFFLINE_PAGES_CORE_MODEL_OFFLINE_PAGE_MODEL_TASKIFIED_H_

@@ -47,7 +47,6 @@
 <translation id="2049639323467105390">Toto zariadenie je spravované doménou <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Na výšku</translation>
 <translation id="2067602449040652523">Jas klávesnice</translation>
-<translation id="207439088875642105">Toto je detský účet spravovaný používateľmi <ph name="FIRST_PARENT_EMAIL" /> a <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Zastaviť prenos karty <ph name="TAB_NAME" /> do zariadenia <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Nabíjačka s nízkym výkonom</translation>
 <translation id="2144487987174258011">Reštartujte a aktualizujte tak Adobe Flash Player</translation>
@@ -93,7 +92,6 @@ Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</tr
 <translation id="3000461861112256445">Zvuk mono</translation>
 <translation id="3009178788565917040">Výstup</translation>
 <translation id="3019353588588144572">Čas zostávajúci do úplného nabitia batérie: <ph name="TIME_REMAINING" /></translation>
-<translation id="3047477924825107454">Toto je detský účet spravovaný používateľom <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">Spodok</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -114,6 +112,7 @@ Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</tr
 <translation id="3473479545200714844">Lupa</translation>
 <translation id="3477079411857374384">Ctrl-Shift-medzerník</translation>
 <translation id="3510164367642747937">Zvýrazniť ukazovateľ myši</translation>
+<translation id="3513798432020909783">Správca účtu: <ph name="MANAGER_EMAIL" /></translation>
 <translation id="3573179567135747900">Zmeniť späť na miestne nastavenie „<ph name="FROM_LOCALE" />“ (vyžaduje sa reštart)</translation>
 <translation id="3582792037806681688">Pre používateľa v tejto relácii bolo viacnásobné prihlásenie zakázané</translation>
 <translation id="3595596368722241419">Batéria je nabitá</translation>
@@ -128,6 +127,7 @@ Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</tr
 <translation id="3784455785234192852">Uzamknúť</translation>
 <translation id="3798670284305777884">Reproduktor (vnútorný)</translation>
 <translation id="3846575436967432996">Informácie o sieti nie sú k dispozícii</translation>
+<translation id="385051799172605136">Naspäť</translation>
 <translation id="3891340733213178823">Ak sa chcete odhlásiť, stlačte dvakrát kombináciu klávesov Ctrl+Shift+Q.</translation>
 <translation id="3893630138897523026">ChromeVox (hlasová spätná väzba)</translation>
 <translation id="3899995891769452915">Hlasový vstup</translation>
@@ -172,6 +172,7 @@ Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</tr
 <translation id="5430931332414098647">Dynamický tethering</translation>
 <translation id="5431825016875453137">OpenVPN / L2TP</translation>
 <translation id="544691375626129091">Do tejto relácie už boli pridaní všetci dostupní používatelia</translation>
+<translation id="5457599981699367932">Prehliadať ako hosť</translation>
 <translation id="553675580533261935">Ukončuje sa relácia</translation>
 <translation id="5548285847212963613">Rozšírenie <ph name="EXTENSION_NAME" /> vám môže pomôcť pripojiť sa k tejto sieti.</translation>
 <translation id="5571066253365925590">Rozhranie Bluetooth je povolené</translation>
@@ -182,6 +183,7 @@ Všetci používatelia sa musia odhlásiť a až potom môžu pokračovať.</tr
 <translation id="5744083938413354016">Presunutie klepnutím</translation>
 <translation id="5777841717266010279">Chcete ukončiť zdieľanie obrazovky?</translation>
 <translation id="57838592816432529">Vypnúť zvuk</translation>
+<translation id="5832805196449965646">Pridať osobu</translation>
 <translation id="5860033963881614850">Vypnuté</translation>
 <translation id="5895138241574237353">Reštartovať</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
@@ -273,6 +275,7 @@ Túto funkciu používajte iba s dôveryhodnými účtami.</translation>
 <translation id="7829386189513694949">Silný signál</translation>
 <translation id="7904094684485781019">Správca tohto účtu zakázal viacnásobné prihlásenie.</translation>
 <translation id="7933084174919150729">Asistent Google je k dispozícii iba pre primárny profil.</translation>
+<translation id="79341161159229895">Správcovia účtu: <ph name="FIRST_PARENT_EMAIL" /> a <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="7977927628060636163">Hľadajú sa mobilné siete...</translation>
 <translation id="7982789257301363584">Sieť</translation>
 <translation id="7994370417837006925">Viacnásobné prihlásenie</translation>
@@ -289,6 +292,7 @@ Túto funkciu používajte iba s dôveryhodnými účtami.</translation>
 <translation id="8261506727792406068">Odstrániť</translation>
 <translation id="8308637677604853869">Predchádzajúca ponuka</translation>
 <translation id="8351131234907093545">Vytvoriť poznámku</translation>
+<translation id="8392451568018454956">Ponuka možností pre používateľa <ph name="USER_EMAIL_ADDRESS" /></translation>
 <translation id="8428213095426709021">Nastavenia</translation>
 <translation id="8433186206711564395">Nastavenia siete</translation>
 <translation id="8433977262951327081">Klávesová skratka na zobrazenie bubliny s možnosťami vstupu na poličke sa zmenila. Namiesto skratky <ph name="OLD_SHORTCUT" /> použite skratku <ph name="NEW_SHORTCUT" />.</translation>

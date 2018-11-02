@@ -12,10 +12,18 @@
 namespace cc {
 class ClientTransferCacheEntry;
 class DisplayItemList;
-}
+class ImageProvider;
+}  // namespace cc
+
+namespace gfx {
+class Rect;
+class Vector2d;
+class Vector2dF;
+}  // namespace gfx
 
 extern "C" typedef struct _ClientBuffer* ClientBuffer;
 extern "C" typedef struct _GLColorSpace* GLColorSpace;
+extern "C" typedef struct _ClientGpuFence* ClientGpuFence;
 
 namespace gpu {
 namespace gles2 {
@@ -23,8 +31,8 @@ namespace gles2 {
 // This class is the interface for all client side GL functions.
 class GLES2Interface {
  public:
-  GLES2Interface() {}
-  virtual ~GLES2Interface() {}
+  GLES2Interface() = default;
+  virtual ~GLES2Interface() = default;
 
   virtual void FreeSharedMemory(void*) {};
 

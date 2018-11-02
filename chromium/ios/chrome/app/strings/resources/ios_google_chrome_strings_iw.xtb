@@ -2,8 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="iw">
 <translation id="1326317727527857210">‏כדי לקבל את הכרטיסיות מהמכשירים האחרים שלך, היכנס ל-Chrome.</translation>
-<translation id="1685087038067318291">‏עם אפשרות זו תוכל לגלות דפי אינטרנט שנשלחו על ידי מכשירים הנמצאים בקרבת מקום. כאשר Bluetooth מופעל, Chrome יכול לאסוף דפי אינטרנט המשויכים לחפצים סביבך ולשלוח אותם באופן אנונימי ל-Google כדי למצוא את השימושיים ביותר. <ph name="BEGIN_LINK" />למידע נוסף<ph name="END_LINK" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1816764564654397850">‏הודעת פרטיות של Google Chrome</translation>
+<translation id="1863312987075920112">‏שימוש באפליקציה הזו מהווה הסכמה ל<ph name="BEGIN_LINK_TOS" />תנאים ולהגבלות<ph name="END_LINK_TOS" /> ול<ph name="BEGIN_LINK_PRIVACY" />הודעת הפרטיות<ph name="END_LINK_PRIVACY" /> של Chrome.</translation>
 <translation id="2147651015520127414">‏Chrome אימת ש-<ph name="ISSUER" /> הנפיק את האישור של אתר זה.</translation>
 <translation id="2334084861041072223">‏Copyright <ph name="YEAR" /> Google Inc.‎. כל הזכויות שמורות.</translation>
 <translation id="2342981853652716282">‏היכנס אל Chrome כדי לקבל גישה אל הסימניות, הסיסמאות ונתונים נוספים בכל המכשירים שלך.</translation>
@@ -28,7 +29,6 @@
 <translation id="4523886039239821078">‏תוספים מסוימים גורמים ל-Chrome לקרוס. הסר את ההתקנה שלהם:</translation>
 <translation id="4615174829807303908">‏אתה יוצא מחשבון המנוהל על-ידי <ph name="SIGNOUT_MANAGED_DOMAIN" />. פעולה זו תמחק את הנתונים שלך ב-Chrome מהמכשיר הזה, אבל הם יישארו בחשבון Google שלך.</translation>
 <translation id="5389212809648216794">‏Google Chrome לא יכול להשתמש במצלמה כי אפליקציה אחרת משתמשת בה</translation>
-<translation id="5566557026214762153">‏בשימוש ביישום הזה, אתה מביע הסכמה <ph name="BEGIN_LINK" />לתנאים ולהגבלות<ph name="END_LINK" /> של Chrome.</translation>
 <translation id="5639704535586432836">‏עבור אל 'הגדרות' &gt; 'פרטיות' &gt; 'מצלמה' &gt; Google Chrome והפעל את המצלמה.</translation>
 <translation id="5642200033778930880">‏Google Chrome אינו יכול להשתמש במצלמה במצב תצוגה מפוצלת</translation>
 <translation id="5703130498371792817">‏נהנה מ-Chrome? ‏<ph name="BEGIN_LINK" />דרג את האפליקציה<ph name="END_LINK" /></translation>
